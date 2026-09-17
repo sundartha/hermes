@@ -1855,6 +1855,26 @@ const rawConfig = {
   // der sich an einen Env-Flip erinnert. Vor dem Launch gehoert hier ausschliesslich ein
   // Account hinein, der uns gehoert.
   ownerSelfCallTenantIds: csvEnv(process.env.OWNER_SELF_CALL_TENANT_IDS),
+  // IEP-P6: Scharfschalter des INBOUND-Owner-Tons - ruft der Owner von seiner hinterlegten
+  // eigenen Nummer an, wird er per Vornamen begruesst. DEFAULT AUS (fail-closed): aus ->
+  // callerIsOwner ist fuer JEDEN Anruf false -> Fremd-Wortlaut ueberall, exaktes
+  // Bestandsverhalten. Er aendert AUSSCHLIESSLICH die Anrede: kein Datenkanal, kein
+  // Werkzeug, kein Recht haengt daran (Owner-Entscheidung 5).
+  // BEWUSST NICHT OWNER_SELF_CALL_ENABLED mitbenutzt: jener Schalter ist in
+  // PLAN-SECURITY.md als Launch-Ruecknahme der OUTBOUND-Offenlegungs-Ausnahme eingetragen.
+  // Ein geteilter Schalter machte eine Inbound-Abschaltung zum Offenlegungs-Ereignis im
+  // Outbound und umgekehrt. Kein Footgun-Eintrag: er entwaffnet keine Sicherung.
+  inboundOwnerGreetingEnabled: boolEnv(
+    "INBOUND_OWNER_GREETING_ENABLED",
+    process.env.INBOUND_OWNER_GREETING_ENABLED,
+    { fallback: false },
+  ),
+  // IEP-P6: WELCHE Tenants den Owner-Ton ueberhaupt ausloesen duerfen. LEER = NIEMAND, nie
+  // JEDER (Lehre streaming-armierung-allowlist). Einmal gesplittet/getrimmt (csvEnv).
+  // Warum die Liste traegt: die hinterlegte eigene Nummer ist format- und land-, NICHT
+  // eigentums-verifiziert und ueber POST /api/self-service/private-number von jedem
+  // eingeloggten Tenant setzbar (PLAN-SECURITY.md, Launch-Blocker).
+  inboundOwnerGreetingTenantIds: csvEnv(process.env.INBOUND_OWNER_GREETING_TENANT_IDS),
   // Rate-Limit pro IP und Minute fuer alle Routen ausser /voice (Provider-Webhooks;
   // localhost-Socket ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min)
   // plus Interaktionen.
@@ -2188,7 +2208,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom", "platformAlertMailTo"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "llmProviderFallback", "llmBillingLatchCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs"],
-  voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
+  voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],

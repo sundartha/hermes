@@ -58,6 +58,7 @@ import {
   rueckfallQuelleFuerLog,
 } from "../elevenlabs/inbound-rueckfall.js";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.js";
+import { callerIsOwnerGranted } from "../callee-is-owner.js";
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -315,6 +316,38 @@ function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
   if (angenommen) inboundBridges.armBindingDeadline(call.id);
 }
 
+// IEP-P6: die EINE Auswertung "ruft der Owner von seiner eigenen Nummer an?" fuer diesen
+// eingehenden Anruf. Ergebnis geht set-once an den Anruf-Datensatz und faerbt spaeter
+// AUSSCHLIESSLICH die Anrede (elevenlabs/inbound-initiation.js). Auf MODUL-EBENE, damit
+// der reihenfolge-gepinnte Handler nicht waechst.
+// NORMALISIERUNG VORGELAGERT UND GETEILT (normNum - dieselbe Quelle, die `To` im Handler
+// normalisiert); das Praedikat selbst vergleicht strikt. Das GESPEICHERTE call.from
+// bleibt roh: daran haengen Tarif, Kostenkalibrierung, Summary-Betreff/-SMS und der
+// Aktiv-Anruf-Lookup.
+function ownerTonFuer({ from, tenantId }, { store, config }) {
+  return callerIsOwnerGranted({
+    from: normNum(from),
+    ownNumber: store.tenantPrivateNumber(tenantId),
+    tenantId,
+    enabled: config.voice.inboundOwnerGreetingEnabled,
+    allowedTenantIds: config.voice.inboundOwnerGreetingTenantIds,
+  });
+}
+
+// IEP-P6: der Anruf-Datensatz eines eingehenden Anrufs - Leg, Notbremse und die
+// Owner-Markierung in EINEM Schritt. Die Markierung entsteht SET-ONCE und VOR dem
+// Uebergabe-TeXML, also vor dem ersten gesprochenen Wort: danach kippt keine
+// Nummern-Aenderung die Anrede mehr. Ebenfalls auf MODUL-EBENE (Praezedenz
+// resolveCallPrivacyFlags in routes/api-calls.js) - der /voice/incoming-Handler traegt
+// einen Reihenfolge-Pin und darf nicht wachsen.
+function erzeugeInboundCall({ leg, maxDurationS }, deps) {
+  return deps.store.createCall({
+    ...leg,
+    maxDurationS,
+    callerIsOwner: ownerTonFuer({ from: leg.from, tenantId: leg.tenantId }, deps),
+  });
+}
+
 export function makeVoiceRoutes({
   store,
   config,
@@ -561,7 +594,7 @@ export function makeVoiceRoutes({
         language,
         costProfile: pfad.kostenprofil,
       };
-      call = store.createCall({ ...inboundLeg, maxDurationS: brakeSecondsFor(inboundLeg) });
+      call = erzeugeInboundCall({ leg: inboundLeg, maxDurationS: brakeSecondsFor(inboundLeg) }, voiceDeps);
       store.markAnswered(call.id);
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
       store.recordCostProfile(call.id, pfad.kostenprofil);

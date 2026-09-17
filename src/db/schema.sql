@@ -280,6 +280,10 @@ CREATE TABLE IF NOT EXISTS call (
   -- Bestandszeile ist per Definition NICHT-Owner - also Offenlegung. Auf der Zeile steht
   -- NUR dieses Boolean, NIE die Nummer.
   callee_is_owner BOOLEAN NOT NULL DEFAULT FALSE,
+  -- IEP-P6: kam dieser EINGEHENDE Anruf von der eigenen hinterlegten Nummer des
+  -- ANGERUFENEN Tenants? Faerbt AUSSCHLIESSLICH die Anrede. NOT NULL DEFAULT FALSE ist
+  -- die fail-closed Form: jede Bestandszeile ist per Definition NICHT-Owner.
+  caller_is_owner BOOLEAN NOT NULL DEFAULT FALSE,
   -- LCT P2 (Ist-Kosten-Achse): estimated_cost_cents ist der TATSAECHLICH gebuchte
   -- Schaetzbetrag (GANZZAHL Cents, reconcileVoiceBudget), NIE spaeter aus dem
   -- Tarif rekonstruiert. actual_cost_micro_cents ist BIGINT (nicht NUMERIC/Float, G26) in
@@ -420,6 +424,8 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS diagnostic BOOLEAN NOT NULL DEFAULT FA
 -- Idempotent; frische DB = No-op. DEFAULT FALSE fuellt Bestandszeilen ohne Backfill -
 -- der Default IST die richtige Antwort fuer alles Alte (NICHT-Owner -> Offenlegung).
 ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_is_owner BOOLEAN NOT NULL DEFAULT FALSE;
+-- IEP-P6: Inbound-Owner-Markierung nachziehen. Idempotent; frische DB = No-op.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS caller_is_owner BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS inbox_entry_at TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS inbox_seen_at TEXT;
 -- P6: Mandats-Spalte auf Bestands-call-Tabellen nachziehen (Muster context).

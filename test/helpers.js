@@ -197,6 +197,13 @@ export const BASE_ENV = {
   // test/oc-p1-owner-call-http.test.js setzt beide explizit.
   OWNER_SELF_CALL_ENABLED: "false",
   OWNER_SELF_CALL_TENANT_IDS: "",
+  // IEP-P6: dieselbe Begruendung eine Achse weiter - der INBOUND-Owner-Ton in Spawn-Tests
+  // neutral AUS und Allowlist LEER (= Bestandsverhalten, Fremd-Wortlaut fuer jeden
+  // Anrufer). Ohne diese zwei Zeilen leckt eine lokale .env via dotenv in JEDEN
+  // Spawn-Test (Lehre test-base-env-drift) und faerbte den ersten gesprochenen Satz.
+  // test/iep-p6-owner-ton.test.js setzt beide explizit.
+  INBOUND_OWNER_GREETING_ENABLED: "false",
+  INBOUND_OWNER_GREETING_TENANT_IDS: "",
   // ---- Telnyx (zweiter Provider) ----
   // Nummern sind keine Env-Var mehr (s.o.). Keys/IDs neutral leer; Tests, die
   // Telnyx-Outbound brauchen, seeden eine Telnyx-Owner-Nummer via ownerNumber.

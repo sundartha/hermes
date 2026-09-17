@@ -441,6 +441,13 @@ services:
         sync: false
       - key: OWNER_SELF_CALL_TENANT_IDS
         sync: false
+      # ---- Owner-Ton bei EINGEHENDEN Anrufen (IEP-P6) ---- Default AUS / Liste LEER
+      # (fail-closed): Fremd-Wortlaut fuer jeden Anrufer, Bestandsverhalten. Beide mit
+      # sync: false aus demselben Grund wie OWNER_SELF_CALL_* darueber.
+      - key: INBOUND_OWNER_GREETING_ENABLED
+        sync: false
+      - key: INBOUND_OWNER_GREETING_TENANT_IDS
+        sync: false
       # Plattform-BEOBACHTUNG, kein Gate: seit KS-P9/E10 sperrt die Plattform-Achse nichts
       # mehr - dieser Wert ist die Bezugsgroesse von PLATFORM_SPEND_WARN_PERCENT (und der
       # Pro-Tenant-Fallback bei DEFAULT_TENANT_BUDGET_CENTS=0). Die sperrende Kosten-Achse

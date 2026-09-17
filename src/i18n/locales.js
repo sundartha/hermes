@@ -126,16 +126,37 @@ function makeDisclosure(satz, ownerFallback) {
   };
 }
 
-// IEX-A2/IEX-A3 (O3/O4): der Namenssatz, mit dem Inbound-Eroeffnung UND Inbound-Fehlersatz
+// IEX-A2/IEX-A3 (O3/O4): der Satz, mit dem Inbound-Eroeffnung UND Inbound-Fehlersatz
 // beginnen. Traegt die KI-Kennzeichnung selbst ("KI"/"AI"/"IA") - auch ohne Namen. Kein
 // disclosureOwnerFallback: "von meinem Auftraggeber" passt grammatisch nicht (O4). Als eigene
 // Konstanten, nicht aus Katalog-Strings geschnitten. Gesprochene DE-Strings: echte Umlaute.
 // Die Namens-Bereinigung spiegelt makeDisclosure bewusst, statt sie zu teilen: A6 laesst den
 // Offenlegungs-Code byte-unberuehrt.
-const INBOUND_NAME_SATZ_TEXTE = Object.freeze({
-  de: Object.freeze({ mitName: (name) => `Hier ist der KI-Assistent von ${name}.`, ohneName: "Hier ist ein KI-Assistent." }),
-  en: Object.freeze({ mitName: (name) => `This is ${name}'s AI assistant.`, ohneName: "This is an AI assistant." }),
-  fr: Object.freeze({ mitName: (name) => `Ici l'assistant IA de ${name}.`, ohneName: "Ici un assistant IA." }),
+// IEP-P6: die Selbstvorstellung als NOMINALPHRASE - EINE Quelle (G5) fuer zwei
+// Satzrahmen: "Hier ist {x}." (Fehlersatz O3, byte-identisch zum Bestand) und
+// "Hallo, hier ist {x}." (Eroeffnung, Owner-Entscheidung 9). Zwei Textkopien waeren
+// dieselbe Aussage an zwei Orten; die Grossschreibung verbietet ein Zusammensetzen
+// aus dem fertigen Namenssatz. Traegt die KI-Kennzeichnung selbst - auch ohne Namen.
+const INBOUND_SELBSTVORSTELLUNG = Object.freeze({
+  de: Object.freeze({ mitName: (name) => `der KI-Assistent von ${name}`, ohneName: "ein KI-Assistent" }),
+  en: Object.freeze({ mitName: (name) => `${name}'s AI assistant`, ohneName: "an AI assistant" }),
+  fr: Object.freeze({ mitName: (name) => `l'assistant IA de ${name}`, ohneName: "un assistant IA" }),
+});
+// Die zwei Rahmen. NAME_SATZ ist der Bestandstext (Fehlersatz O3, byte-identisch), GRUSS_SATZ
+// die Eroeffnung ab Owner-Entscheidung 9. Der Namenssatz ist seit IEP-P6 KEIN Bundle-Feld
+// mehr: ausserhalb dieser Datei las ihn nur der Eroeffnungs-Riegel, und der liest jetzt den
+// variantenrichtigen Kopfsatz (inboundGrussSatz/inboundGrussSatzOwner). Ein Feld ohne
+// Produktionskonsument waere toter Code (GAP-31); der Fehlersatz-Wortlaut selbst ist in
+// test/iex-a2-fehlersatz.test.js byte-gepinnt.
+const INBOUND_NAME_SATZ_RAHMEN = Object.freeze({
+  de: (wer) => `Hier ist ${wer}.`,
+  en: (wer) => `This is ${wer}.`,
+  fr: (wer) => `Ici ${wer}.`,
+});
+const INBOUND_GRUSS_SATZ_RAHMEN = Object.freeze({
+  de: (wer) => `Hallo, hier ist ${wer}.`,
+  en: (wer) => `Hello, this is ${wer}.`,
+  fr: (wer) => `Bonjour, ici ${wer}.`,
 });
 const INBOUND_FEHLERTEIL = Object.freeze({
   de: "Es ist ein technischer Fehler aufgetreten, bitte rufen Sie später noch einmal an.",
@@ -143,38 +164,98 @@ const INBOUND_FEHLERTEIL = Object.freeze({
   fr: "Une erreur technique est survenue, veuillez rappeler plus tard.",
 });
 
-// IEX-A3 (O1): die Frage am Ende der Eroeffnung, Satzzeichen wie greetingVariants[1] (der Test
-// pinnt das Ende). Eigene Konstante, nicht aus dem Katalog-String geschnitten. Kein Bundle-Feld:
-// ausserhalb dieser Datei liest sie niemand (GAP-31).
-const INBOUND_FRAGE = Object.freeze({
-  de: "Wie kann ich Ihnen weiterhelfen?",
-  en: "How can I help you?",
-  fr: "Comment puis-je vous aider ?",
+// OC-P2 + IEP-P6: die Owner-Anrede. EINE Quelle fuer den OUTBOUND-Owner-Fall
+// (elevenlabs/outbound.js#ownerFirstMessage, claude.js#ownerOpeningFor) und den
+// INBOUND-Owner-Ton (inboundGrussSatzOwner unten). Wortlaut, Umlaute und das tragende
+// Wort "KI"/"AI"/"IA" unveraendert - die ausfuehrliche Begruendung steht am Bundle-Feld.
+// KEIN Trim hier: die Aufrufer trimmen (Bestandsvertrag, byte-identisch).
+const OWNER_OPENING_TEXTE = Object.freeze({
+  de: (firstName) => `Hallo ${firstName}, hier ist dein KI-Assistent.`,
+  en: (firstName) => `Hi ${firstName}, it's your AI assistant.`,
+  fr: (firstName) => `Bonjour ${firstName}, c'est ton assistant IA.`,
 });
 
-function makeInboundNameSatz(sprache) {
-  const { mitName, ohneName } = INBOUND_NAME_SATZ_TEXTE[sprache];
+// IEP-P6 (Owner-Entscheidung 9, 2026-09-16): der Transkriptions-/Zusammenfassungs-Hinweis
+// der EROEFFNUNG. GETRENNT von INBOUND_NOTICES (i18n/inbound-notice.js): jener Satz ist
+// der Pflicht-Praefix des GESPEICHERTEN Greetings und traegt die KI-Kennzeichnung selbst -
+// er bleibt unveraendert, sonst verloere ein Greeting ohne eigenen KI-Marker sie
+// (withInboundNotice). Hier traegt der KOPFSATZ die Kennzeichnung ("KI-Assistent").
+// Ausdruecklich WEG (Owner): "Hinweis:", "Sie sprechen mit einer KI", die Sie-Form.
+// Gesprochene DE-Strings: echte Umlaute.
+// EN/FR sind Uebersetzungsvorschlaege und brauchen vor dem Rollout die Owner-Freigabe;
+// der Owner-Tenant ist de-DE, der Rollout ist gesperrt (tasks/iep-strategie.md).
+const INBOUND_HINWEIS_SATZ = Object.freeze({
+  de: "Das Gespräch wird transkribiert und zusammengefasst.",
+  en: "This call is transcribed and summarised.",
+  fr: "Cet appel est transcrit et résumé.",
+});
+
+// IEP-P6: die Frage am Ende - fuer BEIDE Varianten dieselbe, ohne Anrede-Pronomen
+// (Owner-Entscheidung 9: keine Sie-Form, und der Owner wird geduzt - eine
+// pronomenfreie Frage passt auf beides). NICHT mehr an greetingVariants[1] gekoppelt.
+// Kein Bundle-Feld: ausserhalb dieser Datei liest sie niemand (GAP-31).
+const INBOUND_FRAGE = Object.freeze({
+  de: "Wie kann ich helfen?",
+  en: "How can I help?",
+  fr: "Comment puis-je aider ?",
+});
+
+// IEP-P6: EINE Fabrik fuer beide Satzrahmen der Selbstvorstellung - die Namens-Bereinigung
+// bleibt damit an genau einer Stelle (G5).
+function makeInboundSelbstvorstellungsSatz(sprache, rahmen) {
+  const { mitName, ohneName } = INBOUND_SELBSTVORSTELLUNG[sprache];
   return (ownerName) => {
     const name = typeof ownerName === "string" ? ownerName.trim() : "";
-    return name ? mitName(name) : ohneName;
+    return rahmen[sprache](name ? mitName(name) : ohneName);
+  };
+}
+const makeInboundNameSatz = (sprache) => makeInboundSelbstvorstellungsSatz(sprache, INBOUND_NAME_SATZ_RAHMEN);
+const makeInboundGrussSatz = (sprache) => makeInboundSelbstvorstellungsSatz(sprache, INBOUND_GRUSS_SATZ_RAHMEN);
+
+// IEP-P6: der gemeinsame Rest BEIDER Eroeffnungen - Hinweis + Frage. Genau hier
+// unterscheiden sich Owner- und Fremd-Fassung NICHT (Owner-Entscheidung 5: es wechselt
+// die Anrede, nichts sonst).
+const inboundEroeffnungsRest = (sprache) => `${INBOUND_HINWEIS_SATZ[sprache]} ${INBOUND_FRAGE[sprache]}`;
+
+// IEP-P6 (Owner-Entscheidung 9): die Eroeffnung fuer einen FREMDEN Anrufer -
+// Gruss-/Selbstvorstellungssatz (traegt die KI-Kennzeichnung) + Hinweis + Frage.
+// Gesprochen vom Agenten als first_message; i18n/inbound-opening.js prueft sie vor
+// jedem Gespraech (E3).
+function makeInboundEroeffnung(sprache) {
+  const gruss = makeInboundGrussSatz(sprache);
+  return (ownerName) => `${gruss(ownerName)} ${inboundEroeffnungsRest(sprache)}`;
+}
+
+// IEP-P6: der KOPFSATZ der Owner-Eroeffnung als eigener Baustein - Lesestelle des
+// Riegels (zweite Sollform) und Bauteil der Eroeffnung, EINE Quelle fuer beide.
+// "" bei fehlendem/blankem Vornamen: der Riegel wertet das als Defekt, der Bauer
+// faellt auf die Fremd-Fassung zurueck. Beide Wege sind fail-closed.
+function makeInboundGrussSatzOwner(sprache) {
+  return (firstName) => {
+    const vorname = typeof firstName === "string" ? firstName.trim() : "";
+    return vorname ? OWNER_OPENING_TEXTE[sprache](vorname) : "";
   };
 }
 
-// Namenssatz + fester Rest - EINE Zusammensetzung fuer Eroeffnung und Fehlersatz (G5).
-function makeNachNameSatz(sprache, rest) {
-  const nameSatz = makeInboundNameSatz(sprache);
-  return (ownerName) => `${nameSatz(ownerName)} ${rest}`;
-}
-
-// O1: Namenssatz + unveraenderter Inbound-Hinweis + Frage. Gesprochen vom Agenten als
-// first_message; i18n/inbound-opening.js prueft sie vor jedem Gespraech (E3).
-function makeInboundEroeffnung(sprache) {
-  return makeNachNameSatz(sprache, `${INBOUND_NOTICES[sprache]} ${INBOUND_FRAGE[sprache]}`);
+// IEP-P6: die Eroeffnung fuer den ERKANNTEN OWNER. IDENTISCH bis auf den ersten Satz:
+// statt der Selbstvorstellung in der dritten Person die direkte Anrede mit Vornamen -
+// derselbe Satz, den der Outbound-Owner-Fall spricht (OWNER_OPENING_TEXTE, G5).
+// KEIN NAMENS-RUECKFALL, mit Absicht (Muster ownerOpening): ohne Vornamen entsteht ""
+// und der Aufrufer nimmt die freigegebene Fremd-Eroeffnung - fail-closed.
+// Die KI-Kennzeichnung ("dein KI-Assistent") und der Hinweis bleiben WOERTLICH erhalten:
+// die Erkennung beweist etwas ueber die NUMMER, nicht ueber die PERSON am Apparat.
+function makeInboundEroeffnungOwner(sprache) {
+  const kopf = makeInboundGrussSatzOwner(sprache);
+  return (firstName) => {
+    const satz = kopf(firstName);
+    return satz ? `${satz} ${inboundEroeffnungsRest(sprache)}` : "";
+  };
 }
 
 // O3: Namenssatz + Fehlerteil. Der Anrufer hoert ihn vor dem Auflegen, es folgt kein Gespraech.
 function makeInboundFehlersatz(sprache) {
-  return makeNachNameSatz(sprache, INBOUND_FEHLERTEIL[sprache]);
+  const nameSatz = makeInboundNameSatz(sprache);
+  return (ownerName) => `${nameSatz(ownerName)} ${INBOUND_FEHLERTEIL[sprache]}`;
 }
 
 // Pro Sprache: alle sprachabhaengigen Bausteine. Funktionen dort, wo ein Name/Anliegen
@@ -271,7 +352,7 @@ export const LOCALES = Object.freeze({
     // KEIN NAMENS-RUECKFALL, mit Absicht: fehlt der Vorname, wird gar keine
     // Uebersteuerung gebaut (elevenlabs/outbound.js#ownerFirstMessage) und der
     // statische Offenlegungs-Rahmen spricht - fail-closed.
-    ownerOpening: (firstName) => `Hallo ${firstName}, hier ist dein KI-Assistent.`,
+    ownerOpening: OWNER_OPENING_TEXTE.de,
     // Zusammenfassungs-Prompt-Sprach-Teil (claude.js summarizeCall). Die JSON-Keys
     // bleiben englisch (sie werden geparst); nur der menschliche Text ist sprachabhaengig.
     summarySystem: (owner) =>
@@ -305,10 +386,18 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7): fest verdrahtet, durch kein Setting abschaltbar.
     // GETRENNT von disclosure() (Outbound, Regel 2) - beide Achsen bleiben unabhaengig.
     inboundNotice: INBOUND_NOTICES.de,
-    // IEX-A3 (O4/E3): der Namenssatz allein - Anfang von Eroeffnung und Fehlersatz, Lesestelle des Riegels.
-    inboundNameSatz: makeInboundNameSatz("de"),
-    // IEX-A3 (O1): die feste Eroeffnung des Agenten bei einem eingehenden Anruf (first_message).
+    // IEP-P6: der Kopfsatz der FREMD-Eroeffnung (Gruss + Selbstvorstellung). Sollform (a)
+    // des Riegels fuer die Variante FREMD.
+    inboundGrussSatz: makeInboundGrussSatz("de"),
+    // IEP-P6: der Kopfsatz der OWNER-Eroeffnung (Gruss + Vorname + Owner-Anrede).
+    // Sollform (a) des Riegels fuer die Variante OWNER. "" ohne Vornamen.
+    inboundGrussSatzOwner: makeInboundGrussSatzOwner("de"),
+    // IEP-P6: der Transkriptions-Hinweis der Eroeffnung, woertlich. Sollform (b) des Riegels.
+    inboundHinweisSatz: INBOUND_HINWEIS_SATZ.de,
+    // IEP-P6 (Owner-Entscheidung 9): die feste Eroeffnung bei einem eingehenden Anruf.
     inboundEroeffnung: makeInboundEroeffnung("de"),
+    // IEP-P6: dieselbe Eroeffnung mit Owner-Anrede. "" ohne Vornamen -> Fremd-Fassung.
+    inboundEroeffnungOwner: makeInboundEroeffnungOwner("de"),
     // IEX-A2 (O3): der feste Fehlersatz einer gescheiterten Uebergabe an den EL-Agenten.
     inboundFehlersatz: makeInboundFehlersatz("de"),
     // MCP-Textkanal (P12): Rollen-Praefixe + Fehlertexte der MCP-Tool-Schicht. Aus
@@ -417,7 +506,7 @@ export const LOCALES = Object.freeze({
     voicemailBody: (openingLine) =>
       `Je laisse ce message parce que personne n'a décroché. ${openingLine} Je réessaierai plus tard. Au revoir.`,
     // s. DE (ownerOpening) - "IA" traegt hier dieselbe Last wie "KI" dort.
-    ownerOpening: (firstName) => `Bonjour ${firstName}, c'est ton assistant IA.`,
+    ownerOpening: OWNER_OPENING_TEXTE.fr,
     summarySystem: (owner) =>
       `Tu résumes un appel téléphonique de l'assistant IA de ${owner}. Réponds UNIQUEMENT avec du JSON valide : {"summary": "2-3 phrases en français", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 phrase", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. Mentionne dans le résumé des résultats concrets (date/heure convenue, prix, nom de la personne de contact), si le transcript les contient, plutôt que des formulations générales. objective_achieved évalue EXCLUSIVEMENT la mission initiale (pour les appels entrants : si la demande de l'appelant a été résolue). Les sujets annexes ouverts par l'assistant ou l'interlocuteur lui-même (par ex. une prise de rendez-vous proposée ou interrompue) sont SANS PERTINENCE pour cette évaluation. true = la mission a été suffisamment traitée, même si l'appel s'est terminé au milieu d'une étape de suivi ; false = la mission n'a clairement pas été atteinte ; "unclear" = réellement impossible à juger à partir de la mission. N'ajoute des action items que si ${owner} doit réellement faire quelque chose (max. 3). Les rendez-vous déjà fermement réservés ne sont PAS un action item. Fiche de résultat : outcome est UNE phrase avec le résultat concret (date/heure convenue, prix, nom) ou - si rien n'a été obtenu - la raison. commitments sont les engagements pris par l'assistant au nom de ${owner} ; counterparty_commitments sont les engagements de l'interlocuteur. open_points sont les questions restées ouvertes. next_step est LA prochaine étape pour ${owner}, sinon null. facts sont des informations durablement utiles sur l'interlocuteur (horaires, contact, prix). Chaque liste contient au maximum 3 éléments, chaque élément au maximum 200 caractères. N'invente rien : si une information manque dans le transcript, la liste reste vide ou le champ reste null.`,
     // AL-P11 (O5): s. DE - uniquement ajouté si EVIDENCE_RETENTION_DAYS > 0.
@@ -443,10 +532,18 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7), s. DE. Kuratierte Zusatz-Vorlagen (WEB-04): der
     // Pflichtsatz wird beim Katalogbau vorangestellt (G5, s. self-service.js buildTemplates).
     inboundNotice: INBOUND_NOTICES.fr,
-    // IEX-A3 (O4/E3): der Namenssatz allein - Anfang von Eroeffnung und Fehlersatz, Lesestelle des Riegels.
-    inboundNameSatz: makeInboundNameSatz("fr"),
-    // IEX-A3 (O1): die feste Eroeffnung des Agenten bei einem eingehenden Anruf (first_message).
+    // IEP-P6: der Kopfsatz der FREMD-Eroeffnung (Gruss + Selbstvorstellung). Sollform (a)
+    // des Riegels fuer die Variante FREMD. s. DE.
+    inboundGrussSatz: makeInboundGrussSatz("fr"),
+    // IEP-P6: der Kopfsatz der OWNER-Eroeffnung (Gruss + Vorname + Owner-Anrede).
+    // Sollform (a) des Riegels fuer die Variante OWNER. "" ohne Vornamen.
+    inboundGrussSatzOwner: makeInboundGrussSatzOwner("fr"),
+    // IEP-P6: der Transkriptions-Hinweis der Eroeffnung, woertlich. Sollform (b) des Riegels.
+    inboundHinweisSatz: INBOUND_HINWEIS_SATZ.fr,
+    // IEP-P6 (Owner-Entscheidung 9): die feste Eroeffnung bei einem eingehenden Anruf.
     inboundEroeffnung: makeInboundEroeffnung("fr"),
+    // IEP-P6: dieselbe Eroeffnung mit Owner-Anrede. "" ohne Vornamen -> Fremd-Fassung.
+    inboundEroeffnungOwner: makeInboundEroeffnungOwner("fr"),
     // IEX-A2 (O3): der feste Fehlersatz einer gescheiterten Uebergabe an den EL-Agenten.
     inboundFehlersatz: makeInboundFehlersatz("fr"),
     // MCP-Textkanal (P12), s. DE.
@@ -535,7 +632,7 @@ export const LOCALES = Object.freeze({
     voicemailBody: (openingLine) =>
       `I am leaving this message because nobody picked up. ${openingLine} I will try again later. Goodbye.`,
     // s. DE (ownerOpening) - "AI" traegt hier dieselbe Last wie "KI" dort.
-    ownerOpening: (firstName) => `Hi ${firstName}, it's your AI assistant.`,
+    ownerOpening: OWNER_OPENING_TEXTE.en,
     summarySystem: (owner) =>
       `You are summarising a phone call made by ${owner}'s AI assistant. Reply ONLY with valid JSON: {"summary": "2-3 sentences in English", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 sentence", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. State concrete outcomes in the summary (agreed date/time, price, contact person's name) if present in the transcript, instead of vague descriptions. objective_achieved judges ONLY the original objective (for inbound calls: whether the caller's request was resolved). Side topics opened by the assistant or the other party themselves (e.g. an offered or abandoned appointment follow-up) are IRRELEVANT to this judgement. true = the objective was answered well enough, even if the call ended in the middle of a follow-up step; false = the objective was clearly not achieved; "unclear" = genuinely impossible to judge from the objective. Only add action items if ${owner} really needs to do something (max. 3). Appointments that are already firmly booked are NOT an action item. Result card: outcome is ONE sentence with the concrete result (agreed date/time, price, name) or - if nothing was achieved - the reason why. commitments are promises the assistant made on behalf of ${owner}; counterparty_commitments are promises made by the other party. open_points are questions that stayed open. next_step is THE one next step for ${owner}, otherwise null. facts are durably useful details about the other party (opening hours, contact person, prices). Each list holds at most 3 entries, each entry at most 200 characters. Invent nothing: if a detail is missing from the transcript, the list stays empty or the field stays null.`,
     // AL-P11 (O5): s. DE - only appended when EVIDENCE_RETENTION_DAYS > 0.
@@ -556,10 +653,18 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7), s. DE. Kuratierte Zusatz-Vorlagen (WEB-04): der
     // Pflichtsatz wird beim Katalogbau vorangestellt (G5, s. self-service.js buildTemplates).
     inboundNotice: INBOUND_NOTICES.en,
-    // IEX-A3 (O4/E3): der Namenssatz allein - Anfang von Eroeffnung und Fehlersatz, Lesestelle des Riegels.
-    inboundNameSatz: makeInboundNameSatz("en"),
-    // IEX-A3 (O1): die feste Eroeffnung des Agenten bei einem eingehenden Anruf (first_message).
+    // IEP-P6: der Kopfsatz der FREMD-Eroeffnung (Gruss + Selbstvorstellung). Sollform (a)
+    // des Riegels fuer die Variante FREMD. s. DE.
+    inboundGrussSatz: makeInboundGrussSatz("en"),
+    // IEP-P6: der Kopfsatz der OWNER-Eroeffnung (Gruss + Vorname + Owner-Anrede).
+    // Sollform (a) des Riegels fuer die Variante OWNER. "" ohne Vornamen.
+    inboundGrussSatzOwner: makeInboundGrussSatzOwner("en"),
+    // IEP-P6: der Transkriptions-Hinweis der Eroeffnung, woertlich. Sollform (b) des Riegels.
+    inboundHinweisSatz: INBOUND_HINWEIS_SATZ.en,
+    // IEP-P6 (Owner-Entscheidung 9): die feste Eroeffnung bei einem eingehenden Anruf.
     inboundEroeffnung: makeInboundEroeffnung("en"),
+    // IEP-P6: dieselbe Eroeffnung mit Owner-Anrede. "" ohne Vornamen -> Fremd-Fassung.
+    inboundEroeffnungOwner: makeInboundEroeffnungOwner("en"),
     // IEX-A2 (O3): der feste Fehlersatz einer gescheiterten Uebergabe an den EL-Agenten.
     inboundFehlersatz: makeInboundFehlersatz("en"),
     // MCP-Textkanal (P12), s. DE.

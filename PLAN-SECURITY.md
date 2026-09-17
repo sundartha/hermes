@@ -3519,8 +3519,10 @@ Accounts stehen, die uns gehoeren.
 Bedingung fuer den Launch, alternativ:
 (a) Besitz-Verifikation gebaut (Bestaetigungscode an genau diese Nummer, Zeitstempel am
     Tenant, Praedikat haengt daran, Aenderung setzt zurueck), ODER
-(b) `OWNER_SELF_CALL_ENABLED=false` — die Ausnahme ist dann wirkungslos und der
-    Offenlegungssatz gilt wieder ausnahmslos.
+(b) `OWNER_SELF_CALL_ENABLED=false` **und** `INBOUND_OWNER_GREETING_ENABLED=false` — beide
+    Ausnahmen sind dann wirkungslos, der Offenlegungssatz gilt wieder ausnahmslos und jeder
+    eingehende Anrufer hoert den Fremd-Wortlaut. Nur einen der beiden Schalter zu nennen,
+    behauptete eine Deckung, die es seit IEP-P6 nicht mehr gibt.
 
 Ein Eintrag eines fremden Accounts in `OWNER_SELF_CALL_TENANT_IDS` vor (a) ist selbst die
 Rechtsverletzung, gegen die dieser Eintrag steht. Ein Schliessen dieses Eintrags ohne (a)
@@ -3529,6 +3531,21 @@ oder (b) ebenfalls — es ist kein Aufraeumen.
 Unberuehrt davon bleibt die KI-Kennzeichnung: auch im Ausnahmefall nennt die Eroeffnung
 die Maschine ("hier ist dein KI-Assistent"), und der Prompt verpflichtet den Agenten, den
 vollen Offenlegungssatz sofort nachzuholen, wenn am Apparat nicht der Auftraggeber ist.
+
+**Dritter Verwender desselben unverifizierten Feldes (IEP-P6, 2026-09-16): die INBOUND-Anrede.**
+Dieser Eintrag deckte bisher den ANRUF-Weg (outbound) und nennt unter SEC-TEST (1) den
+SMS-Weg als zweiten ungedeckten Verwender. Ab IEP-P6 haengt drittens die Anrede eines
+EINGEHENDEN Anrufs am selben Feld: ruft die Anrufernummer von `tenant.privateNumber` an,
+begruesst der Agent den Anrufer mit Vornamen (`call.callerIsOwner`, gesetzt in
+`src/routes/voice.js`, Praedikat `callerIsOwnerGranted` in `src/callee-is-owner.js`).
+Gebunden an einen EIGENEN Schalter `INBOUND_OWNER_GREETING_ENABLED` (Default false) und
+eine EIGENE Allowlist `INBOUND_OWNER_GREETING_TENANT_IDS` (Default leer = NIEMAND) — nicht
+an `OWNER_SELF_CALL_*`, damit ein Rueckzug auf einer Achse nicht still die andere schaltet.
+Es aendert sich AUSSCHLIESSLICH die Anrede: die KI-Kennzeichnung bleibt im ersten Satz, der
+Transkriptions-/Zusammenfassungs-Hinweis bleibt woertlich, und es geht KEIN Datenkanal auf
+(die serverseitigen Inbound-Werkzeugsperren bleiben unangetastet, `tenant_token` bleibt
+`""`). Begruendung der engen Wirkung: die Anrufernummer stammt aus dem Ursprungsnetz und
+ist faelschbar — jede Datenfreigabe daran waere ein Sicherheitsfehler.
 
 ## SEC-TEST — Sicherheits-Testplan + drei bewusst getragene Risiken (2026-09-07)
 
@@ -4137,12 +4154,18 @@ Keine neue Env, keine neue Dependency.
    Inbound-EL-Anruf im Zustand WARTET oder die identische Wiederholung binnen Frist; dazu `agent_id` ==
    `ELEVENLABS_AGENT_ID` und `called_number` (falls vorhanden) normalisiert == `call.to` (404)
 3. Schalter/Scope/Beleg `inboundElPathFor` (404, IEX-A9): unter `registrierte_dids` bindet nur ein Anruf, dessen angerufene DID einen Beleg mit dem Fingerabdruck des laufenden Zugangs traegt
-3b. Eroeffnungs-Riegel `inboundEroeffnungsDefekteFuer` (IEX-A3/E3), VOR der Bindung: Namenssatz am
-   Anfang, `inboundNotice` woertlich, `hasInboundNotice`, kein `{{` (404, Log `grund=eroeffnung`, keine
-   Bindung -> Anbieter bricht ab -> Fehlersatz)
+3b. Eroeffnungs-Riegel `inboundEroeffnungsDefekteFuer` (IEX-A3/E3), VOR der Bindung: **der
+   variantenrichtige Kopfsatz** am Anfang (`inboundGrussSatz` bzw. `inboundGrussSatzOwner`),
+   **`inboundHinweisSatz` woertlich**, `hasInboundNotice`, kein `{{` (404, Log `grund=eroeffnung`,
+   keine Bindung -> Anbieter bricht ab -> Fehlersatz). Ein leerer Sollkopf und eine unbekannte
+   Variante sind selbst Defekte (fail-closed, IEP-P6)
 4. set-once-Bindung `bindInboundElConversation` (404 bei verlorener Op)
-5. Antwort: dynamische Variablen und `first_message = inboundEroeffnung(ownerName)` (Namenssatz mit
-   KI-Kennzeichnung + unveraenderter Hinweis + Frage), derselbe Riegel erneut am fertigen Koerper im
+5. Antwort: dynamische Variablen und `first_message = inboundEroeffnung(ownerName)` (Gruss-/
+   Selbstvorstellungssatz mit KI-Kennzeichnung + Hinweis + Frage), **bei erkanntem Owner
+   `inboundEroeffnungOwner(firstName)` — Anrede-Wechsel, KI-Kennzeichnung und
+   Transkriptions-Hinweis unveraendert woertlich**; `inbound_situation` in der passenden
+   Fassung. Owner- und Fremd-Antwort unterscheiden sich in **genau zwei** Feldern.
+   Derselbe Riegel erneut am fertigen Koerper im
    Waechter; **ohne Transkript, ohne Secret, `tenant_token ""`**
    (der abgeleitete Werkzeug-Token wird fuer Inbound nie berechnet). Die Werkzeug-Webhooks sperren den
    Inbound-Anruf in beiden Stellungen von `ELEVENLABS_TENANT_TOKEN_REQUIRED` (Test `iel-inbound-werkzeuge`).
