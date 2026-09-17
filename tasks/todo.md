@@ -144,3 +144,34 @@ Owner-Entscheidungen 2026-09-17 (nach bestandenem Testanruf):
 - [ ] IEP-A Messmaschine restlos entfernen (Entscheidung 14)
 - [ ] IEX-B Inbound fuer alle Kunden freischalten (Runbook iex-spec-a.md §7 b)
 - [ ] IEL-X Budget-Engine entfernen — erst nach dem Rollout
+
+Owner-Entscheidungen 2026-09-17, dritte Runde (Abschluss-Auftrag, tasks/kickoff-iep-abschluss.md):
+17. Rollout-Umfang: ALLE drei aktiven DIDs, einschliesslich der Kundennummer des
+    Fremd-Tenants t_user_01KZRNWDJA5MW3C206CK5992W6 (+15804504874). Verworfen: "nur unsere zwei" und "erst den Kunden fragen" -
+    beide haetten einen Fremdkunden auf der Budget-Engine gelassen und Paket C blockiert.
+18. Zweiter Bestaetigungsanruf (Runbook b6 / Messung M-B.d) auf +18643028341 (owner-Tenant),
+    NICHT auf die Kundennummer.
+
+Stand der drei Arbeitspakete (Lead, Belege am lebenden System):
+- Boot-Banner letzter Deploy 2026-09-17T17:29Z: "Inbound-EL: an, 1 Tenants, scope=allowlist".
+- Aktive DIDs laut Prod-DB: +18643028341 (owner), +17067101188 (Owner-Tenant, business,
+  EL-Trunk belegt seit 15.09.), +15804504874 (Fremd-Tenant, business).
+  Nur EINE von drei ist bei ElevenLabs registriert - die beiden anderen bekommen ihre
+  Registrierung in Rollout-Schritt b3.
+- Der Betreiber-Alarm aus Entscheidung 13 (F10a) existiert NICHT: outage-detection.js zaehlt
+  ausschliesslich direction==="outbound". Er ist damit belegte Vorbedingung des Rollouts.
+
+- [ ] IEP-A Messmaschine restlos entfernen (Entscheidung 14)
+      Spec: tasks/iep-abschluss-spec.md | Erwartetes Ergebnis: npm test gruen,
+      "node scripts/iel-mess.mjs status" Exit 0 ohne Gruppe ohrzeuge, "grep -ril ohrzeuge
+      src scripts test" ohne Treffer, "git diff --stat master..HEAD -- src/" leer.
+- [ ] IEX-B1 Betreiber-Alarm fuer gescheiterte Inbound-Uebergaben (Entscheidung 13/F10a)
+      Spec: tasks/iex-b-spec.md | Erwartetes Ergebnis: npm test gruen, Bestandstests zu
+      outage-detection/outage-report im Diff UNVERAENDERT, ein Test belegt Alarm bei lauter
+      gescheiterten Uebergaben MIT gesetztem answeredAt (der blinde-Alarm-Fall).
+- [ ] IEX-B2 Rollout am lebenden System (Runbook tasks/iex-spec-a.md §7 b, Schritte b1-b7)
+      Erwartetes Ergebnis: Boot-Banner "scope=registrierte_dids", Ergebniszeile E11 mit
+      unbekannt=0/abweichung=0 und leerer Liste ohne_beleg_endungen, Owner-Regressionsanruf
+      plus zweiter Anruf auf +18643028341 gruen.
+- [ ] IEL-X Budget-Engine entfernen - erst nach IEX-B2 (Spec Teil B D1-D6,
+      tasks/iex-r2-loeschung-rollout.md)
