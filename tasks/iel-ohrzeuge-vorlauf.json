@@ -1,0 +1,9 @@
+{
+  "_hinweis": "IEP-P1 Vorlauf-Beleg. Vom Lead VOR der Messrunde geschrieben, jedes Feld am lebenden System belegt (Prod-DB lesend, Telnyx lesend, Render-Boot-Banner). Das Skript prueft diese Datei fail-closed gegen den Fall OZ-vorher; veraltet oder abweichend = Verweigerung.",
+  "belegt_am": "2026-09-17T08:11:37.000Z",
+  "tenant_id": "t_user_01KX600834GCJFV9GTZQKWZMTH",
+  "ziel_did": "+17067101188",
+  "sms_summary_opt_in": false,
+  "private_number_treffer": false,
+  "kostendecke_rest_cents": 3881
+}

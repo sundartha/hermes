@@ -1,5 +1,12 @@
 {
   "_hinweis": "Persistenter Anrufzaehler der Ohrzeugen-Messanrufe (IEP-P1..P7) fuer scripts/iel-mess.mjs, Fall-Gruppe 'ohrzeuge'. Owner-Freigabe (tasks/todo.md Entscheidung 11): hoechstens 18 Anrufe auf die eigene DID, je <= 60 s, SMS im Messfenster aus. Das Skript erhoeht VOR jedem Senden und verweigert ab 18. tasks/iel-m1-zaehler.json und tasks/iel-nachdeploy-zaehler.json werden von dieser Gruppe nie gelesen oder geschrieben. Nicht von Hand zuruecksetzen; fehlt die Datei, verweigert das Skript.",
-  "ausgeloest": 0,
-  "anrufe": []
+  "ausgeloest": 1,
+  "anrufe": [
+    {
+      "nr": 1,
+      "fall": "OZ-vorher",
+      "lauf_id": "iel-mu59e2s5-9a9af0",
+      "zeitpunkt": "2026-09-17T08:19:45.309Z"
+    }
+  ]
 }

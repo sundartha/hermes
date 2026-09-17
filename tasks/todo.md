@@ -58,3 +58,75 @@ auflegen, Anruf-Datensatz + Log, keine Benachrichtigung.
       Spec Teil B (Loeschung D1-D6) erst nach Teil A live
 - [ ] IEX-B Bau, Deploy Owner-Tenant, Owner-Test, Rollout, Loeschung
 - [ ] IEL-X Budget-Engine entfernen — NICHT vor IEL-T.
+
+## Owner-Test #2 durchgefallen (2026-09-15, call_mu34oz1l291b) + Forensik-Befund
+
+Owner-Urteil: "absolute Katastrophe". Gehoert: englische Roboter-Ansage "call could not be
+completed" mit Rauschen, dann Klingeln, dann Agent; Agent "duemmer", Stimme deutlich unter
+Outbound. Outbound-Kontrollanruf danach gut. Notaus danach: dep-dakqph3l550s73ctfne0 (52530ce)
+live, Banner "Inbound-EL: aus, 1 Tenants, scope=allowlist".
+
+Forensik 2026-09-15/16 (vier lesende Agenten; Berichte im Scratchpad, Kurzfassung hier):
+- Ansage: NICHT von uns. Telnyx sah genau EIN INVITE (20:32:41.815 UTC), keine Wiederholung,
+  keine weiteren Inbound-Versuche auf …1188, und hat selbst kein Audio gespielt (list_call_events,
+  detail_records). Owner hoerte die Ansage sofort nach dem Waehlen, also vor Telnyx. Owner war
+  bei BEIDEN Tests im Ausland/Roaming (gleiches Netz) — Roaming trennt gut/schlecht also nicht.
+  Luecke: SIP-Ladder am Telnyx-Eingang nur ueber Telnyx-Support.
+- Klingeln: unsere Aenderung. IEX-A4 answerOnBridge=true (Konstante
+  src/elevenlabs/inbound-rueckfall.js:35, KEIN Env-Schalter). Anrufer-Bein 1,56 s unbeantwortet,
+  Freizeichen kommt aus dem Netz des Anrufers. Test #1 nahm sofort an (Play-TTS).
+- Eroeffnung: byte-gleich zum freigegebenen O1-Wortlaut, nicht unterbrochen (169 Zeichen).
+  Abweichung nur gegenueber Runde 1 ("EIN Satz") und gegenueber Outbound (Du-Form).
+  callee_is_owner ist inbound f, outbound t.
+- "Duemmer"/"Stimme": durch nichts Gemessenes erklaert. Zwischen #1 und #2 aenderte sich EL-seitig
+  nur first_message; LLM/Prompt/Stimme/Sprache/TTS identisch; Telnyx-seitig gleiche Codecs,
+  gleiche Transcodierung PCMU<->G722, gleiches data_center, MOS 4,50 in beiden.
+  Kein Audio von #2 (record_voice=false) -> Hoervergleich unmoeglich.
+- Struktureller Unterschied Inbound vs. Outbound (in BEIDEN Tests, nicht neu): Inbound hat keinen
+  Kontext (objective/background/callee_relation leer), keine Werkzeuge (consult+lookup aus),
+  tenant_token kommt LEER an; Outbound voll ausgestattet. Inbound-Bein G722 mit Transcodierung,
+  Outbound PCMU ohne.
+
+Owner-Entscheidungen 2026-09-16 (Chat, AskUserQuestion):
+5. Besitzer-Erkennung bei INBOUND: ja. Ruft der Owner von seiner eigenen Nummer an, begruesst der
+   Agent ihn wie im Outbound-Owner-Fall ("Hallo Antonio, hier ist dein KI-Assistent").
+   KI-Kennzeichnung bleibt in JEDEM Fall. Ausdruecklich: die Erkennung schaltet KEINE privaten
+   Daten frei — nur den Ton. Begruendung Owner-Gespraech: eine Anrufernummer ist faelschbar
+   (schwaecherer Beleg als die selbst gewaehlte Nummer im Outbound-Fall nach CLAUDE.md Regel 2).
+6. Naechster Schritt: Strategie-Workflow (mehrere Agenten, Pre-Mortem) -> Mehr-Phasen-Konzept,
+   danach laeuft der Lead die Phasen autonom. Kein Owner-Test vor belegtem Fix.
+7. Rufnummer ist KEIN Thema (Owner ausdruecklich, mehrfach): kein Nummernwechsel, kein Nummernkauf,
+   keine +49-DID, auch nicht als Option. Dieselbe US-Nummer klingt im Outbound-Betrieb immer
+   einwandfrei — der Unterschied liegt im EINGEHENDEN Weg.
+8. Die Roboter-Ansage ist der WICHTIGSTE Punkt, nicht eine Randnotiz (Owner ausdruecklich): kein
+   Anrufer darf je etwas anderes hoeren als Hermes. Fuehrende Hypothese (Owner + Datenlage): sie
+   entsteht im Fenster, in dem wir den Anruf nicht annehmen (answerOnBridge=true, 1,56 s). Test #1
+   nahm sofort an -> keine Ansage; Test #2 nicht -> Ansage. Erste Phase: sofort annehmen, plus
+   maschineller Beweis (Anruf auf die eigene DID mit Mitschnitt der anrufenden Seite, vorher/nachher).
+   Der alte TeXML-Pflichtsatz kommt NICHT zurueck (Entscheidung 1) — sofort annehmen UND mit der
+   freigegebenen Agenten-Eroeffnung starten.
+
+Owner-Entscheidungen 2026-09-16, zweite Runde (nach Strategie-Workflow, tasks/iep-strategie.md):
+9. Eroeffnung INBOUND = Outbound-Form minus Anrufgrund, plus "Wie kann ich helfen?".
+   Fremde: "Hallo, hier ist der KI-Assistent von <Name>. Das Gespraech wird transkribiert und
+   zusammengefasst. Wie kann ich helfen?"
+   Owner (erkannt): "Hallo <Vorname>, hier ist dein KI-Assistent. Das Gespraech wird transkribiert
+   und zusammengefasst. Wie kann ich helfen?"
+   Ausdruecklich WEG: "Hinweis:", "Sie sprechen mit einer KI", Sie-Form, der Dreisatz-Aufbau O1.
+   KI-Kennzeichnung traegt "KI-Assistent" im ersten Satz. Owner sagte "bearbeitet", gebaut wird
+   "zusammengefasst" (Systemsprache); Owner kann korrigieren.
+10. Erste Sekunde nach der Annahme: kurzer Begruessungslaut (nicht Stille, nicht Dauerton).
+11. Maschinen-Messanrufe auf die eigene Nummer: 18 freigegeben, harter Deckel, je <= 60 s,
+    SMS im Messfenster aus, Muell-Eintraege danach aufraeumen. Owner-Testanruf-Reserve (1) unberuehrt.
+12. IEP-P0 macht der Owner selbst: 5-10 Waehlversuche mit Sprachmemo, auflegen sobald der Agent
+    spricht. Klaert, ob die Ansage vor dem Klingeln kommt und ob sie immer kommt.
+13. Uebernommen ohne Rueckfrage (Vorschlaege aus iep-strategie.md): F3 Schalter kurz an fuer die
+    Vorher-Messung; F5 Telnyx-Auskunft zu Test #2 als Nebenspur ohne Blockwirkung; F6 Standard-
+    Kontext ohne Rufnummern/Kalender/Kundendaten; F8 Transkriptions-Hinweis bleibt; F9 Abnahme-
+    kriterien wie vorgeschlagen; F10a Alarm bei gescheiterter Uebergabe als eigene Phase vor dem
+    Rollout, F10b keine Benachrichtigung bei Auflegen in der Wartephase.
+
+- [x] IEP Strategie-Workflow Inbound-Paritaet -> tasks/iep-strategie.md (12 Agenten, 11 Blocker geloest)
+- [ ] IEP-P0 Owner-Aufnahme + Delta-Analyse der 39 Dateien zwischen 9917db7 und 52530ce
+- [ ] IEP-P1..P7 bauen (Lead autonom, je ein Workflow-Lauf), dann EIN Owner-Test
+- [ ] Danach: Rollout alle Tenants, Budget-Engine loeschen, IEX-A12

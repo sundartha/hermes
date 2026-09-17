@@ -178,7 +178,7 @@
   "ohrzeuge": {
     "_hinweis": "IEP-P1/P1b. ziel_e164 des Falls OZ-vorher ist die belegte DID des Mess-Tenants und muss ZUSAETZLICH mit dem gepinnten OHRZEUGE_ZIEL_PIN in scripts/iel-mess.mjs uebereinstimmen; leerer Pin oder abweichendes ziel_e164 = jeder Lauf verweigert. anrufer_kennung muss eine aktive DID desselben Telnyx-Kontos sein (Kontotreffer-Riegel), nie die Ziel-DID (Selbstanruf) und nie eine Nummer, die als private_number eines Tenants steht - sonst verfaelscht der Messanruf die spaetere Owner-Erkennung. sprechspur_sha256 wird von 'node scripts/iel-mess.mjs sprechspur' gedruckt und danach hier gepinnt.",
     "sprechspur_text": "Guten Tag, hier ist Frau Berger. Ich wollte fragen, ob Herr Fotiadis morgen Vormittag erreichbar ist. Danke, dann versuche ich es spaeter noch einmal.",
-    "sprechspur_sha256": null
+    "sprechspur_sha256": "34f2214bc02d4cc540b4589a7f3ff8d66b48eb4a7b290a488fc112ea9c751f59"
   },
   "setup": {
     "misst_fuer": ["F-F-ohne-agent"],
