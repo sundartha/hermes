@@ -513,6 +513,16 @@ export const BASE_ENV = {
   // 0 = C8b-Selbsttest aus, bis ein Test ihn ausdruecklich scharf schaltet (Muster
   // OUTAGE_ALERT_WINDOW_MS oben).
   OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: "0",
+  // IEX-B1: Inbound-Ausfall-Melder in Spawn-Tests neutral AUS (0), NICHT der
+  // Produktions-Default (Muster OUTAGE_ALERT_WINDOW_MS oben). Ohne diese Zeile leakt ein
+  // lokaler .env-Wert via dotenv in jeden Spawn-Test (Lehre test-base-env-drift) und ein
+  // beliebiger Spawn-Test mit einem gescheiterten EL-Inbound-Fixture erzeugte
+  // unbeabsichtigt Betreiber-Befunde. Die drei Schwellen auf ihren Defaults, damit ein
+  // lokaler Experimentierwert keine fremde Baseline verschiebt.
+  INBOUND_OUTAGE_ALERT_WINDOW_MS: "0",
+  INBOUND_OUTAGE_ALERT_MIN_FAILURES: "2",
+  INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS: "20",
+  INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT: "10",
   // 0 = C8-HOLD-Eskalation aus (Muster OUTAGE_ALERT_WINDOW_MS oben) - sonst koennte ein
   // Spawn-Test mit einem laengst suspendierten Fixture-Tenant unbeabsichtigt eine
   // Betreiber-Meldung ausloesen, ohne jeden Bezug zu C8.

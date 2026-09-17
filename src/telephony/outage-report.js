@@ -1,7 +1,9 @@
 // OUTBOUND-E3b (E-4/F2b): der MELDEWEG des systematischen-Ausfall-Melders - getrennt von
 // der reinen Erkennungsregel (outage-detection.js, Clean-Code-Auftrag: "die Frage wird an
 // genau einem Ort beantwortet, der Versand ist davon getrennt"). Ausgeloest von JEDEM
-// beendeten Anruf mit Grund not-placed (call-finish.js#reportFailedCall).
+// beendeten Anruf, der eine Ausfall-Klasse belegt (outage-classes.js): outbound mit Grund
+// not-placed (call-finish.js#reportFailedCall) oder, seit IEX-B1, eine gescheiterte
+// EL-Inbound-Uebergabe (call-finish.js, Zweig uebergabeGescheitert).
 //
 // MELDEWEG, Reihenfolge ist Teil des Vertrags (Plan 4.1): WARN-Log -> Audit -> Mail ->
 // SMS. MAIL IST PRIMAER: der heutige einzige Betreiber-Kanal (sendBootstrapAlertSms)
@@ -18,6 +20,8 @@ import {
   failureReasonBase,
 } from "./failure-reason.js";
 import { outageBucket, outageWindow, beurteileAusfall, alarmZeile, meldeErlaubt, OUTAGE_VERDICT } from "./outage-detection.js";
+import { AUSFALL_KLASSE, INBOUND_EL_OUTAGE_CODE } from "./outage-classes.js";
+import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
 import * as ops from "../store/state-ops.js";
 import { sendFailSoftAlertSms, platformAlertSender } from "./alert-sms.js";
 import { NUMBER_HOLD_REASON } from "../store/defaults.js";
@@ -34,17 +38,6 @@ const AUDIT_ACTION = Object.freeze({
   [OUTAGE_VERDICT.ALERT]: "outage_alert",
   [OUTAGE_VERDICT.RECOVERED]: "outage_recovered",
 });
-
-function outageThresholds(config) {
-  return {
-    windowMs: config.billing.outageAlertWindowMs,
-    minFailures: config.billing.outageAlertMinFailures,
-    minAttempts: config.billing.outageAlertMinAttempts,
-    failSharePercent: config.billing.outageAlertFailSharePercent,
-    debounceMs: config.billing.outageAlertDebounceMs,
-    retryMs: config.billing.outageAlertRetryMs,
-  };
-}
 
 // Mail-Versand: PRIMAERER Kanal (s. Modul-Kopf). Kein Ziel konfiguriert -> nichts zu tun,
 // "delivered" bleibt false, aber es gibt auch nichts zu WIEDERHOLEN (der Aufrufer setzt
@@ -171,8 +164,13 @@ export async function meldeVollBefund({ store, config, audit, messaging, mailer,
 // Versand, s.u.) - hier wird nur noch gesendet und danach reportedAt/deliveredChannels
 // nachgezogen (S3-2). Kein zweiter Reservierungsschritt hier, sonst waere die
 // Entprellung wieder an genau der Stelle geloest, die die Reservierung schliesst.
-async function sendAlert({ bucket, zahlen, nowMs, store, config, audit, messaging, mailer }) {
-  const zeile = alarmZeile({ code: bucket, zahlen, regel: OUTAGE_VERDICT.ALERT, windowMs: config.billing.outageAlertWindowMs });
+// IEX-B1: windowMs kommt aus den Schwellen der URTEILENDEN Klasse statt aus einem festen
+// Config-Blatt - sonst traegt der Inbound-Alarm das Outbound-Fenster in fenster_min und
+// luegt ueber den Zeitraum, auf den sich seine Zahlen beziehen (Pre-Mortem R7). Fuer
+// Outbound ist der Wert derselbe (AUSFALL_KLASSE.OUTBOUND.schwellen liest genau dieses
+// Blatt) - der Body bleibt dort byte-identisch (I1/I2).
+async function sendAlert({ bucket, zahlen, nowMs, store, config, audit, messaging, mailer, schwellen }) {
+  const zeile = alarmZeile({ code: bucket, zahlen, regel: OUTAGE_VERDICT.ALERT, windowMs: schwellen.windowMs });
   await meldeBetreiberAlarm({ store, config, audit, messaging, mailer, bucket, aktion: "outage_alert", zeile, nowMs });
 }
 
@@ -200,10 +198,10 @@ async function applyOutageVerdict(context) {
 // sieht die Sperre bereits und urteilt nicht mehr "alarm". Der Versand selbst (Mail/
 // SMS, sendAlert) bleibt ausserhalb des Locks - reines IO gehoert nicht in eine
 // Store-Sperre.
-async function claimVerdict({ store, bucket, schwellen, nowMs }) {
+async function claimVerdict({ store, bucket, schwellen, zaehlweise, nowMs }) {
   const result = await store.withStoreLock(() => {
     const state = store.load();
-    const fenster = outageWindow(state.calls, { nowMs, windowMs: schwellen.windowMs, bucket });
+    const fenster = outageWindow(state.calls, { nowMs, windowMs: schwellen.windowMs, bucket, zaehlweise });
     const marker = ops.openOutageAlert(state, bucket);
     const urteilResult = beurteileAusfall({ fenster, marker, schwellen, nowMs });
     if (urteilResult.urteil === OUTAGE_VERDICT.ALERT) {
@@ -215,21 +213,39 @@ async function claimVerdict({ store, bucket, schwellen, nowMs }) {
   return result;
 }
 
-// Der EINE Ausloeser: JEDER beendete Anruf fragt die Regel. Nur not-placed-Anrufe (Schuld
-// bei uns/Anbieter) zaehlen ueberhaupt - ein Erfolg oder ein unreachable/no-answer/
-// result-unknown-Abschluss kehrt sofort zurueck (K2 wird davon nur "gesuender", nie
-// "kaputter": ein Erfolg senkt jeden Anteil und macht "erfolge===0" nur falscher).
+// IEX-B1: WELCHE Ausfall-Klasse dieser BEENDETE Anruf belegt - oder keine. REIN, total und
+// an EINER Stelle; der Ausloeser darunter kennt danach nur noch Klasse + Marker-Code.
+// Outbound: unveraendert NUR die Basis-Klasse not-placed (Schuld bei uns/Anbieter) - ein
+// Erfolg oder ein unreachable/no-answer/result-unknown-Abschluss ergibt null (K2 wird davon
+// nur "gesuender", nie "kaputter": ein Erfolg senkt jeden Anteil und macht "erfolge===0"
+// nur falscher). Inbound: NUR der vermerkte Rueckfall - GEBUNDEN ist der Erfolgsfall und
+// WARTET ist kein Fehler-Beleg (Owner-Entscheidung F10b), beide ergeben null und der Melder
+// laeuft fuer sie gar nicht erst an. Ein Outbound-Anruf kann nie RUECKFALL sein:
+// bridgeStateOf verlangt das EL-Inbound-Kostenprofil.
+function ausfallTrefferAmAnrufEnde(call) {
+  if (call.direction === "outbound")
+    return failureReasonBase(call.failureReason) === NOT_PLACED
+      ? { klasse: AUSFALL_KLASSE.OUTBOUND, bucket: outageBucket(call.failureReason) }
+      : null;
+  return bridgeStateOf(call) === BRIDGE_STATE.RUECKFALL
+    ? { klasse: AUSFALL_KLASSE.INBOUND_EL, bucket: INBOUND_EL_OUTAGE_CODE }
+    : null;
+}
+
+// Der EINE Ausloeser: JEDER beendete Anruf fragt die Regel, fuer BEIDE Klassen ueber
+// denselben Rumpf (G5 - keine zweite Urteils-/Meldefolge). Welche Klasse (falls ueberhaupt
+// eine) er belegt, entscheidet das reine Praedikat darueber.
 // Vollstaendig fail-soft: ein Fehler HIER darf niemals finishCall abbrechen (das ist der
 // Zweck des umschliessenden try/catch - kein Wurf verlaesst diese Funktion je).
 export async function reportSystematicOutage({ store, config, call, audit, messaging, mailer }) {
   try {
-    if (call.direction !== "outbound") return;
-    if (failureReasonBase(call.failureReason) !== NOT_PLACED) return;
-    const bucket = outageBucket(call.failureReason);
+    const treffer = ausfallTrefferAmAnrufEnde(call);
+    if (!treffer) return;
+    const { klasse, bucket } = treffer;
     const nowMs = Date.parse(call.endedAt) || Date.now();
-    const schwellen = outageThresholds(config);
-    const { urteil, zahlen } = await claimVerdict({ store, bucket, schwellen, nowMs });
-    await applyOutageVerdict({ urteil, bucket, zahlen, nowMs, store, config, audit, messaging, mailer });
+    const schwellen = klasse.schwellen(config);
+    const { urteil, zahlen } = await claimVerdict({ store, bucket, schwellen, zaehlweise: klasse.zaehlweise, nowMs });
+    await applyOutageVerdict({ urteil, bucket, zahlen, schwellen, nowMs, store, config, audit, messaging, mailer });
   } catch (err) {
     console.error("[outage] Ausfall-Melder fehlgeschlagen:", err.message);
   }
@@ -245,20 +261,31 @@ export async function reportSystematicOutage({ store, config, call, audit, messa
 // nowMs injizierbar (Default Date.now(), Muster runAlertChannelSelfTest unten) - ein Test
 // braucht eine deterministische Uhr, um ein LEERES Fenster von einem GESUNDEN zu
 // unterscheiden (Blocker "falsche Entwarnung bei Null-Verkehr").
+// B1-Fix (Review-Blocker Runde 3), IEX-B1 verallgemeinert: die offenen Marker, hinter denen
+// eine Ausfall-KLASSE steht - je Marker gleich mit seiner Klasse gepaart, damit der Sweep
+// darunter nur noch urteilt. Die Whitelist bleibt POSITIV formuliert: der Selbsttest-Marker
+// (SELF_TEST_BUCKET, s.u.), der HOLD-Marker, die kosten:-Marker und jeder KUENFTIGE
+// Nicht-Ausfall-Marker haben keine Klasse und duerfen outageWindow() nie befragen - fuer sie
+// liefert es konstruktionsbedingt IMMER fehler=0, beurteileAusfall() urteilte bei JEDEM
+// Sweep-Tick "erholt", der Sweep schloesse den Marker sofort wieder, und der Selbsttest
+// faende beim naechsten Tick keinen offenen Marker mehr -> feuerte bei JEDEM Tick statt
+// einmal je Periode.
+function offeneAusfallMarker(outageAlerts) {
+  const offene = outageAlerts.filter((alert) => alert.closedAt === null);
+  return offene
+    .map((marker) => ({ marker, klasse: ausfallKlasseVonMarker(marker.code) }))
+    .filter((eintrag) => eintrag.klasse !== null);
+}
+
 export async function runOutageRecoverySweep({ store, config, audit, nowMs = Date.now() }) {
   const state = store.load();
-  const schwellen = outageThresholds(config);
-  // B1-Fix (Review-Blocker Runde 3): der Selbsttest-Marker (SELF_TEST_BUCKET, s.u.) ist
-  // KEIN Fehlergrund-Eimer - fuer ihn liefert outageWindow() konstruktionsbedingt IMMER
-  // fehler=0 (kein echter call.failureReason bildet je auf seinen Code ab). Ohne den
-  // Ausschluss urteilt beurteileAusfall() bei JEDEM Sweep-Tick "erholt", der Sweep
-  // schliesst den Marker sofort wieder, und der Selbsttest findet beim naechsten Tick
-  // keinen offenen Marker mehr -> feuert bei JEDEM Tick statt einmal je Periode.
-  const offeneMarker = state.outageAlerts.filter(
-    (alert) => alert.closedAt === null && istFehlergrundEimer(alert.code),
-  );
-  for (const marker of offeneMarker) {
-    const fenster = outageWindow(state.calls, { nowMs, windowMs: schwellen.windowMs, bucket: marker.code });
+  // Die Schwellen kommen JE Klasse (ein Inbound-Marker wird mit dem Inbound-Fenster
+  // bewertet, nicht mit dem Outbound-Fenster).
+  for (const { marker, klasse } of offeneAusfallMarker(state.outageAlerts)) {
+    const schwellen = klasse.schwellen(config);
+    const fenster = outageWindow(state.calls, {
+      nowMs, windowMs: schwellen.windowMs, bucket: marker.code, zaehlweise: klasse.zaehlweise,
+    });
     // E3B-02-Fix: EINE Urteilsstelle (beurteileAusfall) statt einer zweiten,
     // parallel formulierten RECOVERED-Klausel hier - sonst umgeht der Sweep den
     // Rollback-Hebel OUTAGE_VERDICT.OFF (windowMs=0) vollstaendig.
@@ -298,6 +325,15 @@ const SELF_TEST_BUCKET = "self-test:alert-channel";
 // ausgeschlossen bleibt, ohne dass dieses Praedikat je wieder angefasst werden muss.
 function istFehlergrundEimer(code) {
   return code.startsWith(NOT_PLACED);
+}
+
+// IEX-B1: die Klasse hinter einem offenen Marker-Code, oder null fuer jeden Marker, der
+// KEIN Ausfall ist. Zwei Zeilen, EINE Stelle - der Erholungs-Sweep fragt nur hier (G23-
+// Geist: ein Diskriminator, eine Aufloesung, kein verstreuter Namensvergleich). Die beiden
+// Zweige sind disjunkt: INBOUND_EL_OUTAGE_CODE traegt kein not-placed-Praefix.
+function ausfallKlasseVonMarker(code) {
+  if (code === INBOUND_EL_OUTAGE_CODE) return AUSFALL_KLASSE.INBOUND_EL;
+  return istFehlergrundEimer(code) ? AUSFALL_KLASSE.OUTBOUND : null;
 }
 
 // Reine Faelligkeits-Frage (Muster meldeErlaubt/outage-detection.js): kein Marker oder nie

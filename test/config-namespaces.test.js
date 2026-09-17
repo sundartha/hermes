@@ -66,7 +66,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // zahlender Mandant ohne Live-Nummer gemeldet wird) -> 53.
   // GP-P6 (PLAN-GELDPFAD.md): priceDriftMinIntervalMs + priceDriftUnknownEscalateAfter
   // ergaenzt (Takt des Preis-Waechters und die Grenze seiner Unwissenheits-Meldung) -> 55.
-  billing: 55,
+  // IEX-B1: inboundOutageAlertWindowMs + -MinFailures + -MinAttempts + -FailSharePercent
+  // ergaenzt (eigene Schwellen der Inbound-Ausfall-Klasse des Betreiber-Melders) -> 59.
+  billing: 59,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -197,7 +199,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // IE6-S2: openaiApiKey + realtimeModel + realtimeVoice entfernt -> 189.
 // IEL-B10: werkzeug.renderApiKey ergaenzt (voice.elevenLabsInbound bleibt EIN Blatt) -> 190.
 // IEP-P6: inboundOwnerGreetingEnabled + inboundOwnerGreetingTenantIds (voice) ergaenzt -> 192.
-const EXPECTED_TOTAL_KEYS = 192;
+// IEX-B1: vier Inbound-Ausfall-Schwellen (billing) ergaenzt -> 196.
+const EXPECTED_TOTAL_KEYS = 196;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die gepinnten Counts und disjunkte Blaetter", () => {
   assert.deepEqual(
@@ -360,7 +363,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // voice.elevenLabsInbound und zaehlte nicht -> 178.
   // IEP-P6: inboundOwnerGreetingEnabled ist primitiv (Boolean) -> 179.
   // inboundOwnerGreetingTenantIds ist das SECHSTE Array (kein primitives Blatt, s.u.).
-  const EXPECTED_PRIMITIVE_LEAVES = 179;
+  // IEX-B1: die vier Inbound-Ausfall-Schwellen sind alle primitiv (Zahlen) -> 183.
+  const EXPECTED_PRIMITIVE_LEAVES = 183;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

@@ -282,9 +282,22 @@ export function makeCallFinish({
     store.save();
 
     // IEX-A2 (E5/O3): gescheiterte Uebergabe an den EL-Agenten -> keine Notification, keine
-    // Nutzer-/Betreiber-Mail, kein summarizeCall, keine SMS, kein Inbox-Eintrag. Die Buchung oben
+    // NUTZER-Mail, kein summarizeCall, keine SMS, kein Inbox-Eintrag. Die Buchung oben
     // ist gelaufen (Traeger-Minuten sind real, Tenant-Decke sieht sie - Regel 1).
-    if (uebergabeGescheitert(call)) return void logGescheiterteUebergabe(call);
+    //
+    // IEX-B1: dieselbe Naht ist der Ausloeser des BETREIBER-Melders - dieselbe Funktion,
+    // die der not-placed-Zweig unten ueber reportFailedCall ruft (kein zweiter Meldeweg,
+    // G5). Ohne sie faellt ein Totalausfall des EL-Inbound-Pfads NIEMANDEM auf: O3
+    // verbietet jede Tenant-/Owner-Benachrichtigung, und im Log sucht nur, wer schon
+    // weiss, dass etwas kaputt ist. O3 bleibt unangetastet - reportSystematicOutage meldet
+    // ausschliesslich an den Betreiber-Kanal (Mail/SMS aus der Plattform-Config), nie an
+    // den Tenant und nie an den Owner. Vollstaendig fail-soft (eigenes try/catch dort):
+    // ein Fehler hier darf den Anruf-Abschluss nie abbrechen.
+    if (uebergabeGescheitert(call)) {
+      logGescheiterteUebergabe(call);
+      await reportSystematicOutage({ store, config, call, audit, messaging, mailer });
+      return;
+    }
 
     if (call.status !== "completed" || !call.transcript.length) {
       const target = call.direction === "outbound" ? call.to : call.from;
