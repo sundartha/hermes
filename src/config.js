@@ -13,6 +13,11 @@ import { KOSTENPROFIL } from "./billing/kostenarten.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 // IEX-A9: Blatt-Modul ohne Imports (kein Zyklus).
 import { DEFAULT_INBOUND_EL_SCOPE } from "./elevenlabs/inbound-scope.js";
+// IEP-P2: EINE Quelle fuer den Asset-Pfad (Schreiber: Dial-Direktive, Leser: Boot-Riegel unten).
+// inbound-rueckfall.js haengt nur an Modulen, die hier ohnehin schon im Graphen liegen
+// (store/defaults.js, utils/timer.js, billing/kostenarten.js) plus telephony/directives.js, einem
+// import-freien Blatt - kein Zyklus.
+import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.js";
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
 // G5: die Minute lebt in utils/timer.js (import-freies Blatt, kein Zyklus) - dieselbe
 // Zahl, gegen die Abrechnung und Consult-Fristen rechnen. Stunde/Tag leiten hier ab.
@@ -860,6 +865,19 @@ const rawConfig = {
     // Beleg Fehlersatz + Auflegen). Kein Wildcard. Getrimmt wie sttProfile; ein unbekannter Wert bricht den
     // BOOT ab (boot-guard elInboundScopeFindings), nicht erst den Anruf.
     scope: (process.env.ELEVENLABS_INBOUND_SCOPE || DEFAULT_INBOUND_EL_SCOPE).trim(),
+    // IEP-P2 (Owner-Entscheidung 10): kurzer, vorab gerenderter Begruessungslaut waehrend der
+    // Dial-Wartezeit statt des Telnyx-US-Freitons. DEFAULT AN - anders als sonst bei neuen
+    // Schaltern, und das ist Absicht: der Aus-Zustand ist die Sofortannahme OHNE Fuellung, und
+    // genau die ist hoerbar schlechter als heute (Stille statt Freiton). Der Schalter ist der
+    // einzeln revertierbare Rueckweg der FUELLUNG; der Rueckweg der SOFORTANNAHME ist
+    // EL_DIAL_ANSWER_ON_BRIDGE im Code. Wirkt nur auf dem EL-Inbound-Pfad:
+    // ELEVENLABS_INBOUND_ENABLED=false oder ein nicht gepinnter Tenant sehen unveraendert das
+    // heutige Inbound-TeXML.
+    begruessungslautEnabled: boolEnv(
+      "ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED",
+      process.env.ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED,
+      { fallback: true },
+    ),
     // IEL-B1: Digest-Zugang, mit dem unser <Dial><Sip> sich bei ElevenLabs anmeldet - EIN
     // gemeinsamer Zugang fuer alle gepinnten DIDs. Passwort SECRET - nie loggen/leaken.
     // .trim() wie bei elevenLabsToolToken: ein eingefuegtes Newline waere ein Zugang, der
@@ -2416,6 +2434,16 @@ const REQUIRED_CONFIG = Object.freeze([
       Boolean(config.server.webDistDir) &&
       !existsSync(path.join(config.server.webDistDir, "index.html")),
     name: "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",
+  },
+  {
+    // IEP-P2: Fuellung an, Asset fehlt -> Telnyx bekaeme eine 404-URL und spielte wieder seinen
+    // US-Freiton. Sichtbarer Boot-Fehler statt stiller Regression (Muster WEB_DIST_DIR-Build).
+    // Die Datei ist repo-committet; der Riegel faengt Auslieferungs- und Umbenennungsfehler,
+    // nicht den Normalbetrieb.
+    fehlt: () =>
+      config.voice.elevenLabsInbound.begruessungslautEnabled &&
+      !existsSync(path.join(config.server.publicDir, EL_BEGRUESSUNGSLAUT_PFAD)),
+    name: `Begruessungslaut-Asset (public${EL_BEGRUESSUNGSLAUT_PFAD} fehlt - node scripts/render-begruessungslaut.mjs)`,
   },
 ]);
 

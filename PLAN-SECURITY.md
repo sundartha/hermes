@@ -4199,9 +4199,14 @@ Schalter (`ELEVENLABS_INBOUND_ENABLED`), Tenant-Allowlist (`ELEVENLABS_INBOUND_T
 vollstaendiger Zugang zusammen erfuellt sind (`inboundElPathFor`), und sie laeuft NACH allen sieben
 Sicherungen des Handlers (Signatur-MW, Wiederholungs-Riegel, Nummern-Aufloesung, Kostendecke,
 Notbremse mit EL-Satz, Cap/Geld-Wache, set-once-Kostenprofil). Auf dem EL-Pfad ist
-`<Dial answerOnBridge="true"><Sip>` das erste Verb (IEX-A4: Freizeichen bis zur SIP-Annahme); den Hinweis spricht der Agent als Teil seiner vom Server gesetzten und geprueften
+`<Dial audioUrl="…"><Sip>` das erste Verb (IEP-P2: es beantwortet das eingehende Bein SOFORT, und
+waehrend der Dial-Wartezeit laeuft unser eigener Begruessungslaut statt des Anbieter-Freitons); den
+Hinweis spricht der Agent als Teil seiner vom Server gesetzten und geprueften
 Eroeffnung (IEX-A3). Dazu kommen zwei neue
-signaturpflichtige Routen (`/voice/el-rueckfall`, `/voice/el-bein`). Kein neues Env, keine neue
+signaturpflichtige Routen (`/voice/el-rueckfall`, `/voice/el-bein`). Ein neues, nicht-geheimes Env
+(`ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED`, Default an) und ein statisches Asset unter
+`public/brand/` (bestehender `express.static`-Mount, keine neue Route, kein Eintrag in
+`route-policy.js` noetig), keine neue
 Dependency. Schalter aus oder Tenant nicht gepinnt: Inbound-TeXML byte-identisch (Golden-Test).
 
 ### 1. SIP-Zugang
@@ -4214,7 +4219,7 @@ Dependency. Schalter aus oder Tenant nicht gepinnt: Inbound-TeXML byte-identisch
 | Log | Nie geloggt: Direktiven und TeXML werden nicht geloggt, Renderer-Fehler nennen nur Feldnamen, Grep-Test "eine Lesestelle" (`test/iel-b8-weiche.test.js` 9), Spawn-Test "Passwort nicht im stdout" (12) |
 | Transportweg (E16) | Wert entsteht im Prozess von `iel-geheimnisse.mjs`, geht nur an Render-API, ElevenLabs-API und Registrierungs-PATCH; nie Chat, Agent, lokale `.env`, Log |
 | Mindestlaengen | `SIP_PASSWORD_MIN_LENGTH` und `INIT_WEBHOOK_TOKEN_MIN_LENGTH` (je 32) |
-| Rotation | Nicht automatisiert. Erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` mit ALLEN gepinnten DIDs, dann Deploy. Im Zwischenfenster scheitert Digest -> 487 -> `<Redirect>` -> Fehlersatz + Auflegen (IEX-A2) ([M1] J4/F-F); mit `answerOnBridge` ist das fuer das nie beantwortete Bein UNBELEGT (M-S3, Pflicht vor Rollout b, sonst IEX-A4b) |
+| Rotation | Nicht automatisiert. Erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` mit ALLEN gepinnten DIDs, dann Deploy. Im Zwischenfenster scheitert Digest -> 487 -> `<Redirect>` -> Fehlersatz + Auflegen (IEX-A2) ([M1] J4/F-F); seit IEP-P2 laeuft das auf einem bereits beantworteten Bein, also im belegten Fall |
 | Abweichung Render vs. Anbieter | Entsteht nur nach Teilausfall ohne erneuten Lauf; nicht lesend pruefbar. Am Anruf erkennbar: `[el-rueckfall]`-Zeile ohne `[el-init]` (E16) |
 
 ### 2. Offenlegung
@@ -4296,15 +4301,24 @@ API-Views bleibt es entfernt.
   Pflichtsatz-Zeile laeuft `finishCall` in den Zweig "Anruf fehlgeschlagen" statt in eine
   Zusammenfassung ueber nur den Hinweis. Timeout und Dauerfehler des Polls enden schon heute als
   failed.
-- **`answerOnBridge` (IEX-A4):** ob nach einem nie beantworteten, gescheiterten Dial der Fehlersatz
-  noch hoerbar ist, ist unbelegt (M-S3). Negativ: Freizeichen, dann Leitungsende ohne Satz, Abschluss
-  ueber E5 (`WARTET`) ohne Benachrichtigung. Rollout (b) mit `answerOnBridge` nur nach positivem M-S3,
-  sonst IEX-A4b (`false`).
-- **Buchungs-Vorlauf (IEX-A4):** `answeredAt` liegt vor der Traeger-Annahme. Legt der Anrufer beim
-  Freizeichen auf, bucht `voiceMinutesOf` (aufrunden) mindestens eine Minute auf die Tenant-Decke,
-  obwohl der Traeger nie annahm. Konservativ in Richtung Regel 1 (die Decke unterschaetzt nie).
-  Missbrauch kostet einen Angreifer nichts und sperrt die Decke fuer beide Richtungen: Messung M-A1,
-  Owner-Frage F2/F4.
+- **`answerOnBridge` (IEX-A4): geschlossen mit IEP-P2.** Das Dial traegt kein `answerOnBridge` mehr,
+  beantwortet das Bein also sofort; damit entfaellt die Pflichtmessung M-S3 (der Fehlersatz auf einem
+  BEANTWORTETEN Bein ist gemessen, [M1] F-F). Neues ungemessenes Element an ihrer Stelle ist U1: dass
+  der Anbieter-Default `false` hier wirklich sofort annimmt - alle M1-Messungen liefen auf bereits
+  beantworteten Beinen. Belegt wird es am Ohrzeugen-Nachher-Lauf, nicht im Code.
+- **Begruessungslaut (IEP-P2):** die Fuellung der Wartezeit laeuft ueber `audioUrl` am `<Dial>` auf ein
+  statisches, oeffentlich ausgeliefertes WAV ohne Sprache. Ignoriert Telnyx das Attribut, faellt der
+  Anrufer auf den Anbieter-Freiton zurueck (fail-soft, exakt der Schalter-Aus-Zustand) - kein Abbruch,
+  keine Stille, kein Gate beruehrt. Die Attributschreibweise ist doku-belegt, nicht am Konto gemessen.
+  Rueckweg: `ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED=false`.
+- **Buchungs-Vorlauf (IEX-A4), durch IEP-P2 gedreht:** der Befund "`answeredAt` liegt vor der
+  Traeger-Annahme" ist entschaerft - das Anrufer-Bein ist ab dem TeXML beantwortet. Dafuer NEU: eine in
+  der Wartephase abgebrochene Zustellung erzeugt jetzt eine real abgerechnete Traegerminute
+  (`voiceMinutesOf` rundet auf), wo vorher nur der Vorlauf gebucht wurde. Als **Rollout**-Gate - nicht
+  als Owner-Test-Gate - ist die Klingelphasen-Abbruchquote aus den `detail_records` ueber einen
+  laengeren Zeitraum zu beziffern; ist sie nennenswert, vor dem Rollout `EL_DIAL_RING_TIMEOUT_S`
+  senken. Die Decke selbst bleibt unangetastet und sperrt weiter beide Richtungen (Messung M-A1,
+  Owner-Frage F2/F4).
 
 ## IEL-B9 — Anbieter-Konfiguration fuer Inbound (2026-09-15)
 

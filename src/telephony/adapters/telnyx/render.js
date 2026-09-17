@@ -176,6 +176,18 @@ function answerOnBridgeAttr(directive) {
   return directive.answerOnBridge === true ? { answerOnBridge: "true" } : {};
 }
 
+// IEP-P2: Telnyx nennt das Attribut audioUrl - "custom ringback tone ... while waiting for the
+// call to be answered" (Telnyx-Doku Dial-Verb, festgehalten in tasks/iex-r1-eroeffnung.md,
+// Abschnitt "Was hoert der Anrufer waehrend <Dial>?"). Neutral heisst das Feld ringbackAudioUrl;
+// der Provider-Name lebt nur hier, wie bei voiceAttrs. Nur ein nichtleerer String rendert etwas -
+// fehlend, leer oder anderer Typ bleiben byte-gleich zum Bestand (Anbieter-Default: eigener
+// Landes-Freiton). ringTone wird bewusst NIE gesetzt: sein Default ist genau der
+// 440/480-Hz-Doppelton, den der Owner in Test #2 als Netz-Klingeln hoerte.
+function ringbackAudioAttr(directive) {
+  const url = directive.ringbackAudioUrl;
+  return typeof url === "string" && url.length > 0 ? { audioUrl: url } : {};
+}
+
 // <Dial><Sip>: alle Attribute und die URI laufen durch escapeXml (attrString). Attribut-
 // Reihenfolge ist vertraglich (Snapshot test/iel-dial-render.test.js).
 function renderDialSip(directive) {
@@ -186,6 +198,7 @@ function renderDialSip(directive) {
   const statusCallbackUrl = requireDialField(directive, "statusCallbackUrl");
   const dial = attrString({
     ...answerOnBridgeAttr(directive),
+    ...ringbackAudioAttr(directive),
     callerId,
     timeout: clampDialSeconds(directive.timeoutS, "timeoutS", {
       minS: DIAL_TIMEOUT_MIN_S,

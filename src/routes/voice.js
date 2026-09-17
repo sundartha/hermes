@@ -50,6 +50,7 @@ import { EL_RUECKFALL_PFAD } from "../elevenlabs/inbound-bridges.js";
 import {
   EL_BEIN_PFAD,
   RUECKFALL_ENTSCHEIDUNG,
+  elBegruessungslautUrl,
   elFehlersatzDirektiven,
   elUebergabeDirektiven,
   msSeitBindung,
@@ -141,14 +142,20 @@ async function sendBudgetBegruessung({ res, call, locale }, { store, sendVoiceXm
 async function sendElUebergabe({ res, call }, { config, inboundBridges, sendVoiceXml }) {
   logInboundPath({ callId: call.id, path: INBOUND_PATH.ELEVENLABS });
   inboundBridges.armDeadlines(call.id); // E9-2, Anker answeredAt - vor dem Senden: nie Stille
-  const zugang = config.voice.elevenLabsInbound;
+  // Umbenannt: das Objekt traegt seit IEP-P2 nicht nur den Zugang (N7).
+  const elInbound = config.voice.elevenLabsInbound;
   await sendVoiceXml(
     res,
     call,
     elUebergabeDirektiven({
       call,
-      zugang: { username: zugang.sipUser, password: zugang.sipPassword },
+      zugang: { username: elInbound.sipUser, password: elInbound.sipPassword },
       publicUrl: config.server.publicUrl,
+      // IEP-P2: AN/AUS entscheidet HIER - das Direktiven-Modul bleibt config-frei (dessen
+      // Modulkopf). Aus -> null -> Uebergabe-TeXML byte-gleich zur Form ohne Fuellung.
+      begruessungslautUrl: elInbound.begruessungslautEnabled
+        ? elBegruessungslautUrl(config.server.publicUrl)
+        : null,
     }),
   );
 }

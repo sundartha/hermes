@@ -160,6 +160,11 @@ services:
       # faellt damit in die sichere Richtung zurueck. Live ist Dashboard-managed.
       - key: ELEVENLABS_INBOUND_SCOPE
         value: "allowlist"
+      # IEP-P2: Begruessungslaut waehrend der Dial-Wartezeit. Kein Geheimnis, daher value.
+      # Default "true" = der Auslieferungsstand der Phase; "false" ist der Rueckweg der Fuellung.
+      # Live ist Dashboard-managed - diese Zeile allein aendert Live nichts.
+      - key: ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED
+        value: "true"
       # ---- Bootstrap (Owner-Removal P2b, GAP-38: vom In-Prozess-Boot gelesen) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,

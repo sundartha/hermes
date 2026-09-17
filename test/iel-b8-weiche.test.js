@@ -1,7 +1,7 @@
 // ---- IEL-B8: Rueckfall-Routen und Inbound-Weiche des EL-Inbound-Wegs ------------------------
 // /voice/incoming entscheidet EINMAL je Anruf zwischen Budget-Pfad (Schalter aus / nicht gepinnt,
 // byte-identisch, Golden-Test) und der Uebergabe an den ElevenLabs-Agenten: <Dial><Sip> als erstes
-// Verb (IEX-A3), mit answerOnBridge (IEX-A4), dann <Redirect> auf /voice/el-rueckfall?quelle=dial_ende. Die Rueckfall-Route
+// Verb (IEX-A3), mit Sofortannahme und Begruessungslaut (IEP-P2), dann <Redirect> auf /voice/el-rueckfall?quelle=dial_ende. Die Rueckfall-Route
 // entscheidet nur aus dem persistierten Datensatz (Auflegen, Folge-Gather, Fehlersatz), der
 // SIP-Bein-Callback /voice/el-bein armiert die innere Frist.
 //
@@ -56,6 +56,7 @@ import {
   normalizeIncomingTexml,
   nowSeconds,
   postTelnyxIncoming,
+  quelltexteUnter,
   seedCall,
   seedWithTelnyxNumber,
   startServer,
@@ -73,6 +74,8 @@ const EL_INBOUND = KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
 const PUBLIC_URL = "https://agent.test";
 const BINDUNGS_TOKEN = "0123456789abcdef0123456789abcdef";
 const TEST_MAX_DAUER_S = 900;
+// IEP-P2: die Fuellung, die der ausgelieferte Default erzeugt (Literal, nicht abgeleitet).
+const BEGRUESSUNGSLAUT_URL = `${PUBLIC_URL}/brand/hermes-begruessungslaut.wav`;
 const SIP_USER = EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_USER;
 const SIP_PASSWORD = EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_PASSWORD;
 const INIT_TOKEN = EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INIT_WEBHOOK_TOKEN;
@@ -102,9 +105,11 @@ const EL_AN_ENV = Object.freeze({
 const XML_PRAEFIX = `<?xml version="1.0" encoding="UTF-8"?><Response>`;
 const XML_SUFFIX = "</Response>";
 
-// IEX-A4: die Dial-Eroeffnung der Uebergabe an EINER Stelle (Freizeichen, answerOnBridge).
-function dialOeffnung({ callerId, timeLimitS }) {
-  return `<Dial answerOnBridge="true" callerId="${callerId}" timeout="${EL_DIAL_RING_TIMEOUT_S}" timeLimit="${timeLimitS}">`;
+// IEP-P2: die Dial-Eroeffnung der Uebergabe an EINER Stelle - Sofortannahme (kein
+// answerOnBridge), Fuellung als audioUrl, sobald eine URL erwartet wird.
+function dialOeffnung({ callerId, timeLimitS, audioUrl }) {
+  const fuellung = audioUrl ? ` audioUrl="${audioUrl}"` : "";
+  return `<Dial${fuellung} callerId="${callerId}" timeout="${EL_DIAL_RING_TIMEOUT_S}" timeLimit="${timeLimitS}">`;
 }
 
 function uebergabeCall(extra = {}) {
@@ -155,15 +160,6 @@ test("IEL-B8-8: INBOUND_PATH.ELEVENLABS und seine eine Sonden-Zeile", async () =
   const zeilen = await captureConsole(() => logInboundPath({ callId: "c", path: INBOUND_PATH.ELEVENLABS }));
   assert.deepEqual(zeilen, ['[inbound-path] inbound_path {"callId":"c","path":"elevenlabs"}']);
 });
-
-// Alle .js-Dateien unter src/ (rekursiv), als [relativer Pfad, Inhalt].
-function quelltexteUnter(verzeichnis) {
-  return fs.readdirSync(verzeichnis, { withFileTypes: true }).flatMap((eintrag) => {
-    const voll = path.join(verzeichnis, eintrag.name);
-    if (eintrag.isDirectory()) return quelltexteUnter(voll);
-    return eintrag.name.endsWith(".js") ? [[voll, fs.readFileSync(voll, "utf8")]] : [];
-  });
-}
 
 test("IEL-B8-9: der SIP-Zugang hat in src/routes/voice.js und im Inbound-Trunk-Schreiber je genau EINE Lesestelle, sonst nur config und Praedikat", () => {
   const vorkommen = quelltexteUnter("src")
@@ -327,7 +323,7 @@ test("IEL-B8-12: Schalter an + gepinnt - Dial/Sip als erstes Verb, Redirect dial
     const call = einzigerCall(srv);
     const texml = normalizeIncomingTexml(roh).replace(/X-Hermes-Call-Binding=[0-9a-f]{32}/, "X-Hermes-Call-Binding=<token>");
     const erwartet =
-      `${XML_PRAEFIX}${dialOeffnung({ callerId: TELNYX_TEST_TENANT_NUMBER, timeLimitS: call.maxDurationS })}` +
+      `${XML_PRAEFIX}${dialOeffnung({ callerId: TELNYX_TEST_TENANT_NUMBER, timeLimitS: call.maxDurationS, audioUrl: BEGRUESSUNGSLAUT_URL })}` +
       `<Sip username="${SIP_USER}" password="${SIP_PASSWORD}" statusCallback="${PUBLIC_URL}/voice/el-bein?callId=call_X" statusCallbackEvent="answered">` +
       `sip:${TELNYX_TEST_TENANT_NUMBER}@sip.rtc.elevenlabs.io:5060;transport=tcp?X-Hermes-Call-Binding=<token></Sip></Dial>` +
       `<Redirect method="POST">${PUBLIC_URL}/voice/el-rueckfall?callId=call_X&amp;quelle=dial_ende</Redirect>${XML_SUFFIX}`;

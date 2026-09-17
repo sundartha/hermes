@@ -277,6 +277,9 @@ export const BASE_ENV = {
   // IEX-A9: neutral LEER (= Default allowlist in config.js), sonst leakt eine lokale .env mit
   // registrierte_dids in jeden Spawn-Test (Lehre test-base-env-drift). Der Golden-Test faehrt so den Default.
   ELEVENLABS_INBOUND_SCOPE: "",
+  // IEP-P2: gepinnt, damit eine lokale .env nicht in Spawn-Tests leakt (Lehre
+  // test-base-env-drift). Leer = der config-Default greift (Muster ELEVENLABS_INBOUND_SCOPE).
+  ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED: "",
   ELEVENLABS_INBOUND_SIP_USER: "",
   ELEVENLABS_INBOUND_SIP_PASSWORD: "",
   ELEVENLABS_INIT_WEBHOOK_TOKEN: "",
@@ -539,6 +542,18 @@ export const BASE_ENV = {
   OAUTH_AUDIENCE: "",
   RENDER_EXTERNAL_URL: "",
 };
+
+// Alle .js-Quelltexte unter einem REPO-RELATIVEN Verzeichnis als [pfad, inhalt]-Paare (Pfade
+// bleiben repo-relativ, z.B. "src/config.js"). Grundlage der Grep-Tests, die eine Invariante
+// ueber den ganzen Baum halten ("genau EINE Lesestelle"). Seit IEP-P2 hier statt in je einer
+// Testdatei - zwei Nutzer, eine Quelle (G5).
+export function quelltexteUnter(verzeichnis) {
+  return fs.readdirSync(path.join(ROOT, verzeichnis), { withFileTypes: true }).flatMap((eintrag) => {
+    const relativ = path.join(verzeichnis, eintrag.name);
+    if (eintrag.isDirectory()) return quelltexteUnter(relativ);
+    return eintrag.name.endsWith(".js") ? [[relativ, fs.readFileSync(path.join(ROOT, relativ), "utf8")]] : [];
+  });
+}
 
 // Erste nicht-interne IPv4-Adresse - Requests dorthin gelten serverseitig
 // nicht als localhost (req.socket.remoteAddress != 127.0.0.1).
