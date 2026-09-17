@@ -126,7 +126,21 @@ Owner-Entscheidungen 2026-09-16, zweite Runde (nach Strategie-Workflow, tasks/ie
     kriterien wie vorgeschlagen; F10a Alarm bei gescheiterter Uebergabe als eigene Phase vor dem
     Rollout, F10b keine Benachrichtigung bei Auflegen in der Wartephase.
 
+Owner-Entscheidungen 2026-09-17 (nach bestandenem Testanruf):
+14. Die Messmaschine ("Ohrzeuge", IEP-P1/P1b) wird restlos entfernt — ein Owner-Anruf ist der
+    bessere Messweg. "Ich habe keine Lust auf totes Gewicht."
+15. Zusammenfassungs-SMS bleibt AUS (steht fuer den Owner-Tenant auf false). Beim Rollout keine
+    SMS-Welle ausloesen.
+16. Reihenfolge danach: Messmaschine raus -> Inbound fuer ALLE Kunden -> Budget-Engine loeschen.
+    Uebergabe an die naechste Sitzung: tasks/kickoff-iep-abschluss.md.
+
 - [x] IEP Strategie-Workflow Inbound-Paritaet -> tasks/iep-strategie.md (12 Agenten, 11 Blocker geloest)
-- [ ] IEP-P0 Owner-Aufnahme + Delta-Analyse der 39 Dateien zwischen 9917db7 und 52530ce
-- [ ] IEP-P1..P7 bauen (Lead autonom, je ein Workflow-Lauf), dann EIN Owner-Test
-- [ ] Danach: Rollout alle Tenants, Budget-Engine loeschen, IEX-A12
+- [x] IEP-P0 Delta-Analyse der 39 Dateien: hoerbar waren answerOnBridge (Klingeln) und die
+      getauschte Eroeffnungsquelle; fuer "duemmer im Gespraech" gab der Diff nichts her.
+- [x] IEP-P2 Sofortannahme + Begruessungslaut, IEP-P6 Eroeffnung im Owner-Wortlaut + Owner-Ton,
+      IEP-P2c Laut aus ElevenLabs-Soundeffekt. Live seit 648f690.
+- [x] IEP-T Owner-Testanruf 2026-09-17 BESTANDEN ("funktioniert alles"): keine Roboteransage,
+      kein Klingeln, Ton und Eroeffnung abgenommen, Inbound klingt wie Outbound.
+- [ ] IEP-A Messmaschine restlos entfernen (Entscheidung 14)
+- [ ] IEX-B Inbound fuer alle Kunden freischalten (Runbook iex-spec-a.md §7 b)
+- [ ] IEL-X Budget-Engine entfernen — erst nach dem Rollout
