@@ -1,25 +1,12 @@
-// WAV-Auswertung des Ohrzeugen (IEP-P1) ohne Fremdbibliothek: RIFF lesen, Kanaele trennen,
-// Huellkurve, Ton-/Stille-Segmente, Grundrauschen, Bandanteil.
+// RIFF/WAVE-Leser ohne Fremdbibliothek: Kopf pruefen, Format lesen, Kanaele trennen.
 //
-// REIN: kein IO, kein fetch, keine Uhr, kein config - alles kommt als Argument herein.
-// Nur so laesst sich die Positiv-Kontrolle ("bekannter Fremdton, bekannte Stille") ohne
-// Anruf fahren.
+// EINZIGER Zweck: die Quelle des abgenommenen Begruessungslauts
+// (scripts/render-begruessungslaut.mjs, test/iep-p2-begruessungslaut.test.js).
 //
-// Ein nicht unterstuetztes Format WIRFT. Ein Auswerter, der im Zweifel 0 liefert, sieht
-// aus wie ein stiller Anruf - und genau das waere der Befund, den wir suchen.
-
-export const FENSTER_MS = 20;
-// Absoluter Boden: darunter ist es auch dann Stille, wenn der Mitschnitt fast rauschfrei ist.
-const STILLE_SCHWELLE_DBFS = -50;
-// Relativ zum Grundrauschen: ein Mitschnitt mit Leitungsrauschen haette sonst nur "Ton".
-const RAUSCH_FAKTOR = 3;
-const RAUSCH_PERZENTIL = 10;
-// Statt -Infinity, damit jede Kennzahl JSON-faehig bleibt.
-const DBFS_BODEN = -120;
-
-const MS_JE_S = 1000;
-const PROZENT = 100;
-const DBFS_JE_DEKADE = 20;
+// REIN: kein IO, kein fetch, keine Uhr, kein config - die Bytes kommen als Argument herein.
+//
+// Ein nicht unterstuetztes Format WIRFT. Ein Leser, der im Zweifel Nullen liefert, sieht aus
+// wie stilles Audio - und das waere der Befund, den man suchen wuerde.
 
 // RIFF/WAVE-Kopf: "RIFF" + Groesse + "WAVE" = 12 Bytes, danach Chunks aus 8 Byte Kopf.
 const KOPF_LAENGE = 12;
@@ -33,20 +20,8 @@ const PCM16_BYTES = 2;
 const PCM16_MAX = 32768;
 const G711_BYTES = 1;
 
-// Blockgroesse der Bandanalyse (Zweierpotenz, Radix-2-FFT); die reale FFT liefert
-// FFT_BLOCK/2 nutzbare Bins bis zur Nyquist-Frequenz.
-const FFT_BLOCK = 512;
-// Reale Eingangsdaten -> Hermitesche Symmetrie: nur die untere Haelfte der Bins traegt
-// Information (>> 1 halbiert die Zweierpotenz).
-const SPEKTRUM_BINS = FFT_BLOCK >> 1;
-const NYQUIST_TEILER = 2;
-// Voller Kreis im Bogenmass; Hann-Fenster und Drehfaktor teilen ihn (G5).
-const VOLLER_KREIS = Math.PI + Math.PI;
-const ZEHNER_BASIS = 10;
 // RIFF-Chunks sind auf gerade Byte-Grenzen ausgerichtet.
 const CHUNK_AUSRICHTUNG = 2;
-// Hann-Fenster: w(i) = a - a*cos(2*pi*i/(N-1)).
-const HANN_A = 0.5;
 
 export class WavFehler extends Error {}
 
@@ -158,162 +133,4 @@ export function leseWav(bytes) {
   // durch die Chunks (Polsterchunks wie afconverts FLLR verschieben die Datenposition); wer das
   // Format pruefen will, soll dafuer keinen zweiten RIFF-Leser bauen muessen.
   return { abtastrate: format.abtastrate, format, kanaele: teileKanaele({ sicht, format, datenTeil }) };
-}
-
-// --- Huellkurve und Segmente ---------------------------------------------------------------
-
-/** RMS je FENSTER_MS. Der Index eines Wertes ist damit zugleich seine Startzeit / FENSTER_MS. */
-export function huellkurve({ proben, abtastrate }) {
-  const fenster = Math.max(1, Math.round((abtastrate * FENSTER_MS) / MS_JE_S));
-  const anzahl = Math.floor(proben.length / fenster);
-  const werte = new Float32Array(anzahl);
-  for (let i = 0; i < anzahl; i += 1) {
-    let summe = 0;
-    for (let k = i * fenster; k < (i + 1) * fenster; k += 1) summe += proben[k] * proben[k];
-    werte[i] = Math.sqrt(summe / fenster);
-  }
-  return werte;
-}
-
-function alsDbfs(rms) {
-  return rms > 0 ? DBFS_JE_DEKADE * Math.log10(rms) : DBFS_BODEN;
-}
-
-function ausDbfs(dbfs) {
-  return Math.pow(ZEHNER_BASIS, dbfs / DBFS_JE_DEKADE);
-}
-
-function perzentil(werte, anteilProzent) {
-  if (werte.length === 0) return 0;
-  const sortiert = Float32Array.from(werte).sort();
-  const index = Math.min(sortiert.length - 1, Math.floor((sortiert.length * anteilProzent) / PROZENT));
-  return sortiert[index];
-}
-
-/** Grundrauschen in dBFS: das RAUSCH_PERZENTIL-Perzentil der Huellkurve. */
-export function grundrauschen(huellkurveWerte) {
-  return huellkurveWerte.length === 0 ? null : alsDbfs(perzentil(huellkurveWerte, RAUSCH_PERZENTIL));
-}
-
-// DIE EINE Schwelle, die (ii) Fremdton, (v) Stille und (vi) Turn-Luecken teilen (G5).
-export function tonSchwelle(huellkurveWerte) {
-  return Math.max(ausDbfs(STILLE_SCHWELLE_DBFS), RAUSCH_FAKTOR * perzentil(huellkurveWerte, RAUSCH_PERZENTIL));
-}
-
-function segmenteWo(huellkurveWerte, trifftZu) {
-  const segmente = [];
-  let start = null;
-  const schliesse = (bis) => segmente.push({ startMs: start * FENSTER_MS, endeMs: bis * FENSTER_MS, dauerMs: (bis - start) * FENSTER_MS });
-  for (let i = 0; i < huellkurveWerte.length; i += 1) {
-    const passt = trifftZu(huellkurveWerte[i]);
-    if (passt && start === null) start = i;
-    if (!passt && start !== null) {
-      schliesse(i);
-      start = null;
-    }
-  }
-  if (start !== null) schliesse(huellkurveWerte.length);
-  return segmente;
-}
-
-export function tonSegmente({ huellkurve: huellkurveWerte, schwelle }) {
-  return segmenteWo(huellkurveWerte, (wert) => wert >= schwelle);
-}
-
-export function stilleSegmente({ huellkurve: huellkurveWerte, schwelle, minMs }) {
-  return segmenteWo(huellkurveWerte, (wert) => wert < schwelle).filter((segment) => segment.dauerMs >= minMs);
-}
-
-// --- Bandanteil (Klangkennzahl) -------------------------------------------------------------
-
-// Periodogramm EINES Blocks: Hann-Fenster, iterative Radix-2-FFT, Betragsquadrat je Bin.
-// Bewusst EINE Funktion - die FFT arbeitet in-place auf ihren eigenen Puffern, ein Helfer
-// muesste sie als Parameter mutieren.
-function periodogramm(block) {
-  const re = new Float64Array(FFT_BLOCK);
-  const im = new Float64Array(FFT_BLOCK);
-  for (let i = 0; i < FFT_BLOCK; i += 1) {
-    re[i] = block[i] * (HANN_A - HANN_A * Math.cos((VOLLER_KREIS * i) / (FFT_BLOCK - 1)));
-  }
-  // Bit-Umkehr: bringt die Eingaben in die Reihenfolge, die die Schmetterlinge erwarten.
-  for (let i = 1, j = 0; i < FFT_BLOCK; i += 1) {
-    let bit = SPEKTRUM_BINS;
-    for (; j & bit; bit >>= 1) j ^= bit;
-    j ^= bit;
-    if (i < j) {
-      [re[i], re[j]] = [re[j], re[i]];
-      [im[i], im[j]] = [im[j], im[i]];
-    }
-  }
-  for (let stufe = NYQUIST_TEILER; stufe <= FFT_BLOCK; stufe <<= 1) {
-    const grundwinkel = -VOLLER_KREIS / stufe;
-    const haelfte = stufe >> 1;
-    for (let anfang = 0; anfang < FFT_BLOCK; anfang += stufe) {
-      for (let k = 0; k < haelfte; k += 1) {
-        const cos = Math.cos(grundwinkel * k);
-        const sin = Math.sin(grundwinkel * k);
-        const links = anfang + k;
-        const rechts = links + haelfte;
-        const drehRe = re[rechts] * cos - im[rechts] * sin;
-        const drehIm = re[rechts] * sin + im[rechts] * cos;
-        re[rechts] = re[links] - drehRe;
-        im[rechts] = im[links] - drehIm;
-        re[links] += drehRe;
-        im[links] += drehIm;
-      }
-    }
-  }
-  const spektrum = new Float64Array(SPEKTRUM_BINS);
-  for (let bin = 0; bin < SPEKTRUM_BINS; bin += 1) spektrum[bin] = re[bin] * re[bin] + im[bin] * im[bin];
-  return spektrum;
-}
-
-// Ueber alle vollen Bloecke summiertes Periodogramm. Geteilt von bandAnteil und spitzenBin
-// (G5) - es gibt genau EINE FFT in diesem Repo.
-function summiertesSpektrum(proben) {
-  const spektrum = new Float64Array(SPEKTRUM_BINS);
-  for (let ab = 0; ab + FFT_BLOCK <= proben.length; ab += FFT_BLOCK) {
-    const blockSpektrum = periodogramm(proben.subarray(ab, ab + FFT_BLOCK));
-    for (let bin = 0; bin < SPEKTRUM_BINS; bin += 1) spektrum[bin] += blockSpektrum[bin];
-  }
-  return spektrum;
-}
-
-/**
- * Energieanteil oberhalb grenzHz am Gesamtspektrum. null, wenn die Abtastrate oberhalb
- * grenzHz gar kein Band mehr traegt oder zu wenig Audio fuer einen Block vorliegt.
- */
-export function bandAnteil({ proben, abtastrate, grenzHz }) {
-  if (abtastrate / NYQUIST_TEILER <= grenzHz || proben.length < FFT_BLOCK) return null;
-  const spektrum = summiertesSpektrum(proben);
-  const grenzBin = Math.ceil((grenzHz * FFT_BLOCK) / abtastrate);
-  let oben = 0;
-  let gesamt = 0;
-  for (let bin = 0; bin < SPEKTRUM_BINS; bin += 1) {
-    gesamt += spektrum[bin];
-    if (bin >= grenzBin) oben += spektrum[bin];
-  }
-  return gesamt > 0 ? oben / gesamt : null;
-}
-
-/**
- * Staerkster Spektralanteil: { hz, anteil }. `anteil` ist seine Energie gegen die
- * Gesamtenergie - die Messform von "ist das ein Ton oder ein Rauschen". Ein reiner Sinus
- * buendelt fast alles in einem Bin, breitbandiges Rauschen verteilt es.
- * null, wenn zu wenig Audio fuer einen Block vorliegt oder das Signal stumm ist.
- */
-export function spitzenBin({ proben, abtastrate }) {
-  if (proben.length < FFT_BLOCK) return null;
-  const spektrum = summiertesSpektrum(proben);
-  let gesamt = 0;
-  let groesster = 0;
-  let groessterBin = 0;
-  for (let bin = 0; bin < SPEKTRUM_BINS; bin += 1) {
-    gesamt += spektrum[bin];
-    if (spektrum[bin] > groesster) {
-      groesster = spektrum[bin];
-      groessterBin = bin;
-    }
-  }
-  return gesamt > 0 ? { hz: (groessterBin * abtastrate) / FFT_BLOCK, anteil: groesster / gesamt } : null;
 }

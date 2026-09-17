@@ -1,5 +1,5 @@
 {
-  "_hinweis": "Messfaelle fuer scripts/iel-mess.mjs (IE1 F-A..F-F, IEL-B11 N1/N2/N-D, IEP-P1 OZ-*). Werte hier aendern, NICHT die Befehlszeile. Grenzen (5 bzw. 3 bzw. 18 Anrufe je Zaehler-Gruppe, 60 s, erlaubte SIP-Ziele, gepinntes Ohrzeugen-Ziel, Wegwerf-Subdomain) stehen im Skript und sind hier nicht uebersteuerbar. {{lauf_id}} wird je Anruf durch eine frische Kennung ersetzt.",
+  "_hinweis": "Messfaelle fuer scripts/iel-mess.mjs (IE1 F-A..F-F, IEL-B11 N1/N2/N-D). Werte hier aendern, NICHT die Befehlszeile. Grenzen (5 bzw. 3 Anrufe je Zaehler-Gruppe, 60 s, erlaubte SIP-Ziele, Wegwerf-Subdomain) stehen im Skript und sind hier nicht uebersteuerbar. Ein Fall mit dem Feld ziel_e164, unbekannter art oder unbekannter Zaehler-Gruppe wird verweigert - dieses Werkzeug waehlt ausschliesslich SIP-Ziele. {{lauf_id}} wird je Anruf durch eine frische Kennung ersetzt.",
   "gemeinsam": {
     "say_stimme": { "voice": "Azure.de-DE-KatjaNeural", "language": "de-DE" },
     "pflichtsatz": "Hier spricht die Hermes Messung. Kontrollwort Leuchtturm.",
@@ -161,24 +161,7 @@
       "zaehler": "nachdeploy",
       "deckt": ["N1-m7-m8", "N2-ohne-inbound"],
       "misst": "Telnyx detail_records zu N1/N2, kein Anruf"
-    },
-    "OZ-vorher": {
-      "art": "texml-ohrzeuge",
-      "zaehler": "ohrzeuge",
-      "deckt": ["IEP-P1 (f) Vorher-Lauf", "M-S2 erstmals beziffert"],
-      "misst": "Anruf auf die eigene gepinnte DID mit dual-kanaligem Mitschnitt: was hoert ein Anrufer ab der Klingelphase, sieben Kennzahlen",
-      "ziel_e164": "+17067101188",
-      "anrufer_kennung": "+15804504874",
-      "dial_timeout_s": 20,
-      "sprechspur_nach_s": 12,
-      "eltern_auflegen_nach_s": null,
-      "mitschnitt": true
     }
-  },
-  "ohrzeuge": {
-    "_hinweis": "IEP-P1/P1b. ziel_e164 des Falls OZ-vorher ist die belegte DID des Mess-Tenants und muss ZUSAETZLICH mit dem gepinnten OHRZEUGE_ZIEL_PIN in scripts/iel-mess.mjs uebereinstimmen; leerer Pin oder abweichendes ziel_e164 = jeder Lauf verweigert. anrufer_kennung muss eine aktive DID desselben Telnyx-Kontos sein (Kontotreffer-Riegel), nie die Ziel-DID (Selbstanruf) und nie eine Nummer, die als private_number eines Tenants steht - sonst verfaelscht der Messanruf die spaetere Owner-Erkennung. sprechspur_sha256 wird von 'node scripts/iel-mess.mjs sprechspur' gedruckt und danach hier gepinnt.",
-    "sprechspur_text": "Guten Tag, hier ist Frau Berger. Ich wollte fragen, ob Herr Fotiadis morgen Vormittag erreichbar ist. Danke, dann versuche ich es spaeter noch einmal.",
-    "sprechspur_sha256": "34f2214bc02d4cc540b4589a7f3ff8d66b48eb4a7b290a488fc112ea9c751f59"
   },
   "setup": {
     "misst_fuer": ["F-F-ohne-agent"],

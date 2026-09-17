@@ -33,10 +33,6 @@ const TROCKEN_ZEIT_SPALTE = 3;
 // Telnyx-Seitengroesse fuer Listen (call_events, detail_records): eine Seite reicht fuer
 // einen einzelnen Mess-Anruf, detail_records blaettert der Aufrufer selbst.
 const TELNYX_SEITENGROESSE = 50;
-// IEP-P1: die Sprechspur ist eine vorab gerenderte mp3, gespielt in das andere Bein.
-const SPRECHSPUR_TYP = "mp3";
-const SPRECHSPUR_ZIEL_BEINE = "opposite";
-const KONTO_NUMMER_AKTIV = "active";
 
 // --- Ausgabe-Hygiene ------------------------------------------------------------------
 
@@ -109,30 +105,6 @@ export function texmlAnrufAnfrage({ fall, gemeinsam, header, laufId, geheim }) {
   };
 }
 
-// IEP-P1 Schritt 4: GENAU EIN Verb. Jedes <Say> hier wuerde den Anrufer-Kanal von Sekunde
-// null mit unserem eigenen Ton belegen - die Kennzahl "Fremdton vor der ersten Hermes-Silbe"
-// wuerde dann nichts mehr messen (B21). callerId steht ausdruecklich am <Dial>, wird also
-// nicht vom A-Bein geerbt.
-function texmlOhrzeugeDokument({ fall }) {
-  const attribute = ` callerId="${escapeXml(fall.anrufer_kennung)}" timeout="${fall.dial_timeout_s}" timeLimit="${ANBIETER_ZEITLIMIT_S}"`;
-  return `<?xml version="1.0" encoding="UTF-8"?><Response><Dial${attribute}><Number>${escapeXml(fall.ziel_e164)}</Number></Dial></Response>`;
-}
-
-export function texmlOhrzeugeAnfrage({ fall, laufId }) {
-  return {
-    anbieter: "telnyx",
-    methode: "POST",
-    pfad: `/v2/texml/calls/${TEXML_APP_ID}`,
-    form: {
-      From: fall.anrufer_kennung,
-      To: `sip:${laufId}@${ANRUFER_SUBDOMAIN}`,
-      Texml: texmlOhrzeugeDokument({ fall }),
-      Timeout: String(ANRUFER_KLINGEL_S),
-      TimeLimit: String(ANBIETER_ZEITLIMIT_S),
-    },
-  };
-}
-
 function texmlAnrufPfad(callSid) {
   return `/v2/texml/Accounts/${config.telephony.telnyxAccountSid}/Calls/${callSid}`;
 }
@@ -161,16 +133,6 @@ export const ccAktionAnfrage = (callControlId, aktion, koerper) => ({
 
 export const ccStatusAnfrage = (callControlId) => ({ anbieter: "telnyx", methode: "GET", pfad: `/v2/calls/${callControlId}` });
 
-// IEP-P1: der kontrollierte Anrufer-Text als vorab gerenderte mp3 in das GEGENUEBERLIEGENDE
-// Bein. Eigene command_id, damit Kennzahl (iii) unsere Spur nicht als Fremdton zaehlt.
-export const ccSprechspurAnfrage = (callControlId, { inhaltBase64, kommandoId }) =>
-  ccAktionAnfrage(callControlId, "playback_start", {
-    playback_content: inhaltBase64,
-    audio_type: SPRECHSPUR_TYP,
-    target_legs: SPRECHSPUR_ZIEL_BEINE,
-    command_id: kommandoId,
-  });
-
 export function ccWaehlenAnfrage({ fall, header }) {
   return {
     anbieter: "telnyx",
@@ -193,24 +155,6 @@ export const aufnahmenAnfrage = (callSessionId) => ({
 
 export const callEventsAnfrage = (legId) => ({
   anbieter: "telnyx", methode: "GET", pfad: `/v2/call_events?filter%5Bleg_id%5D=${encodeURIComponent(legId)}&page%5Bsize%5D=${TELNYX_SEITENGROESSE}`,
-});
-
-// IEP-P1: BEIDE Beine einer Sitzung in einer Abfrage. Die leg-basierte Abfrage darueber
-// bleibt als Positiv-Kontrolle daneben stehen.
-export const sitzungsEreignisseAnfrage = (callSessionId, seite) => ({
-  anbieter: "telnyx",
-  methode: "GET",
-  pfad:
-    `/v2/call_events?filter%5Bapplication_session_id%5D=${encodeURIComponent(callSessionId)}` +
-    `&page%5Bsize%5D=${TELNYX_SEITENGROESSE}&page%5Bnumber%5D=${seite}`,
-});
-
-// IEP-P1 Eigentumsbeleg: filter[phone_number] matcht bei Telnyx TEILWEISE - der exakte
-// Vergleich passiert beim Aufrufer (iel-mess-ohrzeuge.mjs), nicht hier.
-export const kontoNummerAnfrage = (e164) => ({
-  anbieter: "telnyx",
-  methode: "GET",
-  pfad: `/v2/phone_numbers?filter%5Bphone_number%5D=${encodeURIComponent(e164)}&filter%5Bstatus%5D=${KONTO_NUMMER_AKTIV}`,
 });
 
 export const detailRecordsAnfrage = (recordType, seite) => ({
@@ -245,8 +189,8 @@ export function elGespraecheAnfrage({ nachUnix, agentId, anzahl }) {
 
 export const elGespraechAnfrage = (id) => ({ anbieter: "eleven", methode: "GET", pfad: `/v1/convai/conversations/${id}` });
 
-// dateiname folgt dem Mitschnitt-Format der Fall-Gruppe (mp3 bzw. wav) - ElevenLabs
-// entscheidet am Dateinamen, wie es den Upload dekodiert.
+// dateiname folgt dem Mitschnitt-Format der Fall-Gruppe (mp3) - ElevenLabs entscheidet am
+// Dateinamen, wie es den Upload dekodiert.
 export const elSttAnfrage = ({ modell, audio, dateiname }) => ({
   anbieter: "eleven", methode: "POST", pfad: "/v1/speech-to-text", multipart: { felder: { model_id: modell }, datei: audio, dateiname },
 });
@@ -353,18 +297,14 @@ const PLATZHALTER = Object.freeze({
   sid: "<call_sid>",
   ccId: "<call_control_id>",
   leg: "<call_leg_id>",
-  gewaehltesBein: "<gewaehltes_call_leg_id>",
   session: "<call_session_id>",
   gespraech: "<conversation_id>",
   agent: "<agent_id>",
 });
 
-// Feste Musterzeiten des Trockenlaufs: 2 s zwischen Waehlen und Annahme, Mitschnitt ab
-// derselben Sekunde. Keine echte Uhr - der Trockenlauf bleibt byte-gleich reproduzierbar.
+// Feste Musterzeit des Trockenlaufs: der Mitschnitt beginnt zu dieser Sekunde. Keine echte
+// Uhr - der Trockenlauf bleibt byte-gleich reproduzierbar.
 const MUSTER_AUFNAHME_START = "2026-01-01T00:00:00.000Z";
-const MUSTER_ANNAHME = "2026-01-01T00:00:02.000Z";
-// Query-Teil von sitzungsEreignisseAnfrage, an dem der Trockenlauf sie wiedererkennt.
-const SITZUNGS_FILTER = "filter%5Bapplication_session_id%5D";
 
 const MUSTER_BEIN = { call_control_id: PLATZHALTER.ccId, call_leg_id: PLATZHALTER.leg, call_session_id: PLATZHALTER.session };
 
@@ -387,37 +327,19 @@ function musterAntwort(anfrage, kontext) {
     [() => pfad.startsWith("/v1/convai/conversations/"), () => musterGespraech(kontext)],
     [() => pfad.startsWith("/v2/recordings?"), () => ({ data: [musterAufnahme()] })],
     [() => pfad.startsWith("/v1/speech-to-text"), () => ({ text: "" })],
-    [() => pfad.includes(SITZUNGS_FILTER), () => ({ data: musterSitzungsEreignisse() })],
-    [() => pfad.startsWith("/v2/phone_numbers?"), () => ({ data: [{ phone_number: nummerAusFilter(pfad), status: KONTO_NUMMER_AKTIV }] })],
   ];
   const treffer = regeln.find(([passt]) => passt());
   return treffer ? treffer[1]() : { data: [] };
 }
 
-// IEP-P1: der Mitschnitt liegt in BEIDEN Formaten bereit, damit m1/nachdeploy (mp3) und
-// der Ohrzeuge (wav) denselben Trockenlauf durchlaufen.
+// Musteraufnahme fuer den Trockenlauf: dasselbe Format, das beide Gruppen mitschneiden.
 function musterAufnahme() {
   return {
     id: "<recording_id>",
     call_session_id: PLATZHALTER.session,
     recording_started_at: MUSTER_AUFNAHME_START,
-    download_urls: { mp3: "<download_url>", wav: "<download_url>" },
+    download_urls: { mp3: "<download_url>" },
   };
-}
-
-// Zwei Beine EINER Sitzung: unseres (PLATZHALTER.leg) und das gewaehlte. Nur so zeigt der
-// Trockenlauf eine bezifferte Kennzahl (i) statt eines Grundes.
-function musterSitzungsEreignisse() {
-  const bein = (callLegId, name, occurredAt) => ({ name, occurred_at: occurredAt, payload: { payload: { call_leg_id: callLegId } } });
-  return [
-    bein(PLATZHALTER.leg, "call.initiated", MUSTER_AUFNAHME_START),
-    bein(PLATZHALTER.gewaehltesBein, "call.initiated", MUSTER_AUFNAHME_START),
-    bein(PLATZHALTER.gewaehltesBein, "call.answered", MUSTER_ANNAHME),
-  ];
-}
-
-function nummerAusFilter(pfad) {
-  return new URLSearchParams(pfad.slice(pfad.indexOf("?") + 1)).get("filter[phone_number]") ?? "<phone_number>";
 }
 
 function musterRegistrierung(kontext) {

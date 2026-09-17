@@ -19,9 +19,6 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SPAWN_TIMEOUT_MS = 15000;
 const ATTRAPPE_MODUL = pathToFileURL(path.join(ROOT, "test", "_iel-b11-fetch-attrappe.mjs")).href;
 
-// Der eine gepinnte Mess-Tenant der Ohrzeugen-Laeufe (ELEVENLABS_INBOUND_TENANT_IDS).
-export const MESS_TENANT_ID = "tenant-mess";
-
 // Jede Env-Variable, die scripts/iel-mess.mjs ueber src/config.js liest, gehoert HIER hin -
 // sonst leckt die lokale .env in die Spawn-Tests (Bestandslehre BASE_ENV-Drift).
 export const BASIS_ENV = Object.freeze({
@@ -33,11 +30,6 @@ export const BASIS_ENV = Object.freeze({
   ELEVENLABS_API_KEY: "test-el-schluessel",
   ELEVENLABS_AGENT_ID: "agent_b11_test",
   ELEVENLABS_API_BASE: "http://el.test",
-  // IEP-P1: die drei Werte, die der Ohrzeugen-Riegel liest. Ausdruecklich gesetzt, damit
-  // kein Test von einem Default abhaengt und keine lokale Umgebung durchschlaegt.
-  OUTBOUND_FROZEN: "false",
-  ELEVENLABS_INBOUND_SCOPE: "allowlist",
-  ELEVENLABS_INBOUND_TENANT_IDS: MESS_TENANT_ID,
 });
 
 export function ielMessDateiNamen() {
@@ -47,14 +39,7 @@ export function ielMessDateiNamen() {
 }
 
 export function bauMessBaum(optionen = {}) {
-  const {
-    m1Zaehler,
-    nachdeployZaehler = { ausgeloest: 0, anrufe: [] },
-    ohrzeugeZaehler = { ausgeloest: 0, anrufe: [] },
-    wegwerf,
-    vorlauf,
-    sprechspur,
-  } = optionen;
+  const { m1Zaehler, nachdeployZaehler = { ausgeloest: 0, anrufe: [] }, wegwerf } = optionen;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "iel-b11-"));
   const scriptsDir = path.join(dir, "scripts");
   const tasksDir = path.join(dir, "tasks");
@@ -69,14 +54,11 @@ export function bauMessBaum(optionen = {}) {
   const m1Inhalt = m1Zaehler ?? JSON.parse(fs.readFileSync(m1Pfad, "utf8"));
   fs.writeFileSync(path.join(tasksDir, "iel-m1-zaehler.json"), JSON.stringify(m1Inhalt));
   fs.writeFileSync(path.join(tasksDir, "iel-nachdeploy-zaehler.json"), JSON.stringify(nachdeployZaehler));
-  fs.writeFileSync(path.join(tasksDir, "iel-ohrzeuge-zaehler.json"), JSON.stringify(ohrzeugeZaehler));
   if (wegwerf) fs.writeFileSync(path.join(tasksDir, "iel-m1-wegwerf.json"), JSON.stringify(wegwerf));
-  if (vorlauf) fs.writeFileSync(path.join(tasksDir, "iel-ohrzeuge-vorlauf.json"), JSON.stringify(vorlauf));
-  if (sprechspur) fs.writeFileSync(path.join(tasksDir, "iel-ohrzeuge-sprechspur.mp3"), sprechspur);
   return dir;
 }
 
-export function zaehlerHash(dir, datei) {
+function zaehlerHash(dir, datei) {
   const inhalt = fs.readFileSync(path.join(dir, "tasks", datei));
   return createHash("sha256").update(inhalt).digest("hex");
 }
@@ -91,7 +73,7 @@ export function faellePfadIn(dir) {
 
 // Die EINE Stelle, die die Fall-Datei einer Messbaum-Kopie umschreibt (G5). Die Aenderung
 // LIEFERT die neue Konfiguration - das gelesene Objekt wird nie mutiert.
-export function aendereKonfigurationIn(dir, aenderung) {
+function aendereKonfigurationIn(dir, aenderung) {
   const pfad = faellePfadIn(dir);
   const konfiguration = JSON.parse(fs.readFileSync(pfad, "utf8"));
   fs.writeFileSync(pfad, JSON.stringify(aenderung(konfiguration)));

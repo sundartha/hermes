@@ -14,11 +14,8 @@ import {
   elSipNachrichtenAnfrage,
   elSttAnfrage,
   maskiereNummern,
-  sitzungsEreignisseAnfrage,
   texmlAnrufeAnfrage,
 } from "./iel-mess-anbieter.mjs";
-import { WavFehler } from "./iel-mess-audio.mjs";
-import { ohrzeugeAudioSicht, ohrzeugeKennzahlen } from "./iel-mess-ohrzeuge.mjs";
 
 const MS_JE_S = 1000;
 // Puffer vor dem Laufstart fuer den Gespraechsfilter (Uhrenversatz Anbieter <-> lokal).
@@ -170,8 +167,8 @@ export async function sammleCallEvents(kontext) {
 
 // --- Mitschnitt des Anrufer-Beins -----------------------------------------------------
 
-// EINE Warteschleife fuer beide Auswertungen (Kontrollwort-Fall wie Ohrzeuge): auf die
-// Aufnahme warten, sie im Format der Fall-Gruppe laden. Liefert immer einen Status.
+// Wartet auf die Aufnahme des Anrufer-Beins und laedt sie im Format der Fall-Gruppe. Liefert
+// immer einen Status - nie eine stille Null.
 async function holeAufnahme(kontext) {
   const { transport, uhr, griffe, gruppe } = kontext;
   if (!griffe.ccSession) return { status: "kein_anrufer_bein" };
@@ -314,71 +311,6 @@ export async function sammleSipNachrichten(kontext) {
     ergebnis.push({ conversation_id: gespraech.conversation_id, http: antwort.status, ...sipNachrichtenBeleg(antwort.json?.sip_messages) });
   }
   return ergebnis;
-}
-
-// --- IEP-P1: Ohrzeugen-Belege (sieben Kennzahlen je Lauf) --------------------------------
-//
-// EIN Download, EINE STT-Anfrage: der Ohrzeuge wertet den Mitschnitt hier aus und NICHT
-// zusaetzlich ueber werteMitschnittAus (G5, s. Gruppen-Haken werteMitschnitt).
-
-const SITZUNGS_EREIGNIS_MAX_SEITEN = 3;
-
-async function sammleSitzungsEreignisse(kontext) {
-  const sitzung = kontext.griffe.ccSession;
-  if (!sitzung) return { http: [], eintraege: [] };
-  const http = [];
-  const eintraege = [];
-  for (let seite = 1; seite <= SITZUNGS_EREIGNIS_MAX_SEITEN; seite += 1) {
-    const antwort = await kontext.transport.senden(sitzungsEreignisseAnfrage(sitzung, seite));
-    http.push(antwort.status);
-    const daten = antwort.json?.data ?? [];
-    eintraege.push(...daten);
-    if (daten.length === 0) break;
-  }
-  return { http, eintraege };
-}
-
-// Ein unlesbarer Mitschnitt ist ein BENANNTER Grund, nie eine stille Null - und er darf die
-// Beleg-Sammlung nach einem echten Anruf nicht abbrechen.
-async function leseOhrzeugeAudio(mitschnitt) {
-  if (mitschnitt.status !== "ausgewertet") return { audio: null, grund: `Mitschnitt nicht verfuegbar (${mitschnitt.status})` };
-  try {
-    return { audio: ohrzeugeAudioSicht(new Uint8Array(await mitschnitt.audio.arrayBuffer())) };
-  } catch (fehler) {
-    return { audio: null, grund: fehler instanceof WavFehler ? fehler.message : `Mitschnitt nicht lesbar (${fehler.name})` };
-  }
-}
-
-function ohrzeugeAufnahmeSicht(mitschnitt) {
-  return {
-    status: mitschnitt.status,
-    id: mitschnitt.aufnahme?.id ?? null,
-    gestartet_am: mitschnitt.aufnahme?.recording_started_at ?? null,
-  };
-}
-
-function ereignisNamen(eintraege) {
-  return zaehleNamen(eintraege.map((ereignis) => ereignis.name ?? ereignis.type ?? "?"));
-}
-
-export async function sammleOhrzeugeBelege(kontext) {
-  const ereignisse = await sammleSitzungsEreignisse(kontext);
-  const mitschnitt = await holeAufnahme(kontext);
-  const { audio, grund } = await leseOhrzeugeAudio(mitschnitt);
-  const erkennung = mitschnitt.status === "ausgewertet" ? await erkenneSprache(kontext, mitschnitt) : null;
-  const aufnahme = ohrzeugeAufnahmeSicht(mitschnitt);
-  return {
-    ohrzeuge: {
-      sitzungs_ereignisse: { http: ereignisse.http, namen: ereignisNamen(ereignisse.eintraege) },
-      aufnahme,
-      kennzahlen: ohrzeugeKennzahlen({
-        mitschnitt: { audio, grund, gestartetMs: Date.parse(aufnahme.gestartet_am ?? "") },
-        lauf: { ereignisse: ereignisse.eintraege, laufId: kontext.laufId, unserBein: kontext.griffe.ccLeg },
-      }),
-      stt_http: erkennung?.status ?? null,
-      stt_auszug: kuerze(erkennung?.json?.text, NACHRICHT_MAX_ZEICHEN),
-    },
-  };
 }
 
 export async function sammleNachdeployBelege(kontext) {

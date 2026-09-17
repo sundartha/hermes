@@ -4324,11 +4324,13 @@ API-Views bleibt es entfernt.
   Pflichtsatz-Zeile laeuft `finishCall` in den Zweig "Anruf fehlgeschlagen" statt in eine
   Zusammenfassung ueber nur den Hinweis. Timeout und Dauerfehler des Polls enden schon heute als
   failed.
-- **`answerOnBridge` (IEX-A4): geschlossen mit IEP-P2.** Das Dial traegt kein `answerOnBridge` mehr,
-  beantwortet das Bein also sofort; damit entfaellt die Pflichtmessung M-S3 (der Fehlersatz auf einem
-  BEANTWORTETEN Bein ist gemessen, [M1] F-F). Neues ungemessenes Element an ihrer Stelle ist U1: dass
-  der Anbieter-Default `false` hier wirklich sofort annimmt - alle M1-Messungen liefen auf bereits
-  beantworteten Beinen. Belegt wird es am Ohrzeugen-Nachher-Lauf, nicht im Code.
+- **`answerOnBridge` (IEX-A4): geschlossen mit IEP-P2; U1 geschlossen am 2026-09-17.** Das Dial traegt
+  kein `answerOnBridge` mehr, beantwortet das Bein also sofort; damit entfaellt die Pflichtmessung M-S3
+  (der Fehlersatz auf einem BEANTWORTETEN Bein ist gemessen, [M1] F-F). Das an ihrer Stelle offene
+  Element U1 - dass der Anbieter-Default `false` hier wirklich sofort annimmt, alle M1-Messungen liefen
+  auf bereits beantworteten Beinen - ist durch den bestandenen Owner-Testanruf vom 2026-09-17 belegt
+  (kein Klingeln, Ton und Eroeffnung abgenommen). Kein Rest offen; die Messmaschine, an der der Beleg
+  haengen sollte, ist mit IEP-A entfernt.
 - **Begruessungslaut (IEP-P2):** die Fuellung der Wartezeit laeuft ueber `audioUrl` am `<Dial>` auf ein
   statisches, oeffentlich ausgeliefertes WAV ohne Sprache. Ignoriert Telnyx das Attribut, faellt der
   Anrufer auf den Anbieter-Freiton zurueck (fail-soft, exakt der Schalter-Aus-Zustand) - kein Abbruch,
