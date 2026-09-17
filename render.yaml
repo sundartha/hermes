@@ -520,6 +520,18 @@ services:
       # C8b: monatlicher Selbsttest ueber beide Kanaele. 0 = komplett aus.
       - key: OUTAGE_ALERT_SELF_TEST_INTERVAL_MS
         value: "2592000000"
+      # ---- Inbound-Ausfall-Melder (IEX-B1) ----
+      # Dieselbe Erkennungsregel, eigene Klasse: meldet einen systematischen Ausfall des
+      # EL-Inbound-Pfads (Anrufer hoert den Fehlersatz statt des Assistenten). Erfolg ist
+      # hier die gelungene Uebergabe, NICHT answeredAt. 0 = komplett aus.
+      - key: INBOUND_OUTAGE_ALERT_WINDOW_MS
+        value: "21600000"
+      - key: INBOUND_OUTAGE_ALERT_MIN_FAILURES
+        value: "2"
+      - key: INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS
+        value: "20"
+      - key: INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT
+        value: "10"
       # C8 (Owner-Entscheidung F-8): 24-h-Eskalation eines haengenden Kuendigungs-
       # Nummern-HOLD (platform_number_in_use) ueber denselben Meldeweg. 0 = komplett aus.
       - key: PLATFORM_HOLD_ESCALATION_MAX_AGE_MS

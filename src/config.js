@@ -218,6 +218,9 @@ const MS_PER_DAY = HOURS_PER_DAY * MS_PER_HOUR;
 // (G25: benannte Konstanten statt Zahlenketten im Ausdruck).
 const OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT = 6;
 const OUTAGE_ALERT_RETRY_MINUTES_DEFAULT = 15;
+// IEX-B1: Beobachtungsfenster des INBOUND-Ausfall-Melders - laenger als die Outbound-
+// Stunde, weil Inbound ein anderes Verkehrsregime hat (Begruendung am Blatt unten).
+const INBOUND_OUTAGE_ALERT_WINDOW_HOURS_DEFAULT = 6;
 // FW2: Standard-Haltedauer des Guthaben-Latch (G25/G35, Muster
 // OUTAGE_ALERT_RETRY_MINUTES_DEFAULT).
 const LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT = 15;
@@ -1239,6 +1242,54 @@ const rawConfig = {
     process.env.OUTAGE_ALERT_SELF_TEST_INTERVAL_MS,
     { fallback: OUTAGE_ALERT_SELF_TEST_DAYS_DEFAULT * MS_PER_DAY, min: 0 },
   ),
+  // ---- Inbound-Ausfall-Melder (IEX-B1, tasks/iex-b-spec.md) ----
+  // Eigene Klasse fuer den systematischen Ausfall des EL-INBOUND-Pfads: Erfolg ist hier
+  // die gelungene Uebergabe an den Agenten, NICHT answeredAt (seit der Sofortannahme
+  // traegt jeder eingehende Anruf answeredAt - die Outbound-Definition ergaebe einen
+  // Melder, der nie ausloest). 0 = Melder KOMPLETT AUS (Rollback-Hebel, Muster
+  // outageAlertWindowMs).
+  //
+  // 6 h statt der Outbound-Stunde: der Melder urteilt rueckwaerts, ein laengeres Fenster
+  // verzoegert nichts, es sammelt mehr Beleg. Outbound erreicht in einer Stunde genug
+  // Versuche, Inbound nicht - heute laeuft EIN Tenant ueber EL, nach dem Rollout drei DIDs
+  // mit niedriger Einzelfrequenz. Mit dem Outbound-Fenster koennte ein Totalausfall
+  // stundenlang unbemerkt bleiben, schlicht weil in keiner einzelnen Stunde zwei Anrufe
+  // eingehen. ANNAHME dahinter (heute nicht gemessen, es gibt die Zahlen noch nicht):
+  // wenige Anrufe je Stunde ueber drei DIDs, und ein Rueckfall ist im Normalbetrieb
+  // selten. Nachziehen zwei Wochen nach dem Rollout aus der Prod-DB (GEBUNDEN vs.
+  // RUECKFALL je Woche) - reine Env-Aenderung, kein Code-Deploy.
+  inboundOutageAlertWindowMs: numEnv(
+    "INBOUND_OUTAGE_ALERT_WINDOW_MS",
+    process.env.INBOUND_OUTAGE_ALERT_WINDOW_MS,
+    { fallback: INBOUND_OUTAGE_ALERT_WINDOW_HOURS_DEFAULT * MS_PER_HOUR, min: 0 },
+  ),
+  // K1 (kleines Volumen): 2 statt der Outbound-3. Ein gezaehlter Fehler ist hier kein
+  // Fremdverschulden, sondern UNSER eigener Vermerk (elFallbackAt wird an genau einer
+  // Stelle gesetzt) - jede solche Zeile heisst "ein Anrufer hat statt des Assistenten den
+  // Fehlersatz gehoert". Zwei davon im Fenster OHNE eine einzige gelungene Uebergabe
+  // dazwischen (K1 verlangt erfolge===0 bzw. mehrere Tenants) ist kein Rauschen.
+  inboundOutageAlertMinFailures: numEnv(
+    "INBOUND_OUTAGE_ALERT_MIN_FAILURES",
+    process.env.INBOUND_OUTAGE_ALERT_MIN_FAILURES,
+    { fallback: 2, min: 1 },
+  ),
+  // Mindestnenner wie Outbound: die Grenze, ab der ein Anteil ueberhaupt aussagt. Darunter
+  // entscheidet K1.
+  inboundOutageAlertMinAttempts: numEnv(
+    "INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS",
+    process.env.INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS,
+    { fallback: 20, min: 1 },
+  ),
+  // K2-Schwelle in Prozent (ganzzahlig): 10 statt der Outbound-20. Ein gescheitertes
+  // Inbound-Gespraech ist fuer den Anrufer ein Totalverlust (kein Retry wie beim
+  // Outbound-Auftrag). Konsistenzprobe an der Klassengrenze: bei versuche=20 verlangt K2
+  // fehler*100 >= 20*10, also fehler>=2 - exakt minFailures. K1 und K2 partitionieren die
+  // Volumen-Achse damit nahtlos, K2 ist an der Grenze nie schwaecher als K1.
+  inboundOutageAlertFailSharePercent: numEnv(
+    "INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT",
+    process.env.INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT,
+    { fallback: 10, min: 0, max: 100 },
+  ),
   // C8 (Owner-Entscheidung F-8, PLAN-OUTBOUND-RESILIENZ.md Abschnitt 9): "Darf eine
   // Kuendigung wegen einer Plattform-Bindung haengen bleiben? Ja, mit HOLD + Audit +
   // 24-h-Eskalation." Mindestalter (ab tenant.suspendedAt), ab dem ein HOLD
@@ -2199,7 +2250,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "budgetWatchdogIntervalMs", "rateLimitPerMin", "csrfEnforce", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "paidWithoutNumberGraceMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso", "priceDriftMinIntervalMs", "priceDriftUnknownEscalateAfter"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "inboundOutageAlertWindowMs", "inboundOutageAlertMinFailures", "inboundOutageAlertMinAttempts", "inboundOutageAlertFailSharePercent", "platformHoldEscalationMaxAgeMs", "paidWithoutNumberGraceMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso", "priceDriftMinIntervalMs", "priceDriftUnknownEscalateAfter"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "provisioningRetryMaxAttempts", "provisioningRetryMinIntervalMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -
