@@ -8,57 +8,40 @@
 // Produktions-Inbound (Buchung, Inbox, Benachrichtigung) ausloesen. Die Live-Umleitung bleibt
 // eine Messung am ersten realen Fehlerfall (Spec 8).
 //
-// IEP-P1: dritte Zaehler-Gruppe "ohrzeuge" - der EINZIGE Weg, der eine echte Telefonnummer
-// waehlt (die eigene gepinnte DID) und dabei dual-kanalig mitschneidet. Sie hat einen eigenen,
-// ENGEREN Pruefer (vier Riegel, s. scripts/iel-mess-ohrzeuge.mjs), kein setup/teardown und
-// keinen Anbieter-Schreibzugriff. "m1" und "nachdeploy" bleiben unberuehrt.
-//
-// Aufruf:  node scripts/iel-mess.mjs <fall|status|setup|teardown|sprechspur> [--dry-run]
+// Aufruf:  node scripts/iel-mess.mjs <fall|status|setup|teardown> [--dry-run]
 //          node scripts/iel-mess.mjs setup --nachdeploy|--nur-ausgehend [--dry-run]
 // Faelle und ihre Parameter: scripts/iel-mess.cases.json (Aenderungen NUR dort).
 //
 // Sicherungen IM Skript, nicht per Konvention:
 //   - Zaehler je Fall-Gruppe (Pflichtfeld "zaehler" im Fall): "m1" -> tasks/iel-m1-zaehler.json,
-//     max 5. "nachdeploy" -> tasks/iel-nachdeploy-zaehler.json, max 3. "ohrzeuge" ->
-//     tasks/iel-ohrzeuge-zaehler.json, max 18. Jede Gruppe hat eigene Sperr- und Ergebnisdatei.
-//     Gezaehlt wird VOR dem Senden. Fehlt oder zerfaellt die Zaehlerdatei einer Gruppe, wird
-//     verweigert - Loeschen setzt nichts zurueck.
+//     max 5. "nachdeploy" -> tasks/iel-nachdeploy-zaehler.json, max 3. Jede Gruppe hat eigene
+//     Sperr- und Ergebnisdatei. Gezaehlt wird VOR dem Senden. Fehlt oder zerfaellt die
+//     Zaehlerdatei einer Gruppe, wird verweigert - Loeschen setzt nichts zurueck.
 //   - Sperrdatei je Gruppe: nie zwei Mess-Anrufe derselben Gruppe gleichzeitig.
 //   - Je Anruf <= 60 s: Anbieter-Grenzen (TeXML TimeLimit + <Dial timeLimit>, Call-Control
 //     time_limit_secs) UND aktives Auflegen per API (Wachhund, Nachfassen, unabhaengiger
 //     Notaus-Timer, SIGINT/SIGTERM). Diese Stufen gelten fuer ALLE Gruppen gleich.
 //   - Nur SIP-Ziele: M1 ElevenLabs-SIP mit Spike2- oder fiktiver 555-01xx-Kennung, oder die
 //     nie antwortende TEST-NET-Adresse. Nachdeploy NUR ElevenLabs-SIP mit fiktiver 555-01xx-
-//     Kennung (kein Spike2, kein TEST-NET). Ausnahme ist allein die Ohrzeugen-Gruppe: sie
-//     waehlt genau EINE gepinnte Nummer (OHRZEUGE_ZIEL_PIN; leerer Pin = jeder Lauf verweigert).
+//     Kennung (kein Spike2, kein TEST-NET). Eine echte Telefonnummer waehlt dieses Werkzeug
+//     nicht: ein Fall mit dem Feld "ziel_e164" wird abgewiesen (pruefeFallDefinition).
 //   - --dry-run sendet nichts: fetch ist per Stolperdraht gesperrt und wird gezaehlt;
 //     Zaehler, Sperre und Ergebnisdatei werden nicht geschrieben.
 //   - Schluessel nur aus .env (src/config.js), nie in einer Ausgabe.
 
 import { istTrockenlauf, netzaufrufeImTrockenlauf, TROCKENLAUF_SCHALTER } from "./iel-mess-stolperdraht.mjs";
 
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { appendFile, access, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 
 import { config } from "../src/config.js";
 import { holeRegistrierungen, inventarSchnappschuss } from "../src/elevenlabs/nummern-registrierung.js";
-import { synthesizeSpeechStream } from "../src/tts/synth.js";
 import * as anbieter from "./iel-mess-anbieter.mjs";
-import {
-  sammleCallEvents,
-  sammleDetailRecords,
-  sammleElGespraeche,
-  sammleNachdeployBelege,
-  sammleOhrzeugeBelege,
-  werteMitschnittAus,
-} from "./iel-mess-belege.mjs";
-import { ohrzeugeSperrenGrund, ohrzeugeVorlaufGrund, sprechspurKommandoId } from "./iel-mess-ohrzeuge.mjs";
+import { sammleCallEvents, sammleDetailRecords, sammleElGespraeche, sammleNachdeployBelege, werteMitschnittAus } from "./iel-mess-belege.mjs";
 
 // --- Owner-Grenzen -----------------------------------------------------------------------
 const MAX_ANRUFE = 5;
 const MAX_NACHDEPLOY_ANRUFE = 3;
-// IEP-P1, Owner-Entscheidung 11 (tasks/todo.md): harter Deckel der Ohrzeugen-Messanrufe.
-const MAX_OHRZEUGE_ANRUFE = 18;
 const HART_MAX_S = 60;
 // Auflege-Stufen relativ zum Laufstart. Jede Anfrage bricht nach 5 s ab (Transport), eine
 // Stufe kann sich also um hoechstens Abfrage + Takt verspaeten und bleibt unter 60 s.
@@ -104,19 +87,8 @@ function tasksDatei(name) {
   return Object.freeze({ url: new URL(name, TASKS), anzeige: `tasks/${name}` });
 }
 
-// --- IEP-P1: Ohrzeuge ---------------------------------------------------------------------
-// Das EINE Ziel, das der Ohrzeuge waehlen darf: die aktive DID des Mess-Tenants
-// t_user_01KX600834GCJFV9GTZQKWZMTH, am Telnyx-Konto belegt (IEP-P1b, 2026-09-17) - nicht
-// geraten und NICHT aus dem Nummern-Inventar abgeleitet, das mit dem Rollout auf Kunden-DIDs
-// waechst. Der Wert steht bewusst in git (reviewbar) statt in einer lokal aenderbaren
-// Shell-Variablen; test/iep-p1-ohrzeuge-lauf.test.js nagelt ihn fest - jede Abweichung ist rot.
-// LEER = jeder Ohrzeugen-Lauf verweigert (der Rueckweg bleibt erhalten und getestet).
-const OHRZEUGE_ZIEL_PIN = "+17067101188";
+// Mitschnitt-Format beider Gruppen: Telnyx record_start, Download-Schluessel und STT-Dateiname.
 const MITSCHNITT_MP3 = "mp3";
-// dual-kanalig und unkomprimiert - die Kennzahlen rechnen auf den Proben, nicht auf mp3.
-const MITSCHNITT_WAV = "wav";
-const SPRECHSPUR = tasksDatei("iel-ohrzeuge-sprechspur.mp3");
-const VORLAUF = tasksDatei("iel-ohrzeuge-vorlauf.json");
 
 const EXIT = Object.freeze({ bedienfehler: 1, verweigert: 2, laufzeitfehler: 3, trockenlaufVerletzt: 4 });
 
@@ -254,12 +226,6 @@ async function keineZusatzbelege() {
 
 async function keineZusatzpruefung() {}
 
-// Der Ohrzeuge wertet seinen Mitschnitt in sammleOhrzeugeBelege aus - EIN Download, EINE
-// STT-Anfrage (G5). null heisst: dieser Gruppe gehoert kein eigenes mitschnitt-Feld im Beleg.
-async function ohneEigeneMitschnittAuswertung() {
-  return null;
-}
-
 const ZAEHLER_GRUPPEN = Object.freeze({
   m1: Object.freeze({
     max: MAX_ANRUFE,
@@ -285,56 +251,10 @@ const ZAEHLER_GRUPPEN = Object.freeze({
     werteMitschnitt: werteMitschnittAus,
     sammleZusatzbelege: sammleNachdeployBelege,
   }),
-  // IEP-P1: der Ohrzeuge waehlt eine ECHTE Nummer und laeuft NICHT durch
-  // src/telephony/outbound-gates.js - deshalb liegt der Notaus hier im Riegel, sonst haette
-  // der Kill-Switch eine Luecke (CLAUDE.md Regel 1).
-  ohrzeuge: Object.freeze({
-    max: MAX_OHRZEUGE_ANRUFE,
-    zaehler: tasksDatei("iel-ohrzeuge-zaehler.json"),
-    sperre: tasksDatei("iel-ohrzeuge-zaehler.lock"),
-    ergebnis: tasksDatei("iel-ohrzeuge-messung.jsonl"),
-    artPraefix: "iel-ohrzeuge",
-    pruefeZiel: pruefeOhrzeugeZiel,
-    pruefeVorAnruf: pruefeOhrzeugeVorAnruf,
-    mitschnittFormat: MITSCHNITT_WAV,
-    werteMitschnitt: ohneEigeneMitschnittAuswertung,
-    sammleZusatzbelege: sammleOhrzeugeBelege,
-  }),
 });
 
 function belegArt(gruppe, endung) {
   return `${gruppe.artPraefix}-${endung}`;
-}
-
-// IEP-P1 Review-Fix: "art" (bestimmt den gewaehlten Weg in WEGE) und "zaehler" (bestimmt die
-// gepruefte Riegel-Gruppe) sind zwei freie Felder in scripts/iel-mess.cases.json - ohne diese
-// Bindung koennte ein Fall mit art "texml-ohrzeuge" (waehlt eine echte Nummer) unter einem
-// fremden Zaehler laufen (schwaechere SIP-Riegel statt der vier Ohrzeugen-Riegel) oder
-// umgekehrt ein SIP-Fall unter dem Zaehler "ohrzeuge" (die Ohrzeugen-Riegel pruefen dann ein
-// Ziel, das gar nicht gewaehlt wird). Deshalb: exakt symmetrische Paarung, plus das Feld
-// "ziel_e164" (die einzige Nummer, die ueberhaupt gewaehlt wird) ausserhalb dieser Gruppe verboten.
-const OHRZEUGE_ART = "texml-ohrzeuge";
-const OHRZEUGE_ZAEHLER = "ohrzeuge";
-
-function pruefeArtZaehlerPaarung(fall) {
-  const artIstOhrzeuge = fall.art === OHRZEUGE_ART;
-  const zaehlerIstOhrzeuge = fall.zaehler === OHRZEUGE_ZAEHLER;
-  if (artIstOhrzeuge !== zaehlerIstOhrzeuge) {
-    throw new Verweigerung(
-      `Fall-Art "${fall.art}" und Zaehler-Gruppe "${fall.zaehler}" sind unvereinbar - "${OHRZEUGE_ART}" gehoert ausschliesslich zu Zaehler "${OHRZEUGE_ZAEHLER}" und umgekehrt - verweigert`,
-    );
-  }
-  if (!zaehlerIstOhrzeuge && fall.ziel_e164 !== undefined) {
-    throw new Verweigerung(`Feld ziel_e164 ist nur in der Zaehler-Gruppe "${OHRZEUGE_ZAEHLER}" erlaubt - verweigert`);
-  }
-}
-
-function gruppeFuer(name, fall) {
-  if (!Object.hasOwn(ZAEHLER_GRUPPEN, fall.zaehler ?? "")) {
-    throw new Verweigerung(`Fall ${name} nennt keine gueltige Zaehler-Gruppe (zaehler: ${Object.keys(ZAEHLER_GRUPPEN).join("|")}) - verweigert`);
-  }
-  pruefeArtZaehlerPaarung(fall);
-  return ZAEHLER_GRUPPEN[fall.zaehler];
 }
 
 // --- Pruefungen vor jedem Senden -------------------------------------------------------
@@ -407,69 +327,6 @@ function pruefeHeaderNamen(header) {
 // .env - sonst waere der spaetere Vergleich blind (pruefeRegistrierungsErwartung).
 function pruefeErwartungsKonfiguration(fall) {
   if (fall.registrierung_erwartet?.agent) pruefeAgentKennung();
-}
-
-// --- IEP-P1: die vier Riegel und der Vorlauf-Beleg ---------------------------------------
-// Die Entscheidung selbst liegt rein in scripts/iel-mess-ohrzeuge.mjs; hier steht nur, wo
-// die Eingaben herkommen und dass eine Verweigerung wirklich wirft.
-
-function werfeWennGesperrt(grund) {
-  if (grund) throw new Verweigerung(grund);
-}
-
-function ohrzeugeUmgebung() {
-  return {
-    outboundFrozen: config.safety.outboundFrozen,
-    inboundTenantIds: config.voice.elevenLabsInbound.tenantIds,
-    inboundScope: config.voice.elevenLabsInbound.scope,
-  };
-}
-
-function pruefeOhrzeugeZiel(fall) {
-  werfeWennGesperrt(ohrzeugeSperrenGrund({ fall, pin: OHRZEUGE_ZIEL_PIN, umgebung: ohrzeugeUmgebung() }));
-}
-
-// Dieselbe Datei fuer alle Laeufe: der Pin in iel-mess.cases.json belegt, dass genau die
-// gerenderte Sprechspur gespielt wird und nicht irgendeine Datei gleichen Namens.
-async function ladeSprechspur(ohrzeuge) {
-  const pin = ohrzeuge?.sprechspur_sha256;
-  if (!pin) throw new Verweigerung("Sprechspur nicht gepinnt (ohrzeuge.sprechspur_sha256 fehlt) - verweigert");
-  const bytes = await readFile(SPRECHSPUR.url).catch(() => null);
-  if (!bytes) throw new Verweigerung(`Sprechspur ${SPRECHSPUR.anzeige} fehlt - erst 'sprechspur' rendern`);
-  const hash = createHash("sha256").update(bytes).digest("hex");
-  if (hash !== pin) throw new Verweigerung("Sprechspur weicht vom Pin ab - verweigert");
-  return { base64: bytes.toString("base64"), sha256: hash };
-}
-
-// Eigentumsbeleg ueber den Transport (also trockenlauffest): je Nummer die Trefferliste,
-// exakt verglichen wird in ohrzeugeVorlaufGrund.
-async function leseKontoNummern(kontext, nummern) {
-  const treffer = {};
-  for (const nummer of nummern) {
-    const antwort = await kontext.transport.senden(anbieter.kontoNummerAnfrage(nummer));
-    if (!antwort.ok) throw new Verweigerung(`Konto-Nummern nicht lesbar (HTTP ${antwort.status}) - kein Anruf`);
-    treffer[nummer] = antwort.json?.data ?? [];
-  }
-  return treffer;
-}
-
-function vorlaufSicht(vorlauf) {
-  return {
-    belegt_am: vorlauf.belegt_am ?? null,
-    tenant_id: vorlauf.tenant_id ?? null,
-    ziel_did: maskiert(vorlauf.ziel_did),
-    sms_summary_opt_in: vorlauf.sms_summary_opt_in ?? null,
-    private_number_treffer: vorlauf.private_number_treffer ?? null,
-    kostendecke_rest_cents: vorlauf.kostendecke_rest_cents ?? null,
-  };
-}
-
-async function pruefeOhrzeugeVorAnruf(kontext) {
-  const vorlauf = await leseJson(VORLAUF.url, `Vorlauf-Beleg ${VORLAUF.anzeige} fehlt oder ist unlesbar - verweigert`);
-  const kontoNummern = await leseKontoNummern(kontext, [kontext.fall.ziel_e164, kontext.fall.anrufer_kennung]);
-  werfeWennGesperrt(ohrzeugeVorlaufGrund({ fall: kontext.fall, vorlauf, kontoNummern, umgebung: ohrzeugeUmgebung(), jetztMs: Date.now() }));
-  Object.assign(kontext, { sprechspur: await ladeSprechspur(kontext.konfiguration.ohrzeuge) });
-  Object.assign(kontext.beleg, { vorlauf: vorlaufSicht(vorlauf) });
 }
 
 function pruefeAnrufFall(kontext) {
@@ -571,8 +428,6 @@ function neuerBeleg({ name, fall, laufId, header, gruppe }) {
       weg: fall.art,
       sip_host: ziel?.host ?? null,
       sip_kennung: maskiert(ziel?.kennung),
-      // Nur die Ohrzeugen-Gruppe waehlt eine Nummer; fuer alle anderen bleibt das Feld weg.
-      ...(fall.ziel_e164 ? { ziel_e164: maskiert(fall.ziel_e164) } : {}),
       anrufer_kennung: maskiert(fall.anrufer_kennung),
       header_namen: Object.keys(header),
       dial_timeout_s: fall.dial_timeout_s,
@@ -709,8 +564,8 @@ async function ccBeinBeendet(kontext, callControlId) {
   return antwort.status === HTTP_NICHT_GEFUNDEN || antwort.json?.data?.is_alive === false;
 }
 
-// Beide TeXML-Wege teilen Start, Endeerkennung und Auflege-Griff; sie unterscheiden sich NUR
-// im Dokument, das gesendet wird (Bruecke an ein SIP-Ziel gegen Ohrzeuge an eine Nummer).
+// Der TeXML-Weg: Anlegen + Annehmen des Anrufer-Beins, Endeerkennung, Auflege-Griff. Der
+// Bauer der Anlage-Anfrage kommt herein - der Weg weiss nichts ueber das gesendete Dokument.
 function texmlWeg(anfrageBauer) {
   return {
     async starte(kontext) {
@@ -737,7 +592,6 @@ function texmlWeg(anfrageBauer) {
 
 const WEGE = Object.freeze({
   "texml-bruecke": texmlWeg(anbieter.texmlAnrufAnfrage),
-  "texml-ohrzeuge": texmlWeg(anbieter.texmlOhrzeugeAnfrage),
   "cc-direkt": {
     async starte(kontext) {
       const antwort = merkeSchritt(kontext, "cc_waehlen", await kontext.transport.senden(anbieter.ccWaehlenAnfrage(kontext)));
@@ -773,22 +627,7 @@ async function warteAufEnde(kontext, bisSekunde) {
   return false;
 }
 
-// IEP-P1: der kontrollierte Anrufer-Text. Ohne ihn gibt es keine Turn-Luecke zu messen und
-// keinen Wirkungsbeleg in P4. Eigene command_id, damit Kennzahl (iii) unsere Spur nicht als
-// Fremdton zaehlt.
-async function spieleSprechspurWennGefordert(kontext) {
-  const nachS = kontext.fall.sprechspur_nach_s;
-  if (!nachS || !kontext.griffe.ccId) return;
-  if (await warteAufEnde(kontext, nachS)) return;
-  const anfrage = anbieter.ccSprechspurAnfrage(kontext.griffe.ccId, {
-    inhaltBase64: kontext.sprechspur.base64,
-    kommandoId: sprechspurKommandoId(kontext.laufId),
-  });
-  merkeSchritt(kontext, "sprechspur_start", await kontext.transport.senden(anfrage));
-}
-
 async function begleiteBisEnde(kontext) {
-  await spieleSprechspurWennGefordert(kontext);
   const elternAuflegenS = kontext.fall.eltern_auflegen_nach_s;
   if (elternAuflegenS && !(await warteAufEnde(kontext, elternAuflegenS))) await legeAuf(kontext, "eltern_api", { nurHauptbein: true });
   if (!(await warteAufEnde(kontext, WACHHUND_AUFLEGEN_S))) await legeAuf(kontext, "wachhund");
@@ -891,8 +730,7 @@ async function sammleBelegeNachAnruf(kontext) {
   Object.assign(kontext.beleg, { elevenlabs: await sammleElGespraeche(kontext) });
   Object.assign(kontext.beleg, { telnyx_ereignisse: await sammleCallEvents(kontext) });
   if (!kontext.fall.mitschnitt) return;
-  const mitschnitt = await kontext.gruppe.werteMitschnitt(kontext);
-  if (mitschnitt) Object.assign(kontext.beleg, { mitschnitt });
+  Object.assign(kontext.beleg, { mitschnitt: await kontext.gruppe.werteMitschnitt(kontext) });
 }
 
 async function messeAnruf(kontext) {
@@ -902,8 +740,6 @@ async function messeAnruf(kontext) {
   await leseZaehler(kontext.gruppe);
   await pruefeRegistrierungVorAnruf(kontext);
   await merkeInventarVorAnruf(kontext);
-  // ohrzeuge: Vorlauf-Beleg, Konto-DIDs, Sprechspur - alles VOR der Reservierung.
-  await kontext.gruppe.pruefeVorAnruf(kontext);
   await kontext.buchhaltung.mitSperre(async () => {
     const anruf = async () => {
       const nr = await kontext.buchhaltung.reserviere(kontext);
@@ -1049,32 +885,6 @@ async function raeumeWegwerfAb(kontext) {
   await kontext.wegwerf.vergiss();
 }
 
-// --- IEP-P1: Sprechspur rendern (einmalig, kein Zaehler, kein Anruf) ----------------------
-// EINE TTS-Naht (src/tts/synth.js), derselbe Weg wie im Produktionspfad. Ergebnis ist eine
-// Datei plus ihr SHA-256 - der Hash wird in iel-mess.cases.json gepinnt und committed.
-
-async function rendereSprechspur(kontext) {
-  const text = kontext.konfiguration.ohrzeuge?.sprechspur_text;
-  if (!text) throw new Bedienfehler("scripts/iel-mess.cases.json: ohrzeuge.sprechspur_text fehlt");
-  if (istTrockenlauf) {
-    console.log(`[TROCKEN] wuerde ${text.length} Zeichen synthetisieren und nach ${SPRECHSPUR.anzeige} schreiben (kein Netz)`);
-    return;
-  }
-  const tts = config.voice.elevenLabsPlayTts;
-  if (!(tts.apiKey && tts.voiceId)) throw new Bedienfehler("Fehlt in .env: ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID");
-  const strom = await synthesizeSpeechStream(text, {
-    ...tts,
-    fetchImpl: fetch,
-    firstChunkTimeoutMs: tts.synthTimeoutMs,
-    totalTimeoutMs: tts.synthTotalTimeoutMs,
-  });
-  if (!strom.ok) throw new Error(`Sprechspur-Synthese gescheitert (${strom.reason})`);
-  const { bytes } = await strom.audio;
-  await writeFile(SPRECHSPUR.url, bytes);
-  console.log(`${SPRECHSPUR.anzeige} geschrieben: ${bytes.length} Bytes`);
-  console.log(`sprechspur_sha256: ${createHash("sha256").update(bytes).digest("hex")}`);
-}
-
 // --- Status (offline) ------------------------------------------------------------------
 
 const STATUS_NAME_BREITE = 16;
@@ -1112,10 +922,9 @@ async function zeigeStatus(kontext) {
 
 // --- Einstieg --------------------------------------------------------------------------
 
-const UNTERBEFEHLE = Object.freeze({ status: zeigeStatus, setup: legeWegwerfAn, teardown: raeumeWegwerfAb, sprechspur: rendereSprechspur });
+const UNTERBEFEHLE = Object.freeze({ status: zeigeStatus, setup: legeWegwerfAn, teardown: raeumeWegwerfAb });
 const ARTEN = Object.freeze({
   "texml-bruecke": messeAnruf,
-  "texml-ohrzeuge": messeAnruf,
   "cc-direkt": messeAnruf,
   "detail-records": messeDetailRecords,
   "registrierung-vergleich": messeRegistrierungsVergleich,
@@ -1123,6 +932,22 @@ const ARTEN = Object.freeze({
 
 // argv[0] = node, argv[1] = Skriptpfad - beide vor den eigentlichen Argumenten ueberspringen.
 const CLI_ARGV_OFFSET = 2;
+
+// Die drei Felder, mit denen eine blosse Aenderung an scripts/iel-mess.cases.json den Lauf
+// umlenken koennte - jedes fail-closed, keines faellt still als undefined durch.
+// "ziel_e164" (eine echte Telefonnummer statt eines SIP-Ziels) gab es nur fuer die entfernte
+// Ohrzeugen-Gruppe; seitdem waehlt dieses Werkzeug ausschliesslich SIP-Ziele.
+function pruefeFallDefinition(name, fall) {
+  if (fall.ziel_e164 !== undefined) {
+    throw new Verweigerung(`Fall ${name} traegt das Feld ziel_e164 - dieses Werkzeug waehlt ausschliesslich SIP-Ziele, nie eine Telefonnummer - verweigert`);
+  }
+  if (!Object.hasOwn(ARTEN, fall.art ?? "")) {
+    throw new Verweigerung(`Fall ${name} nennt keine gueltige Art (art: ${Object.keys(ARTEN).join("|")}) - verweigert`);
+  }
+  if (!Object.hasOwn(ZAEHLER_GRUPPEN, fall.zaehler ?? "")) {
+    throw new Verweigerung(`Fall ${name} nennt keine gueltige Zaehler-Gruppe (zaehler: ${Object.keys(ZAEHLER_GRUPPEN).join("|")}) - verweigert`);
+  }
+}
 
 // Loest EINEN Aufruf-Eintrag auf: entweder "setup --variante" (Nachdeploy-Wegwerf-Anlage,
 // braucht genau eine bekannte Option) oder ein Unterbefehl/Fall ohne jede Option. Alles
@@ -1133,10 +958,12 @@ function loeseEinstieg(argumente, konfiguration) {
     return { name, fall: {}, handlung: legeNachdeployWegwerfAn, gruppe: null, setupVariante: SETUP_VARIANTEN[optionen[0]] };
   }
   if (optionen.length > 0) return null;
+  const unterbefehl = UNTERBEFEHLE[name];
+  if (unterbefehl) return { name, fall: {}, handlung: unterbefehl, gruppe: null, setupVariante: null };
   const fall = konfiguration.faelle[name];
-  const handlung = UNTERBEFEHLE[name] ?? ARTEN[fall?.art];
-  if (!handlung) return null;
-  return { name, fall: fall ?? {}, handlung, gruppe: fall ? gruppeFuer(name, fall) : null, setupVariante: null };
+  if (!fall) return null;
+  pruefeFallDefinition(name, fall);
+  return { name, fall, handlung: ARTEN[fall.art], gruppe: ZAEHLER_GRUPPEN[fall.zaehler], setupVariante: null };
 }
 
 async function hauptprogramm() {
