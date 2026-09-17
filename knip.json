@@ -10,6 +10,7 @@
     "scripts/check-token-sync.js",
     "scripts/convo-bench.mjs",
     "scripts/inbound-hoerprobe.mjs",
+    "scripts/render-begruessungslaut.mjs",
     "scripts/backfill-plan-profiles.js",
     "scripts/anruf-unterbrechungen.mjs",
     "scripts/call-abandon-rate.mjs",

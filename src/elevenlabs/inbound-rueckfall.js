@@ -45,7 +45,7 @@ export const EL_BEIN_PFAD = "/voice/el-bein";
 // IEP-P2: EINE Quelle fuer Pfad und URL des Begruessungslauts, der die Luecke zwischen der
 // Sofortannahme und der ersten Agentensilbe besetzt. Ausgeliefert vom bestehenden statischen
 // public/-Mount - kein Parameter, keine neue Route (CLAUDE.md Regel 3). Erzeugt von
-// scripts/render-begruessungslaut.mjs.
+// scripts/render-begruessungslaut.mjs aus der abgenommenen ElevenLabs-Quelle (IEP-P2c).
 export const EL_BEGRUESSUNGSLAUT_PFAD = "/brand/hermes-begruessungslaut.wav";
 
 // Wurzel-relativ wie elBeinUrl; der Aufrufer setzt publicUrl davor.

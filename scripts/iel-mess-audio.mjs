@@ -154,7 +154,10 @@ export function leseWav(bytes) {
   const { format, datenTeil } = sucheChunks(daten, sicht);
   if (!format || !datenTeil) throw new WavFehler("RIFF ohne fmt- oder data-Chunk - Mitschnitt nicht auswertbar");
   if (!(format.kanaele > 0) || !(format.abtastrate > 0)) throw new WavFehler("WAV-Kopf nennt 0 Kanaele oder 0 Hz - Mitschnitt nicht auswertbar");
-  return { abtastrate: format.abtastrate, kanaele: teileKanaele({ sicht, format, datenTeil }) };
+  // format = { code, kanaele, abtastrate, bits } aus dem fmt-Chunk. Der Leser wandert ohnehin
+  // durch die Chunks (Polsterchunks wie afconverts FLLR verschieben die Datenposition); wer das
+  // Format pruefen will, soll dafuer keinen zweiten RIFF-Leser bauen muessen.
+  return { abtastrate: format.abtastrate, format, kanaele: teileKanaele({ sicht, format, datenTeil }) };
 }
 
 // --- Huellkurve und Segmente ---------------------------------------------------------------

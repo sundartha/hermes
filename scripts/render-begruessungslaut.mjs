@@ -1,213 +1,106 @@
 #!/usr/bin/env node
-// IEP-P2b (Owner-Befund 2026-09-17): Rezept des Begruessungslauts, der die Luecke zwischen der
-// Sofortannahme des eingehenden Beins und der ersten Agentensilbe besetzt.
+// IEP-P2c (Owner-Entscheidung 2026-09-17): UMWANDLER Quelle -> Auslieferungsdatei.
 //
-// Die erste Fassung (IEP-P2) war ein Sinus-Zweiklang bei -11 dBFS. Der Owner hat sie am
-// Live-Stand abgelehnt: hoch, piepsig, tut in den Ohren weh. Gemessen ist das kein Ton
-// "oberhalb 1 kHz" (beide Toene lagen darunter), sondern die Kombination aus Pegel,
-// Tonalitaet und Flankensteilheit - genau die drei Groessen, die test/iep-p2-begruessungslaut.js
-// jetzt als Schranke pinnt.
+// Der gerechnete Laut aus IEP-P2b ist durchgefallen ("hoert sich an wie Gewitter"). Der Owner hat
+// einen von ElevenLabs erzeugten Soundeffekt ausgewaehlt und abgenommen: weiches Abheben des
+// Hoerers, danach ruhige Leitung. Dieses Skript synthetisiert nichts mehr - es dokumentiert den
+// wiederholbaren Weg von der abgenommenen Quelle zur Auslieferungsdatei.
 //
-// SOLL: Raumruhe, die nicht auffaellt - "als ob jemand abheben wuerde". Also kein Ton,
-// sondern bandbegrenztes Komfortrauschen mit EINEM weichen Abhebe-Impuls.
+// DREI SCHRITTE, jeder mit Grund:
+//   (a) afconvert (macOS-Bordmittel) dekodiert die mp3 und liefert 8 kHz mono PCM16 - die
+//       Telefonie-Rate, also keine Transcodierung auf dem Weg zum Anrufer. KEINE npm-Dependency:
+//       ein lokales Werkzeug, wie ffmpeg in scripts/stt-wer.mjs. Auf einem Nicht-macOS-Rechner
+//       schlaegt der Lauf fehl; das ist beabsichtigt - die Auslieferungsdatei liegt im Repo.
+//   (b) Skalierung auf ZIEL_SPITZENPEGEL. Zu leise ist so schaedlich wie zu laut: der erste
+//       Entwurf lag bei -40 dBFS und war am Telefon nicht wahrnehmbar.
+//   (c) lineare Ausblende ueber AUSBLENDE_MS. Telnyx wiederholt die audioUrl - ein harter Schnitt
+//       am Ende knackte bei jeder Wiederholung.
 //
-// Vier Bauentscheidungen, jede mit Grund:
-//   (a) Bandpass 300..750 Hz statt reinem Tiefpass. Ein reiner Tiefpass legt zwei Drittel der
-//       Energie unter 300 Hz - unter die Uebertragungsgrenze eines Telefonhoerers. Der Pegel
-//       waere nominell eingehalten und der Laut trotzdem unhoerbar.
-//   (b) Durchgehendes Bett statt "kurz + Nachlauf-Stille". Der Nachlauf der ersten Fassung war
-//       reiner Kadenz-Schutz: Telnyx wiederholt die audioUrl. Ein durchgehendes Bett hat gar
-//       keine Kadenz. Die Dateilaenge haelt nur noch den Abhebe-Impuls aus dem Annahmefenster.
-//   (c) Nahtlose Schleife durch eine Aufwaerm-Runde: jede Filterstufe laeuft ZWEIMAL ueber
-//       dasselbe Rausch-Array, behalten wird die zweite. Bei periodischem Eingang ist der
-//       eingeschwungene Ausgang exakt periodisch - der Schleifenpunkt ist keine Unstetigkeit.
-//   (d) Der weiche Einsatz sitzt im Impuls, nicht in einer Bett-Einblendung. Eine Einblendung
-//       waere eine Pegel-Delle genau am Schleifenpunkt.
+// DIE COMMITTETE DATEI IST DIE ABGENOMMENE FASSUNG, nicht die Ausgabe dieses Laufs: ein
+// Nachlauf trifft sie hoerbar, aber nicht byte-genau (Container-Polsterung von afconvert,
+// +-1 LSB Rundung). Deshalb pinnt KEIN Test die Bytes; test/iep-p2-begruessungslaut.test.js
+// beschreibt die Eigenschaften der Datei, und kein Test ruft afconvert.
 //
-// Der Laut bleibt sprachlos: der erste gesprochene Satz ist die freigegebene Agenten-Eroeffnung
-// (Owner-Entscheidung 1/9).
-//
-// Warum ein Rezept statt einer blossen Binaerdatei: der Laut bliebe sonst ein Blindgaenger, den
-// niemand mehr reproduzieren koennte. test/iep-p2-begruessungslaut.test.js regeneriert ihn und
-// vergleicht byte-genau gegen die committete Datei.
-//
-// Aufruf: node scripts/render-begruessungslaut.mjs   (schreibt public/brand/…, idempotent)
-import { writeFileSync } from "node:fs";
+// Aufruf:
+//   node scripts/render-begruessungslaut.mjs            -> ERSETZT die abgenommene Auslieferungsdatei
+//   node scripts/render-begruessungslaut.mjs /tmp/x.wav -> schreibt woandershin (Pruefung ohne Risiko)
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { leseWav } from "./iel-mess-audio.mjs";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "../src/elevenlabs/inbound-rueckfall.js";
-import { MS_PER_SECOND } from "../src/utils/timer.js";
-
-// Jede Zahl traegt einen Namen (G25). Die Pegel sind Spitzenpegel als Bruchteil der
-// Vollaussteuerung: 0.0060 = -44.4 dBFS (Bett), Gesamtspitze mit Impuls -39.9 dBFS.
-export const BEGRUESSUNGSLAUT_REZEPT = Object.freeze({
-  abtastrateHz: 8000, // Telefonie-Rate: keine Transcodierung, kein Qualitaetsverlust
-  kanaele: 1,
-  bitTiefe: 16,
-  dauerMs: 6000, // haelt den Abhebe-Impuls aus dem EL-Annahmefenster (0,7-0,9 s) heraus
-  // Komfortrauschen: die Raumruhe, die das Fenster traegt. Deterministischer Seed - derselbe
-  // Laut bei jedem Rendern (Bestandstest IEP-P2-A1 vergleicht byte-genau).
-  bett: Object.freeze({
-    seed: 0x1ed2b2,
-    tiefpassHz: 750,
-    tiefpassStufen: 5, // 5 Einpol-Stufen ~ 30 dB/Oktave: oberhalb 1 kHz bleibt nichts Hoerbares
-    hochpassHz: 300,
-    hochpassStufen: 2, // haelt die Energie im Band, das ein Telefonhoerer ueberhaupt uebertraegt
-    spitzenpegel: 0.006,
-  }),
-  // "Als ob jemand abheben wuerde": ein einzelner, dumpfer, weich ein- und ausgeblendeter
-  // Stoss zu Beginn. Duempfer als das Bett (260 Hz) und nur rund 4,5 dB darueber.
-  impuls: Object.freeze({
-    seed: 0x7f4c19,
-    dauerMs: 120,
-    tiefpassHz: 260,
-    tiefpassStufen: 4,
-    spitzenpegel: 0.01,
-  }),
-});
-
-// Kanonisches RIFF/WAVE mit PCM-Rahmen - kein ffmpeg, keine neue Dependency.
-const BITS_PRO_BYTE = 8;
-const PCM_FORMAT_TAG = 1; // unkomprimiertes PCM
-const FMT_CHUNK_BYTES = 16; // kanonischer PCM-fmt-Chunk
-const RIFF_KOPF_BYTES = 44; // RIFF(12) + fmt(24) + data-Kopf(8)
-const RIFF_GROESSE_VORLAUF_BYTES = 8; // "RIFF" und sein Groessenfeld zaehlen nicht mit
-const UINT16_BYTES = 2;
-const UINT32_BYTES = 4;
-const INT16_MAX = 32767;
-const INT16_MIN = -32768;
-const HALBKREISE_PRO_VOLLKREIS = 2;
-const VOLLER_KREIS_RAD = HALBKREISE_PRO_VOLLKREIS * Math.PI;
-const BYTES_PRO_RAHMEN = (BEGRUESSUNGSLAUT_REZEPT.bitTiefe / BITS_PRO_BYTE) * BEGRUESSUNGSLAUT_REZEPT.kanaele;
-
-// xorshift32: deterministischer Zufall ohne Dependency. Integer-Operationen, damit dasselbe
-// Rezept auf jeder Maschine dieselben Bytes ergibt.
-const XORSHIFT_LINKS_A = 13;
-const XORSHIFT_RECHTS = 17;
-const XORSHIFT_LINKS_B = 5;
-const UINT32_MAX = 0xffffffff;
-const SPANNE_MITTE = 2; // [0,1) -> [-1,1)
-
-// Aufwaerm-Runden fuer die nahtlose Schleife (c): die erste Runde fuellt den Filterzustand,
-// die zweite wird behalten.
-const AUFWAERM_RUNDEN = 2;
 
 const REPO_WURZEL = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-// Zielablage: derselbe Pfad, den die Dial-Direktive als URL ausliefert (EINE Quelle - der Test
-// vergleicht ihn gegen config.server.publicDir).
-export const BEGRUESSUNGSLAUT_DATEIPFAD = path.join(REPO_WURZEL, "public", EL_BEGRUESSUNGSLAUT_PFAD);
+// EINE Quelle fuer beide Enden des Wegs.
+const QUELLE_PFAD = path.join(REPO_WURZEL, "scripts", "quellen", "hermes-begruessungslaut-quelle.mp3");
+const AUSLIEFERUNG_PFAD = path.join(REPO_WURZEL, "public", EL_BEGRUESSUNGSLAUT_PFAD);
 
-// Rahmenzahl einer Dauer bei der Rezept-Abtastrate.
-function rahmenAnzahl(dauerMs) {
-  return Math.round((dauerMs * BEGRUESSUNGSLAUT_REZEPT.abtastrateHz) / MS_PER_SECOND);
+// Jede Zahl traegt einen Namen (G25).
+const ZIEL_ABTASTRATE_HZ = 8000;
+const ZIEL_KANAELE = 1;
+const ZIEL_BIT_TIEFE = 16;
+const ZIEL_SPITZENPEGEL = 0.1; // -20,0 dBFS: hoerbar am Telefon, nie aufdringlich
+const AUSBLENDE_MS = 150;
+const PCM_FORMAT_TAG = 1;
+
+const AFCONVERT = "/usr/bin/afconvert";
+const AFCONVERT_DATENFORMAT = `LEI${ZIEL_BIT_TIEFE}@${ZIEL_ABTASTRATE_HZ}`; // little-endian int16
+
+const BITS_PRO_BYTE = 8;
+const FMT_CHUNK_BYTES = 16;
+const RIFF_KOPF_BYTES = 44;
+const RIFF_GROESSE_VORLAUF_BYTES = 8;
+const UINT16_BYTES = 2;
+const UINT32_BYTES = 4;
+const INT16_SKALA = 32768; // Gegenstueck zur Normierung in leseWav
+const INT16_MAX = 32767;
+const INT16_MIN = -32768;
+const MS_PER_SECOND = 1000;
+const DBFS_JE_DEKADE = 20;
+const DBFS_NACHKOMMA = 2;
+const BYTES_PRO_RAHMEN = (ZIEL_BIT_TIEFE / BITS_PRO_BYTE) * ZIEL_KANAELE;
+
+/** Schreibt die Quelle als 8 kHz mono PCM16 nach zielPfad. Nebeneffekt im Namen (N7). */
+function schreibePcm16Umwandlung(quellPfad, zielPfad) {
+  // execFile ohne Shell, feste Argumente - keine Nutzereingabe im Kommando.
+  execFileSync(AFCONVERT, ["-f", "WAVE", "-d", AFCONVERT_DATENFORMAT, "-c", String(ZIEL_KANAELE), quellPfad, zielPfad]);
 }
 
-/** Deterministischer Rausch-Ring fester Laenge in [-1, 1). Rein: gleicher Seed -> gleiche Werte. */
-function rauschRing(seed, rahmen) {
-  let zustand = seed >>> 0 || 1;
-  const naechsterWert = () => {
-    zustand ^= zustand << XORSHIFT_LINKS_A;
-    zustand ^= zustand >>> XORSHIFT_RECHTS;
-    zustand ^= zustand << XORSHIFT_LINKS_B;
-    zustand >>>= 0;
-    return zustand;
-  };
-  return Array.from({ length: rahmen }, () => (naechsterWert() / UINT32_MAX) * SPANNE_MITTE - 1);
+/** Fail-closed: was afconvert lieferte, muss das Zielformat sein - sonst lieber Abbruch als stille Fehlkonvertierung. */
+function pruefeZielformat(format) {
+  const stimmt =
+    format.code === PCM_FORMAT_TAG &&
+    format.kanaele === ZIEL_KANAELE &&
+    format.abtastrate === ZIEL_ABTASTRATE_HZ &&
+    format.bits === ZIEL_BIT_TIEFE;
+  if (!stimmt) {
+    throw new Error(
+      `afconvert lieferte Formatcode ${format.code}, ${format.kanaele} Kanal(e), ${format.abtastrate} Hz, ` +
+        `${format.bits} bit - erwartet PCM, ${ZIEL_KANAELE} Kanal, ${ZIEL_ABTASTRATE_HZ} Hz, ${ZIEL_BIT_TIEFE} bit`,
+    );
+  }
 }
 
-// Einpol-Tiefpass: y += a*(x-y). Jeder Aufruf liefert eine FRISCHE Stufe mit eigenem Zustand -
-// so kann eine Kaskade aus mehreren gleichartigen Stufen bestehen (bett.tiefpassStufen).
-function tiefpassStufe(grenzHz, abtastrateHz) {
-  const alpha = 1 - Math.exp((-VOLLER_KREIS_RAD * grenzHz) / abtastrateHz);
-  let zustand = 0;
-  return (eingabe) => {
-    zustand += alpha * (eingabe - zustand);
-    return zustand;
-  };
+/** Rein: Proben so skaliert, dass die groesste Auslenkung genau spitzenpegel betraegt. */
+function aufSpitzenpegelSkaliert(proben, spitzenpegel) {
+  const spitze = proben.reduce((groesster, wert) => Math.max(groesster, Math.abs(wert)), 0) || 1;
+  const faktor = spitzenpegel / spitze;
+  return Float64Array.from(proben, (wert) => wert * faktor);
 }
 
-// Einpol-Hochpass: y = a*(y + x - xPrev).
-function hochpassStufe(grenzHz, abtastrateHz) {
-  const zeitKonstante = 1 / (VOLLER_KREIS_RAD * grenzHz);
-  const abtastSchritt = 1 / abtastrateHz;
-  const alpha = zeitKonstante / (zeitKonstante + abtastSchritt);
-  let zustand = 0;
-  let vorherigeEingabe = 0;
-  return (eingabe) => {
-    zustand = alpha * (zustand + eingabe - vorherigeEingabe);
-    vorherigeEingabe = eingabe;
-    return zustand;
-  };
-}
-
-// Filterkaskade ueber einen RING: zwei Runden je Stufenkette, behalten wird die zweite. Die
-// erste Runde waermt den Zustand, damit der Ausgang exakt periodisch ist (nahtlose Schleife).
-function kaskadeUeberRing({ werte, stufen, stufeBauen }) {
-  const kette = Array.from({ length: stufen }, stufeBauen);
-  const durchKetteSchicken = (wert) => kette.reduce((zwischenwert, stufe) => stufe(zwischenwert), wert);
-  let ausgabe = werte;
-  for (let runde = 0; runde < AUFWAERM_RUNDEN; runde += 1) {
-    ausgabe = werte.map(durchKetteSchicken);
+/** Rein: lineare Ausblende ueber die letzten ausblendeRahmen Rahmen (Faktor 1 -> 0). */
+function mitLinearerAusblende(proben, ausblendeRahmen) {
+  const ausgabe = Float64Array.from(proben);
+  const start = Math.max(0, ausgabe.length - ausblendeRahmen);
+  for (let i = start; i < ausgabe.length; i += 1) {
+    const faktor = (ausgabe.length - 1 - i) / (ausgabe.length - 1 - start);
+    ausgabe[i] *= faktor;
   }
   return ausgabe;
-}
-
-// Skaliert auf einen Spitzenpegel. Macht den Rezept-Wert "spitzenpegel" woertlich wahr - der
-// Test prueft genau ihn am fertigen WAV.
-function aufSpitzenpegel(werte, spitzenpegel) {
-  const spitze = werte.reduce((groesster, wert) => Math.max(groesster, Math.abs(wert)), 0) || 1;
-  return werte.map((wert) => (wert / spitze) * spitzenpegel);
-}
-
-// Raised-Cosine-Huelle: weicher Ein- UND Ausklang ohne Knick, ein einzelner Hoecker ueber die
-// gesamte Dauer. DIE Stelle, an der "kein harter Einsatz" entsteht.
-function raisedCosineHuelle(index, gesamtRahmen) {
-  return (1 - Math.cos((VOLLER_KREIS_RAD * index) / (gesamtRahmen - 1))) / HALBKREISE_PRO_VOLLKREIS;
-}
-
-/** Das durchgehende Rauschbett, nahtlos schleifenfaehig (a, c). */
-function bettRahmen() {
-  const { seed, tiefpassHz, tiefpassStufen, hochpassHz, hochpassStufen, spitzenpegel } = BEGRUESSUNGSLAUT_REZEPT.bett;
-  const rahmen = rahmenAnzahl(BEGRUESSUNGSLAUT_REZEPT.dauerMs);
-  const roh = rauschRing(seed, rahmen);
-  const tiefpassGefiltert = kaskadeUeberRing({
-    werte: roh,
-    stufen: tiefpassStufen,
-    stufeBauen: () => tiefpassStufe(tiefpassHz, BEGRUESSUNGSLAUT_REZEPT.abtastrateHz),
-  });
-  const bandpassGefiltert = kaskadeUeberRing({
-    werte: tiefpassGefiltert,
-    stufen: hochpassStufen,
-    stufeBauen: () => hochpassStufe(hochpassHz, BEGRUESSUNGSLAUT_REZEPT.abtastrateHz),
-  });
-  return aufSpitzenpegel(bandpassGefiltert, spitzenpegel);
-}
-
-/** Der einmalige Abhebe-Impuls, dumpf und beidseitig weich (d). */
-function impulsRahmen() {
-  const { seed, dauerMs, tiefpassHz, tiefpassStufen, spitzenpegel } = BEGRUESSUNGSLAUT_REZEPT.impuls;
-  const rahmen = rahmenAnzahl(dauerMs);
-  const roh = rauschRing(seed, rahmen);
-  const gefiltert = kaskadeUeberRing({
-    werte: roh,
-    stufen: tiefpassStufen,
-    stufeBauen: () => tiefpassStufe(tiefpassHz, BEGRUESSUNGSLAUT_REZEPT.abtastrateHz),
-  });
-  const skaliert = aufSpitzenpegel(gefiltert, spitzenpegel);
-  return skaliert.map((wert, index) => wert * raisedCosineHuelle(index, rahmen));
-}
-
-// Int16-Spur: Impuls additiv auf den Anfang des Betts, dann geklemmt.
-function spurRahmen() {
-  const bett = bettRahmen();
-  const impuls = impulsRahmen();
-  return bett.map((wert, index) => {
-    const kombiniert = wert + (impuls[index] ?? 0);
-    const skaliert = Math.round(kombiniert * INT16_MAX);
-    return Math.max(INT16_MIN, Math.min(INT16_MAX, skaliert));
-  });
 }
 
 // Kanonischer RIFF/WAVE-Kopf, sequenziell geschrieben - so steht keine nackte Byte-Position im
@@ -231,32 +124,60 @@ function wavKopf(datenBytes) {
   text("fmt ");
   uint32(FMT_CHUNK_BYTES);
   uint16(PCM_FORMAT_TAG);
-  uint16(BEGRUESSUNGSLAUT_REZEPT.kanaele);
-  uint32(BEGRUESSUNGSLAUT_REZEPT.abtastrateHz);
-  uint32(BEGRUESSUNGSLAUT_REZEPT.abtastrateHz * BYTES_PRO_RAHMEN); // Byte-Rate
+  uint16(ZIEL_KANAELE);
+  uint32(ZIEL_ABTASTRATE_HZ);
+  uint32(ZIEL_ABTASTRATE_HZ * BYTES_PRO_RAHMEN); // Byte-Rate
   uint16(BYTES_PRO_RAHMEN); // Block-Ausrichtung
-  uint16(BEGRUESSUNGSLAUT_REZEPT.bitTiefe);
+  uint16(ZIEL_BIT_TIEFE);
   text("data");
   uint32(datenBytes);
   return Buffer.concat(teile);
 }
 
-function pcmDaten(rahmen) {
-  const puffer = Buffer.alloc(rahmen.length * BYTES_PRO_RAHMEN);
-  rahmen.forEach((wert, index) => puffer.writeInt16LE(wert, index * BYTES_PRO_RAHMEN));
+// Float [-1,1] -> PCM16, geklemmt.
+function pcmDaten(proben) {
+  const puffer = Buffer.alloc(proben.length * BYTES_PRO_RAHMEN);
+  proben.forEach((wert, index) => {
+    const skaliert = Math.max(INT16_MIN, Math.min(INT16_MAX, Math.round(wert * INT16_SKALA)));
+    puffer.writeInt16LE(skaliert, index * BYTES_PRO_RAHMEN);
+  });
   return puffer;
 }
 
-// Rein: gleiches Rezept -> gleiche Bytes, kein IO.
-export function rendereBegruessungslautWav() {
-  const daten = pcmDaten(spurRahmen());
+/** Rein: fertige WAV-Bytes aus Proben. */
+function alsWavDatei(proben) {
+  const daten = pcmDaten(proben);
   return Buffer.concat([wavKopf(daten.length), daten]);
 }
 
-// EINZIGES IO des Skripts.
-function schreibeBegruessungslaut() {
-  writeFileSync(BEGRUESSUNGSLAUT_DATEIPFAD, rendereBegruessungslautWav());
-  console.log(`geschrieben: ${BEGRUESSUNGSLAUT_DATEIPFAD}`);
+// EINZIGES IO ausser afconvert: Umwandeln, nachbearbeiten, schreiben, Messzeile ausgeben.
+function schreibeBegruessungslaut(zielPfad) {
+  const arbeitsverzeichnis = mkdtempSync(path.join(tmpdir(), "hermes-laut-"));
+  try {
+    const rohPfad = path.join(arbeitsverzeichnis, "roh.wav");
+    schreibePcm16Umwandlung(QUELLE_PFAD, rohPfad);
+
+    const { abtastrate, kanaele, format } = leseWav(readFileSync(rohPfad));
+    pruefeZielformat(format);
+
+    const ausblendeRahmen = Math.round((AUSBLENDE_MS * abtastrate) / MS_PER_SECOND);
+    const proben = mitLinearerAusblende(aufSpitzenpegelSkaliert(kanaele[0], ZIEL_SPITZENPEGEL), ausblendeRahmen);
+    writeFileSync(zielPfad, alsWavDatei(proben));
+
+    const spitze = proben.reduce((groesster, wert) => Math.max(groesster, Math.abs(wert)), 0);
+    const spitzeDbfs = (DBFS_JE_DEKADE * Math.log10(spitze)).toFixed(DBFS_NACHKOMMA);
+    const dauerMs = ((proben.length * MS_PER_SECOND) / abtastrate).toFixed(1);
+    console.log(`geschrieben: ${zielPfad} (${abtastrate} Hz, ${kanaele.length} Kanal, ${ZIEL_BIT_TIEFE} bit, ${dauerMs} ms, ${spitzeDbfs} dBFS)`);
+
+    if (zielPfad === AUSLIEFERUNG_PFAD) {
+      console.log("Achtung: die abgenommene Owner-Fassung wurde ersetzt - anhoeren und Owner-Freigabe einholen.");
+      console.log("Zuruecknehmen mit: git checkout -- public/brand/hermes-begruessungslaut.wav");
+    }
+  } finally {
+    rmSync(arbeitsverzeichnis, { recursive: true, force: true });
+  }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) schreibeBegruessungslaut();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  schreibeBegruessungslaut(process.argv[2] ? path.resolve(process.argv[2]) : AUSLIEFERUNG_PFAD);
+}
