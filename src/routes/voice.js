@@ -50,6 +50,7 @@ import { EL_RUECKFALL_PFAD } from "../elevenlabs/inbound-bridges.js";
 import {
   EL_BEIN_PFAD,
   RUECKFALL_ENTSCHEIDUNG,
+  elBegruessungslautUrl,
   elFehlersatzDirektiven,
   elUebergabeDirektiven,
   msSeitBindung,
@@ -57,6 +58,7 @@ import {
   rueckfallQuelleFuerLog,
 } from "../elevenlabs/inbound-rueckfall.js";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.js";
+import { callerIsOwnerGranted } from "../callee-is-owner.js";
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -141,14 +143,20 @@ async function sendBudgetBegruessung({ res, call, locale }, { store, sendVoiceXm
 async function sendElUebergabe({ res, call }, { config, inboundBridges, sendVoiceXml }) {
   logInboundPath({ callId: call.id, path: INBOUND_PATH.ELEVENLABS });
   inboundBridges.armDeadlines(call.id); // E9-2, Anker answeredAt - vor dem Senden: nie Stille
-  const zugang = config.voice.elevenLabsInbound;
+  // Umbenannt: das Objekt traegt seit IEP-P2 nicht nur den Zugang (N7).
+  const elInbound = config.voice.elevenLabsInbound;
   await sendVoiceXml(
     res,
     call,
     elUebergabeDirektiven({
       call,
-      zugang: { username: zugang.sipUser, password: zugang.sipPassword },
+      zugang: { username: elInbound.sipUser, password: elInbound.sipPassword },
       publicUrl: config.server.publicUrl,
+      // IEP-P2: AN/AUS entscheidet HIER - das Direktiven-Modul bleibt config-frei (dessen
+      // Modulkopf). Aus -> null -> Uebergabe-TeXML byte-gleich zur Form ohne Fuellung.
+      begruessungslautUrl: elInbound.begruessungslautEnabled
+        ? elBegruessungslautUrl(config.server.publicUrl)
+        : null,
     }),
   );
 }
@@ -306,6 +314,38 @@ function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
   const angenommen = beinAngenommen({ call, status });
   console.log(EL_BEIN_LOG_PREFIX, JSON.stringify({ callId: call.id, status, angenommen }));
   if (angenommen) inboundBridges.armBindingDeadline(call.id);
+}
+
+// IEP-P6: die EINE Auswertung "ruft der Owner von seiner eigenen Nummer an?" fuer diesen
+// eingehenden Anruf. Ergebnis geht set-once an den Anruf-Datensatz und faerbt spaeter
+// AUSSCHLIESSLICH die Anrede (elevenlabs/inbound-initiation.js). Auf MODUL-EBENE, damit
+// der reihenfolge-gepinnte Handler nicht waechst.
+// NORMALISIERUNG VORGELAGERT UND GETEILT (normNum - dieselbe Quelle, die `To` im Handler
+// normalisiert); das Praedikat selbst vergleicht strikt. Das GESPEICHERTE call.from
+// bleibt roh: daran haengen Tarif, Kostenkalibrierung, Summary-Betreff/-SMS und der
+// Aktiv-Anruf-Lookup.
+function ownerTonFuer({ from, tenantId }, { store, config }) {
+  return callerIsOwnerGranted({
+    from: normNum(from),
+    ownNumber: store.tenantPrivateNumber(tenantId),
+    tenantId,
+    enabled: config.voice.inboundOwnerGreetingEnabled,
+    allowedTenantIds: config.voice.inboundOwnerGreetingTenantIds,
+  });
+}
+
+// IEP-P6: der Anruf-Datensatz eines eingehenden Anrufs - Leg, Notbremse und die
+// Owner-Markierung in EINEM Schritt. Die Markierung entsteht SET-ONCE und VOR dem
+// Uebergabe-TeXML, also vor dem ersten gesprochenen Wort: danach kippt keine
+// Nummern-Aenderung die Anrede mehr. Ebenfalls auf MODUL-EBENE (Praezedenz
+// resolveCallPrivacyFlags in routes/api-calls.js) - der /voice/incoming-Handler traegt
+// einen Reihenfolge-Pin und darf nicht wachsen.
+function erzeugeInboundCall({ leg, maxDurationS }, deps) {
+  return deps.store.createCall({
+    ...leg,
+    maxDurationS,
+    callerIsOwner: ownerTonFuer({ from: leg.from, tenantId: leg.tenantId }, deps),
+  });
 }
 
 export function makeVoiceRoutes({
@@ -554,7 +594,7 @@ export function makeVoiceRoutes({
         language,
         costProfile: pfad.kostenprofil,
       };
-      call = store.createCall({ ...inboundLeg, maxDurationS: brakeSecondsFor(inboundLeg) });
+      call = erzeugeInboundCall({ leg: inboundLeg, maxDurationS: brakeSecondsFor(inboundLeg) }, voiceDeps);
       store.markAnswered(call.id);
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
       store.recordCostProfile(call.id, pfad.kostenprofil);

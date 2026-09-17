@@ -112,7 +112,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // Allowlist der Offenlegungs-Ausnahme, PLAN-OWNER-CALL) -> 17.
   // IE6-S2: openaiApiKey + realtimeModel + realtimeVoice entfernt (nur die Realtime-Bridge
   // las sie) -> 16.
-  voice: 16,
+  // IEP-P6: inboundOwnerGreetingEnabled + inboundOwnerGreetingTenantIds ergaenzt (Schalter
+  // + Tenant-Allowlist des INBOUND-Owner-Tons, eigene Achse neben OWNER_SELF_CALL_*) -> 18.
+  voice: 18,
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
   // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
   // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
@@ -194,7 +196,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // telnyxDialTimeoutSecs entfernt -> 192.
 // IE6-S2: openaiApiKey + realtimeModel + realtimeVoice entfernt -> 189.
 // IEL-B10: werkzeug.renderApiKey ergaenzt (voice.elevenLabsInbound bleibt EIN Blatt) -> 190.
-const EXPECTED_TOTAL_KEYS = 190;
+// IEP-P6: inboundOwnerGreetingEnabled + inboundOwnerGreetingTenantIds (voice) ergaenzt -> 192.
+const EXPECTED_TOTAL_KEYS = 192;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die gepinnten Counts und disjunkte Blaetter", () => {
   assert.deepEqual(
@@ -355,11 +358,13 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // IE6-S2: openaiApiKey + realtimeModel + realtimeVoice sind drei primitive Strings -> 177.
   // IEL-B10: werkzeug.renderApiKey ist primitiv (String); vorher lag er im nested Objekt
   // voice.elevenLabsInbound und zaehlte nicht -> 178.
-  const EXPECTED_PRIMITIVE_LEAVES = 178;
+  // IEP-P6: inboundOwnerGreetingEnabled ist primitiv (Boolean) -> 179.
+  // inboundOwnerGreetingTenantIds ist das SECHSTE Array (kein primitives Blatt, s.u.).
+  const EXPECTED_PRIMITIVE_LEAVES = 179;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,
-    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 5 Arrays - 6 nested Objekte) geprueft`,
+    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 6 Arrays - 7 nested Objekte) geprueft`,
   );
 });
 

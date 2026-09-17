@@ -13,6 +13,11 @@ import { KOSTENPROFIL } from "./billing/kostenarten.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 // IEX-A9: Blatt-Modul ohne Imports (kein Zyklus).
 import { DEFAULT_INBOUND_EL_SCOPE } from "./elevenlabs/inbound-scope.js";
+// IEP-P2: EINE Quelle fuer den Asset-Pfad (Schreiber: Dial-Direktive, Leser: Boot-Riegel unten).
+// inbound-rueckfall.js haengt nur an Modulen, die hier ohnehin schon im Graphen liegen
+// (store/defaults.js, utils/timer.js, billing/kostenarten.js) plus telephony/directives.js, einem
+// import-freien Blatt - kein Zyklus.
+import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.js";
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
 // G5: die Minute lebt in utils/timer.js (import-freies Blatt, kein Zyklus) - dieselbe
 // Zahl, gegen die Abrechnung und Consult-Fristen rechnen. Stunde/Tag leiten hier ab.
@@ -860,6 +865,19 @@ const rawConfig = {
     // Beleg Fehlersatz + Auflegen). Kein Wildcard. Getrimmt wie sttProfile; ein unbekannter Wert bricht den
     // BOOT ab (boot-guard elInboundScopeFindings), nicht erst den Anruf.
     scope: (process.env.ELEVENLABS_INBOUND_SCOPE || DEFAULT_INBOUND_EL_SCOPE).trim(),
+    // IEP-P2 (Owner-Entscheidung 10): kurzer, vorab gerenderter Begruessungslaut waehrend der
+    // Dial-Wartezeit statt des Telnyx-US-Freitons. DEFAULT AN - anders als sonst bei neuen
+    // Schaltern, und das ist Absicht: der Aus-Zustand ist die Sofortannahme OHNE Fuellung, und
+    // genau die ist hoerbar schlechter als heute (Stille statt Freiton). Der Schalter ist der
+    // einzeln revertierbare Rueckweg der FUELLUNG; der Rueckweg der SOFORTANNAHME ist
+    // EL_DIAL_ANSWER_ON_BRIDGE im Code. Wirkt nur auf dem EL-Inbound-Pfad:
+    // ELEVENLABS_INBOUND_ENABLED=false oder ein nicht gepinnter Tenant sehen unveraendert das
+    // heutige Inbound-TeXML.
+    begruessungslautEnabled: boolEnv(
+      "ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED",
+      process.env.ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED,
+      { fallback: true },
+    ),
     // IEL-B1: Digest-Zugang, mit dem unser <Dial><Sip> sich bei ElevenLabs anmeldet - EIN
     // gemeinsamer Zugang fuer alle gepinnten DIDs. Passwort SECRET - nie loggen/leaken.
     // .trim() wie bei elevenLabsToolToken: ein eingefuegtes Newline waere ein Zugang, der
@@ -1837,6 +1855,26 @@ const rawConfig = {
   // der sich an einen Env-Flip erinnert. Vor dem Launch gehoert hier ausschliesslich ein
   // Account hinein, der uns gehoert.
   ownerSelfCallTenantIds: csvEnv(process.env.OWNER_SELF_CALL_TENANT_IDS),
+  // IEP-P6: Scharfschalter des INBOUND-Owner-Tons - ruft der Owner von seiner hinterlegten
+  // eigenen Nummer an, wird er per Vornamen begruesst. DEFAULT AUS (fail-closed): aus ->
+  // callerIsOwner ist fuer JEDEN Anruf false -> Fremd-Wortlaut ueberall, exaktes
+  // Bestandsverhalten. Er aendert AUSSCHLIESSLICH die Anrede: kein Datenkanal, kein
+  // Werkzeug, kein Recht haengt daran (Owner-Entscheidung 5).
+  // BEWUSST NICHT OWNER_SELF_CALL_ENABLED mitbenutzt: jener Schalter ist in
+  // PLAN-SECURITY.md als Launch-Ruecknahme der OUTBOUND-Offenlegungs-Ausnahme eingetragen.
+  // Ein geteilter Schalter machte eine Inbound-Abschaltung zum Offenlegungs-Ereignis im
+  // Outbound und umgekehrt. Kein Footgun-Eintrag: er entwaffnet keine Sicherung.
+  inboundOwnerGreetingEnabled: boolEnv(
+    "INBOUND_OWNER_GREETING_ENABLED",
+    process.env.INBOUND_OWNER_GREETING_ENABLED,
+    { fallback: false },
+  ),
+  // IEP-P6: WELCHE Tenants den Owner-Ton ueberhaupt ausloesen duerfen. LEER = NIEMAND, nie
+  // JEDER (Lehre streaming-armierung-allowlist). Einmal gesplittet/getrimmt (csvEnv).
+  // Warum die Liste traegt: die hinterlegte eigene Nummer ist format- und land-, NICHT
+  // eigentums-verifiziert und ueber POST /api/self-service/private-number von jedem
+  // eingeloggten Tenant setzbar (PLAN-SECURITY.md, Launch-Blocker).
+  inboundOwnerGreetingTenantIds: csvEnv(process.env.INBOUND_OWNER_GREETING_TENANT_IDS),
   // Rate-Limit pro IP und Minute fuer alle Routen ausser /voice (Provider-Webhooks;
   // localhost-Socket ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min)
   // plus Interaktionen.
@@ -2170,7 +2208,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom", "platformAlertMailTo"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "llmProviderFallback", "llmBillingLatchCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs"],
-  voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
+  voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
@@ -2416,6 +2454,16 @@ const REQUIRED_CONFIG = Object.freeze([
       Boolean(config.server.webDistDir) &&
       !existsSync(path.join(config.server.webDistDir, "index.html")),
     name: "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",
+  },
+  {
+    // IEP-P2: Fuellung an, Asset fehlt -> Telnyx bekaeme eine 404-URL und spielte wieder seinen
+    // US-Freiton. Sichtbarer Boot-Fehler statt stiller Regression (Muster WEB_DIST_DIR-Build).
+    // Die Datei ist repo-committet; der Riegel faengt Auslieferungs- und Umbenennungsfehler,
+    // nicht den Normalbetrieb.
+    fehlt: () =>
+      config.voice.elevenLabsInbound.begruessungslautEnabled &&
+      !existsSync(path.join(config.server.publicDir, EL_BEGRUESSUNGSLAUT_PFAD)),
+    name: `Begruessungslaut-Asset (public${EL_BEGRUESSUNGSLAUT_PFAD} fehlt - node scripts/render-begruessungslaut.mjs)`,
   },
 ]);
 

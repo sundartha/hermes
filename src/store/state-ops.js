@@ -217,6 +217,27 @@ export function openingLineHash(line) {
   return crypto.createHash("sha256").update(line, "utf8").digest("hex");
 }
 
+// Die zwei Owner-Markierungen eines Anrufs. Dieselbe Frage, zwei Richtungen - deshalb
+// EINE Stelle, die sie baut (G5), und nicht zwei Zeilen im ohnehin langen createCall.
+//
+// calleeIsOwner (OC-P1, PLAN-OWNER-CALL): war das ZIEL dieses Outbound die eigene
+// hinterlegte Nummer des ANRUFENDEN Tenants? Daran haengt ein gesetzlicher Pflichtsatz
+// (Absolute Regel 2), ausgewertet in routes/api-calls.js.
+// callerIsOwner (IEP-P6): kam dieser EINGEHENDE Anruf VON der eigenen hinterlegten Nummer
+// des ANGERUFENEN Tenants? Daran haengt AUSSCHLIESSLICH die Anrede, ausgewertet in
+// routes/voice.js. Ausdruecklich ein EIGENES Feld: die Ordnungsregel "ein eingehender
+// Anruf traegt calleeIsOwner strukturell nie als true" (src/claude.js) traegt zwei
+// Outbound-Waechter und darf nicht still falsch werden.
+//
+// Fuer BEIDE gilt: AUSSCHLIESSLICH serverseitig gesetzt (src/callee-is-owner.js), nie roh
+// aus einem Request-Body. SET-ONCE - danach schreibt sie niemand mehr, damit eine
+// Nummern-Aenderung die Entscheidung nicht nachtraeglich kippt. `=== true` statt Rohwert:
+// Default false ist fail-closed (Offenlegung bzw. Fremd-Wortlaut) und byte-identisch zur
+// pg-Hydrierung (rowToCall). Auf dem Record steht NUR das Boolean, NIE die Nummer.
+function ownerMarkierungen({ calleeIsOwner, callerIsOwner }) {
+  return { calleeIsOwner: calleeIsOwner === true, callerIsOwner: callerIsOwner === true };
+}
+
 export function createCall(
   s,
   {
@@ -238,6 +259,7 @@ export function createCall(
     reserveCents,
     diagnostic,
     calleeIsOwner,
+    callerIsOwner,
   },
 ) {
   const call = {
@@ -378,15 +400,8 @@ export function createCall(
     // Request-Body. Default false = Bestandsverhalten (Purge nach Summary); undefined/
     // fehlend -> false, byte-identisch zur pg-Hydrierung (rowToCall).
     diagnostic: diagnostic === true,
-    // OC-P1 (PLAN-OWNER-CALL): war das Ziel dieses Outbound die eigene hinterlegte
-    // Nummer des ANRUFENDEN Tenants - bei eingeschaltetem Schalter und gepinntem Tenant?
-    // Wird AUSSCHLIESSLICH serverseitig gesetzt (src/callee-is-owner.js, ausgewertet in
-    // routes/api-calls.js) - nie roh aus dem Request-Body. SET-ONCE: danach schreibt es
-    // niemand mehr, damit eine Nummern-Aenderung zwischen Auftragsannahme und Klingeln
-    // die Entscheidung nicht mehr kippen kann. `=== true` statt Rohwert: Default false ist
-    // NICHT-Owner ist Offenlegung (fail-closed), byte-identisch zur pg-Hydrierung
-    // (rowToCall). Auf dem Record steht NUR dieses Boolean, NIE die Nummer.
-    calleeIsOwner: calleeIsOwner === true,
+    // Die zwei Owner-Markierungen, an EINER Stelle gebaut (s. ownerMarkierungen oben).
+    ...ownerMarkierungen({ calleeIsOwner, callerIsOwner }),
     // OUT-05 (F2): Worst-Case-Reserve dieses Calls (GANZZAHL Cents) + Idempotenz-Schloss der
     // Freigabe. reserveCents/reserveReleased sind reine Referenz-/Idempotenz-Daten fuer
     // releaseOutboundReserve + den Backstop-Timer; der Reserve-LEDGER (s.reservations) ist

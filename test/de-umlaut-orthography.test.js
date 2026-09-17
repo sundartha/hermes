@@ -16,6 +16,8 @@ import { SPOKEN_TRANSLITERATION_STEMS as TRANSLITERATION_STEMS } from "./umlaut-
 import { greetingTemplatesFor } from "../src/i18n/greeting-catalog.js";
 
 const OWNER_NAME = "Jonas Beispiel";
+// IEP-P6: die Owner-Anrede nennt nur den Vornamen.
+const OWNER_VORNAME = "Jonas";
 const UNROUTED_TO = "+49999999999"; // nicht geseedet -> nicht routbar (S8-Pfad)
 const CALLER_FROM = "+4915112345678";
 
@@ -59,6 +61,11 @@ const SPOKEN_DE_FIELDS = [
   // IEX-A3 (O1/O4): die Eroeffnung des Agenten bei einem eingehenden Anruf - mit und ohne Namen.
   ["S19 inboundEroeffnung (mit Name)", LOCALES.de.inboundEroeffnung(OWNER_NAME)],
   ["S20 inboundEroeffnung (ohne Name, O4)", LOCALES.de.inboundEroeffnung("")],
+  // IEP-P6: dieselbe Eroeffnung mit Owner-Anrede - sie wird gesprochen und traegt denselben
+  // Hinweis ("Gespraech") wie S19/S20. BEWUSST OHNE inboundGrussSatzOwner: der Kopfsatz
+  // allein traegt keinen Umlaut (U2 waere falsch rot, Muster inboundNameSatz oben) und ist
+  // ueber S21 mit abgedeckt - er ist dessen Praefix.
+  ["S21 inboundEroeffnungOwner", LOCALES.de.inboundEroeffnungOwner(OWNER_VORNAME)],
 ];
 
 test("P1-U1: gesprochene DE-Strings (S1-S7) tragen keine ASCII-Transliteration mehr", () => {

@@ -15,12 +15,25 @@
 // grosszuegig normalisieren, und grosszuegig heisst hier: ein Fremder bekommt einen Anruf
 // ohne Offenlegung. Der Riegel dagegen ist die Fall-Tabelle in test/callee-is-owner.test.js.
 //
-// ZWEI EXPORTE, EIN VERGLEICH. diagnostic-retention.js braucht NUR den Nummern-Vergleich
+// DREI EXPORTE, EIN VERGLEICH. diagnostic-retention.js braucht NUR den Nummern-Vergleich
 // und darf ausdruecklich NICHT am Offenlegungs-Schalter haengen (sonst faellt mit einem
 // Flag-Flip still ein Bestandsfeature aus). routes/api-calls.js braucht NUR die
 // vollstaendige Bedingung und darf sie nicht selbst zusammensetzen (sonst gibt es zwei
 // Wahrheiten darueber, was "Owner-Anruf" heisst). Eine Datei, ein Vergleich, zwei benannte
 // Zugaenge (G5).
+//
+// DIE DRITTE FRAGE IST DIE GEGENRICHTUNG (IEP-P6): ruft die ANRUFERNUMMER eines
+// eingehenden Anrufs von der hinterlegten eigenen Nummer des ANGERUFENEN Tenants an?
+// Derselbe nackte Vergleich, dieselbe Allowlist-Mechanik, eigener Name und eigener
+// Schalter - damit ihn niemand als vierten Outbound-Fall liest.
+//
+// DER BELEG IST SCHWAECHER ALS OUTBOUND, und das ist der Grund fuer die enge Wirkung:
+// outbound ist `to` das Ziel, das WIR nach dem normalize_target-Gate selbst gewaehlt
+// haben; inbound ist `from` eine Angabe der GEGENSEITE. Der Webhook ist Ed25519-geprueft
+// und fail-closed, sein INHALT stammt aus dem Ursprungsnetz und ist faelschbar. Deshalb
+// faerbt diese Antwort AUSSCHLIESSLICH die Anrede (Owner-Entscheidung 5, 2026-09-16) -
+// sie schaltet keine Daten, keine Werkzeuge und keine Rechte frei. Wer je ein Recht
+// daran haengt, baut einen Sicherheitsfehler.
 //
 // KEIN WURF, KEIN LOG, KEIN try/catch. Es gibt in diesem Modul keinen Aufruf, der werfen
 // koennte (typeof, ===, Array.isArray, Array.prototype.includes). Ein spaeter eingebautes
@@ -56,4 +69,16 @@ export function ownerSelfCallGranted({ to, ownNumber, tenantId, enabled, allowed
   if (enabled !== true) return false;
   if (!tenantDarfAusloesen(tenantId, allowedTenantIds)) return false;
   return calleeIsOwner({ to, ownNumber });
+}
+
+// Die vollstaendige Bedingung des Inbound-Owner-Tons, an EINER Stelle:
+//   Schalter an  UND  Tenant in der Allowlist  UND  Anrufernummer == eigene Nummer.
+// `from` ist die BEREITS normalisierte Anrufernummer (normNum, vorgelagert in
+// routes/voice.js) - dieses Modul normalisiert nichts (s. Kopf). Jede Zutat, die die
+// kanonische Form nicht erreicht (fehlend, "unbekannt", "anonymous", nationales Format),
+// vergleicht sich nie gleich und ergibt damit false = Fremd-Wortlaut.
+export function callerIsOwnerGranted({ from, ownNumber, tenantId, enabled, allowedTenantIds }) {
+  if (enabled !== true) return false;
+  if (!tenantDarfAusloesen(tenantId, allowedTenantIds)) return false;
+  return calleeIsOwner({ to: from, ownNumber });
 }

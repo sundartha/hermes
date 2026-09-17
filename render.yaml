@@ -160,6 +160,11 @@ services:
       # faellt damit in die sichere Richtung zurueck. Live ist Dashboard-managed.
       - key: ELEVENLABS_INBOUND_SCOPE
         value: "allowlist"
+      # IEP-P2: Begruessungslaut waehrend der Dial-Wartezeit. Kein Geheimnis, daher value.
+      # Default "true" = der Auslieferungsstand der Phase; "false" ist der Rueckweg der Fuellung.
+      # Live ist Dashboard-managed - diese Zeile allein aendert Live nichts.
+      - key: ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED
+        value: "true"
       # ---- Bootstrap (Owner-Removal P2b, GAP-38: vom In-Prozess-Boot gelesen) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,
@@ -435,6 +440,13 @@ services:
       - key: OWNER_SELF_CALL_ENABLED
         sync: false
       - key: OWNER_SELF_CALL_TENANT_IDS
+        sync: false
+      # ---- Owner-Ton bei EINGEHENDEN Anrufen (IEP-P6) ---- Default AUS / Liste LEER
+      # (fail-closed): Fremd-Wortlaut fuer jeden Anrufer, Bestandsverhalten. Beide mit
+      # sync: false aus demselben Grund wie OWNER_SELF_CALL_* darueber.
+      - key: INBOUND_OWNER_GREETING_ENABLED
+        sync: false
+      - key: INBOUND_OWNER_GREETING_TENANT_IDS
         sync: false
       # Plattform-BEOBACHTUNG, kein Gate: seit KS-P9/E10 sperrt die Plattform-Achse nichts
       # mehr - dieser Wert ist die Bezugsgroesse von PLATFORM_SPEND_WARN_PERCENT (und der

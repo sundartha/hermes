@@ -37,7 +37,14 @@ function makeHarnessConfig() {
     server: { publicUrl: "https://agent.test" },
     // IEL-B8: /voice/incoming fragt die Sprechpfad-Weiche (inboundElPathFor) - Schalter aus wie
     // der Produktions-Default, der Harness bleibt auf dem Budget-Pfad.
-    voice: { elevenLabsInbound: { enabled: false } },
+    // IEP-P6: dazu die zwei Schluessel des Inbound-Owner-Tons, beide auf dem
+    // Produktions-Default (aus, Liste leer) - der Harness misst die Kostenprofil-Weiche,
+    // nicht die Anrede.
+    voice: {
+      elevenLabsInbound: { enabled: false },
+      inboundOwnerGreetingEnabled: false,
+      inboundOwnerGreetingTenantIds: [],
+    },
   };
 }
 
@@ -54,6 +61,9 @@ function makeHarnessStore(state) {
     createCall: (input) => ops.createCall(state, input),
     markAnswered: (callId) => ops.markAnswered(state, callId),
     tenantContext: (tenantId) => ops.tenantContext(state, "", tenantId),
+    // IEP-P6: die hinterlegte eigene Nummer - /voice/incoming liest sie fuer die
+    // Owner-Erkennung. Echter state-ops-Reader wie die Nachbarn, kein Stub.
+    tenantPrivateNumber: (tenantId) => ops.tenantPrivateNumber(state, tenantId),
     addTranscript: (callId, role, text) => ops.addTranscript(state, callId, role, text),
     getCall: (id) => ops.getCall(state, id),
     recordCostProfile: (callId, profil) => ops.recordCostProfile(state, callId, profil).call,

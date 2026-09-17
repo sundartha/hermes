@@ -24,6 +24,11 @@ const DEFAULT_TIME_LIMIT_S = 1800; // liegt innerhalb der Grenzen, aendert sich 
 const DIAL_TIMEOUT_MIN_S = 5;
 const DIAL_TIMEOUT_MAX_S = 600;
 const FAR_ABOVE_DIAL_TIMEOUT_MAX_S = 3600;
+// IEP-P2: eine beispielhafte Ringback-URL (Literal, nicht aus der Konstante abgeleitet).
+const BEGRUESSUNGSLAUT_URL = "https://agent.test/brand/hermes-begruessungslaut.wav";
+const EINMAL = 1;
+// Ein Wert, der kein String ist - die Fail-Richtung des Renderers muss ihn ignorieren.
+const KEIN_STRING_ZAHL = 123;
 
 process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
@@ -187,6 +192,43 @@ test("IEX-A4-4: answerOnBridge fehlend, false oder kein Boolean -> byte-gleich z
     assert.equal(inner, bestand, `answerOnBridge=${JSON.stringify(wert)}`);
     assert.ok(!inner.includes("answerOnBridge"), `answerOnBridge=${JSON.stringify(wert)}`);
   }
+});
+
+// IEP-P2: ringbackAudioUrl -> Telnyx-Attribut audioUrl, direkt hinter answerOnBridge.
+test("IEP-P2-6: ringbackAudioUrl gesetzt -> audioUrl am Dial, Sip unveraendert", () => {
+  const inner = renderEinzeln([baueDialSip({ ringbackAudioUrl: BEGRUESSUNGSLAUT_URL })]);
+  assert.equal(
+    inner,
+    `<Dial audioUrl="${BEGRUESSUNGSLAUT_URL}" callerId="+4930123456789" timeout="20" timeLimit="1800">` +
+      '<Sip username="hermes-sip" password="pw-geheim" statusCallback="https://agent.test/voice/el-bein?callId=call_1" statusCallbackEvent="answered">' +
+      "sip:+4930123456789@sip.rtc.elevenlabs.io:5060;transport=tcp?X-Hermes-Call-Binding=0123456789abcdef0123456789abcdef" +
+      "</Sip></Dial>",
+  );
+});
+
+test("IEP-P2-7: ringbackAudioUrl fehlend, leer oder kein String -> byte-gleich zur Bestandsform", () => {
+  const bestand = renderEinzeln([baueDialSip()]); // Literal gepinnt in IEL-B7-1
+  for (const wert of [undefined, "", false, KEIN_STRING_ZAHL, null]) {
+    const inner = renderEinzeln([baueDialSip({ ringbackAudioUrl: wert })]);
+    assert.equal(inner, bestand, `ringbackAudioUrl=${JSON.stringify(wert)}`);
+    assert.ok(!inner.includes("audioUrl"), `ringbackAudioUrl=${JSON.stringify(wert)}`);
+  }
+});
+
+test("IEP-P2-8: die Ringback-URL wird escaped und sitzt genau einmal, nie am Sip", () => {
+  const inner = renderEinzeln([baueDialSip({ ringbackAudioUrl: 'https://a.test/x?a=1&b=2"<' })]);
+  assert.match(inner, /audioUrl="https:\/\/a\.test\/x\?a=1&amp;b=2&quot;&lt;"/);
+  assert.equal(inner.split("audioUrl=").length - 1, EINMAL);
+  assert.ok(!/<Sip[^>]*audioUrl/.test(inner));
+});
+
+test("IEP-P2-9: ringTone kommt im gerenderten Dial nie vor", () => {
+  const RINGTONE = /ringTone/;
+  for (const wert of [undefined, BEGRUESSUNGSLAUT_URL]) {
+    assert.ok(!RINGTONE.test(renderEinzeln([baueDialSip({ ringbackAudioUrl: wert })])), String(wert));
+  }
+  // Positiv-Kontrolle: sonst waere "kein Treffer" nicht von "sucht nichts" zu unterscheiden.
+  assert.ok(RINGTONE.test('<Dial ringTone="us">'));
 });
 
 test("IEL-B7-4b: fehlendes Pflichtfeld -> wirft ohne 'undefined' im TeXML", () => {

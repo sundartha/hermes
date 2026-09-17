@@ -197,6 +197,13 @@ export const BASE_ENV = {
   // test/oc-p1-owner-call-http.test.js setzt beide explizit.
   OWNER_SELF_CALL_ENABLED: "false",
   OWNER_SELF_CALL_TENANT_IDS: "",
+  // IEP-P6: dieselbe Begruendung eine Achse weiter - der INBOUND-Owner-Ton in Spawn-Tests
+  // neutral AUS und Allowlist LEER (= Bestandsverhalten, Fremd-Wortlaut fuer jeden
+  // Anrufer). Ohne diese zwei Zeilen leckt eine lokale .env via dotenv in JEDEN
+  // Spawn-Test (Lehre test-base-env-drift) und faerbte den ersten gesprochenen Satz.
+  // test/iep-p6-owner-ton.test.js setzt beide explizit.
+  INBOUND_OWNER_GREETING_ENABLED: "false",
+  INBOUND_OWNER_GREETING_TENANT_IDS: "",
   // ---- Telnyx (zweiter Provider) ----
   // Nummern sind keine Env-Var mehr (s.o.). Keys/IDs neutral leer; Tests, die
   // Telnyx-Outbound brauchen, seeden eine Telnyx-Owner-Nummer via ownerNumber.
@@ -277,6 +284,9 @@ export const BASE_ENV = {
   // IEX-A9: neutral LEER (= Default allowlist in config.js), sonst leakt eine lokale .env mit
   // registrierte_dids in jeden Spawn-Test (Lehre test-base-env-drift). Der Golden-Test faehrt so den Default.
   ELEVENLABS_INBOUND_SCOPE: "",
+  // IEP-P2: gepinnt, damit eine lokale .env nicht in Spawn-Tests leakt (Lehre
+  // test-base-env-drift). Leer = der config-Default greift (Muster ELEVENLABS_INBOUND_SCOPE).
+  ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED: "",
   ELEVENLABS_INBOUND_SIP_USER: "",
   ELEVENLABS_INBOUND_SIP_PASSWORD: "",
   ELEVENLABS_INIT_WEBHOOK_TOKEN: "",
@@ -539,6 +549,18 @@ export const BASE_ENV = {
   OAUTH_AUDIENCE: "",
   RENDER_EXTERNAL_URL: "",
 };
+
+// Alle .js-Quelltexte unter einem REPO-RELATIVEN Verzeichnis als [pfad, inhalt]-Paare (Pfade
+// bleiben repo-relativ, z.B. "src/config.js"). Grundlage der Grep-Tests, die eine Invariante
+// ueber den ganzen Baum halten ("genau EINE Lesestelle"). Seit IEP-P2 hier statt in je einer
+// Testdatei - zwei Nutzer, eine Quelle (G5).
+export function quelltexteUnter(verzeichnis) {
+  return fs.readdirSync(path.join(ROOT, verzeichnis), { withFileTypes: true }).flatMap((eintrag) => {
+    const relativ = path.join(verzeichnis, eintrag.name);
+    if (eintrag.isDirectory()) return quelltexteUnter(relativ);
+    return eintrag.name.endsWith(".js") ? [[relativ, fs.readFileSync(path.join(ROOT, relativ), "utf8")]] : [];
+  });
+}
 
 // Erste nicht-interne IPv4-Adresse - Requests dorthin gelten serverseitig
 // nicht als localhost (req.socket.remoteAddress != 127.0.0.1).

@@ -58,6 +58,11 @@ function vorlagenPrompt() {
 const gesendet = (call = pinCall()) =>
   sendeAnrufstart({ makeElevenLabsOutbound, consultAllowedForCall, store: pinStore(), call });
 const blockText = () => EN_PROMPT.inboundSituation({ owner: TEST_OWNER });
+// IEP-P6: die Owner-Fassung derselben Vorlagen-Sektion - sie faellt unter dieselben
+// Auflagen (Auftraggeber genannt, kein Platzhalter, keine Ziffer, Ueberschrift aufgehoben).
+const OWNER_FREMD_EROEFFNUNG = LOCALES.de.inboundEroeffnung(TEST_OWNER);
+const blockTextOwner = () =>
+  EN_PROMPT.inboundSituationOwner({ owner: TEST_OWNER, fremdEroeffnung: OWNER_FREMD_EROEFFNUNG });
 const vorkommen = (text, teil) => text.split(teil).length - 1;
 
 test("IEL-B3-1: Outbound-Koerper = Bestand + genau inbound_situation, direkt vor tenant_token", async () => {
@@ -104,10 +109,12 @@ test("IEL-B3-5: Render-Gleichheit Outbound - Prompt mit gesendetem Wert == Promp
 
 test("IEL-B3-6: Blocktext nennt den Auftraggeber", () => {
   assert.ok(blockText().includes(TEST_OWNER));
+  assert.ok(blockTextOwner().includes(TEST_OWNER));
 });
 
 test("IEL-B3-7: Blocktext traegt keinen Platzhalter", () => {
   assert.ok(!blockText().includes("{{"));
+  assert.ok(!blockTextOwner().includes("{{"));
 });
 
 test("IEL-B3-8: Blocktext traegt keine Nummer (Positiv-Kontrolle am Budget-Baustein)", () => {
@@ -115,12 +122,14 @@ test("IEL-B3-8: Blocktext traegt keine Nummer (Positiv-Kontrolle am Budget-Baust
 
   assert.ok(ZIFFER.test(budgetBaustein), "Positiv-Kontrolle: die Ziffern-Pruefung findet die Nummer im Budget-Baustein nicht");
   assert.ok(!ZIFFER.test(blockText()), "Inbound-Blocktext traegt eine Ziffer");
+  assert.ok(!ZIFFER.test(blockTextOwner()), "Owner-Inbound-Blocktext traegt eine Ziffer");
 });
 
 test("IEL-B3-9: die im Block aufgehobene Sektion existiert woertlich in der Vorlage", () => {
   const sektionen = vorlagenPrompt().split(SEKTIONS_TRENNER);
 
   assert.ok(blockText().includes(AUFGEHOBENE_UEBERSCHRIFT));
+  assert.ok(blockTextOwner().includes(AUFGEHOBENE_UEBERSCHRIFT));
   assert.ok(
     sektionen.some((sektion) => sektion.startsWith(`${AUFGEHOBENE_UEBERSCHRIFT}:`)),
     `keine Sektion der Vorlage beginnt mit "${AUFGEHOBENE_UEBERSCHRIFT}:"`,

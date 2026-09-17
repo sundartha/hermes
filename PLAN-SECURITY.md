@@ -3519,8 +3519,10 @@ Accounts stehen, die uns gehoeren.
 Bedingung fuer den Launch, alternativ:
 (a) Besitz-Verifikation gebaut (Bestaetigungscode an genau diese Nummer, Zeitstempel am
     Tenant, Praedikat haengt daran, Aenderung setzt zurueck), ODER
-(b) `OWNER_SELF_CALL_ENABLED=false` — die Ausnahme ist dann wirkungslos und der
-    Offenlegungssatz gilt wieder ausnahmslos.
+(b) `OWNER_SELF_CALL_ENABLED=false` **und** `INBOUND_OWNER_GREETING_ENABLED=false` — beide
+    Ausnahmen sind dann wirkungslos, der Offenlegungssatz gilt wieder ausnahmslos und jeder
+    eingehende Anrufer hoert den Fremd-Wortlaut. Nur einen der beiden Schalter zu nennen,
+    behauptete eine Deckung, die es seit IEP-P6 nicht mehr gibt.
 
 Ein Eintrag eines fremden Accounts in `OWNER_SELF_CALL_TENANT_IDS` vor (a) ist selbst die
 Rechtsverletzung, gegen die dieser Eintrag steht. Ein Schliessen dieses Eintrags ohne (a)
@@ -3529,6 +3531,21 @@ oder (b) ebenfalls — es ist kein Aufraeumen.
 Unberuehrt davon bleibt die KI-Kennzeichnung: auch im Ausnahmefall nennt die Eroeffnung
 die Maschine ("hier ist dein KI-Assistent"), und der Prompt verpflichtet den Agenten, den
 vollen Offenlegungssatz sofort nachzuholen, wenn am Apparat nicht der Auftraggeber ist.
+
+**Dritter Verwender desselben unverifizierten Feldes (IEP-P6, 2026-09-16): die INBOUND-Anrede.**
+Dieser Eintrag deckte bisher den ANRUF-Weg (outbound) und nennt unter SEC-TEST (1) den
+SMS-Weg als zweiten ungedeckten Verwender. Ab IEP-P6 haengt drittens die Anrede eines
+EINGEHENDEN Anrufs am selben Feld: ruft die Anrufernummer von `tenant.privateNumber` an,
+begruesst der Agent den Anrufer mit Vornamen (`call.callerIsOwner`, gesetzt in
+`src/routes/voice.js`, Praedikat `callerIsOwnerGranted` in `src/callee-is-owner.js`).
+Gebunden an einen EIGENEN Schalter `INBOUND_OWNER_GREETING_ENABLED` (Default false) und
+eine EIGENE Allowlist `INBOUND_OWNER_GREETING_TENANT_IDS` (Default leer = NIEMAND) — nicht
+an `OWNER_SELF_CALL_*`, damit ein Rueckzug auf einer Achse nicht still die andere schaltet.
+Es aendert sich AUSSCHLIESSLICH die Anrede: die KI-Kennzeichnung bleibt im ersten Satz, der
+Transkriptions-/Zusammenfassungs-Hinweis bleibt woertlich, und es geht KEIN Datenkanal auf
+(die serverseitigen Inbound-Werkzeugsperren bleiben unangetastet, `tenant_token` bleibt
+`""`). Begruendung der engen Wirkung: die Anrufernummer stammt aus dem Ursprungsnetz und
+ist faelschbar — jede Datenfreigabe daran waere ein Sicherheitsfehler.
 
 ## SEC-TEST — Sicherheits-Testplan + drei bewusst getragene Risiken (2026-09-07)
 
@@ -4137,12 +4154,18 @@ Keine neue Env, keine neue Dependency.
    Inbound-EL-Anruf im Zustand WARTET oder die identische Wiederholung binnen Frist; dazu `agent_id` ==
    `ELEVENLABS_AGENT_ID` und `called_number` (falls vorhanden) normalisiert == `call.to` (404)
 3. Schalter/Scope/Beleg `inboundElPathFor` (404, IEX-A9): unter `registrierte_dids` bindet nur ein Anruf, dessen angerufene DID einen Beleg mit dem Fingerabdruck des laufenden Zugangs traegt
-3b. Eroeffnungs-Riegel `inboundEroeffnungsDefekteFuer` (IEX-A3/E3), VOR der Bindung: Namenssatz am
-   Anfang, `inboundNotice` woertlich, `hasInboundNotice`, kein `{{` (404, Log `grund=eroeffnung`, keine
-   Bindung -> Anbieter bricht ab -> Fehlersatz)
+3b. Eroeffnungs-Riegel `inboundEroeffnungsDefekteFuer` (IEX-A3/E3), VOR der Bindung: **der
+   variantenrichtige Kopfsatz** am Anfang (`inboundGrussSatz` bzw. `inboundGrussSatzOwner`),
+   **`inboundHinweisSatz` woertlich**, `hasInboundNotice`, kein `{{` (404, Log `grund=eroeffnung`,
+   keine Bindung -> Anbieter bricht ab -> Fehlersatz). Ein leerer Sollkopf und eine unbekannte
+   Variante sind selbst Defekte (fail-closed, IEP-P6)
 4. set-once-Bindung `bindInboundElConversation` (404 bei verlorener Op)
-5. Antwort: dynamische Variablen und `first_message = inboundEroeffnung(ownerName)` (Namenssatz mit
-   KI-Kennzeichnung + unveraenderter Hinweis + Frage), derselbe Riegel erneut am fertigen Koerper im
+5. Antwort: dynamische Variablen und `first_message = inboundEroeffnung(ownerName)` (Gruss-/
+   Selbstvorstellungssatz mit KI-Kennzeichnung + Hinweis + Frage), **bei erkanntem Owner
+   `inboundEroeffnungOwner(firstName)` — Anrede-Wechsel, KI-Kennzeichnung und
+   Transkriptions-Hinweis unveraendert woertlich**; `inbound_situation` in der passenden
+   Fassung. Owner- und Fremd-Antwort unterscheiden sich in **genau zwei** Feldern.
+   Derselbe Riegel erneut am fertigen Koerper im
    Waechter; **ohne Transkript, ohne Secret, `tenant_token ""`**
    (der abgeleitete Werkzeug-Token wird fuer Inbound nie berechnet). Die Werkzeug-Webhooks sperren den
    Inbound-Anruf in beiden Stellungen von `ELEVENLABS_TENANT_TOKEN_REQUIRED` (Test `iel-inbound-werkzeuge`).
@@ -4199,9 +4222,14 @@ Schalter (`ELEVENLABS_INBOUND_ENABLED`), Tenant-Allowlist (`ELEVENLABS_INBOUND_T
 vollstaendiger Zugang zusammen erfuellt sind (`inboundElPathFor`), und sie laeuft NACH allen sieben
 Sicherungen des Handlers (Signatur-MW, Wiederholungs-Riegel, Nummern-Aufloesung, Kostendecke,
 Notbremse mit EL-Satz, Cap/Geld-Wache, set-once-Kostenprofil). Auf dem EL-Pfad ist
-`<Dial answerOnBridge="true"><Sip>` das erste Verb (IEX-A4: Freizeichen bis zur SIP-Annahme); den Hinweis spricht der Agent als Teil seiner vom Server gesetzten und geprueften
+`<Dial audioUrl="…"><Sip>` das erste Verb (IEP-P2: es beantwortet das eingehende Bein SOFORT, und
+waehrend der Dial-Wartezeit laeuft unser eigener Begruessungslaut statt des Anbieter-Freitons); den
+Hinweis spricht der Agent als Teil seiner vom Server gesetzten und geprueften
 Eroeffnung (IEX-A3). Dazu kommen zwei neue
-signaturpflichtige Routen (`/voice/el-rueckfall`, `/voice/el-bein`). Kein neues Env, keine neue
+signaturpflichtige Routen (`/voice/el-rueckfall`, `/voice/el-bein`). Ein neues, nicht-geheimes Env
+(`ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED`, Default an) und ein statisches Asset unter
+`public/brand/` (bestehender `express.static`-Mount, keine neue Route, kein Eintrag in
+`route-policy.js` noetig), keine neue
 Dependency. Schalter aus oder Tenant nicht gepinnt: Inbound-TeXML byte-identisch (Golden-Test).
 
 ### 1. SIP-Zugang
@@ -4214,7 +4242,7 @@ Dependency. Schalter aus oder Tenant nicht gepinnt: Inbound-TeXML byte-identisch
 | Log | Nie geloggt: Direktiven und TeXML werden nicht geloggt, Renderer-Fehler nennen nur Feldnamen, Grep-Test "eine Lesestelle" (`test/iel-b8-weiche.test.js` 9), Spawn-Test "Passwort nicht im stdout" (12) |
 | Transportweg (E16) | Wert entsteht im Prozess von `iel-geheimnisse.mjs`, geht nur an Render-API, ElevenLabs-API und Registrierungs-PATCH; nie Chat, Agent, lokale `.env`, Log |
 | Mindestlaengen | `SIP_PASSWORD_MIN_LENGTH` und `INIT_WEBHOOK_TOKEN_MIN_LENGTH` (je 32) |
-| Rotation | Nicht automatisiert. Erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` mit ALLEN gepinnten DIDs, dann Deploy. Im Zwischenfenster scheitert Digest -> 487 -> `<Redirect>` -> Fehlersatz + Auflegen (IEX-A2) ([M1] J4/F-F); mit `answerOnBridge` ist das fuer das nie beantwortete Bein UNBELEGT (M-S3, Pflicht vor Rollout b, sonst IEX-A4b) |
+| Rotation | Nicht automatisiert. Erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` mit ALLEN gepinnten DIDs, dann Deploy. Im Zwischenfenster scheitert Digest -> 487 -> `<Redirect>` -> Fehlersatz + Auflegen (IEX-A2) ([M1] J4/F-F); seit IEP-P2 laeuft das auf einem bereits beantworteten Bein, also im belegten Fall |
 | Abweichung Render vs. Anbieter | Entsteht nur nach Teilausfall ohne erneuten Lauf; nicht lesend pruefbar. Am Anruf erkennbar: `[el-rueckfall]`-Zeile ohne `[el-init]` (E16) |
 
 ### 2. Offenlegung
@@ -4296,15 +4324,24 @@ API-Views bleibt es entfernt.
   Pflichtsatz-Zeile laeuft `finishCall` in den Zweig "Anruf fehlgeschlagen" statt in eine
   Zusammenfassung ueber nur den Hinweis. Timeout und Dauerfehler des Polls enden schon heute als
   failed.
-- **`answerOnBridge` (IEX-A4):** ob nach einem nie beantworteten, gescheiterten Dial der Fehlersatz
-  noch hoerbar ist, ist unbelegt (M-S3). Negativ: Freizeichen, dann Leitungsende ohne Satz, Abschluss
-  ueber E5 (`WARTET`) ohne Benachrichtigung. Rollout (b) mit `answerOnBridge` nur nach positivem M-S3,
-  sonst IEX-A4b (`false`).
-- **Buchungs-Vorlauf (IEX-A4):** `answeredAt` liegt vor der Traeger-Annahme. Legt der Anrufer beim
-  Freizeichen auf, bucht `voiceMinutesOf` (aufrunden) mindestens eine Minute auf die Tenant-Decke,
-  obwohl der Traeger nie annahm. Konservativ in Richtung Regel 1 (die Decke unterschaetzt nie).
-  Missbrauch kostet einen Angreifer nichts und sperrt die Decke fuer beide Richtungen: Messung M-A1,
-  Owner-Frage F2/F4.
+- **`answerOnBridge` (IEX-A4): geschlossen mit IEP-P2.** Das Dial traegt kein `answerOnBridge` mehr,
+  beantwortet das Bein also sofort; damit entfaellt die Pflichtmessung M-S3 (der Fehlersatz auf einem
+  BEANTWORTETEN Bein ist gemessen, [M1] F-F). Neues ungemessenes Element an ihrer Stelle ist U1: dass
+  der Anbieter-Default `false` hier wirklich sofort annimmt - alle M1-Messungen liefen auf bereits
+  beantworteten Beinen. Belegt wird es am Ohrzeugen-Nachher-Lauf, nicht im Code.
+- **Begruessungslaut (IEP-P2):** die Fuellung der Wartezeit laeuft ueber `audioUrl` am `<Dial>` auf ein
+  statisches, oeffentlich ausgeliefertes WAV ohne Sprache. Ignoriert Telnyx das Attribut, faellt der
+  Anrufer auf den Anbieter-Freiton zurueck (fail-soft, exakt der Schalter-Aus-Zustand) - kein Abbruch,
+  keine Stille, kein Gate beruehrt. Die Attributschreibweise ist doku-belegt, nicht am Konto gemessen.
+  Rueckweg: `ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED=false`.
+- **Buchungs-Vorlauf (IEX-A4), durch IEP-P2 gedreht:** der Befund "`answeredAt` liegt vor der
+  Traeger-Annahme" ist entschaerft - das Anrufer-Bein ist ab dem TeXML beantwortet. Dafuer NEU: eine in
+  der Wartephase abgebrochene Zustellung erzeugt jetzt eine real abgerechnete Traegerminute
+  (`voiceMinutesOf` rundet auf), wo vorher nur der Vorlauf gebucht wurde. Als **Rollout**-Gate - nicht
+  als Owner-Test-Gate - ist die Klingelphasen-Abbruchquote aus den `detail_records` ueber einen
+  laengeren Zeitraum zu beziffern; ist sie nennenswert, vor dem Rollout `EL_DIAL_RING_TIMEOUT_S`
+  senken. Die Decke selbst bleibt unangetastet und sperrt weiter beide Richtungen (Messung M-A1,
+  Owner-Frage F2/F4).
 
 ## IEL-B9 — Anbieter-Konfiguration fuer Inbound (2026-09-15)
 

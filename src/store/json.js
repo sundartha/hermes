@@ -265,6 +265,10 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   // eine Frage, an der ab OC-P2 ein Pflichtsatz haengt. false ist fuer JEDEN Bestandsanruf
   // die richtige Antwort (NICHT-Owner -> Offenlegung), deshalb kein Backfill.
   calleeIsOwner: false,
+  // IEP-P6: Inbound-Owner-Markierung (json<->pg-Parity - die pg-Spalte ist NOT NULL
+  // DEFAULT FALSE, rowToCall liefert fuer jede Bestandszeile strikt false). false ist
+  // fuer JEDEN Bestandsanruf die richtige Antwort (Fremd-Wortlaut) -> kein Backfill.
+  callerIsOwner: false,
   // INBOX-P1: die zwei Inbox-Marker (json<->pg-Parity, rowToCall liefert null).
   inboxEntryAt: null,
   inboxSeenAt: null,

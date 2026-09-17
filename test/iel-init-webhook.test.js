@@ -532,7 +532,20 @@ test("IEX-A3-8: eine Sprachquelle fuer Text, agent.language und Aufloesung; ohne
   const ohneName = await einzelFall({ zustand: baueZustand({ ownerName: "" }) });
   const eroeffnung = agentDerAntwort(ohneName).first_message;
   assert.equal(eroeffnung, VORLAGE_DE.inboundEroeffnung(""));
-  assert.ok(eroeffnung.startsWith("Hier ist ein KI-Assistent."));
+  // IEP-P6 (Owner-Entscheidung 9): der Gruss steht vor der Selbstvorstellung.
+  assert.ok(eroeffnung.startsWith("Hallo, hier ist ein KI-Assistent."));
+});
+
+// IEP-P6: dieselbe Route, derselbe Riegel - nur mit gesetztem callerIsOwner. Der Beleg, dass
+// die Owner-Fassung ueber die ECHTE Init-Route spricht und der Riegel sie durchlaesst.
+test("IEX-A3-8b: callerIsOwner=true -> Owner-Eroeffnung als first_message; ohne das Feld die Fremd-Fassung", async () => {
+  const owner = baueZustand();
+  owner.call.callerIsOwner = true;
+  const mitOwner = agentDerAntwort(await einzelFall({ zustand: owner }));
+  assert.equal(mitOwner.first_message, VORLAGE_DE.inboundEroeffnungOwner("Jonas"));
+
+  const fremd = agentDerAntwort(await einzelFall({ zustand: baueZustand() }));
+  assert.equal(fremd.first_message, VORLAGE_DE.inboundEroeffnung(OWNER_NAME));
 });
 
 test("IEX-A3-9: [el-init] gebunden traegt ms_seit_annahme deterministisch, die Wiederholung nicht", async () => {

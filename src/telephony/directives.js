@@ -87,7 +87,21 @@ export const redirect = (url) => ({ kind: DIRECTIVE.REDIRECT, url });
 // answerOnBridge (optional, IEX-A4): true -> der eingehende Anruf bleibt unbeantwortet, bis das
 // SIP-Bein annimmt (Freizeichen statt Stille). Nur ausdrueckliches true wirkt (Regel im Renderer);
 // weglassen -> TeXML byte-gleich zum Bestand.
-export const dialSip = ({ uri, username, password, callerId, timeoutS, timeLimitS, statusCallbackUrl, answerOnBridge }) => ({
+// ringbackAudioUrl (optional, IEP-P2): Audio, das dem Anrufer waehrend der Dial-Wartezeit statt
+// des Anbieter-Freitons vorgespielt wird. Neutraler Name - der Provider-Attributname lebt nur im
+// Adapter. Nur ein nichtleerer String wirkt (Regel im Renderer); weglassen -> TeXML byte-gleich
+// zum Bestand.
+export const dialSip = ({
+  uri,
+  username,
+  password,
+  callerId,
+  timeoutS,
+  timeLimitS,
+  statusCallbackUrl,
+  answerOnBridge,
+  ringbackAudioUrl,
+}) => ({
   kind: DIRECTIVE.DIAL_SIP,
   uri,
   username,
@@ -97,4 +111,5 @@ export const dialSip = ({ uri, username, password, callerId, timeoutS, timeLimit
   timeLimitS,
   statusCallbackUrl,
   answerOnBridge,
+  ringbackAudioUrl,
 });

@@ -646,6 +646,14 @@ export function thinkingSignalBannerLine(voice) {
   return voice.thinkingSignalEnabled ? "Denk-Signal: AKTIV (THINKING_SIGNAL_ENABLED=true)" : "";
 }
 
+// IEP-P6: der Inbound-Owner-Ton aendert, WAS der Anrufer als ersten Satz hoert. Ein
+// solcher Schalter darf nicht unbemerkt scharf sein (Muster thinkingSignalBannerLine).
+// Nur Zustand und ANZAHL - nie eine Tenant-ID (Regel 4/PII).
+export function inboundOwnerGreetingBannerLine(voice) {
+  if (!voice.inboundOwnerGreetingEnabled) return "";
+  return `Inbound-Owner-Ton: AKTIV (INBOUND_OWNER_GREETING_ENABLED=true, ${voice.inboundOwnerGreetingTenantIds.length} Tenants)`;
+}
+
 // ---- AL-P16: Boot-Sonden fuer die blinden Schalter -------------------------------
 // Am 2026-08-01 waren Faehigkeiten scharf geschaltet, bei denen "gesetzt" nicht dasselbe
 // ist wie "wirkt" - und der Unterschied war am laufenden Dienst nicht ablesbar. Zweimal
@@ -884,6 +892,8 @@ function logBootBanner(config, port, state) {
   if (inCallConsult) console.log(`  ${inCallConsult}`);
   const thinkingSignal = thinkingSignalBannerLine(config.voice);
   if (thinkingSignal) console.log(`  ${thinkingSignal}`);
+  const inboundOwnerGreeting = inboundOwnerGreetingBannerLine(config.voice);
+  if (inboundOwnerGreeting) console.log(`  ${inboundOwnerGreeting}`);
   // AL-P16: die Sonden stehen unkonditional, auch im Aus-Zustand (s. Kommentar bei
   // capabilityProbeLines).
   for (const line of capabilityProbeLines(config)) console.log(`  ${line}`);

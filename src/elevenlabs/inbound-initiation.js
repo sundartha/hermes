@@ -20,8 +20,17 @@
 // aus inboundElLocaleOf (dieselbe Aufloesung wie agent.language und tts.voice_id), Name aus
 // tenantContext. Kein serverseitiger Pflichtsatz davor: der Hinweis steckt in diesem Satz.
 // RIEGEL (E3) zweimal: vor der Bindung (Route, Stufe 3b) und am fertigen Koerper im Waechter.
+//
+// ZWEI VARIANTEN (IEP-P6): hat der Server callerIsOwner set-once auf true gesetzt (eigene
+// hinterlegte Nummer des ANGERUFENEN Tenants, Schalter an, Tenant gepinnt) UND liegt ein
+// Vorname vor, spricht die Owner-Fassung - Anrede mit Vornamen statt Selbstvorstellung in
+// der dritten Person. Sonst die freigegebene Fremd-Fassung. Die Variante faellt GENAU
+// EINMAL (inboundEroeffnungFuer) und faerbt zwei Felder: first_message und
+// inbound_situation. Die KI-Kennzeichnung und der Transkriptions-Hinweis bleiben in BEIDEN
+// Fassungen woertlich; kein Werkzeug, kein Datum und kein Recht haengt an der Variante
+// (Owner-Entscheidung 5 - eine Anrufernummer ist faelschbar).
 import { localeFor, LOCALES } from "../i18n/locales.js";
-import { inboundEroeffnungDefekte } from "../i18n/inbound-opening.js";
+import { EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../i18n/inbound-opening.js";
 import { callLocaleFor } from "./call-locale.js";
 import { callTimeContext } from "./time-context.js";
 import {
@@ -112,7 +121,7 @@ export function inboundElLocaleOf({ store, config, call }) {
   });
 }
 
-function inboundDynamicVariables({ owner, bundle, time }) {
+function inboundDynamicVariables({ owner, bundle, time, situation }) {
   return {
     ...dynamicVariables({
       call: OHNE_AUFTRAG,
@@ -126,22 +135,49 @@ function inboundDynamicVariables({ owner, bundle, time }) {
     }),
     // E12: kein Anrufbeantworter-Text - eingehend spricht der Anbieter nie auf eine Mailbox.
     voicemail_line: "",
-    // L5/B3: die Inbound-Sektion der Vorlage.
-    inbound_situation: LOCALES.en.prompt.inboundSituation({ owner }),
+    // L5/B3 + IEP-P6: die Inbound-Sektion der Vorlage - Fremd- oder Owner-Fassung,
+    // entschieden an DERSELBEN Variante wie die Eroeffnung (eine Entscheidung, G5).
+    inbound_situation: situation,
   };
 }
 
-// E1/E2: EINE Quelle fuer Text, Sprache und Name - Riegel (Route) und Builder lesen dasselbe (G5).
+// IEP-P6: Fremd- oder Owner-Fassung der Vorlagen-Sektion. Der Rueckfall-Text ist die
+// FERTIGE Fremd-Eroeffnung - das Modell formuliert eine Rechtspflicht nicht selbst.
+function inboundSituationFuer({ variante, owner, fremdEroeffnung }) {
+  const vorlage = LOCALES.en.prompt;
+  return variante === EROEFFNUNG_VARIANTE.OWNER
+    ? vorlage.inboundSituationOwner({ owner, fremdEroeffnung })
+    : vorlage.inboundSituation({ owner });
+}
+
+// E1/E2 + IEP-P6: EINE Quelle fuer Text, Sprache, Namen UND Variante - Riegel (Route),
+// Waechter und Builder lesen dasselbe (G5).
+//
+// FAIL-CLOSED DURCH KONSTRUKTION: die Owner-Fassung entsteht nur, wenn (1) der Server
+// callerIsOwner set-once auf true gesetzt hat (Schalter + Allowlist + exakter
+// Nummern-Treffer, routes/voice.js) UND (2) ein Vorname vorliegt - sonst liefert
+// inboundEroeffnungOwner "" und die freigegebene Fremd-Eroeffnung spricht. `=== true`
+// strikt: undefined (Bestands-Datensatz ohne das Feld) heisst FREMD.
 function inboundEroeffnungFuer({ store, config, call }) {
   const locale = inboundElLocaleOf({ store, config, call });
   const bundle = localeFor(locale.language);
-  const { ownerName } = store.tenantContext(call.tenantId);
-  return { text: bundle.inboundEroeffnung(ownerName), locale, bundle, ownerName };
+  const { ownerName, firstName } = store.tenantContext(call.tenantId);
+  const fremd = bundle.inboundEroeffnung(ownerName);
+  const ownerText = call.callerIsOwner === true ? bundle.inboundEroeffnungOwner(firstName) : "";
+  const variante = ownerText ? EROEFFNUNG_VARIANTE.OWNER : EROEFFNUNG_VARIANTE.FREMD;
+  return {
+    text: ownerText || fremd,
+    locale,
+    fremd,
+    // Die Eingabe des Riegels, als EIN Wert - beide Pruefstellen bekommen dieselbe.
+    sollform: { bundle, ownerName, firstName, variante },
+  };
 }
 
 // IEX-A3 Stufe 3b der Init-Route: Defekt-Namen der Eroeffnung dieses Anrufs, VOR der Bindung.
 export function inboundEroeffnungsDefekteFuer({ store, config, call }) {
-  return inboundEroeffnungDefekte(inboundEroeffnungFuer({ store, config, call }));
+  const { text, sollform } = inboundEroeffnungFuer({ store, config, call });
+  return inboundEroeffnungDefekte({ text, ...sollform });
 }
 
 function inboundOverride({ text, locale }) {
@@ -175,17 +211,17 @@ function unsichereOverridePfade(override) {
 const EROEFFNUNG_BEFUND_PRAEFIX = "eroeffnung.";
 
 // E3 am TATSAECHLICH gesendeten first_message, nicht an einer Neuberechnung.
-function eroeffnungsDefekteDer(antwort, { bundle, ownerName }) {
+function eroeffnungsDefekteDer(antwort, sollform) {
   const text = wertAmPfad(antwort.conversation_config_override, FIRST_MESSAGE_PFAD);
-  return inboundEroeffnungDefekte({ text, bundle, ownerName }).map((defekt) => `${EROEFFNUNG_BEFUND_PRAEFIX}${defekt}`);
+  return inboundEroeffnungDefekte({ text, ...sollform }).map((defekt) => `${EROEFFNUNG_BEFUND_PRAEFIX}${defekt}`);
 }
 
 // Fehlertext nennt nur Namen und Pfade, nie Werte (Regel 4).
-function assertAntwortSicher(antwort, { callId, bundle, ownerName }) {
+function assertAntwortSicher(antwort, { callId, sollform }) {
   const befunde = [
     ...unsichereVariablen(antwort.dynamic_variables),
     ...unsichereOverridePfade(antwort.conversation_config_override),
-    ...eroeffnungsDefekteDer(antwort, { bundle, ownerName }),
+    ...eroeffnungsDefekteDer(antwort, sollform),
   ];
   if (befunde.length === 0) return;
   throw new Error(`Init-Antwort abgebrochen (call=${callId}): unsichere Felder ${[...new Set(befunde)].join(", ")}`);
@@ -193,14 +229,20 @@ function assertAntwortSicher(antwort, { callId, bundle, ownerName }) {
 
 export function buildInitiationResponse({ store, config, call }) {
   const eroeffnung = inboundEroeffnungFuer({ store, config, call });
-  const { bundle, ownerName } = eroeffnung;
+  const { sollform, fremd } = eroeffnung;
+  const { bundle, ownerName, variante } = sollform;
   const owner = auftraggeberAusdruck(ownerName, bundle);
   const time = callTimeContext({ tenantTimezone: store.tenantTimezone(call.tenantId), callee: OHNE_GEGENSTELLE });
   const antwort = {
     type: INITIATION_RESPONSE_TYPE,
-    dynamic_variables: inboundDynamicVariables({ owner, bundle, time }),
+    dynamic_variables: inboundDynamicVariables({
+      owner,
+      bundle,
+      time,
+      situation: inboundSituationFuer({ variante, owner, fremdEroeffnung: fremd }),
+    }),
     conversation_config_override: inboundOverride(eroeffnung),
   };
-  assertAntwortSicher(antwort, { callId: call.id, bundle, ownerName });
+  assertAntwortSicher(antwort, { callId: call.id, sollform });
   return antwort;
 }
