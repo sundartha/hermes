@@ -1,9 +1,13 @@
 // IEP-P1 auf Skript-Ebene: der Ohrzeuge im Messbaum, ohne Netz und ohne Anruf.
 //
 // KEIN NETZ: Trockenlauf-Faelle laufen mit --dry-run (fetch per Stolperdraht gesperrt),
-// Echt-Modus-Faelle gegen test/_iel-b11-fetch-attrappe.mjs. Der ausgelieferte Zustand
-// (leerer Pin, ziel_e164 null, sprechspur_sha256 null) verweigert jeden Lauf - genau das
-// pinnt der erste Fall.
+// Echt-Modus-Faelle gegen test/_iel-b11-fetch-attrappe.mjs.
+//
+// IEP-P1b: der ausgelieferte Zustand ist SCHARF - Ziel-Pin, Fall-Ziel und Absenderkennung
+// tragen die belegten Werte. Diese Datei ist die Stelle, die sie festnagelt: der Pin darf NUR
+// die belegte Mess-Tenant-DID sein, ein leerer Pin verweigert weiterhin jeden Lauf, und jedes
+// Ziel ungleich dem Pin wird abgewiesen. Was zum Anruf noch fehlt (Vorlauf-Beleg,
+// Sprechspur-Datei), fehlt absichtlich und bleibt eine Verweigerung.
 
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
@@ -15,9 +19,9 @@ import { fileURLToPath } from "node:url";
 import { texmlOhrzeugeAnfrage } from "../scripts/iel-mess-anbieter.mjs";
 import {
   MESS_TENANT_ID,
+  aendereKonfigurationIn,
   bauMessBaum,
   ergebniszeileMitArt,
-  faellePfadIn,
   leseProtokoll,
   protokollPfadIn,
   setzeZusatzFall,
@@ -34,11 +38,22 @@ const FALL = "OZ-vorher";
 const OHRZEUGE_ART = "texml-ohrzeuge";
 const OHRZEUGE_ZAEHLER = "ohrzeuge";
 const BELEG_ART = "iel-ohrzeuge-anruf";
-const PIN = "+18643028341";
-const ABSENDER = "+15739090177";
+// Die belegten Werte des ausgelieferten Zustands (IEP-P1b). Weicht der Bestand ab, ist dieser
+// Test rot - das ist seine Aufgabe, nicht sein Nebeneffekt.
+const PIN = "+17067101188"; // aktive DID des Mess-Tenants
+const ABSENDER = "+15804504874"; // aktive Konto-DID, keine private_number
+// Als Absender NIE zulaessig: eine Nummer, die als private_number eines Tenants steht - sie
+// wuerde die Owner-Erkennung der spaeteren Phasen verfaelschen.
+const VERBOTENE_ABSENDER = Object.freeze(["+18643028341"]);
+// Rotprobe der Zielsperre ueber den ECHTEN Lauf (Strategie IEP-P1 Abnahme (a)): Ziffer daneben,
+// zu kurz/zu lang, nationale Schreibweise, fuehrendes Leerzeichen und die ZWEITE aktive Nummer
+// des eigenen Kontos. Ein Praefix-Vergleich liesse mindestens die kurze Form durch.
+const ABWEICHENDE_ZIELE = Object.freeze(["+17067101189", "+1706710118", "+170671011880", "17067101188", " +17067101188", ABSENDER]);
 const SPRECHSPUR_BYTES = Buffer.from("iep-p1-sprechspur-attrappe");
 const SPRECHSPUR_SHA = createHash("sha256").update(SPRECHSPUR_BYTES).digest("hex");
-const AUSGELIEFERTER_PIN_QUELLTEXT = 'const OHRZEUGE_ZIEL_PIN = "";';
+const PIN_QUELLTEXT = `const OHRZEUGE_ZIEL_PIN = "${PIN}";`;
+const PIN_ZEILE = /const OHRZEUGE_ZIEL_PIN = "([^"]*)";/g;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 function guterVorlauf(ueberschreibungen = {}) {
   return {
@@ -52,27 +67,28 @@ function guterVorlauf(ueberschreibungen = {}) {
   };
 }
 
-// Setzt den Pin in der KOPIE des Skripts - und belegt dabei, dass er im Bestand leer steht.
-function setzeZielPin(dir, pin) {
+// Schreibt einen ABWEICHENDEN Pin in die KOPIE des Skripts - und belegt dabei, dass der
+// Bestand genau die belegte Mess-Tenant-DID pinnt.
+function ersetzeZielPin(dir, wert) {
   const pfad = path.join(dir, "scripts", "iel-mess.mjs");
   const inhalt = fs.readFileSync(pfad, "utf8");
-  assert.ok(inhalt.includes(AUSGELIEFERTER_PIN_QUELLTEXT), "Ausgangszustand: OHRZEUGE_ZIEL_PIN muss leer ausgeliefert werden");
-  fs.writeFileSync(pfad, inhalt.replace(AUSGELIEFERTER_PIN_QUELLTEXT, `const OHRZEUGE_ZIEL_PIN = "${pin}";`));
+  assert.ok(inhalt.includes(PIN_QUELLTEXT), `Ausgangszustand: OHRZEUGE_ZIEL_PIN muss ${PIN} sein`);
+  fs.writeFileSync(pfad, inhalt.replace(PIN_QUELLTEXT, `const OHRZEUGE_ZIEL_PIN = "${wert}";`));
 }
 
-function ruesteOhrzeugeFall(dir) {
-  const pfad = faellePfadIn(dir);
-  const konfiguration = JSON.parse(fs.readFileSync(pfad, "utf8"));
-  konfiguration.ohrzeuge.sprechspur_sha256 = SPRECHSPUR_SHA;
-  konfiguration.faelle[FALL].ziel_e164 = PIN;
-  fs.writeFileSync(pfad, JSON.stringify(konfiguration));
+// Das Ziel steht seit IEP-P1b im Bestand; Attrappe bleibt allein die Sprechspur. SPRECHSPUR_SHA
+// ruestet sie scharf, null nimmt den Pin wieder weg.
+function setzeSprechspurPin(dir, sha256) {
+  aendereKonfigurationIn(dir, (konfiguration) => ({
+    ...konfiguration,
+    ohrzeuge: { ...konfiguration.ohrzeuge, sprechspur_sha256: sha256 },
+  }));
 }
 
-// Ein vollstaendig scharf gestellter Messbaum: Pin, Fall, Vorlauf-Beleg und Sprechspur.
+// Ein vollstaendig scharf gestellter Messbaum: Bestands-Pin, Vorlauf-Beleg und Sprechspur.
 function scharferMessbaum(optionen = {}) {
   const dir = bauMessBaum({ vorlauf: guterVorlauf(), sprechspur: SPRECHSPUR_BYTES, ...optionen });
-  setzeZielPin(dir, PIN);
-  ruesteOhrzeugeFall(dir);
+  setzeSprechspurPin(dir, SPRECHSPUR_SHA);
   return dir;
 }
 
@@ -80,9 +96,10 @@ function kontoNummerRoute(gemeldeteNummer) {
   return { methode: "GET", muster: "^/v2/phone_numbers\\?", status: HTTP_OK, koerper: { data: [{ phone_number: gemeldeteNummer, status: "active" }] } };
 }
 
-describe("IEP-P1 ausgelieferter Zustand verweigert", () => {
-  it("OZ-vorher --dry-run verweigert mit leerem Pin, ohne einen einzigen fetch", () => {
-    const dir = bauMessBaum();
+describe("IEP-P1b ausgelieferter Zustand ist scharf - und bleibt fail-closed", () => {
+  it("ein leerer Pin verweigert weiterhin jeden Lauf, ohne einen einzigen fetch", () => {
+    const dir = scharferMessbaum();
+    ersetzeZielPin(dir, "");
     const vorher = zaehlerHash(dir, "iel-ohrzeuge-zaehler.json");
     const ergebnis = spawnDry(dir, [FALL]);
     assert.equal(ergebnis.status, EXIT_VERWEIGERT, `${ergebnis.stdout}\n${ergebnis.stderr}`);
@@ -91,10 +108,46 @@ describe("IEP-P1 ausgelieferter Zustand verweigert", () => {
     assert.equal(zaehlerHash(dir, "iel-ohrzeuge-zaehler.json"), vorher);
   });
 
-  it("der ausgelieferte Fall traegt weder ein Ziel noch einen Sprechspur-Pin", () => {
+  it("jedes Ziel ungleich dem Pin wird abgewiesen - Ziffer, Laenge, nationale Form, zweite Konto-Nummer", () => {
+    for (const ziel of ABWEICHENDE_ZIELE) {
+      const dir = scharferMessbaum();
+      aendereKonfigurationIn(dir, (konfiguration) => ({
+        ...konfiguration,
+        faelle: { ...konfiguration.faelle, [FALL]: { ...konfiguration.faelle[FALL], ziel_e164: ziel } },
+      }));
+      const vorher = zaehlerHash(dir, "iel-ohrzeuge-zaehler.json");
+      const ergebnis = spawnDry(dir, [FALL]);
+      assert.equal(ergebnis.status, EXIT_VERWEIGERT, `${JSON.stringify(ziel)}: ${ergebnis.stdout}\n${ergebnis.stderr}`);
+      assert.match(ergebnis.stderr, /ziel_e164 weicht vom gepinnten Ziel ab|ziel_e164 ist keine strikte E\.164-Nummer/);
+      assert.equal(trockenAufrufe(ergebnis.stdout), 0);
+      assert.equal(zaehlerHash(dir, "iel-ohrzeuge-zaehler.json"), vorher);
+    }
+  });
+
+  it("der Bestand pinnt genau die belegte Mess-Tenant-DID und eine zulaessige Absender-DID", () => {
+    const quelle = fs.readFileSync(path.join(ROOT, "scripts", "iel-mess.mjs"), "utf8");
+    const pins = [...quelle.matchAll(PIN_ZEILE)].map((treffer) => treffer[1]);
+    assert.deepEqual(pins, [PIN], "OHRZEUGE_ZIEL_PIN steht genau einmal und traegt genau die belegte DID");
+
     const konfiguration = JSON.parse(fs.readFileSync(path.join(ROOT, "scripts", "iel-mess.cases.json"), "utf8"));
-    assert.equal(konfiguration.faelle[FALL].ziel_e164, null);
-    assert.equal(konfiguration.ohrzeuge.sprechspur_sha256, null);
+    const fall = konfiguration.faelle[FALL];
+    assert.equal(fall.ziel_e164, PIN);
+    assert.equal(fall.anrufer_kennung, ABSENDER);
+    assert.notEqual(fall.anrufer_kennung, fall.ziel_e164, "Selbstanruf ist eine nie gemessene Sonderkonfiguration");
+    assert.ok(!VERBOTENE_ABSENDER.includes(fall.anrufer_kennung), "Absender steht als private_number - verfaelscht die Owner-Erkennung");
+  });
+
+  it("ein fehlender Sprechspur-Pin verweigert weiterhin - und ein gesetzter hat SHA-256-Form", () => {
+    const konfiguration = JSON.parse(fs.readFileSync(path.join(ROOT, "scripts", "iel-mess.cases.json"), "utf8"));
+    const gepinnt = konfiguration.ohrzeuge.sprechspur_sha256;
+    // IEP-P1b fasst diesen Pin nicht an; seine Fail-closed-Wirkung belegt der Lauf darunter.
+    assert.ok(gepinnt === null || SHA256_HEX.test(gepinnt), `sprechspur_sha256 ist weder null noch SHA-256: ${gepinnt}`);
+
+    const dir = scharferMessbaum();
+    setzeSprechspurPin(dir, null);
+    const ergebnis = spawnDry(dir, [FALL]);
+    assert.equal(ergebnis.status, EXIT_VERWEIGERT, `${ergebnis.stdout}\n${ergebnis.stderr}`);
+    assert.match(ergebnis.stderr, /Sprechspur nicht gepinnt/);
   });
 
   it("OUTBOUND_FROZEN verweigert auch bei vollstaendig scharfem Messbaum", () => {
@@ -107,13 +160,11 @@ describe("IEP-P1 ausgelieferter Zustand verweigert", () => {
 
   it("fehlender Vorlauf-Beleg und fehlende Sprechspur verweigern je mit eigenem Grund", () => {
     const ohneVorlauf = bauMessBaum({ sprechspur: SPRECHSPUR_BYTES });
-    setzeZielPin(ohneVorlauf, PIN);
-    ruesteOhrzeugeFall(ohneVorlauf);
+    setzeSprechspurPin(ohneVorlauf, SPRECHSPUR_SHA);
     assert.match(spawnDry(ohneVorlauf, [FALL]).stderr, /Vorlauf-Beleg tasks\/iel-ohrzeuge-vorlauf\.json fehlt/);
 
     const ohneSprechspur = bauMessBaum({ vorlauf: guterVorlauf() });
-    setzeZielPin(ohneSprechspur, PIN);
-    ruesteOhrzeugeFall(ohneSprechspur);
+    setzeSprechspurPin(ohneSprechspur, SPRECHSPUR_SHA);
     assert.match(spawnDry(ohneSprechspur, [FALL]).stderr, /Sprechspur tasks\/iel-ohrzeuge-sprechspur\.mp3 fehlt/);
   });
 
@@ -287,8 +338,7 @@ describe("IEP-P1 Review-Fix: art und zaehler sind eine feste Paarung", () => {
 describe("IEP-P1 Echt-Modus: kein TeXML-POST vor einem vollstaendigen Beleg", () => {
   it("ohne Vorlauf-Beleg wird weder reserviert noch gewaehlt", () => {
     const dir = bauMessBaum({ sprechspur: SPRECHSPUR_BYTES });
-    setzeZielPin(dir, PIN);
-    ruesteOhrzeugeFall(dir);
+    setzeSprechspurPin(dir, SPRECHSPUR_SHA);
     const protokollPfad = protokollPfadIn(dir);
     const vorher = zaehlerHash(dir, "iel-ohrzeuge-zaehler.json");
     const ergebnis = spawnEcht(dir, [FALL], { szenario: { routen: [kontoNummerRoute(PIN)] }, protokollPfad });

@@ -30,7 +30,7 @@
 //   - Nur SIP-Ziele: M1 ElevenLabs-SIP mit Spike2- oder fiktiver 555-01xx-Kennung, oder die
 //     nie antwortende TEST-NET-Adresse. Nachdeploy NUR ElevenLabs-SIP mit fiktiver 555-01xx-
 //     Kennung (kein Spike2, kein TEST-NET). Ausnahme ist allein die Ohrzeugen-Gruppe: sie
-//     waehlt genau EINE gepinnte Nummer (OHRZEUGE_ZIEL_PIN, ausgeliefert leer = verweigert).
+//     waehlt genau EINE gepinnte Nummer (OHRZEUGE_ZIEL_PIN; leerer Pin = jeder Lauf verweigert).
 //   - --dry-run sendet nichts: fetch ist per Stolperdraht gesperrt und wird gezaehlt;
 //     Zaehler, Sperre und Ergebnisdatei werden nicht geschrieben.
 //   - Schluessel nur aus .env (src/config.js), nie in einer Ausgabe.
@@ -105,10 +105,13 @@ function tasksDatei(name) {
 }
 
 // --- IEP-P1: Ohrzeuge ---------------------------------------------------------------------
-// LEER = jeder Ohrzeugen-Lauf verweigert. Der Wert wird EINMAL vom Lead gesetzt, nachdem
-// belegt ist, welche DID dem Mess-Tenant gehoert - er wird NIE geraten und steht bewusst in
-// git (reviewbar) statt in einer lokal aenderbaren Shell-Variablen.
-const OHRZEUGE_ZIEL_PIN = "";
+// Das EINE Ziel, das der Ohrzeuge waehlen darf: die aktive DID des Mess-Tenants
+// t_user_01KX600834GCJFV9GTZQKWZMTH, am Telnyx-Konto belegt (IEP-P1b, 2026-09-17) - nicht
+// geraten und NICHT aus dem Nummern-Inventar abgeleitet, das mit dem Rollout auf Kunden-DIDs
+// waechst. Der Wert steht bewusst in git (reviewbar) statt in einer lokal aenderbaren
+// Shell-Variablen; test/iep-p1-ohrzeuge-lauf.test.js nagelt ihn fest - jede Abweichung ist rot.
+// LEER = jeder Ohrzeugen-Lauf verweigert (der Rueckweg bleibt erhalten und getestet).
+const OHRZEUGE_ZIEL_PIN = "+17067101188";
 const MITSCHNITT_MP3 = "mp3";
 // dual-kanalig und unkomprimiert - die Kennzahlen rechnen auf den Proben, nicht auf mp3.
 const MITSCHNITT_WAV = "wav";
