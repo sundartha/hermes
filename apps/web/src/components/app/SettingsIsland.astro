@@ -234,8 +234,22 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
   // Formular aus dem state befuellen: die Sprach-Kachel auswaehlen (fehlend/leer
   // -> "Automatic", die erste Kachel mit value=""). Kein clientseitiger DOM-Bau
   // mehr; der Permissions-Block ist entfernt (Owner-Entscheidung 2026-08-14).
+  // Knopf-Audit 18.09.2026: jede erneute Verteilung von AUTH_EVENT setzte die Auswahl auf
+  // den Serverstand zurueck -- und solche Verteilungen gibt es viele, die nichts mit dieser
+  // Karte zu tun haben: die Pending-Watch der Newsletter-Insel alle 15 s, solange ein
+  // Zusatzempfaenger unbestaetigt ist, die Rueckkehr in den Tab, der Sprachumschalter,
+  // jede Aktion einer anderen Insel. Gemessen: "French" angeklickt, nach 12 s stand wieder
+  // "Automatic" da; ein Klick auf "Save" speicherte dann den ALTEN Wert, und "Save" wirkte
+  // kaputt. Eine ungespeicherte Auswahl bleibt darum stehen, bis gespeichert (submit) oder
+  // abgemeldet wird; die Beschriftungen folgen weiter der Sprache.
+  let formDirty = false;
+  formEl.addEventListener("change", () => {
+    formDirty = true;
+  });
+
   function fillForm(data) {
     syncSettingsLabels();
+    if (formDirty) return;
     const { settings } = settingsFrom(data);
     const language = settings.language || "";
     for (const input of formEl.querySelectorAll('input[name="settings-language"]')) {
@@ -312,6 +326,7 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
     try {
       const saved = await saveSettings(patch);
       showMessage(msgEl, outcomeText(settingsOutcome(patch, saved)), true);
+      formDirty = false; // gespeichert -> ab jetzt zeigt das Formular wieder den Serverstand
       await refetchState(); // frischen Stand ziehen + an alle Inseln verteilen
     } catch (err) {
       showMessage(msgEl, saveErrorText(err), false);
@@ -347,6 +362,7 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
       privateStatusEl.textContent = privateNumberStatusText(data);
       cardEl.hidden = false;
     } else {
+      formDirty = false;
       cardEl.hidden = true;
     }
   });

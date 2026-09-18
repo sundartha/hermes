@@ -41,7 +41,12 @@ test("Security-Header", async (t) => {
         direktive(csp, "style-src"),
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       );
-      assert.match(csp, /font-src https:\/\/fonts\.gstatic\.com/);
+      // 'self' ist Pflicht: das Dashboard liefert seine Schriften aus /assets/fonts/ aus
+      // (apps/web/src/styles/fonts.css) - ohne 'self' blockiert der Browser alle.
+      assert.equal(
+        direktive(csp, "font-src"),
+        "font-src 'self' https://fonts.gstatic.com",
+      );
 
       const hsts = res.headers.get("strict-transport-security");
       assert.ok(hsts, "Strict-Transport-Security fehlt");

@@ -10,11 +10,18 @@ import { auditAuthFailed, AUTH_FAILED_GRUND } from "./util.js";
 // haelt das fest.
 // style-src behaelt 'unsafe-inline' - das war nicht Teil des Auftrags und ist eine eigene
 // Entscheidung, kein Mitnehmen bei der Gelegenheit.
+// font-src 'self' (18.09.2026): das Dashboard (apps/web) liefert seit dem Hermes-Rebrand
+// (bdee7cf9) ALLE Schriften selbst aus /assets/fonts/ aus (styles/fonts.css) - Norse fuer
+// den Schriftzug, Space Grotesk, die Serif- und die Mono-Schrift. Die Direktive kannte
+// nur fonts.gstatic.com; jede eigene Schrift wurde auf app.sundartha.com blockiert
+// ("Refused to load the font ... violates font-src"), und das Dashboard lief live in
+// Ersatzschriften des Systems. Die Website (Static-Service, render.yaml) ist nicht
+// betroffen: dort gibt es kein font-src, es gilt default-src 'self'.
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com",
+  "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data:",
   "connect-src 'self'",
   "frame-ancestors 'none'",

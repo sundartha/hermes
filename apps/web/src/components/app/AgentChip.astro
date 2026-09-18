@@ -110,6 +110,12 @@
        Zustandswechsel ohne Reload erscheint.
        GP-P6: steht als eigene Zeile UNTER der Kopfzeile und nutzt die volle Kartenbreite. -->
   <span id="agent-number-hint" class="agent-chip__hint" hidden aria-live="polite"></span>
+  <!-- Owner-Befund 18.09.2026 ("der Update-Knopf geht nicht"): scheiterte der Start der
+       Karten-Erfassung, wurde der Knopf nur still wieder freigegeben -- kein Wort, kein
+       Fehler. Genau das ist bei einer abgelaufenen Sitzung passiert (acht Klicks am
+       17.09.2026, alle 401). Jetzt steht hier dieselbe Meldung wie in der Billing-Insel.
+       role="status" statt aria-live allein: die Zeile erscheint erst nach dem Klick. -->
+  <span id="agent-number-msg" class="agent-chip__msg" role="status" hidden></span>
   <!-- Eine einzige, immer unsichtbare Meldezeile fuer "Copied". Sie sitzt bewusst NEBEN
        beiden Kopier-Wegen (Pille am Desktop, Ziffernreihe darunter): die Pille ist unter
        981px display:none und koennte von dort aus nichts mehr melden, und zwei
@@ -121,6 +127,8 @@
   import {
     AUTH_STATE,
     AUTH_EVENT,
+    ApiError,
+    HTTP_UNAUTHORIZED,
     agentInfo,
     isAgentLive,
     numberPlaceholderAction,
@@ -151,6 +159,11 @@
   // schrieb showChip direkt in actionEl.textContent -- das haette das SVG geloescht.
   const actionLabelEl = document.getElementById("agent-number-action-label");
   const hintEl = document.getElementById("agent-number-hint");
+  const msgEl = document.getElementById("agent-number-msg");
+  // Schluessel (lib/i18n.js) der aktuell sichtbaren Fehlermeldung zum Kartenwechsel,
+  // "" = keine. Als Schluessel statt als fertiger Text, damit ein Sprachwechsel (er
+  // verteilt AUTH_EVENT erneut -> showChip) die Meldung in der neuen Sprache zeigt.
+  let msgKey = "";
   const copyBtn = document.getElementById("agent-copy");
   const copyLabelEl = document.getElementById("agent-copy-label");
   // Owner-Entscheid 15.09.2026: zweiter, gleichwertiger Kopier-Weg -- die Ziffernreihe
@@ -178,6 +191,11 @@
     }
   }
 
+  function renderMsg() {
+    msgEl.textContent = msgKey ? t(msgKey) : "";
+    msgEl.hidden = !msgKey;
+  }
+
   function showChip(data) {
     const { number } = agentInfo(data);
     // Aktive Nummer -> ihre e164; sonst ein statusabhaengiger Platzhalter (Fix C: jetzt
@@ -200,6 +218,10 @@
     const action = numberPlaceholderAction(data);
     actionEl.hidden = !action;
     if (action) actionLabelEl.textContent = action.label;
+    // Die Fehlermeldung gehoert zum Knopf: verschwindet er (Nummer inzwischen aktiv,
+    // anderer Grund), verschwindet sie mit.
+    if (!action) msgKey = "";
+    renderMsg();
     // GP-P6: genau dieser Zustand (failed) faerbt den Punkt bernstein.
     dotEl.classList.toggle(DOT_ALERT_CLASS, !!action);
     // GP-P5: der erklaerende Satz. Er steht NEBEN dem Knopf, nicht statt seiner - im
@@ -223,6 +245,8 @@
     actionLabelEl.textContent = "";
     hintEl.hidden = true;
     renderHint("");
+    msgKey = "";
+    renderMsg();
     copyBtn.hidden = false; // Grundzustand, damit der naechste Login ihn wieder sieht
     rowBtn.disabled = false;
     rowBtn.classList.remove(COPIED_CLASS);
@@ -302,16 +326,34 @@
 
   // GP-P3: fuehrt zur bestehenden Stripe-Checkout-Session (setup-mode) - dieselbe, die
   // die Billing-Insel nutzt. Doppelklick-Schutz ueber disabled; scheitert der Start,
-  // wird der Knopf wieder bedienbar (KEIN neuer Fehlertext-Kanal - der ausfuehrliche
-  // Pfad mit Fehlermeldung bleibt die BillingIsland).
+  // wird der Knopf wieder bedienbar.
+  // Owner-Befund 18.09.2026: bis hierhin endete jeder Fehler STUMM (der Knopf wurde nur
+  // wieder freigegeben) - fuer den Kunden sah das aus wie ein toter Knopf. Jetzt dieselbe
+  // Rueckmeldung wie am Knopf der Billing-Insel (checkoutErrorText dort): 401 sagt
+  // "Sitzung abgelaufen", alles andere "Checkout konnte nicht gestartet werden". Bei 401
+  // schaltet zusaetzlich die Auth-Insel die Seite auf "Anmeldung erforderlich" um
+  // (SESSION_EXPIRED_EVENT, lib/api.js) - die Karte ist danach ohnehin ausgeblendet.
   async function startCardUpdate() {
     actionEl.disabled = true;
+    msgKey = "";
+    renderMsg();
     try {
       window.location.assign(await startBillingSetupCheckout());
-    } catch {
+    } catch (err) {
+      const expired = err instanceof ApiError && err.status === HTTP_UNAUTHORIZED;
+      msgKey = expired ? "billingSessionExpired" : "checkoutError";
+      renderMsg();
       actionEl.disabled = false;
     }
   }
 
   actionEl.addEventListener("click", startCardUpdate);
+
+  // Zurueck-Knopf aus dem Stripe-Checkout (18.09.2026): im Erfolgsfall bleibt der Knopf
+  // bewusst gesperrt, die Seite wird ja verlassen. Stellt der Browser sie danach aus dem
+  // Zwischenspeicher wieder her (bfcache), laeuft kein Skript neu -- der Knopf stuende
+  // dauerhaft auf disabled und waere tot.
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) actionEl.disabled = false;
+  });
 </script>
