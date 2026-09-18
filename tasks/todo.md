@@ -175,3 +175,65 @@ Stand der drei Arbeitspakete (Lead, Belege am lebenden System):
       plus zweiter Anruf auf +18643028341 gruen.
 - [ ] IEL-X Budget-Engine entfernen - erst nach IEX-B2 (Spec Teil B D1-D6,
       tasks/iex-r2-loeschung-rollout.md)
+
+Vorbefunde Paket C (Budget-Engine loeschen), gelesen in tasks/iex-r2-loeschung-rollout.md A0/A2/A3:
+- Der Phasenschnitt A3 ist teilweise ueberholt: L1 (Uebergabe-Fehler = Satz + Hangup) und R1
+  (Registrierung je DID + Weiche) sind durch die gemergte IEX-A-Kette (A2/A9/A10/A11) bereits
+  gebaut. R2 ist Paket B. Fuer Paket C bleiben D1-D6.
+- D2 haengt ausdruecklich an R2 - das ist der Grund, warum der Rollout vor der Loeschung steht.
+- ZWEI Punkte brauchen eine Owner-Entscheidung, BEVOR C sie beruehrt:
+  (1) CLAUDE.md Regel 2 nennt das Symbol claude.js#disclosureSentence. Es hat auf dem EL-Pfad
+      keinen Leser mehr (EL liest locale.disclosure aus call-locale.js). Entweder CLAUDE.md
+      zeigt kuenftig auf LOCALES.<lang>.disclosure, oder disclosureSentence bleibt als EINE
+      Quelle fuer call-locale.js erhalten. Still loeschen ist ausgeschlossen.
+  (2) Mit dem Turn entfaellt die Mid-Call-Decke fuer LLM-Token (claude.js#roundStopReason).
+      EL-Token werden erst im Nachlauf gebucht; waehrend des Gespraechs deckelt dann nur noch
+      die minutenbasierte Geld-Wache. CLAUDE.md Regel 1 begruendet die Inbound-Sperre genau mit
+      der laufenden Token-Buchung - der Wegfall ist eine bewusste Entscheidung, keine Nebenwirkung.
+
+Rollout IEX-B2 DURCHGEFUEHRT 2026-09-18 (Runbook iex-spec-a.md 7 b), alle Lesebelege gruen:
+- b1 Push ff180c0..d054c95 + Deploy dep-dambtotbedkc73aqmro0; Banner scope=allowlist,
+  Sweep aktiv=3 belegt=1 ohne_beleg_endungen=…4874,…8341; BELEG-INIT GRUEN.
+- b2 Trunk-Inventar GRUEN, 0 offen, je DID genau eine Registrierung.
+- b3 setzen ueber alle drei Registrierungen mit --ausfuehren: je Registrierung
+  has_auth_credentials ja, username gleich ja, allowed_numbers [DID] ja,
+  outbound_trunk unveraendert ja; Inventar abschliessend GRUEN.
+- b4 Deploy dep-damc0f5bedkc73ar4lp0; Sweep aktiv=3 belegt=3 repariert=0 abweichung=0
+  unbekannt=0 ohne_registrierung=0, ohne_beleg_endungen leer; BELEG-INIT GRUEN.
+- b5 scope --registrierte-dids --ausfuehren (PUT 200) + Deploy dep-damc29h42hec738gkfug;
+  Banner "Inbound-EL: an, scope=registrierte_dids", Sweep unveraendert gruen, keine Drosselung.
+- b6 Owner-Testanrufe GRUEN. …1188 (conv_9501m2sv9zyferavns5zmm06y8qb, 12 s): Agent-Sprache de,
+  erste Zeile woertlich "Hallo Antonio, hier ist dein KI-Assistent. Das Gespraech wird
+  transkribiert und zusammengefasst. Wie kann ich helfen?", unterbrochen=false.
+  …8341 (conv_3501m2sv1qvkfbwrz6py49f77fks, 17 s): Fremd-Eroeffnung vollstaendig,
+  unterbrochen=false. Damit ist M-B.d POSITIV: Telnyx akzeptiert die zweite Tenant-DID als
+  Absender, ElevenLabs bindet sie.
+- Ein frueherer Beleg zeigte unterbrochen=ja; Ursache war ein 4-Sekunden-Anruf des Owners
+  (Bindung allein 1,6 s), nicht der Agent. Kein Offenlegungs-ROT.
+
+Owner-Entscheidungen 2026-09-18:
+19. settings.language='fr' beim Business-Tenant war ABSICHT (Owner hat im Dashboard
+    umgestellt, um zu pruefen, ob der Sprachwechsel noch funktioniert - er funktioniert).
+    KEIN Defekt, nicht "reparieren". Steht inzwischen wieder auf de.
+20. Der SMS-Alarmkanal wird NICHT angefasst. Befund bleibt offen (s. unten).
+
+Offene Punkte nach dem Rollout:
+- [ ] b7: 24-h-Beobachtung. Heute 1 von 6 Uebergaben gescheitert (call_mu6os3efopwh,
+      08:18:18, …8341, el_uebergabe_gescheitert). Der neue Alarm hat korrekt NICHT
+      ausgeloest (zwei gelungene Uebergaben im Fenster).
+- [ ] SMS-Alarmabsender kaputt: die als alert_sms_sender gebundene +18643028341 wird von
+      Telnyx mit HTTP 400 / 40305 "Invalid 'from' address" abgelehnt - stuendlich, seit
+      mindestens 7 Tagen. Mail (Brevo) traegt den Alarm, der Kanal ist also nicht blind.
+      Der Kanal selbst ist NICHT tot: outbound-gates.js sendet mit dem Anruf-Absender.
+      Kleinster Fix waere eine SMS-faehige DID als Bindung oder Messaging auf …8341.
+      ACHTUNG beim Entfernen: die Budget-Fruehwarnung in outbound-gates.js ist die einzige
+      Alarmstelle OHNE Mail-Zweig und wuerde ersatzlos verstummen.
+- [ ] Schwellen des Inbound-Alarms sind eine Annahme ohne Verkehrsdaten - zwei Wochen nach
+      dem Rollout aus der Prod-DB nachziehen (GEBUNDEN vs. RUECKFALL je Woche), reine
+      Env-Aenderung.
+- [ ] Fremd-Eroeffnung nennt den vollen Namen ("Antonio Fotiadis dos Santos Francisco").
+      Funktional korrekt, am Telefon lang - Owner-Entscheidung, keine Bauarbeit.
+- [ ] settings.greeting traegt noch den abgeschafften Wortlaut ("Please note: you are
+      speaking to an AI...") auf Englisch. Auf dem EL-Pfad ungenutzt; gelesen nur vom
+      Budget-Rueckfall (routes/voice.js#gespeicherteBegruessungDes). Loest sich mit
+      Paket C / D2 auf - JETZT leeren wuerde den Rueckfallpfad werfen lassen.
