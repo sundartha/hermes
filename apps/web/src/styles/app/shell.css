@@ -669,6 +669,27 @@
   display: block;
 }
 
+/* Owner-Befund 18.09.2026: Rueckmeldung, wenn der Kartenwechsel nicht starten konnte
+   (AgentChip.astro, #agent-number-msg). Vorher endete dieser Fall stumm und der Knopf
+   wirkte tot. Gleiche Achse und Stufe wie der Erklaersatz darueber, aber in der
+   Bernsteinfarbe des Stoerfall-Punkts (.live-dot--alert) -- kein neuer Farbwert, gleiche
+   Bedeutung. In beiden Raster-Fassungen (ab 620px) laeuft die Zeile wie der Erklaersatz
+   unter beiden Spalten durch; im Flex-Stapel darunter ist grid-column wirkungslos. */
+.agent-chip__msg {
+  grid-column: 1 / -1;
+  padding-left: var(--chip-axis);
+  color: #f0b366;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+@media (max-width: 980px) {
+  .agent-chip__msg {
+    font-size: 13.5px;
+  }
+}
+
 /* GP-P3: der Aktions-Knopf (failed-Nummer) teilt die Optik des Kopier-Knopfs -
    angehaengter Selektor statt einer zweiten, driftenden Deklaration (S2). */
 .agent-chip__copy,
