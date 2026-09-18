@@ -4764,3 +4764,67 @@ Zuwachs), aber der Fristen-Test liest `config.llm.briefingTimeoutMs` LIVE und wi
 
 Tests: `test/openai-s3-hop-frist.test.js`, `test/openai-s3-place-call-idempotenz.test.js`,
 `test/sec-p6-gate-fehlerpfad.test.js` (SEC-P6-2b, erweiterte Store-Erwartungstabelle).
+
+## E5/E8 — Der angekuendigte Origin ist eine geprueft konsistente Angabe (2026-09-18)
+
+**Anlass:** Token-Audience (`src/auth.js` `audience()` = `oauthAudience || ${publicUrl}/mcp`)
+und der Origin, den der Server dem Client ankuendigt (PRM `resource`, 401-Metadaten-Verweis,
+Allowlist der /mcp-Herkunftswache), konnten stillschweigend auseinanderlaufen. Der Ausfall ist
+lautlos und nicht diagnostizierbar: der Client erfaehrt eine `resource`, der Server prueft eine
+andere `aud` - eine erfolgreiche Autorisierung ist dann unmoeglich, ohne dass ein Log etwas sagt.
+MCP-Spec T-32 verlangt EINEN angekuendigten Origin.
+
+**Ein Eigentuemer, nicht zwei (`src/boot-guard.js`):** `kanonischeAudience(publicUrl)` ist die
+EINZIGE Formel fuer die kanonische MCP-Audience und muss identisch bleiben zu `audience()` in
+`src/auth.js`. Diese Gleichheit ist nicht per Konvention gesichert, sondern per Test gegen die
+`resource`, die der laufende Server unter `/.well-known/oauth-protected-resource` ausliefert.
+`angekuendigterOriginFindings` buendelt vier fatale Befunde (Audience-Divergenz, `PUBLIC_URL`
+unparsbar / mit Pfad / im Hosting nicht https, unparsbarer Allowlist-Eintrag);
+`src/boot.js#assertAngekuendigterOrigin` ist das 14. `exit(1)`-Gate, verdrahtet VOR
+`rearmActiveCallTimers` (INV-5).
+
+**Beide Vergleichsseiten werden normalisiert (S5-PM-8).** `fuerAudienceVergleich` trimmt und
+entfernt alle Rand-Schraegstriche links UND rechts. Ein live gemeintes `.../mcp/` darf keinen
+Boot-Abbruch ergeben - ein fataler Befund heisst `exit(1)`, also kein `app.listen`, also auch
+kein `/voice` und keine eingehende Telefonie. Deshalb ist die Normalisierung Teil des Gates und
+nicht Kosmetik. BEWUSST NICHT `stripTrailingSlash` aus `src/config.js`: das entfernt genau EINEN
+Schraegstrich und lebt im config-Modul, das `boot-guard.js` nicht importiert.
+
+**Zweiter Riegel in `PRODUCTION_FOOTGUNS`, bewusst redundant (E8, Review-Runde 1
+korrigiert).** Die urspruengliche E8-Entscheidung hier lautete "nicht bauen" (Begruendung:
+der Boot-Riegel greift in JEDER Umgebung, die Produktions-Menge ist eine echte Teilmenge -
+kein Sicherheitsgewinn). Das ist inhaltlich weiterhin richtig, aber PLAN-OPENAI.md Etappe 8
+verlangt den Eintrag als verbindliche Abnahme woertlich, und diese Ersetzung im Abnahmetext
+ist eine Owner-Entscheidung, die ein Review nicht selbst treffen darf. Der Eintrag ist deshalb
+GEBAUT, aber ohne eine zweite eigene Vergleichsformel: `src/config.js` importiert
+`kanonischeAudience`/`fuerAudienceVergleich` aus `src/boot-guard.js` und ruft exakt dieselben
+Funktionen - der PM-8-Normalisierung (s.o.) kann dieser Eintrag also nicht widersprechen, weil
+er sie nicht neu implementiert. In Produktion feuert bei Audience-Divergenz heute effektiv der
+FRUEHERE der beiden Riegel (`assertConfig`/`productionFootguns`, vor `assertBootGates`) -
+`assertAngekuendigterOrigin` bleibt trotzdem der einzige Riegel, der auch AUSSERHALB der
+Produktion greift (lokal/Test bleibt `productionFootguns()` immer `[]`). Owner-Entscheidung
+ausstehend: PLAN-OPENAI.md Etappe 8 entweder auf diesen Zustand (zwei Riegel, eine Formel)
+festschreiben, oder den `PRODUCTION_FOOTGUNS`-Eintrag wieder zurueckziehen und den
+Abnahmetext auf `assertAngekuendigterOrigin` umschreiben.
+
+**Der Befundtext nennt Namen, keine Werte.** Ausgegeben werden `OAUTH_AUDIENCE`,
+`PUBLIC_URL`, `MCP_ALLOWED_ORIGINS` und - bei der Allowlist - die POSITION des Eintrags, nie
+der eingegebene String. Die Audience-Meldung nennt zusaetzlich den ERWARTETEN Wert; der ist aus
+`PUBLIC_URL` abgeleitet, das der Boot-Banner ohnehin druckt, und ist kein Credential.
+
+**Bewusst akzeptiertes Risiko (Ruecknahme einer Faehigkeit):** eine divergente
+`OAUTH_AUDIENCE` war bis E5 ein Betriebszustand (der AM6-Override, Anlass "WorkOS Resource
+Indicator") und ist jetzt Boot-Refusal. Live kostet das nichts - am 2026-09-18 belegen zwei
+oeffentliche Reads, dass `PRM.resource === publicUrl + "/mcp"` gilt, `OAUTH_AUDIENCE` also leer
+ODER exakt kanonisch ist (`docs/RUNBOOK-LIVE-WERTE.md`, F-b/F-e). **Pflicht bleibt: vor jedem
+Deploy, der `PUBLIC_URL` oder `OAUTH_AUDIENCE` beruehrt, den Live-Wert LESEN (Soll-Ist), nie
+blind setzen.** Nimmt WorkOS die kanonische URL kuenftig nicht als Resource Indicator an, ist
+die Rueckstufung des Riegels auf eine Warnung eine Owner-Entscheidung, keine Bauaufgabe.
+
+Tests: `test/s2-mcp-origin.test.js` (E5-U10..U16 Praedikat, E8-U01 kanonisch-gesetzt,
+E5-B01..B05 Kindprozess mit Exit 1 bzw. Happy-Path-Schraegstrich, plus der Formel-Pin gegen die
+ausgelieferte PRM-`resource`), `test/oauth.test.js` (zweiter, unabhaengiger Spawn-Beleg fuer
+Divergenz -> Exit 1 und fuer den kanonisch gesetzten Wert -> startet). Der
+`PRODUCTION_FOOTGUNS`-Eintrag zusaetzlich in `test/config-prod-footguns.test.js`
+(T-P0-5-15..17: leer/kanonisch-mit-Schraegstrich/divergent) und
+`test/boot-prod-footguns.test.js` (T-P0-5-18: Kindprozess-Exit-1 im Hosting).

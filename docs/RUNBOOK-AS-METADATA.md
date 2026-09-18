@@ -184,13 +184,52 @@ diesem Pfad ausdruecklich "Modus nicht oauth" - kein Ausfall der Route mehr.
 Die Sonde meldet in beiden Faellen FAIL + Exit 1; das ist nach A2 weiterhin
 korrekt, nur die Interpretation des Befunds aendert sich.
 
-## F5 - Platzhalter (Messung nach B1-B3)
+## Messung 2026-09-18T17:29:31Z (F5-Versuch, VOR B1-B3 - Owner-Aufgabe offen)
 
-Noch nicht gefuellt (bewusst - diese Ueberschrift beginnt absichtlich NICHT
-mit "## Messung", damit sie nicht als zweite ausgefuellte Messung
-mitgezaehlt wird). F5 gehoert zu Etappe 8 (nach den Owner-Dashboard-
-Aenderungen B1-B3) und wird dort als zweite, mit "## Messung" ueberschriebene
-datierte Messung ergaenzt.
+Kommando: `node scripts/probe-as-faehigkeiten.mjs https://app.sundartha.com`
+Repo-HEAD zum Messzeitpunkt: `f404035`.
+
+**Ergebnis: CIMD (5/8) und DCR (4/8) sind weiterhin FAIL** -
+`registration_endpoint` und `client_id_metadata_document_supported` fehlen
+unveraendert auf `openid-configuration` (dasselbe Bild wie die Messung vom
+selben Tag um 10:39:18 Uhr, s. oben). Das ist der erwartete Zustand: F5
+verlangt die zweite Messung **nach** den WorkOS-Dashboard-Aenderungen B1-B3
+(S5-authorization-server.md) - diese drei Eintraege sind Owner-Handgriffe im
+WorkOS-Dashboard, kein Code (s. Abschnitt "Was NICHT in diese Etappe
+gehoert" im E8-Spec), und sind nach dieser Messung noch nicht vorgenommen.
+
+**Offener Nachweis (F5), keine Bauaufgabe:** sobald der Owner B2 (CIMD im
+WorkOS-Dashboard aktivieren) und B3 (DCR/`registration_endpoint` aktivieren)
+vorgenommen hat, ist die Sonde erneut zu fahren und das Ergebnis hier als
+naechste `## Messung`-Ueberschrift mit CIMD/DCR = PASS einzutragen. Bis
+dahin bleibt dieser Eintrag der Beleg, dass die zweite Messung ausdruecklich
+versucht (nicht uebersehen) und mit dem erwarteten Befund dokumentiert wurde.
+
+```
+=== Sonde AS-Faehigkeiten ===  Ziel: https://app.sundartha.com   Datum (UTC): 2026-09-18T17:28:42.889Z
+--- Schritt 1: Protected Resource Metadata (F1/F2) ---
+[PASS   ] [PFLICHT] PRM erreichbar    HTTP 200
+[INFO   ] resource (F2) = https://app.sundartha.com/mcp
+[INFO   ] authorization_servers[0] (F1) = https://fearless-network-26.authkit.app
+--- Schritt 2: POST /mcp ohne Token (F3) ---
+[PASS   ] [BEFUND ] WWW-Authenticate vorhanden -> Modus oauth    Bearer resource_metadata="https://app.sundartha.com/.well-known/oauth-protected-resource", error="invalid_token", error_description="Kein Token"
+[INFO   ] publicUrl aus resource_metadata = https://app.sundartha.com
+[INFO   ] A3-Vorhersage = NEIN - Footgun feuert NEIN (resource == publicUrl/mcp)
+--- Schritt 3: AS-Metadata am Issuer (F4) ---
+[PASS   ] [PFLICHT] AS-Metadata erreichbar    Quelle: openid-configuration (HTTP 200) | openid-configuration: HTTP 200 | oauth-authorization-server: HTTP 200
+[INFO   ] issuer-Feld je Pfad = openid-configuration=https://fearless-network-26.authkit.app | oauth-authorization-server=https://fearless-network-26.authkit.app
+[INFO   ] jwks_uri-Feld je Pfad = openid-configuration=https://fearless-network-26.authkit.app/oauth2/jwks | oauth-authorization-server=https://fearless-network-26.authkit.app/oauth2/jwks
+[INFO   ] scopes_supported = email, offline_access, openid, profile
+[PASS   ] [PFLICHT] 1/8 issuer-Gleichheit (A-06/T-7)    Dokument-issuer: https://fearless-network-26.authkit.app
+[PASS   ] [BEFUND ] 2/8 jwks_uri auf Issuer-Origin (A1-Vorbedingung)    jwks_uri: https://fearless-network-26.authkit.app/oauth2/jwks
+[FAIL   ] [PFLICHT] 3/8 PKCE S256 beworben (T-8)    code_challenge_methods_supported: (fehlt)
+[FAIL   ] [BEFUND ] 4/8 DCR: registration_endpoint (T-10)    registration_endpoint: (fehlt)
+[FAIL   ] [BEFUND ] 5/8 CIMD beworben (T-10)    client_id_metadata_document_supported: (fehlt)
+[PASS   ] [BEFUND ] 6/8 Token-Auth 'none' moeglich (T-10)    token_endpoint_auth_methods_supported: none, client_secret_basic, client_secret_post
+[UNKNOWN] [BEFUND ] 7/8 RFC 9207 iss-Parameter (T-11)    authorization_response_iss_parameter_supported: (fehlt)
+[PASS   ] [BEFUND ] 8/8 userinfo_endpoint (T-16)    userinfo_endpoint: https://fearless-network-26.authkit.app/oauth2/userinfo
+=== Ergebnis: PFLICHT 3/4 PASS - Befunde 4 PASS, 2 FAIL, 1 UNKNOWN -> Exit 1
+```
 
 ## 10. Abgrenzung zu `scripts/check-setup.js`
 

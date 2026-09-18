@@ -17,9 +17,10 @@ const { withConfigOverrides } = makeConfigOverrides(config);
 // erzwungen (unabhaengig von process.env). Namespaced (PA-14): productionFootguns()
 // liest cfg.<namespace>.<key>, nicht mehr cfg.<key> flach.
 const SAFE_PROD = {
-  auth: { dashboardPassword: "geheim", mcpAuth: "", oauthIssuerUrl: "" },
+  auth: { dashboardPassword: "geheim", mcpAuth: "", oauthIssuerUrl: "", oauthAudience: "" },
   safety: { skipTwilioSignatureCheck: false },
   store: { storeBackend: "pg" },
+  server: { publicUrl: "https://agent.test" },
 };
 
 test("T-P0-5-01: nicht-Produktion -> nie Footguns (alle Schalter offen erlaubt)", () => {
@@ -57,6 +58,35 @@ test("T-P0-5-06: Produktion + http-OAUTH_ISSUER_URL -> fatal; https + localhost-
   assert.deepEqual(productionFootguns({ ...SAFE_PROD, auth: { ...SAFE_PROD.auth, oauthIssuerUrl: "https://idp.example" } }, true), [], "https-Issuer ist sicher");
   assert.deepEqual(productionFootguns({ ...SAFE_PROD, auth: { ...SAFE_PROD.auth, oauthIssuerUrl: "http://127.0.0.1:8080" } }, true), [], "localhost-IdP bleibt erlaubt");
   assert.deepEqual(productionFootguns({ ...SAFE_PROD, auth: { ...SAFE_PROD.auth, oauthIssuerUrl: "http://localhost:8080/x" } }, true), [], "localhost-IdP bleibt erlaubt");
+});
+
+// E8 (PLAN-OPENAI.md Etappe 8): OAUTH_AUDIENCE muss die kanonische MCP-Audience
+// (PUBLIC_URL + /mcp) tragen oder leer sein - sonst kann kein Client sich je
+// erfolgreich autorisieren. Der Vergleich normalisiert BEIDE Seiten (PM-8): ein
+// live gemeintes ".../mcp/" darf KEINEN Boot-Abbruch ausloesen.
+test("T-P0-5-15: Produktion + leeres OAUTH_AUDIENCE -> kein Footgun (kanonischer Default gilt)", () => {
+  assert.deepEqual(productionFootguns({ ...SAFE_PROD, auth: { ...SAFE_PROD.auth, oauthAudience: "" } }, true), []);
+});
+
+test("T-P0-5-16: Produktion + kanonisches OAUTH_AUDIENCE (auch mit Schraegstrich) -> kein Footgun", () => {
+  assert.deepEqual(
+    productionFootguns({ ...SAFE_PROD, auth: { ...SAFE_PROD.auth, oauthAudience: "https://agent.test/mcp" } }, true),
+    [],
+  );
+  assert.deepEqual(
+    productionFootguns({ ...SAFE_PROD, auth: { ...SAFE_PROD.auth, oauthAudience: "https://agent.test/mcp/" } }, true),
+    [],
+    "ein live gemeintes trailing-slash-Mcp darf keinen Boot-Abbruch ausloesen (PM-8)",
+  );
+});
+
+test("T-P0-5-17: Produktion + divergentes OAUTH_AUDIENCE -> fatal (nennt Var)", () => {
+  const errors = productionFootguns(
+    { ...SAFE_PROD, auth: { ...SAFE_PROD.auth, oauthAudience: "https://fremd.example/mcp" } },
+    true,
+  );
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /OAUTH_AUDIENCE/);
 });
 
 test("T-P0-5-07: Produktion + mehrere Footguns -> alle gesammelt", () => {
