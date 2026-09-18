@@ -19,7 +19,12 @@ test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
   // TELNYX_API_KEY, s. BASE_ENV in helpers.js) - die Audit-Zeile steht da schon im Log.
   const srv = await startServer({
     env: { ALLOWED_NUMBERS: "+4915112345678" },
-    seed: seedState({ calls: [seedCall({ id: "call_audit1" })] }),
+    // E3: eigenes Ziel fuer den Seed-Call, ANDERS als das der ersten Subtest-Wahl
+    // (+4915112345678) - sonst waere der Seed-Call (status "active") ein Dedup-Treffer
+    // fuer den frischen place_call unten, und die Subtest-Antwort waere 200
+    // (dedupliziert) statt 500 (Offline-Diskriminator). Der Cancel-Subtest greift ueber
+    // die id, nicht ueber "to" - unberuehrt.
+    seed: seedState({ calls: [seedCall({ id: "call_audit1", to: "+4915199999999" })] }),
   });
   try {
     await t.test("place_call: genau eine Zeile mit Aktion + IP + Ziel", async () => {

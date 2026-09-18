@@ -259,6 +259,10 @@ export const {
   // server.js-Verdrahtung (F2) wuerfe zur Laufzeit einen TypeError. Muster wie reserveExceedsBudget.
   tryReserveOutboundBudget,
   releaseOutboundReserve,
+  // E3: zweiter Freigabeweg fuer den Fall OHNE Datensatz (Dedup / Wurf vor createCall). OHNE
+  // diesen Re-Export waere store.releaseOutboundReserveCents auf der Fassade undefined -> die
+  // Route wuerfe zur Laufzeit einen TypeError. Beide Backends exportieren sie.
+  releaseOutboundReserveCents,
   reservationOf,
   // Plattform-Fruehwarnung (Budget-Achsen P6): OHNE diesen Re-Export waere
   // store.claimPlatformSpendWarning undefined -> outbound-gates.js wuerfe zur Laufzeit

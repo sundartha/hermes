@@ -95,6 +95,11 @@ test("OUT-27 (Mechanismus, gruen) - der TeXML-Originationspfad reicht das gegate
       tenantPrivateNumber: () => null,
       resolveProfile: () => ({ allowConsult: false }),
       resolveCallLanguage: () => "de",
+      // E3: Dedup-Claim-Abschnitt + sein Fehler-Freigabeweg - beide NACH der
+      // Gate-Kette (Muster test/sec-p6-gate-fehlerpfad.test.js#kettenStore).
+      withStoreLock: (fn) => fn(),
+      activeCallsFor: () => [],
+      releaseOutboundReserveCents: () => true,
       createCall: (felder) => ({ id: "call_out27", ...felder }),
       recordCostProfile: () => {},
       save: () => {},

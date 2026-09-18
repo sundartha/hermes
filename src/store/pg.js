@@ -583,6 +583,10 @@ export function makePgStore(runner) {
     tryReserveOutboundBudget: (tenantId, reserveCents, cfg) =>
       ops.tryReserveOutboundBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
     releaseOutboundReserve: (call) => ops.releaseOutboundReserve(requireState(), call),
+    // E3: zweiter Freigabeweg fuer den Fall OHNE Datensatz (Dedup / Wurf vor createCall).
+    // Wrapper-Parity zu json.js.
+    releaseOutboundReserveCents: (tenantId, cents) =>
+      ops.releaseOutboundReserveCents(requireState(), tenantId, cents),
     reservationOf: (tenantId) => ops.reservationFor(requireState(), tenantId),
     // Plattform-Fruehwarnung (Budget-Achsen P6): Wrapper-Parity zu json.js. Reine
     // In-Memory-Mutation auf dem Spiegel (kein save/Flush): platformSpendWarnedMonth wird

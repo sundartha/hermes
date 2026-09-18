@@ -1238,9 +1238,12 @@ test("T-W2-place-shape: place_call laeuft jetzt ueber registerTool, traegt _meta
     // ({callId:"call_1"}) traegt das Feld selbst NICHT -> der Handler normalisiert
     // defensiv auf "kein Kontext angekommen" (fail-closed, kein Crash bei einem aelteren
     // Gateway-Mock).
+    // E3 (N-11): deduplicated ist additiv dazugekommen (dieselbe Begruendung, PLACE_CALL_MOCK
+    // traegt es nicht -> Handler normalisiert fail-closed auf false, s. T-I10 unten fuer die
+    // Wert-Pruefung).
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
-      "call_id", "context_received", "duration_s", "failure_reason", "last_transcript_lines",
-      "objective_achieved", "result_summary", "status",
+      "call_id", "context_received", "deduplicated", "duration_s", "failure_reason",
+      "last_transcript_lines", "objective_achieved", "result_summary", "status",
     ]);
     assert.equal(result.structuredContent.call_id, "call_1");
     assert.equal(result.structuredContent.status, "dialing");

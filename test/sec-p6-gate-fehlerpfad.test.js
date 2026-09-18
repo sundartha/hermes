@@ -102,6 +102,13 @@ function kettenStore(overrides = {}) {
     // erreichte der Gutfall aber nie den Wahlversuch, und die Positiv-Kontrolle waere
     // wertlos.
     resolveCallLanguage: () => "de",
+    // E3: die Dedup-Entscheidung (activeCallsFor) und ihr Fehlerpfad
+    // (releaseOutboundReserveCents) laufen NACH der vollstaendigen Gate-Kette - wie
+    // createCall selbst sind sie KEINE Gate-Datenquelle (s. NICHT_KETTEN_QUELLEN). Ein Wurf
+    // in diesem Fenster ist Gegenstand von test/openai-s3-place-call-idempotenz.test.js,
+    // nicht dieser Datei.
+    activeCallsFor: () => [],
+    releaseOutboundReserveCents: () => true,
     createCall: (felder) => ({ id: "call_secp6", ...felder }),
     recordCostProfile: () => {},
     save: () => {},
@@ -272,6 +279,10 @@ const KETTEN_QUELLEN = Object.freeze({
 const NICHT_KETTEN_QUELLEN = Object.freeze([
   "claimPlatformSpendWarning",
   "resolveCallLanguage",
+  // E3: Dedup-Praedikat + sein Fehler-Freigabeweg - beide NACH der Gate-Kette (s. Kommentar
+  // an kettenStore()).
+  "activeCallsFor",
+  "releaseOutboundReserveCents",
   "createCall",
   "recordCostProfile",
   "save",
