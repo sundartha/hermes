@@ -526,7 +526,7 @@ const OPEN_QUESTIONS_FIELD = z
 // Bestands-Beschreibung von place_call, byte-identisch aus dem Tool-Deskriptor
 // herausgeloest (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
 const PLACE_CALL_DESCRIPTION =
-  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately and shows a live card that updates itself (status, duration, transcript, result). You do NOT need to poll - if no live update arrives, get_call_status remains available as a fallback.";
+  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status.";
 
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
@@ -557,6 +557,69 @@ const placeCallDescription = (consultLoop) =>
 // eslint-legacy-exceptions.json pinnt sie).
 const CANCEL_CALL_DESCRIPTION =
   "Cancels the call record and stops billing right away. Whether the phone line itself actually drops is NOT guaranteed on every call path - when it is not, the response says so explicitly instead of claiming a clean hangup.";
+
+// MCP-Annotations (Phase E2, P0-1): Nebenwirkungs-Kennzeichnung je Werkzeug, die ein
+// Client OHNE Beschreibungs-Text lesen kann (MCP-Spec "Tool Annotations"). destructiveHint
+// und idempotentHint sind laut Spec nur bedeutungstragend, wenn das Nur-Lese-Feld false
+// ist - deshalb fehlen sie bei den reinen Lese-Werkzeugen bewusst (kein toter Wert).
+// N-02/N-03: das sind HINTS, keine Garantie - ein Client darf seine Nutzungsentscheidung
+// nicht allein darauf stuetzen; die Beschreibungstexte bleiben die eigentliche Quelle.
+// title ist EIN Anzeigename fuer BEIDE Registrierwege (W-09: title > annotations.title >
+// name) - der Legacy-Weg (server.tool) kennt kein eigenes Top-Level-title, deshalb steht
+// er hier bewusst NICHT bei den uiTool-Konfigs (sonst zwei Titel-Regeln je Registrierweg).
+// Wie die Beschreibungen einsprachig Englisch (Systemgrenze O14 oben) - nur das
+// Client-Modell liest das, keine Tenant-Sprache.
+// EIN modulweiter Wahrheitstabelle statt zehn Inline-Literalen (Owner-Auflage
+// "registerTools darf NICHT wachsen", s. Kommentar bei CHECK_INBOX_DESCRIPTION/
+// CANCEL_CALL_DESCRIPTION) - dieselbe Auslagerung wie CALL_OUTPUT/CALENDAR_OUTPUT/
+// MY_NUMBER_OUTPUT. Reihenfolge = Registrierreihenfolge (Vollstaendigkeit gegen die Datei
+// abzaehlbar). await_call_event ist NICHT readOnly: seine Route schreibt zwei Felder
+// (noteConsultPoll/markConsultAskDelivered, routes/api-calls.js + state-ops.js) - der
+// Code widerspricht damit einer frueheren Einschaetzung, und der Code gewinnt.
+const TOOL_ANNOTATIONS = {
+  place_call: {
+    title: "Place a phone call",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+  await_call_event: {
+    title: "Wait for call update",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  answer_consult: {
+    title: "Answer call question",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+  get_call_status: { title: "Get call status", readOnlyHint: true, openWorldHint: true },
+  get_transcript: { title: "Get call transcript", readOnlyHint: true, openWorldHint: true },
+  cancel_call: {
+    title: "Cancel a call",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  get_my_number: { title: "Agent phone number", readOnlyHint: true, openWorldHint: false },
+  list_calls: { title: "List calls", readOnlyHint: true, openWorldHint: false },
+  check_inbox: {
+    title: "Check inbox",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  list_action_items: { title: "List action items", readOnlyHint: true, openWorldHint: false },
+  get_calendar: { title: "Get calendar", readOnlyHint: true, openWorldHint: false },
+  get_agent_status: { title: "Get agent status", readOnlyHint: true, openWorldHint: false },
+};
 
 // ctx (Phase 2): { identity, scopedTenant, allowCalendar }. identity wird per Closure
 // an jeden REST-Aufruf gehaengt (X-Internal-Identity); scopedTenant (AM6) ebenso als
@@ -647,7 +710,10 @@ export function registerTools(
     };
 
   // Bestands-Tools: positionsbasiertes server.tool (frozen API, kein outputSchema/_meta).
-  const tool = (name, desc, schema, handler) => server.tool(name, desc, schema, wrapHandler(handler));
+  // server.tool nimmt Annotations als viertes von fuenf Positionsargumenten (frozen API,
+  // E2). Viertes Argument als EIN Objekt statt fuenftem Parameter (F1, max-params haelt).
+  const tool = (name, desc, schema, { annotations, handler }) =>
+    server.tool(name, desc, schema, annotations, wrapHandler(handler));
 
   // Wie tool(), aber ueber registerTool(config) -> erlaubt outputSchema (Stufe 0
   // schema-validiert) und _meta.ui.resourceUri (Stufe 1). config ohne _meta ->
@@ -666,6 +732,7 @@ export function registerTools(
     "place_call",
     {
       description: placeCallDescription(consultAllowed),
+      annotations: TOOL_ANNOTATIONS.place_call,
       inputSchema: {
         to: z
           .string()
@@ -864,6 +931,7 @@ export function registerTools(
           "answer carries the complete result (summary and whether the objective was achieved), " +
           "so there is no need to call get_transcript separately. event=\"none\" simply means " +
           "nothing happened yet: call it again. This tool NEVER returns audio.",
+        annotations: TOOL_ANNOTATIONS.await_call_event,
         inputSchema: {
           call_id: z.string().describe("The call_id from place_call"),
           after_event_id: z
@@ -910,6 +978,7 @@ export function registerTools(
           " characters; longer answers are REJECTED and the question stays open. Do NOT invent " +
           "facts: if you do not know, say so honestly here instead of guessing. Answers reach " +
           "the agent as background information only.",
+        annotations: TOOL_ANNOTATIONS.answer_consult,
         inputSchema: {
           call_id: z.string().describe("The call_id from place_call"),
           event_id: z.string().describe("The event_id from await_call_event"),
@@ -999,7 +1068,8 @@ export function registerTools(
     "get_call_status",
     {
       description:
-        "Returns the live state of a call: status (dialing|in_progress|completed|failed|cancelled), duration and the last transcript lines. The live card from place_call normally updates itself; this tool remains available as a manual fallback if no live update arrives.",
+        "Returns the live state of a call: status (dialing|in_progress|completed|failed|cancelled), duration and the last transcript lines. Some clients also show a live card that updates itself; call this tool regardless whenever the current state is needed, it always reflects it.",
+      annotations: TOOL_ANNOTATIONS.get_call_status,
       inputSchema: { call_id: z.string().describe("The call_id from place_call") },
       outputSchema: CALL_STATUS_OUTPUT,
     },
@@ -1015,7 +1085,8 @@ export function registerTools(
     "get_transcript",
     {
       description:
-        "After the call has ended, returns the result summary and whether the objective was achieved. For data protection reasons the raw transcript is not kept after the summary (data minimisation) and is NOT returned - only summary and objective status. Call this only once get_call_status reports status=completed.",
+        "After the call has ended, returns the result summary and whether the objective was achieved. This tool NEVER returns the raw transcript - whether the server keeps it afterwards on its own follows the diagnostic rule of place_call's diagnostic field and is independent of this response. Call this only once get_call_status reports status=completed.",
+      annotations: TOOL_ANNOTATIONS.get_transcript,
       inputSchema: { call_id: z.string().describe("The call_id from place_call") },
       outputSchema: TRANSCRIPT_OUTPUT,
     },
@@ -1058,7 +1129,10 @@ export function registerTools(
     "cancel_call",
     CANCEL_CALL_DESCRIPTION,
     { call_id: z.string().describe("The call_id from place_call") },
-    async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
+    {
+      annotations: TOOL_ANNOTATIONS.cancel_call,
+      handler: async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
+    },
   );
 
   // Stufe 0 (Text byte-identisch zum Bestand) + structuredContent (Whitelist) + Stufe 1
@@ -1069,6 +1143,7 @@ export function registerTools(
     "get_my_number",
     {
       description: "Returns the phone number of the phone agent.",
+      annotations: TOOL_ANNOTATIONS.get_my_number,
       inputSchema: {},
       outputSchema: MY_NUMBER_OUTPUT,
       ...enableWidgetUi(WIDGET_MY_NUMBER),
@@ -1097,6 +1172,7 @@ export function registerTools(
     {
       description:
         "Lists the agent's most recent calls (inbound and outbound) with status and summary.",
+      annotations: TOOL_ANNOTATIONS.list_calls,
       inputSchema: {},
       outputSchema: CALLS_OUTPUT,
       ...enableWidgetUi(WIDGET_CALLS),
@@ -1126,6 +1202,7 @@ export function registerTools(
     "check_inbox",
     {
       description: CHECK_INBOX_DESCRIPTION,
+      annotations: TOOL_ANNOTATIONS.check_inbox,
       inputSchema: { include_seen: INCLUDE_SEEN_FIELD },
       outputSchema: INBOX_OUTPUT,
     },
@@ -1146,19 +1223,22 @@ export function registerTools(
   // Leertext und Termin-Praefix folgen der Tenant-Sprache (MCP-14): sie kommen aus
   // DEMSELBEN Locale-Buendel wie Rollen-Praefix, Fehler- und Leertexte (loc.mcp), kein
   // zweiter Lookup. DE bleibt byte-identisch zum Bestand.
-  tool("list_action_items", "Lists open action items from all calls.", {}, async () => {
-    const s = await call("GET", "/api/state");
-    requireFields(s, { actionItems: "array" });
-    const open = s.actionItems.filter((a) => !a.done);
-    if (!open.length) return text(loc.mcp.emptyActionItems);
-    return text(
-      open
-        .map(
-          (a) =>
-            `[${a.id}] ${a.type === "appointment" ? loc.mcp.appointmentPrefix : ""}${a.text}`,
-        )
-        .join("\n"),
-    );
+  tool("list_action_items", "Lists open action items from all calls.", {}, {
+    annotations: TOOL_ANNOTATIONS.list_action_items,
+    handler: async () => {
+      const s = await call("GET", "/api/state");
+      requireFields(s, { actionItems: "array" });
+      const open = s.actionItems.filter((a) => !a.done);
+      if (!open.length) return text(loc.mcp.emptyActionItems);
+      return text(
+        open
+          .map(
+            (a) =>
+              `[${a.id}] ${a.type === "appointment" ? loc.mcp.appointmentPrefix : ""}${a.text}`,
+          )
+          .join("\n"),
+      );
+    },
   });
 
   // Kalender-Tool nur registrieren, wenn das Profil es erlaubt (Phase 2). Ein
@@ -1172,6 +1252,7 @@ export function registerTools(
       "get_calendar",
       {
         description: "Shows the owner's next calendar entries.",
+        annotations: TOOL_ANNOTATIONS.get_calendar,
         inputSchema: {},
         outputSchema: CALENDAR_OUTPUT,
         ...enableWidgetUi(WIDGET_CALENDAR),
@@ -1211,6 +1292,7 @@ export function registerTools(
     {
       description:
         "Status of the phone agent: phone number, voice engine, model, monthly usage, permissions.",
+      annotations: TOOL_ANNOTATIONS.get_agent_status,
       inputSchema: {},
       outputSchema: AGENT_STATUS_OUTPUT,
       ...enableWidgetUi(WIDGET_AGENT_STATUS),

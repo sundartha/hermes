@@ -64,7 +64,7 @@ function captureDescriptions(ctx = {}) {
 // eine verlorene. Der Bestand vor P15 (deutsch) trug exakt dieselbe Marker-Zahl an
 // denselben Satzpositionen (Marker-Inventur im Phasenplan).
 const EXPECTED_MARKERS = {
-  place_call: ["NOT"],
+  place_call: ["NOT", "NOT", "ALWAYS"],
   "place_call.to": ["EXACTLY", "NEVER"],
   "place_call.objective": ["ONE", "VERBATIM", "BEFORE", "NO", "ALWAYS", "FIRST", "NOT"],
   // GQ-B1: die Vertroestungs-Sperre. KNOW ist die Verhaltensgarantie des Feldes (nur
@@ -108,7 +108,7 @@ const EXPECTED_MARKERS = {
   "place_call.diagnostic": ["OWN", "NOT", "ONLY"],
   get_call_status: [],
   "get_call_status.call_id": [],
-  get_transcript: ["NOT"],
+  get_transcript: ["NEVER"],
   "get_transcript.call_id": [],
   // S1-2c (Owner-Auftrag 15.08.2026): die Beschreibung war eine Luege ("Cancels a running
   // call cleanly") - der REST-Pfad zusichert seit S1-4 keinen bestaetigten Leitungs-Abbruch
