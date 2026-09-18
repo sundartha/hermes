@@ -695,7 +695,17 @@ services:
         value: "5"
       - key: SEND_SMS_SUMMARY
         value: "true"
-      # PUBLIC_URL nicht noetig: Render setzt RENDER_EXTERNAL_URL automatisch
+      # ---- Angekuendigter Origin (E5/S2) ----
+      # PUBLIC_URL ist der ANGEKUENDIGTE kanonische Origin: Token-Audience
+      # (<PUBLIC_URL>/mcp), PRM-resource, 401-Metadaten-Verweis UND die Allowlist der
+      # /mcp-Herkunftswache. Er darf NICHT implizit aus RENDER_EXTERNAL_URL geerbt werden -
+      # eine Render-seitige Domain-/Namensaenderung verschoebe sonst Audience, Allowlist
+      # und alle Webhook-Ziele in einem Zug. Owner-Entscheidung E-1: app.sundartha.com.
+      # WAHRHEIT IST DAS DASHBOARD (s. Kopf dieser Datei) - dieser Eintrag ist Doku und
+      # setzt den Wert nur, falls das Blueprint je synchronisiert wird. Betriebsschritt
+      # (Etappe 8 / S2-A9): Live-Wert LESEN, nur bei Abweichung setzen.
+      - key: PUBLIC_URL
+        value: https://app.sundartha.com
 
   # ---- 2) Produkt-Frontend (W0, Static Site aufs CDN) ----
   # Eigenstaendiges Astro-Paket unter apps/web/. Deployt getrennt vom Gateway;

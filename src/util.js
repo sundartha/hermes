@@ -71,8 +71,18 @@ export const AUTH_FAILED_GRUND = Object.freeze({
   // SEC-P3: schreibender Request mit FREMDEM Origin auf einer Self-Service-Route (403).
   // Fehlender Origin ist KEIN Treffer und erzeugt keine Zeile (Normalfall S2S/Webhook).
   CROSS_ORIGIN: "cross_origin",
+  // E5: vorhandener, nicht erlaubter Origin auf /mcp (403, MCP-Spec T-06). EIGENER
+  // Token, damit die /mcp-Ablehnung im Log nicht mit der Self-Service-CSRF-Wache
+  // verwechselt wird - die beiden Wachen haben verschiedene Anker und verschiedene
+  // Heilwege (Allowlist-Nachtrag gegen Proxy-Konfiguration).
+  MCP_CROSS_ORIGIN: "mcp_cross_origin",
 });
 
-export function auditAuthFailed(req, grund) {
-  audit("auth_failed", req, `path=${req.path} grund=${grund}`);
+// detail: OPTIONALES, schon gefiltertes Zusatzfeld im Log (heute nur `origin=<host>`
+// der /mcp-Wache). NIE Rohtext aus einem Header und nie ein Secret - der Aufrufer
+// filtert, diese Funktion formatiert nur. Ohne Argument byte-identisch zu vorher; die
+// vier Bestandsaufrufer an fuenf Stellen (src/web-auth.js 3x, src/middleware.js,
+// src/wiring/internal-only.js) bleiben unveraendert gueltig.
+export function auditAuthFailed(req, grund, detail = "") {
+  audit("auth_failed", req, `path=${req.path} grund=${grund}${detail ? ` ${detail}` : ""}`);
 }

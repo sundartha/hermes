@@ -23,7 +23,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // Default aus) -> 13.
   // SEC-P3: csrfEnforce ergaenzt (Herkunftspruefung der Self-Service-Schreibrouten) -> 14.
   // IE2: budgetWatchdogIntervalMs ergaenzt (Takt des Geld-Waechters) -> 15.
-  safety: 15,
+  // E5: mcpAllowedOrigins + mcpOriginEnforce ergaenzt (Allowlist + Notventil der
+  // /mcp-Herkunftswache) -> 17.
+  safety: 17,
   // P6 (Budget-Achsen, Fruehwarnung): platformSpendWarnPercent + platformAlertSmsTo
   // ergaenzt (Fruehwarn-Schwelle + Betreiber-SMS-Ziel) -> 17 statt 15.
   // P7 (Budget-Achsen, Der Flip): budgetMonthEnabled ergaenzt (Spend-Monat-Flag) -> 18.
@@ -200,7 +202,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // IEL-B10: werkzeug.renderApiKey ergaenzt (voice.elevenLabsInbound bleibt EIN Blatt) -> 190.
 // IEP-P6: inboundOwnerGreetingEnabled + inboundOwnerGreetingTenantIds (voice) ergaenzt -> 192.
 // IEX-B1: vier Inbound-Ausfall-Schwellen (billing) ergaenzt -> 196.
-const EXPECTED_TOTAL_KEYS = 196;
+// E5: mcpAllowedOrigins + mcpOriginEnforce (safety) ergaenzt -> 198.
+const EXPECTED_TOTAL_KEYS = 198;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die gepinnten Counts und disjunkte Blaetter", () => {
   assert.deepEqual(
@@ -364,11 +367,13 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // IEP-P6: inboundOwnerGreetingEnabled ist primitiv (Boolean) -> 179.
   // inboundOwnerGreetingTenantIds ist das SECHSTE Array (kein primitives Blatt, s.u.).
   // IEX-B1: die vier Inbound-Ausfall-Schwellen sind alle primitiv (Zahlen) -> 183.
-  const EXPECTED_PRIMITIVE_LEAVES = 183;
+  // E5: mcpOriginEnforce ist primitiv (Boolean) -> 184. mcpAllowedOrigins ist das
+  // SIEBTE Array (kein primitives Blatt, s.u.).
+  const EXPECTED_PRIMITIVE_LEAVES = 184;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,
-    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 6 Arrays - 7 nested Objekte) geprueft`,
+    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 7 Arrays - 7 nested Objekte) geprueft`,
   );
 });
 

@@ -104,6 +104,112 @@ export function createSameOriginGuard({ enforce }) {
   };
 }
 
+// ---- Herkunftswache fuer /mcp (E5, MCP-Spec T-06) --------------------------------
+// ABGRENZUNG zur Schwesterwache oben - sie darf NICHT mit ihr verschmolzen werden; das
+// waere eine Aufweichung, keine Vereinheitlichung (Lehre clean-code-audit-2026-07:
+// Fragilitaet = Invarianten-per-Konvention):
+//   crossOriginRequest -> Anker ist req.headers.host (Host-Echo). Richtig fuer die
+//     Self-Service-Routen: sie werden aus dem Browser unter GENAU dem Host bedient, der
+//     den Request annimmt (lokal http://127.0.0.1:<port>, live app.sundartha.com) -
+//     eine Allowlist saeg dort das eigene Dashboard ab.
+//   mcpOriginErlaubt   -> Anker ist eine KONFIGURIERTE Allowlist. Fuer /mcp ist der
+//     Host-Anker WIRKUNGSLOS: beim DNS-Rebinding schickt der Angreifer genau den Host,
+//     den der Dienst annimmt, und passiert jeden Host-Echo-Vergleich.
+// Zwei Anker, zwei Wachen - EIN Antwort-Vokabular und EIN Forensik-Kanal (G5).
+const MCP_ORIGIN_SCHEMES = new Set(["http:", "https:"]);
+// Zeichenklasse des LOG-Werts: Hostnamen-Alphabet plus Port-Doppelpunkt, laengenbegrenzt.
+const ORIGIN_LOG_HOST = /^[a-z0-9.:-]{1,64}$/;
+const ORIGIN_LOG_UNLESBAR = "unlesbar";
+
+// Der EINE Parse-Versuch (G5): beide reinen Funktionen unten brauchen dieselbe Antwort
+// auf "ist das ein absoluter http(s)-Origin?". Das Schema-Gate ist PFLICHT und kein
+// Zierrat: fuer ein fremdes Schema liefert URL.origin den STRING "null" (gemessen:
+// new URL("foo://Bar").origin === "null"). Ohne das Gate koennte ein unparsbarer
+// Listeneintrag mit demselben "null" verglichen werden - eine Allowlist, die bei Muell
+// auf Muell passt, ist fail-open.
+function absoluterHttpOrigin(wert) {
+  if (!wert) return null;
+  try {
+    const url = new URL(wert);
+    return MCP_ORIGIN_SCHEMES.has(url.protocol) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+// Kanonische Form eines Origins oder null. URL.origin streicht Default-Ports und Pfade:
+// "HTTPS://Agent.Test" und "https://agent.test/" sind damit derselbe Eintrag,
+// "https://agent.test:8443" bewusst NICHT (der Port gehoert zum Origin).
+export function normalisierterOrigin(wert) {
+  const url = absoluterHttpOrigin(wert);
+  return url ? url.origin.toLowerCase() : null;
+}
+
+// Die EINE Stelle, die die Allowlist bildet (G5). publicUrl ist der ANGEKUENDIGTE Origin
+// (Token-Audience, PRM-resource, 401-Metadaten-Verweis); zusaetzlicheOrigins ist die
+// additive Env-Liste. Unparsbare Eintraege werden VERWORFEN statt durchgelassen, sonst
+// haengt an einem Tippfehler ein Eintrag, der mit nichts vergleichbar ist. Duplikate
+// fallen weg. Leeres Ergebnis heisst deny-all fuer JEDEN vorhandenen Origin - gewollt.
+export function mcpErlaubteOrigins({ publicUrl, zusaetzlicheOrigins = [] }) {
+  const kandidaten = [publicUrl, ...zusaetzlicheOrigins];
+  return [...new Set(kandidaten.map((wert) => normalisierterOrigin(wert)).filter(Boolean))];
+}
+
+// Reines Praedikat (Muster crossOriginRequest), drei Faelle in dieser Reihenfolge:
+//   1. kein Origin-Header -> true. PFLICHT, keine Nachlaessigkeit: Server-zu-Server-
+//      Aufrufer (der heute verbundene Connector, stdio-MCP, 47 Testdateien) senden
+//      keinen Origin, und T-06 verlangt die Ablehnung nur fuer "vorhanden und
+//      ungueltig". Damit bleibt das Verhalten OHNE Origin byte-identisch zu vorher.
+//   2. vorhanden, aber kein absoluter http(s)-Origin ("null" aus sandboxed iframe, zwei
+//      von Node zu "a, b" zusammengefasste Origin-Header, Muell) -> false.
+//   3. sonst Mengenvergleich auf normalisierten Werten.
+// Warum NICHT die SDK-Option enableDnsRebindingProtection: sie ueberspringt die Pruefung
+// bei leerer Liste (fail-open), echot den angreifer-kontrollierten Origin in den
+// Fehler-Body und umgeht diesen Forensik-Kanal. erlaubteOrigins ist die Ausgabe von
+// mcpErlaubteOrigins - die Liste wird EINMAL in der Fabrik normalisiert, nicht pro
+// Request.
+export function mcpOriginErlaubt(originHeader, erlaubteOrigins) {
+  if (!originHeader) return true;
+  const origin = normalisierterOrigin(originHeader);
+  if (!origin) return false;
+  return erlaubteOrigins.includes(origin);
+}
+
+// Log-Wert der Ablehnung: der HOST des Origins, wenn er die enge Zeichenklasse erfuellt,
+// sonst ein Sentinel. Ohne diesen Wert ist ein Aussperren nicht diagnostizierbar (die
+// Heilung ist der Nachtrag in MCP_ALLOWED_ORIGINS); der ROHE Header ist
+// angreifer-kontrollierter Text und gehoert nie ins Log (Regel 4, gleiche Begruendung
+// wie bei der Schwesterwache oben).
+export function originLogWert(originHeader) {
+  const url = absoluterHttpOrigin(originHeader);
+  const host = url ? url.host.toLowerCase() : "";
+  return ORIGIN_LOG_HOST.test(host) ? host : ORIGIN_LOG_UNLESBAR;
+}
+
+// Express-Adapter. KEINE SAFE_METHODS-Ausnahme (anders als createSameOriginGuard): die
+// Wache ist DNS-Rebinding-Schutz, kein CSRF-Schutz - ein GET/OPTIONS fremder Herkunft ist
+// genau der Fall, den T-06 abweist. BEWUSSTE Vertragsaenderung: OPTIONS /mcp antwortet
+// mit fremdem Origin 403 statt der 200 aus Express' Auto-OPTIONS.
+// enforce !== false statt Boolean(enforce): NUR der Literalwert false loest die
+// Sicherung - Bauform und Begruendung wie csrfEnforce/createSameOriginGuard. Das
+// Notventil ist Pflicht, kein Komfort (Owner-Entscheidung E-4): die 403 laeuft VOR
+// mcpAuth, ein Origin-sendender Client sieht dann nie die 401-Bearer-Challenge (src/auth.js,
+// deny401) - den einzigen Zeiger auf den Authorization Server - und kann sich nicht neu autorisieren.
+// Ohne Schalter ist der einzige Reparaturweg ein Deploy. Mit enforce=false schreibt die
+// Wache auch KEINE Zeile: ein geloester Riegel soll nicht aussehen wie ein greifender.
+export function createMcpOriginGuard({ erlaubteOrigins, enforce }) {
+  const aktiv = enforce !== false;
+  return function mcpOriginOnlyMiddleware(req, res, next) {
+    if (!aktiv || mcpOriginErlaubt(req.headers.origin, erlaubteOrigins)) return next();
+    auditAuthFailed(
+      req,
+      AUTH_FAILED_GRUND.MCP_CROSS_ORIGIN,
+      `origin=${originLogWert(req.headers.origin)}`,
+    );
+    res.status(HTTP_FORBIDDEN).json({ error: CROSS_ORIGIN_ERROR });
+  };
+}
+
 // Exportiert: app.js baut den Fehlversuch-Zaehler der Init-Schranke (IEX-A7) mit demselben
 // Fenster, und die Schranke fasst ihre Drossel-Zeile je Fenster zusammen - eine Quelle (G5).
 export const RATE_WINDOW_MS = 60_000;
