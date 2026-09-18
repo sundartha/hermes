@@ -44,7 +44,7 @@ const CONFIG = {
   paymentEnabled: true,
   publicUrl: "https://test.local",
   stripeStarterPriceId: "price_starter",
-  stripeBusinessPriceId: "price_business",
+  stripeProPriceId: "price_pro",
   stripeCustomerRetryDelayMs: 0, // Self-Heal-Tests warten nie echt (P12/T9)
 };
 
@@ -362,10 +362,10 @@ test("(11) return ?plan=starter mit fremder Session (Customer-Mismatch) -> 403, 
   }
 });
 
-test("(12) return ?plan=business bei einer starter-Session (Plan-Tamper) -> 403, nichts persistiert", async () => {
+test("(12) return ?plan=pro bei einer starter-Session (Plan-Tamper) -> 403, nichts persistiert", async () => {
   const s = await setup();
   try {
-    const ret = await billingReturn(s, `session_id=${SESSION}&plan=business`);
+    const ret = await billingReturn(s, `session_id=${SESSION}&plan=pro`);
     assert.equal(ret.status, 403);
     assert.equal(JSON.parse(ret.body).error, "Customer-Mismatch");
     const t = s.store.load().tenants.find((x) => x.id === TENANT);
@@ -422,17 +422,17 @@ test("(14) TOCTOU-Regression: zwei setup-checkout-Aufrufe (Doppelklick/zwei Tabs
 // Test 14 deckt nur denselben Plan ab) erzeugen zwei ECHTE, real abgerechnete
 // Stripe-Subscriptions. Simuliert hier die zweite Rueckkehr: der Tenant hat bereits
 // ein Abo (starter, sub_old aus einer ERSTEN, abgeschlossenen Session), die ZWEITE
-// Session (business) traegt eine ANDERE, ebenfalls real bezahlte subscriptionId.
+// Session (pro) traegt eine ANDERE, ebenfalls real bezahlte subscriptionId.
 // Das darf NIE als Erfolg (sub=ok) gemeldet werden - der Kunde wuerde sonst denken,
-// der Business-Plan sei aktiv, waehrend der Store weiter starter zeigt und die
-// echte Business-Subscription bei Stripe unverwaltet weiterlaeuft.
-test("(15) return ?plan=business bei bereits (starter-)aboniertem Tenant, ABWEICHENDE subscriptionId (Cross-Plan-Race) -> 302 sub=failed, KEIN falscher Erfolg, altes Abo unveraendert, kein Provisioning", async () => {
+// der Pro-Plan sei aktiv, waehrend der Store weiter starter zeigt und die
+// echte Pro-Subscription bei Stripe unverwaltet weiterlaeuft.
+test("(15) return ?plan=pro bei bereits (starter-)aboniertem Tenant, ABWEICHENDE subscriptionId (Cross-Plan-Race) -> 302 sub=failed, KEIN falscher Erfolg, altes Abo unveraendert, kein Provisioning", async () => {
   const s = await setup({
     subscribed: true, // sub_old/starter bereits gespeichert (aus einer ersten, abgeschlossenen Session)
-    checkoutOutcome: { planSlug: "business", subscriptionId: "sub_business_real" },
+    checkoutOutcome: { planSlug: "pro", subscriptionId: "sub_pro_real" },
   });
   try {
-    const ret = await billingReturn(s, `session_id=${SESSION}&plan=business`);
+    const ret = await billingReturn(s, `session_id=${SESSION}&plan=pro`);
     assert.equal(ret.status, 302);
     assert.equal(
       ret.location,
@@ -442,7 +442,7 @@ test("(15) return ?plan=business bei bereits (starter-)aboniertem Tenant, ABWEIC
     assert.deepEqual(s.provisionSpy, [], "kein Provisioning der verwaisten Subscription");
     const t = s.store.load().tenants.find((x) => x.id === TENANT);
     assert.equal(t.stripeSubscriptionId, "sub_old", "das bestehende (starter-)Abo bleibt unveraendert");
-    assert.equal(t.stripePlanSlug, "starter", "kein stiller Plan-Wechsel auf business");
+    assert.equal(t.stripePlanSlug, "starter", "kein stiller Plan-Wechsel auf pro");
     const acct = await s.accounts.resolve(SUB);
     assert.equal(acct.status, "suspended", "keine Aktivierung ueber die verwaiste Subscription");
   } finally {

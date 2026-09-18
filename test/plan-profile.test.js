@@ -1,7 +1,7 @@
 // A1 - Plan->Rechteprofil (reines Datenmodul, KEIN Konsument). Pinnt die
 // Mapping-Daten (PLAN_PROFILE + planProfileFor): Vollstaendigkeit je Katalog-Slug
 // gegen PROFILE_FIELDS (gegen den stillen DEFAULT_PROFILE-Rueckfall A11), die
-// 5.1-Owner-Entscheidung (starter==business), die Toll-Fraud-Invariante und den
+// 5.1-Owner-Entscheidung (starter==pro), die Toll-Fraud-Invariante und den
 // fail-closed Lookup. PROFILE_FIELDS treibt die Coverage generisch (kein
 // hardcodiertes Feld-Listing, G5) - faellt spaeter ein Whitelist-Feld dazu, wird
 // dieser Test rot, bis das Mapping es traegt.
@@ -24,8 +24,8 @@ test("jeder Katalog-Slug traegt ALLE PROFILE_FIELDS, kein undefined, kein Fremdf
   }
 });
 
-test("5.1: starter und business sind feld-gleich (nur includedMinutes unterscheidet)", () => {
-  assert.deepEqual(planProfileFor("starter"), planProfileFor("business"));
+test("5.1: starter und pro sind feld-gleich (nur includedMinutes unterscheidet)", () => {
+  assert.deepEqual(planProfileFor("starter"), planProfileFor("pro"));
   for (const slug of CATALOG_SLUGS) {
     const profile = planProfileFor(slug);
     assert.equal(profile.allowCalendar, false, `${slug}: allowCalendar != false`);

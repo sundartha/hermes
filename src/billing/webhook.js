@@ -9,7 +9,7 @@ import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.js";
 import { enumOrNull } from "./provider-enum.js"; // GP-P2: Anbieter-Enum nur in gepruefter Form
 import { hasCardOnFile } from "../self-service.js";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
-import { isKnownPlanSlug } from "../plans.js";
+import { isKnownPlanSlug, normalizePlanSlug } from "../plans.js";
 import { moneyActionFor, graceDueAtIso, MONEY_ACTION, MONEY_EVENT } from "./money-events.js";
 import { attemptContractEndCleanup } from "./contract-end-cleanup.js";
 import { clearSubscriptionReference } from "./subscribe.js";
@@ -269,8 +269,16 @@ function tenantRefOf(object) {
 // plan-slug aus der Subscription-Metadata (createSubscription gibt es nicht direkt mit,
 // aber Stripe spiegelt Subscription-metadata in UPDATED-Events). Fehlt -> null (der
 // Aufrufer behaelt dann den gespeicherten Slug, kein erzwungenes Ueberschreiben).
+//
+// NORMALISIERT (LEGACY_PLAN_SLUG_ALIASES, plans.js) - und zwar HIER, an der einen
+// Eingangskante, nicht an den beiden Schreibstellen weiter unten: die Stripe-Metadaten
+// laufender Abos tragen noch den alten Slug (business), und ab dieser Zeile soll im
+// ganzen Webhook-Pfad nur noch der Katalog-Slug fliessen. Nebeneffekt, der hier
+// erwuenscht ist: der selektive Patch schreibt damit den NEUEN Slug in den Store - der
+// Bestand heilt sich also beim ersten Event, das ein Abo ohnehin erzeugt.
 function planSlugOf(object) {
-  return (object.metadata && object.metadata.plan_slug) || null;
+  const raw = (object.metadata && object.metadata.plan_slug) || null;
+  return raw === null ? null : normalizePlanSlug(raw);
 }
 
 // Wendet ein verifiziertes Stripe-Subscription-Event auf den Tenant an. Reine

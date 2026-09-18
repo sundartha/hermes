@@ -32,7 +32,7 @@ import {
 // beiden halten - eine Decke, die nur bei einem Satz aufgeht, ist keine.
 const BOOKING_RATES_CENTS_PER_MIN = Object.freeze([300, 30]);
 const STARTER_CAP_AT_LIVE_RATE_CENTS = 1500;
-const BUSINESS_CAP_AT_LIVE_RATE_CENTS = 4500;
+const PRO_CAP_AT_LIVE_RATE_CENTS = 4500;
 const LIVE_BOOKING_RATE_CENTS_PER_MIN = 30;
 const STARTER_SOLD_MINUTES = 30;
 
@@ -80,9 +80,9 @@ test("KS-P5a: jede Plan-Decke traegt die verkauften Minuten PLUS die Reserve des
 
 test("KS-P5a: die Decke folgt dem Buchungssatz (ein Satz, keine zweite Zahl)", () => {
   assert.equal(planCapCents("starter", cfgAtRate(30)), STARTER_CAP_AT_LIVE_RATE_CENTS);
-  assert.equal(planCapCents("business", cfgAtRate(30)), BUSINESS_CAP_AT_LIVE_RATE_CENTS);
+  assert.equal(planCapCents("pro", cfgAtRate(30)), PRO_CAP_AT_LIVE_RATE_CENTS);
   assert.equal(planCapCents("starter", cfgAtRate(300)), 15000);
-  assert.equal(planCapCents("business", cfgAtRate(300)), 45000);
+  assert.equal(planCapCents("pro", cfgAtRate(300)), 45000);
 });
 
 test("KS-P5a: Starter telefoniert die verkauften Minuten leer - der letzte Anruf faellt NICHT ins Reserve-Gate", () => {

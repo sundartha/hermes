@@ -438,11 +438,11 @@ test("retrieveSubscription: GET /v1/subscriptions/<id>?expand[]=latest_invoice, 
 test("retrieveSubscription: latest_invoice.total>0 -> numberSetupFeeExempt:false", async () => {
   const result = await withStripeStub(
     async () =>
-      okJson({ metadata: { plan_slug: "business" }, latest_invoice: { total: 2900 } }),
+      okJson({ metadata: { plan_slug: "pro" }, latest_invoice: { total: 2900 } }),
     () => stripeBilling.retrieveSubscription("sub_2"),
   );
   // status fehlt im Stub -> null (nie raten, G26; der Sweep heilt bei null NICHT).
-  assert.deepEqual(result, { planSlug: "business", numberSetupFeeExempt: false, status: null });
+  assert.deepEqual(result, { planSlug: "pro", numberSetupFeeExempt: false, status: null });
 });
 
 test("retrieveSubscription: fehlendes latest_invoice -> numberSetupFeeExempt:false (fail-closed, nie raten)", async () => {

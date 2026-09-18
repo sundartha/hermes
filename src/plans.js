@@ -31,8 +31,8 @@ export const PLAN_CATALOG = Object.freeze([
     ]),
   }),
   Object.freeze({
-    slug: "business",
-    name: "Business",
+    slug: "pro",
+    name: "Pro",
     amountCents: 999,
     currency: "eur",
     cadence: "month",
@@ -52,6 +52,39 @@ export const PLAN_CATALOG = Object.freeze([
 // billing/subscribe.js (PLAN_SLUGS) - kein zweites Slug-Literal (G5/S2).
 export const CATALOG_SLUGS = Object.freeze(PLAN_CATALOG.map((p) => p.slug));
 
+// ---- Uebergangs-Alias: alter Slug -> heutiger Katalog-Slug (Umbenennung 2026-09-15) ----
+// Der zweite Tarif hiess bis zum 15.09.2026 "Business" und trug den Slug "business".
+// Umbenannt wurde er, weil "Starter/Business" keine Stufenreihe ergibt (Einstieg vs.
+// Kundensegment) - "Starter/Pro" liest sich als Reihe und bleibt nach oben offen.
+//
+// Der Slug lebt aber nicht nur hier: er steht in tenant.stripe_plan_slug, in den
+// Stripe-Metadaten laufender Abos (metadata.plan_slug) und kommt von dort bei JEDEM
+// Webhook zurueck. Kennte der Katalog ihn nicht mehr, liefe die fail-closed-Kette gegen
+// die eigenen Bestandskunden: isKnownPlanSlug -> der Webhook verwirft den planSlug
+// (billing/webhook.js), planCapCents WIRFT (billing/plan-caps.js), planProfileFor
+// liefert null -> die Aktivierung skippt. Ein Rename ohne diesen Alias waere also kein
+// Anzeige-Wechsel, sondern ein stiller Ausfall bezahlter Abos.
+//
+// Deshalb die Arbeitsteilung: JEDE Lesekante normalisiert (die drei Funktionen unten,
+// plan-caps.js, subscribe.js), und JEDE Eingangskante speichert bereits normalisiert
+// (billing/webhook.js planSlugOf, self-service-routes.js planSlugFrom). Der Bestand
+// heilt sich damit von selbst, sobald ein Abo einmal durch einen Webhook laeuft.
+//
+// ENTFERNEN, sobald aus Stripe kein "business" mehr zurueckkommt - der Bestandsumzug
+// steht in docs/RUNBOOK-STRIPE-LIVE.md. Mit dem Alias faellt auch der Env-Rueckfall
+// STRIPE_BUSINESS_PRICE_ID in config.js.
+export const LEGACY_PLAN_SLUG_ALIASES = Object.freeze({
+  business: "pro",
+});
+
+// Alter Slug -> Katalog-Slug; alles andere geht unveraendert durch (auch null/undefined/
+// leer - die Mitgliedschaftspruefung faellt danach ohnehin auf false). Object.hasOwn statt
+// eines nackten Zugriffs, damit ein Slug wie "constructor" den Object-Prototyp nicht
+// trifft und eine Funktion statt eines Strings zurueckgibt.
+export function normalizePlanSlug(slug) {
+  return Object.hasOwn(LEGACY_PLAN_SLUG_ALIASES, slug) ? LEGACY_PLAN_SLUG_ALIASES[slug] : slug;
+}
+
 // Kern-Praedikat: ist `slug` ein buchbarer Katalog-Slug? EINE Quelle der
 // Mitgliedschaftspruefung (G5/S2) - vier Aufrufstellen (subscribe.js, webhook.js,
 // state-ops.js, self-service-routes.js) teilen sie sich, JEDE behaelt aber ihre
@@ -59,15 +92,20 @@ export const CATALOG_SLUGS = Object.freeze(PLAN_CATALOG.map((p) => p.slug));
 // null/leer-Handling. Reine Mitgliedschaft: null/undefined/leer -> false (Array.includes
 // matcht sie nicht) - identisch zum vorher an jeder Stelle inline geschriebenen
 // CATALOG_SLUGS.includes(slug), nur nicht mehr dupliziert.
+// Normalisiert zuerst (LEGACY_PLAN_SLUG_ALIASES): ein Bestands-Abo, das noch den alten
+// Slug traegt, ist ein BEKANNTER Plan - sonst verwuerfe der Webhook seinen eigenen Kunden.
 export function isKnownPlanSlug(slug) {
-  return CATALOG_SLUGS.includes(slug);
+  return CATALOG_SLUGS.includes(normalizePlanSlug(slug));
 }
 
 // Katalog-Lookup nach Slug (BK4: includedMinutes der Minuten-Kontingent-Anzeige).
 // Reiner Accessor - kapselt, dass der Katalog ein Array ist (G17/G36), kein .find
 // verstreut beim Aufrufer. Unbekannter/leerer Slug -> null (Aufrufer zeigt Leerzustand).
+// Normalisiert zuerst, damit ein Bestands-Slug denselben Katalog-Eintrag findet - sonst
+// zeigte die Kontingent-Anzeige eines laufenden Abos einen Leerzustand statt 120 Minuten.
 export function findPlan(slug) {
-  return PLAN_CATALOG.find((p) => p.slug === slug) ?? null;
+  const canonical = normalizePlanSlug(slug);
+  return PLAN_CATALOG.find((p) => p.slug === canonical) ?? null;
 }
 
 // ---- Plan -> Rechteprofil (GAP A, Phase A1; reines Datenmodul, KEIN Konsument) ----
@@ -76,7 +114,7 @@ export function findPlan(slug) {
 // PROFILE_FIELDS-Feld EXPLIZIT - ein fehlendes Feld fiele in resolveProfileFrom still
 // auf den restriktiven DEFAULT_PROFILE-Wert zurueck (A11) und unterliefe das Tier-Recht.
 //
-// 5.1 (Owner, 2026-06-29): starter und business tragen IDENTISCHE Rechte - sie
+// 5.1 (Owner, 2026-06-29): starter und pro tragen IDENTISCHE Rechte - sie
 // unterscheiden sich NUR in includedMinutes (GAP B), NICHT im Profil. Daher EIN
 // gemeinsames Profil-Objekt (G5: keine Wert-Duplizierung), beide Slugs zeigen darauf.
 // Das Plan-Profil hat genau eine Funktion: Outbound ueberhaupt freischalten (paid)
@@ -145,12 +183,14 @@ const PAID_PLAN_PROFILE = Object.freeze({
 // test-gepinnt (test/plan-profile.test.js gegen CATALOG_SLUGS + PROFILE_FIELDS).
 export const PLAN_PROFILE = Object.freeze({
   starter: PAID_PLAN_PROFILE,
-  business: PAID_PLAN_PROFILE,
+  pro: PAID_PLAN_PROFILE,
 });
 
 // Tier-Profil nach Slug (Geschwister zu findPlan, gleiche ?? null-Konvention, G11).
 // Unbekannter/leerer Slug -> null: der Aufrufer (A2-Aktivierung) SKIPt fail-closed
 // statt setProfile(tenantId, undefined) zu schreiben (symmetrisch zu B2 "kein Plan -> blocken").
+// Normalisiert zuerst: ein Bestands-Abo mit altem Slug behaelt sein bezahltes Rechteprofil,
+// statt bei der naechsten Aktivierung fail-closed auf den Default (0 Calls/h) zu fallen.
 export function planProfileFor(slug) {
-  return PLAN_PROFILE[slug] ?? null;
+  return PLAN_PROFILE[normalizePlanSlug(slug)] ?? null;
 }

@@ -18,7 +18,7 @@ import { makeConfigOverrides } from "./helpers.js";
 const TENANT = "t_x";
 const CONFIG = withConfigNamespaces({
   stripeStarterPriceId: "price_starter",
-  stripeBusinessPriceId: "price_business",
+  stripeProPriceId: "price_pro",
 });
 
 // Fake-Store: haelt EINEN Tenant-Bucket mit stripe-Karte + Abo-Referenzen, exakt die
@@ -67,7 +67,7 @@ function fakeBilling(spy = {}) {
 
 test("priceIdForPlan: bekannte Slugs -> Price, unbekannt/unkonfiguriert -> null", () => {
   assert.equal(priceIdForPlan("starter", CONFIG), "price_starter");
-  assert.equal(priceIdForPlan("business", CONFIG), "price_business");
+  assert.equal(priceIdForPlan("pro", CONFIG), "price_pro");
   assert.equal(priceIdForPlan("enterprise", CONFIG), null, "unbekannter Slug -> null");
   assert.equal(priceIdForPlan("starter", withConfigNamespaces({})), null, "fehlende Price-Id -> null");
 });
@@ -80,10 +80,10 @@ test("priceIdForPlan: bekannte Slugs -> Price, unbekannt/unkonfiguriert -> null"
 test("priceIdForPlan: liest config.billing[key] vom ECHTEN config-Singleton (kein Bracket-Blindflug)", () => {
   const { withConfigOverrides } = makeConfigOverrides(realConfig);
   withConfigOverrides(
-    { stripeStarterPriceId: "price_real_starter", stripeBusinessPriceId: "price_real_business" },
+    { stripeStarterPriceId: "price_real_starter", stripeProPriceId: "price_real_pro" },
     () => {
       assert.equal(priceIdForPlan("starter", realConfig), "price_real_starter");
-      assert.equal(priceIdForPlan("business", realConfig), "price_real_business");
+      assert.equal(priceIdForPlan("pro", realConfig), "price_real_pro");
     },
   );
 });
@@ -126,21 +126,21 @@ test("createTenantSubscription: Happy-Pfad persistiert Abo-Felder + reicht Idemp
   const spy = {};
   const store = fakeStore();
   const r = await createTenantSubscription({
-    store, billing: fakeBilling(spy), config: CONFIG, tenant: TENANT, planSlug: "business",
+    store, billing: fakeBilling(spy), config: CONFIG, tenant: TENANT, planSlug: "pro",
   });
   assert.equal(r.ok, true);
-  assert.equal(r.planSlug, "business");
+  assert.equal(r.planSlug, "pro");
   assert.equal(r.subscriptionId, "sub_new");
   assert.equal(r.currentPeriodEnd, 1893456000);
   // Stripe-Call mit dem richtigen Price + Idempotency-Key (tenant+plan+Karten-Suffix).
-  assert.equal(spy.params.priceId, "price_business");
+  assert.equal(spy.params.priceId, "price_pro");
   assert.equal(spy.params.customerId, "cus_x");
   // Die on-file-Karte wird als default_payment_method durchgereicht (sonst Stripe-400).
   assert.equal(spy.params.paymentMethodId, "pm_x");
-  assert.equal(spy.params.idempotencyKey, "sub_t_x_business_pm_x");
+  assert.equal(spy.params.idempotencyKey, "sub_t_x_pro_pm_x");
   // persistiert am Tenant (KEIN Status-Flip - der liegt im Route-Layer).
   assert.equal(store.state.subscription.subscriptionId, "sub_new");
-  assert.equal(store.state.subscription.planSlug, "business");
+  assert.equal(store.state.subscription.planSlug, "pro");
   assert.equal(store.state.subscription.currentPeriodEnd, 1893456000);
   // B1a: der Periodenanker (currentPeriodStart) wird mit in den Store gefaedelt.
   assert.equal(store.state.subscription.currentPeriodStart, 1890864000);
@@ -181,7 +181,7 @@ test("checkoutSessionIdempotencyKey: deterministisch aus Tenant+Plan+Price+Custo
   );
   assert.notEqual(
     idemKey("t_x", "starter", "price_a"),
-    idemKey("t_x", "business", "price_a"),
+    idemKey("t_x", "pro", "price_a"),
     "anderer Plan -> anderer Key",
   );
   assert.notEqual(
@@ -283,7 +283,7 @@ test("activateSubscriptionFromCheckoutSession: Plan-Mismatch (Query-Tamper) -> p
   const store = fakeStore({ card: true });
   const { result, calls } = await runActivate({
     store,
-    billing: fakeCheckoutBilling({ planSlug: "business" }),
+    billing: fakeCheckoutBilling({ planSlug: "pro" }),
     expectedPlanSlug: "starter",
   });
   assert.deepEqual(result, { ok: false, reason: "plan_mismatch" });

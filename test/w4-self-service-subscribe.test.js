@@ -20,7 +20,7 @@ const CONFIG = {
   paymentEnabled: true,
   publicUrl: "https://test.local",
   stripeStarterPriceId: "price_starter",
-  stripeBusinessPriceId: "price_business",
+  stripeProPriceId: "price_pro",
 };
 
 function fakeBilling(spy = {}) {
@@ -145,9 +145,9 @@ test("(a) Happy: subscribe mit Karte -> Abo persistiert + Tenant aktiv (accounts
 test("(b) state zeigt das Abo (planSlug/currentPeriodEnd), KEIN subscriptionId-Leak", async () => {
   const s = await setup();
   try {
-    await subscribe(s, "business");
+    await subscribe(s, "pro");
     const st = JSON.parse((await getState(s)).body);
-    assert.equal(st.subscription.planSlug, "business");
+    assert.equal(st.subscription.planSlug, "pro");
     assert.equal(st.subscription.currentPeriodEnd, 1893456000);
     assert.equal("subscriptionId" in st.subscription, false, "sub_-Referenz nicht in der UI-View");
   } finally {
@@ -176,7 +176,7 @@ test("(d) bereits abonniert -> 409 already_subscribed (Doppelabbuchungs-Schutz)"
   const s = await setup();
   try {
     assert.equal((await subscribe(s, "starter")).status, 200);
-    const second = await subscribe(s, "business");
+    const second = await subscribe(s, "pro");
     assert.equal(second.status, 409);
     assert.equal(JSON.parse(second.body).error, "already_subscribed");
   } finally {

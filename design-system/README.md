@@ -16,7 +16,7 @@ both.
 1. **Marketing website** — public, dark navy hero chrome (`site/`). Full-bleed
    Olympus photo + drifting-cloud video, Norse display, white pill
    CTAs. Pages: hero, *How it works* (3 steps), *Pricing* (Starter €4.99 /
-   Business €9.99).
+   Pro €9.99).
 2. **Tenant web app / dashboard** — logged-in light UI (`app/`). Overview KPIs,
    call history, agent permissions (the one write path), billing. Space
    Grotesk, white cards, brand-navy actions.

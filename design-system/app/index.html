@@ -192,7 +192,7 @@ function BillingView() {
   const [hasCard, setHasCard] = React.useState(false);
   return (
     <Card title="Billing" style={{ maxWidth: 520 }}>
-      <p className="muted" style={{ marginTop: 0 }}>Current plan: <strong style={{ color: "var(--color-text)" }}>Business · €9.99/mo</strong></p>
+      <p className="muted" style={{ marginTop: 0 }}>Current plan: <strong style={{ color: "var(--color-text)" }}>Pro · €9.99/mo</strong></p>
       <p style={{ display: "flex", alignItems: "center", gap: "var(--space-tight)" }}>
         <StatusBadge tone={hasCard ? "completed" : "neutral"}>{hasCard ? "Card on file" : "No card yet"}</StatusBadge>
       </p>

@@ -194,11 +194,11 @@ test("T-P3-13: reiner CODE-Fallback (MAX_BUDGET_EUR/DEFAULT_TENANT_BUDGET_CENTS 
 
 // KS-P9/E10 (frueher LCT P6 (j1), GEDREHT): eine abgeleitete Plan-Decke UEBER der
 // Plattform-Zahl war `plan_cap_inert` und riss den Boot ab (MAX_BUDGET_EUR=8 gegen
-// business=900 ct). Seit KS-P9 ist MAX_BUDGET_EUR nur noch Warnschwelle - derselbe Vektor
+// pro=900 ct). Seit KS-P9 ist MAX_BUDGET_EUR nur noch Warnschwelle - derselbe Vektor
 // muss gruen booten. Was FATAL bleibt, prueft der zweite Teil: ein Katalog-Slug ohne
 // ableitbare Decke (planCapUnderivableFindings) - hier direkt gegen den Guard, weil boot.js
 // finding.message druckt, nie finding.code.
-test("KS-P9: MAX_BUDGET_EUR=8 unter der Business-Plan-Decke bootet gruen (kein plan_cap_inert mehr)", async () => {
+test("KS-P9: MAX_BUDGET_EUR=8 unter der Pro-Plan-Decke bootet gruen (kein plan_cap_inert mehr)", async () => {
   const srv = await startServer({ env: { MAX_BUDGET_EUR: "8" } });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);

@@ -27,7 +27,7 @@ before(async () => {
   webhookMod = await import("../src/billing/webhook.js");
   ops = await import("../src/store/state-ops.js");
   config.billing.stripeStarterPriceId = "price_starter_test";
-  config.billing.stripeBusinessPriceId = "price_business_test";
+  config.billing.stripeProPriceId = "price_pro_test";
 });
 
 async function makeTestStore() {

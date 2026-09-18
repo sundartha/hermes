@@ -48,7 +48,7 @@ const CONFIG = Object.freeze({
   paymentEnabled: true,
   publicUrl: "https://test.local",
   stripeStarterPriceId: "price_starter",
-  stripeBusinessPriceId: "price_business",
+  stripeProPriceId: "price_pro",
 });
 
 // Fake-BillingPort (in-process, KEIN Netz, kein echtes Stripe), Modell wie bk5: liefert

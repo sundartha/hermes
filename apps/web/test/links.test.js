@@ -147,7 +147,7 @@ test("Build ist fail-closed: ohne PUBLIC_GATEWAY_URL bricht er ab (kein stiller 
 });
 
 // Q-ABO: ein Abo = genau EINE Nummer. Der alte englische Tier-Text versprach
-// bei Business drei. Die deutsche Neubau-Fassung nennt gar keine Nummernzahl
+// bei Pro drei. Die deutsche Neubau-Fassung nennt gar keine Nummernzahl
 // mehr (Merkmale = Minuten + Faehigkeiten), darum bleibt hier der negative
 // Waechter: kein Mehrzahl-Versprechen darf zurueckkommen — weder deutsch noch
 // englisch. Sobald die Seite wieder eine Zahl nennt, muss sie 1 sein.

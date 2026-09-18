@@ -139,9 +139,9 @@ test("(9) kein Periodenanker (currentPeriodEnd null) -> fail-closed wie das Gate
   });
 });
 
-test("(10) business -> includedMinutes 120", () => {
+test("(10) pro -> includedMinutes 120", () => {
   const s = makeDefaultState();
-  assert.equal(quotaA(s, "business").includedMinutes, 120);
+  assert.equal(quotaA(s, "pro").includedMinutes, 120);
 });
 
 test("(11) voiceMinutesUsedSince summiert ab sinceIso (Raw-Reader)", () => {

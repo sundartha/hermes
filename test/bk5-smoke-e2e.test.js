@@ -68,7 +68,7 @@ const CONFIG = Object.freeze({
   paymentEnabled: true,
   publicUrl: "https://test.local",
   stripeStarterPriceId: "price_starter",
-  stripeBusinessPriceId: "price_business",
+  stripeProPriceId: "price_pro",
 });
 
 const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
@@ -263,7 +263,7 @@ test("(1) GET /api/plans (pre-Auth) liefert den Katalog ohne PII", async () => {
     assert.equal(plans.length, 2);
     assert.deepEqual(
       plans.map((p) => p.slug),
-      ["starter", "business"],
+      ["starter", "pro"],
     );
     assert.deepEqual(
       plans.map((p) => p.amountCents),

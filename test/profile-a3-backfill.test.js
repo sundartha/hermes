@@ -69,7 +69,7 @@ test("Apply provisioniert das Tier-Profil auf die tenantId (alle 7 Felder)", asy
 // --- Idempotenz: 2. Apply-Lauf = 0 changes ---
 test("zweiter Apply-Lauf ist idempotent (0 changes, in unchanged)", async () => {
   const s = makeDefaultState();
-  seedSubscriber(s, "t_a", { planSlug: "business" });
+  seedSubscriber(s, "t_a", { planSlug: "pro" });
   await backfillPlanProfiles({ store: storeOn(s), apply: true });
   const r2 = await backfillPlanProfiles({ store: storeOn(s), apply: true });
   assert.equal(r2.changes.length, 0);
@@ -81,7 +81,7 @@ test("Bootstrap-Tenant wird per ID ausgenommen (skip bootstrap, kein Profil)", a
   const s = makeDefaultState();
   // Bootstrap kuenstlich zum perfekten Subscriber machen -> beweist die Ausnahme ist per ID.
   setKycLevel(s, BOOTSTRAP_TENANT_ID, KYC_LEVEL.ID_VERIFIED);
-  setTenantSubscription(s, BOOTSTRAP_TENANT_ID, { planSlug: "business" });
+  setTenantSubscription(s, BOOTSTRAP_TENANT_ID, { planSlug: "pro" });
   const r = await backfillPlanProfiles({ store: storeOn(s), apply: true });
   assert.ok(r.skipped.some((x) => x.id === BOOTSTRAP_TENANT_ID && x.reason === BACKFILL_SKIP.BOOTSTRAP));
   assert.equal(Object.keys(s.profiles).length, 0);
@@ -99,7 +99,7 @@ test("aktiver Subscriber ohne planSlug -> skip no_plan, kein Profil", async () =
 // --- Toll-Fraud-Downgrade: Merge==Replace raeumt Alt-unrestricted=true ab ---
 test("vorbestehendes unrestricted=true + allowedNumbers -> nach Apply false/[]", async () => {
   const s = makeDefaultState();
-  seedSubscriber(s, "t_a", { planSlug: "business" });
+  seedSubscriber(s, "t_a", { planSlug: "pro" });
   s.profiles["t_a"] = { unrestricted: true, allowedNumbers: ["+491701234567"], maxCallsPerHour: 99 };
   await backfillPlanProfiles({ store: storeOn(s), apply: true });
   assert.equal(s.profiles["t_a"].unrestricted, false);
@@ -124,11 +124,11 @@ test("Reconcile-Resolver heilt slug-loses Abo (setzt Slug, schreibt Profil)", as
   const r = await backfillPlanProfiles({
     store: storeOn(s),
     apply: true,
-    resolvePlanSlug: async () => "business",
+    resolvePlanSlug: async () => "pro",
   });
   assert.deepEqual(r.reconciled, [{ id: "t_a" }]);
-  assert.equal(tenantSubscription(s, "t_a").planSlug, "business"); // Slug persistiert im Spiegel
-  assert.deepEqual(s.profiles["t_a"], sanitizeProfile(planProfileFor("business")));
+  assert.equal(tenantSubscription(s, "t_a").planSlug, "pro"); // Slug persistiert im Spiegel
+  assert.deepEqual(s.profiles["t_a"], sanitizeProfile(planProfileFor("pro")));
 });
 
 // --- Ohne Reconcile-Resolver bleibt das slug-lose Abo no_plan-Skip ---

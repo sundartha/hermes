@@ -44,7 +44,7 @@ test("(a) Subscriber sub-only passiert das Profil-Gate -> keine_tenant_nummer, N
     env: oauthEnv(idp),
     seed: seedState({
       tenants: [subscriberTenant("t_sub", "sub-sub")],
-      profiles: { t_sub: planProfileFor("business") }, // Profil unter der tenantId (Phase S)
+      profiles: { t_sub: planProfileFor("pro") }, // Profil unter der tenantId (Phase S)
     }),
   });
   try {

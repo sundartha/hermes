@@ -344,7 +344,7 @@ test("A(k) Perioden-Anker aus items.data[0] landet im setTenantSubscription-Patc
           id: "sub_q",
           status: "active",
           items: { data: [{ current_period_start: 1890864000, current_period_end: 1893456000 }] },
-          metadata: { tenant_ref: "t_q", plan_slug: "business" },
+          metadata: { tenant_ref: "t_q", plan_slug: "pro" },
         },
       },
     },
@@ -355,7 +355,7 @@ test("A(k) Perioden-Anker aus items.data[0] landet im setTenantSubscription-Patc
       "t_q",
       {
         subscriptionId: "sub_q",
-        planSlug: "business",
+        planSlug: "pro",
         currentPeriodEnd: 1893456000,
         currentPeriodStart: 1890864000,
       },

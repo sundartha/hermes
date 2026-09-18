@@ -1,8 +1,8 @@
 // KS-P9/E10: die Plan-Cap-Ableitung klemmt NICHT mehr auf die Plattform-Zahl. Diese Datei
-// pinnt genau das - die verkaufte Business-Decke (900 ct) bleibt stehen, auch wenn
+// pinnt genau das - die verkaufte Pro-Decke (900 ct) bleibt stehen, auch wenn
 // MAX_BUDGET_EUR (jetzt nur noch Warnschwelle) darunter liegt. pglite (F.I.R.S.T.).
 //
-// process.env.MAX_BUDGET_EUR="5" (500 ct) < abgeleitete Business-Decke (900 ct) - GENAU der
+// process.env.MAX_BUDGET_EUR="5" (500 ct) < abgeleitete Pro-Decke (900 ct) - GENAU der
 // Fall, den der Clamp frueher auffing und der seit KS-P9 folgenlos ist (sonst kuerzte eine
 // niedrig gesetzte Warnschwelle still verkaufte Leistung).
 // KEIN Server-Boot in dieser Datei - nur die Schreibkante (store.setTenantSubscription)
@@ -10,7 +10,7 @@
 // ausschliesslich dynamische Imports in before() (Muster plan-cap-derivation.test.js).
 // KS-P5a: die Decke folgt seit E5a dem BUCHUNGSSATZ (voiceTariffDefaultCents). Der
 // Fixtur-Wert 6 bleibt bewusst stehen - der gepruefte Vektor ist MAX_BUDGET_EUR=5 (500 ct)
-// UNTER der Business-Decke (900 ct), nicht der Tarifwert.
+// UNTER der Pro-Decke (900 ct), nicht der Tarifwert.
 process.env.MAX_BUDGET_EUR = "5";
 process.env.VOICE_TARIFF_DEFAULT_CENTS = "6";
 
@@ -28,7 +28,7 @@ before(async () => {
   webhookMod = await import("../src/billing/webhook.js");
   bootGuardMod = await import("../src/boot-guard.js");
   config.billing.stripeStarterPriceId = "price_starter_test";
-  config.billing.stripeBusinessPriceId = "price_business_test";
+  config.billing.stripeProPriceId = "price_pro_test";
 });
 
 async function makeTestStore() {
@@ -57,7 +57,7 @@ async function captureWarn(fn) {
   return lines;
 }
 
-test("(j2a) KS-P9: applyStripeWebhook ACTIVATE (business) laeuft durch, Decke bleibt 900 (KEINE Klemm-WARN)", async () => {
+test("(j2a) KS-P9: applyStripeWebhook ACTIVATE (pro) laeuft durch, Decke bleibt 900 (KEINE Klemm-WARN)", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_j2a";
   const s = store.load();
@@ -76,7 +76,7 @@ test("(j2a) KS-P9: applyStripeWebhook ACTIVATE (business) laeuft durch, Decke bl
         current_period_start: 1890864000,
         customer: "cus_j2a",
         default_payment_method: "pm_j2a",
-        metadata: { tenant_ref: tenantId, plan_slug: "business" },
+        metadata: { tenant_ref: tenantId, plan_slug: "pro" },
       },
     },
   };
@@ -103,13 +103,13 @@ test("(j2a) KS-P9: applyStripeWebhook ACTIVATE (business) laeuft durch, Decke bl
   assert.equal(
     store.tenantBudgetSnapshot(tenantId, config.billing).capCents,
     900,
-    "verkaufte Business-Decke ungekuerzt (KS-P9: keine Klemme auf die Plattform-Zahl)",
+    "verkaufte Pro-Decke ungekuerzt (KS-P9: keine Klemme auf die Plattform-Zahl)",
   );
   const clampLines = warnLines.filter((l) => l.includes("grund=clamp"));
   assert.deepEqual(clampLines, [], `keine Klemm-WARN mehr erwartet, war:\n${warnLines.join("\n")}`);
 });
 
-test("(j2b) KS-P9: Checkout-Return-Pfad (business) laeuft durch, Decke bleibt 900 (KEINE Klemm-WARN)", async () => {
+test("(j2b) KS-P9: Checkout-Return-Pfad (pro) laeuft durch, Decke bleibt 900 (KEINE Klemm-WARN)", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_j2b";
   const s = store.load();
@@ -121,7 +121,7 @@ test("(j2b) KS-P9: Checkout-Return-Pfad (business) laeuft durch, Decke bleibt 90
     subscriptionId: "sub_j2b",
     currentPeriodStart: 1890864000,
     currentPeriodEnd: 1893456000,
-    planSlug: "business",
+    planSlug: "pro",
   };
   const provisionCalls = [];
   let result;
@@ -133,7 +133,7 @@ test("(j2b) KS-P9: Checkout-Return-Pfad (business) laeuft durch, Decke bleibt 90
       provision: async (t) => { provisionCalls.push(t); return { ok: true, reason: "queued" }; },
       tenant: tenantId,
       sessionId: "cs_j2b",
-      expectedPlanSlug: "business",
+      expectedPlanSlug: "pro",
     });
   });
   assert.equal(result.ok, true, "Checkout-Return-Pfad laeuft vollstaendig durch (kein Wurf)");

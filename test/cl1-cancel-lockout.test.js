@@ -139,7 +139,7 @@ const CONFIG = {
   paymentEnabled: true,
   publicUrl: "https://test.local",
   stripeStarterPriceId: "price_starter",
-  stripeBusinessPriceId: "price_business",
+  stripeProPriceId: "price_pro",
 };
 
 async function setupRoute({ tenantId, priorSubscriptionId = "sub_prior" }) {

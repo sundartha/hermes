@@ -51,7 +51,7 @@ import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
 // Fix A1 (Runde 1, G5): dieselbe Kauf-Land-Override-Kombination wie requestNumberForPaid-
 // Tenant (provision-trigger.js) - EIN Ort statt einer dritten, abweichenden Inline-Kopie.
 import { resolveNumberCountry } from "./geo/resolve.js";
-import { isKnownPlanSlug } from "./plans.js";
+import { isKnownPlanSlug, normalizePlanSlug } from "./plans.js";
 import { tenantQuotaView } from "./billing/meter.js";
 // P14: die Rueckkehr-Ziele nach Stripe Checkout kommen aus der EINEN Quelle
 // (src/portal-paths.js) - dieselbe Konstante nutzt src/routes/api-billing.js fuer
@@ -190,8 +190,12 @@ function numberSetupFeeCentsFor(s, config, tenant) {
 
 // BK2: Reiner Selektor (N7, kein Nebeneffekt): untrusted Input (Body ODER zurueckgetragene
 // Query) -> bekannter Katalog-Slug oder null. SSoT = isKnownPlanSlug (G5, kein zweites Literal).
+// Liefert den NORMALISIERTEN Slug (LEGACY_PLAN_SLUG_ALIASES, plans.js), nicht den rohen:
+// ein Client, der noch den alten Slug schickt (gecachte Seite, zurueckgetragene Query aus
+// einer vor der Umbenennung gestarteten Checkout-Session), bucht damit denselben Tarif -
+// und was danach gespeichert wird, ist bereits der Katalog-Slug.
 function knownPlanSlug(raw) {
-  return typeof raw === "string" && isKnownPlanSlug(raw) ? raw : null;
+  return typeof raw === "string" && isKnownPlanSlug(raw) ? normalizePlanSlug(raw) : null;
 }
 
 // BK2: Baut die Stripe-successUrl. {CHECKOUT_SESSION_ID} = Stripe-Platzhalter. Optionaler,

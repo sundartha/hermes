@@ -1,6 +1,6 @@
 # RUNBOOK: Stripe Sandbox -> Live (voller Scope)
 
-Ziel: Echtes Geld. Abos (Starter/Business) UND Hold/Capture beim Onboarding inkl.
+Ziel: Echtes Geld. Abos (Starter/Pro) UND Hold/Capture beim Onboarding inkl.
 echtem Nummernkauf. Kein Code-Change noetig — der Wechsel ist ein reiner
 Konfigurations-Cutover (Stripe-Dashboard + Render-Env).
 
@@ -33,7 +33,7 @@ Dashboard -> Produktkatalog -> Produkt anlegen (2x):
 | Produkt | Preis | Intervall | Waehrung |
 |---|---|---|---|
 | Hermes Starter | 4,99 EUR (= 499 Cents) | monatlich (recurring) | EUR (E1) |
-| Hermes Business | 9,99 EUR (= 999 Cents) | monatlich (recurring) | EUR (E1) |
+| Hermes Pro | 9,99 EUR (= 999 Cents) | monatlich (recurring) | EUR (E1) |
 
 - Betraege MUESSEN zu `PLAN_CATALOG` in `src/plans.js` passen (amountCents 499/999) — der Katalog liest Stripe nicht, Uebereinstimmung ist Owner-Verantwortung.
 - Beide **`price_...`-IDs notieren** (Live-IDs, nicht die Test-IDs!).
@@ -87,7 +87,7 @@ Rutsch setzen, dann EIN Deploy (sonst Boot-Refusal wegen halber Konfiguration):
 | `STRIPE_SECRET_KEY` | `sk_live_...` (Schritt 5) |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_...` (Schritt 4, Live!) |
 | `STRIPE_STARTER_PRICE_ID` | `price_...` Starter (Schritt 2, Live!) |
-| `STRIPE_BUSINESS_PRICE_ID` | `price_...` Business (Schritt 2, Live!) |
+| `STRIPE_PRO_PRICE_ID` | `price_...` Pro (Schritt 2, Live!) — bis zum Bestandsumzug liest `config.js` ersatzweise noch `STRIPE_BUSINESS_PRICE_ID` (letzter Abschnitt) |
 | `PAYMENT_CURRENCY` | `eur` (E1; steht schon so in render.yaml) |
 | `NUMBER_SETUP_FEE_CENTS` | `500` (E2) |
 | `PAYMENT_ENABLED` | `true` |
@@ -166,3 +166,47 @@ schon im Checkout selbst. Der reine "Karte hinzufuegen"-Flow ohne Plan bleibt
 setup-Mode wie beschrieben. Das SCA/3DS-Risiko aus 9.1 ist damit NUR fuer den
 Erst-Abschluss geloest (Checkout ist on-session); fuer den Plan-Wechsel ueber
 `/subscribe` (Karte on-file) bleibt es offen.
+
+## Tarif-Umbenennung Business -> Pro (2026-09-15)
+
+Der zweite Abo-Tarif heisst seit dem 15.09.2026 **Pro** (Slug `pro`) statt Business
+(Slug `business`). Preis (9,99 EUR) und Leistungen (120 Minuten, 1 Nummer,
+ausgehende Anrufe, Priority-Support) sind UNVERAENDERT — es ist ein reiner Rename.
+Der Code traegt den Bestand uebergangsweise mit: `LEGACY_PLAN_SLUG_ALIASES`
+(`src/plans.js`) uebersetzt `business` -> `pro`, und `config.js` liest
+`STRIPE_BUSINESS_PRICE_ID` als Rueckfall, solange `STRIPE_PRO_PRICE_ID` fehlt.
+Beides sind Uebergangs-Kruecken; dieser Abschnitt ist der Weg, sie loszuwerden.
+
+Reihenfolge ist NICHT optional — jeder Schritt setzt den vorigen voraus:
+
+- [ ] **1. Stripe-Produkt umbenennen.** Dashboard (Live!) -> Produktkatalog ->
+      "Hermes Business" -> Name auf "Hermes Pro" aendern. NUR der Produktname.
+      **KEIN neues Produkt, KEIN neuer Price** — die `price_...`-ID bleibt
+      identisch, sonst haengen die laufenden Abos an einem Price, den niemand mehr
+      kennt, und brechen.
+- [ ] **2. `metadata.plan_slug` auf den laufenden Subscriptions umstellen.** Je Abo
+      im Dashboard (oder per API) `metadata.plan_slug` von `business` auf `pro`
+      setzen. Stand 15.09.2026 sind das **zwei Abos**. Ohne diesen Schritt liefert
+      jeder Webhook weiter den alten Slug — dann traegt allein der Alias.
+- [ ] **3. Render-Env setzen.** Service `vodafone-agent` -> Environment:
+      `STRIPE_PRO_PRICE_ID` anlegen, **gleicher Wert wie
+      `STRIPE_BUSINESS_PRICE_ID`** (Schritt 1 hat die Price-ID nicht veraendert).
+      Den alten Key **erst nach dem naechsten gruenen Deploy** entfernen — bis dahin
+      laeuft die alte Instanz noch und braucht ihn.
+- [ ] **4. Datenbank nachziehen.**
+      `UPDATE tenant SET stripe_plan_slug = 'pro' WHERE stripe_plan_slug = 'business';`
+- [ ] **5. Erst danach die Uebergangs-Kruecken entfernen.** `LEGACY_PLAN_SLUG_ALIASES`
+      in `src/plans.js` und den Env-Rueckfall auf `STRIPE_BUSINESS_PRICE_ID` in
+      `src/config.js` loeschen (plus die Hinweise in `.env.example` und
+      `render.yaml`). Vorher nicht: solange irgendwo noch `business` steht, waere
+      das Entfernen eine Sperre fuer zahlende Kunden.
+
+**Check:** Nach Schritt 4 liefert
+`SELECT stripe_plan_slug, count(*) FROM tenant GROUP BY 1;` keine `business`-Zeile
+mehr; im Stripe-Dashboard tragen beide Abos `plan_slug=pro`. Erst wenn beides
+stimmt, ist Schritt 5 gefahrlos.
+
+**Rollback:** Schritt 5 ist der einzige, der etwas kaputtmacht — er ist ein
+Code-Change und wird per Revert zurueckgenommen. Die Schritte 1-4 sind
+rueckwaertskompatibel, solange der Alias steht: ein Abo mit `plan_slug=pro` und
+eines mit `business` laufen gleichzeitig durch.

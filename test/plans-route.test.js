@@ -22,7 +22,7 @@ test("GET /api/plans liefert den Spec-Katalog (oeffentlich, ohne Login)", async 
     assert.equal(plans.length, 2);
     assert.deepEqual(
       plans.map((p) => p.slug),
-      ["starter", "business"],
+      ["starter", "pro"],
     );
     assert.deepEqual(
       plans.map((p) => p.amountCents),

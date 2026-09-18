@@ -73,7 +73,7 @@ test("KS-P3a: der ausgelieferte Katalog traegt die Worst-Case-Reserve - bei jede
 test("KS-P3a: Reserve ueber der kleinsten Plan-Decke -> genau ein FATAL, nennt Slug und Zielgroessen", () => {
   const findings = planCapReserveFindings({
     slugs: CATALOG_SLUGS,
-    capForSlug: capForSlugThatThrows({ starter: STUB_SMALLEST_CAP_CENTS, business: STUB_LARGER_CAP_CENTS }),
+    capForSlug: capForSlugThatThrows({ starter: STUB_SMALLEST_CAP_CENTS, pro: STUB_LARGER_CAP_CENTS }),
     maxTariffCents: STUB_TARIFF_CENTS,
   });
   assert.equal(findings.length, 1, `genau EIN Finding erwartet, war: ${JSON.stringify(findings)}`);
@@ -81,9 +81,13 @@ test("KS-P3a: Reserve ueber der kleinsten Plan-Decke -> genau ein FATAL, nennt S
   assert.equal(findings[0].code, PLAN_CAP_FINDING.PLAN_CAP_WORST_CASE_UNAFFORDABLE);
   assert.match(findings[0].message, /starter/, "nennt den Slug mit der kleinsten Decke");
   assert.match(findings[0].message, new RegExp(String(STUB_RESERVE_CENTS)), "nennt die Reserve");
+  // Wortgrenzen (\b) statt eines nackten /pro/: der Slug heisst seit der Umbenennung
+  // "pro" und waere als blosse Teilzeichenkette in jedem "Problem"/"Profil"/"pro Minute"
+  // der Meldung falsch-positiv. Der alte Slug "business" war lang genug, um das nicht
+  // zu brauchen - die Pruefabsicht (der groessere Plan wird NICHT genannt) bleibt gleich.
   assert.doesNotMatch(
     findings[0].message,
-    /business/,
+    /\bpro\b/,
     "nur das Minimum gehoert in die Meldung - der groessere Plan ist nicht der Engpass",
   );
 });

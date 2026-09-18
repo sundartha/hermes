@@ -33,7 +33,7 @@ const CONFIG = {
   paymentEnabled: true,
   publicUrl: "https://test.local",
   stripeStarterPriceId: "price_starter",
-  stripeBusinessPriceId: "price_business",
+  stripeProPriceId: "price_pro",
   numberSetupFeeCents: 500,
   paymentCurrency: "eur",
 };
@@ -227,7 +227,7 @@ test("(7) idempotent: zweiter subscribe -> 409 already_subscribed, provision ble
   const s = await setup();
   try {
     assert.equal((await subscribe(s, "starter")).status, 200);
-    const second = await subscribe(s, "business");
+    const second = await subscribe(s, "pro");
     assert.equal(second.status, 409);
     assert.equal(JSON.parse(second.body).error, "already_subscribed");
     assert.deepEqual(s.provisionSpy, [TENANT], "kein zweites Provisioning (Invariante 4)");

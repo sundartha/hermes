@@ -11,7 +11,7 @@ import { PLAN_CATALOG, formatPlanPrice } from "../src/lib/plans.js";
 const SUB_EURO_CENTS = 99;
 const ROUND_EURO_CENTS = 100;
 const STARTER_CENTS = 499;
-const BUSINESS_CENTS = 999;
+const PRO_CENTS = 999;
 
 test("formatPlanPrice: Ganzzahl-Cents -> EUR-Anzeige (Komma-Trenner, Symbol nachgestellt)", () => {
   assert.equal(formatPlanPrice(499, "eur"), "4,99 €");
@@ -24,7 +24,7 @@ test("formatPlanPrice: Ganzzahl-Cents -> EUR-Anzeige (Komma-Trenner, Symbol nach
 
 test("formatPlanPrice: lang=en -> englische Notation (Punkt-Trenner, Symbol vorangestellt)", () => {
   assert.equal(formatPlanPrice(STARTER_CENTS, "eur", "en"), "€4.99");
-  assert.equal(formatPlanPrice(BUSINESS_CENTS, "eur", "en"), "€9.99");
+  assert.equal(formatPlanPrice(PRO_CENTS, "eur", "en"), "€9.99");
   assert.equal(formatPlanPrice(SUB_EURO_CENTS, "eur", "en"), "€0.99"); // Sub-Euro-Grenzwert
   assert.equal(formatPlanPrice(ROUND_EURO_CENTS, "eur", "en"), "€1.00"); // runder Euro, Minor-Padding
   // "de" und ein fehlender Wert fuehren beide auf die deutsche Notation - der alte

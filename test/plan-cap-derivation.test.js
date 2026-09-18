@@ -3,7 +3,7 @@
 // pglite (kein Netz, kein echter Server-Spawn, F.I.R.S.T.).
 //
 // MECHANIK GEGEN DIE MODUL-CONFIG-FALLE: config.js liest process.env EINMALIG beim
-// Modul-Import (Modul-Singleton). Damit die Ableitung 900 (Business) UNCLAMPED sieht,
+// Modul-Import (Modul-Singleton). Damit die Ableitung 900 (Pro) UNCLAMPED sieht,
 // braucht der Prozess platformSpendCapCents > 900 - deshalb MUESSEN MAX_BUDGET_EUR/
 // VOICE_TARIFF_DEFAULT_CENTS VOR jedem Import (auch transitiv ueber store/pg.js,
 // billing/*.js) gesetzt sein. Ein statischer Import wuerde per ESM-Hoisting VOR diesem
@@ -47,7 +47,7 @@ before(async () => {
   // rawConfig-Slot, s. config.js) statt Env - diese Datei besitzt bereits die
   // Punkt-0-Env-Zeilen oben, ein drittes process.env-Paar waere Rauschen.
   config.billing.stripeStarterPriceId = "price_starter_test";
-  config.billing.stripeBusinessPriceId = "price_business_test";
+  config.billing.stripeProPriceId = "price_pro_test";
 });
 
 async function makeTestStore() {
@@ -89,17 +89,17 @@ function noopProvision() {
 
 // ---- (a) Happy-Pfad + Formel direkt gepinnt --------------------------------------
 
-test("(a) planCapCents direkt: starter=300, business=900 (Bruch, keine Rundung)", () => {
+test("(a) planCapCents direkt: starter=300, pro=900 (Bruch, keine Rundung)", () => {
   assert.equal(planCapsMod.planCapCents("starter", { voiceTariffDefaultCents: 6 }), 300);
-  assert.equal(planCapsMod.planCapCents("business", { voiceTariffDefaultCents: 6 }), 900);
+  assert.equal(planCapsMod.planCapCents("pro", { voiceTariffDefaultCents: 6 }), 900);
 });
 
-test("(a) createTenantSubscription(business) -> abgeleitete Decke 900 ct", async () => {
+test("(a) createTenantSubscription(pro) -> abgeleitete Decke 900 ct", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_a_biz";
   registerCardedTenant(store, tenantId);
   const r = await subscribeMod.createTenantSubscription({
-    store, billing: fakeSubscribeBilling(), config, tenant: tenantId, planSlug: "business",
+    store, billing: fakeSubscribeBilling(), config, tenant: tenantId, planSlug: "pro",
   });
   assert.equal(r.ok, true);
   assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 900);
@@ -155,15 +155,15 @@ test("PAY-16: JEDER Katalog-Slug hat eine Kopffreiheit (ein neuer Plan ohne Eint
 
 // ---- (b) Downgrade senkt die Decke, auch bei bereits hoeherem Verbrauch ----------
 
-test("(b) Downgrade business(900)->starter(300): Verbrauch 400 wird erst NACH dem Downgrade exceeded", async () => {
+test("(b) Downgrade pro(900)->starter(300): Verbrauch 400 wird erst NACH dem Downgrade exceeded", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_b";
   registerCardedTenant(store, tenantId);
   await subscribeMod.createTenantSubscription({
-    store, billing: fakeSubscribeBilling(), config, tenant: tenantId, planSlug: "business",
+    store, billing: fakeSubscribeBilling(), config, tenant: tenantId, planSlug: "pro",
   });
   store.addVoiceUsageCostCents(tenantId, 400);
-  assert.equal(store.budgetExceeded(tenantId, config.billing), false, "400 < 900 (business) -> frei");
+  assert.equal(store.budgetExceeded(tenantId, config.billing), false, "400 < 900 (pro) -> frei");
   // Downgrade (Muster Webhook-Patch: nur planSlug).
   store.setTenantSubscription(tenantId, { planSlug: "starter" });
   assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 300, "Decke gesunken");
@@ -179,25 +179,25 @@ test("(b) Downgrade business(900)->starter(300): Verbrauch 400 wird erst NACH de
 // noch nicht abgerechnete Reserve eines LAUFENDEN Calls: sie sitzt im ephemeren
 // Reserve-Ledger (s.reservations), nicht im usage-Bucket. Der Test beweist, dass
 // effectiveCapCents bei JEDER Pruefung frisch gelesen wird (kein zwischengespeicherter
-// Cap, der die alte Business-Decke ueberleben liesse). Reine state-ops-Ebene, kein
+// Cap, der die alte Pro-Decke ueberleben liesse). Reine state-ops-Ebene, kein
 // pglite noetig.
-const BUSINESS_CAP_CENTS = 900;
+const PRO_CAP_CENTS = 900;
 const STARTER_CAP_CENTS = 300;
 
-test("PAY-24: Downgrade business->starter wirkt sofort auf eine bereits offene Nicht-Inlands-Reserve", () => {
+test("PAY-24: Downgrade pro->starter wirkt sofort auf eine bereits offene Nicht-Inlands-Reserve", () => {
   const s = ops.makeDefaultState();
   const tenantId = "t_pay24";
   ops.registerTenant(s, tenantId, {});
-  ops.setTenantSubscription(s, tenantId, { planSlug: "business" });
+  ops.setTenantSubscription(s, tenantId, { planSlug: "pro" });
   ops.deriveTenantBudgetFromPlan(s, tenantId, config.billing);
   assert.equal(
     ops.tenantBudgetSnapshot(s, tenantId, config.billing).capCents,
-    BUSINESS_CAP_CENTS,
-    "Vorbedingung: Business-Decke unclamped (MAX_BUDGET_EUR=30 am Dateikopf)",
+    PRO_CAP_CENTS,
+    "Vorbedingung: Pro-Decke unclamped (MAX_BUDGET_EUR=30 am Dateikopf)",
   );
 
   assert.equal(
-    ops.tryReserveOutboundBudget(s, tenantId, BUSINESS_CAP_CENTS, config.billing),
+    ops.tryReserveOutboundBudget(s, tenantId, PRO_CAP_CENTS, config.billing),
     true,
     "Vorbedingung: die volle Decke ist als In-Flight-Reserve gebucht",
   );
@@ -239,12 +239,12 @@ test("(c) Tenant ohne stripePlanSlug: keine tenant_budget-Zeile, Cap = Registrie
 
 // ---- (d) EUR-Gate vs. Minuten-Gate: D8 ist behoben (heute umgekehrt) ------------
 
-test("(d) Business-Tenant telefoniert 120 Min: EUR-Gate frei (900 > 648), Minuten-Gate exceeded (120>=120)", async () => {
+test("(d) Pro-Tenant telefoniert 120 Min: EUR-Gate frei (900 > 648), Minuten-Gate exceeded (120>=120)", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_d";
   registerCardedTenant(store, tenantId);
   await subscribeMod.createTenantSubscription({
-    store, billing: fakeSubscribeBilling(), config, tenant: tenantId, planSlug: "business",
+    store, billing: fakeSubscribeBilling(), config, tenant: tenantId, planSlug: "pro",
   });
   // 120 Minuten zu 5.4 ct = 648 ct Ist-Verbrauch (Kontrollrechnung, NICHT die Formel-Eingabe).
   store.addVoiceUsageCostCents(tenantId, 648);
@@ -283,7 +283,7 @@ test("(e2) activateSubscriptionFromCheckoutSession ok-Pfad (kein Abo bisher) -> 
     subscriptionId: "sub_e2",
     currentPeriodStart: 1890864000,
     currentPeriodEnd: 1893456000,
-    planSlug: "business",
+    planSlug: "pro",
   };
   const result = await subscribeMod.activateSubscriptionFromCheckoutSession({
     store,
@@ -292,7 +292,7 @@ test("(e2) activateSubscriptionFromCheckoutSession ok-Pfad (kein Abo bisher) -> 
     provision: noopProvision(),
     tenant: tenantId,
     sessionId: "cs_e2",
-    expectedPlanSlug: "business",
+    expectedPlanSlug: "pro",
   });
   assert.equal(result.ok, true);
   assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 900);
@@ -307,7 +307,7 @@ test("(e3) activateSubscriptionFromCheckoutSession Heilungs-Pfad (Karte fehlt, A
   // Simuliert "der Webhook hat das Rennen gewonnen": Abo roh gesetzt, OHNE die Schreibkante
   // zu durchlaufen (RAW ops-Aufruf, keine Ableitung) - der Test isoliert damit, dass
   // GENAU der Heilungs-Pfad (nicht ein vorheriger Aufrufer) die Ableitung ausloest.
-  ops.setTenantSubscription(s, tenantId, { subscriptionId: "sub_e3", planSlug: "business" });
+  ops.setTenantSubscription(s, tenantId, { subscriptionId: "sub_e3", planSlug: "pro" });
   assert.equal(
     s.tenantBudgets.find((b) => b.tenantId === tenantId),
     undefined,
@@ -319,7 +319,7 @@ test("(e3) activateSubscriptionFromCheckoutSession Heilungs-Pfad (Karte fehlt, A
     subscriptionId: "sub_e3", // IDENTISCH -> Heilungs-Pfad, kein subscription_conflict
     currentPeriodStart: 1890864000,
     currentPeriodEnd: 1893456000,
-    planSlug: "business",
+    planSlug: "pro",
   };
   const result = await subscribeMod.activateSubscriptionFromCheckoutSession({
     store,
@@ -328,7 +328,7 @@ test("(e3) activateSubscriptionFromCheckoutSession Heilungs-Pfad (Karte fehlt, A
     provision: noopProvision(),
     tenant: tenantId,
     sessionId: "cs_e3",
-    expectedPlanSlug: "business",
+    expectedPlanSlug: "pro",
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, "already_subscribed");
@@ -400,7 +400,7 @@ test("(e6) backfillPlanProfiles apply+resolvePlanSlug -> {planSlug} ALLEIN -> Ab
   const report = await backfillMod.backfillPlanProfiles({
     store,
     apply: true,
-    resolvePlanSlug: async () => "business",
+    resolvePlanSlug: async () => "pro",
   });
   assert.ok(
     report.reconciled.some((r) => r.id === tenantId),
@@ -574,7 +574,7 @@ test("(i) pg-Rundlauf: budgetCents+hardCapCents beide 900 nach reload; ein im se
   const tenantId = "t_i";
   registerCardedTenant(store, tenantId);
   await subscribeMod.createTenantSubscription({
-    store, billing: fakeSubscribeBilling(), config, tenant: tenantId, planSlug: "business",
+    store, billing: fakeSubscribeBilling(), config, tenant: tenantId, planSlug: "pro",
   });
   const s = store.load();
   ops.createCall(s, { direction: "outbound", from: "+49", to: "+49", tenantId });

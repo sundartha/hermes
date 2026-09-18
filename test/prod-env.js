@@ -17,7 +17,7 @@
 // nicht Wahrheit - der Live-Service ist dashboard-managed. Gemessen am 2026-07-25 war der
 // Blueprint nicht bloss ungenau, sondern nicht startfaehig: MAX_BUDGET_EUR="8" ergab
 // platformSpendCapCents=800, und der Boot-Guard brach mit plan_cap_inert und exit(1) ab,
-// weil die abgeleitete Business-Plan-Decke darueber lag (HISTORISCH - dieser Guard ist mit
+// weil die abgeleitete Pro-Plan-Decke darueber lag (HISTORISCH - dieser Guard ist mit
 // KS-P9/E10 entfallen; der Befund bleibt als Beleg fuer die Quellen-Trennung stehen).
 // P7 hat den Blueprint auf 30
 // (und die Tenant-Decke auf 1500) gehoben - der Boot-Blocker ist weg, die Trennung der

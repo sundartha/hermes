@@ -23,8 +23,8 @@ export const PLAN_CATALOG = Object.freeze([
     ]),
   }),
   Object.freeze({
-    slug: "business",
-    name: "Business",
+    slug: "pro",
+    name: "Pro",
     amountCents: 999,
     currency: "eur",
     cadence: "month",
@@ -49,7 +49,7 @@ const CURRENCY_SYMBOLS = Object.freeze({ eur: "€", usd: "$" });
 // "€4.99" (Punkt-Dezimaltrenner, Symbol VORangestellt) - dieselbe Schreibweise,
 // die andere Waehrungen (z.B. usd) ohnehin schon nutzen. Die Startseite schreibt
 // beide Fassungen als Woerterbuch-Paar (scripts/hermes-scroll.js starterPrice/
-// businessPrice), das Dashboard holt sie hier - der Kunde sieht im Dashboard
+// proPrice), das Dashboard holt sie hier - der Kunde sieht im Dashboard
 // dieselbe Notation wie beim Tarifwaehlen.
 //
 // lang: "en" | "de". Fehlt der Wert, bleibt es bei der deutschen Notation - der

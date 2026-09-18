@@ -9,7 +9,7 @@
 // Store-Fassade). Diese Schicht persistiert nur die Abo-Referenzen am Tenant.
 
 import { hasCardOnFile } from "../self-service.js";
-import { CATALOG_SLUGS, isKnownPlanSlug } from "../plans.js";
+import { CATALOG_SLUGS, isKnownPlanSlug, normalizePlanSlug } from "../plans.js";
 import { activatePaidTenant } from "./activation.js";
 import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.js";
 
@@ -23,13 +23,15 @@ export const PLAN_SLUGS = CATALOG_SLUGS;
 // die Tier->Price-Zuordnung gehoert in diese Schicht, nicht in config.js.
 const PLAN_PRICE_CONFIG_KEY = Object.freeze({
   starter: "stripeStarterPriceId",
-  business: "stripeBusinessPriceId",
+  pro: "stripeProPriceId",
 });
 
 // Loest den Stripe-Price aus dem Plan-slug ueber config auf. Unbekannter/fehlender
 // Slug ODER fehlende Price-Id -> null (Aufrufer -> 400/500, kein Stripe-Call mit Muell).
+// Normalisiert zuerst (LEGACY_PLAN_SLUG_ALIASES, plans.js): der Stripe-Price ist derselbe,
+// nur der Slug hat sich geaendert - ein Bestands-Abo darf hier nicht auf null laufen.
 export function priceIdForPlan(slug, config) {
-  const key = PLAN_PRICE_CONFIG_KEY[slug];
+  const key = PLAN_PRICE_CONFIG_KEY[normalizePlanSlug(slug)];
   if (!key) return null;
   return config.billing[key] || null;
 }

@@ -450,7 +450,7 @@ export const BASE_ENV = {
   // STRIPE_*_PRICE_ID / STRIPE_WEBHOOK_SECRET via dotenv in Spawn-Tests -> Baseline-Drift
   // (Lehre test-base-env-drift). PAYMENT_ENABLED=false -> der Webhook-Secret-Boot-Check greift nicht.
   STRIPE_STARTER_PRICE_ID: "",
-  STRIPE_BUSINESS_PRICE_ID: "",
+  STRIPE_PRO_PRICE_ID: "",
   STRIPE_WEBHOOK_SECRET: "",
   // outbound-p1c: Kosten-Achse neutral auf 0 (sonst leakt eine lokale .env via dotenv in
   // Spawn-Tests). Tarif 0 -> Reservierung feuert nie + Reconcile/Meter buchen 0 (byte-
@@ -1124,7 +1124,7 @@ export function makeTelnyxSigner() {
 // Quelle (G5/S2). Die Werte sind Attrappen, kein Test ruft Stripe.
 export const PLAN_PRICE_BOOT_ENV = Object.freeze({
   STRIPE_STARTER_PRICE_ID: "price_test_starter",
-  STRIPE_BUSINESS_PRICE_ID: "price_test_business",
+  STRIPE_PRO_PRICE_ID: "price_test_pro",
 });
 
 // IEL-B1: seit dem Boot-Riegel (boot-guard.js#elInboundAccessFindings) bootet

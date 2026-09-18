@@ -7,7 +7,7 @@ import { findPlan } from "../src/plans.js";
 
 test("S3: findPlan(bekannt) -> Katalog-Objekt", () => {
   assert.equal(findPlan("starter")?.slug, "starter");
-  assert.equal(findPlan("business")?.slug, "business");
+  assert.equal(findPlan("pro")?.slug, "pro");
 });
 
 test("S3: findPlan(unbekannt/leer/undefined) -> null (Null-Zweig)", () => {

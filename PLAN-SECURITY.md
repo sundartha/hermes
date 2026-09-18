@@ -4,6 +4,12 @@ Sammlung der sicherheitsrelevanten Einträge der Launch-Blocker-Kette (OUT-05/PR
 PLAN-LAUNCH-FIXES.md). Jede sicherheitsrelevante Phase ergänzt hier ihren Eintrag (Pflicht,
 CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 
+> **Lesehilfe (2026-09-15):** der zweite Abo-Tarif heisst seit dem 15.09.2026 **Pro**
+> (Slug `pro`) und hiess davor **Business** (Slug `business`). Aeltere Abschnitte unten
+> nennen ihn weiter Business — sie werden nach der Hausregel dieses Dokuments nicht
+> rueckwirkend umgeschrieben. Preis, Minuten und die abgeleitete Kopffreiheit (5/4) sind
+> von der Umbenennung unberuehrt, jede Herleitung gilt also unveraendert fuer Pro.
+
 ## OUT-05 — Budget-/Reserve-Race bei parallelen place_call (nach F2)
 
 > **Durch KS-P9 (2026-07-30, E10) ueberholt:** die Plattform-Achse (`MAX_BUDGET_EUR`) trifft keine Sperrentscheidung mehr. Aussagen dieses Abschnitts ueber einen Plattform-Notaus / eine Geld-Schnittmenge beschreiben den Stand VOR KS-P9 und werden bewusst nicht rueckwirkend umgeschrieben.

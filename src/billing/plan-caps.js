@@ -4,12 +4,12 @@
 // leakte die Innenkalkulation ins Marketing-Bundle ODER risse den Spiegel-Test).
 // LIEST includedMinutes aus plans.js (SSoT bleibt dort), der Basissatz kommt als cfg herein.
 // Reines Rechenmodul: KEIN IO, KEIN store-Import (Leaf-Modul, azyklisch).
-import { findPlan } from "../plans.js";
+import { findPlan, normalizePlanSlug } from "../plans.js";
 
 // Kopffreiheit je Plan als GANZZAHLIGER BRUCH (Zaehler/Nenner), NICHT als Dezimalzahl:
 // 1,6667 ist gerundet und 30*30*1.6667 = 1500,03 - eine Geldgrenze, die von einer Rundung
 // im Aufrufer abhinge (G26 auf dem Geld-Pfad). Entscheidung 2 (2026-07-20): Starter 5/3,
-// Business 5/4. Produkt-Entscheidung, KEINE Env (bewusst nicht konfigurierbar -
+// Pro 5/4. Produkt-Entscheidung, KEINE Env (bewusst nicht konfigurierbar -
 // test-gepinnt, nicht per Operator verstellbar).
 //
 // KS-P5a/E5a: die Kopffreiheit traegt seither ZWEI Lasten, und beide muessen bei JEDEM
@@ -19,12 +19,12 @@ import { findPlan } from "../plans.js";
 //       (R = RESERVE_LEAD_MINUTES, seit KS-P3 (a) ein festes Vorlauffenster von 2 Minuten
 //        statt der angefangenen Minuten der laengstmoeglichen Gespraechsdauer - die Reserve
 //        haengt nicht mehr an der Gespraechsdauer)
-// (2) fordert M >= 3 (Starter, 5/3) bzw. M >= 8 (Business, 5/4); der Katalog liegt mit
+// (2) fordert M >= 3 (Starter, 5/3) bzw. M >= 8 (Pro, 5/4); der Katalog liegt mit
 // 30 bzw. 120 verkauften Minuten weit darueber. Nachgerechnet wird das - satzunabhaengig und
 // fuer JEDEN Katalog-Slug - in test/ks-p5a-plan-cap-carries-sold-minutes.test.js.
 const PLAN_CAP_HEADROOM = Object.freeze({
   starter: Object.freeze({ numerator: 5, denominator: 3 }),
-  business: Object.freeze({ numerator: 5, denominator: 4 }),
+  pro: Object.freeze({ numerator: 5, denominator: 4 }),
 });
 
 // planCapCents(slug, cfg) = includedMinutes * voiceTariffDefaultCents * num / den.
@@ -34,14 +34,18 @@ const PLAN_CAP_HEADROOM = Object.freeze({
 // Inlands-Leg bucht guenstiger, passt also erst recht darunter.
 // ZUERST multiplizieren, GENAU EINMAL am Ende dividieren (alle Operanden ganzzahlig) -
 // das Ergebnis ist fuer JEDEN ganzzahligen Satz T ganzzahlig (Starter 30*T*5/3 = 50T,
-// Business 120*T*5/4 = 150T; bei T=30 also 1500 / 4500 ct).
+// Pro 120*T*5/4 = 150T; bei T=30 also 1500 / 4500 ct).
 // WIRFT bei einem UNBEKANNTEN Slug (fail-closed: ein neuer Plan ohne Kopffreiheit-Eintrag
 // darf NICHT still auf einen Default zurueckfallen). Der Aufrufer stellt sicher, dass er
 // nur mit nicht-leerem Slug ruft; leerer/fehlender Slug ist KEIN Fall dieser Funktion (die
 // No-op-Entscheidung fuer diesen Fall liegt an der Schreibkante, nicht hier).
+// Normalisiert zuerst (LEGACY_PLAN_SLUG_ALIASES, plans.js): ein Bestands-Abo mit altem
+// Slug bekommt die Kopffreiheit seines Tarifs, statt hier zu werfen - der Wurf liefe im
+// Webhook-Pfad als unhandled rejection durch (s. billing/webhook.js S1-1).
 export function planCapCents(planSlug, cfg) {
-  const plan = findPlan(planSlug);
-  const headroom = PLAN_CAP_HEADROOM[planSlug];
+  const canonicalSlug = normalizePlanSlug(planSlug);
+  const plan = findPlan(canonicalSlug);
+  const headroom = PLAN_CAP_HEADROOM[canonicalSlug];
   if (!plan || !headroom) {
     throw new Error(`planCapCents: unbekannter Plan-Slug '${planSlug}' (kein Katalog-/Kopffreiheit-Eintrag)`);
   }

@@ -386,7 +386,7 @@ export function globalCapCents(cfg) {
 // Notbremse gehoert nicht an einen Knopf; die frueher hier stehende Env MAX_CALL_DURATION_S
 // ist mit E2/E3 ersatzlos entfallen (sie WAR die willkuerliche Produktgrenze).
 // 1800 s = 30 min liegt ueber jedem realistischen Terminanruf inkl. Warteschleife und in
-// der Groessenordnung des groessten verkauften Kontingents (Business, 120 min/Monat).
+// der Groessenordnung des groessten verkauften Kontingents (Pro, 120 min/Monat).
 export const MAX_CALL_DURATION_CAP_S = 1800;
 
 // KS-P3 (a): die Vorab-Reserve deckt seit dieser Phase nur noch das VORLAUFFENSTER, bis

@@ -22,7 +22,7 @@ import { startServer, startServerExpectExit, makeStripeStub } from "./helpers.js
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const STARTER_PRICE = "price_starter";
-const BUSINESS_PRICE = "price_business";
+const PRO_PRICE = "price_pro";
 const ALERT_SENDER = "+15005550006";
 const ALERT_SMS_TO = "+15005550007";
 const ALERT_MAIL_TO = "ops@example.invalid";
@@ -37,7 +37,7 @@ const HTTP_OK = 200;
 // Die gesunden Anbieter-Antworten: exakt das, was der Katalog anzeigt.
 const GESUNDE_PREISE = Object.freeze({
   [STARTER_PRICE]: { unitAmountCents: 499, currency: "eur" },
-  [BUSINESS_PRICE]: { unitAmountCents: 999, currency: "eur" },
+  [PRO_PRICE]: { unitAmountCents: 999, currency: "eur" },
 });
 
 function fakeConfig(overrides = {}) {
@@ -46,7 +46,7 @@ function fakeConfig(overrides = {}) {
     priceDriftMinIntervalMs: MINDESTFRIST_MS,
     priceDriftUnknownEscalateAfter: 3,
     stripeStarterPriceId: STARTER_PRICE,
-    stripeBusinessPriceId: BUSINESS_PRICE,
+    stripeProPriceId: PRO_PRICE,
     platformAlertMailTo: ALERT_MAIL_TO,
     platformAlertSmsTo: ALERT_SMS_TO,
     // Produktions-Defaults der geteilten Entprellung (6 h / 15 min) - damit "zweiter Lauf
@@ -260,10 +260,10 @@ const PAY_BOOT_ENV = Object.freeze({
 
 test("GP-P6: P6-4 Katalog-Slug ohne Price-Id bei PAYMENT_ENABLED=true -> Boot-Refusal VOR app.listen", async () => {
   const { code, output } = await startServerExpectExit({
-    env: { ...PAY_BOOT_ENV, STRIPE_STARTER_PRICE_ID: "price_a", STRIPE_BUSINESS_PRICE_ID: "" },
+    env: { ...PAY_BOOT_ENV, STRIPE_STARTER_PRICE_ID: "price_a", STRIPE_PRO_PRICE_ID: "" },
   });
   assert.equal(code, 1, `erwartet exit(1), Ausgabe:\n${output}`);
-  assert.match(output, /Katalog-Tarif\(e\) ohne Stripe-Price-Id: business/);
+  assert.match(output, /Katalog-Tarif\(e\) ohne Stripe-Price-Id: pro/);
   assert.doesNotMatch(
     output,
     /Hermes Gateway laeuft auf/,
@@ -352,9 +352,9 @@ test("GP-P6: P6-7 Nicht-2xx -> wirft mit Status, OHNE Schluessel in der Meldung"
 // P6-8: das reine Praedikat des Boot-Guards
 // ---------------------------------------------------------------------------------------
 test("GP-P6: P6-8 unpricedPlanSlugs nennt genau die Slugs ohne Price-Id", () => {
-  const alle = { starter: STARTER_PRICE, business: BUSINESS_PRICE };
+  const alle = { starter: STARTER_PRICE, pro: PRO_PRICE };
   assert.deepEqual(unpricedPlanSlugs(CATALOG_SLUGS, (slug) => alle[slug]), []);
-  assert.deepEqual(unpricedPlanSlugs(CATALOG_SLUGS, (slug) => (slug === "business" ? "" : alle[slug])), ["business"]);
+  assert.deepEqual(unpricedPlanSlugs(CATALOG_SLUGS, (slug) => (slug === "pro" ? "" : alle[slug])), ["pro"]);
   assert.deepEqual(unpricedPlanSlugs([], () => null), []);
 });
 

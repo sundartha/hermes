@@ -99,7 +99,7 @@ test("activatePaidTenant provisioniert das Tier-Profil auf die tenantId (alle 8 
 test("vorbestehendes unrestricted=true + allowedNumbers -> nach Aktivierung false/[]", async () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {});
-  setTenantSubscription(s, "t_a", { planSlug: "business" });
+  setTenantSubscription(s, "t_a", { planSlug: "pro" });
   s.profiles["t_a"] = { unrestricted: true, allowedNumbers: ["+491701234567"], maxCallsPerHour: 99 };
   await activatePaidTenant({
     store: storeOn(s),
@@ -138,7 +138,7 @@ test("Webhook-ACTIVATE mit plan_slug provisioniert identisch (auf die tenantId)"
         object: {
           id: "sub_1",
           status: "active",
-          metadata: { tenant_ref: "t_a", plan_slug: "business" },
+          metadata: { tenant_ref: "t_a", plan_slug: "pro" },
         },
       },
     },
@@ -151,7 +151,7 @@ test("Webhook-ACTIVATE mit plan_slug provisioniert identisch (auf die tenantId)"
       provision: async () => ({ ok: true, reason: "queued" }),
     },
   );
-  assert.deepEqual(s.profiles["t_a"], planProfileFor("business"));
+  assert.deepEqual(s.profiles["t_a"], planProfileFor("pro"));
 });
 
 test("planSlug-loser Webhook (frischer Tenant) -> SKIP, kein Profil, KYC/Status gesetzt", async () => {
@@ -266,7 +266,7 @@ test("Webhook-ACTIVATE mit billing setzt numberSetupFeeExempt IDENTISCH zum dire
         object: {
           id: "sub_webhook_free",
           status: "active",
-          metadata: { tenant_ref: "t_a", plan_slug: "business" },
+          metadata: { tenant_ref: "t_a", plan_slug: "pro" },
         },
       },
     },
