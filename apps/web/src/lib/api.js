@@ -41,6 +41,25 @@ export const AUTH_STATE = Object.freeze({
 // (App-Shell) nicht auseinanderdriften.
 export const AUTH_EVENT = "hermes:authstate";
 
+// Owner-Befund 18.09.2026 ("der Update-Knopf geht nicht"): die Web-Session lebt eine
+// Stunde (SESSION_TTL_SECONDS), das Dashboard bleibt aber beliebig lange offen. Danach
+// antwortet JEDER Aufruf mit 401, waehrend die Seite noch "eingeloggt" aussieht - im
+// Render-Log vom 17.09.2026 stehen acht Klicks auf den Kartenwechsel der Nummernkarte,
+// alle "auth_failed grund=no_session", und im Browser passierte nichts. Jede 401 meldet
+// sich darum zusaetzlich ueber dieses Event; die Auth-Insel prueft daraufhin den Zustand
+// neu und schaltet die ganze Seite auf "Anmeldung erforderlich" um (statt dass jeder
+// Knopf einzeln ins Leere laeuft). Das Event traegt keine Daten - die Quelle der
+// Wahrheit bleibt der state-Fetch der Auth-Insel.
+export const SESSION_EXPIRED_EVENT = "hermes:session-expired";
+
+// Meldet eine 401 an die Auth-Insel. Eigene Funktion, weil ein Aufrufer (die
+// Newsletter-Einwilligung in lib/subscribe.js) bewusst am apiRequest-Wrapper vorbei
+// laeuft. Ohne DOM (node:test) ein No-Op.
+export function notifySessionExpired() {
+  if (typeof document === "undefined") return;
+  document.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+}
+
 // Fehler eines API-Aufrufs mit HTTP-Status. Der Aufrufer (loadAuthState)
 // unterscheidet 401/403 darueber, ohne den rohen Response durchzureichen.
 export class ApiError extends Error {
@@ -91,6 +110,7 @@ async function apiRequest(path, { method = "GET", parseJson = true, body } = {})
   }
   const res = await fetch(path, options);
   if (!res.ok) {
+    if (res.status === HTTP_UNAUTHORIZED) notifySessionExpired();
     const info = await readErrorInfo(res);
     throw new ApiError(res.status, `${method} ${path} -> ${res.status}`, info);
   }
