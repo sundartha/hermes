@@ -29,11 +29,13 @@ const { withConfig } = makeConfigOverrides(config);
 
 // ---- geteilter Mini-Harness (Muster test/mcp-tools-i18n.test.js) ----
 
+// server.tool(name, desc, schema, annotations, handler) seit E2 - Restparameter statt
+// eines fuenften benannten Parameters (annotations sitzt an Position 4; max-params haelt).
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    tool(name, _desc, _schema, handler) {
-      handlers.set(name, handler);
+    tool(name, _desc, _schema, ...rest) {
+      handlers.set(name, rest.at(-1));
     },
     registerTool(name, _config, handler) {
       handlers.set(name, handler);
