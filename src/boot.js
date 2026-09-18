@@ -38,6 +38,7 @@ import {
   llmFallbackFindings,
   elInboundAccessFindings,
   elInboundScopeFindings,
+  angekuendigterOriginFindings,
 } from "./boot-guard.js";
 import {
   inboundElAllowlistProbeLine,
@@ -483,13 +484,28 @@ function assertElInboundScope(config) {
   applyBootFindings(elInboundScopeFindings(config.voice.elevenLabsInbound.scope));
 }
 
+// E5/S2-A6: Eindeutigkeit des ANGEKUENDIGTEN Origins (angekuendigterOriginFindings,
+// Begruendung fuer FATAL steht dort). Kann exit(1) -> "assert", und damit PFLICHTGEMAESS
+// vor rearmActiveCallTimers (INV-5).
+function assertAngekuendigterOrigin(config) {
+  applyBootFindings(
+    angekuendigterOriginFindings({
+      publicUrl: config.server.publicUrl,
+      oauthAudience: config.auth.oauthAudience,
+      allowedOrigins: config.safety.mcpAllowedOrigins,
+      isProduction: config.server.isProduction,
+    }),
+  );
+}
+
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel B) ist
 // das fuenfte, assertProviderRateInBand (LCT P4) das sechste, assertCostTruingBooking
 // (LCT P4) das siebte, assertSttProfile (STT-A1) das achte, assertPricedModels (B4a)
 // das neunte, assertPricedPlans (GP-P6) das zehnte, assertLatentCostPaths (IE3) das elfte,
-// assertElInboundAccess (IEL-B1) das zwoelfte und assertElInboundScope (IEX-A9) das dreizehnte, das noch process.exit(1)
+// assertElInboundAccess (IEL-B1) das zwoelfte, assertElInboundScope (IEX-A9) das dreizehnte und
+// assertAngekuendigterOrigin (E5/S2-A6) das vierzehnte, das noch process.exit(1)
 // rufen kann - warnStaleModelPrices/warnAlertChannelUnset/warnTariffDrift/
 // warnNumberOriginDecoupled/warnMissingProvisioningConnection/
 // warnElRegistrationSipCredsMissing/warnLlmFallbackUnusable (FW2) sind reine Diagnose
@@ -566,6 +582,7 @@ function assertBootGates(config, store, durableAudit) {
   assertProviderRateInBand(config);
   assertCostTruingBooking(config, store);
   assertSttProfile(config);
+  assertAngekuendigterOrigin(config); // E5/S2-A6: kann exit(1)
   warnAlertChannelUnset(config);
   warnKostenAlarmZielUnset(config, durableAudit); // KV2-1, WARN + durabel
   warnPlatformAniUnset(config); // OUTBOUND-E1, WARN

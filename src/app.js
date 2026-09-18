@@ -413,8 +413,9 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
   // Das /mcp-Trio (POST mit mcpAuth, GET/DELETE -> 405) lebt in src/routes/mcp.js
   // (makeMcpRoutes, DI-Muster wie makeBillingRoutes/makeVoiceRoutes) - reine Verschiebung,
   // Verhalten unveraendert. Mount an UNVERAENDERTER Position: nach makeOnboardRoutes, vor
-  // errorHandler (INV-2). mcpAuth (src/auth.js) bleibt die EINZIGE Absicherung auf POST,
-  // fail-closed. Stateless pro Request
+  // errorHandler (INV-2). mcpAuth (src/auth.js) bleibt die einzige IDENTITAETS-Pruefung
+  // auf POST, fail-closed; die Herkunftswache (mcpOriginOnlyMiddleware, E5) laeuft im
+  // Modul davor und ersetzt sie nicht. Stateless pro Request
   // (INV-8) + res.on("close")-Cleanup sind ins Modul mitgewandert. requestTenant = die EINE
   // Wurzel-Instanz (INV-7).
   app.use(makeMcpRoutes({ config, store, requestTenant }));

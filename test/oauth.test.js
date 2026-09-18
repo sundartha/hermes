@@ -14,7 +14,10 @@ import {
 } from "./helpers.js";
 import { hashEmail } from "../src/util.js";
 
-test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
+const HTTP_OK = 200;
+const HTTP_UNAUTHORIZED = 401;
+
+test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
   const idp = await startIdp();
   const srv = await startServer({
     env: {
@@ -25,23 +28,23 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
     },
   });
   try {
-    await t.test("Well-known: 200 JSON ohne Auth-Prompt", async () => {
+    await ctx.test("Well-known: 200 JSON ohne Auth-Prompt", async () => {
       const res = await fetch(`${srv.localUrl}/.well-known/oauth-protected-resource`);
-      assert.equal(res.status, 200);
+      assert.equal(res.status, HTTP_OK);
       assert.ok(!res.headers.get("www-authenticate"));
       const doc = await res.json();
       assert.deepEqual(doc.authorization_servers, [idp.issuer]);
       assert.equal(doc.resource, AUDIENCE);
     });
 
-    await t.test("Well-known pfadbezogen (/mcp) ebenfalls 200", async () => {
+    await ctx.test("Well-known pfadbezogen (/mcp) ebenfalls 200", async () => {
       const res = await fetch(`${srv.localUrl}/.well-known/oauth-protected-resource/mcp`);
-      assert.equal(res.status, 200);
+      assert.equal(res.status, HTTP_OK);
     });
 
-    await t.test("ohne Token -> 401 + WWW-Authenticate mit resource_metadata", async () => {
+    await ctx.test("ohne Token -> 401 + WWW-Authenticate mit resource_metadata", async () => {
       const res = await post(`${srv.localUrl}/mcp`, null);
-      assert.equal(res.status, 401);
+      assert.equal(res.status, HTTP_UNAUTHORIZED);
       const wa = res.headers.get("www-authenticate") || "";
       assert.match(
         wa,
@@ -49,33 +52,33 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
       );
     });
 
-    await t.test("Muell-Token -> 401", async () => {
+    await ctx.test("Muell-Token -> 401", async () => {
       const res = await post(`${srv.localUrl}/mcp`, "abc.def.ghi");
-      assert.equal(res.status, 401);
+      assert.equal(res.status, HTTP_UNAUTHORIZED);
     });
 
-    await t.test("abgelaufenes Token -> 401", async () => {
+    await ctx.test("abgelaufenes Token -> 401", async () => {
       const token = await idp.sign({ email: "exp@team.test" }, { exp: "-1m" });
       const res = await post(`${srv.localUrl}/mcp`, token);
-      assert.equal(res.status, 401);
+      assert.equal(res.status, HTTP_UNAUTHORIZED);
     });
 
-    await t.test("falsche Audience -> 401", async () => {
+    await ctx.test("falsche Audience -> 401", async () => {
       const token = await idp.sign({ email: "aud@team.test" }, { aud: "https://anderes.test/mcp" });
       const res = await post(`${srv.localUrl}/mcp`, token);
-      assert.equal(res.status, 401);
+      assert.equal(res.status, HTTP_UNAUTHORIZED);
     });
 
-    await t.test("falsche Signatur (fremder Schluessel) -> 401", async () => {
+    await ctx.test("falsche Signatur (fremder Schluessel) -> 401", async () => {
       const token = await idp.sign({ email: "sig@team.test" }, { key: idp.wrongKey });
       const res = await post(`${srv.localUrl}/mcp`, token);
-      assert.equal(res.status, 401);
+      assert.equal(res.status, HTTP_UNAUTHORIZED);
     });
 
-    await t.test("gueltiges Token -> kein 401, req.auth.email gehasht im Log", async () => {
+    await ctx.test("gueltiges Token -> kein 401, req.auth.email gehasht im Log", async () => {
       const token = await idp.sign({ email: "alice@team.test" });
       const res = await post(`${srv.localUrl}/mcp`, token);
-      assert.notEqual(res.status, 401);
+      assert.notEqual(res.status, HTTP_UNAUTHORIZED);
       // T-P0-7: das [mcp]-Diagnose-Log zeigt die E-Mail nur gehasht, nie im Klartext.
       await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("alice@team.test")} tenant=`));
     });
@@ -85,52 +88,41 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
   }
 });
 
-test("MCP_AUTH=oauth: OAUTH_AUDIENCE-Override gilt (AM6, nicht der publicUrl/mcp-Default)", async (t) => {
-  // Bestand testet nur mit OAUTH_AUDIENCE == ${publicUrl}/mcp (= AUDIENCE), also den
-  // ||-Linkszweig mit identischem Wert. AM6 nagelt den ECHTEN Override-Pfad fest: ein
-  // OAUTH_AUDIENCE != publicUrl/mcp (WorkOS Resource Indicator) wird verlangt, der
-  // kanonische Default NICHT mehr akzeptiert.
-  const CUSTOM = "https://workos-resource.example/mcp";
-  const idp = await startIdp();
-  const srv = await startServer({
-    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: CUSTOM },
+// E5/S2-A6: der DIVERGENTE OAUTH_AUDIENCE-Override ist kein Betriebszustand mehr,
+// sondern ein Boot-Refusal - bewusste Ruecknahme der AM6-Faehigkeit, nicht ein
+// Regressionsfang. Grund: bis hierher konnten aud-Erwartung (src/auth.js audience()) und
+// Metadaten-Verweis (PRM resource) auseinanderlaufen, ohne dass es jemand merkt; der
+// Client erfaehrt eine resource, der Server prueft eine andere aud - eine erfolgreiche
+// Autorisierung ist dann unmoeglich. T-32 verlangt EINEN angekuendigten Origin.
+// LIVE kostet das nichts: gemessen am 2026-09-18 gilt PRM.resource === publicUrl+"/mcp",
+// OAUTH_AUDIENCE ist also leer ODER exakt gleich. Was den Override-PFAD (audience() liest
+// oauthAudience, nicht den Default) weiter festhaelt, ist der Gleichheits-Pin in
+// test/s2-mcp-origin.test.js gegen die ausgelieferte PRM.
+test("MCP_AUTH=oauth: divergenter OAUTH_AUDIENCE -> Boot verweigert (exit 1)", async () => {
+  const { code, output } = await startServerExpectExit({
+    env: {
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: "https://idp.test",
+      OAUTH_AUDIENCE: "https://workos-resource.example/mcp",
+    },
   });
-  try {
-    await t.test("Well-known.resource = OAUTH_AUDIENCE (Override, nicht publicUrl/mcp)", async () => {
-      const res = await fetch(`${srv.localUrl}/.well-known/oauth-protected-resource`);
-      const doc = await res.json();
-      assert.equal(doc.resource, CUSTOM);
-      assert.notEqual(doc.resource, AUDIENCE, "der kanonische publicUrl/mcp-Default gilt NICHT");
-    });
-
-    await t.test("Token mit aud=Override -> kein 401", async () => {
-      const token = await idp.sign({ email: "over@team.test" }, { aud: CUSTOM });
-      const res = await post(`${srv.localUrl}/mcp`, token);
-      assert.notEqual(res.status, 401);
-    });
-
-    await t.test("Token mit aud=kanonisch (publicUrl/mcp) -> 401 (Override gilt)", async () => {
-      const token = await idp.sign({ email: "canon@team.test" }, { aud: AUDIENCE });
-      const res = await post(`${srv.localUrl}/mcp`, token);
-      assert.equal(res.status, 401);
-    });
-  } finally {
-    await srv.stop();
-    await idp.close();
-  }
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /\[boot\] Start abgebrochen/);
+  assert.match(output, /OAUTH_AUDIENCE/);
+  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
 });
 
-test("MCP_AUTH=oauth: JWKS-Discovery faellt auf oauth-authorization-server zurueck (WorkOS-Stil)", async (t) => {
+test("MCP_AUTH=oauth: JWKS-Discovery faellt auf oauth-authorization-server zurueck (WorkOS-Stil)", async (ctx) => {
   // IdP liefert NUR den OAuth-2.1-Metadata-Pfad, kein openid-configuration.
   const idp = await startIdp({ metadataPath: "/.well-known/oauth-authorization-server" });
   const srv = await startServer({
     env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE },
   });
   try {
-    await t.test("gueltiges Token wird trotzdem akzeptiert", async () => {
+    await ctx.test("gueltiges Token wird trotzdem akzeptiert", async () => {
       const token = await idp.sign({ email: "bob@team.test" });
       const res = await post(`${srv.localUrl}/mcp`, token);
-      assert.notEqual(res.status, 401);
+      assert.notEqual(res.status, HTTP_UNAUTHORIZED);
     });
   } finally {
     await srv.stop();
@@ -153,7 +145,7 @@ test("MCP_AUTH=off: /mcp offen (nur lokale Demos)", async () => {
   const srv = await startServer({ env: { MCP_AUTH: "off" } });
   try {
     const res = await post(`${srv.localUrl}/mcp`, null);
-    assert.notEqual(res.status, 401);
+    assert.notEqual(res.status, HTTP_UNAUTHORIZED);
   } finally {
     await srv.stop();
   }

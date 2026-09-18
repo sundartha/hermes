@@ -118,6 +118,14 @@ export const BASE_ENV = {
   // unberuehrt; ohne die Zeile leakt eine lokale .env mit CSRF_ENFORCE=false via dotenv
   // in jeden Spawn-Test und deaktivierte die Sicherung unbemerkt.
   CSRF_ENFORCE: "true",
+  // E5: die /mcp-Herkunftswache neutral auf den PRODUKTIONS-Default (scharf) und die
+  // additive Allowlist leer. Beide Zeilen sind Pflicht (Lehre test-base-env-drift): ohne
+  // sie leakt eine lokale .env via dotenv in JEDEN Spawn-Test - ein lokales
+  // MCP_ORIGIN_ENFORCE=false deaktivierte die Sicherung unbemerkt, ein lokaler Eintrag in
+  // MCP_ALLOWED_ORIGINS machte den Deny-Fall gruen, ohne dass er greift.
+  // test/s2-mcp-origin.test.js setzt beide gezielt.
+  MCP_ORIGIN_ENFORCE: "true",
+  MCP_ALLOWED_ORIGINS: "",
   // OUTBOUND-E4: der ANI-Riegel ist ein SICHERHEITS-Gate (kann Anrufe ablehnen) - neutral
   // AUS, byte-identisch zum Produktions-Default. Kein Bestandstest soll ihn ungewollt
   // scharf schalten; test/outbound-ani-gate.test.js setzt ihn explizit.

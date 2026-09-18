@@ -3234,14 +3234,6 @@
       "count": 13
     }
   },
-  "test/oauth.test.js": {
-    "id-length": {
-      "count": 3
-    },
-    "no-magic-numbers": {
-      "count": 12
-    }
-  },
   "test/onboard-persist-failure.test.js": {
     "id-length": {
       "count": 5

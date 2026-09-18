@@ -1941,6 +1941,24 @@ const rawConfig = {
   // PRODUCTION_FOOTGUNS: jeder Treffer dort ist FATAL - ein Not-Aus, der den Boot
   // verweigert, ist kein Not-Aus.
   csrfEnforce: boolEnv("CSRF_ENFORCE", process.env.CSRF_ENFORCE, { fallback: true }),
+  // E5 (MCP-Spec T-06): ADDITIVE Allowlist der /mcp-Herkunftswache. Leer = nur der
+  // angekuendigte Origin (PUBLIC_URL) ist erlaubt; leere Liste heisst NIE "alles
+  // erlaubt". Heilweg, wenn ein echter Client mit unbekanntem Origin ausgesperrt wird:
+  // den Host aus der Logzeile `grund=mcp_cross_origin origin=<host>` hier nachtragen.
+  // Jeder Eintrag MUSS ein absoluter http(s)-Origin ohne Pfad sein - ein Tippfehler
+  // sperrt sonst still den gemeinten Partner aus und wird deshalb beim Boot abgelehnt
+  // (boot-guard.angekuendigterOriginFindings).
+  mcpAllowedOrigins: csvEnv(process.env.MCP_ALLOWED_ORIGINS),
+  // E5/Owner-Entscheidung E-4: NOTVENTIL der /mcp-Herkunftswache, Default SCHARF. Wie
+  // csrfEnforce (s.o.) existiert der Schalter ALS RUECKFALL, nicht als Bequemlichkeit -
+  // und aus einem noch haerteren Grund: die Wache antwortet 403 VOR mcpAuth, ein
+  // Origin-sendender Client sieht dann nie die 401-Bearer-Challenge (src/auth.js,
+  // deny401) und kann sich nicht einmal neu autorisieren. Ohne Schalter ist der einzige
+  // Reparaturweg ein Deploy. BEWUSST NICHT in PRODUCTION_FOOTGUNS: jeder Treffer dort ist
+  // FATAL - ein Not-Aus, der den Boot verweigert, ist kein Not-Aus.
+  mcpOriginEnforce: boolEnv("MCP_ORIGIN_ENFORCE", process.env.MCP_ORIGIN_ENFORCE, {
+    fallback: true,
+  }),
   // NUR fuer lokale Tests ohne Twilio (z.B. curl gegen /voice/*). Niemals im Hosting setzen!
   skipTwilioSignatureCheck: boolEnv(
     "SKIP_TWILIO_SIGNATURE_CHECK",
@@ -2249,7 +2267,7 @@ function guardedConfig(target, path = "config") {
 // Fatal-Push, kein Doppel-Eval. rawConfig selbst bleibt der interne Speicher, wird aber
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
-  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "budgetWatchdogIntervalMs", "rateLimitPerMin", "csrfEnforce", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
+  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "budgetWatchdogIntervalMs", "rateLimitPerMin", "csrfEnforce", "mcpAllowedOrigins", "mcpOriginEnforce", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "inboundOutageAlertWindowMs", "inboundOutageAlertMinFailures", "inboundOutageAlertMinAttempts", "inboundOutageAlertFailSharePercent", "platformHoldEscalationMaxAgeMs", "paidWithoutNumberGraceMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso", "priceDriftMinIntervalMs", "priceDriftUnknownEscalateAfter"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "provisioningRetryMaxAttempts", "provisioningRetryMinIntervalMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],

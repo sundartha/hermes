@@ -13,6 +13,7 @@ import { usableFallbackProvider } from "./llm/provider.js";
 // IEL-B1: die EINE Definition von "Zugang des EL-Inbound-Wegs vollstaendig" (rein, config-frei).
 import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.js";
 import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "./elevenlabs/inbound-scope.js";
+import { normalisierterOrigin } from "./middleware.js";
 
 // Boot-Entkopplung (OT-1, AC5). Fuehrt einen Boot-Teilschritt aus und kappt seinen
 // Blast-Radius: faengt jeden Fehler, loggt ihn laut + secret-frei (nur err.message)
@@ -882,5 +883,128 @@ export function elInboundScopeFindings(scope) {
         `ELEVENLABS_INBOUND_SCOPE ist unbekannt. Gueltig: ${Object.values(INBOUND_EL_SCOPE).join("|")}. ` +
         `Handlung: Wert korrigieren oder leeren (Default ${DEFAULT_INBOUND_EL_SCOPE}).`,
     },
+  ];
+}
+
+// ---- E5/S2-A6: Eindeutigkeit des ANGEKUENDIGTEN Origins ---------------------------
+// Warum FATAL und nicht WARN (die Praezedenz llmFallbackFindings oben waehlt WARN,
+// ausdruecklich weil "ein Boot-Refusal einen Tippfehler gegen einen Telefonie-
+// Totalausfall tauschte" - der Fall ist hier benannt, nicht uebersehen): die vier
+// Befunde beschreiben nicht einen wirkungslosen Schalter, sondern eine
+// SICHERHEITSRELEVANTE Uneindeutigkeit. Laufen aud-Erwartung (src/auth.js audience())
+// und Metadaten-Verweis auseinander, prueft der Server eine andere Audience als die, die
+// er dem Client ankuendigt - der Client kann sich nie erfolgreich autorisieren, und
+// niemand merkt es. Ein PUBLIC_URL mit Pfad erzeugt eine "Audience", die kein Origin
+// ist (T-32 friert scheme/host/port ein). Gegen den Telefonie-Totalausfall ist der
+// Schutz die REIHENFOLGE, nicht die Abschwaechung: Live-Werte lesen BEVOR deployed wird
+// (F-b/F-e); am 2026-09-18 belegen zwei oeffentliche Reads, dass PRM.resource ===
+// publicUrl + "/mcp" gilt, dieser Riegel beim ersten Deploy also nicht fatal werden kann.
+export const ANGEKUENDIGTER_ORIGIN_FINDING = Object.freeze({
+  AUDIENCE_DIVERGENT: "angekuendigte_audience_divergent",
+  PUBLIC_URL_UNPARSBAR: "public_url_unparsbar",
+  PUBLIC_URL_MIT_PFAD: "public_url_mit_pfad",
+  PUBLIC_URL_UNSICHER: "public_url_unsicher",
+  ALLOWLIST_UNPARSBAR: "mcp_allowlist_unparsbar",
+});
+
+// Pfad, den die kanonische MCP-Audience an den angekuendigten Origin anhaengt (G25).
+const MCP_AUDIENCE_PFAD = "/mcp";
+const HTTPS_PROTOKOLL = "https:";
+const RAND_SCHRAEGSTRICHE = /\/+$/;
+
+// Vergleichsform beider Audience-Seiten: getrimmt, ohne abschliessende Schraegstriche.
+// BEWUSST NICHT stripTrailingSlash (src/config.js): das entfernt GENAU EINEN Slash und
+// lebt in dem config-Modul, das diese Datei absichtlich nicht importiert. Ein live
+// gemeintes ".../mcp/" darf keinen Boot-Abbruch ausloesen (Nachbesserung PM-8).
+function fuerAudienceVergleich(wert) {
+  return String(wert ?? "").trim().replace(RAND_SCHRAEGSTRICHE, "");
+}
+
+// Die kanonische Audience aus dem angekuendigten Origin. MUSS identisch bleiben zu
+// audience() in src/auth.js (dort `oauthAudience || ${publicUrl}/mcp`). Diese Gleichheit
+// ist NICHT per Konvention gesichert: test/s2-mcp-origin.test.js vergleicht den Wert
+// gegen die resource-Angabe, die der laufende Server unter
+// /.well-known/oauth-protected-resource ausliefert.
+export function kanonischeAudience(publicUrl) {
+  return `${fuerAudienceVergleich(publicUrl)}${MCP_AUDIENCE_PFAD}`;
+}
+
+function audienceFindings({ publicUrl, oauthAudience }) {
+  if (!oauthAudience) return [];
+  const erwartet = kanonischeAudience(publicUrl);
+  if (fuerAudienceVergleich(oauthAudience) === erwartet) return [];
+  return [
+    {
+      code: ANGEKUENDIGTER_ORIGIN_FINDING.AUDIENCE_DIVERGENT,
+      fatal: true,
+      message:
+        `OAUTH_AUDIENCE weicht von der kanonischen MCP-Audience ab (erwartet: ${erwartet}). ` +
+        "Handlung: Wert leeren (dann gilt der kanonische Default) oder exakt darauf setzen.",
+    },
+  ];
+}
+
+// publicUrl LEER liefert bewusst [] - dafuer gibt es schon einen Eigentuemer
+// (assertConfig, config.js: leer oder CHANGE-ME -> Boot-Refusal). Zwei Riegel auf
+// dieselbe Aussage waeren zwei Orte, die auseinanderlaufen koennen.
+function publicUrlFindings({ publicUrl, isProduction }) {
+  const wert = fuerAudienceVergleich(publicUrl);
+  if (!wert) return [];
+  let url;
+  try {
+    url = new URL(wert);
+  } catch {
+    return [
+      {
+        code: ANGEKUENDIGTER_ORIGIN_FINDING.PUBLIC_URL_UNPARSBAR,
+        fatal: true,
+        message:
+          "PUBLIC_URL ist keine absolute URL (erwartet z.B. https://app.example.com, ohne Pfad).",
+      },
+    ];
+  }
+  const findings = [];
+  if (url.pathname !== "/" || url.search || url.hash)
+    findings.push({
+      code: ANGEKUENDIGTER_ORIGIN_FINDING.PUBLIC_URL_MIT_PFAD,
+      fatal: true,
+      message:
+        "PUBLIC_URL traegt Pfad, Query oder Fragment. Der angekuendigte Origin ist nur " +
+        "scheme://host[:port] - alles danach entfernen.",
+    });
+  if (isProduction && url.protocol !== HTTPS_PROTOKOLL)
+    findings.push({
+      code: ANGEKUENDIGTER_ORIGIN_FINDING.PUBLIC_URL_UNSICHER,
+      fatal: true,
+      message: "PUBLIC_URL ist im Hosting nicht https (gleiche Linie wie isInsecureHttpIssuer).",
+    });
+  return findings;
+}
+
+// Meldung nennt die POSITION, nie den Wert (Muster elInboundScopeFindings: kein Echo
+// eines eingegebenen Strings ins Log).
+function allowlistFindings(allowedOrigins) {
+  return allowedOrigins
+    .map((eintrag, index) => ({ eintrag, position: index + 1 }))
+    .filter(({ eintrag }) => !normalisierterOrigin(eintrag))
+    .map(({ position }) => ({
+      code: ANGEKUENDIGTER_ORIGIN_FINDING.ALLOWLIST_UNPARSBAR,
+      fatal: true,
+      message:
+        `MCP_ALLOWED_ORIGINS: Eintrag ${position} ist kein absoluter http(s)-Origin ` +
+        "(erwartet z.B. https://chatgpt.com, ohne Pfad). Der Wert wird bewusst nicht geloggt.",
+    }));
+}
+
+export function angekuendigterOriginFindings({
+  publicUrl,
+  oauthAudience,
+  allowedOrigins = [],
+  isProduction = false,
+} = {}) {
+  return [
+    ...audienceFindings({ publicUrl, oauthAudience }),
+    ...publicUrlFindings({ publicUrl, isProduction }),
+    ...allowlistFindings(allowedOrigins),
   ];
 }

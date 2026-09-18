@@ -11,8 +11,12 @@
 // sessionIdGenerator=undefined nicht zum tools/list-POST mit).
 //
 // mcpAuth (src/auth.js: Legacy-Bearer-Token, statisches Token oder OAuth 2.1) ist und
-// bleibt die EINZIGE Absicherung auf POST, fail-closed (Default nur localhost).
-// GET/DELETE tragen KEINE Auth (nur 405). Die stateless/pure Bausteine (McpServer,
+// bleibt die einzige IDENTITAETS-Pruefung auf POST, fail-closed (Default nur localhost).
+// Seit E5 laeuft DAVOR mcpOriginOnlyMiddleware (s.u.): sie prueft die HERKUNFT
+// (DNS-Rebinding-Schutz, MCP-Spec T-06), ersetzt mcpAuth NICHT und schwaecht sie nicht
+// ab - es kommen strikt weniger Requests durch. GET/DELETE tragen weiter KEINE Auth
+// (nur 405), laufen aber durch dieselbe Herkunftswache.
+// Die stateless/pure Bausteine (McpServer,
 // Transport, registerTools, HERMES_SERVER_INFO, mcpServerOptions, consultAllowedFor,
 // mcpAuth, hashEmail, ANON_IDENTITY) kommen direkt aus ihren Quellmodulen (G5 - wie
 // normNum/localeFor in makeVoiceRoutes); nur config/store und der EINE requestTenant-
@@ -27,6 +31,7 @@ import { mcpAuth } from "../auth.js";
 import { hashEmail } from "../util.js";
 import { ANON_IDENTITY } from "../request-tenant.js";
 import { tenantLanguage } from "../store/views.js";
+import { createMcpOriginGuard, mcpErlaubteOrigins } from "../middleware.js";
 
 // deps: { config, store, requestTenant }. config = globales Config-Objekt (mcpUiEnabled).
 // store traegt resolveProfile. requestTenant = die EINE Wurzel-Instanz (INV-7; loest den
@@ -48,6 +53,25 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
   // Stateless: pro Request ein frischer Server+Transport (einfach & robust fuer den Prototyp).
   // Auth via mcpAuth-Middleware (src/auth.js): Legacy-Bearer-Token, statisches
   // Token oder OAuth 2.1 (MCP_AUTH). Fail-closed bleibt Default (nur localhost).
+  //
+  // E5 (MCP-Spec T-06): Herkunftswache VOR mcpAuth, PFADGEBUNDEN gemountet. Der Pfad ist
+  // nicht Kosmetik - der Router haengt in src/app.js auf "/", ein router.use(guard) OHNE
+  // Pfad saehe JEDEN Request des Gateways und wiese jede Browser-Route fremder Herkunft
+  // ab (lokal auch das eigene Dashboard). Eine use-Schicht deckt POST, GET, DELETE, das
+  // Auto-OPTIONS und jede spaeter ergaenzte Methode in einer Zeile (fail-closed). Die
+  // Allowlist entsteht EINMAL hier, nicht pro Request; ihre Eingaben sind beim Boot
+  // geprueft (boot-guard.angekuendigterOriginFindings).
+  router.use(
+    "/mcp",
+    createMcpOriginGuard({
+      erlaubteOrigins: mcpErlaubteOrigins({
+        publicUrl: config.server.publicUrl,
+        zusaetzlicheOrigins: config.safety.mcpAllowedOrigins,
+      }),
+      enforce: config.safety.mcpOriginEnforce,
+    }),
+  );
+
   router.post("/mcp", mcpAuth, async (req, res) => {
     // tenant=<id|reject|owner> auditiert die I4-Aufloesung (kein Secret: nur die
     // tenantId, nie email/sub). Flag aus -> immer tenant=owner (byte-identisch).
