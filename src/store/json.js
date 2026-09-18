@@ -955,6 +955,11 @@ export function releaseOutboundReserve(call) {
   return ops.releaseOutboundReserve(load(), call);
 }
 
+// E3: KEIN save() - dieselbe Begruendung wie oben (reservations ist strukturell ephemer).
+export function releaseOutboundReserveCents(tenantId, cents) {
+  return ops.releaseOutboundReserveCents(load(), tenantId, cents);
+}
+
 export function reservationOf(tenantId) {
   return ops.reservationFor(load(), tenantId);
 }

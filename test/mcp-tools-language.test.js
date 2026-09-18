@@ -273,6 +273,9 @@ test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
       "callStillRunning",
       "emptyInbox",
       "inboxSummaryUnavailable",
+      // E3 (N-11): Dedup-Hinweis - eine Luecke schriebe "undefined" in den Textblock der
+      // Antwort auf einen deduplizierten place_call.
+      "callAlreadyRunningHint",
     ])
       assert.ok(
         typeof texts[key] === "string" && texts[key].length > 0,

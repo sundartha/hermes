@@ -287,6 +287,22 @@ const CONSULT_ANSWER_CONFLICT_STATUS = 409;
 const ABORT_ERROR_NAMES = new Set(["AbortError", "TimeoutError"]);
 const isAbortError = (err) => ABORT_ERROR_NAMES.has(err?.name);
 
+// E3 (T-27): die Frist des EINEN Hops, der einen echten Anruf ausloest. Sie ist STRUKTURELL
+// groesser als das gesamte Vorwahl-Budget des Servers, damit ein Zeitablauf nie einen
+// laufenden Anrufstart kappt - am Seam abgelesen, nicht geraten:
+//   Anrufstart blockiert ueber die Klingelphase: REQUEST_TIMEOUT_MS 120000
+//     (elevenlabs/convai.js, dort GEMESSEN: 40,3 s blosses Klingeln)
+// + Pre-Call-Briefing: config.llm.briefingTimeoutMs (6000), BRIEFING_MAX_RETRIES = 0
+// + Eroeffnungszeile: DERSELBE Wert, OPENING_MAX_RETRIES = 0 (elevenlabs/opening-line-llm.js)
+// Backoff faellt weg: withRetry (llm.js) schlaeft nur VOR einem Retry, bei max=0 also nie.
+// Summe 132000, hier 180000 - 48 s Kopf.
+// KEIN Env-Knopf: eine kuerzere Frist erzeugt genau die Waise, die diese Etappe beseitigt
+// (der Abbruch verhindert den Anruf nicht, er kappt nur unsere Kennung). Praezedenz fuer
+// "interner Transport-Bound, kein Operator-Knopf" ist REQUEST_TIMEOUT_MS selbst.
+// Wer PRECALL_BRIEFING_TIMEOUT_MS anhebt, muss hier nachrechnen -
+// test/openai-s3-hop-frist.test.js faellt dann rot.
+export const PLACE_CALL_HOP_TIMEOUT_MS = 180000;
+
 const NO_CONSULT_EVENT = Object.freeze({
   event: CONSULT_EVENT.NONE,
   eventId: null,
@@ -324,6 +340,10 @@ const CALL_OUTPUT = {
   result_summary: z.string().nullable(),
   objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
   context_received: CONTEXT_RECEIVED_OUTPUT,
+  // E3 (N-11): lief die Aktion schon? true = der zurueckgegebene Anruf lief bereits, es wurde
+  // kein zweiter gestartet. NUR hier, NICHT in CALL_STATUS_OUTPUT - get_call_status bleibt
+  // unveraendert.
+  deduplicated: z.boolean(),
 };
 
 // I10: defensive Normalisierung des context_received-Metas aus der Gateway-Antwort
@@ -526,7 +546,7 @@ const OPEN_QUESTIONS_FIELD = z
 // Bestands-Beschreibung von place_call, byte-identisch aus dem Tool-Deskriptor
 // herausgeloest (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
 const PLACE_CALL_DESCRIPTION =
-  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status.";
+  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Calling it again for a running number returns that same call (deduplicated: true).";
 
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
@@ -661,6 +681,26 @@ export function registerTools(
       });
     } catch (err) {
       if (isAbortError(err)) return NO_CONSULT_EVENT;
+      throw err;
+    }
+  };
+  // E3: eigener, benannter Zugang fuer den EINEN Aufruf, der einen echten Anruf ausloest -
+  // dasselbe Muster wie pollConsult (kein viertes Positions-Argument an call(), keine zweite
+  // fetch-Implementierung). call() selbst bleibt unangetastet, die uebrigen Werkzeuge damit
+  // byte-identisch. Der Zeitablauf wird hier NICHT geschluckt (anders als beim Long-Poll):
+  // er wird zu einer stabilen Kennung, die wrapHandler in der Tenant-Sprache ausgibt.
+  const placeCallHop = async (body) => {
+    try {
+      return await api({
+        method: "POST",
+        path: "/api/calls",
+        body,
+        identity,
+        scopedTenant,
+        timeoutMs: PLACE_CALL_HOP_TIMEOUT_MS,
+      });
+    } catch (err) {
+      if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_UNCONFIRMED);
       throw err;
     }
   };
@@ -889,7 +929,7 @@ export function registerTools(
       ...enableWidgetUi(WIDGET_CALL),
     },
     async (args) => {
-      const r = await call("POST", "/api/calls", args);
+      const r = await placeCallHop(args);
       requireFields(r, { callId: "string" });
       const data = {
         call_id: r.callId,
@@ -900,18 +940,23 @@ export function registerTools(
         result_summary: null,
         objective_achieved: null,
         context_received: normalizeContextReceived(r.context_received), // I10
+        // E3: defensive Normalisierung wie normalizeContextReceived - ein Gateway-Body ohne
+        // das additive Feld (aelterer Mock) darf nicht crashen; fail-closed auf false, nie
+        // auf Verdacht "war schon da".
+        deduplicated: !!r.deduplicated,
       };
       // AL-P13: der Berechtigungs-Hinweis haengt EINMAL JE ANRUF am place_call-Ergebnis,
       // NICHT an jedem Poll - ein einmaliger Einrichtungs-Schritt ist zumutbar, ein Klick
       // pro Rueckfrage nicht. Kanal aus -> Textblock byte-identisch zum Bestand.
       const started = JSON.stringify({ call_id: data.call_id, status: data.status }, null, 2);
+      // E3 (N-11): der Dedup-Hinweis reist als eigene Zeile, NICHT im started-JSON-Block
+      // (der bleibt byte-identisch gepinnt, test/mcp-ui.test.js).
+      const hinweise = [
+        data.deduplicated ? loc.mcp.callAlreadyRunningHint : null,
+        consultAllowed ? loc.mcp.consultPermissionHint : null,
+      ].filter(Boolean);
       return {
-        content: [
-          {
-            type: "text",
-            text: consultAllowed ? `${started}\n${loc.mcp.consultPermissionHint}` : started,
-          },
-        ],
+        content: [{ type: "text", text: [started, ...hinweise].join("\n") }],
         structuredContent: data,
       };
     },

@@ -32,6 +32,7 @@ import {
   runOutboundGates,
 } from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
+import { findDuplicateOutboundCall } from "../telephony/call-dedup.js";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
@@ -272,6 +273,65 @@ const languageUnavailableBody = () => ({
   code: LANGUAGE_UNAVAILABLE,
 });
 
+// E3: 503 als benannte Konstante (G25; ausserdem haelt das die gepinnte
+// no-magic-numbers-Inventur dieser Datei unveraendert). Dieselbe Klasse wie der
+// Gate-Fehlerpfad (outbound-gates.js) - Dienst voruebergehend nicht moeglich, kein Anruf.
+const HTTP_SERVICE_UNAVAILABLE = 503;
+
+// Der Text der Fehlerklammer. Bewusst NICHT sprachabhaengig und bewusst generisch, dieselbe
+// Begruendung wie GATE_ERROR_MESSAGE (outbound-gates.js): die Sprachquelle koennte im
+// Fehlerfall selbst werfen, und kein Innenleben/keine ID gehoert an den Client (Regel 4).
+const CLAIM_ERROR_MESSAGE =
+  "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
+
+// E3: EIN synchroner Lock-Abschnitt - Dedup-Entscheidung UND Datensatz. Der Body enthaelt
+// KEIN await (Invariante store.js#withStoreLock); nur so sind zwei gleichzeitige Anrufe auf
+// dasselbe Ziel wirklich serialisiert und es entsteht genau EIN Datensatz.
+// Das Praedikat liegt HINTER der vollstaendigen Gate-Kette und kann kein Gate ueberspringen -
+// die Aenderung ist strikt EINSCHRAENKEND (ein Fall mehr, in dem NICHT gewaehlt wird).
+function claimCallRecord({ store, ctx, felder, nowMs }) {
+  const laufender = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
+    to: ctx.to,
+    nowMs,
+  });
+  if (laufender) return { call: laufender, deduplicated: true };
+  return { call: store.createCall(felder), deduplicated: false };
+}
+
+// E3: EINE Antwortform fuer beide Ausgaenge (G5) - der deduplizierte Aufruf beantwortet
+// dieselben Fragen wie der gewaehlte. 200 statt 409 mit Absicht: ein Fehler liesse das Modell
+// "der Anruf hat nicht geklappt" sagen, WAEHREND ein echter Anruf laeuft, und
+// await_call_event/get_call_status laufen mit der ersten callId auf dem richtigen Anruf weiter.
+// deduplicated ist IMMER vorhanden - der Client soll nicht zwischen "Feld fehlt" und "false"
+// raten muessen. status bleibt hart "dialing" wie im Bestand (der MCP-Handler setzt es ebenso).
+function placeCallResponseBody({ call, ctx, config, deduplicated }) {
+  return {
+    ok: true,
+    callId: call.id,
+    twilioSid: call.twilioSid,
+    status: "dialing",
+    deduplicated,
+    context_received: contextReceivedMeta(ctx.context, config), // I10
+    diagnostic: call.diagnostic, // P2b
+  };
+}
+
+// E3: der Fehlerausgang des Fensters Gate-Ende..createCall. Es gibt KEINEN Datensatz, also
+// greift releaseOutboundReserveCents (NICHT releaseOutboundReserve, das einen Call braucht) -
+// die Reserve DIESES Requests, nicht mehr. Eigener, kurzer Lock-Abschnitt; scheitert auch der,
+// wird das laut, aber die Antwort geht trotzdem raus (eine stumme Antwort ist der schlechtere
+// Ausgang, Praezedenz beobachteAblehnung).
+async function gibReserveZurueckUndMelde({ store, ctx, fehler }) {
+  console.error(`[place_call] Anlegen fehlgeschlagen tenant=${ctx.tenantId}:`, fehler?.message);
+  try {
+    await store.withStoreLock(() =>
+      store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents),
+    );
+  } catch (freigabeFehler) {
+    console.error("[place_call] Reserve nicht freigebbar:", freigabeFehler?.message);
+  }
+}
+
 // deps: siehe Modul-Doc. arm = { armMaxDurationTimer, armReserveReleaseTimer } aus der EINEN
 // lifecycle-Instanz (Cap-/Reserve-Backstop, INV-7); finishCall = callFinish.finishCall (bare,
 // EINE Referenz wie in call-lifecycle.js); tenant = { requestTenant, requireTenant,
@@ -369,99 +429,124 @@ export function makeCallRoutes({
     // Auftraggeber-Kette. Das ist die GESPRAECHSsprache; die Sprache des
     // Offenlegungssatzes entsteht getrennt und aus dem Angerufenen
     // (elevenlabs/call-locale.js#disclosureLanguageOf) und wird hier nicht beruehrt.
-    const language =
-      requestedLanguage ||
-      store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
-    // P2b + OC-P1: beide serverseitigen Praedikate (diagnostic, calleeIsOwner) aus EINER
-    // Lesung der eigenen Nummer - volle Begruendung an resolveCallPrivacyFlags (Modul-Ebene,
-    // haelt diese ohnehin ueberlange Route nicht weiter wachsen, s. dortiger Kommentar).
-    const { diagnostic, calleeIsOwnerOfThisCall } = resolveCallPrivacyFlags({
-      store,
-      config,
-      ctx,
-    });
-
-    // P8 (PLAN-CONVERSATION-QUALITY-V2): Pre-Call-Briefing VOR dem Waehlen. Laeuft NUR,
-    // wenn der Owner selbst keinen Kontext mitgeschickt hat (Owner-Eingabe gewinnt immer),
-    // und nur hinter PRECALL_BRIEFING_ENABLED (Default aus). Fail-Soft: Fehler/Timeout/
-    // Schemaverstoss -> null -> ctx.context bleibt null -> systemPrompt byte-identisch
-    // zum Bestand (assistantContextSection: `!call.context -> ""`). Bewusst KEIN Gate in
-    // der outboundGates-Kette (Praezedenz diagnostic oben): es lehnt nie ab und haette die
-    // reihenfolge-gepinnte Safety-Kette nur verbreitert. Position NACH der Kette ist
-    // Pflicht - so entstehen keine Briefing-Token fuer einen Call, den Budget-, Nummern-
-    // oder KYC-Gate ohnehin ablehnen (Regel 1).
-    if (!ctx.context) {
-      const briefed = await fetchPrecallBriefing({
-        objective: ctx.objective,
-        ownerNotes: b.briefing,
-        constraints: b.constraints,
-        to: ctx.to,
-        tenantId: ctx.tenantId,
-      });
-      if (briefed) {
-        ctx.context = briefed.context;
-        ctx.mandate = ctx.mandate || briefed.mandate;
-      }
-    }
-
-    // Thema A (Auftrag 2026-08-19): die Eroeffnungszeile des ElevenLabs-Wegs entsteht
-    // BEI AUFTRAGSANNAHME - vorab erzeugt, fail-closed validiert, mit Rueckfall-Treppe
-    // (src/elevenlabs/opening-line.js). NUR hinter dem EL-Schalter: die beiden
-    // Der TeXML-Zweig liest die Zeile nie, eine Erzeugung dort waere bezahlter Muell.
-    // Position NACH der Gate-Kette wie das Briefing (Regel 1: keine LLM-Token fuer
-    // einen Anruf, den ein Gate ablehnt). Die Sprache kommt aus DERSELBEN Aufloesung,
-    // die der Anrufstart benutzt (callLocaleOf, elevenlabs/outbound.js) - kein zweiter
-    // Sprachweg, der still divergieren koennte. Geloggt werden nur Quelle und Laenge,
-    // NIE der Text (er traegt Auftragsinhalt, Regel 4).
-    let openingLine = null;
-    if (config.voice.elevenLabsOutbound.enabled) {
-      const { ownerName } = store.tenantContext(ctx.tenantId);
-      const callLocale = callLocaleOf({
+    // E3: die Antwort auf einen deduplizierten Aufruf braucht "call" ausserhalb des
+    // try-Abschnitts (emitOpeningConsult, der Originate-Block). Deshalb hier hoisted und
+    // im try-Body per Zuweisung gefuellt (kein zweites const call weiter unten).
+    let call;
+    try {
+      const language =
+        requestedLanguage ||
+        store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
+      // P2b + OC-P1: beide serverseitigen Praedikate (diagnostic, calleeIsOwner) aus EINER
+      // Lesung der eigenen Nummer - volle Begruendung an resolveCallPrivacyFlags (Modul-Ebene,
+      // haelt diese ohnehin ueberlange Route nicht weiter wachsen, s. dortiger Kommentar).
+      const { diagnostic, calleeIsOwnerOfThisCall } = resolveCallPrivacyFlags({
         store,
         config,
-        // P4a: die Gespraechssprache steht bereits fest (s. oben) und reist mit - sie
-        // wird hier NICHT zum zweiten Mal aufgeloest (G5). Die Grund-Zeile entsteht in
-        // der Sprache des Gespraechs, der Pflichtsatz davor in der des Angerufenen.
-        call: { tenantId: ctx.tenantId, from: ctx.fromNumber, to: ctx.to, language },
-        ownerName,
+        ctx,
       });
-      const opening = await fetchOpeningLine({
-        objective: ctx.objective,
-        tenantId: ctx.tenantId,
-        locale: localeFor(callLocale.language),
-      });
-      openingLine = opening.line;
-      console.log(`[opening-line] quelle=${opening.source} zeichen=${openingLine.length}`);
-    }
 
-    // Der /voice/outbound-Webhook rendert dank call.provider (P6a) automatisch TeXML
-    // statt TwiML.
-    const call = store.createCall({
-      direction: "outbound",
-      from: ctx.fromNumber,
-      to: ctx.to,
-      goal: ctx.objective,
-      openingLine, // Thema A: null auf dem TeXML-Zweig (s. Block oben)
-      briefing: b.briefing,
-      constraints: b.constraints,
-      context: ctx.context,
-      mandate: ctx.mandate, // P6: serverseitig normalisiert, nie roh aus dem Body
-      language,
-      maxDurationS: ctx.maxDur,
-      requestedBy: ctx.requestedBy,
-      tenantId: ctx.tenantId,
-      provider: ctx.outboundProvider,
-      reserveCents: ctx.reserveCents, // OUT-05 (F2)
-      diagnostic, // P2b: serverseitig aufgeloest, nie roh aus dem Body
-      // OC-P1: ebenfalls rein serverseitig - der Aufrufer nennt nur `to`, alles andere
-      // (eigene Nummer, Schalter, Allowlist) entscheidet der Server. Kein Client-Flag.
-      calleeIsOwner: calleeIsOwnerOfThisCall,
-    });
-    audit(
-      "place_call",
-      req,
-      `to=${ctx.to} call=${call.id} provider=${ctx.outboundProvider} requestedBy=${ctx.requestedBy}`,
-    );
+      // P8 (PLAN-CONVERSATION-QUALITY-V2): Pre-Call-Briefing VOR dem Waehlen. Laeuft NUR,
+      // wenn der Owner selbst keinen Kontext mitgeschickt hat (Owner-Eingabe gewinnt immer),
+      // und nur hinter PRECALL_BRIEFING_ENABLED (Default aus). Fail-Soft: Fehler/Timeout/
+      // Schemaverstoss -> null -> ctx.context bleibt null -> systemPrompt byte-identisch
+      // zum Bestand (assistantContextSection: `!call.context -> ""`). Bewusst KEIN Gate in
+      // der outboundGates-Kette (Praezedenz diagnostic oben): es lehnt nie ab und haette die
+      // reihenfolge-gepinnte Safety-Kette nur verbreitert. Position NACH der Kette ist
+      // Pflicht - so entstehen keine Briefing-Token fuer einen Call, den Budget-, Nummern-
+      // oder KYC-Gate ohnehin ablehnen (Regel 1).
+      if (!ctx.context) {
+        const briefed = await fetchPrecallBriefing({
+          objective: ctx.objective,
+          ownerNotes: b.briefing,
+          constraints: b.constraints,
+          to: ctx.to,
+          tenantId: ctx.tenantId,
+        });
+        if (briefed) {
+          ctx.context = briefed.context;
+          ctx.mandate = ctx.mandate || briefed.mandate;
+        }
+      }
+
+      // Thema A (Auftrag 2026-08-19): die Eroeffnungszeile des ElevenLabs-Wegs entsteht
+      // BEI AUFTRAGSANNAHME - vorab erzeugt, fail-closed validiert, mit Rueckfall-Treppe
+      // (src/elevenlabs/opening-line.js). NUR hinter dem EL-Schalter: die beiden
+      // Der TeXML-Zweig liest die Zeile nie, eine Erzeugung dort waere bezahlter Muell.
+      // Position NACH der Gate-Kette wie das Briefing (Regel 1: keine LLM-Token fuer
+      // einen Anruf, den ein Gate ablehnt). Die Sprache kommt aus DERSELBEN Aufloesung,
+      // die der Anrufstart benutzt (callLocaleOf, elevenlabs/outbound.js) - kein zweiter
+      // Sprachweg, der still divergieren koennte. Geloggt werden nur Quelle und Laenge,
+      // NIE der Text (er traegt Auftragsinhalt, Regel 4).
+      let openingLine = null;
+      if (config.voice.elevenLabsOutbound.enabled) {
+        const { ownerName } = store.tenantContext(ctx.tenantId);
+        const callLocale = callLocaleOf({
+          store,
+          config,
+          // P4a: die Gespraechssprache steht bereits fest (s. oben) und reist mit - sie
+          // wird hier NICHT zum zweiten Mal aufgeloest (G5). Die Grund-Zeile entsteht in
+          // der Sprache des Gespraechs, der Pflichtsatz davor in der des Angerufenen.
+          call: { tenantId: ctx.tenantId, from: ctx.fromNumber, to: ctx.to, language },
+          ownerName,
+        });
+        const opening = await fetchOpeningLine({
+          objective: ctx.objective,
+          tenantId: ctx.tenantId,
+          locale: localeFor(callLocale.language),
+        });
+        openingLine = opening.line;
+        console.log(`[opening-line] quelle=${opening.source} zeichen=${openingLine.length}`);
+      }
+
+      // Der /voice/outbound-Webhook rendert dank call.provider (P6a) automatisch TeXML
+      // statt TwiML.
+      const felder = {
+        direction: "outbound",
+        from: ctx.fromNumber,
+        to: ctx.to,
+        goal: ctx.objective,
+        openingLine, // Thema A: null auf dem TeXML-Zweig (s. Block oben)
+        briefing: b.briefing,
+        constraints: b.constraints,
+        context: ctx.context,
+        mandate: ctx.mandate, // P6: serverseitig normalisiert, nie roh aus dem Body
+        language,
+        maxDurationS: ctx.maxDur,
+        requestedBy: ctx.requestedBy,
+        tenantId: ctx.tenantId,
+        provider: ctx.outboundProvider,
+        reserveCents: ctx.reserveCents, // OUT-05 (F2)
+        diagnostic, // P2b: serverseitig aufgeloest, nie roh aus dem Body
+        // OC-P1: ebenfalls rein serverseitig - der Aufrufer nennt nur `to`, alles andere
+        // (eigene Nummer, Schalter, Allowlist) entscheidet der Server. Kein Client-Flag.
+        calleeIsOwner: calleeIsOwnerOfThisCall,
+      };
+      // E3: EIN synchroner Lock-Abschnitt - Dedup-Entscheidung UND Datensatz-Anlage.
+      const claim = await store.withStoreLock(() =>
+        claimCallRecord({ store, ctx, felder, nowMs: Date.now() }),
+      );
+      call = claim.call;
+      // E3: deduplizierter Aufruf - KEIN Originate, KEIN Consult, KEIN Timer, KEIN Kostenprofil.
+      // Die selbst gebuchte Reserve geht in einem ZWEITEN, kurzen Lock-Abschnitt zurueck (der
+      // erste traegt allein die Claim-Entscheidung), ohne Datensatz und damit ohne Stunden-
+      // oder Ziel-Kontingent-Verbrauch.
+      if (claim.deduplicated) {
+        await store.withStoreLock(() =>
+          store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents),
+        );
+        audit("place_call_dedup", req, `to=${ctx.to} call=${call.id} tenant=${ctx.tenantId}`);
+        return res.json(placeCallResponseBody({ call, ctx, config, deduplicated: true }));
+      }
+      audit(
+        "place_call",
+        req,
+        `to=${ctx.to} call=${call.id} provider=${ctx.outboundProvider} requestedBy=${ctx.requestedBy}`,
+      );
+    } catch (fehler) {
+      await gibReserveZurueckUndMelde({ store, ctx, fehler });
+      return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: CLAIM_ERROR_MESSAGE });
+    }
 
     // AL-P13 (Sprosse 3 der Fakten-Leiter): die offenen Fragen des Briefings werden
     // beantwortet, WAEHREND das Telefon klingelt - 0 ms Gespraechslatenz. Bewusst KEIN
@@ -511,17 +596,7 @@ export function makeCallRoutes({
         armMaxDurationTimer(call, tw.sid);
       }
       armReserveReleaseTimer(call); // OUT-05 (F2): Reserve-Backstop, BEIDE Pfade, nach erfolgreichem Originate
-      res.json({
-        ok: true,
-        callId: call.id,
-        twilioSid: call.twilioSid,
-        status: "dialing",
-        context_received: contextReceivedMeta(ctx.context, config), // I10
-        // P2b: ehrliche Rueckmeldung, ob der Diagnose-Wunsch gewaehrt wurde. Eine still
-        // verweigerte, datenschutzrelevante Anforderung ohne jede Beobachtbarkeit waere
-        // ein eigener Defekt (Praezedenz: context_received/I10). NUR ein Boolean.
-        diagnostic: call.diagnostic,
-      });
+      res.json(placeCallResponseBody({ call, ctx, config, deduplicated: false }));
     } catch (err) {
       // OUTBOUND-E3a (Befund C1, REIHENFOLGE-RIEGEL): der Grund wird INNERHALB von
       // persistEnd geschrieben (endFailedCallWithReason oben) - und persistEnd laeuft in

@@ -4717,3 +4717,50 @@ Werkzeug-Phase: kein Serververhalten, keine Route, kein Safety-Gate, keine Offen
   Pflicht-Vorbedingung bzw. Lesebeleg in Runbook (b).
 
 Tests: `test/iel-b10-geheimnisse.test.js` IEX-A11-1..8.
+
+## E3 — Anruf-Pfad-Idempotenz (180 s Fenster) und Hop-Frist (2026-09-18)
+
+**Anlass:** `place_call` hatte keinen serverseitigen Schutz gegen einen doppelten Anrufstart auf
+dasselbe Ziel - ein Host-Retry (z.B. nach einem Transport-Timeout) konnte einen zweiten, echten
+Anruf ausloesen, obwohl der erste noch lief. Zwei Bausteine schliessen die Luecke:
+
+**1. Dedup-Praedikat (`src/telephony/call-dedup.js`):** `findDuplicateOutboundCall` prueft, ob
+DIESER Tenant GERADE (Status `active`, `startedAt` innerhalb `DEDUP_WINDOW_MS` = 180000 ms) einen
+Outbound-Call an EXAKT dasselbe (bereits normalisierte) Ziel fuehrt. Rein, kein IO, strikter
+String-Vergleich (kein Praefix-/Fuzzy-Match, keine eigene Normalisierung). Sitzt in
+`src/routes/api-calls.js` HINTER der vollstaendigen Gate-Kette (`runOutboundGates`) - er kann kein
+Gate ueberspringen, die Aenderung ist strikt einschraenkend (ein Fall mehr, in dem NICHT gewaehlt
+wird). Ein Treffer beantwortet den Request mit demselben `callId` und `deduplicated: true` (200,
+kein Originate, kein Consult, kein Timer) statt einen zweiten Anruf zu starten.
+
+**2. Zweiter Reserve-Freigabeweg ohne Datensatz (`state-ops.js#releaseOutboundReserveCents`):** die
+Dedup-Antwort und die neue Fehlerklammer (Wurf zwischen Gate-Ende und `createCall`) haben selbst
+reserviert (`tryReserveOutboundBudget`), legen aber KEINEN Anruf-Datensatz an - `releaseOutboundReserve`
+(braucht `call.reserveReleased`) greift hier nicht. `releaseOutboundReserveCents(s, tenantId, cents)`
+ist die zweite, bewusst GETRENNTE Freigabe: Clamp `>= 0`, `isBookableCents`-Pruefung (dieselbe EINE
+Geld-Kanten-Quelle wie ueberall), KEIN `call.reserveReleased`-Schloss (es gibt nichts, woran es
+haengen koennte). **Invariante:** existiert ein Anruf-Datensatz, gilt AUSSCHLIESSLICH
+`releaseOutboundReserve`; `releaseOutboundReserveCents` laeuft NUR in den zwei Pfaden, die
+nachweislich keinen Datensatz anlegen. Zwei Freigabewege fuer denselben Betrag wuerden den Ledger
+unter den Ist-Stand senken und die pro-Tenant-Kostendecke aushoehlen (Absolute Regel 1) - deshalb
+schliessen sich die beiden Wege gegenseitig aus, nie beide fuer denselben Betrag.
+
+**3. Hop-Frist `PLACE_CALL_HOP_TIMEOUT_MS` (`src/mcp-tools.js`, 180000 ms):** der MCP-Host-seitige
+Timeout auf den `place_call`-Hop ist STRUKTURELL groesser als das gesamte Vorwahl-Budget des Servers
+(Klingelphase `REQUEST_TIMEOUT_MS` 120000 + zweimal `config.llm.briefingTimeoutMs` 6000, ohne
+Backoff bei `MAX_RETRIES = 0`), damit ein Zeitablauf niemals einen tatsaechlich zustande kommenden
+Anrufstart kappt. Ein Abbruch wird NICHT geschluckt (anders als beim Consult-Long-Poll), sondern zu
+`MCP_ERROR_CODE.CALL_START_UNCONFIRMED` - der lokalisierte Text sagt ausdruecklich, dass ein erneuter
+`place_call` an dieselbe Nummer den laufenden Anruf zurueckliefert statt einen zweiten zu starten
+(trifft die Dedup-Antwort oben). `DEDUP_WINDOW_MS >= PLACE_CALL_HOP_TIMEOUT_MS` ist Bedingung: ein
+Host-Retry NACH Fristablauf muss noch im Dedup-Fenster landen (per Test gehalten,
+`test/openai-s3-hop-frist.test.js`).
+
+**Bewusst akzeptiertes Risiko:** das 180-s-Fenster verhindert einen ABSICHTLICHEN zweiten Anruf an
+dasselbe Ziel innerhalb der Frist (Owner-Entscheidung E-3: am Telefon ohnehin selten sinnvoll,
+`deduplicated: true` macht die Antwort erklaerbar). `PRECALL_BRIEFING_TIMEOUT_MS` ist env-setzbar;
+zieht ein Betreiber ihn stark hoch, reisst die Frist-Invariante - kein Boot-Guard dagegen (Scope-
+Zuwachs), aber der Fristen-Test liest `config.llm.briefingTimeoutMs` LIVE und wird rot.
+
+Tests: `test/openai-s3-hop-frist.test.js`, `test/openai-s3-place-call-idempotenz.test.js`,
+`test/sec-p6-gate-fehlerpfad.test.js` (SEC-P6-2b, erweiterte Store-Erwartungstabelle).

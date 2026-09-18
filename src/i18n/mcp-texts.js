@@ -21,6 +21,11 @@ export const MCP_ERROR_CODE = Object.freeze({
   UPSTREAM_INVALID: "upstream_invalid",
   UPSTREAM_INCOMPLETE: "upstream_incomplete",
   UPSTREAM_UNREACHABLE: "upstream_unreachable",
+  // E3 (T-27): Zeitablauf auf dem place_call-Hop. NICHT "Anruf fehlgeschlagen" - der Anruf
+  // kann laufen (gemessen: bei 15 s Frist kam das Gespraech trotzdem zustande,
+  // elevenlabs/convai.js). Der Text sagt deshalb ausdruecklich, dass ein erneuter Versuch
+  // den laufenden Anruf zurueckliefert statt einen zweiten zu starten.
+  CALL_START_UNCONFIRMED: "call_start_unconfirmed",
 });
 
 export const MCP_TEXTS = Object.freeze({
@@ -44,6 +49,9 @@ export const MCP_TEXTS = Object.freeze({
         "Der Telefon-Agent hat eine unvollstaendige Antwort geliefert. Bitte spaeter erneut versuchen.",
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "Der Telefon-Agent ist momentan nicht erreichbar. Bitte spaeter erneut versuchen.",
+      [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
+        "Zeitablauf beim Anrufstart - der Anruf kann bereits laufen. Ein erneuter place_call an " +
+        "dieselbe Nummer liefert den laufenden Anruf zurueck und startet keinen zweiten.",
     }),
     // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
     // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
@@ -63,6 +71,9 @@ export const MCP_TEXTS = Object.freeze({
     consultPermissionHint:
       "Hinweis: Falls waehrend des Anrufs keine Live-Rueckfragen ankommen, muss die " +
       "Werkzeug-Berechtigung des Connectors auf 'Zulassen' stehen.",
+    // E3 (N-11): tenant-sichtbarer Dedup-Hinweis, dasselbe Muster wie consultPermissionHint.
+    callAlreadyRunningHint:
+      "Dieser Anruf lief schon - zurueckgegeben wird der laufende Anruf, es wurde kein zweiter gestartet.",
     consultAnswerAccepted: (n) => `${n} Angabe(n) an den Anruf uebergeben.`,
     // P2 (SCOPE 2): NIE gesprochen, tenant-sichtbarer Chat-Text derselben Klasse wie
     // consultAnswerAccepted - die Quittung ("working") ist keine Antwort und braucht
@@ -119,6 +130,9 @@ export const MCP_TEXTS = Object.freeze({
         "The phone agent returned an incomplete response. Please try again later.",
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "The phone agent is currently unavailable. Please try again later.",
+      [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
+        "Timed out while starting the call - the call may already be running. Calling place_call " +
+        "again for the same number returns the running call instead of starting a second one.",
     }),
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
@@ -128,6 +142,8 @@ export const MCP_TEXTS = Object.freeze({
     consultPermissionHint:
       "Note: if no live questions arrive during the call, the connector's tool permission " +
       "needs to be set to 'Allow'.",
+    callAlreadyRunningHint:
+      "This call was already running - the running call is returned, no second call was started.",
     consultAnswerAccepted: (n) => `${n} detail(s) passed on to the call.`,
     consultAckAccepted: "Consult acknowledged - the answer is expected next.",
     consultAnswerRejected:
@@ -163,6 +179,9 @@ export const MCP_TEXTS = Object.freeze({
         "L'agent téléphonique a renvoyé une réponse incomplète. Veuillez réessayer plus tard.",
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "L'agent téléphonique est actuellement injoignable. Veuillez réessayer plus tard.",
+      [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
+        "Délai dépassé au démarrage de l'appel - l'appel est peut-être déjà en cours. Un nouvel " +
+        "appel à place_call vers le même numéro renvoie l'appel en cours au lieu d'en démarrer un second.",
     }),
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",
@@ -173,6 +192,8 @@ export const MCP_TEXTS = Object.freeze({
     consultPermissionHint:
       "Remarque : si aucune question en direct n'arrive pendant l'appel, l'autorisation " +
       "d'outil du connecteur doit être réglée sur « Autoriser ».",
+    callAlreadyRunningHint:
+      "Cet appel était déjà en cours - l'appel en cours est renvoyé, aucun second appel n'a été lancé.",
     consultAnswerAccepted: (n) => `${n} information(s) transmise(s) à l'appel.`,
     consultAckAccepted: "Question accusée de réception - la réponse est attendue.",
     consultAnswerRejected:

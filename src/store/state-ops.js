@@ -4799,6 +4799,25 @@ export function releaseOutboundReserve(s, call) {
   return true;
 }
 
+// E3/S3-A4: Freigabe einer Reserve, zu der es KEINEN Anruf-Datensatz gibt. Nur zwei Aufrufer
+// (routes/api-calls.js): der deduplizierte Aufruf und die Fehlerklammer vor createCall - beide
+// haben selbst reserviert und legen nachweislich keinen Datensatz an.
+//
+// INVARIANTE, die diese Funktion von releaseOutboundReserve trennt: existiert ein Datensatz,
+// gilt AUSSCHLIESSLICH releaseOutboundReserve mit seinem call.reserveReleased-Schloss. Hier gibt
+// es kein Schloss (es gibt nichts, woran es haengen koennte) - deshalb darf diese Funktion NIE
+// fuer einen Betrag laufen, der an einem Datensatz haengt. Zwei Freigabewege fuer denselben
+// Betrag senkten den Ledger unter den Ist-Stand und hoehlten die pro-Tenant-Kostendecke aus
+// (Absolute Regel 1).
+//
+// Clamp >= 0 und die Buchbarkeits-Pruefung wie im Original (isBookableCents, EINE Quelle fuer
+// alle Geld-Kanten): ein unbuchbarer Betrag darf den Ledger NIE senken. Nebeneffekt im Namen (N7).
+export function releaseOutboundReserveCents(s, tenantId, cents) {
+  if (!isBookableCents(cents)) return false;
+  s.reservations[tenantId] = Math.max(0, reservationFor(s, tenantId) - cents);
+  return true;
+}
+
 // ---- Plattform-Fruehwarnung (Budget-Achsen P6) ----
 // Meldet - GENAU EINMAL pro Spend-Monat - dass die Plattform-Summe eine konfigurierbare
 // Warnschwelle ueberschritten hat. Seit KS-P9/E10 ist das die EINZIGE Wirkung der
