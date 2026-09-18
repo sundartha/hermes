@@ -323,6 +323,13 @@ import {
     }
   });
 
+  // Zurueck-Knopf aus dem Stripe-Checkout (18.09.2026): im Erfolgsfall bleibt der Knopf
+  // gesperrt, weil die Seite verlassen wird. Aus dem bfcache wiederhergestellt, liefe
+  // kein Skript neu -- ohne diese Zeile waere "Add a different card" danach tot.
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) addBtn.disabled = false;
+  });
+
   // Re-Fetch nach erfolgreicher Aktion: den State neu laden und per AUTH_EVENT an
   // ALLE Inseln (inkl. dieser) verteilen -> aktiver Plan, ggf. Nummer, ohne Reload.
   async function refreshState() {

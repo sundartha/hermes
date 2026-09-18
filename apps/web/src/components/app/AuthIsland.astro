@@ -39,6 +39,7 @@ import { LOGIN_URL } from "../../lib/routes.js";
     loadAuthState,
     logout,
     NUMBER_POLL_INTERVAL_MS,
+    SESSION_EXPIRED_EVENT,
     shouldPollNumberStatus,
   } from "../../lib/api.js";
   import { getLang, setLang, t, applyStaticTranslations, LANG_EVENT } from "../../lib/i18n.js";
@@ -89,9 +90,41 @@ import { LOGIN_URL } from "../../lib/routes.js";
     if (session) whoEl.textContent = whoText(result);
   }
 
+  // Lade-Race (18.09.2026, im Knopf-Audit gefunden): jede Insel ist ein eigenes
+  // Modul-Skript, und der Browser darf zwischen zwei Modul-Skripten andere Aufgaben
+  // abarbeiten -- etwa die Antwort des state-Fetch, den dieses Skript als ERSTES startet.
+  // Kam sie an, bevor das Seiten-Skript (app/index.astro, als letztes eingebunden) seinen
+  // AUTH_EVENT-Listener hatte, verpasste es den Zustand: die Seite blieb auf "Loading…"
+  // stehen, ohne einen einzigen bedienbaren Knopf (lokal gegen einen schnellen Server
+  // 5 von 15 Ladevorgaengen). DOMContentLoaded feuert erst, wenn alle Modul-Skripte
+  // gelaufen sind -- ab dann haengen alle Listener, und der erste Versand erreicht jede
+  // Insel. Der Fetch selbst startet weiter sofort; gewartet wird nur mit dem Verteilen.
+  // Ob DOMContentLoaded schon war, sagt NICHT document.readyState: Modul-Skripte laufen
+  // bereits im Zustand "interactive", und der bleibt nach dem Ereignis bis zum "load"
+  // stehen. Verlaesslich ist der Zeitstempel der Navigation (0 = noch nicht gefeuert).
+  // Ohne Navigation-Timing (sehr alter Browser) gilt es als gefeuert -- dann bleibt es
+  // beim bisherigen Verhalten.
+  const navEntry = performance.getEntriesByType("navigation")[0];
+  const domReady =
+    navEntry && navEntry.domContentLoadedEventStart === 0
+      ? new Promise((resolve) => document.addEventListener("DOMContentLoaded", resolve, { once: true }))
+      : Promise.resolve();
+
+  // true, solange ein state-Fetch dieser Insel laeuft. Dessen eigene 401 meldet sich
+  // ebenfalls als SESSION_EXPIRED_EVENT (lib/api.js) -- ohne diese Sperre loeste sie
+  // eine zweite Pruefung aus.
+  let checking = false;
+
   async function refresh() {
     if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
-    const result = await loadAuthState();
+    checking = true;
+    let result;
+    try {
+      result = await loadAuthState();
+      await domReady;
+    } finally {
+      checking = false;
+    }
     applyControls(result);
     // App-Shell ueber den ermittelten Zustand + Daten informieren. Empfaenger
     // registriert seinen Listener synchron beim Modul-Start; dieser dispatch
@@ -134,6 +167,50 @@ import { LOGIN_URL } from "../../lib/routes.js";
   // Initialer Stand vor dem ersten state-Fetch (Markup ist Englisch-Default).
   syncLangButtons();
   applyStaticTranslations(document);
+
+  // Owner-Befund 18.09.2026 ("der Update-Knopf geht nicht"): die Web-Session lebt eine
+  // Stunde, die Seite aber beliebig lange. Danach sah das Dashboard weiter eingeloggt aus,
+  // und jeder Knopf lief in eine 401. Zwei Wege holen den echten Zustand nach:
+  //  - eine 401 irgendwo auf der Seite (SESSION_EXPIRED_EVENT aus lib/api.js), und
+  //  - die Rueckkehr in den Tab (visibilitychange/pageshow), gedrosselt auf einmal pro
+  //    SESSION_RECHECK_MIN_MS -- so steht nach laengerer Abwesenheit schon VOR dem
+  //    ersten Klick "Anmeldung erforderlich" da.
+  // Neu verteilt wird NUR, wenn die Sitzung wirklich weg ist (401 -> anonym). Bleibt sie
+  // gueltig, passiert nichts: ein erneutes AUTH_EVENT wuerde offene Eingaben der Inseln
+  // (z.B. ungespeicherte Einstellungen) auf den Serverstand zuruecksetzen. Ein Netzfehler
+  // beim Nachpruefen schaltet ebenfalls nicht um -- ein Wackler im WLAN ist kein Logout.
+  const SESSION_RECHECK_MIN_MS = 30000;
+  let lastRecheckAt = 0;
+
+  async function recheckSession() {
+    if (checking || !lastAuthResult || !hasSession(lastAuthResult.state)) return;
+    checking = true;
+    lastRecheckAt = Date.now();
+    let result;
+    try {
+      result = await loadAuthState();
+    } finally {
+      checking = false;
+    }
+    if (result.state !== AUTH_STATE.ANONYMOUS) return;
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    applyControls(result);
+    document.dispatchEvent(new CustomEvent(AUTH_EVENT, { detail: result }));
+  }
+
+  function recheckOnReturn() {
+    if (document.visibilityState !== "visible") return;
+    if (Date.now() - lastRecheckAt < SESSION_RECHECK_MIN_MS) return;
+    recheckSession();
+  }
+
+  document.addEventListener(SESSION_EXPIRED_EVENT, recheckSession);
+  document.addEventListener("visibilitychange", recheckOnReturn);
+  // Zurueck-Knopf aus dem Stripe-Checkout: der Browser stellt die Seite aus dem
+  // Zwischenspeicher wieder her (bfcache), ohne ein Skript neu zu starten.
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) recheckOnReturn();
+  });
 
   logoutBtn.addEventListener("click", async () => {
     logoutBtn.disabled = true;
