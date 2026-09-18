@@ -129,6 +129,20 @@ test("E5-U12: angekuendigterOriginFindings toleriert Schraegstrich-Differenz (PM
   );
 });
 
+// E8: der GESETZTE, exakt kanonische Wert ist der zweite erlaubte Betriebszustand neben
+// "leer" (E5-U10) - live nicht unterscheidbar (RUNBOOK-LIVE-WERTE, F-b), deshalb darf
+// KEINER der beiden einen Befund ergeben. Ohne diese Zeile haengt die Zusage nur am
+// Spawn-Fall in test/oauth.test.js, der sie als Nebenwirkung mitbelegt statt sie zu pruefen.
+test("E8-U01: gesetzte, exakt kanonische OAUTH_AUDIENCE -> kein Befund", () => {
+  assert.deepEqual(
+    angekuendigterOriginFindings({
+      publicUrl: "https://agent.test",
+      oauthAudience: kanonischeAudience("https://agent.test"),
+    }),
+    [],
+  );
+});
+
 test("E5-U13: angekuendigterOriginFindings mit Pfad in PUBLIC_URL -> fatal public_url_mit_pfad", () => {
   const findings = angekuendigterOriginFindings({ publicUrl: "https://agent.test/gateway" });
   assert.ok(findings.some((finding) => finding.code === "public_url_mit_pfad" && finding.fatal));

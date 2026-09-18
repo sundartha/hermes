@@ -359,6 +359,12 @@ services:
       # Nur bei MCP_AUTH=oauth noetig: Issuer-URL des IdP (im Dashboard eintragen).
       - key: OAUTH_ISSUER_URL
         sync: false
+      # OAUTH_AUDIENCE (E8) hat hier BEWUSST keinen Eintrag: in Produktion bleibt die
+      # Variable leer, dann gilt die kanonische <PUBLIC_URL>/mcp (s. Angekuendigter-Origin-
+      # Block weiter unten). Die kanonische MCP-URL wird stattdessen beim Authorization
+      # Server als Resource Indicator registriert (WorkOS: Connect -> Configuration).
+      # Ein hier oder im Dashboard gesetzter, abweichender Wert ist Boot-Refusal
+      # (boot-guard.angekuendigterOriginFindings) - und damit auch kein /voice.
       # AM6 (nur MCP_AUTH=oauth): WorkOS user.id (sub) des Owners -> bindet den Bootstrap-
       # Tenant idempotent (idp_subject), damit get_my_number ueber den OAuth-sub nicht leer
       # ist. Im Dashboard eintragen; opake user_-Id, kein Secret. Leer = kein Seed.
