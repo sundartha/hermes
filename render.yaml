@@ -370,6 +370,11 @@ services:
       # ist. Im Dashboard eintragen; opake user_-Id, kein Secret. Leer = kein Seed.
       - key: OWNER_IDP_SUBJECT
         sync: false
+      # E7 (O-4/O-5): Domain-Ownership-Token der OpenAI-Einreichung. Wird im Dashboard
+      # gesetzt (der Dienst ist dashboard-verwaltet, s. Kopf dieser Datei) - ein value:
+      # hier waere eine zweite Wahrheit. Leer = die Challenge-Route antwortet 404.
+      - key: OPENAI_APPS_CHALLENGE_TOKEN
+        sync: false
       # Owner-Identitaet ist KEINE Env-Var mehr (P2b): ownerName setzt der Tenant ueber
       # das Self-Service-Dashboard (nach dem Bootstrap-CLI), nicht ueber die Env.
       - key: CLAUDE_MODEL

@@ -300,6 +300,10 @@ export const BASE_ENV = {
   ELEVENLABS_INIT_WEBHOOK_TOKEN: "",
   // IEL-B9: Werkzeug-Schluessel neutral leer (Lehre test-base-env-drift).
   RENDER_API_KEY: "",
+  // E7: neutral LEER, sonst leakt ein lokal in .env eingetragener Challenge-Token via
+  // dotenv in JEDEN Spawn-Test (Lehre test-base-env-drift) - der 404-Fall (Normalfall
+  // der Suite) waere dort still ein 200. Der Positiv-Test setzt den Wert per Override.
+  OPENAI_APPS_CHALLENGE_TOKEN: "",
   // ---- Store-Backend + Onboarding/Provisioning ----
   // Neutral + fail-closed: json-Store, kein echter Nummern-Kauf. Tests, die das
   // brauchen (pg, Cap, echtes Provisioning), setzen es explizit per env-Override.
