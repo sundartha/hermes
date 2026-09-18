@@ -916,7 +916,12 @@ const RAND_SCHRAEGSTRICHE = /\/+$/;
 // BEWUSST NICHT stripTrailingSlash (src/config.js): das entfernt GENAU EINEN Slash und
 // lebt in dem config-Modul, das diese Datei absichtlich nicht importiert. Ein live
 // gemeintes ".../mcp/" darf keinen Boot-Abbruch ausloesen (Nachbesserung PM-8).
-function fuerAudienceVergleich(wert) {
+// EXPORTIERT (E8): config.js' PRODUCTION_FOOTGUNS-Eintrag fuer OAUTH_AUDIENCE
+// vergleicht gegen dieselbe Vergleichsform - keine zweite, eigene Normalisierungs-
+// Formel (G5). Der Footgun-Eintrag dort ist bewusst redundant zu
+// angekuendigterOriginFindings() (die hier laeuft unconditional, nicht nur in
+// Produktion) - er nutzt exakt diese Funktionen, keine neue Logik.
+export function fuerAudienceVergleich(wert) {
   return String(wert ?? "").trim().replace(RAND_SCHRAEGSTRICHE, "");
 }
 

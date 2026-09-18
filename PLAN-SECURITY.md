@@ -4790,12 +4790,22 @@ kein `/voice` und keine eingehende Telefonie. Deshalb ist die Normalisierung Tei
 nicht Kosmetik. BEWUSST NICHT `stripTrailingSlash` aus `src/config.js`: das entfernt genau EINEN
 Schraegstrich und lebt im config-Modul, das `boot-guard.js` nicht importiert.
 
-**Kein zweiter Riegel in `PRODUCTION_FOOTGUNS` (E8-Entscheidung).** S5-A3 hatte denselben
-Vergleich zusaetzlich als Produktions-Footgun in `src/config.js` vorgesehen. Er wird NICHT
-gebaut: der Boot-Riegel greift in JEDER Umgebung, die Produktions-Menge ist eine echte
-Teilmenge - der Eintrag erhoeht die Schutzwirkung um null und schafft einen zweiten Ort fuer
-eine Aussage, die auseinanderlaufen kann. Der Wortlaut aus S5-A3 (striktes `!==` auf dem rohen
-Env-Wert) wuerde ausserdem die PM-8-Nachbesserung wieder aufreissen.
+**Zweiter Riegel in `PRODUCTION_FOOTGUNS`, bewusst redundant (E8, Review-Runde 1
+korrigiert).** Die urspruengliche E8-Entscheidung hier lautete "nicht bauen" (Begruendung:
+der Boot-Riegel greift in JEDER Umgebung, die Produktions-Menge ist eine echte Teilmenge -
+kein Sicherheitsgewinn). Das ist inhaltlich weiterhin richtig, aber PLAN-OPENAI.md Etappe 8
+verlangt den Eintrag als verbindliche Abnahme woertlich, und diese Ersetzung im Abnahmetext
+ist eine Owner-Entscheidung, die ein Review nicht selbst treffen darf. Der Eintrag ist deshalb
+GEBAUT, aber ohne eine zweite eigene Vergleichsformel: `src/config.js` importiert
+`kanonischeAudience`/`fuerAudienceVergleich` aus `src/boot-guard.js` und ruft exakt dieselben
+Funktionen - der PM-8-Normalisierung (s.o.) kann dieser Eintrag also nicht widersprechen, weil
+er sie nicht neu implementiert. In Produktion feuert bei Audience-Divergenz heute effektiv der
+FRUEHERE der beiden Riegel (`assertConfig`/`productionFootguns`, vor `assertBootGates`) -
+`assertAngekuendigterOrigin` bleibt trotzdem der einzige Riegel, der auch AUSSERHALB der
+Produktion greift (lokal/Test bleibt `productionFootguns()` immer `[]`). Owner-Entscheidung
+ausstehend: PLAN-OPENAI.md Etappe 8 entweder auf diesen Zustand (zwei Riegel, eine Formel)
+festschreiben, oder den `PRODUCTION_FOOTGUNS`-Eintrag wieder zurueckziehen und den
+Abnahmetext auf `assertAngekuendigterOrigin` umschreiben.
 
 **Der Befundtext nennt Namen, keine Werte.** Ausgegeben werden `OAUTH_AUDIENCE`,
 `PUBLIC_URL`, `MCP_ALLOWED_ORIGINS` und - bei der Allowlist - die POSITION des Eintrags, nie
@@ -4814,4 +4824,7 @@ die Rueckstufung des Riegels auf eine Warnung eine Owner-Entscheidung, keine Bau
 Tests: `test/s2-mcp-origin.test.js` (E5-U10..U16 Praedikat, E8-U01 kanonisch-gesetzt,
 E5-B01..B05 Kindprozess mit Exit 1 bzw. Happy-Path-Schraegstrich, plus der Formel-Pin gegen die
 ausgelieferte PRM-`resource`), `test/oauth.test.js` (zweiter, unabhaengiger Spawn-Beleg fuer
-Divergenz -> Exit 1 und fuer den kanonisch gesetzten Wert -> startet).
+Divergenz -> Exit 1 und fuer den kanonisch gesetzten Wert -> startet). Der
+`PRODUCTION_FOOTGUNS`-Eintrag zusaetzlich in `test/config-prod-footguns.test.js`
+(T-P0-5-15..17: leer/kanonisch-mit-Schraegstrich/divergent) und
+`test/boot-prod-footguns.test.js` (T-P0-5-18: Kindprozess-Exit-1 im Hosting).

@@ -106,6 +106,18 @@ test("Boot-Guard: gesetzte TELNYX_CONNECTION_ID -> keine Warnung (gesunder Start
   }
 });
 
+// T-P0-5-18 (E8, PLAN-OPENAI.md Etappe 8): Hosting + divergentes OAUTH_AUDIENCE ->
+// Boot verweigert (exit 1), nennt die Variable. PUBLIC_URL wird gesetzt, damit der
+// Vergleich einen konkreten kanonischen Wert hat (sonst greift RENDER_EXTERNAL_URL).
+test("T-P0-5-18: Hosting + divergentes OAUTH_AUDIENCE -> Boot verweigert (exit 1), nennt Var", async () => {
+  const { code, output } = await startServerExpectExit({
+    env: { ...PROD_SAFE, PUBLIC_URL: "https://agent.onrender.com", OAUTH_AUDIENCE: "https://fremd.example/mcp" },
+  });
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /OAUTH_AUDIENCE/);
+  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
+});
+
 test("T-P0-1-AC1-05: Hosting + STORE_BACKEND=json -> Boot verweigert (exit 1), nennt STORE_BACKEND", async () => {
   const { code, output } = await startServerExpectExit({ env: { ...PROD_SAFE, STORE_BACKEND: "json" } });
   assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);

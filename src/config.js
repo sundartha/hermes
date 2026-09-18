@@ -5,7 +5,12 @@ import { fileURLToPath } from "url";
 import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
 // GAP-07: boot-guard.js und telephony/stt-profile.js importieren ihrerseits nur
 // import-freie bzw. Blatt-Module -> kein Zyklus, obwohl beide sonst downstream sitzen.
-import { alertChannelFindings, alertChannelInputs } from "./boot-guard.js";
+import {
+  alertChannelFindings,
+  alertChannelInputs,
+  fuerAudienceVergleich,
+  kanonischeAudience,
+} from "./boot-guard.js";
 // KV2-10: die gueltigen Werte von VOICE_TARIFF_GRUNDBETRAG_CENTS sind die Kostenprofile
 // der Engine-Weiche. billing/kostenarten.js ist importfrei (Blatt, Praezedenz boot-guard
 // oben) - kein Zyklus, keine zweite Routen-Liste hier.
@@ -2427,6 +2432,22 @@ const PRODUCTION_FOOTGUNS = Object.freeze([
     trifftZu: (cfg) => cfg.store.storeBackend !== "pg",
     befund:
       "STORE_BACKEND ist nicht 'pg' - der json-Store liegt auf Renders fluechtigem Dateisystem (Datenverlust bei jedem Deploy/Neustart). Im Hosting STORE_BACKEND=pg + DATABASE_URL Pflicht.",
+  },
+  {
+    // E8 (PLAN-OPENAI.md Etappe 8): der ANGEKUENDIGTE Origin (die Audience, die der
+    // Server per Well-known bewirbt) muss mit der kanonischen MCP-Audience
+    // uebereinstimmen - sonst kann sich kein Client je erfolgreich autorisieren.
+    // Bewusst redundant zu angekuendigterOriginFindings() (src/boot-guard.js, laeuft
+    // schon unconditional, nicht nur in Produktion, und wuerde denselben Boot heute
+    // schon verweigern): dieser Eintrag macht die Abnahme AUCH ueber den
+    // Produktions-Footgun-Kanal sichtbar, ohne eine zweite Vergleichsformel zu
+    // erfinden - fuerAudienceVergleich/kanonischeAudience sind dieselben Funktionen.
+    trifftZu: (cfg) =>
+      Boolean(cfg.auth.oauthAudience) &&
+      fuerAudienceVergleich(cfg.auth.oauthAudience) !== kanonischeAudience(cfg.server.publicUrl),
+    befund:
+      "OAUTH_AUDIENCE weicht von der kanonischen MCP-Audience (PUBLIC_URL + /mcp) ab - " +
+      "Wert leeren (kanonischer Default) oder exakt darauf setzen.",
   },
   {
     // DEV_LOGIN_ENABLED ist ein lokaler Login-Shim (umgeht WorkOS) - im Hosting NIE erlaubt.
