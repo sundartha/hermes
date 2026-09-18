@@ -250,6 +250,40 @@ test("E1-12b messePrm/messeMcpModus/messeAsMetadata direkt gegen die Attrappe", 
   assert.equal(asMeta.faehigkeiten.length, FAEHIGKEITEN_ANZAHL);
 });
 
+// MESSTREUE (Review-Befund): beide Well-known-Pfade antworten 200, aber mit
+// unterschiedlichen Dokumenten - die Sonde MUSS dasselbe Dokument benoten,
+// das discoverJwksUri (src/auth.js) tatsaechlich konsumiert (zuerst
+// openid-configuration). Reproduziert exakt den Live-Fund: das zweite
+// Dokument bewirbt S256, das erste nicht - Quelle bleibt trotzdem das erste.
+test("E1-12c AS-Metadata auf beiden Pfaden 200 mit divergenten Dokumenten: Produktionsreihenfolge gewinnt", async () => {
+  const jwksVonOpenidConfig = `${ISSUER}/openid/jwks`;
+  const jwksVonAuthServer = `${ISSUER}/as/jwks`;
+  const tabelle = {
+    [`${ISSUER}/.well-known/openid-configuration`]: {
+      status: 200,
+      doc: vollstaendigesAsDokument({ jwks_uri: jwksVonOpenidConfig, code_challenge_methods_supported: undefined }),
+    },
+    [`${ISSUER}/.well-known/oauth-authorization-server`]: {
+      status: 200,
+      doc: vollstaendigesAsDokument({ jwks_uri: jwksVonAuthServer, issuer: "https://fremd.example" }),
+    },
+  };
+  const { abrufen } = machAbrufAttrappe(tabelle);
+
+  const asMeta = await messeAsMetadata(ISSUER, { abrufen });
+
+  assert.equal(asMeta.zeile.status, "PASS");
+  assert.match(asMeta.zeile.detail, /^Quelle: openid-configuration/);
+  const jwksInfo = asMeta.infos.find((info) => info.name === "jwks_uri-Feld je Pfad");
+  assert.match(jwksInfo.detail, new RegExp(`openid-configuration=${jwksVonOpenidConfig}`));
+  assert.match(jwksInfo.detail, new RegExp(`oauth-authorization-server=${jwksVonAuthServer}`));
+  const s256Zeile = asMeta.faehigkeiten.find((zeile) => zeile.name.includes("PKCE S256"));
+  assert.equal(s256Zeile.status, "FAIL");
+  const issuerZeile = asMeta.faehigkeiten.find((zeile) => zeile.name.includes("issuer-Gleichheit"));
+  assert.equal(issuerZeile.status, "PASS");
+  assert.match(issuerZeile.detail, new RegExp(ISSUER));
+});
+
 function runSonde(argv, env) {
   const child = spawn(process.execPath, ["scripts/probe-as-faehigkeiten.mjs", ...argv], {
     cwd: ROOT,

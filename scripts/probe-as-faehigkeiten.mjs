@@ -36,7 +36,10 @@ import { fileURLToPath } from "node:url";
 
 const PRM_PFAD = "/.well-known/oauth-protected-resource";
 const MCP_PFAD = "/mcp";
-const AS_PFADE = ["/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"];
+// Reihenfolge MUSS mit discoverJwksUri (src/auth.js) uebereinstimmen: bei
+// zwei erfolgreichen Antworten benotet die Sonde sonst ein anderes Dokument
+// als die Produktion tatsaechlich konsumiert (Befund MESSTREUE).
+const AS_PFADE = ["/.well-known/openid-configuration", "/.well-known/oauth-authorization-server"];
 const ABRUF_TIMEOUT_MS = 10000;
 const HTTP_OK_MIN = 200;
 const HTTP_OK_MAX = 299;
@@ -343,9 +346,9 @@ function pfadName(pfad) {
   return pfad.split("/").pop();
 }
 
-// F4: beide Well-known-Pfade am Issuer abrufen (T-7: unser Discovery-Fallback
-// passt auf beide, also muss die Sonde auch beide bewerten). Der erste
-// erfolgreiche traegt das Dokument.
+// F4: beide Well-known-Pfade am Issuer abrufen, in Produktionsreihenfolge
+// (AS_PFADE, s.o.) - der erste erfolgreiche traegt das Dokument, exakt wie
+// discoverJwksUri es in src/auth.js auswaehlt.
 export async function messeAsMetadata(issuer, { abrufen }) {
   const antworten = [];
   for (const pfad of AS_PFADE) {
@@ -364,7 +367,14 @@ export async function messeAsMetadata(issuer, { abrufen }) {
   const issuerJeQuelle = antworten
     .map(({ pfad, antwort }) => `${pfadName(pfad)}=${antwort.doc?.issuer ?? FELD_FEHLT}`)
     .join(" | ");
-  const infos = [infoZeile("issuer-Feld je Pfad", issuerJeQuelle), infoZeile("scopes_supported", listeAlsText(doc?.scopes_supported))];
+  const jwksUriJeQuelle = antworten
+    .map(({ pfad, antwort }) => `${pfadName(pfad)}=${antwort.doc?.jwks_uri ?? FELD_FEHLT}`)
+    .join(" | ");
+  const infos = [
+    infoZeile("issuer-Feld je Pfad", issuerJeQuelle),
+    infoZeile("jwks_uri-Feld je Pfad", jwksUriJeQuelle),
+    infoZeile("scopes_supported", listeAlsText(doc?.scopes_supported)),
+  ];
   const faehigkeiten = await bewerteFaehigkeiten(doc, issuer);
   return { zeile, faehigkeiten, infos };
 }

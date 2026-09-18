@@ -71,15 +71,23 @@ PFLICHT-Zeilen (4): "PRM erreichbar", "AS-Metadata erreichbar",
 | 7/8 | RFC 9207 iss-Parameter (T-11) | BEFUND | fehlt das Feld (UNKNOWN) oder steht es auf false (FAIL): ChatGPT nutzt dann die callback-spezifische Redirect-URI statt der stabilen (s. Abschnitt 6) - kein Blocker |
 | 8/8 | userinfo_endpoint (T-16) | BEFUND | nur relevant, falls Workspace-Domain-Restriktionen gewuenscht sind |
 
-## Messung 2026-09-18 (vor B1-B3, F1-F4)
+## Messung 2026-09-18 (vor B1-B3, F1-F4, nach MESSTREUE-Fix)
 
 Kommando: `node scripts/probe-as-faehigkeiten.mjs https://app.sundartha.com`
-Datum (UTC): 2026-09-18T10:11:49.901Z
+Datum (UTC): 2026-09-18T10:39:18.554Z
 Deployter Commit: nicht per `/healthz` erhoben (D6, akzeptiertes Restrisiko -
 die Sonde pinnt keinen Commit). Repo-HEAD zum Messzeitpunkt: `3d32492`.
 
+Ersetzt die vorherige Messung vom selben Tag (10:11:49.901Z): die Sonde
+benotete dort `oauth-authorization-server` statt der Produktionsreihenfolge
+aus `discoverJwksUri` (`src/auth.js`, zuerst `openid-configuration`) - Befund
+MESSTREUE, s. Review-Historie. Beide Well-known-Dokumente tragen live
+denselben `issuer` und dieselbe `jwks_uri`, aber NUR
+`oauth-authorization-server` bewirbt PKCE S256/DCR/CIMD; die alte Messung
+zeigte deshalb ein PASS, das Produktion so nie sieht.
+
 ```
-=== Sonde AS-Faehigkeiten ===  Ziel: https://app.sundartha.com   Datum (UTC): 2026-09-18T10:11:49.901Z
+=== Sonde AS-Faehigkeiten ===  Ziel: https://app.sundartha.com   Datum (UTC): 2026-09-18T10:39:18.554Z
 --- Schritt 1: Protected Resource Metadata (F1/F2) ---
 [PASS   ] [PFLICHT] PRM erreichbar    HTTP 200
 [INFO   ] resource (F2) = https://app.sundartha.com/mcp
@@ -89,18 +97,19 @@ die Sonde pinnt keinen Commit). Repo-HEAD zum Messzeitpunkt: `3d32492`.
 [INFO   ] publicUrl aus resource_metadata = https://app.sundartha.com
 [INFO   ] A3-Vorhersage = NEIN - Footgun feuert NEIN (resource == publicUrl/mcp)
 --- Schritt 3: AS-Metadata am Issuer (F4) ---
-[PASS   ] [PFLICHT] AS-Metadata erreichbar    Quelle: oauth-authorization-server (HTTP 200) | oauth-authorization-server: HTTP 200 | openid-configuration: HTTP 200
-[INFO   ] issuer-Feld je Pfad = oauth-authorization-server=https://fearless-network-26.authkit.app | openid-configuration=https://fearless-network-26.authkit.app
+[PASS   ] [PFLICHT] AS-Metadata erreichbar    Quelle: openid-configuration (HTTP 200) | openid-configuration: HTTP 200 | oauth-authorization-server: HTTP 200
+[INFO   ] issuer-Feld je Pfad = openid-configuration=https://fearless-network-26.authkit.app | oauth-authorization-server=https://fearless-network-26.authkit.app
+[INFO   ] jwks_uri-Feld je Pfad = openid-configuration=https://fearless-network-26.authkit.app/oauth2/jwks | oauth-authorization-server=https://fearless-network-26.authkit.app/oauth2/jwks
 [INFO   ] scopes_supported = email, offline_access, openid, profile
 [PASS   ] [PFLICHT] 1/8 issuer-Gleichheit (A-06/T-7)    Dokument-issuer: https://fearless-network-26.authkit.app
 [PASS   ] [BEFUND ] 2/8 jwks_uri auf Issuer-Origin (A1-Vorbedingung)    jwks_uri: https://fearless-network-26.authkit.app/oauth2/jwks
-[PASS   ] [PFLICHT] 3/8 PKCE S256 beworben (T-8)    code_challenge_methods_supported: S256
-[PASS   ] [BEFUND ] 4/8 DCR: registration_endpoint (T-10)    registration_endpoint: https://fearless-network-26.authkit.app/oauth2/register
-[PASS   ] [BEFUND ] 5/8 CIMD beworben (T-10)    client_id_metadata_document_supported: true
-[PASS   ] [BEFUND ] 6/8 Token-Auth 'none' moeglich (T-10)    token_endpoint_auth_methods_supported: none, client_secret_post, client_secret_basic
+[FAIL   ] [PFLICHT] 3/8 PKCE S256 beworben (T-8)    code_challenge_methods_supported: (fehlt)
+[FAIL   ] [BEFUND ] 4/8 DCR: registration_endpoint (T-10)    registration_endpoint: (fehlt)
+[FAIL   ] [BEFUND ] 5/8 CIMD beworben (T-10)    client_id_metadata_document_supported: (fehlt)
+[PASS   ] [BEFUND ] 6/8 Token-Auth 'none' moeglich (T-10)    token_endpoint_auth_methods_supported: none, client_secret_basic, client_secret_post
 [UNKNOWN] [BEFUND ] 7/8 RFC 9207 iss-Parameter (T-11)    authorization_response_iss_parameter_supported: (fehlt)
-[FAIL   ] [BEFUND ] 8/8 userinfo_endpoint (T-16)    userinfo_endpoint: (fehlt)
-=== Ergebnis: PFLICHT 4/4 PASS - Befunde 5 PASS, 1 FAIL, 1 UNKNOWN -> Exit 0
+[PASS   ] [BEFUND ] 8/8 userinfo_endpoint (T-16)    userinfo_endpoint: https://fearless-network-26.authkit.app/oauth2/userinfo
+=== Ergebnis: PFLICHT 3/4 PASS - Befunde 4 PASS, 2 FAIL, 1 UNKNOWN -> Exit 1
 ```
 
 ### Live-Werte
@@ -112,12 +121,16 @@ die Sonde pinnt keinen Commit). Repo-HEAD zum Messzeitpunkt: `3d32492`.
 - F3 (Live-Auth-Modus von `/mcp`): `oauth` (401 mit `WWW-Authenticate` und
   `resource_metadata`)
 - **A3-Vorhersage**: NEIN
-- **F4-Kurzfazit**: 4/4 PFLICHT-Zeilen PASS, `S256` PASS. Von den vier
-  BEFUND-Zeilen, die S5 als UNKNOWN einstufte, sind DCR/CIMD/Token-Auth-none
-  bereits PASS (CIMD ist laut Live-Messung schon aktiv - abweichend vom in
-  S5 dokumentierten "Default AUS"); `userinfo_endpoint` fehlt (FAIL, nur
-  relevant bei Workspace-Domain-Restriktionen); `authorization_response_iss_
+- **F4-Kurzfazit**: 3/4 PFLICHT-Zeilen PASS - `S256` FEHLT auf dem Dokument,
+  das Produktion tatsaechlich zuerst liest (`openid-configuration`), obwohl
+  der ZWEITE Pfad (`oauth-authorization-server`) es bewirbt. DCR/CIMD sind
+  aus demselben Grund FAIL statt PASS; `userinfo_endpoint` ist dagegen PASS
+  (nur auf `openid-configuration` vorhanden). `authorization_response_iss_
   parameter_supported` bleibt UNKNOWN (T-11, SHOULD-Feld nicht dokumentiert).
+  **Neuer Blocker fuer Etappe 6/8:** WorkOS muesste PKCE S256 auch auf
+  `openid-configuration` bewerben, oder Hermes muesste beide Dokumente
+  zusammenfuehren, bevor `code_challenge_methods_supported` als PASS gilt -
+  s. Folgerungen.
 
 ## 6. Folgerungen
 
@@ -126,6 +139,16 @@ die Sonde pinnt keinen Commit). Repo-HEAD zum Messzeitpunkt: `3d32492`.
   A1 erfuellt, S5-Abhaengigkeit 1). `2/8` (jwks_uri-Origin) ist ebenfalls
   PASS, bleibt aber laut S5 eine Owner-Entscheidung fuer A1, kein
   automatischer Fehlerfall.
+- **NEU seit der MESSTREUE-Korrektur:** `3/8` (PKCE S256) ist jetzt FAIL,
+  weil die Sonde dasselbe Dokument benotet, das `discoverJwksUri` liefert
+  (`openid-configuration`) - und dieses Dokument bewirbt
+  `code_challenge_methods_supported` nicht, obwohl `oauth-authorization-
+  server` es tut. Das ist kein Sonden-Defekt mehr, sondern ein echter Befund
+  ueber WorkOS AuthKit: die zwei Well-known-Dokumente sind inhaltlich NICHT
+  deckungsgleich. Vor Etappe 6/8 klaeren, ob WorkOS S256 auf beiden Pfaden
+  bewerben kann, oder ob Hermes fuer die Faehigkeits-Fragen (nicht fuer
+  `jwks_uri`/`issuer`) beide Dokumente zusammenfuehren muss. Owner-
+  Entscheidung ausstehend.
 - **Etappe 8 (A3, Kanonizitaet der Resource-URI):** F2 = kanonischer Wert,
   A3-Vorhersage NEIN - A3 kann deployt werden, ohne den Boot zu gefaehrden
   (S5-Abhaengigkeit 2, Pre-Mortem 1 entschaerft).
