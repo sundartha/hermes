@@ -1,0 +1,116 @@
+// E7: Domain-Ownership-Challenge der OpenAI-Einreichung (O-4/O-5). Prueft die Route
+// end-to-end am ECHTEN Server (Spawn, PORT=0, DATA_DIR-Override) - nicht am Handler:
+// der Wert der Zusage liegt in der Byte-Form der Antwort und darin, dass keine
+// Auth-Schicht davor sitzt. Beides ist nur ueber HTTP messbar.
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { startServer, ROOT } from "./helpers.js";
+
+const CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
+const TOKEN = "e7-token-abc";
+const HTTP_OK = 200;
+const HTTP_NOT_FOUND = 404;
+const CONTENT_TYPE_TEXT_PLAIN = "text/plain";
+
+function readRepoFile(relativePath) {
+  return fs.readFileSync(path.join(ROOT, relativePath), "utf8");
+}
+
+// startServer + fetch auf den Challenge-Pfad, mit garantiertem stop() (Lehre
+// leaked-test-servers-overheat: ein nicht beendeter Spawn-Server ueberlebt die Suite).
+async function mitServer(env, pruefung) {
+  const srv = await startServer({ env });
+  try {
+    await pruefung(srv);
+  } finally {
+    await srv.stop();
+  }
+}
+
+test("E7-T1: gesetzter Token liefert 200, byte-exakten Klartext, kein WWW-Authenticate", async () => {
+  await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: TOKEN }, async (srv) => {
+    const res = await fetch(srv.localUrl + CHALLENGE_PATH);
+    assert.equal(res.status, HTTP_OK);
+    assert.equal(await res.text(), TOKEN);
+    assert.ok(res.headers.get("content-type").startsWith(CONTENT_TYPE_TEXT_PLAIN));
+    assert.equal(res.headers.get("www-authenticate"), null);
+  });
+});
+
+test("E7-T2: Koerperform ist reiner Klartext, kein JSON/Liste (O-4)", async () => {
+  await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: TOKEN }, async (srv) => {
+    const res = await fetch(srv.localUrl + CHALLENGE_PATH);
+    const text = await res.text();
+    assert.throws(() => JSON.parse(text));
+    assert.ok(!text.includes("{") && !text.includes("[") && !text.includes('"'));
+  });
+});
+
+test("E7-T3: ungesetzter Token -> 404, Body verraet nicht das Wort openai", async () => {
+  await mitServer({}, async (srv) => {
+    const res = await fetch(srv.localUrl + CHALLENGE_PATH);
+    assert.equal(res.status, HTTP_NOT_FOUND);
+    const text = await res.text();
+    assert.ok(!text.includes("openai"));
+  });
+});
+
+test("E7-T4: nur Whitespace als Token -> 404 (belegt .trim() am Config-Rand)", async () => {
+  await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: "   " }, async (srv) => {
+    const res = await fetch(srv.localUrl + CHALLENGE_PATH);
+    assert.equal(res.status, HTTP_NOT_FOUND);
+  });
+});
+
+test("E7-T5: Token mit umgebendem Whitespace/Zeilenumbruch wird getrimmt", async () => {
+  await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: ` ${TOKEN}\n` }, async (srv) => {
+    const res = await fetch(srv.localUrl + CHALLENGE_PATH);
+    assert.equal(res.status, HTTP_OK);
+    assert.equal(await res.text(), TOKEN);
+  });
+});
+
+test("E7-T6: POST bei gesetztem Token -> 404, Token nicht im Body (B2: kein openai-Grep)", async () => {
+  await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: TOKEN }, async (srv) => {
+    const res = await fetch(srv.localUrl + CHALLENGE_PATH, { method: "POST" });
+    assert.equal(res.status, HTTP_NOT_FOUND);
+    const text = await res.text();
+    assert.ok(!text.includes(TOKEN));
+  });
+});
+
+test("E7-T7: der Token wird nie geloggt (Regel 4)", async () => {
+  await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: TOKEN }, async (srv) => {
+    await fetch(srv.localUrl + CHALLENGE_PATH);
+    assert.ok(!srv.stdout.includes(TOKEN));
+  });
+});
+
+test("E7-T8: der Token ist keine configHash-Achse (/healthz identisch mit/ohne Token)", async () => {
+  await mitServer({}, async (srvOhne) => {
+    const resOhne = await fetch(srvOhne.localUrl + "/healthz");
+    const { configHash: hashOhne } = await resOhne.json();
+    await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: TOKEN }, async (srvMit) => {
+      const resMit = await fetch(srvMit.localUrl + "/healthz");
+      const { configHash: hashMit } = await resMit.json();
+      assert.equal(hashOhne, hashMit);
+    });
+  });
+});
+
+test("E7-T9: .env.example + render.yaml + config.js sind kohaerent (Doku-Pin)", () => {
+  const configJs = readRepoFile("src/config.js");
+  const envExample = readRepoFile(".env.example");
+  const renderYaml = readRepoFile("render.yaml");
+
+  // Positiv-Kontrolle: die Regeln finden bei einem BEKANNT vorhandenen Schluessel etwas -
+  // sonst waere "kein Treffer" nicht von "sucht gar nicht" zu unterscheiden (Lehre
+  // pruefkommando-ohne-positiv-kontrolle).
+  assert.match(envExample, /^MCP_ORIGIN_ENFORCE=true$/m);
+
+  assert.ok(configJs.includes("process.env.OPENAI_APPS_CHALLENGE_TOKEN"));
+  assert.match(envExample, /^OPENAI_APPS_CHALLENGE_TOKEN=\s*(#.*)?$/m);
+  assert.match(renderYaml, /key:\s*OPENAI_APPS_CHALLENGE_TOKEN\s*\n\s*sync:\s*false/);
+});

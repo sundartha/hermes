@@ -95,6 +95,15 @@ export const PUBLIC_ROUTES = Object.freeze([
   },
   {
     method: "GET",
+    path: "/.well-known/openai-apps-challenge",
+    reason:
+      "Domain-Ownership-Challenge der OpenAI-Einreichung (O-4/O-5) - der Zweck IST die " +
+      "unauthentifizierte Abholbarkeit. Liefert einen einzigen, von OpenAI zugewiesenen " +
+      "Verifikations-Token als Klartext und sonst nichts: keine Tenant-Daten, kein Zustand, " +
+      "kein Schreibpfad, kein Query-Echo. Bei leerer Env antwortet sie 404.",
+  },
+  {
+    method: "GET",
     path: "/auth/login",
     reason: "Einstieg in den OIDC-Login. Vor der Anmeldung existiert keine Identitaet.",
   },

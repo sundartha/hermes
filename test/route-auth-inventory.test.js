@@ -176,6 +176,10 @@ const ROUTE_FINGERPRINT = [
   "DELETE /mcp",
   "GET /.well-known/oauth-protected-resource",
   "GET /.well-known/oauth-protected-resource/mcp",
+  // E7: Domain-Ownership-Challenge der OpenAI-Einreichung (O-4/O-5). Klasse PUBLIC,
+  // Eintrag in src/route-policy.js. Ohne gesetzten Token antwortet sie 404 - gemountet
+  // ist sie trotzdem immer (bedingte Registrierung waere im Graph unsichtbar).
+  "GET /.well-known/openai-apps-challenge",
   "GET /account",
   "GET /admin",
   "GET /api/admin/tenants",

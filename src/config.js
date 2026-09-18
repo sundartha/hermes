@@ -1507,6 +1507,13 @@ const rawConfig = {
   // brauchen (EINE Quelle, G5). Ungesetzt (lokal) -> Sentinel statt leerem String:
   // "unbekannt" ist eine ehrliche Antwort, "" saehe im Smoke wie ein Feldfehler aus.
   deployedCommit: process.env.RENDER_GIT_COMMIT || DEPLOYED_COMMIT_UNKNOWN,
+  // E7 (O-4/O-5): von OpenAI zugewiesener Domain-Ownership-Token der Einreichung.
+  // .trim(), weil der Wert beim Einfuegen ins Dashboard leicht einen Zeilenumbruch
+  // mitnimmt - der waere Teil des "exakten Tokens" und liesse die Verifikation
+  // unsichtbar scheitern. Wird beim PROZESSSTART gelesen: ein spaeter nachgetragener
+  // Token wirkt erst mit dem naechsten Start des Dienstes. Er authentifiziert
+  // niemanden - er ist ein statischer Eigentumsnachweis fuer den HOST, kein Credential.
+  openaiAppsChallengeToken: (process.env.OPENAI_APPS_CHALLENGE_TOKEN || "").trim(),
   // Passwort-Schutz fuer Dashboard + API im oeffentlichen Hosting (User: admin). Leer = offen (nur lokal ok).
   dashboardPassword: process.env.DASHBOARD_PASSWORD || "",
   sendSmsSummary: boolEnv("SEND_SMS_SUMMARY", process.env.SEND_SMS_SUMMARY, { fallback: true }),
@@ -2286,7 +2293,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
-  server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
+  server: ["port", "publicUrl", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],

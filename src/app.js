@@ -70,11 +70,17 @@ const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
 // /voice-Praefix als EINE Quelle (G5): rawBody-Capture und der Rate-Limit-Bypass
 // teilen denselben Praefix.
 const VOICE_PATH_PREFIX = "/voice";
+// E7 (O-4): der Challenge-Pfad ist woertlich vorgeschrieben - kein Praefix, kein Suffix,
+// kein Tenant-Segment. Als Konstante, damit der Handler unten keinen nackten Magic-String
+// traegt (G25). Die zweite Nennung in src/route-policy.js bleibt bewusst ein Literal
+// (dort begruendet und mechanisch bewacht).
+const OPENAI_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 // Statuscodes als benannte Konstanten (G25): die Umleitung und die Grenzen, innerhalb
 // derer ein Body-Parser-Fehler als Eingabefehler des Aufrufers gilt (400 einschliesslich
 // bis 500 ausschliesslich).
 const HTTP_FOUND = 302;
 const HTTP_BAD_REQUEST = 400;
+const HTTP_NOT_FOUND = 404;
 const HTTP_SERVER_ERROR = 500;
 // rawBody fuer /voice (Telnyx) UND den Stripe-Webhook erfassen: beide pruefen
 // gegen den unveraenderten Body. Die Erfassung aendert das Parsen NICHT (verify
@@ -163,6 +169,23 @@ export function registerPublicRoutes({ app, config }) {
   // PII, kein Schreibpfad. SSoT: src/plans.js (Marketing-Spiegel apps/web/src/lib/
   // plans.js, drift-getestet). BK1 (Dashboard-Kacheln) konsumiert ihn.
   app.get("/api/plans", (_req, res) => res.json(PLAN_CATALOG));
+
+  // ---- GET /.well-known/openai-apps-challenge: Domain-Ownership (O-4/O-5) --------
+  // AUTH-AUSNAHME (Absolute Regel 3, begruendet): OpenAI ruft diesen Pfad ohne jede
+  // Identitaet ab - der Zweck IST die unauthentifizierte Abholbarkeit. Eintrag mit
+  // Begruendung in src/route-policy.js, gepinnt im ROUTE_FINGERPRINT und in der
+  // Erwartungstabelle von scripts/probe-auth.sh.
+  // Antwortet NUR mit dem zugewiesenen Klartext-Token: kein JSON, keine Liste, kein
+  // Zeilenumbruch (O-4 woertlich). Leerer/ungesetzter Wert -> 404 wie eine nicht
+  // existierende Route: fail-closed, ohne zu verraten, dass hier etwas vorbereitet ist.
+  // EIN Wert, weil O-5 den Pfad ignoriert - die Challenge gilt dem HOST.
+  // Laufzeit-Pruefung statt bedingter Registrierung: eine nur-bei-Token gemountete
+  // Route waere im geprueften Routengraph unsichtbar (src/route-policy.js, Klasse (c)).
+  app.get(OPENAI_CHALLENGE_PATH, (_req, res) => {
+    const token = config.server.openaiAppsChallengeToken;
+    if (!token) return res.status(HTTP_NOT_FOUND).end();
+    res.type("text/plain").send(token);
+  });
 
   registerWellKnown(app);
 
