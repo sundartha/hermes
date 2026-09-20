@@ -400,6 +400,8 @@ services:
         value: "20000"
       # ---- Vorab-Recherche im Briefing (AL-P10) ---- Default AUS; Anschalten ist
       # Owner-Arbeit (mit RESEARCH_ENABLED=true wandert Auftragsmaterial an einen Suchindex).
+      # E9 (2026-09-20): der Empfaenger der Vorab-Recherche ist in der Datenschutzerklaerung
+      # genannt; das Anschalten bleibt unveraendert Owner-Arbeit.
       - key: RESEARCH_ENABLED
         value: "false"
       - key: RESEARCH_SEARCH_FEE_CENTS
@@ -407,6 +409,9 @@ services:
       # ---- Nachschlagen IM Gespraech (AL-P10b) ---- Default AUS (fail-closed): kein
       # look_up im Tool-Satz, keine Suchgebuehr. Anschalten erst nach Testanruf UND
       # Nennung des ZWEITEN Auftragsverarbeiters in der Datenschutzerklaerung.
+      # E9 (2026-09-20): die Nennung des ZWEITEN Auftragsverarbeiters in der
+      # Datenschutzerklaerung ist erfolgt - diese Vorbedingung ist erfuellt, die uebrigen
+      # (Testanruf) nicht beruehrt.
       - key: LOOKUP_ENABLED
         value: "false"
       - key: LOOKUP_SEARCH_FEE_CENTS
@@ -421,6 +426,8 @@ services:
       # ---- Rueckfrage IM Gespraech (AL-P14) ---- Default AUS (fail-closed): kein
       # get_consult im Tool-Satz, kein In-Call-Consult. Erst nach Nennung in der
       # Datenschutzerklaerung anschalten.
+      # E9 (2026-09-20): die Weitergabe von Inhalten aus dem laufenden Gespraech an den
+      # MCP-Host ist in der Datenschutzerklaerung genannt - diese Vorbedingung ist erfuellt.
       - key: IN_CALL_CONSULT_ENABLED
         value: "false"
       # ---- Fristen der Rueckfrage (GQ-P2) ---- Warten (kurz) und Offenbleiben (lang)
