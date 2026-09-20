@@ -63,6 +63,8 @@ function makeMockStore({ state, subscription = {} } = {}) {
   return {
     load: () => ({ ...state, calls: [], actionItems: [], notifications: [], numbers: [] }),
     tenantContext: () => ({ settings: {}, ownerName: "Jonas" }),
+    // E4: /api/state scoped unbedingt ueber exportTenantData.
+    exportTenantData: () => ({ calls: [], actionItems: [], notifications: [] }),
     usageOf: () => ({ inputTokens: 5, outputTokens: 7, calls: 3 }),
     tenantSubscription: () => ({
       planSlug: null,

@@ -685,7 +685,8 @@ services:
       - key: LOGIN_COOKIE_TTL_SECONDS
         value: "1800"
       # ---- Multi-Tenant + Self-Service (web-session-only) ----
-      # MULTI_TENANT: Tenant-Scoping aktivieren (Default aus = Owner byte-identisch).
+      # MULTI_TENANT: seit E4 KEIN Tenant-Scoping mehr (das gilt unbedingt, in jeder
+      # Umgebung gleich) - nur noch die Self-Service-Reife (isSelfServiceLive).
       - key: MULTI_TENANT
         value: "false"
       # SELF_SERVICE_ENABLED: Kunden-Self-Service (/api/self-service/*). WEB-SESSION-ONLY:

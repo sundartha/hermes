@@ -22,6 +22,7 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER_SUB = "owner-sub-1";
 const OWNER_NUM = "+18643028341"; // Live-Diskriminator (Owner-Telnyx-DID)
+const HTTP_FORBIDDEN = 403; // E4-Torschluss: TENANT_REJECT -> 403
 
 // Env fuer einen Owner-OAuth-Resource-Server: OAUTH_AUDIENCE bleibt leer -> Default
 // publicUrl/mcp == idp.sign-Default-aud, also werden Tokens akzeptiert.
@@ -81,7 +82,11 @@ test("AM6 e2e: Owner-Token MIT email -> get_my_number traegt die aktive Nummer (
   }
 });
 
-test("AM6 fail-closed: unbekannter sub -> tenant=reject + get_my_number leer (kein Fremd-Tenant)", async () => {
+test("AM6 fail-closed: unbekannter sub -> /mcp 403 (E4-Torschluss, kein Tool erreicht)", async () => {
+  // E4: der Torschluss in routes/mcp.js antwortet TENANT_REJECT bereits VOR dem
+  // Diagnose-Log und VOR jedem Tool-Zugriff - "tenant=reject" im [mcp]-Log ist damit
+  // kein erreichbarer Zustand mehr (die Zeile steht hinter dem return). Der Beleg ist
+  // jetzt der audit()-Trail des Torschlusses selbst.
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp),
@@ -89,21 +94,24 @@ test("AM6 fail-closed: unbekannter sub -> tenant=reject + get_my_number leer (ke
   });
   try {
     const token = await idp.sign({ sub: "fremd-sub", email: "fremd@team.test" });
-    const number = await myNumberOver(srv, token);
-    assert.ok(!number, "unbekannte Identitaet -> keine Nummer (kein Fremd-Tenant)");
-    assert.notEqual(number, OWNER_NUM, "NIE die Owner-Nummer");
-    await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("fremd@team.test")} tenant=reject`));
+    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_my_number"));
+    assert.equal(res.status, HTTP_FORBIDDEN);
+    const body = await res.json();
+    assert.equal(body.error, "Keine Tenant-Zuordnung fuer diese Identitaet.");
+    assert.ok(!JSON.stringify(body).includes(OWNER_NUM), "NIE die Owner-Nummer");
+    await waitForLog(srv, /\[audit\] auth_failed .*path=\/mcp grund=kein_tenant/);
   } finally {
     await srv.stop();
     await idp.close();
   }
 });
 
-test("AM6 fail-closed: verifiziertes Token OHNE sub -> tenant=reject + get_my_number leer (NIE Owner)", async () => {
+test("AM6 fail-closed: verifiziertes Token OHNE sub -> /mcp 403 (E4-Torschluss, NIE Owner)", async () => {
   // FAIL-CLOSED-REGRESSION (AM6-Blocker R2): jose erzwingt den sub-Claim nicht. Ein
   // verifiziertes REMOTE-Token mit email, aber OHNE sub (noSubject) darf NICHT auf den
   // Owner-/Bootstrap-Tenant fallen - sonst laese der Angreifer die Owner-Nummer (PII)
-  // und koennte place_call als Owner ausloesen. Erwartet: leere Nummer + tenant=reject.
+  // und koennte place_call als Owner ausloesen. Seit E4 schliesst der /mcp-Torschluss
+  // dafuer schon VOR jedem Tool-Zugriff mit 403 (s. Testkommentar oben).
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp),
@@ -111,10 +119,12 @@ test("AM6 fail-closed: verifiziertes Token OHNE sub -> tenant=reject + get_my_nu
   });
   try {
     const token = await idp.sign({ email: "evil@attacker.test" }, { noSubject: true });
-    const number = await myNumberOver(srv, token);
-    assert.ok(!number, "subloses Token -> keine Nummer (kein Owner-Tenant)");
-    assert.notEqual(number, OWNER_NUM, "NIE die Owner-Nummer");
-    await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("evil@attacker.test")} tenant=reject`));
+    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_my_number"));
+    assert.equal(res.status, HTTP_FORBIDDEN);
+    const body = await res.json();
+    assert.equal(body.error, "Keine Tenant-Zuordnung fuer diese Identitaet.");
+    assert.ok(!JSON.stringify(body).includes(OWNER_NUM), "NIE die Owner-Nummer");
+    await waitForLog(srv, /\[audit\] auth_failed .*path=\/mcp grund=kein_tenant/);
   } finally {
     await srv.stop();
     await idp.close();
@@ -142,9 +152,13 @@ test("AM6 set-if-absent: bestehende idpSubject-Bindung gewinnt gegen OWNER_IDP_S
   try {
     const boundTok = await idp.sign({ sub: "bound-sub" });
     assert.equal(await myNumberOver(srv, boundTok), OWNER_NUM, "bestehende Bindung loest auf");
+    // E4: "other-sub" bleibt unbekannt (set-if-absent No-Op) -> TENANT_REJECT -> der
+    // /mcp-Torschluss antwortet 403, BEVOR ein Tool erreicht wird (s. Tests oben).
     const envTok = await idp.sign({ sub: "other-sub" });
-    assert.ok(
-      !(await myNumberOver(srv, envTok)),
+    const res = await mcpPost(`${srv.localUrl}/mcp`, envTok, toolCall("get_my_number"));
+    assert.equal(
+      res.status,
+      HTTP_FORBIDDEN,
       "abweichendes OWNER_IDP_SUBJECT wurde NICHT gebunden (set-if-absent No-Op)",
     );
   } finally {

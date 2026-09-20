@@ -4828,3 +4828,76 @@ Divergenz -> Exit 1 und fuer den kanonisch gesetzten Wert -> startet). Der
 `PRODUCTION_FOOTGUNS`-Eintrag zusaetzlich in `test/config-prod-footguns.test.js`
 (T-P0-5-15..17: leer/kanonisch-mit-Schraegstrich/divergent) und
 `test/boot-prod-footguns.test.js` (T-P0-5-18: Kindprozess-Exit-1 im Hosting).
+
+## E4 — Mandantentrennung vom Flag entkoppelt (2026-09-20)
+
+**Anlass:** der Request-Tenant-Resolver (`src/routes/_tenant.js`) schloss die gesamte
+Tenant-Achse per `if (!config.tenancy.multiTenant) return operatorChannelTenant(req);`
+kurz - bei ungesetztem `MULTI_TENANT` (Prod-Default) lief JEDER Request ueber denselben
+Betreiber-Pfad, unabhaengig von Identitaet. Drei lesende Routen (`api-read.js`,
+`api-calls.js`) gaten ihren Tenant-Scope zusaetzlich per `config.tenancy.multiTenant ?
+... : ungefiltert`. `MULTI_TENANT` ist in `.env.example`/`render.yaml` als Betriebsschalter
+dokumentiert, nicht als Sicherheitsgrenze - ein versehentlich ungesetztes Flag haette in
+einer Multi-Tenant-Umgebung jedem authentifizierten Aufrufer die Daten ALLER Tenants
+gezeigt. E4 entfernt den Kurzschluss ersatzlos: die Mandantengrenze gilt in jeder
+Umgebung gleich, ohne Env-Abhaengigkeit.
+
+**RLS ist KEINE Anfrage-Grenze.** `src/store/pg.js` haelt einen In-Memory-Spiegel, der
+beim Laden ALLE Mandanten in EINEN JS-Prozessraum hydriert (Row-Level-Security schuetzt
+die Postgres-Verbindung, nicht die Auslieferung aus dem Spiegel). Die einzige Grenze
+zwischen den Daten zweier Tenants ist die Anwendungs-Filterung in den Routen - seit E4
+unbedingt, vorher vom Flag abhaengig.
+
+**Geaenderte Stellen (`src/routes/_tenant.js`, `api-read.js`, `api-calls.js`,
+`mcp.js`):**
+- `requestTenant`: die Flag-Bedingung ist entfernt, die Aufloesungsreihenfolge
+  (Web-Session -> X-Internal-Tenant -> req.auth.sub/internalIdentity ->
+  operatorChannelTenant) bleibt unveraendert.
+- `GET /api/state`: `store.exportTenantData(tenantId)` unbedingt statt `config.tenancy.
+  multiTenant ? ... : store.load()`. Ein Legacy-Call ohne `tenantId` ist damit fuer
+  NIEMANDEN sichtbar (gehoert niemandem) statt vorher fuer jeden Owner-Kanal-Aufrufer.
+- `GET /api/calls/:id`, `callVisibleTo` (api-calls.js, deckt `/consult`,
+  `/consult/answer`, `/cancel`): der `tenantOwnsCall`-Guard ist unbedingt, kein
+  Flag-Bypass mehr fuer Legacy-Calls.
+- **Torschluss `POST /mcp`** (neu, `mcp.js`): ein gueltiges Token, das auf keinen
+  Tenant aufloest (`TENANT_REJECT`), wird jetzt mit 403 abgewiesen, VOR
+  `registerTools`. Absichtlich als `if` IM Handler, HINTER `mcpAuth` (nicht als
+  vorgelagerte Middleware) - eine Middleware wuerde den "kein Token"-Fall von 401 auf
+  403 drehen, den `WWW-Authenticate`-Header verschlucken und eine Neu-Autorisierung
+  vom Client aus unmoeglich machen. Wortlaut identisch zu `requireTenant`
+  (`routes/_tenant.js`) - EIN Text fuer EINE Ablehnung.
+
+**Absolute Regel 2 (Offenlegung) - beide Fehlerrichtungen gemessen:** vor E4 war der
+`ownerSelfCallGranted`-Pfad (`src/callee-is-owner.js`) an die ECHTE, request-aufgeloeste
+`tenantId` gebunden, aber bei ungesetztem Flag loeste JEDER Request auf
+`BOOTSTRAP_TENANT_ID` auf. Zwei Fehlerrichtungen waren dadurch denkbar:
+- **Richtung A (der scharfe Fall):** ein Tenant in der `OWNER_SELF_CALL_TENANT_IDS`-
+  Allowlist ruft die eigene Nummer an; die entfallende Offenlegung muss NUR fuer ihn
+  gelten. Test `test/e4-mandantentrennung-default.test.js` E4-20 belegt: `call.tenantId`
+  ist die echte Tenant-ID, nicht `BOOTSTRAP_TENANT_ID`, und `calleeIsOwner === true`.
+- **Richtung B (der stille Fall):** ein NICHT gepinnter Tenant ruft seine eigene Nummer
+  an - die Ausnahme darf NICHT greifen. E4-21/E4-22 belegen `calleeIsOwner === false`.
+- E4-23 belegt zusaetzlich, dass die Diagnose-Retention (`diagnostic-retention.js`) der
+  ECHTEN Tenant-Achse folgt, nicht der Allowlist (bewusst getrennte Bedingung, s.
+  Owner-Entscheidung OC oben). E4-24 belegt die Gegenprobe: der Bootstrap-Tenant erbt
+  die Ausnahme NICHT, wenn ein identitaetsloser Aufrufer sie erwirken will.
+
+**Akzeptierte Risiken (unveraendert durch E4, hier nur benannt statt verschwiegen):**
+- `X-Internal-Tenant`/`X-Internal-Identity` werden bei ungesetztem Flag jetzt zum
+  ersten Mal GELESEN (vorher kurzgeschlossen). `trustedLocalHeader` nimmt sie nur vom
+  echten Loopback-Socket OHNE `X-Forwarded-For` an - ein rein host-lokaler Vektor, seit
+  `MULTI_TENANT=true` ohnehin offen, durch E4 nicht vergroessert.
+- `GET /api/state` antwortet einer verifizierten-aber-unbekannten Identitaet weiterhin
+  200 mit leeren Listen statt 403 (bewusst, s. `test/e4-mandantentrennung-default.test.js`
+  E4-12): die Route ist `internalOnly`, der einzige Aussenweg auf dieselbe Aufloesung ist
+  `/mcp`, das seit E4 mit 403 schliesst. Nebenwirkung: `settingsFor` legt per `||=` einen
+  nicht persistierten "reject"-Bucket im In-Memory-Spiegel an.
+- Aggregat-Lockerung (unveraendert seit E10, hier nur wiederholt): N x Tenant-Kostendecke
+  statt eines geteilten Plattform-Topfs. Bremsklotz bleibt Abo+KYC vor Outbound
+  (`state-ops.js`, `outbound-gates.js`) + `MAX_NUMBERS`/`MAX_NUMBERS_PER_TENANT` +
+  `OUTBOUND_FROZEN`.
+
+Tests: `test/e4-mandantentrennung-default.test.js` (E4-10..E4-31, neu), plus invertierte
+Bestandsfaelle in `test/read-scope-tenant.test.js`, `test/api-read-parity.test.js`,
+`test/request-tenant-unit.test.js`, `test/tenant-resolver-parity.test.js`,
+`test/auth-p3-bootstrap-fallback.test.js`.
