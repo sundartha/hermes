@@ -4901,3 +4901,55 @@ Tests: `test/e4-mandantentrennung-default.test.js` (E4-10..E4-31, neu), plus inv
 Bestandsfaelle in `test/read-scope-tenant.test.js`, `test/api-read-parity.test.js`,
 `test/request-tenant-unit.test.js`, `test/tenant-resolver-parity.test.js`,
 `test/auth-p3-bootstrap-fallback.test.js`.
+
+## E9-LOESCHWEG — Der Loeschweg deckt weniger ab, als der Rechtstext versprach (2026-09-20)
+
+**Befund (P1-39/P1-40).** Die Datenschutzerklaerung sagte bis E9 eine "vollstaendige
+Loeschung deiner Anruf- und Kontodaten" zu. `eraseTenantData` (`src/store/state-ops.js`,
+Scope aus `tenantCallScope`) loescht Calls samt Transkript, die daraus abgeleiteten
+Action Items, die call-verknuepften Notifications und die private Summary-Nummer.
+UNANGETASTET bleiben settings, profiles, numbers, calendar, usage - und die Identitaet
+beim Anmeldedienst.
+
+**Drei Luecken, alle offen:**
+1. **Kein Netz-Endpunkt.** Der einzige Ausloeser ist `scripts/erase-tenant.js`
+   (CLI, `--confirm`). Die Export-Route `GET /api/tenant-data/export`
+   (`src/routes/api-read.js`, `internalOnly`) hat kein Loesch-Gegenstueck - bewusst
+   (kleinste Angriffsflaeche), aber damit ist Art. 17 heute Handarbeit.
+2. **Kein Audit-Eintrag.** Der Export schreibt `data_export` ins Audit, die Loeschung
+   ueber das Skript schreibt nichts Vergleichbares in dieselbe Spur.
+3. **Anbieterseite nicht erfasst.** Die beim Anbieter der Gespraechs-Plattform
+   gespeicherten Gespraeche werden von `eraseTenantData` gar nicht beruehrt
+   (eigener Store beim Anbieter, s. naechster Eintrag).
+
+**Was E9 getan hat:** den TEXT auf den Code-Umfang zurueckgeschnitten
+(`apps/web/src/data/legal/privacy.de.json`, Abschnitt "Deine Rechte": benennt den
+Loeschumfang, die manuellen Schritte und das Fehlen eines Selbstbedienungs-Wegs).
+**Was E9 NICHT getan hat:** die Luecke schliessen. Status: **offen, Traeger Etappe 10**
+(`PLAN-OPENAI.md`). Ein zurechtgerueckter Text ist kein Ersatz fuer den fehlenden Weg -
+diese Zeile existiert, damit die Zwischenetappe nicht als Abschluss durchgeht.
+
+## E9-ANBIETER-RETENTION — Aufbewahrung und Audio-Mitschnitt beim Anbieter der Gespraechs-Plattform (2026-09-20)
+
+**Gemessen am 20.09.2026** (GET am Live-Agenten + `npm run elevenlabs:drift`, rein lesend):
+
+| Feld | Live | Vorlagen-SOLL | Folge |
+|---|---|---|---|
+| `platform_settings.privacy.record_voice` | `false` | `false` | deckungsgleich; die Zusage "keine Tonaufzeichnungen" ist belegt und steht so im Rechtstext |
+| `platform_settings.privacy.retention_days` | `-1` (unbegrenzt) | `0` | Abweichung, vom Drift-Lauf blockierend gemeldet |
+
+**Warum `-1` ein Sicherheitsbefund ist:** das vollstaendige Gespraech beider Seiten liegt
+beim Anbieter ohne Loeschfrist. Unsere eigenen Fristen (Wortprotokoll nach der
+Zusammenfassung, 30-Tage-Lauf) sagen darueber nichts aus. Der Wert beruht auf der
+Eigentuemer-Ausnahme vom 2026-08-15 in
+`elevenlabs/agent_configs/outbound-agent.template.json` (Feld `retention_days`,
+Schluessel `ausgenommen`), die das Rueckdrehen VOR DEM ERSTEN FREMDKUNDEN bereits als
+Pflicht notiert. `record_voice` ist seit 2026-09-15 nicht mehr ausgenommen; der
+ANBIETER-Standard dieses Feldes ist `true` - ein Dashboard-Klick dreht die Zusage
+lautlos um, deshalb bleibt es bewacht.
+
+**Status: LAUNCH-BLOCKER vor dem ersten Fremdkunden.** Handgriffe:
+`npm run elevenlabs:drift` misst, `npm run elevenlabs:push` dreht `retention_days`
+zurueck (und die Ausnahme in der Vorlage faellt im selben Zug weg). E9 hat den Zustand
+nur SICHTBAR gemacht - im Rechtstext (`privacy.de.json`, Abschnitte "Daten aus Anrufen"
+und "Speicherdauer", beide mit dem gemessenen Wert) und hier. Kein Wert wurde geaendert.
