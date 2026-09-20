@@ -30,6 +30,9 @@ function makeMockStore(bucket = { inputTokens: 5, outputTokens: 7, costCents: 35
   return {
     load: () => ({ calls: [], actionItems: [], notifications: [], numbers: [], usageEvents: [] }),
     tenantContext: () => ({ settings: {}, ownerName: "Jonas" }),
+    // E4: /api/state scoped unbedingt ueber exportTenantData - der Mock-Store braucht
+    // sie deshalb auch fuer diese usage-fokussierte Achse.
+    exportTenantData: () => ({ calls: [], actionItems: [], notifications: [] }),
     usageOf: () => bucket,
     // KS-P8: kein Abo hinterlegt -> tenantQuotaView() liefert null -> planUsagePercent null.
     tenantSubscription: () => ({

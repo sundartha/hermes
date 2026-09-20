@@ -191,22 +191,21 @@ test("KS-P9: die Plattform-Summe sperrt nicht mehr - A telefoniert trotz gerisse
   }
 });
 
-// (5) Flag AUS = byte-identisch: selbst mit gueltigem A-Identitaets-Header bleibt der
-// Outbound Owner-gepinnt (tenantId=owner, config-Owner-Nummer, NICHT A's Nummer).
-test("Flag AUS: Identitaets-Header wird fuer den Tenant ignoriert -> Owner-Nummer + tenantId=owner", async () => {
-  const srv = await startServer({ env: { ALLOWED_NUMBERS: TO }, seed: seedTenants() }); // MULTI_TENANT default false
+// (5) E4: der Identitaets-Header gilt UNBEDINGT, ohne MULTI_TENANT gesetzt zu haben -
+// ein gueltiger A-Identitaets-Header attribuiert den Outbound auf Tenant A (eigene
+// Nummer), NIE auf den Owner.
+test("Ohne MULTI_TENANT gesetzt: Identitaets-Header attribuiert unbedingt auf den echten Tenant, NIE auf den Owner", async () => {
+  const srv = await startServer({ env: { ALLOWED_NUMBERS: TO }, seed: seedTenants() });
   try {
     const res = await placeCall(srv, SUB_A);
-    assert.equal(res.status, 500, "Owner-Pfad erreicht den Originate (offline 500)");
+    assert.equal(res.status, 500, "Tenant-A-Pfad erreicht den Originate (offline 500)");
 
     const call = outboundCallsTo(srv)[0];
     assert.ok(call, "Call erzeugt");
-    assert.equal(
-      call.tenantId,
-      BOOTSTRAP_TENANT_ID,
-      "Flag aus -> tenantId=owner (Tenant-Achse inaktiv)",
-    );
-    assert.equal(call.from, OWNER_NUMBER, "Flag aus -> config-Owner-Nummer, NICHT A's Nummer");
+    assert.equal(call.tenantId, A, "die Identitaet loest unbedingt auf den echten Tenant auf");
+    assert.notEqual(call.tenantId, BOOTSTRAP_TENANT_ID, "NIE der Owner-Tenant");
+    assert.equal(call.from, NUM_A, "unter A's eigener Nummer, NICHT der Owner-Nummer");
+    assert.notEqual(call.from, OWNER_NUMBER);
   } finally {
     await srv.stop();
   }

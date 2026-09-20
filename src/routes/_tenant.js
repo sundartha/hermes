@@ -9,11 +9,13 @@
 // startet ueber app.listen() den HTTP-Server (deshalb laden alle Tests server.js per
 // Spawn) - der Resolver bleibt damit nicht unit-testbar. Hier liegt er ohne Boot
 // importierbar. Der store wird per Factory injiziert (Repo-Muster makeProfileRoutes/
-// makeSelfServiceRoutes), config wird per DI gereicht (T4-Vertrag
-// makeTenantResolver({ store, config })) und defaultet auf das config-Singleton - das
-// haelt das Modul DB-frei und vermeidet einen Zirkel-Import mit server.js.
-import { config as defaultConfig } from "../config.js";
+// makeSelfServiceRoutes); seit E4 liest der Resolver KEINE Konfiguration mehr - die
+// Mandantengrenze haengt an keiner Env-Variablen, der T4-Vertrag ist
+// makeTenantResolver({ store }). Das haelt das Modul DB- und config-frei und vermeidet
+// einen Zirkel-Import mit server.js.
 import { BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
+
+const HTTP_FORBIDDEN = 403;
 
 // === Reine Helfer / Konstanten (ohne store/config) =============================
 
@@ -106,21 +108,16 @@ export const tenantOwnsCall = (call, tenant) => call.tenantId === tenant;
 
 // === Factory ====================================================================
 
-// makeTenantResolver({ store, config }) — kanonische T4-Naht. Liefert die an store
-// (+ config) gebundenen Resolver plus die reinen Helfer/Konstanten als EIN Objekt
-// (T4 §3.2: server.js baut EINE Instanz, nutzt sie in Middleware/mcp und injiziert
-// dieselbe Instanz in jede Route-Factory -> kein zweiter Resolver, G5/DIP).
-// config defaultet auf das config-Singleton, damit der A4-Kompat-Pfad
-// (makeRequestTenant) ohne explizite config byte-identisch dieselbe Quelle liest
-// (Tests mutieren config.tenancy.multiTenant live auf dem Singleton).
-export function makeTenantResolver({ store, config = defaultConfig }) {
+// makeTenantResolver({ store }) — kanonische T4-Naht. Liefert die an store gebundenen
+// Resolver plus die reinen Helfer/Konstanten als EIN Objekt (T4 §3.2: server.js baut
+// EINE Instanz, nutzt sie in Middleware/mcp und injiziert dieselbe Instanz in jede
+// Route-Factory -> kein zweiter Resolver, G5/DIP).
+export function makeTenantResolver({ store }) {
   // Request-Tenant aus der Auth-Identitaet aufloesen (Geschwister zu internalIdentity).
-  // Aufloesungs-Reihenfolge (load-bearing):
-  //   (1) Flag aus -> es existiert keine Tenant-Achse; der Bootstrap-Tenant ist der
-  //       einzige. Er geht ueber operatorChannelTenant NUR an den Betreiber-Kanal
-  //       (AUTH-P3), jeder andere Aufrufer -> TENANT_REJECT. Muss ZUERST stehen, sonst
-  //       kaeme bei Flag aus ein Session-Tenant statt des Bootstrap-Tenants (R5).
-  //   (2) req.tenant (Web-Session, A4): VOR der req.auth-Logik. req.tenant wird im
+  // Aufloesungs-Reihenfolge (load-bearing). Seit E4 UNBEDINGT: es gibt keinen
+  // Env-Schalter mehr, der diese Kette kurzschliesst - die Mandantengrenze gilt in
+  // jeder Umgebung gleich (eine Semantik statt zweier).
+  //   (1) req.tenant (Web-Session, A4): VOR der req.auth-Logik. req.tenant wird im
   //       ganzen src/ NUR von webAuthMiddleware gesetzt (web-auth.js) - erst nach
   //       signiertem Cookie + gueltiger, nicht-invalidierter DB-Session + aktivem
   //       Account. Das ist die STAERKERE, jederzeit invalidierbare Identitaet und hat
@@ -130,7 +127,7 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   //       zweiter Resolver bei einem Tenant ohne idpSubject von der DB-Session
   //       divergieren (R7). fail-closed: leere/fehlende tenantId -> TENANT_REJECT,
   //       NIE Owner. Bewusst `||`, NICHT `??` - `??` liesse `""` durch (R2).
-  //   (3) req.auth.sub (MCP-Achse) bzw. localhost-internalIdentity. FEHLENDE Identitaet
+  //   (2) req.auth.sub (MCP-Achse) bzw. localhost-internalIdentity. FEHLENDE Identitaet
   //       (kein req.auth UND kein localhost-internal) -> operatorChannelTenant: Bootstrap
   //       NUR fuer den genuin lokalen In-Process-Aufrufer (MCP-Tools/stdio), sonst
   //       TENANT_REJECT (AUTH-P3). VORHANDENE, aber unbekannte/leere Identitaet ->
@@ -139,10 +136,9 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   // (mcp-tools, Profile-Achse), die Tenant-Achse keyt aber auf sub. Statt die REST-
   // Identitaet sub-seitig neu aufzuloesen, reicht das /mcp-Gateway den BEREITS
   // aufgeloesten Tenant als X-Internal-Tenant durch (internalTenant, s.u.); der
-  // Lesepfad get_my_number unter MULTI_TENANT konsumiert ihn -> die sub/email-
+  // Lesepfad get_my_number konsumiert ihn -> die sub/email-
   // Divergenz verschwindet an EINER autoritativen Aufloesung am JWT.
   function requestTenant(req) {
-    if (!config.tenancy.multiTenant) return operatorChannelTenant(req);
     if (req.tenant) return req.tenant.tenantId || TENANT_REJECT; // Web-Session, fail-closed
     // AM6: am /mcp-Gateway bereits aufgeloester Tenant (X-Internal-Tenant, trusted-
     // localhost). Analog req.tenant eine Vorab-Aufloesung -> direkt zurueck, kein zweiter
@@ -171,7 +167,7 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   // Eine VORHANDENE, aber unbekannte Identitaet (TENANT_REJECT) wird hart mit 403
   // abgewiesen, statt in einen Pseudo-Tenant-Bucket zu schreiben (Owner-Entscheidung).
   // Liefert den Tenant ODER null (dann ist 403 bereits gesendet -> Handler returnt).
-  // Flag AUS / fehlende Identitaet -> requestTenant === operatorChannelTenant: fuer den
+  // Fehlende Identitaet -> requestTenant === operatorChannelTenant: fuer den
   // Betreiber-Kanal (Loopback ohne X-Forwarded-For) Bootstrap -> Guard inert, Owner-Pfad
   // byte-identisch; fuer jeden anderen identitaetslosen Request REJECT -> 403 (AUTH-P3).
   // Eine VORHANDENE, aber unbekannte Identitaet -> REJECT -> 403. Eigenstaendig von I5's
@@ -180,7 +176,7 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   function requireTenant(req, res) {
     const tenant = requestTenant(req);
     if (tenant === TENANT_REJECT) {
-      res.status(403).json({ error: "Keine Tenant-Zuordnung fuer diese Identitaet." });
+      res.status(HTTP_FORBIDDEN).json({ error: "Keine Tenant-Zuordnung fuer diese Identitaet." });
       return null;
     }
     return tenant;
@@ -205,7 +201,7 @@ export const createTenantResolver = makeTenantResolver;
 // makeRequestTenant(store) — A4-Kompat-Naht: byte-identische Signatur und Rueckgabe
 // (nur { requestTenant, requireTenant }), damit server.js (Z. 55) und
 // request-tenant-unit.test.js unveraendert weiterlaufen. Delegiert an
-// makeTenantResolver mit default-config (dasselbe config-Singleton wie zuvor).
+// makeTenantResolver (der seit E4 keine config mehr nimmt).
 export function makeRequestTenant(store) {
   const { requestTenant, requireTenant } = makeTenantResolver({ store });
   return { requestTenant, requireTenant };

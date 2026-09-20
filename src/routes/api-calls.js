@@ -372,11 +372,11 @@ export function makeCallRoutes({
 
 
   // L5/I5: EINE Sichtbarkeits-Regel fuer alle Call-Routen dieser Datei (G5) - fremder
-  // Tenant -> der Aufrufer antwortet 404 (kein Existenz-Leck, NICHT 403). Hinter dem
-  // Flag: aus -> ungefiltert wie im Bestand (byte-identisch, auch fuer Calls ohne
-  // tenantId). !call short-circuitet vor dem tenantOwnsCall-Zugriff.
+  // Tenant -> der Aufrufer antwortet 404 (kein Existenz-Leck, NICHT 403). Seit E4
+  // unbedingt: kein Env-Schalter hebt sie auf, ein Call ohne tenantId gehoert niemandem.
+  // !call short-circuitet vor dem tenantOwnsCall-Zugriff.
   function callVisibleTo(call, tenantId) {
-    return Boolean(call) && (!config.tenancy.multiTenant || tenantOwnsCall(call, tenantId));
+    return Boolean(call) && tenantOwnsCall(call, tenantId);
   }
 
   // AL-P13: Consult #0. Keine Fragen ODER Faehigkeit nicht freigegeben -> No-op (kein

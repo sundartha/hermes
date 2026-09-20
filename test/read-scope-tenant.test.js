@@ -29,7 +29,9 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const SUB_OWNER = "sub-owner",
   SUB_B = "sub-b";
-const B = "B";
+const TENANT_B = "B";
+const HTTP_OK = 200;
+const HTTP_NOT_FOUND = 404;
 const OWNER_NUM = "+4915200000001",
   B_NUM = "+4915200000002";
 const OWNER_NAME = "Jonas Beispiel"; // P2b: vom Harness in den Store geseedet (ensureOwnerNumber), G1
@@ -45,7 +47,7 @@ function seedTwoTenants() {
     tenantId: BOOTSTRAP_TENANT_ID,
     status: "completed",
   });
-  const bCall = seedCall({ id: "call_b", twilioSid: "CAb", tenantId: B, status: "completed" });
+  const bCall = seedCall({ id: "call_b", twilioSid: "CAb", tenantId: TENANT_B, status: "completed" });
   return seedState({
     calls: [ownerCall, bCall],
     actionItems: [
@@ -78,7 +80,7 @@ function seedTwoTenants() {
     ],
     tenants: [
       { id: BOOTSTRAP_TENANT_ID, status: "active", idpSubject: SUB_OWNER },
-      { id: B, status: "active", idpSubject: SUB_B, ownerName: B_NAME },
+      { id: TENANT_B, status: "active", idpSubject: SUB_B, ownerName: B_NAME },
     ],
     numbers: [
       {
@@ -92,7 +94,7 @@ function seedTwoTenants() {
       {
         id: "num_b",
         e164: B_NUM,
-        tenantId: B,
+        tenantId: TENANT_B,
         provider: "telnyx",
         status: "active",
         providerNumberId: null,
@@ -104,34 +106,34 @@ function seedTwoTenants() {
 // GET mit X-Internal-Identity (= idpSubject) ueber den localhost-Socket.
 const getJsonAs = async (srv, idpSub, path) => {
   const res = await fetch(`${srv.localUrl}${path}`, { headers: { "X-Internal-Identity": idpSub } });
-  return { status: res.status, body: res.status === 200 ? await res.json() : null };
+  return { status: res.status, body: res.status === HTTP_OK ? await res.json() : null };
 };
-const ids = (list) => list.map((x) => x.id);
+const ids = (list) => list.map((item) => item.id);
 
 // ----- DAS GATE: GET /api/state, je Identitaet -> nur eigene Daten -----
 test("I5 /api/state ist tenant-gescoped: jede Identitaet sieht NUR ihre eigenen Daten", async () => {
   const srv = await startServer({ env: { MULTI_TENANT: "true" }, seed: seedTwoTenants() });
   try {
     const { body: owner } = await getJsonAs(srv, SUB_OWNER, "/api/state");
-    const { body: b } = await getJsonAs(srv, SUB_B, "/api/state");
+    const { body: bodyB } = await getJsonAs(srv, SUB_B, "/api/state");
 
     // calls: Positiv (sieht eigenen) + Negativ (sieht fremden NICHT)
     assert.ok(ids(owner.calls).includes("call_owner"), "Owner sieht eigenen Call");
     assert.ok(!ids(owner.calls).includes("call_b"), "Owner sieht B-Call NICHT");
-    assert.ok(ids(b.calls).includes("call_b"), "B sieht eigenen Call");
-    assert.ok(!ids(b.calls).includes("call_owner"), "B sieht Owner-Call NICHT");
+    assert.ok(ids(bodyB.calls).includes("call_b"), "B sieht eigenen Call");
+    assert.ok(!ids(bodyB.calls).includes("call_owner"), "B sieht Owner-Call NICHT");
 
     // actionItems
     assert.ok(ids(owner.actionItems).includes("ai_owner"), "Owner sieht eigenes Action Item");
     assert.ok(!ids(owner.actionItems).includes("ai_b"), "Owner sieht B-Action-Item NICHT");
-    assert.ok(ids(b.actionItems).includes("ai_b"), "B sieht eigenes Action Item");
-    assert.ok(!ids(b.actionItems).includes("ai_owner"), "B sieht Owner-Action-Item NICHT");
+    assert.ok(ids(bodyB.actionItems).includes("ai_b"), "B sieht eigenes Action Item");
+    assert.ok(!ids(bodyB.actionItems).includes("ai_owner"), "B sieht Owner-Action-Item NICHT");
 
     // notifications
     assert.ok(ids(owner.notifications).includes("nt_owner"), "Owner sieht eigene Notification");
     assert.ok(!ids(owner.notifications).includes("nt_b"), "Owner sieht B-Notification NICHT");
-    assert.ok(ids(b.notifications).includes("nt_b"), "B sieht eigene Notification");
-    assert.ok(!ids(b.notifications).includes("nt_owner"), "B sieht Owner-Notification NICHT");
+    assert.ok(ids(bodyB.notifications).includes("nt_b"), "B sieht eigene Notification");
+    assert.ok(!ids(bodyB.notifications).includes("nt_owner"), "B sieht Owner-Notification NICHT");
   } finally {
     await srv.stop();
   }
@@ -142,28 +144,28 @@ test("I5 /api/state agent-Block ist tenant-gescoped + fail-closed (Nummer/Owner/
   const srv = await startServer({ env: { MULTI_TENANT: "true" }, seed: seedTwoTenants() });
   try {
     const { body: owner } = await getJsonAs(srv, SUB_OWNER, "/api/state");
-    const { body: b } = await getJsonAs(srv, SUB_B, "/api/state");
+    const { body: bodyB } = await getJsonAs(srv, SUB_B, "/api/state");
 
     // agent.number: aktive Tenant-Nummer, NIE die fremde
     assert.equal(owner.agent.number, OWNER_NUM, "Owner sieht eigene Nummer");
-    assert.equal(b.agent.number, B_NUM, "B sieht eigene Nummer");
-    assert.notEqual(b.agent.number, OWNER_NUM, "B sieht NICHT die Owner-Nummer");
+    assert.equal(bodyB.agent.number, B_NUM, "B sieht eigene Nummer");
+    assert.notEqual(bodyB.agent.number, OWNER_NUM, "B sieht NICHT die Owner-Nummer");
     assert.notEqual(owner.agent.number, B_NUM, "Owner sieht NICHT die B-Nummer");
 
     // agent.owner: pro-Tenant ownerName (echt, nicht global)
     assert.equal(owner.agent.owner, OWNER_NAME, "Owner-Sicht traegt Owner-Fallback-Namen");
-    assert.equal(b.agent.owner, B_NAME, "B sieht 'Maria'");
+    assert.equal(bodyB.agent.owner, B_NAME, "B sieht 'Maria'");
     assert.notEqual(owner.agent.owner, B_NAME, "Owner sieht NICHT 'Maria'");
 
     // agent.ownerNumber: Feld seit P4 ganz entfernt (war seit P2b immer "") -> keine
     // Sicht traegt es, ein fail-OPEN-Leak der Owner-Privatnummer ist strukturell
     // unmoeglich.
-    assert.ok(!("ownerNumber" in b.agent), "ownerNumber-Feld ist entfernt (P4)");
+    assert.ok(!("ownerNumber" in bodyB.agent), "ownerNumber-Feld ist entfernt (P4)");
     assert.ok(!("ownerNumber" in owner.agent), "ownerNumber-Feld ist entfernt (P4)");
 
     // Plattform-Service-Config bleibt global (kein Daten-Leck). Das frueher hier gepruefte
     // agent.allowedNumbers entfaellt seit outbound-p3 (Feld aus der Agent-Flaeche entfernt).
-    assert.equal(owner.agent.voiceEngine, b.agent.voiceEngine, "voiceEngine bleibt global");
+    assert.equal(owner.agent.voiceEngine, bodyB.agent.voiceEngine, "voiceEngine bleibt global");
   } finally {
     await srv.stop();
   }
@@ -176,45 +178,46 @@ test("I5 /api/calls/:id ist tenant-gescoped: fremder Call -> 404 (nicht 403), be
     // Positiv: jeder auf seinen eigenen Call -> 200
     assert.equal(
       (await getJsonAs(srv, SUB_OWNER, "/api/calls/call_owner")).status,
-      200,
+      HTTP_OK,
       "Owner -> eigener Call 200",
     );
     assert.equal(
       (await getJsonAs(srv, SUB_B, "/api/calls/call_b")).status,
-      200,
+      HTTP_OK,
       "B -> eigener Call 200",
     );
 
     // Negativ: fremder Call_id -> 404 (kein Existenz-Leck, NICHT 403)
     const foreignById = await getJsonAs(srv, SUB_OWNER, "/api/calls/call_b");
-    assert.equal(foreignById.status, 404, "Owner -> B-Call_id 404");
+    assert.equal(foreignById.status, HTTP_NOT_FOUND, "Owner -> B-Call_id 404");
     // Negativ: getCall matcht AUCH twilioSid -> auch die zweite id-Achse muss 404 sein
     const foreignBySid = await getJsonAs(srv, SUB_OWNER, "/api/calls/CAb");
-    assert.equal(foreignBySid.status, 404, "Owner -> B-twilioSid 404 (getCall matcht twilioSid)");
+    assert.equal(foreignBySid.status, HTTP_NOT_FOUND, "Owner -> B-twilioSid 404 (getCall matcht twilioSid)");
   } finally {
     await srv.stop();
   }
 });
 
-// ----- Flag-AUS-Regression: byte-identisch zum Bestand (kein Filter, kein Guard) -----
-test("Flag aus: Legacy-Call OHNE tenantId bleibt sichtbar (/api/state) und abrufbar (/api/calls/:id = 200)", async () => {
-  // MULTI_TENANT NICHT gesetzt (BASE_ENV: "false"). Legacy-Call ohne tenantId +
-  // ein B-Call: beide muessen ungefiltert sichtbar bleiben (Bestand).
+// ----- E4-Bestand: die Mandantengrenze gilt OHNE gesetztes MULTI_TENANT -----
+test("E4-Bestand: Legacy-Call OHNE tenantId ist fuer niemanden sichtbar (/api/state) und nicht abrufbar (404)", async () => {
+  // MULTI_TENANT NICHT gesetzt (BASE_ENV: "false"). Seit E4 unbedingt: ein Legacy-Call
+  // ohne tenantId gehoert niemandem, ein B-Call gehoert nicht dem Owner - beide bleiben
+  // fuer den Owner unsichtbar.
   const legacy = seedCall({ id: "call_legacy", twilioSid: "CAlegacy", status: "completed" });
   delete legacy.tenantId; // Altbestand kennt kein tenantId
-  const bCall = seedCall({ id: "call_b2", tenantId: B, status: "completed" });
+  const bCall = seedCall({ id: "call_b2", tenantId: TENANT_B, status: "completed" });
   const seed = seedState({ calls: [legacy, bCall] });
 
   const srv = await startServer({ seed });
   try {
     const { body } = await getJsonAs(srv, SUB_OWNER, "/api/state");
-    assert.ok(ids(body.calls).includes("call_legacy"), "Legacy-Call ohne tenantId bleibt sichtbar");
-    assert.ok(ids(body.calls).includes("call_b2"), "B-Call bleibt sichtbar (ungefiltert)");
-    // Kein 404-Guard bei Flag aus -> Legacy-Call abrufbar (byte-identisch)
+    assert.ok(!ids(body.calls).includes("call_legacy"), "Legacy-Call ohne tenantId gehoert niemandem");
+    assert.ok(!ids(body.calls).includes("call_b2"), "B-Call ist fuer den Owner unsichtbar");
+    // Unbedingter Guard (E4) -> auch bei ungesetztem Flag 404
     assert.equal(
       (await getJsonAs(srv, SUB_OWNER, "/api/calls/call_legacy")).status,
-      200,
-      "Legacy-Call /api/calls/:id = 200",
+      HTTP_NOT_FOUND,
+      "Legacy-Call /api/calls/:id = 404",
     );
     // usage darf NIE undefined sein (Owner-Bucket ueber usageOf)
     assert.ok(body.usage, "usage-Bucket vorhanden (kein undefined)");

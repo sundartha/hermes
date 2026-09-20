@@ -28,8 +28,8 @@ import { registerTools } from "../mcp-tools.js";
 import { HERMES_SERVER_INFO, mcpServerOptions } from "../mcp-server-info.js";
 import { consultAllowedFor } from "../consult/gate.js";
 import { mcpAuth } from "../auth.js";
-import { hashEmail } from "../util.js";
-import { ANON_IDENTITY } from "../request-tenant.js";
+import { audit, hashEmail } from "../util.js";
+import { ANON_IDENTITY, TENANT_REJECT } from "../request-tenant.js";
 import { tenantLanguage } from "../store/views.js";
 import { createMcpOriginGuard, mcpErlaubteOrigins } from "../middleware.js";
 
@@ -44,6 +44,43 @@ export function mcpRequestLabel(body) {
   const method = body?.method || "";
   const toolName = method === "tools/call" ? body?.params?.name : null;
   return typeof toolName === "string" && toolName ? `${method} ${toolName}` : method;
+}
+
+const HTTP_FORBIDDEN = 403;
+
+// E4-Torschluss: ein GUELTIGES Token ohne Tenant-Zuordnung kommt bis hierher bis an
+// registerTools heran. Bewusst als eigene Funktion, aufgerufen IM Handler und NACH
+// mcpAuth, nicht als vorgelagerte Middleware: die wuerde den Fall "kein Token" von 401
+// auf 403 drehen, die Bearer-Challenge aus mcpAuth (src/auth.js) verschlucken und eine
+// Neu-Autorisierung vom Client aus unmoeglich machen (der Aussperr-Fall, den E5 fuer die
+// Herkunftswache benannt hat). Wortlaut identisch zu requireTenant (routes/_tenant.js) -
+// EIN Text fuer EINE Lage. Liefert true, wenn der Handler abbrechen muss (Antwort bereits
+// gesendet).
+function rejectIfNoTenant(scopedTenant, req, res) {
+  if (scopedTenant !== TENANT_REJECT) return false;
+  audit("auth_failed", req, "path=/mcp grund=kein_tenant");
+  res.status(HTTP_FORBIDDEN).json({ error: "Keine Tenant-Zuordnung fuer diese Identitaet." });
+  return true;
+}
+
+// tenant=<id|reject|owner> auditiert die I4-Aufloesung (kein Secret: nur die tenantId,
+// nie email/sub). E-Mail wird gehasht (T-P0-7): dieses Diagnose-Log laeuft pro Request
+// und landet im Render-stdout - die Klartext-Adresse waere PII at rest. Der forensische
+// Identitaets-Nachweis bleibt vollstaendig im audit()-Trail (requestedBy). Eigene Funktion
+// (G30/G34): buendelt Logging + Identitaets-Aufloesung, EIN Zweck, aus dem Haupt-Handler
+// herausgezogen, damit dessen Verzweigungszahl unter dem Komplexitaets-Limit bleibt.
+function logAndResolveIdentity({ req, scopedTenant }) {
+  if (req.auth)
+    console.log(
+      "[mcp]",
+      req.auth.email ? hashEmail(req.auth.email) : "anonym",
+      `tenant=${scopedTenant}`,
+      mcpRequestLabel(req.body),
+    );
+  // Identitaet aus dem verifizierten JWT (req.auth). email bevorzugt, sonst sub. Sie wird
+  // als X-Internal-Identity an die In-Process-Tools gereicht (Audit/requestedBy) - NICHT
+  // mehr fuer das Rechteprofil. Kein req.auth (Legacy/localhost/stdio) -> null.
+  return req.auth ? req.auth.email || req.auth.sub || ANON_IDENTITY : null;
 }
 
 export function makeMcpRoutes({ config, store, requestTenant }) {
@@ -73,27 +110,12 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
   );
 
   router.post("/mcp", mcpAuth, async (req, res) => {
-    // tenant=<id|reject|owner> auditiert die I4-Aufloesung (kein Secret: nur die
-    // tenantId, nie email/sub). Flag aus -> immer tenant=owner (byte-identisch).
-    // E-Mail wird gehasht (T-P0-7): dieses Diagnose-Log laeuft pro Request und landet
-    // im Render-stdout - die Klartext-Adresse waere PII at rest. Der forensische
-    // Identitaets-Nachweis bleibt vollstaendig im audit()-Trail (requestedBy).
     // AM6: Tenant EINMAL aus dem verifizierten JWT aufloesen (req.auth.sub) und an die
     // In-Process-Tools reichen (scopedTenant als X-Internal-Tenant), damit der REST-Hop
-    // nicht aus der email-first Identitaet re-aufloest (sub/email-Divergenz). Flag aus ->
-    // requestTenant === BOOTSTRAP_TENANT_ID (byte-identisch).
+    // nicht aus der email-first Identitaet re-aufloest (sub/email-Divergenz).
     const scopedTenant = requestTenant(req);
-    if (req.auth)
-      console.log(
-        "[mcp]",
-        req.auth.email ? hashEmail(req.auth.email) : "anonym",
-        `tenant=${scopedTenant}`,
-        mcpRequestLabel(req.body),
-      );
-    // Identitaet aus dem verifizierten JWT (req.auth). email bevorzugt, sonst sub. Sie wird
-    // als X-Internal-Identity an die In-Process-Tools gereicht (Audit/requestedBy) - NICHT
-    // mehr fuer das Rechteprofil. Kein req.auth (Legacy/localhost/stdio) -> null.
-    const identity = req.auth ? req.auth.email || req.auth.sub || ANON_IDENTITY : null;
+    if (rejectIfNoTenant(scopedTenant, req, res)) return;
+    const identity = logAndResolveIdentity({ req, scopedTenant });
     // Rechteprofil keyt seit Phase S auf den am Gateway aufgeloesten Tenant (scopedTenant),
     // nicht auf die email-/sub-Identitaet. BOOTSTRAP -> OWNER_PROFILE, sonst stored-or-DEFAULT
     // (fail-closed: ein authentifizierter Nutzer ohne Tenant-Profil bekommt DEFAULT_PROFILE).

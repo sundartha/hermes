@@ -25,6 +25,12 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
       OAUTH_ISSUER_URL: idp.issuer,
       OAUTH_AUDIENCE: AUDIENCE,
       DASHBOARD_PASSWORD: "geheim", // Wiederauferstehungs-Detektor: der Wert wird seit AUTH-P7 von nichts mehr gelesen
+      // E4: jedes Token in diesem Block traegt den Default-sub "user-1" (idp.sign ohne
+      // explizites sub) - ohne Bindung wuerde der letzte Subtest am /mcp-Torschluss
+      // (TENANT_REJECT -> 403, VOR dem [mcp]-Diagnose-Log) scheitern, bevor er das
+      // Log-Verhalten pruefen kann. Die anderen Subtests scheitern ohnehin frueher an
+      // mcpAuth (401) und erreichen die Tenant-Aufloesung gar nicht erst.
+      OWNER_IDP_SUBJECT: "user-1",
     },
   });
   try {

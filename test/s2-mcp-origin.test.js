@@ -184,7 +184,17 @@ describe("E5-H: Herkunftswache am laufenden Server", () => {
   before(async () => {
     idp = await startIdp();
     srv = await startServer({
-      env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: MCP_AUDIENCE },
+      env: {
+        MCP_AUTH: "oauth",
+        OAUTH_ISSUER_URL: idp.issuer,
+        OAUTH_AUDIENCE: MCP_AUDIENCE,
+        // E4: gueltigesToken traegt den Default-sub "user-1" (idp.sign ohne explizites
+        // sub) - ohne Bindung wuerde jeder Origin-/Auth-positive Fall am /mcp-Torschluss
+        // (TENANT_REJECT -> 403) scheitern, bevor er die Herkunftswache selbst pruefen
+        // kann. Die Negativ-Faelle (fremder Origin) bleiben unberuehrt: die Herkunftswache
+        // sitzt VOR mcpAuth und dem Torschluss und blockt dort bereits.
+        OWNER_IDP_SUBJECT: "user-1",
+      },
     });
     gueltigesToken = await idp.sign({ email: "e5@team.test" });
   });
@@ -388,6 +398,9 @@ describe("E5-H14: MCP_ALLOWED_ORIGINS ist additiv, nicht ersetzend", () => {
         OAUTH_ISSUER_URL: idp.issuer,
         OAUTH_AUDIENCE: MCP_AUDIENCE,
         MCP_ALLOWED_ORIGINS: "https://chatgpt.com",
+        // E4: s. Kommentar im "E5-H"-Block oben - der Default-sub "user-1" braucht eine
+        // Tenant-Bindung, sonst greift der /mcp-Torschluss VOR der Herkunftswaage-Aussage.
+        OWNER_IDP_SUBJECT: "user-1",
       },
     });
     token = await idp.sign({ email: "e5h14@team.test" });

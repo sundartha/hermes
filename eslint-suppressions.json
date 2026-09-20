@@ -737,14 +737,6 @@
       "count": 5
     }
   },
-  "src/routes/_tenant.js": {
-    "complexity": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
   "src/routes/_validation.js": {
     "id-length": {
       "count": 3
@@ -1516,14 +1508,6 @@
     },
     "no-magic-numbers": {
       "count": 4
-    }
-  },
-  "test/api-read-parity.test.js": {
-    "id-length": {
-      "count": 8
-    },
-    "no-magic-numbers": {
-      "count": 15
     }
   },
   "test/api-state-usage-axis.test.js": {
@@ -3747,14 +3731,6 @@
       "count": 3
     }
   },
-  "test/profiles.test.js": {
-    "id-length": {
-      "count": 7
-    },
-    "no-magic-numbers": {
-      "count": 12
-    }
-  },
   "test/prompt-en-call-e2e.test.js": {
     "id-length": {
       "count": 7
@@ -3878,14 +3854,6 @@
       "count": 1
     }
   },
-  "test/read-scope-tenant.test.js": {
-    "id-length": {
-      "count": 4
-    },
-    "no-magic-numbers": {
-      "count": 6
-    }
-  },
   "test/reattach-active-call.test.js": {
     "no-magic-numbers": {
       "count": 5
@@ -3912,11 +3880,6 @@
     },
     "no-magic-numbers": {
       "count": 1
-    }
-  },
-  "test/request-tenant.test.js": {
-    "no-magic-numbers": {
-      "count": 4
     }
   },
   "test/reservation-json-ephemeral.test.js": {
