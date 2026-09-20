@@ -5,7 +5,8 @@
 //                Kontrolle, dass das Widget-_meta NICHT verdraengt wurde.
 //   Schritt 11 - derselbe Response: der Rest des T-18-Wortlauts (Name eindeutig,
 //                description/inputSchema, outputSchema-Bilanz genau 10 von 12).
-//   Schritt 12 - der lokale Handler-Aufruf: cancel_call/list_action_items liefern nie
+//   Schritt 12 - der lokale Handler-Aufruf: cancel_call/list_action_items arbeiten
+//                (isError=false, Mock-Antwort im Text) und liefern dabei nie
 //                structuredContent (Verhaltens-Beleg, nicht nur "kein Schema deklariert").
 //   Schritt 13 - der stdio-Pfad am ECHTEN SDK (InMemoryTransport, kein Attrappen-
 //                Server): registerTool() verwirft unbekannte Config-Felder still
@@ -169,10 +170,14 @@ test("P2 (T-18 Rest): tools/list liefert eindeutige Namen, description/inputSche
 });
 
 // Schritt 12: registerTool()-Aufrufe direkt einfangen (Muster test/mcp-tools.test.js
-// captureTools), ein lokaler HTTP-Mock spielt das Gateway. Beweist am Verhalten, nicht
-// nur an der Deklaration, dass cancel_call/list_action_items NIE structuredContent
-// liefern - Pre-Mortem #2: eine versehentlich mitgenommene outputSchema-Deklaration
-// waere sonst erst am naechsten echten Anruf als "Output validation error" aufgefallen.
+// captureTools), ein lokaler HTTP-Mock spielt das Gateway. Prueft, dass der Handler
+// tatsaechlich arbeitet (isError=false, Mock-Antwort im Text) UND dabei nie
+// structuredContent liefert - beides zusammen, weil sonst ein kaputter Handler
+// (wrapHandler faengt jeden Wurf und liefert ebenfalls kein structuredContent) unbemerkt
+// bliebe. Der Waechter gegen eine versehentlich mitgenommene outputSchema-Deklaration
+// (Pre-Mortem #2, "Output validation error" am naechsten echten Anruf) ist Schritt 11 -
+// dort laeuft der echte Output-Validator des SDK am Wire, hier wird der eingefangene
+// Handler direkt aufgerufen und der Validator dabei umgangen.
 function captureRegisterToolHandlers(ctx) {
   const handlers = new Map();
   const fakeServer = {
@@ -202,16 +207,32 @@ async function withLocalGateway(body, run) {
   }
 }
 
-test("P2 (Schritt 12): cancel_call und list_action_items liefern nie structuredContent", async () => {
+test("P2 (Schritt 12): cancel_call und list_action_items arbeiten und liefern dabei nie structuredContent", async () => {
   const handlers = captureRegisterToolHandlers({ identity: null, allowCalendar: true });
 
   await withLocalGateway({ status: "cancel_requested" }, async () => {
     const result = await handlers.get("cancel_call")({ call_id: "call_1" });
+    // notEqual(true) statt equal(undefined): wrapHandler faengt JEDEN Wurf und liefert
+    // ebenfalls kein structuredContent - erst diese Zusicherung trennt einen
+    // arbeitenden vom kaputten Handler (Gegenprobe: toter GATEWAY_URL-Port liefert
+    // {content:[{text:"fetch failed"}], isError:true}, structuredContent bliebe
+    // trotzdem undefined).
+    assert.notEqual(result.isError, true, "cancel_call: kein isError - der Handler hat gearbeitet");
+    const [{ text: cancelText }] = result.content;
+    assert.ok(
+      cancelText.includes("cancel_requested"),
+      "cancel_call: die Mock-Antwort des Gateways erscheint im Text",
+    );
     assert.equal(result.structuredContent, undefined, "cancel_call: kein structuredContent");
   });
 
   await withLocalGateway({ actionItems: [] }, async () => {
     const result = await handlers.get("list_action_items")();
+    assert.notEqual(
+      result.isError,
+      true,
+      "list_action_items: kein isError - der Handler hat gearbeitet",
+    );
     assert.equal(result.structuredContent, undefined, "list_action_items: kein structuredContent");
   });
 });

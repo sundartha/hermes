@@ -9,10 +9,10 @@
 // der seine Erwartung aus dem Pruefling zieht, belegt nichts.
 //
 // Harness wie test/p15-mcp-tool-descriptions-en.test.js: ein fakeServer faengt den
-// Registrierweg ab. Seit P2 laufen ALLE Werkzeuge ueber registerTool(config) - die
-// fakeServer.tool()-Falle bleibt als totes Bein stehen (frueherer Legacy-Weg, s.
-// Kommentar am uiTool()-Helfer in src/mcp-tools.js), annotations sitzen jetzt einheitlich
-// im config-Objekt.
+// Registrierweg ab. Seit P2 laufen ALLE Werkzeuge ueber registerTool(config), annotations
+// sitzen einheitlich im config-Objekt - der fakeServer faengt deshalb nur noch
+// registerTool ab (frueherer server.tool()-Legacy-Weg entfernt, s. Kommentar am
+// uiTool()-Helfer in src/mcp-tools.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { registerTools } from "../src/mcp-tools.js";
@@ -110,12 +110,6 @@ const EXPECTED_CONSULT_ANNOTATIONS = {
 function captureAnnotations(ctx = {}) {
   const annotationsByTool = new Map();
   const fakeServer = {
-    // Frueherer Legacy-Weg server.tool(name, desc, schema, annotations, handler) - seit
-    // P2 registriert kein Werkzeug mehr darueber, die Falle bleibt als totes Bein stehen.
-    tool: (name, ...rest) => {
-      const [, , annotations] = rest;
-      annotationsByTool.set(name, annotations);
-    },
     registerTool: (name, config) => annotationsByTool.set(name, config.annotations),
     registerResource() {},
   };
