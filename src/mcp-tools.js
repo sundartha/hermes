@@ -622,9 +622,10 @@ const AWAIT_CALL_EVENT_DESCRIPTION =
 //    Entdopplung selbst steht in der Beschreibung und ist damit nach N-11 offengelegt.
 // N-02/N-03: das sind HINTS, keine Garantie - ein Client darf seine Nutzungsentscheidung
 // nicht allein darauf stuetzen; die Beschreibungstexte bleiben die eigentliche Quelle.
-// title ist EIN Anzeigename fuer BEIDE Registrierwege (W-09: title > annotations.title >
-// name) - der Legacy-Weg (server.tool) kennt kein eigenes Top-Level-title, deshalb steht
-// er hier bewusst NICHT bei den uiTool-Konfigs (sonst zwei Titel-Regeln je Registrierweg).
+// title steht weiterhin genau hier (annotations.title), wird aber von
+// withOpenAiToolMetadata() zusaetzlich auf Top-Level gehoben (T-18, P2) - keine zweite,
+// namensindizierte Tabelle. annotations.title bleibt als W-09-Rueckfall
+// (title > annotations.title > name).
 // Wie die Beschreibungen einsprachig Englisch (Systemgrenze O14 oben) - nur das
 // Client-Modell liest das, keine Tenant-Sprache.
 // EIN modulweiter Wahrheitstabelle statt zehn Inline-Literalen (Owner-Auflage
@@ -712,6 +713,67 @@ const TOOL_ANNOTATIONS = {
     destructiveHint: false,
     openWorldHint: false,
   },
+};
+
+// T-22: Statuszeilen fuer den Moment "waehrend"/"nach" dem Tool-Aufruf, je <= 64 Zeichen
+// (die Grenze prueft der Test, kein Laufzeit-Waechter - ein Waechter waere Code, der im
+// Betrieb nie etwas tut). Reihenfolge = Registrierreihenfolge (Vollstaendigkeit gegen die
+// Datei abzaehlbar, wie TOOL_ANNOTATIONS oben).
+const OPENAI_INVOKING_KEY = "openai/toolInvocation/invoking";
+const OPENAI_INVOKED_KEY = "openai/toolInvocation/invoked";
+const TOOL_INVOCATION_STATUS = {
+  place_call: { invoking: "Placing the call", invoked: "Call started" },
+  await_call_event: {
+    invoking: "Waiting for the next call event",
+    invoked: "Call event received",
+  },
+  answer_consult: {
+    invoking: "Sending your answer to the agent",
+    invoked: "Answer delivered",
+  },
+  get_call_status: { invoking: "Checking the call status", invoked: "Call status read" },
+  get_transcript: { invoking: "Reading the call transcript", invoked: "Transcript read" },
+  // invoked bewusst "Cancellation requested", nicht "Call cancelled": der REST-Pfad
+  // sichert seit S1-4 keinen bestaetigten Leitungsabbruch zu (dieselbe Wahrheit wie
+  // CANCEL_CALL_DESCRIPTION). Eine Statuszeile darf nicht mehr behaupten als die
+  // Beschreibung.
+  cancel_call: { invoking: "Cancelling the call", invoked: "Cancellation requested" },
+  get_my_number: { invoking: "Looking up the agent number", invoked: "Agent number read" },
+  list_calls: { invoking: "Listing recent calls", invoked: "Recent calls listed" },
+  check_inbox: { invoking: "Checking the call inbox", invoked: "Inbox checked" },
+  list_action_items: {
+    invoking: "Listing open action items",
+    invoked: "Action items listed",
+  },
+  get_calendar: { invoking: "Reading the calendar", invoked: "Calendar read" },
+  get_agent_status: { invoking: "Checking the agent status", invoked: "Agent status read" },
+};
+
+// T-18/T-22 (P2, DP-7): hebt title auf Top-Level und haengt die Statuszeilen an _meta an -
+// fuer JEDES Werkzeug, ausserhalb der zwoelf Config-Literale. Grund: fuenf der Literale
+// spreaden ...enableWidgetUi() als LETZTES Feld; ein vorher im Literal gesetztes _meta
+// wuerde von diesem Spread still und vollstaendig ueberschrieben (Objekt-Literal-Semantik,
+// kein Deep-Merge). Deshalb erst HIER, nachdem das Literal fertig gebaut ist.
+// title kommt NUR aus config.annotations?.title (W-09: title > annotations.title > name)
+// - keine zweite, namensindizierte Tabelle. Damit gibt es strukturell EINE Titel-Quelle,
+// title und annotations.title koennen nicht auseinanderlaufen.
+// _meta entsteht als { ...statusMeta, ...config._meta }: der Widget-Anteil steht HINTEN
+// und gewinnt bei (heute unmoeglicher) Kollision - die Namensraeume sind disjunkt (ui /
+// openai/outputTemplate vs. openai/toolInvocation/*).
+// Fehlt ein Tool in TOOL_INVOCATION_STATUS, entstehen KEINE halben Schluessel (leeres
+// Fragment statt throw) - eine fehlende Statuszeile ist kosmetisch, ein Wurf hier wuerde
+// /mcp fuer alle Mandanten zerlegen. Die Luecke faengt der Vollstaendigkeitstest, der ueber
+// die ausgelieferte Liste iteriert, nicht ueber eine Namensliste.
+const withOpenAiToolMetadata = (name, config) => {
+  const status = TOOL_INVOCATION_STATUS[name];
+  const statusMeta = status
+    ? { [OPENAI_INVOKING_KEY]: status.invoking, [OPENAI_INVOKED_KEY]: status.invoked }
+    : {};
+  return {
+    ...config,
+    title: config.annotations?.title,
+    _meta: { ...statusMeta, ...config._meta },
+  };
 };
 
 // ctx (Phase 2): { identity, scopedTenant, allowCalendar }. identity wird per Closure
@@ -802,7 +864,9 @@ export function registerTools(
   // Result-Guard, Deref) wird zu einer sauberen MCP-Fehlerantwort (isError) statt
   // einer process-level unhandled rejection. requireFields-Meldungen sind bereits
   // generisch; alles andere bekommt eine stabile, provider-freie Meldung (kein Leak).
-  // EINE Fehlerhuelle, geteilt von tool() und uiTool() (G5/S2 - keine Duplizierung).
+  // EINE Fehlerhuelle fuer uiTool() (G5/S2 - keine Duplizierung). Bis P2 (T-18/T-22) war
+  // sie auch von der inzwischen entfernten tool()-Fabrik geteilt (Legacy-Registrierweg
+  // server.tool, s. Kommentar an uiTool() unten).
   const wrapHandler =
     (handler) =>
     async (...args) => {
@@ -822,17 +886,13 @@ export function registerTools(
       }
     };
 
-  // Bestands-Tools: positionsbasiertes server.tool (frozen API, kein outputSchema/_meta).
-  // server.tool nimmt Annotations als viertes von fuenf Positionsargumenten (frozen API,
-  // E2). Viertes Argument als EIN Objekt statt fuenftem Parameter (F1, max-params haelt).
-  const tool = (name, desc, schema, { annotations, handler }) =>
-    server.tool(name, desc, schema, annotations, wrapHandler(handler));
-
-  // Wie tool(), aber ueber registerTool(config) -> erlaubt outputSchema (Stufe 0
-  // schema-validiert) und _meta.ui.resourceUri (Stufe 1). config ohne _meta ->
-  // Stufe-0-only. Dieselbe Fehlerhuelle wie tool() (Single Source via wrapHandler).
+  // Einziger Registrierweg: ueber registerTool(config) -> erlaubt outputSchema (Stufe 0
+  // schema-validiert) und _meta.ui.resourceUri (Stufe 1). config ohne outputSchema/_meta
+  // im Literal -> Stufe-0-only. withOpenAiToolMetadata() hebt title auf Top-Level und
+  // haengt die T-22-Statuszeilen an (P2, s. Kommentar dort) - NACHDEM das Literal fertig
+  // gebaut ist, damit ein spaeter gespreadetes Widget-_meta nichts ueberschreibt.
   const uiTool = (name, config, handler) =>
-    server.registerTool(name, config, wrapHandler(handler));
+    server.registerTool(name, withOpenAiToolMetadata(name, config), wrapHandler(handler));
 
   // place_call: EINZIGE Karte fuer den gesamten Anruf-Lebenszyklus (W2, Spam-Wurzel
   // beseitigt). uiTool statt tool(): initiales structuredContent (dialing, alle Felder
@@ -1237,14 +1297,16 @@ export function registerTools(
   // (routes/api-calls.js) traegt seit dieser Aenderung die ehrliche Auskunft (Datensatz vs.
   // Leitung, S1-4: zusaetzlich hangup_attempted) bereits selbst. Kein zweiter Wortlaut hier
   // (G5). Die Beschreibung selbst ist S1-2c-korrigiert (CANCEL_CALL_DESCRIPTION oben).
-  tool(
+  uiTool(
     "cancel_call",
-    CANCEL_CALL_DESCRIPTION,
-    { call_id: z.string().describe("The call_id from place_call") },
     {
+      description: CANCEL_CALL_DESCRIPTION,
       annotations: TOOL_ANNOTATIONS.cancel_call,
-      handler: async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
+      inputSchema: { call_id: z.string().describe("The call_id from place_call") },
+      // KEIN outputSchema: der Handler liefert ausschliesslich text(...), nie
+      // structuredContent (s. Schritt 12 P2-Spec, Beleg test/openai-p2-tool-metadaten.test.js).
     },
+    async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
   );
 
   // Stufe 0 (Text byte-identisch zum Bestand) + structuredContent (Whitelist) + Stufe 1
@@ -1335,9 +1397,15 @@ export function registerTools(
   // Leertext und Termin-Praefix folgen der Tenant-Sprache (MCP-14): sie kommen aus
   // DEMSELBEN Locale-Buendel wie Rollen-Praefix, Fehler- und Leertexte (loc.mcp), kein
   // zweiter Lookup. DE bleibt byte-identisch zum Bestand.
-  tool("list_action_items", "Lists open action items from all calls.", {}, {
-    annotations: TOOL_ANNOTATIONS.list_action_items,
-    handler: async () => {
+  uiTool(
+    "list_action_items",
+    {
+      description: "Lists open action items from all calls.",
+      annotations: TOOL_ANNOTATIONS.list_action_items,
+      inputSchema: {},
+      // KEIN outputSchema: beide Rueckgabepfade sind text(...), nie structuredContent.
+    },
+    async () => {
       const s = await call("GET", "/api/state");
       requireFields(s, { actionItems: "array" });
       const open = s.actionItems.filter((a) => !a.done);
@@ -1351,7 +1419,7 @@ export function registerTools(
           .join("\n"),
       );
     },
-  });
+  );
 
   // Kalender-Tool nur registrieren, wenn das Profil es erlaubt (Phase 2). Ein
   // restriktives Profil sieht get_calendar gar nicht erst. Stufe 0 (Text byte-identisch)

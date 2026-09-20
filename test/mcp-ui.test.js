@@ -53,6 +53,13 @@ const CAPABLE_CAPS = {
 };
 const capableHost = () => ({ enabled: true, capabilities: CAPABLE_CAPS });
 
+// P2: seit withOpenAiToolMetadata() traegt JEDES Werkzeug ein _meta (die T-22-
+// Statuszeilen) - "kein _meta" ist damit kein gueltiger Nicht-Widget-Beweis mehr. Dieser
+// Helfer prueft stattdessen namentlich, dass keiner der beiden Widget-Schluessel da ist
+// (Verschaerfung, keine Abschwaechung: vorher war "kein Objekt" der Beweis, jetzt sind
+// die Widget-Schluessel benannt).
+const ohneWidgetMeta = (config) => !config._meta?.ui && !config._meta?.[CHATGPT_META_KEY];
+
 // Faengt registerTool(name, config, handler) + registerResource(name, uri, config,
 // readCb) ein. tool() (Bestand) faengt es ueber server.tool ab (hier ungenutzt).
 function captureUi(ctx) {
@@ -230,7 +237,7 @@ test("T-P1-UI-AC2: place_call traegt jetzt die vereinte Live-Karte (_meta); get_
       "place_call: _meta zeigt auf die vereinte Karte",
     );
 
-    assert.equal(tools.get("get_call_status").config._meta, undefined, "get_call_status: kein _meta mehr");
+    assert.ok(ohneWidgetMeta(tools.get("get_call_status").config), "get_call_status: kein Widget-_meta");
   });
 });
 
@@ -244,7 +251,7 @@ test("T-P1-UI-AC3: place_call Stufe-0-only bei Master-Schalter aus / kein hostHi
       const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
       const { config, handler } = tools.get("place_call");
       assert.equal(resources.filter((r) => r.uri === RESOURCE_URI_CALL).length, 0, `${label}: keine call-Resource`);
-      assert.ok(!config._meta, `${label}: place_call kein _meta`);
+      assert.ok(ohneWidgetMeta(config), `${label}: place_call kein Widget-_meta`);
 
       const result = await handler(PLACE_CALL_ARGS);
       assert.equal(result.content[0].type, "text", `${label}: Text-Fallback bleibt nutzbar (AC8)`);
@@ -257,10 +264,9 @@ test("T-P1-UI-AC3: place_call Stufe-0-only bei Master-Schalter aus / kein hostHi
       assert.equal(result.structuredContent.call_id, "call_1");
       assert.equal(result.structuredContent.status, "dialing");
 
-      assert.equal(
-        tools.get("get_call_status").config._meta,
-        undefined,
-        `${label}: get_call_status bleibt ohne _meta`,
+      assert.ok(
+        ohneWidgetMeta(tools.get("get_call_status").config),
+        `${label}: get_call_status bleibt ohne Widget-_meta`,
       );
     }
   });
@@ -286,7 +292,7 @@ test("T-UI-stateless: Master-Schalter an OHNE caps (realer stateless tools/list)
       assert.ok(placeResult.structuredContent, `${label}: place_call structuredContent bleibt`);
 
       const status = tools.get("get_call_status");
-      assert.equal(status.config._meta, undefined, `${label}: get_call_status bleibt ohne _meta (W2)`);
+      assert.ok(ohneWidgetMeta(status.config), `${label}: get_call_status bleibt ohne Widget-_meta (W2)`);
     }
   });
 });
@@ -436,7 +442,7 @@ test("T-P2-UI-AC2: get_transcript verliert ihr _meta (W2) - keine eigene Resourc
   await withGateway(RICH_TRANSCRIPT, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
     const { config } = tools.get("get_transcript");
-    assert.equal(config._meta, undefined, "get_transcript: kein _meta mehr");
+    assert.ok(ohneWidgetMeta(config), "get_transcript: kein Widget-_meta");
   });
 });
 
@@ -449,7 +455,7 @@ test("T-P2-UI-AC3: Fallback fail-closed - kein _meta, structuredContent voll", a
     for (const [label, uiHost] of Object.entries(cases)) {
       const { tools } = captureUi(uiHost === null ? undefined : { uiHost });
       const { config, handler } = tools.get("get_transcript");
-      assert.ok(!config._meta, `${label}: kein _meta`);
+      assert.ok(ohneWidgetMeta(config), `${label}: kein Widget-_meta`);
       const result = await handler({ call_id: "call_1" });
       assert.ok(result.structuredContent, `${label}: structuredContent bleibt`);
       assert.equal(result.structuredContent.call_id, "call_1");
@@ -889,7 +895,7 @@ test("T-W3-AC3: Fallback fail-closed - kein _meta, keine agent-status-Resource, 
         0,
         `${label}: keine agent-status-Resource`,
       );
-      assert.ok(!config._meta, `${label}: kein _meta`);
+      assert.ok(ohneWidgetMeta(config), `${label}: kein Widget-_meta`);
       // Default-Tool: existiert in ALLEN Faellen, nur das Widget faellt weg.
       const result = await handler({});
       assert.ok(result.structuredContent, `${label}: structuredContent bleibt`);
@@ -1086,7 +1092,7 @@ test("T-Wb-MY-AC3: Fallback fail-closed - kein _meta/Resource, structuredContent
       const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
       const { config, handler } = tools.get("get_my_number");
       assert.equal(resources.filter((r) => r.uri === RESOURCE_URI_MY).length, 0, `${label}: keine Resource`);
-      assert.ok(!config._meta, `${label}: kein _meta`);
+      assert.ok(ohneWidgetMeta(config), `${label}: kein Widget-_meta`);
       const result = await handler({});
       assert.deepEqual(Object.keys(result.structuredContent).sort(), ["number"], `${label}: structuredContent bleibt`);
     }
@@ -1172,7 +1178,7 @@ test("T-Wb-CALLS-AC3: Fallback fail-closed - kein _meta/Resource, structuredCont
       const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
       const { config, handler } = tools.get("list_calls");
       assert.equal(resources.filter((r) => r.uri === RESOURCE_URI_CALLS).length, 0, `${label}: keine Resource`);
-      assert.ok(!config._meta, `${label}: kein _meta`);
+      assert.ok(ohneWidgetMeta(config), `${label}: kein Widget-_meta`);
       const result = await handler({});
       assert.equal(result.structuredContent.calls.length, 2, `${label}: structuredContent bleibt`);
     }
@@ -1257,7 +1263,7 @@ test("T-Wb-CAL-AC3: Fallback fail-closed - kein _meta/Resource, structuredConten
       const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
       const { config, handler } = tools.get("get_calendar");
       assert.equal(resources.filter((r) => r.uri === RESOURCE_URI_CAL).length, 0, `${label}: keine Resource`);
-      assert.ok(!config._meta, `${label}: kein _meta`);
+      assert.ok(ohneWidgetMeta(config), `${label}: kein Widget-_meta`);
       const result = await handler({});
       assert.equal(result.structuredContent.calendar.length, 1, `${label}: structuredContent bleibt`);
     }

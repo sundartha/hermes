@@ -8,10 +8,11 @@
 // Die Erwartung steht hier als LITERAL, absichtlich nicht aus src importiert: ein Test,
 // der seine Erwartung aus dem Pruefling zieht, belegt nichts.
 //
-// Harness wie test/p15-mcp-tool-descriptions-en.test.js: ein fakeServer faengt BEIDE
-// Registrierungswege ab. Der Legacy-Weg heisst jetzt
-// server.tool(name, desc, schema, annotations, handler) - die Annotations sitzen an der
-// VIERTEN Position (frozen SDK-API, s. Kommentar am tool()-Helfer in src/mcp-tools.js).
+// Harness wie test/p15-mcp-tool-descriptions-en.test.js: ein fakeServer faengt den
+// Registrierweg ab. Seit P2 laufen ALLE Werkzeuge ueber registerTool(config), annotations
+// sitzen einheitlich im config-Objekt - der fakeServer faengt deshalb nur noch
+// registerTool ab (frueherer server.tool()-Legacy-Weg entfernt, s. Kommentar am
+// uiTool()-Helfer in src/mcp-tools.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { registerTools } from "../src/mcp-tools.js";
@@ -109,12 +110,6 @@ const EXPECTED_CONSULT_ANNOTATIONS = {
 function captureAnnotations(ctx = {}) {
   const annotationsByTool = new Map();
   const fakeServer = {
-    // server.tool(name, desc, schema, annotations, handler) - die eingefrorene
-    // 5-Positions-API. Restparameter statt fuenf benannter Positionen (max-params 3).
-    tool: (name, ...rest) => {
-      const [, , annotations] = rest;
-      annotationsByTool.set(name, annotations);
-    },
     registerTool: (name, config) => annotationsByTool.set(name, config.annotations),
     registerResource() {},
   };
@@ -157,10 +152,9 @@ test("P0-1/P1 (X-1): kein registriertes Werkzeug kommt ohne die drei Pflicht-Ann
   }
 });
 
-// Der Beweis ueber die ECHTE Route (P10-Lerntest fuer die eingefrorene SDK-API): der
-// Legacy-Weg server.tool(...) nimmt die Annotations als VIERTES von fuenf Positions-
-// Argumenten. Parst das SDK sie anders, verschwinden sie hier still - oder der Handler
-// wandert an die falsche Position. Beides faellt nur ueber tools/list am laufenden Server auf.
+// Der Beweis ueber die ECHTE Route (P10-Lerntest fuer die SDK-API): registerTool()
+// verwirft unbekannte Config-Felder still (P0/U-2). Parst das SDK annotations anders,
+// verschwinden sie hier still - das faellt nur ueber tools/list am laufenden Server auf.
 test("P0-1 (E2E): tools/list liefert ueber die echte /mcp-Route fuer JEDES Werkzeug Annotations", async () => {
   const srv = await startServer({ seed: seedState({}) });
   try {
@@ -177,8 +171,9 @@ test("P0-1 (E2E): tools/list liefert ueber die echte /mcp-Route fuer JEDES Werkz
       assert.ok(alle[tool.name], `${tool.name} ist in der Erwartungstabelle`);
       assert.deepEqual(tool.annotations, alle[tool.name], tool.name);
     }
-    // Die zwei Werkzeuge auf dem Legacy-Registrierweg MUESSEN dabei sein - sie sind der
-    // eigentliche Beleg (der registerTool-Weg traegt annotations ohnehin im config-Objekt).
+    // cancel_call/list_action_items (die zwei Werkzeuge, die vor P2 auf dem Legacy-Weg
+    // registriert wurden) MUESSEN dabei sein - nach der Migration auf registerTool()
+    // ist das keine Formalitaet mehr, sondern derselbe Weg wie alle anderen zehn.
     const namen = result.tools.map((entry) => entry.name);
     for (const legacy of ["cancel_call", "list_action_items"])
       assert.ok(namen.includes(legacy), `${legacy} erscheint in tools/list`);
