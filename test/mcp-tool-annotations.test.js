@@ -241,6 +241,15 @@ test("P1 (N-1/X-1/N-3/N-4/N-11): tools/list ueber /mcp liefert mit Consult-Faehi
       /writes to the call record/,
       "await_call_event.description nennt den Schreibeffekt in Klartext",
     );
+    // Review-Befund Runde 1 (P1): die Entdopplung leistet ALLEIN after_event_id
+    // (state-ops.js:pendingConsult filtert nur auf status/seq, askDeliveredAt spielt
+    // dort keine Rolle) - die Beschreibung darf keine serverseitige Entdopplung
+    // behaupten, sonst widerspricht sie der eigenen Parameter-Beschreibung.
+    assert.doesNotMatch(
+      awaitCallEvent.description,
+      /same question is not (handed out|delivered)/,
+      "await_call_event.description behauptet keine serverseitige Entdopplung",
+    );
   } finally {
     await srv.stop();
   }

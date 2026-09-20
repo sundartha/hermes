@@ -594,7 +594,7 @@ const AWAIT_CALL_EVENT_DESCRIPTION =
   "so there is no need to call get_transcript separately. event=\"none\" simply means " +
   "nothing happened yet: call it again. This tool NEVER returns audio. Each call also " +
   "writes to the call record: it notes that you polled and marks a pending question as " +
-  "delivered, so the same question is not handed out twice.";
+  "delivered. Pass after_event_id so you do not receive the same question twice.";
 
 // MCP-Annotations (Phase E2, P0-1, geschaerft P1/N-1/X-1/N-3/N-4): Nebenwirkungs-
 // Kennzeichnung je Werkzeug, die ein Client OHNE Beschreibungs-Text lesen kann. Vier
