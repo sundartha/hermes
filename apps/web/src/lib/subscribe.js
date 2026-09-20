@@ -14,6 +14,7 @@ import {
   ApiError,
   HTTP_CONFLICT,
   HTTP_UNAUTHORIZED,
+  notifySessionExpired,
   startBillingSetupCheckout,
   startBillingCancel,
   startBillingResume,
@@ -607,6 +608,7 @@ async function postNewsletterConsent(consent) {
     body: JSON.stringify({ consent }),
   });
   if (!res.ok) {
+    if (res.status === HTTP_UNAUTHORIZED) notifySessionExpired();
     let code;
     try {
       const body = await res.json();
