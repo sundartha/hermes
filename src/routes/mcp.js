@@ -26,6 +26,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerTools } from "../mcp-tools.js";
 import { HERMES_SERVER_INFO, mcpServerOptions } from "../mcp-server-info.js";
+import { applyToolSecuritySchemes } from "../mcp-security-schemes.js";
 import { consultAllowedFor } from "../consult/gate.js";
 import { mcpAuth } from "../auth.js";
 import { audit, hashEmail } from "../util.js";
@@ -156,6 +157,8 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
         uiHost,
         language,
       });
+      // T-15: securitySchemes am Tool-Deskriptor - siehe src/mcp-security-schemes.js.
+      applyToolSecuritySchemes(server);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       res.on("close", () => {
         transport.close();

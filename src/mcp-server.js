@@ -10,6 +10,7 @@ import { registerTools } from "./mcp-tools.js";
 import { config, resolveGatewayUrl } from "./config.js";
 import { uiServerExtension } from "./ui/contract.js";
 import { HERMES_SERVER_INFO } from "./mcp-server-info.js";
+import { applyToolSecuritySchemes } from "./mcp-security-schemes.js";
 
 // Rich-UI auch ueber stdio (Claude Desktop). Anders als der HTTP-Connector rendert
 // stdio die Widgets zuverlaessig: die HTTP-AppBridge-Doppel-Session ist Claude-seitig
@@ -26,6 +27,10 @@ const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
 registerTools(server, {
   uiHost: { enabled: config.tenancy.mcpUiEnabled },
 });
+// T-15: securitySchemes auch ueber stdio - bewusst derselbe Wert wie ueber HTTP (E3),
+// nicht weil stdio eine eigene Auth-Schicht haette, sondern damit es EINE Wahrheit
+// bleibt statt zweier, die auseinanderlaufen koennen. Siehe src/mcp-security-schemes.js.
+applyToolSecuritySchemes(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
