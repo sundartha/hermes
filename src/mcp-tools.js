@@ -578,10 +578,48 @@ const placeCallDescription = (consultLoop) =>
 const CANCEL_CALL_DESCRIPTION =
   "Cancels the call record and stops billing right away. Whether the phone line itself actually drops is NOT guaranteed on every call path - when it is not, the response says so explicitly instead of claiming a clean hangup.";
 
-// MCP-Annotations (Phase E2, P0-1): Nebenwirkungs-Kennzeichnung je Werkzeug, die ein
-// Client OHNE Beschreibungs-Text lesen kann (MCP-Spec "Tool Annotations"). destructiveHint
-// und idempotentHint sind laut Spec nur bedeutungstragend, wenn das Nur-Lese-Feld false
-// ist - deshalb fehlen sie bei den reinen Lese-Werkzeugen bewusst (kein toter Wert).
+// P1 (N-11): auf Modulebene wie PLACE_CALL_DESCRIPTION/CANCEL_CALL_DESCRIPTION/
+// CHECK_INBOX_DESCRIPTION - haelt registerTools() klein statt wachsen zu lassen
+// (Owner-Auflage, s. Kommentar bei CHECK_INBOX_DESCRIPTION). Der letzte Satz nennt den
+// Schreibeffekt in Klartext: readOnlyHint: false stand bereits richtig, aber der
+// Seiteneffekt (noteConsultPoll/markConsultAskDelivered, s. TOOL_ANNOTATIONS-Kommentar
+// Punkt 2) war in der Beschreibung bisher unsichtbar. Kein Grossschreib-Marker in diesem
+// Satz - test/p15-mcp-tool-descriptions-en.test.js pinnt die Emphase von await_call_event
+// auf genau ["REPEATEDLY", "NEVER"], nach Anzahl UND Reihenfolge.
+const AWAIT_CALL_EVENT_DESCRIPTION =
+  "Waits briefly (up to ~20 seconds) for the next event of a running call and returns " +
+  "either a question from the agent, the final result, or nothing. Call this REPEATEDLY " +
+  "right after place_call and keep going until it returns event=\"done\" - that final " +
+  "answer carries the complete result (summary and whether the objective was achieved), " +
+  "so there is no need to call get_transcript separately. event=\"none\" simply means " +
+  "nothing happened yet: call it again. This tool NEVER returns audio. Each call also " +
+  "writes to the call record: it notes that you polled and marks a pending question as " +
+  "delivered, so the same question is not handed out twice.";
+
+// MCP-Annotations (Phase E2, P0-1, geschaerft P1/N-1/X-1/N-3/N-4): Nebenwirkungs-
+// Kennzeichnung je Werkzeug, die ein Client OHNE Beschreibungs-Text lesen kann. Vier
+// Festlegungen, die die naechste Sitzung sonst zurueckdreht:
+// 1. OpenAI fuehrt readOnlyHint, destructiveHint und openWorldHint als Required (X-1/N-1);
+//    die MCP-Spec fuehrt zwei davon als optional. Bei Widerspruch gewinnt die
+//    OpenAI-Fassung - deshalb tragen ALLE zwoelf Werkzeuge alle drei Felder, auch die
+//    reinen Lese-Werkzeuge mit destructiveHint: false. idempotentHint bleibt optional
+//    (N-1 nennt es ausdruecklich so) und steht deshalb weiterhin nur dort, wo es etwas
+//    aussagt - an einem Nur-Lese-Werkzeug waere es ein bedeutungsloser Wert.
+// 2. openWorldHint entscheidet sich am ZUGRIFF des Werkzeugs, nicht am Thema seiner Daten
+//    (N-4 woertlich: Zugriff auf das oeffentliche Internet oder offene externe Entitaeten).
+//    get_call_status, get_transcript und await_call_event lesen (bzw. schreiben)
+//    ausschliesslich den tenant-lokalen Store (GET /api/calls/:id, routes/api-read.js:98),
+//    auch wenn sie ueber einen Anruf nach draussen berichten - deshalb false. place_call,
+//    answer_consult und cancel_call wirken auf die echte Leitung bzw. den Carrier -
+//    deshalb true.
+// 3. answer_consult traegt destructiveHint: true, weil der eingespeiste Text am Telefon
+//    ausgesprochen wird (routes/api-calls.js:690) und damit nicht zurueckholbar ist -
+//    N-3 woertlich: "even ... through indirect side effects".
+// 4. place_call behaelt idempotentHint: false, obwohl der Aufruf fuer eine bereits
+//    laufende Nummer denselben Anruf zurueckgibt (deduplicated: true, PLACE_CALL_
+//    DESCRIPTION oben): die Entdopplung gilt nur fuer die Dauer des laufenden Anrufs, ein
+//    spaeterer Aufruf waehlt erneut. Untertreiben ist hier die sichere Richtung; die
+//    Entdopplung selbst steht in der Beschreibung und ist damit nach N-11 offengelegt.
 // N-02/N-03: das sind HINTS, keine Garantie - ein Client darf seine Nutzungsentscheidung
 // nicht allein darauf stuetzen; die Beschreibungstexte bleiben die eigentliche Quelle.
 // title ist EIN Anzeigename fuer BEIDE Registrierwege (W-09: title > annotations.title >
@@ -609,17 +647,27 @@ const TOOL_ANNOTATIONS = {
     readOnlyHint: false,
     destructiveHint: false,
     idempotentHint: true,
-    openWorldHint: true,
+    openWorldHint: false,
   },
   answer_consult: {
     title: "Answer call question",
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: false,
     openWorldHint: true,
   },
-  get_call_status: { title: "Get call status", readOnlyHint: true, openWorldHint: true },
-  get_transcript: { title: "Get call transcript", readOnlyHint: true, openWorldHint: true },
+  get_call_status: {
+    title: "Get call status",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  get_transcript: {
+    title: "Get call transcript",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
   cancel_call: {
     title: "Cancel a call",
     readOnlyHint: false,
@@ -627,8 +675,18 @@ const TOOL_ANNOTATIONS = {
     idempotentHint: true,
     openWorldHint: true,
   },
-  get_my_number: { title: "Agent phone number", readOnlyHint: true, openWorldHint: false },
-  list_calls: { title: "List calls", readOnlyHint: true, openWorldHint: false },
+  get_my_number: {
+    title: "Agent phone number",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  list_calls: {
+    title: "List calls",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
   check_inbox: {
     title: "Check inbox",
     readOnlyHint: false,
@@ -636,9 +694,24 @@ const TOOL_ANNOTATIONS = {
     idempotentHint: false,
     openWorldHint: false,
   },
-  list_action_items: { title: "List action items", readOnlyHint: true, openWorldHint: false },
-  get_calendar: { title: "Get calendar", readOnlyHint: true, openWorldHint: false },
-  get_agent_status: { title: "Get agent status", readOnlyHint: true, openWorldHint: false },
+  list_action_items: {
+    title: "List action items",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  get_calendar: {
+    title: "Get calendar",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  get_agent_status: {
+    title: "Get agent status",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
 };
 
 // ctx (Phase 2): { identity, scopedTenant, allowCalendar }. identity wird per Closure
@@ -969,13 +1042,7 @@ export function registerTools(
     uiTool(
       "await_call_event",
       {
-        description:
-          "Waits briefly (up to ~20 seconds) for the next event of a running call and returns " +
-          "either a question from the agent, the final result, or nothing. Call this REPEATEDLY " +
-          "right after place_call and keep going until it returns event=\"done\" - that final " +
-          "answer carries the complete result (summary and whether the objective was achieved), " +
-          "so there is no need to call get_transcript separately. event=\"none\" simply means " +
-          "nothing happened yet: call it again. This tool NEVER returns audio.",
+        description: AWAIT_CALL_EVENT_DESCRIPTION,
         annotations: TOOL_ANNOTATIONS.await_call_event,
         inputSchema: {
           call_id: z.string().describe("The call_id from place_call"),
