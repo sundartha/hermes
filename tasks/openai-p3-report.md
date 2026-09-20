@@ -88,3 +88,14 @@ P0 annahmen). Gebaut wird `[{ "type": "oauth2", "scopes": [] }]` (Widerspruch W1
   Baseline-Messung auf demselben master-Commit in diesem Worktree (nicht gefahren,
   Zeitgruende) - s. "abweichungen"/"selbstzweifel" der strukturierten Ruecklieferung.
   Kein `not ok` heisst: keine Regression, unabhaengig vom exakten Baseline-Wert.
+
+## Schritt 9 — Restrisiko fuer den Deploy (Review-Korrektur)
+
+Messung B (Spec 0.3) belegt nur: ein **SDK-basierter** Client (typisiert ueber `ToolSchema`)
+sieht `securitySchemes` nicht, weil zod es beim Parsen strippt. Das ist NICHT dasselbe wie
+"Risiko fuer den LIVE-Claude-Connector gemessen: null" — der claude.ai-Connector ist kein
+Instanz dieses SDK-Clients und wurde nicht gemessen. Die Spec (0.3, Punkt 2) ist entsprechend
+korrigiert. Kein Code-Fix noetig (der Override selbst ist protokoll-konform: das MCP-Schema
+verbietet keine Zusatzfelder, OpenAI schreibt genau dieses Feld vor). Auflage fuer den ersten
+Deploy: `tools/list` einmal ueber den echten claude.ai-Connector ansehen, bevor der Rollout
+als abgeschlossen gilt.

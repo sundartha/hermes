@@ -243,11 +243,14 @@ test("P3 (Schritt 6b): ChatGPT-Adapter traegt securitySchemes neben openai/outpu
 // koennte die stdio-Zeile geloescht werden, ohne dass ein Test rot wird.
 test("P3 (Schritt 7): src/mcp-server.js verdrahtet applyToolSecuritySchemes NACH registerTools", () => {
   const quelltext = readFileSync(new URL("../src/mcp-server.js", import.meta.url), "utf8");
-  // Kommentarzeilen (z.B. eine auskommentierte Verdrahtungszeile bei der Gegenprobe)
-  // werden vor der indexOf-Suche entfernt - sonst faende die Suche den Aufruf auch
-  // dann noch, wenn er nur noch als Text im Kommentar steht, statt ausgefuehrt zu
-  // werden (das waere kein Beleg fuer die Verdrahtung des Einstiegs).
-  const ohneKommentarzeilen = quelltext
+  // Kommentare (Zeilenkommentare UND Blockkommentare, z.B. eine auskommentierte
+  // Verdrahtungszeile bei der Gegenprobe) werden vor der indexOf-Suche entfernt -
+  // sonst faende die Suche den Aufruf auch dann noch, wenn er nur noch als Text im
+  // Kommentar steht, statt ausgefuehrt zu werden (das waere kein Beleg fuer die
+  // Verdrahtung des Einstiegs). Blockkommentare zuerst entfernen, DANACH zeilenweise
+  // filtern - sonst ueberlebt ein Aufruf, der komplett in einem /* ... */-Block liegt.
+  const ohneBlockkommentare = quelltext.replace(/\/\*[\s\S]*?\*\//g, "");
+  const ohneKommentarzeilen = ohneBlockkommentare
     .split("\n")
     .filter((zeile) => !zeile.trim().startsWith("//"))
     .join("\n");
