@@ -158,8 +158,9 @@ function durationS(c) {
 // failure_reason ist das MASCHINENFELD - seit P5b (O-13 Teil 2, Datenminimierung) NUR
 // das BASIS-Token (z.B. "not-placed"), nicht mehr die volle Diagnose
 // ("not-placed:invite-403-D51"). Das Detail (SIP-/Carrier-Code) bleibt der Diagnose
-// vorbehalten: Datensatz, Log und Ausfallbericht (outage-report.js) tragen es weiterhin
-// unveraendert - dort wird es gebraucht, um z.B. zwei verschiedene not-placed-Ausfallarten
+// vorbehalten: Datensatz und Log tragen es weiterhin unveraendert. Der Ausfall-Eimer
+// (outage-detection.js#outageBucket) schneidet davon zusaetzlich den Carrier-Code ab -
+// der verbleibende SIP-Code wird gebraucht, um zwei verschiedene not-placed-Ausfallarten
 // zu unterscheiden. Der Nutzertext entsteht getrennt in pickTranscript und loest bereits
 // auf dem Basis-Token auf.
 function callOutcomeView(call) {
