@@ -5070,3 +5070,54 @@ verweigern lassen.
 eigenes Gate, unberuehrt. Der Offenlegungssatz — unberuehrt. T-14
 (`_meta["mcp/www_authenticate"]`) — gegenstandslos (P0 D0-6, kein Ausloesepfad), gehoert
 zu P7.
+
+## OpenAI-P7 — Auth II: Scope-Achse und Fehlerkanal, dokumentiert (2026-09-21)
+
+IDs T-9, T-11, T-12, T-14, T-16 aus der OpenAI-Einreichung. **Reine Dokumentationsphase —
+kein Produktionscode geaendert** (`git diff master...phase/openai-p7-auth-belege -- src/`
+ist leer). Vollstaendiger Beleg mit Codezeilen, Live-Messprotokoll und Owner-Fragen:
+`docs/OPENAI-AUTH-ABWEICHUNGEN.md`. Hier nur die vier Punkte, die diese Datei betreffen.
+
+**1. T-12 Scope-Achse — bewusste, dokumentierte Abweichung.** `verifyOauth()`
+(`src/auth.js:91-113`) prueft Signatur/JWKS, `iss`, `aud`, `exp`/`nbf` — **keinen**
+`scope`-/`scp`-Claim (0 Codestellen, `grep -rn "scope\|scp" src/auth.js`). Ersatz: die
+Audience-Pruefung (kanonische Resource, boot-fatal bei Divergenz seit E5/S2-A6) plus die
+Tenant-Bindung ueber `sub` (`src/routes/mcp.js:59-64`, E4-17). Grund: WorkOS AuthKit
+bewirbt nur Identitaets-Scopes (`email`, `offline_access`, `openid`, `profile`, live
+gemessen 2026-09-21), keinen ressourcenspezifischen Scope — eine fail-closed Pruefung
+gegen einen nie ausgestellten Claim sperrte jeden Bestandstoken aus (Claude-Connector
+live), eine fail-open Pruefung waere Theater. **Gepinnt** durch
+`test/openai-p7-token-pruefachsen.test.js` (`OpenAI-P7-T4`): ein beliebiger `scope`-Wert
+fuehrt heute zu 200. Wird spaeter eine Scope-Pruefung gebaut (Vorbedingung: WorkOS stellt
+einen Scope aus, s. Owner-Frage (e) im Dokument), MUSS dieser Test rot werden — geschieht
+das nicht, hat die neue Pruefung keine Wirkung — und muss dann zusammen mit
+`src/mcp-security-schemes.js:21-27` (`scopes: []`) und dem Dokument geaendert werden.
+
+**2. T-14 — nicht anwendbar, bedingt.** Auth scheitert immer vor jedem Tool-Aufruf
+(`mcpAuth` vor `POST /mcp`, `src/routes/mcp.js:113`); in `src/mcp-tools.js` existiert kein
+Auth-Fehlerzweig. Ein `_meta["mcp/www_authenticate"]`-Feld am Tool-Fehlerergebnis waere
+toter Code. **Bedingung:** die Aussage gilt nur, solange Produktion `MCP_AUTH=oauth`
+faehrt — im token-/Legacy-Zweig traegt der 401 seit P6 eine Challenge OHNE
+`resource_metadata` (`STATIC_BEARER_CHALLENGE`, `src/auth.js:89`). Live gemessen
+2026-09-21T10:06:03Z: Produktion laeuft im oauth-Zweig (`www-authenticate:
+Bearer resource_metadata="https://app.sundartha.com/..."`).
+
+**3. T-9/T-11/T-16 — Anbieterabhaengigkeiten, offen.** `resource_indicators_supported`
+(T-9-Nebenbefund), `authorization_response_iss_parameter_supported` (T-11) und
+`claims_supported` (T-16-Nebenbefund) stehen ausschliesslich in provider-gehosteten
+Well-known-Dokumenten (WorkOS AuthKit); Hermes erzeugt genau EIN eigenes
+Well-known-Dokument (die Protected-Resource-Metadata, `src/auth.js:142-150`), keine
+AS-Metadata. Ob WorkOS `resource` nach `aud` kopiert (T-9), `iss` in
+Authorization-Responses setzt (T-11) und `email_verified: true` im UserInfo liefert
+(T-16), ist erst mit einem echten Token messbar (Owner-Messung O-3,
+`docs/OPENAI-AUTH-ABWEICHUNGEN.md` Abschnitt 5). Fuenf konkrete WorkOS-Fragen stehen dort
+(Abschnitt 4).
+
+**4. Befund B-1 (nicht behoben, nur vermerkt).** `rejectIfNoTenant`
+(`src/routes/mcp.js:59-64`) antwortet einem gueltigen Token ohne Tenant mit 403 OHNE
+`WWW-Authenticate` (RFC 6750 §3.1 saehe fuer 403 `error="insufficient_scope"` vor). Der
+massgebliche OpenAI-Wortlaut (T-13) verlangt die Challenge nur fuer 401 — kein
+Einreichungskriterium, Wirkung bei ChatGPT UNKNOWN. Befund fuer P10/Owner.
+
+**Kein Launch-Blocker wird durch P7 geschlossen** — alle vier Punkte bleiben offen und
+sind Owner-/Anbieter-Entscheidungen, keine Code-Aenderungen dieser Phase.
