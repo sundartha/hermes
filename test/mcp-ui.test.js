@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { registerTools } from "../src/mcp-tools.js";
 import { uiRendererFor } from "../src/ui/registry.js";
@@ -54,14 +55,21 @@ const CAPABLE_CAPS = {
 const capableHost = () => ({ enabled: true, capabilities: CAPABLE_CAPS });
 
 // P2: seit withOpenAiToolMetadata() traegt JEDES Werkzeug ein _meta (die T-22-
-// Statuszeilen) - "kein _meta" ist damit kein gueltiger Nicht-Widget-Beweis mehr. Dieser
-// Helfer prueft stattdessen namentlich, dass keiner der beiden Widget-Schluessel da ist
-// (Verschaerfung, keine Abschwaechung: vorher war "kein Objekt" der Beweis, jetzt sind
-// die Widget-Schluessel benannt).
-const ohneWidgetMeta = (config) => !config._meta?.ui && !config._meta?.[CHATGPT_META_KEY];
+// Statuszeilen). Gleich streng wie vor P2, bei dem Vorkommen von _meta genau die
+// Statuszeilen: die Schluesselmenge von _meta muss EXAKT diese beiden Schluessel sein
+// (src/mcp-tools.js OPENAI_INVOKING_KEY/OPENAI_INVOKED_KEY, hier als eigene Konstante,
+// weil die src-Konstanten modul-privat bleiben - sie zu exportieren waere eine
+// ausfuehrbare src-Zeile). Kontrollfall am Dateiende, damit der Helfer nicht unbemerkt
+// immer true liefert.
+const STATUS_LINE_META_KEYS = ["openai/toolInvocation/invoking", "openai/toolInvocation/invoked"];
+const ohneWidgetMeta = (config) =>
+  isDeepStrictEqual(Object.keys(config._meta ?? {}).sort(), [...STATUS_LINE_META_KEYS].sort());
 
 // Faengt registerTool(name, config, handler) + registerResource(name, uri, config,
-// readCb) ein. tool() (Bestand) faengt es ueber server.tool ab (hier ungenutzt).
+// readCb) ein. tool() hat seit OpenAI-P2 keinen Aufrufer mehr in src/. Er bleibt nur
+// stehen, weil sein Entfernen die ungefilterte Befundmenge dieser Datei bewegt und das
+// Aufraeum-Gate (scripts/check-staged-suppressions.js) dann ein vollstaendiges
+// Aufraeumen verlangt. Das ist ein eigener Umbau.
 function captureUi(ctx) {
   const tools = new Map(); // name -> { config, desc, handler }
   const resources = []; // { name, uri, config, readCallback }
@@ -1392,4 +1400,35 @@ test("T-W2-get-status-desc: get_call_status-Beschreibung pollt das Modell nicht 
     NO_POLLING_CADENCE,
     "Polling-Anweisung entfernt (Spam-Wurzel beseitigt, W2)",
   );
+});
+
+// ==================== P10a (H2): Kontrollfall fuer ohneWidgetMeta() ====================
+// Der Helfer prueft seit P10a die Schluesselmenge von _meta STRENG (== genau die beiden
+// Statuszeilen), nicht mehr nur "nicht diese zwei Widget-Schluessel". Dieser Kontrollfall
+// haelt fest, dass der strengere Helfer nicht unbemerkt immer true liefert.
+test("P10a (H2): ohneWidgetMeta() ist streng - true NUR bei genau den beiden Statuszeilen-Schluesseln", () => {
+  const STATUS_ONLY = {
+    _meta: {
+      "openai/toolInvocation/invoking": "x",
+      "openai/toolInvocation/invoked": "y",
+    },
+  };
+  assert.ok(ohneWidgetMeta(STATUS_ONLY), "genau die beiden Statuszeilen-Schluessel -> true");
+
+  const WITH_UI_KEY = {
+    _meta: { ...STATUS_ONLY._meta, ui: "widget" },
+  };
+  assert.ok(!ohneWidgetMeta(WITH_UI_KEY), "zusaetzlich 'ui' -> false");
+
+  const WITH_CHATGPT_KEY = {
+    _meta: { ...STATUS_ONLY._meta, [CHATGPT_META_KEY]: "uri" },
+  };
+  assert.ok(!ohneWidgetMeta(WITH_CHATGPT_KEY), "zusaetzlich openai/outputTemplate -> false");
+
+  const WITH_THIRD_KEY = {
+    _meta: { ...STATUS_ONLY._meta, irgendwas: "drittwert" },
+  };
+  assert.ok(!ohneWidgetMeta(WITH_THIRD_KEY), "ein beliebiger dritter Schluessel -> false");
+
+  assert.ok(!ohneWidgetMeta({}), "fehlendes _meta -> false");
 });

@@ -44,15 +44,11 @@ const HTTP_OK = 200;
 
 // ==================== Gemeinsame Test-Infrastruktur (Faelle A-E) ====================
 
-// server.tool()/server.registerTool() einfangen - beide Formen, wie im Bestand
-// (mcp-fehlergrund-rueckweg.test.js#captureTools). uiTool() (der einzige Registrierweg
-// seit W2) ruft ausschliesslich registerTool(name, config, handler).
+// Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
+// server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern.
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    tool(name, ...rest) {
-      handlers.set(name, rest[rest.length - 1]);
-    },
     registerTool(name, _config, handler) {
       handlers.set(name, handler);
     },

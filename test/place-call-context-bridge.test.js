@@ -17,12 +17,11 @@
 // test/p15-mcp-tool-descriptions-en.test.js.
 //
 // Seam wie mcp-tools.test.js / mcp-ui.test.js: ein fakeServer faengt die per
-// server.tool ODER server.registerTool registrierten Schemas ein, ohne echten
-// MCP-Transport. place_call laeuft seit W2 ueber registerTool (uiTool) statt
-// server.tool (Bestands-API) - deshalb faengt dieser Helper BEIDE Registrierungswege
-// in dieselbe Map (schema = die reine Zod-Feldmenge, bei registerTool aus
-// config.inputSchema). registerResource ist ein No-Op (die UI-Tools brauchen wir
-// hier nicht).
+// server.registerTool registrierten Schemas ein, ohne echten MCP-Transport.
+// Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
+// server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern
+// (schema = die reine Zod-Feldmenge, aus config.inputSchema). registerResource
+// ist ein No-Op (die UI-Tools brauchen wir hier nicht).
 // AL-P9 (unten): zwei Faelle brauchen mehr als die Schema-Form - z, um die Feldmenge so
 // zu parsen, wie das MCP-SDK sie parst (z.object(shape), strip-Modus), und den
 // Spawn-Server, um denselben Aufruf ueber die ECHTE /mcp-Route bis in den Store zu
@@ -36,9 +35,6 @@ import { mcpPost, startServer, toolCall } from "./helpers.js";
 function captureSchemas() {
   const schemas = new Map();
   const fakeServer = {
-    tool(name, _desc, schema, _handler) {
-      schemas.set(name, schema);
-    },
     registerTool(name, config, _handler) {
       schemas.set(name, config.inputSchema);
     },
