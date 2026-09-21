@@ -10,7 +10,6 @@ import { registerTools } from "./mcp-tools.js";
 import { config, resolveGatewayUrl } from "./config.js";
 import { uiServerExtension } from "./ui/contract.js";
 import { HERMES_SERVER_INFO } from "./mcp-server-info.js";
-import { applyToolSecuritySchemes } from "./mcp-security-schemes.js";
 
 // Rich-UI auch ueber stdio (Claude Desktop). Anders als der HTTP-Connector rendert
 // stdio die Widgets zuverlaessig: die HTTP-AppBridge-Doppel-Session ist Claude-seitig
@@ -27,11 +26,15 @@ const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
 registerTools(server, {
   uiHost: { enabled: config.tenancy.mcpUiEnabled },
 });
-// T-15: securitySchemes auch ueber stdio - bewusst derselbe Wert wie ueber HTTP (E3),
-// nicht weil stdio eine eigene Auth-Schicht haette, sondern damit es EINE Wahrheit
-// bleibt statt zweier, die auseinanderlaufen koennen. Siehe src/mcp-security-schemes.js.
-applyToolSecuritySchemes(server);
-
+// T-15-Korrektur: KEIN applyToolSecuritySchemes() hier, bewusst anders als
+// routes/mcp.js. stdio hat keine eigene Client-Authentifizierung - mcpAuth haengt
+// ausschliesslich am HTTP-POST /mcp (src/auth.js, src/routes/mcp.js). Ein
+// stdio-Client (Claude Desktop) weist NICHTS vor; was hier schuetzt, ist
+// Herkunfts- statt Client-Auth (Loopback + internalOnly auf dem REST-Weg der
+// Tools). "oauth2" ueber stdio zu melden waere deshalb eine FALSCHANGABE, die in
+// die gefaehrliche Richtung irrt (Schutz behauptet, den es nicht gibt). Zudem
+// erreicht OpenAI (T-15) diesen Prozess nie ueber stdio - nur die HTTP-Route
+// zaehlt fuer diese Anforderung. Siehe src/mcp-security-schemes.js.
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error("[hermes] MCP-Server bereit (stdio). Gateway: " + resolveGatewayUrl());

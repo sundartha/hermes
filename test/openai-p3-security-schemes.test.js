@@ -63,6 +63,20 @@ function assertSecuritySchemesOnEveryTool(tools) {
   }
 }
 
+// T-15-Korrektur: stdio hat keine Client-Auth (mcpAuth haengt nur an POST /mcp), also
+// waere "oauth2" dort eine Falschangabe. Gegenstueck zu assertSecuritySchemesOnEveryTool
+// fuer den stdio-Pfad, der das Feld seit der Korrektur NICHT mehr traegt.
+function assertNoSecuritySchemesOnAnyTool(tools) {
+  assert.ok(tools.length > 0, "tools/list liefert Werkzeuge");
+  for (const tool of tools) {
+    assert.equal(
+      tool.securitySchemes,
+      undefined,
+      `${tool.name}: securitySchemes fehlt ueber stdio (keine Client-Auth dort)`,
+    );
+  }
+}
+
 // Nicht-Regression im selben Response (AC2, Spec Schritt 5.3): der Override darf die
 // SDK-Normalisierung und die P1/P2-Felder nicht zerschossen haben.
 function assertOutputAndP1P2FeldNichtZerschossen(tools) {
@@ -185,10 +199,12 @@ test("P3 (Schritt 5): tools/list ueber die echte /mcp-Route traegt securitySchem
 });
 
 // Schritt 6a - stdio-Pfad, echtes SDK, roh abgefragt (kein Attrappen-Server).
-test("P3 (Schritt 6a): stdio-Pfad (echtes SDK, InMemoryTransport) traegt securitySchemes genau wie ueber HTTP", async () => {
+// T-15-Korrektur: applyToolSecuritySchemes(server) faellt hier bewusst weg - das
+// bildet nach, was src/mcp-server.js seit der Korrektur tut (registerTools() OHNE
+// den Override). stdio hat keine Client-Auth, "oauth2" waere dort eine Falschangabe.
+test("P3 (Schritt 6a): stdio-Pfad (echtes SDK, InMemoryTransport) traegt securitySchemes NICHT - keine Client-Auth ueber stdio", async () => {
   const server = new McpServer({ name: "hermes-p3-stdio", version: "0.0.0" });
   registerTools(server, { uiHost: { enabled: true } });
-  applyToolSecuritySchemes(server);
 
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "hermes-p3-stdio-client", version: "0.0.0" });
@@ -200,7 +216,7 @@ test("P3 (Schritt 6a): stdio-Pfad (echtes SDK, InMemoryTransport) traegt securit
       TOOL_COUNT_WITHOUT_CONSULT,
       "stdio ohne Consult-Faehigkeit liefert zehn Werkzeuge",
     );
-    assertSecuritySchemesOnEveryTool(result.tools);
+    assertNoSecuritySchemesOnAnyTool(result.tools);
   } finally {
     await client.close();
     await server.close();
@@ -250,11 +266,16 @@ test("P3 (Schritt 6b): ChatGPT-Adapter traegt securitySchemes neben openai/outpu
 // spawnt src/mcp-server.js als echten Kindprozess (wie im Betrieb: Claude Desktop
 // startet ihn per "command"-Eintrag genauso) und spricht das echte Protokoll ueber
 // StdioClientTransport - kein Attrappen-Server, keine InMemory-Verdrahtung, keine
-// Quelltext-Inspektion. Gegenprobe im Review gefahren: applyToolSecuritySchemes(server)
-// VOR registerTools(...) verschoben -> der Kindprozess wirft beim Boot
-// ("MCP-SDK-Naht verloren", E5) und tools/list schlaegt fehl -> Test rot.
-// Zurueckgesetzt (git diff leer).
-test("P3 (Schritt 7): der echte stdio-Einstieg (Kindprozess src/mcp-server.js) traegt securitySchemes an jedem Werkzeug", async () => {
+// Quelltext-Inspektion.
+//
+// T-15-Korrektur (unabhaengiger Pruefer, s. src/mcp-server.js): die urspruengliche
+// Zusicherung war das Gegenteil ("traegt securitySchemes an jedem Werkzeug") und war
+// UNWAHR im gefaehrlichen Sinn - stdio hat keine Client-Auth (mcpAuth haengt nur an
+// POST /mcp), "oauth2" ueber stdio behauptete einen Schutz, den es nicht gibt. Dieser
+// Test ist jetzt die Sicherung GEGEN eine Rueckkehr dieser Falschangabe: er muss rot
+// werden, sollte je wieder applyToolSecuritySchemes(...) in src/mcp-server.js
+// aufgerufen werden. Kein Werkzeug darf das Feld ueber stdio tragen.
+test("P3 (Schritt 7, T-15-Korrektur): der echte stdio-Einstieg (Kindprozess src/mcp-server.js) traegt securitySchemes an KEINEM Werkzeug - stdio hat keine Client-Auth, oauth2 waere dort eine Falschangabe", async () => {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [MCP_SERVER_ENTRYPOINT],
@@ -275,7 +296,7 @@ test("P3 (Schritt 7): der echte stdio-Einstieg (Kindprozess src/mcp-server.js) t
       TOOL_COUNT_WITHOUT_CONSULT,
       `stdio-Einstieg ohne Consult-Faehigkeit liefert zehn Werkzeuge (stderr: ${stderrOutput})`,
     );
-    assertSecuritySchemesOnEveryTool(result.tools);
+    assertNoSecuritySchemesOnAnyTool(result.tools);
   } finally {
     await client.close();
   }

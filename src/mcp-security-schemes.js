@@ -35,9 +35,11 @@ const LIST_TOOLS_METHOD = "tools/list";
 const mitSecuritySchemes = (tool) => ({ ...tool, securitySchemes: TOOL_SECURITY_SCHEMES });
 
 // Reichert den tools/list-Handler eines bereits mit registerTools() befuellten
-// McpServer um securitySchemes an. Wird NACH registerTools() aufgerufen, an beiden
-// Zusammenbau-Stellen (src/routes/mcp.js fuer HTTP, src/mcp-server.js fuer stdio) - E3:
-// beide Transporte tragen denselben Wert, damit es eine Wahrheit bleibt statt zweier.
+// McpServer um securitySchemes an. Wird NACH registerTools() aufgerufen - NUR an der
+// HTTP-Zusammenbau-Stelle (src/routes/mcp.js), wo mcpAuth tatsaechlich eine
+// Client-Identitaet prueft. src/mcp-server.js (stdio) ruft diese Funktion bewusst
+// NICHT auf: stdio hat keine Client-Auth, "oauth2" waere dort eine Falschangabe, und
+// OpenAI (T-15) erreicht den Server nie ueber stdio. Siehe Kommentar dort.
 export function applyToolSecuritySchemes(server) {
   const protokoll = server.server;
   const original = protokoll._requestHandlers?.get(LIST_TOOLS_METHOD);
