@@ -89,13 +89,56 @@ P0 annahmen). Gebaut wird `[{ "type": "oauth2", "scopes": [] }]` (Widerspruch W1
   Zeitgruende) - s. "abweichungen"/"selbstzweifel" der strukturierten Ruecklieferung.
   Kein `not ok` heisst: keine Regression, unabhaengig vom exakten Baseline-Wert.
 
-## Schritt 9 — Restrisiko fuer den Deploy (Review-Korrektur)
+### Schritt 8b — Nachbesserung Runde 2 (Review-Befunde)
+
+- `node --check` auf alle vier geaenderten Dateien (`test/helpers.js`,
+  `test/openai-p2-tool-metadaten.test.js`, `test/openai-p3-security-schemes.test.js`,
+  dieser Bericht ist kein JS) -> ok.
+- `npx eslint test/helpers.js test/openai-p2-tool-metadaten.test.js
+  test/openai-p3-security-schemes.test.js` -> 0 Errors (1 Bestandswarnung in
+  `test/helpers.js:1425`, unveraendert von dieser Phase, per `git stash` gegengeprueft).
+- `npm test -- -- --test-concurrency=4` (voller Lauf, Worktree `wt-p3`):
+  `# tests 6186`, `# pass 6185`, `# fail 1`. Der eine rote Fall
+  (`test/ks-p2-live-carrier-spend.test.js:252`, KS-P2-11, "Cannot POST /voice/turn")
+  liegt in einer von dieser Phase UNBERUEHRTEN Datei; isoliert erneut gefahren
+  (`node --test --test-concurrency=4 test/ks-p2-live-carrier-spend.test.js`) -> 11/11
+  gruen. Nach der Lehre "Suite ist auf dieser Maschine nicht deterministisch, ein roter
+  Test zaehlt erst wenn isoliert rot" zaehlt dieser Fall NICHT als Regression - ein
+  Lastartefakt des vollen Parallellaufs, keine Folge dieser Aenderung.
+- Testzahl unveraendert zur Runde-1-Messung (6186): Schritt 7 wurde ERSETZT (1 Test raus,
+  1 Test rein), die Konstanten-Verschiebung nach `test/helpers.js` aendert keine
+  Testzahl. Kein Prozess blieb zurueck (`ps -Ao pid,ppid,etime,args`, geprueft nach
+  Isolationslauf und nach dem vollen Lauf).
+
+## Schritt 9 — Restrisiko fuer den Deploy (Review-Korrektur Runde 1 + 2)
 
 Messung B (Spec 0.3) belegt nur: ein **SDK-basierter** Client (typisiert ueber `ToolSchema`)
 sieht `securitySchemes` nicht, weil zod es beim Parsen strippt. Das ist NICHT dasselbe wie
 "Risiko fuer den LIVE-Claude-Connector gemessen: null" — der claude.ai-Connector ist kein
 Instanz dieses SDK-Clients und wurde nicht gemessen. Die Spec (0.3, Punkt 2) ist entsprechend
 korrigiert. Kein Code-Fix noetig (der Override selbst ist protokoll-konform: das MCP-Schema
-verbietet keine Zusatzfelder, OpenAI schreibt genau dieses Feld vor). Auflage fuer den ersten
-Deploy: `tools/list` einmal ueber den echten claude.ai-Connector ansehen, bevor der Rollout
-als abgeschlossen gilt.
+verbietet keine Zusatzfelder, OpenAI schreibt genau dieses Feld vor).
+
+**Runde 2 (Review-Befund):** dieselbe Luecke gilt fuer den ZWEITEN unvermessenen Host, Claude
+Desktop ueber stdio (`src/mcp-server.js`). Die Spec-Begruendung fuer stdio (E3(c): "ueber stdio
+inert, weil SDK-Clients das Feld strippen") beruht auf genau der Annahme, die Runde 1 fuer den
+HTTP-Weg als unbelegt korrigiert hat — Claude Desktop ist so wenig eine gemessene Instanz des
+typisierten SDK-Clients wie claude.ai. Die Auflage unten gilt deshalb fuer BEIDE Hosts.
+
+**Deploy-Auflage (ZWEI Pruefungen, beide vor "Rollout abgeschlossen"):**
+1. `tools/list` einmal ueber den echten claude.ai-Connector (HTTP `/mcp`) ansehen.
+2. `tools/list` einmal ueber echtes Claude Desktop (stdio, `src/mcp-server.js` als
+   "command"-Eintrag) ansehen.
+
+**Diese Auflage ueberlebt das Aufraeumen NICHT von selbst:** `tasks/openai-p3-report.md`
+(diese Datei) wird laut CLAUDE.md ("Aufraeumen nach einer gemergten Kette") im selben Zug wie
+der Merge geloescht. Es gibt kein Feature-Flag fuer `securitySchemes` (Spec 4.5) — verwirft
+einer der beiden Connectoren die `tools/list`-Antwort wegen des unbekannten Top-Level-Felds,
+verliert der zahlende Live-Tenant alle Werkzeuge, und der einzige Rueckweg ist ein
+Revert-Deploy. Wer diese Phase mergt, MUSS die beiden Pruefungen oben VOR dem Loeschen
+dieses Berichts entweder (a) durchfuehren und das Ergebnis in `tasks/openai-technik-stand.md`
+(Kettenstand, ueberlebt das Aufraeumen) eintragen, oder (b) den Merge-Commit-Text mit genau
+diesen zwei offenen Pruefungen versehen, falls der Kettenstand zum Merge-Zeitpunkt aus diesem
+Worktree heraus nicht erreichbar ist. Dieser Fix-Commit traegt die Auflage zusaetzlich in
+seiner eigenen Commit-Message (dauerhaft in der Git-Historie, unabhaengig vom Schicksal dieser
+Datei) — s. Commit-Message dieses Commits.

@@ -24,7 +24,15 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools } from "../src/mcp-tools.js";
-import { startServer, seedState, mcpPost, readToolResult } from "./helpers.js";
+import {
+  startServer,
+  seedState,
+  mcpPost,
+  readToolResult,
+  TOOL_COUNT_WITH_CONSULT,
+  TOOL_COUNT_WITHOUT_CONSULT,
+  TOOLS_WITH_OUTPUT_SCHEMA,
+} from "./helpers.js";
 
 const OPENAI_INVOKING_KEY = "openai/toolInvocation/invoking";
 const OPENAI_INVOKED_KEY = "openai/toolInvocation/invoked";
@@ -32,12 +40,6 @@ const MAX_INVOCATION_CHARS = 64; // T-22 woertlich: "<= 64 chars"
 const RESOURCE_URI_CALL = "ui://hermes/call";
 const CHATGPT_META_KEY = "openai/outputTemplate";
 const CHATGPT_UI_MIME = "text/html+skybridge";
-// P0-Baseline-Staffelung (tasks/openai-p0-entscheidungen.md): Owner + beide Consult-
-// Master-Schalter an -> alle zwoelf; stdio ohne Consult-Faehigkeit -> zehn; davon tragen
-// genau zehn ein outputSchema (cancel_call/list_action_items ausgenommen, nur text(...)).
-const TOOL_COUNT_WITH_CONSULT = 12;
-const TOOL_COUNT_WITHOUT_CONSULT = 10;
-const TOOLS_WITH_OUTPUT_SCHEMA = 10;
 const HTTP_OK = 200;
 const MOCK_GATEWAY_JSON_CONTENT_TYPE = { "content-type": "application/json" };
 

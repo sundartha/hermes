@@ -19,8 +19,18 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools } from "../src/mcp-tools.js";
 import { applyToolSecuritySchemes } from "../src/mcp-security-schemes.js";
-import { startServer, seedState, mcpPost, readToolResult } from "./helpers.js";
-import { readFileSync } from "node:fs";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import {
+  startServer,
+  seedState,
+  mcpPost,
+  readToolResult,
+  ROOT,
+  BASE_ENV,
+  TOOL_COUNT_WITH_CONSULT,
+  TOOL_COUNT_WITHOUT_CONSULT,
+  TOOLS_WITH_OUTPUT_SCHEMA,
+} from "./helpers.js";
 
 // Literal aus dem woertlich zitierten OpenAI-Rohtext (tasks/openai-p3-report.md,
 // Fundstelle 1) - NICHT aus src importiert.
@@ -29,15 +39,10 @@ const LIST_TOOLS_METHOD = "tools/list";
 // Permissiver Ergebnis-Schema fuer rohe tools/list-Abfragen ueber den typisierten
 // Client - z.any() pro Tool umgeht das Strippen unbekannter Felder (Messung B).
 const RAW_TOOLS_LIST_RESULT = z.object({ tools: z.array(z.any()) });
-// P0-Baseline-Staffelung (tasks/openai-p0-entscheidungen.md), identisch zu P2: Owner +
-// beide Consult-Master-Schalter an -> zwoelf Werkzeuge, stdio ohne Consult-Faehigkeit
-// -> zehn, davon tragen genau zehn ein outputSchema.
-const TOOL_COUNT_WITH_CONSULT = 12;
-const TOOL_COUNT_WITHOUT_CONSULT = 10;
-const TOOLS_WITH_OUTPUT_SCHEMA = 10;
 const RESOURCE_URI_CALL = "ui://hermes/call";
 const CHATGPT_META_KEY = "openai/outputTemplate";
 const CHATGPT_UI_MIME = "text/html+skybridge";
+const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 
 // Testnamen duerfen NICHT mit einer i18n-Katalog-Kennung + Ziffer beginnen
 // (package.json config.i18nCatalogPattern), sonst wandern sie in den Gates-Lauf.
@@ -237,29 +242,41 @@ test("P3 (Schritt 6b): ChatGPT-Adapter traegt securitySchemes neben openai/outpu
   }
 });
 
-// Schritt 7 - Naht-Pin fuer den stdio-EINSTIEG. src/mcp-server.js ist nicht
-// importierbar (Top-Level-await server.connect(...) an stdin/stdout) - Schritt 6a
-// belegt nur den Mechanismus, nicht die Verdrahtung des Einstiegs. Ohne diesen Pin
-// koennte die stdio-Zeile geloescht werden, ohne dass ein Test rot wird.
-test("P3 (Schritt 7): src/mcp-server.js verdrahtet applyToolSecuritySchemes NACH registerTools", () => {
-  const quelltext = readFileSync(new URL("../src/mcp-server.js", import.meta.url), "utf8");
-  // Kommentare (Zeilenkommentare UND Blockkommentare, z.B. eine auskommentierte
-  // Verdrahtungszeile bei der Gegenprobe) werden vor der indexOf-Suche entfernt -
-  // sonst faende die Suche den Aufruf auch dann noch, wenn er nur noch als Text im
-  // Kommentar steht, statt ausgefuehrt zu werden (das waere kein Beleg fuer die
-  // Verdrahtung des Einstiegs). Blockkommentare zuerst entfernen, DANACH zeilenweise
-  // filtern - sonst ueberlebt ein Aufruf, der komplett in einem /* ... */-Block liegt.
-  const ohneBlockkommentare = quelltext.replace(/\/\*[\s\S]*?\*\//g, "");
-  const ohneKommentarzeilen = ohneBlockkommentare
-    .split("\n")
-    .filter((zeile) => !zeile.trim().startsWith("//"))
-    .join("\n");
-  const indexRegisterTools = ohneKommentarzeilen.indexOf("registerTools(");
-  const indexApply = ohneKommentarzeilen.indexOf("applyToolSecuritySchemes(");
-  assert.ok(indexRegisterTools >= 0, "registerTools( kommt in src/mcp-server.js vor (nicht auskommentiert)");
-  assert.ok(indexApply >= 0, "applyToolSecuritySchemes( kommt in src/mcp-server.js vor (nicht auskommentiert)");
-  assert.ok(
-    indexApply > indexRegisterTools,
-    "applyToolSecuritySchemes steht HINTER dem registerTools-Aufruf",
-  );
+// Schritt 7 - Naht-Beleg fuer den stdio-EINSTIEG, als echter Kindprozess (Review Runde
+// 2): der frueher hier stehende Text-Pin (readFileSync + indexOf-Reihenfolge) belegte
+// nur, dass zwei Zeichenketten in dieser Reihenfolge in der DATEI stehen - ein
+// Refactoring, das applyToolSecuritySchemes(...) auf eine ANDERE Server-Instanz
+// anwendet oder in einen nie erreichten Zweig legt, liesse ihn gruen. Dieser Test
+// spawnt src/mcp-server.js als echten Kindprozess (wie im Betrieb: Claude Desktop
+// startet ihn per "command"-Eintrag genauso) und spricht das echte Protokoll ueber
+// StdioClientTransport - kein Attrappen-Server, keine InMemory-Verdrahtung, keine
+// Quelltext-Inspektion. Gegenprobe im Review gefahren: applyToolSecuritySchemes(server)
+// VOR registerTools(...) verschoben -> der Kindprozess wirft beim Boot
+// ("MCP-SDK-Naht verloren", E5) und tools/list schlaegt fehl -> Test rot.
+// Zurueckgesetzt (git diff leer).
+test("P3 (Schritt 7): der echte stdio-Einstieg (Kindprozess src/mcp-server.js) traegt securitySchemes an jedem Werkzeug", async () => {
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [MCP_SERVER_ENTRYPOINT],
+    cwd: ROOT,
+    env: BASE_ENV,
+    stderr: "pipe",
+  });
+  let stderrOutput = "";
+  transport.stderr?.on("data", (chunk) => {
+    stderrOutput += chunk.toString();
+  });
+  const client = new Client({ name: "hermes-p3-stdio-entrypoint-client", version: "0.0.0" });
+  try {
+    await client.connect(transport);
+    const result = await rawToolsList(client);
+    assert.equal(
+      result.tools.length,
+      TOOL_COUNT_WITHOUT_CONSULT,
+      `stdio-Einstieg ohne Consult-Faehigkeit liefert zehn Werkzeuge (stderr: ${stderrOutput})`,
+    );
+    assertSecuritySchemesOnEveryTool(result.tools);
+  } finally {
+    await client.close();
+  }
 });
