@@ -143,6 +143,10 @@ test(
       await t.test("extern -> 401", async () => {
         const res = await fetch(`${srv.externalUrl}/mcp`, { method: "POST" });
         assert.equal(res.status, 401);
+        // P6: einziger Draht-Beleg fuer den Legacy-Zweig (auth.js) ueber einen
+        // echten Nicht-Loopback-Socket - skippt maschinenabhaengig (EXTERNAL_IP),
+        // die Beweislast traegt deshalb test/openai-p6-challenge.test.js (P6-T4).
+        assert.equal(res.headers.get("www-authenticate"), 'Bearer error="invalid_token"');
       });
 
       await t.test("localhost -> kein 401", async () => {
