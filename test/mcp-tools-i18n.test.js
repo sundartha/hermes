@@ -39,14 +39,13 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // ---- geteilter Mini-Harness (Muster test/mcp-tools.test.js) ----
 
-// server.tool(name, desc, schema, annotations, handler) seit E2 - Restparameter statt
-// eines fuenften benannten Parameters (annotations sitzt an Position 4; max-params haelt).
+const HTTP_OK = 200;
+
+// Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
+// server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern.
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    tool(name, _desc, _schema, ...rest) {
-      handlers.set(name, rest.at(-1));
-    },
     registerTool(name, _config, handler) {
       handlers.set(name, handler);
     },
@@ -57,18 +56,17 @@ function captureTools(ctx) {
 }
 
 async function listen(server) {
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
-  return { url, close: () => new Promise((r) => server.close(r)) };
+  return { url, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
-function sendJson(res, { body = null, status = 200 } = {}) {
-  res.statusCode = status;
-  res.setHeader("content-type", "application/json");
+function sendJson(res, { body = null, status = HTTP_OK } = {}) {
+  res.writeHead(status, { "content-type": "application/json" });
   res.end(body == null ? "" : JSON.stringify(body));
 }
 
-async function startGatewayMock({ body = null, status = 200 } = {}) {
+async function startGatewayMock({ body = null, status = HTTP_OK } = {}) {
   const server = http.createServer((req, res) => sendJson(res, { body, status }));
   return listen(server);
 }
@@ -87,7 +85,7 @@ async function withGateway(body, fn) {
 }
 
 function toolText(result) {
-  return (result?.content || []).map((c) => c.text).join("\n");
+  return (result?.content || []).map((item) => item.text).join("\n");
 }
 
 // ==================== MCP-05 ====================
@@ -172,8 +170,8 @@ const MCP_TENANT_EN = { id: "t_mcp_en", sub: "sub-mcp-en", language: "en", e164:
 // Muster e2e-02-two-tenant-two-language.test.js (twoTenantSeed) + am6-oauth-tenant.test.js
 // (idpSubject-Bindung), hier fuer den MCP-OAuth-Pfad kombiniert.
 function twoLanguageTenantSeed() {
-  const s = makeDefaultState();
-  s.numbers.push({
+  const state = makeDefaultState();
+  state.numbers.push({
     id: "num_owner_mcp16",
     e164: "+4915199999998",
     tenantId: BOOTSTRAP_TENANT_ID,
@@ -181,19 +179,19 @@ function twoLanguageTenantSeed() {
     status: "active",
     providerNumberId: null,
   });
-  for (const t of [MCP_TENANT_DE, MCP_TENANT_EN]) {
-    registerTenant(s, t.id, { idpSubject: t.sub });
-    settingsFor(s, t.id).language = t.language;
-    s.numbers.push({
-      id: `num_${t.id}`,
-      e164: t.e164,
-      tenantId: t.id,
+  for (const tenant of [MCP_TENANT_DE, MCP_TENANT_EN]) {
+    registerTenant(state, tenant.id, { idpSubject: tenant.sub });
+    settingsFor(state, tenant.id).language = tenant.language;
+    state.numbers.push({
+      id: `num_${tenant.id}`,
+      e164: tenant.e164,
+      tenantId: tenant.id,
       provider: "telnyx",
       status: "active",
       providerNumberId: null,
     });
   }
-  return s;
+  return state;
 }
 
 test("MCP-16 (Mechanismus, gruen) - parallele /mcp-Requests zweier Tenants leaken keine Sprache", async () => {

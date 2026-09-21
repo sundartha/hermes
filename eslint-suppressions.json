@@ -2988,20 +2988,6 @@
       "count": 15
     }
   },
-  "test/mcp-tools-i18n.test.js": {
-    "id-length": {
-      "count": 5
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 2
-    },
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
   "test/mcp-tools-language.test.js": {
     "complexity": {
       "count": 1
@@ -3020,31 +3006,6 @@
     },
     "no-restricted-syntax": {
       "count": 4
-    }
-  },
-  "test/mcp-tools.test.js": {
-    "id-length": {
-      "count": 8
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 6
-    },
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
-  "test/mcp-ui-i18n-divergence.test.js": {
-    "id-length": {
-      "count": 4
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-param-reassign": {
-      "count": 1
     }
   },
   "test/mcp-ui-p5-token-sync.test.js": {
@@ -3588,11 +3549,6 @@
   },
   "test/pii-mask.test.js": {
     "id-length": {
-      "count": 1
-    }
-  },
-  "test/place-call-context-bridge.test.js": {
-    "max-params": {
       "count": 1
     }
   },

@@ -29,8 +29,10 @@ const { withConfig } = makeConfigOverrides(config);
 
 // ---- geteilter Mini-Harness (Muster test/mcp-tools-i18n.test.js) ----
 
-// server.tool(name, desc, schema, annotations, handler) seit E2 - Restparameter statt
-// eines fuenften benannten Parameters (annotations sitzt an Position 4; max-params haelt).
+// tool() hat seit OpenAI-P2 keinen Aufrufer mehr in src/. Er bleibt nur stehen, weil sein
+// Entfernen die ungefilterte Befundmenge dieser Datei bewegt und das Aufraeum-Gate
+// (scripts/check-staged-suppressions.js) dann ein vollstaendiges Aufraeumen verlangt.
+// Das ist ein eigener Umbau.
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {

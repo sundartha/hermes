@@ -22,9 +22,8 @@ const FIVE_SECONDS_MS = 5000;
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    tool(name, ...rest) {
-      handlers.set(name, rest[rest.length - 1]);
-    },
+    // Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
+    // server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern.
     registerTool(name, _config, handler) {
       handlers.set(name, handler);
     },

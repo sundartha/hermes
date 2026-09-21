@@ -20,12 +20,8 @@ const HTTP_OK = 200;
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    // server.tool(name, desc, schema, handler) - das Bestands-4-Argumente-API (frozen).
-    // Rest-Parameter statt vier benannter Positionen (max-params 3): das Fake braucht
-    // nur name und die letzte Position (handler), desc/schema sind hier irrelevant.
-    tool(name, ...rest) {
-      handlers.set(name, rest[rest.length - 1]);
-    },
+    // Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
+    // server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern.
     registerTool(name, _config, handler) {
       handlers.set(name, handler);
     },
