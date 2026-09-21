@@ -1,7 +1,14 @@
 // UI-Registry: waehlt hinter dem Master-Schalter (config.tenancy.mcpUiEnabled) GENAU EINEN
 // Renderer. Default = der MCP-native Renderer (offizieller "MCP Apps"-Standard, von
-// Claude/Copilot/Goose ... gerendert). Erklaert ein Host explizit die ChatGPT-Skybridge-
-// Konvention (disjunkter mimeType), gewinnt dieser Adapter.
+// Claude/Copilot/Goose ... gerendert). Erklaert der initialize-POST explizit die
+// ChatGPT-Skybridge-Konvention (disjunkter mimeType), gewinnt hier auf dem Papier dieser
+// Adapter - erreicht auf dem Draht aber praktisch NIE einen tools/list- oder
+// resources/read-POST: der stateless Transport (sessionIdGenerator=undefined) fuehrt
+// die im initialize-POST deklarierten Capabilities nicht zum naechsten Request mit, und
+// kein standardkonformer Client sendet sie ausserhalb des initialize (P8,
+// tasks/openai-p8-spec.md §0.3 M-1, Test P8-A). Diese Funktion waehlt also technisch
+// korrekt, aber fuer keinen heutigen Client (Claude, OpenAI) mit sichtbarer Wirkung -
+// der ChatGPT-Adapter ist tot, nicht nur ungetestet.
 //
 // KEIN per-Request-Capability-Gate mehr (frueher: nur rendern, wenn der Client die
 // UI-Capability im initialize deklariert). Begruendung:
@@ -12,7 +19,9 @@
 //      traegt nur der initialize-POST params.capabilities, der spaetere tools/list-POST
 //      nicht. Der Renderer war damit auf genau dem Request null, der die Tool-Deskriptoren
 //      ausliefert -> es erschien NIE ein Widget (lokal end-to-end reproduziert).
-// Master-Schalter aus / kein hostHint (stdio) -> null (Stufe 0, byte-identisch).
+// Master-Schalter aus -> null (Stufe 0, byte-identisch). stdio (mcp-server.js) liefert
+// ebenfalls ein hostHint-Objekt (enabled: config.tenancy.mcpUiEnabled, keine capabilities)
+// - dort entscheidet allein der Master-Schalter, kein fehlender Hint.
 //
 // BEWUSST OFFENE LUECKE (Entscheidung nach widget-wire Runde 2, ChatGPT-Pfad): chatgptRenderer
 // bleibt hier verdrahtet und liefert weiterhin BYTE-IDENTISCHES Widget-HTML wie

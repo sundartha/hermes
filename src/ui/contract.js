@@ -43,8 +43,19 @@ export function uiServerExtension() {
   return { [UI_CAPABILITY_KEY]: { mimeTypes: [UI_MIME] } };
 }
 
-// ChatGPT Apps SDK (OpenAI "skybridge"), P0-Befund. Zweiter Host neben MCP-nativ.
-// mimeType der UI-Resource in dieser Host-Konvention (disjunkt zu UI_MIME).
+// ChatGPT Apps SDK (OpenAI "skybridge"). Zweiter Host-Adapter neben MCP-nativ - AUF DEM
+// DRAHT PRAKTISCH TOT, fuer Claude wie fuer OpenAI (P8, tasks/openai-p8-spec.md §0.3
+// M-1): der Detektor unten greift auf JEDEM Request, dessen params.capabilities die
+// Skybridge-Capability traegt - auch auf tools/list/resources/read selbst, wenn sie
+// dort steht. Nur bringt das nichts, weil der stateless Transport (sessionIdGenerator
+// =undefined) die im initialize-POST deklarierten Capabilities nicht zum spaeteren
+// tools/list- oder resources/read-POST mitfuehrt und kein standardkonformer Client sie
+// ausserhalb des initialize sendet. OpenAIs eigene, aktuell gelesene Doku
+// (developers.openai.com/apps-sdk/*) nennt "text/html+skybridge" nicht mehr und
+// beschreibt statt dessen den MCP-Apps-Standard (mimeType unten bei UI_MIME). Test P8-A
+// pinnt "Skybridge-initialize -> mcp-nativer Pfad auf tools/list". Rueckbau ist trotzdem
+// KEIN Teil von P8 (Owner-Auftrag noetig, s. registry.js, O-P8-1).
+// mimeType der UI-Resource in dieser (toten) Host-Konvention (disjunkt zu UI_MIME).
 export const CHATGPT_UI_MIME = "text/html+skybridge";
 // _meta-Schluessel am Tool-Deskriptor; Wert = die ui://-Resource-URI (flacher String,
 // NICHT das verschachtelte _meta.ui.resourceUri der MCP-nativen Konvention).
@@ -54,7 +65,48 @@ export const CHATGPT_META_KEY = "openai/outputTemplate";
 // Symmetrisch zu capabilityDeclaresUi; disjunkter mimeType -> eindeutige Adapter-Wahl.
 export const capabilityDeclaresChatgptUi = makeCapabilityDetector(CHATGPT_UI_MIME);
 
-// ---- Einreichungs-Pflichtfelder am Widget-_meta (T-30/T-31) ----------------------
+// ---- Einreichungs-Pflichtfelder, TOOL-DESKRIPTOR-Haelfte (T-30/T-31) --------------
+// Diese Felder (uiSubmissionMeta unten) liegen am Tool-Deskriptor (_meta.ui neben
+// resourceUri). RICHTIGGESTELLT (Pruefer-Befund Runde 1, 2026-09-21 - der vorherige
+// Kommentar behauptete faelschlich, dies sei "der MCP-Apps-Standardort fuer
+// Claude/Copilot/Goose"): es gibt dort ueberhaupt KEINEN Standardort fuer csp/domain,
+// fuer KEINEN MCP-Apps-Host. Die Spezifikation selbst verbietet das Feld an dieser
+// Stelle (@modelcontextprotocol/ext-apps 2.0.0, dist/src/spec.types.d.ts,
+// McpUiToolMeta.csp/.permissions sind als `never` getypt): "csp belongs on the UI
+// resource (see McpUiResourceMeta), not the tool. Hosts read it from the resources/read
+// content item (with resources/list entry as fallback) and ignore it here." Das ist eine
+// Aussage ueber ALLE MCP-Apps-Hosts, nicht nur OpenAI.
+//
+// T-30/T-31 SIND AM RESOURCE-INHALT (resources/read) WEITERHIN NICHT ERFUELLT
+// (Pruefer-Befund Runde 2, 2026-09-21 - ein vorheriger Anlauf setzte dort die von OpenAI
+// selbst als "Legacy" bezeichneten Alias-Schluessel openai/widgetCSP/openai/widgetDomain,
+// zurueckgenommen). Gruende, warum das KEIN Ruecksetzer auf einen frueheren Stand ist,
+// sondern die richtige Antwort auf zwei eigene Befunde:
+// 1. T-30 (00-openai-anforderungen.md:63) und T-31 (:64) verlangen woertlich den
+//    STANDARD-Schluessel `_meta.ui.csp`/`_meta.ui.domain`. X-7 (:138) begruendet den
+//    Legacy-Alias `openai/widgetCSP`/`openai/widgetDomain` AUSSCHLIESSLICH mit
+//    `redirect_domains` fuer `openExternal` - das Widget-HTML hat keine `openExternal`-
+//    Ziele (0 externe URLs, s. UI_CSP-Kommentar oben). Der Legacy-Alias erfuellt T-30/T-31
+//    damit nicht einmal dann, wenn er ankommt - er ist die falsche Antwort auf die
+//    falsche Frage.
+// 2. Der EINZIGE Ort, an dem irgendein zusaetzliches Resource-_meta heute ankommt, ist
+//    `mcpNativeRenderer` - der ChatGPT-Adapter ist auf dem Draht tot (M-1,
+//    `tasks/openai-p8-spec.md` §0.3), und `mcpNativeRenderer` bedient deshalb JEDEN
+//    Client, auch den heutigen Claude-Connector (Regel 1 der Phase). Weder fuer den
+//    Legacy-Alias noch fuer den Standard-Schluessel gibt es einen Live-Beleg, dass ein
+//    MCP-Apps-Host (Claude eingeschlossen) ein zusaetzliches Resource-_meta unveraendert
+//    schluckt - nur ein Schema-Beleg (SDK-`_meta` ist ein offenes Record, s.u.), keiner
+//    verhaltensseitig (O-P8-2). Den nicht-erfuellenden Legacy-Alias trotzdem auszuliefern,
+//    haette das Live-Risiko fuer Claude getragen, ohne die Anforderung zu erfuellen -
+//    schlechter als beide Alternativen (nichts senden, oder den Standard-Schluessel mit
+//    demselben Risiko UND erfuellter Anforderung senden).
+// Der Ort fuer T-30/T-31 bleibt `resources/read` (`_meta.ui.csp`/`_meta.ui.domain`, kein
+// Legacy-Alias) - offen bis zu einer Live-Probe (O-P8-2, Claude-Host; O-P8-3/OW-4,
+// echter OpenAI-Developer-Mode-Connector, s. `tasks/openai-p0-entscheidungen.md` Gate-
+// Tabelle "P8, ChatGPT-Adapter-Teil ... ungestartet"). Diese Tool-Deskriptor-Haelfte
+// (uiSubmissionMeta) bleibt stehen: ohne Wirkung fuer jeden MCP-Apps-Host, nur aus
+// Byte-Stabilitaetsgruenden - ihr Entfernen wuerde Claudes tools/list ohne Not
+// veraendern (Regel 1, P8-Spec §5.1).
 // T-30: die CSP muss EXAKT die Domains nennen, von denen die Komponente laedt. Gemessen
 // ueber alle 5 Widget-Quellen und alle injizierten Bausteine (12 Dateien): sie laden von
 // NIRGENDWO - 0 Treffer fuer fetch/XHR/WebSocket/EventSource/sendBeacon/importScripts,
@@ -85,6 +137,10 @@ export function uiSubmissionMeta() {
 // hasWidget/resourceUri/registerResource; host-spezifisch NUR mimeType + die _meta-Form
 // (metaKey/buildMeta). 1 Argument (Objekt) statt drei Einzelparameter (F1). Wird zur
 // Modul-Ladezeit einmal pro Adapter aufgerufen -> stabiler Singleton, keine Lazy-Init (P15).
+// Der Resource-Inhalt (registerResource) traegt bewusst KEIN _meta (P8, Pruefer-Befund
+// Runde 2 - ein Zwischenstand mit optionalem buildResourceMeta-Parameter ist
+// zurueckgenommen, s. Kommentar bei UI_CSP/uiSubmissionMeta oben): { uri, mimeType, text }
+// bleibt fuer BEIDE Adapter exakt der Stand vor P8.
 export function makeUiRenderer({ mimeType, metaKey, buildMeta }) {
   return {
     mimeType,
