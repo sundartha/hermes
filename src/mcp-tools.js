@@ -155,12 +155,13 @@ function durationS(c) {
 // BEWUSST NICHT pickCallStatus als Ganzes wiederverwendet: die traegt
 // last_transcript_lines, und der await_call_event-Kontrakt reicht das Roh-Transkript
 // strukturell NICHT durch (Absolute Regel 5, s. Kommentar bei pickTranscript).
-// failure_reason ist das MASCHINENFELD, aber seit P5b (O-13 Teil 2, Datenminimierung)
-// NUR das BASIS-Token (z.B. "not-placed"), nicht mehr die volle Diagnose
-// ("not-placed:invite-403-D51"). Das Detail (SIP-/Carrier-Code) bleibt am Datensatz,
-// im Log und im Ausfallbericht (outage-report.js) - dort wird es weiterhin gebraucht,
-// um z.B. zwei verschiedene not-placed-Ausfallarten zu unterscheiden. Der Nutzertext
-// entsteht getrennt in pickTranscript und loest bereits auf dem Basis-Token auf.
+// failure_reason ist das MASCHINENFELD - seit P5b (O-13 Teil 2, Datenminimierung) NUR
+// das BASIS-Token (z.B. "not-placed"), nicht mehr die volle Diagnose
+// ("not-placed:invite-403-D51"). Das Detail (SIP-/Carrier-Code) bleibt der Diagnose
+// vorbehalten: Datensatz, Log und Ausfallbericht (outage-report.js) tragen es weiterhin
+// unveraendert - dort wird es gebraucht, um z.B. zwei verschiedene not-placed-Ausfallarten
+// zu unterscheiden. Der Nutzertext entsteht getrennt in pickTranscript und loest bereits
+// auf dem Basis-Token auf.
 function callOutcomeView(call) {
   return { status: mapStatus(call), failure_reason: failureReasonBase(call.failureReason) };
 }
