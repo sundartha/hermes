@@ -1264,7 +1264,11 @@ export function registerTools(
     },
     async ({ call_id }) => {
       const c = await call("GET", `/api/calls/${call_id}`);
-      if (c.status === "active") return text({ error: loc.mcp.callStillRunning });
+      // T-19/T-20: das Werkzeug deklariert ein outputSchema (:1263). text() (:79-81)
+      // liefert weder structuredContent noch isError - der SDK-Validator wirft dann
+      // "Output validation error", und der Client sieht die Systemmeldung statt des
+      // Hinweises. "Anruf laeuft noch" IST ein Fehlerergebnis im MCP-Sinn, also errText.
+      if (c.status === "active") return errText(loc.mcp.callStillRunning);
       // Validiert, dass ein echtes Call-Objekt zurueckkam (transcript-Feld vorhanden);
       // das Roh-Transkript selbst wird bewusst NICHT durchgereicht (Whitelist unten).
       requireFields(c, { transcript: "array" });

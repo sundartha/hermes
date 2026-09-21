@@ -378,14 +378,18 @@ test("get_transcript bei laufendem Anruf: Hinweistext folgt der Tenant-Sprache (
     for (const language of SUPPORTED_LANGUAGES) {
       const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
         .get("get_transcript")({ call_id: "call_1" });
-      assert.equal(JSON.parse(toolText(r)).error, MCP_TEXTS[language].callStillRunning);
+      // T-19: der Satz bleibt byte-identisch, die JSON-Huelle faellt weg - errText()
+      // setzt isError statt eines {"error": ...}-Textblocks (siehe src/mcp-tools.js).
+      assert.equal(r.isError, true, `isError fuer Sprache ${language}`);
+      assert.equal(toolText(r), MCP_TEXTS[language].callStillRunning);
     }
     const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
       .get("get_transcript")({ call_id: "call_1" });
+    assert.equal(de.isError, true, "isError fuer DE");
     assert.equal(
-      JSON.parse(toolText(de)).error,
+      toolText(de),
       "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
-      "DE bleibt byte-identisch zum Bestand",
+      "der SATZ bleibt byte-identisch, die JSON-Huelle faellt weg (T-19)",
     );
   });
 });
