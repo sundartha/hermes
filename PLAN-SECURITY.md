@@ -5152,7 +5152,7 @@ und Positiv-Kontrolle. In P7 bewusst NICHT geaendert.
 **Kein Launch-Blocker wird durch P7 geschlossen** — alle fuenf Punkte bleiben offen und
 sind Owner-/Anbieter-Entscheidungen, keine Code-Aenderungen dieser Phase.
 
-## OpenAI-P8 — Widget-CSP und Domain am Resource-Inhalt (2026-09-21)
+## OpenAI-P8 — Widget-UI: ChatGPT-Adapter auf Paritaet (2026-09-21, Endstand nach Runde 2)
 
 **Ergebnis der Messung (`tasks/openai-p8-spec.md` §0.3):** der ChatGPT-Adapter
 (`src/ui/adapters/chatgpt.js`, "skybridge") ist auf dem Draht TOT — fuer Claude wie fuer
@@ -5164,86 +5164,90 @@ echten HTTP- und stdio-Draht). OpenAIs eigene, am 2026-09-21 gelesene Doku
 (developers.openai.com/apps-sdk/*) beschreibt zudem den MCP-Apps-Standard
 (`text/html;profile=mcp-app`), nicht mehr `text/html+skybridge`.
 
-**Was gesetzt wird:** zwei OpenAI-Alias-Schluessel am RESOURCE-INHALT (nicht am
-Tool-Deskriptor) des mcp-nativen Renderers, `src/ui/contract.js` (`openAiResourceMeta`),
-verdrahtet in `src/ui/adapters/mcp-native.js` (`buildResourceMeta`):
-- `openai/widgetCSP` = `{ connect_domains: [], resource_domains: [] }` — aus der
-  bestehenden `UI_CSP`-Konstante ABGELEITET (eine Quelle), niemals weiter als die
-  mcp-native CSP.
-- `openai/widgetDomain` = `config.server.publicUrl`; entfaellt bei leerer `publicUrl`
-  (fail-safe, Test `P8-G`) statt einen falschen Origin zu behaupten.
+**ENDSTAND: T-30/T-31 (und die daran haengenden X-7/T-23-Resource-Teile) werden NICHT
+gebaut.** Ein Zwischenstand (Commits `4adee50`/`4190448`) setzte zwei OpenAI-Alias-
+Schluessel (`openai/widgetCSP`/`openai/widgetDomain`) am RESOURCE-INHALT des mcp-nativen
+Renderers — **zurueckgenommen** (Pruefer-Befund Runde 2, 2026-09-21). Zwei Gruende, beide
+fuer sich hinreichend:
 
-Grund fuer den Resource-Inhalt statt des Tool-Deskriptors: OpenAIs Referenz
-(`apps-sdk/reference`, gelesen 2026-09-21) fuehrt `openai/widgetCSP`/`openai/widgetDomain`
-explizit unter "Resource contents", nicht "Tool descriptor". **Korrektur (Pruefer-Befund
-Runde 1):** dass OpenAI sie am Tool-Deskriptor (`uiSubmissionMeta`, bereits seit E7
-vorhanden) nicht liest, ist GELESEN, nicht gemessen — M-2/`p8-capture.mjs` misst nur, was
-UNSER eigener Server (Stand master) dort ausgibt, nicht, was OpenAI einliest. Und die
-Aussage gilt staerker, als der urspruengliche Text behauptete: die MCP-Apps-Spezifikation
-selbst (`@modelcontextprotocol/ext-apps` 2.0.0, `McpUiToolMeta.csp`/`.permissions` sind
-als `never` getypt) sagt, dass **kein** MCP-Apps-Host `csp`/`domain` am Tool-Deskriptor
-liest — auch Claude/Copilot/Goose nicht, nicht nur OpenAI (s. Korrektur in
-`src/ui/contract.js`). OpenAIs Referenz nennt die beiden Alias-Schluessel zudem woertlich
-als **Legacy**, nicht als bevorzugten Weg:
-- `_meta["openai/widgetCSP"]`: "Legacy ChatGPT compatibility key for widget CSP metadata.
-  Standard CSP fields are superseded by `_meta.ui.csp`, but `redirect_domains` is still
-  required for trusted `openExternal` destinations."
-- `_meta.ui.csp`: "The standard `_meta.ui.csp` object is generally preferred for new UI
-  ..."
-- `_meta["openai/widgetDomain"]`: "OpenAI-specific compatibility alias for
-  `_meta.ui.domain` in ChatGPT."
+1. **Der Legacy-Alias erfuellt T-30/T-31 nicht einmal, wenn er ankommt.**
+   `tasks/openai-audit/00-openai-anforderungen.md` verlangt fuer T-30 (Zeile 63) und T-31
+   (Zeile 64) woertlich den STANDARD-Schluessel `_meta.ui.csp`/`_meta.ui.domain`. X-7
+   (Zeile 138) begruendet den Legacy-Alias `openai/widgetCSP`/`openai/widgetDomain`
+   AUSSCHLIESSLICH mit `redirect_domains` fuer `window.openai.openExternal(...)` — das
+   Widget-HTML hat 0 externe URLs und keine `openExternal`-Ziele (T-P3-AC5/AC7), also kein
+   `redirect_domains`. OpenAIs eigene Referenz (`apps-sdk/reference`, gelesen 2026-09-21)
+   nennt den Alias selbst "Legacy ... Standard CSP fields are superseded by `_meta.ui.csp`"
+   bzw. "compatibility alias for `_meta.ui.domain`" — ohne `redirect_domains` bleibt kein
+   eigenstaendiger Grund fuer den Alias, den der Standard-Schluessel nicht auch abdeckt.
+2. **Der einzige lebende Pfad ist `mcpNativeRenderer` — fuer JEDEN Client, auch heutige
+   Claude-Nutzer.** Weil der ChatGPT-Adapter tot ist (M-1 oben), bedient `mcpNativeRenderer`
+   `resources/read` fuer ALLE Clients (`registry.js`). Regel 1 der Phase verlangt fuer eine
+   Aenderung an diesem Pfad zwei Belege: Notwendigkeit UND einen Verhaltensbeleg, dass ein
+   MCP-Apps-Client (Claude eingeschlossen) das zusaetzliche Feld unveraendert schluckt. Der
+   Verhaltensbeleg fehlt fuer BEIDE Varianten (Legacy-Alias wie Standard-Schluessel) — nur
+   schema-seitig ist belegt, dass das SDK ein zusaetzliches `_meta`-Feld nicht als
+   Protokollfehler verwirft (`ResourceContentsSchema`, offenes `z.record`), nicht, dass ein
+   realer Host es beim Rendern ignoriert. Den (laut Punkt 1) nicht einmal anforderungs-
+   erfuellenden Legacy-Alias trotzdem auszuliefern, haette dieses ungeklaerte Live-Risiko
+   fuer Claude getragen, ohne T-30/T-31 zu erfuellen — die schlechteste der drei Optionen
+   (nichts senden / Legacy senden / Standard senden).
 
-Diese Phase implementiert also wissentlich den von OpenAI selbst als abgeloest
-bezeichneten Weg, nicht den "generally preferred" Standard-Pfad — Grund bleibt O-P8-2
-(Standard-Schluessel erreichen ueber denselben Renderer auch Claude, s.u.).
+Der Code ist damit wieder exakt auf dem Stand von master `f769841` — nicht nur `tools/list`
+und `resources/list`, sondern jetzt wieder auch `resources/read` (Diff-Gegenprobe:
+`git diff f769841 -- src/ui/` zeigt ausschliesslich Kommentar-Zeilen, keine
+Verhaltensaenderung). Entfernt wurden `openAiResourceMeta()`,
+`OPENAI_WIDGET_CSP_KEY`/`OPENAI_WIDGET_DOMAIN_KEY` und der `buildResourceMeta`-Parameter
+von `makeUiRenderer()` (sonst toter Code, CLAUDE.md).
 
-**Was bewusst NICHT gesetzt wird:**
-- **Standard-Schluessel `_meta.ui.csp`/`_meta.ui.domain` am Resource-Inhalt.** Auch Claude
-  liest den Resource-Inhalt; `domain` ist laut MCP-Apps-Spezifikation host-abhaengig
-  (Claudes eigenes Format: `<hash>.claudemcpcontent.com`). Ob Claude einen fremden Origin
-  (`https://app.sundartha.com`) dort ignoriert, ablehnt oder das Widget deaktiviert, ist
-  ohne Live-Probe **UNKNOWN** → **O-P8-2**.
-- **`openai/widgetCSP.redirect_domains`.** Nur noetig fuer `window.openai.openExternal(...)`;
-  das Widget-HTML enthaelt weder `window.openai` noch `href`-Ziele (T-P3-AC5/AC7). Ein
-  leeres `redirect_domains` waere eine Falschangabe-nahe Angabe ohne Zweck.
-- **ChatGPT-Adapter-Aenderungen.** Toter Code (s.o.); jede Aenderung dort waere wirkungslos.
-  Rueckbau ist ein Owner-Auftrag (`registry.js`) und reisst Regressionstests mit (T-P3-AC2..
-  AC7) → **O-P8-1**.
+**Was bewusst NICHT gesetzt wird — und warum das der P0-Gate-Lage entspricht:**
+`tasks/openai-p0-entscheidungen.md` fuehrt den ChatGPT-Adapter-Teil von P8
+(T-30/T-31/T-23/X-7/X-3) als eigene Zeile in seiner Gate-Tabelle: **"ungestartet"**, gegatet
+an OW-4/D0-8 (Owner-Live-Probe in einem echten OpenAI-Developer-Mode-Connector). Der
+Zwischenstand argumentierte, M-1 mache OW-4 fuer P8 gegenstandslos, weil der ChatGPT-
+Adapter unabhaengig von D0-8 tot ist — das stimmt fuer die Frage "welcher Renderer wird
+gewaehlt", aber nicht fuer die tiefere Absicht des Gates: bevor ein reales Verhalten
+(Claude ODER OpenAI) am Draht gemessen ist, wird am gemeinsamen Live-Pfad nichts
+ausgeliefert, das dieses Verhalten beeinflussen koennte. Diese Phase haelt sich jetzt an
+die tiefere Absicht: nichts geht an `resources/read`, bis O-P8-2 (Claude) UND O-P8-3/OW-4
+(OpenAI) beantwortet sind.
+- **ChatGPT-Adapter-Aenderungen.** Toter Code (s.o.); jede Aenderung dort waere wirkungslos
+  fuer OpenAI (M-1 gilt unabhaengig davon, WAS der Client deklariert) und deshalb kein
+  gangbarer Weg, T-30/T-31 "schlafend" zu bauen. Entfernen ist ebenfalls kein Teil von P8:
+  Rueckbau ist ein Owner-Auftrag (`registry.js`) und reisst Regressionstests mit
+  (T-P3-AC2..AC7) → **O-P8-1**.
 
 **Byte-Beweis (Regel 1 der Phase — nichts aendert sich fuer heutige Claude-Nutzer):**
-`tools/list` und `resources/list` sind vor/nach der Phase byte-identisch
-(`JSON.stringify`-Gleichheit, master `f769841`, sha256 `8c22f000…17daf2b`). `resources/read`
-ist es NICHT mehr — genau das neue `_meta`-Objekt kommt dort bei JEDEM mcp-nativen Client
-an, auch bei einem heutigen echten Claude-Aufruf, weil der ChatGPT-Adapter auf dem Draht
-tot ist (M-1 oben) und `mcpNativeRenderer` deshalb der einzige Renderer ist, den
-`resources/read` je sieht (`registry.js`). Regel 1 verlangt fuer diesen Fall zwei Belege,
-nicht einen: dass der zusaetzliche Schluessel noetig ist (ja, s.o.) UND dass ein
-MCP-Apps-Client ihn ignoriert. Der zweite Beleg ist NUR schema-seitig erbracht, nicht
-verhaltensseitig: `@modelcontextprotocol/sdk` (dieselbe Dependency dieses Repos),
-`dist/esm/types.d.ts`, `ResourceContentsSchema`/`TextResourceContentsSchema`: `_meta:
-z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>` — ein offenes Schluessel-Wert-
-Objekt ohne geschlossene Feldliste, das einen zusaetzlichen Schluessel nicht als
-Schema-Fehler verwirft. Ob der Claude-HOST das Widget mit diesem zusaetzlichen Feld
-trotzdem unveraendert rendert, ist damit NICHT bewiesen — dafuer bleibt die Live-Probe
-gegen einen echten Claude-Host offen (**O-P8-2, NICHT erledigt durch diesen Absatz**).
-Test `P8-F` pinnt die Tool-Deskriptor- und `resources/list`-Schluesselmenge zusaetzlich
-als Regressionsschutz (die BEIDEN byte-identisch bleiben).
+`tools/list`, `resources/list` UND `resources/read` sind nach dieser Phase byte-identisch
+zu master `f769841`, fuer JEDEN Client (Claude wie OpenAI/ChatGPT), auf BEIDEN Transporten
+(HTTP + stdio). Zwei unabhaengige Belege:
+1. Diff-Gegenprobe: `git diff f769841 -- src/ui/adapters/mcp-native.js src/ui/contract.js
+   src/ui/adapters/chatgpt.js src/ui/registry.js` zeigt ausschliesslich Kommentarzeilen.
+2. **Test `P8-I`/`P8-J`** (Pruefer-Befund Runde 2, "wichtig" — P8-F pinnte vorher nur die
+   Schluesselmenge von Tool-`_meta` und `resources/list`, nicht Werte/Bytes, und deckte
+   `resources/read` gar nicht ab): sha256 der vollen, kanonisierten (Schluessel sortiert)
+   JSON-Serialisierung von `tools/list` + `resources/list` + jedem `resources/read` (alle 5
+   Widgets), einmal ueber HTTP, einmal ueber stdio. Beide Hashes sind gegen master `f769841`
+   UND gegen diesen Branch (nach Ruecknahme) identisch gemessen (eigene Gegenprobe: zweiter,
+   per `git worktree` ausgecheckter Baum auf `f769841`, gleiches Capture-Verfahren,
+   `node_modules` symlink-geteilt) — `baf9f1c9…4d36bf` (HTTP), `cb8d492a…3ee215a` (stdio).
+   Weicht der Hash kuenftig ab, loggt der Test das volle kanonisierte Objekt als Diff-
+   Grundlage, nicht nur "rot".
 
 **CSP-Leerbefund erneut geprueft (Schritt 7):** je Widget-HTML (`call`, `my-number`,
 `calls`, `calendar`, `agent-status`) 0 externe URLs und kein `fetch`/`XMLHttpRequest`/
 `WebSocket`/`EventSource`/`sendBeacon`/`importScripts`/`@font-face`/`<iframe>` — die leeren
-CSP-Listen bleiben zutreffend.
+CSP-Listen (`UI_CSP`, Tool-Deskriptor-Haelfte) bleiben zutreffend, auch wenn sie fuer
+keinen MCP-Apps-Host wirksam sind (s. `src/ui/contract.js`).
 
 **Offene Owner-Punkte:**
 - **O-P8-1:** ChatGPT-Adapter (toter Code) zurueckbauen — ja/nein.
-- **O-P8-2:** Standard-Schluessel `_meta.ui.csp`/`_meta.ui.domain` am Resource-Inhalt
-  setzen — nur nach einer Live-Probe mit einem echten Claude-Host (rendert das Widget mit
-  einem fremden `_meta.ui.domain` weiter?). Zusaetzlich weiterhin offen (Pruefer-Befund
-  Runde 1): dieselbe Live-Probe-Luecke gilt bereits fuer den JETZT ausgelieferten
-  Alias-Pfad (`openai/widgetCSP`/`openai/widgetDomain`) selbst — der geht seit dieser
-  Phase unconditional an jeden mcp-nativen Client, auch an heutige Claude-Nutzer (s.
-  Byte-Beweis oben). Schema-seitig belegt (SDK-`_meta` ist ein offenes Record, verwirft
-  den Schluessel nicht), verhaltensseitig (rendert der Host trotzdem?) weiterhin UNKNOWN.
-- **O-P8-3:** Live-Probe in ChatGPT Developer Mode (haengt am selben Termin wie OW-4):
-  rendert die Karte, greifen die Alias-Schluessel, akzeptiert OpenAIs Review-Check die
-  Domain als vorhanden?
+- **O-P8-2:** Live-Probe mit einem echten Claude-Host: schluckt er ein zusaetzliches
+  `_meta`-Feld am Resource-Inhalt (Standard-Schluessel `_meta.ui.csp`/`_meta.ui.domain`)
+  unveraendert, oder aendert/verweigert er das Rendern? Ohne diesen Beleg bleibt
+  `resources/read` unveraendert (s.o.).
+- **O-P8-3 (= OW-4):** Live-Probe in einem echten OpenAI Developer-Mode-Connector
+  (`tasks/openai-p0-entscheidungen.md` O-5/OW-4): welchen mimeType deklariert OpenAIs
+  Client tatsaechlich (D0-8), rendert die Karte ueberhaupt, und wenn ja, ueber welchen
+  Pfad? Erst danach ist entscheidbar, OB und WO T-30/T-31 fuer OpenAI etwas bewirken
+  wuerden.

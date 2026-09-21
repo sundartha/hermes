@@ -1,13 +1,17 @@
-// P8 (T-30/T-31/T-23, X-7): Widget-UI, OpenAI-Alias-Schluessel am Resource-Inhalt.
+// P8 (T-30/T-31/T-23, X-7): Widget-UI, ChatGPT-Adapter auf Paritaet.
 //
-// Faelle A/B belegen die Kern-Entscheidung der Spec (tasks/openai-p8-spec.md §1):
-// der ChatGPT-Adapter ist auf dem Draht TOT - ein initialize-POST mit Skybridge-
-// Capability aendert trotzdem NICHTS an tools/list oder resources/read, weil der
-// stateless Transport (sessionIdGenerator=undefined) die dort deklarierten
-// Capabilities nie zum naechsten POST mitfuehrt. Faelle C-H belegen Schritt 3
-// (openai/widgetCSP + openai/widgetDomain am Resource-Inhalt des mcp-nativen
-// Renderers) auf BEIDEN Pfaden (HTTP + stdio) und dass der ChatGPT-Adapter dabei
-// unveraendert bleibt.
+// ENDSTAND (Pruefer-Befund Runde 2, 2026-09-21): T-30/T-31 werden NICHT gebaut. Ein
+// Zwischenstand setzte openai/widgetCSP + openai/widgetDomain (OpenAIs eigene "Legacy"-
+// Alias-Schluessel) an resources/read des mcp-nativen Renderers - zurueckgenommen, s.
+// src/ui/contract.js beim UI_CSP-Kommentar fuer die vollstaendige Begruendung. Kurz: der
+// ChatGPT-Adapter ist auf dem Draht TOT (Faelle A/B unten), also ist mcpNativeRenderer
+// der einzige Renderer, den je ein Client sieht - auch der heutige Claude-Connector
+// (Regel 1 der Phase). Der Legacy-Alias haette dieses Live-Risiko getragen, OHNE T-30/T-31
+// zu erfuellen (die verlangen woertlich den Standard-Schluessel `_meta.ui.csp`/
+// `_meta.ui.domain`, X-7 begruendet den Legacy-Alias ausschliesslich mit
+// `redirect_domains`, das hier nicht gesetzt wird). Faelle C/D/I/J belegen deshalb das
+// Gegenteil: resources/read traegt auf BEIDEN Pfaden (HTTP + stdio) weiterhin KEIN
+// zusaetzliches _meta - byte-identisch zu master, fuer JEDEN Client.
 //
 // Alle Faelle lesen ROH (eigenes JSON.parse ueber HTTP, bzw. client.request() mit
 // einem passthrough-Schema ueber stdio) - nie einen typisierten SDK-Client fuer
@@ -16,11 +20,10 @@
 // Katalog-/ABNAHME-Praefix (sonst landet er im falschen Lauf).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { config } from "../src/config.js";
-import { mcpNativeRenderer } from "../src/ui/adapters/mcp-native.js";
 import { chatgptRenderer } from "../src/ui/adapters/chatgpt.js";
 import { startServer, seedState, mcpPost, readToolResult, ROOT, BASE_ENV } from "./helpers.js";
 
@@ -28,10 +31,17 @@ const WIDGET_COUNT = 5;
 const RESOURCE_URI_CALL = "ui://hermes/call";
 const CHATGPT_UI_MIME = "text/html+skybridge";
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
-const OPENAI_WIDGET_CSP_KEY = "openai/widgetCSP";
-const OPENAI_WIDGET_DOMAIN_KEY = "openai/widgetDomain";
-const EXPECTED_PUBLIC_URL = "https://agent.test"; // BASE_ENV.PUBLIC_URL
 const HTTP_OK = 200;
+// Byte-Beweis (Pruefer-Befund Runde 2, P8-I/P8-J unten): sha256 der kanonisierten
+// (Schluessel sortiert) JSON-Serialisierung von tools/list + resources/list + jedem
+// resources/read (alle 5 Widgets), einmal ueber HTTP und einmal ueber stdio. Berechnet
+// gegen master f769841 UND gegen diesen Branch nach Rueckbau der Runde-2-Befunde -
+// beide liefern denselben Hash (eigene Gegenprobe: zweiter, per node worktree ausgecheckter
+// Baum auf f769841 mit identischem node_modules, dasselbe Capture-Verfahren wie unten).
+const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
+  "baf9f1c9fdaa09f2ff706046b24c7b27a7b6eeffe1fb067772d7a4d54c4d36bf";
+const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
+  "cb8d492a857fea4619efdd41a58ae5f5cfba4578f6ed9dcfa4ed7c34f3ee215a";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
@@ -78,7 +88,7 @@ async function httpResourceRead(baseUrl, uri) {
 // Verbindet einen echten stdio-Kindprozess (src/mcp-server.js) und schickt danach
 // initialize + capabilities getrennt vom Client-Connect (DP-1: derselbe Kindprozess-
 // Pfad wie der reale Claude-Desktop-/OpenAI-Host).
-async function withStdioClient(env, run) {
+async function withStdioClient(env, capabilities, run) {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [MCP_SERVER_ENTRYPOINT],
@@ -90,10 +100,7 @@ async function withStdioClient(env, run) {
   transport.stderr?.on("data", (chunk) => {
     stderrOutput += chunk.toString();
   });
-  const client = new Client(
-    { name: "p8-test-stdio-client", version: "0.0.0" },
-    { capabilities: SKYBRIDGE_CAPABILITIES },
-  );
+  const client = new Client({ name: "p8-test-stdio-client", version: "0.0.0" }, { capabilities });
   try {
     await client.connect(transport);
     await run(client, () => stderrOutput);
@@ -104,6 +111,10 @@ async function withStdioClient(env, run) {
 
 async function stdioRawToolsList(client) {
   return (await client.request({ method: "tools/list" }, ANY)).tools;
+}
+
+async function stdioRawResourcesList(client) {
+  return (await client.request({ method: "resources/list" }, ANY)).resources;
 }
 
 async function stdioRawResourceRead(client, uri) {
@@ -124,6 +135,27 @@ function readbackResource(renderer, widgetId) {
     };
     renderer.registerResource(fakeServer, widgetId);
   });
+}
+
+// Kanonisiert (Schluessel rekursiv sortiert) fuer eine stabile, Ordnungs-unabhaengige
+// JSON-Serialisierung - Basis fuer den Byte-Beweis P8-I/P8-J. Object.fromEntries statt
+// reduce+Mutation (kein no-param-reassign auf einem Fremd-Parameter).
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalize(value[key])]),
+    );
+  }
+  return value;
+}
+
+const JSON_INDENT = 2;
+
+function sha256Of(value) {
+  return crypto.createHash("sha256").update(JSON.stringify(canonicalize(value))).digest("hex");
 }
 
 // ==================== P8-A/P8-B: ChatGPT-Adapter ist auf dem Draht tot ====================
@@ -162,7 +194,7 @@ test("P8-A (HTTP): Skybridge-initialize aendert tools/list und resources/read NI
 });
 
 test("P8-B (stdio): Skybridge-Client-Capability aendert tools/list ueber den echten Kindprozess NICHT", async () => {
-  await withStdioClient({ MCP_UI_ENABLED: "true" }, async (client, stderr) => {
+  await withStdioClient({ MCP_UI_ENABLED: "true" }, SKYBRIDGE_CAPABILITIES, async (client, stderr) => {
     const tools = await stdioRawToolsList(client);
     const placeCall = tools.find((tool) => tool.name === "place_call");
     assert.ok(placeCall, `place_call ist in der Liste (stderr: ${stderr()})`);
@@ -182,26 +214,10 @@ test("P8-B (stdio): Skybridge-Client-Capability aendert tools/list ueber den ech
   });
 });
 
-// ==================== P8-C/P8-D: OpenAI-Alias-Schluessel am Resource-Inhalt ====================
+// ==================== P8-C/P8-D: resources/read traegt weiterhin KEIN _meta ====================
+// (T-30/T-31 nicht gebaut - Begruendung s. Dateikopf + src/ui/contract.js)
 
-function assertOpenAiAliasMeta(meta) {
-  assert.deepEqual(
-    meta,
-    {
-      [OPENAI_WIDGET_CSP_KEY]: { connect_domains: [], resource_domains: [] },
-      [OPENAI_WIDGET_DOMAIN_KEY]: EXPECTED_PUBLIC_URL,
-    },
-    "Resource-_meta traegt exakt die zwei OpenAI-Alias-Schluessel",
-  );
-  assert.equal("ui" in meta, false, "kein Standard-Schluessel _meta.ui am Resource-Inhalt (O-P8-2)");
-  assert.equal(
-    "redirect_domains" in meta[OPENAI_WIDGET_CSP_KEY],
-    false,
-    "kein redirect_domains ohne openExternal-Ziel (X-7)",
-  );
-}
-
-test("P8-C (HTTP, T-30/T-31): jede Widget-Resource traegt openai/widgetCSP + openai/widgetDomain, sonst nichts", async () => {
+test("P8-C (HTTP, T-30/T-31 NICHT gebaut): jede Widget-Resource traegt exakt uri/mimeType/text, kein _meta", async () => {
   const srv = await startServer({ seed: seedState({}), env: { MCP_UI_ENABLED: "true" } });
   try {
     const tools = await httpToolsList(`${srv.localUrl}/mcp`);
@@ -210,7 +226,11 @@ test("P8-C (HTTP, T-30/T-31): jede Widget-Resource traegt openai/widgetCSP + ope
 
     for (const tool of widgetTools) {
       const read = await httpResourceRead(`${srv.localUrl}/mcp`, tool._meta.ui.resourceUri);
-      assertOpenAiAliasMeta(read.contents[0]._meta);
+      assert.deepEqual(
+        Object.keys(read.contents[0]).sort(),
+        ["mimeType", "text", "uri"],
+        `${tool.name}: Resource-Inhalt traegt genau drei Felder, kein _meta`,
+      );
       assert.equal(read.contents[0].mimeType, "text/html;profile=mcp-app");
     }
   } finally {
@@ -218,15 +238,19 @@ test("P8-C (HTTP, T-30/T-31): jede Widget-Resource traegt openai/widgetCSP + ope
   }
 });
 
-test("P8-D (stdio, DP-1, T-30/T-31): derselbe Beleg ueber den echten stdio-Kindprozess", async () => {
-  await withStdioClient({ MCP_UI_ENABLED: "true" }, async (client, stderr) => {
+test("P8-D (stdio, DP-1, T-30/T-31 NICHT gebaut): derselbe Beleg ueber den echten stdio-Kindprozess", async () => {
+  await withStdioClient({ MCP_UI_ENABLED: "true" }, {}, async (client, stderr) => {
     const tools = await stdioRawToolsList(client);
     const widgetTools = tools.filter((tool) => tool._meta?.ui?.resourceUri);
     assert.equal(widgetTools.length, WIDGET_COUNT, `Positiv-Kontrolle (stderr: ${stderr()})`);
 
     for (const tool of widgetTools) {
       const read = await stdioRawResourceRead(client, tool._meta.ui.resourceUri);
-      assertOpenAiAliasMeta(read.contents[0]._meta);
+      assert.deepEqual(
+        Object.keys(read.contents[0]).sort(),
+        ["mimeType", "text", "uri"],
+        `${tool.name}: Resource-Inhalt traegt genau drei Felder, kein _meta`,
+      );
       assert.equal(read.contents[0].mimeType, "text/html;profile=mcp-app");
     }
   });
@@ -296,25 +320,6 @@ test("P8-F (HTTP): Tool-Deskriptor-_meta und resources/list-Eintraege tragen unv
   }
 });
 
-// ==================== P8-G: fail-safe - leere publicUrl laesst nur die Domain entfallen ====================
-
-test("P8-G (in-process, fail-safe): leere config.server.publicUrl laesst openai/widgetDomain entfallen, openai/widgetCSP bleibt", async () => {
-  const zuvor = config.server.publicUrl;
-  config.server.publicUrl = "";
-  try {
-    const readback = await readbackResource(mcpNativeRenderer, "call");
-    const { _meta: meta } = readback.contents[0];
-    assert.deepEqual(meta[OPENAI_WIDGET_CSP_KEY], { connect_domains: [], resource_domains: [] });
-    assert.equal(
-      OPENAI_WIDGET_DOMAIN_KEY in meta,
-      false,
-      "openai/widgetDomain entfaellt bei leerer publicUrl statt einen falschen Origin zu behaupten",
-    );
-  } finally {
-    config.server.publicUrl = zuvor;
-  }
-});
-
 // ==================== P8-H: ChatGPT-Adapter unveraendert ====================
 
 test("P8-H (in-process): ChatGPT-Adapter liefert den Resource-Inhalt weiterhin OHNE _meta", async () => {
@@ -325,4 +330,51 @@ test("P8-H (in-process): ChatGPT-Adapter liefert den Resource-Inhalt weiterhin O
     ["mimeType", "text", "uri"],
     "ChatGPT-Adapter-Resource-Inhalt bleibt bei genau drei Feldern (kein _meta)",
   );
+});
+
+// ==================== P8-I/P8-J: Byte-Beweis - voller Snapshot statt nur Schluesselmenge ====================
+// (Pruefer-Befund Runde 2, "wichtig": P8-F prueft nur Schluesselmengen, nicht Werte/Bytes,
+// und deckt resources/read gar nicht ab. Hier: sha256 der vollen, kanonisierten
+// JSON-Serialisierung von tools/list + resources/list + jedem resources/read, verglichen
+// mit dem eingecheckten master-Hash (s. Konstanten oben). Weicht ein Hash ab, muss der
+// naechste Blick der volle Klartext-Diff sein (nicht nur "der Test ist rot") - deshalb
+// wird bei Abweichung das kanonisierte Objekt mitgeloggt.
+
+test("P8-I (HTTP): tools/list + resources/list + alle resources/read byte-identisch zu master", async () => {
+  const srv = await startServer({ seed: seedState({}), env: { MCP_UI_ENABLED: "true" } });
+  try {
+    const tools = await httpToolsList(`${srv.localUrl}/mcp`);
+    const resources = await httpResourcesList(`${srv.localUrl}/mcp`);
+    const reads = {};
+    for (const resource of [...resources].sort((left, right) => left.uri.localeCompare(right.uri))) {
+      reads[resource.uri] = (await httpResourceRead(`${srv.localUrl}/mcp`, resource.uri)).contents;
+    }
+    const captured = { tools, resources, reads };
+    const hash = sha256Of(captured);
+    assert.equal(
+      hash,
+      EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP,
+      `Byte-Abweichung von master, kanonisiertes Capture:\n${JSON.stringify(canonicalize(captured), null, JSON_INDENT)}`,
+    );
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("P8-J (stdio): tools/list + resources/list + alle resources/read byte-identisch zu master", async () => {
+  await withStdioClient({ MCP_UI_ENABLED: "true" }, {}, async (client, stderr) => {
+    const tools = await stdioRawToolsList(client);
+    const resources = await stdioRawResourcesList(client);
+    const reads = {};
+    for (const resource of [...resources].sort((left, right) => left.uri.localeCompare(right.uri))) {
+      reads[resource.uri] = (await stdioRawResourceRead(client, resource.uri)).contents;
+    }
+    const captured = { tools, resources, reads };
+    const hash = sha256Of(captured);
+    assert.equal(
+      hash,
+      EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO,
+      `Byte-Abweichung von master (stderr: ${stderr()}), kanonisiertes Capture:\n${JSON.stringify(canonicalize(captured), null, JSON_INDENT)}`,
+    );
+  });
 });
