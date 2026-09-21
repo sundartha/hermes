@@ -43,8 +43,17 @@ export function uiServerExtension() {
   return { [UI_CAPABILITY_KEY]: { mimeTypes: [UI_MIME] } };
 }
 
-// ChatGPT Apps SDK (OpenAI "skybridge"), P0-Befund. Zweiter Host neben MCP-nativ.
-// mimeType der UI-Resource in dieser Host-Konvention (disjunkt zu UI_MIME).
+// ChatGPT Apps SDK (OpenAI "skybridge"). Zweiter Host-Adapter neben MCP-nativ - AUF DEM
+// DRAHT TOT, fuer Claude wie fuer OpenAI (P8, tasks/openai-p8-spec.md §0.3 M-1): der
+// Detektor unten greift nur auf dem initialize-POST, dessen Response weder Tool-
+// Deskriptoren noch Resource-Inhalte traegt; der stateless Transport (sessionIdGenerator
+// =undefined) fuehrt die dort deklarierten Capabilities nicht zum spaeteren tools/list-
+// oder resources/read-POST mit. OpenAIs eigene, aktuell gelesene Doku
+// (developers.openai.com/apps-sdk/*) nennt "text/html+skybridge" nicht mehr und
+// beschreibt statt dessen den MCP-Apps-Standard (mimeType unten bei UI_MIME). Test P8-A
+// pinnt "Skybridge-initialize -> mcp-nativer Pfad auf tools/list". Rueckbau ist trotzdem
+// KEIN Teil von P8 (Owner-Auftrag noetig, s. registry.js, O-P8-1).
+// mimeType der UI-Resource in dieser (toten) Host-Konvention (disjunkt zu UI_MIME).
 export const CHATGPT_UI_MIME = "text/html+skybridge";
 // _meta-Schluessel am Tool-Deskriptor; Wert = die ui://-Resource-URI (flacher String,
 // NICHT das verschachtelte _meta.ui.resourceUri der MCP-nativen Konvention).
@@ -54,7 +63,15 @@ export const CHATGPT_META_KEY = "openai/outputTemplate";
 // Symmetrisch zu capabilityDeclaresUi; disjunkter mimeType -> eindeutige Adapter-Wahl.
 export const capabilityDeclaresChatgptUi = makeCapabilityDetector(CHATGPT_UI_MIME);
 
-// ---- Einreichungs-Pflichtfelder am Widget-_meta (T-30/T-31) ----------------------
+// ---- Einreichungs-Pflichtfelder, TOOL-DESKRIPTOR-Haelfte (T-30/T-31) --------------
+// Diese Felder (uiSubmissionMeta unten) liegen am Tool-Deskriptor (_meta.ui neben
+// resourceUri) - GENAU DORT liest OpenAI CSP/Domain NICHT (gemessen, P8, §0.3 M-2:
+// developers.openai.com/apps-sdk/reference fuehrt "openai/widgetCSP"/"openai/widgetDomain"
+// unter "Resource contents", nicht "Tool descriptor"). Fuer OpenAI wirksam sind die
+// Alias-Schluessel am RESOURCE-INHALT (openAiResourceMeta weiter unten, ueber
+// buildResourceMeta in makeUiRenderer). Diese Tool-Deskriptor-Haelfte bleibt trotzdem
+// stehen: sie ist der MCP-Apps-Standardort fuer Claude/Copilot/Goose, und jede Aenderung
+// hier veraendert Claudes tools/list ohne Not (Regel 1, P8-Spec §5.1).
 // T-30: die CSP muss EXAKT die Domains nennen, von denen die Komponente laedt. Gemessen
 // ueber alle 5 Widget-Quellen und alle injizierten Bausteine (12 Dateien): sie laden von
 // NIRGENDWO - 0 Treffer fuer fetch/XHR/WebSocket/EventSource/sendBeacon/importScripts,
@@ -81,11 +98,43 @@ export function uiSubmissionMeta() {
   return domain ? { csp: UI_CSP, domain } : { csp: UI_CSP };
 }
 
+// P8 (T-30/T-31, mcp-nativer Pfad): OpenAI liest CSP/Domain NICHT am Tool-Deskriptor
+// (uiSubmissionMeta oben), sondern ausschliesslich am Resource-Inhalt von
+// resources/read - dort steht heute kein _meta (gemessen, tasks/openai-p8-spec.md
+// §0.3 M-2). developers.openai.com/apps-sdk/reference nennt "openai/widgetCSP" und
+// "openai/widgetDomain" ausdruecklich als Aliase, die ChatGPT honoriert; Standard-
+// Schluessel (_meta.ui.csp/.domain) werden hier BEWUSST NICHT gesetzt, weil auch
+// Claude den Resource-Inhalt liest und "domain" laut MCP-Apps-Spezifikation
+// host-abhaengig ist (Claude: <hash>.claudemcpcontent.com) - ob Claude einen fremden
+// Origin dort ignoriert oder ablehnt, ist ohne Live-Probe UNKNOWN (O-P8-2).
+export const OPENAI_WIDGET_CSP_KEY = "openai/widgetCSP";
+export const OPENAI_WIDGET_DOMAIN_KEY = "openai/widgetDomain";
+
+// Aus UI_CSP ABGELEITET (eine Quelle, Regel 5: nie weiter als die mcp-native CSP) -
+// nur die Feldnamen wechseln auf snake_case (OpenAIs Legacy-Format). Zur Aufrufzeit
+// gelesen wie uiSubmissionMeta (config.server.publicUrl kann pro Prozess/Test
+// variieren); openai/widgetDomain entfaellt bei leerer publicUrl, gleiche Regel.
+export function openAiResourceMeta() {
+  const domain = config.server.publicUrl;
+  const meta = {
+    [OPENAI_WIDGET_CSP_KEY]: {
+      connect_domains: [...UI_CSP.connectDomains],
+      resource_domains: [...UI_CSP.resourceDomains],
+    },
+  };
+  if (domain) meta[OPENAI_WIDGET_DOMAIN_KEY] = domain;
+  return meta;
+}
+
 // Baut einen UiRenderer (DIP-Port, ports.js) fuer eine Host-Konvention. Host-unabhaengig:
 // hasWidget/resourceUri/registerResource; host-spezifisch NUR mimeType + die _meta-Form
 // (metaKey/buildMeta). 1 Argument (Objekt) statt drei Einzelparameter (F1). Wird zur
 // Modul-Ladezeit einmal pro Adapter aufgerufen -> stabiler Singleton, keine Lazy-Init (P15).
-export function makeUiRenderer({ mimeType, metaKey, buildMeta }) {
+// buildResourceMeta (P8, optional): liefert zusaetzliches _meta fuer den RESOURCE-Inhalt
+// (nicht den Tool-Deskriptor). Ohne dieses Feld bleibt der Inhalt exakt
+// { uri, mimeType, text } wie vor P8 - der ChatGPT-Adapter uebergibt es nicht und ist
+// dadurch unveraendert (T-P3-AC5/AC7, Test P8-H).
+export function makeUiRenderer({ mimeType, metaKey, buildMeta, buildResourceMeta }) {
   return {
     mimeType,
     hasWidget: (widgetId) => hasWidget(widgetId),
@@ -99,7 +148,11 @@ export function makeUiRenderer({ mimeType, metaKey, buildMeta }) {
         widgetId,
         uri,
         { title: widgetTitle(widgetId), mimeType },
-        async () => ({ contents: [{ uri, mimeType, text: widgetHtml(widgetId, language) }] }),
+        async () => {
+          const content = { uri, mimeType, text: widgetHtml(widgetId, language) };
+          if (buildResourceMeta) content._meta = buildResourceMeta();
+          return { contents: [content] };
+        },
       );
     },
     toolMeta: (widgetId) => ({ [metaKey]: buildMeta(uiResourceUri(widgetId)) }),

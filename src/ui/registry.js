@@ -1,7 +1,12 @@
 // UI-Registry: waehlt hinter dem Master-Schalter (config.tenancy.mcpUiEnabled) GENAU EINEN
 // Renderer. Default = der MCP-native Renderer (offizieller "MCP Apps"-Standard, von
-// Claude/Copilot/Goose ... gerendert). Erklaert ein Host explizit die ChatGPT-Skybridge-
-// Konvention (disjunkter mimeType), gewinnt dieser Adapter.
+// Claude/Copilot/Goose ... gerendert). Erklaert der initialize-POST explizit die
+// ChatGPT-Skybridge-Konvention (disjunkter mimeType), gewinnt hier auf dem Papier dieser
+// Adapter - erreicht auf dem Draht aber NIE einen tools/list- oder resources/read-POST,
+// weil der stateless Transport (sessionIdGenerator=undefined) die initialize-Capabilities
+// dorthin nicht mitfuehrt (P8, tasks/openai-p8-spec.md §0.3 M-1, Test P8-A). Diese
+// Funktion waehlt also technisch korrekt, aber fuer keinen heutigen Client (Claude,
+// OpenAI) mit sichtbarer Wirkung - der ChatGPT-Adapter ist tot, nicht nur ungetestet.
 //
 // KEIN per-Request-Capability-Gate mehr (frueher: nur rendern, wenn der Client die
 // UI-Capability im initialize deklariert). Begruendung:

@@ -148,7 +148,10 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
       // mehr, weil der stateless Transport (sessionIdGenerator=undefined) die initialize-
       // Capabilities nicht zum tools/list-POST mitfuehrt - das Widget-_meta erschien sonst
       // NIE. capabilities dienen nur noch der expliziten ChatGPT-Adapter-Wahl. Kein neuer
-      // Endpunkt, mcpAuth + res.on("close")-Cleanup unveraendert.
+      // Endpunkt, mcpAuth + res.on("close")-Cleanup unveraendert. Diese Wahl erreicht auf
+      // dem Draht NIE einen Tool-Deskriptor: nur der initialize-POST traegt params.
+      // capabilities, der stateless Transport baut fuer jeden POST einen frischen Server,
+      // also sieht der spaetere tools/list-/resources/read-POST sie nie (P8, §0.3 M-1).
       const uiHost = { enabled: config.tenancy.mcpUiEnabled, capabilities: req.body?.params?.capabilities };
       registerTools(server, {
         identity,
