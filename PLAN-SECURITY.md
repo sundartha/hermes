@@ -5070,3 +5070,84 @@ verweigern lassen.
 eigenes Gate, unberuehrt. Der Offenlegungssatz — unberuehrt. T-14
 (`_meta["mcp/www_authenticate"]`) — gegenstandslos (P0 D0-6, kein Ausloesepfad), gehoert
 zu P7.
+
+## OpenAI-P7 — Auth II: Scope-Achse und Fehlerkanal, dokumentiert (2026-09-21)
+
+IDs T-9, T-11, T-12, T-14, T-16 aus der OpenAI-Einreichung. **Reine Dokumentationsphase —
+kein Produktionscode geaendert** (`git diff master...phase/openai-p7-auth-belege -- src/`
+ist leer). Vollstaendiger Beleg mit Codezeilen, Primaerquellen-Zitaten
+(developers.openai.com/plugins/build/auth), Live-Messprotokoll und Owner-Fragen:
+`docs/OPENAI-AUTH-ABWEICHUNGEN.md`. Hier nur die fuenf Punkte, die diese Datei betreffen.
+
+**1. T-12 Scope-Achse — bewusste, dokumentierte Abweichung.** `verifyOauth()`
+(`src/auth.js:91-113`) prueft Signatur/JWKS, `iss`, `aud`; `exp`/`nbf` nur, wenn der Claim
+vorhanden ist (Punkt 5) — und **keinen** `scope`-/`scp`-Claim (0 Codestellen,
+`grep -rn "scope\|scp" src/auth.js`). Ersatz: die Audience-Pruefung (Erwartung und
+PRM-`resource` aus derselben Funktion `audience()`, `src/auth.js:23/:100/:144`; boot-fatal
+nur bei `OAUTH_AUDIENCE` != `publicUrl`+`/mcp`, `src/boot-guard.js:937-950`) plus die
+Tenant-Bindung ueber `sub` (`src/routes/mcp.js:60-65`, E4-17). Grund: WorkOS AuthKit
+bewirbt nur Identitaets-Scopes (`email`, `offline_access`, `openid`, `profile`, live
+gemessen 2026-09-21), keinen ressourcenspezifischen Scope. **Ob ein echtes WorkOS-Token
+ueberhaupt einen `scope`-/`scp`-Claim traegt, ist UNKNOWN** (ungemessen, Owner-Messung O-3).
+Es gibt damit keinen belegten Wert, den eine Pruefung verlangen koennte: eine fail-closed
+Pruefung auf einen ungemessenen Wert riskierte, den live laufenden Claude-Connector
+auszusperren; eine fail-open Pruefung waere Theater. **Gepinnt** durch
+`test/openai-p7-token-pruefachsen.test.js` (`OpenAI-P7-T4`): ein beliebiger `scope`-Wert
+fuehrt heute zu 200. Wird spaeter eine Scope-Pruefung gebaut (Vorbedingung: WorkOS stellt
+einen Scope aus und ein echtes Token traegt ihn, s. Owner-Frage (e) im Dokument), MUSS dieser
+Test rot werden — geschieht das nicht, hat die neue Pruefung keine Wirkung — und muss dann
+zusammen mit `src/mcp-security-schemes.js:21-27` (`scopes: []`) und dem Dokument geaendert
+werden.
+
+**2. T-14 — bewusst nicht erfuellt; Ersatz durch den Transport-Pfad UNKNOWN.** Die
+Primaerquelle verlangt fuer die Auth-UI im Gespraech BEIDE Haelften: `securitySchemes` +
+Resource-Metadata **und** Tool-Fehlerergebnisse mit `_meta["mcp/www_authenticate"]` ("Without
+both halves ChatGPT will not show the linking UI for that tool"). Die zweite Haelfte fehlt
+(`grep -rn www_authenticate src/`: 0 Treffer). Die Token-Pruefung scheitert vor jedem
+Tool-Aufruf als HTTP 401 mit Challenge (`mcpAuth`, `src/routes/mcp.js:113`). **Ob ChatGPT auf
+diesen Transport-401 mitten im Gespraech mit einer Neu-Verknuepfung reagiert, ist UNKNOWN** —
+die Primaerquelle ist dort zweideutig ("rely on the WWW-Authenticate challenge to prompt
+ChatGPT to re-authorize"); Messweg Owner-Messung O-6 im Dokument. Zwei Ablehnungen erreichen
+den Client nach der Token-Pruefung ohne `_meta`: (a) `rejectIfNoTenant`
+(`src/routes/mcp.js:60-65`) — 403 ohne Challenge, per Kontowechsel loesbar (B-1, Punkt 4);
+(b) REST-Hop-403 (`internalOnly`, `requireTenant`-REJECT, Consult-Freigabe, Outbound-Gates
+inkl. KYC/Permit, Denylist, `OUTBOUND_FROZEN`) als `isError`-Tool-Ergebnis — dort durch
+Re-Auth nicht loesbar, ein `_meta`-Feld waere falsch. **Bedingung:** der Transport-401 traegt
+`resource_metadata` nur, solange Produktion `MCP_AUTH=oauth` faehrt — im token-/Legacy-Zweig
+traegt er seit P6 eine Challenge OHNE `resource_metadata` (`STATIC_BEARER_CHALLENGE`,
+`src/auth.js:89`). Live gemessen 2026-09-21T10:06:03Z: Produktion laeuft im oauth-Zweig
+(`www-authenticate: Bearer resource_metadata="https://app.sundartha.com/..."`).
+
+**3. T-9/T-11/T-16 — Anbieterabhaengigkeiten, offen.** `resource_indicators_supported`
+(T-9-Nebenbefund), `authorization_response_iss_parameter_supported` (T-11) und
+`claims_supported` (T-16-Nebenbefund) stehen ausschliesslich in provider-gehosteten
+Well-known-Dokumenten (WorkOS AuthKit) und fehlen dort alle drei. Hermes erzeugt genau EIN
+eigenes **OAuth-Metadaten**-Dokument (die Protected-Resource-Metadata,
+`src/auth.js:141-150`), keine AS-Metadata; das zweite eigene Well-known-Dokument,
+`/.well-known/openai-apps-challenge` (`src/app.js:77/173`), ist die Domain-Ownership-Probe und
+kein OAuth-Dokument. Ob WorkOS `resource` nach `aud` kopiert (T-9), `iss` in
+Authorization-Responses setzt (T-11) und `email` sowie `email_verified: true` im UserInfo
+liefert (T-16), ist erst mit einem echten Token messbar (Owner-Messung O-3,
+`docs/OPENAI-AUTH-ABWEICHUNGEN.md` Abschnitt 5). Fuenf konkrete WorkOS-Fragen stehen dort
+(Abschnitt 4).
+
+**4. Befund B-1 (nicht behoben, nur vermerkt).** `rejectIfNoTenant`
+(`src/routes/mcp.js:60-65`) antwortet einem gueltigen Token ohne Tenant mit 403 OHNE
+`WWW-Authenticate` (RFC 6750 §3.1 saehe fuer 403 `error="insufficient_scope"` vor). Der
+OpenAI-Wortlaut (T-13) verlangt die Challenge nur fuer 401 — kein Einreichungskriterium fuer
+T-13. Der Fall ist aber per Kontowechsel loesbar und damit genau der, fuer den ein
+Re-Auth-Ausloeser nach T-14 sinnvoll waere (Audit-Fall PP-D6-15). Wirkung bei ChatGPT UNKNOWN.
+Befund fuer P10/Owner.
+
+**5. OFFEN — `exp` wird nicht verlangt (Haertung, Owner-Freigabe noetig).** `jwtVerify` in
+`src/auth.js:98-102` setzt kein `requiredClaims`. `jose` (6.2.3) prueft `exp`/`nbf` nur, wenn
+der Claim vorhanden ist (`node_modules/jose/dist/webapi/lib/jwt_claims_set.js:142/:150`). Ein
+vom Anbieter signiertes Token **ohne `exp` wuerde unbefristet angenommen**. In der Praxis
+erwarten wir, dass WorkOS `exp` ausstellt (am echten Token ungemessen, O-3) — der Code verlangt
+es aber nicht. Haertung waere `requiredClaims: ['exp']` im `jwtVerify`-Aufruf: Richtung
+fail-closed, aber eine Aenderung am Live-Auth-Pfad (ein Token ohne `exp` wuerde danach mit 401
+abgewiesen) — deshalb **Owner-Freigabe und eigene Phase**, mit Test (Token ohne `exp` -> 401)
+und Positiv-Kontrolle. In P7 bewusst NICHT geaendert.
+
+**Kein Launch-Blocker wird durch P7 geschlossen** — alle fuenf Punkte bleiben offen und
+sind Owner-/Anbieter-Entscheidungen, keine Code-Aenderungen dieser Phase.
