@@ -73,10 +73,34 @@ specification lists all annotation fields as optional (in the MCP SDK's
 OpenAI and sets all three on all 12 tools, including `destructiveHint: false` on the read-only
 tools (`src/mcp-tools.js:612-617`). `idempotentHint` is optional in both; Hermes sets it only on
 tools that write (`src/mcp-tools.js:615-617`) - per the MCP specification it is meaningful only
-when `readOnlyHint` is false. `openWorldHint` is decided by what the tool itself accesses, not by
-what its data is about: a tool that only reads or writes Hermes' own per-account store is
-`false` even when it reports on a phone call with an outside party (`src/mcp-tools.js:618-624`).
-The hints are hints; each tool's `description` states its effects in full.
+when `readOnlyHint` is false. The hints are hints; each tool's `description` states its effects
+in full.
+
+**The `openWorldHint` rule.** OpenAI defines the hint as follows. Apps SDK reference
+(<https://developers.openai.com/apps-sdk/reference>, annotations table): "Declare that the tool
+accesses the public internet or open-ended external entities, including through read-only
+actions such as web search. A bounded private account or workspace isn't open-world solely
+because it is externally hosted." Remote MCP server review requirements
+(<https://developers.openai.com/plugins/deploy/app-review>): "Set to `true` if the tool accesses
+the public internet or open-ended external entities. This includes read-only tools such as web
+search and write tools that post to public platforms, send messages to external recipients,
+publish content, push code, or submit forms. Set to `false` if the tool is limited to a bounded
+private account or workspace, even when that service is externally hosted."
+
+Hermes applies it as three statements, and every value in Table A follows from one of them:
+
+- **O1** - A tool is `true` when it contacts an external party itself: it dials an outside phone
+  number or sends a request to the external telephony provider.
+- **O2** - A tool is also `true` when what it writes is sent on to an external recipient: the
+  write lands in Hermes' own store, but the content is passed to the phone agent during a live
+  call and can reach the person on the other end through what the agent says.
+- **O3** - Every other tool is `false`: it only reads or writes Hermes' own per-account store,
+  and nothing it reads or writes leaves Hermes. This holds even when the data is about a phone
+  call with an outside party - the hint is decided by what the tool reaches, not by what its
+  data is about.
+
+The hint describes what a tool can do, not what every single invocation does: a tool that sends
+to an external party on at least one path is `true`, even if some invocations send nothing.
 
 - **place_call** (registered `src/mcp-tools.js:914`, handler `:1074-1105`, REST
   `POST /api/calls`).
@@ -84,7 +108,8 @@ The hints are hints; each tool's `description` states its effects in full.
   - `destructiveHint: true` - the call reaches a real person, is billed per minute to the
     account, and cannot be undone once placed (its description says "NOT reversible once
     placed").
-  - `openWorldHint: true` - it dials an external phone number through the telephony carrier.
+  - `openWorldHint: true` (O1) - it dials an external phone number through the telephony
+    carrier.
   - `idempotentHint: false` - repeating the call for a number that has a call in progress
     returns that same call (`deduplicated: true`, stated in the description), but only while
     that call is running; a repeat after it has ended places a new, separately billed call
@@ -102,8 +127,9 @@ The hints are hints; each tool's `description` states its effects in full.
     nothing leaves Hermes. The poll timestamp is what tells the server that a client is
     listening, so that the agent may ask a question during the call
     (`src/consult/in-call.js:71-73`).
-  - `openWorldHint: false` - it reads and writes only the account's own call record; it does
-    not contact the carrier or the person on the call.
+  - `openWorldHint: false` (O3) - it reads and writes only the account's own call record; it
+    does not contact the carrier or the person on the call, and the two timestamps it writes
+    are not passed on to anyone.
   - `idempotentHint: true` - the delivery time of a question is set once and never moved
     (`src/store/state-ops.js:1626`). The only write that happens on every call is the poll
     timestamp, which each call overwrites with the current time (`src/store/state-ops.js:1679`);
@@ -120,8 +146,9 @@ The hints are hints; each tool's `description` states its effects in full.
     with a third party. It reaches the agent as background information (the description:
     "Answers reach the agent as background information only"), can influence what the agent
     then says to the other person, and cannot be withdrawn once given.
-  - `openWorldHint: true` - the write itself goes to Hermes' own call record, but its effect
-    reaches an outside party: the person on the phone, through what the agent says.
+  - `openWorldHint: true` (O2) - the write itself goes to Hermes' own call record, but the
+    answer is passed to the phone agent during the live call and can reach an external
+    recipient: the person on the phone, through what the agent says.
   - `idempotentHint: false` - this is the conservative value (it is also the MCP default). It is
     not a claim that a repeat has a second effect: a repeated identical final answer is refused
     (HTTP 409 `already_answered`, `src/store/state-ops.js:1363-1364`, `:1373-1375`,
@@ -133,24 +160,29 @@ The hints are hints; each tool's `description` states its effects in full.
   `src/routes/api-read.js:98-107`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the call record and writes
     nothing.
-  - `openWorldHint: false` - it reads only the account's own store; it reports on a call but
-    does not contact the carrier or the other party.
+  - `openWorldHint: false` (O3) - it reads only the account's own store; it reports on a call
+    but does not contact the carrier or the other party.
   - `idempotentHint` not set - read-only tool.
 - **get_transcript** (registered `src/mcp-tools.js:1271`, REST `GET /api/calls/:id`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the same call record as
     get_call_status and returns the result summary; it never returns the raw transcript and
     writes nothing.
-  - `openWorldHint: false` - own store only.
+  - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
 - **cancel_call** (registered `src/mcp-tools.js:1319`, REST `POST /api/calls/:id/cancel`,
   `src/routes/api-calls.js:717-772`).
   - `readOnlyHint: false`, `destructiveHint: true` - for a running call it marks the call record
-    cancelled, stops billing right away, and requests a hang-up from the telephony provider.
+    cancelled, stops billing right away, and attempts a hang-up where the call path allows it.
     The cancellation cannot be reversed. As its description says, whether the phone line itself
     actually drops is not guaranteed on every call path; when it is not confirmed, the response
-    says so (`line_hangup_confirmed: false`, `hangup_attempted`,
-    `src/routes/api-calls.js:764-770`) instead of claiming a clean hang-up.
-  - `openWorldHint: true` - it sends the hang-up request to the external telephony provider.
+    says so (`line_hangup_confirmed: false`, `src/routes/api-calls.js:764-770`) instead of
+    claiming a clean hang-up. On a call path where no hang-up could be attempted at all (a call
+    handled through the voice-agent path whose conversation handle is not yet known), the
+    response says that too (`hangup_attempted: false`, `src/routes/api-calls.js:769`).
+  - `openWorldHint: true` (O1) - where the call path allows it, it sends a hang-up request to
+    an external party (the telephony provider or the voice-agent provider). On the path where no
+    attempt is possible it sends nothing, but the hint describes what the tool can do, not every
+    invocation (see the rule above).
   - `idempotentHint: true` - for a call that is no longer running, the route only returns the
     call's current status and does nothing else (`src/routes/api-calls.js:721`); a repeat is a
     no-op, not an error.
@@ -158,12 +190,12 @@ The hints are hints; each tool's `description` states its effects in full.
   `src/routes/api-read.js:63-96`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the account's agent phone number
     and writes nothing.
-  - `openWorldHint: false` - own store only.
+  - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
 - **list_calls** (registered `src/mcp-tools.js:1363`, REST `GET /api/state`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the account's recent calls and
     writes nothing; unlike check_inbox it marks nothing as seen.
-  - `openWorldHint: false` - own store only.
+  - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
 - **check_inbox** (registered `src/mcp-tools.js:1394`, REST `POST /api/inbox/poll`,
   `src/routes/api-inbox.js:40-54`).
@@ -175,7 +207,7 @@ The hints are hints; each tool's `description` states its effects in full.
     seen-marker itself is permanent - it is set once, and the code has no path that clears it -
     so what is lost is only the entry's "new" status, which is exactly what the description
     announces ("will NOT appear again").
-  - `openWorldHint: false` - own store only.
+  - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint: false` - one call returns at most 20 unseen entries
     (`INBOX_MAX_ENTRIES`, `src/routes/api-inbox.js:31`) and marks those as seen. An identical
     second call therefore returns and marks the next entries (those reported as `remaining`)
@@ -183,12 +215,12 @@ The hints are hints; each tool's `description` states its effects in full.
 - **list_action_items** (registered `src/mcp-tools.js:1419`, REST `GET /api/state`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the open action items and writes
     nothing.
-  - `openWorldHint: false` - own store only.
+  - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
 - **get_calendar** (registered `src/mcp-tools.js:1450`, REST `GET /api/state`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the account's calendar entries
     from Hermes' own store and writes nothing.
-  - `openWorldHint: false` - own store only; it does not connect to any external calendar.
+  - `openWorldHint: false` (O3) - own store only; it does not connect to any external calendar.
   - `idempotentHint` not set - read-only tool.
   - What the data is: today nothing in Hermes adds calendar entries - the store's add function
     (`addCalendarEvent`, `src/store/state-ops.js:1917-1921`) has no caller outside the two
@@ -199,7 +231,7 @@ The hints are hints; each tool's `description` states its effects in full.
 - **get_agent_status** (registered `src/mcp-tools.js:1489`, REST `GET /api/state`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the agent's number, monthly usage
     and permissions and writes nothing.
-  - `openWorldHint: false` - own store only.
+  - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
 
 ## Table B - tool count and exact name set per configuration
