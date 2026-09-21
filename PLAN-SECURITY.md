@@ -2052,9 +2052,11 @@ einzeln beurteilt. Ergebnis: **kein Konsument stirbt lautlos.**
 - `POST /mcp` laeuft live unter `MCP_AUTH=oauth` (2026-08-02 gemessen: der 401 auf
   `https://app.sundartha.com/mcp` stammt ausschliesslich aus `verifyOauth`) — `req.auth`
   ist gesetzt, der geaenderte Zweig wird nicht betreten. **Restrisiko, nicht Code:** ein
-  Ruecksprung auf `MCP_AUTH="" `/`token` (render.yaml-Blueprint traegt noch `value: ""`)
-  wuerde den Connector nach dieser Phase stumm schalten (kein `req.auth`, externer
-  Request -> `TENANT_REJECT`). Keine Boot-Sonde dafuer vorhanden.
+  Ruecksprung auf `MCP_AUTH=""`/`token` (render.yaml traegt seit OpenAI-P6 `sync: false`
+  statt eines Blueprint-`value: ""` — ein Sync kann den Wert nicht mehr ueberschreiben,
+  der Dashboard-Wert bleibt die einzige Quelle) wuerde den Connector nach dieser Phase
+  stumm schalten (kein `req.auth`, externer Request -> `TENANT_REJECT`). Keine
+  Boot-Sonde dafuer vorhanden (s. OpenAI-P6 unten, O-7).
 - Legacy-Route `GET /api/billing/checkout-return`: ein *vor* dem Deploy geoeffneter
   Stripe-Checkout endet nach dieser Phase in 403 statt Karten-Bindung. Kein Live-Regress
   (die aktive Karten-Erfassung laeuft ueber `/api/self-service/billing/*`), aber genau
@@ -2547,7 +2549,8 @@ MCP-Bearer-Token eine RFC-9728-Challenge (`WWW-Authenticate: Bearer resource_met
 "…"`) — die Discovery-Naht des Claude-Connectors, in `test/oauth.test.js` gepinnt. Wer
 die Regel woertlich befolgt, loescht die Bearer-Challenge und macht den OAuth-Connector
 still kaputt. Korrigierte Abnahme: `WWW-Authenticate` kommt in `src/` **ausschliesslich**
-in `src/auth.js` vor (zwei Zeilen: Kommentar + Challenge); `basic realm` und
+in `src/auth.js` vor (seit OpenAI-P6 im einzigen 401-Sender `sendBearer401` gesetzt, der
+oauth-, token- und Legacy-Zweig teilen sich diese eine Stelle); `basic realm` und
 `makeAuthGate`/`installAuthGate`/`wiring/auth-gate` sind **leer**. `test/auth-p7-gate-
 removed.test.js` (AUTH-P7-8) haelt beides als Positiv-/Negativ-Assertion fest.
 
@@ -4953,3 +4956,117 @@ lautlos um, deshalb bleibt es bewacht.
 zurueck (und die Ausnahme in der Vorlage faellt im selben Zug weg). E9 hat den Zustand
 nur SICHTBAR gemacht - im Rechtstext (`privacy.de.json`, Abschnitte "Daten aus Anrufen"
 und "Speicherdauer", beide mit dem gemessenen Wert) und hier. Kein Wert wurde geaendert.
+
+## OpenAI-P6 — Bearer-Challenge auf allen 401-Pfaden von /mcp (2026-09-21)
+
+IDs T-13/T-5 aus der OpenAI-Einreichung (`tasks/openai-audit/00-openai-anforderungen.md`).
+Ausgangsmessung: der 401 fiel auf jedem der drei `mcpAuth`-Zweige (oauth/token/Legacy),
+die `WWW-Authenticate`-Challenge (RFC 6750) aber nur im oauth-Zweig (`deny401`) — token
+und Legacy antworteten mit einem nackten 401 ohne Header.
+
+**Vorher/nachher je Zweig** (Statuscode und Response-Body unveraendert, nur der Header ist
+neu):
+
+| Zweig | Status vorher | Status nachher | Challenge vorher | Challenge nachher |
+|---|---|---|---|---|
+| oauth (`verifyOauth`/`deny401`) | 401 | 401 (byte-identisch) | `Bearer resource_metadata="…", error="…", error_description="…"` | unveraendert |
+| token (`MCP_AUTH=token`) | 401 | 401 | keine | `Bearer error="invalid_token"` |
+| Legacy (`MCP_AUTH=""`) | 401 | 401 | keine | `Bearer error="invalid_token"` |
+
+**Warum token/Legacy ohne `resource_metadata`:** diese Zweige sprechen kein OAuth 2.1 —
+ein Verweis auf die Protected-Resource-Metadata schickte den Client in eine Discovery,
+deren Token dieser Zweig nie annimmt (und bei leerem `OAUTH_ISSUER_URL` liefert das
+Dokument `authorization_servers: []`). RFC 6750 §3 erlaubt die Bearer-Challenge ohne
+diesen Parameter. Einziger 401-Sender im Modul: `sendBearer401(res, challenge, body)`;
+`deny401` (oauth) delegiert unveraendert dorthin, token/Legacy nutzen die Konstante
+`STATIC_BEARER_CHALLENGE = 'Bearer error="invalid_token"'`.
+
+**Fail-closed-Waechter am Diff** (Beleg, dass kein Bedingungs-, Reihenfolge- oder
+`next()`-Zweig beruehrt wurde — nur WIE ein ohnehin fallender 401 gebaut wird, nie OB er
+faellt):
+
+```
+git diff master...phase/openai-p6-auth-challenge -U0 -- src/auth.js \
+  | grep -E '^[-+][^-+].*(next\(|if \(|safeEqual|legacyLocalBypassAllowed|mcpAuth ===|isLocalSocket|jwtVerify)'
+```
+
+liefert einen Treffer: `discoverJwksUri` (Zeile 36) benennt lokale Variablen um
+(`r`->`response`, `p`->`path`) — eine reine Id-Length-Umbenennung ohne Logikaenderung,
+kein Bedingungs-/Reihenfolge-/`next()`-Zweig, s. Commit-Diff. Sonst keine Treffer. Der
+Grep-Befund ist NICHT vollstaendig: `catch (e)` -> `catch (err)` wurde ebenfalls
+umbenannt, zweimal — in `discoverJwksUri` UND in `verifyOauth`, also im LIVE-OAuth-Pfad
+(dort faengt der `catch`-Zweig die JWT-Pruefung ab und ruft `deny401` — unveraendertes
+Verhalten, nur der Bezeichner ist neu). Der Grep-Filter oben matcht `catch (` nicht, das
+ist eine Luecke im Filter, kein Widerspruch zum Befund. Am Diff mechanisch geprueft: alle
+drei Umbenennungen (`r`->`response`, `p`->`path`, `e`->`err`) sind lokale
+Parameter-/Variablen-Renames ohne jede Aenderung an Bedingungen, Kontrollfluss oder
+Rueckgabewerten — der Diff zeigt fuer jede Fundstelle nur den Bezeichner, nie die
+umgebende Logik.
+Draht-Tests: `test/openai-p6-challenge.test.js` (P6-T1..T5, Praefix
+absichtlich "P6-" statt eines Katalog-Praefixes, sonst landete die Datei still in
+`test:gates` statt in `npm test`). Rot-gegen-alt auf `master` bestaetigt: ohne den Fix
+sind T1/T2a/T2b/T3/T4 rot (Header `null`), T2c/T5 (Positiv-Kontrollen) bleiben gruen.
+`test/security.test.js` ("/mcp fail-closed ohne MCP_AUTH_TOKEN" > "extern -> 401") traegt
+zusaetzlich den einzigen Beleg fuer den Legacy-Zweig ueber einen echten
+Nicht-Loopback-Socket (skippt maschinenabhaengig). `test/oauth.test.js` und
+`test/auth-mcp-bypass.test.js` bleiben unveraendert (Diff leer).
+
+**Risiko-Eintrag U-1 / O-7 (offen, bewusst nicht geschlossen).** In Produktion verweigert
+kein Boot-Guard `MCP_AUTH=""`/`token` (`src/config.js` `productionFootguns` sperrt nur
+`off`). Ein Rueckfall des Dashboard-Werts auf `""`/`token` schaltet still auf statisches
+Bearer (kein OAuth 2.1) — korrigiert (am Draht gemessen, war hier falsch beschrieben):
+der Claude-/ChatGPT-Connector schickt weiter sein OAuth-JWT, das scheitert im
+`""`/`token`-Zweig am `safeEqual`-Vergleich mit dem statischen Token
+(`req.headers.authorization` != `Bearer <MCP_AUTH_TOKEN>`) und bekommt **401** —
+`sendBearer401`/`STATIC_BEARER_CHALLENGE`, nie `TENANT_REJECT`. `req.auth` wird in diesem
+Zweig nirgends gesetzt (das passiert nur in `verifyOauth`), der Request endet also schon
+in der `mcpAuth`-Middleware, lange vor der Tenant-Aufloesung. Ein 403 `TENANT_REJECT`
+entstuende nur in einem anderen Fall: legt jemand von AUSSEN das KORREKTE statische Token
+vor, kommt er durch `mcpAuth` durch (`next()` ohne `req.auth`), und
+`routes/_tenant.js` faellt mangels `req.auth`/`internal` auf `operatorChannelTenant`
+zurueck — ausserhalb der Produktion `isTrustedLocalCaller`, in Produktion
+`TENANT_REJECT` -> 403. Der Connector selbst legt das statische Token aber nie vor (er
+kennt nur sein OAuth-JWT), sieht also 401, nicht 403. P6 hat bewusst KEINE neue
+`PRODUCTION_FOOTGUNS`-Zeile fuer diesen Fall gebaut
+(Lead-Entscheidung P6-2): eine solche Sperre ist maximal live-wirksam — verweigert der
+Boot, faellt ALLES aus, auch eingehende Anrufe — und die Repo-Konfiguration ist
+nachweislich NICHT die Produktionskonfiguration (`render.yaml` sagt `CONSULT_ENABLED=
+false`, der Live-Connector zeigt aber den Consult-Text; Werte sind Dashboard-gepflegt und
+aus dem Repo nicht lesbar). Der Rueckfall war schon auf `master` am 401 unterscheidbar
+(kein `WWW-Authenticate`-Header, anderer Body, gegenueber der oauth-Challenge mit
+Header+`resource_metadata`) — P6 macht ihn NICHT erst erkennbar (Korrektur gegenueber der
+fruehreren Fassung dieses Eintrags, die "wenigstens am 401 erkennbar" seit P6 behauptete).
+P6s tatsaechlicher Beitrag hier: der `""`/`token`-Zweig traegt jetzt ebenfalls eine
+Bearer-Challenge (ohne `resource_metadata`) statt eines nackten 401 — Haertung von T-5,
+nicht Neuschaffung von Erkennbarkeit. Schliessung bleibt Owner-Entscheidung O-7.
+
+**T-13-Stand (Klarstellung).** T-13 (401 + `WWW-Authenticate` auf die
+Protected-Resource-Metadata) war im oauth-Modus schon auf `master` byte-identisch erfuellt
+(Tabelle oben: oauth-Zeile "unveraendert"). P6 aendert den T-13-Stand fuer die Einreichung
+NICHT — sein Beitrag ist ausschliesslich die Challenge im token-/Legacy-Zweig
+(T-5-Haertung, s.o.).
+
+**Zwei aeltere Befunde, NICHT von P6, beim Messen aufgefallen (offen, nicht behoben):**
+- Der oauth-Zweig (`verifyOauth`) akzeptiert ein gueltiges JWT auch OHNE
+  `"Bearer "`-Praefix: `token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "")`
+  laesst den Header-Wert unveraendert, wenn er nicht mit `Bearer ` beginnt — ein roher JWT
+  im `Authorization`-Header wird also ebenso verifiziert wie einer mit Praefix.
+- `MCP_AUTH` wird nicht getrimmt (`src/config.js`: `(process.env.MCP_AUTH || "").toLowerCase()`,
+  kein `.trim()`). `" oauth"` (mit fuehrendem Leerzeichen) wird STILL zu Legacy, weil der
+  String dann nicht mehr `=== "oauth"` ist. Kein Fail-open (das statische Token wird im
+  Legacy-/token-Zweig weiter verlangt), aber eine stille Herabstufung von OAuth 2.1 auf
+  statisches Bearer durch einen Tippfehler im Render-Dashboard — mit
+  `MCP_AUTH_TOKEN generateValue: true` liefe Produktion dann unbemerkt auf statischem
+  Bearer statt OAuth. Als offener Punkt vermerkt, nicht behoben.
+
+`render.yaml`: `MCP_AUTH` von `value: ""` auf `sync: false` umgestellt (T-5-Restposten,
+s.o. korrigierter Verweis in AUTH-P7) — ein Blueprint-Sync kann den Live-Wert (`oauth`)
+nicht mehr stillschweigend auf `""` zurueckziehen. `value: oauth` war keine Alternative:
+`REQUIRED_CONFIG` verlangt bei `MCP_AUTH=oauth` in jedem Modus ein `OAUTH_ISSUER_URL`
+(das als `sync: false` ohne Wert dasteht) und haette jeden `prodEnv()`-Testspawn den Boot
+verweigern lassen.
+
+**Nicht Teil dieser Phase:** die Provider-Signaturpruefung (`/voice`, Telnyx Ed25519) —
+eigenes Gate, unberuehrt. Der Offenlegungssatz — unberuehrt. T-14
+(`_meta["mcp/www_authenticate"]`) — gegenstandslos (P0 D0-6, kein Ausloesepfad), gehoert
+zu P7.
