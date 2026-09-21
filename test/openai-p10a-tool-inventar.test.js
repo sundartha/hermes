@@ -1,11 +1,16 @@
 // P10a (H7 + H8): haelt docs/OPENAI-TOOL-INVENTORY.md gegen den echten Draht. Die Doku
-// behauptet eine Werkzeugmenge/-annotation je Konfiguration (K1-K6) und eine Begruendung je
-// Annotation (Tabelle A) - dieser Test liest beide Tabellen aus der Doku (maschinenlesbare
-// Bloecke) und misst sie GEGEN tools/list ueber HTTP (legacy + OAuth) und stdio.
+// behauptet eine Werkzeugmenge je Konfiguration (K1-K6, Tabelle B) und je Werkzeug Titel,
+// Registrier-Bedingung und Annotationen (Tabelle A). Beide Tabellen stehen ZWEIMAL in der
+// Doku: als Prosatabelle (die der OpenAI-Pruefer liest) und als maschinenlesbarer Block.
+// Dieser Test liest BEIDE und misst sie GEGEN tools/list ueber HTTP (legacy + OAuth) und stdio.
 //
 // Nie das registerTool-Konfigobjekt pruefen: registerTool() des MCP-SDK verwirft unbekannte
 // Felder still, ein Test auf das Registrierungsobjekt beweist nichts (Lehre der Phase). Alle
 // Zusicherungen lesen deshalb den echten tools/list-Output.
+//
+// Messung EINMAL je Datei (memoisiertes Promise ueber alle sechs Konfigurationen): die
+// Bedingungsspalte laesst sich nur aus dem Vergleich MEHRERER Konfigurationen ableiten, und
+// Titel/Annotationen werden in JEDER Konfiguration geprueft, nicht nur in K1.
 //
 // Testnamen tragen KEIN Katalog-/ABNAHME-Praefix (package.json i18nCatalogPattern/
 // abnahmePattern), sonst landet dieser Test im falschen Lauf.
@@ -29,10 +34,24 @@ const DOC_PATH = path.join(
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 const EXPECTED_TABLE_A_ROWS = 12;
-// Permissives Ergebnis-Schema fuer den stdio-Fall ueber den typisierten SDK-Client - Namen
-// sind ein Standardfeld (ueberlebt die SDK-Zod-Schemas unveraendert), nur annotations/_meta
-// koennten gestrippt werden (hier ungenutzt, K6 prueft nur Namen).
+const CONFIG_KEYS = ["K1", "K2", "K3", "K4", "K5", "K6"];
+const HINT_KEYS = ["readOnlyHint", "destructiveHint", "openWorldHint", "idempotentHint"];
+const TABLE_A_COLUMNS = ["name", "title", "condition", ...HINT_KEYS];
+const HINT_NOT_SET = "-";
+// Kopfzeilen-Anfaenge der beiden Prosatabellen - daran findet der Parser sie.
+const PROSE_A_HEADER = "| name | title | condition |";
+const PROSE_B_HEADER = "| K | transport |";
+// Permissives Ergebnis-Schema fuer den stdio-Fall ueber den typisierten SDK-Client: z.any()
+// reicht jedes Werkzeug unveraendert durch (title/annotations werden NICHT gestrippt).
 const RAW_TOOLS_LIST_RESULT = z.object({ tools: z.array(z.any()) });
+
+// Bedingung aus dem Draht: in welchen Konfigurationen taucht das Werkzeug auf?
+// Anwesenheits-Signatur (K1..K6 als 0/1) -> Bedingungsspalte.
+const CONDITION_BY_PRESENCE = new Map([
+  ["111111", "always"],
+  ["100100", "consult"],
+  ["110001", "calendar"],
+]);
 
 function readDoc() {
   return fs.readFileSync(DOC_PATH, "utf8");
@@ -43,18 +62,17 @@ function parseBlock(doc, beginMarker, endMarker) {
   const end = doc.indexOf(endMarker);
   assert.ok(begin !== -1 && end !== -1 && end > begin, `Block ${beginMarker}..${endMarker} fehlt`);
   const body = doc.slice(begin + beginMarker.length, end);
-  const rawLines = body.split("\n");
-  const trimmedLines = rawLines.map((line) => line.trim());
+  const trimmedLines = body.split("\n").map((line) => line.trim());
   return trimmedLines.filter((line) => line.length > 0);
+}
+
+function rowObject(cells) {
+  return Object.fromEntries(TABLE_A_COLUMNS.map((column, i) => [column, cells[i]]));
 }
 
 function parseTableA(doc) {
   const lines = parseBlock(doc, "TABLE-A-BEGIN", "TABLE-A-END");
-  return lines.map((line) => {
-    const [name, condition, readOnlyHint, destructiveHint, openWorldHint, idempotentHint] =
-      line.split("|");
-    return { name, condition, readOnlyHint, destructiveHint, openWorldHint, idempotentHint };
-  });
+  return lines.map((line) => rowObject(line.split("|")));
 }
 
 function parseTableB(doc) {
@@ -67,6 +85,30 @@ function parseTableB(doc) {
   return rows;
 }
 
+// Markdown-Tabelle ab der Kopfzeile bis zur ersten Nicht-Tabellenzeile; Trennzeile (|---|)
+// faellt weg. Liefert je Datenzeile die getrimmten Zellen.
+function parseProseTable(doc, headerPrefix) {
+  const lines = doc.split("\n");
+  const start = lines.findIndex((line) => line.startsWith(headerPrefix));
+  assert.ok(start !== -1, `Prosatabelle "${headerPrefix}" fehlt`);
+  const rows = [];
+  for (const line of lines.slice(start + 1)) {
+    if (!line.startsWith("|")) break;
+    if (/^\|[-|\s]+\|$/.test(line)) continue;
+    rows.push(line.split("|").slice(1, -1).map((cell) => cell.trim()));
+  }
+  return rows;
+}
+
+function parseProseTableA(doc) {
+  return parseProseTable(doc, PROSE_A_HEADER).map(rowObject);
+}
+
+function parseProseTableBCounts(doc) {
+  const rows = parseProseTable(doc, PROSE_B_HEADER);
+  return new Map(rows.map((cells) => [cells[0], Number(cells[cells.length - 1])]));
+}
+
 // tools/list ueber HTTP, ROH gelesen (readToolResult parst nur JSON.parse(...).result,
 // keine SDK-Zod-Schemas - annotations/Namen kommen unveraendert durch).
 async function httpToolsList(baseUrl, token) {
@@ -75,7 +117,7 @@ async function httpToolsList(baseUrl, token) {
   return result.tools;
 }
 
-async function stdioToolNames(env) {
+async function stdioToolsList(env) {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [MCP_SERVER_ENTRYPOINT],
@@ -83,18 +125,74 @@ async function stdioToolNames(env) {
     env: { ...BASE_ENV, ...env },
     stderr: "pipe",
   });
-  let stderrOutput = "";
-  transport.stderr?.on("data", (chunk) => {
-    stderrOutput += chunk.toString();
-  });
   const client = new Client({ name: "p10a-h7-stdio-client", version: "0.0.0" });
   try {
     await client.connect(transport);
     const result = await client.request({ method: "tools/list" }, RAW_TOOLS_LIST_RESULT);
-    return { names: result.tools.map((tool) => tool.name), stderrOutput: () => stderrOutput };
+    return result.tools;
   } finally {
     await client.close();
   }
+}
+
+// ==================== Konfigurationen K1-K6 ====================
+const CONSULT_ON = { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" };
+const TENANT_DEFAULT = "t_p10a_default"; // kein gespeichertes Profil -> DEFAULT_PROFILE
+const TENANT_PAID = "t_p10a_paid"; // planProfileFor("starter")
+const SUB_DEFAULT = "sub-p10a-default";
+const SUB_PAID = "sub-p10a-paid";
+
+function seedOauthTenants() {
+  return seedState({
+    tenants: [
+      { id: TENANT_DEFAULT, status: "active", idpSubject: SUB_DEFAULT },
+      { id: TENANT_PAID, status: "active", idpSubject: SUB_PAID },
+    ],
+    // TENANT_DEFAULT hat bewusst KEIN gespeichertes Profil
+    profiles: { [TENANT_PAID]: planProfileFor("starter") },
+  });
+}
+
+async function measureLegacyHttp(env) {
+  const srv = await startServer({ seed: seedState({}), env });
+  try {
+    return await httpToolsList(`${srv.localUrl}/mcp`, null);
+  } finally {
+    await srv.stop();
+  }
+}
+
+async function measureOauthHttp(env, subject) {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, ...env },
+    seed: seedOauthTenants(),
+  });
+  try {
+    const token = await idp.sign({ sub: subject });
+    return await httpToolsList(`${srv.localUrl}/mcp`, token);
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+}
+
+// Sequenziell, nicht parallel: jede Messung startet einen Kindprozess (Lastgrenze).
+async function measureAllConfigurations() {
+  const wire = new Map();
+  wire.set("K1", await measureLegacyHttp(CONSULT_ON)); // Bootstrap-Owner, Consult an
+  wire.set("K2", await measureLegacyHttp({})); // BASE_ENV: CONSULT_ENABLED=false
+  wire.set("K3", await measureOauthHttp(CONSULT_ON, SUB_DEFAULT));
+  wire.set("K4", await measureOauthHttp(CONSULT_ON, SUB_PAID));
+  wire.set("K5", await measureOauthHttp({}, SUB_PAID)); // Consult global aus
+  wire.set("K6", await stdioToolsList({})); // stdio, kein Tenant
+  return wire;
+}
+
+let wirePromise = null;
+function wireMeasurements() {
+  wirePromise ||= measureAllConfigurations();
+  return wirePromise;
 }
 
 function sortedNames(names) {
@@ -109,156 +207,89 @@ function assertNameSetMatches(label, actualNames, expectedNames) {
   );
 }
 
+function hintAsDocCell(value) {
+  return value === undefined ? HINT_NOT_SET : String(value);
+}
+
+// Titel (Top-Level UND annotations.title) und alle vier Hints eines Draht-Werkzeugs gegen
+// EINE Tabellenzeile.
+function assertToolMatchesRow(label, tool, row) {
+  const annotations = tool.annotations || {};
+  assert.equal(tool.title, row.title, `${label}: title weicht ab`);
+  assert.equal(annotations.title, row.title, `${label}: annotations.title weicht ab`);
+  for (const hint of HINT_KEYS) {
+    assert.equal(hintAsDocCell(annotations[hint]), row[hint], `${label}: ${hint} weicht ab`);
+  }
+}
+
+function wireCondition(name, wire) {
+  const presence = CONFIG_KEYS.map((k) =>
+    wire.get(k).some((tool) => tool.name === name) ? "1" : "0",
+  ).join("");
+  return CONDITION_BY_PRESENCE.get(presence) ?? `unerwartet:${presence}`;
+}
+
 // ==================== Tabelle A: 12 Zeilen, Namensmenge == K1 ====================
 test("P10a (H7/H8): Tabelle A hat genau 12 Zeilen, ihre Namensmenge ist gleich K1", () => {
   const doc = readDoc();
   const tableA = parseTableA(doc);
   assert.equal(tableA.length, EXPECTED_TABLE_A_ROWS, "Tabelle A traegt genau 12 Werkzeuge");
-  const tableB = parseTableB(doc);
-  assertNameSetMatches("Tabelle A vs. K1", tableA.map((row) => row.name), tableB.get("K1").names);
+  assertNameSetMatches("Tabelle A vs. K1", tableA.map((row) => row.name), parseTableB(doc).get("K1").names);
 });
 
-// ==================== K1 (HTTP, Bootstrap-Owner, Consult+Context an) ====================
-test("P10a (H7/H8, K1 - HTTP Bootstrap-Owner, Consult+Context an): Namensmenge, Anzahl und alle vier Hints stimmen mit der Doku", async () => {
+// ==================== Prosa == Maschinenblock ====================
+test("P10a (H7/H8): Prosatabelle A stimmt Zeile fuer Zeile und Spalte fuer Spalte mit dem Maschinenblock", () => {
   const doc = readDoc();
-  const tableA = parseTableA(doc);
+  assert.deepEqual(parseProseTableA(doc), parseTableA(doc));
+});
+
+test("P10a (H7/H8): Anzahl-Spalte der Prosatabelle B stimmt mit dem Maschinenblock", () => {
+  const doc = readDoc();
+  const proseCounts = parseProseTableBCounts(doc);
   const tableB = parseTableB(doc);
-  const expected = tableB.get("K1");
+  assert.deepEqual([...proseCounts.keys()], CONFIG_KEYS, "Prosatabelle B traegt genau K1-K6");
+  for (const k of CONFIG_KEYS) assert.equal(proseCounts.get(k), tableB.get(k).count, `${k}: Anzahl`);
+});
 
-  const srv = await startServer({
-    seed: seedState({}),
-    env: { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
-  });
-  try {
-    const tools = await httpToolsList(`${srv.localUrl}/mcp`, null);
-    assert.equal(tools.length, expected.count, "K1: Anzahl");
-    assertNameSetMatches("K1", tools.map((tool) => tool.name), expected.names);
+// ==================== Draht: Anzahl + Namensmenge je Konfiguration ====================
+test("P10a (H7/H8, K1-K6 - HTTP legacy, HTTP OAuth, stdio): Anzahl (Prosa + Block) und Namensmenge stimmen je Konfiguration mit dem Draht", async () => {
+  const doc = readDoc();
+  const tableB = parseTableB(doc);
+  const proseCounts = parseProseTableBCounts(doc);
+  const wire = await wireMeasurements();
+  for (const k of CONFIG_KEYS) {
+    const tools = wire.get(k);
+    assert.equal(tools.length, tableB.get(k).count, `${k}: Anzahl (Block)`);
+    assert.equal(tools.length, proseCounts.get(k), `${k}: Anzahl (Prosa)`);
+    assertNameSetMatches(k, tools.map((tool) => tool.name), tableB.get(k).names);
+  }
+});
 
-    const byName = new Map(tools.map((tool) => [tool.name, tool]));
-    for (const row of tableA) {
-      const tool = byName.get(row.name);
-      assert.ok(tool, `K1: ${row.name} fehlt im echten tools/list`);
-      const annotations = tool.annotations || {};
-      assert.equal(
-        String(annotations.readOnlyHint),
-        row.readOnlyHint,
-        `${row.name}: readOnlyHint weicht von Tabelle A ab`,
-      );
-      assert.equal(
-        String(annotations.destructiveHint),
-        row.destructiveHint,
-        `${row.name}: destructiveHint weicht von Tabelle A ab`,
-      );
-      assert.equal(
-        String(annotations.openWorldHint),
-        row.openWorldHint,
-        `${row.name}: openWorldHint weicht von Tabelle A ab`,
-      );
-      const expectedIdempotent = row.idempotentHint === "-" ? undefined : row.idempotentHint === "true";
-      assert.equal(
-        annotations.idempotentHint,
-        expectedIdempotent,
-        `${row.name}: idempotentHint weicht von Tabelle A ab`,
-      );
+// ==================== Draht: Titel + Hints in JEDER Konfiguration ====================
+test("P10a (H7/H8, K1-K6): Titel und alle vier Hints stimmen in JEDER Konfiguration mit Prosatabelle UND Maschinenblock", async () => {
+  const doc = readDoc();
+  const tables = { Block: parseTableA(doc), Prosa: parseProseTableA(doc) };
+  const wire = await wireMeasurements();
+  for (const [source, rows] of Object.entries(tables)) {
+    const byName = new Map(rows.map((row) => [row.name, row]));
+    for (const k of CONFIG_KEYS) {
+      for (const tool of wire.get(k)) {
+        const row = byName.get(tool.name);
+        assert.ok(row, `${source}/${k}: ${tool.name} fehlt in Tabelle A`);
+        assertToolMatchesRow(`${source}/${k}/${tool.name}`, tool, row);
+      }
     }
-  } finally {
-    await srv.stop();
   }
 });
 
-// ==================== K2 (HTTP, Bootstrap-Owner, Consult aus) ====================
-test("P10a (H7/H8, K2 - HTTP Bootstrap-Owner, Consult aus/BASE_ENV-Default): Namensmenge + Anzahl stimmen mit der Doku", async () => {
+// ==================== Draht: Bedingungsspalte ====================
+test("P10a (H7/H8, K1-K6): Bedingungsspalte (Prosa + Block) stimmt mit der am Draht gemessenen Anwesenheit ueber alle Konfigurationen", async () => {
   const doc = readDoc();
-  const expected = parseTableB(doc).get("K2");
-  const srv = await startServer({ seed: seedState({}) }); // BASE_ENV: CONSULT_ENABLED=false
-  try {
-    const tools = await httpToolsList(`${srv.localUrl}/mcp`, null);
-    assert.equal(tools.length, expected.count, "K2: Anzahl");
-    assertNameSetMatches("K2", tools.map((tool) => tool.name), expected.names);
-  } finally {
-    await srv.stop();
+  const tables = { Block: parseTableA(doc), Prosa: parseProseTableA(doc) };
+  const wire = await wireMeasurements();
+  for (const [source, rows] of Object.entries(tables)) {
+    for (const row of rows) {
+      assert.equal(row.condition, wireCondition(row.name, wire), `${source}: ${row.name} condition`);
+    }
   }
-});
-
-// ==================== K3/K4 (HTTP OAuth, Consult global an) ====================
-const TENANT_DEFAULT = "t_p10a_default"; // kein gespeichertes Profil -> DEFAULT_PROFILE
-const TENANT_PAID = "t_p10a_paid"; // planProfileFor("starter")
-const SUB_DEFAULT = "sub-p10a-default";
-const SUB_PAID = "sub-p10a-paid";
-
-function seedOauthTenants(profilesOverride) {
-  return seedState({
-    tenants: [
-      { id: TENANT_DEFAULT, status: "active", idpSubject: SUB_DEFAULT },
-      { id: TENANT_PAID, status: "active", idpSubject: SUB_PAID },
-    ],
-    profiles: profilesOverride,
-  });
-}
-
-test("P10a (H7/H8, K3 - HTTP OAuth, Tenant ohne Profil, Consult global an): Namensmenge + Anzahl stimmen mit der Doku", async () => {
-  const doc = readDoc();
-  const expected = parseTableB(doc).get("K3");
-  const idp = await startIdp();
-  const srv = await startServer({
-    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
-    seed: seedOauthTenants({}), // TENANT_DEFAULT hat KEIN gespeichertes Profil
-  });
-  try {
-    const token = await idp.sign({ sub: SUB_DEFAULT });
-    const tools = await httpToolsList(`${srv.localUrl}/mcp`, token);
-    assert.equal(tools.length, expected.count, "K3: Anzahl");
-    assertNameSetMatches("K3", tools.map((tool) => tool.name), expected.names);
-  } finally {
-    await srv.stop();
-    await idp.close();
-  }
-});
-
-test("P10a (H7/H8, K4 - HTTP OAuth, Tenant mit planProfileFor('starter'), Consult global an): Namensmenge + Anzahl stimmen mit der Doku", async () => {
-  const doc = readDoc();
-  const expected = parseTableB(doc).get("K4");
-  const idp = await startIdp();
-  const srv = await startServer({
-    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
-    seed: seedOauthTenants({ [TENANT_PAID]: planProfileFor("starter") }),
-  });
-  try {
-    const token = await idp.sign({ sub: SUB_PAID });
-    const tools = await httpToolsList(`${srv.localUrl}/mcp`, token);
-    assert.equal(tools.length, expected.count, "K4: Anzahl");
-    assertNameSetMatches("K4", tools.map((tool) => tool.name), expected.names);
-  } finally {
-    await srv.stop();
-    await idp.close();
-  }
-});
-
-// ==================== K5 (HTTP OAuth, Consult global aus) ====================
-test("P10a (H7/H8, K5 - HTTP OAuth, Tenant mit Plan-Profil, Consult global aus): Namensmenge + Anzahl stimmen mit der Doku", async () => {
-  const doc = readDoc();
-  const expected = parseTableB(doc).get("K5");
-  const idp = await startIdp();
-  const srv = await startServer({
-    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer }, // BASE_ENV: CONSULT_ENABLED=false
-    seed: seedOauthTenants({ [TENANT_PAID]: planProfileFor("starter") }),
-  });
-  try {
-    const token = await idp.sign({ sub: SUB_PAID });
-    const tools = await httpToolsList(`${srv.localUrl}/mcp`, token);
-    assert.equal(tools.length, expected.count, "K5: Anzahl");
-    assertNameSetMatches("K5", tools.map((tool) => tool.name), expected.names);
-  } finally {
-    await srv.stop();
-    await idp.close();
-  }
-});
-
-// ==================== K6 (stdio, kein Tenant) ====================
-test("P10a (H7/H8, K6 - stdio Kindprozess src/mcp-server.js): Namensmenge + Anzahl stimmen mit der Doku", async () => {
-  const doc = readDoc();
-  const expected = parseTableB(doc).get("K6");
-  const { names, stderrOutput } = await stdioToolNames({});
-  assert.equal(names.length, expected.count, `K6: Anzahl (stderr: ${stderrOutput()})`);
-  assertNameSetMatches("K6", names, expected.names);
 });

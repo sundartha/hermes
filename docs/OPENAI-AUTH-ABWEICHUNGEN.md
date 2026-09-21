@@ -57,7 +57,7 @@ Auth-UI im Gespraech ersetzt: **UNKNOWN.**
   for that tool."
 
 **Ist-Zustand.** Die erste Haelfte ist vorhanden: `securitySchemes` an jedem Tool (P3,
-`src/mcp-security-schemes.js:19-27`, angewandt in `src/routes/mcp.js:162`) und die
+`src/mcp-security-schemes.js:19-27`, angewandt in `src/routes/mcp.js:168`) und die
 Protected-Resource-Metadata (`src/auth.js:141-150`). Die zweite Haelfte fehlt: **kein**
 Tool-Ergebnis traegt `_meta["mcp/www_authenticate"]` (`grep -rn www_authenticate src/` liefert
 0 Treffer). Nach dem Wortlaut der Primaerquelle zeigt ChatGPT deshalb **keine
@@ -251,8 +251,8 @@ limitation and every UNKNOWN from Section 2 and is not more optimistic than the 
 Requirement quotes are verbatim from the OpenAI primary sources, read on 2026-09-21:
 https://developers.openai.com/plugins/build/auth and
 https://developers.openai.com/plugins/reference. File:line references point into this
-repository. "Section 3" is the raw measurement log below (language-neutral, not duplicated in
-English). Section 4 (our open questions to WorkOS) and Section 5 (measurements that need a
+repository. "Section 3" is the raw measurement log below (verbatim, not duplicated in
+English; it contains some German literal output, translated in 2c.1). Section 4 (our open questions to WorkOS) and Section 5 (measurements that need a
 real, completed login) are German-only; their English equivalents are 2c.2 and 2c.3 below.
 
 **Architecture.** Hermes is an OAuth 2.1 resource server for `/mcp` only; WorkOS AuthKit
@@ -278,7 +278,7 @@ errors that carry `_meta["mcp/www_authenticate"]`. [...] Without both halves Cha
 show the linking UI for that tool." (plugins/build/auth)
 
 What we have: the first half — `securitySchemes` on every tool
-(`src/mcp-security-schemes.js:19-27`, applied in `src/routes/mcp.js:162`) and protected-resource
+(`src/mcp-security-schemes.js:19-27`, applied in `src/routes/mcp.js:168`) and protected-resource
 metadata (`src/auth.js:141-150`). What we do not have: the second half — no tool result carries
 `_meta["mcp/www_authenticate"]` (zero occurrences in `src/`). By the wording of the primary
 source, ChatGPT will therefore **not** show the tool-level linking UI. This is a gap, not a
@@ -439,9 +439,11 @@ carries the English equivalents of Sections 3-8 (limitation of the probe script 
 what-changes-if consequences, the open findings, and the duplicate-path check). Every
 limitation and every UNKNOWN is carried over
 1:1 from the German text below; nothing here is phrased more optimistically. Section 3 itself
-(the raw measurement log) is language-neutral (endpoint URLs, JSON, a probe script's own
-`[PASS]`/`[FAIL]`/`[UNKNOWN]` labels) and is deliberately **not** duplicated here — read it
-directly below in Section 3.
+(the raw measurement log) is reproduced verbatim and is deliberately **not** duplicated here —
+read it directly below in Section 3. It is mostly endpoint URLs, JSON and the probe script's
+`[PASS]`/`[FAIL]`/`[UNKNOWN]` labels, but it is **not** entirely language-neutral: some lines
+are German because they are literal output, and translating them would falsify the log. They
+are translated in 2c.1 below.
 
 ### 2c.1 Probe limitation and "a newer measurement wins" (Section 3)
 
@@ -451,6 +453,21 @@ the **first** discovery document (`openid-configuration`). `code_challenge_metho
 only in the **second** document (`oauth-authorization-server`, see the raw log in Section 3) -
 the probe therefore reports FAIL where the provider actually has the field. Not a contradiction
 in substance, only a limitation of the measurement tool (not P7 scope, noted here only).
+
+**German literal output in Section 3, translated:**
+
+- `--- userinfo (ohne Token) ---` — section label of the measurement run: "userinfo (without a
+  token)". Likewise `--- POST /mcp ohne Token (Live-Gateway) ---`: "POST /mcp without a token
+  (live gateway)".
+- `error_description="Kein Token"` and `{"error":"Kein Token"}` — the Hermes gateway's own error
+  text, sent verbatim by `src/auth.js:95`: "No token".
+- `=== Sonde AS-Faehigkeiten (scripts/probe-as-faehigkeiten.mjs) ===` — header of the probe
+  script: "Probe: authorization-server capabilities". `Ziel:` = "target".
+- `WWW-Authenticate vorhanden -> Modus oauth` — "WWW-Authenticate present -> mode oauth".
+- `issuer-Gleichheit` — "issuer equality"; `(fehlt in openid-configuration)` / `(fehlt)` —
+  "(missing in openid-configuration)" / "(missing)"; `moeglich` — "possible".
+- `=== Ergebnis: PFLICHT 3/4 PASS - Befunde 4 PASS, 2 FAIL, 1 UNKNOWN` — "Result: REQUIRED 3/4
+  PASS - findings 4 PASS, 2 FAIL, 1 UNKNOWN".
 
 **A newer measurement wins:** if a future measurement diverges from the log in Section 3, the
 newer measurement governs, and this document is updated with the new timestamp - never the
@@ -515,7 +532,7 @@ require a completed login (owner-only).
   T-9/T-11/T-12/T-14/T-16 are **not applicable** to stdio (no token, no OpenAI connector path
   there) - this is a limitation of scope, not a claim that stdio meets them.
 - **mcp-native adapter vs. ChatGPT adapter (both over HTTP):** `mcpAuth` runs **before** adapter
-  selection (`src/routes/mcp.js:113` vs. `:153`) - both adapters share the same auth code path, a
+  selection (`src/routes/mcp.js:113` vs. `:158`) - both adapters share the same auth code path, a
   second test per adapter was not needed and was not built.
 
 ### 2c.6 What changes if ... (German original: Section 6)
@@ -675,7 +692,7 @@ sie verlangen einen abgeschlossenen Login (Owner-Only).
   T-9/T-11/T-12/T-14/T-16 sind fuer stdio **nicht anwendbar** (kein Token, kein
   OpenAI-Connector-Pfad dort).
 - **mcp-nativer Adapter vs. ChatGPT-Adapter (beide ueber HTTP):** `mcpAuth` laeuft **vor** der
-  Adapterwahl (`src/routes/mcp.js:113` vs. `:153`) — beide Adapter teilen denselben
+  Adapterwahl (`src/routes/mcp.js:113` vs. `:158`) — beide Adapter teilen denselben
   Auth-Codepfad, ein zweiter Test pro Adapter ist nicht noetig und wurde nicht gebaut.
 
 ## 9. Nicht doppelt verbucht
