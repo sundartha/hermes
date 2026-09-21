@@ -281,7 +281,7 @@ test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
         typeof texts[key] === "string" && texts[key].length > 0,
         `${key} fehlt fuer ${language}`,
       );
-    for (const key of ["number", "owner", "voiceEngine", "model", "calls", "permissions", "planUsageUnknown"])
+    for (const key of ["number", "owner", "calls", "permissions", "planUsageUnknown"])
       assert.ok(texts.agentStatus?.[key], `agentStatus.${key} fehlt fuer ${language}`);
     for (const key of ["planUsage"])
       assert.equal(

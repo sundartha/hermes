@@ -99,8 +99,6 @@ export const MCP_TEXTS = Object.freeze({
     agentStatus: Object.freeze({
       number: "Agent-Nummer",
       owner: "Besitzer",
-      voiceEngine: "Voice-Engine",
-      model: "Modell",
       calls: "Calls bisher",
       permissions: "Berechtigungen",
       planUsage: (percent) => `Monatsnutzung: ${percent} % des Minuten-Kontingents`,
@@ -155,8 +153,6 @@ export const MCP_TEXTS = Object.freeze({
     agentStatus: Object.freeze({
       number: "Agent number",
       owner: "Owner",
-      voiceEngine: "Voice engine",
-      model: "Model",
       calls: "Calls so far",
       permissions: "Permissions",
       planUsage: (percent) => `Monthly usage: ${percent}% of your included minutes`,
@@ -206,8 +202,6 @@ export const MCP_TEXTS = Object.freeze({
     agentStatus: Object.freeze({
       number: "Numéro de l'agent",
       owner: "Propriétaire",
-      voiceEngine: "Moteur vocal",
-      model: "Modèle",
       calls: "Appels jusqu'ici",
       permissions: "Autorisations",
       planUsage: (percent) => `Utilisation mensuelle : ${percent} % des minutes incluses`,
