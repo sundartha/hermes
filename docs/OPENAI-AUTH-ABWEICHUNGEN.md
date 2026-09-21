@@ -435,8 +435,9 @@ the metadata therefore do not tell us whether `email`/`email_verified` are deliv
 
 Together with Section 2b above, this section makes the English version complete on its own: it
 carries the English equivalents of Sections 3-8 (limitation of the probe script and the
-"newer measurement wins" rule, the WorkOS questions, the owner-only measurements, the open
-findings, and the duplicate-path check). Every limitation and every UNKNOWN is carried over
+"newer measurement wins" rule, the WorkOS questions, the owner-only measurements, the
+what-changes-if consequences, the open findings, and the duplicate-path check). Every
+limitation and every UNKNOWN is carried over
 1:1 from the German text below; nothing here is phrased more optimistically. Section 3 itself
 (the raw measurement log) is language-neutral (endpoint URLs, JSON, a probe script's own
 `[PASS]`/`[FAIL]`/`[UNKNOWN]` labels) and is deliberately **not** duplicated here — read it
@@ -516,6 +517,27 @@ require a completed login (owner-only).
 - **mcp-native adapter vs. ChatGPT adapter (both over HTTP):** `mcpAuth` runs **before** adapter
   selection (`src/routes/mcp.js:113` vs. `:153`) - both adapters share the same auth code path, a
   second test per adapter was not needed and was not built.
+
+### 2c.6 What changes if ... (German original: Section 6)
+
+- **... WorkOS starts issuing a resource-specific scope:** T-12 can then be built - a check in
+  `verifyOauth()` after `jwtVerify`, fail-closed, with a boot-guard entry, **behind a switch
+  defaulting to off**, maintained in all four places (`src/config.js`, `.env.example`,
+  `render.yaml`, `BASE_ENV` in `test/helpers.js`). `OpenAI-P7-T4` in
+  `test/openai-p7-token-pruefachsen.test.js` **must then turn red** - if it does not, the new
+  check has no effect. Flipping the switch also requires changing
+  `src/mcp-security-schemes.js:21-27` (`scopes: []`) and this document together with the test.
+- **... WorkOS does not copy `resource` into `aud`:** every ChatGPT login fails with 401 on
+  submission day. That is a connectivity failure, not a security failure - the audience check is
+  **not** weakened to work around it.
+- **... O-6 shows that ChatGPT offers no re-linking for the in-conversation transport 401:**
+  then a token expiring mid-conversation has no user-facing path; a tool error result carrying
+  `_meta["mcp/www_authenticate"]` (for token expiry and B-1) becomes an owner decision on the
+  live auth path (T-14).
+- **... production no longer runs `MCP_AUTH=oauth`:** the transport 401 no longer points at the
+  protected-resource metadata (`STATIC_BEARER_CHALLENGE`, `src/auth.js:89`); ChatGPT finds no
+  OAuth entry point via the header. Whether the transport path even covers T-14 is UNKNOWN
+  regardless (O-6).
 
 ## 3. Messprotokoll (roh, mit Zeitstempel)
 
