@@ -68,9 +68,11 @@ export const MCP_TEXTS = Object.freeze({
       "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
     // AL-P13: Consult-Kanal. TENANT-sichtbarer Text (er erscheint im Chat), deshalb
     // sprachabhaengig - anders als die Tool-Beschreibungen (einsprachig englisch, O14).
+    // P5b (O-27 Teil 2, W4): Beschreibung statt Aufforderung - der Text nennt die
+    // Voraussetzung, statt eine Host-Sicherheitseinstellung einzufordern.
     consultPermissionHint:
-      "Hinweis: Falls waehrend des Anrufs keine Live-Rueckfragen ankommen, muss die " +
-      "Werkzeug-Berechtigung des Connectors auf 'Zulassen' stehen.",
+      "Hinweis: Live-Rueckfragen waehrend des Anrufs erreichen diesen Chat nur, wenn die " +
+      "Werkzeug-Berechtigung des Connectors erteilt ist.",
     // E3 (N-11): tenant-sichtbarer Dedup-Hinweis, dasselbe Muster wie consultPermissionHint.
     callAlreadyRunningHint:
       "Dieser Anruf lief schon - zurueckgegeben wird der laufende Anruf, es wurde kein zweiter gestartet.",
@@ -137,9 +139,11 @@ export const MCP_TEXTS = Object.freeze({
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
     emptyCalendar: "Calendar is empty.",
     callStillRunning: "Call is still running. Please poll get_call_status and try again later.",
+    // P5b (O-27 Teil 2, W4): description, not an instruction - names the precondition
+    // instead of demanding a host security setting.
     consultPermissionHint:
-      "Note: if no live questions arrive during the call, the connector's tool permission " +
-      "needs to be set to 'Allow'.",
+      "Note: live questions during the call only reach this chat if the connector's tool " +
+      "permission is granted.",
     callAlreadyRunningHint:
       "This call was already running - the running call is returned, no second call was started.",
     consultAnswerAccepted: (n) => `${n} detail(s) passed on to the call.`,
@@ -185,9 +189,11 @@ export const MCP_TEXTS = Object.freeze({
     emptyCalendar: "L'agenda est vide.",
     callStillRunning:
       "L'appel est encore en cours. Veuillez interroger get_call_status et réessayer plus tard.",
+    // P5b (O-27 Teil 2, W4): Beschreibung statt Aufforderung, wie bei den Fassungen
+    // oben - nennt die Voraussetzung, statt eine Host-Sicherheitseinstellung einzufordern.
     consultPermissionHint:
-      "Remarque : si aucune question en direct n'arrive pendant l'appel, l'autorisation " +
-      "d'outil du connecteur doit être réglée sur « Autoriser ».",
+      "Remarque : les questions en direct pendant l'appel n'arrivent dans cette " +
+      "conversation que si l'autorisation d'outil du connecteur est accordée.",
     callAlreadyRunningHint:
       "Cet appel était déjà en cours - l'appel en cours est renvoyé, aucun second appel n'a été lancé.",
     consultAnswerAccepted: (n) => `${n} information(s) transmise(s) à l'appel.`,

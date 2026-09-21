@@ -10,7 +10,7 @@ import { registerTools, pickTranscript } from "../src/mcp-tools.js";
 import { FAILURE_REASON_TEXTS } from "../src/i18n/failure-reason-texts.js";
 import { MCP_TEXTS } from "../src/i18n/mcp-texts.js";
 import { MCP_CONSULT_INSTRUCTIONS } from "../src/mcp-server-info.js";
-import { NOT_PLACED } from "../src/telephony/failure-reason.js";
+import { NOT_PLACED, failureReasonBase } from "../src/telephony/failure-reason.js";
 
 const CALL_ID = "call_p2a";
 const AWAIT_SUMMARY_PLACEHOLDER =
@@ -93,7 +93,8 @@ test("1: terminaler Anruf MIT Grund - status+failure_reason befuellt, result_sum
   });
 
   assert.equal(data.status, "failed");
-  assert.equal(data.failure_reason, "not-placed:invite-403-D51");
+  // P5b (O-13 Teil 2): an der MCP-Kante nur noch das Basis-Token, nicht das volle Detail.
+  assert.equal(data.failure_reason, NOT_PLACED);
   assert.ok(data.result_summary.includes(FAILURE_REASON_TEXTS.de.phrases["not-placed"]));
   assert.ok(!data.result_summary.includes("5 Sekunden"));
 });
@@ -124,9 +125,11 @@ test("4: D-5 unbekanntes Token - der Sammel-Satz erscheint, das Roh-Token NICHT 
   assert.equal(data.result_summary, MCP_TEXTS.de.callFailedSummary(RAW_TOKEN));
   assert.ok(!data.result_summary.includes("brandneu-nie-gesehen"));
   assert.ok(!data.result_summary.includes("42"));
-  // Das Maschinenfeld darf das Token trotzdem tragen (Diagnose-Kanal, get_call_status tut
-  // dasselbe) - nur der NUTZERTEXT (result_summary) muss frei davon sein.
-  assert.equal(data.failure_reason, RAW_TOKEN);
+  // P5b (O-13 Teil 2): das Maschinenfeld traegt seit dieser Phase nur noch das
+  // Basis-Token (Datenminimierung) - das Detail bleibt am Datensatz/Log/Ausfallbericht,
+  // nicht mehr im MCP-Feld.
+  assert.equal(data.failure_reason, failureReasonBase(RAW_TOKEN));
+  assert.ok(!data.failure_reason.includes("42"));
 });
 
 test("5: Sprache - de/fr/en liefern paarweise verschiedene result_summary, je mit ihrer eigenen Phrase", async () => {

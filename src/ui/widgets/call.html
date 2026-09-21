@@ -269,8 +269,8 @@
 
     // Anzeige-Labels fuer die failure_reason-Basis-Token aus
     // src/telephony/failure-reason.js#FAILURE_REASON_BASE_TOKENS ("no-answer" | "busy" |
-    // "canceled" | "failed" | "not-placed" | "unreachable" | "result-unknown", jeweils
-    // optional mit ":<detail>"); unbekannte Tokens erscheinen roh (Diagnosewert).
+    // "canceled" | "failed" | "not-placed" | "unreachable" | "result-unknown"); ein
+    // unbekanntes Token faellt auf "Failed" zurueck (s. failureReasonLabel weiter unten).
     //
     // OUTBOUND-E2 (Review-Blocker Runde 4, S2-A/G5): diese Tabelle ist NICHT die
     // Klassifikation (die lebt einzig in failure-reason.js) - sie ist reine
@@ -437,7 +437,10 @@
     // ROH erreichen. Es faellt auf das vorhandene Sammel-Label "Failed" zurueck - kurz,
     // uebersetzt, und fuer JEDEN Grund wahr (failureReason existiert nur an nicht
     // erfolgreichen Anrufen). Das rohe Token bleibt der Diagnose vorbehalten: es steht
-    // unveraendert am Datensatz und im Maschinenfeld failure_reason (get_call_status).
+    // unveraendert am Datensatz und im Log. Seit P5b (O-13 Teil 2) liefert das
+    // Maschinenfeld failure_reason (get_call_status) selbst nur noch das Basis-Token -
+    // der split(":") hier bleibt trotzdem: er ist die defensive Normalisierung eines
+    // host-gepushten Fremdwerts, dem das Widget nicht blind vertrauen darf.
     function failureReasonLabel(raw) {
       if (raw === null || raw === undefined) return raw;
       var mapped = FAILURE_REASON_LABELS[String(raw).split(":")[0]];

@@ -81,9 +81,10 @@ export const HERMES_SERVER_INFO = {
 // Tenant registriert bekommt (await_call_event/answer_consult tun das nicht - die
 // bleiben daher ungenannt und stecken nur im Consult-Block unten).
 //
-// OUTBOUND-E3a: ohne den ersten Satz sieht das Modell ab E3a ein Token wie
-// "not-placed:invite-403-D51", weiss nichts damit anzufangen und wiederholt den Anruf -
-// jedes Mal mit echten Anbieterkosten. Ohne Consult-Werkzeug liefert get_call_status
+// OUTBOUND-E3a: ohne den ersten Satz sieht das Modell nur das Basis-Token "not-placed"
+// (callOutcomeView kuerzt das Detail an der MCP-Kante weg), weiss nichts damit
+// anzufangen und wiederholt den Anruf - jedes Mal mit echten Anbieterkosten. Ohne
+// Consult-Werkzeug liefert get_call_status
 // dasselbe Feld (CALL_STATUS_OUTPUT), deshalb "a call" statt "await_call_event".
 //
 // Review-Runde 2 (P4): ohne Namensnennung landete das Modell bei get_transcript's eigener

@@ -29,14 +29,14 @@ import { defaultSetTimer } from "../utils/timer.js";
 // Timer ausgeloesten Abbruch kein Gegenstueck - deshalb entsteht er hier, an seiner
 // einzigen Quelle, statt als Sonderfall in einer Provider-Mapping-Funktion.
 // Stabil und PII-frei: get_call_status reicht failure_reason unveraendert an MCP-Clients
-// weiter; das Call-Widget rendert unbekannte Tokens roh (Diagnosewert, kein Bruch).
+// weiter; das Call-Widget fuehrt ein eigenes Label dafuer (FAILURE_REASON_LABELS, call.html).
 export const CAP_FAILURE_REASON = "max-duration-cap";
 
 // KS-P1b: maschinenlesbarer Grund einer Terminalisierung DURCH DIE GELD-ACHSE. Eigener
 // Token neben CAP_FAILURE_REASON aus derselben Ueberlegung (GAP-26): ohne ihn waere ein an
 // der Decke gestorbener Anruf hinterher von einem am Zeit-Cap gestorbenen nicht zu
 // unterscheiden. Stabil und PII-frei; get_call_status reicht failure_reason unveraendert an
-// MCP-Clients weiter, das Call-Widget rendert unbekannte Tokens roh.
+// MCP-Clients weiter, das Call-Widget fuehrt ein eigenes Label dafuer (call.html).
 export const BUDGET_FAILURE_REASON = "budget-exhausted";
 
 // IE2: der ANLASS einer Geld-Terminalisierung - welche Naht die Achse gefragt hat. EINE

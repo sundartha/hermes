@@ -104,8 +104,10 @@ export function makeStatusBody(statusLabel, bundle) {
 //   bekannter Grund     -> "<Lead> <reasonLabel> <Satzteil>"
 //   unbekanntes Token   -> "<Lead>" allein (Befund D-5: ein rohes Token darf den Nutzer
 //                          NIE erreichen; der Sammel-Satz ist verstaendlich und wahr, das
-//                          Token bleibt der Diagnose vorbehalten - Store, Log und das
-//                          Maschinenfeld failure_reason).
+//                          Token bleibt der Diagnose vorbehalten - Store und Log. Seit P5b
+//                          (O-13 Teil 2) gilt das auch fuer das Maschinenfeld
+//                          failure_reason: es traegt seit dieser Phase nur noch das
+//                          Basis-Token, nicht mehr das volle Detail).
 export function makeCallFailedSummary(lead, bundle) {
   const sentence = makeFailureSentence(bundle);
   return (failureReason) => {

@@ -35,6 +35,10 @@ import { resolveGatewayUrl } from "./config.js";
 import { resultCardView } from "./call-result.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "./i18n/locales.js";
 import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
+// P5b (O-13 Teil 2): dieselbe Zerlegeregel wie der Erzeuger (Modul-Kopf dort) -
+// nicht kopiert, nicht nachgebaut. Wiederverwendung an genau der Naht, an der
+// failure_reason den Server verlaesst (callOutcomeView unten).
+import { failureReasonBase } from "./telephony/failure-reason.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
 // NICHT MEHR EXPORTIERT: der einzige Fremdnutzer war src/conversation/outcome-to-mcp-
@@ -151,10 +155,16 @@ function durationS(c) {
 // BEWUSST NICHT pickCallStatus als Ganzes wiederverwendet: die traegt
 // last_transcript_lines, und der await_call_event-Kontrakt reicht das Roh-Transkript
 // strukturell NICHT durch (Absolute Regel 5, s. Kommentar bei pickTranscript).
-// failure_reason ist das MASCHINENFELD (rohes Token, Diagnose); der Nutzertext entsteht
-// getrennt in pickTranscript.
+// failure_reason ist das MASCHINENFELD - seit P5b (O-13 Teil 2, Datenminimierung) NUR
+// das BASIS-Token (z.B. "not-placed"), nicht mehr die volle Diagnose
+// ("not-placed:invite-403-D51"). Das Detail (SIP-/Carrier-Code) bleibt der Diagnose
+// vorbehalten: Datensatz und Log tragen es weiterhin unveraendert. Der Ausfall-Eimer
+// (outage-detection.js#outageBucket) schneidet davon zusaetzlich den Carrier-Code ab -
+// der verbleibende SIP-Code wird gebraucht, um zwei verschiedene not-placed-Ausfallarten
+// zu unterscheiden. Der Nutzertext entsteht getrennt in pickTranscript und loest bereits
+// auf dem Basis-Token auf.
 function callOutcomeView(call) {
-  return { status: mapStatus(call), failure_reason: call.failureReason ?? null };
+  return { status: mapStatus(call), failure_reason: failureReasonBase(call.failureReason) };
 }
 
 // Daten-Kontrakt get_call_status (P1-Spec Abschnitt 5): GENAU diese Felder duerfen

@@ -210,11 +210,15 @@ test("T-CDF1-UI: Fehlergrund (Spec c) - failure_reason erscheint, PII bleibt ges
     audioUrl: "https://example.com/recording.wav",
   };
   await withGateway(FAILED_CALL, async () => {
+    // Positiv-Kontrolle (P5b, Schritt 2): der Mock-Upstream traegt weiterhin das volle
+    // Diagnose-Token - sonst waere die Kuerzungs-Zusicherung unten trivial gruen.
+    assert.equal(FAILED_CALL.failureReason, "failed:603", "Upstream traegt das volle Token");
     const { tools } = captureUi({ uiHost: capableHost() });
     const { handler } = tools.get("get_call_status");
     const result = await handler({ call_id: "call_1" });
 
-    assert.equal(result.structuredContent.failure_reason, "failed:603", "Grund exponiert");
+    // P5b (O-13 Teil 2, Datenminimierung): an der MCP-Kante nur noch das Basis-Token.
+    assert.equal(result.structuredContent.failure_reason, "failed", "Grund exponiert, gekuerzt");
     assert.doesNotThrow(() => callStatusOutput.parse(result.structuredContent));
 
     const serialized = JSON.stringify(result);
