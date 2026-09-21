@@ -4992,7 +4992,16 @@ git diff master...phase/openai-p6-auth-challenge -U0 -- src/auth.js \
 
 liefert einen Treffer: `discoverJwksUri` (Zeile 36) benennt lokale Variablen um
 (`r`->`response`, `p`->`path`) — eine reine Id-Length-Umbenennung ohne Logikaenderung,
-kein Bedingungs-/Reihenfolge-/`next()`-Zweig, s. Commit-Diff. Sonst keine Treffer.
+kein Bedingungs-/Reihenfolge-/`next()`-Zweig, s. Commit-Diff. Sonst keine Treffer. Der
+Grep-Befund ist NICHT vollstaendig: `catch (e)` -> `catch (err)` wurde ebenfalls
+umbenannt, zweimal — in `discoverJwksUri` UND in `verifyOauth`, also im LIVE-OAuth-Pfad
+(dort faengt der `catch`-Zweig die JWT-Pruefung ab und ruft `deny401` — unveraendertes
+Verhalten, nur der Bezeichner ist neu). Der Grep-Filter oben matcht `catch (` nicht, das
+ist eine Luecke im Filter, kein Widerspruch zum Befund. Am Diff mechanisch geprueft: alle
+drei Umbenennungen (`r`->`response`, `p`->`path`, `e`->`err`) sind lokale
+Parameter-/Variablen-Renames ohne jede Aenderung an Bedingungen, Kontrollfluss oder
+Rueckgabewerten — der Diff zeigt fuer jede Fundstelle nur den Bezeichner, nie die
+umgebende Logik.
 Draht-Tests: `test/openai-p6-challenge.test.js` (P6-T1..T5, Praefix
 absichtlich "P6-" statt eines Katalog-Praefixes, sonst landete die Datei still in
 `test:gates` statt in `npm test`). Rot-gegen-alt auf `master` bestaetigt: ohne den Fix
@@ -5005,15 +5014,50 @@ Nicht-Loopback-Socket (skippt maschinenabhaengig). `test/oauth.test.js` und
 **Risiko-Eintrag U-1 / O-7 (offen, bewusst nicht geschlossen).** In Produktion verweigert
 kein Boot-Guard `MCP_AUTH=""`/`token` (`src/config.js` `productionFootguns` sperrt nur
 `off`). Ein Rueckfall des Dashboard-Werts auf `""`/`token` schaltet still auf statisches
-Bearer (kein OAuth 2.1) — der Claude-/ChatGPT-Connector saehe dann `TENANT_REJECT` statt
-`req.auth`. P6 hat bewusst KEINE neue `PRODUCTION_FOOTGUNS`-Zeile fuer diesen Fall gebaut
+Bearer (kein OAuth 2.1) — korrigiert (am Draht gemessen, war hier falsch beschrieben):
+der Claude-/ChatGPT-Connector schickt weiter sein OAuth-JWT, das scheitert im
+`""`/`token`-Zweig am `safeEqual`-Vergleich mit dem statischen Token
+(`req.headers.authorization` != `Bearer <MCP_AUTH_TOKEN>`) und bekommt **401** —
+`sendBearer401`/`STATIC_BEARER_CHALLENGE`, nie `TENANT_REJECT`. `req.auth` wird in diesem
+Zweig nirgends gesetzt (das passiert nur in `verifyOauth`), der Request endet also schon
+in der `mcpAuth`-Middleware, lange vor der Tenant-Aufloesung. Ein 403 `TENANT_REJECT`
+entstuende nur in einem anderen Fall: legt jemand von AUSSEN das KORREKTE statische Token
+vor, kommt er durch `mcpAuth` durch (`next()` ohne `req.auth`), und
+`routes/_tenant.js` faellt mangels `req.auth`/`internal` auf `operatorChannelTenant`
+zurueck — ausserhalb der Produktion `isTrustedLocalCaller`, in Produktion
+`TENANT_REJECT` -> 403. Der Connector selbst legt das statische Token aber nie vor (er
+kennt nur sein OAuth-JWT), sieht also 401, nicht 403. P6 hat bewusst KEINE neue
+`PRODUCTION_FOOTGUNS`-Zeile fuer diesen Fall gebaut
 (Lead-Entscheidung P6-2): eine solche Sperre ist maximal live-wirksam — verweigert der
 Boot, faellt ALLES aus, auch eingehende Anrufe — und die Repo-Konfiguration ist
 nachweislich NICHT die Produktionskonfiguration (`render.yaml` sagt `CONSULT_ENABLED=
 false`, der Live-Connector zeigt aber den Consult-Text; Werte sind Dashboard-gepflegt und
-aus dem Repo nicht lesbar). Nach P6 ist der Rueckfall wenigstens am 401 selbst erkennbar
-(Challenge ohne `resource_metadata`, per `curl -i` pruefbar). Schliessung bleibt
-Owner-Entscheidung O-7.
+aus dem Repo nicht lesbar). Der Rueckfall war schon auf `master` am 401 unterscheidbar
+(kein `WWW-Authenticate`-Header, anderer Body, gegenueber der oauth-Challenge mit
+Header+`resource_metadata`) — P6 macht ihn NICHT erst erkennbar (Korrektur gegenueber der
+fruehreren Fassung dieses Eintrags, die "wenigstens am 401 erkennbar" seit P6 behauptete).
+P6s tatsaechlicher Beitrag hier: der `""`/`token`-Zweig traegt jetzt ebenfalls eine
+Bearer-Challenge (ohne `resource_metadata`) statt eines nackten 401 — Haertung von T-5,
+nicht Neuschaffung von Erkennbarkeit. Schliessung bleibt Owner-Entscheidung O-7.
+
+**T-13-Stand (Klarstellung).** T-13 (401 + `WWW-Authenticate` auf die
+Protected-Resource-Metadata) war im oauth-Modus schon auf `master` byte-identisch erfuellt
+(Tabelle oben: oauth-Zeile "unveraendert"). P6 aendert den T-13-Stand fuer die Einreichung
+NICHT — sein Beitrag ist ausschliesslich die Challenge im token-/Legacy-Zweig
+(T-5-Haertung, s.o.).
+
+**Zwei aeltere Befunde, NICHT von P6, beim Messen aufgefallen (offen, nicht behoben):**
+- Der oauth-Zweig (`verifyOauth`) akzeptiert ein gueltiges JWT auch OHNE
+  `"Bearer "`-Praefix: `token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "")`
+  laesst den Header-Wert unveraendert, wenn er nicht mit `Bearer ` beginnt — ein roher JWT
+  im `Authorization`-Header wird also ebenso verifiziert wie einer mit Praefix.
+- `MCP_AUTH` wird nicht getrimmt (`src/config.js`: `(process.env.MCP_AUTH || "").toLowerCase()`,
+  kein `.trim()`). `" oauth"` (mit fuehrendem Leerzeichen) wird STILL zu Legacy, weil der
+  String dann nicht mehr `=== "oauth"` ist. Kein Fail-open (das statische Token wird im
+  Legacy-/token-Zweig weiter verlangt), aber eine stille Herabstufung von OAuth 2.1 auf
+  statisches Bearer durch einen Tippfehler im Render-Dashboard — mit
+  `MCP_AUTH_TOKEN generateValue: true` liefe Produktion dann unbemerkt auf statischem
+  Bearer statt OAuth. Als offener Punkt vermerkt, nicht behoben.
 
 `render.yaml`: `MCP_AUTH` von `value: ""` auf `sync: false` umgestellt (T-5-Restposten,
 s.o. korrigierter Verweis in AUTH-P7) — ein Blueprint-Sync kann den Live-Wert (`oauth`)

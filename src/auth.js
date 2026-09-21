@@ -76,10 +76,16 @@ function deny401(res, error, description) {
   return sendBearer401(res, challenge, { error: description });
 }
 
-// token- und Legacy-Zweig sprechen kein OAuth: kein resource_metadata-Verweis,
-// der schickte den Client in eine Discovery, deren Token dieser Zweig nie
+// token- und Legacy-Zweig sprechen kein OAuth: kein resource_metadata-Verweis IM
+// HEADER, der schickte den Client in eine Discovery, deren Token dieser Zweig nie
 // annimmt (P6, Lead-Entscheidung 3). RFC 6750 SS3 erlaubt die Bearer-Challenge
-// ohne diesen Parameter.
+// ohne diesen Parameter. Das Well-known-Dokument selbst (registerWellKnown weiter
+// unten, /.well-known/oauth-protected-resource) wird davon NICHT beruehrt - es wird
+// in JEDEM mcpAuth-Modus ausgeliefert, ungated. Ein Client, der der Spec folgt,
+// faellt bei fehlendem Header-Verweis auf diese Well-known-URI zurueck; steht dort
+// ein OAUTH_ISSUER_URL, findet er den Authorization-Server auch ohne den Header.
+// Der fehlende Header verhindert also keine Discovery - er verweigert nur die
+// Abkuerzung darauf.
 const STATIC_BEARER_CHALLENGE = 'Bearer error="invalid_token"';
 
 async function verifyOauth(req, res, next) {

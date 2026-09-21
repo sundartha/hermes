@@ -352,8 +352,10 @@ services:
       # Sync darf ihn NICHT stillschweigend auf "" zurueckziehen - "" (Legacy) und
       # "token" sind nicht einreichungsfaehig (kein OAuth 2.1). P6: seit dieser Phase
       # traegt auch der "" -/token-Zweig eine Bearer-Challenge ohne resource_metadata
-      # (src/auth.js) - ein Ruecksturz waere damit wenigstens am 401 von aussen
-      # erkennbar (Risiko-Eintrag PLAN-SECURITY.md, O-7).
+      # (src/auth.js). Der Ruecksturz war schon vorher am 401 erkennbar (kein Header,
+      # anderer Body als die oauth-Challenge) - P6 macht ihn NICHT erst erkennbar,
+      # sondern haertet nur den "" -/token-Zweig einheitlich mit einer Bearer-Challenge
+      # (Risiko-Eintrag PLAN-SECURITY.md, O-7).
       - key: MCP_AUTH
         sync: false
       # Pflicht fuers Hosting (Modus leer/token): ohne Token ist /mcp nur von
