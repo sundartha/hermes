@@ -163,6 +163,24 @@ export default [
     },
   },
   {
+    // P6-Review (Runde 1): no-param-reassign(props:true) trifft in dieser Datei
+    // NUR den Auth-Kontext, den die Express-Middleware an req haengt (req.auth =
+    // {...} in verifyOauth) - dasselbe Idiom wie req.tenant in web-auth.js:838,
+    // dort ebenfalls akzeptiert und unterdrueckt (eslint-suppressions.json). Eine
+    // vorherige Fassung hatte den Fund per Object.assign(req, {...}) umgangen -
+    // gleiche Mutation, andere AST-Form, die die Regel nicht mehr matcht: das
+    // Verhalten war unveraendert, nur die Zaehlung verschwand (Review-Befund).
+    // Statt die Mutation zu verschleiern, bekommt die Regel hier eine gezielte,
+    // dokumentierte Ausnahme fuer den Parameter "req" (offizielle Option der
+    // Regel, kein eslint-disable - noInlineConfig bleibt unberuehrt). Nur diese
+    // Datei ist betroffen; die globale Regel bleibt fuer den Rest des Repos
+    // unveraendert scharf (props:true, keine Ausnahme).
+    files: ["src/auth.js"],
+    rules: {
+      "no-param-reassign": ["error", { props: true, ignorePropertyModificationsFor: ["req"] }],
+    },
+  },
+  {
     // Browser-side assets (served to the client)
     files: ["apps/web/**/*.js"],
     languageOptions: { globals: { ...globals.browser } },

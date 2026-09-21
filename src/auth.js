@@ -30,18 +30,18 @@ const metadataUrl = () => `${config.server.publicUrl}/.well-known/oauth-protecte
 async function discoverJwksUri() {
   const paths = ["/.well-known/openid-configuration", "/.well-known/oauth-authorization-server"];
   let lastErr;
-  for (const p of paths) {
+  for (const path of paths) {
     try {
-      const r = await fetch(`${config.auth.oauthIssuerUrl}${p}`);
-      if (!r.ok) {
-        lastErr = new Error(`${p} HTTP ${r.status}`);
+      const response = await fetch(`${config.auth.oauthIssuerUrl}${path}`);
+      if (!response.ok) {
+        lastErr = new Error(`${path} HTTP ${response.status}`);
         continue;
       }
-      const { jwks_uri } = await r.json();
+      const { jwks_uri } = await response.json();
       if (jwks_uri) return jwks_uri;
-      lastErr = new Error(`${p} ohne jwks_uri`);
-    } catch (e) {
-      lastErr = e;
+      lastErr = new Error(`${path} ohne jwks_uri`);
+    } catch (err) {
+      lastErr = err;
     }
   }
   throw lastErr || new Error("keine OAuth-Metadata gefunden");
@@ -61,15 +61,26 @@ export function _resetJwksCache() {
   jwks = null;
 }
 
-// RFC 6750 / 9728: 401 mit WWW-Authenticate-Header inkl. Verweis auf die
-// Protected-Resource-Metadata, damit der Client den Auth-Server findet.
-function deny401(res, error, description) {
-  res.set(
-    "WWW-Authenticate",
-    `Bearer resource_metadata="${metadataUrl()}", error="${error}", error_description="${description}"`,
-  );
-  return res.status(401).json({ error: description });
+// RFC 6750 / 9728: jeder 401 von /mcp traegt eine Bearer-Challenge. Einzige
+// Stelle im Modul, die den WWW-Authenticate-Header setzt und den 401-Code sendet.
+const HTTP_UNAUTHORIZED = 401;
+function sendBearer401(res, challenge, body) {
+  res.set("WWW-Authenticate", challenge);
+  return res.status(HTTP_UNAUTHORIZED).json(body);
 }
+
+// oauth-Zweig: Challenge inkl. Verweis auf die Protected-Resource-Metadata,
+// damit der Client den Auth-Server findet.
+function deny401(res, error, description) {
+  const challenge = `Bearer resource_metadata="${metadataUrl()}", error="${error}", error_description="${description}"`;
+  return sendBearer401(res, challenge, { error: description });
+}
+
+// token- und Legacy-Zweig sprechen kein OAuth: kein resource_metadata-Verweis,
+// der schickte den Client in eine Discovery, deren Token dieser Zweig nie
+// annimmt (P6, Lead-Entscheidung 3). RFC 6750 SS3 erlaubt die Bearer-Challenge
+// ohne diesen Parameter.
+const STATIC_BEARER_CHALLENGE = 'Bearer error="invalid_token"';
 
 async function verifyOauth(req, res, next) {
   const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
@@ -83,10 +94,12 @@ async function verifyOauth(req, res, next) {
       audience: audience(),
       clockTolerance: 30,
     });
+    // no-param-reassign: gezielte Regel-Ausnahme fuer req in eslint.config.js,
+    // dasselbe Express-Idiom wie req.tenant in web-auth.js:838.
     req.auth = { sub: payload.sub, email: payload.email || null, claims: payload };
     next();
-  } catch (e) {
-    audit("auth_failed", req, `path=/mcp grund=${e.code || "invalid_token"}`);
+  } catch (err) {
+    audit("auth_failed", req, `path=/mcp grund=${err.code || "invalid_token"}`);
     deny401(res, "invalid_token", "Token-Pruefung fehlgeschlagen");
   }
 }
@@ -100,18 +113,18 @@ export async function mcpAuth(req, res, next) {
   if (config.auth.mcpAuthToken) {
     if (safeEqual(req.headers.authorization || "", `Bearer ${config.auth.mcpAuthToken}`)) return next();
     audit("auth_failed", req, "path=/mcp");
-    return res.status(401).json({ error: "unauthorized" });
+    return sendBearer401(res, STATIC_BEARER_CHALLENGE, { error: "unauthorized" });
   }
   // Kein Token gesetzt: "token" verlangt trotzdem eines, Legacy faellt AUSSERHALB der
   // Produktion auf localhost-only zurueck (fail-closed wie seit Phase 1). In Produktion
   // ist der Socket-Bypass deaktiviert (AM1) -> 401, auch von localhost.
   if (config.auth.mcpAuth === "token") {
     audit("auth_failed", req, "path=/mcp grund=kein_token");
-    return res.status(401).json({ error: "unauthorized" });
+    return sendBearer401(res, STATIC_BEARER_CHALLENGE, { error: "unauthorized" });
   }
   if (legacyLocalBypassAllowed(req)) return next();
   audit("auth_failed", req, "path=/mcp");
-  return res.status(401).json({
+  return sendBearer401(res, STATIC_BEARER_CHALLENGE, {
     error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost (ausserhalb Produktion) erreichbar",
   });
 }
