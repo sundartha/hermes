@@ -5068,8 +5068,9 @@ verweigern lassen.
 
 **Nicht Teil dieser Phase:** die Provider-Signaturpruefung (`/voice`, Telnyx Ed25519) —
 eigenes Gate, unberuehrt. Der Offenlegungssatz — unberuehrt. T-14
-(`_meta["mcp/www_authenticate"]`) — gegenstandslos (P0 D0-6, kein Ausloesepfad), gehoert
-zu P7.
+(`_meta["mcp/www_authenticate"]`) — bewusst nicht erfuellt, Ersatz durch den Transport-Pfad
+UNKNOWN; Stand und Begruendung s. Abschnitt OpenAI-P7, Punkt 2 (P0 D0-6 hielt ihn zum
+Zeitpunkt dieser Phase noch fuer gegenstandslos; P7 hat das revidiert).
 
 ## OpenAI-P7 — Auth II: Scope-Achse und Fehlerkanal, dokumentiert (2026-09-21)
 
