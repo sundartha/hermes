@@ -249,9 +249,12 @@ test("P4 (T-21 Konstanten): MCP_CONSULT_INSTRUCTIONS traegt den Geld-Satz in den
 
 // ==================== Fall 4 (Abnahmekriterium 4) ====================
 test("P4 (T-21): initialize ohne Consult-Freigabe traegt den Basis-Block, nicht undefined und nicht den Consult-Text", async () => {
-  // KEIN CONSULT_ENABLED-Override: BASE_ENV setzt es bereits auf "false"
-  // (test/helpers.js) - genau der Zustand, in dem Produktion heute laeuft
-  // (render.yaml, UNKNOWN-2 der Spec).
+  // KEIN CONSULT_ENABLED-Override: BASE_ENV setzt es bereits auf "false" (test/helpers.js).
+  // Der Test prueft den Zustand "Tenant ohne Consult-Faehigkeit". Produktion laeuft NICHT
+  // so: der Live-Wert ist Dashboard-gepflegt, render.yaml ist nicht massgeblich, und der
+  // Live-Connector zeigte am 2026-09-21 die Consult-Werkzeuge und den Consult-
+  // Instruktionsblock. Der Fall bleibt relevant fuer jeden Tenant ohne allowConsult
+  // (DEFAULT_PROFILE, src/store/defaults.js:1069-1078).
   const srv = await startServer({ seed: seedState({}) });
   try {
     const res = await mcpPost(`${srv.localUrl}/mcp`, null, INITIALIZE_BODY);
@@ -334,9 +337,9 @@ test("P4 (T-21/O-27 Wirkung): der ausgelieferte Consult-Text traegt die vier Wir
 // Reviewer-Befund: MCP_BASE_INSTRUCTIONS schickte das Modell auf "the result_summary
 // text", ohne zu sagen, WELCHES Werkzeug das Feld traegt (get_transcript) und dass das
 // auch bei status=failed gilt. get_transcript's eigene Beschreibung sagte "call this
-// only once status=completed" - ein Tenant OHNE Consult-Freigabe (Produktions-
-// Normalfall, CONSULT_ENABLED=false) hatte damit keinen textuellen Weg zu
-// result_summary fuer einen NICHT platzierten Anruf (status=failed).
+// only once status=completed" - ein Tenant ohne Consult-Faehigkeit (Fall 4 oben; NICHT
+// notwendig der Produktions-Normalfall, s. dortiger Kommentar) hatte damit keinen
+// textuellen Weg zu result_summary fuer einen NICHT platzierten Anruf (status=failed).
 test("P4 (Review-Runde 2, Befund 1): MCP_BASE_INSTRUCTIONS nennt get_transcript und schliesst status=failed nicht aus", () => {
   assert.match(
     MCP_BASE_INSTRUCTIONS,
