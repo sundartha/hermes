@@ -294,6 +294,15 @@ test("P4 (T-21 stdio, DP-1): der echte stdio-Kindprozess traegt instructions im 
       `stdio-initialize traegt instructions (stderr: ${stderrOutput})`,
     );
     assert.ok(instructions.length > 0, `instructions ist nicht leer (stderr: ${stderrOutput})`);
+    // STDIO_CONSULT_LOOP ist in mcp-server.js hart auf false gepinnt (await_call_event/
+    // answer_consult sind in diesem Prozess gar nicht registriert) - deshalb muss ueber
+    // stdio exakt der BASIS-Block ankommen, dieselbe Schaerfe wie Fall 4 (HTTP).
+    assert.equal(
+      instructions,
+      MCP_BASE_INSTRUCTIONS,
+      "stdio traegt den BASIS-Block, nicht den Consult-Text",
+    );
+    assert.ok(!instructions.includes("await_call_event"));
   } finally {
     await client.close();
   }

@@ -133,8 +133,9 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
       // keine Extension -> byte-identisch. Auto-registrierte tools/resources werden vom SDK
       // dazugemerged (verdraengen die Extension nicht).
       // AL-P13: serverOptions traegt jetzt ZWEI Dinge (Capabilities + instructions) und
-      // ist deshalb aus dem mcpUiEnabled-Ternary herausgeloest. Beide Schalter aus ->
-      // undefined, byte-identisch zum Bestand.
+      // ist deshalb aus dem mcpUiEnabled-Ternary herausgeloest. T-21: instructions sind
+      // IMMER gesetzt (mcp-server-info.js), auch wenn uiEnabled UND consultLoop aus sind -
+      // der Basis-Block gilt dann fuer jeden Tenant. Der Rueckgabewert ist nie undefined.
       const consultLoop = consultAllowedFor(profile);
       const serverOptions = mcpServerOptions({
         uiEnabled: config.tenancy.mcpUiEnabled,
