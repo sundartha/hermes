@@ -73,7 +73,7 @@ den Consult-Wortlaut ab 4c — unveraendert).
 
 ---
 
-## 3. Neue Testdatei — sechs Faelle
+## 3. Neue Testdatei — neun Faelle (sechs urspruenglich, drei aus Review-Runde 2)
 
 `test/openai-p4-ergebnisstruktur-instructions.test.js`:
 
@@ -95,7 +95,19 @@ den Consult-Wortlaut ab 4c — unveraendert).
    `not-placed` nicht wiederholen) und NICHT die Aufzaehlung — ein Pin auf die Aufzaehlung waere
    mit Kriterium 6 unvereinbar, dieser Fall macht den Widerspruch strukturell unmoeglich.
 
-Alle sechs Faelle sind bei Erstlauf, im gemeinsamen Lauf und im Vollbestand gruen.
+7. **Review-Runde 2, Befund 1 (Konstanten):** `MCP_BASE_INSTRUCTIONS` nennt `get_transcript`
+   namentlich und sagt ausdruecklich, dass es auch fuer einen fehlgeschlagenen Anruf gilt.
+8. **Review-Runde 2, Befund 1 (Werkzeug-Beschreibung):** die `get_transcript`-Beschreibung
+   schliesst `status=failed`/`cancelled` nicht mehr aus (alte Formulierung "only once ...
+   status=completed" entfernt, ist am tatsaechlichen Handler-Verhalten ausgerichtet).
+9. **Review-Runde 2, Befund 1 (funktionaler Beleg):** echter HTTP-`/mcp`-Request, Tenant OHNE
+   Consult-Freigabe (BASE_ENV-Standard), ein `status:"failed"`-Anruf mit
+   `failure_reason="not-placed:invite-403-D51"` — `get_transcript` liefert `isError!==true` und
+   `result_summary` = den lokalisierten Fehlschlagstext, weder den Warte-Platzhalter noch das
+   rohe Diagnose-Token. Genau der Pfad (`place_call -> failure_reason -> result_summary` ohne
+   `await_call_event`), den der Reviewer als kaputt beschrieben hat.
+
+Alle neun Faelle sind bei Erstlauf, im gemeinsamen Lauf und im Vollbestand gruen.
 
 ---
 
@@ -103,7 +115,7 @@ Alle sechs Faelle sind bei Erstlauf, im gemeinsamen Lauf und im Vollbestand grue
 
 ```
 NODE_ENV=test node --test test/openai-p4-ergebnisstruktur-instructions.test.js
-# -> 6 Faelle, # fail 0
+# -> 9 Faelle, # fail 0   (6 urspruenglich + 3 aus Review-Runde 2, Befund 1)
 
 NODE_ENV=test node --test test/mcp-tools-language.test.js
 # -> 19 Faelle, # fail 0
@@ -117,20 +129,34 @@ NODE_ENV=test node --test --test-concurrency=4 test/openai-p2-tool-metadaten.tes
 # -> 86 Faelle, # fail 0
 
 npm test -- -- --test-concurrency=4
-# -> # tests 6192 / # pass 6192 / # fail 0
+# -> # tests 6195 / # pass 6186 / # fail 9
 ```
 
+**Die 9 Fehlschlaege, geprueft und als Flake identifiziert (Lehre "Roter Test ist eine
+Behauptung", `gate-triage-red-test-is-a-claim`):** alle 9 sitzen im GEMEINSAMEN Lauf in EINER
+Suite, `test/s2-mcp-origin.test.js` (`E5-H: Herkunftswache am laufenden Server`, Faelle H01-H07c),
+Fehlerbild durchgehend `error: 'fetch failed'` — ein Verbindungsfehler des Test-Clients zu einem
+lokal gespawnten Server, kein Assertion-Mismatch. Diese Suite beruehrt `src/routes/mcp.js`
+(Origin-Wache), NICHT `src/mcp-server-info.js` oder `src/mcp-tools.js` (die einzigen von dieser
+Phase geaenderten Dateien) — inhaltlich ohne Beruehrungspunkt zu Befund 1/2.
+**Isolierter Nachlauf** (`NODE_ENV=test node --test test/s2-mcp-origin.test.js`, keine
+Parallelitaet zu anderen Dateien): **41/41 gruen, inklusive aller 9 zuvor gescheiterten
+Faelle H01-H07c.** Damit zaehlt der Fehlschlag nach der Repo-Regel nicht: er war isoliert nicht
+reproduzierbar (Last-/Ressourcen-Flake unter voller Suite, nicht diese Phase zuzuschreiben —
+passend zur bereits dokumentierten Nicht-Determinismus-Lehre der Suite). Kein Fix noetig, keine
+Aenderung an `test/s2-mcp-origin.test.js` oder `src/routes/mcp.js` vorgenommen.
+
 **Baseline-Abweichung (offen zu dokumentieren, s. Spec W-4):** der Auftrag nennt 6166 gruen als
-Vorher-Grundlinie. `6192 - 6 neue Faelle (Schritt 6) = 6186` ist die rechnerische Vorher-Zahl auf
-diesem Branch-Tip — **22 mehr** als die im Auftrag genannten 6166, nicht die dort erwarteten 0.
-Diese Phase hat die Baseline NICHT selbst vor der ersten Aenderung auf `master` gemessen (nur
-den Netto-Testzuwachs ueber `git diff` verifiziert: `+7`/`-1` `test(`-Vorkommen in `test/**` =
-netto +6, exakt die sechs neuen Faelle aus Schritt 6 — kein versehentlicher zusaetzlicher Test).
-Die Differenz zur genannten 6166 ist damit plausibel reine Zaehl-/Zeitdrift zwischen dem
-Auftrags-Zeitpunkt und diesem Lauf (P0 selbst nennt bereits einen dritten, wieder anderen Wert,
-6153/6152 — s. Spec W-4) und keine dieser Phase zuzuschreibende Regression. Ein unabhaengiger
-Pruefer sollte das vor dem Merge durch einen `git stash`-Lauf auf `master` selbst bestaetigen,
-falls diese Zahl fuer die Abnahme kritisch ist.
+Vorher-Grundlinie. `6195 - 9 neue Faelle (Schritt 6 + Review-Runde 2) = 6186` ist die
+rechnerische Vorher-Zahl auf diesem Branch-Tip — **20 mehr** als die im Auftrag genannten 6166,
+nicht die dort erwarteten 0. Diese Phase hat die Baseline NICHT selbst vor der ersten Aenderung
+auf `master` gemessen (nur den Netto-Testzuwachs ueber `git diff` verifiziert: netto +9 Faelle in
+`test/openai-p4-ergebnisstruktur-instructions.test.js`, keine anderen Testdateien veraendert -
+kein versehentlicher zusaetzlicher Test). Die Differenz zur genannten 6166 ist damit plausibel
+reine Zaehl-/Zeitdrift zwischen dem Auftrags-Zeitpunkt und diesem Lauf (P0 selbst nennt bereits
+einen dritten, wieder anderen Wert, 6153/6152 — s. Spec W-4) und keine dieser Phase zuzuschreibende
+Regression. Ein unabhaengiger Pruefer sollte das vor dem Merge durch einen `git stash`-Lauf auf
+`master` selbst bestaetigen, falls diese Zahl fuer die Abnahme kritisch ist.
 
 Keine zurueckgelassenen Testserver (`ps aux` nach dem Lauf leer bzgl. `node --test`/
 `server-mit-elternwaechter`/`npm test`). `data/store.json` der Hauptarbeitskopie unangetastet
@@ -141,14 +167,27 @@ Store-Multi-Tenant-Setup vorgesehen).
 
 ## 5. Offener Befund (nicht in dieser Phase behoben, absichtlich)
 
-**W-3 (Spec):** `src/mcp-tools.js:940`, die `briefing`-Beschreibung von `place_call`, enthaelt
-ebenfalls die Formulierung `(calendar, mail, files, chat)` — eine zweite, im Plan nicht genannte
-Fundstelle derselben Werkzeug-Aufzaehlung. Diese Phase aendert sie NICHT: die Phasen-IDs
-schneiden O-27 Teil 1 ausdruecklich auf `MCP_CONSULT_INSTRUCTIONS` zu, und die Briefing-
-Beschreibung ist ein an `convo-bench` kalibrierter Anruf-Qualitaetstext (GQ-B2) mit eigenen
-Zeichenbudget-Tests — eine Aenderung ohne Vorher-Messung waere genau das Muster, das die Lehre
-`bench-must-reproduce-defect` verbietet. **Muss vor der Einreichung entschieden werden, sonst
-schliesst jemand O-27 mit halber Abdeckung.**
+**W-3 (Spec), verschaerft nach Review-Runde 2 Befund 2:** `src/mcp-tools.js:940`, die
+`briefing`-Beschreibung von `place_call`, enthaelt ebenfalls die Formulierung `(calendar, mail,
+files, chat)` — eine zweite, im Plan nicht genannte Fundstelle derselben Werkzeug-Aufzaehlung.
+Diese Phase aendert sie NICHT: die Phasen-IDs schneiden O-27 Teil 1 ausdruecklich auf
+`MCP_CONSULT_INSTRUCTIONS` zu, und die Briefing-Beschreibung ist ein an `convo-bench`
+kalibrierter Anruf-Qualitaetstext (GQ-B2) mit eigenen Zeichenbudget-Tests — eine Aenderung ohne
+Vorher-Messung waere genau das Muster, das die Lehre `bench-must-reproduce-defect` verbietet
+(dieselbe Lehre hat den Bauenden davon abgehalten, `:940` anzufassen — angewandt wurde sie nur
+dort, nicht bei der Konsequenz fuer den ID-Status hier).
+
+**Festgehaltener Status, nicht nur eine offene Frage:** **O-27 Teil 1 gilt nach dieser Phase als
+NUR ZUR HAELFTE geschlossen.** Die Wirkung ("eigene Quellen zuerst") bleibt modell-lesbar
+erhalten, aber ausschliesslich in `MCP_CONSULT_INSTRUCTIONS`. Dieselbe, wortgleiche Aufzaehlung
+`(calendar, mail, files, chat)` steht weiterhin in `src/mcp-tools.js:940` und wird bei JEDEM
+`place_call` an das Modell ausgeliefert — ein Host-Modell, das dort liest (und nicht in den
+`instructions`), sieht die alte, unveraenderte Fundstelle. `tasks/openai-technik-stand.md`
+fuehrt P4 bewusst weiterhin als `LAEUFT`, nicht als abgeschlossen. Die ID darf erst dann als
+erfuellt gelten, wenn auch `src/mcp-tools.js:940` entschieden (geaendert ODER mit eigener
+Vorher-Messung bewusst belassen) wurde — das ist P5-Scope, nicht dieser Report. **Bis dahin ist
+dies ein bewusst akzeptiertes, mit `convo-bench` nicht messbares Risiko** (der Pfad laeuft ueber
+das Host-Modell, nicht ueber einen Server-Test) und **kein** vollstaendig erfuellter Punkt.
 
 ---
 
@@ -177,3 +216,41 @@ schliesst jemand O-27 mit halber Abdeckung.**
   (`HTTP_OK`, `INSTRUCTIONS_HEAD_CHARS` in der neuen Testdatei), kein toter/auskommentierter Code.
 - `npm run lint` (Teil des `git commit`-Hooks) lief bei jedem der drei Commits durch — 0 Fehler,
   nur vorbestehende Warnungen in unveraenderten Dateien.
+
+---
+
+## 8. Review-Runden
+
+**Runde 1** (Commit `cccc36f`): veraltete Kommentar-Zusage in `src/routes/mcp.js`
+nachgezogen (behauptete weiterhin "beide Schalter aus -> undefined", seit T-21 falsch) und
+Fall 5 (stdio) von "instructions ist ein nichtleerer String" auf "instructions ist EXAKT
+`MCP_BASE_INSTRUCTIONS`" geschaerft — reine Kommentar-/Test-Praezisierung, kein
+Verhaltenswechsel.
+
+**Runde 2** (dieser Commit):
+- **Befund 1** (`src/mcp-server-info.js:91`): `MCP_BASE_INSTRUCTIONS` schickte das Modell auf
+  "the result_summary text", ohne zu sagen, welches Werkzeug dieses Feld traegt
+  (`get_transcript`) und dass es auch bei `status=failed` gilt. Fuer einen Tenant OHNE
+  Consult-Freigabe (Produktions-Normalfall: `CONSULT_ENABLED=false`) traf das auf
+  `get_transcript`s eigene Beschreibung ("call this only once status=completed"), die einen
+  nicht platzierten Anruf faelschlich ausschloss — der Handler lehnt tatsaechlich nur
+  `status==="active"` ab (`src/mcp-tools.js:1280`), `failed`/`cancelled` liefern
+  `result_summary` genauso. **Fix, an der Ursache:** beide Stellen korrigiert -
+  `MCP_BASE_INSTRUCTIONS` nennt jetzt `get_transcript` namentlich und sagt ausdruecklich
+  "it works for a failed call, not only a completed one"; die Werkzeug-Beschreibung selbst
+  ist jetzt am tatsaechlichen Handler-Verhalten ausgerichtet ("a final status - completed,
+  failed or cancelled"). `get_transcript` ist fuer JEDEN Tenant registriert (kein
+  Consult-Gate) - die Namensnennung verletzt damit nicht die bestehende Regel, keine
+  Werkzeuge zu nennen, die ein Tenant nicht bekommt (die gilt weiterhin fuer
+  `await_call_event`/`answer_consult`).
+- **Befund 2** (`src/mcp-server-info.js:114`): die Kuerzung der Aufzaehlung
+  `(calendar, mail, files, this chat)` ist durch O-27 Teil 1 (Plan, Abnahmekriterium 6)
+  ausdruecklich VERLANGT und durch zwei Tests gepinnt (Fall 3: `doesNotMatch` auf
+  `calendar, mail, files`; Fall 6 pinnt die Wirkung statt der Aufzaehlung) - ein Zuruecknehmen
+  wuerde das Abnahmekriterium und beide Pins brechen. Kein Code-Fix; **Dokumentations-Fix**:
+  Abschnitt 5 nennt jetzt ausdruecklich den Status "O-27 Teil 1 gilt als NUR ZUR HAELFTE
+  geschlossen" statt nur "muss entschieden werden" - dieselbe zweite Fundstelle
+  (`src/mcp-tools.js:940`), derselbe Grund (`bench-must-reproduce-defect`, keine
+  Aenderung ohne Vorher-Messung), jetzt mit dem Status als Festlegung statt als offene Frage.
+  `tasks/openai-technik-stand.md` fuehrt P4 bereits korrekt als `LAEUFT`, nicht als
+  abgeschlossen - keine Aenderung dort noetig.

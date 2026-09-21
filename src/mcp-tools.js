@@ -1253,11 +1253,16 @@ export function registerTools(
   // get_transcript beim Terminal-Status "completed" selbst ueber ihre Host-Bruecke
   // aufruft. Bleibt als Text-Tool erhalten (Fallback, falls die Widget-Bruecke nicht
   // antwortet). Handler/Whitelist (pickTranscript) unveraendert.
+  //
+  // Review-Runde 2 (P4): die alte Beschreibung ("call this only once status=completed")
+  // war ENGER als der Handler (der lehnt einzig status==="active" ab, :1280) - ein nicht
+  // platzierter Anruf ist status=failed, nicht completed, und wurde vom Modell deshalb
+  // faelschlich uebersprungen. Jetzt am tatsaechlichen Handler-Verhalten ausgerichtet.
   uiTool(
     "get_transcript",
     {
       description:
-        "After the call has ended, returns the result summary and whether the objective was achieved. This tool NEVER returns the raw transcript - whether the server keeps it afterwards on its own follows the diagnostic rule of place_call's diagnostic field and is independent of this response. Call this only once get_call_status reports status=completed.",
+        "After the call has ended, returns the result summary and whether the objective was achieved. This tool NEVER returns the raw transcript - whether the server keeps it afterwards on its own follows the diagnostic rule of place_call's diagnostic field and is independent of this response. Call this once get_call_status reports a final status - completed, failed or cancelled, not only completed - it carries the result summary for those too.",
       annotations: TOOL_ANNOTATIONS.get_transcript,
       inputSchema: { call_id: z.string().describe("The call_id from place_call") },
       outputSchema: TRANSCRIPT_OUTPUT,

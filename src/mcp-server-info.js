@@ -77,18 +77,27 @@ export const HERMES_SERVER_INFO = {
 // EINSPRACHIG ENGLISCH (O14): nur das Client-Modell liest ihn, nie der Tenant.
 //
 // T-21: instructions gelten jetzt IMMER, auch ohne Consult-Freigabe - deshalb zwei
-// Bausteine statt eines Textes. MCP_BASE_INSTRUCTIONS nennt kein Werkzeug, das ein
-// Tenant ohne Consult-Freigabe gar nicht registriert bekommt (await_call_event/
-// answer_consult existieren dort nicht).
+// Bausteine statt eines Textes. MCP_BASE_INSTRUCTIONS nennt nur Werkzeuge, die JEDER
+// Tenant registriert bekommt (await_call_event/answer_consult tun das nicht - die
+// bleiben daher ungenannt und stecken nur im Consult-Block unten).
 //
 // OUTBOUND-E3a: ohne den ersten Satz sieht das Modell ab E3a ein Token wie
 // "not-placed:invite-403-D51", weiss nichts damit anzufangen und wiederholt den Anruf -
 // jedes Mal mit echten Anbieterkosten. Ohne Consult-Werkzeug liefert get_call_status
 // dasselbe Feld (CALL_STATUS_OUTPUT), deshalb "a call" statt "await_call_event".
+//
+// Review-Runde 2 (P4): ohne Namensnennung landete das Modell bei get_transcript's eigener
+// Beschreibung ("call this only once status=completed") und rief das Werkzeug fuer einen
+// NICHT platzierten Anruf (status=failed, kein Consult noetig) gar nicht erst auf -
+// result_summary blieb unerreichbar, obwohl get_transcript es fuer genau diesen Fall
+// liefert (pickTranscript/callFailedSummary). get_transcript IST fuer jeden Tenant
+// registriert (kein Consult-Gate) - die Nennung hier ist deshalb sicher, anders als bei
+// await_call_event/answer_consult oben.
 export const MCP_BASE_INSTRUCTIONS =
   `If a call reports a failure_reason starting with "${NOT_PLACED}", the call could not ` +
-  "be placed because of a problem on our side. Do NOT retry the call: tell the user what " +
-  "failed, using the result_summary text as it is. " +
+  "be placed because of a problem on our side. Do NOT retry the call: call get_transcript " +
+  "for that call_id - it works for a failed call, not only a completed one - and tell the " +
+  "user what failed, using its result_summary text as it is. " +
   "Never invent facts about the principal or the call: if you do not know something, say so.";
 
 // Consult-Block bleibt modul-intern (kein dritter Export, keine dritte Wahrheit) - er

@@ -329,3 +329,85 @@ test("P4 (T-21/O-27 Wirkung): der ausgelieferte Consult-Text traegt die vier Wir
   assert.ok(text.includes(NOT_PLACED));
   assert.match(text, /Do NOT retry the call/);
 });
+
+// ==================== Fall 7 (Review-Runde 2, Befund 1) ====================
+// Reviewer-Befund: MCP_BASE_INSTRUCTIONS schickte das Modell auf "the result_summary
+// text", ohne zu sagen, WELCHES Werkzeug das Feld traegt (get_transcript) und dass das
+// auch bei status=failed gilt. get_transcript's eigene Beschreibung sagte "call this
+// only once status=completed" - ein Tenant OHNE Consult-Freigabe (Produktions-
+// Normalfall, CONSULT_ENABLED=false) hatte damit keinen textuellen Weg zu
+// result_summary fuer einen NICHT platzierten Anruf (status=failed).
+test("P4 (Review-Runde 2, Befund 1): MCP_BASE_INSTRUCTIONS nennt get_transcript und schliesst status=failed nicht aus", () => {
+  assert.match(
+    MCP_BASE_INSTRUCTIONS,
+    /call get_transcript/,
+    "das Modell muss wissen, WELCHES Werkzeug result_summary traegt",
+  );
+  assert.match(
+    MCP_BASE_INSTRUCTIONS,
+    /failed call/,
+    "der Basis-Block sagt ausdruecklich, dass get_transcript auch fuer einen fehlgeschlagenen Anruf gilt",
+  );
+});
+
+test("P4 (Review-Runde 2, Befund 1): get_transcript-Beschreibung schliesst status=failed/cancelled NICHT mehr aus", () => {
+  const registrations = captureToolsWithConfig({
+    identity: null,
+    scopedTenant: null,
+    allowCalendar: true,
+    consultAllowed: false,
+    language: null,
+  });
+  const description = registrations.get("get_transcript").config.description;
+  assert.doesNotMatch(
+    description,
+    /only once get_call_status reports status=completed/,
+    "die alte Formulierung war enger als der Handler (der lehnt nur status===active ab)",
+  );
+  assert.match(description, /failed/, "die Beschreibung nennt status=failed als gueltigen Fall");
+});
+
+// Funktionaler Beleg (kein reiner Text-Pin): ein Tenant OHNE Consult-Freigabe
+// (BASE_ENV CONSULT_ENABLED=false, wie Fall 4) ruft get_transcript fuer einen NICHT
+// platzierten Anruf (status=failed, failure_reason mit dem NOT_PLACED-Praefix) direkt
+// auf - der Pfad, den der Reviewer als kaputt beschrieben hat (place_call ->
+// failure_reason -> result_summary, ohne await_call_event). Erwartet: kein isError, der
+// lokalisierte Fehlschlagstext kommt an, nicht der Warte-Platzhalter und nicht das
+// rohe Diagnose-Token.
+test("P4 (Review-Runde 2, Befund 1): get_transcript liefert result_summary fuer einen NICHT platzierten Anruf, auch ohne Consult-Kanal", async () => {
+  const failureReason = `${NOT_PLACED}:invite-403-D51`;
+  const seed = seedState({
+    calls: [
+      seedCall({
+        id: "call_notplaced1",
+        status: "failed",
+        failureReason,
+        endedAt: new Date().toISOString(),
+      }),
+    ],
+    settings: { language: "de" },
+  });
+  const srv = await startServer({ seed });
+  try {
+    const res = await mcpPost(
+      `${srv.localUrl}/mcp`,
+      null,
+      toolCall("get_transcript", { call_id: "call_notplaced1" }),
+    );
+    const result = await readToolResult(res);
+    assert.notEqual(
+      result.isError,
+      true,
+      "ein NICHT platzierter Anruf ist ein gueltiger get_transcript-Aufruf, kein Fehlerergebnis",
+    );
+    const expected = MCP_TEXTS.de.callFailedSummary(failureReason);
+    assert.equal(
+      result.structuredContent.result_summary,
+      expected,
+      "result_summary traegt den lokalisierten Fehlschlagstext, nicht den Warte-Platzhalter und nicht das rohe Token",
+    );
+    assert.doesNotMatch(toolResultText(result), /invite-403-D51/);
+  } finally {
+    await srv.stop();
+  }
+});
