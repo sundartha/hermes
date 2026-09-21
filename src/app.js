@@ -18,7 +18,6 @@ import {
 } from "./middleware.js";
 import { registerWellKnown } from "./auth.js";
 import { PLAN_CATALOG } from "./plans.js";
-import { configFingerprint } from "./config-fingerprint.js";
 import {
   voiceControl,
   webhookEvents,
@@ -41,6 +40,7 @@ import { makeInboxRoutes } from "./routes/api-inbox.js";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
+import { makeDeployInfoRoutes } from "./routes/api-deploy-info.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
 import { wireWebLogin } from "./wiring/web-login.js";
 import { guardedBoot } from "./boot-guard.js";
@@ -75,6 +75,21 @@ const VOICE_PATH_PREFIX = "/voice";
 // traegt (G25). Die zweite Nennung in src/route-policy.js bleibt bewusst ein Literal
 // (dort begruendet und mechanisch bewacht).
 const OPENAI_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
+// OpenAI-P10b (I-2b, RFC 9116): Sicherheitskontakt-Datei. Exportiert (statt lokal), weil
+// der Drift-Test (test/openai-p10b-healthz.test.js) denselben Kontaktwert gegen das
+// Impressum abgleicht - EINE Quelle statt einer zweiten, unabgestimmten Kopie (G5).
+export const SECURITY_TXT_PATH = "/.well-known/security.txt";
+// Rollenadresse aus dem Impressum (apps/web/src/data/legal/imprint.de.json), NICHT die
+// persoenliche Owner-Adresse. Als Konstante statt Env: der Wert ist oeffentlich und im
+// Impressum fest verdrahtet - eine zweite, per Env gesetzte Quelle waere ein Drift-Risiko
+// statt eines Sicherheitsgewinns (keine neue Env-Variable, Vier-Orte-Regel entfaellt).
+export const SECURITY_CONTACT = "mailto:kontakt@sundartha.com";
+// RFC 9116 Abschnitt 2.5.5: das Feld MUSS in der Zukunft liegen und SOLLTE weniger als
+// ein Jahr entfernt sein. Fest codiert (kein pro-Request-Neuberechnen, s. Handler-
+// Kommentar unten) - Erneuerungspflicht vor diesem Datum steht in PLAN-SECURITY.md.
+export const SECURITY_TXT_EXPIRES = "2027-09-01T00:00:00.000Z";
+export const SECURITY_TXT_BODY =
+  `Contact: ${SECURITY_CONTACT}\n` + `Expires: ${SECURITY_TXT_EXPIRES}\n` + `Preferred-Languages: de, en\n`;
 // Statuscodes als benannte Konstanten (G25): die Umleitung und die Grenzen, innerhalb
 // derer ein Body-Parser-Fehler als Eingabefehler des Aufrufers gilt (400 einschliesslich
 // bis 500 ausschliesslich).
@@ -151,16 +166,36 @@ export function registerPublicRoutes({ app, config }) {
   // ---- Routen, die vor jeder Identitaet erreichbar sein muessen. Jede einzeln in
   // src/route-policy.js (PUBLIC_ROUTES) begruendet und maschinell gegen den
   // Produktions-Routengraph geprueft (test/route-auth-inventory.test.js).
-  // GAP-36 (Deploy-Wahrheit): der EINE Ort, an dem der laufende Dienst selbst sagt,
-  // welchen Commit und welche Konfiguration er faehrt (Post-Deploy-Smoke +
-  // Rollback-Drill). AUTH-AUSNAHME bleibt unveraendert (Keep-Alive) - deshalb NUR
-  // Git-SHA + Einweg-Hash, NIE ein Rohwert oder Secret (Begruendung in
-  // src/config-fingerprint.js). Pro Request neu gerechnet: sha256 ueber ~40 Byte ist
-  // vernachlaessigbar, der Endpunkt liegt hinter dem Rate-Limiter, und ein gecachter
-  // Wert waere ein Lazy-Init-Antipattern (P15) mit Staleness-Risiko.
-  app.get("/healthz", (_req, res) =>
-    res.json({ ok: true, commit: config.server.deployedCommit, configHash: configFingerprint(config) }),
-  );
+  // GAP-36 (Deploy-Wahrheit): der EINE oeffentliche Ort, an dem der laufende Dienst
+  // selbst sagt, welchen Commit er faehrt (Post-Deploy-Smoke + Rollback-Drill,
+  // Ziel-Pin von scripts/probe-auth.sh). AUTH-AUSNAHME bleibt unveraendert (Keep-Alive).
+  // OpenAI-P10b: configHash ist HIER NICHT MEHR dabei. Grund: der Hash liegt ueber
+  // sieben niedrig-entropischen Betriebsachsen (src/config-fingerprint.js) und wurde
+  // live aus 9216 Kandidaten eindeutig zurueckgerechnet (Preimage-Befund,
+  // PLAN-SECURITY.md, Abschnitt "OpenAI-P10b", Punkt 1) - er war fuer diese Achsen damit KEIN Einweg-Schutz,
+  // sondern gab sie effektiv im Klartext preis. Die Deploy-Wahrheit teilt sich seither
+  // auf: commit bleibt oeffentlich (unauthentifiziert lesbar noetig), configHash gibt es
+  // nur noch hinter einer Admin-Sitzung (GET /api/admin/deploy-info,
+  // src/routes/api-deploy-info.js) und im Boot-Log (src/boot.js). Commit-SHA bleibt ein
+  // akzeptiertes Risiko: ohne ihn liefe probe-auth.sh (Ziel-Pin W7) blind, und beide
+  // GitHub-Repos sind privat (kein Code-Zugriff ueber den SHA allein).
+  app.get("/healthz", (_req, res) => res.json({ ok: true, commit: config.server.deployedCommit }));
+
+  // ---- GET /.well-known/security.txt: Sicherheitskontakt (RFC 9116, OpenAI-P10b) ----
+  // AUTH-AUSNAHME (Absolute Regel 3, begruendet): RFC 9116 verlangt, dass die Datei ohne
+  // jede Identitaet abrufbar ist - genau das ist ihr Zweck (ein Sicherheitsforscher hat
+  // per Definition noch keine Tenant-Sitzung). Liefert ausschliesslich statischen Text
+  // (Kontakt + Ablaufdatum + Sprachpraeferenz), liest keine Eingabe, haelt keinen
+  // Zustand, hat keinen Schreibpfad, kennt keine Tenant-Daten. Kontaktadresse
+  // (SECURITY_CONTACT) ist die im Impressum veroeffentlichte Rollenadresse
+  // (apps/web/src/data/legal/imprint.de.json), drift-getestet gegen genau diese Quelle
+  // (test/openai-p10b-healthz.test.js). KEIN Canonical-Feld: das wuerde den Host
+  // (app.sundartha.com) hart verdrahten - eine Rebrand-/Origin-Falle; RFC 9116 fuehrt
+  // Canonical ausdruecklich als optional. SECURITY_TXT_EXPIRES ist FEST (kein
+  // pro-Request-Neuberechnen) - ein sich selbst verlaengerndes Ablaufdatum wuerde den
+  // Zweck des Feldes (Staleness-Signal) aufheben; Erneuerung vor diesem Datum ist in
+  // PLAN-SECURITY.md (Abschnitt OpenAI-P10b) als Pflicht festgehalten.
+  app.get(SECURITY_TXT_PATH, (_req, res) => res.type("text/plain").send(SECURITY_TXT_BODY));
 
   // ---- GET /api/plans: oeffentlicher, read-only Plan-Katalog (BK0) -------------
   // AUTH-AUSNAHME (Regel 3, begruendet): bewusst ohne Login erreichbar - exakt wie
@@ -431,6 +466,14 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
   // provisioning = die EINE P6-Instanz (INV-7). Der withStoreLock-kritische Abschnitt +
   // Nummern-Caps + persist_error->503 sind unveraendert.
   app.use(makeOnboardRoutes({ store, config, audit, provisioning, operatorAuth }));
+
+  // ---- Deploy-Nachweis (OpenAI-P10b) -------------------------------------------------
+  // GET /api/admin/deploy-info lebt in src/routes/api-deploy-info.js
+  // (makeDeployInfoRoutes, DI-Muster wie makeOnboardRoutes/makeBillingRoutes). Mount
+  // NACH makeOnboardRoutes, vor /mcp - hinter webAuthMw+adminMw, NUR DANN gemountet,
+  // wenn operatorAuth existiert (AUTH-P6, s.o.). Ersatz fuer die aus /healthz entfernte
+  // configHash-Preisgabe (Preimage-Befund, s. Kommentar in api-deploy-info.js).
+  app.use(makeDeployInfoRoutes({ config, operatorAuth }));
 
   // ================= MCP ueber Streamable HTTP (Custom Connector) =================
   // Das /mcp-Trio (POST mit mcpAuth, GET/DELETE -> 405) lebt in src/routes/mcp.js

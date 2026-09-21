@@ -12,8 +12,10 @@ test("healthz ist offen erreichbar", async () => {
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
-    // GAP-36 (P1): /healthz traegt zusaetzlich commit+configHash (Deploy-Wahrheit,
-    // s. test/gap-36-healthz-fingerprint.test.js) - hier nur die Auth-Ausnahme selbst
+    // GAP-36 (P1): /healthz traegt zusaetzlich commit (Deploy-Wahrheit,
+    // s. test/gap-36-healthz-fingerprint.test.js). configHash lebt seit OpenAI-P10b
+    // NICHT mehr hier (Preimage-Befund), sondern hinter einer Admin-Sitzung
+    // (GET /api/admin/deploy-info) + im Boot-Log - hier nur die Auth-Ausnahme selbst
     // geprueft (ok:true bleibt Teil der Form).
     const body = await res.json();
     assert.equal(body.ok, true);

@@ -5255,3 +5255,55 @@ keinen MCP-Apps-Host wirksam sind (s. `src/ui/contract.js`).
   Client tatsaechlich (D0-8), rendert die Karte ueberhaupt, und wenn ja, ueber welchen
   Pfad? Erst danach ist entscheidbar, OB und WO T-30/T-31 fuer OpenAI etwas bewirken
   wuerden.
+
+## OpenAI-P10b — HTTP-Oberflaeche des Hauptservers (2026-09-21)
+
+Scope: nur der Hauptserver (`src/`, app.sundartha.com). `apps/web`/sundartha.com ist
+Labor-Pflicht (`docs/RUNBOOK-LAB-LIVE.md`) und in dieser Phase ausdruecklich
+ausgeschlossen.
+
+1. **Befund: `configHash` war per Preimage rueckrechenbar.** Methode: SHA-256-Preimage -
+   alle moeglichen Kombinationen der sieben Achsen von `configFingerprint`
+   (`src/config-fingerprint.js:34-45`) wurden vollstaendig aufgezaehlt (**9216
+   Kandidaten**) und gegen den live beobachteten Hash geprueft; genau EINE Kombination
+   reproduzierte ihn, ein zweites Preimage ist rechnerisch ausgeschlossen. Damit standen
+   live alle sieben Achsen im Klartext fest: das Land-Gate (erlaubte Laendervorwahlen),
+   das Stundenlimit fuer Anrufe, der Monats-Budget-Schalter, die Mandantentrennung
+   (Multi-Tenant-Flag), die Zahlungswaehrung und beide Kostendecken (Plattform- und
+   Tenant-Default-Decke). Die tatsaechlichen PRODUKTIONSWERTE dieser Achsen stehen
+   bewusst NICHT hier (SECRETS-Regel, CLAUDE.md) - sie liegen ausschliesslich in einer
+   lokalen, bewusst nicht eingecheckten Arbeitsdatei des Owners; dieser Abschnitt ist die
+   getrackte Referenz fuer Code-Kommentare und Code-Verweise, nicht die Datei. Der Hash
+   war fuer diese niedrig-entropischen Achsen KEIN Einweg-Schutz - er gab sie effektiv im
+   Klartext preis. Damit war die tragende Praemisse des vorherigen "akzeptierten Risikos"
+   (Plan P10 I-1: "der Hash ist nicht rueckrechenbar") widerlegt.
+   **Massnahme:** `configHash` verlaesst `/healthz` (`src/app.js`). Ersatz: authentifiziert
+   `GET /api/admin/deploy-info` (`src/routes/api-deploy-info.js`, hinter webAuthMw+
+   adminMw ueber `operatorRoutes`, fail-closed - ohne Admin-Sitzungs-Infra gar nicht
+   gemountet) und das unveraenderte Boot-Log (`[boot] configHash=...`, `src/boot.js`).
+2. **Akzeptiertes Risiko: `commit` bleibt oeffentlich auf `/healthz`.** Grund:
+   `scripts/probe-auth.sh` (Ziel-Pin W7) MUSS den deployten Commit unauthentifiziert
+   lesen koennen - sonst laeuft die naechste Live-Auth-Probe blind gegen einen
+   beliebigen Deploy. Beide GitHub-Repos sind privat gemessen (`gh repo view
+   jonas986/vodafone-agent`, `Antonio20045/vodafone-agent`, `visibility: PRIVATE`,
+   2026-09-21) - ein SHA ohne Repo-Zugriff verraet keinen Code. **Neubewertungs-
+   Bedingung:** faellt die Privatheit eines der beiden Repos, ist dieser Eintrag neu zu
+   bewerten (kein Commit-SHA mehr unauthentifiziert ausliefern).
+3. **`/.well-known/security.txt` (RFC 9116) gebaut.** Kontakt `kontakt@sundartha.com` -
+   die im Impressum veroeffentlichte Rollenadresse (`apps/web/src/data/legal/
+   imprint.de.json:18`), NICHT die persoenliche Owner-Adresse. **Erneuerungspflicht:**
+   `SECURITY_TXT_EXPIRES` (`src/app.js`) steht fest auf `2027-09-01T00:00:00.000Z` - vor
+   diesem Datum muss der Wert erneuert werden, sonst gilt die Datei als abgelaufen (RFC
+   9116 Abschnitt 2.5.5). Ein Drift-Test (`test/openai-p10b-healthz.test.js`) haelt den
+   Kontaktwert gegen das Impressum synchron. **UNKNOWN:** ob das Postfach
+   `kontakt@sundartha.com` Sicherheitsmeldungen tatsaechlich bearbeitet (Owner-Punkt).
+4. **HSTS `preload` bleibt AUS.** Unveraenderte, bewusste Owner-Entscheidung
+   (`src/middleware.js:29-41`): die Preload-Zusage ist praktisch unwiderruflich.
+5. **Beobachtet, nicht geaendert: `x-powered-by: Express`.** Live gemessen
+   (`curl -sD - https://app.sundartha.com/healthz`), aber nicht Teil dieses Auftrags -
+   offener Folgepunkt fuer eine kuenftige Phase (Express-Header abschalten oder
+   ueberschreiben).
+6. **Render-Health-Check unveraendert.** Live `healthCheckPath: "/healthz"` (Render-API,
+   `srv-d8m0fhflk1mc73bno570`, deckt sich mit `render.yaml:30`) - durch diese Phase nicht
+   beruehrt, Render wertet ausschliesslich den Statuscode aus (weiterhin 200, nur der
+   Body wurde um ein Feld kuerzer).

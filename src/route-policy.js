@@ -75,7 +75,8 @@ export const PUBLIC_ROUTES = Object.freeze([
     method: "GET",
     path: "/healthz",
     reason:
-      "Keep-Alive + Deploy-Wahrheit (Commit-SHA, Einweg-Hash). Traegt keinen Rohwert und kein Secret.",
+      "Keep-Alive + Deploy-Wahrheit (nur Commit-SHA, seit OpenAI-P10b ohne configHash - " +
+      "Preimage-Befund). Kein Rohwert, kein Hash, kein Secret.",
   },
   {
     method: "GET",
@@ -101,6 +102,13 @@ export const PUBLIC_ROUTES = Object.freeze([
       "unauthentifizierte Abholbarkeit. Liefert einen einzigen, von OpenAI zugewiesenen " +
       "Verifikations-Token als Klartext und sonst nichts: keine Tenant-Daten, kein Zustand, " +
       "kein Schreibpfad, kein Query-Echo. Bei leerer Env antwortet sie 404.",
+  },
+  {
+    method: "GET",
+    path: "/.well-known/security.txt",
+    reason:
+      "RFC 9116 Sicherheitskontakt - muss ohne Login abrufbar sein. Statischer Text " +
+      "(Kontakt, Ablaufdatum), keine Tenant-Daten, keine Eingabe.",
   },
   {
     method: "GET",

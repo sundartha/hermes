@@ -180,8 +180,15 @@ const ROUTE_FINGERPRINT = [
   // Eintrag in src/route-policy.js. Ohne gesetzten Token antwortet sie 404 - gemountet
   // ist sie trotzdem immer (bedingte Registrierung waere im Graph unsichtbar).
   "GET /.well-known/openai-apps-challenge",
+  // OpenAI-P10b (I-2b): RFC-9116-Sicherheitskontakt. Klasse PUBLIC, Eintrag in
+  // src/route-policy.js.
+  "GET /.well-known/security.txt",
   "GET /account",
   "GET /admin",
+  // OpenAI-P10b: authentifizierter Ersatz fuer die aus /healthz entfernte
+  // configHash-Preisgabe (Preimage-Befund). Klasse AUTH (operatorRoutes), kein Eintrag
+  // in src/route-policy.js.
+  "GET /api/admin/deploy-info",
   "GET /api/admin/tenants",
   "GET /api/billing/checkout-return",
   "GET /api/billing/cost-drift",
@@ -337,11 +344,13 @@ test("Routen-Inventar: ohne pg-Backend fehlt der Web-Login-Block (der Graph-Scha
   }
 });
 
-// ---- AUTH-P6: die sieben Betreiber-Routen tragen BEIDE Middlewares ----------------
+// ---- AUTH-P6: die Betreiber-Routen tragen BEIDE Middlewares -----------------------
 // classifyRoute() wertet AUTH schon dann, wenn IRGENDEINE Auth-Middleware in der Kette
 // steht (Plan Abschnitt 5, "Ehrliche Luecke") - webAuthGateMiddleware ALLEIN waere fuer
-// diese sieben Routen zu wenig (jeder eingeloggte, aber nicht-admin Kunde saehe sie).
-// Die Paar-Assertion unten schliesst genau diese Luecke fuer diese sieben Routen.
+// diese Routen zu wenig (jeder eingeloggte, aber nicht-admin Kunde saehe sie).
+// Die Paar-Assertion unten schliesst genau diese Luecke fuer diese Routen. (OpenAI-P10b:
+// GET /api/admin/deploy-info kam als achte Route dazu - die feste Zahl "sieben" aus dem
+// AUTH-P6-Namen war ab da sachlich falsch und ist hier bewusst entfernt.)
 const OPERATOR_ROUTE_KEYS = [
   "POST /api/billing/flush-meters",
   "POST /api/billing/cost-truing/sweep",
@@ -350,9 +359,10 @@ const OPERATOR_ROUTE_KEYS = [
   "GET /api/billing/platform-costs",
   "POST /api/onboard",
   "POST /api/onboard/retry",
+  "GET /api/admin/deploy-info",
 ];
 
-test("AUTH-P6-7: die sieben Betreiber-Routen tragen webAuthGateMiddleware UND adminOnlyMiddleware", () => {
+test("AUTH-P6-7: die Betreiber-Routen tragen webAuthGateMiddleware UND adminOnlyMiddleware", () => {
   const byKey = new Map(PROD_GRAPH.map((route) => [routeKey(route.method, route.path), route]));
   for (const key of OPERATOR_ROUTE_KEYS) {
     const route = byKey.get(key);
@@ -368,12 +378,12 @@ test("AUTH-P6-7: die sieben Betreiber-Routen tragen webAuthGateMiddleware UND ad
   }
 });
 
-test("AUTH-P6-8: ohne pg-Backend sind die sieben Betreiber-Routen gar nicht gemountet (Kehrseite von AUTH-P6-5, In-Process)", () => {
+test("AUTH-P6-8: ohne pg-Backend sind die Betreiber-Routen gar nicht gemountet (Kehrseite von AUTH-P6-5, In-Process)", () => {
   const leanKeys = keysOf(LEAN_GRAPH);
   for (const key of OPERATOR_ROUTE_KEYS) {
     assert.ok(
       !leanKeys.has(key),
-      `${key} existiert auch ohne pg-Backend - die sieben Betreiber-Routen duerfen ohne ` +
+      `${key} existiert auch ohne pg-Backend - die Betreiber-Routen duerfen ohne ` +
         "operatorAuth (webAuthMw+adminMw) gar nicht gemountet sein (fail-closed by construction).",
     );
   }

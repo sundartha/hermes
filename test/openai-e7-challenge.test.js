@@ -88,14 +88,19 @@ test("E7-T7: der Token wird nie geloggt (Regel 4)", async () => {
   });
 });
 
-test("E7-T8: der Token ist keine configHash-Achse (/healthz identisch mit/ohne Token)", async () => {
+// OpenAI-P10b: configHash verliess /healthz (Preimage-Befund, s. src/app.js). Der
+// Vergleich laeuft seither ueber die Boot-Log-Zeile "[boot] configHash=..." (der
+// verbliebene Zwilling, src/boot.js) statt ueber die oeffentliche Antwort. Vorbedingung
+// PRUEFT ZUERST, dass beide Zeilen ueberhaupt einen Hash tragen - sonst waere ein
+// undefined===undefined-Vergleich leer gruen (genau die Falle aus dem P10b-Pre-Mortem).
+test("E7-T8: der Token ist keine configHash-Achse (Boot-Hash identisch mit/ohne Token)", async () => {
   await mitServer({}, async (srvOhne) => {
-    const resOhne = await fetch(srvOhne.localUrl + "/healthz");
-    const { configHash: hashOhne } = await resOhne.json();
+    const matchOhne = srvOhne.stdout.match(/\[boot\] configHash=([a-f0-9]{64})/);
+    assert.ok(matchOhne, "Boot-Log ohne Token traegt keinen configHash");
     await mitServer({ OPENAI_APPS_CHALLENGE_TOKEN: TOKEN }, async (srvMit) => {
-      const resMit = await fetch(srvMit.localUrl + "/healthz");
-      const { configHash: hashMit } = await resMit.json();
-      assert.equal(hashOhne, hashMit);
+      const matchMit = srvMit.stdout.match(/\[boot\] configHash=([a-f0-9]{64})/);
+      assert.ok(matchMit, "Boot-Log mit Token traegt keinen configHash");
+      assert.equal(matchOhne[1], matchMit[1]);
     });
   });
 });

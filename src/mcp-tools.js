@@ -610,18 +610,23 @@ const AWAIT_CALL_EVENT_DESCRIPTION =
 // Kennzeichnung je Werkzeug, die ein Client OHNE Beschreibungs-Text lesen kann. Vier
 // Festlegungen, die die naechste Sitzung sonst zurueckdreht:
 // 1. OpenAI fuehrt readOnlyHint, destructiveHint und openWorldHint als Required (X-1/N-1);
-//    die MCP-Spec fuehrt zwei davon als optional. Bei Widerspruch gewinnt die
-//    OpenAI-Fassung - deshalb tragen ALLE zwoelf Werkzeuge alle drei Felder, auch die
-//    reinen Lese-Werkzeuge mit destructiveHint: false. idempotentHint bleibt optional
-//    (N-1 nennt es ausdruecklich so) und steht deshalb weiterhin nur dort, wo es etwas
-//    aussagt - an einem Nur-Lese-Werkzeug waere es ein bedeutungsloser Wert.
-// 2. openWorldHint entscheidet sich am ZUGRIFF des Werkzeugs, nicht am Thema seiner Daten
-//    (N-4 woertlich: Zugriff auf das oeffentliche Internet oder offene externe Entitaeten).
-//    get_call_status, get_transcript und await_call_event lesen (bzw. schreiben)
-//    ausschliesslich den tenant-lokalen Store (GET /api/calls/:id, routes/api-read.js:98),
-//    auch wenn sie ueber einen Anruf nach draussen berichten - deshalb false. place_call,
-//    answer_consult und cancel_call wirken auf die echte Leitung bzw. den Carrier -
-//    deshalb true.
+//    die MCP-Spec fuehrt ALLE Annotation-Felder als optional (SDK `ToolAnnotationsSchema`,
+//    jedes Feld `.optional()`). Bei Widerspruch gewinnt die OpenAI-Fassung - deshalb tragen
+//    ALLE zwoelf Werkzeuge alle drei Felder, auch die reinen Lese-Werkzeuge mit
+//    destructiveHint: false. idempotentHint bleibt optional (N-1 nennt es ausdruecklich so)
+//    und steht deshalb weiterhin nur dort, wo es etwas aussagt - an einem Nur-Lese-Werkzeug
+//    waere es ein bedeutungsloser Wert.
+// 2. openWorldHint folgt der Dreiteilung O1-O3 aus docs/OPENAI-TOOL-INVENTORY.md ("The
+//    openWorldHint rule") - DIESE Datei ist die verbindliche Fassung, hier nicht
+//    wiederholt (G5). Kurzfassung: O1 = das Werkzeug kontaktiert selbst eine externe
+//    Partei (place_call, cancel_call - waehlt bzw. beendet eine echte Telefonverbindung).
+//    O2 = was das Werkzeug schreibt, geht an einen externen Empfaenger weiter
+//    (answer_consult: die Antwort landet zwar im eigenen Store, wird aber waehrend des
+//    laufenden Anrufs an den Gespraechspartner ausgesprochen). O3 = alles andere, auch
+//    wenn es inhaltlich um einen Anruf nach draussen geht (get_call_status,
+//    get_transcript, await_call_event lesen/schreiben ausschliesslich den tenant-lokalen
+//    Store, GET /api/calls/:id, routes/api-read.js:98) - der Hint richtet sich nach dem
+//    ZUGRIFF des Werkzeugs, nicht nach dem Thema seiner Daten.
 // 3. answer_consult traegt destructiveHint: true, weil der eingespeiste Text am Telefon
 //    ausgesprochen wird (routes/api-calls.js:690) und damit nicht zurueckholbar ist -
 //    N-3 woertlich: "even ... through indirect side effects".

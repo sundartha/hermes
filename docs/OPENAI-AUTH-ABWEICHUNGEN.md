@@ -34,7 +34,7 @@ authentifizierter Request abgelehnt wird:
 - **Der interne REST-Hop der Tools** (`api()`, `src/mcp-tools.js:60-81`): liefert der Gateway
   dort 403 (z. B. `internalOnly`, `src/wiring/internal-only.js:24-28`, ebenfalls auditiert als
   `auth_failed`), kommt das beim Client als Tool-Ergebnis mit `isError: true` an
-  (`wrapHandler`, `src/mcp-tools.js:880-897`). Aufzaehlung der Faelle unter T-14.
+  (`wrapHandler`, `src/mcp-tools.js:885-902`). Aufzaehlung der Faelle unter T-14.
 
 ## 2. Status je ID
 
@@ -88,7 +88,7 @@ Gespraech einen Tool-Aufruf ausloesen, beobachten ob die Verknuepfungs-UI ersche
    **durch Re-Authentisierung loesbar** (Anmeldung mit einem Konto, dem ein Tenant zugeordnet
    ist). Ein Re-Auth-Ausloeser waere hier **kein toter Code**. Offener Befund (Abschnitt 7).
 2. **REST-Hop-403 als `isError`-Tool-Ergebnis** (`api()`, `src/mcp-tools.js:60-81`, gefangen in
-   `wrapHandler`, `src/mcp-tools.js:880-897`). Quellen eines 403 dort:
+   `wrapHandler`, `src/mcp-tools.js:885-902`). Quellen eines 403 dort:
    - `internalOnly` — Request nicht vertrauenswuerdig lokal (`src/wiring/internal-only.js:24-28`);
      ein interner Konfigurations-/Programmierfehler;
    - `requireTenant` REJECT (z. B. `src/routes/api-calls.js:691`) und das
@@ -263,7 +263,7 @@ reject an already-authenticated request: `rejectIfNoTenant` (`src/routes/mcp.js:
 at `:118`) returns HTTP 403 **without** a `WWW-Authenticate` challenge for a valid token that
 maps to no tenant (logged as `auth_failed`); and the tools' internal REST hop (`api()`,
 `src/mcp-tools.js:60-81`) can receive a 403, which reaches the client as a tool result with
-`isError: true` (`src/mcp-tools.js:880-897`).
+`isError: true` (`src/mcp-tools.js:885-902`).
 
 ### T-14 — in-conversation auth UI only via an error result carrying `_meta["mcp/www_authenticate"]`
 
