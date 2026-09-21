@@ -50,6 +50,17 @@ export const OWNER_TEST_FIRST_NAME = "Jonas";
 export const OWNER_TEST_LAST_NAME = "Beispiel";
 const OWNER_TEST_NAME = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 
+// P0-Baseline-Staffelung der registrierten Werkzeuge (tasks/openai-p0-entscheidungen.md):
+// Owner + beide Consult-Master-Schalter an -> alle zwoelf Werkzeuge; stdio ohne
+// Consult-Faehigkeit -> zehn; davon tragen genau zehn ein outputSchema
+// (cancel_call/list_action_items ausgenommen, nur text(...)). EINE Quelle statt
+// Kopien in test/openai-p2-tool-metadaten.test.js und
+// test/openai-p3-security-schemes.test.js (G5) - kommt ein 13. Werkzeug dazu oder
+// aendert sich die Consult-Faehigkeit, aendert sich die Zahl genau EINMAL.
+export const TOOL_COUNT_WITH_CONSULT = 12;
+export const TOOL_COUNT_WITHOUT_CONSULT = 10;
+export const TOOLS_WITH_OUTPUT_SCHEMA = 10;
+
 // ALLE config-relevanten Env-Variablen explizit setzen: dotenv fuellt nur
 // UNgesetzte Variablen, so kann eine lokale .env die Tests nicht beeinflussen.
 export const BASE_ENV = {
