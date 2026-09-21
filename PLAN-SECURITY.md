@@ -5151,3 +5151,63 @@ und Positiv-Kontrolle. In P7 bewusst NICHT geaendert.
 
 **Kein Launch-Blocker wird durch P7 geschlossen** — alle fuenf Punkte bleiben offen und
 sind Owner-/Anbieter-Entscheidungen, keine Code-Aenderungen dieser Phase.
+
+## OpenAI-P8 — Widget-CSP und Domain am Resource-Inhalt (2026-09-21)
+
+**Ergebnis der Messung (`tasks/openai-p8-spec.md` §0.3):** der ChatGPT-Adapter
+(`src/ui/adapters/chatgpt.js`, "skybridge") ist auf dem Draht TOT — fuer Claude wie fuer
+OpenAI. Er wird nur gewaehlt, wenn der `initialize`-POST eine Skybridge-Capability traegt,
+aber der stateless MCP-Transport (`sessionIdGenerator: undefined`) fuehrt diese Capability
+nie zum spaeteren `tools/list`- oder `resources/read`-POST mit — beide sehen immer den
+mcp-nativen Renderer (Test `P8-A`/`P8-B`, `test/openai-p8-widget-ui.test.js`, gegen den
+echten HTTP- und stdio-Draht). OpenAIs eigene, am 2026-09-21 gelesene Doku
+(developers.openai.com/apps-sdk/*) beschreibt zudem den MCP-Apps-Standard
+(`text/html;profile=mcp-app`), nicht mehr `text/html+skybridge`.
+
+**Was gesetzt wird:** zwei OpenAI-Alias-Schluessel am RESOURCE-INHALT (nicht am
+Tool-Deskriptor) des mcp-nativen Renderers, `src/ui/contract.js` (`openAiResourceMeta`),
+verdrahtet in `src/ui/adapters/mcp-native.js` (`buildResourceMeta`):
+- `openai/widgetCSP` = `{ connect_domains: [], resource_domains: [] }` — aus der
+  bestehenden `UI_CSP`-Konstante ABGELEITET (eine Quelle), niemals weiter als die
+  mcp-native CSP.
+- `openai/widgetDomain` = `config.server.publicUrl`; entfaellt bei leerer `publicUrl`
+  (fail-safe, Test `P8-G`) statt einen falschen Origin zu behaupten.
+
+Grund fuer den Resource-Inhalt statt des Tool-Deskriptors: OpenAIs Referenz
+(`apps-sdk/reference`) fuehrt `openai/widgetCSP`/`openai/widgetDomain` explizit unter
+"Resource contents", nicht "Tool descriptor" — am Tool-Deskriptor (`uiSubmissionMeta`,
+bereits seit E7 vorhanden) liest OpenAI sie nachweislich nicht (M-2, `p8-capture.mjs`).
+
+**Was bewusst NICHT gesetzt wird:**
+- **Standard-Schluessel `_meta.ui.csp`/`_meta.ui.domain` am Resource-Inhalt.** Auch Claude
+  liest den Resource-Inhalt; `domain` ist laut MCP-Apps-Spezifikation host-abhaengig
+  (Claudes eigenes Format: `<hash>.claudemcpcontent.com`). Ob Claude einen fremden Origin
+  (`https://app.sundartha.com`) dort ignoriert, ablehnt oder das Widget deaktiviert, ist
+  ohne Live-Probe **UNKNOWN** → **O-P8-2**.
+- **`openai/widgetCSP.redirect_domains`.** Nur noetig fuer `window.openai.openExternal(...)`;
+  das Widget-HTML enthaelt weder `window.openai` noch `href`-Ziele (T-P3-AC5/AC7). Ein
+  leeres `redirect_domains` waere eine Falschangabe-nahe Angabe ohne Zweck.
+- **ChatGPT-Adapter-Aenderungen.** Toter Code (s.o.); jede Aenderung dort waere wirkungslos.
+  Rueckbau ist ein Owner-Auftrag (`registry.js`) und reisst Regressionstests mit (T-P3-AC2..
+  AC7) → **O-P8-1**.
+
+**Byte-Beweis (Regel 1 der Phase — nichts aendert sich fuer heutige Claude-Nutzer):**
+`tools/list` und `resources/list` sind vor/nach der Phase byte-identisch
+(`JSON.stringify`-Gleichheit, master `f769841`, sha256 `8c22f000…17daf2b`); `resources/read`
+ist byte-identisch bis auf genau das neue `_meta`-Objekt (Anhang A/B der Spec, lokal
+reproduziert). Test `P8-F` pinnt die Tool-Deskriptor- und `resources/list`-Schluesselmenge
+zusaetzlich als Regressionsschutz.
+
+**CSP-Leerbefund erneut geprueft (Schritt 7):** je Widget-HTML (`call`, `my-number`,
+`calls`, `calendar`, `agent-status`) 0 externe URLs und kein `fetch`/`XMLHttpRequest`/
+`WebSocket`/`EventSource`/`sendBeacon`/`importScripts`/`@font-face`/`<iframe>` — die leeren
+CSP-Listen bleiben zutreffend.
+
+**Offene Owner-Punkte:**
+- **O-P8-1:** ChatGPT-Adapter (toter Code) zurueckbauen — ja/nein.
+- **O-P8-2:** Standard-Schluessel `_meta.ui.csp`/`_meta.ui.domain` am Resource-Inhalt setzen
+  — nur nach einer Live-Probe mit einem echten Claude-Host (rendert das Widget mit einem
+  fremden `_meta.ui.domain` weiter?).
+- **O-P8-3:** Live-Probe in ChatGPT Developer Mode (haengt am selben Termin wie OW-4):
+  rendert die Karte, greifen die Alias-Schluessel, akzeptiert OpenAIs Review-Check die
+  Domain als vorhanden?
