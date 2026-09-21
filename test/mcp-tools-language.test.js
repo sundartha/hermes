@@ -281,7 +281,7 @@ test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
         typeof texts[key] === "string" && texts[key].length > 0,
         `${key} fehlt fuer ${language}`,
       );
-    for (const key of ["number", "owner", "voiceEngine", "model", "calls", "permissions", "planUsageUnknown"])
+    for (const key of ["number", "owner", "calls", "permissions", "planUsageUnknown"])
       assert.ok(texts.agentStatus?.[key], `agentStatus.${key} fehlt fuer ${language}`);
     for (const key of ["planUsage"])
       assert.equal(
@@ -397,11 +397,12 @@ test("get_transcript bei laufendem Anruf: Hinweistext folgt der Tenant-Sprache (
 // ==================== T16 (P15/T3a) ====================
 // Der get_agent_status-Textblock traegt die Feldnamen der Tenant-Sprache. Der DE-Block ist
 // VOLLSTAENDIG byte-identisch zum Bestand (voller String-Vergleich, nicht nur Stichprobe).
+// P5a/O-13 Teil 1: Voice-Engine/Modell sind seit diesem Commit ABSICHTLICH nicht mehr Teil
+// des Blocks (interne Konfigurationswerte, keine Session-Selbstauskunft) - der Pin ist hier
+// bewusst nachgezogen, kein Testabbau.
 const AGENT_STATUS_TEXT_DE =
   "Agent-Nummer: +18643028341\n" +
   "Besitzer: Antonio\n" +
-  "Voice-Engine: budget\n" +
-  "Modell: claude-haiku\n" +
   "Calls bisher: 3\n" +
   "Monatsnutzung: 40 % des Minuten-Kontingents\n" +
   "Berechtigungen: Summaries=true, PersoenlicheDaten=false, Bankdaten=false";

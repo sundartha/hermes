@@ -767,23 +767,13 @@ const RICH_STATE = {
   calls: [{ id: "c1", from: "+49170000000" }], // fremder state, nicht durchreichen
 };
 const RESOURCE_URI_AGENT = uiResourceUri(WIDGET_AGENT_STATUS); // ui://hermes/agent-status
-const AGENT_KEYS = [
-  "calls",
-  "model",
-  "number",
-  "owner",
-  "permissions",
-  "planUsagePercent",
-  "voiceEngine",
-];
+const AGENT_KEYS = ["calls", "number", "owner", "permissions", "planUsagePercent"];
 // Pin bleibt WOERTLICH, wird nur explizit an seine Sprache gebunden (P13 ENTSCHAERFT 1:
 // mitgezogen, nicht "passend gemacht").
 const PERMISSIONS_STR_DE = "Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
 const agentStatusOutput = z.object({
   number: z.string().nullable(),
   owner: z.string().nullable(),
-  voiceEngine: z.string(),
-  model: z.string(),
   calls: z.number(),
   planUsagePercent: z.number().nullable(),
   permissions: z.string(),
@@ -815,6 +805,22 @@ test("T-W3-AC1: Stufe 0 additiv - Backward-Compat-Text + schema-validiertes stru
       () => agentStatusOutput.parse(result.structuredContent),
       "structuredContent validiert gegen outputSchema",
     );
+
+    // O-13 Teil 1: voiceEngine/model sind interne Konfigurationswerte, keine Session-
+    // Selbstauskunft an den Tenant - sie duerfen weder ueber den Schluessel noch ueber
+    // den Fixture-WERT durchsickern. RICH_STATE traegt beide Felder UNVERAENDERT
+    // (Kanarienvogel wie secretAgentField) - faellt dieser Test rot, hat die Whitelist
+    // versagt.
+    assert.ok(
+      !Object.hasOwn(result.structuredContent, "voiceEngine"),
+      "structuredContent traegt kein voiceEngine mehr",
+    );
+    assert.ok(
+      !Object.hasOwn(result.structuredContent, "model"),
+      "structuredContent traegt kein model mehr",
+    );
+    assert.ok(!txt.includes("budget"), "Textblock traegt den voiceEngine-Fixture-Wert nicht");
+    assert.ok(!txt.includes("claude-haiku"), "Textblock traegt den model-Fixture-Wert nicht");
   });
 });
 
