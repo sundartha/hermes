@@ -65,13 +65,22 @@ export const capabilityDeclaresChatgptUi = makeCapabilityDetector(CHATGPT_UI_MIM
 
 // ---- Einreichungs-Pflichtfelder, TOOL-DESKRIPTOR-Haelfte (T-30/T-31) --------------
 // Diese Felder (uiSubmissionMeta unten) liegen am Tool-Deskriptor (_meta.ui neben
-// resourceUri) - GENAU DORT liest OpenAI CSP/Domain NICHT (gemessen, P8, §0.3 M-2:
-// developers.openai.com/apps-sdk/reference fuehrt "openai/widgetCSP"/"openai/widgetDomain"
-// unter "Resource contents", nicht "Tool descriptor"). Fuer OpenAI wirksam sind die
+// resourceUri). RICHTIGGESTELLT (Pruefer-Befund Runde 1, 2026-09-21 - der vorherige
+// Kommentar behauptete faelschlich, dies sei "der MCP-Apps-Standardort fuer
+// Claude/Copilot/Goose"): es gibt dort ueberhaupt KEINEN Standardort fuer csp/domain,
+// fuer KEINEN MCP-Apps-Host. Die Spezifikation selbst verbietet das Feld an dieser
+// Stelle (@modelcontextprotocol/ext-apps 2.0.0, dist/src/spec.types.d.ts,
+// McpUiToolMeta.csp/.permissions sind als `never` getypt): "csp belongs on the UI
+// resource (see McpUiResourceMeta), not the tool. Hosts read it from the resources/read
+// content item (with resources/list entry as fallback) and ignore it here." Das ist eine
+// Aussage ueber ALLE MCP-Apps-Hosts, nicht nur OpenAI. Wirksam sind ausschliesslich die
 // Alias-Schluessel am RESOURCE-INHALT (openAiResourceMeta weiter unten, ueber
-// buildResourceMeta in makeUiRenderer). Diese Tool-Deskriptor-Haelfte bleibt trotzdem
-// stehen: sie ist der MCP-Apps-Standardort fuer Claude/Copilot/Goose, und jede Aenderung
-// hier veraendert Claudes tools/list ohne Not (Regel 1, P8-Spec §5.1).
+// buildResourceMeta in makeUiRenderer) - und die decken bisher nur den OpenAI-Legacy-Pfad
+// ab, s. Kommentar dort. Fuer Claude/Copilot/Goose fehlt eine wirksame CSP/Domain am
+// Resource-Inhalt WEITERHIN (O-P8-2 unten ist NICHT erledigt). Diese Tool-Deskriptor-
+// Haelfte bleibt trotzdem stehen: ohne Wirkung fuer jeden MCP-Apps-Host, nur aus
+// Byte-Stabilitaetsgruenden - ihr Entfernen wuerde Claudes tools/list ohne Not
+// veraendern (Regel 1, P8-Spec §5.1).
 // T-30: die CSP muss EXAKT die Domains nennen, von denen die Komponente laedt. Gemessen
 // ueber alle 5 Widget-Quellen und alle injizierten Bausteine (12 Dateien): sie laden von
 // NIRGENDWO - 0 Treffer fuer fetch/XHR/WebSocket/EventSource/sendBeacon/importScripts,
@@ -98,15 +107,42 @@ export function uiSubmissionMeta() {
   return domain ? { csp: UI_CSP, domain } : { csp: UI_CSP };
 }
 
-// P8 (T-30/T-31, mcp-nativer Pfad): OpenAI liest CSP/Domain NICHT am Tool-Deskriptor
-// (uiSubmissionMeta oben), sondern ausschliesslich am Resource-Inhalt von
-// resources/read - dort steht heute kein _meta (gemessen, tasks/openai-p8-spec.md
-// §0.3 M-2). developers.openai.com/apps-sdk/reference nennt "openai/widgetCSP" und
-// "openai/widgetDomain" ausdruecklich als Aliase, die ChatGPT honoriert; Standard-
-// Schluessel (_meta.ui.csp/.domain) werden hier BEWUSST NICHT gesetzt, weil auch
-// Claude den Resource-Inhalt liest und "domain" laut MCP-Apps-Spezifikation
-// host-abhaengig ist (Claude: <hash>.claudemcpcontent.com) - ob Claude einen fremden
-// Origin dort ignoriert oder ablehnt, ist ohne Live-Probe UNKNOWN (O-P8-2).
+// P8 (T-30/T-31, mcp-nativer Pfad): CSP/Domain wirken fuer KEINEN MCP-Apps-Host am
+// Tool-Deskriptor (uiSubmissionMeta oben, s. Korrektur beim UI_META_KEY-Kommentar oben) -
+// wirksam ist ausschliesslich der Resource-Inhalt von resources/read. Dass der Inhalt VOR
+// dieser Phase kein _meta trug, ist GEMESSEN (tasks/openai-p8-spec.md §0.3 M-2, unser
+// eigener master-Capture, sha256 8c22f000...17daf2b) - das misst nur, was UNSER Server
+// ausgibt, nicht, was OpenAI liest. Dass OpenAI/ChatGPT am Resource-Inhalt
+// "openai/widgetCSP"/"openai/widgetDomain" als Alias-Schluessel honoriert, ist GELESEN,
+// nicht gemessen: developers.openai.com/apps-sdk/reference (gelesen 2026-09-21) fuehrt
+// beide unter "Resource contents" und sagt woertlich:
+//   - "_meta['openai/widgetCSP'] | Legacy ChatGPT compatibility key for widget CSP
+//     metadata. Standard CSP fields are superseded by _meta.ui.csp, but
+//     redirect_domains is still required for trusted openExternal destinations."
+//   - "The standard _meta.ui.csp object is generally preferred for new UI ..."
+//   - "_meta['openai/widgetDomain'] | OpenAI-specific compatibility alias for
+//     _meta.ui.domain in ChatGPT."
+// Diese Phase setzt also wissentlich NUR den von OpenAI selbst als Legacy bezeichneten
+// Alias-Pfad, NICHT den von OpenAI selbst als "generally preferred" bezeichneten
+// Standard-Pfad (_meta.ui.csp/.domain). Grund: Standard-Schluessel am Resource-Inhalt
+// erreichen ueber denselben Renderer/denselben Inhalt auch Claude (registry.js: der
+// ChatGPT-Adapter ist auf dem Draht tot, mcpNativeRenderer bedient ALLE Clients), und
+// "domain" ist dort laut MCP-Apps-Spezifikation host-abhaengig (Claude:
+// <hash>.claudemcpcontent.com) - ob Claude einen fremden Origin dort ignoriert oder
+// ablehnt, ist ohne Live-Probe UNKNOWN (O-P8-2, NICHT erledigt).
+//
+// Rule-1-Beleg fuer den Alias-Pfad, der JETZT unconditional an jeden mcp-nativen Client
+// geht (auch heutige Claude-Nutzer, s.o.): dass ein zusaetzliches _meta-Feld am
+// Resource-Inhalt nicht schon auf Schema-/Protokollebene verworfen wird, ist am
+// tatsaechlichen SDK-Vertrag nachpruefbar, nicht nur behauptet -
+// node_modules/@modelcontextprotocol/sdk/dist/esm/types.d.ts,
+// ResourceContentsSchema/TextResourceContentsSchema: `_meta: z.ZodOptional<z.ZodRecord
+// <z.ZodString, z.ZodUnknown>>` - ein offenes Schluessel-Wert-Objekt, keine geschlossene
+// Feldliste, die zusaetzliche Schluessel abweisen wuerde. Das deckt NUR "wird nicht als
+// Schema-Fehler verworfen" - NICHT "der Claude-Host rendert das Widget trotzdem
+// unveraendert weiter". Fuer Letzteres bleibt die Live-Probe gegen einen echten
+// Claude-Host offen (O-P8-2). Diese Zeile ist damit ein staerker belegter, aber
+// weiterhin AUSDRUECKLICH OFFENER Punkt - keine Erledigung.
 export const OPENAI_WIDGET_CSP_KEY = "openai/widgetCSP";
 export const OPENAI_WIDGET_DOMAIN_KEY = "openai/widgetDomain";
 

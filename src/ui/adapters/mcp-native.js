@@ -16,14 +16,24 @@ export { WIDGET_AGENT_STATUS, WIDGET_CALL };
 export const mcpNativeRenderer = makeUiRenderer({
   mimeType: UI_MIME,
   metaKey: UI_META_KEY,
-  // Tool-Deskriptor-Haelfte von T-30/T-31 (Standardort fuer Claude/Copilot/Goose; OpenAI
-  // liest sie NICHT, s. contract.js beim CHATGPT_UI_MIME-Kommentar und bei
-  // uiSubmissionMeta). Zur Aufrufzeit ausgewertet (publicUrl kann pro Prozess/Test
-  // variieren), nicht zur Modul-Ladezeit.
+  // Tool-Deskriptor-Haelfte von T-30/T-31. RICHTIGGESTELLT (Pruefer-Befund Runde 1,
+  // 2026-09-21): das ist KEIN Standardort fuer Claude/Copilot/Goose - kein MCP-Apps-Host
+  // liest csp/domain an dieser Stelle (spec.types.d.ts McpUiToolMeta.csp = `never`, s.
+  // contract.js beim UI_META_KEY-Kommentar). Bleibt trotzdem stehen: ohne Wirkung fuer
+  // jeden Host, nur aus Byte-Stabilitaetsgruenden (Regel 1). Zur Aufrufzeit ausgewertet
+  // (publicUrl kann pro Prozess/Test variieren), nicht zur Modul-Ladezeit.
   buildMeta: (uri) => ({ resourceUri: uri, ...uiSubmissionMeta() }),
-  // P8 (T-30/T-31, wirksame Haelfte fuer OpenAI): openai/widgetCSP + openai/widgetDomain
-  // am RESOURCE-Inhalt (resources/read), nicht am Tool-Deskriptor - dort liest OpenAI sie
-  // tatsaechlich (contract.js openAiResourceMeta). Der ChatGPT-Adapter uebergibt dieses
-  // Feld NICHT (bleibt unveraendert, Test P8-H).
+  // P8 (T-30/T-31, bislang einzige wirksame Haelfte - und die deckt nur den von OpenAI
+  // selbst als "Legacy" bezeichneten Alias-Pfad ab, s. contract.js openAiResourceMeta
+  // fuer die woertlichen Zitate): openai/widgetCSP + openai/widgetDomain am
+  // RESOURCE-Inhalt (resources/read), nicht am Tool-Deskriptor. Weil der ChatGPT-Adapter
+  // auf dem Draht tot ist (registry.js, M-1), ist DIESER Renderer hier der einzige, den
+  // JEDER Client sieht - auch ein heutiger Claude-Aufruf bekommt dieses zusaetzliche
+  // _meta-Feld (Byte-Beweis PLAN-SECURITY.md OpenAI-P8: resources/read ist NICHT mehr
+  // byte-identisch, nur tools/list und resources/list sind es noch). Ob ein
+  // MCP-Apps-Client dieses zusaetzliche Feld schadlos ignoriert, ist schema-seitig belegt
+  // (contract.js, SDK-ResourceContentsSchema), verhaltensseitig aber ohne Live-Probe
+  // gegen einen echten Claude-Host weiterhin UNKNOWN (O-P8-2, NICHT erledigt). Der
+  // ChatGPT-Adapter uebergibt dieses Feld NICHT (bleibt unveraendert, Test P8-H).
   buildResourceMeta: openAiResourceMeta,
 });
