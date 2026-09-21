@@ -8,17 +8,26 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools } from "./mcp-tools.js";
 import { config, resolveGatewayUrl } from "./config.js";
-import { uiServerExtension } from "./ui/contract.js";
-import { HERMES_SERVER_INFO } from "./mcp-server-info.js";
+import { HERMES_SERVER_INFO, mcpServerOptions } from "./mcp-server-info.js";
 
 // Rich-UI auch ueber stdio (Claude Desktop). Anders als der HTTP-Connector rendert
 // stdio die Widgets zuverlaessig: die HTTP-AppBridge-Doppel-Session ist Claude-seitig
 // kaputt (anthropics/claude-ai-mcp#149), stdio teilt EINE Pipe. Server deklariert die
 // io.modelcontextprotocol/ui-Extension + die Tools tragen das Widget-_meta (uiHost),
 // gegated am Master-Schalter MCP_UI_ENABLED (aus -> byte-identisch).
-const serverOptions = config.tenancy.mcpUiEnabled
-  ? { capabilities: { extensions: uiServerExtension() } }
-  : undefined;
+//
+// T-21: derselbe Options-Bauer wie der HTTP-Connector (routes/mcp.js) - sonst traegt der
+// initialize-Response ueber stdio strukturell NIE instructions. mcpServerOptions() nimmt
+// ausschliesslich zwei Booleans und beruehrt KEINEN Store (wichtig: dieser Prozess darf
+// keinen zweiten pg-Pool oeffnen, s. Kommentar unten).
+// Der Consult-Block bleibt aus, weil dieser Prozess registerTools() ohne consultAllowed
+// aufruft (:26-28, Default false) - await_call_event/answer_consult existieren hier gar
+// nicht, und eine Instruktion auf ein nicht registriertes Werkzeug waere eine Falschangabe.
+const STDIO_CONSULT_LOOP = false;
+const serverOptions = mcpServerOptions({
+  uiEnabled: config.tenancy.mcpUiEnabled,
+  consultLoop: STDIO_CONSULT_LOOP,
+});
 const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
 // P12: KEIN language-Feld - dieser Prozess hat keinen Store (ein Store-Import hier
 // oeffnete einen zweiten pg-Pool/JSON-Leser). Ohne Feld faellt localeFor() auf den

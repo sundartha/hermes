@@ -70,12 +70,39 @@ export const HERMES_SERVER_INFO = {
   ],
 };
 
-// AL-P13: Server-Instruktionen fuer den MCP-Host. ACHTUNG: `instructions` ist ein Feld
-// von ServerOptions, NICHT von Implementation - in HERMES_SERVER_INFO gesetzt wuerde es
-// still verworfen. Deshalb liegt hier NUR der Text plus der Options-Bauer; eingesetzt
-// wird er in routes/mcp.js.
+// AL-P13/T-21: Server-Instruktionen fuer den MCP-Host. ACHTUNG: `instructions` ist ein
+// Feld von ServerOptions, NICHT von Implementation - in HERMES_SERVER_INFO gesetzt
+// wuerde es still verworfen. Deshalb liegt hier NUR der Text plus der Options-Bauer;
+// eingesetzt wird er in routes/mcp.js UND (T-21/DP-1) in mcp-server.js (stdio).
 // EINSPRACHIG ENGLISCH (O14): nur das Client-Modell liest ihn, nie der Tenant.
-export const MCP_CONSULT_INSTRUCTIONS =
+//
+// T-21: instructions gelten jetzt IMMER, auch ohne Consult-Freigabe - deshalb zwei
+// Bausteine statt eines Textes. MCP_BASE_INSTRUCTIONS nennt nur Werkzeuge, die JEDER
+// Tenant registriert bekommt (await_call_event/answer_consult tun das nicht - die
+// bleiben daher ungenannt und stecken nur im Consult-Block unten).
+//
+// OUTBOUND-E3a: ohne den ersten Satz sieht das Modell ab E3a ein Token wie
+// "not-placed:invite-403-D51", weiss nichts damit anzufangen und wiederholt den Anruf -
+// jedes Mal mit echten Anbieterkosten. Ohne Consult-Werkzeug liefert get_call_status
+// dasselbe Feld (CALL_STATUS_OUTPUT), deshalb "a call" statt "await_call_event".
+//
+// Review-Runde 2 (P4): ohne Namensnennung landete das Modell bei get_transcript's eigener
+// Beschreibung ("call this only once status=completed") und rief das Werkzeug fuer einen
+// NICHT platzierten Anruf (status=failed, kein Consult noetig) gar nicht erst auf -
+// result_summary blieb unerreichbar, obwohl get_transcript es fuer genau diesen Fall
+// liefert (pickTranscript/callFailedSummary). get_transcript IST fuer jeden Tenant
+// registriert (kein Consult-Gate) - die Nennung hier ist deshalb sicher, anders als bei
+// await_call_event/answer_consult oben.
+export const MCP_BASE_INSTRUCTIONS =
+  `If a call reports a failure_reason starting with "${NOT_PLACED}", the call could not ` +
+  "be placed because of a problem on our side. Do NOT retry the call: call get_transcript " +
+  "for that call_id - it works for a failed call, not only a completed one - and tell the " +
+  "user what failed, using its result_summary text as it is. " +
+  "Never invent facts about the principal or the call: if you do not know something, say so.";
+
+// Consult-Block bleibt modul-intern (kein dritter Export, keine dritte Wahrheit) - er
+// gilt NUR, wenn der Tenant await_call_event/answer_consult registriert bekommt.
+const CONSULT_BLOCK =
   "While a call placed with place_call is running, keep calling await_call_event with " +
   "that call_id, again and again, until it returns event=\"done\". " +
   "When it returns event=\"consult\", " +
@@ -88,12 +115,13 @@ export const MCP_CONSULT_INSTRUCTIONS =
   "nobody can answer and lets the agent move on. Then answer the questions briefly and " +
   "factually with " +
   // GQ-B2: Der Owner ist waehrend des Anrufs ABWESEND (Normalfall). Der Wert dieses Kanals
-  // liegt in den EIGENEN Quellen des auftraggebenden Assistenten (Kalender, Mail, Dateien,
-  // Chat-Kontext), nicht im Durchreichen an den Menschen - deshalb steht der eigene Weg
-  // zuerst und die Nutzer-Rueckfrage nur noch unter der Bedingung echter Anwesenheit.
-  "answer_consult - answer from your own tools and context first (calendar, mail, files, " +
-  "this chat); only ask the user when they are actually present right now, and never " +
-  "invent an answer. " +
+  // liegt in den EIGENEN Quellen des auftraggebenden Assistenten, nicht im Durchreichen
+  // an den Menschen - deshalb steht der eigene Weg zuerst und die Nutzer-Rueckfrage nur
+  // noch unter der Bedingung echter Anwesenheit. O-27: die Aufzaehlung der Quellen
+  // (calendar, mail, files, chat) entfaellt - sie nennt fremde Werkzeugklassen, die der
+  // Host nicht kennen muss; die WIRKUNG (eigene Quellen zuerst) bleibt.
+  "answer_consult - answer from your own tools and context first; only ask the user when " +
+  "they are actually present right now, and never invent an answer. " +
   "Staying in that loop pays off: the final \"done\" answer carries the summary of the " +
   "call and whether the objective was achieved. " +
   // GQ-B1: Die Rueckfrage hat eine Wanduhr-Frist (CONSULT_OPEN_MS) - eine Antwort nach einer
@@ -104,20 +132,22 @@ export const MCP_CONSULT_INSTRUCTIONS =
   // ausrichten, dass der Auftraggeber sich meldet.
   "The agent is on the phone while it waits, so answer within seconds - if you cannot " +
   "find the answer that fast, say with answer_consult that you do not know instead of " +
-  "waiting, so the agent can tell the other party that the principal will get back on it. " +
-  // OUTBOUND-E3a: ohne diesen Satz sieht das Modell ab E3a ein Token wie
-  // "not-placed:invite-403-D51", weiss nichts damit anzufangen und wiederholt den Anruf -
-  // jedes Mal mit echten Anbieterkosten.
-  `If await_call_event returns a failure_reason starting with "${NOT_PLACED}", the call ` +
-  "could not be placed because of a problem on our side. Do NOT retry the call: tell the " +
-  "user what failed, using the result_summary text as it is.";
+  "waiting, so the agent can tell the other party that the principal will get back on it.";
 
-// serverOptions traegt inzwischen ZWEI Dinge (UI-Capabilities + instructions). Byte-
-// identisch zum Bestand, solange beide Schalter aus sind: undefined. Nur so bleibt das
-// Verhalten bei ausgeschaltetem Flag unveraendert.
+// AL-P13: der Text, der im Consult-Fall ausgeliefert wird. Name/Bedeutung bleiben (T-21
+// W-7): die Konstante heisst nach dem FALL, in dem sie ausgeliefert wird, nicht nach
+// ihrem letzten Absatz - sonst brechen die Pruefkommandos aus dem Plan und die
+// Bestandspins auf dieser Konstante (test/mcp-fehlergrund-rueckweg.test.js,
+// test/gq-b1-briefing-openness.test.js). Komposition statt Ersatz: der Geld-Satz und
+// der Nicht-Erfinden-Satz gelten AUCH im Consult-Fall.
+export const MCP_CONSULT_INSTRUCTIONS = MCP_BASE_INSTRUCTIONS + " " + CONSULT_BLOCK;
+
+// serverOptions traegt inzwischen ZWEI Dinge (UI-Capabilities + instructions).
+// T-21: instructions sind IMMER gesetzt - der Basis-Block gilt auch fuer einen Tenant
+// ohne Consult-Freigabe. Der Rueckgabewert ist deshalb nie mehr undefined.
 export function mcpServerOptions({ uiEnabled, consultLoop }) {
   const options = {};
   if (uiEnabled) options.capabilities = { extensions: uiServerExtension() };
-  if (consultLoop) options.instructions = MCP_CONSULT_INSTRUCTIONS;
-  return Object.keys(options).length ? options : undefined;
+  options.instructions = consultLoop ? MCP_CONSULT_INSTRUCTIONS : MCP_BASE_INSTRUCTIONS;
+  return options;
 }

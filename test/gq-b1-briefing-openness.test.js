@@ -150,9 +150,12 @@ test("GQ-B1-04: die place_call-Beschreibungen bleiben unter dem Zeichen-Deckel",
 });
 
 test("GQ-B1-05: die Server-Instructions nennen die Frist, ohne eine Sekundenzahl zu nennen", () => {
+  // T-21: der Satz bleibt erhalten, nur seine POSITION aendert sich - der Geld-Satz
+  // (MCP_BASE_INSTRUCTIONS) muss nach vorn (Wichtigstes in die ersten 512 Zeichen).
+  // Ein startsWith-Pin und T-21 schliessen einander aus.
   assert.ok(
-    consultInstructions.startsWith("While a call placed with place_call is running"),
-    "der Bestandstext bleibt byte-identischer Prefix",
+    consultInstructions.includes("While a call placed with place_call is running"),
+    "der Bestandssatz bleibt erhalten",
   );
   assert.match(consultInstructions, /Staying in that loop pays off/, "Bestandssatz erhalten");
   assert.match(consultInstructions, /answer within seconds/i, "nennt die Dringlichkeit");
