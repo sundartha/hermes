@@ -382,8 +382,6 @@ function pickAgentStatus(s, texts) {
   return {
     number: s.agent.number ?? null,
     owner: s.agent.owner ?? null,
-    voiceEngine: s.agent.voiceEngine,
-    model: s.agent.model,
     calls: s.usage.calls,
     // KS-P8/E4: KEIN Kostenbetrag mehr im Chat - nur die Monatsnutzung in Prozent.
     // null = kein Kontingent hinterlegt (Schluessel bleibt erhalten, Schema nullable).
@@ -398,8 +396,6 @@ function pickAgentStatus(s, texts) {
 const AGENT_STATUS_OUTPUT = {
   number: z.string().nullable(),
   owner: z.string().nullable(),
-  voiceEngine: z.string(),
-  model: z.string(),
   calls: z.number(),
   planUsagePercent: z.number().nullable(),
   permissions: z.string(),
@@ -1480,7 +1476,7 @@ export function registerTools(
     "get_agent_status",
     {
       description:
-        "Status of the phone agent: phone number, voice engine, model, monthly usage, permissions.",
+        "Status of the phone agent: phone number, monthly usage, permissions.",
       annotations: TOOL_ANNOTATIONS.get_agent_status,
       inputSchema: {},
       outputSchema: AGENT_STATUS_OUTPUT,
@@ -1497,7 +1493,6 @@ export function registerTools(
             type: "text",
             text:
               `${A.number}: ${data.number}\n${A.owner}: ${data.owner}\n` +
-              `${A.voiceEngine}: ${data.voiceEngine}\n${A.model}: ${data.model}\n` +
               `${A.calls}: ${data.calls}\n` +
               `${planUsageLine(data.planUsagePercent, A)}\n` +
               `${A.permissions}: ${data.permissions}`,
