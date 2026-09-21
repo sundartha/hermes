@@ -44,11 +44,13 @@ export function uiServerExtension() {
 }
 
 // ChatGPT Apps SDK (OpenAI "skybridge"). Zweiter Host-Adapter neben MCP-nativ - AUF DEM
-// DRAHT TOT, fuer Claude wie fuer OpenAI (P8, tasks/openai-p8-spec.md §0.3 M-1): der
-// Detektor unten greift nur auf dem initialize-POST, dessen Response weder Tool-
-// Deskriptoren noch Resource-Inhalte traegt; der stateless Transport (sessionIdGenerator
-// =undefined) fuehrt die dort deklarierten Capabilities nicht zum spaeteren tools/list-
-// oder resources/read-POST mit. OpenAIs eigene, aktuell gelesene Doku
+// DRAHT PRAKTISCH TOT, fuer Claude wie fuer OpenAI (P8, tasks/openai-p8-spec.md §0.3
+// M-1): der Detektor unten greift auf JEDEM Request, dessen params.capabilities die
+// Skybridge-Capability traegt - auch auf tools/list/resources/read selbst, wenn sie
+// dort steht. Nur bringt das nichts, weil der stateless Transport (sessionIdGenerator
+// =undefined) die im initialize-POST deklarierten Capabilities nicht zum spaeteren
+// tools/list- oder resources/read-POST mitfuehrt und kein standardkonformer Client sie
+// ausserhalb des initialize sendet. OpenAIs eigene, aktuell gelesene Doku
 // (developers.openai.com/apps-sdk/*) nennt "text/html+skybridge" nicht mehr und
 // beschreibt statt dessen den MCP-Apps-Standard (mimeType unten bei UI_MIME). Test P8-A
 // pinnt "Skybridge-initialize -> mcp-nativer Pfad auf tools/list". Rueckbau ist trotzdem

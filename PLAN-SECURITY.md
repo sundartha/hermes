@@ -5155,12 +5155,15 @@ sind Owner-/Anbieter-Entscheidungen, keine Code-Aenderungen dieser Phase.
 ## OpenAI-P8 — Widget-UI: ChatGPT-Adapter auf Paritaet (2026-09-21, Endstand nach Runde 2)
 
 **Ergebnis der Messung (`tasks/openai-p8-spec.md` §0.3):** der ChatGPT-Adapter
-(`src/ui/adapters/chatgpt.js`, "skybridge") ist auf dem Draht TOT — fuer Claude wie fuer
-OpenAI. Er wird nur gewaehlt, wenn der `initialize`-POST eine Skybridge-Capability traegt,
-aber der stateless MCP-Transport (`sessionIdGenerator: undefined`) fuehrt diese Capability
-nie zum spaeteren `tools/list`- oder `resources/read`-POST mit — beide sehen immer den
-mcp-nativen Renderer (Test `P8-A`/`P8-B`, `test/openai-p8-widget-ui.test.js`, gegen den
-echten HTTP- und stdio-Draht). OpenAIs eigene, am 2026-09-21 gelesene Doku
+(`src/ui/adapters/chatgpt.js`, "skybridge") ist auf dem Draht praktisch TOT — fuer Claude
+wie fuer OpenAI. Der Server liest die Skybridge-Capability bei jedem Request neu (`src/
+routes/mcp.js`); nur kommt sie dort nie an, weil der stateless MCP-Transport
+(`sessionIdGenerator: undefined`) die im `initialize`-POST deklarierte Capability nicht
+zum spaeteren `tools/list`- oder `resources/read`-POST mitfuehrt und kein
+standardkonformer Client (Claude, ChatGPT) Capabilities ausserhalb des `initialize`
+sendet — beide Requests sehen deshalb in der Praxis immer den mcp-nativen Renderer (Test
+`P8-A`/`P8-B`, `test/openai-p8-widget-ui.test.js`, gegen den echten HTTP- und
+stdio-Draht). OpenAIs eigene, am 2026-09-21 gelesene Doku
 (developers.openai.com/apps-sdk/*) beschreibt zudem den MCP-Apps-Standard
 (`text/html;profile=mcp-app`), nicht mehr `text/html+skybridge`.
 
