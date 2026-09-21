@@ -161,6 +161,10 @@ function callOutcomeView(call) {
 // nach aussen (structuredContent + Text + Widget). Whitelist, keine Blacklist. Sitzt
 // NACH der Tenant-Aufloesung (Gateway) und VOR jeder Sicht - eine einzige Stelle.
 // Kein Secret/Identitaet/Audio/Cross-Tenant-Feld passiert diese Funktion.
+// Praezisierung: diese Aussage geht ueber die FELDER dieser Funktion, nicht ueber den
+// INHALT jedes Feldes. Eines der Felder, last_transcript_lines, traegt woertliche
+// Zeilen der Gegenseite (Rohtext, den der Angerufene gesagt hat) unveraendert durch -
+// bewusst offener Befund, noch nicht behoben.
 function pickCallStatus(callId, c, texts) {
   return {
     call_id: callId,
