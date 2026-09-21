@@ -4990,7 +4990,10 @@ git diff master...phase/openai-p6-auth-challenge -U0 -- src/auth.js \
   | grep -E '^[-+][^-+].*(next\(|if \(|safeEqual|legacyLocalBypassAllowed|mcpAuth ===|isLocalSocket|jwtVerify)'
 ```
 
-liefert keine Ausgabe. Draht-Tests: `test/openai-p6-challenge.test.js` (P6-T1..T5, Praefix
+liefert einen Treffer: `discoverJwksUri` (Zeile 36) benennt lokale Variablen um
+(`r`->`response`, `p`->`path`) — eine reine Id-Length-Umbenennung ohne Logikaenderung,
+kein Bedingungs-/Reihenfolge-/`next()`-Zweig, s. Commit-Diff. Sonst keine Treffer.
+Draht-Tests: `test/openai-p6-challenge.test.js` (P6-T1..T5, Praefix
 absichtlich "P6-" statt eines Katalog-Praefixes, sonst landete die Datei still in
 `test:gates` statt in `npm test`). Rot-gegen-alt auf `master` bestaetigt: ohne den Fix
 sind T1/T2a/T2b/T3/T4 rot (Header `null`), T2c/T5 (Positiv-Kontrollen) bleiben gruen.

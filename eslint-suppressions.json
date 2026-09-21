@@ -464,6 +464,11 @@
       "count": 1
     }
   },
+  "src/auth.js": {
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
   "src/billing/activation.js": {
     "id-length": {
       "count": 1

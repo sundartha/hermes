@@ -94,8 +94,10 @@ async function verifyOauth(req, res, next) {
       audience: audience(),
       clockTolerance: 30,
     });
-    // no-param-reassign: gezielte Regel-Ausnahme fuer req in eslint.config.js,
-    // dasselbe Express-Idiom wie req.tenant in web-auth.js:838.
+    // no-param-reassign: dasselbe Express-Idiom wie req.tenant in web-auth.js:838,
+    // dort ebenso ueber eslint-suppressions.json (count:1) akzeptiert statt einer
+    // Regel-Ausnahme - eine dateiweite Ausnahme wuerde eine ZWEITE req.xyz-Zuweisung
+    // an anderer Stelle dieser Datei unbemerkt durchlassen (P6-Review Runde 2).
     req.auth = { sub: payload.sub, email: payload.email || null, claims: payload };
     next();
   } catch (err) {
