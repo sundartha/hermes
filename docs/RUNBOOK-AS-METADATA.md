@@ -10,6 +10,10 @@ ausliefert. Das ist die Feststellungsaufgabe F1-F5 aus
 dafuer - und zugleich die Quelle, die `PLAN-SECURITY.md` bisher nur als
 Messnotiz kennt (dort `:2052-2056`).
 
+Die Einordnung der Sonden-Befunde je OpenAI-Anforderungs-ID (T-8 bis T-16) steht in
+`docs/OPENAI-AUTH-ABWEICHUNGEN.md` (Phase P7) - dort auch die Grenze dieser Sonde (sie
+wertet nur das erste Anbieter-Dokument aus).
+
 ## 2. Was die Sonde ist und NICHT ist
 
 `scripts/probe-as-faehigkeiten.mjs` ist ein Messwerkzeug, **kein Gate**. Sie
