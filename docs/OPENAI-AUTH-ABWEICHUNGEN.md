@@ -9,9 +9,10 @@
 > wurde kein Login, kein echtes Token und kein Schreibzugriff verwendet** (die Tests in
 > `test/` signieren eigene Tokens gegen einen lokalen Test-IdP).
 >
-> Die **englische Fassung (Abschnitt 2b) ist vollstaendig und eigenstaendig**: sie traegt jede
-> Einschraenkung und jedes UNKNOWN aus Abschnitt 2. Sie ist nicht optimistischer als der
-> deutsche Text; wo beide je auseinanderlaufen, gilt die vorsichtigere Aussage.
+> Die **englische Fassung (Abschnitte 2b+2c) ist vollstaendig und eigenstaendig**: sie traegt jede
+> Einschraenkung und jedes UNKNOWN aus Abschnitt 2 sowie aus den Abschnitten 3-8. Sie ist nicht
+> optimistischer als der deutsche Text; wo beide je auseinanderlaufen, gilt die vorsichtigere
+> Aussage.
 
 ## 1. Architektur kurz
 
@@ -245,13 +246,14 @@ ablesbar, ob `email`/`email_verified` geliefert werden.
 
 ## 2b. English version (per ID, for the OpenAI reviewer)
 
-This section is complete on its own: it carries every limitation and every UNKNOWN from
-Section 2 and is not more optimistic than the German text. Requirement quotes are verbatim
-from the OpenAI primary sources, read on 2026-09-21:
+This section, together with Section 2c below, is complete on its own: it carries every
+limitation and every UNKNOWN from Section 2 and is not more optimistic than the German text.
+Requirement quotes are verbatim from the OpenAI primary sources, read on 2026-09-21:
 https://developers.openai.com/plugins/build/auth and
 https://developers.openai.com/plugins/reference. File:line references point into this
-repository. "Section 3" is the raw measurement log below; "Section 4" lists our open questions
-to WorkOS; "Section 5" lists measurements that need a real, completed login.
+repository. "Section 3" is the raw measurement log below (language-neutral, not duplicated in
+English). Section 4 (our open questions to WorkOS) and Section 5 (measurements that need a
+real, completed login) are German-only; their English equivalents are 2c.2 and 2c.3 below.
 
 **Architecture.** Hermes is an OAuth 2.1 resource server for `/mcp` only; WorkOS AuthKit
 (`https://fearless-network-26.authkit.app`) is the authorization server. Every bearer token is
@@ -294,14 +296,14 @@ re-authorize with the correct parameters", but also that "without both halves Ch
 show the linking UI for that tool". We have not measured which applies. How to measure: link
 the connector in ChatGPT, let the token become invalid (wait for expiry or revoke the session
 at WorkOS), trigger a tool call in the same conversation, and observe whether the linking UI
-appears (Section 5, O-6).
+appears (2c.3, O-6).
 
 Cases that today carry no `_meta` field:
 
 1. **Valid token, no tenant** (`rejectIfNoTenant`): HTTP 403 without a challenge, at the HTTP
    layer (not even a tool result). This case **can be resolved by re-authenticating** with an
    account that has a tenant, so a re-auth trigger here would **not** be dead code. Open
-   finding (Section 7, B-1).
+   finding (2c.4, B-1).
 2. **403 from the internal REST hop, arriving as an `isError` tool result.** Sources: the
    `internalOnly` guard (request not trusted-local, `src/wiring/internal-only.js:24-28`) — an
    internal configuration/programming fault; a tenant REJECT in `requireTenant`
@@ -342,7 +344,7 @@ against the JWKS-discovered key, issuer and audience, with a 30-second clock tol
 claim is present** (`jwt_claims_set.js:142` and `:150`), and `src/auth.js:98-102` sets no
 `requiredClaims`. A token signed by the provider **without `exp` would be accepted without time
 limit**; one without `nbf` has no start of validity. Whether real WorkOS access tokens carry
-`exp` has not been measured on a real token (Section 5, O-3); our code does not require it.
+`exp` has not been measured on a real token (2c.3, O-3); our code does not require it.
 Hardening (`requiredClaims: ['exp']`) is recorded as an open item and not changed in this phase.
 What is proven: a token **with** an expired `exp` -> 401 (`test/oauth.test.js:66-70`).
 
@@ -363,8 +365,8 @@ scope as required. That satisfies the wording only formally; there is no functio
 **UNKNOWN:** WorkOS advertises only identity scopes (`email`, `offline_access`, `openid`,
 `profile`; Section 3), no resource-specific scope. Whether a real WorkOS access token carries a
 `scope` or `scp` claim at all, and with which value, cannot be measured without a completed
-login (Section 5, O-3). The gap can only close if (1) WorkOS offers a resource-specific scope
-(Section 4e) **and** (2) a real token is shown to carry it — both open.
+login (2c.3, O-3). The gap can only close if (1) WorkOS offers a resource-specific scope
+(2c.2, item e) **and** (2) a real token is shown to carry it — both open.
 
 ### T-9 — authorization server copies the `resource` parameter into the token (usually `aud`)
 
@@ -387,7 +389,7 @@ a criterion for T-9 — but it also means the metadata do not tell us whether Wo
 RFC 8707.
 
 **UNKNOWN:** whether WorkOS actually copies the RFC 8707 `resource` parameter into `aud` can only
-be checked on a real token (Section 4a, Section 5 O-3). If it does not: every ChatGPT login fails
+be checked on a real token (2c.2 item a, 2c.3 O-3). If it does not: every ChatGPT login fails
 closed with 401 — a connectivity problem, not a security one; the audience check is not weakened
 to work around it.
 
@@ -408,7 +410,7 @@ redirect URI is used instead — not a submission blocker.
 **UNKNOWN:** whether WorkOS accepts that callback-specific redirect URI (via CIMD or DCR —
 `client_id_metadata_document_supported: true` and `registration_endpoint` appear only in the
 `oauth-authorization-server` document) can only be measured in a first real connector flow
-(Section 4b).
+(2c.2, item b).
 
 ### T-16 — for workspace-domain restrictions: OIDC discovery + scopes + UserInfo with `email` and `email_verified`
 
@@ -424,10 +426,96 @@ OIDC discovery returns HTTP 200 and advertises the `openid` and `email` scopes; 
 Section 3.
 
 **UNKNOWN:** whether `/oauth2/userinfo` returns the **`email`** claim and **`email_verified:
-true`** for a real token cannot be measured without a completed login (Section 4c, Section 5
+true`** for a real token cannot be measured without a completed login (2c.2 item c, 2c.3
 O-3). Side finding: WorkOS does **not** advertise `claims_supported` (absent from both
 documents). The primary source does not name that field, so it is not a criterion for T-16 — but
 the metadata therefore do not tell us whether `email`/`email_verified` are delivered.
+
+## 2c. English appendix (for the OpenAI reviewer)
+
+Together with Section 2b above, this section makes the English version complete on its own: it
+carries the English equivalents of Sections 3-8 (limitation of the probe script and the
+"newer measurement wins" rule, the WorkOS questions, the owner-only measurements, the open
+findings, and the duplicate-path check). Every limitation and every UNKNOWN is carried over
+1:1 from the German text below; nothing here is phrased more optimistically. Section 3 itself
+(the raw measurement log) is language-neutral (endpoint URLs, JSON, a probe script's own
+`[PASS]`/`[FAIL]`/`[UNKNOWN]` labels) and is deliberately **not** duplicated here — read it
+directly below in Section 3.
+
+### 2c.1 Probe limitation and "a newer measurement wins" (Section 3)
+
+**Probe limitation:** `scripts/probe-as-faehigkeiten.mjs` evaluates findings 3-8 against only
+the **first** discovery document (`openid-configuration`). `code_challenge_methods_supported`,
+`registration_endpoint` and `client_id_metadata_document_supported` are advertised by WorkOS
+only in the **second** document (`oauth-authorization-server`, see the raw log in Section 3) -
+the probe therefore reports FAIL where the provider actually has the field. Not a contradiction
+in substance, only a limitation of the measurement tool (not P7 scope, noted here only).
+
+**A newer measurement wins:** if a future measurement diverges from the log in Section 3, the
+newer measurement governs, and this document is updated with the new timestamp - never the
+other way round. **Re-run Section 3's probe before every submission.**
+
+### 2c.2 Concrete questions for WorkOS (owner action item; German original: Section 4)
+
+a. **(T-9)** Does AuthKit copy the `resource` parameter (RFC 8707) from the authorization and
+   token requests into the issued access token's `aud` claim?
+b. **(T-11)** Can AuthKit set `iss` on authorization responses and advertise
+   `authorization_response_iss_parameter_supported: true` in its AS metadata?
+c. **(T-16)** Does `/oauth2/userinfo`, given a valid token, return `email` and
+   `email_verified: true`?
+d. **(T-8, side finding OW-7)** Why is `code_challenge_methods_supported` missing from
+   `openid-configuration` although it is present in `oauth-authorization-server`? Which of the
+   two documents does a connector like ChatGPT typically query first?
+e. **(T-12)** Does AuthKit offer resource-specific (not just identity) scopes that we could
+   require and check for `/mcp`?
+
+### 2c.3 Owner-only measurements (action item, not run by an agent; German original: Section 5)
+
+**O-3.** Once a real, completed WorkOS login exists (e.g. the production Claude connector
+flow): decode the access token (base64, no secret needed for the payload) and check:
+
+1. `aud` - does it match the resource `https://app.sundartha.com/mcp`? (T-9)
+2. `scope` / `scp` - is a claim present, and if so, which value? (T-12)
+3. `exp` - is the claim present? (T-12, the `exp` limitation)
+4. `GET /oauth2/userinfo` with the same token - does the response carry `email` and
+   `email_verified: true`? (T-16)
+
+**O-6.** (T-14) Link the connector in ChatGPT, let the token become invalid (wait for expiry or
+revoke the session at WorkOS), trigger a tool call in the same conversation: does the linking UI
+(re-authentication) appear, or only an error message?
+
+These values close the remaining UNKNOWNs in Section 2 / 2b. No agent runs these steps - they
+require a completed login (owner-only).
+
+### 2c.4 Open findings, not built, only recorded (German original: Section 7)
+
+- **B-1:** `rejectIfNoTenant` (`src/routes/mcp.js:60-65`) answers a valid token with no tenant
+  mapping with **403 without** `WWW-Authenticate`. RFC 6750 §3.1 would suggest
+  `error="insufficient_scope"` for a 403; the OpenAI wording (T-13) only requires the challenge
+  for 401. The case is resolvable by account switch (signing in with an account that has a
+  tenant) and is therefore exactly the case for which a re-auth trigger (T-14) would make sense.
+  Whether ChatGPT offers an account switch on this 403 is UNKNOWN. Finding for P10/owner, not
+  changed here.
+- **`exp` not required (T-12):** `jwtVerify` in `src/auth.js:98-102` sets no `requiredClaims`; a
+  signed token without `exp` is accepted without time limit. The hardening
+  (`requiredClaims: ['exp']`) is recorded as an open item in `PLAN-SECURITY.md` (owner approval,
+  its own phase), not changed here.
+- **T-8 (side finding, not P7 inventory):** `code_challenge_methods_supported` is missing from
+  `openid-configuration`, present in `oauth-authorization-server` (Section 3). Our
+  `discoverJwksUri()` tries `openid-configuration` first (`src/auth.js:31`) - inconsequential for
+  us (we only read `jwks_uri` there), but UNKNOWN for ChatGPT's own discovery order (question d,
+  2c.2). Owner item, not built.
+
+### 2c.5 Duplicate paths (completeness check; German original: Section 8)
+
+- **HTTP `/mcp` vs. stdio:** `mcpAuth` is the **only** token-check path - it exists only on the
+  HTTP route (`src/routes/mcp.js:113`). stdio (`src/mcp-server.js:35-46`) registers tools without
+  the auth middleware and deliberately never calls `applyToolSecuritySchemes`;
+  T-9/T-11/T-12/T-14/T-16 are **not applicable** to stdio (no token, no OpenAI connector path
+  there) - this is a limitation of scope, not a claim that stdio meets them.
+- **mcp-native adapter vs. ChatGPT adapter (both over HTTP):** `mcpAuth` runs **before** adapter
+  selection (`src/routes/mcp.js:113` vs. `:153`) - both adapters share the same auth code path, a
+  second test per adapter was not needed and was not built.
 
 ## 3. Messprotokoll (roh, mit Zeitstempel)
 
