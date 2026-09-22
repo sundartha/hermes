@@ -120,9 +120,9 @@ export const WIDGET_DICT = {
 
 // Sprachfeld-Schluessel am Ergebnis-`_meta` der Widget-Werkzeuge (mcp-tools.js
 // withWidgetLocale). NICHT in structuredContent (pinnte outputSchema/T-33-Snapshot,
-// s. T2-02-Spec Kernentscheidung 4) und NICHT ueber window.openai gelesen (UI-03
-// verbietet das im ausgelieferten HTML) - NUR ueber die MCP-Apps-Bruecke
-// (ui/notifications/tool-result, params._meta).
+// s. T2-02-Spec Kernentscheidung 4) und NICHT ueber die globale OpenAI-Bruecke
+// gelesen (UI-03 verbietet ihre Nutzung im ausgelieferten HTML) - NUR ueber die
+// MCP-Apps-Bruecke (ui/notifications/tool-result, params._meta).
 export const WIDGET_LOCALE_META_KEY = "hermes/locale";
 
 // "de-DE"/"fr_CH" -> "de"/"fr". Nur der primaere Subtag entscheidet - die

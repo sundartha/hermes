@@ -836,9 +836,9 @@ function widgetResourceOptions(uiHost) {
 // OpenAI nur fuer die Komponente bestimmt (das Modell liest es nicht), und MCP
 // Apps reicht das CallToolResult per `ui/notifications/tool-result` als `params`
 // durch - `params._meta` traegt den Wert also unveraendert weiter. Das Widget
-// liest ihn NUR ueber diese Bruecke (widget-i18n.js), NIE ueber window.openai
-// (UI-03). Fehlerergebnisse bleiben unveraendert - der Host zeigt dann ohnehin
-// kein Widget (s. Aufrufer uiTool, VOR wrapHandler eingehaengt).
+// liest ihn NUR ueber diese Bruecke (widget-i18n.js), NIE ueber die globale
+// OpenAI-Bruecke (UI-03). Fehlerergebnisse bleiben unveraendert - der Host
+// zeigt dann ohnehin kein Widget (s. Aufrufer uiTool, VOR wrapHandler eingehaengt).
 function withWidgetLocale(config, handler, language) {
   const resourceUri = config._meta?.[UI_META_KEY]?.resourceUri;
   if (!resourceUri) return handler;
