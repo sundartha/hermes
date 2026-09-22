@@ -65,14 +65,19 @@ const EXPECTED_RESOURCE_META = {
 // BASE_ENV). Vorheriger T2-01-Sollwert zum Vergleich: HTTP
 // edf490f6dddb5a2a8a3176a6ecaf803bda03829364ad5b1b5915f23002a3d57a, stdio
 // d65e36ed14b2d87e4f4b50f55a32e9ade76a88d4a934e9ee2b75f3ed8ab5c948.
-// T2-23 (T-16): der HTTP-Hash aendert sich erneut - securitySchemes.scopes traegt
-// jetzt ["openid","email","offline_access"] statt einer leeren Liste
-// (src/mcp-security-schemes.js). stdio bleibt UNVERAENDERT (kein securitySchemes
-// dort, Autonome Entscheidung P3) - der stdio-Hash ist deshalb bewusst gleich
-// geblieben. Voriger HTTP-Sollwert zum Vergleich:
-// d1038dfc2f1f51ad22b055c92c8155caacc57995784065ffbafe820fa9c4b89c.
+// T2-23-Nachtrag (unabhaengiger Pruefer, 2026-09-22): securitySchemes bildet jetzt
+// den AKTIVEN mcpAuth-Modus ab statt immer "oauth2" zu behaupten
+// (src/mcp-security-schemes.js). Dieser Test startet den Server im Legacy-Default
+// (MCP_AUTH="", kein expliziter Modus) - dort ist "oauth2" seit dem Nachtrag eine
+// Falschangabe (kein OAuth-Flow), also traegt securitySchemes hier gar KEIN Feld
+// mehr (dieselbe Angabe wie ueber stdio, s. src/mcp-security-schemes.js). Der
+// HTTP-Hash ist deshalb ab jetzt BYTE-IDENTISCH zum stdio-Hash - das ist keine
+// zufaellige Kollision, sondern die direkte Folge: beide Pfade tragen ab jetzt kein
+// securitySchemes. Voriger HTTP-Sollwert zum Vergleich (T2-23, volle oauth2-Angabe
+// im Legacy-Default - das war der Regressionsbefund dieses Nachtrags):
+// 00c916d4ece76dda6fa60de658979464c9dbd50d22596d77f53a6c49ea501b13.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "00c916d4ece76dda6fa60de658979464c9dbd50d22596d77f53a6c49ea501b13";
+  "bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
   "bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47";
 

@@ -56,9 +56,17 @@ Auth-UI im Gespraech ersetzt: **UNKNOWN.**
   `_meta["mcp/www_authenticate"]`." — "Without both halves ChatGPT will not show the linking UI
   for that tool."
 
-**Ist-Zustand.** Die erste Haelfte ist vorhanden: `securitySchemes` an jedem Tool (P3,
-`src/mcp-security-schemes.js:19-27`, angewandt in `src/routes/mcp.js:182`) und die
-Protected-Resource-Metadata (`src/auth.js:141-150`). Die zweite Haelfte fehlt: **kein**
+**Ist-Zustand.** Die erste Haelfte ist vorhanden fuer den Modus, in dem ChatGPT den Server
+ueberhaupt erreicht (`MCP_AUTH=oauth` — nur dort spricht ChatGPT den Connector, s. Abschnitt
+T-16 unten): `securitySchemes` traegt dort an jedem Tool die volle beworbene Scope-Menge (P3,
+`src/mcp-security-schemes.js:59-61`, angewandt in `src/routes/mcp.js:182`). **Nachtrag
+2026-09-22:** im Token-/Legacy-Modus (statischer Bearer-Token bzw. lokaler Dev-Bypass, kein
+OAuth-Flow) traegt `tools/list` seither GAR KEIN `securitySchemes`-Feld mehr — vorher wurde
+faelschlich derselbe oauth2-Wert gemeldet, unabhaengig vom aktiven Modus; das war eine
+Regression, die ein unabhaengiger Pruefer fand und die in `src/mcp-security-schemes.js`
+behoben ist (s. Kommentar dort). Fuer den ChatGPT-Connector (ausschliesslich oauth-Modus) aendert
+das nichts. Ebenfalls vorhanden (in jedem Modus): die Protected-Resource-Metadata
+(`src/auth.js:141-150`). Die zweite Haelfte fehlt: **kein**
 Tool-Ergebnis traegt `_meta["mcp/www_authenticate"]` (`grep -rn www_authenticate src/` liefert
 0 Treffer). Nach dem Wortlaut der Primaerquelle zeigt ChatGPT deshalb **keine
 tool-bezogene Verknuepfungs-UI**. Das ist eine Luecke, keine Nicht-Anwendbarkeit.
@@ -315,8 +323,15 @@ requires both metadata (`securitySchemes` and the resource metadata document) **
 errors that carry `_meta["mcp/www_authenticate"]`. [...] Without both halves ChatGPT will not
 show the linking UI for that tool." (plugins/build/auth)
 
-What we have: the first half — `securitySchemes` on every tool
-(`src/mcp-security-schemes.js:19-27`, applied in `src/routes/mcp.js:182`) and protected-resource
+What we have: the first half — `securitySchemes` on every tool, for the mode ChatGPT actually
+uses to reach the server (`MCP_AUTH=oauth` — ChatGPT never speaks the connector any other way,
+see the T-16 section below): `src/mcp-security-schemes.js:59-61`, applied in
+`src/routes/mcp.js:182`. **Addendum 2026-09-22:** in the token/legacy mode (static bearer token
+or local dev bypass, no OAuth flow), `tools/list` now carries NO `securitySchemes` field at
+all — before this addendum, the server incorrectly reported the same oauth2 value regardless of
+the active mode; an independent reviewer found this regression, fixed in
+`src/mcp-security-schemes.js` (see the comment there). This changes nothing for the ChatGPT
+connector (oauth mode only). Also present in every mode: the protected-resource
 metadata (`src/auth.js:141-150`). What we do not have: the second half — no tool result carries
 `_meta["mcp/www_authenticate"]` (zero occurrences in `src/`). By the wording of the primary
 source, ChatGPT will therefore **not** show the tool-level linking UI. This is a gap, not a

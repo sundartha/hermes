@@ -5562,3 +5562,42 @@ Scope; die fachliche Zugriffsgrenze bleibt unveraendert Audience + Mandantenbind
 (`rejectIfNoTenant`, `src/routes/mcp.js`). `docs/OPENAI-AUTH-ABWEICHUNGEN.md` (Abschnitte 2
 und 2b, ID T-12/T-16) ist auf den neuen Stand nachgezogen; eine abschliessende Sprach-/
 Konsistenzpruefung der Abschnitte 6/7/8 (bzw. 2c.4/2c.6) vor der Einreichung steht noch aus.
+
+**Nachtrag (2026-09-22, unabhaengiger Pruefer, Folgephase T2-23-auth-scopes):
+securitySchemes bildete bis hierhin JEDEN Modus als oauth2 ab — Regression dieser
+Phase.** Commit A (oben) machte `TOOL_SECURITY_SCHEMES` von `OAUTH_SCOPES` abhaengig, aber
+`applyToolSecuritySchemes()` haengte diesen EINEN Wert unbedingt an jedes Werkzeug, unabhaengig
+vom tatsaechlich aktiven `mcpAuth`-Modus. Ergebnis: im Token-/Legacy-Modus (`MCP_AUTH=token`
+oder `""`, statischer Bearer-Token ODER lokaler Dev-Bypass — KEIN OAuth-Flow) meldete
+`tools/list` trotzdem `[{"type":"oauth2","scopes":["openid","email","offline_access"]}]` — eine
+ueberzeichnete Angabe: der Server behauptete einen OAuth2-Schutz, den dieser Modus nicht hat.
+Vor Commit A war das harmlos (`scopes: []`), seit Commit A ist es eine falsche Tatsachenbehauptung
+gegenueber jedem MCP-Client, der `securitySchemes` liest (das ist ihr einziger Zweck, s. Spec-Zitat
+`src/mcp-security-schemes.js`).
+
+Fix: `src/mcp-security-schemes.js` bildet jetzt drei Faelle ab, nach dem tatsaechlich aktiven
+`config.auth.mcpAuth` (injizierbar als `mcpAuthMode`-Parameter, Muster
+`legacyLocalBypassAllowed`/"productionFootguns" in `src/auth.js`, fuer Unit-Tests ohne
+Serverneustart):
+- `oauth`: unveraendert `TOOL_SECURITY_SCHEMES` (volle beworbene Menge `S`, wie Commit A).
+- `off`: NEU `NOAUTH_TOOL_SECURITY_SCHEMES = [{"type":"noauth"}]` — der einzige Modus, in dem
+  `mcpAuth` (`src/auth.js:226`) JEDEN Request unbedingt durchlaesst, also der einzige Fall, in
+  dem der zweite von der OpenAI-Apps-SDK-Spec definierte Typ (`developers.openai.com/apps-sdk/
+  build/auth`, Abschnitt "Security Schemes": genau zwei Typen, `noauth` und `oauth2`) ehrlich
+  ist.
+- `token` / Legacy (statischer Bearer-Token ODER lokaler Dev-Bypass): weder `noauth` (ein
+  Request ohne das richtige Credential wird abgelehnt) noch `oauth2` (kein Autorisierungsserver,
+  kein Scope-Flow) ist wahr, und die Spec kennt keinen dritten Typ. Die Angabe bleibt deshalb
+  GANZ WEG (kein `securitySchemes`-Feld) — dasselbe Muster, das der stdio-Pfad bereits seit der
+  T-15-Korrektur nutzt (`src/mcp-server.js` ruft `applyToolSecuritySchemes()` dort bewusst nicht
+  auf).
+
+Tests: `test/openai-p3-security-schemes.test.js` "Schritt 5" laeuft jetzt EXPLIZIT im
+oauth-Modus (echter IdP, echtes Token) statt im impliziten Legacy-Default; neu "Schritt 5b"
+(Legacy), "5c" (`MCP_AUTH=token`) und "5d" (`MCP_AUTH=off`) belegen je ihren Fall ueber die
+echte `/mcp`-Route. `test/openai-p8-widget-ui.test.js` P8-I (HTTP-Byte-Hash, Legacy-Default) ist
+nachgezogen: der HTTP-Hash ist jetzt byte-identisch zum stdio-Hash (beide Pfade tragen im
+gepruesften Setup kein `securitySchemes` mehr) — das ist die direkte Folge des Fixes, keine
+zufaellige Kollision. `test/openai-t2-23-scopes.test.js` (`OpenAI-T2-23-A5`, oauth-Modus)
+unveraendert gruen. Kein Safety-Gate/Offenlegungssatz beruehrt: die fachliche Zugriffsgrenze
+bleibt Audience + Mandantenbindung (`rejectIfNoTenant`), `mcpAuth` selbst ist unangetastet.
