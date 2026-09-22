@@ -10,8 +10,10 @@
  * @property {(widgetId: string) => string} resourceUri
  *   ui://-URI fuer das Tool-_meta (geteiltes Schema ueber alle Hosts).
  * @property {(server: import("@modelcontextprotocol/sdk/server/mcp.js").McpServer, widgetId: string, options?: {chatgptEgress?: boolean}) => void} registerResource
- *   Registriert die STATISCHE ui://-Resource (self-contained HTML) am McpServer, in
- *   der uebergebenen Agentensprache (P13/E4; fehlend -> englische Fassung).
+ *   Registriert die STATISCHE, sprachneutrale ui://-Resource (self-contained HTML) am
+ *   McpServer (T2-02/T-34) - EIN Inhalt fuer alle Mandanten, cache-fest ueber eine
+ *   versionierte URI. Die Agentensprache reist NICHT hier, sondern als Ergebnis-_meta
+ *   der Widget-Werkzeuge (s. mcp-tools.js withWidgetLocale, WIDGET_LOCALE_META_KEY).
  *   Die Resource traegt KEINE Tenant-Daten (Daten -> structuredContent, P0-Befund).
  *   options.chatgptEgress (T2-01 Nachbau, Default false): NUR wenn true, traegt der
  *   Resource-Inhalt zusaetzlich zum Alias openai/widgetDomain auch `_meta.ui.domain`

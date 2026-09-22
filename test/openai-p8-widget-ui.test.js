@@ -19,12 +19,25 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import http from "node:http";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { startServer, seedState, mcpPost, readToolResult, ROOT, BASE_ENV } from "./helpers.js";
+import {
+  startServer,
+  seedState,
+  mcpPost,
+  toolCall,
+  readToolResult,
+  startIdp,
+  ROOT,
+  BASE_ENV,
+} from "./helpers.js";
 import { uiResourceUri } from "../src/ui/contract.js";
 import { WIDGET_CALL } from "../src/ui/widget-catalog.js";
+import { WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
+import { makeDefaultState, registerTenant, settingsFor } from "../src/store/state-ops.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const WIDGET_COUNT = 5;
 // T2-02/T-34: die URI traegt seither eine Version (Pin-Datei
@@ -392,4 +405,175 @@ test("P8-J (stdio): tools/list + resources/list + alle resources/read byte-ident
       `Byte-Abweichung vom gepinnten T2-01-Sollwert (stderr: ${stderr()}), kanonisiertes Capture:\n${JSON.stringify(canonicalize(captured), null, JSON_INDENT)}`,
     );
   });
+});
+
+// ==================== P8-K..P8-N: T2-02/S6 - Widget-Sprache reist am Tool-Ergebnis (Draht) ====================
+// Abnahme (4), PLAN-OPENAI-TECHNIK-2.md T2-02: "Widget-Tool-Ergebnis traegt das
+// Sprachfeld (Draht)". Bisher pruefte nur die vm-Sandbox (mcp-ui-widget-i18n.test.js) das
+// iframe-seitige Skript mit handgebauten Nachrichten - withWidgetLocale (mcp-tools.js)
+// selbst lief nie ueber einen echten tools/call. Vier Faelle, je Transport zwei: das
+// Sprachfeld traegt die Tenant-Sprache (Positiv-Kontrolle: zwei Sprachen, zwei Werte),
+// ein Nicht-Widget-Werkzeug traegt es nie, ein isError-Ergebnis traegt es nie.
+
+// HTTP: Muster MCP-16 (test/mcp-tools-i18n.test.js) - zwei per idpSubject gebundene
+// Tenants mit eigener Sprache und eigener DID, ein OAuth-Token je Tenant.
+const WIDGET_LOCALE_TENANT_DE = { id: "t_p8k_de", sub: "sub-p8k-de", language: "de", e164: "+4915100000301" };
+const WIDGET_LOCALE_TENANT_EN = { id: "t_p8k_en", sub: "sub-p8k-en", language: "en", e164: "+12025550301" };
+
+function widgetLocaleTenantSeed() {
+  const state = makeDefaultState();
+  state.numbers.push({
+    id: "num_owner_p8k",
+    e164: "+4915199999801",
+    tenantId: BOOTSTRAP_TENANT_ID,
+    provider: "telnyx",
+    status: "active",
+    providerNumberId: null,
+  });
+  for (const tenant of [WIDGET_LOCALE_TENANT_DE, WIDGET_LOCALE_TENANT_EN]) {
+    registerTenant(state, tenant.id, { idpSubject: tenant.sub });
+    settingsFor(state, tenant.id).language = tenant.language;
+    state.numbers.push({
+      id: `num_${tenant.id}`,
+      e164: tenant.e164,
+      tenantId: tenant.id,
+      provider: "telnyx",
+      status: "active",
+      providerNumberId: null,
+    });
+  }
+  return state;
+}
+
+test("P8-K (HTTP, T2-02/S6): get_my_number traegt _meta['hermes/locale'] in der Tenant-Sprache, list_action_items nicht", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, MULTI_TENANT: "true", MCP_UI_ENABLED: "true" },
+    seed: widgetLocaleTenantSeed(),
+  });
+  try {
+    const [tokenDe, tokenEn] = await Promise.all([
+      idp.sign({ sub: WIDGET_LOCALE_TENANT_DE.sub }),
+      idp.sign({ sub: WIDGET_LOCALE_TENANT_EN.sub }),
+    ]);
+
+    const [resDe, resEn] = await Promise.all([
+      mcpPost(`${srv.localUrl}/mcp`, tokenDe, toolCall("get_my_number")),
+      mcpPost(`${srv.localUrl}/mcp`, tokenEn, toolCall("get_my_number")),
+    ]);
+    const resultDe = await readToolResult(resDe);
+    const resultEn = await readToolResult(resEn);
+    assert.notEqual(resultDe.isError, true, "DE-Aufruf ist kein Fehler");
+    assert.notEqual(resultEn.isError, true, "EN-Aufruf ist kein Fehler");
+    assert.equal(resultDe._meta?.[WIDGET_LOCALE_META_KEY], "de", "DE-Mandant -> Sprachfeld de");
+    assert.equal(resultEn._meta?.[WIDGET_LOCALE_META_KEY], "en", "EN-Mandant -> Sprachfeld en");
+    assert.notEqual(
+      resultDe._meta?.[WIDGET_LOCALE_META_KEY],
+      resultEn._meta?.[WIDGET_LOCALE_META_KEY],
+      "Positiv-Kontrolle: zwei verschiedene Sprachen ergeben zwei verschiedene Werte",
+    );
+
+    const nonWidgetRes = await mcpPost(`${srv.localUrl}/mcp`, tokenDe, toolCall("list_action_items"));
+    const nonWidgetResult = await readToolResult(nonWidgetRes);
+    assert.notEqual(nonWidgetResult.isError, true, "list_action_items ist kein Fehler");
+    assert.equal(
+      WIDGET_LOCALE_META_KEY in (nonWidgetResult._meta || {}),
+      false,
+      "list_action_items traegt kein Widget - kein Sprachfeld am Ergebnis",
+    );
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+// Ein-Feld-Gateway-Mock (Muster mcp-tools.test.js/P5b Fall C): liefert body fuer JEDEN
+// Pfad. body={} degradiert requireFields() -> wrapHandler faengt den Throw -> errText
+// (isError:true, AC5/AC6) - genau der Pfad, den withWidgetLocale NICHT erreicht (der
+// Throw passiert VOR ihrem eigenen result?.isError-Zweig).
+async function startFixedGatewayMock(body) {
+  const server = http.createServer((req, res) => {
+    res.writeHead(HTTP_OK, { "content-type": "application/json" });
+    res.end(JSON.stringify(body));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  return { url, close: () => new Promise((resolve) => server.close(resolve)) };
+}
+
+test("P8-L (HTTP, T2-02/S6): ein isError-Ergebnis traegt kein Sprachfeld", async () => {
+  const mock = await startFixedGatewayMock({}); // requireFields({agent:"object"}) wirft
+  const srv = await startServer({
+    seed: seedState({}),
+    env: { GATEWAY_URL: mock.url, MCP_UI_ENABLED: "true" },
+  });
+  try {
+    const res = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_my_number"));
+    const result = await readToolResult(res);
+    assert.equal(result.isError, true, "degradierte Gateway-Antwort -> isError (AC5/AC6)");
+    assert.equal(
+      WIDGET_LOCALE_META_KEY in (result._meta || {}),
+      false,
+      "ein Fehlerergebnis traegt niemals das Sprachfeld",
+    );
+  } finally {
+    await srv.stop();
+    await mock.close();
+  }
+});
+
+// stdio hat KEINEN Store (mcp-server.js registriert ohne language-Feld, s. Kommentar
+// dort) - loc.language faellt fail-safe auf DEFAULT_LANGUAGE zurueck (Weltdefault, "en",
+// BASE_ENV pinnt WORLD_DEFAULT_LANGUAGE_ENABLED="true"). Zwei verschiedene Sprachen sind
+// ueber stdio deshalb nicht messbar (kein Tenant-Kontext); gemessen wird, dass der
+// Weltdefault tatsaechlich am Ergebnis ankommt.
+test("P8-M (stdio, T2-02/S6, DP-1): get_my_number traegt _meta['hermes/locale']=Weltdefault, list_action_items nicht", async () => {
+  const mock = await startFixedGatewayMock({ agent: { number: "+15005550006" }, actionItems: [] });
+  try {
+    await withStdioClient({ MCP_UI_ENABLED: "true", GATEWAY_URL: mock.url }, {}, async (client, stderr) => {
+      const numberResult = await client.request(
+        { method: "tools/call", params: { name: "get_my_number", arguments: {} } },
+        ANY,
+      );
+      assert.notEqual(numberResult.isError, true, `stdio get_my_number ist kein Fehler (stderr: ${stderr()})`);
+      assert.equal(
+        numberResult._meta?.[WIDGET_LOCALE_META_KEY],
+        "en",
+        "stdio: kein Tenant-Kontext -> Weltdefault",
+      );
+
+      const itemsResult = await client.request(
+        { method: "tools/call", params: { name: "list_action_items", arguments: {} } },
+        ANY,
+      );
+      assert.notEqual(itemsResult.isError, true, "stdio list_action_items ist kein Fehler");
+      assert.equal(
+        WIDGET_LOCALE_META_KEY in (itemsResult._meta || {}),
+        false,
+        "list_action_items traegt kein Widget - kein Sprachfeld ueber stdio",
+      );
+    });
+  } finally {
+    await mock.close();
+  }
+});
+
+test("P8-N (stdio, T2-02/S6): ein isError-Ergebnis traegt ueber den echten Kindprozess ebenfalls kein Sprachfeld", async () => {
+  const mock = await startFixedGatewayMock({}); // requireFields({agent:"object"}) wirft
+  try {
+    await withStdioClient({ MCP_UI_ENABLED: "true", GATEWAY_URL: mock.url }, {}, async (client, stderr) => {
+      const result = await client.request(
+        { method: "tools/call", params: { name: "get_my_number", arguments: {} } },
+        ANY,
+      );
+      assert.equal(result.isError, true, `degradierte Gateway-Antwort -> isError (stderr: ${stderr()})`);
+      assert.equal(
+        WIDGET_LOCALE_META_KEY in (result._meta || {}),
+        false,
+        "ein Fehlerergebnis traegt niemals das Sprachfeld (stdio)",
+      );
+    });
+  } finally {
+    await mock.close();
+  }
 });
