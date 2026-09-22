@@ -730,6 +730,9 @@ services:
       # WAHRHEIT IST DAS DASHBOARD (s. Kopf dieser Datei) - dieser Eintrag ist Doku und
       # setzt den Wert nur, falls das Blueprint je synchronisiert wird. Betriebsschritt
       # (Etappe 8 / S2-A9): Live-Wert LESEN, nur bei Abweichung setzen.
+      # T2-04 (T-32): fehlt der Wert IM DASHBOARD (nicht hier), startet der Dienst nach
+      # dem Deploy nicht mehr (Boot-Refusal, exit 1) - der Origin einer OpenAI-App ist
+      # nach der Publikation unveraenderlich. Vor jedem Deploy im Dashboard pruefen.
       - key: PUBLIC_URL
         value: https://app.sundartha.com
 
