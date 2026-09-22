@@ -18,7 +18,11 @@
 //
 // Erwartungen stehen als LITERAL, nicht aus src importiert (Muster
 // mcp-tool-annotations.test.js) - ein Test, der seine Erwartung aus dem Pruefling
-// zieht, belegt nichts.
+// zieht, belegt nichts. AUSNAHME seit T2-02/T-34: RESOURCE_URI_CALL traegt jetzt eine
+// Version (ui://hermes/call/v<N>.html), die bei jeder HTML-Aenderung bewusst hochgezaehlt
+// wird (Pin-Datei src/ui/widget-versions.json) - ein Literal wuerde bei JEDER Versions-
+// erhoehung von Hand nachgezogen und pruefte dann nur noch sich selbst. uiResourceUri()
+// bleibt die einzige Quelle fuer die aktuelle Version (kein zweiter Zaehler im Test).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -26,6 +30,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools } from "../src/mcp-tools.js";
+import { uiResourceUri } from "../src/ui/contract.js";
+import { WIDGET_CALL } from "../src/ui/widget-catalog.js";
 import {
   startServer,
   seedState,
@@ -39,7 +45,7 @@ import {
 const OPENAI_INVOKING_KEY = "openai/toolInvocation/invoking";
 const OPENAI_INVOKED_KEY = "openai/toolInvocation/invoked";
 const MAX_INVOCATION_CHARS = 64; // T-22 woertlich: "<= 64 chars"
-const RESOURCE_URI_CALL = "ui://hermes/call";
+const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL);
 const CHATGPT_META_KEY = "openai/outputTemplate";
 const CHATGPT_UI_MIME = "text/html+skybridge";
 const HTTP_OK = 200;

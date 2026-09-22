@@ -23,9 +23,14 @@ import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { startServer, seedState, mcpPost, readToolResult, ROOT, BASE_ENV } from "./helpers.js";
+import { uiResourceUri } from "../src/ui/contract.js";
+import { WIDGET_CALL } from "../src/ui/widget-catalog.js";
 
 const WIDGET_COUNT = 5;
-const RESOURCE_URI_CALL = "ui://hermes/call";
+// T2-02/T-34: die URI traegt seither eine Version (Pin-Datei
+// src/ui/widget-versions.json) - aus uiResourceUri() statt eines Literals, das bei
+// jeder Versionserhoehung von Hand nachgezogen werden muesste.
+const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL);
 const CHATGPT_UI_MIME = "text/html+skybridge";
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const HTTP_OK = 200;
@@ -38,13 +43,19 @@ const EXPECTED_RESOURCE_META = {
 // Byte-Beweis (Pruefer-Befund Runde 2, P8-I/P8-J unten): sha256 der kanonisierten
 // (Schluessel sortiert) JSON-Serialisierung von tools/list + resources/list + jedem
 // resources/read (alle 5 Widgets), einmal ueber HTTP und einmal ueber stdio. Neu gepinnt
-// fuer T2-01 (Spec S4): gegen den vorherigen Hash gesichtprueft, der EINZIGE Unterschied
-// ist (a) _meta.ui traegt am Tool nur noch resourceUri (csp/domain raus), (b) jeder
-// resources/read-Inhalt traegt jetzt zusaetzlich _meta = EXPECTED_RESOURCE_META.
+// fuer T2-02 (T-34, Spec S1-S6): gegen den vorherigen Hash gesichtprueft, der EINZIGE
+// Unterschied ist (a) jede resources/list-URI + resources/read-URI traegt jetzt eine
+// Version (ui://hermes/<id>/v1.html statt ui://hermes/<id>, Pin-Datei
+// src/ui/widget-versions.json), (b) jeder resources/read-Inhalt (text) ist jetzt EINE
+// sprachneutrale Fassung (das eingebettete I18N-Script ist sprachunabhaengig, startet
+// mit en) statt der vorherigen Fassung in der Tenant-Sprache (hier: Weltdefault, s.
+// BASE_ENV). Vorheriger T2-01-Sollwert zum Vergleich: HTTP
+// edf490f6dddb5a2a8a3176a6ecaf803bda03829364ad5b1b5915f23002a3d57a, stdio
+// d65e36ed14b2d87e4f4b50f55a32e9ade76a88d4a934e9ee2b75f3ed8ab5c948.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "edf490f6dddb5a2a8a3176a6ecaf803bda03829364ad5b1b5915f23002a3d57a";
+  "d1038dfc2f1f51ad22b055c92c8155caacc57995784065ffbafe820fa9c4b89c";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "d65e36ed14b2d87e4f4b50f55a32e9ade76a88d4a934e9ee2b75f3ed8ab5c948";
+  "bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
