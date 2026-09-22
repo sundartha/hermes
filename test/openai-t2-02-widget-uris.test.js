@@ -81,6 +81,37 @@ test("S7(a) Positiv-Kontrolle: ein veraendertes Byte im HTML ergibt GENAU einen 
   assert.deepEqual(stalePins(mutated, pins), [WIDGET_MY_NUMBER]);
 });
 
+// S7(a)-Ledger (Review-Befund): der Test oben prueft nur "Hash der HOECHSTEN Version
+// passt zum ausgelieferten HTML" - wer den BESTEHENDEN v1-Eintrag in-place ueberschreibt
+// (statt v2 anzuhaengen), besteht ihn trotzdem, waehrend die URI (ui://hermes/<id>/
+// v1.html) unveraendert bleibt und ChatGPT bis zu 1 h das ALTE HTML aus dem Cache
+// bedient - genau der Fall, den T-34 verhindern soll. KNOWN_PINS friert deshalb die
+// HEUTE bekannten (Widget, Version, Hash)-Paare hart ein: APPEND-ONLY, nie aendern oder
+// loeschen - eine spaetere Phase ergaenzt hier NUR einen neuen Eintrag, wenn sie
+// bewusst eine neue Version anhaengt. Ein ueberschriebener Hash wird dadurch unabhaengig
+// davon rot, welche Version pins[widgetId] gerade als hoechste fuehrt.
+const KNOWN_PINS = {
+  [WIDGET_AGENT_STATUS]: { "1": "8304aed2dd3dd12c73ae8319eb0f8ba742d70c265e9b45a1eed956a048736f5c" },
+  [WIDGET_MY_NUMBER]: { "1": "caaebb738f0b60c5f5fabe5bdb8b4b04e1e563c04a8c08324c78e127fbde31c7" },
+  [WIDGET_CALLS]: { "1": "f65f989627c621bef2c9813d7198383fb6faa744af7cd396d31f97889bdf6555" },
+  [WIDGET_CALENDAR]: { "1": "57f50c389d3b52e5e812d0eb782ae8931b0900a6e5e87ade7ca502a984fa4e0f" },
+  [WIDGET_CALL]: { "1": "d4cc20704fe287449dd3d445f937ec1fb7f6f4480624f3740866764b478c4f81" },
+};
+
+test("S7(a)-Ledger: bekannte (Widget, Version, Hash)-Paare bleiben unveraendert - kein Ueberschreiben statt Anhaengen", () => {
+  const pins = loadPins();
+  for (const [widgetId, versions] of Object.entries(KNOWN_PINS)) {
+    for (const [version, hash] of Object.entries(versions)) {
+      assert.equal(
+        pins[widgetId]?.[version],
+        hash,
+        `${widgetId} v${version}: eingefrorener Hash hat sich geaendert - eine neue Version anhaengen, ` +
+          "NIE einen bestehenden Eintrag ueberschreiben (sonst zeigt eine gecachte URI stillschweigend anderen Inhalt)",
+      );
+    }
+  }
+});
+
 test("S7(b) keine zwei Versionen desselben Widgets teilen einen Hash", () => {
   const pins = loadPins();
   for (const widgetId of ALL_WIDGET_IDS) {

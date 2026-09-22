@@ -34,6 +34,7 @@ import {
 import { SUPPORTED_LANGUAGES, localeFor } from "../src/i18n/locales.js";
 import { makeDefaultState, registerTenant, setTenantGeo, tenantGeo } from "../src/store/state-ops.js";
 import { setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
+import { registerTools } from "../src/mcp-tools.js";
 import { FAILURE_REASON_BASE_TOKENS } from "../src/telephony/failure-reason.js";
 import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../src/telephony/call-lifecycle.js";
 
@@ -243,12 +244,33 @@ test("widgetHtml() ignoriert ein zusaetzliches Sprachargument - EINE Fassung, ke
   }
 });
 
-// ==================== ex UI-18 (invertiert, T2-02) ====================
-// Vormals: "Land = Frankreich" faerbt die servergerenderte Widget-Sprache. Seit T2-02
-// tut sie das NICHT mehr - die Resource ist sprachneutral, die Sprache reist ueber das
-// Ergebnis-_meta der Widget-Werkzeuge (mcp-tools.js withWidgetLocale), nicht mehr die
-// Resource selbst.
-test("tenant.country=FR aendert die servergerenderte Widget-Resource NICHT mehr (ex UI-18, T2-02 invertiert)", () => {
+// ==================== ex UI-18 (umgebaut, Review-Befund T2-02 Nacharbeit) ====================
+// Vormals: verglich widgetHtml(WIDGET_AGENT_STATUS) mit sich selbst - eine Tautologie,
+// die angelegte Tenant-Geo floss nirgends in den geprueften Pfad ein. Jetzt laeuft die
+// Tenant-Geo TATSAECHLICH durch den echten Pfad: registerTools() (derselbe Aufruf wie
+// die Produktion, src/routes/mcp.js) mit der aus tenantGeo abgeleiteten Sprache. Ein
+// minimaler Fake-Server faengt NUR den registerResource()-Aufruf fuer
+// WIDGET_AGENT_STATUS ab (Muster captureUi, test/mcp-ui.test.js) - der gelesene
+// Resource-Text wird zwischen zwei registerTools()-Aufrufen mit unterschiedlicher
+// Sprache verglichen, statt widgetHtml() direkt (und ohne registerTools) zweimal
+// gleich aufzurufen.
+function registeredAgentStatusResource(language) {
+  const captured = [];
+  const fakeServer = {
+    registerTool() {},
+    // Rest-Parameter statt vier Positionsargumenten (G30/F1) - registerResource() wird
+    // mit fester SDK-Form (name, uri, config, readCallback) aufgerufen (contract.js),
+    // die dieser Fake nur abfaengt, nicht selbst gestaltet.
+    registerResource(...resourceArgs) {
+      const [name, , , readCallback] = resourceArgs;
+      captured.push({ name, readCallback });
+    },
+  };
+  registerTools(fakeServer, { uiHost: { enabled: true }, language });
+  return captured.find((entry) => entry.name === WIDGET_AGENT_STATUS);
+}
+
+test("tenant.country=FR aendert die servergerenderte Widget-Resource NICHT mehr (ex UI-18, T2-02 umgebaut)", async () => {
   const s = makeDefaultState();
   registerTenant(s, "tenant_fr");
   setTenantGeo(s, "tenant_fr", { country: "FR", defaultLanguage: "fr" });
@@ -256,12 +278,26 @@ test("tenant.country=FR aendert die servergerenderte Widget-Resource NICHT mehr 
   assert.equal(geo.country, "FR", "Server kennt das Land des Tenants");
   assert.equal(geo.defaultLanguage, "fr", "Server kennt die abgeleitete Sprache des Tenants");
 
-  const htmlForTenant = widgetHtml(WIDGET_AGENT_STATUS);
-  const htmlDefault = widgetHtml(WIDGET_AGENT_STATUS);
+  // Echter Eingang (anders als widgetHtml() direkt, s.o. ex UI-14): die aus der
+  // FR-Tenant-Geo abgeleitete Sprache laeuft durch registerTools() ein, einmal gegen
+  // eine erkennbar andere Sprache verglichen.
+  const resourceFr = registeredAgentStatusResource(geo.defaultLanguage);
+  const resourceEn = registeredAgentStatusResource("en");
+  assert.ok(resourceFr, "WIDGET_AGENT_STATUS-Resource wurde registriert (fr)");
+  assert.ok(resourceEn, "WIDGET_AGENT_STATUS-Resource wurde registriert (en)");
+
+  const readFr = await resourceFr.readCallback();
+  const readEn = await resourceEn.readCallback();
   assert.equal(
-    htmlForTenant,
-    htmlDefault,
-    "T2-02: die Resource ist sprachneutral - Land/Sprache duerfen sie nicht mehr aendern",
+    readFr.contents[0].text,
+    readEn.contents[0].text,
+    "T2-02: die Resource ist sprachneutral - eine ueber registerTools() eingespeiste " +
+      "Tenant-Sprache darf sie nicht mehr aendern",
+  );
+  assert.equal(
+    readFr.contents[0].text,
+    widgetHtml(WIDGET_AGENT_STATUS),
+    "die registrierte Resource bleibt identisch zur direkt geladenen Fassung",
   );
 });
 
