@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { hasWidget, widgetTitle, widgetHtml, WIDGET_CALL } from "../src/ui/widget-catalog.js";
 import { BIND_SCRIPT, signalUiReady, UI_READY_FLAG, UI_READY_EVENT } from "../src/ui/widget-bind.js";
+import { I18N_SCRIPT, WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
 import { WING_PNG } from "../design-system/components/brand/wing-image.js";
 
 // data-mcp-Slots nach dem Design-Cleanup 2026-07-02: duration_s/failure_reason/
@@ -112,6 +113,12 @@ function makeFakeDocument() {
   bySelector.set("[data-ring-arc]", ringArc);
   return {
     querySelector: (sel) => bySelector.get(sel) || null,
+    // T2-02/S5: leer, weil call.html keine [data-i18n]-Elemente traegt (die
+    // Status-Pill/HUD-Phase werden dynamisch uebersetzt, s. updateStatusPill/
+    // updateHudPhase) - noetig, damit das I18N_SCRIPT (widget-i18n.js) in
+    // derselben Fake-Sandbox laufen kann (T-W1-call-AC-status-pill-locale).
+    querySelectorAll: () => [],
+    documentElement: { lang: "" },
     createElement: () => makeFakeElement(),
     slot: (name) => bySelector.get(`[data-mcp="${name}"]`),
     row: (name) => bySelector.get(`[data-row="${name}"]`),
@@ -153,6 +160,15 @@ function ownScriptSource() {
   const matches = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   assert.ok(matches.length >= 1, "eigenes Inline-Skript in call.html gefunden");
   return matches[matches.length - 1][1];
+}
+
+// Schneidet den Inhalt eines einzelnen <script>-Fragments heraus (Muster
+// mcp-ui-widget-i18n.test.js scriptBodyOf) - fuer T2-02/S5: das I18N_SCRIPT laeuft
+// in <head>, also VOR dem eigenen Inline-Skript, und braucht deshalb dieselbe
+// Extraktion wie ownScriptSource oben, nur fuer ein fertiges Fragment statt fuer
+// die ganze widgetHtml()-Ausgabe.
+function scriptBodyOf(script) {
+  return script.match(/<script>([\s\S]*)<\/script>/)[1];
 }
 
 // Fuehrt das eigene Inline-Skript in einer frischen vm-Sandbox aus (window === die
@@ -199,6 +215,11 @@ function runOwnScript(doc, options) {
   if (options && options.readyBeforeScript) sandbox[UI_READY_FLAG] = true;
 
   vm.createContext(sandbox);
+  // T2-02/S5: optional das I18N_SCRIPT VOR dem eigenen Inline-Skript laufen lassen -
+  // exakt die reale Reihenfolge (widget-catalog.js injiziert es in <head>, das eigene
+  // Skript steht im <body>). Der I18N-message-Listener landet dadurch VOR dem eigenen
+  // in sandbox.addEventListener("message", ...) - env.emit() unten ruft beide aus.
+  if (options && options.withI18n) vm.runInContext(scriptBodyOf(I18N_SCRIPT), sandbox);
   vm.runInContext(ownScriptSource(), sandbox);
 
   return {
@@ -753,6 +774,43 @@ test("T-W1-call-AC-status-pill: Status-Pill-Labels ueber alle 5 Status (EN-Keys;
       params: { structuredContent: { call_id: "call_1", status, duration_s: 1, last_transcript_lines: [], failure_reason: null } } });
     assert.equal(doc.querySelector("[data-status-label]").textContent, expectedLabel, `Status ${status} -> ${expectedLabel}`);
   }
+});
+
+// T2-02/S5: Status-Pill/HUD-Phase muessen NACH einem Sprachwechsel in der neuen
+// Sprache erscheinen - vorher rechnete call.html t() beim Laden (S5-Spec-Beweis).
+// Faehrt das ECHTE I18N_SCRIPT (widget-i18n.js) UND das eigene Inline-Skript in
+// derselben Sandbox (runOwnScript({ withI18n: true })), sendet EINE Host-Nachricht
+// mit BEIDEM: _meta["hermes/locale"]="de" (I18N-Listener schaltet um) UND
+// structuredContent.status="in_progress" (eigener Listener bindet/rendert) - exakt
+// wie am echten Draht (mcp-tools.js withWidgetLocale setzt beide Felder am selben
+// CallToolResult).
+test("T-W1-call-AC-status-pill-locale: tool-result mit hermes/locale=de uebersetzt Status-Pill + HUD-Phase live (T2-02/S5)", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc, { withI18n: true });
+  doc.slot("call_id").textContent = "call_1";
+
+  env.emit({
+    jsonrpc: "2.0",
+    method: "ui/notifications/tool-result",
+    params: {
+      _meta: { [WIDGET_LOCALE_META_KEY]: "de" },
+      structuredContent: { call_id: "call_1", status: "in_progress", duration_s: 1, last_transcript_lines: [], failure_reason: null },
+    },
+  });
+
+  assert.equal(doc.querySelector("[data-status-label]").textContent, "Live", "DE: Live (im Woerterbuch identisch zu EN)");
+  assert.equal(doc.querySelector("[data-hud-phase]").textContent, "Im Gespräch", "DE: HUD-Phase uebersetzt");
+
+  // Gegenprobe: ohne _meta bleibt die Karte englisch (fail-safe Start-Locale).
+  const docEn = makeFakeDocument();
+  const envEn = runOwnScript(docEn, { withI18n: true });
+  docEn.slot("call_id").textContent = "call_1";
+  envEn.emit({
+    jsonrpc: "2.0",
+    method: "ui/notifications/tool-result",
+    params: { structuredContent: { call_id: "call_1", status: "in_progress", duration_s: 1, last_transcript_lines: [], failure_reason: null } },
+  });
+  assert.equal(docEn.querySelector("[data-hud-phase]").textContent, "In call", "ohne _meta bleibt es bei EN");
 });
 
 test("T-W1-call-AC-hud-ring: Status -> HUD-Phasentext (STATUS_VIEW.hudPhase) + Status -> Ring-Erscheinung (STATUS_VIEW.ringPreset: Klasse+dasharray) ueber alle 5 Status", () => {
