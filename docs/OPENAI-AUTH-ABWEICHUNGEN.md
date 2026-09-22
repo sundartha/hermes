@@ -693,9 +693,11 @@ sie verlangen einen abgeschlossenen Login (Owner-Only).
   ohne Auth-Middleware und ruft bewusst kein `applyToolSecuritySchemes` auf;
   T-9/T-11/T-12/T-14/T-16 sind fuer stdio **nicht anwendbar** (kein Token, kein
   OpenAI-Connector-Pfad dort).
-- **mcp-nativer Adapter vs. ChatGPT-Adapter (beide ueber HTTP):** `mcpAuth` laeuft **vor** der
-  Adapterwahl (`src/routes/mcp.js:113` vs. `:158`) — beide Adapter teilen denselben
-  Auth-Codepfad, ein zweiter Test pro Adapter ist nicht noetig und wurde nicht gebaut.
+- **mcp-nativer Adapter (seit T2-01 der einzige, ChatGPT-/Skybridge-Adapter entfernt):**
+  `mcpAuth` laeuft **vor** der Renderer-Wahl (`src/routes/mcp.js:113` vs. `:158`) — es gibt
+  seit T2-01 nur noch einen Renderer fuer JEDEN Host, ein zweiter Auth-Test pro Adapter
+  ist damit gegenstandslos geworden (er war schon vorher nicht noetig, da beide Adapter
+  denselben Auth-Codepfad teilten).
 
 ## 9. Nicht doppelt verbucht
 
