@@ -3077,7 +3077,7 @@
   },
   "test/mcp-ui.test.js": {
     "id-length": {
-      "count": 29
+      "count": 24
     },
     "max-params": {
       "count": 3
@@ -3089,7 +3089,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 38
+      "count": 37
     },
     "sonarjs/no-commented-code": {
       "count": 1

@@ -14,7 +14,6 @@ import {
   mcpNativeRenderer,
   WIDGET_AGENT_STATUS,
 } from "../src/ui/adapters/mcp-native.js";
-import { chatgptRenderer } from "../src/ui/adapters/chatgpt.js";
 // Neue read-only Widget-Ids aus der kanonischen Quelle (widget-catalog.js).
 import {
   WIDGET_MY_NUMBER,
@@ -26,10 +25,7 @@ import {
 import { localeFor } from "../src/i18n/locales.js";
 import {
   UI_MIME,
-  CHATGPT_UI_MIME,
-  CHATGPT_META_KEY,
   capabilityDeclaresUi,
-  capabilityDeclaresChatgptUi,
   uiResourceUri,
   uiServerExtension,
 } from "../src/ui/contract.js";
@@ -524,10 +520,15 @@ test("T-P2-UI-AC5: Fehlerpfad - degradierte Antwort -> isError, text-only, auch 
 // Beweist: dasselbe Widget rendert in BEIDEN Host-Konventionen; der mcp-native Pfad
 // bleibt byte-kompatibel (die P1/P2-Tests oben sind unveraendert), nur die Host-eigene
 // _meta-Form + der mimeType unterscheiden sich.
+// Skybridge-Capability-Literal: NUR noch fuer den Beleg "eine Capability im Request
+// aendert nichts" (T2-01 - der ChatGPT-/Skybridge-Adapter ist entfernt, s.
+// src/ui/registry.js). Kein Import mehr aus contract.js (die Konstante existiert dort
+// nicht mehr).
+const SKYBRIDGE_UI_MIME = "text/html+skybridge";
 const CHATGPT_CAPS = {
-  extensions: { "io.modelcontextprotocol/ui": { mimeTypes: [CHATGPT_UI_MIME] } },
+  extensions: { "io.modelcontextprotocol/ui": { mimeTypes: [SKYBRIDGE_UI_MIME] } },
 };
-const chatgptHost = () => ({ enabled: true, capabilities: CHATGPT_CAPS });
+const skybridgeCapsHost = () => ({ enabled: true, capabilities: CHATGPT_CAPS });
 
 // Liest die statische ui://-Resource eines Renderers fuer ein Widget zurueck (readback).
 function readbackResource(renderer, widgetId) {
@@ -567,99 +568,65 @@ test("T-P3-AC1: place_call (einziges _meta-tragendes Tool nach W2), mcp-nativer 
   }
 });
 
-test("T-P3-AC2: place_call, ChatGPT-Host - eine Resource + flaches openai/outputTemplate", async () => {
-  for (const { tool, widgetId, body, args } of P3_WIDGETS) {
-    await withGateway(body, async () => {
-      const capable = captureUi({ uiHost: capableHost() });
-      const chat = captureUi({ uiHost: chatgptHost() });
-      const uri = uiResourceUri(widgetId);
-      const matching = chat.resources.filter((r) => r.uri === uri);
-      assert.equal(matching.length, 1, `${tool}: genau eine Resource`);
-      assert.equal(matching[0].config.mimeType, CHATGPT_UI_MIME);
-      const meta = chat.tools.get(tool).config._meta;
-      assert.equal(meta[CHATGPT_META_KEY], uri, `${tool}: flacher String unter openai/outputTemplate`);
-      assert.ok(!meta.ui, `${tool}: kein verschachteltes _meta.ui (das ist mcp-nativ)`);
-
-      const a = await capable.tools.get(tool).handler(args);
-      const b = await chat.tools.get(tool).handler(args);
-      assert.deepEqual(
-        Object.keys(b.structuredContent).sort(),
-        Object.keys(a.structuredContent).sort(),
-        `${tool}: structuredContent-Keys host-unabhaengig identisch`,
-      );
-    });
-  }
-});
-
-test("T-P3-AC3: Registry waehlt GENAU EINEN Adapter pro Host (ChatGPT explizit, sonst mcp-nativ)", () => {
+test("T-P3-AC3: Registry waehlt den mcp-nativen Renderer, auch mit Skybridge-Capability (Adapter entfernt, T2-01) - Master-Schalter bleibt das einzige Gate", () => {
   assert.equal(uiRendererFor(capableHost()), mcpNativeRenderer, "mcp-nativer Host -> mcp-native");
-  assert.equal(uiRendererFor(chatgptHost()), chatgptRenderer, "ChatGPT-Host -> chatgpt");
+  assert.equal(
+    uiRendererFor(skybridgeCapsHost()),
+    mcpNativeRenderer,
+    "Skybridge-Capability aendert nichts mehr - der Adapter ist entfernt",
+  );
   assert.equal(
     uiRendererFor({
       enabled: true,
       capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
     }),
     mcpNativeRenderer,
-    "fremder mimeType (kein ChatGPT-Marker) -> Default mcp-nativ",
+    "jede Capability fuehrt zum selben Renderer",
   );
   assert.equal(uiRendererFor({ enabled: false, capabilities: CHATGPT_CAPS }), null, "Master-Schalter aus -> null");
   assert.equal(uiRendererFor(null), null, "kein hostHint -> null");
 });
 
-test("T-P3-AC4: Whitelist unveraendert auch im ChatGPT-Pfad (place_call, kein PII-Leck aus dem Gateway-Body)", async () => {
+test("T-P3-AC4: Whitelist - place_call (mcp-nativer Host), kein PII-Leck aus dem Gateway-Body", async () => {
   const leaks = {
     place_call: ["secret@example.com", "sk_live_LEAK", "tenant-XYZ"],
   };
   for (const { tool, body, args } of P3_WIDGETS) {
     await withGateway(body, async () => {
       const capable = captureUi({ uiHost: capableHost() });
-      const chat = captureUi({ uiHost: chatgptHost() });
-      const a = await capable.tools.get(tool).handler(args);
-      const b = await chat.tools.get(tool).handler(args);
-      const serialized = JSON.stringify(b);
+      const result = await capable.tools.get(tool).handler(args);
+      const serialized = JSON.stringify(result);
       for (const leak of leaks[tool]) {
-        assert.ok(!serialized.includes(leak), `${tool}: kein Leck von "${leak}" im ChatGPT-Result`);
+        assert.ok(!serialized.includes(leak), `${tool}: kein Leck von "${leak}" im Tool-Result`);
       }
-      assert.deepEqual(
-        Object.keys(b.structuredContent).sort(),
-        Object.keys(a.structuredContent).sort(),
-        `${tool}: structuredContent-Keys exakt wie mcp-nativ`,
-      );
     });
   }
 });
 
-// E7 (T-30/T-31): die zwei Einreichungs-Pflichtfelder am Widget-_meta. config.server.
-// publicUrl wird pro Test explizit gesetzt und im finally wiederhergestellt (Muster
-// test/route-auth-inventory.test.js) - sonst entscheidet die lokale .env ueber das
-// Ergebnis. uiSubmissionMeta() wertet synchron zur Aufrufzeit aus (kein await noetig).
-test("E7-T10: mcp-nativer Host traegt eine leere, aber vorhandene CSP am Widget-_meta", async () => {
-  const zuvor = config.server.publicUrl;
-  config.server.publicUrl = "https://e7.test";
-  try {
-    for (const { tool, body } of P3_WIDGETS) {
-      await withGateway(body, async () => {
-        const { tools } = captureUi({ uiHost: capableHost() });
-        const meta = tools.get(tool).config._meta;
-        assert.deepEqual(meta.ui.csp, { connectDomains: [], resourceDomains: [] });
-        assert.equal("frameDomains" in meta.ui.csp, false, "frameDomains entfaellt (0 Frames)");
-      });
-    }
-  } finally {
-    config.server.publicUrl = zuvor;
-  }
-});
-
-test("E7-T11: mcp-nativer Host traegt den Server-Origin als domain, resourceUri unveraendert", async () => {
+// E7 (T-30/T-31), Stand T2-01: die zwei Einreichungs-Pflichtfelder sitzen seit T2-01 am
+// RESOURCE-INHALT (uiResourceMeta, src/ui/contract.js), nicht mehr am Tool-Deskriptor -
+// der traegt seither nur noch _meta.ui.resourceUri. config.server.publicUrl wird pro Test
+// explizit gesetzt und im finally wiederhergestellt (Muster test/route-auth-inventory.
+// test.js) - sonst entscheidet die lokale .env ueber das Ergebnis. uiResourceMeta()
+// wertet synchron zur Aufrufzeit aus (kein await noetig).
+test("E7-T10: Tool-Deskriptor traegt seit T2-01 NUR resourceUri; die Resource-CSP ist leer, aber vorhanden", async () => {
   const zuvor = config.server.publicUrl;
   config.server.publicUrl = "https://e7.test";
   try {
     for (const { tool, widgetId, body } of P3_WIDGETS) {
       await withGateway(body, async () => {
         const { tools } = captureUi({ uiHost: capableHost() });
-        const meta = tools.get(tool).config._meta;
-        assert.equal(meta.ui.domain, "https://e7.test");
-        assert.equal(meta.ui.resourceUri, uiResourceUri(widgetId));
+        const { config } = tools.get(tool);
+        assert.deepEqual(
+          Object.keys(config._meta.ui),
+          ["resourceUri"],
+          `${tool}: _meta.ui traegt NUR resourceUri`,
+        );
+
+        const read = await readbackResource(mcpNativeRenderer, widgetId);
+        const content = read.contents[0];
+        assert.deepEqual(content._meta.ui.csp, { connectDomains: [], resourceDomains: [] });
+        assert.equal("frameDomains" in content._meta.ui.csp, false, "frameDomains entfaellt (0 Frames)");
       });
     }
   } finally {
@@ -667,83 +634,62 @@ test("E7-T11: mcp-nativer Host traegt den Server-Origin als domain, resourceUri 
   }
 });
 
-test("E7-T12: fail-safe - leere publicUrl laesst domain entfallen, CSP bleibt vorhanden", async () => {
+test("E7-T11: Resource-Inhalt traegt den Server-Origin als openai/widgetDomain, resourceUri am Tool unveraendert", async () => {
+  const zuvor = config.server.publicUrl;
+  config.server.publicUrl = "https://e7.test";
+  try {
+    for (const { tool, widgetId, body } of P3_WIDGETS) {
+      await withGateway(body, async () => {
+        const { tools } = captureUi({ uiHost: capableHost() });
+        const { config } = tools.get(tool);
+        assert.equal(config._meta.ui.resourceUri, uiResourceUri(widgetId));
+
+        const read = await readbackResource(mcpNativeRenderer, widgetId);
+        const content = read.contents[0];
+        assert.equal(content._meta["openai/widgetDomain"], "https://e7.test");
+      });
+    }
+  } finally {
+    config.server.publicUrl = zuvor;
+  }
+});
+
+test("E7-T12: fail-safe - leere publicUrl laesst openai/widgetDomain am Resource-Inhalt entfallen, csp bleibt vorhanden", async () => {
   const zuvor = config.server.publicUrl;
   config.server.publicUrl = "";
   try {
-    for (const { tool, body } of P3_WIDGETS) {
-      await withGateway(body, async () => {
-        const { tools } = captureUi({ uiHost: capableHost() });
-        const meta = tools.get(tool).config._meta;
-        assert.equal("domain" in meta.ui, false);
-        assert.ok(meta.ui.csp, "csp bleibt trotzdem vorhanden");
-      });
+    for (const { widgetId } of P3_WIDGETS) {
+      const read = await readbackResource(mcpNativeRenderer, widgetId);
+      const content = read.contents[0];
+      assert.equal("openai/widgetDomain" in content._meta, false);
+      assert.ok(content._meta.ui.csp, "csp bleibt trotzdem vorhanden");
     }
   } finally {
     config.server.publicUrl = zuvor;
   }
 });
 
-test("E7-T13: Nicht-Regression ChatGPT-Host - flacher openai/outputTemplate-String bleibt unangetastet", async () => {
-  const zuvor = config.server.publicUrl;
-  config.server.publicUrl = "https://e7.test";
-  try {
-    for (const { tool, widgetId, body } of P3_WIDGETS) {
-      await withGateway(body, async () => {
-        const { tools: chatTools } = captureUi({ uiHost: chatgptHost() });
-        const meta = chatTools.get(tool).config._meta;
-        assert.equal(meta[CHATGPT_META_KEY], uiResourceUri(widgetId));
-        assert.ok(!meta.ui, "ChatGPT-_meta bleibt flach, kein verschachteltes ui");
-      });
-    }
-  } finally {
-    config.server.publicUrl = zuvor;
-  }
+test("T-P3-AC6: mcpNativeRenderer-Grenzfaelle + Detektor", () => {
+  assert.equal(mcpNativeRenderer.hasWidget(WIDGET_CALL), true);
+  assert.equal(mcpNativeRenderer.hasWidget(WIDGET_AGENT_STATUS), true);
+  assert.equal(mcpNativeRenderer.hasWidget("unknown"), false);
+  assert.equal(mcpNativeRenderer.mimeType, UI_MIME);
+
+  assert.equal(capabilityDeclaresUi(undefined), false, "Grenzfall: undefined -> false");
+  assert.equal(capabilityDeclaresUi({}), false);
+  assert.equal(capabilityDeclaresUi(CHATGPT_CAPS), false, "Skybridge-Caps -> kein mcp-nativ");
+  assert.equal(capabilityDeclaresUi(CAPABLE_CAPS), true, "mcp-native Caps -> mcp-nativ");
 });
 
-test("T-P3-AC5: gleiche Widget-Bytes in beiden Hosts (Resource-HTML byte-genau)", async () => {
+// Regressions-Pin, seit T2-01 fuer JEDEN Host (es gibt nur noch mcp-native): das
+// Widget-HTML spricht ausschliesslich tools/call-postMessage (SEP-1865) - keine
+// window.openai-Bruecke, keine host-bedingte Verzweigung mehr.
+test("T-P3-AC7: Widget-HTML spricht nur tools/call, keine window.openai-Bruecke", async () => {
   for (const { widgetId } of P3_WIDGETS) {
-    const nativeBack = await readbackResource(mcpNativeRenderer, widgetId);
-    const chatBack = await readbackResource(chatgptRenderer, widgetId);
-    assert.equal(chatBack.contents[0].mimeType, CHATGPT_UI_MIME, "ChatGPT-readback mimeType");
-    const nativeHtml = nativeBack.contents[0].text;
-    const chatHtml = chatBack.contents[0].text;
-    assert.equal(chatHtml, nativeHtml, `${widgetId}: identische Widget-Bytes in beiden Hosts`);
-    assert.ok(chatHtml.startsWith("<!-- @dsCard"), "@dsCard-Marker in Zeile 1");
-    assert.ok(!chatHtml.includes("@import"), "kein @import");
-    assert.doesNotMatch(chatHtml, /<link[\s>]/, "kein <link>-Element");
-    assert.doesNotMatch(chatHtml, /href\s*=/, "kein href-Linkback");
-  }
-});
-
-test("T-P3-AC6: chatgptRenderer-Grenzfaelle + Detektor", () => {
-  assert.equal(chatgptRenderer.hasWidget(WIDGET_CALL), true);
-  assert.equal(chatgptRenderer.hasWidget(WIDGET_AGENT_STATUS), true);
-  assert.equal(chatgptRenderer.hasWidget("unknown"), false);
-  assert.equal(chatgptRenderer.mimeType, CHATGPT_UI_MIME);
-
-  assert.equal(capabilityDeclaresChatgptUi(undefined), false, "Grenzfall: undefined -> false");
-  assert.equal(capabilityDeclaresChatgptUi({}), false);
-  // Detektoren disjunkt: ein mcp-nativer Host ist KEIN ChatGPT-Host und umgekehrt.
-  assert.equal(capabilityDeclaresChatgptUi(CAPABLE_CAPS), false, "mcp-Caps -> kein ChatGPT");
-  assert.equal(capabilityDeclaresUi(CHATGPT_CAPS), false, "ChatGPT-Caps -> kein mcp-nativ");
-});
-
-// Regressions-Pin fuer die in src/ui/registry.js dokumentierte, bewusst offene Luecke:
-// der ChatGPT-Adapter liefert dasselbe Widget-HTML wie mcp-nativ (T-P3-AC5), das seit
-// widget-wire NUR NOCH tools/call-postMessage spricht - keine ChatGPT-eigene
-// window.openai-Bruecke mehr. Ein echter ChatGPT-Host bekommt damit den Erst-Aufruf
-// (Text+structuredContent) wie gewohnt, aber KEINE live-aktualisierende Karte (Self-Poll/
-// Cancel/get_transcript bleiben dort stumm). Faellt dieser Test um, weil das HTML wieder
-// window.openai enthaelt ODER tools/call nicht mehr der einzige Sendeweg ist, muss die
-// Entscheidung in src/ui/registry.js neu getroffen und dort dokumentiert werden - nicht
-// stillschweigend hier vorbeigehen.
-test("T-P3-AC7: bekannte Luecke gepinnt - ChatGPT-ausgeliefertes Widget-HTML spricht nur tools/call, keine window.openai-Bruecke", async () => {
-  for (const { widgetId } of P3_WIDGETS) {
-    const chatBack = await readbackResource(chatgptRenderer, widgetId);
-    const chatHtml = chatBack.contents[0].text;
-    assert.ok(!chatHtml.includes("window.openai"), `${widgetId}: kein window.openai im ChatGPT-Pfad`);
-    assert.ok(chatHtml.includes('"tools/call"'), `${widgetId}: einziger Sendeweg bleibt tools/call`);
+    const read = await readbackResource(mcpNativeRenderer, widgetId);
+    const html = read.contents[0].text;
+    assert.ok(!html.includes("window.openai"), `${widgetId}: kein window.openai`);
+    assert.ok(html.includes('"tools/call"'), `${widgetId}: einziger Sendeweg bleibt tools/call`);
   }
 });
 
@@ -1421,7 +1367,10 @@ test("P10a (H2): ohneWidgetMeta() ist streng - true NUR bei genau den beiden Sta
   assert.ok(!ohneWidgetMeta(WITH_UI_KEY), "zusaetzlich 'ui' -> false");
 
   const WITH_CHATGPT_KEY = {
-    _meta: { ...STATUS_ONLY._meta, [CHATGPT_META_KEY]: "uri" },
+    // Literal statt Import: der Skybridge-Alias existiert seit T2-01 nicht mehr in
+    // contract.js (Adapter entfernt) - der Helfer muss trotzdem JEDEN dritten Schluessel
+    // ablehnen, nicht nur die heute noch verdrahteten.
+    _meta: { ...STATUS_ONLY._meta, "openai/outputTemplate": "uri" },
   };
   assert.ok(!ohneWidgetMeta(WITH_CHATGPT_KEY), "zusaetzlich openai/outputTemplate -> false");
 
