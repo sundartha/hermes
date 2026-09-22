@@ -33,6 +33,7 @@ import { audit, hashEmail } from "../util.js";
 import { ANON_IDENTITY, TENANT_REJECT } from "../request-tenant.js";
 import { tenantLanguage } from "../store/views.js";
 import { createMcpOriginGuard, mcpErlaubteOrigins } from "../middleware.js";
+import { isChatGptEgressIp } from "../ui/chatgpt-egress.js";
 
 // deps: { config, store, requestTenant }. config = globales Config-Objekt (mcpUiEnabled).
 // store traegt resolveProfile. requestTenant = die EINE Wurzel-Instanz (INV-7; loest den
@@ -82,6 +83,18 @@ function logAndResolveIdentity({ req, scopedTenant }) {
   // als X-Internal-Identity an die In-Process-Tools gereicht (Audit/requestedBy) - NICHT
   // mehr fuer das Rechteprofil. Kein req.auth (Legacy/localhost/stdio) -> null.
   return req.auth ? req.auth.email || req.auth.sub || ANON_IDENTITY : null;
+}
+
+// T2-01 Nachbau: Client-Klasse fuer ui.domain (chatgpt-egress.js) UND fuer die Owner-
+// Messung loggen - NIEMALS req.ip selbst (Regel 4, PII). req.ip ist hinter "trust
+// proxy" (app.js) aus X-Forwarded-For abgeleitet, dieselbe Ableitung wie ueberall sonst
+// im Repo (routes/_tenant.js, middleware.js rateHit) - keine zweite IP-Quelle. Eigene
+// Funktion (G30/G34): buendelt Klassifikation + Diagnose-Log, analog
+// logAndResolveIdentity oben (EIN Zweck, aus dem Haupt-Handler herausgezogen).
+function logAndDetectChatgptEgress(req) {
+  const chatgptEgress = isChatGptEgressIp(req.ip);
+  console.log("[mcp] client-class", chatgptEgress ? "chatgpt" : "andere");
+  return chatgptEgress;
 }
 
 export function makeMcpRoutes({ config, store, requestTenant }) {
@@ -143,19 +156,20 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
       });
       const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
       // Rich-UI-Host-Hinweis: gegated NUR durch den Master-Schalter config.tenancy.mcpUiEnabled
-      // (aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Der MCP-native
-      // Renderer ist der Default (siehe ui/registry.js); kein per-Request-Capability-Gate
-      // mehr, weil der stateless Transport (sessionIdGenerator=undefined) die initialize-
-      // Capabilities nicht zum tools/list-POST mitfuehrt - das Widget-_meta erschien sonst
-      // NIE. capabilities dienen nur noch der expliziten ChatGPT-Adapter-Wahl. Kein neuer
-      // Endpunkt, mcpAuth + res.on("close")-Cleanup unveraendert. Die Zeile unten liest
-      // params.capabilities bei JEDEM POST neu (kein Session-State) - vom initialize-POST
-      // kommt beim naechsten Request also nichts mehr an. Stuende dieselbe Capability im
-      // tools/list- oder resources/read-Request selbst, wuerde sie hier greifen. Kein
-      // standardkonformer Client (Claude, ChatGPT) tut das - Capabilities gehoeren laut
-      // Spec nur ins initialize -, deshalb praktisch tot, aber nicht technisch unerreichbar
-      // (P8, §0.3 M-1).
-      const uiHost = { enabled: config.tenancy.mcpUiEnabled, capabilities: req.body?.params?.capabilities };
+      // (aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Seit T2-01 gibt es
+      // genau einen Renderer (ui/registry.js, MCP-Apps-Standard fuer JEDEN Host) - kein
+      // Capability-Feld mehr noetig, kein neuer Endpunkt, mcpAuth + res.on("close")-Cleanup
+      // unveraendert.
+      const uiEnabled = config.tenancy.mcpUiEnabled;
+      // T2-01 Nachbau: NUR bei aktivem Master-Schalter ueberhaupt klassifizieren - der
+      // Schalter aus heisst weiterhin byte-identisch (kein Widget, kein Resource-Read,
+      // die Klassifikation waere reine Nebenwirkung ohne Konsumenten). chatgptEgress
+      // reist ALS FELD AM uiHost mit, kein eigenes registerTools-Argument (uiHost und
+      // chatgptEgress beschreiben denselben Host-Kontext, G32).
+      const uiHost = {
+        enabled: uiEnabled,
+        chatgptEgress: uiEnabled ? logAndDetectChatgptEgress(req) : false,
+      };
       registerTools(server, {
         identity,
         scopedTenant,

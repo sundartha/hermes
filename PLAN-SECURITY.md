@@ -5153,7 +5153,13 @@ und Positiv-Kontrolle. In P7 bewusst NICHT geaendert.
 **Kein Launch-Blocker wird durch P7 geschlossen** — alle fuenf Punkte bleiben offen und
 sind Owner-/Anbieter-Entscheidungen, keine Code-Aenderungen dieser Phase.
 
-## OpenAI-P8 — Widget-UI: ChatGPT-Adapter auf Paritaet (2026-09-21, Endstand nach Runde 2)
+## OpenAI-P8 — Widget-UI: ChatGPT-Adapter auf Paritaet (2026-09-21, Endstand nach Runde 2) — ABGELOEST DURCH T2-01
+
+**Abgeloest durch OpenAI-T2-01 (2026-09-22, s.u.):** der ENDSTAND dieses Abschnitts (T-30/
+T-31 nicht gebaut, ChatGPT-Adapter bleibt toter Code) gilt NICHT mehr. T2-01 baut T-30/
+T-31 am Resource-Inhalt und entfernt den ChatGPT-/Skybridge-Adapter ersatzlos. Dieser
+Abschnitt bleibt als Historie stehen (er begruendet, WARUM T2-01 den Standard-Schluessel
+statt des Legacy-Alias waehlt).
 
 **Ergebnis der Messung (`tasks/openai-p8-spec.md` §0.3):** der ChatGPT-Adapter
 (`src/ui/adapters/chatgpt.js`, "skybridge") ist auf dem Draht praktisch TOT — fuer Claude
@@ -5255,6 +5261,139 @@ keinen MCP-Apps-Host wirksam sind (s. `src/ui/contract.js`).
   Client tatsaechlich (D0-8), rendert die Karte ueberhaupt, und wenn ja, ueber welchen
   Pfad? Erst danach ist entscheidbar, OB und WO T-30/T-31 fuer OpenAI etwas bewirken
   wuerden.
+
+## OpenAI-T2-01 — Widget: csp/Origin am Resource-Inhalt, Skybridge-Adapter raus (2026-09-22)
+
+**Loest den P8-ENDSTAND ab (s.o.):** T-30/T-31 sitzen jetzt am RESOURCE-INHALT
+(`resources/read`, `uiResourceMeta()` in `src/ui/contract.js`), fuer HTTP UND stdio, EIN
+anfrageunabhaengiger Inhalt fuer Claude UND ChatGPT:
+```
+contents[0]._meta = {
+  ui: { csp: { connectDomains: [], resourceDomains: [] } },
+  "openai/widgetDomain": <Origin aus PUBLIC_URL, normalisierterOrigin(), s. src/middleware.js>,
+}
+```
+Urspruenglich bewusst KEIN `_meta.ui.domain`: claude.com/docs/connectors/building/
+mcp-apps/troubleshooting verlangt dort GENAU den SHA-256-Hash der eigenen Connector-URL
+(`{hash}.claudemcpcontent.com`) — jeder andere Wert laesst Claude das Widget mit "Invalid
+ui.domain format" verweigern; ohne das Feld rendert Claude mit seinem Standard-Origin.
+`openai/widgetDomain` ist der offizielle ChatGPT-Alias fuer denselben Origin und bricht
+Claude nicht. T-31 war damit nur ueber den Alias erfuellt, nicht ueber den woertlichen
+`ui.domain`-Schluessel. **Nachbau (s. Abschnitt "OpenAI-T2-01 Nachbau" unten):**
+developers.openai.com/plugins/reference nennt `_meta.ui.domain` selbst als PFLICHTFELD
+("required when submitting a plugin with UI") — ein echter Zielkonflikt zwischen den
+beiden Primaerquellen, seit 2026-09-22 aufgeloest per Client-Erkennung (ChatGPT-Egress-
+IP): NUR wenn die Anfrage nachweislich von ChatGPT kommt, wird `ui.domain` zusaetzlich
+zum Alias gesetzt. Jeder andere Host (inkl. stdio) bleibt exakt beim hier beschriebenen
+Zustand.
+
+**Der Skybridge-/ChatGPT-Adapter ist ersatzlos entfernt** (`src/ui/adapters/chatgpt.js`
+geloescht, `CHATGPT_UI_MIME`/`CHATGPT_META_KEY`/`capabilityDeclaresChatgptUi` aus
+`src/ui/contract.js` raus, `src/ui/registry.js` waehlt nur noch `mcpNativeRenderer`,
+`src/routes/mcp.js` liest keine `params.capabilities` mehr). Begruendung: der Adapter war
+bereits seit P8 auf dem Draht praktisch tot (stateless Transport fuehrt keine
+initialize-Capabilities zum tools/list-/resources/read-POST mit); ihn zu entfernen macht
+den EINEN lebenden Pfad (`mcpNativeRenderer`) auch der EINZIGE im Code, statt eines toten
+Zweigs, den niemand mehr pflegt.
+
+**Draht-Beleg:** `test/openai-t2-01-widget-resource-meta.test.js` (T1-T8) — HTTP OAuth
+UND Token/Legacy, stdio, mit UND ohne PUBLIC_URL, ein rekursiver `ui.domain`-Waechter
+(0 Treffer, Positiv-Kontrolle inklusive), Byte-Gleichheit trotz Skybridge-Capabilities im
+Request, Quelltext-Waechter (kein `chatgpt.js`/Skybridge-Rest unter `src/`), und ein
+Widget-Scan, der belegt, dass alle 5 Widgets in JEDER Sprache von nirgendwo laden.
+`test/openai-p8-widget-ui.test.js` (P8-A..P8-J) ist auf den neuen Stand umgebaut (P8-H
+entfaellt, der Adapter existiert nicht mehr).
+
+**Rechercheergebnis, das die Spec nicht vorwegnahm (T2 in der neuen Testdatei):** der
+statische Bearer-Modus (`MCP_AUTH=token`) setzt NIE `req.auth` — nur der OAuth-Zweig tut
+das (`src/auth.js`). Ohne `req.auth` loest `requestTenant` ueber `operatorChannelTenant`
+auf, und das greift AUSSCHLIESSLICH fuer `isTrustedLocalCaller` (echter Loopback-Socket,
+`src/routes/_tenant.js:100-101`) — unabhaengig vom Bearer. Ein korrekter Token ueber die
+Interface-IP authentifiziert damit den DRAHT, liefert aber NIE eine Tenant-Identitaet ->
+403, bevor `registerTools` je laeuft. Das ist bestehende, fail-closed Architektur (Token =
+Single-Operator-Loopback, keine Multi-Tenant-Identitaet ohne OAuth) und keine Luecke
+dieser Phase — dokumentiert statt stillschweigend angenommen (T2b in der neuen Testdatei
+ist der Negativ-Beleg dafuer).
+
+**Rueckfall ohne Code:** `MCP_UI_ENABLED=false` im Dashboard (Master-Schalter, Stufe-0-
+Text bleibt, `place_call` funktioniert weiter).
+
+**Offene Owner-Punkte:**
+- **OW-D:** Claude (Web + Desktop), fruehestens nach Deploy — Widget rendert, kein
+  `ui.domain`-/CSP-Fehler.
+- **OW-C:** ChatGPT Developer Mode, fruehestens 1h nach Deploy (Cache) — Widget rendert,
+  Iframe-Origin ist eine vom Origin abgeleitete `oaiusercontent.com`-Subdomain.
+- **OW-E:** OpenAI-Dashboard-Scan-Entwurf (nicht einreichen) gegen `https://<origin>/mcp`
+  — keine Warnung zu `_meta.ui.domain`/CSP. Warnung -> Rueckfall "eigener ChatGPT-Pfad"
+  ist eine eigene, spaetere Phase.
+- **OW-G:** Render-Werte PUBLIC_URL = Einreichungs-Origin, MCP_UI_ENABLED an.
+
+## OpenAI-T2-01 Nachbau — ui.domain per ChatGPT-Egress-Erkennung (2026-09-22)
+
+**Befund, der den T2-01-ENDSTAND korrigiert:** developers.openai.com/plugins/reference
+nennt `_meta.ui.domain` selbst als "Resource contents"-Pflichtfeld ("Dedicated origin for
+hosted components (required when submitting a plugin with UI; must be unique per
+plugin)"); `openai/widgetDomain` ist dort nur der "OpenAI-specific compatibility alias".
+Claude validiert `ui.domain` dagegen gegen die Connector-URL und zeigt statt des Widgets
+einen Fehler, wenn ein falscher Wert steht ("Invalid ui.domain format"/"ui.domain
+mismatch", claude.com/docs/connectors/building/mcp-apps/troubleshooting); fehlt das Feld,
+nimmt Claude seinen Standard-Origin. Echter Zielkonflikt zwischen den beiden
+Primaerquellen — T2-01 hatte ihn zugunsten von Claude aufgeloest (kein `ui.domain`,
+T-31 nur ueber den Alias).
+
+**Owner-Entscheidung: `ui.domain` NUR setzen, wenn die Anfrage nachweislich von ChatGPT
+kommt** — erkannt an OpenAIs veroeffentlichten Egress-IP-Bereichen. OpenAI dokumentiert
+das selbst als Client-Erkennung ("You can also allowlist ChatGPT's published egress IP
+ranges", developers.openai.com/plugins/build/auth#client-identification; Liste
+https://openai.com/chatgpt-connectors.json). Der Alias `openai/widgetDomain` bleibt
+UNBEDINGT und fuer JEDEN Host gesetzt. stdio setzt `ui.domain` NIE (kein Client-IP-Begriff
+dort). Standardfall (keine ChatGPT-IP, Erkennung faellt aus) = der T2-01-ENDSTAND von
+oben, byte-identisch.
+
+**Umsetzung:**
+- `src/ui/chatgpt-egress.js` (neu): `node:net` `BlockList`, gespeist aus der
+  eingecheckten `src/ui/chatgpt-egress-ranges.json` (Herkunft/Abrufdatum in deren
+  Feldern `_source`/`_fetchedAt`/`_upstreamCreationTime`, Aktualisierungsweg im
+  Datei-Kommentar). Kein Laufzeit-Fetch. `isChatGptEgressIp(ip)` ist fail-closed: jede
+  ungueltige/fehlende Eingabe -> `false` (= "kein `ui.domain`", NIE ein Sicherheits-Gate
+  im Sinne der absoluten Regeln — es steuert nur ein Zusatzfeld am Resource-Inhalt).
+- `src/routes/mcp.js`: klassifiziert PRO REQUEST via `req.ip` (hinter `trust proxy 1`,
+  `src/app.js`, ungeaendert) NUR wenn `MCP_UI_ENABLED` an ist; loggt ausschliesslich die
+  Klasse (`chatgpt`/`andere`) fuer die Owner-Messung — NIEMALS `req.ip` selbst.
+- `src/mcp-tools.js` (`registerTools`): reicht die Klasse als `chatgptEgress` durch
+  (stdio, `src/mcp-server.js`, ruft ohne dieses Feld auf -> immer `false`).
+- `src/ui/contract.js` (`uiResourceMeta(chatgptEgress)`, `makeUiRenderer().
+  registerResource(server, widgetId, { language, chatgptEgress })`): `ui.domain` nur bei
+  `chatgptEgress === true` UND vorhandenem Origin, sonst wie zuvor nur der Alias.
+
+**Betriebswissen: Aktualisierung der Egress-Liste.** `src/ui/chatgpt-egress-ranges.json`
+ist eine einmalige Kopie ohne Laufzeit-Fetch (Safety-Review-Befund, Nachbau). Kein
+dedizierter Alarm ausser einer Testschwelle: `test/chatgpt-egress.test.js` faellt rot,
+sobald `_fetchedAt` mehr als 180 Tage zurueckliegt (`EGRESS_LISTE_MAX_ALTER_TAGE`) - das
+faengt NUR das Vergessen, nicht die inhaltliche Drift (OpenAI kann Bereiche jederzeit
+frueher aendern; ein zu alter Eintrag klassifiziert eine echte ChatGPT-Anfrage dann
+still als "andere" und die Resource verliert nur `ui.domain`, kein Auth-/Kosten-/
+Gate-Effekt). Rhythmus: bei jeder folgenden OpenAI-Einreichungs-Phase neu von `_source`
+abrufen, spaetestens wenn der Test rot wird; Verantwortlich ist, wer die naechste
+OpenAI-Phase vorbereitet (keine dedizierte Rolle noetig, Team = Owner). Vorgehen steht im
+`_note`-Feld der Datei.
+
+**Draht-Beleg (echte HTTP-Route, kein `registerResource()`-Unit-Test — der SDK-Client
+verwirft unbekannte `_meta`-Felder sonst still):** `test/openai-t2-01-widget-resource-
+meta.test.js` T9 (X-Forwarded-For aus der gelisteten Liste -> `ui.domain` = PUBLIC_URL-
+Origin, Alias bleibt) und T10 (reale, nicht gelistete IP, Beispiel 160.79.104.10 —
+Claude-Adressraum -> kein `ui.domain`, Alias bleibt); T5 (Waechter) bleibt fuer den
+Standardfall gruen und ist im Kommentar auf den Bereich "keine ChatGPT-IP" praezisiert.
+`test/chatgpt-egress.test.js` deckt das Modul isoliert ab (zwei echte Treffer,
+Subnetz-Grenzfall an einem realen `/23`-Eintrag, IPv4-gemapptes IPv6, Nicht-Treffer,
+Muell/fail-closed).
+
+**Offene Owner-Punkte (zusaetzlich zu OW-C/D/E/G oben):**
+- Ob ChatGPTs `resources/read` und der Portal-Scan tatsaechlich aus den gelisteten
+  IP-Bereichen kommen und `req.ip` hinter Render die echte Client-IP traegt (Klasse im
+  Log pruefen).
+- Ob der Portal-Scan `ui.domain` jetzt als akzeptiert zeigt (vorher: Pflichtfeld fehlte).
+- Ob ChatGPT das Widget mit `ui.domain` = PUBLIC_URL-Origin tatsaechlich rendert.
 
 ## OpenAI-P10b — HTTP-Oberflaeche des Hauptservers (2026-09-21)
 

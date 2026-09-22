@@ -40,8 +40,6 @@ const LIST_TOOLS_METHOD = "tools/list";
 // Client - z.any() pro Tool umgeht das Strippen unbekannter Felder (Messung B).
 const RAW_TOOLS_LIST_RESULT = z.object({ tools: z.array(z.any()) });
 const RESOURCE_URI_CALL = "ui://hermes/call";
-const CHATGPT_META_KEY = "openai/outputTemplate";
-const CHATGPT_UI_MIME = "text/html+skybridge";
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 
 // Testnamen duerfen NICHT mit einer i18n-Katalog-Kennung + Ziffer beginnen
@@ -217,41 +215,6 @@ test("P3 (Schritt 6a): stdio-Pfad (echtes SDK, InMemoryTransport) traegt securit
       "stdio ohne Consult-Faehigkeit liefert zehn Werkzeuge",
     );
     assertNoSecuritySchemesOnAnyTool(result.tools);
-  } finally {
-    await client.close();
-    await server.close();
-  }
-});
-
-// Schritt 6b - ChatGPT-Adapter: securitySchemes haengt NICHT an der Adapterwahl.
-test("P3 (Schritt 6b): ChatGPT-Adapter traegt securitySchemes neben openai/outputTemplate", async () => {
-  const server = new McpServer({ name: "hermes-p3-chatgpt", version: "0.0.0" });
-  registerTools(server, {
-    uiHost: {
-      enabled: true,
-      capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: [CHATGPT_UI_MIME] } } },
-    },
-  });
-  applyToolSecuritySchemes(server);
-
-  const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: "hermes-p3-chatgpt-client", version: "0.0.0" });
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  try {
-    const result = await rawToolsList(client);
-    assertSecuritySchemesOnEveryTool(result.tools);
-    const placeCall = result.tools.find((tool) => tool.name === "place_call");
-    assert.ok(placeCall, "place_call ist in der Liste");
-    assert.equal(
-      placeCall._meta?.[CHATGPT_META_KEY],
-      RESOURCE_URI_CALL,
-      "place_call traegt weiterhin den flachen openai/outputTemplate-String",
-    );
-    assert.deepEqual(
-      placeCall.securitySchemes,
-      EXPECTED_SECURITY_SCHEMES,
-      "securitySchemes liegt daneben - unabhaengig von der Adapterwahl",
-    );
   } finally {
     await client.close();
     await server.close();

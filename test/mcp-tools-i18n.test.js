@@ -132,7 +132,7 @@ const GERMAN_STAGE0_PROBES = [
   { label: "list_action_items-Praefix", tool: "list_action_items", body: APPOINTMENT_ITEM, german: /\(Termin\)/ },
   { label: "list_action_items-Leertext", tool: "list_action_items", body: NO_ITEMS, german: /Keine offenen Action Items/ },
 ];
-const CAPABLE_UI_HOST = { enabled: true }; // ohne chatgpt-mimeType -> mcpNativeRenderer (ui/registry.js)
+const CAPABLE_UI_HOST = { enabled: true }; // Master-Schalter an -> mcpNativeRenderer (ui/registry.js, einziger Renderer seit T2-01)
 
 test("MCP-14 (SOLL, rot) - Stufe-0-Text eines EN-Tenants traegt keine deutschen Artefakte, auch bei faehigem Host", async () => {
   for (const probe of GERMAN_STAGE0_PROBES) {

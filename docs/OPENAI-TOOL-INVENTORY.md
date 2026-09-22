@@ -317,6 +317,7 @@ account without an active subscription and completed verification. For those acc
 any call is placed; its description says that disallowed destinations are refused by the server
 with a clear message.
 
-The transport does not add a further axis: the MCP-native adapter and the ChatGPT adapter (both
-reached over HTTP) share the exact same tool registration - `enableWidgetUi` only changes
-per-tool `_meta`, never which tools exist (`src/mcp-tools.js:868-875`).
+The transport does not add a further axis: since T2-01 there is only one renderer for every host
+(the ChatGPT-/Skybridge adapter is removed), and it shares the exact same tool registration -
+`enableWidgetUi` only changes per-tool `_meta`, never which tools exist
+(`src/mcp-tools.js:868-875`).

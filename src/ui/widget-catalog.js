@@ -1,8 +1,8 @@
 // Host-agnostischer Widget-Katalog: kennt die Hermes-Widgets (Id, Datei, Titel) und
 // laedt ihre self-contained HTML EINMAL beim Modul-Load - und je unterstuetzter
 // Sprache eine Fassung (P13/E4). KEIN Host-/Protokoll-Wissen hier (kein mimeType, kein
-// _meta) - dasselbe Widget rendert in JEDEM Host (P3-Ziel). Beide Adapter (mcp-native,
-// chatgpt) konsumieren diesen Katalog (G5/S2 - eine Quelle fuer die Lade-Logik, keine
+// _meta) - dasselbe Widget rendert in JEDEM Host (P3-Ziel). Der Adapter (mcp-native)
+// konsumiert diesen Katalog (G5/S2 - eine Quelle fuer die Lade-Logik, keine
 // Duplizierung).
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

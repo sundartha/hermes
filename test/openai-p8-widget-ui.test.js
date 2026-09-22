@@ -1,17 +1,15 @@
-// P8 (T-30/T-31/T-23, X-7): Widget-UI, ChatGPT-Adapter auf Paritaet.
+// P8 (T-30/T-31/T-23), Stand T2-01: Widget-UI, Skybridge-Adapter tot UND entfernt.
 //
-// ENDSTAND (Pruefer-Befund Runde 2, 2026-09-21): T-30/T-31 werden NICHT gebaut. Ein
-// Zwischenstand setzte openai/widgetCSP + openai/widgetDomain (OpenAIs eigene "Legacy"-
-// Alias-Schluessel) an resources/read des mcp-nativen Renderers - zurueckgenommen, s.
-// src/ui/contract.js beim UI_CSP-Kommentar fuer die vollstaendige Begruendung. Kurz: der
-// ChatGPT-Adapter ist auf dem Draht TOT (Faelle A/B unten), also ist mcpNativeRenderer
-// der einzige Renderer, den je ein Client sieht - auch der heutige Claude-Connector
-// (Regel 1 der Phase). Der Legacy-Alias haette dieses Live-Risiko getragen, OHNE T-30/T-31
-// zu erfuellen (die verlangen woertlich den Standard-Schluessel `_meta.ui.csp`/
-// `_meta.ui.domain`, X-7 begruendet den Legacy-Alias ausschliesslich mit
-// `redirect_domains`, das hier nicht gesetzt wird). Faelle C/D/I/J belegen deshalb das
-// Gegenteil: resources/read traegt auf BEIDEN Pfaden (HTTP + stdio) weiterhin KEIN
-// zusaetzliches _meta - byte-identisch zu master, fuer JEDEN Client.
+// T2-01 (Plan-Abschnitt 2.1, Harte Nuesse) baut T-30/T-31 jetzt: `_meta.ui.csp` und der
+// ChatGPT-Alias `openai/widgetDomain` sitzen am resources/read-Inhalt (uiResourceMeta,
+// src/ui/contract.js), nicht mehr am Tool-Deskriptor - kein MCP-Apps-Host liest csp/domain
+// dort. Der Tool-Deskriptor traegt seither nur noch `_meta.ui.resourceUri` (T-23-
+// Aufraeumen). Der Skybridge-/ChatGPT-Adapter (`text/html+skybridge`,
+// `openai/outputTemplate`) ist ersatzlos entfernt: er war auf dem Draht bereits TOT
+// (Faelle A/B unten pruefen das weiterhin, jetzt zusaetzlich ueber Capabilities IM
+// tools/list-Request selbst - der einzige Weg, der den alten Adapter je erreicht haette).
+// mcpNativeRenderer ist der einzige Renderer, den je ein Client sieht - auch der heutige
+// Claude-Connector und ein kuenftiger ChatGPT-Connector (EIN Resource-Inhalt fuer beide).
 //
 // Alle Faelle lesen ROH (eigenes JSON.parse ueber HTTP, bzw. client.request() mit
 // einem passthrough-Schema ueber stdio) - nie einen typisierten SDK-Client fuer
@@ -24,7 +22,6 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { chatgptRenderer } from "../src/ui/adapters/chatgpt.js";
 import { startServer, seedState, mcpPost, readToolResult, ROOT, BASE_ENV } from "./helpers.js";
 
 const WIDGET_COUNT = 5;
@@ -32,16 +29,22 @@ const RESOURCE_URI_CALL = "ui://hermes/call";
 const CHATGPT_UI_MIME = "text/html+skybridge";
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const HTTP_OK = 200;
+// BASE_ENV.PUBLIC_URL (test/helpers.js) - der Origin, den uiResourceMeta() daraus ableitet.
+const EXPECTED_WIDGET_DOMAIN = "https://agent.test";
+const EXPECTED_RESOURCE_META = {
+  ui: { csp: { connectDomains: [], resourceDomains: [] } },
+  "openai/widgetDomain": EXPECTED_WIDGET_DOMAIN,
+};
 // Byte-Beweis (Pruefer-Befund Runde 2, P8-I/P8-J unten): sha256 der kanonisierten
 // (Schluessel sortiert) JSON-Serialisierung von tools/list + resources/list + jedem
-// resources/read (alle 5 Widgets), einmal ueber HTTP und einmal ueber stdio. Berechnet
-// gegen master f769841 UND gegen diesen Branch nach Rueckbau der Runde-2-Befunde -
-// beide liefern denselben Hash (eigene Gegenprobe: zweiter, per node worktree ausgecheckter
-// Baum auf f769841 mit identischem node_modules, dasselbe Capture-Verfahren wie unten).
+// resources/read (alle 5 Widgets), einmal ueber HTTP und einmal ueber stdio. Neu gepinnt
+// fuer T2-01 (Spec S4): gegen den vorherigen Hash gesichtprueft, der EINZIGE Unterschied
+// ist (a) _meta.ui traegt am Tool nur noch resourceUri (csp/domain raus), (b) jeder
+// resources/read-Inhalt traegt jetzt zusaetzlich _meta = EXPECTED_RESOURCE_META.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "baf9f1c9fdaa09f2ff706046b24c7b27a7b6eeffe1fb067772d7a4d54c4d36bf";
+  "edf490f6dddb5a2a8a3176a6ecaf803bda03829364ad5b1b5915f23002a3d57a";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "cb8d492a857fea4619efdd41a58ae5f5cfba4578f6ed9dcfa4ed7c34f3ee215a";
+  "d65e36ed14b2d87e4f4b50f55a32e9ade76a88d4a934e9ee2b75f3ed8ab5c948";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
@@ -121,22 +124,6 @@ async function stdioRawResourceRead(client, uri) {
   return await client.request({ method: "resources/read", params: { uri } }, ANY);
 }
 
-// Liest die statische ui://-Resource eines Renderers zurueck (readback), in-process,
-// ohne echten Transport - Muster test/mcp-ui.test.js readbackResource. Rest-Parameter
-// (max-params): server.registerResource ruft mit vier Argumenten (name, uri, config,
-// readCallback), nur das vierte interessiert hier.
-function readbackResource(renderer, widgetId) {
-  return new Promise((resolve) => {
-    const fakeServer = {
-      registerResource(...args) {
-        const readCallback = args[3];
-        resolve(readCallback());
-      },
-    };
-    renderer.registerResource(fakeServer, widgetId);
-  });
-}
-
 // Kanonisiert (Schluessel rekursiv sortiert) fuer eine stabile, Ordnungs-unabhaengige
 // JSON-Serialisierung - Basis fuer den Byte-Beweis P8-I/P8-J. Object.fromEntries statt
 // reduce+Mutation (kein no-param-reassign auf einem Fremd-Parameter).
@@ -160,7 +147,7 @@ function sha256Of(value) {
 
 // ==================== P8-A/P8-B: ChatGPT-Adapter ist auf dem Draht tot ====================
 
-test("P8-A (HTTP): Skybridge-initialize aendert tools/list und resources/read NICHT - mcp-nativer Pfad bleibt", async () => {
+test("P8-A (HTTP): Skybridge-Capability (initialize UND direkt im tools/list-Request) aendert nichts - ein Renderer", async () => {
   const srv = await startServer({ seed: seedState({}), env: { MCP_UI_ENABLED: "true" } });
   try {
     const initRes = await mcpPost(`${srv.localUrl}/mcp`, null, initializeBody(SKYBRIDGE_CAPABILITIES));
@@ -179,7 +166,7 @@ test("P8-A (HTTP): Skybridge-initialize aendert tools/list und resources/read NI
     assert.equal(
       "openai/outputTemplate" in (placeCall._meta || {}),
       false,
-      "der ChatGPT-Adapter-Schluessel erscheint NICHT, obwohl initialize ihn deklarierte",
+      "der Skybridge-Alias erscheint NICHT, obwohl initialize ihn deklarierte",
     );
 
     const read = await httpResourceRead(`${srv.localUrl}/mcp`, RESOURCE_URI_CALL);
@@ -187,6 +174,23 @@ test("P8-A (HTTP): Skybridge-initialize aendert tools/list und resources/read NI
       read.contents[0].mimeType,
       "text/html;profile=mcp-app",
       "mcp-nativer mimeType, nicht text/html+skybridge",
+    );
+
+    // Zusaetzlich (Spec S4): Capability DIREKT im tools/list-Request selbst (nicht nur im
+    // initialize) - der einzige Weg, der den frueheren Adapter je erreicht haette. Ohne
+    // Adapter gibt es hierfuer keinen Erreichungspfad mehr; das Ergebnis bleibt identisch.
+    const res = await mcpPost(`${srv.localUrl}/mcp`, null, {
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/list",
+      params: { capabilities: SKYBRIDGE_CAPABILITIES },
+    });
+    const toolsWithInlineCap = (await readToolResult(res)).tools;
+    const placeCallInline = toolsWithInlineCap.find((tool) => tool.name === "place_call");
+    assert.equal(
+      placeCallInline._meta?.ui?.resourceUri,
+      RESOURCE_URI_CALL,
+      "Capability im tools/list-Request selbst aendert ebenfalls nichts",
     );
   } finally {
     await srv.stop();
@@ -206,7 +210,7 @@ test("P8-B (stdio): Skybridge-Client-Capability aendert tools/list ueber den ech
     assert.equal(
       "openai/outputTemplate" in (placeCall._meta || {}),
       false,
-      "kein ChatGPT-Adapter-Schluessel ueber stdio",
+      "kein Skybridge-Alias ueber stdio",
     );
 
     const read = await stdioRawResourceRead(client, RESOURCE_URI_CALL);
@@ -214,10 +218,11 @@ test("P8-B (stdio): Skybridge-Client-Capability aendert tools/list ueber den ech
   });
 });
 
-// ==================== P8-C/P8-D: resources/read traegt weiterhin KEIN _meta ====================
-// (T-30/T-31 nicht gebaut - Begruendung s. Dateikopf + src/ui/contract.js)
+// ==================== P8-C/P8-D: resources/read traegt jetzt csp/Origin (T-30/T-31) ====================
+// Stand T2-01: das Resource-_meta ist umgedreht - es traegt jetzt den Sollwert statt zu
+// fehlen (Begruendung s. Dateikopf + src/ui/contract.js uiResourceMeta).
 
-test("P8-C (HTTP, T-30/T-31 NICHT gebaut): jede Widget-Resource traegt exakt uri/mimeType/text, kein _meta", async () => {
+test("P8-C (HTTP, T2-01, T-30/T-31 gebaut): jede Widget-Resource traegt _meta/mimeType/text/uri, _meta = Sollwert", async () => {
   const srv = await startServer({ seed: seedState({}), env: { MCP_UI_ENABLED: "true" } });
   try {
     const tools = await httpToolsList(`${srv.localUrl}/mcp`);
@@ -228,8 +233,13 @@ test("P8-C (HTTP, T-30/T-31 NICHT gebaut): jede Widget-Resource traegt exakt uri
       const read = await httpResourceRead(`${srv.localUrl}/mcp`, tool._meta.ui.resourceUri);
       assert.deepEqual(
         Object.keys(read.contents[0]).sort(),
-        ["mimeType", "text", "uri"],
-        `${tool.name}: Resource-Inhalt traegt genau drei Felder, kein _meta`,
+        ["_meta", "mimeType", "text", "uri"],
+        `${tool.name}: Resource-Inhalt traegt genau vier Felder, inkl. _meta`,
+      );
+      assert.deepEqual(
+        read.contents[0]._meta,
+        EXPECTED_RESOURCE_META,
+        `${tool.name}: _meta = Sollwert (csp leer, widgetDomain = PUBLIC_URL-Origin)`,
       );
       assert.equal(read.contents[0].mimeType, "text/html;profile=mcp-app");
     }
@@ -238,7 +248,7 @@ test("P8-C (HTTP, T-30/T-31 NICHT gebaut): jede Widget-Resource traegt exakt uri
   }
 });
 
-test("P8-D (stdio, DP-1, T-30/T-31 NICHT gebaut): derselbe Beleg ueber den echten stdio-Kindprozess", async () => {
+test("P8-D (stdio, DP-1, T2-01, T-30/T-31 gebaut): derselbe Beleg ueber den echten stdio-Kindprozess", async () => {
   await withStdioClient({ MCP_UI_ENABLED: "true" }, {}, async (client, stderr) => {
     const tools = await stdioRawToolsList(client);
     const widgetTools = tools.filter((tool) => tool._meta?.ui?.resourceUri);
@@ -248,9 +258,10 @@ test("P8-D (stdio, DP-1, T-30/T-31 NICHT gebaut): derselbe Beleg ueber den echte
       const read = await stdioRawResourceRead(client, tool._meta.ui.resourceUri);
       assert.deepEqual(
         Object.keys(read.contents[0]).sort(),
-        ["mimeType", "text", "uri"],
-        `${tool.name}: Resource-Inhalt traegt genau drei Felder, kein _meta`,
+        ["_meta", "mimeType", "text", "uri"],
+        `${tool.name}: Resource-Inhalt traegt genau vier Felder, inkl. _meta`,
       );
+      assert.deepEqual(read.contents[0]._meta, EXPECTED_RESOURCE_META, `${tool.name}: _meta = Sollwert`);
       assert.equal(read.contents[0].mimeType, "text/html;profile=mcp-app");
     }
   });
@@ -300,9 +311,9 @@ test("P8-F (HTTP): Tool-Deskriptor-_meta und resources/list-Eintraege tragen unv
         `${tool.name}: Tool-_meta-Schluesselmenge unveraendert`,
       );
       assert.deepEqual(
-        Object.keys(tool._meta.ui).sort(),
-        ["csp", "domain", "resourceUri"],
-        `${tool.name}: _meta.ui-Schluesselmenge unveraendert`,
+        Object.keys(tool._meta.ui),
+        ["resourceUri"],
+        `${tool.name}: _meta.ui traegt seit T2-01 NUR noch resourceUri (csp/domain am Resource-Inhalt)`,
       );
     }
 
@@ -320,27 +331,20 @@ test("P8-F (HTTP): Tool-Deskriptor-_meta und resources/list-Eintraege tragen unv
   }
 });
 
-// ==================== P8-H: ChatGPT-Adapter unveraendert ====================
-
-test("P8-H (in-process): ChatGPT-Adapter liefert den Resource-Inhalt weiterhin OHNE _meta", async () => {
-  const readback = await readbackResource(chatgptRenderer, "call");
-  const content = readback.contents[0];
-  assert.deepEqual(
-    Object.keys(content).sort(),
-    ["mimeType", "text", "uri"],
-    "ChatGPT-Adapter-Resource-Inhalt bleibt bei genau drei Feldern (kein _meta)",
-  );
-});
+// P8-H (ChatGPT-Adapter-Regressions-Pin) entfaellt: der Adapter ist seit T2-01 entfernt
+// (s. test/openai-t2-01-widget-resource-meta.test.js T6 fuer den Ersatz-Beweis, dass kein
+// Skybridge-Verhalten mehr existiert).
 
 // ==================== P8-I/P8-J: Byte-Beweis - voller Snapshot statt nur Schluesselmenge ====================
 // (Pruefer-Befund Runde 2, "wichtig": P8-F prueft nur Schluesselmengen, nicht Werte/Bytes,
 // und deckt resources/read gar nicht ab. Hier: sha256 der vollen, kanonisierten
 // JSON-Serialisierung von tools/list + resources/list + jedem resources/read, verglichen
-// mit dem eingecheckten master-Hash (s. Konstanten oben). Weicht ein Hash ab, muss der
-// naechste Blick der volle Klartext-Diff sein (nicht nur "der Test ist rot") - deshalb
-// wird bei Abweichung das kanonisierte Objekt mitgeloggt.
+// mit dem gepinnten T2-01-Sollwert (s. Konstanten oben, NICHT master - der Wert wurde seit
+// P8 bewusst neu gepinnt, s. Kommentar dort). Weicht ein Hash ab, muss der naechste Blick
+// der volle Klartext-Diff sein (nicht nur "der Test ist rot") - deshalb wird bei Abweichung
+// das kanonisierte Objekt mitgeloggt.
 
-test("P8-I (HTTP): tools/list + resources/list + alle resources/read byte-identisch zu master", async () => {
+test("P8-I (HTTP): tools/list + resources/list + alle resources/read byte-identisch zum gepinnten T2-01-Sollwert", async () => {
   const srv = await startServer({ seed: seedState({}), env: { MCP_UI_ENABLED: "true" } });
   try {
     const tools = await httpToolsList(`${srv.localUrl}/mcp`);
@@ -354,14 +358,14 @@ test("P8-I (HTTP): tools/list + resources/list + alle resources/read byte-identi
     assert.equal(
       hash,
       EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP,
-      `Byte-Abweichung von master, kanonisiertes Capture:\n${JSON.stringify(canonicalize(captured), null, JSON_INDENT)}`,
+      `Byte-Abweichung vom gepinnten T2-01-Sollwert, kanonisiertes Capture:\n${JSON.stringify(canonicalize(captured), null, JSON_INDENT)}`,
     );
   } finally {
     await srv.stop();
   }
 });
 
-test("P8-J (stdio): tools/list + resources/list + alle resources/read byte-identisch zu master", async () => {
+test("P8-J (stdio): tools/list + resources/list + alle resources/read byte-identisch zum gepinnten T2-01-Sollwert", async () => {
   await withStdioClient({ MCP_UI_ENABLED: "true" }, {}, async (client, stderr) => {
     const tools = await stdioRawToolsList(client);
     const resources = await stdioRawResourcesList(client);
@@ -374,7 +378,7 @@ test("P8-J (stdio): tools/list + resources/list + alle resources/read byte-ident
     assert.equal(
       hash,
       EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO,
-      `Byte-Abweichung von master (stderr: ${stderr()}), kanonisiertes Capture:\n${JSON.stringify(canonicalize(captured), null, JSON_INDENT)}`,
+      `Byte-Abweichung vom gepinnten T2-01-Sollwert (stderr: ${stderr()}), kanonisiertes Capture:\n${JSON.stringify(canonicalize(captured), null, JSON_INDENT)}`,
     );
   });
 });

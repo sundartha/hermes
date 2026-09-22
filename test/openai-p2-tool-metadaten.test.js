@@ -11,8 +11,10 @@
 //   Schritt 13 - der stdio-Pfad am ECHTEN SDK (InMemoryTransport, kein Attrappen-
 //                Server): registerTool() verwirft unbekannte Config-Felder still
 //                (P0/U-2), das faellt nur ueber den echten ListTools-Handler auf.
-//   Schritt 14 - der ChatGPT-Adapter: beide _meta-Familien (openai/outputTemplate +
-//                toolInvocation) nebeneinander, _meta.ui bleibt trotzdem weg.
+//   Schritt 14 - Skybridge-Caps aendern nichts (T2-01, Adapter entfernt): place_call
+//                traegt weiterhin _meta.ui.resourceUri + toolInvocation, NIE
+//                openai/outputTemplate - egal ob die Capability im uiHost oder direkt im
+//                Request steht.
 //
 // Erwartungen stehen als LITERAL, nicht aus src importiert (Muster
 // mcp-tool-annotations.test.js) - ein Test, der seine Erwartung aus dem Pruefling
@@ -271,12 +273,11 @@ test("P2 (Schritt 13): stdio-Pfad (echtes SDK, InMemoryTransport) traegt title +
   }
 });
 
-// Schritt 14: der ChatGPT-Adapter traegt BEIDE _meta-Familien nebeneinander - Muster
-// test/mcp-ui.test.js:509-512 (CHATGPT_CAPS/chatgptHost). Derselbe In-Memory-Harness wie
-// Schritt 13, aber mit der Skybridge-Capability im ctx (uiRendererFor liest sie direkt
-// aus ctx.uiHost.capabilities - dieselbe Konstruktion wie der stateless HTTP-Pfad in
-// src/routes/mcp.js, keine echte initialize-Verhandlung noetig).
-test("P2 (Schritt 14): ChatGPT-Adapter traegt openai/outputTemplate UND toolInvocation nebeneinander, _meta.ui bleibt weg", async () => {
+// Schritt 14 (T2-01): der Skybridge-/ChatGPT-Adapter ist entfernt (s. src/ui/registry.js)
+// - eine Skybridge-Capability im uiHost aendert seither NICHTS mehr am mcp-nativen Pfad.
+// Derselbe In-Memory-Harness wie Schritt 13, aber mit der Capability im ctx (frueher las
+// uiRendererFor sie aus ctx.uiHost.capabilities; die Registry ignoriert das Feld jetzt).
+test("P2 (Schritt 14): Skybridge-Caps im uiHost aendern nichts - place_call traegt _meta.ui.resourceUri + toolInvocation, KEIN openai/outputTemplate", async () => {
   const server = new McpServer({ name: "hermes-p2-test", version: "0.0.0" });
   registerTools(server, {
     uiHost: {
@@ -293,19 +294,20 @@ test("P2 (Schritt 14): ChatGPT-Adapter traegt openai/outputTemplate UND toolInvo
     const placeCall = result.tools.find((tool) => tool.name === "place_call");
     assert.ok(placeCall, "place_call ist in der Liste");
     assert.equal(
-      placeCall._meta?.[CHATGPT_META_KEY],
+      placeCall._meta?.ui?.resourceUri,
       RESOURCE_URI_CALL,
-      "place_call: flacher openai/outputTemplate-String (ChatGPT-Konvention)",
+      "place_call: mcp-nativer Pfad, trotz Skybridge-Capability im uiHost",
     );
     assert.equal(
       typeof placeCall._meta?.[OPENAI_INVOKING_KEY],
       "string",
-      "place_call traegt daneben trotzdem die toolInvocation-Statuszeilen",
+      "place_call traegt daneben die toolInvocation-Statuszeilen",
     );
     assert.equal(typeof placeCall._meta?.[OPENAI_INVOKED_KEY], "string");
-    assert.ok(
-      !placeCall._meta?.ui,
-      "kein verschachteltes _meta.ui - das ist die mcp-native Konvention, nicht ChatGPT",
+    assert.equal(
+      CHATGPT_META_KEY in (placeCall._meta || {}),
+      false,
+      "kein openai/outputTemplate - der Adapter, der ihn ausliefern wuerde, ist entfernt",
     );
   } finally {
     await client.close();

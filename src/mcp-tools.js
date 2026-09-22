@@ -773,8 +773,8 @@ const TOOL_INVOCATION_STATUS = {
 // - keine zweite, namensindizierte Tabelle. Damit gibt es strukturell EINE Titel-Quelle,
 // title und annotations.title koennen nicht auseinanderlaufen.
 // _meta entsteht als { ...statusMeta, ...config._meta }: der Widget-Anteil steht HINTEN
-// und gewinnt bei (heute unmoeglicher) Kollision - die Namensraeume sind disjunkt (ui /
-// openai/outputTemplate vs. openai/toolInvocation/*).
+// und gewinnt bei (heute unmoeglicher) Kollision - die Namensraeume sind disjunkt
+// (ui.resourceUri vs. openai/toolInvocation/*).
 // Fehlt ein Tool in TOOL_INVOCATION_STATUS, entstehen KEINE halben Schluessel (leeres
 // Fragment statt throw) - eine fehlende Statuszeile ist kosmetisch, ein Wurf hier wuerde
 // /mcp fuer alle Mandanten zerlegen. Die Luecke faengt der Vollstaendigkeitstest, der ueber
@@ -804,6 +804,25 @@ const withOpenAiToolMetadata = (name, config) => {
 // consultAllowed (AL-P13) defaultet auf FALSE (nicht wie allowCalendar auf true): der
 // stdio-Transport hat kein Client-Modell, das pollt, und ein Default-an wuerde die
 // byte-gepinnte Beschreibungs-Inventur ohne Not verschieben.
+// uiHost.chatgptEgress (T2-01 Nachbau): true NUR, wenn routes/mcp.js die Anfrage ueber
+// die veroeffentlichten ChatGPT-Egress-IP-Bereiche als ChatGPT erkannt hat (chatgpt-
+// egress.js) - steuert AUSSCHLIESSLICH, ob die Widget-Resource zusaetzlich zum Alias
+// openai/widgetDomain auch `_meta.ui.domain` traegt (contract.js uiResourceMeta). Reist
+// AM uiHost mit statt als eigenes registerTools-Argument (uiHost und chatgptEgress
+// beschreiben denselben Host-Kontext, ein weiteres Positionsargument waere Willkuer,
+// G32) - aufgeloest in widgetResourceOptions() unten. stdio (mcp-server.js) liefert
+// uiHost ohne dieses Feld -> uiHost?.chatgptEgress ist undefined -> setzt `ui.domain`
+// NIE (Owner-Vorgabe).
+//
+// Baut die Rendering-Optionen fuer EINE Widget-Resource (T2-01 Nachbau). Eigene,
+// modulweite Funktion statt Inline-Objekt in enableWidgetUi - dieselbe EINE Baustelle
+// fuer alle Widget-Tools (G5) und AUSSERHALB von registerTools, damit das
+// chatgptEgress-Feld dessen Zeilenzahl nicht anhebt (G30, registerTools liegt an der
+// gepinnten Altlast-Grenze, s. eslint-legacy-exceptions.json).
+function widgetResourceOptions(language, uiHost) {
+  return { language, chatgptEgress: uiHost?.chatgptEgress === true };
+}
+
 export function registerTools(
   server,
   {
@@ -870,7 +889,7 @@ export function registerTools(
     // E4/P13: die servergerenderte Widget-Sprache ist die Agentensprache. Weitergereicht
     // wird die BEREITS aufgeloeste loc.language (nie das rohe language-Feld) - damit gilt
     // im Widget dieselbe eine Aufloesungsregel wie im Text- und im Anrufkanal.
-    uiRenderer.registerResource(server, widgetId, loc.language);
+    uiRenderer.registerResource(server, widgetId, widgetResourceOptions(loc.language, uiHost));
     return { _meta: uiRenderer.toolMeta(widgetId) };
   };
 

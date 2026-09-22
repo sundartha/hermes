@@ -24,7 +24,7 @@ Token lokal: Signatur, Issuer, Audience; `exp`/`nbf` **nur, wenn der jeweilige C
 vorhanden ist** (ein signiertes Token ohne `exp` wird unbefristet angenommen, Details T-12).
 
 Die Token-Pruefung sitzt **einmal pro HTTP-Request** in der Middleware `mcpAuth`
-(`src/routes/mcp.js:113`), **vor** jedem MCP-Tool-Aufruf; waehrend eines Tool-Aufrufs wird das
+(`src/routes/mcp.js:126`), **vor** jedem MCP-Tool-Aufruf; waehrend eines Tool-Aufrufs wird das
 Token nicht erneut geprueft. Es gibt aber **zwei weitere Stellen**, an denen ein bereits
 authentifizierter Request abgelehnt wird:
 
@@ -57,14 +57,14 @@ Auth-UI im Gespraech ersetzt: **UNKNOWN.**
   for that tool."
 
 **Ist-Zustand.** Die erste Haelfte ist vorhanden: `securitySchemes` an jedem Tool (P3,
-`src/mcp-security-schemes.js:19-27`, angewandt in `src/routes/mcp.js:168`) und die
+`src/mcp-security-schemes.js:19-27`, angewandt in `src/routes/mcp.js:182`) und die
 Protected-Resource-Metadata (`src/auth.js:141-150`). Die zweite Haelfte fehlt: **kein**
 Tool-Ergebnis traegt `_meta["mcp/www_authenticate"]` (`grep -rn www_authenticate src/` liefert
 0 Treffer). Nach dem Wortlaut der Primaerquelle zeigt ChatGPT deshalb **keine
 tool-bezogene Verknuepfungs-UI**. Das ist eine Luecke, keine Nicht-Anwendbarkeit.
 
 **Was stattdessen passiert.** Die Token-Pruefung laeuft als Express-Middleware vor
-`POST /mcp` (`src/routes/mcp.js:113`), bevor irgendein MCP-Handler erreicht wird. Ein Token,
+`POST /mcp` (`src/routes/mcp.js:126`), bevor irgendein MCP-Handler erreicht wird. Ein Token,
 das zwischen zwei Turns ungueltig wird, trifft den **naechsten** `POST /mcp` als HTTP 401 mit
 Bearer-Challenge inkl. `resource_metadata` (`deny401`, `src/auth.js:74`, Aufrufe `:95`/`:111`;
 Challenge belegt fuer den OAuth-Zweig in `test/openai-p7-token-pruefachsen.test.js`,
@@ -256,7 +256,7 @@ real, completed login) are German-only; their English equivalents are 2c.2 and 2
 
 **Architecture.** Hermes is an OAuth 2.1 resource server for `/mcp` only; WorkOS AuthKit
 (`https://fearless-network-26.authkit.app`) is the authorization server. Every bearer token is
-verified locally once per HTTP request in the `mcpAuth` middleware (`src/routes/mcp.js:113`),
+verified locally once per HTTP request in the `mcpAuth` middleware (`src/routes/mcp.js:126`),
 before any MCP tool runs: signature (JWKS), issuer, audience; `exp`/`nbf` **only if the claim is
 present** (see T-12). The token is not re-checked during a tool call. Two further places can
 reject an already-authenticated request: `rejectIfNoTenant` (`src/routes/mcp.js:60-65`, called
@@ -277,7 +277,7 @@ errors that carry `_meta["mcp/www_authenticate"]`. [...] Without both halves Cha
 show the linking UI for that tool." (plugins/build/auth)
 
 What we have: the first half — `securitySchemes` on every tool
-(`src/mcp-security-schemes.js:19-27`, applied in `src/routes/mcp.js:168`) and protected-resource
+(`src/mcp-security-schemes.js:19-27`, applied in `src/routes/mcp.js:182`) and protected-resource
 metadata (`src/auth.js:141-150`). What we do not have: the second half — no tool result carries
 `_meta["mcp/www_authenticate"]` (zero occurrences in `src/`). By the wording of the primary
 source, ChatGPT will therefore **not** show the tool-level linking UI. This is a gap, not a
@@ -527,13 +527,14 @@ require a completed login (owner-only).
 ### 2c.5 Duplicate paths (completeness check; German original: Section 8)
 
 - **HTTP `/mcp` vs. stdio:** `mcpAuth` is the **only** token-check path - it exists only on the
-  HTTP route (`src/routes/mcp.js:113`). stdio (`src/mcp-server.js:35-46`) registers tools without
+  HTTP route (`src/routes/mcp.js:126`). stdio (`src/mcp-server.js:35-46`) registers tools without
   the auth middleware and deliberately never calls `applyToolSecuritySchemes`;
   T-9/T-11/T-12/T-14/T-16 are **not applicable** to stdio (no token, no OpenAI connector path
   there) - this is a limitation of scope, not a claim that stdio meets them.
-- **mcp-native adapter vs. ChatGPT adapter (both over HTTP):** `mcpAuth` runs **before** adapter
-  selection (`src/routes/mcp.js:113` vs. `:158`) - both adapters share the same auth code path, a
-  second test per adapter was not needed and was not built.
+- **mcp-native adapter (since T2-01 the only one, ChatGPT-/Skybridge adapter removed):**
+  `mcpAuth` runs **before** renderer selection (`src/routes/mcp.js:126` vs. `:169`) - only one
+  renderer exists for every host now, a second auth test per adapter has become moot (it was not
+  needed before either, since both adapters shared the same auth code path).
 
 ### 2c.6 What changes if ... (German original: Section 6)
 
@@ -689,13 +690,15 @@ sie verlangen einen abgeschlossenen Login (Owner-Only).
 ## 8. Doppelte Pfade (Vollstaendigkeits-Check)
 
 - **HTTP `/mcp` vs. stdio:** `mcpAuth` ist der **einzige** Token-Pruefpfad — er existiert nur fuer
-  die HTTP-Route (`src/routes/mcp.js:113`). stdio (`src/mcp-server.js:35-46`) registriert Tools
+  die HTTP-Route (`src/routes/mcp.js:126`). stdio (`src/mcp-server.js:35-46`) registriert Tools
   ohne Auth-Middleware und ruft bewusst kein `applyToolSecuritySchemes` auf;
   T-9/T-11/T-12/T-14/T-16 sind fuer stdio **nicht anwendbar** (kein Token, kein
   OpenAI-Connector-Pfad dort).
-- **mcp-nativer Adapter vs. ChatGPT-Adapter (beide ueber HTTP):** `mcpAuth` laeuft **vor** der
-  Adapterwahl (`src/routes/mcp.js:113` vs. `:158`) — beide Adapter teilen denselben
-  Auth-Codepfad, ein zweiter Test pro Adapter ist nicht noetig und wurde nicht gebaut.
+- **mcp-nativer Adapter (seit T2-01 der einzige, ChatGPT-/Skybridge-Adapter entfernt):**
+  `mcpAuth` laeuft **vor** der Renderer-Wahl (`src/routes/mcp.js:126` vs. `:169`) — es gibt
+  seit T2-01 nur noch einen Renderer fuer JEDEN Host, ein zweiter Auth-Test pro Adapter
+  ist damit gegenstandslos geworden (er war schon vorher nicht noetig, da beide Adapter
+  denselben Auth-Codepfad teilten).
 
 ## 9. Nicht doppelt verbucht
 
