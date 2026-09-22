@@ -5,13 +5,16 @@
 //   T1 falscher Issuer  -> 401 (jwtVerify prueft `issuer`, src/auth.js:99)
 //   T2 nbf in der Zukunft -> 401 (jwtVerify respektiert `nbf`, clockTolerance 30s, :101)
 //   T3 (Positiv-Kontrolle) vollstaendige Scope-Menge -> 200
-//   T4 unvollstaendiger Scope-Claim -> 403 insufficient_scope
+//   T4 einem erzwungenen Scope fehlt -> 403 insufficient_scope
 // T3/T4 pinnten bis T2-23 Commit B eine DOKUMENTIERTE Luecke (docs/OPENAI-AUTH-
 // ABWEICHUNGEN.md, ID T-12): kein Scope wurde ausgewertet, beide Faelle ergaben 200.
 // Seit Commit B (Scope-Pruefung in verifyOauth, src/auth.js) prueft der Resource
-// Server jedes Token gegen OAUTH_SCOPES; T4 belegt jetzt genau das Gegenteil von
-// vorher. test/helpers.js#sign() signiert per Default die volle Scope-Menge -
-// T4 ueberschreibt das explizit mit einem unvollstaendigen Scope-Claim.
+// Server jedes Token gegen ENFORCED_OAUTH_SCOPES (NICHT die volle beworbene
+// OAUTH_SCOPES - Safety-Review src/auth.js:36: "offline_access" ist ein Grant-Scope,
+// steht typischerweise nie im Access-Token, und darf deshalb nicht erzwungen werden);
+// T4 belegt jetzt, dass ein am RS fehlendes Element der ERZWUNGENEN Menge ablehnt.
+// test/helpers.js#sign() signiert per Default die volle Scope-Menge - T4 ueberschreibt
+// das explizit mit einem Scope-Claim, dem "email" (Teil der erzwungenen Menge) fehlt.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startIdp, mcpPost as post, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
@@ -26,9 +29,10 @@ const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 const FREMDER_ISSUER = "https://fremder-issuer.test";
 // Weit jenseits der 30s clockTolerance (src/auth.js:101) - kein Uhren-Jitter-Flake.
 const NBF_VORLAUF_SEK = 3600;
-// "email" fehlt "offline_access" aus OAUTH_SCOPES - unvollstaendig, kein erfundener
-// Scope-Name (der waere ein anderer Fehlerfall beim Auth-Server, nicht hier am RS).
-const UNVOLLSTAENDIGER_SCOPE = "openid email";
+// "openid" fehlt "email" - ein Element der ERZWUNGENEN Menge (ENFORCED_OAUTH_SCOPES,
+// src/auth.js) fehlt. Kein erfundener Scope-Name (der waere ein anderer Fehlerfall
+// beim Auth-Server, nicht hier am RS).
+const SCOPE_OHNE_ERZWUNGENES_ELEMENT = "openid";
 const MS_PRO_SEKUNDE = 1000;
 
 test("OpenAI-P7: Token-Pruefachsen (iss, nbf, Scope) am echten tools/list", async (ctx) => {
@@ -70,9 +74,9 @@ test("OpenAI-P7: Token-Pruefachsen (iss, nbf, Scope) am echten tools/list", asyn
     });
 
     await ctx.test(
-      "OpenAI-P7-T4: unvollstaendiger Scope-Claim -> 403 insufficient_scope (T-12 geschlossen)",
+      "OpenAI-P7-T4: einem erzwungenen Scope fehlt -> 403 insufficient_scope (T-12 geschlossen)",
       async () => {
-        const token = await idp.sign({ email: "p7-t4@team.test", scope: UNVOLLSTAENDIGER_SCOPE });
+        const token = await idp.sign({ email: "p7-t4@team.test", scope: SCOPE_OHNE_ERZWUNGENES_ELEMENT });
         const res = await post(`${srv.localUrl}/mcp`, token, TOOLS_LIST_BODY);
         assert.equal(res.status, HTTP_FORBIDDEN, "fehlender Scope muss jetzt abgelehnt werden");
         const wa = res.headers.get("www-authenticate") || "";

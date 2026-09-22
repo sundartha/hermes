@@ -1,15 +1,17 @@
 // OpenAI-T2-23: Scope-Angabe des Resource-Servers (T-16, Commit A, Tests A1-A5) -
 // PRM (scopes_supported), oauth-401-Challenge (scope=) und securitySchemes tragen
-// alle dieselbe Menge S; token-/Legacy-Zweig bleiben byte-gleich ohne scope=. Dazu
-// die Scope-PRUEFUNG am Token (T-12, Commit B, Tests B1-B4): 403 insufficient_scope,
-// sobald ein Element von S fehlt - egal ob als `scope`-String oder `scp`-Array/String
-// signiert. Jeder Beleg liest den ECHTEN HTTP-Draht (kein fakeRes), s. Lehre
-// "registerTool() verwirft unbekannte Felder still" - dasselbe gilt fuer jede
-// Auth-Behauptung.
+// alle dieselbe BEWORBENE Menge S (= OAUTH_SCOPES); token-/Legacy-Zweig bleiben
+// byte-gleich ohne scope=. Dazu die Scope-PRUEFUNG am Token (T-12, Commit B, Tests
+// B1-B4): 403 insufficient_scope, sobald ein Element der ERZWUNGENEN Menge
+// (ENFORCED_OAUTH_SCOPES, S ohne den Grant-Scope "offline_access" - Safety-Review
+// src/auth.js:36, ein Access-Token traegt offline_access typischerweise nie) fehlt -
+// egal ob als `scope`-String oder `scp`-Array/String signiert. Jeder Beleg liest den
+// ECHTEN HTTP-Draht (kein fakeRes), s. Lehre "registerTool() verwirft unbekannte Felder
+// still" - dasselbe gilt fuer jede Auth-Behauptung.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startIdp, mcpPost as post, readToolResult, waitForLog, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
-import { OAUTH_SCOPES } from "../src/auth.js";
+import { OAUTH_SCOPES, ENFORCED_OAUTH_SCOPES } from "../src/auth.js";
 import { TOOL_SECURITY_SCHEMES } from "../src/mcp-security-schemes.js";
 
 const HTTP_OK = 200;
@@ -106,9 +108,12 @@ test("OpenAI-T2-23-A5: securitySchemes traegt S auf jedem Werkzeug (HTTP, echter
 
 // ---- Commit B (T-12): Scope-PRUEFUNG am Token ------------------------------
 const HTTP_FORBIDDEN = 403;
-// "email" fehlt "offline_access" aus OAUTH_SCOPES - unvollstaendig, kein erfundener
-// Scope-Name (der waere ein Fehlerfall beim Auth-Server, nicht hier am RS).
-const UNVOLLSTAENDIGER_SCOPE = "openid email";
+// Genau die erzwungene Menge, ohne den Grant-Scope "offline_access" - MUSS reichen
+// (offline_access ist nur beworben, nicht erzwungen, s. src/auth.js GRANT_ONLY_SCOPES).
+const NUR_ERZWUNGENE_SCOPES = ENFORCED_OAUTH_SCOPES.join(" ");
+// "openid" fehlt "email" - ein Element der ERZWUNGENEN Menge fehlt (kein erfundener
+// Scope-Name, der waere ein Fehlerfall beim Auth-Server, nicht hier am RS).
+const SCOPE_OHNE_ERZWUNGENES_ELEMENT = "openid";
 
 function assertInsufficientScopeChallenge(wa) {
   assert.match(wa, /^Bearer /);
@@ -166,14 +171,38 @@ test("OpenAI-T2-23-B2: Token mit vollstaendigem scp-Array -> 200", async () => {
   }
 });
 
-test("OpenAI-T2-23-B3: Token mit unvollstaendigem scope -> 403 insufficient_scope", async () => {
+// Kernbefund des Safety-Reviews (src/auth.js:36, VOR dieser Phase): OAUTH_SCOPES war
+// gleichzeitig die beworbene UND die erzwungene Menge - der Server verlangte damit
+// "offline_access" am Access-Token, das ein spec-treuer IdP dort nie eintraegt.
+// B3 ist jetzt die POSITIV-Kontrolle fuer die Trennung: die erzwungene Menge OHNE den
+// Grant-Scope muss durchgehen.
+test("OpenAI-T2-23-B3: Token mit erzwungenen Scopes ohne offline_access -> 200 (Grant-Scope wird nicht erzwungen)", async () => {
   const idp = await startIdp();
   const srv = await startServer({
     env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE, OWNER_IDP_SUBJECT: "user-1" },
   });
   try {
-    const email = "t2-23-b3@team.test";
-    const token = await idp.sign({ email, scope: UNVOLLSTAENDIGER_SCOPE });
+    const token = await idp.sign({ email: "t2-23-b3@team.test", scope: NUR_ERZWUNGENE_SCOPES });
+    const res = await post(`${srv.localUrl}/mcp`, token, TOOLS_LIST_BODY);
+    assert.equal(
+      res.status,
+      HTTP_OK,
+      "ein Access-Token ohne offline_access ist spec-konform und darf nicht an einem Grant-Scope scheitern",
+    );
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+test("OpenAI-T2-23-B3b: Token ohne ein erzwungenes Element (email fehlt) -> 403 insufficient_scope", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE, OWNER_IDP_SUBJECT: "user-1" },
+  });
+  try {
+    const email = "t2-23-b3b@team.test";
+    const token = await idp.sign({ email, scope: SCOPE_OHNE_ERZWUNGENES_ELEMENT });
     const res = await post(`${srv.localUrl}/mcp`, token, TOOLS_LIST_BODY);
     assert.equal(res.status, HTTP_FORBIDDEN);
     assertInsufficientScopeChallenge(res.headers.get("www-authenticate") || "");
@@ -186,7 +215,7 @@ test("OpenAI-T2-23-B3: Token mit unvollstaendigem scope -> 403 insufficient_scop
   }
 });
 
-test("OpenAI-T2-23-B4: Token ganz ohne scope/scp -> 403 insufficient_scope", async () => {
+test("OpenAI-T2-23-B4: Token ganz ohne scope/scp -> 403 insufficient_scope (fail-closed, erzwungene Menge nicht leer)", async () => {
   const idp = await startIdp();
   const srv = await startServer({
     env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE, OWNER_IDP_SUBJECT: "user-1" },

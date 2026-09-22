@@ -33,8 +33,35 @@ const metadataUrl = () => `${config.server.publicUrl}/.well-known/oauth-protecte
 // Identitaets-Scopes (docs/OPENAI-AUTH-ABWEICHUNGEN.md), ein erfundener Scope wuerde
 // beim Auth-Server als invalid_scope scheitern. Keine Env-Var: die Menge ist eine
 // Produktentscheidung, kein Umgebungswert - Rueckweg ist ein Revert dieses Commits.
+//
+// WICHTIG (Safety-Review src/auth.js:36, nachtraeglich behoben): OAUTH_SCOPES ist die
+// BEWORBENE Menge - was der Server in PRM/Challenge/securitySchemes ANKUENDIGT. Das ist
+// NICHT dieselbe Menge wie die ERZWUNGENE Menge (was der Server am Access-Token
+// tatsaechlich VERLANGT). "offline_access" ist ein Grant-Scope: er steuert, ob der
+// Auth-Server ueberhaupt ein Refresh-Token AUSSTELLT, und steht bei einem spec-treuen
+// IdP typischerweise NICHT im Access-Token selbst (das Access-Token traegt die
+// Identitaets-/Ressourcen-Scopes, das Refresh-Token ist ein separates Artefakt). Wuerde
+// der Server "offline_access" auch ERZWINGEN, schiede JEDER Aufruf mit einem
+// spec-konformen Access-Token an einer Bedingung, die dieses Token strukturell nie
+// erfuellen kann - ein globaler 403 nach dem Deploy. Deshalb unten ENFORCED_OAUTH_SCOPES:
+// aus OAUTH_SCOPES abgeleitet, Grant-Scopes (GRANT_ONLY_SCOPES) ausgenommen. Keine neue
+// Env-Var: die erzwungene Menge folgt automatisch jeder kuenftigen Aenderung der
+// beworbenen Menge.
 export const OAUTH_SCOPES = Object.freeze(["openid", "email", "offline_access"]);
 const OAUTH_SCOPE_PARAM = OAUTH_SCOPES.join(" ");
+
+// Scopes, die der Auth-Server nur fuer die AUSSTELLUNG eines Refresh-Tokens verlangt
+// (Grant-Scope) und die deshalb nicht im Access-Token erwartet werden duerfen. Einzige
+// Stelle mit dieser Ausnahme-Liste - kommt ein weiterer reiner Grant-Scope dazu, gehoert
+// er hier rein, nicht in eine Kopie der Pruefung.
+const GRANT_ONLY_SCOPES = Object.freeze(["offline_access"]);
+
+// ERZWUNGENE Menge: die beworbene Menge abzueglich der Grant-Scopes. Das ist die Menge,
+// die verifyOauth()/hasRequiredScopes() tatsaechlich am Token verlangt - siehe Kommentar
+// oben an OAUTH_SCOPES.
+export const ENFORCED_OAUTH_SCOPES = Object.freeze(
+  OAUTH_SCOPES.filter((scope) => !GRANT_ONLY_SCOPES.includes(scope)),
+);
 
 // JWKS-URI ueber die Standard-Metadata des Issuers finden. Beide gaengigen
 // Pfade versuchen: OIDC (openid-configuration) und OAuth 2.1 AS-Metadata
@@ -109,7 +136,8 @@ function deny401(res, error, description) {
 // Schreibweisen - `scope` als leerzeichengetrennter String (der ueblichere Fall) oder
 // `scp` als Array (manche IdPs, z.B. Azure AD) oder ebenfalls als String. Fehlt
 // beides, ist die Menge leer - das Token traegt dann garantiert nicht alle
-// Elemente von OAUTH_SCOPES und die Pruefung unten schlaegt fehl (fail-closed).
+// Elemente von ENFORCED_OAUTH_SCOPES (die nicht leer ist) und die Pruefung unten
+// schlaegt fehl (fail-closed).
 function grantedScopes(payload) {
   if (typeof payload.scope === "string" && payload.scope.trim() !== "") {
     return payload.scope.trim().split(/\s+/);
@@ -119,9 +147,11 @@ function grantedScopes(payload) {
   return [];
 }
 
+// Prueft gegen ENFORCED_OAUTH_SCOPES (Grant-Scopes wie offline_access ausgenommen),
+// NICHT gegen die beworbene OAUTH_SCOPES - s. Kommentar dort.
 function hasRequiredScopes(payload) {
   const granted = new Set(grantedScopes(payload));
-  return OAUTH_SCOPES.every((scope) => granted.has(scope));
+  return ENFORCED_OAUTH_SCOPES.every((scope) => granted.has(scope));
 }
 
 const HTTP_FORBIDDEN = 403;
@@ -170,9 +200,10 @@ async function verifyOauth(req, res, next) {
       // im catch-Zweig unten -> 401 + oauth-Challenge, kein Token im Audit-Log.
       requiredClaims: ["exp"],
     });
-    // T-12 (Commit B): das Token muss jedes Element von OAUTH_SCOPES tragen - erst
-    // NACH erfolgreicher Signatur-/Claim-Pruefung, damit ein manipuliertes Token nie
-    // bis hierher kommt. Audit ohne Token- oder Claim-Inhalt (nur der Grund).
+    // T-12 (Commit B): das Token muss jedes Element von ENFORCED_OAUTH_SCOPES tragen
+    // (nicht die volle beworbene OAUTH_SCOPES, s. Kommentar dort) - erst NACH
+    // erfolgreicher Signatur-/Claim-Pruefung, damit ein manipuliertes Token nie bis
+    // hierher kommt. Audit ohne Token- oder Claim-Inhalt (nur der Grund).
     if (!hasRequiredScopes(payload)) {
       audit("auth_failed", req, "path=/mcp grund=insufficient_scope");
       return deny403InsufficientScope(res);
