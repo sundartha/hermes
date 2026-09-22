@@ -5601,3 +5601,56 @@ gepruesften Setup kein `securitySchemes` mehr) — das ist die direkte Folge des
 zufaellige Kollision. `test/openai-t2-23-scopes.test.js` (`OpenAI-T2-23-A5`, oauth-Modus)
 unveraendert gruen. Kein Safety-Gate/Offenlegungssatz beruehrt: die fachliche Zugriffsgrenze
 bleibt Audience + Mandantenbindung (`rejectIfNoTenant`), `mcpAuth` selbst ist unangetastet.
+
+## OpenAI-T2-04 — PUBLIC_URL ist in Produktion Boot-Pflicht (2026-09-22)
+
+**Scope: genau T-32.** OpenAI: "To change the origin, create a new plugin, then complete its
+scan, submission, review, and publication flow" — der Origin (scheme/hostname/port) des
+MCP-Servers ist nach der Publikation unveraenderlich. Ist-Stand vor diesem Eintrag:
+`publicUrl` (`src/config.js`) fiel still auf `RENDER_EXTERNAL_URL` zurueck, wenn `PUBLIC_URL`
+fehlt — und `RENDER_EXTERNAL_URL` ist zugleich der Produktionsdiskriminator
+(`detectProduction()`), der Rueckfall kann also nur in Produktion auftreten. Ein Betreiber, der
+`PUBLIC_URL` im Hosting vergisst, friert damit lautlos den falschen Origin (den
+`*.onrender.com`-Hosting-Host statt des Marken-Hosts der Einreichung) ein.
+
+**Entscheidung: Footgun statt `boot-guard.js`.** Gebaut wird ein neues, rein abgeleitetes
+config-Blatt `server.publicUrlExplicit` (`Boolean((process.env.PUBLIC_URL || "").trim())`) plus
+ein Eintrag in `PRODUCTION_FOOTGUNS` (`src/config.js`), der auf `!cfg.server.publicUrlExplicit`
+prueft — NICHT auf `publicUrl` selbst, weil `publicUrl` den Rueckfall bereits aufgeloest hat und
+die Herkunft des Wertes dort nicht mehr sichtbar ist. `src/boot-guard.js` bleibt unberuehrt: der
+bestehende Kommentar dort (`angekuendigterOriginFindings`) weist die Aussage "publicUrl leer"
+bereits ausdruecklich `config.js` zu, und dieser Pfad bekommt nur den bereits zusammengefallenen
+Wert — die Herkunft ist dort strukturell nicht entscheidbar. Zwei Riegel auf dieselbe Aussage
+waeren zwei Orte, die auseinanderlaufen koennen (vgl. den Grundsatz "ein Eigentuemer, nicht
+zwei" aus E5/E8 oben).
+
+**Was sich NICHT aendert:** kein ausgelieferter Wert. `publicUrl`, Audience, PRM-`resource`,
+Herkunftswache und alle Webhook-Ziele bleiben byte-identisch — der neue Eintrag aendert
+ausschliesslich die Boot-Entscheidung (Boot-Refusal statt stillem Rueckfall). Kein
+`stdio`-Riegel: `src/mcp-server.js` ruft `assertConfig()` nicht auf, dieser Pfad laeuft nie auf
+Render, `detectProduction()` ist dort mangels `RENDER_EXTERNAL_URL` immer `false` — ein Riegel
+waere in jedem erreichbaren Zustand wirkungslos.
+
+**Deploy-Vorbedingung OW-G (Owner-Regel, kein Bau-Agent kann sie erfuellen):** vor jedem Deploy
+im Render-Dashboard pruefen, dass `PUBLIC_URL` gesetzt ist, `https://` traegt, ohne
+Pfad/Query/Fragment/Slash am Ende, und exakt der Origin der OpenAI-Einreichung ist (nicht der
+Hosting-Host). Lesende Alternative ohne Dashboard-Zugriff: `GET
+https://<Marken-Host>/.well-known/oauth-protected-resource` — zeigt `resource` den
+Hosting-Host, ist `PUBLIC_URL` nicht gesetzt. **render.yaml ist NICHT die Produktionswahrheit**
+(Lehre "Live != render.yaml") — ihr `value:`-Eintrag dokumentiert nur, was gelten soll, ersetzt
+die Dashboard-Pruefung nicht.
+
+**Restrisiko:** fehlt `PUBLIC_URL` im Dashboard und wird trotzdem deployt, startet der Dienst
+nach diesem Commit gar nicht mehr (kein `app.listen`, kein Inbound, kein `/mcp`) — Rollback ist
+der vorherige Render-Deploy, weil der Riegel nur im neuen Commit steckt. Das ist die bewusst in
+Kauf genommene Kehrseite: lieber ein Fehlschlag beim Deploy (sichtbar, rueckrollbar) als ein
+eingefrorener Falsch-Origin nach der Publikation (unumkehrbar ohne neues Plugin).
+
+Querverweis: `E5/E8 — Der angekuendigte Origin ist eine geprueft konsistente Angabe` (oben) —
+dieselbe Formel `kanonischeAudience(publicUrl)`, derselbe `PRODUCTION_FOOTGUNS`-Mechanismus,
+diesmal fuer die Herkunft des Wertes statt fuer seine Konsistenz.
+
+Tests: `test/config-prod-footguns.test.js` (`T2-04-01..03`, reine Funktion),
+`test/boot-prod-footguns.test.js` (`T2-04-04/05`, Kindprozess: Boot-Refusal + Meldung nennt Var
+und Sollform ohne Wert-Echo; Spezifitaets-Gegenprobe gegen den `OAUTH_AUDIENCE`-Befund, der
+denselben Variablennamen enthaelt).
