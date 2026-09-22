@@ -2473,6 +2473,22 @@ export function productionFootguns(cfg = config, isProduction = detectProduction
   );
 }
 
+// T-5: reiner Hinweis (WARN), KEINE Sperre - Autonome Entscheidung P6. Produktion
+// wird NUR ueber den Parameter isProduction gelesen (kein zweiter Blick auf die
+// Prozess-Umgebung oder config.server.isProduction hier drin), damit es genau
+// EINEN Produktionsbegriff gibt (detectProduction bleibt die einzige Quelle).
+// MCP_AUTH=off ist bereits FATAL ueber PRODUCTION_FOOTGUNS oben - kein
+// Doppel-Report fuer denselben Zustand.
+export function productionAuthHints(cfg = config, isProduction = detectProduction()) {
+  if (!isProduction) return [];
+  if (cfg.auth.mcpAuth === "oauth" || cfg.auth.mcpAuth === "off") return [];
+  return [
+    "[Sicherheit] MCP_AUTH ist nicht 'oauth' - /mcp laeuft im Hosting mit statischem " +
+      "Bearer statt OAuth 2.1; Claude-/ChatGPT-Connectoren erhalten 401 (T-5). Kein " +
+      "Boot-Stopp (Hinweis).",
+  ];
+}
+
 // EINE Quelle (G5) fuer das Self-Service-Reifekriterium: nur "scharf", wenn BEIDE Flags
 // gesetzt sind (SELF_SERVICE_ENABLED + MULTI_TENANT). Reine Praedikatfunktion, per Import
 // genutzt (auth-gate/web-login) statt vierfach woertlich. INV-3-Exemption-Reihenfolge
@@ -2649,5 +2665,9 @@ export function assertConfig() {
     console.error(
       "[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!",
     );
+  // T-5: reiner Hinweis, unabhaengig von missing/fatal - zaehlt NICHT in den
+  // Rueckgabewert (Autonome Entscheidung P6, keine neue Boot-Verweigerung).
+  // Derselbe lokale isProduction wie fuer fatalConfigFindings oben.
+  for (const hint of productionAuthHints(config, isProduction)) console.error(hint);
   return missing.length === 0 && fatal.length === 0;
 }
