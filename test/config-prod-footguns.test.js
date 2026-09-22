@@ -20,7 +20,7 @@ const SAFE_PROD = {
   auth: { dashboardPassword: "geheim", mcpAuth: "", oauthIssuerUrl: "", oauthAudience: "" },
   safety: { skipTwilioSignatureCheck: false },
   store: { storeBackend: "pg" },
-  server: { publicUrl: "https://agent.test" },
+  server: { publicUrl: "https://agent.test", publicUrlExplicit: true },
 };
 
 test("T-P0-5-01: nicht-Produktion -> nie Footguns (alle Schalter offen erlaubt)", () => {
@@ -90,15 +90,20 @@ test("T-P0-5-17: Produktion + divergentes OAUTH_AUDIENCE -> fatal (nennt Var)", 
 });
 
 test("T-P0-5-07: Produktion + mehrere Footguns -> alle gesammelt", () => {
+  // Alle gleichzeitig entschaerften Bedingungen: DASHBOARD_PASSWORD, MCP_AUTH,
+  // SKIP_TWILIO_SIGNATURE_CHECK, OAUTH_ISSUER_URL, STORE_BACKEND, PUBLIC_URL (T2-04).
+  // OAUTH_AUDIENCE bleibt aussen vor: leer -> Praedikat kurzschliesst.
+  const ANZAHL_GLEICHZEITIGER_FOOTGUNS = 6;
   const errors = productionFootguns(
     {
       auth: { dashboardPassword: "", mcpAuth: "off", oauthIssuerUrl: "http://idp.example" },
       safety: { skipTwilioSignatureCheck: true },
       store: { storeBackend: "json" },
+      server: { publicUrlExplicit: false },
     },
     true,
   );
-  assert.equal(errors.length, 5, "alle fuenf Footguns werden gemeldet, nicht nur der erste");
+  assert.equal(errors.length, ANZAHL_GLEICHZEITIGER_FOOTGUNS, "alle sechs Footguns werden gemeldet, nicht nur der erste");
 });
 
 // Integration: assertConfig faltet die Footguns in die Fatal-Menge -> false (Boot-
@@ -125,7 +130,7 @@ function captureConsoleError(fn) {
 // Presence-Feld). mcpAuth/skip/issuer entschaerft, dashboardPassword bewusst leer.
 const REQUIRED_OK_PROD = {
   anthropicApiKey: "x",
-  publicUrl: "https://agent.onrender.com", storeBackend: "json", paymentEnabled: false,
+  publicUrl: "https://agent.onrender.com", publicUrlExplicit: true, storeBackend: "json", paymentEnabled: false,
   mcpAuth: "", skipTwilioSignatureCheck: false, oauthIssuerUrl: "", dashboardPassword: "",
 };
 
@@ -168,4 +173,34 @@ test("T-P0-1-AC1-04: Produktion + undefined storeBackend -> fatal", () => {
   const errors = productionFootguns({ ...SAFE_PROD, store: { ...SAFE_PROD.store, storeBackend: undefined } }, true);
   assert.equal(errors.length, 1);
   assert.match(errors[0], /STORE_BACKEND/);
+});
+
+// T2-04 (T-32): PUBLIC_URL in Produktion Boot-Pflicht - der angekuendigte Origin einer
+// OpenAI-App ist nach der Publikation unveraenderlich, ein stiller Rueckfall auf den
+// Hosting-Host wuerde den falschen Origin einfrieren. Das Praedikat liest NUR
+// publicUrlExplicit (nicht publicUrl), weil publicUrl den Rueckfall schon aufgeloest hat.
+
+test("T2-04-01: Produktion + publicUrlExplicit=false -> genau ein Befund, nennt Var + Sollform, kein Wert-Echo", () => {
+  const errors = productionFootguns(
+    { ...SAFE_PROD, server: { ...SAFE_PROD.server, publicUrlExplicit: false } },
+    true,
+  );
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /PUBLIC_URL/);
+  assert.match(errors[0], /https:\/\/<host>/);
+  assert.doesNotMatch(errors[0], /agent\.test/, "kein Echo des konfigurierten Wertes");
+});
+
+test("T2-04-02: Produktion + publicUrlExplicit=true -> kein Footgun", () => {
+  assert.deepEqual(
+    productionFootguns({ ...SAFE_PROD, server: { ...SAFE_PROD.server, publicUrlExplicit: true } }, true),
+    [],
+  );
+});
+
+test("T2-04-03: nicht-Produktion + publicUrlExplicit=false -> kein Footgun (Rueckfall-Quelle ist der Produktionsdiskriminator)", () => {
+  assert.deepEqual(
+    productionFootguns({ ...SAFE_PROD, server: { ...SAFE_PROD.server, publicUrlExplicit: false } }, false),
+    [],
+  );
 });
