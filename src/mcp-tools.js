@@ -773,8 +773,8 @@ const TOOL_INVOCATION_STATUS = {
 // - keine zweite, namensindizierte Tabelle. Damit gibt es strukturell EINE Titel-Quelle,
 // title und annotations.title koennen nicht auseinanderlaufen.
 // _meta entsteht als { ...statusMeta, ...config._meta }: der Widget-Anteil steht HINTEN
-// und gewinnt bei (heute unmoeglicher) Kollision - die Namensraeume sind disjunkt (ui /
-// openai/outputTemplate vs. openai/toolInvocation/*).
+// und gewinnt bei (heute unmoeglicher) Kollision - die Namensraeume sind disjunkt
+// (ui.resourceUri vs. openai/toolInvocation/*).
 // Fehlt ein Tool in TOOL_INVOCATION_STATUS, entstehen KEINE halben Schluessel (leeres
 // Fragment statt throw) - eine fehlende Statuszeile ist kosmetisch, ein Wurf hier wuerde
 // /mcp fuer alle Mandanten zerlegen. Die Luecke faengt der Vollstaendigkeitstest, der ueber

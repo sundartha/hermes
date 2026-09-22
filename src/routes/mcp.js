@@ -143,19 +143,11 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
       });
       const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
       // Rich-UI-Host-Hinweis: gegated NUR durch den Master-Schalter config.tenancy.mcpUiEnabled
-      // (aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Der MCP-native
-      // Renderer ist der Default (siehe ui/registry.js); kein per-Request-Capability-Gate
-      // mehr, weil der stateless Transport (sessionIdGenerator=undefined) die initialize-
-      // Capabilities nicht zum tools/list-POST mitfuehrt - das Widget-_meta erschien sonst
-      // NIE. capabilities dienen nur noch der expliziten ChatGPT-Adapter-Wahl. Kein neuer
-      // Endpunkt, mcpAuth + res.on("close")-Cleanup unveraendert. Die Zeile unten liest
-      // params.capabilities bei JEDEM POST neu (kein Session-State) - vom initialize-POST
-      // kommt beim naechsten Request also nichts mehr an. Stuende dieselbe Capability im
-      // tools/list- oder resources/read-Request selbst, wuerde sie hier greifen. Kein
-      // standardkonformer Client (Claude, ChatGPT) tut das - Capabilities gehoeren laut
-      // Spec nur ins initialize -, deshalb praktisch tot, aber nicht technisch unerreichbar
-      // (P8, §0.3 M-1).
-      const uiHost = { enabled: config.tenancy.mcpUiEnabled, capabilities: req.body?.params?.capabilities };
+      // (aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Seit T2-01 gibt es
+      // genau einen Renderer (ui/registry.js, MCP-Apps-Standard fuer JEDEN Host) - kein
+      // Capability-Feld mehr noetig, kein neuer Endpunkt, mcpAuth + res.on("close")-Cleanup
+      // unveraendert.
+      const uiHost = { enabled: config.tenancy.mcpUiEnabled };
       registerTools(server, {
         identity,
         scopedTenant,

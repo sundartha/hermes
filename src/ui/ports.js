@@ -1,6 +1,6 @@
 // UI-Ports: host-abstrakter Vertrag fuer Rich-UI-Resources (DIP, analog telephony).
-// Mehrere Adapter (mcp-native, chatgpt) erfuellen denselben Vertrag. Reine JSDoc-
-// Typdefs, keine Laufzeit-Logik.
+// Seit T2-01 genau ein Adapter (mcp-native, MCP-Apps-Standard fuer JEDEN Host). Reine
+// JSDoc-Typdefs, keine Laufzeit-Logik.
 
 /**
  * @typedef {Object} UiRenderer
@@ -14,7 +14,7 @@
  *   der uebergebenen Agentensprache (P13/E4; fehlend -> englische Fassung).
  *   Die Resource traegt KEINE Tenant-Daten (Daten -> structuredContent, P0-Befund).
  * @property {(widgetId: string) => object} toolMeta
- *   Host-spezifisches _meta-Fragment fuer den Tool-Deskriptor (mcp-nativ:
- *   _meta.ui.resourceUri; ChatGPT: _meta["openai/outputTemplate"]).
+ *   _meta-Fragment fuer den Tool-Deskriptor (_meta.ui.resourceUri). csp/Origin (T-30/T-31)
+ *   liegen NICHT hier, sondern am Resource-Inhalt (s. contract.js uiResourceMeta).
  */
 export {};
