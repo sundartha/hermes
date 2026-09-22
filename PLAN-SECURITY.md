@@ -5366,6 +5366,18 @@ oben, byte-identisch.
   registerResource(server, widgetId, { language, chatgptEgress })`): `ui.domain` nur bei
   `chatgptEgress === true` UND vorhandenem Origin, sonst wie zuvor nur der Alias.
 
+**Betriebswissen: Aktualisierung der Egress-Liste.** `src/ui/chatgpt-egress-ranges.json`
+ist eine einmalige Kopie ohne Laufzeit-Fetch (Safety-Review-Befund, Nachbau). Kein
+dedizierter Alarm ausser einer Testschwelle: `test/chatgpt-egress.test.js` faellt rot,
+sobald `_fetchedAt` mehr als 180 Tage zurueckliegt (`EGRESS_LISTE_MAX_ALTER_TAGE`) - das
+faengt NUR das Vergessen, nicht die inhaltliche Drift (OpenAI kann Bereiche jederzeit
+frueher aendern; ein zu alter Eintrag klassifiziert eine echte ChatGPT-Anfrage dann
+still als "andere" und die Resource verliert nur `ui.domain`, kein Auth-/Kosten-/
+Gate-Effekt). Rhythmus: bei jeder folgenden OpenAI-Einreichungs-Phase neu von `_source`
+abrufen, spaetestens wenn der Test rot wird; Verantwortlich ist, wer die naechste
+OpenAI-Phase vorbereitet (keine dedizierte Rolle noetig, Team = Owner). Vorgehen steht im
+`_note`-Feld der Datei.
+
 **Draht-Beleg (echte HTTP-Route, kein `registerResource()`-Unit-Test — der SDK-Client
 verwirft unbekannte `_meta`-Felder sonst still):** `test/openai-t2-01-widget-resource-
 meta.test.js` T9 (X-Forwarded-For aus der gelisteten Liste -> `ui.domain` = PUBLIC_URL-

@@ -160,11 +160,16 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
       // genau einen Renderer (ui/registry.js, MCP-Apps-Standard fuer JEDEN Host) - kein
       // Capability-Feld mehr noetig, kein neuer Endpunkt, mcpAuth + res.on("close")-Cleanup
       // unveraendert.
-      const uiHost = { enabled: config.tenancy.mcpUiEnabled };
+      const uiEnabled = config.tenancy.mcpUiEnabled;
       // T2-01 Nachbau: NUR bei aktivem Master-Schalter ueberhaupt klassifizieren - der
       // Schalter aus heisst weiterhin byte-identisch (kein Widget, kein Resource-Read,
-      // die Klassifikation waere reine Nebenwirkung ohne Konsumenten).
-      const chatgptEgress = uiHost.enabled ? logAndDetectChatgptEgress(req) : false;
+      // die Klassifikation waere reine Nebenwirkung ohne Konsumenten). chatgptEgress
+      // reist ALS FELD AM uiHost mit, kein eigenes registerTools-Argument (uiHost und
+      // chatgptEgress beschreiben denselben Host-Kontext, G32).
+      const uiHost = {
+        enabled: uiEnabled,
+        chatgptEgress: uiEnabled ? logAndDetectChatgptEgress(req) : false,
+      };
       registerTools(server, {
         identity,
         scopedTenant,
@@ -172,7 +177,6 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
         consultAllowed: consultLoop,
         uiHost,
         language,
-        chatgptEgress,
       });
       // T-15: securitySchemes am Tool-Deskriptor - siehe src/mcp-security-schemes.js.
       applyToolSecuritySchemes(server);

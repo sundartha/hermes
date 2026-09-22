@@ -74,3 +74,29 @@ test("fail-closed: Muell/fehlende Eingabe liefert false, nie true und nie throw"
     assert.equal(isChatGptEgressIp(wert), false, `Eingabe: ${JSON.stringify(wert)}`);
   }
 });
+
+// Safety-Befund T2-01-Nachbau: die eingecheckte Liste ist eine EINMALIGE Kopie vom
+// Abrufdatum (`_fetchedAt`) ohne Laufzeit-Fetch und ohne Aktualisierungs-Automatik
+// (Update-Anleitung steht nur im `_note`-Feld). Erweitert OpenAI seine Egress-Bereiche,
+// klassifiziert eine ansonsten echte ChatGPT-Anfrage still als "andere" - kein Test und
+// kein Log meldet das als Fehler, das Widget verliert nur unauffaellig `ui.domain`.
+// Dieser Test ist das Alarm-Netz: er faengt NICHT die inhaltliche Drift (das kann nur
+// ein erneuter Abruf gegen _source), sondern das VERGESSEN, die Datei ueberhaupt wieder
+// anzufassen. Schwelle bewusst grosszuegig (kein Rauschen bei normaler Kadenz), aber
+// endlich (kein "einmal eingecheckt, nie wieder geprueft").
+const EGRESS_LISTE_MAX_ALTER_TAGE = 180;
+// Dieselbe Konstante wie MS_PER_DAY in src/config.js/src/boot-guard.js (G5) - dort
+// namensgleich, hier lokal benannt, weil dieser Testfile die src-Module nicht importiert.
+const MS_JE_TAG = 86_400_000;
+
+test("Egress-Liste ist nicht aelter als die Alarm-Schwelle (_fetchedAt)", () => {
+  const fetchedAt = new Date(`${RANGES._fetchedAt}T00:00:00Z`);
+  assert.ok(!Number.isNaN(fetchedAt.getTime()), `_fetchedAt unlesbar: ${RANGES._fetchedAt}`);
+  const alterTage = (Date.now() - fetchedAt.getTime()) / MS_JE_TAG;
+  assert.ok(
+    alterTage <= EGRESS_LISTE_MAX_ALTER_TAGE,
+    `src/ui/chatgpt-egress-ranges.json ist ${Math.floor(alterTage)} Tage alt (Grenze ` +
+      `${EGRESS_LISTE_MAX_ALTER_TAGE}) - gegen _source neu abrufen und _fetchedAt/` +
+      `_upstreamCreationTime nachziehen (Anleitung im _note-Feld der Datei).`,
+  );
+});
