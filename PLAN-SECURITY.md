@@ -5496,11 +5496,46 @@ Claim-Inhalt; es laeuft in keinem 403-Fall ein Werkzeug (kein `jsonrpc`-`result`
 Vorher pinnte `test/openai-p7-token-pruefachsen.test.js` (`OpenAI-P7-T3`/`-T4`) die
 dokumentierte Luecke: ein Token ganz ohne bzw. mit beliebigem `scope`-Claim bekam 200. Mit
 Commit B MUSSTEN diese Tests rot werden — sie sind jetzt bewusst umgeschrieben: T3 (Positiv-
-Kontrolle) belegt ein Token MIT vollstaendiger Scope-Menge -> 200, T4 belegt ein Token mit
-unvollstaendigem Scope -> 403. `test/openai-t2-23-scopes.test.js` (`OpenAI-T2-23-A1`..`A5`,
+Kontrolle) belegt ein Token MIT vollstaendiger Scope-Menge -> 200, T4 belegt ein Token, dem ein
+ERZWUNGENER Scope fehlt -> 403. `test/openai-t2-23-scopes.test.js` (`OpenAI-T2-23-A1`..`A5`,
 `B1`..`B4`) deckt beide Commits vollstaendig ab: PRM mit/ohne AS, 401-Challenge, byte-gleicher
 Token-/Legacy-Zweig, `securitySchemes` auf jedem Werkzeug (echter `tools/list`-Draht), sowie
 `scope`-String voll/unvollstaendig und `scp`-Array voll/fehlend.
+
+**Nachtrag (2026-09-22, Safety-Review, selbe Phase): beworbene und erzwungene Menge getrennt.**
+Der Safety-Review fand einen Fehler in Commit B: `hasRequiredScopes()` verlangte urspruenglich
+JEDES Element von `OAUTH_SCOPES` — also auch `offline_access` — direkt am Access-Token.
+`offline_access` ist aber ein **Grant-Scope**: er steuert nur, ob der Auth-Server ueberhaupt
+ein Refresh-Token AUSSTELLT, und steht bei einem spec-treuen IdP typischerweise NICHT im
+Access-Token selbst. Waere das unveraendert geblieben, haette jeder Deploy JEDEN MCP-Aufruf mit
+einem gueltigen, spec-konformen Access-Token mit 403 abgelehnt — unabhaengig vom Ausgang von
+OW-B.
+
+Fix: `src/auth.js` fuehrt `ENFORCED_OAUTH_SCOPES` ein, aus `OAUTH_SCOPES` abgeleitet und um die
+neue benannte Konstante `GRANT_ONLY_SCOPES = ["offline_access"]` bereinigt
+(`OAUTH_SCOPES.filter((scope) => !GRANT_ONLY_SCOPES.includes(scope))`); `hasRequiredScopes()`
+prueft jetzt gegen `ENFORCED_OAUTH_SCOPES`, nicht mehr gegen die volle beworbene Menge. Keine
+neue Env-Variable — die erzwungene Menge folgt automatisch jeder kuenftigen Aenderung der
+beworbenen. Die BEWORBENE Menge (PRM `scopes_supported`, `scope=` in beiden Bearer-Challenges,
+`securitySchemes`) ist davon unberuehrt und traegt weiterhin alle drei Werte inkl.
+`offline_access` — das bleibt fuer T-16 und einen spec-treuen Client wichtig (er faehrt sonst
+gar nicht erst mit `offline_access` im Consent-Request vor).
+
+Tests nachgezogen: `OpenAI-T2-23-B3` wurde von "unvollstaendiger Scope -> 403" zu "erzwungene
+Scopes ohne `offline_access` -> 200" (die eigentliche Regression, die dieser Nachtrag behebt);
+neu `OpenAI-T2-23-B3b` deckt den echten Negativfall (ein Element der ERZWUNGENEN Menge fehlt ->
+403) ab; `OpenAI-P7-T4` wurde ebenso von "offline_access fehlt" auf "email (Teil der erzwungenen
+Menge) fehlt" umgestellt. `OpenAI-T2-23-B4` (kein `scope`/`scp` -> 403) bleibt unveraendert:
+`ENFORCED_OAUTH_SCOPES` ist nicht leer, die Pruefung bleibt fail-closed.
+
+**Deploy-Vorbedingung OW-B, Risiko gesunken:** OW-B (Login mit `S` durchfuehren, Access-Token
+dekodieren) bleibt als Beleg-Schritt stehen, aber ihr Ausfall-Szenario ist jetzt harmlos statt
+fatal. Vorher: fehlte `offline_access` im Access-Token, war JEDE Connector-Verbindung ab Deploy
+tot (403 statt 200). Jetzt: `offline_access` wird gar nicht mehr erzwungen — selbst wenn es im
+Access-Token fehlt (der erwartbare Fall), bleibt der Zugriff erlaubt, solange `openid` und
+`email` vorhanden sind. OW-B prueft damit nur noch, ob die tatsaechlich erzwungenen Scopes
+(`openid`, `email`) ankommen — nicht mehr, ob ein Grant-Scope faelschlich im Access-Token
+landen muesste.
 
 **test/helpers.js — Default-Scope fuer signierte Test-Token.** `startIdp().sign()` signiert
 seit Commit B per Default die volle `OAUTH_SCOPES`-Menge (`DEFAULT_TEST_SCOPE`), sonst haetten
