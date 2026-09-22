@@ -24,19 +24,28 @@ import { uiResourceUri } from "../src/ui/contract.js";
 import { WIDGET_CALL } from "../src/ui/widget-catalog.js";
 import {
   startServer,
+  startIdp,
   seedState,
   mcpPost,
   readToolResult,
   ROOT,
   BASE_ENV,
+  MCP_AUDIENCE,
   TOOL_COUNT_WITH_CONSULT,
   TOOL_COUNT_WITHOUT_CONSULT,
   TOOLS_WITH_OUTPUT_SCHEMA,
 } from "./helpers.js";
 
-// Literal aus dem woertlich zitierten OpenAI-Rohtext (tasks/openai-p3-report.md,
-// Fundstelle 1) - NICHT aus src importiert.
-const EXPECTED_SECURITY_SCHEMES = [{ type: "oauth2", scopes: [] }];
+// Literal der T2-23-Scope-Menge S ("openid","email","offline_access", s.
+// src/auth.js OAUTH_SCOPES) - bewusst NICHT aus src importiert, sonst wuerde ein
+// Bug, der OAUTH_SCOPES selbst falsch setzt, hier unbemerkt mitlaufen (Pre-Mortem #4
+// der P3-Spec: ein Test, der seine Erwartung aus dem Pruefling zieht, belegt nichts).
+const EXPECTED_SECURITY_SCHEMES = [{ type: "oauth2", scopes: ["openid", "email", "offline_access"] }];
+// T2-23-Nachtrag: der zweite (und einzige weitere) Spec-Typ, ebenfalls als Literal
+// (nicht aus src importiert, Pre-Mortem #4 s.o.) - developers.openai.com/apps-sdk/
+// build/auth: "`noauth`: The tool is callable anonymously; ChatGPT can run it
+// immediately."
+const EXPECTED_NOAUTH_SECURITY_SCHEMES = [{ type: "noauth" }];
 const LIST_TOOLS_METHOD = "tools/list";
 // Permissiver Ergebnis-Schema fuer rohe tools/list-Abfragen ueber den typisierten
 // Client - z.any() pro Tool umgeht das Strippen unbekannter Felder (Messung B).
@@ -61,21 +70,34 @@ function assertSecuritySchemesOnEveryTool(tools) {
     assert.deepEqual(
       tool.securitySchemes,
       EXPECTED_SECURITY_SCHEMES,
-      `${tool.name}: securitySchemes traegt genau [{"type":"oauth2","scopes":[]}]`,
+      `${tool.name}: securitySchemes traegt genau [{"type":"oauth2","scopes":["openid","email","offline_access"]}]`,
     );
   }
 }
 
 // T-15-Korrektur: stdio hat keine Client-Auth (mcpAuth haengt nur an POST /mcp), also
 // waere "oauth2" dort eine Falschangabe. Gegenstueck zu assertSecuritySchemesOnEveryTool
-// fuer den stdio-Pfad, der das Feld seit der Korrektur NICHT mehr traegt.
-function assertNoSecuritySchemesOnAnyTool(tools) {
+// fuer jeden Pfad, an dem KEINER der beiden Spec-Typen (noauth/oauth2) ehrlich zutrifft -
+// stdio (keine Client-Auth ueberhaupt) UND, seit dem T2-23-Nachtrag, der Token-/Legacy-
+// Modus ueber HTTP (Auth existiert, ist aber kein OAuth2-Flow). `grund` macht die
+// Fehlermeldung am jeweiligen Aufrufort praezise statt pauschal "stdio" zu behaupten.
+function assertNoSecuritySchemesOnAnyTool(tools, grund = "keine Client-Auth dort") {
   assert.ok(tools.length > 0, "tools/list liefert Werkzeuge");
   for (const tool of tools) {
-    assert.equal(
+    assert.equal(tool.securitySchemes, undefined, `${tool.name}: securitySchemes fehlt (${grund})`);
+  }
+}
+
+// T2-23-Nachtrag: Gegenstueck fuer MCP_AUTH=off - der einzige Modus, in dem der
+// zweite Spec-Typ ("noauth") ehrlich ist (echt anonym erreichbar, s.
+// src/mcp-security-schemes.js).
+function assertNoauthSecuritySchemesOnEveryTool(tools) {
+  assert.ok(tools.length > 0, "tools/list liefert Werkzeuge");
+  for (const tool of tools) {
+    assert.deepEqual(
       tool.securitySchemes,
-      undefined,
-      `${tool.name}: securitySchemes fehlt ueber stdio (keine Client-Auth dort)`,
+      EXPECTED_NOAUTH_SECURITY_SCHEMES,
+      `${tool.name}: securitySchemes traegt genau [{"type":"noauth"}]`,
     );
   }
 }
@@ -146,8 +168,11 @@ test("P3 (Lerntest): registerTool() verwirft securitySchemes still, der Override
     );
 
     // Override anwenden - jetzt traegt der ROHE Weg das Feld, der TYPISIERTE nicht
-    // (Messung B): Zusicherung 3.
-    applyToolSecuritySchemes(server);
+    // (Messung B): Zusicherung 3. mcpAuthMode="oauth" EXPLIZIT (T2-23-Nachtrag): dieser
+    // Lerntest prueft die SDK-Mechanik, nicht die Modus-Abbildung - der Prozess-weite
+    // config.auth.mcpAuth waere hier der Legacy-Default (Modul-Singleton, einmal beim
+    // Import aus process.env gelesen, s. src/mcp-security-schemes.js).
+    applyToolSecuritySchemes(server, "oauth");
     const getroffen = await client.listTools();
     const t1Getroffen = getroffen.tools.find((tool) => tool.name === "t1");
     assert.equal(
@@ -180,14 +205,28 @@ test("P3 (Lerntest): fehlt der Original-Handler, wirft applyToolSecuritySchemes 
 });
 
 // Schritt 5 - Beleg ueber die echte HTTP-Route (AC1 + AC2 im selben Response).
-test("P3 (Schritt 5): tools/list ueber die echte /mcp-Route traegt securitySchemes an jedem Werkzeug, P1/P2-Felder unveraendert", async () => {
+// T2-23-Nachtrag: MCP_AUTH=oauth jetzt EXPLIZIT (vorher lief dieser Test im
+// Legacy-Default MCP_AUTH="" - genau die Konstellation, in der securitySchemes VOR
+// dem Nachtrag faelschlich "oauth2" behauptete, obwohl kein OAuth-Flow existiert).
+// Nur im oauth-Modus ist die volle Angabe ehrlich (s. src/mcp-security-schemes.js).
+test("P3 (Schritt 5): tools/list ueber die echte /mcp-Route traegt securitySchemes an jedem Werkzeug im oauth-Modus, P1/P2-Felder unveraendert", async () => {
+  const idp = await startIdp();
   const srv = await startServer({
     seed: seedState({}),
-    env: { MCP_UI_ENABLED: "true", CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
+    env: {
+      MCP_UI_ENABLED: "true",
+      CONSULT_ENABLED: "true",
+      ASSISTANT_CONTEXT_ENABLED: "true",
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+      OAUTH_AUDIENCE: MCP_AUDIENCE,
+      OWNER_IDP_SUBJECT: "user-1",
+    },
   });
   try {
+    const token = await idp.sign({ email: "p3-schritt5@team.test" });
     const result = await readToolResult(
-      await mcpPost(`${srv.localUrl}/mcp`, null, { jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      await mcpPost(`${srv.localUrl}/mcp`, token, { jsonrpc: "2.0", id: 1, method: "tools/list" }),
     );
     assert.equal(
       result.tools.length,
@@ -196,6 +235,67 @@ test("P3 (Schritt 5): tools/list ueber die echte /mcp-Route traegt securitySchem
     );
     assertSecuritySchemesOnEveryTool(result.tools);
     assertOutputAndP1P2FeldNichtZerschossen(result.tools);
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+// Schritt 5b (T2-23-Nachtrag) - Legacy-Modus (MCP_AUTH="", der BASE_ENV-Default):
+// statischer Bearer-Token ODER lokaler Dev-Bypass, aber KEIN OAuth-Flow. Die
+// ehrliche Angabe ist "kein Schema" (s. Kommentar src/mcp-security-schemes.js) -
+// DAS ist die Regression, die der unabhaengige Pruefer gefunden hat: vor dem
+// Nachtrag stand hier faelschlich die volle oauth2-Angabe.
+test("P3 (Schritt 5b, T2-23-Nachtrag): tools/list im Legacy-Modus (MCP_AUTH=\"\") traegt securitySchemes NICHT - kein OAuth-Flow, keine Falschangabe", async () => {
+  const srv = await startServer({
+    seed: seedState({}),
+    env: { MCP_UI_ENABLED: "true", CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
+  });
+  try {
+    const result = await readToolResult(
+      await mcpPost(`${srv.localUrl}/mcp`, null, { jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    );
+    assert.equal(result.tools.length, TOOL_COUNT_WITH_CONSULT);
+    assertNoSecuritySchemesOnAnyTool(result.tools, "Legacy-Modus hat keinen OAuth-Flow");
+    assertOutputAndP1P2FeldNichtZerschossen(result.tools);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// Schritt 5c (T2-23-Nachtrag) - MCP_AUTH=token mit gesetztem MCP_AUTH_TOKEN:
+// derselbe Befund wie Legacy, jetzt mit einem echten Bearer-Token authentifiziert
+// (kein Dev-Bypass involviert) - der statische Token ersetzt KEIN OAuth2.
+test("P3 (Schritt 5c, T2-23-Nachtrag): tools/list im Token-Modus (MCP_AUTH=token) traegt securitySchemes NICHT - statischer Bearer-Token ist kein OAuth2", async () => {
+  const srv = await startServer({
+    seed: seedState({}),
+    env: { MCP_AUTH: "token", MCP_AUTH_TOKEN: "t2-23-geheim" },
+  });
+  try {
+    const result = await readToolResult(
+      await mcpPost(`${srv.localUrl}/mcp`, "t2-23-geheim", { jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    );
+    assert.ok(result.tools.length > 0);
+    assertNoSecuritySchemesOnAnyTool(result.tools, "Token-Modus ist ein statischer Bearer-Token, kein OAuth2");
+  } finally {
+    await srv.stop();
+  }
+});
+
+// Schritt 5d (T2-23-Nachtrag) - MCP_AUTH=off: der einzige Modus, in dem der Server
+// JEDEN Request unbedingt durchlaesst (auth.js:226) - hier ist "noauth" der ehrliche
+// zweite Spec-Typ.
+test("P3 (Schritt 5d, T2-23-Nachtrag): tools/list im off-Modus (MCP_AUTH=off) traegt securitySchemes als noauth auf jedem Werkzeug", async () => {
+  const srv = await startServer({
+    seed: seedState({}),
+    env: { MCP_AUTH: "off" },
+  });
+  try {
+    const result = await readToolResult(
+      await mcpPost(`${srv.localUrl}/mcp`, null, { jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    );
+    assert.ok(result.tools.length > 0);
+    assertNoauthSecuritySchemesOnEveryTool(result.tools);
   } finally {
     await srv.stop();
   }

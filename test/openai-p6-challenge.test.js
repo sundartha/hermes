@@ -21,7 +21,7 @@ import { startServer, startIdp, mcpPost, MCP_AUDIENCE } from "./helpers.js";
 const HTTP_UNAUTHORIZED = 401;
 const STATIC_CHALLENGE = 'Bearer error="invalid_token"';
 const OAUTH_CHALLENGE =
-  'Bearer resource_metadata="https://agent.test/.well-known/oauth-protected-resource", error="invalid_token", error_description="Kein Token"';
+  'Bearer resource_metadata="https://agent.test/.well-known/oauth-protected-resource", scope="openid email offline_access", error="invalid_token", error_description="Kein Token"';
 
 // P6-T4 braucht die Ueberschreibung waehrend ECHTER Netzwerk-I/O (Express-Listener
 // starten, echter HTTP-Request) - das ueberschreitet mehrere Makrotask-Grenzen. Der
