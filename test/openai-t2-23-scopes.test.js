@@ -8,7 +8,7 @@
 // Auth-Behauptung.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer, startIdp, mcpPost as post, readToolResult, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
+import { startServer, startIdp, mcpPost as post, readToolResult, waitForLog, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
 import { OAUTH_SCOPES } from "../src/auth.js";
 import { TOOL_SECURITY_SCHEMES } from "../src/mcp-security-schemes.js";
 
@@ -117,6 +117,25 @@ function assertInsufficientScopeChallenge(wa) {
   assert.match(wa, /resource_metadata="https:\/\/agent\.test\/\.well-known\/oauth-protected-resource"/);
 }
 
+// JWT-Segmente (header/payload/signature) sind base64url und in der Praxis immer
+// laenger als das - ein zufaelliger Treffer eines kuerzeren Substrings im Log waere
+// kein Leak-Beleg, sondern Rauschen.
+const MIN_LEAK_SEGMENT_LEN = 16;
+
+// Abnahmekriterium (5): in JEDEM 403-Fall darf die Audit-Ausgabe keinen Teil des
+// signierten Tokens und keine Claim-Email enthalten. Positiv-Kontrolle ZUERST (die
+// Zeile grund=insufficient_scope MUSS geloggt sein) - sonst waere eine leere/verpasste
+// Log-Pruefung kein Beleg fuer "kein Leak", sondern nur fuer "nichts geprueft" (Lehre
+// "Pruefkommando ohne Positiv-Kontrolle").
+async function assertAuditLoggedWithoutTokenLeak(srv, token, email) {
+  await waitForLog(srv, /grund=insufficient_scope/);
+  for (const segment of token.split(".")) {
+    if (segment.length < MIN_LEAK_SEGMENT_LEN) continue;
+    assert.equal(srv.stdout.includes(segment), false, "Token-Segment darf nicht im Audit-Log stehen");
+  }
+  assert.equal(srv.stdout.includes(email), false, "Claim-Email darf nicht im Audit-Log stehen");
+}
+
 test("OpenAI-T2-23-B1: Token mit vollstaendigem scope-String -> 200", async () => {
   const idp = await startIdp();
   const srv = await startServer({
@@ -153,12 +172,14 @@ test("OpenAI-T2-23-B3: Token mit unvollstaendigem scope -> 403 insufficient_scop
     env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE, OWNER_IDP_SUBJECT: "user-1" },
   });
   try {
-    const token = await idp.sign({ email: "t2-23-b3@team.test", scope: UNVOLLSTAENDIGER_SCOPE });
+    const email = "t2-23-b3@team.test";
+    const token = await idp.sign({ email, scope: UNVOLLSTAENDIGER_SCOPE });
     const res = await post(`${srv.localUrl}/mcp`, token, TOOLS_LIST_BODY);
     assert.equal(res.status, HTTP_FORBIDDEN);
     assertInsufficientScopeChallenge(res.headers.get("www-authenticate") || "");
     const body = await res.json();
     assert.equal(body.jsonrpc, undefined, "kein jsonrpc-Feld - kein Tool-Aufruf durchgelassen");
+    await assertAuditLoggedWithoutTokenLeak(srv, token, email);
   } finally {
     await srv.stop();
     await idp.close();
@@ -171,12 +192,14 @@ test("OpenAI-T2-23-B4: Token ganz ohne scope/scp -> 403 insufficient_scope", asy
     env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE, OWNER_IDP_SUBJECT: "user-1" },
   });
   try {
-    const token = await idp.sign({ email: "t2-23-b4@team.test", scope: null });
+    const email = "t2-23-b4@team.test";
+    const token = await idp.sign({ email, scope: null });
     const res = await post(`${srv.localUrl}/mcp`, token, TOOLS_LIST_BODY);
     assert.equal(res.status, HTTP_FORBIDDEN);
     assertInsufficientScopeChallenge(res.headers.get("www-authenticate") || "");
     const body = await res.json();
     assert.equal(body.jsonrpc, undefined, "kein jsonrpc-Feld - kein Tool-Aufruf durchgelassen");
+    await assertAuditLoggedWithoutTokenLeak(srv, token, email);
   } finally {
     await srv.stop();
     await idp.close();

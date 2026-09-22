@@ -74,12 +74,15 @@ export function _resetJwksCache() {
   jwks = null;
 }
 
-// RFC 6750 / 9728: jeder 401 von /mcp traegt eine Bearer-Challenge. Einzige
-// Stelle im Modul, die den WWW-Authenticate-Header setzt und den 401-Code sendet.
+// RFC 6750 / 9728: jede Bearer-Challenge-Antwort von /mcp setzt Header und Status
+// gemeinsam. Einzige Stelle im Modul, die "WWW-Authenticate" setzt. `status` faellt
+// auf 401 zurueck (der haeufige Fall - alle Zweige ausser Scope-Mangel); 403 nutzt
+// `deny403InsufficientScope` explizit. Optionen statt eines vierten Positionsarguments
+// (Argument-Obergrenze .claude/refs/clean-code.md).
 const HTTP_UNAUTHORIZED = 401;
-function sendBearer401(res, challenge, body) {
+function sendBearerChallenge(res, challenge, { body, status = HTTP_UNAUTHORIZED } = {}) {
   res.set("WWW-Authenticate", challenge);
-  return res.status(HTTP_UNAUTHORIZED).json(body);
+  return res.status(status).json(body);
 }
 
 // Reiner Baustein: setzt eine geordnete Parameterliste zu einem Bearer-Challenge-
@@ -99,7 +102,7 @@ function deny401(res, error, description) {
     ["error", error],
     ["error_description", description],
   ]);
-  return sendBearer401(res, challenge, { error: description });
+  return sendBearerChallenge(res, challenge, { body: { error: description } });
 }
 
 // T-12 (T2-23, Commit B): welche Scopes traegt das Token? RFC 6749/8693 kennt zwei
@@ -135,8 +138,7 @@ function deny403InsufficientScope(res) {
     ["resource_metadata", metadataUrl()],
     ["error_description", "Token traegt nicht alle geforderten Scopes"],
   ]);
-  res.set("WWW-Authenticate", challenge);
-  return res.status(HTTP_FORBIDDEN).json({ error: "insufficient_scope" });
+  return sendBearerChallenge(res, challenge, { body: { error: "insufficient_scope" }, status: HTTP_FORBIDDEN });
 }
 
 // token- und Legacy-Zweig sprechen kein OAuth: kein resource_metadata-Verweis IM
@@ -196,19 +198,19 @@ export async function mcpAuth(req, res, next) {
   if (config.auth.mcpAuthToken) {
     if (safeEqual(req.headers.authorization || "", `Bearer ${config.auth.mcpAuthToken}`)) return next();
     audit("auth_failed", req, "path=/mcp");
-    return sendBearer401(res, STATIC_BEARER_CHALLENGE, { error: "unauthorized" });
+    return sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } });
   }
   // Kein Token gesetzt: "token" verlangt trotzdem eines, Legacy faellt AUSSERHALB der
   // Produktion auf localhost-only zurueck (fail-closed wie seit Phase 1). In Produktion
   // ist der Socket-Bypass deaktiviert (AM1) -> 401, auch von localhost.
   if (config.auth.mcpAuth === "token") {
     audit("auth_failed", req, "path=/mcp grund=kein_token");
-    return sendBearer401(res, STATIC_BEARER_CHALLENGE, { error: "unauthorized" });
+    return sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } });
   }
   if (legacyLocalBypassAllowed(req)) return next();
   audit("auth_failed", req, "path=/mcp");
-  return sendBearer401(res, STATIC_BEARER_CHALLENGE, {
-    error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost (ausserhalb Produktion) erreichbar",
+  return sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, {
+    body: { error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost (ausserhalb Produktion) erreichbar" },
   });
 }
 

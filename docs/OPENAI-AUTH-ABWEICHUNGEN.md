@@ -241,8 +241,8 @@ messbar.
 
 ### T-16 — Fuer Workspace-Domain-Restriktionen: OIDC-Discovery + Scopes + UserInfo mit `email` und `email_verified`
 
-**Status: teilweise erfuellt, beim Anbieter (nur relevant, falls Workspace-Domain-Restriktionen
-genutzt werden sollen).**
+**Status: Resource-Server-Anteil erfuellt (T2-23 Commit A); Rest teilweise erfuellt, beim
+Anbieter (nur relevant, falls Workspace-Domain-Restriktionen genutzt werden sollen).**
 
 **Anforderung (Primaerquelle, woertlich):** "Advertise a UserInfo Endpoint that returns the
 user's `email` claim and `email_verified: true`." — "the UserInfo Endpoint is required for
@@ -250,13 +250,24 @@ workspace domain restrictions."
 
 OIDC-Discovery antwortet HTTP 200 (`openid-configuration`, Abschnitt 3); `scopes_supported`
 enthaelt `openid` und `email`; ein `userinfo_endpoint` existiert und antwortet ohne Token
-mit 401 (kein 404, kein 500 — der Endpunkt existiert und verlangt ein Token).
+mit 401 (kein 404, kein 500 — der Endpunkt existiert und verlangt ein Token). Das war die
+Anbieter-(AS-)Haelfte, unveraendert seit P7.
+
+**Resource-Server-Anteil GEBAUT (T2-23 Commit A):** der Resource Server selbst bewirbt dieselbe
+Scope-Menge `S` = `openid`, `email`, `offline_access` jetzt an drei Stellen — Protected-Resource-
+Metadata (`scopes_supported: S`, NUR mit konfiguriertem Authorization-Server,
+`test/openai-t2-23-scopes.test.js` `OpenAI-T2-23-A1`), der oauth-401-Bearer-Challenge
+(`scope="openid email offline_access"`, `OpenAI-T2-23-A3`) und `securitySchemes` auf jedem
+Werkzeug (`OpenAI-T2-23-A5`, echter `tools/list`-HTTP-Draht). Ein spec-treuer Client liest laut
+MCP-Spec (Scope Selection Strategy) diese beworbene Menge und fragt `openid`/`email` damit
+tatsaechlich an — vorher (P7) war die beworbene Menge leer (`scopes: []`).
 
 **Rest (UNKNOWN, Owner O-3 / WorkOS-Frage (c)):** ob `/oauth2/userinfo` mit einem echten Token
-das Feld **`email`** und **`email_verified: true`** liefert, ist ohne Login nicht messbar.
-**Nebenbefund:** `claims_supported` fehlt in beiden WorkOS-Dokumenten. Die Primaerquelle nennt
-das Feld nicht (kein Pruefkriterium fuer T-16) — aber damit ist auch aus den Metadaten nicht
-ablesbar, ob `email`/`email_verified` geliefert werden.
+das Feld **`email`** und **`email_verified: true`** liefert, ist ohne Login nicht messbar — das
+ist die einzige noch offene Haelfte, ausschliesslich beim Anbieter. **Nebenbefund:**
+`claims_supported` fehlt in beiden WorkOS-Dokumenten. Die Primaerquelle nennt das Feld nicht
+(kein Pruefkriterium fuer T-16) — aber damit ist auch aus den Metadaten nicht ablesbar, ob
+`email`/`email_verified` geliefert werden.
 
 ## 2b. English version (per ID, for the OpenAI reviewer)
 
@@ -443,8 +454,8 @@ redirect URI is used instead — not a submission blocker.
 
 ### T-16 — for workspace-domain restrictions: OIDC discovery + scopes + UserInfo with `email` and `email_verified`
 
-**Status: partially met, on the provider side (only relevant if workspace-domain restrictions
-are used).**
+**Status: resource-server share met (T2-23 Commit A); remainder partially met, on the provider
+side (only relevant if workspace-domain restrictions are used).**
 
 Requirement: "Advertise a UserInfo Endpoint that returns the user's `email` claim and
 `email_verified: true`." — "the UserInfo Endpoint is required for workspace domain
@@ -452,13 +463,22 @@ restrictions."
 
 OIDC discovery returns HTTP 200 and advertises the `openid` and `email` scopes; a
 `userinfo_endpoint` exists and rejects a tokenless request with 401 (not 404/500). All measured,
-Section 3.
+Section 3. That was the provider (AS) half, unchanged since P7.
+
+**Resource-server share BUILT (T2-23 Commit A):** the resource server itself now advertises the
+same scope set `S` = `openid`, `email`, `offline_access` in three places — the protected-resource
+metadata (`scopes_supported: S`, only with a configured authorization server,
+`test/openai-t2-23-scopes.test.js` `OpenAI-T2-23-A1`), the oauth 401 bearer challenge
+(`scope="openid email offline_access"`, `OpenAI-T2-23-A3`) and `securitySchemes` on every tool
+(`OpenAI-T2-23-A5`, real `tools/list` HTTP wire). A spec-compliant client therefore actually
+requests `openid`/`email` now; before (P7) the advertised set was empty (`scopes: []`).
 
 **UNKNOWN:** whether `/oauth2/userinfo` returns the **`email`** claim and **`email_verified:
 true`** for a real token cannot be measured without a completed login (2c.2 item c, 2c.3
-O-3). Side finding: WorkOS does **not** advertise `claims_supported` (absent from both
-documents). The primary source does not name that field, so it is not a criterion for T-16 — but
-the metadata therefore do not tell us whether `email`/`email_verified` are delivered.
+O-3) — this is the only remaining half, and it sits entirely with the provider. Side finding:
+WorkOS does **not** advertise `claims_supported` (absent from both documents). The primary
+source does not name that field, so it is not a criterion for T-16 — but the metadata therefore
+do not tell us whether `email`/`email_verified` are delivered.
 
 ## 2c. English appendix (for the OpenAI reviewer)
 
@@ -573,14 +593,17 @@ require a completed login (owner-only).
 
 ### 2c.6 What changes if ... (German original: Section 6)
 
-- **... WorkOS starts issuing a resource-specific scope:** T-12 can then be built - a check in
-  `verifyOauth()` after `jwtVerify`, fail-closed, with a boot-guard entry, **behind a switch
-  defaulting to off**, maintained in all four places (`src/config.js`, `.env.example`,
-  `render.yaml`, `BASE_ENV` in `test/helpers.js`). The repository test case that asserts an
-  arbitrary `scope` value is accepted (case T4 in `test/openai-p7-token-pruefachsen.test.js`)
-  **must then turn red** - if it does not, the new
-  check has no effect. Flipping the switch also requires changing
-  `src/mcp-security-schemes.js:21-27` (`scopes: []`) and this document together with the test.
+- **... WorkOS starts issuing a resource-specific scope:** BUILT (phase T2-23, Commit B,
+  `bf05aa2`) - no switch, `verifyOauth()` checks `scope`/`scp` after `jwtVerify` fail-closed for
+  every request. The repository test case that previously asserted an arbitrary `scope` value is
+  accepted (case T4 in `test/openai-p7-token-pruefachsen.test.js`) is deliberately rewritten and
+  now pins the opposite (incomplete scope -> 403). Two outcomes, depending on the still
+  outstanding owner result OW-B (deploy precondition, `PLAN-SECURITY.md` section
+  "OpenAI-T2-23"): if a real WorkOS token carries `scope`/`scp` with all three values from `S`,
+  Commit B stays live and this section as well as Section 2 (T-12) read "fully met in code". If
+  it does not, ONLY Commit B is reverted before deploy (rollback = reverting this commit, not a
+  feature switch) - T-12 then falls back to "partially met" and this section as well as Section 2
+  must be updated to match.
 - **... WorkOS does not copy `resource` into `aud`:** every ChatGPT login fails with 401 on
   submission day. That is a connectivity failure, not a security failure - the audience check is
   **not** weakened to work around it.
@@ -686,14 +709,17 @@ sie verlangen einen abgeschlossenen Login (Owner-Only).
 
 ## 6. Was sich aendert, wenn …
 
-- **… WorkOS einen ressourcenspezifischen Scope ausstellt:** T-12 kann gebaut werden — Pruefung
-  in `verifyOauth()` nach `jwtVerify`, fail-closed, mit Boot-Guard-Eintrag, **hinter einem
-  Schalter mit Default aus** und Vier-Orte-Pflege (`src/config.js`, `.env.example`,
-  `render.yaml`, `BASE_ENV` in `test/helpers.js`). Der Repo-Testfall, der die Annahme eines
-  beliebigen `scope`-Werts belegt (Fall T4 in `test/openai-p7-token-pruefachsen.test.js`),
-  **muss dann rot werden** — geschieht das nicht, hat
-  die neue Pruefung keine Wirkung. Wird der Schalter umgelegt, muessen zusammen mit dem Test auch
-  `src/mcp-security-schemes.js:21-27` (`scopes: []`) und dieses Dokument geaendert werden.
+- **… WorkOS einen ressourcenspezifischen Scope ausstellt:** GEBAUT (Phase T2-23, Commit B,
+  `bf05aa2`) — kein Schalter, `verifyOauth()` prueft `scope`/`scp` nach `jwtVerify` fail-closed
+  fuer jeden Request. Der Repo-Testfall, der zuvor die Annahme eines beliebigen `scope`-Werts
+  belegte (Fall T4 in `test/openai-p7-token-pruefachsen.test.js`), ist bewusst umgeschrieben und
+  pinnt jetzt das Gegenteil (unvollstaendiger Scope -> 403). Zwei Ausgaenge, je nach dem noch
+  ausstehenden Owner-Ergebnis OW-B (Deploy-Vorbedingung, `PLAN-SECURITY.md` Abschnitt
+  "OpenAI-T2-23"): traegt ein echtes WorkOS-Token `scope`/`scp` mit allen drei Werten aus `S`,
+  bleibt Commit B scharf und dieser Abschnitt sowie Abschnitt 2 (T-12) gelten als "code-seitig
+  vollstaendig erfuellt". Fehlt das, wird NUR Commit B vor dem Deploy zurueckgenommen (Rueckweg =
+  Revert dieses Commits, kein Feature-Schalter) — dann faellt T-12 wieder auf "teilweise erfuellt"
+  zurueck und dieser Abschnitt sowie Abschnitt 2 sind entsprechend nachzuziehen.
 - **… WorkOS `resource` nicht nach `aud` kopiert:** jeder ChatGPT-Login scheitert am
   Einreichungstag mit 401. Das ist ein Verbindungsausfall, kein Sicherheitsausfall — die Audience-
   Pruefung wird dafuer **nicht** aufgeweicht.
