@@ -1497,6 +1497,13 @@ const rawConfig = {
   port: numEnv("PORT", process.env.PORT, { fallback: 3000, min: 0 }),
   // Render setzt RENDER_EXTERNAL_URL automatisch -> kein ngrok noetig
   publicUrl: stripTrailingSlash(process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || ""),
+  // T2-04 (T-32): abgeleitete Tatsache wie isProduction/deployedCommit, kein Betreiber-Knopf.
+  // Haelt fest, ob PUBLIC_URL ausdruecklich gesetzt ist (statt aus RENDER_EXTERNAL_URL
+  // geerbt) - productionFootguns liest NUR dieses Blatt, nie publicUrl selbst, weil
+  // publicUrl den Rueckfall schon aufgeloest hat und die Herkunft dort nicht mehr sichtbar
+  // ist. .trim(), weil ein aus dem Dashboard kopierter Zeilenumbruch sonst als "gesetzt"
+  // zaehlte (Muster openaiAppsChallengeToken, s.u.).
+  publicUrlExplicit: Boolean((process.env.PUBLIC_URL || "").trim()),
   // Import-Zeit-Snapshot der Produktions-Erkennung fuer Laufzeit-Konsumenten (z.B. der
   // /mcp-Auth-Bypass-Gate in auth.js). productionFootguns/assertConfig nutzen denselben
   // Begriff call-time ueber detectProduction() (injizierbarer Test-Seam).
@@ -2293,7 +2300,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
-  server: ["port", "publicUrl", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
+  server: ["port", "publicUrl", "publicUrlExplicit", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],
@@ -2455,6 +2462,22 @@ const PRODUCTION_FOOTGUNS = Object.freeze([
     befund:
       "OAUTH_AUDIENCE weicht von der kanonischen MCP-Audience (PUBLIC_URL + /mcp) ab - " +
       "Wert leeren (kanonischer Default) oder exakt darauf setzen.",
+  },
+  {
+    // T2-04 (T-32): der Origin (scheme/hostname/port) einer OpenAI-App ist nach der
+    // Publikation unveraenderlich - ein Umzug verlangt ein neues Plugin (Scan,
+    // Einreichung, Review). Fehlt PUBLIC_URL, faellt publicUrl still auf
+    // RENDER_EXTERNAL_URL zurueck (den Hosting-Host) - genau der Wert, der NICHT
+    // eingefroren werden darf. Das Praedikat liest deshalb publicUrlExplicit, nicht
+    // publicUrl: publicUrl hat den Rueckfall schon aufgeloest, die Herkunft ist dort
+    // nicht mehr sichtbar (s. Kommentar bei publicUrlExplicit). Kein Wert-Echo in der
+    // Meldung (Muster allowlistFindings, boot-guard.js) - nur Variablenname + Sollform.
+    trifftZu: (cfg) => !cfg.server.publicUrlExplicit,
+    befund:
+      "PUBLIC_URL fehlt - der angekuendigte Origin faellt sonst still auf den " +
+      "Hosting-Host zurueck. Pflichtform: https://<host>[:<port>], ohne Pfad/Query/Slash " +
+      "am Ende, und exakt der Origin der OpenAI-Einreichung (nicht der Hosting-Host): " +
+      "ein Origin-Wechsel nach der Publikation verlangt ein neues Plugin.",
   },
   {
     // DEV_LOGIN_ENABLED ist ein lokaler Login-Shim (umgeht WorkOS) - im Hosting NIE erlaubt.
