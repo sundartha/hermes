@@ -18,6 +18,7 @@ import {
   SIP_PASSWORD_MIN_LENGTH,
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,
 } from "../src/elevenlabs/inbound-path-decision.js";
+import { OAUTH_SCOPES } from "../src/auth.js";
 
 // ROOT exportiert (AM3): single-origin-serving.test.js bildet einen RELATIVEN
 // WEB_DIST_DIR gegen das Arbeitsverzeichnis des Spawn-Childs (= ROOT).
@@ -1310,11 +1311,27 @@ export async function startIdp({ metadataPath = "/.well-known/openid-configurati
       .setExpirationTime(exp);
   };
 
+  // T2-23 Commit B (T-12): Standard-Scope fuer signierte Test-Token ist die volle
+  // Produktions-Menge (OAUTH_SCOPES, src/auth.js - einzige Quelle der Literale).
+  // Ohne diesen Default wuerden ALLE Bestandsaufrufer von sign() (58 Stellen in 15
+  // Dateien), die bisher keinen scope-Claim setzen, nach Einfuehrung der
+  // Scope-Pruefung ploetzlich 403 statt 200 bekommen. Ein Aufrufer, der GEZIELT
+  // eine andere oder fehlende Scope-Menge braucht (T2-23-Scope-Tests), setzt
+  // `scope` (String) oder `scp` (Array/String) explizit in `claims` - das
+  // ueberschreibt diesen Default vollstaendig; `scope: null` erzwingt ausdruecklich
+  // "kein Scope-Claim im Token". Eigene Funktion statt Inline-Ternary in sign() -
+  // haelt dessen Komplexitaet unter dem Lint-Limit.
+  const DEFAULT_TEST_SCOPE = OAUTH_SCOPES.join(" ");
+  const mitScopeDefault = (claims) => {
+    if ("scope" in claims || "scp" in claims) return claims;
+    return { scope: DEFAULT_TEST_SCOPE, ...claims };
+  };
+
   const sign = (
     claims = {},
     { key = privateKey, exp = "5m", aud = MCP_AUDIENCE, iss = issuer, noSubject = false } = {},
   ) => {
-    let jwt = buildJwt(claims, { iss, aud, exp });
+    let jwt = buildJwt(mitScopeDefault(claims), { iss, aud, exp });
     if (!noSubject) jwt = jwt.setSubject(claims.sub || "user-1");
     return jwt.sign(key);
   };

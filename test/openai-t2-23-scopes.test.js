@@ -1,10 +1,11 @@
-// OpenAI-T2-23 (T-16, Commit A): Scope-Angabe des Resource-Servers - PRM
-// (scopes_supported), oauth-401-Challenge (scope=) und securitySchemes tragen alle
-// dieselbe Menge S; token-/Legacy-Zweig bleiben byte-gleich ohne scope=. Die
-// Scope-PRUEFUNG am Token (T-12, Commit B) kommt in einem eigenen, zuruecknehmbaren
-// Commit und ergaenzt diese Datei um weitere Tests. Jeder Beleg liest den ECHTEN
-// HTTP-Draht (kein fakeRes), s. Lehre "registerTool() verwirft unbekannte Felder
-// still" - dasselbe gilt fuer jede Auth-Behauptung.
+// OpenAI-T2-23: Scope-Angabe des Resource-Servers (T-16, Commit A, Tests A1-A5) -
+// PRM (scopes_supported), oauth-401-Challenge (scope=) und securitySchemes tragen
+// alle dieselbe Menge S; token-/Legacy-Zweig bleiben byte-gleich ohne scope=. Dazu
+// die Scope-PRUEFUNG am Token (T-12, Commit B, Tests B1-B4): 403 insufficient_scope,
+// sobald ein Element von S fehlt - egal ob als `scope`-String oder `scp`-Array/String
+// signiert. Jeder Beleg liest den ECHTEN HTTP-Draht (kein fakeRes), s. Lehre
+// "registerTool() verwirft unbekannte Felder still" - dasselbe gilt fuer jede
+// Auth-Behauptung.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startIdp, mcpPost as post, readToolResult, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
@@ -97,6 +98,85 @@ test("OpenAI-T2-23-A5: securitySchemes traegt S auf jedem Werkzeug (HTTP, echter
     for (const tool of result.tools) {
       assert.deepEqual(tool.securitySchemes, [...TOOL_SECURITY_SCHEMES], tool.name);
     }
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+// ---- Commit B (T-12): Scope-PRUEFUNG am Token ------------------------------
+const HTTP_FORBIDDEN = 403;
+// "email" fehlt "offline_access" aus OAUTH_SCOPES - unvollstaendig, kein erfundener
+// Scope-Name (der waere ein Fehlerfall beim Auth-Server, nicht hier am RS).
+const UNVOLLSTAENDIGER_SCOPE = "openid email";
+
+function assertInsufficientScopeChallenge(wa) {
+  assert.match(wa, /^Bearer /);
+  assert.match(wa, /error="insufficient_scope"/);
+  assert.match(wa, new RegExp(`scope="${SCOPE_PARAM}"`));
+  assert.match(wa, /resource_metadata="https:\/\/agent\.test\/\.well-known\/oauth-protected-resource"/);
+}
+
+test("OpenAI-T2-23-B1: Token mit vollstaendigem scope-String -> 200", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE, OWNER_IDP_SUBJECT: "user-1" },
+  });
+  try {
+    const token = await idp.sign({ email: "t2-23-b1@team.test", scope: SCOPE_PARAM });
+    const res = await post(`${srv.localUrl}/mcp`, token, TOOLS_LIST_BODY);
+    assert.equal(res.status, HTTP_OK);
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+test("OpenAI-T2-23-B2: Token mit vollstaendigem scp-Array -> 200", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE, OWNER_IDP_SUBJECT: "user-1" },
+  });
+  try {
+    const token = await idp.sign({ email: "t2-23-b2@team.test", scope: null, scp: [...OAUTH_SCOPES] });
+    const res = await post(`${srv.localUrl}/mcp`, token, TOOLS_LIST_BODY);
+    assert.equal(res.status, HTTP_OK);
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+test("OpenAI-T2-23-B3: Token mit unvollstaendigem scope -> 403 insufficient_scope", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE, OWNER_IDP_SUBJECT: "user-1" },
+  });
+  try {
+    const token = await idp.sign({ email: "t2-23-b3@team.test", scope: UNVOLLSTAENDIGER_SCOPE });
+    const res = await post(`${srv.localUrl}/mcp`, token, TOOLS_LIST_BODY);
+    assert.equal(res.status, HTTP_FORBIDDEN);
+    assertInsufficientScopeChallenge(res.headers.get("www-authenticate") || "");
+    const body = await res.json();
+    assert.equal(body.jsonrpc, undefined, "kein jsonrpc-Feld - kein Tool-Aufruf durchgelassen");
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+test("OpenAI-T2-23-B4: Token ganz ohne scope/scp -> 403 insufficient_scope", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE, OWNER_IDP_SUBJECT: "user-1" },
+  });
+  try {
+    const token = await idp.sign({ email: "t2-23-b4@team.test", scope: null });
+    const res = await post(`${srv.localUrl}/mcp`, token, TOOLS_LIST_BODY);
+    assert.equal(res.status, HTTP_FORBIDDEN);
+    assertInsufficientScopeChallenge(res.headers.get("www-authenticate") || "");
+    const body = await res.json();
+    assert.equal(body.jsonrpc, undefined, "kein jsonrpc-Feld - kein Tool-Aufruf durchgelassen");
   } finally {
     await srv.stop();
     await idp.close();

@@ -5110,6 +5110,11 @@ Test rot werden — geschieht das nicht, hat die neue Pruefung keine Wirkung —
 zusammen mit `src/mcp-security-schemes.js:21-27` (`scopes: []`) und dem Dokument geaendert
 werden.
 
+**Stand zum Zeitpunkt dieses Eintrags (2026-09-21); UEBERHOLT durch Phase T2-23** (Abschnitt
+"OpenAI-T2-23" weiter unten): `S` ist jetzt beworben (PRM/Challenge/`securitySchemes`, Commit
+A) UND geprueft (Commit B) — `OpenAI-P7-T4` ist entsprechend umgeschrieben (403 statt 200) und
+pinnt jetzt das Gegenteil des hier beschriebenen Standes.
+
 **2. T-14 — bewusst nicht erfuellt; Ersatz durch den Transport-Pfad UNKNOWN.** Die
 Primaerquelle verlangt fuer die Auth-UI im Gespraech BEIDE Haelften: `securitySchemes` +
 Resource-Metadata **und** Tool-Fehlerergebnisse mit `_meta["mcp/www_authenticate"]` ("Without
@@ -5159,8 +5164,9 @@ Commit): ein Token ohne `exp` wird jetzt mit 401 abgewiesen (Test + Rot-vor-Grue
 `test/oauth.test.js`, Subtest "Token ohne exp"). **Deploy-Vorbedingung OW-B**: vor dem Deploy
 ein echtes WorkOS-Access-Token dekodieren und `exp` als vorhanden/numerisch/in der Zukunft
 pruefen — fehlt er, wird dieser Commit vor dem Deploy zurueckgenommen. `nbf` bleibt weiterhin
-nur bei Vorhandensein geprueft (nicht Teil von T2-03). Der Scope-Pruefungs-Anteil von T-12
-bleibt offen (Phase T2-23).
+nur bei Vorhandensein geprueft (nicht Teil von T2-03). Der Scope-Pruefungs-Anteil von T-12 war
+zum Zeitpunkt dieses Eintrags offen — seit Phase T2-23 (Commit B, s. Abschnitt "OpenAI-T2-23"
+weiter unten) ist er code-seitig gebaut; Owner-Bestaetigung OW-B steht vor dem Deploy noch aus.
 
 **Kein Launch-Blocker wird durch P7 geschlossen** — alle fuenf Punkte bleiben offen und
 sind Owner-/Anbieter-Entscheidungen, keine Code-Aenderungen dieser Phase.
@@ -5458,3 +5464,66 @@ ausgeschlossen.
    `srv-d8m0fhflk1mc73bno570`, deckt sich mit `render.yaml:30`) - durch diese Phase nicht
    beruehrt, Render wertet ausschliesslich den Statuscode aus (weiterhin 200, nur der
    Body wurde um ein Feld kuerzer).
+
+## OpenAI-T2-23 — Auth: Scope-Angabe (T-16) und Scope-Pruefung (T-12) des Resource Servers (2026-09-22)
+
+IDs T-16 (Resource-Server-Anteil) und T-12 (Scope-Anteil; der `exp`-Anteil ist bereits mit
+T2-03 erledigt, s. o.). Zwei getrennte, je fuer sich revertierbare Commits.
+
+**Commit A (T-16) — eine Scope-Menge `S`, an drei Stellen beworben.** `OAUTH_SCOPES =
+["openid", "email", "offline_access"]` (`src/auth.js`, einzige Stelle mit diesen Literalen)
+wird gelesen von: der Protected-Resource-Metadata (`scopes_supported: S`, NUR wenn ein
+Authorization-Server konfiguriert ist — ohne AS bleibt das Feld ganz weg, `registerWellKnown`),
+der oauth-401-Bearer-Challenge (`scope="openid email offline_access"`, `deny401`) und
+`TOOL_SECURITY_SCHEMES` (`src/mcp-security-schemes.js`, importiert statt eines eigenen
+Literals). Token- und Legacy-Zweig bleiben byte-gleich ohne `scope=`
+(`STATIC_BEARER_CHALLENGE`). `offline_access` ist Teil von `S`, obwohl T-16 nur `openid`+
+`email` verlangt: ein spec-treuer Client fragt nach dieser Aenderung NUR noch die
+Challenge-/PRM-Menge an - ohne `offline_access` bekaeme er nie ein Refresh-Token. Alle drei
+Werte bewirbt WorkOS AuthKit selbst (`docs/OPENAI-AUTH-ABWEICHUNGEN.md` Abschnitt 3) - kein
+erfundener Scope.
+
+**Commit B (T-12) — Scope-PRUEFUNG am Token.** `verifyOauth()` (`src/auth.js`) liest nach
+erfolgreicher Signatur-/Claim-Pruefung (Reihenfolge bewusst: ein manipuliertes Token kommt nie
+bis zur Scope-Pruefung) `scope` (leerzeichengetrennter String) oder `scp` (Array oder String)
+aus dem Token und verlangt jedes Element von `S`. Fehlt eines, antwortet der Server 403 mit
+`WWW-Authenticate: Bearer error="insufficient_scope", scope="openid email offline_access",
+resource_metadata="...", error_description="..."` — bewusst ANDERE Parameterreihenfolge als
+`deny401` (dort `resource_metadata` zuerst): eine andere RFC-6750-Fehlerklasse, keine Variante
+derselben Challenge. Audit traegt nur `grund=insufficient_scope`, kein Token- oder
+Claim-Inhalt; es laeuft in keinem 403-Fall ein Werkzeug (kein `jsonrpc`-`result` im Body).
+
+Vorher pinnte `test/openai-p7-token-pruefachsen.test.js` (`OpenAI-P7-T3`/`-T4`) die
+dokumentierte Luecke: ein Token ganz ohne bzw. mit beliebigem `scope`-Claim bekam 200. Mit
+Commit B MUSSTEN diese Tests rot werden — sie sind jetzt bewusst umgeschrieben: T3 (Positiv-
+Kontrolle) belegt ein Token MIT vollstaendiger Scope-Menge -> 200, T4 belegt ein Token mit
+unvollstaendigem Scope -> 403. `test/openai-t2-23-scopes.test.js` (`OpenAI-T2-23-A1`..`A5`,
+`B1`..`B4`) deckt beide Commits vollstaendig ab: PRM mit/ohne AS, 401-Challenge, byte-gleicher
+Token-/Legacy-Zweig, `securitySchemes` auf jedem Werkzeug (echter `tools/list`-Draht), sowie
+`scope`-String voll/unvollstaendig und `scp`-Array voll/fehlend.
+
+**test/helpers.js — Default-Scope fuer signierte Test-Token.** `startIdp().sign()` signiert
+seit Commit B per Default die volle `OAUTH_SCOPES`-Menge (`DEFAULT_TEST_SCOPE`), sonst haetten
+alle Bestandsaufrufer (58 Aufrufstellen in 15 Testdateien), die bisher keinen `scope`-Claim
+setzen, nach Einfuehrung der Pruefung ploetzlich 403 statt 200 bekommen. Ein Aufrufer, der
+gezielt eine andere oder fehlende Scope-Menge braucht, setzt `scope`/`scp` explizit in
+`claims` — das ueberschreibt den Default vollstaendig; `scope: null` erzwingt ausdruecklich
+"kein Scope-Claim". Keine neue Env-Variable (weder produktions- noch testseitig).
+
+**Deploy-Vorbedingung OW-B (fuer Commit A UND B, s. `docs/OPENAI-AUTH-ABWEICHUNGEN.md`
+Abschnitt T-12):** vor dem Deploy mit dem GEBAUTEN Stand ein Login mit genau `S` durchfuehren
+und das dekodierte Access-Token pruefen: (1) Login mit `S` gelingt, ein Refresh-Token wird
+ausgegeben (Commit A); (2) `scope` oder `scp` traegt alle drei Werte (zusaetzlich fuer Commit
+B). Fehlt nur (2), wird NUR Commit B vor dem Deploy zurueckgenommen (chirurgisch revertierbar,
+eigener Commit) und der Scope-Teil von T-12 bleibt als dokumentierte Abweichung stehen; fehlt
+bereits (1), wird auch Commit A zurueckgenommen. Ohne diesen Beleg legt ein Deploy jede
+bestehende Connector-Verbindung (Claude, ChatGPT) gleichzeitig lahm, weil der AS dann
+Access-Tokens ohne die geforderten Scopes ausstellt und Commit B jedes davon mit 403 abweist.
+
+Kommentar in `src/mcp-security-schemes.js` ("Die Scope-Liste bleibt leer ... D0-7") ist mit
+Commit A ersetzt: D0-7 ("kein Scope konsumiert/beworben") ist durch T-16 ueberholt — `S` ist
+die vom Auth-Server beworbene Identitaets-Scope-Menge, kein fachlicher Hermes-Berechtigungs-
+Scope; die fachliche Zugriffsgrenze bleibt unveraendert Audience + Mandantenbindung
+(`rejectIfNoTenant`, `src/routes/mcp.js`). `docs/OPENAI-AUTH-ABWEICHUNGEN.md` (Abschnitte 2
+und 2b, ID T-12/T-16) ist auf den neuen Stand nachgezogen; eine abschliessende Sprach-/
+Konsistenzpruefung der Abschnitte 6/7/8 (bzw. 2c.4/2c.6) vor der Einreichung steht noch aus.

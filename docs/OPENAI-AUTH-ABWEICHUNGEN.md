@@ -125,7 +125,9 @@ Token"). Vor jeder Einreichung erneut pruefen.
 
 ### T-12 — Token-Pruefung: Signatur/JWKS, `iss`, `exp`/`nbf`, Audience, Scopes, eigene Policy
 
-**Status: teilweise erfuellt.**
+**Status: code-seitig vollstaendig erfuellt (T2-23, Commit B). Owner-Bestaetigung vor dem
+Deploy offen (OW-B) — schlaegt sie fehl, wird Commit B laut Plan zurueckgenommen und dieser
+Abschnitt wieder auf "teilweise erfuellt" zurueckgesetzt.**
 
 **Anforderung (Primaerquelle, woertlich):** "verify the token's signature and `iss`." — "Deny
 tokens that have expired or have not yet become valid (`exp`/`nbf`)." — "Confirm the token was
@@ -156,27 +158,37 @@ T1-T4):
   Challenge mit `resource_metadata`, kein `jsonrpc`-Feld im Body.
 - `OpenAI-P7-T2`: Token mit `nbf` 3600 Sekunden in der Zukunft (weit jenseits der 30s
   `clockTolerance`) -> **401**.
-- `OpenAI-P7-T3` (Positiv-Kontrolle): gueltiges Token **ohne** `scope`-Claim -> **200**. Belegt,
-  dass das Gate nicht pauschal alles ablehnt.
-- `OpenAI-P7-T4`: gueltiges Token mit einem **beliebigen** `scope`-Claim (`"nicht-vergeben"`) ->
-  ebenfalls **200**. Belegt die Luecke: der Scope-Wert wird weder verlangt noch ausgewertet.
+- `OpenAI-P7-T3` (Positiv-Kontrolle): gueltiges Token **mit** vollstaendiger Scope-Menge ->
+  **200**. Belegt, dass das Gate ein korrekt beliefertes Token nicht pauschal ablehnt.
+- `OpenAI-P7-T4`: gueltiges Token mit **unvollstaendigem** `scope`-Claim (`"openid email"`, ohne
+  `offline_access`) -> **403** mit `WWW-Authenticate: Bearer error="insufficient_scope", ...`,
+  kein `jsonrpc`-Feld im Body. Seit T2-23 Commit B wird der fehlende Scope durchgesetzt.
+
+Vier weitere Faelle in `test/openai-t2-23-scopes.test.js` (`OpenAI-T2-23-B1`..`B4`): volle
+Scope-Menge als `scope`-String -> 200; volle Menge als `scp`-Array -> 200; unvollstaendiger
+`scope` -> 403; komplett ohne `scope`/`scp` -> 403 — jeweils mit derselben Challenge (`error`,
+`scope`, `resource_metadata`, `error_description`, in dieser Reihenfolge).
 
 Eigene Policy (jenseits des Tokens) existiert: Tenant-Bindung ueber `sub`; ein gueltiges Token
 ohne zugeordneten Tenant erhaelt 403 (`rejectIfNoTenant`, `src/routes/mcp.js:60-65`, belegt in
 `test/e4-mandantentrennung-default.test.js:210-220`, ID E4-17 — dort bereits erfuellt, hier nur
 referenziert). Diese 403 traegt keine Challenge (B-1).
 
-**Scope wird NICHT geprueft** — 0 Codestellen (`grep -rn "scope\|scp" src/auth.js` liefert keinen
-Treffer). Konsistent mit der deklarierten Security-Scheme: `securitySchemes = [{type:"oauth2",
-scopes: []}]` (`src/mcp-security-schemes.js:19-27`) — wir markieren keinen Scope als
-erforderlich. Das erfuellt den Wortlaut nur formal; eine fachliche Scope-Pruefung fehlt.
+**Scope WIRD geprueft (T2-23 Commit B, `src/auth.js` `hasRequiredScopes`/`grantedScopes`):** nach
+erfolgreicher Signatur-/Claim-Pruefung liest der Resource Server `scope` (leerzeichengetrennter
+String) oder `scp` (Array oder String) aus dem Token und verlangt jedes Element der Menge `S`
+(`OAUTH_SCOPES` = `openid`, `email`, `offline_access` — dieselbe Menge, die PRM/Challenge/
+`securitySchemes` seit Commit A bewerben, `src/mcp-security-schemes.js`). Fehlt eines, antwortet
+der Server 403 `insufficient_scope`, ohne dass ein Werkzeug laeuft (kein `jsonrpc`-`result` im
+Body) und ohne Token- oder Claim-Inhalt im Audit-Log (nur `grund=insufficient_scope`).
 
-**Rest (UNKNOWN, Owner O-3 / WorkOS-Frage (e)):** WorkOS bewirbt nur die Identitaets-Scopes
-`email`, `offline_access`, `openid`, `profile` (Abschnitt 3) — keinen ressourcenspezifischen
-Scope. Ob ein echtes WorkOS-Access-Token ueberhaupt einen `scope`- oder `scp`-Claim traegt (und
-mit welchem Wert), ist ohne einen abgeschlossenen Login nicht messbar. Die Luecke schliesst sich
-nur, wenn (1) WorkOS einen ressourcenspezifischen Scope anbietet **und** (2) ein echtes Token ihn
-nachweislich traegt — beides offen.
+**Rest (UNKNOWN, Owner O-3 / WorkOS-Frage (e), Deploy-Vorbedingung OW-B):** WorkOS bewirbt die
+Identitaets-Scopes `email`, `offline_access`, `openid`, `profile` (Abschnitt 3) — `S` ist eine
+Teilmenge davon, kein ressourcenspezifischer Scope. Ob ein echtes, von WorkOS ausgestelltes
+Access-Token tatsaechlich einen `scope`- oder `scp`-Claim mit allen drei Werten traegt, ist ohne
+einen abgeschlossenen Login nicht messbar — das ist genau OW-B. Bestaetigt sich das nicht, ist
+jede Connector-Verbindung ab Deploy tot (403 statt 200); die Deploy-Vorbedingung verlangt deshalb
+den Beleg VOR dem Deploy, sonst wird Commit B zurueckgenommen.
 
 ### T-9 — Authorization Server uebernimmt den `resource`-Parameter ins Token (i. d. R. `aud`)
 
@@ -334,7 +346,9 @@ without `resource_metadata` (`src/auth.js:89`). Verify before every submission:
 
 ### T-12 — token check: signature/JWKS, `iss`, `exp`/`nbf`, audience, scopes, own policy
 
-**Status: partially met.**
+**Status: fully met in code (T2-23, Commit B). Owner confirmation still open before deploy
+(OW-B) — if it fails, Commit B is reverted per the plan and this section reverts to "partially
+met".**
 
 Requirement: "verify the token's signature and `iss`." — "Deny tokens that have expired or have
 not yet become valid (`exp`/`nbf`)." — "Confirm the token was minted for your server (`aud` or
@@ -356,22 +370,32 @@ AND a token **without** `exp` -> 401 (red-then-green proof in the T2-03 report).
 Proven end-to-end against the real `tools/list` HTTP response
 (`test/openai-p7-token-pruefachsen.test.js`): T1 foreign issuer -> 401 with a
 `resource_metadata` challenge and no JSON-RPC body; T2 `nbf` one hour in the future -> 401;
-T3 (positive control) valid token without a `scope` claim -> 200; T4 valid token with an
-arbitrary `scope` value -> also 200.
+T3 (positive control) valid token with the full scope set -> 200; T4 valid token with an
+**incomplete** `scope` claim (`"openid email"`, missing `offline_access`) -> **403** with
+`WWW-Authenticate: Bearer error="insufficient_scope", ...` and no JSON-RPC body. Four more cases
+in `test/openai-t2-23-scopes.test.js` (`OpenAI-T2-23-B1`..`B4`): full scope as a `scope` string
+-> 200; full scope as an `scp` array -> 200; incomplete `scope` -> 403; no `scope`/`scp` at all
+-> 403 — same challenge order each time (`error`, `scope`, `resource_metadata`,
+`error_description`).
 
 Own policy beyond the token: tenant binding via `sub`; a valid token without a tenant gets 403
 (`src/routes/mcp.js:60-65`, `test/e4-mandantentrennung-default.test.js:210-220`), without a
 challenge (see T-14, case 1).
 
-**Scope is not checked** — zero occurrences of `scope`/`scp` in `src/auth.js`. `securitySchemes`
-declares an empty scope list to match (`src/mcp-security-schemes.js:19-27`), i.e. we mark no
-scope as required. That satisfies the wording only formally; there is no functional scope check.
+**Scope IS checked (T2-23 Commit B, `src/auth.js` `hasRequiredScopes`/`grantedScopes`):** after
+signature/claim verification succeeds, the resource server reads `scope` (space-separated
+string) or `scp` (array or string) from the token and requires every element of the set `S`
+(`OAUTH_SCOPES` = `openid`, `email`, `offline_access` — the same set advertised in the PRM,
+the 401 challenge and `securitySchemes` since Commit A). If one is missing, the server answers
+403 `insufficient_scope`, no tool runs (no `jsonrpc` `result` in the body), and the audit log
+carries no token or claim content (only `reason=insufficient_scope`).
 
-**UNKNOWN:** WorkOS advertises only identity scopes (`email`, `offline_access`, `openid`,
-`profile`; Section 3), no resource-specific scope. Whether a real WorkOS access token carries a
-`scope` or `scp` claim at all, and with which value, cannot be measured without a completed
-login (2c.3, O-3). The gap can only close if (1) WorkOS offers a resource-specific scope
-(2c.2, item e) **and** (2) a real token is shown to carry it — both open.
+**UNKNOWN (deploy precondition OW-B):** WorkOS advertises only identity scopes (`email`,
+`offline_access`, `openid`, `profile`; Section 3) — `S` is a subset of those, not a
+resource-specific scope. Whether a real WorkOS-issued access token actually carries a `scope` or
+`scp` claim with all three values cannot be measured without a completed login — that is exactly
+OW-B. If it does not hold, every connector connection is dead from deploy on (403 instead of
+200); the deploy precondition requires this proof before deploy, otherwise Commit B is reverted.
 
 ### T-9 — authorization server copies the `resource` parameter into the token (usually `aud`)
 
@@ -522,11 +546,13 @@ require a completed login (owner-only).
   tenant) and is therefore exactly the case for which a re-auth trigger (T-14) would make sense.
   Whether ChatGPT offers an account switch on this 403 is UNKNOWN. Open item for the owner, not
   changed here.
-- **`exp` required since T2-03 (T-12), scope part still open:** `jwtVerify` in
-  `src/auth.js:98-106` sets `requiredClaims: ['exp']`; a signed token without `exp` has been
-  rejected since (401), no longer accepted without time limit (`PLAN-SECURITY.md` updated
-  accordingly). Only the scope-checking part of T-12 remains open (phase T2-23) - the token
-  content is not checked against expected scopes, only validity/expiry.
+- **`exp` required since T2-03, scope check since T2-23 Commit B (T-12 fully met in code):**
+  `jwtVerify` in `src/auth.js:98-106` sets `requiredClaims: ['exp']`; a signed token without
+  `exp` has been rejected since (401), no longer accepted without time limit (`PLAN-SECURITY.md`
+  updated accordingly). Since T2-23 Commit B, `verifyOauth` also checks `scope`/`scp` against
+  `OAUTH_SCOPES`; if one is missing, the server answers 403 `insufficient_scope`. What remains
+  open is only the owner confirmation OW-B (a real WorkOS token carries all three scopes)
+  before deploy — without it, Commit B is reverted per the plan.
 - **T-8 (side finding, outside the requirements covered by this document):** `code_challenge_methods_supported` is missing from
   `openid-configuration`, present in `oauth-authorization-server` (Section 3). Our
   `discoverJwksUri()` tries `openid-configuration` first (`src/auth.js:31`) - inconsequential for
@@ -688,11 +714,13 @@ sie verlangen einen abgeschlossenen Login (Owner-Only).
   401. Der Fall ist per Kontowechsel loesbar (Anmeldung mit einem Konto mit Tenant) und damit
   genau der Fall, fuer den ein Re-Auth-Ausloeser (T-14) sinnvoll waere. Ob ChatGPT bei diesem 403
   einen Konto-Wechsel anbietet, ist UNKNOWN. Offener Punkt fuer den Owner, hier nicht geaendert.
-- **`exp` verlangt seit T2-03 (T-12), Scope-Teil bleibt offen:** `jwtVerify` in
-  `src/auth.js:98-106` setzt `requiredClaims: ['exp']`; ein signiertes Token ohne `exp` wird
-  seither abgelehnt (401), nicht mehr unbefristet angenommen (`PLAN-SECURITY.md` entsprechend
-  nachgezogen). Offen bleibt NUR der Scope-Pruefungs-Anteil von T-12 (Phase T2-23) - der
-  Token-Inhalt wird nicht auf erwartete Scopes geprueft, nur auf Gueltigkeit/Ablauf.
+- **`exp` verlangt seit T2-03, Scope-Pruefung seit T2-23 Commit B (T-12 damit code-seitig
+  vollstaendig):** `jwtVerify` in `src/auth.js:98-106` setzt `requiredClaims: ['exp']`; ein
+  signiertes Token ohne `exp` wird seither abgelehnt (401), nicht mehr unbefristet angenommen
+  (`PLAN-SECURITY.md` entsprechend nachgezogen). Seit T2-23 Commit B prueft `verifyOauth`
+  zusaetzlich `scope`/`scp` gegen `OAUTH_SCOPES`; fehlt ein Element, folgt 403
+  `insufficient_scope`. Offen bleibt NUR die Owner-Bestaetigung OW-B (echtes WorkOS-Token traegt
+  alle drei Scopes) VOR dem Deploy — ohne sie wird Commit B laut Plan zurueckgenommen.
 - **T-8 (Nebenbefund, ausserhalb der in diesem Dokument behandelten Anforderungen):** `code_challenge_methods_supported` fehlt in
   `openid-configuration`, steht in `oauth-authorization-server` (Abschnitt 3). Unser
   `discoverJwksUri()` probiert `openid-configuration` zuerst (`src/auth.js:31`) — fuer uns

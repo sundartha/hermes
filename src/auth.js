@@ -102,6 +102,43 @@ function deny401(res, error, description) {
   return sendBearer401(res, challenge, { error: description });
 }
 
+// T-12 (T2-23, Commit B): welche Scopes traegt das Token? RFC 6749/8693 kennt zwei
+// Schreibweisen - `scope` als leerzeichengetrennter String (der ueblichere Fall) oder
+// `scp` als Array (manche IdPs, z.B. Azure AD) oder ebenfalls als String. Fehlt
+// beides, ist die Menge leer - das Token traegt dann garantiert nicht alle
+// Elemente von OAUTH_SCOPES und die Pruefung unten schlaegt fehl (fail-closed).
+function grantedScopes(payload) {
+  if (typeof payload.scope === "string" && payload.scope.trim() !== "") {
+    return payload.scope.trim().split(/\s+/);
+  }
+  if (Array.isArray(payload.scp)) return payload.scp;
+  if (typeof payload.scp === "string" && payload.scp.trim() !== "") return payload.scp.trim().split(/\s+/);
+  return [];
+}
+
+function hasRequiredScopes(payload) {
+  const granted = new Set(grantedScopes(payload));
+  return OAUTH_SCOPES.every((scope) => granted.has(scope));
+}
+
+const HTTP_FORBIDDEN = 403;
+
+// RFC 6750 Runtime Insufficient Scope Errors: 403 statt 401 - das Token selbst ist
+// gueltig, es fehlt nur die geforderte Scope-Menge. Parameterreihenfolge wie im Plan
+// (T2-23) woertlich uebernommen: error, scope, resource_metadata, error_description -
+// bewusst ANDERS als deny401 (dort resource_metadata zuerst), weil dies eine andere
+// RFC-Fehlerklasse ist, keine Variante derselben Challenge.
+function deny403InsufficientScope(res) {
+  const challenge = bearerChallenge([
+    ["error", "insufficient_scope"],
+    ["scope", OAUTH_SCOPE_PARAM],
+    ["resource_metadata", metadataUrl()],
+    ["error_description", "Token traegt nicht alle geforderten Scopes"],
+  ]);
+  res.set("WWW-Authenticate", challenge);
+  return res.status(HTTP_FORBIDDEN).json({ error: "insufficient_scope" });
+}
+
 // token- und Legacy-Zweig sprechen kein OAuth: kein resource_metadata-Verweis IM
 // HEADER, der schickte den Client in eine Discovery, deren Token dieser Zweig nie
 // annimmt (P6, Lead-Entscheidung 3). RFC 6750 SS3 erlaubt die Bearer-Challenge
@@ -131,6 +168,13 @@ async function verifyOauth(req, res, next) {
       // im catch-Zweig unten -> 401 + oauth-Challenge, kein Token im Audit-Log.
       requiredClaims: ["exp"],
     });
+    // T-12 (Commit B): das Token muss jedes Element von OAUTH_SCOPES tragen - erst
+    // NACH erfolgreicher Signatur-/Claim-Pruefung, damit ein manipuliertes Token nie
+    // bis hierher kommt. Audit ohne Token- oder Claim-Inhalt (nur der Grund).
+    if (!hasRequiredScopes(payload)) {
+      audit("auth_failed", req, "path=/mcp grund=insufficient_scope");
+      return deny403InsufficientScope(res);
+    }
     // no-param-reassign: dasselbe Express-Idiom wie req.tenant in web-auth.js:838,
     // dort ebenso ueber eslint-suppressions.json (count:1) akzeptiert statt einer
     // Regel-Ausnahme - eine dateiweite Ausnahme wuerde eine ZWEITE req.xyz-Zuweisung
