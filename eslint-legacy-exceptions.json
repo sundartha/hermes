@@ -347,20 +347,5 @@
       "no-magic-numbers :: No magic number: 200.": 1,
       "no-magic-numbers :: No magic number: 32.": 1
     }
-  },
-  "test/mcp-ui.test.js": {
-    "reason": "NEUER Eintrag 2026-09-22 (OpenAI-T2-01, Skybridge-Adapter entfernt). Reine Loeschung + Chain-Fixes verschieben Meldungstext, keine neue Schuld: T-P3-AC2/E7-T13/T-P3-AC5 sind geloescht (nur den entfernten ChatGPT-/Skybridge-Adapter betroffen, kein Nachfolger im Produktcode) - ihre kurzen Vergleichs-Identifier ('a'/'b'/'r' in resources.filter((r)=>...) etc.) verschwinden mit ihnen (id-length 'r' 21->20, 'a' 2->0). T-P3-AC3/AC4/AC6/AC7 und E7-T10/T11/T12 sind auf mcpNativeRenderer bzw. den Resource-Inhalt umgestellt; neu eingefuehrte tiefe Zugriffsketten sind per Zwischenvariable (config/content) vermieden (no-restricted-syntax G36 sinkt netto 38->37, keine neue Kette). Die verbleibenden Verstoesse sind Bestand (P1-P3/W2/W3/Wb-Tests, unberuehrt von T2-01). Gemessen mit `npx eslint test/mcp-ui.test.js --suppressions-location eslint-suppressions.empty.json`.",
-    "date": "2026-09-22",
-    "findings": {
-      "id-length :: Identifier name 'c' is too short (< 2).": 3,
-      "id-length :: Identifier name 'r' is too short (< 2).": 20,
-      "id-length :: Identifier name 's' is too short (< 2).": 1,
-      "max-params :: Method 'registerResource' has too many parameters (4). Maximum allowed is 3.": 2,
-      "max-params :: Method 'tool' has too many parameters (4). Maximum allowed is 3.": 1,
-      "no-magic-numbers :: No magic number: 2.": 2,
-      "no-param-reassign :: Assignment to property of function parameter 'res'.": 1,
-      "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 37,
-      "sonarjs/no-commented-code :: Remove this commented out code.": 1
-    }
   }
 }
