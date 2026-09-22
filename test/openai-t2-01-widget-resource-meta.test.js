@@ -25,7 +25,6 @@ import {
 import { makeDefaultState, registerTenant, settingsFor } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { widgetHtml } from "../src/ui/widget-catalog.js";
-import { LOCALES } from "../src/i18n/locales.js";
 
 const WIDGET_COUNT = 5;
 const HTTP_OK = 200;
@@ -445,16 +444,12 @@ test("T8 (Widget-Scan, T-30-Exaktheit): kein Widget laedt von aussen - weder ueb
     await srv.stop();
   }
 
+  // T2-02/T-34: EINE sprachneutrale Fassung je Widget statt einer Sprachmatrix -
+  // widgetHtml() nimmt keine Sprache mehr entgegen (s. widget-catalog.js).
   const widgetIds = ["agent-status", "my-number", "calls", "calendar", "call"];
   for (const widgetId of widgetIds) {
-    for (const language of Object.keys(LOCALES)) {
-      const html = widgetHtml(widgetId, language);
-      assert.deepEqual(
-        findForbiddenLoads(html),
-        [],
-        `${widgetId}/${language}: laedt von nirgendwo (in-process)`,
-      );
-    }
+    const html = widgetHtml(widgetId);
+    assert.deepEqual(findForbiddenLoads(html), [], `${widgetId}: laedt von nirgendwo (in-process)`);
   }
 });
 
