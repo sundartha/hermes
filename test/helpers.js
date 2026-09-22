@@ -1291,16 +1291,30 @@ export async function startIdp({ metadataPath = "/.well-known/openid-configurati
 
   // noSubject: true laesst den sub-Claim ganz weg (fuer den Fail-closed-Test:
   // verifiziertes Token ohne email UND sub).
-  const sign = (
-    claims = {},
-    { key = privateKey, exp = "5m", aud = MCP_AUDIENCE, iss = issuer, noSubject = false } = {},
-  ) => {
-    let jwt = new SignJWT({ ...claims })
+  // exp: null laesst den exp-Claim ganz weg (fuer den T-12-Test: Token ohne
+  // Ablaufzeit muss der Resource Server ablehnen). Default bleibt "5m" - alle
+  // bestehenden Aufrufer signieren weiterhin ein Token mit Ablaufzeit.
+  const buildJwt = (claims, { iss, aud, exp }) => {
+    if (exp === null) {
+      const jwt = new SignJWT({ ...claims })
+        .setProtectedHeader({ alg: "RS256", kid: KID })
+        .setIssuer(iss)
+        .setAudience(aud);
+      return jwt.setIssuedAt();
+    }
+    return new SignJWT({ ...claims })
       .setProtectedHeader({ alg: "RS256", kid: KID })
       .setIssuer(iss)
       .setAudience(aud)
       .setIssuedAt()
       .setExpirationTime(exp);
+  };
+
+  const sign = (
+    claims = {},
+    { key = privateKey, exp = "5m", aud = MCP_AUDIENCE, iss = issuer, noSubject = false } = {},
+  ) => {
+    let jwt = buildJwt(claims, { iss, aud, exp });
     if (!noSubject) jwt = jwt.setSubject(claims.sub || "user-1");
     return jwt.sign(key);
   };
