@@ -99,6 +99,11 @@ async function verifyOauth(req, res, next) {
       issuer: config.auth.oauthIssuerUrl,
       audience: audience(),
       clockTolerance: 30,
+      // T-12: jose prueft exp nur, wenn der Claim vorhanden ist - ohne diese Zeile
+      // gilt ein signiertes Token OHNE exp unbefristet. requiredClaims erzwingt den
+      // Claim; fehlt er, wirft jwtVerify (ERR_JWT_CLAIM_VALIDATION_FAILED) und landet
+      // im catch-Zweig unten -> 401 + oauth-Challenge, kein Token im Audit-Log.
+      requiredClaims: ["exp"],
     });
     // no-param-reassign: dasselbe Express-Idiom wie req.tenant in web-auth.js:838,
     // dort ebenso ueber eslint-suppressions.json (count:1) akzeptiert statt einer

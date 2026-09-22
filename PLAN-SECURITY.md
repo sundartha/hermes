@@ -5040,6 +5040,16 @@ P6s tatsaechlicher Beitrag hier: der `""`/`token`-Zweig traegt jetzt ebenfalls e
 Bearer-Challenge (ohne `resource_metadata`) statt eines nackten 401 — Haertung von T-5,
 nicht Neuschaffung von Erkennbarkeit. Schliessung bleibt Owner-Entscheidung O-7.
 
+**Ergaenzung T2-03:** seit T2-03 gibt es zusaetzlich ein WARN-Signal beim Boot
+(`productionAuthHints`, `src/config.js`): laeuft Produktion mit `MCP_AUTH` != `oauth` (und
+!= `off`, das ist bereits fatal), erscheint eine feste Hinweiszeile im Boot-Log
+("[Sicherheit] MCP_AUTH ist nicht 'oauth' ..."). Das ist KEINE Sperre (Autonome
+Entscheidung P6: eine Boot-Verweigerung wuerde bei jedem Nicht-OAuth-Deploy auch
+eingehende Anrufe stilllegen) — der Rueckfall auf `""`/`token` bleibt technisch weiter
+moeglich und der Connector bekommt weiterhin nur 401 statt eines funktionierenden
+OAuth-Flows. Dieser Eintrag bleibt OFFEN; die Schliessung (Boot-Sperre oder anderer
+Mechanismus) bleibt Owner-Entscheidung O-7.
+
 **T-13-Stand (Klarstellung).** T-13 (401 + `WWW-Authenticate` auf die
 Protected-Resource-Metadata) war im oauth-Modus schon auf `master` byte-identisch erfuellt
 (Tabelle oben: oauth-Zeile "unveraendert"). P6 aendert den T-13-Stand fuer die Einreichung
@@ -5140,15 +5150,17 @@ T-13. Der Fall ist aber per Kontowechsel loesbar und damit genau der, fuer den e
 Re-Auth-Ausloeser nach T-14 sinnvoll waere (Audit-Fall PP-D6-15). Wirkung bei ChatGPT UNKNOWN.
 Befund fuer P10/Owner.
 
-**5. OFFEN — `exp` wird nicht verlangt (Haertung, Owner-Freigabe noetig).** `jwtVerify` in
-`src/auth.js:98-102` setzt kein `requiredClaims`. `jose` (6.2.3) prueft `exp`/`nbf` nur, wenn
-der Claim vorhanden ist (`node_modules/jose/dist/webapi/lib/jwt_claims_set.js:142/:150`). Ein
-vom Anbieter signiertes Token **ohne `exp` wuerde unbefristet angenommen**. In der Praxis
-erwarten wir, dass WorkOS `exp` ausstellt (am echten Token ungemessen, O-3) — der Code verlangt
-es aber nicht. Haertung waere `requiredClaims: ['exp']` im `jwtVerify`-Aufruf: Richtung
-fail-closed, aber eine Aenderung am Live-Auth-Pfad (ein Token ohne `exp` wuerde danach mit 401
-abgewiesen) — deshalb **Owner-Freigabe und eigene Phase**, mit Test (Token ohne `exp` -> 401)
-und Positiv-Kontrolle. In P7 bewusst NICHT geaendert.
+**5. UMGESETZT in T2-03 — `exp` wird verlangt, Deploy-Vorbedingung OW-B.** `jwtVerify` in
+`src/auth.js:98-106` setzte frueher kein `requiredClaims`. `jose` (6.2.3) prueft `exp`/`nbf` nur,
+wenn der Claim vorhanden ist (`node_modules/jose/dist/webapi/lib/jwt_claims_set.js:142/:150`).
+Ein vom Anbieter signiertes Token **ohne `exp` wurde frueher unbefristet angenommen**. Seit
+T2-03 setzt `src/auth.js` `requiredClaims: ['exp']` (eigener, chirurgisch revertierbarer
+Commit): ein Token ohne `exp` wird jetzt mit 401 abgewiesen (Test + Rot-vor-Gruen-Nachweis in
+`test/oauth.test.js`, Subtest "Token ohne exp"). **Deploy-Vorbedingung OW-B**: vor dem Deploy
+ein echtes WorkOS-Access-Token dekodieren und `exp` als vorhanden/numerisch/in der Zukunft
+pruefen — fehlt er, wird dieser Commit vor dem Deploy zurueckgenommen. `nbf` bleibt weiterhin
+nur bei Vorhandensein geprueft (nicht Teil von T2-03). Der Scope-Pruefungs-Anteil von T-12
+bleibt offen (Phase T2-23).
 
 **Kein Launch-Blocker wird durch P7 geschlossen** — alle fuenf Punkte bleiben offen und
 sind Owner-/Anbieter-Entscheidungen, keine Code-Aenderungen dieser Phase.

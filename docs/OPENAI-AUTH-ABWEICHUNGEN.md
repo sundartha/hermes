@@ -20,8 +20,8 @@ Hermes ist ausschliesslich **OAuth-2.1-Resource-Server** fuer `/mcp` (`src/auth.
 Authorization Server - es gibt keinen eigenen `/.well-known/oauth-authorization-server` und
 keine eigene Login-/Consent-Seite. **WorkOS AuthKit** (`https://fearless-network-26.authkit.app`)
 ist der Authorization Server; Hermes vertraut ihm ueber JWKS-Discovery und prueft jedes Bearer-
-Token lokal: Signatur, Issuer, Audience; `exp`/`nbf` **nur, wenn der jeweilige Claim im Token
-vorhanden ist** (ein signiertes Token ohne `exp` wird unbefristet angenommen, Details T-12).
+Token lokal: Signatur, Issuer, Audience, **`exp` ist Pflicht** (`requiredClaims`, seit T2-03);
+`nbf` weiterhin **nur, wenn der Claim im Token vorhanden ist** (Details T-12).
 
 Die Token-Pruefung sitzt **einmal pro HTTP-Request** in der Middleware `mcpAuth`
 (`src/routes/mcp.js:126`), **vor** jedem MCP-Tool-Aufruf; waehrend eines Tool-Aufrufs wird das
@@ -137,14 +137,17 @@ Geprueft wird in `verifyOauth()` (`src/auth.js:91-113`) in einem einzigen `jwtVe
 `config.auth.oauthIssuerUrl`, `audience` gegen die kanonische Resource, `clockTolerance: 30`
 Sekunden.
 
-**Einschraenkung `exp`/`nbf`:** `jose` (6.2.3) prueft `nbf` und `exp` **nur, wenn der Claim
-vorhanden ist** (`node_modules/jose/dist/webapi/lib/jwt_claims_set.js:142` und `:150`,
-`if (payload.exp !== undefined)`). `src/auth.js:98-102` setzt **kein** `requiredClaims`. Folge:
-ein vom Anbieter signiertes Token **ohne `exp`** wird **unbefristet** angenommen, eines ohne
-`nbf` ohne Gueltigkeitsbeginn. Ob echte WorkOS-Access-Tokens `exp` tragen, ist am echten Token
-nicht gemessen (Abschnitt 5, O-3); der Code verlangt es jedenfalls nicht. Offener
-Haertungspunkt (`requiredClaims: ['exp']`) in `PLAN-SECURITY.md`, nicht geaendert. Belegt ist nur: ein Token **mit** abgelaufenem `exp` -> 401
-(`test/oauth.test.js:66-70`, prueft den Status).
+**Einschraenkung `nbf`, `exp` jetzt Pflicht (T2-03):** `jose` (6.2.3) prueft `nbf` und `exp`
+frueher **nur, wenn der Claim vorhanden war** (`node_modules/jose/dist/webapi/lib/jwt_claims_set.js:142`
+und `:150`, `if (payload.exp !== undefined)`). Seit T2-03 setzt `src/auth.js:98-106`
+`requiredClaims: ['exp']`: ein vom Anbieter signiertes Token **ohne `exp`** wird jetzt
+abgelehnt (401 + oauth-Challenge, `test/oauth.test.js`, Subtest "Token ohne exp"), nicht mehr
+unbefristet angenommen. `nbf` bleibt weiterhin **nur** geprueft, wenn der Claim vorhanden ist
+(nicht Teil dieser Anforderung, s. T2-03-Spec "Nicht bauen"). Ob echte WorkOS-Access-Tokens
+`exp` tragen, ist am echten Token weiterhin nicht gemessen (Abschnitt 5, O-3) - das ist die
+Deploy-Vorbedingung OW-B fuer T2-03, nicht Teil des Codes. Belegt ist: ein Token **mit**
+abgelaufenem `exp` -> 401 (`test/oauth.test.js:66-70`, prueft den Status) UND ein Token **ohne**
+`exp` -> 401 (Rot-vor-Gruen-Nachweis im T2-03-Bericht).
 
 Am echten `tools/list`-Response belegt (`test/openai-p7-token-pruefachsen.test.js`, Faelle
 T1-T4):
@@ -257,8 +260,9 @@ real, completed login) are German-only; their English equivalents are 2c.2 and 2
 **Architecture.** Hermes is an OAuth 2.1 resource server for `/mcp` only; WorkOS AuthKit
 (`https://fearless-network-26.authkit.app`) is the authorization server. Every bearer token is
 verified locally once per HTTP request in the `mcpAuth` middleware (`src/routes/mcp.js:126`),
-before any MCP tool runs: signature (JWKS), issuer, audience; `exp`/`nbf` **only if the claim is
-present** (see T-12). The token is not re-checked during a tool call. Two further places can
+before any MCP tool runs: signature (JWKS), issuer, audience, **`exp` is now required**
+(`requiredClaims`, since T2-03); `nbf` still **only if the claim is present** (see T-12). The
+token is not re-checked during a tool call. Two further places can
 reject an already-authenticated request: `rejectIfNoTenant` (`src/routes/mcp.js:60-65`, called
 at `:118`) returns HTTP 403 **without** a `WWW-Authenticate` challenge for a valid token that
 maps to no tenant (logged as `auth_failed`); and the tools' internal REST hop (`api()`,
@@ -339,13 +343,15 @@ the `resource` claim) and contains the scopes you marked as required."
 `verifyOauth()` (`src/auth.js:91-113`) checks, in one `jwtVerify` call (`:98-102`), signature
 against the JWKS-discovered key, issuer and audience, with a 30-second clock tolerance.
 
-**Limitation on `exp`/`nbf`:** the `jose` library (6.2.3) checks `nbf` and `exp` **only when the
-claim is present** (`jwt_claims_set.js:142` and `:150`), and `src/auth.js:98-102` sets no
-`requiredClaims`. A token signed by the provider **without `exp` would be accepted without time
-limit**; one without `nbf` has no start of validity. Whether real WorkOS access tokens carry
-`exp` has not been measured on a real token (2c.3, O-3); our code does not require it.
-Hardening (`requiredClaims: ['exp']`) is recorded as an open item and has not been changed.
-What is proven: a token **with** an expired `exp` -> 401 (`test/oauth.test.js:66-70`).
+**Limitation on `nbf`, `exp` now required (T2-03):** the `jose` library (6.2.3) used to check
+`nbf` and `exp` **only when the claim was present** (`jwt_claims_set.js:142` and `:150`). Since
+T2-03, `src/auth.js:98-106` sets `requiredClaims: ['exp']`: a token signed by the provider
+**without `exp` is now rejected** (401 + oauth challenge, `test/oauth.test.js`, subtest "Token
+ohne exp"), no longer accepted without time limit. `nbf` still has no start of validity if
+absent (not part of this requirement). Whether real WorkOS access tokens carry `exp` is still
+not measured on a real token (2c.3, O-3) - that is deploy precondition OW-B for T2-03, not part
+of the code. What is proven: a token **with** an expired `exp` -> 401 (`test/oauth.test.js:66-70`)
+AND a token **without** `exp` -> 401 (red-then-green proof in the T2-03 report).
 
 Proven end-to-end against the real `tools/list` HTTP response
 (`test/openai-p7-token-pruefachsen.test.js`): T1 foreign issuer -> 401 with a
@@ -494,7 +500,9 @@ flow): decode the access token (base64, no secret needed for the payload) and ch
 
 1. `aud` - does it match the resource `https://app.sundartha.com/mcp`? (T-9)
 2. `scope` / `scp` - is a claim present, and if so, which value? (T-12)
-3. `exp` - is the claim present? (T-12, the `exp` limitation)
+3. `exp` - is the claim present, numeric, in the future relative to `iat`? (T-12, deploy
+   precondition OW-B for T2-03: if missing, the `requiredClaims` commit is reverted before
+   deploy)
 4. `GET /oauth2/userinfo` with the same token - does the response carry `email` and
    `email_verified: true`? (T-16)
 
@@ -514,10 +522,11 @@ require a completed login (owner-only).
   tenant) and is therefore exactly the case for which a re-auth trigger (T-14) would make sense.
   Whether ChatGPT offers an account switch on this 403 is UNKNOWN. Open item for the owner, not
   changed here.
-- **`exp` not required (T-12):** `jwtVerify` in `src/auth.js:98-102` sets no `requiredClaims`; a
-  signed token without `exp` is accepted without time limit. The hardening
-  (`requiredClaims: ['exp']`) is recorded as an open item in `PLAN-SECURITY.md` (requires owner
-  approval as a separate change), not changed here.
+- **`exp` required since T2-03 (T-12), scope part still open:** `jwtVerify` in
+  `src/auth.js:98-106` sets `requiredClaims: ['exp']`; a signed token without `exp` has been
+  rejected since (401), no longer accepted without time limit (`PLAN-SECURITY.md` updated
+  accordingly). Only the scope-checking part of T-12 remains open (phase T2-23) - the token
+  content is not checked against expected scopes, only validity/expiry.
 - **T-8 (side finding, outside the requirements covered by this document):** `code_challenge_methods_supported` is missing from
   `openid-configuration`, present in `oauth-authorization-server` (Section 3). Our
   `discoverJwksUri()` tries `openid-configuration` first (`src/auth.js:31`) - inconsequential for
@@ -636,7 +645,9 @@ Payload) und pruefen:
 
 1. `aud` — entspricht sie der Resource `https://app.sundartha.com/mcp`? (T-9)
 2. `scope` / `scp` — ist ein Claim vorhanden, und wenn ja, welcher Wert? (T-12)
-3. `exp` — ist der Claim vorhanden? (T-12, `exp`-Einschraenkung)
+3. `exp` — ist der Claim vorhanden, numerisch, in der Zukunft relativ zu `iat`? (T-12,
+   Deploy-Vorbedingung OW-B fuer T2-03: fehlt er, wird der `requiredClaims`-Commit vor dem
+   Deploy zurueckgenommen)
 4. `GET /oauth2/userinfo` mit demselben Token — liefert die Antwort `email` und
    `email_verified: true`? (T-16)
 
@@ -677,10 +688,11 @@ sie verlangen einen abgeschlossenen Login (Owner-Only).
   401. Der Fall ist per Kontowechsel loesbar (Anmeldung mit einem Konto mit Tenant) und damit
   genau der Fall, fuer den ein Re-Auth-Ausloeser (T-14) sinnvoll waere. Ob ChatGPT bei diesem 403
   einen Konto-Wechsel anbietet, ist UNKNOWN. Offener Punkt fuer den Owner, hier nicht geaendert.
-- **`exp` nicht verlangt (T-12):** `jwtVerify` in `src/auth.js:98-102` setzt kein
-  `requiredClaims`; ein signiertes Token ohne `exp` wird unbefristet angenommen. Haertung
-  `requiredClaims: ['exp']` ist in `PLAN-SECURITY.md` als offener Punkt eingetragen (braucht
-  Owner-Freigabe als eigene Aenderung), hier nicht geaendert.
+- **`exp` verlangt seit T2-03 (T-12), Scope-Teil bleibt offen:** `jwtVerify` in
+  `src/auth.js:98-106` setzt `requiredClaims: ['exp']`; ein signiertes Token ohne `exp` wird
+  seither abgelehnt (401), nicht mehr unbefristet angenommen (`PLAN-SECURITY.md` entsprechend
+  nachgezogen). Offen bleibt NUR der Scope-Pruefungs-Anteil von T-12 (Phase T2-23) - der
+  Token-Inhalt wird nicht auf erwartete Scopes geprueft, nur auf Gueltigkeit/Ablauf.
 - **T-8 (Nebenbefund, ausserhalb der in diesem Dokument behandelten Anforderungen):** `code_challenge_methods_supported` fehlt in
   `openid-configuration`, steht in `oauth-authorization-server` (Abschnitt 3). Unser
   `discoverJwksUri()` probiert `openid-configuration` zuerst (`src/auth.js:31`) — fuer uns
