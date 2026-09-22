@@ -4,7 +4,7 @@
 // zusaetzlich die geteilten Fabriken makeCapabilityDetector + makeUiRenderer, die genau
 // diese Konstanten je Host-Konvention zu Detektoren/Renderern binden (EINE Quelle je
 // Cluster statt Copy-Paste pro Host, G5); Widget-HTML/-Titel host-agnostisch aus dem Katalog.
-import { hasWidget, widgetHtml, widgetTitle } from "./widget-catalog.js";
+import { hasWidget, widgetHtml, widgetTitle, widgetVersion } from "./widget-catalog.js";
 import { config } from "../config.js";
 import { normalisierterOrigin } from "../middleware.js";
 
@@ -16,10 +16,16 @@ export const UI_CAPABILITY_KEY = "io.modelcontextprotocol/ui";
 // In EINER Konstante, falls der reale Namespace spaeter angepasst werden muss (P3).
 export const UI_META_KEY = "ui"; // -> _meta.ui.resourceUri
 
-// ui://-URI-Schema fuer Hermes-Widgets. EIN Tenant-freier, statischer URI je Widget
+// ui://-URI-Schema fuer Hermes-Widgets. EIN Tenant-freier URI je Widget+Version
 // (die Resource traegt KEINE Daten; Daten fliessen ueber structuredContent, P0-Befund).
+// T2-02/T-34 (cache-feste, sprachunabhaengige Resource-URIs): die Version kommt aus
+// der Pin-Datei (widget-catalog.js widgetVersion) - eine HTML-Aenderung MUSS die
+// Version hochzaehlen, sonst kann ein bis zu 1 h gecachter Client (developers.openai.
+// com/plugins/deploy/app-review) veralteten Inhalt unter derselben URI behalten.
+// Bewusst NICHT sprachabhaengig (Plan 2.1): eine sprachige URI machte den
+// tools/list-Snapshot (T-33) mandantenabhaengig.
 const UI_URI_PREFIX = "ui://hermes/";
-export const uiResourceUri = (widgetId) => `${UI_URI_PREFIX}${widgetId}`;
+export const uiResourceUri = (widgetId) => `${UI_URI_PREFIX}${widgetId}/v${widgetVersion(widgetId)}.html`;
 
 // Baut einen fail-closed Capability-Detektor fuer genau einen mimeType: true NUR wenn der
 // Client die UI-Capability (UI_CAPABILITY_KEY) mit diesem mimeType deklariert; unbekannte/
@@ -127,16 +133,16 @@ export function makeUiRenderer({ mimeType, metaKey, buildMeta }) {
     mimeType,
     hasWidget: (widgetId) => hasWidget(widgetId),
     resourceUri: (widgetId) => uiResourceUri(widgetId),
-    // Rendering-Optionen als EIN Objekt (F1: max 3 Argumente) - language und
-    // chatgptEgress reisen ohnehin immer zusammen (beide beschreiben denselben
-    // Resource-Render-Vorgang), ein viertes Positionsargument waere Willkuer (G32).
-    // language (P13/E4): die Agentensprache, in der die statische Resource gerendert
-    // wird. Die ui://-URI bleibt bewusst sprachfrei (ein live etablierter Wire-
-    // Bezeichner); pro Request steht ohnehin genau eine Sprache fest (stateless, INV-8).
+    // Rendering-Option als EIN Objekt (F1). T2-02/T-34: KEIN language-Feld mehr - die
+    // Resource ist seit dieser Phase EINE sprachneutrale Fassung je Widget (die
+    // Agentensprache reist stattdessen als Ergebnis-`_meta` der Widget-Werkzeuge,
+    // s. mcp-tools.js withWidgetLocale); die ui://-URI traegt seit je keine Sprache
+    // (pro Request steht ohnehin genau eine Sprache fest, stateless, INV-8), jetzt
+    // aber zusaetzlich eine Version (uiResourceUri oben).
     // chatgptEgress (T2-01 Nachbau): s. uiResourceMeta oben. Default false - der
     // stdio-Transport (mcp-server.js) ruft ohne dieses Feld auf und setzt damit
     // NIE `ui.domain` (Owner-Vorgabe: "stdio setzt ui.domain NIE").
-    registerResource(server, widgetId, { language, chatgptEgress = false } = {}) {
+    registerResource(server, widgetId, { chatgptEgress = false } = {}) {
       const uri = uiResourceUri(widgetId);
       server.registerResource(
         widgetId,
@@ -144,7 +150,7 @@ export function makeUiRenderer({ mimeType, metaKey, buildMeta }) {
         { title: widgetTitle(widgetId), mimeType },
         async () => ({
           contents: [
-            { uri, mimeType, text: widgetHtml(widgetId, language), _meta: uiResourceMeta(chatgptEgress) },
+            { uri, mimeType, text: widgetHtml(widgetId), _meta: uiResourceMeta(chatgptEgress) },
           ],
         }),
       );

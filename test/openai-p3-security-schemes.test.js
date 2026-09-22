@@ -20,6 +20,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools } from "../src/mcp-tools.js";
 import { applyToolSecuritySchemes } from "../src/mcp-security-schemes.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { uiResourceUri } from "../src/ui/contract.js";
+import { WIDGET_CALL } from "../src/ui/widget-catalog.js";
 import {
   startServer,
   seedState,
@@ -39,7 +41,10 @@ const LIST_TOOLS_METHOD = "tools/list";
 // Permissiver Ergebnis-Schema fuer rohe tools/list-Abfragen ueber den typisierten
 // Client - z.any() pro Tool umgeht das Strippen unbekannter Felder (Messung B).
 const RAW_TOOLS_LIST_RESULT = z.object({ tools: z.array(z.any()) });
-const RESOURCE_URI_CALL = "ui://hermes/call";
+// AUSNAHME zum Datei-Kopf (Literal statt src-Import) seit T2-02/T-34: die URI traegt
+// jetzt eine bewusst hochgezaehlte Version (Pin-Datei src/ui/widget-versions.json) -
+// ein Literal wuerde bei jeder Versionserhoehung von Hand nachgezogen.
+const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL);
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 
 // Testnamen duerfen NICHT mit einer i18n-Katalog-Kennung + Ziffer beginnen

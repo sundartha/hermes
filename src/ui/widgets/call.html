@@ -320,45 +320,52 @@
     var RING_ARC_INTERRUPTED_GAP_PX = 23;
     var RING_PRESET_DEFAULT = { cls: "ring", dash: RING_CIRCUMFERENCE + " 0" };
 
+    // T2-02/S5: pillLabel/hudPhase tragen den Uebersetzungs-KEY, nicht mehr die beim
+    // Laden uebersetzte Zeichenkette - die Karte startet englisch (window.HermesI18n
+    // hat beim Modul-Lauf noch keine servergerenderte Sprache, s. widget-i18n.js) und
+    // schaltet ERST beim ersten Tool-Ergebnis um. Wuerde hier t(...) einmalig beim
+    // Laden aufgeloest, bliebe Pill/HUD-Unterzeile nach dem Umschalten englisch
+    // (updateStatusPill/updateHudPhase rufen t(view.pillLabel)/t(view.hudPhase) daher
+    // erst ZUR ANWENDEZEIT auf, s.u.).
     var STATUS_VIEW = {
       dialing: {
         wingStatus: "connecting",
-        pillLabel: t("Connecting"),
+        pillLabel: "Connecting",
         pillClass: "pill pill--active",
         dot: true,
-        hudPhase: t("Placing call"),
+        hudPhase: "Placing call",
         ringPreset: { cls: "ring ring--spin ring--accent", dash: RING_ARC_DIALING_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_DIALING_PX) },
       },
       in_progress: {
         wingStatus: "working",
-        pillLabel: t("Live"),
+        pillLabel: "Live",
         pillClass: "pill pill--active",
         dot: true,
-        hudPhase: t("In call"),
+        hudPhase: "In call",
         ringPreset: { cls: "ring ring--spin ring--accent-strong", dash: RING_ARC_IN_PROGRESS_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_IN_PROGRESS_PX) },
       },
       completed: {
         wingStatus: "success",
-        pillLabel: t("Completed"),
+        pillLabel: "Completed",
         pillClass: "pill pill--done",
         dot: false,
-        hudPhase: t("Call ended"),
+        hudPhase: "Call ended",
         ringPreset: { cls: "ring ring--accent-solid", dash: RING_CIRCUMFERENCE + " 0" },
       },
       failed: {
         wingStatus: "error",
-        pillLabel: t("Failed"),
+        pillLabel: "Failed",
         pillClass: "pill pill--muted",
         dot: false,
-        hudPhase: t("Call ended"),
+        hudPhase: "Call ended",
         ringPreset: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
       },
       cancelled: {
         wingStatus: "error",
-        pillLabel: t("Cancelled"),
+        pillLabel: "Cancelled",
         pillClass: "pill pill--muted",
         dot: false,
-        hudPhase: t("Call ended"),
+        hudPhase: "Call ended",
         ringPreset: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
       },
     };
@@ -527,15 +534,16 @@
       var label = doc.querySelector("[data-status-label]");
       if (pill) pill.className = view ? view.pillClass : "pill pill--muted";
       if (dot) dot.style.display = view && view.dot ? "" : "none";
-      if (label) label.textContent = view ? view.pillLabel : EMDASH;
+      if (label) label.textContent = view ? t(view.pillLabel) : EMDASH;
     }
 
     // Status-abgeleitete HUD-Unterzeile - wie die Status-Pill eine reine
-    // Anzeige-Uebersetzung, keine neue Datenquelle.
+    // Anzeige-Uebersetzung, keine neue Datenquelle. t() zur ANWENDEZEIT (s.
+    // STATUS_VIEW-Kommentar oben) - nicht beim Laden aufgeloest.
     function updateHudPhase(status) {
       var view = STATUS_VIEW[status];
       var el = doc.querySelector("[data-hud-phase]");
-      if (el) el.textContent = view ? view.hudPhase : EMDASH;
+      if (el) el.textContent = view ? t(view.hudPhase) : EMDASH;
     }
 
     function updateRingForStatus(status) {

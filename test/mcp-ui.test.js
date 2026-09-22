@@ -22,7 +22,6 @@ import {
   WIDGET_CALL,
   widgetHtml,
 } from "../src/ui/widget-catalog.js";
-import { localeFor } from "../src/i18n/locales.js";
 import {
   UI_MIME,
   capabilityDeclaresUi,
@@ -31,7 +30,7 @@ import {
 } from "../src/ui/contract.js";
 import { config } from "../src/config.js";
 
-const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL); // ui://hermes/call
+const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL); // ui://hermes/call/v1.html
 
 // Abwesenheits-Pin (Kritik N1): KEINE feste Zahl ("~10") vorschreiben, sondern generisch
 // jede "alle N Sekunden"-Polling-Anweisung verbieten - robuster als ein Positiv-String-Pin.
@@ -724,7 +723,7 @@ const RICH_STATE = {
   tenantId: "tenant-XYZ",
   calls: [{ id: "c1", from: "+49170000000" }], // fremder state, nicht durchreichen
 };
-const RESOURCE_URI_AGENT = uiResourceUri(WIDGET_AGENT_STATUS); // ui://hermes/agent-status
+const RESOURCE_URI_AGENT = uiResourceUri(WIDGET_AGENT_STATUS); // ui://hermes/agent-status/v1.html
 const AGENT_KEYS = ["calls", "number", "owner", "permissions", "planUsagePercent"];
 // Pin bleibt WOERTLICH, wird nur explizit an seine Sprache gebunden (P13 ENTSCHAERFT 1:
 // mitgezogen, nicht "passend gemacht").
@@ -812,24 +811,31 @@ test("T-W3-AC1b: planUsagePercent=null (kein Kontingent hinterlegt) - Text-Fallb
   });
 });
 
-// P13/E4: die registrierte ui://-Resource traegt die Agentensprache. Verdrahtungsbeweis
-// ueber die ECHTE Kette registerTools -> enableWidgetUi -> registerResource -> widgetHtml.
-test("T-W3-AC1c: language: \"en\" registriert die englische agent-status-Resource", async () => {
+// T2-02/T-34 (invertiert - vormals P13/E4 "Sprache erreicht die Resource"): die
+// registrierte ui://-Resource ist jetzt EINE sprachneutrale, cache-feste Fassung -
+// language:"en" registriert BYTE-IDENTISCH dieselbe Resource wie language:"de".
+// Verdrahtungsbeweis ueber die ECHTE Kette registerTools -> enableWidgetUi ->
+// registerResource -> widgetHtml.
+test("T-W3-AC1c: die registrierte agent-status-Resource ist sprachneutral (T2-02)", async () => {
   await withGateway(RICH_STATE, async () => {
     const { resources } = captureUi({ uiHost: capableHost(), language: "en" });
     const html = (await resources.find((r) => r.uri === RESOURCE_URI_AGENT).readCallback()).contents[0].text;
-    assert.equal(html, widgetHtml(WIDGET_AGENT_STATUS, "en"));
-    assert.notEqual(html, widgetHtml(WIDGET_AGENT_STATUS, "de"), "Sprache erreicht die Resource wirklich");
+    assert.equal(html, widgetHtml(WIDGET_AGENT_STATUS));
   });
 });
 
-// Ohne language-Feld gilt DERSELBE eine Resolver wie im Text-/Anrufkanal (localeFor),
-// nicht blind Englisch - sonst haette das Widget einen zweiten Fallback.
-test("T-W3-AC1d: ohne language-Feld folgt die Resource localeFor(null)", async () => {
+// Die Sprache erreicht seit T2-02 das ERGEBNIS (mcp-tools.js withWidgetLocale), nicht
+// mehr die Resource - "de" und "en" registrieren dieselbe Resource-URI mit demselben
+// Inhalt.
+test("T-W3-AC1d: language:\"de\" registriert dieselbe Resource wie language:\"en\"", async () => {
   await withGateway(RICH_STATE, async () => {
-    const { resources } = captureUi({ uiHost: capableHost() });
-    const html = (await resources.find((r) => r.uri === RESOURCE_URI_AGENT).readCallback()).contents[0].text;
-    assert.equal(html, widgetHtml(WIDGET_AGENT_STATUS, localeFor(null).language));
+    const { resources: resourcesEn } = captureUi({ uiHost: capableHost(), language: "en" });
+    const htmlEn = (await resourcesEn.find((r) => r.uri === RESOURCE_URI_AGENT).readCallback()).contents[0].text;
+    const { resources: resourcesDe } = captureUi({ uiHost: capableHost(), language: "de" });
+    const resourceDe = resourcesDe.find((res) => res.uri === RESOURCE_URI_AGENT);
+    const readDe = await resourceDe.readCallback();
+    const htmlDe = readDe.contents[0].text;
+    assert.equal(htmlEn, htmlDe, "T2-02: Resource-Inhalt sprachneutral - Sprache reist ueber Ergebnis-_meta");
   });
 });
 
@@ -993,9 +999,9 @@ const BATCH_LEAKS = [
   "calendar-LEAK",
   "Geheim",
 ];
-const RESOURCE_URI_MY = uiResourceUri(WIDGET_MY_NUMBER); // ui://hermes/my-number
-const RESOURCE_URI_CALLS = uiResourceUri(WIDGET_CALLS); // ui://hermes/calls
-const RESOURCE_URI_CAL = uiResourceUri(WIDGET_CALENDAR); // ui://hermes/calendar
+const RESOURCE_URI_MY = uiResourceUri(WIDGET_MY_NUMBER); // ui://hermes/my-number/v1.html
+const RESOURCE_URI_CALLS = uiResourceUri(WIDGET_CALLS); // ui://hermes/calls/v1.html
+const RESOURCE_URI_CAL = uiResourceUri(WIDGET_CALENDAR); // ui://hermes/calendar/v1.html
 const myNumberOutput = z.object({ number: z.string().nullable() });
 const callsOutput = z.object({
   calls: z.array(

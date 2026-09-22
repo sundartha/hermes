@@ -1,0 +1,8 @@
+{
+  "_comment": "T2-02/T-34: Pin-Datei fuer cache-feste, sprachunabhaengige Resource-URIs. Je Widget die Abbildung Version -> SHA-256 des AUSGELIEFERTEN HTML (widgetHtml(id), inkl. aller Injektionen: HUD-CSS, Wing-Assets, Wing-Engine, Mount, I18N-Script, BIND_SCRIPT). Die hoechste Version je Widget ist die aktive (widgetVersion()). REGEL: aendert sich das ausgelieferte HTML, MUSS eine neue Version angehaengt werden (naechste ganze Zahl) - alte Eintraege werden NIE ueberschrieben (sonst zeigt eine bereits im Client gecachte URI ploetzlich anderen Inhalt). test/openai-t2-02-widget-uris.test.js faengt einen veralteten Pin (Hash geaendert, Version nicht erhoeht) rot ab. Erstbefuellung 2026-09-22 (T2-02).",
+  "agent-status": { "1": "8304aed2dd3dd12c73ae8319eb0f8ba742d70c265e9b45a1eed956a048736f5c" },
+  "my-number": { "1": "caaebb738f0b60c5f5fabe5bdb8b4b04e1e563c04a8c08324c78e127fbde31c7" },
+  "calls": { "1": "f65f989627c621bef2c9813d7198383fb6faa744af7cd396d31f97889bdf6555" },
+  "calendar": { "1": "57f50c389d3b52e5e812d0eb782ae8931b0900a6e5e87ade7ca502a984fa4e0f" },
+  "call": { "1": "d4cc20704fe287449dd3d445f937ec1fb7f6f4480624f3740866764b478c4f81" }
+}

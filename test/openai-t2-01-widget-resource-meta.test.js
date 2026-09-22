@@ -17,6 +17,7 @@ import {
   startIdp,
   mcpPost,
   readToolResult,
+  toolCall,
   ROOT,
   BASE_ENV,
   externalIp,
@@ -25,7 +26,7 @@ import {
 import { makeDefaultState, registerTenant, settingsFor } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { widgetHtml } from "../src/ui/widget-catalog.js";
-import { LOCALES } from "../src/i18n/locales.js";
+import { WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
 
 const WIDGET_COUNT = 5;
 const HTTP_OK = 200;
@@ -61,6 +62,16 @@ async function httpResourceRead(baseUrl, token, uri) {
   const body = { jsonrpc: "2.0", id: 3, method: "resources/read", params: { uri } };
   const res = await mcpPost(`${baseUrl}/mcp`, token, body);
   return await readToolResult(res);
+}
+
+// Nur fuer die T1-Positiv-Kontrolle (Review-Befund): liest die servergerenderte
+// Widget-Sprache eines Mandanten ueber den ECHTEN Draht - get_my_number ist ein
+// Widget-Tool (uiTool) und traegt sie seit T2-02 an result._meta[WIDGET_LOCALE_META_KEY]
+// (mcp-tools.js withWidgetLocale), NICHT mehr an der Resource selbst.
+async function httpWidgetLocale(baseUrl, token) {
+  const res = await mcpPost(`${baseUrl}/mcp`, token, toolCall("get_my_number"));
+  const result = await readToolResult(res);
+  return result._meta?.[WIDGET_LOCALE_META_KEY];
 }
 
 // Nur fuer T9/T10 (ui.domain-Erkennung ueber die Client-IP): mcpPost (helpers.js)
@@ -162,6 +173,15 @@ function twoTenantSeed() {
   return state;
 }
 
+// Kurzform fuer den Text EINES gelesenen Resource-Inhalts (G36: haelt die Aufrufkette
+// in der T-34-Kernabnahme unten auf hoechstens 4 verkettete Zugriffe - Muster wie
+// assertAllFiveResourcesCarryExpectedMeta unten, read+content je eigene Zeile).
+function resourceText(reads, uri) {
+  const read = reads[uri];
+  const content = read.contents[0];
+  return content.text;
+}
+
 function assertAllFiveResourcesCarryExpectedMeta(resources, reads) {
   assert.equal(resources.length, WIDGET_COUNT, "Positiv-Kontrolle: genau 5 Widgets");
   for (const resource of resources) {
@@ -189,11 +209,39 @@ test("T1 (HTTP OAuth): alle 5 Widget-Resources tragen den Sollwert, identisch ue
       idp.sign({ sub: TENANT_DE.sub }, { aud }),
       idp.sign({ sub: TENANT_EN.sub }, { aud }),
     ]);
+    // readsByTenant statt Ueberschreiben je Schleifendurchlauf (Review-Befund): der
+    // Text-Vergleich unten braucht BEIDE Mandanten gleichzeitig, nicht nur den
+    // zuletzt gelesenen.
+    const readsByTenant = [];
     for (const token of [tokenDe, tokenEn]) {
       const resources = await httpResourcesList(srv.externalUrl, token);
       const reads = {};
       for (const resource of resources) reads[resource.uri] = await httpResourceRead(srv.externalUrl, token, resource.uri);
       assertAllFiveResourcesCarryExpectedMeta(resources, reads);
+      readsByTenant.push(reads);
+    }
+    const [readsDe, readsEn] = readsByTenant;
+
+    // Positiv-Kontrolle (Review-Befund): beweist, dass tokenDe/tokenEn nachweislich
+    // verschiedene Agentensprachen tragen. Ohne sie waere ein Byte-Gleich-Befund unten
+    // wertlos - er koennte auch gelten, weil beide Mandanten zufaellig dieselbe Sprache
+    // haben.
+    const [localeDe, localeEn] = await Promise.all([
+      httpWidgetLocale(srv.externalUrl, tokenDe),
+      httpWidgetLocale(srv.externalUrl, tokenEn),
+    ]);
+    assert.equal(localeDe, "de", "Positiv-Kontrolle: DE-Mandant meldet de");
+    assert.equal(localeEn, "en", "Positiv-Kontrolle: EN-Mandant meldet en");
+
+    // T-34-Kernabnahme (Review-Befund, ersetzt die geloeschte Tautologie ex UI-18):
+    // die Resource selbst ist sprachneutral - jede URI liefert byte-gleichen Text ueber
+    // beide Mandanten, obwohl deren Sprache nachweislich verschieden ist (s.o.).
+    for (const uri of Object.keys(readsDe)) {
+      assert.equal(
+        resourceText(readsDe, uri),
+        resourceText(readsEn, uri),
+        `${uri}: Resource-Text muss ueber DE- und EN-Mandant byte-gleich sein (T-34)`,
+      );
     }
   } finally {
     await srv.stop();
@@ -445,16 +493,12 @@ test("T8 (Widget-Scan, T-30-Exaktheit): kein Widget laedt von aussen - weder ueb
     await srv.stop();
   }
 
+  // T2-02/T-34: EINE sprachneutrale Fassung je Widget statt einer Sprachmatrix -
+  // widgetHtml() nimmt keine Sprache mehr entgegen (s. widget-catalog.js).
   const widgetIds = ["agent-status", "my-number", "calls", "calendar", "call"];
   for (const widgetId of widgetIds) {
-    for (const language of Object.keys(LOCALES)) {
-      const html = widgetHtml(widgetId, language);
-      assert.deepEqual(
-        findForbiddenLoads(html),
-        [],
-        `${widgetId}/${language}: laedt von nirgendwo (in-process)`,
-      );
-    }
+    const html = widgetHtml(widgetId);
+    assert.deepEqual(findForbiddenLoads(html), [], `${widgetId}: laedt von nirgendwo (in-process)`);
   }
 });
 
