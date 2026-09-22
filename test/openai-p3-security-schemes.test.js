@@ -34,9 +34,11 @@ import {
   TOOLS_WITH_OUTPUT_SCHEMA,
 } from "./helpers.js";
 
-// Literal aus dem woertlich zitierten OpenAI-Rohtext (tasks/openai-p3-report.md,
-// Fundstelle 1) - NICHT aus src importiert.
-const EXPECTED_SECURITY_SCHEMES = [{ type: "oauth2", scopes: [] }];
+// Literal der T2-23-Scope-Menge S ("openid","email","offline_access", s.
+// src/auth.js OAUTH_SCOPES) - bewusst NICHT aus src importiert, sonst wuerde ein
+// Bug, der OAUTH_SCOPES selbst falsch setzt, hier unbemerkt mitlaufen (Pre-Mortem #4
+// der P3-Spec: ein Test, der seine Erwartung aus dem Pruefling zieht, belegt nichts).
+const EXPECTED_SECURITY_SCHEMES = [{ type: "oauth2", scopes: ["openid", "email", "offline_access"] }];
 const LIST_TOOLS_METHOD = "tools/list";
 // Permissiver Ergebnis-Schema fuer rohe tools/list-Abfragen ueber den typisierten
 // Client - z.any() pro Tool umgeht das Strippen unbekannter Felder (Messung B).
@@ -61,7 +63,7 @@ function assertSecuritySchemesOnEveryTool(tools) {
     assert.deepEqual(
       tool.securitySchemes,
       EXPECTED_SECURITY_SCHEMES,
-      `${tool.name}: securitySchemes traegt genau [{"type":"oauth2","scopes":[]}]`,
+      `${tool.name}: securitySchemes traegt genau [{"type":"oauth2","scopes":["openid","email","offline_access"]}]`,
     );
   }
 }

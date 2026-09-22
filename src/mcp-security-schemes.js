@@ -18,13 +18,16 @@
 //
 // Der Wert ist fuer alle Werkzeuge identisch: es gibt genau einen Auth-Mount-Punkt
 // (POST /mcp, src/routes/mcp.js), kein Werkzeug ist ohne Token erreichbar, also ist
-// "noauth" falsch. Die Scope-Liste bleibt leer, weil der Anbieter keinen fachlichen
-// Scope-Claim liest oder ausstellt - eine erfundene Scope-Liste waere eine
-// Falschangabe (E1, D0-7).
+// "noauth" falsch. Die Scope-Liste (T-16, T2-23) ist die vom Auth-Server beworbene
+// Identitaets-Scope-Menge S (src/auth.js OAUTH_SCOPES, einzige Quelle der Literale) -
+// KEIN fachlicher Hermes-Berechtigungs-Scope; D0-7 ("kein Scope konsumiert/beworben")
+// ist durch T-16 ueberholt. Die fachliche Zugriffsgrenze bleibt unveraendert Audience +
+// Mandantenbindung (rejectIfNoTenant, src/routes/mcp.js).
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { OAUTH_SCOPES } from "./auth.js";
 
 export const TOOL_SECURITY_SCHEMES = Object.freeze([
-  Object.freeze({ type: "oauth2", scopes: Object.freeze([]) }),
+  Object.freeze({ type: "oauth2", scopes: OAUTH_SCOPES }),
 ]);
 
 const LIST_TOOLS_METHOD = "tools/list";

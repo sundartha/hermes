@@ -23,6 +23,19 @@ export function legacyLocalBypassAllowed(req, isProduction = config.server.isPro
 const audience = () => config.auth.oauthAudience || `${config.server.publicUrl}/mcp`;
 const metadataUrl = () => `${config.server.publicUrl}/.well-known/oauth-protected-resource`;
 
+// T-16/T-12 (T2-23): EINE Scope-Menge, gelesen von PRM (scopes_supported), der
+// oauth-401-Challenge (scope=) und securitySchemes (src/mcp-security-schemes.js) -
+// einzige Stelle im Code mit diesen Literalen. "openid"+"email" ist T-16 (OpenAI
+// verlangt genau diese Identitaets-Scopes); "offline_access" ist noetig, weil ein
+// spec-treuer Client nach dieser Aenderung nur noch die Challenge-/PRM-Menge anfragt -
+// ohne offline_access bekaeme er nie ein Refresh-Token. Kein "profile" (Minimalmenge),
+// keine erfundenen Hermes-Scopes (calls:write o.ae.): der Auth-Server bewirbt nur
+// Identitaets-Scopes (docs/OPENAI-AUTH-ABWEICHUNGEN.md), ein erfundener Scope wuerde
+// beim Auth-Server als invalid_scope scheitern. Keine Env-Var: die Menge ist eine
+// Produktentscheidung, kein Umgebungswert - Rueckweg ist ein Revert dieses Commits.
+export const OAUTH_SCOPES = Object.freeze(["openid", "email", "offline_access"]);
+const OAUTH_SCOPE_PARAM = OAUTH_SCOPES.join(" ");
+
 // JWKS-URI ueber die Standard-Metadata des Issuers finden. Beide gaengigen
 // Pfade versuchen: OIDC (openid-configuration) und OAuth 2.1 AS-Metadata
 // (oauth-authorization-server, so dokumentiert WorkOS AuthKit). Erster Treffer
@@ -69,10 +82,23 @@ function sendBearer401(res, challenge, body) {
   return res.status(HTTP_UNAUTHORIZED).json(body);
 }
 
-// oauth-Zweig: Challenge inkl. Verweis auf die Protected-Resource-Metadata,
-// damit der Client den Auth-Server findet.
+// Reiner Baustein: setzt eine geordnete Parameterliste zu einem Bearer-Challenge-
+// String zusammen. `resource_metadata` bleibt ERSTER Parameter
+// (test/openai-p7-token-pruefachsen.test.js:47 prueft `^Bearer resource_metadata="`).
+function bearerChallenge(paare) {
+  return `Bearer ${paare.map(([schluessel, wert]) => `${schluessel}="${wert}"`).join(", ")}`;
+}
+
+// oauth-Zweig: Challenge inkl. Verweis auf die Protected-Resource-Metadata und der
+// erwarteten Scope-Menge (T-16), damit der Client den Auth-Server findet und weiss,
+// welche Scopes er anfragen muss.
 function deny401(res, error, description) {
-  const challenge = `Bearer resource_metadata="${metadataUrl()}", error="${error}", error_description="${description}"`;
+  const challenge = bearerChallenge([
+    ["resource_metadata", metadataUrl()],
+    ["scope", OAUTH_SCOPE_PARAM],
+    ["error", error],
+    ["error_description", description],
+  ]);
   return sendBearer401(res, challenge, { error: description });
 }
 
@@ -145,11 +171,18 @@ export async function mcpAuth(req, res, next) {
 // RFC 9728: Protected Resource Metadata. Beide Pfade bedienen (generisch und
 // pfadbezogen), weil MCP-Clients hier unterschiedlich raten.
 export function registerWellKnown(app) {
-  const doc = () => ({
-    resource: audience(),
-    authorization_servers: config.auth.oauthIssuerUrl ? [config.auth.oauthIssuerUrl] : [],
-    bearer_methods_supported: ["header"],
-  });
+  const doc = () => {
+    const authorizationServers = config.auth.oauthIssuerUrl ? [config.auth.oauthIssuerUrl] : [];
+    return {
+      resource: audience(),
+      authorization_servers: authorizationServers,
+      bearer_methods_supported: ["header"],
+      // T-16: scopes_supported NUR mit Authorization-Server - ohne einen ist die
+      // Menge bedeutungslos (kein AS, der sie ausstellen koennte), Feld bleibt dann
+      // abwesend statt einer leeren Liste.
+      ...(authorizationServers.length > 0 ? { scopes_supported: [...OAUTH_SCOPES] } : {}),
+    };
+  };
   app.get("/.well-known/oauth-protected-resource", (_q, res) => res.json(doc()));
   app.get("/.well-known/oauth-protected-resource/mcp", (_q, res) => res.json(doc()));
 }
