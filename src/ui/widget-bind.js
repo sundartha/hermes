@@ -34,7 +34,10 @@ const FIELD_SEP = ",";
 const UI_PROTOCOL_VERSION = "2026-01-26";
 const METHOD_INITIALIZE = "ui/initialize";
 const METHOD_INITIALIZED = "ui/notifications/initialized";
-const METHOD_TOOL_RESULT = "ui/notifications/tool-result";
+// Exportiert (T2-02/S2): widget-i18n.js registriert einen EIGENEN Listener fuer
+// dieselbe Host-Nachricht (Sprachumschaltung) und braucht denselben Methodennamen -
+// EINE Quelle statt eines zweiten Literals (G5/S2).
+export const METHOD_TOOL_RESULT = "ui/notifications/tool-result";
 const METHOD_SIZE_CHANGED = "ui/notifications/size-changed";
 const INIT_ID = 1;
 

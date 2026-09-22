@@ -9,7 +9,7 @@
  *   Kennt dieser Renderer das Widget? (unbekannt -> false -> Stufe 0).
  * @property {(widgetId: string) => string} resourceUri
  *   ui://-URI fuer das Tool-_meta (geteiltes Schema ueber alle Hosts).
- * @property {(server: import("@modelcontextprotocol/sdk/server/mcp.js").McpServer, widgetId: string, options?: {language?: string, chatgptEgress?: boolean}) => void} registerResource
+ * @property {(server: import("@modelcontextprotocol/sdk/server/mcp.js").McpServer, widgetId: string, options?: {chatgptEgress?: boolean}) => void} registerResource
  *   Registriert die STATISCHE ui://-Resource (self-contained HTML) am McpServer, in
  *   der uebergebenen Agentensprache (P13/E4; fehlend -> englische Fassung).
  *   Die Resource traegt KEINE Tenant-Daten (Daten -> structuredContent, P0-Befund).

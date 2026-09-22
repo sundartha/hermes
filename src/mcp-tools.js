@@ -12,6 +12,8 @@
 // Test gepinnt (test/p15-mcp-tool-descriptions-en.test.js). NICHT lokalisieren.
 import { z } from "zod";
 import { uiRendererFor } from "./ui/registry.js";
+import { UI_META_KEY } from "./ui/contract.js";
+import { WIDGET_LOCALE_META_KEY } from "./ui/widget-i18n.js";
 import { WIDGET_AGENT_STATUS } from "./ui/adapters/mcp-native.js";
 // Neue Widgets aus der kanonischen Quelle (widget-catalog.js); der mcp-native-Re-Export
 // oben ist historisch (siehe Datei-Kommentar dort).
@@ -819,8 +821,32 @@ const withOpenAiToolMetadata = (name, config) => {
 // fuer alle Widget-Tools (G5) und AUSSERHALB von registerTools, damit das
 // chatgptEgress-Feld dessen Zeilenzahl nicht anhebt (G30, registerTools liegt an der
 // gepinnten Altlast-Grenze, s. eslint-legacy-exceptions.json).
-function widgetResourceOptions(language, uiHost) {
-  return { language, chatgptEgress: uiHost?.chatgptEgress === true };
+// T2-02/T-34: KEIN language-Feld mehr - die Resource ist seit dieser Phase EINE
+// sprachneutrale Fassung (s. contract.js registerResource); die Agentensprache
+// reist stattdessen ueber withWidgetLocale am Ergebnis der Widget-Werkzeuge (s.u.).
+function widgetResourceOptions(uiHost) {
+  return { chatgptEgress: uiHost?.chatgptEgress === true };
+}
+
+// S6 (T2-02/T-34): traegt die servergerenderte Widget-Sprache am ERGEBNIS der
+// Widget-Werkzeuge (NICHT in structuredContent, s. T2-02-Spec Kernentscheidung 4) -
+// nur Werkzeuge mit einer Widget-Resource am faehigen Host (config._meta.ui.
+// resourceUri gesetzt) bekommen den Schluessel; jedes andere Werkzeug bleibt
+// unveraendert. Grund fuer `_meta` statt `structuredContent`: `_meta` ist laut
+// OpenAI nur fuer die Komponente bestimmt (das Modell liest es nicht), und MCP
+// Apps reicht das CallToolResult per `ui/notifications/tool-result` als `params`
+// durch - `params._meta` traegt den Wert also unveraendert weiter. Das Widget
+// liest ihn NUR ueber diese Bruecke (widget-i18n.js), NIE ueber window.openai
+// (UI-03). Fehlerergebnisse bleiben unveraendert - der Host zeigt dann ohnehin
+// kein Widget (s. Aufrufer uiTool, VOR wrapHandler eingehaengt).
+function withWidgetLocale(config, handler, language) {
+  const resourceUri = config._meta?.[UI_META_KEY]?.resourceUri;
+  if (!resourceUri) return handler;
+  return async (...args) => {
+    const result = await handler(...args);
+    if (result?.isError) return result;
+    return { ...result, _meta: { ...result?._meta, [WIDGET_LOCALE_META_KEY]: language } };
+  };
 }
 
 export function registerTools(
@@ -886,10 +912,10 @@ export function registerTools(
   // Request).
   const enableWidgetUi = (widgetId) => {
     if (!uiRenderer || !uiRenderer.hasWidget(widgetId)) return {};
-    // E4/P13: die servergerenderte Widget-Sprache ist die Agentensprache. Weitergereicht
-    // wird die BEREITS aufgeloeste loc.language (nie das rohe language-Feld) - damit gilt
-    // im Widget dieselbe eine Aufloesungsregel wie im Text- und im Anrufkanal.
-    uiRenderer.registerResource(server, widgetId, widgetResourceOptions(loc.language, uiHost));
+    // T2-02/T-34: die Resource selbst traegt keine Sprache mehr (s.
+    // widgetResourceOptions) - die Agentensprache reist stattdessen ueber
+    // withWidgetLocale am Ergebnis des Werkzeugs (s.u., uiTool).
+    uiRenderer.registerResource(server, widgetId, widgetResourceOptions(uiHost));
     return { _meta: uiRenderer.toolMeta(widgetId) };
   };
 
@@ -925,8 +951,16 @@ export function registerTools(
   // im Literal -> Stufe-0-only. withOpenAiToolMetadata() hebt title auf Top-Level und
   // haengt die T-22-Statuszeilen an (P2, s. Kommentar dort) - NACHDEM das Literal fertig
   // gebaut ist, damit ein spaeter gespreadetes Widget-_meta nichts ueberschreibt.
+  // withWidgetLocale (T2-02/S6) haengt VOR wrapHandler ein - sie liest config._meta
+  // (das rohe Literal, nicht das von withOpenAiToolMetadata angereicherte) und traegt
+  // die Sprache nur bei Nicht-Fehler-Ergebnissen an; wrapHandler faengt weiterhin
+  // JEDEN Throw, unveraendert.
   const uiTool = (name, config, handler) =>
-    server.registerTool(name, withOpenAiToolMetadata(name, config), wrapHandler(handler));
+    server.registerTool(
+      name,
+      withOpenAiToolMetadata(name, config),
+      wrapHandler(withWidgetLocale(config, handler, loc.language)),
+    );
 
   // place_call: EINZIGE Karte fuer den gesamten Anruf-Lebenszyklus (W2, Spam-Wurzel
   // beseitigt). uiTool statt tool(): initiales structuredContent (dialing, alle Felder
