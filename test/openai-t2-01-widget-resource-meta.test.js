@@ -8,6 +8,7 @@
 // falschen Lauf, package.json config.i18nCatalogPattern/abnahmePattern).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -59,6 +60,27 @@ async function httpResourcesList(baseUrl, token) {
 async function httpResourceRead(baseUrl, token, uri) {
   const body = { jsonrpc: "2.0", id: 3, method: "resources/read", params: { uri } };
   const res = await mcpPost(`${baseUrl}/mcp`, token, body);
+  return await readToolResult(res);
+}
+
+// Nur fuer T9/T10 (ui.domain-Erkennung ueber die Client-IP): mcpPost (helpers.js)
+// nimmt keinen Header-Parameter - eigene, schlanke Variante statt eines vierten
+// Positionsarguments an mcpPost (F1/G30). uri+forwardedFor als EIN Objekt (F1: max 3
+// Argumente) - beide beschreiben denselben Request, kein viertes Positionsargument.
+// "trust proxy" (app.js, ungeaendert) leitet req.ip aus GENAU diesem Header ab, auch
+// wenn die TCP-Verbindung selbst ueber Loopback laeuft (belegt: Node net.Server-Probe,
+// s. Kommentar an chatgpt-egress.js) - deshalb reicht srv.localUrl hier aus.
+async function httpResourceReadFromIp(baseUrl, token, { uri, forwardedFor }) {
+  const res = await fetch(`${baseUrl}/mcp`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Accept: "application/json, text/event-stream",
+      Authorization: `Bearer ${token}`,
+      "X-Forwarded-For": forwardedFor,
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "resources/read", params: { uri } }),
+  });
   return await readToolResult(res);
 }
 
@@ -264,7 +286,13 @@ test("T4 (stdio, fail-safe): ohne PUBLIC_URL/RENDER_EXTERNAL_URL fehlt openai/wi
   );
 });
 
-// ==================== T5: Waechter ui.domain ====================
+// ==================== T5: Waechter ui.domain (Standardfall: keine ChatGPT-IP) ====================
+//
+// T2-01 Nachbau: dieser Waechter gilt fuer JEDEN Request in diesem Test - weder ueber
+// srv.localUrl (Loopback) noch ueber stdio traegt der Aufruf eine ChatGPT-Egress-IP
+// (chatgpt-egress.js), also bleibt `ui.domain` in BEIDEN Faellen zurecht abwesend. Der
+// Positiv-Beleg fuer den ChatGPT-Fall steht in T9 (unten), die Negativ-Kontrolle mit
+// einer echten, nicht gelisteten IP in T10.
 
 // Meldet jedes Objekt unter Schluessel "ui", das selbst einen Schluessel "domain"
 // traegt - unabhaengig von der Tiefe. Rekursiv ueber Arrays/Objekte, Basisfall (String/
@@ -427,5 +455,98 @@ test("T8 (Widget-Scan, T-30-Exaktheit): kein Widget laedt von aussen - weder ueb
         `${widgetId}/${language}: laedt von nirgendwo (in-process)`,
       );
     }
+  }
+});
+
+// ==================== T9/T10: ui.domain NUR bei nachweislicher ChatGPT-Egress-IP ====================
+//
+// T2-01 Nachbau (Owner-Entscheidung): `ui.domain` wird ZUSAETZLICH zum Alias
+// openai/widgetDomain gesetzt, wenn und NUR wenn die Anfrage ueber die
+// veroeffentlichten ChatGPT-Egress-IP-Bereiche (chatgpt-egress.js,
+// chatgpt-egress-ranges.json) als ChatGPT erkannt wird. Beide Tests laufen ueber die
+// ECHTE HTTP-Route (kein registerResource()-Unit-Test - der SDK-Client wuerde ein
+// unbekanntes _meta-Feld ohnehin still verwerfen, s. Dateikopf).
+//
+// Eine ECHTE IP aus der eingecheckten Liste - kein erfundener Wert, sonst prueft der
+// Test nur sich selbst (Positiv-Kontrolle als Lesart, nicht als Code: chatgpt-
+// egress.test.js deckt das Modul isoliert ab).
+const CHATGPT_RANGES_URL = new URL("../src/ui/chatgpt-egress-ranges.json", import.meta.url);
+const CHATGPT_RANGES = JSON.parse(fs.readFileSync(CHATGPT_RANGES_URL, "utf8"));
+const [CHATGPT_FIRST_CIDR] = CHATGPT_RANGES.prefixes;
+const CHATGPT_SAMPLE_IP = CHATGPT_FIRST_CIDR.ipv4Prefix.split("/")[0];
+
+// Reale, NICHT gelistete IP - vom Owner-Auftrag namentlich als Beispiel genannt
+// ("z.B. 160.79.104.10, Claude").
+const OTHER_CLIENT_IP = "160.79.104.10";
+
+test("T9 (ChatGPT-Egress-IP via X-Forwarded-For): _meta.ui.domain gesetzt, gleich PUBLIC_URL-Origin, Alias bleibt", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    seed: twoTenantSeed(),
+    env: {
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+      MULTI_TENANT: "true",
+      MCP_UI_ENABLED: "true",
+      PUBLIC_URL: PROBE_ORIGIN,
+    },
+  });
+  try {
+    const aud = `${PROBE_ORIGIN}/mcp`;
+    const token = await idp.sign({ sub: TENANT_DE.sub }, { aud });
+    const resources = await httpResourcesList(srv.localUrl, token);
+    assert.equal(resources.length, WIDGET_COUNT, "Positiv-Kontrolle: genau 5 Widgets");
+    for (const resource of resources) {
+      const read = await httpResourceReadFromIp(srv.localUrl, token, {
+        uri: resource.uri,
+        forwardedFor: CHATGPT_SAMPLE_IP,
+      });
+      const content = read.contents[0];
+      assert.equal(content._meta.ui.domain, PROBE_ORIGIN, `${resource.uri}: ui.domain = PUBLIC_URL-Origin`);
+      assert.deepEqual(content._meta.ui.csp, { connectDomains: [], resourceDomains: [] });
+      assert.equal(
+        content._meta["openai/widgetDomain"],
+        PROBE_ORIGIN,
+        `${resource.uri}: Alias bleibt zusaetzlich gesetzt`,
+      );
+    }
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+test("T10 (andere IP, Beispiel Claude 160.79.104.10): kein ui.domain, Alias bleibt", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    seed: twoTenantSeed(),
+    env: {
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+      MULTI_TENANT: "true",
+      MCP_UI_ENABLED: "true",
+      PUBLIC_URL: PROBE_ORIGIN,
+    },
+  });
+  try {
+    const aud = `${PROBE_ORIGIN}/mcp`;
+    const token = await idp.sign({ sub: TENANT_DE.sub }, { aud });
+    const resources = await httpResourcesList(srv.localUrl, token);
+    for (const resource of resources) {
+      const read = await httpResourceReadFromIp(srv.localUrl, token, {
+        uri: resource.uri,
+        forwardedFor: OTHER_CLIENT_IP,
+      });
+      const content = read.contents[0];
+      assert.equal("domain" in content._meta.ui, false, `${resource.uri}: kein ui.domain`);
+      assert.equal(
+        content._meta["openai/widgetDomain"],
+        PROBE_ORIGIN,
+        `${resource.uri}: Alias bleibt trotzdem gesetzt`,
+      );
+    }
+  } finally {
+    await srv.stop();
+    await idp.close();
   }
 });

@@ -33,6 +33,7 @@ import { audit, hashEmail } from "../util.js";
 import { ANON_IDENTITY, TENANT_REJECT } from "../request-tenant.js";
 import { tenantLanguage } from "../store/views.js";
 import { createMcpOriginGuard, mcpErlaubteOrigins } from "../middleware.js";
+import { isChatGptEgressIp } from "../ui/chatgpt-egress.js";
 
 // deps: { config, store, requestTenant }. config = globales Config-Objekt (mcpUiEnabled).
 // store traegt resolveProfile. requestTenant = die EINE Wurzel-Instanz (INV-7; loest den
@@ -82,6 +83,18 @@ function logAndResolveIdentity({ req, scopedTenant }) {
   // als X-Internal-Identity an die In-Process-Tools gereicht (Audit/requestedBy) - NICHT
   // mehr fuer das Rechteprofil. Kein req.auth (Legacy/localhost/stdio) -> null.
   return req.auth ? req.auth.email || req.auth.sub || ANON_IDENTITY : null;
+}
+
+// T2-01 Nachbau: Client-Klasse fuer ui.domain (chatgpt-egress.js) UND fuer die Owner-
+// Messung loggen - NIEMALS req.ip selbst (Regel 4, PII). req.ip ist hinter "trust
+// proxy" (app.js) aus X-Forwarded-For abgeleitet, dieselbe Ableitung wie ueberall sonst
+// im Repo (routes/_tenant.js, middleware.js rateHit) - keine zweite IP-Quelle. Eigene
+// Funktion (G30/G34): buendelt Klassifikation + Diagnose-Log, analog
+// logAndResolveIdentity oben (EIN Zweck, aus dem Haupt-Handler herausgezogen).
+function logAndDetectChatgptEgress(req) {
+  const chatgptEgress = isChatGptEgressIp(req.ip);
+  console.log("[mcp] client-class", chatgptEgress ? "chatgpt" : "andere");
+  return chatgptEgress;
 }
 
 export function makeMcpRoutes({ config, store, requestTenant }) {
@@ -148,6 +161,10 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
       // Capability-Feld mehr noetig, kein neuer Endpunkt, mcpAuth + res.on("close")-Cleanup
       // unveraendert.
       const uiHost = { enabled: config.tenancy.mcpUiEnabled };
+      // T2-01 Nachbau: NUR bei aktivem Master-Schalter ueberhaupt klassifizieren - der
+      // Schalter aus heisst weiterhin byte-identisch (kein Widget, kein Resource-Read,
+      // die Klassifikation waere reine Nebenwirkung ohne Konsumenten).
+      const chatgptEgress = uiHost.enabled ? logAndDetectChatgptEgress(req) : false;
       registerTools(server, {
         identity,
         scopedTenant,
@@ -155,6 +172,7 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
         consultAllowed: consultLoop,
         uiHost,
         language,
+        chatgptEgress,
       });
       // T-15: securitySchemes am Tool-Deskriptor - siehe src/mcp-security-schemes.js.
       applyToolSecuritySchemes(server);

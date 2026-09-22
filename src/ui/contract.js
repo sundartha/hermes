@@ -53,14 +53,24 @@ export function uiServerExtension() {
 //   Item (resources/list-Eintrag nur als Fallback) und ignorieren es am Tool.
 // - developers.openai.com/plugins/reference: `_meta.ui.csp` und `_meta.ui.domain` sind
 //   "Resource contents"-Felder, keine Tool-Felder.
-// `_meta.ui.domain` selbst bleibt trotzdem aussen vor: claude.com/docs/connectors/
-// building/mcp-apps/troubleshooting verlangt dort GENAU den SHA-256-Hash der eigenen
-// Connector-URL (`{hash}.claudemcpcontent.com`) - jeder andere Wert laesst Claude das
-// Widget mit "Invalid ui.domain format" verweigern; ohne das Feld rendert Claude mit
-// seinem Standard-Origin. Fuer ChatGPT liefert der offizielle Alias
-// `_meta["openai/widgetDomain"]` denselben Origin, ohne Claude zu brechen (T-31 damit
-// nur ueber den Alias erfuellt, nicht ueber den woertlichen Schluessel - UNKNOWN OW-E,
-// s. Plan).
+// `_meta.ui.domain` selbst bleibt fuer JEDEN Host aussen vor, AUSSER die Anfrage kommt
+// NACHWEISLICH von ChatGPT (T2-01 Nachbau, Owner-Entscheidung s. mcp-tools.js
+// chatgptEgress): claude.com/docs/connectors/building/mcp-apps/troubleshooting
+// verlangt dort GENAU den SHA-256-Hash der eigenen Connector-URL
+// (`{hash}.claudemcpcontent.com`) - jeder andere Wert laesst Claude das Widget mit
+// "Invalid ui.domain format"/"ui.domain mismatch" verweigern; ohne das Feld rendert
+// Claude mit seinem Standard-Origin. developers.openai.com/plugins/reference nennt
+// `_meta.ui.domain` dagegen als PFLICHTFELD ("Dedicated origin for hosted components
+// (required when submitting a plugin with UI; must be unique per plugin)") - ein
+// echter Zielkonflikt zwischen den beiden Primaerquellen. Aufgeloest per
+// Client-Erkennung (developers.openai.com/plugins/build/auth#client-identification:
+// "You can also allowlist ChatGPT's published egress IP ranges", Liste
+// openai.com/chatgpt-connectors.json, s. chatgpt-egress.js): NUR wenn die Anfrage
+// nachweislich von ChatGPT stammt, wird `ui.domain` ZUSAETZLICH zum Alias gesetzt;
+// jeder andere Host (inkl. stdio, wo es nie eine Client-IP gibt) bekommt weiterhin
+// NUR den Alias. Der Alias `_meta["openai/widgetDomain"]` bleibt UNBEDINGT gesetzt
+// (T-31 damit fuer ChatGPT ab sofort ueber BEIDE Schluessel erfuellt, fuer jeden
+// anderen Host weiterhin nur ueber den Alias).
 // T-30: die CSP muss EXAKT die Domains nennen, von denen die Komponente laedt. Gemessen
 // ueber alle 5 Widget-Quellen und alle injizierten Bausteine (12 Dateien): sie laden von
 // NIRGENDWO - 0 Treffer fuer fetch/XHR/WebSocket/EventSource/sendBeacon/importScripts,
@@ -89,34 +99,53 @@ export const OPENAI_WIDGET_DOMAIN_KEY = "openai/widgetDomain";
 // (fail-safe). Liest zur AUFRUFZEIT, nicht zur Modul-Ladezeit: die config-Blaetter sind
 // Getter auf einen gemeinsamen Speicher-Slot, und die In-Process-Tests setzen den Wert
 // nach dem Import. Kein Cache - ein gecachter Wert waere ein Lazy-Init-Antipattern (P15).
-export function uiResourceMeta() {
+//
+// chatgptEgress (T2-01 Nachbau): true NUR, wenn der aufrufende Transport die Anfrage
+// ueber die veroeffentlichten ChatGPT-Egress-IP-Bereiche als ChatGPT identifiziert hat
+// (chatgpt-egress.js, aufgerufen in routes/mcp.js - NICHT hier, dieses Modul kennt
+// keine Request-/IP-Daten, G17). Default false: jeder andere Aufrufer (Claude, ein
+// unbekannter Host, der stdio-Transport, der niemals eine Client-IP hat) bekommt
+// weiterhin NUR den Alias. `ui.domain` entfaellt zusaetzlich, wenn kein Origin
+// bekannt ist (fail-safe, wie beim Alias).
+export function uiResourceMeta(chatgptEgress = false) {
   const origin = normalisierterOrigin(config.server.publicUrl);
-  return origin ? { ui: { csp: UI_CSP }, [OPENAI_WIDGET_DOMAIN_KEY]: origin } : { ui: { csp: UI_CSP } };
+  if (!origin) return { ui: { csp: UI_CSP } };
+  const ui = chatgptEgress ? { csp: UI_CSP, domain: origin } : { csp: UI_CSP };
+  return { ui, [OPENAI_WIDGET_DOMAIN_KEY]: origin };
 }
 
 // Baut einen UiRenderer (DIP-Port, ports.js) fuer eine Host-Konvention. Host-unabhaengig:
 // hasWidget/resourceUri/registerResource; host-spezifisch NUR mimeType + die _meta-Form
 // (metaKey/buildMeta). 1 Argument (Objekt) statt drei Einzelparameter (F1). Wird zur
 // Modul-Ladezeit einmal pro Adapter aufgerufen -> stabiler Singleton, keine Lazy-Init (P15).
-// Der Resource-Inhalt (registerResource) traegt seit T2-01 IMMER _meta = uiResourceMeta()
-// (csp/Origin, T-30/T-31) - anfragenunabhaengig, fuer HTTP UND stdio identisch (EIN
-// Resource-Inhalt fuer beide Hosts, Plan 2.1). Kein `ui.domain`: s. Kommentar oben.
+// Der Resource-Inhalt (registerResource) traegt seit T2-01 IMMER _meta = uiResourceMeta(...)
+// (csp/Origin, T-30/T-31) - fuer HTTP UND stdio dieselbe Funktion, aber NICHT mehr
+// zwingend byte-identisch: chatgptEgress (vom Aufrufer durchgereicht, Default false)
+// entscheidet je Request/Prozess, ob `ui.domain` zusaetzlich zum Alias gesetzt wird.
 export function makeUiRenderer({ mimeType, metaKey, buildMeta }) {
   return {
     mimeType,
     hasWidget: (widgetId) => hasWidget(widgetId),
     resourceUri: (widgetId) => uiResourceUri(widgetId),
+    // Rendering-Optionen als EIN Objekt (F1: max 3 Argumente) - language und
+    // chatgptEgress reisen ohnehin immer zusammen (beide beschreiben denselben
+    // Resource-Render-Vorgang), ein viertes Positionsargument waere Willkuer (G32).
     // language (P13/E4): die Agentensprache, in der die statische Resource gerendert
     // wird. Die ui://-URI bleibt bewusst sprachfrei (ein live etablierter Wire-
     // Bezeichner); pro Request steht ohnehin genau eine Sprache fest (stateless, INV-8).
-    registerResource(server, widgetId, language) {
+    // chatgptEgress (T2-01 Nachbau): s. uiResourceMeta oben. Default false - der
+    // stdio-Transport (mcp-server.js) ruft ohne dieses Feld auf und setzt damit
+    // NIE `ui.domain` (Owner-Vorgabe: "stdio setzt ui.domain NIE").
+    registerResource(server, widgetId, { language, chatgptEgress = false } = {}) {
       const uri = uiResourceUri(widgetId);
       server.registerResource(
         widgetId,
         uri,
         { title: widgetTitle(widgetId), mimeType },
         async () => ({
-          contents: [{ uri, mimeType, text: widgetHtml(widgetId, language), _meta: uiResourceMeta() }],
+          contents: [
+            { uri, mimeType, text: widgetHtml(widgetId, language), _meta: uiResourceMeta(chatgptEgress) },
+          ],
         }),
       );
     },

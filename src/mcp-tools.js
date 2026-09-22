@@ -804,6 +804,15 @@ const withOpenAiToolMetadata = (name, config) => {
 // consultAllowed (AL-P13) defaultet auf FALSE (nicht wie allowCalendar auf true): der
 // stdio-Transport hat kein Client-Modell, das pollt, und ein Default-an wuerde die
 // byte-gepinnte Beschreibungs-Inventur ohne Not verschieben.
+// chatgptEgress (T2-01 Nachbau): true NUR, wenn routes/mcp.js die Anfrage ueber die
+// veroeffentlichten ChatGPT-Egress-IP-Bereiche als ChatGPT erkannt hat (chatgpt-
+// egress.js) - steuert AUSSCHLIESSLICH, ob die Widget-Resource zusaetzlich zum Alias
+// openai/widgetDomain auch `_meta.ui.domain` traegt (contract.js uiResourceMeta).
+// Default false: der stdio-Transport (mcp-server.js) hat nie eine Client-IP und ruft
+// registerTools ohne dieses Feld auf -> setzt `ui.domain` NIE (Owner-Vorgabe). BEWUSST
+// ohne `= false` an dieser Stelle (kein weiteres AssignmentPattern, komplexitaets-
+// neutral - registerTools steht mit den bestehenden Defaults bereits am Limit von 10);
+// die Boolean-Absicherung passiert am Verwendungsort in enableWidgetUi.
 export function registerTools(
   server,
   {
@@ -813,6 +822,7 @@ export function registerTools(
     consultAllowed = false,
     uiHost = null,
     language = null,
+    chatgptEgress,
   } = {},
 ) {
   const call = (method, path, body) => api({ method, path, body, identity, scopedTenant });
@@ -870,7 +880,13 @@ export function registerTools(
     // E4/P13: die servergerenderte Widget-Sprache ist die Agentensprache. Weitergereicht
     // wird die BEREITS aufgeloeste loc.language (nie das rohe language-Feld) - damit gilt
     // im Widget dieselbe eine Aufloesungsregel wie im Text- und im Anrufkanal.
-    uiRenderer.registerResource(server, widgetId, loc.language);
+    // chatgptEgress (T2-01 Nachbau): reine Weiterreichung des ctx-Felds oben (Boolean-
+    // Absicherung hier, s. Kommentar an registerTools) - steuert NUR, ob der
+    // Resource-Inhalt zusaetzlich `_meta.ui.domain` traegt.
+    uiRenderer.registerResource(server, widgetId, {
+      language: loc.language,
+      chatgptEgress: chatgptEgress === true,
+    });
     return { _meta: uiRenderer.toolMeta(widgetId) };
   };
 
