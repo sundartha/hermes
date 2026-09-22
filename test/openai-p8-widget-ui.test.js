@@ -339,11 +339,12 @@ test("P8-F (HTTP): Tool-Deskriptor-_meta und resources/list-Eintraege tragen unv
 // (Pruefer-Befund Runde 2, "wichtig": P8-F prueft nur Schluesselmengen, nicht Werte/Bytes,
 // und deckt resources/read gar nicht ab. Hier: sha256 der vollen, kanonisierten
 // JSON-Serialisierung von tools/list + resources/list + jedem resources/read, verglichen
-// mit dem eingecheckten master-Hash (s. Konstanten oben). Weicht ein Hash ab, muss der
-// naechste Blick der volle Klartext-Diff sein (nicht nur "der Test ist rot") - deshalb
-// wird bei Abweichung das kanonisierte Objekt mitgeloggt.
+// mit dem gepinnten T2-01-Sollwert (s. Konstanten oben, NICHT master - der Wert wurde seit
+// P8 bewusst neu gepinnt, s. Kommentar dort). Weicht ein Hash ab, muss der naechste Blick
+// der volle Klartext-Diff sein (nicht nur "der Test ist rot") - deshalb wird bei Abweichung
+// das kanonisierte Objekt mitgeloggt.
 
-test("P8-I (HTTP): tools/list + resources/list + alle resources/read byte-identisch zu master", async () => {
+test("P8-I (HTTP): tools/list + resources/list + alle resources/read byte-identisch zum gepinnten T2-01-Sollwert", async () => {
   const srv = await startServer({ seed: seedState({}), env: { MCP_UI_ENABLED: "true" } });
   try {
     const tools = await httpToolsList(`${srv.localUrl}/mcp`);
@@ -357,14 +358,14 @@ test("P8-I (HTTP): tools/list + resources/list + alle resources/read byte-identi
     assert.equal(
       hash,
       EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP,
-      `Byte-Abweichung von master, kanonisiertes Capture:\n${JSON.stringify(canonicalize(captured), null, JSON_INDENT)}`,
+      `Byte-Abweichung vom gepinnten T2-01-Sollwert, kanonisiertes Capture:\n${JSON.stringify(canonicalize(captured), null, JSON_INDENT)}`,
     );
   } finally {
     await srv.stop();
   }
 });
 
-test("P8-J (stdio): tools/list + resources/list + alle resources/read byte-identisch zu master", async () => {
+test("P8-J (stdio): tools/list + resources/list + alle resources/read byte-identisch zum gepinnten T2-01-Sollwert", async () => {
   await withStdioClient({ MCP_UI_ENABLED: "true" }, {}, async (client, stderr) => {
     const tools = await stdioRawToolsList(client);
     const resources = await stdioRawResourcesList(client);
@@ -377,7 +378,7 @@ test("P8-J (stdio): tools/list + resources/list + alle resources/read byte-ident
     assert.equal(
       hash,
       EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO,
-      `Byte-Abweichung von master (stderr: ${stderr()}), kanonisiertes Capture:\n${JSON.stringify(canonicalize(captured), null, JSON_INDENT)}`,
+      `Byte-Abweichung vom gepinnten T2-01-Sollwert (stderr: ${stderr()}), kanonisiertes Capture:\n${JSON.stringify(canonicalize(captured), null, JSON_INDENT)}`,
     );
   });
 });
