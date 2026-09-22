@@ -139,7 +139,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   tenancy: 13,
   // P1 (i18n-Fix): deployedCommit ergaenzt (Deploy-Commit fuer /healthz + Boot-Banner) -> 8.
   // E7: openaiAppsChallengeToken ergaenzt (Domain-Ownership-Token, O-4/O-5) -> 9.
-  server: 9,
+  // T2-04: publicUrlExplicit ergaenzt (abgeleitete Herkunfts-Tatsache fuer die
+  // PUBLIC_URL-Boot-Pflicht, T-32) -> 10.
+  server: 10,
   store: 3,
   metrics: 1,
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
@@ -205,7 +207,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // IEX-B1: vier Inbound-Ausfall-Schwellen (billing) ergaenzt -> 196.
 // E5: mcpAllowedOrigins + mcpOriginEnforce (safety) ergaenzt -> 198.
 // E7: openaiAppsChallengeToken (server) ergaenzt -> 199.
-const EXPECTED_TOTAL_KEYS = 199;
+// T2-04: publicUrlExplicit (server) ergaenzt -> 200.
+const EXPECTED_TOTAL_KEYS = 200;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die gepinnten Counts und disjunkte Blaetter", () => {
   assert.deepEqual(
@@ -372,7 +375,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // E5: mcpOriginEnforce ist primitiv (Boolean) -> 184. mcpAllowedOrigins ist das
   // SIEBTE Array (kein primitives Blatt, s.u.).
   // E7: openaiAppsChallengeToken ist primitiv (String, kein Array/nested Objekt) -> 185.
-  const EXPECTED_PRIMITIVE_LEAVES = 185;
+  // T2-04: publicUrlExplicit ist primitiv (Boolean, kein Array/nested Objekt) -> 186.
+  const EXPECTED_PRIMITIVE_LEAVES = 186;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

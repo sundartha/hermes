@@ -13,7 +13,7 @@ const SAFE_PROD = {
   auth: { dashboardPassword: "geheim", mcpAuth: "", oauthIssuerUrl: "", oauthAudience: "" },
   safety: { skipTwilioSignatureCheck: false },
   store: { storeBackend: "pg" },
-  server: { publicUrl: "https://agent.test" },
+  server: { publicUrl: "https://agent.test", publicUrlExplicit: true },
 };
 
 const MCP_AUTH_PATTERN = /MCP_AUTH/;

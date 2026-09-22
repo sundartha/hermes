@@ -1947,11 +1947,6 @@
       "count": 2
     }
   },
-  "test/config-prod-footguns.test.js": {
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
   "test/config-shape.test.js": {
     "id-length": {
       "count": 6
