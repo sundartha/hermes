@@ -18,7 +18,19 @@ import {
   SIP_PASSWORD_MIN_LENGTH,
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,
 } from "../src/elevenlabs/inbound-path-decision.js";
-import { OAUTH_SCOPES } from "../src/auth.js";
+// KEIN statischer Import von src/auth.js hier (Regressions-Fund, s. startIdp unten):
+// src/auth.js importiert src/config.js, dessen `config`-Konstante EINMALIG bei der
+// ERSTEN Ausfuehrung des Moduls gebaut wird (Zeile "export const config = ...").
+// helpers.js wird von praktisch jeder Testdatei statisch importiert, VOR jedem
+// `before()`-Hook - ein statischer Import hier haette config.js schon beim Laden
+// dieser Datei ausgewertet, mit dem `DATA_DIR` von VOR dem Test-Setup. Jede Testdatei,
+// die danach store.js im selben Prozess importiert (kein Kindprozess), haette dann ein
+// eingefrorenes, falsches `config.dataDir` bekommen - `store.getCall()` faende nichts
+// (Wurzel des Massenausfalls in test/afix-p4-*, test/al-*, test/cq-p4-*, ...). Der
+// dynamische Import unten in `startIdp()` verschiebt die erste config.js-Auswertung
+// auf den tatsaechlichen Aufrufzeitpunkt - der liegt in JEDEM bestehenden Aufrufer nach
+// dem eigenen Env-Setup, weil `startIdp()` einen Kindprozess-Server aufsetzt und sein
+// Ergebnis erst danach an `startServer({ env: {...} })` uebergeben wird.
 
 // ROOT exportiert (AM3): single-origin-serving.test.js bildet einen RELATIVEN
 // WEB_DIST_DIR gegen das Arbeitsverzeichnis des Spawn-Childs (= ROOT).
@@ -1268,6 +1280,9 @@ const KID = "test-key-1";
 // oeffentlichen Schluessel. Liefert Issuer-URL + Signierer. metadataPath waehlt
 // den Well-known-Pfad (WorkOS AuthKit nutzt oauth-authorization-server).
 export async function startIdp({ metadataPath = "/.well-known/openid-configuration" } = {}) {
+  // Dynamischer statt statischer Import (Begruendung am Datei-Kopf) - liest
+  // src/auth.js/config.js erst JETZT, nicht beim Laden von helpers.js.
+  const { OAUTH_SCOPES } = await import("../src/auth.js");
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const jwk = { ...(await exportJWK(publicKey)), kid: KID, alg: "RS256", use: "sig" };
 
