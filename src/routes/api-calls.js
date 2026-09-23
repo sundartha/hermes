@@ -289,6 +289,8 @@ const languageUnavailableBody = () => ({
 // no-magic-numbers-Inventur dieser Datei unveraendert). Dieselbe Klasse wie der
 // Gate-Fehlerpfad (outbound-gates.js) - Dienst voruebergehend nicht moeglich, kein Anruf.
 const HTTP_SERVICE_UNAVAILABLE = 503;
+// Die Erfolgsantwort eines deduplizierten Aufrufs (antwortOhneNeuenAnruf), benannt wie oben.
+const HTTP_OK = 200;
 
 // Der Text der Fehlerklammer. Bewusst NICHT sprachabhaengig und bewusst generisch, dieselbe
 // Begruendung wie GATE_ERROR_MESSAGE (outbound-gates.js): die Sprachquelle koennte im
@@ -310,15 +312,17 @@ const CLAIM_ERROR_MESSAGE =
 // im selben synchronen Lock-Body wie die Dedup-Entscheidung - die einzige Stelle, an der
 // Zaehlen und Anlegen atomar zusammenfallen. Reihenfolge: Dedup zuerst (ein laufender Anruf
 // verbraucht ohnehin keinen neuen Slot), dann Quote, erst dann createCall.
+// created=false heisst: KEIN neuer Datensatz - entweder ein laufender Anruf (call) oder eine
+// Quoten-Ablehnung (denial). Beide Ausgaenge beantwortet antwortOhneNeuenAnruf (unten).
 function claimCallRecord({ store, ctx, felder, nowMs, callQuotaDenial }) {
   const laufender = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
     to: ctx.to,
     nowMs,
   });
-  if (laufender) return { call: laufender, deduplicated: true };
+  if (laufender) return { call: laufender, created: false };
   const denial = callQuotaDenial(ctx);
-  if (denial) return { denial };
-  return { call: store.createCall(felder), deduplicated: false };
+  if (denial) return { denial, created: false };
+  return { call: store.createCall(felder), created: true };
 }
 
 // E3: EINE Antwortform fuer beide Ausgaenge (G5) - der deduplizierte Aufruf beantwortet
@@ -336,6 +340,26 @@ function placeCallResponseBody({ call, ctx, config, deduplicated }) {
     deduplicated,
     context_received: contextReceivedMeta(ctx.context, config), // I10
     diagnostic: call.diagnostic, // P2b
+  };
+}
+
+// E3 + T2-08 (T-27): die Antwort auf einen Claim OHNE neuen Datensatz (claimCallRecord
+// created=false). Die Reserve ist zu diesem Zeitpunkt bereits zurueckgebucht (Aufrufer).
+// Quoten-Ablehnung im Claim-Lock -> derselbe Ausgang wie eine fruehe number_gate-Ablehnung
+// (Audit+Metrik ueber beobachteAblehnung, Status/Text aus dem Gate). Deduplizierter Aufruf
+// -> Audit place_call_dedup + die EINE Antwortform (placeCallResponseBody, 200). In beiden
+// Faellen KEIN Originate, KEIN Consult, KEIN Timer, KEIN Kostenprofil. Modul-Ebene
+// (Praezedenz beobachteAblehnung): die gepinnte Riesenfunktion waechst dadurch nicht.
+function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }) {
+  if (claim.denial) {
+    beobachteAblehnung({ store, audit, denial: claim.denial, req, tenantId: ctx.tenantId });
+    return claim.denial;
+  }
+  const { call } = claim;
+  audit("place_call_dedup", req, `to=${ctx.to} call=${call.id} tenant=${ctx.tenantId}`);
+  return {
+    status: HTTP_OK,
+    body: placeCallResponseBody({ call, ctx, config, deduplicated: true }),
   };
 }
 
@@ -555,29 +579,19 @@ export function makeCallRoutes({
       const claim = await store.withStoreLock(() =>
         claimCallRecord({ store, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
       );
-      // T2-08 (T-27): die im Lock erneut geprueften Quoten (Stundenlimit/Ziel-Cap) haben
-      // NACH Dedup, aber VOR der Datensatz-Anlage abgelehnt - derselbe Ausgang wie eine
-      // fruehe number_gate-Ablehnung: Reserve zurueck (ZWEITER, kurzer Lock-Abschnitt, wie
-      // beim Dedup-Zweig unten), Audit+Metrik ueber beobachteAblehnung, KEIN Originate,
-      // KEIN Consult, KEIN Timer, KEIN Kostenprofil - es entstand kein Datensatz.
-      if (claim.denial) {
-        await store.withStoreLock(() =>
-          store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents),
-        );
-        beobachteAblehnung({ store, audit, denial: claim.denial, req, tenantId: ctx.tenantId });
-        return res.status(claim.denial.status).json(claim.denial.body);
-      }
       call = claim.call;
-      // E3: deduplizierter Aufruf - KEIN Originate, KEIN Consult, KEIN Timer, KEIN Kostenprofil.
-      // Die selbst gebuchte Reserve geht in einem ZWEITEN, kurzen Lock-Abschnitt zurueck (der
-      // erste traegt allein die Claim-Entscheidung), ohne Datensatz und damit ohne Stunden-
-      // oder Ziel-Kontingent-Verbrauch.
-      if (claim.deduplicated) {
+      // E3 + T2-08 (T-27): kein neuer Datensatz (deduplizierter Aufruf ODER im Lock erneut
+      // gepruefte Quote Stundenlimit/Ziel-Cap abgelehnt) - KEIN Originate, KEIN Consult, KEIN
+      // Timer, KEIN Kostenprofil. Die selbst gebuchte Reserve geht in einem ZWEITEN, kurzen
+      // Lock-Abschnitt zurueck (der erste traegt allein die Claim-Entscheidung), ohne
+      // Datensatz und damit ohne Stunden- oder Ziel-Kontingent-Verbrauch. Die Antwort
+      // (Ablehnung bzw. Dedup) formt antwortOhneNeuenAnruf.
+      if (!claim.created) {
         await store.withStoreLock(() =>
           store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents),
         );
-        audit("place_call_dedup", req, `to=${ctx.to} call=${call.id} tenant=${ctx.tenantId}`);
-        return res.json(placeCallResponseBody({ call, ctx, config, deduplicated: true }));
+        const antwort = antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config });
+        return res.status(antwort.status).json(antwort.body);
       }
       audit(
         "place_call",
@@ -760,8 +774,8 @@ export function makeCallRoutes({
     if (!callVisibleTo(call, requestTenant(req)))
       return res.status(404).json({ error: "not found" });
     if (call.status !== "active") return res.json({ status: call.status });
-    const requestedBy = internalIdentity(req) || OWNER_ID; // L5: forensisch nachvollziehbar
-    audit("cancel_call", req, `call=${call.id} requestedBy=${requestedBy}`);
+    // L5: requestedBy forensisch nachvollziehbar (interne Identitaet, sonst der Owner).
+    audit("cancel_call", req, `call=${call.id} requestedBy=${internalIdentity(req) || OWNER_ID}`);
     // S1-4 Fix (Owner-Auftrag 15.08.2026): hangUpAction() EINMAL ausgewertet (vorher
     // zweimal identisch aufgerufen, das erste Ergebnis nur als Boolean verworfen) -
     // providerHangUp ist zugleich der Telnyx-Thunk UND die Telnyx-Form-Erkennung.

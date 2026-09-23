@@ -337,6 +337,23 @@ export const PLACE_CALL_HOP_TIMEOUT_MS = 180000;
 // test/openai-t2-08-hop-frist.test.js faellt dann rot (Ungleichungs-Test).
 export const MCP_HOP_TIMEOUT_MS = 60000;
 
+// T2-08 (T-27): der Hop, ueber den registerTools' call() JEDEN uebrigen MCP->REST-Aufruf
+// fuehrt - mit MCP_HOP_TIMEOUT_MS statt gar keiner Frist (Befund: nur pollConsult/
+// placeCallHop hatten bisher eine). Ein Zeitablauf ist HIER - anders als beim Long-Poll -
+// kein normales Ereignis: er wird zu einer stabilen Kennung (HOP_TIMEOUT), die wrapHandler
+// in der Tenant-Sprache ausgibt (Muster CALL_START_UNCONFIRMED). NIE "fehlgeschlagen": die
+// Aktion kann serverseitig trotzdem gelaufen sein. Modul-Ebene statt inline in
+// registerTools (Muster withWidgetLocale): der gepinnte registerTools-Befund
+// (eslint-legacy-exceptions.json) waechst dadurch nicht.
+async function boundedHop(request) {
+  try {
+    return await api({ ...request, timeoutMs: MCP_HOP_TIMEOUT_MS });
+  } catch (err) {
+    if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.HOP_TIMEOUT);
+    throw err;
+  }
+}
+
 const NO_CONSULT_EVENT = Object.freeze({
   event: CONSULT_EVENT.NONE,
   eventId: null,
@@ -878,19 +895,8 @@ export function registerTools(
     language = null,
   } = {},
 ) {
-  // T2-08 (T-27): JEDER Hop ueber call() bekommt jetzt MCP_HOP_TIMEOUT_MS statt gar keiner
-  // Frist (Befund: nur pollConsult/placeCallHop hatten bisher eine). Ein Zeitablauf ist HIER
-  // - anders als beim Long-Poll - kein normales Ereignis: er wird zu einer stabilen Kennung
-  // (HOP_TIMEOUT), die wrapHandler in der Tenant-Sprache ausgibt (Muster CALL_START_
-  // UNCONFIRMED). NIE "fehlgeschlagen": die Aktion kann serverseitig trotzdem gelaufen sein.
-  const call = async (method, path, body) => {
-    try {
-      return await api({ method, path, body, identity, scopedTenant, timeoutMs: MCP_HOP_TIMEOUT_MS });
-    } catch (err) {
-      if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.HOP_TIMEOUT);
-      throw err;
-    }
-  };
+  // T2-08 (T-27): JEDER Hop ueber call() hat eine Frist - s. boundedHop (Modul-Ebene).
+  const call = (method, path, body) => boundedHop({ method, path, body, identity, scopedTenant });
   // Eigener, benannter Zugang fuer den EINEN lange haltenden Aufruf (kein viertes
   // Positions-Argument an call(), keine zweite fetch-Implementierung). Ein Zeitablauf
   // ist das NORMALE Ergebnis eines Long-Polls und wird deshalb GEZIELT zu event="none" -

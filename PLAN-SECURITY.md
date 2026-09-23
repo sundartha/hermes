@@ -5961,24 +5961,25 @@ derselben Messung). Derselbe Zaehl-dann-Anlegen-Abstand gilt fuer den Ziel-Cap. 
 `await_call_event`) lief ohne, ein haengender Gateway-Handler haette den MCP-Client unbegrenzt
 blockiert.
 
-**1. Quoten-Pruefung als eigenstaendige Fabrik (`src/telephony/outbound-gates.js#makeCallQuotaCheck`):**
-`callQuotaError(to, caller)` (Stundenlimit vor Ziel-Cap, Texte/Status byte-identisch zum Bestand)
-und `callQuotaDenial(ctx)` (dieselbe `number_gate`-Ablehnungsform) liegen AUSSERHALB von
-`makeOutboundGates` — Muster `makeAniOwnershipGate` (OUTBOUND-E4): `makeOutboundGates` ist eine
-bereits gepinnte Altlast (`eslint-suppressions.json`, `max-lines-per-function`); die Extraktion
-haelt den Pin, statt ihn zu bewegen (kein neuer `eslint-legacy-exceptions.json`-Eintrag noetig —
-ein Bau-Agent darf laut `test/check-staged-suppressions.test.js` keinen setzen). Injiziert werden
-die UNVERAENDERTEN Praedikate `tenantHourReached`/`perTargetCapReached`/`gateTexts`; `numberGateError`
-bleibt bewusst byte-identisch zum Bestand (ruft die Fabrik NICHT auf) — dieselbe Schwellwert-Logik
-ist trotzdem EINE Quelle (beide Aufrufer injizieren dieselben Praedikate), dupliziert ist nur die
-Antwortformung.
+**1. EINE Quoten-Pruefung (`src/telephony/outbound-gates.js#callQuotaError`):** Stundenlimit vor
+Ziel-Cap, Texte/Status byte-identisch zum Bestand, Vertrag `{status,grund,message}` wie
+`kycGateError`. `numberGateError` (fruehes `number_gate`) und `callQuotaDenial(ctx)` (Claim-Lock)
+rufen BEIDE diese eine Funktion — Schwellwert UND Antwortformung sind eine Quelle, sie koennen nicht
+auseinanderlaufen. Die Ablehnungsform `{status, body, audit}` fuer den Claim-Lock baut der
+Modul-Helfer `quotaDenialOf` (derselbe `denialAudit`-Detailtext wie im `number_gate`).
+`makeOutboundGates` liefert zusaetzlich `callQuotaDenial`; ihr gepinnter
+`max-lines-per-function`-Befund (`eslint-suppressions.json`) bleibt unveraendert, ohne
+Altlast-Eintrag und ohne Ein-Zeilen-Umgehung.
 
 **2. Quote im Claim-Lock erneut geprueft, Rennen geschlossen (`src/routes/api-calls.js#claimCallRecord`):**
 im SELBEN synchronen `withStoreLock`-Abschnitt wie die Dedup-Entscheidung (KEIN `await` im
 Lock-Body — Invariante `store.js`) prueft `claimCallRecord` nach der Dedup, aber VOR `createCall`,
-zusaetzlich `callQuotaDenial(ctx)`. Bei Ablehnung: `{ denial }` statt eines neuen Datensatzes; die
-Route behandelt das wie den Dedup-Zweig (Reserve in einem zweiten, kurzen Lock-Abschnitt zurueck,
-Audit+Metrik ueber `beobachteAblehnung`, KEIN Originate/Consult/Timer/Kostenprofil). Die fruehe
+zusaetzlich `callQuotaDenial(ctx)`. Bei Ablehnung: `{ denial, created: false }` statt eines neuen
+Datensatzes; die Route behandelt das im selben Zweig wie den Dedup (`!claim.created`: Reserve in
+einem zweiten, kurzen Lock-Abschnitt zurueck, dann formt der Modul-Helfer `antwortOhneNeuenAnruf`
+die Antwort — Ablehnung mit Audit+Metrik ueber `beobachteAblehnung`, bzw. Dedup-200; KEIN
+Originate/Consult/Timer/Kostenprofil). Die gepinnten Befunde von `makeCallRoutes` in
+`eslint-legacy-exceptions.json` bleiben unveraendert. Die fruehe
 Pruefung im `number_gate`-Gate BLEIBT (spart Briefing-/Eroeffnungs-Token fuer einen Anruf, der
 ohnehin abgelehnt wird) — die Lock-Pruefung ist die VERBINDLICHE. `callQuotaDenial` reist
 `server.js -> app.js -> makeCallRoutes` durch mit lautem fail-closed-Default
@@ -5987,8 +5988,9 @@ Kompositionswurzel wirft in den bestehenden Claim-`catch` (503, Reserve zurueck,
 statt die Pruefung still auf "immer erlaubt" fallen zu lassen — kein Default `() => null`.
 
 **3. Frist fuer jeden uebrigen MCP-Hop (`src/mcp-tools.js`):** `MCP_HOP_TIMEOUT_MS = 60000`
-(benannte Konstante, KEIN Env-Knopf — Praezedenz `PLACE_CALL_HOP_TIMEOUT_MS`, E3), `call()` gibt sie
-als `timeoutMs` an `api()`. Ein Zeitablauf wird zu `MCP_ERROR_CODE.HOP_TIMEOUT` (de/en/fr) — NIE
+(benannte Konstante, KEIN Env-Knopf — Praezedenz `PLACE_CALL_HOP_TIMEOUT_MS`, E3), `call()` laeuft
+ueber den Modul-Helfer `boundedHop`, der sie als `timeoutMs` an `api()` gibt (der gepinnte
+`registerTools`-Befund bleibt unveraendert). Ein Zeitablauf wird zu `MCP_ERROR_CODE.HOP_TIMEOUT` (de/en/fr) — NIE
 "fehlgeschlagen": der Text sagt ausdruecklich, dass die Aktion trotzdem gelaufen sein kann und der
 Stand erneut abgefragt werden soll statt blind zu wiederholen (`cancel_call` ist serverseitig
 idempotent, `answer_consult` auf eine beantwortete Frage liefert 409, kein Pfad waehlt doppelt).
