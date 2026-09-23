@@ -25,6 +25,7 @@ import { Router } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerTools } from "../mcp-tools.js";
+import { registerNoTenantStubs } from "../mcp-no-tenant.js";
 import { HERMES_SERVER_INFO, mcpServerOptions } from "../mcp-server-info.js";
 import { applyToolSecuritySchemes } from "../mcp-security-schemes.js";
 import { consultAllowedFor } from "../consult/gate.js";
@@ -50,6 +51,15 @@ export function mcpRequestLabel(body) {
 
 const HTTP_FORBIDDEN = 403;
 
+// T2-05 (T-14): Audit-Log fuer JEDEN Kein-Mandant-Fall, unabhaengig vom Auth-Modus -
+// der forensische Pfad ("wer hat sich ohne Mandant gemeldet") bleibt fuer BEIDE
+// Antwort-Zweige vollstaendig, nur die HTTP-Antwort unterscheidet sich (s.
+// rejectIfNoTenant und die Registrierwahl im Handler). Wortlaut Bestand.
+function auditNoTenant(scopedTenant, req) {
+  if (scopedTenant !== TENANT_REJECT) return;
+  audit("auth_failed", req, "path=/mcp grund=kein_tenant");
+}
+
 // E4-Torschluss: ein GUELTIGES Token ohne Tenant-Zuordnung kommt bis hierher bis an
 // registerTools heran. Bewusst als eigene Funktion, aufgerufen IM Handler und NACH
 // mcpAuth, nicht als vorgelagerte Middleware: die wuerde den Fall "kein Token" von 401
@@ -58,9 +68,17 @@ const HTTP_FORBIDDEN = 403;
 // Herkunftswache benannt hat). Wortlaut identisch zu requireTenant (routes/_tenant.js) -
 // EIN Text fuer EINE Lage. Liefert true, wenn der Handler abbrechen muss (Antwort bereits
 // gesendet).
+//
+// T2-05 (T-14): sperrt NUR NOCH den Token-/Legacy-/off-Modus (kein req.auth - nur
+// verifyOauth setzt es, src/auth.js). Der OAuth-Fall (req.auth gesetzt UND
+// scopedTenant === TENANT_REJECT) bekommt HIER keine Sperre mehr: er laeuft weiter in
+// den Handler und bekommt dort registerNoTenantStubs statt registerTools - eine
+// Werkzeugliste mit Stub-Handlern, deren tools/call-Ergebnis die Re-Auth-Challenge in
+// _meta["mcp/www_authenticate"] traegt (Pre-Mortem 2 PLAN-OPENAI-TECHNIK-2.md: die
+// Bedingung haengt bewusst an req.auth, nicht nur an scopedTenant, damit ein
+// Token-Aufrufer ueber die Interface-IP niemals eine Werkzeugliste bekommt).
 function rejectIfNoTenant(scopedTenant, req, res) {
-  if (scopedTenant !== TENANT_REJECT) return false;
-  audit("auth_failed", req, "path=/mcp grund=kein_tenant");
+  if (scopedTenant !== TENANT_REJECT || req.auth) return false;
   res.status(HTTP_FORBIDDEN).json({ error: "Keine Tenant-Zuordnung fuer diese Identitaet." });
   return true;
 }
@@ -128,6 +146,7 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
     // In-Process-Tools reichen (scopedTenant als X-Internal-Tenant), damit der REST-Hop
     // nicht aus der email-first Identitaet re-aufloest (sub/email-Divergenz).
     const scopedTenant = requestTenant(req);
+    auditNoTenant(scopedTenant, req);
     if (rejectIfNoTenant(scopedTenant, req, res)) return;
     const identity = logAndResolveIdentity({ req, scopedTenant });
     // Rechteprofil keyt seit Phase S auf den am Gateway aufgeloesten Tenant (scopedTenant),
@@ -170,7 +189,13 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
         enabled: uiEnabled,
         chatgptEgress: uiEnabled ? logAndDetectChatgptEgress(req) : false,
       };
-      registerTools(server, {
+      // T2-05 (T-14): OAuth-Kein-Mandant registriert die Stub-Fassade
+      // (registerNoTenantStubs, src/mcp-no-tenant.js) statt der echten Werkzeuge - EINE
+      // Verzweigung, keine zweite Kopie des Aufrufs. scopedTenant erreicht diese Zeile
+      // im OAuth-Kein-Mandant-Fall bereits als TENANT_REJECT (requestTenant); die Stub-
+      // Fassade erzwingt ihn zusaetzlich intern (Pre-Mortem 1, nie null).
+      const register = scopedTenant === TENANT_REJECT ? registerNoTenantStubs : registerTools;
+      register(server, {
         identity,
         scopedTenant,
         allowCalendar: profile.allowCalendar,

@@ -21,8 +21,12 @@
 // ist die vom Auth-Server beworbene Identitaets-Scope-Menge S (src/auth.js
 // OAUTH_SCOPES, einzige Quelle der Literale) - KEIN fachlicher Hermes-
 // Berechtigungs-Scope; D0-7 ("kein Scope konsumiert/beworben") ist durch T-16
-// ueberholt. Die fachliche Zugriffsgrenze bleibt unveraendert Audience +
-// Mandantenbindung (rejectIfNoTenant, src/routes/mcp.js).
+// ueberholt. Die fachliche Zugriffsgrenze bleibt Audience + Mandantenbindung: im
+// Token-/Legacy-Modus weiterhin HTTP 403 (rejectIfNoTenant, src/routes/mcp.js); im
+// OAuth-Modus liefert ein gueltiges Token ohne Mandant seit T2-05 (T-14) statt 403 eine
+// Werkzeugliste mit Stub-Handlern (registerNoTenantStubs, src/mcp-no-tenant.js), deren
+// tools/call-Ergebnis eine Re-Auth-Challenge traegt - die Zugriffsgrenze bleibt
+// bestehen, nur die Antwortform aendert sich (kein echter Handler laeuft je).
 //
 // T2-23-Nachtrag (unabhaengiger Pruefer, 2026-09-22): der obige Satz "kein Werkzeug
 // ist ohne Token erreichbar, also ist noauth falsch" galt nur fuer den oauth-Modus -
