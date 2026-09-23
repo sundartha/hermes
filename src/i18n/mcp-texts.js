@@ -49,6 +49,14 @@ export const MCP_ERROR_CODE = Object.freeze({
   NOT_FOUND: "not_found",
   NOT_PERMITTED: "not_permitted",
   REQUEST_REJECTED: "request_rejected",
+  // T2-09-Nachbesserung (Safety-Review-Befund mcp-tools.js:435): der Anrufstart selbst
+  // ist bei einem 5xx OHNE bekannten Ablehnungsgrund (Originate/Provider-Ablehnung,
+  // api-calls.js originate-catch) KEIN "vorruebergehend nicht erreichbar" - der Anruf-
+  // Datensatz existiert bereits (endFailedCallWithReason lief), ein Retry legt einen
+  // WEITEREN Anruf-Datensatz samt Reservierung an. Anders als UPSTREAM_UNREACHABLE laedt
+  // dieser Text NICHT zum sofortigen Wiederholen ein, sondern verweist auf list_calls -
+  // derselbe Retry-Vorsicht-Wortlaut wie CALL_START_UNCONFIRMED/HOP_TIMEOUT oben.
+  CALL_START_REJECTED: "call_start_rejected",
 });
 
 export const MCP_TEXTS = Object.freeze({
@@ -90,6 +98,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.NOT_PERMITTED]: "Diese Aktion ist fuer dieses Hermes-Konto nicht verfuegbar.",
       [MCP_ERROR_CODE.REQUEST_REJECTED]:
         "Die Anfrage wurde abgelehnt. Bitte die Eingabe pruefen und erneut versuchen.",
+      [MCP_ERROR_CODE.CALL_START_REJECTED]:
+        "Der Anruf konnte nicht gestartet werden. Bitte den Status in list_calls pruefen, " +
+        "bevor erneut angerufen wird.",
     }),
     // T2-09: Ablehnungstexte je Gate-Grund (s. mcp-denial-texts.js), EINE Quelle je Sprache.
     denials: MCP_DENIAL_TEXTS.de,
@@ -187,6 +198,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.NOT_PERMITTED]: "This action is not available for your Hermes account.",
       [MCP_ERROR_CODE.REQUEST_REJECTED]:
         "The request was rejected. Please check the input and try again.",
+      [MCP_ERROR_CODE.CALL_START_REJECTED]:
+        "The call could not be started. Please check the status with list_calls before " +
+        "calling again.",
     }),
     denials: MCP_DENIAL_TEXTS.en,
     emptyCalls: "No calls yet.",
@@ -252,6 +266,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.NOT_PERMITTED]: "Cette action n'est pas disponible pour ce compte Hermes.",
       [MCP_ERROR_CODE.REQUEST_REJECTED]:
         "La demande a été rejetée. Veuillez vérifier la saisie et réessayer.",
+      [MCP_ERROR_CODE.CALL_START_REJECTED]:
+        "L'appel n'a pas pu être démarré. Veuillez vérifier l'état dans list_calls avant " +
+        "de rappeler.",
     }),
     denials: MCP_DENIAL_TEXTS.fr,
     emptyCalls: "Aucun appel pour le moment.",

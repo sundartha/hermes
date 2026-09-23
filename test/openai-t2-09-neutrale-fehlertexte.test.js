@@ -13,10 +13,15 @@
 // den Env-Namen, (c) unbekannter Grund -> DENIAL_UNKNOWN + Server-Warnung, (d) Gateway
 // unerreichbar ohne "fetch failed", (e) 500 ohne Body ohne "HTTP 500", (f) 400-Eingabefehler
 // ohne reason bleibt durchgereicht (Entscheidung 3), (g) list_action_items ohne interne ID.
-// T4 (OAuth, Nicht-Bootstrap-Tenant): NICHT gebaut - s. Bericht (UNKNOWN mit Grund). T5(a)
-// deckt den 402-Minuten-Fall am Draht bereits, S1 deckt das REST-reason-Feld separat mit
-// einer echten PAYMENT_ENABLED/b2-Fixture ab.
+// T4 (OAuth, Nicht-Bootstrap-Tenant, ECHTES Minuten-Gate): Safety-Review-Nachbesserung -
+// jetzt gebaut (s. u.). PAYMENT_ENABLED + eine per OAuth-sub gebundene Nicht-Bootstrap-
+// Tenant-Fixture mit aufgebrauchten Plan-Minuten, Draht HTTP /mcp (Muster MCP-16:
+// startIdp + registerTenant/idpSubject). Prueft isError, den Wortlaut-Pin gegen
+// MCP_DENIAL_TEXTS.<lang>.minutes, das additive REST-reason=minutes UND keinen
+// entstandenen Call - auf demselben Server-Prozess, derselben Fixture.
 // T6: HTTP-Statusklassen ohne bekannten Grund (404/403/409-ausserhalb-answer_consult).
+// T7: place_call-5xx ohne Gate-Grund (Originate-/Provider-Fehlschlag) -> eigener neutraler
+// Text (CALL_START_REJECTED), der nicht zum sofortigen Wiederholen einlaedt.
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -29,7 +34,10 @@ import { registerTools } from "../src/mcp-tools.js";
 import { MCP_TEXTS, MCP_ERROR_CODE } from "../src/i18n/mcp-texts.js";
 import { MCP_DENIAL_TEXTS } from "../src/i18n/mcp-denial-texts.js";
 import { SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
-import { startServer, mcpPost, toolCall, readToolResult, ROOT, BASE_ENV } from "./helpers.js";
+import { startServer, startIdp, mcpPost, toolCall, readToolResult, ROOT, BASE_ENV, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
+import { makeDefaultState, settingsFor } from "../src/store/state-ops.js";
+import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
+import { findPlan } from "../src/plans.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -108,7 +116,7 @@ function assertNeutralText(text, label) {
   assert.doesNotMatch(text, /\d/, `${label}: enthaelt eine Ziffer`);
 }
 
-test("T2: jeder Ablehnungstext und die vier neuen Fehlertexte sind neutral (alle Sprachen)", () => {
+test("T2: jeder Ablehnungstext und die fuenf neuen Fehlertexte sind neutral (alle Sprachen)", () => {
   for (const lang of SUPPORTED_LANGUAGES) {
     for (const [grund, txt] of Object.entries(MCP_DENIAL_TEXTS[lang]))
       assertNeutralText(txt, `${lang}.denials.${grund}`);
@@ -117,6 +125,9 @@ test("T2: jeder Ablehnungstext und die vier neuen Fehlertexte sind neutral (alle
       MCP_ERROR_CODE.NOT_FOUND,
       MCP_ERROR_CODE.NOT_PERMITTED,
       MCP_ERROR_CODE.REQUEST_REJECTED,
+      // Safety-Review-Nachbesserung (Befund mcp-tools.js:435): eigener neutraler Text
+      // fuer einen Originate-Fehlschlag ohne Gate-Grund, s. T7 fuer die Draht-Klassifikation.
+      MCP_ERROR_CODE.CALL_START_REJECTED,
     ])
       assertNeutralText(MCP_TEXTS[lang].errors[code], `${lang}.errors.${code}`);
   }
@@ -158,6 +169,113 @@ test("T3 (Draht HTTP /mcp, Legacy/Bootstrap): OUTBOUND_FROZEN liefert den neutra
     assert.equal(srv.readStore().calls.length, before, "auch die direkte REST-Ablehnung erzeugt keinen Call");
   } finally {
     await srv.stop();
+  }
+});
+
+// ==================== T4: Draht HTTP /mcp, OAuth, echtes Minuten-Gate ====================
+
+const T4_TARGET = "+4915112345678";
+const T4_TENANT = "tenant-t2-09-oauth";
+const T4_SUB = "sub-t2-09-oauth";
+const T4_NUMBER = "+4915110000099";
+const T4_SECONDS_PER_DAY = 86400;
+const T4_MS_PER_SECOND = 1000;
+const T4_PERIOD_START_DAYS_AGO = 5; // Periodenanker im laufenden Fenster (Muster b2-quota-gate)
+const T4_PERIOD_START_SEC =
+  Math.floor(Date.now() / T4_MS_PER_SECOND) - T4_PERIOD_START_DAYS_AGO * T4_SECONDS_PER_DAY;
+const T4_STARTER_MIN = findPlan("starter").includedMinutes;
+
+// Nicht-Bootstrap-Tenant mit erschoepften Plan-Minuten, gebunden ueber OAuth-sub (Muster
+// MCP-16: state-ops statt seedState, damit settingsFor() die Sprache DETERMINISTISCH setzt
+// - unabhaengig von WORLD_DEFAULT_LANGUAGE_ENABLED, s. Befund mcp-tools.js:1046-1057). Die
+// uebrigen Gates (KYC, Allowlist/Abo, Nummer, Budget) muessen passieren, damit der Test
+// GENAU das Minuten-Gate isoliert - dieselbe Fixture-Form wie test/b2-quota-gate.test.js
+// seedQuota, hier ueber den OAuth-/mcp-Pfad statt X-Internal-Identity/REST.
+function t4MinutesExhaustedSeed() {
+  const state = makeDefaultState();
+  state.tenants.push({
+    id: T4_TENANT,
+    status: "active",
+    idpSubject: T4_SUB,
+    ownerName: "T2-09 OAuth Tenant",
+    kycLevel: "card",
+    stripePlanSlug: "starter",
+    stripeCurrentPeriodStart: T4_PERIOD_START_SEC,
+  });
+  state.numbers.push({
+    id: "num_t4_oauth",
+    e164: T4_NUMBER,
+    tenantId: T4_TENANT,
+    provider: "telnyx",
+    status: "active",
+    providerNumberId: null,
+  });
+  state.profiles[T4_TENANT] = { maxCallsPerHour: null }; // entkoppelt vom User-Hour-Gate (A4)
+  state.usageEvents.push({
+    id: "ue_t4_oauth",
+    tenantId: T4_TENANT,
+    callId: null,
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: T4_STARTER_MIN, // >= includedMinutes -> exceeded
+    costCents: 0,
+    occurredAt: new Date().toISOString(),
+    stripeMeterSent: false,
+  });
+  settingsFor(state, T4_TENANT).language = "en"; // deterministisch, unabhaengig vom Weltdefault
+  return state;
+}
+
+test("T4 (Draht HTTP /mcp, OAuth, echtes Minuten-Gate): erschoepfte Plan-Minuten -> isError mit dem Tabellentext, REST 402 reason=minutes, kein Call", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: {
+      ...PLAN_PRICE_BOOT_ENV,
+      MULTI_TENANT: "true",
+      PAYMENT_ENABLED: "true",
+      STRIPE_SECRET_KEY: "sk_test_x",
+      STRIPE_WEBHOOK_SECRET: "whsec_test_x",
+      STRIPE_API_BASE: "http://127.0.0.1:9",
+      NUMBER_SETUP_FEE_CENTS: "500",
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+    },
+    seed: t4MinutesExhaustedSeed(),
+  });
+  try {
+    const before = srv.readStore().calls.length;
+    const token = await idp.sign({ sub: T4_SUB });
+    const res = await mcpPost(
+      `${srv.localUrl}/mcp`,
+      token,
+      toolCall("place_call", { to: T4_TARGET, objective: "Termin vereinbaren" }),
+    );
+    const result = await readToolResult(res);
+    assert.equal(result.isError, true, "erschoepfte Minuten -> Fehlerergebnis");
+    assert.equal(
+      result.content[0].text,
+      MCP_TEXTS.en.denials.minutes,
+      "Wortlaut-Pin gegen den Tabellentext (Tenant-Sprache=en, deterministisch gesetzt)",
+    );
+    assert.equal(srv.readStore().calls.length, before, "kein Call entstanden");
+
+    // Gegenprobe: /api/calls direkt (X-Internal-Identity = OAuth-sub, derselbe Tenant)
+    // liefert denselben Status UND traegt additiv den Grund.
+    const apiRes = await fetch(`${srv.localUrl}/api/calls`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Internal-Identity": T4_SUB },
+      body: JSON.stringify({ to: T4_TARGET, objective: "Termin vereinbaren" }),
+    });
+    assert.equal(apiRes.status, HTTP_PAYMENT_REQUIRED);
+    const apiBody = await apiRes.json();
+    assert.equal(apiBody.reason, "minutes", "REST traegt additiv den Grund");
+    assert.equal(
+      srv.readStore().calls.length,
+      before,
+      "auch die direkte REST-Ablehnung erzeugt keinen Call",
+    );
+  } finally {
+    await srv.stop();
+    await idp.close();
   }
 });
 
@@ -388,5 +506,58 @@ test("T6: 404 -> NOT_FOUND, 403 ohne reason -> NOT_PERMITTED, 409 ausserhalb ans
       assert.equal(result.isError, true);
       assert.equal(result.content[0].text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.REQUEST_REJECTED]);
     });
+  }
+});
+
+// ==================== T7: place_call-5xx ohne Gate-Grund -> CALL_START_REJECTED ====================
+// Safety-Review-Befund mcp-tools.js:435: ein Originate-/Provider-Fehlschlag (500 ohne
+// providerStatus ODER 502 MIT providerStatus, s. api-calls.js originate-catch) hat KEIN
+// err.reason und fiel deshalb bisher auf UPSTREAM_UNREACHABLE ("try again later") -
+// obwohl bereits ein Anruf-Datensatz mit Fehlgrund existiert und ein Retry einen
+// WEITEREN Datensatz samt Reservierung anlegt. Gegenprobe (dritter Fall): ein 5xx MIT
+// bekanntem Gate-Grund (gate_error/ani_not_owned-Muster) bleibt UNVERAENDERT auf seinem
+// eigenen Ablehnungstext - die neue Klassifikation darf bestehende Gate-Texte nicht
+// verdraengen.
+const PROVIDER_REJECTED_STATUS = 502;
+const ORIGINATE_FAILED_STATUS = 500;
+const GATE_ERROR_STATUS = 503;
+const NO_RETRY_INVITATION = /try again|erneut versuchen|réessayer/i;
+
+test("T7 (Draht, lokaler Harness): place_call-5xx ohne reason -> CALL_START_REJECTED, verweist auf list_calls statt auf sofortiges Wiederholen", async () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    for (const status of [ORIGINATE_FAILED_STATUS, PROVIDER_REJECTED_STATUS]) {
+      await withFixedGateway(
+        { status, body: { error: "Provider hat den Anruf abgelehnt (HTTP 502)." } },
+        async () => {
+          const handlers = captureTools({ language: lang });
+          const result = await handlers.get("place_call")({
+            to: "+4915112345678",
+            objective: "Termin vereinbaren",
+          });
+          assert.equal(result.isError, true, `status=${status}`);
+          const text = result.content[0].text;
+          assert.equal(text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.CALL_START_REJECTED], `status=${status}`);
+          assertNeutralText(text, `${lang}.CALL_START_REJECTED (status=${status})`);
+          assert.doesNotMatch(
+            text,
+            NO_RETRY_INVITATION,
+            `${lang}.CALL_START_REJECTED (status=${status}): laedt nicht zum sofortigen Wiederholen ein`,
+          );
+        },
+      );
+    }
+    // Gegenprobe: 5xx MIT bekanntem Gate-Grund bleibt auf seinem eigenen Text (gate_error).
+    await withFixedGateway(
+      { status: GATE_ERROR_STATUS, body: { error: "Sicherheitspruefung nicht abgeschlossen.", reason: "gate_error" } },
+      async () => {
+        const handlers = captureTools({ language: lang });
+        const result = await handlers.get("place_call")({
+          to: "+4915112345678",
+          objective: "Termin vereinbaren",
+        });
+        assert.equal(result.isError, true);
+        assert.equal(result.content[0].text, MCP_TEXTS[lang].denials.gate_error);
+      },
+    );
   }
 });

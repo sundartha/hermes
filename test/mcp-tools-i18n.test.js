@@ -101,6 +101,13 @@ function toolText(result) {
 // Test bleibt an der spezifizierten SOLL-Assertion (kein deutscher Fallback-Text fuer den
 // EN-Tenant) - diese Assertion ist nach der Messung GRUEN, nicht rot wie im Katalog
 // vorhergesagt (Polaritaets-Abweichung, siehe Report).
+//
+// T2-09-Nachtrag (PLAN-SECURITY.md, Owner-Punkt): seit T2-09 baut wrapHandler den
+// Fallback-Text ueber texts.errors[UPSTREAM_UNREACHABLE] (loc.mcp), nicht mehr ueber
+// err.message durch - dieser Test haengt damit erstmals wirklich an DEFAULT_LANGUAGE
+// (WORLD_DEFAULT_LANGUAGE_ENABLED). Isoliert reproduzierbar: OHNE den Flag-Override rot
+// (Weltdefault "de"), MIT WORLD_DEFAULT_LANGUAGE_ENABLED=true (wie .env.example/BASE_ENV)
+// gruen. Kein Testfehler - der Env-Wert entscheidet, s. PLAN-SECURITY.md/T2-09.
 test("MCP-05: wrapHandler-Fallback bei Netzwerkfehler zeigt einem EN-Tenant keinen deutschen Text", async () => {
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = "http://127.0.0.1:1"; // kein lauschender Server -> ECONNREFUSED

@@ -373,6 +373,58 @@ const NOT_FOUND_STATUS = 404;
 const NOT_PERMITTED_STATUS = 403;
 const CLIENT_ERROR_STATUS_MIN = 400;
 const CLIENT_ERROR_STATUS_MAX = 499;
+// Safety-Review-Nachbesserung (Befund mcp-tools.js:435): Serverfehler-Bereich fuer die
+// placeCallHop-Klassifikation unten - benannt statt Magic Number, dieselbe Grenzen-Form
+// wie CLIENT_ERROR_STATUS_MIN/MAX oben.
+const SERVER_ERROR_STATUS_MIN = 500;
+const SERVER_ERROR_STATUS_MAX = 599;
+
+// Safety-Review-Nachbesserung (Befund mcp-tools.js:435): ein Originate-/Provider-
+// Fehlschlag (api-calls.js originate-catch, 500 ohne providerStatus ODER 502 MIT
+// providerStatus) traegt KEIN err.reason (das ist ausschliesslich den Gate-Ablehnungen
+// vorbehalten, s. denialResponseBody in api-calls.js). NUR dieser Fall - 5xx ohne
+// bekannten Gate-Grund - wird unten zu CALL_START_REJECTED umgemuenzt; ein 5xx MIT
+// reason (z.B. gate_error, ani_not_owned) bleibt unangetastet und laeuft weiterhin ueber
+// denialReasonText (Schritt 2 in toolErrorText), NICHT ueber diese Funktion.
+function isServerErrorWithoutReason(err) {
+  return (
+    typeof err?.reason !== "string" &&
+    typeof err?.httpStatus === "number" &&
+    err.httpStatus >= SERVER_ERROR_STATUS_MIN &&
+    err.httpStatus <= SERVER_ERROR_STATUS_MAX
+  );
+}
+
+// E3: eigener, benannter Zugang fuer den EINEN Aufruf, der einen echten Anruf ausloest -
+// dasselbe Muster wie pollConsult (kein viertes Positions-Argument an call(), keine zweite
+// fetch-Implementierung). Modul-Ebene statt Closure in registerTools() (haelt deren
+// Zeilenzahl klein - der Pin in eslint-legacy-exceptions.json haengt daran, wie bei
+// PLACE_CALL_DESCRIPTION/CHECK_INBOX_DESCRIPTION oben begruendet). Der Zeitablauf wird HIER
+// NICHT geschluckt (anders als beim Long-Poll pollConsult): er wird zu einer stabilen
+// Kennung, die wrapHandler in der Tenant-Sprache ausgibt. Safety-Review-Nachbesserung
+// (Befund mcp-tools.js:435): ein Originate-Fehlschlag OHNE Gate-Grund (5xx ohne err.reason,
+// s. isServerErrorWithoutReason) fiele sonst auf UPSTREAM_UNREACHABLE ("try again later") -
+// das laedt bei einer dauerhaften Provider-Ablehnung (falsche Absender-DID, Telnyx 403) zu
+// einem zweiten Anruf an dieselbe Person ein. CALL_START_REJECTED verweist stattdessen auf
+// list_calls, ohne den Anlass zu benennen (kein Provider-/Secret-Leak, der bleibt
+// serverseitig in api-calls.js).
+async function placeCallHop({ identity, scopedTenant, body }) {
+  try {
+    return await api({
+      method: "POST",
+      path: "/api/calls",
+      body,
+      identity,
+      scopedTenant,
+      timeoutMs: PLACE_CALL_HOP_TIMEOUT_MS,
+    });
+  } catch (err) {
+    if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_UNCONFIRMED);
+    if (isServerErrorWithoutReason(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_REJECTED);
+    throw err;
+  }
+}
+
 // Ein unbekannter Ablehnungsgrund darf den Server-Log weder sprengen noch mit Steuerzeichen
 // fuellen (Log-Injection) - deshalb auf [a-z_] und diese Laenge bereinigt, BEVOR er geloggt wird.
 const DENIAL_WARN_MAX_LEN = 40;
@@ -997,26 +1049,10 @@ export function registerTools(
       throw err;
     }
   };
-  // E3: eigener, benannter Zugang fuer den EINEN Aufruf, der einen echten Anruf ausloest -
-  // dasselbe Muster wie pollConsult (kein viertes Positions-Argument an call(), keine zweite
-  // fetch-Implementierung). call() selbst bleibt unangetastet, die uebrigen Werkzeuge damit
-  // byte-identisch. Der Zeitablauf wird hier NICHT geschluckt (anders als beim Long-Poll):
-  // er wird zu einer stabilen Kennung, die wrapHandler in der Tenant-Sprache ausgibt.
-  const placeCallHop = async (body) => {
-    try {
-      return await api({
-        method: "POST",
-        path: "/api/calls",
-        body,
-        identity,
-        scopedTenant,
-        timeoutMs: PLACE_CALL_HOP_TIMEOUT_MS,
-      });
-    } catch (err) {
-      if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_UNCONFIRMED);
-      throw err;
-    }
-  };
+  // E3/Safety-Review-Nachbesserung: placeCallHop lebt auf Modul-Ebene (s.o., haelt
+  // registerTools() klein - der Zeilen-Pin in eslint-legacy-exceptions.json haengt daran).
+  // Dieser Ein-Zeiler bindet nur identity/scopedTenant aus dem registerTools-Aufruf ein.
+  const placeCallHopCall = (body) => placeCallHop({ identity, scopedTenant, body });
   const loc = localeFor(language); // Namensgleich zu claude.js promptInputs
   const formatDate = makeDateFormatter(loc.dateLocale);
   const uiRenderer = uiRendererFor(uiHost); // null = Stufe-0-only (fail-closed)
@@ -1244,7 +1280,7 @@ export function registerTools(
       ...enableWidgetUi(WIDGET_CALL),
     },
     async (args) => {
-      const r = await placeCallHop(args);
+      const r = await placeCallHopCall(args);
       requireFields(r, { callId: "string" });
       const data = {
         call_id: r.callId,

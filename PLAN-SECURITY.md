@@ -6071,12 +6071,63 @@ Eingabe des Aufrufers, sonst koennte das Modell sie nicht reparieren), 4. HTTP-S
 `list_action_items` (O-13) nennt keine interne Item-ID mehr — kein Werkzeug und keine REST-Route
 nimmt eine entgegen.
 
-**Bewusst NICHT gebaut:** T4 (OAuth, Nicht-Bootstrap-Tenant, PAYMENT_ENABLED-Fixture ueber `/mcp`)
-— der 402-Minuten-Fall ist am Draht bereits ueber den stdio-Kindprozess belegt, das additive
-REST-`reason`-Feld separat mit einer echten Formfehler-/Frozen-Fixture.
-
 Tests: `test/openai-t2-09-neutrale-fehlertexte.test.js` (T1 Vollstaendigkeit gegen die Quelle
 inkl. Struktur-Waechter auf jeden `denialAudit()`-Aufruf, T2 Reinheit, T3 Draht HTTP `/mcp`
-Legacy/Bootstrap, S1 REST-`reason` additiv, T5 Draht stdio-Kindprozess gegen Gateway-Attrappe,
-T6 HTTP-Statusklassen), `test/mcp-tools.test.js` und `test/mcp-tools-language.test.js`
+Legacy/Bootstrap, T4 Draht HTTP `/mcp` OAuth mit echtem Minuten-Gate, S1 REST-`reason` additiv,
+T5 Draht stdio-Kindprozess gegen Gateway-Attrappe, T6 HTTP-Statusklassen, T7
+`place_call`-5xx-ohne-Grund), `test/mcp-tools.test.js` und `test/mcp-tools-language.test.js`
 (`list_action_items` ohne Item-ID angepasst) gruen.
+
+### Nachbesserung (Safety-/Clean-Code-Review, 2026-09-23)
+
+**T4 nachgezogen (war "bewusst NICHT gebaut"):** die Abnahme verlangt HTTP + stdio,
+PAYMENT_ENABLED, aufgebrauchte Plan-Minuten UND einen Tenant ausserhalb des Bootstrap-Zugangs,
+moeglichst OAuth. T5(a) deckte nur stdio mit einer Gateway-ATTRAPPE ({reason:"minutes"} vorgegeben)
+ab, S1 nur das REST-`reason`-Feld mit einer Frozen-Fixture — das ECHTE Minuten-Gate ueber `/mcp`
+mit einem echten OAuth-Token war ungemessen. Jetzt gebaut: `t4MinutesExhaustedSeed()` (state-ops
+statt `seedState()`, damit `settingsFor()` die Tenant-Sprache deterministisch auf `en` setzt) +
+`startIdp()`/`idp.sign({sub})`, dieselbe Fixture-Form wie `test/b2-quota-gate.test.js` `seedQuota`.
+Pruft: `isError` mit `MCP_TEXTS.en.denials.minutes`, REST 402 `reason=minutes`, kein Call in beiden
+Faellen.
+
+**`CALL_START_REJECTED` fuer `place_call`-5xx ohne Gate-Grund (Befund
+`mcp-tools.js:435`):** der Originate-/Provider-Fehlschlag in `routes/api-calls.js` (500 ohne
+`providerStatus`, 502 MIT `providerStatus` — die 502-Provider-Ablehnung nannte vorher die Account-/
+Nummern-Konfiguration) traegt KEIN `err.reason` (das ist ausschliesslich Gate-Ablehnungen
+vorbehalten) und fiel deshalb auf `UPSTREAM_UNREACHABLE` ("try again later"). Bei einer dauerhaften
+Provider-Ablehnung (z.B. falsche Absender-DID, Telnyx 403) laedt das zum sofortigen Wiederholen ein
+— obwohl bereits ein Anruf-Datensatz mit Fehlgrund existiert (`endFailedCallWithReason`,
+`startRejectionReason`) und jeder Retry einen weiteren Datensatz samt Reservierung anlegt. Neuer,
+eigener Text `CALL_START_REJECTED` (`isServerErrorWithoutReason`, `placeCallHop`-Catch in
+`mcp-tools.js`): 5xx OHNE `err.reason` -> Verweis auf `list_calls` statt Wiederholungs-Einladung.
+5xx MIT `err.reason` (`gate_error`/`ani_not_owned`) bleibt unangetastet auf seinem eigenen
+Ablehnungstext (Test T7, Gegenprobe). Reine Text-/Klassifikationsaenderung — kein neues REST-Feld,
+keine Gate-Logik veraendert (Status/Audit/Entscheidung unveraendert).
+
+**Bekannter Risiko-Punkt (KEIN Code-Fix in dieser Phase, Owner-Punkt):** der Fallback-Text
+`texts.errors[UPSTREAM_UNREACHABLE]` ist seit T2-09 fuer JEDEN Netzwerk-/Serverfehler ohne
+bekannten Grund erstmals real erreichbar (vorher lieferte `err.message` — z.B. "fetch failed" —
+immer einen nicht-leeren, sprachneutralen String durch). Dieser Fallback haengt an `loc.mcp`, das
+ohne explizite `ctx.language` auf `DEFAULT_LANGUAGE` (Weltdefault, P10) zurueckfaellt — live heute
+`de`, weil `WORLD_DEFAULT_LANGUAGE_ENABLED` in `render.yaml` bewusst auf `"false"` steht (P10-P13-
+Aktivierungsfenster, s. render.yaml-Kommentar dort) und der Code-Default ebenfalls `false` ist.
+`.env.example`/`BASE_ENV` (Tests) setzen `"true"`. Der bereits vorhandene Katalog-Test `MCP-05`
+(`test/mcp-tools-i18n.test.js`) deckt GENAU diesen Fall (EN-Tenant, unaufgeloeste Sprache,
+Netzwerkfehler) und kippt dadurch je nach `WORLD_DEFAULT_LANGUAGE_ENABLED` von gruen zu isoliert-rot
+(reproduziert: `NODE_ENV=test node --test --test-name-pattern="MCP-05" test/mcp-tools-i18n.test.js`
+ohne den Flag-Override -> rot; mit `WORLD_DEFAULT_LANGUAGE_ENABLED=true` -> gruen). Betroffen ist
+JEDER stdio-Aufruf (der Prozess hat keinen Store, s. `mcp-server.js`-Kommentar "faellt localeFor()
+auf den Weltdefault") und jeder HTTP-/mcp-Aufruf ohne aufgeloeste Tenant-Sprache — nicht nur die
+neuen T2-09-Texte, sondern der gesamte MCP-Textkanal (R7, vorbestehende, dokumentierte
+Architektur-Entscheidung). T2-09 macht diesen einen zusaetzlichen Fall (Netzwerkfehler) NEU
+konsistent mit dem Rest des Kanals — kein neuer Mechanismus, aber ein bisher zufaellig-gruener Test
+wird dadurch messbar. Kein Fix hier: Aendern von `DEFAULT_LANGUAGE`/`WORLD_DEFAULT_LANGUAGE_ENABLED`
+ist Gate-/Architektur-Logik ausserhalb des T2-09-Scopes (Texte an der MCP-Grenze) und eine bereits
+separat gefuehrte, groessere Entscheidung (P10-P13-Aktivierungsfenster). Owner-Punkt: pruefen, ob
+`WORLD_DEFAULT_LANGUAGE_ENABLED` im Render-Dashboard live tatsaechlich `true` gesetzt ist (Dashboard
+gilt vor `render.yaml` bei diesem dashboard-managed Service) — weicht der Live-Wert von `render.yaml`
+("false") ab, ist `render.yaml` nachzuziehen, damit die eingecheckte Quelle nicht am Live-Verhalten
+vorbeidokumentiert.
+
+Tests (Nachbesserung): T4 (s.o.), T7 (`CALL_START_REJECTED`, inkl. Gegenprobe `gate_error`
+unveraendert), T2 um `CALL_START_REJECTED` in der Neutralitaetspruefung erweitert.
