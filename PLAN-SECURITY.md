@@ -5783,3 +5783,101 @@ dieser Phase.
 
 Tests: `test/s2-mcp-origin.test.js` (Praefix `T2-06-`, Unit- und Drahtfaelle gegen den echten
 `/mcp`-Endpunkt in allen drei Auth-Modi).
+
+## OpenAI-T2-07 — Rate-Limit auf POST /mcp: je Mandant statt je IP (2026-09-23)
+
+**Anlass (T-28):** der EINE globale IP-Limiter (`createRateLimiter`, `RATE_LIMIT_PER_MIN`) zaehlte
+bislang auch `POST /mcp` je `req.ip`. Hinter OpenAIs gemeinsamen ChatGPT-Egress-IPs draengt das
+alle Nutzer in denselben Eimer — ein einzelner drosselter/fluteender Nutzer sperrt jeden anderen
+hinter derselben Egress-IP mit.
+
+**Loesung:** `POST /mcp` verlaesst den globalen IP-Limiter UND die globalen Body-Parser
+(`src/app.js#installGlobalMiddleware`, Praedikat `isMcpPost`). Auf der Route (`src/routes/mcp.js`)
+laufen stattdessen, in dieser Reihenfolge: Herkunftswache -> CORS (beide unveraendert, T2-06/E5) ->
+`mcpAuth` -> `mandantDrossel` -> dieselben zwei Body-Parser (jetzt HINTER der Auth) -> Handler.
+Zwei getrennte Fixed-Window-Zaehler (`src/mcp-rate-limit.js`, `makeMcpDrosseln`, EINE Instanz je
+Prozess, Limit = `RATE_LIMIT_PER_MIN`, Fenster/Sweep wie der globale Limiter):
+
+| Zaehler | Zaehlt | Schluessel |
+|---|---|---|
+| Ablehnung | JEDE Ablehnung von `mcpAuth` (kein Token, Muell-Signatur, falscher `iss`/`aud`, fehlendes `exp`, JWKS-Fehler, Token-/Legacy-Fehlschlag) | `ip:<req.ip>` |
+| Ablehnung | `ERR_JWT_EXPIRED` ODER `insufficient_scope`, JEWEILS mit nicht-leerem `sub` aus dem verifizierten Token | `sub:<sub>` |
+| Mandant | OAuth, Mandant aufgeloest | `tenant:<scopedTenant>` |
+| Mandant | OAuth, `TENANT_REJECT` (Stub-Fassade, T2-05) | `sub:<req.auth.sub>`, ohne `sub` `ip:<req.ip>` |
+| Mandant | kein `req.auth` (Token-/Legacy-/off-Modus) | `ip:<req.ip>` (unveraendert zu vorher) |
+| beide | `isTrustedLocalCaller(req)` (In-Process-MCP-Tools/stdio-Nachbau) | nicht gezaehlt (Paritaet zum globalen Limiter) |
+
+**Erst pruefen, dann zaehlen (Muster `initTokenSchranke`, IEX-A7):** `mcpAuth` entsteht seit dieser
+Phase aus `makeMcpAuth({ ablehnungsDrossel })` (Fabrik statt modulweitem Export; wirft ohne
+Drossel — fail-closed, kein ungedrosselter Default). JEDER Ablehnungszweig ruft NACH dem
+unveraenderten Audit-Log den injizierten Zaehler; ist dessen Fenster ausgeschoepft, ersetzt eine
+429 (`Retry-After`) die heutige 401/403-Antwort. Ein GUELTIGES Token durchlaeuft den
+Ablehnungs-Zaehler nie — er sieht ausschliesslich Ablehnungen.
+
+**Schluessel NUR aus verifizierten oder Netz-Quellen:** nie aus unverifiziertem Token- oder
+Body-Inhalt — insbesondere NICHT aus der anonymisierten Nutzer-ID, die der Client optional in
+`_meta` mitschickt (ein unverifizierter, nur von einem Host gesetzter Wert; der Mandant aus dem
+verifizierten Token ist die staerkere Grenze und deckt jeden Host ab). Das Map-Wachstum bleibt
+dadurch auf derselben Groessenordnung wie beim bisherigen globalen Limiter (IPs) plus Mandanten
+und vom eigenen Authorization-Server ausgestellte `sub`-Werte.
+
+**Pre-Mortem 1 (Egress-Refresh nicht faelschlich drosseln):** ein abgelaufenes, aber GUELTIG
+SIGNIERTES Token (`ERR_JWT_EXPIRED`) ist der normale Refresh-Anlass legitimer Clients hinter
+geteilten Egress-IPs — jose prueft die Signatur vor den Claims
+(`node_modules/jose/dist/webapi/jwt/verify.js`), nur der eigene Authorization-Server kann so ein
+Token ausgestellt haben. Es zaehlt darum je verifizierter `sub`, NIE je IP; derselbe Gedanke gilt
+fuer `insufficient_scope` (gueltige Signatur, zu wenig Scope). Jeder andere Ablehnungsgrund traegt
+keine verifizierte `sub` und faellt auf die IP zurueck (fail-closed: eine unbekannte/fehlende `sub`
+darf nie unbegrenzt bleiben).
+
+**Pre-Mortem 2 (unauthentifizierte Flut):** vorher liefen die globalen Parser VOR dem Limiter fuer
+JEDE Route. Fuer `POST /mcp` gilt seit dieser Phase: kein Parse vor `mcpAuth` — die beiden globalen
+Body-Parser-Instanzen (`withParserErrors(express.urlencoded)`, `withParserErrors(express.json)`)
+laufen unveraendert weiter, nehmen `POST /mcp` aber aus und werden UNVERAENDERT an
+`makeMcpRoutes` weitergereicht, wo sie HINTER `mcpAuth`+`mandantDrossel` haengen. Jede Ablehnung
+zaehlt weiter je IP (s.o.); Rest bleibt: je Anfrage ein JWT-Decode, hoechstens eine
+Signaturpruefung, JWKS-Nachladen bei unbekanntem `kid` hoechstens alle 30s (jose-Cache) — eine
+Flut ueber viele verschiedene IPs ist Sache der Hosting-Kante, nicht dieses Gates.
+
+**Pfad-Varianten strenger, nicht lockerer:** `isMcpPost` vergleicht Methode und Pfad EXAKT
+(`req.method === "POST" && req.path === "/mcp"`). Eine Variante (Gross-/Kleinschreibung,
+Schraegstrich am Ende), die Express trotzdem auf die Route matcht, bleibt im globalen IP-Limiter
+UND den globalen Parsern — dieselbe Menge wie vor dieser Phase, keine neue Luecke.
+
+| Punkt | Festlegung |
+|---|---|
+| Mandant EINMAL aufgeloest (INV-7) | `mandantDrossel` (`src/routes/mcp.js`) ruft `requestTenant(req)` genau einmal und legt das Ergebnis in `res.locals.scopedTenant` ab; der Handler liest von dort, ruft `requestTenant` nicht erneut. |
+| Funktionsname `mcpAuth` bleibt | Der Routen-Inventar-Test (`test/route-auth-inventory.test.js`) erkennt Auth am Namen der zurueckgegebenen Funktion aus `makeMcpAuth(...)` — ein Rename waere ein stiller Schutzverlust im Inventar. |
+| Kein neuer Env-Wert | `RATE_LIMIT_PER_MIN` bleibt DER Regler, seine Semantik ist nur um "je Mandant auf POST /mcp" erweitert (Kommentare in `src/config.js`, `.env.example`, `render.yaml`). |
+
+**Bewusst NICHT gebaut:**
+- Eigener Regler fuer das Ablehnungs-Limit — ohne Messgrundlage waere ein zweiter Wert Raten.
+- Log-Zeile je 429 — der HTTP-Status im Render-Log plus das bestehende `auth_failed`-Audit je
+  Ablehnung decken das ab; eine Zeile je Anfrage waere Log-Flut.
+- Harte Obergrenze der Schluesselzahl im Zaehler — Schluessel kommen nur aus IP/Mandant/AS-`sub`,
+  Sweep laeuft wie beim globalen Limiter, der Zaehler ist mit ihm und der Init-Schranke geteilt.
+- Verteilter Zaehler (Redis o.ae.) — heute ebenfalls je Prozess-Instanz wie der globale Limiter;
+  Mehr-Instanz-Betrieb ist eine eigene Entscheidung.
+- T-27 (Hop-Fristen fuer `cancel_call`/`answer_consult`/`check_inbox`, Stundenlimit-Sperre) —
+  eigene Phase; die Safety-Gates aus CLAUDE.md (Stundenlimit, Kostendecke, Denylist, Land-Gate,
+  Kill-Switch) sind unangetastet.
+
+**Bewusst getragene Restrisiken:**
+- Ein einzelner Mandant mit vielen parallelen `/mcp`-Anfragen je Minute (z.B. viele parallele
+  Anruf-Polls, ca. 10,9 Polls/min je laufendem Anruf, AL-P13-45) sperrt NUR sich selbst; Default
+  120 liegt weit darueber.
+- Neue ChatGPT-Verbindungen ohne Token hinter einer Egress-IP bekommen 429 statt der
+  401-Challenge, wenn ein Angreifer den IP-Eimer DERSELBEN IP zuvor leert — hoechstens ein Fenster
+  (60s).
+- UNKNOWN (kein Deploy-Vorbedingung): ob `req.ip` hinter dem Hosting-Proxy die echte Client-IP
+  ist. Liegt ein weiterer Proxy davor, war das IP-Limit schon vor dieser Phase faktisch global —
+  diese Phase entschaerft das eher, weil auf `/mcp` nur noch Fehlversuche je IP zaehlen.
+- `isTrustedLocalCaller` haengt an fehlendem `X-Forwarded-For`; wuerde der Hosting-Proxy den
+  Header nicht mehr setzen, waere `/mcp` ungedrosselt — Bestandsrisiko, geteilt mit dem globalen
+  Limiter, nicht neu durch diese Phase.
+
+Tests: `test/mcp-rate-limit.test.js` (Praefix `MRL-`, Drahtfaelle gegen den echten `/mcp`-Endpunkt
+in beiden betroffenen Auth-Modi: OAuth mit/ohne Mandant, Token-Modus); `test/openai-p6-challenge.test.js`
+und `test/auth-mcp-bypass.test.js` auf `makeMcpAuth({ ablehnungsDrossel: () => ({ allowed: true, retryAfterS: 0 }) })`
+umgestellt (Asserts unveraendert — diese Dateien pruefen Wortlaut/Modus-Verzweigung, kein
+Drossel-Verhalten).

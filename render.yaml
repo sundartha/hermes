@@ -647,6 +647,8 @@ services:
       # oben) - dieselbe Boot-Haertung, derselbe Foot-Gun-Pin.
       - key: FAKE_ORIGINATE_ELEVENLABS
         value: "false"
+      # T2-07/T-28: je IP fuer alle Routen ausser POST /mcp, dort je Mandant (Ablehnungen
+      # weiter je IP) - s. src/mcp-rate-limit.js, .env.example.
       - key: RATE_LIMIT_PER_MIN
         value: "120"
       # SEC-P3: Herkunftspruefung der Self-Service-Schreibrouten. Default ist ohnehin

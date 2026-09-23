@@ -1946,9 +1946,11 @@ const rawConfig = {
   // eigentums-verifiziert und ueber POST /api/self-service/private-number von jedem
   // eingeloggten Tenant setzbar (PLAN-SECURITY.md, Launch-Blocker).
   inboundOwnerGreetingTenantIds: csvEnv(process.env.INBOUND_OWNER_GREETING_TENANT_IDS),
-  // Rate-Limit pro IP und Minute fuer alle Routen ausser /voice (Provider-Webhooks;
+  // Rate-Limit pro Minute fuer alle Routen ausser /voice (Provider-Webhooks;
   // localhost-Socket ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min)
-  // plus Interaktionen.
+  // plus Interaktionen. Zaehlung ist pro IP - AUSSER auf POST /mcp (T2-07/T-28): dort
+  // gilt derselbe Wert je aufgeloestem MANDANTEN (OAuth) bzw. je IP fuer Ablehnungen
+  // (kein/ungueltiges Token) - s. src/mcp-rate-limit.js, PLAN-SECURITY.md.
   rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", process.env.RATE_LIMIT_PER_MIN, {
     fallback: 120,
     min: 0,
