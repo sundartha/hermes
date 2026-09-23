@@ -101,11 +101,21 @@ function toolText(result) {
 // Test bleibt an der spezifizierten SOLL-Assertion (kein deutscher Fallback-Text fuer den
 // EN-Tenant) - diese Assertion ist nach der Messung GRUEN, nicht rot wie im Katalog
 // vorhergesagt (Polaritaets-Abweichung, siehe Report).
+//
+// T2-09-Nachtrag: seit T2-09 (O-13) reicht wrapHandler err.message NICHT mehr durch - der
+// rohe "fetch failed"-String, der diesen Test bisher zufaellig gruen hielt, ist genau der
+// Interna-Leak, den O-13 abstellt. Der Fallback kommt jetzt aus loc.mcp (Tenant-Sprache).
+// Ohne ctx.language wusste der Harness nie, dass es ein EN-Tenant ist (localeFor() faellt
+// dann auf DEFAULT_LANGUAGE, R7) - der Test hing dadurch an WORLD_DEFAULT_LANGUAGE_ENABLED.
+// Er traegt jetzt die Sprache, die der HTTP-Connector fuer einen EN-Tenant aufloest
+// (routes/mcp.js), und prueft die Katalog-Zusicherung (kein deutscher Text) plus die
+// O-13-Zusicherung (kein "fetch failed") - unabhaengig vom Flag. Der Rueckfall ohne Sprache
+// ist in test/openai-t2-09-neutrale-fehlertexte.test.js (T8) belegt.
 test("MCP-05: wrapHandler-Fallback bei Netzwerkfehler zeigt einem EN-Tenant keinen deutschen Text", async () => {
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = "http://127.0.0.1:1"; // kein lauschender Server -> ECONNREFUSED
   try {
-    const handlers = captureTools({ identity: null, scopedTenant: "tenant-en-us" });
+    const handlers = captureTools({ identity: null, scopedTenant: "tenant-en-us", language: "en" });
     const result = await handlers.get("get_my_number")();
     assert.ok(result?.isError, "Netzwerkfehler -> isError-Tool-Antwort");
     assert.doesNotMatch(
@@ -113,6 +123,7 @@ test("MCP-05: wrapHandler-Fallback bei Netzwerkfehler zeigt einem EN-Tenant kein
       /nicht erreichbar/,
       "EN-Tenant darf keinen deutschen Fallback-Text sehen",
     );
+    assert.doesNotMatch(toolText(result), /fetch failed/, "kein roher Netzwerkfehler-Text (O-13)");
   } finally {
     if (prev === undefined) delete process.env.GATEWAY_URL;
     else process.env.GATEWAY_URL = prev;

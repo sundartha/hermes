@@ -256,6 +256,17 @@ function beobachteAblehnung({ store, audit, denial, req, tenantId }) {
   }
 }
 
+// T2-09 (O-13/O-20): additives, maschinenlesbares Feld an JEDER Gate-Ablehnung, die die
+// Route verlaesst. Quelle ist ausschliesslich denial.audit.grund (dieselbe Kennung, die
+// beobachteAblehnung schon fuer Audit/Metrik liest) - keine zweite Grund-Herleitung. Reine
+// 400-Eingabefehler tragen kein audit-Objekt (s.o.) und bleiben deshalb ohne reason: die
+// Rueckmeldung "was war falsch an meiner Eingabe" (z.B. objective zu lang) bleibt
+// unveraendert Text ohne Kennung. body/status/error/Audit/Metrik bleiben byte-identisch;
+// nur dieses eine Feld kommt hinzu.
+function denialResponseBody(denial) {
+  return denial.audit ? { ...denial.body, reason: denial.audit.grund } : denial.body;
+}
+
 // P4a (F-2): die zwei Ablehnungen des Sprachwunsches. Beide sind reine EINGABEfehler und
 // laufen deshalb wie die Bestands-400er VOR jedem Gate - ohne Audit, ohne Metrik
 // (dieselbe Regel wie bei to/objective und E164_FORMAT_ERROR). Die unterstuetzten Codes
@@ -353,7 +364,7 @@ function placeCallResponseBody({ call, ctx, config, deduplicated }) {
 function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }) {
   if (claim.denial) {
     beobachteAblehnung({ store, audit, denial: claim.denial, req, tenantId: ctx.tenantId });
-    return claim.denial;
+    return { status: claim.denial.status, body: denialResponseBody(claim.denial) };
   }
   const { call } = claim;
   audit("place_call_dedup", req, `to=${ctx.to} call=${call.id} tenant=${ctx.tenantId}`);
@@ -472,7 +483,7 @@ export function makeCallRoutes({
     const denial = await runOutboundGates({ gates: outboundGates, ctx });
     if (denial) {
       beobachteAblehnung({ store, audit, denial, req, tenantId: ctx.tenantId });
-      return res.status(denial.status).json(denial.body);
+      return res.status(denial.status).json(denialResponseBody(denial));
     }
 
     // Ab hier ist ctx vollstaendig durch die Gate-Kette befuellt. KRITISCH: ctx.to ist die von

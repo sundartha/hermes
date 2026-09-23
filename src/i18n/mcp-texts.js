@@ -13,6 +13,9 @@
 // aus failure-reason-texts.js - DIESELBE Aufloesung Token -> Satz wie die Notification
 // (G5), kein zweiter Textbau fuer denselben Grund.
 import { FAILURE_REASON_TEXTS, makeCallFailedSummary } from "./failure-reason-texts.js";
+// T2-09 (O-13/O-20): neutrale Ablehnungstexte je Gate-Grund, EINE Quelle fuer alle drei
+// Sprachen (G5) - kein zweiter Textbau in mcp-tools.js.
+import { MCP_DENIAL_TEXTS } from "./mcp-denial-texts.js";
 
 // Stabile, sprachneutrale Fehler-Kennungen (P12 Pre-Mortem 2). Der Wurf traegt den CODE,
 // die Uebersetzung passiert an genau EINER Kante (wrapHandler in mcp-tools.js). Diese
@@ -37,6 +40,23 @@ export const MCP_ERROR_CODE = Object.freeze({
   // verknuepften Tenant). Kein Wurf - src/mcp-no-tenant.js liest den Text direkt als
   // Tool-Fehlertext, zusammen mit der Re-Auth-Challenge im Ergebnis-_meta.
   NO_TENANT_LINKED: "no_tenant_linked",
+  // T2-09 (O-13/O-20): vier weitere stabile Kennungen an der MCP-Grenze. DENIAL_UNKNOWN
+  // ist der Auffangtext fuer einen Ablehnungsgrund, der (noch) keinen Tabelleneintrag hat
+  // (Pre-Mortem 2) - er darf nie roh am Client landen, deshalb PLUS console.warn
+  // serverseitig (mcp-tools.js#toolErrorText). NOT_FOUND/NOT_PERMITTED/REQUEST_REJECTED
+  // ersetzen den rohen HTTP-Statuscode fuer alles ohne bekannten Grund.
+  DENIAL_UNKNOWN: "denial_unknown",
+  NOT_FOUND: "not_found",
+  NOT_PERMITTED: "not_permitted",
+  REQUEST_REJECTED: "request_rejected",
+  // T2-09-Nachbesserung (Safety-Review-Befund mcp-tools.js:435): der Anrufstart selbst
+  // ist bei einem 5xx OHNE bekannten Ablehnungsgrund (Originate/Provider-Ablehnung,
+  // api-calls.js originate-catch) KEIN "vorruebergehend nicht erreichbar" - der Anruf-
+  // Datensatz existiert bereits (endFailedCallWithReason lief), ein Retry legt einen
+  // WEITEREN Anruf-Datensatz samt Reservierung an. Anders als UPSTREAM_UNREACHABLE laedt
+  // dieser Text NICHT zum sofortigen Wiederholen ein, sondern verweist auf list_calls -
+  // derselbe Retry-Vorsicht-Wortlaut wie CALL_START_UNCONFIRMED/HOP_TIMEOUT oben.
+  CALL_START_REJECTED: "call_start_rejected",
 });
 
 export const MCP_TEXTS = Object.freeze({
@@ -69,7 +89,21 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.NO_TENANT_LINKED]:
         "Zu dieser Anmeldung ist kein Hermes-Konto verknuepft. Bitte erneut mit dem Konto anmelden, " +
         "das fuer Hermes genutzt wird. Ohne Hermes-Konto ist dieses Werkzeug nicht verfuegbar.",
+      [MCP_ERROR_CODE.DENIAL_UNKNOWN]:
+        "Der Anruf wurde durch eine Sicherheits- oder Kontopruefung abgelehnt. Es wurde kein " +
+        "Anruf gestartet. Details stehen im Hermes-Dashboard.",
+      [MCP_ERROR_CODE.NOT_FOUND]:
+        "Zu dieser ID wurde kein Anruf fuer dieses Konto gefunden. list_calls zeigt die " +
+        "letzten Anrufe.",
+      [MCP_ERROR_CODE.NOT_PERMITTED]: "Diese Aktion ist fuer dieses Hermes-Konto nicht verfuegbar.",
+      [MCP_ERROR_CODE.REQUEST_REJECTED]:
+        "Die Anfrage wurde abgelehnt. Bitte die Eingabe pruefen und erneut versuchen.",
+      [MCP_ERROR_CODE.CALL_START_REJECTED]:
+        "Der Anruf konnte nicht gestartet werden. Bitte den Status in list_calls pruefen, " +
+        "bevor erneut angerufen wird.",
     }),
+    // T2-09: Ablehnungstexte je Gate-Grund (s. mcp-denial-texts.js), EINE Quelle je Sprache.
+    denials: MCP_DENIAL_TEXTS.de,
     // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
     // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
     emptyCalls: "Noch keine Anrufe.",
@@ -156,7 +190,19 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.NO_TENANT_LINKED]:
         "No Hermes account is linked to this sign-in. Please sign in again with the account you " +
         "use for Hermes. Without a Hermes account this tool is not available.",
+      [MCP_ERROR_CODE.DENIAL_UNKNOWN]:
+        "The call was refused by a safety or account check. No call was placed. Details are " +
+        "shown in the Hermes dashboard.",
+      [MCP_ERROR_CODE.NOT_FOUND]:
+        "No call with this ID was found for your account. list_calls shows the recent calls.",
+      [MCP_ERROR_CODE.NOT_PERMITTED]: "This action is not available for your Hermes account.",
+      [MCP_ERROR_CODE.REQUEST_REJECTED]:
+        "The request was rejected. Please check the input and try again.",
+      [MCP_ERROR_CODE.CALL_START_REJECTED]:
+        "The call could not be started. Please check the status with list_calls before " +
+        "calling again.",
     }),
+    denials: MCP_DENIAL_TEXTS.en,
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
@@ -211,7 +257,20 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.NO_TENANT_LINKED]:
         "Aucun compte Hermes n'est lié à cette connexion. Veuillez vous reconnecter avec le compte " +
         "que vous utilisez pour Hermes. Sans compte Hermes, cet outil n'est pas disponible.",
+      [MCP_ERROR_CODE.DENIAL_UNKNOWN]:
+        "L'appel a été refusé par un contrôle de sécurité ou de compte. Aucun appel n'a été " +
+        "passé. Les détails sont affichés dans le tableau de bord Hermes.",
+      [MCP_ERROR_CODE.NOT_FOUND]:
+        "Aucun appel avec cet identifiant n'a été trouvé pour ce compte. list_calls affiche " +
+        "les appels récents.",
+      [MCP_ERROR_CODE.NOT_PERMITTED]: "Cette action n'est pas disponible pour ce compte Hermes.",
+      [MCP_ERROR_CODE.REQUEST_REJECTED]:
+        "La demande a été rejetée. Veuillez vérifier la saisie et réessayer.",
+      [MCP_ERROR_CODE.CALL_START_REJECTED]:
+        "L'appel n'a pas pu être démarré. Veuillez vérifier l'état dans list_calls avant " +
+        "de rappeler.",
     }),
+    denials: MCP_DENIAL_TEXTS.fr,
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",

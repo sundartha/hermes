@@ -241,9 +241,10 @@ test("S1-5a: list_action_items filtert erledigte aus + praefixt Termine mit '(Te
     const handlers = captureTools({ identity: null, allowCalendar: true });
     const result = await handlers.get("list_action_items")();
     const text = toolText(result);
-    assert.match(text, /\[a1\] Rueckruf/);
-    assert.match(text, /\[a2\] \(Termin\) Zahnarzt/);
-    assert.doesNotMatch(text, /a3/, "erledigtes Item (done:true) darf nicht auftauchen");
+    // T2-09 (O-13): keine interne Item-ID mehr in der Zeile - nur noch Praefix + Text.
+    assert.match(text, /^Rueckruf$/m);
+    assert.match(text, /^\(Termin\) Zahnarzt$/m);
+    assert.doesNotMatch(text, /\[a1\]|\[a2\]|\[a3\]/, "keine Item-ID-Klammer mehr");
     assert.doesNotMatch(text, /Erledigt/);
   } finally {
     if (prev === undefined) delete process.env.GATEWAY_URL;
@@ -279,10 +280,11 @@ test("S1-5c: Todo-Zeile traegt KEIN '(Termin) '-Praefix (Ternary nicht invertier
     const handlers = captureTools({ identity: null, allowCalendar: true });
     const result = await handlers.get("list_action_items")();
     const lines = toolText(result).split("\n");
-    const todoLine = lines.find((line) => line.startsWith("[b1]"));
-    const apptLine = lines.find((line) => line.startsWith("[b2]"));
-    assert.equal(todoLine, "[b1] Einkaufen");
-    assert.equal(apptLine, "[b2] (Termin) Friseur");
+    // T2-09 (O-13): keine Item-ID mehr - die Zeilen sind jetzt exakt Praefix + Text.
+    const todoLine = lines.find((line) => line.includes("Einkaufen"));
+    const apptLine = lines.find((line) => line.includes("Friseur"));
+    assert.equal(todoLine, "Einkaufen");
+    assert.equal(apptLine, "(Termin) Friseur");
   } finally {
     if (prev === undefined) delete process.env.GATEWAY_URL;
     else process.env.GATEWAY_URL = prev;

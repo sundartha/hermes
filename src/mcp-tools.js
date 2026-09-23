@@ -36,7 +36,7 @@ import { resolveGatewayUrl } from "./config.js";
 // Inbox-Projektion in state-ops.js. Hier NUR noch importiert, nie zweitdefiniert (G5).
 import { resultCardView } from "./call-result.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "./i18n/locales.js";
-import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
+import { MCP_ERROR_CODE, MCP_TEXTS } from "./i18n/mcp-texts.js";
 // P5b (O-13 Teil 2): dieselbe Zerlegeregel wie der Erzeuger (Modul-Kopf dort) -
 // nicht kopiert, nicht nachgebaut. Wiederverwendung an genau der Naht, an der
 // failure_reason den Server verlaesst (callOutcomeView unten).
@@ -59,6 +59,10 @@ const LAST_TRANSCRIPT_LINES = 6;
 // Socket unbegrenzt, falls der Gateway-Handler haengt. Ohne timeoutMs byte-identisch
 // zum Bestand (kein signal -> fetch-Default). EIN Objekt-Argument statt sechs
 // Positionen (F1). AbortSignal.timeout ist ab Node 17.3 verfuegbar (package.json: >=22).
+// T2-09: reiner 400-Eingabefehler (Formfehler des Aufrufers, s. api() unten) - benannt statt
+// nackter Zahl (G25).
+const BAD_REQUEST_STATUS = 400;
+
 async function api({ method, path, body, identity, scopedTenant, timeoutMs = null }) {
   const headers = { "Content-Type": "application/json" };
   if (identity) headers["X-Internal-Identity"] = identity;
@@ -72,11 +76,21 @@ async function api({ method, path, body, identity, scopedTenant, timeoutMs = nul
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error(json.error || `HTTP ${res.status}`);
-    // AL-P13: der Status reist additiv mit (Message unveraendert) - answer_consult muss
-    // "verworfen" (400) von "nicht mehr offen" (409) unterscheiden, ohne den Fehlertext
-    // zu parsen (Zeichenketten-Vergleich waere ein zweites, brechendes Format).
+    // T2-09 (O-13/O-20): kein roher REST-Fehlertext mehr in der message - sie wird nirgends
+    // mehr ausgegeben (toolErrorText in wrapHandler baut den Client-Text ausschliesslich aus
+    // reason/inputHint/httpStatus, s.u.). httpStatus bleibt unveraendert (AL-P13: answer_consult
+    // muss "verworfen" 400 von "nicht mehr offen" 409 unterscheiden). reason ist additiv aus
+    // dem REST-Body (api-calls.js#denialResponseBody) - der maschinenlesbare Gate-Grund.
+    // inputHint traegt NUR bei einem reinen 400-Eingabefehler (kein reason, also kein
+    // Gate-Grund) den Bestandstext weiter: das ist ein Korrekturhinweis zur eigenen Eingabe
+    // des Aufrufers (z.B. Laengengrenze von objective), das Modell braucht ihn, um die
+    // Eingabe zu korrigieren (Entscheidung 3 der T2-09-Spec) - er traegt keine interne
+    // Kennung, keinen Env-Namen, keinen Tarif-Hinweis.
+    const err = new Error("upstream_status");
     err.httpStatus = res.status;
+    if (typeof json.reason === "string") err.reason = json.reason;
+    else if (res.status === BAD_REQUEST_STATUS && typeof json.error === "string")
+      err.inputHint = json.error;
     throw err;
   }
   return json;
@@ -352,6 +366,150 @@ async function boundedHop(request) {
     if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.HOP_TIMEOUT);
     throw err;
   }
+}
+
+// T2-09 (O-13/O-20): HTTP-Statusklassen fuer toolErrorText, benannt statt Magic Numbers.
+const NOT_FOUND_STATUS = 404;
+const NOT_PERMITTED_STATUS = 403;
+const CLIENT_ERROR_STATUS_MIN = 400;
+const CLIENT_ERROR_STATUS_MAX = 499;
+// Safety-Review-Nachbesserung (Befund mcp-tools.js:435): Serverfehler-Bereich fuer die
+// placeCallHop-Klassifikation unten - benannt statt Magic Number, dieselbe Grenzen-Form
+// wie CLIENT_ERROR_STATUS_MIN/MAX oben.
+const SERVER_ERROR_STATUS_MIN = 500;
+const SERVER_ERROR_STATUS_MAX = 599;
+
+// Safety-Review-Nachbesserung (Befund mcp-tools.js:435): ein Originate-/Provider-
+// Fehlschlag (api-calls.js originate-catch, 500 ohne providerStatus ODER 502 MIT
+// providerStatus) traegt KEIN err.reason (das ist ausschliesslich den Gate-Ablehnungen
+// vorbehalten, s. denialResponseBody in api-calls.js). NUR dieser Fall - 5xx ohne
+// bekannten Gate-Grund - wird unten zu CALL_START_REJECTED umgemuenzt; ein 5xx MIT
+// reason (z.B. gate_error, ani_not_owned) bleibt unangetastet und laeuft weiterhin ueber
+// denialReasonText (Schritt 2 in toolErrorText), NICHT ueber diese Funktion.
+function isServerErrorWithoutReason(err) {
+  return (
+    typeof err?.reason !== "string" &&
+    typeof err?.httpStatus === "number" &&
+    err.httpStatus >= SERVER_ERROR_STATUS_MIN &&
+    err.httpStatus <= SERVER_ERROR_STATUS_MAX
+  );
+}
+
+// E3: eigener, benannter Zugang fuer den EINEN Aufruf, der einen echten Anruf ausloest -
+// dasselbe Muster wie pollConsult (kein viertes Positions-Argument an call(), keine zweite
+// fetch-Implementierung). Modul-Ebene statt Closure in registerTools() (haelt deren
+// Zeilenzahl klein - der Pin in eslint-legacy-exceptions.json haengt daran, wie bei
+// PLACE_CALL_DESCRIPTION/CHECK_INBOX_DESCRIPTION oben begruendet). Der Zeitablauf wird HIER
+// NICHT geschluckt (anders als beim Long-Poll pollConsult): er wird zu einer stabilen
+// Kennung, die wrapHandler in der Tenant-Sprache ausgibt. Safety-Review-Nachbesserung
+// (Befund mcp-tools.js:435): ein Originate-Fehlschlag OHNE Gate-Grund (5xx ohne err.reason,
+// s. isServerErrorWithoutReason) fiele sonst auf UPSTREAM_UNREACHABLE ("try again later") -
+// das laedt bei einer dauerhaften Provider-Ablehnung (falsche Absender-DID, Telnyx 403) zu
+// einem zweiten Anruf an dieselbe Person ein. CALL_START_REJECTED verweist stattdessen auf
+// list_calls, ohne den Anlass zu benennen (kein Provider-/Secret-Leak, der bleibt
+// serverseitig in api-calls.js).
+async function placeCallHop({ identity, scopedTenant, body }) {
+  try {
+    return await api({
+      method: "POST",
+      path: "/api/calls",
+      body,
+      identity,
+      scopedTenant,
+      timeoutMs: PLACE_CALL_HOP_TIMEOUT_MS,
+    });
+  } catch (err) {
+    if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_UNCONFIRMED);
+    if (isServerErrorWithoutReason(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_REJECTED);
+    throw err;
+  }
+}
+
+// Ein unbekannter Ablehnungsgrund darf den Server-Log weder sprengen noch mit Steuerzeichen
+// fuellen (Log-Injection) - deshalb auf [a-z_] und diese Laenge bereinigt, BEVOR er geloggt wird.
+const DENIAL_WARN_MAX_LEN = 40;
+
+// Bereinigt einen unbekannten Ablehnungsgrund fuer den Server-Log (NIE fuer den Client-Text -
+// der bekommt ausschliesslich texts.errors[DENIAL_UNKNOWN]).
+function sanitizedDenialReason(reason) {
+  return String(reason)
+    .toLowerCase()
+    .replace(/[^a-z_]/g, "")
+    .slice(0, DENIAL_WARN_MAX_LEN);
+}
+
+// Schritt 1 (Vertrag s. toolErrorText unten): ein ToolError mit bekannter Kennung geht IMMER
+// vor - diese Zustaende koennen "die Aktion lief serverseitig trotzdem" bedeuten.
+function knownToolErrorCodeText(err, texts) {
+  return err?.code ? texts.errors[err.code] : undefined;
+}
+
+// Schritt 2: ein Gate-Ablehnungsgrund (err.reason, additiv aus dem REST-Body via api()).
+// Bekannter Grund -> der neutrale Text aus texts.denials; unbekannter/kuenftiger Grund -> der
+// Client bekommt DENIAL_UNKNOWN (NIE eine rohe Kennung), der Server-Log die bereinigte Kennung
+// als Warnung (console.warn, NIE console.log - stdout ist im stdio-Transport das Protokoll).
+function denialReasonText(err, texts) {
+  if (typeof err?.reason !== "string") return undefined;
+  const denialText = texts.denials[err.reason];
+  if (denialText) return denialText;
+  console.warn("[mcp] unbekannter Ablehnungsgrund:", sanitizedDenialReason(err.reason));
+  return texts.errors[MCP_ERROR_CODE.DENIAL_UNKNOWN];
+}
+
+// Schritt 4: der HTTP-Status ohne bekannten Grund und ohne inputHint.
+function httpStatusClassText(httpStatus, texts) {
+  if (httpStatus === NOT_FOUND_STATUS) return texts.errors[MCP_ERROR_CODE.NOT_FOUND];
+  if (httpStatus === NOT_PERMITTED_STATUS) return texts.errors[MCP_ERROR_CODE.NOT_PERMITTED];
+  const isClientError =
+    typeof httpStatus === "number" &&
+    httpStatus >= CLIENT_ERROR_STATUS_MIN &&
+    httpStatus <= CLIENT_ERROR_STATUS_MAX;
+  return isClientError ? texts.errors[MCP_ERROR_CODE.REQUEST_REJECTED] : undefined;
+}
+
+// T2-09 (O-13/O-20, Pre-Mortem 2/3/5): EINE Abbildung Fehler -> Client-Text, modul-weit
+// (Muster boundedHop), damit der gepinnte registerTools-Befund (eslint-legacy-exceptions.json)
+// nicht waechst. Reihenfolge ist Vertrag (Schritte 1-2/4 in eigenen Funktionen oben, wegen der
+// Komplexitaetsgrenze): 1. ToolError-Kennung, 2. Gate-Ablehnungsgrund, 3. err.inputHint (NUR
+// ein reiner 400-Eingabefehler ohne reason, s. api()) - wird an das Client-Modell
+// durchgereicht, das seine eigene Eingabe sonst nicht korrigieren koennte, 4. HTTP-Statusklasse,
+// 5. alles andere (5xx, Netzfehler wie "fetch failed", ein TypeError aus einem Handler) ->
+// UPSTREAM_UNREACHABLE; console.error mit err.name/err.message (secret-frei wie im Bestand)
+// landet NUR serverseitig, nie beim Client.
+function resolvedToolErrorText(err, texts) {
+  const known = knownToolErrorCodeText(err, texts);
+  if (known) return known;
+  const denial = denialReasonText(err, texts);
+  if (denial) return denial;
+  if (typeof err?.inputHint === "string") return err.inputHint;
+  const statusText = httpStatusClassText(err?.httpStatus, texts);
+  if (statusText) return statusText;
+  console.error("[mcp] Tool-Fehler ohne bekannte Kennung:", err?.name, err?.message);
+  return texts.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
+}
+
+// T2-09-Nachbesserung (Safety-Review, Befund mcp-tools.js:1095): der Client-Text haengt seit
+// T2-09 an der aufgeloesten Sprache (loc.mcp), nicht mehr am immer nicht-leeren err.message.
+// Letzte Rueckfallebene, falls dieses Buendel einen Text nicht traegt (fehlende Uebersetzung,
+// fehlendes errors-/denials-Objekt): der neutrale EN-Text aus DERSELBEN Quelle (G5) - nie
+// undefined, nie leer, nie ein interner Bezeichner. EN, weil er ohne Sprachbezug fuer die
+// meisten Nutzer lesbar ist; der Regelfall bleibt die Tenant-Sprache.
+const LAST_RESORT_ERROR_TEXT = MCP_TEXTS.en.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
+
+function withTextTables(texts) {
+  return { errors: texts?.errors ?? {}, denials: texts?.denials ?? {} };
+}
+
+function isNonEmptyText(text) {
+  return typeof text === "string" && text.trim() !== "";
+}
+
+// Fail-safe Huelle um resolvedToolErrorText: fehlende Tabellen werfen nicht (sonst entkaeme
+// ein TypeError aus dem catch in wrapHandler), ein fehlender/leerer Text faellt auf
+// LAST_RESORT_ERROR_TEXT. Exportiert fuer den Test genau dieses Rueckfalls.
+export function toolErrorText(err, texts) {
+  const text = resolvedToolErrorText(err, withTextTables(texts));
+  return isNonEmptyText(text) ? text : LAST_RESORT_ERROR_TEXT;
 }
 
 const NO_CONSULT_EVENT = Object.freeze({
@@ -915,26 +1073,10 @@ export function registerTools(
       throw err;
     }
   };
-  // E3: eigener, benannter Zugang fuer den EINEN Aufruf, der einen echten Anruf ausloest -
-  // dasselbe Muster wie pollConsult (kein viertes Positions-Argument an call(), keine zweite
-  // fetch-Implementierung). call() selbst bleibt unangetastet, die uebrigen Werkzeuge damit
-  // byte-identisch. Der Zeitablauf wird hier NICHT geschluckt (anders als beim Long-Poll):
-  // er wird zu einer stabilen Kennung, die wrapHandler in der Tenant-Sprache ausgibt.
-  const placeCallHop = async (body) => {
-    try {
-      return await api({
-        method: "POST",
-        path: "/api/calls",
-        body,
-        identity,
-        scopedTenant,
-        timeoutMs: PLACE_CALL_HOP_TIMEOUT_MS,
-      });
-    } catch (err) {
-      if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_UNCONFIRMED);
-      throw err;
-    }
-  };
+  // E3/Safety-Review-Nachbesserung: placeCallHop lebt auf Modul-Ebene (s.o., haelt
+  // registerTools() klein - der Zeilen-Pin in eslint-legacy-exceptions.json haengt daran).
+  // Dieser Ein-Zeiler bindet nur identity/scopedTenant aus dem registerTools-Aufruf ein.
+  const placeCallHopCall = (body) => placeCallHop({ identity, scopedTenant, body });
   const loc = localeFor(language); // Namensgleich zu claude.js promptInputs
   const formatDate = makeDateFormatter(loc.dateLocale);
   const uiRenderer = uiRendererFor(uiHost); // null = Stufe-0-only (fail-closed)
@@ -969,16 +1111,12 @@ export function registerTools(
       try {
         return await handler(...args);
       } catch (err) {
-        // P12: ein ToolError traegt eine stabile Kennung -> hier uebersetzt. Alles ohne
-        // bekannte Kennung behaelt sein Bestandsverhalten (err.message, z.B. "HTTP 500"
-        // oder "fetch failed" aus api()); nur der leere Fall bekommt den lokalisierten
-        // Auffangsatz. Diese Reihenfolge ist Absicht: wuerde err.message unterdrueckt,
-        // saehe ein EN-Tenant bei Netzfehlern wieder den deutschen Satz (MCP-05).
-        return errText(
-          loc.mcp.errors[err?.code] ||
-            err?.message ||
-            loc.mcp.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
-        );
+        // T2-09 (O-13/O-20): err.message traegt seit api() nichts Nutzerlesbares mehr (kein
+        // roher REST-Fehlertext, kein "HTTP 500", kein "fetch failed") - der Client-Text
+        // entsteht ausschliesslich ueber toolErrorText (P12 ToolError-Kennung, Gate-Grund,
+        // 400-Eingabehinweis oder HTTP-Statusklasse, in dieser Reihenfolge, s. dort). Die
+        // Uebersetzung passiert damit weiterhin an EINER Kante.
+        return errText(toolErrorText(err, loc.mcp));
       }
     };
 
@@ -1166,7 +1304,7 @@ export function registerTools(
       ...enableWidgetUi(WIDGET_CALL),
     },
     async (args) => {
-      const r = await placeCallHop(args);
+      const r = await placeCallHopCall(args);
       requireFields(r, { callId: "string" });
       const data = {
         call_id: r.callId,
@@ -1521,13 +1659,16 @@ export function registerTools(
     async () => {
       const s = await call("GET", "/api/state");
       requireFields(s, { actionItems: "array" });
-      const open = s.actionItems.filter((a) => !a.done);
+      const open = s.actionItems.filter((item) => !item.done);
       if (!open.length) return text(loc.mcp.emptyActionItems);
+      // T2-09 (O-13 Datenminimierung): keine interne Item-ID mehr in der Zeile - kein
+      // Werkzeug und keine REST-Route nimmt eine Action-Item-ID entgegen, sie ist also
+      // nicht "strictly required" (O-13-Ausnahme).
       return text(
         open
           .map(
-            (a) =>
-              `[${a.id}] ${a.type === "appointment" ? loc.mcp.appointmentPrefix : ""}${a.text}`,
+            (item) =>
+              `${item.type === "appointment" ? loc.mcp.appointmentPrefix : ""}${item.text}`,
           )
           .join("\n"),
       );
