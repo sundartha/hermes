@@ -324,7 +324,11 @@ export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
   };
 }
 
-const RATE_LIMIT_BODY = Object.freeze({ error: "Zu viele Anfragen. Bitte spaeter erneut versuchen." });
+// Exportiert (T2-07/T-28): src/auth.js braucht denselben Koerper fuer die 429-Antwort des
+// Ablehnungs-Zaehlers von POST /mcp - EINE Quelle statt einer zweiten Konstante (G5).
+export const RATE_LIMIT_BODY = Object.freeze({
+  error: "Zu viele Anfragen. Bitte spaeter erneut versuchen.",
+});
 
 // Die EINE Drossel-Antwort (G5): globaler Limiter und Init-Token-Schranke (IEX-A7) - nur der
 // konstante Koerper unterscheidet sich. Die 429 bleibt hier bewusst als Literal stehen: sie
