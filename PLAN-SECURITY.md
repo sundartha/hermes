@@ -6104,7 +6104,7 @@ eigener Text `CALL_START_REJECTED` (`isServerErrorWithoutReason`, `placeCallHop`
 Ablehnungstext (Test T7, Gegenprobe). Reine Text-/Klassifikationsaenderung — kein neues REST-Feld,
 keine Gate-Logik veraendert (Status/Audit/Entscheidung unveraendert).
 
-**Bekannter Risiko-Punkt (KEIN Code-Fix in dieser Phase, Owner-Punkt):** der Fallback-Text
+**Bekannter Risiko-Punkt (Stand zweite Nachbesserung; Fehlertext-Pfad geschlossen, s. Nachtrag unten):** der Fallback-Text
 `texts.errors[UPSTREAM_UNREACHABLE]` ist seit T2-09 fuer JEDEN Netzwerk-/Serverfehler ohne
 bekannten Grund erstmals real erreichbar (vorher lieferte `err.message` — z.B. "fetch failed" —
 immer einen nicht-leeren, sprachneutralen String durch). Dieser Fallback haengt an `loc.mcp`, das
@@ -6128,6 +6128,20 @@ separat gefuehrte, groessere Entscheidung (P10-P13-Aktivierungsfenster). Owner-P
 gilt vor `render.yaml` bei diesem dashboard-managed Service) — weicht der Live-Wert von `render.yaml`
 ("false") ab, ist `render.yaml` nachzuziehen, damit die eingecheckte Quelle nicht am Live-Verhalten
 vorbeidokumentiert.
+
+**Nachtrag 2026-09-24 (dritte Nachbesserung, Review cleancode/blocker + safety/wichtig): der
+obige Risiko-Punkt ist fuer den Fehlertext-Pfad jetzt im Code geschlossen.** (1) `toolErrorText`
+ist fail-safe: fehlt dem aufgeloesten Buendel ein Text oder eine Tabelle (`errors`/`denials`),
+wirft die Abbildung nicht (sonst entkaeme ein TypeError aus dem `wrapHandler`-catch) und liefert
+den neutralen EN-Text `MCP_TEXTS.en.errors[UPSTREAM_UNREACHABLE]` — nie `undefined`, nie leer,
+nie Interna (Test T8b). Der Regelfall ist unveraendert die Tenant-Sprache; eine fehlende oder
+unbekannte Sprache faellt ueber `localeFor()` auf den Weltdefault (T8a, flag-unabhaengig
+formuliert). (2) `MCP-05` war nur zufaellig gruen (es reichte das rohe "fetch failed" durch, genau
+der O-13-Leak) und kannte die Tenant-Sprache nie. Der Test traegt jetzt `language: "en"` wie der
+HTTP-Connector fuer einen EN-Tenant (`routes/mcp.js` `tenantLanguage`) und prueft zusaetzlich
+"kein fetch failed" — gruen mit und ohne `WORLD_DEFAULT_LANGUAGE_ENABLED`. Unveraendert offen
+(Architektur, nicht Fehlertext): stdio kennt keine Tenant-Sprache und zeigt den Weltdefault (R7);
+der Owner-Punkt zum Live-Wert von `WORLD_DEFAULT_LANGUAGE_ENABLED` bleibt bestehen.
 
 Tests (Nachbesserung): T4 (s.o.), T7 (`CALL_START_REJECTED`, inkl. Gegenprobe `gate_error`
 unveraendert), T2 um `CALL_START_REJECTED` in der Neutralitaetspruefung erweitert.

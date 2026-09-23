@@ -36,7 +36,7 @@ import { resolveGatewayUrl } from "./config.js";
 // Inbox-Projektion in state-ops.js. Hier NUR noch importiert, nie zweitdefiniert (G5).
 import { resultCardView } from "./call-result.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "./i18n/locales.js";
-import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
+import { MCP_ERROR_CODE, MCP_TEXTS } from "./i18n/mcp-texts.js";
 // P5b (O-13 Teil 2): dieselbe Zerlegeregel wie der Erzeuger (Modul-Kopf dort) -
 // nicht kopiert, nicht nachgebaut. Wiederverwendung an genau der Naht, an der
 // failure_reason den Server verlaesst (callOutcomeView unten).
@@ -476,7 +476,7 @@ function httpStatusClassText(httpStatus, texts) {
 // 5. alles andere (5xx, Netzfehler wie "fetch failed", ein TypeError aus einem Handler) ->
 // UPSTREAM_UNREACHABLE; console.error mit err.name/err.message (secret-frei wie im Bestand)
 // landet NUR serverseitig, nie beim Client.
-function toolErrorText(err, texts) {
+function resolvedToolErrorText(err, texts) {
   const known = knownToolErrorCodeText(err, texts);
   if (known) return known;
   const denial = denialReasonText(err, texts);
@@ -486,6 +486,30 @@ function toolErrorText(err, texts) {
   if (statusText) return statusText;
   console.error("[mcp] Tool-Fehler ohne bekannte Kennung:", err?.name, err?.message);
   return texts.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
+}
+
+// T2-09-Nachbesserung (Safety-Review, Befund mcp-tools.js:1095): der Client-Text haengt seit
+// T2-09 an der aufgeloesten Sprache (loc.mcp), nicht mehr am immer nicht-leeren err.message.
+// Letzte Rueckfallebene, falls dieses Buendel einen Text nicht traegt (fehlende Uebersetzung,
+// fehlendes errors-/denials-Objekt): der neutrale EN-Text aus DERSELBEN Quelle (G5) - nie
+// undefined, nie leer, nie ein interner Bezeichner. EN, weil er ohne Sprachbezug fuer die
+// meisten Nutzer lesbar ist; der Regelfall bleibt die Tenant-Sprache.
+const LAST_RESORT_ERROR_TEXT = MCP_TEXTS.en.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
+
+function withTextTables(texts) {
+  return { errors: texts?.errors ?? {}, denials: texts?.denials ?? {} };
+}
+
+function isNonEmptyText(text) {
+  return typeof text === "string" && text.trim() !== "";
+}
+
+// Fail-safe Huelle um resolvedToolErrorText: fehlende Tabellen werfen nicht (sonst entkaeme
+// ein TypeError aus dem catch in wrapHandler), ein fehlender/leerer Text faellt auf
+// LAST_RESORT_ERROR_TEXT. Exportiert fuer den Test genau dieses Rueckfalls.
+export function toolErrorText(err, texts) {
+  const text = resolvedToolErrorText(err, withTextTables(texts));
+  return isNonEmptyText(text) ? text : LAST_RESORT_ERROR_TEXT;
 }
 
 const NO_CONSULT_EVENT = Object.freeze({

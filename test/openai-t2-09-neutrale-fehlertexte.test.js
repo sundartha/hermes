@@ -22,6 +22,9 @@
 // T6: HTTP-Statusklassen ohne bekannten Grund (404/403/409-ausserhalb-answer_consult).
 // T7: place_call-5xx ohne Gate-Grund (Originate-/Provider-Fehlschlag) -> eigener neutraler
 // Text (CALL_START_REJECTED), der nicht zum sofortigen Wiederholen einlaedt.
+// T8: der Netzwerkfehler-Fallback ist fail-safe gegen die Sprach-Aufloesung - jede
+// unterstuetzte Sprache liefert ihren Text, fehlende/unbekannte Sprache den Weltdefault,
+// eine fehlende Uebersetzung den neutralen EN-Text; nie undefined, leer oder Interna.
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -30,10 +33,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { registerTools } from "../src/mcp-tools.js";
+import { registerTools, toolErrorText } from "../src/mcp-tools.js";
 import { MCP_TEXTS, MCP_ERROR_CODE } from "../src/i18n/mcp-texts.js";
 import { MCP_DENIAL_TEXTS } from "../src/i18n/mcp-denial-texts.js";
-import { SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
+import { SUPPORTED_LANGUAGES, localeFor } from "../src/i18n/locales.js";
 import { startServer, startIdp, mcpPost, toolCall, readToolResult, ROOT, BASE_ENV, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
 import { makeDefaultState, settingsFor } from "../src/store/state-ops.js";
 import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
@@ -560,4 +563,55 @@ test("T7 (Draht, lokaler Harness): place_call-5xx ohne reason -> CALL_START_REJE
       },
     );
   }
+});
+
+// ==================== T8: Fallback fail-safe gegen die Sprach-Aufloesung ====================
+
+const UNREACHABLE_GATEWAY_URL = "http://127.0.0.1:1"; // kein lauschender Server -> ECONNREFUSED
+const LAST_RESORT_TEXT = MCP_TEXTS.en.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
+const NETWORK_ERROR = new TypeError("fetch failed");
+
+async function networkErrorText(ctx) {
+  const prev = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = UNREACHABLE_GATEWAY_URL;
+  try {
+    const result = await captureTools(ctx).get("get_my_number")();
+    assert.equal(result.isError, true);
+    return result.content[0].text;
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+  }
+}
+
+test("T8a: Netzwerkfehler folgt der Tenant-Sprache, fehlende/unbekannte Sprache faellt auf den Weltdefault", async () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const text = await networkErrorText({ language: lang });
+    assert.equal(text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE], lang);
+    assertNeutralText(text, `${lang}.UPSTREAM_UNREACHABLE`);
+  }
+  // Flag-unabhaengig: erwartet ist, was localeFor() als Weltdefault liefert - welcher auch immer.
+  const worldDefaultText = localeFor(undefined).mcp.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
+  for (const language of [undefined, "xx"]) {
+    const text = await networkErrorText({ language });
+    assert.equal(text, worldDefaultText, `language=${language}`);
+    assertNeutralText(text, `language=${language}`);
+  }
+});
+
+test("T8b: fehlende Uebersetzung oder fehlendes Text-Buendel -> neutraler EN-Rueckfall, kein Wurf", () => {
+  const missingCode = { errors: { ...MCP_TEXTS.de.errors, [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]: undefined } };
+  const emptyText = { errors: { [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]: "  " }, denials: {} };
+  for (const [label, texts] of [
+    ["kein Buendel", undefined],
+    ["leeres Buendel", {}],
+    ["fehlender Code", missingCode],
+    ["leerer Text", emptyText],
+  ]) {
+    const text = toolErrorText(NETWORK_ERROR, texts);
+    assert.equal(text, LAST_RESORT_TEXT, label);
+    assertNeutralText(text, label);
+  }
+  // Auch ein Gate-Grund ohne denials-Tabelle wirft nicht und leakt die Kennung nicht.
+  assert.equal(toolErrorText({ reason: "frozen" }, undefined), LAST_RESORT_TEXT);
 });
