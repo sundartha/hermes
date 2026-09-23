@@ -20,13 +20,20 @@ import {
   MCP_AUDIENCE,
   waitForLog,
 } from "./helpers.js";
-import { normalisierterOrigin, mcpErlaubteOrigins, mcpOriginErlaubt, originLogWert } from "../src/middleware.js";
+import {
+  normalisierterOrigin,
+  mcpErlaubteOrigins,
+  mcpOriginErlaubt,
+  originLogWert,
+  mcpCorsOrigin,
+} from "../src/middleware.js";
 import { angekuendigterOriginFindings, kanonischeAudience } from "../src/boot-guard.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_METHOD_NOT_ALLOWED = 405;
+const HTTP_NO_CONTENT = 204;
 
 // mcpPost (helpers.js) kann keinen Origin setzen - bewusst nicht erweitert: 47
 // Testdateien haengen an seiner heutigen Header-Menge, und "kein Origin" ist die
@@ -493,4 +500,374 @@ test("E5-B05: Happy-Path-Schraegstrich - PUBLIC_URL/OAUTH_AUDIENCE mit/ohne Slas
   } finally {
     await srv.stop();
   }
+});
+
+// ==================================================================================
+// T2-06 (T-29): CORS auf /mcp - nur byte-genau gelistete Origins duerfen die Antwort
+// im Browser lesen. Praefix "T2-06-" (NICHT DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|
+// PROMPT|UI|VOICE|WEB|WORLD-<Ziffer>) - sonst landen die Faelle im test:gates-Lauf
+// (Lehre catalog-id-prefix-misroutes-tests).
+// ==================================================================================
+
+// Nur die access-control-*-Header einer Antwort, sortiert-frei als Menge lesbar.
+function acHeaders(res) {
+  return [...res.headers.keys()].filter((k) => k.startsWith("access-control-"));
+}
+
+// Auto-OPTIONS-Baseline OHNE T2-06 (vor dem Bau am laufenden Server gemessen, s.
+// T2-06-Spec Schritt 4/H02): Express haengt bei fehlendem Origin und leerer CORS-Liste
+// den "Allow"-Header unveraendert an - "POST,GET,HEAD,DELETE" (Reihenfolge der
+// router.METHOD-Aufrufe in routes/mcp.js: post, get, delete, plus das implizite HEAD
+// zu GET). Als Konstante gepinnt, damit ein Drift sofort auffaellt.
+const AUTO_OPTIONS_ALLOW_BASELINE = "POST,GET,HEAD,DELETE";
+
+describe("T2-06-A: leere Liste (BASE_ENV) - byte-identisch zu vor T2-06", () => {
+  let idp;
+  let srv;
+  let gueltigesToken;
+
+  before(async () => {
+    idp = await startIdp();
+    srv = await startServer({
+      env: {
+        MCP_AUTH: "oauth",
+        OAUTH_ISSUER_URL: idp.issuer,
+        OAUTH_AUDIENCE: MCP_AUDIENCE,
+        OWNER_IDP_SUBJECT: "user-1",
+      },
+    });
+    gueltigesToken = await idp.sign({ email: "t2-06-a@team.test" });
+  });
+
+  after(async () => {
+    await srv.stop();
+    await idp.close();
+  });
+
+  it("T2-06-H01: fremder Origin (chatgpt.com) - OPTIONS/POST/GET bleiben 403, keine CORS-Header, kein Vary:Origin", async () => {
+    const optRes = await fetch(`${srv.localUrl}/mcp`, {
+      method: "OPTIONS",
+      headers: { Origin: "https://chatgpt.com", "Access-Control-Request-Method": "POST" },
+    });
+    assert.equal(optRes.status, HTTP_FORBIDDEN);
+    assert.deepEqual(acHeaders(optRes), []);
+    assert.doesNotMatch(optRes.headers.get("vary") || "", /Origin/);
+
+    const postRes = await mcpPostMitOrigin(`${srv.localUrl}/mcp`, {
+      origin: "https://chatgpt.com",
+      token: gueltigesToken,
+    });
+    assert.equal(postRes.status, HTTP_FORBIDDEN);
+    assert.deepEqual(acHeaders(postRes), []);
+
+    const getRes = await fetch(`${srv.localUrl}/mcp`, {
+      method: "GET",
+      headers: { Origin: "https://chatgpt.com" },
+    });
+    assert.equal(getRes.status, HTTP_FORBIDDEN);
+    assert.deepEqual(acHeaders(getRes), []);
+  });
+
+  it("T2-06-H02: OPTIONS ohne Origin -> Auto-OPTIONS unveraendert, kein CORS; POST ohne Origin/Token -> 401 ohne CORS", async () => {
+    const optRes = await fetch(`${srv.localUrl}/mcp`, { method: "OPTIONS" });
+    assert.equal(optRes.status, HTTP_OK);
+    assert.equal(optRes.headers.get("allow"), AUTO_OPTIONS_ALLOW_BASELINE);
+    assert.deepEqual(acHeaders(optRes), []);
+
+    const postRes = await post(`${srv.localUrl}/mcp`, null);
+    assert.equal(postRes.status, HTTP_UNAUTHORIZED);
+    assert.deepEqual(acHeaders(postRes), []);
+  });
+
+  it("T2-06-H03: Origin=PUBLIC_URL (https://agent.test) - nicht 403, aber KEINE CORS-Header (same-origin braucht kein CORS)", async () => {
+    const res = await mcpPostMitOrigin(`${srv.localUrl}/mcp`, {
+      origin: "https://agent.test",
+      token: gueltigesToken,
+    });
+    assert.notEqual(res.status, HTTP_FORBIDDEN);
+    assert.deepEqual(acHeaders(res), []);
+  });
+});
+
+// Zweigeteilt wie "E5-H"/"E5-H (Methoden, Pfad, ...)" oben (G30/max-lines-per-function):
+// derselbe Server-Aufbau, nur in zwei before/after gespiegelt, damit keine einzelne
+// Arrow-Function alle H04..H11-Faelle traegt.
+describe("T2-06-B1: MCP_ALLOWED_ORIGINS=https://chatgpt.com - Preflight, 401, 200", () => {
+  let idp;
+  let srv;
+  let gueltigesToken;
+
+  before(async () => {
+    idp = await startIdp();
+    srv = await startServer({
+      env: {
+        MCP_AUTH: "oauth",
+        OAUTH_ISSUER_URL: idp.issuer,
+        OAUTH_AUDIENCE: MCP_AUDIENCE,
+        MCP_ALLOWED_ORIGINS: "https://chatgpt.com",
+        OWNER_IDP_SUBJECT: "user-1",
+      },
+    });
+    gueltigesToken = await idp.sign({ email: "t2-06-b1@team.test" });
+  });
+
+  after(async () => {
+    await srv.stop();
+    await idp.close();
+  });
+
+  it("T2-06-H04: Preflight fuer gelisteten Origin -> 204 mit dem vollen Header-Satz, leerer Body", async () => {
+    const res = await fetch(`${srv.localUrl}/mcp`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://chatgpt.com",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "authorization, content-type",
+      },
+    });
+    assert.equal(res.status, HTTP_NO_CONTENT);
+    assert.equal(res.headers.get("access-control-allow-origin"), "https://chatgpt.com");
+    assert.match(res.headers.get("vary") || "", /Origin/);
+    assert.equal(res.headers.get("access-control-allow-methods"), "POST");
+    const allowHeaders = (res.headers.get("access-control-allow-headers") || "").toLowerCase();
+    for (const kopf of ["authorization", "content-type", "mcp-session-id", "mcp-protocol-version"]) {
+      assert.match(allowHeaders, new RegExp(kopf));
+    }
+    const expose = res.headers.get("access-control-expose-headers") || "";
+    assert.match(expose, /Mcp-Session-Id/);
+    assert.match(expose, /WWW-Authenticate/);
+    assert.equal(res.headers.get("access-control-allow-credentials"), null);
+    assert.equal(await res.text(), "");
+  });
+
+  it("T2-06-H05: POST ohne Token, gelisteter Origin (Interface-IP UND localhost) -> 401 MIT WWW-Authenticate UND CORS-Headern", async () => {
+    assert.ok(srv.externalUrl, "externalIp() lieferte null - Test kann die Interface-IP nicht pruefen");
+    for (const basis of [srv.externalUrl, srv.localUrl]) {
+      const res = await mcpPostMitOrigin(`${basis}/mcp`, { origin: "https://chatgpt.com" });
+      assert.equal(res.status, HTTP_UNAUTHORIZED, basis);
+      assert.notEqual(res.headers.get("www-authenticate"), null, basis);
+      assert.equal(res.headers.get("access-control-allow-origin"), "https://chatgpt.com", basis);
+      assert.match(res.headers.get("vary") || "", /Origin/, basis);
+      assert.match(res.headers.get("access-control-expose-headers") || "", /Mcp-Session-Id/, basis);
+    }
+  });
+
+  it("T2-06-H06: POST mit gueltigem Token, tools/list -> 200, ACAO exakt", async () => {
+    const res = await post(`${srv.localUrl}/mcp`, gueltigesToken, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/list",
+    });
+    const withOrigin = await fetch(`${srv.localUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Accept: "application/json, text/event-stream",
+        Origin: "https://chatgpt.com",
+        Authorization: `Bearer ${gueltigesToken}`,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    });
+    assert.equal(res.status, HTTP_OK);
+    assert.equal(withOrigin.status, HTTP_OK);
+    assert.equal(withOrigin.headers.get("access-control-allow-origin"), "https://chatgpt.com");
+  });
+});
+
+describe("T2-06-B2: MCP_ALLOWED_ORIGINS=https://chatgpt.com - fremde/aehnliche Origins, Pfad, Methoden", () => {
+  let idp;
+  let srv;
+  let gueltigesToken;
+
+  before(async () => {
+    idp = await startIdp();
+    srv = await startServer({
+      env: {
+        MCP_AUTH: "oauth",
+        OAUTH_ISSUER_URL: idp.issuer,
+        OAUTH_AUDIENCE: MCP_AUDIENCE,
+        MCP_ALLOWED_ORIGINS: "https://chatgpt.com",
+        OWNER_IDP_SUBJECT: "user-1",
+      },
+    });
+    gueltigesToken = await idp.sign({ email: "t2-06-b2@team.test" });
+  });
+
+  after(async () => {
+    await srv.stop();
+    await idp.close();
+  });
+
+  it("T2-06-H07: fremder Origin (evil.example) - OPTIONS und POST bleiben 403, keine CORS-Header", async () => {
+    const optRes = await fetch(`${srv.localUrl}/mcp`, {
+      method: "OPTIONS",
+      headers: { Origin: "https://evil.example", "Access-Control-Request-Method": "POST" },
+    });
+    assert.equal(optRes.status, HTTP_FORBIDDEN);
+    assert.deepEqual(acHeaders(optRes), []);
+
+    const postRes = await mcpPostMitOrigin(`${srv.localUrl}/mcp`, {
+      origin: "https://evil.example",
+      token: gueltigesToken,
+    });
+    assert.equal(postRes.status, HTTP_FORBIDDEN);
+    assert.deepEqual(acHeaders(postRes), []);
+  });
+
+  it("T2-06-H08a: klar abgelehnte Nachbar-Origins bleiben 403 ohne CORS-Header", async () => {
+    for (const origin of ["https://chatgpt.com.evil.tld", "http://chatgpt.com", "https://chatgpt.com:8443"]) {
+      const res = await mcpPostMitOrigin(`${srv.localUrl}/mcp`, { origin, token: gueltigesToken });
+      assert.equal(res.status, HTTP_FORBIDDEN, origin);
+      assert.deepEqual(acHeaders(res), [], origin);
+    }
+  });
+
+  it("T2-06-H08b: von der (toleranteren) Wache durchgelassene Schreibvarianten bekommen trotzdem KEINE CORS-Header", async () => {
+    for (const origin of ["https://CHATGPT.COM", "https://chatgpt.com/", "https://chatgpt.com:443"]) {
+      const postRes = await mcpPostMitOrigin(`${srv.localUrl}/mcp`, { origin, token: gueltigesToken });
+      assert.notEqual(postRes.status, HTTP_FORBIDDEN, origin);
+      assert.deepEqual(acHeaders(postRes), [], origin);
+
+      const preflight = await fetch(`${srv.localUrl}/mcp`, {
+        method: "OPTIONS",
+        headers: { Origin: origin, "Access-Control-Request-Method": "POST" },
+      });
+      assert.notEqual(preflight.status, HTTP_NO_CONTENT, origin);
+      assert.deepEqual(acHeaders(preflight), [], origin);
+    }
+  });
+
+  it("T2-06-H09: Origin=PUBLIC_URL (https://agent.test) - weiter keine CORS-Header", async () => {
+    const res = await mcpPostMitOrigin(`${srv.localUrl}/mcp`, {
+      origin: "https://agent.test",
+      token: gueltigesToken,
+    });
+    assert.deepEqual(acHeaders(res), []);
+  });
+
+  it("T2-06-H10: OPTIONS /mcp/foo mit gelistetem Origin - nicht 204, keine CORS-Header", async () => {
+    const res = await fetch(`${srv.localUrl}/mcp/foo`, {
+      method: "OPTIONS",
+      headers: { Origin: "https://chatgpt.com", "Access-Control-Request-Method": "POST" },
+    });
+    assert.notEqual(res.status, HTTP_NO_CONTENT);
+    assert.deepEqual(acHeaders(res), []);
+  });
+
+  it("T2-06-H11: GET /mcp mit gelistetem Origin bleibt 405, darf aber CORS-Header tragen", async () => {
+    const res = await fetch(`${srv.localUrl}/mcp`, {
+      method: "GET",
+      headers: { Origin: "https://chatgpt.com" },
+    });
+    assert.equal(res.status, HTTP_METHOD_NOT_ALLOWED);
+    assert.equal(res.headers.get("access-control-allow-origin"), "https://chatgpt.com");
+  });
+});
+
+describe("T2-06-C: Auth-Modi und Notventil", () => {
+  it("T2-06-H12: MCP_AUTH=token + Liste gesetzt - POST ohne Token von gelistetem Origin -> 401 statische Challenge UND ACAO exakt", async () => {
+    const srv = await startServer({
+      env: {
+        MCP_AUTH: "token",
+        MCP_AUTH_TOKEN: "t2-06-geheimes-token",
+        MCP_ALLOWED_ORIGINS: "https://chatgpt.com",
+      },
+    });
+    try {
+      const res = await mcpPostMitOrigin(`${srv.localUrl}/mcp`, { origin: "https://chatgpt.com" });
+      assert.equal(res.status, HTTP_UNAUTHORIZED);
+      assert.match(res.headers.get("www-authenticate") || "", /invalid_token/);
+      assert.equal(res.headers.get("access-control-allow-origin"), "https://chatgpt.com");
+    } finally {
+      await srv.stop();
+    }
+  });
+
+  it("T2-06-H13: Legacy (MCP_AUTH leer, kein Token) + Liste gesetzt - externe IP 401 mit ACAO, localhost 200-Bypass mit ACAO", async () => {
+    const srv = await startServer({
+      env: { MCP_AUTH: "", MCP_ALLOWED_ORIGINS: "https://chatgpt.com" },
+    });
+    try {
+      assert.ok(srv.externalUrl, "externalIp() lieferte null - Test kann den Legacy-Bypass nicht von echtem Fremd-Socket abgrenzen");
+      const extern = await mcpPostMitOrigin(`${srv.externalUrl}/mcp`, { origin: "https://chatgpt.com" });
+      assert.equal(extern.status, HTTP_UNAUTHORIZED);
+      assert.equal(extern.headers.get("access-control-allow-origin"), "https://chatgpt.com");
+
+      const lokal = await mcpPostMitOrigin(`${srv.localUrl}/mcp`, { origin: "https://chatgpt.com" });
+      assert.notEqual(lokal.status, HTTP_UNAUTHORIZED);
+      assert.notEqual(lokal.status, HTTP_FORBIDDEN);
+      assert.equal(lokal.headers.get("access-control-allow-origin"), "https://chatgpt.com");
+    } finally {
+      await srv.stop();
+    }
+  });
+
+  it("T2-06-H14: MCP_ORIGIN_ENFORCE=false + leere Liste + fremder Origin -> 401 (Wache geloest), aber KEINE CORS-Header", async () => {
+    const srv = await startServer({ env: { MCP_ORIGIN_ENFORCE: "false", MCP_AUTH: "token" } });
+    try {
+      const res = await mcpPostMitOrigin(`${srv.localUrl}/mcp`, { origin: "https://evil.example" });
+      assert.equal(res.status, HTTP_UNAUTHORIZED);
+      assert.deepEqual(acHeaders(res), []);
+
+      const preflight = await fetch(`${srv.localUrl}/mcp`, {
+        method: "OPTIONS",
+        headers: { Origin: "https://evil.example", "Access-Control-Request-Method": "POST" },
+      });
+      assert.notEqual(preflight.status, HTTP_NO_CONTENT);
+      assert.deepEqual(acHeaders(preflight), []);
+    } finally {
+      await srv.stop();
+    }
+  });
+});
+
+// ==================================================================================
+// Unit-Faelle des Praedikats (kein Server) - T2-06-U01..U05
+// ==================================================================================
+
+test("T2-06-U01: mcpCorsOrigin - Treffer liefert das Listen-Element", () => {
+  assert.equal(mcpCorsOrigin("https://chatgpt.com", ["https://chatgpt.com"]), "https://chatgpt.com");
+});
+
+test("T2-06-U02: mcpCorsOrigin - aehnliche/ungueltige Origins -> null", () => {
+  const liste = ["https://chatgpt.com"];
+  const faelle = [
+    "https://chatgpt.com.evil.tld",
+    "https://evilchatgpt.com",
+    "https://sub.chatgpt.com",
+    "http://chatgpt.com",
+    "https://CHATGPT.COM",
+    "https://ChatGPT.com",
+    "https://chatgpt.com/",
+    "https://chatgpt.com:443",
+    "https://chatgpt.com:8443",
+    null,
+    "https://chatgpt.com, https://evil.example",
+    "",
+    undefined,
+    "*",
+  ];
+  for (const wert of faelle) {
+    assert.equal(mcpCorsOrigin(wert, liste), null, JSON.stringify(wert));
+  }
+});
+
+test("T2-06-U03: mcpCorsOrigin - leere Liste -> null fuer jeden Wert", () => {
+  for (const wert of ["https://chatgpt.com", "https://agent.test", "null", ""]) {
+    assert.equal(mcpCorsOrigin(wert, []), null, wert);
+  }
+});
+
+test("T2-06-U04: Teilmengen-Invariante - corsOrigins (ohne publicUrl) ist Teilmenge der Wachen-Liste (mit publicUrl)", () => {
+  const zusaetzlicheOrigins = ["https://chatgpt.com", "agent.test", "https://chatgpt.com", "*", "https://Extra.Test/"];
+  const corsOrigins = mcpErlaubteOrigins({ zusaetzlicheOrigins });
+  const wachenListe = mcpErlaubteOrigins({ publicUrl: "https://agent.test", zusaetzlicheOrigins });
+  for (const origin of corsOrigins) assert.ok(wachenListe.includes(origin), origin);
+  assert.ok(!corsOrigins.includes("https://agent.test"), "publicUrl darf nicht ueber die Env-Liste hereinrutschen");
+  assert.ok(wachenListe.includes("https://agent.test"));
+});
+
+test("T2-06-U05: mcpCorsOrigin - Rueckgabewert ist nie '*', Wildcard-Eintraege werden nicht interpretiert", () => {
+  assert.equal(mcpCorsOrigin("https://x.chatgpt.com", ["https://*.chatgpt.com"]), null);
+  assert.equal(mcpCorsOrigin("*", ["https://chatgpt.com"]), null);
 });
