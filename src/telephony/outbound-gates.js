@@ -280,6 +280,20 @@ function makeAniOwnershipGate({ config, store, aniOwnershipRecheck }) {
   };
 }
 
+// T2-08 (T-27): die Ablehnungsform {status, body, audit} einer Quoten-Ablehnung
+// (Stundenlimit/Ziel-Cap) fuer den Claim-Lock-Recheck (callQuotaDenial in makeOutboundGates,
+// Aufrufer api-calls.js#claimCallRecord). fehler ist das {status,grund,message} aus
+// callQuotaError - Text und Status stammen damit aus DERSELBEN Quelle wie beim fruehen
+// number_gate; der Audit-Detailtext hat dieselbe Form wie dort (ohne praefix=, den nur das
+// Denylist-Gate setzt). denialAudit ist modulweit (s.o.), keine zweite Bauform.
+function quotaDenialOf(fehler, ctx) {
+  return {
+    status: fehler.status,
+    body: { error: fehler.message },
+    audit: denialAudit(fehler.grund, ctx, ` requestedBy=${ctx.requestedBy}`),
+  };
+}
+
 // SEC-P6 (GATE-02): die Gate-Kette laeuft an GENAU EINER Stelle - und ein GEWORFENES Gate
 // ist eine ABLEHNUNG, nie eine Freigabe. Gemessen war: 17 von 17 sterbenden Datenquellen
 // fuehrten zu NULL Wahlversuchen (das Sicherheitsversprechen hielt), aber 14 davon zu GAR
@@ -454,6 +468,31 @@ export function makeOutboundGates({
     });
   }
 
+  // Quoten-Gate: Stundenlimit (pro Tenant) vor Pro-Ziel-Cap. Liefert {status,grund,message}
+  // oder null (Vertrag wie kycGateError). T2-08 (T-27): EINE Quelle fuer Schwellwert UND
+  // Antwortformung - numberGateError (fruehes number_gate) und callQuotaDenial (Claim-Lock-
+  // Recheck) rufen beide diese Funktion, Text/Status koennen nicht auseinanderlaufen.
+  // Ein Ablehnungstext nennt NIE einen internen Env-Namen (Regel-4-Nachbarschaft): der
+  // Anrufer erfaehrt die Sperre, nicht die Konfigurationsflaeche. Der Blattwert bleibt
+  // im Audit-Log (grund=stundenlimit) forensisch nachvollziehbar.
+  function callQuotaError(to, caller) {
+    const { profile, tenantId } = caller;
+    if (tenantHourReached(profile, tenantId))
+      return { status: 429, grund: "stundenlimit", message: gateTexts(tenantId).hourLimit };
+    if (perTargetCapReached(tenantId, to))
+      return { status: 429, grund: "ziel_limit", message: gateTexts(tenantId).perTargetLimit };
+    return null;
+  }
+
+  // T2-08 (T-27): die Quoten-Pruefung fuer den Claim-Lock (api-calls.js#claimCallRecord,
+  // IM synchronen Lock-Body nach der Dedup-Entscheidung, vor createCall) - schliesst das
+  // Rennen zwischen fruehem number_gate und Datensatz-Anlage. ctx traegt to/profile/tenantId
+  // aus dem Gate-Durchlauf. null = Quote nicht erreicht.
+  function callQuotaDenial(ctx) {
+    const fehler = callQuotaError(ctx.to, { profile: ctx.profile, tenantId: ctx.tenantId });
+    return fehler ? quotaDenialOf(fehler, ctx) : null;
+  }
+
   // Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null. Feste
   // Pruefreihenfolge: Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit (pro Tenant)
   // -> Pro-Ziel-Cap -> Verifikations-Gate. Die Denylist laeuft BEWUSST vor der
@@ -479,22 +518,8 @@ export function makeOutboundGates({
         grund: "land",
         message: gateTexts(tenantId).countryBlocked(to),
       };
-    // Ein Ablehnungstext nennt NIE einen internen Env-Namen (Regel-4-Nachbarschaft): der
-    // Anrufer erfaehrt die Sperre, nicht die Konfigurationsflaeche. Der Blattwert bleibt
-    // im Audit-Log (grund=stundenlimit) forensisch nachvollziehbar.
-    if (tenantHourReached(profile, tenantId))
-      return {
-        status: 429,
-        grund: "stundenlimit",
-        message: gateTexts(tenantId).hourLimit,
-      };
-    if (perTargetCapReached(tenantId, to))
-      return {
-        status: 429,
-        grund: "ziel_limit",
-        message: gateTexts(tenantId).perTargetLimit,
-      };
-    return allowlistError(to, caller);
+    // Stundenlimit, dann Pro-Ziel-Cap (callQuotaError), dann das Verifikations-Gate.
+    return callQuotaError(to, caller) ?? allowlistError(to, caller);
   }
 
   // Absendernummer + Provider fuer den Outbound EINES Tenants (I7, L4). JEDER Tenant - auch
@@ -964,5 +989,5 @@ export function makeOutboundGates({
         "Kette und Sollstaerke (GATE_CHAIN_LENGTH) sind auseinandergelaufen.",
     );
 
-  return { gates };
+  return { gates, callQuotaDenial };
 }

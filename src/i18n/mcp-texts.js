@@ -26,6 +26,13 @@ export const MCP_ERROR_CODE = Object.freeze({
   // elevenlabs/convai.js). Der Text sagt deshalb ausdruecklich, dass ein erneuter Versuch
   // den laufenden Anruf zurueckliefert statt einen zweiten zu starten.
   CALL_START_UNCONFIRMED: "call_start_unconfirmed",
+  // T2-08 (T-27): Zeitablauf auf JEDEM UEBRIGEN MCP->REST-Hop (cancel_call, answer_consult,
+  // check_inbox, get_call_status, list_calls, GET /api/state-Leser, der Abschluss-GET in
+  // await_call_event). Anders als CALL_START_UNCONFIRMED (ein Anruf, der trotzdem lief) sagt
+  // dieser Text NIE "fehlgeschlagen": cancel/answer laufen serverseitig unabhaengig vom
+  // MCP-Client weiter, ein Retry darf deshalb nur zum erneuten Abfragen des Standes raten,
+  // nie zu einer blinden Wiederholung.
+  HOP_TIMEOUT: "hop_timeout",
   // T-14 (T2-05): kein Hermes-Mandant zu dieser Anmeldung gefunden (OAuth-Login ohne
   // verknuepften Tenant). Kein Wurf - src/mcp-no-tenant.js liest den Text direkt als
   // Tool-Fehlertext, zusammen mit der Re-Auth-Challenge im Ergebnis-_meta.
@@ -56,6 +63,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
         "Zeitablauf beim Anrufstart - der Anruf kann bereits laufen. Ein erneuter place_call an " +
         "dieselbe Nummer liefert den laufenden Anruf zurueck und startet keinen zweiten.",
+      [MCP_ERROR_CODE.HOP_TIMEOUT]:
+        "Zeitablauf bei der Anfrage - die Aktion kann trotzdem ausgefuehrt worden sein. Bitte " +
+        "den aktuellen Stand erneut abfragen, statt die Aktion blind zu wiederholen.",
       [MCP_ERROR_CODE.NO_TENANT_LINKED]:
         "Zu dieser Anmeldung ist kein Hermes-Konto verknuepft. Bitte erneut mit dem Konto anmelden, " +
         "das fuer Hermes genutzt wird. Ohne Hermes-Konto ist dieses Werkzeug nicht verfuegbar.",
@@ -140,6 +150,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
         "Timed out while starting the call - the call may already be running. Calling place_call " +
         "again for the same number returns the running call instead of starting a second one.",
+      [MCP_ERROR_CODE.HOP_TIMEOUT]:
+        "Timed out while waiting for a response - the action may have completed anyway. Please " +
+        "check the current status instead of blindly retrying the action.",
       [MCP_ERROR_CODE.NO_TENANT_LINKED]:
         "No Hermes account is linked to this sign-in. Please sign in again with the account you " +
         "use for Hermes. Without a Hermes account this tool is not available.",
@@ -192,6 +205,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
         "Délai dépassé au démarrage de l'appel - l'appel est peut-être déjà en cours. Un nouvel " +
         "appel à place_call vers le même numéro renvoie l'appel en cours au lieu d'en démarrer un second.",
+      [MCP_ERROR_CODE.HOP_TIMEOUT]:
+        "Délai dépassé en attendant une réponse - l'action a peut-être quand même été exécutée. " +
+        "Veuillez vérifier l'état actuel plutôt que de répéter l'action à l'aveugle.",
       [MCP_ERROR_CODE.NO_TENANT_LINKED]:
         "Aucun compte Hermes n'est lié à cette connexion. Veuillez vous reconnecter avec le compte " +
         "que vous utilisez pour Hermes. Sans compte Hermes, cet outil n'est pas disponible.",

@@ -319,6 +319,41 @@ const isAbortError = (err) => ABORT_ERROR_NAMES.has(err?.name);
 // test/openai-s3-hop-frist.test.js faellt dann rot.
 export const PLACE_CALL_HOP_TIMEOUT_MS = 180000;
 
+// T2-08 (T-27): Frist fuer JEDEN UEBRIGEN MCP->REST-Hop (alles ausser pollConsult und
+// placeCallHop, die eigene, oben begruendete Fristen behalten) - u.a. cancel_call,
+// answer_consult, check_inbox, get_call_status, list_calls, die GET /api/state-Leser und
+// der Abschluss-GET in await_call_event. KEIN Env-Knopf (Praezedenz PLACE_CALL_HOP_TIMEOUT_MS
+// oben, E3): ein Operator-Knopf ist der Weg, die Frist abzuschalten.
+// Wert-Herleitung am Seam, nicht geraten: der laengste begrenzte Serverweg der uebrigen
+// Hops ist cancel_call auf einen GEBUNDENEN EL-Inbound-Anruf (elevenlabs/outbound.js,
+// awaitAndPersistInboundElResult/pollConversationResult) - er wartet hoechstens
+//   EL_TERMINATION_RESULT_ATTEMPTS (3) x EL_ABORT_PROVIDER_TIMEOUT_MS (10000)
+// + (EL_TERMINATION_RESULT_ATTEMPTS - 1) x config.voice.elevenLabsOutbound.resultPollMs
+//   (Default 5000)
+// = 3*10000 + 2*5000 = 40000 ms. Alle anderen Ziel-Routen sind synchron (POST
+// /api/inbox/poll, POST /consult/answer, GET /api/state, GET /api/calls/:id) und warten
+// nicht auf einen Anbieter-Poll. 60000 ms laesst dem Default-Fall reichlich Kopf; wer
+// ELEVENLABS_RESULT_POLL_MS anhebt, muss hier nachrechnen -
+// test/openai-t2-08-hop-frist.test.js faellt dann rot (Ungleichungs-Test).
+export const MCP_HOP_TIMEOUT_MS = 60000;
+
+// T2-08 (T-27): der Hop, ueber den registerTools' call() JEDEN uebrigen MCP->REST-Aufruf
+// fuehrt - mit MCP_HOP_TIMEOUT_MS statt gar keiner Frist (Befund: nur pollConsult/
+// placeCallHop hatten bisher eine). Ein Zeitablauf ist HIER - anders als beim Long-Poll -
+// kein normales Ereignis: er wird zu einer stabilen Kennung (HOP_TIMEOUT), die wrapHandler
+// in der Tenant-Sprache ausgibt (Muster CALL_START_UNCONFIRMED). NIE "fehlgeschlagen": die
+// Aktion kann serverseitig trotzdem gelaufen sein. Modul-Ebene statt inline in
+// registerTools (Muster withWidgetLocale): der gepinnte registerTools-Befund
+// (eslint-legacy-exceptions.json) waechst dadurch nicht.
+async function boundedHop(request) {
+  try {
+    return await api({ ...request, timeoutMs: MCP_HOP_TIMEOUT_MS });
+  } catch (err) {
+    if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.HOP_TIMEOUT);
+    throw err;
+  }
+}
+
 const NO_CONSULT_EVENT = Object.freeze({
   event: CONSULT_EVENT.NONE,
   eventId: null,
@@ -860,7 +895,8 @@ export function registerTools(
     language = null,
   } = {},
 ) {
-  const call = (method, path, body) => api({ method, path, body, identity, scopedTenant });
+  // T2-08 (T-27): JEDER Hop ueber call() hat eine Frist - s. boundedHop (Modul-Ebene).
+  const call = (method, path, body) => boundedHop({ method, path, body, identity, scopedTenant });
   // Eigener, benannter Zugang fuer den EINEN lange haltenden Aufruf (kein viertes
   // Positions-Argument an call(), keine zweite fetch-Implementierung). Ein Zeitablauf
   // ist das NORMALE Ergebnis eines Long-Polls und wird deshalb GEZIELT zu event="none" -
