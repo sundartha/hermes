@@ -19,9 +19,10 @@ import { makeMcpAuth } from "../src/auth.js";
 import { startServer, startIdp, mcpPost, MCP_AUDIENCE } from "./helpers.js";
 
 // T2-07 (T-28): mcpAuth entsteht seit dieser Phase aus einer Fabrik, die den
-// Ablehnungs-Zaehler injiziert bekommt. Fuer diese Datei (Challenge-Wortlaut, kein
-// Drossel-Verhalten) genuegt eine Attrappe, die nie drosselt.
-const mcpAuth = makeMcpAuth({ ablehnungsDrossel: () => ({ allowed: true, retryAfterS: 0 }) });
+// Ablehnungs-Zaehler und dessen IP-Sperre injiziert bekommt. Fuer diese Datei (Challenge-Wortlaut, kein
+// Drossel-Verhalten) genuegen Attrappen, die nie drosseln.
+const ERLAUBT = () => ({ allowed: true, retryAfterS: 0 });
+const mcpAuth = makeMcpAuth({ ablehnungsDrossel: ERLAUBT, ipSperre: ERLAUBT });
 
 const HTTP_UNAUTHORIZED = 401;
 const STATIC_CHALLENGE = 'Bearer error="invalid_token"';

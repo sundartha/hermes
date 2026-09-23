@@ -312,6 +312,10 @@ export const RATE_SWEEP_INTERVAL_MS = 5 * 60_000;
 // windowMs/limit/sweepMs als EIN Optionsobjekt (F1). Liefert eine hit(key)-Funktion, die den
 // Zaehler fuer key erhoeht und {allowed, retryAfterS} zurueckgibt - reine Query+Zaehl-
 // Logik, kein HTTP-Wissen (der Express-Adapter bleibt beim Aufrufer).
+// hit.peek(key) (T2-07-Nachbesserung): liest denselben Stand, OHNE zu zaehlen - allowed ist
+// false, sobald das Fenster fuer key bereits ausgeschoepft ist (count >= limit), d.h. der
+// NAECHSTE hit(key) waere nicht mehr erlaubt. Nutzer: die IP-Sperre VOR dem statischen
+// Token-Vergleich (src/mcp-rate-limit.js, src/auth.js).
 export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
   const windows = new Map(); // key -> { count, startedAt }
 
@@ -322,19 +326,30 @@ export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
     for (const [key, w] of windows) if (now - w.startedAt >= windowMs) windows.delete(key);
   }, sweepMs).unref();
 
-  return function hit(key) {
+  const retryAfterS = (fenster, now) => Math.ceil((fenster.startedAt + windowMs - now) / 1000);
+  const laufendesFenster = (key, now) => {
+    const fenster = windows.get(key);
+    return fenster && now - fenster.startedAt < windowMs ? fenster : null;
+  };
+
+  function hit(key) {
     const now = Date.now();
-    let w = windows.get(key);
-    if (!w || now - w.startedAt >= windowMs) {
+    let w = laufendesFenster(key, now);
+    if (!w) {
       w = { count: 0, startedAt: now };
       windows.set(key, w);
     }
     w.count++;
-    return {
-      allowed: w.count <= limit,
-      retryAfterS: Math.ceil((w.startedAt + windowMs - now) / 1000),
-    };
+    return { allowed: w.count <= limit, retryAfterS: retryAfterS(w, now) };
+  }
+
+  hit.peek = function peek(key) {
+    const now = Date.now();
+    const fenster = laufendesFenster(key, now);
+    if (!fenster) return { allowed: true, retryAfterS: 0 };
+    return { allowed: fenster.count < limit, retryAfterS: retryAfterS(fenster, now) };
   };
+  return hit;
 }
 
 // Exportiert (T2-07/T-28): src/auth.js braucht denselben Koerper fuer die 429-Antwort des
@@ -365,7 +380,13 @@ export function respondTooManyRequests(res, { retryAfterS, body }) {
 // Rueckgabe false: die 429-Antwort ist bereits gesendet - der Aufrufer MUSS sofort
 // zurueckkehren, ohne eine zweite Antwort zu senden.
 export function pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel, verifizierteSub = null }) {
-  const { allowed, retryAfterS } = ablehnungsDrossel(req, { verifizierteSub });
+  return sende429WennGesperrt(res, ablehnungsDrossel(req, { verifizierteSub }));
+}
+
+// Die EINE Stelle "Drossel-Ergebnis -> ggf. 429" fuer pruefeAblehnungsDrossel (oben) und die
+// IP-Sperre vor dem statischen Token-Vergleich (src/auth.js). Rueckgabe wie dort: true =
+// weiterlaufen, false = 429 bereits gesendet.
+export function sende429WennGesperrt(res, { allowed, retryAfterS }) {
   if (allowed) return true;
   respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
   return false;

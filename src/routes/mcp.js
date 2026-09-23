@@ -20,7 +20,7 @@
 // T2-07 (T-28): POST /mcp traegt zwei eigene Zaehler statt des einen globalen IP-Limiters
 // (src/mcp-rate-limit.js, in app.js gebaut, ueber deps.mcpDrosseln injiziert) - je Mandant
 // statt je IP, damit ChatGPTs gemeinsame Egress-IPs Nutzer nicht gegenseitig drosseln.
-// mcpAuth entsteht hier aus makeMcpAuth({ ablehnungsDrossel }); mandantDrossel (s.u.) laeuft
+// mcpAuth entsteht hier aus makeMcpAuth({ ablehnungsDrossel, ipSperre }); mandantDrossel (s.u.) laeuft
 // NACH mcpAuth und VOR den Body-Parsern (deps.bodyParsers, dieselben Instanzen wie global
 // in app.js) - ein Unauthentifizierter wird dadurch nie geparst (Pre-Mortem 2). Die
 // Herkunftswache oben bekommt DENSELBEN Ablehnungs-Zaehler injiziert (Nachbesserung nach
@@ -137,8 +137,9 @@ function logAndDetectChatgptEgress(req) {
 export function makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyParsers }) {
   const router = Router();
   // mcpAuth (Funktionsname PFLICHT - Routen-Inventar-Test) mit dem Ablehnungs-Zaehler
-  // dieses Prozesses (T2-07/T-28). EINMAL gebaut, nicht pro Request.
-  const mcpAuth = makeMcpAuth({ ablehnungsDrossel: mcpDrosseln.ablehnung });
+  // dieses Prozesses (T2-07/T-28) und dessen IP-Sperre vor dem statischen Token-Vergleich
+  // (Brute-Force-Bremse, src/auth.js makeVerifyStatic). EINMAL gebaut, nicht pro Request.
+  const mcpAuth = makeMcpAuth({ ablehnungsDrossel: mcpDrosseln.ablehnung, ipSperre: mcpDrosseln.ipSperre });
 
   // T2-07 (T-28): Mandant EINMAL aufloesen (INV-7), NACH mcpAuth. In res.locals ablegen -
   // der Handler liest von dort statt requestTenant ein zweites Mal aufzurufen. Object.assign

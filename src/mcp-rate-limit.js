@@ -74,5 +74,18 @@ export function makeMcpDrosseln({ limitPerMin }) {
     return mandantHit(mandantSchluessel(req, scopedTenant));
   }
 
-  return { ablehnung, mandant };
+  // T2-07-Nachbesserung (Befund safety/wichtig, Brute-Force): liest den IP-Eimer des
+  // Ablehnungs-Zaehlers, OHNE zu zaehlen. Nicht erlaubt, sobald diese IP ihr Fenster an
+  // Fehlversuchen schon ausgeschoepft hat. Nutzer: der statische Token-/Legacy-Vergleich in
+  // mcpAuth (src/auth.js) fragt das VOR safeEqual - ab dem Fenster wird fuer diese IP gar
+  // nicht mehr verglichen, auch ein richtig geratenes Token bekommt 429 (sonst verriete
+  // "200 statt 429" jede richtige Vermutung, ungebremst). OAuth nutzt das bewusst NICHT:
+  // Signaturen sind nicht ratbar, und gueltige ChatGPT-Nutzer hinter derselben Egress-IP
+  // sollen nicht fuer fremde Fehlversuche gesperrt werden (T-28).
+  function ipSperre(req) {
+    if (isTrustedLocalCaller(req)) return TRUSTED_LOCAL_RESULT;
+    return ablehnungHit.peek(ablehnungsSchluessel(req, null));
+  }
+
+  return { ablehnung, mandant, ipSperre };
 }

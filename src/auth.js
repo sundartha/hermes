@@ -14,7 +14,7 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { config } from "./config.js";
 import { audit, safeEqual } from "./util.js";
-import { pruefeAblehnungsDrossel } from "./middleware.js";
+import { pruefeAblehnungsDrossel, sende429WennGesperrt } from "./middleware.js";
 
 // Localhost anhand der echten Socket-Adresse (nicht spoofbar via X-Forwarded-For).
 // ACHTUNG: hinter einem Reverse-Proxy (Render) ist remoteAddress IMMER der Loopback-
@@ -210,7 +210,9 @@ function nichtLeererString(wert) {
 }
 
 // EINE Stelle fuer "erst pruefen, dann zaehlen" (Muster initTokenSchranke,
-// routes/webhooks-elevenlabs-init.js): ruft den injizierten Ablehnungs-Zaehler VOR dem
+// routes/webhooks-elevenlabs-init.js) - "pruefen" meint hier die Credential-Pruefung, die
+// VOR diesem Aufruf gelaufen ist (fuer den statischen Token-Vergleich gibt es zusaetzlich
+// die IP-Sperre davor, makeVerifyStatic). Ruft den injizierten Ablehnungs-Zaehler VOR dem
 // Audit-Log, ueber den mit createMcpOriginGuard (src/middleware.js) geteilten Helper
 // pruefeAblehnungsDrossel (T2-07-Nachbesserung, Befund cleancode/wichtig - vorher stand
 // "pruefen, bei !allowed 429" wortgleich an beiden Stellen). T2-07-Nachbesserung (Befund
@@ -306,52 +308,61 @@ function makeVerifyOauth(ablehnungsDrossel) {
   };
 }
 
-// Fabrik statt eines modulweiten Exports (T2-07/T-28): mcpAuth braucht den injizierten
-// Ablehnungs-Zaehler (src/mcp-rate-limit.js) fuer JEDEN seiner Zweige. Wirft ohne
-// ablehnungsDrossel - fail-closed, kein ungedrosselter Default. Der Name der
-// zurueckgegebenen Funktion MUSS "mcpAuth" bleiben (Routen-Inventar-Test erkennt Auth
-// am Funktionsnamen, test/route-auth-inventory.test.js).
-export function makeMcpAuth({ ablehnungsDrossel }) {
-  if (!ablehnungsDrossel) throw new Error("makeMcpAuth: ablehnungsDrossel fehlt (fail-closed)");
-  const verifyOauth = makeVerifyOauth(ablehnungsDrossel);
+// Statischer Bearer-Vergleich (Modus "token" und Legacy ""), als Closure wie makeVerifyOauth.
+// T2-07-Nachbesserung (Befund safety/wichtig, Brute-Force): ein statisches MCP_AUTH_TOKEN ist -
+// anders als eine OAuth-Signatur - ratbar. "Erst pruefen, dann zaehlen" allein liesse jede
+// Vermutung ungebremst vergleichen und verriete das Ergebnis am Status (richtig = 200/403,
+// falsch = 429 ab dem Fenster). Darum fragt dieser Zweig die IP-Sperre (mcpDrosseln.ipSperre)
+// VOR safeEqual: hat diese IP ihr Fenster an Fehlversuchen schon ausgeschoepft, antwortet er
+// 429, ohne zu vergleichen - auch fuer ein richtiges Token (fail-closed, derselbe Schutz wie
+// der globale IP-Limiter VOR der Auth bis T2-07). Gueltige Aufrufe zaehlen NICHT in diesen
+// Eimer; sie sperrt nur, wer von derselben IP das Fenster an Fehlversuchen voll macht.
+function makeVerifyStatic({ ablehnungsDrossel, ipSperre }) {
+  const lehneAb = (req, res, { grund, body }) =>
+    mitAblehnungsDrossel(
+      { req, res, ablehnungsDrossel, auditFn: () => audit("auth_failed", req, grund) },
+      () => sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body }),
+    );
 
-  return async function mcpAuth(req, res, next) {
-    if (config.auth.mcpAuth === "oauth") return verifyOauth(req, res, next);
-    // Modus "off": keine Ablehnung moeglich, nichts zu zaehlen.
-    if (config.auth.mcpAuth === "off") return next();
-
-    // Modus "token" und Legacy ("") teilen die statische Bearer-Pruefung.
+  return function verifyStatic(req, res, next) {
+    if (!sende429WennGesperrt(res, ipSperre(req))) return;
     if (config.auth.mcpAuthToken) {
       if (safeEqual(req.headers.authorization || "", `Bearer ${config.auth.mcpAuthToken}`)) return next();
-      return mitAblehnungsDrossel(
-        { req, res, ablehnungsDrossel, auditFn: () => audit("auth_failed", req, "path=/mcp") },
-        () => sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } }),
-      );
+      return lehneAb(req, res, { grund: "path=/mcp", body: { error: "unauthorized" } });
     }
     // Kein Token gesetzt: "token" verlangt trotzdem eines, Legacy faellt AUSSERHALB der
     // Produktion auf localhost-only zurueck (fail-closed wie seit Phase 1). In Produktion
     // ist der Socket-Bypass deaktiviert (AM1) -> 401, auch von localhost.
     if (config.auth.mcpAuth === "token") {
-      return mitAblehnungsDrossel(
-        {
-          req,
-          res,
-          ablehnungsDrossel,
-          auditFn: () => audit("auth_failed", req, "path=/mcp grund=kein_token"),
-        },
-        () => sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } }),
-      );
+      return lehneAb(req, res, { grund: "path=/mcp grund=kein_token", body: { error: "unauthorized" } });
     }
     if (legacyLocalBypassAllowed(req)) return next();
-    return mitAblehnungsDrossel(
-      { req, res, ablehnungsDrossel, auditFn: () => audit("auth_failed", req, "path=/mcp") },
-      () =>
-        sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, {
-          body: {
-            error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost (ausserhalb Produktion) erreichbar",
-          },
-        }),
-    );
+    return lehneAb(req, res, {
+      grund: "path=/mcp",
+      body: {
+        error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost (ausserhalb Produktion) erreichbar",
+      },
+    });
+  };
+}
+
+// Fabrik statt eines modulweiten Exports (T2-07/T-28): mcpAuth braucht den injizierten
+// Ablehnungs-Zaehler (src/mcp-rate-limit.js) fuer JEDEN seiner Zweige und die IP-Sperre fuer
+// den statischen Vergleich (makeVerifyStatic). Wirft ohne eines von beiden - fail-closed,
+// kein ungedrosselter Default. Der Name der zurueckgegebenen Funktion MUSS "mcpAuth" bleiben
+// (Routen-Inventar-Test erkennt Auth am Funktionsnamen, test/route-auth-inventory.test.js).
+export function makeMcpAuth({ ablehnungsDrossel, ipSperre }) {
+  if (!ablehnungsDrossel) throw new Error("makeMcpAuth: ablehnungsDrossel fehlt (fail-closed)");
+  if (!ipSperre) throw new Error("makeMcpAuth: ipSperre fehlt (fail-closed)");
+  const verifyOauth = makeVerifyOauth(ablehnungsDrossel);
+  const verifyStatic = makeVerifyStatic({ ablehnungsDrossel, ipSperre });
+
+  return async function mcpAuth(req, res, next) {
+    if (config.auth.mcpAuth === "oauth") return verifyOauth(req, res, next);
+    // Modus "off": keine Ablehnung moeglich, nichts zu zaehlen.
+    if (config.auth.mcpAuth === "off") return next();
+    // Modus "token" und Legacy ("") teilen die statische Bearer-Pruefung.
+    return verifyStatic(req, res, next);
   };
 }
 

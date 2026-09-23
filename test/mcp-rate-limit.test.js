@@ -454,3 +454,46 @@ test("MRL-n: auth_failed-Zeilen bleiben unter einer Flut auf FENSTER_LIMIT begre
     await idp.close();
   }
 });
+
+// (o) T2-07-Nachbesserung (Befund safety/wichtig, Brute-Force): im statischen Token- und im
+// Legacy-Modus ist das Geheimnis ratbar. Hat eine IP ihr Fenster an Fehlversuchen voll,
+// wird fuer sie VOR safeEqual abgelehnt (429) - auch ein richtiges Token, sonst verriete
+// "200 statt 429" die richtige Vermutung. Gueltige Aufrufe verbrauchen das Fehlversuch-
+// Budget nicht, und eine andere IP bleibt unberuehrt. (OAuth-Gegenstueck: MRL-b/MRL-n -
+// dort bleibt ein gueltiges Token derselben IP nach der Flut 200.)
+const STATISCHES_TOKEN = "t0p-secret";
+async function belegeIpSperreVorVergleich(env) {
+  const srv = await startServer({ env: { ...env, RATE_LIMIT_PER_MIN: RATE_LIMIT_PER_MIN_TEST }, seed: seedTwoTenants() });
+  try {
+    const url = `${srv.localUrl}/mcp`;
+    const angreiferIp = "203.0.113.30";
+    const sende = (token, forwardedFor = angreiferIp) => mcpPostFrom(url, { token, body: initBody, forwardedFor });
+
+    for (let i = 0; i < FENSTER_LIMIT; i++) {
+      assert.equal((await sende("falsch")).status, HTTP_UNAUTHORIZED, `Fehlversuch ${i + 1}`);
+      if (i < FENSTER_LIMIT - 1) {
+        const gueltig = await sende(STATISCHES_TOKEN);
+        assert.notEqual(gueltig.status, HTTP_TOO_MANY, "gueltig unter dem Fehlversuch-Budget: nicht gedrosselt");
+      }
+    }
+    const richtigGeraten = await sende(STATISCHES_TOKEN);
+    assert.equal(richtigGeraten.status, HTTP_TOO_MANY, "ab dem Fenster kein Vergleich mehr - kein Orakel");
+    assert.ok(richtigGeraten.headers.get("retry-after"), "Retry-After gesetzt");
+    for (let i = 0; i < FLUT_UEBERSCHUSS; i++) {
+      assert.equal((await sende(`rate-${i}`)).status, HTTP_TOO_MANY, `Flut-Versuch ${i + 1}`);
+    }
+    const andereIp = await sende(STATISCHES_TOKEN, "203.0.113.31");
+    assert.notEqual(andereIp.status, HTTP_TOO_MANY, "andere IP teilt den Fehlversuch-Eimer nicht");
+    assert.notEqual(andereIp.status, HTTP_UNAUTHORIZED, "andere IP mit gueltigem Token authentifiziert");
+  } finally {
+    await srv.stop();
+  }
+}
+
+test("MRL-o: Token-Modus - IP-Sperre VOR dem Token-Vergleich nach FENSTER_LIMIT Fehlversuchen", async () => {
+  await belegeIpSperreVorVergleich({ MCP_AUTH: "token", MCP_AUTH_TOKEN: STATISCHES_TOKEN });
+});
+
+test("MRL-p: Legacy-Modus (MCP_AUTH leer, Token gesetzt) - dieselbe IP-Sperre VOR dem Vergleich", async () => {
+  await belegeIpSperreVorVergleich({ MCP_AUTH: "", MCP_AUTH_TOKEN: STATISCHES_TOKEN });
+});
