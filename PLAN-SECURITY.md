@@ -5717,3 +5717,69 @@ Legacy-Modus unveraendert, T05-8 stdio unveraendert, T05-9 ungueltige Signatur b
 Vier Bestandsdateien nachgezogen (`am6-oauth-tenant`, `request-tenant`, `profiles`,
 `e4-mandantentrennung-default`), die bisher 403 fuer diesen Fall erwarteten — die NIE-Owner-
 Aussagen bleiben in jedem Fall unveraendert Kernpruefung.
+
+## T2-06 — CORS auf /mcp nur fuer byte-genau gelistete Origins (2026-09-23)
+
+**Anlass:** MCP-Spec-Quickstart (T-29, Stufe C) sieht vor, dass ein Browser-basierter Client
+`/mcp` per `fetch` ansprechen und die Antwort lesen kann — dafuer muss der Server CORS-Header
+setzen. Ohne diese Phase gibt es keinen einzigen `Access-Control-*`-Header irgendwo im Code; ein
+Browser-Client scheiterte am Same-Origin-Policy, unabhaengig davon, ob die Herkunftswache
+(`createMcpOriginGuard`, E5) ihn durchliess.
+
+**Eigene, aber abgeleitete Liste (`src/middleware.js#createMcpCors`, Montage
+`src/routes/mcp.js`):** `corsOrigins` entsteht aus DERSELBEN `mcpErlaubteOrigins`-Funktion wie die
+Herkunftswache, aber OHNE `publicUrl` — PUBLIC_URL ist same-origin und braucht kein CORS. Per
+Konstruktion ist `corsOrigins` damit eine ECHTE Teilmenge der Wachen-Liste: kein Origin bekommt
+CORS-Header, der nicht auch die Wache passieren wuerde. Bei leerer Liste (Default, heute live)
+ruft die Middleware fuer jeden Request sofort `next()` und setzt keinen Header — jede
+`/mcp`-Antwort bleibt byte-identisch zu vor dieser Phase.
+
+**Byte-genauer Vergleich, keine Normalisierung:** `mcpCorsOrigin` vergleicht den ROHEN
+`Origin`-Header als String exakt gegen die Listen-Eintraege (`corsOrigins.includes(rohwert)`) und
+gibt bei Treffer das Listen-Element zurueck, sonst `null` — nie den Rohwert. Kein
+Praefix-/Suffix-Match, kein Wildcard, keine Case-/Slash-/Port-Toleranz. Das ist STRENGER als die
+Herkunftswache selbst (die normalisiert, E5-H06: `HTTPS://Agent.Test` passiert die Wache) —
+bewusste Asymmetrie: ein Origin, der die Wache mit abweichender Schreibweise passiert, bekommt
+trotzdem keine CORS-Header, wenn er nicht byte-genau in der Liste steht. `Access-Control-Allow-Origin`
+traegt immer das Listen-Element, nie `*` und nie den Rohwert direkt.
+
+**Unabhaengig vom Notventil (`MCP_ORIGIN_ENFORCE`):** die CORS-Entscheidung liest diesen Schalter
+nie. Mit `enforce=false` ist die Herkunftswache geloest, aber CORS spiegelt weiterhin nur einen
+Origin aus `corsOrigins` — ein geloestes Notventil oeffnet keinen fremden Origin fuer
+Browser-Lesezugriff.
+
+**use-Layer statt eigener OPTIONS-Route:** eine `router.options("/mcp", ...)` wuerde (a) das
+heutige Auto-OPTIONS ohne Origin veraendern (Express haengte einen `Allow`-Header an, den es
+heute nicht setzt — kein byte-identisches Verhalten bei leerer Liste, E5-H09) und (b) einen neuen
+Eintrag im Routen-Graph erzeugen. `test/route-auth-inventory.test.js` sammelt ausschliesslich
+`layer.route`-Schichten (keine `router.use`-Schichten) und wuerde einen `PUBLIC_ROUTES`-Eintrag
+fuer diesen Layer als verwaist melden — ein Eintrag ist fuer eine use-Schicht technisch nicht
+moeglich. Absolute Regel 3 wird stattdessen durch diesen Abschnitt und den Code-Kommentar in
+`createMcpCors` erfuellt: der Preflight liefert keine Daten und keine Identitaet, nur Header, und
+nur fuer gelistete Origins. Die Herkunftswache (E5) ist bereits derselbe Bautyp (use-Layer,
+beantwortet OPTIONS) — keine neue Kategorie.
+
+**Reihenfolge Wache -> CORS -> mcpAuth:** die CORS-Middleware sitzt DIREKT nach der
+Herkunftswache und VOR `mcpAuth`. Ein fremder Origin endet bereits in der Wache (403, ohne
+CORS-Header). Ein gelisteter Origin bekommt die Header gesetzt, BEVOR `mcpAuth` eine 401/403-Antwort
+schickt — ein Browser-Client kann die `WWW-Authenticate`-Challenge dadurch lesen und sich neu
+autorisieren (ohne das die Falle entstuende, wegen der das Notventil E-4 existiert). Kein
+`Access-Control-Allow-Credentials` (Identitaet laeuft per Bearer-Header, keine Cookies, keine
+Ambient-Credentials); kein `Access-Control-Max-Age` (nicht verlangt, keine Zahl ohne
+Messgrundlage).
+
+**Semantik-Erweiterung ohne neue Env-Variable:** `MCP_ALLOWED_ORIGINS` steuert seit dieser Phase
+zusaetzlich den Browser-Lesezugriff, nicht nur die Herkunftswache. Kommentare in `src/config.js`
+und `.env.example` sind entsprechend nachgezogen; kein neuer Wert wird gesetzt (Default bleibt
+leer = inert), `render.yaml` und `test/helpers.js#BASE_ENV` bleiben unangetastet.
+
+**Bewusst akzeptiertes Risiko:** ein gelisteter Origin darf `/mcp`-Antworten im Browser lesen —
+das ist die Wirkung, die T-29 verlangt. Die einzige mildernde Eigenschaft ist, dass Identitaet
+weiterhin ausschliesslich per eigenem Bearer-Token laeuft (keine Ambient-Credentials, kein
+Cookie-Kontext) — ein gelisteter Origin ohne gueltiges Token sieht nur die 401-Challenge, keine
+Tool-Antworten. Der Wert fuer `MCP_ALLOWED_ORIGINS` haengt an einer Owner-Messung im ChatGPT
+Developer Mode (Render-Log `grund=mcp_cross_origin` / `[mcp] client-class`) und ist NICHT Teil
+dieser Phase.
+
+Tests: `test/s2-mcp-origin.test.js` (Praefix `T2-06-`, Unit- und Drahtfaelle gegen den echten
+`/mcp`-Endpunkt in allen drei Auth-Modi).
