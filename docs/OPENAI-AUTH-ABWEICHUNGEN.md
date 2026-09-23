@@ -322,11 +322,14 @@ verified locally once per HTTP request in the `mcpAuth` middleware (`src/routes/
 before any MCP tool runs: signature (JWKS), issuer, audience, **`exp` is now required**
 (`requiredClaims`, since T2-03); `nbf` still **only if the claim is present** (see T-12). The
 token is not re-checked during a tool call. Two further places can
-reject an already-authenticated request: `rejectIfNoTenant` (`src/routes/mcp.js:60-65`, called
-at `:118`) returns HTTP 403 **without** a `WWW-Authenticate` challenge for a valid token that
-maps to no tenant (logged as `auth_failed`); and the tools' internal REST hop (`api()`,
-`src/mcp-tools.js:60-81`) can receive a 403, which reaches the client as a tool result with
-`isError: true` (`src/mcp-tools.js:885-902`).
+reject an already-authenticated request: `rejectIfNoTenant` (`src/routes/mcp.js`) rejects a
+valid token that maps to no tenant. In token/legacy/off mode (no `req.auth`) this remains HTTP
+403 **without** a `WWW-Authenticate` challenge; in OAuth mode, since T2-05 (2026-09-23), it no
+longer returns 403 — instead it registers stub tools (`registerNoTenantStubs`,
+`src/mcp-no-tenant.js`) whose `tools/call` result carries a re-auth challenge in
+`_meta["mcp/www_authenticate"]`. Both cases are audited as `auth_failed` (finding B-1, Section
+7). And the tools' internal REST hop (`api()`, `src/mcp-tools.js:60-81`) can receive a 403,
+which reaches the client as a tool result with `isError: true` (`src/mcp-tools.js:885-902`).
 
 ### T-14 — in-conversation auth UI only via an error result carrying `_meta["mcp/www_authenticate"]`
 
