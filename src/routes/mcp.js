@@ -142,8 +142,8 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
   );
 
   // T2-06 (T-29): CORS NUR fuer byte-genau gelistete Origins, DIREKT nach der
-  // Herkunftswache und VOR mcpAuth - ein Browser-Client mit gelistetem Origin muss die
-  // 401-Bearer-Challenge (WWW-Authenticate) lesen koennen, um sich neu zu autorisieren
+  // Herkunftswache und VOR mcpAuth - ein Browser-Client mit gelistetem Origin muss den
+  // 401-Bearer-Challenge-Header lesen koennen, um sich neu zu autorisieren
   // (sonst genau die Falle, wegen der das Notventil E-4 existiert). corsOrigins entsteht
   // aus DERSELBEN mcpErlaubteOrigins-Funktion wie die Wachen-Liste oben, aber OHNE
   // publicUrl: PUBLIC_URL ist same-origin und braucht kein CORS, und diese Konstruktion
