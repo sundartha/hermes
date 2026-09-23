@@ -6034,3 +6034,49 @@ geoeffnetem Rennfenster, T3-T6 In-Process gegen die echte Gate-Kette + Route), `
 (Hop-Frist + Ungleichungstest), `test/outbound-gates-order.test.js`, `test/number-gate.test.js`,
 `test/gap-10-hour-limit-per-tenant.test.js`, `test/mcp-tools-language.test.js` (Vollstaendigkeits-
 pruefung `HOP_TIMEOUT` in allen drei Sprachen) gruen ohne Verhaltensaenderung.
+
+## OpenAI-T2-09 — Geldpfad: neutrale Fehlertexte an der MCP-Grenze (2026-09-23)
+
+Die MCP-Grenze reicht seit T2-09 keinen rohen REST-Fehlertext mehr durch (Ausnahme:
+400-Eingabehinweise); Gate-Ablehnungen tragen im REST-Body additiv `reason`, das MCP-Werkzeug
+zeigt einen neutralen Text je Grund.
+
+**Anlass (O-13/O-20):** `mcp-tools.js#api()` warf bisher `json.error || "HTTP <status>"` und
+`wrapHandler` gab `err.message` unveraendert aus — ein Budget-/Minuten-402 nannte Betraege und
+Daten, ein 500 ohne Body zeigte "HTTP 500", ein nicht erreichbares Gateway "fetch failed",
+`list_action_items` die interne Item-ID.
+
+**Additives `reason` in `src/routes/api-calls.js`:** der Modul-Helfer `denialResponseBody(denial)`
+haengt `denial.audit.grund` (dieselbe Kennung wie Audit/Metrik) an GENAU den zwei Stellen an, an
+denen eine Gate-Ablehnung die Route verlaesst — der fruehe Gate-Durchlauf und der Claim-Lock-
+Recheck in `antwortOhneNeuenAnruf`. `outbound-gates.js` bleibt unangetastet: `reason` ist additiv,
+Status/`error`-Text/Audit/Metrik bleiben byte-identisch. Ein reiner 400-Formfehler (kein
+`audit`-Objekt) traegt weiterhin kein `reason`.
+
+**Neutrale Texttabelle `src/i18n/mcp-denial-texts.js`:** je einer der 21 Ablehnungsgruende aus
+`outbound-gates.js` (per Test aus der Quelle abgeleitet, keine gepflegte Liste) bekommt in de/en/fr
+einen Text, der sagt was passiert ist ("kein Anruf"), was zu tun ist, und dabei keine Zahl, keinen
+Env-Namen, keine interne Kennung und kein Abo-/Upgrade-Wort nennt (O-20: "must not display
+subscription plans, initiate new subscriptions, or promote upgrades"). Vier neue stabile
+Fehlerkennungen (`DENIAL_UNKNOWN`, `NOT_FOUND`, `NOT_PERMITTED`, `REQUEST_REJECTED`) decken den
+Rest ab.
+
+**Eine Abbildung Fehler -> Text (`mcp-tools.js#toolErrorText`, modul-weit):** 1. bekannte
+`ToolError`-Kennung (Bestand, Vorrang), 2. `err.reason` -> Tabellentext, unbekannter/kuenftiger
+Grund -> `DENIAL_UNKNOWN` PLUS `console.warn` mit der auf `[a-z_]` und 40 Zeichen bereinigten
+Kennung (serverseitig, NIE `console.log` — stdout ist im stdio-Transport das Protokoll), 3.
+`err.inputHint` (NUR ein reiner 400-Eingabefehler ohne `reason` — Korrekturhinweis zur eigenen
+Eingabe des Aufrufers, sonst koennte das Modell sie nicht reparieren), 4. HTTP-Statusklasse
+(404/403/sonstige 4xx), 5. Rest -> `UPSTREAM_UNREACHABLE` + `console.error` serverseitig.
+`list_action_items` (O-13) nennt keine interne Item-ID mehr — kein Werkzeug und keine REST-Route
+nimmt eine entgegen.
+
+**Bewusst NICHT gebaut:** T4 (OAuth, Nicht-Bootstrap-Tenant, PAYMENT_ENABLED-Fixture ueber `/mcp`)
+— der 402-Minuten-Fall ist am Draht bereits ueber den stdio-Kindprozess belegt, das additive
+REST-`reason`-Feld separat mit einer echten Formfehler-/Frozen-Fixture.
+
+Tests: `test/openai-t2-09-neutrale-fehlertexte.test.js` (T1 Vollstaendigkeit gegen die Quelle
+inkl. Struktur-Waechter auf jeden `denialAudit()`-Aufruf, T2 Reinheit, T3 Draht HTTP `/mcp`
+Legacy/Bootstrap, S1 REST-`reason` additiv, T5 Draht stdio-Kindprozess gegen Gateway-Attrappe,
+T6 HTTP-Statusklassen), `test/mcp-tools.test.js` und `test/mcp-tools-language.test.js`
+(`list_action_items` ohne Item-ID angepasst) gruen.
