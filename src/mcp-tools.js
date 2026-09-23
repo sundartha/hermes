@@ -59,6 +59,10 @@ const LAST_TRANSCRIPT_LINES = 6;
 // Socket unbegrenzt, falls der Gateway-Handler haengt. Ohne timeoutMs byte-identisch
 // zum Bestand (kein signal -> fetch-Default). EIN Objekt-Argument statt sechs
 // Positionen (F1). AbortSignal.timeout ist ab Node 17.3 verfuegbar (package.json: >=22).
+// T2-09: reiner 400-Eingabefehler (Formfehler des Aufrufers, s. api() unten) - benannt statt
+// nackter Zahl (G25).
+const BAD_REQUEST_STATUS = 400;
+
 async function api({ method, path, body, identity, scopedTenant, timeoutMs = null }) {
   const headers = { "Content-Type": "application/json" };
   if (identity) headers["X-Internal-Identity"] = identity;
@@ -72,11 +76,21 @@ async function api({ method, path, body, identity, scopedTenant, timeoutMs = nul
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error(json.error || `HTTP ${res.status}`);
-    // AL-P13: der Status reist additiv mit (Message unveraendert) - answer_consult muss
-    // "verworfen" (400) von "nicht mehr offen" (409) unterscheiden, ohne den Fehlertext
-    // zu parsen (Zeichenketten-Vergleich waere ein zweites, brechendes Format).
+    // T2-09 (O-13/O-20): kein roher REST-Fehlertext mehr in der message - sie wird nirgends
+    // mehr ausgegeben (toolErrorText in wrapHandler baut den Client-Text ausschliesslich aus
+    // reason/inputHint/httpStatus, s.u.). httpStatus bleibt unveraendert (AL-P13: answer_consult
+    // muss "verworfen" 400 von "nicht mehr offen" 409 unterscheiden). reason ist additiv aus
+    // dem REST-Body (api-calls.js#denialResponseBody) - der maschinenlesbare Gate-Grund.
+    // inputHint traegt NUR bei einem reinen 400-Eingabefehler (kein reason, also kein
+    // Gate-Grund) den Bestandstext weiter: das ist ein Korrekturhinweis zur eigenen Eingabe
+    // des Aufrufers (z.B. Laengengrenze von objective), das Modell braucht ihn, um die
+    // Eingabe zu korrigieren (Entscheidung 3 der T2-09-Spec) - er traegt keine interne
+    // Kennung, keinen Env-Namen, keinen Tarif-Hinweis.
+    const err = new Error("upstream_status");
     err.httpStatus = res.status;
+    if (typeof json.reason === "string") err.reason = json.reason;
+    else if (res.status === BAD_REQUEST_STATUS && typeof json.error === "string")
+      err.inputHint = json.error;
     throw err;
   }
   return json;
@@ -352,6 +366,74 @@ async function boundedHop(request) {
     if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.HOP_TIMEOUT);
     throw err;
   }
+}
+
+// T2-09 (O-13/O-20): HTTP-Statusklassen fuer toolErrorText, benannt statt Magic Numbers.
+const NOT_FOUND_STATUS = 404;
+const NOT_PERMITTED_STATUS = 403;
+const CLIENT_ERROR_STATUS_MIN = 400;
+const CLIENT_ERROR_STATUS_MAX = 499;
+// Ein unbekannter Ablehnungsgrund darf den Server-Log weder sprengen noch mit Steuerzeichen
+// fuellen (Log-Injection) - deshalb auf [a-z_] und diese Laenge bereinigt, BEVOR er geloggt wird.
+const DENIAL_WARN_MAX_LEN = 40;
+
+// Bereinigt einen unbekannten Ablehnungsgrund fuer den Server-Log (NIE fuer den Client-Text -
+// der bekommt ausschliesslich texts.errors[DENIAL_UNKNOWN]).
+function sanitizedDenialReason(reason) {
+  return String(reason)
+    .toLowerCase()
+    .replace(/[^a-z_]/g, "")
+    .slice(0, DENIAL_WARN_MAX_LEN);
+}
+
+// Schritt 1 (Vertrag s. toolErrorText unten): ein ToolError mit bekannter Kennung geht IMMER
+// vor - diese Zustaende koennen "die Aktion lief serverseitig trotzdem" bedeuten.
+function knownToolErrorCodeText(err, texts) {
+  return err?.code ? texts.errors[err.code] : undefined;
+}
+
+// Schritt 2: ein Gate-Ablehnungsgrund (err.reason, additiv aus dem REST-Body via api()).
+// Bekannter Grund -> der neutrale Text aus texts.denials; unbekannter/kuenftiger Grund -> der
+// Client bekommt DENIAL_UNKNOWN (NIE eine rohe Kennung), der Server-Log die bereinigte Kennung
+// als Warnung (console.warn, NIE console.log - stdout ist im stdio-Transport das Protokoll).
+function denialReasonText(err, texts) {
+  if (typeof err?.reason !== "string") return undefined;
+  const denialText = texts.denials[err.reason];
+  if (denialText) return denialText;
+  console.warn("[mcp] unbekannter Ablehnungsgrund:", sanitizedDenialReason(err.reason));
+  return texts.errors[MCP_ERROR_CODE.DENIAL_UNKNOWN];
+}
+
+// Schritt 4: der HTTP-Status ohne bekannten Grund und ohne inputHint.
+function httpStatusClassText(httpStatus, texts) {
+  if (httpStatus === NOT_FOUND_STATUS) return texts.errors[MCP_ERROR_CODE.NOT_FOUND];
+  if (httpStatus === NOT_PERMITTED_STATUS) return texts.errors[MCP_ERROR_CODE.NOT_PERMITTED];
+  const isClientError =
+    typeof httpStatus === "number" &&
+    httpStatus >= CLIENT_ERROR_STATUS_MIN &&
+    httpStatus <= CLIENT_ERROR_STATUS_MAX;
+  return isClientError ? texts.errors[MCP_ERROR_CODE.REQUEST_REJECTED] : undefined;
+}
+
+// T2-09 (O-13/O-20, Pre-Mortem 2/3/5): EINE Abbildung Fehler -> Client-Text, modul-weit
+// (Muster boundedHop), damit der gepinnte registerTools-Befund (eslint-legacy-exceptions.json)
+// nicht waechst. Reihenfolge ist Vertrag (Schritte 1-2/4 in eigenen Funktionen oben, wegen der
+// Komplexitaetsgrenze): 1. ToolError-Kennung, 2. Gate-Ablehnungsgrund, 3. err.inputHint (NUR
+// ein reiner 400-Eingabefehler ohne reason, s. api()) - wird an das Client-Modell
+// durchgereicht, das seine eigene Eingabe sonst nicht korrigieren koennte, 4. HTTP-Statusklasse,
+// 5. alles andere (5xx, Netzfehler wie "fetch failed", ein TypeError aus einem Handler) ->
+// UPSTREAM_UNREACHABLE; console.error mit err.name/err.message (secret-frei wie im Bestand)
+// landet NUR serverseitig, nie beim Client.
+function toolErrorText(err, texts) {
+  const known = knownToolErrorCodeText(err, texts);
+  if (known) return known;
+  const denial = denialReasonText(err, texts);
+  if (denial) return denial;
+  if (typeof err?.inputHint === "string") return err.inputHint;
+  const statusText = httpStatusClassText(err?.httpStatus, texts);
+  if (statusText) return statusText;
+  console.error("[mcp] Tool-Fehler ohne bekannte Kennung:", err?.name, err?.message);
+  return texts.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
 }
 
 const NO_CONSULT_EVENT = Object.freeze({
@@ -969,16 +1051,12 @@ export function registerTools(
       try {
         return await handler(...args);
       } catch (err) {
-        // P12: ein ToolError traegt eine stabile Kennung -> hier uebersetzt. Alles ohne
-        // bekannte Kennung behaelt sein Bestandsverhalten (err.message, z.B. "HTTP 500"
-        // oder "fetch failed" aus api()); nur der leere Fall bekommt den lokalisierten
-        // Auffangsatz. Diese Reihenfolge ist Absicht: wuerde err.message unterdrueckt,
-        // saehe ein EN-Tenant bei Netzfehlern wieder den deutschen Satz (MCP-05).
-        return errText(
-          loc.mcp.errors[err?.code] ||
-            err?.message ||
-            loc.mcp.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
-        );
+        // T2-09 (O-13/O-20): err.message traegt seit api() nichts Nutzerlesbares mehr (kein
+        // roher REST-Fehlertext, kein "HTTP 500", kein "fetch failed") - der Client-Text
+        // entsteht ausschliesslich ueber toolErrorText (P12 ToolError-Kennung, Gate-Grund,
+        // 400-Eingabehinweis oder HTTP-Statusklasse, in dieser Reihenfolge, s. dort). Die
+        // Uebersetzung passiert damit weiterhin an EINER Kante.
+        return errText(toolErrorText(err, loc.mcp));
       }
     };
 
@@ -1521,13 +1599,16 @@ export function registerTools(
     async () => {
       const s = await call("GET", "/api/state");
       requireFields(s, { actionItems: "array" });
-      const open = s.actionItems.filter((a) => !a.done);
+      const open = s.actionItems.filter((item) => !item.done);
       if (!open.length) return text(loc.mcp.emptyActionItems);
+      // T2-09 (O-13 Datenminimierung): keine interne Item-ID mehr in der Zeile - kein
+      // Werkzeug und keine REST-Route nimmt eine Action-Item-ID entgegen, sie ist also
+      // nicht "strictly required" (O-13-Ausnahme).
       return text(
         open
           .map(
-            (a) =>
-              `[${a.id}] ${a.type === "appointment" ? loc.mcp.appointmentPrefix : ""}${a.text}`,
+            (item) =>
+              `${item.type === "appointment" ? loc.mcp.appointmentPrefix : ""}${item.text}`,
           )
           .join("\n"),
       );
