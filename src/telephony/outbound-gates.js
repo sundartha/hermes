@@ -280,6 +280,73 @@ function makeAniOwnershipGate({ config, store, aniOwnershipRecheck }) {
   };
 }
 
+// T2-08 (T-27): callQuotaError/callQuotaDenial (Stundenlimit + Ziel-Cap) als EIGENSTAENDIGE
+// Fabrik statt inline in makeOutboundGates - GENAU dasselbe Muster wie makeAniOwnershipGate
+// oben (Blocker-Vermeidungsliste 3, Clean-Code): makeOutboundGates ist eine bereits gepinnte
+// Altlast (eslint-suppressions.json, max-lines-per-function, kein eslint-legacy-exceptions-
+// Eintrag - ein NEUER Eintrag braucht Owner-Freigabe, die hier nicht eingeholt werden kann,
+// s. test/check-staged-suppressions.test.js#"der Inhalt der Altlast-Liste ist
+// unveraendert"). Beide Funktionen sind komplett NEUER Code und wandern deshalb komplett
+// hier hinaus, statt den Pin dort zu bewegen. Injiziert werden die bereits vorhandenen,
+// UNVERAENDERTEN Praedikate (tenantHourReached/perTargetCapReached/gateTexts bleiben an
+// ihrer Stelle in makeOutboundGates).
+//
+// ABWEICHUNG vom urspruenglichen Spec-Vorschlag (S1: "numberGateError ruft sie an GENAU
+// derselben Stelle"): numberGateError bleibt bewusst BYTE-IDENTISCH zum Bestand (s.
+// Kommentar dort) statt auf callQuotaError() umgestellt zu werden - eine Umstellung haette
+// die zwei Inline-Bloecke durch einen zweizeiligen Aufruf ersetzt und damit den bereits
+// gepinnten max-lines-per-function-Befund um 10 Zeilen verschoben, was denselben
+// Owner-Freigabe-Bedarf ausloest. Die tatsaechliche SICHERHEITSLOGIK bleibt trotzdem EINE
+// Quelle: callQuotaError ruft dieselben zwei Praedikate (tenantHourReached/
+// perTargetCapReached), injiziert von hier - der Schwellwert-Vergleich kann nicht
+// auseinanderlaufen. Dupliziert ist NUR die Antwortformung (welcher Text/Status zu welchem
+// Grund), zwischen numberGateError's Inline-Bloecken und callQuotaError unten - kleineres,
+// nicht sicherheitskritisches Risiko als eine unautorisierte Altlast-Eintragung.
+//
+// Eigene, hier lokale Denial-Form ({status, body, audit}) statt eines injizierten deny() -
+// dieselbe Form, dieselbe Begruendung wie beim ANI-Riegel oben (kein Zugriff auf dessen
+// Closure von aussen). denialAudit ist bereits modulweit definiert (s.o.), keine zweite
+// Quelle.
+function makeCallQuotaCheck({ tenantHourReached, perTargetCapReached, gateTexts }) {
+  // Vertrag: {status,grund,message} oder null. Reihenfolge/Texte/Status byte-identisch
+  // zu numberGateError's eigenen (unveraenderten) Inline-Bloecken: stundenlimit vor
+  // ziel_limit.
+  function callQuotaError(to, caller) {
+    const { profile, tenantId } = caller;
+    // Ein Ablehnungstext nennt NIE einen internen Env-Namen (Regel-4-Nachbarschaft): der
+    // Anrufer erfaehrt die Sperre, nicht die Konfigurationsflaeche. Der Blattwert bleibt
+    // im Audit-Log (grund=stundenlimit) forensisch nachvollziehbar.
+    if (tenantHourReached(profile, tenantId))
+      return {
+        status: 429,
+        grund: "stundenlimit",
+        message: gateTexts(tenantId).hourLimit,
+      };
+    if (perTargetCapReached(tenantId, to))
+      return {
+        status: 429,
+        grund: "ziel_limit",
+        message: gateTexts(tenantId).perTargetLimit,
+      };
+    return null;
+  }
+
+  // Die number_gate-Ablehnungsform, wiederverwendbar aus dem Claim-Lock (S3) OHNE den
+  // fruehen number_gate-Gate-Code zu duplizieren. ctx traegt hier bereits to/profile/
+  // tenantId (vom Gate-Durchlauf davor gefuellt). null = Quote nicht erreicht (weiter).
+  function callQuotaDenial(ctx) {
+    const fehler = callQuotaError(ctx.to, { profile: ctx.profile, tenantId: ctx.tenantId });
+    if (!fehler) return null;
+    return {
+      status: fehler.status,
+      body: { error: fehler.message },
+      audit: denialAudit(fehler.grund, ctx, ` requestedBy=${ctx.requestedBy}`),
+    };
+  }
+
+  return { callQuotaError, callQuotaDenial };
+}
+
 // SEC-P6 (GATE-02): die Gate-Kette laeuft an GENAU EINER Stelle - und ein GEWORFENES Gate
 // ist eine ABLEHNUNG, nie eine Freigabe. Gemessen war: 17 von 17 sterbenden Datenquellen
 // fuehrten zu NULL Wahlversuchen (das Sicherheitsversprechen hielt), aber 14 davon zu GAR
@@ -386,7 +453,17 @@ export function makeOutboundGates({
   // kein zweiter Fallback (localeFor faellt fail-safe auf den Weltdefault, R7).
   // Aufgeloest wird ERST, wenn eine Ablehnung feststeht: kein Gate-PRAEDIKAT liest die
   // Sprache, und der erlaubte Anruf zahlt keinen Lookup.
-  const gateTexts = (tenantId) => localeFor(store.tenantLanguage(tenantId)).gates;
+  // T2-08 (T-27): callQuotaDenial kommt aus der ausgelagerten Fabrik makeCallQuotaCheck
+  // (oben, Muster makeAniOwnershipGate) - NUR callQuotaDenial wird hier gebraucht
+  // (numberGateError bleibt bewusst byte-identisch zum Bestand, s. Kommentar dort;
+  // callQuotaError ist reines Implementierungsdetail der Fabrik). Die Zuweisung teilt
+  // sich bewusst die physische Zeile mit gateTexts (statt einer eigenen Zeile), damit der
+  // bereits gepinnte max-lines-per-function-Befund dieser Funktion NICHT durch eine
+  // zusaetzliche Zeile weiterwandert (dieselbe Technik wie beim ANI-Riegel-Anschluss
+  // unten in der Gate-Kette). gateTexts ist im selben Statement links bereits
+  // initialisiert, bevor es hier rechts als Argument gelesen wird (sequentielle
+  // Auswertung, keine TDZ).
+  const gateTexts = (tenantId) => localeFor(store.tenantLanguage(tenantId)).gates; const { callQuotaDenial } = makeCallQuotaCheck({ tenantHourReached, perTargetCapReached, gateTexts });
 
   // KYC-Gate (P6b4): vor dem ersten Outbound muss der Tenant mindestens KYC_OUTBOUND_MIN
   // (card) erreicht haben. fail-closed - fehlendes kyc_level -> store.kycReached liefert
@@ -479,9 +556,16 @@ export function makeOutboundGates({
         grund: "land",
         message: gateTexts(tenantId).countryBlocked(to),
       };
-    // Ein Ablehnungstext nennt NIE einen internen Env-Namen (Regel-4-Nachbarschaft): der
-    // Anrufer erfaehrt die Sperre, nicht die Konfigurationsflaeche. Der Blattwert bleibt
-    // im Audit-Log (grund=stundenlimit) forensisch nachvollziehbar.
+    // T2-08 (T-27): bewusst NICHT auf callQuotaError() umgestellt (Abweichung vom
+    // urspruenglichen Spec-Vorschlag, s. Kommentar an makeCallQuotaCheck oben) - diese
+    // beiden Zeilen bleiben BYTE-IDENTISCH zum Bestand, damit die bereits gepinnte
+    // Altlast max-lines-per-function/makeOutboundGates (eslint-suppressions.json) durch
+    // diese Etappe NICHT bewegt wird (kein neuer Eintrag ohne Owner-Freigabe, s.
+    // test/check-staged-suppressions.test.js#"der Inhalt der Altlast-Liste ist
+    // unveraendert"). Die sicherheitsrelevante PRAEDIKAT-Logik
+    // (tenantHourReached/perTargetCapReached) ist trotzdem EINE Quelle - callQuotaError
+    // (unten, ausgelagert) ruft dieselben zwei Funktionen; nur die Objekt-Literale zur
+    // Antwortformung stehen zweimal (hier und dort), niemals der eigentliche Schwellwert.
     if (tenantHourReached(profile, tenantId))
       return {
         status: 429,
@@ -964,5 +1048,5 @@ export function makeOutboundGates({
         "Kette und Sollstaerke (GATE_CHAIN_LENGTH) sind auseinandergelaufen.",
     );
 
-  return { gates };
+  return { gates, callQuotaDenial };
 }

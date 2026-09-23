@@ -380,6 +380,9 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     lifecycle,
     provisioning,
     outboundGates,
+    // T2-08 (T-27): dieselbe makeOutboundGates-Instanz wie outboundGates, EIN zweites
+    // Feld (kein zweiter Aufruf von makeOutboundGates, keine zweite Quelle).
+    callQuotaDenial,
     requestTenant,
     requireTenant,
     costTruing,
@@ -404,6 +407,10 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       config,
       audit,
       outboundGates,
+      // T2-08 (T-27): fehlt sie im deps-Buendel, bleibt der Platz LEER statt hier zu
+      // werfen - makeCallRoutes setzt dann seinen fail-closed Ersatz ein (503 statt
+      // stillem "immer erlaubt", s. callQuotaDenialNotWired dort).
+      callQuotaDenial,
       voiceControl,
       // EL-Anrufstart: die EINE Instanz aus server.js (INV-7, Naht wie callFinish) - sie
       // haelt den ziehenden Ergebnisweg des Anbieters. Fehlt sie im deps-Buendel, bleibt

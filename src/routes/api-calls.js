@@ -101,6 +101,18 @@ function elevenLabsCallNotWired() {
   );
 }
 
+// T2-08 (T-27): LAUTER Fallback fuer callQuotaDenial, dasselbe Muster wie
+// elevenLabsCallNotWired oben - eine fehlverdrahtete Kompositionswurzel darf die
+// Quoten-Pruefung im Claim-Lock nicht still abschalten (KEIN Default () => null, das
+// waere fail-open, Absolute Regel 1). Der Wurf landet im bestehenden Claim-catch (503
+// CLAIM_ERROR_MESSAGE, Reserve zurueck, NICHT gewaehlt) - dieselbe Senke wie ein Wurf aus
+// store.createCall.
+function callQuotaDenialNotWired() {
+  throw new Error(
+    "callQuotaDenial ist nicht verdrahtet (deps.callQuotaDenial fehlt) - Quoten-Pruefung im Claim-Lock kann nicht laufen",
+  );
+}
+
 // S1-5 Fix (Owner-Auftrag 15.08.2026): LAUTER Fallback statt eines stillen No-op fuer
 // elevenLabsHangUpAction (s. deps unten). Ein stiller Vorgabewert liesse eine
 // Kompositionswurzel, die diesen Parameter vergisst, den EL-Terminierungspfad UNBEMERKT
@@ -289,12 +301,23 @@ const CLAIM_ERROR_MESSAGE =
 // dasselbe Ziel wirklich serialisiert und es entsteht genau EIN Datensatz.
 // Das Praedikat liegt HINTER der vollstaendigen Gate-Kette und kann kein Gate ueberspringen -
 // die Aenderung ist strikt EINSCHRAENKEND (ein Fall mehr, in dem NICHT gewaehlt wird).
-function claimCallRecord({ store, ctx, felder, nowMs }) {
+//
+// T2-08 (T-27, Rennen Gate->Claim geschlossen): zwischen dem fruehen number_gate und
+// diesem Lock koennen Netz-awaits liegen (Pre-Call-Briefing, EL-Eroeffnungszeile) - in
+// diesem Fenster kann ein anderer, gleichzeitiger Request des SELBEN Tenants die Quote
+// bereits ausgeschoepft haben (gemessen: 8 parallele Requests bei Limit 2 -> 8 Datensaetze
+// ohne diese Pruefung, s. Spec Befund 3). callQuotaDenial(ctx) prueft deshalb HIER ERNEUT,
+// im selben synchronen Lock-Body wie die Dedup-Entscheidung - die einzige Stelle, an der
+// Zaehlen und Anlegen atomar zusammenfallen. Reihenfolge: Dedup zuerst (ein laufender Anruf
+// verbraucht ohnehin keinen neuen Slot), dann Quote, erst dann createCall.
+function claimCallRecord({ store, ctx, felder, nowMs, callQuotaDenial }) {
   const laufender = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
     to: ctx.to,
     nowMs,
   });
   if (laufender) return { call: laufender, deduplicated: true };
+  const denial = callQuotaDenial(ctx);
+  if (denial) return { denial };
   return { call: store.createCall(felder), deduplicated: false };
 }
 
@@ -343,6 +366,12 @@ export function makeCallRoutes({
   config,
   audit,
   outboundGates,
+  // T2-08 (T-27): die geteilte Quoten-Pruefung (Stundenlimit + Ziel-Cap) aus
+  // outbound-gates.js#makeOutboundGates - dieselbe Instanz wie im number_gate-Gate der
+  // outboundGates-Kette (EINE Quelle, kein zweiter Zaehler). Default wirft (s.o.,
+  // callQuotaDenialNotWired): eine fehlverdrahtete Kompositionswurzel darf die Pruefung
+  // im Claim-Lock nicht still auf "immer erlaubt" fallen lassen.
+  callQuotaDenial = callQuotaDenialNotWired,
   voiceControl,
   // EL-Anrufstart (dritter Outbound-Weg): die EINE Instanz aus server.js (INV-7) - sie
   // haelt den ziehenden Ergebnisweg, eine zweite haette eine zweite Abhol-Schleife.
@@ -524,8 +553,20 @@ export function makeCallRoutes({
       };
       // E3: EIN synchroner Lock-Abschnitt - Dedup-Entscheidung UND Datensatz-Anlage.
       const claim = await store.withStoreLock(() =>
-        claimCallRecord({ store, ctx, felder, nowMs: Date.now() }),
+        claimCallRecord({ store, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
       );
+      // T2-08 (T-27): die im Lock erneut geprueften Quoten (Stundenlimit/Ziel-Cap) haben
+      // NACH Dedup, aber VOR der Datensatz-Anlage abgelehnt - derselbe Ausgang wie eine
+      // fruehe number_gate-Ablehnung: Reserve zurueck (ZWEITER, kurzer Lock-Abschnitt, wie
+      // beim Dedup-Zweig unten), Audit+Metrik ueber beobachteAblehnung, KEIN Originate,
+      // KEIN Consult, KEIN Timer, KEIN Kostenprofil - es entstand kein Datensatz.
+      if (claim.denial) {
+        await store.withStoreLock(() =>
+          store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents),
+        );
+        beobachteAblehnung({ store, audit, denial: claim.denial, req, tenantId: ctx.tenantId });
+        return res.status(claim.denial.status).json(claim.denial.body);
+      }
       call = claim.call;
       // E3: deduplizierter Aufruf - KEIN Originate, KEIN Consult, KEIN Timer, KEIN Kostenprofil.
       // Die selbst gebuchte Reserve geht in einem ZWEITEN, kurzen Lock-Abschnitt zurueck (der
