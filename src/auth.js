@@ -119,16 +119,25 @@ function bearerChallenge(paare) {
   return `Bearer ${paare.map(([schluessel, wert]) => `${schluessel}="${wert}"`).join(", ")}`;
 }
 
-// oauth-Zweig: Challenge inkl. Verweis auf die Protected-Resource-Metadata und der
-// erwarteten Scope-Menge (T-16), damit der Client den Auth-Server findet und weiss,
-// welche Scopes er anfragen muss.
-function deny401(res, error, description) {
-  const challenge = bearerChallenge([
+// T-14 (T2-05): EINE Quelle fuer den oauth-Challenge-String, sowohl fuer den HTTP-401-
+// Header (deny401) als auch fuer die Re-Auth-Challenge im Tool-Fehlerergebnis
+// (src/mcp-no-tenant.js, dort der einzige Ort mit dem Metadaten-Schluessel selbst).
+// Parameterreihenfolge wie deny401 (resource_metadata zuerst) - bewusst ANDERS als
+// deny403InsufficientScope, das eine andere RFC-Fehlerklasse ist.
+export function oauthBearerChallenge(error, description) {
+  return bearerChallenge([
     ["resource_metadata", metadataUrl()],
     ["scope", OAUTH_SCOPE_PARAM],
     ["error", error],
     ["error_description", description],
   ]);
+}
+
+// oauth-Zweig: Challenge inkl. Verweis auf die Protected-Resource-Metadata und der
+// erwarteten Scope-Menge (T-16), damit der Client den Auth-Server findet und weiss,
+// welche Scopes er anfragen muss.
+function deny401(res, error, description) {
+  const challenge = oauthBearerChallenge(error, description);
   return sendBearerChallenge(res, challenge, { body: { error: description } });
 }
 

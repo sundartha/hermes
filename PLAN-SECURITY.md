@@ -5654,3 +5654,66 @@ Tests: `test/config-prod-footguns.test.js` (`T2-04-01..03`, reine Funktion),
 `test/boot-prod-footguns.test.js` (`T2-04-04/05`, Kindprozess: Boot-Refusal + Meldung nennt Var
 und Sollform ohne Wert-Echo; Spezifitaets-Gegenprobe gegen den `OAUTH_AUDIENCE`-Befund, der
 denselben Variablennamen enthaelt).
+
+## OpenAI-T2-05 — Re-Auth-Challenge im Tool-Fehlerergebnis statt HTTP 403 (2026-09-23)
+
+**Scope: genau T-14.** OpenAI (plugins/build/auth): "Triggering the tool-level OAuth flow
+requires both metadata (`securitySchemes` and the resource metadata document) **and** runtime
+errors that carry `_meta["mcp/www_authenticate"]`. Without both halves ChatGPT will not show the
+linking UI for that tool." Ist-Stand vor diesem Eintrag: ein gueltiges OAuth-Token ohne
+verknuepften Hermes-Mandanten bekam von `POST /mcp` fuer JEDE Methode (`initialize`,
+`tools/list`, `tools/call`) HTTP 403 — die zweite Haelfte der OpenAI-Bedingung war strukturell
+unerreichbar, weil kein `tools/call`-Ergebnis je zustande kam.
+
+**Entscheidung: eine Stub-Fassade statt einer neuen Sonderpruefung im Handler.** Der Torschluss
+in `src/routes/mcp.js` (`rejectIfNoTenant`) sperrt seit diesem Commit nur noch, wenn KEIN
+`req.auth` gesetzt ist (Token-/Legacy-/off-Modus — dort setzt nur `verifyOauth` `req.auth`, s.
+`src/auth.js`) — der OAuth-Fall (`req.auth` gesetzt UND `scopedTenant === TENANT_REJECT`)
+registriert stattdessen `registerNoTenantStubs` (neue Datei `src/mcp-no-tenant.js`) statt
+`registerTools`. Der Audit-Log-Eintrag `auth_failed ... grund=kein_tenant` bleibt fuer BEIDE
+Antwortformen gleich (forensischer Pfad unveraendert) — er wird jetzt VOR der Verzweigung
+geloggt (`auditNoTenant`), nicht mehr nur beim Senden der 403-Antwort.
+
+**Sicherheits-Invariante (kein echter Handler laeuft je im Kein-Mandant-Fall):**
+`registerNoTenantStubs` baut eine Fassade mit GENAU zwei Methoden (`registerTool`,
+`registerResource`, plain object, keine Proxy-Magie) und reicht sie an das UNVERAENDERTE
+`registerTools` weiter — dieselben Namen, Beschreibungen, Schemas, `securitySchemes`,
+Widget-Verweise wie im echten Weg, aber `registerTool()` VERWIRFT den uebergebenen
+Original-Handler und ruft stattdessen immer denselben synchron-trivialen Stub auf (`async () =>
+result`, kein `fetch`, kein `api()`, kein Store-Zugriff). `scopedTenant` wird dabei hart auf
+`TENANT_REJECT` erzwungen, nie `null` — selbst ein versehentlich durchgereichter echter Handler
+liefe damit nie in den `operatorChannelTenant`-Rueckfall (BOOTSTRAP/Owner). Jede fehlende
+Server-Methode, die ein kuenftiger zweiter Registrierweg in `registerTools` aufriefe, wirft
+`TypeError` (500 im Route-`catch`) statt still zu verpuffen.
+
+Der Stub-Ergebniswert traegt `isError: true`, einen lokalisierten Fehlertext (neue Kennung
+`NO_TENANT_LINKED` in `src/i18n/mcp-texts.js`, de/en/fr, ohne Link/URL/Tenant-Existenzauskunft)
+und `_meta["mcp/www_authenticate"]` als Array mit GENAU EINEM String — derselbe
+Challenge-Bauer wie der HTTP-401-Header (`oauthBearerChallenge`, neu aus `src/auth.js`
+exportiert, `deny401` ruft ihn jetzt ebenfalls auf statt den String zu duplizieren): RFC-7235,
+`resource_metadata` zuerst, `error="insufficient_scope"` (Token ist gueltig, es fehlt nur die
+Mandanten-Zuordnung — RFC 6750 "requires higher privileges", nicht `invalid_token`).
+
+**Was sich NICHT aendert:** Token-/Legacy-/off-Modus bleiben byte-identisch 403 bzw. 401 (kein
+OAuth-Flow dort, eine `resource_metadata`-Challenge schickte den Client in eine Discovery, deren
+Token dieser Modus nie annimmt — P6-Lead-Entscheidung, unveraendert). `stdio`
+(`src/mcp-server.js`) importiert `mcp-no-tenant.js` nicht — kein Auth, kein Tenant-Resolver,
+T-14 dort gegenstandslos. Ein ungueltiges/abgelaufenes Token bleibt HTTP 401 mit Challenge, KEIN
+Tool-Ergebnis (ein Tool-Fehler statt 401 verlangte `initialize` ohne gueltiges Token — Auth
+aufweichen, Regel 3). `deny403InsufficientScope` (T2-23) ist unangetastet.
+
+**Informationsleck, bewusst akzeptiert:** jedes gueltige OAuth-Login sieht jetzt die
+Werkzeugliste + Widget-Metadaten (vorher 403) — der Inhalt ist ohnehin oeffentlich (Einreichung),
+`DEFAULT_PROFILE` traegt weder Kalender- noch Consult-Werkzeuge, der Fehlertext nennt weder
+Tenant noch Owner-Nummer (Drahttest prueft explizit, dass die Owner-Nummer NIE im Body steht).
+
+Tests: neue Datei `test/openai-t2-05-reauth-challenge.test.js` — Unit (Form von
+`buildNoTenantResult`, Fassade hat exakt zwei Methoden, `registerNoTenantStubs` registriert
+dieselbe Namensmenge wie `registerTools` mit lauter Stubs, die nie `fetch()` ausloesen) und
+Draht (Kindprozess, Spion-Gateway zaehlt jeden Request an den internen REST-Hop: T05-1..3 Spion
+bleibt 0 bei unbekanntem/subenlosem Token, T05-4 Positiv-Kontrolle mit echtem Mandanten-Token
+Spion >= 1, T05-5 dieselben Challenge-Parameter wie der 401-Header, T05-6/T05-7 Token-/
+Legacy-Modus unveraendert, T05-8 stdio unveraendert, T05-9 ungueltige Signatur bleibt 401).
+Vier Bestandsdateien nachgezogen (`am6-oauth-tenant`, `request-tenant`, `profiles`,
+`e4-mandantentrennung-default`), die bisher 403 fuer diesen Fall erwarteten — die NIE-Owner-
+Aussagen bleiben in jedem Fall unveraendert Kernpruefung.

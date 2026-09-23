@@ -26,6 +26,10 @@ export const MCP_ERROR_CODE = Object.freeze({
   // elevenlabs/convai.js). Der Text sagt deshalb ausdruecklich, dass ein erneuter Versuch
   // den laufenden Anruf zurueckliefert statt einen zweiten zu starten.
   CALL_START_UNCONFIRMED: "call_start_unconfirmed",
+  // T-14 (T2-05): kein Hermes-Mandant zu dieser Anmeldung gefunden (OAuth-Login ohne
+  // verknuepften Tenant). Kein Wurf - src/mcp-no-tenant.js liest den Text direkt als
+  // Tool-Fehlertext, zusammen mit der Re-Auth-Challenge im Ergebnis-_meta.
+  NO_TENANT_LINKED: "no_tenant_linked",
 });
 
 export const MCP_TEXTS = Object.freeze({
@@ -52,6 +56,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
         "Zeitablauf beim Anrufstart - der Anruf kann bereits laufen. Ein erneuter place_call an " +
         "dieselbe Nummer liefert den laufenden Anruf zurueck und startet keinen zweiten.",
+      [MCP_ERROR_CODE.NO_TENANT_LINKED]:
+        "Zu dieser Anmeldung ist kein Hermes-Konto verknuepft. Bitte erneut mit dem Konto anmelden, " +
+        "das fuer Hermes genutzt wird. Ohne Hermes-Konto ist dieses Werkzeug nicht verfuegbar.",
     }),
     // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
     // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
@@ -133,6 +140,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
         "Timed out while starting the call - the call may already be running. Calling place_call " +
         "again for the same number returns the running call instead of starting a second one.",
+      [MCP_ERROR_CODE.NO_TENANT_LINKED]:
+        "No Hermes account is linked to this sign-in. Please sign in again with the account you " +
+        "use for Hermes. Without a Hermes account this tool is not available.",
     }),
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
@@ -182,6 +192,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
         "Délai dépassé au démarrage de l'appel - l'appel est peut-être déjà en cours. Un nouvel " +
         "appel à place_call vers le même numéro renvoie l'appel en cours au lieu d'en démarrer un second.",
+      [MCP_ERROR_CODE.NO_TENANT_LINKED]:
+        "Aucun compte Hermes n'est lié à cette connexion. Veuillez vous reconnecter avec le compte " +
+        "que vous utilisez pour Hermes. Sans compte Hermes, cet outil n'est pas disponible.",
     }),
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",

@@ -1394,6 +1394,23 @@ export async function readToolResult(res) {
   return JSON.parse(raw).result;
 }
 
+// T2-05 (T-14): EINE geteilte Pruef-Funktion fuer die Re-Auth-Challenge, die ein
+// OAuth-Kein-Mandant-tools/call statt eines HTTP-403 liefert (src/mcp-no-tenant.js).
+// Genutzt von am6-oauth-tenant/request-tenant/profiles/e4-mandantentrennung-default
+// UND openai-t2-05-reauth-challenge (G5 - keine vier Kopien derselben Pruefung).
+export function assertReauthChallenge(result) {
+  assert.equal(result.isError, true);
+  const challenge = result._meta?.["mcp/www_authenticate"];
+  assert.ok(Array.isArray(challenge) && challenge.length === 1, "genau eine Challenge");
+  assert.ok(
+    challenge[0].startsWith('Bearer resource_metadata="https://agent.test/.well-known/oauth-protected-resource"'),
+    "resource_metadata zuerst, PUBLIC_URL aus BASE_ENV",
+  );
+  assert.ok(challenge[0].includes('scope="openid email offline_access"'));
+  assert.ok(challenge[0].includes('error="insufficient_scope"'));
+  assert.ok(challenge[0].includes('error_description="'));
+}
+
 // Startet src/server.js und ERWARTET einen Boot-Refusal (Exit statt listen). Fuer
 // die Fail-closed-Tests (OT-4): liefert { code, output, dataDir }. Wirft, wenn der
 // Prozess NICHT innerhalb timeoutMs beendet (d.h. der Boot lief durch). Teilt

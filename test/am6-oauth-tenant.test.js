@@ -16,13 +16,14 @@ import {
   readToolResult,
   waitForLog,
   seedState,
+  assertReauthChallenge,
 } from "./helpers.js";
 import { hashEmail } from "../src/util.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER_SUB = "owner-sub-1";
 const OWNER_NUM = "+18643028341"; // Live-Diskriminator (Owner-Telnyx-DID)
-const HTTP_FORBIDDEN = 403; // E4-Torschluss: TENANT_REJECT -> 403
+const HTTP_OK = 200;
 
 // Env fuer einen Owner-OAuth-Resource-Server: OAUTH_AUDIENCE bleibt leer -> Default
 // publicUrl/mcp == idp.sign-Default-aud, also werden Tokens akzeptiert.
@@ -82,11 +83,12 @@ test("AM6 e2e: Owner-Token MIT email -> get_my_number traegt die aktive Nummer (
   }
 });
 
-test("AM6 fail-closed: unbekannter sub -> /mcp 403 (E4-Torschluss, kein Tool erreicht)", async () => {
-  // E4: der Torschluss in routes/mcp.js antwortet TENANT_REJECT bereits VOR dem
-  // Diagnose-Log und VOR jedem Tool-Zugriff - "tenant=reject" im [mcp]-Log ist damit
-  // kein erreichbarer Zustand mehr (die Zeile steht hinter dem return). Der Beleg ist
-  // jetzt der audit()-Trail des Torschlusses selbst.
+test("AM6 T2-05: unbekannter sub -> Tool-Fehler mit Re-Auth-Challenge, kein echter Tool-Zugriff", async () => {
+  // E4/T2-05: der Torschluss in routes/mcp.js erkennt TENANT_REJECT weiterhin VOR dem
+  // Diagnose-Log; seit T2-05 sperrt er im OAuth-Modus aber nicht mehr mit 403, sondern
+  // registriert die Stub-Fassade (registerNoTenantStubs) - der Tool-Aufruf erreicht
+  // damit NIE den echten Handler (der Stub ruft nie api()/Store). Der Beleg bleibt der
+  // audit()-Trail PLUS das Tool-Fehlerergebnis selbst.
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp),
@@ -95,10 +97,10 @@ test("AM6 fail-closed: unbekannter sub -> /mcp 403 (E4-Torschluss, kein Tool err
   try {
     const token = await idp.sign({ sub: "fremd-sub", email: "fremd@team.test" });
     const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_my_number"));
-    assert.equal(res.status, HTTP_FORBIDDEN);
-    const body = await res.json();
-    assert.equal(body.error, "Keine Tenant-Zuordnung fuer diese Identitaet.");
-    assert.ok(!JSON.stringify(body).includes(OWNER_NUM), "NIE die Owner-Nummer");
+    assert.equal(res.status, HTTP_OK);
+    const result = await readToolResult(res);
+    assertReauthChallenge(result);
+    assert.ok(!JSON.stringify(result).includes(OWNER_NUM), "NIE die Owner-Nummer");
     await waitForLog(srv, /\[audit\] auth_failed .*path=\/mcp grund=kein_tenant/);
   } finally {
     await srv.stop();
@@ -106,12 +108,13 @@ test("AM6 fail-closed: unbekannter sub -> /mcp 403 (E4-Torschluss, kein Tool err
   }
 });
 
-test("AM6 fail-closed: verifiziertes Token OHNE sub -> /mcp 403 (E4-Torschluss, NIE Owner)", async () => {
+test("AM6 T2-05: verifiziertes Token OHNE sub -> Tool-Fehler mit Re-Auth-Challenge, NIE Owner", async () => {
   // FAIL-CLOSED-REGRESSION (AM6-Blocker R2): jose erzwingt den sub-Claim nicht. Ein
   // verifiziertes REMOTE-Token mit email, aber OHNE sub (noSubject) darf NICHT auf den
   // Owner-/Bootstrap-Tenant fallen - sonst laese der Angreifer die Owner-Nummer (PII)
-  // und koennte place_call als Owner ausloesen. Seit E4 schliesst der /mcp-Torschluss
-  // dafuer schon VOR jedem Tool-Zugriff mit 403 (s. Testkommentar oben).
+  // und koennte place_call als Owner ausloesen. Seit T2-05 antwortet der /mcp-Torschluss
+  // dafuer im OAuth-Modus mit einem Tool-Fehler + Re-Auth-Challenge statt 403 - der
+  // Stub-Handler laeuft, nicht der echte (s. Testkommentar oben).
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp),
@@ -120,10 +123,10 @@ test("AM6 fail-closed: verifiziertes Token OHNE sub -> /mcp 403 (E4-Torschluss, 
   try {
     const token = await idp.sign({ email: "evil@attacker.test" }, { noSubject: true });
     const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_my_number"));
-    assert.equal(res.status, HTTP_FORBIDDEN);
-    const body = await res.json();
-    assert.equal(body.error, "Keine Tenant-Zuordnung fuer diese Identitaet.");
-    assert.ok(!JSON.stringify(body).includes(OWNER_NUM), "NIE die Owner-Nummer");
+    assert.equal(res.status, HTTP_OK);
+    const result = await readToolResult(res);
+    assertReauthChallenge(result);
+    assert.ok(!JSON.stringify(result).includes(OWNER_NUM), "NIE die Owner-Nummer");
     await waitForLog(srv, /\[audit\] auth_failed .*path=\/mcp grund=kein_tenant/);
   } finally {
     await srv.stop();
@@ -152,15 +155,14 @@ test("AM6 set-if-absent: bestehende idpSubject-Bindung gewinnt gegen OWNER_IDP_S
   try {
     const boundTok = await idp.sign({ sub: "bound-sub" });
     assert.equal(await myNumberOver(srv, boundTok), OWNER_NUM, "bestehende Bindung loest auf");
-    // E4: "other-sub" bleibt unbekannt (set-if-absent No-Op) -> TENANT_REJECT -> der
-    // /mcp-Torschluss antwortet 403, BEVOR ein Tool erreicht wird (s. Tests oben).
+    // E4: "other-sub" bleibt unbekannt (set-if-absent No-Op) -> TENANT_REJECT -> seit
+    // T2-05 antwortet der /mcp-Torschluss im OAuth-Modus mit einem Tool-Fehler +
+    // Re-Auth-Challenge statt 403 (s. Tests oben) - der Stub-Handler laeuft, nie der
+    // echte get_my_number-Handler.
     const envTok = await idp.sign({ sub: "other-sub" });
     const res = await mcpPost(`${srv.localUrl}/mcp`, envTok, toolCall("get_my_number"));
-    assert.equal(
-      res.status,
-      HTTP_FORBIDDEN,
-      "abweichendes OWNER_IDP_SUBJECT wurde NICHT gebunden (set-if-absent No-Op)",
-    );
+    assert.equal(res.status, HTTP_OK, "abweichendes OWNER_IDP_SUBJECT wurde NICHT gebunden (set-if-absent No-Op)");
+    assertReauthChallenge(await readToolResult(res));
   } finally {
     await srv.stop();
     await idp.close();
