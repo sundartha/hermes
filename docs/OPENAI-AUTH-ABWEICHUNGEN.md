@@ -28,9 +28,12 @@ Die Token-Pruefung sitzt **einmal pro HTTP-Request** in der Middleware `mcpAuth`
 Token nicht erneut geprueft. Es gibt aber **zwei weitere Stellen**, an denen ein bereits
 authentifizierter Request abgelehnt wird:
 
-- **`rejectIfNoTenant`** (`src/routes/mcp.js:60-65`, aufgerufen `:118`): gueltiges Token, aber
-  keine Tenant-Zuordnung -> HTTP 403 **ohne** `WWW-Authenticate`, auditiert als `auth_failed`
-  (Befund B-1, Abschnitt 7).
+- **`rejectIfNoTenant`** (`src/routes/mcp.js`): gueltiges Token, aber keine Tenant-Zuordnung.
+  Im Token-/Legacy-/off-Modus (kein `req.auth`) weiterhin HTTP 403 **ohne**
+  `WWW-Authenticate`. Im OAuth-Modus seit T2-05 (2026-09-23) **kein** 403 mehr — stattdessen
+  eine Werkzeugliste mit Stub-Handlern (`registerNoTenantStubs`, `src/mcp-no-tenant.js`),
+  deren `tools/call`-Ergebnis eine Re-Auth-Challenge in `_meta["mcp/www_authenticate"]`
+  traegt. Beide Faelle auditieren `auth_failed` (Befund B-1, Abschnitt 7).
 - **Der interne REST-Hop der Tools** (`api()`, `src/mcp-tools.js:60-81`): liefert der Gateway
   dort 403 (z. B. `internalOnly`, `src/wiring/internal-only.js:24-28`, ebenfalls auditiert als
   `auth_failed`), kommt das beim Client als Tool-Ergebnis mit `isError: true` an
@@ -44,8 +47,10 @@ konkrete Frage in Abschnitt 4 oder eine Messung in Abschnitt 5.
 
 ### T-14 — Auth-UI im Gespraech NUR ueber ein Fehlerergebnis mit `_meta["mcp/www_authenticate"]`
 
-**Status: bewusst nicht erfuellt.** Ob der Transport-Pfad (HTTP 401 + Challenge) die
-Auth-UI im Gespraech ersetzt: **UNKNOWN.**
+**Status: fuer den B-1-Fall erfuellt (T2-05, 2026-09-23).** Token-Ablauf/ungueltiges Token
+mitten im Gespraech bleibt bewusst Transport-401 (s. u.); ob ChatGPT dort zusaetzlich die
+Verknuepfungs-UI zeigt, ist weiterhin **UNKNOWN** (Owner-Probe O-6/OW-6 unten, W6 im
+T2-05-Plan).
 
 **Anforderung (Primaerquelle, woertlich):**
 
@@ -56,27 +61,34 @@ Auth-UI im Gespraech ersetzt: **UNKNOWN.**
   `_meta["mcp/www_authenticate"]`." — "Without both halves ChatGPT will not show the linking UI
   for that tool."
 
-**Ist-Zustand.** Die erste Haelfte ist vorhanden fuer den Modus, in dem ChatGPT den Server
-ueberhaupt erreicht (`MCP_AUTH=oauth` — nur dort spricht ChatGPT den Connector, s. Abschnitt
-T-16 unten): `securitySchemes` traegt dort an jedem Tool die volle beworbene Scope-Menge (P3,
-`src/mcp-security-schemes.js:59-61`, angewandt in `src/routes/mcp.js:182`). **Nachtrag
-2026-09-22:** im Token-/Legacy-Modus (statischer Bearer-Token bzw. lokaler Dev-Bypass, kein
-OAuth-Flow) traegt `tools/list` seither GAR KEIN `securitySchemes`-Feld mehr — vorher wurde
-faelschlich derselbe oauth2-Wert gemeldet, unabhaengig vom aktiven Modus; das war eine
-Regression, die ein unabhaengiger Pruefer fand und die in `src/mcp-security-schemes.js`
-behoben ist (s. Kommentar dort). Fuer den ChatGPT-Connector (ausschliesslich oauth-Modus) aendert
-das nichts. Ebenfalls vorhanden (in jedem Modus): die Protected-Resource-Metadata
-(`src/auth.js:141-150`). Die zweite Haelfte fehlt: **kein**
-Tool-Ergebnis traegt `_meta["mcp/www_authenticate"]` (`grep -rn www_authenticate src/` liefert
-0 Treffer). Nach dem Wortlaut der Primaerquelle zeigt ChatGPT deshalb **keine
-tool-bezogene Verknuepfungs-UI**. Das ist eine Luecke, keine Nicht-Anwendbarkeit.
+**Ist-Zustand seit T2-05.** Die erste Haelfte war schon vorhanden fuer den Modus, in dem
+ChatGPT den Server ueberhaupt erreicht (`MCP_AUTH=oauth` — nur dort spricht ChatGPT den
+Connector, s. Abschnitt T-16 unten): `securitySchemes` traegt dort an jedem Tool die volle
+beworbene Scope-Menge (P3, `src/mcp-security-schemes.js:59-61`, angewandt in
+`src/routes/mcp.js`). **Nachtrag 2026-09-22:** im Token-/Legacy-Modus (statischer Bearer-Token
+bzw. lokaler Dev-Bypass, kein OAuth-Flow) traegt `tools/list` seither GAR KEIN
+`securitySchemes`-Feld mehr — vorher wurde faelschlich derselbe oauth2-Wert gemeldet,
+unabhaengig vom aktiven Modus; das war eine Regression, die ein unabhaengiger Pruefer fand und
+die in `src/mcp-security-schemes.js` behoben ist. Ebenfalls vorhanden (in jedem Modus): die
+Protected-Resource-Metadata (`src/auth.js`). **Die zweite Haelfte ist jetzt fuer Fall B-1
+gebaut:** ein gueltiges OAuth-Token ohne verknuepften Hermes-Mandanten (`scopedTenant ===
+TENANT_REJECT`) bekommt statt HTTP 403 eine normale Werkzeugliste
+(`initialize`/`tools/list` unveraendert) und JEDER `tools/call` liefert ein Ergebnis mit
+`isError: true` und `_meta["mcp/www_authenticate"]` als Array mit genau einem RFC-7235-String
+(`grep -rn www_authenticate src/` liefert genau `src/mcp-no-tenant.js`). Beide Haelften der
+OpenAI-Bedingung sind fuer diesen Fall damit gleichzeitig erfuellt.
 
-**Was stattdessen passiert.** Die Token-Pruefung laeuft als Express-Middleware vor
-`POST /mcp` (`src/routes/mcp.js:126`), bevor irgendein MCP-Handler erreicht wird. Ein Token,
-das zwischen zwei Turns ungueltig wird, trifft den **naechsten** `POST /mcp` als HTTP 401 mit
-Bearer-Challenge inkl. `resource_metadata` (`deny401`, `src/auth.js:74`, Aufrufe `:95`/`:111`;
-Challenge belegt fuer den OAuth-Zweig in `test/openai-p7-token-pruefachsen.test.js`,
-`OpenAI-P7-T1`) — nicht als Tool-Ergebnis mit `isError: true`.
+**Was stattdessen fuer Token-Ablauf/ungueltiges Token passiert (bewusst unveraendert).** Die
+Token-Pruefung laeuft als Express-Middleware vor `POST /mcp` (`mcpAuth`, `src/routes/mcp.js`),
+bevor irgendein MCP-Handler erreicht wird. Ein Token, das zwischen zwei Turns ungueltig wird,
+trifft den **naechsten** `POST /mcp` als HTTP 401 mit Bearer-Challenge inkl.
+`resource_metadata` (`deny401`, jetzt ueber die geteilte Funktion `oauthBearerChallenge`,
+`src/auth.js`; Challenge belegt fuer den OAuth-Zweig in
+`test/openai-p7-token-pruefachsen.test.js`, `OpenAI-P7-T1`, UND fuer den B-1-Fall in
+`test/openai-t2-05-reauth-challenge.test.js` T05-9) — nicht als Tool-Ergebnis mit
+`isError: true`. Das ist bewusst so geblieben: ein Tool-Fehler statt 401 verlangte
+`initialize` ohne gueltiges Token — Auth aufweichen (Regel 3, s. "NICHT bauen" im
+T2-05-Plan).
 
 **UNKNOWN: wie ChatGPT auf diesen Transport-401 mitten im Gespraech reagiert.** Die
 Primaerquelle ist hier zweideutig. Einerseits: "respond with `401 Unauthorized` and a
@@ -89,33 +101,35 @@ belegt. **Messweg (Owner, Abschnitt 5, O-6):** Connector in ChatGPT verknuepfen,
 ungueltig werden lassen (Ablauf abwarten oder Sitzung bei WorkOS widerrufen), im selben
 Gespraech einen Tool-Aufruf ausloesen, beobachten ob die Verknuepfungs-UI erscheint.
 
-**Faelle, in denen heute kein `_meta`-Feld kommt:**
+**Faelle, in denen weiterhin kein `_meta`-Feld kommt (bewusst):**
 
-1. **B-1 — gueltiges Token, kein Tenant** (`rejectIfNoTenant`, `src/routes/mcp.js:60-65`): 403
-   **ohne** Challenge, auf HTTP-Ebene, also nicht einmal ein Tool-Ergebnis. Dieser Fall ist
-   **durch Re-Authentisierung loesbar** (Anmeldung mit einem Konto, dem ein Tenant zugeordnet
-   ist). Ein Re-Auth-Ausloeser waere hier **kein toter Code**. Offener Befund (Abschnitt 7).
-2. **REST-Hop-403 als `isError`-Tool-Ergebnis** (`api()`, `src/mcp-tools.js:60-81`, gefangen in
-   `wrapHandler`, `src/mcp-tools.js:885-902`). Quellen eines 403 dort:
-   - `internalOnly` — Request nicht vertrauenswuerdig lokal (`src/wiring/internal-only.js:24-28`);
+1. ~~B-1 — gueltiges Token, kein Tenant~~ **seit T2-05 gebaut** (s. o.): statt 403 jetzt ein
+   Tool-Fehler mit Challenge bei jedem `tools/call` (`registerNoTenantStubs`,
+   `src/mcp-no-tenant.js`; Torschluss `rejectIfNoTenant`, `src/routes/mcp.js`, sperrt nur noch
+   im Token-/Legacy-/off-Modus, d. h. wenn `req.auth` fehlt).
+2. **REST-Hop-403 als `isError`-Tool-Ergebnis** (`api()`, `src/mcp-tools.js`, gefangen in
+   `wrapHandler`). Quellen eines 403 dort:
+   - `internalOnly` — Request nicht vertrauenswuerdig lokal (`src/wiring/internal-only.js`);
      ein interner Konfigurations-/Programmierfehler;
-   - `requireTenant` REJECT (z. B. `src/routes/api-calls.js:691`) und das
-     Tenant-REJECT-Gate der Outbound-Kette (`src/telephony/outbound-gates.js:689-691`) —
-     Verteidigung in der Tiefe, weil `rejectIfNoTenant` diesen Fall am `/mcp`-Eingang schon
-     abweist;
-   - Consult-Kanal fuer den Tenant nicht freigegeben (`src/routes/api-calls.js:696-699`);
+   - `requireTenant` REJECT (z. B. `src/routes/api-calls.js`) und das
+     Tenant-REJECT-Gate der Outbound-Kette (`src/telephony/outbound-gates.js`) —
+     Verteidigung in der Tiefe, weil `rejectIfNoTenant` den OAuth-Kein-Mandant-Fall am
+     `/mcp`-Eingang seit T2-05 gar nicht mehr bis hierher durchlaesst (Stub laeuft, ruft
+     NIE `api()`);
+   - Consult-Kanal fuer den Tenant nicht freigegeben (`src/routes/api-calls.js`);
    - `POST /api/calls` reicht Ablehnungen der Outbound-Gates als 403 durch
-     (`src/routes/api-calls.js:419-422`, Kette in `src/telephony/outbound-gates.js`, u. a.
-     `OUTBOUND_FROZEN` `:657-668`, KYC `:394-401`, Abo/Freigabe `:407ff`, Denylist `:461ff`).
+     (`src/routes/api-calls.js`, Kette in `src/telephony/outbound-gates.js`, u. a.
+     `OUTBOUND_FROZEN`, KYC, Abo/Freigabe, Denylist).
 
    Keiner dieser 403 ist durch Neu-Anmeldung desselben Kontos loesbar (interne Grenze, Plan-/
    Profilrecht, Sicherheits-Gate). Ein `_meta`-Feld dort loeste eine Neu-Verknuepfung aus, die
-   das Problem nicht behebt. Deshalb **dort bewusst nicht gebaut**.
+   das Problem nicht behebt. Deshalb **dort weiterhin bewusst nicht gebaut** (Pre-Mortem 4,
+   T2-05-Plan, "NICHT bauen" Punkt 4).
 
-**Warum insgesamt nicht gebaut:** fuer Fall 2 waere das Feld falsch (s. o.). Fuer Fall 1 und
-fuer den Token-Ablauf mitten im Gespraech waere es sinnvoll, verlangt aber eine
-Entwurfsentscheidung am Live-Auth-Pfad (Ablehnung als Tool-Fehlerergebnis statt als
-HTTP-Antwort) — Owner-Entscheidung, nicht Teil dieses Dokuments.
+**Warum Fall 2 weiterhin nicht gebaut wird:** das Feld waere dort schlicht falsch (s. o.) — ein
+Re-Login behebt ein Plan-/Profilrecht oder ein Sicherheits-Gate nicht. Fuer den Token-Ablauf
+mitten im Gespraech (der einzige verbleibende B-1-aehnliche Fall) bliebe ein Tool-Fehler
+statt 401 eine Aufweichung von Regel 3 — deshalb ebenfalls bewusst nicht gebaut.
 
 **Bedingung (woertlich, Pflicht-Wiederholung vor jeder Einreichung):** der Transport-401 traegt
 `resource_metadata` NUR, solange Produktion `MCP_AUTH=oauth` faehrt. Im token-/Legacy-Zweig
@@ -181,9 +195,11 @@ dieser Reihenfolge, weiterhin mit der VOLLEN beworbenen Menge inkl. `offline_acc
 `scope=`-Parameter).
 
 Eigene Policy (jenseits des Tokens) existiert: Tenant-Bindung ueber `sub`; ein gueltiges Token
-ohne zugeordneten Tenant erhaelt 403 (`rejectIfNoTenant`, `src/routes/mcp.js:60-65`, belegt in
-`test/e4-mandantentrennung-default.test.js:210-220`, ID E4-17 — dort bereits erfuellt, hier nur
-referenziert). Diese 403 traegt keine Challenge (B-1).
+ohne zugeordneten Tenant sperrt weiterhin den Werkzeug-AUFRUF (`rejectIfNoTenant`,
+`src/routes/mcp.js`, belegt in `test/e4-mandantentrennung-default.test.js`, ID E4-17). Seit
+T2-05 (2026-09-23) ist das im OAuth-Modus kein 403 mehr, sondern ein Tool-Fehler MIT Challenge
+in `_meta["mcp/www_authenticate"]` (B-1, s. T-14 oben) — die Werkzeugliste selbst wird sichtbar,
+nur der Aufruf bleibt gesperrt.
 
 **Scope WIRD geprueft (T2-23 Commit B, `src/auth.js` `hasRequiredScopes`/`grantedScopes`):** nach
 erfolgreicher Signatur-/Claim-Pruefung liest der Resource Server `scope` (leerzeichengetrennter
@@ -314,8 +330,9 @@ maps to no tenant (logged as `auth_failed`); and the tools' internal REST hop (`
 
 ### T-14 — in-conversation auth UI only via an error result carrying `_meta["mcp/www_authenticate"]`
 
-**Status: deliberately not met. Whether the transport-level 401 path substitutes for it:
-UNKNOWN.**
+**Status: met for the B-1 case (T2-05, 2026-09-23).** Token expiry / an invalid token
+mid-conversation deliberately remains a transport-level 401 (see below); whether ChatGPT also
+shows the linking UI there is still **UNKNOWN** (owner probe O-6/OW-6, W6 in the T2-05 plan).
 
 Requirement: "`_meta["mcp/www_authenticate"]` — Error result — RFC 7235 WWW-Authenticate
 challenges to trigger OAuth." (plugins/reference); "Triggering the tool-level OAuth flow
@@ -323,24 +340,28 @@ requires both metadata (`securitySchemes` and the resource metadata document) **
 errors that carry `_meta["mcp/www_authenticate"]`. [...] Without both halves ChatGPT will not
 show the linking UI for that tool." (plugins/build/auth)
 
-What we have: the first half — `securitySchemes` on every tool, for the mode ChatGPT actually
-uses to reach the server (`MCP_AUTH=oauth` — ChatGPT never speaks the connector any other way,
-see the T-16 section below): `src/mcp-security-schemes.js:59-61`, applied in
-`src/routes/mcp.js:182`. **Addendum 2026-09-22:** in the token/legacy mode (static bearer token
-or local dev bypass, no OAuth flow), `tools/list` now carries NO `securitySchemes` field at
-all — before this addendum, the server incorrectly reported the same oauth2 value regardless of
-the active mode; an independent reviewer found this regression, fixed in
-`src/mcp-security-schemes.js` (see the comment there). This changes nothing for the ChatGPT
-connector (oauth mode only). Also present in every mode: the protected-resource
-metadata (`src/auth.js:141-150`). What we do not have: the second half — no tool result carries
-`_meta["mcp/www_authenticate"]` (zero occurrences in `src/`). By the wording of the primary
-source, ChatGPT will therefore **not** show the tool-level linking UI. This is a gap, not a
-case of "not applicable".
+What we have since T2-05: the first half already existed for the mode ChatGPT actually uses to
+reach the server (`MCP_AUTH=oauth` — ChatGPT never speaks the connector any other way, see the
+T-16 section below): `securitySchemes` on every tool (`src/mcp-security-schemes.js`, applied in
+`src/routes/mcp.js`). **Addendum 2026-09-22:** in the token/legacy mode (static bearer token or
+local dev bypass, no OAuth flow), `tools/list` carries NO `securitySchemes` field at all — an
+independent reviewer found and fixed an earlier regression that reported the same oauth2 value
+regardless of mode. Also present in every mode: the protected-resource metadata (`src/auth.js`).
+**The second half is now built for case B-1:** a valid OAuth token without a linked Hermes
+tenant (`scopedTenant === TENANT_REJECT`) gets a normal tool list (`initialize`/`tools/list`
+unchanged) and every `tools/call` returns a result with `isError: true` and
+`_meta["mcp/www_authenticate"]` as an array holding exactly one RFC-7235 string (`grep -rn
+www_authenticate src/` now finds exactly `src/mcp-no-tenant.js`). Both halves of the OpenAI
+condition are met simultaneously for this case.
 
-What happens instead: token verification runs as HTTP middleware in front of `POST /mcp`. A
+What still happens for token expiry / an invalid token (deliberately unchanged): token
+verification runs as HTTP middleware (`mcpAuth`, `src/routes/mcp.js`) in front of `POST /mcp`. A
 token that becomes invalid between turns hits the *next* `POST /mcp` as HTTP 401 with a bearer
-challenge including `resource_metadata` (`src/auth.js:74`, used at `:95`/`:111`; challenge
-asserted in `test/openai-p7-token-pruefachsen.test.js`, case T1) — never as a tool result.
+challenge including `resource_metadata` (`deny401`, now via the shared `oauthBearerChallenge`,
+`src/auth.js`; asserted in `test/openai-p7-token-pruefachsen.test.js` case T1 AND in
+`test/openai-t2-05-reauth-challenge.test.js` T05-9 for the B-1 case) — never as a tool result.
+This stayed deliberate: a tool error instead of a 401 would require `initialize` to succeed
+without a valid token — weakening auth (rule 3, see "not built" in the T2-05 plan).
 
 **UNKNOWN — how ChatGPT reacts to that transport-level 401 in the middle of a conversation.**
 The primary source is ambiguous here: it says the 401 + `WWW-Authenticate` "tells the client to
@@ -351,29 +372,29 @@ the connector in ChatGPT, let the token become invalid (wait for expiry or revok
 at WorkOS), trigger a tool call in the same conversation, and observe whether the linking UI
 appears (2c.3, O-6).
 
-Cases that today carry no `_meta` field:
+Cases that still carry no `_meta` field (deliberately):
 
-1. **Valid token, no tenant** (`rejectIfNoTenant`): HTTP 403 without a challenge, at the HTTP
-   layer (not even a tool result). This case **can be resolved by re-authenticating** with an
-   account that has a tenant, so a re-auth trigger here would **not** be dead code. Open
-   finding (2c.4, B-1).
+1. ~~Valid token, no tenant~~ **built since T2-05** (see above): instead of 403, every
+   `tools/call` now returns a tool error with a challenge (`registerNoTenantStubs`,
+   `src/mcp-no-tenant.js`; `rejectIfNoTenant`, `src/routes/mcp.js`, now blocks only the
+   token/legacy/off mode, i.e. when `req.auth` is absent).
 2. **403 from the internal REST hop, arriving as an `isError` tool result.** Sources: the
-   `internalOnly` guard (request not trusted-local, `src/wiring/internal-only.js:24-28`) — an
+   `internalOnly` guard (request not trusted-local, `src/wiring/internal-only.js`) — an
    internal configuration/programming fault; a tenant REJECT in `requireTenant`
-   (`src/routes/api-calls.js:691`) or in the outbound gate chain
-   (`src/telephony/outbound-gates.js:689-691`) — defence in depth, since `rejectIfNoTenant`
-   already rejects this case at the `/mcp` entrance; the consult channel not being enabled for
-   the tenant (`src/routes/api-calls.js:696-699`); and `POST /api/calls` passing through
-   rejections from the outbound safety gates (`src/routes/api-calls.js:419-422`, chain in
-   `src/telephony/outbound-gates.js`: global outbound kill switch `:657-668`, KYC `:394-401`,
-   subscription/permit `:407ff`, denylist `:461ff`, among others). None of these can be fixed by
-   the same user signing in again; a `_meta` field there would trigger a re-link that cannot
-   help, so it is deliberately not emitted there.
+   (`src/routes/api-calls.js`) or in the outbound gate chain
+   (`src/telephony/outbound-gates.js`) — defence in depth, since `rejectIfNoTenant` no longer
+   lets the OAuth no-tenant case reach this far at all (the stub runs, it never calls `api()`);
+   the consult channel not being enabled for the tenant (`src/routes/api-calls.js`); and
+   `POST /api/calls` passing through rejections from the outbound safety gates
+   (`src/routes/api-calls.js`, chain in `src/telephony/outbound-gates.js`: global outbound kill
+   switch, KYC, subscription/permit, denylist, among others). None of these can be fixed by the
+   same user signing in again; a `_meta` field there would trigger a re-link that cannot help,
+   so it remains deliberately not emitted there (T2-05 plan, "not built" item 4).
 
-Why not built overall: for case 2 the field would be wrong. For case 1 and for token expiry
-mid-conversation it would make sense, but it requires a design change on the live auth path
-(rejecting as a tool error result instead of an HTTP response); that decision is open and not
-part of this document.
+Why case 2 remains not built: the field would simply be wrong there — a re-login does not fix a
+plan/profile right or a safety gate. For token expiry mid-conversation (the only remaining
+B-1-like case), a tool error instead of a 401 would still weaken rule 3 — so that too remains
+deliberately not built.
 
 Condition: the transport 401 carries `resource_metadata` only while production runs
 `MCP_AUTH=oauth`; in the static-token/legacy mode the 401 carries `Bearer error="invalid_token"`
@@ -418,9 +439,11 @@ missing an enforced element -> 403 (B3b); no `scope`/`scp` at all -> 403 (B4) �
 the same challenge order each time (`error`, `scope`, `resource_metadata`, `error_description`,
 still carrying the full advertised set including `offline_access` in the `scope=` parameter).
 
-Own policy beyond the token: tenant binding via `sub`; a valid token without a tenant gets 403
-(`src/routes/mcp.js:60-65`, `test/e4-mandantentrennung-default.test.js:210-220`), without a
-challenge (see T-14, case 1).
+Own policy beyond the token: tenant binding via `sub`; a valid token without a tenant still
+blocks the tool CALL (`src/routes/mcp.js`, `test/e4-mandantentrennung-default.test.js`, ID
+E4-17). Since T2-05 (2026-09-23) that is no longer a 403 in OAuth mode but a tool error WITH a
+challenge in `_meta["mcp/www_authenticate"]` (B-1, see T-14 above) — the tool list itself
+becomes visible, only the call stays blocked.
 
 **Scope IS checked (T2-23 Commit B, `src/auth.js` `hasRequiredScopes`/`grantedScopes`):** after
 signature/claim verification succeeds, the resource server reads `scope` (space-separated
@@ -597,13 +620,14 @@ require a completed login (owner-only).
 
 ### 2c.4 Open findings, not built, only recorded (German original: Section 7)
 
-- **B-1:** `rejectIfNoTenant` (`src/routes/mcp.js:60-65`) answers a valid token with no tenant
-  mapping with **403 without** `WWW-Authenticate`. RFC 6750 §3.1 would suggest
-  `error="insufficient_scope"` for a 403; the OpenAI wording (T-13) only requires the challenge
-  for 401. The case is resolvable by account switch (signing in with an account that has a
-  tenant) and is therefore exactly the case for which a re-auth trigger (T-14) would make sense.
-  Whether ChatGPT offers an account switch on this 403 is UNKNOWN. Open item for the owner, not
-  changed here.
+- **B-1 — CLOSED (T2-05, 2026-09-23):** in the OAuth mode, `rejectIfNoTenant`
+  (`src/routes/mcp.js`) no longer answers a valid token with no tenant mapping with 403 - it
+  registers stub tools (`registerNoTenantStubs`, `src/mcp-no-tenant.js`) whose `tools/call`
+  result carries `isError: true` and a `_meta["mcp/www_authenticate"]` challenge with
+  `error="insufficient_scope"` (RFC 6750 §3.1 wording, as suggested here previously). The
+  token/legacy/off mode is unaffected (still 403 without a challenge - no OAuth flow exists
+  there). Whether ChatGPT actually offers the account-linking UI on this tool error is OP-1
+  (owner probe, PLAN-OPENAI-TECHNIK-2.md).
 - **`exp` required since T2-03, scope check since T2-23 Commit B (T-12 fully met in code):**
   `jwtVerify` in `src/auth.js:98-106` sets `requiredClaims: ['exp']`; a signed token without
   `exp` has been rejected since (401), no longer accepted without time limit (`PLAN-SECURITY.md`
@@ -652,9 +676,9 @@ require a completed login (owner-only).
   submission day. That is a connectivity failure, not a security failure - the audience check is
   **not** weakened to work around it.
 - **... O-6 shows that ChatGPT offers no re-linking for the in-conversation transport 401:**
-  then a token expiring mid-conversation has no user-facing path; a tool error result carrying
-  `_meta["mcp/www_authenticate"]` (for token expiry and B-1) becomes an owner decision on the
-  live auth path (T-14).
+  then a token expiring mid-conversation has no user-facing path; a tool error result for that
+  case (B-1 already carries one since T2-05) would again weaken rule 3 (auth must not accept
+  `initialize` without a valid token) and stays an explicit owner decision, not a default.
 - **... production no longer runs `MCP_AUTH=oauth`:** the transport 401 no longer points at the
   protected-resource metadata (`STATIC_BEARER_CHALLENGE`, `src/auth.js:89`); ChatGPT finds no
   OAuth entry point via the header. Whether the transport path even covers T-14 is UNKNOWN
@@ -769,8 +793,9 @@ sie verlangen einen abgeschlossenen Login (Owner-Only).
   Pruefung wird dafuer **nicht** aufgeweicht.
 - **… O-6 zeigt, dass ChatGPT auf den Transport-401 im Gespraech keine Neu-Verknuepfung
   anbietet:** dann ist der Token-Ablauf mitten im Gespraech ohne Nutzerpfad; ein
-  Tool-Fehlerergebnis mit `_meta["mcp/www_authenticate"]` (fuer Token-Ablauf und B-1) wird zur
-  Owner-Entscheidung am Live-Auth-Pfad (T-14).
+  Tool-Fehlerergebnis fuer diesen Fall (B-1 traegt seit T2-05 bereits eines) weichte erneut
+  Regel 3 auf (`initialize` duerfte dann ohne gueltiges Token gelingen) und bleibt eine
+  ausdrueckliche Owner-Entscheidung, kein Default.
 - **… Produktion nicht mehr `MCP_AUTH=oauth` faehrt:** der Transport-401 verweist nicht mehr auf
   die Protected-Resource-Metadata (`STATIC_BEARER_CHALLENGE`, `src/auth.js:89`); ChatGPT findet
   ueber den Header keinen OAuth-Einstieg. Ob der Transport-Pfad T-14 ueberhaupt abdeckt, ist
@@ -778,12 +803,14 @@ sie verlangen einen abgeschlossenen Login (Owner-Only).
 
 ## 7. Offene Befunde (nicht gebaut, nur notiert)
 
-- **B-1:** `rejectIfNoTenant` (`src/routes/mcp.js:60-65`) antwortet einem gueltigen Token ohne
-  zugeordneten Tenant mit **403 ohne** `WWW-Authenticate`. RFC 6750 §3.1 saehe fuer 403
-  `error="insufficient_scope"` vor; der OpenAI-Wortlaut (T-13) verlangt die Challenge nur fuer
-  401. Der Fall ist per Kontowechsel loesbar (Anmeldung mit einem Konto mit Tenant) und damit
-  genau der Fall, fuer den ein Re-Auth-Ausloeser (T-14) sinnvoll waere. Ob ChatGPT bei diesem 403
-  einen Konto-Wechsel anbietet, ist UNKNOWN. Offener Punkt fuer den Owner, hier nicht geaendert.
+- **B-1 — GESCHLOSSEN (T2-05, 2026-09-23):** im OAuth-Modus antwortet `rejectIfNoTenant`
+  (`src/routes/mcp.js`) einem gueltigen Token ohne zugeordneten Tenant nicht mehr mit 403 —
+  er registriert Stub-Werkzeuge (`registerNoTenantStubs`, `src/mcp-no-tenant.js`), deren
+  `tools/call`-Ergebnis `isError: true` und eine `_meta["mcp/www_authenticate"]`-Challenge mit
+  `error="insufficient_scope"` traegt (RFC-6750-§3.1-Wortlaut, wie hier zuvor vorgeschlagen).
+  Token-/Legacy-/off-Modus bleibt unveraendert 403 ohne Challenge (dort existiert kein
+  OAuth-Flow). Ob ChatGPT bei diesem Tool-Fehler tatsaechlich die Konto-Verknuepfungs-UI zeigt,
+  ist OP-1 (Owner-Probe, PLAN-OPENAI-TECHNIK-2.md).
 - **`exp` verlangt seit T2-03, Scope-Pruefung seit T2-23 Commit B (T-12 damit code-seitig
   vollstaendig):** `jwtVerify` in `src/auth.js:98-106` setzt `requiredClaims: ['exp']`; ein
   signiertes Token ohne `exp` wird seither abgelehnt (401), nicht mehr unbefristet angenommen

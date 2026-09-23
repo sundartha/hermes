@@ -73,10 +73,10 @@ function auditNoTenant(scopedTenant, req) {
 // verifyOauth setzt es, src/auth.js). Der OAuth-Fall (req.auth gesetzt UND
 // scopedTenant === TENANT_REJECT) bekommt HIER keine Sperre mehr: er laeuft weiter in
 // den Handler und bekommt dort registerNoTenantStubs statt registerTools - eine
-// Werkzeugliste mit Stub-Handlern, deren tools/call-Ergebnis die Re-Auth-Challenge in
-// _meta["mcp/www_authenticate"] traegt (Pre-Mortem 2 PLAN-OPENAI-TECHNIK-2.md: die
-// Bedingung haengt bewusst an req.auth, nicht nur an scopedTenant, damit ein
-// Token-Aufrufer ueber die Interface-IP niemals eine Werkzeugliste bekommt).
+// Werkzeugliste mit Stub-Handlern, deren tools/call-Ergebnis die Re-Auth-Challenge im
+// Ergebnis-_meta traegt (Pre-Mortem 2 PLAN-OPENAI-TECHNIK-2.md: die Bedingung haengt
+// bewusst an req.auth, nicht nur an scopedTenant, damit ein Token-Aufrufer ueber die
+// Interface-IP niemals eine Werkzeugliste bekommt).
 function rejectIfNoTenant(scopedTenant, req, res) {
   if (scopedTenant !== TENANT_REJECT || req.auth) return false;
   res.status(HTTP_FORBIDDEN).json({ error: "Keine Tenant-Zuordnung fuer diese Identitaet." });

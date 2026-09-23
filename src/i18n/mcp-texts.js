@@ -28,7 +28,7 @@ export const MCP_ERROR_CODE = Object.freeze({
   CALL_START_UNCONFIRMED: "call_start_unconfirmed",
   // T-14 (T2-05): kein Hermes-Mandant zu dieser Anmeldung gefunden (OAuth-Login ohne
   // verknuepften Tenant). Kein Wurf - src/mcp-no-tenant.js liest den Text direkt als
-  // Tool-Fehlertext, zusammen mit der Re-Auth-Challenge in _meta["mcp/www_authenticate"].
+  // Tool-Fehlertext, zusammen mit der Re-Auth-Challenge im Ergebnis-_meta.
   NO_TENANT_LINKED: "no_tenant_linked",
 });
 
