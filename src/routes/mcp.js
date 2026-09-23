@@ -22,7 +22,10 @@
 // statt je IP, damit ChatGPTs gemeinsame Egress-IPs Nutzer nicht gegenseitig drosseln.
 // mcpAuth entsteht hier aus makeMcpAuth({ ablehnungsDrossel }); mandantDrossel (s.u.) laeuft
 // NACH mcpAuth und VOR den Body-Parsern (deps.bodyParsers, dieselben Instanzen wie global
-// in app.js) - ein Unauthentifizierter wird dadurch nie geparst (Pre-Mortem 2).
+// in app.js) - ein Unauthentifizierter wird dadurch nie geparst (Pre-Mortem 2). Die
+// Herkunftswache oben bekommt DENSELBEN Ablehnungs-Zaehler injiziert (Nachbesserung nach
+// Befund safety/blocker) - ihre 403-Antwort lief sonst an mcpAuth und damit an jeder
+// Drossel vorbei.
 // Die stateless/pure Bausteine (McpServer,
 // Transport, registerTools, HERMES_SERVER_INFO, mcpServerOptions, consultAllowedFor,
 // hashEmail, ANON_IDENTITY) kommen direkt aus ihren Quellmodulen (G5 - wie
@@ -163,6 +166,10 @@ export function makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyP
   // Auto-OPTIONS und jede spaeter ergaenzte Methode in einer Zeile (fail-closed). Die
   // Allowlist entsteht EINMAL hier, nicht pro Request; ihre Eingaben sind beim Boot
   // geprueft (boot-guard.angekuendigterOriginFindings).
+  // T2-07-Nachbesserung (Befund safety/blocker): die Wache bekommt denselben
+  // IP-Ablehnungs-Zaehler wie mcpAuth injiziert (mcpDrosseln.ablehnung) - eine Flut mit
+  // fremdem Origin lief bisher an JEDEM Zaehler vorbei (Begruendung in
+  // createMcpOriginGuard, src/middleware.js).
   router.use(
     "/mcp",
     createMcpOriginGuard({
@@ -171,6 +178,7 @@ export function makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyP
         zusaetzlicheOrigins: config.safety.mcpAllowedOrigins,
       }),
       enforce: config.safety.mcpOriginEnforce,
+      ablehnungsDrossel: mcpDrosseln.ablehnung,
     }),
   );
 

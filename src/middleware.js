@@ -204,10 +204,24 @@ export function originLogWert(originHeader) {
 // deny401) - den einzigen Zeiger auf den Authorization Server - und kann sich nicht neu autorisieren.
 // Ohne Schalter ist der einzige Reparaturweg ein Deploy. Mit enforce=false schreibt die
 // Wache auch KEINE Zeile: ein geloester Riegel soll nicht aussehen wie ein greifender.
-export function createMcpOriginGuard({ erlaubteOrigins, enforce }) {
+//
+// T2-07-Nachbesserung (Befund safety/blocker): diese Wache haengt VOR mcpAuth und damit
+// auch VOR dessen Ablehnungs-Zaehler (src/mcp-rate-limit.js) - eine Flut mit fremdem
+// Origin traf bisher auf KEINE Drossel und schrieb je Anfrage unbegrenzt eine
+// auth_failed-Zeile. ablehnungsDrossel ist derselbe injizierte IP-Zaehler wie in
+// makeMcpAuth (mcpDrosseln.ablehnung, EINE Instanz je Prozess) - erst pruefen, dann
+// zaehlen (Muster mitAblehnungsDrossel, src/auth.js): ist das Fenster ausgeschoepft,
+// antwortet 429 statt 403 und es entsteht KEINE Audit-Zeile (Pre-Mortem b: vor der
+// Authentifizierung bleibt eine Grenze; die Audit-Zeile selbst bleibt dadurch ebenfalls
+// begrenzt, s. Befund safety/wichtig). verifizierteSub ist hier immer null - vor
+// mcpAuth existiert noch kein verifiziertes Token, die Ablehnung zaehlt darum immer
+// je IP (fail-closed).
+export function createMcpOriginGuard({ erlaubteOrigins, enforce, ablehnungsDrossel }) {
   const aktiv = enforce !== false;
   return function mcpOriginOnlyMiddleware(req, res, next) {
     if (!aktiv || mcpOriginErlaubt(req.headers.origin, erlaubteOrigins)) return next();
+    const { allowed, retryAfterS } = ablehnungsDrossel(req, { verifizierteSub: null });
+    if (!allowed) return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
     auditAuthFailed(
       req,
       AUTH_FAILED_GRUND.MCP_CROSS_ORIGIN,

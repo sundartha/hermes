@@ -5793,8 +5793,9 @@ hinter derselben Egress-IP mit.
 
 **Loesung:** `POST /mcp` verlaesst den globalen IP-Limiter UND die globalen Body-Parser
 (`src/app.js#installGlobalMiddleware`, Praedikat `isMcpPost`). Auf der Route (`src/routes/mcp.js`)
-laufen stattdessen, in dieser Reihenfolge: Herkunftswache -> CORS (beide unveraendert, T2-06/E5) ->
-`mcpAuth` -> `mandantDrossel` -> dieselben zwei Body-Parser (jetzt HINTER der Auth) -> Handler.
+laufen stattdessen, in dieser Reihenfolge: Herkunftswache (traegt seit der Nachbesserung unten
+denselben Ablehnungs-Zaehler wie `mcpAuth`) -> CORS (unveraendert, T2-06/E5) -> `mcpAuth` ->
+`mandantDrossel` -> dieselben zwei Body-Parser (jetzt HINTER der Auth) -> Handler.
 Zwei getrennte Fixed-Window-Zaehler (`src/mcp-rate-limit.js`, `makeMcpDrosseln`, EINE Instanz je
 Prozess, Limit = `RATE_LIMIT_PER_MIN`, Fenster/Sweep wie der globale Limiter):
 
@@ -5875,6 +5876,32 @@ UND den globalen Parsern — dieselbe Menge wie vor dieser Phase, keine neue Lue
 - `isTrustedLocalCaller` haengt an fehlendem `X-Forwarded-For`; wuerde der Hosting-Proxy den
   Header nicht mehr setzen, waere `/mcp` ungedrosselt — Bestandsrisiko, geteilt mit dem globalen
   Limiter, nicht neu durch diese Phase.
+
+**Nachbesserung (Safety-/Clean-Code-Review, 2026-09-23):**
+- **Herkunftswache ohne Zaehler (Befund safety/blocker):** die Wache (`createMcpOriginGuard`,
+  `src/middleware.js`) haengt VOR `mcpAuth` und lief dadurch an BEIDEN Zaehlern vorbei — eine
+  Flut mit fremdem Origin traf auf keine Drossel und schrieb je Anfrage unbegrenzt eine
+  `auth_failed`-Zeile (am laufenden System gemessen: `RATE_LIMIT_PER_MIN=3`, XFF `203.0.113.99`,
+  Origin `https://evil.example`, 8 Anfragen -> vorher 403 x8, nie 429). Fix: die Wache bekommt
+  denselben injizierten `ablehnungsDrossel` wie `mcpAuth` (`mcpDrosseln.ablehnung`, EINE Instanz
+  je Prozess) — erst pruefen, dann zaehlen, ab dem Fenster 429 statt 403, `verifizierteSub`
+  immer `null` (vor `mcpAuth` existiert kein verifiziertes Token, zaehlt darum je IP,
+  fail-closed). Ein gueltiges Token derselben IP bleibt danach 200 — der Zaehler sieht nur
+  Ablehnungen, unabhaengig davon, ob sie von der Wache oder von `mcpAuth` kommen. Test:
+  `test/mcp-rate-limit.test.js` MRL-l.
+- **Audit-Zeile vor dem Zaehler (Befund safety/wichtig):** `mitAblehnungsDrossel` rief
+  `audit("auth_failed", ...)` bisher VOR dem Zaehler-Aufruf in JEDEM Ablehnungszweig — eine Flut
+  von Muell-Tokens erzeugte dadurch unbegrenzt viele Log-Zeilen, obwohl die HTTP-Antwort ab dem
+  Fenster laengst 429 war (die Drossel sparte die Antwort, nicht das Log). Fix: `auditFn` wird
+  jetzt NUR NOCH im erlaubten Zweig aufgerufen (`mitAblehnungsDrossel`, `src/auth.js`) — die
+  429-Antwort selbst bleibt weiter ohne eigene Zeile (unveraendert zur urspruenglichen
+  Entscheidung oben: der HTTP-Status im Render-Log deckt das ab). Test: `test/mcp-rate-limit.test.js`
+  MRL-n (Flut weit ueber dem Fenster -> genau `FENSTER_LIMIT` `auth_failed`-Zeilen, nicht eine
+  je Anfrage).
+- **insufficient_scope ohne eigenen Drahtbeleg (Befund cleancode/wichtig):** MRL-c/d belegten den
+  ERR_JWT_EXPIRED-Zweig, der insufficient_scope-Zweig teilte sich denselben Code-Pfad, hatte aber
+  keinen eigenen Test. Ergaenzt: MRL-m (zwei subs ohne den erzwungenen Scope, gleiche IP, je
+  `FENSTER_LIMIT`-mal -> kein 429 durch die IP allein).
 
 Tests: `test/mcp-rate-limit.test.js` (Praefix `MRL-`, Drahtfaelle gegen den echten `/mcp`-Endpunkt
 in beiden betroffenen Auth-Modi: OAuth mit/ohne Mandant, Token-Modus); `test/openai-p6-challenge.test.js`

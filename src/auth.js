@@ -4,11 +4,13 @@
 //
 // T2-07 (T-28): mcpAuth entsteht seit dieser Phase aus makeMcpAuth({ ablehnungsDrossel }) -
 // ERST pruefen, DANN zaehlen (Muster initTokenSchranke, routes/webhooks-elevenlabs-init.js).
-// Jeder Ablehnungszweig ruft NACH dem unveraenderten Audit-Log den injizierten Zaehler; ist
-// dessen Fenster ausgeschoepft, ersetzt eine 429 (Retry-After) die heutige 401/403-Antwort -
-// ein gueltiges Token durchlaeuft den Zaehler nie. Die Fabrik wirft ohne ablehnungsDrossel
-// (fail-closed: kein ungedrosselter Default, keine anonyme Ersatz-Middleware, die das
-// Routen-Inventar faelschlich fuer geschuetzt haelt).
+// Jeder Ablehnungszweig ruft den injizierten Zaehler VOR dem Audit-Log; ist dessen Fenster
+// ausgeschoepft, ersetzt eine 429 (Retry-After) die heutige 401/403-Antwort und es entsteht
+// KEINE Audit-Zeile (Nachbesserung Befund safety/wichtig: sonst schriebe eine Flut
+// ungueltiger Tokens unbegrenzt viele auth_failed-Zeilen, obwohl die Antwort laengst
+// gedrosselt ist) - ein gueltiges Token durchlaeuft den Zaehler nie. Die Fabrik wirft ohne
+// ablehnungsDrossel (fail-closed: kein ungedrosselter Default, keine anonyme
+// Ersatz-Middleware, die das Routen-Inventar faelschlich fuer geschuetzt haelt).
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { config } from "./config.js";
 import { audit, safeEqual } from "./util.js";
@@ -208,14 +210,20 @@ function nichtLeererString(wert) {
 }
 
 // EINE Stelle fuer "erst pruefen, dann zaehlen" (Muster initTokenSchranke,
-// routes/webhooks-elevenlabs-init.js): ruft den injizierten Ablehnungs-Zaehler NACH dem
-// Audit-Log und ersetzt die heutige Antwort (sende) durch eine 429, sobald dessen Fenster
-// ausgeschoepft ist. verifizierteSub NUR bei ERR_JWT_EXPIRED/insufficient_scope gesetzt
+// routes/webhooks-elevenlabs-init.js): ruft den injizierten Ablehnungs-Zaehler VOR dem
+// Audit-Log. T2-07-Nachbesserung (Befund safety/wichtig): auditFn laeuft seither NUR
+// NOCH im erlaubten Zweig - vorher schrieb JEDER Ablehnungszweig seine auth_failed-Zeile
+// VOR dem Zaehler, eine Flut ungueltiger Tokens erzeugte dadurch unbegrenzt viele
+// Log-Zeilen, obwohl die HTTP-Antwort laengst gedrosselt (429) war. Die 429-Antwort
+// selbst bleibt ohne eigene Log-Zeile (bewusst, PLAN-SECURITY.md: der HTTP-Status im
+// Render-Log deckt das ab - eine Zeile je Anfrage waere die Log-Flut, die dieser Fix
+// gerade vermeidet). verifizierteSub NUR bei ERR_JWT_EXPIRED/insufficient_scope gesetzt
 // (Aufrufer unten) - jeder andere Ablehnungsgrund zaehlt ueber die IP (mcp-rate-limit.js).
-function mitAblehnungsDrossel({ req, res, ablehnungsDrossel, verifizierteSub = null }, sende) {
+function mitAblehnungsDrossel({ req, res, ablehnungsDrossel, verifizierteSub = null, auditFn }, sende) {
   const { allowed, retryAfterS } = ablehnungsDrossel(req, { verifizierteSub });
-  if (allowed) return sende();
-  return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
+  if (!allowed) return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
+  auditFn();
+  return sende();
 }
 
 // Curry statt eines vierten Positionsarguments (Argument-Obergrenze .claude/refs/clean-code.md,
@@ -225,9 +233,14 @@ function makeVerifyOauth(ablehnungsDrossel) {
   return async function verifyOauth(req, res, next) {
     const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     if (!token) {
-      audit("auth_failed", req, "path=/mcp grund=kein_token");
-      return mitAblehnungsDrossel({ req, res, ablehnungsDrossel }, () =>
-        deny401(res, "invalid_token", "Kein Token"),
+      return mitAblehnungsDrossel(
+        {
+          req,
+          res,
+          ablehnungsDrossel,
+          auditFn: () => audit("auth_failed", req, "path=/mcp grund=kein_token"),
+        },
+        () => deny401(res, "invalid_token", "Kein Token"),
       );
     }
     try {
@@ -246,12 +259,17 @@ function makeVerifyOauth(ablehnungsDrossel) {
       // erfolgreicher Signatur-/Claim-Pruefung, damit ein manipuliertes Token nie bis
       // hierher kommt. Audit ohne Token- oder Claim-Inhalt (nur der Grund).
       if (!hasRequiredScopes(payload)) {
-        audit("auth_failed", req, "path=/mcp grund=insufficient_scope");
         // T2-07: insufficient_scope hat eine gueltige Signatur - die sub stammt vom
         // eigenen AS und zaehlt darum wie ein abgelaufenes Token je verifizierter sub,
         // nicht je IP (dieselbe Egress-IP-Ueberlegung wie beim JWTExpired-Zweig unten).
         return mitAblehnungsDrossel(
-          { req, res, ablehnungsDrossel, verifizierteSub: nichtLeererString(payload.sub) },
+          {
+            req,
+            res,
+            ablehnungsDrossel,
+            verifizierteSub: nichtLeererString(payload.sub),
+            auditFn: () => audit("auth_failed", req, "path=/mcp grund=insufficient_scope"),
+          },
           () => deny403InsufficientScope(res),
         );
       }
@@ -262,7 +280,6 @@ function makeVerifyOauth(ablehnungsDrossel) {
       req.auth = { sub: payload.sub, email: payload.email || null, claims: payload };
       next();
     } catch (err) {
-      audit("auth_failed", req, `path=/mcp grund=${err.code || "invalid_token"}`);
       // T2-07 (Pre-Mortem 1): ein abgelaufenes, aber GUELTIG SIGNIERTES Token
       // (ERR_JWT_EXPIRED) ist der normale Refresh-Anlass legitimer Clients hinter
       // geteilten ChatGPT-Egress-IPs - jose prueft die Signatur vor den Claims
@@ -273,8 +290,15 @@ function makeVerifyOauth(ablehnungsDrossel) {
       // JWKS-Fehler) traegt keine verifizierte sub und faellt auf die IP zurueck.
       const verifizierteSub =
         err.code === "ERR_JWT_EXPIRED" ? nichtLeererString(err.payload?.sub) : null;
-      mitAblehnungsDrossel({ req, res, ablehnungsDrossel, verifizierteSub }, () =>
-        deny401(res, "invalid_token", "Token-Pruefung fehlgeschlagen"),
+      mitAblehnungsDrossel(
+        {
+          req,
+          res,
+          ablehnungsDrossel,
+          verifizierteSub,
+          auditFn: () => audit("auth_failed", req, `path=/mcp grund=${err.code || "invalid_token"}`),
+        },
+        () => deny401(res, "invalid_token", "Token-Pruefung fehlgeschlagen"),
       );
     }
   };
@@ -297,28 +321,34 @@ export function makeMcpAuth({ ablehnungsDrossel }) {
     // Modus "token" und Legacy ("") teilen die statische Bearer-Pruefung.
     if (config.auth.mcpAuthToken) {
       if (safeEqual(req.headers.authorization || "", `Bearer ${config.auth.mcpAuthToken}`)) return next();
-      audit("auth_failed", req, "path=/mcp");
-      return mitAblehnungsDrossel({ req, res, ablehnungsDrossel }, () =>
-        sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } }),
+      return mitAblehnungsDrossel(
+        { req, res, ablehnungsDrossel, auditFn: () => audit("auth_failed", req, "path=/mcp") },
+        () => sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } }),
       );
     }
     // Kein Token gesetzt: "token" verlangt trotzdem eines, Legacy faellt AUSSERHALB der
     // Produktion auf localhost-only zurueck (fail-closed wie seit Phase 1). In Produktion
     // ist der Socket-Bypass deaktiviert (AM1) -> 401, auch von localhost.
     if (config.auth.mcpAuth === "token") {
-      audit("auth_failed", req, "path=/mcp grund=kein_token");
-      return mitAblehnungsDrossel({ req, res, ablehnungsDrossel }, () =>
-        sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } }),
+      return mitAblehnungsDrossel(
+        {
+          req,
+          res,
+          ablehnungsDrossel,
+          auditFn: () => audit("auth_failed", req, "path=/mcp grund=kein_token"),
+        },
+        () => sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } }),
       );
     }
     if (legacyLocalBypassAllowed(req)) return next();
-    audit("auth_failed", req, "path=/mcp");
-    return mitAblehnungsDrossel({ req, res, ablehnungsDrossel }, () =>
-      sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, {
-        body: {
-          error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost (ausserhalb Produktion) erreichbar",
-        },
-      }),
+    return mitAblehnungsDrossel(
+      { req, res, ablehnungsDrossel, auditFn: () => audit("auth_failed", req, "path=/mcp") },
+      () =>
+        sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, {
+          body: {
+            error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost (ausserhalb Produktion) erreichbar",
+          },
+        }),
     );
   };
 }

@@ -10,11 +10,12 @@
 // die Drosseln ueberhaupt.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer, startIdp, seedState, externalIp } from "./helpers.js";
+import { startServer, startIdp, seedState, externalIp, waitForLog } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY = 429;
 const HTTP_PAYLOAD_TOO_LARGE = 413;
 // Fenster-Limit fuer ALLE Faelle dieser Datei (RATE_LIMIT_PER_MIN=FENSTER_LIMIT) - haelt
@@ -22,6 +23,9 @@ const HTTP_PAYLOAD_TOO_LARGE = 413;
 const FENSTER_LIMIT = 3;
 const UEBER_LIMIT = FENSTER_LIMIT + 1;
 const RATE_LIMIT_PER_MIN_TEST = String(FENSTER_LIMIT);
+// (n): wie viele Versuche UEBER dem Fenster hinaus die Flut noch treibt - beliebig, nur
+// "spuerbar mehr als das Limit" ist der Anspruch (Regel: keine Magic Number ohne Konstante).
+const FLUT_UEBERSCHUSS = 10;
 // (g): Body groesser als BODY_LIMIT ("100kb", src/app.js) - provoziert 413 hinter mcpAuth.
 const GROSSER_BODY_BYTES = 150_000;
 
@@ -52,6 +56,25 @@ function mcpPostFrom(url, { token, body, forwardedFor } = {}) {
     body: JSON.stringify(body),
   });
 }
+
+// Wie mcpPostFrom, aber mit Origin-Header - fuer MRL-l (Herkunftswache teilt sich den
+// Ablehnungs-Zaehler mit mcpAuth, Nachbesserung Befund safety/blocker). BASE_ENV.PUBLIC_URL
+// ist "https://agent.test" (helpers.js) - das ist der eine ERLAUBTE Origin ohne eigene
+// MCP_ALLOWED_ORIGINS-Konfiguration.
+function mcpPostMitOriginFrom(url, { origin, token, forwardedFor } = {}) {
+  return fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Accept: "application/json, text/event-stream",
+      ...(origin ? { Origin: origin } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(forwardedFor ? { "X-Forwarded-For": forwardedFor } : {}),
+    },
+    body: JSON.stringify(initBody),
+  });
+}
+const ERLAUBTER_ORIGIN = "https://agent.test";
 
 const initBody = { jsonrpc: "2.0", id: 1, method: "initialize" };
 const oauthEnv = (idp, overrides = {}) => ({
@@ -335,6 +358,97 @@ test("MRL-k: OAuth ohne Mandant zaehlt je sub, nicht je IP - zwei unbekannte sub
       const res2 = await mcpPostFrom(`${srv.localUrl}/mcp`, { token: tokenGhost2, body: initBody, forwardedFor: ip });
       assert.notEqual(res2.status, HTTP_TOO_MANY, `ghost2 Versuch ${i + 1}`);
     }
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+// (l) Nachbesserung Befund safety/blocker: die Herkunftswache (createMcpOriginGuard,
+// VOR mcpAuth) traegt seither denselben IP-Ablehnungs-Zaehler wie mcpAuth. Fremder Origin
+// FENSTER_LIMIT-mal 403, danach 429 - VORHER lief diese Wache an JEDEM Zaehler vorbei
+// (Draht-Beleg der Nachbesserung: master 403x8, Branch vor dem Fix ebenso). Ein gueltiges
+// Token derselben IP bleibt DANACH 200 - sowohl ganz ohne Origin (Server-zu-Server-
+// Aufrufer) als auch mit dem einen ERLAUBTEN Origin: ein durch die Wache ausgeschoepfter
+// Eimer blockiert kein gueltiges Token (Muster MRL-b: der Zaehler sieht nur Ablehnungen).
+test("MRL-l: fremder Origin zaehlt jetzt ueber den Ablehnungs-Zaehler - 3x 403, 4. 429; gueltiges Token danach weiter 200", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({ env: oauthEnv(idp), seed: seedTwoTenants() });
+  try {
+    const ip = "203.0.113.23";
+    for (let i = 0; i < FENSTER_LIMIT; i++) {
+      const res = await mcpPostMitOriginFrom(`${srv.localUrl}/mcp`, { origin: "https://evil.example", forwardedFor: ip });
+      assert.equal(res.status, HTTP_FORBIDDEN, `Versuch ${i + 1}`);
+    }
+    const blocked = await mcpPostMitOriginFrom(`${srv.localUrl}/mcp`, { origin: "https://evil.example", forwardedFor: ip });
+    assert.equal(blocked.status, HTTP_TOO_MANY, "die Wache zaehlt jetzt mit");
+    assert.ok(blocked.headers.get("retry-after"));
+
+    const tokenA = await idp.sign({ sub: SUB_A });
+    const ohneOrigin = await mcpPostMitOriginFrom(`${srv.localUrl}/mcp`, { token: tokenA, forwardedFor: ip });
+    assert.equal(ohneOrigin.status, HTTP_OK, "gueltiges Token ohne Origin bleibt trotz ausgeschoepftem Eimer 200");
+
+    const tokenB = await idp.sign({ sub: SUB_B });
+    const mitErlaubtemOrigin = await mcpPostMitOriginFrom(`${srv.localUrl}/mcp`, {
+      origin: ERLAUBTER_ORIGIN,
+      token: tokenB,
+      forwardedFor: ip,
+    });
+    assert.equal(mitErlaubtemOrigin.status, HTTP_OK, "gueltiges Token mit erlaubtem Origin bleibt ebenso 200");
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+// (m) Befund cleancode/wichtig: insufficient_scope (gueltige Signatur, Scope fehlt)
+// zaehlt wie ERR_JWT_EXPIRED je verifizierter sub - zwei verschiedene subs OHNE den
+// erzwungenen Scope, dieselbe IP, je FENSTER_LIMIT-mal -> KEIN 429 durch die IP allein
+// (Analogon zu MRL-k, jetzt fuer den insufficient_scope-Zweig selbst statt nur
+// Code-Pfad-Identitaet mit MRL-c/d).
+test("MRL-m: insufficient_scope zaehlt je sub, nicht je IP - zwei subs ohne Scope, gleiche IP, je 3x kein 429", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({ env: oauthEnv(idp), seed: seedTwoTenants() });
+  try {
+    const ip = "203.0.113.24";
+    const tokenOhneScope1 = await idp.sign({ sub: "sub-ohne-scope-1", scope: null });
+    const tokenOhneScope2 = await idp.sign({ sub: "sub-ohne-scope-2", scope: null });
+    for (let i = 0; i < FENSTER_LIMIT; i++) {
+      const res1 = await mcpPostFrom(`${srv.localUrl}/mcp`, { token: tokenOhneScope1, body: initBody, forwardedFor: ip });
+      assert.notEqual(res1.status, HTTP_TOO_MANY, `sub1 Versuch ${i + 1}`);
+      assert.equal(res1.status, HTTP_FORBIDDEN, `sub1 Versuch ${i + 1} ist insufficient_scope`);
+      const res2 = await mcpPostFrom(`${srv.localUrl}/mcp`, { token: tokenOhneScope2, body: initBody, forwardedFor: ip });
+      assert.notEqual(res2.status, HTTP_TOO_MANY, `sub2 Versuch ${i + 1}`);
+    }
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+// (n) Befund safety/wichtig: die auth_failed-Audit-Zeile entsteht NUR NOCH, solange der
+// Ablehnungs-Zaehler "allowed" meldet - eine Flut WEIT ueber dem Fenster hinaus erzeugt
+// trotzdem hoechstens FENSTER_LIMIT Zeilen (vorher: eine Zeile je Anfrage, unbegrenzt).
+// Danach ein gueltiges Token als Ordnungs-Marker: waitForLog serialisiert gegen die
+// stdout-Pipe (HTTP-Antworten koennen vor dem Log beim Parent ankommen, s. helpers.js).
+test("MRL-n: auth_failed-Zeilen bleiben unter einer Flut auf FENSTER_LIMIT begrenzt", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({ env: oauthEnv(idp), seed: seedTwoTenants() });
+  try {
+    const ip = "203.0.113.25";
+    const FLUT_VERSUCHE = FENSTER_LIMIT + FLUT_UEBERSCHUSS;
+    for (let i = 0; i < FLUT_VERSUCHE; i++) {
+      const res = await mcpPostFrom(`${srv.localUrl}/mcp`, { body: initBody, forwardedFor: ip });
+      const erwartet = i < FENSTER_LIMIT ? HTTP_UNAUTHORIZED : HTTP_TOO_MANY;
+      assert.equal(res.status, erwartet, `Versuch ${i + 1}`);
+    }
+    const tokenA = await idp.sign({ sub: SUB_A });
+    const markerRes = await mcpPostFrom(`${srv.localUrl}/mcp`, { token: tokenA, body: initBody, forwardedFor: ip });
+    assert.equal(markerRes.status, HTTP_OK, "der Mandanten-Zaehler ist vom Ablehnungs-Zaehler getrennt (MRL-b)");
+    await waitForLog(srv, /\[mcp\]/);
+
+    const zeilen = srv.stdout.match(/grund=kein_token/g) || [];
+    assert.equal(zeilen.length, FENSTER_LIMIT, "hoechstens eine Audit-Zeile je erlaubtem Versuch, keine je 429");
   } finally {
     await srv.stop();
     await idp.close();
