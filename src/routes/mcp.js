@@ -33,7 +33,7 @@ import { mcpAuth } from "../auth.js";
 import { audit, hashEmail } from "../util.js";
 import { ANON_IDENTITY, TENANT_REJECT } from "../request-tenant.js";
 import { tenantLanguage } from "../store/views.js";
-import { createMcpOriginGuard, mcpErlaubteOrigins } from "../middleware.js";
+import { createMcpOriginGuard, createMcpCors, mcpErlaubteOrigins } from "../middleware.js";
 import { isChatGptEgressIp } from "../ui/chatgpt-egress.js";
 
 // deps: { config, store, requestTenant }. config = globales Config-Objekt (mcpUiEnabled).
@@ -138,6 +138,24 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
         zusaetzlicheOrigins: config.safety.mcpAllowedOrigins,
       }),
       enforce: config.safety.mcpOriginEnforce,
+    }),
+  );
+
+  // T2-06 (T-29): CORS NUR fuer byte-genau gelistete Origins, DIREKT nach der
+  // Herkunftswache und VOR mcpAuth - ein Browser-Client mit gelistetem Origin muss die
+  // 401-Bearer-Challenge (WWW-Authenticate) lesen koennen, um sich neu zu autorisieren
+  // (sonst genau die Falle, wegen der das Notventil E-4 existiert). corsOrigins entsteht
+  // aus DERSELBEN mcpErlaubteOrigins-Funktion wie die Wachen-Liste oben, aber OHNE
+  // publicUrl: PUBLIC_URL ist same-origin und braucht kein CORS, und diese Konstruktion
+  // macht corsOrigins per Bauart zu einer Teilmenge der Wachen-Liste - kein Origin
+  // bekommt CORS-Header, der nicht auch die Wache passieren wuerde. Liste einmal hier
+  // gebildet (nicht pro Request, wie bei der Wache oben). Kein PUBLIC_ROUTES-Eintrag
+  // fuer diesen use-Layer (Begruendung: Kommentar in createMcpCors, src/middleware.js,
+  // und PLAN-SECURITY.md) - der Inventar-Test sieht nur layer.route, keine use-Schichten.
+  router.use(
+    "/mcp",
+    createMcpCors({
+      corsOrigins: mcpErlaubteOrigins({ zusaetzlicheOrigins: config.safety.mcpAllowedOrigins }),
     }),
   );
 
