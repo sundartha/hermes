@@ -17,6 +17,7 @@ import {
   RATE_SWEEP_INTERVAL_MS,
 } from "./middleware.js";
 import { registerWellKnown } from "./auth.js";
+import { makeMcpDrosseln } from "./mcp-rate-limit.js";
 import { PLAN_CATALOG } from "./plans.js";
 import {
   voiceControl,
@@ -70,6 +71,12 @@ const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
 // /voice-Praefix als EINE Quelle (G5): rawBody-Capture und der Rate-Limit-Bypass
 // teilen denselben Praefix.
 const VOICE_PATH_PREFIX = "/voice";
+// T2-07 (T-28): EIN Praedikat fuer "ist dies der /mcp-POST", an beiden Ausnahmestellen
+// verwendet (globaler IP-Limiter, globale Body-Parser) - keine zweite Kopie des
+// Pfad-/Methoden-Vergleichs. Nur GENAU diese Form; Varianten (Gross-/Kleinschreibung,
+// Schraegstrich am Ende), die Express trotzdem auf die Route matcht, bleiben im globalen
+// Limiter und den globalen Parsern (strenger, nicht lockerer).
+const isMcpPost = (req) => req.method === "POST" && req.path === "/mcp";
 // E7 (O-4): der Challenge-Pfad ist woertlich vorgeschrieben - kein Praefix, kein Suffix,
 // kein Tenant-Segment. Als Konstante, damit der Handler unten keinen nackten Magic-String
 // traegt (G25). Die zweite Nennung in src/route-policy.js bleibt bewusst ein Literal
@@ -138,28 +145,49 @@ function makeInitTokenSchranke(config) {
 export function installGlobalMiddleware({ app, config }) {
   app.use(securityHeaders);
 
-  // ---- Rate-Limit fuer alle Routen ausser /voice (vor Auth: bremst auch Brute-Force).
-  // /voice/* ist ausgenommen (kommt vom Provider, eigene Signaturpruefung), ebenso
-  // vertrauenswuerdige lokale In-Process-Aufrufe (interne MCP-Tools): echtes Loopback OHNE
-  // Proxy-Weiterleitung. NICHT per isLocalSocket allein - hinter Render erscheint auch
-  // externer Traffic als Loopback (-> sonst liefe das Limit fuer den ganzen Internet-
-  // Traffic ins Leere). isTrustedLocalCaller verlangt zusaetzlich kein X-Forwarded-For.
-  // POST auf den Init-Webhook (IEX-A7/E12) laeuft STATT des globalen Limiters durch die
-  // Init-Token-Schranke - VOR den Parsern und VOR der Loopback-Ausnahme, damit ein
-  // ungueltiges Token nie geparst wird, egal von wo. Geteilte Anbieter-IPs: nur ungueltige
-  // Tokens zaehlen, ein gueltiges wird nie gedrosselt.
+  // ---- Rate-Limit fuer alle Routen ausser /voice und POST /mcp (vor Auth: bremst auch
+  // Brute-Force). /voice/* ist ausgenommen (kommt vom Provider, eigene Signaturpruefung),
+  // ebenso vertrauenswuerdige lokale In-Process-Aufrufe (interne MCP-Tools): echtes
+  // Loopback OHNE Proxy-Weiterleitung. NICHT per isLocalSocket allein - hinter Render
+  // erscheint auch externer Traffic als Loopback (-> sonst liefe das Limit fuer den ganzen
+  // Internet-Traffic ins Leere). isTrustedLocalCaller verlangt zusaetzlich kein
+  // X-Forwarded-For. POST auf den Init-Webhook (IEX-A7/E12) laeuft STATT des globalen
+  // Limiters durch die Init-Token-Schranke - VOR den Parsern und VOR der Loopback-
+  // Ausnahme, damit ein ungueltiges Token nie geparst wird, egal von wo. Geteilte
+  // Anbieter-IPs: nur ungueltige Tokens zaehlen, ein gueltiges wird nie gedrosselt.
+  // T2-07 (T-28): POST /mcp nimmt der globale IP-Limiter GENAUSO aus - dort zaehlen
+  // stattdessen die zwei mandanten-/ablehnungs-basierten Zaehler aus mcpDrosseln
+  // (makeMcpRoutes), weil OpenAIs gemeinsame ChatGPT-Egress-IPs sonst alle Nutzer in
+  // denselben globalen Eimer draengten. GET/DELETE/OPTIONS auf /mcp bleiben im globalen
+  // Limiter (nur POST hat eigene Zaehler noetig, s. mcp-rate-limit.js).
   const rateLimiter = createRateLimiter(config.safety.rateLimitPerMin);
   const initSchranke = makeInitTokenSchranke(config);
   app.use((req, res, next) => {
     if (istInitWebhookAnfrage(req)) return initSchranke(req, res, next);
+    if (isMcpPost(req)) return next();
     if (req.path.startsWith(VOICE_PATH_PREFIX) || isTrustedLocalCaller(req)) return next();
     rateLimiter(req, res, next);
   });
 
-  app.use(
-    withParserErrors(express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody })),
+  // T2-07 (T-28): dieselben zwei Parser-Instanzen wie bisher, aber POST /mcp laesst sie
+  // hier aus - dort laufen sie ERST HINTER mcpAuth (makeMcpRoutes/bodyParsers), damit ein
+  // Unauthentifizierter nie geparst wird (Pre-Mortem 2 der Phase). Beide Instanzen werden
+  // unveraendert an makeMcpRoutes weitergereicht (EIN Parser-Paar, nicht zwei).
+  const urlencodedParser = withParserErrors(
+    express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody }),
   ); // Provider-Webhooks (form-encoded)
-  app.use(withParserErrors(express.json({ limit: BODY_LIMIT, verify: captureRawBody }))); // eigene API + MCP
+  const jsonParser = withParserErrors(
+    express.json({ limit: BODY_LIMIT, verify: captureRawBody }),
+  ); // eigene API + MCP (MCP: nur hinter mcpAuth, s.o.)
+  app.use((req, res, next) => (isMcpPost(req) ? next() : urlencodedParser(req, res, next)));
+  app.use((req, res, next) => (isMcpPost(req) ? next() : jsonParser(req, res, next)));
+
+  // T2-07 (T-28): EINE Instanz je Prozess (Fixed-Window-Zustand darf nicht pro Request neu
+  // entstehen) - Mandanten-/Ablehnungs-Zaehler fuer POST /mcp, dasselbe Limit wie der
+  // globale IP-Limiter (config.safety.rateLimitPerMin).
+  const mcpDrosseln = makeMcpDrosseln({ limitPerMin: config.safety.rateLimitPerMin });
+
+  return { mcpDrosseln, mcpBodyParsers: [urlencodedParser, jsonParser] };
 }
 
 export function registerPublicRoutes({ app, config }) {
@@ -357,6 +385,9 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     costTruing,
     consultDelivery,
     elevenLabsOutbound,
+    // T2-07 (T-28): in installGlobalMiddleware gebaut, s. Kommentar an buildApp.
+    mcpDrosseln,
+    mcpBodyParsers,
   } = deps;
 
   // ---- Outbound-Call-Routen -------------------------------------------------------
@@ -483,8 +514,12 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
   // auf POST, fail-closed; die Herkunftswache (mcpOriginOnlyMiddleware, E5) laeuft im
   // Modul davor und ersetzt sie nicht. Stateless pro Request
   // (INV-8) + res.on("close")-Cleanup sind ins Modul mitgewandert. requestTenant = die EINE
-  // Wurzel-Instanz (INV-7).
-  app.use(makeMcpRoutes({ config, store, requestTenant }));
+  // Wurzel-Instanz (INV-7). mcpDrosseln/mcpBodyParsers (T2-07/T-28): dieselben Instanzen
+  // wie im globalen Middleware-Stack (installGlobalMiddleware), hier injiziert statt
+  // ein zweites Mal gebaut.
+  app.use(
+    makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyParsers: mcpBodyParsers }),
+  );
 }
 
 export async function buildApp(deps) {
@@ -533,7 +568,10 @@ export async function buildApp(deps) {
   // per X-Forwarded-For eine beliebige IP vortaeuschen.
   app.set("trust proxy", 1);
 
-  installGlobalMiddleware({ app, config });
+  // T2-07 (T-28): mcpDrosseln + mcpBodyParsers entstehen HIER (installGlobalMiddleware
+  // baut sie, s. dort) und wandern unveraendert an registerApiRoutes -> makeMcpRoutes -
+  // EINE Instanz je Prozess, kein zweiter Bau.
+  const { mcpDrosseln, mcpBodyParsers } = installGlobalMiddleware({ app, config });
   registerPublicRoutes({ app, config });
   registerPathRedirects({ app });
 
@@ -657,7 +695,10 @@ export async function buildApp(deps) {
   // Die Mount-Sequenz selbst steht in registerApiRoutes (oben) - Position, Reihenfolge
   // und Argumente unveraendert (INV-2). operatorAuth entsteht im Web-Login-Block und
   // entscheidet dort ueber die sechs Betreiber-Routen (AUTH-P6).
-  registerApiRoutes({ app, deps, operatorAuth });
+  // T2-07 (T-28): mcpDrosseln/mcpBodyParsers reisen als ZUSAETZLICHE Felder auf demselben
+  // deps-Objekt mit - registerApiRoutes bekommt weiter "deps als GANZES" (Kommentar dort),
+  // nur um die zwei hier oben gebauten Kollaboratoren ergaenzt (kein zweites Abbild).
+  registerApiRoutes({ app, deps: { ...deps, mcpDrosseln, mcpBodyParsers }, operatorAuth });
 
   // ---- Catch-all Error-Net -----------------------------------------------------------
   // MUSS NACH allen Route-Mounts und VOR app.listen stehen: Express-Error-MW sieht nur

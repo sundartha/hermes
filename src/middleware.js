@@ -204,10 +204,23 @@ export function originLogWert(originHeader) {
 // deny401) - den einzigen Zeiger auf den Authorization Server - und kann sich nicht neu autorisieren.
 // Ohne Schalter ist der einzige Reparaturweg ein Deploy. Mit enforce=false schreibt die
 // Wache auch KEINE Zeile: ein geloester Riegel soll nicht aussehen wie ein greifender.
-export function createMcpOriginGuard({ erlaubteOrigins, enforce }) {
+//
+// T2-07-Nachbesserung (Befund safety/blocker): diese Wache haengt VOR mcpAuth und damit
+// auch VOR dessen Ablehnungs-Zaehler (src/mcp-rate-limit.js) - eine Flut mit fremdem
+// Origin traf bisher auf KEINE Drossel und schrieb je Anfrage unbegrenzt eine
+// auth_failed-Zeile. ablehnungsDrossel ist derselbe injizierte IP-Zaehler wie in
+// makeMcpAuth (mcpDrosseln.ablehnung, EINE Instanz je Prozess) - erst pruefen, dann
+// zaehlen ueber den gemeinsamen Helper pruefeAblehnungsDrossel (unten, geteilt mit
+// mitAblehnungsDrossel in src/auth.js): ist das Fenster ausgeschoepft, antwortet 429
+// statt 403 und es entsteht KEINE Audit-Zeile (Pre-Mortem b: vor der Authentifizierung
+// bleibt eine Grenze; die Audit-Zeile selbst bleibt dadurch ebenfalls begrenzt, s. Befund
+// safety/wichtig). verifizierteSub ist hier immer null - vor mcpAuth existiert noch kein
+// verifiziertes Token, die Ablehnung zaehlt darum immer je IP (fail-closed).
+export function createMcpOriginGuard({ erlaubteOrigins, enforce, ablehnungsDrossel }) {
   const aktiv = enforce !== false;
   return function mcpOriginOnlyMiddleware(req, res, next) {
     if (!aktiv || mcpOriginErlaubt(req.headers.origin, erlaubteOrigins)) return next();
+    if (!pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel })) return;
     auditAuthFailed(
       req,
       AUTH_FAILED_GRUND.MCP_CROSS_ORIGIN,
@@ -299,6 +312,10 @@ export const RATE_SWEEP_INTERVAL_MS = 5 * 60_000;
 // windowMs/limit/sweepMs als EIN Optionsobjekt (F1). Liefert eine hit(key)-Funktion, die den
 // Zaehler fuer key erhoeht und {allowed, retryAfterS} zurueckgibt - reine Query+Zaehl-
 // Logik, kein HTTP-Wissen (der Express-Adapter bleibt beim Aufrufer).
+// hit.peek(key) (T2-07-Nachbesserung): liest denselben Stand, OHNE zu zaehlen - allowed ist
+// false, sobald das Fenster fuer key bereits ausgeschoepft ist (count >= limit), d.h. der
+// NAECHSTE hit(key) waere nicht mehr erlaubt. Nutzer: die IP-Sperre VOR dem statischen
+// Token-Vergleich (src/mcp-rate-limit.js, src/auth.js).
 export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
   const windows = new Map(); // key -> { count, startedAt }
 
@@ -309,22 +326,37 @@ export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
     for (const [key, w] of windows) if (now - w.startedAt >= windowMs) windows.delete(key);
   }, sweepMs).unref();
 
-  return function hit(key) {
+  const retryAfterS = (fenster, now) => Math.ceil((fenster.startedAt + windowMs - now) / 1000);
+  const laufendesFenster = (key, now) => {
+    const fenster = windows.get(key);
+    return fenster && now - fenster.startedAt < windowMs ? fenster : null;
+  };
+
+  function hit(key) {
     const now = Date.now();
-    let w = windows.get(key);
-    if (!w || now - w.startedAt >= windowMs) {
+    let w = laufendesFenster(key, now);
+    if (!w) {
       w = { count: 0, startedAt: now };
       windows.set(key, w);
     }
     w.count++;
-    return {
-      allowed: w.count <= limit,
-      retryAfterS: Math.ceil((w.startedAt + windowMs - now) / 1000),
-    };
+    return { allowed: w.count <= limit, retryAfterS: retryAfterS(w, now) };
+  }
+
+  hit.peek = function peek(key) {
+    const now = Date.now();
+    const fenster = laufendesFenster(key, now);
+    if (!fenster) return { allowed: true, retryAfterS: 0 };
+    return { allowed: fenster.count < limit, retryAfterS: retryAfterS(fenster, now) };
   };
+  return hit;
 }
 
-const RATE_LIMIT_BODY = Object.freeze({ error: "Zu viele Anfragen. Bitte spaeter erneut versuchen." });
+// Exportiert (T2-07/T-28): src/auth.js braucht denselben Koerper fuer die 429-Antwort des
+// Ablehnungs-Zaehlers von POST /mcp - EINE Quelle statt einer zweiten Konstante (G5).
+export const RATE_LIMIT_BODY = Object.freeze({
+  error: "Zu viele Anfragen. Bitte spaeter erneut versuchen.",
+});
 
 // Die EINE Drossel-Antwort (G5): globaler Limiter und Init-Token-Schranke (IEX-A7) - nur der
 // konstante Koerper unterscheidet sich. Die 429 bleibt hier bewusst als Literal stehen: sie
@@ -335,6 +367,29 @@ const RATE_LIMIT_BODY = Object.freeze({ error: "Zu viele Anfragen. Bitte spaeter
 export function respondTooManyRequests(res, { retryAfterS, body }) {
   res.set("Retry-After", String(retryAfterS));
   return res.status(429).json(body);
+}
+
+// T2-07-Nachbesserung (Befund cleancode/wichtig): "ablehnungsDrossel aufrufen, bei
+// ausgeschoepftem Fenster 429 senden" stand wortgleich zweimal - hier in
+// createMcpOriginGuard UND in mitAblehnungsDrossel (src/auth.js). EINE Quelle (G5) statt
+// zweier Kopien, die bei einer Vertragsaenderung (z.B. ein zusaetzliches 429-Feld)
+// auseinanderlaufen koennten. Optionsobjekt statt viertem Positionsargument (Argument-
+// Obergrenze .claude/refs/clean-code.md, max 3) - dieselbe Curry-Bauform wie
+// makeVerifyOauth/mitAblehnungsDrossel in src/auth.js.
+// Rueckgabe true: Anfrage darf weiterlaufen, der Aufrufer prueft/antwortet selbst weiter.
+// Rueckgabe false: die 429-Antwort ist bereits gesendet - der Aufrufer MUSS sofort
+// zurueckkehren, ohne eine zweite Antwort zu senden.
+export function pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel, verifizierteSub = null }) {
+  return sende429WennGesperrt(res, ablehnungsDrossel(req, { verifizierteSub }));
+}
+
+// Die EINE Stelle "Drossel-Ergebnis -> ggf. 429" fuer pruefeAblehnungsDrossel (oben) und die
+// IP-Sperre vor dem statischen Token-Vergleich (src/auth.js). Rueckgabe wie dort: true =
+// weiterlaufen, false = 429 bereits gesendet.
+export function sende429WennGesperrt(res, { allowed, retryAfterS }) {
+  if (allowed) return true;
+  respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
+  return false;
 }
 
 // Fixed-Window-Rate-Limiter pro Client-IP. Die Ausnahmen (localhost-Socket,
