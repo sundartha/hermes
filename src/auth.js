@@ -1,9 +1,18 @@
 // Auth fuer /mcp: statisches Bearer-Token (Legacy/token) oder OAuth 2.1 als
 // Resource Server (oauth). Das Gateway prueft nur Tokens - kein eigener Login,
 // keine Sessions. Niemals Tokens loggen.
+//
+// T2-07 (T-28): mcpAuth entsteht seit dieser Phase aus makeMcpAuth({ ablehnungsDrossel }) -
+// ERST pruefen, DANN zaehlen (Muster initTokenSchranke, routes/webhooks-elevenlabs-init.js).
+// Jeder Ablehnungszweig ruft NACH dem unveraenderten Audit-Log den injizierten Zaehler; ist
+// dessen Fenster ausgeschoepft, ersetzt eine 429 (Retry-After) die heutige 401/403-Antwort -
+// ein gueltiges Token durchlaeuft den Zaehler nie. Die Fabrik wirft ohne ablehnungsDrossel
+// (fail-closed: kein ungedrosselter Default, keine anonyme Ersatz-Middleware, die das
+// Routen-Inventar faelschlich fuer geschuetzt haelt).
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { config } from "./config.js";
 import { audit, safeEqual } from "./util.js";
+import { RATE_LIMIT_BODY, respondTooManyRequests } from "./middleware.js";
 
 // Localhost anhand der echten Socket-Adresse (nicht spoofbar via X-Forwarded-For).
 // ACHTUNG: hinter einem Reverse-Proxy (Render) ist remoteAddress IMMER der Loopback-
@@ -192,66 +201,126 @@ function deny403InsufficientScope(res) {
 // Abkuerzung darauf.
 const STATIC_BEARER_CHALLENGE = 'Bearer error="invalid_token"';
 
-async function verifyOauth(req, res, next) {
-  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  if (!token) {
-    audit("auth_failed", req, "path=/mcp grund=kein_token");
-    return deny401(res, "invalid_token", "Kein Token");
-  }
-  try {
-    const { payload } = await jwtVerify(token, await getJwks(), {
-      issuer: config.auth.oauthIssuerUrl,
-      audience: audience(),
-      clockTolerance: 30,
-      // T-12: jose prueft exp nur, wenn der Claim vorhanden ist - ohne diese Zeile
-      // gilt ein signiertes Token OHNE exp unbefristet. requiredClaims erzwingt den
-      // Claim; fehlt er, wirft jwtVerify (ERR_JWT_CLAIM_VALIDATION_FAILED) und landet
-      // im catch-Zweig unten -> 401 + oauth-Challenge, kein Token im Audit-Log.
-      requiredClaims: ["exp"],
-    });
-    // T-12 (Commit B): das Token muss jedes Element von ENFORCED_OAUTH_SCOPES tragen
-    // (nicht die volle beworbene OAUTH_SCOPES, s. Kommentar dort) - erst NACH
-    // erfolgreicher Signatur-/Claim-Pruefung, damit ein manipuliertes Token nie bis
-    // hierher kommt. Audit ohne Token- oder Claim-Inhalt (nur der Grund).
-    if (!hasRequiredScopes(payload)) {
-      audit("auth_failed", req, "path=/mcp grund=insufficient_scope");
-      return deny403InsufficientScope(res);
-    }
-    // no-param-reassign: dasselbe Express-Idiom wie req.tenant in web-auth.js:838,
-    // dort ebenso ueber eslint-suppressions.json (count:1) akzeptiert statt einer
-    // Regel-Ausnahme - eine dateiweite Ausnahme wuerde eine ZWEITE req.xyz-Zuweisung
-    // an anderer Stelle dieser Datei unbemerkt durchlassen (P6-Review Runde 2).
-    req.auth = { sub: payload.sub, email: payload.email || null, claims: payload };
-    next();
-  } catch (err) {
-    audit("auth_failed", req, `path=/mcp grund=${err.code || "invalid_token"}`);
-    deny401(res, "invalid_token", "Token-Pruefung fehlgeschlagen");
-  }
+// Nicht-leerer String, sonst null - dieselbe Guard-Form wie trustedLocalHeader
+// (routes/_tenant.js): eine leere/kaputte sub darf nie als Schluessel durchgehen.
+function nichtLeererString(wert) {
+  return typeof wert === "string" && wert ? wert : null;
 }
 
-// Express-Middleware vor POST /mcp.
-export async function mcpAuth(req, res, next) {
-  if (config.auth.mcpAuth === "oauth") return verifyOauth(req, res, next);
-  if (config.auth.mcpAuth === "off") return next();
+// EINE Stelle fuer "erst pruefen, dann zaehlen" (Muster initTokenSchranke,
+// routes/webhooks-elevenlabs-init.js): ruft den injizierten Ablehnungs-Zaehler NACH dem
+// Audit-Log und ersetzt die heutige Antwort (sende) durch eine 429, sobald dessen Fenster
+// ausgeschoepft ist. verifizierteSub NUR bei ERR_JWT_EXPIRED/insufficient_scope gesetzt
+// (Aufrufer unten) - jeder andere Ablehnungsgrund zaehlt ueber die IP (mcp-rate-limit.js).
+function mitAblehnungsDrossel({ req, res, ablehnungsDrossel, verifizierteSub = null }, sende) {
+  const { allowed, retryAfterS } = ablehnungsDrossel(req, { verifizierteSub });
+  if (allowed) return sende();
+  return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
+}
 
-  // Modus "token" und Legacy ("") teilen die statische Bearer-Pruefung.
-  if (config.auth.mcpAuthToken) {
-    if (safeEqual(req.headers.authorization || "", `Bearer ${config.auth.mcpAuthToken}`)) return next();
+// Curry statt eines vierten Positionsarguments (Argument-Obergrenze .claude/refs/clean-code.md,
+// max 3) - verifyOauth bleibt eine gewoehnliche (req,res,next)-Middleware, ablehnungsDrossel
+// haengt als Closure daran. makeMcpAuth (s.u.) baut sie EINMAL, nicht pro Request.
+function makeVerifyOauth(ablehnungsDrossel) {
+  return async function verifyOauth(req, res, next) {
+    const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    if (!token) {
+      audit("auth_failed", req, "path=/mcp grund=kein_token");
+      return mitAblehnungsDrossel({ req, res, ablehnungsDrossel }, () =>
+        deny401(res, "invalid_token", "Kein Token"),
+      );
+    }
+    try {
+      const { payload } = await jwtVerify(token, await getJwks(), {
+        issuer: config.auth.oauthIssuerUrl,
+        audience: audience(),
+        clockTolerance: 30,
+        // T-12: jose prueft exp nur, wenn der Claim vorhanden ist - ohne diese Zeile
+        // gilt ein signiertes Token OHNE exp unbefristet. requiredClaims erzwingt den
+        // Claim; fehlt er, wirft jwtVerify (ERR_JWT_CLAIM_VALIDATION_FAILED) und landet
+        // im catch-Zweig unten -> 401 + oauth-Challenge, kein Token im Audit-Log.
+        requiredClaims: ["exp"],
+      });
+      // T-12 (Commit B): das Token muss jedes Element von ENFORCED_OAUTH_SCOPES tragen
+      // (nicht die volle beworbene OAUTH_SCOPES, s. Kommentar dort) - erst NACH
+      // erfolgreicher Signatur-/Claim-Pruefung, damit ein manipuliertes Token nie bis
+      // hierher kommt. Audit ohne Token- oder Claim-Inhalt (nur der Grund).
+      if (!hasRequiredScopes(payload)) {
+        audit("auth_failed", req, "path=/mcp grund=insufficient_scope");
+        // T2-07: insufficient_scope hat eine gueltige Signatur - die sub stammt vom
+        // eigenen AS und zaehlt darum wie ein abgelaufenes Token je verifizierter sub,
+        // nicht je IP (dieselbe Egress-IP-Ueberlegung wie beim JWTExpired-Zweig unten).
+        return mitAblehnungsDrossel(
+          { req, res, ablehnungsDrossel, verifizierteSub: nichtLeererString(payload.sub) },
+          () => deny403InsufficientScope(res),
+        );
+      }
+      // no-param-reassign: dasselbe Express-Idiom wie req.tenant in web-auth.js:838,
+      // dort ebenso ueber eslint-suppressions.json (count:1) akzeptiert statt einer
+      // Regel-Ausnahme - eine dateiweite Ausnahme wuerde eine ZWEITE req.xyz-Zuweisung
+      // an anderer Stelle dieser Datei unbemerkt durchlassen (P6-Review Runde 2).
+      req.auth = { sub: payload.sub, email: payload.email || null, claims: payload };
+      next();
+    } catch (err) {
+      audit("auth_failed", req, `path=/mcp grund=${err.code || "invalid_token"}`);
+      // T2-07 (Pre-Mortem 1): ein abgelaufenes, aber GUELTIG SIGNIERTES Token
+      // (ERR_JWT_EXPIRED) ist der normale Refresh-Anlass legitimer Clients hinter
+      // geteilten ChatGPT-Egress-IPs - jose prueft die Signatur vor den Claims
+      // (node_modules/jose/dist/webapi/jwt/verify.js), nur unser AS kann so ein Token
+      // ausgestellt haben. Es zaehlt darum je verifizierter sub (err.payload.sub), NIE
+      // je IP - sonst haengt ein einzelner Refresh alle Nutzer derselben Egress-IP mit.
+      // Jeder andere Fehler (Muell-Signatur, falscher iss/aud, fehlendes exp,
+      // JWKS-Fehler) traegt keine verifizierte sub und faellt auf die IP zurueck.
+      const verifizierteSub =
+        err.code === "ERR_JWT_EXPIRED" ? nichtLeererString(err.payload?.sub) : null;
+      mitAblehnungsDrossel({ req, res, ablehnungsDrossel, verifizierteSub }, () =>
+        deny401(res, "invalid_token", "Token-Pruefung fehlgeschlagen"),
+      );
+    }
+  };
+}
+
+// Fabrik statt eines modulweiten Exports (T2-07/T-28): mcpAuth braucht den injizierten
+// Ablehnungs-Zaehler (src/mcp-rate-limit.js) fuer JEDEN seiner Zweige. Wirft ohne
+// ablehnungsDrossel - fail-closed, kein ungedrosselter Default. Der Name der
+// zurueckgegebenen Funktion MUSS "mcpAuth" bleiben (Routen-Inventar-Test erkennt Auth
+// am Funktionsnamen, test/route-auth-inventory.test.js).
+export function makeMcpAuth({ ablehnungsDrossel }) {
+  if (!ablehnungsDrossel) throw new Error("makeMcpAuth: ablehnungsDrossel fehlt (fail-closed)");
+  const verifyOauth = makeVerifyOauth(ablehnungsDrossel);
+
+  return async function mcpAuth(req, res, next) {
+    if (config.auth.mcpAuth === "oauth") return verifyOauth(req, res, next);
+    // Modus "off": keine Ablehnung moeglich, nichts zu zaehlen.
+    if (config.auth.mcpAuth === "off") return next();
+
+    // Modus "token" und Legacy ("") teilen die statische Bearer-Pruefung.
+    if (config.auth.mcpAuthToken) {
+      if (safeEqual(req.headers.authorization || "", `Bearer ${config.auth.mcpAuthToken}`)) return next();
+      audit("auth_failed", req, "path=/mcp");
+      return mitAblehnungsDrossel({ req, res, ablehnungsDrossel }, () =>
+        sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } }),
+      );
+    }
+    // Kein Token gesetzt: "token" verlangt trotzdem eines, Legacy faellt AUSSERHALB der
+    // Produktion auf localhost-only zurueck (fail-closed wie seit Phase 1). In Produktion
+    // ist der Socket-Bypass deaktiviert (AM1) -> 401, auch von localhost.
+    if (config.auth.mcpAuth === "token") {
+      audit("auth_failed", req, "path=/mcp grund=kein_token");
+      return mitAblehnungsDrossel({ req, res, ablehnungsDrossel }, () =>
+        sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } }),
+      );
+    }
+    if (legacyLocalBypassAllowed(req)) return next();
     audit("auth_failed", req, "path=/mcp");
-    return sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } });
-  }
-  // Kein Token gesetzt: "token" verlangt trotzdem eines, Legacy faellt AUSSERHALB der
-  // Produktion auf localhost-only zurueck (fail-closed wie seit Phase 1). In Produktion
-  // ist der Socket-Bypass deaktiviert (AM1) -> 401, auch von localhost.
-  if (config.auth.mcpAuth === "token") {
-    audit("auth_failed", req, "path=/mcp grund=kein_token");
-    return sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, { body: { error: "unauthorized" } });
-  }
-  if (legacyLocalBypassAllowed(req)) return next();
-  audit("auth_failed", req, "path=/mcp");
-  return sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, {
-    body: { error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost (ausserhalb Produktion) erreichbar" },
-  });
+    return mitAblehnungsDrossel({ req, res, ablehnungsDrossel }, () =>
+      sendBearerChallenge(res, STATIC_BEARER_CHALLENGE, {
+        body: {
+          error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost (ausserhalb Produktion) erreichbar",
+        },
+      }),
+    );
+  };
 }
 
 // RFC 9728: Protected Resource Metadata. Beide Pfade bedienen (generisch und
