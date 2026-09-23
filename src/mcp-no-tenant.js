@@ -60,6 +60,14 @@ function noTenantFacade(server, stubHandler) {
   };
 }
 
+// Test-Naht (Muster _resetJwksCache in src/auth.js): erlaubt dem Unit-Test in
+// test/openai-t2-05-reauth-challenge.test.js, die Fassade selbst zu inspizieren
+// (Pre-Mortem 1, Beweis (iv): "tool" in fassade === false) - ohne sie ist die
+// Zwei-Methoden-Form nur am Quelltext, nicht am Laufzeitobjekt belegbar.
+export function _noTenantFacade(server, stubHandler) {
+  return noTenantFacade(server, stubHandler);
+}
+
 // Registriert dieselbe Werkzeugmenge wie registerTools (Namen, Beschreibungen, Schemas,
 // annotations, _meta, Widget-Verweise bleiben byte-gleich), aber JEDER Handler ist der
 // synchron-triviale Stub oben - unabhaengig davon, welchen Handler das jeweilige Tool
