@@ -25,6 +25,9 @@ import { makeDefaultState, updateSettings } from "../src/store/state-ops.js";
 import { defaultSettings, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const HTTP_OK = 200;
+// Zielnummer des place_call MIT Mandant im e2e-/mcp-Test - zugleich Positiv-Kontrolle
+// fuer die "to=<nummer>"-Negativpruefung in assertNoTenantPlaceCallStubbed.
+const TENANT_CALL_TO = "+4915123123123";
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY_REQUESTS = 429;
@@ -271,6 +274,10 @@ test("PROFILES_JSON kaputt -> Start crasht nicht, Store bleibt leer", async () =
 // umschliessende Testfunktion unter dem Zeilenlimit (G30) UND vermeidet Kopie/Einfuegen
 // derselben vier Assertions. place_call laeuft NIE (Stub ruft nie api()), deshalb darf
 // im Stdout weder "requestedBy=owner" noch ein "place_call"-Audit fuer DIESE Nummer stehen.
+// Positiv-Kontrolle fuer die "to=<nummer>"-Negativpruefung: derselbe Server hat im
+// vorangehenden Teiltest MIT Mandant (TENANT_CALL_TO) einen echten place_call auditiert -
+// die Form "to=<nummer>" MUSS dort im Stdout stehen, sonst saehe die Negativpruefung
+// unten nur deshalb gruen aus, weil das Log diese Form gar nicht schreibt.
 async function assertNoTenantPlaceCallStubbed(srv, token, { to, ownerMsg }) {
   const res = await mcpPost(
     `${srv.localUrl}/mcp`,
@@ -281,6 +288,10 @@ async function assertNoTenantPlaceCallStubbed(srv, token, { to, ownerMsg }) {
   assertReauthChallenge(await readToolResult(res));
   await waitForLog(srv, /\[audit\] auth_failed ip=\S+ path=\/mcp grund=kein_tenant/);
   assert.ok(!/requestedBy=owner/.test(srv.stdout), ownerMsg);
+  assert.ok(
+    srv.stdout.includes(`to=${TENANT_CALL_TO}`),
+    "Positiv-Kontrolle: der place_call MIT Mandant muss 'to=<nummer>' im Log hinterlassen",
+  );
   assert.ok(!srv.stdout.includes(`to=${to}`), "der Stub loest NIE einen echten Anruf aus");
 }
 
@@ -315,7 +326,7 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       const res = await mcpPost(
         `${srv.localUrl}/mcp`,
         token,
-        toolCall("place_call", { to: "+4915123123123", objective: "Termin" }),
+        toolCall("place_call", { to: TENANT_CALL_TO, objective: "Termin" }),
       );
       assert.notEqual(res.status, HTTP_UNAUTHORIZED);
       await waitForLog(
