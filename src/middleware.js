@@ -217,6 +217,78 @@ export function createMcpOriginGuard({ erlaubteOrigins, enforce }) {
   };
 }
 
+// ---- CORS auf /mcp (T-29) ---------------------------------------------------------
+// Reines Praedikat: Listen-Element bei Treffer, sonst null - NIE der Rohwert selbst
+// (eine Setz-Stelle, die versehentlich den Rueckgabewert statt der Konstante nimmt,
+// wuerde bei jedem Tippfehler den Angreifer-Origin spiegeln; ein Praedikat, das nur
+// Listen-Elemente zurueckgeben KANN, macht diesen Fehler unmoeglich). Byte-genauer
+// Vergleich des ROHEN Headers gegen corsOrigins - KEINE Normalisierung, kein
+// Praefix/Suffix-Match, kein Wildcard. Ein echter Browser sendet den Origin immer
+// kanonisch (lowercase, ohne Default-Port, ohne Pfad) - verliert dadurch nichts. Die
+// Wache (mcpOriginErlaubt oben) vergleicht normalisiert und ist damit toleranter als
+// CORS hier - bewusste Asymmetrie, CORS ist die strengere der beiden Pruefungen.
+export function mcpCorsOrigin(originHeader, corsOrigins) {
+  if (typeof originHeader !== "string") return null;
+  return corsOrigins.includes(originHeader) ? originHeader : null;
+}
+
+// 204 als benannte Konstante (Regel: keine Magic Numbers) - Praeflight-Antwort ohne Body.
+const HTTP_NO_CONTENT = 204;
+// Nur "/mcp" selbst, NICHT "/mcp/foo" - req.path ist relativ zum Mount-Punkt des Routers
+// ("/mcp" in app.js), also "/" fuer die Mount-Wurzel.
+const MCP_CORS_PFAD = "/";
+const MCP_CORS_ALLOW_METHODS = "POST";
+const MCP_CORS_ALLOW_HEADERS = "authorization, content-type, mcp-session-id, mcp-protocol-version";
+const MCP_CORS_EXPOSE_HEADERS = "Mcp-Session-Id, WWW-Authenticate";
+
+// Express-Fabrik (T-29): Browser duerfen `/mcp`-Antworten NUR lesen, wenn ihr Origin
+// byte-genau in corsOrigins steht. corsOrigins ist per Konstruktion eine Teilmenge der
+// Wachen-Liste OHNE PUBLIC_URL (routes/mcp.js bildet sie aus derselben mcpErlaubteOrigins
+// - same-origin braucht kein CORS). Leere Liste (Default) -> die Middleware ruft fuer
+// JEDEN Request sofort next() und setzt keinen einzigen Header - byte-identisch zu vor
+// T2-06 (E5-H09 bleibt gruen).
+//
+// use-Layer statt eigener OPTIONS-Route (Designentscheidung T2-06-Spec #4, Begruendung
+// hier UND in PLAN-SECURITY.md statt eines PUBLIC_ROUTES-Eintrags): eine
+// router.options("/mcp", ...) wuerde (a) das heutige Auto-OPTIONS OHNE Origin veraendern
+// (Express haengte dann einen "Allow"-Header an, den es heute nicht setzt - kein
+// byte-identisches Verhalten bei leerer Liste) und (b) einen neuen Eintrag im
+// Routen-Graph erzeugen, den test/route-auth-inventory.test.js als verwaisten
+// PUBLIC_ROUTES-Eintrag melden wuerde (der Inventar-Test sieht nur layer.route, keine
+// use-Schichten - ein Eintrag fuer diesen Layer ist technisch nicht moeglich). Die
+// Herkunftswache oben ist ebenfalls ein use-Layer, der OPTIONS beantwortet - gleiche
+// Bauart, gleiche Deckung durch Absolute Regel 3 (Begruendung im Kommentar statt
+// Inventar-Eintrag).
+//
+// Liest NIE MCP_ORIGIN_ENFORCE: mit enforce=false bleibt die Herkunftswache geloest
+// (Notventil E-4), aber diese Middleware spiegelt weiterhin NUR einen Origin aus
+// corsOrigins - ein geloestes Notventil oeffnet keinen fremden Origin fuer CORS
+// (Designentscheidung T2-06-Spec #3, Test H14).
+//
+// Header-Reihenfolge: ACAO + Expose-Headers + Vary auf JEDER Antwort an einen
+// gelisteten Origin (auch 401/403 von mcpAuth danach - der Layer sitzt VOR mcpAuth,
+// die Header bleiben auf der res-Instanz stehen); zusaetzlich Allow-Methods/-Headers +
+// 204 nur bei OPTIONS. `res.vary("Origin")` haengt an einen bestehenden Vary-Header an,
+// statt ihn zu ueberschreiben (Cache-Vergiftung: eine Antwort mit ACAO fuer Origin A
+// darf nie an Origin B ausgeliefert werden). NIE Access-Control-Allow-Credentials
+// (Identitaet laeuft per Bearer-Header, nicht per Cookie - keine Ambient-Credentials);
+// KEIN Access-Control-Max-Age (nicht verlangt, waere eine neue Zahl ohne
+// Messgrundlage).
+export function createMcpCors({ corsOrigins }) {
+  return function mcpCorsMiddleware(req, res, next) {
+    if (req.path !== MCP_CORS_PFAD) return next();
+    const treffer = mcpCorsOrigin(req.headers.origin, corsOrigins);
+    if (!treffer) return next();
+    res.vary("Origin");
+    res.set("Access-Control-Allow-Origin", treffer);
+    res.set("Access-Control-Expose-Headers", MCP_CORS_EXPOSE_HEADERS);
+    if (req.method !== "OPTIONS") return next();
+    res.set("Access-Control-Allow-Methods", MCP_CORS_ALLOW_METHODS);
+    res.set("Access-Control-Allow-Headers", MCP_CORS_ALLOW_HEADERS);
+    res.status(HTTP_NO_CONTENT).end();
+  };
+}
+
 // Exportiert: app.js baut den Fehlversuch-Zaehler der Init-Schranke (IEX-A7) mit demselben
 // Fenster, und die Schranke fasst ihre Drossel-Zeile je Fenster zusammen - eine Quelle (G5).
 export const RATE_WINDOW_MS = 60_000;

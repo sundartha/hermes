@@ -1967,6 +1967,13 @@ const rawConfig = {
   // Jeder Eintrag MUSS ein absoluter http(s)-Origin ohne Pfad sein - ein Tippfehler
   // sperrt sonst still den gemeinten Partner aus und wird deshalb beim Boot abgelehnt
   // (boot-guard.angekuendigterOriginFindings).
+  // T2-06 (T-29): dieselbe Liste bestimmt SEIT DIESER PHASE zusaetzlich, welche Origins
+  // `/mcp`-Antworten per CORS im BROWSER lesen duerfen (src/middleware.js:
+  // createMcpCors) - byte-genauer Vergleich, PUBLIC_URL ausgenommen (same-origin
+  // braucht kein CORS). Ein Eintrag hier heisst also "Wache laesst durch UND Browser
+  // duerfen die Antwort lesen", nicht mehr nur ersteres. Die Widget-Sandbox-Domain
+  // (ui.domain, chatgpt-egress.js) gehoert NICHT auf diese Liste - sie ist der Ursprung
+  // des Iframe-Inhalts, nicht ein Aufrufer von `/mcp`.
   mcpAllowedOrigins: csvEnv(process.env.MCP_ALLOWED_ORIGINS),
   // E5/Owner-Entscheidung E-4: NOTVENTIL der /mcp-Herkunftswache, Default SCHARF. Wie
   // csrfEnforce (s.o.) existiert der Schalter ALS RUECKFALL, nicht als Bequemlichkeit -
