@@ -487,11 +487,12 @@ test("list_action_items: Leertext + Termin-Praefix folgen der Tenant-Sprache; DE
       for (const language of SUPPORTED_LANGUAGES) {
         const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
           .get("list_action_items")();
-        assert.equal(toolText(r), `[a1] ${MCP_TEXTS[language].appointmentPrefix}Zahnarzt`);
+        // T2-09 (O-13): keine interne Item-ID mehr in der Zeile.
+        assert.equal(toolText(r), `${MCP_TEXTS[language].appointmentPrefix}Zahnarzt`);
       }
       const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
         .get("list_action_items")();
-      assert.equal(toolText(de), "[a1] (Termin) Zahnarzt", "DE bleibt byte-identisch");
+      assert.equal(toolText(de), "(Termin) Zahnarzt", "DE bleibt byte-identisch (bis auf die entfallene ID)");
     },
   );
 });
