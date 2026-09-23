@@ -64,11 +64,11 @@ export const MCP_DENIAL_TEXTS = Object.freeze({
       "Die Leitung fuer ausgehende Anrufe ist derzeit nicht verfuegbar. Es wurde kein Anruf " +
       "gestartet. Bitte spaeter erneut versuchen.",
     budget_tenant:
-      "Die monatliche Kostengrenze dieses Kontos ist erreicht. Es wurde kein Anruf gestartet. " +
-      "Details stehen im Hermes-Dashboard.",
+      "Ausgehende Anrufe sind durch die Kostengrenze dieses Kontos gesperrt. Es wurde kein " +
+      "Anruf gestartet. Details stehen im Hermes-Dashboard.",
     reserve_erschoepft:
-      "Die monatliche Kostengrenze dieses Kontos ist erreicht. Es wurde kein Anruf gestartet. " +
-      "Details stehen im Hermes-Dashboard.",
+      "Ausgehende Anrufe sind durch die Kostengrenze dieses Kontos gesperrt. Es wurde kein " +
+      "Anruf gestartet. Details stehen im Hermes-Dashboard.",
     reserve_ueber_rest:
       "Dieser Anruf passt nicht mehr in die verbleibende monatliche Kostengrenze. Es wurde " +
       "kein Anruf gestartet. Details stehen im Hermes-Dashboard.",
@@ -125,11 +125,11 @@ export const MCP_DENIAL_TEXTS = Object.freeze({
       "The line for outgoing calls is temporarily unavailable. No call was placed. Please " +
       "try again later.",
     budget_tenant:
-      "Your monthly cost limit has been reached. No call was placed. Details are shown in " +
-      "the Hermes dashboard.",
+      "Outbound calls are blocked by this account's cost limit. No call was placed. Details " +
+      "are shown in the Hermes dashboard.",
     reserve_erschoepft:
-      "Your monthly cost limit has been reached. No call was placed. Details are shown in " +
-      "the Hermes dashboard.",
+      "Outbound calls are blocked by this account's cost limit. No call was placed. Details " +
+      "are shown in the Hermes dashboard.",
     reserve_ueber_rest:
       "This call does not fit into the remaining monthly cost limit. No call was placed. " +
       "Details are shown in the Hermes dashboard.",
@@ -189,11 +189,11 @@ export const MCP_DENIAL_TEXTS = Object.freeze({
       "La ligne pour les appels sortants est temporairement indisponible. Aucun appel n'a " +
       "été passé. Veuillez réessayer plus tard.",
     budget_tenant:
-      "La limite de coût mensuelle de ce compte est atteinte. Aucun appel n'a été passé. " +
-      "Les détails sont affichés dans le tableau de bord Hermes.",
+      "Les appels sortants sont bloqués par la limite de coût de ce compte. Aucun appel n'a " +
+      "été passé. Les détails sont affichés dans le tableau de bord Hermes.",
     reserve_erschoepft:
-      "La limite de coût mensuelle de ce compte est atteinte. Aucun appel n'a été passé. " +
-      "Les détails sont affichés dans le tableau de bord Hermes.",
+      "Les appels sortants sont bloqués par la limite de coût de ce compte. Aucun appel n'a " +
+      "été passé. Les détails sont affichés dans le tableau de bord Hermes.",
     reserve_ueber_rest:
       "Cet appel dépasse la limite de coût mensuelle restante. Aucun appel n'a été passé. " +
       "Les détails sont affichés dans le tableau de bord Hermes.",

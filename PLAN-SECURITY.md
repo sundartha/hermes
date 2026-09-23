@@ -6131,3 +6131,31 @@ vorbeidokumentiert.
 
 Tests (Nachbesserung): T4 (s.o.), T7 (`CALL_START_REJECTED`, inkl. Gegenprobe `gate_error`
 unveraendert), T2 um `CALL_START_REJECTED` in der Neutralitaetspruefung erweitert.
+
+### Zweite Nachbesserung (Safety-/Clean-Code-Review, 2026-09-24)
+
+**Ratschen-Fingerabdruck nachgezogen (kein Code-, nur ein Test-Snapshot-Fehler):** die
+`registerTools`-Senkung 508 -> 494 (s. Aenderungschronik oben) war in
+`eslint-legacy-exceptions.json`/`eslint-suppressions.json` bereits korrekt, der hartcodierte
+Vergleichs-Schnappschuss `LEGACY_FINGERPRINT["src/mcp-tools.js"]` in
+`test/check-staged-suppressions.test.js` (Suite "Altlast-Ratsche (echte Liste)") war dabei nicht
+mitgezogen worden und stand noch auf 508 samt dem entsprechend kuerzeren `reason`-Text. Der
+Regressionstest verglich damit den echten (494) gegen einen veralteten Schnappschuss (508) und war
+isoliert rot. Fix: `reason`-String byte-genau auf den Stand der echten Datei gebracht (inkl. des
+Chronik-Absatzes "ZAHL KORRIGIERT 2026-09-24") und der Befundwert auf 494 gesenkt. Keine
+Code-/Verhaltensaenderung, reiner Snapshot-Abgleich. Isoliert gruen nachgewiesen.
+
+**`budget_tenant`/`reserve_erschoepft` an der MCP-Grenze ehrlicher formuliert:** beide Gate-Gruende
+decken ZWEI REST-Zustaende ab, die auf der Tenant-Budget-Achse denselben `grund` teilen — der Cap
+ist tatsaechlich erreicht (`budgetCapReached`) ODER der Verbrauchszaehler ist unlesbar/unbuchbar
+(`budgetUnreadable`, D7, fail-closed). Der bisherige MCP-Text ("Die monatliche Kostengrenze dieses
+Kontos ist erreicht...") war fuer den zweiten Fall irrefuehrend: "erreicht" legt nahe, mit dem
+naechsten Abrechnungszeitraum loese sich die Sperre von selbst, waehrend ein unlesbarer Zaehler nur
+der Betreiber beheben kann. Da eine eigene Kennung fuer den unlesbaren Fall eine Gate-Aenderung
+waere (ausserhalb des T2-09-Scopes: nur Texte an der MCP-Grenze), bleibt der Grund unangetastet und
+NUR der Wortlaut wird neutral fuer BEIDE Zustaende: DE "Ausgehende Anrufe sind durch die
+Kostengrenze dieses Kontos gesperrt.", EN "Outbound calls are blocked by this account's cost
+limit.", FR "Les appels sortants sont bloqués par la limite de coût de ce compte." — jeweils
+weiterhin ohne Zahl, ohne Kennung, mit Verweis auf das Hermes-Dashboard. Kein Test pinnte den
+alten Wortlaut; `test/openai-t2-09-neutrale-fehlertexte.test.js` (T1/T2) und
+`test/deny-diagnosability.test.js` bleiben unveraendert gruen.
