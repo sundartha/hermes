@@ -5945,3 +5945,90 @@ in den betroffenen Auth-Modi: OAuth mit/ohne Mandant, Token-Modus, Legacy); `tes
 und `test/auth-mcp-bypass.test.js` auf `makeMcpAuth({ ablehnungsDrossel: ERLAUBT, ipSperre: ERLAUBT })`
 (`ERLAUBT` = Attrappe, die nie drosselt) umgestellt (Asserts unveraendert — diese Dateien pruefen Wortlaut/Modus-Verzweigung, kein
 Drossel-Verhalten).
+
+## OpenAI-T2-08 — Stundenlimit/Ziel-Cap im Claim-Lock verbindlich, Frist fuer jeden uebrigen MCP-Hop (2026-09-23)
+
+**Anlass (T-27):** zwei Luecken im Geldpfad. (1) `tenantHourReached`/`perTargetCapReached` liefen
+bisher NUR im fruehen `number_gate`-Gate, VOR Pre-Call-Briefing/EL-Eroeffnungszeile (Netz-awaits).
+Gemessen am laufenden Server (`MAX_CALLS_PER_HOUR=2`, 8 parallele `POST /api/calls` an verschiedene
+Ziele, `FAKE_ORIGINATE=true`, LLM-Attrappe mit 300 ms Verzoegerung): **8x 200, 8 Datensaetze — das
+Limit war 2, ueberholt um das Vierfache.** Ohne Netz-await zwischen Gate und Claim lief die Kette
+dagegen bis `createCall` in Microtasks durch und zeigte kein Rennen (Positiv-/Negativ-Kontrolle
+derselben Messung). Derselbe Zaehl-dann-Anlegen-Abstand gilt fuer den Ziel-Cap. (2) `call()`
+(`src/mcp-tools.js`, geteilt von stdio UND HTTP `/mcp`) setzte nur fuer `pollConsult` und
+`placeCallHop` eine Frist — jeder uebrige Hop (`cancel_call`, `answer_consult`, `check_inbox`,
+`get_call_status`, `list_calls`, die `GET /api/state`-Leser, der Abschluss-`GET` in
+`await_call_event`) lief ohne, ein haengender Gateway-Handler haette den MCP-Client unbegrenzt
+blockiert.
+
+**1. Quoten-Pruefung als eigenstaendige Fabrik (`src/telephony/outbound-gates.js#makeCallQuotaCheck`):**
+`callQuotaError(to, caller)` (Stundenlimit vor Ziel-Cap, Texte/Status byte-identisch zum Bestand)
+und `callQuotaDenial(ctx)` (dieselbe `number_gate`-Ablehnungsform) liegen AUSSERHALB von
+`makeOutboundGates` — Muster `makeAniOwnershipGate` (OUTBOUND-E4): `makeOutboundGates` ist eine
+bereits gepinnte Altlast (`eslint-suppressions.json`, `max-lines-per-function`); die Extraktion
+haelt den Pin, statt ihn zu bewegen (kein neuer `eslint-legacy-exceptions.json`-Eintrag noetig —
+ein Bau-Agent darf laut `test/check-staged-suppressions.test.js` keinen setzen). Injiziert werden
+die UNVERAENDERTEN Praedikate `tenantHourReached`/`perTargetCapReached`/`gateTexts`; `numberGateError`
+bleibt bewusst byte-identisch zum Bestand (ruft die Fabrik NICHT auf) — dieselbe Schwellwert-Logik
+ist trotzdem EINE Quelle (beide Aufrufer injizieren dieselben Praedikate), dupliziert ist nur die
+Antwortformung.
+
+**2. Quote im Claim-Lock erneut geprueft, Rennen geschlossen (`src/routes/api-calls.js#claimCallRecord`):**
+im SELBEN synchronen `withStoreLock`-Abschnitt wie die Dedup-Entscheidung (KEIN `await` im
+Lock-Body — Invariante `store.js`) prueft `claimCallRecord` nach der Dedup, aber VOR `createCall`,
+zusaetzlich `callQuotaDenial(ctx)`. Bei Ablehnung: `{ denial }` statt eines neuen Datensatzes; die
+Route behandelt das wie den Dedup-Zweig (Reserve in einem zweiten, kurzen Lock-Abschnitt zurueck,
+Audit+Metrik ueber `beobachteAblehnung`, KEIN Originate/Consult/Timer/Kostenprofil). Die fruehe
+Pruefung im `number_gate`-Gate BLEIBT (spart Briefing-/Eroeffnungs-Token fuer einen Anruf, der
+ohnehin abgelehnt wird) — die Lock-Pruefung ist die VERBINDLICHE. `callQuotaDenial` reist
+`server.js -> app.js -> makeCallRoutes` durch mit lautem fail-closed-Default
+(`callQuotaDenialNotWired`, Muster `elevenLabsCallNotWired`): eine fehlverdrahtete
+Kompositionswurzel wirft in den bestehenden Claim-`catch` (503, Reserve zurueck, NICHT gewaehlt)
+statt die Pruefung still auf "immer erlaubt" fallen zu lassen — kein Default `() => null`.
+
+**3. Frist fuer jeden uebrigen MCP-Hop (`src/mcp-tools.js`):** `MCP_HOP_TIMEOUT_MS = 60000`
+(benannte Konstante, KEIN Env-Knopf — Praezedenz `PLACE_CALL_HOP_TIMEOUT_MS`, E3), `call()` gibt sie
+als `timeoutMs` an `api()`. Ein Zeitablauf wird zu `MCP_ERROR_CODE.HOP_TIMEOUT` (de/en/fr) — NIE
+"fehlgeschlagen": der Text sagt ausdruecklich, dass die Aktion trotzdem gelaufen sein kann und der
+Stand erneut abgefragt werden soll statt blind zu wiederholen (`cancel_call` ist serverseitig
+idempotent, `answer_consult` auf eine beantwortete Frage liefert 409, kein Pfad waehlt doppelt).
+`pollConsult`/`placeCallHop` bleiben unveraendert (eigene Fristen/Abbildung). Wert am Seam
+hergeleitet: laengster begrenzter Serverweg ist `cancel_call` auf einen GEBUNDENEN EL-Inbound-Anruf
+(`EL_TERMINATION_RESULT_ATTEMPTS` 3 x `EL_ABORT_PROVIDER_TIMEOUT_MS` 10000 + 2 x
+`config.voice.elevenLabsOutbound.resultPollMs` Default 5000 = 40000 ms) — 60000 laesst Kopf; ein
+Betreiber, der `ELEVENLABS_RESULT_POLL_MS` stark anhebt, reisst die Invariante, der
+Ungleichungs-Test liest sie LIVE und wird rot.
+
+**Pre-Mortem (entschaerft):**
+- **Sperre haengt nach einem Wurf:** keine neue Sperre — der bestehende Chain-Mutex laeuft bei
+  Wurf weiter (`.then(run, run)`), Lock-Body bleibt synchron. Belegt: ein Wurf in `createCall` ->
+  503, 0 Datensaetze, Reserve frei, die NAECHSTE Anfrage desselben Mandanten -> 200.
+- **Alle Mandanten serialisiert:** der globale Lock umfasst nur synchrone Mikrosekunden (Zaehlen +
+  Anlegen), keine Netz-awaits — Mandant B bleibt unter Last von Mandant A unbeeintraechtigt.
+- **Fehlverdrahtung schaltet die Pruefung still ab:** fail-closed Default, der wirft -> 503, nicht
+  gewaehlt (s. 2. oben).
+- **Ein Mandant ist eine Stunde gesperrt, weil Originate-Fehler Slots fressen:** bewusst akzeptiert
+  und STRENGER benannt — Bestandsverhalten, die fruehe Pruefung zaehlte fehlgeschlagene Anrufe
+  schon immer (`state-ops.js:1745-1752`); nur ein Wurf VOR dem Anlegen (kein Datensatz) verbraucht
+  keinen Slot.
+
+**Bewusst akzeptiertes Restrisiko:** prozess-lokaler Lock (1 Instanz, OT-3, geteilt mit dem
+Rate-Limiter aus T2-07) — bei horizontaler Skalierung schliesst er das Rennen nicht mehr; kein
+Deploy-Vorbedingung (Produktion laeuft heute auf 1 Instanz).
+
+**Bewusst NICHT gebaut:**
+- Keine neue, per-Mandant gekeyte Sperre ueber den ganzen Anrufstart — sie wuerde die Anrufe EINES
+  Mandanten fuer die Briefing-/Eroeffnungs-Dauer serialisieren; der bestehende globale Lock mit
+  synchronem Mikro-Body schliesst das Rennen ohne diese Kosten.
+- Keine Aenderung an Kostendecke, Reserve-Logik, `OUTBOUND_FROZEN`, KYC, Denylist, Land-Gate,
+  Max-Dauer, Offenlegung — alle Safety-Gates aus CLAUDE.md Regel 1 bleiben unangetastet.
+- Kein Rename des Registrierweg-Legacy-CALL_START_UNCONFIRMED-Texts: am Stundenlimit lehnt
+  `number_gate` einen Retry schon VOR der Dedup mit 429 ab (der Text verspricht "liefert den
+  laufenden Anruf zurueck") — kein Geld-/Anrufschaden (es wird nicht gewaehlt), aber der Text
+  stimmt am Limit nicht; Bestandsluecke, nicht neu durch diese Phase.
+
+Tests: `test/openai-t2-08-stundenlimit-sperre.test.js` (T1/T2 Spawn mit LLM-Attrappe und
+geoeffnetem Rennfenster, T3-T6 In-Process gegen die echte Gate-Kette + Route), `test/openai-t2-08-hop-frist.test.js`
+(Hop-Frist + Ungleichungstest), `test/outbound-gates-order.test.js`, `test/number-gate.test.js`,
+`test/gap-10-hour-limit-per-tenant.test.js`, `test/mcp-tools-language.test.js` (Vollstaendigkeits-
+pruefung `HOP_TIMEOUT` in allen drei Sprachen) gruen ohne Verhaltensaenderung.
