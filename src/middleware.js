@@ -210,18 +210,17 @@ export function originLogWert(originHeader) {
 // Origin traf bisher auf KEINE Drossel und schrieb je Anfrage unbegrenzt eine
 // auth_failed-Zeile. ablehnungsDrossel ist derselbe injizierte IP-Zaehler wie in
 // makeMcpAuth (mcpDrosseln.ablehnung, EINE Instanz je Prozess) - erst pruefen, dann
-// zaehlen (Muster mitAblehnungsDrossel, src/auth.js): ist das Fenster ausgeschoepft,
-// antwortet 429 statt 403 und es entsteht KEINE Audit-Zeile (Pre-Mortem b: vor der
-// Authentifizierung bleibt eine Grenze; die Audit-Zeile selbst bleibt dadurch ebenfalls
-// begrenzt, s. Befund safety/wichtig). verifizierteSub ist hier immer null - vor
-// mcpAuth existiert noch kein verifiziertes Token, die Ablehnung zaehlt darum immer
-// je IP (fail-closed).
+// zaehlen ueber den gemeinsamen Helper pruefeAblehnungsDrossel (unten, geteilt mit
+// mitAblehnungsDrossel in src/auth.js): ist das Fenster ausgeschoepft, antwortet 429
+// statt 403 und es entsteht KEINE Audit-Zeile (Pre-Mortem b: vor der Authentifizierung
+// bleibt eine Grenze; die Audit-Zeile selbst bleibt dadurch ebenfalls begrenzt, s. Befund
+// safety/wichtig). verifizierteSub ist hier immer null - vor mcpAuth existiert noch kein
+// verifiziertes Token, die Ablehnung zaehlt darum immer je IP (fail-closed).
 export function createMcpOriginGuard({ erlaubteOrigins, enforce, ablehnungsDrossel }) {
   const aktiv = enforce !== false;
   return function mcpOriginOnlyMiddleware(req, res, next) {
     if (!aktiv || mcpOriginErlaubt(req.headers.origin, erlaubteOrigins)) return next();
-    const { allowed, retryAfterS } = ablehnungsDrossel(req, { verifizierteSub: null });
-    if (!allowed) return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
+    if (!pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel })) return;
     auditAuthFailed(
       req,
       AUTH_FAILED_GRUND.MCP_CROSS_ORIGIN,
@@ -353,6 +352,23 @@ export const RATE_LIMIT_BODY = Object.freeze({
 export function respondTooManyRequests(res, { retryAfterS, body }) {
   res.set("Retry-After", String(retryAfterS));
   return res.status(429).json(body);
+}
+
+// T2-07-Nachbesserung (Befund cleancode/wichtig): "ablehnungsDrossel aufrufen, bei
+// ausgeschoepftem Fenster 429 senden" stand wortgleich zweimal - hier in
+// createMcpOriginGuard UND in mitAblehnungsDrossel (src/auth.js). EINE Quelle (G5) statt
+// zweier Kopien, die bei einer Vertragsaenderung (z.B. ein zusaetzliches 429-Feld)
+// auseinanderlaufen koennten. Optionsobjekt statt viertem Positionsargument (Argument-
+// Obergrenze .claude/refs/clean-code.md, max 3) - dieselbe Curry-Bauform wie
+// makeVerifyOauth/mitAblehnungsDrossel in src/auth.js.
+// Rueckgabe true: Anfrage darf weiterlaufen, der Aufrufer prueft/antwortet selbst weiter.
+// Rueckgabe false: die 429-Antwort ist bereits gesendet - der Aufrufer MUSS sofort
+// zurueckkehren, ohne eine zweite Antwort zu senden.
+export function pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel, verifizierteSub = null }) {
+  const { allowed, retryAfterS } = ablehnungsDrossel(req, { verifizierteSub });
+  if (allowed) return true;
+  respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
+  return false;
 }
 
 // Fixed-Window-Rate-Limiter pro Client-IP. Die Ausnahmen (localhost-Socket,

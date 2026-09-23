@@ -5876,6 +5876,15 @@ UND den globalen Parsern — dieselbe Menge wie vor dieser Phase, keine neue Lue
 - `isTrustedLocalCaller` haengt an fehlendem `X-Forwarded-For`; wuerde der Hosting-Proxy den
   Header nicht mehr setzen, waere `/mcp` ungedrosselt — Bestandsrisiko, geteilt mit dem globalen
   Limiter, nicht neu durch diese Phase.
+- Authentifizierte Last je IP skaliert mit der Kontenzahl (Folge von T-28, gewollt): erfolgreich
+  authentifizierte `POST /mcp`-Anfragen zaehlen seit dieser Phase je Mandant bzw. je verifizierter
+  `sub` (bei `TENANT_REJECT`, `src/mcp-rate-limit.js`), nicht mehr je IP. Die Last, die EINE IP
+  erzeugen kann, ist dadurch nicht mehr gedeckelt — sie waechst mit der Zahl der Konten, die ein
+  Angreifer beim Authorization-Server anlegt (jede neue `sub` ergibt einen eigenen Mandanten bzw.
+  Zaehler-Eimer mit eigenem 120/min-Limit). Das Volumen, das viele gueltige Konten von einer IP
+  erzeugen koennen, ist Sache der Hosting-Kante, nicht dieses Gates — die Safety-Gates aus
+  CLAUDE.md (Stundenlimit, Kostendecke, Denylist, Land-Gate, Kill-Switch) bleiben unberuehrt, es
+  geht um CPU-/Parse-Last bis `BODY_LIMIT`, nicht um Anruf-/SMS-Kosten.
 
 **Nachbesserung (Safety-/Clean-Code-Review, 2026-09-23):**
 - **Herkunftswache ohne Zaehler (Befund safety/blocker):** die Wache (`createMcpOriginGuard`,

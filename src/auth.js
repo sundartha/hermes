@@ -14,7 +14,7 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { config } from "./config.js";
 import { audit, safeEqual } from "./util.js";
-import { RATE_LIMIT_BODY, respondTooManyRequests } from "./middleware.js";
+import { pruefeAblehnungsDrossel } from "./middleware.js";
 
 // Localhost anhand der echten Socket-Adresse (nicht spoofbar via X-Forwarded-For).
 // ACHTUNG: hinter einem Reverse-Proxy (Render) ist remoteAddress IMMER der Loopback-
@@ -211,17 +211,19 @@ function nichtLeererString(wert) {
 
 // EINE Stelle fuer "erst pruefen, dann zaehlen" (Muster initTokenSchranke,
 // routes/webhooks-elevenlabs-init.js): ruft den injizierten Ablehnungs-Zaehler VOR dem
-// Audit-Log. T2-07-Nachbesserung (Befund safety/wichtig): auditFn laeuft seither NUR
-// NOCH im erlaubten Zweig - vorher schrieb JEDER Ablehnungszweig seine auth_failed-Zeile
-// VOR dem Zaehler, eine Flut ungueltiger Tokens erzeugte dadurch unbegrenzt viele
-// Log-Zeilen, obwohl die HTTP-Antwort laengst gedrosselt (429) war. Die 429-Antwort
-// selbst bleibt ohne eigene Log-Zeile (bewusst, PLAN-SECURITY.md: der HTTP-Status im
-// Render-Log deckt das ab - eine Zeile je Anfrage waere die Log-Flut, die dieser Fix
-// gerade vermeidet). verifizierteSub NUR bei ERR_JWT_EXPIRED/insufficient_scope gesetzt
-// (Aufrufer unten) - jeder andere Ablehnungsgrund zaehlt ueber die IP (mcp-rate-limit.js).
+// Audit-Log, ueber den mit createMcpOriginGuard (src/middleware.js) geteilten Helper
+// pruefeAblehnungsDrossel (T2-07-Nachbesserung, Befund cleancode/wichtig - vorher stand
+// "pruefen, bei !allowed 429" wortgleich an beiden Stellen). T2-07-Nachbesserung (Befund
+// safety/wichtig): auditFn laeuft seither NUR NOCH im erlaubten Zweig - vorher schrieb
+// JEDER Ablehnungszweig seine auth_failed-Zeile VOR dem Zaehler, eine Flut ungueltiger
+// Tokens erzeugte dadurch unbegrenzt viele Log-Zeilen, obwohl die HTTP-Antwort laengst
+// gedrosselt (429) war. Die 429-Antwort selbst bleibt ohne eigene Log-Zeile (bewusst,
+// PLAN-SECURITY.md: der HTTP-Status im Render-Log deckt das ab - eine Zeile je Anfrage
+// waere die Log-Flut, die dieser Fix gerade vermeidet). verifizierteSub NUR bei
+// ERR_JWT_EXPIRED/insufficient_scope gesetzt (Aufrufer unten) - jeder andere
+// Ablehnungsgrund zaehlt ueber die IP (mcp-rate-limit.js).
 function mitAblehnungsDrossel({ req, res, ablehnungsDrossel, verifizierteSub = null, auditFn }, sende) {
-  const { allowed, retryAfterS } = ablehnungsDrossel(req, { verifizierteSub });
-  if (!allowed) return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
+  if (!pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel, verifizierteSub })) return;
   auditFn();
   return sende();
 }
