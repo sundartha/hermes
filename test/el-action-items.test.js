@@ -176,7 +176,7 @@ function captureTools() {
   const remember = (...args) => handlers.set(args[0], args.at(-1));
   registerTools(
     { tool: remember, registerTool: remember, registerResource: () => {} },
-    { identity: null, allowCalendar: true },
+    { identity: null },
   );
   return handlers;
 }

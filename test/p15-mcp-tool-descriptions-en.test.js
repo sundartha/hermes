@@ -126,7 +126,6 @@ const EXPECTED_MARKERS = {
   check_inbox: ["CONSUMING", "NOT", "NOT"],
   "check_inbox.include_seen": ["NO"],
   list_action_items: [],
-  get_calendar: [],
   get_agent_status: [],
 };
 

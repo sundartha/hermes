@@ -70,12 +70,6 @@ const EXPECTED_ANNOTATIONS = {
     destructiveHint: false,
     openWorldHint: false,
   },
-  get_calendar: {
-    title: "Get calendar",
-    readOnlyHint: true,
-    destructiveHint: false,
-    openWorldHint: false,
-  },
   get_agent_status: {
     title: "Get agent status",
     readOnlyHint: true,
@@ -185,11 +179,11 @@ test("P0-1 (E2E): tools/list liefert ueber die echte /mcp-Route fuer JEDES Werkz
 // P1 (S8): der Vollstaendigkeitsbeweis mit FREIGESCHALTETER Consult-Faehigkeit ueber die
 // echte Route - der Bootstrap-Tenant loest auf OWNER_PROFILE auf (routes/mcp.js,
 // store/defaults.js), consultAllowedFor() wird damit true (consult/gate.js). Das liefert
-// GENAU die zwoelf Werkzeuge. Die Schleifen laufen ueber result.tools, NICHT ueber eine
+// GENAU die elf Werkzeuge. Die Schleifen laufen ueber result.tools, NICHT ueber eine
 // handgepflegte Namensliste - ein registerTool()-Konfigobjekt verwirft unbekannte Felder
 // STILL (P0/U-2), ein Test am Config-Objekt beweist deshalb nichts ueber das, was der
 // Host sieht.
-test("P1 (N-1/X-1/N-3/N-4/N-11): tools/list ueber /mcp liefert mit Consult-Faehigkeit alle 12 Werkzeuge - Annotationen vollstaendig und tabellentreu, await_call_event nennt seinen Schreibeffekt", async () => {
+test("P1 (N-1/X-1/N-3/N-4/N-11): tools/list ueber /mcp liefert mit Consult-Faehigkeit alle 11 Werkzeuge - Annotationen vollstaendig und tabellentreu, await_call_event nennt seinen Schreibeffekt", async () => {
   const srv = await startServer({
     seed: seedState({}),
     env: { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
@@ -203,13 +197,13 @@ test("P1 (N-1/X-1/N-3/N-4/N-11): tools/list ueber /mcp liefert mit Consult-Faehi
       }),
     );
     const alle = { ...EXPECTED_ANNOTATIONS, ...EXPECTED_CONSULT_ANNOTATIONS };
-    // (1) Mengengleichheit gegen die Vereinigung beider Tabellen - nicht die Zahl 12
-    // gegen eine Konstante, damit sowohl ein fehlendes als auch ein dreizehntes Werkzeug
+    // (1) Mengengleichheit gegen die Vereinigung beider Tabellen - nicht die Zahl 11
+    // gegen eine Konstante, damit sowohl ein fehlendes als auch ein zwoelftes Werkzeug
     // auffaellt.
     assert.deepEqual(
       result.tools.map((entry) => entry.name).sort(),
       Object.keys(alle).sort(),
-      "genau die zwoelf erwarteten Werkzeuge, keins mehr, keins weniger",
+      "genau die elf erwarteten Werkzeuge, keins mehr, keins weniger",
     );
     for (const tool of result.tools) {
       // (2) X-1/N-1 am ausgelieferten JSON: alle drei Pflicht-Annotationen sind Booleans.
@@ -262,7 +256,6 @@ test("P1 (DP-1): stdio-ctx und HTTP-ctx liefern fuer dasselbe Werkzeug identisch
   const stdioAnnotations = captureAnnotations({ uiHost: { enabled: false } });
   // Exakt wie src/routes/mcp.js:151 registerTools() mit voller Consult-Faehigkeit aufruft.
   const httpAnnotations = captureAnnotations({
-    allowCalendar: true,
     consultAllowed: true,
     uiHost: { enabled: true },
   });

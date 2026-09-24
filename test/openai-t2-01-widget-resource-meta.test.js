@@ -28,7 +28,7 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { widgetHtml } from "../src/ui/widget-catalog.js";
 import { WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
 
-const WIDGET_COUNT = 5;
+const WIDGET_COUNT = 4;
 const HTTP_OK = 200;
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const EXTERNAL_IP = externalIp();
@@ -157,10 +157,6 @@ function twoTenantSeed() {
   for (const tenant of [TENANT_DE, TENANT_EN]) {
     registerTenant(state, tenant.id, { idpSubject: tenant.sub });
     settingsFor(state, tenant.id).language = tenant.language;
-    // DEFAULT_PROFILE sperrt allowCalendar (restriktiver Default) - ohne diese Zeile
-    // fehlt das calendar-Widget bei diesen Nicht-Owner-Tenants, WIDGET_COUNT wird 4
-    // statt 5 (Positiv-Kontrolle wuerde dann faelschlich mit 4 durchlaufen).
-    state.profiles[tenant.id] = { allowCalendar: true };
     state.numbers.push({
       id: `num_${tenant.id}`,
       e164: tenant.e164,
@@ -183,7 +179,7 @@ function resourceText(reads, uri) {
 }
 
 function assertAllFiveResourcesCarryExpectedMeta(resources, reads) {
-  assert.equal(resources.length, WIDGET_COUNT, "Positiv-Kontrolle: genau 5 Widgets");
+  assert.equal(resources.length, WIDGET_COUNT, "Positiv-Kontrolle: genau 4 Widgets");
   for (const resource of resources) {
     const read = reads[resource.uri];
     const content = read.contents[0];
@@ -495,7 +491,7 @@ test("T8 (Widget-Scan, T-30-Exaktheit): kein Widget laedt von aussen - weder ueb
 
   // T2-02/T-34: EINE sprachneutrale Fassung je Widget statt einer Sprachmatrix -
   // widgetHtml() nimmt keine Sprache mehr entgegen (s. widget-catalog.js).
-  const widgetIds = ["agent-status", "my-number", "calls", "calendar", "call"];
+  const widgetIds = ["agent-status", "my-number", "calls", "call"];
   for (const widgetId of widgetIds) {
     const html = widgetHtml(widgetId);
     assert.deepEqual(findForbiddenLoads(html), [], `${widgetId}: laedt von nirgendwo (in-process)`);
@@ -539,7 +535,7 @@ test("T9 (ChatGPT-Egress-IP via X-Forwarded-For): _meta.ui.domain gesetzt, gleic
     const aud = `${PROBE_ORIGIN}/mcp`;
     const token = await idp.sign({ sub: TENANT_DE.sub }, { aud });
     const resources = await httpResourcesList(srv.localUrl, token);
-    assert.equal(resources.length, WIDGET_COUNT, "Positiv-Kontrolle: genau 5 Widgets");
+    assert.equal(resources.length, WIDGET_COUNT, "Positiv-Kontrolle: genau 4 Widgets");
     for (const resource of resources) {
       const read = await httpResourceReadFromIp(srv.localUrl, token, {
         uri: resource.uri,

@@ -259,7 +259,6 @@ export function makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyP
       register(server, {
         identity,
         scopedTenant,
-        allowCalendar: profile.allowCalendar,
         consultAllowed: consultLoop,
         uiHost,
         language,

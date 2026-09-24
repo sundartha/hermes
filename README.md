@@ -151,7 +151,7 @@ Du gehst nicht ran → Agent übernimmt → du bekommst SMS mit Summary + Action
 | `cancel_call`     | `call_id`                                                                                                                                                        | `{status:"cancelled"}`                                                                                                                                             |
 | `get_agent_number`   | —                                                                                                                                                                | `{number}`                                                                                                                                                         |
 
-Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_calendar`, `get_agent_status`.
+Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_agent_status`.
 
 ## Demo-Drehbuch (5 Minuten)
 

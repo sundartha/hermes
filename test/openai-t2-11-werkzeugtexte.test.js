@@ -129,19 +129,35 @@ function findTool(tools, name) {
 // schon durch test/am6-oauth-tenant.test.js belegt (get_agent_number liefert die Nummer), aber
 // nicht der WORTLAUT (Titel/Beschreibung/invoking/invoked). Bindung auf den Bootstrap-Tenant
 // (OWNER_IDP_SUBJECT, wie am6-oauth-tenant.test.js) statt eines frischen Tenants: ein frischer
-// Tenant traegt DEFAULT_PROFILE (allowCalendar/allowConsult beide false, src/store/defaults.js)
-// und liefert eine ANDERE Namensmenge - das wuerde die Legacy/OAuth-Gegenprobe unten verfaelschen,
-// die exakt denselben Werkzeug-Wortlaut ueber beide Pfade sehen soll.
+// Tenant traegt DEFAULT_PROFILE (allowConsult false, src/store/defaults.js) und liefert eine
+// ANDERE Namensmenge - das wuerde die Legacy/OAuth-Gegenprobe unten verfaelschen, die exakt
+// denselben Werkzeug-Wortlaut ueber beide Pfade sehen soll. (T2-12: allowCalendar bestimmt die
+// Werkzeugmenge nicht mehr - get_calendar ist entfallen.)
 const OAUTH_SUBJECT = "sub-t2-11-werkzeugtexte";
+// Bewusst verschieden von OAUTH_SUBJECT und ungeseeded: bleibt unbekannt -> requestTenant
+// liefert TENANT_REJECT -> der Torschluss in routes/mcp.js:258 registriert
+// registerNoTenantStubs statt registerTools (Review-Nachtrag S6, T2-12; Muster
+// test/am6-oauth-tenant.test.js "AM6 set-if-absent").
+const NO_TENANT_SUBJECT = "sub-t2-12-kein-mandant";
 
 // registersConsult: ob der Pfad answer_consult/await_call_event registriert. stdio tut das
 // NIE (src/mcp-server.js ruft registerTools() ohne consultAllowed, STDIO_CONSULT_LOOP=false),
 // auch nicht mit gesetzter Consult-Env - das belegen T11-d/T11-n ausdruecklich.
 const CONFIGS = [
-  { label: "HTTP Legacy, ohne Consult", expectedCount: 10, registersConsult: false, run: (fn) => runLegacy({}, fn) },
-  { label: "HTTP Legacy, mit Consult", expectedCount: 12, registersConsult: true, run: (fn) => runLegacy(CONSULT_ON, fn) },
-  { label: "stdio", expectedCount: 10, registersConsult: false, run: (fn) => runStdio({}, fn) },
-  { label: "HTTP OAuth", expectedCount: 10, registersConsult: false, run: (fn) => runOAuth(fn) },
+  { label: "HTTP Legacy, ohne Consult", expectedCount: 9, registersConsult: false, run: (fn) => runLegacy({}, fn) },
+  { label: "HTTP Legacy, mit Consult", expectedCount: 11, registersConsult: true, run: (fn) => runLegacy(CONSULT_ON, fn) },
+  { label: "stdio", expectedCount: 9, registersConsult: false, run: (fn) => runStdio({}, fn) },
+  { label: "HTTP OAuth", expectedCount: 9, registersConsult: false, run: (fn) => runOAuth(fn) },
+  // S6-Nachzug (T2-12): fehlte bisher komplett - der Pfad, ueber den ein ChatGPT-Reviewer
+  // beim Erstkontakt (Token gueltig, aber kein verknuepfter Hermes-Mandant) faehrt. Die
+  // Stub-Fassade registriert dieselbe Namensmenge/denselben Wortlaut wie registerTools
+  // (src/mcp-no-tenant.js:71-80), deshalb dieselbe expectedCount wie "HTTP OAuth".
+  {
+    label: "HTTP OAuth, ohne Mandant",
+    expectedCount: 9,
+    registersConsult: false,
+    run: (fn) => runOAuthNoTenant(fn),
+  },
 ];
 
 // Alle Pfade x Consult an/aus: CONFIGS plus die beiden Consult-an-Varianten, die dort fehlen.
@@ -195,6 +211,31 @@ async function runOAuth(fn, env = {}) {
   });
   try {
     const token = await idp.sign({ sub: OAUTH_SUBJECT });
+    const url = `${srv.localUrl}/mcp`;
+    await fn(await httpToolsList(url, token), httpPathContext(url, token));
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+}
+
+// HTTP OAuth mit gueltigem, aber NICHT verknuepftem Token (S6-Nachzug): dieselbe Server-
+// Konfiguration wie runOAuth (OWNER_IDP_SUBJECT=OAUTH_SUBJECT), aber signiert mit einem
+// fremden, ungeseededen sub - requestTenant kennt ihn nicht -> TENANT_REJECT.
+async function runOAuthNoTenant(fn, env = {}) {
+  const idp = await startIdp();
+  const srv = await startServer({
+    seed: seedState({}),
+    env: {
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+      MULTI_TENANT: "true",
+      OWNER_IDP_SUBJECT: OAUTH_SUBJECT,
+      ...env,
+    },
+  });
+  try {
+    const token = await idp.sign({ sub: NO_TENANT_SUBJECT });
     const url = `${srv.localUrl}/mcp`;
     await fn(await httpToolsList(url, token), httpPathContext(url, token));
   } finally {
@@ -554,7 +595,11 @@ test("T11-r: jede _meta.ui.resourceUri aus tools/list steht in resources/list un
 // ==================== T11-n (N-12): keine werblich/vergleichende Sprache in Namen/Titeln ====================
 // Jeder Pfad x Consult an/aus (ALL_PATH_CONFIGS): die Namensmenge unterscheidet sich je Pfad.
 
-test("T11-n: kein Werkzeugname und kein Titel traegt best/official/pick_me/recommended", async (subtests) => {
+// Review-Nachtrag (safety/wichtig, T2-12): pruefte vorher NUR name/title. description,
+// annotations.title, invoking/invoked (die _meta-Statuszeilen) blieben ungeprueft, obwohl
+// visibleTexts() (oben, Grundlage fuer T11-b/T11-b2) genau diese Menge schon liefert - ein
+// Werbewort dort haette den Test nicht rot gemacht.
+test("T11-n: kein sichtbarer Werkzeugtext traegt best/official/pick_me/recommended", async (subtests) => {
   for (const cfg of ALL_PATH_CONFIGS) {
     await subtests.test(cfg.label, async () => {
       await cfg.run(async (tools) => {
@@ -565,11 +610,11 @@ test("T11-n: kein Werkzeugname und kein Titel traegt best/official/pick_me/recom
             PROMOTIONAL_WORDS,
             `${tool.name}: Name ohne Werbe-/Vergleichssprache`,
           );
-          if (tool.title) {
+          for (const text of visibleTexts(tool)) {
             assert.doesNotMatch(
-              tool.title,
+              text,
               PROMOTIONAL_WORDS,
-              `${tool.name}: Titel ohne Werbe-/Vergleichssprache`,
+              `${tool.name}: sichtbarer Text "${text}" ohne Werbe-/Vergleichssprache`,
             );
           }
         }

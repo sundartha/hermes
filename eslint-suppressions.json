@@ -667,7 +667,7 @@
   },
   "src/mcp-tools.js": {
     "id-length": {
-      "count": 26
+      "count": 22
     },
     "max-lines-per-function": {
       "count": 1
@@ -2983,26 +2983,6 @@
       "count": 15
     }
   },
-  "test/mcp-tools-language.test.js": {
-    "complexity": {
-      "count": 1
-    },
-    "id-length": {
-      "count": 17
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 3
-    },
-    "no-param-reassign": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
   "test/mcp-ui-p5-token-sync.test.js": {
     "id-length": {
       "count": 5
@@ -3068,26 +3048,6 @@
   "test/mcp-ui-wing-canvas-sync.test.js": {
     "no-magic-numbers": {
       "count": 2
-    }
-  },
-  "test/mcp-ui.test.js": {
-    "id-length": {
-      "count": 24
-    },
-    "max-params": {
-      "count": 3
-    },
-    "no-magic-numbers": {
-      "count": 2
-    },
-    "no-param-reassign": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 37
-    },
-    "sonarjs/no-commented-code": {
-      "count": 1
     }
   },
   "test/media-token.test.js": {

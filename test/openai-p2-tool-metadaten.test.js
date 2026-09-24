@@ -218,7 +218,7 @@ async function withLocalGateway(body, run) {
 }
 
 test("P2 (Schritt 12): cancel_call und list_action_items arbeiten und liefern dabei nie structuredContent", async () => {
-  const handlers = captureRegisterToolHandlers({ identity: null, allowCalendar: true });
+  const handlers = captureRegisterToolHandlers({ identity: null });
 
   await withLocalGateway({ status: "cancel_requested" }, async () => {
     const result = await handlers.get("cancel_call")({ call_id: "call_1" });
@@ -249,7 +249,7 @@ test("P2 (Schritt 12): cancel_call und list_action_items arbeiten und liefern da
 
 // Schritt 13: der stdio-Pfad am ECHTEN SDK-ListTools-Handler, kein Attrappen-Server -
 // InMemoryTransport + Client.listTools() ueber genau den ctx aus src/mcp-server.js:26-28
-// ({ uiHost: { enabled } }, keine Consult-Faehigkeit, allowCalendar per Default).
+// ({ uiHost: { enabled } }, keine Consult-Faehigkeit).
 // Staerker als ein Fake-Server: ein Feld, das registerTool() still verwirft (P0/U-2),
 // faellt hier auf, weil der echte ListTools-Handler des SDK laeuft. Verbleibende Luecke
 // (bewusst, s. Spec "Was diese Phase NICHT baut" #3): kein Kindprozess, keine Pipe-

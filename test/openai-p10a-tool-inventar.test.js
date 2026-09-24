@@ -33,7 +33,7 @@ const DOC_PATH = path.join(
 );
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
-const EXPECTED_TABLE_A_ROWS = 12;
+const EXPECTED_TABLE_A_ROWS = 11;
 const CONFIG_KEYS = ["K1", "K2", "K3", "K4", "K5", "K6"];
 const HINT_KEYS = ["readOnlyHint", "destructiveHint", "openWorldHint", "idempotentHint"];
 const TABLE_A_COLUMNS = ["name", "title", "condition", ...HINT_KEYS];
@@ -50,7 +50,6 @@ const RAW_TOOLS_LIST_RESULT = z.object({ tools: z.array(z.any()) });
 const CONDITION_BY_PRESENCE = new Map([
   ["111111", "always"],
   ["100100", "consult"],
-  ["110001", "calendar"],
 ]);
 
 function readDoc() {
@@ -229,11 +228,11 @@ function wireCondition(name, wire) {
   return CONDITION_BY_PRESENCE.get(presence) ?? `unerwartet:${presence}`;
 }
 
-// ==================== Tabelle A: 12 Zeilen, Namensmenge == K1 ====================
-test("P10a (H7/H8): Tabelle A hat genau 12 Zeilen, ihre Namensmenge ist gleich K1", () => {
+// ==================== Tabelle A: 11 Zeilen, Namensmenge == K1 ====================
+test("P10a (H7/H8): Tabelle A hat genau 11 Zeilen, ihre Namensmenge ist gleich K1", () => {
   const doc = readDoc();
   const tableA = parseTableA(doc);
-  assert.equal(tableA.length, EXPECTED_TABLE_A_ROWS, "Tabelle A traegt genau 12 Werkzeuge");
+  assert.equal(tableA.length, EXPECTED_TABLE_A_ROWS, "Tabelle A traegt genau 11 Werkzeuge");
   assertNameSetMatches("Tabelle A vs. K1", tableA.map((row) => row.name), parseTableB(doc).get("K1").names);
 });
 

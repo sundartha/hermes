@@ -78,7 +78,8 @@ export function uiServerExtension() {
 // (T-31 damit fuer ChatGPT ab sofort ueber BEIDE Schluessel erfuellt, fuer jeden
 // anderen Host weiterhin nur ueber den Alias).
 // T-30: die CSP muss EXAKT die Domains nennen, von denen die Komponente laedt. Gemessen
-// ueber alle 5 Widget-Quellen und alle injizierten Bausteine (12 Dateien): sie laden von
+// ueber alle Widget-Quellen und alle injizierten Bausteine (damals 12 Dateien, darunter
+// das inzwischen entfernte calendar.html; heute 4 Widget-Quellen): sie laden von
 // NIRGENDWO - 0 Treffer fuer fetch/XHR/WebSocket/EventSource/sendBeacon/importScripts,
 // kein @font-face, keine absolute URL (die einzige, der w3.org-SVG-Namespace, steht
 // INNERHALB eines data:-URI), Bilder nur als data:-URI, kein iframe/embed/object.

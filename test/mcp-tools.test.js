@@ -1,11 +1,11 @@
 // P4 / AC5 + AC6: mcp-tools Result-Guard + per-handler Throw-Schutz.
 //
 // AC5: Die Tool-Handler derefen verschachtelte Felder aus dem api()-Ergebnis
-// (r.callId, s.calendar, s.usage, s.agent, s.calls, s.actionItems). api() degradiert
+// (r.callId, s.usage, s.agent, s.calls, s.actionItems). api() degradiert
 // bei Parse-Fehler zu `{}` (mcp-tools.js: `res.json().catch(() => ({}))`). Auf `{}`
-// ist s.calendar undefined -> .length crasht. Ein Result-Guard muss das in eine
+// ist s.calls undefined -> .length crasht. Ein Result-Guard muss das in eine
 // KLARE Tool-Fehlermeldung wandeln statt in einen TypeError (unhandled rejection im
-// stdio-Pfad). Leerer Kalender `[]` bleibt valide (kein Guard-Fehler).
+// stdio-Pfad). Leere Anrufliste `[]` bleibt valide (kein Guard-Fehler).
 //
 // AC6: Wirft ein Handler trotzdem, faengt der per-handler-Wrapper das ab und liefert
 // eine MCP-Fehlerantwort (isError: true) statt einer process-level unhandled rejection.
@@ -86,14 +86,14 @@ test("T-P4-06: degradierte api-Antwort ({}) -> klare Tool-Fehlermeldung, kein .l
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = mock.url;
   try {
-    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const handlers = captureTools({ identity: null });
 
-    // get_calendar derefed s.calendar.length -> auf {} ein TypeError. Mit Guard:
+    // list_calls derefed s.calls.length -> auf {} ein TypeError. Mit Guard:
     // klare Fehlermeldung (isError) ODER ein sauberer Text, NIE ein unhandled throw.
     let result;
     await assert.doesNotReject(async () => {
-      result = await handlers.get("get_calendar")();
-    }, "get_calendar darf nicht mit TypeError crashen");
+      result = await handlers.get("list_calls")();
+    }, "list_calls darf nicht mit TypeError crashen");
     assert.ok(result?.isError, "degradierte Antwort -> isError-Tool-Antwort");
     assert.doesNotMatch(
       toolText(result),
@@ -114,19 +114,19 @@ test("T-P4-06: degradierte api-Antwort ({}) -> klare Tool-Fehlermeldung, kein .l
   }
 });
 
-test("T-P4-06b: leerer Kalender ([]) bleibt valide -> 'Kalender ist leer.', kein Fehler", async () => {
+test("T-P4-06b: leere Anrufliste ([]) bleibt valide -> 'Noch keine Anrufe.', kein Fehler", async () => {
   // Guard prueft Existenz/Typ (Array), NICHT Nicht-Leere: [] ist ein gueltiger Zustand.
-  const mock = await startGatewayMock({ body: { calendar: [] } });
+  const mock = await startGatewayMock({ body: { calls: [] } });
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = mock.url;
   try {
     // P15/T3a: die Leertexte folgen jetzt der Tenant-Sprache. Dieser Fall pinnt den
     // DEUTSCHEN Backward-Compat-Text - die Sprache wird deshalb explizit gewaehlt,
     // statt implizit vom Weltdefault-Schalter zu leben.
-    const handlers = captureTools({ identity: null, allowCalendar: true, language: "de" });
-    const result = await handlers.get("get_calendar")();
-    assert.ok(!result?.isError, "leerer Kalender ist KEIN Fehler");
-    assert.match(toolText(result), /Kalender ist leer/);
+    const handlers = captureTools({ identity: null, language: "de" });
+    const result = await handlers.get("list_calls")();
+    assert.ok(!result?.isError, "leere Anrufliste ist KEIN Fehler");
+    assert.match(toolText(result), /Noch keine Anrufe/);
   } finally {
     if (prev === undefined) delete process.env.GATEWAY_URL;
     else process.env.GATEWAY_URL = prev;
@@ -146,7 +146,7 @@ test("T-P4-07: Handler-Throw (Gateway 500) -> MCP-Fehlerantwort, keine unhandled
   const onRejection = (error) => rejections.push(error);
   process.on("unhandledRejection", onRejection);
   try {
-    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const handlers = captureTools({ identity: null });
     let result;
     await assert.doesNotReject(async () => {
       result = await handlers.get("get_agent_number")();
@@ -171,7 +171,7 @@ test("T-P4-07b: Gateway-500 zeigt einem EN-Tenant keinen deutschen Fehlertext", 
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = mock.url;
   try {
-    const handlers = captureTools({ identity: null, allowCalendar: true, language: "en" });
+    const handlers = captureTools({ identity: null, language: "en" });
     const result = await handlers.get("get_agent_number")();
     assert.ok(result?.isError);
     assert.doesNotMatch(
@@ -210,7 +210,7 @@ test("T-C3-01: duration_s springt bei markAnswered nicht zurueck (Monotonie)", a
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = mock.url;
   try {
-    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const handlers = captureTools({ identity: null });
     const poll1 = await handlers.get("get_call_status")({ call_id: "call_1" });
     const poll2 = await handlers.get("get_call_status")({ call_id: "call_1" });
     const d1 = poll1.structuredContent.duration_s;
@@ -238,7 +238,7 @@ test("S1-5a: list_action_items filtert erledigte aus + praefixt Termine mit '(Te
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = mock.url;
   try {
-    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const handlers = captureTools({ identity: null });
     const result = await handlers.get("list_action_items")();
     const text = toolText(result);
     // T2-09 (O-13): keine interne Item-ID mehr in der Zeile - nur noch Praefix + Text.
@@ -258,7 +258,7 @@ test("S1-5b: list_action_items ohne offene Items -> 'Keine offenen Action Items.
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = mock.url;
   try {
-    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const handlers = captureTools({ identity: null });
     const result = await handlers.get("list_action_items")();
     assert.equal(toolText(result), "Keine offenen Action Items.");
   } finally {
@@ -277,7 +277,7 @@ test("S1-5c: Todo-Zeile traegt KEIN '(Termin) '-Praefix (Ternary nicht invertier
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = mock.url;
   try {
-    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const handlers = captureTools({ identity: null });
     const result = await handlers.get("list_action_items")();
     const lines = toolText(result).split("\n");
     // T2-09 (O-13): keine Item-ID mehr - die Zeilen sind jetzt exakt Praefix + Text.
@@ -304,7 +304,7 @@ test("T-C3-02: completed-Call misst startedAt..endedAt, nicht answeredAt..endedA
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = mock.url;
   try {
-    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const handlers = captureTools({ identity: null });
     const result = await handlers.get("get_call_status")({ call_id: "call_1" });
     assert.equal(
       result.structuredContent.duration_s,

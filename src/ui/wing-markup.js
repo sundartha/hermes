@@ -8,9 +8,10 @@
 // (withWingAssets) - dasselbe Muster wie BIND_SCRIPT (G5/S2, eine Quelle statt
 // Copy-Paste in 5 Dateien).
 //
-// Zwei Auspraegungen, damit die 4 Read-only-Widgets (kein Anruf-Lebenszyklus)
+// Zwei Auspraegungen, damit die 3 Read-only-Widgets (kein Anruf-Lebenszyklus)
 // nicht die ungenutzten State-Keyframes mitschleppen (sonst toter Code):
-// - STATIC: nur idle (Drift + Bob) - agent-status/calendar/calls/my-number
+// - STATIC: nur idle (Drift + Bob) - agent-status/calls/my-number (calendar
+//   entfallen seit T2-12)
 // - LIVE: idle + alle vier Anruf-Status - call.html, Statuswechsel per
 //   Klassenwechsel auf [data-wing] (siehe dortiges Inline-Skript)
 import { WING_PNG } from "./wing-image-data.js";

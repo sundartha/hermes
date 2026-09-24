@@ -264,7 +264,7 @@ UI kits:
 - `mcp/` — `index.html` (result card in a chatbot), `wing-status.html`
   (concept showcase, Pixi/CDN — not the production path), `call.html` (unified
   call card across its 5 lifecycle states, mirrors `src/ui/widgets/call.html`),
-  `agent-status.html`, `my-number.html`, `calls.html`, `calendar.html` (the 4
+  `agent-status.html`, `my-number.html`, `calls.html` (the 3
   read-only cards, mirror `src/ui/widgets/*`). **Design only.**
 
 The Design System tab renders every `@dsCard`-tagged HTML, grouped by `group`.

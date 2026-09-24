@@ -1,10 +1,11 @@
-// Read-only-Widgets (H4: agent-status/my-number/calls/calendar): montiert die
+// Read-only-Widgets (H4: agent-status/my-number/calls; calendar entfallen
+// seit T2-12): montiert die
 // Wing-Canvas-Engine ruhig im idle-Zustand (H0-Entscheidungsregel erfuellt:
 // 86px/8x12 median 0.10ms << 2.5ms Haupt-Thread + Visibility-Gating wirksam ->
 // Canvas-idle erlaubt, siehe tasks/widget-hermes-redesign-chain.md H0-ERGEBNIS).
 // fpsCap<=24. Anders als call.html (eigene Zustandsmaschine, H3) gibt es hier
 // NIE einen Statuswechsel - kein setStatus-Aufruf noetig, nur ein einmaliger
-// Mount-Versuch beim Laden. EINE Quelle statt 4x derselben ~15 Zeilen in den
+// Mount-Versuch beim Laden. EINE Quelle statt 3x derselben ~15 Zeilen in den
 // Widget-Dateien (G5/S2), injiziert von widget-catalog.js (withWingCanvasMount)
 // ueber einen Platzhalter am Body-Ende - dasselbe Muster wie die Wing-Canvas-
 // Engine selbst (withWingEngine).

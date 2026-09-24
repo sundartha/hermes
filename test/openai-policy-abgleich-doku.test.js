@@ -5,7 +5,7 @@
 //   1. Anker-Block: an jeder genannten Stelle steht der Anker-Text; jede datei:zeile-Angabe
 //      im Fliesstext steht im Block (und umgekehrt).
 //   2. Werkzeug-Zitate: jedes Zitat steht woertlich im ECHTEN tools/list - ueber HTTP /mcp
-//      (Legacy-Token, Consult + Kalender = alle 12 Werkzeuge) UND ueber stdio. Nie das
+//      (Legacy-Token, mit Consult = alle 11 Werkzeuge) UND ueber stdio. Nie das
 //      registerTool-Konfigobjekt pruefen: das SDK verwirft unbekannte Felder still, ein Test
 //      darauf beweist nichts.
 //   3. Jedes Policy-Zitat (Zeile "> \"...") nennt eine OpenAI-URL.
@@ -32,7 +32,7 @@ const DOC_PATH = path.join(ROOT, "docs", "OPENAI-POLICY-ABGLEICH.md");
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 const CONSULT_ON = { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" };
-const EXPECTED_HTTP_TOOL_COUNT = 12;
+const EXPECTED_HTTP_TOOL_COUNT = 11;
 const RAW_TOOLS_LIST_RESULT = z.object({ tools: z.array(z.any()) });
 
 const ANCHOR_BLOCK = { begin: "ANKER-BEGIN", end: "ANKER-END" };

@@ -1,7 +1,7 @@
 /*
- * Geteilter Olympus-HUD-Kartenrahmen fuer die 4 Read-only-MCP-Kit-Karten
- * (agent-status.html/calendar.html/calls.html/my-number.html). Vorher war
- * dieser ~40-zeilige Block in allen 4 Dateien byte-identisch kopiert (G5/S2-
+ * Geteilter Olympus-HUD-Kartenrahmen fuer die 3 Read-only-MCP-Kit-Karten
+ * (agent-status.html/calls.html/my-number.html). Vorher war
+ * dieser ~40-zeilige Block in allen Karten byte-identisch kopiert (G5/S2-
  * Duplizierung, H5-Review-Blocker) - jetzt EINE Quelle, per <link> eingebunden,
  * analog zu src/ui/hud-card-css.js fuer die echten Widgets.
  *

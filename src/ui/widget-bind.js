@@ -19,7 +19,7 @@
 // CSS-Klasse je gerenderter Transkriptzeile - matcht .turn in den Widget-Styles.
 const LINE_CLASS = "turn";
 
-// Objekt-Listen (z.B. list_calls / get_calendar): ein data-mcp-Slot rendert eine
+// Objekt-Listen (z.B. list_calls): ein data-mcp-Slot rendert eine
 // Liste von Objekten als wiederholte Rows. Welche Sub-Felder eine Row zeigt,
 // deklariert der Slot generisch im HTML via data-mcp-row="feld1,feld2,..." - das
 // Binding kennt KEINE konkreten Widget-Felder (OCP, eine Quelle fuer alle Listen).

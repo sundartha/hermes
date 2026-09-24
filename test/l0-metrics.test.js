@@ -162,7 +162,7 @@ test("T-L0-3: logTurn ist PII-frei (Tool-NAMEN, kein Transkript)", () => {
   const { log, entries } = collector();
   const m = createMetrics({ enabled: true, log });
 
-  m.logTurn({ callId: "c1", direction: "outbound", roundtrips: 2, tools: ["get_calendar", "end_call"] });
+  m.logTurn({ callId: "c1", direction: "outbound", roundtrips: 2, tools: ["list_calls", "end_call"] });
 
   assert.equal(entries.length, 1);
   assert.equal(entries[0].kind, "turn");
@@ -172,7 +172,7 @@ test("T-L0-3: logTurn ist PII-frei (Tool-NAMEN, kein Transkript)", () => {
     "roundtrips",
     "tools",
   ]);
-  assert.deepEqual(entries[0].payload.tools, ["get_calendar", "end_call"]);
+  assert.deepEqual(entries[0].payload.tools, ["list_calls", "end_call"]);
   assert.ok(entries[0].payload.tools.every((t) => typeof t === "string"));
 });
 
