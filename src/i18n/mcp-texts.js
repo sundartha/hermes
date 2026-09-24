@@ -57,6 +57,10 @@ export const MCP_ERROR_CODE = Object.freeze({
   // dieser Text NICHT zum sofortigen Wiederholen ein, sondern verweist auf list_calls -
   // derselbe Retry-Vorsicht-Wortlaut wie CALL_START_UNCONFIRMED/HOP_TIMEOUT oben.
   CALL_START_REJECTED: "call_start_rejected",
+  // T2-13 (N-10): das Betriebsgeheimnis des Bestaetigungs-Codes fehlt (CALL_CONFIRMATION_
+  // SECRET leer, POST /api/call-confirmations antwortet 503 reason=confirmation_unavailable).
+  // Neutraler Text, NIE der Env-Name oder ein Secret-Hinweis (Regel 4).
+  CONFIRMATION_UNAVAILABLE: "confirmation_unavailable",
 });
 
 export const MCP_TEXTS = Object.freeze({
@@ -101,9 +105,28 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "Der Anruf konnte nicht gestartet werden. Bitte den Status in list_calls pruefen, " +
         "bevor erneut angerufen wird.",
+      [MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE]:
+        "Der Bestaetigungsdienst ist derzeit nicht verfuegbar. Es wurde kein Anruf gestartet.",
     }),
     // T2-09: Ablehnungstexte je Gate-Grund (s. mcp-denial-texts.js), EINE Quelle je Sprache.
     denials: MCP_DENIAL_TEXTS.de,
+    // T2-13 (N-10): place_call ohne gueltigen confirmation_code - der Anruf wurde NICHT
+    // gewaehlt (kein Datensatz, keine Kosten). to/objective sind bereits normalisiert bzw.
+    // wie eingegeben (dieselben Werte, die auch die Vorschau zeigt). "Host ohne Karte"
+    // wortwoertlich, s. Spec-Abschnitt 2 Punkt 4: ein Host ohne Kartenfaehigkeit bekommt nie
+    // einen Code und kann darum nie bestaetigen.
+    confirmationRequired: (to, objective) =>
+      `Dieser Anruf ist noch nicht bestaetigt (Ziel: ${to}, Anliegen: ${objective}). Bitte ` +
+      "den Anruf in der Hermes-Karte bestaetigen - ein Host ohne Karte kann nicht waehlen.",
+    // T2-13: prepare_call OHNE Kartenfaehigkeit (MCP_UI_ENABLED=false oder Host ohne UI) -
+    // ein Code wird zwar serverseitig ausgestellt, aber NIE an diesen Host weitergereicht
+    // (Plan Abschnitt 5, "Weg ohne Karte" ist bewusst ausgeschlossen).
+    prepareCallNoCardHint:
+      "Vorschau erstellt. Dieser Host kann Anrufe nicht bestaetigen (keine Hermes-Karte) - " +
+      "place_call wird hier keinen Anruf ausloesen.",
+    prepareCallCardHint:
+      "Vorschau erstellt. Zum Bestaetigen den Code in der Hermes-Karte pruefen und mit " +
+      "place_call (gleiche Angaben) erneut aufrufen.",
     // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
     // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
     emptyCalls: "Noch keine Anrufe.",
@@ -196,8 +219,22 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "The call could not be started. Please check the status with list_calls before " +
         "calling again.",
+      [MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE]:
+        "The confirmation service is currently unavailable. No call was started.",
     }),
     denials: MCP_DENIAL_TEXTS.en,
+    // T2-13 (N-10): place_call without a valid confirmation_code - no call was placed (no
+    // record, no cost). A host without a card never receives a code and can therefore never
+    // confirm.
+    confirmationRequired: (to, objective) =>
+      `This call is not confirmed yet (destination: ${to}, purpose: ${objective}). Please ` +
+      "confirm the call in the Hermes card - a host without a card cannot place calls.",
+    prepareCallNoCardHint:
+      "Preview created. This host cannot confirm calls (no Hermes card) - place_call will " +
+      "not place a call here.",
+    prepareCallCardHint:
+      "Preview created. To confirm, check the code in the Hermes card and call place_call " +
+      "again with the same arguments.",
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
@@ -262,8 +299,21 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "L'appel n'a pas pu être démarré. Veuillez vérifier l'état dans list_calls avant " +
         "de rappeler.",
+      [MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE]:
+        "Le service de confirmation est actuellement indisponible. Aucun appel n'a été démarré.",
     }),
     denials: MCP_DENIAL_TEXTS.fr,
+    // T2-13 (N-10): place_call sans confirmation_code valide - aucun appel n'a été passé.
+    confirmationRequired: (to, objective) =>
+      `Cet appel n'est pas encore confirmé (destination : ${to}, objet : ${objective}). ` +
+      "Veuillez confirmer l'appel dans la carte Hermes - un hôte sans carte ne peut pas " +
+      "passer d'appel.",
+    prepareCallNoCardHint:
+      "Aperçu créé. Cet hôte ne peut pas confirmer d'appels (pas de carte Hermes) - " +
+      "place_call ne déclenchera pas d'appel ici.",
+    prepareCallCardHint:
+      "Aperçu créé. Pour confirmer, vérifiez le code dans la carte Hermes puis rappelez " +
+      "place_call avec les mêmes arguments.",
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",
