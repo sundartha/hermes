@@ -174,8 +174,10 @@ nie gemessen.
     (`src/config.js:624`, Code-Default aus), kann das `briefing` beim Such-Anbieter ankommen.
   - Das Gespraechsmodell soll keine Namen, Nummern, Adressen, Gesundheits- oder Geldangaben des
     Gegenuebers recherchieren (`src/i18n/prompts/en.js:326`).
-  - Das Roh-Transkript wird am Anrufende geleert, auf beiden Sprechwegen
-    (`src/telephony/call-finish.js:350`); Fristen siehe Teil B.
+  - Das Roh-Transkript auf unserer Seite wird am Anrufende geleert
+    (`src/telephony/call-finish.js:350`, in `finishCall`); der Sprach-Agenten-Weg endet ueber
+    dieselbe Funktion (`src/elevenlabs/outbound.js:1458`). Was der Sprach-Anbieter selbst
+    aufbewahrt, ist eine Einstellung dort (Teil B, offen). Fristen siehe Teil B.
 - Was an OpenAI geht: `get_call_status` liefert waehrend des Anrufs die letzten Zeilen des
   Gespraechs (`src/mcp-tools.js:199`, hoechstens `LAST_TRANSCRIPT_LINES = 6`,
   `src/mcp-tools.js:48`), also woertliche Aussagen des Dritten.
@@ -526,6 +528,7 @@ src/routes/api-calls.js:525 | ownerNotes: b.briefing
 src/config.js:624 | researchEnabled: boolEnv("RESEARCH_ENABLED", process.env.RESEARCH_ENABLED, { fallback: false })
 src/i18n/prompts/en.js:326 | NEVER search for names, phone numbers, addresses, health or money details
 src/telephony/call-finish.js:350 | if (!keepsTranscriptForDiagnosis(call, config.privacy)) store.purgeTranscript(call.id);
+src/elevenlabs/outbound.js:1458 | billThunk(finishCall, store, callId)
 src/mcp-tools.js:199 | last_transcript_lines: c.transcript
 src/mcp-tools.js:48 | const LAST_TRANSCRIPT_LINES = 6;
 src/mcp-tools.js:1522 | pickTranscript(call_id, c, loc.mcp)
