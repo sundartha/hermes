@@ -33,7 +33,8 @@ const DOC_PATH = path.join(
 );
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
-const EXPECTED_TABLE_A_ROWS = 11;
+// T2-13 (N-10): prepare_call dazu, elf -> zwoelf.
+const EXPECTED_TABLE_A_ROWS = 12;
 const CONFIG_KEYS = ["K1", "K2", "K3", "K4", "K5", "K6"];
 const HINT_KEYS = ["readOnlyHint", "destructiveHint", "openWorldHint", "idempotentHint"];
 const TABLE_A_COLUMNS = ["name", "title", "condition", ...HINT_KEYS];
