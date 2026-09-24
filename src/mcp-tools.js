@@ -792,7 +792,7 @@ const OPEN_QUESTIONS_FIELD = z
 // Beschreibung von place_call, sonst byte-identisch aus dem Tool-Deskriptor herausgeloest
 // (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
 const PLACE_CALL_DESCRIPTION =
-  "REQUIRES a confirmation_code from prepare_call: call prepare_call FIRST with the exact same arguments, let the user confirm in the Hermes card, then call this tool with the code. Without a valid code the call is NOT placed and no cost is incurred - a host without card support cannot place calls at all. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Calling it again for a running number returns that same call (deduplicated: true).";
+  "REQUIRES a confirmation_code from prepare_call - call prepare_call FIRST with identical arguments, then pass the code the user confirmed. Without it the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Calling it again for a running number returns that same call (deduplicated: true).";
 
 // T2-13 (N-10): Beschreibung von prepare_call - reine Vorschau, KEIN Anruf, KEINE Kosten.
 // Nennt ausdruecklich, dass der Code nur auf einem Host mit Kartenfaehigkeit ankommt (s.
@@ -1477,7 +1477,7 @@ export function registerTools(
           .string()
           .optional()
           .describe(
-            "The confirmation code shown in the Hermes card after calling prepare_call with the SAME arguments. REQUIRED to actually place the call - call prepare_call first, let the user confirm in the card, then pass the code here. Without a valid code the call is NOT placed; a host without card support cannot place calls at all.",
+            "The confirmation code from the Hermes card after prepare_call with the SAME arguments. REQUIRED - without a valid code the call is NOT placed.",
           ),
       },
       outputSchema: CALL_OUTPUT,
