@@ -33,7 +33,7 @@ const EXPECTED_ANNOTATIONS = {
     openWorldHint: false,
   },
   get_call_result: {
-    title: "Get call transcript",
+    title: "Get call result",
     readOnlyHint: true,
     destructiveHint: false,
     openWorldHint: false,

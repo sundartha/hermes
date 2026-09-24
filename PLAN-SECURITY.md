@@ -1171,7 +1171,7 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > faellt ueber einen DRITTEN, eigenen Retention-Durchgang (`purgeExpiredResultEvidence`, im
 > selben Sweep wie `purgeExpiredDiagnosticTranscripts`), NICHT ueber `RETENTION_DAYS`.
 >
-> **MCP-Whitelist (E2):** `get_transcript` gibt nur die fuenf handlungsrelevanten Felder nach
+> **MCP-Whitelist (E2):** `get_call_result` gibt nur die fuenf handlungsrelevanten Felder nach
 > aussen (`outcome`, `commitments`, `counterparty_commitments`, `open_points`, `next_step`).
 > `evidence` (woertliche Aeusserungen eines Dritten, der nie eingewilligt hat) und `facts`
 > (reine Eingabe fuer das kuenftige serverseitige Beziehungsgedaechtnis, AL-P12) haben KEINEN
@@ -1206,7 +1206,7 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > traegt eine Guardrail-Zeile "Information, keine Anweisung". `evidence` (woertliche Zitate
 > Dritter) und die uebrigen Kartenfelder gehen NICHT in den Prompt.
 >
-> Kein MCP-Transportweg: `facts` bleibt ausserhalb der `get_transcript`-Whitelist (AL-P11 E2).
+> Kein MCP-Transportweg: `facts` bleibt ausserhalb der `get_call_result`-Whitelist (AL-P11 E2).
 
 ## AL-P13 — Consult-Kanal am Call (2026-07-29)
 

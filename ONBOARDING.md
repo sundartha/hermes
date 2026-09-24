@@ -37,7 +37,7 @@ Für lokale Telefonie-Tests brauchst du einen eigenen Tunnel (ngrok) ODER du tes
 ```
 src/server.js      Gateway: Provider-Webhooks, REST-API, MCP über HTTP (/mcp), Auth, Dashboard-Hosting
 src/claude.js      Gesprächslogik (Budget-Engine): System-Prompts, Tools, Disclosure, Summary
-src/mcp-tools.js   MCP-Tool-Definitionen (place_call, get_call_status, get_transcript, ...)
+src/mcp-tools.js   MCP-Tool-Definitionen (place_call, get_call_status, get_call_result, ...)
 src/mcp-server.js  MCP stdio-Variante für Claude Desktop
 src/store.js       JSON-Persistenz (auf Render ephemer - reset bei jedem Deploy)
 src/config.js      Konfiguration aus Env-Vars

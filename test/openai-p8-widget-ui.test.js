@@ -76,10 +76,16 @@ const EXPECTED_RESOURCE_META = {
 // securitySchemes. Voriger HTTP-Sollwert zum Vergleich (T2-23, volle oauth2-Angabe
 // im Legacy-Default - das war der Regressionsbefund dieses Nachtrags):
 // 00c916d4ece76dda6fa60de658979464c9dbd50d22596d77f53a6c49ea501b13.
+// Neu gepinnt (N-11/N-12/N-13, ehrliche Werkzeug-Namen/Titel/Beschreibungen):
+// get_transcript/get_my_number heissen jetzt get_call_result/get_agent_number, deren
+// Titel und Statuszeilen aendern sich mit; answer_consult- und get_agent_status-
+// Beschreibungen aendern sich (N-11/N-13). Voriger Sollwert (beide Pfade,
+// byte-identisch seit dem securitySchemes-Nachtrag oben):
+// bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47";
+  "e36d8f9e7aa4b4fda25cc0d1518bb364fa25f4de597a24d54e763f3cee88599d";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47";
+  "e36d8f9e7aa4b4fda25cc0d1518bb364fa25f4de597a24d54e763f3cee88599d";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
