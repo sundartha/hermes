@@ -173,7 +173,7 @@ to an external party on at least one path is `true`, even if some invocations se
   - `openWorldHint: false` (O3) - it reads only the account's own store; it reports on a call
     but does not contact the carrier or the other party.
   - `idempotentHint` not set - read-only tool.
-- **get_call_result** (registered `src/mcp-tools.js:1540`, REST `GET /api/calls/:id`).
+- **get_call_result** (registered `src/mcp-tools.js:1545`, REST `GET /api/calls/:id`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the same call record as
     get_call_status and returns the result summary; it never returns the raw transcript and
     writes nothing.
@@ -196,7 +196,7 @@ to an external party on at least one path is `true`, even if some invocations se
   - `idempotentHint: true` - for a call that is no longer running, the route only returns the
     call's current status and does nothing else (`src/routes/api-calls.js:721`); a repeat is a
     no-op, not an error.
-- **get_agent_number** (registered `src/mcp-tools.js:1608`, REST `GET /api/state`,
+- **get_agent_number** (registered `src/mcp-tools.js:1613`, REST `GET /api/state`,
   `src/routes/api-read.js:63-96`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the account's agent phone number
     and writes nothing.

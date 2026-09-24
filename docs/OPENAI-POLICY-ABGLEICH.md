@@ -264,7 +264,7 @@ nie gemessen.
   (Code-Default 7 Tage). Ein `cancel_call` beendet also die Verbindung, beendet aber nicht die
   Herausgabe der letzten Zeilen ueber `get_call_status`.
   Werkzeugtext (get_call_status): "duration and the last transcript lines"
-  `get_call_result` gibt nur Zusammenfassung und Ergebnis zurueck (`src/mcp-tools.js:1557`).
+  `get_call_result` gibt nur Zusammenfassung und Ergebnis zurueck (`src/mcp-tools.js:1562`).
   Werkzeugtext (get_call_result): "This tool NEVER returns the raw transcript"
 - Status: `teilweise`. Der Dritte willigt nicht ein; er wird nur informiert (Offenlegung).
   Luecke 8 in Teil C (Suchanfragen an Such-Anbieter), Luecke 11 (Rohzeilen nicht an den
@@ -371,7 +371,7 @@ nie gemessen.
 > "Response minimization: Tool responses must return only data that is directly relevant to the user’s request and the tool’s stated purpose." - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Data collection")
 
 - Einschlaegig: ja.
-- Mechanismus: `get_call_result` filtert ueber eine Whitelist (`src/mcp-tools.js:1557`) und
+- Mechanismus: `get_call_result` filtert ueber eine Whitelist (`src/mcp-tools.js:1562`) und
   liefert nie das Roh-Transkript; `get_call_status` liefert hoechstens sechs letzte Zeilen
   (`src/mcp-tools.js:48`), aber unabhaengig vom Anrufstatus, also auch nach dem Anruf, solange
   ein Transkript gespeichert ist (Luecke 11 in Teil C).
@@ -493,7 +493,7 @@ danach alle 6 Stunden (`src/boot.js:108`, `src/boot.js:1255-1256`).
 | Roh-Transkript eines Diagnose-Anrufs an die eigene hinterlegte Nummer | wie oben, Markierung `diagnostic` | nachtraegliche Analyse | 7 Tage (`src/config.js:2043-2047`). Aufbewahrung per Default AN: ohne Angabe behaelt der Server das Transkript, nur ein ausdrueckliches `diagnostic=false` bei `place_call` verhindert es (Opt-out, `src/diagnostic-retention.js:42`, `src/diagnostic-retention.js:56`). Die eigene hinterlegte Nummer ist nur auf Format und Land geprueft, NICHT darauf, dass sie dem Nutzer gehoert (`src/diagnostic-retention.js:48`); hat ein Nutzer eine fremde Nummer hinterlegt, ist es das Roh-Transkript eines Dritten | wie oben; insbesondere bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` fuer die ganze Frist (`src/mcp-tools.js:200`, `src/diagnostic-retention.js:72`) |
 | Zusammenfassung, Ergebnis | `summary`, `result` am Anruf (`src/db/schema.sql:339`) | Bericht an den Nutzer | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (Werkzeug-Antworten), Benachrichtigungswege |
 | Woertliche Zitate im Ergebnis | `result.evidence` | Beleg zur Ergebnis-Karte | Code-Default 0 = Funktion aus, es wird nichts erhoben (`src/config.js:2057-2060`) | - |
-| Aufgaben (Action Items) | Tabelle `action_item` (`src/db/schema.sql:564`) | Nachbereitung | erledigte: 30 Tage; OFFENE unbefristet (`src/store/state-ops.js:5127`) | OpenAI/ChatGPT: offene Aufgaben ueber `list_action_items` (`src/mcp-tools.js:1711`) und je Eingangs-Eintrag ueber `check_inbox` (Feld `action_items`, `src/store/state-ops.js:786`) |
+| Aufgaben (Action Items) | Tabelle `action_item` (`src/db/schema.sql:564`) | Nachbereitung | erledigte: 30 Tage; OFFENE unbefristet (`src/store/state-ops.js:5127`) | OpenAI/ChatGPT: offene Aufgaben ueber `list_action_items` (`src/mcp-tools.js:1716`) und je Eingangs-Eintrag ueber `check_inbox` (Feld `action_items`, `src/store/state-ops.js:786`) |
 | Benachrichtigungen | Tabelle `notification` (`src/db/schema.sql:699`) | Hinweise an den Nutzer | 30 Tage | - |
 | Eingangs-Eintraege eingehender Anrufe: Anrufernummer, Anliegen | Anruf-Datensatz, `inbox_entry_at` (`src/db/schema.sql:369`), Gesehen-Markierung (`src/store/state-ops.js:835`) | Anruf-Eingang | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (`check_inbox`) |
 | Nutzung und Kosten | Tabellen `usage` (`src/db/schema.sql:589`), `usage_event` (`src/db/schema.sql:901`), `call_cost_evidence` (`src/db/schema.sql:953`) | Abrechnung, Kostendecke | keine Frist im Code | Zahlungsanbieter (Abrechnung); OpenAI/ChatGPT ueber `get_agent_status`: Zahl der Anrufe (Feld `calls`, `src/mcp-tools.js:594`) und Monatsnutzung in Prozent (Feld `planUsagePercent`, `src/mcp-tools.js:597`), kein Geldbetrag |
@@ -542,7 +542,7 @@ im Abschnitt "Minimale Antworten" behandelt.
 | `get_agent_number` | `number` (`src/mcp-tools.js:616`) | Rufnummer des Assistenten |
 | `list_calls` | je Anruf `id`, `direction`, `counterparty`, `status`, `startedAt`, `summary` (`src/mcp-tools.js:626`) | Anruf-Datensatz (Nummer der Gegenseite; bei einem Anruf an die eigene hinterlegte Nummer ist es diese), Zusammenfassung |
 | `check_inbox` | je Eintrag `call_id`, `caller`, `at`, `summary`, `summary_unavailable`, fuenf Felder der Ergebnis-Karte, `action_items`, `action_required`; dazu `remaining` (`src/store/state-ops.js:786`) | Eingangs-Eintraege, Zusammenfassung und Ergebnis, Aufgaben |
-| `list_action_items` | Text je offener Aufgabe (`src/mcp-tools.js:1711`) | Aufgaben |
+| `list_action_items` | Text je offener Aufgabe (`src/mcp-tools.js:1716`) | Aufgaben |
 | `get_calendar` (nur wenn der Kalender aktiv ist) | je Eintrag `title`, `start`, `end` (`src/mcp-tools.js:723`) | Kalender |
 | `get_agent_status` | `number`, `owner`, `calls`, `planUsagePercent`, `permissions` (`src/mcp-tools.js:590-599`) | Rufnummer des Assistenten, Mandant (Name des Auftraggebers), Nutzung und Kosten, Einstellungen |
 
@@ -565,13 +565,13 @@ Sache des Rechtstextes.
 
 - Diagnose-Transkript abschalten: `diagnostic=false` bei `place_call`.
   Werkzeugtext (place_call): "Set it to false ONLY when the user explicitly does not want that transcript kept."
-- Laufenden Anruf abbrechen: `cancel_call` (`src/mcp-tools.js:1587`). Das beendet die
+- Laufenden Anruf abbrechen: `cancel_call` (`src/mcp-tools.js:1592`). Das beendet die
   Verbindung und setzt den Status `cancelled` (`src/routes/api-calls.js:811`); es loescht das
   bis dahin entstandene Roh-Transkript NICHT. Das bleibt bis zum Loeschlauf des Anrufs
   gespeichert, und `get_call_status` liefert weiter dessen letzte Zeilen (Luecken 11 und 12 in
   Teil C).
 - Eingangs-Eintraege erneut lesen, ohne Markierungen zu aendern: `check_inbox` mit
-  `include_seen` (`src/mcp-tools.js:1667`).
+  `include_seen` (`src/mcp-tools.js:1672`).
   Werkzeugtext (check_inbox): "Re-read entries that were already marked as seen. Changes NO marker."
 - Einstellungen im Self-Service (`src/self-service-routes.js:467`): frei setzbar sind nur Name,
   Sprache und Stil des Assistenten (`src/self-service.js:20`), dazu zwei Freigaben fuer
@@ -739,7 +739,7 @@ src/self-service-routes.js:482 | store.updateSettings(tenant, clean)
 src/self-service-routes.js:488 | res.json(settings);
 src/self-service-routes.js:483-487 | rejected=
 src/mcp-tools.js:48 | const LAST_TRANSCRIPT_LINES = 6;
-src/mcp-tools.js:1557 | pickTranscript(call_id, c, loc.mcp)
+src/mcp-tools.js:1562 | pickTranscript(call_id, c, loc.mcp)
 src/i18n/prompts/en.js:157 | never claim something is done or booked
 src/db/schema.sql:1014 | CREATE TABLE IF NOT EXISTS audit_log
 src/audit-store.js:1 | Append-only Audit-Log-Schreiber
@@ -800,8 +800,8 @@ src/config.js:2090 | https://api.workos.com
 src/brevo-mail.js:22 | https://api.brevo.com
 src/smtp-mail.js:22 | import nodemailer from "nodemailer";
 src/render-api.js:3 | der Server spricht nie mit Render
-src/mcp-tools.js:1587 | "cancel_call"
-src/mcp-tools.js:1667 | "check_inbox"
+src/mcp-tools.js:1592 | "cancel_call"
+src/mcp-tools.js:1672 | "check_inbox"
 src/self-service-routes.js:467 | router.post("/api/self-service/settings", webAuthMw
 src/self-service-routes.js:501 | router.post("/api/self-service/private-number", webAuthMw
 src/store/defaults.js:610 | allowSummaries: true
@@ -856,7 +856,7 @@ src/mcp-tools.js:723 | function pickCalendarEntry(e, formatDate)
 src/mcp-tools.js:1356 | const data = {
 src/mcp-tools.js:1450 | /consult/answer
 src/mcp-tools.js:1464 | structuredContent: { accepted: true, merged_facts: mergedFacts }
-src/mcp-tools.js:1711 | ${item.text}
+src/mcp-tools.js:1716 | ${item.text}
 src/routes/api-calls.js:765 | const { event_id: eventId, answers, status } = req.body
 src/routes/api-calls.js:831-837 | status: "cancelled"
 src/routes/api-read.js:89 | number: activeNumberFor(s, tenantId)

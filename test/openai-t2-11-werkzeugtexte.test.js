@@ -9,6 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
   startServer,
+  startIdp,
   seedState,
   seedCall,
   mcpPost,
@@ -123,10 +124,21 @@ function findTool(tools, name) {
 
 // ==================== T11-a: Namensmenge je Pfad (Anwesenheit + Anzahl unveraendert) ====================
 
+// Review-Nachtrag (cleancode/wichtig): die drei Pfade oben deckten den Draht-Wortlaut nie im
+// HTTP-OAuth-Modus ab - genau dem Pfad, ueber den ChatGPT/OpenAI verbindet. Funktional war das
+// schon durch test/am6-oauth-tenant.test.js belegt (get_agent_number liefert die Nummer), aber
+// nicht der WORTLAUT (Titel/Beschreibung/invoking/invoked). Bindung auf den Bootstrap-Tenant
+// (OWNER_IDP_SUBJECT, wie am6-oauth-tenant.test.js) statt eines frischen Tenants: ein frischer
+// Tenant traegt DEFAULT_PROFILE (allowCalendar/allowConsult beide false, src/store/defaults.js)
+// und liefert eine ANDERE Namensmenge - das wuerde die Legacy/OAuth-Gegenprobe unten verfaelschen,
+// die exakt denselben Werkzeug-Wortlaut ueber beide Pfade sehen soll.
+const OAUTH_SUBJECT = "sub-t2-11-werkzeugtexte";
+
 const CONFIGS = [
   { label: "HTTP Legacy, ohne Consult", expectedCount: 10, run: (fn) => runLegacy({}, fn) },
   { label: "HTTP Legacy, mit Consult", expectedCount: 12, run: (fn) => runLegacy(CONSULT_ON, fn) },
   { label: "stdio", expectedCount: 10, run: (fn) => runStdio({}, fn) },
+  { label: "HTTP OAuth", expectedCount: 10, run: (fn) => runOAuth(fn) },
 ];
 
 async function runLegacy(env, fn) {
@@ -144,6 +156,28 @@ async function runStdio(env, fn) {
     const tools = await stdioToolsList(client);
     await fn(tools, { instructions: () => Promise.resolve(client.getInstructions()) });
   });
+}
+
+async function runOAuth(fn, env = {}) {
+  const idp = await startIdp();
+  const srv = await startServer({
+    seed: seedState({}),
+    env: {
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+      MULTI_TENANT: "true",
+      OWNER_IDP_SUBJECT: OAUTH_SUBJECT,
+      ...env,
+    },
+  });
+  try {
+    const token = await idp.sign({ sub: OAUTH_SUBJECT });
+    const tools = await httpToolsList(`${srv.localUrl}/mcp`, token);
+    await fn(tools, { instructions: () => httpInitializeInstructions(`${srv.localUrl}/mcp`, token) });
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
 }
 
 test("T11-a: get_call_result/get_agent_number vorhanden, get_transcript/get_my_number fehlen, Anzahl unveraendert", async (subtests) => {
@@ -247,59 +281,73 @@ test("T11-b2: instructions und alle sichtbaren Tool-Texte nennen die alten Namen
 });
 
 // ==================== T11-d (N-11): answer_consult nennt die Weitergabe (nur mit Consult) ====================
+// Legacy UND OAuth (Review-Nachtrag): beide bauen die Werkzeug-Registrierung aus denselben
+// TOOL_ANNOTATIONS/*_DESCRIPTION-Konstanten - dieselbe Begruendung wie bei CONFIGS oben.
 
-test("T11-d: answer_consult nennt die Weitergabe an die Gegenseite, nicht mehr 'background information only'", async () => {
-  const srv = await startServer({ seed: seedState({}), env: CONSULT_ON });
-  try {
-    const tools = await httpToolsList(`${srv.localUrl}/mcp`, null);
-    const tool = findTool(tools, "answer_consult");
-    assert.match(
-      tool.description,
-      /The agent may relay your answer to the person on the call\./,
-      "answer_consult nennt die Weitergabe woertlich",
-    );
-    assert.doesNotMatch(tool.description, /background information only/);
-  } finally {
-    await srv.stop();
+const CONSULT_CONFIGS = [
+  {
+    label: "HTTP Legacy, mit Consult",
+    run: async (fn) => {
+      const srv = await startServer({ seed: seedState({}), env: CONSULT_ON });
+      try {
+        await fn(await httpToolsList(`${srv.localUrl}/mcp`, null));
+      } finally {
+        await srv.stop();
+      }
+    },
+  },
+  { label: "HTTP OAuth, mit Consult", run: (fn) => runOAuth(fn, CONSULT_ON) },
+];
+
+test("T11-d: answer_consult nennt die Weitergabe an die Gegenseite, nicht mehr 'background information only'", async (subtests) => {
+  for (const cfg of CONSULT_CONFIGS) {
+    await subtests.test(cfg.label, async () => {
+      await cfg.run(async (tools) => {
+        const tool = findTool(tools, "answer_consult");
+        assert.match(
+          tool.description,
+          /The agent may relay your answer to the person on the call\./,
+          "answer_consult nennt die Weitergabe woertlich",
+        );
+        assert.doesNotMatch(tool.description, /background information only/);
+      });
+    });
   }
 });
 
 // ==================== T11-e/T11-e2 (N-13): jedes Antwortfeld steht in der Beschreibung ====================
+// Legacy UND OAuth (Review-Nachtrag, s. CONFIGS oben).
 
-test("T11-e: get_agent_status nennt jeden Schluessel seines outputSchema in der Beschreibung", async () => {
-  const srv = await startServer({ seed: seedState({}) });
-  try {
-    const tools = await httpToolsList(`${srv.localUrl}/mcp`, null);
-    const tool = findTool(tools, "get_agent_status");
-    const keys = Object.keys(tool.outputSchema?.properties || {});
-    assert.ok(keys.length > 0, "Positiv-Kontrolle: outputSchema traegt Schluessel");
-    assert.ok(keys.includes("planUsagePercent"), "Positiv-Kontrolle: planUsagePercent dabei");
-    for (const key of keys) {
-      assert.ok(
-        tool.description.includes(key),
-        `description nennt Schluessel "${key}" nicht woertlich`,
-      );
-    }
-  } finally {
-    await srv.stop();
+function assertDescribesEveryOutputKey(tool, { minKeys = [] } = {}) {
+  const keys = Object.keys(tool.outputSchema?.properties || {});
+  assert.ok(keys.length > 0, "Positiv-Kontrolle: outputSchema traegt Schluessel");
+  for (const required of minKeys) {
+    assert.ok(keys.includes(required), `Positiv-Kontrolle: ${required} dabei`);
+  }
+  for (const key of keys) {
+    assert.ok(tool.description.includes(key), `description nennt Schluessel "${key}" nicht woertlich`);
+  }
+}
+
+test("T11-e: get_agent_status nennt jeden Schluessel seines outputSchema in der Beschreibung", async (subtests) => {
+  for (const cfg of CONFIGS) {
+    await subtests.test(cfg.label, async () => {
+      await cfg.run(async (tools) => {
+        assertDescribesEveryOutputKey(findTool(tools, "get_agent_status"), {
+          minKeys: ["planUsagePercent"],
+        });
+      });
+    });
   }
 });
 
-test("T11-e2: get_call_result nennt jeden Schluessel seines outputSchema in der Beschreibung", async () => {
-  const srv = await startServer({ seed: seedState({}) });
-  try {
-    const tools = await httpToolsList(`${srv.localUrl}/mcp`, null);
-    const tool = findTool(tools, "get_call_result");
-    const keys = Object.keys(tool.outputSchema?.properties || {});
-    assert.ok(keys.length > 0, "Positiv-Kontrolle: outputSchema traegt Schluessel");
-    for (const key of keys) {
-      assert.ok(
-        tool.description.includes(key),
-        `description nennt Schluessel "${key}" nicht woertlich`,
-      );
-    }
-  } finally {
-    await srv.stop();
+test("T11-e2: get_call_result nennt jeden Schluessel seines outputSchema in der Beschreibung", async (subtests) => {
+  for (const cfg of CONFIGS) {
+    await subtests.test(cfg.label, async () => {
+      await cfg.run(async (tools) => {
+        assertDescribesEveryOutputKey(findTool(tools, "get_call_result"));
+      });
+    });
   }
 });
 
@@ -406,18 +454,27 @@ test("T11-r: jede _meta.ui.resourceUri aus tools/list steht in resources/list un
 });
 
 // ==================== T11-n (N-12): keine werblich/vergleichende Sprache in Namen/Titeln ====================
+// Legacy UND OAuth (Review-Nachtrag, s. CONFIGS oben).
 
-test("T11-n: kein Werkzeugname und kein Titel traegt best/official/pick_me/recommended", async () => {
-  const srv = await startServer({ seed: seedState({}), env: CONSULT_ON });
-  try {
-    const tools = await httpToolsList(`${srv.localUrl}/mcp`, null);
-    for (const tool of tools) {
-      assert.doesNotMatch(tool.name, PROMOTIONAL_WORDS, `${tool.name}: Name ohne Werbe-/Vergleichssprache`);
-      if (tool.title) {
-        assert.doesNotMatch(tool.title, PROMOTIONAL_WORDS, `${tool.name}: Titel ohne Werbe-/Vergleichssprache`);
-      }
-    }
-  } finally {
-    await srv.stop();
+test("T11-n: kein Werkzeugname und kein Titel traegt best/official/pick_me/recommended", async (subtests) => {
+  for (const cfg of CONSULT_CONFIGS) {
+    await subtests.test(cfg.label, async () => {
+      await cfg.run(async (tools) => {
+        for (const tool of tools) {
+          assert.doesNotMatch(
+            tool.name,
+            PROMOTIONAL_WORDS,
+            `${tool.name}: Name ohne Werbe-/Vergleichssprache`,
+          );
+          if (tool.title) {
+            assert.doesNotMatch(
+              tool.title,
+              PROMOTIONAL_WORDS,
+              `${tool.name}: Titel ohne Werbe-/Vergleichssprache`,
+            );
+          }
+        }
+      });
+    });
   }
 });
