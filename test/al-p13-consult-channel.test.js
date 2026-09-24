@@ -981,7 +981,14 @@ test("AL-P13-50: answer_consult mit status=working gibt die feste Quittung zurue
 test("AL-P13-43: der Berechtigungs-Hinweis haengt EINMAL am place_call-Ergebnis", async () => {
   const { localeFor } = await import("../src/i18n/locales.js");
   const hint = localeFor("en").mcp.consultPermissionHint;
-  await withGateway([{ path: "/api/calls", status: 200, body: { callId: CALL_ID } }], async () => {
+  await withGateway(
+    [
+      // T2-13 (N-10): der Bestaetigungs-Hop laeuft VOR /api/calls - eigene Route noetig,
+      // sonst faellt confirmCallHop auf den 404-Default und place_call kommt nie an.
+      { path: "/api/call-confirmations", status: 200, body: { preview: {}, confirmed: true } },
+      { path: "/api/calls", status: 200, body: { callId: CALL_ID } },
+    ],
+    async () => {
     const withConsult = await captureRegistrations({ consultAllowed: true, language: "en" })
       .get("place_call")
       .handler({ to: "+4915112345678", objective: "Test" });
