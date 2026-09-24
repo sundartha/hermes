@@ -23,7 +23,8 @@ import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-reques
 import { TENANT_REJECT } from "../request-tenant.js";
 import { internalOnly } from "../wiring/internal-only.js";
 import {
-  CONFIRMATION_WINDOW_MS,
+  MAX_FAILED_CONFIRMATIONS_PER_WINDOW,
+  acceptanceEndMs,
   deriveConfirmationKey,
   canonicalCallRequest,
   issueConfirmationCode,
@@ -86,53 +87,38 @@ function usedCodeDigest({ tenantId, windowIdx, normalizedCode }) {
 }
 
 // Einmal-Verbrauch je App-Instanz (Schritt 3 der Spec): bewusst im Speicher, keine
-// Store-Spalte - die Architektur setzt ohnehin eine Instanz voraus (pg-Store haelt Zustand
-// im Speicher, Lehre pg-store-holds-state-in-memory). Grenze: nach einem Neustart ist ein
-// noch gueltiger Code bis zu CONFIRMATION_WINDOW_MS*ACCEPTED_WINDOWS lang erneut nutzbar -
-// die bestehende Anruf-Dedup (call-dedup.js, <=180s auf AKTIVE Anrufe) faengt den Fall eines
-// noch laufenden Anrufs; laenger zurueckliegende Replays bleiben eine akzeptierte,
-// dokumentierte Grenze (PLAN-SECURITY.md).
+// Store-Spalte. Grenzen (PLAN-SECURITY.md, Abschnitt OpenAI-T2-13): nach einem Neustart
+// und auf einer ANDEREN Instanz (Mehr-Instanz-Betrieb) ist ein noch gueltiger Code bis zu
+// CONFIRMATION_WINDOW_MS*ACCEPTED_WINDOWS lang erneut nutzbar - die bestehende Anruf-Dedup
+// (call-dedup.js, <=180s auf AKTIVE Anrufe) faengt nur den Fall eines noch laufenden Anrufs.
+// KORRIGIERT (Safety-Review T2-13): der Eintrag lebt bis acceptanceEndMs (Ende des LETZTEN
+// Fensters, in dem der Code angenommen wird), nicht nur bis zum Ende seines Ausstellungs-
+// fensters - sonst war ein verbrauchter Code im Folgefenster wieder frei.
 function makeOneTimeCodeLedger() {
   const usedUntilMs = new Map();
-  return function markIfUnused({ digest, windowEndMs, nowMs }) {
+  return function markIfUnused({ digest, acceptedUntilMs, nowMs }) {
     for (const [key, expiresAtMs] of usedUntilMs) if (expiresAtMs <= nowMs) usedUntilMs.delete(key);
     if (usedUntilMs.has(digest)) return false;
-    usedUntilMs.set(digest, windowEndMs);
+    usedUntilMs.set(digest, acceptedUntilMs);
     return true;
   };
 }
 
-// Slot-Suffix fuer die Codeableitung (Safety-Nachbesserung T2-13, Befund "Einmal-Verbrauch
-// vs. deterministischer Code"): OHNE dieses Register stellt ein erneutes prepare_call mit
-// UNVERAENDERTEN Argumenten im selben Fenster deterministisch denselben (schon
-// verbrauchten) Code aus - confirmCode (unten) lehnt ihn dann immer ab, bis zu
-// CONFIRMATION_WINDOW_MS lang, obwohl der Nutzer nur "nochmal versuchen" wollte (Gegenprobe
-// am echten Router: erster Verbrauch true, Neuausstellung sameCode:true, zweiter Verbrauch
-// false). Slot 0 (der Normalfall - noch kein Verbrauch fuer diese Anfrage in diesem
-// Fenster) ergibt canonical UNVERAENDERT: wiederholtes prepare_call VOR jedem Verbrauch
-// bleibt idempotent (byte-identisches Verhalten, s. Test "gleiche Eingabe ergibt gleichen
-// Code" in call-confirmation.test.js). Der Slot geht NUR in die Codeableitung ein, NICHT in
-// das, was der Code inhaltlich bindet (weiterhin Mandant+alle Argumente+Fenster).
-function canonicalForSlot({ canonical, slot }) {
-  return slot === 0 ? canonical : `${canonical}|slot:${slot}`;
-}
-
-// Obergrenze der Slot-Suche beim Pruefen (s. confirmCode): mehr als ein paar
-// Wiederholversuche innerhalb desselben 5-Minuten-Fensters sind kein normaler Retry mehr.
-// Die Grenze ist reine SERVERSEITIGE Rechenbegrenzung ueber selbst abgeleitete Kandidaten -
-// sie aendert nichts an der Trefferwahrscheinlichkeit eines Angreifers (Sicherheits-
-// Rechnung in call-confirmation.js bleibt gueltig, der Angreifer muss weiterhin einen von
-// 32^6 Codes treffen, unabhaengig von dieser Zahl).
-const MAX_CONFIRMATION_SLOTS = 8;
-
+// Slot-Register (Safety-Nachbesserung T2-13, Befund "Einmal-Verbrauch vs. deterministischer
+// Code"): OHNE dieses Register stellt ein erneutes prepare_call mit UNVERAENDERTEN Argumenten
+// im selben Fenster deterministisch denselben (schon verbrauchten) Code aus. Nach jedem
+// Verbrauch schaltet das Register fuer (Mandant, Fenster, Anfrage) den naechsten Slot frei;
+// Ausstellung UND Pruefung nutzen genau diesen aktuellen Slot (call-confirmation.js,
+// issueConfirmationCode/matchedWindowIndex). Vor dem ersten Verbrauch bleibt Slot 0 -
+// wiederholtes prepare_call bleibt bis dahin idempotent.
 function slotLedgerDigest({ tenantId, windowIdx, canonical }) {
   return createHash("sha256").update(`slot|${tenantId}|${windowIdx}|${canonical}`).digest("hex");
 }
 
 // Gleiches Speicher-/Verwerfungs-Muster wie makeOneTimeCodeLedger: haelt je (Mandant,
 // Fenster, kanonische Anfrage) NUR einen Zaehler im Prozessspeicher, kein Klartext, kein
-// Code. Dieselbe akzeptierte Grenze wie beim Einmal-Verbrauch-Register (Kommentar oben):
-// je App-Instanz, verwirft abgelaufene Eintraege beim naechsten Zugriff.
+// Code - bis acceptanceEndMs des Fensters (solange dessen Codes angenommen werden).
+// Dieselbe Grenze wie beim Einmal-Verbrauch-Register (Kommentar oben): je App-Instanz.
 function makeFreshSlotLedger() {
   const slotByDigest = new Map();
   function prune(nowMs) {
@@ -143,38 +129,68 @@ function makeFreshSlotLedger() {
       prune(nowMs);
       return slotByDigest.get(digest)?.slot ?? 0;
     },
-    advance({ digest, windowEndMs, nowMs }) {
+    advance({ digest, acceptedUntilMs, nowMs }) {
       prune(nowMs);
       const next = (slotByDigest.get(digest)?.slot ?? 0) + 1;
-      slotByDigest.set(digest, { slot: next, expiresAtMs: windowEndMs });
+      slotByDigest.set(digest, { slot: next, expiresAtMs: acceptedUntilMs });
     },
   };
 }
 
-// War der vorgelegte Code (in irgendeinem offenen Slot der aktuellen Anfrage) gueltig UND
-// noch nicht verbraucht? Verbraucht ihn bei JA sofort (kein zweiter Treffer moeglich) und
-// schaltet - NUR bei tatsaechlichem Verbrauch - den naechsten Slot fuer diese (Mandant,
-// Fenster, Anfrage)-Kombination frei, damit ein nachfolgendes prepare_call einen FRISCHEN
-// Code liefert statt des soeben verbrauchten.
-function confirmCode({ key, tenantId, canonical, code, nowMs, markIfUnused, freshSlots }) {
-  for (let slot = 0; slot < MAX_CONFIRMATION_SLOTS; slot++) {
-    const windowIdx = matchedWindowIndex({
-      key,
-      tenantId,
-      canonical: canonicalForSlot({ canonical, slot }),
-      code,
-      nowMs,
-    });
-    if (windowIdx === null) continue;
-    const digest = usedCodeDigest({ tenantId, windowIdx, normalizedCode: normalizeConfirmationCode(code) });
-    const windowEndMs = (windowIdx + 1) * CONFIRMATION_WINDOW_MS;
-    const consumed = markIfUnused({ digest, windowEndMs, nowMs });
-    if (consumed) {
-      freshSlots.advance({ digest: slotLedgerDigest({ tenantId, windowIdx, canonical }), windowEndMs, nowMs });
-    }
-    return consumed;
+// Fehlversuchsbremse (Safety-Review T2-13, Rechnung in call-confirmation.js): je Mandant
+// hoechstens MAX_FAILED_CONFIRMATIONS_PER_WINDOW abgelehnte Codes je Bestaetigungsfenster.
+// Danach lehnt die Route bis Fensterende JEDEN Code ab, ohne ihn zu pruefen - auch einen
+// richtigen (fail-closed, kein Treffer-Orakel fuer einen Rater). Zaehlt nur echte
+// Rateversuche (nicht-leerer Code); ein fehlender Code ist keiner. Je App-Instanz im
+// Speicher wie die Register oben (Grenze: PLAN-SECURITY.md).
+function makeFailedAttemptBrake() {
+  const failuresByTenant = new Map();
+  function countFor({ tenantKey, windowIdx }) {
+    const entry = failuresByTenant.get(tenantKey);
+    return entry?.windowIdx === windowIdx ? entry.count : 0;
   }
-  return false;
+  return {
+    isLocked({ tenantKey, windowIdx }) {
+      return countFor({ tenantKey, windowIdx }) >= MAX_FAILED_CONFIRMATIONS_PER_WINDOW;
+    },
+    recordFailure({ tenantKey, windowIdx }) {
+      for (const [key, entry] of failuresByTenant) if (entry.windowIdx < windowIdx) failuresByTenant.delete(key);
+      failuresByTenant.set(tenantKey, { windowIdx, count: countFor({ tenantKey, windowIdx }) + 1 });
+    },
+  };
+}
+
+// War der vorgelegte Code der AKTUELL gueltige Code dieser Anfrage (je akzeptiertem Fenster
+// genau der Code des aktuellen Slots, s. matchedWindowIndex) UND noch nicht verbraucht?
+// Verbraucht ihn bei JA sofort (kein zweiter Treffer moeglich) und schaltet - NUR bei
+// tatsaechlichem Verbrauch - den naechsten Slot frei, damit ein nachfolgendes prepare_call
+// einen FRISCHEN Code liefert statt des soeben verbrauchten.
+function consumeIfCurrent({ key, tenantId, canonical, code, nowMs, registers }) {
+  const slotDigestFor = (windowIdx) => slotLedgerDigest({ tenantId, windowIdx, canonical });
+  const windowIdx = matchedWindowIndex({
+    key,
+    tenantId,
+    canonical,
+    code,
+    nowMs,
+    slotForWindow: (idx) => registers.freshSlots.currentSlot({ digest: slotDigestFor(idx), nowMs }),
+  });
+  if (windowIdx === null) return false;
+  const acceptedUntilMs = acceptanceEndMs(windowIdx);
+  const digest = usedCodeDigest({ tenantId, windowIdx, normalizedCode: normalizeConfirmationCode(code) });
+  if (!registers.markIfUnused({ digest, acceptedUntilMs, nowMs })) return false;
+  registers.freshSlots.advance({ digest: slotDigestFor(windowIdx), acceptedUntilMs, nowMs });
+  return true;
+}
+
+// Bremse um consumeIfCurrent: gesperrt -> false ohne Pruefung; abgelehnter echter Versuch
+// -> gezaehlt.
+function confirmCode({ key, tenantId, canonical, code, nowMs, registers }) {
+  const brakeKey = { tenantKey: String(tenantId), windowIdx: windowIndexFor(nowMs) };
+  if (registers.brake.isLocked(brakeKey)) return false;
+  const confirmed = consumeIfCurrent({ key, tenantId, canonical, code, nowMs, registers });
+  if (!confirmed && normalizeConfirmationCode(code)) registers.brake.recordFailure(brakeKey);
+  return confirmed;
 }
 
 // tenant = { requestTenant } (dieselbe EINE Quelle wie in makeCallRoutes). now injizierbar
@@ -182,8 +198,11 @@ function confirmCode({ key, tenantId, canonical, code, nowMs, markIfUnused, fres
 // Server bekommt bewusst KEINE Uhr-Naht per Env (Plan Abschnitt 4, "Nicht bauen").
 export function makeCallConfirmationRoutes({ store, config, tenant: { requestTenant }, now = Date.now }) {
   const router = Router();
-  const markIfUnused = makeOneTimeCodeLedger();
-  const freshSlots = makeFreshSlotLedger();
+  const registers = {
+    markIfUnused: makeOneTimeCodeLedger(),
+    freshSlots: makeFreshSlotLedger(),
+    brake: makeFailedAttemptBrake(),
+  };
 
   router.post("/api/call-confirmations", internalOnly, (req, res) => {
     const body = req.body || {};
@@ -216,26 +235,20 @@ export function makeCallConfirmationRoutes({ store, config, tenant: { requestTen
         canonical,
         code: body.confirmation_code,
         nowMs,
-        markIfUnused,
-        freshSlots,
+        registers,
       });
       return res.status(HTTP_OK).json({ preview, confirmed });
     }
 
-    // Frischer Slot nach einem etwaigen Verbrauch (s. canonicalForSlot/makeFreshSlotLedger
-    // oben) - slot bleibt 0, solange fuer diese exakte Anfrage in diesem Fenster noch
-    // nichts verbraucht wurde, macht die Ausstellung also byte-identisch zum Bestand.
+    // Frischer Slot nach einem etwaigen Verbrauch (s. makeFreshSlotLedger oben) - slot
+    // bleibt 0, solange fuer diese exakte Anfrage in diesem Fenster noch nichts verbraucht
+    // wurde, macht die Ausstellung also byte-identisch zum Bestand.
     const windowIdx = windowIndexFor(nowMs);
-    const slot = freshSlots.currentSlot({
+    const slot = registers.freshSlots.currentSlot({
       digest: slotLedgerDigest({ tenantId, windowIdx, canonical }),
       nowMs,
     });
-    const { code, expiresAtMs } = issueConfirmationCode({
-      key,
-      tenantId,
-      canonical: canonicalForSlot({ canonical, slot }),
-      nowMs,
-    });
+    const { code, expiresAtMs } = issueConfirmationCode({ key, tenantId, canonical, nowMs, slot });
     return res.status(HTTP_OK).json({
       preview,
       confirmation: { code, expires_at: new Date(expiresAtMs).toISOString() },

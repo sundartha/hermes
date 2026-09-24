@@ -1,6 +1,7 @@
 // ---- Geldpfad: serverseitige Bestaetigung vor dem Waehlen (T2-13, N-10) -----------------
 // WAS DIE BESTAETIGUNG BEWEIST: der Server hat fuer GENAU diese Anfrage (Mandant,
-// normalisiertes Ziel, alle uebrigen Argumente) innerhalb der letzten maximal
+// normalisiertes Ziel, alle gebundenen Argumente - briefing/context sind bewusst NICHT
+// gebunden, s. UNBOUND_ARGUMENTS) innerhalb der letzten maximal
 // CONFIRMATION_WINDOW_MS * ACCEPTED_WINDOWS einen Code ausgestellt, und dieser Code ist noch
 // nicht verbraucht. Der Code steht nur im Ergebnis-`_meta` von `prepare_call` (Karte, nicht
 // Modelltext) - auf einem Host, der sich an diesen Vertrag haelt, erreicht er das Modell also
@@ -22,12 +23,24 @@ import { MS_PER_MINUTE } from "./utils/timer.js";
 
 // Alphabet: Crockford-Base32 ohne I/L/O/U (Verwechslungsgefahr beim Vorlesen/Abtippen).
 export const CONFIRMATION_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-// Brute-Force-Rechnung (Pre-Mortem Punkt 10): 32^6 = 2^30, rund 1,07e9 moegliche Codes.
-// Bei RATE_LIMIT_PER_MIN=120 Aufrufen/Minute je Mandant (src/config.js) und einer
-// Gueltigkeit von ACCEPTED_WINDOWS*CONFIRMATION_WINDOW_MS = 10 Minuten sind das hoechstens
-// 1200 Versuche je Gueltigkeitsfenster, P(Treffer) also rund 1200/1.07e9 = 1,1e-6. Dazu
-// kommt: jeder Versuch muss dieselben Argumente (to/objective/briefing/...) tragen, sonst
-// prueft er gegen einen anderen Code.
+// Brute-Force-Rechnung (KORRIGIERT, Safety-Review T2-13; die erste Fassung zaehlte nur EINEN
+// Kandidaten je Versuch und nahm das Rate-Limit als einzige Bremse):
+// - Suchraum: 32^6 = 2^30, rund 1,07e9 moegliche Codes.
+// - Kandidaten je Versuch: ein vorgelegter Code wird gegen GENAU EINEN Code je akzeptiertem
+//   Fenster geprueft (den des aktuellen Slots, s. matchedWindowIndex/slotForWindow), also
+//   gegen hoechstens ACCEPTED_WINDOWS = 2 Kandidaten. P(Treffer je Versuch) <= 2/2^30 =
+//   2^-29, rund 1,9e-9.
+// - Versuche: das Rate-Limit (RATE_LIMIT_PER_MIN, Default 120/min je Mandant auf POST /mcp)
+//   allein reicht NICHT - es erlaubt rund 6,3e7 Versuche im Jahr (P ~ 11 %), und stdio
+//   laeuft ueber Loopback ganz ohne Rate-Limit. Deshalb die Fehlversuchsbremse
+//   MAX_FAILED_CONFIRMATIONS_PER_WINDOW (unten): hoechstens 10 Fehlversuche je Mandant und
+//   CONFIRMATION_WINDOW_MS (5 min) je App-Instanz, danach wird bis Fensterende JEDER Code
+//   abgelehnt (auch ein richtiger - fail-closed).
+// - Ergebnis (Summenschranke): je 5-Minuten-Fenster <= 10 * 2^-29 ~ 1,9e-8, je Tag (288
+//   Fenster) ~ 5,4e-6, je Jahr (~1,05e6 Versuche) ~ 2e-3 - je App-Instanz; bei N Instanzen
+//   das N-fache (Bremse und Register leben im Prozessspeicher, s. PLAN-SECURITY.md).
+// Jeder Versuch muss zudem dieselben gebundenen Argumente tragen, sonst prueft er gegen den
+// Code einer anderen Anfrage.
 export const CONFIRMATION_CODE_LENGTH = 6;
 // Fenstergroesse: ein frisch ausgestellter Code ist sofort bis zu CONFIRMATION_WINDOW_MINUTES
 // Minuten gueltig (MS_PER_MINUTE = bestehende Zeit-Umrechnung, src/utils/timer.js).
@@ -35,7 +48,14 @@ const CONFIRMATION_WINDOW_MINUTES = 5;
 export const CONFIRMATION_WINDOW_MS = CONFIRMATION_WINDOW_MINUTES * MS_PER_MINUTE;
 // Akzeptiert werden das aktuelle und das vorherige Fenster - Gueltigkeit damit effektiv
 // zwischen 5 und 10 Minuten (abhaengig davon, wie kurz vor Fensterende ausgestellt wurde).
+// Das ist zugleich die kleinste Kandidatenmenge, die der Entwurf fachlich braucht: mit nur
+// EINEM Fenster liefe ein kurz vor der Fenstergrenze ausgestellter Code nach Sekunden ab,
+// bevor ein Mensch die Karte gelesen hat.
 export const ACCEPTED_WINDOWS = 2;
+// Fehlversuchsbremse je Mandant und Fenster (Rechnung oben). 10 laesst einem Menschen
+// Luft fuer ein paar echte Fehlgriffe (abgelaufener Code, umformuliertes Anliegen) und
+// haelt die Trefferwahrscheinlichkeit trotzdem im Promille-Bereich je Jahr.
+export const MAX_FAILED_CONFIRMATIONS_PER_WINDOW = 10;
 // Ein kuerzeres/leeres Geheimnis ergibt keinen Schluessel (fail-closed, s. deriveConfirmationKey).
 export const CONFIRMATION_SECRET_MIN_LENGTH = 32;
 // Versions-Praefix in der Ableitung: eine kuenftige Aenderung bekommt ein eigenes Praefix
@@ -69,13 +89,45 @@ function sortedCanonical(value) {
   return value;
 }
 
+// NICHT gebundene Argumente (Plan T2-13): briefing/context sind umformulierbarer
+// Hintergrund - ein Modell, das sie zwischen prepare_call und place_call neu formuliert,
+// soll nicht an der Bestaetigung scheitern. Bewusst eine Ausschluss-, keine Positivliste:
+// jedes KUENFTIGE Argument ist damit automatisch gebunden (fail-closed). Gebunden bleiben
+// heute to (normalisiert), objective, language, max_duration_s (kosten-/dauerrelevant),
+// constraints und mandate (was der Agent zusagen darf) und diagnostic.
+const UNBOUND_ARGUMENTS = Object.freeze(["confirmation_code", "briefing", "context"]);
+
 /**
- * Bindet ALLE Argumente ausser confirmation_code, mit `to` in NORMALISIERTER Form (Aufrufer
+ * Bindet alle Argumente ausser UNBOUND_ARGUMENTS, mit `to` in NORMALISIERTER Form (Aufrufer
  * uebergibt das schon aufgeloeste Ziel separat - es ersetzt ein eventuelles args.to).
  */
 export function canonicalCallRequest({ to, args }) {
-  const { confirmation_code: _ignored, ...rest } = args || {};
-  return JSON.stringify(sortedCanonical({ ...rest, to }));
+  const bound = { ...args };
+  for (const field of UNBOUND_ARGUMENTS) delete bound[field];
+  return JSON.stringify(sortedCanonical({ ...bound, to }));
+}
+
+// Slot-Suffix fuer die Codeableitung (Slot-Register in src/routes/api-call-confirmations.js):
+// nach einem Verbrauch stellt prepare_call fuer dieselbe Anfrage einen Code des NAECHSTEN
+// Slots aus. Slot 0 laesst canonical unveraendert. Der Slot geht NUR in die Ableitung ein,
+// nicht in das, was der Code inhaltlich bindet.
+function canonicalForSlot({ canonical, slot }) {
+  return slot === 0 ? canonical : `${canonical}|slot:${slot}`;
+}
+
+function* acceptedWindowIndices(nowMs) {
+  const currentWindow = windowIndexFor(nowMs);
+  for (let offset = 0; offset < ACCEPTED_WINDOWS; offset++) yield currentWindow - offset;
+}
+
+/**
+ * Bis wann ein in Fenster windowIdx ausgestellter Code angenommen wird (Ende des letzten
+ * akzeptierten Fensters). Einmal-Verbrauch und Slot-Register muessen ihre Eintraege
+ * MINDESTENS so lange halten - sonst waere ein verbrauchter Code im Folgefenster erneut
+ * gueltig.
+ */
+export function acceptanceEndMs(windowIdx) {
+  return (windowIdx + ACCEPTED_WINDOWS) * CONFIRMATION_WINDOW_MS;
 }
 
 // Exportiert (Safety-Nachbesserung T2-13): der Aufrufer (die Bestaetigungs-Route) braucht
@@ -96,11 +148,14 @@ function codeForWindow({ key, tenantId, canonical, windowIdx }) {
   return code;
 }
 
-/** Stellt einen Code fuer das AKTUELLE Fenster aus, plus dessen fruehesten Ablaufzeitpunkt. */
-export function issueConfirmationCode({ key, tenantId, canonical, nowMs }) {
+/**
+ * Stellt einen Code fuer das AKTUELLE Fenster (und den gegebenen Slot, Default 0) aus, plus
+ * dessen fruehesten Ablaufzeitpunkt.
+ */
+export function issueConfirmationCode({ key, tenantId, canonical, nowMs, slot = 0 }) {
   const windowIdx = windowIndexFor(nowMs);
   return {
-    code: codeForWindow({ key, tenantId, canonical, windowIdx }),
+    code: codeForWindow({ key, tenantId, canonical: canonicalForSlot({ canonical, slot }), windowIdx }),
     expiresAtMs: (windowIdx + 1) * CONFIRMATION_WINDOW_MS,
   };
 }
@@ -115,20 +170,25 @@ export function normalizeConfirmationCode(code) {
   return code.toUpperCase().replace(/[\s-]/g, "");
 }
 
+const NO_SLOT_REGISTER = () => 0;
+
 /**
  * Welches Fenster (aktuell oder vorheriges) den vorgelegten Code bestaetigt, oder null.
+ * Geprueft wird je akzeptiertem Fenster GENAU EIN Kandidat: der Code des Slots, den
+ * slotForWindow(windowIdx) als aktuell meldet (ohne Register: Slot 0) - also hoechstens
+ * ACCEPTED_WINDOWS Kandidaten je Versuch (Rechnung oben). Codes aelterer Slots sind damit
+ * ungueltig, noch nie ausgestellte spaetere Slots ebenso.
  * Timing-sicherer Vergleich (safeEqual, Absolute Regel 3). key === null (nicht ableitbares
  * Geheimnis) ergibt immer null - niemals ein Match ohne echten Schluessel. Der Aufrufer
  * braucht den WindowIndex fuer den Einmal-Verbrauch-Digest (Mandant+Fenster+Code).
  */
-export function matchedWindowIndex({ key, tenantId, canonical, code, nowMs }) {
+export function matchedWindowIndex({ key, tenantId, canonical, code, nowMs, slotForWindow = NO_SLOT_REGISTER }) {
   if (!key) return null;
   const normalized = normalizeConfirmationCode(code);
   if (!normalized) return null;
-  const currentWindow = windowIndexFor(nowMs);
-  for (let offset = 0; offset < ACCEPTED_WINDOWS; offset++) {
-    const windowIdx = currentWindow - offset;
-    const candidate = codeForWindow({ key, tenantId, canonical, windowIdx });
+  for (const windowIdx of acceptedWindowIndices(nowMs)) {
+    const slotCanonical = canonicalForSlot({ canonical, slot: slotForWindow(windowIdx) });
+    const candidate = codeForWindow({ key, tenantId, canonical: slotCanonical, windowIdx });
     if (safeEqual(normalized, candidate)) return windowIdx;
   }
   return null;

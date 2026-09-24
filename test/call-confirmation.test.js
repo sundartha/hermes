@@ -7,6 +7,7 @@ import {
   CONFIRMATION_CODE_ALPHABET,
   CONFIRMATION_WINDOW_MS,
   CONFIRMATION_SECRET_MIN_LENGTH,
+  MAX_FAILED_CONFIRMATIONS_PER_WINDOW,
   deriveConfirmationKey,
   canonicalCallRequest,
   issueConfirmationCode,
@@ -33,6 +34,7 @@ function argsFixture(overrides = {}) {
     language: "de-DE",
     max_duration_s: 300,
     mandate: "vollmacht",
+    constraints: "hoechstens 40 Euro",
     ...overrides,
   };
 }
@@ -51,7 +53,8 @@ test("Code hat feste Laenge und nur Alphabet-Zeichen", () => {
   for (const ch of code) assert.ok(CONFIRMATION_CODE_ALPHABET.includes(ch));
 });
 
-const FIELDS = ["to", "objective", "briefing", "language", "max_duration_s", "mandate"];
+// Gebunden (Plan T2-13): alles ausser briefing/context - s. UNBOUND_ARGUMENTS.
+const FIELDS = ["to", "objective", "language", "max_duration_s", "mandate", "constraints"];
 for (const field of FIELDS) {
   test(`Aenderung an ${field} aendert den Code`, () => {
     const base = argsFixture();
@@ -65,6 +68,16 @@ for (const field of FIELDS) {
     assert.notEqual(codeBase.code, codeChanged.code);
   });
 }
+
+// Plan T2-13: "briefing/context nicht (umformulierter Kontext soll nicht scheitern)".
+test("Aenderung an briefing oder context aendert den Code NICHT (bewusst nicht gebunden)", () => {
+  const base = argsFixture({ context: { summary: "alt" } });
+  const reworded = argsFixture({ briefing: "Ganz anders formuliert", context: { summary: "neu" } });
+  const withoutBoth = argsFixture({ briefing: undefined });
+  const canonicalBase = canonicalCallRequest({ to: base.to, args: base });
+  assert.equal(canonicalCallRequest({ to: reworded.to, args: reworded }), canonicalBase);
+  assert.equal(canonicalCallRequest({ to: withoutBoth.to, args: withoutBoth }), canonicalBase);
+});
 
 test("Aenderung der tenantId aendert den Code", () => {
   const canonical = canonicalCallRequest({ to: argsFixture().to, args: argsFixture() });
@@ -82,6 +95,7 @@ test("Schluesselreihenfolge der Argumente ist egal", () => {
     briefing: sorted.briefing,
     max_duration_s: sorted.max_duration_s,
     language: sorted.language,
+    constraints: sorted.constraints,
   };
   const canonicalSorted = canonicalCallRequest({ to: sorted.to, args: sorted });
   const canonicalShuffled = canonicalCallRequest({ to: shuffled.to, args: shuffled });
@@ -188,13 +202,16 @@ function requestTenantFromHeader(req) {
   return req.headers["x-internal-tenant"] || "route-test-tenant";
 }
 
-async function mountConfirmationRoutes({ now, secret = ROUTE_SECRET } = {}) {
+async function mountConfirmationRoutes({ now, secret = ROUTE_SECRET, languageEnabled = false } = {}) {
   const app = express();
   app.use(express.json());
   app.use(
     makeCallConfirmationRoutes({
       store: fakeStoreForRoute(),
-      config: { auth: { callConfirmationSecret: secret }, voice: { elevenLabsOutbound: { enabled: false } } },
+      config: {
+        auth: { callConfirmationSecret: secret },
+        voice: { elevenLabsOutbound: { enabled: languageEnabled } },
+      },
       tenant: { requestTenant: requestTenantFromHeader },
       ...(now ? { now } : {}),
     }),
@@ -303,4 +320,144 @@ test("Route: kein/zu kurzes CALL_CONFIRMATION_SECRET -> 503, kein Code ausgestel
   } finally {
     await app.close();
   }
+});
+
+// ============ Safety-Review T2-13 (zweite Runde): Ablauf, Slots, Bremse, Bindung ===========
+// Alle ueber die ECHTE Route-Factory mit injizierter Uhr. ROUTE_TENANT ist der Default aus
+// requestTenantFromHeader/postConfirmation oben.
+const ROUTE_TENANT = "route-test-tenant";
+const ROUTE_KEY = deriveConfirmationKey(ROUTE_SECRET);
+const ROUTE_CLOCK_START = Date.parse("2026-09-24T15:00:00Z");
+const FUTURE_SLOT = 2;
+const WINDOWS_UNTIL_EXPIRED = 2;
+const EMPTY_ATTEMPTS_BEYOND_LIMIT = MAX_FAILED_CONFIRMATIONS_PER_WINDOW + 1;
+
+function confirmBody(code, extra = {}) {
+  return { to: ROUTE_TARGET, objective: ROUTE_OBJECTIVE, ...extra, confirmation_code: code };
+}
+
+function makeRouteClock() {
+  let nowMs = ROUTE_CLOCK_START;
+  return {
+    now: () => nowMs,
+    advance: (deltaMs) => {
+      nowMs += deltaMs;
+    },
+  };
+}
+
+async function withRouteClock(run, options = {}) {
+  const clock = makeRouteClock();
+  const app = await mountConfirmationRoutes({ now: clock.now, ...options });
+  try {
+    await run({ base: app.base, clock });
+  } finally {
+    await app.close();
+  }
+}
+
+async function issueCode(base, extra = {}) {
+  const issued = await postConfirmation(base, { to: ROUTE_TARGET, objective: ROUTE_OBJECTIVE, ...extra });
+  return issued.json.confirmation.code;
+}
+
+test("Route-Ablauf (injizierte Uhr): unverbrauchter Code gilt im Folgefenster, zwei Fenster spaeter nicht mehr", async () => {
+  await withRouteClock(async ({ base, clock }) => {
+    const codeA = await issueCode(base, { objective: "Anliegen A" });
+    const codeB = await issueCode(base, { objective: "Anliegen B" });
+    clock.advance(CONFIRMATION_WINDOW_MS);
+    const inNextWindow = await postConfirmation(base, confirmBody(codeA, { objective: "Anliegen A" }));
+    assert.equal(inNextWindow.json.confirmed, true, "Positiv-Kontrolle: vorheriges Fenster wird angenommen");
+    clock.advance(CONFIRMATION_WINDOW_MS * (WINDOWS_UNTIL_EXPIRED - 1));
+    const expired = await postConfirmation(base, confirmBody(codeB, { objective: "Anliegen B" }));
+    assert.equal(expired.json.confirmed, false, "unverbrauchter Code nach Ablauf -> confirmed:false");
+  });
+});
+
+test("Route: verbrauchter Code ist auch im FOLGEFENSTER nicht erneut gueltig (Einmal-Verbrauch bis Annahmeende)", async () => {
+  await withRouteClock(async ({ base, clock }) => {
+    const code = await issueCode(base);
+    const first = await postConfirmation(base, confirmBody(code));
+    assert.equal(first.json.confirmed, true, "erster Verbrauch gilt");
+    clock.advance(CONFIRMATION_WINDOW_MS);
+    const replay = await postConfirmation(base, confirmBody(code));
+    assert.equal(replay.json.confirmed, false, "Replay im Folgefenster wird abgelehnt");
+  });
+});
+
+test("Route: Code aus altem Slot wird abgelehnt, der frische Slot-Code gilt", async () => {
+  await withRouteClock(async ({ base }) => {
+    const oldCode = await issueCode(base);
+    assert.equal((await postConfirmation(base, confirmBody(oldCode))).json.confirmed, true);
+    const freshCode = await issueCode(base);
+    assert.notEqual(freshCode, oldCode, "nach Verbrauch ein neuer Code");
+    const old = await postConfirmation(base, confirmBody(oldCode));
+    assert.equal(old.json.confirmed, false, "Code des alten Slots -> confirmed:false");
+    const fresh = await postConfirmation(base, confirmBody(freshCode));
+    assert.equal(fresh.json.confirmed, true, "Code des aktuellen Slots gilt");
+  });
+});
+
+test("Route: Code eines noch nicht ausgestellten Slots wird abgelehnt (nur der aktuelle Slot je Fenster zaehlt)", async () => {
+  await withRouteClock(async ({ base, clock }) => {
+    const canonical = canonicalCallRequest({ to: ROUTE_TARGET, args: { to: ROUTE_TARGET, objective: ROUTE_OBJECTIVE } });
+    const derive = (slot) =>
+      issueConfirmationCode({ key: ROUTE_KEY, tenantId: ROUTE_TENANT, canonical, nowMs: clock.now(), slot }).code;
+    assert.equal(derive(0), await issueCode(base), "Positiv-Kontrolle: Test-Ableitung == Route-Ausstellung");
+    const future = await postConfirmation(base, confirmBody(derive(FUTURE_SLOT)));
+    assert.equal(future.json.confirmed, false, "Zukunfts-Slot -> confirmed:false (frueher bis zu 8 Slots geprueft)");
+    const current = await postConfirmation(base, confirmBody(derive(0)));
+    assert.equal(current.json.confirmed, true, "der aktuelle Slot-Code gilt weiterhin");
+  });
+});
+
+test("Route: Fehlversuchsbremse sperrt nach MAX_FAILED_CONFIRMATIONS_PER_WINDOW Fehlversuchen auch den richtigen Code bis Fensterende", async () => {
+  await withRouteClock(async ({ base, clock }) => {
+    const code = await issueCode(base);
+    for (let attempt = 0; attempt < MAX_FAILED_CONFIRMATIONS_PER_WINDOW; attempt++) {
+      assert.equal((await postConfirmation(base, confirmBody("ZZZZZZ"))).json.confirmed, false);
+    }
+    const locked = await postConfirmation(base, confirmBody(code));
+    assert.equal(locked.json.confirmed, false, "gesperrt: auch der richtige Code wird abgelehnt");
+    clock.advance(CONFIRMATION_WINDOW_MS);
+    const afterWindow = await postConfirmation(base, confirmBody(code));
+    assert.equal(afterWindow.json.confirmed, true, "neues Fenster: Sperre vorbei, Code (Vorfenster) gilt");
+  });
+});
+
+test("Route: leere Codes zaehlen nicht als Fehlversuch (kein Rateversuch)", async () => {
+  await withRouteClock(async ({ base }) => {
+    const code = await issueCode(base);
+    for (let attempt = 0; attempt < EMPTY_ATTEMPTS_BEYOND_LIMIT; attempt++) {
+      assert.equal((await postConfirmation(base, confirmBody(""))).json.confirmed, false);
+    }
+    assert.equal((await postConfirmation(base, confirmBody(code))).json.confirmed, true);
+  });
+});
+
+test("Route: Fehlversuchsbremse ist je Mandant - Fehlversuche von A sperren B nicht", async () => {
+  await withRouteClock(async ({ base }) => {
+    for (let attempt = 0; attempt < MAX_FAILED_CONFIRMATIONS_PER_WINDOW; attempt++) {
+      await postConfirmation(base, confirmBody("ZZZZZZ"), "tenant-a");
+    }
+    const issuedB = await postConfirmation(base, { to: ROUTE_TARGET, objective: ROUTE_OBJECTIVE }, "tenant-b");
+    const confirmedB = await postConfirmation(base, confirmBody(issuedB.json.confirmation.code), "tenant-b");
+    assert.equal(confirmedB.json.confirmed, true);
+  });
+});
+
+test("Route: geaenderte language wird abgelehnt, geaendertes briefing/context bestaetigt trotzdem", async () => {
+  await withRouteClock(
+    async ({ base }) => {
+      const issued = { language: "de", briefing: "alt", context: { summary: "alt" } };
+      const code = await issueCode(base, issued);
+      const otherLanguage = await postConfirmation(base, confirmBody(code, { ...issued, language: "en" }));
+      assert.equal(otherLanguage.status, HTTP_OK_ROUTE, "Sprache ist freigeschaltet (kein 400 vor der Pruefung)");
+      assert.equal(otherLanguage.json.confirmed, false, "geaenderte language -> confirmed:false");
+      const reworded = { ...issued, briefing: "neu formuliert", context: { summary: "neu" } };
+      const ok = await postConfirmation(base, confirmBody(code, reworded));
+      assert.equal(ok.json.confirmed, true, "briefing/context sind nicht gebunden");
+    },
+    { languageEnabled: true },
+  );
 });
