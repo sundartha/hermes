@@ -1537,10 +1537,10 @@ export function registerTools(
   // nie lieferte - Name/Titel/Statuszeilen jetzt umbenannt (Owner-Entscheidung
   // 2026-09-22, Breaking Change gewollt, kein Alias).
   // ACHTUNG Deploy-Reihenfolge: die WIDGET_CALL-Karte (src/ui/widgets/call.html) ruft
-  // diesen Toolnamen bisher noch unter dem ALTEN Namen "get_transcript" ab (eigene
-  // Konstante dort, nicht ueber diese Datei geteilt) - dieser Aufruf schlaegt fehl, bis
-  // die Karte in T2-12 auf "get_call_result" nachgezogen ist. T2-11 darf deshalb nicht
-  // ohne T2-12 gemergt/deployed werden (Deploy-Vorbedingung, s. owner_punkte).
+  // diesen Toolnamen bisher noch unter dem frueheren, in T2-11 abgeloesten Namen ab
+  // (eigene Konstante dort) - schlaegt fehl, bis die Karte in T2-12 auf
+  // "get_call_result" nachgezogen ist. T2-11 darf gemergt (Plan sieht das vor), aber
+  // nicht VOR T2-12 deployed werden (Deploy-Vorbedingung, s. owner_punkte).
   uiTool(
     "get_call_result",
     {
