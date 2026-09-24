@@ -216,13 +216,15 @@ function researchBoundaryLine(b, { lookupAvailable, consultAvailable }) {
 // weg (D8). Die beiden Kalender-/Buchungs-Zeilen sind seit P1b unbedingt (Owner-
 // Entscheidung E1) und bleiben es. Die Recherche-Zeile und die Werkzeug-Sparsamkeit
 // decken die vierte neu geschlossene Telefonie-Luecke (Faehigkeits-Ehrlichkeit +
-// Werkzeug-Sparsamkeit); davor steht das unbedingte Beratungsverbot. Die
+// Werkzeug-Sparsamkeit); davor steht das unbedingte Beratungsverbot und - nur ausgehend -
+// die Zweckbindung (kein Werbe-, Kampagnen- oder Belaestigungsauftrag). Die
 // Verzweigung bleibt hier (EINE Quelle, P11 D1) - nur die Zeilen kommen aus dem
 // Sprach-Baustein.
 function boundaryRules({
   loc,
   settings: s,
   owner,
+  isInbound,
   lookupAvailable,
   consultAvailable,
   mandateScopeGiven,
@@ -251,8 +253,11 @@ function boundaryRules({
       : b.noAskingCounterpartAboutOwner(owner),
     // Beratungsverbot: unbedingt, unabhaengig von Richtung, Werkzeugen und Mandat.
     b.noLicensedAdvice,
-    b.toolThrift,
   );
+  // Zweckbindung: nur ausgehend, dort unbedingt (auch beim Anruf an die eigene Nummer).
+  // Eingehend gibt es keinen vorab formulierten Auftrag, den der Agent ablehnen koennte.
+  if (!isInbound) lines.push(b.noProhibitedPurpose);
+  lines.push(b.toolThrift);
   return lines.join("\n");
 }
 

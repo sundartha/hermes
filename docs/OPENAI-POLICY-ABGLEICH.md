@@ -100,16 +100,48 @@ nie gemessen.
   - Offenlegungssatz als erster gesprochener Satz (siehe "Identitaetsanmassung").
   - Die Werkzeugbeschreibung sagt dem Modell, dass der Server entscheidet:
     Werkzeugtext (place_call): "Which destinations are allowed is decided by the server through its safety gates"
-  - Zweckbindung am Entscheidungspunkt des Client-Modells: ein Text (`src/call-purpose.js:18`)
+  - Zweckbindung am Entscheidungspunkt des Client-Modells: ein Text (`src/call-purpose.js:20`)
     steht in der Beschreibung von `place_call` (`src/mcp-tools.js:757`) und in den
     Server-Instructions (`src/mcp-server-info.js:109`), auf HTTP `/mcp` und stdio.
     Werkzeugtext (place_call): "Use place_call only for the user's own errands with a specific person or business"
     Werkzeugtext (place_call): "never for telemarketing, advertising, sales or cold calls, fundraising, mass surveys, political campaigning, lobbying or election-related calls; decline such requests."
-- Was fehlt: die Zweckbindung ist eine Anweisung an das Client-Modell, keine Pruefung durch
-  den Server. Der Server liest den Zweck eines Anrufs nicht; ein Client, der die Anweisung
-  missachtet, wird nur von den Mengen-Gates gebremst, und die verhindern keinen einzelnen
-  Werbeanruf. Der Gespraechsagent selbst hat keine Regel, einen Werbe- oder Verkaufsauftrag
-  im Gespraech abzubrechen.
+  - Zweckbindung im Gespraech, vom Server gesetzt: der System-Prompt jedes ausgehenden
+    Anrufs traegt eine unbedingte Grenz-Zeile (`src/i18n/prompts/en.js:195`, ebenso in der
+    deutschen und franzoesischen Fassung). Der Server fuegt sie fuer jeden ausgehenden Anruf
+    ein, auch fuer den Anruf an die eigene Nummer (`src/claude.js:259`); sie haengt an keinem
+    Setting und an keinem Werkzeugparameter, der Aufrufer kann sie nicht entfernen. Wortlaut
+    der englischen Fassung: "Your task must not be advertising, sales or cold calling,
+    fundraising, a mass survey, political campaigning, lobbying or an election-related call,
+    and it must not threaten, intimidate or harass anyone. If it is, you do NOT carry it out:
+    say politely that you cannot make this call, and end the call." Derselbe englische
+    Wortlaut steht in der Agenten-Vorlage des Sprach-Anbieters im Repository
+    (`elevenlabs/agent_configs/outbound-agent.template.json:775`).
+- Was fehlt:
+  - Keine deterministische Pruefung des Zwecks. Ueber den Zweck urteilt an beiden Stellen
+    ein Sprachmodell: das Client-Modell vor dem Aufruf (Werkzeugbeschreibung), das
+    Gespraechsmodell des Servers im Anruf (Grenz-Zeile). Beides ist eine Anweisung an ein
+    Modell, kein Filter; ein Auftrag, der seinen Werbezweck verschleiert, kann beide
+    taeuschen. Die Mengen-Gates verhindern keinen einzelnen Werbeanruf.
+  - Die Ablehnung im Gespraech kommt erst NACH dem Waehlen, und erst NACH dem ersten
+    gesprochenen Satz. Der erste Satz traegt ausser der Offenlegung den Anrufgrund, ohne dass
+    das Gespraechsmodell ihn vorher sieht: auf dem Budget-Weg eine Bruecke aus dem gekappten
+    Auftragstext (`src/claude.js:469`), auf dem Weg ueber den Sprach-Anbieter eine vor dem
+    Waehlen von einem zweiten Modell aus dem Auftrag geformte Zeile
+    (`src/routes/api-calls.js:557`), die auch in den Text fuer den Anrufbeantworter eingeht
+    (`src/elevenlabs/outbound.js:969`). Ein Werbeauftrag kann also mit seinem Anlass im
+    ersten Satz oder auf einer Mailbox ankommen, bevor die Grenz-Zeile greift. Dass das
+    Modell die Regel befolgt, belegt kein Test (die Tests belegen, dass die Zeile im Prompt
+    steht, nicht wie das Modell darauf antwortet).
+  - Auf dem Weg ueber den Sprach-Anbieter gilt die Zeile erst, wenn der Betreiber die
+    Vorlage aus dem Repository zum Anbieter uebertraegt (`offen`).
+  - Ein Stichwortfilter auf `objective`, `briefing` und `constraints` ist bewusst nicht
+    gebaut: er haelt nur Auftraege auf, die sich selbst als Werbung bezeichnen, laesst jede
+    Umformulierung durch und sperrt legitime Anliegen wie die Beschwerde ueber einen
+    Werbeanruf. Eine Pruefung durch ein Modell vor dem Waehlen ist nicht gebaut. Auf dem Weg
+    ueber den Sprach-Anbieter laeuft vor dem Waehlen ohnehin ein Modellaufruf (die
+    Eroeffnungszeile oben), der sie ohne zusaetzliche Wartezeit mittragen koennte; bei dessen
+    Ausfall faellt entweder der Schutz weg oder jeder ausgehende Anruf aus. Das ist eine
+    Entscheidung des Betreibers.
 - Status: `teilweise`. Luecke 1 in Teil C.
 
 ### Drohung, Einschuechterung, Belaestigung
@@ -118,9 +150,13 @@ nie gemessen.
 
 - Einschlaegig: ja. Ein Anruf in fremdem Auftrag kann als Belaestigung eingesetzt werden.
 - Mechanismen: Wiederholungs-Grenze je Ziel und Stundenlimit (siehe oben), Sperrliste,
-  Offenlegung (der Angerufene erfaehrt, dass eine KI im Auftrag von jemandem anruft).
+  Offenlegung (der Angerufene erfaehrt, dass eine KI im Auftrag von jemandem anruft). Die
+  Zweckbindung im Gespraech (siehe "Telemarketing") verbietet dem Agenten ausdruecklich,
+  jemanden zu bedrohen, einzuschuechtern oder zu belaestigen, und verlangt, einen solchen
+  Auftrag abzulehnen und das Gespraech zu beenden.
 - Was fehlt: kein Inhaltsfilter fuer `objective`, `briefing` oder `constraints`; ein einzelner
-  bedrohender Anruf wird durch kein Gate erkannt.
+  bedrohender Anruf wird durch kein Gate erkannt, nur durch das Gespraechsmodell, und erst
+  nach dem Waehlen (Grenzen wie unter "Telemarketing").
 - Status: `teilweise`. Luecke 1 in Teil C (Zweckbindung) deckt den Kern.
 
 ### Identitaetsanmassung (Impersonation)
@@ -131,8 +167,8 @@ nie gemessen.
 
 - Einschlaegig: ja.
 - Mechanismus, Budget-/Telnyx-Weg: der erste gesprochene Satz ist der Offenlegungssatz
-  (`firstSpokenSentence`, `src/claude.js:471-473`), gebaut von `disclosureSentence`
-  (`src/claude.js:426`) aus dem Sprachbaustein `disclosure` (englische Fassung
+  (`firstSpokenSentence`, `src/claude.js:476-478`), gebaut von `disclosureSentence`
+  (`src/claude.js:431`) aus dem Sprachbaustein `disclosure` (englische Fassung
   `src/i18n/locales.js:622-624`). Er nennt die KI-Eigenschaft und den Auftraggeber (den beim
   Mandanten hinterlegten Namen) und sagt, dass das Gespraech fuer den Auftraggeber
   zusammengefasst wird.
@@ -145,7 +181,7 @@ nie gemessen.
   lange Satz zum Auftraggeber; die KI-Kennzeichnung bleibt. Voraussetzungen: exakte
   String-Gleichheit von Ziel und hinterlegter Nummer (`src/callee-is-owner.js:48-49`), ein
   ausdruecklich freigeschalteter Mandant (`src/callee-is-owner.js:68`) und ein Schalter, der
-  per Code-Default aus ist (`src/config.js:1915-1917`). Budget-Weg: `src/claude.js:471-473`;
+  per Code-Default aus ist (`src/config.js:1915-1917`). Budget-Weg: `src/claude.js:476-478`;
   Sprach-Agenten-Weg: `ownerFirstMessage` (`src/elevenlabs/outbound.js:1165`).
 - Der hinterlegte Auftraggeber-Name wird gegen keinen Identitaetsnachweis geprueft. Beim
   Web-Login uebernimmt der Server Vor- und Nachname aus dem Profil des Login-Anbieters
@@ -189,7 +225,7 @@ nie gemessen.
     Achtung: die Auftragsnotizen SIND das `briefing` (`src/routes/api-calls.js:525`); das
     `briefing` kann also bei dieser Suche ankommen.
   - Nachschlag WAEHREND des Anrufs: das Werkzeug `look_up` des Gespraechsmodells
-    (`src/research/in-call.js:18`), auf dem Budget-/Telnyx-Weg (`src/claude.js:651`) und auf
+    (`src/research/in-call.js:18`), auf dem Budget-/Telnyx-Weg (`src/claude.js:656`) und auf
     dem Sprach-Agenten-Weg ueber einen Webhook (`src/routes/webhooks-elevenlabs.js:270`).
     Voraussetzungen: Schalter `LOOKUP_ENABLED` (`src/config.js:649`, Code-Default aus), ein
     hinterlegter Schluessel fuer Exa (`src/research/registry.js:56`) und das Profil-Recht
@@ -214,7 +250,7 @@ nie gemessen.
     waehrend des Anrufs nichts zum Vergleichen.
   - Die Werkzeugbeschreibung von `look_up` auf dem Budget-/Telnyx-Weg verbietet, Namen,
     Nummern, Adressen, Gesundheits- oder Geldangaben des Gegenuebers zu suchen
-    (`src/i18n/prompts/en.js:329`). Das ist eine Anweisung an das Modell; serverseitig
+    (`src/i18n/prompts/en.js:333`). Das ist eine Anweisung an das Modell; serverseitig
     durchgesetzt ist nur der Filter oben.
   - Das Roh-Transkript auf unserer Seite wird am Anrufende geleert
     (`src/telephony/call-finish.js:350`, in `finishCall`); der Sprach-Agenten-Weg endet ueber
@@ -249,7 +285,7 @@ nie gemessen.
   (`src/i18n/prompts/en.js:157`). Eine unbedingte Grenz-Zeile verbietet ihm eigene
   medizinische, rechtliche, steuerliche oder finanzielle Beratung
   (`src/i18n/prompts/en.js:191`, ebenso in der deutschen und franzoesischen Fassung); sie
-  steht in jedem System-Prompt, ein- wie ausgehend (`src/claude.js:253`). Derselbe
+  steht in jedem System-Prompt, ein- wie ausgehend (`src/claude.js:255`). Derselbe
   Wortlaut steht in der Agenten-Vorlage des Sprach-Anbieters
   (`elevenlabs/agent_configs/outbound-agent.template.json:775`).
 - Was fehlt: die Vorlage ist die Datei im Repository, nicht die Konfiguration beim
@@ -272,11 +308,13 @@ nie gemessen.
 > "political campaigning, lobbying, foreign or domestic election interference, or demobilization activities" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people")
 
 - Einschlaegig: ja. Massenanrufe sind ein klassisches Kampagnenwerkzeug.
-- Mechanismus: die Mengen-Gates (Stundenlimit, Ziel-Grenze, Kostendecke) und die
+- Mechanismus: die Mengen-Gates (Stundenlimit, Ziel-Grenze, Kostendecke), die
   Zweckbindung in Werkzeugbeschreibung und Server-Instructions, die politische Kampagnen,
-  Lobbying und wahlbezogene Anrufe ausdruecklich ausschliesst (Stellen und Wortlaut siehe
+  Lobbying und wahlbezogene Anrufe ausdruecklich ausschliesst, und dieselbe Zweckbindung
+  als vom Server gesetzte Grenz-Zeile im Gespraech (Stellen und Wortlaut siehe
   "Telemarketing").
-- Was fehlt: dieselbe Grenze wie dort - keine serverseitige Pruefung des Zwecks.
+- Was fehlt: dieselben Grenzen wie dort - keine deterministische Pruefung des Zwecks, die
+  Ablehnung im Gespraech erst nach dem Waehlen.
 - Status: `teilweise`. Luecke 1 in Teil C.
 
 ### Minderjaehrige
@@ -424,7 +462,7 @@ Werkzeugtext (place_call): "Through this the agent books NOTHING and gets NO cal
 Der Rahmen ist auf 1000 Zeichen begrenzt (`src/routes/_validation.js:50`). Die Werte fuer
 Angebote ausserhalb des Rahmens stammen aus einer Quelle (`src/store/defaults.js:417`); auf dem
 Budget-/Telnyx-Weg setzt der Prompt `accept_best` so um: das beste Angebot annehmen und als
-Nachricht festhalten (`src/i18n/prompts/en.js:226-227`).
+Nachricht festhalten (`src/i18n/prompts/en.js:230-231`).
 
 **Unterschied zwischen den Sprechwegen.** Welcher Weg einen Anruf fuehrt, entscheidet ein
 globaler Schalter (`src/config.js:808`, Code-Default aus; ausgewertet in
@@ -544,17 +582,25 @@ Sache des Rechtstextes.
 
 ## Teil C: Luecken
 
-1. **Zweckbindung nur als Anweisung**: Telemarketing, Werbe- und Verkaufsanrufe und
-   politische Kampagnen schliessen Beschreibung von `place_call` und Server-Instructions
-   aus (`src/call-purpose.js:18`); eine serverseitige Pruefung des Zwecks gibt es nicht, und
-   der Gespraechsagent bricht einen solchen Auftrag nicht ab. Klauseln: "telemarketing",
-   "spam", "political campaigning".
+1. **Zweckbindung nur als Anweisung an Modelle**: Telemarketing, Werbe- und
+   Verkaufsanrufe, politische Kampagnen und Belaestigung schliessen Beschreibung von
+   `place_call` und Server-Instructions aus (`src/call-purpose.js:20`), und der Server setzt
+   dieselbe Grenze als unbedingte Zeile in den Prompt jedes ausgehenden Anrufs
+   (`src/claude.js:259`): der Agent soll einen solchen Auftrag ablehnen und das Gespraech
+   beenden. Eine deterministische Pruefung des Zwecks gibt es nicht; die Ablehnung im
+   Gespraech kommt erst nach dem Waehlen und nach dem ersten Satz, der den Anrufgrund
+   bereits traegt (auch auf einem Anrufbeantworter), ob das Modell sie befolgt, belegt kein
+   Test, und auf dem Weg ueber den Sprach-Anbieter wirkt sie erst nach Uebertragung der
+   Vorlage durch den Betreiber (`offen`). Ob vor dem Waehlen ein Modell den Zweck prueft
+   (etwa im ohnehin laufenden Modellaufruf fuer die Eroeffnungszeile) und was bei dessen
+   Ausfall gilt, entscheidet der Betreiber. Klauseln:
+   "telemarketing", "spam", "political campaigning", "harassment".
 2. **Breiter Kontext-Trichter**: `briefing` fordert Chat-Kontext an
    (`src/mcp-tools.js:1186`), `context` ist ein zweites Sammelfeld. Klauseln: "full
    conversation history ... broad contextual fields", "Collection minimization",
    "Data boundaries".
 3. **Minimierung fuer Gesundheitsangaben und amtliche Kennnummern nur als Anweisung** an
-   das Client-Modell (`src/call-purpose.js:18`); kein serverseitiger Filter in `briefing`,
+   das Client-Modell (`src/call-purpose.js:20`); kein serverseitiger Filter in `briefing`,
    `key_facts`, `objective` (`src/mcp-tools.js:1186`), keine Einwilligungsstelle.
    Klauseln: "Restricted data", "Regulated Sensitive Data".
 4. **`on_out_of_scope` wirkt auf dem Sprach-Agenten-Weg nicht**
@@ -616,8 +662,8 @@ src/telephony/outbound-gates.js:900 | name: "budget"
 src/telephony/outbound-gates.js:913 | name: "minutes"
 src/telephony/outbound-gates.js:774 | name: "owner_name"
 src/mcp-server-info.js:109 | CALL_PURPOSE_RULE;
-src/claude.js:471-473 | ownerOpeningFor(call) || disclosureSentence(call)
-src/claude.js:426 | export function disclosureSentence(call)
+src/claude.js:476-478 | ownerOpeningFor(call) || disclosureSentence(call)
+src/claude.js:431 | export function disclosureSentence(call)
 src/i18n/locales.js:622-624 | this is an AI assistant calling on behalf of
 elevenlabs/agent_configs/outbound-agent.template.json:810 | "first_message": "Hello, this is an AI assistant calling on behalf of {{owner_name}}.
 src/elevenlabs/outbound.js:19 | der Satz ist first_message der AGENTEN-Konfiguration
@@ -628,7 +674,7 @@ src/elevenlabs/outbound.js:1165 | function ownerFirstMessage
 src/research/sanitize.js:17 | RESEARCH_EGRESS_FIELDS = Object.freeze(["objective", "ownerNotes", "constraints"])
 src/routes/api-calls.js:525 | ownerNotes: b.briefing
 src/config.js:624 | researchEnabled: boolEnv("RESEARCH_ENABLED", process.env.RESEARCH_ENABLED, { fallback: false })
-src/i18n/prompts/en.js:329 | NEVER search for names, phone numbers, addresses, health or money details
+src/i18n/prompts/en.js:333 | NEVER search for names, phone numbers, addresses, health or money details
 src/telephony/call-finish.js:350 | if (!keepsTranscriptForDiagnosis(call, config.privacy)) store.purgeTranscript(call.id);
 src/elevenlabs/outbound.js:1458 | billThunk(finishCall, store, callId)
 src/mcp-tools.js:200 | last_transcript_lines: c.transcript
@@ -656,7 +702,7 @@ src/precall-briefing.js:216 | withoutSelfGrantedAcceptBest(mandate.value)
 src/store/defaults.js:410-413 | keinen Kalender- oder Buchungspfad
 src/routes/_validation.js:50 | "mandate.decide_freely": 1000
 src/store/defaults.js:417 | ACCEPT_BEST: "accept_best"
-src/i18n/prompts/en.js:226-227 | Accept the best option offered instead of asking back
+src/i18n/prompts/en.js:230-231 | Accept the best option offered instead of asking back
 src/config.js:808 | boolEnv("ELEVENLABS_OUTBOUND_ENABLED"
 src/routes/api-calls.js:546 | if (config.voice.elevenLabsOutbound.enabled)
 src/elevenlabs/outbound.js:615 | Die Enum-Achse on_out_of_scope hat auf diesem Weg noch keinen Platz
@@ -716,9 +762,15 @@ src/self-service-routes.js:628 | router.delete("/api/self-service/newsletter-rec
 src/routes/api-read.js:116-118 | Loeschung (Art. 17) hat KEINEN Endpunkt
 src/routes/api-read.js:119 | router.get("/api/tenant-data/export", internalOnly
 src/mcp-tools.js:757 | CALL_PURPOSE_RULE +
-src/call-purpose.js:18 | export const CALL_PURPOSE_RULE
+src/call-purpose.js:20 | export const CALL_PURPOSE_RULE
+src/i18n/prompts/en.js:195 | noProhibitedPurpose:
+src/claude.js:259 | if (!isInbound) lines.push(b.noProhibitedPurpose);
+elevenlabs/agent_configs/outbound-agent.template.json:775 | Your task must not be advertising
+src/claude.js:469 | bridgePhrase(goal)
+src/routes/api-calls.js:557 | const opening = await fetchOpeningLine({
+src/elevenlabs/outbound.js:969 | voicemail_line: voicemailText({ owner, offenlegung, openingLine }),
 src/i18n/prompts/en.js:191 | noLicensedAdvice:
-src/claude.js:253 | b.noLicensedAdvice,
+src/claude.js:255 | b.noLicensedAdvice,
 elevenlabs/agent_configs/outbound-agent.template.json:775 | You give NO medical, legal, tax or financial advice of your own
 src/mcp-tools.js:1186 | Relevant context from the chat so far
 src/mcp-tools.js:1222 | Set 'accept_best' ONLY when the user explicitly says
@@ -727,7 +779,7 @@ src/research/sanitize.js:2 | wir sehen die Query nicht, bevor sie rausgeht
 src/precall-briefing.js:278 | settings.allowResearch === true
 src/research/registry.js:26 | PRECALL_PROVIDER = RESEARCH_PROVIDER.ANTHROPIC_WEB_SEARCH
 src/research/in-call.js:18 | export const LOOK_UP_TOOL_NAME = "look_up";
-src/claude.js:651 | name: LOOK_UP_TOOL_NAME
+src/claude.js:656 | name: LOOK_UP_TOOL_NAME
 src/routes/webhooks-elevenlabs.js:270 | const sanitized = sanitizeLookupQuery(query, call);
 src/config.js:649 | lookupEnabled: boolEnv("LOOKUP_ENABLED", process.env.LOOKUP_ENABLED, { fallback: false })
 src/research/registry.js:56 | if (!config.research.exaApiKey) return null;

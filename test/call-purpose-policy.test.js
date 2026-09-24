@@ -6,6 +6,10 @@
 //   2. Der Text schliesst die verbotenen Zwecke und die eingeschraenkten Daten ausdruecklich aus.
 //   3. Das Beratungsverbot steht in jedem Sprach-Baustein, im gebauten System-Prompt beider
 //      Richtungen und woertlich in der Agenten-Vorlage des Sprach-Anbieters.
+//   4. Die Zweckbindung im Gespraech (Werbe-, Kampagnen- oder Belaestigungsauftrag wird
+//      abgelehnt und das Gespraech beendet) steht in jedem Sprach-Baustein, im gebauten
+//      System-Prompt NUR ausgehend und woertlich in der Agenten-Vorlage. Sie setzt der Server,
+//      nicht der Aufrufer (der Anruf an die eigene Nummer: test/callee-is-owner-opening.test.js).
 //
 // Testnamen tragen KEIN Katalog-/ABNAHME-Praefix (package.json i18nCatalogPattern/
 // abnahmePattern), sonst landet dieser Test im falschen Lauf.
@@ -40,6 +44,11 @@ const RAW_TOOLS_LIST_RESULT = z.object({ tools: z.array(z.any()) });
 function adviceLineOf(lang) {
   const { boundaries } = LOCALES[lang].prompt;
   return boundaries.noLicensedAdvice;
+}
+
+function purposeLineOf(lang) {
+  const { boundaries } = LOCALES[lang].prompt;
+  return boundaries.noProhibitedPurpose;
 }
 
 function templatePromptText() {
@@ -135,4 +144,28 @@ test("Beratungsverbot: jeder Sprach-Baustein fuehrt die Zeile, das Golden der ge
 test("Beratungsverbot: die Agenten-Vorlage des Sprach-Anbieters traegt den englischen Wortlaut", () => {
   const wording = adviceLineOf("en").replace(/^- /, "");
   assert.ok(templatePromptText().includes(wording), "Vorlage ohne Beratungsverbot oder mit abweichendem Wortlaut");
+});
+
+// Gegenprobe zum Golden wie beim Beratungsverbot: das Golden ist gegen den gebauten Prompt
+// byte-identisch gepinnt (test/callee-is-owner-opening.test.js, beide Richtungen).
+test("Zweckbindung im Gespraech: jeder Sprach-Baustein fuehrt die Zeile, nur der ausgehende Prompt enthaelt sie", () => {
+  const golden = JSON.parse(fs.readFileSync(GOLDEN_PATH, "utf8"));
+  for (const [lang, byDirection] of Object.entries(golden.systemPrompt)) {
+    const line = purposeLineOf(lang);
+    assert.equal(typeof line, "string", `${lang}: noProhibitedPurpose fehlt`);
+    assert.ok(byDirection.outbound.includes(line), `${lang}/outbound: Zweckbindung fehlt im Prompt`);
+    assert.ok(!byDirection.inbound.includes(line), `${lang}/inbound: Zweckbindung darf eingehend nicht stehen`);
+  }
+});
+
+test("Zweckbindung im Gespraech: die Zeile verlangt Ablehnen und Beenden, nicht nur Zurueckhaltung", () => {
+  const line = purposeLineOf("en");
+  for (const term of ["advertising", "cold calling", "political campaigning", "harass", "do NOT carry it out", "end the call"]) {
+    assert.ok(line.includes(term), `Zweckbindung nennt "${term}" nicht`);
+  }
+});
+
+test("Zweckbindung im Gespraech: die Agenten-Vorlage des Sprach-Anbieters traegt den englischen Wortlaut", () => {
+  const wording = purposeLineOf("en").replace(/^- /, "");
+  assert.ok(templatePromptText().includes(wording), "Vorlage ohne Zweckbindung oder mit abweichendem Wortlaut");
 });
