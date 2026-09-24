@@ -1,4 +1,4 @@
-// OUTBOUND-E3a (F2a): der MCP-Rueckweg (await_call_event/get_transcript) bekommt Ausgang
+// OUTBOUND-E3a (F2a): der MCP-Rueckweg (await_call_event/get_call_result) bekommt Ausgang
 // UND Grund - der Weg, in den die Server-Instruktionen das Modell tatsaechlich schicken.
 // Offline, kein echter Anruf: ein lokaler HTTP-Mock spielt das Gateway (GATEWAY_URL),
 // Muster test/mcp-tools-language.test.js#withGateway. Testnamen ohne Katalog-Praefix

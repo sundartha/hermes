@@ -108,15 +108,15 @@ const EXPECTED_MARKERS = {
   "place_call.diagnostic": ["OWN", "NOT", "ONLY"],
   get_call_status: [],
   "get_call_status.call_id": [],
-  get_transcript: ["NEVER"],
-  "get_transcript.call_id": [],
+  get_call_result: ["NEVER"],
+  "get_call_result.call_id": [],
   // S1-2c (Owner-Auftrag 15.08.2026): die Beschreibung war eine Luege ("Cancels a running
   // call cleanly") - der REST-Pfad zusichert seit S1-4 keinen bestaetigten Leitungs-Abbruch
   // mehr. Die neue, wahrheitsgemaesse Fassung traegt EINE Emphase (NOT guaranteed) -
   // bewusst nachgezogen statt die Emphase wegzuschreiben, Praezedenz max_duration_s/KS-P3.
   cancel_call: ["NOT"],
   "cancel_call.call_id": [],
-  get_my_number: [],
+  get_agent_number: [],
   list_calls: [],
   // INBOX-P3: das Negativ-Verbot am Tool-Entscheidungspunkt (Pre-Mortem R-11). Die drei
   // Marker sind die Verhaltensgarantie des Werkzeugs - CONSUMING (der Abruf verbraucht),

@@ -90,7 +90,7 @@ test("V3: unbekannter sub -> Tool-Fehler mit Re-Auth-Challenge (T2-05, NIE Owner
   });
   try {
     const token = await idp.sign({ sub: UNKNOWN_SUB });
-    const res = await post(`${srv.localUrl}/mcp`, token, toolCall("get_my_number"));
+    const res = await post(`${srv.localUrl}/mcp`, token, toolCall("get_agent_number"));
     assert.equal(res.status, HTTP_OK);
     assertReauthChallenge(await readToolResult(res));
     await waitForLog(srv, /\[audit\] auth_failed .*path=\/mcp grund=kein_tenant/);
@@ -114,7 +114,7 @@ test("V4: verifiziertes Token OHNE sub -> Tool-Fehler mit Re-Auth-Challenge (T2-
   });
   try {
     const token = await idp.sign({ email: "nosub@team.test" }, { noSubject: true });
-    const res = await post(`${srv.localUrl}/mcp`, token, toolCall("get_my_number"));
+    const res = await post(`${srv.localUrl}/mcp`, token, toolCall("get_agent_number"));
     assert.equal(res.status, HTTP_OK);
     assertReauthChallenge(await readToolResult(res));
     await waitForLog(srv, /\[audit\] auth_failed .*path=\/mcp grund=kein_tenant/);

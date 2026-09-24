@@ -231,7 +231,7 @@ test("E4-17: /mcp, gueltiges Token OHNE Tenant-Zuordnung -> Tool-Liste sichtbar,
     assert.equal(listRes.status, HTTP_OK);
     const listResult = await readToolResult(listRes);
     assert.ok(Array.isArray(listResult.tools) && listResult.tools.length > 0);
-    const callRes = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_my_number"));
+    const callRes = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_agent_number"));
     assert.equal(callRes.status, HTTP_OK);
     const result = await readToolResult(callRes);
     assertReauthChallenge(result);

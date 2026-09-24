@@ -54,7 +54,7 @@ function toolResultText(result) {
 }
 
 // ==================== Fall 1 (Abnahmekriterium 1) ====================
-test('P4 (T-19/T-20): get_transcript bei laufendem Anruf liefert isError + den lokalisierten Satz, nicht "Output validation error"', async () => {
+test('P4 (T-19/T-20): get_call_result bei laufendem Anruf liefert isError + den lokalisierten Satz, nicht "Output validation error"', async () => {
   // Sprache explizit gesetzt (statt aus dem Weltdefault abgeleitet): DEFAULT_LANGUAGE
   // ist ein modul-globaler Schalter (src/store/defaults.js), den config.js beim ERSTEN
   // Import auf den WORLD_DEFAULT_LANGUAGE_ENABLED-Wert DIESES Testprozesses dreht - das
@@ -69,7 +69,7 @@ test('P4 (T-19/T-20): get_transcript bei laufendem Anruf liefert isError + den l
     const res = await mcpPost(
       `${srv.localUrl}/mcp`,
       null,
-      toolCall("get_transcript", { call_id: "call_active1" }),
+      toolCall("get_call_result", { call_id: "call_active1" }),
     );
     const result = await readToolResult(res);
     assert.equal(result.isError, true, "laufender Anruf ist ein Fehlerergebnis im MCP-Sinn");
@@ -141,10 +141,10 @@ const SUCCESS_BODY_OF = new Map([
     { status: "in_progress", transcript: [], startedAt: new Date().toISOString() },
   ],
   [
-    "get_transcript",
+    "get_call_result",
     { status: "completed", transcript: [], summary: "Alles erledigt.", objectiveAchieved: true },
   ],
-  ["get_my_number", { agent: { number: "+491511234567" } }],
+  ["get_agent_number", { agent: { number: "+491511234567" } }],
   ["list_calls", { calls: [] }],
   ["check_inbox", { entries: [], remaining: 0 }],
   ["get_calendar", { calendar: [] }],
@@ -158,8 +158,8 @@ const ARGS_OF = new Map([
   ["await_call_event", { call_id: "call_1" }],
   ["answer_consult", { call_id: "call_1", event_id: "evt_1", status: "final", answers: ["ok"] }],
   ["get_call_status", { call_id: "call_1" }],
-  ["get_transcript", { call_id: "call_1" }],
-  ["get_my_number", {}],
+  ["get_call_result", { call_id: "call_1" }],
+  ["get_agent_number", {}],
   ["list_calls", {}],
   ["check_inbox", { include_seen: false }],
   ["get_calendar", {}],
@@ -219,10 +219,10 @@ test("P4 (T-19/T-20 Regel): jedes Werkzeug mit outputSchema liefert in jedem Rue
 
   // Der heute einzige bekannte fruehe Rueckgabepfad (Schritt 1): macht jemand ihn
   // rueckgaengig (return text(...) statt errText(...)), faellt dieser Lauf.
-  const getTranscript = withSchema.get("get_transcript").handler;
+  const getTranscript = withSchema.get("get_call_result").handler;
   await withMock({ body: { status: "active", transcript: [] } }, async () => {
     const result = await getTranscript({ call_id: "call_1" });
-    assert.equal(result.isError, true, "get_transcript bei laufendem Anruf bleibt isError");
+    assert.equal(result.isError, true, "get_call_result bei laufendem Anruf bleibt isError");
   });
 });
 
@@ -335,25 +335,25 @@ test("P4 (T-21/O-27 Wirkung): der ausgelieferte Consult-Text traegt die vier Wir
 
 // ==================== Fall 7 (Review-Runde 2, Befund 1) ====================
 // Reviewer-Befund: MCP_BASE_INSTRUCTIONS schickte das Modell auf "the result_summary
-// text", ohne zu sagen, WELCHES Werkzeug das Feld traegt (get_transcript) und dass das
-// auch bei status=failed gilt. get_transcript's eigene Beschreibung sagte "call this
+// text", ohne zu sagen, WELCHES Werkzeug das Feld traegt (get_call_result) und dass das
+// auch bei status=failed gilt. get_call_result's eigene Beschreibung sagte "call this
 // only once status=completed" - ein Tenant ohne Consult-Faehigkeit (Fall 4 oben; NICHT
 // notwendig der Produktions-Normalfall, s. dortiger Kommentar) hatte damit keinen
 // textuellen Weg zu result_summary fuer einen NICHT platzierten Anruf (status=failed).
-test("P4 (Review-Runde 2, Befund 1): MCP_BASE_INSTRUCTIONS nennt get_transcript und schliesst status=failed nicht aus", () => {
+test("P4 (Review-Runde 2, Befund 1): MCP_BASE_INSTRUCTIONS nennt get_call_result und schliesst status=failed nicht aus", () => {
   assert.match(
     MCP_BASE_INSTRUCTIONS,
-    /call get_transcript/,
+    /call get_call_result/,
     "das Modell muss wissen, WELCHES Werkzeug result_summary traegt",
   );
   assert.match(
     MCP_BASE_INSTRUCTIONS,
     /failed call/,
-    "der Basis-Block sagt ausdruecklich, dass get_transcript auch fuer einen fehlgeschlagenen Anruf gilt",
+    "der Basis-Block sagt ausdruecklich, dass get_call_result auch fuer einen fehlgeschlagenen Anruf gilt",
   );
 });
 
-test("P4 (Review-Runde 2, Befund 1): get_transcript-Beschreibung schliesst status=failed/cancelled NICHT mehr aus", () => {
+test("P4 (Review-Runde 2, Befund 1): get_call_result-Beschreibung schliesst status=failed/cancelled NICHT mehr aus", () => {
   const registrations = captureToolsWithConfig({
     identity: null,
     scopedTenant: null,
@@ -361,7 +361,7 @@ test("P4 (Review-Runde 2, Befund 1): get_transcript-Beschreibung schliesst statu
     consultAllowed: false,
     language: null,
   });
-  const description = registrations.get("get_transcript").config.description;
+  const description = registrations.get("get_call_result").config.description;
   assert.doesNotMatch(
     description,
     /only once get_call_status reports status=completed/,
@@ -371,13 +371,13 @@ test("P4 (Review-Runde 2, Befund 1): get_transcript-Beschreibung schliesst statu
 });
 
 // Funktionaler Beleg (kein reiner Text-Pin): ein Tenant OHNE Consult-Freigabe
-// (BASE_ENV CONSULT_ENABLED=false, wie Fall 4) ruft get_transcript fuer einen NICHT
+// (BASE_ENV CONSULT_ENABLED=false, wie Fall 4) ruft get_call_result fuer einen NICHT
 // platzierten Anruf (status=failed, failure_reason mit dem NOT_PLACED-Praefix) direkt
 // auf - der Pfad, den der Reviewer als kaputt beschrieben hat (place_call ->
 // failure_reason -> result_summary, ohne await_call_event). Erwartet: kein isError, der
 // lokalisierte Fehlschlagstext kommt an, nicht der Warte-Platzhalter und nicht das
 // rohe Diagnose-Token.
-test("P4 (Review-Runde 2, Befund 1): get_transcript liefert result_summary fuer einen NICHT platzierten Anruf, auch ohne Consult-Kanal", async () => {
+test("P4 (Review-Runde 2, Befund 1): get_call_result liefert result_summary fuer einen NICHT platzierten Anruf, auch ohne Consult-Kanal", async () => {
   const failureReason = `${NOT_PLACED}:invite-403-D51`;
   const seed = seedState({
     calls: [
@@ -395,13 +395,13 @@ test("P4 (Review-Runde 2, Befund 1): get_transcript liefert result_summary fuer 
     const res = await mcpPost(
       `${srv.localUrl}/mcp`,
       null,
-      toolCall("get_transcript", { call_id: "call_notplaced1" }),
+      toolCall("get_call_result", { call_id: "call_notplaced1" }),
     );
     const result = await readToolResult(res);
     assert.notEqual(
       result.isError,
       true,
-      "ein NICHT platzierter Anruf ist ein gueltiger get_transcript-Aufruf, kein Fehlerergebnis",
+      "ein NICHT platzierter Anruf ist ein gueltiger get_call_result-Aufruf, kein Fehlerergebnis",
     );
     const expected = MCP_TEXTS.de.callFailedSummary(failureReason);
     assert.equal(

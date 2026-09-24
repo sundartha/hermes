@@ -65,11 +65,11 @@ async function httpResourceRead(baseUrl, token, uri) {
 }
 
 // Nur fuer die T1-Positiv-Kontrolle (Review-Befund): liest die servergerenderte
-// Widget-Sprache eines Mandanten ueber den ECHTEN Draht - get_my_number ist ein
+// Widget-Sprache eines Mandanten ueber den ECHTEN Draht - get_agent_number ist ein
 // Widget-Tool (uiTool) und traegt sie seit T2-02 an result._meta[WIDGET_LOCALE_META_KEY]
 // (mcp-tools.js withWidgetLocale), NICHT mehr an der Resource selbst.
 async function httpWidgetLocale(baseUrl, token) {
-  const res = await mcpPost(`${baseUrl}/mcp`, token, toolCall("get_my_number"));
+  const res = await mcpPost(`${baseUrl}/mcp`, token, toolCall("get_agent_number"));
   const result = await readToolResult(res);
   return result._meta?.[WIDGET_LOCALE_META_KEY];
 }

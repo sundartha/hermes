@@ -100,7 +100,7 @@ test("UI-09: Charakterisierung heutiger Stand - drei Sprachachsen divergieren gl
   await withGateway(CALL_FIXTURE, async () => {
     const handlers = captureTools({ identity: null, scopedTenant: "tenant-fr" });
     const statusResult = await handlers.get("get_call_status")({ call_id: "call_1" });
-    const transcriptResult = await handlers.get("get_transcript")({ call_id: "call_1" });
+    const transcriptResult = await handlers.get("get_call_result")({ call_id: "call_1" });
 
     const summary = transcriptResult.structuredContent.result_summary;
     assert.match(summary, /[éèàâîïôûç]/i, "Achse D traegt franzoesische Zeichen (Fixture-Beweis)");

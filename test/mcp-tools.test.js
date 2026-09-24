@@ -149,7 +149,7 @@ test("T-P4-07: Handler-Throw (Gateway 500) -> MCP-Fehlerantwort, keine unhandled
     const handlers = captureTools({ identity: null, allowCalendar: true });
     let result;
     await assert.doesNotReject(async () => {
-      result = await handlers.get("get_my_number")();
+      result = await handlers.get("get_agent_number")();
     }, "Handler-Throw darf nicht als Rejection entkommen");
     assert.ok(result?.isError, "Gateway-Fehler -> isError-Tool-Antwort");
     // dem Tick Zeit geben, eine etwaige Rejection zu feuern
@@ -172,7 +172,7 @@ test("T-P4-07b: Gateway-500 zeigt einem EN-Tenant keinen deutschen Fehlertext", 
   process.env.GATEWAY_URL = mock.url;
   try {
     const handlers = captureTools({ identity: null, allowCalendar: true, language: "en" });
-    const result = await handlers.get("get_my_number")();
+    const result = await handlers.get("get_agent_number")();
     assert.ok(result?.isError);
     assert.doesNotMatch(
       toolText(result),

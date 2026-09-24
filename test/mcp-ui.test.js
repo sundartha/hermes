@@ -38,7 +38,7 @@ const NO_POLLING_CADENCE = /alle ~?\d+\s*Sekunden/;
 
 // Minimal gueltige place_call-Aufruf-Form fuer die Tests dieser Datei (EINE Quelle,
 // G5/S2): Argumente UND der dazu passende Gateway-Mock-Body. place_call postet an
-// POST /api/calls und liest nur r.callId - anders als get_call_status/get_transcript,
+// POST /api/calls und liest nur r.callId - anders als get_call_status/get_call_result,
 // die GET /api/calls/:id lesen und ein RICH_CALL/RICH_TRANSCRIPT-Call-Objekt erwarten.
 const PLACE_CALL_ARGS = { to: "+4917212345678", objective: "Testanruf" };
 const PLACE_CALL_MOCK = { callId: "call_1" };
@@ -146,7 +146,7 @@ const callStatusOutput = z.object({
 });
 
 // callOutput (place_call, W2): Obermenge aus callStatusOutput per Spread (G5/S2, keine
-// erneute Feld-Duplizierung) plus den beiden Abschluss-Feldern aus dem get_transcript-
+// erneute Feld-Duplizierung) plus den beiden Abschluss-Feldern aus dem get_call_result-
 // Kontrakt (nullable, der Anruf hat gerade erst begonnen) plus dem additiven
 // context_received-Meta (I10, call-quality Impl-1).
 const contextReceivedOutput = z.object({
@@ -371,7 +371,7 @@ test("T-UI-server-cap: Server deklariert io.modelcontextprotocol/ui (Pflicht fue
   assert.equal(capabilityDeclaresUi({ extensions: ext }), true, "Server-Decl erfuellt Client-Detektor");
 });
 
-// ===== P2: get_transcript ueber den BESTEHENDEN Seam (Seam-Wiederverwendung) =====
+// ===== P2: get_call_result ueber den BESTEHENDEN Seam (Seam-Wiederverwendung) =====
 // Datensatz eines ABGESCHLOSSENEN Calls MIT Roh-Transkript-Zeilen + Summary/Ziel +
 // PII. Der Whitelist-Test beweist, dass NUR Summary/objective/call_id durchkommen,
 // das Roh-Transkript NIE - auch wenn der Datensatz es noch traegt (DSGVO).
@@ -405,7 +405,7 @@ const transcriptOutput = z.object({
 test("T-P2-UI-AC1: Stufe 0 additiv - Textblock (Summary/Ziel) + schema-validiertes structuredContent", async () => {
   await withGateway(RICH_TRANSCRIPT, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
-    const { config, handler } = tools.get("get_transcript");
+    const { config, handler } = tools.get("get_call_result");
     assert.ok(config.outputSchema, "outputSchema am config deklariert");
     const result = await handler({ call_id: "call_1" });
 
@@ -445,11 +445,11 @@ test("T-P2-UI-AC1: Stufe 0 additiv - Textblock (Summary/Ziel) + schema-validiert
   });
 });
 
-test("T-P2-UI-AC2: get_transcript verliert ihr _meta (W2) - keine eigene Resource mehr ueber registerTools", async () => {
+test("T-P2-UI-AC2: get_call_result verliert ihr _meta (W2) - keine eigene Resource mehr ueber registerTools", async () => {
   await withGateway(RICH_TRANSCRIPT, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
-    const { config } = tools.get("get_transcript");
-    assert.ok(ohneWidgetMeta(config), "get_transcript: kein Widget-_meta");
+    const { config } = tools.get("get_call_result");
+    assert.ok(ohneWidgetMeta(config), "get_call_result: kein Widget-_meta");
   });
 });
 
@@ -461,7 +461,7 @@ test("T-P2-UI-AC3: Fallback fail-closed - kein _meta, structuredContent voll", a
   await withGateway(RICH_TRANSCRIPT, async () => {
     for (const [label, uiHost] of Object.entries(cases)) {
       const { tools } = captureUi(uiHost === null ? undefined : { uiHost });
-      const { config, handler } = tools.get("get_transcript");
+      const { config, handler } = tools.get("get_call_result");
       assert.ok(ohneWidgetMeta(config), `${label}: kein Widget-_meta`);
       const result = await handler({ call_id: "call_1" });
       assert.ok(result.structuredContent, `${label}: structuredContent bleibt`);
@@ -470,10 +470,10 @@ test("T-P2-UI-AC3: Fallback fail-closed - kein _meta, structuredContent voll", a
   });
 });
 
-test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/Text (get_transcript)", async () => {
+test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/Text (get_call_result)", async () => {
   await withGateway(RICH_TRANSCRIPT, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
-    const { handler } = tools.get("get_transcript");
+    const { handler } = tools.get("get_call_result");
     const result = await handler({ call_id: "call_1" });
 
     const serialized = JSON.stringify(result);
@@ -506,7 +506,7 @@ test("T-P2-UI-AC5: Fehlerpfad - degradierte Antwort -> isError, text-only, auch 
   // Body ohne transcript -> requireFields wirft -> wrapHandler liefert isError.
   await withGateway({ status: "completed" }, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
-    const { handler } = tools.get("get_transcript");
+    const { handler } = tools.get("get_call_result");
     const result = await handler({ call_id: "call_1" });
     assert.ok(result.isError, "degradierte Antwort -> isError");
     assert.ok(!result.structuredContent, "Fehlerpfad ohne structuredContent");
@@ -542,7 +542,7 @@ function readbackResource(renderer, widgetId) {
 }
 
 // Nach W2 traegt ausschliesslich place_call ein Widget-_meta (WIDGET_CALL, vereinte
-// Live-Karte) - get_call_status/get_transcript verlieren ihr _meta. P3_WIDGETS spiegelt
+// Live-Karte) - get_call_status/get_call_result verlieren ihr _meta. P3_WIDGETS spiegelt
 // genau diese tatsaechlich verdrahtete Menge; place_call hat eine andere Aufruf-Form
 // (to/objective statt call_id) und einen POST- statt GET-Mock-Body, daher args separat.
 const P3_WIDGETS = [
@@ -936,7 +936,7 @@ test("T-W3-AC6: agent-status.html self-contained + read-only + erbt W1-Binding",
 });
 
 // ===== W-batch: drei weitere read-only Widgets ueber den BESTEHENDEN Seam =====
-// get_my_number / list_calls / get_calendar bekommen Stufe 0 (structuredContent +
+// get_agent_number / list_calls / get_calendar bekommen Stufe 0 (structuredContent +
 // Backward-Compat-Text) + Stufe 1 (Widget) bei faehigem Host; Fallback Stufe-0 bei
 // unfaehigem. Whitelist beweist Nicht-Durchreichung von PII/Secrets/Roh-Transkript/
 // Cross-Tenant-State. Read-only: kein Callback/Button. list_calls/get_calendar liefern
@@ -1030,11 +1030,11 @@ const FALLBACK_CASES = {
 // Beweist: Server-seitige Formatierung (fmt) - kein roher ISO-Timestamp im Slot.
 const isFormattedNotIso = (s) => typeof s === "string" && s.length > 0 && !/\dT\d/.test(s);
 
-// ---- get_my_number ----
+// ---- get_agent_number ----
 test("T-Wb-MY-AC1: Stufe 0 - Backward-Compat-Text {number} + schema-validiertes structuredContent", async () => {
   await withGateway(RICH_STATE_BATCH, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
-    const { config, handler } = tools.get("get_my_number");
+    const { config, handler } = tools.get("get_agent_number");
     assert.ok(config.outputSchema, "outputSchema am config deklariert");
     const result = await handler({});
 
@@ -1052,7 +1052,7 @@ test("T-Wb-MY-AC2: Stufe 1 (faehiger Host) - genau eine my-number-Resource + _me
     const matching = resources.filter((r) => r.uri === RESOURCE_URI_MY);
     assert.equal(matching.length, 1, "genau eine my-number-Resource");
     assert.equal(matching[0].config.mimeType, UI_MIME);
-    assert.equal(tools.get("get_my_number").config._meta.ui.resourceUri, RESOURCE_URI_MY);
+    assert.equal(tools.get("get_agent_number").config._meta.ui.resourceUri, RESOURCE_URI_MY);
   });
 });
 
@@ -1060,7 +1060,7 @@ test("T-Wb-MY-AC3: Fallback fail-closed - kein _meta/Resource, structuredContent
   await withGateway(RICH_STATE_BATCH, async () => {
     for (const [label, uiHost] of Object.entries(FALLBACK_CASES)) {
       const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
-      const { config, handler } = tools.get("get_my_number");
+      const { config, handler } = tools.get("get_agent_number");
       assert.equal(resources.filter((r) => r.uri === RESOURCE_URI_MY).length, 0, `${label}: keine Resource`);
       assert.ok(ohneWidgetMeta(config), `${label}: kein Widget-_meta`);
       const result = await handler({});
@@ -1072,7 +1072,7 @@ test("T-Wb-MY-AC3: Fallback fail-closed - kein _meta/Resource, structuredContent
 test("T-Wb-MY-AC4: Whitelist - NUR { number }, kein agent-LEAK/PII", async () => {
   await withGateway(RICH_STATE_BATCH, async () => {
     const { tools, resources } = captureUi({ uiHost: capableHost() });
-    const result = await tools.get("get_my_number").handler({});
+    const result = await tools.get("get_agent_number").handler({});
     const serialized = JSON.stringify(result);
     for (const leak of BATCH_LEAKS) assert.ok(!serialized.includes(leak), `kein Leck von ${leak}`);
     assert.deepEqual(Object.keys(result.structuredContent).sort(), ["number"]);

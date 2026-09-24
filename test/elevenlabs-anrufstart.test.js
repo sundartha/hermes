@@ -122,7 +122,7 @@ const NUMBER_A = "+4915005559002";
 // Kennung und Ergebnis stammen aus DEMSELBEN Fund: die Attrappe antwortet dem Poll damit
 // auf genau das Gespraech, dessen Kennung ihr Anrufstart vorher zurueckgegeben hat.
 const CONVERSATION_ID = CONVERSATION_DONE_WITH_ANALYSIS.conversation_id;
-// Die Zusammenfassung kommt VOM ANBIETER - sie muss unveraendert bis in get_transcript
+// Die Zusammenfassung kommt VOM ANBIETER - sie muss unveraendert bis in get_call_result
 // durchkommen (T3). Die Zeile der Gegenstelle (Anbieter-Rolle "user") ist der Gegen-Marker:
 // sie darf NIE nach aussen (Datensparsamkeit, Absolute Regel 5).
 //
@@ -590,7 +590,7 @@ for (const fall of GATE_FAELLE) {
 
 // ---- T3: das Ergebnis wird geholt ----------------------------------------------------
 
-test("EL-START T3: beendetes Anbieter-Gespraech -> Transkript und Zusammenfassung so im Store, dass get_transcript sie liefert", async (ctx) => {
+test("EL-START T3: beendetes Anbieter-Gespraech -> Transkript und Zusammenfassung so im Store, dass get_call_result sie liefert", async (ctx) => {
   await withElevenLabs(
     {
       // Der Minutensatz steht hier EXPLIZIT, weil BASE_ENV (test/helpers.js) ihn fuer die
@@ -623,7 +623,7 @@ test("EL-START T3: beendetes Anbieter-Gespraech -> Transkript und Zusammenfassun
         );
       });
 
-      // Die beiden Bedingungen, die get_transcript stellt (src/mcp-tools.js): Status
+      // Die beiden Bedingungen, die get_call_result stellt (src/mcp-tools.js): Status
       // verlaesst "active", und der Datensatz traegt ein transcript-Array (requireFields).
       await ctx.test("Bedingung 1: der Call verlaesst 'active'", () => {
         assert.notEqual(call.status, "active");
@@ -635,11 +635,11 @@ test("EL-START T3: beendetes Anbieter-Gespraech -> Transkript und Zusammenfassun
         assert.equal(call.summary, PROVIDER_SUMMARY);
       });
 
-      await ctx.test("get_transcript liefert sie - und NICHT das Roh-Transkript", async () => {
+      await ctx.test("get_call_result liefert sie - und NICHT das Roh-Transkript", async () => {
         const antwort = await mcpPost(
           `${srv.localUrl}/mcp`,
           null,
-          toolCall("get_transcript", { call_id: callId }),
+          toolCall("get_call_result", { call_id: callId }),
         );
         const ergebnis = await readToolResult(antwort);
         const text = ergebnis.content[0].text;
@@ -654,7 +654,7 @@ test("EL-START T3: beendetes Anbieter-Gespraech -> Transkript und Zusammenfassun
         assert.equal(
           JSON.parse(text).result_summary,
           PROVIDER_SUMMARY,
-          `Zusammenfassung fehlt in get_transcript: ${text}`,
+          `Zusammenfassung fehlt in get_call_result: ${text}`,
         );
         assert.ok(
           !text.includes(TRANSCRIPT_LINE),

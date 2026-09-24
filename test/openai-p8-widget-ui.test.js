@@ -456,7 +456,7 @@ function widgetLocaleTenantSeed() {
   return state;
 }
 
-test("P8-K (HTTP, T2-02/S6): get_my_number traegt _meta['hermes/locale'] in der Tenant-Sprache, list_action_items nicht", async () => {
+test("P8-K (HTTP, T2-02/S6): get_agent_number traegt _meta['hermes/locale'] in der Tenant-Sprache, list_action_items nicht", async () => {
   const idp = await startIdp();
   const srv = await startServer({
     env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, MULTI_TENANT: "true", MCP_UI_ENABLED: "true" },
@@ -469,8 +469,8 @@ test("P8-K (HTTP, T2-02/S6): get_my_number traegt _meta['hermes/locale'] in der 
     ]);
 
     const [resDe, resEn] = await Promise.all([
-      mcpPost(`${srv.localUrl}/mcp`, tokenDe, toolCall("get_my_number")),
-      mcpPost(`${srv.localUrl}/mcp`, tokenEn, toolCall("get_my_number")),
+      mcpPost(`${srv.localUrl}/mcp`, tokenDe, toolCall("get_agent_number")),
+      mcpPost(`${srv.localUrl}/mcp`, tokenEn, toolCall("get_agent_number")),
     ]);
     const resultDe = await readToolResult(resDe);
     const resultEn = await readToolResult(resEn);
@@ -519,7 +519,7 @@ test("P8-L (HTTP, T2-02/S6): ein isError-Ergebnis traegt kein Sprachfeld", async
     env: { GATEWAY_URL: mock.url, MCP_UI_ENABLED: "true" },
   });
   try {
-    const res = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_my_number"));
+    const res = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_agent_number"));
     const result = await readToolResult(res);
     assert.equal(result.isError, true, "degradierte Gateway-Antwort -> isError (AC5/AC6)");
     assert.equal(
@@ -538,15 +538,15 @@ test("P8-L (HTTP, T2-02/S6): ein isError-Ergebnis traegt kein Sprachfeld", async
 // BASE_ENV pinnt WORLD_DEFAULT_LANGUAGE_ENABLED="true"). Zwei verschiedene Sprachen sind
 // ueber stdio deshalb nicht messbar (kein Tenant-Kontext); gemessen wird, dass der
 // Weltdefault tatsaechlich am Ergebnis ankommt.
-test("P8-M (stdio, T2-02/S6, DP-1): get_my_number traegt _meta['hermes/locale']=Weltdefault, list_action_items nicht", async () => {
+test("P8-M (stdio, T2-02/S6, DP-1): get_agent_number traegt _meta['hermes/locale']=Weltdefault, list_action_items nicht", async () => {
   const mock = await startFixedGatewayMock({ agent: { number: "+15005550006" }, actionItems: [] });
   try {
     await withStdioClient({ MCP_UI_ENABLED: "true", GATEWAY_URL: mock.url }, {}, async (client, stderr) => {
       const numberResult = await client.request(
-        { method: "tools/call", params: { name: "get_my_number", arguments: {} } },
+        { method: "tools/call", params: { name: "get_agent_number", arguments: {} } },
         ANY,
       );
-      assert.notEqual(numberResult.isError, true, `stdio get_my_number ist kein Fehler (stderr: ${stderr()})`);
+      assert.notEqual(numberResult.isError, true, `stdio get_agent_number ist kein Fehler (stderr: ${stderr()})`);
       assert.equal(
         numberResult._meta?.[WIDGET_LOCALE_META_KEY],
         "en",
@@ -574,7 +574,7 @@ test("P8-N (stdio, T2-02/S6): ein isError-Ergebnis traegt ueber den echten Kindp
   try {
     await withStdioClient({ MCP_UI_ENABLED: "true", GATEWAY_URL: mock.url }, {}, async (client, stderr) => {
       const result = await client.request(
-        { method: "tools/call", params: { name: "get_my_number", arguments: {} } },
+        { method: "tools/call", params: { name: "get_agent_number", arguments: {} } },
         ANY,
       );
       assert.equal(result.isError, true, `degradierte Gateway-Antwort -> isError (stderr: ${stderr()})`);

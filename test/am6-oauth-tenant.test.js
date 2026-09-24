@@ -4,7 +4,7 @@
 //   G4-a Binding: OWNER_IDP_SUBJECT bindet den Owner-sub an den Bootstrap-Tenant (der die
 //        aktive Nummer haelt) -> resolveTenant findet ihn ueber den sub-Claim.
 //   G4-b Threading: das /mcp-Gateway loest den Tenant aus sub auf und reicht ihn als
-//        X-Internal-Tenant durch -> get_my_number ist NICHT leer, SELBST wenn das Token
+//        X-Internal-Tenant durch -> get_agent_number ist NICHT leer, SELBST wenn das Token
 //        einen email-Claim traegt (genau die frueher divergierende email/sub-Achse).
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -35,11 +35,11 @@ const oauthEnv = (idp, extra = {}) => ({
   ...extra,
 });
 
-// structuredContent.number aus einem get_my_number tools/call ueber /mcp (echter
+// structuredContent.number aus einem get_agent_number tools/call ueber /mcp (echter
 // MCP-HTTP-Pfad: Gateway -> registerTools(scopedTenant) -> REST /api/state mit
 // X-Internal-Tenant). Das ist der Lesepfad, den AM6 dicht macht.
 async function myNumberOver(srv, token) {
-  const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_my_number"));
+  const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_agent_number"));
   assert.notEqual(res.status, 401, "gueltiges Token muss akzeptiert werden");
   return (await readToolResult(res)).structuredContent.number;
 }
@@ -54,7 +54,7 @@ test("AM6: geseedeter Owner-sub -> Gateway-Tenant=owner (auch mit email-Claim)",
     // Token traegt sub UND email: die email-Achse (Profile) divergiert frueher von der
     // sub-Achse (Tenant). Der Gateway-Audit muss trotzdem tenant=owner zeigen.
     const token = await idp.sign({ sub: OWNER_SUB, email: "owner@team.test" });
-    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_my_number"));
+    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_agent_number"));
     assert.notEqual(res.status, 401);
     await waitForLog(
       srv,
@@ -66,7 +66,7 @@ test("AM6: geseedeter Owner-sub -> Gateway-Tenant=owner (auch mit email-Claim)",
   }
 });
 
-test("AM6 e2e: Owner-Token MIT email -> get_my_number traegt die aktive Nummer (honest-green)", async () => {
+test("AM6 e2e: Owner-Token MIT email -> get_agent_number traegt die aktive Nummer (honest-green)", async () => {
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp),
@@ -74,7 +74,7 @@ test("AM6 e2e: Owner-Token MIT email -> get_my_number traegt die aktive Nummer (
   });
   try {
     // DER Test, der die email/sub-Divergenz als gefixt beweist: trotz email-Claim
-    // liefert get_my_number die aktive Bootstrap-Nummer, nicht leer.
+    // liefert get_agent_number die aktive Bootstrap-Nummer, nicht leer.
     const token = await idp.sign({ sub: OWNER_SUB, email: "owner@team.test" });
     assert.equal(await myNumberOver(srv, token), OWNER_NUM);
   } finally {
@@ -96,7 +96,7 @@ test("AM6 T2-05: unbekannter sub -> Tool-Fehler mit Re-Auth-Challenge, kein echt
   });
   try {
     const token = await idp.sign({ sub: "fremd-sub", email: "fremd@team.test" });
-    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_my_number"));
+    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_agent_number"));
     assert.equal(res.status, HTTP_OK);
     const result = await readToolResult(res);
     assertReauthChallenge(result);
@@ -122,7 +122,7 @@ test("AM6 T2-05: verifiziertes Token OHNE sub -> Tool-Fehler mit Re-Auth-Challen
   });
   try {
     const token = await idp.sign({ email: "evil@attacker.test" }, { noSubject: true });
-    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_my_number"));
+    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_agent_number"));
     assert.equal(res.status, HTTP_OK);
     const result = await readToolResult(res);
     assertReauthChallenge(result);
@@ -158,9 +158,9 @@ test("AM6 set-if-absent: bestehende idpSubject-Bindung gewinnt gegen OWNER_IDP_S
     // E4: "other-sub" bleibt unbekannt (set-if-absent No-Op) -> TENANT_REJECT -> seit
     // T2-05 antwortet der /mcp-Torschluss im OAuth-Modus mit einem Tool-Fehler +
     // Re-Auth-Challenge statt 403 (s. Tests oben) - der Stub-Handler laeuft, nie der
-    // echte get_my_number-Handler.
+    // echte get_agent_number-Handler.
     const envTok = await idp.sign({ sub: "other-sub" });
-    const res = await mcpPost(`${srv.localUrl}/mcp`, envTok, toolCall("get_my_number"));
+    const res = await mcpPost(`${srv.localUrl}/mcp`, envTok, toolCall("get_agent_number"));
     assert.equal(res.status, HTTP_OK, "abweichendes OWNER_IDP_SUBJECT wurde NICHT gebunden (set-if-absent No-Op)");
     assertReauthChallenge(await readToolResult(res));
   } finally {
