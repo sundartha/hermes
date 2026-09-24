@@ -2988,7 +2988,7 @@
       "count": 1
     },
     "id-length": {
-      "count": 17
+      "count": 14
     },
     "max-params": {
       "count": 1
@@ -3000,7 +3000,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 2
     }
   },
   "test/mcp-ui-p5-token-sync.test.js": {
