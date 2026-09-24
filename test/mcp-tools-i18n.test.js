@@ -12,20 +12,21 @@
 // MCP-14 (R-G: neues Subjekt) - das Katalog-Subjekt ist tot, ein besseres lebt. Der
 // Katalog misst "Gegenseite" in get_call_status - seit P12 geschlossen
 // (pickCallStatus -> texts.roleCounterparty, gepinnt in mcp-tools-language.test.js).
-// Ein gruener Pin darauf waere ein Duplikat. Gemessen sind stattdessen drei ECHTE
+// Ein gruener Pin darauf waere ein Duplikat. Gemessen sind stattdessen zwei ECHTE
 // deutsche Stufe-0-Artefakte in src/mcp-tools.js (alle sprachfrei, kein loc.-Bezug):
-// der Leertext von list_action_items, dessen Termin-Praefix, und der Verbinder
-// " bis " in get_calendar. MCP-14 wird gegen diese gebaut (GERMAN_STAGE0_PROBES unten).
-// Die Katalog-These ("ein Widget-Fix reicht nicht") bleibt woertlich erhalten und wird
-// als zweiter, gruener Test bewiesen: get_calendar traegt ein Widget, sein Text ist
-// trotzdem host-unabhaengig.
+// der Leertext von list_action_items und dessen Termin-Praefix. MCP-14 wird gegen
+// diese gebaut (GERMAN_STAGE0_PROBES unten). (T2-12: der dritte, urspruengliche Beleg -
+// der Verbinder " bis " in get_calendar - ist mit dem Kalender-Werkzeug ersatzlos
+// entfallen, O-25.) Die Katalog-These ("ein Widget-Fix reicht nicht") bleibt woertlich
+// erhalten und wird als zweiter, gruener Test bewiesen: list_calls traegt ein Widget,
+// sein Text ist trotzdem host-unabhaengig.
 //
 // MCP-14 widerspricht einem Bestandspin (test/mcp-tools.test.js S1-5b:
 // assert.equal(toolText(result), "Keine offenen Action Items.") bleibt dort gruen).
 // Muster GAP-37 (W2-B6): der Widerspruch IST der Launch-Befund - der Bestandstest
 // bleibt namens-neutral gruen im Regressionslauf, MCP-14a faehrt ID-getragen rot im
 // Gate-Lauf. Fix-Auflage (Report): nach dem Fix (loc.mcp.emptyActionItems /
-// appointmentPrefix / calendarRangeSeparator) muss der Bestandspin mitgezogen werden.
+// appointmentPrefix) muss der Bestandspin mitgezogen werden.
 //
 // Harness-Muster (kopiert/angepasst aus test/mcp-tools.test.js + test/mcp-ui.test.js -
 // beide Dateien gehoeren NICHT zu diesem Block und werden nicht editiert).
@@ -132,14 +133,16 @@ test("MCP-05: wrapHandler-Fallback bei Netzwerkfehler zeigt einem EN-Tenant kein
 
 // ==================== MCP-14 ====================
 const EN_TENANT = "tenant-en-us";
-const CALENDAR_FIXTURE = {
-  calendar: [{ title: "Dentist", start: "2026-07-01T09:00:00.000Z", end: "2026-07-01T09:30:00.000Z" }],
+// T2-12: get_calendar (und mit ihm sein Verbinder-Artefakt " bis ") ist entfallen -
+// die Probe dafuer entfaellt ersatzlos (O-25). Die verbleibenden zwei Artefakte sind
+// unveraendert sprachfrei-deutsch.
+const CALLS_FIXTURE = {
+  calls: [{ id: "call_1", direction: "inbound", counterparty: "+491234", status: "completed", startedAt: "2026-07-01T09:00:00.000Z" }],
 };
 const APPOINTMENT_ITEM = { actionItems: [{ id: "ai_1", text: "Call back", type: "appointment", done: false }] };
 const NO_ITEMS = { actionItems: [] };
-// Die drei heute noch sprachfrei-deutschen Stufe-0-Artefakte in src/mcp-tools.js.
+// Die zwei heute noch sprachfrei-deutschen Stufe-0-Artefakte in src/mcp-tools.js.
 const GERMAN_STAGE0_PROBES = [
-  { label: "get_calendar-Verbinder", tool: "get_calendar", body: CALENDAR_FIXTURE, german: / bis / },
   { label: "list_action_items-Praefix", tool: "list_action_items", body: APPOINTMENT_ITEM, german: /\(Termin\)/ },
   { label: "list_action_items-Leertext", tool: "list_action_items", body: NO_ITEMS, german: /Keine offenen Action Items/ },
 ];
@@ -158,17 +161,17 @@ test("MCP-14 (SOLL, rot) - Stufe-0-Text eines EN-Tenants traegt keine deutschen 
 });
 
 test("MCP-14 (Mechanismus, gruen) - der Stufe-0-Text ist host-unabhaengig: ein reiner Widget-Fix aendert ihn nicht", async () => {
-  await withGateway(CALENDAR_FIXTURE, async () => {
+  await withGateway(CALLS_FIXTURE, async () => {
     const withoutHost = toolText(
-      await captureTools({ scopedTenant: EN_TENANT, language: "en" }).get("get_calendar")(),
+      await captureTools({ scopedTenant: EN_TENANT, language: "en" }).get("list_calls")(),
     );
     const withWidgetHost = toolText(
-      await captureTools({ scopedTenant: EN_TENANT, language: "en", uiHost: CAPABLE_UI_HOST }).get("get_calendar")(),
+      await captureTools({ scopedTenant: EN_TENANT, language: "en", uiHost: CAPABLE_UI_HOST }).get("list_calls")(),
     );
     assert.equal(
       withoutHost,
       withWidgetHost,
-      "get_calendar traegt ein Widget - sein Text haengt trotzdem nicht am Host",
+      "list_calls traegt ein Widget - sein Text haengt trotzdem nicht am Host",
     );
   });
 });
