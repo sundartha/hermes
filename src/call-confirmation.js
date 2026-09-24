@@ -78,7 +78,10 @@ export function canonicalCallRequest({ to, args }) {
   return JSON.stringify(sortedCanonical({ ...rest, to }));
 }
 
-function windowIndexFor(nowMs) {
+// Exportiert (Safety-Nachbesserung T2-13): der Aufrufer (die Bestaetigungs-Route) braucht
+// denselben WindowIndex fuer das Slot-Register, das nach einem Verbrauch einen frischen
+// Code erzwingt (s. api-call-confirmations.js) - EINE Formel statt einer zweiten Kopie.
+export function windowIndexFor(nowMs) {
   return Math.floor(nowMs / CONFIRMATION_WINDOW_MS);
 }
 

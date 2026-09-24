@@ -200,6 +200,40 @@ test("(g) ohne CALL_CONFIRMATION_SECRET: prepare_call ist isError, kein Anruf mo
   }
 });
 
+// ==================== Safety-Review-Nachbesserung: frischer Code nach Verbrauch ==========
+// Befund (Zwischenmessung): das Einmal-Verbrauch-Register (Mandant+Fenster+Code) passte
+// nicht zum deterministischen Code (HMAC ueber Mandant+Argumente+Fenster) - ein erneutes
+// prepare_call mit UNVERAENDERTEN Argumenten stellte im selben 5-Minuten-Fenster exakt den
+// schon verbrauchten Code erneut aus, place_call scheiterte danach IMMER an
+// confirmationRequired (bis zu 5 Minuten lang), obwohl der Nutzer nur "nochmal versuchen"
+// wollte. Dieser Test belegt den Fix am echten Draht: prepare -> place (ok) -> prepare mit
+// denselben Argumenten (neuer Code) -> place mit dem neuen Code (ok, dedupliziert - der
+// erste Anruf laeuft mit FAKE_ORIGINATE unveraendert weiter, kein Webhook beendet ihn).
+// Belegt zugleich, dass PLACE_CALL_DESCRIPTION wieder stimmt: "Calling it again ... returns
+// that same call (deduplicated: true)" ist nur ueber ein FRISCHES prepare_call erreichbar.
+test("Nachbesserung: erneutes prepare_call nach Verbrauch liefert einen NEUEN Code, place_call damit -> ok, dedupliziert", async () => {
+  await withServer(async (srv) => {
+    const before = srv.readStore().calls.length;
+
+    const prep1 = await prepareCall(srv, { to: TARGET, objective: OBJECTIVE });
+    const code1 = prep1._meta[CONFIRMATION_META_KEY];
+    const placed1 = await placeCall(srv, { to: TARGET, objective: OBJECTIVE, confirmation_code: code1 });
+    assert.notEqual(placed1.isError, true, "erster Anruf wird bestaetigt und gewaehlt");
+    const callId1 = placed1.structuredContent.call_id;
+
+    const prep2 = await prepareCall(srv, { to: TARGET, objective: OBJECTIVE });
+    const code2 = prep2._meta[CONFIRMATION_META_KEY];
+    assert.notEqual(code2, code1, "die Neuausstellung nach Verbrauch liefert einen ANDEREN Code");
+
+    const placed2 = await placeCall(srv, { to: TARGET, objective: OBJECTIVE, confirmation_code: code2 });
+    assert.notEqual(placed2.isError, true, "der neue Code wird akzeptiert, place_call scheitert NICHT an confirmationRequired");
+    assert.equal(placed2.structuredContent.deduplicated, true, "der laufende Anruf wird dedupliziert, kein zweiter Datensatz");
+    assert.equal(placed2.structuredContent.call_id, callId1, "dedupliziert auf denselben call_id");
+
+    assert.equal(srv.readStore().calls.length, before + 1, "weiterhin genau EIN Anruf-Datensatz");
+  });
+});
+
 // ==================== (h) stdio: echter Kindprozess, echter Rundlauf ======================
 // Zwei echte Prozesse wie in der Produktion: EIN voller Gateway (startServer, traegt
 // /api/call-confirmations + /api/calls) und EIN stdio-MCP-Server (src/mcp-server.js), der
@@ -341,5 +375,55 @@ test("(i) OAuth (echtes Token, fremder Mandant): Code von Tenant A waehlt nicht 
   } finally {
     await srv.stop();
     await idp.close();
+  }
+});
+
+// ============ Nachbesserung (cleancode/wichtig): Consult-Kanal aktiv, HTTP =================
+// Befund: die Abnahme deckte HTTP-Legacy/-OAuth, stdio und Fake-Originate ab, aber KEINE
+// Kombination mit aktivem Consult-Kanal (CONSULT_ENABLED) - ein Risiko sollte der
+// Bestaetigungscode je mit der Consult-Registrierung interagieren. Dieser Test faehrt mit
+// eingeschaltetem Kanal (Owner-Bootstrap: OWNER_PROFILE.allowConsult=true, s.
+// store/defaults.js) denselben Rundlauf wie (a)-(d) und zeigt zusaetzlich, dass
+// await_call_event/answer_consult registriert sind (tools/list) - die Bestaetigungspruefung
+// laeuft strukturell VOR jeder Consult-Logik (mcp-tools.js: der Code wird im place_call-
+// Handler vor dem eigentlichen POST /api/calls-Aufruf geprueft, die Consult-Werkzeuge
+// wirken erst NACH einem erfolgreich gewaehlten Anruf) und ist von ihr unabhaengig - ein
+// echter Rueckfrage-Austausch braucht einen simulierten Telnyx-Webhook und bleibt der
+// Folgephase T2-14 vorbehalten (Uebergabe-Notiz oben).
+test("Nachbesserung: Consult-Kanal aktiv (CONSULT_ENABLED) stoert die Bestaetigungspruefung nicht - Werkzeuge registriert, gueltiger/ungueltiger Code verhalten sich unveraendert", async () => {
+  const srv = await startServer({
+    env: {
+      FAKE_ORIGINATE: "true",
+      ALLOWED_COUNTRY_CODES: "*",
+      MCP_UI_ENABLED: "true",
+      CALL_CONFIRMATION_SECRET: TEST_SECRET,
+      CONSULT_ENABLED: "true",
+      ASSISTANT_CONTEXT_ENABLED: "true",
+    },
+  });
+  try {
+    const listRes = await mcpPost(`${srv.localUrl}/mcp`, null, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/list",
+    });
+    const { tools } = await readToolResult(listRes);
+    const toolNames = tools.map((tool) => tool.name);
+    assert.ok(toolNames.includes("await_call_event"), "Consult-Werkzeug ist registriert");
+    assert.ok(toolNames.includes("answer_consult"), "Consult-Werkzeug ist registriert");
+
+    const before = srv.readStore().calls.length;
+    const badResult = await placeCall(srv, { to: TARGET, objective: OBJECTIVE, confirmation_code: "ZZZZZZ" });
+    assert.equal(badResult.isError, true, "erfundener Code wird trotz Consult-Kanal abgelehnt");
+    assert.equal(srv.readStore().calls.length, before, "kein Anruf trotz Consult-Kanal");
+
+    const prep = await prepareCall(srv, { to: TARGET, objective: OBJECTIVE });
+    const code = prep._meta[CONFIRMATION_META_KEY];
+    const result = await placeCall(srv, { to: TARGET, objective: OBJECTIVE, confirmation_code: code });
+    assert.notEqual(result.isError, true, "gueltiger Code funktioniert unveraendert mit aktivem Consult-Kanal");
+    assert.ok(result.structuredContent.call_id, "call_id vorhanden");
+    assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf entstanden");
+  } finally {
+    await srv.stop();
   }
 });

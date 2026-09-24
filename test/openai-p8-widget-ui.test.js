@@ -114,10 +114,18 @@ const EXPECTED_RESOURCE_META = {
 // Aufbau dieses Tests (tools/list + resources/list + jedes resources/read, kanonisiert),
 // nicht geschaetzt. Voriger Sollwert (beide Pfade, byte-identisch seit dem T2-11-Nachzug
 // oben): ffed5a5db028eaa0e37da11c2558f131f270dded0eab61760c8a6bc0a0212883.
+// Neu gepinnt (T2-13-Nachbesserung, Safety-Review, Befund "Beschreibung nicht mitgezogen"):
+// PLACE_CALL_DESCRIPTION (mcp-tools.js) nennt jetzt ausdruecklich, dass eine Wiederholung
+// ein eigenes frisches prepare_call braucht (der alte Satz war seit T2-13 nicht mehr
+// erreichbar, s. PLAN-SECURITY.md Abschnitt OpenAI-T2-13) - tools/list traegt seither einen
+// laengeren description-Text fuer place_call, resources/list und alle resources/read-Inhalte
+// bleiben unveraendert. Nachgerechnet mit dem exakten Aufbau dieses Tests, nicht geschaetzt.
+// Voriger Sollwert (beide Pfade, byte-identisch seit T2-13 oben):
+// 84e8b490bb7811977a714e5358dc031bb4188431937bb2f21c741b42e797e3e4.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "84e8b490bb7811977a714e5358dc031bb4188431937bb2f21c741b42e797e3e4";
+  "8da33018cbdd342cbbff1082e54d0d1a0e8299f120e8d36933fa8139ed8c6ec3";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "84e8b490bb7811977a714e5358dc031bb4188431937bb2f21c741b42e797e3e4";
+  "8da33018cbdd342cbbff1082e54d0d1a0e8299f120e8d36933fa8139ed8c6ec3";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

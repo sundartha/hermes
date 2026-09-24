@@ -791,8 +791,17 @@ const OPEN_QUESTIONS_FIELD = z
 // oben) - der erste Satz nennt die Sequenz, bevor er sagt, was der Anruf kostet.
 // Beschreibung von place_call, sonst byte-identisch aus dem Tool-Deskriptor herausgeloest
 // (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
+// KORRIGIERT (T2-13-Nachbesserung, Safety-Review): der letzte Satz sagte frueher nur
+// "calling it again ... returns that same call", ohne zu nennen, dass jeder Aufruf (auch
+// eine Wiederholung) sein eigenes frisches prepare_call braucht - ein Code wird nach
+// Gebrauch sofort verbraucht (Einmal-Verbrauch, s. call-confirmation.js) und ist danach kein
+// gueltiger Code mehr fuer irgendeinen Aufruf. Ein erneutes prepare_call mit denselben
+// Argumenten liefert dabei einen neuen Code (Slot-Register in api-call-confirmations.js) -
+// erst der erreicht ueberhaupt die Dedup-Pruefung in POST /api/calls. Keine neuen
+// GROSSBUCHSTABEN-Woerter im Nachtrag (Test p15-mcp-tool-descriptions-en.test.js pinnt die
+// Emphase von place_call auf genau ["REQUIRES","FIRST","NOT","NOT","NOT","ALWAYS"]).
 const PLACE_CALL_DESCRIPTION =
-  "REQUIRES a confirmation_code from prepare_call - call prepare_call FIRST with identical arguments, then pass the code the user confirmed. Without it the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Calling it again for a running number returns that same call (deduplicated: true).";
+  "REQUIRES a confirmation_code from prepare_call - call prepare_call FIRST with identical arguments, then pass the code the user confirmed. Without it the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Repeating it for a running number needs its own fresh prepare_call and code (a used code is never valid twice) and then returns that same call (deduplicated: true).";
 
 // T2-13 (N-10): Beschreibung von prepare_call - reine Vorschau, KEIN Anruf, KEINE Kosten.
 // Nennt ausdruecklich, dass der Code nur auf einem Host mit Kartenfaehigkeit ankommt (s.

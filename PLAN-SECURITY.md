@@ -6280,3 +6280,46 @@ abschaltbare Sicherung); kein persistenter Einmal-Verbrauch (Schemaaenderung ohn
 solange die Architektur eine Instanz voraussetzt); keine zweite Bestaetigungsstufe fuer
 `cancel_call` (mindert nur Schaden, keine neuen Kosten/kein neuer Kontakt) oder
 `answer_consult` (sekundenkritisch, laeuft nur innerhalb eines bereits bestaetigten Anrufs).
+
+**Nachbesserung (Safety-/Clean-Code-Review, derselbe Merge): Einmal-Verbrauch passte nicht
+zum deterministischen Code.** Befund: `issueConfirmationCode` leitet den Code deterministisch
+aus Mandant+Fenster+`canonical` ab, das Einmal-Verbrauch-Register schluesselt aber auf
+Mandant+Fenster+Code. Ein erneutes `prepare_call` mit UNVERAENDERTEN Argumenten im selben
+5-Minuten-Fenster stellte deshalb exakt den schon verbrauchten Code erneut aus —
+`place_call` scheiterte danach bis zu 5 Minuten lang an `confirmationRequired`, obwohl der
+Nutzer nur einen fehlgeschlagenen Versuch (niemand hebt ab, Gate-Ablehnung) wiederholen
+wollte. Gemessen am echten Router: erster Verbrauch `true`, Neuausstellung `sameCode:true`,
+zweiter Verbrauch `false`.
+
+**Fix:** ein zweites In-Memory-Register (`makeFreshSlotLedger`,
+`src/routes/api-call-confirmations.js`, gleiches Speicher-/Verwerfungs-Muster wie das
+Einmal-Verbrauch-Register) haelt je (Mandant, Fenster, kanonische Anfrage) einen Slot-Index.
+Der Slot geht als Suffix NUR in die Codeableitung ein (`canonicalForSlot`) — er aendert
+nicht, was der Code inhaltlich bindet (weiterhin Mandant+alle Argumente+Fenster), nur, dass
+ein weiterer Aufruf einen ANDEREN Code derselben Anfrage bekommt. Vor dem ersten Verbrauch
+bleibt Slot 0 (byte-identische Codeableitung, wiederholtes `prepare_call` VOR jedem
+Verbrauch bleibt idempotent — Test "gleiche Eingabe ergibt gleichen Code" unveraendert
+gruen); der Slot wird NUR bei tatsaechlichem, erfolgreichem Verbrauch weitergeschaltet. Die
+Pruefseite (`confirmCode`) sucht den vorgelegten Code ueber bis zu `MAX_CONFIRMATION_SLOTS`
+(8) Slots je Fenster — eine reine Server-Rechengrenze ueber selbst abgeleitete Kandidaten,
+die Brute-Force-Rechnung fuer einen Angreifer (s.o.) bleibt unveraendert, weil sie nicht
+davon abhaengt, wie viele Kandidaten der Server selbst prueft.
+
+**Folgekorrektur:** `PLACE_CALL_DESCRIPTION` (`src/mcp-tools.js`) versprach weiterhin
+"Calling it again for a running number returns that same call (deduplicated: true)", ohne zu
+sagen, dass jeder Aufruf sein eigenes frisches `prepare_call` braucht — vor dem Fix war das
+nicht erreichbar (der wiederholte Code scheiterte immer an der Bestaetigung, bevor er die
+Dedup in `POST /api/calls` je erreichte). Der Satz nennt das jetzt ausdruecklich; keine neuen
+GROSSBUCHSTABEN-Woerter (Emphase-Pin `test/p15-mcp-tool-descriptions-en.test.js`).
+
+**Testabdeckung:** `test/openai-t2-13-bestaetigung.test.js` traegt jetzt zwei zusaetzliche
+Draht-Tests: (1) `prepare_call` -> `place_call` (ok) -> `prepare_call` mit denselben
+Argumenten (neuer Code) -> `place_call` mit dem neuen Code (ok, `deduplicated:true`, gleicher
+`call_id`, weiterhin genau EIN Anruf-Datensatz); (2) derselbe Rundlauf mit aktivem
+Consult-Kanal (`CONSULT_ENABLED=true`), der zeigt, dass `await_call_event`/`answer_consult`
+registriert sind UND ein gueltiger/ungueltiger Bestaetigungscode sich dabei unveraendert
+verhaelt — die Bestaetigungspruefung laeuft strukturell vor jeder Consult-Logik. Ein echter
+Rueckfrage-Austausch waehrend eines laufenden Anrufs (simulierter Webhook, Frage/Antwort ueber
+`await_call_event`/`answer_consult`) bleibt der Folgephase T2-14 vorbehalten — dort entsteht
+ohnehin erst die Bestaetigungs-Ansicht im Call-Widget, mit der beide Phasen zusammen live
+gehen (s.o.).

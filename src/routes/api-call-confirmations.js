@@ -29,6 +29,7 @@ import {
   issueConfirmationCode,
   matchedWindowIndex,
   normalizeConfirmationCode,
+  windowIndexFor,
 } from "../call-confirmation.js";
 
 const HTTP_BAD_REQUEST = 400;
@@ -101,13 +102,79 @@ function makeOneTimeCodeLedger() {
   };
 }
 
-// War der vorgelegte Code gueltig UND noch nicht verbraucht? Verbraucht ihn bei JA sofort
-// (kein zweiter Treffer moeglich).
-function confirmAndConsume({ key, tenantId, canonical, code, nowMs, markIfUnused }) {
-  const windowIdx = matchedWindowIndex({ key, tenantId, canonical, code, nowMs });
-  if (windowIdx === null) return false;
-  const digest = usedCodeDigest({ tenantId, windowIdx, normalizedCode: normalizeConfirmationCode(code) });
-  return markIfUnused({ digest, windowEndMs: (windowIdx + 1) * CONFIRMATION_WINDOW_MS, nowMs });
+// Slot-Suffix fuer die Codeableitung (Safety-Nachbesserung T2-13, Befund "Einmal-Verbrauch
+// vs. deterministischer Code"): OHNE dieses Register stellt ein erneutes prepare_call mit
+// UNVERAENDERTEN Argumenten im selben Fenster deterministisch denselben (schon
+// verbrauchten) Code aus - confirmCode (unten) lehnt ihn dann immer ab, bis zu
+// CONFIRMATION_WINDOW_MS lang, obwohl der Nutzer nur "nochmal versuchen" wollte (Gegenprobe
+// am echten Router: erster Verbrauch true, Neuausstellung sameCode:true, zweiter Verbrauch
+// false). Slot 0 (der Normalfall - noch kein Verbrauch fuer diese Anfrage in diesem
+// Fenster) ergibt canonical UNVERAENDERT: wiederholtes prepare_call VOR jedem Verbrauch
+// bleibt idempotent (byte-identisches Verhalten, s. Test "gleiche Eingabe ergibt gleichen
+// Code" in call-confirmation.test.js). Der Slot geht NUR in die Codeableitung ein, NICHT in
+// das, was der Code inhaltlich bindet (weiterhin Mandant+alle Argumente+Fenster).
+function canonicalForSlot({ canonical, slot }) {
+  return slot === 0 ? canonical : `${canonical}|slot:${slot}`;
+}
+
+// Obergrenze der Slot-Suche beim Pruefen (s. confirmCode): mehr als ein paar
+// Wiederholversuche innerhalb desselben 5-Minuten-Fensters sind kein normaler Retry mehr.
+// Die Grenze ist reine SERVERSEITIGE Rechenbegrenzung ueber selbst abgeleitete Kandidaten -
+// sie aendert nichts an der Trefferwahrscheinlichkeit eines Angreifers (Sicherheits-
+// Rechnung in call-confirmation.js bleibt gueltig, der Angreifer muss weiterhin einen von
+// 32^6 Codes treffen, unabhaengig von dieser Zahl).
+const MAX_CONFIRMATION_SLOTS = 8;
+
+function slotLedgerDigest({ tenantId, windowIdx, canonical }) {
+  return createHash("sha256").update(`slot|${tenantId}|${windowIdx}|${canonical}`).digest("hex");
+}
+
+// Gleiches Speicher-/Verwerfungs-Muster wie makeOneTimeCodeLedger: haelt je (Mandant,
+// Fenster, kanonische Anfrage) NUR einen Zaehler im Prozessspeicher, kein Klartext, kein
+// Code. Dieselbe akzeptierte Grenze wie beim Einmal-Verbrauch-Register (Kommentar oben):
+// je App-Instanz, verwirft abgelaufene Eintraege beim naechsten Zugriff.
+function makeFreshSlotLedger() {
+  const slotByDigest = new Map();
+  function prune(nowMs) {
+    for (const [key, entry] of slotByDigest) if (entry.expiresAtMs <= nowMs) slotByDigest.delete(key);
+  }
+  return {
+    currentSlot({ digest, nowMs }) {
+      prune(nowMs);
+      return slotByDigest.get(digest)?.slot ?? 0;
+    },
+    advance({ digest, windowEndMs, nowMs }) {
+      prune(nowMs);
+      const next = (slotByDigest.get(digest)?.slot ?? 0) + 1;
+      slotByDigest.set(digest, { slot: next, expiresAtMs: windowEndMs });
+    },
+  };
+}
+
+// War der vorgelegte Code (in irgendeinem offenen Slot der aktuellen Anfrage) gueltig UND
+// noch nicht verbraucht? Verbraucht ihn bei JA sofort (kein zweiter Treffer moeglich) und
+// schaltet - NUR bei tatsaechlichem Verbrauch - den naechsten Slot fuer diese (Mandant,
+// Fenster, Anfrage)-Kombination frei, damit ein nachfolgendes prepare_call einen FRISCHEN
+// Code liefert statt des soeben verbrauchten.
+function confirmCode({ key, tenantId, canonical, code, nowMs, markIfUnused, freshSlots }) {
+  for (let slot = 0; slot < MAX_CONFIRMATION_SLOTS; slot++) {
+    const windowIdx = matchedWindowIndex({
+      key,
+      tenantId,
+      canonical: canonicalForSlot({ canonical, slot }),
+      code,
+      nowMs,
+    });
+    if (windowIdx === null) continue;
+    const digest = usedCodeDigest({ tenantId, windowIdx, normalizedCode: normalizeConfirmationCode(code) });
+    const windowEndMs = (windowIdx + 1) * CONFIRMATION_WINDOW_MS;
+    const consumed = markIfUnused({ digest, windowEndMs, nowMs });
+    if (consumed) {
+      freshSlots.advance({ digest: slotLedgerDigest({ tenantId, windowIdx, canonical }), windowEndMs, nowMs });
+    }
+    return consumed;
+  }
+  return false;
 }
 
 // tenant = { requestTenant } (dieselbe EINE Quelle wie in makeCallRoutes). now injizierbar
@@ -116,6 +183,7 @@ function confirmAndConsume({ key, tenantId, canonical, code, nowMs, markIfUnused
 export function makeCallConfirmationRoutes({ store, config, tenant: { requestTenant }, now = Date.now }) {
   const router = Router();
   const markIfUnused = makeOneTimeCodeLedger();
+  const freshSlots = makeFreshSlotLedger();
 
   router.post("/api/call-confirmations", internalOnly, (req, res) => {
     const body = req.body || {};
@@ -142,18 +210,32 @@ export function makeCallConfirmationRoutes({ store, config, tenant: { requestTen
     const nowMs = now();
 
     if (typeof body.confirmation_code === "string") {
-      const confirmed = confirmAndConsume({
+      const confirmed = confirmCode({
         key,
         tenantId,
         canonical,
         code: body.confirmation_code,
         nowMs,
         markIfUnused,
+        freshSlots,
       });
       return res.status(HTTP_OK).json({ preview, confirmed });
     }
 
-    const { code, expiresAtMs } = issueConfirmationCode({ key, tenantId, canonical, nowMs });
+    // Frischer Slot nach einem etwaigen Verbrauch (s. canonicalForSlot/makeFreshSlotLedger
+    // oben) - slot bleibt 0, solange fuer diese exakte Anfrage in diesem Fenster noch
+    // nichts verbraucht wurde, macht die Ausstellung also byte-identisch zum Bestand.
+    const windowIdx = windowIndexFor(nowMs);
+    const slot = freshSlots.currentSlot({
+      digest: slotLedgerDigest({ tenantId, windowIdx, canonical }),
+      nowMs,
+    });
+    const { code, expiresAtMs } = issueConfirmationCode({
+      key,
+      tenantId,
+      canonical: canonicalForSlot({ canonical, slot }),
+      nowMs,
+    });
     return res.status(HTTP_OK).json({
       preview,
       confirmation: { code, expires_at: new Date(expiresAtMs).toISOString() },
