@@ -40,7 +40,15 @@ const NO_POLLING_CADENCE = /alle ~?\d+\s*Sekunden/;
 // POST /api/calls und liest nur r.callId - anders als get_call_status/get_call_result,
 // die GET /api/calls/:id lesen und ein RICH_CALL/RICH_TRANSCRIPT-Call-Objekt erwarten.
 const PLACE_CALL_ARGS = { to: "+4917212345678", objective: "Testanruf" };
-const PLACE_CALL_MOCK = { callId: "call_1" };
+// T2-13 (N-10): der Fake-Gateway ist statisch (EIN Body fuer JEDEN Pfad) - place_call
+// macht jetzt ZWEI Hops (confirmCallHop -> POST /api/call-confirmations, dann
+// placeCallHopCall -> POST /api/calls). preview/confirmed decken den ersten Hop,
+// callId weiterhin den zweiten.
+const PLACE_CALL_MOCK = {
+  preview: { status: "awaiting_confirmation", to: PLACE_CALL_ARGS.to, objective: PLACE_CALL_ARGS.objective },
+  confirmed: true,
+  callId: "call_1",
+};
 
 // Faehiger Host: deklariert die UI-Capability mit UI_MIME (SEP-1865 initialize).
 const CAPABLE_CAPS = {
