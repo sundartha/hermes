@@ -70,12 +70,6 @@ const EXPECTED_ANNOTATIONS = {
     destructiveHint: false,
     openWorldHint: false,
   },
-  get_calendar: {
-    title: "Get calendar",
-    readOnlyHint: true,
-    destructiveHint: false,
-    openWorldHint: false,
-  },
   get_agent_status: {
     title: "Get agent status",
     readOnlyHint: true,
@@ -262,7 +256,6 @@ test("P1 (DP-1): stdio-ctx und HTTP-ctx liefern fuer dasselbe Werkzeug identisch
   const stdioAnnotations = captureAnnotations({ uiHost: { enabled: false } });
   // Exakt wie src/routes/mcp.js:151 registerTools() mit voller Consult-Faehigkeit aufruft.
   const httpAnnotations = captureAnnotations({
-    allowCalendar: true,
     consultAllowed: true,
     uiHost: { enabled: true },
   });

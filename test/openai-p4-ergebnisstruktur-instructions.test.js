@@ -129,7 +129,7 @@ async function withMock({ body = null, status = HTTP_OK } = {}, run) {
 }
 
 // Ein Antwortkoerper je Werkzeug, mit dem der Handler OHNE Fehler durchlaeuft
-// (Erfolgslauf/Positiv-Kontrolle). Leere Listen sind gueltige Erfolgsfaelle (get_calendar
+// (Erfolgslauf/Positiv-Kontrolle). Leere Listen sind gueltige Erfolgsfaelle (list_calls
 // etc. behandeln [] als validen, nicht-fehlerhaften Zustand - s. requireFields: Existenz/
 // Typ wird geprueft, nicht Nicht-Leere).
 const SUCCESS_BODY_OF = new Map([
@@ -147,7 +147,6 @@ const SUCCESS_BODY_OF = new Map([
   ["get_agent_number", { agent: { number: "+491511234567" } }],
   ["list_calls", { calls: [] }],
   ["check_inbox", { entries: [], remaining: 0 }],
-  ["get_calendar", { calendar: [] }],
   ["get_agent_status", { agent: {}, usage: {}, settings: {} }],
 ]);
 
@@ -162,7 +161,6 @@ const ARGS_OF = new Map([
   ["get_agent_number", {}],
   ["list_calls", {}],
   ["check_inbox", { include_seen: false }],
-  ["get_calendar", {}],
   ["get_agent_status", {}],
 ]);
 
@@ -179,7 +177,6 @@ test("P4 (T-19/T-20 Regel): jedes Werkzeug mit outputSchema liefert in jedem Rue
   const registrations = captureToolsWithConfig({
     identity: null,
     scopedTenant: null,
-    allowCalendar: true,
     consultAllowed: true,
     language: null,
   });
@@ -357,7 +354,6 @@ test("P4 (Review-Runde 2, Befund 1): get_call_result-Beschreibung schliesst stat
   const registrations = captureToolsWithConfig({
     identity: null,
     scopedTenant: null,
-    allowCalendar: true,
     consultAllowed: false,
     language: null,
   });
