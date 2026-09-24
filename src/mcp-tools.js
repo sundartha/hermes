@@ -986,7 +986,7 @@ const TOOL_INVOCATION_STATUS = {
 };
 
 // T-18/T-22 (P2, DP-7): hebt title auf Top-Level und haengt die Statuszeilen an _meta an -
-// fuer JEDES Werkzeug, ausserhalb der zwoelf Config-Literale. Grund: fuenf der Literale
+// fuer JEDES Werkzeug, ausserhalb der elf Config-Literale. Grund: vier der Literale
 // spreaden ...enableWidgetUi() als LETZTES Feld; ein vorher im Literal gesetztes _meta
 // wuerde von diesem Spread still und vollstaendig ueberschrieben (Objekt-Literal-Semantik,
 // kein Deep-Merge). Deshalb erst HIER, nachdem das Literal fertig gebaut ist.

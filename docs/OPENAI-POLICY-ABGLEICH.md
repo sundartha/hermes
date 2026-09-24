@@ -377,7 +377,7 @@ nie gemessen.
   ein Transkript gespeichert ist (Luecke 11 in Teil C).
 - `get_agent_status` gibt den Namen des Auftraggebers zurueck (`src/mcp-tools.js:592`); die
   Beschreibung nennt ihn jetzt als Zweck.
-- Teilweise geprueft: welche Felder jedes der zwoelf Werkzeuge zurueckgibt und zu welcher
+- Teilweise geprueft: welche Felder jedes der Werkzeuge zurueckgibt und zu welcher
   Datenkategorie sie gehoeren, steht in Teil B ("Werkzeug-Antworten Feld fuer Feld"). Ob jedes
   dieser Felder fuer die Anfrage des Nutzers erforderlich ist, ist nicht Feld fuer Feld
   bewertet.
