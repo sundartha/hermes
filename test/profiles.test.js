@@ -31,6 +31,19 @@ const TENANT_CALL_TO = "+4915123123123";
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY_REQUESTS = 429;
+
+// T2-13 (N-10): Bestaetigungs-Code direkt an der Route holen (derselbe Loopback-Aufrufer
+// wie der MCP-Handler); tenantHeader bindet ihn - wie das echte /mcp-Gateway per
+// X-Internal-Tenant - an den Mandanten, dessen Gate der jeweilige Testfall prueft.
+async function confirmedPlaceCallArgs(localUrl, args, tenantHeader) {
+  const res = await fetch(`${localUrl}/api/call-confirmations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Internal-Tenant": tenantHeader },
+    body: JSON.stringify(args),
+  });
+  const json = await res.json();
+  return { ...args, confirmation_code: json.confirmation?.code };
+}
 const HTTP_SERVER_ERROR = 500; // Offline-Diskriminator: alle Gates passiert (kein TELNYX_API_KEY)
 
 const postCall = (url, to, identity) =>
@@ -306,6 +319,9 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       MULTI_TENANT: "true",
       ALLOWED_NUMBERS: "",
       ALLOWED_COUNTRY_CODES: "*",
+      // T2-13 (N-10): ohne bestaetigten confirmation_code kaeme place_call nie bis zum
+      // Gate, dessen Audit-Zeile dieser Test prueft.
+      CALL_CONFIRMATION_SECRET: "profiles-test-confirmation-secret-mind-32-zeichen",
     },
     seed: seedState({
       tenants: [subTenant("t_alice", "alice-sub"), subTenant("t_prod", "user_01PROD")],
@@ -323,11 +339,12 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
   try {
     await ctx.test("place_call ueber MCP (JWT email+sub) -> Audit requestedBy=<email>", async () => {
       const token = await idp.sign({ sub: "alice-sub", email: "alice@team.test" });
-      const res = await mcpPost(
-        `${srv.localUrl}/mcp`,
-        token,
-        toolCall("place_call", { to: TENANT_CALL_TO, objective: "Termin" }),
+      const placeCallArgs = await confirmedPlaceCallArgs(
+        srv.localUrl,
+        { to: TENANT_CALL_TO, objective: "Termin" },
+        "t_alice",
       );
+      const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
       assert.notEqual(res.status, HTTP_UNAUTHORIZED);
       await waitForLog(
         srv,
@@ -375,11 +392,12 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       "Profil per Tenant (Token-sub -> idpSubject) hebt die Allowlist auf -> place_call",
       async () => {
         const token = await idp.sign({ sub: "user_01PROD" }); // identity = sub, loest t_prod auf
-        const res = await mcpPost(
-          `${srv.localUrl}/mcp`,
-          token,
-          toolCall("place_call", { to: "+4915123123126", objective: "Termin" }),
+        const placeCallArgs = await confirmedPlaceCallArgs(
+          srv.localUrl,
+          { to: "+4915123123126", objective: "Termin" },
+          "t_prod",
         );
+        const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
         assert.notEqual(res.status, HTTP_UNAUTHORIZED);
         await waitForLog(
           srv,
