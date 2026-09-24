@@ -26,12 +26,17 @@ nie gemessen.
 
 ## Quellen
 
-- OpenAI Usage Policies: https://openai.com/policies/usage-policies/ - die Primaerquelle war
-  am 2026-09-24 NICHT abrufbar: sowohl eine einfache HTTP-Anfrage als auch ein Abruf-Werkzeug
-  erhielten 403. Der Wortlaut der Zitate aus dieser Seite stammt aus einer Kopie, die ein
-  Crawler-Dienst am selben Tag geliefert hat (Kopfzeile dort "Effective: October 29, 2025").
-  Jedes dieser Zitate traegt deshalb den Vermerk "wording to be re-checked against the live
-  page before attestation"; bis dahin gilt es als ungeprueft.
+- OpenAI Usage Policies: https://openai.com/policies/usage-policies/ - Kopfzeile der Seite
+  "Effective: October 29, 2025". Eine einfache HTTP-Anfrage an diese Adresse erhaelt 403; die
+  Seite wurde deshalb am 2026-09-24 in einem gewoehnlichen Browser direkt von der
+  Primaerquelle geladen. Die Seite leitet je nach Spracheinstellung auf eine uebersetzte
+  Fassung um; zitiert wird ausschliesslich die englische Fassung unter der obigen Adresse
+  (HTTP 200). Jedes Zitat aus dieser Seite wurde Zeichen fuer Zeichen, mit Gross- und
+  Kleinschreibung und typografischen Apostrophen, gegen den Seitentext geprueft, ebenso der
+  jeweils genannte Abschnitt ("Protect people", "Respect privacy", "Keep minors safe",
+  "Empower people") und die Bereichsliste unter "automation of high-stakes decisions".
+  Gegenprobe: das Wort "telemarketing" steht NICHT in den Usage Policies und wurde als fehlend
+  erkannt - es stammt aus den Plugin Guidelines und ist unten auch nur dort zugeordnet.
 - OpenAI Plugin Guidelines: https://developers.openai.com/plugins/app-guidelines - Seitentitel
   "Plugin guidelines"; die Seite spricht durchgehend von "plugins". Am 2026-09-24 direkt von
   der Primaerquelle abgerufen (HTTP 200). Jedes Zitat aus dieser Seite und jeder genannte
@@ -92,7 +97,7 @@ nie gemessen.
 
 > "Negative-option billing, telemarketing, or consent-bypass schemes" - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Prohibited fraudulent, deceptive, or high-risk services")
 
-> "deceit, fraud, scams, spam, or impersonation" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people") - wording to be re-checked against the live page before attestation
+> "deceit, fraud, scams, spam, or impersonation" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people")
 
 - Einschlaegig: ja. Hermes fuehrt echte ausgehende Anrufe an Dritte.
 - Mechanismen im Code (Kette der Ausgangs-Gates, serverseitig, vor dem Waehlen):
@@ -122,7 +127,7 @@ nie gemessen.
 
 ### Drohung, Einschuechterung, Belaestigung
 
-> "threats, intimidation, harassment, or defamation" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people") - wording to be re-checked against the live page before attestation
+> "threats, intimidation, harassment, or defamation" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people")
 
 - Einschlaegig: ja. Ein Anruf in fremdem Auftrag kann als Belaestigung eingesetzt werden.
 - Mechanismen: Wiederholungs-Grenze je Ziel und Stundenlimit (siehe oben), Sperrliste,
@@ -135,7 +140,7 @@ nie gemessen.
 
 > "Identity theft, impersonation, or identity-monitoring services that enable misuse" - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Prohibited fraudulent, deceptive, or high-risk services")
 
-> "deceit, fraud, scams, spam, or impersonation" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people") - wording to be re-checked against the live page before attestation
+> "deceit, fraud, scams, spam, or impersonation" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people")
 
 - Einschlaegig: ja.
 - Mechanismus, Budget-/Telnyx-Weg: der erste gesprochene Satz ist der Offenlegungssatz
@@ -169,7 +174,7 @@ nie gemessen.
 
 ### Stimme einer realen Person
 
-> "use of someone’s likeness, including their photorealistic image or voice, without their consent in ways that could confuse authenticity" - https://openai.com/policies/usage-policies/ (Abschnitt "Respect privacy") - wording to be re-checked against the live page before attestation
+> "use of someone’s likeness, including their photorealistic image or voice, without their consent in ways that could confuse authenticity" - https://openai.com/policies/usage-policies/ (Abschnitt "Respect privacy")
 
 - Einschlaegig: ja, Hermes spricht mit synthetischer Stimme.
 - Mechanismus: im Code gibt es keine Funktion, die eine Stimme klont oder anlegt. Beleg:
@@ -182,7 +187,7 @@ nie gemessen.
 
 ### Privatsphaere Dritter
 
-> "we don’t allow attempts to compromise the privacy of others, including to aggregate, monitor, profile, or distribute individuals’ private or sensitive information without their authorization" - https://openai.com/policies/usage-policies/ (Abschnitt "Respect privacy") - wording to be re-checked against the live page before attestation
+> "we don’t allow attempts to compromise the privacy of others, including to aggregate, monitor, profile, or distribute individuals’ private or sensitive information without their authorization" - https://openai.com/policies/usage-policies/ (Abschnitt "Respect privacy")
 
 - Einschlaegig: ja. Der Angerufene ist ein Dritter; seine Aussagen werden verarbeitet.
 - Mechanismen:
@@ -261,7 +266,7 @@ nie gemessen.
 
 ### Beratung, die eine Zulassung erfordert
 
-> "provision of tailored advice that requires a license, such as legal or medical advice, without appropriate involvement by a licensed professional" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people") - wording to be re-checked against the live page before attestation
+> "provision of tailored advice that requires a license, such as legal or medical advice, without appropriate involvement by a licensed professional" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people")
 
 - Einschlaegig: mittelbar. Hermes beraet den Nutzer nicht, er fuehrt Gespraeche in seinem
   Auftrag, z.B. mit einer Arztpraxis oder Kanzlei; die Auskunft kommt dort von Menschen.
@@ -274,7 +279,7 @@ nie gemessen.
 
 ### Umgehung von Schutzmassnahmen
 
-> "circumventing our safeguards" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people") - wording to be re-checked against the live page before attestation
+> "circumventing our safeguards" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people")
 
 - Einschlaegig: nein - die Klausel meint OpenAIs Schutzmassnahmen; Hermes hat keinen Pfad, der
   sie beruehrt. Zur Einordnung: Hermes' eigene Gates liegen serverseitig in der Gate-Kette
@@ -283,7 +288,7 @@ nie gemessen.
 
 ### Politische Kampagnen, Lobbying
 
-> "political campaigning, lobbying, foreign or domestic election interference, or demobilization activities" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people") - wording to be re-checked against the live page before attestation
+> "political campaigning, lobbying, foreign or domestic election interference, or demobilization activities" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people")
 
 - Einschlaegig: ja. Massenanrufe sind ein klassisches Kampagnenwerkzeug.
 - Mechanismus: nur die Mengen-Gates (Stundenlimit, Ziel-Grenze, Kostendecke). Keine
@@ -292,7 +297,7 @@ nie gemessen.
 
 ### Minderjaehrige
 
-> "Children and teens deserve special protection." - https://openai.com/policies/usage-policies/ (Abschnitt "Keep minors safe") - wording to be re-checked against the live page before attestation
+> "Children and teens deserve special protection." - https://openai.com/policies/usage-policies/ (Abschnitt "Keep minors safe")
 
 > "Plugins must be suitable for general audiences, including users aged 13–17. Plugins may not explicitly target children under 13." - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Appropriateness")
 
@@ -412,7 +417,7 @@ behandelt `docs/OPENAI-TOOL-INVENTORY.md`, nicht dieses Dokument.
 
 ## Teil A2: "automation of high-stakes decisions in sensitive areas without human review"
 
-> "automation of high-stakes decisions in sensitive areas without human review" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people"; die Bereichsliste nennt u.a. housing, employment, financial activities and credit, insurance, legal, medical) - wording to be re-checked against the live page before attestation
+> "automation of high-stakes decisions in sensitive areas without human review" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people"; die Bereichsliste nennt u.a. housing, employment, financial activities and credit, insurance, legal, medical)
 
 Gegenstand: das optionale Mandat von `place_call`. Mit ihm darf der Gespraechsagent im Anruf
 selbst zusagen, statt jede Frage als Nachricht zurueckzugeben.

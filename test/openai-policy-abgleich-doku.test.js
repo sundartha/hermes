@@ -46,9 +46,11 @@ const BLOCK_SEPARATOR = " | ";
 const ERROR_EXCERPT_CHARS = 80;
 const USAGE_POLICIES_URL = "https://openai.com/policies/usage-policies/";
 const OPENAI_SOURCE_URLS = [USAGE_POLICIES_URL, "https://developers.openai.com/plugins/app-guidelines"];
-// Die Usage Policies antworteten beim Abgleich mit 403; ihr Wortlaut ist ungeprueft.
-const UNFETCHABLE_SOURCE_URLS = [USAGE_POLICIES_URL];
-const RECHECK_MARKER = "wording to be re-checked against the live page before attestation";
+const SOURCES_SECTION = { begin: "## Quellen", end: "## Uebersicht" };
+const SOURCE_ITEM_START = /^- /m;
+// Jede zitierte OpenAI-Quelle muss im Quellen-Abschnitt als direkt an der Primaerquelle
+// Zeichen fuer Zeichen geprueft ausgewiesen sein - eine Kopie Dritter ist kein Beleg.
+const PRIMARY_SOURCE_CLAIMS = ["direkt von der Primaerquelle", "Zeichen fuer Zeichen"];
 const GAPS_SECTION = { begin: "## Teil C: Luecken", end: "## Anker (maschinenlesbar)" };
 const GAP_ITEM_START = /^\d+\. \*\*/m;
 // Der Ziel-Wert darf ueber einen Zeilenumbruch laufen; geprueft wird der Text mit
@@ -241,14 +243,15 @@ test("Policy-Abgleich: keine internen Kennungen, Nummern oder Secret-Muster im D
   }
 });
 
-test("Policy-Abgleich: jedes Zitat einer nicht abrufbaren Quelle traegt den Nachpruef-Vermerk", () => {
-  const quoteLines = readDoc()
-    .split("\n")
-    .filter((line) => line.startsWith(POLICY_QUOTE_PREFIX))
-    .filter((line) => UNFETCHABLE_SOURCE_URLS.some((url) => line.includes(url)));
-  assert.ok(quoteLines.length > 0, "keine Zitate der nicht abrufbaren Quelle gefunden - der Filter greift nicht");
-  for (const line of quoteLines) {
-    assert.ok(line.includes(RECHECK_MARKER), `Zitat ohne Nachpruef-Vermerk: ${line.slice(0, ERROR_EXCERPT_CHARS)}`);
+test("Policy-Abgleich: jede zitierte OpenAI-Quelle ist als an der Primaerquelle geprueft ausgewiesen", () => {
+  const { body } = blockBounds(readDoc(), SOURCES_SECTION);
+  const items = body.split(SOURCE_ITEM_START).map((item) => item.replace(/\s+/g, " "));
+  for (const url of OPENAI_SOURCE_URLS) {
+    const item = items.find((candidate) => candidate.includes(url));
+    assert.ok(item, `Quelle ${url} fehlt im Quellen-Abschnitt`);
+    for (const claim of PRIMARY_SOURCE_CLAIMS) {
+      assert.ok(item.includes(claim), `Quelle ${url} ohne Primaerquellen-Nachweis "${claim}"`);
+    }
   }
 });
 
