@@ -32,7 +32,7 @@
 //
 // ERGEBNIS: ziehend. Der Anbieter meldet das Gespraechsende nicht an uns, wir holen es ab
 // (GET /v1/convai/conversations/{id}, Takt ELEVENLABS_RESULT_POLL_MS) und legen Transkript
-// und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
+// und Zusammenfassung an denselben Call-Record, den get_call_result ohnehin liest.
 import { LOCALES, localeFor } from "../i18n/locales.js";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
 import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
@@ -1053,7 +1053,7 @@ function recordAbsenderMessung(store, callId, conversation) {
 
 // Das Gespraech ist beim Anbieter zu Ende. Transkript, Zusammenfassung und Befund KOMMEN
 // VON IHM (wir haben auf diesem Weg weder Audio noch Turn-Schleife) und landen ueber die
-// Store-Mutatoren an denselben Feldern, die get_transcript ohnehin liest - kein zweiter
+// Store-Mutatoren an denselben Feldern, die get_call_result ohnehin liest - kein zweiter
 // Schreibweg neben dem Store. MODUL-EBENE (G30/G34): die Funktion braucht ausser store
 // keinen Zustand der Fabrik - dieselbe Begruendung wie bei recordAbsenderMessung darueber.
 //
