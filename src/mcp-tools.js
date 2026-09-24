@@ -41,6 +41,7 @@ import { MCP_ERROR_CODE, MCP_TEXTS } from "./i18n/mcp-texts.js";
 // nicht kopiert, nicht nachgebaut. Wiederverwendung an genau der Naht, an der
 // failure_reason den Server verlaesst (callOutcomeView unten).
 import { failureReasonBase } from "./telephony/failure-reason.js";
+import { CALL_PURPOSE_RULE } from "./call-purpose.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
 // NICHT MEHR EXPORTIERT: der einzige Fremdnutzer war src/conversation/outcome-to-mcp-
@@ -748,10 +749,13 @@ const OPEN_QUESTIONS_FIELD = z
     "A few (max. 10) short questions that are still open BEFORE the call and that only the principal can answer. They are asked while the phone is ringing, so the agent starts the conversation with the answers.",
   );
 
-// Bestands-Beschreibung von place_call, byte-identisch aus dem Tool-Deskriptor
-// herausgeloest (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
+// Beschreibung von place_call (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
+// Die Zweckbindung (CALL_PURPOSE_RULE, call-purpose.js) steht direkt hinter dem ersten Satz:
+// sie entscheidet, OB das Werkzeug ueberhaupt gerufen wird, und gehoert deshalb nach vorn.
 const PLACE_CALL_DESCRIPTION =
-  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Calling it again for a running number returns that same call (deduplicated: true).";
+  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. " +
+  CALL_PURPOSE_RULE +
+  " The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Calling it again for a running number returns that same call (deduplicated: true).";
 
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -

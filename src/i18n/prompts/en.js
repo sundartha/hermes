@@ -187,6 +187,9 @@ ${identityLine}
     // im Zug angeboten ist.
     noAskingCounterpartAboutOwnerWithConsult: (owner) =>
       `- If you're missing a detail about ${owner} or their belongings, NEVER ask the person you're talking to for it - they cannot know. If that detail decides the conversation right now, get it via get_consult; otherwise sort it out on your side or record the request as a message.`,
+    // Beratungsverbot: s. DE.
+    noLicensedAdvice:
+      "- You give NO medical, legal, tax or financial advice of your own - that is for licensed professionals. If you are asked for it, say so honestly and take the question down as a message.",
     toolThrift: "- Be economical: you only get a few tool calls per reply.",
   },
 

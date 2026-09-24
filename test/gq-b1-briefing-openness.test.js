@@ -47,8 +47,12 @@ before(async () => {
 // traegt Katalog + Ablehnungssemantik + die Grenze zur Offenlegung - das treibt den
 // Deckel messbar nach oben (gemessen: 6139 von 6300 ohne Kanal, 6541 von 6700 mit
 // Kanal). Etwas Luft bleibt, damit eine reine Wortwahl-Korrektur ihn nicht reisst.
-const PLACE_CALL_BUDGET_CHARS = 6300;
-const PLACE_CALL_WITH_CONSULT_BUDGET_CHARS = 6700;
+// Benannter Grund (Zweckbindung, src/call-purpose.js): die OpenAI Usage Policies verlangen,
+// Telemarketing, Werbung, politische Kampagnen und eingeschraenkte Daten am
+// Entscheidungspunkt des Modells auszuschliessen - das kostet 544 Zeichen in der
+// Beschreibung selbst (gemessen: 6836 ohne Kanal, 7238 mit Kanal).
+const PLACE_CALL_BUDGET_CHARS = 6900;
+const PLACE_CALL_WITH_CONSULT_BUDGET_CHARS = 7300;
 const CONSULT_CTX = Object.freeze({ consultAllowed: true });
 const PLACE_CALL_PREFIX = "place_call";
 // GROSS-/KLEINSCHREIBUNG BEWUSST EGAL: der Bestand trug den Satz einmal als "ask the
