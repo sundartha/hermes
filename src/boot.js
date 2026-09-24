@@ -35,6 +35,7 @@ import {
   platformAniFindings,
   platformAlertSenderFindings,
   driftConfigFindings,
+  callConfirmationSecretFindings,
   llmFallbackFindings,
   elInboundAccessFindings,
   elInboundScopeFindings,
@@ -329,6 +330,13 @@ function warnOutboundDriftConfigUnset(config) {
     console.warn(`[boot] ${finding.message}`);
 }
 
+// T2-13 (N-10): reine Diagnose, NIE fatal (s. callConfirmationSecretFindings). Loggt nie
+// den Secret-Wert.
+function warnCallConfirmationSecretUnset(config) {
+  for (const finding of callConfirmationSecretFindings({ secret: config.auth.callConfirmationSecret }))
+    console.warn(`[boot] ${finding.message}`);
+}
+
 // LCT P5: Drift-Waechter, Ausloeser 1 von 2 (Boot). GENAU EINE Zeile fuer ALLE Praefixe -
 // nicht eine je Praefix je Boot (Risiko-Abschnitt der Phase: WARN-Muedigkeit). WARN nur,
 // wenn ueberhaupt ein Befund vorliegt; ein durchweg im Band liegender Zustand loggt ruhig.
@@ -587,6 +595,7 @@ function assertBootGates(config, store, durableAudit) {
   warnKostenAlarmZielUnset(config, durableAudit); // KV2-1, WARN + durabel
   warnPlatformAniUnset(config); // OUTBOUND-E1, WARN
   warnOutboundDriftConfigUnset(config); // OUTBOUND-E4, WARN
+  warnCallConfirmationSecretUnset(config); // T2-13, WARN
   warnTariffDrift(config, store);
   warnTarifpaar(config, store); // KV2-10, WARN: Tarifpaar-Waechter feuert beim Start
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN

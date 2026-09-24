@@ -595,6 +595,11 @@ export const BASE_ENV = {
   OAUTH_ISSUER_URL: "",
   OAUTH_AUDIENCE: "",
   RENDER_EXTERNAL_URL: "",
+  // T2-13 (N-10) default AUS (fail-closed, leer): Bestandssuite byte-identisch (prepare_call
+  // antwortet 503 confirmation_unavailable, keine Bestaetigung ausgestellt). Ohne diese
+  // Zeile leakt eine lokale .env mit CALL_CONFIRMATION_SECRET via dotenv in Spawn-Tests
+  // (Lehre test-base-env-drift). Der Draht-Test (openai-t2-13) setzt sie explizit.
+  CALL_CONFIRMATION_SECRET: "",
 };
 
 // Alle .js-Quelltexte unter einem REPO-RELATIVEN Verzeichnis als [pfad, inhalt]-Paare (Pfade

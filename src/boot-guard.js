@@ -711,6 +711,26 @@ export function driftConfigFindings({ fqdnConnectionId, outboundVoiceProfileId, 
   }];
 }
 
+// T2-13 (N-10): das Betriebsgeheimnis des serverseitigen Bestaetigungs-Codes vor dem
+// Waehlen (src/call-confirmation.js). NIE fatal (Owner-Regel P6, keine neue Boot-Sperre) -
+// fehlt es, laeuft die Produktion weiter, aber prepare_call antwortet ausschliesslich
+// 503 "confirmation_unavailable" und per MCP waehlt niemand mehr (s. PLAN-SECURITY.md,
+// Abschnitt "OpenAI-T2-13"). Loggt nie den Wert, nur die Praesenz.
+export const CALL_CONFIRMATION_SECRET_FINDING = Object.freeze({
+  UNSET: "call_confirmation_secret_unset", // WARN
+});
+
+export function callConfirmationSecretFindings({ secret } = {}) {
+  if (secret) return [];
+  return [{
+    code: CALL_CONFIRMATION_SECRET_FINDING.UNSET,
+    fatal: false,
+    message:
+      "CALL_CONFIRMATION_SECRET fehlt - prepare_call/place_call koennen per MCP keinen " +
+      "Anruf bestaetigen (503 confirmation_unavailable). Wert im Render-Dashboard setzen.",
+  }];
+}
+
 // LCT P4: die Riegel des Flips. FATAL = leere Pflicht-Menge bei aktiver Buchung ("Ein
 // Dienst, der Geld zurueckerstattet, ohne zu wissen, wogegen er Vollstaendigkeit prueft,
 // darf nicht starten"). FATAL = Pflicht-Typ, den der Adapter nie zuordnen KANN (LCT-FIX-1)
