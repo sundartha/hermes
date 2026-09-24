@@ -144,10 +144,17 @@ nie gemessen.
   ausdruecklich freigeschalteter Mandant (`src/callee-is-owner.js:68`) und ein Schalter, der
   per Code-Default aus ist (`src/config.js:1915-1917`). Budget-Weg: `src/claude.js:469-471`;
   Sprach-Agenten-Weg: `ownerFirstMessage` (`src/elevenlabs/outbound.js:1165`).
-- Nicht belegt in diesem Dokument: ob der hinterlegte Auftraggeber-Name gegen eine
-  nachgewiesene Identitaet geprueft wird (UNKNOWN). Ein Mandant, der einen fremden Namen
-  eintraegt, liesse die KI "im Auftrag von" dieser Person anrufen.
-- Status: `teilweise`.
+- Der hinterlegte Auftraggeber-Name wird gegen keinen Identitaetsnachweis geprueft. Beim
+  Web-Login uebernimmt der Server Vor- und Nachname aus dem Profil des Login-Anbieters
+  (`src/web-auth.js:461-462`) und schreibt sie an den Mandanten, wenn dort noch keiner steht
+  (`src/web-auth.js:205`). Im Onboarding durch den Betreiber sind beide Felder Freitext
+  (`src/routes/api-onboard.js:94-98`). Wie die Namensfelder beim Login-Anbieter entstehen,
+  belegt der Code nicht. Die Pruefstufe fuer ausgehende Anrufe ist die hinterlegte Karte
+  (`src/store/defaults.js:524`), keine Identitaetspruefung; die hoehere Stufe "Identitaet
+  geprueft" vergibt der Code nur beim Start an den Mandanten des Betreibers, ohne
+  Pruefverfahren (`src/store/state-ops.js:2216`). Ein Konto mit fremdem Namen im
+  Login-Profil liesse die KI "im Auftrag von" dieser Person anrufen.
+- Status: `teilweise`. Luecke 10 in Teil C.
 
 ### Stimme einer realen Person
 
@@ -168,12 +175,44 @@ nie gemessen.
 
 - Einschlaegig: ja. Der Angerufene ist ein Dritter; seine Aussagen werden verarbeitet.
 - Mechanismen:
-  - Recherche waehrend des Anrufs erhaelt nur `objective`, Auftragsnotizen und `constraints`,
-    nie die Zielnummer (`src/research/sanitize.js:17`). Achtung: die Auftragsnotizen SIND das
-    `briefing` (`src/routes/api-calls.js:525`); ist die Recherche eingeschaltet
-    (`src/config.js:624`, Code-Default aus), kann das `briefing` beim Such-Anbieter ankommen.
-  - Das Gespraechsmodell soll keine Namen, Nummern, Adressen, Gesundheits- oder Geldangaben des
-    Gegenuebers recherchieren (`src/i18n/prompts/en.js:326`).
+  - Es gibt zwei getrennte Such-Mechanismen mit eigenen Schaltern, Anbietern und Filtern.
+  - Vorab-Recherche VOR dem Anruf: Schalter `RESEARCH_ENABLED` (`src/config.js:624`,
+    Code-Default aus) und Mandanten-Einstellung `allowResearch`
+    (`src/precall-briefing.js:278`). Anbieter ist die serverseitige Suche des
+    Sprachmodell-Anbieters Anthropic (`src/research/registry.js:26`). Das Modell sieht dabei
+    nur `objective`, Auftragsnotizen und `constraints`, nie die Zielnummer
+    (`src/research/sanitize.js:17`). Die Suchanfrage formuliert das Modell beim Anbieter; der
+    Server sieht sie nicht und kann sie nicht filtern (`src/research/sanitize.js:2`).
+    Achtung: die Auftragsnotizen SIND das `briefing` (`src/routes/api-calls.js:525`); das
+    `briefing` kann also bei dieser Suche ankommen.
+  - Nachschlag WAEHREND des Anrufs: das Werkzeug `look_up` des Gespraechsmodells
+    (`src/research/in-call.js:18`), auf dem Budget-/Telnyx-Weg (`src/claude.js:648`) und auf
+    dem Sprach-Agenten-Weg ueber einen Webhook (`src/routes/webhooks-elevenlabs.js:270`).
+    Voraussetzungen: Schalter `LOOKUP_ENABLED` (`src/config.js:649`, Code-Default aus), ein
+    hinterlegter Schluessel fuer Exa (`src/research/registry.js:56`) und das Profil-Recht
+    `allowLookup` (`src/research/in-call.js:55`); nur ausgehende Anrufe
+    (`src/research/in-call.js:51`, Sprach-Agenten-Weg `src/research/registry.js:97`); auf dem
+    Budget-/Telnyx-Weg zusaetzlich der Assistenten-Kontext (`src/research/in-call.js:50`).
+    Das Profil der bezahlten Tarife traegt das Recht im Code nicht (`src/plans.js:138`), das
+    Profil des Betreiber-Mandanten schon (`src/store/defaults.js:1062`); welche gespeicherten
+    Profile es in Produktion tragen, ist hier nicht gemessen. Anbieter ist Exa
+    (`src/research/registry.js:34`), hoechstens zwei Suchen je Anruf
+    (`src/research/registry.js:68`).
+  - Die Suchanfrage des Nachschlags formuliert das Gespraechsmodell frei aus dem laufenden
+    Gespraech, also auch aus Aussagen des Angerufenen. Der einzige serverseitige Filter
+    (`src/research/lookup-guard.js:66-74`) verwirft Anfragen mit Ziffernfolgen ab fuenf
+    Stellen (`src/research/lookup-guard.js:25`), mit E-Mail-Adressen, mit der Zielnummer oder
+    mit woertlichen Zitaten aus dem Transkript, und kuerzt auf 120 Zeichen
+    (`src/research/lookup-guard.js:20`). Einen Namensfilter hat er nicht (`src/plans.js:125`),
+    Gesundheits- oder Geldbegriffe prueft er nicht. Umschriebene Aussagen des Angerufenen
+    koennen also an Exa gehen. Auf dem Sprach-Agenten-Weg schreibt der Server das Transkript
+    erst nach dem Anruf (`src/elevenlabs/outbound.js:1075`); der Zitat-Filter vergleicht nur
+    mit gespeicherten Zeilen des Angerufenen (`src/utils/text.js:57-60`) und hat dort
+    waehrend des Anrufs nichts zum Vergleichen.
+  - Die Werkzeugbeschreibung von `look_up` auf dem Budget-/Telnyx-Weg verbietet, Namen,
+    Nummern, Adressen, Gesundheits- oder Geldangaben des Gegenuebers zu suchen
+    (`src/i18n/prompts/en.js:326`). Das ist eine Anweisung an das Modell; serverseitig
+    durchgesetzt ist nur der Filter oben.
   - Das Roh-Transkript auf unserer Seite wird am Anrufende geleert
     (`src/telephony/call-finish.js:350`, in `finishCall`); der Sprach-Agenten-Weg endet ueber
     dieselbe Funktion (`src/elevenlabs/outbound.js:1458`). Was der Sprach-Anbieter selbst
@@ -186,6 +225,7 @@ nie gemessen.
   (`src/mcp-tools.js:1522`).
   Werkzeugtext (get_transcript): "This tool NEVER returns the raw transcript"
 - Status: `teilweise`. Der Dritte willigt nicht ein; er wird nur informiert (Offenlegung).
+  Luecke 8 in Teil C (Suchanfragen an Such-Anbieter).
   Rechtsgrundlage und Information des Dritten sind Rechtstext-Fragen (Teil B).
 
 ### Beratung, die eine Zulassung erfordert
@@ -198,7 +238,7 @@ nie gemessen.
   (`src/i18n/prompts/en.js:157`).
 - Was fehlt: kein Prompt-Satz verbietet dem Gespraechsagenten, dem Gegenueber selbst
   medizinische oder rechtliche Auskunft zu geben. Beleg: die einzige Gesundheits-Nennung in
-  `src/i18n/prompts/en.js` betrifft die Recherche (`src/i18n/prompts/en.js:326`).
+  `src/i18n/prompts/en.js` betrifft den Nachschlag im Anruf (`src/i18n/prompts/en.js:326`).
 - Status: `teilweise`.
 
 ### Umgehung von Schutzmassnahmen
@@ -303,9 +343,12 @@ nie gemessen.
   Werkzeugtext (place_call): "Starts a real phone call by the AI agent to a phone number, pursuing the given objective."
   Die Beschreibung sagt auch, dass `objective` dem Angerufenen woertlich vorgelesen wird.
   Werkzeugtext (place_call): "it is read out VERBATIM to the called party right after the disclosure"
-- Was fehlt: dass `briefing`, `objective` und `constraints` bei eingeschalteter Recherche an
-  einen Such-Anbieter gehen koennen (`src/research/sanitize.js:17`,
-  `src/routes/api-calls.js:525`), steht in keiner Werkzeugbeschreibung.
+- Was fehlt, in keiner Werkzeugbeschreibung erwaehnt: (1) bei eingeschalteter
+  Vorab-Recherche koennen `briefing`, `objective` und `constraints` bei der Suche des
+  Sprachmodell-Anbieters ankommen (`src/research/sanitize.js:17`,
+  `src/routes/api-calls.js:525`); (2) bei eingeschaltetem Nachschlag im Anruf gehen vom
+  Gespraechsmodell formulierte Suchanfragen aus dem laufenden Gespraech, auch aus Aussagen
+  des Angerufenen, an Exa (`src/research/lookup-guard.js:66-74`).
 - Status: `teilweise`. Luecke 8 in Teil C.
 
 ### Datenpraktiken, Metadaten
@@ -394,8 +437,8 @@ danach alle 6 Stunden (`src/boot.js:108`, `src/boot.js:1255-1256`).
 | Sitzung | Tabelle `session` (`src/db/schema.sql:997`) | Browser-Sitzung | Ablaufzeitpunkt je Sitzung; kein Loeschlauf im Code gefunden | - |
 | Mandant: Name des Auftraggebers, eigene Nummer, Abrechnungs-Kennungen | Tabelle `tenant` (`src/db/schema.sql:13`), Spalten `owner_name` (`src/db/schema.sql:23`), `private_number` (`src/db/schema.sql:81`), `stripe_customer_id` (`src/db/schema.sql:38`), `stripe_subscription_id` (`src/db/schema.sql:48`) | Offenlegungssatz, Eigen-Anruf, Abrechnung | keine Frist im Code | Zahlungsanbieter (Kennungen) |
 | Einstellungen | Tabelle `settings` (`src/db/schema.sql:163`) | Verhalten des Assistenten | keine Frist im Code | - |
-| Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/schema.sql:211`): `from_e164`/`to_e164` (`src/db/schema.sql:218-219`), `goal` (`src/db/schema.sql:220`), `briefing` (`src/db/schema.sql:227`), `constraints` (`src/db/schema.sql:228`), `context` (`src/db/schema.sql:252`), `mandate` (`src/db/schema.sql:256`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js:2036`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js:5125`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Recherche Such-Anbieter (ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
-| Roh-Transkript | Tabelle `transcript_segment` (`src/db/schema.sql:554`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende geleert (`src/telephony/call-finish.js:350`); scheitert die Zusammenfassung mit einem Fehler, bleibt es bis zum Loeschlauf des Anrufs | waehrend des Anrufs bis zu sechs letzte Zeilen an OpenAI/ChatGPT (`src/mcp-tools.js:48`); Sprachmodell- und Sprach-Anbieter |
+| Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/schema.sql:211`): `from_e164`/`to_e164` (`src/db/schema.sql:218-219`), `goal` (`src/db/schema.sql:220`), `briefing` (`src/db/schema.sql:227`), `constraints` (`src/db/schema.sql:228`), `context` (`src/db/schema.sql:252`), `mandate` (`src/db/schema.sql:256`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js:2036`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js:5125`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Vorab-Recherche die serverseitige Suche von Anthropic (`objective`, `briefing`, `constraints`, ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
+| Roh-Transkript | Tabelle `transcript_segment` (`src/db/schema.sql:554`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende geleert (`src/telephony/call-finish.js:350`); scheitert die Zusammenfassung mit einem Fehler, bleibt es bis zum Loeschlauf des Anrufs | waehrend des Anrufs bis zu sechs letzte Zeilen an OpenAI/ChatGPT (`src/mcp-tools.js:48`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
 | Roh-Transkript eines Diagnose-Anrufs an die eigene Nummer | wie oben, Markierung `diagnostic` | nachtraegliche Analyse | 7 Tage (`src/config.js:2043-2047`); abschaltbar je Anruf mit `diagnostic=false` | - |
 | Zusammenfassung, Ergebnis | `summary`, `result` am Anruf (`src/db/schema.sql:339`) | Bericht an den Nutzer | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (Werkzeug-Antworten), Benachrichtigungswege |
 | Woertliche Zitate im Ergebnis | `result.evidence` | Beleg zur Ergebnis-Karte | Code-Default 0 = Funktion aus, es wird nichts erhoben (`src/config.js:2057-2060`) | - |
@@ -416,8 +459,8 @@ Reproduzierbar mit
 | Telnyx | Telefonie, SMS | `src/config.js:683` |
 | ElevenLabs | Sprach-Agent und Sprachausgabe | `src/config.js:506` |
 | DeepSeek | Sprachmodell (je nach Anbieter-Schalter) | `src/llm/adapters/deepseek.js:28`, Schalter `src/config.js:514` |
-| Anthropic | Sprachmodell (je nach Anbieter-Schalter), ueber das SDK | `src/llm/adapters/anthropic.js:35` |
-| Exa | Recherche waehrend des Anrufs (nur wenn eingeschaltet) | `src/config.js:666` |
+| Anthropic | Sprachmodell (je nach Anbieter-Schalter), ueber das SDK; serverseitige Suche der Vorab-Recherche (nur wenn eingeschaltet) | `src/llm/adapters/anthropic.js:35` |
+| Exa | Nachschlag waehrend ausgehender Anrufe (nur wenn eingeschaltet): vom Gespraechsmodell formulierte Suchanfragen aus dem laufenden Gespraech, auch aus Aussagen des Angerufenen | `src/config.js:666` |
 | Stripe | Zahlungen | `src/config.js:918` |
 | WorkOS | Anmeldung | `src/config.js:2090` |
 | Brevo, eigenes SMTP-Postfach | E-Mail (Kuendigungsbestaetigung) | `src/brevo-mail.js:22`, `src/smtp-mail.js:22` |
@@ -433,8 +476,9 @@ ergaenzt werden.
 
 Anrufe bei Arztpraxen, Therapeuten oder Apotheken transportieren Gesundheitsbezug in
 `objective`, `briefing`, Transkript und Zusammenfassung - zum Sprachmodell-, Sprach- und
-Telefonie-Anbieter, bei eingeschalteter Recherche zum Such-Anbieter, und ueber die
-Werkzeug-Antworten an OpenAI/ChatGPT. Dieses Dokument benennt das; die rechtliche Bewertung ist
+Telefonie-Anbieter, bei eingeschalteter Vorab-Recherche zur Suche von Anthropic, beim
+Nachschlag im Anruf als Suchanfrage an Exa (der Filter prueft keine Gesundheitsbegriffe), und
+ueber die Werkzeug-Antworten an OpenAI/ChatGPT. Dieses Dokument benennt das; die rechtliche Bewertung ist
 Sache des Rechtstextes.
 
 ### Kontrollen, die der Code dem Nutzer gibt
@@ -490,13 +534,25 @@ Sache des Rechtstextes.
    "Data practices".
 7. **Keine Loeschung und keine Auskunft im Self-Service** (`src/routes/api-read.js:116-118`,
    `src/routes/api-read.js:119`). Klausel: "any controls offered to your users".
-8. **Datenabfluss an den Such-Anbieter nicht in der Werkzeugdefinition**: bei eingeschalteter
-   Recherche gehen `briefing`, `objective` und `constraints` hinaus
-   (`src/research/sanitize.js:17`, `src/routes/api-calls.js:525`). Klausel: "If a tool sends
-   data outside the current environment ..., this must be clear from the tool definition."
+8. **Datenabfluss an Such-Anbieter nicht in der Werkzeugdefinition**, zwei Mechanismen:
+   (a) Vorab-Recherche: bei eingeschalteter Recherche gehen `briefing`, `objective` und
+   `constraints` an die Suche von Anthropic (`src/research/sanitize.js:17`,
+   `src/routes/api-calls.js:525`); (b) Nachschlag im Anruf: bei eingeschaltetem Nachschlag
+   gehen vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech mit dem Angerufenen an
+   Exa, gefiltert nur nach Ziffernfolgen, E-Mail, Zielnummer und woertlichem Zitat, ohne
+   Namensfilter (`src/research/lookup-guard.js:66-74`, `src/plans.js:125`). Ob die
+   Datenschutzerklaerung den Nachschlag und den Angerufenen als Betroffenen nennt, klaert nur
+   der Rechtstext (`offen`).
+   Klausel: "If a tool sends data outside the current environment ..., this must be clear
+   from the tool definition."
 9. **Kein Beratungsverbot im Gespraechsprompt** fuer medizinische oder rechtliche Auskunft an
    das Gegenueber (`src/i18n/prompts/en.js:157`). Klausel: "tailored advice that requires a
    license".
+10. **Auftraggeber-Name nicht identitaetsgeprueft**: der Name im Offenlegungssatz stammt aus
+    dem Profil des Login-Anbieters (`src/web-auth.js:461-462`) bzw. aus Freitext im
+    Betreiber-Onboarding (`src/routes/api-onboard.js:94-98`); die Pruefstufe fuer ausgehende
+    Anrufe ist die Karte (`src/store/defaults.js:524`). Klauseln: "impersonation",
+    "Identity theft, impersonation".
 
 ## Anker (maschinenlesbar)
 
@@ -604,6 +660,32 @@ src/mcp-tools.js:1147 | "place_call"
 src/mcp-tools.js:1182 | Relevant context from the chat so far
 src/mcp-tools.js:1218 | Set 'accept_best' ONLY when the user explicitly says
 src/mcp-tools.js:1202 | decide_freely: z
+src/research/sanitize.js:2 | wir sehen die Query nicht, bevor sie rausgeht
+src/precall-briefing.js:278 | settings.allowResearch === true
+src/research/registry.js:26 | PRECALL_PROVIDER = RESEARCH_PROVIDER.ANTHROPIC_WEB_SEARCH
+src/research/in-call.js:18 | export const LOOK_UP_TOOL_NAME = "look_up";
+src/claude.js:648 | name: LOOK_UP_TOOL_NAME
+src/routes/webhooks-elevenlabs.js:270 | const sanitized = sanitizeLookupQuery(query, call);
+src/config.js:649 | lookupEnabled: boolEnv("LOOKUP_ENABLED", process.env.LOOKUP_ENABLED, { fallback: false })
+src/research/registry.js:56 | if (!config.research.exaApiKey) return null;
+src/research/in-call.js:55 | allowLookup === true
+src/research/in-call.js:51 | if (call.direction !== "outbound") return null;
+src/research/registry.js:97 | if (call?.direction !== "outbound") return null;
+src/research/in-call.js:50 | assistantContextEnabled !== true
+src/plans.js:138 | allowLookup: false,
+src/store/defaults.js:1062 | allowLookup: true
+src/research/registry.js:34 | IN_CALL_PROVIDER = RESEARCH_PROVIDER.EXA_SEARCH
+src/research/registry.js:68 | export const LOOKUP_MAX_PER_CALL = 2;
+src/research/lookup-guard.js:66-74 | export function sanitizeLookupQuery(query, call)
+src/research/lookup-guard.js:25 | LOOKUP_DIGIT_RUN_MAX = 4
+src/research/lookup-guard.js:20 | LOOKUP_QUERY_MAX_CHARS = 120
+src/plans.js:125 | hat aber KEINEN Namensfilter
+src/elevenlabs/outbound.js:1075 | store.addTranscript(callId, roleOf(zeile.role), zeile.message)
+src/utils/text.js:57-60 | entry?.role === "caller"
+src/web-auth.js:461-462 | firstName: user.first_name
+src/web-auth.js:205 | await applyTenantIdentity(tenantId, { firstName, lastName })
+src/routes/api-onboard.js:94-98 | Freitext
+src/store/state-ops.js:2216 | setKycLevel(s, tenantId, KYC_LEVEL.ID_VERIFIED);
 ANKER-END -->
 
 ## Werkzeug-Zitate (maschinenlesbar)
