@@ -202,10 +202,12 @@ function sentToolNames(posted) {
   return posted.filter((msg) => msg.params && msg.params.name).map((msg) => msg.params.name);
 }
 
-// Die eigentliche Pruefung aus T12-d, als eigene Funktion: von BEIDEN Tests genutzt,
-// damit die Gegenprobe unten dieselbe Pruefung ausfuehrt (nicht nur eine aehnliche) und
-// tatsaechlich zeigen kann, dass sie rot wird - nicht nur, dass ihre Zutaten es waeren.
-function assertSentNamesMatchToolsList(sentNames, toolNames) {
+// Positiv-Kontrollen: das Widget sendet ueberhaupt die erwarteten Aufrufe. Getrennt von
+// der Mitgliedschaftspruefung unten, weil die Gegenprobe NUR diese treffen darf: der
+// wieder eingesetzte Altname verdraengt get_call_result, die Positiv-Kontrolle wuerde
+// also zuerst werfen - die Gegenprobe waere dann gruen, ohne die Mitgliedschaftspruefung
+// je erreicht zu haben.
+function assertSendsExpectedCalls(sentNames) {
   assert.ok(sentNames.length > 0, "Positiv-Kontrolle: mindestens ein tools/call gesendet");
   assert.ok(sentNames.includes("get_call_status"), "Positiv-Kontrolle: get_call_status gesendet");
   assert.equal(
@@ -213,9 +215,18 @@ function assertSentNamesMatchToolsList(sentNames, toolNames) {
     1,
     "Positiv-Kontrolle: get_call_result genau einmal gesendet",
   );
+}
+
+// Die eigentliche Zusicherung aus T12-d, als eigene Funktion: von BEIDEN Tests genutzt,
+// damit die Gegenprobe unten dieselbe Pruefung ausfuehrt (nicht nur eine aehnliche).
+function assertSentNamesInToolsList(sentNames, toolNames) {
   for (const name of sentNames) {
-    assert.ok(toolNames.has(name), `gesendeter Name "${name}" steht nicht in tools/list desselben Servers`);
+    assert.ok(toolNames.has(name), notInToolsListMessage(name));
   }
+}
+
+function notInToolsListMessage(name) {
+  return `gesendeter Name "${name}" steht nicht in tools/list desselben Servers`;
 }
 
 test("T12-d: Call-Widget vom Draht - jeder gesendete tools/call-Name steht in tools/list desselben Servers", async () => {
@@ -224,16 +235,20 @@ test("T12-d: Call-Widget vom Draht - jeder gesendete tools/call-Name steht in to
     const { tools, html } = await fetchToolsAndCallWidget(srv.localUrl + "/mcp");
     const toolNames = new Set(tools.map((tool) => tool.name));
     const posted = driveToCompletion(ownScriptFromWire(html));
-    assertSentNamesMatchToolsList(sentToolNames(posted), toolNames);
+    const sentNames = sentToolNames(posted);
+    assertSendsExpectedCalls(sentNames);
+    assertSentNamesInToolsList(sentNames, toolNames);
   } finally {
     await srv.stop();
   }
 });
 
 // Beweiskraft-Nachweis (Pre-Mortem 1 aus dem Plan): setzt man den Altnamen wieder ein,
-// muss DIESELBE Pruefung wie oben (assertSentNamesMatchToolsList, nicht nur eine
-// aehnliche) tatsaechlich rot werden - sonst waere "nichts gefunden" wertlos (Lehre
-// "Pruefkommando ohne Positiv-Kontrolle").
+// muss DIESELBE Mitgliedschaftspruefung wie oben (assertSentNamesInToolsList, nicht nur
+// eine aehnliche) tatsaechlich rot werden - und zwar GENAU an ihrer Zusicherung fuer den
+// Altnamen, nicht an irgendeinem anderen Assert. Der Fehler-Abgleich unten haelt das
+// fest; sonst waere "nichts gefunden" wertlos (Lehre "Pruefkommando ohne
+// Positiv-Kontrolle").
 test("T12-d Gegenprobe: wird der alte Name wieder eingesetzt, wird die Pruefung von oben tatsaechlich rot", async () => {
   const srv = await startServer({ seed: seedState({}), env: UI_ENV });
   try {
@@ -249,10 +264,10 @@ test("T12-d Gegenprobe: wird der alte Name wieder eingesetzt, wird die Pruefung 
     const sentNames = sentToolNames(driveToCompletion(mutated));
     assert.ok(sentNames.includes(OLD_CALL_RESULT_NAME), "Positiv-Kontrolle: das mutierte Skript sendet den alten Namen");
 
-    assert.throws(
-      () => assertSentNamesMatchToolsList(sentNames, toolNames),
-      "die Hauptpruefung (T12-d oben), auf das mutierte Skript angewendet, wirft - am Zwischenstand ohne diese Gegenprobe waere sie gruen geblieben",
-    );
+    assert.throws(() => assertSentNamesInToolsList(sentNames, toolNames), {
+      name: "AssertionError",
+      message: notInToolsListMessage(OLD_CALL_RESULT_NAME),
+    });
   } finally {
     await srv.stop();
   }
