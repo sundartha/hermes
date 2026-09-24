@@ -804,7 +804,7 @@ const OPEN_QUESTIONS_FIELD = z
 // user confirmed" - ohne zu sagen, WOHER der Code kommt. Jetzt: der Nutzer bestaetigt in der
 // Karte, die Karte sendet den Code; nie raten/erfinden (keine Selbstbestaetigung).
 const PLACE_CALL_DESCRIPTION =
-  "REQUIRES a confirmation_code from prepare_call - call prepare_call FIRST with identical arguments; the user then confirms in the Hermes card, which sends the code. Pass exactly that code and never guess or invent one. Without it the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Repeating it for a running number needs its own fresh prepare_call and code (a used code is never valid twice) and then returns that same call (deduplicated: true).";
+  "REQUIRES a confirmation_code - call prepare_call FIRST with identical arguments; the user confirms in the Hermes card, which sends the code (never guess or invent one). Without it the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Repeating it for a running number needs a fresh prepare_call and code, then returns that same call (deduplicated: true).";
 
 // T2-13 (N-10): Beschreibung von prepare_call - reine Vorschau, KEIN Anruf, KEINE Kosten.
 // Nennt ausdruecklich, dass der Code nur auf einem Host mit Kartenfaehigkeit ankommt (s.
@@ -1506,7 +1506,7 @@ export function registerTools(
           .string()
           .optional()
           .describe(
-            "The confirmation code that the Hermes card sends after the user confirms prepare_call with the SAME arguments - never guess or invent it. REQUIRED - without a valid code the call is NOT placed.",
+            "Sent by the Hermes card once the user confirms prepare_call (SAME arguments); never guess or invent it. REQUIRED - without a valid code the call is NOT placed.",
           ),
       },
       outputSchema: CALL_OUTPUT,

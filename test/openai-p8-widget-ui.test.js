@@ -122,10 +122,17 @@ const EXPECTED_RESOURCE_META = {
 // bleiben unveraendert. Nachgerechnet mit dem exakten Aufbau dieses Tests, nicht geschaetzt.
 // Voriger Sollwert (beide Pfade, byte-identisch seit T2-13 oben):
 // 84e8b490bb7811977a714e5358dc031bb4188431937bb2f21c741b42e797e3e4.
+// Neu gepinnt (T2-13, Safety-Review Runde 2, Befund "Anleitung zur Selbstbestaetigung"):
+// die description-Texte von prepare_call, place_call und place_call.confirmation_code sagen
+// jetzt, dass der NUTZER in der Karte bestaetigt und die Karte den Code sendet (nie raten/
+// erfinden, ohne Karte kein Anruf). Gegen den Quell-Diff geprueft: EINZIGE Unterschiede in
+// tools/list sind diese drei Beschreibungen; resources/list und alle resources/read-Inhalte
+// unveraendert (src/ui unberuehrt). Voriger Sollwert (beide Pfade):
+// 8da33018cbdd342cbbff1082e54d0d1a0e8299f120e8d36933fa8139ed8c6ec3.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "8da33018cbdd342cbbff1082e54d0d1a0e8299f120e8d36933fa8139ed8c6ec3";
+  "c24783bc0755354a545c2703bcb69b3ac75d2a5a423e72438daa2886ed201c0a";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "8da33018cbdd342cbbff1082e54d0d1a0e8299f120e8d36933fa8139ed8c6ec3";
+  "c24783bc0755354a545c2703bcb69b3ac75d2a5a423e72438daa2886ed201c0a";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
