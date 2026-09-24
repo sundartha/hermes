@@ -140,17 +140,38 @@ test("T2: jeder Ablehnungstext und die fuenf neuen Fehlertexte sind neutral (all
   }
 });
 
+// T2-13 (N-10): CALL_CONFIRMATION_SECRET testweise gesetzt - ohne bestaetigten
+// confirmation_code wuerde place_call gar nicht mehr bis zum jeweils geprueften Gate
+// kommen. Der Code wird direkt an der Route geholt (derselbe Loopback-Aufrufer wie der
+// MCP-Handler); tenantHeader bindet ihn - wie das echte /mcp-Gateway per
+// X-Internal-Tenant - an den richtigen Mandanten (leer = Bootstrap/Owner, T3).
+const TEST_CONFIRMATION_SECRET = "t2-09-test-secret-mindestens-32-zeichen-lang";
+async function confirmedPlaceCallArgs(localUrl, args, tenantHeader = null) {
+  const res = await fetch(`${localUrl}/api/call-confirmations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(tenantHeader ? { "X-Internal-Tenant": tenantHeader } : {}),
+    },
+    body: JSON.stringify(args),
+  });
+  const json = await res.json();
+  return { ...args, confirmation_code: json.confirmation?.code };
+}
+
 // ==================== T3: Draht HTTP /mcp, Legacy/Bootstrap ====================
 
 test("T3 (Draht HTTP /mcp, Legacy/Bootstrap): OUTBOUND_FROZEN liefert den neutralen Text, kein Env-Name", async () => {
-  const srv = await startServer({ env: { OUTBOUND_FROZEN: "true" } });
+  const srv = await startServer({
+    env: { OUTBOUND_FROZEN: "true", CALL_CONFIRMATION_SECRET: TEST_CONFIRMATION_SECRET },
+  });
   try {
     const before = srv.readStore().calls.length;
-    const res = await mcpPost(
-      `${srv.localUrl}/mcp`,
-      null,
-      toolCall("place_call", { to: "+4915112345678", objective: "Termin vereinbaren" }),
-    );
+    const placeCallArgs = await confirmedPlaceCallArgs(srv.localUrl, {
+      to: "+4915112345678",
+      objective: "Termin vereinbaren",
+    });
+    const res = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", placeCallArgs));
     const result = await readToolResult(res);
     assert.equal(result.isError, true, "frozen ist ein Fehlerergebnis");
     const text = result.content[0].text;
@@ -241,17 +262,19 @@ test("T4 (Draht HTTP /mcp, OAuth, echtes Minuten-Gate): erschoepfte Plan-Minuten
       NUMBER_SETUP_FEE_CENTS: "500",
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: idp.issuer,
+      CALL_CONFIRMATION_SECRET: TEST_CONFIRMATION_SECRET,
     },
     seed: t4MinutesExhaustedSeed(),
   });
   try {
     const before = srv.readStore().calls.length;
     const token = await idp.sign({ sub: T4_SUB });
-    const res = await mcpPost(
-      `${srv.localUrl}/mcp`,
-      token,
-      toolCall("place_call", { to: T4_TARGET, objective: "Termin vereinbaren" }),
+    const placeCallArgs = await confirmedPlaceCallArgs(
+      srv.localUrl,
+      { to: T4_TARGET, objective: "Termin vereinbaren" },
+      T4_TENANT,
     );
+    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
     const result = await readToolResult(res);
     assert.equal(result.isError, true, "erschoepfte Minuten -> Fehlerergebnis");
     assert.equal(
@@ -472,8 +495,21 @@ function captureTools(ctx) {
   return handlers;
 }
 
+// T2-13 (N-10): place_call haengt jetzt VOR jedem echten Hop den Bestaetigungs-Hop
+// (POST /api/call-confirmations) davor. Diese Attrappe ist pfad-blind by design (EIN
+// fixer response fuer den Fall, den ein Testfall pruefen will) - der Bestaetigungs-Hop
+// braucht deshalb eine EIGENE, immer erfolgreiche Antwort, sonst schlaegt jeder
+// place_call-Testfall schon dort fehl, bevor er den eigentlich gepruefte Zustand erreicht.
+const CONFIRMATION_STUB_RESPONSE = {
+  status: 200,
+  body: { preview: { status: "awaiting_confirmation", to: "+4915112345678", objective: "x" }, confirmed: true },
+};
+
 async function withFixedGateway(response, run) {
-  const server = http.createServer((req, res) => sendJson(res, response));
+  const server = http.createServer((req, res) => {
+    if (req.url === "/api/call-confirmations") return sendJson(res, CONFIRMATION_STUB_RESPONSE);
+    return sendJson(res, response);
+  });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = `http://127.0.0.1:${server.address().port}`;
