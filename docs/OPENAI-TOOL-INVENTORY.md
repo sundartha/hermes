@@ -116,20 +116,23 @@ Hermes applies it as three statements, and every value in Table A follows from o
 The hint describes what a tool can do, not what every single invocation does: a tool that sends
 to an external party on at least one path is `true`, even if some invocations send nothing.
 
-- **prepare_call** (registered `src/mcp-tools.js:1420`, handler `:1428-1454`, REST
-  `POST /api/call-confirmations`). Previews an outbound call and, on a client that renders the
-  Hermes card, issues a one-time confirmation code that `place_call` then requires - see
-  "Confirmation before placing a call" below.
+- **prepare_call** (registered `src/mcp-tools.js:1439`, handler `:1448-1480`, REST
+  `POST /api/call-confirmations`). Previews an outbound call and, when card confirmation is
+  switched on for the server, attaches a single-use confirmation code for the Hermes card that
+  `place_call` then requires - see "Confirmation before placing a call" below. The server does
+  not detect whether the connected client actually renders the card.
   - `readOnlyHint: true` - it never starts a call, never writes to the call store and never
     calls `audit()`; it only derives a code from the request and returns it.
   - `destructiveHint: false` - nothing it does can be undone because nothing durable happens:
     no call record, no billing, no third-party contact.
   - `openWorldHint: false` (O3) - it reaches only Hermes' own confirmation endpoint; it never
     dials and never contacts the telephony carrier.
-  - `idempotentHint: true` - the same arguments within the same validity window
-    (`CONFIRMATION_WINDOW_MS`, `src/call-confirmation.js`) deterministically yield the same
-    code; repeating the call changes nothing.
-- **place_call** (registered `src/mcp-tools.js:1465`, handler `:1486-1517`, REST
+  - `idempotentHint: true` - repeating the call has no additional effect on the world: no
+    call, no record, no cost. It does NOT mean the code is always the same: until a code has
+    been used, repeating `prepare_call` with the same bound arguments in the same five-minute
+    window returns the same code; once that code has been used to place a call, repeating
+    `prepare_call` returns a new code.
+- **place_call** (registered `src/mcp-tools.js:1493`, handler `:1515-1559`, REST
   `POST /api/calls`). As of this inventory, `place_call` additionally REQUIRES a
   `confirmation_code` from a preceding `prepare_call` call with identical arguments - see
   "Confirmation before placing a call" below. The annotations below are unchanged by that
@@ -256,20 +259,46 @@ to an external party on at least one path is `true`, even if some invocations se
 ### Confirmation before placing a call
 
 `place_call` requires a `confirmation_code` obtained from a preceding `prepare_call` call with
-the identical arguments. The server derives the code from a secret operated by Hermes plus the
-exact request (destination, objective, and every other argument); it is issued only in the
-tool result's `_meta`, never in the model-visible text or `structuredContent`. The server does
-not detect whether the connecting host actually keeps `_meta` from the model - once card
+the identical arguments. The server derives the code from a secret operated by Hermes, the
+account, a five-minute time window and the bound arguments: the normalized destination,
+`objective`, `language`, `max_duration_s`, `constraints`, `mandate` and `diagnostic` (any
+argument added later is bound by default). `briefing` and `context` are deliberately not bound,
+so that rewording background information between the two calls does not fail the
+confirmation; the preview includes them, but changing them afterwards does not invalidate the
+code.
+The code is issued only in the tool result's `_meta`, never in the model-visible text or
+`structuredContent`.
+
+A code is accepted for at least five and at most ten minutes and only once. Each submitted code
+is compared, in constant time, against at most two candidates (the current code of this request
+for the current and the previous window). After ten rejected codes for one account within a
+five-minute window, every code for that account is rejected until the window ends, including a
+correct one. With 32^6 possible codes this keeps the chance of guessing a code by brute force at
+roughly 2e-3 per year of guessing at the highest rate this limit allows, per server instance.
+The single-use record and
+this limit are held in the memory of each server instance: they reset on restart, and with
+several instances a used code could be replayed on another instance while it is still valid,
+and the guessing limit applies per instance.
+
+The server does not detect whether the connecting host displays the card or keeps `_meta` from
+the model - once card
 confirmation is enabled, every connecting host receives the code in `_meta`. On a host that
 follows the MCP Apps contract and keeps `_meta` from the model, the code therefore reaches the
 model only through a user action (reviewing the rendered card). On a host that does not, the
 code would be model-visible and the confirmation would be formal only; Hermes does not claim
-more than that the code was issued for this exact request and consumed once. It is not a claim
+more than that the code was issued for these bound arguments and consumed once. It is not a claim
 that a human read the card, and it does not itself authorize the call:
 the server's outbound permission checks (subscription/verification, destination country and
 number, hourly/per-destination limits, per-account cost cap, maximum duration, provider
 signature verification) run unchanged when the call is actually placed, regardless of the
 confirmation.
+
+A host that does not display the Hermes card (and keeps `_meta` from the model, as the contract
+requires) has no way to place calls through `place_call`: the code never reaches its model. The
+tool texts tell the model not to call `place_call` before the card has sent the code, never to
+guess or invent a code, and to tell the user honestly when no call can be placed from this host.
+When card confirmation is switched off for the server, no client receives a code and no call can
+be placed through `place_call` at all.
 
 `cancel_call` and `answer_consult` do not get a second confirmation step. `cancel_call` only
 reduces harm - delaying it adds no new cost and starts no new contact. `answer_consult` is

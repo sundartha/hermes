@@ -120,20 +120,30 @@ export const MCP_TEXTS = Object.freeze({
     // wie eingegeben (dieselben Werte, die auch die Vorschau zeigt). "Host ohne Karte"
     // wortwoertlich, s. Spec-Abschnitt 2 Punkt 4: ein Host ohne Kartenfaehigkeit bekommt nie
     // einen Code und kann darum nie bestaetigen.
+    // KORRIGIERT (Safety-Review T2-13): alle drei Texte richten sich an das MODELL. Sie
+    // durften es nie anleiten, den Code selbst in der Karte zu "pruefen" (= sich selbst zu
+    // bestaetigen) - bestaetigen tut der NUTZER, die Karte sendet den Code.
     confirmationRequired: (to, objective) =>
-      `Dieser Anruf ist noch nicht bestaetigt (Ziel: ${to}, Anliegen: ${objective}). Bitte ` +
-      "den Anruf in der Hermes-Karte bestaetigen - ein Host ohne Karte kann nicht waehlen.",
+      `Dieser Anruf ist noch nicht bestaetigt (Ziel: ${to}, Anliegen: ${objective}). Der ` +
+      "Nutzer muss ihn in der Hermes-Karte bestaetigen, erst dann sendet die Karte den " +
+      "Bestaetigungscode; nie einen Code raten oder erfinden - ein Host ohne Karte kann " +
+      "nicht waehlen.",
     // T2-13: prepare_call bei MCP_UI_ENABLED=false (der einzige Schalter, der das
     // entscheidet - keine Erkennung einzelner Hosts, s. Korrektur in PLAN-SECURITY.md
     // Abschnitt OpenAI-T2-13) - ein Code wird zwar serverseitig ausgestellt, aber an
     // KEINEN Client weitergereicht (Plan Abschnitt 5, "Weg ohne Karte" ist bewusst
-    // ausgeschlossen).
+    // ausgeschlossen). Der Text nennt deshalb den SERVER-Schalter, keine Host-Eigenschaft.
     prepareCallNoCardHint:
-      "Vorschau erstellt. Dieser Host kann Anrufe nicht bestaetigen (keine Hermes-Karte) - " +
-      "place_call wird hier keinen Anruf ausloesen.",
+      "Vorschau erstellt. Die Kartenbestaetigung ist auf diesem Server ausgeschaltet - es " +
+      "gibt keinen Bestaetigungscode, place_call kann hier keinen Anruf ausloesen. Das dem " +
+      "Nutzer ehrlich sagen.",
+    // Bei MCP_UI_ENABLED=true - der Server weiss NICHT, ob dieser Host die Karte zeigt;
+    // der letzte Satz deckt den Host ohne Karte ehrlich ab.
     prepareCallCardHint:
-      "Vorschau erstellt. Zum Bestaetigen den Code in der Hermes-Karte pruefen und mit " +
-      "place_call (gleiche Angaben) erneut aufrufen.",
+      "Vorschau erstellt. Der Nutzer prueft und bestaetigt den Anruf in der Hermes-Karte; " +
+      "erst danach sendet die Karte den Bestaetigungscode. Vorher place_call nicht aufrufen " +
+      "und nie einen Code raten oder erfinden. Zeigt dieser Host keine Hermes-Karte, kann " +
+      "hier kein Anruf ausgeloest werden - das dem Nutzer ehrlich sagen.",
     // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
     // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
     emptyCalls: "Noch keine Anrufe.",
@@ -235,14 +245,17 @@ export const MCP_TEXTS = Object.freeze({
     // record, no cost). A host without a card never receives a code and can therefore never
     // confirm.
     confirmationRequired: (to, objective) =>
-      `This call is not confirmed yet (destination: ${to}, purpose: ${objective}). Please ` +
-      "confirm the call in the Hermes card - a host without a card cannot place calls.",
+      `This call is not confirmed yet (destination: ${to}, purpose: ${objective}). The ` +
+      "user must confirm it in the Hermes card, which then sends the confirmation code; " +
+      "never guess or invent a code - a host without a card cannot place calls.",
     prepareCallNoCardHint:
-      "Preview created. This host cannot confirm calls (no Hermes card) - place_call will " +
-      "not place a call here.",
+      "Preview created. Card confirmation is switched off on this server - there is no " +
+      "confirmation code, and place_call cannot place a call here. Tell the user so honestly.",
     prepareCallCardHint:
-      "Preview created. To confirm, check the code in the Hermes card and call place_call " +
-      "again with the same arguments.",
+      "Preview created. The user reviews and confirms this call in the Hermes card; only " +
+      "then does the card send the confirmation code. Do not call place_call before that " +
+      "code arrives, and never guess or invent a code. If this host does not show the " +
+      "Hermes card, no call can be placed from here - tell the user so honestly.",
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
@@ -315,14 +328,19 @@ export const MCP_TEXTS = Object.freeze({
     // T2-13 (N-10): place_call sans confirmation_code valide - aucun appel n'a été passé.
     confirmationRequired: (to, objective) =>
       `Cet appel n'est pas encore confirmé (destination : ${to}, objet : ${objective}). ` +
-      "Veuillez confirmer l'appel dans la carte Hermes - un hôte sans carte ne peut pas " +
-      "passer d'appel.",
+      "L'utilisateur doit le confirmer dans la carte Hermes, qui envoie ensuite le code de " +
+      "confirmation ; ne devinez ni n'inventez jamais de code - un hôte sans carte ne peut " +
+      "pas passer d'appel.",
     prepareCallNoCardHint:
-      "Aperçu créé. Cet hôte ne peut pas confirmer d'appels (pas de carte Hermes) - " +
-      "place_call ne déclenchera pas d'appel ici.",
+      "Aperçu créé. La confirmation par carte est désactivée sur ce serveur - il n'y a pas " +
+      "de code de confirmation, et place_call ne peut pas passer d'appel ici. Dites-le " +
+      "honnêtement à l'utilisateur.",
     prepareCallCardHint:
-      "Aperçu créé. Pour confirmer, vérifiez le code dans la carte Hermes puis rappelez " +
-      "place_call avec les mêmes arguments.",
+      "Aperçu créé. L'utilisateur vérifie et confirme cet appel dans la carte Hermes ; ce " +
+      "n'est qu'ensuite que la carte envoie le code de confirmation. N'appelez pas " +
+      "place_call avant l'arrivée de ce code et ne devinez ni n'inventez jamais de code. " +
+      "Si cet hôte n'affiche pas la carte Hermes, aucun appel ne peut être passé d'ici - " +
+      "dites-le honnêtement à l'utilisateur.",
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",

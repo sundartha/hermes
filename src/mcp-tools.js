@@ -800,15 +800,23 @@ const OPEN_QUESTIONS_FIELD = z
 // erst der erreicht ueberhaupt die Dedup-Pruefung in POST /api/calls. Keine neuen
 // GROSSBUCHSTABEN-Woerter im Nachtrag (Test p15-mcp-tool-descriptions-en.test.js pinnt die
 // Emphase von place_call auf genau ["REQUIRES","FIRST","NOT","NOT","NOT","ALWAYS"]).
+// KORRIGIERT (Safety-Review T2-13, zweite Runde): der erste Satz sagte "pass the code the
+// user confirmed" - ohne zu sagen, WOHER der Code kommt. Jetzt: der Nutzer bestaetigt in der
+// Karte, die Karte sendet den Code; nie raten/erfinden (keine Selbstbestaetigung).
 const PLACE_CALL_DESCRIPTION =
-  "REQUIRES a confirmation_code from prepare_call - call prepare_call FIRST with identical arguments, then pass the code the user confirmed. Without it the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Repeating it for a running number needs its own fresh prepare_call and code (a used code is never valid twice) and then returns that same call (deduplicated: true).";
+  "REQUIRES a confirmation_code from prepare_call - call prepare_call FIRST with identical arguments; the user then confirms in the Hermes card, which sends the code. Pass exactly that code and never guess or invent one. Without it the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Repeating it for a running number needs its own fresh prepare_call and code (a used code is never valid twice) and then returns that same call (deduplicated: true).";
 
 // T2-13 (N-10): Beschreibung von prepare_call - reine Vorschau, KEIN Anruf, KEINE Kosten.
 // Nennt ausdruecklich, dass der Code nur auf einem Host mit Kartenfaehigkeit ankommt (s.
 // Plan Abschnitt 5, "Weg ohne Karte" ist bewusst ausgeschlossen) - sonst versucht das
 // Modell auf einem Host ohne UI wiederholt, einen Code zu "finden", der nie erscheint.
+// KORRIGIERT (Safety-Review T2-13, zweite Runde): "reveals a confirmation code" und "unless
+// the host forwards it to you" liessen offen, ob das Modell den Code selbst aus der Karte
+// nehmen darf. Jetzt: die Karte sendet den Code nach der Nutzerbestaetigung, vorher kein
+// place_call, nie raten/erfinden; ohne Karte ehrlich sagen, dass kein Anruf moeglich ist.
+// Der Server erkennt KEINE Host-Faehigkeit - nur den Schalter MCP_UI_ENABLED.
 const PREPARE_CALL_DESCRIPTION =
-  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is enabled for this server, this shows a Hermes card where the user reviews the call and reveals a confirmation code that place_call then requires - you never see that code yourself unless the host forwards it to you, and it is not a substitute for the user actually reviewing the card. When card confirmation is disabled for this server, no code is ever issued to anyone - placing this call via place_call is not possible here, do not attempt it and do not ask the user for a code they cannot see. Call this before EVERY place_call with identical arguments.";
+  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is switched on for this server, the host can show a Hermes card where the user reviews the call; after the user confirms, the card sends the confirmation code that place_call requires. Do not call place_call before that code arrives, and never guess or invent a code. If this host does not show the Hermes card, or card confirmation is switched off for this server, no call can be placed from here - tell the user so honestly and do not ask them for a code they cannot see. Call this before EVERY place_call with identical arguments.";
 
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
@@ -953,9 +961,12 @@ const TOOL_ANNOTATIONS = {
   // T2-13 (N-10): reine Vorschau + Code-Ausstellung, KEIN Anruf und KEIN Aufruf nach
   // aussen (die Route schreibt nichts in den Store, ruft kein audit(), faehrt keine
   // Gate-Kette) - deshalb readOnlyHint:true/destructiveHint:false/openWorldHint:false,
-  // anders als place_call direkt darunter. idempotentHint:true: dieselben Argumente
-  // liefern innerhalb desselben Fensters denselben Code (canonicalCallRequest ist eine
-  // reine Funktion der Argumente).
+  // anders als place_call direkt darunter. idempotentHint:true: ein wiederholter Aufruf
+  // hat keine zusaetzliche Wirkung auf die Welt (kein Anruf, kein Datensatz, keine
+  // Kosten). KORRIGIERT (Safety-Review T2-13): "dieselben Argumente liefern denselben
+  // Code" stimmt seit dem Slot-Register nur noch BIS zum ersten Verbrauch - danach liefert
+  // dieselbe Anfrage im selben Fenster einen NEUEN Code (api-call-confirmations.js), und
+  // briefing/context gehen gar nicht in den Code ein (call-confirmation.js).
   prepare_call: {
     title: "Preview a phone call",
     readOnlyHint: true,
@@ -1437,7 +1448,7 @@ export function registerTools(
     async (args) => {
       const previewResult = await confirmCallHop({ identity, scopedTenant, body: args });
       requireFields(previewResult, { preview: "object" });
-      // KORREKTUR (Safety-Review T2-13): hasCard prueft NUR den globalen Master-Schalter
+      // KORREKTUR (Safety-Review T2-13): mcpUiEnabled prueft NUR den globalen Master-Schalter
       // MCP_UI_ENABLED (callWidgetUi._meta ist bei aktivem Schalter fuer JEDEN Host
       // gesetzt, s. enableWidgetUi/uiRendererFor - es gibt keine Pruefung, ob der
       // konkret verbundene Host _meta tatsaechlich vor dem Modell verbirgt). Bei
@@ -1449,9 +1460,11 @@ export function registerTools(
       // Rueckfall in dem Fall: PLAN-SECURITY.md Abschnitt OpenAI-T2-13. Bei
       // MCP_UI_ENABLED=false bleibt previewResult.confirmation ungenutzt: kein Client
       // bekommt je einen Code, place_call ist dann fuer niemanden moeglich.
-      const hasCard = Boolean(callWidgetUi._meta);
+      // Name = was geprueft wird (der Schalter), NICHT "Host hat Karte" - das weiss der
+      // Server nicht; prepareCallCardHint sagt dem Modell deshalb auch, was ohne Karte gilt.
+      const mcpUiEnabled = Boolean(callWidgetUi._meta);
       const meta =
-        hasCard && previewResult.confirmation
+        mcpUiEnabled && previewResult.confirmation
           ? {
               [CONFIRMATION_CODE_META_KEY]: previewResult.confirmation.code,
               [CONFIRMATION_EXPIRES_META_KEY]: previewResult.confirmation.expires_at,
@@ -1459,7 +1472,7 @@ export function registerTools(
           : undefined;
       return {
         content: [
-          { type: "text", text: hasCard ? loc.mcp.prepareCallCardHint : loc.mcp.prepareCallNoCardHint },
+          { type: "text", text: mcpUiEnabled ? loc.mcp.prepareCallCardHint : loc.mcp.prepareCallNoCardHint },
         ],
         structuredContent: previewResult.preview,
         ...(meta ? { _meta: meta } : {}),
@@ -1493,7 +1506,7 @@ export function registerTools(
           .string()
           .optional()
           .describe(
-            "The confirmation code from the Hermes card after prepare_call with the SAME arguments. REQUIRED - without a valid code the call is NOT placed.",
+            "The confirmation code that the Hermes card sends after the user confirms prepare_call with the SAME arguments - never guess or invent it. REQUIRED - without a valid code the call is NOT placed.",
           ),
       },
       outputSchema: CALL_OUTPUT,

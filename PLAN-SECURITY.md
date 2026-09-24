@@ -6186,7 +6186,8 @@ waehlen**, T2-13 geht deshalb nur zusammen mit T2-14 live (Deploy-Vorbedingung).
 
 **Was die Bestaetigung beweist, und was nicht** (Pflichttext, wortgleich in
 `src/call-confirmation.js`, `docs/OPENAI-TOOL-INVENTORY.md`): der Server hat fuer GENAU
-diese Anfrage (Mandant, normalisiertes Ziel, alle uebrigen Argumente) innerhalb der letzten
+diese Anfrage (Mandant, normalisiertes Ziel, alle gebundenen Argumente - `briefing`/`context`
+sind laut Plan bewusst NICHT gebunden) innerhalb der letzten
 maximal 10 Minuten einen Code ausgestellt, und dieser Code ist noch nicht verbraucht. Sie
 beweist NICHT, dass ein Mensch die Vorschau gelesen hat (ein Host, der `_meta` doch ans
 Modell weiterreicht, laesst das Modell sich selbst bestaetigen), nicht, dass die klickende
@@ -6218,6 +6219,17 @@ mehr moeglich, nicht selektiv fuer kartenlose Hosts. Ein Code im Modelltext oder
 Web-Link waeren ein neuer, zustandsbehafteter Geldpfad-Endpunkt bzw. eine nur formale
 Bestaetigung (das Modell koennte ihn selbst lesen) — beides bewusst nicht gebaut.
 
+**Modelltexte KORRIGIERT (Safety-Review Runde 2):** `prepareCallCardHint` (DE/EN/FR) wies das
+MODELL an, "den Code in der Hermes-Karte zu pruefen und place_call erneut aufzurufen" — eine
+Anleitung zur Selbstbestaetigung. Jetzt sagen Kartenhinweis, `confirmationRequired`,
+die Beschreibungen von `prepare_call`/`place_call`/`confirmation_code` und die
+Server-Instruktionen einheitlich: der NUTZER bestaetigt in der Karte, die Karte sendet den
+Code; vorher kein `place_call`; nie einen Code raten oder erfinden; zeigt der Host keine
+Karte, ist kein Anruf moeglich — das dem Nutzer ehrlich sagen. Die Variable im Handler heisst
+jetzt `mcpUiEnabled` (sie prueft nur den Schalter, keine Host-Faehigkeit); der Text fuer den
+ausgeschalteten Schalter nennt den Server-Schalter statt "dieser Host". Test:
+`test/openai-t2-13-bestaetigung.test.js` (Positiv-Kontrolle: die alten Texte werden erkannt).
+
 **Vertrauensgrenze `POST /api/call-confirmations`:** identisch zu `POST /api/calls` —
 `internalOnly` (echter Loopback-Socket, kein `X-Forwarded-For`, AUTH-P5/P7), ihr einziger
 Aufrufer ist der In-Process-MCP-Handler. Sie faehrt KEINE Outbound-Gate-Kette (die Gates
@@ -6231,26 +6243,61 @@ beim echten Waehlen in `POST /api/calls` — die Bestaetigung ist ZUSAETZLICH, k
 HKDF-abgeleiteter Schluessel aus `CALL_CONFIRMATION_SECRET` (leer/<32 Zeichen -> `null`,
 fail-closed — keine Ausstellung, keine Pruefung ist je erfolgreich). 6-stelliger
 Crockford-Base32-Code (Alphabet ohne I/L/O/U), HMAC-SHA256 ueber
-`v1|tenantId|windowIndex|canonical`, `canonical` bindet ALLE Argumente ausser
-`confirmation_code` inkl. `to` in NORMALISIERTER Form (`resolveDialTarget`, derselbe reine
+`v1|tenantId|windowIndex|canonical`, `canonical` bindet alle Argumente ausser
+`confirmation_code`, `briefing` und `context` (KORRIGIERT Safety-Review Runde 2: der Plan
+nimmt briefing/context ausdruecklich aus, "umformulierter Kontext soll nicht scheitern";
+Ausschluss- statt Positivliste, jedes kuenftige Argument ist damit gebunden), inkl. `to` in
+NORMALISIERTER Form (`resolveDialTarget`, derselbe reine
 Extract aus dem `normalize_target`-Gate wie das echte Waehlen — "geprueft == gewaehlt"
 gilt jetzt fuer Vorschau UND Aufruf). Fensterlaenge 5 Minuten, zwei Fenster akzeptiert
 (Gueltigkeit effektiv 5–10 Minuten). Vergleich timing-sicher (`safeEqual`).
 
-**Brute-Force-Rechnung:** 32^6 = 2^30 (~1,07e9) moegliche Codes. Bei `RATE_LIMIT_PER_MIN`
-(Default 120) Aufrufen/Minute je Mandant und 10 Minuten Gueltigkeit sind das hoechstens 1200
-Versuche je Gueltigkeitsfenster, P(Treffer) ≈ 1,1e-6. Jeder Versuch muss zusaetzlich
-dieselben Argumente (`to`/`objective`/`briefing`/...) tragen, sonst prueft er gegen einen
-anderen Code. `stdio` hat kein Rate-Limit, ist aber lokal (der Nutzer selbst).
+**Brute-Force-Rechnung (KORRIGIERT, Safety-Review Runde 2 — die erste Fassung war zu stark):**
+Die erste Fassung rechnete 1200 Versuche / 32^6 ≈ 1,1e-6 je 10 Minuten. Das galt nur fuer
+EINEN Kandidaten je Versuch; `confirmCode` pruefte tatsaechlich gegen bis zu 8 Slots x 2
+Fenster = 16 Kandidaten (≈ 1,8e-5 je 10 Minuten), und das Rate-Limit war die einzige Bremse
+(Dauerbetrieb 120/min ≈ 6,3e7 Versuche/Jahr — mit 16 Kandidaten praktisch sicherer Treffer;
+`stdio` laeuft ueber Loopback ganz ohne Rate-Limit). Stand jetzt:
+- Suchraum 32^6 = 2^30 ≈ 1,07e9.
+- Kandidaten je Versuch: je akzeptiertem Fenster GENAU der Code des aktuellen Slots
+  (`matchedWindowIndex` mit `slotForWindow`), also hoechstens `ACCEPTED_WINDOWS` = 2. Weniger
+  geht im Entwurf nicht: mit nur einem Fenster liefe ein kurz vor der Fenstergrenze
+  ausgestellter Code nach Sekunden ab. P(Treffer je Versuch) ≤ 2^-29 ≈ 1,9e-9.
+- Fehlversuchsbremse (NEU, fail-closed): hoechstens `MAX_FAILED_CONFIRMATIONS_PER_WINDOW` = 10
+  abgelehnte, nicht-leere Codes je Mandant und 5-Minuten-Fenster; danach lehnt die Route bis
+  Fensterende JEDEN Code ab, ohne ihn zu pruefen (auch einen richtigen — kein Treffer-Orakel).
+  Das gilt fuer HTTP UND stdio (die Bremse sitzt in `POST /api/call-confirmations`, nicht im
+  Rate-Limiter).
+- Ergebnis (Summenschranke) je App-Instanz: ≤ 1,9e-8 je Fenster, ≈ 5,4e-6 je Tag,
+  ≈ 2e-3 je Jahr Dauer-Raten an der Bremsgrenze (~1,05e6 Versuche). Ohne Bremse waeren es
+  bei 120/min ≈ 11 % je Jahr.
+- Preis, akzeptiert: ein Mandant, der sich 10-mal vertippt, ist bis zu 5 Minuten gesperrt
+  (der Handler meldet dann weiter nur "nicht bestaetigt").
 
 **Einmal-Verbrauch:** In-Memory-Ledger je App-Instanz (`src/routes/api-call-confirmations.js`),
 Digest aus Mandant+Fenster+normalisiertem Code, bereinigt sich beim Zugriff. Bewusst KEINE
 Store-Spalte — die Architektur setzt ohnehin eine laufende Instanz voraus (der pg-Store
-haelt Zustand im Speicher, s. Lehre `pg-store-holds-state-in-memory`). **Grenze, akzeptiert:**
-nach einem Prozess-Neustart ist ein noch gueltiger Code bis zu 10 Minuten lang erneut
-nutzbar. Die bestehende Anruf-Dedup (`call-dedup.js`, ≤180s auf AKTIVE Anrufe) faengt davon
-den Fall eines noch laufenden Anrufs; ein Replay NACH Ende eines kurzen Anrufs innerhalb der
-Code-Gueltigkeit ist der verbleibende, akzeptierte Fall.
+haelt Zustand im Speicher, s. Lehre `pg-store-holds-state-in-memory`).
+**KORRIGIERT (Safety-Review Runde 2):** der Eintrag lebte nur bis zum Ende des
+AUSSTELLUNGS-Fensters, der Code wird aber auch im Folgefenster angenommen — ein verbrauchter
+Code war im Folgefenster erneut gueltig (Test "verbrauchter Code ist auch im FOLGEFENSTER
+nicht erneut gueltig" war gegen den alten Stand rot). Jetzt halten Ledger und Slot-Register
+ihre Eintraege bis `acceptanceEndMs` (Ende des letzten akzeptierten Fensters).
+**Bekannte Grenzen (Ledger, Slot-Register und Fehlversuchsbremse leben NUR im Speicher der
+jeweiligen Instanz):**
+- Neustart: ein vor dem Neustart verbrauchter, noch gueltiger Code ist bis zu 10 Minuten lang
+  erneut nutzbar; die Fehlversuchszaehler beginnen bei 0.
+- **Mehr-Instanz-Betrieb:** laufen zwei oder mehr Instanzen hinter einem Load-Balancer, kennt
+  Instanz B den Verbrauch auf Instanz A nicht — derselbe Code ist innerhalb seines
+  Gueltigkeitsfensters (≤ 10 Minuten) auf JEDER anderen Instanz noch einmal verwendbar (ein
+  Replay je Instanz), und die Fehlversuchsbremse gilt je Instanz (N Instanzen = N-fache
+  Rate-Chance). Heute unkritisch, weil die Architektur eine Instanz voraussetzt (pg-Store
+  haelt Zustand im Speicher); **vor jedem horizontalen Skalieren** muessen Ledger und Bremse in
+  einen geteilten Speicher (Postgres/Redis) — sonst ist der Einmal-Verbrauch nur noch
+  "einmal je Instanz".
+- Die bestehende Anruf-Dedup (`call-dedup.js`, ≤180s auf AKTIVE Anrufe) faengt davon nur den
+  Fall eines noch laufenden Anrufs; ein Replay NACH Ende eines kurzen Anrufs innerhalb der
+  Code-Gueltigkeit bleibt der akzeptierte Restfall.
 
 **Secret als Deploy-Vorbedingung, kein Boot-Refusal:** `CALL_CONFIRMATION_SECRET` ist NICHT
 boot-pflichtig (Owner-Entscheidung P6 — keine neue Boot-Sperre). Fehlt es, laeuft die
@@ -6300,10 +6347,12 @@ ein weiterer Aufruf einen ANDEREN Code derselben Anfrage bekommt. Vor dem ersten
 bleibt Slot 0 (byte-identische Codeableitung, wiederholtes `prepare_call` VOR jedem
 Verbrauch bleibt idempotent — Test "gleiche Eingabe ergibt gleichen Code" unveraendert
 gruen); der Slot wird NUR bei tatsaechlichem, erfolgreichem Verbrauch weitergeschaltet. Die
-Pruefseite (`confirmCode`) sucht den vorgelegten Code ueber bis zu `MAX_CONFIRMATION_SLOTS`
-(8) Slots je Fenster — eine reine Server-Rechengrenze ueber selbst abgeleitete Kandidaten,
-die Brute-Force-Rechnung fuer einen Angreifer (s.o.) bleibt unveraendert, weil sie nicht
-davon abhaengt, wie viele Kandidaten der Server selbst prueft.
+Pruefseite suchte den vorgelegten Code zunaechst ueber bis zu `MAX_CONFIRMATION_SLOTS` (8)
+Slots je Fenster; die Behauptung, das aendere die Brute-Force-Rechnung nicht, war FALSCH (jeder
+zusaetzlich gepruefte Kandidat ist ein zusaetzlicher Treffer fuer einen Rater). KORRIGIERT
+(Safety-Review Runde 2): geprueft wird nur noch der aktuelle Slot je Fenster (s.
+Brute-Force-Rechnung oben); Codes aelterer Slots sind ohnehin verbraucht, spaetere Slots nie
+ausgestellt — fachlich geht nichts verloren.
 
 **Folgekorrektur:** `PLACE_CALL_DESCRIPTION` (`src/mcp-tools.js`) versprach weiterhin
 "Calling it again for a running number returns that same call (deduplicated: true)", ohne zu

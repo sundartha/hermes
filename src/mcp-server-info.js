@@ -104,10 +104,13 @@ export const MCP_BASE_INSTRUCTIONS =
   "Never invent facts about the principal or the call: if you do not know something, say so. " +
   // T2-13 (N-10): die Bestaetigungs-Sequenz vor jedem place_call - ein Satz, damit das
   // Modell nicht rein aus der Tool-Beschreibung raet, wann prepare_call an der Reihe ist.
+  // KORRIGIERT (Safety-Review T2-13): "reveals a confirmation_code" liess offen, ob das
+  // Modell den Code selbst aus der Karte nimmt - die Karte SENDET ihn nach der Bestaetigung.
   "Before every place_call, call prepare_call first with the exact same arguments; the " +
-  "user then confirms in the Hermes card and reveals a confirmation_code, which you pass " +
-  "to place_call. If card confirmation is disabled for this server no code is ever issued " +
-  "and place_call cannot succeed.";
+  "user then confirms in the Hermes card, which sends the confirmation_code - only then " +
+  "pass it to place_call, and never guess or invent a code. If this host does not show " +
+  "the Hermes card, or card confirmation is switched off for this server, no call can be " +
+  "placed from here - tell the user so honestly.";
 
 // Consult-Block bleibt modul-intern (kein dritter Export, keine dritte Wahrheit) - er
 // gilt NUR, wenn der Tenant await_call_event/answer_consult registriert bekommt.
