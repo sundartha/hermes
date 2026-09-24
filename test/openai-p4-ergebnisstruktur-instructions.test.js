@@ -133,7 +133,25 @@ async function withMock({ body = null, status = HTTP_OK } = {}, run) {
 // etc. behandeln [] als validen, nicht-fehlerhaften Zustand - s. requireFields: Existenz/
 // Typ wird geprueft, nicht Nicht-Leere).
 const SUCCESS_BODY_OF = new Map([
-  ["place_call", { callId: "call_success_place" }],
+  // T2-13 (N-10): der Fake-Gateway ist statisch (EIN Body fuer JEDEN Pfad) - place_call
+  // macht jetzt ZWEI Hops (confirmCallHop -> POST /api/call-confirmations, dann
+  // placeCallHopCall -> POST /api/calls). Der eine Body deckt beide: confirmCallHop liest
+  // nur preview/confirmed, placeCallHopCall nur callId - je ein Feld fuer je einen Hop.
+  [
+    "place_call",
+    {
+      preview: { status: "awaiting_confirmation", to: "+491511234567", objective: "Termin vereinbaren" },
+      confirmed: true,
+      callId: "call_success_place",
+    },
+  ],
+  // T2-13 (N-10): reine Vorschau - derselbe Body-Ausschnitt, den confirmCallHop fuer den
+  // Erfolgsfall braucht (preview; confirmation optional, hier bewusst weggelassen - der
+  // Host in diesem Test hat kein Widget, s. captureToolsWithConfig ohne uiHost).
+  [
+    "prepare_call",
+    { preview: { status: "awaiting_confirmation", to: "+491511234567", objective: "Termin vereinbaren" } },
+  ],
   ["await_call_event", { event: "none", eventId: null, questions: [] }],
   ["answer_consult", { merged_facts: 1 }],
   [
@@ -153,7 +171,8 @@ const SUCCESS_BODY_OF = new Map([
 // Eingabeargumente je Werkzeug (Handler-Aufruf, kein Zod-Parsing - der Fake-Server
 // reicht sie unveraendert durch, wie captureTools() in test/mcp-tools.test.js).
 const ARGS_OF = new Map([
-  ["place_call", { to: "+491511234567", objective: "Termin vereinbaren" }],
+  ["place_call", { to: "+491511234567", objective: "Termin vereinbaren", confirmation_code: "ABC123" }],
+  ["prepare_call", { to: "+491511234567", objective: "Termin vereinbaren" }],
   ["await_call_event", { call_id: "call_1" }],
   ["answer_consult", { call_id: "call_1", event_id: "evt_1", status: "final", answers: ["ok"] }],
   ["get_call_status", { call_id: "call_1" }],

@@ -71,9 +71,11 @@ const OWNER_TEST_NAME = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 // test/openai-p3-security-schemes.test.js (G5) - kommt ein weiteres Werkzeug dazu oder
 // aendert sich die Consult-Faehigkeit, aendert sich die Zahl genau EINMAL.
 // T2-12 (O-25): get_calendar entfallen, zwoelf/zehn -> elf/neun.
-export const TOOL_COUNT_WITH_CONSULT = 11;
-export const TOOL_COUNT_WITHOUT_CONSULT = 9;
-export const TOOLS_WITH_OUTPUT_SCHEMA = 9;
+// T2-13 (N-10): prepare_call dazu (readOnly, outputSchema) - elf/neun -> zwoelf/zehn;
+// TOOLS_WITH_OUTPUT_SCHEMA neun -> zehn (prepare_call traegt eines).
+export const TOOL_COUNT_WITH_CONSULT = 12;
+export const TOOL_COUNT_WITHOUT_CONSULT = 10;
+export const TOOLS_WITH_OUTPUT_SCHEMA = 10;
 
 // ALLE config-relevanten Env-Variablen explizit setzen: dotenv fuellt nur
 // UNgesetzte Variablen, so kann eine lokale .env die Tests nicht beeinflussen.
