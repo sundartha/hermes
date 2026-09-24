@@ -26,12 +26,17 @@ nie gemessen.
 
 ## Quellen
 
-- OpenAI Usage Policies: https://openai.com/policies/usage-policies/ - Kopfzeile des Abrufs
-  "Effective: October 29, 2025". Abgerufen am 2026-09-24 ueber einen Crawler-Dienst;
-  openai.com direkt liefert auf eine einfache HTTP-Anfrage 403.
+- OpenAI Usage Policies: https://openai.com/policies/usage-policies/ - die Primaerquelle war
+  am 2026-09-24 NICHT abrufbar: sowohl eine einfache HTTP-Anfrage als auch ein Abruf-Werkzeug
+  erhielten 403. Der Wortlaut der Zitate aus dieser Seite stammt aus einer Kopie, die ein
+  Crawler-Dienst am selben Tag geliefert hat (Kopfzeile dort "Effective: October 29, 2025").
+  Jedes dieser Zitate traegt deshalb den Vermerk "wording to be re-checked against the live
+  page before attestation"; bis dahin gilt es als ungeprueft.
 - OpenAI Plugin Guidelines: https://developers.openai.com/plugins/app-guidelines - Seitentitel
-  im Abruf "Plugin guidelines"; die Seite spricht durchgehend von "plugins". Abgerufen am
-  2026-09-24 ueber denselben Crawler-Dienst.
+  "Plugin guidelines"; die Seite spricht durchgehend von "plugins". Am 2026-09-24 direkt von
+  der Primaerquelle abgerufen (HTTP 200). Jedes Zitat aus dieser Seite und jeder genannte
+  Abschnittstitel wurde Zeichen fuer Zeichen gegen den Seitentext geprueft (mit
+  Gegenprobe: ein erfundener Satz wird als fehlend erkannt).
 - Werkzeugtexte: echter `tools/list` ueber HTTP `/mcp` im Legacy-Token-Modus mit Consult und
   Kalender (12 Werkzeuge) und ueber stdio (10 Werkzeuge, ohne die beiden Consult-Werkzeuge).
   Dass Werkzeugmenge und Texte im OAuth-Modus dieselben sind, belegt nicht dieses Dokument,
@@ -73,7 +78,13 @@ nie gemessen.
 > "Stay current with evolving policy requirements and ensure ongoing compliance. Previously approved plugins that are later found in violation may be removed." - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Usage policies")
 
 - Einschlaegig: ja, Oberbegriff fuer alle Zeilen unten.
-- Mechanismus: siehe die einzelnen Klauseln.
+- Mechanismus: kein eigener. Dieses Dokument ist ein Abgleich, keine Durchsetzung: es stellt
+  jede Klausel neben das, was der Code tut, und benennt, was er nicht tut. Serverseitig
+  durchgesetzt ist nur, was unten mit Code-Stelle als Mechanismus steht; alles andere ist
+  Luecke (Teil C).
+- Laufende Einhaltung: der Test zu diesem Dokument schlaegt fehl, wenn eine genannte Code-Stelle
+  oder ein zitierter Werkzeugtext sich aendert. Aenderungen an den OpenAI-Seiten selbst erkennt
+  er NICHT; die muessen vor jeder Einreichung von Hand gegengelesen werden (siehe "Quellen").
 - Status: `teilweise`. Die Luecken aus Teil C bestehen; "ongoing compliance" heisst, dass dieses
   Dokument nach jeder Aenderung an Werkzeugtexten, Prompts oder Gates nachgezogen werden muss.
 
@@ -81,7 +92,7 @@ nie gemessen.
 
 > "Negative-option billing, telemarketing, or consent-bypass schemes" - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Prohibited fraudulent, deceptive, or high-risk services")
 
-> "deceit, fraud, scams, spam, or impersonation" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people")
+> "deceit, fraud, scams, spam, or impersonation" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people") - wording to be re-checked against the live page before attestation
 
 - Einschlaegig: ja. Hermes fuehrt echte ausgehende Anrufe an Dritte.
 - Mechanismen im Code (Kette der Ausgangs-Gates, serverseitig, vor dem Waehlen):
@@ -111,7 +122,7 @@ nie gemessen.
 
 ### Drohung, Einschuechterung, Belaestigung
 
-> "threats, intimidation, harassment, or defamation" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people")
+> "threats, intimidation, harassment, or defamation" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people") - wording to be re-checked against the live page before attestation
 
 - Einschlaegig: ja. Ein Anruf in fremdem Auftrag kann als Belaestigung eingesetzt werden.
 - Mechanismen: Wiederholungs-Grenze je Ziel und Stundenlimit (siehe oben), Sperrliste,
@@ -124,7 +135,7 @@ nie gemessen.
 
 > "Identity theft, impersonation, or identity-monitoring services that enable misuse" - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Prohibited fraudulent, deceptive, or high-risk services")
 
-> "deceit, fraud, scams, spam, or impersonation" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people")
+> "deceit, fraud, scams, spam, or impersonation" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people") - wording to be re-checked against the live page before attestation
 
 - Einschlaegig: ja.
 - Mechanismus, Budget-/Telnyx-Weg: der erste gesprochene Satz ist der Offenlegungssatz
@@ -158,7 +169,7 @@ nie gemessen.
 
 ### Stimme einer realen Person
 
-> "use of someone’s likeness, including their photorealistic image or voice, without their consent in ways that could confuse authenticity" - https://openai.com/policies/usage-policies/ (Abschnitt "Respect privacy")
+> "use of someone’s likeness, including their photorealistic image or voice, without their consent in ways that could confuse authenticity" - https://openai.com/policies/usage-policies/ (Abschnitt "Respect privacy") - wording to be re-checked against the live page before attestation
 
 - Einschlaegig: ja, Hermes spricht mit synthetischer Stimme.
 - Mechanismus: im Code gibt es keine Funktion, die eine Stimme klont oder anlegt. Beleg:
@@ -171,7 +182,7 @@ nie gemessen.
 
 ### Privatsphaere Dritter
 
-> "we don’t allow attempts to compromise the privacy of others, including to aggregate, monitor, profile, or distribute individuals’ private or sensitive information without their authorization" - https://openai.com/policies/usage-policies/ (Abschnitt "Respect privacy")
+> "we don’t allow attempts to compromise the privacy of others, including to aggregate, monitor, profile, or distribute individuals’ private or sensitive information without their authorization" - https://openai.com/policies/usage-policies/ (Abschnitt "Respect privacy") - wording to be re-checked against the live page before attestation
 
 - Einschlaegig: ja. Der Angerufene ist ein Dritter; seine Aussagen werden verarbeitet.
 - Mechanismen:
@@ -213,32 +224,44 @@ nie gemessen.
     Nummern, Adressen, Gesundheits- oder Geldangaben des Gegenuebers zu suchen
     (`src/i18n/prompts/en.js:326`). Das ist eine Anweisung an das Modell; serverseitig
     durchgesetzt ist nur der Filter oben.
-  - Das Roh-Transkript auf unserer Seite wird am Anrufende geleert
-    (`src/telephony/call-finish.js:350`, in `finishCall`); der Sprach-Agenten-Weg endet ueber
-    dieselbe Funktion (`src/elevenlabs/outbound.js:1458`). Zwei Ausnahmen: ein Diagnose-Anruf
-    an die eigene hinterlegte Nummer behaelt es (`src/diagnostic-retention.js:72`), und
-    scheitert die Zusammenfassung mit einem Fehler, bleibt es bis zum Loeschlauf liegen.
-    Was der Sprach-Anbieter selbst aufbewahrt, ist eine Einstellung dort (Teil B, offen).
-    Fristen siehe Teil B.
+  - Das Roh-Transkript auf unserer Seite wird am Anrufende NUR bei einem abgeschlossenen
+    Anruf geleert. Die Leerung steht in `finishCall` (`src/telephony/call-finish.js:350`) hinter
+    zwei fruehen Ruecksprungstellen: hat der Anruf einen anderen Endstatus als `completed` -
+    etwa `cancelled` nach `cancel_call` (`src/routes/api-calls.js:811`) oder `failed` - oder
+    ist das Transkript leer, kehrt die Funktion vorher zurueck
+    (`src/telephony/call-finish.js:302`, Ruecksprung `src/telephony/call-finish.js:322`);
+    ebenso bei einer gescheiterten Uebergabe eines eingehenden Anrufs an den Sprach-Agenten
+    (`src/telephony/call-finish.js:296`). Ein abgebrochener oder gescheiterter Anruf behaelt
+    sein Roh-Transkript also bis zum Loeschlauf des Anrufs (Code-Default 30 Tage nach
+    Anrufende, `src/config.js:2036`; der Wert 0 schaltet den Loeschlauf ganz aus). Der
+    Sprach-Agenten-Weg endet ueber dieselbe Funktion (`src/elevenlabs/outbound.js:1458`) und
+    unterliegt denselben Ruecksprungstellen. Weitere Ausnahmen bei einem abgeschlossenen
+    Anruf: ein Diagnose-Anruf an die eigene hinterlegte Nummer behaelt es
+    (`src/diagnostic-retention.js:72`), und scheitert die Zusammenfassung mit einem Fehler,
+    bleibt es ebenfalls bis zum Loeschlauf liegen. Was der Sprach-Anbieter selbst aufbewahrt,
+    ist eine Einstellung dort (Teil B, offen). Fristen siehe Teil B.
 - Was an OpenAI geht: `get_call_status` liefert die letzten Zeilen des Gespraechs
   (`src/mcp-tools.js:199`, hoechstens `LAST_TRANSCRIPT_LINES = 6`, `src/mcp-tools.js:48`), also
   woertliche Aussagen des Dritten. Der Handler prueft den Anrufstatus nicht
   (`src/mcp-tools.js:1453-1456`); die Zeilen kommen aus dem gespeicherten Transkript
   (`src/mcp-tools.js:200`). Sie gehen deshalb nicht nur waehrend des Anrufs an OpenAI/ChatGPT,
-  sondern auch danach, solange das Transkript existiert: bei einem Diagnose-Anruf bis zum Ende
-  der Diagnose-Frist (Code-Default 7 Tage), nach einer gescheiterten Zusammenfassung bis zum
-  Loeschlauf des Anrufs (Code-Default 30 Tage).
+  sondern auch danach, solange das Transkript existiert: nach einem abgebrochenen oder
+  gescheiterten Anruf und nach einer gescheiterten Zusammenfassung bis zum Loeschlauf des
+  Anrufs (Code-Default 30 Tage), bei einem Diagnose-Anruf bis zum Ende der Diagnose-Frist
+  (Code-Default 7 Tage). Ein `cancel_call` beendet also die Verbindung, beendet aber nicht die
+  Herausgabe der letzten Zeilen ueber `get_call_status`.
   Werkzeugtext (get_call_status): "duration and the last transcript lines"
   `get_transcript` gibt nur Zusammenfassung und Ergebnis zurueck (`src/mcp-tools.js:1522`).
   Werkzeugtext (get_transcript): "This tool NEVER returns the raw transcript"
 - Status: `teilweise`. Der Dritte willigt nicht ein; er wird nur informiert (Offenlegung).
   Luecke 8 in Teil C (Suchanfragen an Such-Anbieter), Luecke 11 (Rohzeilen nicht an den
-  laufenden Anruf gebunden).
+  laufenden Anruf gebunden), Luecke 12 (Roh-Transkript nicht abgeschlossener Anrufe wird nicht
+  geleert).
   Rechtsgrundlage und Information des Dritten sind Rechtstext-Fragen (Teil B).
 
 ### Beratung, die eine Zulassung erfordert
 
-> "provision of tailored advice that requires a license, such as legal or medical advice, without appropriate involvement by a licensed professional" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people")
+> "provision of tailored advice that requires a license, such as legal or medical advice, without appropriate involvement by a licensed professional" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people") - wording to be re-checked against the live page before attestation
 
 - Einschlaegig: mittelbar. Hermes beraet den Nutzer nicht, er fuehrt Gespraeche in seinem
   Auftrag, z.B. mit einer Arztpraxis oder Kanzlei; die Auskunft kommt dort von Menschen.
@@ -247,11 +270,11 @@ nie gemessen.
 - Was fehlt: kein Prompt-Satz verbietet dem Gespraechsagenten, dem Gegenueber selbst
   medizinische oder rechtliche Auskunft zu geben. Beleg: die einzige Gesundheits-Nennung in
   `src/i18n/prompts/en.js` betrifft den Nachschlag im Anruf (`src/i18n/prompts/en.js:326`).
-- Status: `teilweise`.
+- Status: `teilweise`. Luecke 9 in Teil C.
 
 ### Umgehung von Schutzmassnahmen
 
-> "circumventing our safeguards" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people")
+> "circumventing our safeguards" - https://openai.com/policies/usage-policies/ (Abschnitt "Protect people") - wording to be re-checked against the live page before attestation
 
 - Einschlaegig: nein - die Klausel meint OpenAIs Schutzmassnahmen; Hermes hat keinen Pfad, der
   sie beruehrt. Zur Einordnung: Hermes' eigene Gates liegen serverseitig in der Gate-Kette
@@ -260,7 +283,7 @@ nie gemessen.
 
 ### Politische Kampagnen, Lobbying
 
-> "political campaigning, lobbying, foreign or domestic election interference, or demobilization activities" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people")
+> "political campaigning, lobbying, foreign or domestic election interference, or demobilization activities" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people") - wording to be re-checked against the live page before attestation
 
 - Einschlaegig: ja. Massenanrufe sind ein klassisches Kampagnenwerkzeug.
 - Mechanismus: nur die Mengen-Gates (Stundenlimit, Ziel-Grenze, Kostendecke). Keine
@@ -269,7 +292,7 @@ nie gemessen.
 
 ### Minderjaehrige
 
-> "Children and teens deserve special protection." - https://openai.com/policies/usage-policies/ (Abschnitt "Keep minors safe")
+> "Children and teens deserve special protection." - https://openai.com/policies/usage-policies/ (Abschnitt "Keep minors safe") - wording to be re-checked against the live page before attestation
 
 > "Plugins must be suitable for general audiences, including users aged 13–17. Plugins may not explicitly target children under 13." - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Appropriateness")
 
@@ -385,7 +408,7 @@ behandelt `docs/OPENAI-TOOL-INVENTORY.md`, nicht dieses Dokument.
 
 ## Teil A2: "automation of high-stakes decisions in sensitive areas without human review"
 
-> "automation of high-stakes decisions in sensitive areas without human review" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people"; die Bereichsliste nennt u.a. housing, employment, financial activities and credit, insurance, legal, medical)
+> "automation of high-stakes decisions in sensitive areas without human review" - https://openai.com/policies/usage-policies/ (Abschnitt "Empower people"; die Bereichsliste nennt u.a. housing, employment, financial activities and credit, insurance, legal, medical) - wording to be re-checked against the live page before attestation
 
 Gegenstand: das optionale Mandat von `place_call`. Mit ihm darf der Gespraechsagent im Anruf
 selbst zusagen, statt jede Frage als Nachricht zurueckzugeben.
@@ -447,7 +470,7 @@ danach alle 6 Stunden (`src/boot.js:108`, `src/boot.js:1255-1256`).
 | Mandant: Name des Auftraggebers, eigene Nummer, Abrechnungs-Kennungen | Tabelle `tenant` (`src/db/schema.sql:13`), Spalten `owner_name` (`src/db/schema.sql:23`), `private_number` (`src/db/schema.sql:81`), `stripe_customer_id` (`src/db/schema.sql:38`), `stripe_subscription_id` (`src/db/schema.sql:48`) | Offenlegungssatz, Eigen-Anruf, Abrechnung | keine Frist im Code | Zahlungsanbieter (Kennungen) |
 | Einstellungen | Tabelle `settings` (`src/db/schema.sql:163`) | Verhalten des Assistenten | keine Frist im Code | - |
 | Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/schema.sql:211`): `from_e164`/`to_e164` (`src/db/schema.sql:218-219`), `goal` (`src/db/schema.sql:220`), `briefing` (`src/db/schema.sql:227`), `constraints` (`src/db/schema.sql:228`), `context` (`src/db/schema.sql:252`), `mandate` (`src/db/schema.sql:256`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js:2036`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js:5125`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Vorab-Recherche die serverseitige Suche von Anthropic (`objective`, `briefing`, `constraints`, ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
-| Roh-Transkript | Tabelle `transcript_segment` (`src/db/schema.sql:554`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende geleert (`src/telephony/call-finish.js:350`); scheitert die Zusammenfassung mit einem Fehler, bleibt es bis zum Loeschlauf des Anrufs (30 Tage) | bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` (`src/mcp-tools.js:48`), waehrend des Anrufs und danach, solange das Transkript gespeichert ist, also auch nach einer gescheiterten Zusammenfassung (`src/mcp-tools.js:1453-1456`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
+| Roh-Transkript | Tabelle `transcript_segment` (`src/db/schema.sql:554`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende nur bei Endstatus `completed` geleert (`src/telephony/call-finish.js:350`); bei jedem anderen Endstatus, z.B. `cancelled` nach `cancel_call` oder `failed` (Ruecksprung vor der Leerung, `src/telephony/call-finish.js:302`), und nach einer gescheiterten Zusammenfassung bleibt es bis zum Loeschlauf des Anrufs (30 Tage) | bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` (`src/mcp-tools.js:48`), waehrend des Anrufs und danach, solange das Transkript gespeichert ist, also auch nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten Zusammenfassung (`src/mcp-tools.js:1453-1456`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
 | Roh-Transkript eines Diagnose-Anrufs an die eigene hinterlegte Nummer | wie oben, Markierung `diagnostic` | nachtraegliche Analyse | 7 Tage (`src/config.js:2043-2047`). Aufbewahrung per Default AN: ohne Angabe behaelt der Server das Transkript, nur ein ausdrueckliches `diagnostic=false` bei `place_call` verhindert es (Opt-out, `src/diagnostic-retention.js:42`, `src/diagnostic-retention.js:56`). Die eigene hinterlegte Nummer ist nur auf Format und Land geprueft, NICHT darauf, dass sie dem Nutzer gehoert (`src/diagnostic-retention.js:48`); hat ein Nutzer eine fremde Nummer hinterlegt, ist es das Roh-Transkript eines Dritten | wie oben; insbesondere bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` fuer die ganze Frist (`src/mcp-tools.js:200`, `src/diagnostic-retention.js:72`) |
 | Zusammenfassung, Ergebnis | `summary`, `result` am Anruf (`src/db/schema.sql:339`) | Bericht an den Nutzer | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (Werkzeug-Antworten), Benachrichtigungswege |
 | Woertliche Zitate im Ergebnis | `result.evidence` | Beleg zur Ergebnis-Karte | Code-Default 0 = Funktion aus, es wird nichts erhoben (`src/config.js:2057-2060`) | - |
@@ -494,7 +517,11 @@ Sache des Rechtstextes.
 
 - Diagnose-Transkript abschalten: `diagnostic=false` bei `place_call`.
   Werkzeugtext (place_call): "Set it to false ONLY when the user explicitly does not want that transcript kept."
-- Laufenden Anruf abbrechen: `cancel_call` (`src/mcp-tools.js:1552`).
+- Laufenden Anruf abbrechen: `cancel_call` (`src/mcp-tools.js:1552`). Das beendet die
+  Verbindung und setzt den Status `cancelled` (`src/routes/api-calls.js:811`); es loescht das
+  bis dahin entstandene Roh-Transkript NICHT. Das bleibt bis zum Loeschlauf des Anrufs
+  gespeichert, und `get_call_status` liefert weiter dessen letzte Zeilen (Luecken 11 und 12 in
+  Teil C).
 - Eingangs-Eintraege erneut lesen, ohne Markierungen zu aendern: `check_inbox` mit
   `include_seen` (`src/mcp-tools.js:1627`).
   Werkzeugtext (check_inbox): "Re-read entries that were already marked as seen. Changes NO marker."
@@ -527,55 +554,89 @@ Sache des Rechtstextes.
 
 ## Teil C: Luecken
 
+Jede Luecke traegt ein Ziel. Die Ziel-Werte bedeuten: "planned: ..." - die Arbeit ist
+vorgesehen, aber nicht gebaut; bis sie gebaut ist, gilt die Luecke unveraendert. "open, no owner
+decision yet" - es gibt noch keine Entscheidung des Betreibers, ob und wie die Luecke
+geschlossen wird. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
+
 1. **Keine Zweckbindung** gegen Telemarketing, Werbe- oder Verkaufsanrufe und politische
    Kampagnen - weder in der Beschreibung von `place_call` (`src/mcp-tools.js:1147`) noch in den
-   Server-Instructions (`src/mcp-server-info.js:97`). Klauseln: "telemarketing",
-   "spam", "political campaigning".
+   Server-Instructions (`src/mcp-server-info.js:97`); der Server prueft den Zweck eines Anrufs
+   nicht. Klauseln: "telemarketing", "spam", "political campaigning".
+   Ziel (Zweckbindung und Zweck-Beschreibung in Werkzeugbeschreibung und Server-Instructions):
+   planned: tool description/instructions work. Eine solche Anweisung richtet sich an das
+   Modell und ist keine serverseitige Pruefung; ob es darueber hinaus eine serverseitige
+   Pruefung geben soll: open, no owner decision yet.
 2. **Breiter Kontext-Trichter**: `briefing` fordert Chat-Kontext an
    (`src/mcp-tools.js:1182`), `context` ist ein zweites Sammelfeld. Klauseln: "full
    conversation history ... broad contextual fields", "Collection minimization",
    "Data boundaries".
+   Ziel: planned: minimization of the `place_call` descriptions and input fields.
 3. **Keine Minimierung fuer Gesundheitsangaben** (und amtliche Kennnummern) in `briefing`,
-   `key_facts`, `objective` (`src/mcp-tools.js:1182`). Klauseln: "Restricted data",
-   "Regulated Sensitive Data".
+   `key_facts`, `objective` (`src/mcp-tools.js:1182`); keine Einwilligungs- oder Hinweisstelle
+   vor der Erhebung. Klauseln: "Restricted data", "Regulated Sensitive Data".
+   Ziel fuer die Werkzeugtexte: planned: minimization of the `place_call` descriptions and
+   input fields. Ziel fuer Einwilligung und Hinweis vor der Erhebung: open, no owner decision
+   yet.
 4. **`on_out_of_scope` wirkt auf dem Sprach-Agenten-Weg nicht**
    (`src/elevenlabs/outbound.js:615`), die Beschreibung verspricht das Verhalten
    (`src/mcp-tools.js:1218`). Klausel: "Descriptions that match behavior".
+   Ziel: open, no owner decision yet.
 5. **Kein Hinweis und keine Sperre fuer Mandate in sensiblen Bereichen** (Wohnen, Arbeit,
    Kredit, Versicherung, Recht, Medizin) (`src/mcp-tools.js:1202`). Klausel: "automation of
    high-stakes decisions in sensitive areas without human review".
+   Ziel: open, no owner decision yet.
 6. **Keine Loeschfrist** fuer Audit-Log (`src/db/schema.sql:1014`), Nutzungs- und
    Kostendaten (`src/db/schema.sql:901`), Konten (`src/db/schema.sql:980`); offene Aufgaben
    unbefristet (`src/store/state-ops.js:5127`). Klauseln: "data retention timelines",
    "Data practices".
+   Ziel: open, no owner decision yet.
 7. **Keine Loeschung und keine Auskunft im Self-Service** (`src/routes/api-read.js:116-118`,
    `src/routes/api-read.js:119`). Klausel: "any controls offered to your users".
+   Ziel: open, no owner decision yet.
 8. **Datenabfluss an Such-Anbieter nicht in der Werkzeugdefinition**, zwei Mechanismen:
    (a) Vorab-Recherche: bei eingeschalteter Recherche gehen `briefing`, `objective` und
    `constraints` an die Suche von Anthropic (`src/research/sanitize.js:17`,
    `src/routes/api-calls.js:525`); (b) Nachschlag im Anruf: bei eingeschaltetem Nachschlag
    gehen vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech mit dem Angerufenen an
    Exa, gefiltert nur nach Ziffernfolgen, E-Mail, Zielnummer und woertlichem Zitat, ohne
-   Namensfilter (`src/research/lookup-guard.js:66-74`, `src/plans.js:125`). Ob die
-   Datenschutzerklaerung den Nachschlag und den Angerufenen als Betroffenen nennt, klaert nur
-   der Rechtstext (`offen`).
+   Namensfilter (`src/research/lookup-guard.js:66-74`, `src/plans.js:125`).
    Klausel: "If a tool sends data outside the current environment ..., this must be clear
    from the tool definition."
+   Ziel fuer die Werkzeugdefinition: open, no owner decision yet. Ob die
+   Datenschutzerklaerung den Nachschlag und den Angerufenen als Betroffenen nennt, ist Teil
+   von Luecke 13.
 9. **Kein Beratungsverbot im Gespraechsprompt** fuer medizinische oder rechtliche Auskunft an
    das Gegenueber (`src/i18n/prompts/en.js:157`). Klausel: "tailored advice that requires a
    license".
+   Ziel: open, no owner decision yet.
 10. **Auftraggeber-Name nicht identitaetsgeprueft**: der Name im Offenlegungssatz stammt aus
     dem Profil des Login-Anbieters (`src/web-auth.js:461-462`) bzw. aus Freitext im
     Betreiber-Onboarding (`src/routes/api-onboard.js:94-98`); die Pruefstufe fuer ausgehende
     Anrufe ist die Karte (`src/store/defaults.js:524`). Klauseln: "impersonation",
     "Identity theft, impersonation".
+    Ziel: open, no owner decision yet.
 11. **Rohzeilen nicht an den laufenden Anruf gebunden**: `get_call_status` gibt die letzten
     sechs Zeilen des gespeicherten Transkripts fuer jeden Anrufstatus zurueck
     (`src/mcp-tools.js:1453-1456`, `src/mcp-tools.js:200`), also auch nach dem Anruf -
-    bei Diagnose-Anrufen fuer die ganze Diagnose-Frist (`src/diagnostic-retention.js:72`),
-    nach einer gescheiterten Zusammenfassung bis zum Loeschlauf. Der Code nennt das selbst
-    einen offenen Befund (`src/mcp-tools.js:189-193`). Klauseln: "Response minimization",
-    "privacy of others".
+    nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten
+    Zusammenfassung bis zum Loeschlauf, bei Diagnose-Anrufen fuer die ganze Diagnose-Frist
+    (`src/diagnostic-retention.js:72`). Der Code nennt das selbst einen offenen Befund
+    (`src/mcp-tools.js:189-193`). Klauseln: "Response minimization", "privacy of others".
+    Ziel: open, no owner decision yet.
+12. **Roh-Transkript nicht abgeschlossener Anrufe wird nicht geleert**: `finishCall` kehrt bei
+    jedem Endstatus ausser `completed` vor der Leerung zurueck
+    (`src/telephony/call-finish.js:302`); das betrifft auch jeden per `cancel_call`
+    abgebrochenen Anruf. Das Roh-Transkript mit den woertlichen Aussagen des Angerufenen bleibt
+    bis zum Loeschlauf des Anrufs (Code-Default 30 Tage, `src/config.js:2036`). Klauseln:
+    "Collection minimization", "privacy of others", "data retention timelines".
+    Ziel: open, no owner decision yet.
+13. **Rechtstext fehlt in diesem Dokument**: Datenschutzerklaerung und AGB, darin
+    Mindestalter, Offenlegung der Metadaten, Information des Angerufenen als Betroffenem und
+    die tatsaechlichen Fristen. Teil B liefert nur die Faktengrundlage. Klauseln: "Plugin
+    submissions must include a clear, published privacy policy", "Children and teens deserve
+    special protection.", "Data practices".
+    Ziel: planned: legal text (privacy policy and terms), written by the operator.
 
 ## Anker (maschinenlesbar)
 
@@ -607,6 +668,10 @@ src/routes/api-calls.js:525 | ownerNotes: b.briefing
 src/config.js:624 | researchEnabled: boolEnv("RESEARCH_ENABLED", process.env.RESEARCH_ENABLED, { fallback: false })
 src/i18n/prompts/en.js:326 | NEVER search for names, phone numbers, addresses, health or money details
 src/telephony/call-finish.js:350 | if (!keepsTranscriptForDiagnosis(call, config.privacy)) store.purgeTranscript(call.id);
+src/telephony/call-finish.js:302 | if (call.status !== "completed" || !call.transcript.length) {
+src/telephony/call-finish.js:322 | return;
+src/telephony/call-finish.js:296 | if (uebergabeGescheitert(call)) {
+src/routes/api-calls.js:811 | status: "cancelled"
 src/elevenlabs/outbound.js:1458 | billThunk(finishCall, store, callId)
 src/mcp-tools.js:199 | last_transcript_lines: c.transcript
 src/mcp-tools.js:200 | .slice(-LAST_TRANSCRIPT_LINES)

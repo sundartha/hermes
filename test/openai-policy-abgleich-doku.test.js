@@ -11,6 +11,11 @@
 //   3. Jedes Policy-Zitat (Zeile "> \"...") nennt eine OpenAI-URL.
 //   4. Hygiene: das Dokument kann mit eingereicht werden - keine internen Kennungen, keine
 //      Nummern, keine Secret-Muster.
+//   5. Ehrlichkeit der Quellen: jedes Zitat aus einer Seite, die beim Abgleich nicht direkt
+//      abrufbar war, traegt den Nachpruef-Vermerk. Wer den Vermerk entfernt, muss die Seite
+//      gegengelesen haben und diesen Test bewusst anpassen.
+//   6. Jede Luecke in Teil C nennt ein Ziel (geplant oder ohne Entscheidung) - keine Luecke
+//      ohne Aussage, wie es mit ihr weitergeht.
 //
 // Testnamen tragen KEIN Katalog-/ABNAHME-Praefix (package.json i18nCatalogPattern/
 // abnahmePattern), sonst landet dieser Test im falschen Lauf.
@@ -39,10 +44,16 @@ const POLICY_QUOTE_PREFIX = '> "';
 const BLOCK_SEPARATOR = " | ";
 // Laenge des Zeilenauszugs in einer Fehlermeldung.
 const ERROR_EXCERPT_CHARS = 80;
-const OPENAI_SOURCE_URLS = [
-  "https://openai.com/policies/usage-policies/",
-  "https://developers.openai.com/plugins/app-guidelines",
-];
+const USAGE_POLICIES_URL = "https://openai.com/policies/usage-policies/";
+const OPENAI_SOURCE_URLS = [USAGE_POLICIES_URL, "https://developers.openai.com/plugins/app-guidelines"];
+// Die Usage Policies antworteten beim Abgleich mit 403; ihr Wortlaut ist ungeprueft.
+const UNFETCHABLE_SOURCE_URLS = [USAGE_POLICIES_URL];
+const RECHECK_MARKER = "wording to be re-checked against the live page before attestation";
+const GAPS_SECTION = { begin: "## Teil C: Luecken", end: "## Anker (maschinenlesbar)" };
+const GAP_ITEM_START = /^\d+\. \*\*/m;
+// Der Ziel-Wert darf ueber einen Zeilenumbruch laufen; geprueft wird der Text mit
+// zusammengezogenem Leerraum.
+const GAP_TARGET = /Ziel[^:]*: (planned: |open, no owner decision yet)/;
 // Interne Kennungen (Phasen, Befunde, Owner-Punkte, Branches), E.164-artige Nummern,
 // Secret-Muster. Das Dokument kann an OpenAI gehen.
 const FORBIDDEN_PATTERNS = [
@@ -227,5 +238,26 @@ test("Policy-Abgleich: keine internen Kennungen, Nummern oder Secret-Muster im D
   for (const pattern of FORBIDDEN_PATTERNS) {
     const hit = doc.match(pattern);
     assert.equal(hit, null, `verbotenes Muster ${pattern} gefunden: "${hit?.[0]}"`);
+  }
+});
+
+test("Policy-Abgleich: jedes Zitat einer nicht abrufbaren Quelle traegt den Nachpruef-Vermerk", () => {
+  const quoteLines = readDoc()
+    .split("\n")
+    .filter((line) => line.startsWith(POLICY_QUOTE_PREFIX))
+    .filter((line) => UNFETCHABLE_SOURCE_URLS.some((url) => line.includes(url)));
+  assert.ok(quoteLines.length > 0, "keine Zitate der nicht abrufbaren Quelle gefunden - der Filter greift nicht");
+  for (const line of quoteLines) {
+    assert.ok(line.includes(RECHECK_MARKER), `Zitat ohne Nachpruef-Vermerk: ${line.slice(0, ERROR_EXCERPT_CHARS)}`);
+  }
+});
+
+test("Policy-Abgleich: jede Luecke in Teil C nennt ein Ziel", () => {
+  const { body } = blockBounds(readDoc(), GAPS_SECTION);
+  const items = body.split(GAP_ITEM_START).slice(1);
+  assert.ok(items.length > 0, "keine Luecken gefunden - der Filter greift nicht");
+  for (const item of items) {
+    const flat = item.replace(/\s+/g, " ");
+    assert.match(flat, GAP_TARGET, `Luecke ohne Ziel: ${flat.slice(0, ERROR_EXCERPT_CHARS)}`);
   }
 });
