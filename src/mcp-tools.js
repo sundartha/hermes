@@ -1538,7 +1538,8 @@ export function registerTools(
   // 2026-09-22, Breaking Change gewollt, kein Alias).
   // Kopplung: die WIDGET_CALL-Karte (src/ui/widgets/call.html) ruft dieses Werkzeug per
   // Host-Bruecke unter eigenem Konstantennamen ab (TOOL_GET_CALL_RESULT). Ein Rename hier
-  // ohne Nachzug dort macht die Ergebnis-Karte stumm - Test T11-f in
+  // ohne Nachzug dort macht die Ergebnis-Karte stumm; eine geaenderte Karte braucht
+  // zusaetzlich eine neue Pin-Version (src/ui/widget-versions.json). Test T11-f in
   // test/openai-t2-11-werkzeugtexte.test.js prueft jede Widget-Referenz gegen tools/list.
   uiTool(
     "get_call_result",

@@ -82,10 +82,15 @@ const EXPECTED_RESOURCE_META = {
 // Beschreibungen aendern sich (N-11/N-13). Voriger Sollwert (beide Pfade,
 // byte-identisch seit dem securitySchemes-Nachtrag oben):
 // bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47.
+// Neu gepinnt (T2-11-Nachzug Widgets): call.html und my-number.html nennen die neuen
+// Werkzeugnamen, beide Widgets tragen deshalb Pin-Version 2. Gegen den Klartext-Diff
+// geprueft: EINZIGE Unterschiede sind die URIs call/my-number v1 -> v2 (resources/list,
+// resources/read, tools/list _meta) und die umbenannten Namen im Widget-Text. Voriger
+// Sollwert (beide Pfade): e36d8f9e7aa4b4fda25cc0d1518bb364fa25f4de597a24d54e763f3cee88599d.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "e36d8f9e7aa4b4fda25cc0d1518bb364fa25f4de597a24d54e763f3cee88599d";
+  "72b3f3606e69272a0ee82b97aebde39550fbe74b99ba7433b2507f2cb1b8a5d6";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "e36d8f9e7aa4b4fda25cc0d1518bb364fa25f4de597a24d54e763f3cee88599d";
+  "72b3f3606e69272a0ee82b97aebde39550fbe74b99ba7433b2507f2cb1b8a5d6";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
