@@ -116,7 +116,7 @@ Hermes applies it as three statements, and every value in Table A follows from o
 The hint describes what a tool can do, not what every single invocation does: a tool that sends
 to an external party on at least one path is `true`, even if some invocations send nothing.
 
-- **prepare_call** (registered `src/mcp-tools.js:1439`, handler `:1448-1480`, REST
+- **prepare_call** (registered `src/mcp-tools.js:1438`, handler `:1447-1479`, REST
   `POST /api/call-confirmations`). Previews an outbound call and, when card confirmation is
   switched on for the server, attaches a single-use confirmation code for the Hermes card that
   `place_call` then requires - see "Confirmation before placing a call" below. The server does
@@ -129,10 +129,10 @@ to an external party on at least one path is `true`, even if some invocations se
     dials and never contacts the telephony carrier.
   - `idempotentHint: true` - repeating the call has no additional effect on the world: no
     call, no record, no cost. It does NOT mean the code is always the same: until a code has
-    been used, repeating `prepare_call` with the same bound arguments in the same five-minute
+    been used, repeating `prepare_call` with the same arguments in the same five-minute
     window returns the same code; once that code has been used to place a call, repeating
     `prepare_call` returns a new code.
-- **place_call** (registered `src/mcp-tools.js:1493`, handler `:1515-1559`, REST
+- **place_call** (registered `src/mcp-tools.js:1492`, handler `:1514-1558`, REST
   `POST /api/calls`). As of this inventory, `place_call` additionally REQUIRES a
   `confirmation_code` from a preceding `prepare_call` call with identical arguments - see
   "Confirmation before placing a call" below. The annotations below are unchanged by that
@@ -260,12 +260,12 @@ to an external party on at least one path is `true`, even if some invocations se
 
 `place_call` requires a `confirmation_code` obtained from a preceding `prepare_call` call with
 the identical arguments. The server derives the code from a secret operated by Hermes, the
-account, a five-minute time window and the bound arguments: the normalized destination,
-`objective`, `language`, `max_duration_s`, `constraints`, `mandate` and `diagnostic` (any
-argument added later is bound by default). `briefing` and `context` are deliberately not bound,
-so that rewording background information between the two calls does not fail the
-confirmation; the preview includes them, but changing them afterwards does not invalidate the
-code.
+account, a five-minute time window and every argument except the code itself: the normalized
+destination, `objective`, `briefing`, `context`, `language`, `max_duration_s`, `constraints`,
+`mandate` and `diagnostic` (any argument added later is bound by default). A missing argument,
+an empty string and an empty object are distinct values. Changing any argument after the user
+confirmed - including only rewording `briefing` or `context` - invalidates the code; the model
+has to call `prepare_call` again and the user has to confirm again.
 The code is issued only in the tool result's `_meta`, never in the model-visible text or
 `structuredContent`.
 
@@ -286,7 +286,7 @@ confirmation is enabled, every connecting host receives the code in `_meta`. On 
 follows the MCP Apps contract and keeps `_meta` from the model, the code therefore reaches the
 model only through a user action (reviewing the rendered card). On a host that does not, the
 code would be model-visible and the confirmation would be formal only; Hermes does not claim
-more than that the code was issued for these bound arguments and consumed once. It is not a claim
+more than that the code was issued for exactly these arguments and consumed once. It is not a claim
 that a human read the card, and it does not itself authorize the call:
 the server's outbound permission checks (subscription/verification, destination country and
 number, hourly/per-destination limits, per-account cost cap, maximum duration, provider

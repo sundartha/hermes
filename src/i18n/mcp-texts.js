@@ -126,8 +126,9 @@ export const MCP_TEXTS = Object.freeze({
     confirmationRequired: (to, objective) =>
       `Dieser Anruf ist noch nicht bestaetigt (Ziel: ${to}, Anliegen: ${objective}). Der ` +
       "Nutzer muss ihn in der Hermes-Karte bestaetigen, erst dann sendet die Karte den " +
-      "Bestaetigungscode; nie einen Code raten oder erfinden - ein Host ohne Karte kann " +
-      "nicht waehlen.",
+      "Bestaetigungscode; nie einen Code raten oder erfinden. Wurde danach ein Argument " +
+      "geaendert (auch briefing oder context), neu mit prepare_call vorbereiten - ein Host " +
+      "ohne Karte kann nicht waehlen.",
     // T2-13: prepare_call bei MCP_UI_ENABLED=false (der einzige Schalter, der das
     // entscheidet - keine Erkennung einzelner Hosts, s. Korrektur in PLAN-SECURITY.md
     // Abschnitt OpenAI-T2-13) - ein Code wird zwar serverseitig ausgestellt, aber an
@@ -247,7 +248,8 @@ export const MCP_TEXTS = Object.freeze({
     confirmationRequired: (to, objective) =>
       `This call is not confirmed yet (destination: ${to}, purpose: ${objective}). The ` +
       "user must confirm it in the Hermes card, which then sends the confirmation code; " +
-      "never guess or invent a code - a host without a card cannot place calls.",
+      "never guess or invent a code. If any argument changed since (briefing or context " +
+      "included), call prepare_call again - a host without a card cannot place calls.",
     prepareCallNoCardHint:
       "Preview created. Card confirmation is switched off on this server - there is no " +
       "confirmation code, and place_call cannot place a call here. Tell the user so honestly.",
@@ -329,7 +331,8 @@ export const MCP_TEXTS = Object.freeze({
     confirmationRequired: (to, objective) =>
       `Cet appel n'est pas encore confirmé (destination : ${to}, objet : ${objective}). ` +
       "L'utilisateur doit le confirmer dans la carte Hermes, qui envoie ensuite le code de " +
-      "confirmation ; ne devinez ni n'inventez jamais de code - un hôte sans carte ne peut " +
+      "confirmation ; ne devinez ni n'inventez jamais de code. Si un argument a changé depuis " +
+      "(briefing ou context compris), rappelez prepare_call - un hôte sans carte ne peut " +
       "pas passer d'appel.",
     prepareCallNoCardHint:
       "Aperçu créé. La confirmation par carte est désactivée sur ce serveur - il n'y a pas " +

@@ -129,10 +129,16 @@ const EXPECTED_RESOURCE_META = {
 // tools/list sind diese drei Beschreibungen; resources/list und alle resources/read-Inhalte
 // unveraendert (src/ui unberuehrt). Voriger Sollwert (beide Pfade):
 // 8da33018cbdd342cbbff1082e54d0d1a0e8299f120e8d36933fa8139ed8c6ec3.
+// Neu gepinnt (T2-13, zweite Pruefung, Lead-Entscheidung "briefing/context gebunden"):
+// prepare_call-, place_call- und confirmation_code-Beschreibung sagen jetzt, dass der Code
+// auch briefing/context abdeckt und jede Aenderung ein neues prepare_call braucht. Gegen den
+// Quell-Diff geprueft: EINZIGE Unterschiede in tools/list sind diese drei Beschreibungen,
+// src/ui unberuehrt. Voriger Sollwert (beide Pfade):
+// c24783bc0755354a545c2703bcb69b3ac75d2a5a423e72438daa2886ed201c0a.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "c24783bc0755354a545c2703bcb69b3ac75d2a5a423e72438daa2886ed201c0a";
+  "2b3e1f8c732997bc73bcc1387a2f24b4b594ad9b9984a4b8bb58352cef03e336";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "c24783bc0755354a545c2703bcb69b3ac75d2a5a423e72438daa2886ed201c0a";
+  "2b3e1f8c732997bc73bcc1387a2f24b4b594ad9b9984a4b8bb58352cef03e336";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

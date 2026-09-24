@@ -108,7 +108,9 @@ export const MCP_BASE_INSTRUCTIONS =
   // Modell den Code selbst aus der Karte nimmt - die Karte SENDET ihn nach der Bestaetigung.
   "Before every place_call, call prepare_call first with the exact same arguments; the " +
   "user then confirms in the Hermes card, which sends the confirmation_code - only then " +
-  "pass it to place_call, and never guess or invent a code. If this host does not show " +
+  "pass it to place_call, and never guess or invent a code. The code covers every " +
+  "argument, briefing and context included: after changing any of them, call " +
+  "prepare_call again and let the user confirm again. If this host does not show " +
   "the Hermes card, or card confirmation is switched off for this server, no call can be " +
   "placed from here - tell the user so honestly.";
 

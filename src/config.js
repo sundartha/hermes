@@ -2085,9 +2085,9 @@ const rawConfig = {
   oidcClientId: process.env.OIDC_CLIENT_ID || "",
   oidcClientSecret: process.env.OIDC_CLIENT_SECRET || "", // SECRET
   // T2-13 (N-10): Betriebsgeheimnis fuer den serverseitigen Bestaetigungs-Code vor dem
-  // Waehlen (src/call-confirmation.js). Leer -> nicht ableitbar, prepare_call antwortet
-  // 503 "confirmation_unavailable" (fail-closed, KEIN Boot-Refusal - s. PRODUCTION_FOOTGUNS
-  // unten, das bleibt bewusst nur eine WARN-Zeile, boot.js#warnCallConfirmationSecretUnset).
+  // Waehlen (src/call-confirmation.js). Leer oder kuerzer als 32 Zeichen -> nicht ableitbar,
+  // prepare_call antwortet 503 "confirmation_unavailable" (fail-closed, KEIN Boot-Refusal - s.
+  // PRODUCTION_FOOTGUNS unten, nur eine WARN-Zeile, boot.js#warnCallConfirmationSecretUnusable).
   callConfirmationSecret: process.env.CALL_CONFIRMATION_SECRET || "", // SECRET
   // WorkOS User-Management API-Basis (authorize/authenticate). Die Umgebung wird ueber
   // client_id + API-Key unterschieden, NICHT ueber den Host -> derselbe Host fuer Staging

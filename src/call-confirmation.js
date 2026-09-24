@@ -1,7 +1,7 @@
 // ---- Geldpfad: serverseitige Bestaetigung vor dem Waehlen (T2-13, N-10) -----------------
 // WAS DIE BESTAETIGUNG BEWEIST: der Server hat fuer GENAU diese Anfrage (Mandant,
-// normalisiertes Ziel, alle gebundenen Argumente - briefing/context sind bewusst NICHT
-// gebunden, s. UNBOUND_ARGUMENTS) innerhalb der letzten maximal
+// normalisiertes Ziel, ALLE uebrigen Argumente inkl. briefing/context) innerhalb der
+// letzten maximal
 // CONFIRMATION_WINDOW_MS * ACCEPTED_WINDOWS einen Code ausgestellt, und dieser Code ist noch
 // nicht verbraucht. Der Code steht nur im Ergebnis-`_meta` von `prepare_call` (Karte, nicht
 // Modelltext) - auf einem Host, der sich an diesen Vertrag haelt, erreicht er das Modell also
@@ -59,8 +59,9 @@ export const MAX_FAILED_CONFIRMATIONS_PER_WINDOW = 10;
 // Ein kuerzeres/leeres Geheimnis ergibt keinen Schluessel (fail-closed, s. deriveConfirmationKey).
 export const CONFIRMATION_SECRET_MIN_LENGTH = 32;
 // Versions-Praefix in der Ableitung: eine kuenftige Aenderung bekommt ein eigenes Praefix
-// und kollidiert nicht mit alten Codes (Muster tenant-tool-token.js).
-export const DERIVATION_VERSION = "v1";
+// und kollidiert nicht mit alten Codes (Muster tenant-tool-token.js). v2 (Safety-Review
+// T2-13): HMAC-Eingabe als JSON-Tupel statt "|"-Verkettung, Slot als eigenes Element.
+export const DERIVATION_VERSION = "v2";
 const HKDF_INFO = Buffer.from("hermes-call-confirmation-v1", "utf8");
 const HKDF_KEY_LENGTH = 32;
 
@@ -74,8 +75,10 @@ export function deriveConfirmationKey(secret) {
 }
 
 // Rekursiv sortierte Kopie: Schluesselreihenfolge wird egal, undefined/fehlende Felder
-// werden gleich behandelt (beide verschwinden aus dem Ergebnis). Strings bleiben exakt,
-// kein Trim - ein Leerzeichen mehr im Briefing ist ein ANDERER Anruf.
+// werden gleich behandelt (beide verschwinden aus dem Ergebnis - "nicht gesetzt"; ueber
+// den JSON-Body der Route kommt undefined ohnehin nie an). Alles andere bleibt ein
+// EIGENER Wert: "" ist nicht "fehlt", {} nicht "fehlt", null nicht "". Strings bleiben
+// exakt, kein Trim - ein Leerzeichen mehr im Briefing ist ein ANDERER Anruf.
 function sortedCanonical(value) {
   if (Array.isArray(value)) return value.map(sortedCanonical);
   if (value && typeof value === "object") {
@@ -89,30 +92,20 @@ function sortedCanonical(value) {
   return value;
 }
 
-// NICHT gebundene Argumente (Plan T2-13): briefing/context sind umformulierbarer
-// Hintergrund - ein Modell, das sie zwischen prepare_call und place_call neu formuliert,
-// soll nicht an der Bestaetigung scheitern. Bewusst eine Ausschluss-, keine Positivliste:
-// jedes KUENFTIGE Argument ist damit automatisch gebunden (fail-closed). Gebunden bleiben
-// heute to (normalisiert), objective, language, max_duration_s (kosten-/dauerrelevant),
-// constraints und mandate (was der Agent zusagen darf) und diagnostic.
-const UNBOUND_ARGUMENTS = Object.freeze(["confirmation_code", "briefing", "context"]);
-
 /**
- * Bindet alle Argumente ausser UNBOUND_ARGUMENTS, mit `to` in NORMALISIERTER Form (Aufrufer
- * uebergibt das schon aufgeloeste Ziel separat - es ersetzt ein eventuelles args.to).
+ * Bindet ALLE Argumente ausser confirmation_code - to (normalisiert), objective, language,
+ * max_duration_s, constraints, mandate, diagnostic UND briefing/context. KORRIGIERT
+ * (Safety-Review T2-13, Lead-Entscheidung): briefing/context waren kurz ungebunden; die
+ * Vorschau zeigt sie aber, und ein per Prompt-Injection gesteuertes Modell haette nach dem
+ * Klick Inhalt und Ton des Anrufs tauschen koennen. Der Nutzer bestaetigt, was tatsaechlich
+ * passiert - jede Aenderung nach dem Klick braucht ein neues prepare_call. Ausschluss statt
+ * Positivliste: jedes KUENFTIGE Argument ist damit automatisch gebunden (fail-closed).
+ * `to` in NORMALISIERTER Form (der Aufrufer uebergibt das aufgeloeste Ziel separat - es
+ * ersetzt ein eventuelles args.to).
  */
 export function canonicalCallRequest({ to, args }) {
-  const bound = { ...args };
-  for (const field of UNBOUND_ARGUMENTS) delete bound[field];
+  const { confirmation_code: _notBound, ...bound } = args || {};
   return JSON.stringify(sortedCanonical({ ...bound, to }));
-}
-
-// Slot-Suffix fuer die Codeableitung (Slot-Register in src/routes/api-call-confirmations.js):
-// nach einem Verbrauch stellt prepare_call fuer dieselbe Anfrage einen Code des NAECHSTEN
-// Slots aus. Slot 0 laesst canonical unveraendert. Der Slot geht NUR in die Ableitung ein,
-// nicht in das, was der Code inhaltlich bindet.
-function canonicalForSlot({ canonical, slot }) {
-  return slot === 0 ? canonical : `${canonical}|slot:${slot}`;
 }
 
 function* acceptedWindowIndices(nowMs) {
@@ -137,9 +130,14 @@ export function windowIndexFor(nowMs) {
   return Math.floor(nowMs / CONFIRMATION_WINDOW_MS);
 }
 
-function codeForWindow({ key, tenantId, canonical, windowIdx }) {
+// HMAC-Eingabe als JSON-Tupel: jedes Element ist eindeutig abgegrenzt, auch wenn ein
+// Mandant oder die kanonische Anfrage das Trennzeichen einer Verkettung enthielte. Der Slot
+// (Slot-Register in src/routes/api-call-confirmations.js: nach einem Verbrauch stellt
+// prepare_call fuer dieselbe Anfrage einen Code des NAECHSTEN Slots aus) geht NUR in die
+// Ableitung ein, nicht in das, was der Code inhaltlich bindet.
+function codeForWindow({ key, tenantId, canonical, windowIdx, slot }) {
   const mac = createHmac("sha256", key)
-    .update(`${DERIVATION_VERSION}|${tenantId}|${windowIdx}|${canonical}`)
+    .update(JSON.stringify([DERIVATION_VERSION, tenantId, windowIdx, slot, canonical]))
     .digest();
   let code = "";
   for (let i = 0; i < CONFIRMATION_CODE_LENGTH; i++) {
@@ -155,7 +153,7 @@ function codeForWindow({ key, tenantId, canonical, windowIdx }) {
 export function issueConfirmationCode({ key, tenantId, canonical, nowMs, slot = 0 }) {
   const windowIdx = windowIndexFor(nowMs);
   return {
-    code: codeForWindow({ key, tenantId, canonical: canonicalForSlot({ canonical, slot }), windowIdx }),
+    code: codeForWindow({ key, tenantId, canonical, windowIdx, slot }),
     expiresAtMs: (windowIdx + 1) * CONFIRMATION_WINDOW_MS,
   };
 }
@@ -187,8 +185,7 @@ export function matchedWindowIndex({ key, tenantId, canonical, code, nowMs, slot
   const normalized = normalizeConfirmationCode(code);
   if (!normalized) return null;
   for (const windowIdx of acceptedWindowIndices(nowMs)) {
-    const slotCanonical = canonicalForSlot({ canonical, slot: slotForWindow(windowIdx) });
-    const candidate = codeForWindow({ key, tenantId, canonical: slotCanonical, windowIdx });
+    const candidate = codeForWindow({ key, tenantId, canonical, windowIdx, slot: slotForWindow(windowIdx) });
     if (safeEqual(normalized, candidate)) return windowIdx;
   }
   return null;

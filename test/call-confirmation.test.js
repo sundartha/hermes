@@ -16,6 +16,7 @@ import {
   normalizeConfirmationCode,
 } from "../src/call-confirmation.js";
 import { makeCallConfirmationRoutes } from "../src/routes/api-call-confirmations.js";
+import { CALL_CONFIRMATION_SECRET_FINDING, callConfirmationSecretFindings } from "../src/boot-guard.js";
 
 const TOO_SHORT_SECRET_LENGTH = CONFIRMATION_SECRET_MIN_LENGTH - 1;
 const WINDOWS_AFTER_EXPIRY = 2;
@@ -53,8 +54,9 @@ test("Code hat feste Laenge und nur Alphabet-Zeichen", () => {
   for (const ch of code) assert.ok(CONFIRMATION_CODE_ALPHABET.includes(ch));
 });
 
-// Gebunden (Plan T2-13): alles ausser briefing/context - s. UNBOUND_ARGUMENTS.
-const FIELDS = ["to", "objective", "language", "max_duration_s", "mandate", "constraints"];
+// Gebunden: ALLE Argumente ausser confirmation_code (Lead-Entscheidung Safety-Review T2-13,
+// briefing/context eingeschlossen - context s. eigener Test unten, er ist ein Objekt).
+const FIELDS = ["to", "objective", "briefing", "language", "max_duration_s", "mandate", "constraints"];
 for (const field of FIELDS) {
   test(`Aenderung an ${field} aendert den Code`, () => {
     const base = argsFixture();
@@ -69,14 +71,31 @@ for (const field of FIELDS) {
   });
 }
 
-// Plan T2-13: "briefing/context nicht (umformulierter Kontext soll nicht scheitern)".
-test("Aenderung an briefing oder context aendert den Code NICHT (bewusst nicht gebunden)", () => {
+// Lead-Entscheidung Safety-Review T2-13: der Nutzer bestaetigt, was tatsaechlich passiert -
+// briefing UND context sind gebunden, leer/fehlend eindeutig unterschieden.
+function canonicalOf(args) {
+  return canonicalCallRequest({ to: args.to, args });
+}
+
+test("briefing und context sind gebunden; leer, fehlend und leeres Objekt sind verschiedene Anfragen", () => {
   const base = argsFixture({ context: { summary: "alt" } });
-  const reworded = argsFixture({ briefing: "Ganz anders formuliert", context: { summary: "neu" } });
-  const withoutBoth = argsFixture({ briefing: undefined });
-  const canonicalBase = canonicalCallRequest({ to: base.to, args: base });
-  assert.equal(canonicalCallRequest({ to: reworded.to, args: reworded }), canonicalBase);
-  assert.equal(canonicalCallRequest({ to: withoutBoth.to, args: withoutBoth }), canonicalBase);
+  const canonicalBase = canonicalOf(base);
+  assert.equal(canonicalOf(argsFixture({ context: { summary: "alt" } })), canonicalBase, "Positiv-Kontrolle: unveraendert = gleich");
+  const variants = [
+    argsFixture({ context: { summary: "neu" } }),
+    argsFixture({ briefing: "anders", context: { summary: "alt" } }),
+    argsFixture({ briefing: "", context: { summary: "alt" } }),
+    argsFixture({ briefing: undefined, context: { summary: "alt" } }),
+    argsFixture({ context: {} }),
+    argsFixture({ context: undefined }),
+  ];
+  const canonicals = variants.map(canonicalOf);
+  assert.equal(new Set([canonicalBase, ...canonicals]).size, variants.length + 1, "jede Variante ist eine eigene Anfrage");
+});
+
+test("confirmation_code selbst ist nicht gebunden (sonst koennte kein Code je passen)", () => {
+  const base = argsFixture();
+  assert.equal(canonicalOf({ ...base, confirmation_code: "ABC123" }), canonicalOf(base));
 });
 
 test("Aenderung der tenantId aendert den Code", () => {
@@ -446,7 +465,7 @@ test("Route: Fehlversuchsbremse ist je Mandant - Fehlversuche von A sperren B ni
   });
 });
 
-test("Route: geaenderte language wird abgelehnt, geaendertes briefing/context bestaetigt trotzdem", async () => {
+test("Route: geaenderte language/briefing/context werden abgelehnt, unveraenderte Anfrage bestaetigt", async () => {
   await withRouteClock(
     async ({ base }) => {
       const issued = { language: "de", briefing: "alt", context: { summary: "alt" } };
@@ -454,10 +473,31 @@ test("Route: geaenderte language wird abgelehnt, geaendertes briefing/context be
       const otherLanguage = await postConfirmation(base, confirmBody(code, { ...issued, language: "en" }));
       assert.equal(otherLanguage.status, HTTP_OK_ROUTE, "Sprache ist freigeschaltet (kein 400 vor der Pruefung)");
       assert.equal(otherLanguage.json.confirmed, false, "geaenderte language -> confirmed:false");
-      const reworded = { ...issued, briefing: "neu formuliert", context: { summary: "neu" } };
-      const ok = await postConfirmation(base, confirmBody(code, reworded));
-      assert.equal(ok.json.confirmed, true, "briefing/context sind nicht gebunden");
+      const otherBriefing = await postConfirmation(base, confirmBody(code, { ...issued, briefing: "neu" }));
+      assert.equal(otherBriefing.json.confirmed, false, "geaendertes briefing -> confirmed:false");
+      const otherContext = await postConfirmation(base, confirmBody(code, { ...issued, context: { summary: "neu" } }));
+      assert.equal(otherContext.json.confirmed, false, "geaenderter context -> confirmed:false");
+      const unchanged = await postConfirmation(base, confirmBody(code, issued));
+      assert.equal(unchanged.json.confirmed, true, "Positiv-Kontrolle: unveraenderte Anfrage bestaetigt");
     },
     { languageEnabled: true },
   );
+});
+
+// Boot-Befund (Safety-Review T2-13): fehlendes UND zu kurzes Geheimnis melden, nie den Wert.
+test("Boot-Befund: CALL_CONFIRMATION_SECRET fehlt / zu kurz / ok - Meldung enthaelt nie den Wert", () => {
+  const secretMarker = "x9Qz";
+  const tooShort = secretMarker.padEnd(TOO_SHORT_SECRET_LENGTH, "#");
+  assert.deepEqual(
+    callConfirmationSecretFindings({ secret: "" }).map((finding) => finding.code),
+    [CALL_CONFIRMATION_SECRET_FINDING.UNSET],
+  );
+  const shortFindings = callConfirmationSecretFindings({ secret: tooShort });
+  assert.deepEqual(shortFindings.map((finding) => finding.code), [CALL_CONFIRMATION_SECRET_FINDING.TOO_SHORT]);
+  assert.equal(shortFindings[0].fatal, false, "nie fatal (kein Boot-Refusal)");
+  assert.ok(!shortFindings[0].message.includes(secretMarker), "kein Teil des Werts in der Meldung");
+  assert.ok(!shortFindings[0].message.includes("##"), "auch nicht das Fuellzeichen");
+  assert.ok(!shortFindings[0].message.includes(String(TOO_SHORT_SECRET_LENGTH)), "keine Laenge des Werts");
+  assert.equal(deriveConfirmationKey(tooShort), null, "zu kurz bleibt fail-closed (kein Schluessel)");
+  assert.deepEqual(callConfirmationSecretFindings({ secret: SECRET }), [], "ausreichend lang: kein Befund");
 });

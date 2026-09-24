@@ -330,9 +330,9 @@ function warnOutboundDriftConfigUnset(config) {
     console.warn(`[boot] ${finding.message}`);
 }
 
-// T2-13 (N-10): reine Diagnose, NIE fatal (s. callConfirmationSecretFindings). Loggt nie
-// den Secret-Wert.
-function warnCallConfirmationSecretUnset(config) {
+// T2-13 (N-10): reine Diagnose, NIE fatal (s. callConfirmationSecretFindings) - fehlendes
+// UND zu kurzes Geheimnis. Loggt nie den Secret-Wert.
+function warnCallConfirmationSecretUnusable(config) {
   for (const finding of callConfirmationSecretFindings({ secret: config.auth.callConfirmationSecret }))
     console.warn(`[boot] ${finding.message}`);
 }
@@ -595,7 +595,7 @@ function assertBootGates(config, store, durableAudit) {
   warnKostenAlarmZielUnset(config, durableAudit); // KV2-1, WARN + durabel
   warnPlatformAniUnset(config); // OUTBOUND-E1, WARN
   warnOutboundDriftConfigUnset(config); // OUTBOUND-E4, WARN
-  warnCallConfirmationSecretUnset(config); // T2-13, WARN
+  warnCallConfirmationSecretUnusable(config); // T2-13, WARN
   warnTariffDrift(config, store);
   warnTarifpaar(config, store); // KV2-10, WARN: Tarifpaar-Waechter feuert beim Start
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN

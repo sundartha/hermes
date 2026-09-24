@@ -6186,8 +6186,8 @@ waehlen**, T2-13 geht deshalb nur zusammen mit T2-14 live (Deploy-Vorbedingung).
 
 **Was die Bestaetigung beweist, und was nicht** (Pflichttext, wortgleich in
 `src/call-confirmation.js`, `docs/OPENAI-TOOL-INVENTORY.md`): der Server hat fuer GENAU
-diese Anfrage (Mandant, normalisiertes Ziel, alle gebundenen Argumente - `briefing`/`context`
-sind laut Plan bewusst NICHT gebunden) innerhalb der letzten
+diese Anfrage (Mandant, normalisiertes Ziel, ALLE uebrigen Argumente inkl.
+`briefing`/`context`) innerhalb der letzten
 maximal 10 Minuten einen Code ausgestellt, und dieser Code ist noch nicht verbraucht. Sie
 beweist NICHT, dass ein Mensch die Vorschau gelesen hat (ein Host, der `_meta` doch ans
 Modell weiterreicht, laesst das Modell sich selbst bestaetigen), nicht, dass die klickende
@@ -6243,10 +6243,20 @@ beim echten Waehlen in `POST /api/calls` — die Bestaetigung ist ZUSAETZLICH, k
 HKDF-abgeleiteter Schluessel aus `CALL_CONFIRMATION_SECRET` (leer/<32 Zeichen -> `null`,
 fail-closed — keine Ausstellung, keine Pruefung ist je erfolgreich). 6-stelliger
 Crockford-Base32-Code (Alphabet ohne I/L/O/U), HMAC-SHA256 ueber
-`v1|tenantId|windowIndex|canonical`, `canonical` bindet alle Argumente ausser
-`confirmation_code`, `briefing` und `context` (KORRIGIERT Safety-Review Runde 2: der Plan
-nimmt briefing/context ausdruecklich aus, "umformulierter Kontext soll nicht scheitern";
-Ausschluss- statt Positivliste, jedes kuenftige Argument ist damit gebunden), inkl. `to` in
+das JSON-Tupel `["v2", tenantId, windowIndex, slot, canonical]` (v2: Tupel statt
+"|"-Verkettung - jedes Element eindeutig abgegrenzt), `canonical` = schluesselsortiertes JSON
+ALLER Argumente ausser `confirmation_code`, **inkl. `briefing` und `context`**. Fehlend/
+undefined = "nicht gesetzt"; `""`, `{}` und `null` sind jeweils EIGENE Werte (Test
+"leer, fehlend und leeres Objekt sind verschiedene Anfragen"). Ausschluss- statt
+Positivliste: jedes kuenftige Argument ist automatisch gebunden.
+**Lead-Entscheidung (Safety-Review T2-13, zweite Pruefung):** eine Zwischenfassung liess
+`briefing`/`context` nach Plan-Wortlaut ("umformulierter Kontext soll nicht scheitern")
+ungebunden. Gemessen: briefing nach der Bestaetigung getauscht, trotzdem gewaehlt - die
+Vorschau zeigt briefing aber, und ein per Prompt-Injection gesteuertes Modell haette nach dem
+Klick Inhalt und Ton des Anrufs aendern koennen. Der Nutzer bestaetigt, was tatsaechlich
+passiert: beide Felder sind gebunden; jede Aenderung nach dem Klick braucht ein neues
+`prepare_call` (so sagen es Werkzeug-/Feldbeschreibungen, Server-Instruktionen und der
+Ablehnungstext). Preis: ein Modell, das nur umformuliert, muss neu bestaetigen lassen. `to` in
 NORMALISIERTER Form (`resolveDialTarget`, derselbe reine
 Extract aus dem `normalize_target`-Gate wie das echte Waehlen — "geprueft == gewaehlt"
 gilt jetzt fuer Vorschau UND Aufruf). Fensterlaenge 5 Minuten, zwei Fenster akzeptiert
@@ -6301,8 +6311,11 @@ jeweiligen Instanz):**
 
 **Secret als Deploy-Vorbedingung, kein Boot-Refusal:** `CALL_CONFIRMATION_SECRET` ist NICHT
 boot-pflichtig (Owner-Entscheidung P6 — keine neue Boot-Sperre). Fehlt es, laeuft die
-Produktion weiter, ein Boot-WARN meldet die fehlende Variable
-(`src/boot-guard.js#callConfirmationSecretFindings`, `src/boot.js#warnCallConfirmationSecretUnset`),
+Produktion weiter, ein Boot-WARN meldet die fehlende ODER zu kurze (< 32 Zeichen) Variable
+(`src/boot-guard.js#callConfirmationSecretFindings`, Befunde `UNSET`/`TOO_SHORT`,
+`src/boot.js#warnCallConfirmationSecretUnusable`; KORRIGIERT: ein zu kurzes Geheimnis ergab
+frueher keinen Befund, aber genauso still 503; die Meldung nennt nie den Wert, keinen Teil
+und nicht seine Laenge),
 und `prepare_call`/`place_call` antworten `503 confirmation_unavailable` (eigene
 `MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE`, neutraler Text, kein Env-/Secret-Leak) — per MCP
 waehlt niemand. `DASHBOARD_PASSWORD` bleibt aus AUTH-P8-Rueckfall-Gruenden das einzige
@@ -6341,7 +6354,7 @@ zweiter Verbrauch `false`.
 **Fix:** ein zweites In-Memory-Register (`makeFreshSlotLedger`,
 `src/routes/api-call-confirmations.js`, gleiches Speicher-/Verwerfungs-Muster wie das
 Einmal-Verbrauch-Register) haelt je (Mandant, Fenster, kanonische Anfrage) einen Slot-Index.
-Der Slot geht als Suffix NUR in die Codeableitung ein (`canonicalForSlot`) — er aendert
+Der Slot geht als eigenes Element des HMAC-Tupels NUR in die Codeableitung ein — er aendert
 nicht, was der Code inhaltlich bindet (weiterhin Mandant+alle Argumente+Fenster), nur, dass
 ein weiterer Aufruf einen ANDEREN Code derselben Anfrage bekommt. Vor dem ersten Verbrauch
 bleibt Slot 0 (byte-identische Codeableitung, wiederholtes `prepare_call` VOR jedem

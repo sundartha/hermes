@@ -804,7 +804,7 @@ const OPEN_QUESTIONS_FIELD = z
 // user confirmed" - ohne zu sagen, WOHER der Code kommt. Jetzt: der Nutzer bestaetigt in der
 // Karte, die Karte sendet den Code; nie raten/erfinden (keine Selbstbestaetigung).
 const PLACE_CALL_DESCRIPTION =
-  "REQUIRES a confirmation_code - call prepare_call FIRST with identical arguments; the user confirms in the Hermes card, which sends the code (never guess or invent one). Without it the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Repeating it for a running number needs a fresh prepare_call and code, then returns that same call (deduplicated: true).";
+  "REQUIRES a confirmation_code - call prepare_call FIRST with the same arguments; the user confirms in the Hermes card, which sends it (never guess or invent one). Without it the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Repeating it for a running number needs a fresh prepare_call and code, then returns that same call (deduplicated: true).";
 
 // T2-13 (N-10): Beschreibung von prepare_call - reine Vorschau, KEIN Anruf, KEINE Kosten.
 // Nennt ausdruecklich, dass der Code nur auf einem Host mit Kartenfaehigkeit ankommt (s.
@@ -816,7 +816,7 @@ const PLACE_CALL_DESCRIPTION =
 // place_call, nie raten/erfinden; ohne Karte ehrlich sagen, dass kein Anruf moeglich ist.
 // Der Server erkennt KEINE Host-Faehigkeit - nur den Schalter MCP_UI_ENABLED.
 const PREPARE_CALL_DESCRIPTION =
-  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is switched on for this server, the host can show a Hermes card where the user reviews the call; after the user confirms, the card sends the confirmation code that place_call requires. Do not call place_call before that code arrives, and never guess or invent a code. If this host does not show the Hermes card, or card confirmation is switched off for this server, no call can be placed from here - tell the user so honestly and do not ask them for a code they cannot see. Call this before EVERY place_call with identical arguments.";
+  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is switched on for this server, the host can show a Hermes card where the user reviews the call; after the user confirms, the card sends the confirmation code that place_call requires. Do not call place_call before that code arrives, and never guess or invent a code. The code covers every argument, briefing and context included: if you change any of them, call prepare_call again and let the user confirm again. If this host does not show the Hermes card, or card confirmation is switched off for this server, no call can be placed from here - tell the user so honestly and do not ask them for a code they cannot see. Call this before EVERY place_call with identical arguments.";
 
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
@@ -965,8 +965,7 @@ const TOOL_ANNOTATIONS = {
   // hat keine zusaetzliche Wirkung auf die Welt (kein Anruf, kein Datensatz, keine
   // Kosten). KORRIGIERT (Safety-Review T2-13): "dieselben Argumente liefern denselben
   // Code" stimmt seit dem Slot-Register nur noch BIS zum ersten Verbrauch - danach liefert
-  // dieselbe Anfrage im selben Fenster einen NEUEN Code (api-call-confirmations.js), und
-  // briefing/context gehen gar nicht in den Code ein (call-confirmation.js).
+  // dieselbe Anfrage im selben Fenster einen NEUEN Code (api-call-confirmations.js).
   prepare_call: {
     title: "Preview a phone call",
     readOnlyHint: true,
@@ -1506,7 +1505,7 @@ export function registerTools(
           .string()
           .optional()
           .describe(
-            "Sent by the Hermes card once the user confirms prepare_call (SAME arguments); never guess or invent it. REQUIRED - without a valid code the call is NOT placed.",
+            "From the Hermes card once the user confirms prepare_call (SAME arguments incl. briefing/context); never guess or invent it. REQUIRED - without it the call is NOT placed.",
           ),
       },
       outputSchema: CALL_OUTPUT,

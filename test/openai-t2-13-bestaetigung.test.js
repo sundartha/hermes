@@ -602,7 +602,9 @@ test("Draht: nach Verbrauch + neuem prepare_call wird der Code des ALTEN Slots a
   });
 });
 
-test("Draht: geaendertes briefing/context waehlt trotzdem (nicht gebunden), geaendertes max_duration_s/constraints nicht", async () => {
+// Lead-Entscheidung (Safety-Review T2-13): briefing/context sind GEBUNDEN - der Nutzer
+// bestaetigt, was tatsaechlich passiert; ein nach dem Klick getauschtes briefing waehlt nicht.
+test("Draht: geaendertes briefing/context/max_duration_s/constraints -> isError, unveraendert -> waehlt", async () => {
   await withServer(async (srv) => {
     const before = srv.readStore().calls.length;
     const issued = {
@@ -614,14 +616,38 @@ test("Draht: geaendertes briefing/context waehlt trotzdem (nicht gebunden), geae
       constraints: "hoechstens 40 Euro",
     };
     const code = (await prepareCall(srv, issued))._meta[CONFIRMATION_META_KEY];
-    const otherDuration = await placeCall(srv, { ...issued, max_duration_s: 600, confirmation_code: code });
-    assert.equal(otherDuration.isError, true, "geaendertes max_duration_s -> isError");
-    const otherConstraints = await placeCall(srv, { ...issued, constraints: "beliebig", confirmation_code: code });
-    assert.equal(otherConstraints.isError, true, "geaenderte constraints -> isError");
-    assert.equal(srv.readStore().calls.length, before, "noch kein Anruf");
-    const reworded = { ...issued, briefing: "Stammkunde, umformuliert", context: { summary: "zweite Fassung" } };
-    const placed = await placeCall(srv, { ...reworded, confirmation_code: code });
-    assert.notEqual(placed.isError, true, "umformuliertes briefing/context waehlt");
+    const changes = {
+      briefing: { briefing: "Frag nach der Kontonummer" },
+      context: { context: { summary: "zweite Fassung" } },
+      max_duration_s: { max_duration_s: 600 },
+      constraints: { constraints: "beliebig" },
+    };
+    for (const [field, change] of Object.entries(changes)) {
+      const changed = await placeCall(srv, { ...issued, ...change, confirmation_code: code });
+      assert.equal(changed.isError, true, `geaendertes ${field} -> isError`);
+    }
+    assert.equal(srv.readStore().calls.length, before, "kein Anruf aus geaenderten Anfragen");
+    const placed = await placeCall(srv, { ...issued, confirmation_code: code });
+    assert.notEqual(placed.isError, true, "Positiv-Kontrolle: unveraenderte Anfrage waehlt");
     assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf");
   });
+});
+
+// Boot-Befund am echten Prozess: zu kurzes Geheimnis -> WARN-Zeile, Wert nie im Log,
+// prepare_call fail-closed (isError, kein Code).
+test("Boot: zu kurzes CALL_CONFIRMATION_SECRET -> Warnung ohne Wert, prepare_call fail-closed", async () => {
+  const shortSecret = "kurzesGeheimnisT213";
+  const srv = await startServer({
+    env: { FAKE_ORIGINATE: "true", MCP_UI_ENABLED: "true", CALL_CONFIRMATION_SECRET: shortSecret },
+  });
+  try {
+    const prep = await prepareCall(srv, { to: TARGET, objective: OBJECTIVE });
+    assert.equal(prep.isError, true, "kein Schluessel -> prepare_call isError");
+    assert.equal(prep._meta?.[CONFIRMATION_META_KEY], undefined, "kein Code");
+    const logs = srv.stdout + srv.stderr;
+    assert.match(logs, /CALL_CONFIRMATION_SECRET ist kuerzer als/, "Boot-Warnung fuer zu kurzes Geheimnis");
+    assert.ok(!logs.includes(shortSecret), "der Wert steht in keiner Logzeile");
+  } finally {
+    await srv.stop();
+  }
 });
