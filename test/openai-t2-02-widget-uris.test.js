@@ -93,16 +93,22 @@ const KNOWN_PINS = {
   [WIDGET_AGENT_STATUS]: {
     "1": "8304aed2dd3dd12c73ae8319eb0f8ba742d70c265e9b45a1eed956a048736f5c",
     "2": "32fed2e0273a1afeae313926acc13dc4d1eab53e919d57d7e4bc9c7fbbb687ee",
+    // T2-12-Review-Nachtrag (Kommentar-Fix wing-canvas-mount-idle.js, roh eingebettet).
+    "3": "e7ea14f82f9efee46548f3f6db89042045c5558995f129c8ddcd7b4c7d7fdf48",
   },
   [WIDGET_MY_NUMBER]: {
     "1": "caaebb738f0b60c5f5fabe5bdb8b4b04e1e563c04a8c08324c78e127fbde31c7",
     // T2-11 (Umbenennung get_my_number -> get_agent_number).
     "2": "877d0e0a5b585ea4825be97a8fb52711c948bb86fecf65c52354dbc63ee9af3e",
     "3": "16ed6203a37e8239145bab68cb13d44732c79a6bb8033839fca72f4c76790528",
+    // T2-12-Review-Nachtrag (Kommentar-Fix wing-canvas-mount-idle.js, roh eingebettet).
+    "4": "8632be41d7a08f6cc37bba79d368f0a964119a81bcd66136880c01e6d5c9f36a",
   },
   [WIDGET_CALLS]: {
     "1": "f65f989627c621bef2c9813d7198383fb6faa744af7cd396d31f97889bdf6555",
     "2": "33b00db2fbcb0bd4eea89cc6a564291154487ed4ee38395aa39683602914fcd9",
+    // T2-12-Review-Nachtrag (Kommentar-Fix wing-canvas-mount-idle.js, roh eingebettet).
+    "3": "8ebd105b6122a6f4b0ab6e7de0ea1e8ff230a4300c83f9e63d43b861604c97d9",
   },
   [WIDGET_CALL]: {
     "1": "d4cc20704fe287449dd3d445f937ec1fb7f6f4480624f3740866764b478c4f81",

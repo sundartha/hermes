@@ -92,10 +92,16 @@ const EXPECTED_RESOURCE_META = {
 // Version (WIDGET_DICT wird in jedes Widget serialisiert), also neue URIs fuer
 // agent-status/calls/my-number/call. Voriger Sollwert (beide Pfade, byte-identisch seit
 // dem T2-11-Nachzug oben): 72b3f3606e69272a0ee82b97aebde39550fbe74b99ba7433b2507f2cb1b8a5d6.
+// Neu gepinnt (T2-12-Review-Nachtrag): Kommentar-Fix in src/ui/wing-canvas-mount-idle.js
+// (Zahl "4 Read-only-Widgets" auf "3" korrigiert, calendar.html ist entfallen) - diese
+// Datei wird ROH per readFileSync in agent-status/my-number/calls eingebettet
+// (widget-catalog.js withWingCanvasMount), also neue Versionen fuer genau diese drei
+// (call.html haengt nicht an dieser Datei, unveraendert). Voriger Sollwert (beide Pfade,
+// byte-identisch seit T2-12 oben): 513bb73c23e4d7ea833711198fb306fbc92c8a496f5ff8a9d7224c85067a25aa.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "513bb73c23e4d7ea833711198fb306fbc92c8a496f5ff8a9d7224c85067a25aa";
+  "ffed5a5db028eaa0e37da11c2558f131f270dded0eab61760c8a6bc0a0212883";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "513bb73c23e4d7ea833711198fb306fbc92c8a496f5ff8a9d7224c85067a25aa";
+  "ffed5a5db028eaa0e37da11c2558f131f270dded0eab61760c8a6bc0a0212883";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
