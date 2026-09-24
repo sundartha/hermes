@@ -82,7 +82,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   provisioning: 17,
   // 312k-Phase 4: workosManagementApiKey ergaenzt (eigener Schluessel fuer die WorkOS-
   // Nutzerloeschung beim Vertragsende, getrennt vom Anmeldeschluessel oidcClientSecret) -> 16.
-  auth: 16,
+  // T2-13 (N-10): callConfirmationSecret ergaenzt (Betriebsgeheimnis des serverseitigen
+  // Bestaetigungs-Codes vor dem Waehlen) -> 17.
+  auth: 17,
   // 312k-Phase 5: eigener Namespace fuer den Versand der Kuendigungsbestaetigung
   // (smtpHost/smtpPort/smtpUser/smtpPassword/mailFrom) -> 5, neuer 15. Namespace.
   // HTTP-Fortsetzung: brevoApiKey ergaenzt (Render sperrt SMTP auf kostenlosen Plaenen,
@@ -208,7 +210,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // E5: mcpAllowedOrigins + mcpOriginEnforce (safety) ergaenzt -> 198.
 // E7: openaiAppsChallengeToken (server) ergaenzt -> 199.
 // T2-04: publicUrlExplicit (server) ergaenzt -> 200.
-const EXPECTED_TOTAL_KEYS = 200;
+// T2-13: callConfirmationSecret (auth) ergaenzt -> 201.
+const EXPECTED_TOTAL_KEYS = 201;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die gepinnten Counts und disjunkte Blaetter", () => {
   assert.deepEqual(
@@ -376,7 +379,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // SIEBTE Array (kein primitives Blatt, s.u.).
   // E7: openaiAppsChallengeToken ist primitiv (String, kein Array/nested Objekt) -> 185.
   // T2-04: publicUrlExplicit ist primitiv (Boolean, kein Array/nested Objekt) -> 186.
-  const EXPECTED_PRIMITIVE_LEAVES = 186;
+  // T2-13: callConfirmationSecret ist primitiv (String) -> 187.
+  const EXPECTED_PRIMITIVE_LEAVES = 187;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

@@ -287,7 +287,10 @@ test("P5b (O-13 Teil 2, Fall D): der Riegel gegen teure Wiederwahl bleibt intakt
 // ==================== Fall F/G (consultPermissionHint, O-27 Teil 2) ====================
 
 async function placeCallText({ consultAllowed, language }) {
-  return withGateway({ callBody: { callId: "call_hint" } }, async () => {
+  // T2-13 (N-10): der Gateway-Mock ist pfad-blind fuer alles ausser /consult - callBody
+  // deckt jetzt BEIDE Hops ab (confirmCallHop liest preview/confirmed, placeCallHopCall
+  // nur callId).
+  return withGateway({ callBody: { preview: {}, confirmed: true, callId: "call_hint" } }, async () => {
     const handlers = captureTools({
       identity: null,
       scopedTenant: "tenant_p5b",

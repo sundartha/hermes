@@ -40,6 +40,7 @@ import { makeReadRoutes } from "./routes/api-read.js";
 import { makeInboxRoutes } from "./routes/api-inbox.js";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
+import { makeCallConfirmationRoutes } from "./routes/api-call-confirmations.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
 import { makeDeployInfoRoutes } from "./routes/api-deploy-info.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
@@ -401,6 +402,13 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
   // INV-9: die Outbound-Gate-Kette (outboundGates = EIN gepinntes Array) + der Max-Dauer-
   // Cap (arm.*) + der Fehlerpfad (terminateAndBillCall) wandern unveraendert mit; finishCall
   // = die EINE callFinish-Instanz (INV-7), arm.* = die EINE lifecycle-Instanz.
+  //
+  // T2-13 (N-10): die Bestaetigungs-Vorschau (POST /api/call-confirmations) sitzt
+  // UNMITTELBAR VOR makeCallRoutes, absichtlich NICHT unter /api/calls/... (Kollision mit
+  // /api/calls/:id) und ohne outboundGates/finishCall - sie faehrt keine Gate-Kette,
+  // ersetzt keins, schreibt nichts in den Store (s. Kommentar an der Route).
+  app.use(makeCallConfirmationRoutes({ store, config, tenant: { requestTenant } }));
+
   app.use(
     makeCallRoutes({
       store,

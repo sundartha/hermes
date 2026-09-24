@@ -47,8 +47,13 @@ before(async () => {
 // traegt Katalog + Ablehnungssemantik + die Grenze zur Offenlegung - das treibt den
 // Deckel messbar nach oben (gemessen: 6139 von 6300 ohne Kanal, 6541 von 6700 mit
 // Kanal). Etwas Luft bleibt, damit eine reine Wortwahl-Korrektur ihn nicht reisst.
-const PLACE_CALL_BUDGET_CHARS = 6300;
-const PLACE_CALL_WITH_CONSULT_BUDGET_CHARS = 6700;
+// T2-13 (benannter Grund, N-10): confirmation_code ist ein neues Pflichtfeld
+// (Geldpfad-Bestaetigung, nur im Handler durchgesetzt - s. Schema-Kommentar in
+// mcp-tools.js) - der erste Satz der Beschreibung UND die Feldbeschreibung muessen die
+// Pflicht + die Sequenz (erst prepare_call, gleiche Argumente) nennen. Das treibt den
+// Deckel weiter nach oben (gemessen: 6606 von 6700 ohne Kanal). Etwas Luft bleibt.
+const PLACE_CALL_BUDGET_CHARS = 6700;
+const PLACE_CALL_WITH_CONSULT_BUDGET_CHARS = 7100;
 const CONSULT_CTX = Object.freeze({ consultAllowed: true });
 const PLACE_CALL_PREFIX = "place_call";
 // GROSS-/KLEINSCHREIBUNG BEWUSST EGAL: der Bestand trug den Satz einmal als "ask the

@@ -101,7 +101,18 @@ export const MCP_BASE_INSTRUCTIONS =
   "be placed because of a problem on our side. Do NOT retry the call: call get_call_result " +
   "for that call_id - it works for a failed call, not only a completed one - and tell the " +
   "user what failed, using its result_summary text as it is. " +
-  "Never invent facts about the principal or the call: if you do not know something, say so.";
+  "Never invent facts about the principal or the call: if you do not know something, say so. " +
+  // T2-13 (N-10): die Bestaetigungs-Sequenz vor jedem place_call - ein Satz, damit das
+  // Modell nicht rein aus der Tool-Beschreibung raet, wann prepare_call an der Reihe ist.
+  // KORRIGIERT (Safety-Review T2-13): "reveals a confirmation_code" liess offen, ob das
+  // Modell den Code selbst aus der Karte nimmt - die Karte SENDET ihn nach der Bestaetigung.
+  "Before every place_call, call prepare_call first with the exact same arguments; the " +
+  "user then confirms in the Hermes card, which sends the confirmation_code - only then " +
+  "pass it to place_call, and never guess or invent a code. The code covers every " +
+  "argument, briefing and context included: after changing any of them, call " +
+  "prepare_call again and let the user confirm again. If this host does not show " +
+  "the Hermes card, or card confirmation is switched off for this server, no call can be " +
+  "placed from here - tell the user so honestly.";
 
 // Consult-Block bleibt modul-intern (kein dritter Export, keine dritte Wahrheit) - er
 // gilt NUR, wenn der Tenant await_call_event/answer_consult registriert bekommt.

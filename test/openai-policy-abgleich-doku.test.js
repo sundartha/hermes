@@ -32,7 +32,8 @@ const DOC_PATH = path.join(ROOT, "docs", "OPENAI-POLICY-ABGLEICH.md");
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 const CONSULT_ON = { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" };
-const EXPECTED_HTTP_TOOL_COUNT = 11;
+// T2-13 (N-10): prepare_call dazu, elf -> zwoelf.
+const EXPECTED_HTTP_TOOL_COUNT = 12;
 const RAW_TOOLS_LIST_RESULT = z.object({ tools: z.array(z.any()) });
 
 const ANCHOR_BLOCK = { begin: "ANKER-BEGIN", end: "ANKER-END" };

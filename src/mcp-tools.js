@@ -377,6 +377,10 @@ const CLIENT_ERROR_STATUS_MAX = 499;
 // wie CLIENT_ERROR_STATUS_MIN/MAX oben.
 const SERVER_ERROR_STATUS_MIN = 500;
 const SERVER_ERROR_STATUS_MAX = 599;
+// T2-13 (N-10): der eine Status, den confirmCallHop unten gesondert abfaengt (Betriebs-
+// geheimnis fehlt, src/routes/api-call-confirmations.js).
+const HTTP_SERVICE_UNAVAILABLE_STATUS = 503;
+const CONFIRMATION_UNAVAILABLE_REASON = "confirmation_unavailable";
 
 // Safety-Review-Nachbesserung (Befund mcp-tools.js:435): ein Originate-/Provider-
 // Fehlschlag (api-calls.js originate-catch, 500 ohne providerStatus ODER 502 MIT
@@ -420,6 +424,36 @@ async function placeCallHop({ identity, scopedTenant, body }) {
   } catch (err) {
     if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_UNCONFIRMED);
     if (isServerErrorWithoutReason(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_REJECTED);
+    throw err;
+  }
+}
+
+// T2-13 (N-10): fehlt das Betriebsgeheimnis (CALL_CONFIRMATION_SECRET), antwortet die
+// Route 503 reason=confirmation_unavailable - kein Gate-Ablehnungsgrund (denialReasonText
+// kennt ihn nicht), deshalb hier explizit auf eine eigene ToolError-Kennung abgebildet
+// (Muster isServerErrorWithoutReason oben), statt beim generischen DENIAL_UNKNOWN zu
+// landen.
+function isConfirmationUnavailable(err) {
+  return err?.httpStatus === HTTP_SERVICE_UNAVAILABLE_STATUS && err?.reason === CONFIRMATION_UNAVAILABLE_REASON;
+}
+
+// T2-13 (N-10): geteilter Hop zu POST /api/call-confirmations - prepare_call (ohne Code)
+// UND place_call (mit Code) rufen ihn mit demselben Body-Muster (EINE Quelle, kein
+// zweiter Fetch-Aufbau). MCP_HOP_TIMEOUT_MS/HOP_TIMEOUT wie jeder uebrige Hop (die Route
+// ist synchron, kein Long-Poll) - NUR die 503-Sonderlage bekommt eine eigene Kennung.
+async function confirmCallHop({ identity, scopedTenant, body }) {
+  try {
+    return await api({
+      method: "POST",
+      path: "/api/call-confirmations",
+      body,
+      identity,
+      scopedTenant,
+      timeoutMs: MCP_HOP_TIMEOUT_MS,
+    });
+  } catch (err) {
+    if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.HOP_TIMEOUT);
+    if (isConfirmationUnavailable(err)) throw new ToolError(MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE);
     throw err;
   }
 }
@@ -567,6 +601,25 @@ function normalizeContextReceived(cr) {
     desired_outcome: !!cr?.desired_outcome,
   };
 }
+
+// T2-13 (N-10): outputSchema von prepare_call - spiegelt genau die gebundenen Felder aus
+// src/routes/api-call-confirmations.js#buildPreview (status/to/objective immer gesetzt,
+// der Rest nur wenn im Aufruf mitgegeben). mandate/context bleiben lose typisiert
+// (z.record) statt einer zweiten Kopie ihrer verschachtelten Form aus
+// PLACE_CALL_REQUEST_SCHEMA - die Vorschau ist ein reiner Spiegel, keine zweite
+// Validierungsflaeche.
+const PREPARE_CALL_OUTPUT = {
+  status: z.string(),
+  to: z.string(),
+  objective: z.string(),
+  language: z.string().optional(),
+  max_duration_s: z.number().optional(),
+  briefing: z.string().optional(),
+  constraints: z.string().optional(),
+  mandate: z.record(z.string(), z.unknown()).optional(),
+  context: z.record(z.string(), z.unknown()).optional(),
+  diagnostic: z.boolean().optional(),
+};
 
 // Berechtigungen als EIN flacher String (passt in genau einen data-mcp-Slot, W1-Binding
 // rendert Nicht-Arrays via textContent). EINE Quelle - auch der Stufe-0-Textblock liest
@@ -734,10 +787,36 @@ const OPEN_QUESTIONS_FIELD = z
     "A few (max. 10) short questions that are still open BEFORE the call and that only the principal can answer. They are asked while the phone is ringing, so the agent starts the conversation with the answers.",
   );
 
-// Bestands-Beschreibung von place_call, byte-identisch aus dem Tool-Deskriptor
-// herausgeloest (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
+// T2-13 (N-10): confirmation_code ist jetzt PFLICHT (nur im Handler, s. Schema-Kommentar
+// oben) - der erste Satz nennt die Sequenz, bevor er sagt, was der Anruf kostet.
+// Beschreibung von place_call, sonst byte-identisch aus dem Tool-Deskriptor herausgeloest
+// (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
+// KORRIGIERT (T2-13-Nachbesserung, Safety-Review): der letzte Satz sagte frueher nur
+// "calling it again ... returns that same call", ohne zu nennen, dass jeder Aufruf (auch
+// eine Wiederholung) sein eigenes frisches prepare_call braucht - ein Code wird nach
+// Gebrauch sofort verbraucht (Einmal-Verbrauch, s. call-confirmation.js) und ist danach kein
+// gueltiger Code mehr fuer irgendeinen Aufruf. Ein erneutes prepare_call mit denselben
+// Argumenten liefert dabei einen neuen Code (Slot-Register in api-call-confirmations.js) -
+// erst der erreicht ueberhaupt die Dedup-Pruefung in POST /api/calls. Keine neuen
+// GROSSBUCHSTABEN-Woerter im Nachtrag (Test p15-mcp-tool-descriptions-en.test.js pinnt die
+// Emphase von place_call auf genau ["REQUIRES","FIRST","NOT","NOT","NOT","ALWAYS"]).
+// KORRIGIERT (Safety-Review T2-13, zweite Runde): der erste Satz sagte "pass the code the
+// user confirmed" - ohne zu sagen, WOHER der Code kommt. Jetzt: der Nutzer bestaetigt in der
+// Karte, die Karte sendet den Code; nie raten/erfinden (keine Selbstbestaetigung).
 const PLACE_CALL_DESCRIPTION =
-  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Calling it again for a running number returns that same call (deduplicated: true).";
+  "REQUIRES a confirmation_code - call prepare_call FIRST with the same arguments; the user confirms in the Hermes card, which sends it (never guess or invent one). Without it the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Repeating it for a running number needs a fresh prepare_call and code, then returns that same call (deduplicated: true).";
+
+// T2-13 (N-10): Beschreibung von prepare_call - reine Vorschau, KEIN Anruf, KEINE Kosten.
+// Nennt ausdruecklich, dass der Code nur auf einem Host mit Kartenfaehigkeit ankommt (s.
+// Plan Abschnitt 5, "Weg ohne Karte" ist bewusst ausgeschlossen) - sonst versucht das
+// Modell auf einem Host ohne UI wiederholt, einen Code zu "finden", der nie erscheint.
+// KORRIGIERT (Safety-Review T2-13, zweite Runde): "reveals a confirmation code" und "unless
+// the host forwards it to you" liessen offen, ob das Modell den Code selbst aus der Karte
+// nehmen darf. Jetzt: die Karte sendet den Code nach der Nutzerbestaetigung, vorher kein
+// place_call, nie raten/erfinden; ohne Karte ehrlich sagen, dass kein Anruf moeglich ist.
+// Der Server erkennt KEINE Host-Faehigkeit - nur den Schalter MCP_UI_ENABLED.
+const PREPARE_CALL_DESCRIPTION =
+  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is switched on for this server, the host can show a Hermes card where the user reviews the call; after the user confirms, the card sends the confirmation code that place_call requires. Do not call place_call before that code arrives, and never guess or invent a code. The code covers every argument, briefing and context included: if you change any of them, call prepare_call again and let the user confirm again. If this host does not show the Hermes card, or card confirmation is switched off for this server, no call can be placed from here - tell the user so honestly and do not ask them for a code they cannot see. Call this before EVERY place_call with identical arguments.";
 
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
@@ -879,6 +958,21 @@ const ANSWER_CONSULT_DESCRIPTION =
 // (noteConsultPoll/markConsultAskDelivered, routes/api-calls.js + state-ops.js) - der
 // Code widerspricht damit einer frueheren Einschaetzung, und der Code gewinnt.
 const TOOL_ANNOTATIONS = {
+  // T2-13 (N-10): reine Vorschau + Code-Ausstellung, KEIN Anruf und KEIN Aufruf nach
+  // aussen (die Route schreibt nichts in den Store, ruft kein audit(), faehrt keine
+  // Gate-Kette) - deshalb readOnlyHint:true/destructiveHint:false/openWorldHint:false,
+  // anders als place_call direkt darunter. idempotentHint:true: ein wiederholter Aufruf
+  // hat keine zusaetzliche Wirkung auf die Welt (kein Anruf, kein Datensatz, keine
+  // Kosten). KORRIGIERT (Safety-Review T2-13): "dieselben Argumente liefern denselben
+  // Code" stimmt seit dem Slot-Register nur noch BIS zum ersten Verbrauch - danach liefert
+  // dieselbe Anfrage im selben Fenster einen NEUEN Code (api-call-confirmations.js).
+  prepare_call: {
+    title: "Preview a phone call",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   place_call: {
     title: "Place a phone call",
     readOnlyHint: false,
@@ -959,6 +1053,7 @@ const TOOL_ANNOTATIONS = {
 const OPENAI_INVOKING_KEY = "openai/toolInvocation/invoking";
 const OPENAI_INVOKED_KEY = "openai/toolInvocation/invoked";
 const TOOL_INVOCATION_STATUS = {
+  prepare_call: { invoking: "Preparing the call for confirmation", invoked: "Call preview ready" },
   place_call: { invoking: "Placing the call", invoked: "Call started" },
   await_call_event: {
     invoking: "Waiting for the next call event",
@@ -1067,6 +1162,171 @@ function withWidgetLocale(config, handler, language) {
   };
 }
 
+// T2-13 (N-10): die zwei _meta-Schluessel, unter denen prepare_call den Bestaetigungs-Code
+// und seinen Ablauf an die Hermes-Karte reicht - benannt statt Literal an zwei Stellen
+// (Ausstellung im Handler, Kriteriums-Test am Draht). Namensraum "hermes/..." wie die
+// bestehenden Widget-Metas (ui.*), aber ausserhalb des ui.-Namensraums: der Wert ist KEIN
+// Rendering-Detail, sondern das Geheimnis selbst.
+const CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
+const CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
+
+// T2-13 (N-10, Schritt 6): woertlich verschoben aus dem place_call-inputSchema-Literal -
+// prepare_call und place_call teilen sich JETZT dieses eine Schema (confirmation_code
+// kommt nur bei place_call dazu, s.u.). Modul-Konstante statt Closure: haelt registerTools
+// klein (der gepinnte Zeilen-Pin in eslint-legacy-exceptions.json haengt daran).
+export const PLACE_CALL_REQUEST_SCHEMA = {
+  to: z
+    .string()
+    .describe(
+      "Take the destination number over EXACTLY as the user gave it - copy the digits character by character, NEVER convert them or reshape them into E.164 (reshaping introduces digit errors; the server normalises deterministically). A national notation with a leading 0 is resolved by the server via the user's home country; international destinations need +XX/00XX - if a number looks like a foreign national format, ask the user for the international notation instead of guessing. Checked server-side by the safety gates (permission profile/allowlist, denylist, country).",
+    ),
+  // GQ-B1: Die Vorab-Rueckfrage gilt nur noch dem THEMA selbst - der Satz wird
+  // woertlich vorgesprochen, ohne Thema gibt es keinen sprechbaren ersten Satz. Eine
+  // fehlende Praeferenz traegt dagegen das Mandat oder die Live-Rueckfrage. Der neue
+  // Nebensatz benennt den dritten Ausgang ("stays open") und ist BEWUSST durchgehend
+  // klein geschrieben: jedes Grossbuchstaben-Wort mit zwei oder mehr Buchstaben
+  // verschoebe die gepinnte Marker-Inventur dieses Feldes.
+  objective: z
+    .string()
+    .describe(
+      "The goal of the call as ONE speakable first-person sentence from the perspective of the calling assistant - it is read out VERBATIM to the called party right after the disclosure, BEFORE they answer. Phrase it the way a human states their concern on the phone, e.g. 'I would like to book a men's haircut for Max on Saturday morning.' NO bare-infinitive stub like 'Book an appointment'. ALWAYS name a concrete topic/occasion when it is known; if the topic itself is still unknown, ask the user FIRST, instead of sending off a vague task - a single missing detail is not a reason to ask, it belongs in the briefing or stays open. Background and details do NOT belong here, they belong in the briefing.",
+    ),
+  // GQ-B2 (Owner-Entscheidung 2026-08-19): der Auftraggeber ist waehrend des Anrufs
+  // ABWESEND - das ist der Normalfall. Die GQ-B1-Pauschale ("nie vertroesten")
+  // ueberschoss deshalb: sie verbrennt die eine gedeckelte Rueckfrage auf Fragen, die
+  // auch der auftraggebende Assistent nicht beantworten kann. An ihre Stelle tritt die
+  // Selbsteinschaetzung in drei Klassen - eigene Quellen (offen lassen + deklarieren),
+  // Nur-Owner-Wissen (die ehrliche Prozess-Auskunft, KEINE erfundene Antwort),
+  // oeffentlich pruefbar (nichts schreiben). Die Erfindungs-Sperre ("never script an
+  // answer") bleibt woertlich stehen, sie ist weiterhin wahr. Der Text nennt bewusst
+  // KEIN Werkzeug: das Feld ist immer registriert, waehrend die Rueckfrage am Kanal
+  // haengt - die Anweisung dazu steht am kanalabhaengigen PLACE_CALL_CONSULT_LOOP.
+  briefing: z
+    .string()
+    .optional()
+    .describe(
+      "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. Write only what you KNOW: never script an answer for a detail you are missing. For each gap, decide: could you answer it yourself during the call (calendar, mail, files, chat)? Then leave the gap open and declare that in one line. Can only the principal know it? Then write the honest line that they will get back on it. Can anyone look it up? Then write nothing. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
+    ),
+  constraints: z
+    .string()
+    .optional()
+    .describe(
+      "Hard limits the agent must not cross in the conversation, e.g. 'Not before 10 am, at most 40 euros, do not promise a deposit.'",
+    ),
+  // P6 (PLAN-CONVERSATION-QUALITY-V2): Vorab-Mandat. Ohne Eintrag im zod-Schema
+  // erreichte das Feld /api/calls nie (zod strippt unbekannte Keys - dieselbe
+  // Falle wie bei diagnostic). Kein Constraint-DSL: die Feld-BESCHREIBUNGEN sind
+  // das Feature, nicht der Typ.
+  mandate: z
+    .object({
+      // GQ-B1: Die zweite "Ask the user FIRST"-Anweisung ist gestrichen - die bedingte
+      // Aufforderung im ELTERN-Feld mandate bleibt woertlich stehen und ist der
+      // verbleibende Weg zu einem Rahmen. Die Erfindungs-Sperre bleibt (sie ist die
+      // sicherheitsrelevante Haelfte); der Ausgang dreht von "Chat-Runde" auf "Feld
+      // weglassen" und ist damit fail-closed: ohne Feld darf der Agent nichts zusagen,
+      // genau das sagt der naechste Satz derselben Beschreibung bereits.
+      decide_freely: z
+        .string()
+        .optional()
+        .describe(
+          "The authorisation - what the agent may commit to in the call WITHOUT asking back, e.g. 'appointment on any weekday between 9 and 12, up to 60 euros'. Phrase it concretely enough that a yes/no decision can be derived from it on the phone; vague frames ('flexible', 'sometime') do not help. Never invent one: take the frame from what the user has already said, otherwise leave the field out. WITHOUT this field the agent may commit to nothing and only passes every proposal on as a message. Hard prohibitions do NOT belong here, they belong in constraints.",
+        ),
+      fallback_order: z
+        .string()
+        .optional()
+        .describe(
+          "Preference order the agent works through on its own if the first choice does not work, e.g. 'Thursday morning first, otherwise Friday, otherwise next week'. Without this field it will not try any alternative on its own.",
+        ),
+      on_out_of_scope: z
+        .enum(MANDATE_OUT_OF_SCOPE_VALUES)
+        .optional()
+        .describe(
+          "What the agent does when an offer lies OUTSIDE decide_freely: 'take_message' (default) - record the offer with all details, pass it on and promise that the user will get back; 'decline' - politely refuse, without a counter-offer; 'accept_best' - accept and record the best offer made anyway. Set 'accept_best' ONLY when the user explicitly says that any option suits them.",
+        ),
+    })
+    .optional()
+    .describe(
+      "Optional advance MANDATE: the frame within which the agent may decide ITSELF in the conversation, instead of returning every question as a message. Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance. Ask the user about their frame when an appointment or price question is to be expected in the call; without a mandate the agent can only answer 'When suits you?' with 'I will pass that on'. In a conflict with constraints, constraints ALWAYS win.",
+    ),
+  context: z
+    .object({
+      summary: z
+        .string()
+        .optional()
+        .describe(
+          "What the call is about, summarised in 1-3 sentences (not a raw dump of the chat).",
+        ),
+      key_facts: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "A few (max. 10) short bullet points with facts relevant to the conversation (names, dates, preferences). NO secrets/passwords/payment data.",
+        ),
+      recipient_relationship: z
+        .string()
+        .optional()
+        .describe("Relationship of the principal to the called party, e.g. 'regular hairdresser', 'new customer'."),
+      desired_outcome: z
+        .string()
+        .optional()
+        .describe("The desired outcome from the principal's perspective, phrased briefly."),
+      open_questions: OPEN_QUESTIONS_FIELD,
+    })
+    .optional()
+    .describe(
+      "Optional structured BACKGROUND for the conversation (only for the agent's information, ADDITIONAL to the briefing). The agent speaks as the personal AI assistant of the principal, NEVER as Claude/Gemini; only pass on what the task requires. NO secrets.",
+    ),
+  // LANG-15 AUFGEHOBEN (Owner-Entscheidung F-2, 2026-09-06, PLAN-ANRUFDEFEKTE.md
+  // Abschnitt 6): das Feld gibt es wieder - und es WIRKT. Bis dahin entschied allein
+  // die Zielnummer; ein portugiesischer Auftrag an eine deutsche Nummer war nicht
+  // ausdrueckbar und der Widerspruch wurde STILL ignoriert (W5, gemessen an
+  // call_mtq08ett4l3o). Ohne Angabe gilt ab hier die Sprache des AUFTRAGGEBERS, nicht
+  // mehr die des Ziellandes; ein nicht unterstuetzter Code wird mit 400
+  // unsupported_language abgelehnt statt auf den Weltdefault gedreht.
+  // WAS DIESES FELD NICHT KANN (hartes Gate, F-2 Punkt 4 / PM-2): die Sprache des
+  // OFFENLEGUNGSSATZES bestimmen. Die folgt weiterhin dem ANGERUFENEN
+  // (elevenlabs/call-locale.js) - eine client-gewaehlte Sprache darf nicht darueber
+  // entscheiden, ob ein Mensch die Artikel-50-Aufklaerung versteht.
+  // Der Katalog reist aus SUPPORTED_LANGUAGES in den Text, nicht getippt: sonst
+  // veraltet die Beschreibung mit der naechsten Sprache (P4b).
+  language: z
+    .string()
+    .optional()
+    .describe(
+      `The language the agent SPEAKS in this call - one of: ${SUPPORTED_LANGUAGES.join(", ")}. ` +
+        "Leave it out unless the user asked for a particular language: without it the call " +
+        "is held in the principal's own language. An unsupported code is REJECTED with an " +
+        "error instead of being ignored. This does NOT change the language of the mandatory " +
+        "AI disclosure - that always follows the person being called.",
+    ),
+  // S1-6 DiD: schema-seitig bereits positiv/ganzzahlig/gecappt (der eigentliche
+  // Wurzelfix sitzt in outbound-gates.js resolveMaxDurationS, das JEDEN Body-Wert
+  // - auch einen durch diese Zod-Grenze rutschenden - nochmal klemmt).
+  max_duration_s: z
+    .number()
+    .int()
+    .positive()
+    .max(MAX_CALL_DURATION_CAP_S)
+    .optional()
+    .describe(
+      "Optional upper bound for the call duration in seconds. The server derives the " +
+        "effective limit from the remaining credit and only ever applies a SHORTER value " +
+        "than that; it never extends a call.",
+    ),
+  // P2b + GQ-P11 (Diagnose-Retention): OPT-OUT statt Opt-in. Der Server entscheidet
+  // selbst, ob das Roh-Transkript die Summary ueberlebt - und nur beim Ziel "eigene
+  // verifizierte Nummer des Nutzers"; dieses Feld ist ausschliesslich der
+  // Widerspruch dagegen. Der Grund fuer die Umkehrung steht in
+  // src/diagnostic-retention.js. Ohne diesen Eintrag erreichte das Feld /api/calls
+  // nie (Zod strippt unbekannte Keys).
+  diagnostic: z
+    .boolean()
+    .optional()
+    .describe(
+      "Leave this unset in normal use. The server keeps the raw transcript of a call to the user's OWN verified number for a limited period on its own, so the conversation can be analysed afterwards - you do NOT have to ask for it. Set it to false ONLY when the user explicitly does not want that transcript kept. For any other destination the field has no effect.",
+    ),
+};
+
 export function registerTools(
   server,
   {
@@ -1110,8 +1370,11 @@ export function registerTools(
   // UND liefert das _meta-Fragment fuer den Tool-Deskriptor - aber NUR wenn der
   // Renderer das Widget kennt und der Host faehig ist. Sonst {} (kein _meta, keine
   // Resource = fail-closed Stufe-0-only, AC3). Der Name nennt den Seiteneffekt
-  // (Registrierung, N7); idempotent pro Server-Instanz (stateless: frischer Server je
-  // Request).
+  // (Registrierung, N7). NICHT idempotent (T2-13-Korrektur, s.u. bei callWidgetUi): ein
+  // zweiter Aufruf mit DERSELBEN widgetId wirft beim SDK ("Resource ... is already
+  // registered"). Deshalb je Widget-ID genau EIN Aufruf je registerTools()-Durchlauf -
+  // "stateless: frischer Server je Request" gilt fuer den PROZESS (stdio/HTTP-Request),
+  // schuetzt aber nicht vor einem zweiten Aufruf INNERHALB desselben Durchlaufs.
   const enableWidgetUi = (widgetId) => {
     if (!uiRenderer || !uiRenderer.hasWidget(widgetId)) return {};
     // T2-02/T-34: die Resource selbst traegt keine Sprache mehr (s.
@@ -1160,175 +1423,109 @@ export function registerTools(
       wrapHandler(withWidgetLocale(config, handler, loc.language)),
     );
 
+  // T2-13 (N-10): EINMAL berechnet, an prepare_call UND place_call gespreadet.
+  // enableWidgetUi(WIDGET_CALL) ist NICHT idempotent - ein zweiter Aufruf wirft beim
+  // SDK ("Resource ... is already registered", node_modules/@modelcontextprotocol/sdk/
+  // dist/esm/server/mcp.js:456/476), der Kommentar "idempotent pro Server-Instanz" weiter
+  // unten an der alten Stelle war irrefuehrend (s. Korrektur dort).
+  const callWidgetUi = enableWidgetUi(WIDGET_CALL);
+
+  // prepare_call: reine Vorschau + Code-Ausstellung VOR place_call (T2-13, N-10). readOnly
+  // (kein Anruf, kein Store-Schreiben, kein audit() - s. src/routes/api-call-confirmations.js).
+  // Teilt sich PLACE_CALL_REQUEST_SCHEMA UND callWidgetUi mit place_call (EINE Quelle,
+  // s.o.), damit Vorschau und Aufruf niemals aus unterschiedlichen Schemas/Widgets
+  // auseinanderlaufen koennen.
+  uiTool(
+    "prepare_call",
+    {
+      description: PREPARE_CALL_DESCRIPTION,
+      annotations: TOOL_ANNOTATIONS.prepare_call,
+      inputSchema: PLACE_CALL_REQUEST_SCHEMA,
+      outputSchema: PREPARE_CALL_OUTPUT,
+      ...callWidgetUi,
+    },
+    async (args) => {
+      const previewResult = await confirmCallHop({ identity, scopedTenant, body: args });
+      requireFields(previewResult, { preview: "object" });
+      // KORREKTUR (Safety-Review T2-13): mcpUiEnabled prueft NUR den globalen Master-Schalter
+      // MCP_UI_ENABLED (callWidgetUi._meta ist bei aktivem Schalter fuer JEDEN Host
+      // gesetzt, s. enableWidgetUi/uiRendererFor - es gibt keine Pruefung, ob der
+      // konkret verbundene Host _meta tatsaechlich vor dem Modell verbirgt). Bei
+      // aktivem Schalter erreicht der Code also JEDEN Host in _meta - ob daraus ein
+      // menschlicher Schritt wird, haengt allein davon ab, ob dieser Host den
+      // MCP-Apps-Vertrag einhaelt und _meta nicht an das Modell weiterreicht (Zitat
+      // Primaerquelle: "Treat `_meta` as hidden from the model, not as a substitute
+      // for authorization"). Ein Host, der dagegen verstoesst, liest den Code selbst;
+      // Rueckfall in dem Fall: PLAN-SECURITY.md Abschnitt OpenAI-T2-13. Bei
+      // MCP_UI_ENABLED=false bleibt previewResult.confirmation ungenutzt: kein Client
+      // bekommt je einen Code, place_call ist dann fuer niemanden moeglich.
+      // Name = was geprueft wird (der Schalter), NICHT "Host hat Karte" - das weiss der
+      // Server nicht; prepareCallCardHint sagt dem Modell deshalb auch, was ohne Karte gilt.
+      const mcpUiEnabled = Boolean(callWidgetUi._meta);
+      const meta =
+        mcpUiEnabled && previewResult.confirmation
+          ? {
+              [CONFIRMATION_CODE_META_KEY]: previewResult.confirmation.code,
+              [CONFIRMATION_EXPIRES_META_KEY]: previewResult.confirmation.expires_at,
+            }
+          : undefined;
+      return {
+        content: [
+          { type: "text", text: mcpUiEnabled ? loc.mcp.prepareCallCardHint : loc.mcp.prepareCallNoCardHint },
+        ],
+        structuredContent: previewResult.preview,
+        ...(meta ? { _meta: meta } : {}),
+      };
+    },
+  );
+
   // place_call: EINZIGE Karte fuer den gesamten Anruf-Lebenszyklus (W2, Spam-Wurzel
   // beseitigt). uiTool statt tool(): initiales structuredContent (dialing, alle Felder
   // auf Start-Werte) + Widget-Anhang (WIDGET_CALL) NUR bei faehigem Host - das Widget
   // pollt sich selbst (get_call_status/get_call_result ueber die Host-Bruecke), das
-  // Modell NICHT mehr (kein Karten-Spam). Safety-Gates (Allowlist/Denylist/Land/Budget/
-  // Signatur) sitzen UNVERAENDERT in src/server.js /api/calls - hier aendern sich NUR
-  // Widget-Anhang, Beschreibung und Rueckgabeform.
+  // Modell NICHT mehr (kein Karten-Spam). Safety-Gates (Permit/OUTBOUND_FROZEN/Denylist/
+  // Land/Stundenlimit/Kostendecke/Max-Dauer/Signaturpruefung) sitzen UNVERAENDERT in
+  // routes/api-calls.js + telephony/outbound-gates.js (NICHT src/server.js - der
+  // Kommentar hier nannte bis T2-13 faelschlich server.js und eine tote Allowlist).
+  // T2-13 (N-10): ZUSAETZLICH vor jedem Hop die Bestaetigung - sie ersetzt KEIN Gate,
+  // POST /api/calls faehrt seine Kette unveraendert.
   uiTool(
     "place_call",
     {
       description: placeCallDescription(consultAllowed),
       annotations: TOOL_ANNOTATIONS.place_call,
       inputSchema: {
-        to: z
-          .string()
-          .describe(
-            "Take the destination number over EXACTLY as the user gave it - copy the digits character by character, NEVER convert them or reshape them into E.164 (reshaping introduces digit errors; the server normalises deterministically). A national notation with a leading 0 is resolved by the server via the user's home country; international destinations need +XX/00XX - if a number looks like a foreign national format, ask the user for the international notation instead of guessing. Checked server-side by the safety gates (permission profile/allowlist, denylist, country).",
-          ),
-        // GQ-B1: Die Vorab-Rueckfrage gilt nur noch dem THEMA selbst - der Satz wird
-        // woertlich vorgesprochen, ohne Thema gibt es keinen sprechbaren ersten Satz. Eine
-        // fehlende Praeferenz traegt dagegen das Mandat oder die Live-Rueckfrage. Der neue
-        // Nebensatz benennt den dritten Ausgang ("stays open") und ist BEWUSST durchgehend
-        // klein geschrieben: jedes Grossbuchstaben-Wort mit zwei oder mehr Buchstaben
-        // verschoebe die gepinnte Marker-Inventur dieses Feldes.
-        objective: z
-          .string()
-          .describe(
-            "The goal of the call as ONE speakable first-person sentence from the perspective of the calling assistant - it is read out VERBATIM to the called party right after the disclosure, BEFORE they answer. Phrase it the way a human states their concern on the phone, e.g. 'I would like to book a men's haircut for Max on Saturday morning.' NO bare-infinitive stub like 'Book an appointment'. ALWAYS name a concrete topic/occasion when it is known; if the topic itself is still unknown, ask the user FIRST, instead of sending off a vague task - a single missing detail is not a reason to ask, it belongs in the briefing or stays open. Background and details do NOT belong here, they belong in the briefing.",
-          ),
-        // GQ-B2 (Owner-Entscheidung 2026-08-19): der Auftraggeber ist waehrend des Anrufs
-        // ABWESEND - das ist der Normalfall. Die GQ-B1-Pauschale ("nie vertroesten")
-        // ueberschoss deshalb: sie verbrennt die eine gedeckelte Rueckfrage auf Fragen, die
-        // auch der auftraggebende Assistent nicht beantworten kann. An ihre Stelle tritt die
-        // Selbsteinschaetzung in drei Klassen - eigene Quellen (offen lassen + deklarieren),
-        // Nur-Owner-Wissen (die ehrliche Prozess-Auskunft, KEINE erfundene Antwort),
-        // oeffentlich pruefbar (nichts schreiben). Die Erfindungs-Sperre ("never script an
-        // answer") bleibt woertlich stehen, sie ist weiterhin wahr. Der Text nennt bewusst
-        // KEIN Werkzeug: das Feld ist immer registriert, waehrend die Rueckfrage am Kanal
-        // haengt - die Anweisung dazu steht am kanalabhaengigen PLACE_CALL_CONSULT_LOOP.
-        briefing: z
+        ...PLACE_CALL_REQUEST_SCHEMA,
+        // SDK-Grund (node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js:125,
+        // 166-178): ein PFLICHTFELD im zod-Schema wuerde bei Fehlen als "Input validation
+        // error" enden, OHNE dass der Handler (und damit toolErrorText/loc.mcp) je laeuft -
+        // der Client saehe nie den Kartensatz. Deshalb optional im SCHEMA, Pflicht erst im
+        // HANDLER (s.u., confirmCallHop/confirmationRequired).
+        confirmation_code: z
           .string()
           .optional()
           .describe(
-            "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. Write only what you KNOW: never script an answer for a detail you are missing. For each gap, decide: could you answer it yourself during the call (calendar, mail, files, chat)? Then leave the gap open and declare that in one line. Can only the principal know it? Then write the honest line that they will get back on it. Can anyone look it up? Then write nothing. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
-          ),
-        constraints: z
-          .string()
-          .optional()
-          .describe(
-            "Hard limits the agent must not cross in the conversation, e.g. 'Not before 10 am, at most 40 euros, do not promise a deposit.'",
-          ),
-        // P6 (PLAN-CONVERSATION-QUALITY-V2): Vorab-Mandat. Ohne Eintrag im zod-Schema
-        // erreichte das Feld /api/calls nie (zod strippt unbekannte Keys - dieselbe
-        // Falle wie bei diagnostic). Kein Constraint-DSL: die Feld-BESCHREIBUNGEN sind
-        // das Feature, nicht der Typ.
-        mandate: z
-          .object({
-            // GQ-B1: Die zweite "Ask the user FIRST"-Anweisung ist gestrichen - die bedingte
-            // Aufforderung im ELTERN-Feld mandate bleibt woertlich stehen und ist der
-            // verbleibende Weg zu einem Rahmen. Die Erfindungs-Sperre bleibt (sie ist die
-            // sicherheitsrelevante Haelfte); der Ausgang dreht von "Chat-Runde" auf "Feld
-            // weglassen" und ist damit fail-closed: ohne Feld darf der Agent nichts zusagen,
-            // genau das sagt der naechste Satz derselben Beschreibung bereits.
-            decide_freely: z
-              .string()
-              .optional()
-              .describe(
-                "The authorisation - what the agent may commit to in the call WITHOUT asking back, e.g. 'appointment on any weekday between 9 and 12, up to 60 euros'. Phrase it concretely enough that a yes/no decision can be derived from it on the phone; vague frames ('flexible', 'sometime') do not help. Never invent one: take the frame from what the user has already said, otherwise leave the field out. WITHOUT this field the agent may commit to nothing and only passes every proposal on as a message. Hard prohibitions do NOT belong here, they belong in constraints.",
-              ),
-            fallback_order: z
-              .string()
-              .optional()
-              .describe(
-                "Preference order the agent works through on its own if the first choice does not work, e.g. 'Thursday morning first, otherwise Friday, otherwise next week'. Without this field it will not try any alternative on its own.",
-              ),
-            on_out_of_scope: z
-              .enum(MANDATE_OUT_OF_SCOPE_VALUES)
-              .optional()
-              .describe(
-                "What the agent does when an offer lies OUTSIDE decide_freely: 'take_message' (default) - record the offer with all details, pass it on and promise that the user will get back; 'decline' - politely refuse, without a counter-offer; 'accept_best' - accept and record the best offer made anyway. Set 'accept_best' ONLY when the user explicitly says that any option suits them.",
-              ),
-          })
-          .optional()
-          .describe(
-            "Optional advance MANDATE: the frame within which the agent may decide ITSELF in the conversation, instead of returning every question as a message. Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance. Ask the user about their frame when an appointment or price question is to be expected in the call; without a mandate the agent can only answer 'When suits you?' with 'I will pass that on'. In a conflict with constraints, constraints ALWAYS win.",
-          ),
-        context: z
-          .object({
-            summary: z
-              .string()
-              .optional()
-              .describe(
-                "What the call is about, summarised in 1-3 sentences (not a raw dump of the chat).",
-              ),
-            key_facts: z
-              .array(z.string())
-              .optional()
-              .describe(
-                "A few (max. 10) short bullet points with facts relevant to the conversation (names, dates, preferences). NO secrets/passwords/payment data.",
-              ),
-            recipient_relationship: z
-              .string()
-              .optional()
-              .describe("Relationship of the principal to the called party, e.g. 'regular hairdresser', 'new customer'."),
-            desired_outcome: z
-              .string()
-              .optional()
-              .describe("The desired outcome from the principal's perspective, phrased briefly."),
-            open_questions: OPEN_QUESTIONS_FIELD,
-          })
-          .optional()
-          .describe(
-            "Optional structured BACKGROUND for the conversation (only for the agent's information, ADDITIONAL to the briefing). The agent speaks as the personal AI assistant of the principal, NEVER as Claude/Gemini; only pass on what the task requires. NO secrets.",
-          ),
-        // LANG-15 AUFGEHOBEN (Owner-Entscheidung F-2, 2026-09-06, PLAN-ANRUFDEFEKTE.md
-        // Abschnitt 6): das Feld gibt es wieder - und es WIRKT. Bis dahin entschied allein
-        // die Zielnummer; ein portugiesischer Auftrag an eine deutsche Nummer war nicht
-        // ausdrueckbar und der Widerspruch wurde STILL ignoriert (W5, gemessen an
-        // call_mtq08ett4l3o). Ohne Angabe gilt ab hier die Sprache des AUFTRAGGEBERS, nicht
-        // mehr die des Ziellandes; ein nicht unterstuetzter Code wird mit 400
-        // unsupported_language abgelehnt statt auf den Weltdefault gedreht.
-        // WAS DIESES FELD NICHT KANN (hartes Gate, F-2 Punkt 4 / PM-2): die Sprache des
-        // OFFENLEGUNGSSATZES bestimmen. Die folgt weiterhin dem ANGERUFENEN
-        // (elevenlabs/call-locale.js) - eine client-gewaehlte Sprache darf nicht darueber
-        // entscheiden, ob ein Mensch die Artikel-50-Aufklaerung versteht.
-        // Der Katalog reist aus SUPPORTED_LANGUAGES in den Text, nicht getippt: sonst
-        // veraltet die Beschreibung mit der naechsten Sprache (P4b).
-        language: z
-          .string()
-          .optional()
-          .describe(
-            `The language the agent SPEAKS in this call - one of: ${SUPPORTED_LANGUAGES.join(", ")}. ` +
-              "Leave it out unless the user asked for a particular language: without it the call " +
-              "is held in the principal's own language. An unsupported code is REJECTED with an " +
-              "error instead of being ignored. This does NOT change the language of the mandatory " +
-              "AI disclosure - that always follows the person being called.",
-          ),
-        // S1-6 DiD: schema-seitig bereits positiv/ganzzahlig/gecappt (der eigentliche
-        // Wurzelfix sitzt in outbound-gates.js resolveMaxDurationS, das JEDEN Body-Wert
-        // - auch einen durch diese Zod-Grenze rutschenden - nochmal klemmt).
-        max_duration_s: z
-          .number()
-          .int()
-          .positive()
-          .max(MAX_CALL_DURATION_CAP_S)
-          .optional()
-          .describe(
-            "Optional upper bound for the call duration in seconds. The server derives the " +
-              "effective limit from the remaining credit and only ever applies a SHORTER value " +
-              "than that; it never extends a call.",
-          ),
-        // P2b + GQ-P11 (Diagnose-Retention): OPT-OUT statt Opt-in. Der Server entscheidet
-        // selbst, ob das Roh-Transkript die Summary ueberlebt - und nur beim Ziel "eigene
-        // verifizierte Nummer des Nutzers"; dieses Feld ist ausschliesslich der
-        // Widerspruch dagegen. Der Grund fuer die Umkehrung steht in
-        // src/diagnostic-retention.js. Ohne diesen Eintrag erreichte das Feld /api/calls
-        // nie (Zod strippt unbekannte Keys).
-        diagnostic: z
-          .boolean()
-          .optional()
-          .describe(
-            "Leave this unset in normal use. The server keeps the raw transcript of a call to the user's OWN verified number for a limited period on its own, so the conversation can be analysed afterwards - you do NOT have to ask for it. Set it to false ONLY when the user explicitly does not want that transcript kept. For any other destination the field has no effect.",
+            "From the Hermes card once the user confirms prepare_call (SAME arguments incl. briefing/context); never guess or invent it. REQUIRED - without it the call is NOT placed.",
           ),
       },
       outputSchema: CALL_OUTPUT,
-      ...enableWidgetUi(WIDGET_CALL),
+      ...callWidgetUi,
     },
     async (args) => {
-      const r = await placeCallHopCall(args);
+      // T2-13 (N-10): confirmation_code darf NICHT im Body an POST /api/calls
+      // ankommen (er hat dort nichts verloren und liefe sonst mit in den
+      // Call-Datensatz) - destrukturiert raus, BEVOR irgendein Hop laeuft.
+      const { confirmation_code, ...request } = args;
+      const confirmResult = await confirmCallHop({
+        identity,
+        scopedTenant,
+        body: { ...request, confirmation_code },
+      });
+      requireFields(confirmResult, { preview: "object" });
+      if (!confirmResult.confirmed) {
+        return errText(loc.mcp.confirmationRequired(confirmResult.preview.to, confirmResult.preview.objective));
+      }
+      const r = await placeCallHopCall(request);
       requireFields(r, { callId: "string" });
       const data = {
         call_id: r.callId,

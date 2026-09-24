@@ -144,17 +144,17 @@ const NO_TENANT_SUBJECT = "sub-t2-12-kein-mandant";
 // NIE (src/mcp-server.js ruft registerTools() ohne consultAllowed, STDIO_CONSULT_LOOP=false),
 // auch nicht mit gesetzter Consult-Env - das belegen T11-d/T11-n ausdruecklich.
 const CONFIGS = [
-  { label: "HTTP Legacy, ohne Consult", expectedCount: 9, registersConsult: false, run: (fn) => runLegacy({}, fn) },
-  { label: "HTTP Legacy, mit Consult", expectedCount: 11, registersConsult: true, run: (fn) => runLegacy(CONSULT_ON, fn) },
-  { label: "stdio", expectedCount: 9, registersConsult: false, run: (fn) => runStdio({}, fn) },
-  { label: "HTTP OAuth", expectedCount: 9, registersConsult: false, run: (fn) => runOAuth(fn) },
+  { label: "HTTP Legacy, ohne Consult", expectedCount: 10, registersConsult: false, run: (fn) => runLegacy({}, fn) },
+  { label: "HTTP Legacy, mit Consult", expectedCount: 12, registersConsult: true, run: (fn) => runLegacy(CONSULT_ON, fn) },
+  { label: "stdio", expectedCount: 10, registersConsult: false, run: (fn) => runStdio({}, fn) },
+  { label: "HTTP OAuth", expectedCount: 10, registersConsult: false, run: (fn) => runOAuth(fn) },
   // S6-Nachzug (T2-12): fehlte bisher komplett - der Pfad, ueber den ein ChatGPT-Reviewer
   // beim Erstkontakt (Token gueltig, aber kein verknuepfter Hermes-Mandant) faehrt. Die
   // Stub-Fassade registriert dieselbe Namensmenge/denselben Wortlaut wie registerTools
   // (src/mcp-no-tenant.js:71-80), deshalb dieselbe expectedCount wie "HTTP OAuth".
   {
     label: "HTTP OAuth, ohne Mandant",
-    expectedCount: 9,
+    expectedCount: 10,
     registersConsult: false,
     run: (fn) => runOAuthNoTenant(fn),
   },

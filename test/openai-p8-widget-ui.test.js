@@ -39,7 +39,15 @@ import { WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
 import { makeDefaultState, registerTenant, settingsFor } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-const WIDGET_COUNT = 4;
+// T2-13 (N-10, Nachtrag - diese Konstanten waren nach dem T2-13-Merge nicht
+// nachgezogen): prepare_call teilt sich seither dieselbe Widget-Resource (WIDGET_CALL)
+// mit place_call (EIN enableWidgetUi(WIDGET_CALL)-Aufruf, an beide Tool-Deskriptoren
+// gespreadet, s. Kommentar an callWidgetUi in mcp-tools.js) - die Zahl der WERKZEUGE mit
+// Widget-_meta steigt dadurch von 4 auf 5, die Zahl der WIDGET-RESSOURCEN selbst bleibt
+// bei 4 (kein zweiter resources/list-Eintrag, keine zweite Registrierung). Zwei
+// Konstanten statt einer, weil beide Zahlen seit T2-13 auseinanderlaufen.
+const WIDGET_TOOL_COUNT = 5;
+const WIDGET_RESOURCE_COUNT = 4;
 // T2-02/T-34: die URI traegt seither eine Version (Pin-Datei
 // src/ui/widget-versions.json) - aus uiResourceUri() statt eines Literals, das bei
 // jeder Versionserhoehung von Hand nachgezogen werden muesste.
@@ -98,10 +106,39 @@ const EXPECTED_RESOURCE_META = {
 // (widget-catalog.js withWingCanvasMount), also neue Versionen fuer genau diese drei
 // (call.html haengt nicht an dieser Datei, unveraendert). Voriger Sollwert (beide Pfade,
 // byte-identisch seit T2-12 oben): 513bb73c23e4d7ea833711198fb306fbc92c8a496f5ff8a9d7224c85067a25aa.
+// Neu gepinnt (T2-13-Nachtrag, Safety-Review): prepare_call ist neu registriert und
+// traegt dasselbe callWidgetUi-_meta wie place_call (EIN enableWidgetUi(WIDGET_CALL)-
+// Aufruf, an beide Tool-Deskriptoren gespreadet) - tools/list traegt seither einen
+// fuenften Eintrag mit ui.resourceUri; resources/list und alle resources/read-Inhalte
+// bleiben unveraendert (keine neue/geaenderte Resource). Nachgerechnet mit dem exakten
+// Aufbau dieses Tests (tools/list + resources/list + jedes resources/read, kanonisiert),
+// nicht geschaetzt. Voriger Sollwert (beide Pfade, byte-identisch seit dem T2-11-Nachzug
+// oben): ffed5a5db028eaa0e37da11c2558f131f270dded0eab61760c8a6bc0a0212883.
+// Neu gepinnt (T2-13-Nachbesserung, Safety-Review, Befund "Beschreibung nicht mitgezogen"):
+// PLACE_CALL_DESCRIPTION (mcp-tools.js) nennt jetzt ausdruecklich, dass eine Wiederholung
+// ein eigenes frisches prepare_call braucht (der alte Satz war seit T2-13 nicht mehr
+// erreichbar, s. PLAN-SECURITY.md Abschnitt OpenAI-T2-13) - tools/list traegt seither einen
+// laengeren description-Text fuer place_call, resources/list und alle resources/read-Inhalte
+// bleiben unveraendert. Nachgerechnet mit dem exakten Aufbau dieses Tests, nicht geschaetzt.
+// Voriger Sollwert (beide Pfade, byte-identisch seit T2-13 oben):
+// 84e8b490bb7811977a714e5358dc031bb4188431937bb2f21c741b42e797e3e4.
+// Neu gepinnt (T2-13, Safety-Review Runde 2, Befund "Anleitung zur Selbstbestaetigung"):
+// die description-Texte von prepare_call, place_call und place_call.confirmation_code sagen
+// jetzt, dass der NUTZER in der Karte bestaetigt und die Karte den Code sendet (nie raten/
+// erfinden, ohne Karte kein Anruf). Gegen den Quell-Diff geprueft: EINZIGE Unterschiede in
+// tools/list sind diese drei Beschreibungen; resources/list und alle resources/read-Inhalte
+// unveraendert (src/ui unberuehrt). Voriger Sollwert (beide Pfade):
+// 8da33018cbdd342cbbff1082e54d0d1a0e8299f120e8d36933fa8139ed8c6ec3.
+// Neu gepinnt (T2-13, zweite Pruefung, Lead-Entscheidung "briefing/context gebunden"):
+// prepare_call-, place_call- und confirmation_code-Beschreibung sagen jetzt, dass der Code
+// auch briefing/context abdeckt und jede Aenderung ein neues prepare_call braucht. Gegen den
+// Quell-Diff geprueft: EINZIGE Unterschiede in tools/list sind diese drei Beschreibungen,
+// src/ui unberuehrt. Voriger Sollwert (beide Pfade):
+// c24783bc0755354a545c2703bcb69b3ac75d2a5a423e72438daa2886ed201c0a.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "ffed5a5db028eaa0e37da11c2558f131f270dded0eab61760c8a6bc0a0212883";
+  "2b3e1f8c732997bc73bcc1387a2f24b4b594ad9b9984a4b8bb58352cef03e336";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "ffed5a5db028eaa0e37da11c2558f131f270dded0eab61760c8a6bc0a0212883";
+  "2b3e1f8c732997bc73bcc1387a2f24b4b594ad9b9984a4b8bb58352cef03e336";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
@@ -284,7 +321,7 @@ test("P8-C (HTTP, T2-01, T-30/T-31 gebaut): jede Widget-Resource traegt _meta/mi
   try {
     const tools = await httpToolsList(`${srv.localUrl}/mcp`);
     const widgetTools = tools.filter((tool) => tool._meta?.ui?.resourceUri);
-    assert.equal(widgetTools.length, WIDGET_COUNT, "Positiv-Kontrolle: genau 4 Widget-Werkzeuge");
+    assert.equal(widgetTools.length, WIDGET_TOOL_COUNT, "Positiv-Kontrolle: genau 5 Widget-Werkzeuge (prepare_call teilt sich WIDGET_CALL mit place_call)");
 
     for (const tool of widgetTools) {
       const read = await httpResourceRead(`${srv.localUrl}/mcp`, tool._meta.ui.resourceUri);
@@ -309,7 +346,7 @@ test("P8-D (stdio, DP-1, T2-01, T-30/T-31 gebaut): derselbe Beleg ueber den echt
   await withStdioClient({ MCP_UI_ENABLED: "true" }, {}, async (client, stderr) => {
     const tools = await stdioRawToolsList(client);
     const widgetTools = tools.filter((tool) => tool._meta?.ui?.resourceUri);
-    assert.equal(widgetTools.length, WIDGET_COUNT, `Positiv-Kontrolle (stderr: ${stderr()})`);
+    assert.equal(widgetTools.length, WIDGET_TOOL_COUNT, `Positiv-Kontrolle (stderr: ${stderr()})`);
 
     for (const tool of widgetTools) {
       const read = await stdioRawResourceRead(client, tool._meta.ui.resourceUri);
@@ -332,7 +369,7 @@ test("P8-E (HTTP, T-23): jedes Widget-Werkzeug traegt _meta.ui.resourceUri (Stan
     const tools = await httpToolsList(`${srv.localUrl}/mcp`);
     const resources = await httpResourcesList(`${srv.localUrl}/mcp`);
     const widgetTools = tools.filter((tool) => tool._meta?.ui?.resourceUri);
-    assert.equal(widgetTools.length, WIDGET_COUNT);
+    assert.equal(widgetTools.length, WIDGET_TOOL_COUNT);
 
     for (const tool of widgetTools) {
       const uri = tool._meta.ui.resourceUri;
@@ -360,7 +397,7 @@ test("P8-F (HTTP): Tool-Deskriptor-_meta und resources/list-Eintraege tragen unv
   try {
     const tools = await httpToolsList(`${srv.localUrl}/mcp`);
     const widgetTools = tools.filter((tool) => tool._meta?.ui);
-    assert.equal(widgetTools.length, WIDGET_COUNT);
+    assert.equal(widgetTools.length, WIDGET_TOOL_COUNT);
     for (const tool of widgetTools) {
       assert.deepEqual(
         Object.keys(tool._meta).sort(),
@@ -375,7 +412,7 @@ test("P8-F (HTTP): Tool-Deskriptor-_meta und resources/list-Eintraege tragen unv
     }
 
     const resources = await httpResourcesList(`${srv.localUrl}/mcp`);
-    assert.equal(resources.length, WIDGET_COUNT);
+    assert.equal(resources.length, WIDGET_RESOURCE_COUNT);
     for (const resource of resources) {
       assert.deepEqual(
         Object.keys(resource).sort(),

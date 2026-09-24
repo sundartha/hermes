@@ -43,10 +43,14 @@ import { hangUpForCall, persistEndWithReason } from "../telephony/call-terminati
 import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.js";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
-import { localeFor, supportedLanguageOf, SUPPORTED_LANGUAGES } from "../i18n/locales.js";
+import { localeFor, supportedLanguageOf } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { internalOnly } from "../wiring/internal-only.js";
+// T2-13 (N-10, Schritt 3): die zwei Sprach-Ablehnungen sind nach src/routes/_call-request.js
+// gewandert (reiner Extract) - dieselbe Bestaetigungs-Vorschau (POST /api/call-confirmations)
+// braucht GENAU diese Formen, keine zweite Kopie.
+import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-request.js";
 
 // I10 (call-quality Impl-1): additives Meta in der /api/calls-Erfolgsantwort - zeigt dem
 // aufrufenden MCP-Client (place_call), WAS vom optionalen context tatsaechlich ankam.
@@ -266,35 +270,6 @@ function beobachteAblehnung({ store, audit, denial, req, tenantId }) {
 function denialResponseBody(denial) {
   return denial.audit ? { ...denial.body, reason: denial.audit.grund } : denial.body;
 }
-
-// P4a (F-2): die zwei Ablehnungen des Sprachwunsches. Beide sind reine EINGABEfehler und
-// laufen deshalb wie die Bestands-400er VOR jedem Gate - ohne Audit, ohne Metrik
-// (dieselbe Regel wie bei to/objective und E164_FORMAT_ERROR). Die unterstuetzten Codes
-// stehen IM error-String: der MCP-Weg reicht nur json.error an das aufrufende Modell
-// weiter (mcp-tools.js#api), ein Zusatzfeld saehe es nie. code/supported reisen zusaetzlich
-// fuer maschinelle Leser. Englisch, weil hier das Client-MODELL liest, nicht der Tenant
-// (Systemgrenze O14) - Gate-Ablehnungen an den Tenant bleiben davon unberuehrt.
-const UNSUPPORTED_LANGUAGE = "unsupported_language";
-const LANGUAGE_UNAVAILABLE = "language_unavailable";
-
-const unsupportedLanguageBody = () => ({
-  error: `${UNSUPPORTED_LANGUAGE}: language must be one of ${SUPPORTED_LANGUAGES.join(", ")}`,
-  code: UNSUPPORTED_LANGUAGE,
-  supported: SUPPORTED_LANGUAGES,
-});
-
-// P4a/E-1 (hartes Gate): der Wunsch gilt NUR auf dem Sprechweg, der Gespraechs- und
-// Offenlegungssprache getrennt beantwortet (ElevenLabs, elevenlabs/call-locale.js). Die
-// Der TeXML-Zweig rendert den Offenlegungssatz aus call.language (claude.js
-// disclosureSentence) - dort machte ein Wunsch die Sprache der PFLICHTAUSSAGE
-// client-bestimmt, und genau das verbietet F-2 Punkt 4 (PM-2). LAUT abgelehnt statt still
-// ignoriert: ein wirkungsloses Feld IST der Defekt, gegen den diese Phase gebaut ist.
-const languageUnavailableBody = () => ({
-  error:
-    `${LANGUAGE_UNAVAILABLE}: this deployment cannot separate the spoken language from the ` +
-    "mandatory AI disclosure - omit language",
-  code: LANGUAGE_UNAVAILABLE,
-});
 
 // E3: 503 als benannte Konstante (G25; ausserdem haelt das die gepinnte
 // no-magic-numbers-Inventur dieser Datei unveraendert). Dieselbe Klasse wie der

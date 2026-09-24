@@ -16,7 +16,7 @@
 > The reasoning below describes what each tool does, and it says the same thing as the tool's
 > own `description` in `tools/list`. File:line references point into this repository.
 
-## Table A - all 11 tools, in registration order
+## Table A - all 12 tools, in registration order
 
 Registration order: `src/mcp-tools.js:919-1523` (the `uiTool(...)` calls inside
 `registerTools()`). Condition column: "always" (registered unconditionally) or "consult"
@@ -27,6 +27,7 @@ Registration order: `src/mcp-tools.js:919-1523` (the `uiTool(...)` calls inside
 
 | name | title | condition | readOnlyHint | destructiveHint | openWorldHint | idempotentHint |
 |---|---|---|---|---|---|---|
+| prepare_call | Preview a phone call | always | true | false | false | true |
 | place_call | Place a phone call | always | false | true | true | false |
 | await_call_event | Wait for call update | consult | false | false | false | true |
 | answer_consult | Answer call question | consult | false | true | true | false |
@@ -47,6 +48,7 @@ Machine-readable block (`name|title|condition|readOnlyHint|destructiveHint|openW
 
 ```text
 TABLE-A-BEGIN
+prepare_call|Preview a phone call|always|true|false|false|true
 place_call|Place a phone call|always|false|true|true|false
 await_call_event|Wait for call update|consult|false|false|false|true
 answer_consult|Answer call question|consult|false|true|true|false
@@ -82,7 +84,7 @@ forwarding of the old name).
 OpenAI requires `readOnlyHint`, `destructiveHint` and `openWorldHint` on every tool. The MCP
 specification lists all annotation fields as optional (in the MCP SDK's
 `ToolAnnotationsSchema`, every field is `.optional()`); where the two differ, Hermes follows
-OpenAI and sets all three on all 11 tools, including `destructiveHint: false` on the read-only
+OpenAI and sets all three on all 12 tools, including `destructiveHint: false` on the read-only
 tools (`src/mcp-tools.js:612-618`). `idempotentHint` is optional in both; Hermes sets it only on
 tools that write (`src/mcp-tools.js:616-618`) - per the MCP specification it is meaningful only
 when `readOnlyHint` is false. The hints are hints; each tool's `description` states its effects
@@ -114,8 +116,27 @@ Hermes applies it as three statements, and every value in Table A follows from o
 The hint describes what a tool can do, not what every single invocation does: a tool that sends
 to an external party on at least one path is `true`, even if some invocations send nothing.
 
-- **place_call** (registered `src/mcp-tools.js:919`, handler `:1079-1110`, REST
-  `POST /api/calls`).
+- **prepare_call** (registered `src/mcp-tools.js:1438`, handler `:1447-1479`, REST
+  `POST /api/call-confirmations`). Previews an outbound call and, when card confirmation is
+  switched on for the server, attaches a single-use confirmation code for the Hermes card that
+  `place_call` then requires - see "Confirmation before placing a call" below. The server does
+  not detect whether the connected client actually renders the card.
+  - `readOnlyHint: true` - it never starts a call, never writes to the call store and never
+    calls `audit()`; it only derives a code from the request and returns it.
+  - `destructiveHint: false` - nothing it does can be undone because nothing durable happens:
+    no call record, no billing, no third-party contact.
+  - `openWorldHint: false` (O3) - it reaches only Hermes' own confirmation endpoint; it never
+    dials and never contacts the telephony carrier.
+  - `idempotentHint: true` - repeating the call has no additional effect on the world: no
+    call, no record, no cost. It does NOT mean the code is always the same: until a code has
+    been used, repeating `prepare_call` with the same arguments in the same five-minute
+    window returns the same code; once that code has been used to place a call, repeating
+    `prepare_call` returns a new code.
+- **place_call** (registered `src/mcp-tools.js:1492`, handler `:1514-1558`, REST
+  `POST /api/calls`). As of this inventory, `place_call` additionally REQUIRES a
+  `confirmation_code` from a preceding `prepare_call` call with identical arguments - see
+  "Confirmation before placing a call" below. The annotations below are unchanged by that
+  requirement: they describe what happens once the call IS placed.
   - `readOnlyHint: false` - it starts a real outbound phone call by the AI agent.
   - `destructiveHint: true` - the call reaches a real person, is billed per minute to the
     account, and cannot be undone once placed (its description says "NOT reversible once
@@ -235,6 +256,55 @@ to an external party on at least one path is `true`, even if some invocations se
   - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
 
+### Confirmation before placing a call
+
+`place_call` requires a `confirmation_code` obtained from a preceding `prepare_call` call with
+the identical arguments. The server derives the code from a secret operated by Hermes, the
+account, a five-minute time window and every argument except the code itself: the normalized
+destination, `objective`, `briefing`, `context`, `language`, `max_duration_s`, `constraints`,
+`mandate` and `diagnostic` (any argument added later is bound by default). A missing argument,
+an empty string and an empty object are distinct values. Changing any argument after the user
+confirmed - including only rewording `briefing` or `context` - invalidates the code; the model
+has to call `prepare_call` again and the user has to confirm again.
+The code is issued only in the tool result's `_meta`, never in the model-visible text or
+`structuredContent`.
+
+A code is accepted for at least five and at most ten minutes and only once. Each submitted code
+is compared, in constant time, against at most two candidates (the current code of this request
+for the current and the previous window). After ten rejected codes for one account within a
+five-minute window, every code for that account is rejected until the window ends, including a
+correct one. With 32^6 possible codes this keeps the chance of guessing a code by brute force at
+roughly 2e-3 per year of guessing at the highest rate this limit allows, per server instance.
+The single-use record and
+this limit are held in the memory of each server instance: they reset on restart, and with
+several instances a used code could be replayed on another instance while it is still valid,
+and the guessing limit applies per instance.
+
+The server does not detect whether the connecting host displays the card or keeps `_meta` from
+the model - once card
+confirmation is enabled, every connecting host receives the code in `_meta`. On a host that
+follows the MCP Apps contract and keeps `_meta` from the model, the code therefore reaches the
+model only through a user action (reviewing the rendered card). On a host that does not, the
+code would be model-visible and the confirmation would be formal only; Hermes does not claim
+more than that the code was issued for exactly these arguments and consumed once. It is not a claim
+that a human read the card, and it does not itself authorize the call:
+the server's outbound permission checks (subscription/verification, destination country and
+number, hourly/per-destination limits, per-account cost cap, maximum duration, provider
+signature verification) run unchanged when the call is actually placed, regardless of the
+confirmation.
+
+A host that does not display the Hermes card (and keeps `_meta` from the model, as the contract
+requires) has no way to place calls through `place_call`: the code never reaches its model. The
+tool texts tell the model not to call `place_call` before the card has sent the code, never to
+guess or invent a code, and to tell the user honestly when no call can be placed from this host.
+When card confirmation is switched off for the server, no client receives a code and no call can
+be placed through `place_call` at all.
+
+`cancel_call` and `answer_consult` do not get a second confirmation step. `cancel_call` only
+reduces harm - delaying it adds no new cost and starts no new contact. `answer_consult` is
+time-critical and only ever runs inside a call that was already confirmed when it was placed; a
+card round-trip there would let the call time out.
+
 ## Table B - tool count and exact name set per configuration
 
 The counts are **measured on the real wire** (HTTP `/mcp` and the stdio child process
@@ -242,29 +312,29 @@ The counts are **measured on the real wire** (HTTP `/mcp` and the stdio child pr
 
 | K | transport | identity/profile | switches | count |
 |---|---|---|---|---|
-| K1 | HTTP | Bootstrap owner (`OWNER_PROFILE`, `src/store/defaults.js:1056-1065`) | Consult + AssistantContext on | 11 |
-| K2 | HTTP | Bootstrap owner | Consult off | 9 |
-| K3 | HTTP (OAuth) | Account without a stored profile (`DEFAULT_PROFILE`, `src/store/defaults.js:1069-1078`) | Consult on | 9 |
-| K4 | HTTP (OAuth) | Account with the paid-plan profile (`planProfileFor("starter")`, `src/plans.js:107-141`, `:154-156`) | Consult on | 11 |
-| K5 | HTTP (OAuth) | Account with the same paid-plan profile | Consult off | 9 |
-| K6 | stdio (`src/mcp-server.js`) | no account (defaults `consultAllowed = false`, `src/mcp-tools.js:807-816`) | not applicable (stdio never registers the consult tools) | 9 |
+| K1 | HTTP | Bootstrap owner (`OWNER_PROFILE`, `src/store/defaults.js:1056-1065`) | Consult + AssistantContext on | 12 |
+| K2 | HTTP | Bootstrap owner | Consult off | 10 |
+| K3 | HTTP (OAuth) | Account without a stored profile (`DEFAULT_PROFILE`, `src/store/defaults.js:1069-1078`) | Consult on | 10 |
+| K4 | HTTP (OAuth) | Account with the paid-plan profile (`planProfileFor("starter")`, `src/plans.js:107-141`, `:154-156`) | Consult on | 12 |
+| K5 | HTTP (OAuth) | Account with the same paid-plan profile | Consult off | 10 |
+| K6 | stdio (`src/mcp-server.js`) | no account (defaults `consultAllowed = false`, `src/mcp-tools.js:807-816`) | not applicable (stdio never registers the consult tools) | 10 |
 
-Now that `get_calendar` is gone, the count depends on exactly one thing: whether the
-consult channel is available. K1 and K4 both have it and both count 11; K2, K3, K5 and K6 all
-lack it and all count 9 - four different reasons (owner with consult switched off, no stored
-profile, paid plan with consult switched off, stdio never registers the consult tools) landing
-on the identical name set.
+The count still depends on exactly one thing: whether the consult channel is available.
+K1 and K4 both have it and both count 12; K2, K3, K5 and K6 all lack it and all count 10 -
+four different reasons (owner with consult switched off, no stored profile, paid plan with
+consult switched off, stdio never registers the consult tools) landing on the identical name
+set. prepare_call is registered unconditionally, in EVERY configuration.
 
 Machine-readable block (`K|transport|count|comma-separated tool names in Table A order`):
 
 ```text
 TABLE-B-BEGIN
-K1|http|11|place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
-K2|http|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
-K3|http-oauth|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
-K4|http-oauth|11|place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
-K5|http-oauth|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
-K6|stdio|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K1|http|12|prepare_call,place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K2|http|10|prepare_call,place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K3|http-oauth|10|prepare_call,place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K4|http-oauth|12|prepare_call,place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K5|http-oauth|10|prepare_call,place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K6|stdio|10|prepare_call,place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
 TABLE-B-END
 ```
 

@@ -222,6 +222,9 @@ const ROUTE_FINGERPRINT = [
   "POST /api/billing/cost-truing/sweep",
   "POST /api/billing/flush-meters",
   "POST /api/billing/setup-checkout",
+  // T2-13 (N-10): Bestaetigungs-Vorschau vor dem Waehlen (prepare_call/place_call). Klasse
+  // AUTH (internalOnly, wie POST /api/calls) - kein Eintrag in src/route-policy.js.
+  "POST /api/call-confirmations",
   "POST /api/calls",
   "POST /api/calls/:id/cancel",
   "POST /api/calls/:id/consult/answer",

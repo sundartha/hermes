@@ -109,18 +109,18 @@ nie gemessen.
 
 - Einschlaegig: ja. Hermes fuehrt echte ausgehende Anrufe an Dritte.
 - Mechanismen im Code (Kette der Ausgangs-Gates, serverseitig, vor dem Waehlen):
-  - Globaler Notaus: Gate `outbound_frozen` (`src/telephony/outbound-gates.js:687`).
-  - Verifikation des Kontos: Gate `kyc` (`src/telephony/outbound-gates.js:758`), Mindeststufe
+  - Globaler Notaus: Gate `outbound_frozen` (`src/telephony/outbound-gates.js:699`).
+  - Verifikation des Kontos: Gate `kyc` (`src/telephony/outbound-gates.js:772`), Mindeststufe
     `KYC_OUTBOUND_MIN = KYC_LEVEL.CARD` (`src/store/defaults.js:524`).
   - Sperrliste und Land-Gate: `deniedPrefix` bzw. `countryGateAllowed` in `numberGateError`
-    (`src/telephony/outbound-gates.js:504-506`, `src/telephony/outbound-gates.js:359-363`),
-    ausgefuehrt im Gate `number_gate` (`src/telephony/outbound-gates.js:800`).
+    (`src/telephony/outbound-gates.js:518-520`, `src/telephony/outbound-gates.js:371-375`),
+    ausgefuehrt im Gate `number_gate` (`src/telephony/outbound-gates.js:814`).
   - Stundenlimit pro Mandant und Wiederholungs-Grenze je Ziel im Zeitfenster:
-    `callQuotaError` (`src/telephony/outbound-gates.js:478-483`), Grenzwert pro Mandant
-    (`src/telephony/outbound-gates.js:380-382`), Ziel-Grenze `perTargetCapReached`
-    (`src/telephony/outbound-gates.js:389`).
+    `callQuotaError` (`src/telephony/outbound-gates.js:490-495`), Grenzwert pro Mandant
+    (`src/telephony/outbound-gates.js:392-394`), Ziel-Grenze `perTargetCapReached`
+    (`src/telephony/outbound-gates.js:401`).
   - Kostendecke pro Mandant: Gates `budget` und `minutes`
-    (`src/telephony/outbound-gates.js:900`, `src/telephony/outbound-gates.js:913`).
+    (`src/telephony/outbound-gates.js:914`, `src/telephony/outbound-gates.js:927`).
   - Offenlegungssatz als erster gesprochener Satz (siehe "Identitaetsanmassung").
   - Die Werkzeugbeschreibung sagt dem Modell, dass der Server entscheidet:
     Werkzeugtext (place_call): "Which destinations are allowed is decided by the server through its safety gates"
@@ -152,7 +152,7 @@ nie gemessen.
 
 - Einschlaegig: ja.
 - Mechanismus, Budget-/Telnyx-Weg: der erste gesprochene Satz ist der Offenlegungssatz
-  (`firstSpokenSentence`, `src/claude.js:469-471`), gebaut von `disclosureSentence`
+  (`firstSpokenSentence`, `src/claude.js:470-472`), gebaut von `disclosureSentence`
   (`src/claude.js:423`) aus dem Sprachbaustein `disclosure` (englische Fassung
   `src/i18n/locales.js:622-624`). Er nennt die KI-Eigenschaft und den Auftraggeber (den beim
   Mandanten hinterlegten Namen) und sagt, dass das Gespraech fuer den Auftraggeber
@@ -161,18 +161,18 @@ nie gemessen.
   (`elevenlabs/agent_configs/outbound-agent.template.json:810`) und wird im Code nicht
   uebersteuert (`src/elevenlabs/outbound.js:19`).
 - Ohne hinterlegten Auftraggeber-Namen kein Anruf: Gate `owner_name`
-  (`src/telephony/outbound-gates.js:774`).
+  (`src/telephony/outbound-gates.js:788`).
 - Eng begrenzte Ausnahme: ruft der Mandant seine EIGENE hinterlegte Nummer an, entfaellt nur der
   lange Satz zum Auftraggeber; die KI-Kennzeichnung bleibt. Voraussetzungen: exakte
-  String-Gleichheit von Ziel und hinterlegter Nummer (`src/callee-is-owner.js:48-49`), ein
+  String-Gleichheit von Ziel und hinterlegter Nummer (`src/callee-is-owner.js:49-50`), ein
   ausdruecklich freigeschalteter Mandant (`src/callee-is-owner.js:68`) und ein Schalter, der
-  per Code-Default aus ist (`src/config.js:1915-1917`). Budget-Weg: `src/claude.js:469-471`;
+  per Code-Default aus ist (`src/config.js:1915-1917`). Budget-Weg: `src/claude.js:470-472`;
   Sprach-Agenten-Weg: `ownerFirstMessage` (`src/elevenlabs/outbound.js:1165`).
 - Der hinterlegte Auftraggeber-Name wird gegen keinen Identitaetsnachweis geprueft. Beim
   Web-Login uebernimmt der Server Vor- und Nachname aus dem Profil des Login-Anbieters
   (`src/web-auth.js:461-462`) und schreibt sie an den Mandanten, wenn dort noch keiner steht
   (`src/web-auth.js:205`). Im Onboarding durch den Betreiber sind beide Felder Freitext
-  (`src/routes/api-onboard.js:94-98`). Wie die Namensfelder beim Login-Anbieter entstehen,
+  (`src/routes/api-onboard.js:95-99`). Wie die Namensfelder beim Login-Anbieter entstehen,
   belegt der Code nicht. Die Pruefstufe fuer ausgehende Anrufe ist die hinterlegte Karte
   (`src/store/defaults.js:524`), keine Identitaetspruefung; die hoehere Stufe "Identitaet
   geprueft" vergibt der Code nur beim Start an den Mandanten des Betreibers, ohne
@@ -207,7 +207,7 @@ nie gemessen.
     nur `objective`, Auftragsnotizen und `constraints`, nie die Zielnummer
     (`src/research/sanitize.js:17`). Die Suchanfrage formuliert das Modell beim Anbieter; der
     Server sieht sie nicht und kann sie nicht filtern (`src/research/sanitize.js:2`).
-    Achtung: die Auftragsnotizen SIND das `briefing` (`src/routes/api-calls.js:525`); das
+    Achtung: die Auftragsnotizen SIND das `briefing` (`src/routes/api-calls.js:500`); das
     `briefing` kann also bei dieser Suche ankommen.
   - Nachschlag WAEHREND des Anrufs: das Werkzeug `look_up` des Gespraechsmodells
     (`src/research/in-call.js:18`), auf dem Budget-/Telnyx-Weg (`src/claude.js:648`) und auf
@@ -231,7 +231,7 @@ nie gemessen.
     Gesundheits- oder Geldbegriffe prueft er nicht. Umschriebene Aussagen des Angerufenen
     koennen also an Exa gehen. Auf dem Sprach-Agenten-Weg schreibt der Server das Transkript
     erst nach dem Anruf (`src/elevenlabs/outbound.js:1075`); der Zitat-Filter vergleicht nur
-    mit gespeicherten Zeilen des Angerufenen (`src/utils/text.js:57-60`) und hat dort
+    mit gespeicherten Zeilen des Angerufenen (`src/utils/text.js:58-61`) und hat dort
     waehrend des Anrufs nichts zum Vergleichen.
   - Die Werkzeugbeschreibung von `look_up` auf dem Budget-/Telnyx-Weg verbietet, Namen,
     Nummern, Adressen, Gesundheits- oder Geldangaben des Gegenuebers zu suchen
@@ -240,7 +240,7 @@ nie gemessen.
   - Das Roh-Transkript auf unserer Seite wird am Anrufende NUR bei einem abgeschlossenen
     Anruf geleert. Die Leerung steht in `finishCall` (`src/telephony/call-finish.js:350`) hinter
     zwei fruehen Ruecksprungstellen: hat der Anruf einen anderen Endstatus als `completed` -
-    etwa `cancelled` nach `cancel_call` (`src/routes/api-calls.js:811`) oder `failed` - oder
+    etwa `cancelled` nach `cancel_call` (`src/routes/api-calls.js:812`) oder `failed` - oder
     ist das Transkript leer, kehrt die Funktion vorher zurueck
     (`src/telephony/call-finish.js:302`, Ruecksprung `src/telephony/call-finish.js:322`);
     ebenso bei einer gescheiterten Uebergabe eines eingehenden Anrufs an den Sprach-Agenten
@@ -256,7 +256,7 @@ nie gemessen.
 - Was an OpenAI geht: `get_call_status` liefert die letzten Zeilen des Gespraechs
   (`src/mcp-tools.js:198`, hoechstens `LAST_TRANSCRIPT_LINES = 6`, `src/mcp-tools.js:47`), also
   woertliche Aussagen des Dritten. Der Handler prueft den Anrufstatus nicht
-  (`src/mcp-tools.js:1466`); die Zeilen kommen aus dem gespeicherten Transkript
+  (`src/mcp-tools.js:1663`); die Zeilen kommen aus dem gespeicherten Transkript
   (`src/mcp-tools.js:199`). Sie gehen deshalb nicht nur waehrend des Anrufs an OpenAI/ChatGPT,
   sondern auch danach, solange das Transkript existiert: nach einem abgebrochenen oder
   gescheiterten Anruf und nach einer gescheiterten Zusammenfassung bis zum Loeschlauf des
@@ -264,7 +264,7 @@ nie gemessen.
   (Code-Default 7 Tage). Ein `cancel_call` beendet also die Verbindung, beendet aber nicht die
   Herausgabe der letzten Zeilen ueber `get_call_status`.
   Werkzeugtext (get_call_status): "duration and the last transcript lines"
-  `get_call_result` gibt nur Zusammenfassung und Ergebnis zurueck (`src/mcp-tools.js:1539`).
+  `get_call_result` gibt nur Zusammenfassung und Ergebnis zurueck (`src/mcp-tools.js:1736`).
   Werkzeugtext (get_call_result): "This tool NEVER returns the raw transcript"
 - Status: `teilweise`. Der Dritte willigt nicht ein; er wird nur informiert (Offenlegung).
   Luecke 8 in Teil C (Suchanfragen an Such-Anbieter), Luecke 11 (Rohzeilen nicht an den
@@ -371,11 +371,11 @@ nie gemessen.
 > "Response minimization: Tool responses must return only data that is directly relevant to the user’s request and the tool’s stated purpose." - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Data collection")
 
 - Einschlaegig: ja.
-- Mechanismus: `get_call_result` filtert ueber eine Whitelist (`src/mcp-tools.js:1539`) und
+- Mechanismus: `get_call_result` filtert ueber eine Whitelist (`src/mcp-tools.js:1736`) und
   liefert nie das Roh-Transkript; `get_call_status` liefert hoechstens sechs letzte Zeilen
   (`src/mcp-tools.js:47`), aber unabhaengig vom Anrufstatus, also auch nach dem Anruf, solange
   ein Transkript gespeichert ist (Luecke 11 in Teil C).
-- `get_agent_status` gibt den Namen des Auftraggebers zurueck (`src/mcp-tools.js:592`); die
+- `get_agent_status` gibt den Namen des Auftraggebers zurueck (`src/mcp-tools.js:645`); die
   Beschreibung nennt ihn jetzt als Zweck.
 - Teilweise geprueft: welche Felder jedes der Werkzeuge zurueckgibt und zu welcher
   Datenkategorie sie gehoeren, steht in Teil B ("Werkzeug-Antworten Feld fuer Feld"). Ob jedes
@@ -395,7 +395,7 @@ nie gemessen.
 - Was fehlt, in keiner Werkzeugbeschreibung erwaehnt: (1) bei eingeschalteter
   Vorab-Recherche koennen `briefing`, `objective` und `constraints` bei der Suche des
   Sprachmodell-Anbieters ankommen (`src/research/sanitize.js:17`,
-  `src/routes/api-calls.js:525`); (2) bei eingeschaltetem Nachschlag im Anruf gehen vom
+  `src/routes/api-calls.js:500`); (2) bei eingeschaltetem Nachschlag im Anruf gehen vom
   Gespraechsmodell formulierte Suchanfragen aus dem laufenden Gespraech, auch aus Aussagen
   des Angerufenen, an Exa (`src/research/lookup-guard.js:66-74`).
 - Status: `teilweise`. Luecke 8 in Teil C.
@@ -442,16 +442,16 @@ angewendet in `src/precall-briefing.js:216`). Ob das Modell im Chat die Bedingun
 says" einhaelt, prueft der Server nicht - er kann es nicht sehen.
 
 **Was darf der Agent?** Nur muendlich zusagen. Das Mandat oeffnet keinen Buchungs- oder
-Kalenderpfad (`src/store/defaults.js:410-413`).
+Kalenderpfad (`src/store/defaults.js:413-416`).
 Werkzeugtext (place_call): "Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance."
 Der Rahmen ist auf 1000 Zeichen begrenzt (`src/routes/_validation.js:50`). Die Werte fuer
 Angebote ausserhalb des Rahmens stammen aus einer Quelle (`src/store/defaults.js:417`); auf dem
 Budget-/Telnyx-Weg setzt der Prompt `accept_best` so um: das beste Angebot annehmen und als
-Nachricht festhalten (`src/i18n/prompts/en.js:223-224`).
+Nachricht festhalten (`src/i18n/prompts/en.js:224-225`).
 
 **Unterschied zwischen den Sprechwegen.** Welcher Weg einen Anruf fuehrt, entscheidet ein
 globaler Schalter (`src/config.js:808`, Code-Default aus; ausgewertet in
-`src/routes/api-calls.js:546`); der Produktionswert ist hier nicht genannt. Auf dem
+`src/routes/api-calls.js:521`); der Produktionswert ist hier nicht genannt. Auf dem
 Sprach-Agenten-Weg kommt `on_out_of_scope` nicht beim Agenten an: uebergeben werden nur der
 Rahmen, die Ausweich-Reihenfolge und die Buchungsgrenze (`src/elevenlabs/outbound.js:615`,
 `src/elevenlabs/outbound.js:622`). Die Werkzeugbeschreibung verspricht fuer `decline` und
@@ -476,7 +476,7 @@ Grundlage fuer Datenschutzerklaerung und AGB. Alle Fristen sind **Code-Defaults*
 Umgebungsvariable einstellbar, der Produktionswert steht im Hosting-Dashboard und ist hier
 bewusst nicht genannt. Beide Speicher-Backends (Datei und Postgres) rufen denselben Loeschlauf
 auf (`src/store/json.js:1339`, `src/store/pg.js:833`). Der Loeschlauf laeuft beim Start und
-danach alle 6 Stunden (`src/boot.js:108`, `src/boot.js:1255-1256`).
+danach alle 6 Stunden (`src/boot.js:109`, `src/boot.js:1264-1265`).
 
 ### Datenkategorien
 
@@ -484,19 +484,19 @@ danach alle 6 Stunden (`src/boot.js:108`, `src/boot.js:1255-1256`).
 |---|---|---|---|---|
 | Konto: Login-Kennung, E-Mail, Rolle | Tabelle `account` (`src/db/schema.sql:980`) | Anmeldung, Zuordnung zum Mandanten | keine Frist im Code; Einzelzeilen fallen nur beim Abgleich verwaister Identitaeten (`src/web-auth.js:711`) | Login-Anbieter |
 | Sitzung | Tabelle `session` (`src/db/schema.sql:997`) | Browser-Sitzung | Ablaufzeitpunkt je Sitzung; kein Loeschlauf im Code gefunden | - |
-| Mandant: Name des Auftraggebers, eigene Nummer, Abrechnungs-Kennungen | Tabelle `tenant` (`src/db/schema.sql:13`), Spalten `owner_name` (`src/db/schema.sql:23`), `private_number` (`src/db/schema.sql:81`), `stripe_customer_id` (`src/db/schema.sql:38`), `stripe_subscription_id` (`src/db/schema.sql:48`) | Offenlegungssatz, Eigen-Anruf, Abrechnung | keine Frist im Code | Name des Auftraggebers: OpenAI/ChatGPT ueber `get_agent_status` (Feld `owner`, `src/mcp-tools.js:592`); Sprach-Anbieter als Variable `owner_name` des Sprach-Agenten (`src/elevenlabs/outbound.js:953`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs (`src/i18n/prompts/en.js:12`); Telefonie-Anbieter als Text der ersten Ansage des Budget-Wegs (`src/claude.js:452`); jeder Angerufene hoert ihn im Offenlegungssatz (`src/i18n/locales.js:622-624`). Vorname (Spalte `first_name`, `src/db/schema.sql:27`): Sprach-Anbieter in der Eroeffnung eines Anrufs an die eigene hinterlegte Nummer (`src/elevenlabs/outbound.js:1165-1167`). Eigene Nummer: kein Werkzeugfeld gibt sie als solche zurueck; ist sie Ziel eines Anrufs, steht sie im Anruf-Datensatz und geht als Nummer der Gegenseite an OpenAI/ChatGPT (`list_calls`, Feld `counterparty`, `src/mcp-tools.js:629`). Abrechnungs-Kennungen: Zahlungsanbieter |
-| Rufnummer des Assistenten (dem Mandanten zugeordnete, beim Telefonie-Anbieter gemietete Nummer) | Tabelle `number` (`src/db/schema.sql:714`), Spalte `provider` (`src/db/schema.sql:718`); Anzeige-Nummer des Mandanten (`src/routes/api-read.js:89`) | Anrufe annehmen und fuehren | der periodische Loeschlauf hat keinen Durchgang fuer diese Tabelle (`src/store/state-ops.js:5186`); was mit der Zeile nach einer Kuendigung und der Freigabe der Nummer geschieht, ist hier nicht untersucht | Telefonie-Anbieter; OpenAI/ChatGPT ueber `get_agent_number` (`src/mcp-tools.js:616`) und `get_agent_status` (Feld `number`, `src/mcp-tools.js:591`) |
-| Einstellungen | Tabelle `settings` (`src/db/schema.sql:163`) | Verhalten des Assistenten | keine Frist im Code | OpenAI/ChatGPT ueber `get_agent_status`: die drei Freigaben (Zusammenfassungen, persoenliche Daten, Bankdaten) als Feld `permissions` (`src/mcp-tools.js:597`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs: Name und Stil des Assistenten (`src/i18n/prompts/en.js:12`, `src/i18n/prompts/en.js:129`) und die Grenzen aus den Freigaben fuer persoenliche und Bankdaten (`src/claude.js:231-232`); Name des Assistenten in der Ergebnis-SMS an den Nutzer ueber den Telefonie-Anbieter (`src/telephony/call-finish.js:370`). Auf dem Sprach-Agenten-Weg geht laut Code keines dieser Felder an den Sprach-Anbieter (`grep -rnE "agentName|agentStyle|allowPersonalData|allowBankData" src/elevenlabs` liefert 0) |
-| Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/schema.sql:211`): `from_e164`/`to_e164` (`src/db/schema.sql:218-219`), `goal` (`src/db/schema.sql:220`), `briefing` (`src/db/schema.sql:227`), `constraints` (`src/db/schema.sql:228`), `context` (`src/db/schema.sql:252`), `mandate` (`src/db/schema.sql:256`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js:2036`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js:5125`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Vorab-Recherche die serverseitige Suche von Anthropic (`objective`, `briefing`, `constraints`, ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
-| Rueckfragen des Agenten an den Nutzer und dessen Antworten (nur bei freigegebenem Rueckfrage-Kanal) | Spalte `consults` am Anruf (`src/db/schema.sql:342`) | Rueckfrage waehrend des Anrufs | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT: die Fragen des Agenten, die aus dem laufenden Gespraech stammen, ueber `await_call_event` (Feld `questions`, `src/mcp-tools.js:294`). Die Antworten kommen aus ChatGPT ueber `answer_consult` (`src/mcp-tools.js:1427`, Route `src/routes/api-calls.js:765`) und sind fuer den Agenten im laufenden Gespraech bestimmt; der Weg von dort zum Sprachmodell- bzw. Sprach-Anbieter ist in diesem Dokument nicht Zeile fuer Zeile belegt |
-| Roh-Transkript | Tabelle `transcript_segment` (`src/db/schema.sql:554`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende nur bei Endstatus `completed` geleert (`src/telephony/call-finish.js:350`); bei jedem anderen Endstatus, z.B. `cancelled` nach `cancel_call` oder `failed` (Ruecksprung vor der Leerung, `src/telephony/call-finish.js:302`), und nach einer gescheiterten Zusammenfassung bleibt es bis zum Loeschlauf des Anrufs (30 Tage) | bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` (`src/mcp-tools.js:47`), waehrend des Anrufs und danach, solange das Transkript gespeichert ist, also auch nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten Zusammenfassung (`src/mcp-tools.js:1466`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
+| Mandant: Name des Auftraggebers, eigene Nummer, Abrechnungs-Kennungen | Tabelle `tenant` (`src/db/schema.sql:13`), Spalten `owner_name` (`src/db/schema.sql:23`), `private_number` (`src/db/schema.sql:81`), `stripe_customer_id` (`src/db/schema.sql:38`), `stripe_subscription_id` (`src/db/schema.sql:48`) | Offenlegungssatz, Eigen-Anruf, Abrechnung | keine Frist im Code | Name des Auftraggebers: OpenAI/ChatGPT ueber `get_agent_status` (Feld `owner`, `src/mcp-tools.js:645`); Sprach-Anbieter als Variable `owner_name` des Sprach-Agenten (`src/elevenlabs/outbound.js:953`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs (`src/i18n/prompts/en.js:12`); Telefonie-Anbieter als Text der ersten Ansage des Budget-Wegs (`src/claude.js:452`); jeder Angerufene hoert ihn im Offenlegungssatz (`src/i18n/locales.js:622-624`). Vorname (Spalte `first_name`, `src/db/schema.sql:27`): Sprach-Anbieter in der Eroeffnung eines Anrufs an die eigene hinterlegte Nummer (`src/elevenlabs/outbound.js:1167-1169`). Eigene Nummer: kein Werkzeugfeld gibt sie als solche zurueck; ist sie Ziel eines Anrufs, steht sie im Anruf-Datensatz und geht als Nummer der Gegenseite an OpenAI/ChatGPT (`list_calls`, Feld `counterparty`, `src/mcp-tools.js:682`). Abrechnungs-Kennungen: Zahlungsanbieter |
+| Rufnummer des Assistenten (dem Mandanten zugeordnete, beim Telefonie-Anbieter gemietete Nummer) | Tabelle `number` (`src/db/schema.sql:714`), Spalte `provider` (`src/db/schema.sql:718`); Anzeige-Nummer des Mandanten (`src/routes/api-read.js:89`) | Anrufe annehmen und fuehren | der periodische Loeschlauf hat keinen Durchgang fuer diese Tabelle (`src/store/state-ops.js:5186`); was mit der Zeile nach einer Kuendigung und der Freigabe der Nummer geschieht, ist hier nicht untersucht | Telefonie-Anbieter; OpenAI/ChatGPT ueber `get_agent_number` (`src/mcp-tools.js:669`) und `get_agent_status` (Feld `number`, `src/mcp-tools.js:644`) |
+| Einstellungen | Tabelle `settings` (`src/db/schema.sql:163`) | Verhalten des Assistenten | keine Frist im Code | OpenAI/ChatGPT ueber `get_agent_status`: die drei Freigaben (Zusammenfassungen, persoenliche Daten, Bankdaten) als Feld `permissions` (`src/mcp-tools.js:650`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs: Name und Stil des Assistenten (`src/i18n/prompts/en.js:12`, `src/i18n/prompts/en.js:129`) und die Grenzen aus den Freigaben fuer persoenliche und Bankdaten (`src/claude.js:231-232`); Name des Assistenten in der Ergebnis-SMS an den Nutzer ueber den Telefonie-Anbieter (`src/telephony/call-finish.js:370`). Auf dem Sprach-Agenten-Weg geht laut Code keines dieser Felder an den Sprach-Anbieter (`grep -rnE "agentName|agentStyle|allowPersonalData|allowBankData" src/elevenlabs` liefert 0) |
+| Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/schema.sql:211`): `from_e164`/`to_e164` (`src/db/schema.sql:219-220`), `goal` (`src/db/schema.sql:220`), `briefing` (`src/db/schema.sql:227`), `constraints` (`src/db/schema.sql:228`), `context` (`src/db/schema.sql:252`), `mandate` (`src/db/schema.sql:256`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js:2036`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js:5125`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Vorab-Recherche die serverseitige Suche von Anthropic (`objective`, `briefing`, `constraints`, ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
+| Rueckfragen des Agenten an den Nutzer und dessen Antworten (nur bei freigegebenem Rueckfrage-Kanal) | Spalte `consults` am Anruf (`src/db/schema.sql:342`) | Rueckfrage waehrend des Anrufs | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT: die Fragen des Agenten, die aus dem laufenden Gespraech stammen, ueber `await_call_event` (Feld `questions`, `src/mcp-tools.js:294`). Die Antworten kommen aus ChatGPT ueber `answer_consult` (`src/mcp-tools.js:1624`, Route `src/routes/api-calls.js:740`) und sind fuer den Agenten im laufenden Gespraech bestimmt; der Weg von dort zum Sprachmodell- bzw. Sprach-Anbieter ist in diesem Dokument nicht Zeile fuer Zeile belegt |
+| Roh-Transkript | Tabelle `transcript_segment` (`src/db/schema.sql:554`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende nur bei Endstatus `completed` geleert (`src/telephony/call-finish.js:350`); bei jedem anderen Endstatus, z.B. `cancelled` nach `cancel_call` oder `failed` (Ruecksprung vor der Leerung, `src/telephony/call-finish.js:302`), und nach einer gescheiterten Zusammenfassung bleibt es bis zum Loeschlauf des Anrufs (30 Tage) | bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` (`src/mcp-tools.js:47`), waehrend des Anrufs und danach, solange das Transkript gespeichert ist, also auch nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten Zusammenfassung (`src/mcp-tools.js:1663`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
 | Roh-Transkript eines Diagnose-Anrufs an die eigene hinterlegte Nummer | wie oben, Markierung `diagnostic` | nachtraegliche Analyse | 7 Tage (`src/config.js:2043-2047`). Aufbewahrung per Default AN: ohne Angabe behaelt der Server das Transkript, nur ein ausdrueckliches `diagnostic=false` bei `place_call` verhindert es (Opt-out, `src/diagnostic-retention.js:42`, `src/diagnostic-retention.js:56`). Die eigene hinterlegte Nummer ist nur auf Format und Land geprueft, NICHT darauf, dass sie dem Nutzer gehoert (`src/diagnostic-retention.js:48`); hat ein Nutzer eine fremde Nummer hinterlegt, ist es das Roh-Transkript eines Dritten | wie oben; insbesondere bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` fuer die ganze Frist (`src/mcp-tools.js:199`, `src/diagnostic-retention.js:72`) |
 | Zusammenfassung, Ergebnis | `summary`, `result` am Anruf (`src/db/schema.sql:339`) | Bericht an den Nutzer | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (Werkzeug-Antworten), Benachrichtigungswege |
 | Woertliche Zitate im Ergebnis | `result.evidence` | Beleg zur Ergebnis-Karte | Code-Default 0 = Funktion aus, es wird nichts erhoben (`src/config.js:2057-2060`) | - |
-| Aufgaben (Action Items) | Tabelle `action_item` (`src/db/schema.sql:564`) | Nachbereitung | erledigte: 30 Tage; OFFENE unbefristet (`src/store/state-ops.js:5127`) | OpenAI/ChatGPT: offene Aufgaben ueber `list_action_items` (`src/mcp-tools.js:1693`) und je Eingangs-Eintrag ueber `check_inbox` (Feld `action_items`, `src/store/state-ops.js:786`) |
+| Aufgaben (Action Items) | Tabelle `action_item` (`src/db/schema.sql:564`) | Nachbereitung | erledigte: 30 Tage; OFFENE unbefristet (`src/store/state-ops.js:5127`) | OpenAI/ChatGPT: offene Aufgaben ueber `list_action_items` (`src/mcp-tools.js:1890`) und je Eingangs-Eintrag ueber `check_inbox` (Feld `action_items`, `src/store/state-ops.js:786`) |
 | Benachrichtigungen | Tabelle `notification` (`src/db/schema.sql:699`) | Hinweise an den Nutzer | 30 Tage | - |
 | Eingangs-Eintraege eingehender Anrufe: Anrufernummer, Anliegen | Anruf-Datensatz, `inbox_entry_at` (`src/db/schema.sql:369`), Gesehen-Markierung (`src/store/state-ops.js:835`) | Anruf-Eingang | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (`check_inbox`) |
-| Nutzung und Kosten | Tabellen `usage` (`src/db/schema.sql:589`), `usage_event` (`src/db/schema.sql:901`), `call_cost_evidence` (`src/db/schema.sql:953`) | Abrechnung, Kostendecke | keine Frist im Code | Zahlungsanbieter (Abrechnung); OpenAI/ChatGPT ueber `get_agent_status`: Zahl der Anrufe (Feld `calls`, `src/mcp-tools.js:593`) und Monatsnutzung in Prozent (Feld `planUsagePercent`, `src/mcp-tools.js:596`), kein Geldbetrag |
+| Nutzung und Kosten | Tabellen `usage` (`src/db/schema.sql:589`), `usage_event` (`src/db/schema.sql:901`), `call_cost_evidence` (`src/db/schema.sql:953`) | Abrechnung, Kostendecke | keine Frist im Code | Zahlungsanbieter (Abrechnung); OpenAI/ChatGPT ueber `get_agent_status`: Zahl der Anrufe (Feld `calls`, `src/mcp-tools.js:646`) und Monatsnutzung in Prozent (Feld `planUsagePercent`, `src/mcp-tools.js:649`), kein Geldbetrag |
 | Kalender | Tabelle `calendar_event` (`src/db/schema.sql:576`) | Anzeige der naechsten Termine | keine Frist im Code | keiner mehr - das MCP-Kalender-Werkzeug ist entfallen, die Daten bleiben im Store, gehen aber ueber kein Werkzeug mehr nach aussen |
 | Audit-Log | Tabelle `audit_log` (`src/db/schema.sql:1014`), append-only (`src/audit-store.js:1`) | Nachvollziehbarkeit sicherheitsrelevanter Aktionen | keine Frist im Code | - |
 
@@ -513,7 +513,7 @@ Reproduzierbar mit
 | Anthropic | Sprachmodell (je nach Anbieter-Schalter), ueber das SDK; serverseitige Suche der Vorab-Recherche (nur wenn eingeschaltet) | `src/llm/adapters/anthropic.js:35` |
 | Exa | Nachschlag waehrend ausgehender Anrufe (nur wenn eingeschaltet): vom Gespraechsmodell formulierte Suchanfragen aus dem laufenden Gespraech, auch aus Aussagen des Angerufenen | `src/config.js:666` |
 | Stripe | Zahlungen | `src/config.js:918` |
-| WorkOS | Anmeldung | `src/config.js:2090` |
+| WorkOS | Anmeldung | `src/config.js:2095` |
 | Brevo, eigenes SMTP-Postfach | E-Mail (Kuendigungsbestaetigung) | `src/brevo-mail.js:22`, `src/smtp-mail.js:22` |
 | OpenAI / ChatGPT | Quelle der Werkzeug-Aufrufe und der Antworten auf Rueckfragen; Empfaenger aller Werkzeug-Antworten: Zusammenfassungen und Ergebnis-Karten, Nummern der Gegenseite, Eingangs-Eintraege, letzte Gespraechszeilen, Rueckfragen des Agenten, Aufgaben, Name des Auftraggebers, Rufnummer des Assistenten, Zahl der Anrufe und Monatsnutzung in Prozent, Freigaben aus den Einstellungen (Zuordnung Feld fuer Feld im naechsten Abschnitt) | Werkzeuge in `src/mcp-tools.js` |
 
@@ -533,17 +533,17 @@ im Abschnitt "Minimale Antworten" behandelt.
 
 | Werkzeug | Felder der Antwort | Kategorie |
 |---|---|---|
-| `place_call` | `call_id`, `status`, `duration_s`, `last_transcript_lines` (beim Start leer), `failure_reason`, `result_summary`, `objective_achieved`, `context_received`, `deduplicated` (`src/mcp-tools.js:1333`) | Anruf-Datensatz |
+| `place_call` | `call_id`, `status`, `duration_s`, `last_transcript_lines` (beim Start leer), `failure_reason`, `result_summary`, `objective_achieved`, `context_received`, `deduplicated` (`src/mcp-tools.js:1530`) | Anruf-Datensatz |
 | `get_call_status` | `call_id`, `status`, `failure_reason`, `duration_s`, `last_transcript_lines` (`src/mcp-tools.js:193`) | Anruf-Datensatz, Roh-Transkript |
 | `await_call_event` (nur bei freigegebenem Rueckfrage-Kanal) | `event`, `event_id`, `questions`, `status`, `failure_reason`, `result_summary`, `objective_achieved`, fuenf Felder der Ergebnis-Karte (`src/mcp-tools.js:288`) | Rueckfragen, Anruf-Datensatz, Zusammenfassung und Ergebnis |
-| `answer_consult` (nur bei freigegebenem Rueckfrage-Kanal) | `accepted`, `merged_facts` (`src/mcp-tools.js:1441`) | keine personenbezogenen Daten in der Antwort; die Eingabe ist unter Rueckfragen erfasst |
+| `answer_consult` (nur bei freigegebenem Rueckfrage-Kanal) | `accepted`, `merged_facts` (`src/mcp-tools.js:1638`) | keine personenbezogenen Daten in der Antwort; die Eingabe ist unter Rueckfragen erfasst |
 | `get_call_result` | `call_id`, `result_summary`, `objective_achieved`, fuenf Felder der Ergebnis-Karte (`src/mcp-tools.js:235`) | Zusammenfassung und Ergebnis |
-| `cancel_call` | `status`, bei einem Anruf ueber den Sprach-Agenten zusaetzlich technische Angaben zum Auflegen (`src/routes/api-calls.js:831-837`) | Anruf-Datensatz (nur Status) |
-| `get_agent_number` | `number` (`src/mcp-tools.js:615`) | Rufnummer des Assistenten |
-| `list_calls` | je Anruf `id`, `direction`, `counterparty`, `status`, `startedAt`, `summary` (`src/mcp-tools.js:625`) | Anruf-Datensatz (Nummer der Gegenseite; bei einem Anruf an die eigene hinterlegte Nummer ist es diese), Zusammenfassung |
+| `cancel_call` | `status`, bei einem Anruf ueber den Sprach-Agenten zusaetzlich technische Angaben zum Auflegen (`src/routes/api-calls.js:806-811`) | Anruf-Datensatz (nur Status) |
+| `get_agent_number` | `number` (`src/mcp-tools.js:668`) | Rufnummer des Assistenten |
+| `list_calls` | je Anruf `id`, `direction`, `counterparty`, `status`, `startedAt`, `summary` (`src/mcp-tools.js:678`) | Anruf-Datensatz (Nummer der Gegenseite; bei einem Anruf an die eigene hinterlegte Nummer ist es diese), Zusammenfassung |
 | `check_inbox` | je Eintrag `call_id`, `caller`, `at`, `summary`, `summary_unavailable`, fuenf Felder der Ergebnis-Karte, `action_items`, `action_required`; dazu `remaining` (`src/store/state-ops.js:786`) | Eingangs-Eintraege, Zusammenfassung und Ergebnis, Aufgaben |
-| `list_action_items` | Text je offener Aufgabe (`src/mcp-tools.js:1693`) | Aufgaben |
-| `get_agent_status` | `number`, `owner`, `calls`, `planUsagePercent`, `permissions` (`src/mcp-tools.js:589-598`) | Rufnummer des Assistenten, Mandant (Name des Auftraggebers), Nutzung und Kosten, Einstellungen |
+| `list_action_items` | Text je offener Aufgabe (`src/mcp-tools.js:1890`) | Aufgaben |
+| `get_agent_status` | `number`, `owner`, `calls`, `planUsagePercent`, `permissions` (`src/mcp-tools.js:642-651`) | Rufnummer des Assistenten, Mandant (Name des Auftraggebers), Nutzung und Kosten, Einstellungen |
 
 `get_agent_status` nennt jetzt jedes Feld der Antwort beim Namen, einschliesslich des Namens
 des Auftraggebers (Feld `owner`):
@@ -564,13 +564,13 @@ Sache des Rechtstextes.
 
 - Diagnose-Transkript abschalten: `diagnostic=false` bei `place_call`.
   Werkzeugtext (place_call): "Set it to false ONLY when the user explicitly does not want that transcript kept."
-- Laufenden Anruf abbrechen: `cancel_call` (`src/mcp-tools.js:1569`). Das beendet die
-  Verbindung und setzt den Status `cancelled` (`src/routes/api-calls.js:811`); es loescht das
+- Laufenden Anruf abbrechen: `cancel_call` (`src/mcp-tools.js:1766`). Das beendet die
+  Verbindung und setzt den Status `cancelled` (`src/routes/api-calls.js:812`); es loescht das
   bis dahin entstandene Roh-Transkript NICHT. Das bleibt bis zum Loeschlauf des Anrufs
   gespeichert, und `get_call_status` liefert weiter dessen letzte Zeilen (Luecken 11 und 12 in
   Teil C).
 - Eingangs-Eintraege erneut lesen, ohne Markierungen zu aendern: `check_inbox` mit
-  `include_seen` (`src/mcp-tools.js:1649`).
+  `include_seen` (`src/mcp-tools.js:1846`).
   Werkzeugtext (check_inbox): "Re-read entries that were already marked as seen. Changes NO marker."
 - Einstellungen im Self-Service (`src/self-service-routes.js:467`): frei setzbar sind nur Name,
   Sprache und Stil des Assistenten (`src/self-service.js:20`), dazu zwei Freigaben fuer
@@ -583,11 +583,11 @@ Sache des Rechtstextes.
   `src/store/defaults.js:610`), der Nutzer kann sie aber nicht setzen. Die Self-Service-Route
   (`src/self-service-routes.js:482`) weist das Feld ab (`src/self-service.js:68`); die Route
   antwortet trotzdem mit den gespeicherten Einstellungen (`src/self-service-routes.js:488`) und
-  nennt die Ablehnung nur im Audit-Log (`src/self-service-routes.js:483-487`). Umstellen kann es
+  nennt die Ablehnung nur im Audit-Log (`src/self-service-routes.js:486-490`). Umstellen kann es
   nur der Betreiber durch einen Eingriff im Datenbestand.
 - Konto loeschen: keine Route. Die einzige DELETE-Route im Self-Service betrifft
   Newsletter-Empfaenger (`src/self-service-routes.js:628`). Der Code sagt selbst, dass die
-  Loeschung keinen Endpunkt hat (`src/routes/api-read.js:116-118`); es gibt dafuer nur ein
+  Loeschung keinen Endpunkt hat (`src/routes/api-read.js:117-119`); es gibt dafuer nur ein
   Betreiber-Skript (`scripts/erase-tenant.js`).
 - Datenexport: `GET /api/tenant-data/export` existiert, ist aber nur fuer den lokalen,
   vertrauenswuerdigen Aufrufer erreichbar, nicht fuer den Nutzer im Browser und nicht als
@@ -610,7 +610,7 @@ Entscheidung des Betreibers (etwa Rechtstext, Fristen, Einwilligung, Identitaets
 noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
 
 1. **Keine Zweckbindung** gegen Telemarketing, Werbe- oder Verkaufsanrufe und politische
-   Kampagnen - weder in der Beschreibung von `place_call` (`src/mcp-tools.js:1171`) noch in den
+   Kampagnen - weder in der Beschreibung von `place_call` (`src/mcp-tools.js:1493`) noch in den
    Server-Instructions (`src/mcp-server-info.js:99`); der Server prueft den Zweck eines Anrufs
    nicht. Klauseln: "telemarketing", "spam", "political campaigning".
    Ziel (Zweckbindung und Zweck-Beschreibung in Werkzeugbeschreibung und Server-Instructions):
@@ -618,22 +618,22 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
    Modell und ist keine serverseitige Pruefung; ob es darueber hinaus eine serverseitige
    Pruefung geben soll: open, no owner decision yet.
 2. **Breiter Kontext-Trichter**: `briefing` fordert Chat-Kontext an
-   (`src/mcp-tools.js:1206`), `context` ist ein zweites Sammelfeld. Klauseln: "full
+   (`src/mcp-tools.js:1208`), `context` ist ein zweites Sammelfeld. Klauseln: "full
    conversation history ... broad contextual fields", "Collection minimization",
    "Data boundaries".
    Ziel: planned: minimization of the `place_call` descriptions and input fields.
 3. **Keine Minimierung fuer Gesundheitsangaben** (und amtliche Kennnummern) in `briefing`,
-   `key_facts`, `objective` (`src/mcp-tools.js:1206`); keine Einwilligungs- oder Hinweisstelle
+   `key_facts`, `objective` (`src/mcp-tools.js:1208`); keine Einwilligungs- oder Hinweisstelle
    vor der Erhebung. Klauseln: "Restricted data", "Regulated Sensitive Data".
    Ziel fuer die Werkzeugtexte: planned: minimization of the `place_call` descriptions and
    input fields. Ziel fuer Einwilligung und Hinweis vor der Erhebung: open, no owner decision
    yet.
 4. **`on_out_of_scope` wirkt auf dem Sprach-Agenten-Weg nicht**
    (`src/elevenlabs/outbound.js:615`), die Beschreibung verspricht das Verhalten
-   (`src/mcp-tools.js:1242`). Klausel: "Descriptions that match behavior".
+   (`src/mcp-tools.js:1244`). Klausel: "Descriptions that match behavior".
    Ziel: open, not yet assigned to a work package.
 5. **Kein Hinweis und keine Sperre fuer Mandate in sensiblen Bereichen** (Wohnen, Arbeit,
-   Kredit, Versicherung, Recht, Medizin) (`src/mcp-tools.js:1226`). Klausel: "automation of
+   Kredit, Versicherung, Recht, Medizin) (`src/mcp-tools.js:1228`). Klausel: "automation of
    high-stakes decisions in sensitive areas without human review".
    Ziel: open, not yet assigned to a work package.
 6. **Keine Loeschfrist** fuer Audit-Log (`src/db/schema.sql:1014`), Nutzungs- und
@@ -641,13 +641,13 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
    unbefristet (`src/store/state-ops.js:5127`). Klauseln: "data retention timelines",
    "Data practices".
    Ziel: open, no owner decision yet.
-7. **Keine Loeschung und keine Auskunft im Self-Service** (`src/routes/api-read.js:116-118`,
+7. **Keine Loeschung und keine Auskunft im Self-Service** (`src/routes/api-read.js:117-119`,
    `src/routes/api-read.js:119`). Klausel: "any controls offered to your users".
    Ziel: open, not yet assigned to a work package.
 8. **Datenabfluss an Such-Anbieter nicht in der Werkzeugdefinition**, zwei Mechanismen:
    (a) Vorab-Recherche: bei eingeschalteter Recherche gehen `briefing`, `objective` und
    `constraints` an die Suche von Anthropic (`src/research/sanitize.js:17`,
-   `src/routes/api-calls.js:525`); (b) Nachschlag im Anruf: bei eingeschaltetem Nachschlag
+   `src/routes/api-calls.js:500`); (b) Nachschlag im Anruf: bei eingeschaltetem Nachschlag
    gehen vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech mit dem Angerufenen an
    Exa, gefiltert nur nach Ziffernfolgen, E-Mail, Zielnummer und woertlichem Zitat, ohne
    Namensfilter (`src/research/lookup-guard.js:66-74`, `src/plans.js:125`).
@@ -662,17 +662,17 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
    Ziel: open, not yet assigned to a work package.
 10. **Auftraggeber-Name nicht identitaetsgeprueft**: der Name im Offenlegungssatz stammt aus
     dem Profil des Login-Anbieters (`src/web-auth.js:461-462`) bzw. aus Freitext im
-    Betreiber-Onboarding (`src/routes/api-onboard.js:94-98`); die Pruefstufe fuer ausgehende
+    Betreiber-Onboarding (`src/routes/api-onboard.js:95-99`); die Pruefstufe fuer ausgehende
     Anrufe ist die Karte (`src/store/defaults.js:524`). Klauseln: "impersonation",
     "Identity theft, impersonation".
     Ziel: open, no owner decision yet.
 11. **Rohzeilen nicht an den laufenden Anruf gebunden**: `get_call_status` gibt die letzten
     sechs Zeilen des gespeicherten Transkripts fuer jeden Anrufstatus zurueck
-    (`src/mcp-tools.js:1466`, `src/mcp-tools.js:199`), also auch nach dem Anruf -
+    (`src/mcp-tools.js:1663`, `src/mcp-tools.js:199`), also auch nach dem Anruf -
     nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten
     Zusammenfassung bis zum Loeschlauf, bei Diagnose-Anrufen fuer die ganze Diagnose-Frist
     (`src/diagnostic-retention.js:72`). Der Code nennt das selbst einen offenen Befund
-    (`src/mcp-tools.js:189-192`). Klauseln: "Response minimization", "privacy of others".
+    (`src/mcp-tools.js:192-195`). Klauseln: "Response minimization", "privacy of others".
     Ziel: open, not yet assigned to a work package.
 12. **Roh-Transkript nicht abgeschlossener Anrufe wird nicht geleert**: `finishCall` kehrt bei
     jedem Endstatus ausser `completed` vor der Leerung zurueck
@@ -691,42 +691,42 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
 ## Anker (maschinenlesbar)
 
 <!-- ANKER-BEGIN
-src/telephony/outbound-gates.js:687 | name: "outbound_frozen"
-src/telephony/outbound-gates.js:758 | name: "kyc"
+src/telephony/outbound-gates.js:699 | name: "outbound_frozen"
+src/telephony/outbound-gates.js:772 | name: "kyc"
 src/store/defaults.js:524 | KYC_OUTBOUND_MIN = KYC_LEVEL.CARD
-src/telephony/outbound-gates.js:504-506 | deniedPrefix(to)
-src/telephony/outbound-gates.js:359-363 | function countryGateAllowed
-src/telephony/outbound-gates.js:800 | name: "number_gate"
-src/telephony/outbound-gates.js:478-483 | function callQuotaError
-src/telephony/outbound-gates.js:380-382 | maxCallsPerHour
-src/telephony/outbound-gates.js:389 | function perTargetCapReached
-src/telephony/outbound-gates.js:900 | name: "budget"
-src/telephony/outbound-gates.js:913 | name: "minutes"
-src/telephony/outbound-gates.js:774 | name: "owner_name"
+src/telephony/outbound-gates.js:518-520 | deniedPrefix(to)
+src/telephony/outbound-gates.js:371-375 | function countryGateAllowed
+src/telephony/outbound-gates.js:814 | name: "number_gate"
+src/telephony/outbound-gates.js:490-495 | function callQuotaError
+src/telephony/outbound-gates.js:392-394 | maxCallsPerHour
+src/telephony/outbound-gates.js:401 | function perTargetCapReached
+src/telephony/outbound-gates.js:914 | name: "budget"
+src/telephony/outbound-gates.js:927 | name: "minutes"
+src/telephony/outbound-gates.js:788 | name: "owner_name"
 src/mcp-server-info.js:99 | export const MCP_BASE_INSTRUCTIONS
-src/claude.js:469-471 | ownerOpeningFor(call) || disclosureSentence(call)
+src/claude.js:470-472 | ownerOpeningFor(call) || disclosureSentence(call)
 src/claude.js:423 | export function disclosureSentence(call)
 src/i18n/locales.js:622-624 | this is an AI assistant calling on behalf of
 elevenlabs/agent_configs/outbound-agent.template.json:810 | "first_message": "Hello, this is an AI assistant calling on behalf of {{owner_name}}.
 src/elevenlabs/outbound.js:19 | der Satz ist first_message der AGENTEN-Konfiguration
-src/callee-is-owner.js:48-49 | to === ownNumber
+src/callee-is-owner.js:49-50 | to === ownNumber
 src/callee-is-owner.js:68 | export function ownerSelfCallGranted
 src/config.js:1915-1917 | fallback: false
 src/elevenlabs/outbound.js:1165 | function ownerFirstMessage
 src/research/sanitize.js:17 | RESEARCH_EGRESS_FIELDS = Object.freeze(["objective", "ownerNotes", "constraints"])
-src/routes/api-calls.js:525 | ownerNotes: b.briefing
+src/routes/api-calls.js:500 | ownerNotes: b.briefing
 src/config.js:624 | researchEnabled: boolEnv("RESEARCH_ENABLED", process.env.RESEARCH_ENABLED, { fallback: false })
 src/i18n/prompts/en.js:326 | NEVER search for names, phone numbers, addresses, health or money details
 src/telephony/call-finish.js:350 | if (!keepsTranscriptForDiagnosis(call, config.privacy)) store.purgeTranscript(call.id);
 src/telephony/call-finish.js:302 | if (call.status !== "completed" || !call.transcript.length) {
 src/telephony/call-finish.js:322 | return;
 src/telephony/call-finish.js:296 | if (uebergabeGescheitert(call)) {
-src/routes/api-calls.js:811 | status: "cancelled"
+src/routes/api-calls.js:812 | status: "cancelled"
 src/elevenlabs/outbound.js:1458 | billThunk(finishCall, store, callId)
 src/mcp-tools.js:198 | last_transcript_lines: c.transcript
 src/mcp-tools.js:199 | .slice(-LAST_TRANSCRIPT_LINES)
-src/mcp-tools.js:1466 | pickCallStatus(call_id, c, loc.mcp)
-src/mcp-tools.js:189-192 | bewusst offener Befund
+src/mcp-tools.js:1663 | pickCallStatus(call_id, c, loc.mcp)
+src/mcp-tools.js:192-195 | bewusst offener Befund
 src/diagnostic-retention.js:72 | export function keepsTranscriptForDiagnosis(call, privacy)
 src/diagnostic-retention.js:42 | ein OPT-OUT: nur ein ausdruecklicher
 src/diagnostic-retention.js:56 | if (callerDeclined(requested)) return false;
@@ -736,27 +736,27 @@ src/self-service.js:24 | SELF_SERVICE_RESTRICT_ONLY_FIELDS = ["allowPersonalData
 src/self-service.js:68 | alles andere (allowSummaries
 src/self-service-routes.js:482 | store.updateSettings(tenant, clean)
 src/self-service-routes.js:488 | res.json(settings);
-src/self-service-routes.js:483-487 | rejected=
+src/self-service-routes.js:486-490 | rejected=
 src/mcp-tools.js:47 | const LAST_TRANSCRIPT_LINES = 6;
-src/mcp-tools.js:1539 | pickTranscript(call_id, c, loc.mcp)
+src/mcp-tools.js:1736 | pickTranscript(call_id, c, loc.mcp)
 src/i18n/prompts/en.js:157 | never claim something is done or booked
 src/db/schema.sql:1014 | CREATE TABLE IF NOT EXISTS audit_log
 src/audit-store.js:1 | Append-only Audit-Log-Schreiber
 src/precall-briefing.js:52-53 | MANDATE_OUT_OF_SCOPE.ACCEPT_BEST
 src/precall-briefing.js:200 | function withoutSelfGrantedAcceptBest(mandate)
 src/precall-briefing.js:216 | withoutSelfGrantedAcceptBest(mandate.value)
-src/store/defaults.js:410-413 | keinen Kalender- oder Buchungspfad
+src/store/defaults.js:413-416 | keinen Kalender- oder Buchungspfad
 src/routes/_validation.js:50 | "mandate.decide_freely": 1000
 src/store/defaults.js:417 | ACCEPT_BEST: "accept_best"
-src/i18n/prompts/en.js:223-224 | Accept the best option offered instead of asking back
+src/i18n/prompts/en.js:224-225 | Accept the best option offered instead of asking back
 src/config.js:808 | boolEnv("ELEVENLABS_OUTBOUND_ENABLED"
-src/routes/api-calls.js:546 | if (config.voice.elevenLabsOutbound.enabled)
+src/routes/api-calls.js:521 | if (config.voice.elevenLabsOutbound.enabled)
 src/elevenlabs/outbound.js:615 | Die Enum-Achse on_out_of_scope hat auf diesem Weg noch keinen Platz
 src/elevenlabs/outbound.js:622 | function mandateText(mandate)
 src/store/json.js:1339 | export function pruneOldData(
 src/store/pg.js:833 | pruneOldData(
-src/boot.js:108 | const RETENTION_SWEEP_INTERVAL_HOURS = 6;
-src/boot.js:1255-1256 | runRetention(store, config)
+src/boot.js:109 | const RETENTION_SWEEP_INTERVAL_HOURS = 6;
+src/boot.js:1264-1265 | runRetention(store, config)
 src/db/schema.sql:980 | CREATE TABLE IF NOT EXISTS account
 src/web-auth.js:711 | async dropAccount(sub)
 src/db/schema.sql:997 | CREATE TABLE IF NOT EXISTS session
@@ -767,7 +767,7 @@ src/db/schema.sql:38 | stripe_customer_id
 src/db/schema.sql:48 | stripe_subscription_id
 src/db/schema.sql:163 | CREATE TABLE IF NOT EXISTS settings
 src/db/schema.sql:211 | CREATE TABLE IF NOT EXISTS call
-src/db/schema.sql:218-219 | to_e164
+src/db/schema.sql:219-220 | to_e164
 src/db/schema.sql:220 | goal
 src/db/schema.sql:227 | briefing
 src/db/schema.sql:228 | constraints
@@ -795,22 +795,22 @@ src/config.js:514 | llmProvider: enumEnv("LLM_PROVIDER"
 src/llm/adapters/anthropic.js:35 | import Anthropic from "@anthropic-ai/sdk";
 src/config.js:666 | https://api.exa.ai
 src/config.js:918 | https://api.stripe.com
-src/config.js:2090 | https://api.workos.com
+src/config.js:2095 | https://api.workos.com
 src/brevo-mail.js:22 | https://api.brevo.com
 src/smtp-mail.js:22 | import nodemailer from "nodemailer";
 src/render-api.js:3 | der Server spricht nie mit Render
-src/mcp-tools.js:1569 | "cancel_call"
-src/mcp-tools.js:1649 | "check_inbox"
+src/mcp-tools.js:1766 | "cancel_call"
+src/mcp-tools.js:1846 | "check_inbox"
 src/self-service-routes.js:467 | router.post("/api/self-service/settings", webAuthMw
 src/self-service-routes.js:501 | router.post("/api/self-service/private-number", webAuthMw
 src/store/defaults.js:610 | allowSummaries: true
 src/self-service-routes.js:628 | router.delete("/api/self-service/newsletter-recipients"
-src/routes/api-read.js:116-118 | Loeschung (Art. 17) hat KEINEN Endpunkt
+src/routes/api-read.js:117-119 | Loeschung (Art. 17) hat KEINEN Endpunkt
 src/routes/api-read.js:119 | router.get("/api/tenant-data/export", internalOnly
-src/mcp-tools.js:1171 | "place_call"
-src/mcp-tools.js:1206 | Relevant context from the chat so far
-src/mcp-tools.js:1242 | Set 'accept_best' ONLY when the user explicitly says
-src/mcp-tools.js:1226 | decide_freely: z
+src/mcp-tools.js:1493 | "place_call"
+src/mcp-tools.js:1208 | Relevant context from the chat so far
+src/mcp-tools.js:1244 | Set 'accept_best' ONLY when the user explicitly says
+src/mcp-tools.js:1228 | decide_freely: z
 src/research/sanitize.js:2 | wir sehen die Query nicht, bevor sie rausgeht
 src/precall-briefing.js:278 | settings.allowResearch === true
 src/research/registry.js:26 | PRECALL_PROVIDER = RESEARCH_PROVIDER.ANTHROPIC_WEB_SEARCH
@@ -832,31 +832,31 @@ src/research/lookup-guard.js:25 | LOOKUP_DIGIT_RUN_MAX = 4
 src/research/lookup-guard.js:20 | LOOKUP_QUERY_MAX_CHARS = 120
 src/plans.js:125 | hat aber KEINEN Namensfilter
 src/elevenlabs/outbound.js:1075 | store.addTranscript(callId, roleOf(zeile.role), zeile.message)
-src/utils/text.js:57-60 | entry?.role === "caller"
+src/utils/text.js:58-61 | entry?.role === "caller"
 src/web-auth.js:461-462 | firstName: user.first_name
 src/web-auth.js:205 | await applyTenantIdentity(tenantId, { firstName, lastName })
-src/routes/api-onboard.js:94-98 | Freitext
+src/routes/api-onboard.js:95-99 | Freitext
 src/store/state-ops.js:2216 | setKycLevel(s, tenantId, KYC_LEVEL.ID_VERIFIED);
-src/mcp-tools.js:589-598 | function pickAgentStatus(s, texts)
-src/mcp-tools.js:591 | number: s.agent.number ?? null
-src/mcp-tools.js:592 | owner: s.agent.owner ?? null
-src/mcp-tools.js:593 | calls: s.usage.calls
-src/mcp-tools.js:596 | planUsagePercent: s.usage.planUsagePercent ?? null
-src/mcp-tools.js:597 | permissions: permissionsSummary(s.settings, texts.permissionLabels)
-src/mcp-tools.js:615 | function pickMyNumber(s)
-src/mcp-tools.js:616 | return { number: s.agent.number ?? null };
-src/mcp-tools.js:625 | function pickCall(c, formatDate)
-src/mcp-tools.js:629 | counterparty: (c.direction === "outbound" ? c.to : c.from) ?? null
+src/mcp-tools.js:642-651 | function pickAgentStatus(s, texts)
+src/mcp-tools.js:644 | number: s.agent.number ?? null
+src/mcp-tools.js:645 | owner: s.agent.owner ?? null
+src/mcp-tools.js:646 | calls: s.usage.calls
+src/mcp-tools.js:649 | planUsagePercent: s.usage.planUsagePercent ?? null
+src/mcp-tools.js:650 | permissions: permissionsSummary(s.settings, texts.permissionLabels)
+src/mcp-tools.js:668 | function pickMyNumber(s)
+src/mcp-tools.js:669 | return { number: s.agent.number ?? null };
+src/mcp-tools.js:678 | function pickCall(c, formatDate)
+src/mcp-tools.js:682 | counterparty: (c.direction === "outbound" ? c.to : c.from) ?? null
 src/mcp-tools.js:193 | function pickCallStatus(callId, c, texts)
 src/mcp-tools.js:235 | export function pickTranscript(callId, c, texts = null)
 src/mcp-tools.js:288 | function awaitEventView({ callId, event, finished, texts })
 src/mcp-tools.js:294 | questions: Array.isArray(event.questions) ? event.questions : []
-src/mcp-tools.js:1333 | const data = {
-src/mcp-tools.js:1427 | /consult/answer
-src/mcp-tools.js:1441 | structuredContent: { accepted: true, merged_facts: mergedFacts }
-src/mcp-tools.js:1693 | ${item.text}
-src/routes/api-calls.js:765 | const { event_id: eventId, answers, status } = req.body
-src/routes/api-calls.js:831-837 | status: "cancelled"
+src/mcp-tools.js:1530 | const data = {
+src/mcp-tools.js:1624 | /consult/answer
+src/mcp-tools.js:1638 | structuredContent: { accepted: true, merged_facts: mergedFacts }
+src/mcp-tools.js:1890 | ${item.text}
+src/routes/api-calls.js:740 | const { event_id: eventId, answers, status } = req.body
+src/routes/api-calls.js:806-811 | status: "cancelled"
 src/routes/api-read.js:89 | number: activeNumberFor(s, tenantId)
 src/store/state-ops.js:786 | export function inboxEntryView(call, actionItemTexts)
 src/store/state-ops.js:5186 | export function pruneOldData(s, { retentionDays, diagnosticRetentionDays, evidenceRetentionDays })
@@ -865,7 +865,7 @@ src/db/schema.sql:342 | consults JSONB
 src/db/schema.sql:714 | CREATE TABLE IF NOT EXISTS number (
 src/db/schema.sql:718 | provider
 src/elevenlabs/outbound.js:953 | owner_name: owner,
-src/elevenlabs/outbound.js:1165-1167 | const vorname = alsText(firstName);
+src/elevenlabs/outbound.js:1167-1169 | const vorname = alsText(firstName);
 src/i18n/prompts/en.js:12 | You are "${s.agentName}", ${owner}'s personal AI phone assistant.
 src/i18n/prompts/en.js:129 | ${loc.styleClause(s.agentStyle)}
 src/claude.js:452 | in EINEM Gather-Say

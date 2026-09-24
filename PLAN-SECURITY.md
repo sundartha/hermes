@@ -6173,3 +6173,215 @@ limit.", FR "Les appels sortants sont bloqués par la limite de coût de ce comp
 weiterhin ohne Zahl, ohne Kennung, mit Verweis auf das Hermes-Dashboard. Kein Test pinnte den
 alten Wortlaut; `test/openai-t2-09-neutrale-fehlertexte.test.js` (T1/T2) und
 `test/deny-diagnosability.test.js` bleiben unveraendert gruen.
+
+## OpenAI-T2-13 — Bestaetigung vor dem Waehlen (N-10, Serverteil)
+
+**Schritt:** `prepare_call(args)` -> Vorschau (Modell) + Bestaetigungs-Code (nur im
+Ergebnis-`_meta` von `prepare_call`, nie im Modelltext/`structuredContent`) -> Nutzer
+bestaetigt in der Hermes-Karte -> `place_call(args, confirmation_code)` -> Server prueft +
+verbraucht den Code -> unveraenderter Weg `POST /api/calls` mit ALLEN bestehenden Gates.
+Serverteil dieser Phase; die Bestaetigungs-Ansicht im Call-Widget (die einzige Stelle, die
+den Code je einem Menschen zeigt) ist T2-14 — **ohne T2-14 kann niemand mehr per MCP
+waehlen**, T2-13 geht deshalb nur zusammen mit T2-14 live (Deploy-Vorbedingung).
+
+**Was die Bestaetigung beweist, und was nicht** (Pflichttext, wortgleich in
+`src/call-confirmation.js`, `docs/OPENAI-TOOL-INVENTORY.md`): der Server hat fuer GENAU
+diese Anfrage (Mandant, normalisiertes Ziel, ALLE uebrigen Argumente inkl.
+`briefing`/`context`) innerhalb der letzten
+maximal 10 Minuten einen Code ausgestellt, und dieser Code ist noch nicht verbraucht. Sie
+beweist NICHT, dass ein Mensch die Vorschau gelesen hat (ein Host, der `_meta` doch ans
+Modell weiterreicht, laesst das Modell sich selbst bestaetigen), nicht, dass die klickende
+Person der Kontoinhaber ist, und sie ist KEINE Autorisierung — sie ersetzt kein Gate.
+Nirgends darf "vom Nutzer bestaetigt" als Garantie stehen; die Formulierung bleibt "der Code
+erreicht das Modell auf Hosts, die `_meta` dem Modell vorenthalten, nur ueber die Karte."
+
+**Host-Abhaengigkeit, KORRIGIERT (Safety-Review, war falsch dokumentiert):** `prepare_call`
+haengt den Code an `_meta` an, sobald der globale Master-Schalter `MCP_UI_ENABLED=true`
+ist (`callWidgetUi._meta` gesetzt, s. `enableWidgetUi`/`uiRendererFor` in `src/mcp-tools.js`).
+Es gibt KEINE zweite Pruefung, ob der konkret verbundene Host tatsaechlich kartenfaehig ist
+oder `_meta` vor dem Modell verbirgt — "der Host meldet UI-Faehigkeit" beschrieb einen
+Mechanismus, der im Code nicht existiert (T2-01 hat bewusst auf ein Capability-Feld
+verzichtet, s. `src/routes/mcp.js`). Bei `MCP_UI_ENABLED=true` erreicht der Code deshalb
+JEDEN verbundenen Host in `_meta` — auch Claude Code, stdio-Clients oder ein
+Agenten-Framework ohne Kartenanzeige. Ob daraus ein menschlicher Bestaetigungsschritt wird,
+haengt ausschliesslich davon ab, ob dieser Host den MCP-Apps-Vertrag einhaelt und `_meta`
+nicht an das Modell serialisiert (Primaerquelle: "Treat `_meta` as hidden from the model,
+not as a substitute for authorization or secure storage"). Ein Host, der dagegen verstoesst,
+liest den Code selbst und kann sich damit selbst bestaetigen — die Bestaetigung ist dann nur
+formal (s. Pre-Mortem (1) in der T2-13-Spec). Rueckfall fuer diesen Fall: **keine echte
+Host-Faehigkeitspruefung existiert heute** — Gegenmassnahme ist ausschliesslich die
+Stichprobe aus OW-C/OW-D (das Modell vor dem Klick nach dem Code fragen, erwartet: kennt ihn
+nicht) sowie, im begruendeten Verdachtsfall, `MCP_UI_ENABLED=false` fuer den betroffenen
+Client zu setzen (dann bekommt NIEMAND mehr einen Code, s.u.). NUR bei
+`MCP_UI_ENABLED=false` wird der Code serverseitig zwar weiterhin ausgestellt, aber an
+KEINEN Client weitergereicht — dann ist per MCP fuer ALLE Hosts gleichermassen kein Anruf
+mehr moeglich, nicht selektiv fuer kartenlose Hosts. Ein Code im Modelltext oder ein
+Web-Link waeren ein neuer, zustandsbehafteter Geldpfad-Endpunkt bzw. eine nur formale
+Bestaetigung (das Modell koennte ihn selbst lesen) — beides bewusst nicht gebaut.
+
+**Modelltexte KORRIGIERT (Safety-Review Runde 2):** `prepareCallCardHint` (DE/EN/FR) wies das
+MODELL an, "den Code in der Hermes-Karte zu pruefen und place_call erneut aufzurufen" — eine
+Anleitung zur Selbstbestaetigung. Jetzt sagen Kartenhinweis, `confirmationRequired`,
+die Beschreibungen von `prepare_call`/`place_call`/`confirmation_code` und die
+Server-Instruktionen einheitlich: der NUTZER bestaetigt in der Karte, die Karte sendet den
+Code; vorher kein `place_call`; nie einen Code raten oder erfinden; zeigt der Host keine
+Karte, ist kein Anruf moeglich — das dem Nutzer ehrlich sagen. Die Variable im Handler heisst
+jetzt `mcpUiEnabled` (sie prueft nur den Schalter, keine Host-Faehigkeit); der Text fuer den
+ausgeschalteten Schalter nennt den Server-Schalter statt "dieser Host". Test:
+`test/openai-t2-13-bestaetigung.test.js` (Positiv-Kontrolle: die alten Texte werden erkannt).
+
+**Vertrauensgrenze `POST /api/call-confirmations`:** identisch zu `POST /api/calls` —
+`internalOnly` (echter Loopback-Socket, kein `X-Forwarded-For`, AUTH-P5/P7), ihr einziger
+Aufrufer ist der In-Process-MCP-Handler. Sie faehrt KEINE Outbound-Gate-Kette (die Gates
+haben Nebenwirkungen — Reserve, Audit —, eine Vorschau sagt keine Gate-Entscheidung voraus),
+schreibt nichts in den Store, ruft kein `audit()` und loggt weder Code noch Ziel. Alle
+bestehenden Gates (Abo+KYC-Permit, `OUTBOUND_FROZEN`, Denylist, Land, Stundenlimit/
+Ziel-Cap, Tenant-Kostendecke, Max-Dauer, Provider-Signaturpruefung) laufen unveraendert erst
+beim echten Waehlen in `POST /api/calls` — die Bestaetigung ist ZUSAETZLICH, kein Ersatz.
+
+**Code-Ableitung** (`src/call-confirmation.js`, Muster `src/elevenlabs/tenant-tool-token.js`):
+HKDF-abgeleiteter Schluessel aus `CALL_CONFIRMATION_SECRET` (leer/<32 Zeichen -> `null`,
+fail-closed — keine Ausstellung, keine Pruefung ist je erfolgreich). 6-stelliger
+Crockford-Base32-Code (Alphabet ohne I/L/O/U), HMAC-SHA256 ueber
+das JSON-Tupel `["v2", tenantId, windowIndex, slot, canonical]` (v2: Tupel statt
+"|"-Verkettung - jedes Element eindeutig abgegrenzt), `canonical` = schluesselsortiertes JSON
+ALLER Argumente ausser `confirmation_code`, **inkl. `briefing` und `context`**. Fehlend/
+undefined = "nicht gesetzt"; `""`, `{}` und `null` sind jeweils EIGENE Werte (Test
+"leer, fehlend und leeres Objekt sind verschiedene Anfragen"). Ausschluss- statt
+Positivliste: jedes kuenftige Argument ist automatisch gebunden.
+**Lead-Entscheidung (Safety-Review T2-13, zweite Pruefung):** eine Zwischenfassung liess
+`briefing`/`context` nach Plan-Wortlaut ("umformulierter Kontext soll nicht scheitern")
+ungebunden. Gemessen: briefing nach der Bestaetigung getauscht, trotzdem gewaehlt - die
+Vorschau zeigt briefing aber, und ein per Prompt-Injection gesteuertes Modell haette nach dem
+Klick Inhalt und Ton des Anrufs aendern koennen. Der Nutzer bestaetigt, was tatsaechlich
+passiert: beide Felder sind gebunden; jede Aenderung nach dem Klick braucht ein neues
+`prepare_call` (so sagen es Werkzeug-/Feldbeschreibungen, Server-Instruktionen und der
+Ablehnungstext). Preis: ein Modell, das nur umformuliert, muss neu bestaetigen lassen. `to` in
+NORMALISIERTER Form (`resolveDialTarget`, derselbe reine
+Extract aus dem `normalize_target`-Gate wie das echte Waehlen — "geprueft == gewaehlt"
+gilt jetzt fuer Vorschau UND Aufruf). Fensterlaenge 5 Minuten, zwei Fenster akzeptiert
+(Gueltigkeit effektiv 5–10 Minuten). Vergleich timing-sicher (`safeEqual`).
+
+**Brute-Force-Rechnung (KORRIGIERT, Safety-Review Runde 2 — die erste Fassung war zu stark):**
+Die erste Fassung rechnete 1200 Versuche / 32^6 ≈ 1,1e-6 je 10 Minuten. Das galt nur fuer
+EINEN Kandidaten je Versuch; `confirmCode` pruefte tatsaechlich gegen bis zu 8 Slots x 2
+Fenster = 16 Kandidaten (≈ 1,8e-5 je 10 Minuten), und das Rate-Limit war die einzige Bremse
+(Dauerbetrieb 120/min ≈ 6,3e7 Versuche/Jahr — mit 16 Kandidaten praktisch sicherer Treffer;
+`stdio` laeuft ueber Loopback ganz ohne Rate-Limit). Stand jetzt:
+- Suchraum 32^6 = 2^30 ≈ 1,07e9.
+- Kandidaten je Versuch: je akzeptiertem Fenster GENAU der Code des aktuellen Slots
+  (`matchedWindowIndex` mit `slotForWindow`), also hoechstens `ACCEPTED_WINDOWS` = 2. Weniger
+  geht im Entwurf nicht: mit nur einem Fenster liefe ein kurz vor der Fenstergrenze
+  ausgestellter Code nach Sekunden ab. P(Treffer je Versuch) ≤ 2^-29 ≈ 1,9e-9.
+- Fehlversuchsbremse (NEU, fail-closed): hoechstens `MAX_FAILED_CONFIRMATIONS_PER_WINDOW` = 10
+  abgelehnte, nicht-leere Codes je Mandant und 5-Minuten-Fenster; danach lehnt die Route bis
+  Fensterende JEDEN Code ab, ohne ihn zu pruefen (auch einen richtigen — kein Treffer-Orakel).
+  Das gilt fuer HTTP UND stdio (die Bremse sitzt in `POST /api/call-confirmations`, nicht im
+  Rate-Limiter).
+- Ergebnis (Summenschranke) je App-Instanz: ≤ 1,9e-8 je Fenster, ≈ 5,4e-6 je Tag,
+  ≈ 2e-3 je Jahr Dauer-Raten an der Bremsgrenze (~1,05e6 Versuche). Ohne Bremse waeren es
+  bei 120/min ≈ 11 % je Jahr.
+- Preis, akzeptiert: ein Mandant, der sich 10-mal vertippt, ist bis zu 5 Minuten gesperrt
+  (der Handler meldet dann weiter nur "nicht bestaetigt").
+
+**Einmal-Verbrauch:** In-Memory-Ledger je App-Instanz (`src/routes/api-call-confirmations.js`),
+Digest aus Mandant+Fenster+normalisiertem Code, bereinigt sich beim Zugriff. Bewusst KEINE
+Store-Spalte — die Architektur setzt ohnehin eine laufende Instanz voraus (der pg-Store
+haelt Zustand im Speicher, s. Lehre `pg-store-holds-state-in-memory`).
+**KORRIGIERT (Safety-Review Runde 2):** der Eintrag lebte nur bis zum Ende des
+AUSSTELLUNGS-Fensters, der Code wird aber auch im Folgefenster angenommen — ein verbrauchter
+Code war im Folgefenster erneut gueltig (Test "verbrauchter Code ist auch im FOLGEFENSTER
+nicht erneut gueltig" war gegen den alten Stand rot). Jetzt halten Ledger und Slot-Register
+ihre Eintraege bis `acceptanceEndMs` (Ende des letzten akzeptierten Fensters).
+**Bekannte Grenzen (Ledger, Slot-Register und Fehlversuchsbremse leben NUR im Speicher der
+jeweiligen Instanz):**
+- Neustart: ein vor dem Neustart verbrauchter, noch gueltiger Code ist bis zu 10 Minuten lang
+  erneut nutzbar; die Fehlversuchszaehler beginnen bei 0.
+- **Mehr-Instanz-Betrieb:** laufen zwei oder mehr Instanzen hinter einem Load-Balancer, kennt
+  Instanz B den Verbrauch auf Instanz A nicht — derselbe Code ist innerhalb seines
+  Gueltigkeitsfensters (≤ 10 Minuten) auf JEDER anderen Instanz noch einmal verwendbar (ein
+  Replay je Instanz), und die Fehlversuchsbremse gilt je Instanz (N Instanzen = N-fache
+  Rate-Chance). Heute unkritisch, weil die Architektur eine Instanz voraussetzt (pg-Store
+  haelt Zustand im Speicher); **vor jedem horizontalen Skalieren** muessen Ledger und Bremse in
+  einen geteilten Speicher (Postgres/Redis) — sonst ist der Einmal-Verbrauch nur noch
+  "einmal je Instanz".
+- Die bestehende Anruf-Dedup (`call-dedup.js`, ≤180s auf AKTIVE Anrufe) faengt davon nur den
+  Fall eines noch laufenden Anrufs; ein Replay NACH Ende eines kurzen Anrufs innerhalb der
+  Code-Gueltigkeit bleibt der akzeptierte Restfall.
+
+**Secret als Deploy-Vorbedingung, kein Boot-Refusal:** `CALL_CONFIRMATION_SECRET` ist NICHT
+boot-pflichtig (Owner-Entscheidung P6 — keine neue Boot-Sperre). Fehlt es, laeuft die
+Produktion weiter, ein Boot-WARN meldet die fehlende ODER zu kurze (< 32 Zeichen) Variable
+(`src/boot-guard.js#callConfirmationSecretFindings`, Befunde `UNSET`/`TOO_SHORT`,
+`src/boot.js#warnCallConfirmationSecretUnusable`; KORRIGIERT: ein zu kurzes Geheimnis ergab
+frueher keinen Befund, aber genauso still 503; die Meldung nennt nie den Wert, keinen Teil
+und nicht seine Laenge),
+und `prepare_call`/`place_call` antworten `503 confirmation_unavailable` (eigene
+`MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE`, neutraler Text, kein Env-/Secret-Leak) — per MCP
+waehlt niemand. `DASHBOARD_PASSWORD` bleibt aus AUTH-P8-Rueckfall-Gruenden das einzige
+boot-pflichtige Geheimnis; ein neues Pflicht-Secret waere ein Rueckschritt fuer AUTH-P8.
+
+**Owner-Punkte (Deploy-Vorbedingungen):**
+1. `CALL_CONFIRMATION_SECRET` im Render-Dashboard setzen (>= 32 Zeichen Zufallswert,
+   z.B. `openssl rand -base64 48`), nirgends im Repo.
+2. Deploy NUR zusammen mit T2-14 (beide gemergt), `MCP_UI_ENABLED` im Dashboard nicht
+   `false`.
+3. Live-Probe (OW-C(6)/OW-D): vor dem Klick das Modell nach dem Kartencode fragen — es darf
+   ihn nicht kennen; erst danach ueber die Karte bestaetigen.
+4. Bewusste Folge zur Kenntnis nehmen: Claude Code/stdio ohne Karte kann ab jetzt per MCP
+   keinen Anruf mehr platzieren.
+
+**Nicht gebaut, mit Grund** (s. `tasks/openai-t2/T2-13-spec.md` Abschnitt 4 fuer die volle
+Liste): keine Pruefung des Codes in `POST /api/calls` bzw. ein zweites Gate in der
+Gate-Kette (die Route ist `internalOnly`, ihr einziger Aufrufer ist der MCP-Handler — ein
+Gate dort braeuchte die gepinnte `makeCallRoutes` an und braeche die REST-direkten
+Gate-Tests); keine Uhr-Naht per Env fuer den gespawnten Server (waere eine neue
+abschaltbare Sicherung); kein persistenter Einmal-Verbrauch (Schemaaenderung ohne Nutzen,
+solange die Architektur eine Instanz voraussetzt); keine zweite Bestaetigungsstufe fuer
+`cancel_call` (mindert nur Schaden, keine neuen Kosten/kein neuer Kontakt) oder
+`answer_consult` (sekundenkritisch, laeuft nur innerhalb eines bereits bestaetigten Anrufs).
+
+**Nachbesserung (Safety-/Clean-Code-Review, derselbe Merge): Einmal-Verbrauch passte nicht
+zum deterministischen Code.** Befund: `issueConfirmationCode` leitet den Code deterministisch
+aus Mandant+Fenster+`canonical` ab, das Einmal-Verbrauch-Register schluesselt aber auf
+Mandant+Fenster+Code. Ein erneutes `prepare_call` mit UNVERAENDERTEN Argumenten im selben
+5-Minuten-Fenster stellte deshalb exakt den schon verbrauchten Code erneut aus —
+`place_call` scheiterte danach bis zu 5 Minuten lang an `confirmationRequired`, obwohl der
+Nutzer nur einen fehlgeschlagenen Versuch (niemand hebt ab, Gate-Ablehnung) wiederholen
+wollte. Gemessen am echten Router: erster Verbrauch `true`, Neuausstellung `sameCode:true`,
+zweiter Verbrauch `false`.
+
+**Fix:** ein zweites In-Memory-Register (`makeFreshSlotLedger`,
+`src/routes/api-call-confirmations.js`, gleiches Speicher-/Verwerfungs-Muster wie das
+Einmal-Verbrauch-Register) haelt je (Mandant, Fenster, kanonische Anfrage) einen Slot-Index.
+Der Slot geht als eigenes Element des HMAC-Tupels NUR in die Codeableitung ein — er aendert
+nicht, was der Code inhaltlich bindet (weiterhin Mandant+alle Argumente+Fenster), nur, dass
+ein weiterer Aufruf einen ANDEREN Code derselben Anfrage bekommt. Vor dem ersten Verbrauch
+bleibt Slot 0 (byte-identische Codeableitung, wiederholtes `prepare_call` VOR jedem
+Verbrauch bleibt idempotent — Test "gleiche Eingabe ergibt gleichen Code" unveraendert
+gruen); der Slot wird NUR bei tatsaechlichem, erfolgreichem Verbrauch weitergeschaltet. Die
+Pruefseite suchte den vorgelegten Code zunaechst ueber bis zu `MAX_CONFIRMATION_SLOTS` (8)
+Slots je Fenster; die Behauptung, das aendere die Brute-Force-Rechnung nicht, war FALSCH (jeder
+zusaetzlich gepruefte Kandidat ist ein zusaetzlicher Treffer fuer einen Rater). KORRIGIERT
+(Safety-Review Runde 2): geprueft wird nur noch der aktuelle Slot je Fenster (s.
+Brute-Force-Rechnung oben); Codes aelterer Slots sind ohnehin verbraucht, spaetere Slots nie
+ausgestellt — fachlich geht nichts verloren.
+
+**Folgekorrektur:** `PLACE_CALL_DESCRIPTION` (`src/mcp-tools.js`) versprach weiterhin
+"Calling it again for a running number returns that same call (deduplicated: true)", ohne zu
+sagen, dass jeder Aufruf sein eigenes frisches `prepare_call` braucht — vor dem Fix war das
+nicht erreichbar (der wiederholte Code scheiterte immer an der Bestaetigung, bevor er die
+Dedup in `POST /api/calls` je erreichte). Der Satz nennt das jetzt ausdruecklich; keine neuen
+GROSSBUCHSTABEN-Woerter (Emphase-Pin `test/p15-mcp-tool-descriptions-en.test.js`).
+
+**Testabdeckung:** `test/openai-t2-13-bestaetigung.test.js` traegt jetzt zwei zusaetzliche
+Draht-Tests: (1) `prepare_call` -> `place_call` (ok) -> `prepare_call` mit denselben
+Argumenten (neuer Code) -> `place_call` mit dem neuen Code (ok, `deduplicated:true`, gleicher
+`call_id`, weiterhin genau EIN Anruf-Datensatz); (2) derselbe Rundlauf mit aktivem
+Consult-Kanal (`CONSULT_ENABLED=true`), der zeigt, dass `await_call_event`/`answer_consult`
+registriert sind UND ein gueltiger/ungueltiger Bestaetigungscode sich dabei unveraendert
+verhaelt — die Bestaetigungspruefung laeuft strukturell vor jeder Consult-Logik. Ein echter
+Rueckfrage-Austausch waehrend eines laufenden Anrufs (simulierter Webhook, Frage/Antwort ueber
+`await_call_event`/`answer_consult`) bleibt der Folgephase T2-14 vorbehalten — dort entsteht
+ohnehin erst die Bestaetigungs-Ansicht im Call-Widget, mit der beide Phasen zusammen live
+gehen (s.o.).

@@ -307,6 +307,18 @@ function quotaDenialOf(fehler, ctx) {
 // (store.tenantLanguage) ist selbst eine der sterbenden Datenquellen - eine Lokalisierung
 // koennte im Fehlerfall ein zweites Mal werfen. Praezedenz im Haus: der ani_ownership-503
 // und der reserve-Fehlerpfad antworten ebenso fest.
+// Reiner Extract aus dem "normalize_target"-Gate (T2-13, N-10): dieselbe Ableitung wird
+// jetzt auch von der Bestaetigungs-Vorschau (POST /api/call-confirmations) gebraucht, damit
+// Vorschau und echtes Waehlen ZWINGEND dieselbe Normalisierung sehen ("geprueft ==
+// gewaehlt" bleibt wahr fuer beide Aufrufer). Keine geaenderte Bedingung, nur verschoben.
+export function resolveDialTarget({ store, tenantId, to }) {
+  const homeCountry = homeCountryCode(
+    [store.tenantPrivateNumber(tenantId), findActiveNumber(store.load(), tenantId)?.e164],
+    store.tenantGeo(tenantId).country,
+  );
+  return normalizeDialTarget(to, homeCountry);
+}
+
 export const GATE_ERROR_GRUND = "gate_error";
 export const GATE_ERROR_MESSAGE =
   "Sicherheitspruefung derzeit nicht moeglich. Der Anruf wurde nicht gestartet.";
@@ -733,12 +745,14 @@ export function makeOutboundGates({
         // TENANT-Herkunftsland (store.tenantGeo, dieselbe Quelle wie denialDimensions in
         // routes/api-calls.js, G5) als Guard - ohne ihn wuerde eine europaeische DID-
         // Zufalls-NANP-Nummer (DIDs sind heute default US, privateNumber ist optional)
-        // jeden Tenant zum NANP-Heimatland machen.
-        const homeCountry = homeCountryCode(
-          [store.tenantPrivateNumber(ctx.tenantId), findActiveNumber(store.load(), ctx.tenantId)?.e164],
-          store.tenantGeo(ctx.tenantId).country,
-        );
-        ctx.to = normalizeDialTarget(ctx.to, homeCountry);
+        // jeden Tenant zum NANP-Heimatland machen. Ableitung jetzt in resolveDialTarget
+        // (Modul-Ebene, oben) - reiner Extract fuer T2-13/N-10 (Bestaetigungs-Vorschau
+        // braucht dieselbe Normalisierung), keine geaenderte Bedingung.
+        ctx.to = resolveDialTarget({
+          store,
+          tenantId: ctx.tenantId,
+          to: ctx.to,
+        });
         return null;
       },
     },

@@ -22,9 +22,20 @@ import {
 // Die lokale Gateway-Attrappe antwortet NIE (kein res.end()) - jeder Hop darueber laeuft
 // zwingend in seine Frist. req.resume() verhindert einen Backpressure-Hänger auf dem
 // Request-Body, ohne selbst zu antworten.
+// T2-13 (N-10) Ausnahme: POST /api/call-confirmations antwortet SOFORT mit confirmed:true -
+// sonst wuerde schon der neue, vorgeschaltete Bestaetigungs-Hop (MCP_HOP_TIMEOUT_MS) in die
+// Frist laufen, BEVOR die eigentlich gepruefte place_call-Frist (PLACE_CALL_HOP_TIMEOUT_MS
+// am /api/calls-Hop) je erreicht wird.
+const HTTP_OK = 200;
 let gateway;
 before(async () => {
-  gateway = http.createServer((req) => req.resume());
+  gateway = http.createServer((req, res) => {
+    if (req.url === "/api/call-confirmations") {
+      res.writeHead(HTTP_OK, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ preview: {}, confirmed: true }));
+    }
+    return req.resume();
+  });
   await new Promise((resolve) => gateway.listen(0, "127.0.0.1", resolve));
   process.env.GATEWAY_URL = `http://127.0.0.1:${gateway.address().port}`;
 });
@@ -126,10 +137,13 @@ test("Gegenprobe: place_call protokolliert weiter PLACE_CALL_HOP_TIMEOUT_MS (eig
     const result = await handlers.get("place_call")({ to: "+491511234", objective: "Test" });
     assert.equal(result.isError, true, "place_call muss bei Zeitablauf weiterhin isError sein (CALL_START_UNCONFIRMED)");
     assert.equal(result.content[0].text, MCP_TEXTS.de.errors[MCP_ERROR_CODE.CALL_START_UNCONFIRMED]);
+    // T2-13 (N-10): der vorgeschaltete Bestaetigungs-Hop laeuft mit MCP_HOP_TIMEOUT_MS
+    // (beantwortet, kein Abbruch) UND vor dem eigentlich gepruefte /api/calls-Hop, der
+    // weiterhin PLACE_CALL_HOP_TIMEOUT_MS verwendet und hier tatsaechlich abbricht.
     assert.deepEqual(
       requestedMsLog,
-      [PLACE_CALL_HOP_TIMEOUT_MS],
-      `place_call muss weiterhin PLACE_CALL_HOP_TIMEOUT_MS (${PLACE_CALL_HOP_TIMEOUT_MS}) verwenden, nicht MCP_HOP_TIMEOUT_MS`,
+      [MCP_HOP_TIMEOUT_MS, PLACE_CALL_HOP_TIMEOUT_MS],
+      `place_call muss fuer den Bestaetigungs-Hop MCP_HOP_TIMEOUT_MS (${MCP_HOP_TIMEOUT_MS}) und fuer den Anrufstart weiterhin PLACE_CALL_HOP_TIMEOUT_MS (${PLACE_CALL_HOP_TIMEOUT_MS}) verwenden`,
     );
   } finally {
     restoreAbortSpy();
