@@ -659,12 +659,12 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //               komplett auf Modul-Ebene und zaehlen nicht mit. Keine neue Regel-Kategorie,
 //               kein neuer Eintrag. Gemessen mit dem echten eslint-Aufruf
 //               (--suppressions-location eslint-suppressions.empty.json --format json).
-//   2026-09-24  T2-12 (get_calendar entfallen): Pin von src/mcp-tools.js gesenkt;
-//               test/mcp-ui.test.js und test/mcp-tools-language.test.js neu
-//               aufgenommen als VERSCHIEBUNG, keine neue Schuld - jeder gepinnte
-//               Befund stand auf master bereits in eslint-suppressions.json, kein
-//               Zaehler steigt, kein Schluessel ist neu (ungefilterter Vergleich
-//               master gegen Phasenstand, Aufruf im jeweiligen reason-Feld).
+//   2026-09-24  Pin gesenkt (T2-12, get_calendar entfallen): src/mcp-tools.js
+//               verliert id-length 'e' 4 -> 1 und 's' 9 -> 8, registerTools
+//               schrumpft 483 -> 459 Zeilen. Kein neuer Eintrag: die ebenfalls
+//               angefassten test/mcp-ui.test.js und test/mcp-tools-language.test.js
+//               sind stattdessen vollstaendig aufgeraeumt (ungefiltert 0 Befunde,
+//               kein Eintrag mehr in eslint-suppressions.json).
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     "reason": "Echte Schuld, kein Fehlschnitt der Regel. Das Aufraeumen ist ein eigenes Refactoring des Zustandsmoduls und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-19 (Thema A): createCall 12 -> 14 Komplexitaet (openingLine-Feld + Hash-Bedingung). Geprueft und bewusst uebernommen; das Aufraeumen bleibt das eigene Refactoring des Zustandsmoduls (s.o.). KV2-2 GEPRUEFT, KEINE Anhebung: costProfile: null, ist eine reine Zuweisung ohne Operator (Muster sipCallId) - createCall bleibt bei Komplexitaet 14. Gemessen mit `npx eslint src/store/state-ops.js --suppressions-location eslint-suppressions.empty.json`. PIN ANGEHOBEN 2026-08-31 (KV2-3): id-length 's' 180 -> 183 - die drei neuen Store-Operationen des Kosten-Buchs (findCostEvidence/recordCallCostEvidence/callCostEvidence) nennen ihren Zustands-Parameter 's', dieselbe Konvention wie jede bestehende state-ops-Funktion in dieser Datei. Keine weitere Kategorie bewegt sich (kein neues no-param-reassign: die Reifung mutiert 'vorhanden', eine lokale Variable aus .find(), keinen Funktionsparameter). Gemessen mit `npx eslint src/store/state-ops.js --suppressions-location eslint-suppressions.empty.json`. PIN ANGEHOBEN 2026-09-06 (P2, gestaffelter EL-Rueckfrage-Halt): id-length 'c' 15 -> 17 und 's' 183 -> 187 (die drei neuen Operationen markConsultAskDelivered/ackConsult/timeOutStagedConsult sowie der extrahierte reine Leser openConsultFor nennen Call/Zustand nach derselben Konvention 'c'/'s'); id-length 'o' 0 -> 1 (der verkuerzte Reject-Parameter 'o' in answerConsult's lokaler reject-Funktion, s. openConsultFor-Refactor). Keine neue Regel-Kategorie. Gemessen mit `npx eslint src/store/state-ops.js --suppressions-location eslint-suppressions.empty.json`. PIN GESENKT 2026-09-14 (IE6-S1): id-length 'c' 17 -> 16, 's' 187 -> 185, no-restricted-syntax (G36) 12 -> 11 - getCallByControlId und dropLastAgentTranscript (beide Assistant-Shim-Schreibwege) sind entfernt. Gemessen mit `npx eslint src/store/state-ops.js --suppressions-location eslint-suppressions.empty.json`. ZAHL KORRIGIERT 2026-09-18 (E3, Anruf-Idempotenz): id-length 's' 185 -> 186, no-param-reassign 's' 17 -> 18 - die neue Funktion releaseOutboundReserveCents (zweiter Freigabeweg fuer den Fall OHNE Anruf-Datensatz, Dedup/Fehlerklammer vor createCall) nennt ihren Zustands-Parameter 's' nach derselben Konvention wie jede bestehende state-ops-Funktion und mutiert s.reservations wie tryReserveOutboundBudget/releaseOutboundReserve. Keine weitere Kategorie bewegt sich. Gemessen mit `node scripts/check-staged-suppressions.js src/store/state-ops.js` gegen die vorgemerkte Fassung.",
@@ -1012,36 +1012,6 @@ const LEGACY_FINGERPRINT = {
     "findings": {
       "no-magic-numbers :: No magic number: 200.": 1,
       "no-magic-numbers :: No magic number: 32.": 1
-    }
-  },
-  "test/mcp-ui.test.js": {
-    "reason": "NEUER Eintrag 2026-09-24 (T2-12, S5). Verschiebung, keine neue Schuld: die Loeschung des T-Wb-CAL-*-Blocks (get_calendar/Kalender-Widget entfallen) bewegt die ungefilterte Befundmenge, deshalb verlangt das Gate (Stufe 2) einen Eintrag. Jeder hier gepinnte Befund stand auf master (91fc847) bereits in eslint-suppressions.json; die Zaehler dort sinken (id-length 24 -> 21, no-restricted-syntax 37 -> 28), keiner steigt. Gemessen als Vergleich master gegen Phasenstand, beide ungefiltert (`git show master:test/mcp-ui.test.js | npx eslint --stdin --stdin-filename test/mcp-ui.test.js --suppressions-location eslint-suppressions.empty.json --format json` gegen denselben Aufruf auf die Arbeitskopie): nur id-length 'r' (20 -> 17, drei Kurzvariablen `r` der Kalender-Tests) und no-restricted-syntax/Demeter G36 (37 -> 28, neun tief verschachtelte resources/tools-Zugriffsketten der Kalender-Assertions) bewegen sich; die uebrigen sieben Schluessel sind identisch, kein Schluessel ist neu. Praezedenz: test/media-token.test.js (IE6-S2).",
-    "date": "2026-09-24",
-    "findings": {
-      "id-length :: Identifier name 'c' is too short (< 2).": 3,
-      "id-length :: Identifier name 'r' is too short (< 2).": 17,
-      "id-length :: Identifier name 's' is too short (< 2).": 1,
-      "max-params :: Method 'registerResource' has too many parameters (4). Maximum allowed is 3.": 2,
-      "max-params :: Method 'tool' has too many parameters (4). Maximum allowed is 3.": 1,
-      "no-magic-numbers :: No magic number: 2.": 2,
-      "no-param-reassign :: Assignment to property of function parameter 'res'.": 1,
-      "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 28,
-      "sonarjs/no-commented-code :: Remove this commented out code.": 1
-    }
-  },
-  "test/mcp-tools-language.test.js": {
-    "reason": "NEUER Eintrag 2026-09-24 (T2-12, S5). Verschiebung, keine neue Schuld: get_calendar entfallen - drei dedizierte Kalender-Tests geloescht (FMT-03 b, Leertext, befuellte Zeile), die verbleibenden Faelle auf list_calls umgestellt, das tote allowCalendar-Argument entfernt. Das bewegt die ungefilterte Befundmenge, deshalb verlangt das Gate (Stufe 2) einen Eintrag. Jeder hier gepinnte Befund stand auf master (91fc847) bereits in eslint-suppressions.json; die Zaehler dort sinken (id-length 17 -> 14, no-restricted-syntax 4 -> 2), keiner steigt. Gemessen als Vergleich master gegen Phasenstand, beide ungefiltert (`git show master:test/mcp-tools-language.test.js | npx eslint --stdin --stdin-filename test/mcp-tools-language.test.js --suppressions-location eslint-suppressions.empty.json --format json` gegen denselben Aufruf auf die Arbeitskopie): nur id-length 'r' (10 -> 8), id-length 'e' (1 -> 0) und no-restricted-syntax/Demeter G36 (4 -> 2, structuredContent.calendar[0]-Ketten) bewegen sich; die uebrigen sieben Schluessel (darunter complexity 12, no-magic-numbers 200 dreimal, max-params 'tool') sind identisch, kein Schluessel ist neu. Praezedenz: test/media-token.test.js (IE6-S2).",
-    "date": "2026-09-24",
-    "findings": {
-      "complexity :: Arrow function has a complexity of 12. Maximum allowed is 10.": 1,
-      "id-length :: Identifier name 'c' is too short (< 2).": 1,
-      "id-length :: Identifier name 'f' is too short (< 2).": 1,
-      "id-length :: Identifier name 'l' is too short (< 2).": 4,
-      "id-length :: Identifier name 'r' is too short (< 2).": 8,
-      "max-params :: Method 'tool' has too many parameters (4). Maximum allowed is 3.": 1,
-      "no-magic-numbers :: No magic number: 200.": 3,
-      "no-param-reassign :: Assignment to property of function parameter 'res'.": 1,
-      "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 2
     }
   }
 };
