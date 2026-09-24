@@ -1,7 +1,7 @@
 # Hermes MCP tool inventory (for the OpenAI reviewer)
 
-> **Purpose.** The set of tools Hermes registers varies by account and transport (9, 10, 11 or
-> 12 tools). A reviewer who sees one set must not assume every user sees the same one. This
+> **Purpose.** The set of tools Hermes registers varies by transport and consult capability (9
+> or 11 tools). A reviewer who sees one set must not assume every user sees the same one. This
 > document records that variance - the exact name set per configuration - and, per tool, the
 > reasoning behind each of the three required annotations (`readOnlyHint`, `destructiveHint`,
 > `openWorldHint`) and the optional `idempotentHint`.
@@ -16,16 +16,14 @@
 > The reasoning below describes what each tool does, and it says the same thing as the tool's
 > own `description` in `tools/list`. File:line references point into this repository.
 
-## Table A - all 12 tools, in registration order
+## Table A - all 11 tools, in registration order
 
 Registration order: `src/mcp-tools.js:919-1523` (the `uiTool(...)` calls inside
-`registerTools()`). Condition column: "always" (registered unconditionally), "consult"
-(`if (consultAllowed)`, `src/mcp-tools.js:1116`) or "calendar" (`if (allowCalendar)`,
-`src/mcp-tools.js:1454`). Over HTTP, `consultAllowed` is `consultAllowedFor(profile)`
-(`src/routes/mcp.js:139`, `:163`) = `config.tenancy.consultEnabled === true &&
-config.tenancy.assistantContextEnabled === true && profile?.allowConsult === true`
-(`src/consult/gate.js:19-25`), and `allowCalendar` is the account profile's `allowCalendar`
-(`src/routes/mcp.js:162`).
+`registerTools()`). Condition column: "always" (registered unconditionally) or "consult"
+(`if (consultAllowed)`, `src/mcp-tools.js:1116`). Over HTTP, `consultAllowed` is
+`consultAllowedFor(profile)` (`src/routes/mcp.js:139`, `:163`) = `config.tenancy.consultEnabled
+=== true && config.tenancy.assistantContextEnabled === true && profile?.allowConsult === true`
+(`src/consult/gate.js:19-25`).
 
 | name | title | condition | readOnlyHint | destructiveHint | openWorldHint | idempotentHint |
 |---|---|---|---|---|---|---|
@@ -39,7 +37,6 @@ config.tenancy.assistantContextEnabled === true && profile?.allowConsult === tru
 | list_calls | List calls | always | true | false | false | - |
 | check_inbox | Check inbox | always | false | false | false | false |
 | list_action_items | List action items | always | true | false | false | - |
-| get_calendar | Get calendar | calendar | true | false | false | - |
 | get_agent_status | Get agent status | always | true | false | false | - |
 
 `-` = hint not set. The values come from `TOOL_ANNOTATIONS` (`src/mcp-tools.js:653-731`), the
@@ -60,7 +57,6 @@ get_agent_number|Agent phone number|always|true|false|false|-
 list_calls|List calls|always|true|false|false|-
 check_inbox|Check inbox|always|false|false|false|false
 list_action_items|List action items|always|true|false|false|-
-get_calendar|Get calendar|calendar|true|false|false|-
 get_agent_status|Get agent status|always|true|false|false|-
 TABLE-A-END
 ```
@@ -75,12 +71,18 @@ forwarding of the old name).
 | get_transcript | get_call_result | The tool never returned a transcript - it returns a result summary and whether the objective was achieved. The old name promised content the tool never delivered. |
 | get_my_number | get_agent_number | "my" suggested the caller's own number; the tool returns the phone agent's number instead. |
 
+### Removed tools
+
+| name | why |
+|---|---|
+| get_calendar | Showed demo calendar data, not a real calendar - no consumer ever wrote to it. Removed rather than fixed. |
+
 ### Annotation reasoning
 
 OpenAI requires `readOnlyHint`, `destructiveHint` and `openWorldHint` on every tool. The MCP
 specification lists all annotation fields as optional (in the MCP SDK's
 `ToolAnnotationsSchema`, every field is `.optional()`); where the two differ, Hermes follows
-OpenAI and sets all three on all 12 tools, including `destructiveHint: false` on the read-only
+OpenAI and sets all three on all 11 tools, including `destructiveHint: false` on the read-only
 tools (`src/mcp-tools.js:612-618`). `idempotentHint` is optional in both; Hermes sets it only on
 tools that write (`src/mcp-tools.js:616-618`) - per the MCP specification it is meaningful only
 when `readOnlyHint` is false. The hints are hints; each tool's `description` states its effects
@@ -227,17 +229,6 @@ to an external party on at least one path is `true`, even if some invocations se
     nothing.
   - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
-- **get_calendar** (registered `src/mcp-tools.js:1455`, REST `GET /api/state`).
-  - `readOnlyHint: true`, `destructiveHint: false` - it reads the account's calendar entries
-    from Hermes' own store and writes nothing.
-  - `openWorldHint: false` (O3) - own store only; it does not connect to any external calendar.
-  - `idempotentHint` not set - read-only tool.
-  - What the data is: today nothing in Hermes adds calendar entries - the store's add function
-    (`addCalendarEvent`, `src/store/state-ops.js:1917-1921`) has no caller outside the two
-    store wrappers, and the phone agent does not book appointments (it takes requests down as a
-    message, `src/i18n/prompts/en.js:83`). The bootstrap owner
-    account starts with a pre-filled demo calendar (`src/store/defaults.js:675-680`); every
-    other account starts with an empty one (`src/store/state-ops.js:1902-1908`).
 - **get_agent_status** (registered `src/mcp-tools.js:1494`, REST `GET /api/state`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the agent's number, monthly usage
     and permissions and writes nothing.
@@ -251,30 +242,29 @@ The counts are **measured on the real wire** (HTTP `/mcp` and the stdio child pr
 
 | K | transport | identity/profile | switches | count |
 |---|---|---|---|---|
-| K1 | HTTP | Bootstrap owner (`OWNER_PROFILE`, `src/store/defaults.js:1056-1065`) | Consult + AssistantContext on | 12 |
-| K2 | HTTP | Bootstrap owner | Consult off | 10 |
+| K1 | HTTP | Bootstrap owner (`OWNER_PROFILE`, `src/store/defaults.js:1056-1065`) | Consult + AssistantContext on | 11 |
+| K2 | HTTP | Bootstrap owner | Consult off | 9 |
 | K3 | HTTP (OAuth) | Account without a stored profile (`DEFAULT_PROFILE`, `src/store/defaults.js:1069-1078`) | Consult on | 9 |
 | K4 | HTTP (OAuth) | Account with the paid-plan profile (`planProfileFor("starter")`, `src/plans.js:107-141`, `:154-156`) | Consult on | 11 |
 | K5 | HTTP (OAuth) | Account with the same paid-plan profile | Consult off | 9 |
-| K6 | stdio (`src/mcp-server.js`) | no account (defaults `allowCalendar = true`, `consultAllowed = false`, `src/mcp-tools.js:807-816`) | not applicable (stdio never registers the consult tools) | 10 |
+| K6 | stdio (`src/mcp-server.js`) | no account (defaults `consultAllowed = false`, `src/mcp-tools.js:807-816`) | not applicable (stdio never registers the consult tools) | 9 |
 
-K3's and K5's counts coincide (9), but for different reasons: K3 has no stored profile at all
-(it falls back to the restrictive `DEFAULT_PROFILE`), K5 has the paid-plan profile but the
-platform-wide consult switch is off. Their name sets are identical (neither carries
-`get_calendar` nor the two consult tools). K2's and K6's counts also coincide (10): the owner
-profile and the stdio defaults both carry `allowCalendar: true` with the consult channel
-unavailable, so both carry `get_calendar` but neither carries the two consult tools.
+Now that `get_calendar` is gone, the count depends on exactly one thing: whether the
+consult channel is available. K1 and K4 both have it and both count 11; K2, K3, K5 and K6 all
+lack it and all count 9 - four different reasons (owner with consult switched off, no stored
+profile, paid plan with consult switched off, stdio never registers the consult tools) landing
+on the identical name set.
 
 Machine-readable block (`K|transport|count|comma-separated tool names in Table A order`):
 
 ```text
 TABLE-B-BEGIN
-K1|http|12|place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_calendar,get_agent_status
-K2|http|10|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_calendar,get_agent_status
+K1|http|11|place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K2|http|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
 K3|http-oauth|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
 K4|http-oauth|11|place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
 K5|http-oauth|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
-K6|stdio|10|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_calendar,get_agent_status
+K6|stdio|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
 TABLE-B-END
 ```
 
@@ -283,19 +273,19 @@ TABLE-B-END
 The set of tools a reviewer or user sees depends on which account and transport they connect
 with - it is not a fixed catalog:
 
-- The full set of 12 tools is reached **only** by the bootstrap owner account
-  (`OWNER_PROFILE`) with both `CONSULT_ENABLED` and `ASSISTANT_CONTEXT_ENABLED` on (K1).
-- An account on any paid plan (`starter` or `business`, `src/plans.js:146-149`) reaches
-  **at most 11** - `get_calendar` is off for every paid plan
-  (`PAID_PLAN_PROFILE.allowCalendar: false`, `src/plans.js:111`).
-- An account with no stored profile reaches 9, the same as a paid account with the consult
-  channel switched off.
+- The full set of 11 tools is reached by the bootstrap owner account (`OWNER_PROFILE`) with
+  both `CONSULT_ENABLED` and `ASSISTANT_CONTEXT_ENABLED` on (K1), and equally by any account on
+  a paid plan (`starter` or `business`, `src/plans.js:146-149`) with the consult channel
+  available (K4) - the two no longer differ, since `get_calendar` (the one tool that used to
+  depend on the account's profile rather than on the consult switch) is gone.
+- Every account without the consult channel available - no stored profile, a paid plan with
+  consult switched off, or the bootstrap owner with consult switched off - reaches 9.
 - The stdio entry point (Claude Desktop, or any local MCP client that launches
-  `src/mcp-server.js`) never registers the two consult tools, but does carry `get_calendar` by
-  default. The reasons in the code: stdio has no client model that polls
-  (`src/mcp-tools.js:804-806`), the process calls `registerTools()` without `consultAllowed`
-  (default `false`), and it has no store from which an account's consult permission could be
-  resolved (`src/mcp-server.js:23-37`).
+  `src/mcp-server.js`) never registers the two consult tools and so always reaches 9. The
+  reasons in the code: stdio has no client model that polls (`src/mcp-tools.js:804-806`), the
+  process calls `registerTools()` without `consultAllowed` (default `false`), and it has no
+  store from which an account's consult permission could be resolved
+  (`src/mcp-server.js:23-37`).
 
 The **live values of the platform switches** (`CONSULT_ENABLED`, `ASSISTANT_CONTEXT_ENABLED`)
 are maintained in the hosting dashboard and are **not** recorded in this document - the
@@ -304,7 +294,7 @@ which values production runs with.
 
 ## Why the variance is not resolved in code
 
-The variance is deliberate product behaviour, not a defect, and it comes from exactly three
+The variance is deliberate product behaviour, not a defect, and it comes from exactly two
 conditional tools:
 
 - The two consult tools (`await_call_event`, `answer_consult`) are registered only when the
@@ -314,10 +304,8 @@ conditional tools:
   (`src/consult/gate.js:41-43`) - whether the channel is offered on a live call. Registering
   tools whose channel cannot work would put tools into `tools/list` that the account cannot
   use.
-- `get_calendar` is registered only when the account's profile allows the calendar
-  (`src/mcp-tools.js:1448-1454`).
 
-This "not registered rather than refused" rule applies **only** to these three tools. Every
+This "not registered rather than refused" rule applies **only** to these two tools. Every
 other tool is registered for every account, and permission is enforced when the tool is
 called. In particular, `place_call` is registered even for accounts that may not place outbound
 calls at all - an account without a stored profile (its outbound limit is 0 calls per hour,
