@@ -555,9 +555,12 @@ Sache des Rechtstextes.
 ## Teil C: Luecken
 
 Jede Luecke traegt ein Ziel. Die Ziel-Werte bedeuten: "planned: ..." - die Arbeit ist
-vorgesehen, aber nicht gebaut; bis sie gebaut ist, gilt die Luecke unveraendert. "open, no owner
-decision yet" - es gibt noch keine Entscheidung des Betreibers, ob und wie die Luecke
-geschlossen wird. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
+vorgesehen, aber nicht gebaut; bis sie gebaut ist, gilt die Luecke unveraendert. "open, not yet
+assigned to a work package" - die Luecke ist mit Arbeit an Werkzeugbeschreibung, Prompt oder
+Code zu schliessen, die noch keinem Arbeitspaket zugeordnet ist; sie wartet auf keine
+Entscheidung des Betreibers. "open, no owner decision yet" - die Luecke haengt an einer
+Entscheidung des Betreibers (etwa Rechtstext, Fristen, Einwilligung, Identitaetspruefung), die
+noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
 
 1. **Keine Zweckbindung** gegen Telemarketing, Werbe- oder Verkaufsanrufe und politische
    Kampagnen - weder in der Beschreibung von `place_call` (`src/mcp-tools.js:1147`) noch in den
@@ -581,11 +584,11 @@ geschlossen wird. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
 4. **`on_out_of_scope` wirkt auf dem Sprach-Agenten-Weg nicht**
    (`src/elevenlabs/outbound.js:615`), die Beschreibung verspricht das Verhalten
    (`src/mcp-tools.js:1218`). Klausel: "Descriptions that match behavior".
-   Ziel: open, no owner decision yet.
+   Ziel: open, not yet assigned to a work package.
 5. **Kein Hinweis und keine Sperre fuer Mandate in sensiblen Bereichen** (Wohnen, Arbeit,
    Kredit, Versicherung, Recht, Medizin) (`src/mcp-tools.js:1202`). Klausel: "automation of
    high-stakes decisions in sensitive areas without human review".
-   Ziel: open, no owner decision yet.
+   Ziel: open, not yet assigned to a work package.
 6. **Keine Loeschfrist** fuer Audit-Log (`src/db/schema.sql:1014`), Nutzungs- und
    Kostendaten (`src/db/schema.sql:901`), Konten (`src/db/schema.sql:980`); offene Aufgaben
    unbefristet (`src/store/state-ops.js:5127`). Klauseln: "data retention timelines",
@@ -593,7 +596,7 @@ geschlossen wird. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
    Ziel: open, no owner decision yet.
 7. **Keine Loeschung und keine Auskunft im Self-Service** (`src/routes/api-read.js:116-118`,
    `src/routes/api-read.js:119`). Klausel: "any controls offered to your users".
-   Ziel: open, no owner decision yet.
+   Ziel: open, not yet assigned to a work package.
 8. **Datenabfluss an Such-Anbieter nicht in der Werkzeugdefinition**, zwei Mechanismen:
    (a) Vorab-Recherche: bei eingeschalteter Recherche gehen `briefing`, `objective` und
    `constraints` an die Suche von Anthropic (`src/research/sanitize.js:17`,
@@ -603,13 +606,13 @@ geschlossen wird. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
    Namensfilter (`src/research/lookup-guard.js:66-74`, `src/plans.js:125`).
    Klausel: "If a tool sends data outside the current environment ..., this must be clear
    from the tool definition."
-   Ziel fuer die Werkzeugdefinition: open, no owner decision yet. Ob die
+   Ziel fuer die Werkzeugdefinition: open, not yet assigned to a work package. Ob die
    Datenschutzerklaerung den Nachschlag und den Angerufenen als Betroffenen nennt, ist Teil
    von Luecke 13.
 9. **Kein Beratungsverbot im Gespraechsprompt** fuer medizinische oder rechtliche Auskunft an
    das Gegenueber (`src/i18n/prompts/en.js:157`). Klausel: "tailored advice that requires a
    license".
-   Ziel: open, no owner decision yet.
+   Ziel: open, not yet assigned to a work package.
 10. **Auftraggeber-Name nicht identitaetsgeprueft**: der Name im Offenlegungssatz stammt aus
     dem Profil des Login-Anbieters (`src/web-auth.js:461-462`) bzw. aus Freitext im
     Betreiber-Onboarding (`src/routes/api-onboard.js:94-98`); die Pruefstufe fuer ausgehende
@@ -623,14 +626,14 @@ geschlossen wird. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
     Zusammenfassung bis zum Loeschlauf, bei Diagnose-Anrufen fuer die ganze Diagnose-Frist
     (`src/diagnostic-retention.js:72`). Der Code nennt das selbst einen offenen Befund
     (`src/mcp-tools.js:189-193`). Klauseln: "Response minimization", "privacy of others".
-    Ziel: open, no owner decision yet.
+    Ziel: open, not yet assigned to a work package.
 12. **Roh-Transkript nicht abgeschlossener Anrufe wird nicht geleert**: `finishCall` kehrt bei
     jedem Endstatus ausser `completed` vor der Leerung zurueck
     (`src/telephony/call-finish.js:302`); das betrifft auch jeden per `cancel_call`
     abgebrochenen Anruf. Das Roh-Transkript mit den woertlichen Aussagen des Angerufenen bleibt
     bis zum Loeschlauf des Anrufs (Code-Default 30 Tage, `src/config.js:2036`). Klauseln:
     "Collection minimization", "privacy of others", "data retention timelines".
-    Ziel: open, no owner decision yet.
+    Ziel: open, not yet assigned to a work package.
 13. **Rechtstext fehlt in diesem Dokument**: Datenschutzerklaerung und AGB, darin
     Mindestalter, Offenlegung der Metadaten, Information des Angerufenen als Betroffenem und
     die tatsaechlichen Fristen. Teil B liefert nur die Faktengrundlage. Klauseln: "Plugin

@@ -14,8 +14,8 @@
 //   5. Ehrlichkeit der Quellen: jedes Zitat aus einer Seite, die beim Abgleich nicht direkt
 //      abrufbar war, traegt den Nachpruef-Vermerk. Wer den Vermerk entfernt, muss die Seite
 //      gegengelesen haben und diesen Test bewusst anpassen.
-//   6. Jede Luecke in Teil C nennt ein Ziel (geplant oder ohne Entscheidung) - keine Luecke
-//      ohne Aussage, wie es mit ihr weitergeht.
+//   6. Jede Luecke in Teil C nennt ein Ziel (geplant, keinem Arbeitspaket zugeordnet oder
+//      ohne Betreiber-Entscheidung) - keine Luecke ohne Aussage, wie es mit ihr weitergeht.
 //
 // Testnamen tragen KEIN Katalog-/ABNAHME-Praefix (package.json i18nCatalogPattern/
 // abnahmePattern), sonst landet dieser Test im falschen Lauf.
@@ -53,7 +53,7 @@ const GAPS_SECTION = { begin: "## Teil C: Luecken", end: "## Anker (maschinenles
 const GAP_ITEM_START = /^\d+\. \*\*/m;
 // Der Ziel-Wert darf ueber einen Zeilenumbruch laufen; geprueft wird der Text mit
 // zusammengezogenem Leerraum.
-const GAP_TARGET = /Ziel[^:]*: (planned: |open, no owner decision yet)/;
+const GAP_TARGET = /Ziel[^:]*: (planned: |open, not yet assigned to a work package|open, no owner decision yet)/;
 // Interne Kennungen (Phasen, Befunde, Owner-Punkte, Branches), E.164-artige Nummern,
 // Secret-Muster. Das Dokument kann an OpenAI gehen.
 const FORBIDDEN_PATTERNS = [
