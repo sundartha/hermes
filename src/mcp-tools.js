@@ -243,7 +243,7 @@ export function pickTranscript(callId, c, texts = null) {
   };
 }
 
-// AL-P11: die fuenf Karten-Felder als eigenes Schema-Fragment - von TRANSCRIPT_OUTPUT
+// AL-P11: die fuenf Karten-Felder als eigenes Schema-Fragment - von CALL_RESULT_OUTPUT
 // gespreadet (G5), damit Sicht (resultCardView) und Schema nie auseinanderlaufen.
 const RESULT_CARD_OUTPUT = {
   outcome: z.string().nullable(),
@@ -255,7 +255,7 @@ const RESULT_CARD_OUTPUT = {
 
 // outputSchema fuer get_call_result: validiert GENAU die Whitelist. objective_achieved
 // ist true|false|"unclear" (Bool oder String), daher union.
-const TRANSCRIPT_OUTPUT = {
+const CALL_RESULT_OUTPUT = {
   call_id: z.string(),
   result_summary: z.string(),
   objective_achieved: z.union([z.boolean(), z.string()]),
@@ -840,7 +840,7 @@ const ANSWER_CONSULT_DESCRIPTION =
 // 1. OpenAI fuehrt readOnlyHint, destructiveHint und openWorldHint als Required (X-1/N-1);
 //    die MCP-Spec fuehrt ALLE Annotation-Felder als optional (SDK `ToolAnnotationsSchema`,
 //    jedes Feld `.optional()`). Bei Widerspruch gewinnt die OpenAI-Fassung - deshalb tragen
-//    ALLE zwoelf Werkzeuge alle drei Felder, auch die reinen Lese-Werkzeuge mit
+//    ALLE Werkzeuge alle drei Felder, auch die reinen Lese-Werkzeuge mit
 //    destructiveHint: false. idempotentHint bleibt optional (N-1 nennt es ausdruecklich so)
 //    und steht deshalb weiterhin nur dort, wo es etwas aussagt - an einem Nur-Lese-Werkzeug
 //    waere es ein bedeutungsloser Wert.
@@ -1524,7 +1524,7 @@ export function registerTools(
       description: CALL_RESULT_DESCRIPTION,
       annotations: TOOL_ANNOTATIONS.get_call_result,
       inputSchema: { call_id: z.string().describe("The call_id from place_call") },
-      outputSchema: TRANSCRIPT_OUTPUT,
+      outputSchema: CALL_RESULT_OUTPUT,
     },
     async ({ call_id }) => {
       const c = await call("GET", `/api/calls/${call_id}`);

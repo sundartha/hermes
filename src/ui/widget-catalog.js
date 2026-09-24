@@ -28,7 +28,7 @@ export const WIDGET_CALLS = "calls";
 // Zusammenfassung), die in W3 entfernt wurden.
 export const WIDGET_CALL = "call";
 
-// H4: alle 4 Read-only-Widgets sind jetzt Olympus-HUD-Karten (volldunkel,
+// H4: alle 3 Read-only-Widgets sind jetzt Olympus-HUD-Karten (volldunkel,
 // PLAN-WIDGET-HERMES-REDESIGN.md Abschnitt 6.3) - WING_STATIC (helle
 // Auspraegung) hat damit keinen Konsumenten mehr und entfaellt hier (toter
 // Code sonst, Muster wie WING_LIVE in H3). WING_CSS_STATIC/WING_MARKUP_STATIC
@@ -55,19 +55,19 @@ const WING_ENGINE_SCRIPT = `<script>\n${WING_ENGINE_JS}\n</script>`;
 
 // Fuegt die Wing-Canvas-Engine an ihrem Platzhalter ein - Muster wie
 // withBindScript/withWingAssets, aber OHNE deren defensives Anhaengen: fehlt
-// der Platzhalter (heute alle 5 Widgets - H3/H4 fuehren ihn erst ein), bleibt
-// das HTML byte-unveraendert. Exportiert (anders als withBindScript/
-// withWingAssets, die ueber echte Widget-Dateien indirekt getestet werden):
-// in H2 traegt noch kein echtes Widget den Platzhalter, die Injektion wird
-// deshalb ueber ein synthetisches Fixture direkt getestet (P13).
+// der Platzhalter, bleibt das HTML byte-unveraendert (heute tragen ihn alle 4
+// Widgets). Exportiert (anders als withBindScript/withWingAssets, die ueber
+// echte Widget-Dateien indirekt getestet werden): die Injektion wird ueber ein
+// synthetisches Fixture direkt getestet (P13, aus H2, als noch kein echtes
+// Widget den Platzhalter trug).
 export function withWingEngine(html) {
   if (!html.includes(WING_ENGINE_PLACEHOLDER)) return html;
   return html.replace(WING_ENGINE_PLACEHOLDER, WING_ENGINE_SCRIPT);
 }
 
 // Wing-Canvas-Mount-Idle (H4): generisches, self-contained Mount-Skript fuer die
-// 4 Read-only-Widgets - identisch fuer alle vier (nie ein Statuswechsel), EINE
-// Quelle statt 4x derselben ~15 Zeilen (G5/S2). Muster wie WING_ENGINE_SCRIPT.
+// 3 Read-only-Widgets - identisch fuer alle drei (nie ein Statuswechsel), EINE
+// Quelle statt 3x derselben ~15 Zeilen (G5/S2). Muster wie WING_ENGINE_SCRIPT.
 const WING_CANVAS_MOUNT_IDLE_JS = readFileSync(
   fileURLToPath(new URL("./wing-canvas-mount-idle.js", import.meta.url)),
   "utf8",
