@@ -129,19 +129,20 @@ function findTool(tools, name) {
 // schon durch test/am6-oauth-tenant.test.js belegt (get_agent_number liefert die Nummer), aber
 // nicht der WORTLAUT (Titel/Beschreibung/invoking/invoked). Bindung auf den Bootstrap-Tenant
 // (OWNER_IDP_SUBJECT, wie am6-oauth-tenant.test.js) statt eines frischen Tenants: ein frischer
-// Tenant traegt DEFAULT_PROFILE (allowCalendar/allowConsult beide false, src/store/defaults.js)
-// und liefert eine ANDERE Namensmenge - das wuerde die Legacy/OAuth-Gegenprobe unten verfaelschen,
-// die exakt denselben Werkzeug-Wortlaut ueber beide Pfade sehen soll.
+// Tenant traegt DEFAULT_PROFILE (allowConsult false, src/store/defaults.js) und liefert eine
+// ANDERE Namensmenge - das wuerde die Legacy/OAuth-Gegenprobe unten verfaelschen, die exakt
+// denselben Werkzeug-Wortlaut ueber beide Pfade sehen soll. (T2-12: allowCalendar bestimmt die
+// Werkzeugmenge nicht mehr - get_calendar ist entfallen.)
 const OAUTH_SUBJECT = "sub-t2-11-werkzeugtexte";
 
 // registersConsult: ob der Pfad answer_consult/await_call_event registriert. stdio tut das
 // NIE (src/mcp-server.js ruft registerTools() ohne consultAllowed, STDIO_CONSULT_LOOP=false),
 // auch nicht mit gesetzter Consult-Env - das belegen T11-d/T11-n ausdruecklich.
 const CONFIGS = [
-  { label: "HTTP Legacy, ohne Consult", expectedCount: 10, registersConsult: false, run: (fn) => runLegacy({}, fn) },
-  { label: "HTTP Legacy, mit Consult", expectedCount: 12, registersConsult: true, run: (fn) => runLegacy(CONSULT_ON, fn) },
-  { label: "stdio", expectedCount: 10, registersConsult: false, run: (fn) => runStdio({}, fn) },
-  { label: "HTTP OAuth", expectedCount: 10, registersConsult: false, run: (fn) => runOAuth(fn) },
+  { label: "HTTP Legacy, ohne Consult", expectedCount: 9, registersConsult: false, run: (fn) => runLegacy({}, fn) },
+  { label: "HTTP Legacy, mit Consult", expectedCount: 11, registersConsult: true, run: (fn) => runLegacy(CONSULT_ON, fn) },
+  { label: "stdio", expectedCount: 9, registersConsult: false, run: (fn) => runStdio({}, fn) },
+  { label: "HTTP OAuth", expectedCount: 9, registersConsult: false, run: (fn) => runOAuth(fn) },
 ];
 
 // Alle Pfade x Consult an/aus: CONFIGS plus die beiden Consult-an-Varianten, die dort fehlen.
