@@ -85,18 +85,18 @@ export const WIDGET_DICT = {
     "Context": "Kontext",
     "Diagnostic": "Diagnose",
     "Confirm call": "Anruf bestätigen",
-    "Confirmation code unavailable — ask the assistant to prepare the call again.":
-      "Bestätigungscode nicht verfügbar — bitte den Assistenten, den Anruf erneut vorzubereiten.",
-    "Confirmation expired — ask the assistant to prepare the call again.":
-      "Bestätigung abgelaufen — bitte den Assistenten, den Anruf erneut vorzubereiten.",
-    "Unclear whether the call was placed — do not confirm again; check the call list.":
-      "Unklar, ob der Anruf gestartet wurde — nicht erneut bestätigen; Anrufliste prüfen.",
-    "Call was not started — ask the assistant to prepare it again.":
-      "Der Anruf wurde nicht gestartet — bitte den Assistenten, ihn erneut vorzubereiten.",
-    "Confirmed the call to {to} in the Hermes card; call_id {call_id}. Track it with get_call_status.":
-      "Anruf an {to} in der Hermes-Karte bestätigt; call_id {call_id}. Mit get_call_status verfolgen.",
-    "Confirmed a call to {to} in the Hermes card; the card received no response. Check with list_calls, do not call place_call again.":
-      "Anruf an {to} in der Hermes-Karte bestätigt; die Karte hat keine Rückmeldung erhalten. Mit list_calls prüfen, nicht erneut place_call aufrufen.",
+    "Confirmation code unavailable — ask for a new prepare_call.":
+      "Bestätigungscode nicht verfügbar — bitte um ein neues prepare_call.",
+    "Confirmation expired — ask for a new prepare_call.":
+      "Bestätigung abgelaufen — bitte um ein neues prepare_call.",
+    "Unclear whether the call was placed — do not confirm again; check list_calls.":
+      "Unklar, ob der Anruf gestartet wurde — nicht erneut bestätigen; list_calls prüfen.",
+    "Call was not started — ask for a new prepare_call.":
+      "Anruf wurde nicht gestartet — bitte um ein neues prepare_call.",
+    "Confirmed the call to {to} (call_id {call_id}); track it with get_call_status.":
+      "Anruf an {to} bestätigt (call_id {call_id}); mit get_call_status verfolgen.",
+    "Confirmed a call to {to}; no response from the card yet. Check list_calls, do not call place_call again.":
+      "Anruf an {to} bestätigt; noch keine Rückmeldung der Karte. list_calls prüfen, nicht erneut place_call aufrufen.",
   },
   fr: {
     "Hermes · Call": "Hermes · Appel",
@@ -145,18 +145,18 @@ export const WIDGET_DICT = {
     "Context": "Contexte",
     "Diagnostic": "Diagnostic",
     "Confirm call": "Confirmer l'appel",
-    "Confirmation code unavailable — ask the assistant to prepare the call again.":
-      "Code de confirmation indisponible — demandez à l'assistant de préparer à nouveau l'appel.",
-    "Confirmation expired — ask the assistant to prepare the call again.":
-      "Confirmation expirée — demandez à l'assistant de préparer à nouveau l'appel.",
-    "Unclear whether the call was placed — do not confirm again; check the call list.":
-      "Impossible de savoir si l'appel a été lancé — ne confirmez pas à nouveau ; vérifiez la liste des appels.",
-    "Call was not started — ask the assistant to prepare it again.":
-      "L'appel n'a pas été lancé — demandez à l'assistant de le préparer à nouveau.",
-    "Confirmed the call to {to} in the Hermes card; call_id {call_id}. Track it with get_call_status.":
-      "Appel vers {to} confirmé dans la carte Hermes ; call_id {call_id}. Suivez-le avec get_call_status.",
-    "Confirmed a call to {to} in the Hermes card; the card received no response. Check with list_calls, do not call place_call again.":
-      "Appel vers {to} confirmé dans la carte Hermes ; la carte n'a reçu aucune réponse. Vérifiez avec list_calls, n'appelez pas à nouveau place_call.",
+    "Confirmation code unavailable — ask for a new prepare_call.":
+      "Code de confirmation indisponible — redemandez un prepare_call.",
+    "Confirmation expired — ask for a new prepare_call.":
+      "Confirmation expirée — redemandez un prepare_call.",
+    "Unclear whether the call was placed — do not confirm again; check list_calls.":
+      "Incertain si l'appel a été lancé — ne confirmez pas à nouveau ; vérifiez list_calls.",
+    "Call was not started — ask for a new prepare_call.":
+      "Appel non lancé — redemandez un prepare_call.",
+    "Confirmed the call to {to} (call_id {call_id}); track it with get_call_status.":
+      "Appel vers {to} confirmé (call_id {call_id}) ; suivez-le avec get_call_status.",
+    "Confirmed a call to {to}; no response from the card yet. Check list_calls, do not call place_call again.":
+      "Appel vers {to} confirmé ; pas encore de réponse de la carte. Vérifiez list_calls, n'appelez pas à nouveau place_call.",
   },
 };
 

@@ -135,10 +135,16 @@ const EXPECTED_RESOURCE_META = {
 // Quell-Diff geprueft: EINZIGE Unterschiede in tools/list sind diese drei Beschreibungen,
 // src/ui unberuehrt. Voriger Sollwert (beide Pfade):
 // c24783bc0755354a545c2703bcb69b3ac75d2a5a423e72438daa2886ed201c0a.
+// Neu gepinnt (T2-14, N-10): Bestaetigungs-Ansicht im Call-Widget - alle vier Widgets
+// tragen eine neue Version (WIDGET_DICT bekommt neue Keys, call.html zusaetzlich neues
+// Markup/Skript), also neue URIs in tools/list-_meta/resources/list/resources/read fuer
+// agent-status/my-number/calls/call. Actual-Wert aus dem roten Diff eines isolierten
+// Testlaufs uebernommen, nicht geschaetzt. Voriger Sollwert (beide Pfade):
+// 2b3e1f8c732997bc73bcc1387a2f24b4b594ad9b9984a4b8bb58352cef03e336.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "2b3e1f8c732997bc73bcc1387a2f24b4b594ad9b9984a4b8bb58352cef03e336";
+  "950d1a1c8f096942e6dc258326243f24b7c6183a78cd4a1ccdf0c549906b9861";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "2b3e1f8c732997bc73bcc1387a2f24b4b594ad9b9984a4b8bb58352cef03e336";
+  "950d1a1c8f096942e6dc258326243f24b7c6183a78cd4a1ccdf0c549906b9861";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
