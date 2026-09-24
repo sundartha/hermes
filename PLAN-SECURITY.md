@@ -6173,3 +6173,95 @@ limit.", FR "Les appels sortants sont bloqués par la limite de coût de ce comp
 weiterhin ohne Zahl, ohne Kennung, mit Verweis auf das Hermes-Dashboard. Kein Test pinnte den
 alten Wortlaut; `test/openai-t2-09-neutrale-fehlertexte.test.js` (T1/T2) und
 `test/deny-diagnosability.test.js` bleiben unveraendert gruen.
+
+## OpenAI-T2-13 — Bestaetigung vor dem Waehlen (N-10, Serverteil)
+
+**Schritt:** `prepare_call(args)` -> Vorschau (Modell) + Bestaetigungs-Code (nur im
+Ergebnis-`_meta` von `prepare_call`, nie im Modelltext/`structuredContent`) -> Nutzer
+bestaetigt in der Hermes-Karte -> `place_call(args, confirmation_code)` -> Server prueft +
+verbraucht den Code -> unveraenderter Weg `POST /api/calls` mit ALLEN bestehenden Gates.
+Serverteil dieser Phase; die Bestaetigungs-Ansicht im Call-Widget (die einzige Stelle, die
+den Code je einem Menschen zeigt) ist T2-14 — **ohne T2-14 kann niemand mehr per MCP
+waehlen**, T2-13 geht deshalb nur zusammen mit T2-14 live (Deploy-Vorbedingung).
+
+**Was die Bestaetigung beweist, und was nicht** (Pflichttext, wortgleich in
+`src/call-confirmation.js`, `docs/OPENAI-TOOL-INVENTORY.md`): der Server hat fuer GENAU
+diese Anfrage (Mandant, normalisiertes Ziel, alle uebrigen Argumente) innerhalb der letzten
+maximal 10 Minuten einen Code ausgestellt, und dieser Code ist noch nicht verbraucht. Sie
+beweist NICHT, dass ein Mensch die Vorschau gelesen hat (ein Host, der `_meta` doch ans
+Modell weiterreicht, laesst das Modell sich selbst bestaetigen), nicht, dass die klickende
+Person der Kontoinhaber ist, und sie ist KEINE Autorisierung — sie ersetzt kein Gate.
+Nirgends darf "vom Nutzer bestaetigt" als Garantie stehen; die Formulierung bleibt "der Code
+erreicht das Modell auf Hosts, die `_meta` dem Modell vorenthalten, nur ueber die Karte."
+
+**Host-Abhaengigkeit, bewusste Folge:** `prepare_call` haengt den Code NUR an, wenn der
+aufrufende Host kartenfaehig ist (`callWidgetUi._meta` gesetzt, `MCP_UI_ENABLED=true` UND
+der Host meldet UI-Faehigkeit). Ohne Karte wird der Code serverseitig zwar ausgestellt
+(die Route kennt die Kartenfaehigkeit des Aufrufers nicht), aber NIE an den Client
+weitergereicht — aus Claude Code, stdio ohne UI oder `MCP_UI_ENABLED=false` ist per MCP
+deshalb ab dieser Phase KEIN Anruf mehr moeglich. Ein Code im Modelltext oder ein
+Web-Link waeren ein neuer, zustandsbehafteter Geldpfad-Endpunkt bzw. eine nur formale
+Bestaetigung (das Modell koennte ihn selbst lesen) — beides bewusst nicht gebaut.
+
+**Vertrauensgrenze `POST /api/call-confirmations`:** identisch zu `POST /api/calls` —
+`internalOnly` (echter Loopback-Socket, kein `X-Forwarded-For`, AUTH-P5/P7), ihr einziger
+Aufrufer ist der In-Process-MCP-Handler. Sie faehrt KEINE Outbound-Gate-Kette (die Gates
+haben Nebenwirkungen — Reserve, Audit —, eine Vorschau sagt keine Gate-Entscheidung voraus),
+schreibt nichts in den Store, ruft kein `audit()` und loggt weder Code noch Ziel. Alle
+bestehenden Gates (Abo+KYC-Permit, `OUTBOUND_FROZEN`, Denylist, Land, Stundenlimit/
+Ziel-Cap, Tenant-Kostendecke, Max-Dauer, Provider-Signaturpruefung) laufen unveraendert erst
+beim echten Waehlen in `POST /api/calls` — die Bestaetigung ist ZUSAETZLICH, kein Ersatz.
+
+**Code-Ableitung** (`src/call-confirmation.js`, Muster `src/elevenlabs/tenant-tool-token.js`):
+HKDF-abgeleiteter Schluessel aus `CALL_CONFIRMATION_SECRET` (leer/<32 Zeichen -> `null`,
+fail-closed — keine Ausstellung, keine Pruefung ist je erfolgreich). 6-stelliger
+Crockford-Base32-Code (Alphabet ohne I/L/O/U), HMAC-SHA256 ueber
+`v1|tenantId|windowIndex|canonical`, `canonical` bindet ALLE Argumente ausser
+`confirmation_code` inkl. `to` in NORMALISIERTER Form (`resolveDialTarget`, derselbe reine
+Extract aus dem `normalize_target`-Gate wie das echte Waehlen — "geprueft == gewaehlt"
+gilt jetzt fuer Vorschau UND Aufruf). Fensterlaenge 5 Minuten, zwei Fenster akzeptiert
+(Gueltigkeit effektiv 5–10 Minuten). Vergleich timing-sicher (`safeEqual`).
+
+**Brute-Force-Rechnung:** 32^6 = 2^30 (~1,07e9) moegliche Codes. Bei `RATE_LIMIT_PER_MIN`
+(Default 120) Aufrufen/Minute je Mandant und 10 Minuten Gueltigkeit sind das hoechstens 1200
+Versuche je Gueltigkeitsfenster, P(Treffer) ≈ 1,1e-6. Jeder Versuch muss zusaetzlich
+dieselben Argumente (`to`/`objective`/`briefing`/...) tragen, sonst prueft er gegen einen
+anderen Code. `stdio` hat kein Rate-Limit, ist aber lokal (der Nutzer selbst).
+
+**Einmal-Verbrauch:** In-Memory-Ledger je App-Instanz (`src/routes/api-call-confirmations.js`),
+Digest aus Mandant+Fenster+normalisiertem Code, bereinigt sich beim Zugriff. Bewusst KEINE
+Store-Spalte — die Architektur setzt ohnehin eine laufende Instanz voraus (der pg-Store
+haelt Zustand im Speicher, s. Lehre `pg-store-holds-state-in-memory`). **Grenze, akzeptiert:**
+nach einem Prozess-Neustart ist ein noch gueltiger Code bis zu 10 Minuten lang erneut
+nutzbar. Die bestehende Anruf-Dedup (`call-dedup.js`, ≤180s auf AKTIVE Anrufe) faengt davon
+den Fall eines noch laufenden Anrufs; ein Replay NACH Ende eines kurzen Anrufs innerhalb der
+Code-Gueltigkeit ist der verbleibende, akzeptierte Fall.
+
+**Secret als Deploy-Vorbedingung, kein Boot-Refusal:** `CALL_CONFIRMATION_SECRET` ist NICHT
+boot-pflichtig (Owner-Entscheidung P6 — keine neue Boot-Sperre). Fehlt es, laeuft die
+Produktion weiter, ein Boot-WARN meldet die fehlende Variable
+(`src/boot-guard.js#callConfirmationSecretFindings`, `src/boot.js#warnCallConfirmationSecretUnset`),
+und `prepare_call`/`place_call` antworten `503 confirmation_unavailable` (eigene
+`MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE`, neutraler Text, kein Env-/Secret-Leak) — per MCP
+waehlt niemand. `DASHBOARD_PASSWORD` bleibt aus AUTH-P8-Rueckfall-Gruenden das einzige
+boot-pflichtige Geheimnis; ein neues Pflicht-Secret waere ein Rueckschritt fuer AUTH-P8.
+
+**Owner-Punkte (Deploy-Vorbedingungen):**
+1. `CALL_CONFIRMATION_SECRET` im Render-Dashboard setzen (>= 32 Zeichen Zufallswert,
+   z.B. `openssl rand -base64 48`), nirgends im Repo.
+2. Deploy NUR zusammen mit T2-14 (beide gemergt), `MCP_UI_ENABLED` im Dashboard nicht
+   `false`.
+3. Live-Probe (OW-C(6)/OW-D): vor dem Klick das Modell nach dem Kartencode fragen — es darf
+   ihn nicht kennen; erst danach ueber die Karte bestaetigen.
+4. Bewusste Folge zur Kenntnis nehmen: Claude Code/stdio ohne Karte kann ab jetzt per MCP
+   keinen Anruf mehr platzieren.
+
+**Nicht gebaut, mit Grund** (s. `tasks/openai-t2/T2-13-spec.md` Abschnitt 4 fuer die volle
+Liste): keine Pruefung des Codes in `POST /api/calls` bzw. ein zweites Gate in der
+Gate-Kette (die Route ist `internalOnly`, ihr einziger Aufrufer ist der MCP-Handler — ein
+Gate dort braeuchte die gepinnte `makeCallRoutes` an und braeche die REST-direkten
+Gate-Tests); keine Uhr-Naht per Env fuer den gespawnten Server (waere eine neue
+abschaltbare Sicherung); kein persistenter Einmal-Verbrauch (Schemaaenderung ohne Nutzen,
+solange die Architektur eine Instanz voraussetzt); keine zweite Bestaetigungsstufe fuer
+`cancel_call` (mindert nur Schaden, keine neuen Kosten/kein neuer Kontakt) oder
+`answer_consult` (sekundenkritisch, laeuft nur innerhalb eines bereits bestaetigten Anrufs).
