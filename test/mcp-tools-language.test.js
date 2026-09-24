@@ -375,18 +375,18 @@ test("get_calendar: Leertext folgt der Tenant-Sprache; DE byte-identisch (P15/T3
 });
 
 // ==================== T15 (P15/T3a) ====================
-test("get_transcript bei laufendem Anruf: Hinweistext folgt der Tenant-Sprache (P15/T3a)", async () => {
+test("get_call_result bei laufendem Anruf: Hinweistext folgt der Tenant-Sprache (P15/T3a)", async () => {
   await withGateway({ status: "active" }, async () => {
     for (const language of SUPPORTED_LANGUAGES) {
       const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
-        .get("get_transcript")({ call_id: "call_1" });
+        .get("get_call_result")({ call_id: "call_1" });
       // T-19: der Satz bleibt byte-identisch, die JSON-Huelle faellt weg - errText()
       // setzt isError statt eines {"error": ...}-Textblocks (siehe src/mcp-tools.js).
       assert.equal(r.isError, true, `isError fuer Sprache ${language}`);
       assert.equal(toolText(r), MCP_TEXTS[language].callStillRunning);
     }
     const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
-      .get("get_transcript")({ call_id: "call_1" });
+      .get("get_call_result")({ call_id: "call_1" });
     assert.equal(de.isError, true, "isError fuer DE");
     assert.equal(
       toolText(de),

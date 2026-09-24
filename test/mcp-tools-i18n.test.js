@@ -116,7 +116,7 @@ test("MCP-05: wrapHandler-Fallback bei Netzwerkfehler zeigt einem EN-Tenant kein
   process.env.GATEWAY_URL = "http://127.0.0.1:1"; // kein lauschender Server -> ECONNREFUSED
   try {
     const handlers = captureTools({ identity: null, scopedTenant: "tenant-en-us", language: "en" });
-    const result = await handlers.get("get_my_number")();
+    const result = await handlers.get("get_agent_number")();
     assert.ok(result?.isError, "Netzwerkfehler -> isError-Tool-Antwort");
     assert.doesNotMatch(
       toolText(result),

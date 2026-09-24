@@ -248,8 +248,8 @@ test("P5b (O-13 Teil 2, Fall D): der Riegel gegen teure Wiederwahl bleibt intakt
   );
   // Positiv-Kontrolle: das Kommando findet ueberhaupt etwas in der Instruktion.
   assert.ok(
-    MCP_BASE_INSTRUCTIONS.includes("get_transcript"),
-    "Positiv-Kontrolle: get_transcript wird genannt",
+    MCP_BASE_INSTRUCTIONS.includes("get_call_result"),
+    "Positiv-Kontrolle: get_call_result wird genannt",
   );
 
   // 2) der von get_call_status gelieferte Wert erfuellt beide Formen der Zusicherung.

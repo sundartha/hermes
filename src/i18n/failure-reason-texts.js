@@ -96,7 +96,7 @@ export function makeStatusBody(statusLabel, bundle) {
   };
 }
 
-// OUTBOUND-E3a: der Ergebnistext des MCP-Rueckwegs (await_call_event/get_transcript).
+// OUTBOUND-E3a: der Ergebnistext des MCP-Rueckwegs (await_call_event/get_call_result).
 // Anders als statusBody hat er KEIN Ziel-Feld - deshalb ein eigener Bauplan, aber
 // DIESELBE Aufloesung (makeFailureSentence). Drei Ausgaenge, bewusst getrennt:
 //   kein Grund          -> null  (der Aufrufer behaelt seinen Bestandstext; die

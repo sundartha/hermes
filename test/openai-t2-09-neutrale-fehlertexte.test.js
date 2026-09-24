@@ -575,7 +575,7 @@ async function networkErrorText(ctx) {
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = UNREACHABLE_GATEWAY_URL;
   try {
-    const result = await captureTools(ctx).get("get_my_number")();
+    const result = await captureTools(ctx).get("get_agent_number")();
     assert.equal(result.isError, true);
     return result.content[0].text;
   } finally {

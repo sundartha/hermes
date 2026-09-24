@@ -11,7 +11,7 @@
 // (GET /api/calls/:id/consult ist rein lesend); dieser Praezedenzfall bleibt heil.
 //
 // WARUM NICHT auf /api/state markiert wird: list_calls, list_action_items,
-// get_my_number und get_agent_status laufen alle ueber GET /api/state. Wuerde dort
+// get_agent_number und get_agent_status laufen alle ueber GET /api/state. Wuerde dort
 // markiert, konsumierten vier unbeteiligte Werkzeuge die Inbox leer.
 //
 // AUTH: `internalOnly` (genuin lokaler In-Process-Aufrufer - echter Loopback-Socket OHNE

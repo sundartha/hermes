@@ -32,8 +32,8 @@ const EXPECTED_ANNOTATIONS = {
     destructiveHint: false,
     openWorldHint: false,
   },
-  get_transcript: {
-    title: "Get call transcript",
+  get_call_result: {
+    title: "Get call result",
     readOnlyHint: true,
     destructiveHint: false,
     openWorldHint: false,
@@ -45,7 +45,7 @@ const EXPECTED_ANNOTATIONS = {
     idempotentHint: true,
     openWorldHint: true,
   },
-  get_my_number: {
+  get_agent_number: {
     title: "Agent phone number",
     readOnlyHint: true,
     destructiveHint: false,

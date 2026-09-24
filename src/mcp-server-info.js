@@ -87,16 +87,18 @@ export const HERMES_SERVER_INFO = {
 // Consult-Werkzeug liefert get_call_status
 // dasselbe Feld (CALL_STATUS_OUTPUT), deshalb "a call" statt "await_call_event".
 //
-// Review-Runde 2 (P4): ohne Namensnennung landete das Modell bei get_transcript's eigener
+// Review-Runde 2 (P4): ohne Namensnennung landete das Modell bei get_call_result's eigener
 // Beschreibung ("call this only once status=completed") und rief das Werkzeug fuer einen
 // NICHT platzierten Anruf (status=failed, kein Consult noetig) gar nicht erst auf -
-// result_summary blieb unerreichbar, obwohl get_transcript es fuer genau diesen Fall
-// liefert (pickTranscript/callFailedSummary). get_transcript IST fuer jeden Tenant
+// result_summary blieb unerreichbar, obwohl get_call_result es fuer genau diesen Fall
+// liefert (pickTranscript/callFailedSummary). get_call_result IST fuer jeden Tenant
 // registriert (kein Consult-Gate) - die Nennung hier ist deshalb sicher, anders als bei
 // await_call_event/answer_consult oben.
+// T2-11 (N-12): der fruehere Toolname (versprach ein Transkript, das nie geliefert wurde)
+// ist auf get_call_result umbenannt, Wortlaut sonst unveraendert.
 export const MCP_BASE_INSTRUCTIONS =
   `If a call reports a failure_reason starting with "${NOT_PLACED}", the call could not ` +
-  "be placed because of a problem on our side. Do NOT retry the call: call get_transcript " +
+  "be placed because of a problem on our side. Do NOT retry the call: call get_call_result " +
   "for that call_id - it works for a failed call, not only a completed one - and tell the " +
   "user what failed, using its result_summary text as it is. " +
   "Never invent facts about the principal or the call: if you do not know something, say so.";

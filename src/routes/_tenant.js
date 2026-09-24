@@ -136,7 +136,7 @@ export function makeTenantResolver({ store }) {
   // (mcp-tools, Profile-Achse), die Tenant-Achse keyt aber auf sub. Statt die REST-
   // Identitaet sub-seitig neu aufzuloesen, reicht das /mcp-Gateway den BEREITS
   // aufgeloesten Tenant als X-Internal-Tenant durch (internalTenant, s.u.); der
-  // Lesepfad get_my_number konsumiert ihn -> die sub/email-
+  // Lesepfad get_agent_number konsumiert ihn -> die sub/email-
   // Divergenz verschwindet an EINER autoritativen Aufloesung am JWT.
   function requestTenant(req) {
     if (req.tenant) return req.tenant.tenantId || TENANT_REJECT; // Web-Session, fail-closed

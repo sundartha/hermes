@@ -76,10 +76,21 @@ const EXPECTED_RESOURCE_META = {
 // securitySchemes. Voriger HTTP-Sollwert zum Vergleich (T2-23, volle oauth2-Angabe
 // im Legacy-Default - das war der Regressionsbefund dieses Nachtrags):
 // 00c916d4ece76dda6fa60de658979464c9dbd50d22596d77f53a6c49ea501b13.
+// Neu gepinnt (N-11/N-12/N-13, ehrliche Werkzeug-Namen/Titel/Beschreibungen):
+// get_transcript/get_my_number heissen jetzt get_call_result/get_agent_number, deren
+// Titel und Statuszeilen aendern sich mit; answer_consult- und get_agent_status-
+// Beschreibungen aendern sich (N-11/N-13). Voriger Sollwert (beide Pfade,
+// byte-identisch seit dem securitySchemes-Nachtrag oben):
+// bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47.
+// Neu gepinnt (T2-11-Nachzug Widgets): call.html und my-number.html nennen die neuen
+// Werkzeugnamen, beide Widgets tragen deshalb Pin-Version 2. Gegen den Klartext-Diff
+// geprueft: EINZIGE Unterschiede sind die URIs call/my-number v1 -> v2 (resources/list,
+// resources/read, tools/list _meta) und die umbenannten Namen im Widget-Text. Voriger
+// Sollwert (beide Pfade): e36d8f9e7aa4b4fda25cc0d1518bb364fa25f4de597a24d54e763f3cee88599d.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47";
+  "72b3f3606e69272a0ee82b97aebde39550fbe74b99ba7433b2507f2cb1b8a5d6";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47";
+  "72b3f3606e69272a0ee82b97aebde39550fbe74b99ba7433b2507f2cb1b8a5d6";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
@@ -456,7 +467,7 @@ function widgetLocaleTenantSeed() {
   return state;
 }
 
-test("P8-K (HTTP, T2-02/S6): get_my_number traegt _meta['hermes/locale'] in der Tenant-Sprache, list_action_items nicht", async () => {
+test("P8-K (HTTP, T2-02/S6): get_agent_number traegt _meta['hermes/locale'] in der Tenant-Sprache, list_action_items nicht", async () => {
   const idp = await startIdp();
   const srv = await startServer({
     env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, MULTI_TENANT: "true", MCP_UI_ENABLED: "true" },
@@ -469,8 +480,8 @@ test("P8-K (HTTP, T2-02/S6): get_my_number traegt _meta['hermes/locale'] in der 
     ]);
 
     const [resDe, resEn] = await Promise.all([
-      mcpPost(`${srv.localUrl}/mcp`, tokenDe, toolCall("get_my_number")),
-      mcpPost(`${srv.localUrl}/mcp`, tokenEn, toolCall("get_my_number")),
+      mcpPost(`${srv.localUrl}/mcp`, tokenDe, toolCall("get_agent_number")),
+      mcpPost(`${srv.localUrl}/mcp`, tokenEn, toolCall("get_agent_number")),
     ]);
     const resultDe = await readToolResult(resDe);
     const resultEn = await readToolResult(resEn);
@@ -519,7 +530,7 @@ test("P8-L (HTTP, T2-02/S6): ein isError-Ergebnis traegt kein Sprachfeld", async
     env: { GATEWAY_URL: mock.url, MCP_UI_ENABLED: "true" },
   });
   try {
-    const res = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_my_number"));
+    const res = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_agent_number"));
     const result = await readToolResult(res);
     assert.equal(result.isError, true, "degradierte Gateway-Antwort -> isError (AC5/AC6)");
     assert.equal(
@@ -538,15 +549,15 @@ test("P8-L (HTTP, T2-02/S6): ein isError-Ergebnis traegt kein Sprachfeld", async
 // BASE_ENV pinnt WORLD_DEFAULT_LANGUAGE_ENABLED="true"). Zwei verschiedene Sprachen sind
 // ueber stdio deshalb nicht messbar (kein Tenant-Kontext); gemessen wird, dass der
 // Weltdefault tatsaechlich am Ergebnis ankommt.
-test("P8-M (stdio, T2-02/S6, DP-1): get_my_number traegt _meta['hermes/locale']=Weltdefault, list_action_items nicht", async () => {
+test("P8-M (stdio, T2-02/S6, DP-1): get_agent_number traegt _meta['hermes/locale']=Weltdefault, list_action_items nicht", async () => {
   const mock = await startFixedGatewayMock({ agent: { number: "+15005550006" }, actionItems: [] });
   try {
     await withStdioClient({ MCP_UI_ENABLED: "true", GATEWAY_URL: mock.url }, {}, async (client, stderr) => {
       const numberResult = await client.request(
-        { method: "tools/call", params: { name: "get_my_number", arguments: {} } },
+        { method: "tools/call", params: { name: "get_agent_number", arguments: {} } },
         ANY,
       );
-      assert.notEqual(numberResult.isError, true, `stdio get_my_number ist kein Fehler (stderr: ${stderr()})`);
+      assert.notEqual(numberResult.isError, true, `stdio get_agent_number ist kein Fehler (stderr: ${stderr()})`);
       assert.equal(
         numberResult._meta?.[WIDGET_LOCALE_META_KEY],
         "en",
@@ -574,7 +585,7 @@ test("P8-N (stdio, T2-02/S6): ein isError-Ergebnis traegt ueber den echten Kindp
   try {
     await withStdioClient({ MCP_UI_ENABLED: "true", GATEWAY_URL: mock.url }, {}, async (client, stderr) => {
       const result = await client.request(
-        { method: "tools/call", params: { name: "get_my_number", arguments: {} } },
+        { method: "tools/call", params: { name: "get_agent_number", arguments: {} } },
         ANY,
       );
       assert.equal(result.isError, true, `degradierte Gateway-Antwort -> isError (stderr: ${stderr()})`);

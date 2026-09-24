@@ -278,7 +278,7 @@ test("T-W1-call-AC4: Inline-Skript enthaelt Poll-Konstante + alle Tool-Namen + d
   assert.match(html, /setInterval/);
   assert.match(html, /POLL_INTERVAL_MS\s*=\s*8000/);
   assert.match(html, /"get_call_status"/);
-  assert.match(html, /"get_transcript"/);
+  assert.match(html, /"get_call_result"/);
   assert.match(html, /"cancel_call"/);
   assert.match(html, /"tools\/call"/);
 });
@@ -291,7 +291,7 @@ test("T-W1-call-AC6: kein innerHTML/@import/<link/href= im Widget", () => {
   assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
 });
 
-test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deaktiviert Cancel, erreicht clearInterval, holt get_transcript GENAU EINMAL", () => {
+test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deaktiviert Cancel, erreicht clearInterval, holt get_call_result GENAU EINMAL", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
   env.uiReady(); // Handshake beantwortet - Polling/Sendeweg ist ab hier offen (F2)
@@ -300,10 +300,10 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   // dem initialen place_call-Push, BEVOR unser eigenes Skript pollt).
   doc.slot("call_id").textContent = "call_1";
 
-  // Vor dem ersten Poll-Response darf get_transcript NICHT versucht worden sein.
-  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 0);
+  // Vor dem ersten Poll-Response darf get_call_result NICHT versucht worden sein.
+  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_call_result").length, 0);
 
-  // Zwischenschritt: in_progress darf get_transcript weiterhin NICHT ausloesen.
+  // Zwischenschritt: in_progress darf get_call_result weiterhin NICHT ausloesen.
   env.emit({
     jsonrpc: "2.0",
     method: "ui/notifications/tool-result",
@@ -320,7 +320,7 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   assert.equal(doc.slot("status").textContent, "in_progress");
   assert.equal(doc.row("lines").style.display, "", "Transkriptzeilen sichtbar bei in_progress");
   assert.equal(doc.cancelButton().disabled, false, "Cancel bleibt aktiv, nicht terminal");
-  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 0);
+  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_call_result").length, 0);
 
   // Terminal-Notification: completed.
   env.emit({
@@ -349,13 +349,13 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   assert.equal(doc.cancelButton().style.display, "none", "Cancel zusaetzlich versteckt");
   assert.equal(doc.row("lines").style.display, "none", "Transkriptzeilen ausgeblendet nach Terminal");
   assert.equal(
-    env.posted.filter((m) => m.params && m.params.name === "get_transcript").length,
+    env.posted.filter((m) => m.params && m.params.name === "get_call_result").length,
     1,
-    "get_transcript NUR im Terminal-Zweig (completed) versucht - genau EIN Versuch (tools/call)",
+    "get_call_result NUR im Terminal-Zweig (completed) versucht - genau EIN Versuch (tools/call)",
   );
 
   // Get-transcript-Antwort einspielen -> result_summary/objective_achieved gefuellt.
-  const transcriptReq = env.posted.find((m) => m.params && m.params.name === "get_transcript");
+  const transcriptReq = env.posted.find((m) => m.params && m.params.name === "get_call_result");
   env.emit({
     jsonrpc: "2.0",
     id: transcriptReq.id,
@@ -368,16 +368,16 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   assert.equal(doc.querySelector("[data-objective-display]").textContent, "Yes");
   assert.equal(doc.row("summary").style.display, "", "Ergebnis-Zeile sichtbar nach completed");
 
-  // Erneutes Terminal-Signal darf get_transcript NICHT erneut ausloesen (Guard).
+  // Erneutes Terminal-Signal darf get_call_result NICHT erneut ausloesen (Guard).
   env.emit({
     jsonrpc: "2.0",
     method: "ui/notifications/tool-result",
     params: { structuredContent: { call_id: "call_1", status: "completed", duration_s: 43, last_transcript_lines: [], failure_reason: null } },
   });
-  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 1, "get_transcript bleibt einmalig");
+  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_call_result").length, 1, "get_call_result bleibt einmalig");
 });
 
-test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert get_transcript nicht dauerhaft - der Poll-Tick nach dem Handshake holt ihn nach", () => {
+test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert get_call_result nicht dauerhaft - der Poll-Tick nach dem Handshake holt ihn nach", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
 
@@ -391,7 +391,7 @@ test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert
       structuredContent: { call_id: "call_1", status: "completed", duration_s: 42, last_transcript_lines: [], failure_reason: null },
     },
   });
-  assert.equal(env.posted.length, 0, "get_transcript-Versuch scheitert am ready-Gate - noch kein Versand");
+  assert.equal(env.posted.length, 0, "get_call_result-Versuch scheitert am ready-Gate - noch kein Versand");
 
   env.uiReady(); // Handshake beantwortet - init() startet ueber whenUiReady(startPolling) sofort einen Poll-Tick
 
@@ -406,8 +406,8 @@ test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert
     result: { structuredContent: { call_id: "call_1", status: "completed", duration_s: 42, last_transcript_lines: [], failure_reason: null } },
   });
 
-  const transcriptReqs = env.posted.filter((m) => m.params && m.params.name === "get_transcript");
-  assert.equal(transcriptReqs.length, 1, "get_transcript wird nach dem Handshake nachgeholt");
+  const transcriptReqs = env.posted.filter((m) => m.params && m.params.name === "get_call_result");
+  assert.equal(transcriptReqs.length, 1, "get_call_result wird nach dem Handshake nachgeholt");
 });
 
 test("T-W1-call-F1: das ausgelieferte Widget kennt nur noch tools/call - keine Schrotflinte", () => {
@@ -521,7 +521,7 @@ test("T-W1-call-AC7d: Fallback nach 15s ohne jede Antwort - clearInterval, initi
   assert.equal(doc.slot("status").textContent, "dialing", "initialer Status bleibt sichtbar (nie leer)");
 });
 
-test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEIN get_transcript", () => {
+test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEIN get_call_result", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
   doc.slot("call_id").textContent = "call_1";
@@ -544,7 +544,7 @@ test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEI
   assert.equal(doc.querySelector("[data-failure-display]").textContent, "No answer");
   assert.equal(doc.row("failure").style.display, "", "Grund-Zeile sichtbar bei failed");
   assert.equal(doc.row("summary").style.display, "none", "Ergebnis-Zeile bleibt versteckt bei failed");
-  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 0);
+  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_call_result").length, 0);
   assert.equal(doc.cancelButton().disabled, true);
 
   // OUTBOUND-E3a (Befund D-5): ein unbekanntes/neues Token faellt auf das Sammel-Label

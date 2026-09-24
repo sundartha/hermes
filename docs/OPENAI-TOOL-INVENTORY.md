@@ -33,9 +33,9 @@ config.tenancy.assistantContextEnabled === true && profile?.allowConsult === tru
 | await_call_event | Wait for call update | consult | false | false | false | true |
 | answer_consult | Answer call question | consult | false | true | true | false |
 | get_call_status | Get call status | always | true | false | false | - |
-| get_transcript | Get call transcript | always | true | false | false | - |
+| get_call_result | Get call result | always | true | false | false | - |
 | cancel_call | Cancel a call | always | false | true | true | true |
-| get_my_number | Agent phone number | always | true | false | false | - |
+| get_agent_number | Agent phone number | always | true | false | false | - |
 | list_calls | List calls | always | true | false | false | - |
 | check_inbox | Check inbox | always | false | false | false | false |
 | list_action_items | List action items | always | true | false | false | - |
@@ -54,9 +54,9 @@ place_call|Place a phone call|always|false|true|true|false
 await_call_event|Wait for call update|consult|false|false|false|true
 answer_consult|Answer call question|consult|false|true|true|false
 get_call_status|Get call status|always|true|false|false|-
-get_transcript|Get call transcript|always|true|false|false|-
+get_call_result|Get call result|always|true|false|false|-
 cancel_call|Cancel a call|always|false|true|true|true
-get_my_number|Agent phone number|always|true|false|false|-
+get_agent_number|Agent phone number|always|true|false|false|-
 list_calls|List calls|always|true|false|false|-
 check_inbox|Check inbox|always|false|false|false|false
 list_action_items|List action items|always|true|false|false|-
@@ -64,6 +64,16 @@ get_calendar|Get calendar|calendar|true|false|false|-
 get_agent_status|Get agent status|always|true|false|false|-
 TABLE-A-END
 ```
+
+### Renamed tools
+
+Two tools were renamed for clarity; both are breaking changes (no alias, no silent
+forwarding of the old name).
+
+| old name | new name | why |
+|---|---|---|
+| get_transcript | get_call_result | The tool never returned a transcript - it returns a result summary and whether the objective was achieved. The old name promised content the tool never delivered. |
+| get_my_number | get_agent_number | "my" suggested the caller's own number; the tool returns the phone agent's number instead. |
 
 ### Annotation reasoning
 
@@ -163,7 +173,7 @@ to an external party on at least one path is `true`, even if some invocations se
   - `openWorldHint: false` (O3) - it reads only the account's own store; it reports on a call
     but does not contact the carrier or the other party.
   - `idempotentHint` not set - read-only tool.
-- **get_transcript** (registered `src/mcp-tools.js:1276`, REST `GET /api/calls/:id`).
+- **get_call_result** (registered `src/mcp-tools.js:1545`, REST `GET /api/calls/:id`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the same call record as
     get_call_status and returns the result summary; it never returns the raw transcript and
     writes nothing.
@@ -186,7 +196,7 @@ to an external party on at least one path is `true`, even if some invocations se
   - `idempotentHint: true` - for a call that is no longer running, the route only returns the
     call's current status and does nothing else (`src/routes/api-calls.js:721`); a repeat is a
     no-op, not an error.
-- **get_my_number** (registered `src/mcp-tools.js:1340`, REST `GET /api/state`,
+- **get_agent_number** (registered `src/mcp-tools.js:1613`, REST `GET /api/state`,
   `src/routes/api-read.js:63-96`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the account's agent phone number
     and writes nothing.
@@ -259,12 +269,12 @@ Machine-readable block (`K|transport|count|comma-separated tool names in Table A
 
 ```text
 TABLE-B-BEGIN
-K1|http|12|place_call,await_call_event,answer_consult,get_call_status,get_transcript,cancel_call,get_my_number,list_calls,check_inbox,list_action_items,get_calendar,get_agent_status
-K2|http|10|place_call,get_call_status,get_transcript,cancel_call,get_my_number,list_calls,check_inbox,list_action_items,get_calendar,get_agent_status
-K3|http-oauth|9|place_call,get_call_status,get_transcript,cancel_call,get_my_number,list_calls,check_inbox,list_action_items,get_agent_status
-K4|http-oauth|11|place_call,await_call_event,answer_consult,get_call_status,get_transcript,cancel_call,get_my_number,list_calls,check_inbox,list_action_items,get_agent_status
-K5|http-oauth|9|place_call,get_call_status,get_transcript,cancel_call,get_my_number,list_calls,check_inbox,list_action_items,get_agent_status
-K6|stdio|10|place_call,get_call_status,get_transcript,cancel_call,get_my_number,list_calls,check_inbox,list_action_items,get_calendar,get_agent_status
+K1|http|12|place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_calendar,get_agent_status
+K2|http|10|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_calendar,get_agent_status
+K3|http-oauth|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K4|http-oauth|11|place_call,await_call_event,answer_consult,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K5|http-oauth|9|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_agent_status
+K6|stdio|10|place_call,get_call_status,get_call_result,cancel_call,get_agent_number,list_calls,check_inbox,list_action_items,get_calendar,get_agent_status
 TABLE-B-END
 ```
 

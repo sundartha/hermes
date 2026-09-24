@@ -281,12 +281,12 @@ test("T05-1 (unbekannter sub, localhost): initialize/tools/list unveraendert, pl
   });
 });
 
-test("T05-2 (verifiziertes Token OHNE sub): place_call und get_my_number -> Challenge, Spion 0", async () => {
+test("T05-2 (verifiziertes Token OHNE sub): place_call und get_agent_number -> Challenge, Spion 0", async () => {
   await withOauthFixture(async ({ idp, spy, srv }) => {
     const noSubToken = await idp.sign({ email: "ghost@team.test" }, { noSubject: true });
     for (const [name, args] of [
       ["place_call", { to: "+4915112345678", objective: "Testtermin" }],
-      ["get_my_number", {}],
+      ["get_agent_number", {}],
     ]) {
       const result = await callAsUrl(srv, noSubToken, { name, args });
       assertReauthChallenge(result);
@@ -295,10 +295,10 @@ test("T05-2 (verifiziertes Token OHNE sub): place_call und get_my_number -> Chal
   });
 });
 
-test("T05-3 (zweites/drittes Werkzeug): get_my_number und list_calls -> dieselbe Challenge, Spion 0", async () => {
+test("T05-3 (zweites/drittes Werkzeug): get_agent_number und list_calls -> dieselbe Challenge, Spion 0", async () => {
   await withOauthFixture(async ({ idp, spy, srv }) => {
     const ghostToken = await idp.sign({ sub: "sub-unbekannt-t05-3" });
-    const numberResult = await callAsUrl(srv, ghostToken, { name: "get_my_number" });
+    const numberResult = await callAsUrl(srv, ghostToken, { name: "get_agent_number" });
     const callsResult = await callAsUrl(srv, ghostToken, { name: "list_calls" });
     assertReauthChallenge(numberResult);
     assertReauthChallenge(callsResult);
@@ -311,10 +311,10 @@ test("T05-3 (zweites/drittes Werkzeug): get_my_number und list_calls -> dieselbe
   });
 });
 
-test("T05-4 POSITIV-KONTROLLE: Mandant C (echtes Token) -> get_my_number erreicht den echten Handler, Spion >= 1, KEINE Challenge", async () => {
+test("T05-4 POSITIV-KONTROLLE: Mandant C (echtes Token) -> get_agent_number erreicht den echten Handler, Spion >= 1, KEINE Challenge", async () => {
   await withOauthFixture(async ({ idp, spy, srv }) => {
     const realToken = await idp.sign({ sub: SUB_C });
-    const result = await callAsUrl(srv, realToken, { name: "get_my_number" });
+    const result = await callAsUrl(srv, realToken, { name: "get_agent_number" });
     assert.equal(result._meta?.[MCP_WWW_AUTHENTICATE], undefined, "kein Challenge-Feld im echten Ergebnis");
     assert.ok(spy.count >= 1, "der echte Handler ruft den internen REST-Hop auf - sonst beweist Spion=0 nichts");
   });
@@ -323,7 +323,7 @@ test("T05-4 POSITIV-KONTROLLE: Mandant C (echtes Token) -> get_my_number erreich
 test("T05-5: dieselben resource_metadata/scope-Parameter wie der HTTP-401-Header", async () => {
   await withOauthFixture(async ({ idp, srv }) => {
     const ghostToken = await idp.sign({ sub: "sub-unbekannt-t05-5" });
-    const challengeResult = await callAsUrl(srv, ghostToken, { name: "get_my_number" });
+    const challengeResult = await callAsUrl(srv, ghostToken, { name: "get_agent_number" });
     const challenge = challengeResult._meta[MCP_WWW_AUTHENTICATE][0];
 
     const noTokenRes = await mcpPost(`${srv.localUrl}/mcp`, null);
@@ -343,7 +343,7 @@ test("T05-6: Token-Modus unveraendert - HTTP 403, kein mcp/www_authenticate im B
     ownerNumber: { e164: OWNER_NUM, provider: "telnyx" },
   });
   try {
-    const res = await mcpPost(`${srv.externalUrl || srv.localUrl}/mcp`, "tok-t05-6", toolCall("get_my_number"));
+    const res = await mcpPost(`${srv.externalUrl || srv.localUrl}/mcp`, "tok-t05-6", toolCall("get_agent_number"));
     assert.equal(res.status, HTTP_FORBIDDEN);
     const body = await res.json();
     assert.deepEqual(body, { error: "Keine Tenant-Zuordnung fuer diese Identitaet." });
@@ -360,7 +360,7 @@ test("T05-7: Legacy-Modus unveraendert - 401 ohne resource_metadata, kein JSON-R
     ownerNumber: { e164: OWNER_NUM, provider: "telnyx" },
   });
   try {
-    const res = await mcpPost(`${srv.externalUrl || srv.localUrl}/mcp`, null, toolCall("get_my_number"));
+    const res = await mcpPost(`${srv.externalUrl || srv.localUrl}/mcp`, null, toolCall("get_agent_number"));
     assert.equal(res.status, HTTP_UNAUTHORIZED);
     const header = res.headers.get("www-authenticate") || "";
     assert.ok(header.startsWith('Bearer error="invalid_token"'));
@@ -386,7 +386,7 @@ test("T05-8: stdio unveraendert - echter Handler laeuft, KEINE Challenge, tools/
     await client.connect(transport);
     const list = await client.listTools();
     assert.equal(list.tools.length, TOOL_COUNT_WITHOUT_CONSULT);
-    const result = await client.callTool({ name: "get_my_number", arguments: {} });
+    const result = await client.callTool({ name: "get_agent_number", arguments: {} });
     assert.equal(result._meta?.[MCP_WWW_AUTHENTICATE], undefined);
     assert.ok(spy.count >= 1, "stdio ruft den echten Handler auf, nie den Stub");
   } finally {
@@ -398,7 +398,7 @@ test("T05-8: stdio unveraendert - echter Handler laeuft, KEINE Challenge, tools/
 test("T05-9: ungueltiges Token (falsche Signatur) -> weiterhin HTTP 401 mit oauth-Challenge, kein Tool-Ergebnis", async () => {
   await withOauthFixture(async ({ idp, srv }) => {
     const badToken = await idp.sign({ sub: SUB_C }, { key: idp.wrongKey });
-    const res = await mcpPost(`${srv.localUrl}/mcp`, badToken, toolCall("get_my_number"));
+    const res = await mcpPost(`${srv.localUrl}/mcp`, badToken, toolCall("get_agent_number"));
     assert.equal(res.status, HTTP_UNAUTHORIZED);
     const header = res.headers.get("www-authenticate") || "";
     assert.ok(header.startsWith(CHALLENGE_PREFIX));

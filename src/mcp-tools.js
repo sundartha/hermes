@@ -220,7 +220,7 @@ const CALL_STATUS_OUTPUT = {
 const AWAIT_SUMMARY_PLACEHOLDER =
   "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)";
 
-// Daten-Kontrakt get_transcript (Strategie Abschnitt 5.1, DSGVO): GENAU diese Felder
+// Daten-Kontrakt get_call_result (Strategie Abschnitt 5.1, DSGVO): GENAU diese Felder
 // duerfen nach aussen (structuredContent + Text + Widget). Das Roh-Transkript
 // (c.transcript: role/text/t) wird NIE durchgereicht - es wird serverseitig nach der
 // Summary gepurged (P8a) und faellt hier per Whitelist (nicht Blacklist) ohnehin raus.
@@ -254,7 +254,7 @@ const RESULT_CARD_OUTPUT = {
   next_step: z.string().nullable(),
 };
 
-// outputSchema fuer get_transcript: validiert GENAU die Whitelist. objective_achieved
+// outputSchema fuer get_call_result: validiert GENAU die Whitelist. objective_achieved
 // ist true|false|"unclear" (Bool oder String), daher union.
 const TRANSCRIPT_OUTPUT = {
   call_id: z.string(),
@@ -540,7 +540,7 @@ const CONTEXT_RECEIVED_OUTPUT = z.object({
 
 // outputSchema fuer place_call (W2, vereinte Live-Karte WIDGET_CALL): Obermenge aus
 // CALL_STATUS_OUTPUT (dialing/in_progress/...-Felder) plus den beiden Abschluss-Feldern
-// aus dem get_transcript-Kontrakt (result_summary/objective_achieved), hier initial NULL
+// aus dem get_call_result-Kontrakt (result_summary/objective_achieved), hier initial NULL
 // (der Anruf hat gerade erst begonnen - das Widget pollt Status/Ergebnis selbst nach),
 // plus dem additiven context_received-Meta (I10). Modul-Konstante bei den anderen
 // *_OUTPUT (G35), EIN Spread statt Redefinition (G5/S2).
@@ -610,7 +610,7 @@ const AGENT_STATUS_OUTPUT = {
   permissions: z.string(),
 };
 
-// Daten-Kontrakt get_my_number: GENAU das eine Eigen-Feld number. Whitelist, keine
+// Daten-Kontrakt get_agent_number: GENAU das eine Eigen-Feld number. Whitelist, keine
 // Blacklist. number kann fail-closed leer sein (kein aktiver Nummern-Seed) -> auf null
 // normalisiert (Schema nullable), damit der Schluessel erhalten bleibt.
 function pickMyNumber(s) {
@@ -654,7 +654,7 @@ function callTextLine(e) {
 // ---- check_inbox (PLAN-ANRUF-INBOX, INBOX-P3, E-5) --------------------------------
 // Daten-Kontrakt check_inbox. Die Whitelist lebt an GENAU EINER Stelle: inboxEntryView
 // in src/store/state-ops.js. Dieses Schema ist ihre Schema-Seite, KEINE zweite Sicht -
-// die fuenf Karten-Felder kommen aus demselben RESULT_CARD_OUTPUT wie get_transcript
+// die fuenf Karten-Felder kommen aus demselben RESULT_CARD_OUTPUT wie get_call_result
 // und await_call_event (G5/S2, ein Spread statt einer Redefinition).
 // at (statt started_at) ist der EINZIGE Unterschied zur REST-Sicht: server-seitig in
 // der Tenant-Sprache formatiert, derselbe Formatter wie list_calls/get_calendar.
@@ -796,10 +796,57 @@ const AWAIT_CALL_EVENT_DESCRIPTION =
   "either a question from the agent, the final result, or nothing. Call this REPEATEDLY " +
   "right after place_call and keep going until it returns event=\"done\" - that final " +
   "answer carries the complete result (summary and whether the objective was achieved), " +
-  "so there is no need to call get_transcript separately. event=\"none\" simply means " +
+  "so there is no need to call get_call_result separately. event=\"none\" simply means " +
   "nothing happened yet: call it again. This tool NEVER returns audio. Each call also " +
   "writes to the call record: it notes that you polled and marks a pending question as " +
   "delivered. Pass after_event_id so you do not receive the same question twice.";
+
+// T2-11 (N-13): auf Modulebene wie die anderen *_DESCRIPTION-Konstanten - haelt
+// registerTools() klein (Lint-Pin s. eslint-legacy-exceptions.json). Der Verneinungssatz
+// ("This tool NEVER returns the raw transcript...") bleibt woertlich (er ist in
+// docs/OPENAI-POLICY-ABGLEICH.md zitiert und per Test gepinnt); NEU nennt der erste Satz
+// jedes der acht Antwortfelder beim Namen (N-13: die Antwort traegt acht Felder, die alte
+// Beschreibung nannte nur zwei).
+const CALL_RESULT_DESCRIPTION =
+  "After the call has ended, returns call_id, result_summary, objective_achieved and the " +
+  "result card: outcome, commitments, counterparty_commitments, open_points, next_step. " +
+  "This tool NEVER returns the raw transcript - whether the server keeps it afterwards on " +
+  "its own follows the diagnostic rule of place_call's diagnostic field and is independent " +
+  "of this response. Call this once get_call_status reports a final status - completed, " +
+  "failed or cancelled, not only completed - it carries the result summary for those too.";
+
+// T2-11 (N-13): auf Modulebene wie CALL_RESULT_DESCRIPTION (Lint-Pin). Nennt jedes Feld
+// des outputSchema (AGENT_STATUS_OUTPUT, s.o.) beim Namen mit Bedeutung. "so far" statt
+// "this month" fuer calls: der Zaehler ist ein Lebenszeit-Zaehler (state-ops.js, keine
+// Monats-Reset-Logik gefunden) - "this month" waere eine neue N-13-Unwahrheit.
+const AGENT_STATUS_DESCRIPTION =
+  "Returns the status of the phone agent with these fields: number (the agent's phone " +
+  "number, or null), owner (the account owner's name, or null), calls (number of calls so " +
+  "far), planUsagePercent (share of the monthly minute quota used, in percent, or null if " +
+  "no quota is set), permissions (what the agent may share: summaries, personal data, bank " +
+  "data).";
+
+// T2-11 (N-11): auf Modulebene wie CALL_RESULT_DESCRIPTION/AGENT_STATUS_DESCRIPTION
+// (Lint-Pin). GQ-B2 Fix-Runde 1 (Kommentar zieht mit): der Owner ist waehrend des
+// Anrufs ABWESEND (Normalfall) - dieselbe Praemisse wie MCP_CONSULT_INSTRUCTIONS. Eine
+// unbedingte "ask the user FIRST" waere an diesem naeheren Entscheidungspunkt die
+// Anweisung, die den Zieldefekt (Schweigen bis zum Timeout) erst ausloest. Der letzte
+// Satz nennt den Seiteneffekt jetzt vollstaendig (N-11): die Antwort landet nicht nur im
+// Store, sondern kann am Telefon an den Angerufenen weitergegeben werden - "only" faellt,
+// weil es dieser zutreffenden Aussage widerspraeche (destructiveHint/openWorldHint sind
+// schon true). p15-Emphase-Pin ["FIRST","THEN","SHORT","REJECTED","NOT"] bleibt gueltig -
+// kein neues Grossbuchstaben-Wort.
+const ANSWER_CONSULT_DESCRIPTION =
+  "Answers a question the phone agent asked during a running call. " +
+  "FIRST, the moment you receive the question, call this tool once with " +
+  'status="working" and no answers - that tells the agent someone is on it. ' +
+  'THEN send the real answer with status="final" (the default). ' +
+  "Give SHORT factual answers - one entry per question, each at most " +
+  KEY_FACTS_LIMITS.maxLen +
+  " characters; longer answers are REJECTED and the question stays open. Do NOT invent " +
+  "facts: if you do not know, say so honestly here instead of guessing. Answers reach " +
+  "the agent as background information. The agent may relay your answer to the person " +
+  "on the call.";
 
 // MCP-Annotations (Phase E2, P0-1, geschaerft P1/N-1/X-1/N-3/N-4): Nebenwirkungs-
 // Kennzeichnung je Werkzeug, die ein Client OHNE Beschreibungs-Text lesen kann. Vier
@@ -819,7 +866,7 @@ const AWAIT_CALL_EVENT_DESCRIPTION =
 //    (answer_consult: die Antwort landet zwar im eigenen Store, wird aber waehrend des
 //    laufenden Anrufs an den Gespraechspartner ausgesprochen). O3 = alles andere, auch
 //    wenn es inhaltlich um einen Anruf nach draussen geht (get_call_status,
-//    get_transcript, await_call_event lesen/schreiben ausschliesslich den tenant-lokalen
+//    get_call_result, await_call_event lesen/schreiben ausschliesslich den tenant-lokalen
 //    Store, GET /api/calls/:id, routes/api-read.js:98) - der Hint richtet sich nach dem
 //    ZUGRIFF des Werkzeugs, nicht nach dem Thema seiner Daten.
 // 3. answer_consult traegt destructiveHint: true, weil der eingespeiste Text am Telefon
@@ -873,8 +920,8 @@ const TOOL_ANNOTATIONS = {
     destructiveHint: false,
     openWorldHint: false,
   },
-  get_transcript: {
-    title: "Get call transcript",
+  get_call_result: {
+    title: "Get call result",
     readOnlyHint: true,
     destructiveHint: false,
     openWorldHint: false,
@@ -886,7 +933,7 @@ const TOOL_ANNOTATIONS = {
     idempotentHint: true,
     openWorldHint: true,
   },
-  get_my_number: {
+  get_agent_number: {
     title: "Agent phone number",
     readOnlyHint: true,
     destructiveHint: false,
@@ -942,13 +989,13 @@ const TOOL_INVOCATION_STATUS = {
     invoked: "Answer delivered",
   },
   get_call_status: { invoking: "Checking the call status", invoked: "Call status read" },
-  get_transcript: { invoking: "Reading the call transcript", invoked: "Transcript read" },
+  get_call_result: { invoking: "Reading the call result", invoked: "Call result read" },
   // invoked bewusst "Cancellation requested", nicht "Call cancelled": der REST-Pfad
   // sichert seit S1-4 keinen bestaetigten Leitungsabbruch zu (dieselbe Wahrheit wie
   // CANCEL_CALL_DESCRIPTION). Eine Statuszeile darf nicht mehr behaupten als die
   // Beschreibung.
   cancel_call: { invoking: "Cancelling the call", invoked: "Cancellation requested" },
-  get_my_number: { invoking: "Looking up the agent number", invoked: "Agent number read" },
+  get_agent_number: { invoking: "Looking up the agent number", invoked: "Agent number read" },
   list_calls: { invoking: "Listing recent calls", invoked: "Recent calls listed" },
   check_inbox: { invoking: "Checking the call inbox", invoked: "Inbox checked" },
   list_action_items: {
@@ -1139,7 +1186,7 @@ export function registerTools(
   // place_call: EINZIGE Karte fuer den gesamten Anruf-Lebenszyklus (W2, Spam-Wurzel
   // beseitigt). uiTool statt tool(): initiales structuredContent (dialing, alle Felder
   // auf Start-Werte) + Widget-Anhang (WIDGET_CALL) NUR bei faehigem Host - das Widget
-  // pollt sich selbst (get_call_status/get_transcript ueber die Host-Bruecke), das
+  // pollt sich selbst (get_call_status/get_call_result ueber die Host-Bruecke), das
   // Modell NICHT mehr (kein Karten-Spam). Safety-Gates (Allowlist/Denylist/Land/Budget/
   // Signatur) sitzen UNVERAENDERT in src/server.js /api/calls - hier aendern sich NUR
   // Widget-Anhang, Beschreibung und Rueckgabeform.
@@ -1373,25 +1420,11 @@ export function registerTools(
     uiTool(
       "answer_consult",
       {
-        // GQ-B2 Fix-Runde 1: der Owner ist waehrend des Anrufs ABWESEND (Normalfall) -
-        // dieselbe Praemisse, die MCP_CONSULT_INSTRUCTIONS traegt. Eine unbedingte
-        // "ask the user FIRST" waere an diesem naeheren Entscheidungspunkt die Anweisung,
-        // die den Zieldefekt (Schweigen bis zum Timeout) erst ausloest. Der Satz spiegelt
-        // jetzt denselben Unbekannt-Ausgang wie MCP_CONSULT_INSTRUCTIONS: ehrlich melden
-        // statt erfinden, statt auf den abwesenden Menschen zu warten.
-        description:
-          "Answers a question the phone agent asked during a running call. " +
-          // P2 (SCOPE 2): die Quittung ist die ERSTE Pflicht nach Erhalt der Frage - sie
-          // ist zugleich der Berechtigungstest. Bleibt sie aus, bricht der Server den
-          // Halt nach wenigen Sekunden ab, statt den Anrufer 47 s stumm warten zu lassen.
-          "FIRST, the moment you receive the question, call this tool once with " +
-          'status="working" and no answers - that tells the agent someone is on it. ' +
-          'THEN send the real answer with status="final" (the default). ' +
-          "Give SHORT factual answers - one entry per question, each at most " +
-          KEY_FACTS_LIMITS.maxLen +
-          " characters; longer answers are REJECTED and the question stays open. Do NOT invent " +
-          "facts: if you do not know, say so honestly here instead of guessing. Answers reach " +
-          "the agent as background information only.",
+        // P2 (SCOPE 2): die Quittung ist die ERSTE Pflicht nach Erhalt der Frage - sie
+        // ist zugleich der Berechtigungstest. Bleibt sie aus, bricht der Server den
+        // Halt nach wenigen Sekunden ab, statt den Anrufer 47 s stumm warten zu lassen.
+        // Kommentar zur GQ-B2/N-11-Begruendung: s. ANSWER_CONSULT_DESCRIPTION oben.
+        description: ANSWER_CONSULT_DESCRIPTION,
         annotations: TOOL_ANNOTATIONS.answer_consult,
         inputSchema: {
           call_id: z.string().describe("The call_id from place_call"),
@@ -1492,7 +1525,7 @@ export function registerTools(
 
   // Reines Stufe-0-Tool (W2): kein Widget-Anhang mehr - der Abschluss (Summary/Ziel-
   // Status) erscheint jetzt in der vereinten place_call-Karte (WIDGET_CALL), die
-  // get_transcript beim Terminal-Status "completed" selbst ueber ihre Host-Bruecke
+  // get_call_result beim Terminal-Status "completed" selbst ueber ihre Host-Bruecke
   // aufruft. Bleibt als Text-Tool erhalten (Fallback, falls die Widget-Bruecke nicht
   // antwortet). Handler/Whitelist (pickTranscript) unveraendert.
   //
@@ -1500,12 +1533,19 @@ export function registerTools(
   // war ENGER als der Handler (der lehnt einzig status==="active" ab, :1280) - ein nicht
   // platzierter Anruf ist status=failed, nicht completed, und wurde vom Modell deshalb
   // faelschlich uebersprungen. Jetzt am tatsaechlichen Handler-Verhalten ausgerichtet.
+  // T2-11 (N-12): der fruehere Toolname versprach ein Transkript, das dieses Werkzeug
+  // nie lieferte - Name/Titel/Statuszeilen jetzt umbenannt (Owner-Entscheidung
+  // 2026-09-22, Breaking Change gewollt, kein Alias).
+  // Kopplung: die WIDGET_CALL-Karte (src/ui/widgets/call.html) ruft dieses Werkzeug per
+  // Host-Bruecke unter eigenem Konstantennamen ab (TOOL_GET_CALL_RESULT). Ein Rename hier
+  // ohne Nachzug dort macht die Ergebnis-Karte stumm; eine geaenderte Karte braucht
+  // zusaetzlich eine neue Pin-Version (src/ui/widget-versions.json). Test T11-f in
+  // test/openai-t2-11-werkzeugtexte.test.js prueft jede Widget-Referenz gegen tools/list.
   uiTool(
-    "get_transcript",
+    "get_call_result",
     {
-      description:
-        "After the call has ended, returns the result summary and whether the objective was achieved. This tool NEVER returns the raw transcript - whether the server keeps it afterwards on its own follows the diagnostic rule of place_call's diagnostic field and is independent of this response. Call this once get_call_status reports a final status - completed, failed or cancelled, not only completed - it carries the result summary for those too.",
-      annotations: TOOL_ANNOTATIONS.get_transcript,
+      description: CALL_RESULT_DESCRIPTION,
+      annotations: TOOL_ANNOTATIONS.get_call_result,
       inputSchema: { call_id: z.string().describe("The call_id from place_call") },
       outputSchema: TRANSCRIPT_OUTPUT,
     },
@@ -1564,11 +1604,16 @@ export function registerTools(
   // (my-number Widget) NUR bei faehigem Host. Der Textblock bleibt JSON.stringify ueber
   // den ROHEN agent.number (undefined -> "{}", byte-identisch); structuredContent
   // normalisiert auf null (Schema nullable), damit fehlende Nummer kein isError ist.
+  // T2-11 (N-12): der fruehere Toolname begann mit "my" und suggerierte die Nummer des
+  // Nutzers, das Werkzeug liefert aber die Nummer des Telefon-Agenten - jetzt umbenannt
+  // (Owner-Entscheidung 2026-09-22, Breaking Change gewollt, kein Alias). Titel/Statuszeilen/Beschreibung
+  // bleiben woertlich - nur der Name aendert sich. Die Widget-Bindung laeuft ueber die
+  // Widget-Kennung WIDGET_MY_NUMBER, nicht ueber den Toolnamen, und loest unveraendert auf.
   uiTool(
-    "get_my_number",
+    "get_agent_number",
     {
       description: "Returns the phone number of the phone agent.",
-      annotations: TOOL_ANNOTATIONS.get_my_number,
+      annotations: TOOL_ANNOTATIONS.get_agent_number,
       inputSchema: {},
       outputSchema: MY_NUMBER_OUTPUT,
       ...enableWidgetUi(WIDGET_MY_NUMBER),
@@ -1724,8 +1769,7 @@ export function registerTools(
   uiTool(
     "get_agent_status",
     {
-      description:
-        "Status of the phone agent: phone number, monthly usage, permissions.",
+      description: AGENT_STATUS_DESCRIPTION,
       annotations: TOOL_ANNOTATIONS.get_agent_status,
       inputSchema: {},
       outputSchema: AGENT_STATUS_OUTPUT,

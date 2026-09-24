@@ -373,7 +373,7 @@ services:
       # Ein hier oder im Dashboard gesetzter, abweichender Wert ist Boot-Refusal
       # (boot-guard.angekuendigterOriginFindings) - und damit auch kein /voice.
       # AM6 (nur MCP_AUTH=oauth): WorkOS user.id (sub) des Owners -> bindet den Bootstrap-
-      # Tenant idempotent (idp_subject), damit get_my_number ueber den OAuth-sub nicht leer
+      # Tenant idempotent (idp_subject), damit get_agent_number ueber den OAuth-sub nicht leer
       # ist. Im Dashboard eintragen; opake user_-Id, kein Secret. Leer = kein Seed.
       - key: OWNER_IDP_SUBJECT
         sync: false
