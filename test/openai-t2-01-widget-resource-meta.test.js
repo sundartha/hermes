@@ -29,6 +29,11 @@ import { widgetHtml } from "../src/ui/widget-catalog.js";
 import { WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
 
 const WIDGET_COUNT = 4;
+// T2-13 (N-10): prepare_call teilt sich WIDGET_CALL mit place_call (callWidgetUi,
+// EINMAL berechnet, EINE Resource-Registrierung) - resources/list bleibt bei
+// WIDGET_COUNT (4, die Resource ist dieselbe), aber jetzt tragen FUENF Tools statt
+// vier ein _meta.ui.resourceUri (place_call + prepare_call zeigen auf dieselbe Resource).
+const WIDGET_TOOL_COUNT = 5;
 const HTTP_OK = 200;
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const EXTERNAL_IP = externalIp();
@@ -368,7 +373,7 @@ test("T5 (Waechter ui.domain): weder tools/list noch resources/read tragen irgen
     assert.equal(JSON.stringify(payload).includes("openai/outputTemplate"), false, "kein Skybridge-Alias (HTTP)");
 
     const widgetTools = tools.filter((tool) => tool._meta?.ui?.resourceUri);
-    assert.equal(widgetTools.length, WIDGET_COUNT);
+    assert.equal(widgetTools.length, WIDGET_TOOL_COUNT);
     for (const tool of widgetTools) {
       assert.deepEqual(Object.keys(tool._meta.ui), ["resourceUri"], `${tool.name}: _meta.ui NUR resourceUri`);
     }
