@@ -758,7 +758,7 @@ export const PROFILE_FIELDS = {
   allowedNumbers: "string[]", // eigene Ziel-Freigabe (Pfad 1: gezielte Nummern ohne Abo/Verifikation)
   allowedCountryCodes: "string[]", // engt das globale Land-Gate weiter ein (nie auf)
   unrestricted: "boolean", // erfuellt das Verifikations-Gate (Pfad 1; nur dieses Gate, kein hartes Gate)
-  allowCalendar: "boolean", // get_calendar-MCP-Tool
+  allowCalendar: "boolean", // ohne Konsumenten, das MCP-Kalender-Werkzeug ist entfallen (T2-12)
   allowConsult: "boolean", // AL-P13: await_call_event/answer_consult + Consult-Routen
   allowLookup: "boolean", // AL-P10b: look_up im Gespraech (zweiter Auftragsverarbeiter)
   allowBooking: "boolean", // seit AUTH-P4 ohne Konsumenten (die einzige gegatete Aktion war POST /api/calendar)

@@ -20,7 +20,6 @@ import { WIDGET_AGENT_STATUS } from "./ui/adapters/mcp-native.js";
 import {
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
-  WIDGET_CALENDAR,
   WIDGET_CALL,
 } from "./ui/widget-catalog.js";
 import {
@@ -104,7 +103,7 @@ const text = (s) => ({
 const errText = (s) => ({ content: [{ type: "text", text: s }], isError: true });
 // Datums-/Zeitformat der Tenant-Sprache (FMT-03). dateLocale kommt aus DEMSELBEN
 // Locale-Bundle wie der Anrufpfad (claude.js promptInputs) - kein zweites "de-DE"-
-// Literal in dieser Datei. Fabrik statt drittem Argument an pickCall/pickCalendarEntry:
+// Literal in dieser Datei. Fabrik statt drittem Argument an pickCall & Co.:
 // die Bindung passiert EINMAL je Registrierung (registerTools), nicht je Zeile.
 const makeDateFormatter = (dateLocale) => (iso) =>
   new Date(iso).toLocaleString(dateLocale, {
@@ -118,8 +117,8 @@ const makeDateFormatter = (dateLocale) => (iso) =>
 // AC5 Result-Guard: prueft, ob das api()-Ergebnis die erwarteten Felder mit dem
 // erwarteten Typ traegt, BEVOR ein Handler verschachtelt deref't. api() degradiert
 // bei Parse-Fehler zu `{}` (mcp-tools.js: res.json().catch(() => ({}))); ein blinder
-// Deref (`s.calendar.length`, `r.callId`) crasht darauf mit TypeError. Geprueft wird
-// Existenz/Typ, NICHT Nicht-Leere (leerer Kalender `[]` bleibt valide). Wirft eine
+// Deref (`s.calls.length`, `r.callId`) crasht darauf mit TypeError. Geprueft wird
+// Existenz/Typ, NICHT Nicht-Leere (leere Liste `[]` bleibt valide). Wirft eine
 // generische, provider-freie Tool-Fehlermeldung (kein roher Gateway-Body, Regel 5).
 // Tool-Fehler mit stabiler, sprachneutraler Kennung (P12): der Wurf legt NUR den Code
 // fest, die Uebersetzung passiert an EINER Kante (wrapHandler). Vorher war der deutsche
@@ -657,7 +656,7 @@ function callTextLine(e) {
 // die fuenf Karten-Felder kommen aus demselben RESULT_CARD_OUTPUT wie get_call_result
 // und await_call_event (G5/S2, ein Spread statt einer Redefinition).
 // at (statt started_at) ist der EINZIGE Unterschied zur REST-Sicht: server-seitig in
-// der Tenant-Sprache formatiert, derselbe Formatter wie list_calls/get_calendar.
+// der Tenant-Sprache formatiert, derselbe Formatter wie list_calls.
 // BEWUSST NICHT .strict(): Praezedenz CALL_LIST_ENTRY. Ein spaeter im Store
 // hinzugefuegtes Feld soll als ROTER TEST auffallen (test/inbox-mcp-tool.test.js,
 // Schluesselsatz-Pin), nicht als Laufzeit-Fehler des Werkzeugs.
@@ -716,19 +715,6 @@ const INCLUDE_SEEN_FIELD = z
   .boolean()
   .optional()
   .describe("Re-read entries that were already marked as seen. Changes NO marker.");
-
-// Daten-Kontrakt get_calendar: pro Eintrag GENAU title/start/end (start/end server-seitig
-// formatiert via formatDate - eine Quelle, derselbe Formatter wie der Stufe-0-Text). title
-// nullable (Robustheit, eine defekte Zeile killt nicht die Liste). Kein internes Feld.
-function pickCalendarEntry(e, formatDate) {
-  return { title: e.title ?? null, start: formatDate(e.start), end: formatDate(e.end) };
-}
-const CALENDAR_ENTRY = z.object({
-  title: z.string().nullable(),
-  start: z.string(),
-  end: z.string(),
-});
-const CALENDAR_OUTPUT = { calendar: z.array(CALENDAR_ENTRY) };
 
 // AL-P13, der Eroeffnungs-Consult: das Feld war das einzige der fuenf Kontext-Felder, das
 // dieses Schema NICHT deklarierte - und zod strippt undeklarierte Schluessel STILL. Ueber
@@ -958,12 +944,6 @@ const TOOL_ANNOTATIONS = {
     destructiveHint: false,
     openWorldHint: false,
   },
-  get_calendar: {
-    title: "Get calendar",
-    readOnlyHint: true,
-    destructiveHint: false,
-    openWorldHint: false,
-  },
   get_agent_status: {
     title: "Get agent status",
     readOnlyHint: true,
@@ -1002,7 +982,6 @@ const TOOL_INVOCATION_STATUS = {
     invoking: "Listing open action items",
     invoked: "Action items listed",
   },
-  get_calendar: { invoking: "Reading the calendar", invoked: "Calendar read" },
   get_agent_status: { invoking: "Checking the agent status", invoked: "Agent status read" },
 };
 
@@ -1033,19 +1012,18 @@ const withOpenAiToolMetadata = (name, config) => {
   };
 };
 
-// ctx (Phase 2): { identity, scopedTenant, allowCalendar }. identity wird per Closure
+// ctx (Phase 2): { identity, scopedTenant }. identity wird per Closure
 // an jeden REST-Aufruf gehaengt (X-Internal-Identity); scopedTenant (AM6) ebenso als
-// X-Internal-Tenant (am /mcp-Gateway aufgeloest). allowCalendar steuert, ob das
-// get_calendar-Tool ueberhaupt registriert wird. stdio ruft registerTools(server)
-// ohne ctx -> identity/scopedTenant null (Owner), allowCalendar true.
+// X-Internal-Tenant (am /mcp-Gateway aufgeloest). stdio ruft registerTools(server)
+// ohne ctx -> identity/scopedTenant null (Owner).
 // language (P12): die BEREITS aufgeloeste Tenant-Sprache. Aufgeloest wird sie am
 // Transport (routes/mcp.js) mit derselben Funktion wie im Anrufpfad (views.tenantLanguage
 // -> resolveCallLanguage) - hier gibt es KEINE zweite Aufloesungsregel. Fehlt sie
 // (stdio-Transport, der keinen Store hat), faellt localeFor() fail-safe auf den
 // Weltdefault zurueck (R7) - derselbe eine Fallback wie ueberall sonst.
-// consultAllowed (AL-P13) defaultet auf FALSE (nicht wie allowCalendar auf true): der
-// stdio-Transport hat kein Client-Modell, das pollt, und ein Default-an wuerde die
-// byte-gepinnte Beschreibungs-Inventur ohne Not verschieben.
+// consultAllowed (AL-P13) defaultet auf FALSE: der stdio-Transport hat kein
+// Client-Modell, das pollt, und ein Default-an wuerde die byte-gepinnte
+// Beschreibungs-Inventur ohne Not verschieben.
 // uiHost.chatgptEgress (T2-01 Nachbau): true NUR, wenn routes/mcp.js die Anfrage ueber
 // die veroeffentlichten ChatGPT-Egress-IP-Bereiche als ChatGPT erkannt hat (chatgpt-
 // egress.js) - steuert AUSSCHLIESSLICH, ob die Widget-Resource zusaetzlich zum Alias
@@ -1094,7 +1072,6 @@ export function registerTools(
   {
     identity = null,
     scopedTenant = null,
-    allowCalendar = true,
     consultAllowed = false,
     uiHost = null,
     language = null,
@@ -1719,42 +1696,6 @@ export function registerTools(
       );
     },
   );
-
-  // Kalender-Tool nur registrieren, wenn das Profil es erlaubt (Phase 2). Ein
-  // restriktives Profil sieht get_calendar gar nicht erst. Stufe 0 (Text byte-identisch)
-  // + structuredContent (Whitelist: title/start/end je Eintrag) + Stufe 1 (calendar
-  // Widget) bei faehigem Host. Text UND structuredContent lesen dieselben gewhitelisteten
-  // Eintraege (eine Quelle); leerer Kalender behaelt DE byte-identisch "Kalender ist
-  // leer." + leere Liste.
-  if (allowCalendar)
-    uiTool(
-      "get_calendar",
-      {
-        description: "Shows the owner's next calendar entries.",
-        annotations: TOOL_ANNOTATIONS.get_calendar,
-        inputSchema: {},
-        outputSchema: CALENDAR_OUTPUT,
-        ...enableWidgetUi(WIDGET_CALENDAR),
-      },
-      async () => {
-        const s = await call("GET", "/api/state");
-        // Existenz/Typ pruefen, NICHT Nicht-Leere: leerer Kalender ([]) ist valide
-        // und behaelt den bestehenden "Kalender ist leer."-Pfad.
-        requireFields(s, { calendar: "array" });
-        const entries = s.calendar.map((e) => pickCalendarEntry(e, formatDate)); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
-        // Auch die BEFUELLTE Zeile folgt der Tenant-Sprache (MCP-14), nicht nur der
-        // Leertext: Verbinder und Interpunktion um den Zeitraum liegen im Locale-Buendel
-        // (loc.mcp.calendarLine). Explizite Arrow statt punktfreiem map(loc.mcp.calendarLine),
-        // damit map() nicht Index/Array als weitere Argumente durchreicht.
-        const txt = entries.length
-          ? entries.map((e) => loc.mcp.calendarLine(e)).join("\n")
-          : loc.mcp.emptyCalendar;
-        return {
-          content: [{ type: "text", text: txt }],
-          structuredContent: { calendar: entries },
-        };
-      },
-    );
 
   // KS-P8: EINE Statuszeile fuer die Monatsnutzung. Ohne hinterlegtes Kontingent (null)
   // der fail-closed-Wortlaut aus dem Sprachbuendel statt einer erfundenen 0 %.

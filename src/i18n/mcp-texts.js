@@ -114,7 +114,6 @@ export const MCP_TEXTS = Object.freeze({
     // ein Eintrag ohne Zusammenfassung ist unbequem, aber wahr (E-2, Pre-Mortem R-1).
     emptyInbox: "Keine neuen Anrufe.",
     inboxSummaryUnavailable: "Zusammenfassung nicht verfuegbar (technischer Fehler).",
-    emptyCalendar: "Kalender ist leer.",
     callStillRunning:
       "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
     // AL-P13: Consult-Kanal. TENANT-sichtbarer Text (er erscheint im Chat), deshalb
@@ -135,16 +134,12 @@ export const MCP_TEXTS = Object.freeze({
     consultAnswerRejected:
       "Antwort verworfen (Format oder Laenge). Die Rueckfrage bleibt offen - bitte kuerzer antworten.",
     consultNoLongerOpen: "Diese Rueckfrage ist nicht mehr offen (beantwortet oder Anruf vorbei).",
-    // Stufe-0-Zeilenbausteine (P10/MCP-14): tenant-sichtbarer Text von list_action_items
-    // und get_calendar. Sie standen bis hierher als deutsche Literale in mcp-tools.js -
-    // in einer Oberflaeche, deren Weltdefault "en" ist. DE bleibt byte-identisch zum
-    // Bestand, inklusive des abschliessenden Leerzeichens im Praefix. calendarLine ist
-    // eine ZEILEN-Funktion (nicht nur ein Trennwort), weil Verbinder UND Interpunktion
-    // um den Zeitraum sprachabhaengig sind - dieselbe Begruendung wie bei der
-    // Nutzungszeile unten. Die Zeitwerte kommen fertig formatiert herein.
+    // Stufe-0-Zeilenbausteine (P10/MCP-14): tenant-sichtbarer Text von list_action_items.
+    // Er stand bis hierher als deutsches Literal in mcp-tools.js - in einer Oberflaeche,
+    // deren Weltdefault "en" ist. DE bleibt byte-identisch zum Bestand, inklusive des
+    // abschliessenden Leerzeichens im Praefix.
     emptyActionItems: "Keine offenen Action Items.",
     appointmentPrefix: "(Termin) ",
-    calendarLine: ({ title, start, end }) => `${title}: ${start} bis ${end}`,
     // Feldnamen des get_agent_status-Textblocks (P15/T3a). LABEL, wo der Wert nur
     // angehaengt wird; ZEILEN-Funktion, wo die Sprache die Wortstellung bestimmt
     // (Nutzungszeile). KS-P8: der Prozentwert kommt fertig herein - keine Formatlogik
@@ -206,7 +201,6 @@ export const MCP_TEXTS = Object.freeze({
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
-    emptyCalendar: "Calendar is empty.",
     callStillRunning: "Call is still running. Please poll get_call_status and try again later.",
     // P5b (O-27 Teil 2, W4): description, not an instruction - names the precondition
     // instead of demanding a host security setting.
@@ -222,7 +216,6 @@ export const MCP_TEXTS = Object.freeze({
     consultNoLongerOpen: "This question is no longer open (already answered or the call ended).",
     emptyActionItems: "No open action items.",
     appointmentPrefix: "(Appointment) ",
-    calendarLine: ({ title, start, end }) => `${title}: ${start} to ${end}`,
     agentStatus: Object.freeze({
       number: "Agent number",
       owner: "Owner",
@@ -274,7 +267,6 @@ export const MCP_TEXTS = Object.freeze({
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",
-    emptyCalendar: "L'agenda est vide.",
     callStillRunning:
       "L'appel est encore en cours. Veuillez interroger get_call_status et réessayer plus tard.",
     // P5b (O-27 Teil 2, W4): Beschreibung statt Aufforderung, wie bei den Fassungen
@@ -292,7 +284,6 @@ export const MCP_TEXTS = Object.freeze({
       "Cette question n'est plus ouverte (déjà répondue ou appel terminé).",
     emptyActionItems: "Aucune action en attente.",
     appointmentPrefix: "(Rendez-vous) ",
-    calendarLine: ({ title, start, end }) => `${title} : ${start} à ${end}`,
     agentStatus: Object.freeze({
       number: "Numéro de l'agent",
       owner: "Propriétaire",
