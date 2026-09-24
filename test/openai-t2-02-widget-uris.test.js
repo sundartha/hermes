@@ -16,14 +16,13 @@ import {
   WIDGET_AGENT_STATUS,
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
-  WIDGET_CALENDAR,
   WIDGET_CALL,
   hasWidget,
   widgetHtml,
   widgetVersion,
 } from "../src/ui/widget-catalog.js";
 
-const ALL_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALENDAR, WIDGET_CALL];
+const ALL_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALL];
 
 const PINS_PATH = fileURLToPath(new URL("../src/ui/widget-versions.json", import.meta.url));
 
@@ -91,11 +90,26 @@ test("S7(a) Positiv-Kontrolle: ein veraendertes Byte im HTML ergibt GENAU einen 
 // bewusst eine neue Version anhaengt. Ein ueberschriebener Hash wird dadurch unabhaengig
 // davon rot, welche Version pins[widgetId] gerade als hoechste fuehrt.
 const KNOWN_PINS = {
-  [WIDGET_AGENT_STATUS]: { "1": "8304aed2dd3dd12c73ae8319eb0f8ba742d70c265e9b45a1eed956a048736f5c" },
-  [WIDGET_MY_NUMBER]: { "1": "caaebb738f0b60c5f5fabe5bdb8b4b04e1e563c04a8c08324c78e127fbde31c7" },
-  [WIDGET_CALLS]: { "1": "f65f989627c621bef2c9813d7198383fb6faa744af7cd396d31f97889bdf6555" },
-  [WIDGET_CALENDAR]: { "1": "57f50c389d3b52e5e812d0eb782ae8931b0900a6e5e87ade7ca502a984fa4e0f" },
-  [WIDGET_CALL]: { "1": "d4cc20704fe287449dd3d445f937ec1fb7f6f4480624f3740866764b478c4f81" },
+  [WIDGET_AGENT_STATUS]: {
+    "1": "8304aed2dd3dd12c73ae8319eb0f8ba742d70c265e9b45a1eed956a048736f5c",
+    "2": "32fed2e0273a1afeae313926acc13dc4d1eab53e919d57d7e4bc9c7fbbb687ee",
+  },
+  [WIDGET_MY_NUMBER]: {
+    "1": "caaebb738f0b60c5f5fabe5bdb8b4b04e1e563c04a8c08324c78e127fbde31c7",
+    // T2-11 (Umbenennung get_my_number -> get_agent_number).
+    "2": "877d0e0a5b585ea4825be97a8fb52711c948bb86fecf65c52354dbc63ee9af3e",
+    "3": "16ed6203a37e8239145bab68cb13d44732c79a6bb8033839fca72f4c76790528",
+  },
+  [WIDGET_CALLS]: {
+    "1": "f65f989627c621bef2c9813d7198383fb6faa744af7cd396d31f97889bdf6555",
+    "2": "33b00db2fbcb0bd4eea89cc6a564291154487ed4ee38395aa39683602914fcd9",
+  },
+  [WIDGET_CALL]: {
+    "1": "d4cc20704fe287449dd3d445f937ec1fb7f6f4480624f3740866764b478c4f81",
+    // T2-11 (Umbenennung get_transcript -> get_call_result).
+    "2": "c2ef262dbabc0e64100045331ad7a4beff93d004b2368381f9f834a471586936",
+    "3": "64bf5d21c4b039f07e236052f437ff2d7be6b719a0c5ad059684312700f58e86",
+  },
 };
 
 test("S7(a)-Ledger: bekannte (Widget, Version, Hash)-Paare bleiben unveraendert - kein Ueberschreiben statt Anhaengen", () => {
@@ -155,7 +169,6 @@ const BASELINE_BYTES_A941D23 = {
   [WIDGET_AGENT_STATUS]: 214943,
   [WIDGET_MY_NUMBER]: 213294,
   [WIDGET_CALLS]: 214450,
-  [WIDGET_CALENDAR]: 213767,
   [WIDGET_CALL]: 247763,
 };
 const BUDGET_FACTOR = 1.1;
