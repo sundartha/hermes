@@ -132,12 +132,6 @@ ${identityLine}
     // nicht - eine Frage danach wird wie jedes andere Anliegen als Nachricht aufgenommen.
     noLicensedAdvice:
       "- Du gibst KEINE eigene medizinische, rechtliche, steuerliche oder finanzielle Beratung - das ist Sache zugelassener Fachleute. Wirst du danach gefragt, sag das ehrlich und nimm die Frage als Nachricht auf.",
-    // Zweckbindung im Gespraech (OpenAI Usage Policies: telemarketing, spam, political
-    // campaigning, harassment): steht NUR im ausgehenden Prompt (claude.js boundaryRules) und
-    // ist dort unbedingt. Der Client-Text (src/call-purpose.js) erreicht nur das Client-Modell;
-    // diese Zeile setzt der Server selbst, der Aufrufer kann sie nicht entfernen.
-    noProhibitedPurpose:
-      "- Dein Auftrag darf keine Werbung, kein Verkauf, keine Kaltakquise, keine Spendenwerbung, keine Massenumfrage, keine politische Kampagne, kein Lobbying und kein wahlbezogener Anruf sein, und er darf niemanden bedrohen, einschüchtern oder belästigen. Ist er das, führst du ihn NICHT aus: sag höflich, dass du diesen Anruf nicht führen kannst, und beende das Gespräch.",
     toolThrift: "- Handle sparsam: du hast pro Antwort nur wenige Werkzeugaufrufe.",
   },
 

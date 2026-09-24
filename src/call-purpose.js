@@ -11,9 +11,7 @@
 //
 // Grenze dieses Textes: er ist eine Anweisung an das Client-Modell, KEINE serverseitige
 // Pruefung. Der Server liest den Zweck eines Anrufs nicht; die Safety-Gates bleiben die
-// einzige harte Sperre (docs/OPENAI-POLICY-ABGLEICH.md nennt das als Restluecke). Im
-// Gespraech setzt der Server dieselbe Grenze selbst (boundaries.noProhibitedPurpose, nur
-// ausgehend, claude.js boundaryRules) - auch das eine Anweisung, an das Gespraechsmodell.
+// einzige harte Sperre (docs/OPENAI-POLICY-ABGLEICH.md nennt das als Restluecke).
 //
 // BEWUSST ohne Grossbuchstaben-Emphase: die Beschreibungen von place_call tragen eine
 // gepinnte Emphase-Inventur (test/p15-mcp-tool-descriptions-en.test.js).

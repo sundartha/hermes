@@ -39,9 +39,8 @@ const NO_NAME_TENANT_ID = "t_oc_p3_no_name";
 const OUTBOUND = "outbound";
 
 // Golden-Fixture (5.2): aus UNBERUEHRTEM master abgegriffen, VOR jedem OC-P3-Edit.
-// Einzige spaetere, absichtliche Aenderungen: die unbedingte Grenz-Zeile noLicensedAdvice
-// (Beratungsverbot) steht je Sprache und Richtung vor toolThrift; nur ausgehend folgt ihr
-// die Zweckbindung noProhibitedPurpose.
+// Einzige spaetere, absichtliche Aenderung: die unbedingte Grenz-Zeile noLicensedAdvice
+// (Beratungsverbot) steht je Sprache und Richtung vor toolThrift.
 // Zeile 2 des Prompts (uhrabhaengig) ist bereits maskiert - maskSecondLine unten
 // erzeugt beim Vergleich dieselbe Maskierung.
 const GOLDEN = JSON.parse(
@@ -200,16 +199,6 @@ for (const lang of LANGS) {
     const disclosure = disclosureSentence(call);
     assert.equal(disclosure, LOCALES[lang].disclosure(OWNER), `${lang}: disclosureSentence-Quelle abweichend`);
     assert.ok(prompt.includes(disclosure), `${lang}: Offenlegungssatz fehlt woertlich in der Rueckfallzeile`);
-  });
-}
-
-// Die Zweckbindung (kein Werbe-, Kampagnen- oder Belaestigungsauftrag) haengt an der
-// Richtung, nicht am Ziel: auch der Anruf an die eigene Nummer traegt sie.
-for (const lang of LANGS) {
-  test(`OC-P3-B systemPrompt Owner-Ziel ${lang}: Zweckbindung steht auch beim Anruf an die eigene Nummer`, () => {
-    const prompt = systemPrompt(ownerCall({ language: lang }));
-    const { boundaries } = LOCALES[lang].prompt;
-    assert.ok(prompt.includes(boundaries.noProhibitedPurpose), `${lang}: Zweckbindung fehlt`);
   });
 }
 

@@ -96,9 +96,6 @@ ${identityLine}
     // Beratungsverbot: s. DE.
     noLicensedAdvice:
       "- Tu ne donnes AUCUN conseil médical, juridique, fiscal ou financier de ta part - cela relève de professionnels agréés. Si on te le demande, dis-le honnêtement et consigne la question comme un message.",
-    // Zweckbindung im Gespraech: s. DE.
-    noProhibitedPurpose:
-      "- Ta mission ne doit être ni de la publicité, ni de la vente ou de la prospection à froid, ni un appel aux dons, ni un sondage de masse, ni une campagne politique, ni du lobbying, ni un appel lié à une élection, et elle ne doit menacer, intimider ni harceler personne. Si c'est le cas, tu ne l'exécutes PAS : dis poliment que tu ne peux pas passer cet appel, et mets fin à l'appel.",
     toolThrift: "- Sois économe : tu n'as droit qu'à peu d'appels d'outils par réponse.",
   },
 
