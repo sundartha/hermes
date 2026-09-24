@@ -161,7 +161,7 @@
          BIND_SCRIPT laeuft NACH dem Inline-Skript und wuerde formatierte Werte
          sonst wieder mit Rohwerten (Sekundenzahl, roher Reason-Token,
          true/false) ueberschreiben. Das Inline-Skript befuellt sie formatiert/
-         lokalisiert aus denselben Pushes (applyCallStatus/applyTranscript). -->
+         lokalisiert aus denselben Pushes (applyCallStatus/applyCallResult). -->
     <div class="rows">
       <div class="row"><span class="row-k" data-i18n="Duration">Duration</span><span class="row-v" data-duration-display>—</span></div>
       <div class="row lines" data-row="lines" data-mcp="last_transcript_lines"></div>
@@ -399,7 +399,7 @@
     var pollTimerId = null;
     var fallbackTimerId = null;
     var anyResponseReceived = false;
-    var transcriptFetched = false;
+    var callResultFetched = false;
     var pendingRequests = {}; // rpcId -> Tool-Name (Antwort-Zuordnung, s. handleMessage)
     var consecutiveRpcErrors = 0;
     var rpcCounter = 0;
@@ -584,7 +584,7 @@
       setRowVisible("objective", status === "completed");
       setCancelDisabled(terminal);
       if (terminal) stopPolling();
-      if (status === "completed") fetchTranscriptOnce();
+      if (status === "completed") fetchCallResultOnce();
     }
 
     // Wendet die get_call_status-Whitelist (pickCallStatus, src/mcp-tools.js) an.
@@ -601,7 +601,7 @@
     }
 
     // Wendet die get_call_result-Whitelist (pickTranscript) an.
-    function applyTranscript(data) {
+    function applyCallResult(data) {
       if (!isRecord(data)) return;
       if (data.call_id) setSlotText("call_id", data.call_id);
       if ("result_summary" in data) setSlotText("result_summary", data.result_summary);
@@ -642,7 +642,7 @@
     }
 
     function dispatchFor(tool) {
-      return tool === TOOL_GET_CALL_RESULT ? applyTranscript : applyCallStatus;
+      return tool === TOOL_GET_CALL_RESULT ? applyCallResult : applyCallStatus;
     }
 
     // Der EINZIGE ausgehende Weg: JSON-RPC-postMessage "tools/call" an den Host, id-
@@ -651,7 +651,7 @@
     // Handshake beantwortet der Host keinen Tool-Call. Rueckgabewert (true = tatsaechlich
     // gesendet) ist Pflicht fuer jeden Aufrufer, der einen einmaligen Effekt (Fetch-Guard,
     // optische Deaktivierung) an den Versand knuepft - sonst faellt der Effekt auf einen
-    // Aufruf, der der Host nie gesehen hat (s. fetchTranscriptOnce/onCancelClick).
+    // Aufruf, der der Host nie gesehen hat (s. fetchCallResultOnce/onCancelClick).
     function sendToolCall(tool, args) {
       if (!window[UI_READY_FLAG]) return false;
       var parent = window.parent;
@@ -665,17 +665,17 @@
       return true;
     }
 
-    // transcriptFetched wird NUR bei tatsaechlichem Versand gesetzt (Rueckgabewert von
+    // callResultFetched wird NUR bei tatsaechlichem Versand gesetzt (Rueckgabewert von
     // sendToolCall). Trifft die completed-Notification VOR dem Handshake ein (Kanal A ist
     // nicht ready-gegated, s. Kommentar bei METHOD_TOOL_RESULT), schlaegt der Versand fehl
     // und der Guard bleibt offen - verloren geht dadurch nichts: init() startet ueber
     // whenUiReady(startPolling) so oder so einen Poll-Tick, sobald der Handshake steht;
-    // dessen Antwort ruft bei weiterhin completed erneut updateForStatus/fetchTranscriptOnce
+    // dessen Antwort ruft bei weiterhin completed erneut updateForStatus/fetchCallResultOnce
     // auf, und dieser zweite Versuch trifft auf ready=true.
-    function fetchTranscriptOnce() {
-      if (transcriptFetched) return;
+    function fetchCallResultOnce() {
+      if (callResultFetched) return;
       var callId = currentCallId();
-      if (callId && sendToolCall(TOOL_GET_CALL_RESULT, { call_id: callId })) transcriptFetched = true;
+      if (callId && sendToolCall(TOOL_GET_CALL_RESULT, { call_id: callId })) callResultFetched = true;
     }
 
     function pollTick() {
@@ -717,7 +717,7 @@
 
       if (m.method === METHOD_TOOL_RESULT && isRecord(m.params) && isRecord(m.params.structuredContent)) {
         var pushed = m.params.structuredContent;
-        var pushedFn = "result_summary" in pushed ? applyTranscript : applyCallStatus;
+        var pushedFn = "result_summary" in pushed ? applyCallResult : applyCallStatus;
         markResponse(pushed, pushedFn);
         return;
       }

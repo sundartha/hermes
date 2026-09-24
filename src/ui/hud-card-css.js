@@ -1,10 +1,11 @@
-// Gemeinsamer Olympus-HUD-Kartenrahmen fuer die 4 Read-only-Widgets (H4:
-// agent-status/my-number/calls/calendar) - dieselbe visuelle Sprache wie
-// call.html (H3, MUSTER), aber NICHT aus call.html importiert: call.html
-// bleibt in dieser Kette unangetastet (ABS_RULES der H4-Phase), behaelt daher
-// seine eigene, werte-identische Token-Deklaration. Die 4 Read-only-Widgets
-// teilen dieses Fragment wortgleich - EINE Quelle statt 4x derselben ~35
-// CSS-Zeilen (G5/S2). widget-catalog.js injiziert es per Platzhalter-Replace
+// Gemeinsamer Olympus-HUD-Kartenrahmen fuer die 3 Read-only-Widgets (H4:
+// agent-status/my-number/calls; calendar entfallen seit T2-12) - dieselbe
+// visuelle Sprache wie call.html (H3, MUSTER), aber NICHT aus call.html
+// importiert: call.html bleibt in dieser Kette unangetastet (ABS_RULES der
+// H4-Phase), behaelt daher seine eigene, werte-identische Token-Deklaration.
+// Die Read-only-Widgets teilen dieses Fragment wortgleich - EINE Quelle statt
+// mehrfacher Kopien derselben ~35 CSS-Zeilen (G5/S2). widget-catalog.js
+// injiziert es per Platzhalter-Replace
 // (withHudCardCss), dasselbe Muster wie WING_CSS/WING_MARKUP (wing-markup.js)
 // und WING_ENGINE (wing-canvas-engine.js).
 //
@@ -14,8 +15,8 @@
 //   unten (dort per .list-Scope auf die Listen-Widgets begrenzt, agent-
 //   status.html hat keinen .list-Container).
 // - .cell[data-field=...] (feldspezifische Farben/Formatierung) -
-//   calls.html/calendar.html haben unterschiedliche Felder/Farben, keine
-//   wortgleiche Kopie. Die Basis-Regeln .list .row/.list .cell SIND dagegen
+//   calls.html hat eigene Felder/Farben, keine wortgleiche Kopie mit anderen
+//   Listen-Widgets. Die Basis-Regeln .list .row/.list .cell SIND dagegen
 //   wortgleich und leben deshalb hier (analog .list, s.u.).
 // Werte (Farben/Radien/Ease) sind ABSICHTLICH identisch zu call.html gewaehlt
 // (Produkt-weite Konsistenz), die Wing-Groesse (86px) ist H4-spezifisch
@@ -73,14 +74,14 @@ export const HUD_CARD_CSS = `
   .wing-canvas-mount canvas{filter:var(--wing-glow-filter)}
   .phase{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.5)}
   .hero-title{font-size:16px;font-weight:600;color:rgba(255,255,255,.94)}
-  /* Objekt-Listen-Wrapper (calls.html/calendar.html) + Basis-Regeln fuer die
-     von renderRows() erzeugten Kind-Elemente (widget-bind.js: ROW_CLASS=row,
-     CELL_CLASS=cell, DOM ist .list > .row > .cell) - wortgleich zwischen
-     calls.html und calendar.html, deshalb hier EINE Quelle statt 2x Kopie
-     (G5/S2). Mit .list gescoped, damit diese Basis-Regeln NICHT mit dem
-     andersartigen .row in agent-status.html kollidieren (dort .rows > .row-k/
-     .row-v, kein .list-Container - s. Kommentar oben). Die feldspezifischen
-     [data-field=...]-Overrides bleiben lokal in calls.html/calendar.html. */
+  /* Objekt-Listen-Wrapper (calls.html) + Basis-Regeln fuer die von
+     renderRows() erzeugten Kind-Elemente (widget-bind.js: ROW_CLASS=row,
+     CELL_CLASS=cell, DOM ist .list > .row > .cell) - hier als EINE Quelle
+     statt lokal dupliziert (G5/S2). Mit .list gescoped, damit diese
+     Basis-Regeln NICHT mit dem andersartigen .row in agent-status.html
+     kollidieren (dort .rows > .row-k/.row-v, kein .list-Container - s.
+     Kommentar oben). Die feldspezifischen [data-field=...]-Overrides
+     bleiben lokal in calls.html. */
   .list{position:relative;z-index:1;display:flex;flex-direction:column}
   .list .row{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;
     padding:11px 2px;border-top:1px solid rgba(255,255,255,.09)}

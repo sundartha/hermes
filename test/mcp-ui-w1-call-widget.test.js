@@ -398,7 +398,7 @@ test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert
   assert.equal(env.posted.length, 1, "erster Versand nach dem Handshake ist der Poll-Tick, nicht der nachgeholte Transcript-Fetch");
   assert.equal(env.posted[0].params.name, "get_call_status");
 
-  // Antwort auf den Poll-Tick: Call ist weiterhin completed -> fetchTranscriptOnce()
+  // Antwort auf den Poll-Tick: Call ist weiterhin completed -> fetchCallResultOnce()
   // laeuft ein zweites Mal, diesmal mit ready=true - der Fetch ist NICHT verloren.
   env.emit({
     jsonrpc: "2.0",

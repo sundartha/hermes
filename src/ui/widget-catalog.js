@@ -22,7 +22,6 @@ import { HUD_CARD_CSS } from "./hud-card-css.js";
 export const WIDGET_AGENT_STATUS = "agent-status";
 export const WIDGET_MY_NUMBER = "my-number";
 export const WIDGET_CALLS = "calls";
-export const WIDGET_CALENDAR = "calendar";
 // W1 (MCP-UI-Live-Widget): vereintes Call-Widget fuer den gesamten Anruf-Lebenszyklus
 // (dialing -> in_progress -> completed/failed/cancelled), seit W2 an place_call
 // verdrahtet. Subsumiert die frueheren Einzel-Widgets (Status/Cancel/Transkript-
@@ -108,7 +107,6 @@ const WIDGET_DEFS = {
   [WIDGET_AGENT_STATUS]: { file: "agent-status.html", title: "Hermes Agent Status", wing: WING_DARK_STATIC },
   [WIDGET_MY_NUMBER]: { file: "my-number.html", title: "Hermes Agent Number", wing: WING_DARK_STATIC },
   [WIDGET_CALLS]: { file: "calls.html", title: "Hermes Call List", wing: WING_DARK_STATIC },
-  [WIDGET_CALENDAR]: { file: "calendar.html", title: "Hermes Calendar", wing: WING_DARK_STATIC },
   [WIDGET_CALL]: { file: "call.html", title: "Hermes Call", wing: WING_DARK_LIVE },
 };
 
