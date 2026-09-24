@@ -14,6 +14,8 @@ import fs from "node:fs";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
+import { MCP_TEXTS } from "../src/i18n/mcp-texts.js";
+import { MCP_BASE_INSTRUCTIONS } from "../src/mcp-server-info.js";
 import { planProfileFor } from "../src/plans.js";
 import {
   startServer,
@@ -426,4 +428,200 @@ test("Nachbesserung: Consult-Kanal aktiv (CONSULT_ENABLED) stoert die Bestaetigu
   } finally {
     await srv.stop();
   }
+});
+
+// ============ Safety-Review T2-13, zweite Runde ============================================
+// (f) am Draht ueber ALLE drei Transporte, Modelltexte ohne Selbstbestaetigung, alter Slot,
+// ungebundenes briefing/context. Ablauf mit injizierter Uhr, Fehlversuchsbremse,
+// Zukunfts-Slot und language-Bindung laufen ueber die ECHTE Route-Factory in
+// test/call-confirmation.test.js (der gespawnte Server hat bewusst keine Uhr-Naht).
+
+// Plan-Kriterium (f): place_call-Annotationen UNVERAENDERT gegenueber dem Stand vor T2-13.
+const PLACE_CALL_ANNOTATIONS_BEFORE = {
+  title: "Place a phone call",
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: true,
+};
+
+function assertCriterionF(tools, transport) {
+  const byName = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
+  const prepare = byName.prepare_call;
+  assert.ok(prepare, `${transport}: prepare_call ist registriert`);
+  assert.equal(prepare.annotations.readOnlyHint, true, `${transport}: prepare_call readOnlyHint`);
+  assert.equal(prepare.annotations.destructiveHint, false, `${transport}: prepare_call destructiveHint`);
+  assert.equal(prepare.annotations.openWorldHint, false, `${transport}: prepare_call openWorldHint`);
+  const place = byName.place_call;
+  for (const [hint, value] of Object.entries(PLACE_CALL_ANNOTATIONS_BEFORE)) {
+    assert.equal(place.annotations[hint], value, `${transport}: place_call ${hint} unveraendert`);
+  }
+  const field = place.inputSchema.properties.confirmation_code;
+  assert.ok(field, `${transport}: confirmation_code steht in inputSchema.properties`);
+  assert.ok(
+    !(place.inputSchema.required || []).includes("confirmation_code"),
+    `${transport}: confirmation_code steht NICHT in inputSchema.required (SDK-Grund, Kriterium f)`,
+  );
+  assert.match(field.description, /REQUIRED/, `${transport}: Feldbeschreibung nennt die Pflicht`);
+}
+
+async function listToolsHttp(url, token) {
+  const res = await mcpPost(url, token, { jsonrpc: "2.0", id: 1, method: "tools/list" });
+  const { tools } = await readToolResult(res);
+  return tools;
+}
+
+test("(f) am Draht, HTTP Legacy: Annotationen und confirmation_code optional im Schema", async () => {
+  await withServer(async (srv) => {
+    assertCriterionF(await listToolsHttp(`${srv.localUrl}/mcp`, null), "HTTP Legacy");
+  });
+});
+
+test("(f) am Draht, HTTP OAuth (echtes Token): Annotationen und confirmation_code optional im Schema", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: {
+      FAKE_ORIGINATE: "true",
+      MCP_UI_ENABLED: "true",
+      CALL_CONFIRMATION_SECRET: TEST_SECRET,
+      MULTI_TENANT: "true",
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+    },
+    seed: seedState({
+      tenants: [oauthTenant(OAUTH_TENANT_A, OAUTH_SUB_A)],
+      profiles: { [OAUTH_TENANT_A]: planProfileFor("business") },
+    }),
+  });
+  try {
+    const token = await idp.sign({ sub: OAUTH_SUB_A });
+    assertCriterionF(await listToolsHttp(`${srv.localUrl}/mcp`, token), "HTTP OAuth");
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+test("(f) am Draht, stdio (echter Kindprozess): Annotationen und confirmation_code optional im Schema", async () => {
+  const gateway = await startServer({ env: { CALL_CONFIRMATION_SECRET: TEST_SECRET } });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: ["src/mcp-server.js"],
+    cwd: ROOT,
+    env: { ...BASE_ENV, GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" },
+    stderr: "pipe",
+  });
+  const client = new Client({ name: "hermes-t2-13-stdio-list", version: "0.0.0" });
+  try {
+    await client.connect(transport);
+    const { tools } = await client.listTools();
+    assertCriterionF(tools, "stdio");
+  } finally {
+    await client.close();
+    await gateway.stop();
+  }
+});
+
+// Anleitung an das MODELL, den Code selbst aus der Karte zu nehmen (= Selbstbestaetigung):
+// ein Lese-/Pruef-Verb und "Code" im selben Teilsatz. Je Sprache, weil die Verben es sind.
+const SELF_CONFIRMATION_PATTERNS = {
+  de: [/\bCode\b[^.;]*\b(pruefen|ablesen|lesen|abschreiben|uebernehmen)\b/i, /\b(pruefe|lies)\b[^.;]*\bCode\b/i],
+  en: [/\b(check|read|look at|copy|take)\b[^.;]*\bcode\b/i, /\breveals?\b[^.;]*\bcode\b/i],
+  fr: [/\b(vérifiez|lisez|copiez|relevez)\b[^.;]*\bcode\b/i],
+};
+// Pflichtaussagen je Sprache: der NUTZER bestaetigt, nie raten/erfinden.
+const REQUIRED_STATEMENTS = {
+  de: [/Nutzer[^.]*bestaetig/, /nie einen Code raten oder erfinden/],
+  en: [/\buser\b[^.]*confirms?/, /never guess or invent/],
+  fr: [/utilisateur[^.]*confirme/, /ne devinez ni n'inventez jamais/],
+};
+// Wortlaut VOR dieser Korrektur (Commit 9862021) - Positiv-Kontrolle: der Pruefer muss ihn
+// als Selbstbestaetigung erkennen, sonst waere "nicht gefunden" wertlos.
+const OLD_CARD_HINTS = {
+  de: "Vorschau erstellt. Zum Bestaetigen den Code in der Hermes-Karte pruefen und mit place_call (gleiche Angaben) erneut aufrufen.",
+  en: "Preview created. To confirm, check the code in the Hermes card and call place_call again with the same arguments.",
+  fr: "Aperçu créé. Pour confirmer, vérifiez le code dans la carte Hermes puis rappelez place_call avec les mêmes arguments.",
+};
+
+function selfConfirmationHits(language, text) {
+  return SELF_CONFIRMATION_PATTERNS[language].filter((pattern) => pattern.test(text));
+}
+
+test("Modelltexte je Sprache: keine Anleitung zur Selbstbestaetigung, Nutzer bestaetigt, nie raten (Positiv-Kontrolle: alter Text wird erkannt)", () => {
+  const languages = Object.keys(MCP_TEXTS);
+  assert.deepEqual(languages.sort(), Object.keys(SELF_CONFIRMATION_PATTERNS).sort(), "jede Sprache hat Muster");
+  for (const language of languages) {
+    assert.ok(selfConfirmationHits(language, OLD_CARD_HINTS[language]).length > 0, `${language}: alter Text wird erkannt`);
+    const texts = MCP_TEXTS[language];
+    const modelTexts = [
+      texts.prepareCallCardHint,
+      texts.prepareCallNoCardHint,
+      texts.confirmationRequired(TARGET, OBJECTIVE),
+    ];
+    for (const text of modelTexts) {
+      assert.deepEqual(selfConfirmationHits(language, text), [], `${language}: keine Selbstbestaetigung in "${text}"`);
+    }
+    for (const statement of REQUIRED_STATEMENTS[language]) {
+      assert.match(texts.prepareCallCardHint, statement, `${language}: Kartenhinweis`);
+      assert.match(texts.confirmationRequired(TARGET, OBJECTIVE), statement, `${language}: Ablehnungstext`);
+    }
+  }
+  assert.deepEqual(selfConfirmationHits("en", MCP_BASE_INSTRUCTIONS), [], "Server-Instruktionen");
+});
+
+test("Modelltexte am Draht: prepare_call-Text und Werkzeugbeschreibungen leiten nicht zur Selbstbestaetigung an", async () => {
+  await withServer(async (srv) => {
+    const prep = await prepareCall(srv, { to: TARGET, objective: OBJECTIVE });
+    assert.equal(prep.content[0].text, MCP_TEXTS.en.prepareCallCardHint, "Weltdefault EN, Kartenhinweis");
+    const tools = await listToolsHttp(`${srv.localUrl}/mcp`, null);
+    const byName = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
+    const placeCallFields = byName.place_call.inputSchema.properties;
+    const descriptions = [
+      byName.prepare_call.description,
+      byName.place_call.description,
+      placeCallFields.confirmation_code.description,
+    ];
+    for (const text of descriptions) {
+      assert.deepEqual(selfConfirmationHits("en", text), [], `keine Selbstbestaetigung in "${text}"`);
+      assert.match(text, /never guess or invent/, "nennt das Rate-/Erfindungsverbot");
+    }
+  });
+});
+
+test("Draht: nach Verbrauch + neuem prepare_call wird der Code des ALTEN Slots abgelehnt, der neue gilt", async () => {
+  await withServer(async (srv) => {
+    const args = { to: TARGET, objective: OBJECTIVE };
+    const oldCode = (await prepareCall(srv, args))._meta[CONFIRMATION_META_KEY];
+    assert.notEqual((await placeCall(srv, { ...args, confirmation_code: oldCode })).isError, true);
+    const freshCode = (await prepareCall(srv, args))._meta[CONFIRMATION_META_KEY];
+    assert.notEqual(freshCode, oldCode, "neuer Slot, neuer Code");
+    const old = await placeCall(srv, { ...args, confirmation_code: oldCode });
+    assert.equal(old.isError, true, "alter Slot-Code -> isError");
+    const fresh = await placeCall(srv, { ...args, confirmation_code: freshCode });
+    assert.notEqual(fresh.isError, true, "Code des aktuellen Slots gilt");
+  });
+});
+
+test("Draht: geaendertes briefing/context waehlt trotzdem (nicht gebunden), geaendertes max_duration_s/constraints nicht", async () => {
+  await withServer(async (srv) => {
+    const before = srv.readStore().calls.length;
+    const issued = {
+      to: TARGET,
+      objective: OBJECTIVE,
+      briefing: "Kunde seit 2019",
+      context: { summary: "erste Fassung" },
+      max_duration_s: 300,
+      constraints: "hoechstens 40 Euro",
+    };
+    const code = (await prepareCall(srv, issued))._meta[CONFIRMATION_META_KEY];
+    const otherDuration = await placeCall(srv, { ...issued, max_duration_s: 600, confirmation_code: code });
+    assert.equal(otherDuration.isError, true, "geaendertes max_duration_s -> isError");
+    const otherConstraints = await placeCall(srv, { ...issued, constraints: "beliebig", confirmation_code: code });
+    assert.equal(otherConstraints.isError, true, "geaenderte constraints -> isError");
+    assert.equal(srv.readStore().calls.length, before, "noch kein Anruf");
+    const reworded = { ...issued, briefing: "Stammkunde, umformuliert", context: { summary: "zweite Fassung" } };
+    const placed = await placeCall(srv, { ...reworded, confirmation_code: code });
+    assert.notEqual(placed.isError, true, "umformuliertes briefing/context waehlt");
+    assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf");
+  });
 });
