@@ -109,18 +109,18 @@ nie gemessen.
 
 - Einschlaegig: ja. Hermes fuehrt echte ausgehende Anrufe an Dritte.
 - Mechanismen im Code (Kette der Ausgangs-Gates, serverseitig, vor dem Waehlen):
-  - Globaler Notaus: Gate `outbound_frozen` (`src/telephony/outbound-gates.js:687`).
-  - Verifikation des Kontos: Gate `kyc` (`src/telephony/outbound-gates.js:758`), Mindeststufe
+  - Globaler Notaus: Gate `outbound_frozen` (`src/telephony/outbound-gates.js:699`).
+  - Verifikation des Kontos: Gate `kyc` (`src/telephony/outbound-gates.js:772`), Mindeststufe
     `KYC_OUTBOUND_MIN = KYC_LEVEL.CARD` (`src/store/defaults.js:524`).
   - Sperrliste und Land-Gate: `deniedPrefix` bzw. `countryGateAllowed` in `numberGateError`
-    (`src/telephony/outbound-gates.js:504-506`, `src/telephony/outbound-gates.js:359-363`),
-    ausgefuehrt im Gate `number_gate` (`src/telephony/outbound-gates.js:800`).
+    (`src/telephony/outbound-gates.js:516-518`, `src/telephony/outbound-gates.js:371-375`),
+    ausgefuehrt im Gate `number_gate` (`src/telephony/outbound-gates.js:814`).
   - Stundenlimit pro Mandant und Wiederholungs-Grenze je Ziel im Zeitfenster:
-    `callQuotaError` (`src/telephony/outbound-gates.js:478-483`), Grenzwert pro Mandant
-    (`src/telephony/outbound-gates.js:380-382`), Ziel-Grenze `perTargetCapReached`
-    (`src/telephony/outbound-gates.js:389`).
+    `callQuotaError` (`src/telephony/outbound-gates.js:490-495`), Grenzwert pro Mandant
+    (`src/telephony/outbound-gates.js:392-394`), Ziel-Grenze `perTargetCapReached`
+    (`src/telephony/outbound-gates.js:401`).
   - Kostendecke pro Mandant: Gates `budget` und `minutes`
-    (`src/telephony/outbound-gates.js:900`, `src/telephony/outbound-gates.js:913`).
+    (`src/telephony/outbound-gates.js:914`, `src/telephony/outbound-gates.js:927`).
   - Offenlegungssatz als erster gesprochener Satz (siehe "Identitaetsanmassung").
   - Die Werkzeugbeschreibung sagt dem Modell, dass der Server entscheidet:
     Werkzeugtext (place_call): "Which destinations are allowed is decided by the server through its safety gates"
@@ -161,7 +161,7 @@ nie gemessen.
   (`elevenlabs/agent_configs/outbound-agent.template.json:810`) und wird im Code nicht
   uebersteuert (`src/elevenlabs/outbound.js:19`).
 - Ohne hinterlegten Auftraggeber-Namen kein Anruf: Gate `owner_name`
-  (`src/telephony/outbound-gates.js:774`).
+  (`src/telephony/outbound-gates.js:788`).
 - Eng begrenzte Ausnahme: ruft der Mandant seine EIGENE hinterlegte Nummer an, entfaellt nur der
   lange Satz zum Auftraggeber; die KI-Kennzeichnung bleibt. Voraussetzungen: exakte
   String-Gleichheit von Ziel und hinterlegter Nummer (`src/callee-is-owner.js:48-49`), ein
@@ -691,18 +691,18 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
 ## Anker (maschinenlesbar)
 
 <!-- ANKER-BEGIN
-src/telephony/outbound-gates.js:687 | name: "outbound_frozen"
-src/telephony/outbound-gates.js:758 | name: "kyc"
+src/telephony/outbound-gates.js:699 | name: "outbound_frozen"
+src/telephony/outbound-gates.js:772 | name: "kyc"
 src/store/defaults.js:524 | KYC_OUTBOUND_MIN = KYC_LEVEL.CARD
-src/telephony/outbound-gates.js:504-506 | deniedPrefix(to)
-src/telephony/outbound-gates.js:359-363 | function countryGateAllowed
-src/telephony/outbound-gates.js:800 | name: "number_gate"
-src/telephony/outbound-gates.js:478-483 | function callQuotaError
-src/telephony/outbound-gates.js:380-382 | maxCallsPerHour
-src/telephony/outbound-gates.js:389 | function perTargetCapReached
-src/telephony/outbound-gates.js:900 | name: "budget"
-src/telephony/outbound-gates.js:913 | name: "minutes"
-src/telephony/outbound-gates.js:774 | name: "owner_name"
+src/telephony/outbound-gates.js:516-518 | deniedPrefix(to)
+src/telephony/outbound-gates.js:371-375 | function countryGateAllowed
+src/telephony/outbound-gates.js:814 | name: "number_gate"
+src/telephony/outbound-gates.js:490-495 | function callQuotaError
+src/telephony/outbound-gates.js:392-394 | maxCallsPerHour
+src/telephony/outbound-gates.js:401 | function perTargetCapReached
+src/telephony/outbound-gates.js:914 | name: "budget"
+src/telephony/outbound-gates.js:927 | name: "minutes"
+src/telephony/outbound-gates.js:788 | name: "owner_name"
 src/mcp-server-info.js:99 | export const MCP_BASE_INSTRUCTIONS
 src/claude.js:469-471 | ownerOpeningFor(call) || disclosureSentence(call)
 src/claude.js:423 | export function disclosureSentence(call)
