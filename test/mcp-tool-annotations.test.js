@@ -19,6 +19,14 @@ import { registerTools } from "../src/mcp-tools.js";
 import { startServer, seedState, mcpPost, readToolResult } from "./helpers.js";
 
 const EXPECTED_ANNOTATIONS = {
+  // T2-13 (N-10): reine Vorschau vor place_call, readOnly/nicht destruktiv/kein openWorld.
+  prepare_call: {
+    title: "Preview a phone call",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   place_call: {
     title: "Place a phone call",
     readOnlyHint: false,
