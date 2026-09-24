@@ -94,8 +94,8 @@ export const HERMES_SERVER_INFO = {
 // liefert (pickTranscript/callFailedSummary). get_call_result IST fuer jeden Tenant
 // registriert (kein Consult-Gate) - die Nennung hier ist deshalb sicher, anders als bei
 // await_call_event/answer_consult oben.
-// T2-11 (N-12): Toolname get_transcript -> get_call_result umbenannt, Wortlaut sonst
-// unveraendert.
+// T2-11 (N-12): der fruehere Toolname (versprach ein Transkript, das nie geliefert wurde)
+// ist auf get_call_result umbenannt, Wortlaut sonst unveraendert.
 export const MCP_BASE_INSTRUCTIONS =
   `If a call reports a failure_reason starting with "${NOT_PLACED}", the call could not ` +
   "be placed because of a problem on our side. Do NOT retry the call: call get_call_result " +

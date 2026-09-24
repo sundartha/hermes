@@ -1533,8 +1533,8 @@ export function registerTools(
   // war ENGER als der Handler (der lehnt einzig status==="active" ab, :1280) - ein nicht
   // platzierter Anruf ist status=failed, nicht completed, und wurde vom Modell deshalb
   // faelschlich uebersprungen. Jetzt am tatsaechlichen Handler-Verhalten ausgerichtet.
-  // T2-11 (N-12): umbenannt von get_transcript - das Werkzeug lieferte nie ein
-  // Transkript, Name/Titel/Statuszeilen behaupteten es aber (Owner-Entscheidung
+  // T2-11 (N-12): der fruehere Toolname versprach ein Transkript, das dieses Werkzeug
+  // nie lieferte - Name/Titel/Statuszeilen jetzt umbenannt (Owner-Entscheidung
   // 2026-09-22, Breaking Change gewollt, kein Alias).
   uiTool(
     "get_call_result",
@@ -1599,9 +1599,9 @@ export function registerTools(
   // (my-number Widget) NUR bei faehigem Host. Der Textblock bleibt JSON.stringify ueber
   // den ROHEN agent.number (undefined -> "{}", byte-identisch); structuredContent
   // normalisiert auf null (Schema nullable), damit fehlende Nummer kein isError ist.
-  // T2-11 (N-12): umbenannt von get_my_number - "my" suggerierte die Nummer des
-  // Nutzers, das Werkzeug liefert aber die Nummer des Telefon-Agenten (Owner-Entscheidung
-  // 2026-09-22, Breaking Change gewollt, kein Alias). Titel/Statuszeilen/Beschreibung
+  // T2-11 (N-12): der fruehere Toolname begann mit "my" und suggerierte die Nummer des
+  // Nutzers, das Werkzeug liefert aber die Nummer des Telefon-Agenten - jetzt umbenannt
+  // (Owner-Entscheidung 2026-09-22, Breaking Change gewollt, kein Alias). Titel/Statuszeilen/Beschreibung
   // bleiben woertlich - nur der Name aendert sich. Die Widget-Bindung laeuft ueber die
   // Widget-Kennung WIDGET_MY_NUMBER, nicht ueber den Toolnamen, und loest unveraendert auf.
   uiTool(
