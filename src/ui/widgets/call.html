@@ -123,6 +123,18 @@
   .hud-cancel:hover{border-color:var(--color-accent-light-strong);color:#fff;
     box-shadow:0 0 18px -4px var(--color-accent-light-glow);background:rgba(var(--color-accent-light-rgb),.08)}
   .hud-cancel:disabled{opacity:.6;cursor:default}
+  /* T2-14 (N-10): Bestaetigungs-Ansicht - wiederverwendet .row/.row-k/.row-v aus
+     .rows oben (gleiche Optik), eigener Block, damit er unabhaengig von den
+     Status-Zeilen ein-/ausgeblendet werden kann. */
+  .confirm{position:relative;z-index:1;display:flex;flex-direction:column}
+  .confirm .row-v{white-space:pre-line;text-align:right;max-width:62%}
+  .confirm-hint{color:rgba(255,255,255,.75);font-weight:600;font-size:12px}
+  .confirm-button{width:100%;margin-top:14px;padding:11px 16px;font-size:13px;
+    border-radius:var(--radius-pill);border:1px solid rgba(var(--color-accent-light-rgb),.5);
+    background:rgba(var(--color-accent-light-rgb),.16);color:#fff;font-weight:700;
+    letter-spacing:.04em;cursor:pointer;transition:all .22s var(--ease)}
+  .confirm-button:hover{background:rgba(var(--color-accent-light-rgb),.26)}
+  .confirm-button:disabled{opacity:.5;cursor:default}
   @media (prefers-reduced-motion: reduce) {
     .ring--spin{animation:none}
     .pill--active .dot{animation:none}
@@ -180,6 +192,27 @@
       <div class="row" data-row="next_step" style="display:none">
         <span class="row-k" data-i18n="Next step">Next step</span><span class="row-v pill-value" data-mcp="next_step">—</span>
       </div>
+    </div>
+
+    <!-- T2-14 (N-10): Bestaetigungs-Ansicht. Anfangs verborgen; wird sichtbar,
+         sobald prepare_call einen awaiting_confirmation-Push liefert (Kanal A,
+         s. Inline-Skript unten, handleAwaitingConfirmationPush). Anzeige UND
+         die spaeter gesendeten tools/call-Argumente lesen AUSSCHLIESSLICH aus
+         pendingConfirmation.args - eine Quelle (Pre-Mortem 3). KEIN data-mcp auf
+         den Werte-Elementen (nur dieses Skript befuellt sie, s. Kommentar bei
+         .rows oben - dasselbe Muster). -->
+    <div class="confirm rows" data-confirm style="display:none">
+      <div class="row"><span class="row-k" data-i18n="To">To</span><span class="row-v" data-confirm-to>—</span></div>
+      <div class="row"><span class="row-k" data-i18n="Request">Request</span><span class="row-v" data-confirm-objective>—</span></div>
+      <div class="row" data-confirm-row="briefing" style="display:none"><span class="row-k" data-i18n="Briefing">Briefing</span><span class="row-v" data-confirm-briefing>—</span></div>
+      <div class="row" data-confirm-row="language" style="display:none"><span class="row-k" data-i18n="Call language">Call language</span><span class="row-v" data-confirm-language>—</span></div>
+      <div class="row" data-confirm-row="max_duration_s" style="display:none"><span class="row-k" data-i18n="Max. duration">Max. duration</span><span class="row-v" data-confirm-max_duration_s>—</span></div>
+      <div class="row" data-confirm-row="constraints" style="display:none"><span class="row-k" data-i18n="Constraints">Constraints</span><span class="row-v" data-confirm-constraints>—</span></div>
+      <div class="row" data-confirm-row="mandate" style="display:none"><span class="row-k" data-i18n="Mandate">Mandate</span><span class="row-v" data-confirm-mandate>—</span></div>
+      <div class="row" data-confirm-row="context" style="display:none"><span class="row-k" data-i18n="Context">Context</span><span class="row-v" data-confirm-context>—</span></div>
+      <div class="row" data-confirm-row="diagnostic" style="display:none"><span class="row-k" data-i18n="Diagnostic">Diagnostic</span><span class="row-v" data-confirm-diagnostic>—</span></div>
+      <div class="row" data-confirm-hint style="display:none"><span class="row-v confirm-hint" data-confirm-hint-text>—</span></div>
+      <button type="button" class="confirm-button" data-confirm-button data-i18n="Confirm call">Confirm call</button>
     </div>
 
     <div class="foot">
@@ -243,6 +276,40 @@
     // bindet - wir werten ihn zusaetzlich selbst aus, um Terminal-Status zu erkennen).
     var METHOD_TOOLS_CALL = "tools/call";
     var METHOD_TOOL_RESULT = "ui/notifications/tool-result";
+    // T2-14 (N-10): "ui/message" - der App->Host-Weg, ueber den die Karte NACH einem
+    // bestaetigten Anruf GENAU EINE Chat-Nachricht postet (call_id + Ziel, NIE den Code).
+    // Wortlaut der params-Form uebernommen aus dem Bau-Auftrag (T2-14-spec.md Schritt 1,
+    // dort als woertliches Zitat der MCP-Apps-Primaerquelle,
+    // ext-apps specification/2026-01-26/apps.mdx, Abschnitt "ui/message" gefuehrt) - diese
+    // Sandbox hat keinen Netzzugriff, um die Primaerquelle selbst erneut zu lesen (Owner-
+    // Punkt: vor dem Live-Deploy gegen die Quelle gegenpruefen).
+    var METHOD_UI_MESSAGE = "ui/message";
+
+    // T2-14 (N-10): Bestaetigungs-Ansicht im Call-Widget (serverseitiger Teil T2-13).
+    // Tool-Name, unter dem die Karte den bestaetigten Anruf SELBST ausloest - das Modell
+    // sieht den Bestaetigungscode nie (er steht nur im _meta von prepare_call, s.u.).
+    var TOOL_PLACE_CALL = "place_call";
+    // _meta-Schluessel, unter denen prepare_call (src/mcp-tools.js,
+    // CONFIRMATION_CODE_META_KEY/CONFIRMATION_EXPIRES_META_KEY) den Code und seinen Ablauf
+    // an die Karte reicht - woertlich dupliziert (self-contained Iframe-Skript, s.
+    // Datei-Kopfkommentar), Sync-Test haelt beide Quellen zusammen.
+    var CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
+    var CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
+    // Status-Wert der prepare_call-Vorschau (PREVIEW_STATUS, src/routes/api-call-
+    // confirmations.js) - der EINZIGE Marker, an dem die Karte einen Bestaetigungs-Push von
+    // einem normalen Status-/Ergebnis-Push unterscheidet (s. handleMessage Kanal A).
+    var STATUS_AWAITING_CONFIRMATION = "awaiting_confirmation";
+    // Frist fuer die Antwort auf das eigene "place_call"-tools/call. Muss GROESSER als der
+    // serverseitige Hop-Timeout sein (PLACE_CALL_HOP_TIMEOUT_MS = 180000, src/mcp-tools.js) -
+    // sonst meldet die Karte "unklar", waehrend der Server noch regulaer arbeitet. Marge
+    // 20000 ms fuer den Postmessage-/Serialisierungs-Umweg durch den Host. Sync-Test
+    // vergleicht diesen Wert gegen den mcp-tools.js-Export.
+    var PLACE_CALL_RESPONSE_TIMEOUT_MS = 200000;
+    // Die neun Argumente aus PLACE_CALL_REQUEST_SCHEMA (src/mcp-tools.js) - GENAU diese
+    // Felder werden aus der prepare_call-Vorschau uebernommen (nie "status", das ist kein
+    // Anruf-Argument), angezeigt UND unveraendert an place_call zurueckgesendet (Pre-Mortem
+    // 3: Anzeige = Gesendetes, eine Quelle).
+    var BOUND_ARG_FIELDS = ["to", "objective", "briefing", "constraints", "mandate", "context", "language", "max_duration_s", "diagnostic"];
 
     // Ready-Signal des geteilten BIND_SCRIPT (src/ui/widget-bind.js: UI_READY_FLAG /
     // UI_READY_EVENT) - gesetzt, sobald der Host die ui/initialize-Anfrage beantwortet
@@ -405,6 +472,17 @@
     var rpcCounter = 0;
     var engineHandle = null; // Wing-Canvas-Engine-Handle nach erfolgreichem mount() (H3); null = reiner CSS-Fallback
 
+    // T2-14 (N-10): Bestaetigungs-Zustandsmaschine. pendingConfirmation ist EIN
+    // eingefrorenes Objekt { args, code, expiresAtMs } - Anzeige UND die spaeter
+    // gesendeten tools/call-Argumente lesen AUSSCHLIESSLICH daraus (Pre-Mortem 3).
+    // confirmState-Uebergaenge: none -> awaiting (Push) -> submitting (Klick) ->
+    // placed|rejected|uncertain; expired kann aus awaiting ODER submitting erreicht
+    // werden (Klick auf einen inzwischen abgelaufenen Code). Jeder Endzustand ausser
+    // placed haelt den Knopf dauerhaft gesperrt (kein zweiter Versand, Pre-Mortem 2).
+    var confirmState = "none";
+    var pendingConfirmation = null;
+    var confirmResponseTimerId = null;
+
     function isRecord(value) {
       return typeof value === "object" && value !== null;
     }
@@ -482,6 +560,244 @@
       if (!btn) return;
       btn.disabled = disabled;
       btn.style.display = disabled ? "none" : "";
+    }
+
+    // Generischer Sichtbarkeits-Schalter fuer beliebige Selektoren (setRowVisible oben
+    // kennt nur das feste [data-row="<key>"]-Muster der Status-/Ergebnis-Zeilen).
+    function setElementVisible(selector, visible) {
+      var el = doc.querySelector(selector);
+      if (el) el.style.display = visible ? "" : "none";
+    }
+
+    // "Blattwert" -> String, wie EMDASH-Regel bei setDisplayText (null/undefined -> "").
+    function stringifyLeaf(value) {
+      return value === null || value === undefined ? "" : String(value);
+    }
+
+    // Verschachtelte Objekte werden NIE als Markup gerendert (XSS-Disziplin, Pre-Mortem 7),
+    // sondern rekursiv in "pfad.schluessel: wert"-Zeilen aufgeloest - jede Blatt-
+    // Zeichenkette landet damit als Text im sichtbaren Block (Test-Anforderung "Anzeige =
+    // Gesendetes"). "constraints"/"mandate" etc. duerfen beliebig tief verschachtelt sein
+    // (server-seitig nur als z.record(z.string(), z.unknown()) typisiert).
+    function objectLines(value, prefix) {
+      var lines = [];
+      var keys = Object.keys(value);
+      for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        var v = value[key];
+        var label = prefix ? prefix + "." + key : key;
+        if (isRecord(v) && !Array.isArray(v)) {
+          lines = lines.concat(objectLines(v, label));
+        } else if (Array.isArray(v)) {
+          lines.push(label + ": " + v.map(stringifyLeaf).join(", "));
+        } else {
+          lines.push(label + ": " + stringifyLeaf(v));
+        }
+      }
+      return lines;
+    }
+
+    // Anzeige-Text fuer EIN gebundenes Argument (skalarer Wert, Array oder Objekt).
+    // Boolesche Werte lokalisiert (Yes/No), alles andere textContent-sicher als String.
+    function fieldDisplayText(value) {
+      if (isRecord(value) && !Array.isArray(value)) return objectLines(value, "").join("\n");
+      if (Array.isArray(value)) return value.map(stringifyLeaf).join(", ");
+      if (typeof value === "boolean") return value ? t("Yes") : t("No");
+      return stringifyLeaf(value);
+    }
+
+    // Code vorhanden, nicht (mehr) abgelaufen? Einzige Stelle, die "abgelaufen" beurteilt -
+    // sowohl beim Rendern (Hinweis) als auch beim Klick (Pre-Mortem 11, Uhrversatz bleibt
+    // fail-closed).
+    function confirmCodeUsable() {
+      return Boolean(
+        pendingConfirmation &&
+          pendingConfirmation.code &&
+          pendingConfirmation.expiresAtMs &&
+          Date.now() < pendingConfirmation.expiresAtMs,
+      );
+    }
+
+    function showConfirmHint(text) {
+      setElementVisible("[data-confirm-hint]", true);
+      setDisplayText("[data-confirm-hint-text]", text);
+    }
+
+    function updateConfirmButtonState() {
+      var btn = doc.querySelector("[data-confirm-button]");
+      if (!btn) return;
+      btn.disabled = confirmState !== "awaiting" || !confirmCodeUsable();
+    }
+
+    // Die neun optionalen BOUND_ARG_FIELDS ausser to/objective (die haben eine eigene,
+    // immer sichtbare Zeile) - jedes gesendete Feld MUSS sichtbar sein (Test-Anforderung
+    // Schritt 6 (d)), ein fehlendes Feld blendet seine Zeile komplett aus.
+    var CONFIRM_OPTIONAL_ROWS = ["briefing", "language", "max_duration_s", "constraints", "mandate", "context", "diagnostic"];
+
+    // Baut die Bestaetigungs-Ansicht AUSSCHLIESSLICH aus pendingConfirmation.args auf -
+    // dieselbe Quelle, aus der onConfirmButtonClick die tools/call-Argumente liest
+    // (Pre-Mortem 3, Test "Anzeige = Gesendetes").
+    function renderConfirmation() {
+      var confirmEl = doc.querySelector("[data-confirm]");
+      if (!confirmEl || !pendingConfirmation) return;
+      confirmEl.style.display = "";
+      setCancelDisabled(true); // Cancel-Knopf im Zustand awaiting verborgen (Spec Schritt 1)
+      var args = pendingConfirmation.args;
+      setDisplayText("[data-confirm-to]", args.to);
+      setDisplayText("[data-confirm-objective]", args.objective);
+      for (var i = 0; i < CONFIRM_OPTIONAL_ROWS.length; i++) {
+        var field = CONFIRM_OPTIONAL_ROWS[i];
+        var present = Object.prototype.hasOwnProperty.call(args, field);
+        setElementVisible('[data-confirm-row="' + field + '"]', present);
+        if (present) {
+          var display = field === "max_duration_s" ? formatDuration(args[field]) : fieldDisplayText(args[field]);
+          setDisplayText("[data-confirm-" + field + "]", display);
+        }
+      }
+      if (confirmCodeUsable()) {
+        setElementVisible("[data-confirm-hint]", false);
+      } else {
+        showConfirmHint(t("Confirmation code unavailable — ask the assistant to prepare the call again."));
+      }
+      updateConfirmButtonState();
+    }
+
+    function hideConfirmationBlock() {
+      setElementVisible("[data-confirm]", false);
+    }
+
+    // Kanal A, Bestaetigungs-Push (structuredContent.status === STATUS_AWAITING_CONFIRMATION,
+    // s. handleMessage). NUR in "none"/"awaiting" angenommen - jeder andere Zustand ignoriert
+    // den Push (ein Replay aus dem Verlauf setzt eine bereits abgeschickte Karte NIE zurueck,
+    // Pre-Mortem 1/Test (k)).
+    function handleAwaitingConfirmationPush(structuredContent, meta) {
+      if (confirmState !== "none" && confirmState !== "awaiting") return;
+      var args = {};
+      for (var i = 0; i < BOUND_ARG_FIELDS.length; i++) {
+        var field = BOUND_ARG_FIELDS[i];
+        if (Object.prototype.hasOwnProperty.call(structuredContent, field)) args[field] = structuredContent[field];
+      }
+      var code = meta && isRecord(meta) && typeof meta[CONFIRMATION_CODE_META_KEY] === "string"
+        ? meta[CONFIRMATION_CODE_META_KEY]
+        : null;
+      var expiresRaw = meta && isRecord(meta) ? meta[CONFIRMATION_EXPIRES_META_KEY] : null;
+      var expiresAtMs = typeof expiresRaw === "string" ? Date.parse(expiresRaw) : NaN;
+      pendingConfirmation = { args: args, code: code, expiresAtMs: isNaN(expiresAtMs) ? null : expiresAtMs };
+      confirmState = "awaiting";
+      renderConfirmation();
+    }
+
+    // ui/message-Text ohne jeden Nutzdaten-Inhalt (NIE briefing/context, NIE den Code,
+    // Pre-Mortem 4/Test (f)/(n)) - nur call_id + Ziel, Platzhalter per String-replace.
+    function sendUiMessage(text) {
+      var parent = window.parent;
+      if (!parent || typeof parent.postMessage !== "function") return;
+      rpcCounter += 1;
+      parent.postMessage(
+        {
+          jsonrpc: "2.0",
+          id: "call-widget-msg-" + rpcCounter,
+          method: METHOD_UI_MESSAGE,
+          params: { role: "user", content: [{ type: "text", text: text }] },
+        },
+        "*",
+      );
+    }
+
+    function targetForMessage() {
+      var to = pendingConfirmation && pendingConfirmation.args ? pendingConfirmation.args.to : null;
+      return to === null || to === undefined ? EMDASH : String(to);
+    }
+
+    function sendPlacedMessage(callId) {
+      sendUiMessage(
+        t("Confirmed the call to {to} in the Hermes card; call_id {call_id}. Track it with get_call_status.")
+          .replace("{to}", targetForMessage())
+          .replace("{call_id}", callId),
+      );
+    }
+
+    function sendUncertainMessage() {
+      sendUiMessage(
+        t("Confirmed a call to {to} in the Hermes card; the card received no response. Check with list_calls, do not call place_call again.").replace(
+          "{to}",
+          targetForMessage(),
+        ),
+      );
+    }
+
+    // Antwort auf das eigene "place_call"-tools/call (Kanal B). wasTimedOut: die
+    // PLACE_CALL_RESPONSE_TIMEOUT_MS-Frist ist schon abgelaufen (Zustand "uncertain") - eine
+    // spaet eintreffende Erfolgsantwort wird noch angewendet (Karte zeigt den Anruf), aber es
+    // geht KEINE zweite ui/message raus (Spec Schritt 1, "Spaet eintreffende Antwort").
+    function handlePlaceCallResponse(m) {
+      var wasTimedOut = confirmState === "uncertain";
+      if (confirmResponseTimerId !== null) {
+        clearTimeout(confirmResponseTimerId);
+        confirmResponseTimerId = null;
+      }
+      if (confirmState !== "submitting" && !wasTimedOut) return; // schon rejected/expired: kein zweiter Effekt
+      if (m.error) {
+        if (!wasTimedOut) {
+          confirmState = "uncertain";
+          showConfirmHint(t("Unclear whether the call was placed — do not confirm again; check the call list."));
+          updateConfirmButtonState();
+          sendUncertainMessage();
+        }
+        return;
+      }
+      var result = m.result;
+      var structured = isRecord(result) ? result.structuredContent : undefined;
+      var isErrorResult = Boolean(result && result.isError);
+      if (!isErrorResult && isRecord(structured) && structured.call_id) {
+        var callId = structured.call_id;
+        confirmState = "placed";
+        hideConfirmationBlock();
+        applyCallStatus(structured); // Karte laeuft ab hier als Live-Karte weiter (Self-Poll)
+        if (!wasTimedOut) sendPlacedMessage(callId);
+        return;
+      }
+      if (!wasTimedOut) {
+        confirmState = "rejected";
+        showConfirmHint(t("Call was not started — ask the assistant to prepare it again."));
+        updateConfirmButtonState();
+      }
+    }
+
+    // Frist abgelaufen, keine Antwort: "unklar" statt "fehlgeschlagen" (Pre-Mortem 6 - ein
+    // Host-Timeout beweist nicht, dass der Server nicht gewaehlt hat). Kein erneuter
+    // tools/call, Knopf bleibt gesperrt.
+    function onConfirmResponseTimeout() {
+      confirmResponseTimerId = null;
+      if (confirmState !== "submitting") return;
+      confirmState = "uncertain";
+      showConfirmHint(t("Unclear whether the call was placed — do not confirm again; check the call list."));
+      updateConfirmButtonState();
+      sendUncertainMessage();
+    }
+
+    // EINZIGER Sendeort fuer place_call aus der Karte. Reihenfolge bindend (Pre-Mortem 2):
+    // 1) Doppelklick-/Wiederholungs-Sperre SYNCHRON vor jedem Senden. 2) Code/Ablauf pruefen
+    // (Pre-Mortem 11, fail-closed). 3) Senden; nur bei tatsaechlichem Versand (Rueckgabe
+    // true) in "submitting" wechseln - sonst bleibt der Knopf aktiv (Muster onCancelClick).
+    function onConfirmButtonClick() {
+      if (confirmState !== "awaiting") return;
+      if (!confirmCodeUsable()) {
+        confirmState = "expired";
+        showConfirmHint(t("Confirmation expired — ask the assistant to prepare the call again."));
+        updateConfirmButtonState();
+        return;
+      }
+      var callArgs = {};
+      for (var i = 0; i < BOUND_ARG_FIELDS.length; i++) {
+        var field = BOUND_ARG_FIELDS[i];
+        if (Object.prototype.hasOwnProperty.call(pendingConfirmation.args, field)) callArgs[field] = pendingConfirmation.args[field];
+      }
+      callArgs.confirmation_code = pendingConfirmation.code;
+      if (!sendToolCall(TOOL_PLACE_CALL, callArgs)) return; // Handshake noch nicht fertig
+      confirmState = "submitting";
+      updateConfirmButtonState();
+      confirmResponseTimerId = setTimeout(onConfirmResponseTimeout, PLACE_CALL_RESPONSE_TIMEOUT_MS);
     }
 
     // className-Token-Helfer (kein DOM-classList-Zwang - funktioniert mit jedem
@@ -717,6 +1033,12 @@
 
       if (m.method === METHOD_TOOL_RESULT && isRecord(m.params) && isRecord(m.params.structuredContent)) {
         var pushed = m.params.structuredContent;
+        // T2-14 (N-10): Bestaetigungs-Push geht NICHT in applyCallStatus (kein Status-
+        // Slot-Bruch, kein Poll) - eigener Zweig, VOR der bestehenden Weiche.
+        if (pushed.status === STATUS_AWAITING_CONFIRMATION) {
+          handleAwaitingConfirmationPush(pushed, m.params._meta);
+          return;
+        }
         var pushedFn = "result_summary" in pushed ? applyCallResult : applyCallStatus;
         markResponse(pushed, pushedFn);
         return;
@@ -725,6 +1047,13 @@
       var pendingTool = m.id != null ? pendingRequests[m.id] : null;
       if (!pendingTool) return;
       delete pendingRequests[m.id];
+      // T2-14 (N-10): die Antwort auf das eigene place_call-tools/call hat eine eigene
+      // Zustandsmaschine (Erfolg/isError/JSON-RPC-Fehler/Timeout) - nicht die generische
+      // Poll-Fehlerbremse darunter (die gilt fuer get_call_status/get_call_result/cancel).
+      if (pendingTool === TOOL_PLACE_CALL) {
+        handlePlaceCallResponse(m);
+        return;
+      }
       // JSON-RPC-Fehlerantwort: NICHT mehr still verschlucken. Transiente Fehler duerfen
       // nicht stoppen (ein Erfolg setzt den Zaehler zurueck), aber ein dauerhaft
       // ablehnender Host wird nicht endlos weitergefragt. Die Karte behaelt dabei ihren
@@ -783,6 +1112,8 @@
     function init() {
       var btn = doc.querySelector("[data-cancel]");
       if (btn) btn.addEventListener("click", onCancelClick);
+      var confirmBtn = doc.querySelector("[data-confirm-button]");
+      if (confirmBtn) confirmBtn.addEventListener("click", onConfirmButtonClick);
       mountWingEngine();
       window.addEventListener("message", handleMessage);
       whenUiReady(startPolling);

@@ -74,6 +74,29 @@ export const WIDGET_DICT = {
     "Yes": "Ja",
     "No": "Nein",
     "Unclear": "Unklar",
+    // T2-14 (N-10): Bestaetigungs-Ansicht im Call-Widget.
+    "To": "Ziel",
+    "Request": "Anliegen",
+    "Briefing": "Briefing",
+    "Call language": "Sprache des Anrufs",
+    "Max. duration": "Maximaldauer",
+    "Constraints": "Einschränkungen",
+    "Mandate": "Mandat",
+    "Context": "Kontext",
+    "Diagnostic": "Diagnose",
+    "Confirm call": "Anruf bestätigen",
+    "Confirmation code unavailable — ask the assistant to prepare the call again.":
+      "Bestätigungscode nicht verfügbar — bitte den Assistenten, den Anruf erneut vorzubereiten.",
+    "Confirmation expired — ask the assistant to prepare the call again.":
+      "Bestätigung abgelaufen — bitte den Assistenten, den Anruf erneut vorzubereiten.",
+    "Unclear whether the call was placed — do not confirm again; check the call list.":
+      "Unklar, ob der Anruf gestartet wurde — nicht erneut bestätigen; Anrufliste prüfen.",
+    "Call was not started — ask the assistant to prepare it again.":
+      "Der Anruf wurde nicht gestartet — bitte den Assistenten, ihn erneut vorzubereiten.",
+    "Confirmed the call to {to} in the Hermes card; call_id {call_id}. Track it with get_call_status.":
+      "Anruf an {to} in der Hermes-Karte bestätigt; call_id {call_id}. Mit get_call_status verfolgen.",
+    "Confirmed a call to {to} in the Hermes card; the card received no response. Check with list_calls, do not call place_call again.":
+      "Anruf an {to} in der Hermes-Karte bestätigt; die Karte hat keine Rückmeldung erhalten. Mit list_calls prüfen, nicht erneut place_call aufrufen.",
   },
   fr: {
     "Hermes · Call": "Hermes · Appel",
@@ -111,6 +134,29 @@ export const WIDGET_DICT = {
     "Yes": "Oui",
     "No": "Non",
     "Unclear": "Incertain",
+    // T2-14 (N-10): Bestaetigungs-Ansicht im Call-Widget.
+    "To": "Destinataire",
+    "Request": "Demande",
+    "Briefing": "Briefing",
+    "Call language": "Langue de l'appel",
+    "Max. duration": "Durée max.",
+    "Constraints": "Contraintes",
+    "Mandate": "Mandat",
+    "Context": "Contexte",
+    "Diagnostic": "Diagnostic",
+    "Confirm call": "Confirmer l'appel",
+    "Confirmation code unavailable — ask the assistant to prepare the call again.":
+      "Code de confirmation indisponible — demandez à l'assistant de préparer à nouveau l'appel.",
+    "Confirmation expired — ask the assistant to prepare the call again.":
+      "Confirmation expirée — demandez à l'assistant de préparer à nouveau l'appel.",
+    "Unclear whether the call was placed — do not confirm again; check the call list.":
+      "Impossible de savoir si l'appel a été lancé — ne confirmez pas à nouveau ; vérifiez la liste des appels.",
+    "Call was not started — ask the assistant to prepare it again.":
+      "L'appel n'a pas été lancé — demandez à l'assistant de le préparer à nouveau.",
+    "Confirmed the call to {to} in the Hermes card; call_id {call_id}. Track it with get_call_status.":
+      "Appel vers {to} confirmé dans la carte Hermes ; call_id {call_id}. Suivez-le avec get_call_status.",
+    "Confirmed a call to {to} in the Hermes card; the card received no response. Check with list_calls, do not call place_call again.":
+      "Appel vers {to} confirmé dans la carte Hermes ; la carte n'a reçu aucune réponse. Vérifiez avec list_calls, n'appelez pas à nouveau place_call.",
   },
 };
 
