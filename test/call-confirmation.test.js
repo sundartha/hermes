@@ -10,6 +10,8 @@ import {
   canonicalCallRequest,
   issueConfirmationCode,
   verifyConfirmationCode,
+  matchedWindowIndex,
+  normalizeConfirmationCode,
 } from "../src/call-confirmation.js";
 
 const TOO_SHORT_SECRET_LENGTH = CONFIRMATION_SECRET_MIN_LENGTH - 1;
@@ -118,6 +120,30 @@ test("Kleinbuchstaben und umgebende Leerzeichen/Bindestriche werden akzeptiert",
     verifyConfirmationCode({ key: KEY, tenantId: "t1", canonical, code: messy, nowMs: NOW }),
     true,
   );
+});
+
+test("matchedWindowIndex liefert den WindowIndex des treffenden Fensters", () => {
+  const canonical = canonicalCallRequest({ to: argsFixture().to, args: argsFixture() });
+  const { code } = issueConfirmationCode({ key: KEY, tenantId: "t1", canonical, nowMs: NOW });
+  const currentWindowIdx = Math.floor(NOW / CONFIRMATION_WINDOW_MS);
+  const oneWindowLater = NOW + CONFIRMATION_WINDOW_MS;
+  assert.equal(
+    matchedWindowIndex({ key: KEY, tenantId: "t1", canonical, code, nowMs: NOW }),
+    currentWindowIdx,
+  );
+  assert.equal(
+    matchedWindowIndex({ key: KEY, tenantId: "t1", canonical, code, nowMs: oneWindowLater }),
+    currentWindowIdx,
+  );
+  assert.equal(
+    matchedWindowIndex({ key: KEY, tenantId: "t1", canonical, code: "ZZZZZZ", nowMs: NOW }),
+    null,
+  );
+});
+
+test("normalizeConfirmationCode entfernt Bindestriche/Leerzeichen und macht Grossbuchstaben", () => {
+  assert.equal(normalizeConfirmationCode(" ab-cd12 "), "ABCD12");
+  assert.equal(normalizeConfirmationCode(CODE_MIDPOINT), "");
 });
 
 test("falscher Code wird abgelehnt", () => {

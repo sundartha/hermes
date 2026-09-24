@@ -103,25 +103,35 @@ export function issueConfirmationCode({ key, tenantId, canonical, nowMs }) {
 }
 
 // Eingabe-Normalisierung: Grossbuchstaben, Leerzeichen und Bindestriche raus (Menschen
-// tippen/lesen Codes oft mit Trenner-Formatierung vor).
-function normalizeCodeInput(code) {
+// tippen/lesen Codes oft mit Trenner-Formatierung vor). Exportiert, damit der Aufrufer
+// (die Bestaetigungs-Route) denselben normalisierten Wert fuer den Einmal-Verbrauch-Digest
+// verwenden kann wie diese Pruefung selbst - sonst koennte "abc-123" und "ABC123" als zwei
+// verschiedene Codes durchgehen und den Einmal-Verbrauch umgehen.
+export function normalizeConfirmationCode(code) {
   if (typeof code !== "string") return "";
   return code.toUpperCase().replace(/[\s-]/g, "");
 }
 
 /**
- * Prueft einen vorgelegten Code gegen das aktuelle und das vorherige Fenster, timing-sicher
- * (safeEqual, Absolute Regel 3). key === null (nicht ableitbares Geheimnis) ergibt immer
- * false - niemals ein Match ohne echten Schluessel.
+ * Welches Fenster (aktuell oder vorheriges) den vorgelegten Code bestaetigt, oder null.
+ * Timing-sicherer Vergleich (safeEqual, Absolute Regel 3). key === null (nicht ableitbares
+ * Geheimnis) ergibt immer null - niemals ein Match ohne echten Schluessel. Der Aufrufer
+ * braucht den WindowIndex fuer den Einmal-Verbrauch-Digest (Mandant+Fenster+Code).
  */
-export function verifyConfirmationCode({ key, tenantId, canonical, code, nowMs }) {
-  if (!key) return false;
-  const normalized = normalizeCodeInput(code);
-  if (!normalized) return false;
+export function matchedWindowIndex({ key, tenantId, canonical, code, nowMs }) {
+  if (!key) return null;
+  const normalized = normalizeConfirmationCode(code);
+  if (!normalized) return null;
   const currentWindow = windowIndexFor(nowMs);
   for (let offset = 0; offset < ACCEPTED_WINDOWS; offset++) {
-    const candidate = codeForWindow({ key, tenantId, canonical, windowIdx: currentWindow - offset });
-    if (safeEqual(normalized, candidate)) return true;
+    const windowIdx = currentWindow - offset;
+    const candidate = codeForWindow({ key, tenantId, canonical, windowIdx });
+    if (safeEqual(normalized, candidate)) return windowIdx;
   }
-  return false;
+  return null;
+}
+
+/** Boolean-Fassade von matchedWindowIndex - fuer Aufrufer, die nur JA/NEIN brauchen. */
+export function verifyConfirmationCode(args) {
+  return matchedWindowIndex(args) !== null;
 }
