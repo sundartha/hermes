@@ -18,7 +18,6 @@ import {
 import {
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
-  WIDGET_CALENDAR,
   WIDGET_CALL,
   widgetHtml,
 } from "../src/ui/widget-catalog.js";
@@ -30,7 +29,7 @@ import {
 } from "../src/ui/contract.js";
 import { config } from "../src/config.js";
 
-const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL); // ui://hermes/call/v1.html
+const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL); // ui://hermes/call/v<widgetVersion>.html
 
 // Abwesenheits-Pin (Kritik N1): KEINE feste Zahl ("~10") vorschreiben, sondern generisch
 // jede "alle N Sekunden"-Polling-Anweisung verbieten - robuster als ein Positiv-String-Pin.
@@ -935,12 +934,12 @@ test("T-W3-AC6: agent-status.html self-contained + read-only + erbt W1-Binding",
   assert.ok(html.includes('data-mcp="planUsagePercent"'), "Slot data-mcp=planUsagePercent");
 });
 
-// ===== W-batch: drei weitere read-only Widgets ueber den BESTEHENDEN Seam =====
-// get_agent_number / list_calls / get_calendar bekommen Stufe 0 (structuredContent +
+// ===== W-batch: zwei weitere read-only Widgets ueber den BESTEHENDEN Seam =====
+// get_agent_number / list_calls bekommen Stufe 0 (structuredContent +
 // Backward-Compat-Text) + Stufe 1 (Widget) bei faehigem Host; Fallback Stufe-0 bei
 // unfaehigem. Whitelist beweist Nicht-Durchreichung von PII/Secrets/Roh-Transkript/
-// Cross-Tenant-State. Read-only: kein Callback/Button. list_calls/get_calendar liefern
-// Objekt-Listen (Slot-Rendering ueber das generische W1-Binding, data-mcp-row).
+// Cross-Tenant-State. Read-only: kein Callback/Button. list_calls liefert eine
+// Objekt-Liste (Slot-Rendering ueber das generische W1-Binding, data-mcp-row).
 const RICH_STATE_BATCH = {
   agent: {
     number: "+18643028341",
@@ -1000,8 +999,7 @@ const BATCH_LEAKS = [
   "Geheim",
 ];
 const RESOURCE_URI_MY = uiResourceUri(WIDGET_MY_NUMBER); // ui://hermes/my-number/v1.html
-const RESOURCE_URI_CALLS = uiResourceUri(WIDGET_CALLS); // ui://hermes/calls/v1.html
-const RESOURCE_URI_CAL = uiResourceUri(WIDGET_CALENDAR); // ui://hermes/calendar/v1.html
+const RESOURCE_URI_CALLS = uiResourceUri(WIDGET_CALLS); // ui://hermes/calls/v<widgetVersion>.html
 const myNumberOutput = z.object({ number: z.string().nullable() });
 const callsOutput = z.object({
   calls: z.array(
@@ -1015,11 +1013,7 @@ const callsOutput = z.object({
     }),
   ),
 });
-const calendarOutput = z.object({
-  calendar: z.array(z.object({ title: z.string().nullable(), start: z.string(), end: z.string() })),
-});
 const CALL_ENTRY_KEYS = ["counterparty", "direction", "id", "startedAt", "status"];
-const CALENDAR_ENTRY_KEYS = ["end", "start", "title"];
 // Fallback-Faelle (Stufe 0 bleibt): NUR Master-Schalter aus / kein hostHint (stdio).
 // Ein faehiger Host mit/ohne deklarierte Capability bekommt jetzt das Widget (Default
 // mcp-nativ, stateless-tauglich) - siehe T-UI-stateless.
@@ -1185,86 +1179,6 @@ test("T-Wb-CALLS-AC6: calls.html self-contained + read-only + erbt W1 + deklarie
   assert.ok(html.includes('data-mcp="calls"'), "Listen-Slot data-mcp=calls");
   assert.ok(html.includes("data-mcp-row="), "deklariert Row-Felder fuer das Objekt-Listen-Rendering");
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_CALLS), true, "Adapter kennt calls");
-});
-
-// ---- get_calendar ----
-test("T-Wb-CAL-AC1: Stufe 0 - Backward-Compat-Text + structuredContent { calendar:[...] } schema-valid", async () => {
-  await withGateway(RICH_STATE_BATCH, async () => {
-    const { tools } = captureUi({ uiHost: capableHost() });
-    const { config, handler } = tools.get("get_calendar");
-    assert.ok(config.outputSchema, "outputSchema am config deklariert");
-    const result = await handler({});
-
-    assert.match(result.content[0].text, /^Zahnarzt: .+ bis .+$/, "Text byte-identisch (title: start bis end)");
-    assert.equal(result.structuredContent.calendar.length, 1);
-    assert.deepEqual(Object.keys(result.structuredContent.calendar[0]).sort(), CALENDAR_ENTRY_KEYS);
-    assert.equal(result.structuredContent.calendar[0].title, "Zahnarzt");
-    assert.ok(isFormattedNotIso(result.structuredContent.calendar[0].start), "start server-formatiert (kein ISO)");
-    assert.doesNotThrow(() => calendarOutput.parse(result.structuredContent));
-  });
-});
-
-test("T-Wb-CAL-AC1b: leerer Kalender -> 'Kalender ist leer.' + structuredContent { calendar:[] }", async () => {
-  await withGateway({ calendar: [] }, async () => {
-    // P15/T3a: die Leertexte folgen jetzt der Tenant-Sprache. Dieser Fall pinnt den
-    // DEUTSCHEN Backward-Compat-Text - die Sprache wird deshalb explizit gewaehlt,
-    // statt implizit vom Weltdefault-Schalter zu leben.
-    const { tools } = captureUi({ uiHost: capableHost(), language: "de" });
-    const result = await tools.get("get_calendar").handler({});
-    assert.ok(!result.isError, "leerer Kalender ist kein Fehler");
-    assert.equal(result.content[0].text, "Kalender ist leer.", "Backward-Compat-Text");
-    assert.deepEqual(result.structuredContent, { calendar: [] }, "leere Liste schema-konform");
-  });
-});
-
-test("T-Wb-CAL-AC2: Stufe 1 (faehiger Host) - genau eine calendar-Resource + _meta", async () => {
-  await withGateway(RICH_STATE_BATCH, async () => {
-    const { tools, resources } = captureUi({ uiHost: capableHost() });
-    const matching = resources.filter((r) => r.uri === RESOURCE_URI_CAL);
-    assert.equal(matching.length, 1, "genau eine calendar-Resource");
-    assert.equal(matching[0].config.mimeType, UI_MIME);
-    assert.equal(tools.get("get_calendar").config._meta.ui.resourceUri, RESOURCE_URI_CAL);
-  });
-});
-
-test("T-Wb-CAL-AC3: Fallback fail-closed - kein _meta/Resource, structuredContent bleibt", async () => {
-  await withGateway(RICH_STATE_BATCH, async () => {
-    for (const [label, uiHost] of Object.entries(FALLBACK_CASES)) {
-      const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
-      const { config, handler } = tools.get("get_calendar");
-      assert.equal(resources.filter((r) => r.uri === RESOURCE_URI_CAL).length, 0, `${label}: keine Resource`);
-      assert.ok(ohneWidgetMeta(config), `${label}: kein Widget-_meta`);
-      const result = await handler({});
-      assert.equal(result.structuredContent.calendar.length, 1, `${label}: structuredContent bleibt`);
-    }
-  });
-});
-
-test("T-Wb-CAL-AC4: Whitelist - nur title/start/end, kein location/notes/attendees", async () => {
-  await withGateway(RICH_STATE_BATCH, async () => {
-    const { tools, resources } = captureUi({ uiHost: capableHost() });
-    const result = await tools.get("get_calendar").handler({});
-    const serialized = JSON.stringify(result);
-    for (const leak of BATCH_LEAKS) assert.ok(!serialized.includes(leak), `kein Leck von ${leak}`);
-    assert.deepEqual(Object.keys(result.structuredContent.calendar[0]).sort(), CALENDAR_ENTRY_KEYS);
-
-    const html = (await resources.find((r) => r.uri === RESOURCE_URI_CAL).readCallback()).contents[0].text;
-    for (const leak of BATCH_LEAKS) assert.ok(!html.includes(leak), `Resource-HTML statisch, kein ${leak}`);
-  });
-});
-
-test("T-Wb-CAL-AC6: calendar.html self-contained + read-only + erbt W1 + deklariert data-mcp-row", async () => {
-  const html = (await readbackResource(mcpNativeRenderer, WIDGET_CALENDAR)).contents[0].text;
-  assert.ok(html.startsWith("<!-- @dsCard"), "@dsCard-Marker in Zeile 1");
-  assert.ok(!html.includes("@import"), "kein @import");
-  assert.doesNotMatch(html, /<link[\s>]/, "kein <link>-Element");
-  assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
-  assert.doesNotMatch(html, /<button/, "kein <button> (read-only)");
-  assert.ok(!html.includes("callTool"), "kein callTool (read-only)");
-  assert.ok(html.includes("run(window)"), "injiziertes W1-Binding vorhanden");
-  assert.ok(html.includes('data-mcp="calendar"'), "Listen-Slot data-mcp=calendar");
-  assert.ok(html.includes("data-mcp-row="), "deklariert Row-Felder fuer das Objekt-Listen-Rendering");
-  assert.equal(mcpNativeRenderer.hasWidget(WIDGET_CALENDAR), true, "Adapter kennt calendar");
 });
 
 // ===== W2: Tool-Rewiring - Spam-Wurzel beseitigt (vormals W0-Charakterisierungs-Baseline) =====

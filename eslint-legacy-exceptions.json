@@ -346,5 +346,20 @@
       "no-magic-numbers :: No magic number: 200.": 1,
       "no-magic-numbers :: No magic number: 32.": 1
     }
+  },
+  "test/mcp-ui.test.js": {
+    "reason": "NEUER Eintrag 2026-09-24 (T2-12, S5). Reine Loeschung des T-Wb-CAL-*-Blocks (get_calendar/Kalender-Widget entfallen, O-25/N-13) senkt zwei Regel-Zaehler: id-length 'r' 20 -> 17 (drei Kurzvariablen `e`/`r` der Kalender-Tests weg) und no-restricted-syntax (Demeter G36) 37 -> 28 (neun tief verschachtelte resources/tools-Zugriffsketten der Kalender-Assertions weg). Keine neue Regel, keine neue Ausnahme, kein einziger Befund gestiegen - reine Loeschung verschiebt Meldungstext, keine neue Schuld (Praezedenz test/media-token.test.js). Gemessen mit `npx eslint test/mcp-ui.test.js --suppressions-location eslint-suppressions.empty.json --format json`.",
+    "date": "2026-09-24",
+    "findings": {
+      "id-length :: Identifier name 'c' is too short (< 2).": 3,
+      "id-length :: Identifier name 'r' is too short (< 2).": 17,
+      "id-length :: Identifier name 's' is too short (< 2).": 1,
+      "max-params :: Method 'registerResource' has too many parameters (4). Maximum allowed is 3.": 2,
+      "max-params :: Method 'tool' has too many parameters (4). Maximum allowed is 3.": 1,
+      "no-magic-numbers :: No magic number: 2.": 2,
+      "no-param-reassign :: Assignment to property of function parameter 'res'.": 1,
+      "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 28,
+      "sonarjs/no-commented-code :: Remove this commented out code.": 1
+    }
   }
 }
