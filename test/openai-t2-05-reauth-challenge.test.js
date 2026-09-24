@@ -138,7 +138,6 @@ test("Unit S3 (ii+iii): registerNoTenantStubs registriert dieselbe Namensmenge, 
   const ctx = {
     identity: null,
     scopedTenant: "tenant-c",
-    allowCalendar: true,
     consultAllowed: false,
     uiHost: null,
     language: "de",
@@ -254,10 +253,10 @@ test("T05-1 (unbekannter sub, localhost): initialize/tools/list unveraendert, pl
       method: "tools/list",
     });
     const realTools = (await readToolResult(realListRes)).tools;
-    // W3 (PLAN-OPENAI-TECHNIK-2.md): Mandant C traegt DEFAULT_PROFILE (allowCalendar
-    // false) - die Zahl weicht deshalb von TOOL_COUNT_WITHOUT_CONSULT (Owner-Profil,
-    // allowCalendar true, s. T05-8) ab; entscheidend ist die Gleichheit ghost==real -
-    // Kein-Mandant liefert exakt dieselbe Menge wie derselbe Mandant MIT Zuordnung.
+    // T2-12: get_calendar (und mit ihm allowCalendar als Werkzeugmengen-Schalter) ist
+    // entfallen - die Werkzeugmenge haengt nicht mehr vom Profil ab. Entscheidend bleibt
+    // die Gleichheit ghost==real: Kein-Mandant liefert exakt dieselbe Menge wie derselbe
+    // Mandant MIT Zuordnung.
     assert.equal(ghostTools.length, realTools.length);
     assert.ok(ghostTools.length > 0, "die Tool-Liste ist NICHT leer (sichtbar, nur der Aufruf ist gesperrt)");
     for (const toolDesc of ghostTools) {
