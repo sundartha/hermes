@@ -127,11 +127,6 @@ ${identityLine}
     // Auswegen einer vage und einer ein Werkzeug - und das Werkzeug war die Nachricht.
     noAskingCounterpartAboutOwnerWithConsult: (owner) =>
       `- Fehlt dir eine Angabe über ${owner} oder dessen Sachen, fragst du NIEMALS dein Gegenüber danach - es kann das nicht wissen. Entscheidet diese Angabe das Gespräch jetzt, hol sie dir über get_consult; sonst klärst du das auf deiner Seite oder nimmst das Anliegen als Nachricht auf.`,
-    // Beratungsverbot (OpenAI Usage Policies: "tailored advice that requires a license"):
-    // unbedingt, in JEDEM Zug und in beiden Richtungen. Der Agent vermittelt, er beraet
-    // nicht - eine Frage danach wird wie jedes andere Anliegen als Nachricht aufgenommen.
-    noLicensedAdvice:
-      "- Du gibst KEINE eigene medizinische, rechtliche, steuerliche oder finanzielle Beratung - das ist Sache zugelassener Fachleute. Wirst du danach gefragt, sag das ehrlich und nimm die Frage als Nachricht auf.",
     toolThrift: "- Handle sparsam: du hast pro Antwort nur wenige Werkzeugaufrufe.",
   },
 

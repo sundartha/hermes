@@ -39,8 +39,6 @@ const NO_NAME_TENANT_ID = "t_oc_p3_no_name";
 const OUTBOUND = "outbound";
 
 // Golden-Fixture (5.2): aus UNBERUEHRTEM master abgegriffen, VOR jedem OC-P3-Edit.
-// Einzige spaetere, absichtliche Aenderung: die unbedingte Grenz-Zeile noLicensedAdvice
-// (Beratungsverbot) steht je Sprache und Richtung vor toolThrift.
 // Zeile 2 des Prompts (uhrabhaengig) ist bereits maskiert - maskSecondLine unten
 // erzeugt beim Vergleich dieselbe Maskierung.
 const GOLDEN = JSON.parse(

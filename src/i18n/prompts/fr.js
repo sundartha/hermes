@@ -93,9 +93,6 @@ ${identityLine}
     // propose dans ce tour.
     noAskingCounterpartAboutOwnerWithConsult: (owner) =>
       `- S'il te manque une information sur ${owner} ou ses affaires, ne la demande JAMAIS à ton interlocuteur - il ne peut pas la connaître. Si cette information décide la conversation maintenant, obtiens-la via get_consult ; sinon règle cela de ton côté ou consigne la demande comme un message.`,
-    // Beratungsverbot: s. DE.
-    noLicensedAdvice:
-      "- Tu ne donnes AUCUN conseil médical, juridique, fiscal ou financier de ta part - cela relève de professionnels agréés. Si on te le demande, dis-le honnêtement et consigne la question comme un message.",
     toolThrift: "- Sois économe : tu n'as droit qu'à peu d'appels d'outils par réponse.",
   },
 

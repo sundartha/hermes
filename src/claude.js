@@ -214,9 +214,8 @@ function researchBoundaryLine(b, { lookupAvailable, consultAvailable }) {
 // Grenzen. Die beiden allow*-Gates behalten exakt ihre fail-closed-Semantik (Zeile
 // steht, SOLANGE nicht ausdruecklich erlaubt) - nur die Leerzeile bei "erlaubt" faellt
 // weg (D8). Die beiden Kalender-/Buchungs-Zeilen sind seit P1b unbedingt (Owner-
-// Entscheidung E1) und bleiben es. Die Recherche-Zeile und die Werkzeug-Sparsamkeit
-// decken die vierte neu geschlossene Telefonie-Luecke (Faehigkeits-Ehrlichkeit +
-// Werkzeug-Sparsamkeit); davor steht das unbedingte Beratungsverbot. Die
+// Entscheidung E1) und bleiben es. Die letzten beiden Zeilen decken die vierte neu
+// geschlossene Telefonie-Luecke (Faehigkeits-Ehrlichkeit + Werkzeug-Sparsamkeit). Die
 // Verzweigung bleibt hier (EINE Quelle, P11 D1) - nur die Zeilen kommen aus dem
 // Sprach-Baustein.
 function boundaryRules({
@@ -249,8 +248,6 @@ function boundaryRules({
     consultAvailable
       ? b.noAskingCounterpartAboutOwnerWithConsult(owner)
       : b.noAskingCounterpartAboutOwner(owner),
-    // Beratungsverbot: unbedingt, unabhaengig von Richtung, Werkzeugen und Mandat.
-    b.noLicensedAdvice,
     b.toolThrift,
   );
   return lines.join("\n");

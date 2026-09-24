@@ -76,15 +76,10 @@ const EXPECTED_RESOURCE_META = {
 // securitySchemes. Voriger HTTP-Sollwert zum Vergleich (T2-23, volle oauth2-Angabe
 // im Legacy-Default - das war der Regressionsbefund dieses Nachtrags):
 // 00c916d4ece76dda6fa60de658979464c9dbd50d22596d77f53a6c49ea501b13.
-// Zweckbindung (src/call-purpose.js) neu gepinnt: die place_call-Beschreibung traegt jetzt
-// CALL_PURPOSE_RULE hinter dem ersten Satz. Gegenprobe: mit der Beschreibung OHNE diesen
-// Text ergaben HTTP und stdio wieder den vorigen Sollwert
-// bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47 - das ist der EINZIGE
-// Unterschied.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "b96bd6dd35902de46c658fffdf6486e0b56a323a72d578a216edec40b969c2a0";
+  "bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "b96bd6dd35902de46c658fffdf6486e0b56a323a72d578a216edec40b969c2a0";
+  "bd4128d31d17468a962aefe223e85211c1c80795df4d17a1901a81dab2fcda47";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

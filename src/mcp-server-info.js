@@ -26,7 +26,6 @@ import { uiServerExtension } from "./ui/contract.js";
 // G22: dasselbe Basis-Token wie mail-not-placed.js - EINE Quelle statt zweimal
 // getippt, sonst deaktiviert eine Umbenennung des Tokens den Wiederhol-Riegel still.
 import { NOT_PLACED } from "./telephony/failure-reason.js";
-import { CALL_PURPOSE_RULE } from "./call-purpose.js";
 
 // Pfad-Praefix fuer selbst gehostete Marken-Assets unter public/ (kein Magic-String,
 // G25) - server.js braucht denselben Wert fuer icons[1].src oben.
@@ -95,18 +94,12 @@ export const HERMES_SERVER_INFO = {
 // liefert (pickTranscript/callFailedSummary). get_transcript IST fuer jeden Tenant
 // registriert (kein Consult-Gate) - die Nennung hier ist deshalb sicher, anders als bei
 // await_call_event/answer_consult oben.
-//
-// Zweckbindung (CALL_PURPOSE_RULE, call-purpose.js): derselbe Text wie in der Beschreibung
-// von place_call. Er steht HINTER dem not-placed-Satz, damit der Geld-Satz in den ersten
-// 512 Zeichen bleibt (test/openai-p4-ergebnisstruktur-instructions.test.js). place_call ist
-// fuer jeden Tenant registriert - die Nennung ist deshalb sicher.
 export const MCP_BASE_INSTRUCTIONS =
   `If a call reports a failure_reason starting with "${NOT_PLACED}", the call could not ` +
   "be placed because of a problem on our side. Do NOT retry the call: call get_transcript " +
   "for that call_id - it works for a failed call, not only a completed one - and tell the " +
   "user what failed, using its result_summary text as it is. " +
-  "Never invent facts about the principal or the call: if you do not know something, say so. " +
-  CALL_PURPOSE_RULE;
+  "Never invent facts about the principal or the call: if you do not know something, say so.";
 
 // Consult-Block bleibt modul-intern (kein dritter Export, keine dritte Wahrheit) - er
 // gilt NUR, wenn der Tenant await_call_event/answer_consult registriert bekommt.
