@@ -723,7 +723,7 @@ const INCLUDE_SEEN_FIELD = z
 // dafuer gebaut sind. Form und Deckel wie beim Geschwisterfeld key_facts (maxItems 10,
 // routes/_validation.js OPEN_QUESTIONS_LIMITS).
 //
-// Auf Modulebene wie CALENDAR_ENTRY/CALL_LIST_ENTRY daneben, NICHT inline wie die
+// Auf Modulebene wie CALL_LIST_ENTRY daneben, NICHT inline wie die
 // Geschwisterfelder: die Schema-Definition von place_call ist bereits so tief
 // verschachtelt, dass jede weitere inline gekettete Feld-Definition die Demeter-Grenze
 // (G36) reisst. Ein benannter Wert an dieser Stelle haelt die Kette flach.
@@ -873,8 +873,8 @@ const ANSWER_CONSULT_DESCRIPTION =
 // Client-Modell liest das, keine Tenant-Sprache.
 // EIN modulweiter Wahrheitstabelle statt zehn Inline-Literalen (Owner-Auflage
 // "registerTools darf NICHT wachsen", s. Kommentar bei CHECK_INBOX_DESCRIPTION/
-// CANCEL_CALL_DESCRIPTION) - dieselbe Auslagerung wie CALL_OUTPUT/CALENDAR_OUTPUT/
-// MY_NUMBER_OUTPUT. Reihenfolge = Registrierreihenfolge (Vollstaendigkeit gegen die Datei
+// CANCEL_CALL_DESCRIPTION) - dieselbe Auslagerung wie CALL_OUTPUT/MY_NUMBER_OUTPUT.
+// Reihenfolge = Registrierreihenfolge (Vollstaendigkeit gegen die Datei
 // abzaehlbar). await_call_event ist NICHT readOnly: seine Route schreibt zwei Felder
 // (noteConsultPoll/markConsultAskDelivered, routes/api-calls.js + state-ops.js) - der
 // Code widerspricht damit einer frueheren Einschaetzung, und der Code gewinnt.

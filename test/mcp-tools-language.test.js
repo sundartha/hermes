@@ -204,9 +204,9 @@ test("Tenant mit language=de bleibt im MCP-Kanal deutsch, auch bei scharfem Welt
   try {
     await withGateway({}, async () => {
       const handlers = captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" });
-      const resultCalendar = await handlers.get("list_calls")();
+      const callsResult = await handlers.get("list_calls")();
       assert.equal(
-        toolText(resultCalendar),
+        toolText(callsResult),
         "Der Telefon-Agent hat eine unvollstaendige Antwort geliefert. Bitte spaeter erneut versuchen.",
       );
     });

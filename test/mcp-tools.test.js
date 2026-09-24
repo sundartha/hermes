@@ -1,11 +1,11 @@
 // P4 / AC5 + AC6: mcp-tools Result-Guard + per-handler Throw-Schutz.
 //
 // AC5: Die Tool-Handler derefen verschachtelte Felder aus dem api()-Ergebnis
-// (r.callId, s.calendar, s.usage, s.agent, s.calls, s.actionItems). api() degradiert
+// (r.callId, s.usage, s.agent, s.calls, s.actionItems). api() degradiert
 // bei Parse-Fehler zu `{}` (mcp-tools.js: `res.json().catch(() => ({}))`). Auf `{}`
-// ist s.calendar undefined -> .length crasht. Ein Result-Guard muss das in eine
+// ist s.calls undefined -> .length crasht. Ein Result-Guard muss das in eine
 // KLARE Tool-Fehlermeldung wandeln statt in einen TypeError (unhandled rejection im
-// stdio-Pfad). Leerer Kalender `[]` bleibt valide (kein Guard-Fehler).
+// stdio-Pfad). Leere Anrufliste `[]` bleibt valide (kein Guard-Fehler).
 //
 // AC6: Wirft ein Handler trotzdem, faengt der per-handler-Wrapper das ab und liefert
 // eine MCP-Fehlerantwort (isError: true) statt einer process-level unhandled rejection.
