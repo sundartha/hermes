@@ -11,11 +11,10 @@ import {
   WIDGET_AGENT_STATUS,
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
-  WIDGET_CALENDAR,
 } from "../src/ui/widget-catalog.js";
 import { WING_PNG } from "../design-system/components/brand/wing-image.js";
 
-const STATIC_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALENDAR];
+const STATIC_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS];
 const STATE_KEYFRAMES_NOT_EXPECTED = [
   "hermesWingConnect", "hermesWingFlap", "hermesWingSuccess", "hermesWingError",
 ];

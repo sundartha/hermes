@@ -26,7 +26,6 @@ import {
   WIDGET_AGENT_STATUS,
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
-  WIDGET_CALENDAR,
   WIDGET_CALL,
   widgetHtml,
   withI18nScript,
@@ -40,7 +39,7 @@ import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../src/telephony/call
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WIDGET_DIR = path.join(ROOT, "src", "ui", "widgets");
-const ALL_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALENDAR, WIDGET_CALL];
+const ALL_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALL];
 const LOCALES = Object.keys(WIDGET_DICT);
 
 // OUTBOUND-E2 (Review-Blocker Runde 4, S2-A/G5): FAILURE_REASON_LABELS lebt als
@@ -167,10 +166,10 @@ test("T-i18n-en-default: data-i18n-Elemente tragen den Key selbst als englischen
   }
 });
 
-// UI-05 (Buchhaltung, gruen) - prueft alle 5 Widgets, Platzhalter-Ersetzung und die
+// UI-05 (Buchhaltung, gruen) - prueft alle Widgets, Platzhalter-Ersetzung und die
 // Position vor <body; Spezifikation tasks/i18n-tests/12-sprachachsen-ui.md. Kein eigener
 // Test (G5).
-test("T-i18n-inject: I18N_SCRIPT ist in ALLEN 5 Widget-HTML injiziert, kein Platzhalter-Leak", () => {
+test("T-i18n-inject: I18N_SCRIPT ist in ALLEN 4 Widget-HTML injiziert, kein Platzhalter-Leak", () => {
   for (const id of ALL_WIDGET_IDS) {
     const html = widgetHtml(id);
     assert.ok(html.includes("window.HermesI18n"), `${id}: HermesI18n fehlt`);
