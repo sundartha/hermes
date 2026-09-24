@@ -139,7 +139,12 @@ const EXPECTED_MARKERS = {
   // T2-13 (N-10): prepare_call ist neu registriert und teilt sich PLACE_CALL_REQUEST_SCHEMA
   // mit place_call (dieselbe Modul-Konstante) - jedes Feld traegt deshalb DIESELBEN
   // Emphase-Marker wie sein place_call-Gegenstueck oben, unter dem eigenen Pfad-Praefix.
-  prepare_call: ["WITHOUT", "WITHOUT", "EVERY"],
+  // Safety-Review T2-13-Nachbesserung: die Beschreibung ist auf den echten Mechanismus
+  // zurueckgeschnitten (kein "host with/without card support", stattdessen "card
+  // confirmation enabled/disabled for this server" - es gibt keine Host-Erkennung, nur
+  // den globalen Schalter MCP_UI_ENABLED, s. Korrektur in mcp-tools.js/PLAN-SECURITY.md).
+  // Dadurch faellt ein WITHOUT weg (nur noch einmal im ersten Satz).
+  prepare_call: ["WITHOUT", "EVERY"],
   "prepare_call.to": ["EXACTLY", "NEVER"],
   "prepare_call.objective": ["ONE", "VERBATIM", "BEFORE", "NO", "ALWAYS", "FIRST", "NOT"],
   "prepare_call.briefing": ["SUMMARISE", "NO", "KNOW"],

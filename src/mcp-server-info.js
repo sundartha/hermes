@@ -106,7 +106,8 @@ export const MCP_BASE_INSTRUCTIONS =
   // Modell nicht rein aus der Tool-Beschreibung raet, wann prepare_call an der Reihe ist.
   "Before every place_call, call prepare_call first with the exact same arguments; the " +
   "user then confirms in the Hermes card and reveals a confirmation_code, which you pass " +
-  "to place_call. Hosts without card support never see a code and cannot place calls.";
+  "to place_call. If card confirmation is disabled for this server no code is ever issued " +
+  "and place_call cannot succeed.";
 
 // Consult-Block bleibt modul-intern (kein dritter Export, keine dritte Wahrheit) - er
 // gilt NUR, wenn der Tenant await_call_event/answer_consult registriert bekommt.

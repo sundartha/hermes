@@ -799,7 +799,7 @@ const PLACE_CALL_DESCRIPTION =
 // Plan Abschnitt 5, "Weg ohne Karte" ist bewusst ausgeschlossen) - sonst versucht das
 // Modell auf einem Host ohne UI wiederholt, einen Code zu "finden", der nie erscheint.
 const PREPARE_CALL_DESCRIPTION =
-  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. On a host with card support this shows a Hermes card where the user reviews the call and reveals a confirmation code that place_call then requires. On a host WITHOUT card support no code is ever issued to you - placing this call via place_call is not possible here, do not attempt it and do not ask the user for a code they cannot see. Call this before EVERY place_call with identical arguments.";
+  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is enabled for this server, this shows a Hermes card where the user reviews the call and reveals a confirmation code that place_call then requires - you never see that code yourself unless the host forwards it to you, and it is not a substitute for the user actually reviewing the card. When card confirmation is disabled for this server, no code is ever issued to anyone - placing this call via place_call is not possible here, do not attempt it and do not ask the user for a code they cannot see. Call this before EVERY place_call with identical arguments.";
 
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
@@ -1426,26 +1426,33 @@ export function registerTools(
       ...callWidgetUi,
     },
     async (args) => {
-      const r = await confirmCallHop({ identity, scopedTenant, body: args });
-      requireFields(r, { preview: "object" });
-      // Der Code erreicht das Modell auf Hosts, die _meta dem Modell vorenthalten, NUR
-      // ueber die Karte (Abschnitt 0 der Spec, PLAN-SECURITY.md) - deshalb wird er
-      // ausschliesslich angehaengt, wenn dieser Host ueberhaupt eine Karte hat
-      // (callWidgetUi._meta gesetzt). Ohne Karte bleibt r.confirmation ungenutzt: der
-      // Server hat zwar einen Code ausgestellt, aber niemand bekommt ihn zu sehen.
+      const previewResult = await confirmCallHop({ identity, scopedTenant, body: args });
+      requireFields(previewResult, { preview: "object" });
+      // KORREKTUR (Safety-Review T2-13): hasCard prueft NUR den globalen Master-Schalter
+      // MCP_UI_ENABLED (callWidgetUi._meta ist bei aktivem Schalter fuer JEDEN Host
+      // gesetzt, s. enableWidgetUi/uiRendererFor - es gibt keine Pruefung, ob der
+      // konkret verbundene Host _meta tatsaechlich vor dem Modell verbirgt). Bei
+      // aktivem Schalter erreicht der Code also JEDEN Host in _meta - ob daraus ein
+      // menschlicher Schritt wird, haengt allein davon ab, ob dieser Host den
+      // MCP-Apps-Vertrag einhaelt und _meta nicht an das Modell weiterreicht (Zitat
+      // Primaerquelle: "Treat `_meta` as hidden from the model, not as a substitute
+      // for authorization"). Ein Host, der dagegen verstoesst, liest den Code selbst;
+      // Rueckfall in dem Fall: PLAN-SECURITY.md Abschnitt OpenAI-T2-13. Bei
+      // MCP_UI_ENABLED=false bleibt previewResult.confirmation ungenutzt: kein Client
+      // bekommt je einen Code, place_call ist dann fuer niemanden moeglich.
       const hasCard = Boolean(callWidgetUi._meta);
       const meta =
-        hasCard && r.confirmation
+        hasCard && previewResult.confirmation
           ? {
-              [CONFIRMATION_CODE_META_KEY]: r.confirmation.code,
-              [CONFIRMATION_EXPIRES_META_KEY]: r.confirmation.expires_at,
+              [CONFIRMATION_CODE_META_KEY]: previewResult.confirmation.code,
+              [CONFIRMATION_EXPIRES_META_KEY]: previewResult.confirmation.expires_at,
             }
           : undefined;
       return {
         content: [
           { type: "text", text: hasCard ? loc.mcp.prepareCallCardHint : loc.mcp.prepareCallNoCardHint },
         ],
-        structuredContent: r.preview,
+        structuredContent: previewResult.preview,
         ...(meta ? { _meta: meta } : {}),
       };
     },

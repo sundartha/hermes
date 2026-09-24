@@ -6194,12 +6194,27 @@ Person der Kontoinhaber ist, und sie ist KEINE Autorisierung — sie ersetzt kei
 Nirgends darf "vom Nutzer bestaetigt" als Garantie stehen; die Formulierung bleibt "der Code
 erreicht das Modell auf Hosts, die `_meta` dem Modell vorenthalten, nur ueber die Karte."
 
-**Host-Abhaengigkeit, bewusste Folge:** `prepare_call` haengt den Code NUR an, wenn der
-aufrufende Host kartenfaehig ist (`callWidgetUi._meta` gesetzt, `MCP_UI_ENABLED=true` UND
-der Host meldet UI-Faehigkeit). Ohne Karte wird der Code serverseitig zwar ausgestellt
-(die Route kennt die Kartenfaehigkeit des Aufrufers nicht), aber NIE an den Client
-weitergereicht — aus Claude Code, stdio ohne UI oder `MCP_UI_ENABLED=false` ist per MCP
-deshalb ab dieser Phase KEIN Anruf mehr moeglich. Ein Code im Modelltext oder ein
+**Host-Abhaengigkeit, KORRIGIERT (Safety-Review, war falsch dokumentiert):** `prepare_call`
+haengt den Code an `_meta` an, sobald der globale Master-Schalter `MCP_UI_ENABLED=true`
+ist (`callWidgetUi._meta` gesetzt, s. `enableWidgetUi`/`uiRendererFor` in `src/mcp-tools.js`).
+Es gibt KEINE zweite Pruefung, ob der konkret verbundene Host tatsaechlich kartenfaehig ist
+oder `_meta` vor dem Modell verbirgt — "der Host meldet UI-Faehigkeit" beschrieb einen
+Mechanismus, der im Code nicht existiert (T2-01 hat bewusst auf ein Capability-Feld
+verzichtet, s. `src/routes/mcp.js`). Bei `MCP_UI_ENABLED=true` erreicht der Code deshalb
+JEDEN verbundenen Host in `_meta` — auch Claude Code, stdio-Clients oder ein
+Agenten-Framework ohne Kartenanzeige. Ob daraus ein menschlicher Bestaetigungsschritt wird,
+haengt ausschliesslich davon ab, ob dieser Host den MCP-Apps-Vertrag einhaelt und `_meta`
+nicht an das Modell serialisiert (Primaerquelle: "Treat `_meta` as hidden from the model,
+not as a substitute for authorization or secure storage"). Ein Host, der dagegen verstoesst,
+liest den Code selbst und kann sich damit selbst bestaetigen — die Bestaetigung ist dann nur
+formal (s. Pre-Mortem (1) in der T2-13-Spec). Rueckfall fuer diesen Fall: **keine echte
+Host-Faehigkeitspruefung existiert heute** — Gegenmassnahme ist ausschliesslich die
+Stichprobe aus OW-C/OW-D (das Modell vor dem Klick nach dem Code fragen, erwartet: kennt ihn
+nicht) sowie, im begruendeten Verdachtsfall, `MCP_UI_ENABLED=false` fuer den betroffenen
+Client zu setzen (dann bekommt NIEMAND mehr einen Code, s.u.). NUR bei
+`MCP_UI_ENABLED=false` wird der Code serverseitig zwar weiterhin ausgestellt, aber an
+KEINEN Client weitergereicht — dann ist per MCP fuer ALLE Hosts gleichermassen kein Anruf
+mehr moeglich, nicht selektiv fuer kartenlose Hosts. Ein Code im Modelltext oder ein
 Web-Link waeren ein neuer, zustandsbehafteter Geldpfad-Endpunkt bzw. eine nur formale
 Bestaetigung (das Modell koennte ihn selbst lesen) — beides bewusst nicht gebaut.
 

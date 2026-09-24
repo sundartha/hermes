@@ -26,8 +26,12 @@ export const MCP_ERROR_CODE = Object.freeze({
   UPSTREAM_UNREACHABLE: "upstream_unreachable",
   // E3 (T-27): Zeitablauf auf dem place_call-Hop. NICHT "Anruf fehlgeschlagen" - der Anruf
   // kann laufen (gemessen: bei 15 s Frist kam das Gespraech trotzdem zustande,
-  // elevenlabs/convai.js). Der Text sagt deshalb ausdruecklich, dass ein erneuter Versuch
-  // den laufenden Anruf zurueckliefert statt einen zweiten zu starten.
+  // elevenlabs/convai.js). KORRIGIERT (T2-13-Nachbesserung, Safety-Review): der Text riet
+  // frueher zu einem erneuten place_call an dieselbe Nummer (die POST /api/calls-Dedup
+  // haette den laufenden Anruf zurueckgeliefert). Seit T2-13 verbraucht confirmAndConsume
+  // den Bestaetigungscode VOR diesem Hop - ein erneuter place_call mit demselben Code
+  // erreicht die Dedup gar nicht mehr, er scheitert IMMER an confirmationRequired. Der
+  // Text verweist deshalb jetzt auf list_calls/get_call_status statt auf einen Retry.
   CALL_START_UNCONFIRMED: "call_start_unconfirmed",
   // T2-08 (T-27): Zeitablauf auf JEDEM UEBRIGEN MCP->REST-Hop (cancel_call, answer_consult,
   // check_inbox, get_call_status, list_calls, GET /api/state-Leser, der Abschluss-GET in
@@ -85,8 +89,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "Der Telefon-Agent ist momentan nicht erreichbar. Bitte spaeter erneut versuchen.",
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
-        "Zeitablauf beim Anrufstart - der Anruf kann bereits laufen. Ein erneuter place_call an " +
-        "dieselbe Nummer liefert den laufenden Anruf zurueck und startet keinen zweiten.",
+        "Zeitablauf beim Anrufstart - der Anruf kann bereits laufen. Der Bestaetigungscode ist " +
+        "jetzt verbraucht: KEIN erneuter place_call mit diesem Code (er wird abgelehnt). " +
+        "Stattdessen list_calls oder get_call_status abfragen, um den aktuellen Stand zu sehen.",
       [MCP_ERROR_CODE.HOP_TIMEOUT]:
         "Zeitablauf bei der Anfrage - die Aktion kann trotzdem ausgefuehrt worden sein. Bitte " +
         "den aktuellen Stand erneut abfragen, statt die Aktion blind zu wiederholen.",
@@ -118,9 +123,11 @@ export const MCP_TEXTS = Object.freeze({
     confirmationRequired: (to, objective) =>
       `Dieser Anruf ist noch nicht bestaetigt (Ziel: ${to}, Anliegen: ${objective}). Bitte ` +
       "den Anruf in der Hermes-Karte bestaetigen - ein Host ohne Karte kann nicht waehlen.",
-    // T2-13: prepare_call OHNE Kartenfaehigkeit (MCP_UI_ENABLED=false oder Host ohne UI) -
-    // ein Code wird zwar serverseitig ausgestellt, aber NIE an diesen Host weitergereicht
-    // (Plan Abschnitt 5, "Weg ohne Karte" ist bewusst ausgeschlossen).
+    // T2-13: prepare_call bei MCP_UI_ENABLED=false (der einzige Schalter, der das
+    // entscheidet - keine Erkennung einzelner Hosts, s. Korrektur in PLAN-SECURITY.md
+    // Abschnitt OpenAI-T2-13) - ein Code wird zwar serverseitig ausgestellt, aber an
+    // KEINEN Client weitergereicht (Plan Abschnitt 5, "Weg ohne Karte" ist bewusst
+    // ausgeschlossen).
     prepareCallNoCardHint:
       "Vorschau erstellt. Dieser Host kann Anrufe nicht bestaetigen (keine Hermes-Karte) - " +
       "place_call wird hier keinen Anruf ausloesen.",
@@ -200,8 +207,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "The phone agent is currently unavailable. Please try again later.",
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
-        "Timed out while starting the call - the call may already be running. Calling place_call " +
-        "again for the same number returns the running call instead of starting a second one.",
+        "Timed out while starting the call - the call may already be running. The confirmation " +
+        "code is now consumed: do NOT call place_call again with this code (it will be rejected). " +
+        "Check list_calls or get_call_status instead to see the current state.",
       [MCP_ERROR_CODE.HOP_TIMEOUT]:
         "Timed out while waiting for a response - the action may have completed anyway. Please " +
         "check the current status instead of blindly retrying the action.",
@@ -279,8 +287,9 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "L'agent téléphonique est actuellement injoignable. Veuillez réessayer plus tard.",
       [MCP_ERROR_CODE.CALL_START_UNCONFIRMED]:
-        "Délai dépassé au démarrage de l'appel - l'appel est peut-être déjà en cours. Un nouvel " +
-        "appel à place_call vers le même numéro renvoie l'appel en cours au lieu d'en démarrer un second.",
+        "Délai dépassé au démarrage de l'appel - l'appel est peut-être déjà en cours. Le code de " +
+        "confirmation est maintenant consommé : NE PAS rappeler place_call avec ce code (il sera " +
+        "refusé). Consultez plutôt list_calls ou get_call_status pour voir l'état actuel.",
       [MCP_ERROR_CODE.HOP_TIMEOUT]:
         "Délai dépassé en attendant une réponse - l'action a peut-être quand même été exécutée. " +
         "Veuillez vérifier l'état actuel plutôt que de répéter l'action à l'aveugle.",

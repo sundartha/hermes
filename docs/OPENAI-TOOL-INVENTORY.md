@@ -258,12 +258,14 @@ to an external party on at least one path is `true`, even if some invocations se
 `place_call` requires a `confirmation_code` obtained from a preceding `prepare_call` call with
 the identical arguments. The server derives the code from a secret operated by Hermes plus the
 exact request (destination, objective, and every other argument); it is issued only in the
-tool result's `_meta`, never in the model-visible text or `structuredContent`. On a host that
-keeps `_meta` from the model, the code therefore reaches the model only through a user action
-(reviewing the rendered card). On a host that does not - there is no such host among the
-reviewed clients - the code would be model-visible and the confirmation would be formal only;
-Hermes does not claim more than that the code was issued for this exact request and consumed
-once. It is not a claim that a human read the card, and it does not itself authorize the call:
+tool result's `_meta`, never in the model-visible text or `structuredContent`. The server does
+not detect whether the connecting host actually keeps `_meta` from the model - once card
+confirmation is enabled, every connecting host receives the code in `_meta`. On a host that
+follows the MCP Apps contract and keeps `_meta` from the model, the code therefore reaches the
+model only through a user action (reviewing the rendered card). On a host that does not, the
+code would be model-visible and the confirmation would be formal only; Hermes does not claim
+more than that the code was issued for this exact request and consumed once. It is not a claim
+that a human read the card, and it does not itself authorize the call:
 the server's outbound permission checks (subscription/verification, destination country and
 number, hourly/per-destination limits, per-account cost cap, maximum duration, provider
 signature verification) run unchanged when the call is actually placed, regardless of the
