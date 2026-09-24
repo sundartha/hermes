@@ -39,7 +39,7 @@ import { WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
 import { makeDefaultState, registerTenant, settingsFor } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-const WIDGET_COUNT = 5;
+const WIDGET_COUNT = 4;
 // T2-02/T-34: die URI traegt seither eine Version (Pin-Datei
 // src/ui/widget-versions.json) - aus uiResourceUri() statt eines Literals, das bei
 // jeder Versionserhoehung von Hand nachgezogen werden muesste.
@@ -87,10 +87,15 @@ const EXPECTED_RESOURCE_META = {
 // geprueft: EINZIGE Unterschiede sind die URIs call/my-number v1 -> v2 (resources/list,
 // resources/read, tools/list _meta) und die umbenannten Namen im Widget-Text. Voriger
 // Sollwert (beide Pfade): e36d8f9e7aa4b4fda25cc0d1518bb364fa25f4de597a24d54e763f3cee88599d.
+// Neu gepinnt (T2-12, O-25/N-13): get_calendar-Werkzeug UND -Karte entfernt (tools/list
+// -1 Eintrag, resources/list -1 Eintrag); alle vier verbleibenden Widgets tragen eine neue
+// Version (WIDGET_DICT wird in jedes Widget serialisiert), also neue URIs fuer
+// agent-status/calls/my-number/call. Voriger Sollwert (beide Pfade, byte-identisch seit
+// dem T2-11-Nachzug oben): 72b3f3606e69272a0ee82b97aebde39550fbe74b99ba7433b2507f2cb1b8a5d6.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "72b3f3606e69272a0ee82b97aebde39550fbe74b99ba7433b2507f2cb1b8a5d6";
+  "513bb73c23e4d7ea833711198fb306fbc92c8a496f5ff8a9d7224c85067a25aa";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "72b3f3606e69272a0ee82b97aebde39550fbe74b99ba7433b2507f2cb1b8a5d6";
+  "513bb73c23e4d7ea833711198fb306fbc92c8a496f5ff8a9d7224c85067a25aa";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
@@ -273,7 +278,7 @@ test("P8-C (HTTP, T2-01, T-30/T-31 gebaut): jede Widget-Resource traegt _meta/mi
   try {
     const tools = await httpToolsList(`${srv.localUrl}/mcp`);
     const widgetTools = tools.filter((tool) => tool._meta?.ui?.resourceUri);
-    assert.equal(widgetTools.length, WIDGET_COUNT, "Positiv-Kontrolle: genau 5 Widget-Werkzeuge");
+    assert.equal(widgetTools.length, WIDGET_COUNT, "Positiv-Kontrolle: genau 4 Widget-Werkzeuge");
 
     for (const tool of widgetTools) {
       const read = await httpResourceRead(`${srv.localUrl}/mcp`, tool._meta.ui.resourceUri);
