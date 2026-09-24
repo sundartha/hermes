@@ -61,6 +61,8 @@ const PLACE_CALL_SHAPE = {
   language: { optional: true },
   max_duration_s: { optional: true },
   diagnostic: { optional: true },
+  // T2-13 (N-10): optional im Schema (SDK-Grund, s. mcp-tools.js), Pflicht erst im Handler.
+  confirmation_code: { optional: true },
 };
 
 test("P1-01: place_call-briefing-Beschreibung verlangt zusammengefassten Kontext ohne Secrets in der Assistenten-Rolle", () => {
@@ -226,23 +228,41 @@ const CALL_ZIEL = "+4915112345678";
 // Benannt statt nackt (Repo-Regel: keine Magic Numbers) - die eine Achse, an der dieser
 // Fall scheitern koennte, ohne den Kontext-Weg ueberhaupt erreicht zu haben.
 const HTTP_UNAUTHORIZED = 401;
+// T2-13 (N-10): CALL_CONFIRMATION_SECRET testweise gesetzt (>= 32 Zeichen) - ohne
+// bestaetigten confirmation_code wuerde place_call gar nicht mehr bis /api/calls kommen.
+const TEST_CONFIRMATION_SECRET = "al-p9-11-test-secret-mindestens-32-zeichen";
 const E2E_ENV = Object.freeze({
   ASSISTANT_CONTEXT_ENABLED: "true",
   FAKE_ORIGINATE: "true",
   ALLOWED_COUNTRY_CODES: "*",
+  CALL_CONFIRMATION_SECRET: TEST_CONFIRMATION_SECRET,
 });
+
+// T2-13 (N-10): dieser Host deklariert keine Kartenfaehigkeit (kein MCP_UI_ENABLED), der
+// Code aus prepare_call bliebe also unsichtbar. Fuer diesen Test - der die
+// open_questions-Bruecke misst, nicht den Bestaetigungs-Weg - wird der Code deshalb direkt
+// an der Route geholt (derselbe Loopback-Aufrufer wie der MCP-Handler selbst, s.
+// src/routes/api-call-confirmations.js) statt ueber prepare_call/_meta.
+async function confirmationCodeFor(localUrl, body) {
+  const res = await fetch(`${localUrl}/api/call-confirmations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  return json.confirmation?.code;
+}
 
 test("AL-P9-11: ueber die MCP-Route uebergebene open_questions stehen am Call-Datensatz", async () => {
   const srv = await startServer({ env: E2E_ENV });
   try {
+    const placeCallArgs = { ...PLACE_CALL_INPUT, to: CALL_ZIEL, context: CONTEXT_MIT_FRAGEN };
+    const confirmation_code = await confirmationCodeFor(srv.localUrl, placeCallArgs);
+    assert.ok(confirmation_code, "Vorbedingung: die Bestaetigungs-Route liefert einen Code");
     const res = await mcpPost(
       `${srv.localUrl}/mcp`,
       null,
-      toolCall("place_call", {
-        ...PLACE_CALL_INPUT,
-        to: CALL_ZIEL,
-        context: CONTEXT_MIT_FRAGEN,
-      }),
+      toolCall("place_call", { ...placeCallArgs, confirmation_code }),
     );
     assert.notEqual(res.status, HTTP_UNAUTHORIZED, "Vorbedingung: die MCP-Route nimmt den Aufruf an");
     // Der Rumpf MUSS vor dem Store-Lesen abgeholt werden: der Streamable-HTTP-Transport
