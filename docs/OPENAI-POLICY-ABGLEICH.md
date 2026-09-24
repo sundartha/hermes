@@ -54,7 +54,7 @@ nie gemessen.
 
 | Klausel (Kurzname) | Status |
 |---|---|
-| Allgemeine Pflicht, Usage Policies einzuhalten | teilweise (Summe der Zeilen darunter) |
+| Allgemeine Pflicht, Usage Policies einzuhalten | Luecke (nicht erfuellt, siehe Ergebnis) |
 | Telemarketing, Spam, Betrug | teilweise |
 | Drohung, Einschuechterung, Belaestigung | teilweise |
 | Identitaetsanmassung (Impersonation) | teilweise |
@@ -90,8 +90,16 @@ nie gemessen.
 - Laufende Einhaltung: der Test zu diesem Dokument schlaegt fehl, wenn eine genannte Code-Stelle
   oder ein zitierter Werkzeugtext sich aendert. Aenderungen an den OpenAI-Seiten selbst erkennt
   er NICHT; die muessen vor jeder Einreichung von Hand gegengelesen werden (siehe "Quellen").
-- Status: `teilweise`. Die Luecken aus Teil C bestehen; "ongoing compliance" heisst, dass dieses
+- Status: `Luecke`. Die Pflicht lautet "Do not ... facilitate": sie ist nicht teilweise
+  erfuellbar, solange eine verbotene Nutzung ungehindert moeglich ist. Genau das ist beim
+  Code-Stand der Fall - ein einzelner Werbe- oder Wahlkampfanruf passiert alle Gates (Luecke 1),
+  und weitere Luecken aus Teil C bestehen. "ongoing compliance" heisst ausserdem, dass dieses
   Dokument nach jeder Aenderung an Werkzeugtexten, Prompts oder Gates nachgezogen werden muss.
+- Ergebnis: Hermes haelt die Usage Policies beim Code-Stand NICHT vollstaendig ein. Dieses
+  Dokument traegt keine Zusicherung der Einhaltung gegenueber OpenAI. Die Pflicht gilt erst als
+  erfuellt, wenn jede Luecke aus Teil C geschlossen ist oder der Betreiber sie ausdruecklich und
+  mit Begruendung als nicht einschlaegig festgehalten hat; bis dahin bleibt diese Zeile
+  `Luecke`, auch wenn einzelne Zeilen darunter `erfuellt` werden.
 
 ### Telemarketing, Spam, Betrug
 
