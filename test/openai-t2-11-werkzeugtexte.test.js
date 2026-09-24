@@ -134,18 +134,37 @@ function findTool(tools, name) {
 // die exakt denselben Werkzeug-Wortlaut ueber beide Pfade sehen soll.
 const OAUTH_SUBJECT = "sub-t2-11-werkzeugtexte";
 
+// registersConsult: ob der Pfad answer_consult/await_call_event registriert. stdio tut das
+// NIE (src/mcp-server.js ruft registerTools() ohne consultAllowed, STDIO_CONSULT_LOOP=false),
+// auch nicht mit gesetzter Consult-Env - das belegen T11-d/T11-n ausdruecklich.
 const CONFIGS = [
-  { label: "HTTP Legacy, ohne Consult", expectedCount: 10, run: (fn) => runLegacy({}, fn) },
-  { label: "HTTP Legacy, mit Consult", expectedCount: 12, run: (fn) => runLegacy(CONSULT_ON, fn) },
-  { label: "stdio", expectedCount: 10, run: (fn) => runStdio({}, fn) },
-  { label: "HTTP OAuth", expectedCount: 10, run: (fn) => runOAuth(fn) },
+  { label: "HTTP Legacy, ohne Consult", expectedCount: 10, registersConsult: false, run: (fn) => runLegacy({}, fn) },
+  { label: "HTTP Legacy, mit Consult", expectedCount: 12, registersConsult: true, run: (fn) => runLegacy(CONSULT_ON, fn) },
+  { label: "stdio", expectedCount: 10, registersConsult: false, run: (fn) => runStdio({}, fn) },
+  { label: "HTTP OAuth", expectedCount: 10, registersConsult: false, run: (fn) => runOAuth(fn) },
 ];
+
+// Alle Pfade x Consult an/aus: CONFIGS plus die beiden Consult-an-Varianten, die dort fehlen.
+const ALL_PATH_CONFIGS = [
+  ...CONFIGS,
+  { label: "stdio, Consult-Env an", registersConsult: false, run: (fn) => runStdio(CONSULT_ON, fn) },
+  { label: "HTTP OAuth, mit Consult", registersConsult: true, run: (fn) => runOAuth(fn, CONSULT_ON) },
+];
+
+// Zugriffe, die ein Pfad seinem Test neben tools/list anbietet (instructions, Widgets).
+function httpPathContext(url, token) {
+  return {
+    instructions: () => httpInitializeInstructions(url, token),
+    resources: () => httpResourcesList(url, token),
+    readResource: (uri) => httpResourceRead(url, token, uri),
+  };
+}
 
 async function runLegacy(env, fn) {
   const srv = await startServer({ seed: seedState({}), env });
   try {
-    const tools = await httpToolsList(`${srv.localUrl}/mcp`, null);
-    await fn(tools, { instructions: () => httpInitializeInstructions(`${srv.localUrl}/mcp`, null) });
+    const url = `${srv.localUrl}/mcp`;
+    await fn(await httpToolsList(url, null), httpPathContext(url, null));
   } finally {
     await srv.stop();
   }
@@ -154,7 +173,11 @@ async function runLegacy(env, fn) {
 async function runStdio(env, fn) {
   await withStdioClient(env, async (client) => {
     const tools = await stdioToolsList(client);
-    await fn(tools, { instructions: () => Promise.resolve(client.getInstructions()) });
+    await fn(tools, {
+      instructions: () => Promise.resolve(client.getInstructions()),
+      resources: () => stdioResourcesList(client),
+      readResource: (uri) => stdioResourceRead(client, uri),
+    });
   });
 }
 
@@ -172,8 +195,8 @@ async function runOAuth(fn, env = {}) {
   });
   try {
     const token = await idp.sign({ sub: OAUTH_SUBJECT });
-    const tools = await httpToolsList(`${srv.localUrl}/mcp`, token);
-    await fn(tools, { instructions: () => httpInitializeInstructions(`${srv.localUrl}/mcp`, token) });
+    const url = `${srv.localUrl}/mcp`;
+    await fn(await httpToolsList(url, token), httpPathContext(url, token));
   } finally {
     await srv.stop();
     await idp.close();
@@ -280,36 +303,36 @@ test("T11-b2: instructions und alle sichtbaren Tool-Texte nennen die alten Namen
   }
 });
 
-// ==================== T11-d (N-11): answer_consult nennt die Weitergabe (nur mit Consult) ====================
-// Legacy UND OAuth (Review-Nachtrag): beide bauen die Werkzeug-Registrierung aus denselben
-// TOOL_ANNOTATIONS/*_DESCRIPTION-Konstanten - dieselbe Begruendung wie bei CONFIGS oben.
+// ==================== T11-d (N-11): answer_consult nennt die Weitergabe ====================
+// Jeder Pfad x Consult an/aus (ALL_PATH_CONFIGS). Wo das Werkzeug nicht registriert ist, belegt
+// der Test das ausdruecklich, statt den Pfad stillschweigend auszulassen.
 
-const CONSULT_CONFIGS = [
-  {
-    label: "HTTP Legacy, mit Consult",
-    run: async (fn) => {
-      const srv = await startServer({ seed: seedState({}), env: CONSULT_ON });
-      try {
-        await fn(await httpToolsList(`${srv.localUrl}/mcp`, null));
-      } finally {
-        await srv.stop();
-      }
-    },
-  },
-  { label: "HTTP OAuth, mit Consult", run: (fn) => runOAuth(fn, CONSULT_ON) },
-];
+function assertAnswerConsultRelayText(tools) {
+  const tool = findTool(tools, "answer_consult");
+  assert.match(
+    tool.description,
+    /The agent may relay your answer to the person on the call\./,
+    "answer_consult nennt die Weitergabe woertlich",
+  );
+  assert.doesNotMatch(tool.description, /background information only/);
+}
 
 test("T11-d: answer_consult nennt die Weitergabe an die Gegenseite, nicht mehr 'background information only'", async (subtests) => {
-  for (const cfg of CONSULT_CONFIGS) {
+  assert.ok(
+    ALL_PATH_CONFIGS.some((cfg) => cfg.registersConsult),
+    "Positiv-Kontrolle: mindestens ein Pfad registriert answer_consult",
+  );
+  for (const cfg of ALL_PATH_CONFIGS) {
     await subtests.test(cfg.label, async () => {
       await cfg.run(async (tools) => {
-        const tool = findTool(tools, "answer_consult");
-        assert.match(
-          tool.description,
-          /The agent may relay your answer to the person on the call\./,
-          "answer_consult nennt die Weitergabe woertlich",
+        if (cfg.registersConsult) {
+          assertAnswerConsultRelayText(tools);
+          return;
+        }
+        assert.ok(
+          !tools.some((tool) => tool.name === "answer_consult"),
+          `${cfg.label}: answer_consult ist hier nicht registriert - Wortlaut-Pruefung entfaellt belegt`,
         );
-        assert.doesNotMatch(tool.description, /background information only/);
       });
     });
   }
@@ -351,9 +374,84 @@ test("T11-e2: get_call_result nennt jeden Schluessel seines outputSchema in der 
   }
 });
 
-// ==================== T11-f: tools/call - der Breaking Change ist am Verhalten belegt ====================
+// ==================== T11-f: Werkzeugnamen am Draht - tools/call UND Widget-Verweise ====================
+// Vorher belegte T11-f den Zwischenzustand (Anruf-Karte rief den abgeloesten Namen, der Server
+// antwortete mit Fehler). Jetzt das Gegenteil: jedes ausgelieferte Widget nennt NUR Namen, die
+// derselbe Pfad per tools/list liefert. Die Namensform wird aus diesem tools/list abgeleitet
+// (Verb-Praefixe der registrierten Namen), nicht aus einer gepflegten Liste.
 
-test("T11-f: tools/call get_call_result liefert genau die outputSchema-Schluessel, tools/call get_transcript liefert einen Fehler", async () => {
+const UI_ON = { MCP_UI_ENABLED: "true" };
+// Bruecken-Konstanten im Widget-Skript (call.html: "Tool-Namen wie server-seitig registriert").
+const BRIDGE_CONSTANT = /var TOOL_[A-Z_]+ = "([^"]+)"/g;
+
+const WIDGET_CONFIGS = [
+  { label: "Widgets, HTTP Legacy", run: (fn) => runLegacy(UI_ON, fn) },
+  { label: "Widgets, stdio", run: (fn) => runStdio(UI_ON, fn) },
+  { label: "Widgets, HTTP OAuth", run: (fn) => runOAuth(fn, UI_ON) },
+];
+
+function toolNameShape(toolNames) {
+  const verbs = [...new Set(toolNames.map((name) => name.split("_")[0]))];
+  return new RegExp(`\\b(?:${verbs.join("|")})_[a-z0-9_]+\\b`, "g");
+}
+
+// Jeder Name, den ein Widget-HTML nennt: Bruecken-Konstanten plus jedes Token in Werkzeugnamen-
+// Form (Kommentare, sichtbare Labels, @dsCard eingeschlossen), das tools/list nicht liefert.
+function unknownToolReferences(html, toolNames) {
+  const known = new Set(toolNames);
+  const bridge = [...html.matchAll(BRIDGE_CONSTANT)].map((match) => match[1]);
+  const tokens = html.match(toolNameShape(toolNames)) || [];
+  return [...new Set([...bridge, ...tokens])].filter((name) => !known.has(name));
+}
+
+async function servedWidgets(ctx) {
+  const widgets = [];
+  for (const resource of await ctx.resources()) {
+    const read = await ctx.readResource(resource.uri);
+    const html = read.contents.map((content) => content.text || "").join("\n");
+    widgets.push({ uri: resource.uri, html });
+  }
+  return widgets;
+}
+
+// Positiv-Kontrolle am echten ausgelieferten HTML: setzt man den Altnamen an die Stelle des
+// neuen, muss der Pruefer ihn melden - sonst waere "nichts gefunden" wertlos.
+function assertDetectsReinsertedOldNames(widgets, toolNames) {
+  for (const [index, newName] of NEW_NAMES.entries()) {
+    const target = widgets.find(({ html }) => html.includes(newName));
+    assert.ok(target, `Positiv-Kontrolle: ein Widget nennt ${newName}`);
+    const mutated = target.html.replaceAll(newName, OLD_NAMES[index]);
+    assert.ok(
+      unknownToolReferences(mutated, toolNames).includes(OLD_NAMES[index]),
+      `Positiv-Kontrolle: wieder eingesetztes ${OLD_NAMES[index]} wird gemeldet`,
+    );
+  }
+}
+
+async function assertWidgetsReferenceOnlyListedTools(tools, ctx) {
+  const toolNames = tools.map((tool) => tool.name);
+  const widgets = await servedWidgets(ctx);
+  assert.ok(widgets.length > 0, "Positiv-Kontrolle: der Pfad liefert Widgets aus");
+  const bridgeCount = widgets.flatMap(({ html }) => [...html.matchAll(BRIDGE_CONSTANT)]).length;
+  assert.ok(bridgeCount > 0, "Positiv-Kontrolle: mindestens eine Bruecken-Konstante gefunden");
+  for (const { uri, html } of widgets) {
+    assert.deepEqual(
+      unknownToolReferences(html, toolNames),
+      [],
+      `${uri} nennt Werkzeugnamen, die tools/list dieses Pfads nicht liefert`,
+    );
+  }
+  assertDetectsReinsertedOldNames(widgets, toolNames);
+}
+
+test("T11-f: tools/call get_call_result antwortet, get_transcript nicht, und kein Widget nennt einen Namen ausserhalb tools/list", async (subtests) => {
+  await subtests.test("tools/call, HTTP Legacy", assertCallResultWireBehaviour);
+  for (const cfg of WIDGET_CONFIGS) {
+    await subtests.test(cfg.label, () => cfg.run(assertWidgetsReferenceOnlyListedTools));
+  }
+});
+
+async function assertCallResultWireBehaviour() {
   const seed = seedState({
     calls: [
       seedCall({
@@ -410,7 +508,7 @@ test("T11-f: tools/call get_call_result liefert genau die outputSchema-Schluesse
   } finally {
     await srv.stop();
   }
-});
+}
 
 // ==================== T11-r: jede _meta.ui.resourceUri loest auf (Widget-Verweise) ====================
 
@@ -454,12 +552,13 @@ test("T11-r: jede _meta.ui.resourceUri aus tools/list steht in resources/list un
 });
 
 // ==================== T11-n (N-12): keine werblich/vergleichende Sprache in Namen/Titeln ====================
-// Legacy UND OAuth (Review-Nachtrag, s. CONFIGS oben).
+// Jeder Pfad x Consult an/aus (ALL_PATH_CONFIGS): die Namensmenge unterscheidet sich je Pfad.
 
 test("T11-n: kein Werkzeugname und kein Titel traegt best/official/pick_me/recommended", async (subtests) => {
-  for (const cfg of CONSULT_CONFIGS) {
+  for (const cfg of ALL_PATH_CONFIGS) {
     await subtests.test(cfg.label, async () => {
       await cfg.run(async (tools) => {
+        assert.ok(tools.length > 0, `${cfg.label}: Positiv-Kontrolle - tools/list nicht leer`);
         for (const tool of tools) {
           assert.doesNotMatch(
             tool.name,
