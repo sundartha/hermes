@@ -1536,11 +1536,10 @@ export function registerTools(
   // T2-11 (N-12): der fruehere Toolname versprach ein Transkript, das dieses Werkzeug
   // nie lieferte - Name/Titel/Statuszeilen jetzt umbenannt (Owner-Entscheidung
   // 2026-09-22, Breaking Change gewollt, kein Alias).
-  // ACHTUNG Deploy-Reihenfolge: die WIDGET_CALL-Karte (src/ui/widgets/call.html) ruft
-  // diesen Toolnamen bisher noch unter dem frueheren, in T2-11 abgeloesten Namen ab
-  // (eigene Konstante dort) - schlaegt fehl, bis die Karte in T2-12 auf
-  // "get_call_result" nachgezogen ist. T2-11 darf gemergt (Plan sieht das vor), aber
-  // nicht VOR T2-12 deployed werden (Deploy-Vorbedingung, s. owner_punkte).
+  // Kopplung: die WIDGET_CALL-Karte (src/ui/widgets/call.html) ruft dieses Werkzeug per
+  // Host-Bruecke unter eigenem Konstantennamen ab (TOOL_GET_CALL_RESULT). Ein Rename hier
+  // ohne Nachzug dort macht die Ergebnis-Karte stumm - Test T11-f in
+  // test/openai-t2-11-werkzeugtexte.test.js prueft jede Widget-Referenz gegen tools/list.
   uiTool(
     "get_call_result",
     {

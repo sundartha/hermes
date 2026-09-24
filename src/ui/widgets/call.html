@@ -197,7 +197,7 @@
        status-Push von place_call laeuft ueber den GETEILTEN, bereits bewiesenen
        Empfangspfad (widget-bind.js, von der Katalog-Ladefunktion unten injiziert).
        Alles danach - Self-Poll, der ausgehende tools/call an den Host, Terminal-
-       Erkennung, get_transcript, Cancel - lebt in DIESEM eigenen Inline-Skript (Owner-
+       Erkennung, get_call_result, Cancel - lebt in DIESEM eigenen Inline-Skript (Owner-
        Entscheidung #3, PLAN-MCP-UI-LIVE-WIDGET.md Abschnitt 5): kein neues
        widget-bridge.js-Modul, keine Katalog-Aenderung, exakt das etablierte Muster
        der mittlerweile entfernten Vorlaeufer-Widgets (Cancel-Callback bzw.
@@ -228,7 +228,7 @@
 
     // Tool-Namen wie server-seitig registriert (src/mcp-tools.js).
     var TOOL_GET_STATUS = "get_call_status";
-    var TOOL_GET_TRANSCRIPT = "get_transcript";
+    var TOOL_GET_CALL_RESULT = "get_call_result";
     var TOOL_CANCEL = "cancel_call";
 
     // Wire-Formate der MCP-Apps-Spec (SEP-1865 / ext-apps 2026-01-26). METHOD_TOOLS_CALL
@@ -454,7 +454,7 @@
       return t(mapped || "Failed");
     }
 
-    // objective_achieved ist bool ODER String (get_transcript-Kontrakt,
+    // objective_achieved ist bool ODER String (get_call_result-Kontrakt,
     // src/mcp-tools.js) - bool/"unclear" lokalisiert, andere Strings roh.
     function objectiveLabel(value) {
       if (value === true) return t("Yes");
@@ -571,7 +571,7 @@
     }
 
     // Terminal-Folgen (Plan 6.1 Punkt 3): Sichtbarkeit je Status, Cancel deaktivieren,
-    // Polling stoppen, bei completed EINMAL get_transcript nachladen.
+    // Polling stoppen, bei completed EINMAL get_call_result nachladen.
     function updateForStatus(status) {
       var terminal = isTerminalStatus(status);
       updateWingForStatus(status);
@@ -600,7 +600,7 @@
       }
     }
 
-    // Wendet die get_transcript-Whitelist (pickTranscript) an.
+    // Wendet die get_call_result-Whitelist (pickTranscript) an.
     function applyTranscript(data) {
       if (!isRecord(data)) return;
       if (data.call_id) setSlotText("call_id", data.call_id);
@@ -642,12 +642,12 @@
     }
 
     function dispatchFor(tool) {
-      return tool === TOOL_GET_TRANSCRIPT ? applyTranscript : applyCallStatus;
+      return tool === TOOL_GET_CALL_RESULT ? applyTranscript : applyCallStatus;
     }
 
     // Der EINZIGE ausgehende Weg: JSON-RPC-postMessage "tools/call" an den Host, id-
     // gematcht (Antwort siehe handleMessage, Kanal B). Das ready-Gate steht hier - an
-    // EINER Stelle fuer ALLE Aufrufer (Poll-Tick, get_transcript, Cancel-Klick): vor dem
+    // EINER Stelle fuer ALLE Aufrufer (Poll-Tick, get_call_result, Cancel-Klick): vor dem
     // Handshake beantwortet der Host keinen Tool-Call. Rueckgabewert (true = tatsaechlich
     // gesendet) ist Pflicht fuer jeden Aufrufer, der einen einmaligen Effekt (Fetch-Guard,
     // optische Deaktivierung) an den Versand knuepft - sonst faellt der Effekt auf einen
@@ -675,7 +675,7 @@
     function fetchTranscriptOnce() {
       if (transcriptFetched) return;
       var callId = currentCallId();
-      if (callId && sendToolCall(TOOL_GET_TRANSCRIPT, { call_id: callId })) transcriptFetched = true;
+      if (callId && sendToolCall(TOOL_GET_CALL_RESULT, { call_id: callId })) transcriptFetched = true;
     }
 
     function pollTick() {
