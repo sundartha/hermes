@@ -40,6 +40,7 @@ import { MCP_ERROR_CODE, MCP_TEXTS } from "./i18n/mcp-texts.js";
 // nicht kopiert, nicht nachgebaut. Wiederverwendung an genau der Naht, an der
 // failure_reason den Server verlaesst (callOutcomeView unten).
 import { failureReasonBase } from "./telephony/failure-reason.js";
+import { CONFIRMATION_ALREADY_USED_REASON } from "./call-confirmation.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
 // NICHT MEHR EXPORTIERT: der einzige Fremdnutzer war src/conversation/outcome-to-mcp-
@@ -803,8 +804,16 @@ const OPEN_QUESTIONS_FIELD = z
 // KORRIGIERT (Safety-Review T2-13, zweite Runde): der erste Satz sagte "pass the code the
 // user confirmed" - ohne zu sagen, WOHER der Code kommt. Jetzt: der Nutzer bestaetigt in der
 // Karte, die Karte sendet den Code; nie raten/erfinden (keine Selbstbestaetigung).
+// KORRIGIERT (T2-14-Nachbesserung, Safety-Review): "die Karte sendet den Code" liess weiter
+// offen, ob das MODELL den Code danach entgegennimmt - es tut es nie. Die Hermes-Karte ruft
+// place_call fuer einen bestaetigten Anruf SELBST auf (ueber die Host-Tool-Bruecke, s.
+// src/ui/widgets/call.html); der Code steckt dafuer nur in prepare_call's Ergebnis-`_meta`,
+// das der Karte vorbehalten ist. Das Modell ruft dieses Werkzeug fuer einen bestaetigten
+// Anruf deshalb nicht mehr selbst auf, sondern wartet auf die Chat-Nachricht der Karte mit
+// der call_id (s. PREPARE_CALL_DESCRIPTION, MCP_BASE_INSTRUCTIONS). Emphase-Pin unveraendert
+// (["REQUIRES","FIRST","NOT","NOT","NOT","ALWAYS"]).
 const PLACE_CALL_DESCRIPTION =
-  "REQUIRES a confirmation_code - call prepare_call FIRST with the same arguments; the user confirms in the Hermes card, which sends it (never guess or invent one). Without it the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Repeating it for a running number needs a fresh prepare_call and code, then returns that same call (deduplicated: true).";
+  "REQUIRES a confirmation_code that only the Hermes card can supply - call prepare_call FIRST with the same arguments so the user can confirm there; once they do, the card places the call itself and reports the call_id back in a chat message, so you never call this tool for that call and never guess or invent its code. Without a code from the card the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective, and is NOT reversible once placed; billed per minute to the caller's account. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits). A live-updating card is NOT guaranteed on every host - ALWAYS track the call via the call_id from that chat message, using get_call_status until it reports a final status.";
 
 // T2-13 (N-10): Beschreibung von prepare_call - reine Vorschau, KEIN Anruf, KEINE Kosten.
 // Nennt ausdruecklich, dass der Code nur auf einem Host mit Kartenfaehigkeit ankommt (s.
@@ -815,8 +824,13 @@ const PLACE_CALL_DESCRIPTION =
 // nehmen darf. Jetzt: die Karte sendet den Code nach der Nutzerbestaetigung, vorher kein
 // place_call, nie raten/erfinden; ohne Karte ehrlich sagen, dass kein Anruf moeglich ist.
 // Der Server erkennt KEINE Host-Faehigkeit - nur den Schalter MCP_UI_ENABLED.
+// KORRIGIERT (T2-14-Nachbesserung, Safety-Review): "Do not call place_call before that code
+// arrives" implizierte weiter, das Modell riefe place_call spaeter SELBST mit dem Code auf.
+// Tatsaechlich ruft die Karte place_call fuer einen bestaetigten Anruf komplett selbst auf -
+// das Modell ruft es fuer diesen Anruf nie, unabhaengig davon, ob/wann ein Code eintrifft.
+// Emphase-Pin unveraendert (["WITHOUT","EVERY"]).
 const PREPARE_CALL_DESCRIPTION =
-  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is switched on for this server, the host can show a Hermes card where the user reviews the call; after the user confirms, the card sends the confirmation code that place_call requires. Do not call place_call before that code arrives, and never guess or invent a code. The code covers every argument, briefing and context included: if you change any of them, call prepare_call again and let the user confirm again. If this host does not show the Hermes card, or card confirmation is switched off for this server, no call can be placed from here - tell the user so honestly and do not ask them for a code they cannot see. Call this before EVERY place_call with identical arguments.";
+  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is switched on for this server, the host can show a Hermes card where the user reviews and confirms the call; if they confirm, the card places the call itself with the confirmation code and reports the call_id back in a chat message - you never call place_call for that call, and never guess or invent its code. The confirmation covers every argument, briefing and context included: if you change any of them, call prepare_call again and let the user confirm again. If this host does not show the Hermes card, or card confirmation is switched off for this server, no call can be placed from here - tell the user so honestly and do not ask them for a code they cannot see. Call prepare_call again EVERY time the arguments change or a previous confirmation expired.";
 
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
@@ -1166,9 +1180,25 @@ function withWidgetLocale(config, handler, language) {
 // und seinen Ablauf an die Hermes-Karte reicht - benannt statt Literal an zwei Stellen
 // (Ausstellung im Handler, Kriteriums-Test am Draht). Namensraum "hermes/..." wie die
 // bestehenden Widget-Metas (ui.*), aber ausserhalb des ui.-Namensraums: der Wert ist KEIN
-// Rendering-Detail, sondern das Geheimnis selbst.
+// Rendering-Detail, sondern das Geheimnis selbst. T2-14: dupliziert in call.html (dort), eine Aenderung NUR hier deaktiviert den Bestaetigen-Knopf lautlos.
 const CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
 const CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
+// T2-14-Nachbesserung: Maschinenfeld im place_call-Fehlerergebnis fuer einen schon
+// verbrauchten Code (Route-Grund CONFIRMATION_ALREADY_USED_REASON). Die Karte (call.html,
+// dort dupliziert) erkennt daran sprachunabhaengig, dass ihr Anruf schon abgeschickt wurde,
+// und bietet keinen zweiten Klick an. Traegt weder Code noch Register-Interna.
+const CONFIRMATION_USED_STATUS = "confirmation_used";
+
+function confirmationUsedResult(loc) {
+  return { ...errText(loc.mcp.confirmationAlreadyUsed), structuredContent: { status: CONFIRMATION_USED_STATUS } };
+}
+
+// Ergebnis fuer ein nicht bestaetigtes place_call: schon verbrauchter Code -> eigenes Ergebnis
+// (confirmationUsedResult), sonst der generische Hinweis confirmationRequired.
+function unconfirmedResult(loc, confirmResult) {
+  if (confirmResult.reason === CONFIRMATION_ALREADY_USED_REASON) return confirmationUsedResult(loc);
+  return errText(loc.mcp.confirmationRequired(confirmResult.preview.to, confirmResult.preview.objective));
+}
 
 // T2-13 (N-10, Schritt 6): woertlich verschoben aus dem place_call-inputSchema-Literal -
 // prepare_call und place_call teilen sich JETZT dieses eine Schema (confirmation_code
@@ -1501,11 +1531,16 @@ export function registerTools(
         // error" enden, OHNE dass der Handler (und damit toolErrorText/loc.mcp) je laeuft -
         // der Client saehe nie den Kartensatz. Deshalb optional im SCHEMA, Pflicht erst im
         // HANDLER (s.u., confirmCallHop/confirmationRequired).
+        // KORRIGIERT (T2-14-Nachbesserung, Safety-Review): "From the Hermes card" liess
+        // offen, ob das Modell dieses Feld je selbst befuellt - es kann es nicht, der Code
+        // erreicht das Modell nie (nur `_meta`). Nur die Karte selbst setzt dieses Feld, beim
+        // eigenen place_call-Aufruf ueber die Host-Bruecke. Emphase-Pin unveraendert
+        // (["SAME","REQUIRED","NOT"]).
         confirmation_code: z
           .string()
           .optional()
           .describe(
-            "From the Hermes card once the user confirms prepare_call (SAME arguments incl. briefing/context); never guess or invent it. REQUIRED - without it the call is NOT placed.",
+            "Only the Hermes card can supply this, once the user confirms prepare_call (SAME arguments incl. briefing/context) - never guess or invent it. REQUIRED - without it the call is NOT placed.",
           ),
       },
       outputSchema: CALL_OUTPUT,
@@ -1523,7 +1558,7 @@ export function registerTools(
       });
       requireFields(confirmResult, { preview: "object" });
       if (!confirmResult.confirmed) {
-        return errText(loc.mcp.confirmationRequired(confirmResult.preview.to, confirmResult.preview.objective));
+        return unconfirmedResult(loc, confirmResult);
       }
       const r = await placeCallHopCall(request);
       requireFields(r, { callId: "string" });

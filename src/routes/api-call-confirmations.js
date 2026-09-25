@@ -23,8 +23,10 @@ import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-reques
 import { TENANT_REJECT } from "../request-tenant.js";
 import { internalOnly } from "../wiring/internal-only.js";
 import {
+  CONFIRMATION_ALREADY_USED_REASON,
   MAX_FAILED_CONFIRMATIONS_PER_WINDOW,
   acceptanceEndMs,
+  acceptedWindowIndices,
   deriveConfirmationKey,
   canonicalCallRequest,
   issueConfirmationCode,
@@ -94,13 +96,24 @@ function usedCodeDigest({ tenantId, windowIdx, normalizedCode }) {
 // KORRIGIERT (Safety-Review T2-13): der Eintrag lebt bis acceptanceEndMs (Ende des LETZTEN
 // Fensters, in dem der Code angenommen wird), nicht nur bis zum Ende seines Ausstellungs-
 // fensters - sonst war ein verbrauchter Code im Folgefenster wieder frei.
+// T2-14-Nachbesserung: wasUsed liest dasselbe Register nur (fuer die Antwort "already_used",
+// s. confirmCode) - kein zweites Register, keine zweite Lebensdauer.
 function makeOneTimeCodeLedger() {
   const usedUntilMs = new Map();
-  return function markIfUnused({ digest, acceptedUntilMs, nowMs }) {
+  function prune(nowMs) {
     for (const [key, expiresAtMs] of usedUntilMs) if (expiresAtMs <= nowMs) usedUntilMs.delete(key);
-    if (usedUntilMs.has(digest)) return false;
-    usedUntilMs.set(digest, acceptedUntilMs);
-    return true;
+  }
+  return {
+    wasUsed({ digest, nowMs }) {
+      prune(nowMs);
+      return usedUntilMs.has(digest);
+    },
+    markIfUnused({ digest, acceptedUntilMs, nowMs }) {
+      prune(nowMs);
+      if (usedUntilMs.has(digest)) return false;
+      usedUntilMs.set(digest, acceptedUntilMs);
+      return true;
+    },
   };
 }
 
@@ -178,19 +191,55 @@ function consumeIfCurrent({ key, tenantId, canonical, code, nowMs, registers }) 
   if (windowIdx === null) return false;
   const acceptedUntilMs = acceptanceEndMs(windowIdx);
   const digest = usedCodeDigest({ tenantId, windowIdx, normalizedCode: normalizeConfirmationCode(code) });
-  if (!registers.markIfUnused({ digest, acceptedUntilMs, nowMs })) return false;
+  if (!registers.usedCodes.markIfUnused({ digest, acceptedUntilMs, nowMs })) return false;
   registers.freshSlots.advance({ digest: slotDigestFor(windowIdx), acceptedUntilMs, nowMs });
   return true;
 }
 
-// Bremse um consumeIfCurrent: gesperrt -> false ohne Pruefung; abgelehnter echter Versuch
+// T2-14-Nachbesserung (Safety-Befund "Karte nach Neuladen"): hat DIESER Mandant genau diesen
+// Code in einem noch akzeptierten Fenster schon verbraucht? Dann ist die Antwort
+// "already_used" statt des generischen "nicht bestaetigt" - die Karte erkennt daran, dass ihr
+// Anruf schon abgeschickt wurde, und bietet keinen zweiten Klick an. Kein Treffer-Orakel fuer
+// einen Rater: im Register stehen nur Codes, die schon verbraucht und damit wertlos sind; ein
+// noch gueltiger Code wird dadurch weder bestaetigt noch verraten. Deshalb laeuft diese
+// Pruefung VOR der Bremse und zaehlt nicht als Fehlversuch (ein neu geladener Karten-Klick
+// soll den Mandanten nicht aussperren).
+function wasCodeUsed({ tenantId, code, nowMs, registers }) {
+  const normalizedCode = normalizeConfirmationCode(code);
+  if (!normalizedCode) return false;
+  for (const windowIdx of acceptedWindowIndices(nowMs)) {
+    const digest = usedCodeDigest({ tenantId, windowIdx, normalizedCode });
+    if (registers.usedCodes.wasUsed({ digest, nowMs })) return true;
+  }
+  return false;
+}
+
+// Ergebnis einer Code-Pruefung: CONFIRMED (jetzt verbraucht), ALREADY_USED (war schon
+// verbraucht, s. wasCodeUsed) oder REJECTED (alles andere, inkl. gesperrter Bremse).
+const CONFIRM_OUTCOME = Object.freeze({
+  CONFIRMED: "confirmed",
+  ALREADY_USED: "already_used",
+  REJECTED: "rejected",
+});
+
+// Bremse um consumeIfCurrent: gesperrt -> REJECTED ohne Pruefung; abgelehnter echter Versuch
 // -> gezaehlt.
 function confirmCode({ key, tenantId, canonical, code, nowMs, registers }) {
+  if (wasCodeUsed({ tenantId, code, nowMs, registers })) return CONFIRM_OUTCOME.ALREADY_USED;
   const brakeKey = { tenantKey: String(tenantId), windowIdx: windowIndexFor(nowMs) };
-  if (registers.brake.isLocked(brakeKey)) return false;
+  if (registers.brake.isLocked(brakeKey)) return CONFIRM_OUTCOME.REJECTED;
   const confirmed = consumeIfCurrent({ key, tenantId, canonical, code, nowMs, registers });
-  if (!confirmed && normalizeConfirmationCode(code)) registers.brake.recordFailure(brakeKey);
-  return confirmed;
+  if (confirmed) return CONFIRM_OUTCOME.CONFIRMED;
+  if (normalizeConfirmationCode(code)) registers.brake.recordFailure(brakeKey);
+  return CONFIRM_OUTCOME.REJECTED;
+}
+
+// Antwort-Body der Pruefung: reason NUR beim schon verbrauchten Code (Maschinenfeld fuer
+// place_call in src/mcp-tools.js) - nie der Code, nie Register-Interna.
+function confirmationResponseBody({ preview, outcome }) {
+  const body = { preview, confirmed: outcome === CONFIRM_OUTCOME.CONFIRMED };
+  if (outcome === CONFIRM_OUTCOME.ALREADY_USED) body.reason = CONFIRMATION_ALREADY_USED_REASON;
+  return body;
 }
 
 // tenant = { requestTenant } (dieselbe EINE Quelle wie in makeCallRoutes). now injizierbar
@@ -199,7 +248,7 @@ function confirmCode({ key, tenantId, canonical, code, nowMs, registers }) {
 export function makeCallConfirmationRoutes({ store, config, tenant: { requestTenant }, now = Date.now }) {
   const router = Router();
   const registers = {
-    markIfUnused: makeOneTimeCodeLedger(),
+    usedCodes: makeOneTimeCodeLedger(),
     freshSlots: makeFreshSlotLedger(),
     brake: makeFailedAttemptBrake(),
   };
@@ -229,7 +278,7 @@ export function makeCallConfirmationRoutes({ store, config, tenant: { requestTen
     const nowMs = now();
 
     if (typeof body.confirmation_code === "string") {
-      const confirmed = confirmCode({
+      const outcome = confirmCode({
         key,
         tenantId,
         canonical,
@@ -237,7 +286,7 @@ export function makeCallConfirmationRoutes({ store, config, tenant: { requestTen
         nowMs,
         registers,
       });
-      return res.status(HTTP_OK).json({ preview, confirmed });
+      return res.status(HTTP_OK).json(confirmationResponseBody({ preview, outcome }));
     }
 
     // Frischer Slot nach einem etwaigen Verbrauch (s. makeFreshSlotLedger oben) - slot

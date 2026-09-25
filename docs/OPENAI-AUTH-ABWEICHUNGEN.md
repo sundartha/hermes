@@ -36,10 +36,10 @@ authentifizierter Request abgelehnt wird:
   (`registerNoTenantStubs`, `src/mcp-no-tenant.js`), deren `tools/call`-Ergebnis eine
   Re-Auth-Challenge in `_meta["mcp/www_authenticate"]` traegt. Beide Faelle auditieren
   `auth_failed` (Befund B-1, Abschnitt 7).
-- **Der interne REST-Hop der Tools** (`api()`, `src/mcp-tools.js:60-81`): liefert der Gateway
+- **Der interne REST-Hop der Tools** (`api()`, `src/mcp-tools.js:61-82`): liefert der Gateway
   dort 403 (z. B. `internalOnly`, `src/wiring/internal-only.js:24-28`, ebenfalls auditiert als
   `auth_failed`), kommt das beim Client als Tool-Ergebnis mit `isError: true` an
-  (`wrapHandler`, `src/mcp-tools.js:885-902`). Aufzaehlung der Faelle unter T-14.
+  (`wrapHandler`, `src/mcp-tools.js:886-903`). Aufzaehlung der Faelle unter T-14.
 
 ## 2. Status je ID
 
@@ -331,8 +331,8 @@ valid token that maps to no tenant. In token/legacy/off mode (no `req.auth`) thi
 `/mcp` handler in the same file then registers stub tools (`registerNoTenantStubs`,
 `src/mcp-no-tenant.js`) instead of the real tools (`registerTools`); their `tools/call` result
 carries a re-auth challenge in `_meta["mcp/www_authenticate"]`. Both cases are audited as `auth_failed` (finding B-1, Section
-7). And the tools' internal REST hop (`api()`, `src/mcp-tools.js:60-81`) can receive a 403,
-which reaches the client as a tool result with `isError: true` (`src/mcp-tools.js:885-902`).
+7). And the tools' internal REST hop (`api()`, `src/mcp-tools.js:61-82`) can receive a 403,
+which reaches the client as a tool result with `isError: true` (`src/mcp-tools.js:886-903`).
 
 ### T-14 — in-conversation auth UI only via an error result carrying `_meta["mcp/www_authenticate"]`
 

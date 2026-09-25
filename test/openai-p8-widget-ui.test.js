@@ -135,10 +135,45 @@ const EXPECTED_RESOURCE_META = {
 // Quell-Diff geprueft: EINZIGE Unterschiede in tools/list sind diese drei Beschreibungen,
 // src/ui unberuehrt. Voriger Sollwert (beide Pfade):
 // c24783bc0755354a545c2703bcb69b3ac75d2a5a423e72438daa2886ed201c0a.
+// Neu gepinnt (T2-14, N-10): Bestaetigungs-Ansicht im Call-Widget - alle vier Widgets
+// tragen eine neue Version (WIDGET_DICT bekommt neue Keys, call.html zusaetzlich neues
+// Markup/Skript), also neue URIs in tools/list-_meta/resources/list/resources/read fuer
+// agent-status/my-number/calls/call. Actual-Wert aus dem roten Diff eines isolierten
+// Testlaufs uebernommen, nicht geschaetzt. Voriger Sollwert (beide Pfade):
+// 2b3e1f8c732997bc73bcc1387a2f24b4b594ad9b9984a4b8bb58352cef03e336.
+// Neu gepinnt (T2-14-Nachbesserung, Safety-Review): place_call-/prepare_call-/
+// confirmation_code-Beschreibungen und die server-instructions sind auf den tatsaechlichen
+// Ablauf nachgezogen (die Karte ruft place_call selbst auf, das Modell nie), zusaetzlich
+// wieder eine neue Version aller vier Widgets (Poll-Neustart, serverseitiger
+// Ablehnungstext, Rekursionsdeckel, G5-Dedup, gekuerzter WIDGET_DICT-Key). Beide Pfade
+// weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen. Voriger Sollwert
+// (beide Pfade): 950d1a1c8f096942e6dc258326243f24b7c6183a78cd4a1ccdf0c549906b9861.
+// Neu gepinnt (T2-14-Nachbesserung Runde 2, Safety-/Cleancode-Review): overflow-wrap:anywhere
+// gegen abgeschnittenen langen Text in der Bestaetigungs-Ansicht + zwei Mehrfach-Anweisungen
+// je Zeile aufgeteilt - NUR call.html aendert sich (kein WIDGET_DICT-Eingriff diesmal), Pin-
+// Version 6 fuer call, die anderen drei Widgets unveraendert (s. widget-versions.json). Beide
+// Pfade weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen, nicht geschaetzt.
+// Voriger Sollwert (beide Pfade): 053ba89e21d62b02b42fc806337ea6225c387eb5400219eb0ff4959195e548b4.
+// Neu gepinnt (T2-14-Nachbesserung Runde 3, G5 + Safety "Karte nach Neuladen"): Zustand
+// "used" in call.html + neuer WIDGET_DICT-Key -> neue Version aller vier Widgets, call danach
+// zusaetzlich auf Version 8 (Kommentare fuer das 260-KB-Budget gekuerzt). Werkzeug-
+// Beschreibungen unveraendert. Beide Pfade weiterhin byte-identisch. Actual-Wert aus dem roten
+// Diff uebernommen, nicht geschaetzt. Voriger Sollwert (beide Pfade):
+// 7f16173f41dfe310b819b8b643ff950645f54a1a3cab7a2d3420a034bb6df551.
+// Neu gepinnt (Kommentar-Bereinigung, Review-Befund): interne Prozess-Verweise (Phasen-/
+// Test-Kennungen, Verweise auf inzwischen geloeschte PLAN-/Spec-Dateien, "Owner"-Formulierungen)
+// aus den ausgelieferten Widget-Kommentaren entfernt (call.html direkt, sowie die geteilten,
+// ROH eingebetteten Quellen hud-card-css.js/wing-canvas-mount-idle.js/wing-canvas-engine.js) +
+// zwei sachliche Kommentar-Korrekturen in call.html (s. src/ui/widget-versions.json) - reiner
+// Kommentar-Fix, kein Verhalten, aber ausgeliefertes HTML aendert sich -> neue Version aller
+// vier Widgets (agent-status 7, my-number 8, calls 7, call 9). Werkzeug-Beschreibungen
+// unveraendert. Beide Pfade weiterhin byte-identisch. Actual-Wert aus dem roten Diff
+// uebernommen, nicht geschaetzt. Voriger Sollwert (beide Pfade):
+// b12f140a2ff461cf0b24d24d0135e285889834324d7038e757028aa547ce54f4.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "2b3e1f8c732997bc73bcc1387a2f24b4b594ad9b9984a4b8bb58352cef03e336";
+  "84cbfd1c490a3bcf03966dced65016655181667f39387f6f3772a3ce81bf5cb3";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "2b3e1f8c732997bc73bcc1387a2f24b4b594ad9b9984a4b8bb58352cef03e336";
+  "84cbfd1c490a3bcf03966dced65016655181667f39387f6f3772a3ce81bf5cb3";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

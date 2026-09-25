@@ -6176,13 +6176,22 @@ alten Wortlaut; `test/openai-t2-09-neutrale-fehlertexte.test.js` (T1/T2) und
 
 ## OpenAI-T2-13 — Bestaetigung vor dem Waehlen (N-10, Serverteil)
 
-**Schritt:** `prepare_call(args)` -> Vorschau (Modell) + Bestaetigungs-Code (nur im
-Ergebnis-`_meta` von `prepare_call`, nie im Modelltext/`structuredContent`) -> Nutzer
-bestaetigt in der Hermes-Karte -> `place_call(args, confirmation_code)` -> Server prueft +
-verbraucht den Code -> unveraenderter Weg `POST /api/calls` mit ALLEN bestehenden Gates.
-Serverteil dieser Phase; die Bestaetigungs-Ansicht im Call-Widget (die einzige Stelle, die
-den Code je einem Menschen zeigt) ist T2-14 — **ohne T2-14 kann niemand mehr per MCP
-waehlen**, T2-13 geht deshalb nur zusammen mit T2-14 live (Deploy-Vorbedingung).
+**Schritt, KORRIGIERT (T2-14-Nachbesserung):** `prepare_call(args)` -> Vorschau (Modell) +
+Bestaetigungs-Code (nur im Ergebnis-`_meta` von `prepare_call`, nie im
+Modelltext/`structuredContent`) -> Nutzer bestaetigt per Klick in der Hermes-Karte -> **die
+Karte selbst** ruft `place_call(args, confirmation_code)` ueber die Host-Tool-Bruecke auf
+(`src/ui/widgets/call.html`, `onConfirmButtonClick`/`sendToolCall`) -> Server prueft +
+verbraucht den Code -> unveraenderter Weg `POST /api/calls` mit ALLEN bestehenden Gates ->
+die Karte meldet die `call_id` per `ui/message` an den Chat zurueck. Der urspruengliche
+Plantext dieses Abschnitts beschrieb noch `place_call(args, confirmation_code)` als
+Modell-Aufruf ("Nutzer bestaetigt -> `place_call`") - das war der Stand VOR T2-14. Tatsaechlich
+gebaut ist: das MODELL ruft `place_call` fuer einen bestaetigten Anruf NIE selbst auf und
+erhaelt den Code zu keinem Zeitpunkt (weder in `content`/`structuredContent` noch als
+Chat-Text) - nur die Karte tut das. Serverteil dieser Phase; die Bestaetigungs-Ansicht im
+Call-Widget (die einzige Stelle, die den Code je einem Menschen zeigt, UND die einzige
+Stelle, die `place_call` fuer einen bestaetigten Anruf aufruft) ist T2-14 — **ohne T2-14
+kann niemand mehr per MCP waehlen**, T2-13 geht deshalb nur zusammen mit T2-14 live
+(Deploy-Vorbedingung).
 
 **Was die Bestaetigung beweist, und was nicht** (Pflichttext, wortgleich in
 `src/call-confirmation.js`, `docs/OPENAI-TOOL-INVENTORY.md`): der Server hat fuer GENAU
@@ -6223,12 +6232,26 @@ Bestaetigung (das Modell koennte ihn selbst lesen) — beides bewusst nicht geba
 MODELL an, "den Code in der Hermes-Karte zu pruefen und place_call erneut aufzurufen" — eine
 Anleitung zur Selbstbestaetigung. Jetzt sagen Kartenhinweis, `confirmationRequired`,
 die Beschreibungen von `prepare_call`/`place_call`/`confirmation_code` und die
-Server-Instruktionen einheitlich: der NUTZER bestaetigt in der Karte, die Karte sendet den
-Code; vorher kein `place_call`; nie einen Code raten oder erfinden; zeigt der Host keine
-Karte, ist kein Anruf moeglich — das dem Nutzer ehrlich sagen. Die Variable im Handler heisst
+Server-Instruktionen einheitlich: der NUTZER bestaetigt in der Karte, die Karte WAEHLT
+selbst; nie einen Code raten oder erfinden; zeigt der Host keine Karte, ist kein Anruf
+moeglich — das dem Nutzer ehrlich sagen. Die Variable im Handler heisst
 jetzt `mcpUiEnabled` (sie prueft nur den Schalter, keine Host-Faehigkeit); der Text fuer den
 ausgeschalteten Schalter nennt den Server-Schalter statt "dieser Host". Test:
 `test/openai-t2-13-bestaetigung.test.js` (Positiv-Kontrolle: die alten Texte werden erkannt).
+
+**Modelltexte NACHGEZOGEN (T2-14-Nachbesserung, Safety-Review):** dieselben Texte sagten bis
+hierhin weiterhin "die Karte sendet den Code" bzw. "vorher `place_call` nicht aufrufen" -
+Formulierungen aus der Zeit VOR T2-14, die dem Modell weiterhin unterstellten, es riefe
+`place_call` spaeter selbst mit dem Code auf. Tatsaechlich ruft die Karte `place_call` fuer
+einen bestaetigten Anruf komplett selbst auf; das Modell erhaelt den Code zu keinem
+Zeitpunkt und ruft `place_call` fuer diesen Anruf nie. Nachgezogen: `PLACE_CALL_DESCRIPTION`,
+`PREPARE_CALL_DESCRIPTION`, das `confirmation_code`-Feld, `MCP_BASE_INSTRUCTIONS`
+(`src/mcp-server-info.js`) sowie `prepareCallCardHint`/`confirmationRequired` in DE/EN/FR
+(`src/i18n/mcp-texts.js`). `confirmationRequired` erreicht seit T2-14 zusaetzlich einen
+zweiten Adressaten: zeigt der Server bei `place_call` `isError`, rendert die Karte selbst
+diesen Text (`content[0].text`) fuer den NUTZER (`src/ui/widgets/call.html`,
+`serverRejectionText`) - der Wortlaut musste deshalb fuer beide Adressaten (Modell und
+Mensch) verstaendlich bleiben.
 
 **Vertrauensgrenze `POST /api/call-confirmations`:** identisch zu `POST /api/calls` —
 `internalOnly` (echter Loopback-Socket, kein `X-Forwarded-For`, AUTH-P5/P7), ihr einziger
@@ -6373,6 +6396,12 @@ sagen, dass jeder Aufruf sein eigenes frisches `prepare_call` braucht — vor de
 nicht erreichbar (der wiederholte Code scheiterte immer an der Bestaetigung, bevor er die
 Dedup in `POST /api/calls` je erreichte). Der Satz nennt das jetzt ausdruecklich; keine neuen
 GROSSBUCHSTABEN-Woerter (Emphase-Pin `test/p15-mcp-tool-descriptions-en.test.js`).
+**UEBERHOLT seit T2-14-Nachbesserung:** dieser Dedup-Satz ist aus `PLACE_CALL_DESCRIPTION`
+wieder entfernt — "calling it again" adressierte das MODELL, das `place_call` fuer einen
+bestaetigten Anruf seit T2-14 aber nie mehr selbst aufruft (die Karte tut es). Die
+Dedup-Garantie selbst (`POST /api/calls`) ist unveraendert und weiterhin durch die zwei
+Draht-Tests unten belegt — nur der an das Modell gerichtete Satz war gegenstandslos
+geworden.
 
 **Testabdeckung:** `test/openai-t2-13-bestaetigung.test.js` traegt jetzt zwei zusaetzliche
 Draht-Tests: (1) `prepare_call` -> `place_call` (ok) -> `prepare_call` mit denselben
@@ -6382,6 +6411,62 @@ Consult-Kanal (`CONSULT_ENABLED=true`), der zeigt, dass `await_call_event`/`answ
 registriert sind UND ein gueltiger/ungueltiger Bestaetigungscode sich dabei unveraendert
 verhaelt — die Bestaetigungspruefung laeuft strukturell vor jeder Consult-Logik. Ein echter
 Rueckfrage-Austausch waehrend eines laufenden Anrufs (simulierter Webhook, Frage/Antwort ueber
-`await_call_event`/`answer_consult`) bleibt der Folgephase T2-14 vorbehalten — dort entsteht
-ohnehin erst die Bestaetigungs-Ansicht im Call-Widget, mit der beide Phasen zusammen live
-gehen (s.o.).
+`await_call_event`/`answer_consult`) bleibt weiterhin offen — unabhaengig von T2-14, die nur
+die Bestaetigungs-Ansicht selbst baut (s.u.).
+
+## OpenAI-T2-14 — Widget: Bestaetigungs-Ansicht im Call-Widget (N-10, sichtbarer Schritt)
+
+**Schritt:** der sichtbare Teil von N-10, s. die T2-14-Korrektur im T2-13-Abschnitt oben fuer
+den vollstaendigen Ablauf. Kurz: `prepare_call`-Push (Vorschau + Code in `_meta`) -> die
+Karte zeigt Ziel/Anliegen/Briefing/Sprache/Dauer/... aus genau den Feldern, die sie auch an
+`place_call` sendet (`BOUND_ARG_FIELDS`, EINE Quelle fuer Anzeige UND Versand,
+`src/ui/widgets/call.html`) -> Klick sperrt den Knopf synchron (Einmal-Versand) -> die Karte
+ruft `place_call` selbst ueber die Host-Tool-Bruecke auf -> bei Erfolg genau EINE
+`ui/message` mit `call_id`+Ziel (nie Code, nie briefing/context) -> die Karte laeuft als
+Live-Karte (Self-Poll) weiter, bis ein Terminalstatus erreicht ist.
+
+**Fehlerpfade, fail-closed:** abgelaufener Code -> Hinweis "neu vorbereiten", kein Versand;
+schon abgeschickter/verbrauchter Code -> Zustand "used" (s. Runde 3 unten), kein Knopf mehr; Host antwortet nicht (Timeout) oder mit JSON-RPC-Fehler -> Zustand "unklar",
+genau EINE Nachricht ohne Code, kein zweiter Versand bei erneutem Klick; lehnt der Server
+`place_call` ab (z.B. ein Safety-Gate) -> die Karte zeigt den serverseitigen Ablehnungstext
+(`content[0].text`, derselbe Text wie `confirmationRequired`/die uebrigen Gate-Texte, KEIN
+Code darin) statt eines generischen Hinweises.
+
+**Nachbesserung (Safety-Review):** ein Fund dieser Runde betraf die Live-Karte selbst: das
+initiale Poll-Intervall stoppt nach einer festen Frist, wenn bis dahin keine Antwort ankam
+(realistisch: waehrend der Nutzer die Vorschau liest) — ohne Neustart nach erfolgreicher
+Bestaetigung blieb die Karte fuer JEDEN Anruf auf dem ersten Stand haengen (kein
+Terminalstatus, kein Poll mehr). Fix: Polling startet nach einer erfolgreichen Bestaetigung
+neu, ausser der Status ist bereits terminal. Ausserdem wurden die Modelltexte (s.
+T2-13-Abschnitt oben) auf den tatsaechlichen Ablauf nachgezogen: das Modell ruft `place_call`
+fuer einen bestaetigten Anruf nie selbst auf und erhaelt den Code zu keinem Zeitpunkt.
+
+**Nachbesserung Runde 3 (Safety-Befund "Karte nach Neuladen"):** vorher merkte sich die Karte
+nicht, dass sie schon bestaetigt hatte. Ein Neuladen (oder ein erneuter Push desselben
+`prepare_call`-Ergebnisses) machte den Knopf wieder bedienbar, und der Server beantwortete den
+verbrauchten Code mit demselben generischen `confirmationRequired` ("noch nicht bestaetigt") wie
+einen nie ausgestellten - falsch, der Anruf lief schon. Jetzt:
+- Server: die Bestaetigungs-Route meldet einen Code, den DERSELBE Mandant in einem noch
+  akzeptierten Fenster schon verbraucht hat, als `reason: "already_used"`
+  (`src/routes/api-call-confirmations.js` `wasCodeUsed`, liest nur das bestehende
+  Einmal-Verbrauch-Register). `place_call` macht daraus ein eigenes Fehlerergebnis mit
+  `structuredContent.status = "confirmation_used"` und dem Text `confirmationAlreadyUsed` (kein
+  Code, kein Ziel). Kein Treffer-Orakel: im Register stehen nur schon verbrauchte, wertlose
+  Codes; fremder Mandant und falscher Code bleiben generisch. Die Pruefung laeuft vor der
+  Fehlversuchsbremse und zaehlt nicht als Fehlversuch.
+- Karte: neuer Endzustand "used" (Hinweis "schon abgeschickt", Knopf ausgeblendet) bei dieser
+  Serverantwort; zusaetzlich merkt sie sich beim Absenden einen FNV-Fingerabdruck von
+  Code+Ablauf (nie den Klartext-Code) in `localStorage`, sodass eine neu geladene Karte mit
+  demselben Push direkt in "used" startet, ohne zu senden.
+- Grenze, bewusst akzeptiert: ist `localStorage` gesperrt (Sandbox ohne eigenen Ursprung) UND
+  wurde der Server seit dem Verbrauch neu gestartet (oder laeuft der Klick auf einer anderen
+  Instanz), ist der noch gueltige Code (<= 10 min) dort wieder frei - ein Klick auf die neu
+  geladene Karte kann dann einen zweiten Anruf ausloesen. Das ist dieselbe
+  Prozessspeicher-Grenze wie im T2-13-Abschnitt oben; alle Gates laufen dabei unveraendert.
+
+**Offener Owner-Punkt (Deploy-Vorbedingung):** ob der Host das Ergebnis-`_meta` von
+`prepare_call` tatsaechlich an das Iframe durchreicht (`ui/notifications/tool-result`) und ob
+er ein app-initiiertes `tools/call` auf das destruktive `place_call` ohne toten Knopf
+ausfuehrt, ist fuer ChatGPT und Claude bisher UNGEMESSEN — nur eine echte Live-Probe in
+beiden Hosts kann das zeigen. T2-13 und T2-14 gehen nur gemeinsam und erst nach bestandener
+Probe live (s. Owner-Punkte des Baulaufs).

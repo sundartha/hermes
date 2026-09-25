@@ -304,6 +304,30 @@ test("Route: derselbe Code ein zweites Mal (zweiter Treffer) -> confirmed:false"
       confirmation_code: code,
     });
     assert.equal(second.json.confirmed, false, "zweiter Verbrauch desselben Codes wird abgelehnt");
+    assert.equal(second.json.reason, "already_used", "verbrauchter Code eindeutig gemeldet (T2-14-Nachbesserung)");
+    assert.ok(!JSON.stringify(second.json).includes(code), "Antwort nennt den Code nie");
+  } finally {
+    await app.close();
+  }
+});
+
+test("Route: already_used nur fuer den EIGENEN verbrauchten Code - fremder Mandant und falscher Code bleiben generisch (Positiv-Kontrolle)", async () => {
+  const app = await mountConfirmationRoutes({ now: () => Date.parse("2026-09-24T13:30:00Z") });
+  try {
+    const request = { to: ROUTE_TARGET, objective: ROUTE_OBJECTIVE };
+    const issued = await postConfirmation(app.base, request, "tenant-a");
+    const code = issued.json.confirmation.code;
+    const consumed = await postConfirmation(app.base, { ...request, confirmation_code: code }, "tenant-a");
+    assert.equal(consumed.json.confirmed, true);
+    assert.equal(consumed.json.reason, undefined, "ein Erfolg traegt keinen Grund");
+
+    const foreign = await postConfirmation(app.base, { ...request, confirmation_code: code }, "tenant-b");
+    assert.equal(foreign.json.confirmed, false);
+    assert.equal(foreign.json.reason, undefined, "fremder Mandant erfaehrt nichts ueber den Verbrauch");
+    const wrong = await postConfirmation(app.base, { ...request, confirmation_code: "000000" }, "tenant-a");
+    assert.equal(wrong.json.reason, undefined, "nie ausgestellter Code bleibt generisch");
+    const replay = await postConfirmation(app.base, { ...request, confirmation_code: code }, "tenant-a");
+    assert.equal(replay.json.reason, "already_used");
   } finally {
     await app.close();
   }

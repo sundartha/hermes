@@ -30,9 +30,8 @@ export const HUD_CARD_CSS = `
     --ease:cubic-bezier(0.22,1,0.36,1);
     --wing-size:86px;
     /* Akzent-Lichtfarbe: dieselbe Herleitung/Werte wie call.html (aufgehellte
-       Stufe von navy-700 fuer dunkle Karten, PLAN-WIDGET-HERMES-REDESIGN.md
-       Abschnitt 3) - NUR fuer Glow/Ring/Border/aktive Badges, nie als
-       Flaechenfarbe. */
+       Stufe von navy-700 fuer dunkle Karten) - NUR fuer Glow/Ring/Border/aktive
+       Badges, nie als Flaechenfarbe. */
     --color-accent-light:#5ea1e0;
     --color-accent-light-strong:#8ec2ee;
     --color-accent-light-rgb:94,161,224;
@@ -66,7 +65,7 @@ export const HUD_CARD_CSS = `
     align-items:center;gap:8px;padding:14px 0 18px;text-align:center}
   /* Fester Platz fuer den Wing (86x86) - reserviert unabhaengig davon, ob die
      Canvas-Engine oder die CSS-WingMark aktiv ist (kein reportSize-Jank,
-     Kritik R9, Muster call.html .ring-wrap). */
+     Muster call.html .ring-wrap). */
   .wing-wrap{position:relative;width:var(--wing-size);height:var(--wing-size);
     display:grid;place-items:center;flex-shrink:0}
   .wing-canvas-mount{position:absolute;inset:0;display:flex;align-items:center;

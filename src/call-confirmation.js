@@ -56,6 +56,11 @@ export const ACCEPTED_WINDOWS = 2;
 // Luft fuer ein paar echte Fehlgriffe (abgelaufener Code, umformuliertes Anliegen) und
 // haelt die Trefferwahrscheinlichkeit trotzdem im Promille-Bereich je Jahr.
 export const MAX_FAILED_CONFIRMATIONS_PER_WINDOW = 10;
+// T2-14-Nachbesserung: Maschinenfeld `reason` der Bestaetigungs-Route fuer einen Code, den
+// derselbe Mandant schon verbraucht hat (src/routes/api-call-confirmations.js wasCodeUsed).
+// place_call (src/mcp-tools.js) macht daraus ein eigenes Ergebnis, an dem die Karte erkennt,
+// dass ihr Anruf schon abgeschickt wurde. EINE Konstante fuer Route und Handler.
+export const CONFIRMATION_ALREADY_USED_REASON = "already_used";
 // Ein kuerzeres/leeres Geheimnis ergibt keinen Schluessel (fail-closed, s. deriveConfirmationKey).
 export const CONFIRMATION_SECRET_MIN_LENGTH = 32;
 // Versions-Praefix in der Ableitung: eine kuenftige Aenderung bekommt ein eigenes Praefix
@@ -108,7 +113,9 @@ export function canonicalCallRequest({ to, args }) {
   return JSON.stringify(sortedCanonical({ ...bound, to }));
 }
 
-function* acceptedWindowIndices(nowMs) {
+// Exportiert (T2-14-Nachbesserung): die Route prueft den Einmal-Verbrauch ueber GENAU diese
+// Fenster (wasCodeUsed) - eine Aufzaehlung statt einer zweiten Schleife.
+export function* acceptedWindowIndices(nowMs) {
   const currentWindow = windowIndexFor(nowMs);
   for (let offset = 0; offset < ACCEPTED_WINDOWS; offset++) yield currentWindow - offset;
 }

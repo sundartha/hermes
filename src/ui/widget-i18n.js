@@ -74,6 +74,31 @@ export const WIDGET_DICT = {
     "Yes": "Ja",
     "No": "Nein",
     "Unclear": "Unklar",
+    // T2-14 (N-10): Bestaetigungs-Ansicht im Call-Widget.
+    "To": "Ziel",
+    "Request": "Anliegen",
+    "Briefing": "Briefing",
+    "Call language": "Sprache des Anrufs",
+    "Max. duration": "Maximaldauer",
+    "Constraints": "Einschränkungen",
+    "Mandate": "Mandat",
+    "Context": "Kontext",
+    "Diagnostic": "Diagnose",
+    "Confirm call": "Anruf bestätigen",
+    "Confirmation code unavailable — ask for a new prepare_call.":
+      "Bestätigungscode nicht verfügbar — bitte um ein neues prepare_call.",
+    "Confirmation expired — ask for a new prepare_call.":
+      "Bestätigung abgelaufen — bitte um ein neues prepare_call.",
+    "Unclear whether the call was placed — do not confirm again; check list_calls.":
+      "Unklar, ob der Anruf gestartet wurde — nicht erneut bestätigen; list_calls prüfen.",
+    "This confirmation was already sent — do not confirm again; check list_calls.":
+      "Diese Bestätigung wurde bereits abgeschickt — nicht erneut bestätigen; list_calls prüfen.",
+    "Call was not started — ask for a new prepare_call.":
+      "Anruf wurde nicht gestartet — bitte um ein neues prepare_call.",
+    "Confirmed the call to {to} (call_id {call_id}).":
+      "Anruf an {to} bestätigt (call_id {call_id}).",
+    "Confirmed a call to {to}; no response from the card yet. Check list_calls, do not call place_call again.":
+      "Anruf an {to} bestätigt; noch keine Rückmeldung der Karte. list_calls prüfen, nicht erneut place_call aufrufen.",
   },
   fr: {
     "Hermes · Call": "Hermes · Appel",
@@ -111,6 +136,31 @@ export const WIDGET_DICT = {
     "Yes": "Oui",
     "No": "Non",
     "Unclear": "Incertain",
+    // T2-14 (N-10): Bestaetigungs-Ansicht im Call-Widget.
+    "To": "Destinataire",
+    "Request": "Demande",
+    "Briefing": "Briefing",
+    "Call language": "Langue de l'appel",
+    "Max. duration": "Durée max.",
+    "Constraints": "Contraintes",
+    "Mandate": "Mandat",
+    "Context": "Contexte",
+    "Diagnostic": "Diagnostic",
+    "Confirm call": "Confirmer l'appel",
+    "Confirmation code unavailable — ask for a new prepare_call.":
+      "Code de confirmation indisponible — redemandez un prepare_call.",
+    "Confirmation expired — ask for a new prepare_call.":
+      "Confirmation expirée — redemandez un prepare_call.",
+    "Unclear whether the call was placed — do not confirm again; check list_calls.":
+      "Incertain si l'appel a été lancé — ne confirmez pas à nouveau ; vérifiez list_calls.",
+    "This confirmation was already sent — do not confirm again; check list_calls.":
+      "Cette confirmation a déjà été envoyée — ne confirmez pas à nouveau ; vérifiez list_calls.",
+    "Call was not started — ask for a new prepare_call.":
+      "Appel non lancé — redemandez un prepare_call.",
+    "Confirmed the call to {to} (call_id {call_id}).":
+      "Appel vers {to} confirmé (call_id {call_id}).",
+    "Confirmed a call to {to}; no response from the card yet. Check list_calls, do not call place_call again.":
+      "Appel vers {to} confirmé ; pas encore de réponse de la carte. Vérifiez list_calls, n'appelez pas à nouveau place_call.",
   },
 };
 
