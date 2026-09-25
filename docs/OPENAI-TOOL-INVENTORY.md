@@ -281,12 +281,17 @@ several instances a used code could be replayed on another instance while it is 
 and the guessing limit applies per instance.
 
 The server does not detect whether the connecting host displays the card or keeps `_meta` from
-the model - once card
-confirmation is enabled, every connecting host receives the code in `_meta`. On a host that
-follows the MCP Apps contract and keeps `_meta` from the model, the code therefore reaches the
-model only through a user action (reviewing the rendered card). On a host that does not, the
-code would be model-visible and the confirmation would be formal only; Hermes does not claim
-more than that the code was issued for exactly these arguments and consumed once. It is not a claim
+the model - once card confirmation is enabled, every connecting host receives the code in
+`_meta`. The Hermes card widget (its own iframe script, not the model) reads the code from
+there and, once the user clicks confirm, calls `place_call` itself over the host's own
+tool-call bridge; it then reports the resulting `call_id` back to the model in a chat message.
+The model does not call `place_call` for that call itself. On a host that follows the MCP Apps
+contract and keeps `_meta` from the model, the code therefore never reaches the model at all -
+only a user action (clicking confirm in the rendered card) can place the call. On a host that
+does not follow the contract, the code would be model-visible too, and the confirmation would
+be formal only: a model could read it from `_meta` and call `place_call` itself, bypassing the
+card's user-facing review entirely; Hermes does not claim more than that the code was issued
+for exactly these arguments and consumed once. It is not a claim
 that a human read the card, and it does not itself authorize the call:
 the server's outbound permission checks (subscription/verification, destination country and
 number, hourly/per-destination limits, per-account cost cap, maximum duration, provider
@@ -294,11 +299,12 @@ signature verification) run unchanged when the call is actually placed, regardle
 confirmation.
 
 A host that does not display the Hermes card (and keeps `_meta` from the model, as the contract
-requires) has no way to place calls through `place_call`: the code never reaches its model. The
-tool texts tell the model not to call `place_call` before the card has sent the code, never to
-guess or invent a code, and to tell the user honestly when no call can be placed from this host.
-When card confirmation is switched off for the server, no client receives a code and no call can
-be placed through `place_call` at all.
+requires) has no way to place calls through `place_call`: no card was ever rendered to read the
+code from, and the model never receives it either. The tool texts tell the model that a
+card-confirmed call is placed by the card itself, never by the model, never to guess or invent
+a code, and to tell the user honestly when no call can be placed from this host. When card
+confirmation is switched off for the server, no client receives a code and no call can be
+placed through `place_call` at all.
 
 `cancel_call` and `answer_consult` do not get a second confirmation step. `cancel_call` only
 reduces harm - delaying it adds no new cost and starts no new contact. `answer_consult` is

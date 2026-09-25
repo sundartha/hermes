@@ -106,9 +106,15 @@ export const MCP_BASE_INSTRUCTIONS =
   // Modell nicht rein aus der Tool-Beschreibung raet, wann prepare_call an der Reihe ist.
   // KORRIGIERT (Safety-Review T2-13): "reveals a confirmation_code" liess offen, ob das
   // Modell den Code selbst aus der Karte nimmt - die Karte SENDET ihn nach der Bestaetigung.
-  "Before every place_call, call prepare_call first with the exact same arguments; the " +
-  "user then confirms in the Hermes card, which sends the confirmation_code - only then " +
-  "pass it to place_call, and never guess or invent a code. The code covers every " +
+  // KORRIGIERT (T2-14-Nachbesserung, Safety-Review): "then pass it to place_call" wies das
+  // Modell direkt an, place_call SELBST mit dem Code aufzurufen - das kann es nicht, der
+  // Code erreicht es nie. Tatsaechlich ruft die Karte place_call fuer den bestaetigten
+  // Anruf selbst auf (ueber die Host-Tool-Bruecke) und meldet die call_id per Chat-Nachricht
+  // zurueck; das Modell wartet auf diese Nachricht, statt place_call selbst aufzurufen.
+  "Before every place_call, call prepare_call first with the exact same arguments and let " +
+  "the user confirm in the Hermes card; if they confirm, the card places the call itself " +
+  "and reports the call_id back in a chat message - do not call place_call for that call " +
+  "yourself, and never guess or invent a confirmation code. The confirmation covers every " +
   "argument, briefing and context included: after changing any of them, call " +
   "prepare_call again and let the user confirm again. If this host does not show " +
   "the Hermes card, or card confirmation is switched off for this server, no call can be " +

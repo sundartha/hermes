@@ -123,12 +123,20 @@ export const MCP_TEXTS = Object.freeze({
     // KORRIGIERT (Safety-Review T2-13): alle drei Texte richten sich an das MODELL. Sie
     // durften es nie anleiten, den Code selbst in der Karte zu "pruefen" (= sich selbst zu
     // bestaetigen) - bestaetigen tut der NUTZER, die Karte sendet den Code.
+    // KORRIGIERT (T2-14-Nachbesserung, Safety-Review): "sendet die Karte den
+    // Bestaetigungscode" liess offen, WOHIN - das Modell haette annehmen koennen, es
+    // bekaeme ihn selbst. Die Karte waehlt fuer den bestaetigten Anruf SELBST (Klick ->
+    // place_call ueber die Host-Bruecke); das Modell ruft place_call fuer diesen Anruf nicht
+    // auf und erhaelt die call_id per Chat-Nachricht der Karte. Dieser Text erscheint jetzt
+    // auch der KARTE selbst bei einer Ablehnung (isError -> content[0].text, s.
+    // src/ui/widgets/call.html serverRejectionText) - er muss also fuer beide Adressaten
+    // verstaendlich bleiben.
     confirmationRequired: (to, objective) =>
       `Dieser Anruf ist noch nicht bestaetigt (Ziel: ${to}, Anliegen: ${objective}). Der ` +
-      "Nutzer muss ihn in der Hermes-Karte bestaetigen, erst dann sendet die Karte den " +
-      "Bestaetigungscode; nie einen Code raten oder erfinden. Wurde danach ein Argument " +
-      "geaendert (auch briefing oder context), neu mit prepare_call vorbereiten - ein Host " +
-      "ohne Karte kann nicht waehlen.",
+      "Nutzer muss ihn in der Hermes-Karte bestaetigen; bestaetigt er, waehlt die Karte " +
+      "selbst mit ihrem Bestaetigungscode - diesen Code gibt es sonst nirgends, nie einen " +
+      "Code raten oder erfinden. Wurde danach ein Argument geaendert (auch briefing oder " +
+      "context), neu mit prepare_call vorbereiten - ein Host ohne Karte kann nicht waehlen.",
     // T2-13: prepare_call bei MCP_UI_ENABLED=false (der einzige Schalter, der das
     // entscheidet - keine Erkennung einzelner Hosts, s. Korrektur in PLAN-SECURITY.md
     // Abschnitt OpenAI-T2-13) - ein Code wird zwar serverseitig ausgestellt, aber an
@@ -140,10 +148,14 @@ export const MCP_TEXTS = Object.freeze({
       "Nutzer ehrlich sagen.",
     // Bei MCP_UI_ENABLED=true - der Server weiss NICHT, ob dieser Host die Karte zeigt;
     // der letzte Satz deckt den Host ohne Karte ehrlich ab.
+    // KORRIGIERT (T2-14-Nachbesserung, Safety-Review): s. Kommentar bei confirmationRequired
+    // - "Vorher place_call nicht aufrufen" implizierte, das Modell riefe es SPAETER selbst
+    // auf. Die Karte ruft place_call fuer den bestaetigten Anruf komplett selbst auf.
     prepareCallCardHint:
       "Vorschau erstellt. Der Nutzer prueft und bestaetigt den Anruf in der Hermes-Karte; " +
-      "erst danach sendet die Karte den Bestaetigungscode. Vorher place_call nicht aufrufen " +
-      "und nie einen Code raten oder erfinden. Zeigt dieser Host keine Hermes-Karte, kann " +
+      "bestaetigt er, waehlt die Karte selbst mit ihrem Bestaetigungscode. Ruf place_call " +
+      "fuer diesen Anruf nicht selbst auf und nie einen Code raten oder erfinden; die Karte " +
+      "meldet die call_id danach per Chat-Nachricht. Zeigt dieser Host keine Hermes-Karte, kann " +
       "hier kein Anruf ausgeloest werden - das dem Nutzer ehrlich sagen.",
     // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
     // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
@@ -245,19 +257,25 @@ export const MCP_TEXTS = Object.freeze({
     // T2-13 (N-10): place_call without a valid confirmation_code - no call was placed (no
     // record, no cost). A host without a card never receives a code and can therefore never
     // confirm.
+    // KORRIGIERT (T2-14-Nachbesserung, Safety-Review): s. the DE comment above
+    // confirmationRequired - the card places a confirmed call itself, the model never gets
+    // the code. This text also renders inside the card itself on a rejection (isError ->
+    // content[0].text, s. src/ui/widgets/call.html serverRejectionText).
     confirmationRequired: (to, objective) =>
       `This call is not confirmed yet (destination: ${to}, purpose: ${objective}). The ` +
-      "user must confirm it in the Hermes card, which then sends the confirmation code; " +
-      "never guess or invent a code. If any argument changed since (briefing or context " +
-      "included), call prepare_call again - a host without a card cannot place calls.",
+      "user must confirm it in the Hermes card; once confirmed, the card places the call " +
+      "itself with its own confirmation code - never guess or invent one. If any argument " +
+      "changed since (briefing or context included), call prepare_call again - a host " +
+      "without a card cannot place calls.",
     prepareCallNoCardHint:
       "Preview created. Card confirmation is switched off on this server - there is no " +
       "confirmation code, and place_call cannot place a call here. Tell the user so honestly.",
     prepareCallCardHint:
-      "Preview created. The user reviews and confirms this call in the Hermes card; only " +
-      "then does the card send the confirmation code. Do not call place_call before that " +
-      "code arrives, and never guess or invent a code. If this host does not show the " +
-      "Hermes card, no call can be placed from here - tell the user so honestly.",
+      "Preview created. The user reviews and confirms this call in the Hermes card; if " +
+      "they confirm, the card places the call itself - do not call place_call for that " +
+      "call yourself, and never guess or invent a code. The card reports the call_id back " +
+      "in a chat message once it is placed. If this host does not show the Hermes card, " +
+      "no call can be placed from here - tell the user so honestly.",
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
@@ -328,22 +346,26 @@ export const MCP_TEXTS = Object.freeze({
     }),
     denials: MCP_DENIAL_TEXTS.fr,
     // T2-13 (N-10): place_call sans confirmation_code valide - aucun appel n'a été passé.
+    // KORRIGIERT (T2-14-Nachbesserung, Safety-Review) : voir le commentaire DE au-dessus de
+    // confirmationRequired - c'est la carte qui passe l'appel confirmé elle-même, le modèle
+    // ne reçoit jamais le code. Ce texte s'affiche aussi dans la carte elle-même en cas de
+    // refus (isError -> content[0].text, s. src/ui/widgets/call.html serverRejectionText).
     confirmationRequired: (to, objective) =>
       `Cet appel n'est pas encore confirmé (destination : ${to}, objet : ${objective}). ` +
-      "L'utilisateur doit le confirmer dans la carte Hermes, qui envoie ensuite le code de " +
-      "confirmation ; ne devinez ni n'inventez jamais de code. Si un argument a changé depuis " +
-      "(briefing ou context compris), rappelez prepare_call - un hôte sans carte ne peut " +
-      "pas passer d'appel.",
+      "L'utilisateur doit le confirmer dans la carte Hermes ; une fois confirmé, la carte " +
+      "passe l'appel elle-même avec son propre code de confirmation - ne devinez ni " +
+      "n'inventez jamais de code. Si un argument a changé depuis (briefing ou context " +
+      "compris), rappelez prepare_call - un hôte sans carte ne peut pas passer d'appel.",
     prepareCallNoCardHint:
       "Aperçu créé. La confirmation par carte est désactivée sur ce serveur - il n'y a pas " +
       "de code de confirmation, et place_call ne peut pas passer d'appel ici. Dites-le " +
       "honnêtement à l'utilisateur.",
     prepareCallCardHint:
-      "Aperçu créé. L'utilisateur vérifie et confirme cet appel dans la carte Hermes ; ce " +
-      "n'est qu'ensuite que la carte envoie le code de confirmation. N'appelez pas " +
-      "place_call avant l'arrivée de ce code et ne devinez ni n'inventez jamais de code. " +
-      "Si cet hôte n'affiche pas la carte Hermes, aucun appel ne peut être passé d'ici - " +
-      "dites-le honnêtement à l'utilisateur.",
+      "Aperçu créé. L'utilisateur vérifie et confirme cet appel dans la carte Hermes ; s'il " +
+      "confirme, la carte passe l'appel elle-même - n'appelez pas place_call vous-même pour " +
+      "cet appel, et ne devinez ni n'inventez jamais de code. La carte signale la call_id " +
+      "dans un message de chat une fois l'appel passé. Si cet hôte n'affiche pas la carte " +
+      "Hermes, aucun appel ne peut être passé d'ici - dites-le honnêtement à l'utilisateur.",
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",

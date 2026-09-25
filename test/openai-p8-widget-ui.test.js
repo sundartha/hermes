@@ -141,10 +141,17 @@ const EXPECTED_RESOURCE_META = {
 // agent-status/my-number/calls/call. Actual-Wert aus dem roten Diff eines isolierten
 // Testlaufs uebernommen, nicht geschaetzt. Voriger Sollwert (beide Pfade):
 // 2b3e1f8c732997bc73bcc1387a2f24b4b594ad9b9984a4b8bb58352cef03e336.
+// Neu gepinnt (T2-14-Nachbesserung, Safety-Review): place_call-/prepare_call-/
+// confirmation_code-Beschreibungen und die server-instructions sind auf den tatsaechlichen
+// Ablauf nachgezogen (die Karte ruft place_call selbst auf, das Modell nie), zusaetzlich
+// wieder eine neue Version aller vier Widgets (Poll-Neustart, serverseitiger
+// Ablehnungstext, Rekursionsdeckel, G5-Dedup, gekuerzter WIDGET_DICT-Key). Beide Pfade
+// weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen. Voriger Sollwert
+// (beide Pfade): 950d1a1c8f096942e6dc258326243f24b7c6183a78cd4a1ccdf0c549906b9861.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "950d1a1c8f096942e6dc258326243f24b7c6183a78cd4a1ccdf0c549906b9861";
+  "053ba89e21d62b02b42fc806337ea6225c387eb5400219eb0ff4959195e548b4";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "950d1a1c8f096942e6dc258326243f24b7c6183a78cd4a1ccdf0c549906b9861";
+  "053ba89e21d62b02b42fc806337ea6225c387eb5400219eb0ff4959195e548b4";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

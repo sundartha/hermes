@@ -4,17 +4,27 @@
 // Selektor bekommt sein eigenes Fake-Element - deckt sowohl die Bestand-Slots als auch die
 // neuen data-confirm-*/data-cf-*-Selektoren ab, ohne jeden einzeln aufzaehlen zu muessen).
 //
-// Deckt NUR den Widget-Mechanismus (Schritt 6 (a)-(d), (f)-(l)) - das End-to-End-Kriterium
-// (e) am echten Draht (HTTP Legacy/OAuth, stdio, echter prepare_call -> Klick -> place_call
-// -> ui/message) UND Schritt 7 (X-6/X-2-Waechter) sind in dieser Phase NICHT gebaut, s.
-// Rueckgabe (nicht_gebaut) - Budget-Grenze dieses Baulaufs.
+// Deckt den Widget-Mechanismus (Schritt 6 (a)-(d), (f)-(l)) UEBER eine handgebaute Fixture
+// (schnell, isoliert) UND das End-to-End-Kriterium (e) am echten Draht (HTTP Legacy/OAuth,
+// stdio: echter prepare_call -> dieselbe Karte -> echtes place_call -> ui/message) sowie
+// Schritt 7 (X-2/X-6-Waechter) - T2-14-Nachbesserung (Safety-Review), zuvor fehlten (e)/X-2/
+// X-6 (Budget-Grenze des ersten Baulaufs). Die (e)-Tests nehmen den Fake-Originate-Harness
+// aus test/openai-t2-13-bestaetigung.test.js: das ECHTE prepare_call-Ergebnis wird in die
+// Karte gepusht, das von der Karte gesendete tools/call unveraendert an den echten Server
+// weitergereicht - Beleg ist der Draht, nicht eine Annahme ueber sein Format.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { widgetHtml, WIDGET_CALL } from "../src/ui/widget-catalog.js";
 import { BIND_SCRIPT, signalUiReady, UI_READY_FLAG } from "../src/ui/widget-bind.js";
 import { I18N_SCRIPT } from "../src/ui/widget-i18n.js";
 import { PLACE_CALL_HOP_TIMEOUT_MS } from "../src/mcp-tools.js";
+import { uiResourceUri } from "../src/ui/contract.js";
+import { KYC_LEVEL } from "../src/store/defaults.js";
+import { planProfileFor } from "../src/plans.js";
+import { startServer, startIdp, mcpPost, toolCall, readToolResult, seedState, ROOT, BASE_ENV } from "./helpers.js";
 
 function makeFakeElement(initialText) {
   const listeners = {};
@@ -160,6 +170,9 @@ function runOwnScript(doc, options) {
       for (const fn of [...timeoutFns.values()]) fn();
     },
     timeoutCount: () => timeoutFns.size,
+    // (o): beweist, dass ein nach dem Fallback-Stop neu gestartetes Poll-Intervall
+    // tatsaechlich wieder LAEUFT (nicht nur, dass kein Fehler geworfen wird).
+    intervalCount: () => intervalFns.size,
     uiReady: () => signalUiReady(sandbox),
   };
 }
@@ -360,7 +373,7 @@ test("(h) Host antwortet nicht: nach PLACE_CALL_RESPONSE_TIMEOUT_MS derselbe unk
   assert.equal(placeCallToolCall(env).length, 1, "kein erneuter tools/call nach Timeout");
 });
 
-test("(i) result.isError: Hinweis 'neu vorbereiten' sichtbar, keine ui/message, kein weiteres Senden", () => {
+test("(i) result.isError: server-seitiger Ablehnungstext sichtbar (nicht der generische Hinweis), keine ui/message, kein weiteres Senden", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc, { withI18n: true });
   env.uiReady();
@@ -371,9 +384,23 @@ test("(i) result.isError: Hinweis 'neu vorbereiten' sichtbar, keine ui/message, 
 
   assert.equal(uiMessages(env).length, 0);
   assert.equal(doc.get("[data-confirm-hint]").style.display, "");
-  assert.notEqual(doc.get("[data-confirm-hint-text]").textContent, "—");
+  // safety/wichtig (T2-14-Nachbesserung): die Karte zeigt den ECHTEN Ablehnungsgrund des
+  // Servers (z.B. ein Safety-Gate), nicht mehr nur einen generischen "neu vorbereiten".
+  assert.equal(doc.get("[data-confirm-hint-text]").textContent, "code verbraucht");
   doc.get("[data-confirm-button]").click();
   assert.equal(placeCallToolCall(env).length, 1);
+});
+
+test("(i2) result.isError ohne verwertbaren content: Rueckfall auf den generischen 'neu vorbereiten'-Hinweis", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc, { withI18n: true });
+  env.uiReady();
+  env.emit(awaitingConfirmationPush());
+  doc.get("[data-confirm-button]").click();
+  const rpcId = env.posted[0].id;
+  env.emit({ id: rpcId, result: { isError: true } }); // kein content[] (unerwartete Form)
+
+  assert.equal(doc.get("[data-confirm-hint-text]").textContent, "Call was not started — ask for a new prepare_call.");
 });
 
 test("(j) abgelaufener Code beim Klick: 0 tools/call, 0 ui/message, Hinweis sichtbar; fehlender Code im _meta ebenso", () => {
@@ -447,6 +474,56 @@ test("(m) Sprachen: Knopf-/Label-Text aus WIDGET_DICT je hermes/locale (de/fr/en
   assert.equal(confirmButtonLabel("fr"), "Confirmer l'appel");
 });
 
+// safety/blocker + cleancode/blocker (T2-14-Nachbesserung): deckt zwei Befunde in EINEM
+// realistischen Ablauf ab. (1) startPolling() laeuft schon seit dem Handshake, lange bevor
+// der Nutzer die Karte gelesen und geklickt hat - der 15s-Poll-Fallback UND der
+// PLACE_CALL_RESPONSE_TIMEOUT_MS-Timer feuern deshalb typischerweise GEMEINSAM
+// (env.fireTimeout() feuert alle gesetzten Timer, wie Test (h) dokumentiert), noch bevor
+// die eigentliche place_call-Antwort eintrifft. (2) Trifft danach doch noch eine
+// Erfolgsantwort ein (wasTimedOut-Zweig in handlePlaceCallResponse), muss die Karte auf
+// "placed" umschalten, OHNE eine zweite ui/message zu senden - UND das Live-Polling muss
+// fuer DIESEN Anruf neu anlaufen (vorher blieb die Karte hier fuer immer auf ihrem ersten
+// Stand haengen, kein Terminalstatus wurde je erreicht).
+test("(o) Fallback-/Antwort-Timeout schon gefeuert, danach doch Erfolg: placed uebernommen, genau 1 ui/message, Polling laeuft weiter", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc);
+  env.uiReady();
+  assert.equal(env.intervalCount(), 1, "Vorbedingung: Self-Poll laeuft seit dem Handshake");
+  env.emit(awaitingConfirmationPush());
+  doc.get("[data-confirm-button]").click();
+  const rpcId = placeCallToolCall(env)[0].id;
+
+  env.fireTimeout(); // feuert PLACE_CALL_RESPONSE_TIMEOUT_MS (-> "uncertain", 1 ui/message) UND den 15s-Poll-Fallback
+  assert.equal(uiMessages(env).length, 1, "genau die unklar-Nachricht");
+  assert.equal(env.intervalCount(), 0, "Poll-Intervall durch den Fallback gestoppt");
+
+  env.emit({ id: rpcId, result: { structuredContent: { call_id: CALL_ID, status: "dialing" } } }); // spaete Erfolgsantwort
+  assert.equal(doc.get("[data-confirm]").style.display, "none", "Bestaetigungsblock verschwindet");
+  assert.equal(doc.get('[data-mcp="call_id"]').textContent, CALL_ID, "applyCallStatus hat call_id uebernommen");
+  assert.equal(uiMessages(env).length, 1, "keine zweite ui/message nach der spaeten Erfolgsantwort");
+  assert.equal(env.intervalCount(), 1, "Polling wurde nach dem Erfolg neu gestartet");
+
+  // Positiv-Kontrolle: das neu gestartete Intervall pollt tatsaechlich mit der bekannten
+  // call_id (nicht nur "irgendein" Intervall ohne Wirkung).
+  const statusCallsBefore = env.posted.filter((msg) => msg.method === "tools/call" && msg.params.name === "get_call_status").length;
+  assert.ok(statusCallsBefore >= 1, "der Sofort-Tick von startPolling() hat bereits get_call_status gesendet");
+});
+
+test("(p) objectLines: absichtlich sehr tief verschachteltes context-Objekt bricht renderConfirmation NICHT ab (Rekursionsdeckel)", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc);
+  env.uiReady();
+  const DEEP_NESTING_LEVELS = 50; // weit ueber jedem realistischen briefing/context-JSON
+  let deep = { leaf: "innerster-wert" };
+  for (let i = 0; i < DEEP_NESTING_LEVELS; i++) deep = { nested: deep };
+  assert.doesNotThrow(() => {
+    env.emit(awaitingConfirmationPush({ context: deep }));
+  }, "kein Stack-Overflow trotz 50 Verschachtelungsebenen");
+  // Die Karte erscheint trotzdem (Kernversprechen von N-10: kein stiller Ausfall).
+  assert.equal(doc.get("[data-confirm]").style.display, "");
+  assert.match(doc.get("[data-cf-context]").textContent, /…/, "ab der Deckel-Tiefe wird abgeschnitten statt weiter zu rekursieren");
+});
+
 test("(n) ui/message-Text enthaelt nie briefing/context-Inhalte", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
@@ -459,4 +536,233 @@ test("(n) ui/message-Text enthaelt nie briefing/context-Inhalte", () => {
   assert.ok(!msg.includes("GEHEIMER-BRIEFING-TEXT"));
   assert.ok(!msg.includes("GEHEIMER-KONTEXT"));
   assert.match(msg, new RegExp(CALL_ID));
+});
+
+// ================= (e) End-to-Ende am echten Draht ==========================================
+
+const E2E_SECRET = "openai-t2-14-abnahme-test-secret-mind-32-zeichen";
+const E2E_TARGET = "+4915112340077";
+const E2E_OBJECTIVE = "Termin vereinbaren";
+const CONFIRMATION_META_KEY = "hermes/confirmation_code";
+// Kein "language": das haengt an einer Deployment-Faehigkeit (TTS-Trennung von der
+// Offenlegung), die im lokalen FAKE_ORIGINATE-Testaufbau nicht verfuegbar ist
+// (language_unavailable) - fuer den Draht-Rundlauf selbst irrelevant.
+const E2E_PREVIEW_ARGS = {
+  to: E2E_TARGET,
+  objective: E2E_OBJECTIVE,
+  briefing: "Kunde seit 2019",
+  max_duration_s: 300,
+};
+
+// Nimmt das ECHTE prepare_call-Ergebnis (content/structuredContent/_meta, wie es ueber den
+// Draht ankommt) und faehrt es durch DIESELBE Karte wie die Mechanismus-Tests oben: Push,
+// Klick, Abgriff des von der Karte gesendeten tools/call. Einzige Quelle fuer Anzeige UND
+// Versand ist damit - wie im Widget selbst - der echte Server-Output, nicht eine Fixture.
+function widgetPlaceCallFromRealPreview(prep) {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc);
+  env.uiReady();
+  env.emit({
+    method: "ui/notifications/tool-result",
+    params: { structuredContent: prep.structuredContent, _meta: prep._meta },
+  });
+  doc.get("[data-confirm-button]").click();
+  const calls = placeCallToolCall(env);
+  assert.equal(calls.length, 1, "die Karte hat place_call genau einmal gesendet");
+  return { env, doc, call: calls[0] };
+}
+
+// Nach jeder erfolgreichen Bestaetigung: die vom Server tatsaechlich gesendeten Argumente
+// sind EXAKT die aus der echten Vorschau (kein Drift zwischen Schema-Parsing/Output-Schema/
+// Host und dem HMAC-gebundenen Tupel, Pre-Mortem (a)).
+function assertArgsMatchPreview(args, prep) {
+  for (const field of ["to", "objective", "briefing", "max_duration_s"]) {
+    assert.equal(args[field], prep.structuredContent[field], `${field} stimmt mit der echten Vorschau ueberein`);
+  }
+  assert.equal(args.confirmation_code, prep._meta[CONFIRMATION_META_KEY]);
+}
+
+test("(e-http) Draht-Rundlauf HTTP Legacy: echtes prepare_call -> dieselbe Karte -> echtes place_call -> Erfolg -> genau 1 ui/message mit call_id, nie mit Code", async () => {
+  const srv = await startServer({
+    env: { FAKE_ORIGINATE: "true", ALLOWED_COUNTRY_CODES: "*", MCP_UI_ENABLED: "true", CALL_CONFIRMATION_SECRET: E2E_SECRET },
+  });
+  try {
+    const before = srv.readStore().calls.length;
+    const prepRes = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("prepare_call", E2E_PREVIEW_ARGS));
+    const prep = await readToolResult(prepRes);
+    assert.notEqual(prep.isError, true, "prepare_call ueber HTTP Legacy");
+
+    const { env, call } = widgetPlaceCallFromRealPreview(prep);
+    assertArgsMatchPreview(call.params.arguments, prep);
+
+    const placeRes = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", call.params.arguments));
+    const placed = await readToolResult(placeRes);
+    assert.notEqual(placed.isError, true, "der von der Karte gesendete tools/call wird unveraendert angenommen");
+    assert.ok(placed.structuredContent.call_id, "call_id vorhanden");
+    assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf-Datensatz");
+    // Store-Feldname ist `goal` (routes/api-calls.js), nicht `objective` (das ist der
+    // MCP-seitige Argumentname).
+    const storedCall = srv.readStore().calls[0];
+    assert.equal(storedCall.goal, E2E_OBJECTIVE, "Datensatz.goal == Vorschau.objective");
+    assert.equal(storedCall.to, E2E_TARGET, "Datensatz.to == Vorschau");
+
+    // Die Karte verarbeitet die ECHTE Serverantwort weiter.
+    env.emit({ id: call.id, result: placed });
+    const msgs = uiMessages(env);
+    assert.equal(msgs.length, 1, "genau EINE ui/message");
+    assert.match(JSON.stringify(msgs[0]), new RegExp(placed.structuredContent.call_id));
+    assert.ok(!JSON.stringify(msgs[0]).includes(prep._meta[CONFIRMATION_META_KEY]), "der Code steht nie in der ui/message");
+  } finally {
+    await srv.stop();
+  }
+});
+
+const OAUTH_E2E_TARGET = "+4915112340066";
+const OAUTH_E2E_TENANT = "tenant-t2-14-oauth-e2e";
+const OAUTH_E2E_SUB = "sub-t2-14-oauth-e2e";
+const OAUTH_E2E_NUMBER = "+4915110000088";
+
+test("(e-oauth) Draht-Rundlauf HTTP OAuth (echtes Token): derselbe Rundlauf ueber einen authentifizierten Mandanten", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: {
+      FAKE_ORIGINATE: "true",
+      ALLOWED_COUNTRY_CODES: "*",
+      MCP_UI_ENABLED: "true",
+      CALL_CONFIRMATION_SECRET: E2E_SECRET,
+      MULTI_TENANT: "true",
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+    },
+    seed: seedState({
+      tenants: [
+        { id: OAUTH_E2E_TENANT, status: "active", idpSubject: OAUTH_E2E_SUB, ownerName: "T2-14 E2E Tester", kycLevel: KYC_LEVEL.CARD },
+      ],
+      profiles: { [OAUTH_E2E_TENANT]: planProfileFor("business") },
+      numbers: [
+        { id: "num-t2-14-oauth-e2e", e164: OAUTH_E2E_NUMBER, tenantId: OAUTH_E2E_TENANT, provider: "telnyx", status: "active", providerNumberId: null },
+      ],
+    }),
+  });
+  try {
+    const before = srv.readStore().calls.length;
+    const token = await idp.sign({ sub: OAUTH_E2E_SUB });
+    const args = { to: OAUTH_E2E_TARGET, objective: E2E_OBJECTIVE };
+    const prepRes = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("prepare_call", args));
+    const prep = await readToolResult(prepRes);
+    assert.notEqual(prep.isError, true, "prepare_call ueber OAuth");
+
+    const { env, call } = widgetPlaceCallFromRealPreview(prep);
+    assert.equal(call.params.arguments.to, OAUTH_E2E_TARGET);
+    assert.equal(call.params.arguments.confirmation_code, prep._meta[CONFIRMATION_META_KEY]);
+
+    const placeRes = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", call.params.arguments));
+    const placed = await readToolResult(placeRes);
+    assert.notEqual(placed.isError, true, "der von der Karte gesendete tools/call wird unveraendert angenommen");
+    assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf-Datensatz");
+
+    env.emit({ id: call.id, result: placed });
+    assert.equal(uiMessages(env).length, 1);
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+test("(e-stdio) Draht-Rundlauf stdio (echter Kindprozess): derselbe Rundlauf ueber einen gespawnten MCP-stdio-Server", async () => {
+  const gateway = await startServer({
+    env: { FAKE_ORIGINATE: "true", ALLOWED_COUNTRY_CODES: "*", CALL_CONFIRMATION_SECRET: E2E_SECRET },
+  });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: ["src/mcp-server.js"],
+    cwd: ROOT,
+    env: { ...BASE_ENV, GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" },
+    stderr: "pipe",
+  });
+  const client = new Client({ name: "hermes-t2-14-stdio-client", version: "0.0.0" });
+  try {
+    await client.connect(transport);
+    const before = gateway.readStore().calls.length;
+    const prep = await client.callTool({ name: "prepare_call", arguments: { to: E2E_TARGET, objective: E2E_OBJECTIVE } });
+    assert.notEqual(prep.isError, true, "prepare_call ueber stdio");
+
+    const { env, call } = widgetPlaceCallFromRealPreview(prep);
+    assert.equal(call.params.arguments.confirmation_code, prep._meta[CONFIRMATION_META_KEY]);
+
+    const placed = await client.callTool({ name: "place_call", arguments: call.params.arguments });
+    assert.notEqual(placed.isError, true, "der von der Karte gesendete tools/call wird unveraendert angenommen");
+    assert.equal(gateway.readStore().calls.length, before + 1, "genau EIN Anruf-Datensatz");
+
+    env.emit({ id: call.id, result: placed });
+    assert.equal(uiMessages(env).length, 1);
+  } finally {
+    await client.close();
+    await gateway.stop();
+  }
+});
+
+// ================= X-2: ausser prepare_call kein Tool-Ergebnis mit Nutzdaten-_meta ==========
+// "Nutzdaten-_meta" = das Bestaetigungs-Geheimnis selbst (CONFIRMATION_META_KEY und sein
+// Ablauf-Gegenstueck), NICHT die Rendering-Metadaten (_meta.ui.*/hermes/locale), die JEDES
+// Widget-Werkzeug traegt (T2-01/T2-02, eigene Draht-Belege). X-2 schuetzt davor, dass der
+// Code ausserhalb von prepare_call irgendwo landet, wo ihn ein Host dem Modell zeigen
+// koennte.
+test("X-2 (Draht): ausser prepare_call traegt kein Werkzeug-Ergebnis den Bestaetigungscode in _meta", async () => {
+  const srv = await startServer({
+    env: { FAKE_ORIGINATE: "true", ALLOWED_COUNTRY_CODES: "*", MCP_UI_ENABLED: "true", CALL_CONFIRMATION_SECRET: E2E_SECRET },
+  });
+  try {
+    const prep = await readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("prepare_call", E2E_PREVIEW_ARGS)));
+    const code = prep._meta[CONFIRMATION_META_KEY];
+    assert.match(code, /^[0-9A-HJKMNP-TV-Z]{6}$/, "Positiv-Kontrolle: prepare_call TRAEGT den Code (sonst waere die Pruefung unten wertlos)");
+
+    const placed = await readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", { ...E2E_PREVIEW_ARGS, confirmation_code: code })));
+    const callId = placed.structuredContent.call_id;
+
+    const others = [
+      readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_call_status", { call_id: callId }))),
+      readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("cancel_call", { call_id: callId }))),
+      readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("list_calls", {}))),
+      readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_agent_status", {}))),
+      readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_agent_number", {}))),
+      readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("check_inbox", {}))),
+      readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("list_action_items", {}))),
+    ];
+    for (const resultPromise of others) {
+      const result = await resultPromise;
+      assert.ok(!JSON.stringify(result._meta || {}).includes(code), `${JSON.stringify(result._meta)} darf den Code nicht enthalten`);
+    }
+    // placed.result selbst darf den VERBRAUCHTEN Code auch nicht in _meta tragen.
+    assert.ok(!JSON.stringify(placed._meta || {}).includes(code));
+  } finally {
+    await srv.stop();
+  }
+});
+
+// ================= X-6: Sandbox-Scan der ausgelieferten Widget-Resource ======================
+// Keine privilegierten APIs, kein fetch/XHR/WebSocket/eval - der EINZIGE Kommunikationsweg
+// nach aussen ist parent.postMessage (Plan X-6). Gemessen am echten resources/read-Text ueber
+// die Route, nicht an der lokalen Quelldatei (die koennte anders ausgeliefert werden).
+test("X-6 (Draht): resources/read des Call-Widgets enthaelt keine privilegierten APIs (kein fetch/XHR/WebSocket/eval)", async () => {
+  const srv = await startServer({ env: { MCP_UI_ENABLED: "true" } });
+  try {
+    const uri = uiResourceUri(WIDGET_CALL);
+    const res = await mcpPost(`${srv.localUrl}/mcp`, null, { jsonrpc: "2.0", id: 9, method: "resources/read", params: { uri } });
+    const read = await readToolResult(res);
+    const html = read.contents[0].text;
+    assert.ok(html.length > 0, "Vorbedingung: die Resource liefert Inhalt");
+    assert.doesNotMatch(html, /\bfetch\s*\(/, "kein fetch()");
+    assert.doesNotMatch(html, /\bXMLHttpRequest\b/, "kein XMLHttpRequest");
+    assert.doesNotMatch(html, /\bnew\s+WebSocket\s*\(/, "kein WebSocket");
+    assert.doesNotMatch(html, /\beval\s*\(/, "kein eval()");
+    assert.match(html, /parent\.postMessage/, "der einzige Sendeweg bleibt parent.postMessage");
+
+    // Positiv-Kontrolle: die Pruefung selbst erkennt eine eingeschleuste verbotene API.
+    const poisoned = html + "\n<script>fetch('https://example.invalid');</script>";
+    assert.doesNotMatch(html, /example\.invalid/, "Sanity: der echte Text enthaelt den Marker nicht");
+    assert.match(poisoned, /\bfetch\s*\(/, "Sanity: die Pruefung selbst faengt eine eingebaute Verletzung");
+  } finally {
+    await srv.stop();
+  }
 });

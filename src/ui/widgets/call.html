@@ -535,8 +535,11 @@
       return value === null || value === undefined ? "" : String(value);
     }
 
+    var MAX_DEPTH = 6;
+
     // Nie als Markup (XSS), sondern "pfad.schluessel: wert"-Zeilen, jede Zeichenkette als Text.
-    function objectLines(value, prefix) {
+    function objectLines(value, prefix, depth) {
+      depth = depth || 0;
       var lines = [];
       var keys = Object.keys(value);
       for (var i = 0; i < keys.length; i++) {
@@ -544,7 +547,7 @@
         var v = value[key];
         var label = prefix ? prefix + "." + key : key;
         if (isRecord(v) && !Array.isArray(v)) {
-          lines = lines.concat(objectLines(v, label));
+          lines = depth >= MAX_DEPTH ? lines.concat([label + ": …"]) : lines.concat(objectLines(v, label, depth + 1));
         } else if (Array.isArray(v)) {
           lines.push(label + ": " + v.map(stringifyLeaf).join(", "));
         } else {
@@ -582,8 +585,7 @@
       btn.disabled = confirmState !== "awaiting" || !confirmCodeUsable();
     }
 
-    // BOUND_ARG_FIELDS ausser to/objective; fehlendes Feld blendet seine Zeile aus.
-    var CONFIRM_OPTIONAL_ROWS = ["briefing", "language", "max_duration_s", "constraints", "mandate", "context", "diagnostic"];
+    var CONFIRM_OPTIONAL_ROWS = BOUND_ARG_FIELDS.filter(function (f) { return f !== "to" && f !== "objective"; }); // abgeleitet
 
     // Nur aus pendingConfirmation.args - dieselbe Quelle wie onConfirmButtonClick.
     function renderConfirmation() {
@@ -619,10 +621,7 @@
     function handleAwaitingConfirmationPush(structuredContent, meta) {
       if (confirmState !== "none" && confirmState !== "awaiting") return;
       var args = {};
-      for (var i = 0; i < BOUND_ARG_FIELDS.length; i++) {
-        var field = BOUND_ARG_FIELDS[i];
-        if (Object.prototype.hasOwnProperty.call(structuredContent, field)) args[field] = structuredContent[field];
-      }
+      for (var i = 0; i < BOUND_ARG_FIELDS.length; i++) if (Object.prototype.hasOwnProperty.call(structuredContent, BOUND_ARG_FIELDS[i])) args[BOUND_ARG_FIELDS[i]] = structuredContent[BOUND_ARG_FIELDS[i]];
       var code = meta && isRecord(meta) && typeof meta[CONFIRMATION_CODE_META_KEY] === "string"
         ? meta[CONFIRMATION_CODE_META_KEY]
         : null;
@@ -656,7 +655,7 @@
 
     function sendPlacedMessage(callId) {
       sendUiMessage(
-        t("Confirmed the call to {to} (call_id {call_id}); track it with get_call_status.")
+        t("Confirmed the call to {to} (call_id {call_id}).")
           .replace("{to}", targetForMessage())
           .replace("{call_id}", callId),
       );
@@ -697,14 +696,21 @@
         confirmState = "placed";
         hideConfirmationBlock();
         applyCallStatus(structured); // Karte laeuft ab hier als Live-Karte weiter (Self-Poll)
+        resumePollingAfterPlaced(structured.status);
         if (!wasTimedOut) sendPlacedMessage(callId);
         return;
       }
       if (!wasTimedOut) {
         confirmState = "rejected";
-        showConfirmHint(t("Call was not started — ask for a new prepare_call."));
+        showConfirmHint(serverRejectionText(result));
         updateConfirmButtonState();
       }
+    }
+
+    // Nie der Code.
+    function serverRejectionText(result) {
+      var first = isRecord(result) && Array.isArray(result.content) ? result.content[0] : undefined;
+      return (first && typeof first.text === "string" && first.text.trim()) || t("Call was not started — ask for a new prepare_call.");
     }
 
     // "unklar" statt "fehlgeschlagen" (ein Host-Timeout beweist keinen Fehlschlag).
@@ -727,11 +733,7 @@
         updateConfirmButtonState();
         return;
       }
-      var callArgs = {};
-      for (var i = 0; i < BOUND_ARG_FIELDS.length; i++) {
-        var field = BOUND_ARG_FIELDS[i];
-        if (Object.prototype.hasOwnProperty.call(pendingConfirmation.args, field)) callArgs[field] = pendingConfirmation.args[field];
-      }
+      var callArgs = Object.assign({}, pendingConfirmation.args); // schon gefiltert
       callArgs.confirmation_code = pendingConfirmation.code;
       if (!sendToolCall(TOOL_PLACE_CALL, callArgs)) return; // Handshake noch nicht fertig
       confirmState = "submitting";
@@ -1030,6 +1032,12 @@
       pollTick();
       pollTimerId = setInterval(pollTick, POLL_INTERVAL_MS);
       fallbackTimerId = setTimeout(onFallbackTimeout, FALLBACK_TIMEOUT_MS);
+    }
+
+    // Evtl. schon gestoppt.
+    function resumePollingAfterPlaced(status) {
+      if (isTerminalStatus(status)) return;
+      stopPolling(); anyResponseReceived = true; startPolling();
     }
 
     // Late-safe: Signal schon gefeuert (BIND_SCRIPT lief frueher, oder Remount) -> sofort

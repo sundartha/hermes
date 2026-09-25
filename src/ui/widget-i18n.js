@@ -93,8 +93,8 @@ export const WIDGET_DICT = {
       "Unklar, ob der Anruf gestartet wurde — nicht erneut bestätigen; list_calls prüfen.",
     "Call was not started — ask for a new prepare_call.":
       "Anruf wurde nicht gestartet — bitte um ein neues prepare_call.",
-    "Confirmed the call to {to} (call_id {call_id}); track it with get_call_status.":
-      "Anruf an {to} bestätigt (call_id {call_id}); mit get_call_status verfolgen.",
+    "Confirmed the call to {to} (call_id {call_id}).":
+      "Anruf an {to} bestätigt (call_id {call_id}).",
     "Confirmed a call to {to}; no response from the card yet. Check list_calls, do not call place_call again.":
       "Anruf an {to} bestätigt; noch keine Rückmeldung der Karte. list_calls prüfen, nicht erneut place_call aufrufen.",
   },
@@ -153,8 +153,8 @@ export const WIDGET_DICT = {
       "Incertain si l'appel a été lancé — ne confirmez pas à nouveau ; vérifiez list_calls.",
     "Call was not started — ask for a new prepare_call.":
       "Appel non lancé — redemandez un prepare_call.",
-    "Confirmed the call to {to} (call_id {call_id}); track it with get_call_status.":
-      "Appel vers {to} confirmé (call_id {call_id}) ; suivez-le avec get_call_status.",
+    "Confirmed the call to {to} (call_id {call_id}).":
+      "Appel vers {to} confirmé (call_id {call_id}).",
     "Confirmed a call to {to}; no response from the card yet. Check list_calls, do not call place_call again.":
       "Appel vers {to} confirmé ; pas encore de réponse de la carte. Vérifiez list_calls, n'appelez pas à nouveau place_call.",
   },
