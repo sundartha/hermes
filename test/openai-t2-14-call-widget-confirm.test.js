@@ -15,6 +15,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
+import http from "node:http";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { widgetHtml, WIDGET_CALL } from "../src/ui/widget-catalog.js";
@@ -24,7 +25,15 @@ import { PLACE_CALL_HOP_TIMEOUT_MS } from "../src/mcp-tools.js";
 import { uiResourceUri } from "../src/ui/contract.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
-import { startServer, startIdp, mcpPost, toolCall, readToolResult, seedState, ROOT, BASE_ENV } from "./helpers.js";
+import { startServer, startIdp, mcpPost, toolCall, readToolResult, seedState, ROOT, BASE_ENV, externalIp } from "./helpers.js";
+
+// Lehre pgrep-blind/localhost-umgeht-das-Gate: localhost gilt serverseitig als
+// vertrauenswuerdiger lokaler Aufrufer (isTrustedLocalCaller) - ein OAuth-Draht-Test ueber
+// srv.localUrl koennte fail-closed nur WEIL localhost sowieso durchgelassen wird, ohne dass
+// der OAuth-Rundlauf selbst je gemessen wurde. (e-oauth) unten faehrt deshalb ueber die
+// Interface-IP; ohne eine solche (z.B. reines Loopback-Sandbox-Netz) wird der Fall
+// uebersprungen statt falsch gruen zu sein.
+const EXTERNAL_IP = externalIp();
 
 function makeFakeElement(initialText) {
   const listeners = {};
@@ -622,7 +631,7 @@ const OAUTH_E2E_TENANT = "tenant-t2-14-oauth-e2e";
 const OAUTH_E2E_SUB = "sub-t2-14-oauth-e2e";
 const OAUTH_E2E_NUMBER = "+4915110000088";
 
-test("(e-oauth) Draht-Rundlauf HTTP OAuth (echtes Token): derselbe Rundlauf ueber einen authentifizierten Mandanten", async () => {
+test("(e-oauth) Draht-Rundlauf HTTP OAuth (echtes Token): derselbe Rundlauf ueber einen authentifizierten Mandanten", { skip: !EXTERNAL_IP && "externalIp() liefert null - kein Interface fuer den Nicht-localhost-Rundlauf" }, async () => {
   const idp = await startIdp();
   const srv = await startServer({
     env: {
@@ -648,7 +657,9 @@ test("(e-oauth) Draht-Rundlauf HTTP OAuth (echtes Token): derselbe Rundlauf uebe
     const before = srv.readStore().calls.length;
     const token = await idp.sign({ sub: OAUTH_E2E_SUB });
     const args = { to: OAUTH_E2E_TARGET, objective: E2E_OBJECTIVE };
-    const prepRes = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("prepare_call", args));
+    // externalUrl statt localUrl (s. Kommentar an EXTERNAL_IP oben): der Request kommt
+    // serverseitig NICHT von 127.0.0.1 an, isTrustedLocalCaller greift also nicht.
+    const prepRes = await mcpPost(`${srv.externalUrl}/mcp`, token, toolCall("prepare_call", args));
     const prep = await readToolResult(prepRes);
     assert.notEqual(prep.isError, true, "prepare_call ueber OAuth");
 
@@ -656,16 +667,108 @@ test("(e-oauth) Draht-Rundlauf HTTP OAuth (echtes Token): derselbe Rundlauf uebe
     assert.equal(call.params.arguments.to, OAUTH_E2E_TARGET);
     assert.equal(call.params.arguments.confirmation_code, prep._meta[CONFIRMATION_META_KEY]);
 
-    const placeRes = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", call.params.arguments));
+    const placeRes = await mcpPost(`${srv.externalUrl}/mcp`, token, toolCall("place_call", call.params.arguments));
     const placed = await readToolResult(placeRes);
     assert.notEqual(placed.isError, true, "der von der Karte gesendete tools/call wird unveraendert angenommen");
     assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf-Datensatz");
+    const storedCall = srv.readStore().calls[before];
+    assert.equal(storedCall.tenantId, OAUTH_E2E_TENANT, "der Anruf-Datensatz gehoert dem OAuth-Mandanten, nicht Bootstrap/Null");
 
     env.emit({ id: call.id, result: placed });
     assert.equal(uiMessages(env).length, 1);
   } finally {
     await srv.stop();
     await idp.close();
+  }
+});
+
+// Lokaler Mock, der JEDEN Request sofort mit 404 beantwortet - kein echtes Netz, keine
+// Wartezeit. Gepinnt auf ANTHROPIC_BASE_URL (s. FULL_FIELDS-Test unten): dieselbe
+// Rueckfall-Garantie wie test/elevenlabs-anrufstart.test.js Fall T11 ("schneller 404,
+// nicht-transient, kein Retry" -> die Eroeffnungszeilen-Erzeugung faellt deterministisch
+// auf die feste Bruecken-Zeile zurueck, bevor der EL-Anrufstart selbst beginnt).
+const HTTP_NOT_FOUND = 404;
+async function startFastFailMock() {
+  const server = http.createServer((req, res) => {
+    res.writeHead(HTTP_NOT_FOUND, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "not_found" }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+}
+
+// Eigenes Ziel (nicht E2E_TARGET/OAUTH_E2E_TARGET): vermeidet jede Call-Dedup-Kollision mit
+// den Nachbar-Faellen. National-Form (fuehrende "0" statt "+49") desselben Ziels - die
+// Vorschau muss sie ueber resolveDialTarget/normalizeDialTarget (store/defaults.js) auf
+// GENAU FULL_FIELDS_TARGET normalisieren.
+const FULL_FIELDS_TARGET = "+4915112340088";
+const FULL_FIELDS_TARGET_NATIONAL = "015112340088";
+const FULL_FIELDS_OWNER_NUMBER = { e164: "+4915100000099", provider: "telnyx" };
+// Alle neun BOUND_ARG_FIELDS (src/ui/widgets/call.html) mit je einem unterscheidbaren Wert -
+// deckt den vollen Draht ab, den (e-http) bewusst ausspart (Kommentar an E2E_PREVIEW_ARGS
+// oben: "language" braucht den EL-Weg).
+const FULL_FIELDS_ARGS = {
+  to: FULL_FIELDS_TARGET_NATIONAL,
+  objective: E2E_OBJECTIVE,
+  briefing: "Kunde seit 2019, bevorzugt Rueckruf am Vormittag",
+  constraints: "Nur Mo-Fr 9-17 Uhr anrufen",
+  mandate: { budget_eur: 50 },
+  context: { note: "Rueckruf erwartet" },
+  language: "de",
+  max_duration_s: 300,
+  diagnostic: true,
+};
+
+test("(e-full-fields) Draht-Rundlauf HTTP Legacy mit allen neun gebundenen Feldern + nationalem 'to': Normalisierung, Bindung, get_call_status danach", async () => {
+  const anthropicFastFail = await startFastFailMock();
+  const srv = await startServer({
+    env: {
+      FAKE_ORIGINATE_ELEVENLABS: "true",
+      ALLOWED_COUNTRY_CODES: "*",
+      MCP_UI_ENABLED: "true",
+      CALL_CONFIRMATION_SECRET: E2E_SECRET,
+      // "language" ist nur mit dem EL-Weg an bindbar (languageDenial, api-call-
+      // confirmations.js) - der Draht-Rundlauf braucht ihn deshalb wirklich an, nicht nur
+      // die Vorschau.
+      ELEVENLABS_OUTBOUND_ENABLED: "true",
+      ELEVENLABS_AGENT_ID: "agent_t2_14_full",
+      ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_t2_14_full",
+      ELEVENLABS_API_KEY: "el-t2-14-full-test-key",
+      ANTHROPIC_BASE_URL: anthropicFastFail.url,
+    },
+    ownerNumber: FULL_FIELDS_OWNER_NUMBER,
+  });
+  try {
+    const before = srv.readStore().calls.length;
+    const prepRes = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("prepare_call", FULL_FIELDS_ARGS));
+    const prep = await readToolResult(prepRes);
+    assert.notEqual(prep.isError, true, `prepare_call mit allen neun Feldern: ${JSON.stringify(prep)}`);
+    assert.equal(prep.structuredContent.to, FULL_FIELDS_TARGET, "nationales 'to' normalisiert in der Vorschau");
+
+    const { call } = widgetPlaceCallFromRealPreview(prep);
+    const BOUND_ARG_FIELDS_WIRE = ["to", "objective", "briefing", "constraints", "mandate", "context", "language", "max_duration_s", "diagnostic"];
+    for (const field of BOUND_ARG_FIELDS_WIRE) {
+      assert.deepEqual(call.params.arguments[field], prep.structuredContent[field], `${field}: Karte == Vorschau (Pre-Mortem (a))`);
+    }
+    assert.equal(call.params.arguments.to, FULL_FIELDS_TARGET, "die Karte sendet das normalisierte Ziel, nicht die Nutzereingabe");
+
+    const placeRes = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", call.params.arguments));
+    const placed = await readToolResult(placeRes);
+    assert.notEqual(placed.isError, true, `place_call mit allen neun Feldern: ${JSON.stringify(placed)}`);
+    assert.ok(placed.structuredContent.call_id, "call_id vorhanden");
+    assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf-Datensatz");
+
+    const callId = placed.structuredContent.call_id;
+    const statusRes = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_call_status", { call_id: callId }));
+    const status = await readToolResult(statusRes);
+    assert.notEqual(status.isError, true, `get_call_status fuer die gemeldete call_id: ${JSON.stringify(status)}`);
+    assert.equal(status.structuredContent.call_id, callId, "get_call_status findet denselben Anruf-Datensatz");
+  } finally {
+    await srv.stop();
+    await anthropicFastFail.close();
   }
 });
 

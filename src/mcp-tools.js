@@ -1179,7 +1179,7 @@ function withWidgetLocale(config, handler, language) {
 // und seinen Ablauf an die Hermes-Karte reicht - benannt statt Literal an zwei Stellen
 // (Ausstellung im Handler, Kriteriums-Test am Draht). Namensraum "hermes/..." wie die
 // bestehenden Widget-Metas (ui.*), aber ausserhalb des ui.-Namensraums: der Wert ist KEIN
-// Rendering-Detail, sondern das Geheimnis selbst.
+// Rendering-Detail, sondern das Geheimnis selbst. T2-14: dupliziert in call.html (dort), eine Aenderung NUR hier deaktiviert den Bestaetigen-Knopf lautlos.
 const CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
 const CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
 

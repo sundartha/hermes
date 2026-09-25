@@ -148,10 +148,16 @@ const EXPECTED_RESOURCE_META = {
 // Ablehnungstext, Rekursionsdeckel, G5-Dedup, gekuerzter WIDGET_DICT-Key). Beide Pfade
 // weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen. Voriger Sollwert
 // (beide Pfade): 950d1a1c8f096942e6dc258326243f24b7c6183a78cd4a1ccdf0c549906b9861.
+// Neu gepinnt (T2-14-Nachbesserung Runde 2, Safety-/Cleancode-Review): overflow-wrap:anywhere
+// gegen abgeschnittenen langen Text in der Bestaetigungs-Ansicht + zwei Mehrfach-Anweisungen
+// je Zeile aufgeteilt - NUR call.html aendert sich (kein WIDGET_DICT-Eingriff diesmal), Pin-
+// Version 6 fuer call, die anderen drei Widgets unveraendert (s. widget-versions.json). Beide
+// Pfade weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen, nicht geschaetzt.
+// Voriger Sollwert (beide Pfade): 053ba89e21d62b02b42fc806337ea6225c387eb5400219eb0ff4959195e548b4.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "053ba89e21d62b02b42fc806337ea6225c387eb5400219eb0ff4959195e548b4";
+  "7f16173f41dfe310b819b8b643ff950645f54a1a3cab7a2d3420a034bb6df551";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "053ba89e21d62b02b42fc806337ea6225c387eb5400219eb0ff4959195e548b4";
+  "7f16173f41dfe310b819b8b643ff950645f54a1a3cab7a2d3420a034bb6df551";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

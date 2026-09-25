@@ -125,7 +125,7 @@
   .hud-cancel:disabled{opacity:.6;cursor:default}
   /* T2-14: Bestaetigungs-Ansicht, wiederverwendet .row/.row-k/.row-v/.hud-cancel. */
   .confirm{position:relative;z-index:1;display:flex;flex-direction:column}
-  .confirm .row-v{white-space:pre-line;max-width:62%}
+  .confirm .row-v{white-space:pre-line;max-width:62%;overflow-wrap:anywhere}
   .confirm-hint{color:rgba(255,255,255,.75);font-weight:600;font-size:12px}
   .confirm-button{width:100%;margin-top:14px;display:block;text-align:center;
     background:rgba(var(--color-accent-light-rgb),.16)}
@@ -621,7 +621,10 @@
     function handleAwaitingConfirmationPush(structuredContent, meta) {
       if (confirmState !== "none" && confirmState !== "awaiting") return;
       var args = {};
-      for (var i = 0; i < BOUND_ARG_FIELDS.length; i++) if (Object.prototype.hasOwnProperty.call(structuredContent, BOUND_ARG_FIELDS[i])) args[BOUND_ARG_FIELDS[i]] = structuredContent[BOUND_ARG_FIELDS[i]];
+      for (var i = 0; i < BOUND_ARG_FIELDS.length; i++) {
+        var field = BOUND_ARG_FIELDS[i];
+        if (Object.prototype.hasOwnProperty.call(structuredContent, field)) args[field] = structuredContent[field];
+      }
       var code = meta && isRecord(meta) && typeof meta[CONFIRMATION_CODE_META_KEY] === "string"
         ? meta[CONFIRMATION_CODE_META_KEY]
         : null;
@@ -1037,7 +1040,9 @@
     // Evtl. schon gestoppt.
     function resumePollingAfterPlaced(status) {
       if (isTerminalStatus(status)) return;
-      stopPolling(); anyResponseReceived = true; startPolling();
+      stopPolling();
+      anyResponseReceived = true;
+      startPolling();
     }
 
     // Late-safe: Signal schon gefeuert (BIND_SCRIPT lief frueher, oder Remount) -> sofort
