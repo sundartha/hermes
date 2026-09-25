@@ -154,10 +154,16 @@ const EXPECTED_RESOURCE_META = {
 // Version 6 fuer call, die anderen drei Widgets unveraendert (s. widget-versions.json). Beide
 // Pfade weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen, nicht geschaetzt.
 // Voriger Sollwert (beide Pfade): 053ba89e21d62b02b42fc806337ea6225c387eb5400219eb0ff4959195e548b4.
+// Neu gepinnt (T2-14-Nachbesserung Runde 3, G5 + Safety "Karte nach Neuladen"): Zustand
+// "used" in call.html + neuer WIDGET_DICT-Key -> neue Version aller vier Widgets, call danach
+// zusaetzlich auf Version 8 (Kommentare fuer das 260-KB-Budget gekuerzt). Werkzeug-
+// Beschreibungen unveraendert. Beide Pfade weiterhin byte-identisch. Actual-Wert aus dem roten
+// Diff uebernommen, nicht geschaetzt. Voriger Sollwert (beide Pfade):
+// 7f16173f41dfe310b819b8b643ff950645f54a1a3cab7a2d3420a034bb6df551.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "7f16173f41dfe310b819b8b643ff950645f54a1a3cab7a2d3420a034bb6df551";
+  "b12f140a2ff461cf0b24d24d0135e285889834324d7038e757028aa547ce54f4";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "7f16173f41dfe310b819b8b643ff950645f54a1a3cab7a2d3420a034bb6df551";
+  "b12f140a2ff461cf0b24d24d0135e285889834324d7038e757028aa547ce54f4";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

@@ -253,13 +253,8 @@
     var TOOL_CANCEL = "cancel_call";
 
     // Wire-Formate der MCP-Apps-Spec (SEP-1865 / ext-apps 2026-01-26). METHOD_TOOLS_CALL
-    // ist der EINZIGE erlaubte App->Host-Sendeweg fuer Tool-Calls. Frueher feuerte das
-    // Widget zusaetzlich den ChatGPT-Adapter-Pfad (frueherer Konstantenname FORMAT_OPENAI,
-    // in claude.ai nicht vorhanden) und eine selbst erfundene Notification-Methode
-    // (frueherer Konstantenname METHOD_UI_TOOL_CALL): der Host beantwortete die unbekannte
-    // Methode mit einem JSON-RPC-Fehler, den er im Chat sichtbar machte. Diese Datei darf
-    // die frueheren Wire-Strings deshalb nirgends mehr woertlich enthalten (Spec-Gate,
-    // s. Test T-W1-call-F1).
+    // ist der EINZIGE erlaubte App->Host-Sendeweg fuer Tool-Calls; fruehere, erfundene
+    // Wire-Strings duerfen hier nirgends woertlich stehen (Spec-Gate, Test T-W1-call-F1).
     // METHOD_TOOL_RESULT = Kanal A (Host-Push, den der geteilte BIND_SCRIPT ohnehin
     // bindet - wir werten ihn zusaetzlich selbst aus, um Terminal-Status zu erkennen).
     var METHOD_TOOLS_CALL = "tools/call";
@@ -274,17 +269,12 @@
     var CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
     var CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
     var STATUS_AWAITING_CONFIRMATION = "awaiting_confirmation";
-    // place_call-Fehlerergebnis fuer einen schon verbrauchten Code (mcp-tools.js
-    // CONFIRMATION_USED_STATUS, dupliziert) - sprachunabhaengiges Maschinenfeld.
+    // place_call-Fehlerergebnis "Code schon verbraucht" (mcp-tools.js, dupliziert).
     var STATUS_CONFIRMATION_USED = "confirmation_used";
-    // Lokales Gedaechtnis "Code schon abgeschickt" (ueberlebt ein Neuladen der Karte, s.
-    // rememberConfirmationSent). Best-effort: ist der Speicher gesperrt (Sandbox ohne
-    // eigenen Ursprung), bleibt die Server-Antwort STATUS_CONFIRMATION_USED die Sicherung.
+    // "Code abgeschickt"-Gedaechtnis ueber ein Neuladen hinweg (rememberConfirmationSent).
     var SENT_CONFIRMATIONS_STORAGE_KEY = "hermes/call-confirmations-sent";
-    // FNV-1a-32 (Fingerabdruck statt Klartext-Code im Speicher, s. confirmationFingerprint).
-    var FNV_OFFSET_BASIS = 2166136261;
+    var FNV_OFFSET_BASIS = 2166136261; // FNV-1a-32, s. confirmationFingerprint
     var FNV_PRIME = 16777619;
-    var HEX_RADIX = 16;
     var CONFIRMATION_USED_HINT = "This confirmation was already sent — do not confirm again; check list_calls.";
     var UNCERTAIN_HINT = "Unclear whether the call was placed — do not confirm again; check list_calls.";
     // Antwortfrist: GROESSER als der Server-Hop-Timeout (180000, mcp-tools.js) + Marge.
@@ -315,18 +305,10 @@
       ? window.HermesI18n.t
       : function (key) { return key; };
 
-    // Anzeige-Labels fuer die failure_reason-Basis-Token aus
-    // src/telephony/failure-reason.js#FAILURE_REASON_BASE_TOKENS ("no-answer" | "busy" |
-    // "canceled" | "failed" | "not-placed" | "unreachable" | "result-unknown"); ein
-    // unbekanntes Token faellt auf "Failed" zurueck (s. failureReasonLabel weiter unten).
-    //
-    // OUTBOUND-E2 (Review-Blocker Runde 4, S2-A/G5): diese Tabelle ist NICHT die
-    // Klassifikation (die lebt einzig in failure-reason.js) - sie ist reine
-    // Praesentation, wie schon FAILURE_REASON_TEXTS (i18n/failure-reason-texts.js) ihre
-    // eigene, andersartige Formulierung (ganzer Satz statt kurzes Label) fuehrt. Die drei
-    // neuen Basis-Token muessen HIER genauso wie DORT eine Zeile bekommen - der
-    // Vollstaendigkeits-Waechter test/mcp-ui-widget-i18n.test.js (T-i18n-failure-labels)
-    // importiert FAILURE_REASON_BASE_TOKENS und faellt rot, wenn eine fehlt.
+    // Anzeige-Labels (reine Praesentation) fuer die failure_reason-Basis-Token aus
+    // src/telephony/failure-reason.js#FAILURE_REASON_BASE_TOKENS - die Klassifikation lebt
+    // nur dort; unbekannt -> "Failed" (failureReasonLabel). Ein neues Token braucht hier
+    // eine Zeile, sonst faellt T-i18n-failure-labels (test/mcp-ui-widget-i18n.test.js) rot.
     var FAILURE_REASON_LABELS = {
       "no-answer": "No answer",
       "busy": "Busy",
@@ -342,17 +324,10 @@
       "budget-exhausted": "Budget used up",
     };
 
-    // STATUS_VIEW: EIN kanonischer Eintrag pro Call-Status (dialing/in_progress/
-    // completed/failed/cancelled) statt vormals sechs paralleler Lookup-Maps ueber
-    // demselben Diskriminator (WING_STATUS_BY_CALL_STATUS, STATUS_PILL_LABEL,
-    // STATUS_PILL_CLASS, STATUS_PILL_DOT_STATUSES, HUD_PHASE_LABEL,
-    // RING_PRESET_BY_CALL_STATUS - H3-S2-1-Fix). One-Switch-Regel: ein neuer
-    // Call-Status braucht GENAU EINE neue STATUS_VIEW-Zeile, nicht sechs verstreute
-    // Map-Eintraege. Alle Werte 1:1 aus den vormaligen Maps uebernommen, nichts
-    // umbenannt/erfunden. Die 5 WingMark-Zustaende sind weiterhin fix vorgegeben
-    // (PLAN-MCP-WIDGET-BRANDING.md Abschnitt 3 + Kette T2) - kein sechster
-    // erfunden; cancelled faellt bewusst auf denselben wingStatus wie failed
-    // (Abschnitt 6, kein eigener Cancelled-State im Animation-Lab).
+    // STATUS_VIEW: EIN kanonischer Eintrag pro Call-Status (One-Switch-Regel: ein neuer
+    // Status braucht GENAU EINE Zeile). Die 5 WingMark-Zustaende sind fix
+    // (PLAN-MCP-WIDGET-BRANDING.md Abschnitt 3) - cancelled nutzt bewusst den wingStatus
+    // von failed (Abschnitt 6).
     var WING_STATUS_IDLE = "idle";
 
     // Ring-Geometrie (Olympus-HUD): rein dekorativ, kein echter Fortschritts-
@@ -368,13 +343,8 @@
     var RING_ARC_INTERRUPTED_GAP_PX = 23;
     var RING_PRESET_DEFAULT = { cls: "ring", dash: RING_CIRCUMFERENCE + " 0" };
 
-    // T2-02/S5: pillLabel/hudPhase tragen den Uebersetzungs-KEY, nicht mehr die beim
-    // Laden uebersetzte Zeichenkette - die Karte startet englisch (window.HermesI18n
-    // hat beim Modul-Lauf noch keine servergerenderte Sprache, s. widget-i18n.js) und
-    // schaltet ERST beim ersten Tool-Ergebnis um. Wuerde hier t(...) einmalig beim
-    // Laden aufgeloest, bliebe Pill/HUD-Unterzeile nach dem Umschalten englisch
-    // (updateStatusPill/updateHudPhase rufen t(view.pillLabel)/t(view.hudPhase) daher
-    // erst ZUR ANWENDEZEIT auf, s.u.).
+    // pillLabel/hudPhase tragen den Uebersetzungs-KEY: die Sprache steht erst mit dem ersten
+    // Tool-Ergebnis fest, t(...) laeuft deshalb erst zur Anwendezeit (updateStatusPill/-HudPhase).
     var STATUS_VIEW = {
       dialing: {
         wingStatus: "connecting",
@@ -496,15 +466,9 @@
       return Math.floor(s / 60) + ":" + (rest < 10 ? "0" + rest : rest);
     }
 
-    // "failed:487" -> Label von "failed".
-    // OUTBOUND-E3a (Befund D-5): ein unbekanntes/neues Basis-Token darf den Nutzer NIE
-    // ROH erreichen. Es faellt auf das vorhandene Sammel-Label "Failed" zurueck - kurz,
-    // uebersetzt, und fuer JEDEN Grund wahr (failureReason existiert nur an nicht
-    // erfolgreichen Anrufen). Das rohe Token bleibt der Diagnose vorbehalten: es steht
-    // unveraendert am Datensatz und im Log. Seit P5b (O-13 Teil 2) liefert das
-    // Maschinenfeld failure_reason (get_call_status) selbst nur noch das Basis-Token -
-    // der split(":") hier bleibt trotzdem: er ist die defensive Normalisierung eines
-    // host-gepushten Fremdwerts, dem das Widget nicht blind vertrauen darf.
+    // "failed:487" -> Label von "failed". Ein unbekanntes Token erreicht den Nutzer NIE roh,
+    // sondern als "Failed" (fuer jeden Grund wahr). split(":") = defensive Normalisierung
+    // eines host-gepushten Fremdwerts.
     function failureReasonLabel(raw) {
       if (raw === null || raw === undefined) return raw;
       var mapped = FAILURE_REASON_LABELS[String(raw).split(":")[0]];
@@ -615,20 +579,16 @@
       sendUncertainMessage();
     }
 
-    // Fingerabdruck Code+Ablauf: kein Klartext-Code im Speicher. KEIN Geheimnisschutz (der
-    // Suchraum des Codes ist klein) - er gehoert aber ohnehin zu einem schon abgeschickten,
-    // serverseitig verbrauchten Code.
+    // Kein Klartext-Code im Speicher; KEIN Geheimnisschutz (kleiner Suchraum) - der Code
+    // ist ohnehin schon abgeschickt.
     function confirmationFingerprint(confirmation) {
       var input = confirmation.code + "|" + confirmation.expiresAtMs;
       var hash = FNV_OFFSET_BASIS;
-      for (var i = 0; i < input.length; i++) {
-        hash ^= input.charCodeAt(i);
-        hash = Math.imul(hash, FNV_PRIME) >>> 0;
-      }
-      return hash.toString(HEX_RADIX);
+      for (var i = 0; i < input.length; i++) hash = Math.imul(hash ^ input.charCodeAt(i), FNV_PRIME) >>> 0;
+      return String(hash);
     }
 
-    // { fingerprint: expiresAtMs } - leer, wenn der Speicher fehlt, gesperrt oder kaputt ist.
+    // { fingerprint: expiresAtMs } - leer bei fehlendem/gesperrtem/kaputtem Speicher.
     function readSentConfirmations() {
       try {
         var parsed = JSON.parse(window.localStorage.getItem(SENT_CONFIRMATIONS_STORAGE_KEY) || "{}");
@@ -643,8 +603,8 @@
       return Object.prototype.hasOwnProperty.call(readSentConfirmations(), confirmationFingerprint(confirmation));
     }
 
-    // Beim Absenden gemerkt (nicht erst beim Erfolg): auch ein Neuladen WAEHREND der Antwort
-    // bietet keinen zweiten Klick an. Abgelaufene Eintraege fallen dabei heraus.
+    // Beim Absenden gemerkt (auch ein Neuladen WAEHREND der Antwort bietet keinen Klick mehr).
+    // Best-effort: gesperrter Speicher -> Sicherung ist die Server-Antwort confirmation_used.
     function rememberConfirmationSent(confirmation) {
       var sent = readSentConfirmations();
       var kept = {};
@@ -655,7 +615,7 @@
       try {
         window.localStorage.setItem(SENT_CONFIRMATIONS_STORAGE_KEY, JSON.stringify(kept));
       } catch (e) {
-        // Speicher gesperrt/voll: die Server-Antwort STATUS_CONFIRMATION_USED bleibt die Sicherung.
+        // gesperrt/voll: s. Kopfkommentar
       }
     }
 
@@ -832,16 +792,9 @@
       return view ? view.wingStatus : WING_STATUS_IDLE;
     }
 
-    // Spiegelt den Call-Status auf den Wing-Zustand: EIN Klassenwechsel auf dem
-    // CSS-Wrapper (Fallback-Pfad, Absolute Regel 3/Kette-Invariante T2) UND,
-    // falls die Canvas-Engine erfolgreich montiert wurde, ZUSAETZLICH
-    // engineHandle.setStatus() (H3, PLAN 6.2) - beide Pfade laufen immer
-    // parallel, kein Entweder-Oder. Wechselt NUR den Status-Modifier-Token
-    // (remove alter/add neuer wing--<status>-Klasse) statt den kompletten
-    // className zu ueberschreiben - die von wingSpan() gesetzte "wing--dark"-
-    // Klasse (Olympus-HUD-Karte ist immer dunkel) bleibt dadurch unangetastet
-    // und muss hier nicht ein zweites Mal hartcodiert werden (sonst Regression
-    // von Commit 0dca7ce bei jeder Aenderung an wing-markup.js).
+    // Spiegelt den Call-Status auf den Wing-Zustand: Klassenwechsel auf dem CSS-Wrapper
+    // (Fallback-Pfad) UND, falls montiert, engineHandle.setStatus() - beide immer parallel.
+    // Wechselt NUR den wing--<status>-Token, damit "wing--dark" (von wingSpan()) bleibt.
     function updateWingForStatus(status) {
       var mapped = wingStatusFor(status);
       var wing = doc.querySelector("[data-wing]");
@@ -973,13 +926,9 @@
       return tool === TOOL_GET_CALL_RESULT ? applyCallResult : applyCallStatus;
     }
 
-    // Der EINZIGE ausgehende Weg: JSON-RPC-postMessage "tools/call" an den Host, id-
-    // gematcht (Antwort siehe handleMessage, Kanal B). Das ready-Gate steht hier - an
-    // EINER Stelle fuer ALLE Aufrufer (Poll-Tick, get_call_result, Cancel-Klick): vor dem
-    // Handshake beantwortet der Host keinen Tool-Call. Rueckgabewert (true = tatsaechlich
-    // gesendet) ist Pflicht fuer jeden Aufrufer, der einen einmaligen Effekt (Fetch-Guard,
-    // optische Deaktivierung) an den Versand knuepft - sonst faellt der Effekt auf einen
-    // Aufruf, der der Host nie gesehen hat (s. fetchCallResultOnce/onCancelClick).
+    // Der EINZIGE ausgehende Weg: JSON-RPC-postMessage "tools/call", id-gematcht
+    // (handleMessage). Das ready-Gate steht hier fuer ALLE Aufrufer. Rueckgabe true =
+    // tatsaechlich gesendet - Pflicht fuer jeden einmaligen Effekt, der am Versand haengt.
     function sendToolCall(tool, args) {
       if (!window[UI_READY_FLAG]) return false;
       var parent = window.parent;
@@ -993,13 +942,8 @@
       return true;
     }
 
-    // callResultFetched wird NUR bei tatsaechlichem Versand gesetzt (Rueckgabewert von
-    // sendToolCall). Trifft die completed-Notification VOR dem Handshake ein (Kanal A ist
-    // nicht ready-gegated, s. Kommentar bei METHOD_TOOL_RESULT), schlaegt der Versand fehl
-    // und der Guard bleibt offen - verloren geht dadurch nichts: init() startet ueber
-    // whenUiReady(startPolling) so oder so einen Poll-Tick, sobald der Handshake steht;
-    // dessen Antwort ruft bei weiterhin completed erneut updateForStatus/fetchCallResultOnce
-    // auf, und dieser zweite Versuch trifft auf ready=true.
+    // callResultFetched NUR bei tatsaechlichem Versand. Vor dem Handshake bleibt der Guard
+    // offen; der erste Poll-Tick nach whenUiReady(startPolling) holt das Ergebnis nach.
     function fetchCallResultOnce() {
       if (callResultFetched) return;
       var callId = currentCallId();
@@ -1077,12 +1021,8 @@
       markResponse(data, dispatchFor(pendingTool));
     }
 
-    // Montiert die Wing-Canvas-Engine progressiv (PLAN 6.1/6.2). widget-catalog.js
-    // injiziert die Engine in <head>, VOR diesem Skript (siehe Kopf-Kommentar
-    // dieser Datei) - window.HermesWingCanvas ist deshalb hier bereits synchron
-    // verfuegbar. Bei jedem Fehlschlag (Engine fehlt, kein 2D-Context, Mount-
-    // Container/Bild fehlen) bleibt die bewaehrte CSS-WingMark sichtbar - NIE ein
-    // leeres Loch (Absolute Regel 3).
+    // Montiert die Wing-Canvas-Engine (in <head> VOR diesem Skript injiziert, also synchron
+    // verfuegbar). Bei jedem Fehlschlag bleibt die CSS-WingMark sichtbar - NIE ein leeres Loch.
     function mountWingEngine() {
       if (!(window.HermesWingCanvas && typeof window.HermesWingCanvas.mount === "function")) return;
       var host = doc.querySelector("[data-wing-canvas]");
