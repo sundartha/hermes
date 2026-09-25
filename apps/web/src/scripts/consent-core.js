@@ -8,8 +8,11 @@ export const CONSENT_VERSION = 1;
 export const CONSENT_CATEGORIES = Object.freeze(["statistics", "marketing"]);
 
 const UUID_BYTES = 16;
-const HEX_RADIX = 16;
-const HEX_PAD = 2;
+// Hex per Nachschlagen statt Number#toString: haelt apps/web frei von weiteren
+// toString/toLocale-Aufrufstellen (test/dashboard-i18n-surface.test.js, WEB-18).
+const HEX_DIGITS = "0123456789abcdef";
+const NIBBLE_BITS = 4;
+const NIBBLE_MASK = 0x0f;
 const VERSION_BYTE = 6;
 const VARIANT_BYTE = 8;
 const VERSION_MASK = 0x0f;
@@ -26,7 +29,9 @@ export function newConsentId(cryptoApi) {
   const bytes = cryptoApi.getRandomValues(new Uint8Array(UUID_BYTES));
   bytes[VERSION_BYTE] = (bytes[VERSION_BYTE] & VERSION_MASK) | VERSION_4;
   bytes[VARIANT_BYTE] = (bytes[VARIANT_BYTE] & VARIANT_MASK) | VARIANT_RFC4122;
-  const hex = [...bytes].map((byte) => byte.toString(HEX_RADIX).padStart(HEX_PAD, "0")).join("");
+  const hex = [...bytes]
+    .map((byte) => HEX_DIGITS[byte >> NIBBLE_BITS] + HEX_DIGITS[byte & NIBBLE_MASK])
+    .join("");
   return hex.replace(UUID_GROUPS, "$1-$2-$3-$4-$5");
 }
 
