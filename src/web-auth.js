@@ -111,6 +111,14 @@ function clearCookies(res, names) {
   }
 }
 
+// EINE Quelle (G5) fuer den Namen des Sitzungs-Cookies. Das Praefix __Host- ist kein
+// Schmuck, sondern eine vom Browser erzwungene Zusage: er nimmt das Cookie NUR mit
+// Secure, mit Path=/ und OHNE Domain an - eine (auch kompromittierte) Subdomain kann es
+// damit weder setzen noch ueberschreiben. cookieAttrs() erfuellt alle drei Bedingungen
+// bereits bedingungslos; der Praefix macht die Zusage nur pruefbar.
+// Preis, bewusst: der Name aendert sich, also endet beim Deploy JEDE laufende Sitzung.
+export const SESSION_COOKIE_NAME = "__Host-session";
+
 // Login-Flow-Cookies (state/pkce/nonce) als EINE Namensliste (G5) fuer die drei Cleanup-Stellen.
 const LOGIN_FLOW_COOKIE_NAMES = ["pkce_verifier", "oauth_state", "oidc_nonce"];
 
@@ -199,7 +207,7 @@ export function makeWebAuthRoutes(deps) {
     // WorkOS-Sign-out-Redirect bei /auth/logout. Dev-Login reicht sie nie durch (undefined ->
     // sessions.create() defaultet auf null, kein Verhaltenswechsel fuer den Dev-Pfad).
     const { id } = await sessions.create({ sub, tenantId, ttlSeconds, workosSessionId });
-    res.append("Set-Cookie", cookieAttrs("session", signValue(id, secret), ttlSeconds));
+    res.append("Set-Cookie", cookieAttrs(SESSION_COOKIE_NAME, signValue(id, secret), ttlSeconds));
     return { tenantId, id };
   }
 
@@ -306,14 +314,14 @@ export function makeWebAuthRoutes(deps) {
   // Formular). Alt-Sessions/Dev-Login OHNE workos_session_id -> weiterhin 204 ohne Body
   // (rein lokal, byte-identisch zum Bestand).
   router.post("/auth/logout", async (req, res) => {
-    const sessionId = readSignedCookie(req, "session", secret);
+    const sessionId = readSignedCookie(req, SESSION_COOKIE_NAME, secret);
     let workosSessionId = null;
     if (sessionId) {
       const row = await sessions.get(sessionId);
       workosSessionId = row ? row.workosSessionId : null;
       await sessions.invalidateById(sessionId);
     }
-    clearCookies(res, ["session"]);
+    clearCookies(res, [SESSION_COOKIE_NAME]);
     if (!workosSessionId) return res.status(204).end();
     res
       .status(200)
@@ -552,6 +560,25 @@ async function selectAccountAuth(c, sub) {
   return rows[0] || null;
 }
 
+// CL1-B5: Auswahlregel fuer accountByTenant. Der Vertragsende-Cleanup loescht den
+// WorkOS-User, laesst dessen account-Zeile aber stehen; kehrt der Kunde zurueck,
+// haengt der Email-Dedup einen zweiten sub auf denselben Tenant. Zwei Zeilen hiessen
+// bisher pauschal "mehrdeutig -> null", und email-abhaengige Funktionen (Dashboard-
+// Prefill, Newsletter-Empfaenger, Kuendigungsbestaetigung) degradierten still.
+// Regel: JUENGSTE Zeile gewinnt, solange ALLE Zeilen dieselbe Email tragen - dann ist
+// die Empfaengerfrage gar nicht mehrdeutig, egal wie viele subs es gibt. Tragen sie
+// UNTERSCHIEDLICHE Emails, bleibt es fail-closed bei null (nicht raten, B2C-1:1).
+// rows kommt vom Aufrufer bereits absteigend nach created_at sortiert (juengste zuerst).
+// Verglichen wird ueber normalizeEmail - dieselbe Identitaets-Definition wie im
+// Login-Dedup (G5), kein zweiter Email-Vergleichsbegriff.
+export function newestAccountIfUnanimousEmail(rows) {
+  if (rows.length === 0) return null;
+  const [newest] = rows;
+  const email = normalizeEmail(newest.email);
+  if (!rows.every((row) => normalizeEmail(row.email) === email)) return null;
+  return { sub: newest.sub, email: newest.email };
+}
+
 // ---- makeAccounts ----------------------------------------------------
 // Tenant + Account upsert beim ersten Login; Lesepfade fuer Middleware.
 //
@@ -624,18 +651,82 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
     },
 
     // A2-Bruecke (Achsen-Bruch A9): die Aktivierung kennt nur tenantId, das Profil keyt
-    // email. Reverse-Query zu upsertOnFirstLogin. Liefert {sub,email} fuer GENAU EINEN
-    // Account des Tenants, sonst null: 0 (Webhook vor Account-Anlage) ODER >1 (mehrdeutig,
-    // §5.6 B2C-1:1 - NICHT raten, fail-closed). account ist RLS-exempt (laeuft vor
-    // app.current_tenant, Muster resolve/setStatus). LIMIT 2 trennt eindeutig/mehrdeutig,
-    // ohne die ganze Liste zu laden.
+    // email. Reverse-Query zu upsertOnFirstLogin. Liefert {sub,email} fuer den Tenant,
+    // sonst null: 0 Zeilen (Webhook vor Account-Anlage) ODER mehrere Zeilen mit
+    // UNTERSCHIEDLICHEN Emails (echt mehrdeutig, §5.6 B2C-1:1 - NICHT raten, fail-closed).
+    // Tragen mehrere Zeilen dieselbe Email (CL1-B5: Vertragsende-Cleanup loescht den
+    // WorkOS-User, nicht die account-Zeile - ein zurueckkehrender Kunde haengt einen
+    // zweiten sub an denselben Tenant), gewinnt die JUENGSTE - s.
+    // newestAccountIfUnanimousEmail. account ist RLS-exempt (laeuft vor
+    // app.current_tenant, Muster resolve/setStatus).
     async accountByTenant(tenantId) {
       return runner.withClient(async (c) => {
+        // ORDER BY created_at DESC = juengste Zeile zuerst (sub ASC nur als stabiler
+        // Tie-Break bei identischem Zeitstempel - deterministisch statt Zufalls-
+        // reihenfolge). KEIN LIMIT mehr: die Einstimmigkeitsregel muss JEDE Zeile des
+        // Tenants sehen; ein LIMIT koennte Einstimmigkeit behaupten, die nicht gilt
+        // (fail-open). Ein Tenant hat eine Handvoll Accounts, keine Liste.
         const { rows } = await c.query(
-          `SELECT sub, email FROM account WHERE tenant_id = $1 LIMIT 2`,
+          `SELECT sub, email FROM account WHERE tenant_id = $1 ORDER BY created_at DESC, sub ASC`,
           [tenantId],
         );
-        return rows.length === 1 ? rows[0] : null;
+        return newestAccountIfUnanimousEmail(rows);
+      });
+    },
+
+    // ---- CL2: Lesepfad des Abgleichs verwaister account-Zeilen --------------------
+    // Liefert die Zeilen JEDES Tenants, bei dem eine Altlast moeglich ist: entweder haengen
+    // mehrere account-Zeilen am selben Tenant, oder tenant.idp_subject zeigt auf gar keine
+    // Zeile mehr. Beides entsteht nach einem Vertragsende: der Cleanup loescht die
+    // WorkOS-Identitaet, laesst ihre account-Zeile aber stehen, und der naechste Login haengt
+    // eine weitere Zeile an denselben (geparkten) Tenant.
+    // Bewusst NUR Kandidaten, nicht die ganze Tabelle: der Abgleich fragt pro Zeile bei
+    // WorkOS nach, und ein Lauf ueber alle Accounts waere eine Fremdlast ohne Erkenntnis.
+    // Die Entscheidung, WELCHE Zeile weg darf, trifft dieser Lesepfad NICHT - er weiss
+    // nichts ueber tot/lebendig (s. orphan-account-reconcile.js). Read-only, RLS-exempt wie
+    // die uebrigen account-Pfade.
+    async accountsForOrphanReconcile() {
+      return runner.withClient(async (client) => {
+        const { rows } = await client.query(
+          `SELECT t.id AS "tenantId", t.idp_subject AS "idpSubject",
+                  a.sub, a.email, a.created_at AS "createdAt"
+             FROM tenant t JOIN account a ON a.tenant_id = t.id
+            WHERE t.id IN (SELECT tenant_id FROM account GROUP BY tenant_id HAVING count(*) > 1)
+               OR (t.idp_subject IS NOT NULL
+                   AND t.idp_subject NOT IN (SELECT sub FROM account WHERE tenant_id = t.id))
+            ORDER BY t.id, a.created_at`,
+        );
+        return rows;
+      });
+    },
+
+    // Entfernt EINE account-Zeile. Nur fuer den Abgleich verwaister Zeilen gedacht; der
+    // Aufrufer hat vorher bei WorkOS bestaetigt, dass diese Identitaet nicht mehr existiert,
+    // UND dass mindestens eine andere Zeile des Tenants stehen bleibt. Warum diese Bedingung
+    // ausserhalb liegt: account.email ist der EINZIGE Email-Anker am Tenant (es gibt keinen
+    // tenantByEmail-Pfad) - faellt die letzte Zeile, ist der Tenant beim naechsten Login per
+    // Email unauffindbar und der Rueckkehrer bekaeme einen leeren Tenant ohne Historie und
+    // ohne stripe_customer_id. session.sub haengt per FK CASCADE daran: die Sessions dieser
+    // toten Identitaet verschwinden mit - sie waeren ohnehin nicht mehr autorisierbar.
+    async dropAccount(sub) {
+      return runner.withClient(async (client) => {
+        const { rows } = await client.query(`DELETE FROM account WHERE sub = $1 RETURNING sub`, [sub]);
+        return rows.length > 0;
+      });
+    },
+
+    // Setzt den Identitaetsanker des Tenants. tenant.idp_subject bestimmt, WELCHE
+    // WorkOS-Identitaet das naechste Vertragsende loescht (contract-end-cleanup.js). Zeigt er
+    // nach einer Rueckkehr auf den laengst geloeschten Alt-sub, laeuft die Loeschung gegen
+    // einen Geist - 404 zaehlt dort als Erfolg - und die LEBENDE Identitaet bleibt stehen:
+    // eine nicht erfuellte Loeschpflicht, die niemandem auffaellt.
+    async setIdpSubject(tenantId, sub) {
+      return runner.withClient(async (client) => {
+        const { rows } = await client.query(
+          `UPDATE tenant SET idp_subject = $1 WHERE id = $2 RETURNING id`,
+          [sub, tenantId],
+        );
+        return rows.length > 0;
       });
     },
 
@@ -689,7 +780,7 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
 // webAuthAllowPending nicht auseinanderdriften. Fail-closed: kein Detail-Leak, kein
 // Token-/Cookie-Logging (der Aufrufer faengt unerwartete Fehler generisch ab).
 async function resolveWebSession({ secret, sessions, accounts }, req) {
-  const sessionId = readSignedCookie(req, "session", secret);
+  const sessionId = readSignedCookie(req, SESSION_COOKIE_NAME, secret);
   if (!sessionId) return null;
   const row = await sessions.get(sessionId);
   if (!row || row.invalidated_at != null || new Date(row.expires_at) <= new Date()) return null;

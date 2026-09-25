@@ -15,8 +15,15 @@ import "../styles/fonts.css";
 import "../styles/hermes.css";
 import { LOGIN_URL } from "../lib/routes.js";
 
+// Sprache: die Startseite ist seit 2026-09-10 ENGLISCH als Default — Englisch
+// steht im Markup (und ist damit die indexierte Fassung), Deutsch liegt als
+// Woerterbuch in scripts/hermes-scroll.js und wird per Umschalter zur Laufzeit
+// eingesetzt. Umschalter-Reihenfolge ueberall EN | DE.
+//
 // Rechtstexte direkt aus dem Content-Verzeichnis — DIESELBE Quelle, aus der
 // auch /datenschutz, /impressum und /agb gebaut werden. Kein zweiter Textstand.
+// Die Rechtsdokumente selbst bleiben DEUTSCH (verbindlicher Wortlaut); nur ihre
+// Reiter-Beschriftungen folgen der Seitensprache.
 import HermesDemo from "../components/HermesDemo.astro";
 import CookieConsent from "../components/site/CookieConsent.astro";
 import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
@@ -24,9 +31,9 @@ import privacy from "../data/legal/privacy.de.json";
 import imprint from "../data/legal/imprint.de.json";
 import terms from "../data/legal/terms.de.json";
 
-const title = "Hermes — Gib deiner KI eine Telefonnummer";
+const title = "Hermes — Give your AI a phone number";
 const description =
-  "Hermes nimmt Anrufe an und führt sie für dich. Ein Anschluss über MCP — und deine KI hat eine Stimme.";
+  "Hermes answers calls and handles them for you. One connection over MCP — and your AI gets a voice.";
 
 const MCP_URL = "https://app.sundartha.com/mcp";
 const MCP_CMD = `claude mcp add --transport http hermes ${MCP_URL}`;
@@ -36,14 +43,14 @@ const CONTACT = "kontakt@sundartha.com";
 // Dokument (kein contact.de.json) — dafuer steht der mailto-Link, so wie es
 // die heutige Fussnavigation in Site.astro auch haelt.
 const legalDocs = [
-  { slug: "privacy", href: "/datenschutz", label: "Datenschutz", i18n: "privacy", doc: privacy },
-  { slug: "imprint", href: "/impressum", label: "Impressum", i18n: "imprint", doc: imprint },
-  { slug: "terms", href: "/agb", label: "AGB", i18n: "terms", doc: terms },
+  { slug: "privacy", href: "/datenschutz", label: "Privacy", i18n: "privacy", doc: privacy },
+  { slug: "imprint", href: "/impressum", label: "Imprint", i18n: "imprint", doc: imprint },
+  { slug: "terms", href: "/agb", label: "Terms", i18n: "terms", doc: terms },
 ];
 ---
 
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <!-- viewport-fit=cover: am iPhone reicht die Buehne bis unter die Statusleiste
@@ -61,7 +68,7 @@ const legalDocs = [
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={new URL(Astro.url.pathname, Astro.site)} />
-    <meta property="og:locale" content="de_DE" />
+    <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary" />
   </head>
   <body>
@@ -74,8 +81,8 @@ const legalDocs = [
           <div class="scrim-veil" aria-hidden="true"></div>
 
           <!-- ------------------------------------------------ Navigation -->
-          <nav class="nav-desktop" aria-label="Hauptnavigation">
-            <a class="lockup" href="/" aria-label="Hermes — Startseite">
+          <nav class="nav-desktop" aria-label="Main navigation">
+            <a class="lockup" href="/" aria-label="Hermes — home">
               <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
               <span class="lockup__text">
                 <span class="lockup__name">HERMES</span>
@@ -83,24 +90,24 @@ const legalDocs = [
               </span>
             </a>
             <span class="nav-actions">
-              <button class="nav-link" type="button" data-goto="howto:1" data-i18n="howItWorks">So funktioniert's</button>
-              <button class="nav-link" type="button" data-goto="price:2" data-i18n="pricing">Preise</button>
-              <button class="nav-link" type="button" data-goto="dev:3" data-i18n="forDevs">Für Entwickler</button>
+              <button class="nav-link" type="button" data-goto="howto:1" data-i18n="howItWorks">How it works</button>
+              <button class="nav-link" type="button" data-goto="price:2" data-i18n="pricing">Pricing</button>
+              <button class="nav-link" type="button" data-goto="dev:3" data-i18n="forDevs">For developers</button>
               <span class="lang">
-                <button class="lang__opt" type="button" data-lang="de" aria-pressed="true">DE</button>
+                <button class="lang__opt" type="button" data-lang="en" aria-pressed="true">EN</button>
                 <span class="lang__sep" aria-hidden="true">/</span>
-                <button class="lang__opt" type="button" data-lang="en" aria-pressed="false">EN</button>
+                <button class="lang__opt" type="button" data-lang="de" aria-pressed="false">DE</button>
               </span>
               <!-- Owner-Feedback 2026-08-14: oben rechts NICHT noch einmal "Nummer holen" (hat der Hero schon). -->
               <!-- Login als ruhiger Textlink, Registrieren als Pillen-CTA (klassisches Muster). -->
               <!-- BEIDE Ziele bewusst LOGIN_URL: Login = Registrierung (Account entsteht beim ersten OIDC-Login, s. lib/routes.js) — reine Nutzerfuehrung, kein zweiter Funnel. -->
-              <a class="nav-link" href={LOGIN_URL} data-i18n="logIn">Login</a>
-              <a class="btn-solid" href={LOGIN_URL} data-i18n="signUp">Registrieren</a>
+              <a class="nav-link" href={LOGIN_URL} data-i18n="logIn">Log in</a>
+              <a class="btn-solid" href={LOGIN_URL} data-i18n="signUp">Sign up</a>
             </span>
           </nav>
 
           <div class="nav-mobile">
-            <a class="lockup" href="/" aria-label="Hermes — Startseite">
+            <a class="lockup" href="/" aria-label="Hermes — home">
               <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
               <span class="lockup__text">
                 <span class="lockup__name">HERMES</span>
@@ -110,8 +117,8 @@ const legalDocs = [
             <!-- Owner-Feedback 2026-08-26: Login auch auf dem Handy DIREKT in der Leiste sichtbar. -->
             <!-- Im Menü-Blatt bleiben Login + Registrieren zusätzlich stehen. -->
             <span class="nav-mobile__actions">
-              <a class="nav-link nav-mobile__login" href={LOGIN_URL} data-i18n="logIn">Login</a>
-              <button class="burger" type="button" data-open-sheet="menu" aria-label="Menü öffnen">
+              <a class="nav-link nav-mobile__login" href={LOGIN_URL} data-i18n="logIn">Log in</a>
+              <button class="burger" type="button" data-open-sheet="menu" aria-label="Open menu">
                 <span aria-hidden="true"></span>
                 <span aria-hidden="true"></span>
               </button>
@@ -122,72 +129,72 @@ const legalDocs = [
           <div class="hero-inner">
             <div class="hero-pad">
               <div class="hero-copy">
-                <h1 class="hero-title" data-i18n="heroTitle"><span class="l1">Gib deiner KI</span> <span>eine <em>Telefonnummer</em>.</span></h1>
-                <p class="hero-lead" data-i18n="heroLead">Hermes nimmt Anrufe an und führt sie für dich. Ein Anschluss über <strong>MCP</strong> — und deine KI hat eine Stimme.</p>
+                <h1 class="hero-title" data-i18n="heroTitle"><span class="l1">Give your AI</span> <span>a <em>phone number</em>.</span></h1>
+                <p class="hero-lead" data-i18n="heroLead">Hermes answers calls and handles them for you. One connection over <strong>MCP</strong> — and your AI gets a voice.</p>
                 <div class="hero-actions">
-                  <a class="btn-solid btn-solid--hero" href={LOGIN_URL} data-i18n="getNumber">Nummer holen</a>
-                  <button class="btn-ghost" type="button" data-goto="howto:1" data-i18n="howItWorks">So funktioniert's</button>
+                  <a class="btn-solid btn-solid--hero" href={LOGIN_URL} data-i18n="getNumber">Get a number</a>
+                  <button class="btn-ghost" type="button" data-goto="howto:1" data-i18n="howItWorks">How it works</button>
                 </div>
               </div>
             </div>
           </div>
 
           <!-- ------------------------------------ Ebene 2: So funktioniert's -->
-          <section class="howto-layer" aria-label="So funktioniert's">
-            <h2 class="layer-title" data-i18n="howtoTitle">Ein Anschluss, <em>zwei Minuten</em>.</h2>
-            <p class="layer-lead" data-i18n="howtoLead">Ein Anschluss über <strong>MCP</strong>, kein Setup — deine KI ist in unter zwei Minuten unter einer echten Nummer erreichbar.</p>
+          <section class="howto-layer" aria-label="How it works">
+            <h2 class="layer-title" data-i18n="howtoTitle">One connection, <em>two minutes</em>.</h2>
+            <p class="layer-lead" data-i18n="howtoLead">One connection over <strong>MCP</strong>, no setup — your AI is reachable on a real number in under two minutes.</p>
             <div class="demo-frame">
-              <HermesDemo />
+              <HermesDemo lang="en" />
             </div>
           </section>
 
           <!-- ------------------------------------------- Ebene 3: Preise -->
-          <section class="price-layer" aria-label="Preise">
-            <h2 class="layer-title" data-i18n="priceTitle">Zwei Tarife, <em>keine Überraschungen</em>.</h2>
-            <p class="layer-lead" data-i18n="priceLead">Wähle das Paket, welches zu dir passt. <strong>Monatlich kündbar</strong>, <strong>keine versteckten Kosten</strong>.</p>
+          <section class="price-layer" aria-label="Pricing">
+            <h2 class="layer-title" data-i18n="priceTitle">Two plans, <em>no surprises</em>.</h2>
+            <p class="layer-lead" data-i18n="priceLead">Choose the plan that fits you. <strong>Cancel monthly</strong>, <strong>no hidden costs</strong>.</p>
             <div class="price-grid">
               <div class="plan">
                 <span class="plan__head">
                   <span class="plan__label" data-i18n="starterLabel">Starter</span>
                 </span>
-                <span class="plan__price">4,99 €<span class="plan__per" data-i18n="perMonth">/ Monat</span></span>
+                <span class="plan__price"><span data-i18n="starterPrice">€4.99</span><span class="plan__per" data-i18n="perMonth">/ month</span></span>
                 <span class="plan__features">
-                  <span data-i18n="starterF1"><strong>30 Minuten</strong> Gespräche pro Monat</span>
-                  <span data-i18n="starterF2">Nimmt jeden Anruf für dich an</span>
-                  <span data-i18n="starterF3">Fasst jedes Gespräch für dich zusammen</span>
-                  <span data-i18n="starterF4">E-Mail-Support</span>
+                  <span data-i18n="starterF1"><strong>30 minutes</strong> of calls per month</span>
+                  <span data-i18n="starterF2">Answers every call for you</span>
+                  <span data-i18n="starterF3">Summarizes every call for you</span>
+                  <span data-i18n="starterF4">Email support</span>
                 </span>
-                <a class="plan__cta" href={LOGIN_URL} data-i18n="starterCta">Starter wählen</a>
+                <a class="plan__cta" href={LOGIN_URL} data-i18n="starterCta">Choose Starter</a>
               </div>
               <div class="plan plan--featured">
                 <span class="plan__head">
                   <span class="plan__label" data-i18n="businessLabel">Business</span>
-                  <span class="plan__badge" data-i18n="popular">Beliebt</span>
+                  <span class="plan__badge" data-i18n="popular">Popular</span>
                 </span>
-                <span class="plan__price">9,99 €<span class="plan__per" data-i18n="perMonth">/ Monat</span></span>
+                <span class="plan__price"><span data-i18n="businessPrice">€9.99</span><span class="plan__per" data-i18n="perMonth">/ month</span></span>
                 <span class="plan__features">
-                  <span data-i18n="businessF1"><strong>120 Minuten</strong> Gespräche pro Monat</span>
-                  <span data-i18n="businessF2">Nimmt an <em>und</em> telefoniert für dich raus</span>
-                  <span data-i18n="businessF3">Erledigt Aufgaben eigenständig für dich</span>
-                  <span data-i18n="businessF4">Priorisierter Support</span>
+                  <span data-i18n="businessF1"><strong>120 minutes</strong> of calls per month</span>
+                  <span data-i18n="businessF2">Answers <em>and</em> calls out for you</span>
+                  <span data-i18n="businessF3">Handles tasks independently for you</span>
+                  <span data-i18n="businessF4">Priority support</span>
                 </span>
-                <a class="plan__cta" href={LOGIN_URL} data-i18n="businessCta">Business wählen</a>
+                <a class="plan__cta" href={LOGIN_URL} data-i18n="businessCta">Choose Business</a>
               </div>
             </div>
-            <p class="layer-note" data-i18n="footnote">Minuten aufgebraucht? Du bekommst einen Hinweis — kein automatischer Aufpreis.</p>
+            <p class="layer-note" data-i18n="footnote">Out of minutes? You get a heads-up — never an automatic surcharge.</p>
           </section>
 
           <!-- -------------------------------------- Ebene 4: Entwickler -->
-          <section class="dev-layer" aria-label="Für Entwickler">
-            <h2 class="layer-title" data-i18n="devTitle">Ein Endpoint, <em>zwei Wege</em>.</h2>
-            <p class="layer-lead" data-i18n="devLead">Hermes ist ein <strong>MCP</strong>-Server. Verbinde ihn im KI-Tool deiner Wahl oder direkt aus dem Terminal.</p>
+          <section class="dev-layer" aria-label="For developers">
+            <h2 class="layer-title" data-i18n="devTitle">One endpoint, <em>two ways</em>.</h2>
+            <p class="layer-lead" data-i18n="devLead">Hermes is an <strong>MCP</strong> server. Connect it in the AI tool of your choice or straight from the terminal.</p>
             <div class="dev-grid">
               <div class="dev-card" data-dev-card="a">
                 <span class="dev-card__head">
                   <span class="dev-num">01</span>
                   <span class="dev-card__titles">
-                    <span class="dev-eyebrow" data-i18n="devWayA">Im KI-Tool</span>
-                    <span class="dev-card__title" data-i18n="devWayATitle">Als Konnektor hinzufügen</span>
+                    <span class="dev-eyebrow" data-i18n="devWayA">In your AI tool</span>
+                    <span class="dev-card__title" data-i18n="devWayATitle">Add it as a connector</span>
                   </span>
                 </span>
                 <span class="dev-window">
@@ -195,11 +202,11 @@ const legalDocs = [
                     <span class="dev-dot" aria-hidden="true"></span>
                     <span class="dev-dot" aria-hidden="true"></span>
                     <span class="dev-dot" aria-hidden="true"></span>
-                    <span class="dev-bar__title" data-i18n="devWindowTitle">Einstellungen › Konnektoren</span>
+                    <span class="dev-bar__title" data-i18n="devWindowTitle">Settings › Connectors</span>
                   </span>
                   <span class="dev-form-body">
                     <span class="dev-addrow">
-                      <span class="dev-addrow__plus" aria-hidden="true">+</span><span data-i18n="devAddRow">Benutzerdefinierten Connector</span>
+                      <span class="dev-addrow__plus" aria-hidden="true">+</span><span data-i18n="devAddRow">Add custom connector</span>
                     </span>
                     <span class="dev-arrow dev-arrow--1" aria-hidden="true"><span>↓</span></span>
                     <span class="dev-field dev-field--1">
@@ -208,11 +215,11 @@ const legalDocs = [
                     </span>
                     <span class="dev-arrow dev-arrow--2" aria-hidden="true"><span>↓</span></span>
                     <span class="dev-field dev-field--2">
-                      <span class="dev-field__label" data-i18n="devFieldUrl">Server-URL</span>
+                      <span class="dev-field__label" data-i18n="devFieldUrl">Server URL</span>
                       <span class="dev-field__url">{MCP_URL}</span>
-                      <button class="dev-copy" type="button" data-copy={MCP_URL} data-i18n="copyLabel">Kopieren</button>
+                      <button class="dev-copy" type="button" data-copy={MCP_URL} data-i18n="copyLabel">Copy</button>
                     </span>
-                    <span class="dev-connect" data-i18n="devConnectBtn">Verbinden</span>
+                    <span class="dev-connect" data-i18n="devConnectBtn">Connect</span>
                   </span>
                 </span>
               </div>
@@ -221,8 +228,8 @@ const legalDocs = [
                 <span class="dev-card__head">
                   <span class="dev-num">02</span>
                   <span class="dev-card__titles">
-                    <span class="dev-eyebrow" data-i18n="devWayB">Im Terminal</span>
-                    <span class="dev-card__title" data-i18n="devWayBTitle">Mit einem Befehl</span>
+                    <span class="dev-eyebrow" data-i18n="devWayB">In the terminal</span>
+                    <span class="dev-card__title" data-i18n="devWayBTitle">With a single command</span>
                   </span>
                 </span>
                 <span class="dev-window dev-window--dark">
@@ -233,35 +240,35 @@ const legalDocs = [
                       <span class="dev-dot" aria-hidden="true"></span>
                       <span class="dev-bar__title" data-i18n="devTerminalTitle">zsh — hermes</span>
                     </span>
-                    <button class="dev-copy" type="button" data-copy={MCP_CMD} data-i18n="copyLabel">Kopieren</button>
+                    <button class="dev-copy" type="button" data-copy={MCP_CMD} data-i18n="copyLabel">Copy</button>
                   </span>
                   <span class="dev-term-body">
                     <span class="dev-term-out">
                       <span class="dev-cmd"><span class="dev-cmd__prompt">$ </span>claude mcp add --transport http hermes \</span>
                       <span class="dev-cmd2"><span class="dev-cmd2__text">&nbsp;&nbsp;&nbsp;&nbsp;{MCP_URL}</span><span class="dev-caret" aria-hidden="true"></span></span>
-                      <span class="dev-out dev-out--1" data-i18n="devOut1">✓ MCP-Server „hermes“ hinzugefügt</span>
-                      <span class="dev-out dev-out--2" data-i18n="devOut2">✓ Verbunden · Tools verfügbar</span>
+                      <span class="dev-out dev-out--1" data-i18n="devOut1">✓ Added MCP server “hermes”</span>
+                      <span class="dev-out dev-out--2" data-i18n="devOut2">✓ Connected · tools available</span>
                     </span>
                     <span class="dev-ask">
-                      <span class="dev-ask__label" data-i18n="devToolsLabel">Frag danach — zum Beispiel</span>
-                      <span class="dev-ask__line dev-ask-1" data-i18n="devAsk1">„Wer hat heute angerufen und was wollten sie?“</span>
-                      <span class="dev-ask__line dev-ask-2" data-i18n="devAsk2">„Ruf Herrn Müller an und verschiebe den Termin auf Donnerstag.“</span>
+                      <span class="dev-ask__label" data-i18n="devToolsLabel">Just ask — for example</span>
+                      <span class="dev-ask__line dev-ask-1" data-i18n="devAsk1">“Who called today, and what did they want?”</span>
+                      <span class="dev-ask__line dev-ask-2" data-i18n="devAsk2">“Call Mr. Müller and move his appointment to Thursday.”</span>
                     </span>
                   </span>
                 </span>
               </div>
             </div>
-            <p class="layer-note" data-i18n="devFootnote">Streamable HTTP, OAuth beim ersten Verbinden. Läuft mit Claude, Codex und jedem MCP-Client.</p>
+            <p class="layer-note" data-i18n="devFootnote">Streamable HTTP, OAuth on first connect. Works with Claude, Codex and any MCP client.</p>
           </section>
 
           <!-- -------------------------------------------------- Fussband -->
           <footer class="site-footer">
-            <span class="site-footer__copy" data-i18n="footerCopy">© Sundartha — Hermes, dein Telefonassistent</span>
+            <span class="site-footer__copy" data-i18n="footerCopy">© Sundartha — Hermes, your phone assistant</span>
             <span class="site-footer__nav">
-              <button class="site-footer__link" type="button" data-goto="howto:1" data-i18n="howItWorks">So funktioniert's</button>
-              <button class="site-footer__link" type="button" data-goto="price:2" data-i18n="pricing">Preise</button>
-              <button class="site-footer__link" type="button" data-goto="dev:3" data-i18n="forDevs">Für Entwickler</button>
-              <a class="site-footer__link" href={LOGIN_URL} data-i18n="getNumber">Nummer holen</a>
+              <button class="site-footer__link" type="button" data-goto="howto:1" data-i18n="howItWorks">How it works</button>
+              <button class="site-footer__link" type="button" data-goto="price:2" data-i18n="pricing">Pricing</button>
+              <button class="site-footer__link" type="button" data-goto="dev:3" data-i18n="forDevs">For developers</button>
+              <a class="site-footer__link" href={LOGIN_URL} data-i18n="getNumber">Get a number</a>
               {legalDocs.map((entry) => (
                 <a class="site-footer__link" href={entry.href} data-legal-open={entry.slug} data-i18n={entry.i18n}>{entry.label}</a>
               ))}
@@ -270,8 +277,8 @@ const legalDocs = [
                    der Sprachschalter auf EN steht (der Wortlaut ist nicht frei waehlbar,
                    s. Bericht). -->
               <a class="site-footer__link" href="/kuendigen">Verträge kündigen</a>
-              <a class="site-footer__link" href={`mailto:${CONTACT}`} data-i18n="contact">Kontakt</a>
-              <button class="site-footer__link" type="button" data-consent-open data-i18n="cookieSettings">Cookie-Einstellungen</button>
+              <a class="site-footer__link" href={`mailto:${CONTACT}`} data-i18n="contact">Contact</a>
+              <button class="site-footer__link" type="button" data-consent-open data-i18n="cookieSettings">Cookie settings</button>
             </span>
           </footer>
 
@@ -286,7 +293,7 @@ const legalDocs = [
 
     <!-- Am Handy wird nicht gescrollt: die drei Sektionen und das Menue
          oeffnen sich als Vollbild. Auf dem Desktop dient nur das Rechts-Blatt. -->
-    <div class="sheet" data-sheet="howto" data-open="0" role="dialog" aria-modal="true" aria-label="So funktioniert's">
+    <div class="sheet" data-sheet="howto" data-open="0" role="dialog" aria-modal="true" aria-label="How it works">
       <div class="sheet__bg" aria-hidden="true"></div>
       <div class="sheet__veil" aria-hidden="true"></div>
       <div class="sheet__top" aria-hidden="true"></div>
@@ -298,42 +305,42 @@ const legalDocs = [
             <span class="lockup__by">by Sundartha</span>
           </span>
         </span>
-        <button class="sheet__close" type="button" data-close-sheet aria-label="Schließen">×</button>
+        <button class="sheet__close" type="button" data-close-sheet aria-label="Close">×</button>
       </div>
-      <span class="sheet__title" data-i18n="howtoTitle">Ein Anschluss, <em>zwei Minuten</em>.</span>
-      <p class="sheet__lead" data-i18n="howtoLead">Ein Anschluss über <strong>MCP</strong>, kein Setup — deine KI ist in unter zwei Minuten unter einer echten Nummer erreichbar.</p>
+      <span class="sheet__title" data-i18n="howtoTitle">One connection, <em>two minutes</em>.</span>
+      <p class="sheet__lead" data-i18n="howtoLead">One connection over <strong>MCP</strong>, no setup — your AI is reachable on a real number in under two minutes.</p>
       <div class="sheet__demo">
-        <HermesDemo />
+        <HermesDemo lang="en" />
       </div>
       <div class="sheet__card">
         <span class="step">
           <span class="step__num">01</span>
           <span class="step__body">
-            <span class="step__title" data-i18n="step1Title">Nummer holen</span>
-            <span class="step__text" data-i18n="step1Desc">Eine echte Rufnummer, in zwei Minuten aktiv. Kein Vertrag, keine Hardware.</span>
+            <span class="step__title" data-i18n="step1Title">Get a number</span>
+            <span class="step__text" data-i18n="step1Desc">A real phone number, active in two minutes. No contract, no hardware.</span>
           </span>
         </span>
         <span class="rule" aria-hidden="true"></span>
         <span class="step">
           <span class="step__num">02</span>
           <span class="step__body">
-            <span class="step__title" data-i18n="step2Title">KI verbinden</span>
-            <span class="step__text" data-i18n="step2Desc">Ein Anschluss über MCP. Deine KI weiß danach, wer angerufen hat und was zu tun ist.</span>
+            <span class="step__title" data-i18n="step2Title">Connect your AI</span>
+            <span class="step__text" data-i18n="step2Desc">One connection over MCP. Your AI then knows who called and what to do.</span>
           </span>
         </span>
         <span class="rule" aria-hidden="true"></span>
         <span class="step">
           <span class="step__num">03</span>
           <span class="step__body">
-            <span class="step__title" data-i18n="step3Title">Abnehmen lassen</span>
-            <span class="step__text" data-i18n="step3Desc">Hermes spricht, hört zu, vereinbart Termine und schreibt mit. Du liest das Protokoll.</span>
+            <span class="step__title" data-i18n="step3Title">Let it answer</span>
+            <span class="step__text" data-i18n="step3Desc">Hermes talks, listens, books appointments and takes notes. You read the summary.</span>
           </span>
         </span>
       </div>
-      <a class="sheet__cta" href={LOGIN_URL} data-i18n="getNumber">Nummer holen</a>
+      <a class="sheet__cta" href={LOGIN_URL} data-i18n="getNumber">Get a number</a>
     </div>
 
-    <div class="sheet" data-sheet="price" data-open="0" role="dialog" aria-modal="true" aria-label="Preise">
+    <div class="sheet" data-sheet="price" data-open="0" role="dialog" aria-modal="true" aria-label="Pricing">
       <div class="sheet__bg" aria-hidden="true"></div>
       <div class="sheet__veil" aria-hidden="true"></div>
       <div class="sheet__top" aria-hidden="true"></div>
@@ -345,47 +352,47 @@ const legalDocs = [
             <span class="lockup__by">by Sundartha</span>
           </span>
         </span>
-        <button class="sheet__close" type="button" data-close-sheet aria-label="Schließen">×</button>
+        <button class="sheet__close" type="button" data-close-sheet aria-label="Close">×</button>
       </div>
-      <span class="sheet__title" data-i18n="priceTitle">Zwei Tarife, <em>keine Überraschungen</em>.</span>
-      <p class="sheet__lead" data-i18n="priceLead">Wähle das Paket, welches zu dir passt. <strong>Monatlich kündbar</strong>, <strong>keine versteckten Kosten</strong>.</p>
+      <span class="sheet__title" data-i18n="priceTitle">Two plans, <em>no surprises</em>.</span>
+      <p class="sheet__lead" data-i18n="priceLead">Choose the plan that fits you. <strong>Cancel monthly</strong>, <strong>no hidden costs</strong>.</p>
       <div class="sheet-plans">
         <div class="sheet-plan">
           <span class="sheet-plan__head">
             <span class="sheet-plan__labels">
               <span class="sheet-plan__label" data-i18n="starterLabel">Starter</span>
             </span>
-            <span class="sheet-plan__price">4,99 €<span class="sheet-plan__per" data-i18n="perMonth">/ Monat</span></span>
+            <span class="sheet-plan__price"><span data-i18n="starterPrice">€4.99</span><span class="sheet-plan__per" data-i18n="perMonth">/ month</span></span>
           </span>
           <span class="sheet-plan__features">
-            <span data-i18n="starterF1"><strong>30 Minuten</strong> Gespräche pro Monat</span>
-            <span data-i18n="starterF2">Nimmt jeden Anruf für dich an</span>
-            <span data-i18n="starterF3">Fasst jedes Gespräch für dich zusammen</span>
-            <span data-i18n="starterF4">E-Mail-Support</span>
+            <span data-i18n="starterF1"><strong>30 minutes</strong> of calls per month</span>
+            <span data-i18n="starterF2">Answers every call for you</span>
+            <span data-i18n="starterF3">Summarizes every call for you</span>
+            <span data-i18n="starterF4">Email support</span>
           </span>
-          <a class="sheet-plan__cta" href={LOGIN_URL} data-i18n="starterCta">Starter wählen</a>
+          <a class="sheet-plan__cta" href={LOGIN_URL} data-i18n="starterCta">Choose Starter</a>
         </div>
         <div class="sheet-plan sheet-plan--featured">
           <span class="sheet-plan__head">
             <span class="sheet-plan__labels">
               <span class="sheet-plan__label" data-i18n="businessLabel">Business</span>
-              <span class="sheet-plan__badge" data-i18n="popular">Beliebt</span>
+              <span class="sheet-plan__badge" data-i18n="popular">Popular</span>
             </span>
-            <span class="sheet-plan__price">9,99 €<span class="sheet-plan__per" data-i18n="perMonth">/ Monat</span></span>
+            <span class="sheet-plan__price"><span data-i18n="businessPrice">€9.99</span><span class="sheet-plan__per" data-i18n="perMonth">/ month</span></span>
           </span>
           <span class="sheet-plan__features">
-            <span data-i18n="businessF1"><strong>120 Minuten</strong> Gespräche pro Monat</span>
-            <span data-i18n="businessF2">Nimmt an <em>und</em> telefoniert für dich raus</span>
-            <span data-i18n="businessF3">Erledigt Aufgaben eigenständig für dich</span>
-            <span data-i18n="businessF4">Priorisierter Support</span>
+            <span data-i18n="businessF1"><strong>120 minutes</strong> of calls per month</span>
+            <span data-i18n="businessF2">Answers <em>and</em> calls out for you</span>
+            <span data-i18n="businessF3">Handles tasks independently for you</span>
+            <span data-i18n="businessF4">Priority support</span>
           </span>
-          <a class="sheet-plan__cta" href={LOGIN_URL} data-i18n="businessCta">Business wählen</a>
+          <a class="sheet-plan__cta" href={LOGIN_URL} data-i18n="businessCta">Choose Business</a>
         </div>
       </div>
-      <p class="sheet__note" data-i18n="footnote">Minuten aufgebraucht? Du bekommst einen Hinweis — kein automatischer Aufpreis.</p>
+      <p class="sheet__note" data-i18n="footnote">Out of minutes? You get a heads-up — never an automatic surcharge.</p>
     </div>
 
-    <div class="sheet dev-sheet" data-sheet="dev" data-open="0" role="dialog" aria-modal="true" aria-label="Für Entwickler">
+    <div class="sheet dev-sheet" data-sheet="dev" data-open="0" role="dialog" aria-modal="true" aria-label="For developers">
       <div class="sheet__bg" aria-hidden="true"></div>
       <div class="sheet__veil" aria-hidden="true"></div>
       <div class="sheet__top" aria-hidden="true"></div>
@@ -397,17 +404,17 @@ const legalDocs = [
             <span class="lockup__by">by Sundartha</span>
           </span>
         </span>
-        <button class="sheet__close" type="button" data-close-sheet aria-label="Schließen">×</button>
+        <button class="sheet__close" type="button" data-close-sheet aria-label="Close">×</button>
       </div>
-      <span class="sheet__title" data-i18n="devTitle">Ein Endpoint, <em>zwei Wege</em>.</span>
-      <p class="sheet__lead" data-i18n="devLead">Hermes ist ein <strong>MCP</strong>-Server. Verbinde ihn im KI-Tool deiner Wahl oder direkt aus dem Terminal.</p>
+      <span class="sheet__title" data-i18n="devTitle">One endpoint, <em>two ways</em>.</span>
+      <p class="sheet__lead" data-i18n="devLead">Hermes is an <strong>MCP</strong> server. Connect it in the AI tool of your choice or straight from the terminal.</p>
 
       <div class="sheet__card">
         <span class="dev-card__head">
           <span class="dev-num">01</span>
           <span class="dev-card__titles">
-            <span class="dev-eyebrow" data-i18n="devWayA">Im KI-Tool</span>
-            <span class="dev-card__title" data-i18n="devWayATitle">Als Konnektor hinzufügen</span>
+            <span class="dev-eyebrow" data-i18n="devWayA">In your AI tool</span>
+            <span class="dev-card__title" data-i18n="devWayATitle">Add it as a connector</span>
           </span>
         </span>
         <span class="dev-window">
@@ -415,11 +422,11 @@ const legalDocs = [
             <span class="dev-dot" aria-hidden="true"></span>
             <span class="dev-dot" aria-hidden="true"></span>
             <span class="dev-dot" aria-hidden="true"></span>
-            <span class="dev-bar__title" data-i18n="devWindowTitle">Einstellungen › Konnektoren</span>
+            <span class="dev-bar__title" data-i18n="devWindowTitle">Settings › Connectors</span>
           </span>
           <span class="dev-form-body">
             <span class="dev-addrow">
-              <span class="dev-addrow__plus" aria-hidden="true">+</span><span data-i18n="devAddRow">Benutzerdefinierten Connector</span>
+              <span class="dev-addrow__plus" aria-hidden="true">+</span><span data-i18n="devAddRow">Add custom connector</span>
             </span>
             <span class="dev-arrow dev-arrow--1" aria-hidden="true"><span>↓</span></span>
             <span class="dev-field dev-field--1">
@@ -428,13 +435,13 @@ const legalDocs = [
             </span>
             <span class="dev-arrow dev-arrow--2" aria-hidden="true"><span>↓</span></span>
             <span class="dev-field dev-field--2 dev-field--url">
-              <span class="dev-field__label" data-i18n="devFieldUrl">Server-URL</span>
+              <span class="dev-field__label" data-i18n="devFieldUrl">Server URL</span>
               <span class="dev-field__row">
                 <span class="dev-field__url">{MCP_URL}</span>
-                <button class="dev-copy" type="button" data-copy={MCP_URL} data-i18n="copyLabel">Kopieren</button>
+                <button class="dev-copy" type="button" data-copy={MCP_URL} data-i18n="copyLabel">Copy</button>
               </span>
             </span>
-            <span class="dev-connect" data-i18n="devConnectBtn">Verbinden</span>
+            <span class="dev-connect" data-i18n="devConnectBtn">Connect</span>
           </span>
         </span>
       </div>
@@ -443,8 +450,8 @@ const legalDocs = [
         <span class="dev-card__head">
           <span class="dev-num">02</span>
           <span class="dev-card__titles">
-            <span class="dev-eyebrow" data-i18n="devWayB">Im Terminal</span>
-            <span class="dev-card__title" data-i18n="devWayBTitle">Mit einem Befehl</span>
+            <span class="dev-eyebrow" data-i18n="devWayB">In the terminal</span>
+            <span class="dev-card__title" data-i18n="devWayBTitle">With a single command</span>
           </span>
         </span>
         <span class="dev-window dev-window--dark">
@@ -455,31 +462,31 @@ const legalDocs = [
               <span class="dev-dot" aria-hidden="true"></span>
               <span class="dev-bar__title" data-i18n="devTerminalTitle">zsh — hermes</span>
             </span>
-            <button class="dev-copy" type="button" data-copy={MCP_CMD} data-i18n="copyLabel">Kopieren</button>
+            <button class="dev-copy" type="button" data-copy={MCP_CMD} data-i18n="copyLabel">Copy</button>
           </span>
           <span class="dev-term-body">
             <span class="dev-term-out">
               <span class="dev-cmd"><span class="dev-cmd__prompt">$ </span>claude mcp add --transport http hermes \</span>
               <span class="dev-cmd2"><span class="dev-cmd2__text">&nbsp;&nbsp;&nbsp;&nbsp;{MCP_URL}</span><span class="dev-caret" aria-hidden="true"></span></span>
-              <span class="dev-out dev-out--1" data-i18n="devOut1">✓ MCP-Server „hermes“ hinzugefügt</span>
-              <span class="dev-out dev-out--2" data-i18n="devOut2">✓ Verbunden · Tools verfügbar</span>
+              <span class="dev-out dev-out--1" data-i18n="devOut1">✓ Added MCP server “hermes”</span>
+              <span class="dev-out dev-out--2" data-i18n="devOut2">✓ Connected · tools available</span>
             </span>
             <span class="dev-ask">
-              <span class="dev-ask__label" data-i18n="devToolsLabel">Frag danach — zum Beispiel</span>
-              <span class="dev-ask__line dev-ask-1" data-i18n="devAsk1">„Wer hat heute angerufen und was wollten sie?“</span>
-              <span class="dev-ask__line dev-ask-2" data-i18n="devAsk2">„Ruf Herrn Müller an und verschiebe den Termin auf Donnerstag.“</span>
+              <span class="dev-ask__label" data-i18n="devToolsLabel">Just ask — for example</span>
+              <span class="dev-ask__line dev-ask-1" data-i18n="devAsk1">“Who called today, and what did they want?”</span>
+              <span class="dev-ask__line dev-ask-2" data-i18n="devAsk2">“Call Mr. Müller and move his appointment to Thursday.”</span>
             </span>
           </span>
         </span>
       </div>
 
-      <p class="sheet__note" data-i18n="devFootnote">Streamable HTTP, OAuth beim ersten Verbinden. Läuft mit Claude, Codex und jedem MCP-Client.</p>
+      <p class="sheet__note" data-i18n="devFootnote">Streamable HTTP, OAuth on first connect. Works with Claude, Codex and any MCP client.</p>
     </div>
 
     <!-- Rechts-Blatt. Die Texte stammen aus src/data/legal/ — derselben Quelle
          wie /datenschutz, /impressum und /agb. Die Seiten bleiben unter ihrer
          URL erreichbar (Pflicht), das Blatt ist der schnelle Weg von hier. -->
-    <div class="sheet legal-sheet" data-sheet="legal" data-open="0" role="dialog" aria-modal="true" aria-label="Rechtliches">
+    <div class="sheet legal-sheet" data-sheet="legal" data-open="0" role="dialog" aria-modal="true" aria-label="Legal">
       <div class="sheet__bg" aria-hidden="true"></div>
       <div class="sheet__veil" aria-hidden="true"></div>
       <div class="sheet__top" aria-hidden="true"></div>
@@ -491,7 +498,7 @@ const legalDocs = [
             <span class="lockup__by">by Sundartha</span>
           </span>
         </span>
-        <button class="sheet__close" type="button" data-close-sheet aria-label="Schließen">×</button>
+        <button class="sheet__close" type="button" data-close-sheet aria-label="Close">×</button>
       </div>
       <div class="legal-body">
         <div class="legal-topper">
@@ -502,7 +509,7 @@ const legalDocs = [
             {legalDocs.map((entry) => (
               <button class="legal-pill" type="button" data-legal-pill={entry.slug} data-i18n={entry.i18n}>{entry.label}</button>
             ))}
-            <a class="legal-pill" href={`mailto:${CONTACT}`} data-i18n="contact">Kontakt</a>
+            <a class="legal-pill" href={`mailto:${CONTACT}`} data-i18n="contact">Contact</a>
           </div>
         </div>
         {legalDocs.map((entry) => (
@@ -523,7 +530,7 @@ const legalDocs = [
       </div>
     </div>
 
-    <div class="sheet menu-sheet" data-sheet="menu" data-open="0" role="dialog" aria-modal="true" aria-label="Menü">
+    <div class="sheet menu-sheet" data-sheet="menu" data-open="0" role="dialog" aria-modal="true" aria-label="Menu">
       <div class="sheet__bg" aria-hidden="true"></div>
       <div class="sheet__veil" aria-hidden="true"></div>
       <div class="sheet__top" aria-hidden="true"></div>
@@ -535,24 +542,24 @@ const legalDocs = [
             <span class="lockup__by">by Sundartha</span>
           </span>
         </span>
-        <button class="sheet__close" type="button" data-close-sheet aria-label="Schließen">×</button>
+        <button class="sheet__close" type="button" data-close-sheet aria-label="Close">×</button>
       </div>
       <div class="menu-list">
-        <button class="menu-item" type="button" data-goto="howto:1" data-from-menu data-i18n="howItWorks">So funktioniert's</button>
-        <button class="menu-item" type="button" data-goto="price:2" data-from-menu data-i18n="pricing">Preise</button>
-        <button class="menu-item" type="button" data-goto="dev:3" data-from-menu data-i18n="forDevs">Für Entwickler</button>
+        <button class="menu-item" type="button" data-goto="howto:1" data-from-menu data-i18n="howItWorks">How it works</button>
+        <button class="menu-item" type="button" data-goto="price:2" data-from-menu data-i18n="pricing">Pricing</button>
+        <button class="menu-item" type="button" data-goto="dev:3" data-from-menu data-i18n="forDevs">For developers</button>
       </div>
       <div class="menu-block">
-        <span class="menu-label" data-i18n="language">Sprache</span>
+        <span class="menu-label" data-i18n="language">Language</span>
         <div class="menu-langs">
-          <button class="menu-lang" type="button" data-lang="de" aria-pressed="true">Deutsch</button>
-          <button class="menu-lang" type="button" data-lang="en" aria-pressed="false">English</button>
+          <button class="menu-lang" type="button" data-lang="en" aria-pressed="true">English</button>
+          <button class="menu-lang" type="button" data-lang="de" aria-pressed="false">Deutsch</button>
         </div>
       </div>
       <!-- Owner-Feedback 2026-08-14: Login + Registrieren statt "Nummer holen" — wie im Desktop-Header (s. nav-actions oben, beide Ziele LOGIN_URL). -->
       <div class="menu-cta-row">
-        <a class="sheet__cta sheet__cta--ghost" href={LOGIN_URL} data-i18n="logIn">Login</a>
-        <a class="sheet__cta" href={LOGIN_URL} data-i18n="signUp">Registrieren</a>
+        <a class="sheet__cta sheet__cta--ghost" href={LOGIN_URL} data-i18n="logIn">Log in</a>
+        <a class="sheet__cta" href={LOGIN_URL} data-i18n="signUp">Sign up</a>
       </div>
       <div class="menu-foot">
         <div class="menu-foot__links">
@@ -562,14 +569,14 @@ const legalDocs = [
           <!-- § 312k BGB: derselbe gesetzlich vorgegebene Wortlaut wie im Fussband oben,
                KEIN data-i18n (s. dort). -->
           <a class="menu-foot__link" href="/kuendigen">Verträge kündigen</a>
-          <a class="menu-foot__link" href={`mailto:${CONTACT}`} data-i18n="contact">Kontakt</a>
-          <button class="menu-foot__link" type="button" data-consent-open data-i18n="cookieSettings">Cookie-Einstellungen</button>
+          <a class="menu-foot__link" href={`mailto:${CONTACT}`} data-i18n="contact">Contact</a>
+          <button class="menu-foot__link" type="button" data-consent-open data-i18n="cookieSettings">Cookie settings</button>
         </div>
-        <span class="menu-foot__copy" data-i18n="footerCopy">© Sundartha — Hermes, dein Telefonassistent</span>
+        <span class="menu-foot__copy" data-i18n="footerCopy">© Sundartha — Hermes, your phone assistant</span>
       </div>
     </div>
 
-    <CookieConsent />
+    <CookieConsent lang="en" />
     <AnalyticsSlot />
 
     <script>

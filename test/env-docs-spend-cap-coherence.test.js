@@ -156,3 +156,56 @@ test("LAW-15 (Mechanismus, gruen) - Retention-Defaults 30/7 stimmen in src/confi
     "die Diagnose-Frist ist die STRENGERE und damit immer die bindende (src/config.js)",
   );
 });
+
+// boolEnv-Analogon zu readCodeFallback: liest den ausgelieferten CODE-Default einer
+// Boolean-Env direkt aus dem src/config.js-Quelltext (kein config-Import - der wuerde die
+// ambiente Shell auswerten, Lehre test-base-env-drift).
+function readBoolCodeFallback(text, envName) {
+  const match = text.match(new RegExp(`boolEnv\\(\\s*"${envName}",[^)]*?fallback:\\s*(true|false)`));
+  if (!match) throw new Error(`boolEnv-Fallback fuer ${envName} nicht in src/config.js gefunden`);
+  return match[1] === "true";
+}
+
+// IP3 (TELNYX_INBOUND_HANDOFF_ENABLED) ist mit IE6-S1 gegenstandslos: der Schalter ist
+// entfernt, ohne ihn gibt es keine zweite Wahrheit mehr zu bewachen.
+
+// IE3: derselbe Riegel fuer den neuen Inbound-Weichenschalter. Er hat bis IE5 KEINEN
+// Verbraucher im Sprechpfad - genau deshalb ist ein auseinanderlaufender Blueprint hier
+// gefaehrlich: ein Reapply koennte den Weg scharf stellen, bevor jemand ihn bewusst
+// scharf stellt. Dieselben drei Leser wie oben (G5 statt einer vierten Kopie).
+const EL_INBOUND_SHIPPED_DEFAULT = false;
+
+test("IE3-7: ELEVENLABS_INBOUND_ENABLED sagt in src/config.js, .env.example und render.yaml dasselbe (Blueprint gegen Code)", () => {
+  const name = "ELEVENLABS_INBOUND_ENABLED";
+  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
+  const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
+  assert.equal(
+    readBoolCodeFallback(configSrc, name),
+    EL_INBOUND_SHIPPED_DEFAULT,
+    "src/config.js boolEnv-Fallback",
+  );
+  assert.equal(readEnvValue(envExample, name), String(EL_INBOUND_SHIPPED_DEFAULT), ".env.example");
+  assert.equal(readRenderValue(renderYaml, name), String(EL_INBOUND_SHIPPED_DEFAULT), "render.yaml");
+});
+
+// IE2: derselbe Riegel eine Zeile darueber, fuer den Takt der Geld-Wache. Die Zahl IST die
+// bewusst akzeptierte Ueberziehung zwischen zwei Runden (hoechstens ein Takt Gespraechszeit
+// je laufendem Leg) - liefe render.yaml auseinander, waere im Betrieb eine andere
+// Ueberziehung scharf als die dokumentierte und begruendete. Dieselben drei Leser wie oben
+// (G5 statt einer vierten Kopie).
+const BUDGET_WATCHDOG_SHIPPED_MS = 15000;
+
+test("IE2: BUDGET_WATCHDOG_INTERVAL_MS sagt in src/config.js, .env.example und render.yaml dasselbe (Blueprint gegen Code)", () => {
+  const name = "BUDGET_WATCHDOG_INTERVAL_MS";
+  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
+  const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
+  assert.equal(
+    readCodeFallback(configSrc, name),
+    BUDGET_WATCHDOG_SHIPPED_MS,
+    "src/config.js numEnv-Fallback",
+  );
+  assert.equal(Number(readEnvValue(envExample, name)), BUDGET_WATCHDOG_SHIPPED_MS, ".env.example");
+  assert.equal(Number(readRenderValue(renderYaml, name)), BUDGET_WATCHDOG_SHIPPED_MS, "render.yaml");
+});

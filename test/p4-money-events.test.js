@@ -19,6 +19,8 @@ function fakeMoneyStore({ customerId = CUSTOMER, tenantId = TENANT } = {}) {
     calls,
     findTenantByCustomer: (cid) => (customerId && cid === customerId ? { id: tenantId } : null),
     findTenantBySubscription: () => null,
+    // FW1-A: Existenz-Gate der Tenant-Aufloesung - dieses Double modelliert einen existierenden Tenant.
+    tenantExists: () => true,
     setTenantSubscription: (t, patch) => calls.setTenantSubscription.push([t, patch]),
     setBillingHold: (t, patch) => calls.setBillingHold.push([t, patch]),
     clearBillingHold: (t) => calls.clearBillingHold.push(t),

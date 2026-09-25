@@ -78,26 +78,12 @@ export const {
   newId,
   createCall,
   getCall,
-  // Brain-Shim-Korrelation (E1): beide Backends exportieren die Query, Fassade = EINE
-  // Quelle. Ohne diesen Re-Export waere store.getCallByControlId undefined -> der Shim
-  // wuerfe zur Laufzeit einen TypeError.
-  getCallByControlId,
   // F12 (A6): dem Prozess unbekannten, aber in der DB aktiven Call RLS-sauber nachladen
   // (Deploy-Instanzwechsel). pg = Tenant-Loop; json = getCall. OHNE diesen Re-Export waere
   // store.attachActiveCall undefined -> der /voice-Re-Attach-Pfad wuerfe zur Laufzeit einen
   // TypeError. Beide Backends exportieren die Methode -> die Fassade ist die EINE Quelle.
   attachActiveCall,
-  // KS-P1b: dieselbe Nachladung ueber die call_control_id (Assistant-Shim, E1). OHNE
-  // diesen Re-Export waere store.attachActiveCallByControlId undefined -> der Shim-Re-
-  // Attach-Pfad wuerfe zur Laufzeit einen TypeError (Muster attachActiveCall/
-  // getCallByControlId). Beide Backends exportieren die Methode.
-  attachActiveCallByControlId,
   addTranscript,
-  // GQ-H1-a: eine von Telnyx verworfene, nie gesprochene Antwort wieder aus dem Transkript
-  // nehmen. Beide Backends exportieren die Methode -> die Fassade ist die EINE Quelle;
-  // ohne diesen Re-Export waere store.dropLastAgentTranscript undefined und der Shim-Pfad
-  // wuerfe zur Laufzeit einen TypeError.
-  dropLastAgentTranscript,
   purgeTranscript,
   markAnswered,
   // KS-EL1: der Anker nachziehen (elevenlabs/outbound.js, answeredAnchorOutcome). OHNE
@@ -116,6 +102,10 @@ export const {
   // Laufzeit einen TypeError.
   markSummaryMailSent,
   markBilled, // F9 (A6): Bucht-Idempotenz-Marker
+  // SEC-P1: Ereignis-Anker der Turn-Webhooks. OHNE diesen Re-Export waere
+  // store.recordWebhookAnchors auf der Fassade undefined -> der Wiederholungs-Riegel
+  // wuerfe zur Laufzeit einen TypeError (Muster markBilled).
+  recordWebhookAnchors,
   markInboxEntry, // INBOX-P1: Qualifikations-Marker
   // INBOX-P2: die EINE Konsum-Operation (Auswahl + Projektion + Markierung, synchron).
   // OHNE diesen Re-Export waere store.takeInboxEntries auf der Fassade undefined -> der
@@ -123,27 +113,56 @@ export const {
   takeInboxEntries,
   recordCallEstimatedCostCents, // LCT P2: gebuchter Schaetzbetrag am Call
   recordCallCostTruingResult, // LCT P3: Ergebnis des Kosten-Abgleichs am Call
+  // KV2-7: Abschluss ohne Messung (Faelligkeitslauf). OHNE diesen Re-Export waere
+  // store.schliesseKostenAbgleich undefined -> der Faelligkeitslauf wuerfe zur Laufzeit
+  // einen TypeError (Muster recordCallCostTruingResult).
+  schliesseKostenAbgleich,
+  // KV2-7, Phasenschnitt-Nachlauf: setzt costTruedAt zurueck auf null. OHNE diesen
+  // Re-Export waere store.oeffneKostenAbgleichErneut undefined -> der Nachlauf-Skript-
+  // Pfad wuerfe zur Laufzeit einen TypeError.
+  oeffneKostenAbgleichErneut,
   recordFailureReason,
-  // AL-P1: Conversation-UUID (Latenz-Achse) + Anrufer-Turn-Zaehler (Abbruch-Achse).
-  // OHNE diese Re-Exports waeren sie auf der Fassade undefined -> der Call-Control-Ingest
-  // bzw. agentTurn wuerfen zur Laufzeit einen TypeError.
-  recordTelnyxConversationId,
   // EL-BL1: das ElevenLabs-Handle (Bindungs-Kennung des Rueckfrage-Webhooks). OHNE
   // diesen Re-Export waere store.recordElevenlabsConversationId auf der Fassade
   // undefined -> der Schreibweg wuerfe zur Laufzeit einen TypeError (Muster
-  // recordTelnyxConversationId).
+  // recordFailureReason).
   recordElevenlabsConversationId,
   // Phase-6-Voraussetzung: der Join-Schluessel zwischen ElevenLabs- und Telefonie-Kosten.
   // OHNE diesen Re-Export waere store.recordSipCallId auf der Fassade undefined -> der
   // ziehende Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster
   // recordElevenlabsConversationId).
   recordSipCallId,
+  // KV2-2: das an der Engine-Weiche gesetzte Kostenprofil. OHNE diesen Re-Export waere
+  // store.recordCostProfile auf der Fassade undefined -> beide Weichen wuerfen zur
+  // Laufzeit einen TypeError (Muster recordSipCallId).
+  recordCostProfile,
+  // IEL-B4a (E5): Brueckenzustand des EL-Inbound-Wegs. OHNE diese Re-Exporte waeren die drei
+  // Operationen auf der Fassade undefined -> Init-Webhook (B6), Rueckfall-Route (B8) und
+  // Nachlauf-Start (B4) wuerfen zur Laufzeit einen TypeError (Muster recordCostProfile).
+  bindInboundElConversation,
+  markInboundElFallback,
+  markInboundElNachlaufStarted,
+  // IEX-A8 (E8): Registrierungs-Beleg am Nummern-Datensatz. OHNE diese Re-Exporte waeren sie auf der Fassade
+  // undefined -> der Boot-Sweep (elevenlabs/inbound-trunk-beleg.js) wuerfe zur Laufzeit einen TypeError, den
+  // runBootSweep als "sweep fehler" schluckt - die Ergebniszeile fehlte dann bei JEDEM Boot (Muster
+  // markInboundElFallback).
+  markNumberElInboundTrunkBelegt,
+  clearNumberElInboundTrunkBeleg,
+  // KV2-3: das Kosten-Buch. OHNE diese Re-Exports waeren store.recordCallCostEvidence /
+  // store.callCostEvidence auf der Fassade undefined -> jeder kuenftige Einsammler
+  // (KV2-4/KV2-5) wuerfe zur Laufzeit einen TypeError (Muster recordCostProfile).
+  recordCallCostEvidence,
+  callCostEvidence,
   // OUTBOUND-E5: Absender-Wahrheit + Registrierungs-Herkunft. OHNE diese Re-Exports waeren
   // store.recordActualSender / store.recordFromRegistrationSource auf der Fassade undefined
   // -> der EL-Anrufstart bzw. der Ergebnisweg wuerfen zur Laufzeit einen TypeError
   // (Muster recordSipCallId).
   recordActualSender,
   recordFromRegistrationSource,
+  // ST3 (O3): Zaehlfeld der Stimmen-Detektoren am Call. OHNE diesen Re-Export waere
+  // store.recordElDetectorCounts auf der Fassade undefined -> der EL-Ergebnisweg wuerfe
+  // zur Laufzeit einen TypeError (Muster recordSipCallId).
+  recordElDetectorCounts,
   // EL-Anrufstart: Zusammenfassung + Befund eines vom Anbieter gefuehrten Gespraechs. OHNE
   // diesen Re-Export waere store.recordProviderCallResult auf der Fassade undefined -> der
   // ziehende Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster
@@ -167,6 +186,12 @@ export const {
   // waere store.markConsultAnswerDelivered auf der Fassade undefined -> der Shim wuerfe
   // zur Laufzeit einen TypeError (Muster answerConsult).
   markConsultAnswerDelivered,
+  // P2: Zustell-, Quittungs- und Abbruch-Marker der gestaffelten Rueckfrage. OHNE diese
+  // Re-Exports waeren sie auf der Fassade undefined -> die Poll-Route, die Antwort-Route
+  // und der EL-Warter wuerfen zur Laufzeit einen TypeError (Muster answerConsult).
+  markConsultAskDelivered,
+  ackConsult,
+  timeOutStagedConsult,
   expireOpenConsults,
   pendingConsult,
   // AL-P14: In-Call-Rueckfrage. OHNE diese Re-Exports waeren sie auf der Fassade
@@ -212,7 +237,7 @@ export const {
   budgetExceeded,
   reserveExceedsBudget,
   // KS-P2: Live-Verbrauchs-Gate + seine Basis. OHNE diese Re-Exports waeren sie auf der
-  // Fassade undefined -> blockingBudgetAxis (claude.js/telnyx-llm-shim.js) wuerfe zur
+  // Fassade undefined -> blockingBudgetAxis (claude.js) wuerfe zur
   // Laufzeit einen TypeError. Beide Backends exportieren sie -> die Fassade ist die EINE
   // Quelle. Muster wie reserveExceedsBudget.
   liveBudgetExceeded,
@@ -234,6 +259,10 @@ export const {
   // server.js-Verdrahtung (F2) wuerfe zur Laufzeit einen TypeError. Muster wie reserveExceedsBudget.
   tryReserveOutboundBudget,
   releaseOutboundReserve,
+  // E3: zweiter Freigabeweg fuer den Fall OHNE Datensatz (Dedup / Wurf vor createCall). OHNE
+  // diesen Re-Export waere store.releaseOutboundReserveCents auf der Fassade undefined -> die
+  // Route wuerfe zur Laufzeit einen TypeError. Beide Backends exportieren sie.
+  releaseOutboundReserveCents,
   reservationOf,
   // Plattform-Fruehwarnung (Budget-Achsen P6): OHNE diesen Re-Export waere
   // store.claimPlatformSpendWarning undefined -> outbound-gates.js wuerfe zur Laufzeit
@@ -315,6 +344,10 @@ export const {
   // OHNE diese Re-Exports sind sie auf der Fassade undefined -> billing/webhook.js UND
   // outbound-gates.js wuerfen zur Laufzeit einen TypeError. Muster wie findTenantBySubscription.
   findTenantByCustomer,
+  // FW1-A: Existenz-Praedikat der Webhook-Tenant-Aufloesung. OHNE diesen Re-Export ist
+  // store.tenantExists auf der Fassade undefined -> billing/webhook.js wirft zur Laufzeit
+  // einen TypeError (dieselbe Landmine wie bei findTenantByCustomer).
+  tenantExists,
   setBillingHold,
   clearBillingHold,
   billingHoldActive,

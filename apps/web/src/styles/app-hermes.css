@@ -124,10 +124,17 @@ body {
 /* ------------------------------------------------------------- 3. Kopfzeile */
 
 /* Der Header ist auf der Website transparent — keine weiße Leiste, kein Rand. */
+/* Owner-Befund 15.09.2026: zwischen dem Markenblock und dem Seiteninhalt klaffte
+   zu viel Luft ("sehr grosser Abstand"), der Inhalt soll ein Stueck hoeher und
+   mit dem Kopf verbunden wirken -- aber nicht eng. Der Abstand entsteht aus zwei
+   Polstern: der unteren Kante des Kopfes UND dem oberen Polster von .app-main.
+   Beide geben ein Stueck ab (Desktop 28 -> 20, s. .app-main unten): gemessen bei
+   1440px faellt der Abstand Schriftzug -> Pille von 61,6 auf 43,4px, am Handy von
+   49,2 auf 36,8px -- rund ein Drittel weniger, der Rest bleibt als Luft stehen. */
 .app-header {
   background: transparent;
   border-bottom: 0;
-  padding: 28px clamp(20px, 3.4vw, 44px);
+  padding: 28px clamp(20px, 3.4vw, 44px) 20px;
 }
 
 .app-brand {
@@ -173,7 +180,9 @@ body {
 
 .app-main {
   max-width: 1320px;
-  padding: clamp(22px, 3.4vh, 34px) clamp(20px, 3vw, 40px) 56px;
+  /* Oberes Polster ein Stueck kleiner (s. .app-header): der Inhalt rueckt naeher
+     an den Markenblock, ohne an ihm zu kleben. */
+  padding: clamp(18px, 2.6vh, 28px) clamp(20px, 3vw, 40px) 56px;
   gap: 16px;
 }
 
@@ -545,7 +554,7 @@ select.field-input option {
     row-gap: 14px;
     /* Safe-Area: viewport-fit=cover (App.astro) zieht die Seite bis unter die
        iPhone-Statusleiste bzw. an die Notch im Querformat. */
-    padding: calc(22px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) 22px max(20px, env(safe-area-inset-left, 0px));
+    padding: calc(22px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) 16px max(20px, env(safe-area-inset-left, 0px));
   }
   .app-main {
     padding-left: max(20px, env(safe-area-inset-left, 0px));

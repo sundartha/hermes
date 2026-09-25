@@ -8,7 +8,7 @@
 //
 // ABSOLUTE REGEL Safety-Gates (INV-9): die geordnete Outbound-Gate-Kette laeuft
 // unveraendert als EINE Schleife ueber das EINE injizierte outboundGates-Array (INV-7,
-// wird NICHT hier neu gebaut); armMaxDurationTimer(call,null) (C-Telnyx-Zweig) bzw.
+// wird NICHT hier neu gebaut); armMaxDurationTimer(call,null) (TeXML-Zweig) bzw.
 // armMaxDurationTimer(call,tw.sid) (TeXML-Zweig) sitzen an exakt denselben Punkten
 // (kein Cap-Verlust). Der Fehlerpfad (terminateAndBillCall + providerStatus-
 // Kategorisierung, kein Roh-Provider-/Secret-Leak an den Client) wandert unveraendert.
@@ -20,24 +20,30 @@
 // (Gate-Array, Timer, Terminierung, finishCall) und die request-tenant-Resolver werden
 // injiziert (EINE Quelle, INV-7).
 import { Router } from "express";
-import { VOICE_ENGINE } from "../config.js";
-import { normNum, CONSULT_ANSWER } from "../store/defaults.js";
+import { normNum, CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../store/defaults.js";
 import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
+import { CONSULT_EVENT } from "../consult/delivery.js";
 import { isConsultEventId } from "../store/state-ops.js";
-import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
+import {
+  E164_FORMAT_ERROR,
+  isTrunkZeroFormatError,
+  runOutboundGates,
+} from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
-import { providerSupports, CAPABILITY } from "../telephony/registry.js";
+import { findDuplicateOutboundCall } from "../telephony/call-dedup.js";
+import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
-import { persistEndWithReason } from "../telephony/call-termination.js";
+import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.js";
 // TEIL C (Owner-Auftrag 15.08.2026, cancel_call darf nicht luegen): der Deckelwert ist
 // KEINE Magic Number - er ist in elevenlabs/outbound.js besessen (Bewachung statt
 // Korrektur der Anbieter-Vorlage, s. dortiger Kommentar).
-import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf } from "../elevenlabs/outbound.js";
+import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
+import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.js";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
-import { localeFor } from "../i18n/locales.js";
+import { localeFor, supportedLanguageOf, SUPPORTED_LANGUAGES } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { internalOnly } from "../wiring/internal-only.js";
@@ -138,6 +144,56 @@ function elevenLabsHangUpActionNotWired(_endActiveCall, call) {
 // outboundGates-Kette: beide Praedikate lehnen nie ab, wuerden von keinem Gate gelesen und
 // haetten die reihenfolge-gepinnte Safety-Kette nur verbreitert
 // (test/outbound-gates-order.test.js bleibt unangetastet).
+// P2 (Review-Fix Runde 1, S1/CLAUDE.md "keine neuen abgeschaltete Sicherungen"): reine
+// Formpruefung ausgelagert - EIN Verzweigungspunkt statt der zusammengesetzten
+// Bedingung (status !== undefined && status !== WORKING && status !== FINAL) direkt in
+// der Route. Modul-Ebene wie resolveCallPrivacyFlags oben (G30/G34, eine
+// Abstraktionsebene je Funktion) - macht den am 2026-09-06 gepinnten
+// Komplexitaets-Befund ueberfluessig statt ihn hinzunehmen.
+function invalidConsultAnswerStatus(status) {
+  if (status === undefined) return null;
+  if (status === CONSULT_ANSWER_MODE.WORKING || status === CONSULT_ANSWER_MODE.FINAL) return null;
+  return "status ist ungueltig";
+}
+
+// P2 (Review-Fix Runde 1): der leichte Quittungs-Zweig (status=WORKING) ausgelagert -
+// gleiches Muster wie consultResponseBody in webhooks-elevenlabs.js (G30/eine
+// Abstraktionsebene je Funktion). Reiner Aufruf ohne eigenen Verzweigungspunkt in der
+// Route selbst; Ablehnungscode 409 UNVERAENDERT, nur verschoben.
+function ackWorkingConsult({ store, audit, req, res, call, eventId }) {
+  const { outcome } = store.ackConsult(call.id, { eventId });
+  // Eigene Aktion statt "consult_answered": eine Quittung ist keine Antwort, und der
+  // Forensik-Trail von P3 muss beides unterscheiden koennen. PII-frei - Kennungen und
+  // Ergebnis-Token, nie der Fragetext (Regel 4).
+  audit("consult_acked", req, `call=${call.id} event=${eventId} ergebnis=${outcome}`);
+  if (outcome !== CONSULT_ANSWER.ACCEPTED) return res.status(409).json({ error: outcome });
+  return res.json({ accepted: true, merged_facts: 0 });
+}
+
+// P2 (Review-Fix Runde 1): der volle Antwort-Zweig (status=FINAL/Bestand) ausgelagert -
+// gleiche Begruendung wie ackWorkingConsult oben. Verhalten byte-identisch zum Vorzustand,
+// nur aus der Route in eine eigene Funktion verschoben.
+function answerConsultFinal({ store, audit, req, res, call, eventId, answers }) {
+  const validated = validateAssistantContext({ key_facts: answers });
+  if (validated.error || !validated.value)
+    return res.status(400).json({ error: validated.error || "answers ist Pflicht" });
+  // GQ-P2: die Offen-Frist-KONSTANTE kommt aus dem Consult-Modul (G22/EINE Quelle),
+  // der DB-Zugriff bleibt am injizierten store (DIP).
+  const { outcome, mergedFacts } = store.answerConsult(call.id, {
+    eventId,
+    facts: validated.value.key_facts,
+    nowMs: Date.now(),
+    openMs: CONSULT_OPEN_MS,
+  });
+  audit(
+    "consult_answered",
+    req,
+    `call=${call.id} event=${eventId} ergebnis=${outcome} fakten=${mergedFacts}`,
+  );
+  if (outcome !== CONSULT_ANSWER.ACCEPTED) return res.status(409).json({ error: outcome });
+  return res.json({ accepted: true, merged_facts: mergedFacts });
+}
+
 function resolveCallPrivacyFlags({ store, config, ctx }) {
   const ownNumber = store.tenantPrivateNumber(ctx.tenantId);
   const diagnostic = diagnosticRetentionGranted({
@@ -156,6 +212,126 @@ function resolveCallPrivacyFlags({ store, config, ctx }) {
   return { diagnostic, calleeIsOwnerOfThisCall };
 }
 
+// GAP-35: die drei PII-freien Dimensionen des Ablehnungs-Ereignisses. Land und Sprache
+// kommen aus dem TENANT (tenantGeo, reine Query), NICHT aus der Zielnummer: eine aus
+// der E.164-Vorwahl abgeleitete Landangabe waere ein Rufnummern-Fragment im Log
+// (Absolute Regel 4). Ohne aufgeloesten Tenant - outbound_frozen feuert VOR
+// resolve_identity, tenant_reject traegt eine unbekannte Identitaet - liefert tenantGeo
+// beide Achsen als null: geraten wird nichts. Bewusst NICHT resolveCallLanguage, das
+// via settingsFor lazy einen Settings-Bucket anlegen wuerde (Schreib-Nebeneffekt auf
+// einer unaufgeloesten Identitaet).
+// SEC-P6: von der Closure auf die Modul-Ebene gezogen (Praezedenz resolveCallPrivacyFlags
+// oben) - so waechst die ohnehin ueberlange makeCallRoutes durch diese Phase NICHT.
+function denialDimensions({ store, grund, tenantId }) {
+  const { country, defaultLanguage } = store.tenantGeo(tenantId);
+  return { grund, country, language: defaultLanguage };
+}
+
+// SEC-P6: Audit und Metrik einer Ablehnung sind BEOBACHTUNG, nie Bedingung der Antwort.
+// Die zweite Haelfte des GATE-02-Haengers sass genau hier: stirbt store.tenantGeo, wirft
+// denialDimensions ein zweites Mal - diesmal AUSSERHALB jedes Gates, also wieder ohne
+// Antwort. Scheitert die Protokollierung, wird sie LAUT (secret-freie Fehlerzeile), die
+// Ablehnung wird trotzdem zugestellt: der Anruf ist so oder so abgelehnt, und eine stumme
+// Antwort ist der schlechtere Ausgang. Reine 400er-Eingabefehler tragen kein audit-Objekt
+// und erzeugen weiterhin weder Audit- noch Metrik-Zeile (Bestand, unveraendert).
+function beobachteAblehnung({ store, audit, denial, req, tenantId }) {
+  if (!denial.audit) return;
+  try {
+    audit(denial.audit.event, req, denial.audit.detail);
+    metrics.logCallDenied(denialDimensions({ store, grund: denial.audit.grund, tenantId }));
+  } catch (fehler) {
+    console.error("[place_call] Ablehnung nicht protokollierbar:", fehler?.message);
+  }
+}
+
+// P4a (F-2): die zwei Ablehnungen des Sprachwunsches. Beide sind reine EINGABEfehler und
+// laufen deshalb wie die Bestands-400er VOR jedem Gate - ohne Audit, ohne Metrik
+// (dieselbe Regel wie bei to/objective und E164_FORMAT_ERROR). Die unterstuetzten Codes
+// stehen IM error-String: der MCP-Weg reicht nur json.error an das aufrufende Modell
+// weiter (mcp-tools.js#api), ein Zusatzfeld saehe es nie. code/supported reisen zusaetzlich
+// fuer maschinelle Leser. Englisch, weil hier das Client-MODELL liest, nicht der Tenant
+// (Systemgrenze O14) - Gate-Ablehnungen an den Tenant bleiben davon unberuehrt.
+const UNSUPPORTED_LANGUAGE = "unsupported_language";
+const LANGUAGE_UNAVAILABLE = "language_unavailable";
+
+const unsupportedLanguageBody = () => ({
+  error: `${UNSUPPORTED_LANGUAGE}: language must be one of ${SUPPORTED_LANGUAGES.join(", ")}`,
+  code: UNSUPPORTED_LANGUAGE,
+  supported: SUPPORTED_LANGUAGES,
+});
+
+// P4a/E-1 (hartes Gate): der Wunsch gilt NUR auf dem Sprechweg, der Gespraechs- und
+// Offenlegungssprache getrennt beantwortet (ElevenLabs, elevenlabs/call-locale.js). Die
+// Der TeXML-Zweig rendert den Offenlegungssatz aus call.language (claude.js
+// disclosureSentence) - dort machte ein Wunsch die Sprache der PFLICHTAUSSAGE
+// client-bestimmt, und genau das verbietet F-2 Punkt 4 (PM-2). LAUT abgelehnt statt still
+// ignoriert: ein wirkungsloses Feld IST der Defekt, gegen den diese Phase gebaut ist.
+const languageUnavailableBody = () => ({
+  error:
+    `${LANGUAGE_UNAVAILABLE}: this deployment cannot separate the spoken language from the ` +
+    "mandatory AI disclosure - omit language",
+  code: LANGUAGE_UNAVAILABLE,
+});
+
+// E3: 503 als benannte Konstante (G25; ausserdem haelt das die gepinnte
+// no-magic-numbers-Inventur dieser Datei unveraendert). Dieselbe Klasse wie der
+// Gate-Fehlerpfad (outbound-gates.js) - Dienst voruebergehend nicht moeglich, kein Anruf.
+const HTTP_SERVICE_UNAVAILABLE = 503;
+
+// Der Text der Fehlerklammer. Bewusst NICHT sprachabhaengig und bewusst generisch, dieselbe
+// Begruendung wie GATE_ERROR_MESSAGE (outbound-gates.js): die Sprachquelle koennte im
+// Fehlerfall selbst werfen, und kein Innenleben/keine ID gehoert an den Client (Regel 4).
+const CLAIM_ERROR_MESSAGE =
+  "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
+
+// E3: EIN synchroner Lock-Abschnitt - Dedup-Entscheidung UND Datensatz. Der Body enthaelt
+// KEIN await (Invariante store.js#withStoreLock); nur so sind zwei gleichzeitige Anrufe auf
+// dasselbe Ziel wirklich serialisiert und es entsteht genau EIN Datensatz.
+// Das Praedikat liegt HINTER der vollstaendigen Gate-Kette und kann kein Gate ueberspringen -
+// die Aenderung ist strikt EINSCHRAENKEND (ein Fall mehr, in dem NICHT gewaehlt wird).
+function claimCallRecord({ store, ctx, felder, nowMs }) {
+  const laufender = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
+    to: ctx.to,
+    nowMs,
+  });
+  if (laufender) return { call: laufender, deduplicated: true };
+  return { call: store.createCall(felder), deduplicated: false };
+}
+
+// E3: EINE Antwortform fuer beide Ausgaenge (G5) - der deduplizierte Aufruf beantwortet
+// dieselben Fragen wie der gewaehlte. 200 statt 409 mit Absicht: ein Fehler liesse das Modell
+// "der Anruf hat nicht geklappt" sagen, WAEHREND ein echter Anruf laeuft, und
+// await_call_event/get_call_status laufen mit der ersten callId auf dem richtigen Anruf weiter.
+// deduplicated ist IMMER vorhanden - der Client soll nicht zwischen "Feld fehlt" und "false"
+// raten muessen. status bleibt hart "dialing" wie im Bestand (der MCP-Handler setzt es ebenso).
+function placeCallResponseBody({ call, ctx, config, deduplicated }) {
+  return {
+    ok: true,
+    callId: call.id,
+    twilioSid: call.twilioSid,
+    status: "dialing",
+    deduplicated,
+    context_received: contextReceivedMeta(ctx.context, config), // I10
+    diagnostic: call.diagnostic, // P2b
+  };
+}
+
+// E3: der Fehlerausgang des Fensters Gate-Ende..createCall. Es gibt KEINEN Datensatz, also
+// greift releaseOutboundReserveCents (NICHT releaseOutboundReserve, das einen Call braucht) -
+// die Reserve DIESES Requests, nicht mehr. Eigener, kurzer Lock-Abschnitt; scheitert auch der,
+// wird das laut, aber die Antwort geht trotzdem raus (eine stumme Antwort ist der schlechtere
+// Ausgang, Praezedenz beobachteAblehnung).
+async function gibReserveZurueckUndMelde({ store, ctx, fehler }) {
+  console.error(`[place_call] Anlegen fehlgeschlagen tenant=${ctx.tenantId}:`, fehler?.message);
+  try {
+    await store.withStoreLock(() =>
+      store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents),
+    );
+  } catch (freigabeFehler) {
+    console.error("[place_call] Reserve nicht freigebbar:", freigabeFehler?.message);
+  }
+}
+
 // deps: siehe Modul-Doc. arm = { armMaxDurationTimer, armReserveReleaseTimer } aus der EINEN
 // lifecycle-Instanz (Cap-/Reserve-Backstop, INV-7); finishCall = callFinish.finishCall (bare,
 // EINE Referenz wie in call-lifecycle.js); tenant = { requestTenant, requireTenant,
@@ -168,7 +344,6 @@ export function makeCallRoutes({
   audit,
   outboundGates,
   voiceControl,
-  originateAiAssistantCall,
   // EL-Anrufstart (dritter Outbound-Weg): die EINE Instanz aus server.js (INV-7) - sie
   // haelt den ziehenden Ergebnisweg, eine zweite haette eine zweite Abhol-Schleife.
   // Ohne verdrahtete Instanz greift der fail-closed Ersatz: bei eingeschaltetem Schalter
@@ -183,6 +358,8 @@ export function makeCallRoutes({
   // treffen ohnehin nie einen EL-Call).
   elevenLabsHangUpAction = elevenLabsHangUpActionNotWired,
   endActiveCall,
+  // IEL-B5 (E10): Ergebnis-Teil des Bruecken-Beende-Thunks - dieselbe elevenLabsOutbound-Instanz.
+  awaitAndPersistInboundElResult,
   billThunk,
   finishCall,
   arm: { armMaxDurationTimer, armReserveReleaseTimer },
@@ -193,25 +370,13 @@ export function makeCallRoutes({
 }) {
   const router = Router();
 
-  // GAP-35: die drei PII-freien Dimensionen des Ablehnungs-Ereignisses. Land und Sprache
-  // kommen aus dem TENANT (tenantGeo, reine Query), NICHT aus der Zielnummer: eine aus
-  // der E.164-Vorwahl abgeleitete Landangabe waere ein Rufnummern-Fragment im Log
-  // (Absolute Regel 4). Ohne aufgeloesten Tenant - outbound_frozen feuert VOR
-  // resolve_identity, tenant_reject traegt eine unbekannte Identitaet - liefert tenantGeo
-  // beide Achsen als null: geraten wird nichts. Bewusst NICHT resolveCallLanguage, das
-  // via settingsFor lazy einen Settings-Bucket anlegen wuerde (Schreib-Nebeneffekt auf
-  // einer unaufgeloesten Identitaet).
-  function denialDimensions(grund, tenantId) {
-    const { country, defaultLanguage } = store.tenantGeo(tenantId);
-    return { grund, country, language: defaultLanguage };
-  }
 
   // L5/I5: EINE Sichtbarkeits-Regel fuer alle Call-Routen dieser Datei (G5) - fremder
-  // Tenant -> der Aufrufer antwortet 404 (kein Existenz-Leck, NICHT 403). Hinter dem
-  // Flag: aus -> ungefiltert wie im Bestand (byte-identisch, auch fuer Calls ohne
-  // tenantId). !call short-circuitet vor dem tenantOwnsCall-Zugriff.
+  // Tenant -> der Aufrufer antwortet 404 (kein Existenz-Leck, NICHT 403). Seit E4
+  // unbedingt: kein Env-Schalter hebt sie auf, ein Call ohne tenantId gehoert niemandem.
+  // !call short-circuitet vor dem tenantOwnsCall-Zugriff.
   function callVisibleTo(call, tenantId) {
-    return Boolean(call) && (!config.tenancy.multiTenant || tenantOwnsCall(call, tenantId));
+    return Boolean(call) && tenantOwnsCall(call, tenantId);
   }
 
   // AL-P13: Consult #0. Keine Fragen ODER Faehigkeit nicht freigegeben -> No-op (kein
@@ -235,115 +400,153 @@ export function makeCallRoutes({
     // (wie die to/objective-Pruefung oben).
     if (isTrunkZeroFormatError(to)) return res.status(400).json({ error: E164_FORMAT_ERROR });
 
-    // Geordnete Safety-/Geld-Gate-Kette (EINE Schleife, EIN Array, Struct-1 P6). ctx
+    // P4a: der Sprachwunsch - VOR jedem Gate, vor jedem Datensatz, vor jeder Buchung
+    // (E-3: kein Anruf, kein Datensatz, keine Kosten). Fehlend/"" heisst "kein Wunsch"
+    // (Bestandsverhalten); alles andere MUSS im Katalog stehen.
+    const requestedLanguage = b.language ? supportedLanguageOf(b.language) : null;
+    if (b.language && !requestedLanguage) return res.status(400).json(unsupportedLanguageBody());
+    if (requestedLanguage && !config.voice.elevenLabsOutbound.enabled)
+      return res.status(400).json(languageUnavailableBody());
+
+    // Geordnete Safety-/Geld-Gate-Kette (EINE Kettenfahrt, EIN Array, Struct-1 P6). ctx
     // transportiert Derivationen (normalisiertes to, tenantId, Absendernummer, Reserve)
     // zwischen den Gates; volle Reihenfolge + Rationale in telephony/outbound-gates.js.
+    // SEC-P6: die Kette faehrt in runOutboundGates (telephony/outbound-gates.js) - dort ist
+    // "ein geworfenes Gate ist eine Ablehnung" STRUKTUR und nicht Disziplin dieser Route
+    // (G27). Die Senke unten ist unveraendert die einzige Stelle, an der eine Ablehnung den
+    // Client erreicht (GAP-35: Audit + PII-freie Metrik, gleiche Bedingung wie bisher).
     const ctx = { req, to, objective, b };
-    for (const gate of outboundGates) {
-      const denial = await gate.run(ctx);
-      if (denial) {
-        if (denial.audit) {
-          audit(denial.audit.event, req, denial.audit.detail);
-          // GAP-35: dasselbe Ereignis maschinenlesbar und PII-frei. GLEICHE Bedingung wie
-          // das Audit - reine 400er-Eingabefehler sind keine Sicherheits-Ablehnung und
-          // erzeugen weiterhin weder Audit- noch Metrik-Zeile.
-          metrics.logCallDenied(denialDimensions(denial.audit.grund, ctx.tenantId));
-        }
-        return res.status(denial.status).json(denial.body);
-      }
+    const denial = await runOutboundGates({ gates: outboundGates, ctx });
+    if (denial) {
+      beobachteAblehnung({ store, audit, denial, req, tenantId: ctx.tenantId });
+      return res.status(denial.status).json(denial.body);
     }
 
     // Ab hier ist ctx vollstaendig durch die Gate-Kette befuellt. KRITISCH: ctx.to ist die von
     // normalize_target aufgeloeste Nummer - die lokale `to` bleibt roh und wird ab hier NICHT
     // mehr gelesen.
-    const language = store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
-    // P2b + OC-P1: beide serverseitigen Praedikate (diagnostic, calleeIsOwner) aus EINER
-    // Lesung der eigenen Nummer - volle Begruendung an resolveCallPrivacyFlags (Modul-Ebene,
-    // haelt diese ohnehin ueberlange Route nicht weiter wachsen, s. dortiger Kommentar).
-    const { diagnostic, calleeIsOwnerOfThisCall } = resolveCallPrivacyFlags({
-      store,
-      config,
-      ctx,
-    });
-
-    // P8 (PLAN-CONVERSATION-QUALITY-V2): Pre-Call-Briefing VOR dem Waehlen. Laeuft NUR,
-    // wenn der Owner selbst keinen Kontext mitgeschickt hat (Owner-Eingabe gewinnt immer),
-    // und nur hinter PRECALL_BRIEFING_ENABLED (Default aus). Fail-Soft: Fehler/Timeout/
-    // Schemaverstoss -> null -> ctx.context bleibt null -> systemPrompt byte-identisch
-    // zum Bestand (assistantContextSection: `!call.context -> ""`). Bewusst KEIN Gate in
-    // der outboundGates-Kette (Praezedenz diagnostic oben): es lehnt nie ab und haette die
-    // reihenfolge-gepinnte Safety-Kette nur verbreitert. Position NACH der Kette ist
-    // Pflicht - so entstehen keine Briefing-Token fuer einen Call, den Budget-, Nummern-
-    // oder KYC-Gate ohnehin ablehnen (Regel 1).
-    if (!ctx.context) {
-      const briefed = await fetchPrecallBriefing({
-        objective: ctx.objective,
-        ownerNotes: b.briefing,
-        constraints: b.constraints,
-        to: ctx.to,
-        tenantId: ctx.tenantId,
-      });
-      if (briefed) {
-        ctx.context = briefed.context;
-        ctx.mandate = ctx.mandate || briefed.mandate;
-      }
-    }
-
-    // Thema A (Auftrag 2026-08-19): die Eroeffnungszeile des ElevenLabs-Wegs entsteht
-    // BEI AUFTRAGSANNAHME - vorab erzeugt, fail-closed validiert, mit Rueckfall-Treppe
-    // (src/elevenlabs/opening-line.js). NUR hinter dem EL-Schalter: die beiden
-    // Telnyx-Zweige lesen die Zeile nie, eine Erzeugung dort waere bezahlter Muell.
-    // Position NACH der Gate-Kette wie das Briefing (Regel 1: keine LLM-Token fuer
-    // einen Anruf, den ein Gate ablehnt). Die Sprache kommt aus DERSELBEN Aufloesung,
-    // die der Anrufstart benutzt (callLocaleOf, elevenlabs/outbound.js) - kein zweiter
-    // Sprachweg, der still divergieren koennte. Geloggt werden nur Quelle und Laenge,
-    // NIE der Text (er traegt Auftragsinhalt, Regel 4).
-    let openingLine = null;
-    if (config.voice.elevenLabsOutbound.enabled) {
-      const { ownerName } = store.tenantContext(ctx.tenantId);
-      const callLocale = callLocaleOf({
+    // P4a (F-2 Punkt 2): der Wunsch des Auftraggebers gewinnt, sonst UNVERAENDERT die
+    // Auftraggeber-Kette. Das ist die GESPRAECHSsprache; die Sprache des
+    // Offenlegungssatzes entsteht getrennt und aus dem Angerufenen
+    // (elevenlabs/call-locale.js#disclosureLanguageOf) und wird hier nicht beruehrt.
+    // E3: die Antwort auf einen deduplizierten Aufruf braucht "call" ausserhalb des
+    // try-Abschnitts (emitOpeningConsult, der Originate-Block). Deshalb hier hoisted und
+    // im try-Body per Zuweisung gefuellt (kein zweites const call weiter unten).
+    let call;
+    try {
+      const language =
+        requestedLanguage ||
+        store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
+      // P2b + OC-P1: beide serverseitigen Praedikate (diagnostic, calleeIsOwner) aus EINER
+      // Lesung der eigenen Nummer - volle Begruendung an resolveCallPrivacyFlags (Modul-Ebene,
+      // haelt diese ohnehin ueberlange Route nicht weiter wachsen, s. dortiger Kommentar).
+      const { diagnostic, calleeIsOwnerOfThisCall } = resolveCallPrivacyFlags({
         store,
         config,
-        call: { tenantId: ctx.tenantId, from: ctx.fromNumber, to: ctx.to },
-        ownerName,
+        ctx,
       });
-      const opening = await fetchOpeningLine({
-        objective: ctx.objective,
-        tenantId: ctx.tenantId,
-        locale: localeFor(callLocale.language),
-      });
-      openingLine = opening.line;
-      console.log(`[opening-line] quelle=${opening.source} zeichen=${openingLine.length}`);
-    }
 
-    // Der /voice/outbound-Webhook rendert dank call.provider (P6a) automatisch TeXML
-    // statt TwiML.
-    const call = store.createCall({
-      direction: "outbound",
-      from: ctx.fromNumber,
-      to: ctx.to,
-      goal: ctx.objective,
-      openingLine, // Thema A: null auf den Telnyx-Zweigen (s. Block oben)
-      briefing: b.briefing,
-      constraints: b.constraints,
-      context: ctx.context,
-      mandate: ctx.mandate, // P6: serverseitig normalisiert, nie roh aus dem Body
-      language,
-      maxDurationS: ctx.maxDur,
-      requestedBy: ctx.requestedBy,
-      tenantId: ctx.tenantId,
-      provider: ctx.outboundProvider,
-      reserveCents: ctx.reserveCents, // OUT-05 (F2)
-      diagnostic, // P2b: serverseitig aufgeloest, nie roh aus dem Body
-      // OC-P1: ebenfalls rein serverseitig - der Aufrufer nennt nur `to`, alles andere
-      // (eigene Nummer, Schalter, Allowlist) entscheidet der Server. Kein Client-Flag.
-      calleeIsOwner: calleeIsOwnerOfThisCall,
-    });
-    audit(
-      "place_call",
-      req,
-      `to=${ctx.to} call=${call.id} provider=${ctx.outboundProvider} requestedBy=${ctx.requestedBy}`,
-    );
+      // P8 (PLAN-CONVERSATION-QUALITY-V2): Pre-Call-Briefing VOR dem Waehlen. Laeuft NUR,
+      // wenn der Owner selbst keinen Kontext mitgeschickt hat (Owner-Eingabe gewinnt immer),
+      // und nur hinter PRECALL_BRIEFING_ENABLED (Default aus). Fail-Soft: Fehler/Timeout/
+      // Schemaverstoss -> null -> ctx.context bleibt null -> systemPrompt byte-identisch
+      // zum Bestand (assistantContextSection: `!call.context -> ""`). Bewusst KEIN Gate in
+      // der outboundGates-Kette (Praezedenz diagnostic oben): es lehnt nie ab und haette die
+      // reihenfolge-gepinnte Safety-Kette nur verbreitert. Position NACH der Kette ist
+      // Pflicht - so entstehen keine Briefing-Token fuer einen Call, den Budget-, Nummern-
+      // oder KYC-Gate ohnehin ablehnen (Regel 1).
+      if (!ctx.context) {
+        const briefed = await fetchPrecallBriefing({
+          objective: ctx.objective,
+          ownerNotes: b.briefing,
+          constraints: b.constraints,
+          to: ctx.to,
+          tenantId: ctx.tenantId,
+        });
+        if (briefed) {
+          ctx.context = briefed.context;
+          ctx.mandate = ctx.mandate || briefed.mandate;
+        }
+      }
+
+      // Thema A (Auftrag 2026-08-19): die Eroeffnungszeile des ElevenLabs-Wegs entsteht
+      // BEI AUFTRAGSANNAHME - vorab erzeugt, fail-closed validiert, mit Rueckfall-Treppe
+      // (src/elevenlabs/opening-line.js). NUR hinter dem EL-Schalter: die beiden
+      // Der TeXML-Zweig liest die Zeile nie, eine Erzeugung dort waere bezahlter Muell.
+      // Position NACH der Gate-Kette wie das Briefing (Regel 1: keine LLM-Token fuer
+      // einen Anruf, den ein Gate ablehnt). Die Sprache kommt aus DERSELBEN Aufloesung,
+      // die der Anrufstart benutzt (callLocaleOf, elevenlabs/outbound.js) - kein zweiter
+      // Sprachweg, der still divergieren koennte. Geloggt werden nur Quelle und Laenge,
+      // NIE der Text (er traegt Auftragsinhalt, Regel 4).
+      let openingLine = null;
+      if (config.voice.elevenLabsOutbound.enabled) {
+        const { ownerName } = store.tenantContext(ctx.tenantId);
+        const callLocale = callLocaleOf({
+          store,
+          config,
+          // P4a: die Gespraechssprache steht bereits fest (s. oben) und reist mit - sie
+          // wird hier NICHT zum zweiten Mal aufgeloest (G5). Die Grund-Zeile entsteht in
+          // der Sprache des Gespraechs, der Pflichtsatz davor in der des Angerufenen.
+          call: { tenantId: ctx.tenantId, from: ctx.fromNumber, to: ctx.to, language },
+          ownerName,
+        });
+        const opening = await fetchOpeningLine({
+          objective: ctx.objective,
+          tenantId: ctx.tenantId,
+          locale: localeFor(callLocale.language),
+        });
+        openingLine = opening.line;
+        console.log(`[opening-line] quelle=${opening.source} zeichen=${openingLine.length}`);
+      }
+
+      // Der /voice/outbound-Webhook rendert dank call.provider (P6a) automatisch TeXML
+      // statt TwiML.
+      const felder = {
+        direction: "outbound",
+        from: ctx.fromNumber,
+        to: ctx.to,
+        goal: ctx.objective,
+        openingLine, // Thema A: null auf dem TeXML-Zweig (s. Block oben)
+        briefing: b.briefing,
+        constraints: b.constraints,
+        context: ctx.context,
+        mandate: ctx.mandate, // P6: serverseitig normalisiert, nie roh aus dem Body
+        language,
+        maxDurationS: ctx.maxDur,
+        requestedBy: ctx.requestedBy,
+        tenantId: ctx.tenantId,
+        provider: ctx.outboundProvider,
+        reserveCents: ctx.reserveCents, // OUT-05 (F2)
+        diagnostic, // P2b: serverseitig aufgeloest, nie roh aus dem Body
+        // OC-P1: ebenfalls rein serverseitig - der Aufrufer nennt nur `to`, alles andere
+        // (eigene Nummer, Schalter, Allowlist) entscheidet der Server. Kein Client-Flag.
+        calleeIsOwner: calleeIsOwnerOfThisCall,
+      };
+      // E3: EIN synchroner Lock-Abschnitt - Dedup-Entscheidung UND Datensatz-Anlage.
+      const claim = await store.withStoreLock(() =>
+        claimCallRecord({ store, ctx, felder, nowMs: Date.now() }),
+      );
+      call = claim.call;
+      // E3: deduplizierter Aufruf - KEIN Originate, KEIN Consult, KEIN Timer, KEIN Kostenprofil.
+      // Die selbst gebuchte Reserve geht in einem ZWEITEN, kurzen Lock-Abschnitt zurueck (der
+      // erste traegt allein die Claim-Entscheidung), ohne Datensatz und damit ohne Stunden-
+      // oder Ziel-Kontingent-Verbrauch.
+      if (claim.deduplicated) {
+        await store.withStoreLock(() =>
+          store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents),
+        );
+        audit("place_call_dedup", req, `to=${ctx.to} call=${call.id} tenant=${ctx.tenantId}`);
+        return res.json(placeCallResponseBody({ call, ctx, config, deduplicated: true }));
+      }
+      audit(
+        "place_call",
+        req,
+        `to=${ctx.to} call=${call.id} provider=${ctx.outboundProvider} requestedBy=${ctx.requestedBy}`,
+      );
+    } catch (fehler) {
+      await gibReserveZurueckUndMelde({ store, ctx, fehler });
+      return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: CLAIM_ERROR_MESSAGE });
+    }
 
     // AL-P13 (Sprosse 3 der Fakten-Leiter): die offenen Fragen des Briefings werden
     // beantwortet, WAEHREND das Telefon klingelt - 0 ms Gespraechslatenz. Bewusst KEIN
@@ -353,15 +556,18 @@ export function makeCallRoutes({
     emitOpeningConsult({ req, call, context: ctx.context, tenantId: ctx.tenantId });
 
     try {
-      // EL-Anrufstart: der dritte Weg, an EXAKT derselben Stelle wie die beiden anderen -
+      // EL-Anrufstart: an EXAKT derselben Stelle wie der TeXML-Weg -
       // HINTER der kompletten, unveraenderten Gate-Kette (KEIN zweiter Einstieg, Regel 1).
-      // Der Weichenschalter steht Default aus; aus -> die beiden Telnyx-Zweige unten laufen
+      // Der Weichenschalter steht Default aus; aus -> der TeXML-Zweig unten laeuft
       // byte-identisch weiter. Der PROVIDER des Anrufs bleibt telnyx (die DID liegt dort,
       // ElevenLabs haengt per SIP-Trunk daran) - deshalb keine Provider-Abfrage, sondern
       // ein Engine-Schalter (s. src/elevenlabs/outbound.js).
       if (config.voice.elevenLabsOutbound.enabled) {
+        // KV2-2: Kostenprofil an der Weiche, VOR dem Waehlen. Set-once (state-ops);
+        // liest niemand produktiv, lehnt niemanden ab.
+        store.recordCostProfile(call.id, KOSTENPROFIL.EL_CONVAI_SIP);
         await originateElevenLabsCall(call);
-        // Regel 1 (Minuten-Achse): derselbe harte Max-Dauer-Cap wie im C-Telnyx-Zweig.
+        // Regel 1 (Minuten-Achse): derselbe harte Max-Dauer-Cap wie im TeXML-Zweig.
         // providerCallSid=null ist Absicht (es gibt keinen twilioSid); ohne callControlId
         // faellt hangUpAction auf null - der Cap beendet und bucht den Record, stoppt die
         // Ergebnis-Abholung UND loest seit 6da29ec (elevenLabsHangUpAction, s.
@@ -370,28 +576,9 @@ export function makeCallRoutes({
         // vorher das Gegenteil). OB das die Leitung tatsaechlich kappt, ist weiterhin
         // NICHT belegt (s. convai.js#endConversation).
         armMaxDurationTimer(call, null);
-        // C-Telnyx (P5): Call-Control-Origination HINTER der kompletten, unveraenderten Gate-
-        // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
-        // Provider; sonst TeXML byte-identisch. Flag Default aus -> Live-Pfad unveraendert bis P11.
-      } else if (config.telnyx.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)) {
-        await originateAiAssistantCall({
-          store,
-          voiceControl,
-          config,
-          call,
-          fromNumber: ctx.fromNumber,
-          to: ctx.to,
-          maxDur: ctx.maxDur,
-        });
-        // P6 (Regel 1, Minuten-Achse): harter Max-Dauer-Cap AUCH fuer C-Telnyx. originateAiAssistantCall
-        // hat call.callControlId persistiert+gespeichert; terminateCappedCall liest sie beim Feuern
-        // frisch und waehlt via hangUpAction den Call-Control-Hangup (endCallViaCallControl), NICHT
-        // TeXML-endCall. providerCallSid=null ist Absicht (es gibt keinen twilioSid; die ID kommt
-        // aus callControlId). KEIN realtime-Guard: ein C-Telnyx-Call laeuft NICHT ueber die
-        // Realtime-Bridge (kein Media-Stream) -> dieser Timer ist neben time_limit_secs der
-        // EINZIGE in-Prozess-Cap (fail-closed, Regel 1).
-        armMaxDurationTimer(call, null);
       } else {
+        // TeXML-Outbound-Zweig: telnyx_budget (einzige Telnyx-Outbound-Engine seit IE6-S2).
+        store.recordCostProfile(call.id, KOSTENPROFIL.TELNYX_BUDGET);
         const tw = await voiceControl(ctx.outboundProvider).originateCall({
           from: ctx.fromNumber,
           to: ctx.to,
@@ -406,20 +593,10 @@ export function makeCallRoutes({
         // Max-Dauer hart durchsetzen (Budget-Engine). Fuer den TeXML-Pfad der EINZIGE
         // verlaessliche Cap. Erst NACH erfolgreichem Originate armen (vorher gibt es
         // keinen providerCallSid).
-        if (config.voice.voiceEngine !== VOICE_ENGINE.REALTIME) armMaxDurationTimer(call, tw.sid);
+        armMaxDurationTimer(call, tw.sid);
       }
       armReserveReleaseTimer(call); // OUT-05 (F2): Reserve-Backstop, BEIDE Pfade, nach erfolgreichem Originate
-      res.json({
-        ok: true,
-        callId: call.id,
-        twilioSid: call.twilioSid,
-        status: "dialing",
-        context_received: contextReceivedMeta(ctx.context, config), // I10
-        // P2b: ehrliche Rueckmeldung, ob der Diagnose-Wunsch gewaehrt wurde. Eine still
-        // verweigerte, datenschutzrelevante Anforderung ohne jede Beobachtbarkeit waere
-        // ein eigener Defekt (Praezedenz: context_received/I10). NUR ein Boolean.
-        diagnostic: call.diagnostic,
-      });
+      res.json(placeCallResponseBody({ call, ctx, config, deduplicated: false }));
     } catch (err) {
       // OUTBOUND-E3a (Befund C1, REIHENFOLGE-RIEGEL): der Grund wird INNERHALB von
       // persistEnd geschrieben (endFailedCallWithReason oben) - und persistEnd laeuft in
@@ -494,6 +671,13 @@ export function makeCallRoutes({
       afterEventId: typeof req.query.after === "string" ? req.query.after : null,
       signal: null,
     });
+    // P2 (Stufe 0, N-10): DIES ist die Zustellung - der Client bekommt die Frage mit dieser
+    // Antwort in die Hand. Bis heute war nirgends festgehalten, ob eine Rueckfrage jemals
+    // einen Client ERREICHT hat; die Aufklaerung am 06.09. brauchte deshalb eine
+    // Zeugenaussage statt einer Messung. Der Marker gehoert an den Datensatz und nicht in
+    // waitForEvent: consult/delivery.js liest, es schreibt nicht.
+    if (event.event === CONSULT_EVENT.CONSULT && event.eventId)
+      store.markConsultAskDelivered(call.id, event.eventId);
     res.json(event);
   });
 
@@ -512,33 +696,21 @@ export function makeCallRoutes({
       return res
         .status(403)
         .json({ error: "Consult-Kanal ist fuer diesen Tenant nicht freigegeben." });
-    const { event_id: eventId, answers } = req.body || {};
+    const { event_id: eventId, answers, status } = req.body || {};
     // event_id ist Client-Freitext ueber einen authentifizierten Endpunkt. Format-
     // Pruefung VOR jeder Weiterverarbeitung (auch vor dem Audit-Log unten) - sonst
     // landet beliebiger Text im Forensik-Trail (Regel 4: keine Freitext-Audit-Zeile).
     if (!isConsultEventId(eventId))
       return res.status(400).json({ error: "event_id ist ungueltig" });
-    const validated = validateAssistantContext({ key_facts: answers });
-    if (validated.error || !validated.value)
-      return res.status(400).json({ error: validated.error || "answers ist Pflicht" });
-    // GQ-P2: die Offen-Frist-KONSTANTE kommt aus dem Consult-Modul (G22/EINE Quelle),
-    // der DB-Zugriff bleibt am injizierten store (DIP) - anders als claude.js/der Shim ist
-    // diese Route Factory-basiert und wird mit einem Store-Double getestet (P4); ein
-    // direkter Aufruf von in-call.js's acceptConsultAnswer wuerde am Test-Double vorbei
-    // immer den echten Singleton-Store treffen.
-    const { outcome, mergedFacts } = store.answerConsult(call.id, {
-      eventId,
-      facts: validated.value.key_facts,
-      nowMs: Date.now(),
-      openMs: CONSULT_OPEN_MS,
-    });
-    audit(
-      "consult_answered",
-      req,
-      `call=${call.id} event=${eventId} ergebnis=${outcome} fakten=${mergedFacts}`,
-    );
-    if (outcome !== CONSULT_ANSWER.ACCEPTED) return res.status(409).json({ error: outcome });
-    res.json({ accepted: true, merged_facts: mergedFacts });
+    // P2 (SCOPE 2): der leichte Modus. AUSDRUECKLICH ueber status und NICHT ueber ein
+    // fehlendes answers-Feld: ein Client, der answers vergisst, wuerde sonst still
+    // quittieren statt zu antworten - der Fehler saehe wie Erfolg aus. Fehlender status =
+    // FINAL, damit jeder Bestands-Aufrufer byte-identisch bleibt.
+    const statusError = invalidConsultAnswerStatus(status);
+    if (statusError) return res.status(400).json({ error: statusError });
+    if (status === CONSULT_ANSWER_MODE.WORKING)
+      return ackWorkingConsult({ store, audit, req, res, call, eventId });
+    return answerConsultFinal({ store, audit, req, res, call, eventId, answers });
   });
 
   // Laufenden Anruf sauber abbrechen
@@ -567,10 +739,15 @@ export function makeCallRoutes({
     // (awaited, provider-aware ueber call.provider - sonst endCall ueber den falschen
     // Anbieter), dann buchen (fire-and-forget).
     await terminateAndBillCall({
-      persistEnd: () => store.endCallRecord(call.id, "cancelled"),
+      // IEL-B5 (E10/E17): Ende-Anker = Carrier-Ende fuer Inbound-EL; jeder andere Call
+      // unveraendert endCallRecord (derselbe Terminal-Schreiber wie der EL-Poll, G5).
+      persistEnd: endeSchreiberFuer({
+        store, callId: call.id, status: "cancelled", politik: nachlaufPolitikFuer(call), nowMs: Date.now(),
+      }),
       // P6 (Check 5): dieselbe callControlId-/twilioSid-Auswahl wie terminateCappedCall (G5,
       // EINE Quelle) - EL-Calls fallen auf den Beende-Versuch (elHangUp, s.o.).
-      hangUp: providerHangUp ?? elHangUp,
+      // IEL-B5: GEBUNDEN -> Traeger auflegen + Ergebnis sichern, sonst unveraendert (hangUpForCall).
+      hangUp: hangUpForCall({ call, hangUp: providerHangUp ?? elHangUp, awaitAndPersistInboundElResult }),
       bill: billThunk(finishCall, store, call.id),
       onHangUpError: (e) => console.error("[cancel]", e.message),
       callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation

@@ -32,6 +32,7 @@ import {
   uiResourceUri,
   uiServerExtension,
 } from "../src/ui/contract.js";
+import { config } from "../src/config.js";
 
 const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL); // ui://hermes/call
 
@@ -607,6 +608,78 @@ test("T-P3-AC4: Whitelist unveraendert auch im ChatGPT-Pfad (place_call, kein PI
         `${tool}: structuredContent-Keys exakt wie mcp-nativ`,
       );
     });
+  }
+});
+
+// E7 (T-30/T-31): die zwei Einreichungs-Pflichtfelder am Widget-_meta. config.server.
+// publicUrl wird pro Test explizit gesetzt und im finally wiederhergestellt (Muster
+// test/route-auth-inventory.test.js) - sonst entscheidet die lokale .env ueber das
+// Ergebnis. uiSubmissionMeta() wertet synchron zur Aufrufzeit aus (kein await noetig).
+test("E7-T10: mcp-nativer Host traegt eine leere, aber vorhandene CSP am Widget-_meta", async () => {
+  const zuvor = config.server.publicUrl;
+  config.server.publicUrl = "https://e7.test";
+  try {
+    for (const { tool, body } of P3_WIDGETS) {
+      await withGateway(body, async () => {
+        const { tools } = captureUi({ uiHost: capableHost() });
+        const meta = tools.get(tool).config._meta;
+        assert.deepEqual(meta.ui.csp, { connectDomains: [], resourceDomains: [] });
+        assert.equal("frameDomains" in meta.ui.csp, false, "frameDomains entfaellt (0 Frames)");
+      });
+    }
+  } finally {
+    config.server.publicUrl = zuvor;
+  }
+});
+
+test("E7-T11: mcp-nativer Host traegt den Server-Origin als domain, resourceUri unveraendert", async () => {
+  const zuvor = config.server.publicUrl;
+  config.server.publicUrl = "https://e7.test";
+  try {
+    for (const { tool, widgetId, body } of P3_WIDGETS) {
+      await withGateway(body, async () => {
+        const { tools } = captureUi({ uiHost: capableHost() });
+        const meta = tools.get(tool).config._meta;
+        assert.equal(meta.ui.domain, "https://e7.test");
+        assert.equal(meta.ui.resourceUri, uiResourceUri(widgetId));
+      });
+    }
+  } finally {
+    config.server.publicUrl = zuvor;
+  }
+});
+
+test("E7-T12: fail-safe - leere publicUrl laesst domain entfallen, CSP bleibt vorhanden", async () => {
+  const zuvor = config.server.publicUrl;
+  config.server.publicUrl = "";
+  try {
+    for (const { tool, body } of P3_WIDGETS) {
+      await withGateway(body, async () => {
+        const { tools } = captureUi({ uiHost: capableHost() });
+        const meta = tools.get(tool).config._meta;
+        assert.equal("domain" in meta.ui, false);
+        assert.ok(meta.ui.csp, "csp bleibt trotzdem vorhanden");
+      });
+    }
+  } finally {
+    config.server.publicUrl = zuvor;
+  }
+});
+
+test("E7-T13: Nicht-Regression ChatGPT-Host - flacher openai/outputTemplate-String bleibt unangetastet", async () => {
+  const zuvor = config.server.publicUrl;
+  config.server.publicUrl = "https://e7.test";
+  try {
+    for (const { tool, widgetId, body } of P3_WIDGETS) {
+      await withGateway(body, async () => {
+        const { tools: chatTools } = captureUi({ uiHost: chatgptHost() });
+        const meta = chatTools.get(tool).config._meta;
+        assert.equal(meta[CHATGPT_META_KEY], uiResourceUri(widgetId));
+        assert.ok(!meta.ui, "ChatGPT-_meta bleibt flach, kein verschachteltes ui");
+      });
+    }
+  } finally {
+    config.server.publicUrl = zuvor;
   }
 });
 
@@ -1238,9 +1311,12 @@ test("T-W2-place-shape: place_call laeuft jetzt ueber registerTool, traegt _meta
     // ({callId:"call_1"}) traegt das Feld selbst NICHT -> der Handler normalisiert
     // defensiv auf "kein Kontext angekommen" (fail-closed, kein Crash bei einem aelteren
     // Gateway-Mock).
+    // E3 (N-11): deduplicated ist additiv dazugekommen (dieselbe Begruendung, PLACE_CALL_MOCK
+    // traegt es nicht -> Handler normalisiert fail-closed auf false, s. T-I10 unten fuer die
+    // Wert-Pruefung).
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
-      "call_id", "context_received", "duration_s", "failure_reason", "last_transcript_lines",
-      "objective_achieved", "result_summary", "status",
+      "call_id", "context_received", "deduplicated", "duration_s", "failure_reason",
+      "last_transcript_lines", "objective_achieved", "result_summary", "status",
     ]);
     assert.equal(result.structuredContent.call_id, "call_1");
     assert.equal(result.structuredContent.status, "dialing");

@@ -19,12 +19,14 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { registerTools } from "../src/mcp-tools.js";
 
-// Faengt server.tool(name, desc, schema, handler) ein -> Map name -> handler.
+// Faengt server.tool(name, desc, schema, annotations, handler) ein -> Map name -> handler.
+// Restparameter statt eines fuenften benannten Parameters (annotations sitzt seit E2 an
+// Position 4; max-params haelt).
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    tool(name, _desc, _schema, handler) {
-      handlers.set(name, handler);
+    tool(name, _desc, _schema, ...rest) {
+      handlers.set(name, rest.at(-1));
     },
     // P1: get_call_status nutzt registerTool/registerResource. Der Stub muss sie
     // kennen, sonst wirft registerTools (TypeError). Capture nach Name (cb an

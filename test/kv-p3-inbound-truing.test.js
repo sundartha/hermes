@@ -86,7 +86,8 @@ test("KV-P3-1 beendeter Inbound-Call mit vollstaendigen Belegen: cost_trued_at, 
   assert.equal(result.measured, 1);
   assert.notEqual(call.costTruedAt, null, "der Riegel ist gesetzt");
   assert.equal(call.actualCostMicroCents, KV_M1_ACTUAL_MICRO_CENTS, "USD-Mikro-Cent, UNVERAENDERT (D5)");
-  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.DETAIL_RECORDS);
+  // KV2-8: neu gesettelte Anrufe tragen 'kostenbuch_vollbeleg'.
+  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG);
   assert.equal(
     usageFor(state, BOOTSTRAP_TENANT_ID).costCents,
     SEED_COST_CENTS + ERWARTETES_DELTA_CENTS,

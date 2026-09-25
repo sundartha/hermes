@@ -1,6 +1,6 @@
 // ---- makeVoiceRoutes (Server-Slim P11) --------------------------------------------
 // Extrahierte Voice-Webhook-Gruppe (GET /voice/tts/:token, die /voice-Signatur-MW,
-// POST /voice/incoming|turn|outbound|status|call-control) als Factory mit Dependency-
+// POST /voice/incoming|turn|outbound|el-rueckfall|el-bein|status) als Factory mit Dependency-
 // Injection - gleiches Muster wie makeCallRoutes/makeReadRoutes. Teil der
 // server.js-Decomposition (PLAN-SERVER-SLIM P11): REINE Verschiebung, Verhalten
 // unveraendert (byte-identische Pfade/Status/Bodies/Audit-Events). G5-1-Dedup
@@ -9,42 +9,56 @@
 // Provider-Signatur (Regel 3) und die Offenlegungs-Textpfade (Regel 2).
 //
 // Import-vs-Inject wie api-calls.js (P9): reine Modul-Konstanten/Praedikate/Formatierer
-// mit EINER kanonischen Heimat (normNum/DEFAULT_PROVIDER, providerSupports/CAPABILITY
-// (P5, registry.js), sayD/hangupD, SPEAK_OUTCOME, localeFor, callFailureReason,
-// degradedSpeechFor, agentTurn/openingText/callerHasSpoken, remainingMaxDurationMs,
-// noSpeechEscalation, metrics, startInboundAiAssistant/inboundHandoffDecision,
-// makeCallControlIngest) werden direkt importiert (G5 "eine Quelle"). Laufzeit-Instanzen
-// (voiceRender/directiveSynth/ttsStore/lifecycle/finishCall/watchdog, INV-7), der
-// Provider-Dispatch-Seam (voiceControl/webhookEvents/providerFromHeaders/
+// mit EINER kanonischen Heimat (normNum/DEFAULT_PROVIDER, sayD/hangupD, SPEAK_OUTCOME,
+// localeFor, callFailureReason, degradedSpeechFor, agentTurn/openingText/callerHasSpoken,
+// remainingMaxDurationMs, noSpeechEscalation, metrics, logInboundPath/INBOUND_PATH,
+// legRunsOurTurnLoop, bridgeStateOf/BRIDGE_STATE, inboundPfadEntscheidung/inboundAbgewiesen, inboundElLocaleOf,
+// inbound-rueckfall, inbound-uebergabe-gescheitert) werden direkt importiert (G5 "eine
+// Quelle"). Laufzeit-Instanzen (voiceRender/directiveSynth/ttsStore/lifecycle/finishCall,
+// INV-7), der Provider-Dispatch-Seam (webhookEvents/providerFromHeaders/
 // inboundSignatureVerifier, DIP) sowie der Settlement-Seam (terminateAndBillCall/
-// billThunk) und config/store/audit werden injiziert (INV-7 "eine Instanz").
+// billThunk), der Nachlauf-Start des EL-Inbound-Wegs (startInboundNachlauf, EINE
+// elevenLabsOutbound-Instanz), die Frist-Instanz der Inbound-Bruecken (inboundBridges) und
+// config/store/audit werden injiziert (INV-7 "eine Instanz").
 import { Router } from "express";
-import { VOICE_ENGINE } from "../config.js";
 import { normNum, DEFAULT_PROVIDER, MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 import { emergencyBrakeSeconds } from "../call-duration.js";
 import { callTariffCentsPerMin } from "../billing/metering.js";
-import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.js";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.js";
 import { localeFor } from "../i18n/locales.js";
 import { withInboundNotice } from "../i18n/inbound-notice.js";
-import { greetingForLanguage } from "../i18n/greeting-catalog.js";
+import { gespeicherteBegruessungFuer } from "../i18n/greeting-catalog.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { degradedSpeechFor } from "../llm.js";
+import { noteLlmBillingOutage } from "../llm-billing-outage.js";
 import { agentTurn, openingText, callerHasSpoken } from "../claude.js";
 import { isBudgetAxis } from "../budget-gate.js";
 import { remainingMaxDurationMs } from "../store/state-ops.js";
 import { noSpeechEscalation } from "../no-speech-escalation.js";
 import { metrics } from "../metrics.js";
-import {
-  startInboundAiAssistant,
-  inboundHandoffDecision,
-  logInboundPathDecision,
-  INBOUND_PATH,
-} from "../telnyx-inbound.js";
-import { makeCallControlIngest } from "../telnyx-call-control-ingest.js";
+import { logInboundPath, INBOUND_PATH } from "../telephony/inbound-path.js";
 import { ANSWERED_BY } from "../telephony/answered-by.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
+import { KOSTENPROFIL } from "../billing/kostenarten.js";
+import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.js";
+import { legRunsOurTurnLoop } from "../telephony/leg-turn-loop.js";
+import { BRIDGE_STATE, bridgeStateOf, inboundAbgewiesen } from "../elevenlabs/inbound-bridge-state.js";
+import { inboundPfadEntscheidung } from "../elevenlabs/inbound-path-decision.js";
+import { inboundElLocaleOf } from "../elevenlabs/inbound-initiation.js";
+import { EL_RUECKFALL_PFAD } from "../elevenlabs/inbound-bridges.js";
+import {
+  EL_BEIN_PFAD,
+  RUECKFALL_ENTSCHEIDUNG,
+  elBegruessungslautUrl,
+  elFehlersatzDirektiven,
+  elUebergabeDirektiven,
+  msSeitBindung,
+  rueckfallEntscheidungFuer,
+  rueckfallQuelleFuerLog,
+} from "../elevenlabs/inbound-rueckfall.js";
+import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.js";
+import { callerIsOwnerGranted } from "../callee-is-owner.js";
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -65,11 +79,274 @@ import { persistEndWithReason } from "../telephony/call-termination.js";
 // Der Aufrufer hat call -> localeFor(call.language).<feld>. DE-Werte tragen seit P1
 // korrekte Umlaute (i18n-Test + de-umlaut-orthography pinnen sie).
 
-// P8: TeXML-Handoff-Antwort auf /voice/incoming, wenn der Call-Control-Assistant den Leg
-// uebernimmt. Leere Direktivenliste (renderDirectives([]) -> <Response></Response>) als
-// Platzhalter; die exakte Telnyx-Handoff-Direktive ist live unbestaetigt (P0/P11). Zentral
-// benannt statt inline-[] gestreut.
-const INBOUND_ASSISTANT_HANDOFF = [];
+// IE4: die Ersatzantwort auf eine WIEDERHOLTE Zustellung - leere Direktivenliste, damit
+// der Provider das laufende Dokument des uebergebenen Beins nicht zurueksetzt.
+// Leere Liste mit EINER Frage: "den laufenden Dokumentfluss eines uebergebenen Beins nicht anfassen".
+const RUNNING_DOCUMENT_UNTOUCHED = [];
+
+// IE4: die Antwort richtet sich nach dem ZUSTAND des Beins, nicht nach der Engine.
+// Budget-Bein (und jeder unbelegte Zustand) -> unveraenderter Folge-Gather OHNE Prompt:
+// Mikrofon offen, keine Modellrunde, keine Synthese. Uebergebenes Bein (heute der
+// Realtime-Stream, ab IE5 die SIP-Uebergabe) -> gueltiges, aber leeres Dokument.
+// MODUL-EBENE statt im Abschluss von makeVoiceRoutes (Praezedenz
+// recordStartRejectionReason in api-calls.js): die Entscheidung braucht keinen
+// Server-Zustand, nur die Direktiven-Fabrik - und makeVoiceRoutes traegt bereits zu viel.
+// IEX-A9 (D6): ein abgewiesener Anruf bekommt nie einen Gather - er wuerde sonst nach einem Neustart
+// ein Budget-Gespraech ohne Hinweis fuehren (O5). Ohne Synthese: die Antwort ist synchron.
+function repeatDeliveryXml(call, deps) {
+  if (inboundAbgewiesen(call)) return fehlersatzOhneAufloesungXml({ call }, deps);
+  const directives = legRunsOurTurnLoop(call)
+    ? deps.followupTurnDirectives(call, "")
+    : RUNNING_DOCUMENT_UNTOUCHED;
+  return deps.render(directives, call.provider);
+}
+
+// FW2: EIN Kanalname fuer die Diagnose-Zeilen dieses Webhooks (G25).
+const TURN_LOG_PREFIX = "[voice/turn]";
+
+// IE7: die EINE Antwort der TTS-Route auf "gibt es nicht (mehr)" - Nichtfund UND
+// Fehlerpfad geben dieselbe Auskunft, damit ein Anruf nie an einem haengenden Abruf
+// stirbt und der Endpunkt nichts ueber vergebene Token verraet.
+const HTTP_NOT_FOUND = 404;
+
+const HTTP_OK = 200;
+// "Das Bein ist angenommen" - EINE Quelle fuer /voice/status und /voice/el-bein (G5).
+const ANGENOMMEN_STATUS = Object.freeze(["in-progress", "answered"]);
+const EL_RUECKFALL_LOG_PREFIX = "[el-rueckfall]";
+const EL_BEIN_LOG_PREFIX = "[el-bein]";
+const INBOUND_LOG_PREFIX = "[inbound]";
+
+// PROMPT-03/IEL-B6: die gespeicherte Vorlage in der Anrufsprache (Budget-Erstanruf). Das
+// Einsetzen des Auftraggebers bleibt VOR dem Pflichtsatz-Praefix: der Fehlerpfad bei
+// greeting=null wirft unveraendert (voice-incoming-catch-path, greetingForLanguage(null, ...)
+// gibt null zurueck).
+function gespeicherteBegruessungDes({ call, store }) {
+  const ctx = store.tenantContext(call.tenantId);
+  return gespeicherteBegruessungFuer({ storedGreeting: ctx.settings.greeting, language: call.language, ownerName: ctx.ownerName });
+}
+
+// Budget-Pfad des Erstanrufs - REINE Verschiebung aus /voice/incoming, Reihenfolge unveraendert
+// (Golden-Test). GAP-14: der Pflichtsatz wird GERENDERT, nie gepromptet (Regel-2-Analogie fuer
+// Inbound) - und nur vorangestellt, wenn er im Greeting fehlt (kein Doppelsatz). Deckt den
+// TeXML-Gather. Die Sonde je Leg (telephony/inbound-path.js): genau eine Zeile, auch im Normalfall.
+async function sendBudgetBegruessung({ res, call, locale }, { store, sendVoiceXml, turnDirectives }) {
+  const greeting = withInboundNotice(gespeicherteBegruessungDes({ call, store }), locale.inboundNotice);
+  logInboundPath({ callId: call.id, path: INBOUND_PATH.BUDGET });
+  store.addTranscript(call.id, "agent", greeting);
+  await sendVoiceXml(res, call, turnDirectives(call, greeting));
+}
+
+// IEX-A3 (3.1 Schritt 3): Uebergabe an den Agenten OHNE eigenen Satz - den KI-/Transkriptionshinweis
+// spricht der Agent als Teil seiner Eroeffnung (first_message, Riegel E3 an der Init-Route).
+// Nebeneffekte (N7): Sonde, Frist-Timer, Antwort. Kein Transkript: die erste Agent-Zeile kommt im
+// Nachlauf aus dem Anbieter-Transkript. Der SIP-Zugang wird NUR hier gelesen (Grep-Test).
+async function sendElUebergabe({ res, call }, { config, inboundBridges, sendVoiceXml }) {
+  logInboundPath({ callId: call.id, path: INBOUND_PATH.ELEVENLABS });
+  inboundBridges.armDeadlines(call.id); // E9-2, Anker answeredAt - vor dem Senden: nie Stille
+  // Umbenannt: das Objekt traegt seit IEP-P2 nicht nur den Zugang (N7).
+  const elInbound = config.voice.elevenLabsInbound;
+  await sendVoiceXml(
+    res,
+    call,
+    elUebergabeDirektiven({
+      call,
+      zugang: { username: elInbound.sipUser, password: elInbound.sipPassword },
+      publicUrl: config.server.publicUrl,
+      // IEP-P2: AN/AUS entscheidet HIER - das Direktiven-Modul bleibt config-frei (dessen
+      // Modulkopf). Aus -> null -> Uebergabe-TeXML byte-gleich zur Form ohne Fuellung.
+      begruessungslautUrl: elInbound.begruessungslautEnabled
+        ? elBegruessungslautUrl(config.server.publicUrl)
+        : null,
+    }),
+  );
+}
+
+// E2/G23: die Weiche als EIN Objekt je Pfad - der Handler verzweigt nicht (keine neue Komplexitaet
+// im gepinnten Handler). Funktionsdeklarationen sind gehoisted.
+// IEX-A9 (E9/E10): indiziert ueber die Pfad-Tokens der Weiche (EIN Vokabular). ABGEWIESEN traegt das
+// Kurzbein-Profil: einziger Traeger telnyx_call_records = Wirklichkeit des Beins ohne Uebergabe.
+const INBOUND_PFAD = Object.freeze({
+  [INBOUND_PATH.BUDGET]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, antworte: sendBudgetBegruessung }),
+  [INBOUND_PATH.ELEVENLABS]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI, antworte: sendElUebergabe }),
+  [INBOUND_PATH.ABGEWIESEN]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, antworte: sendAbweisung }),
+});
+function inboundPfadFuer({ config, tenantId, numberRecord }) {
+  return INBOUND_PFAD[inboundPfadEntscheidung({ config, tenantId, numberRecord })];
+}
+
+// S1-1: technischer Abbruch mit Ansage - der catch von /voice/incoming (der Rueckfall-catch
+// spricht seit IEX-A2 den Fehlersatz). Gracefuler Fehler-TeXML-Fallback statt haengendem Call
+// (spiegelt /voice/turn, Runde 2 S-A: sichtbar statt still). Kein LLM-Aufruf im Greeting-Pfad -> immer
+// turnErrorSpeech (kein llmDegradedSpeech-Fall wie bei /voice/turn). Vor der Call-Erzeugung gibt
+// es noch kein call.provider fuer synthesizeDirectiveAudio (der Guard dort wuerde selbst werfen)
+// -> reines Azure-<Say> wie der Unrouted-Pfad; localeFor(undefined) faellt fail-safe zurueck.
+async function sendTechnischesEnde({ res, call, provider }, { directiveSynth, render }) {
+  const locale = localeFor(call?.language);
+  const errorDirectives = [sayD(locale.turnErrorSpeech, locale.voiceProfile), hangupD()];
+  const outDirectives = call ? await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives) : errorDirectives;
+  res.type("text/xml").send(render(outDirectives, provider));
+}
+
+// F12-Muster wie /voice/turn: unbekannter oder nicht aktiver Call -> erst re-attachen (Deploy-Instanzwechsel).
+async function aktiverCallFuer(callId, { store, lifecycle }) {
+  const call = store.getCall(callId);
+  if (call?.status === "active") return call;
+  return (await lifecycle.reattachActiveCall(callId)).call;
+}
+
+function sendAuflegen({ res, call }, { render }) {
+  res.type("text/xml").send(render([hangupD()], call?.provider));
+}
+
+// Mikro offen, keine Begruessung, keine Modellrunde (Budget-Bein, [IEL] 3.3).
+function sendFolgeGather({ res, call }, { render, followupTurnDirectives }) {
+  res.type("text/xml").send(render(followupTurnDirectives(call, ""), call.provider));
+}
+
+// E1/E2: Sprache und Stimme aus derselben Aufloesung wie die Init-Antwort (tts.voice_id),
+// Name des Tenants aus tenantContext.
+function fehlersatzFuer({ call }, { store, config }) {
+  const aufloesung = inboundElLocaleOf({ store, config, call });
+  const bundle = localeFor(aufloesung.language);
+  return {
+    text: bundle.inboundFehlersatz(store.tenantContext(call.tenantId).ownerName),
+    voiceProfile: bundle.voiceProfile,
+    voiceId: aufloesung.voiceId,
+  };
+}
+
+// IEX-A2 (O3/E4): gescheiterte Uebergabe. Nebeneffekte (N7): Marker, Fehlergrund, Fristen weg,
+// Antwort. Vermerk VOR der Synthese: ein Synthese-Wurf laesst den Marker stehen. Kein Transkript.
+async function sprecheFehlersatz({ res, call, nowMs }, deps) {
+  vermerkeUebergabeGescheitert({ callId: call.id, grund: INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT, nowMs }, deps);
+  await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(fehlersatzFuer({ call }, deps)));
+}
+
+// IEX-A9 (O5/3.3): Scope registrierte_dids, DID ohne gueltigen Registrierungs-Beleg. Nebeneffekte (N7):
+// Sonde, Marker + Grund (Vermerk VOR der Synthese - ein Synthese-Wurf laesst den Marker stehen, der
+// Abschluss benachrichtigt dann trotzdem nicht), Logzeile ohne Nummer, Antwort. Kein Dial, keine Frist,
+// kein Transkript. Kostenprofil Kurzbein (E10, INBOUND_PFAD).
+async function sendAbweisung({ res, call }, deps) {
+  logInboundPath({ callId: call.id, path: INBOUND_PATH.ABGEWIESEN });
+  const grund = INBOUND_EL_GRUND.EL_OHNE_REGISTRIERUNG;
+  vermerkeUebergabeGescheitert({ callId: call.id, grund, nowMs: Date.now() }, deps);
+  console.log(`${INBOUND_LOG_PREFIX} ${INBOUND_PATH.ABGEWIESEN} grund=${grund} call=${call.id}`);
+  await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(fehlersatzFuer({ call }, deps)));
+}
+
+const RUECKFALL_ANTWORT = Object.freeze({
+  [RUECKFALL_ENTSCHEIDUNG.AUFLEGEN]: sendAuflegen,
+  [RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER]: sendFolgeGather,
+  [RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ]: sprecheFehlersatz,
+});
+
+// E4-catch (D5): Marker nur, wo auch der Normalweg ihn setzt - ein laenger gebundenes Gespraech
+// behaelt seinen Nachlauf, ein Budget-Call seine Benachrichtigung. Best-effort: ein zweiter
+// Wurf verhindert den Satz nie.
+function vermerkeNachFehlerBestEffort({ call, nowMs }, deps) {
+  if (rueckfallEntscheidungFuer({ call, nowMs }) !== RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ) return;
+  try {
+    vermerkeUebergabeGescheitert({ callId: call.id, grund: INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT, nowMs }, deps);
+  } catch (err) {
+    console.error(EL_RUECKFALL_LOG_PREFIX, "vermerk:", err.message);
+  }
+}
+
+// Name nur bei bekanntem, lesbarem Tenant; sonst "" -> O4-Form. Wirft nie.
+function ownerNameBestEffort({ call }, { store }) {
+  if (!call) return "";
+  try {
+    return store.tenantContext(call.tenantId).ownerName;
+  } catch {
+    return "";
+  }
+}
+
+// E4-catch: ohne Synthese und ohne Sprach-/Stimmaufloesung (beides kann der Wurf gewesen sein) -
+// Azure-<Say> wie der Unrouted-Pfad, damit der catch nicht an derselben Stelle erneut wirft. Dieselbe
+// XML-Quelle bedient die Wiederholungs-Antwort abgewiesener Anrufe (D6).
+function fehlersatzOhneAufloesungXml({ call }, deps) {
+  const bundle = localeFor(call?.language);
+  const satz = sayD(bundle.inboundFehlersatz(ownerNameBestEffort({ call }, deps)), bundle.voiceProfile);
+  return deps.render([satz, hangupD()], call?.provider ?? DEFAULT_PROVIDER);
+}
+
+function sendFehlersatzOhneAufloesung({ res, call }, deps) {
+  res.type("text/xml").send(fehlersatzOhneAufloesungXml({ call }, deps));
+}
+
+// E4 (Nebeneffekte je Entscheidung s.o.). Rumpf komplett in try/catch (Express 4, Muster S1-1).
+// quelle wirkt nur noch im Log; ms_seit_bindung ist die Kalibrierzeile fuer A3 (Spec M-A3) - der
+// Schluessel bleibt snake_case (G11-Ausnahme), weil das Runbook genau diesen Text liest.
+async function antworteAufElRueckfall(req, res, deps) {
+  let call = null;
+  try {
+    call = await aktiverCallFuer(req.query.callId || "", deps);
+    const nowMs = Date.now();
+    const entscheidung = rueckfallEntscheidungFuer({ call, nowMs });
+    console.log(
+      EL_RUECKFALL_LOG_PREFIX,
+      JSON.stringify({
+        callId: call?.id ?? null,
+        quelle: rueckfallQuelleFuerLog(req.query.quelle),
+        entscheidung,
+        ms_seit_bindung: msSeitBindung(call, nowMs),
+      }),
+    );
+    await RUECKFALL_ANTWORT[entscheidung]({ res, call, nowMs }, deps);
+  } catch (err) {
+    console.error(EL_RUECKFALL_LOG_PREFIX, err.message);
+    vermerkeNachFehlerBestEffort({ call, nowMs: Date.now() }, deps);
+    sendFehlersatzOhneAufloesung({ res, call }, deps);
+  }
+}
+
+function beinAngenommen({ call, status }) {
+  return ANGENOMMEN_STATUS.includes(status) && call.status === "active" && bridgeStateOf(call) === BRIDGE_STATE.WARTET;
+}
+
+// E9-1: answered des SIP-Beins -> innere Frist. Andere Ereignisse: nur loggen. PII-frei.
+function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
+  res.sendStatus(HTTP_OK);
+  const call = store.getCall(req.query.callId || "");
+  if (!call) return;
+  const { status } = webhookEvents(call.provider).parseLifecycleEvent(req.body);
+  const angenommen = beinAngenommen({ call, status });
+  console.log(EL_BEIN_LOG_PREFIX, JSON.stringify({ callId: call.id, status, angenommen }));
+  if (angenommen) inboundBridges.armBindingDeadline(call.id);
+}
+
+// IEP-P6: die EINE Auswertung "ruft der Owner von seiner eigenen Nummer an?" fuer diesen
+// eingehenden Anruf. Ergebnis geht set-once an den Anruf-Datensatz und faerbt spaeter
+// AUSSCHLIESSLICH die Anrede (elevenlabs/inbound-initiation.js). Auf MODUL-EBENE, damit
+// der reihenfolge-gepinnte Handler nicht waechst.
+// NORMALISIERUNG VORGELAGERT UND GETEILT (normNum - dieselbe Quelle, die `To` im Handler
+// normalisiert); das Praedikat selbst vergleicht strikt. Das GESPEICHERTE call.from
+// bleibt roh: daran haengen Tarif, Kostenkalibrierung, Summary-Betreff/-SMS und der
+// Aktiv-Anruf-Lookup.
+function ownerTonFuer({ from, tenantId }, { store, config }) {
+  return callerIsOwnerGranted({
+    from: normNum(from),
+    ownNumber: store.tenantPrivateNumber(tenantId),
+    tenantId,
+    enabled: config.voice.inboundOwnerGreetingEnabled,
+    allowedTenantIds: config.voice.inboundOwnerGreetingTenantIds,
+  });
+}
+
+// IEP-P6: der Anruf-Datensatz eines eingehenden Anrufs - Leg, Notbremse und die
+// Owner-Markierung in EINEM Schritt. Die Markierung entsteht SET-ONCE und VOR dem
+// Uebergabe-TeXML, also vor dem ersten gesprochenen Wort: danach kippt keine
+// Nummern-Aenderung die Anrede mehr. Ebenfalls auf MODUL-EBENE (Praezedenz
+// resolveCallPrivacyFlags in routes/api-calls.js) - der /voice/incoming-Handler traegt
+// einen Reihenfolge-Pin und darf nicht wachsen.
+function erzeugeInboundCall({ leg, maxDurationS }, deps) {
+  return deps.store.createCall({
+    ...leg,
+    maxDurationS,
+    callerIsOwner: ownerTonFuer({ from: leg.from, tenantId: leg.tenantId }, deps),
+  });
+}
 
 export function makeVoiceRoutes({
   store,
@@ -80,16 +357,15 @@ export function makeVoiceRoutes({
   ttsStore,
   lifecycle,
   finishCall,
-  voiceControl,
   webhookEvents,
   providerFromHeaders,
   inboundSignatureVerifier,
   terminateAndBillCall,
   billThunk,
-  watchdog,
+  startInboundNachlauf,
+  inboundBridges,
 }) {
-  const { render, turnDirectives, sayInCallVoice, followupTurnDirectives, streamDirectives } =
-    voiceRender;
+  const { render, turnDirectives, sayInCallVoice, followupTurnDirectives } = voiceRender;
 
   // EINE Quelle (G5) fuer die TeXML-Antwort "Directiven synthetisieren -> rendern -> als
   // text/xml senden". Provider = call.provider (bei /voice/incoming identisch zum lokalen
@@ -99,6 +375,12 @@ export function makeVoiceRoutes({
     const audio = await directiveSynth.synthesizeDirectiveAudio(call, directives);
     res.type("text/xml").send(render(audio, call.provider));
   }
+
+  // IEL-B8: EIN Abhaengigkeits-Buendel fuer die Modul-Ebene-Handler (INV-7: dieselben Instanzen).
+  const voiceDeps = {
+    store, config, lifecycle, webhookEvents, inboundBridges, directiveSynth,
+    render, turnDirectives, followupTurnDirectives, sendVoiceXml,
+  };
 
   // P3.1 (PLAN-CONVERSATION-QUALITY-V2): Abschied VOR dem harten Max-Dauer-Cap. Faellt die
   // Restzeit unter den Vorlauf, endet dieser Turn mit einem deterministischen Abschluss-Satz
@@ -123,8 +405,9 @@ export function makeVoiceRoutes({
   // werden nur ihre zwei Eingaben aus dem Store gezogen. Auch INBOUND bekommt sie: seine
   // KI-Token buchen in jeder Schleifenrunde live auf dieselbe Tenant-Achse (E11-Korrektur),
   // und ohne eigene Frist liefe ein haengendes Inbound-Leg bis zur absoluten Obergrenze.
-  // callTariffCentsPerMin traegt die Richtungsregel (inbound: Satz des EIGENEN DID-Landes) -
-  // hier NICHT nachgebaut.
+  // callTariffCentsPerMin traegt die Satzregel (outbound: Leg-Satz; inbound: kalibrierter
+  // Inbound-Satz, mit Kostenprofil telnyx_inbound_el_convai der Leg-Satz wie Outbound-EL) -
+  // hier NICHT nachgebaut. Das Profil muss dafuer im Leg-Objekt stehen.
   function brakeSecondsFor(leg) {
     return emergencyBrakeSeconds({
       remainingCents: store.tenantBudgetSnapshot(leg.tenantId, config.billing).remainingCents,
@@ -159,48 +442,24 @@ export function makeVoiceRoutes({
     await sendVoiceXml(res, call, directives);
   }
 
-  // C-Telnyx-Inbound (P8, Befund 8): startet - falls einschlaegig - den Call-Control-Assistant
-  // fuer einen Inbound-Leg und liefert die Handoff-TeXML; sonst null (Aufrufer faellt fail-safe
-  // auf den bestehenden TeXML-Gather-Pfad zurueck). ERBT Signatur (app.use "/voice"), Tenant-
-  // Resolve (numberRecordByE164) UND Budget-Gate vom Aufrufer - KEIN neuer Gate, dieser Helper
-  // fuegt keinen hinzu. Nur bei beiden aktiven Schaltern (Master-Flag + GQ-P3-Inbound-Schalter)
-  // + signatur-authentifiziertem Telnyx-Provider (Anti-Spoof: provider stammt aus dem Signatur-
-  // Header, nicht aus To/Body). callControlId fehlt (TeXML-Feld absent) -> null,
-  // kein kaputter Assistant-Pfad. Der Max-Dauer-Timer ist beim Aufrufer BEREITS armiert;
-  // terminateCappedCall liest den Call frisch und trifft via hangUpAction(callControlId) den
-  // Call-Control-Hangup, sobald callControlId persistiert ist (P6) - KEIN Re-Arm (zweiter Timer
-  // = Leak). Exakte Handoff-Direktive live unbestaetigt (wie P4-Adapter-Body-Form) - mit dem
-  // Owner in P0/P11 fixen.
-  async function inboundAssistantHandoffXml({ call, provider, body, greeting, voiceProfile }) {
-    // GQ-P3: die Bedingung lebt als benannte Entscheidung in telnyx-inbound.js (dort, wo
-    // auch der gemessene Feldname wohnt) - hier bleibt nur Verdrahtung. Die Sonde laeuft
-    // VOR der Verzweigung und meldet jeden Leg, nicht nur den Defekt (Punkt 4 der Spec);
-    // im Feldname-Defektfall setzt sie die laute GQ-S1-Zeile obendrauf.
-    const decision = inboundHandoffDecision({
-      assistantEnabled: config.telnyx.telnyxAssistant.enabled,
-      handoffEnabled: config.telnyx.telnyxAssistant.inboundHandoffEnabled,
-      providerCapable: providerSupports(provider, CAPABILITY.AI_ASSISTANT),
-      body,
-    });
-    logInboundPathDecision({ callId: call.id, decision, body });
-    if (decision.path !== INBOUND_PATH.ASSISTANT) return null;
-    await startInboundAiAssistant({
-      store,
-      voiceControl,
-      config,
-      call,
-      callControlId: decision.callControlId,
-      greeting,
-      voiceProfile,
-    });
-    return render(INBOUND_ASSISTANT_HANDOFF, provider);
-  }
-
   const router = Router();
 
-  // ---- INV-4 (Pflicht-Kommentar, safety-tragend): TTS-Route ZUERST, DANN Sig-MW, DANN die 5
-  // Webhooks (/voice/incoming, /voice/turn, /voice/outbound, /voice/status,
-  // /voice/call-control). Wuerde die Sig-MW VOR die TTS-Route ruecken, wuerde PII-Audio
+  // SEC-P1 (REPLAY-01/02): Wiederholungs-Riegel der zwei ungeschuetzten Webhooks.
+  // EINE Instanz je Server (INV-7). Registriert wird er PRO ROUTE, also strukturell
+  // HINTER der /voice-Signatur-MW - ein unsignierter Request darf keinen Anker
+  // beanspruchen. keepAliveXml ist die Antwort auf eine Wiederholung, deren Wortlaut
+  // dieser Prozess nicht mehr kennt (Neustart). Seit IE4 ist sie PFADGERECHT
+  // (repeatDeliveryXml): Budget-Bein unveraendert Folge-Gather, uebergebenes Bein ein
+  // leeres Dokument. Der ANKER und die Antwortpflicht (immer text/xml, nie ein
+  // Fehlerstatus) sind unberuehrt; KEIN Gate wird hier beruehrt (Regel 1).
+  const idempotenz = makeWebhookIdempotenz({
+    store,
+    keepAliveXml: (call) => repeatDeliveryXml(call, voiceDeps),
+  });
+
+  // ---- INV-4 (Pflicht-Kommentar, safety-tragend): TTS-Route ZUERST, DANN Sig-MW, DANN die
+  // Webhooks (inkl. /voice/el-*: /voice/incoming, /voice/turn, /voice/outbound, /voice/status). Wuerde die
+  // Sig-MW VOR die TTS-Route ruecken, wuerde PII-Audio
   // signaturpflichtig (Telnyx kann GET nicht signieren -> 403 -> tote Audio-Ausgabe).
   // Reihenfolge NIEMALS aendern.
 
@@ -210,10 +469,21 @@ export function makeVoiceRoutes({
   // Kosten aus (Regel 1 unberuehrt); die einzige Absicherung der PII-Audio ist der
   // kryptografisch unratbare Token + kurze TTL + EINMALIGER Abruf (takeOnce). Kein Log
   // von Token/Bytes (kein PII/Secret-Leak, Regel 4).
-  router.get("/voice/tts/:token", (req, res) => {
-    const audio = ttsStore.takeOnce(req.params.token);
-    if (!audio) return res.status(404).end();
-    res.type(audio.contentType).send(audio.bytes);
+  // IE7: async, weil der Token vergeben wird, BEVOR die Synthese fertig ist - das Warten
+  // auf den Rest liegt hier, nicht mehr im Webhook. Begrenzt ist es durch die Gesamtfrist
+  // der Synthese (ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS), nicht durch diesen Handler. Express 4
+  // faengt Rejections aus async-Handlern NICHT ab (Muster S1-1 in /voice/incoming) ->
+  // Rumpf komplett in try/catch; der Fehlerpfad antwortet wie der Nichtfund, damit ein
+  // Anruf nie an einem haengenden Abruf stirbt. Kein Log von Token oder Bytes (Regel 4).
+  router.get("/voice/tts/:token", async (req, res) => {
+    try {
+      const audio = await ttsStore.takeOnce(req.params.token);
+      if (!audio) return res.status(HTTP_NOT_FOUND).end();
+      res.type(audio.contentType).send(audio.bytes);
+    } catch (err) {
+      console.error("[voice/tts]", err.message);
+      res.status(HTTP_NOT_FOUND).end();
+    }
   });
 
   // ---- Inbound-Signaturpruefung fuer alle /voice-Webhooks (fail-closed) ----
@@ -258,7 +528,7 @@ export function makeVoiceRoutes({
   // vor der Signatur waere Tenant-Spoofing). Unbekannte/fehlende To -> hoeflicher
   // Hangup, KEIN Default-Tenant, KEIN aktiver Call (nicht-routbare Nummer kostet
   // nichts).
-  router.post("/voice/incoming", async (req, res) => {
+  router.post("/voice/incoming", idempotenz.forIncoming, async (req, res) => {
     // Provider EINMAL aus dem (bereits fail-closed signatur-geprueften) Header
     // ableiten. Skip-Signature/lokale curl-Tests ohne Provider-Header -> DEFAULT_PROVIDER,
     // seit C-P1 also der Telnyx-Pfad - bewusst und getestet ("C-P1 B",
@@ -308,6 +578,12 @@ export function makeVoiceRoutes({
       // KS-P3 (b): das Leg EINMAL beschrieben, damit die Notbremse dieselbe Richtung/
       // dasselbe Ziel sieht, die auch persistiert werden (kein zweiter, abweichender
       // Nachbau der Leg-Felder fuer die Satz-Ableitung).
+      // IEL-B8 (E2/L2): die Weiche - EINMAL je Anruf, NACH Signatur-MW, forIncoming,
+      // numberRecordByE164 und budgetExceeded. Das Profil steht im Leg, BEVOR die Notbremse rechnet
+      // (E3); danach Cap + Geld-Wache (armMaxDurationTimer) und das set-once-Profil - erst DANN
+      // antwortet der Pfad. Schalter aus / Scope allowlist + nicht gepinnt -> Budget, byte-identisch (Golden);
+      // Scope registrierte_dids ohne gueltigen Beleg der angerufenen DID -> Abweisung (IEX-A9, O5).
+      const pfad = inboundPfadFuer({ config, tenantId, numberRecord });
       const inboundLeg = {
         direction: "inbound",
         from: req.body.From || "unbekannt",
@@ -316,63 +592,21 @@ export function makeVoiceRoutes({
         tenantId,
         provider,
         language,
+        costProfile: pfad.kostenprofil,
       };
-      call = store.createCall({ ...inboundLeg, maxDurationS: brakeSecondsFor(inboundLeg) });
+      call = erzeugeInboundCall({ leg: inboundLeg, maxDurationS: brakeSecondsFor(inboundLeg) }, voiceDeps);
       store.markAnswered(call.id);
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
-
-      if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) {
-        // GAP-14: auch die Realtime-Engine darf den Pflichtsatz nicht dem Modell
-        // ueberlassen (der Opener ist eine Prompt-Anweisung). Deterministisch gerendert
-        // VOR dem Stream-Handoff; bridge.js bleibt unberuehrt (HEIKLE STELLE).
-        return res
-          .type("text/xml")
-          .send(render([sayD(locale.inboundNotice, locale.voiceProfile), ...streamDirectives(call)], provider));
-      }
-
-      const ctx = store.tenantContext(call.tenantId);
-      // GAP-14: der Pflichtsatz wird GERENDERT, nie gepromptet (Regel-2-Analogie fuer
-      // Inbound) - und nur vorangestellt, wenn er im Greeting fehlt (kein Doppelsatz).
-      // Deckt BEIDE Live-Kanaele: TeXML-Gather UND den Assistant-Speak-Node (derselbe
-      // String). PROMPT-03: die gespeicherte Vorlage folgt der Anrufsprache
-      // (greetingForLanguage) - der deutsche Seed-Default darf einem EN-/FR-Tenant nicht
-      // mehr vorgelesen werden. replaceAll bleibt VOR dem Pflichtsatz-Praefix: der
-      // Fehlerpfad bei greeting=null wirft unveraendert (voice-incoming-catch-path,
-      // greetingForLanguage(null, ...) gibt null zurueck).
-      const greeting = withInboundNotice(
-        greetingForLanguage(ctx.settings.greeting, language).replaceAll("{owner}", ctx.ownerName),
-        locale.inboundNotice,
-      );
-
-      // P8: Handoff an den Call-Control-Assistant, falls einschlaegig; sonst (null) faellt
-      // der Aufrufer fail-safe auf den bestehenden TeXML-Gather-Pfad zurueck (byte-identisch).
-      const handoffXml = await inboundAssistantHandoffXml({
-        call,
-        provider,
-        body: req.body,
-        greeting,
-        voiceProfile: locale.voiceProfile,
-      });
-      if (handoffXml) return res.type("text/xml").send(handoffXml);
-
-      store.addTranscript(call.id, "agent", greeting);
-      await sendVoiceXml(res, call, turnDirectives(call, greeting));
+      store.recordCostProfile(call.id, pfad.kostenprofil);
+      await pfad.antworte({ res, call, locale }, voiceDeps);
     } catch (err) {
       console.error("[incoming]", err.message);
-      // S1-1: gracefuler Fehler-TeXML-Fallback statt haengendem Call (spiegelt /voice/turn,
-      // Runde 2 S-A: sichtbar statt still). Kein LLM-Aufruf im Greeting-Pfad -> immer
-      // turnErrorSpeech (kein llmDegradedSpeech-Fall wie bei /voice/turn). Vor der Call-
-      // Erzeugung gibt es noch kein call.provider fuer synthesizeDirectiveAudio (der Guard
-      // dort wuerde selbst werfen) -> reines Azure-<Say> wie der Unrouted-Pfad oben.
-      const locale = localeFor(call?.language);
-      const errorDirectives = [sayD(locale.turnErrorSpeech, locale.voiceProfile), hangupD()];
-      const outDirectives = call ? await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives) : errorDirectives;
-      res.type("text/xml").send(render(outDirectives, provider));
+      await sendTechnischesEnde({ res, call, provider }, voiceDeps);
     }
   });
 
   // ---------------- GESPRAECHS-TURN (Budget-Engine, beide Richtungen) ----------------
-  router.post("/voice/turn", async (req, res) => {
+  router.post("/voice/turn", idempotenz.forTurn, async (req, res) => {
     let call = store.getCall(req.query.callId);
     if (!call || call.status !== "active") {
       // F12 (A6): dem Prozess unbekannter, aber in der DB aktiver Call (Deploy-Instanz-
@@ -391,7 +625,7 @@ export function makeVoiceRoutes({
         // (logUnknown:false) WAR aktiv, "kein aktiver Call" waere dort irrefuehrend (G2).
         if (reattached.logUnknown)
           console.warn(
-            `[voice/turn] kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
+            `${TURN_LOG_PREFIX} kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
           );
         return res.type("text/xml").send(render([hangupD()]));
       }
@@ -435,6 +669,10 @@ export function makeVoiceRoutes({
       // KEIN Retry hier (der Seam hat bereits begrenzt+selektiv retried); das Gespraech
       // endet kontrolliert (Say + Hangup), kein stummer Abbruch. Jeder ANDERE Fehler
       // (nicht-transient, z.B. 4xx/Auth) bleibt terminal wie im Bestand.
+      // FW2-B: der Guthaben-Ausfall ist auf diesem Weg bisher nicht von einem beliebigen
+      // Fehler unterscheidbar - die gemeinsame Alarm-Funktion (llm-billing-outage.js),
+      // plus der Latch. Der Degradations-/Sendepfad bleibt unveraendert.
+      noteLlmBillingOutage(err, { logPrefix: TURN_LOG_PREFIX, payload: { callId: call.id } });
       const locale = localeFor(call.language);
       await sendTurnOutcome(res, call, { speech: degradedSpeechFor(err, locale), endCall: true });
     }
@@ -473,10 +711,6 @@ export function makeVoiceRoutes({
       return res.type("text/xml").send(render([hangupD()], call.provider));
     }
 
-    if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) {
-      return res.type("text/xml").send(render(streamDirectives(call), call.provider));
-    }
-
     // Schicht 1 (P3b-R) + G2: /voice/outbound ist LLM-FREI. Der gesamte gesprochene
     // Erst-Turn (Pflicht-Offenlegung Regel 2 als erster Satz + Bruecke + gekapptes
     // Anliegen) wird als EIN <Say> INNERHALB des <Gather> gerendert - byte-strukturgleich
@@ -490,8 +724,15 @@ export function makeVoiceRoutes({
     await sendVoiceXml(res, call, turnDirectives(call, opening));
   });
 
+  // ---------------- IEL-B8: Rueckfall und SIP-Bein des EL-Inbound-Wegs ----------------
+  // Unter der /voice-Signatur-MW (Ed25519 fail-closed), KEINE Auth-Ausnahme; Eintraege in
+  // src/route-policy.js mit VOICE_SIGNATURE_REASON. Idempotenz-Anker PRO ROUTE hinter der MW.
+  // quelle wirkt nur im Log (IEX-A2 E4).
+  router.post(EL_RUECKFALL_PFAD, idempotenz.forElRueckfall, (req, res) => antworteAufElRueckfall(req, res, voiceDeps));
+  router.post(EL_BEIN_PFAD, idempotenz.forElBein, (req, res) => vermerkeElBein(req, res, voiceDeps));
+
   router.post("/voice/status", async (req, res) => {
-    res.sendStatus(200);
+    res.sendStatus(HTTP_OK);
     let call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
     if (!call) {
       // F12 (A6) Runde 2 (S1-1): denselben reattachActiveCall()-Pfad wie /voice/turn und
@@ -535,9 +776,15 @@ export function makeVoiceRoutes({
       "[voice/status]",
       JSON.stringify({ callId: call.id, status: callStatus, provider, diagnostics }),
     );
-    if (callStatus === "in-progress" || callStatus === "answered")
+    if (ANGENOMMEN_STATUS.includes(callStatus))
       return void store.markAnswered(call.id);
     if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(callStatus)) return;
+    // IEL-B5 (E7d/E18): ein ueberbrueckter Inbound-Call wird HIER nicht abgeschlossen - Transkript
+    // und Ergebnis liegen beim Agenten, der Nachlauf-Poll holt sie. Dieses Ereignis setzt nur das
+    // Carrier-Ende und startet hoechstens eine Schleife (Start-Tor in startInboundNachlauf). Kein
+    // Rueckfall auf den Abschluss unten, auch nicht bei wiederholter Zustellung oder bereits
+    // beendetem Call: finishCall liefe sonst vor dem Transkript (Buchung + Purge zu frueh).
+    if (bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN) return void startInboundNachlauf(call.id);
     // CDF1: maschinenlesbaren Fehlergrund aus der bereits berechneten Diagnose (PII-frei).
     // completed -> callFailureReason null -> recordFailureReason No-op (kein Save).
     // OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
@@ -560,25 +807,6 @@ export function makeVoiceRoutes({
       callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
     });
   });
-
-  // Call-Control-Event-Ingest (P4.5): additiv, liegt UNTER app.use("/voice") -> Ed25519
-  // fail-closed (Regel 3). Faehrt die event-getriebene Zustandsmaschine (answered->
-  // Opening-Speak (Offenlegung+Anliegen); speak.ended->ai_assistant_start; hangup->Settlement
-  // finishCall). Korrelation ueber ?callId (Muster /voice/status), KEIN Store-Sekundaerindex.
-  // Der bestehende Budget/TeXML-Pfad (/voice/status|turn|outbound) bleibt byte-identisch.
-  router.post(
-    "/voice/call-control",
-    makeCallControlIngest({
-      store,
-      voiceControl,
-      finishCall,
-      openingText,
-      localeFor,
-      reattachActiveCall: lifecycle.reattachActiveCall,
-      watchdog,
-      config,
-    }),
-  );
 
   return router;
 }

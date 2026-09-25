@@ -6,7 +6,8 @@
 // (public/index.html existiert seit der Owner-Removal-Kette nicht mehr, s.
 // PLAN-LIVE-COST-TRACING.md). Ungeprueft blieben sonst: die Response-Form, die ZWEI
 // Cent-Rechnungen (didRentCents = numberMonthlyCostCents * activeNumbers und
-// fixedCostCentsPerMonth = platformFixedCostCentsPerMonth + didRentCents), die Filterung
+// fixedCostCentsPerMonth = elevenLabsCents + didRentCents, seit KV2-10 mit dem
+// US-Cent-Listenpreis ueber EINEN Kurs umgerechnet), die Filterung
 // auf NUMBER_STATUS.ACTIVE und die Auth-fail-closed-Zusage.
 //
 // AUTH-P6: platform-costs ist seither eine Betreiber-Route (webAuthMw+adminMw, nur MIT
@@ -33,15 +34,19 @@ const EXTERNAL_IP = externalIp();
 
 // In BASE_ENV (test/helpers.js) gepinnte Fixkosten-Achse - hier als Config-Double
 // gespiegelt, damit die Arithmetik-Assertion nicht raet, sondern gegen die gepinnte
-// Basis rechnet.
+// Basis rechnet. KV2-10: der ElevenLabs-Wert ist ein US-Cent-LISTENPREIS; die Route
+// rechnet ihn ueber providerToBucketRateMicro (920000 = 0,92) nach EUR-Cent.
 const NUMBER_MONTHLY_COST_CENTS = 92;
-const PLATFORM_FIXED_COST_CENTS = 600;
+const PLATFORM_FIXED_COST_USD_CENTS = 600;
+const ELEVENLABS_EUR_CENTS = 552; // 600 US-ct x 0,92 = 552 (aufgerundet in der geteilten Funktion)
+const PROVIDER_TO_BUCKET_RATE_MICRO = 920000;
 const TTS_CHARACTER_QUOTA = 39981;
 const TTS_WARN_PERCENT = 0; // BASE_ENV pinnt die Warnschwelle neutral AUS
 
 const PLATFORM_COSTS_CONFIG = withConfigNamespaces({
   numberMonthlyCostCents: NUMBER_MONTHLY_COST_CENTS,
-  platformFixedCostCentsPerMonth: PLATFORM_FIXED_COST_CENTS,
+  platformFixedCostUsdCentsPerMonth: PLATFORM_FIXED_COST_USD_CENTS,
+  providerToBucketRateMicro: PROVIDER_TO_BUCKET_RATE_MICRO,
   ttsCharacterQuota: TTS_CHARACTER_QUOTA,
   ttsCharacterQuotaWarnPercent: TTS_WARN_PERCENT,
   ttsQuotaCycleAnchorDay: 1,
@@ -52,11 +57,11 @@ const PLATFORM_COSTS_CONFIG = withConfigNamespaces({
 const PII_PHONE = "+4915155599999";
 const PII_TENANT = "kunde-pii-klarname";
 
-async function startPlatformCostsApp(state) {
+async function startPlatformCostsApp(state, config = PLATFORM_COSTS_CONFIG) {
   const app = express();
   app.use(
     makeBillingRoutes({
-      config: PLATFORM_COSTS_CONFIG,
+      config,
       store: {
         load: () => state,
         platformTtsUsageView: (nowIso) => platformTtsUsageView(state, PLATFORM_COSTS_CONFIG.billing, nowIso),
@@ -105,9 +110,10 @@ function mixedSeed() {
   };
 }
 
-// (A) Response-Form + die zwei Cent-Rechnungen + die Filterung auf ACTIVE. Der Endpunkt
+// (A) Response-Form + die Cent-Rechnungen + die Filterung auf ACTIVE. Der Endpunkt
 // zaehlt genau die drei aktiven Nummern (die zwei inaktiven fallen raus) und rechnet
-// beide Fixkosten-Summen daraus - Ganzzahl-EUR-Cent.
+// beide Fixkosten-Summen daraus - Ganzzahl-EUR-Cent. KV2-10: der ElevenLabs-Wert reist
+// als US-Cent-LISTENPREIS mit UND umgerechnet als EUR-Cent (600 x 0,92 = 552).
 test("GET /api/billing/platform-costs: Form, Arithmetik und ACTIVE-Filter", async () => {
   const app = await startPlatformCostsApp(mixedSeed());
   try {
@@ -118,7 +124,8 @@ test("GET /api/billing/platform-costs: Form, Arithmetik und ACTIVE-Filter", asyn
     assert.equal(body.currency, "EUR");
     assert.equal(body.listPriceNotBilled, true, "Listenpreis, NICHT Rechnungsposten (Entscheidung 6)");
     assert.equal(body.activeNumbers, ACTIVE_COUNT, "nur NUMBER_STATUS.ACTIVE zaehlt, inaktive fallen raus");
-    assert.equal(body.elevenLabsCents, PLATFORM_FIXED_COST_CENTS);
+    assert.equal(body.elevenLabsUsdCents, PLATFORM_FIXED_COST_USD_CENTS, "USD-Listenpreis reist separat mit");
+    assert.equal(body.elevenLabsCents, ELEVENLABS_EUR_CENTS, "ElevenLabs-Wand: USD-Listenpreis x EINER Kurs, aufgerundet");
     assert.equal(
       body.didRentCents,
       NUMBER_MONTHLY_COST_CENTS * ACTIVE_COUNT,
@@ -126,8 +133,8 @@ test("GET /api/billing/platform-costs: Form, Arithmetik und ACTIVE-Filter", asyn
     );
     assert.equal(
       body.fixedCostCentsPerMonth,
-      PLATFORM_FIXED_COST_CENTS + NUMBER_MONTHLY_COST_CENTS * ACTIVE_COUNT,
-      "fixedCostCentsPerMonth = platformFixedCostCentsPerMonth + didRentCents",
+      ELEVENLABS_EUR_CENTS + NUMBER_MONTHLY_COST_CENTS * ACTIVE_COUNT,
+      "fixedCostCentsPerMonth = elevenLabsCents + didRentCents",
     );
     assert.ok(Number.isInteger(body.fixedCostCentsPerMonth), "Ganzzahl-Cent, kein Float");
 
@@ -174,6 +181,32 @@ test(
     }
   },
 );
+
+// (D) KV2-10 Review (G26/PM-4): die geteilte Kurs-Umrechnung liefert dokumentiert null,
+// sobald US-Listenpreis x Kurs den sicheren Ganzzahlbereich verlaesst. Der Grenzfall ist
+// realistisch erreichbar (die Env hat min:0, kein max; ein ElevenLabs-Preis ueber ~98 USD
+// je Monat genuegt bei Kurs 0,92). Zuvor koerzierte `null + didRentCents` null still zu 0
+// und die Summe meldete NUR die DID-Miete - der Endpunkt lehnt jetzt mit diagnosefaehiger
+// Meldung ab statt eine falsche Betreiber-Zahl zu liefern ("nicht berechenbar ist nicht
+// kostet nichts").
+const UEBERLAUF_USD_CENTS = 9800; // 9800e6 Mikro-Cent x 920000 Kurs > 2^53 -> Number.isSafeInteger false
+const HTTP_SERVER_ERROR = 500; // G25; Naming wie src/app.js
+test("GET /api/billing/platform-costs: Kurs-Produkt ausserhalb des sicheren Ganzzahlbereichs -> 500 mit Diagnose, keine stille 0", async () => {
+  const app = await startPlatformCostsApp(
+    mixedSeed(),
+    withConfigNamespaces({ ...PLATFORM_COSTS_CONFIG.billing, platformFixedCostUsdCentsPerMonth: UEBERLAUF_USD_CENTS }),
+  );
+  try {
+    const res = await fetchCosts(app);
+    assert.equal(res.status, HTTP_SERVER_ERROR, "nicht berechenbar wird gemeldet, nicht als 0 ausgegeben");
+    const body = await res.json();
+    assert.match(body.error, /nicht berechenbar/);
+    assert.match(body.error, /PLATFORM_FIXED_COST_CENTS_PER_MONTH/, "die Meldung nennt die Ursachen-Env");
+    assert.equal(body.fixedCostCentsPerMonth, undefined, "keine Summe, die den ElevenLabs-Anteil still verschwinden laesst");
+  } finally {
+    await app.close();
+  }
+});
 
 // ---- countActiveNumbers (src/store/views.js) direkt ----
 // Der reine Zaehler hinter der Route. Grenzfaelle: leer, alles aktiv, gemischt - genau die

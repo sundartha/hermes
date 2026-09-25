@@ -130,6 +130,22 @@
   color: #ffffff;
 }
 
+/* Owner-Entscheid 15.09.2026: der Klammerzusatz der Auto-Kachel ("(by number)" /
+   "(nach Nummer)") steht ab 620px wieder da -- er fuellt die sonst leere Zeile und
+   sagt, wonach "automatisch" entscheidet. Am Handy bleibt er weg: dort hat die Kachel
+   neben dem Kuerzel AUTO keinen Platz und die Zeile brach um. Gedaempft, damit das
+   eigentliche Wort die Kachel traegt. */
+.lang-tile__qualifier {
+  margin-left: 6px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 619px) {
+  .lang-tile__qualifier {
+    display: none;
+  }
+}
+
 /* Sprachcode rechts in Mono (Spec §9). */
 .lang-tile__code {
   position: relative;
@@ -155,10 +171,23 @@
    (.billing-status__head) mit echter vertikaler Zentrierung -- baseline
    liess die Pille optisch zu hoch neben dem grossen Serif-Wert sitzen.
    Die Mono-Nebenangabe steht darunter auf der Karten-Innenkante. */
+/* Owner-Befund 15.09.2026 ("nicht mittig, nicht linksbuendig, sieht komisch
+   aus"): ohne Abo stand die Pille ALLEIN in einer Zeile und der Mono-Satz
+   darunter in der naechsten -- rechts daneben jeweils eine leere halbe
+   Kartenbreite, und die Pille wirkt neben einem Text darunter nie buendig, weil
+   ihre Schrift um das eigene Innenpolster (11px) eingerueckt sitzt, waehrend
+   ihr Rahmen an der Kartenkante steht.
+   Beides faellt weg, wenn Pille und Nebenangabe EINE Zeile teilen: nichts steht
+   mehr unter der Pille, die Zeile ist gefuellt, und die Pille ist senkrecht
+   mittig zum Satz. Reicht die Breite nicht (Handy), bricht die Nebenangabe wie
+   bisher in die naechste Zeile -- dann fluchtet sie mit Ueberschrift und
+   Einleitung der Karte. */
 .billing-status {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 6px;
   margin-top: 18px;
 }
 
@@ -180,7 +209,14 @@
   flex-shrink: 0;
   padding: 5px 11px;
   border: 1px solid;
-  border-radius: 999px;
+  /* Owner-Vorgabe 16.09.2026: "die sollen in der Form sein wie die blaue Box --
+     ein abgerundetes Viereck, damit das harmonisch aussieht." Die Pille (999px)
+     stand als Kapsel in einer Blase mit Radius 13 auf 52 px Hoehe. Derselbe
+     Rundungsanteil, auf die Hoehe der Pille gerechnet: 13/52 = 0,25, die Pille
+     ist rund 25 px hoch -> 6 px. Keine gegriffene Zahl, sondern die Rundung der
+     Blase im kleinen Massstab. Gilt fuer BEIDE Orte derselben Pille (Newsletter-
+     Zeilen und Billing-Kopf), sonst haette die Karte zwei Pillenformen. */
+  border-radius: 6px;
   font-family: var(--app-mono);
   font-size: 10px;
   font-weight: 400;
@@ -312,7 +348,10 @@
    in irgendeinem Stylesheet -- der Knopf fiel auf Browser-Default zurueck
    (weisser Kasten, schwarzer Text). Reiner Text-Look, kein Knopf-Rahmen. */
 .cancel-link {
-  margin-top: 22px;
+  /* Owner-Befund 15.09.2026: 22px OBEN DRAUF auf die 28px des umgebenden
+     .billing-section ergaben eine 50px-Luecke ueber "Cancel contracts". Der Takt
+     kommt vom Abschnitt, der Knopf bringt keinen zweiten mit. */
+  margin-top: 0;
   padding: 0;
   border: 0;
   background: none;
@@ -354,7 +393,9 @@
 /* ---------------------------------------------------------- 5. Billing: Fussnote */
 
 .billing-footnote {
-  margin-top: 30px;
+  /* Auf dem Abschnitts-Takt (28px) statt eines eigenen 30px-Werts -- Owner-Befund
+     15.09.2026 zur Luecke ueber der Stripe-Zeile. */
+  margin-top: 28px;
   font-family: var(--app-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
@@ -389,10 +430,87 @@
   color: rgba(255, 255, 255, 0.46);
 }
 
-.newsletter-toggle {
+/* Konto-Zeile der Empfaengerliste (Owner-Befund 15.09.2026, s. NewsletterIsland.astro).
+   Das Layout kommt aus .newsletter-form (Blase + Knopf daneben, am Handy gestapelt);
+   hier nur die Position fuer die absolut liegende Checkbox und der Abstand nach oben. */
+.newsletter-account {
   position: relative;
-  display: block;
-  margin-top: 18px;
+  margin-top: 14px;
+}
+
+/* Die Blase: exakt die Masse eines Eingabefelds (.field-input, 52px/Radius 13), damit
+   Konto-Zeile, Empfaengerzeilen und das Hinzufuegen-Feld dieselbe Dicke haben --
+   Owner-Vorgabe "von der Bubble dieselbe Dicke nehmen". */
+.newsletter-account__field,
+.newsletter-recipient__main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding: 6px 17px;
+  background: rgba(4, 14, 32, 0.66);
+  border: 1px solid var(--color-field-border);
+  border-radius: 13px;
+}
+
+.newsletter-account__email,
+.newsletter-recipient__email {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: #ffffff;
+}
+
+/* Einleitungssatz einer Karte (die .muted-Zeile direkt unter der Ueberschrift):
+   `text-wrap: pretty` verhindert die Hurenkinder, die dem Owner am Handy
+   aufgefallen sind -- "unsubscribe anytime." stand allein in einer dritten Zeile,
+   waehrend oben Platz frei war. Der Browser verteilt die Woerter dann so, dass
+   keine Restzeile mit ein, zwei Woertern uebrig bleibt; ohne Unterstuetzung
+   bricht es wie bisher. */
+.card > h2 + .muted {
+  text-wrap: pretty;
+}
+
+/* Liegt (noch) keine Konto-Adresse vor, steht in der Blase der Beispieltext des
+   Feldes darunter -- in exakt dessen Platzhalterfarbe (app-hermes.css
+   .field-input::placeholder), damit er als Beispiel und nicht als echte Adresse
+   gelesen wird. Owner-Befund 15.09.2026: leer sah die Blase kaputt aus. */
+.newsletter-account__email.is-placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Im Platzhalter-Zustand soll die Zeile AUSSEHEN wie das Feld darunter, nicht
+   nur denselben Text tragen (Owner 15.09.2026). Darum hier die zwei Masse, die
+   sich sonst unterscheiden: die Adressschrift schrumpft am Handy auf 14px, damit
+   Adresse UND Status-Pille nebeneinander passen -- ohne Adresse gibt es keine
+   Pille, also gilt die Feldschrift (15,5px); und das Innenpolster der Blase geht
+   am Handy aus demselben Grund auf 13px zurueck, hier bleibt es bei den 17px des
+   Feldes. Ergebnis: beide Zeilen starten auf demselben Pixel, in derselben
+   Groesse und Farbe. Die Marke sitzt an der ZEILE (JS), weil eine Blase ihr Kind
+   sonst nicht abfragen koennte (kein :has() im Projekt). */
+.newsletter-account.is-placeholder .newsletter-account__field {
+  padding-left: 17px;
+  padding-right: 17px;
+}
+
+.newsletter-account.is-placeholder .newsletter-account__email {
+  font-size: 15.5px;
+}
+
+/* Die Status-Pille der Konto-Zeile gehoert zum angemeldeten Zustand -- sie haengt
+   deshalb an derselben Checkbox wie die beiden Knopf-Zustaende daneben. */
+.newsletter-account__badge {
+  display: none;
+}
+
+.newsletter-toggle__input:checked ~ .newsletter-account__field .newsletter-account__badge {
+  display: inline-flex;
 }
 
 .newsletter-toggle__input {
@@ -414,22 +532,37 @@
   display: none;
 }
 
-/* Zustand "nicht angemeldet" (Spec §11): eingelassenes E-Mail-Feld (readonly,
-   Konto-Adresse) + weisse Subscribe-Pille nebeneinander, Mono-Hinweis darunter. */
+/* Zustand "nicht angemeldet": nur noch die weisse Subscribe-Pille am Ende der
+   Konto-Zeile (das readonly-Feld und der Mono-Hinweis darunter sind mit dem
+   Listen-Umbau vom 15.09.2026 entfallen). */
 .newsletter-toggle__state--off {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
 }
 
 .newsletter-toggle__input:checked ~ .newsletter-toggle__state--off {
   display: none;
 }
 
+/* Owner-Befund 15.09.2026: die Eingabefelder und die Pillen daneben wirkten gequetscht
+   -- 50px Feld neben einer 37px hohen Pille, dazu ein sehr schmaler "Add"-Knopf. Die
+   Feldgroesse steht hier fuer ALLE App-Formulare (Newsletter, Empfaenger, eigene
+   Nummer), damit es im Dashboard nur eine Feldhoehe gibt; spaeterer Import gewinnt
+   gegen app-hermes.css. */
+.field-input {
+  /* 58px war der ersten Korrektur zu viel ("ein bisschen zu fett", Owner 15.09.2026):
+     52px -- noch spuerbar groesser als der Bestand (50px), aber keine Wuchtleiste. */
+  height: 52px;
+  border-radius: 13px;
+  padding: 0 17px;
+  font-size: 15.5px;
+}
+
 .newsletter-form {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 /* .field-input liefert schon das eingelassene Feld (Spec §2, app-hermes.css);
@@ -456,7 +589,14 @@
 
 .newsletter-toggle__cta {
   flex-shrink: 0;
-  padding: 10px 22px;
+  /* Owner-Befund 15.09.2026, zuletzt "die Knoepfe sind viel zu fett -- so gross wie
+     bei Save number": exakt die Masse von `.btn` (12px 20px, 15/600, min-width 126)
+     statt einer eigenen, hoeheren Pille. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 126px;
+  padding: 12px 20px;
   /* border:0 (Owner-Feedback 2026-08-14): die Klasse sass urspruenglich auf
      einem <label> (rahmenlos); der Empfaenger-"Add" ist ein echter <button>
      und bekam ohne diese Zeile den Browser-Default-Rahmen (graue Umrandung).
@@ -466,7 +606,7 @@
   background: #ffffff;
   color: #10305a;
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -484,27 +624,9 @@
   display: flex;
 }
 
-.newsletter-status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  background: rgba(127, 224, 176, 0.12);
-  border: 1px solid rgba(127, 224, 176, 0.4);
-  color: #7fe0b0;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.newsletter-toggle__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: #7fe0b0;
-  flex-shrink: 0;
-}
+/* .newsletter-status-pill und .newsletter-toggle__dot sind mit dem Listen-Umbau vom
+   15.09.2026 entfallen: den angemeldeten Zustand zeigt jetzt dieselbe Status-Pille wie
+   in Billing und in der Empfaengerliste (.billing-status-badge--active). */
 
 .newsletter-toggle__unsub {
   padding: 8px 16px;
@@ -548,56 +670,69 @@
   gap: 10px;
 }
 
+/* Owner-Befund 15.09.2026: die Status-Pille stand unter der Adresse und das Kreuz
+   daneben -- die Zeile wurde dadurch hoch und unruhig. Jetzt traegt die Zeile selbst
+   keine Blase mehr: die Blase ist .newsletter-recipient__main (Adresse links,
+   Status-Pille rechts, mittig zur Adresse), das Kreuz sitzt AUSSERHALB rechts daneben,
+   und der Wartehinweis steht unter der Blase. */
 .newsletter-recipient {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 12px 14px;
-  background: rgba(8, 22, 46, 0.52);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  /* Die freigehaltene Spalte rechts ist so breit wie die Knopfspalte der Zeilen darueber
+     und darunter (14px Abstand + 126px Knopf): damit enden ALLE Blasen der Karte an
+     derselben Kante und das Kreuz steht buendig unter dem rechten Knopfrand. */
+  padding-right: 140px;
 }
 
-.newsletter-recipient__main {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.newsletter-recipient__email {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  color: #ffffff;
-}
-
-/* Ghost-Kreis: kleinere Geschwister-Optik von .call-modal__close (calls.css) --
-   gleiche Materialsprache (transparenter Kreis, weisser Rand), passend zur
-   kompakteren Listenzeile statt des Modal-Kopfs. */
+/* Owner-Befund 16.09.2026 ("fuer diesen Delete-Button nochmal was einfallen lassen,
+   so sieht das komisch aus"): der Knopf war ein 26-px-Kreis mit Haarlinie, der in
+   einer 140 px breiten Knopfspalte allein in der Luft hing -- zu klein fuer die
+   Spalte, zu rund fuer die eckigen Blasen daneben, und als einziges Element der
+   Karte ohne Flaeche. Jetzt eine Kachel in der Sprache der Zeile:
+   - dieselbe Rundung wie die Blase (13px), also ein abgerundetes Viereck statt
+     eines Kreises -- dieselbe Vorgabe, die auch die Status-Pillen bekommen haben,
+   - 44 px im Quadrat: die Hoehe der Knoepfe in den Zeilen darueber und darunter
+     ("Unsubscribe"/"Add", 43-46 px) und zugleich das uebliche Mindestmass fuer
+     eine Tippflaeche -- der Knopf steht damit in derselben optischen Bank,
+   - eine leise Flaeche (0.06) wie beim Geisterknopf der eigenen Nummer, damit die
+     Kachel nicht als blosse Haarlinie im Leerraum steht,
+   - das Kreuz etwas gedaempft (0.7): eine loeschende Handlung soll nicht lauter
+     sein als "Unsubscribe" daneben; beim Ueberfahren wird es weiss.
+   Position unveraendert: rechtsbuendig unter dem rechten Rand der Knopfspalte
+   (Fluchten-Entscheidung vom 15.09.2026), senkrecht mittig zur 52-px-Blase. */
 .newsletter-recipient__remove {
+  /* Sitzt ausserhalb der Blase, senkrecht mittig zu ihr (52px hoch -> 26px). Absolut
+     positioniert, damit die Wartezeile darunter die Lage nicht verschiebt. */
+  position: absolute;
+  top: 26px;
+  right: 0;
+  transform: translateY(-50%);
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
-  background: transparent;
-  color: #ffffff;
-  font-size: 15px;
-  line-height: 1;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+/* Gleiche Groesse wie im Anruf-Fenster (.call-modal__close svg, calls.css). */
+.newsletter-recipient__remove svg {
+  width: 16px;
+  height: 16px;
 }
 
 .newsletter-recipient__remove:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
 }
 
 .newsletter-recipient__remove:focus-visible {
@@ -660,13 +795,158 @@
     width: 100%;
     text-align: center;
   }
+  /* Owner-Durchgang 15.09.2026: gestapelt zog die weisse Pille ueber die ganze Breite
+     und legte zwei fette weisse Balken in eine Karte. Sie behaelt ihre Form (126px
+     Mindestbreite) und steht linksbuendig unter dem Feld -- wie "Save"/"Save number"
+     in den Einstellungen. */
   .newsletter-form {
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
+    /* Dieselbe rechte Spalte wie bei den Empfaengerzeilen (Kreuz), damit ALLE Blasen der
+       Karte auch am Handy exakt gleich breit sind. */
+    padding-right: 38px;
+  }
+  /* Owner-Befund 15.09.2026: am Handy war das Feld nur noch ein Strich. Ursache:
+     `flex: 1` an .newsletter-form__field wirkt in der gestapelten Spalte auf die HOEHE
+     (Hauptachse) -- mit flex-basis 0 und ohne freien Platz schrumpft das Feld auf seine
+     Mindesthoehe. Gestapelt braucht es kein flex, nur volle Breite. Gilt genauso fuer
+     die Blase der Konto-Zeile, die im selben Formular-Layout sitzt. */
+  .newsletter-form__field,
+  .newsletter-account__field {
+    flex: none;
+    width: 100%;
   }
   .newsletter-toggle__cta {
     text-align: center;
   }
+  /* Gestapelt steht kein Knopf mehr neben den Blasen -- die Empfaengerzeile haelt dann
+     nur noch die Breite ihres Kreuzes frei. */
+  .newsletter-recipient {
+    padding-right: 38px;
+  }
+  /* Am Handy bleibt die Kachel klein: die Spalte rechts ist hier nur 38 px breit
+     (26 px Knopf + 12 px Abstand), und jeder Pixel mehr fehlt der Adresse in der
+     Blase -- im Block <=480px sind dort gemessen nur rund 5 px Spielraum. Also
+     dieselbe Grundflaeche wie bisher, nur die neue Form (abgerundetes Viereck
+     statt Kreis, Rundung proportional zur 44-px-Kachel: 13/44 = 0,3 -> 8 px).
+     Die TIPPFLAECHE waechst trotzdem auf 44 px: ein unsichtbares ::after
+     vergroessert sie um 9 px nach allen Seiten, ohne das Layout zu bewegen. */
+  .newsletter-recipient__remove {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+  }
+  .newsletter-recipient__remove svg {
+    width: 13px;
+    height: 13px;
+  }
+  .newsletter-recipient__remove::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
+  }
+}
+
+/* Am Telefon (≤480px) bleiben in der Blase rund 236px: Adresse UND Status-Pille passen
+   dort nur nebeneinander, wenn beide etwas kleiner werden. Gemessen: Adresse braucht
+   162px bei 15px Schrift, die Pille 89px -- mit 14px Adresse, kleinerer Pille und
+   schmalerem Innenpolster sind es 231px, die Adresse bricht also nicht mehr ab. */
+@media (max-width: 480px) {
+  .newsletter-account__field,
+  .newsletter-recipient__main {
+    gap: 10px;
+    padding-left: 13px;
+    padding-right: 13px;
+  }
+  .newsletter-account__email,
+  .newsletter-recipient__email {
+    font-size: 14px;
+  }
+  .newsletter-account__badge,
+  .newsletter-recipient__main .billing-status-badge {
+    padding: 4px 8px;
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+  }
+  .newsletter-recipient .newsletter-form__hint {
+    padding-left: 13px;
+  }
+}
+
+/* --------------------------------- 8b. Takt und Schriftstufen (Owner-Audit) */
+
+/* Owner-Auftrag 15.09.2026: einmal komplett durch Handy und Desktop gehen und pruefen,
+   ob Abstaende und Schriften einheitlich sind. Gemessen ueber alle Karten: Kartenpolster
+   (clamp 20-42px), Abschnitts-Takt (.billing-section 28px), Serif-Ueberschriften,
+   Sans 15px fuer Fliesstext und Mono-Kleinlabels stimmten bereits. Diese Ausreisser
+   nicht -- sie stehen hier gebuendelt statt verstreut in den Einzelregeln. */
+
+/* 1. Einleitung -> erster Block: Billing und Newsletter 18px, Einstellungen 16px. */
+#settings-form {
+  margin-top: 18px;
+}
+
+/* 2. Knopfschriften liefen auf vier Stufen auseinander (16/600, 15/600, 14/500,
+   16/400). Es bleiben zwei: gefuellt 15/600, geisterhaft 15/500. */
+.card .btn,
+.newsletter-toggle__cta {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.payment-card__action,
+.private-number-form__remove {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* 3. Der Kuendigungs-Link ist Fliesstext, kein Knopf -- also die Fliesstextstufe. */
+.cancel-link {
+  font-size: 15px;
+}
+
+/* 4. Das Entfernen-Kreuz hatte KEINE Schriftfamilie und fiel damit als einziges
+   Element im Dashboard auf Arial zurueck. Seit dem 16.09.2026 ist es ueberhaupt
+   kein Schriftzeichen mehr, sondern ein gezeichnetes SVG (s. Abschnitt 6b) --
+   die Regel hat damit keinen Gegenstand mehr und entfaellt. */
+
+/* 5. Mono-Kleinlabels standen teils auf 400 (.billing-section__title), teils auf 600
+   (.field-label, .dash-head__eyebrow). Eine Ebene, ein Gewicht. */
+.field-label,
+.dash-head__eyebrow {
+  font-weight: 400;
+}
+
+/* 6. Gefuellte Knoepfe in den Karten hatten keine Mindestbreite: "Save" stand als
+   winzige Pille neben "Save number" und den 126px-Pillen des Newsletters. Gleiche
+   Grundflaeche fuer alle -- laengere Beschriftungen wachsen weiterhin mit. */
+.card .btn {
+  min-width: 126px;
+}
+
+/* 7. Der Leer-Hinweis der Empfaengerliste stand mittig unter einem linksbuendigen
+   Formular (geerbt von .data-empty, das fuer die grosse leere Anruf-Karte gedacht ist)
+   -- in einer Listenzeile unter einem Feld gehoert er nach links. */
+.newsletter-recipient-list .data-empty {
+  padding: 0;
+  text-align: left;
+}
+
+/* 8. Das Hinzufuegen-Feld steht seit dem Listen-Umbau UNTER der Liste und braucht
+   denselben Zeilenabstand wie die Zeilen darueber. Der Geisterknopf "Unsubscribe"
+   laeuft auf der Geisterknopf-Stufe (15/500) statt auf eigenen 13px. */
+.newsletter-recipient-list + .newsletter-form {
+  margin-top: 14px;
+}
+
+.newsletter-toggle__unsub {
+  font-size: 15px;
+}
+
+/* 9. Der Wartehinweis einer pending-Zeile steht unter der Blase und fluchtet mit dem
+   Text darin (gleiches Innenpolster, 17px). */
+.newsletter-recipient .newsletter-form__hint {
+  padding-left: 17px;
 }
 
 /* ------------------------------------------- 8. Toggle-Schalter zentrieren */
@@ -687,4 +967,66 @@
    ::before-Basisposition, :checked haengt nur den translateX an). */
 .switch-slider::before {
   top: calc((var(--space-6) - var(--space-5)) / 2);
+}
+
+/* ------------------------------- 9. Tarifkacheln: Leistungen zweispaltig --- */
+
+/* Owner-Wunsch 15.09.2026: in den Tarifkacheln sollen die ersten beiden
+   Leistungen links stehen und die letzten beiden rechts daneben, "damit die Box
+   besser gefuellt ist". Statt eines Rasters mit festem Breakpoint uebernimmt das
+   der Mehrspalten-Satz: `columns` legt eine ZWEITE Spalte nur an, wenn beide
+   mindestens 220px breit werden -- genau die Breite, die die laengste Zeile
+   ("30 minutes of calls per month", gemessen 223px inklusive Haken) braucht.
+   Ist die Kachel schmaler (Handy, oder zwei Kacheln nebeneinander am grossen
+   Desktop), bleibt es automatisch bei einer Spalte, ohne dass eine Zeile
+   umbricht. Der Textfluss ist spaltenweise: Punkt 1+2 links, 3+4 rechts -- die
+   vom Owner gewuenschte Reihenfolge.
+   `display: block` hebt das Flex aus app.css auf (Mehrspalten-Satz wirkt nicht
+   auf Flex-Container); der Zeilenabstand kommt darum als margin statt als gap,
+   mit demselben Token. `break-inside: avoid` haelt eine umbrechende Zeile
+   zusammen, statt sie ueber die Spaltengrenze zu reissen. */
+.plan-features {
+  display: block;
+  columns: 220px 2;
+  column-gap: clamp(20px, 2.4vw, 36px);
+}
+
+.plan-feature {
+  break-inside: avoid;
+}
+
+.plan-feature + .plan-feature {
+  margin-top: var(--space-tight);
+}
+
+/* -------------------------------------- 10. Knopfmasse am Handy ----------- */
+
+/* Owner-Befund 15.09.2026: "alle Buttons sollen so gross sein wie der Add-Knopf".
+   Gemessen bei 390px waren es vier verschiedene Groessen: "Add" 126x43,
+   "Subscribe" 126x46,5 (es ist ein <label> und erbt die 1.5-Zeilenhoehe des
+   Fliesstexts, waehrend ein <button> auf line-height:normal steht),
+   "Save number" 133,2x43 (Text breiter als die Mindestbreite plus 20px Polster)
+   und die Geisterknoepfe "Remove"/"Add a different card" 41px hoch ganz ohne
+   Mindestbreite.
+   Eine Grundflaeche fuer alle: 44px hoch (feste Zeilenhoehe statt geerbter,
+   Polster nur noch waagerecht), mindestens 126px breit. Schmalere
+   Beschriftungen fuellen die 126px, laengere wachsen weiter mit -- "Add a
+   different card" bleibt breit, das ist gewollt. Farbe, Rand und
+   Schriftgewicht bleiben je Variante unveraendert, nur die Masse sind
+   vereinheitlicht (Owner: "die Farben kannst du lassen"). */
+@media (max-width: 559px) {
+  .card .btn,
+  .newsletter-toggle__cta,
+  .newsletter-toggle__unsub,
+  .payment-card__action,
+  .private-number-form__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 126px;
+    min-height: 44px;
+    padding-block: 0;
+    padding-inline: 16px;
+    line-height: 1.2;
+  }
 }

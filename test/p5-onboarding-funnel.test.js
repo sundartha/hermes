@@ -16,6 +16,7 @@ import {
   makeAccounts,
   makeSessions,
   signValue,
+  SESSION_COOKIE_NAME,
 } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
@@ -46,7 +47,7 @@ function fakeBilling() {
   };
 }
 
-const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
+const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
 async function setup({ card = true, configOverride = {} } = {}) {
   const { store, db } = await makePgTestStore();

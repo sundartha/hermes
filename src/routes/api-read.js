@@ -47,27 +47,27 @@ function usageView({ usage, quota }) {
 // deps: { store, config, audit, tenant }. store traegt load/tenantContext/
 // exportTenantData/getCall/usageOf (+ getCalendar via upcomingCalendar). config ist
 // das globale Config-Objekt. audit ist util.audit (loggt nur Keys/Counts, keine
-// PII/Werte). tenant buendelt die request-tenant-Resolver: requestTenant (Flag aus
-// -> BOOTSTRAP_TENANT_ID), requireTenant (tenant-gescopt; REJECT -> 403) und
+// PII/Werte). tenant buendelt die request-tenant-Resolver: requestTenant (Betreiber-
+// Kanal -> BOOTSTRAP_TENANT_ID), requireTenant (tenant-gescopt; REJECT -> 403) und
 // tenantOwnsCall (Ownership-Praedikat, eine Quelle wie POST /api/calls/:id/cancel).
 export function makeReadRoutes({ store, config, audit, tenant }) {
   const { requestTenant, requireTenant, tenantOwnsCall } = tenant;
   const router = Router();
 
-  // Gesamter Zustand fuers Dashboard (Polling) + MCP-Tools. Tenant-gescoped hinter
-  // MULTI_TENANT (Flag aus -> requestTenant === BOOTSTRAP_TENANT_ID + ungefilterte Listen
-  // wie im Bestand, inkl. Legacy-Calls ohne tenantId -> byte-identisch). Die lesenden
-  // MCP-Tools (list_calls/list_action_items/get_my_number/get_agent_status) erben das
-  // Scoping AUTOMATISCH ueber diese Route (mcp-tools.js unveraendert).
+  // Gesamter Zustand fuers Dashboard (Polling) + MCP-Tools. Tenant-gescoped UNBEDINGT
+  // (E4): kein Env-Schalter hebt den Scope mehr auf. Ein Legacy-Call ohne tenantId
+  // gehoert damit niemandem und ist fuer niemanden sichtbar - gewollt, denn "sichtbar
+  // fuer alle" ist die Alternative. Die lesenden MCP-Tools (list_calls/
+  // list_action_items/get_my_number/get_agent_status) erben das Scoping AUTOMATISCH
+  // ueber diese Route (mcp-tools.js unveraendert).
   router.get("/api/state", internalOnly, (req, res) => {
     const s = store.load();
     const tenantId = requestTenant(req);
     const ctx = store.tenantContext(tenantId);
 
     // Listen-Scope ueber die EINE Quelle (tenantCallScope via exportTenantData):
-    // calls/actionItems/notifications EINES Tenants. Flag aus -> ungefiltert
-    // (Bestand). Danach die Bestands-Slices.
-    const scoped = config.tenancy.multiTenant ? store.exportTenantData(tenantId) : s;
+    // calls/actionItems/notifications EINES Tenants. Danach die Bestands-Slices.
+    const scoped = store.exportTenantData(tenantId);
 
     res.json({
       // settings/calendar/usage sind seit I2/P4 Maps tenantId -> Bucket; tenantContext
@@ -98,11 +98,11 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
   router.get("/api/calls/:id", internalOnly, (req, res) => {
     const call = store.getCall(req.params.id);
     if (!call) return res.status(404).json({ error: "not found" });
-    // Tenant-Scope (I5): fremder Call -> 404 (kein Existenz-Leck, NICHT 403). Flag
-    // aus -> requestTenant === BOOTSTRAP_TENANT_ID; trotzdem ueber config.tenancy.multiTenant
-    // gaten, damit Legacy-Calls ohne tenantId bei Flag aus byte-identisch (200)
-    // bleiben. getCall matcht auch twilioSid -> der Guard deckt beide id-Achsen.
-    if (config.tenancy.multiTenant && !tenantOwnsCall(call, requestTenant(req)))
+    // Tenant-Scope (I5, seit E4 unbedingt): fremder Call -> 404 (kein Existenz-Leck,
+    // NICHT 403). Ein Legacy-Call ohne tenantId gehoert niemandem und faellt damit
+    // ebenfalls auf 404 - dieselbe Linie wie /api/state oben. getCall matcht auch
+    // twilioSid -> der Guard deckt beide id-Achsen.
+    if (!tenantOwnsCall(call, requestTenant(req)))
       return res.status(404).json({ error: "not found" });
     res.json(publicCall(call));
   });

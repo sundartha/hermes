@@ -75,51 +75,5 @@ test("F12 fail-closed: unbekannte id -> null, completed-Call -> null", async () 
   assert.equal(store2.getCall(done.id), null, "fail-closed: kein push eines nicht-aktiven Calls");
 });
 
-// ---- KS-P1b: dieselbe Nachladung ueber die call_control_id (Assistant-Shim, E1) ----
-
-test("KS-P1b-9: unbekannter, aber aktiver Call wird ueber die call_control_id re-attached und danach von getCall gefunden", async () => {
-  const { runner } = await sharedDb();
-  const store2 = makePgStore(runner);
-  await store2.init(); // leerer Spiegel (kennt den Fremd-Call nicht)
-  const foreignId = await seedForeignActiveCall(runner);
-
-  assert.equal(store2.getCallByControlId(FOREIGN_CCID), null, "vor dem Re-Attach im Spiegel unbekannt");
-
-  const attached = await store2.attachActiveCallByControlId(FOREIGN_CCID);
-  assert.ok(attached, "attachActiveCallByControlId liefert die aktive Zeile");
-  assert.equal(attached.id, foreignId);
-  assert.equal(attached.status, "active");
-  assert.equal(attached.callControlId, FOREIGN_CCID);
-
-  assert.ok(store2.getCall(foreignId), "nach dem Re-Attach im Spiegel gefunden (idempotenter push)");
-});
-
-test("KS-P1b-10 fail-closed: unbekannte/leere ccid -> null (nie ein fremder Call ueber call_control_id IS NULL), completed -> null", async () => {
-  const { runner } = await sharedDb();
-  const store2 = makePgStore(runner);
-  await store2.init(); // leerer Spiegel
-
-  // Ein aktiver Call OHNE call_control_id liegt in der DB - die Zeile, die eine ccid-lose
-  // Suche faelschlich ausliefern wuerde. Gemessen: hier tragen ZWEI Schichten (der
-  // ccid-Riegel in pg.js UND die SQL-NULL-Semantik) - der Test pinnt das Ergebnis, damit
-  // eine kuenftige Umformulierung der Query (z.B. auf IS NOT DISTINCT FROM) auffliegt.
-  const store1 = makePgStore(runner);
-  await store1.init();
-  const noCcid = store1.createCall(outboundCall());
-  store1.markAnswered(noCcid.id);
-  const done = store1.createCall(outboundCall());
-  done.callControlId = "cc_done";
-  store1.endCallRecord(done.id, "completed");
-  await store1.save();
-
-  assert.equal(await store2.attachActiveCallByControlId("cc_unbekannt"), null, "unbekannte ccid -> null");
-  assert.equal(await store2.attachActiveCallByControlId(""), null, "leere ccid -> null");
-  assert.equal(await store2.attachActiveCallByControlId(null), null, "null-ccid -> null");
-  assert.equal(store2.getCall(noCcid.id), null, "fail-closed: kein push eines ccid-losen Calls");
-  assert.equal(
-    await store2.attachActiveCallByControlId("cc_done"),
-    null,
-    "completed-Call -> null (nur status='active')",
-  );
-  assert.equal(store2.getCall(done.id), null, "fail-closed: kein push eines nicht-aktiven Calls");
-});
+// KS-P1b-9/KS-P1b-10 (Nachladung ueber die call_control_id, Assistant-Shim) sind mit
+// IE6-S1 entfernt - getCallByControlId/attachActiveCallByControlId existieren nicht mehr.

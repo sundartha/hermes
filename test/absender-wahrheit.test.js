@@ -16,7 +16,7 @@ import {
   CONVERSATION_FAILED_UNVERIFIED_ORIGINATION,
 } from "./fixtures/elevenlabs-conversations.js";
 
-let jsonStore, BOOTSTRAP, FROM_SOURCE, originateAiAssistantCall;
+let jsonStore, BOOTSTRAP, FROM_SOURCE;
 
 before(async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-absender-wahrheit-"));
@@ -25,7 +25,6 @@ before(async () => {
   jsonStore = await import("../src/store/json.js");
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
   ({ FROM_SOURCE } = await import("../src/store/state-ops.js"));
-  ({ originateAiAssistantCall } = await import("../src/telnyx-origination.js"));
 });
 
 function neuerOutboundAnruf(from = "+18643028341") {
@@ -77,36 +76,13 @@ test("T3: EL-Fixture ohne metadata.phone_call -> fromActualE164/fromSource bleib
   assert.equal(gespeichert.fromSource, null);
 });
 
-// T4-a: der C-Telnyx-Zweig (originateAiAssistantCall) - der gesendete Absender IST
-// fromNumber (kein ANI-Override auf dieser Connection, Struktur-Beleg statt Behauptung).
-test("T4-a: C-Telnyx-Zweig -> fromActualE164 === from_e164, fromSource === tenant_did", async () => {
-  const call = neuerOutboundAnruf("+18643028341");
-  const fakeVoiceControl = () => ({
-    originateViaCallControl: async () => ({ callControlId: "cc_test_t4a" }),
-  });
-  await originateAiAssistantCall({
-    store: jsonStore,
-    voiceControl: fakeVoiceControl,
-    config: { telnyx: { telnyxAssistant: { assistantId: "" } }, server: { publicUrl: "https://test.invalid" } },
-    call: jsonStore.getCall(call.id),
-    fromNumber: "+18643028341",
-    to: "+4915005550002",
-    maxDur: 60,
-  });
-  const gespeichert = jsonStore.getCall(call.id);
-  assert.equal(gespeichert.fromActualE164, call.from);
-  assert.equal(gespeichert.fromSource, FROM_SOURCE.TENANT_DID);
-});
-
-// T4-b: der TeXML-Zweig - die BENANNTE Auslassung (s. src/telnyx-origination.js Modulkopf/
-// routes/api-calls.js, Blocker-Vermeidungsliste 5: der Marker wuerde dort einen gepinnten
-// Zeilen-/Komplexitaets-Pin heben). Auf diesem Weg schreibt NICHTS das Feld - es bleibt
-// exakt der createCall-Default: ehrlich unbekannt, NIE geraten. Diese Auslassung ist eine
-// Entscheidung (Plan §3.6), kein Vergessen - dieser Test naegelt sie fest.
+// T4-b: der TeXML-Zweig - die BENANNTE Auslassung. Auf diesem Weg schreibt NICHTS das
+// Feld - es bleibt exakt der createCall-Default: ehrlich unbekannt, NIE geraten. Diese
+// Auslassung ist eine Entscheidung (Plan §3.6), kein Vergessen - dieser Test naegelt sie fest.
 test("T4-b: TeXML-Zweig (benannte Auslassung) -> fromSource bleibt unangetastet (unknown)", () => {
   const call = neuerOutboundAnruf();
   // Bewusst: KEIN Aufruf von recordActualSender hier - der TeXML-Zweig in
-  // routes/api-calls.js ruft ihn nicht (anders als telnyx-origination.js/outbound.js).
+  // routes/api-calls.js ruft ihn nicht (anders als elevenlabs/outbound.js).
   const gespeichert = jsonStore.getCall(call.id);
   assert.equal(gespeichert.fromActualE164, null);
   assert.equal(gespeichert.fromSource, null);

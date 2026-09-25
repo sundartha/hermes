@@ -59,16 +59,12 @@ test("AL-P1-1: callerTurns round-trippt ueber Re-Hydrierung (Spalte + flush + ro
   );
 });
 
-test("AL-P1-2: telnyxConversationId round-trippt und ist set-once", async () => {
+test("AL-P1-2: telnyxConversationId round-trippt (Altbestand-Spalte)", async () => {
   const { store, runner } = await makePgTestStore();
   const created = store.createCall(newCall());
-  store.recordTelnyxConversationId(created.id, "conv-first");
-  store.recordTelnyxConversationId(created.id, "conv-second");
-  assert.equal(
-    store.getCall(created.id).telnyxConversationId,
-    "conv-first",
-    "zweiter Aufruf mit anderer UUID aendert nichts (set-once)",
-  );
+  // Der Schreibweg (recordTelnyxConversationId) ist mit IE6-S1 entfernt - die Spalte
+  // selbst bleibt Altbestand (Daten, NICHT-Scope). Wert direkt am Spiegel gesetzt.
+  store.getCall(created.id).telnyxConversationId = "conv-first";
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
@@ -125,7 +121,7 @@ test("AL-P1-3b: Migration ist idempotent - bereits gesetzte Werte (auch 0) bleib
 
 test("AL-P1-4: json-Backend persistiert beide Felder auf Platte (echter Disk-Roundtrip)", () => {
   const created = jsonStore.createCall(newCall());
-  jsonStore.recordTelnyxConversationId(created.id, "conv-json");
+  jsonStore.getCall(created.id).telnyxConversationId = "conv-json";
   jsonStore.countCallerTurn(created.id);
   jsonStore.countCallerTurn(created.id);
   const onDisk = JSON.parse(fs.readFileSync(path.join(dataDir, "store.json"), "utf8"));

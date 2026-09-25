@@ -1,0 +1,44 @@
+# WZ-01 (PLAN-SICHERHEITSTEST.md 5.2): Dauersignal fuer Abhaengigkeits-Advisories.
+# Bis hierher gab es KEINES - `npm audit` laeuft nur, wenn ohnehin ein Push die CI
+# ausloest (.github/workflows/ci.yml, Schritt "Dependency-Audit"). Ein Advisory, das
+# nach dem letzten Push veroeffentlicht wird, bleibt bis zum naechsten Push unsichtbar.
+#
+# groups ist Pflicht, kein Stilmittel: ohne die Gruppierung entstehen ~20 Einzel-PRs pro
+# Woche statt einem. Genau daran stirbt jede Bot-Einfuehrung - eine PR-Flut wird binnen
+# zwei Wochen ignoriert, und dann meldet der Bot ins Leere.
+#
+# WICHTIG (Repo-Split, PLAN-SECURITY.md SEC-TEST Punkt 2): Render deployt aus dem
+# UPSTREAM-Repo jonas986/vodafone-agent, nicht aus origin. Diese Datei wirkt nur dort,
+# wo sie liegt - sie muss zusaetzlich im Upstream ankommen, sonst laeuft der Waechter
+# neben der Produktion her.
+version: 2
+updates:
+  # Gateway/Server (Repo-Wurzel): 9 Laufzeit-Pakete, s. package.json
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      alle:
+        patterns: ["*"]
+
+  # Marketing-Site + App-Shell (Astro). Eigener Baum, eigenes Lockfile.
+  - package-ecosystem: "npm"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      alle:
+        patterns: ["*"]
+
+  # Die Workflows selbst: eine gepinnte Action mit bekannter Luecke ist derselbe
+  # Lieferketten-Pfad wie ein npm-Paket (A-17), nur an der CI statt an der Laufzeit.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      alle:
+        patterns: ["*"]

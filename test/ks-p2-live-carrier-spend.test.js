@@ -28,9 +28,9 @@ import {
   activeCallsFor,
   tryReserveOutboundBudget,
 } from "../src/store/state-ops.js";
-// test/telnyx-shim-harness.js importiert src/config.js STATISCH und wird deshalb - wie
-// budget-gate.js und billing/metering.js - erst NACH dem Setzen der Tarif-Env geladen.
-// Ein statischer Import hier fror die Config mit dem Tarif der lokalen .env ein.
+// budget-gate.js/billing/metering.js importieren src/config.js STATISCH und werden
+// deshalb erst NACH dem Setzen der Tarif-Env geladen. Ein statischer Import hier fror die
+// Config mit dem Tarif der lokalen .env ein.
 
 // Fixierter Minutensatz dieser Datei: das Leg +1 -> +49 ist KEIN Inlands-Leg
 // (isDomesticLeg), es zieht also VOICE_TARIFF_DEFAULT_CENTS.
@@ -65,7 +65,6 @@ const CFG = Object.freeze({
 });
 
 let blockingBudgetAxis, liveVoiceSpendCents;
-let shim; // Modul-Namensraum von test/telnyx-shim-harness.js (s. Hinweis oben)
 
 before(async () => {
   process.env.VOICE_TARIFF_DEFAULT_CENTS = String(TARIFF_CENTS_PER_MIN);
@@ -74,7 +73,6 @@ before(async () => {
   await import("../src/config.js");
   ({ blockingBudgetAxis } = await import("../src/budget-gate.js"));
   ({ liveVoiceSpendCents } = await import("../src/billing/metering.js"));
-  shim = await import("./telnyx-shim-harness.js");
 });
 
 function isoAgo(ms) {
@@ -298,31 +296,3 @@ test("KS-P2-11: Budget-Engine - der Live-Verbrauch beendet den Call mit Ansage u
   }
 });
 
-test("KS-P2-12: Shim - der Live-Verbrauch loest killCallForBudget aus, ohne agentTurn zu rufen", async () => {
-  const startedAt = isoAgo(TWO_MINUTE_LEG_MS);
-  const call = shim.makeCall({ tenantId: TENANT, startedAt, answeredAt: startedAt });
-  const s = stateWith({ capCents: 100, legs: [call] });
-  // Der Harness-Fake liefert die Shim-Kanten (getCallByControlId, Settlement-Spies); die
-  // zwei Geld-Kanten fuehren in die ECHTEN ops-Funktionen (kein Nachbau im Test).
-  const store = { ...shim.fakeStore({ call }), ...storeOver(s) };
-  const voiceControl = shim.voiceControlSpy();
-  const agentTurn = shim.agentTurnSpy();
-  const res = shim.fakeRes();
-
-  const original = console.warn;
-  const lines = [];
-  console.warn = (...args) => lines.push(args.join(" "));
-  try {
-    await shim.makeHandler({ store, agentTurn, voiceControl })(shim.validReq(call), res);
-  } finally {
-    console.warn = original;
-  }
-
-  assert.equal(shim.sseContent(res), localeFor("de").budgetExhaustedHangup);
-  assert.deepEqual(voiceControl.calls, [{ provider: "telnyx", callControlId: "cc_1" }]);
-  assert.deepEqual(agentTurn.calls, [], "kein Token verbrannt");
-  assert.deepEqual(store.settlementCalls, [], "Settlement bleibt allein bei P4.5 onHangup");
-  const gateLines = lines.filter((l) => l.includes("[telnyx-shim] gate"));
-  assert.equal(gateLines.length, 1);
-  assert.match(gateLines[0], /"reason":"budget_tenant"/);
-});

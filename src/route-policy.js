@@ -26,6 +26,7 @@
 // als Literal wiederholt (G5/G25) - test/p14-checkout-return-app-shell.test.js pinnt
 // das fuer den Altpfad ausdruecklich.
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
+import { ELEVENLABS_INIT_PATH } from "./routes/webhooks-elevenlabs-init.js";
 
 // Benannte Auth-Middlewares. Der Inventar-Test erkennt sie an handler.name in der
 // Route-Handler-Kette. INVARIANTE: diese Middlewares MUESSEN benannte Funktionen
@@ -93,12 +94,13 @@ export const PUBLIC_ROUTES = Object.freeze([
     reason: "OAuth-Metadata (MCP-Variante) - muss ohne Login erreichbar sein.",
   },
   {
-    method: "POST",
-    path: "/v1/chat/completions",
+    method: "GET",
+    path: "/.well-known/openai-apps-challenge",
     reason:
-      "HANDLER-INTERNE AUTH (Runbook-Fall 2): Telnyx BYO-LLM ruft serverseitig, kann keinen " +
-      "Session-Cookie senden. Absicherung im Handler: 404 bei abgeschaltetem Assistant-Flag " +
-      "plus timing-sicherer Bearer-Vergleich (safeEqual) gegen das Shim-Secret.",
+      "Domain-Ownership-Challenge der OpenAI-Einreichung (O-4/O-5) - der Zweck IST die " +
+      "unauthentifizierte Abholbarkeit. Liefert einen einzigen, von OpenAI zugewiesenen " +
+      "Verifikations-Token als Klartext und sonst nichts: keine Tenant-Daten, kein Zustand, " +
+      "kein Schreibpfad, kein Query-Echo. Bei leerer Env antwortet sie 404.",
   },
   {
     method: "GET",
@@ -135,7 +137,11 @@ export const PUBLIC_ROUTES = Object.freeze([
       "SIGNIERT Werkzeug-Webhooks nicht (nur frei konfigurierbare Header). Absicherung im " +
       "Handler: timing-sicherer Vergleich (safeEqual) des Headers x-hermes-tool-token gegen " +
       "ELEVENLABS_TOOL_TOKEN, leerer Wert lehnt JEDEN Aufruf ab; danach Bindung an einen " +
-      "laufenden Anruf (404 sonst), Consult-Faehigkeits-Gate und die pro-Tenant-Kostendecke.",
+      "laufenden Anruf UND an dessen Mandanten (SEC-P4: der Anrufstart gibt dem Agenten " +
+      "einen aus dem Mandanten abgeleiteten Wert mit, den die Werkzeug-Definition " +
+      "zurueckschickt; ein Aufruf fuer Mandant A passt an keinem Anruf von Mandant B), " +
+      "Consult-Faehigkeits-Gate und die pro-Tenant-Kostendecke. Jede dieser drei " +
+      "Ablehnungen antwortet mit demselben Grund (404), nur das Log unterscheidet sie.",
   },
   {
     method: "POST",
@@ -143,10 +149,29 @@ export const PUBLIC_ROUTES = Object.freeze([
     reason:
       "HANDLER-INTERNE AUTH, wortgleiche Bauart wie /webhooks/elevenlabs/consult darueber " +
       "(Thema B, 2026-08-19): derselbe timing-sichere x-hermes-tool-token-Vergleich " +
-      "(fail-closed bei leerem Wert), dieselbe Bindung an einen laufenden Anruf (404), " +
+      "(fail-closed bei leerem Wert), dieselbe Bindung an einen " +
+      "laufenden Anruf UND an dessen Mandanten (SEC-P4: der Anrufstart gibt dem Agenten " +
+      "einen aus dem Mandanten abgeleiteten Wert mit, den die Werkzeug-Definition " +
+      "zurueckschickt; ein Aufruf fuer Mandant A passt an keinem Anruf von Mandant B), " +
       "danach das Recherche-Gate (LOOKUP_ENABLED + EXA_API_KEY + per-Tenant allowLookup + " +
       "Richtung outbound, research/registry.js), die pro-Tenant-Kostendecke und der " +
-      "Deckel LOOKUP_MAX_PER_CALL. Egress-Filter sanitizeLookupQuery vor jedem Versand.",
+      "Deckel LOOKUP_MAX_PER_CALL. Jede dieser drei Ablehnungen antwortet mit demselben " +
+      "Grund (404), nur das Log unterscheidet sie. Egress-Filter sanitizeLookupQuery vor " +
+      "jedem Versand.",
+  },
+  {
+    method: "POST",
+    path: ELEVENLABS_INIT_PATH,
+    reason:
+      "HANDLER-INTERNE AUTH (IEL-B6, Conversation-Initiation-Webhook): der Anbieter ruft " +
+      "serverseitig, ohne Session und ohne Signatur. Stufe 1: safeEqual des Headers " +
+      "x-hermes-init-token gegen ELEVENLABS_INIT_WEBHOOK_TOKEN; leer oder kuerzer als " +
+      "INIT_WEBHOOK_TOKEN_MIN_LENGTH -> 403 fuer JEDEN Aufruf. Der Header beweist nur das " +
+      "Anbieter-Konto, nicht die Zugehoerigkeit zu einem Anruf - Barriere ist Stufe 2: " +
+      "Zuordnung NUR ueber das 16-Byte-Bindungs-Token an einen aktiven, wartenden " +
+      "Inbound-EL-Anruf (oder die identische Wiederholung binnen " +
+      "EL_INIT_WIEDERHOLUNG_FRIST_MS), dann Schalter/Allowlist, dann set-once-Bindung. Jede " +
+      "Ablehnung 404 mit konstantem Koerper ohne Daten. Loest selbst keinen Anruf aus.",
   },
   {
     method: "GET",
@@ -210,7 +235,12 @@ export const PUBLIC_ROUTES = Object.freeze([
   },
   {
     method: "POST",
-    path: "/voice/call-control",
+    path: "/voice/el-rueckfall",
+    reason: VOICE_SIGNATURE_REASON,
+  },
+  {
+    method: "POST",
+    path: "/voice/el-bein",
     reason: VOICE_SIGNATURE_REASON,
   },
   {

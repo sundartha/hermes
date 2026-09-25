@@ -8,10 +8,29 @@
 // dashboard-i18n-surface). [data-i18n]/[data-i18n-attr] markieren, was zur
 // Laufzeit ersetzt wird.
 //
-// WICHTIG: derselbe localStorage-Key wie die Website (hermes.lang) -- wer dort
-// DE waehlt, bekommt hier ebenfalls DE.
+// Derselbe Schluesselname wie die Website. Geteilt wird der WERT aber nur
+// innerhalb eines Origins: sundartha.com (Static-Service) und app.sundartha.com
+// (Gateway) haben getrennte localStorage-Baeume. Auf dem Gateway-Origin liegen
+// Dashboard UND Startseite, dort wirkt die Wahl also ueber beide.
+//
+// Der Schluessel traegt seit dem Default-Wechsel eine Version: Wahlen aus der
+// Zeit, als Deutsch der Default war, sollen Englisch nicht aushebeln. Der alte
+// Eintrag wird hier ebenfalls entfernt und nicht nur in
+// scripts/hermes-scroll.js -- das Dashboard laedt jenes Modul nicht, sonst
+// bliebe auf dem Gateway-Origin ein verwaister Wert liegen, den der
+// Datenschutztext nicht mehr beschreibt.
 
-const LANG_KEY = "hermes.lang";
+const LANG_KEY = "hermes.lang.v2";
+const LEGACY_LANG_KEY = "hermes.lang";
+
+// Einmaliges Aufraeumen beim Laden des Moduls. Eigenes try/catch: im
+// Privatmodus wirft schon der Zugriff, und ein Fehler hier darf die Insel
+// nicht am Starten hindern.
+try {
+  localStorage.removeItem(LEGACY_LANG_KEY);
+} catch {
+  /* Kein Speicher -- dann gibt es auch nichts aufzuraeumen. */
+}
 const SUPPORTED_LANGS = new Set(["de", "en"]);
 
 // Event, ueber das setLang() eine Sprachaenderung meldet. Lauscher: AuthIsland
@@ -122,6 +141,7 @@ export const STRINGS = {
     pendingText:
       "Your account has been created and is awaiting activation. Once it's active, your assistant will appear here.",
     pendingSkip: "Maybe later",
+    pendingRestore: "Show plans",
     errorTitle: "Something went wrong",
     errorText: "The app couldn't load just now. Check your connection and try again.",
     errorRetry: "Try again",
@@ -142,10 +162,12 @@ export const STRINGS = {
     // CallsIsland
     callsTitle: "Calls",
     viewDetails: "View details",
+    // Aufklapper der Anrufliste (Owner-Wunsch 16.09.2026): die Karte zeigt drei
+    // Anrufe, aufgeklappt sechs plus Scrollen. Beschriftung wechselt zur Laufzeit.
+    showMore: "Show more",
+    showLess: "Show less",
     transcript: "Transcript",
     modalClose: "Close",
-    // OUTBOUND-E3a (F2a, L8): Ueberschrift des Benachrichtigungs-Feeds.
-    notificationsTitle: "Notifications",
 
     // SettingsIsland
     settingsTitle: "My agent settings",
@@ -188,8 +210,7 @@ export const STRINGS = {
 
     // NewsletterIsland
     newsletterTitle: "Newsletter",
-    newsletterSubtitle:
-      "Get a short summary emailed to you after every call. Optional -- you can unsubscribe anytime.",
+    newsletterSubtitle: "Get a short summary emailed after every call — unsubscribe anytime.",
     newsletterAriaLabel: "Subscribe to the newsletter",
     accountEmailAriaLabel: "Account email",
     subscribe: "Subscribe",
@@ -216,6 +237,7 @@ export const STRINGS = {
     pendingText:
       "Dein Konto wurde erstellt und wartet auf die Freischaltung. Sobald es aktiv ist, erscheint dein Assistent hier.",
     pendingSkip: "Vielleicht später",
+    pendingRestore: "Tarife anzeigen",
     errorTitle: "Etwas ist schiefgelaufen",
     errorText: "Die App konnte gerade nicht geladen werden. Prüf deine Verbindung und versuch es erneut.",
     errorRetry: "Erneut versuchen",
@@ -236,9 +258,10 @@ export const STRINGS = {
     // CallsIsland
     callsTitle: "Anrufe",
     viewDetails: "Details ansehen",
+    showMore: "Mehr anzeigen",
+    showLess: "Weniger anzeigen",
     transcript: "Gesprächsverlauf",
     modalClose: "Schließen",
-    notificationsTitle: "Meldungen",
 
     // SettingsIsland
     settingsTitle: "Mein Agent",
@@ -282,7 +305,7 @@ export const STRINGS = {
     // NewsletterIsland
     newsletterTitle: "Newsletter",
     newsletterSubtitle:
-      "Erhalte nach jedem Anruf eine kurze Zusammenfassung per E-Mail. Optional - du kannst dich jederzeit abmelden.",
+      "Erhalte nach jedem Anruf eine kurze Zusammenfassung per E-Mail — jederzeit abbestellbar.",
     newsletterAriaLabel: "Newsletter abonnieren",
     accountEmailAriaLabel: "Konto-E-Mail",
     subscribe: "Anmelden",

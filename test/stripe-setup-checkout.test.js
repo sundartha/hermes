@@ -86,7 +86,12 @@ test("getCheckoutSessionResult: GET /v1/checkout/sessions/<id>?expand[]=setup_in
   assert.ok(captured.url.includes("expand[]=setup_intent"), "setup_intent wird expandiert");
   assert.equal(captured.opts.method, "GET");
   assert.equal(captured.opts.headers.Authorization, `Bearer ${SECRET}`);
-  assert.deepEqual(result, { customerId: "cus_new1", paymentMethodId: "pm_1" });
+  // GP-P2: unexpandierte Fixtur (payment_method als String) -> Typ unbekannt, KEIN Wurf.
+  assert.deepEqual(result, {
+    customerId: "cus_new1",
+    paymentMethodId: "pm_1",
+    paymentMethodType: null,
+  });
 });
 
 test("getCheckoutSessionResult: fehlendes payment_method -> wirft (Karte nicht gespeichert), KEIN stilles null", async () => {
@@ -348,6 +353,7 @@ test("getSubscriptionCheckoutResult: GET /v1/checkout/sessions/<id>?expand[]=sub
   assert.deepEqual(result, {
     customerId: "cus_new1",
     paymentMethodId: "pm_b",
+    paymentMethodType: null, // GP-P2: Fixtur-Objekt ohne type -> unbekannt
     subscriptionId: "sub_new",
     currentPeriodStart: 1890864000,
     currentPeriodEnd: 1893456000,
@@ -399,6 +405,7 @@ test("getSubscriptionCheckoutResult: unexpandiertes pm-String + top-level-Period
   assert.deepEqual(result, {
     customerId: "cus_new1",
     paymentMethodId: "pm_string",
+    paymentMethodType: null, // GP-P2: unexpandierter String traegt keinen Typ
     subscriptionId: "sub_new",
     currentPeriodStart: 1600000000,
     currentPeriodEnd: 1602592000,

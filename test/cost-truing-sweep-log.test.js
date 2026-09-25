@@ -52,7 +52,21 @@ test("(P6-8) Sweep-Log traegt anfragen/seiten/pool/vollstaendig HINTER den Besta
     "[cost-truing] sweep trigger=manual kandidaten=2 gemessen=0 unvollstaendig=2 " +
       "ohne_schaetzung=0 unbestimmt=0 uebersprungen=0 " +
       `anfragen=${ASSIGNABLE_COST_RECORD_TYPES.length} seiten=${ASSIGNABLE_COST_RECORD_TYPES.length} ` +
-      "pool=1 vollstaendig=true",
+      // KV2-1 (Kriterium (d)): kanaele= HINTER den Bestandsfeldern - kein Ziel gesetzt
+      // (BASE_ENV/fakeConfig-Default) -> kanaele=keine.
+      // KV2-6: buch=/herzschlag= HINTER kanaele=. Beide Kandidaten enden 200 min her
+      // (makeDueOutboundCall-Default) - das liegt INNERHALB der Karenz dieser Config
+      // (costTruingDelayMinutes=180min + costTruingSweepIntervalMs=1h = 4h), also
+      // ausserhalb JEDES Fensters: buch=keine herzschlag=keine.
+      // KV2-7: erschoepft=/abschluesse= HINTER profillos=. Beide Kandidaten sind
+      // messbar (0 Versuche), erschoepft=0. Beide Fixturen tragen KEIN costProfile
+      // (makeDueOutboundCall setzt es nicht) -> Endzustand profil_fehlt, sobald der
+      // Sweep-Traeger (telnyx_call_records) fertig ist (measured!==null, auch bei
+      // unvollstaendiger Pflicht-Menge) -> abschluesse=profil_fehlt(2).
+      "pool=1 vollstaendig=true kanaele=keine buch=keine herzschlag=keine nie_beendet=0 " +
+      // KV2-9: el_reifung=/el_abweichung=/el_uebrig= HINTER abschluesse= - kein
+      // elKostenRead injiziert (Bestandstest ohne EL-Anrufe) -> vollstaendiges No-op.
+      "profillos=0 erschoepft=0 abschluesse=profil_fehlt(2) el_reifung=keine el_abweichung=0 el_uebrig=0",
   );
   assert.equal(
     fetchCalls.length, Number(line.match(/anfragen=(\d+)/)[1]),

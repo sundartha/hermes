@@ -34,16 +34,27 @@
 // (GET /v1/convai/conversations/{id}, Takt ELEVENLABS_RESULT_POLL_MS) und legen Transkript
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
 import { LOCALES, localeFor } from "../i18n/locales.js";
-import { cappedEndedAtMs, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
+import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
+import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
+import { BRIDGE_STATE, bridgeStateOf } from "./inbound-bridge-state.js";
+import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfWirken } from "./nachlauf-politik.js";
 import { findActiveNumber } from "../store/views.js";
 import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
 import { verifiedOpeningLine } from "./opening-line.js";
-import { MS_PER_SECOND } from "../utils/timer.js";
-import { callLocaleFor } from "./call-locale.js";
+import { tenantToolToken } from "./tenant-tool-token.js";
+import { MS_PER_SECOND, sleep } from "../utils/timer.js";
+import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";
 import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
+// ST3 (O3): AUDIO_TAG wohnt seit dem Move im Heuristik-Modul (EINE Quelle fuer [el-tags]
+// UND die B1-Lexemisierung, Import-Richtung nur hierher - kein Zykel); findeB1Treffer ist
+// die reine B1-Heuristik (kein Store, kein Netz, s. dort).
+import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
+// KV2-4: die Belegzeilen dieses Gespraechs (Regelwerk und Geldpruefung liegen daneben,
+// nicht hier - s. kosten-beleg.js).
+import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
 // OUTBOUND-E5 (F3): die reine Registrierungs-Auswahl - kein Netz, kein Store (s. dort).
 import { waehleAbsenderRegistrierung, ABSENDER_QUELLE } from "../telephony/absender-registrierung.js";
 import crypto from "node:crypto";
@@ -54,6 +65,11 @@ import crypto from "node:crypto";
 const PROVIDER_DONE = "done";
 const PROVIDER_FAILED = "failed";
 const FINISHED_PROVIDER_STATUS = Object.freeze([PROVIDER_DONE, PROVIDER_FAILED]);
+
+// G5: EINE Formulierung von "der Anbieter hat ein fertiges Ergebnis" fuer Poll-Takt und Beende-Pfad.
+function anbieterErgebnisFertig(conversation) {
+  return Boolean(conversation) && FINISHED_PROVIDER_STATUS.includes(conversation.status);
+}
 
 // Unsere Call-Endzustaende (store/state-ops.js) - bewusst benannt, weil "failed" auf
 // beiden Seiten vorkommt und die beiden Vokabulare nicht dasselbe sind.
@@ -157,6 +173,19 @@ const ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR = "poll_permanent_provider_error";
 // api-calls.js), damit N dort KEINE Magic Number ist.
 export const ELEVENLABS_PROVIDER_MAX_DURATION_S = 600;
 
+// IEL-B4 (E7c): wie lange der Poll eines ueberbrueckten Inbound-Calls nach dem
+// Carrier-Ende (elNachlaufStartedAt) auf das Anbieter-Ergebnis wartet. STARTWERT, NICHT
+// GEMESSEN: die Verarbeitungsdauer nach Verbindungsende ist nicht aufgezeichnet
+// (spike1-messung belegt nur den Uebergang auf "processing"). Gleich dem besessenen
+// Anbieter-Deckel, weil (1) die Frist nie gebucht wird (Ende-Anker = Carrier-Ende, E17) -
+// ein zu langer Wert kostet kein Geld, (2) ein zu kurzer Transkript, Zusammenfassung und
+// Inbox-Eintrag verliert. Obergrenze fuer den Datensatz bleibt der Max-Dauer-Cap.
+export const INBOUND_NACHLAUF_FRIST_MS = ELEVENLABS_PROVIDER_MAX_DURATION_S * MS_PER_SECOND;
+
+// E18(1): Ausgang eines Poll-Takts, der einen Folgetakt geplant hat - jeder andere Ausgang
+// traegt den Call aus dem Register laufendeInboundPolls aus.
+const FOLGETAKT_GEPLANT = Symbol("folgetakt-geplant");
+
 // S1-A (unabhaengige Durchsicht 17.08.2026): auf DIESEM Weg ist der Anbieter-Deckel eine
 // HARTE OBERGRENZE, kein Default. classifyCallTime/cappedEndedAtMs rechnen eine Ebene
 // tiefer (call.maxDurationS || defaultMaxDurationS) - der hereingereichte Deckel wirkt dort
@@ -199,6 +228,14 @@ function callUnderProviderCap(call) {
 // Loeschversuch (endConversation) laeuft weiterhin IN JEDEM FALL, auch wenn die Frist des
 // Ergebnisabrufs ablaeuft (fetchConversationSoft faengt den Abbruch fail-soft ab, s. dort).
 export const EL_ABORT_PROVIDER_TIMEOUT_MS = 10000;
+
+// IEL-B5 (E10): Ergebnis-Abrufe des Beende-Pfads (Cap, Geld-Wache, cancel_call) eines
+// ueberbrueckten Inbound-Calls NACH dem Auflegen des Elternbeins. STARTWERT, NICHT GEMESSEN
+// (wie INBOUND_NACHLAUF_FRIST_MS): die Verarbeitungsdauer nach Verbindungsende ist nicht
+// aufgezeichnet. Wartezeit hoechstens Versuche x EL_ABORT_PROVIDER_TIMEOUT_MS + (Versuche - 1)
+// x resultPollMs; die Leitung ist dann schon aufgelegt - das Warten verzoegert nur Buchung und
+// cancel_call-Antwort, nie die Kappung. Exportiert fuer den Test (G22).
+export const EL_TERMINATION_RESULT_ATTEMPTS = 3;
 
 // Rollen: der Anbieter kennt "agent" und "user", unser Transkript "agent" und "caller".
 // Alles, was nicht der Agent ist, ist die Gegenstelle - ein unbekannter Rollenname darf
@@ -288,7 +325,9 @@ export function collectedFieldsOf(conversation) {
 // TEIL 3 (die bestaetigte Zeitzone) wird NUR geschrieben, wenn tatsaechlich ein
 // bestaetigter Wert vorliegt - "nur bestaetigte Werte werden gespeichert" ist die
 // Owner-Auflage, hier am Aufruf selbst durchgesetzt statt dem Store-Mutator ueberlassen.
-function persistCollectedFields(store, callId, conversation) {
+// IEL-B4 (E6): fuer einen ueberbrueckten Inbound-Call entsteht KEIN next_steps-Item -
+// summarizeCall schreibt die Items auf dem EL-Transkript (Sprache, allowSummaries).
+function persistCollectedFields({ store, callId, conversation, politik }) {
   const collected = collectedFieldsOf(conversation);
   store.recordProviderCollectedFields(callId, collected);
   if (collected.confirmedTimezone) {
@@ -298,7 +337,7 @@ function persistCollectedFields(store, callId, conversation) {
       confirmedAt: new Date().toISOString(),
     });
   }
-  const nextStep = nextStepActionItemOf(conversation, collected);
+  const nextStep = politik.naechsteSchritteAlsAufgabe ? nextStepActionItemOf(conversation, collected) : null;
   if (nextStep) store.addActionItem(callId, nextStep.text, nextStep.type);
 }
 
@@ -376,6 +415,12 @@ const LIST_DASH = /^-\s+/;
 // blanker Wert genau die nackte Ueberschrift ("CONSTRAINTS:"), die es zu vermeiden gilt.
 const alsText = (wert) => (typeof wert === "string" ? wert.trim() : "");
 
+// IEL-B6 (E12): EIN Auftraggeber-Ausdruck fuer beide Richtungen - der Name, sonst der
+// Fallback der Sprache des Satzes, in den er faellt.
+export function auftraggeberAusdruck(ownerName, locale) {
+  return alsText(ownerName) || locale.disclosureOwnerFallback;
+}
+
 const roleOf = (role) => (role === AGENT_ROLE ? AGENT_ROLE : CALLER_ROLE);
 
 const endStatusOf = (conversation) =>
@@ -384,6 +429,10 @@ const endStatusOf = (conversation) =>
 const objectiveAchievedOf = (conversation) =>
   OBJECTIVE_ACHIEVED_BY_PROVIDER[conversation.analysis?.call_successful] ??
   OBJECTIVE_ACHIEVED_UNKNOWN;
+
+// IEL-B4 (E6): leer fuer Inbound-EL -> finishCall laeuft in summarizeCall (unser LLM, Anrufsprache).
+const providerSummaryOf = (conversation, politik) =>
+  politik.anbieterZusammenfassung ? conversation.analysis?.transcript_summary || null : null;
 
 // KS-EL1 (Owner-Entscheidung, s. Modul-Kopf): WAS aus dem Buchungsanker werden soll, reine
 // Entscheidung OHNE Store-Mutation (P5/P6) - exportiert, weil sie ohne Store/Netz testbar
@@ -484,11 +533,6 @@ const providerErrorReasonFor = (anchor, conversation) =>
 const spokenLines = (conversation) =>
   (conversation.transcript || []).filter((zeile) => zeile && zeile.message);
 
-// Ein Klammerausdruck im GESPROCHENEN Text. Laengenbegrenzt, damit die Pruefung eine
-// Marke findet ("[Curious]") und nicht einen halben Satz, der zufaellig zwei Klammern
-// enthaelt; kein Zeilenumbruch aus demselben Grund.
-const AUDIO_TAG = /\[[^\]\n]{1,40}\]/g;
-
 // BEFUND 3 (Anruf 6, 18.08.2026): der Agent sprach woertlich "[Curious] Interessant, das
 // koennte wichtig sein." Ursache war ein Widerspruch in der Konfiguration -
 // tts.suggested_audio_tags schlug dem Modell zehn solcher Marken vor, waehrend der Prompt
@@ -507,6 +551,18 @@ const AUDIO_TAG = /\[[^\]\n]{1,40}\]/g;
 // Gespraechsinhalt, sondern die Eigenproduktion des Modells - und ohne sie waere die
 // Meldung fuer die Diagnose wertlos (welche Marke leckt, entscheidet, welche Quelle offen
 // steht). Der Rest der Zeile bleibt draussen (Absolute Regel 4).
+//
+// VORFALL 2026-09-02 (tasks/PLAN-AGENTEN-STIMME.md, ST3/O3): der Agent sprach
+// "[froehlich]" woertlich - die zweite DE-Marke nach dem 18.08.-Fix ([Curious]-Serie,
+// Konfig-Ursache) und nach "[freundlich]" (19.08., damals bewusst zurueckgestellt).
+// Diesmal KEINE offene Quelle: suggested_audio_tags ist leer, die Soft-Timeout-Texte
+// sind klammerfrei - B2 ist Adhaeren-Luecke des Modells, keine Konfig. Im selben
+// Vorfall zeigte sich B1: der Agent kuendigte den Inhalt an und kuendigte ihn ein
+// zweites Mal an, bevor er ihn lieferte - dafuer gibt es seit ST3 den zweiten
+// Detektor daneben (reportDoubleAnnouncements, Heuristik in b1-doppelankaendigung.js)
+// und das diagnostische Zaehlfeld am Call-Datensatz (recordElDetectorCounts,
+// Owner-Entscheidung 6): MELDEN, NICHT ENTFERNEN gilt fuer beide - das Transkript
+// bleibt unveraendert (Art. 50).
 function reportAudioTags(callId, lines) {
   const marken = lines
     .filter((zeile) => roleOf(zeile.role) === AGENT_ROLE)
@@ -518,6 +574,28 @@ function reportAudioTags(callId, lines) {
       "und turn.soft_timeout_config am Agenten.",
   );
   return marken;
+}
+
+// ST3 (O3, NUR Diagnose): B1 - der Agent kuendigt denselben Inhalt an und kuendigt ihn
+// erneut an, bevor er ihn liefert (Vorfall 2026-09-02, s. Kommentarblock oben). Dieselbe
+// Disziplin wie [el-tags]: NUR Agent-Zeilen, NUR MELDEN - keine Transkript-Aenderung.
+//
+// WAS GELOGGT WIRD (Pre-Mortem R8): Trefferzahl, Leit-Cues und Zeilenindizes - KEINE
+// Vollsaetze. Die Cues sind Einzelwoerter aus den geschlossenen Listen der Heuristik,
+// die Zeilenindizes beziehen sich auf die Liste gesprochener Zeilen, die
+// persistProviderResult sieht. Heuristik MIT dokumentierter False-Positive-Toleranz
+// (Owner-Entscheidung 5): Feuert [el-b1] dauernd, ist das Rauschen sicht- und zaehlbar
+// (Zaehlfeld), und die Detailligung wird duenner gezogen - NIE abgestellt.
+function reportDoubleAnnouncements(callId, lines) {
+  const treffer = findeB1Treffer(lines);
+  if (treffer.length === 0) return treffer;
+  const cues = treffer.map((einTreffer) => einTreffer.cues.join("+")).join(",");
+  const zeilen = [...new Set(treffer.map((einTreffer) => einTreffer.zeile))].join(",");
+  console.error(
+    `[el-b1] call=${callId} treffer=${treffer.length} cues=${cues} zeilen=${zeilen} - ` +
+      "der Agent hat denselben Inhalt doppelt angekuendigt (B1). Heuristik, NUR Diagnose.",
+  );
+  return treffer;
 }
 
 // Die Buchungs-Grenze des Agenten - die WIRKUNG des Mandats, nicht sein Wortlaut. Der
@@ -601,7 +679,7 @@ function backgroundText({ context, briefing }) {
 // Anbieter aufloest, ist im besten Fall Muell und im schlechtesten der 1008-Abbruch (der
 // Angerufene hoert Stille, belegt im Kopfkommentar von
 // test/el-vorlage-variablen-abgleich.test.js). Benannt statt nackt im Code (G25).
-const PLACEHOLDER_OPENER = "{{";
+export const PLACEHOLDER_OPENER = "{{";
 
 // OC-P2: die Prompt-Sektion fuer den Owner-Fall - gebaut wie constraintsText/
 // backgroundText: "" oder ein fertiger Block mit fuehrendem Zeilenumbruch, NIE null, NIE
@@ -615,12 +693,38 @@ const PLACEHOLDER_OPENER = "{{";
 // routes/api-calls.js); zwei Auswertungen desselben Schalters waeren zwei Wahrheiten.
 //
 // Der eingesetzte Offenlegungssatz kommt aus DERSELBEN einen Quelle wie der statische
-// Rahmen und die Presets (LOCALES.<lang>.disclosure), in der GESPROCHENEN Sprache dieses
+// Rahmen und die Presets (LOCALES.<lang>.disclosure), in der OFFENLEGUNGSsprache dieses
 // Anrufs - obwohl der Prompt englisch ist. Keine zweite Fassung, keine Uebersetzung hier.
-function calleeRelationText({ call, owner, bundle }) {
+// P4a: die Nachricht ist an den ANGERUFENEN gerichtet und beginnt mit dem Pflichtsatz -
+// sie folgt deshalb der Offenlegungssprache, nicht der Gespraechssprache (E-1).
+function calleeRelationText({ call, owner, offenlegung }) {
   if (call.calleeIsOwner !== true) return "";
-  const block = `\n${EN_PROMPT.calleeRelation({ owner, disclosure: bundle.disclosure(owner) })}`;
+  const block = `\n${EN_PROMPT.calleeRelation({ owner, disclosure: offenlegung.disclosure(owner) })}`;
   return block.includes(PLACEHOLDER_OPENER) ? "" : block;
+}
+
+// DE1: der Anrufbeantworter-Text dieses Anrufs, in der Sprache des Anrufs. Gebaut wie
+// calleeRelationText direkt darueber und aus demselben Grund an derselben Stelle: der
+// Wortlaut kommt aus EINER Quelle (call-locale.js -> LOCALES), hier steht nur der
+// Waechter davor.
+//
+// WARUM DER TEXT UEBERHAUPT VON UNS KOMMT: das Feld am Agenten
+// (built_in_tools.voicemail_detection.params.voicemail_message) laesst sich weder je
+// Sprache noch je Anruf uebersteuern (Anbieter-Schema, 2026-09-04 gemessen). Es loest
+// aber dynamische Variablen auf - der einzige Weg, auf dem ein deutscher Anruf keinen
+// englischen Anrufbeantworter-Text mehr hinterlaesst.
+//
+// "" HEISST HIER: KEINE NACHRICHT. Der Anbieter beendet den Anruf dann sofort, statt
+// etwas zu sprechen (Schema-Beschreibung des Feldes) - fail-safe: eine Lage, in der wir
+// den Text nicht sauber bauen koennen, hinterlaesst LIEBER NICHTS als eine Nachricht
+// ohne belastbare Offenlegung. Dieselbe {{-Sperre und dieselbe Semantik wie bei
+// ownerFirstMessage/calleeRelationText: ein unversorgtes {{...}} in einem Wert, den der
+// Anbieter aufloest, ist im besten Fall Muell und im schlechtesten der 1008-Abbruch.
+// P4a: die Nachricht ist an den ANGERUFENEN gerichtet und beginnt mit dem Pflichtsatz -
+// sie folgt deshalb der Offenlegungssprache, nicht der Gespraechssprache (E-1).
+function voicemailText({ owner, offenlegung, openingLine }) {
+  const text = providerVoicemailMessage({ locale: offenlegung, ownerName: owner, openingLine });
+  return text.includes(PLACEHOLDER_OPENER) ? "" : text;
 }
 
 // Die Zone des ANGERUFENEN reist samt ihrem Satz und ihrem fuehrenden Zeilenumbruch -
@@ -758,7 +862,7 @@ const ohneRechercheTor = () => false;
 
 // OUTBOUND-E5 (F3): der Standard-Metrik-Empfaenger, wenn niemand welche verdrahtet hat -
 // ein No-op statt eines Wurfs, dasselbe Muster wie ohneRueckfrageTor/ohneRechercheTor.
-// HEREINGEREICHT statt importiert (Muster consultAllowedFor, s. Signatur unten): src/
+// HEREINGEREICHT statt importiert (Muster consultAllowedForCall, s. Signatur unten): src/
 // metrics.js importiert src/config.js und bindet damit dessen DATA_DIR-Snapshot beim
 // Laden - ein statischer Import HIER haette jede Datei, die outbound.js STATISCH laedt
 // (mehrere Testdateien tun das, Muster test/el-sip-call-id-join.test.js), an diesen
@@ -767,21 +871,23 @@ const ohneRechercheTor = () => false;
 // in das echte data/store.json statt in sein Temp-Verzeichnis).
 const ohneMetrikMeldung = Object.freeze({ logSenderFallback: () => {} });
 
-// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die dreizehn, die die
-// Agenten-Vorlage deklariert ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}},
-// {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}},
-// {{consult_available}}, {{opening_line}}, {{lookup_available}}, {{callee_relation}}) -
-// fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt unaufgeloest. Der Weg ueber eine
-// Prompt-Uebersteuerung scheidet aus: eine nicht freigeschaltete
-// conversation_config_override wird vom Anbieter STILL ignoriert.
+// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die, die die Agenten-Vorlage
+// verbraucht ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}}, {{background}},
+// {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}}, {{consult_available}},
+// {{opening_line}}, {{lookup_available}}, {{callee_relation}}, {{voicemail_line}},
+// {{inbound_situation}}, dazu tenant_token fuer die Werkzeuge; die Namensmenge pinnt
+// test/el-vorlage-variablen-abgleich.test.js) - fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt
+// unaufgeloest. Der Weg ueber eine Prompt-Uebersteuerung scheidet aus: eine nicht
+// freigeschaltete conversation_config_override wird vom Anbieter STILL ignoriert.
 //
-// opening_line (Thema A, 2026-08-19) ist der GESPROCHENE Anrufgrund in first_message
-// und voicemail_message - die bei Auftragsannahme festgelegte, geprueft-validierte
-// Zeile vom Call-Datensatz, hier nur noch gegen ihren Annahme-Hash gehalten
-// (verifiedOpeningLine): stimmt er nicht, spricht der Anruf den deterministischen
-// Rueckfall, NIE den veraenderten Text. {{objective}} bleibt daneben ROH bestehen -
-// es speist den PROMPT (die Aufgabe des Agenten), nicht mehr die gesprochene
-// Eroeffnung; die Aufgabentreue haengt am vollen Wortlaut des Auftraggebers.
+// opening_line (Thema A, 2026-08-19) ist der GESPROCHENE Anrufgrund in first_message -
+// die bei Auftragsannahme festgelegte, geprueft-validierte Zeile vom Call-Datensatz,
+// hier nur noch gegen ihren Annahme-Hash gehalten (verifiedOpeningLine): stimmt er
+// nicht, spricht der Anruf den deterministischen Rueckfall, NIE den veraenderten Text.
+// In den Anrufbeantworter-Text geht sie seit DE1 als WERT ein (voicemail_line), nicht
+// mehr als Platzhalter. {{objective}} bleibt daneben ROH bestehen - es speist den
+// PROMPT (die Aufgabe des Agenten), nicht mehr die gesprochene Eroeffnung; die
+// Aufgabentreue haengt am vollen Wortlaut des Auftraggebers.
 //
 // owner_name ist der einzige mit INHALTLICHEM Default: er traegt die Offenlegung (Regel 2,
 // Artikel 50 EU AI Act), und die haengt nie an einer Variablen ohne Default. Ein fehlender
@@ -817,26 +923,26 @@ const ohneMetrikMeldung = Object.freeze({ logSenderFallback: () => {} });
 // dabei nichts (s. time-context.js). Vorher wirkte an dieser Stelle ein Festwert am Agenten
 // ("Europe/Berlin"), der weder besessen noch pro Anruf richtig war.
 //
-// bundle + openingLine kommen HEREIN statt hier aufgeloest zu werden (s. startCallBody):
-// die Owner-Eroeffnung braucht dieselbe Grund-Zeile, und verifiedOpeningLine WARNT bei
-// einem Hash-Bruch - ein zweiter Aufruf ergaebe dieselbe Zeile, aber eine zweite Warnung
-// zum selben Anruf, also zwei Kandidaten in der Diagnose statt einem (G5/P6).
-// `locale` ist als Parameter entfallen: seine beiden Leser hier waren localeFor(
-// locale.language) und locale.disclosureOwnerFallback - beides IST das Bundle
-// (callLocaleFor leitet den Wert aus genau diesem Bundle ab, call-locale.js:144-149).
-function dynamicVariables({
+// offenlegung + openingLine kommen HEREIN statt hier aufgeloest zu werden (s.
+// startCallBody): die Owner-Eroeffnung braucht dieselbe Grund-Zeile, und
+// verifiedOpeningLine WARNT bei einem Hash-Bruch - ein zweiter Aufruf ergaebe dieselbe
+// Zeile, aber eine zweite Warnung zum selben Anruf, also zwei Kandidaten in der Diagnose
+// statt einem (G5/P6).
+// P4a: `owner` kommt HEREIN statt hier berechnet zu werden - EIN Auftraggeber-Ausdruck
+// fuer alle drei Leser (owner_name, callee_relation, die uebersteuerte Eroeffnung) lebt
+// jetzt in startCallBody (G5); drei Rechnungen desselben Defaults waeren drei Wahrheiten.
+// IEL-B6: der Inbound-Builder (inbound-initiation.js) leitet seine Schluesselmenge hieraus
+// ab (eine Quelle) - deshalb exportiert.
+export function dynamicVariables({
   call,
-  ownerName,
-  bundle,
+  owner,
+  offenlegung,
   openingLine,
   time,
   consultAllowed,
   lookupAllowed,
+  tenantToken,
 }) {
-  // EIN Auftraggeber-Ausdruck fuer beide Leser: die Variable owner_name (die der Anbieter
-  // in den statischen Offenlegungssatz einsetzt) UND der Owner-Prompt-Block. Zwei
-  // Rechnungen desselben Defaults waeren zwei Wahrheiten (G5).
-  const owner = alsText(ownerName) || bundle.disclosureOwnerFallback;
   return {
     consult_available: consultAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     // Thema B: der Torzustand der Recherche, aus DERSELBEN Torkette wie der Webhook
@@ -855,7 +961,24 @@ function dynamicVariables({
     today: alsText(time.today),
     // OC-P2: "" fuer jedes Nicht-Owner-Ziel - der Prompt am Anbieter rendert dann exakt
     // den heutigen Text.
-    callee_relation: calleeRelationText({ call, owner, bundle }),
+    callee_relation: calleeRelationText({ call, owner, offenlegung }),
+    // DE1: der GANZE Anrufbeantworter-Text, in der Sprache dieses Anrufs. Er benutzt
+    // DENSELBEN owner-Ausdruck wie owner_name eine Zeile darueber (zwei Rechnungen
+    // desselben Defaults waeren zwei Wahrheiten, G5) und DIESELBE geprueft-validierte
+    // Grund-Zeile wie die Eroeffnung.
+    voicemail_line: voicemailText({ owner, offenlegung, openingLine }),
+    // IEL-B3 (L5): die Inbound-Sektion der Vorlage (Ende der PERSONA-Zeile). Ein
+    // ausgehender Anruf ist nie eingehend: der Wert ist hier IMMER "", und der Prompt am
+    // Anbieter rendert damit exakt den Text ohne diese Sektion (Muster callee_relation).
+    // Mitreisen MUSS sie trotzdem - ein Prompt-Platzhalter ohne Wert bliebe unaufgeloest.
+    // Den Blocktext fuer eingehende Anrufe baut der Inbound-Weg, nicht dieser Anrufstart.
+    inbound_situation: "",
+    // SEC-P4: die Mandanten-Dimension des Werkzeug-Tokens. Die Werkzeug-Definition liest
+    // sie ueber dynamic_variable in ihren Anfragekoerper (dieselbe Mechanik wie
+    // conversation_id aus system__conversation_id); der PROMPT nennt sie NIE - kein
+    // Modell bekommt sie zu sehen und kann sie aussprechen (Absolute Regel 4). ALS
+    // LETZTER Schluessel, damit die Reihenfolge des Bestands-Koerpers unberuehrt bleibt.
+    tenant_token: tenantToken,
   };
 }
 
@@ -886,9 +1009,13 @@ export function callLocaleOf({ store, config, call, ownerName }) {
     ownerName,
     defaultVoiceId: config.telnyx.telnyxElevenLabs.voiceId,
     // Das ANGERUFENE Ziel, bereits normalisiert (routes/api-calls.js) - der hoechst-
-    // gewichtete Eingang der Sprachwahl, s. call-locale.js. Nicht call.to roh vom
-    // Aufrufer: normalisiert wird eine Ebene hoeher, hier wird nur gelesen.
+    // gewichtete Eingang der OFFENLEGUNGS-Sprachwahl, s. call-locale.js. Nicht call.to
+    // roh vom Aufrufer: normalisiert wird eine Ebene hoeher, hier wird nur gelesen.
     to: call.to,
+    // P4a: die GESPRAECHSSPRACHE steht am Datensatz (routes/api-calls.js hat Sprachwunsch
+    // und Auftraggeber-Kette dort zu EINEM Wert gemacht). Sie wird hier nicht zum zweiten
+    // Mal aufgeloest; die Offenlegungssprache leitet die Naht selbst aus `to` ab.
+    callLanguage: call.language,
   });
 }
 
@@ -924,6 +1051,72 @@ function recordAbsenderMessung(store, callId, conversation) {
   });
 }
 
+// Das Gespraech ist beim Anbieter zu Ende. Transkript, Zusammenfassung und Befund KOMMEN
+// VON IHM (wir haben auf diesem Weg weder Audio noch Turn-Schleife) und landen ueber die
+// Store-Mutatoren an denselben Feldern, die get_transcript ohnehin liest - kein zweiter
+// Schreibweg neben dem Store. MODUL-EBENE (G30/G34): die Funktion braucht ausser store
+// keinen Zustand der Fabrik - dieselbe Begruendung wie bei recordAbsenderMessung darueber.
+//
+// belegNachreifbar (KV2-4): DATENFELD der EL-Belegzeile, keine Verhaltensweiche - es
+// steuert hier keine Verzweigung, es wird persistiert (deshalb kein G15/F3-Selektor). Die
+// beiden Aufrufer liefern es ausdruecklich, ohne Default: der regulaere Weg laesst den
+// Anbieter-Datensatz stehen, der Abbruchweg loescht ihn unmittelbar danach.
+// politik (IEL-B4) ist dagegen bewusst eine Verhaltensweiche (Spec E6/E7): sie entscheidet,
+// ob Anbieter-Zusammenfassung und next_steps-Item geschrieben werden (nachlauf-politik.js).
+function persistProviderResult({ store, callId, conversation, belegNachreifbar, politik }) {
+  const zeilen = spokenLines(conversation);
+  // VOR dem Schreiben: die Meldung gilt dem, was der Anbieter geliefert hat, und darf
+  // nicht an einem spaeteren Store-Fehler haengen bleiben (s. reportAudioTags).
+  // ST3: beide Detektoren melden und zaehlen - das Zaehlfeld (Owner-Entscheidung 6)
+  // macht die Rueckfall-Rate messbar (Treffer/Anrufe) und aendert am Transkript nichts.
+  const audioTagMarken = reportAudioTags(callId, zeilen);
+  const b1Treffer = reportDoubleAnnouncements(callId, zeilen);
+  store.recordElDetectorCounts(callId, { elTags: audioTagMarken.length, elB1: b1Treffer.length });
+  for (const zeile of zeilen) store.addTranscript(callId, roleOf(zeile.role), zeile.message);
+  store.recordProviderCallResult(callId, {
+    summary: providerSummaryOf(conversation, politik),
+    objectiveAchieved: objectiveAchievedOf(conversation),
+  });
+  // ABNAHME-D1 (TEIL 2/3): s. persistCollectedFields oben (Modul-Ebene, G30).
+  persistCollectedFields({ store, callId, conversation, politik });
+  // PHASE-6-VORAUSSETZUNG, die EINZIGE Quelle des Join-Schluessels zur Telefonie-
+  // Rechnung: der "otb_"-Wert, den auch der Telnyx-Beleg unter sip_call_id fuehrt
+  // (GEMESSEN an beiden Enden, test/fixtures/elevenlabs-conversations.js). Die Antwort
+  // des Anrufstarts scheidet als Quelle aus - sie liefert unter demselben Feldnamen
+  // ElevenLabs' call_sid (s. convai.js#startResultOf, an Anruf 2 vom 17.08.2026 gemessen).
+  //
+  // DIE STELLE IST BEWUSST GEWAEHLT: persistProviderResult laeuft auf BEIDEN Wegen VOR
+  // dem Loeschversuch beim Anbieter - im regulaeren Ende (finishFromConversation) gibt es
+  // gar keinen, im Abbruch (endActiveCall) ist die Reihenfolge Abruf-vor-Loeschen bindend.
+  // Was hier nicht gesichert ist, ist danach unwiederbringlich weg.
+  //
+  // PREIS DER EINEN QUELLE, bewusst getragen: kommt nie ein Ergebnis (Anbieter stumm,
+  // Prozess vorher weg), bleibt der Schluessel leer und die Telefonie-Kosten dieses
+  // Anrufs sind ihm nicht mehr zuzuordnen. Ein FALSCHER Schluessel waere schlechter: er
+  // jointet ebenfalls nicht, sperrt aber zusaetzlich (set-once) die richtige Quelle aus
+  // und behauptet dabei eine Zuordnung, die es nicht gibt.
+  //
+  // IEX-A1: nur fuer Profile mit telnyx_sip-Traeger (Katalog,
+  // kosten-beleg.js#anrufFuehrtTelnyxSip). Der Inbound-EL-Weg (Telnyx-Dial) liefert als
+  // call_id eine UUID ohne Telnyx-Beleg; sein Leg-Schluessel ist twilioSid +
+  // telnyx_session_id (billing/call-leg-ref.js). Der Waechter in
+  // state-ops.js#recordSipCallId bleibt unveraendert und meldet eine Fremdform auf Profilen
+  // mit telnyx_sip weiter laut.
+  const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(store.getCall(callId));
+  if (fuehrtTelnyxSip) store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
+  // OUTBOUND-E5 (F3): die vom Anbieter gemeldete Absendernummer - AUCH im abgelehnten Fall
+  // befuellt (Befund 27.08.). Formpruefung sitzt im Store-Mutator (recordActualSender).
+  recordAbsenderMessung(store, callId, conversation);
+  // KV2-4: der EL-Beleg (vorlaeufig) plus, nur bei Profil mit telnyx_sip (IEX-A1), die
+  // erwartete telnyx_sip-Zeile. HIER, weil beide Aufrufer von persistProviderResult damit
+  // bedient sind - das regulaere Ende und der Abbruch -, und ALS LETZTER SCHRITT, weil
+  // dieser Schreibweg rein additiv ist und keinen der Anbieter-Wahrheits-Schreiber oben
+  // beeinflussen darf. Kein Netz-IO: die Antwort
+  // liegt bereits vollstaendig im Speicher. Fail-soft (s. dort) - dieses Buch hat noch
+  // keinen Leser und darf den Geld-/Terminierungspfad nie anhalten.
+  recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar, erwarteTelnyxSip: fuehrtTelnyxSip });
+}
+
 // Die EINZIGEN zwei Dinge, die pro Anruf am Agenten des Anbieters gesetzt werden duerfen
 // (Eigentuemer-Entscheidung 16.08.2026): die Sprache und die Stimme. Beide kommen aus dem
 // aufgeloesten Locale (call-locale.js), also aus dem Datensatz - kein Aufrufer kann sie
@@ -944,7 +1137,7 @@ function recordAbsenderMessung(store, callId, conversation) {
 // KEINE STIMME KONFIGURIERT -> KEIN tts-ZWEIG: eine leere Plattform-Stimme wuerde als
 // voice_id: "" hinausgehen und dem Agenten seine im Dashboard gewaehlte Stimme nehmen,
 // ohne eine zu setzen. Weglassen laesst sie stehen - fail-safe, dieselbe Haltung wie
-// hasElevenLabsVoice im Telnyx-Renderer.
+
 //
 // OC-P2: DIE EINE KOMPOSITIONSSTELLE DER OWNER-EROEFFNUNG (G5/S2). Sie besteht aus der
 // Owner-Begruessung und derselben Grund-Zeile, die der Bestandsfall hinter der Offenlegung
@@ -969,18 +1162,49 @@ function recordAbsenderMessung(store, callId, conversation) {
 //      Klammern tragen (validOpeningLine verbietet {} , opening-line.js). Ein
 //      "{{irgendwas}}" im Vornamen wuerde in einer uebersteuerten first_message zum
 //      1008-Abbruch - der Angerufene hoert Stille.
-function ownerFirstMessage({ call, bundle, firstName, openingLine }) {
+function ownerFirstMessage({ call, offenlegung, firstName, openingLine }) {
   if (call.calleeIsOwner !== true) return "";
   const vorname = alsText(firstName);
   if (!vorname) return "";
-  const teile = [bundle.ownerOpening(vorname), openingLine].filter(Boolean);
-  const text = teile.join(" ").trim();
-  if (!text || text.includes(PLACEHOLDER_OPENER)) return "";
-  return text;
+  // P4a: die KI-Kennzeichnung der Owner-Eroeffnung ersetzt den Pflichtsatz (OC) und
+  // traegt dieselbe Pflicht - also dieselbe Sprache. Der Beweis des Praedikats lautet
+  // "die NUMMER gehoert dem Tenant", nicht "die PERSON ist der Tenant".
+  return sichereEroeffnung([offenlegung.ownerOpening(vorname), openingLine]);
 }
 
-function conversationConfigOverride({ call, locale, bundle, firstName, openingLine }) {
-  const eroeffnung = ownerFirstMessage({ call, bundle, firstName, openingLine });
+// "" HEISST: KEINE UEBERSTEUERUNG - nicht "leere first_message" (s. conversationConfig-
+// Override). EIN Waechter fuer beide Lagen (G5/S2): blank oder ein unversorgtes {{...}}
+// ergeben "", weil ein unaufgeloester Platzhalter im besten Fall Muell und im
+// schlechtesten der 1008-Abbruch ist (der Angerufene hoert Stille).
+function sichereEroeffnung(teile) {
+  const text = teile.filter(Boolean).join(" ").trim();
+  return !text || text.includes(PLACEHOLDER_OPENER) ? "" : text;
+}
+
+// P4a: DIE EINE Kompositionsstelle der pro Anruf uebersteuerten Eroeffnung - zwei
+// einander ausschliessende Lagen, sonst leer:
+//   1. das eigene Ziel (OC-P2): die Owner-Begruessung tritt an die Stelle des
+//      Pflichtsatzes - unveraendert, weder weiter noch enger (I-2);
+//   2. Gespraechs- und Offenlegungssprache laufen auseinander (F-2): dann waehlt der
+//      Anbieter ueber agent.language das language_preset - und damit den Pflichtsatz -
+//      in der GESPRAECHSSPRACHE aus. Ein franzoesisch gefuehrter Anruf an eine deutsche
+//      Nummer bekaeme so den franzoesischen Satz, den der Angerufene nicht versteht.
+//      Deshalb reist der Satz hier als WERT, aus DERSELBEN Quelle wie der statische
+//      Rahmen (LOCALES.<sprache>.disclosure) - keine zweite Fassung, keine Uebersetzung.
+// Fallen beide Sprachen zusammen (jeder Anruf ohne Sprachwunsch im eigenen Sprachraum),
+// bleibt es beim statischen Anbietertext und der Koerper ist byte-identisch zum Bestand.
+// Laesst sich in Lage 2 keine sichere Eroeffnung bauen, entsteht "" - dann WIRFT der
+// Waechter in convai.js vor dem Netzzugriff. Es gibt bewusst KEINEN dritten, stillen
+// Ausgang: ein Anruf mit unpassendem Pflichtsatz ist schlechter als kein Anruf.
+function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
+  if (ownerEroeffnung) return ownerEroeffnung;
+  if (locale.language === locale.disclosureLanguage) return "";
+  return sichereEroeffnung([offenlegung.disclosure(owner), openingLine]);
+}
+
+function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine }) {
+  const eroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine });
   return {
     agent: {
       language: locale.language,
@@ -1006,10 +1230,19 @@ function startCallBody({
   consultAllowed,
   lookupAllowed,
   agentPhoneNumberId,
+  tenantToken,
 }) {
   // EIN Bundle und EINE Grund-Zeile fuer beide Leser (s. dynamicVariables).
   const bundle = localeFor(locale.language);
+  // P4a: das Buendel der OFFENLEGUNGSSPRACHE. Fallen beide zusammen - jeder Anruf ohne
+  // Sprachwunsch im eigenen Sprachraum -, ist es DASSELBE Objekt und der Koerper bleibt
+  // byte-identisch zum Bestand (test/fixtures/el-anrufstart-fremdziel.json).
+  const offenlegung = localeFor(locale.disclosureLanguage);
   const openingLine = verifiedOpeningLine({ call, locale: bundle });
+  // EIN Auftraggeber-Ausdruck fuer alle drei Leser (owner_name, callee_relation und die
+  // uebersteuerte Eroeffnung) - drei Rechnungen desselben Defaults waeren drei Wahrheiten
+  // (G5). Der Default spricht die Sprache des PFLICHTSATZES, in den er eingesetzt wird.
+  const owner = auftraggeberAusdruck(ownerName, offenlegung);
   return {
     agent_id: el.agentId,
     // OUTBOUND-E5 (F3): die Registrierung der DID DES ANRUFENDEN TENANTS. Der Anrufkoerper
@@ -1022,18 +1255,20 @@ function startCallBody({
     conversation_initiation_client_data: {
       dynamic_variables: dynamicVariables({
         call,
-        ownerName,
-        bundle,
+        owner,
+        offenlegung,
         openingLine,
         time,
         consultAllowed,
         lookupAllowed,
+        tenantToken,
       }),
       conversation_config_override: conversationConfigOverride({
         call,
         locale,
-        bundle,
+        offenlegung,
         firstName,
+        owner,
         openingLine,
       }),
     },
@@ -1056,7 +1291,54 @@ function startCallRequest(anfrage) {
     body: startCallBody(anfrage),
     callId: anfrage.call.id,
     calleeIsOwner: anfrage.call.calleeIsOwner === true,
+    // P4a: die Offenlegungssprache aus der AUFLOESUNG (locale), nicht aus dem Koerper, den
+    // der Waechter prueft - erst dadurch kann er eine falsch gebaute Eroeffnung ueberhaupt
+    // sehen. Dieselbe Haltung wie calleeIsOwner eine Zeile darunter.
+    disclosureLanguage: anfrage.locale.disclosureLanguage,
   };
+}
+
+// IEL-B4 (E7a/E17): Ende-Anker eines ueberbrueckten Inbound-Calls = Carrier-Ende, gekappt
+// wie jedes Telnyx-Bein. Ohne Nachlauf-Marker liefert carrierEndMsOf nowMs (E17-Rest).
+// nowMs ist der Taktbeginn (Spec E7a woertlich carrierEndMsOf(call, nowMs)): wird der Marker
+// erst waehrend eines haengenden Abrufs gesetzt, landet der Anker um hoechstens die
+// Abrufdauer zu frueh (Unterbuchung) - nur im Neustart-Fall, der Sweep bucht nach (L7).
+function carrierEndeIso(call, nowMs) {
+  return new Date(cappedEndedAtMs(call, carrierEndMsOf(call, nowMs), MAX_CALL_DURATION_CAP_S)).toISOString();
+}
+
+// IEL-B4 (E7a): der Buchungsanker eines ueberbrueckten Inbound-Calls ist unser Telnyx-Bein
+// (answeredAt aus /voice/incoming) - er wird weder nachgezogen noch geloescht. keepAnchor
+// ohne Grund: applyAnsweredAnchor schreibt/loggt nichts, providerErrorReasonFor liefert
+// null (das Bein ist zustande gekommen).
+const TRAEGER_ANKER_BLEIBT = keepAnchor(null);
+const ankerFuerPolitik = (politik, anbieterAnker) => (politik.ankerNachziehen ? anbieterAnker : TRAEGER_ANKER_BLEIBT);
+
+// IEL-B4 (E7c): Poll-Frist je Politik. Fehlt der Nachlauf-Marker, gibt es KEINE eigene
+// Frist (E7f: Gespraech laeuft evtl. noch; Obergrenze = re-armierter Max-Dauer-Cap).
+function pollFristAbgelaufen(call, nowMs, politik) {
+  if (politik.fristAnker === FRIST_ANKER.NACHLAUF_START) return nachlaufFristAbgelaufen(call, nowMs);
+  return classifyCallTime(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S).expired;
+}
+
+function nachlaufFristAbgelaufen(call, nowMs) {
+  if (!call.elNachlaufStartedAt) return false;
+  return nowMs - Date.parse(call.elNachlaufStartedAt) >= INBOUND_NACHLAUF_FRIST_MS;
+}
+
+// IEL-B4: der EINE Terminal-Schreiber des Conversation-Abschlusses als Thunk - Anker-
+// Lieferant UND persistEnd (zweiter Aufruf idempotent, setCallEndedAt nur aus 'active').
+// IEL-B5: auch der Terminal-Schreiber von cancel_call (routes/api-calls.js).
+export function endeSchreiberFuer({ store, callId, status, politik, nowMs }) {
+  if (politik.endeAnker === ENDE_ANKER.CARRIER_ENDE)
+    return () => store.setCallEndedAt(callId, status, carrierEndeIso(store.getCall(callId), nowMs));
+  return () => store.endCallRecord(callId, status);
+}
+
+// Ende-Anker, wenn der Poll ohne Anbieter-Ergebnis aufgibt (Frist, 3x 401/404).
+function endeOhneErgebnisIso({ call, nowMs, politik }) {
+  if (politik.endeAnker === ENDE_ANKER.CARRIER_ENDE) return carrierEndeIso(call, nowMs);
+  return new Date(cappedEndedAtMs(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S)).toISOString();
 }
 
 // Owner-Auftrag 15.08.2026 (Aufgabe 2): der Zombie-Zweig der Poll-Obergrenze (s.
@@ -1081,19 +1363,21 @@ async function finishWithoutProviderResult({
   billThunk,
   finishCall,
   endActiveCall,
+  endCarrierCall,
   callId,
   nowMs,
   failureReason,
 }) {
   const call = store.getCall(callId);
   if (!call) return;
+  const politik = nachlaufPolitikFuer(call);
   // OUTBOUND-E2: BEIDE Aufgeben-Faelle sind result-unknown, NICHT "gescheitert": der Anruf
   // kann gelaufen sein, wir haben nur kein Ergebnis abholen koennen.
   // OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
   // geschrieben, NICHT mehr als freie Anweisung davor (Reihenfolge-Riegel).
-  const endedAtIso = new Date(
-    cappedEndedAtMs(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S),
-  ).toISOString();
+  const endedAtIso = endeOhneErgebnisIso({ call, nowMs, politik });
+  // E7b: Inbound-EL beendet das Telnyx-Elternbein, nie per DELETE (nimmt den Datensatz mit).
+  const beenden = politik.beendeVersuch === BEENDE_VERSUCH.TRAEGER ? endCarrierCall : endActiveCall;
   await terminateAndBillCall({
     persistEnd: persistEndWithReason({
       store,
@@ -1101,7 +1385,7 @@ async function finishWithoutProviderResult({
       reason: failureReason,
       endCall: () => store.setCallEndedAt(callId, CALL_FAILED, endedAtIso),
     }),
-    hangUp: () => endActiveCall(callId),
+    hangUp: () => beenden(callId),
     bill: billThunk(finishCall, store, callId),
     callId,
   });
@@ -1121,9 +1405,93 @@ async function finishExpiredPoll(deps) {
 // vorlaeufigen Verbindungs-Stempel (answeredAt=null, S1-1-Richtung "im Zweifel GAR NICHTS")
 // und vermerkt den Grund - wir haben nie ein metadata.call_duration_secs gesehen, der
 // provisorische Stempel darf nicht als Buchungsanker stehen bleiben.
+// IEL-B4 (E7a): fuer einen ueberbrueckten Inbound-Call bleibt der Anker unseres Telnyx-Beins
+// stehen (ankerFuerPolitik) - das Bein ist zustande gekommen, nur das Ergebnis fehlt.
 async function finishOnPermanentError(deps) {
-  applyAnsweredAnchor(deps.store, deps.callId, clearAnchor(ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR));
+  const politik = nachlaufPolitikFuer(deps.store.getCall(deps.callId));
+  applyAnsweredAnchor(deps.store, deps.callId, ankerFuerPolitik(politik, clearAnchor(ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR)));
   await finishWithoutProviderResult({ ...deps, failureReason: pollProviderErrorReason(deps.providerStatus) });
+}
+
+// Ergebnis persistieren, DANN terminalisieren, DANN den Anker nachziehen, ERST DANACH
+// buchen - so sieht die Buchungskette den fertigen Stand. hangUp bleibt null: es gibt
+// kein eigenes Provider-Leg mehr aufzulegen, das Gespraech ist beim Anbieter bereits
+// beendet. MODUL-EBENE aus demselben Grund wie finishWithoutProviderResult (G30, haelt
+// makeElevenLabsOutbound unter der Zeilengrenze); die Abhaengigkeiten reisen als EIN
+// Objekt (F1).
+//
+// DER ANKER STEHT HIER, NICHT IM persistEnd-THUNK UNTEN: ohne eigenes hangUp (hangUp:
+// null) ruft terminateAndBillCall bill() synchron direkt nach persistEnd() - es gibt kein
+// Zeitfenster, in das sich ein Zwischenschritt haengen liesse. billThunk laedt den Call
+// FRISCH aus dem Store, der Anker muss also VOR dem Aufruf unten stehen. Der erste Aufruf
+// des Terminal-Schreibers (endCall) liefert zugleich endedAt fuer answeredAnchorOutcome; der
+// zweite Aufruf im persistEnd-Thunk ist idempotent (setCallEndedAt greift nur aus
+// status==='active') und bleibt aus Symmetrie zu jedem anderen Terminierungspfad stehen.
+// S2: ended kann null sein (der Store findet den Call nicht mehr) - answeredAnchorOutcome
+// faengt das selbst ab (s. dort), hier wird nur noch weitergereicht.
+//
+// Regulaeres Ende: es gibt hier keinen Loeschversuch, der Anbieter-Datensatz bleibt
+// abrufbar -> der Beleg kann in KV2-9 auf 'belegt' nachreifen.
+//
+// OUTBOUND-E2: finishCall liest call.failureReason beim Notification-Bau (telephony/
+// call-finish.js) und billThunk laedt den Call FRISCH aus dem Store - steht der Grund
+// noch nicht am Datensatz, bleibt der Nutzertext "<Ziel> (Status: failed)", also genau
+// der Zustand, den diese Etappe abstellt.
+// OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
+// geschrieben, NICHT mehr als freie Anweisung davor (Reihenfolge-Riegel). Der ERSTE
+// Aufruf des Terminal-Schreibers bleibt UNANGETASTET - er ist der Anker-Lieferant fuer
+// answeredAnchorOutcome (PM-7/PM-14).
+//
+// IEL-B4 (E7a/E17): die Politik waehlt Terminal-Schreiber (Carrier-Ende statt jetzt) und
+// Anker (Traeger-Anker bleibt). Zwischen der frischen Pruefung im Poll-Takt und dem
+// Terminal-Schreiber liegt kein await (E18-2).
+async function finishFromConversation({ store, terminateAndBillCall, billThunk, finishCall, callId, nowMs, conversation }) {
+  const politik = nachlaufPolitikFuer(store.getCall(callId));
+  persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
+  const endCall = endeSchreiberFuer({ store, callId, status: endStatusOf(conversation), politik, nowMs });
+  const ended = endCall();
+  const anchor = ankerFuerPolitik(politik, answeredAnchorOutcome(ended?.endedAt, conversation));
+  applyAnsweredAnchor(store, callId, anchor);
+  await terminateAndBillCall({
+    persistEnd: persistEndWithReason({ store, callId, reason: providerErrorReasonFor(anchor, conversation), endCall }),
+    hangUp: null,
+    bill: billThunk(finishCall, store, callId),
+    callId,
+  });
+}
+
+// IEL-B4 (E7d/E18-1): Start-Tor des Nachlaufs. Der Marker wird IMMER gesetzt (set-once);
+// eine Schleife startet NUR bei changed:true UND ohne Register-Eintrag. Laeuft bereits eine
+// (Boot-Re-Arm), uebernimmt sie Frist und Ende-Anker ab dem naechsten Takt (E7f).
+// Vorbedingung GEBUNDEN prueft der einzige Aufrufer routes/voice.js#/voice/status.
+function startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }) {
+  const { call, changed } = store.markInboundElNachlaufStarted(callId, new Date().toISOString());
+  if (!changed) return;
+  // Runbook 11: genau eine Zeile je Call (set-once-Marker), PII-frei.
+  console.log(`[el-inbound] nachlauf gestartet (call=${callId})`);
+  if (laufendeInboundPolls.has(callId)) return;
+  laufendeInboundPolls.add(callId);
+  void pollConversationResult(callId, call.elevenlabsConversationId);
+}
+
+// IEL-B5 (E10): Ergebnis-Teil des Bruecken-Beende-Thunks (telephony/call-termination.js#
+// hangUpForCall). Laeuft NACH persistEnd und NACH dem Traeger-Hangup - der Call ist terminal,
+// eine laufende Poll-Schleife schliesst deshalb nicht mehr ab (E18-2); diese Funktion ist dann
+// der einzige Transkript-Schreiber. Kein DELETE (E7b), Beleg nachreifbar. Fail-soft:
+// fetchConversationSoft wirft nie; ohne Ergebnis bucht terminateAndBillCall ohne Transkript.
+async function awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs, callId }) {
+  const conversationId = store.getCall(callId)?.elevenlabsConversationId;
+  if (!conversationId) return;
+  for (let versuch = 1; versuch <= EL_TERMINATION_RESULT_ATTEMPTS; versuch += 1) {
+    const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
+    if (anbieterErgebnisFertig(conversation)) {
+      const politik = nachlaufPolitikFuer(store.getCall(callId));
+      persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
+      return;
+    }
+    if (versuch < EL_TERMINATION_RESULT_ATTEMPTS) await sleep(pollMs);
+  }
+  console.warn(`[el-inbound] Ergebnis beim Beenden nicht abrufbar (call=${callId})`);
 }
 
 // S1-1 Fix (Owner-Auftrag 15.08.2026, stiller Totalausfall): das Nachziehen des
@@ -1234,11 +1602,17 @@ function permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent) 
 // Poll auszuloesen; ein laufender bekommt seine Schleife sofort zurueck (ein direkter Aufruf
 // statt scheduleResultPoll - ein Neustart darf die Ergebnis-Erkennung nicht zusaetzlich um
 // einen vollen Takt verzoegern).
-function rearmActiveConversationPolls({ store, pollConversationResult }) {
+//
+// IEL-B4 (E7f): ein Rueckfall-Call wird nie re-armiert (er schliesst nach dem Fehlersatz ueber
+// /voice/status ab); jede re-armierte Inbound-EL-Schleife steht im Register (E18-1).
+function rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }) {
   const activeElCalls = store
     .load()
-    .calls.filter((call) => call.status === "active" && call.elevenlabsConversationId);
-  for (const call of activeElCalls) void pollConversationResult(call.id, call.elevenlabsConversationId);
+    .calls.filter((call) => call.elevenlabsConversationId && pollDarfWirken(call));
+  for (const call of activeElCalls) {
+    if (bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN) laufendeInboundPolls.add(call.id);
+    void pollConversationResult(call.id, call.elevenlabsConversationId);
+  }
   if (activeElCalls.length)
     console.log(`[el-outbound] Poll-Schleife re-armiert: ${activeElCalls.length} Anrufe`);
 }
@@ -1251,7 +1625,7 @@ function rearmActiveConversationPolls({ store, pollConversationResult }) {
  *   (INV-7) - der Ergebnisweg beendet Anrufe ueber denselben Gateway wie jeder andere
  *   Beender, nicht ueber einen zweiten, buchungsfreien Weg.
  */
-// consultAllowedFor kommt HEREIN statt importiert zu werden, und das ist keine Stilfrage:
+// consultAllowedForCall kommt HEREIN statt importiert zu werden, und das ist keine Stilfrage:
 // src/consult/gate.js liest das MODUL src/config.js, und dieses bindet beim Laden den
 // Datenpfad. Ein statischer Import haette jede Datei, die outbound.js laedt, an diesen
 // Pfad gebunden, BEVOR ein Test sein DATA_DIR setzen kann - am 2026-08-17 gemessen: ein
@@ -1263,93 +1637,23 @@ export function makeElevenLabsOutbound({
   terminateAndBillCall,
   billThunk,
   finishCall,
-  consultAllowedFor = ohneRueckfrageTor,
+  // Signatur (call, profile) -> boolean, s. consult/gate.js#consultAllowedForCall: DAS
+  // Praedikat, das auch der Rueckfrage-Webhook fragt - eine Stelle, zwei Aufrufer.
+  consultAllowedForCall = ohneRueckfrageTor,
   // Thema B: das Recherche-Tor, aus demselben Grund HEREINGEREICHT wie
-  // consultAllowedFor (research/registry.js liest das MODUL src/config.js).
+  // consultAllowedForCall (research/registry.js liest das MODUL src/config.js).
   // Signatur (call, resolveProfile) -> boolean, s. elevenLabsLookupAvailableFor.
   lookupAvailableFor = ohneRechercheTor,
   // OUTBOUND-E5 (F3): der Absender-Rueckfall-Zaehler (s. ohneMetrikMeldung oben fuer die
   // Begruendung, warum er hereingereicht statt importiert wird).
   metrics = ohneMetrikMeldung,
+  // IEL-B4 (E7b): Beende-Versuch des Telnyx-Elternbeins fuer einen ueberbrueckten Inbound-Call
+  // (DI wie endActiveCall - keine Import-Kante elevenlabs -> telephony). Signatur (callId).
+  endCarrierCall,
 }) {
   // Immer frisch gelesen (nicht beim Bauen eingefroren): Tests uebersteuern die Gruppe
   // zur Laufzeit, und der Abholtakt darf nicht an einer Kopie von vor dem Boot haengen.
   const settings = () => config.voice.elevenLabsOutbound;
-
-  // Das Gespraech ist beim Anbieter zu Ende. Transkript, Zusammenfassung und Befund KOMMEN
-  // VON IHM (wir haben auf diesem Weg weder Audio noch Turn-Schleife) und landen ueber die
-  // Store-Mutatoren an denselben Feldern, die get_transcript ohnehin liest - kein zweiter
-  // Schreibweg neben dem Store.
-  function persistProviderResult(callId, conversation) {
-    const zeilen = spokenLines(conversation);
-    // VOR dem Schreiben: die Meldung gilt dem, was der Anbieter geliefert hat, und darf
-    // nicht an einem spaeteren Store-Fehler haengen bleiben (s. reportAudioTags).
-    reportAudioTags(callId, zeilen);
-    for (const zeile of zeilen) store.addTranscript(callId, roleOf(zeile.role), zeile.message);
-    store.recordProviderCallResult(callId, {
-      summary: conversation.analysis?.transcript_summary || null,
-      objectiveAchieved: objectiveAchievedOf(conversation),
-    });
-    // ABNAHME-D1 (TEIL 2/3): s. persistCollectedFields oben (Modul-Ebene, G30).
-    persistCollectedFields(store, callId, conversation);
-    // PHASE-6-VORAUSSETZUNG, die EINZIGE Quelle des Join-Schluessels zur Telefonie-
-    // Rechnung: der "otb_"-Wert, den auch der Telnyx-Beleg unter sip_call_id fuehrt
-    // (GEMESSEN an beiden Enden, test/fixtures/elevenlabs-conversations.js). Die Antwort
-    // des Anrufstarts scheidet als Quelle aus - sie liefert unter demselben Feldnamen
-    // ElevenLabs' call_sid (s. convai.js#startResultOf, an Anruf 2 vom 17.08.2026
-    // gemessen).
-    //
-    // DIE STELLE IST BEWUSST GEWAEHLT: persistProviderResult laeuft auf BEIDEN Wegen VOR
-    // dem Loeschversuch beim Anbieter - im regulaeren Ende (finishFromConversation) gibt
-    // es gar keinen, im Abbruch (endActiveCall) ist die Reihenfolge Abruf-vor-Loeschen
-    // bindend. Was hier nicht gesichert ist, ist danach unwiederbringlich weg.
-    //
-    // PREIS DER EINEN QUELLE, bewusst getragen: kommt nie ein Ergebnis (Anbieter stumm,
-    // Prozess vorher weg), bleibt der Schluessel leer und die Telefonie-Kosten dieses
-    // Anrufs sind ihm nicht mehr zuzuordnen. Ein FALSCHER Schluessel waere schlechter:
-    // er joint ebenfalls nicht, sperrt aber zusaetzlich (set-once) die richtige Quelle
-    // aus und behauptet dabei eine Zuordnung, die es nicht gibt.
-    store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
-    // OUTBOUND-E5 (F3): die vom Anbieter gemeldete Absendernummer - AUCH im abgelehnten Fall
-    // befuellt (Befund 27.08.). Formpruefung sitzt im Store-Mutator (recordActualSender).
-    recordAbsenderMessung(store, callId, conversation);
-  }
-
-  // Ergebnis persistieren, DANN terminalisieren, DANN den Anker nachziehen, ERST DANACH
-  // buchen - so sieht die Buchungskette den fertigen Stand. hangUp bleibt null: es gibt
-  // kein eigenes Provider-Leg mehr aufzulegen, das Gespraech ist beim Anbieter bereits
-  // beendet.
-  //
-  // DER ANKER STEHT HIER, NICHT IM persistEnd-THUNK UNTEN: ohne eigenes hangUp (hangUp:
-  // null) ruft terminateAndBillCall bill() synchron direkt nach persistEnd() - es gibt kein
-  // Zeitfenster, in das sich ein Zwischenschritt haengen liesse. billThunk laedt den Call
-  // FRISCH aus dem Store, der Anker muss also VOR dem Aufruf unten stehen. Der
-  // endCallRecord-Aufruf hier liefert zugleich endedAt fuer answeredAnchorOutcome; der
-  // zweite Aufruf im persistEnd-Thunk ist idempotent (setCallEndedAt greift nur aus
-  // status==='active') und bleibt aus Symmetrie zu jedem anderen Terminierungspfad stehen.
-  // S2: ended kann null sein (store.endCallRecord findet den Call nicht mehr) -
-  // answeredAnchorOutcome faengt das selbst ab (s. dort), hier wird nur noch weitergereicht.
-  async function finishFromConversation(callId, conversation) {
-    persistProviderResult(callId, conversation);
-    const ended = store.endCallRecord(callId, endStatusOf(conversation));
-    const anchor = answeredAnchorOutcome(ended?.endedAt, conversation);
-    applyAnsweredAnchor(store, callId, anchor);
-    // OUTBOUND-E2: finishCall liest call.failureReason beim Notification-Bau (telephony/
-    // call-finish.js) und billThunk laedt den Call FRISCH aus dem Store - steht der Grund
-    // noch nicht am Datensatz, bleibt der Nutzertext "<Ziel> (Status: failed)", also genau
-    // der Zustand, den diese Etappe abstellt.
-    // OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
-    // geschrieben, NICHT mehr als freie Anweisung davor (Reihenfolge-Riegel). Der zweite
-    // endCallRecord-Aufruf im Thunk ist idempotent (greift nur aus status==='active'); der
-    // ERSTE oben (:1275) bleibt UNANGETASTET - er ist der Anker-Lieferant fuer
-    // answeredAnchorOutcome (PM-7/PM-14).
-    await terminateAndBillCall({
-      persistEnd: persistEndWithReason({ store, callId, reason: providerErrorReasonFor(anchor, conversation), endCall: () => store.endCallRecord(callId, endStatusOf(conversation)) }),
-      hangUp: null,
-      bill: billThunk(finishCall, store, callId),
-      callId,
-    });
-  }
 
   function scheduleResultPoll(callId, conversationId) {
     setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);
@@ -1401,23 +1705,44 @@ export function makeElevenLabsOutbound({
   // jeden Poll frisch) und ein ueberlebender Zaehler einen laengst vergangenen Fehlschlag
   // in diese neue Bewertung hineintragen wuerde.
   const permanentErrorStreaks = new Map();
+  // E18-1: Prozess-Register der laufenden Inbound-EL-Schleifen (Closure-Zustand wie
+  // permanentErrorStreaks: je Fabrik-Instanz, nie modul-global). Eintrag: Start-Tor und
+  // Boot-Re-Arm; Austrag: jeder Takt-Ausgang ohne Folgetakt (hier, EINE Stelle).
+  const laufendeInboundPolls = new Set();
 
+  // IEL-B4: pollConversationResult ist der Wrapper um EINEN Takt (pollTakt) - er haelt das
+  // Register (E18-1) an genau einer Stelle aktuell, auch wenn der Takt wirft. Der Riegel
+  // pollDarfWirken (E7e) steht am Taktbeginn und fuer Inbound-EL zusaetzlich frisch nach dem
+  // Abruf (E18-2); die Frist haengt an der Politik (Anbieter-Deckel vs. Nachlauf-Marker).
   async function pollConversationResult(callId, conversationId) {
+    let ausgang;
+    try {
+      ausgang = await pollTakt(callId, conversationId);
+    } finally {
+      if (ausgang !== FOLGETAKT_GEPLANT) laufendeInboundPolls.delete(callId);
+    }
+  }
+
+  async function pollTakt(callId, conversationId) {
     const call = store.getCall(callId);
-    if (!call || call.status !== "active") return;
+    if (!pollDarfWirken(call)) return;
+    const politik = nachlaufPolitikFuer(call);
     const nowMs = Date.now();
     // G5: EIN Deps-Objekt fuer BEIDE Faelle, in denen der Poll ohne Anbieter-Ergebnis
     // aufgibt (Zeit-Obergrenze, dauerhafter Fehler) - haelt diese Funktion unter der
     // Zeilengrenze (G30).
-    const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, callId, nowMs };
-    if (classifyCallTime(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S).expired)
-      return finishExpiredPoll(finishDeps);
+    const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, endCarrierCall, callId, nowMs };
+    if (pollFristAbgelaufen(call, nowMs, politik)) return finishExpiredPoll(finishDeps);
     const { conversation, permanent, providerStatus } = await fetchConversationSoft(conversationId, callId);
+    // E18-2: nach dem await frisch - danach bis setCallEndedAt kein await.
+    if (politik.frischPruefenNachAbruf && !pollDarfWirken(store.getCall(callId))) return;
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
       return finishOnPermanentError({ ...finishDeps, providerStatus });
-    if (!conversation || !FINISHED_PROVIDER_STATUS.includes(conversation.status))
-      return scheduleResultPoll(callId, conversationId);
-    await finishFromConversation(callId, conversation);
+    if (!anbieterErgebnisFertig(conversation)) {
+      scheduleResultPoll(callId, conversationId);
+      return FOLGETAKT_GEPLANT;
+    }
+    await finishFromConversation({ ...finishDeps, conversation });
   }
 
   // TEIL A/Owner-Auftrag 15.08.2026 (Beende-Versuch beim Anbieter): der hangUp-Thunk des
@@ -1449,8 +1774,16 @@ export function makeElevenLabsOutbound({
     if (!conversationId) return;
     const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
     if (conversation) {
-      persistProviderResult(callId, conversation);
-      applyAnsweredAnchor(store, callId, answeredAnchorOutcome(call.endedAt, conversation));
+      // Kriterium (c): unmittelbar nach diesem Block laeuft endConversation, ein DELETE
+      // beim Anbieter, das den Datensatz vermutlich mitnimmt (s. Kommentar oben). Der
+      // Beleg entsteht also in derselben Form wie am regulaeren Ende - aber er ist
+      // strukturell nicht nachreifbar. UNBEDINGT, nicht abhaengig vom Ausgang des DELETE:
+      // die sichere Richtung ist "reift nicht" (nachbuchen ja, erstatten nein, 4.4);
+      // schlaegt das DELETE fehl, kostet uns das hoechstens eine ungenutzte Reifung, nie
+      // eine unbelegte Erstattung.
+      const politik = nachlaufPolitikFuer(call);
+      persistProviderResult({ store, callId, conversation, belegNachreifbar: false, politik });
+      applyAnsweredAnchor(store, callId, ankerFuerPolitik(politik, answeredAnchorOutcome(call.endedAt, conversation)));
     }
     await endConversation({
       fetchImpl: fetch,
@@ -1482,15 +1815,15 @@ export function makeElevenLabsOutbound({
       callee: call.to,
     });
     const locale = callLocaleOf({ store, config, call, ownerName });
-    // Der Torzustand kommt aus DERSELBEN Torkette wie alles andere (consultAllowedFor -
+    // Der Torzustand kommt aus DERSELBEN Torkette wie alles andere (consultAllowedForCall -
     // Master-Schalter, Kontext-Kanal, Per-Tenant-Recht), nicht aus dem MCP-Aufruf und
     // nicht aus einem zweiten Nachbau: dieselbe Funktion, die der Webhook fragt, bevor er
-    // eine Rueckfrage annimmt (routes/webhooks-elevenlabs.js). OC-P2: den eigenen
-    // Auftraggeber zu fragen, waehrend man mit ihm telefoniert, ist sinnlos - der Prompt
-    // deckt den unavailable-Zustand vollstaendig ab ("REACHING YOUR PRINCIPAL DURING THIS
-    // CALL"), es braucht keinen neuen Prompt-Text. Das Recherche-Tor bleibt unberuehrt.
-    const consultAllowed =
-      consultAllowedFor(store.resolveProfile(call.tenantId)) && call.calleeIsOwner !== true;
+    // eine Rueckfrage annimmt (routes/webhooks-elevenlabs.js) - seit P1 einschliesslich der
+    // Owner-Bedingung, die dort gefehlt hat. OC-P2: den eigenen Auftraggeber zu fragen,
+    // waehrend man mit ihm telefoniert, ist sinnlos - der Prompt deckt den
+    // unavailable-Zustand vollstaendig ab ("REACHING YOUR PRINCIPAL DURING THIS CALL"), es
+    // braucht keinen neuen Prompt-Text. Das Recherche-Tor bleibt unberuehrt.
+    const consultAllowed = consultAllowedForCall(call, store.resolveProfile(call.tenantId));
     // Thema B: der Torzustand der Recherche - DIESELBE Funktion, die der Webhook fragt
     // (research/registry.js#elevenLabsLookupAvailableFor, per DI verdrahtet), mit der
     // Fassaden-Profilaufloesung als Parameter.
@@ -1505,7 +1838,13 @@ export function makeElevenLabsOutbound({
     // laufen unveraendert - der Fake unterscheidet sich einzig in der Herkunft der
     // conversation_id.
     // Alles, was in den Anfragekoerper eingeht, EINMAL benannt (G19).
-    const anfrage = { el, call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed, agentPhoneNumberId };
+    // SEC-P4: die Mandanten-Dimension dieses Anrufs - EINMAL abgeleitet, rein, netzfrei.
+    // Aus DEMSELBEN Geheimnis, gegen das der Webhook den Header prueft (kein zweites).
+    const tenantToken = tenantToolToken({
+      secret: config.voice.elevenLabsToolToken,
+      tenantId: call.tenantId,
+    });
+    const anfrage = { el, call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed, agentPhoneNumberId, tenantToken };
     const { conversationId } = config.safety.fakeOriginateElevenlabs
       ? startResultOf(fakeSipTrunkOutboundCallResponse())
       : await startOutboundCall(startCallRequest(anfrage));
@@ -1553,6 +1892,11 @@ export function makeElevenLabsOutbound({
   return {
     originateCall,
     endActiveCall,
-    rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult }),
+    rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }),
+    // IEL-B4/B5 (E7d): Aufrufer routes/voice.js#/voice/status bei GEBUNDEN.
+    startInboundNachlauf: (callId) => startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }),
+    // IEL-B5 (E10): Aufrufer telephony/call-termination.js#hangUpForCall (Cap, Geld-Wache, cancel_call).
+    awaitAndPersistInboundElResult: (callId) =>
+      awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs: settings().resultPollMs, callId }),
   };
 }

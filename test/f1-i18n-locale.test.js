@@ -119,50 +119,6 @@ test("Bundle: DE-Summary-Prompt ist byte-identisch zum Bestand; FR ist franzoesi
   }
 });
 
-// ---- (A3) Realtime-Felder (F1 P5): Voice + Whisper-Locale + Opener je Sprache ----
-
-test("Realtime-Bundle: DE-Sentinels null (byte-identisch), FR/EN konkrete Voice + ISO-Whisper", () => {
-  // DE: null -> Bridge nutzt config.realtimeVoice bzw. Whisper-Auto-Detect (Bestand).
-  assert.equal(LOCALES.de.realtimeVoice, null);
-  assert.equal(LOCALES.de.whisperLocale, null);
-  // FR/EN: konkrete OpenAI-Voice + ISO-639-Whisper-Code (kein BCP-47).
-  assert.equal(LOCALES.fr.realtimeVoice, "shimmer");
-  assert.equal(LOCALES.fr.whisperLocale, "fr");
-  assert.equal(LOCALES.en.realtimeVoice, "alloy");
-  assert.equal(LOCALES.en.whisperLocale, "en");
-});
-
-test("Realtime-Bundle: Opener (outbound/inbound) je Sprache vorhanden, DE byte-identisch", () => {
-  for (const lang of SUPPORTED_LANGUAGES) {
-    const op = LOCALES[lang].realtimeOpener;
-    assert.equal(typeof op.outbound, "function", `${lang}: outbound-Opener fehlt`);
-    assert.equal(typeof op.inbound, "string", `${lang}: inbound-Opener fehlt`);
-    assert.ok(op.inbound.length > 0, `${lang}: inbound-Opener leer`);
-    // Outbound-Opener bettet die Offenlegung ein.
-    assert.ok(
-      op.outbound("DISCLOSURE").includes("DISCLOSURE"),
-      `${lang}: Offenlegung nicht eingebettet`,
-    );
-  }
-  // DE-Opener byte-identisch zum frueheren bridge.js-Inline-Text.
-  assert.equal(
-    LOCALES.de.realtimeOpener.outbound("X"),
-    'Beginne das Gespraech JETZT. Dein erster Satz muss exakt lauten: "X" Nenne danach kurz dein Anliegen.',
-  );
-  assert.equal(
-    LOCALES.de.realtimeOpener.inbound,
-    "Der Anrufer ist in der Leitung. Begruesse ihn jetzt entsprechend deiner Anweisungen.",
-  );
-});
-
-// P10: der Fallback zeigt seit dem Weltdefault-Flip auf das EN-Bundle (WORLD-03), nicht
-// mehr auf die DE-Sentinels - das Subjekt bleibt der MECHANISMUS (Fallback = DEFAULT_
-// LANGUAGE-Bundle, R7), der konkrete Wert folgt DEFAULT_LANGUAGE statt fest "de".
-test("Realtime-Bundle: localeFor-Fallback liefert das DEFAULT_LANGUAGE-Bundle (unbekannte Sprache)", () => {
-  assert.equal(localeFor("xx").realtimeVoice, LOCALES[DEFAULT_LANGUAGE].realtimeVoice);
-  assert.equal(localeFor("xx").whisperLocale, LOCALES[DEFAULT_LANGUAGE].whisperLocale);
-});
-
 // ---- (A2) EN-Bundle (F1 P4): kuratierte Offenlegung + statische Texte ----
 
 // OUT-24 (i18n-Testkatalog). Beleg: src/i18n/locales.js:236-238;

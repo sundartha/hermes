@@ -17,7 +17,6 @@ export function safeEqual(a, b) {
 const MASK_VISIBLE_TAIL = 4; // sichtbare End-Zeichen einer maskierten Nummer
 const MASK_HASH_LEN = 6;     // Hex-Stellen des Korrelations-Hash bei Nummern
 const EMAIL_HASH_LEN = 8;    // Hex-Stellen des E-Mail-Hash (Vorgabe T-P0-7)
-const TEXT_HASH_LEN = 8;     // Hex-Stellen des Text-Korrelations-Hash (Diagnose-Sonden)
 
 function sha256Hex(value) {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
@@ -40,17 +39,6 @@ export function hashEmail(value) {
   const s = String(value ?? "").trim().toLowerCase();
   if (!s) return "-";
   return sha256Hex(s).slice(0, EMAIL_HASH_LEN);
-}
-
-// GQ-S1: beliebigen Text auf ein nicht umkehrbares SHA256-Praefix reduzieren - gleicher
-// Text ergibt dasselbe Token, ueber Logzeilen vergleichbar, ohne den Wortlaut zu zeigen.
-// Anders als hashEmail BEWUSST ohne trim/lowercase: die Sonden muessen "identischer Text"
-// von "erweitertem Text" unterscheiden, jede Normalisierung wuerde genau das verwischen.
-// Leerwert -> "-" (gleiche Konvention wie maskNumber/hashEmail).
-export function hashText(value) {
-  const s = String(value ?? "");
-  if (!s) return "-";
-  return sha256Hex(s).slice(0, TEXT_HASH_LEN);
 }
 
 // Audit-Logzeile fuer sicherheitsrelevante Aktionen (Call-Ausloesung, Cancel,
@@ -80,8 +68,21 @@ export const AUTH_FAILED_GRUND = Object.freeze({
   NOT_ACTIVE: "not_active", // Sitzung gueltig, Tenant-Status nicht erlaubt (403)
   NOT_ADMIN: "not_admin", // Sitzung gueltig, aber kein Admin (403)
   NOT_LOCAL: "not_local", // kein vertrauenswuerdiger In-Process-Aufrufer (403)
+  // SEC-P3: schreibender Request mit FREMDEM Origin auf einer Self-Service-Route (403).
+  // Fehlender Origin ist KEIN Treffer und erzeugt keine Zeile (Normalfall S2S/Webhook).
+  CROSS_ORIGIN: "cross_origin",
+  // E5: vorhandener, nicht erlaubter Origin auf /mcp (403, MCP-Spec T-06). EIGENER
+  // Token, damit die /mcp-Ablehnung im Log nicht mit der Self-Service-CSRF-Wache
+  // verwechselt wird - die beiden Wachen haben verschiedene Anker und verschiedene
+  // Heilwege (Allowlist-Nachtrag gegen Proxy-Konfiguration).
+  MCP_CROSS_ORIGIN: "mcp_cross_origin",
 });
 
-export function auditAuthFailed(req, grund) {
-  audit("auth_failed", req, `path=${req.path} grund=${grund}`);
+// detail: OPTIONALES, schon gefiltertes Zusatzfeld im Log (heute nur `origin=<host>`
+// der /mcp-Wache). NIE Rohtext aus einem Header und nie ein Secret - der Aufrufer
+// filtert, diese Funktion formatiert nur. Ohne Argument byte-identisch zu vorher; die
+// vier Bestandsaufrufer an fuenf Stellen (src/web-auth.js 3x, src/middleware.js,
+// src/wiring/internal-only.js) bleiben unveraendert gueltig.
+export function auditAuthFailed(req, grund, detail = "") {
+  audit("auth_failed", req, `path=${req.path} grund=${grund}${detail ? ` ${detail}` : ""}`);
 }

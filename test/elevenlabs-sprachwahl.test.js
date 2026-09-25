@@ -324,16 +324,27 @@ test("Sprachwahl EL: die Sprache des ANGERUFENEN gewinnt, wenn seine Nummer sie 
       to,
     });
 
+  // P4a (F-2 Punkt 2): die GESPRAECHSSPRACHE folgt seit dieser Phase dem Sprachwunsch des
+  // Auftraggebers (hier: keiner gesetzt -> Auftraggeber-Kette), NICHT mehr dem Land des
+  // Angerufenen - genau die Umkehrung, die F-2 verlangt (ein portugiesischer Auftrag an
+  // eine deutsche Nummer soll das Gespraech auf Portugiesisch fuehren koennen).
   assert.equal(
     locale(ZIEL_DE).language,
+    kase.language,
+    "die GESPRAECHSSPRACHE folgt seit F-2 dem Auftraggeber, nicht mehr dem Land des " +
+      "Angerufenen - das ist die von F-2 Punkt 2 verlangte Umkehrung",
+  );
+  // Die OFFENLEGUNGSSPRACHE bleibt UNVERAENDERT die Sprache des Angerufenen (E-2) - diese
+  // Zusicherung ist der Beleg, dass P4a die Offenlegung in KEINEM Fall lockert.
+  assert.equal(
+    locale(ZIEL_DE).disclosureLanguage,
     "de",
-    "eine deutsche Rufnummer belegt die Sprache des Angerufenen - sie muss die " +
-      "franzoesische Spracheinstellung des Auftraggebers ueberstimmen",
+    "die OFFENLEGUNGSSPRACHE bleibt byte-identisch die Sprache des Angerufenen (E-2)",
   );
   assert.ok(
     locale(ZIEL_DE).firstMessage.startsWith(disclosureFor("de")),
-    "der Offenlegungssatz folgt derselben Wahl und steht am Anfang der Eroeffnung - er " +
-      "muss vom Angerufenen VERSTANDEN werden (Artikel 50 EU AI Act)",
+    "der Offenlegungssatz folgt weiterhin dem Angerufenen und steht am Anfang der " +
+      "Eroeffnung - er muss vom Angerufenen VERSTANDEN werden (Artikel 50 EU AI Act)",
   );
 
   assert.equal(

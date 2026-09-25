@@ -6,7 +6,7 @@
 //
 // Diese Datei haelt die ENTSCHEIDUNGEN (darf/passt/gesaeubert), nicht die Turn-Mechanik -
 // die bleibt in claude.js, dem einzigen Ort mit Turn-Kontrolle.
-import { config, VOICE_ENGINE } from "../config.js";
+import { config } from "../config.js";
 import * as store from "../store.js";
 import { localeFor } from "../i18n/locales.js";
 import { MS_PER_MINUTE } from "../utils/timer.js";
@@ -33,8 +33,16 @@ export const CONSULT_WAIT_MS = config.tenancy.consultWaitMs;
 // GQ-P2 (W2): die lange Frist - wie lange die Rueckfrage OFFEN bleibt und eine
 // eintreffende Antwort noch annimmt. Getrennt von CONSULT_WAIT_MS, weil "warten" und
 // "sterben" zwei verschiedene Dinge sind: der Agent spricht laengst weiter, waehrend der
-// Kanal noch offen ist. Ein laenger offener Consult verlaengert KEIN Gespraech - es wird
-// nirgends gewartet, und expireOpenConsults schliesst ihn spaetestens am Call-Ende.
+// Kanal noch offen ist. Ein laenger offener Consult verlaengert KEIN Gespraech -
+// AUF DIESEM WEG (Budget-/Telnyx-Engine) wird nirgends gewartet, und expireOpenConsults
+// schliesst ihn spaetestens am Call-Ende.
+//
+// AUF DEM ELEVENLABS-WEG GILT DAS NICHT, und die Ungenauigkeit war ein Befund vom
+// 06.09.2026 (PLAN-ANRUFDEFEKTE W2): dort haelt der Rueckfrage-Webhook seinen Request
+// offen und friert die Leitung ein, solange er wartet
+// (conversation/consult-raised.js, "ES WIRD GEWARTET"). Seit P2 ist dieser Halt
+// gestaffelt und laeuft gegen EL_CONSULT_DELIVERY/ACK/ANSWER_MS, nicht gegen
+// CONSULT_OPEN_MS. Diese Konstante hier bleibt der Wert des MCP-Long-Poll-Wegs (E-5).
 export const CONSULT_OPEN_MS = config.tenancy.consultOpenMs;
 
 // Wie frisch ein Client-Poll sein muss, damit das Werkzeug ueberhaupt angeboten wird.
@@ -64,15 +72,6 @@ export function consultClientIsPolling(call, nowMs = Date.now()) {
   return nowMs - (call.consultPolledAtMs || 0) <= CONSULT_POLL_FRESH_MS;
 }
 
-// GQ-P2/B-2: WIE ALT ist der letzte Client-Poll? Der Boolean consultClientIsPolling kann
-// "nie gepollt" nicht von "um Millisekunden zu alt" trennen - genau diese Mehrdeutigkeit
-// liess B-2 nach dem Live-Anruf offen. Eine Zahl, kein Text (PII-Freiheit der Log-Zeile
-// unberuehrt). Reiner Leser.
-export const CONSULT_POLL_NEVER = -1;
-export function consultPollAgeMs(call, nowMs = Date.now()) {
-  return call.consultPolledAtMs ? nowMs - call.consultPolledAtMs : CONSULT_POLL_NEVER;
-}
-
 // GQ-P7: Wartet eine eingetroffene Rueckfrage-Antwort noch auf ihren ersten Modell-Turn?
 // Durchreichung der Store-Operation, damit der Shim das Consult-Modul befragt und nicht
 // direkt state-ops (dieselbe Schichtung wie consultClientIsPolling). Reiner Leser.
@@ -85,17 +84,9 @@ export function consultAnswerAwaitingDelivery(call) {
 // ausgeschaltetem Feature nicht einmal der Store gelesen wird (Bestand byte-identisch).
 // Das Richtungs-Gate ist der Sicherheitskern: ein fremder Inbound-Anrufer darf seine
 // Aeusserungen NIE als "Rueckfrage" in den Kontext des Tenants exportieren.
-//
-// WW-P3: der Engine-Faktor ist derselbe wie in research/in-call.js (AL-P10b-fix), aus
-// demselben Grund. Beide Konsumenten dieses Praedikats liegen im Budget-Turn (agentTools,
-// decideConsultRequest) - die Realtime-Bridge baut ihren Werkzeugsatz aus toolDefs und
-// bietet get_consult NIE an, teilt sich den systemPrompt aber mit der Budget-Engine. Ohne
-// diesen Faktor wuerde der Realtime-Prompt seit WW-P3 einen Rueckfrage-Weg versprechen,
-// den es dort nicht gibt. Fuer den Budget-Pfad aendert der Faktor nichts.
 export function consultAvailableFor(call, nowMs = Date.now()) {
   return (
     config.tenancy.inCallConsultEnabled === true &&
-    config.voice.voiceEngine !== VOICE_ENGINE.REALTIME &&
     consultAllowedFor(store.resolveProfile(call.tenantId)) &&
     call.direction === "outbound" &&
     call.status === "active" &&

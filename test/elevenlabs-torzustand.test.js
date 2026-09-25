@@ -14,7 +14,7 @@
 // Das ist die teuerste Art von Fehler, die wir hier machen koennen."
 //
 // DIE TORKETTE WIRD NICHT NACHGEBAUT: die Attrappe liefert ein PROFIL, und der Wert laeuft
-// durch das echte consultAllowedFor (Master-Schalter, Kontext-Kanal, Per-Tenant-Recht).
+// durch das echte consultAllowedForCall (Master-Schalter, Kontext-Kanal, Per-Tenant-Recht).
 // Eine Attrappe, die "available" zurueckgibt, wuerde sich selbst pruefen.
 //
 // REIHENFOLGE BINDEND: die beiden Schalter stehen VOR dem Import - src/config.js liest
@@ -31,7 +31,7 @@ process.env.ASSISTANT_CONTEXT_ENABLED = "true";
 process.env.LOOKUP_ENABLED = "true";
 process.env.EXA_API_KEY = "exa-test-key-torzustand";
 const { makeElevenLabsOutbound } = await import("../src/elevenlabs/outbound.js");
-const { consultAllowedFor } = await import("../src/consult/gate.js");
+const { consultAllowedForCall } = await import("../src/consult/gate.js");
 const { elevenLabsLookupAvailableFor } = await import("../src/research/registry.js");
 const { openingLineHash } = await import("../src/store/state-ops.js");
 const { LOCALES } = await import("../src/i18n/locales.js");
@@ -43,7 +43,7 @@ const ZU = "unavailable";
 const torzustandBei = async (profil) => {
   const variablen = await sendeAnrufstart({
     makeElevenLabsOutbound,
-    consultAllowedFor,
+    consultAllowedForCall,
     store: pinStore({ profil }),
   });
   return variablen[VARIABLE];
@@ -61,7 +61,7 @@ describe("Torzustand des Rueckfragekanals: der Wert folgt der Torkette", () => {
 
 describe("Torzustand: der Standard ist fail-closed - 'unbekannt' sieht aus wie 'nicht verfuegbar'", () => {
   // WO DIE ZUSAGE WIRKLICH HAENGT, gemessen und nicht vermutet: nicht am `=== true` in
-  // dynamicVariables, sondern am Tor selbst. consultAllowedFor liefert einen STRIKTEN
+  // dynamicVariables, sondern am Tor selbst. consultAllowedForCall liefert einen STRIKTEN
   // Wahrheitswert - jeder der Faelle unten kommt dort schon als false heraus. Beide
   // Rotproben am 2026-08-17 gefahren:
   //   `=== true` -> `!== false` in dynamicVariables : 0 rote Faelle (unerreichbar, solange
@@ -88,7 +88,7 @@ describe("Torzustand: der Standard ist fail-closed - 'unbekannt' sieht aus wie '
   it("die Variable ist IMMER gesetzt - auch im unbekannten Fall, und nie leer", async () => {
     const variablen = await sendeAnrufstart({
       makeElevenLabsOutbound,
-      consultAllowedFor,
+      consultAllowedForCall,
       store: pinStore({ profil: null }),
     });
     assert.ok(
@@ -113,10 +113,10 @@ describe("Torzustand: der Standard ist fail-closed - 'unbekannt' sieht aus wie '
 // eine vergessene Verdrahtung den Agenten eine Rueckfrage zusagen lassen, die kein
 // Webhook je annimmt.
 describe("Torzustand ohne verdrahtetes Tor: die Fabrik faellt auf 'nein'", () => {
-  it("ohne consultAllowedFor -> unavailable, obwohl das Profil das Recht traegt", async () => {
+  it("ohne consultAllowedForCall -> unavailable, obwohl das Profil das Recht traegt", async () => {
     const variablen = await sendeAnrufstart({
       makeElevenLabsOutbound,
-      consultAllowedFor: undefined,
+      consultAllowedForCall: undefined,
       store: pinStore({ profil: { allowConsult: true } }),
     });
     assert.equal(variablen[VARIABLE], ZU);
@@ -140,7 +140,7 @@ describe("Torzustand der Recherche: der Wert folgt der Torkette", () => {
   const lookupZustandBei = async ({ profil, call }) => {
     const variablen = await sendeAnrufstart({
       makeElevenLabsOutbound,
-      consultAllowedFor,
+      consultAllowedForCall,
       lookupAvailableFor: elevenLabsLookupAvailableFor,
       store: pinStore({ profil }),
       call,
@@ -168,7 +168,7 @@ describe("Torzustand der Recherche: der Wert folgt der Torkette", () => {
   it("ohne verdrahtetes Tor -> unavailable, obwohl das Profil das Recht traegt", async () => {
     const variablen = await sendeAnrufstart({
       makeElevenLabsOutbound,
-      consultAllowedFor,
+      consultAllowedForCall,
       lookupAvailableFor: undefined,
       store: pinStore({ profil: { allowLookup: true } }),
     });
@@ -187,7 +187,7 @@ describe("Wert von opening_line am Anrufstart", () => {
   const openingLineBei = async (call) => {
     const variablen = await sendeAnrufstart({
       makeElevenLabsOutbound,
-      consultAllowedFor,
+      consultAllowedForCall,
       store: pinStore({ profil: { allowConsult: true } }),
       call,
     });

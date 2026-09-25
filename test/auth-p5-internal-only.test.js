@@ -23,7 +23,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { webAuth, adminOnly, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, adminOnly, signValue } from "../src/web-auth.js";
 import { TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import {
   startServer,
@@ -218,7 +218,7 @@ test("AUTH-P5-5: webAuth mit gueltiger Sitzung, aber gesperrtem Tenant (closed) 
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
   const srv = await mountProbe([webAuthMw]);
   try {
-    const cookie = `session=${encodeURIComponent(signValue("sess_p5", SECRET))}`;
+    const cookie = `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue("sess_p5", SECRET))}`;
     let res;
     const lines = await captureConsole(async () => {
       res = await fetch(`${srv.base}/api/probe`, { headers: { Cookie: cookie } });

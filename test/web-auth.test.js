@@ -10,6 +10,7 @@ import {
   makeOidc,
   claimsFromPayload,
   adminOnly,
+  SESSION_COOKIE_NAME,
 } from "../src/web-auth.js";
 import { GERMAN_STOPWORDS } from "./helpers.js";
 
@@ -197,7 +198,7 @@ test("GET /auth/callback mit passendem state: upsert 1x, Session-Cookie gesetzt,
     assert.equal(calls.create[0].sub, "user-1");
     assert.equal(calls.create[0].tenantId, "t_user-1");
     // Set-Cookie traegt die SIGNIERTE Session-id
-    const sessionCookie = cookieValue(res.setCookie, "session");
+    const sessionCookie = cookieValue(res.setCookie, SESSION_COOKIE_NAME);
     assert.equal(
       verifyValue(sessionCookie, SECRET),
       "sess-abc-123",
@@ -206,6 +207,11 @@ test("GET /auth/callback mit passendem state: upsert 1x, Session-Cookie gesetzt,
     const joined = res.setCookie.join("\n");
     assert.match(joined, /HttpOnly/i);
     assert.match(joined, /SameSite=Lax/i);
+    // SEC-P5: die drei Bedingungen, die der Browser fuer __Host- erzwingt.
+    const gesetzt = res.setCookie.find((zeile) => zeile.startsWith(`${SESSION_COOKIE_NAME}=`));
+    assert.match(gesetzt, /;\s*Secure/i);
+    assert.match(gesetzt, /;\s*Path=\/(;|$)/i);
+    assert.doesNotMatch(gesetzt, /;\s*Domain=/i, "__Host- verbietet Domain=");
     // verifier + state werden geloescht (Max-Age=0 / Expires Vergangenheit)
     assert.match(
       joined,
@@ -280,7 +286,7 @@ test("GET /auth/callback mit FALSCHEM state -> 400, keine Session (CSRF)", async
     assert.equal(calls.upsert.length, 0, "kein Account-Upsert bei CSRF");
     assert.equal(calls.create.length, 0, "keine Session bei CSRF");
     // Cookie darf NICHT gesetzt sein
-    assert.equal(cookieValue(res.setCookie, "session"), null);
+    assert.equal(cookieValue(res.setCookie, SESSION_COOKIE_NAME), null);
   } finally {
     await srv.close();
   }
@@ -297,7 +303,7 @@ test("GET /auth/callback ohne state-Cookie -> 302 Recovery (kein Bypass, keine S
     assert.match(res.headers.location, /^\/auth\/login\?retry=1$/);
     assert.equal(calls.create.length, 0, "kein Session-Mint im Recovery-Pfad");
     assert.equal(calls.upsert.length, 0);
-    assert.equal(cookieValue(res.setCookie, "session"), null);
+    assert.equal(cookieValue(res.setCookie, SESSION_COOKIE_NAME), null);
   } finally {
     await srv.close();
   }
@@ -337,7 +343,7 @@ test("AM2: Callback ohne Cookie + markierter state -> terminale Seite (Loop-Guar
     assert.match(res.body, /Session expired/);
     assert.match(res.body, /\/auth\/login/);
     assert.equal(calls.create.length, 0);
-    assert.equal(cookieValue(res.setCookie, "session"), null);
+    assert.equal(cookieValue(res.setCookie, SESSION_COOKIE_NAME), null);
   } finally {
     await srv.close();
   }
@@ -414,7 +420,7 @@ test("GET /auth/callback mit fehlschlagendem exchange -> 401, Cookies geloescht,
     assert.equal(calls.create.length, 0);
     // KEIN Leak des internen Fehlertexts/Tokens in den Body
     assert.doesNotMatch(res.body, /super-secret-token-xyz/);
-    assert.equal(cookieValue(res.setCookie, "session"), null);
+    assert.equal(cookieValue(res.setCookie, SESSION_COOKIE_NAME), null);
   } finally {
     await srv.close();
   }
@@ -424,13 +430,16 @@ test("POST /auth/logout invalidiert die Session und loescht das Cookie -> 204", 
   const { deps, calls } = fakeDeps();
   const srv = await mountRouter(deps);
   try {
-    const cookie = `session=${encodeURIComponent(signValue("sess-abc-123", SECRET))}`;
+    const cookie = `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue("sess-abc-123", SECRET))}`;
     const res = await rawPost(`${srv.base}/auth/logout`, { Cookie: cookie });
     assert.equal(res.status, 204);
     assert.deepEqual(calls.invalidate, ["sess-abc-123"]);
     // Cookie geloescht
     const joined = res.setCookie.join("\n");
-    assert.match(joined, /session=;|Max-Age=0|Expires=Thu, 01 Jan 1970/i);
+    assert.match(
+      joined,
+      new RegExp(`${SESSION_COOKIE_NAME}=;|Max-Age=0|Expires=Thu, 01 Jan 1970`, "i"),
+    );
   } finally {
     await srv.close();
   }
@@ -524,7 +533,7 @@ test("T-F2-02: GET /auth/callback ohne oidc_nonce-Cookie -> 400, keine Session",
       Cookie: cookies,
     });
     assert.equal(res.status, 400);
-    assert.equal(cookieValue(res.setCookie, "session"), null);
+    assert.equal(cookieValue(res.setCookie, SESSION_COOKIE_NAME), null);
     assert.equal(calls.upsert.length, 0);
     assert.equal(calls.create.length, 0);
   } finally {
@@ -547,7 +556,7 @@ test("T-F2-03: GET /auth/callback mit manipuliertem oidc_nonce-Cookie -> 400, ke
       Cookie: cookies,
     });
     assert.equal(res.status, 400);
-    assert.equal(cookieValue(res.setCookie, "session"), null);
+    assert.equal(cookieValue(res.setCookie, SESSION_COOKIE_NAME), null);
     assert.equal(calls.create.length, 0);
     assert.doesNotMatch(res.body, /nonce-val/);
   } finally {
@@ -578,7 +587,7 @@ test("T-F2-04: GET /auth/callback mit fehlschlagendem exchange (WorkOS-Fehler) -
     assert.equal(res.status, 401);
     assert.equal(calls.create.length, 0);
     assert.doesNotMatch(res.body, /super-secret-detail/);
-    assert.equal(cookieValue(res.setCookie, "session"), null);
+    assert.equal(cookieValue(res.setCookie, SESSION_COOKIE_NAME), null);
   } finally {
     await srv.close();
   }
@@ -600,7 +609,7 @@ test("T-F2-05: GET /auth/callback Happy-Path: oidc_nonce-Cookie wird beim Cleanu
     });
     assert.equal(res.status, 302);
     // Session-Cookie gesetzt (Happy-Path unveraendert)
-    const sessionCookie = cookieValue(res.setCookie, "session");
+    const sessionCookie = cookieValue(res.setCookie, SESSION_COOKIE_NAME);
     assert.equal(verifyValue(sessionCookie, SECRET), "sess-abc-123");
     // oidc_nonce wird geloescht (Max-Age=0)
     const joined = res.setCookie.join("\n");
@@ -637,7 +646,7 @@ test("T-CB-01: GET /auth/callback ohne pkce_verifier-Cookie -> 400, kein exchang
     });
     assert.equal(res.status, 400);
     assert.equal(calls.exchangeCalled, undefined, "exchange darf ohne Verifier nicht laufen");
-    assert.equal(cookieValue(res.setCookie, "session"), null);
+    assert.equal(cookieValue(res.setCookie, SESSION_COOKIE_NAME), null);
   } finally {
     await srv.close();
   }
@@ -665,7 +674,7 @@ test("T-CB-02: GET /auth/callback ohne code-Query-Param -> 400, kein exchange", 
     const res = await rawGet(`${srv.base}/auth/callback?state=${state}`, { Cookie: cookies });
     assert.equal(res.status, 400);
     assert.equal(calls.exchangeCalled, undefined, "exchange darf ohne code nicht laufen");
-    assert.equal(cookieValue(res.setCookie, "session"), null);
+    assert.equal(cookieValue(res.setCookie, SESSION_COOKIE_NAME), null);
   } finally {
     await srv.close();
   }

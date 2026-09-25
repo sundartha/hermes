@@ -6,10 +6,10 @@
 // Drei Ebenen in einer Datei (Muster test/usage-spend-month-axis.test.js): Ops-Ebene
 // (recordTtsCharacters/platformTtsUsageView direkt auf makeDefaultState()), Fassaden-
 // Roundtrip (json + pglite, Backend-Paritaet) und directive-synth-Ebene. Der Synth-
-// Erfolg/Fehlschlag-Seam ist bei synthesizeSpeech NICHT injiziert (harter Import aus
+// Erfolg/Fehlschlag-Seam ist bei synthesizeSpeechStream NICHT injiziert (harter Import aus
 // synth.js) - injiziert ist fetchImpl (== globalThis.fetch), exakt wie in
 // test/directive-synth.test.js. Diese Datei nutzt denselben Fake-fetch-Kniff statt
-// eines eigenstaendigen Fake-synthesizeSpeech.
+// eines eigenstaendigen Fake-Synth.
 //
 // Alle Faelle sind VOR der Implementierung rot: emptyPlatformTtsUsage (defaults.js)
 // sowie recordTtsCharacters/platformTtsUsageView (state-ops.js) existieren noch nicht
@@ -28,6 +28,8 @@ import { say } from "../src/telephony/directives.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { tempDataDir } from "./helpers.js";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "./pg-helpers.js";
+// IE7: die gestreamte Antwort-Attrappe liegt geteilt in test/helpers/fake-tts-stream.mjs.
+import { recordingStreamFetch } from "./helpers/fake-tts-stream.mjs";
 
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
@@ -257,6 +259,7 @@ function fakeSynthConfig() {
       apiBase: "https://api.elevenlabs.io",
       outputFormat: "mp3_44100_128",
       synthTimeoutMs: 2000,
+      synthTotalTimeoutMs: 10000,
     },
   });
 }
@@ -282,12 +285,12 @@ async function withFakeFetch(fetchImpl, fn) {
   }
 }
 
+// Der Fake-Audio-Inhalt dieser Datei bleibt ihr eigener (die Bytewerte sind ohne
+// Bedeutung, nur ihre Existenz zaehlt); GETEILT ist seit IE7 nur die ANTWORT-FORM - die
+// gestreamte Attrappe aus test/helpers/fake-tts-stream.mjs.
+const FAKE_AUDIO_CHUNK = new Uint8Array([1, 2, 3]);
 function okFetch() {
-  return async () => ({
-    ok: true,
-    headers: { get: () => "audio/mpeg" },
-    arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-  });
+  return recordingStreamFetch({ chunks: [FAKE_AUDIO_CHUNK] }).fetchImpl;
 }
 
 function failFetch() {

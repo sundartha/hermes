@@ -13,25 +13,11 @@
 //      Verschiebe-Fehler im fail-closed-Pfad oeffnet ein Tenant-Leck).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../src/config.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import * as viaReexport from "../src/request-tenant.js";
 import * as canonical from "../src/routes/_tenant.js";
 
 // --- Test-Helfer ---------------------------------------------------------------
-
-// config.tenancy.multiTenant fuer die Dauer von fn() setzen und danach exakt restaurieren
-// (Test-Isolation; kein Spawn, keine Env). Der Resolver liest config.tenancy.multiTenant
-// live vom selben Singleton, das hier mutiert wird.
-function withMultiTenant(value, fn) {
-  const saved = config.tenancy.multiTenant;
-  config.tenancy.multiTenant = value;
-  try {
-    return fn();
-  } finally {
-    config.tenancy.multiTenant = saved;
-  }
-}
 
 // Mock-store: nur resolveTenant (per Factory injiziert). `map` bildet Identitaet ->
 // tenantId ab; unbekannt -> null (Reject-Pfad). `calls` protokolliert jede Aufloesung,
@@ -116,87 +102,66 @@ const RESOLVER_FACTORIES = [
 ];
 
 for (const [label, build] of RESOLVER_FACTORIES) {
-  test(`[${label}] Flag aus -> Owner (byte-identisch, kein Lookup)`, () => {
+  test(`[${label}] bekannter sub -> tenantId, unabhaengig von jeder Env`, () => {
     const store = makeStore({ "user-1": "tenant-a" });
     const { requestTenant } = build(store);
-    withMultiTenant(false, () => {
-      assert.equal(requestTenant(makeReq({ auth: { sub: "user-1" } })), BOOTSTRAP_TENANT_ID);
-    });
-    assert.equal(store.calls.length, 0, "Flag aus darf keinen resolveTenant-Lookup ausloesen");
+    assert.equal(requestTenant(makeReq({ auth: { sub: "user-1" } })), "tenant-a");
+    assert.deepEqual(store.calls, ["user-1"], "genau ein Lookup");
   });
 
-  test(`[${label}] Flag an + fehlende Identitaet (localhost/stdio) -> Owner (Bootstrap-Bindung)`, () => {
+  test(`[${label}] fehlende Identitaet (localhost/stdio) -> Owner (Bootstrap-Bindung)`, () => {
     const store = makeStore();
     const { requestTenant } = build(store);
-    withMultiTenant(true, () => {
-      assert.equal(requestTenant(makeReq()), BOOTSTRAP_TENANT_ID);
-    });
+    assert.equal(requestTenant(makeReq()), BOOTSTRAP_TENANT_ID);
     assert.equal(store.calls.length, 0, "fehlende Identitaet darf keinen Lookup ausloesen");
   });
 
-  test(`[${label}] Flag an + bekannte Identitaet -> tenantId`, () => {
-    const store = makeStore({ "user-1": "tenant-a" });
-    const { requestTenant } = build(store);
-    withMultiTenant(true, () => {
-      assert.equal(requestTenant(makeReq({ auth: { sub: "user-1" } })), "tenant-a");
-    });
-    assert.deepEqual(store.calls, ["user-1"], "bekannte Identitaet loest genau einen Lookup aus");
-  });
-
-  test(`[${label}] Flag an + vorhandene-aber-unbekannte Identitaet -> REJECT (NIE Owner)`, () => {
+  test(`[${label}] vorhandene-aber-unbekannte Identitaet -> REJECT (NIE Owner)`, () => {
     const store = makeStore();
     const { requestTenant } = build(store);
-    withMultiTenant(true, () => {
-      const result = requestTenant(makeReq({ auth: { sub: "ghost" } }));
-      assert.equal(result, canonical.TENANT_REJECT);
-      assert.notEqual(result, BOOTSTRAP_TENANT_ID, "fail-closed: unbekannt darf nie Owner werden");
-    });
+    const result = requestTenant(makeReq({ auth: { sub: "ghost" } }));
+    assert.equal(result, canonical.TENANT_REJECT);
+    assert.notEqual(result, BOOTSTRAP_TENANT_ID, "fail-closed: unbekannt darf nie Owner werden");
   });
 
   test(`[${label}] Web-Session (req.tenant) gewinnt vor req.auth, ohne Lookup`, () => {
     const store = makeStore({ "user-1": "tenant-a" });
     const { requestTenant } = build(store);
-    withMultiTenant(true, () => {
-      const req = makeReq({ tenant: { tenantId: "tenant-web" }, auth: { sub: "user-1" } });
-      assert.equal(requestTenant(req), "tenant-web");
-    });
+    const req = makeReq({ tenant: { tenantId: "tenant-web" }, auth: { sub: "user-1" } });
+    assert.equal(requestTenant(req), "tenant-web");
     assert.equal(store.calls.length, 0, "req.tenant wird direkt genutzt, kein zweiter Lookup (R7)");
   });
 
   test(`[${label}] Web-Session mit leerer tenantId -> REJECT (fail-closed)`, () => {
     const store = makeStore();
     const { requestTenant } = build(store);
-    withMultiTenant(true, () => {
-      assert.equal(requestTenant(makeReq({ tenant: { tenantId: "" } })), canonical.TENANT_REJECT);
-    });
+    assert.equal(requestTenant(makeReq({ tenant: { tenantId: "" } })), canonical.TENANT_REJECT);
   });
 
   test(`[${label}] requireTenant: REJECT -> 403 + null, gueltig -> tenant`, () => {
     const store = makeStore({ "user-1": "tenant-a" });
     const { requireTenant } = build(store);
-    withMultiTenant(true, () => {
-      // REJECT-Pfad: 403 gesendet, Rueckgabe null.
-      let status;
-      let body;
-      const res = {
-        status(code) {
-          status = code;
-          return this;
-        },
-        json(payload) {
-          body = payload;
-          return this;
-        },
-      };
-      const rejected = requireTenant(makeReq({ auth: { sub: "ghost" } }), res);
-      assert.equal(rejected, null);
-      assert.equal(status, 403);
-      assert.ok(body && typeof body.error === "string", "403 traegt eine error-Nachricht");
+    // REJECT-Pfad: 403 gesendet, Rueckgabe null.
+    let status;
+    let body;
+    const res = {
+      status(code) {
+        status = code;
+        return this;
+      },
+      json(payload) {
+        body = payload;
+        return this;
+      },
+    };
+    const rejected = requireTenant(makeReq({ auth: { sub: "ghost" } }), res);
+    assert.equal(rejected, null);
+    assert.equal(status, 403);
+    assert.ok(body && typeof body.error === "string", "403 traegt eine error-Nachricht");
 
-      // Gueltiger Pfad: tenant zurueck, kein res-Zugriff.
-      const ok = requireTenant(makeReq({ auth: { sub: "user-1" } }), null);
-      assert.equal(ok, "tenant-a");
-    });
+    // Gueltiger Pfad: tenant zurueck, kein res-Zugriff.
+    const ok = requireTenant(makeReq({ auth: { sub: "user-1" } }), null);
+    assert.equal(ok, "tenant-a");
   });
 }
 

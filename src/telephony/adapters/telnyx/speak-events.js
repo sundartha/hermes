@@ -1,6 +1,6 @@
 // Telnyx-Adapter: klassifiziert Telnyx-"Speak"-Command-Events zu einem NEUTRALEN
-// Ergebnis. Symmetrisch zu media.js (parseMediaFrame): eine reine Funktion, die
-// Provider-Events auf neutrale Typen abbildet, die der Core (server.js) konsumiert.
+// Ergebnis. Eine reine Funktion, die Provider-Events auf neutrale Typen abbildet,
+// die der Core (server.js) konsumiert.
 //
 // HINTERGRUND: Das server-seitige TTS laeuft als TeXML-<Say voice="Azure...Neural">
 // (render.js) ueber Telnyx' Azure-NTTS-Backend. Dieses Backend faellt SPORADISCH aus
@@ -36,9 +36,7 @@ const REASON_UNKNOWN = "unknown";
 
 // Telnyx-v2 wrappt Events in {data:{event_type,payload}}; manche Pfade liefern flach.
 // Hebt die Huelle ab und liefert das Event-Objekt oder null (kein Event erkennbar).
-// Exportiert (P4.5, G5): call-control-events.js nutzt dieselbe Huellen-Abhebung
-// statt sie zu duplizieren (EINE Quelle fuer das Telnyx-v2-Envelope-Format).
-export function eventEnvelope(body) {
+function eventEnvelope(body) {
   if (!body || typeof body !== "object") return null;
   const ev = body.data && typeof body.data === "object" ? body.data : body;
   return ev.event_type ? ev : null;

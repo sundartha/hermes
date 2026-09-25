@@ -97,6 +97,18 @@ test("(P9-3) leere abrufbare Menge bei nicht-leerer Kandidatenmenge -> Bilanz tr
     line,
     "[cost-truing] sweep trigger=manual kandidaten=3 gemessen=0 unvollstaendig=0 " +
       "ohne_schaetzung=0 unbestimmt=0 uebersprungen=3 " +
-      "anfragen=0 seiten=0 pool=0 vollstaendig=true",
+      // KV2-1 (Kriterium (d)): kanaele= HINTER den Bestandsfeldern - kein Ziel gesetzt
+      // (BASE_ENV/fakeConfig-Default) -> kanaele=keine. KV2-6: buch=/herzschlag=/
+      // nie_beendet=/profillos= wachsen HINTER kanaele= - die 3 Kandidaten liegen
+      // ausserhalb JEDES Fensters (makeDueOutboundCall-Default endedMinutesAgo=200min,
+      // < der Karenz dieser Config) -> buch=keine herzschlag=keine.
+      // KV2-7: erschoepft=/abschluesse= HINTER profillos=. Keine Antwort => keine der
+      // drei Fixturen ist messbar (uebersprungen, keine Leg-Referenz) -> erschoepft=0
+      // (der Zaehler zaehlt nur nicht mehr versuchbare, nicht uebersprungene Calls); sie
+      // tragen kein costProfile UND schliessen in diesem Sweep nicht -> abschluesse=keine.
+      // KV2-9: el_reifung=/el_abweichung=/el_uebrig= HINTER abschluesse= - kein
+      // elKostenRead injiziert -> vollstaendiges No-op.
+      "anfragen=0 seiten=0 pool=0 vollstaendig=true kanaele=keine buch=keine herzschlag=keine " +
+      "nie_beendet=0 profillos=0 erschoepft=0 abschluesse=keine el_reifung=keine el_abweichung=0 el_uebrig=0",
   );
 });

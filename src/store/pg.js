@@ -41,12 +41,10 @@ export { BOOTSTRAP_TENANT_ID };
 // KEINE DB-Verbindung hier konstruiert (DIP): Pool/Adapter wird injiziert. init()
 // muss vor dem ersten Zugriff erwartet werden (Migration + Hydrierung).
 
-// KS-P1b: die zwei Suchachsen des Re-Attach als vollstaendige, parametrisierte Queries -
-// EINE Scan-Implementierung (attachActiveCallRow) bedient beide (G5). Bewusst zwei fertige
-// Statements statt eines interpolierten WHERE-Fragments: so gibt es keinen Pfad, auf dem je
-// ein Aufrufer-Wert in den SQL-Text geraten koennte.
+// Vollstaendige, parametrisierte Query fuer den Re-Attach (attachActiveCallRow). Bewusst
+// ein fertiges Statement statt eines interpolierten WHERE-Fragments: so gibt es keinen
+// Pfad, auf dem je ein Aufrufer-Wert in den SQL-Text geraten koennte.
 const ACTIVE_CALL_BY_ID_SQL = `SELECT * FROM call WHERE id = $1 AND status = $2`;
-const ACTIVE_CALL_BY_CONTROL_ID_SQL = `SELECT * FROM call WHERE call_control_id = $1 AND status = $2`;
 
 export function makePgStore(runner) {
   let state = null;
@@ -210,9 +208,6 @@ export function makePgStore(runner) {
       return call;
     },
     getCall: (id) => ops.getCall(requireState(), id),
-    // Brain-Shim-Korrelation (E1): Spiegel-Scan wie getCall (D-A), kein RLS/withClient-
-    // Sonderpfad. Deploy-Grenze identisch zu getCall (Spiegel ist nach hydrate() warm).
-    getCallByControlId: (ccid) => ops.getCallByControlId(requireState(), ccid),
     // F12 (A6): einen dem Spiegel unbekannten, aber in der DB aktiven Call RLS-sauber
     // nachladen. Ein Deploy-/Instanzwechsel legt eine aktive Zeile NACH unserer init()-
     // Hydrierung an -> getCall() findet sie nicht -> der /voice-Webhook legte sonst fail-
@@ -226,26 +221,8 @@ export function makePgStore(runner) {
     // FAIL-SAFE wie ensureTenant: ein DB-Schluckauf wird secret-frei geloggt und als null
     // behandelt -> der Handler legt fail-closed auf, NIE eine Rejection.
     attachActiveCall: (callId) => attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, callId),
-    // KS-P1b: dieselbe RLS-saubere Nachladung ueber die Telnyx-eigene call_control_id -
-    // der Assistant-Shim korreliert ausschliesslich darueber (E1, Anti-Spoofing), er kennt
-    // keine callId. Leere/fehlende ccid -> null OHNE DB-Roundtrip. Das ist eine
-    // Abkuerzung, KEIN eigenes Sicherheitsnetz: `WHERE call_control_id = NULL` trifft in
-    // SQL ohnehin nie eine Zeile, und "" matcht nur eine gleichlautende. Der Riegel spart
-    // den Tenant-Loop-Scan und haelt die Form von getCallByControlId (gleiche Antwort auf
-    // dieselbe leere Eingabe) - gemessen: ohne ihn bleibt das Verhalten identisch.
-    attachActiveCallByControlId: (ccid) =>
-      ccid ? attachActiveCallRow(ACTIVE_CALL_BY_CONTROL_ID_SQL, ccid) : Promise.resolve(null),
     addTranscript(callId, role, text) {
       if (ops.addTranscript(requireState(), callId, role, text)) save();
-    },
-    // GQ-H1-a: verworfene Antwort aus dem Transkript nehmen. Muster identisch zu
-    // addTranscript (changed -> save); flushTranscript raeumt die DB-Zeile mit ab.
-    // LIEFERT den Befund zurueck (Muster json.js, NICHT addTranscript): der Shim verzweigt
-    // darauf, nur eine tatsaechliche Entfernung erzeugt die discarded_answer-Zeile.
-    dropLastAgentTranscript(callId) {
-      const entfernt = ops.dropLastAgentTranscript(requireState(), callId);
-      if (entfernt) save();
-      return entfernt;
     },
     purgeTranscript(callId) {
       if (ops.purgeTranscript(requireState(), callId)) save();
@@ -263,12 +240,17 @@ export function makePgStore(runner) {
       return call;
     },
     // KS-EL1: der Grund, wenn der Anker nicht ermittelbar war - Wrapper-Paritaet zu
-    // json.js (Muster recordElevenlabsConversationId).
+    // json.js (Muster recordElevenlabsConversationId). Rumpf-Ende einzeilig (Muster
+    // markInboxEntry): der ST3-Spread darunter braucht die Zeile, der gepinnte
+    // Zeilenzaehler von makePgStore bleibt dadurch unveraendert (Praezedenz KV2-7).
     recordAnsweredUnclearReason(callId, reason) {
       const { call, changed } = ops.recordAnsweredUnclearReason(requireState(), callId, reason);
-      if (changed) save();
-      return call;
+      if (changed) save(); return call;
     },
+    // ST3 (O3): Zaehlfeld der Stimmen-Detektoren als Spread-Fabrik statt ausgeschriebener
+    // Methode IN makePgStore (Muster kostenAbschlussMutatoren, unten) - haelt dessen
+    // gepinnte Zeilenzahl in eslint-legacy-exceptions.json unveraendert.
+    ...elDetektorMutatoren({ requireState, save }),
     endCallRecord(callId, status = "completed") {
       const { call, changed } = ops.endCallRecord(requireState(), callId, status);
       if (changed) save();
@@ -301,11 +283,17 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // SEC-P1: Ereignis-Anker der Turn-Webhooks - Wrapper-Parity zu json.js. Der Flush
+    // schreibt webhook_anchors (INSERT + ON CONFLICT DO UPDATE SET).
+    recordWebhookAnchors(callId, anchors) {
+      const { call, changed } = ops.recordWebhookAnchors(requireState(), callId, anchors);
+      if (changed) save();
+      return call;
+    },
     // INBOX-P1: Qualifikations-Marker - Wrapper-Parity zu json.js.
     markInboxEntry(callId, qualifies) {
       const { call, changed } = ops.markInboxEntry(requireState(), callId, qualifies);
-      if (changed) save();
-      return call;
+      if (changed) save(); return call;
     },
     // INBOX-P2 (R-3): Wrapper-Parity zu json.js. save() flusht den KOMPLETTEN Spiegel
     // ALLER Tenants in die serialisierte flushChain - ein unbedingtes save() haengte
@@ -332,18 +320,14 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // KV2-7: die zwei Schliessregel-Mutatoren als Spread-Fabrik statt zweier ausgeschriebener
+    // Methoden IN makePgStore - haelt dessen gepinnte Zeilengrenze (eslint-legacy-exceptions.json),
+    // Muster absenderWahrheitMutatoren (OUTBOUND-E5, unten in dieser Datei).
+    ...kostenAbschlussMutatoren({ requireState, save }),
     // CDF1 (Report #2 5.4): persistierter Fehlergrund - Wrapper-Parity zu json.js. Der
     // Flush schreibt failure_reason am call-Record (INSERT + ON CONFLICT DO UPDATE).
     recordFailureReason(callId, reason) {
       const { call, changed } = ops.recordFailureReason(requireState(), callId, reason);
-      if (changed) save();
-      return call;
-    },
-    // AL-P1: Conversation-UUID + Anrufer-Turn-Zaehler - Wrapper-Paritaet zu json.js.
-    // BEIDE saven (anders als countNoSpeechTurn): es gibt Spalten, und der Flush schreibt
-    // sie aus dem Spiegel.
-    recordTelnyxConversationId(callId, conversationId) {
-      const { call, changed } = ops.recordTelnyxConversationId(requireState(), callId, conversationId);
       if (changed) save();
       return call;
     },
@@ -365,6 +349,26 @@ export function makePgStore(runner) {
       const { call, changed } = ops.recordSipCallId(requireState(), callId, sipCallId);
       if (changed) save();
       return call;
+    },
+    // KV2-2: Wrapper-Paritaet zu json.js. Saved aus demselben Grund wie recordSipCallId.
+    recordCostProfile(callId, profil) {
+      const { call, changed } = ops.recordCostProfile(requireState(), callId, profil);
+      if (changed) save();
+      return call;
+    },
+    // IEL-B4a: Brueckenzustand als Spread-Fabrik (Muster absenderWahrheitMutatoren).
+    ...brueckenZustandMutatoren({ requireState, save }),
+    // IEX-A8: Registrierungs-Beleg als Spread-Fabrik (haelt den Zeilen-Pin, s. o.).
+    ...inboundTrunkBelegMutatoren({ requireState, save }),
+    // KV2-3: Kosten-Buch. Wrapper-Paritaet zu json.js - saved nur bei changed (der
+    // terminale No-Op schreibt nichts).
+    recordCallCostEvidence(eingabe) {
+      const { evidence, changed } = ops.recordCallCostEvidence(requireState(), eingabe);
+      if (changed) save();
+      return evidence;
+    },
+    callCostEvidence(callId) {
+      return ops.callCostEvidence(requireState(), callId);
     },
     // OUTBOUND-E5: Absender-Wahrheits-Mutatoren als Spread (haelt den Zeilen-Pin, s.o.).
     ...absenderWahrheitMutatoren({ requireState, save }),
@@ -415,6 +419,26 @@ export function makePgStore(runner) {
     // Zustellfenster).
     markConsultAnswerDelivered(callId) {
       const result = ops.markConsultAnswerDelivered(requireState(), callId);
+      if (result.changed) save();
+      return result;
+    },
+    // P2 (Stufe 0): saved wie markConsultAnswerDelivered - askDeliveredAt liegt in
+    // derselben consults-Spalte und muss einen Instanzwechsel ueberleben.
+    markConsultAskDelivered(callId, eventId) {
+      const result = ops.markConsultAskDelivered(requireState(), callId, eventId);
+      if (result.changed) save();
+      return result;
+    },
+    // P2 (Stufe 1): saved wie oben - die Quittung ist genauso persistent wie die Zustellung.
+    ackConsult(callId, input) {
+      const result = ops.ackConsult(requireState(), callId, input);
+      if (result.changed) save();
+      return result;
+    },
+    // P2: der gestaffelte Abbruch - Status und Grund in einem Schreibweg, saved wie
+    // advanceInCallConsult (derselbe Zustand, dieselbe Spalte).
+    timeOutStagedConsult(callId, input) {
+      const result = ops.timeOutStagedConsult(requireState(), callId, input);
       if (result.changed) save();
       return result;
     },
@@ -514,7 +538,7 @@ export function makePgStore(runner) {
     liveBudgetExceeded: (tenantId, liveCents, cfg) =>
       ops.liveBudgetExceeded(requireState(), tenantId, liveCents, cfg, new Date().toISOString()),
     // KS-P2/KV-P2: Basis des Live-Terms. Spiegel-Scan wie getCall, kein RLS/withClient-Sonderpfad.
-    // GRENZE (dieselbe wie getCallByControlId): ein Leg, das eine ANDERE Instanz nach unserer
+    // GRENZE (dieselbe wie getCall): ein Leg, das eine ANDERE Instanz nach unserer
     // hydrate() angelegt hat, fehlt im Spiegel und faellt aus der Summe - der Live-Term
     // unterzaehlt dann, er ueberzaehlt nie.
     activeCallsFor: (tenantId) => ops.activeCallsFor(requireState(), tenantId),
@@ -559,6 +583,10 @@ export function makePgStore(runner) {
     tryReserveOutboundBudget: (tenantId, reserveCents, cfg) =>
       ops.tryReserveOutboundBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
     releaseOutboundReserve: (call) => ops.releaseOutboundReserve(requireState(), call),
+    // E3: zweiter Freigabeweg fuer den Fall OHNE Datensatz (Dedup / Wurf vor createCall).
+    // Wrapper-Parity zu json.js.
+    releaseOutboundReserveCents: (tenantId, cents) =>
+      ops.releaseOutboundReserveCents(requireState(), tenantId, cents),
     reservationOf: (tenantId) => ops.reservationFor(requireState(), tenantId),
     // Plattform-Fruehwarnung (Budget-Achsen P6): Wrapper-Parity zu json.js. Reine
     // In-Memory-Mutation auf dem Spiegel (kein save/Flush): platformSpendWarnedMonth wird
@@ -686,6 +714,8 @@ export function makePgStore(runner) {
 
     // ---- Billing-Hold (GAP-03, O2): Wrapper-Parity zu json.js ----
     findTenantByCustomer: (customerId) => ops.findTenantByCustomer(requireState(), customerId),
+    // FW1-A: reine Query (kein save), Wrapper-Parity zu json.js.
+    tenantExists: (tenantId) => ops.tenantExists(requireState(), tenantId),
     setBillingHold(tenantId, patch) {
       ops.setBillingHold(requireState(), tenantId, patch);
       save();
@@ -1060,7 +1090,7 @@ async function hydrateSubIndex(client, state) {
 // tenant-Tabelle hat keine RLS.
 const TENANT_COLUMNS =
   "id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, " +
-  "stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, " +
+  "stripe_payment_method_id, stripe_payment_method_type, stripe_subscription_id, stripe_plan_slug, " +
   "stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, " +
   "country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, " +
   "suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, " +
@@ -1086,6 +1116,8 @@ function rowToTenant(r) {
   if (r.kyc_level != null) tenant.kycLevel = r.kyc_level;
   if (r.stripe_customer_id != null) tenant.stripeCustomerId = r.stripe_customer_id;
   if (r.stripe_payment_method_id != null) tenant.stripePaymentMethodId = r.stripe_payment_method_id;
+  if (r.stripe_payment_method_type != null)
+    tenant.stripePaymentMethodType = r.stripe_payment_method_type;
   if (r.stripe_subscription_id != null) tenant.stripeSubscriptionId = r.stripe_subscription_id;
   if (r.stripe_plan_slug != null) tenant.stripePlanSlug = r.stripe_plan_slug;
   // BIGINT kommt als String aus pg -> zurueck zur Zahl (Unix-Sekunden, kein Float-Geld).
@@ -1144,6 +1176,42 @@ async function hydrateTenants(client) {
   return rows.map(rowToTenant);
 }
 
+// call_cost_evidence-Hydrierung (KV2-3): tenant-scoped, laeuft unter der RLS-GUC des
+// Tenants. BIGINT kommt als String vom Treiber -> Number, NULL bleibt null ("0 statt
+// unbekannt" waere eine erfundene Messung, Muster cost_micro_cents). detail ist JSONB und
+// kommt bereits geparst (Muster call.context/result).
+async function hydrateCallCostEvidence(client, tenantId) {
+  const rows = (
+    await client.query(
+      `SELECT id, tenant_id, call_id, traeger, reife, betrag_mikro_cents, waehrung, quelle,
+              beleg_ref, versuche, gemessen_at, abstand_zum_gespraechsende_s, detail,
+              nachreifbar
+         FROM call_cost_evidence WHERE tenant_id = $1 ORDER BY id ASC`,
+      [tenantId],
+    )
+  ).rows;
+  return rows.map((row) => ({
+    id: row.id,
+    tenantId: row.tenant_id,
+    callId: row.call_id,
+    traeger: row.traeger,
+    reife: row.reife,
+    betragMikroCents:
+      row.betrag_mikro_cents === null || row.betrag_mikro_cents === undefined
+        ? null
+        : Number(row.betrag_mikro_cents),
+    waehrung: row.waehrung ?? null,
+    quelle: row.quelle ?? null,
+    belegRef: row.beleg_ref ?? null,
+    versuche: Number(row.versuche),
+    gemessenAt: row.gemessen_at ?? null,
+    abstandZumGespraechsendeS: row.abstand_zum_gespraechsende_s ?? null,
+    detail: row.detail ?? null,
+    // NOT NULL in der DB -> immer ein Boolean, nie null (kein ?? -Fallback noetig).
+    nachreifbar: row.nachreifbar,
+  }));
+}
+
 // Liest die tenant-scoped Zeilen EINES Tenants (RLS-GUC ist gesetzt) und fuellt sie
 // in den Spiegel: settings/calendar/usage in den Map-Bucket dieses Tenants, calls/
 // actionItems/notifications/numbers an die globalen Listen ANGEHAENGT (nicht
@@ -1180,7 +1248,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   ).rows;
   const numberRows = (
     await client.query(
-      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id FROM number WHERE tenant_id = $1`,
+      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp FROM number WHERE tenant_id = $1`,
       [tenantId],
     )
   ).rows;
@@ -1256,6 +1324,7 @@ async function hydrateTenantInto(client, state, tenantId) {
       stripeMeterSent: r.stripe_meter_sent,
     })),
   );
+  state.callCostEvidence.push(...(await hydrateCallCostEvidence(client, tenantId)));
 }
 
 function groupTranscripts(segRows) {
@@ -1333,6 +1402,17 @@ function absenderWahrheitWerte(call) {
   return [call.fromActualE164 ?? null, call.fromSource ?? null, call.fromRegistrationSource ?? null];
 }
 
+// ST3 (O3): Zaehlfeld der Stimmen-Detektoren als EIN JSONB (Muster lookup_log). Spread-
+// Helfer statt direktem ?? in rowToCall/callRowValues haelt deren gepinnte Komplexitaet
+// flach (Muster absenderWahrheitFelder darueber). JSONB kommt vom Treiber bereits
+// geparst; NULL -> null (json-Parity zu createCall, das das Feld nicht setzt).
+function elDetektorFelder(zeile) {
+  return { elDetectorCounts: zeile.el_detector_counts ?? null };
+}
+function elDetektorWerte(call) {
+  return [call.elDetectorCounts ? JSON.stringify(call.elDetectorCounts) : null];
+}
+
 // OUTBOUND-E5: die zwei Schreibweg-Mutatoren als Spread-Fabrik statt zweier ausgeschriebener
 // Methoden IN makePgStore - haelt dessen gepinnte Zeilengrenze (eslint-legacy-exceptions.json),
 // aus demselben Grund wie absenderWahrheitFelder/-Werte oben. requireState/save reisen herein
@@ -1348,6 +1428,101 @@ function absenderWahrheitMutatoren({ requireState, save }) {
       const { call, changed } = ops.recordActualSender(requireState(), callId, herkunft);
       if (changed) save();
       return call;
+    },
+  };
+}
+
+// KV2-7: dieselbe Spread-Fabrik-Technik (s. absenderWahrheitMutatoren oben) fuer die zwei
+// Schliessregel-Mutatoren - haelt makePgStores gepinnte Zeilengrenze.
+function kostenAbschlussMutatoren({ requireState, save }) {
+  return {
+    schliesseKostenAbgleich(callId, eingabe) {
+      const { call, changed } = ops.schliesseKostenAbgleich(requireState(), callId, eingabe);
+      if (changed) save();
+      return call;
+    },
+    oeffneKostenAbgleichErneut(callId) {
+      const { call, changed } = ops.oeffneKostenAbgleichErneut(requireState(), callId);
+      if (changed) save();
+      return call;
+    },
+  };
+}
+
+// ST3 (O3): der Zaehlfeld-Mutator der Stimmen-Detektoren - dieselbe Spread-Fabrik wie
+// absenderWahrheitMutatoren/kostenAbschlussMutatoren darueber, Wrapper-Paritaet zu
+// json.js. Saved aus demselben Grund wie die Handles: es gibt eine Spalte
+// (el_detector_counts), und der Flush schreibt sie aus dem Spiegel.
+function elDetektorMutatoren({ requireState, save }) {
+  return {
+    recordElDetectorCounts(callId, zaehlung) {
+      const { call, changed } = ops.recordElDetectorCounts(requireState(), callId, zaehlung);
+      if (changed) save();
+      return call;
+    },
+  };
+}
+
+// IEL-B4a: die drei Bruecken-Marker als EIN benanntes Konzept (Muster absenderWahrheitFelder/
+// -Werte/-Mutatoren) - Spread statt direkter ?? in rowToCall/callRowValues haelt deren
+// gepinnte Komplexitaet (eslint-legacy-exceptions.json). TIMESTAMPTZ kommt vom Treiber als
+// Date: zurueck in DENSELBEN ISO-String, den json speichert (Muster boundAt der
+// Nummern-Zuordnung) - sonst Shape-Drift und Millisekundenverlust bei Date.parse(String(date)).
+function isoZeitpunktOderNull(wert) {
+  return wert instanceof Date ? wert.toISOString() : (wert ?? null);
+}
+function brueckenZustandFelder(zeile) {
+  return {
+    elBoundAt: isoZeitpunktOderNull(zeile.el_bound_at),
+    elFallbackAt: isoZeitpunktOderNull(zeile.el_fallback_at),
+    elNachlaufStartedAt: isoZeitpunktOderNull(zeile.el_nachlauf_started_at),
+  };
+}
+function brueckenZustandWerte(call) {
+  return [call.elBoundAt ?? null, call.elFallbackAt ?? null, call.elNachlaufStartedAt ?? null];
+}
+// IEX-A8: Registrierungs-Beleg als EIN benanntes Konzept (Muster brueckenZustandFelder/-Werte). NULL -> Felder
+// ABWESEND (Form wie json, haelt den Golden-Master T-PA6-1). TIMESTAMPTZ -> derselbe ISO-String wie json.
+function inboundTrunkBelegFelder(zeile) {
+  const belegtAt = isoZeitpunktOderNull(zeile.el_inbound_trunk_belegt_at);
+  if (belegtAt === null) return {};
+  return { elInboundTrunkBelegtAt: belegtAt, elInboundTrunkZugangFp: zeile.el_inbound_trunk_zugang_fp ?? null };
+}
+function inboundTrunkBelegWerte(nummer) {
+  return [nummer.elInboundTrunkBelegtAt ?? null, nummer.elInboundTrunkZugangFp ?? null];
+}
+// Save NUR bei changed, Rueckgabe = volles Op-Ergebnis - geteilt von brueckenZustandMutatoren und
+// inboundTrunkBelegMutatoren (G5), Wrapper-Paritaet zu json.js#speichereBeiAenderung.
+function mitSpeichernBeiAenderung(save) {
+  return (ergebnis) => {
+    if (ergebnis.changed) save();
+    return ergebnis;
+  };
+}
+// Wrapper-Paritaet zu json.js; Save nur bei changed, Rueckgabe = volles Op-Ergebnis.
+function brueckenZustandMutatoren({ requireState, save }) {
+  const speichereBeiAenderung = mitSpeichernBeiAenderung(save);
+  return {
+    bindInboundElConversation(callId, bindung) {
+      return speichereBeiAenderung(ops.bindInboundElConversation(requireState(), callId, bindung));
+    },
+    markInboundElFallback(callId, nowIso) {
+      return speichereBeiAenderung(ops.markInboundElFallback(requireState(), callId, nowIso));
+    },
+    markInboundElNachlaufStarted(callId, nowIso) {
+      return speichereBeiAenderung(ops.markInboundElNachlaufStarted(requireState(), callId, nowIso));
+    },
+  };
+}
+// IEX-A8: Spread-Fabrik (Muster brueckenZustandMutatoren) - haelt makePgStores Zeilen-Pin auf +1.
+function inboundTrunkBelegMutatoren({ requireState, save }) {
+  const speichereBeiAenderung = mitSpeichernBeiAenderung(save);
+  return {
+    markNumberElInboundTrunkBelegt(numberId, beleg) {
+      return speichereBeiAenderung(ops.markNumberElInboundTrunkBelegt(requireState(), numberId, beleg));
+    },
+    clearNumberElInboundTrunkBeleg(numberId) {
+      return speichereBeiAenderung(ops.clearNumberElInboundTrunkBeleg(requireState(), numberId));
     },
   };
 }
@@ -1441,6 +1616,10 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // dem Treiber, und ein NULL aus einer alt-migrierten Zeile muss auf false fallen, nie
     // auf true (fail-closed - false heisst Offenlegung).
     calleeIsOwner: r.callee_is_owner === true,
+    // IEP-P6: Inbound-Owner-Markierung hydrieren, aus demselben Grund und mit derselben
+    // strikten === true-Form wie calleeIsOwner darueber (NULL einer alt-migrierten Zeile
+    // faellt auf false = Fremd-Wortlaut, fail-closed).
+    callerIsOwner: r.caller_is_owner === true,
     // INBOX-P1: beide Inbox-Marker hydrieren. NULL -> null (json-Parity).
     inboxEntryAt: r.inbox_entry_at ?? null,
     inboxSeenAt: r.inbox_seen_at ?? null,
@@ -1471,6 +1650,9 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // i8-design-decisions) - die Telefonie-Kosten waeren dem Anruf danach dauerhaft nicht
     // mehr zuzuordnen, weil der Anbieter-Beleg, aus dem er stammt, geloescht ist.
     sipCallId: r.sip_call_id ?? null,
+    // KV2-2: Kostenprofil mit-hydrieren. Ohne diese Zeile ginge es beim Restart verloren
+    // UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
+    costProfile: r.cost_profile ?? null,
     callerTurns: r.caller_turns ?? 0,
     // AL-P11: Ergebnis-Karte mit-hydrieren. Ohne diese Zeile ginge sie beim Restart
     // verloren UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
@@ -1485,7 +1667,17 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // zurueck (Lehre i8-design-decisions) - und der Deckel zaehlte von vorn.
     lookupLog: r.lookup_log ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
+    // SEC-P1: Ereignis-Anker mit-hydrieren. Ohne diese Zeile ginge der Anker beim
+    // Restart verloren UND der naechste Flush ueberschriebe ihn (Lehre
+    // i8-design-decisions) - eine Wiederholung loeste danach wieder eine zweite
+    // Modellrunde aus. JSONB kommt vom Treiber geparst; NULL -> [] (json-Parity zu
+    // createCall). Frisches Array je Zeile, kein geteilter Alias.
+    webhookAnchors: r.webhook_anchors ?? [],
     ...absenderWahrheitFelder(r),
+    // ST3: Detektor-Zaehlfeld mit-hydrieren - ohne diese Zeile ginge es beim Restart
+    // verloren UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
+    ...elDetektorFelder(r),
+    ...brueckenZustandFelder(r),
   };
 }
 
@@ -1624,6 +1816,7 @@ async function flushTenantScope(client, tenantId, state) {
   await flushProvisioningJobs(client, tenantId, state.provisioningJobs);
   await flushTenantBudgets(client, tenantId, state.tenantBudgets);
   await flushUsageEvents(client, tenantId, state.usageEvents);
+  await flushCallCostEvidence(client, tenantId, state.callCostEvidence);
 }
 
 // tenant-Tabelle round-trippen (I8): id/status/owner_name/idp_subject upsert. KEINE
@@ -1639,14 +1832,15 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked, stripe_cancel_at_period_end, number_release_pending, workos_delete_pending, cancellation_mail_pending, cancellation_mail_received_at, newsletter_consent, newsletter_consent_at, newsletter_recipients, newsletter_confirm_mail_log)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_payment_method_type, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked, stripe_cancel_at_period_end, number_release_pending, workos_delete_pending, cancellation_mail_pending, cancellation_mail_received_at, newsletter_consent, newsletter_consent_at, newsletter_recipients, newsletter_confirm_mail_log)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
        ON CONFLICT (id) DO UPDATE SET
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
          idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level,
          stripe_customer_id=EXCLUDED.stripe_customer_id,
          stripe_payment_method_id=EXCLUDED.stripe_payment_method_id,
+         stripe_payment_method_type=EXCLUDED.stripe_payment_method_type,
          stripe_subscription_id=EXCLUDED.stripe_subscription_id,
          stripe_plan_slug=EXCLUDED.stripe_plan_slug,
          stripe_current_period_end=EXCLUDED.stripe_current_period_end,
@@ -1680,6 +1874,7 @@ async function flushTenants(client, tenants) {
         t.kycLevel ?? null,
         t.stripeCustomerId ?? null,
         t.stripePaymentMethodId ?? null,
+        t.stripePaymentMethodType ?? null,
         t.stripeSubscriptionId ?? null,
         t.stripePlanSlug ?? null,
         t.stripeCurrentPeriodEnd ?? null,
@@ -1703,7 +1898,7 @@ async function flushTenants(client, tenants) {
         t.cancellationMailReceivedAt ?? null,
         t.newsletterConsent ?? null,
         t.newsletterConsentAt ?? null,
-        // Newsletter-Zusatzempfaenger ($32-$33): explizites JSON.stringify fuer den
+        // Newsletter-Zusatzempfaenger ($33-$34): explizites JSON.stringify fuer den
         // outbound JSONB-Parameter (der Treiber serialisiert Schreib-Parameter NICHT
         // automatisch, Muster consults auf call). null bleibt null (leere Liste = kein
         // Eintrag, kein leeres "[]" am Bestandstenant).
@@ -1946,6 +2141,30 @@ function callRowValues(call, tenantId) {
     // Wahrheits-Felder, alle IM ON CONFLICT DO UPDATE SET - sie entstehen NACH dem
     // Create (Anrufstart bzw. Ergebnisabruf).
     ...absenderWahrheitWerte(call),
+    // KV2-2 ($61, angehaengt): Kostenprofil. IM ON CONFLICT DO UPDATE SET - es entsteht
+    // NACH dem Create (an der Engine-Weiche), der set-once-Riegel liegt in state-ops,
+    // nicht in SQL (Muster sip_call_id, NICHT callee_is_owner).
+    call.costProfile ?? null,
+    // ST3 ($62, angehaengt): Detektor-Zaehlfeld als JSONB (Muster lookup_log). IM ON
+    // CONFLICT DO UPDATE SET - es entsteht NACH dem Create am Gespraechsende
+    // (persistProviderResult); ohne UPDATE-SET faelle es beim naechsten Flush auf NULL
+    // zurueck (Muster answered_unclear_reason).
+    ...elDetektorWerte(call),
+    // SEC-P1 ($63, ans Ende angehaengt -> keine Umnummerierung): Ereignis-Anker als
+    // JSONB (Muster lookup_log). IM ON CONFLICT DO UPDATE SET - die Anker entstehen
+    // NACH dem Create (je Turn-Webhook); fehlte die Spalte im UPDATE-SET, fiele der
+    // Ringpuffer bei jedem Flush auf den Create-Zustand zurueck und der Neustart-Fall
+    // waere ungeschuetzt. Leere Liste -> NULL (kein "[]" am Bestandsanruf).
+    call.webhookAnchors?.length ? JSON.stringify(call.webhookAnchors) : null,
+    // IEL-B4a ($64-$66, ans Ende angehaengt -> keine Umnummerierung): die drei Bruecken-
+    // Marker. ALLE im ON CONFLICT DO UPDATE SET - sie entstehen NACH dem Create; fehlten
+    // sie dort, fielen sie beim naechsten Flush auf den Create-Zustand (NULL) zurueck
+    // (Lehre i8-design-decisions). Set-once-Riegel liegt in state-ops, nicht in SQL.
+    ...brueckenZustandWerte(call),
+    // IEP-P6 ($67, ans Ende angehaengt -> keine Umnummerierung): Inbound-Owner-Markierung.
+    // Wie callee_is_owner BEWUSST NICHT im ON CONFLICT DO UPDATE SET - sie wird bei
+    // createCall gesetzt und danach nie mehr geaendert (set-once).
+    call.callerIsOwner === true,
   ];
 }
 
@@ -1971,8 +2190,10 @@ async function flushCalls(client, tenantId, calls) {
           callee_confirmed_timezone, callee_confirmed_timezone_origin,
           callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256,
           lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at,
-          from_actual_e164, from_source, from_registration_source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60)
+          from_actual_e164, from_source, from_registration_source, cost_profile,
+          el_detector_counts, webhook_anchors, el_bound_at, el_fallback_at, el_nachlauf_started_at,
+          caller_is_owner)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -2000,7 +2221,12 @@ async function flushCalls(client, tenantId, calls) {
          summary_mail_sent_at=EXCLUDED.summary_mail_sent_at,
          inbox_entry_at=EXCLUDED.inbox_entry_at, inbox_seen_at=EXCLUDED.inbox_seen_at,
          from_actual_e164=EXCLUDED.from_actual_e164, from_source=EXCLUDED.from_source,
-         from_registration_source=EXCLUDED.from_registration_source`,
+         from_registration_source=EXCLUDED.from_registration_source,
+         cost_profile=EXCLUDED.cost_profile,
+         el_detector_counts=EXCLUDED.el_detector_counts,
+         webhook_anchors=EXCLUDED.webhook_anchors,
+         el_bound_at=EXCLUDED.el_bound_at, el_fallback_at=EXCLUDED.el_fallback_at,
+         el_nachlauf_started_at=EXCLUDED.el_nachlauf_started_at`,
       callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);
@@ -2021,13 +2247,10 @@ async function flushTranscript(client, tenantId, call) {
     ]);
     return;
   }
-  // GQ-H1-a: seit dropLastAgentTranscript kann das Transkript auch SCHRUMPFEN - vorher
-  // wuchs es nur, und ein blosser ZEILENZAEHLER genuegte, um die fehlenden anzuhaengen.
-  // Er genuegt nicht mehr: schrumpft der Spiegel und waechst danach wieder, BEVOR ein
-  // Flush laeuft, stimmt die Zahl zufaellig wieder, waehrend Zeile i und Segment i
-  // auseinanderlaufen - die verworfene Antwort bliebe stehen und die echte landete an
-  // ihrer Stelle. Deshalb wird ueber den INHALT abgeglichen: bis zur ersten Abweichung
-  // ist die DB gueltig, ab dort wird sie neu geschrieben. Das heilt auch Altbestand.
+  // Abgleich ueber den INHALT statt ueber einen Zeilenzaehler: richtig fuer jede Mutation
+  // des Spiegels und heilt Altbestand aus der Zeit, als eine verworfene Antwort entfernt
+  // werden konnte (GQ-H1-a, bis IE6-S1). Bis zur ersten Abweichung ist die DB gueltig, ab
+  // dort wird sie neu geschrieben.
   const persisted = (
     await client.query(
       `SELECT id, role, text FROM transcript_segment WHERE call_id=$1 ORDER BY id ASC`,
@@ -2260,6 +2483,7 @@ function rowToNumber(r) {
     language: r.language ?? null,
     // OUTBOUND-E5: Bestands-Nummer ohne Registrierung -> null (kein undefined-Drift).
     providerAgentPhoneNumberId: r.provider_agent_phone_number_id ?? null,
+    ...inboundTrunkBelegFelder(r),
     ...(r.monthly_cost_cents === null || r.monthly_cost_cents === undefined
       ? {} : { monthlyCostCents: r.monthly_cost_cents }),
   };
@@ -2273,15 +2497,17 @@ async function flushNumbers(client, tenantId, numbers) {
     rows: numbers,
     insertRow: (n) =>
       client.query(
-        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          ON CONFLICT (id) DO UPDATE SET
            e164=EXCLUDED.e164, provider=EXCLUDED.provider,
            status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
            payment_intent_id=EXCLUDED.payment_intent_id,
            country=EXCLUDED.country, language=EXCLUDED.language,
            monthly_cost_cents=EXCLUDED.monthly_cost_cents,
-           provider_agent_phone_number_id=EXCLUDED.provider_agent_phone_number_id`,
+           provider_agent_phone_number_id=EXCLUDED.provider_agent_phone_number_id,
+           el_inbound_trunk_belegt_at=EXCLUDED.el_inbound_trunk_belegt_at,
+           el_inbound_trunk_zugang_fp=EXCLUDED.el_inbound_trunk_zugang_fp`,
         [
           n.id,
           tenantId,
@@ -2294,6 +2520,7 @@ async function flushNumbers(client, tenantId, numbers) {
           n.language ?? null,
           n.monthlyCostCents ?? null,
           n.providerAgentPhoneNumberId ?? null,
+          ...inboundTrunkBelegWerte(n),
         ],
       ),
   });
@@ -2373,6 +2600,50 @@ async function flushUsageEvents(client, tenantId, events) {
           e.costMicroCents ?? null,
           e.occurredAt,
           e.stripeMeterSent,
+        ],
+      ),
+  });
+}
+
+// call_cost_evidence-Flush (KV2-3): id-PK-Upsert ueber flushOwnScoped (own-Filter +
+// deleteMissing, siehe dort). Aenderbar sind nur die Felder, die die Reifung fortschreibt;
+// call_id/traeger stehen nach dem Insert fest (der Unique-Index auf (call_id, traeger)
+// haelt das auch in der DB).
+async function flushCallCostEvidence(client, tenantId, zeilen) {
+  await flushOwnScoped({
+    client,
+    tenantId,
+    table: "call_cost_evidence",
+    rows: zeilen,
+    insertRow: (zeile) =>
+      client.query(
+        `INSERT INTO call_cost_evidence
+           (id, tenant_id, call_id, traeger, reife, betrag_mikro_cents, waehrung, quelle,
+            beleg_ref, versuche, gemessen_at, abstand_zum_gespraechsende_s, detail,
+            nachreifbar)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         ON CONFLICT (id) DO UPDATE SET
+           reife=EXCLUDED.reife, betrag_mikro_cents=EXCLUDED.betrag_mikro_cents,
+           waehrung=EXCLUDED.waehrung, quelle=EXCLUDED.quelle,
+           beleg_ref=EXCLUDED.beleg_ref, versuche=EXCLUDED.versuche,
+           gemessen_at=EXCLUDED.gemessen_at,
+           abstand_zum_gespraechsende_s=EXCLUDED.abstand_zum_gespraechsende_s,
+           detail=EXCLUDED.detail, nachreifbar=EXCLUDED.nachreifbar`,
+        [
+          zeile.id,
+          tenantId,
+          zeile.callId,
+          zeile.traeger,
+          zeile.reife,
+          zeile.betragMikroCents ?? null,
+          zeile.waehrung ?? null,
+          zeile.quelle ?? null,
+          zeile.belegRef ?? null,
+          zeile.versuche,
+          zeile.gemessenAt ?? null,
+          zeile.abstandZumGespraechsendeS ?? null,
+          zeile.detail ? JSON.stringify(zeile.detail) : null,
+          zeile.nachreifbar,
         ],
       ),
   });

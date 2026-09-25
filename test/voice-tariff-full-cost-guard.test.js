@@ -1,7 +1,8 @@
 // LCT P4b (Vollkosten-Boot-Guard): sichert die spaetere Owner-Tarifsenkung ab. Muster
 // test/cost-truing-booking-guard.test.js.
 //   (Wahrheitstabelle) Unit: voiceTariffFloorFindings (src/boot-guard.js) - reine
-//       Entscheidung, Konjunktion aus zwei Schwellen.
+//       Entscheidung. Seit KV2-10 feuert sie auf belowFloor ALLEIN (deckungs-
+//       unabhaengig, Kriterium (c)); bis KV2-9 war es die Konjunktion aus zwei Schwellen.
 //   (p)/(q)/(r) Boot-Beweis: Spawn-Tests, Seed-Bauer outboundCallsSeed (G5: geteilt mit
 //       cost-truing-booking-guard.test.js, definiert in test/helpers.js).
 import { test } from "node:test";
@@ -23,14 +24,19 @@ test("U1: belowFloor && thinCoverage (6<10, 20<80) -> genau ein Befund, fatal:fa
   assert.equal(findings[0].code, VOICE_TARIFF_FLOOR_FINDING.BELOW_FULL_COST);
 });
 
-test("U2: nur belowFloor (6<10, Deckung 90 >= 80) -> []", () => {
+test("U2 (KV2-10): nur belowFloor (6<10, Deckung 90 >= 80) -> GENAU EIN Befund (Deckung schweigt den Boden nicht mehr)", () => {
   const findings = voiceTariffFloorFindings({
     domesticTariffCents: 6,
     fullCostFloorCents: 10,
     coveragePercent: 90,
     minCoveragePercent: 80,
   });
-  assert.deepEqual(findings, []);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].fatal, false);
+  assert.equal(findings[0].code, VOICE_TARIFF_FLOOR_FINDING.BELOW_FULL_COST);
+  assert.match(findings[0].message, /Abgleich-Deckung 90%/);
+  assert.match(findings[0].message, /COST_TRUING_MIN_COVERAGE_PERCENT=80%/);
+  assert.match(findings[0].message, /kein\s+Ausloeser mehr/);
 });
 
 test("U3: nur thinCoverage (20>=10, 20<80) -> []", () => {
@@ -63,14 +69,15 @@ test("U5: Gleichstand Tarif==Schwelle (10<10 false) -> [] (strikt <, Gleichstand
   assert.deepEqual(findings, []);
 });
 
-test("U6: Gleichstand Coverage==Schwelle (80<80 false) -> [] (strikt <, Gleichstand ist erfuellt)", () => {
+test("U6 (KV2-10): Gleichstand Coverage==Schwelle bei belowFloor (6<10, 80==80) -> GENAU EIN Befund", () => {
   const findings = voiceTariffFloorFindings({
     domesticTariffCents: 6,
     fullCostFloorCents: 10,
     coveragePercent: 80,
     minCoveragePercent: 80,
   });
-  assert.deepEqual(findings, []);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, VOICE_TARIFF_FLOOR_FINDING.BELOW_FULL_COST);
 });
 
 // ---- Boot-Beweis ----
@@ -95,7 +102,7 @@ test("(p) Tarif 6 < Schwelle 10, Deckung 20% < 80% -> genau EINE WARN-Zeile mit 
   }
 });
 
-test("(q1) Tarif 6 < Schwelle 10, aber Deckung 90% >= 80% -> keine Meldung (offene Flanke, Vorbedingung 1 nicht eigenstaendig ueberwacht)", async () => {
+test("(q1) KV2-10: Tarif 6 < Schwelle 10, Deckung 90% >= 80% -> GENAU EINE WARN (Deckung schweigt den Boden nicht mehr laenger)", async () => {
   const srv = await startServer({
     env: { VOICE_TARIFF_DOMESTIC_CENTS: "6", VOICE_TARIFF_FULL_COST_FLOOR_CENTS: "10" },
     seed: outboundCallsSeed(10, 9, "call_q_"),
@@ -103,7 +110,11 @@ test("(q1) Tarif 6 < Schwelle 10, aber Deckung 90% >= 80% -> keine Meldung (offe
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
-    assert.doesNotMatch(srv.stdout, /Vollkostenschwelle/);
+    const warn = srv.stdout.match(/Vollkostenschwelle VOICE_TARIFF_FULL_COST_FLOOR_CENTS=10/g);
+    assert.equal(warn ? warn.length : 0, 1, `erwartet genau eine WARN-Zeile, Output:\n${srv.stdout}`);
+    assert.match(srv.stdout, /VOICE_TARIFF_DOMESTIC_CENTS=6/);
+    assert.match(srv.stdout, /Abgleich-Deckung 90%/);
+    assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
   } finally {
     await srv.stop();
   }

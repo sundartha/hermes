@@ -1,16 +1,11 @@
-// GQ-H1-a: das Transkript kann seit dropLastAgentTranscript SCHRUMPFEN - vorher wuchs es
-// nur. flushTranscript (store/pg.js) haengt INDEX-BASIERT an (DB-Zeile i == transcript[i])
-// und hat das Schrumpfen nicht gekannt. Ohne das Abraeumen in dieser Phase waere der Fix
-// gegen ein sichtbares Problem ein stiller Datenverlust geworden:
-//
-//   1. die verworfene Antwort bliebe trotz Entfernung in der DB stehen, und
-//   2. danach waere persisted > transcript.length - die Anhaenge-Schleife liefe NIE wieder,
-//      jedes weitere Segment dieses Calls ginge still verloren.
-//
-// Punkt 2 ist der gefaehrlichere: er trifft nicht die verworfene Antwort, sondern alles,
-// was danach im Gespraech noch gesagt wird. Deshalb ein eigener Test gegen echtes Postgres
-// (pglite, kein Netz) MIT Re-Hydrierung - nur so ist die Persistenz belegt und nicht der
-// In-Memory-Spiegel.
+// GQ-H1-a: der pg-Flush gleicht ein geschrumpftes Transkript ueber den INHALT ab, nicht
+// ueber einen Zeilenzaehler - flushTranscript (store/pg.js) haengt sonst INDEX-BASIERT an
+// (DB-Zeile i == transcript[i]) und kennt kein Schrumpfen des Spiegels. Bis IE6-S1 konnte
+// der Telnyx-Shim eine verworfene Antwort ueber dropLastAgentTranscript entfernen; die
+// Naht selbst (Inhalts-Abgleich statt Zeilenzaehler) bleibt als Regressionsschutz stehen -
+// ein KUENFTIGER Schreiber, der den Spiegel mutiert, darf sich auf sie verlassen. Test
+// gegen echtes Postgres (pglite, kein Netz) MIT Re-Hydrierung - nur so ist die Persistenz
+// belegt und nicht der In-Memory-Spiegel.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore } from "../src/store/pg.js";
@@ -37,11 +32,9 @@ function seedCall(store) {
 }
 
 // save() ist fire-and-forget UND wird zusammengefasst: ohne ein erzwungenes Flush zwischen
-// Schreiben und Verwerfen erreicht der Zwischenstand die DB nie, und der Test misst den
-// Defekt nicht (er war so in beiden Faellen gruen). Live liegen zwischen der geschriebenen
-// Antwort und ihrem Verwerfen Sekunden und mindestens ein Flush - genau das stellt
-// persistiere() her.
-// Erzwingt den Flush-Zustand, den es live zwischen zwei Shim-Requests gibt.
+// Schreiben und Schrumpfen erreicht der Zwischenstand die DB nie, und der Test misst den
+// Defekt nicht (er war so in beiden Faellen gruen). Erzwingt den Flush-Zustand, den es
+// live zwischen zwei Schreibvorgaengen desselben Calls gibt.
 async function persistiere(store) {
   await store.save();
 }
@@ -55,28 +48,35 @@ async function transcriptAusDb(store, db, callId) {
   return rows.rows.map((r) => `${r.role}:${r.text}`);
 }
 
-test("GQ-H1-PG-1: die entfernte agent-Zeile verschwindet auch aus der DB", async () => {
+// Testlokaler Ersatz fuer den entfernten dropLastAgentTranscript-Schreibweg: entfernt die
+// letzte Zeile direkt am Spiegel (Muster GQ-H1-Regressionstest, s. Modulkopf) - misst NUR
+// das Schrumpfen-Verhalten des Flushs, nicht mehr einen Produktions-Schreibweg.
+function schrumpfeSpiegel(store, callId) {
+  store.getCall(callId).transcript.pop();
+}
+
+test("GQ-H1-PG-1: eine am Spiegel entfernte Zeile verschwindet auch aus der DB", async () => {
   const { store, db } = await makePgTestStore();
   const call = seedCall(store);
   store.addTranscript(call.id, "caller", "Was wuerde ich das wissen?");
   store.addTranscript(call.id, "agent", "nie gesprochen");
   await persistiere(store); // die Antwort steht jetzt WIRKLICH in der DB
 
-  store.dropLastAgentTranscript(call.id);
+  schrumpfeSpiegel(store, call.id);
 
   assert.deepEqual(await transcriptAusDb(store, db, call.id), ["caller:Was wuerde ich das wissen?"]);
 });
 
-test("GQ-H1-PG-2: nach einer Entfernung landen FOLGENDE Segmente weiterhin in der DB", async () => {
-  // Der stille Datenverlust: ohne das Abraeumen bliebe persisted (2) > length (1), die
-  // Anhaenge-Schleife liefe nie wieder, und alles Weitere dieses Gespraechs waere nur noch
-  // im Speicher - bis zum naechsten Deploy.
+test("GQ-H1-PG-2: nach einem Schrumpfen landen FOLGENDE Segmente weiterhin in der DB", async () => {
+  // Der stille Datenverlust: ohne den Inhalts-Abgleich bliebe persisted (2) > length (1),
+  // die Anhaenge-Schleife liefe nie wieder, und alles Weitere dieses Gespraechs waere nur
+  // noch im Speicher - bis zum naechsten Deploy.
   const { store, db } = await makePgTestStore();
   const call = seedCall(store);
   store.addTranscript(call.id, "caller", "Was wuerde ich das wissen?");
   store.addTranscript(call.id, "agent", "nie gesprochen");
   await persistiere(store);
-  store.dropLastAgentTranscript(call.id);
+  schrumpfeSpiegel(store, call.id);
 
   store.addTranscript(call.id, "caller", "Was wuerde ich das wissen? Das musst Du wissen.");
   store.addTranscript(call.id, "agent", "die echte Antwort");
@@ -94,7 +94,7 @@ test("GQ-H1-PG-3: der Stand ueberlebt die Re-Hydrierung (Persistenz, nicht Spieg
   store.addTranscript(call.id, "caller", "Fragment");
   store.addTranscript(call.id, "agent", "nie gesprochen");
   await persistiere(store);
-  store.dropLastAgentTranscript(call.id);
+  schrumpfeSpiegel(store, call.id);
   store.addTranscript(call.id, "agent", "die echte Antwort");
 
   await store.save();
@@ -105,33 +105,6 @@ test("GQ-H1-PG-3: der Stand ueberlebt die Re-Hydrierung (Persistenz, nicht Spieg
   );
 });
 
-test("GQ-H1-PG-4: dropLastAgentTranscript ruehrt eine abschliessende caller-Zeile nicht an", async () => {
-  // Fail-safe-Richtung (G3/T5): lieber eine Zeile zu viel im Transkript als eine echte,
-  // gesprochene Aeusserung geloescht.
-  const { store, db } = await makePgTestStore();
-  const call = seedCall(store);
-  store.addTranscript(call.id, "agent", "gesprochen");
-  store.addTranscript(call.id, "caller", "und die Gegenstelle antwortet");
-
-  store.dropLastAgentTranscript(call.id);
-
-  assert.deepEqual(await transcriptAusDb(store, db, call.id), [
-    "agent:gesprochen",
-    "caller:und die Gegenstelle antwortet",
-  ]);
-});
-
-test("GQ-H1-PG-5: leeres Transkript und unbekannter Call bleiben folgenlos", async () => {
-  const { store, db } = await makePgTestStore();
-  const call = seedCall(store);
-
-  store.dropLastAgentTranscript(call.id);
-  store.dropLastAgentTranscript("call_gibtsnicht");
-
-  assert.deepEqual(await transcriptAusDb(store, db, call.id), []);
-  assert.deepEqual(store.getCall(call.id).transcript, []);
-});
-
 test("GQ-H1-PG-6: die Entfernung trifft NUR den eigenen Call", async () => {
   const { store, db } = await makePgTestStore();
   const einer = seedCall(store);
@@ -140,35 +113,8 @@ test("GQ-H1-PG-6: die Entfernung trifft NUR den eigenen Call", async () => {
   store.addTranscript(anderer.id, "agent", "fremde Antwort");
   await persistiere(store);
 
-  store.dropLastAgentTranscript(einer.id);
+  schrumpfeSpiegel(store, einer.id);
 
   assert.deepEqual(await transcriptAusDb(store, db, einer.id), []);
   assert.deepEqual(await transcriptAusDb(store, db, anderer.id), ["agent:fremde Antwort"]);
-});
-
-// Gegenprobe zur Fassade (Muster der Re-Export-Kommentare in src/store.js): das json-
-// Backend muss dieselbe Operation anbieten, sonst wirft der Shim je nach STORE_BACKEND.
-test("GQ-H1-PG-7: beide Backends bieten dropLastAgentTranscript an", async () => {
-  const { store } = await makePgTestStore();
-  const json = await import("../src/store/json.js");
-  assert.equal(typeof store.dropLastAgentTranscript, "function");
-  assert.equal(typeof json.dropLastAgentTranscript, "function");
-});
-
-test("GQ-H1-PG-8: der ECHTE Store meldet zurueck, OB er etwas entfernt hat", async () => {
-  // Live am Testanruf call_mshb9v7btbsp aufgefallen: die Entfernung lief, aber KEINE
-  // discarded_answer-Zeile stand im Log. Der Wrapper folgte dem fire-and-forget-Muster von
-  // addTranscript und lieferte undefined - der Shim verzweigt aber darauf. Die Repro-Tests
-  // haben es nicht gefangen, weil ihr fakeStore ein Boolean liefert: DER FAKE KONNTE MEHR
-  // ALS DER ECHTE STORE. Deshalb steht diese Zusicherung hier, am echten Backend.
-  const { store } = await makePgTestStore();
-  const call = seedCall(store);
-
-  assert.equal(store.dropLastAgentTranscript(call.id), false, "leeres Transkript");
-
-  store.addTranscript(call.id, "caller", "Fragment");
-  assert.equal(store.dropLastAgentTranscript(call.id), false, "caller-Zeile am Ende");
-
-  store.addTranscript(call.id, "agent", "nie gesprochen");
-  assert.equal(store.dropLastAgentTranscript(call.id), true, "agent-Zeile am Ende");
 });

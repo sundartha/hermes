@@ -18,14 +18,18 @@
 //     eigener Stripe-Endpunkt fuer "kuendigen"; nicht zu verwechseln mit cancel oben, das
 //     storniert eine PaymentIntent-Reserve, kein Abo)
 import { config } from "../config.js";
-import { paymentMethodIdOf, periodFieldsOf } from "./webhook.js"; // G5: EINE Normalisierung (pm + Perioden)
+// G5: EINE Normalisierung (pm-Id, pm-Typ, Perioden)
+import { paymentMethodIdOf, paymentMethodTypeOf, periodFieldsOf } from "./webhook.js";
 import { CustomerMissingError, PaymentAuthenticationRequiredError } from "./errors.js";
+import { declineOf, declineDetail, attachProviderDecline } from "./decline.js"; // GP-P1: EINE Quelle des Ablehnungsgrunds
 
 const PAYMENT_INTENTS_PATH = "/v1/payment_intents";
 const METER_EVENTS_PATH = "/v1/billing/meter_events";
 const CUSTOMERS_PATH = "/v1/customers";
 const CHECKOUT_SESSIONS_PATH = "/v1/checkout/sessions";
 const SUBSCRIPTIONS_PATH = "/v1/subscriptions"; // W4: monatliches Recurring
+const PAYMENT_METHODS_PATH = "/v1/payment_methods"; // GP-P2: rein lesend, kein Geld
+const PRICES_PATH = "/v1/prices"; // GP-P6: rein lesend, kein Geld
 const CHECKOUT_SETUP_MODE = "setup"; // Karte speichern OHNE Abbuchung (kein Magic-String)
 const CHECKOUT_SUBSCRIPTION_MODE = "subscription"; // Karte + Abo in EINEM gehosteten Schritt (kein Magic-String)
 // GAP-05 (Sicherungs-Achse): Stripe sammelt im subscription-Mode bei einem Rechnungsbetrag
@@ -137,8 +141,11 @@ async function readErrorBody(res) {
 // Klassifikation nach AUFRUFER-Sicht (P9): der Stripe-Fehlercode entscheidet ueber den
 // Port-Fehlertyp, nicht die technische Herkunft. Erwartet den GEPARSTEN Fehlerkoerper -
 // dieselbe Form wie isAlreadyCapturedError (G11). Kennt der Adapter den Fall nicht, bleibt
-// es der generische Error. Die Message ist in allen drei Zweigen dieselbe, damit sich der
-// Log-Output nicht nach Fehlertyp veraendert.
+// es der generische Error. Alle drei Zweige bekommen DIESELBE, bereits fertige Meldung
+// uebergeben - diese Funktion baut keinen Text. Seit GP-P1 traegt diese Meldung den
+// Ablehnungsgrund als Enum-Anhang; der Log-Output unterscheidet sich also sehr wohl nach
+// GRUND (das ist der Zweck). Er ist trotzdem KEIN Steuerkanal: wer den Grund auswerten
+// will, liest err.providerDecline (Waechter in test/gp-p1-ablehnungsgrund.test.js).
 function billingErrorFor(errorBody, message) {
   const err = (errorBody && errorBody.error) || {};
   // PAY-19: die Bank verlangt 3-D Secure. Die Karte ist gueltig - ein Retry derselben
@@ -153,22 +160,39 @@ function billingErrorFor(errorBody, message) {
   return new Error(message);
 }
 
+// GP-P1: der Bauplatz beider klassifizierenden Stufen - EINE Stelle, an der der
+// Ablehnungsgrund erhoben, angehaengt und ans Fehlerobjekt geheftet wird (G5). `detail`
+// ist der zusaetzliche Diagnose-Text der jeweiligen Stufe: Stufe 2 gibt keinen, Stufe 3
+// den Provider-Rohtext. Der Enum-Anhang steht VOR dem Rohtext, damit der Grund auch in
+// einer abgeschnittenen Log-Zeile noch lesbar ist. EIN Objekt-Argument (F1).
+function classifiedError({ body, op, status, detail = "" }) {
+  const decline = declineOf(body);
+  const nachtrag = [declineDetail(decline), detail].filter(Boolean).join(" ");
+  return attachProviderDecline(billingErrorFor(body, failureMessage(op, status, nachtrag)), decline);
+}
+
 // Stufe 2: wie assertOk, aber der Stripe-Fehlercode bestimmt den Port-Fehlertyp. Der
-// Provider-Rohkoerper bleibt AUSSEN VOR - nur Code/Typ werden uebernommen (Regel 4).
+// Provider-Rohkoerper bleibt AUSSEN VOR; uebernommen wird GENAU das Enum-Trio
+// code/decline_code/type. Regel 4 schuetzt Secrets, und die liegen ausschliesslich im
+// Request-Header (s. authHeaders) - der Grund, den Grund wegzuwerfen, war nie Regel 4,
+// sondern die Sorge um Kundendaten im Koerper. Die trifft die verschachtelten Objekte
+// (payment_method/billing_details), nicht die drei Enums (GP-P1).
 // Fuer Geld-Calls, deren Aufrufer den Erholungspfad unterscheiden koennen muss.
 async function assertOkClassified(res, op) {
   if (res.ok) return;
   const { body } = await readErrorBody(res);
-  throw billingErrorFor(body, failureMessage(op, res.status));
+  throw classifiedError({ body, op, status: res.status });
 }
 
-// Stufe 3: wie assertOkClassified, haengt zusaetzlich den Provider-Rohtext an die Diagnose
-// (Bestand der Checkout-/Subscription-Calls; der Body enthaelt keine Secrets - sk_/Bearer
-// liegen nur im Request-Header). Body nicht lesbar -> nur Status melden (wie assertOk).
+// Stufe 3: wie assertOkClassified, haengt zusaetzlich den Provider-Rohtext an die Diagnose.
+// Verbliebene Aufrufer sind die beiden Checkout-SESSION-Aufbauten: dort ist noch keine
+// Zahlungsmethode am Vorgang, der Fehlerkoerper traegt also keine Kundendaten. Der
+// Abo-Aufbau (createSubscription) hat diese Stufe mit GP-P1 verlassen - dort lagen sie
+// (Vorfall 11.09.2026). Body nicht lesbar -> nur Status melden (wie assertOk).
 async function assertOkWithDetail(res, op) {
   if (res.ok) return;
   const { text, body } = await readErrorBody(res);
-  throw billingErrorFor(body, failureMessage(op, res.status, text));
+  throw classifiedError({ body, op, status: res.status, detail: text });
 }
 
 const url = (path) => config.billing.stripeApiBase + path;
@@ -285,18 +309,32 @@ export const stripeBilling = {
   // (setup_intent expandiert). Fehlt das payment_method -> klarer Fehler (Karte
   // nicht gespeichert), KEIN stilles null (G26: kein null ungeprueft weiterreichen).
   async getCheckoutSessionResult(sessionId) {
-    const res = await fetch(`${url(CHECKOUT_SESSIONS_PATH)}/${sessionId}?expand[]=setup_intent`, {
+    // GP-P2: der Expand ist um eine Ebene vertieft (setup_intent.payment_method), sonst
+    // kommt die Zahlungsmethode als blosse String-Id und der Typ existiert in der Antwort
+    // gar nicht (Pre-Mortem 2: das Feld bliebe in Produktion dauerhaft null). Damit ist
+    // payment_method jetzt ein OBJEKT - die Id MUSS ueber paymentMethodIdOf laufen, das
+    // beide Formen kennt (String wie Objekt); die alte Direktlesung haette ein Stripe-
+    // Objekt als paymentMethodId in die Datenbank geschrieben.
+    const expand = "expand[]=setup_intent&expand[]=setup_intent.payment_method";
+    const res = await fetch(`${url(CHECKOUT_SESSIONS_PATH)}/${sessionId}?${expand}`, {
       method: "GET",
       headers: authHeaders(),
     });
     assertOk(res, "getCheckoutSessionResult");
     const json = await res.json().catch(() => ({}));
-    const paymentMethodId = json.setup_intent && json.setup_intent.payment_method;
+    const paymentMethod = json.setup_intent && json.setup_intent.payment_method;
+    const paymentMethodId = paymentMethodIdOf(paymentMethod);
     if (!paymentMethodId)
       throw new Error(
         "Stripe getCheckoutSessionResult: kein payment_method (Karte nicht gespeichert)",
       );
-    return { customerId: json.customer, paymentMethodId };
+    // Typ fehlt (unexpandierte Altform) -> null, KEIN Wurf: ob das reicht, entscheidet
+    // das Eignungs-Gate, nicht der Adapter.
+    return {
+      customerId: json.customer,
+      paymentMethodId,
+      paymentMethodType: paymentMethodTypeOf(paymentMethod),
+    };
   },
 
   // Checkout-Session im subscription-Mode (Rabattcode-Feature): Stripe erfasst Karte
@@ -368,9 +406,41 @@ export const stripeBilling = {
     return {
       customerId: json.customer,
       paymentMethodId,
+      paymentMethodType: paymentMethodTypeOf(sub.default_payment_method), // GP-P2: bereits expandiert
       subscriptionId: sub.id,
       ...periodFieldsOf(sub),
       planSlug: (sub.metadata && sub.metadata.plan_slug) || null,
+    };
+  },
+
+  // GP-P2: liest NUR den Typ einer gespeicherten Zahlungsmethode (GET /v1/payment_methods/
+  // {id}). Rein lesend, bewegt KEIN Geld, aendert nichts. Gebraucht vom Webhook-Pfad:
+  // Stripe-Ereignisse tragen default_payment_method immer unexpandiert, der Typ steht dort
+  // nie - ohne diesen Nachschlag bekaeme jeder ueber den Race-Fix gebundene Mandant einen
+  // unbekannten Typ und damit fail-closed keine Nummer. Aus dem Adapter kommt AUSSCHLIESS-
+  // LICH der Enum-Typ: das PM-Objekt traegt billing_details mit Name, E-Mail und Anschrift
+  // (Vorfall 11.09.2026) und bleibt vollstaendig hier drinnen (Regel 4/GP-P1).
+  async retrievePaymentMethodType(paymentMethodId) {
+    const res = await fetch(`${url(PAYMENT_METHODS_PATH)}/${paymentMethodId}`, {
+      method: "GET",
+      headers: authHeaders(),
+    });
+    assertOk(res, "retrievePaymentMethodType");
+    const json = await res.json().catch(() => ({}));
+    return paymentMethodTypeOf(json);
+  },
+
+  // GP-P6: liest NUR Betrag und Waehrung eines Stripe-Price (GET /v1/prices/{id}).
+  // Rein lesend, bewegt KEIN Geld. Aus dem Adapter kommen ausschliesslich zwei Skalare
+  // (KEIN Stripe-Objekt). Fehlendes/nicht ganzzahliges unit_amount (gestaffelter oder
+  // metered Price) -> null: der Waechter urteilt dann "unbekannt" statt zu raten (G26).
+  async retrievePriceAmount(priceId) {
+    const res = await fetch(`${url(PRICES_PATH)}/${priceId}`, { method: "GET", headers: authHeaders() });
+    assertOk(res, "retrievePriceAmount");
+    const json = await res.json().catch(() => ({}));
+    return {
+      unitAmountCents: Number.isInteger(json.unit_amount) ? json.unit_amount : null,
+      currency: typeof json.currency === "string" ? json.currency : null,
     };
   },
 
@@ -397,7 +467,11 @@ export const stripeBilling = {
     });
     body.set("metadata[tenant_ref]", tenantRef);
     const res = await fetch(url(SUBSCRIPTIONS_PATH), { method: "POST", headers, body });
-    await assertOkWithDetail(res, "createSubscription");
+    // GP-P1 (Owner-Entscheidung 2026-09-11, Frage 6): Stufe 2 statt 3. Der 402-Koerper
+    // dieses Calls trug am 11.09.2026 Name, E-Mail und Anschrift des Kunden und landete
+    // ueber err.message in console.error (self-service-routes.js, asyncBilling). Die
+    // Diagnose bleibt - als Enum-Anhang code/decline_code/type an derselben Meldung.
+    await assertOkClassified(res, "createSubscription");
     const json = await res.json().catch(() => ({}));
     return { subscriptionId: json.id, ...periodFieldsOf(json) };
   },

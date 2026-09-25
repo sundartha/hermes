@@ -159,8 +159,19 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 > Code-Kommentar "STT bleibt UNBERUEHRT" war falsch und ist korrigiert. Der neue
 > Play-TTS-Pfad (server-seitige Vorab-Synthese + natives `<Play>` einer statischen
 > Datei) umgeht dieses Problem, weil Telnyx keinen Live-Relay-Stream aufbaut.
+>
+> IE7 (Streaming): der Token wird vergeben, BEVOR die Synthese fertig ist - GET
+> /voice/tts/:token wartet seither auf den Rest des Stroms. Unveraendert: 256-bit-Token,
+> kurze TTL, EINMALIGER Abruf (takeOnce loescht VOR dem Warten, ein zweiter Abruf bekommt
+> 404), kein Log von Token oder Bytes, kein Call/keine SMS/keine Kosten ueber diesen
+> Endpunkt. Neu begrenzt: das Warten ist durch ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS
+> gedeckelt (AbortController in src/tts/synth.js), der Handler-Rumpf liegt in try/catch
+> (Express 4 faengt async-Rejections nicht), und ein abgebrochener Strom liefert das
+> bisher Empfangene statt Stille. Ohne gueltigen Token ist kein Warten ausloesbar.
 
 ## C-TELNYX — AI-Assistant-Engine (Barge-in, Custom-LLM-Shim, Call-Control)
+
+> **ENTFERNT mit IE6-S1 (2026-09-14)**, s. Abschnitt IE6-S1.
 
 C-Telnyx (PLAN-TELNYX-AI-ASSISTANT.md, P1-P11) migriert die Live-Voice-Schicht auf den
 Telnyx AI Assistant (voll-duplex, Sprach-Barge-in). Master-Flag `TELNYX_AI_ASSISTANT_ENABLED`
@@ -1994,7 +2005,7 @@ Negativkontrollen liefern 401 statt eines Treffers. **Kein Befund.**
 
 **Getragene Restrisiken (benannt, nicht behoben).**
 (1) Die erwarteten Statuscodes sind eine Momentaufnahme der **deployten Konfiguration**.
-`TELNYX_AI_ASSISTANT_ENABLED` aus wuerde `/v1/chat/completions` von 403 auf 404 drehen,
+(seit IE6-S1 gegenstandslos: die Route ist entfernt)
 `PAYMENT_ENABLED` aus den Stripe-Webhook von 400 auf 404 — die Probe meldet das als
 Abweichung. Das ist gewollt (H10: die Tabelle wird bewusst nachgezogen, nie
 weggeklickt), heisst aber: eine rote Zeile ist nicht automatisch ein Loch.
@@ -3220,8 +3231,12 @@ Phantom-Turn des ASR bei 3 s. Ein Anruf zuvor lief bei identischer Konfiguration
 
 **Absolute Regel 2 sichert den WORTLAUT, nicht die ZUSTELLUNG.** Alle drei bestehenden Sicherungen (Test
 gegen `locales.js`, Drift-Lauf, Wert-Vergleich am Preset) pruefen, was gespeichert ist — keine kann das
-fangen. Gegenmittel am Anbieter: `disable_first_message_interruptions` (Default false), dazu
-`transcribe_on_disabled_interruptions`, damit waehrend der Offenlegung Gesagtes nicht verloren geht.
+fangen. Gegenmittel am Anbieter: `disable_first_message_interruptions` (Default false). Dazu stand bis
+2026-09-04 `transcribe_on_disabled_interruptions=true`, damit waehrend der Offenlegung Gesagtes nicht
+verloren geht; dieser Zusatz ist mit SP1-B auf `false` GEDREHT, weil ueber ihn ein Phantom-Turn der
+Erkennung als echter Zug beim Modell ankam und den Anruf in eine fremde Sprache kippte
+(`tasks/UEBERGABE-SPRACHDEFEKT.md`). Die Offenlegung selbst ist davon unberuehrt: sie haengt an
+`disable_first_message_interruptions`, das unveraendert `true` bleibt.
 Maschinell pruefbares Rotsignal je Anruf: `transcript[0].interrupted === true`.
 
 ### 4. Nebenbefund: die Vertrauensgrenze haelt gegen einen fremden Proxy
@@ -3504,8 +3519,10 @@ Accounts stehen, die uns gehoeren.
 Bedingung fuer den Launch, alternativ:
 (a) Besitz-Verifikation gebaut (Bestaetigungscode an genau diese Nummer, Zeitstempel am
     Tenant, Praedikat haengt daran, Aenderung setzt zurueck), ODER
-(b) `OWNER_SELF_CALL_ENABLED=false` — die Ausnahme ist dann wirkungslos und der
-    Offenlegungssatz gilt wieder ausnahmslos.
+(b) `OWNER_SELF_CALL_ENABLED=false` **und** `INBOUND_OWNER_GREETING_ENABLED=false` — beide
+    Ausnahmen sind dann wirkungslos, der Offenlegungssatz gilt wieder ausnahmslos und jeder
+    eingehende Anrufer hoert den Fremd-Wortlaut. Nur einen der beiden Schalter zu nennen,
+    behauptete eine Deckung, die es seit IEP-P6 nicht mehr gibt.
 
 Ein Eintrag eines fremden Accounts in `OWNER_SELF_CALL_TENANT_IDS` vor (a) ist selbst die
 Rechtsverletzung, gegen die dieser Eintrag steht. Ein Schliessen dieses Eintrags ohne (a)
@@ -3514,3 +3531,1425 @@ oder (b) ebenfalls — es ist kein Aufraeumen.
 Unberuehrt davon bleibt die KI-Kennzeichnung: auch im Ausnahmefall nennt die Eroeffnung
 die Maschine ("hier ist dein KI-Assistent"), und der Prompt verpflichtet den Agenten, den
 vollen Offenlegungssatz sofort nachzuholen, wenn am Apparat nicht der Auftraggeber ist.
+
+**Dritter Verwender desselben unverifizierten Feldes (IEP-P6, 2026-09-16): die INBOUND-Anrede.**
+Dieser Eintrag deckte bisher den ANRUF-Weg (outbound) und nennt unter SEC-TEST (1) den
+SMS-Weg als zweiten ungedeckten Verwender. Ab IEP-P6 haengt drittens die Anrede eines
+EINGEHENDEN Anrufs am selben Feld: ruft die Anrufernummer von `tenant.privateNumber` an,
+begruesst der Agent den Anrufer mit Vornamen (`call.callerIsOwner`, gesetzt in
+`src/routes/voice.js`, Praedikat `callerIsOwnerGranted` in `src/callee-is-owner.js`).
+Gebunden an einen EIGENEN Schalter `INBOUND_OWNER_GREETING_ENABLED` (Default false) und
+eine EIGENE Allowlist `INBOUND_OWNER_GREETING_TENANT_IDS` (Default leer = NIEMAND) — nicht
+an `OWNER_SELF_CALL_*`, damit ein Rueckzug auf einer Achse nicht still die andere schaltet.
+Es aendert sich AUSSCHLIESSLICH die Anrede: die KI-Kennzeichnung bleibt im ersten Satz, der
+Transkriptions-/Zusammenfassungs-Hinweis bleibt woertlich, und es geht KEIN Datenkanal auf
+(die serverseitigen Inbound-Werkzeugsperren bleiben unangetastet, `tenant_token` bleibt
+`""`). Begruendung der engen Wirkung: die Anrufernummer stammt aus dem Ursprungsnetz und
+ist faelschbar — jede Datenfreigabe daran waere ein Sicherheitsfehler.
+
+## SEC-TEST — Sicherheits-Testplan + drei bewusst getragene Risiken (2026-09-07)
+
+`PLAN-SICHERHEITSTEST.md` (Repo-Wurzel) ist der vollstaendige Sicherheits-Testplan:
+15 Angriffspfade, 54 pruefbare Faelle, Wellen W0-W5. Er ersetzt diesen Eintrag nicht,
+sondern speist ihn: was dort als Risiko akzeptiert wird, steht hier.
+
+Drei Owner-Entscheidungen vom 07.09.2026 (Herleitung: `PLAN-SICHERHEITSTEST.md` 8.4/8.5)
+sind bewusst getragene Risiken und KEINE offenen Aufgaben:
+
+**(1) Der SMS-Weg der unverifizierten eigenen Nummer bleibt vorerst ohne Allowlist.**
+Neuer Befund, vom Eintrag "Offen (Launch-Blocker): Besitz-Verifikation der eigenen Nummer"
+NICHT gedeckt: jener Eintrag sichert den ANRUF-Weg (`OWNER_SELF_CALL_ENABLED` Default false
+plus Tenant-Allowlist, `src/callee-is-owner.js`). Der SMS-Weg hat keine solche Bindung -
+`setPrivateNumber` (`src/store/state-ops.js:2471`) prueft nur E.164-Form, Denylist und
+Laendercode, und die Summary-SMS nach jedem Inbound-Call geht an genau diesen Wert
+(`src/sms-summary.js:26`). Jeder eingeloggte Tenant kann dort eine fremde Nummer eintragen
+(`src/self-service-routes.js:401`, nur `webAuthMw`) und erhaelt damit Zusammenfassungen von
+Gespraechen Dritter an eine Nummer, die ihm nicht gehoert.
+Warum trotzdem akzeptiert: alle aktiven Accounts sind wir selbst (siehe unten).
+**Ausloeser, der das Risiko zum Befund macht: der erste Fremdkunde.** Bis dahin ist die
+Gegenmassnahme klein (dieselbe Allowlist wie am Anruf-Weg), danach ist sie Pflicht -
+zusammen mit der Besitz-Verifikation aus dem Eintrag darueber.
+
+**(2) Der Repo-Split bleibt: Render deployt aus `jonas986/vodafone-agent` (Upstream), nicht
+aus `origin`.** Es gibt kein belegtes Merge-Gate und keine geprueften Zugriffsrechte auf
+diesem Konto; die in `.github/workflows/ci.yml:8` genannte `docs/RUNBOOK-BRANCH-PROTECTION.md`
+existiert im Repo nicht. Wer dort schreiben kann, deployt an jeder Pruefung vorbei.
+Warum trotzdem akzeptiert: Owner-Entscheidung, Aufwand einer Konsolidierung ueberwiegt
+heute den Nutzen. Konsequenz, die mitgetragen wird: jede Aussage ueber den
+PRODUKTIONS-Stand ist nur so belastbar wie der Zugriffsschutz dieses Kontos. Die Messung
+(MFA-Status, Schreibrechte, Branch-Protection) laeuft trotzdem und ist read-only.
+
+**(3) Kein externer Pentest, kein Bug-Bounty.** Die Ausfuehrung des Testplans uebernimmt der
+Assistent. Bewusst mitgetragen: der Pruefende teilt die blinden Flecken des Geprueften -
+der Plan ist aus derselben Code-Lektuere entstanden, gegen die er prueft. `security.txt`/VDP
+wird unabhaengig davon angelegt (0 EUR, legaler Meldeweg).
+
+**Die gemeinsame Sicherungsannahme aller drei Punkte** ist die Praemisse aus
+`PLAN-SICHERHEITSTEST.md` 1.1: **alle aktiven Accounts sind wir selbst.** Sie ist ab hier
+kein Kontext mehr, sondern eine tragende Annahme - faellt sie, fallen (1) und (2) sofort
+mit, ohne dass eine Code-Aenderung noetig waere.
+
+### Messstand des Testplans (Laeufe 1+2, 2026-09-08)
+
+Belege: `tasks/sicherheitstest-befunde.md`. Die Funde unten sind **noch keine akzeptierten
+Risiken** - ob und was gefixt wird, entscheidet der Owner separat. Sie stehen hier, damit
+Sicherheitsarbeit sie nicht uebersieht.
+
+- **REPLAY-02 (Geld, schwerster neuer Fund):** ein byte-identisch wiederholter
+  `/voice/turn`-Webhook (EIN Body, EIN Zeitstempel, EINE Signatur) loest eine ZWEITE
+  Modellrunde aus und bucht ein zweites Mal - gemessen 828 -> 1656 Cent auf genau der Achse,
+  die `budgetExceeded` als Tenant-Decke liest; das Transkript verdoppelt sich (2 -> 4 Zeilen).
+  Kein Angreifer noetig: ein Anbieter-Retry nach Timeout genuegt. Das Gegenstueck
+  `/voice/status` ist ueber den persistierten `billedAt`-Marker sauber idempotent
+  (`src/telephony/call-finish.js:258-266`) - die Luecke liegt allein auf der KI-Token-Achse.
+- **Gate-Kette im Fehlerfall (GATE-02):** stirbt die Datenquelle eines Outbound-Gates, wird
+  in **17 von 17** gemessenen Faellen NICHT gewaehlt und kein Anruf-Datensatz angelegt - das
+  Sicherheitsversprechen haelt. Aber 14 der 17 Faelle enden ohne jede Antwort (der Request
+  haengt bis zum Client-Timeout, `[guard] unhandledRejection` im Log), weil Express 4
+  async-Rejections nicht faengt und die Gate-Schleife (`src/routes/api-calls.js:331-341`)
+  keinen try/catch hat. `/voice/incoming` hat genau diesen Schutz (`src/routes/voice.js:279`).
+  **BEHOBEN SEC-P6** - ein geworfenes Gate ergibt 503 + `grund=gate_error` und BRICHT die
+  Kette ab; die Zustellung der Ablehnung ist zusaetzlich gegen Audit-/Metrik-Wuerfe
+  abgesichert.
+- **`scripts/spike2-anruf.mjs`** loest einen echten Anruf direkt beim Anbieter aus und laeuft
+  dabei an der GESAMTEN Gate-Kette vorbei (keine Denylist, kein Land-Gate, keine Kostendecke,
+  kein `OUTBOUND_FROZEN`). Committet, Ziel aus `argv`, Schluessel aus `.env`. Verstaerkt (2).
+  **ENTFERNT SEC-P6** - die Datei ist geloescht (kein npm-Skript, kein knip-Eintrag, keine
+  Import-Kante verwies darauf). `scripts/spike2-sip.mjs` bleibt: es richtet die SIP-Strecke
+  ein und kennt keinen Wahl-Endpunkt.
+- **Gehalten und belegt:** Inbound-Kostendecke sperrt bei korrupter UND werfender Datenquelle
+  fail-closed (GATE-03); je Wahlweg genau ein Aufrufer, alle hinter der Kette (GATE-01);
+  Routen-Fuzzing und Pfad-Traversal finden nichts (L-03); Render-Logs werden ~7 Tage
+  aufbewahrt, was das Zeitfenster einer versehentlich geloggten PII-Zeile begrenzt (OPS-03).
+
+## SEC-P6 — Antwortverhalten der Gate-Kette + drei Struktur-Waechter (2026-09-09)
+
+Ausgang (gemessen, `PLAN-SEC-FIX.md` § SEC-P6): 17 von 17 sterbenden Gate-Datenquellen
+fuehrten zu NULL Wahlversuchen - das Sicherheitsversprechen hielt -, aber 14 davon endeten
+ohne jedes Antwort-Byte.
+
+**Der Fix hat zwei Haelften, weil der Defekt zwei hatte.** Die Gate-Kette faehrt jetzt in
+`runOutboundGates` (`src/telephony/outbound-gates.js`): ein geworfenes Gate ist dort eine
+ABLEHNUNG und BRICHT die Kette ab - `return`, kein `continue`. Ein Weiterlaufen waere der
+Totalschaden dieser Phase gewesen ("Gate kaputt" wuerde zu "es wird gewaehlt", Absolute
+Regel 1). Der `reserve_budget`-eigene try/catch bleibt unangetastet: er ist spezifischer
+(er kennt die Geld-Achse und den Grund `reserve_error`), der neue Fang ist der generische
+Rueckhalt fuer die anderen Gates.
+
+Die zweite Haelfte sass in der Ablehnungs-Senke der Route: `denialDimensions` liest
+`store.tenantGeo` - selbst eine der sterbenden Datenquellen. Stirbt sie, warf die Senke ein
+ZWEITES Mal, diesmal ausserhalb jedes Gates, also wieder ohne Antwort. Audit und Metrik
+laufen deshalb in `beobachteAblehnung` (`src/routes/api-calls.js`, Modul-Ebene): scheitert
+die Protokollierung, wird sie LAUT (secret-freie Fehlerzeile), die Ablehnung wird trotzdem
+zugestellt.
+
+- **Statuswahl 503** (nicht 500): Praezedenz im Haus sind der `ani_ownership`-503 und der
+  `reserve`-Fehlerpfad - "Dienst voruebergehend nicht verfuegbar" beschreibt den Zustand
+  richtiger als ein Programmfehler, und 402/403 sind bereits von Gate-Gruenden belegt.
+- **Der Anzeigetext ist sprachinvariant.** Die Sprachquelle der Kette
+  (`store.tenantLanguage`) ist selbst eine sterbende Datenquelle; eine Lokalisierung
+  koennte im Fehlerfall ein zweites Mal werfen. Der Text nennt kein Innenleben (kein
+  Stack, keine Fehlermeldung, kein Config-Name); Gate-Name und Meldung stehen nur im
+  serverseitigen Log und im Audit-Detail (`grund=gate_error gate=<name>`).
+
+**Drei Waechter, die den erreichten Stand einfrieren** (alle im Regressionslauf, Praefix
+`SEC-P6-`, jeder mit eigener Positiv-Kontrolle):
+
+1. `test/sec-p6-waechter-rls.test.js` - jede Tabelle mit `tenant_id` hat FORCE + Policy
+   oder steht begruendet in `RLS_AUSNAHMEN` (heute: `account`, `session`, `audit_log` -
+   alle drei loesen VOR `app.current_tenant` auf bzw. sind append-only). Ein verwaister
+   Eintrag (Tabelle hat inzwischen FORCE+Policy) macht ebenfalls rot, sonst rottet die
+   Liste zur Blankovollmacht.
+2. `test/sec-p6-waechter-wahlaufrufer.test.js` - je Wahlweg entspricht die Menge der
+   Aufrufer in `src/` der Erwartungsliste. Gepinnt wird Datei + Symbol, NIE eine
+   Zeilennummer.
+3. `test/sec-p6-waechter-werkzeugsatz.test.js` - der Werkzeugsatz des Telefon-Agenten ist
+   bei offenen Kanaelen EXAKT `end_call/get_consult/look_up/take_message` und ohne Kanaele
+   exakt der Basissatz. Gemessen an `agentTools(call)`, wo der Satz entsteht - `toolDefs()`
+   liefert nur den Basissatz (zwei Namen) und ist bereits dreifach gepinnt. Erstes Pin des
+   GESCHLOSSENEN Satzes ueberhaupt: die Bestandstests pruefen nur `includes()`, ein
+   fuenftes Werkzeug waere bis heute unbemerkt geblieben.
+
+**Zwei benannte Restrisiken (bewusst nicht in dieser Phase gebaut):**
+
+- **RESTRISIKO A - der Streifen zwischen Kette und Origination.** `store.resolveCallLanguage`,
+  `resolveCallPrivacyFlags` (`store.tenantPrivateNumber`), `emitOpeningConsult`
+  (`store.resolveProfile`), `store.createCall`, `store.recordCostProfile` und `store.save`
+  laufen NACH der Gate-Kette und VOR dem `try` der Origination. Sie sind keine
+  Gate-Datenquellen und waren nicht Teil der 17 gemessenen Faelle; ein Wurf dort haengt
+  heute wie frueher. Der bestehende `catch` kann sie nicht mit uebernehmen - er ruft
+  `terminateAndBillCall` auf einem Anruf-Datensatz auf, den es in diesem Fenster noch gar
+  nicht gibt. Eigener Befund, eigene Phase.
+- **RESTRISIKO B - Waechter 2 kennt nur die BEKANNTEN Wahlwege.** Ein neuer Weg, der den
+  Anbieter per rohem `fetch` anspricht - die Klasse, die `spike2-anruf.mjs` verkoerperte -,
+  wird von ihm nicht gefunden. Deshalb wurde geloescht statt nachgeruestet. Ein Waechter
+  auf "roher Anbieter-Wahl-Endpunkt in `src/`/`scripts/`" ist eine eigene, groessere
+  Entscheidung.
+
+## SEC-P1 — Webhook-Idempotenz: Anker, Vorhaltezeit, Restrisiken (2026-09-08)
+
+Ausgang (gemessen, `PLAN-SEC-FIX.md` § SEC-P1): ein byte-identischer, gueltig signierter
+Request, zweimal zugestellt, erzeugte auf `/voice/incoming` ZWEI Anruf-Datensaetze
+(REPLAY-01) und auf `/voice/turn` eine ZWEITE Modellrunde (REPLAY-02: Token 4M/1M ->
+8M/2M, 828 -> 1656 Cent, Transkript 2 -> 4 Zeilen). `/voice/status` war bereits gedeckt
+(persistierter `billedAt`-Marker).
+
+Vor beiden Routen haengt jetzt ein Wiederholungs-Riegel
+(`src/telephony/webhook-idempotenz.js`), registriert PRO ROUTE und damit strukturell
+HINTER der Ed25519-Signatur-MW: ein unsignierter Request kann keinen Anker beanspruchen.
+**Kein Safety-Gate wird beruehrt** — der Riegel fuegt hinzu, er nimmt nichts weg, und er
+VERWIRFT NIE (ein Anbieter-Retry ist legitim und bekommt 200, kein 4xx).
+
+### Woraus der Anker gebildet wird
+
+| Route | Anker | Warum |
+|---|---|---|
+| `/voice/incoming` | `in:<CallSid>` — der Anruf-Datensatz SELBST ist der persistierte Anker (`createCall` legt `twilioSid` an, `getCall` matcht darauf) | Telnyx liefert genau EIN "a call comes in"-Ereignis je Leg. Kein neues Feld noetig; das ist die `billedAt`-Bauart, nur dass der Marker schon existiert |
+| `/voice/turn` | ZWEI Anker: **A** `t:<turnToken>` (frische Marke, die WIR je gerendertem Gather in die Action-/Redirect-URL setzen und die der Anbieter zurueckreicht) und **B** `e:sha256(telnyx-timestamp \| rawBody)` (Fingerabdruck des SIGNIERTEN Umschlags) | Der TeXML-Gather-Callback traegt KEIN anbieterseitiges Ereignis-Merkmal. `CallSid` allein waere der teuerste Fehler: die zweite Runde desselben Anrufs saehe wie ein Duplikat aus, der Agent verstummte |
+
+Duplikat = **einer** der beiden Anker ist bereits beansprucht. Vollstaendigkeit:
+
+| Fall | A | B | Ergebnis |
+|---|---|---|---|
+| Anbieter-Retry, gleiche URL, gleiche Signatur | Treffer | Treffer | Wiederholung |
+| Anbieter-Retry, gleiche URL, NEU signiert | Treffer | frei | Wiederholung |
+| Angreifer, byte-identisch, Marke gestrichen/geraten | frei | Treffer | Wiederholung |
+| Echte 2. Runde, Anrufer sagt WORTGLEICH dasselbe | frei (neuer Gather = neue Marke) | frei (neue Sekunde -> neuer Fingerabdruck) | normal verarbeitet |
+
+Die Marke wird beim EINTREFFEN beansprucht, nicht beim Rendern — eine wiederholt
+ausgelieferte Antwort traegt deshalb eine Marke, die noch niemand eingeloest hat, und die
+naechste echte Runde kommt durch (kein Livelock).
+
+### Was eine Wiederholung als Antwort bekommt
+
+- Prozess-Cache getroffen -> die erste Antwort **byte-identisch** (Status/Content-Type/Body).
+- Erste Zustellung laeuft noch -> die Wiederholung WARTET auf sie (Deckel
+  `PROVIDER_WEBHOOK_HARDCUT_MS`) und liefert sie aus.
+- Nur der persistierte Anker getroffen (Prozess-Neustart) -> Folge-Gather OHNE Prompt:
+  Mikrofon offen, frische Marke, **keine Modellrunde, keine Synthese, kein Cent**.
+- Gar keine Antwort erzeugt (Absturz) -> die Wiederholung laeuft normal durch; es wurde
+  nichts doppelt gebucht, und der Anrufer braucht eine Antwort.
+
+### Vorhaltezeit
+
+| Schicht | Inhalt | Wie es verschwindet |
+|---|---|---|
+| Prozess-Cache (`Map` im Abschluss der Fabrik) | Anker -> Antwort | LRU-Deckel `ANSWER_CACHE_MAX` (200); aelteste Eintraege fallen raus; stirbt mit dem Prozess |
+| Persistiert am Call (`call.webhookAnchors`, nur `/voice/turn`) | NUR die Anker-Strings (Zufallsmarke bzw. Hash, PII-FREI) | Ringpuffer `WEBHOOK_ANCHOR_HISTORY` (6); der Rest stirbt mit dem Call-Datensatz ueber die bestehende `RETENTION_DAYS`-Loeschung |
+| `/voice/incoming` | nichts Neues — der Call-Datensatz selbst | wie oben |
+
+Kein neuer Aufraeum-Job, keine neue Env-Variable, keine neue npm-Abhaengigkeit. Der
+Antwort-WORTLAUT (PII) verlaesst den Prozess nie; persistiert werden ausschliesslich
+Hashes/Zufallsmarken — also keine neue PII-Senke neben `transcript` und keine Kollision
+mit der kuerzeren `DIAGNOSTIC_RETENTION_DAYS`-Transkript-Loeschung. `webhookAnchors` ist in
+`views.publicCall` gestrippt und verlaesst die API nicht.
+
+### Bewusst getragene Restrisiken
+
+| # | Restrisiko | Warum getragen |
+|---|---|---|
+| R1 | Ein Angreifer mit gueltiger Signatur, der `callId` auf einen anderen, ihm bekannten aktiven Anruf umbiegt, umgeht den call-gebundenen Anker | Ein globales Ledger waere eine neue, quer-mandantige PII-/Datensenke. Der Angreifer braucht bereits eine abgefangene gueltige Signatur UND eine fremde `callId`; die Signatur gilt nur 300 s |
+| R2 | Zweite Zustellung NACH Prozess-Neustart bekommt den Wortlaut nicht zurueck, nur ein offenes Mikrofon | Der Wortlaut ist PII und wuerde die kuerzere Transkript-Loeschung ueberleben. Der Anruf ueberlebt, es kostet nichts |
+| R3 | Request ganz OHNE ableitbaren Anker (kein `CallSid`, keine Marke, kein signierter Umschlag — lokaler Skip-Modus, in-flight-Leg ueber einen Deploy) laeuft wie bisher | Fail-open genau dort, wo heute schon nichts geschuetzt ist; kein Gate wird geschwaecht. In Produktion liegt immer mindestens der Umschlag-Anker vor |
+| R4 | pg flusht asynchron: stirbt der Prozess zwischen Antwort und Flush, ist der Anker weg | Geerbt von `billedAt`, kein neuer Defekt |
+| R5 | `/voice/outbound` bleibt ohne Riegel (doppelte Zustellung -> zweite Opening-Zeile im Transkript) | Nicht gemessen, nicht Teil dieser Phase. Als Befund benannt, nicht gebaut |
+| R6 | Prozessuebergreifende Beanspruchung (`deliveries` lebt im Prozess) | = GATE-04 in `PLAN-SEC-FIX.md` § 4, ausdruecklich draussen, solange `numInstances=1`. Der pg-Store ist ein Spiegel mit asynchronem Flush, kein synchroner DB-Schreiber — ein `ON CONFLICT` waere hier wirkungslos |
+| R7 | Zwei GLEICHZEITIGE Anrufe, deren Turn-Webhook-Body UND Zeitstempel byte-identisch waeren, teilten sich Anker B | In Produktion unerreichbar: der TeXML-Body traegt je Leg die eigene `CallSid`. Der Ausgang waere ausserdem harmlos (eine wiederholte Antwort, Mikrofon bleibt offen, naechste Runde laeuft) |
+
+Belegt durch `test/sec-p1-webhook-idempotenz.test.js` (echte Ed25519-Signatur, EIN Body,
+EIN Zeitstempel, zweimal zugestellt; LLM-Aufrufe gezaehlt) und
+`test/sec-p1-webhook-anker-persistenz.test.js` (Round-Trip in BEIDEN Store-Backends,
+Ringpuffer-Deckel, kein API-Leck).
+
+## SEC-P2 — Lieferkette: gezieltes Update statt `npm audit fix` (2026-09-09)
+
+Zwei Commits, 0 Zeilen Anwendungslogik, kein `--force`, keine neue Abhaengigkeit.
+
+**Commit 1 (nicht-brechend):** `npm update ip-address fast-uri hono @hono/node-server
+body-parser brace-expansion` — alle sechs transitiv, alle innerhalb bestehender Ranges,
+`package.json` unveraendert. Bewusst NICHT `npm audit fix`: das haette `express` von
+4.22.2 auf 4.22.1 zurueckgestuft, um dem `qs`-Advisory auszuweichen, und das Advisory
+dabei nicht einmal behoben (`qs` bleibt in beiden Faellen im verwundbaren Bereich
+2.2.5-6.15.3, nur an einer anderen Stelle im Baum). Ein Downgrade eines Live-Frameworks
+als Nebenwirkung eines Sicherheitsschritts wird hier nicht getragen.
+
+**Commit 2 (brechend, `nodemailer` Major):** `nodemailer` `^7.0.13` -> `^10.0.1`. Einziger
+Breaking Change laut Anbieter-CHANGELOG: `Node.js >= 20` erforderlich — wir fahren
+`>=22 <23`, vertraeglich. Kein Quellcode-Edit in `src/smtp-mail.js` /
+`src/mail-boot-probe.js` noetig (Default-Export, `createTransport`, `sendMail`, `verify`
+unveraendert). Neuer Test `test/nodemailer-lernvertrag.test.js` (Clean-Code P10) faengt
+genau das ab, was die attrappenbasierten Bestandstests per Konstruktion nicht sehen
+koennen: er laeuft gegen die ECHTE Bibliothek (lokaler `net`-Server ohne STARTTLS) und
+sichert die Invariante "TLS ist ERZWUNGEN" — kein `DATA`-Kommando erreicht den Server,
+solange `requireTLS` respektiert wird.
+
+### Owner-bindende Entscheidungen (gelten bis widerrufen)
+
+1. **`nodemailer` faehrt ab jetzt auf `^10`.** `Node >= 20` ist damit harte Untergrenze
+   der Mail-Faehigkeit (heute `>=22 <23` — Puffer vorhanden). Ein Rueckschritt auf `^7`
+   holt sechs hohe Advisories zurueck (SMTP-Command-Injection, CRLF-Injection, fehlende
+   TLS-Pruefung beim OAuth2-Token-Abruf, `raw`/`jsonTransport` umgehen
+   `disableFileAccess`/`disableUrlAccess`).
+2. **Das `qs`-Advisory (moderat, via `express@4.22.2` -> `qs@~6.15.1`) wird bewusst
+   getragen**, solange es moderat bleibt — der einzige Ausweg ist ein `express`-Downgrade
+   oder ein `overrides`-Zwang, beides ein brechender Sprung an einem Live-Framework fuer
+   einen moderaten Befund. Wird das Advisory je auf `high` hochgestuft, faellt die Abnahme
+   dieser Phase von selbst rot; der `express`-5-Sprung (oder `overrides`) ist dann als
+   eigene Entscheidung zu treffen, nicht nebenbei.
+
+### Zustand nach beiden Commits (gemessen)
+
+```
+npm audit --omit=dev --audit-level=high   -> exit 0   (Abnahme)
+npm audit --audit-level=high              -> exit 0   (CI-Gate-Paritaet, ci.yml auditiert ohne --omit=dev)
+npm audit --omit=dev                      -> 2 moderate severity vulnerabilities (qs, s.o.)
+```
+
+`apps/web` hat ein eigenes Lockfile, 0 Verwundbarkeiten, nicht angefasst.
+`.github/dependabot.yml` bereits versioniert, nicht Teil dieser Phase.
+
+---
+
+## SEC-P3 — Eingabegrenzen + CSRF-Modus (2026-09-09)
+
+### Owner-bindende Entscheidungen (gelten bis widerrufen)
+
+1. **Der CSRF-Modus ist Origin-gegen-Request-Host, kein Token und keine Allowlist.**
+   Verglichen wird der Host des `Origin`-Headers mit `req.headers.host`. Kein
+   Doppel-Submit-Cookie, kein Synchronizer-Token, keine gepflegte Liste erlaubter
+   Herkuenfte. Begruendung: die App laeuft single-origin (`render.yaml`, Phase A) — eine
+   Liste haette einen Fehlkonfigurations-Ausgang (einmal falsch = Dashboard tot), der
+   Host-Vergleich hat keinen. Ein Token-Verfahren braeuchte einen zweiten Zustand pro
+   Sitzung, ohne mehr zu leisten.
+2. **Fehlender `Origin` passiert weiterhin (200).** Anbieter-Webhooks, `/mcp` und
+   Server-zu-Server-Aufrufer senden keinen; eine fail-closed-Variante braeche sie —
+   bei `/voice` hiesse das: eingehende Anrufe sterben. Ein FREMDER Origin -> 403.
+3. **Das Schema wird NICHT verglichen, nur der Host (inkl. Port).** Der Proxy terminiert
+   TLS; ein Schema-Vergleich braeuchte `X-Forwarded-Proto` als zweite, spoofbare Quelle.
+   Der `http://`-Zwilling faellt mit HSTS (SEC-P5). Bewusst getragen.
+4. **`CSRF_ENFORCE=false` ist ein zulaessiger Betriebszustand und loest KEINEN
+   Boot-Refusal aus** (nicht in `PRODUCTION_FOOTGUNS`). Ein Not-Aus, der den Dienst nicht
+   mehr starten laesst, ist kein Not-Aus. Wird der Schalter je auf `false` gestellt, ist
+   das eine bewusste, befristete Owner-Entscheidung.
+5. **Die Laengengrenze prompt-gebundener Freitextfelder lebt in `TEXT_LIMITS`
+   (`src/routes/_validation.js`), nicht in `config.js`.** `agentName: 80`. Kein Env-Knopf:
+   dieselbe Frage hat im Haus genau eine Quelle. Gemessen in CODEPOINTS; verworfen werden
+   ausschliesslich C0-/C1-Steuerzeichen. **Eine Zeichen-Allowlist ist und bleibt
+   verboten** — das Produkt ist weltweit ausgelegt.
+
+### Reichweite
+
+Geschuetzt sind alle nicht-sicheren Methoden unter `/api/self-service/**` (Praefix-
+Montage, keine Routen-Liste — eine kuenftige Route ist automatisch mit drin). NICHT
+geschuetzt und bewusst nicht: `/voice/*` (Provider-Signatur), `/mcp` (mcpAuth),
+`/webhooks/stripe` (HMAC), `/api/calls` u.a. (`internalOnly`).
+
+---
+
+## SEC-P4 — ElevenLabs-Werkzeug-Token je Mandant (2026-09-09)
+
+### Der Befund
+
+Die beiden Werkzeug-Webhooks (`/webhooks/elevenlabs/consult`, `.../lookup`) sind allein
+durch das geteilte Geheimnis im Header `x-hermes-tool-token` gesichert. Dieses Geheimnis
+ist EIN Wert fuer ALLE Mandanten; die Bindung (`activeCallBoundTo`) fragt nur, ob ein
+laufender Anruf zu der vorgelegten Gespraechskennung gehoert — nie, ob der Aufrufer fuer
+DESSEN Mandanten sprechen darf. Zweitens verriet der Ablehnungsgrund die Bindung: eine
+erfundene Kennung antwortete `kein_laufender_anruf`, die Kennung des Anrufs eines fremden
+Mandanten `kanal_nicht_freigegeben`.
+
+### Was gebaut ist
+
+1. **Vereinheitlichter Ablehnungsgrund, sofort wirksam.** Alle Ablehnungen, die von einem
+   gebundenen Anruf abhaengen (Bindung, Mandanten-Riegel, Faehigkeit), antworten `404`
+   mit demselben Grund. Das LOG unterscheidet sie weiter (`toolDenied` trennt `logGrund`
+   von `antwortGrund`) — ohne diese Diagnose waere der naechste echte Vorfall nicht mehr
+   aufklaerbar. `402` (Geld), `400` (Nutzlast) und `404 kein_freier_platz` bleiben
+   unveraendert: wer sie erreicht, hat einen faehigen Anruf bereits passiert.
+2. **Mandanten-Dimension aus dem Anrufstart.** Der Anrufstart gibt dem Agenten dieses
+   Anrufs `tenant_token` als dynamische Variable mit, abgeleitet als
+   `HMAC-SHA256(ELEVENLABS_TOOL_TOKEN, "v1:<tenantId>")`
+   (`src/elevenlabs/tenant-tool-token.js`); die Werkzeug-Definition holt den Wert ueber
+   `dynamic_variable` in ihren Anfragekoerper zurueck (dieselbe Mechanik wie
+   `conversation_id` aus `system__conversation_id`), und der Webhook rechnet den Sollwert
+   aus dem GEBUNDENEN Anruf neu aus und vergleicht timing-sicher (`safeEqual`).
+
+### Owner-bindende Entscheidungen (gelten bis widerrufen)
+
+1. **Abgeleitet, kein zweites Geheimnis.** Dasselbe eine Plattform-Geheimnis, ein
+   Rotationsfall, NICHTS wird persistiert — beide Seiten rechnen. Die staerkere Variante
+   (zufaelliges, je Mandant persistiertes Geheimnis) ist bewusst verworfen: neue Spalte +
+   Backfill + N Rotationsfaelle.
+2. **`ELEVENLABS_TENANT_TOKEN_REQUIRED` ist Default `false`, und das ist keine
+   Bequemlichkeit.** Die Werkzeug-Definition am Anbieter schickt den Wert noch nicht mit.
+   AN, bevor der Anbieter sendet, hiesse: `look_up` und `get_consult` antworten `404`, die
+   In-Call-Recherche stirbt und der Agent steht im laufenden Gespraech stumm da. AUS gilt
+   fuer einen FEHLENDEN Wert das heutige Verhalten; ein VORGELEGTER falscher Wert wird
+   IMMER abgelehnt.
+3. **`tenant_token` steht NICHT unter `required`.** Ein Anruf, der vor dem Push gestartet
+   wurde, traegt den Wert nicht, und ein `dynamic_variable`-Parameter wird ohnehin nie vom
+   Modell geliefert.
+
+### Grenze, ehrlich benannt
+
+Die Ableitung schuetzt NICHT gegen einen Angreifer, der Plattform-Token UND
+Mandanten-Kennung zugleich besitzt — er kann den Wert selbst ausrechnen. Sie nimmt dem
+einen geteilten Token seine QUER-MANDANTEN-REICHWEITE. Solange der Schalter aus ist,
+besteht diese Reichweite fort; die Phase liefert die vereinheitlichte Auskunft sofort und
+den Riegel scharf-schaltbar.
+
+### Offener Owner-Blocker (nicht vom Assistenten baubar)
+
+Die Werkzeug-Definition am Anbieter muss `tenant_token` tragen: `PATCH
+/v1/convai/tools/{tool_id}` fuer BEIDE Werkzeuge von Hand — `npm run elevenlabs:push`
+kann das nicht (Werkzeuge sind Besitz-Art `texte` und werden ausdruecklich nicht
+geschrieben). Erst danach: erneute GET-Messung -> `_live_gemessene_form` nachziehen ->
+Testanruf -> `ELEVENLABS_TENANT_TOKEN_REQUIRED=true`. In dieser Phase wurde nicht
+gepusht, nicht deployt und kein Live-Wert geaendert.
+
+## SEC-P5 — Web-Haertung: HSTS, striktes script-src, __Host-Cookie (2026-09-09)
+
+### Was gebaut ist
+
+1. **HSTS auf beiden Auslieferungswegen.** `Strict-Transport-Security:
+   max-age=15552000; includeSubDomains` — im Gateway aus `HSTS_HEADER_VALUE`
+   (`src/middleware.js`, EINE Quelle) und als Header-Regel des Static-Service in
+   `render.yaml`. `test/sec-p5-web-haertung.test.js` haelt beide Seiten deckungsgleich;
+   den Header am echten HTTP-Weg misst `test/headers.test.js`.
+2. **`script-src 'self'`** in der Gateway-CSP — kein `'unsafe-inline'` (`'unsafe-eval'`
+   stand dort nie). `style-src` behaelt sein `'unsafe-inline'`: das war nicht Teil des
+   Auftrags und ist eine eigene Entscheidung. Belegt ist die Vertraeglichkeit an der
+   Quelle (kein `is:inline`, `assetsInlineLimit: 0`) und am gebauten Astro-Output
+   (`apps/web/test/csp.test.js`).
+3. **Sitzungs-Cookie heisst `__Host-session`** (`SESSION_COOKIE_NAME`,
+   `src/web-auth.js`). Ein Doppel-Lesen des alten Namens gibt es NICHT — eine zweite
+   akzeptierte Herkunft waere genau die Aufweichung, die die Phase beseitigt; ein
+   eigener Testfall belegt, dass `session=` jetzt 401 ergibt.
+
+### Bindung und Begruendungen
+
+- **`includeSubDomains` fuer 180 Tage** bindet jeden Namen unter der Zone an HTTPS:
+  `sundartha.com`, `www.sundartha.com`, `app.sundartha.com`,
+  `vodafone-agent.onrender.com` — alle heute ausschliesslich ueber HTTPS erreichbar
+  (Render). Ein kuenftiger Klartext-Subdomain-Dienst waere fuer die Restlaufzeit der
+  Zusage in jedem Browser unerreichbar, der sie einmal gesehen hat.
+- **Kein `preload`.** Die Zusage ist nicht widerrufbar: ein Browser vergisst sie erst nach
+  Ablauf von `max-age`, die Preload-Liste ist praktisch endgueltig. 180 Tage ist die
+  kleinste vom Auftrag verlangte Frist, also das kleinste Zeitfenster im Fehlerfall.
+- **Preis, bewusst akzeptiert:** der Cookie-Name aendert sich, also endet beim Deploy JEDE
+  laufende Sitzung. Alle aktiven Accounts sind heute wir.
+- **Die Anmeldung ueber eine LAN-IP war schon vor dieser Phase tot:** `cookieAttrs()`
+  setzt `Secure` bedingungslos, ohne Protokoll-Verzweigung. `__Host-` ist damit eine reine
+  Umbenennung — die drei Bedingungen (Secure, `Path=/`, kein `Domain=`) waren bereits
+  erfuellt. Die Bestandslehre zum Loopback-Bypass betrifft den Auth-Rauchtest, nicht
+  diesen Cookie.
+- **Abgrenzung:** die Login-Flow-Cookies `pkce_verifier` / `oauth_state` / `oidc_nonce`
+  bleiben unpraefixiert. Gemessen und benannt im Auftrag war das Sitzungs-Cookie; ihre
+  Umbenennung ist ein eigener Auftrag mit eigenem Testradius.
+- Keine neue Env-Variable: ein Sicherheits-Header, den eine Env abschalten kann, ist eine
+  abschaltbare Sicherung.
+
+### Owner-Schritte, die diese Phase NICHT ausfuehrt
+
+1. Deploy des Gateways.
+2. Eintrag des HSTS-Headers im Render-Dashboard des Static-Service (`hermes-web` ist
+   dashboard-managed — der `render.yaml`-Eintrag wird live nicht wirksam), ueber den
+   Lab->Live-Weg aus `docs/RUNBOOK-LAB-LIVE.md`.
+3. Aussenmessung der drei Oberflaechen nach dem Deploy.
+4. Entscheidung, ob die `apps/web`-Testbank (`apps/web/test/csp.test.js`, laeuft nur auf
+   Kommando via `npm --prefix apps/web test`) in CI aufgenommen wird.
+
+## GELDPFAD — Behebungskette zum Vorfall vom 11.09.2026 (GP-P0..GP-P6, abgeschlossen 2026-09-11)
+
+Manifest `PLAN-GELDPFAD.md`, Kettenstand `tasks/geldpfad-chain-state.md`. Der Vorfall: ein
+zahlender Mandant wurde mit 4,99 EUR belastet und bekam keine Rufnummer, weil seine
+Zahlungsmethode vom Typ `link` war — eine Wallet, die eine getrennte Autorisierung und
+Erfassung nicht traegt. Derselbe Weg trug 4,99 EUR und lehnte sechs Sekunden spaeter den
+92-Cent-Hold ab. Es war kein Deckungsproblem.
+
+Fuenf Entscheidungen, die diese Kette gefaellt hat und die ohne ausdrueckliche
+Owner-Entscheidung nicht rueckgaengig zu machen sind:
+
+**(1) Eignung der Zahlungsmethode ist eine ALLOWLIST, niemals eine Denylist (GP-P2,
+2026-09-11).** `isHoldCapablePaymentMethodType` (`src/billing/payment-method-eligibility.js`)
+ist die einzige Stelle, die ueber Eignung entscheidet. Sie kennt heute genau `card`. Alles
+andere — auch ein kuenftiger, tatsaechlich hold-faehiger Stripe-Typ — faellt durch, bis ihn
+jemand eintraegt. Falsch-negativ ist hier bewusst billiger als falsch-positiv: die
+Denylist-Variante ("wenn `link`, ablehnen") liesse jeden neuen Wallet-Typ durch und der
+Schaden liefe unbemerkt weiter. Ein Test pinnt die Allowlist-Eigenschaft an einem frei
+erfundenen Typ; ohne ihn weicht der naechste Edit sie still auf.
+
+**(2) Unbekannter Zahlungsmethoden-Typ gilt als ungeeignet, fail-closed (GP-P2, Owner-Frage 5,
+2026-09-11).** Das Typ-Feld ist additiv-nullable ohne Backfill, jeder Bestands-Mandant traegt
+also zunaechst `null`. Der Rueckweg ist GP-P3, nicht eine Lockerung: wer eine Karte neu
+hinterlegt, stoesst die Provisionierung selbst wieder an. Zwischen den Merges von GP-P2 und
+GP-P3 bestand ein Fenster, in dem betroffene Mandanten nur ueber die Admin-Route zu bedienen
+waren; da alle aktiven Konten intern sind, wurde es getragen.
+
+**(3) Der Ablehnungsgrund hat ZWEI Transportwege, und Steuerung liest nur den getypten (GP-P1,
+Owner-Fragen 6 und 8, 2026-09-11).** Die Whitelist ist genau `error.code`,
+`error.decline_code`, `error.type` — feste Stripe-Enums, nie Freitext, nie verschachtelte
+Objekte wie `payment_method` oder `billing_details`. Der Enum-Anhang landet auch dauerhaft in
+`job.lastError` in Postgres. Ein Struktur-Waechter mit eigener Positiv-Kontrolle haelt fest,
+dass kein Modul unter `src/` `err.message` per `includes`/`match`/`indexOf` zur Steuerung
+liest; Ausnahmen stehen mit Begruendung in einer im Test hartkodierten Liste. Ohne diese
+Trennung kippt ein harmloser Wortlaut-Edit spaeter den automatischen Wiederanlauf in eine
+Endlosschleife. Im selben Zug faellt `createSubscription` von Stufe 3 auf Stufe 2 zurueck und
+protokolliert keine Kundendaten mehr — eine Verengung des Protokollierten, nie eine
+Erweiterung.
+
+**(4) Der Wiederanlauf kann enden: Versuchsdeckel plus terminaler Zustand (GP-P3/GP-P4,
+2026-09-11).** `PROVISIONING_RETRY_MAX_ATTEMPTS` (Default 3) zaehlt je Mandant und zaehlt
+`failed`-Nummern MIT; erschoepft fuehrt hart nach `needs_manual_reconcile`. Das ist kein
+Komfort, sondern der Ersatz fuer einen Deckel, der hier strukturell nicht greift:
+`occupiesCapacity` zaehlt `failed` und `released` nicht zur Kapazitaet, und die
+Idempotenz-Schluessel haengen an der `numberId` — jeder Neuanlauf erzeugt eine neue `numberId`
+mit frischen Schluesseln und stiesse nie an `MAX_NUMBERS_PER_TENANT`. Ohne den Zaehler waere
+der automatische Wiederanlauf ein Umgehungsweg um genau den Deckel, der seit E10 gegen
+DID-Vermehrung uebrig ist. Der zeitgesteuerte Zweig (GP-P4) stoesst zusaetzlich nur an, wenn
+die getypte Klassifikation aus (3) die letzte Ablehnung als voruebergehend ausweist;
+`PROVISIONING_RETRY_MIN_INTERVAL_MS` (Default 24 h) entprellt. Beide Werte sind Env, kein Code.
+Rollback: `maxAttempts=0` bzw. `minIntervalMs=0` halten den jeweiligen Zweig komplett aus.
+
+**(5) Der Preis-Waechter eskaliert auch seine eigene Unwissenheit — beziffert (GP-P6,
+Owner-Frage 12, 2026-09-11).** Zwei Waechter mit unterschiedlicher Schwere: `assertPricedPlans`
+ist netzfrei, prueft Config gegen Config und beendet den Start mit `exit(1)`, wenn bei
+`PAYMENT_ENABLED=true` ein Katalog-Slug keine Stripe-Price-Id hat. Bei `PAYMENT_ENABLED=false`
+ist er folgenlos, sonst stirbt jeder Entwickler- und Testboot. Der zweite Waechter vergleicht
+taeglich (`PRICE_DRIFT_MIN_INTERVAL_MS=86400000`) Betrag und Waehrung gegen den Katalog, ueber
+einen injizierbaren, rein lesenden Port, und meldet ueber denselben Kanal wie
+`outbound-drift-watch` (Audit -> Mail -> SMS, entprellt — eine SMS ist ein kostenpflichtiger
+Ausgangskanal). Ein Netzfehler bleibt eine Notiz; erst
+`PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER` (Default 3) aufeinanderfolgende erzeugen GENAU EINE
+Meldung, jeder weitere schweigt, ein erfolgreicher Lauf setzt zurueck. Ohne diese Zusage
+maskiert ein fehlendes Lese-Scope den Preis-Drift fuer immer.
+
+**Nicht Teil der Kette, weiter offen (`PLAN-GELDPFAD.md` Abschnitt 3):** die Deaktivierung von
+Link als Zahlungsart im Stripe-Dashboard (reiner Dashboard-Schritt, ausdruecklich NICHT per
+`payment_method_types` im Code zu ersetzen — ein falscher Wert legte beide Checkout-Aufbauten
+zugleich lahm); die Nachweisdokumente fuer `+4921194289148`; und der Dauergutschein ueber
+hundert Prozent, der zusammen mit der Befreiung an `invoiceTotal===0` einen Vollgratis-Zugang
+ergibt — zu pruefen vor dem ersten fremden Kunden.
+
+## IE2 — Die Geld-Achse bekommt einen Herzschlag (2026-09-12)
+
+**Was sich aendert.** Die pro-Tenant-Kostendecke bekommt eine **fuenfte, zeitgesteuerte**
+Fragestelle. Bisher wurde `blockingBudgetAxis` ausschliesslich aus vier
+EREIGNISGEBUNDENEN Naehten gefragt: der Turn-Runde (`claude.js#agentTurn`), dem Shim-Turn
+(`telnyx-llm-shim.js`), dem ElevenLabs-Werkzeug-Webhook (`routes/webhooks-elevenlabs.js`)
+und dem `/voice/*`-Re-Attach (`telephony/call-lifecycle.js#reattachActiveCall`). Ein Anruf
+ohne Turn und ohne Werkzeugaufruf — der Anrufer, der nur eine Nachricht hinterlaesst — hat
+die Decke mid-call NIE erreicht. Der neue Waechter
+(`src/telephony/budget-watchdog.js`, Takt `BUDGET_WATCHDOG_INTERVAL_MS`, Default 15000 ms)
+fragt je aktivem Anruf wiederkehrend DIESELBE Achse und beendet ueber DENSELBEN einen
+Terminierungspfad (`terminateOverBudgetCall` -> `terminateActiveCall` ->
+`terminateAndBillCall`). Er rechnet nichts selbst, legt nicht selbst auf und fuehrt keinen
+eigenen Zaehler.
+
+**Richtung der Wirkung: strenger, nie lockerer.** Es ist dieselbe Decke mit demselben
+Grund-Token (`budget-exhausted`) und demselben Endstatus (`completed`) — sie bindet nur
+jetzt auch dort, wo kein Ereignis sie bisher gefragt hat. Armiert wird an genau drei
+Stellen, alle strukturell und nicht per Konvention: in `armMaxDurationTimer` (die Naht, die
+jeder Anrufweg ohnehin durchlaeuft — NICHT als fuenfter Aufruf an den vier Startpfaden),
+nach erfolgreichem Re-Attach (ein Leg, das erst dort in den Prozess-Spiegel kommt) und im
+Boot-Re-Arm `rearmBudgetWatchdogs()` (unmittelbar nach dem Cap-Re-Arm; der
+Realtime-Sonderfall der Zeit-Achse wird bewusst NICHT geerbt, die Geld-Achse ist
+engine-neutral). Eine gescheiterte Runde (Achse oder Store wirft) beendet die Wache NICHT,
+sondern stellt sie neu — die einzige akzeptable Fehlrichtung fuer ein Gate.
+
+**Was unberuehrt bleibt.** Dial-Gate und Outbound-Permit, der Inbound-Reject, die
+Offenlegung, die Provider-Signaturpruefung, die Auth-Kette, `OUTBOUND_FROZEN`,
+Denylist/Land-Gate/Stundenlimit, der Max-Dauer-Cap samt seinem Re-Arm, alle Tarife und
+Decken, `src/bridge.js` (kein `blockingBudgetAxis` dort, `REALTIME_MID_CALL_BUDGET_CHECK`
+unveraendert) und `src/telephony/reattach.js` (byte-identisch — der Anlass der
+Terminalisierung wird in der Injektion gebunden). Kein neuer Endpunkt, also kein Eintrag in
+`src/route-policy.js`; keine neue Abhaengigkeit; keine zweite Geld-Achse und keine zweite
+Logquelle (die EINE Warnzeile traegt den Anlass als Token, `re-attach` oder `wache`).
+
+**Drei getragene Restrisiken.**
+
+1. **Ueberziehung von hoechstens einem Takt je Leg.** Zwischen zwei Runden kann ein Leg
+   weiterlaufen: bei 15 s Takt und `VOICE_TARIFF_DEFAULT_CENTS=30` rund 7,5 Cent je
+   laufendem Leg, bei `VOICE_TARIFF_INBOUND_CENTS=6` rund 1,5 Cent. NICHT kumulativ — jede
+   Runde liest den Ist-Stand. Der Takt liegt bewusst deutlich unter der Abrechnungsminute
+   (Telnyx rundet auf 60 s auf), damit die Ueberziehung keine ganze Carrier-Minute
+   erreicht. Zweite Linie bleibt die guthaben-abgeleitete Frist am Anruf (`maxDurationS`).
+2. **Grenze des Prozess-Spiegels.** Armiert wird, was DIESER Prozess sieht. Ein Leg einer
+   anderen Instanz ist erst ab seinem Re-Attach gedeckt. Die Abdeckung ist damit
+   unvollstaendig, aber nie falsch in die andere Richtung: es wird nie ein Leg
+   terminalisiert, das die Achse nicht als gesperrt meldet.
+3. **`BUDGET_WATCHDOG_INTERVAL_MS=0` schaltet den Takt komplett aus.** Das ist der bewusste
+   Rueckfall-Hebel ohne Deploy (wirksam beim naechsten Prozessstart). Die vier
+   ereignisgebundenen Pruefstellen bleiben dabei unveraendert scharf — der Zustand ist
+   exakt der Bestand vor dieser Phase, nicht ein Zustand ohne Decke.
+
+## IE6-S1 — Telnyx-AI-Assistant ersatzlos entfernt (2026-09-14)
+
+Der Telnyx-Custom-LLM-Shim (`/v1/chat/completions`), die Call-Control-Origination
+(`originateAiAssistantCall`), der Inbound-Handoff und der Dead-Air-Watchdog sind
+vollstaendig entfernt (kein Feature-Flip, kein Rueckweg ohne Revert).
+
+**Angriffsflaeche:** `POST /v1/chat/completions` ist nicht mehr gemountet, 404
+unabhaengig von Env-Werten. `POST /voice/call-control` ist entfernt; die
+`/voice`-Praefix-Signatur antwortet weiter 403 fail-closed. Ein Fall handler-interner
+Auth faellt weg.
+
+**Unveraendert:** Ed25519, Wiederholungs-Riegel, Tenant-Aufloesung, Kostendecke (beide
+Richtungen), Max-Dauer, Offenlegung, Outbound-Gates, `OUTBOUND_FROZEN`, `MAX_NUMBERS*`.
+
+**Altbestand:** Legs mit `callControlId` bleiben ueber `hangUpAction` beendbar; Profil
+`telnyx_assistant` bleibt unaufgeloest und damit fail-closed.
+
+**Probe:** Negativkontrolle `fehlt|POST|/v1/chat/completions|404`.
+
+**Getragen:** R-1 (Streaming-/Abbruch-Naht in `agentTurn`, entfaellt mit IE6 Stufe 3),
+R-3 (Render-Env-Werte der entfernten Schalter bleiben stehen und sind wirkungslos).
+
+## IE6-S2 — OpenAI-Realtime-Bridge ersatzlos entfernt (2026-09-14)
+
+Die Audio-Bridge (Media-Stream-WebSocket <-> OpenAI Realtime), die Stream-Direktive,
+der MediaTransport-Port samt Telnyx-Adapter und VOICE_ENGINE=realtime sind entfernt.
+
+**Angriffsflaeche:** kein upgrade-Handler mehr; ein WebSocket-Upgrade auf /media/telnyx
+wird nicht angenommen (kein 101, Test IE6-S2-4). Die stream_token-Pruefung entfaellt mit
+dem Endpunkt; das Feld bleibt am Call-Datensatz und wird weiter gestrippt.
+Ein Secret (OPENAI_API_KEY) wird nicht mehr gelesen.
+
+**Unveraendert:** Ed25519, Wiederholungs-Riegel, Tenant-Aufloesung, Kostendecke (beide
+Richtungen, Mid-Call-Pruefung der Budget-Engine), Max-Dauer inkl. Boot-Re-Arm (jetzt
+ohne Engine-Sonderfall), Offenlegung (disclosureSentence), Outbound-Gates, OUTBOUND_FROZEN.
+
+**Altbestand:** Profil telnyx_inbound_realtime bleibt unaufgeloest (fail-closed).
+
+**Getragen:** R-S2-1 (stream_token-Spalte, Schema-Cutover eigene Entscheidung),
+R-S2-2 (Render-Env VOICE_ENGINE/OPENAI_*/REALTIME_* wirkungslos), R-S2-3 (Workflow-Vorlagen).
+
+## IEL-B6 — Init-Webhook wird von aussen erreichbar (2026-09-15)
+
+**Was sich sicherheitsrelevant geaendert hat:** ein neuer oeffentlicher Endpunkt
+`POST /webhooks/elevenlabs/init` (Conversation-Initiation-Webhook des ElevenLabs-Inbound-Wegs)
+und Frist-Timer, die einen wartenden Inbound-Anruf live umleiten oder auflegen. Beides wirkt erst,
+wenn ein Tenant ueber `ELEVENLABS_INBOUND_ENABLED` + `ELEVENLABS_INBOUND_TENANT_IDS` gepinnt ist
+und B8 den Sprechpfad umstellt; mit Schalter aus antwortet der Endpunkt jedem Aufrufer mit 403/404.
+Keine neue Env, keine neue Dependency.
+
+### 1. Das Geheimnis
+
+| Eigenschaft | Zustand |
+|---|---|
+| Vergleich | timing-sicher (`safeEqual`) des Headers `x-hermes-init-token` gegen `ELEVENLABS_INIT_WEBHOOK_TOKEN`, VOR jeder anderen Verarbeitung |
+| leeres oder zu kurzes Secret | ein konfigurierter Wert unter `INIT_WEBHOOK_TOKEN_MIN_LENGTH` gilt als leer: **403 fuer jeden Aufruf** (fail-closed) |
+| Ablage | Render-Env (`sync:false`) und Workspace-Secret im ElevenLabs-Konto, erzeugt und verteilt von `iel-geheimnisse.mjs` aus EINEM Wert; im Repo nur die `secret_id` (E14/E16), nie der Wert |
+| Replay | **NICHT kryptografisch geschuetzt** — keine Nonce, keine Signatur (Anbieter-Grenze [R1] c7). Nur binnen `EL_INIT_WIEDERHOLUNG_FRIST_MS` (Startwert 10 s, Anker `elBoundAt`), mit identischem Bindungs-Token UND identischer `conversation_id`, kommt dieselbe Antwort erneut; sonst 404 ohne Daten |
+| Rotation | nicht automatisiert. Weg: erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` (Render-Env und Workspace-Secret aus EINEM Wert), dann Deploy. Nur falls keine Secret-Aktualisierung belegt ist: neue `secret_id` + `--workspace-init-webhook --secret-id=<neu>`. Zwischenfenster = 403 -> keine Bindung -> Frist -> Budget-Rueckfall, nie Tenant-Daten |
+
+### 2. Die schadensbegrenzenden Stufen (Reihenfolge bindend, E11)
+
+0. Init-Token-Schranke (IEX-A7, `app.js#installGlobalMiddleware`, VOR `express.urlencoded`/`express.json`):
+   gueltiges Token -> weiter; ungueltiges -> je IP gezaehlt, 403 (Log wie Stufe 1) bzw. 429 `gedrosselt`
+   ab `INIT_FEHLVERSUCHE_PRO_MIN` - ohne Body-Parse, ohne Store-Zugriff
+1. Init-Token (403, Log `grund=token` ohne Request-Schluessel)
+2. Zuordnung, nur lesend: NUR ueber das 16-Byte-Bindungs-Token (`call.streamToken`, als SIP-Header
+   `X-Hermes-Call-Binding` bzw. `dynamic_variables.sip_hermes_call_binding`) an einen **aktiven**
+   Inbound-EL-Anruf im Zustand WARTET oder die identische Wiederholung binnen Frist; dazu `agent_id` ==
+   `ELEVENLABS_AGENT_ID` und `called_number` (falls vorhanden) normalisiert == `call.to` (404)
+3. Schalter/Scope/Beleg `inboundElPathFor` (404, IEX-A9): unter `registrierte_dids` bindet nur ein Anruf, dessen angerufene DID einen Beleg mit dem Fingerabdruck des laufenden Zugangs traegt
+3b. Eroeffnungs-Riegel `inboundEroeffnungsDefekteFuer` (IEX-A3/E3), VOR der Bindung: **der
+   variantenrichtige Kopfsatz** am Anfang (`inboundGrussSatz` bzw. `inboundGrussSatzOwner`),
+   **`inboundHinweisSatz` woertlich**, `hasInboundNotice`, kein `{{` (404, Log `grund=eroeffnung`,
+   keine Bindung -> Anbieter bricht ab -> Fehlersatz). Ein leerer Sollkopf und eine unbekannte
+   Variante sind selbst Defekte (fail-closed, IEP-P6)
+4. set-once-Bindung `bindInboundElConversation` (404 bei verlorener Op)
+5. Antwort: dynamische Variablen und `first_message = inboundEroeffnung(ownerName)` (Gruss-/
+   Selbstvorstellungssatz mit KI-Kennzeichnung + Hinweis + Frage), **bei erkanntem Owner
+   `inboundEroeffnungOwner(firstName)` — Anrede-Wechsel, KI-Kennzeichnung und
+   Transkriptions-Hinweis unveraendert woertlich**; `inbound_situation` in der passenden
+   Fassung. Owner- und Fremd-Antwort unterscheiden sich in **genau zwei** Feldern.
+   Derselbe Riegel erneut am fertigen Koerper im
+   Waechter; **ohne Transkript, ohne Secret, `tenant_token ""`**
+   (der abgeleitete Werkzeug-Token wird fuer Inbound nie berechnet). Die Werkzeug-Webhooks sperren den
+   Inbound-Anruf in beiden Stellungen von `ELEVENLABS_TENANT_TOKEN_REQUIRED` (Test `iel-inbound-werkzeuge`).
+
+Jede Ablehnung ab Stufe 2 antwortet mit demselben konstanten Koerper; nur das Log unterscheidet die Gruende
+(`token`, `kein_wartender_anruf`, `agent`, `called_number`, `schalter`, `eroeffnung`). Der Antwort-Builder hat genau EINEN
+Aufrufer (die Route, nach Stufe 4). Der Endpunkt loest selbst keinen Anruf aus.
+
+| Punkt | Festlegung |
+|---|---|
+| Secret-Header beweist keine Zugehoerigkeit (R-B) | Der Anbieter sendet den Header bei JEDEM Inbound-Gespraech des Workspace mit — er beweist nur "kommt von unserem Anbieter-Konto". Die Barriere ist die Token-Bindung aus Stufe 2 (Beleg E11, Test `iel-init-webhook` 3). |
+| Rate-Limit (IEX-A7/E12) | Fremd-DoS-Schnitt: fremde ElevenLabs-Workspaces teilen die Egress-IPs des Anbieters; ein Zaehler ueber ALLE Anfragen einer IP (auch der globale mit `RATE_LIMIT_PER_MIN`) sperrte unsere echten Bindungen. Deshalb nimmt der globale Limiter `POST` auf exakt `ELEVENLABS_INIT_PATH` aus (`istInitWebhookAnfrage`, andere Methoden bleiben gezaehlt), und die Vor-Parser-Schranke zaehlt NUR ungueltige Tokens je `req.ip`: `INIT_FEHLVERSUCHE_PRO_MIN=30` je `RATE_WINDOW_MS`, danach 429 + `Retry-After`. Gueltiges Token wird nie gezaehlt oder gedrosselt; 404/500 nach gueltigem Token zaehlen nicht. 403/429 ohne Parse und ohne Store. Log: 429 hoechstens eine Zeile `[el-init] gedrosselt anzahl=<n>` je Fenster, ohne IP/Token; 403 weiter `grund=token` je Anfrage (Erkennungsweg §6). Stufe 1 bleibt im Handler. Test `iex-a7-init-limit` |
+| Pfadform | Der Init-Router ist `caseSensitive`+`strict`: nur die exakte Form (`initWebhookUrl()`) erreicht den Handler - dieselbe Menge, die die Schranke vergleicht. Varianten (`/init/`, Grossschreibung) fallen durch (404, globaler Limiter), ohne Handler. Test `iex-a7` 8/10 |
+| Log | Schluesselnamen des Requests bereinigt (`[A-Za-z0-9_]`) und auf 20 gekappt, nie Werte, nie Token, nie `conversation_id` |
+
+### 3. Frist-Timer (E9)
+
+Die aeussere Frist (`EL_BRIDGE_START_DEADLINE_MS` ab `answeredAt`) und die innere
+(`EL_BINDING_AFTER_ANSWER_MS` ab dem answered-Callback, armiert ab B8) leiten einen noch aktiven, noch
+WARTENDEN Anruf auf `/voice/el-rueckfall?quelle=frist` um (volle Begruessung mit Pflichtsatz); scheitert
+das oder fehlt `redirectCall` (vor B7), wird aufgelegt. Nie Stille. Der Boot re-armiert die aeussere Frist
+(setzt nur Timer, INV-5).
+
+### 4. Restrisiken (bewusst getragen)
+
+- **Stille bei Neustart** = Neustart-Dauer plus Rest der aeusseren Frist.
+- **Frist-Startwerte unbelegt:** `EL_BRIDGE_START_DEADLINE_MS = 30000` und `EL_BINDING_AFTER_ANSWER_MS = 8000`
+  sind Vorschlaege aus Einzelmessungen ([M1] J3, [KO 3.2]), Nachzug nach Messung 8.
+- **Builder wirft NACH der Bindung** (der Eroeffnungs-Riegel laeuft vorher, danach koennen noch
+  Store-Leser/Zeitkontext werfen): 500 ohne Daten, der Anruf bleibt GEBUNDEN ohne Frist. Ob
+  der Anbieter dann BYE schickt (Rueckfall ueber E8) oder still bleibt, ist M8 (Test `iel-init-webhook` 12).
+- **Frist-Timer wirken je Prozess** (Deploy-Ueberlappung, pg-Zustand im Speicher, Klasse E18-3): eine alte
+  Instanz kann umleiten; Folge ist ein Rueckfall, kein Datenleck.
+- **Kein Budget-Check an der Init-Route:** die Stufenfolge E11 ist bindend. `budgetExceeded` hat der Anruf
+  Sekunden vorher in `/voice/incoming` passiert, danach wirkt die Geld-Wache. Die pro-Tenant-Kostendecke
+  bleibt fuer beide Richtungen unangetastet.
+- **Init-Token geleakt (IEX-A7):** wer das Token hat, wird am Init-Pfad nicht mehr gedrosselt; vorher galt
+  noch das globale 120/min je IP. Bewusst so (E12(1)). Die Barriere bleibt das Bindungs-Token (Stufe 2);
+  jede Anfrage kostet einen Store-Scan ueber die Calls. Gegenmittel ist die Rotation per
+  `iel-geheimnisse.mjs setzen`.
+- **IPv6-Rotation (IEX-A7):** der Zaehlerschluessel ist die volle `req.ip`. Wer viele Adressen rotiert,
+  umgeht das Fehlversuch-Limit, fuellt die Zaehler-Map (Sweep alle `RATE_SWEEP_INTERVAL_MS`) und das
+  403-Log. Dieselbe Klasse wie beim globalen Limiter, dessen Map diese Anfragen jetzt nicht mehr sieht; je
+  IP entsteht weniger Log als vorher (30 statt 120 Zeilen/min). Folgeaufgabe: Schluessel auf das
+  /64-Praefix normalisieren, fuer beide Zaehler an EINER Stelle.
+- **Exakte Pfadform (IEX-A7):** sendete der Anbieter je eine andere Form als die konfigurierte URL, endete
+  jede Uebergabe im Fehlersatz. Belegt ist nur, dass die konfigurierte URL aus der Konstante stammt
+  (`test/iel-b9`) und `beleg-init` sie nutzt. Erkennungsweg: Owner-Test #2 (a5) verlangt `[el-init] gebunden`.
+
+## IEL-B8 — SIP-Uebergabe an ElevenLabs und Rueckfall-Routen (2026-09-15)
+
+Sicherheitsrelevant geaendert hat sich: `/voice/incoming` hat eine Weiche. Sie greift nur, wenn
+Schalter (`ELEVENLABS_INBOUND_ENABLED`), Tenant-Allowlist (`ELEVENLABS_INBOUND_TENANT_IDS`) und
+vollstaendiger Zugang zusammen erfuellt sind (`inboundElPathFor`), und sie laeuft NACH allen sieben
+Sicherungen des Handlers (Signatur-MW, Wiederholungs-Riegel, Nummern-Aufloesung, Kostendecke,
+Notbremse mit EL-Satz, Cap/Geld-Wache, set-once-Kostenprofil). Auf dem EL-Pfad ist
+`<Dial audioUrl="…"><Sip>` das erste Verb (IEP-P2: es beantwortet das eingehende Bein SOFORT, und
+waehrend der Dial-Wartezeit laeuft unser eigener Begruessungslaut statt des Anbieter-Freitons); den
+Hinweis spricht der Agent als Teil seiner vom Server gesetzten und geprueften
+Eroeffnung (IEX-A3). Dazu kommen zwei neue
+signaturpflichtige Routen (`/voice/el-rueckfall`, `/voice/el-bein`). Ein neues, nicht-geheimes Env
+(`ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED`, Default an) und ein statisches Asset unter
+`public/brand/` (bestehender `express.static`-Mount, keine neue Route, kein Eintrag in
+`route-policy.js` noetig), keine neue
+Dependency. Schalter aus oder Tenant nicht gepinnt: Inbound-TeXML byte-identisch (Golden-Test).
+
+### 1. SIP-Zugang
+
+| Eigenschaft | Zustand |
+|---|---|
+| Umfang | EIN gemeinsamer Zugang fuer alle gepinnten DIDs |
+| Klartext | Klartext im TeXML bei Telnyx (`<Sip username password>`) |
+| Ablage | Render-Env `sync:false` und `inbound_trunk_config.credentials` beim Anbieter |
+| Log | Nie geloggt: Direktiven und TeXML werden nicht geloggt, Renderer-Fehler nennen nur Feldnamen, Grep-Test "eine Lesestelle" (`test/iel-b8-weiche.test.js` 9), Spawn-Test "Passwort nicht im stdout" (12) |
+| Transportweg (E16) | Wert entsteht im Prozess von `iel-geheimnisse.mjs`, geht nur an Render-API, ElevenLabs-API und Registrierungs-PATCH; nie Chat, Agent, lokale `.env`, Log |
+| Mindestlaengen | `SIP_PASSWORD_MIN_LENGTH` und `INIT_WEBHOOK_TOKEN_MIN_LENGTH` (je 32) |
+| Rotation | Nicht automatisiert. Erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` mit ALLEN gepinnten DIDs, dann Deploy. Im Zwischenfenster scheitert Digest -> 487 -> `<Redirect>` -> Fehlersatz + Auflegen (IEX-A2) ([M1] J4/F-F); seit IEP-P2 laeuft das auf einem bereits beantworteten Bein, also im belegten Fall |
+| Abweichung Render vs. Anbieter | Entsteht nur nach Teilausfall ohne erneuten Lauf; nicht lesend pruefbar. Am Anruf erkennbar: `[el-rueckfall]`-Zeile ohne `[el-init]` (E16) |
+
+### 2. Offenlegung
+
+- Erstanruf (IEX-A3, O1/A2): kein eigenes Sprech-Verb vor dem Dial. `first_message =
+  inboundEroeffnung(ownerName)`, Hinweis-Text unveraendert aus `INBOUND_NOTICES`, der Namenssatz
+  traegt die KI-Kennzeichnung auch ohne Namen (O4). Riegel E3 fail-closed vor der Bindung und im
+  Builder. Die Stimme aus E19 gilt nur noch fuer den Fehlersatz (Test 18). Ob die
+  Unterbrechungssperre auch fuer den Override wirkt, ist UNBELEGT: Messung M-U1 am Owner-Test #2,
+  ROT = Notaus.
+- Gescheiterte Übergabe (IEX-A2, O3): fester Fehlersatz `inboundFehlersatz(ownerName)` in der
+  Agentenstimme (E1), danach `<Hangup/>`. Kein Budget-Gespräch, also kein zweites
+  Transkriptions-Gespräch. Der Namenssatz trägt die KI-Kennzeichnung auch ohne Namen (O4).
+  `quelle` wirkt nur im Log.
+
+### 3. Bindungs-Token
+
+`streamToken` ist kein Geheimnis. Es bindet nur waehrend `WARTET`, danach nur fuer die idempotente
+Wiederholung derselben `conversation_id` binnen `EL_INIT_WIEDERHOLUNG_FRIST_MS` (E11/K1). In
+API-Views bleibt es entfernt.
+
+### 4. Neue Routen `/voice/el-rueckfall`, `/voice/el-bein`
+
+- Liegen unter `router.use("/voice")` (Ed25519 fail-closed), keine Auth-Ausnahme, je ein
+  `route-policy.js`-Eintrag mit `VOICE_SIGNATURE_REASON` (Inventar- und Probe-Tabelle nachgezogen).
+- Idempotenz-Anker (`rk:`/`eb:` + callId + Unterscheider, dazu der Umschlag-Fingerabdruck) OHNE
+  Neustart-Schicht: die Ersatzantwort waere fuer ein uebergebenes Bein ein leeres Dokument, im
+  Rueckfall also Stille. Nach einem Neustart entscheidet der Handler aus der Persistenz neu.
+- Entscheidung nur aus Aktiv-Status, `bridgeStateOf` und `elBoundAt`, nie aus Prozessspeicher.
+- Budget-Call: Folge-Gather, kein neuer Abbruchweg.
+- Die Routen loesen keinen Anruf aus; `/voice/el-bein` armiert nur eine Frist. Fehler in
+  `/voice/el-rueckfall` enden im Fehlersatz (ohne Synthese, Name nur bei bekanntem Call) + Hangup;
+  der Marker wird im catch nur gesetzt, wo die Entscheidung FEHLERSATZ lautet (D5). Ein
+  unbekannter/beendeter Call endet in Hangup.
+
+### 5. Reihenfolge der schadensbegrenzenden Stufen
+
+1. sieben Sicherungen in `/voice/incoming`
+2. Digest und `allowed_numbers` (Absender-Filter) als Zusatz
+3. Token-Bindung am Init-Webhook als Barriere
+4. Eroeffnungs-Riegel vor der Bindung (kein Gespraech ohne Hinweis-Baustein, IEX-A3)
+5. Fristen (innere und aeussere) mit Live-Umleitung
+6. Fehlersatz bzw. Auflegen, nie Stille (IEX-A2)
+
+### 6. Restrisiken (bewusst getragen)
+
+- Stille bei Prozess-Neustart = Neustart-Dauer + Rest der aeusseren Frist (3.2).
+- Keine Erstattung auf `TELNYX_INBOUND_EL_CONVAI`, bis `pflichttypen` gemessen ist (L7).
+- Keine Benachrichtigung für gescheiterte Übergaben (E5): Marker ODER nie gebunden (`WARTET`).
+  Darunter fallen auch Auflegen beim Freizeichen, `cancel_call`, Cap und Geld-Wache vor der
+  Bindung (Owner-Frage F4, Default nein). Sichtbar bleiben der Call in `list_calls` und die
+  Logzeile `[el-uebergabe] gescheitert`. Einen Betreiber-Alarm gibt es nicht (F3).
+- Die Grund-Kennung `el_uebergabe_gescheitert` hat keinen Nutzertext; Widget und MCP zeigen den
+  Sammeltext.
+- Die Grund-Schreibung liegt bewusst in `elevenlabs/inbound-uebergabe-gescheitert.js`, nicht in
+  `routes/voice.js` (Riegel R4b). Das ist keine End-Naht; das Ende läuft über
+  `persistEndWithReason`, die Reihenfolge prüft IEX-A2-10.
+- Bei `GEBUNDEN` unter `EL_MIN_CONVERSATION_MS` endet auch ein echtes Kurzgespräch im Fehlersatz,
+  ohne Nachricht (A3-Heuristik, Messung M-A3).
+- EL-Kosten eines nach der Bindung abgebrochenen Kurzgespraechs (< `EL_MIN_CONVERSATION_MS`) werden
+  nicht aus der Conversation belegt, weil der Rueckfall-Riegel (E7e) diesen Abschluss verhindert.
+- Ende-Anker `jetzt` statt Carrier-Ende, wenn eine nach Neustart re-armierte Schleife vor
+  `/voice/status` abschliesst (E17 Rest).
+- Single-Flight und Abschluss-Riegel wirken je Prozess: zwei Instanzen waehrend einer
+  Deploy-Ueberlappung koennen ein Transkript nach dem Purge erneut schreiben (E18-3, Bestand wie
+  Outbound-EL-Re-Arm).
+- Startwerte `EL_DIAL_RING_TIMEOUT_S = 10` und `EL_MIN_CONVERSATION_MS = 5000` sind unbelegt
+  (Nachzug nach Messung 8).
+- Ein Idempotenz-Anker wirkt je Prozess.
+- Die `[el-rueckfall]`-Zeile eines nicht mehr aktiven Calls traegt `callId: null` (der Call wird nicht
+  re-attacht); die Korrelation laeuft dann nur ueber Zeitpunkt und `[voice/status]`.
+- **M-U1 offen (IEX-A3):** der Hinweis ist ab IEX-A3 moeglicherweise abschneidbar, bis M-U1 belegt
+  ist; das Fenster zwischen Deploy und Owner-Test #2 wird bewusst getragen (Runbook a5 unmittelbar
+  nach a2/a3).
+- **`ownerName` ist nicht laengenbegrenzt** und steht vor dem Hinweis. Er kommt aus der eigenen
+  IdP-Identitaet; der Riegel sichert, dass Kennzeichnung und Hinweis woertlich folgen. Eine
+  Obergrenze ist eine eigene Entscheidung fuer beide Richtungen.
+- **Gebundener Anruf mit leerem Anbieter-Transkript und Status completed:** ohne serverseitige
+  Pflichtsatz-Zeile laeuft `finishCall` in den Zweig "Anruf fehlgeschlagen" statt in eine
+  Zusammenfassung ueber nur den Hinweis. Timeout und Dauerfehler des Polls enden schon heute als
+  failed.
+- **`answerOnBridge` (IEX-A4): geschlossen mit IEP-P2; U1 geschlossen am 2026-09-17.** Das Dial traegt
+  kein `answerOnBridge` mehr, beantwortet das Bein also sofort; damit entfaellt die Pflichtmessung M-S3
+  (der Fehlersatz auf einem BEANTWORTETEN Bein ist gemessen, [M1] F-F). Das an ihrer Stelle offene
+  Element U1 - dass der Anbieter-Default `false` hier wirklich sofort annimmt, alle M1-Messungen liefen
+  auf bereits beantworteten Beinen - ist durch den bestandenen Owner-Testanruf vom 2026-09-17 belegt
+  (kein Klingeln, Ton und Eroeffnung abgenommen). Kein Rest offen; die Messmaschine, an der der Beleg
+  haengen sollte, ist mit IEP-A entfernt.
+- **Begruessungslaut (IEP-P2):** die Fuellung der Wartezeit laeuft ueber `audioUrl` am `<Dial>` auf ein
+  statisches, oeffentlich ausgeliefertes WAV ohne Sprache. Ignoriert Telnyx das Attribut, faellt der
+  Anrufer auf den Anbieter-Freiton zurueck (fail-soft, exakt der Schalter-Aus-Zustand) - kein Abbruch,
+  keine Stille, kein Gate beruehrt. Die Attributschreibweise ist doku-belegt, nicht am Konto gemessen.
+  Rueckweg: `ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED=false`.
+- **Buchungs-Vorlauf (IEX-A4), durch IEP-P2 gedreht:** der Befund "`answeredAt` liegt vor der
+  Traeger-Annahme" ist entschaerft - das Anrufer-Bein ist ab dem TeXML beantwortet. Dafuer NEU: eine in
+  der Wartephase abgebrochene Zustellung erzeugt jetzt eine real abgerechnete Traegerminute
+  (`voiceMinutesOf` rundet auf), wo vorher nur der Vorlauf gebucht wurde. Als **Rollout**-Gate - nicht
+  als Owner-Test-Gate - ist die Klingelphasen-Abbruchquote aus den `detail_records` ueber einen
+  laengeren Zeitraum zu beziffern; ist sie nennenswert, vor dem Rollout `EL_DIAL_RING_TIMEOUT_S`
+  senken. Die Decke selbst bleibt unangetastet und sperrt weiter beide Richtungen (Messung M-A1,
+  Owner-Frage F2/F4).
+
+## IEL-B9 — Anbieter-Konfiguration fuer Inbound (2026-09-15)
+
+Werkzeug-Phase: kein Serververhalten aendert sich, keine Route, kein Safety-Gate, keine Offenlegung, keine
+neue Dependency. Neu sind drei Schreibwege beim Anbieter (Workspace-Init-Webhook, Agent-Schalter,
+Loeschen einer offenen Registrierung) und ein lesendes Inventar. Wirksam werden sie erst ueber die
+Runbook-Schritte 0/5/6/8 - jeder Schreibweg ist Trockenlauf per Default.
+
+### 1. Workspace-weiter Init-Webhook
+
+Der Webhook gilt fuer JEDEN Agenten des Workspace, der den Schalter traegt ([R1] c3). Geschrieben wird er
+nur mit `npm run elevenlabs:push -- --workspace-init-webhook --secret-id=<id> --ausfuehren`.
+
+| Eigenschaft | Zustand |
+|---|---|
+| Ziel | `init-webhook-ziel.js#initWebhookUrl` - Repo-Konstante, nie `PUBLIC_URL` der lokalen Konfiguration (Quelltext-Pin, Test 24; Kindprozess mit Tunnel-`PUBLIC_URL`, Test 11) |
+| Ziel-Urteil | Render-API fuer `HERMES_RENDER_SERVICE_ID`, nur GET: wirksamer Origin (`PUBLIC_URL` \|\| Service-URL) ist https und in `HERMES_GATEWAY_ORIGINS`, der Init-Host ist dem Dienst als VERIFIZIERTE Custom-Domain zugeordnet. ROT = 0 Aufrufe an ElevenLabs |
+| Render-Basis | Konstante im Code, kein Env-Wert - eine lokale `.env` kann den Schluessel nicht auf einen fremden Host lenken |
+| Header | `x-hermes-init-token` nur als Workspace-Secret-Verweis `{secret_id}`; der Lesebeleg nach dem Schreiben ist ROT, sobald irgendein Header-Wert ein String ist (gemeldet wird nur der Name) |
+| `secret_id` | steht im Repo nur als Runbook-Eintrag nach dem Anlegen; das Skript liest keinen Geheimnis-Wert |
+| Gegenprobe (P5) | ob der PATCH andere Workspace-Settings ersetzt, ist ungemessen: alle uebrigen Top-Level-Schluessel werden vorher/nachher tief verglichen, Abweichung = ROT (nur Namen) |
+| Entfernen (P4) | `--entfernen` laeuft ohne Ziel-Urteil - er schreibt weder Adresse noch Secret, und der Rueckweg haengt nicht an Render |
+
+### 2. Agent-Schalter und Freigaben
+
+Besitz-Feld `init_webhook_schalter` (`platform_settings.overrides.enable_conversation_initiation_client_data_from_webhook`,
+SOLL true, ohne `ausgenommen`). Freigaben-Wache (Riegel 8 in `push-elevenlabs.mjs`), aktiv sobald der
+fertige Koerper den Schalter traegt, auch im Trockenlauf:
+
+- Schalter nur ausdruecklich (`--felder=init_webhook_schalter`); ein Lauf ohne Nennung ist ROT ohne PATCH (P2).
+- Minimal-Body: unter `platform_settings.overrides` nur der Schalter, sonst ROT.
+- Schnappschuss der Freigaben-Karte vorher; ROT ohne PATCH bei unlesbarer Karte oder schon offener
+  `agent.prompt.*`-Freigabe (sonst koennte jeder Anrufstart den Systemprompt uebersteuern).
+- Nachher Tiefvergleich der Karte; Abweichung = ROT mit Rueckweg: `--felder=conversation_config_override_erlaubnisse --ausfuehren`,
+  danach Schalter false (Vorlage lokal auf false + `--felder=init_webhook_schalter --ausfuehren`).
+
+### 3. Inventar-Regel E15 und Entfernung Spike2
+
+- `npm run elevenlabs:nummern -- --trunk-inventar` liest alle Registrierungen (Liste + Einzel-GET). ROT bei
+  `inbound_trunk` ohne `has_auth_credentials === true`. Ausgabe nur Kennung, Label, Nummern-Endung und
+  ja/nein-Felder - nie Nutzername, volle Nummer oder `allowed_addresses`.
+- `phnum_1101m00pjrg7e1js7aaxwp8hdw38` (Spike2) wird als Runbook-Schritt 0 geloescht.
+- `--registrierung-loeschen --id=<phnum_...>` nur fuer die Klasse offen, sonst VERWEIGERT; ohne
+  `--ja-wirklich` Trockenlauf. Erfolg ist der Lesebeleg (id nicht mehr gelistet UND Inventar gruen), nicht
+  der HTTP-Status des DELETE.
+- Kein Modus schreibt `credentials:null` oder `allowed_numbers:[]` - ein Leerwert ist gemessen der OFFENE
+  Zustand ([M1] J4). Rueckweg ist Schalter, Webhook oder `ELEVENLABS_INBOUND_ENABLED`.
+- Beide Modi laufen ohne Store (E13), belegt per Import-Spion mit Positiv-Kontrolle (Test 23).
+
+### 4. Barriere vs. Zusatz
+
+| Stufe | Rolle | Beleg |
+|---|---|---|
+| Token-Bindung am Init-Webhook | Barriere (E11) | IEL-B6 |
+| Digest am Inbound-Trunk | Zusatz - gemessen nur fuer angerufene Registrierung == Trunk | [M1] J4 |
+| `allowed_numbers` | Zusatz - faelschbarer Absender-Filter | [M1] J6 |
+
+### 5. UNBELEGT: Registrierung ohne `inbound_trunk` lehnt INVITE ab
+
+Risiko: erreichbar fuer jeden, falls Registrierungen ohne Inbound-Konfiguration INVITEs annehmen
+(ungemessen); die Barriere ist dann das Bindungs-Token im Init-Webhook: ohne gueltige Bindung startet kein
+Gespraech mit Tenant-Kontext und kein Tenant-Wert verlaesst den Server.
+
+Ersetzungsregel: dieser Eintrag wird NUR durch ein diskriminierendes N2-Ergebnis ersetzt (Annahme, SIP
+200). Eine Ablehnung (404/407/487/sonstiger Status) ergaenzt nur "in Konfiguration <Trunk-Inventar> mit
+Status X abgelehnt, From/Request-URI, Datum - nicht diskriminierend"; der Eintrag bleibt UNBELEGT.
+
+N2 gemessen 2026-09-15 ~07:03 UTC (`tasks/iel-nachdeploy-messung.jsonl` nr 2): Trunk-Inventar 3 Produktions-
+Registrierungen (…1188 mit Zugang, …4874/…8341 ohne Inbound) + Wegwerf …0176 nur mit `outbound_trunk_config`;
+From …0177, Request-URI `sip:…0176@sip.rtc.elevenlabs.io:5060;transport=tcp`, ohne Digest. Ergebnis: KEIN
+ElevenLabs-Gespraech, TeXML lief in den Rueckfallsatz (im Mitschnitt gehoert); SIP-Status des Kindbeins nicht
+erfasst - nicht diskriminierend. Der Eintrag bleibt UNBELEGT.
+
+### 6. M8 gemessen: Kostenfall fremder INVITE, Init-Webhook lehnt ab
+
+Gemessen 2026-09-15 ~07:00 UTC (N1, `tasks/iel-nachdeploy-messung.jsonl` nr 1): INVITE MIT gueltigem Digest an
+eine Wegwerf-Registrierung am Agenten, Inbound-Schalter aus. ElevenLabs ruft den Init-Webhook (Render-Log
+`[el-init] abgelehnt grund=kein_wartender_anruf schluessel=agent_id,call_id,call_sid,called_number,caller_id,
+conversation_id,sip_headers sip_headers=objekt`, = M7), startet das Gespraech trotzdem und beendet es nach
+1 s mit `failed` ("Missing required dynamic variables in first message: owner_name, opening_line"); SIP
+100/407/180/200. Kostenfall damit: rund 1 s Anbieter-Dauer je fremdem INVITE, und nur fuer jemanden mit
+gueltigem Digest (ohne Digest gemessen abgelehnt, [M1] J4). Bewusst akzeptiert.
+
+### 7. Werkzeug-Schluessel und Restrisiken
+
+- `RENDER_API_KEY`: Werkzeug-Schluessel ueber `src/config.js` (seit IEL-B10 `config.werkzeug.renderApiKey`,
+  vorher `config.voice.elevenLabsInbound.renderApiKey`; in `.env.example` dokumentiert, NICHT in `render.yaml` und nicht im Dienst gesetzt), voller
+  Workspace-Zugriff bei Render; in B9 nur GET, nie ausgegeben, nie in einem Ergebnisfeld. Liegt er lokal in
+  `.env`, liest dotenv ihn mit - die Render-BASIS bleibt trotzdem Konstante.
+- Custom-Domain-Liste mit 100 oder mehr Eintraegen ergibt ROT (kein Blaettern).
+- Render nicht lesbar blockiert nur das Setzen, nicht das Entfernen.
+- Dict-Ersetzung beim Anbieter ist fuer die Workspace-Settings ungemessen; abgedeckt durch die Gegenprobe
+  (ROT, aber ohne automatischen Rueckbau).
+
+### 8. Mitschnitt-Sperre gerichtet geoeffnet (IEX-A5, Owner-Entscheidung O2, 2026-09-15)
+
+`record_voice` steht nicht mehr auf der Sperrliste von `push-elevenlabs.mjs`. Geoeffnet ist nur die
+Richtung `false` (`RECORD_VOICE_ERLAUBT`): nennbar in `--felder`; Riegel 1c bricht vor dem PATCH ab,
+sobald der fertige Koerper `record_voice` mit irgendeinem anderen Wert traegt (auch `null`, `"false"`,
+`0`, auch in Listen). `retention_days` bleibt in beiden Richtungen hart gesperrt, auch in kombinierter
+Nennung. Die Vorlage nimmt `record_voice` nicht mehr aus; bis zum Push (Runbook a4) meldet der
+Drift-Lauf die Abweichung blockierend. Der historische Satz unter EL-P5 §5 ("beide gesperrt") ist
+damit fuer `record_voice` ueberholt. Nicht Teil dieser Aenderung: der Push selbst und die Messung,
+dass Transkript und Zusammenfassung trotz `record_voice=false` ankommen (M-O2, Runbook a5).
+
+## IEL-B10 — Erzeugung und Verteilung der Inbound-Geheimnisse (2026-09-15)
+
+Werkzeug-Phase: kein Serververhalten aendert sich, keine Route, kein Safety-Gate, keine Offenlegung, keine
+neue Dependency. Neu ist `scripts/iel-geheimnisse.mjs` (Hilfsmodule `scripts/iel-geheimnisse-*.mjs`) mit den
+Unterbefehlen `setzen`, `beleg-init`, `allowlist-uebernehmen`, `schalter`, `stimmen-beleg`,
+`conversation-beleg`. Jeder Schreibweg ist Trockenlauf per Default (`--ausfuehren`). Die Render-Zugriffe
+von B9 und B10 laufen ueber eine gemeinsame Schicht `src/render-api.js` (B9-Verhalten unveraendert,
+Bestandstests IEL-B9 ohne Aenderung gruen).
+
+### 1. Erzeugung
+
+- CSPRNG `crypto.randomBytes`, hex-kodiert: `ELEVENLABS_INBOUND_SIP_USER` 16 Byte (32 Zeichen),
+  `ELEVENLABS_INBOUND_SIP_PASSWORD` und `ELEVENLABS_INIT_WEBHOOK_TOKEN` je 32 Byte (64 Zeichen).
+- Laengenpruefung ueber `inbound-path-decision.js#inboundElAccessDefects` (eine Quelle der Mindestlaengen mit
+  Praedikat, Boot-Riegel und Init-Route). Zu kurz = ROT ohne einen einzigen Schreibaufruf (Test IEL-B10-3).
+- Die Werte existieren nur im Speicher des Laufs; nach Prozessende sind sie unwiederbringlich (gewollt).
+
+### 2. Ablage
+
+| Ziel | Form | Grenze |
+|---|---|---|
+| Render-Env des Dienstes `HERMES_RENDER_SERVICE_ID` | `sync:false`, Einzel-Schluessel-PUT | nur die sechs Schluessel `ELEVENLABS_INBOUND_SIP_USER`, `_SIP_PASSWORD`, `ELEVENLABS_INIT_WEBHOOK_TOKEN`, `ELEVENLABS_INBOUND_TENANT_IDS`, `ELEVENLABS_INBOUND_ENABLED`, `ELEVENLABS_INBOUND_SCOPE` (seit IEX-A11) (Allowlist im Code, Wurf vor dem Senden) |
+| ElevenLabs-Workspace-Secret `hermes_init_webhook_token` | aktualisiert (PATCH, belegt) oder angelegt | im Repo/in der Ausgabe nur die `secret_id` |
+| `inbound_trunk_config.credentials` | PATCH `{credentials, allowed_numbers:[DID], allowed_addresses:["0.0.0.0/0"]}` | nur Registrierungen, deren `phone_number` exakt einer `--nummer` gleicht oder deren `phone_number_id` einer `--registrierung` gleicht, jeweils mit eigenem Agenten und `outbound_trunk` (seit IEX-A11) |
+
+Nie lokale `.env`, nie Repo, nie Agenten-Kontext. Der Render-Listen-Endpunkt (`PUT .../env-vars` ersetzt
+die GESAMTE Env) ist baulich unerreichbar: ein leerer Schluessel wirft vor jedem fetch (Test IEL-B10-5).
+
+Seit IEX-A10 schreibt zusaetzlich der Server denselben Koerper fuer neue bzw. einzeln reparierte Nummern,
+s. IEX-A10.
+
+### 3. Sichtbarkeit
+
+- **Ausgabe-Waechter:** EINE Ausgabefunktion fuer stdout und stderr. Verbotsmenge = alle erzeugten und alle
+  gelesenen Geheimnis-Werte (Render-Werte, Registrierungs-`username`, `tenant_token`,
+  `sip_hermes_call_binding`). Treffer -> Zeile verworfen, konstante Meldung, Exit != 0 (Test IEL-B10-12).
+  Gekuerzte Ausgaben prueft er UNGEKUERZT, gekuerzt wird danach (Test IEL-B10-13a).
+- Anbieter-Fehlerkoerper werden nie gelesen oder ausgegeben, auch nicht `synth.detail` der Probe-Synthese;
+  gemeldet wird nur der Status. Die Fake-Anbieter der Tests spiegeln den gesendeten Koerper im 500er, damit
+  jeder Leser sofort auffiele (Test IEL-B10-1a/b/c).
+- Der letzte `catch` gibt nur `err.providerStatus` aus, nie `err.message` (ein Parse-Fehlertext kann
+  Koerper-Schnipsel tragen).
+- `beleg-init` sendet mit `redirect:"manual"`: eine Umleitung traegt den Token-Header an keinen anderen Host.
+- Ausgabe von Rufnummern nur als Endung (`e164Endung`), von Tenant-IDs nur als Anzahl.
+
+### 4. Reihenfolge und Vorab-Riegel (`setzen`)
+
+1. Vorab-Riegel, nur GET: Inventar (E15) hart; jede `--nummer` hat genau eine Registrierung; keine
+   Registrierung mit Inbound-Zugangsdaten ausserhalb der Liste (halbe Rotation gesperrt); Secret-Suche
+   eindeutig (kein `next_cursor`, hoechstens ein Namenstreffer). ROT = 0 schreibende Aufrufe (Tests 6, 6a).
+2. Render (wirkt erst nach Deploy, deshalb zuerst) -> Workspace-Secret -> Registrierung(en).
+3. Lesebelege, nur GET; ALS LETZTES das Inventar. Danach kein Schreibaufruf (Test 6b).
+
+### 5. Rotation
+
+Rotation = erneuter Lauf `setzen --ausfuehren` + Deploy. Zwischenfenster (Anbieter schon neu, Dienst noch
+alt) ist fail-safe: Digest scheitert -> Dial endet -> Rueckfall-Route; abweichendes Init-Token -> 403 am
+Init-Webhook, kein Gespraech mit Tenant-Kontext.
+
+### 6. Teilausfall
+
+Abbruch beim ERSTEN Fehlschlag; die Ziel-Tabelle zeigt je Ziel `gesetzt: ja/nein`, Laenge und Status. Der
+Rueckweg ist ein erneuter Lauf mit frischen Werten, der alle Ziele ueberschreibt. Erkennungsweg einer
+Abweichung ohne erneuten Lauf: Rueckfall-Zeile im Render-Log ohne vorherige `[el-init]`-Zeile (SIP) bzw.
+`beleg-init`/`[el-init] grund=token` (Token).
+
+### 7. Schalter-Riegel (Runde 5, K2)
+
+`schalter --an --ausfuehren` fuehrt im selben Lauf Inventar, `beleg-init` (inkl. Ziel-Urteil aus der
+Render-API), `stimmen-beleg` und die Mindestlaengen der drei Render-Geheimnisse aus. Nur wenn alle vier GRUEN
+sind, folgt genau EIN PUT `ELEVENLABS_INBOUND_ENABLED=true` als letzter Aufruf (Test IEL-B10-10).
+`schalter --aus` schreibt bedingungslos (braucht nur `RENDER_API_KEY`). `allowlist-uebernehmen` schreibt nur
+bei genau einem Eintrag in `OWNER_SELF_CALL_TENANT_IDS` (Zerlegung `csvEnv` wie am Server, Test 9).
+
+### 8. `conversation-beleg` (E22)
+
+Ausgabe nur aus einer Weissliste abgeleiteter Felder: Kennung, Richtung, Status, Dauer, Registrierungs-
+Gleichheit, je `BELEG_VARIABLEN` vorhanden/leer/Laenge, Namen der uebrigen Variablen, erste Agent-Zeile
+(gekuerzt, ungekuerzt geprueft). `tenant_token` und `sip_hermes_call_binding` gehen VOR jeder Ausgabe in die
+Verbotsmenge. Eine Liste mit `has_more` ist ROT (unvollstaendig).
+
+### 9. Werkzeug-Schluessel `RENDER_API_KEY`
+
+- Gelesen ueber den eigenen Konfig-Namespace `config.werkzeug.renderApiKey` - EIN Leser fuer
+  `push-elevenlabs.mjs` und `iel-geheimnisse.mjs`, verdrahtet genau einmal in `standardAbhaengigkeiten()`.
+  **Abweichung von Plan L-1 (Default "direkt aus process.env"):** der Lint sperrt `process.env` ausserhalb
+  von `src/config.js` (G35, `noInlineConfig`, keine neue Unterdrueckung), und der Abnahme-Grep verbietet
+  `config.voice.elevenLabsInbound` in den Werkzeug-Modulen. Umgesetzt ist deshalb die L-1-Alternative: der
+  Schluessel liegt nicht mehr neben den Inbound-Geheimnissen, sondern im Namespace `werkzeug`. Wirkung wie
+  zuvor: `src/config.js` laedt (ausser `NODE_ENV=test`) die lokale `.env`; ein dort gesetzter Wert gilt
+  auch fuer den Werkzeug-Lauf.
+- Voller Render-Workspace-Zugriff, jetzt auch SCHREIBEND. **Restrisiko:** ein kompromittierter Arbeitsplatz
+  mit diesem Schluessel kann jede Render-Env jedes Dienstes aendern; das Werkzeug begrenzt nur sich selbst
+  (sechs Schluessel, gepinnter Dienst, Basis-Konstante).
+- Nie in `render.yaml`, nie im Dienst gesetzt, nie ausgegeben, nie in einem Ergebnisfeld.
+
+### 10. UNBELEGT und akzeptiert
+
+- **Loest ein Render-API-PUT einen Deploy aus?** Die API-Doku (reference/update-env-var, gelesen 2026-09-15)
+  sagt es nicht. Fail-safe durch die Reihenfolge: `ELEVENLABS_INBOUND_ENABLED` bleibt bis zum eigenen,
+  letzten Einzel-PUT aus, der Boot-Riegel greift nur bei Schalter an; ein Deploy mitten in `setzen` startet
+  also einen Dienst mit Schalter aus.
+- **Vorrang Dienst-Variable vor Environment-Group:** gelesen und geschrieben wird nur auf Dienst-Ebene; eine
+  gleichnamige Variable in einer Environment-Group ist nicht betrachtet.
+- **`media_encryption` bei Dict-Ersetzung (L-2):** der PATCH sendet den Spec-Koerper ohne `media_encryption`;
+  die Anbieter-Doku nennt als Default `allowed` (M1 legte mit `disabled` an). Der Lesebeleg gibt den Wert nach
+  dem Schreiben aus (`media_encryption=<wert>`); bei Abweichung erneuter Lauf nach Entscheidung.
+- **Sortierung der Conversation-Liste:** unbelegt; es wird clientseitig nach `start_time_unix_secs`
+  sortiert, `has_more` ergibt ROT.
+
+## IEX-A9 — Scope-Schalter und Abweisung ohne Registrierungs-Beleg (2026-09-15)
+
+### 1. Scope
+
+- Enum `allowlist|registrierte_dids` (`src/elevenlabs/inbound-scope.js`), Env `ELEVENLABS_INBOUND_SCOPE`,
+  Default `allowlist` (= Verhalten vor IEX-A9), kein Wildcard-Mitglied.
+- Ein unbekannter Wert ist ein FATALER Boot-Befund (`elInboundScopeFindings`, `el_inbound_scope_unknown`),
+  unabhaengig vom Schalter: ein Tippfehler faellt beim Deploy auf, nicht erst beim Einschalten. Die Meldung
+  nennt nie den eingegebenen Wert (Log-Injection), nur Schluessel und gueltige Werte.
+- Die Weiche selbst ist strikt: ein unbekannter Scope ergibt `budget` (in Produktion unerreichbar, der Boot
+  bricht vorher ab). Test: `test/iex-a9-scope.test.js`.
+
+### 2. Entscheidung
+
+| Zustand | Ergebnis |
+|---|---|
+| Schalter aus oder Zugang unvollstaendig | `budget` |
+| `allowlist`, Tenant gepinnt | `elevenlabs` |
+| `allowlist`, Tenant nicht gepinnt | `budget` |
+| `registrierte_dids`, Beleg (`elInboundTrunkBelegtAt`) UND Fingerabdruck == laufender `sipUser` | `elevenlabs` |
+| `registrierte_dids`, sonst (kein Beleg, alter Fingerabdruck, keine Nummer) | `abgewiesen` |
+
+Unter `registrierte_dids` wirkt die Tenant-Liste nicht. Die Weiche (`inboundPfadEntscheidung`) laeuft einmal
+je Anruf in `/voice/incoming` NACH allen sieben Sicherungen (davor u. a. Signatur-MW, `forIncoming`,
+`numberRecordByE164`, `resolveCallLanguage`, `budgetExceeded`) und erneut in Init-Webhook Stufe 3 (`inboundElPathFor`): ein seit dem Anrufeingang
+weggefallener Beleg bindet nicht.
+
+### 3. Abweisung (O5)
+
+- Ablauf: Call mit dem Kurzbein-Profil `telnyx_inbound_budget` (E10), Notbremse aus der Tenant-Decke, Cap
+  und Geld-Wache wie jeder Inbound-Pfad; Marker (`elFallbackAt`) und Grund `ohne_el_registrierung` VOR der
+  Synthese; Sonde `"path":"abgewiesen"`; Logzeile `[inbound] abgewiesen grund=ohne_el_registrierung call=<id>`
+  ohne Nummer; fester Fehlersatz in der Agentenstimme; Auflegen.
+- Kein Dial, keine Frist, kein Transkript. Abschluss ueber den E5-Zweig von `finishCall`: gebucht, genau eine
+  Zeile `[el-uebergabe] gescheitert ... zustand=abgewiesen`, keine Notification, SMS, Mail oder Zusammenfassung.
+- Wiederholte Zustellung von `/voice/incoming` nach einem Neustart (`inboundAbgewiesen`): Fehlersatz ohne
+  Synthese plus Auflegen, NIE ein Gather (sonst Budget-Gespraech ohne Hinweis).
+
+### 4. Beleg an den Zugang gebunden (Review-Concern E8/E9)
+
+Der Fingerabdruck deckt nur `sipUser` ab. Eine reine Passwort-Aenderung (manuell in Render statt ueber
+`iel-geheimnisse.mjs setzen`) laesst die Belege wirksam; dann scheitert der Digest beim Anbieter, und das
+Hoerbild haengt an M-S3. **Rotation ausschliesslich ueber `scripts/iel-geheimnisse.mjs setzen`.**
+
+### 5. Kosten
+
+Eine abgewiesene DID bucht mindestens eine Minute auf die Tenant-Decke (`Math.ceil`, Start-Anker bei
+Eingang). Teil der Owner-Frage F2; Default: buchen.
+
+### 6. Restrisiken (bewusst getragen)
+
+- **(a) DID ohne Beleg bis zum naechsten Boot-Sweep.** Ohne periodischen Sweep und bei `autoDeploy=no`
+  hoert eine solche DID den Fehlersatz unter Umstaenden tagelang. Fehlt die EL-Registrierung ganz, repariert
+  kein Sweep, nur ein Skript-Lauf. Nach O3/O5 wird niemand benachrichtigt. **Vorbedingung vor dem
+  Scope-Flip:** F3 (Betreiber-Alarm) als Rollout-Vorbedingung (Review-Concern E15(i)).
+- **(b) Skala des Boot-Sweeps.** N GETs je Boot (mit A10 bis zu N PATCHes). Anbieter-Rate-Limits ergeben
+  `unbekannt>0` und blockieren a3/b4/b5. **Folgeaufgabe:** periodischer oder inkrementeller Sweep
+  (Review-Concern E11/E16).
+- **(c) Rennen Freigabe/Wiederaktivierung waehrend eines laufenden Boot-GETs** (A8-Report). Der Beleg prueft
+  `phone_number` und `allowed_numbers` gegen dieselbe DID, der Tenant kommt nur aus der DID. Schlimmster Fall:
+  ein Dial auf eine inzwischen geloeschte Registrierung, also Fehlersatz; kein fremder Tenant, kein Datenleck.
+- **(d) Gepinnter Owner ohne Beleg ist unter `registrierte_dids` ebenfalls abgewiesen.** Gewollt; das Runbook
+  belegt in b3/b4, bevor b5 den Scope umstellt.
+
+## IEX-A10 — Inbound-Trunk fuer neue Nummern und Einzelreparatur im Boot-Sweep (2026-09-15)
+
+### 1. Neuer Passwort-Weg Server -> ElevenLabs
+
+Bisher schrieb nur `scripts/iel-geheimnisse.mjs setzen` den Inbound-Trunk. Jetzt gibt es zwei Aufrufer im
+Server:
+
+1. das Onboarding (`provisionNumber`, Schreiber injiziert in `runProvisioningDrain`),
+2. die Sweep-Reparatur (Hook `reparatur` von `makeTrunkSweep`, injiziert in `server.js`).
+
+Beide nutzen EINE Konstruktions- und Lesestelle: `inboundTrunkSchreiberWennErlaubt` ->
+`makeInboundTrunkSchreiber` (`src/elevenlabs/nummern-registrierung.js`); belegt durch den Grep-Test IEL-B8-9
+(genau eine Passwort-Lesestelle in dieser Datei). Der Koerper ist mit dem Skript geteilt
+(`inboundTrunkKoerper`). Ein leerer Wert wirft vor dem Netz, nie `credentials:null` oder `allowed_numbers:[]`.
+
+### 2. Gate `inboundTrunkSchreibenErlaubt`
+
+Alle Bedingungen gleichzeitig: `PROVISIONING_ENABLED` UND `ELEVENLABS_OUTBOUND_ENABLED` UND
+`ELEVENLABS_NUMBER_REGISTRATION_ENABLED` UND Inbound-Schalter an UND Zugang vollstaendig UND EL-Konto
+(`apiKey`/`agentId`) UND `scope=registrierte_dids`. Gate zu heisst: kein Schreiber, 0 PATCH. Unter
+`allowlist` schreibt der Server nie; damit bleiben a7, a7a und b3 frei von "halber Rotation".
+Tests: `test/iex-a10-onboarding-trunk.test.js` (IEX-A10-1 Gate-Tabelle, IEX-A10-3 Produktionspfad).
+
+### 3. Sichtbarkeit
+
+Nur `err.providerStatus`, nie Koerper oder `err.message`, kein Audit-Eintrag. Logs nennen nur `nummer_id`,
+das Beleg-Token und den Status; nie Nummer, `username` oder Fingerabdruck. Test: der Fake-Anbieter spiegelt
+den Koerper in der 500er-Antwort (IEX-A10-6, IEX-A10-11).
+
+### 4. Onboarding
+
+Ablauf: PATCH -> Nach-GET -> Beleg E8 -> die Beleg-Felder werden nur bei `belegt` gesetzt. Fehlertolerant:
+die Aktivierung einer bezahlten DID wird nie blockiert (IEX-A10-8).
+
+### 5. Sweep-Reparatur (E16)
+
+- Geschrieben wird nur bei `abweichung`, gelesener Registrierung, eigenem Agenten, `phone_number == DID` und
+  vorhandenem `outbound_trunk`.
+- Hoechstens ein Versuch je Nummer je Boot.
+- Der abweichende Beleg wird VOR dem Schreiben geloescht; neu gesetzt wird er nur bei `belegt` im Nach-GET.
+- Sonst eine Zeile `[el-trunk] nicht_repariert nummer_id=<id> grund=<token>`.
+- Die Ergebniszeile traegt `repariert=<r>` direkt nach `belegt=`; der Wert ist in `belegt` enthalten.
+
+### 6. Rotation und Reparatur (E15)
+
+`setzen` bleibt der einzige flottenweite Weg; der Sweep repariert einzeln mit dem laufenden Zugang. Fall
+(iii) konvergiert beim Deploy.
+
+### 7. Restrisiken (bewusst getragen)
+
+- **(a) PATCH angenommen, aber Antwort unlesbar oder Nach-GET gescheitert:** kein Beleg bis zum naechsten
+  Boot. Fail-closed, der Anrufer hoert den Fehlersatz.
+- **(b) Uebernommene Registrierung im Onboarding:** das Onboarding prueft eine ueber Schloss #2 uebernommene
+  Registrierung vor dem PATCH nicht auf Agent oder `outbound_trunk`. Barriere ist der Nach-GET-Beleg:
+  fremder Agent -> kein Beleg -> kein Dial.
+- **(c) Reine Passwort-Aenderung:** weder Beleg noch Reparatur erkennen sie (`username` gleich -> `belegt`).
+  Rotation nur ueber `setzen` (s. IEX-A9 §4).
+- **(d) Skala:** bis zu N PATCHes je Boot mit `SWEEP_PARALLEL`; periodischer Sweep ist Folgeaufgabe
+  (s. IEX-A9 §6b).
+- **(e) E15(i):** die Dauer bis zum naechsten Boot bleibt; eine fehlende Registrierung repariert kein Sweep;
+  niemand wird benachrichtigt -> F3 als Rollout-Vorbedingung (s. IEX-A9 §6a).
+- **(f) Fremde Instanz gegen dieselben Anbieter-/DB-Daten:** ein Dienst mit abweichendem
+  `ELEVENLABS_INBOUND_SIP_USER` gegen dasselbe EL-Konto und dieselbe DB (etwa lokal mit kopierter
+  Prod-Umgebung) wuerde beim Boot die Belegungen "reparieren". Bedingung dafuer sind alle Gate-Flags
+  inklusive `PROVISIONING_ENABLED`. Regel: Prod-Env nie lokal; der naechste Prod-Boot konvergiert zurueck.
+
+## IEX-A11 — Rollout-Werkzeug: setzen per Registrierung, Scope-Unterbefehl (2026-09-15)
+
+Werkzeug-Phase: kein Serververhalten, keine Route, kein Safety-Gate, keine Offenlegung, keine Dependency.
+
+### 1. `setzen --registrierung=<phnum_...>`
+
+- Zusaetzlich zu `--nummer`, mischbar; Ziele je `phone_number_id`, dieselbe Registrierung zaehlt einmal.
+- Die Nummer stammt aus dem gelesenen Inventar und bleibt im Speicher; Ausgabe nur Kennung + Endung. Eine
+  unbekannte Kennung wird nur mit ihrer Position gemeldet (die Eingabe koennte eine volle Nummer sein).
+- **Schreibziel-Riegel fuer JEDES Ziel** (auch `--nummer`): eigener Agent (`assigned_agent.agent_id`),
+  `phone_number` gesetzt, `outbound_trunk` vorhanden. EINE Definition mit der Sweep-Reparatur E16
+  (`inbound-trunk-beleg.js#reparaturHindernis`). ROT = 0 schreibende Aufrufe. `setzen` verlangt deshalb
+  zusaetzlich `ELEVENLABS_AGENT_ID` (fehlt er: fail-closed vor jedem fetch).
+- Halbe Rotation wird ueber die Kennung gegen die Ziel-Liste geprueft.
+- **Grenze:** das Werkzeug kennt die aktiven DIDs nicht (kein Store). Registrierungen OHNE Zugangsdaten
+  ausserhalb der Liste erkennt es nicht; das decken Runbook b2 (Inventar) und b4 (E11 `ohne_beleg_endungen`).
+- Rotation weiterhin ausschliesslich ueber `setzen` (s. IEX-A9 §4).
+
+### 2. `scope --registrierte-dids|--allowlist`
+
+- Einzel-Schluessel-PUT auf `ELEVENLABS_INBOUND_SCOPE` (Werte aus `inbound-scope.js`), Trockenlauf Default,
+  Ruecklesen nach dem PUT, wirkt erst nach Deploy.
+- `--registrierte-dids` nur, wenn Inventar UND `beleg-init` im selben Lauf GRUEN sind; sonst 0
+  Konfigurations-Schreibaufrufe. `--allowlist` bedingungslos (nur `RENDER_API_KEY`).
+- **Prueft NICHT:** Beleg-Zahlen je DID (E11-Ergebniszeile, nur im Render-Log), F3/F4. Beides bleibt
+  Pflicht-Vorbedingung bzw. Lesebeleg in Runbook (b).
+
+Tests: `test/iel-b10-geheimnisse.test.js` IEX-A11-1..8.
+
+## E3 — Anruf-Pfad-Idempotenz (180 s Fenster) und Hop-Frist (2026-09-18)
+
+**Anlass:** `place_call` hatte keinen serverseitigen Schutz gegen einen doppelten Anrufstart auf
+dasselbe Ziel - ein Host-Retry (z.B. nach einem Transport-Timeout) konnte einen zweiten, echten
+Anruf ausloesen, obwohl der erste noch lief. Zwei Bausteine schliessen die Luecke:
+
+**1. Dedup-Praedikat (`src/telephony/call-dedup.js`):** `findDuplicateOutboundCall` prueft, ob
+DIESER Tenant GERADE (Status `active`, `startedAt` innerhalb `DEDUP_WINDOW_MS` = 180000 ms) einen
+Outbound-Call an EXAKT dasselbe (bereits normalisierte) Ziel fuehrt. Rein, kein IO, strikter
+String-Vergleich (kein Praefix-/Fuzzy-Match, keine eigene Normalisierung). Sitzt in
+`src/routes/api-calls.js` HINTER der vollstaendigen Gate-Kette (`runOutboundGates`) - er kann kein
+Gate ueberspringen, die Aenderung ist strikt einschraenkend (ein Fall mehr, in dem NICHT gewaehlt
+wird). Ein Treffer beantwortet den Request mit demselben `callId` und `deduplicated: true` (200,
+kein Originate, kein Consult, kein Timer) statt einen zweiten Anruf zu starten.
+
+**2. Zweiter Reserve-Freigabeweg ohne Datensatz (`state-ops.js#releaseOutboundReserveCents`):** die
+Dedup-Antwort und die neue Fehlerklammer (Wurf zwischen Gate-Ende und `createCall`) haben selbst
+reserviert (`tryReserveOutboundBudget`), legen aber KEINEN Anruf-Datensatz an - `releaseOutboundReserve`
+(braucht `call.reserveReleased`) greift hier nicht. `releaseOutboundReserveCents(s, tenantId, cents)`
+ist die zweite, bewusst GETRENNTE Freigabe: Clamp `>= 0`, `isBookableCents`-Pruefung (dieselbe EINE
+Geld-Kanten-Quelle wie ueberall), KEIN `call.reserveReleased`-Schloss (es gibt nichts, woran es
+haengen koennte). **Invariante:** existiert ein Anruf-Datensatz, gilt AUSSCHLIESSLICH
+`releaseOutboundReserve`; `releaseOutboundReserveCents` laeuft NUR in den zwei Pfaden, die
+nachweislich keinen Datensatz anlegen. Zwei Freigabewege fuer denselben Betrag wuerden den Ledger
+unter den Ist-Stand senken und die pro-Tenant-Kostendecke aushoehlen (Absolute Regel 1) - deshalb
+schliessen sich die beiden Wege gegenseitig aus, nie beide fuer denselben Betrag.
+
+**3. Hop-Frist `PLACE_CALL_HOP_TIMEOUT_MS` (`src/mcp-tools.js`, 180000 ms):** der MCP-Host-seitige
+Timeout auf den `place_call`-Hop ist STRUKTURELL groesser als das gesamte Vorwahl-Budget des Servers
+(Klingelphase `REQUEST_TIMEOUT_MS` 120000 + zweimal `config.llm.briefingTimeoutMs` 6000, ohne
+Backoff bei `MAX_RETRIES = 0`), damit ein Zeitablauf niemals einen tatsaechlich zustande kommenden
+Anrufstart kappt. Ein Abbruch wird NICHT geschluckt (anders als beim Consult-Long-Poll), sondern zu
+`MCP_ERROR_CODE.CALL_START_UNCONFIRMED` - der lokalisierte Text sagt ausdruecklich, dass ein erneuter
+`place_call` an dieselbe Nummer den laufenden Anruf zurueckliefert statt einen zweiten zu starten
+(trifft die Dedup-Antwort oben). `DEDUP_WINDOW_MS >= PLACE_CALL_HOP_TIMEOUT_MS` ist Bedingung: ein
+Host-Retry NACH Fristablauf muss noch im Dedup-Fenster landen (per Test gehalten,
+`test/openai-s3-hop-frist.test.js`).
+
+**Bewusst akzeptiertes Risiko:** das 180-s-Fenster verhindert einen ABSICHTLICHEN zweiten Anruf an
+dasselbe Ziel innerhalb der Frist (Owner-Entscheidung E-3: am Telefon ohnehin selten sinnvoll,
+`deduplicated: true` macht die Antwort erklaerbar). `PRECALL_BRIEFING_TIMEOUT_MS` ist env-setzbar;
+zieht ein Betreiber ihn stark hoch, reisst die Frist-Invariante - kein Boot-Guard dagegen (Scope-
+Zuwachs), aber der Fristen-Test liest `config.llm.briefingTimeoutMs` LIVE und wird rot.
+
+Tests: `test/openai-s3-hop-frist.test.js`, `test/openai-s3-place-call-idempotenz.test.js`,
+`test/sec-p6-gate-fehlerpfad.test.js` (SEC-P6-2b, erweiterte Store-Erwartungstabelle).
+
+## E5/E8 — Der angekuendigte Origin ist eine geprueft konsistente Angabe (2026-09-18)
+
+**Anlass:** Token-Audience (`src/auth.js` `audience()` = `oauthAudience || ${publicUrl}/mcp`)
+und der Origin, den der Server dem Client ankuendigt (PRM `resource`, 401-Metadaten-Verweis,
+Allowlist der /mcp-Herkunftswache), konnten stillschweigend auseinanderlaufen. Der Ausfall ist
+lautlos und nicht diagnostizierbar: der Client erfaehrt eine `resource`, der Server prueft eine
+andere `aud` - eine erfolgreiche Autorisierung ist dann unmoeglich, ohne dass ein Log etwas sagt.
+MCP-Spec T-32 verlangt EINEN angekuendigten Origin.
+
+**Ein Eigentuemer, nicht zwei (`src/boot-guard.js`):** `kanonischeAudience(publicUrl)` ist die
+EINZIGE Formel fuer die kanonische MCP-Audience und muss identisch bleiben zu `audience()` in
+`src/auth.js`. Diese Gleichheit ist nicht per Konvention gesichert, sondern per Test gegen die
+`resource`, die der laufende Server unter `/.well-known/oauth-protected-resource` ausliefert.
+`angekuendigterOriginFindings` buendelt vier fatale Befunde (Audience-Divergenz, `PUBLIC_URL`
+unparsbar / mit Pfad / im Hosting nicht https, unparsbarer Allowlist-Eintrag);
+`src/boot.js#assertAngekuendigterOrigin` ist das 14. `exit(1)`-Gate, verdrahtet VOR
+`rearmActiveCallTimers` (INV-5).
+
+**Beide Vergleichsseiten werden normalisiert (S5-PM-8).** `fuerAudienceVergleich` trimmt und
+entfernt alle Rand-Schraegstriche links UND rechts. Ein live gemeintes `.../mcp/` darf keinen
+Boot-Abbruch ergeben - ein fataler Befund heisst `exit(1)`, also kein `app.listen`, also auch
+kein `/voice` und keine eingehende Telefonie. Deshalb ist die Normalisierung Teil des Gates und
+nicht Kosmetik. BEWUSST NICHT `stripTrailingSlash` aus `src/config.js`: das entfernt genau EINEN
+Schraegstrich und lebt im config-Modul, das `boot-guard.js` nicht importiert.
+
+**Zweiter Riegel in `PRODUCTION_FOOTGUNS`, bewusst redundant (E8, Review-Runde 1
+korrigiert).** Die urspruengliche E8-Entscheidung hier lautete "nicht bauen" (Begruendung:
+der Boot-Riegel greift in JEDER Umgebung, die Produktions-Menge ist eine echte Teilmenge -
+kein Sicherheitsgewinn). Das ist inhaltlich weiterhin richtig, aber PLAN-OPENAI.md Etappe 8
+verlangt den Eintrag als verbindliche Abnahme woertlich, und diese Ersetzung im Abnahmetext
+ist eine Owner-Entscheidung, die ein Review nicht selbst treffen darf. Der Eintrag ist deshalb
+GEBAUT, aber ohne eine zweite eigene Vergleichsformel: `src/config.js` importiert
+`kanonischeAudience`/`fuerAudienceVergleich` aus `src/boot-guard.js` und ruft exakt dieselben
+Funktionen - der PM-8-Normalisierung (s.o.) kann dieser Eintrag also nicht widersprechen, weil
+er sie nicht neu implementiert. In Produktion feuert bei Audience-Divergenz heute effektiv der
+FRUEHERE der beiden Riegel (`assertConfig`/`productionFootguns`, vor `assertBootGates`) -
+`assertAngekuendigterOrigin` bleibt trotzdem der einzige Riegel, der auch AUSSERHALB der
+Produktion greift (lokal/Test bleibt `productionFootguns()` immer `[]`). Owner-Entscheidung
+ausstehend: PLAN-OPENAI.md Etappe 8 entweder auf diesen Zustand (zwei Riegel, eine Formel)
+festschreiben, oder den `PRODUCTION_FOOTGUNS`-Eintrag wieder zurueckziehen und den
+Abnahmetext auf `assertAngekuendigterOrigin` umschreiben.
+
+**Der Befundtext nennt Namen, keine Werte.** Ausgegeben werden `OAUTH_AUDIENCE`,
+`PUBLIC_URL`, `MCP_ALLOWED_ORIGINS` und - bei der Allowlist - die POSITION des Eintrags, nie
+der eingegebene String. Die Audience-Meldung nennt zusaetzlich den ERWARTETEN Wert; der ist aus
+`PUBLIC_URL` abgeleitet, das der Boot-Banner ohnehin druckt, und ist kein Credential.
+
+**Bewusst akzeptiertes Risiko (Ruecknahme einer Faehigkeit):** eine divergente
+`OAUTH_AUDIENCE` war bis E5 ein Betriebszustand (der AM6-Override, Anlass "WorkOS Resource
+Indicator") und ist jetzt Boot-Refusal. Live kostet das nichts - am 2026-09-18 belegen zwei
+oeffentliche Reads, dass `PRM.resource === publicUrl + "/mcp"` gilt, `OAUTH_AUDIENCE` also leer
+ODER exakt kanonisch ist (`docs/RUNBOOK-LIVE-WERTE.md`, F-b/F-e). **Pflicht bleibt: vor jedem
+Deploy, der `PUBLIC_URL` oder `OAUTH_AUDIENCE` beruehrt, den Live-Wert LESEN (Soll-Ist), nie
+blind setzen.** Nimmt WorkOS die kanonische URL kuenftig nicht als Resource Indicator an, ist
+die Rueckstufung des Riegels auf eine Warnung eine Owner-Entscheidung, keine Bauaufgabe.
+
+Tests: `test/s2-mcp-origin.test.js` (E5-U10..U16 Praedikat, E8-U01 kanonisch-gesetzt,
+E5-B01..B05 Kindprozess mit Exit 1 bzw. Happy-Path-Schraegstrich, plus der Formel-Pin gegen die
+ausgelieferte PRM-`resource`), `test/oauth.test.js` (zweiter, unabhaengiger Spawn-Beleg fuer
+Divergenz -> Exit 1 und fuer den kanonisch gesetzten Wert -> startet). Der
+`PRODUCTION_FOOTGUNS`-Eintrag zusaetzlich in `test/config-prod-footguns.test.js`
+(T-P0-5-15..17: leer/kanonisch-mit-Schraegstrich/divergent) und
+`test/boot-prod-footguns.test.js` (T-P0-5-18: Kindprozess-Exit-1 im Hosting).
+
+## E4 — Mandantentrennung vom Flag entkoppelt (2026-09-20)
+
+**Anlass:** der Request-Tenant-Resolver (`src/routes/_tenant.js`) schloss die gesamte
+Tenant-Achse per `if (!config.tenancy.multiTenant) return operatorChannelTenant(req);`
+kurz - bei ungesetztem `MULTI_TENANT` (Prod-Default) lief JEDER Request ueber denselben
+Betreiber-Pfad, unabhaengig von Identitaet. Drei lesende Routen (`api-read.js`,
+`api-calls.js`) gaten ihren Tenant-Scope zusaetzlich per `config.tenancy.multiTenant ?
+... : ungefiltert`. `MULTI_TENANT` ist in `.env.example`/`render.yaml` als Betriebsschalter
+dokumentiert, nicht als Sicherheitsgrenze - ein versehentlich ungesetztes Flag haette in
+einer Multi-Tenant-Umgebung jedem authentifizierten Aufrufer die Daten ALLER Tenants
+gezeigt. E4 entfernt den Kurzschluss ersatzlos: die Mandantengrenze gilt in jeder
+Umgebung gleich, ohne Env-Abhaengigkeit.
+
+**RLS ist KEINE Anfrage-Grenze.** `src/store/pg.js` haelt einen In-Memory-Spiegel, der
+beim Laden ALLE Mandanten in EINEN JS-Prozessraum hydriert (Row-Level-Security schuetzt
+die Postgres-Verbindung, nicht die Auslieferung aus dem Spiegel). Die einzige Grenze
+zwischen den Daten zweier Tenants ist die Anwendungs-Filterung in den Routen - seit E4
+unbedingt, vorher vom Flag abhaengig.
+
+**Geaenderte Stellen (`src/routes/_tenant.js`, `api-read.js`, `api-calls.js`,
+`mcp.js`):**
+- `requestTenant`: die Flag-Bedingung ist entfernt, die Aufloesungsreihenfolge
+  (Web-Session -> X-Internal-Tenant -> req.auth.sub/internalIdentity ->
+  operatorChannelTenant) bleibt unveraendert.
+- `GET /api/state`: `store.exportTenantData(tenantId)` unbedingt statt `config.tenancy.
+  multiTenant ? ... : store.load()`. Ein Legacy-Call ohne `tenantId` ist damit fuer
+  NIEMANDEN sichtbar (gehoert niemandem) statt vorher fuer jeden Owner-Kanal-Aufrufer.
+- `GET /api/calls/:id`, `callVisibleTo` (api-calls.js, deckt `/consult`,
+  `/consult/answer`, `/cancel`): der `tenantOwnsCall`-Guard ist unbedingt, kein
+  Flag-Bypass mehr fuer Legacy-Calls.
+- **Torschluss `POST /mcp`** (neu, `mcp.js`): ein gueltiges Token, das auf keinen
+  Tenant aufloest (`TENANT_REJECT`), wird jetzt mit 403 abgewiesen, VOR
+  `registerTools`. Absichtlich als `if` IM Handler, HINTER `mcpAuth` (nicht als
+  vorgelagerte Middleware) - eine Middleware wuerde den "kein Token"-Fall von 401 auf
+  403 drehen, den `WWW-Authenticate`-Header verschlucken und eine Neu-Autorisierung
+  vom Client aus unmoeglich machen. Wortlaut identisch zu `requireTenant`
+  (`routes/_tenant.js`) - EIN Text fuer EINE Ablehnung.
+
+**Absolute Regel 2 (Offenlegung) - beide Fehlerrichtungen gemessen:** vor E4 war der
+`ownerSelfCallGranted`-Pfad (`src/callee-is-owner.js`) an die ECHTE, request-aufgeloeste
+`tenantId` gebunden, aber bei ungesetztem Flag loeste JEDER Request auf
+`BOOTSTRAP_TENANT_ID` auf. Zwei Fehlerrichtungen waren dadurch denkbar:
+- **Richtung A (der scharfe Fall):** ein Tenant in der `OWNER_SELF_CALL_TENANT_IDS`-
+  Allowlist ruft die eigene Nummer an; die entfallende Offenlegung muss NUR fuer ihn
+  gelten. Test `test/e4-mandantentrennung-default.test.js` E4-20 belegt: `call.tenantId`
+  ist die echte Tenant-ID, nicht `BOOTSTRAP_TENANT_ID`, und `calleeIsOwner === true`.
+- **Richtung B (der stille Fall):** ein NICHT gepinnter Tenant ruft seine eigene Nummer
+  an - die Ausnahme darf NICHT greifen. E4-21/E4-22 belegen `calleeIsOwner === false`.
+- E4-23 belegt zusaetzlich, dass die Diagnose-Retention (`diagnostic-retention.js`) der
+  ECHTEN Tenant-Achse folgt, nicht der Allowlist (bewusst getrennte Bedingung, s.
+  Owner-Entscheidung OC oben). E4-24 belegt die Gegenprobe: der Bootstrap-Tenant erbt
+  die Ausnahme NICHT, wenn ein identitaetsloser Aufrufer sie erwirken will.
+
+**Akzeptierte Risiken (unveraendert durch E4, hier nur benannt statt verschwiegen):**
+- `X-Internal-Tenant`/`X-Internal-Identity` werden bei ungesetztem Flag jetzt zum
+  ersten Mal GELESEN (vorher kurzgeschlossen). `trustedLocalHeader` nimmt sie nur vom
+  echten Loopback-Socket OHNE `X-Forwarded-For` an - ein rein host-lokaler Vektor, seit
+  `MULTI_TENANT=true` ohnehin offen, durch E4 nicht vergroessert.
+- `GET /api/state` antwortet einer verifizierten-aber-unbekannten Identitaet weiterhin
+  200 mit leeren Listen statt 403 (bewusst, s. `test/e4-mandantentrennung-default.test.js`
+  E4-12): die Route ist `internalOnly`, der einzige Aussenweg auf dieselbe Aufloesung ist
+  `/mcp`, das seit E4 mit 403 schliesst. Nebenwirkung: `settingsFor` legt per `||=` einen
+  nicht persistierten "reject"-Bucket im In-Memory-Spiegel an.
+- Aggregat-Lockerung (unveraendert seit E10, hier nur wiederholt): N x Tenant-Kostendecke
+  statt eines geteilten Plattform-Topfs. Bremsklotz bleibt Abo+KYC vor Outbound
+  (`state-ops.js`, `outbound-gates.js`) + `MAX_NUMBERS`/`MAX_NUMBERS_PER_TENANT` +
+  `OUTBOUND_FROZEN`.
+
+Tests: `test/e4-mandantentrennung-default.test.js` (E4-10..E4-31, neu), plus invertierte
+Bestandsfaelle in `test/read-scope-tenant.test.js`, `test/api-read-parity.test.js`,
+`test/request-tenant-unit.test.js`, `test/tenant-resolver-parity.test.js`,
+`test/auth-p3-bootstrap-fallback.test.js`.
+
+## E9-LOESCHWEG — Der Loeschweg deckt weniger ab, als der Rechtstext versprach (2026-09-20)
+
+**Befund (P1-39/P1-40).** Die Datenschutzerklaerung sagte bis E9 eine "vollstaendige
+Loeschung deiner Anruf- und Kontodaten" zu. `eraseTenantData` (`src/store/state-ops.js`,
+Scope aus `tenantCallScope`) loescht Calls samt Transkript, die daraus abgeleiteten
+Action Items, die call-verknuepften Notifications und die private Summary-Nummer.
+UNANGETASTET bleiben settings, profiles, numbers, calendar, usage - und die Identitaet
+beim Anmeldedienst.
+
+**Drei Luecken, alle offen:**
+1. **Kein Netz-Endpunkt.** Der einzige Ausloeser ist `scripts/erase-tenant.js`
+   (CLI, `--confirm`). Die Export-Route `GET /api/tenant-data/export`
+   (`src/routes/api-read.js`, `internalOnly`) hat kein Loesch-Gegenstueck - bewusst
+   (kleinste Angriffsflaeche), aber damit ist Art. 17 heute Handarbeit.
+2. **Kein Audit-Eintrag.** Der Export schreibt `data_export` ins Audit, die Loeschung
+   ueber das Skript schreibt nichts Vergleichbares in dieselbe Spur.
+3. **Anbieterseite nicht erfasst.** Die beim Anbieter der Gespraechs-Plattform
+   gespeicherten Gespraeche werden von `eraseTenantData` gar nicht beruehrt
+   (eigener Store beim Anbieter, s. naechster Eintrag).
+
+**Was E9 getan hat:** den TEXT auf den Code-Umfang zurueckgeschnitten
+(`apps/web/src/data/legal/privacy.de.json`, Abschnitt "Deine Rechte": benennt den
+Loeschumfang, die manuellen Schritte und das Fehlen eines Selbstbedienungs-Wegs).
+**Was E9 NICHT getan hat:** die Luecke schliessen. Status: **offen, Traeger Etappe 10**
+(`PLAN-OPENAI.md`). Ein zurechtgerueckter Text ist kein Ersatz fuer den fehlenden Weg -
+diese Zeile existiert, damit die Zwischenetappe nicht als Abschluss durchgeht.
+
+## E9-ANBIETER-RETENTION — Aufbewahrung und Audio-Mitschnitt beim Anbieter der Gespraechs-Plattform (2026-09-20)
+
+**Gemessen am 20.09.2026** (GET am Live-Agenten + `npm run elevenlabs:drift`, rein lesend):
+
+| Feld | Live | Vorlagen-SOLL | Folge |
+|---|---|---|---|
+| `platform_settings.privacy.record_voice` | `false` | `false` | deckungsgleich; die Zusage "keine Tonaufzeichnungen" ist belegt und steht so im Rechtstext |
+| `platform_settings.privacy.retention_days` | `-1` (unbegrenzt) | `0` | Abweichung, vom Drift-Lauf blockierend gemeldet |
+
+**Warum `-1` ein Sicherheitsbefund ist:** das vollstaendige Gespraech beider Seiten liegt
+beim Anbieter ohne Loeschfrist. Unsere eigenen Fristen (Wortprotokoll nach der
+Zusammenfassung, 30-Tage-Lauf) sagen darueber nichts aus. Der Wert beruht auf der
+Eigentuemer-Ausnahme vom 2026-08-15 in
+`elevenlabs/agent_configs/outbound-agent.template.json` (Feld `retention_days`,
+Schluessel `ausgenommen`), die das Rueckdrehen VOR DEM ERSTEN FREMDKUNDEN bereits als
+Pflicht notiert. `record_voice` ist seit 2026-09-15 nicht mehr ausgenommen; der
+ANBIETER-Standard dieses Feldes ist `true` - ein Dashboard-Klick dreht die Zusage
+lautlos um, deshalb bleibt es bewacht.
+
+**Status: LAUNCH-BLOCKER vor dem ersten Fremdkunden.** Handgriffe:
+`npm run elevenlabs:drift` misst, `npm run elevenlabs:push` dreht `retention_days`
+zurueck (und die Ausnahme in der Vorlage faellt im selben Zug weg). E9 hat den Zustand
+nur SICHTBAR gemacht - im Rechtstext (`privacy.de.json`, Abschnitte "Daten aus Anrufen"
+und "Speicherdauer", beide mit dem gemessenen Wert) und hier. Kein Wert wurde geaendert.

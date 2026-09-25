@@ -11,7 +11,7 @@
 import { hasCardOnFile } from "../self-service.js";
 import { CATALOG_SLUGS, isKnownPlanSlug } from "../plans.js";
 import { activatePaidTenant } from "./activation.js";
-import { customerMatches } from "./card-setup.js";
+import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.js";
 
 // Buchbare Plan-Slugs = die EINE Quelle aus dem Plan-Katalog (src/plans.js, SSoT).
 // Kein zweites Slug-Literal hier (G5/S2): der Katalog definiert die Tiers, diese
@@ -81,6 +81,20 @@ export function checkoutSessionIdempotencyKey({ tenant, planSlug, priceId, custo
 // falls sich die Bedingung je erweitert (z.B. Status statt nur Id).
 export function hasActiveSubscription(store, tenant) {
   return !!store.tenantSubscription(tenant).subscriptionId;
+}
+
+// CL1-B2: das Gegenstueck zu hasActiveSubscription - die EINE Stelle, die die
+// gespeicherte Abo-Referenz entwertet. Genau das Feld, das die Lesekante darueber
+// prueft, und NUR dieses: planSlug bleibt (Historie/Budget-Ableitung, Owner-
+// Entscheidung "geparkt"), cancelAtPeriodEnd bleibt (der Vertragsende-Retry im
+// Webhook liest ihn). Kein No-Op-Risiko und kein Wurf: ist nichts gespeichert
+// (auch bei unbekanntem Tenant liefert tenantSubscription null), passiert nichts -
+// setTenantSubscription wuerde fuer einen unbekannten Tenant werfen, und der
+// SUSPEND-Zweig hat kein try/catch ueber sich. Idempotent (zweiter Aufruf = No-Op).
+// Nebeneffekt (Store-Schreibung) im Namen (N7).
+export function clearSubscriptionReference(store, tenant) {
+  if (!hasActiveSubscription(store, tenant)) return;
+  store.setTenantSubscription(tenant, { subscriptionId: null });
 }
 
 // Erstellt das Abo fail-closed und persistiert seine Referenzen am Tenant.
@@ -163,10 +177,9 @@ export async function activateSubscriptionFromCheckoutSession({
       // Session ist oben customer- + plan-verifiziert -> Karte binden + dieselbe
       // idempotente Aktivierung wie der ok-Pfad (tenantHasLiveNumber-Guard: kein
       // Doppelkauf, falls der Webhook-Pfad die Nummer schon beschafft hat).
-      store.setTenantStripe(tenant, {
-        customerId: outcome.customerId,
-        paymentMethodId: outcome.paymentMethodId,
-      });
+      // GP-P2: Karte UND Typ aus derselben, bereits customer- und plan-verifizierten
+      // Session (outcome traegt genau die drei Felder, die die Bind-Funktion liest).
+      bindPaymentMethodOnTenant(store, tenant, outcome);
       // Heilung komplett machen: auch die Abo-Referenzen aus der Session persistieren
       // (identische subscriptionId -> idempotent). Fuellt insbesondere den Perioden-
       // Anker (currentPeriodStart/End), falls der Webhook-Write ihn nicht trug -
@@ -186,10 +199,9 @@ export async function activateSubscriptionFromCheckoutSession({
     // sonst in diesem Modul), damit Ops sie ueber den Audit-Log manuell stornieren kann.
     return { ok: false, reason: "subscription_conflict", subscriptionId: outcome.subscriptionId };
   }
-  store.setTenantStripe(tenant, {
-    customerId: outcome.customerId,
-    paymentMethodId: outcome.paymentMethodId,
-  });
+  // GP-P2: Karte UND Typ aus derselben, bereits customer- und plan-verifizierten
+  // Session (outcome traegt genau die drei Felder, die die Bind-Funktion liest).
+  bindPaymentMethodOnTenant(store, tenant, outcome);
   store.setTenantSubscription(tenant, {
     subscriptionId: outcome.subscriptionId,
     planSlug: outcome.planSlug,

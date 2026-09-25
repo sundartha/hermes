@@ -75,10 +75,12 @@ const TOOL_TOKEN = "el-tool-token-testgeheim";
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
 // Der Grund-Token, mit dem der Webhook die Faehigkeits-Ablehnung meldet
-// (routes/webhooks-elevenlabs.js). Nur er unterscheidet "das Kontingent ist verbraucht" von
-// irgendeiner anderen Ablehnung - ein blosses "nicht 200" waere in den Faellen 7/8 auch
-// dann gruen, wenn der Aufruf am Token oder an der Bindung gescheitert waere.
-const GATE_ABGELEHNT = "kanal_nicht_freigegeben";
+// (routes/webhooks-elevenlabs.js). Seit SEC-P4 ist er nach aussen EINHEITLICH: Bindung,
+// Mandanten-Riegel und Faehigkeit antworten alle drei mit diesem Grund, unterschieden
+// wird nur noch im Log. Er trennt die Faelle 7/8 damit weiterhin von einer
+// 403-Token-Ablehnung und von jeder 200-Antwort, nicht mehr aber von einer gescheiterten
+// Bindung - genau das ist die Absicht des Riegels.
+const GATE_ABGELEHNT = "kein_laufender_anruf";
 
 // Der Beleg des Servers, dass die Rueckfrage steht und der Warter haelt (consult-raised.js,
 // PII-frei). EINE Quelle fuer alle Faelle.
@@ -151,6 +153,21 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // zeigt weiterhin, dass ein einzelner 401 den Anruf NICHT sofort beendet.
 const EL_RESULT_POLL_MS_OHNE_INTERFERENZ = "60000";
 
+// P2 (W2): der EL-Halt laeuft seit P2 nicht mehr pauschal gegen CONSULT_OPEN_MS, sondern
+// gestaffelt gegen drei Fristen (Zustellung/Quittung/Antwort). Diese Datei misst einen
+// FLACHEN Ablauf (der Auftraggeber quittiert nie mit status="working") und braucht deshalb
+// weiterhin GENAU EINEN Zeitpunkt: alle drei Stufen werden auf denselben Wert gesetzt
+// (ACK additiv 0, s. EL_CONSULT_ACK_MS unten), damit Zustellung, Quittung und Antwort exakt
+// bei derselben Wanduhr-Marke ablaufen - unabhaengig davon, ob ein Fall zwischendurch pollt
+// (das setzt askDeliveredAt und ueberspringt nur Stufe 0, nicht die Ablaufzeit selbst).
+function elStagesFlach(ms) {
+  return {
+    EL_CONSULT_DELIVERY_MS: String(ms),
+    EL_CONSULT_ACK_MS: "0",
+    EL_CONSULT_ANSWER_MS: String(ms),
+  };
+}
+
 const CONSULT_ON_ENV = Object.freeze({
   CONSULT_ENABLED: "true",
   ASSISTANT_CONTEXT_ENABLED: "true",
@@ -160,6 +177,7 @@ const CONSULT_ON_ENV = Object.freeze({
   CONSULT_OPEN_MS: String(OPEN_MS),
   SHUTDOWN_DRAIN_TIMEOUT_MS: String(DRAIN_TIMEOUT_MS),
   ELEVENLABS_RESULT_POLL_MS: EL_RESULT_POLL_MS_OHNE_INTERFERENZ,
+  ...elStagesFlach(OPEN_MS),
 });
 
 // Dieselbe Konfiguration mit der KURZEN Haltefrist - die Umgebung der beiden Ablauf-Faelle
@@ -171,6 +189,7 @@ const CONSULT_ON_ENV = Object.freeze({
 const KURZE_FRIST_ENV = Object.freeze({
   ...CONSULT_ON_ENV,
   CONSULT_OPEN_MS: String(KURZ_OFFEN_MS),
+  ...elStagesFlach(KURZ_OFFEN_MS),
 });
 
 // Ein laufender Outbound-Anruf mit Anbieter-Kennung. maxDurationS grosszuegig, damit der

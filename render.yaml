@@ -80,18 +80,22 @@ services:
         sync: false
       - key: TELNYX_SIP_TRUNK_PASSWORD
         sync: false
-      # ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme). Nur aktiv, wenn
-      # REF + VOICE_ID gesetzt sind; leer = Azure-Bestand. Erst NACH gruenem
-      # Live-Smoke setzen (Plan/tasks/todo.md).
-      - key: TELNYX_ELEVENLABS_API_KEY_REF
-        sync: false
+      # Globale Plattform-Stimme (Rueckfall der Stimm-Karte, EL-Anrufstart).
       - key: TELNYX_ELEVENLABS_VOICE_ID
         sync: false
-      - key: TELNYX_ELEVENLABS_MODEL
-        value: "Default"
       # Play-TTS: ElevenLabs-Stimme via <Play> in der Budget-Engine (Telnyx). GETRENNT
-      # vom Relay oben. Default AUS -> Azure byte-identisch. Erst NACH gruenem
-      # Live-Smoke setzen (Plan/tasks/todo.md).
+      # vom Relay oben. Default AUS -> Azure byte-identisch.
+      # UMSTELLEN (IP4, Eigentuemer-Handlung, kein Deploy noetig - Render ist
+      # dashboard-managed, dieser Blueprint ist NICHT die Live-Wahrheit):
+      #   1. npm run inbound:hoerprobe -- --out /tmp/vorher   (erwartet: azure_say)
+      #   2. Flag im Render-Dashboard auf true, Instanz startet neu
+      #   3. Boot-Log: "Inbound-Sprechpfad: play_tts (ELEVENLABS_PLAY_TTS_ENABLED=true)"
+      #   4. npm run inbound:hoerprobe -- --out /tmp/nachher  (erwartet: play_tts + Datei)
+      #   5. echter Inbound-Testanruf: dieselbe Sprecherin wie bei einem Outbound-Anruf?
+      # Es kostet ElevenLabs-Zeichen auf einem Plattform-Konto OHNE per-Tenant-Metering.
+      # Eine spaetere sporadische Stimmaenderung ist an genau einer Log-Zeile erkennbar:
+      #   [play-tts] Kontingent erschoepft (<x>/<quota>, Zyklus <k>) -> Azure-Fallback
+      # Rueckweg: Flag zurueck auf false - sofort, ohne Deploy, byte-identisch zum Bestand.
       - key: ELEVENLABS_PLAY_TTS_ENABLED
         value: "false"
       - key: ELEVENLABS_API_KEY
@@ -99,13 +103,15 @@ services:
       - key: ELEVENLABS_VOICE_ID
         sync: false
       - key: ELEVENLABS_MODEL
-        value: "eleven_flash_v2_5"
+        value: "eleven_v3_conversational"
       - key: ELEVENLABS_API_BASE
         value: "https://api.elevenlabs.io"
       - key: ELEVENLABS_OUTPUT_FORMAT
         value: "mp3_44100_128"
       - key: ELEVENLABS_SYNTH_TIMEOUT_MS
         value: "2000"
+      - key: ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS
+        value: "10000"
       - key: ELEVENLABS_TTS_TOKEN_TTL_MS
         value: "60000"
       # ---- ElevenLabs-Anrufstart (Convai SIP-Trunk-Outbound) ----
@@ -114,6 +120,11 @@ services:
       # angelegtem Agenten + registrierter Nummer im Dashboard scharfstellen; Flag an
       # ohne AGENT_ID/AGENT_PHONE_NUMBER_ID -> der Zweig waehlt NICHT (fail-closed).
       - key: ELEVENLABS_OUTBOUND_ENABLED
+        value: "false"
+      # SEC-P4: Mandanten-Bindung des Werkzeug-Tokens. Default AUS, bis die
+      # Werkzeug-Definition am Anbieter den Parameter tenant_token traegt. Achtung: die
+      # Live-Services sind Dashboard-managed, diese Zeile allein aendert Live nichts.
+      - key: ELEVENLABS_TENANT_TOKEN_REQUIRED
         value: "false"
       # Opake Kennungen (kein Secret, aber deployment-spezifisch) -> Dashboard.
       - key: ELEVENLABS_AGENT_ID
@@ -127,72 +138,33 @@ services:
         value: "false"
       - key: ELEVENLABS_RESULT_POLL_MS
         value: "5000"
-      # ---- Telnyx AI Assistant / Brain-Shim (C-Telnyx, P10) ----
-      # Master-Flag: 404 bis Cutover. Erst NACH verifiziertem Deploy im Dashboard auf
-      # "true" (Owner-Cutover P11). Flag an -> Boot verlangt ASSISTANT_ID + API_KEY +
-      # CONNECTION_ID + CALL_CONTROL_APP_ID (assertConfig fail-closed).
-      - key: TELNYX_AI_ASSISTANT_ENABLED
+      # ---- ElevenLabs-Inbound (K1, IE3/IE5) ----
+      # Default AUS. Erst scharfstellen, wenn IE5 live und der Testanruf gruen ist
+      # (Owner-Entscheidung O10, Kosten pro Inbound-Minute). Achtung: die Live-Services
+      # sind Dashboard-managed, diese Zeile allein aendert Live nichts.
+      - key: ELEVENLABS_INBOUND_ENABLED
         value: "false"
-      # Opake Assistant-ID (KEIN Secret, aber deployment-spezifisch) -> Dashboard.
-      - key: TELNYX_ASSISTANT_ID
+      # IEL-B1: Allowlist + Zugang des EL-Inbound-Wegs. ALLE sync: false (Muster
+      # OWNER_SELF_CALL_TENANT_IDS): kein Wert im Blueprint, Leer-Liste = NIEMAND.
+      # Werte nie von Hand - nur per Skript-Lauf der IEL-Kette mit Lesebeleg.
+      - key: ELEVENLABS_INBOUND_TENANT_IDS
         sync: false
-      # Call-Control-App-ID (Outbound ueber /v2/calls). ANDERER Objekttyp als
-      # TELNYX_CONNECTION_ID (TeXML) - Verwechslung = HTTP 422 bei jedem Outbound.
-      - key: TELNYX_CALL_CONTROL_APP_ID
+      - key: ELEVENLABS_INBOUND_SIP_USER
         sync: false
-      - key: TELNYX_SHIM_MAX_TURNS_PER_MIN
-        value: "30"
-      # E2: statisches Shim-Bearer-Secret (SECRET) -> Dashboard.
-      - key: TELNYX_SHIM_SHARED_SECRET
+      - key: ELEVENLABS_INBOUND_SIP_PASSWORD
         sync: false
-      # E3: NAME des Telnyx-Integration-Secrets fuer external_llm.llm_api_key_ref.
-      - key: TELNYX_SHIM_API_KEY_REF
+      - key: ELEVENLABS_INIT_WEBHOOK_TOKEN
         sync: false
-      # OBS-FLAG (Diagnose): einmaliger Shape-Dump im Shim (keys-only, NIE Werte). Safe-
-      # Default false; Owner flippt im Dashboard nur fuer den EINEN Diagnose-Call auf true.
-      - key: TELNYX_SHIM_DEBUG_SHAPE
-        value: "false"
-      # AL-P7: echtes Token-Streaming des Shim-Turns (satzweise SSE statt EIN Chunk am
-      # Ende). Safe-Default false; Owner flippt im Dashboard fuer die Latenz-Abnahme.
-      - key: TELNYX_SHIM_TOKEN_STREAMING
-        value: "false"
-      # GQ-P1: Riegel gegen zwei gesprochene Antworten auf EINE Aeusserung (Befund B-1).
-      # Default true = Riegel aktiv; Owner flippt im Dashboard auf "false", um ohne Deploy
-      # auf das Bestandsverhalten zurueckzugehen.
-      - key: TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN
+      # IEX-A9: Wirkungsbereich des EL-Inbound-Wegs (allowlist|registrierte_dids). Kein Geheimnis, daher
+      # value statt sync:false. Default allowlist = heutiges Verhalten; eine Blueprint-Synchronisierung
+      # faellt damit in die sichere Richtung zurueck. Live ist Dashboard-managed.
+      - key: ELEVENLABS_INBOUND_SCOPE
+        value: "allowlist"
+      # IEP-P2: Begruessungslaut waehrend der Dial-Wartezeit. Kein Geheimnis, daher value.
+      # Default "true" = der Auslieferungsstand der Phase; "false" ist der Rueckweg der Fuellung.
+      # Live ist Dashboard-managed - diese Zeile allein aendert Live nichts.
+      - key: ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED
         value: "true"
-      # GQ-P18: Sprechsperre (ms) am Anfang eines Shim-Turns. Fuer deepgram/nova-3
-      # existiert beim Anbieter KEIN Turn-End-Regler; solange nichts gesprochen wurde, laesst
-      # ein fortschreibender Request den laufenden Turn stumm ueberholen. Die Sperre
-      # verzoegert KEINE Antwort (am Turn-Ende geht alles raus); der Preis faellt nur beim
-      # ERSTEN Wort langer Turns an. Zum Trimmen: hold-Log-Zeile, outcome
-      # silenced/released/flushed. "0" = ohne Deploy zurueck auf das Bestandsverhalten.
-      - key: TELNYX_SHIM_EXTEND_HOLD_MS
-        value: "3000"
-      # Messschalter fuer EINE unbelegte Anbieter-Frage (transcriptionFields, adapters/
-      # telnyx/voice.js): ob der Pro-Call-transcription-Block das Assistant-eigene
-      # transcription-Objekt ersetzt oder in es hineinmerged, sagt die Telnyx-Doku nicht.
-      # Default true = Bestand byte-identisch. Owner flippt im Dashboard NUR fuer EINEN
-      # begleiteten Testanruf auf "false", danach sofort zurueckstellen - kein Dauerbetrieb.
-      - key: TELNYX_PER_CALL_TRANSCRIPTION_ENABLED
-        value: "true"
-      # GQ-P3: Inbound-Handoff auf den Call-Control-Assistant (Befund B-9). Default true;
-      # Owner flippt im Dashboard auf "false", um Inbound ohne Deploy auf die Budget-Engine
-      # zurueckzustellen. KOSTEN: Inbound wird auf dem Assistant-Pfad rund dreimal teurer.
-      - key: TELNYX_INBOUND_HANDOFF_ENABLED
-        value: "true"
-      # GQ-P5: Riegel gegen den Provider-Anstoss. Telnyx stoesst nach
-      # telephony_settings.user_idle_reply_secs Sekunden Anrufer-Stille selbst einen Turn an,
-      # dessen Request KEINE neue Aeusserung traegt. Default true = der Shim antwortet leer
-      # und gueltig; Owner flippt im Dashboard auf "false" fuer das Bestandsverhalten (die
-      # ALTE Aeusserung wird erneut beantwortet und ausgesprochen).
-      - key: TELNYX_SHIM_IGNORE_PROVIDER_NUDGE
-        value: "true"
-      # GQ-P6: Klingelfrist beim Waehlen (Telnyx POST /v2/calls, timeout_secs; min 5, max
-      # 600). Default 60 statt Anbieter-Default 30 - der war zu knapp, wenn die Zustellung
-      # selbst ~30 s braucht (US-DID nach DE). Owner tunt im Dashboard ohne Deploy.
-      - key: TELNYX_DIAL_TIMEOUT_SECS
-        value: "60"
       # ---- Bootstrap (Owner-Removal P2b, GAP-38: vom In-Prozess-Boot gelesen) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,
@@ -255,6 +227,14 @@ services:
       # gruenem Telnyx-Idempotenz-Smoke scharfschalten.
       - key: PROVISIONING_REDRIVE_MAX_AGE_MS
         value: "0"
+      # GP-P3: Versuchsdeckel je Mandant fuer den automatischen Wiederanlauf nach
+      # Kartenwechsel. Erschoepft -> needs_manual_reconcile. 0 = komplett aus.
+      - key: PROVISIONING_RETRY_MAX_ATTEMPTS
+        value: "3"
+      # GP-P4: Mindestfrist zwischen zwei automatischen Anstoessen desselben Mandanten
+      # durch den zeitgesteuerten Wiederanlauf. 0 = zeitgesteuerter Zweig komplett aus.
+      - key: PROVISIONING_RETRY_MIN_INTERVAL_MS
+        value: "86400000"
       # tenant-prolif-d: Grace (TAGE) bis zum Auto-DID-Release suspendierter Tenants.
       # 0 = Observe-Only (fail-closed, kein DELETE). Erst > 0 gibt echte DIDs frei.
       - key: RELEASE_GRACE_DAYS
@@ -335,10 +315,20 @@ services:
       - key: COST_CALIBRATION_MIN_SAMPLES
         value: "20"
       # ---- Abo-Buchung (Stripe Recurring, W4) ----
+      # WARNUNG: bleibt einer der beiden Werte leer, waehrend PAYMENT_ENABLED=true,
+      # verweigert der Dienst nach dem Deploy den Start (fatal, boot.js#assertPricedPlans,
+      # GP-P6) - VOR einem Deploy im Dashboard nachsehen.
       - key: STRIPE_STARTER_PRICE_ID
         sync: false
       - key: STRIPE_BUSINESS_PRICE_ID
         sync: false
+      # ---- Preis-Waechter (GP-P6) ----
+      # Vergleicht den angezeigten Katalogpreis mit dem, was Stripe wirklich abbucht.
+      # 0 = der Waechter ist KOMPLETT AUS.
+      - key: PRICE_DRIFT_MIN_INTERVAL_MS
+        value: "86400000"
+      - key: PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER
+        value: "3"
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
       # Self-Heal (Fix B): Wartezeit (ms) vor dem EINEN Checkout-Retry nach Stripe
@@ -369,10 +359,21 @@ services:
       # Nur bei MCP_AUTH=oauth noetig: Issuer-URL des IdP (im Dashboard eintragen).
       - key: OAUTH_ISSUER_URL
         sync: false
+      # OAUTH_AUDIENCE (E8) hat hier BEWUSST keinen Eintrag: in Produktion bleibt die
+      # Variable leer, dann gilt die kanonische <PUBLIC_URL>/mcp (s. Angekuendigter-Origin-
+      # Block weiter unten). Die kanonische MCP-URL wird stattdessen beim Authorization
+      # Server als Resource Indicator registriert (WorkOS: Connect -> Configuration).
+      # Ein hier oder im Dashboard gesetzter, abweichender Wert ist Boot-Refusal
+      # (boot-guard.angekuendigterOriginFindings) - und damit auch kein /voice.
       # AM6 (nur MCP_AUTH=oauth): WorkOS user.id (sub) des Owners -> bindet den Bootstrap-
       # Tenant idempotent (idp_subject), damit get_my_number ueber den OAuth-sub nicht leer
       # ist. Im Dashboard eintragen; opake user_-Id, kein Secret. Leer = kein Seed.
       - key: OWNER_IDP_SUBJECT
+        sync: false
+      # E7 (O-4/O-5): Domain-Ownership-Token der OpenAI-Einreichung. Wird im Dashboard
+      # gesetzt (der Dienst ist dashboard-verwaltet, s. Kopf dieser Datei) - ein value:
+      # hier waere eine zweite Wahrheit. Leer = die Challenge-Route antwortet 404.
+      - key: OPENAI_APPS_CHALLENGE_TOKEN
         sync: false
       # Owner-Identitaet ist KEINE Env-Var mehr (P2b): ownerName setzt der Tenant ueber
       # das Self-Service-Dashboard (nach dem Bootstrap-CLI), nicht ueber die Env.
@@ -382,6 +383,10 @@ services:
       # nicht die Umstellung. Mitzieh-Pflichten stehen in .env.example.
       - key: LLM_PROVIDER
         value: anthropic
+      # FW2: Ausweich-Anbieter des Guthaben-Latch. Leer = Funktion AUS (Bestand).
+      # Mitzieh-Pflichten stehen in .env.example.
+      - key: LLM_PROVIDER_FALLBACK
+        value: ""
       # ---- Pre-Call-Briefing (P8) ---- Default AUS; Anschalten ist Owner-Arbeit.
       - key: PRECALL_BRIEFING_ENABLED
         value: "false"
@@ -395,6 +400,8 @@ services:
         value: "20000"
       # ---- Vorab-Recherche im Briefing (AL-P10) ---- Default AUS; Anschalten ist
       # Owner-Arbeit (mit RESEARCH_ENABLED=true wandert Auftragsmaterial an einen Suchindex).
+      # E9 (2026-09-20): der Empfaenger der Vorab-Recherche ist in der Datenschutzerklaerung
+      # genannt; das Anschalten bleibt unveraendert Owner-Arbeit.
       - key: RESEARCH_ENABLED
         value: "false"
       - key: RESEARCH_SEARCH_FEE_CENTS
@@ -402,6 +409,9 @@ services:
       # ---- Nachschlagen IM Gespraech (AL-P10b) ---- Default AUS (fail-closed): kein
       # look_up im Tool-Satz, keine Suchgebuehr. Anschalten erst nach Testanruf UND
       # Nennung des ZWEITEN Auftragsverarbeiters in der Datenschutzerklaerung.
+      # E9 (2026-09-20): die Nennung des ZWEITEN Auftragsverarbeiters in der
+      # Datenschutzerklaerung ist erfolgt - diese Vorbedingung ist erfuellt, die uebrigen
+      # (Testanruf) nicht beruehrt.
       - key: LOOKUP_ENABLED
         value: "false"
       - key: LOOKUP_SEARCH_FEE_CENTS
@@ -416,6 +426,8 @@ services:
       # ---- Rueckfrage IM Gespraech (AL-P14) ---- Default AUS (fail-closed): kein
       # get_consult im Tool-Satz, kein In-Call-Consult. Erst nach Nennung in der
       # Datenschutzerklaerung anschalten.
+      # E9 (2026-09-20): die Weitergabe von Inhalten aus dem laufenden Gespraech an den
+      # MCP-Host ist in der Datenschutzerklaerung genannt - diese Vorbedingung ist erfuellt.
       - key: IN_CALL_CONSULT_ENABLED
         value: "false"
       # ---- Fristen der Rueckfrage (GQ-P2) ---- Warten (kurz) und Offenbleiben (lang)
@@ -424,8 +436,17 @@ services:
         value: "4000"
       - key: CONSULT_OPEN_MS
         value: "47000"
-      # ---- Denk-Signal (AL-P7b) ---- Default AUS (fail-closed): kein Prompt-Block, kein
-      # zusaetzliches SSE-Fragment. Braucht TELNYX_SHIM_TOKEN_STREAMING=true, um zu wirken.
+      # ---- Gestaffelter Halt des ElevenLabs-Rueckfrage-Webhooks (P2, W2) ---- Drei
+      # Stufen statt einer Pauschalfrist (Zustellung/Quittung/Antwort). VORLAEUFIG (E-6):
+      # keine Messung fuer Stufe 0/1, aus P3-Telemetrie nachzukalibrieren.
+      - key: EL_CONSULT_DELIVERY_MS
+        value: "5000"
+      - key: EL_CONSULT_ACK_MS
+        value: "5000"
+      - key: EL_CONSULT_ANSWER_MS
+        value: "30000"
+      # ---- Denk-Signal (AL-P7b) ---- Default AUS (fail-closed): kein Prompt-Block.
+      # Prompt-Block; kein gesprochener Abnehmer seit IE6-S1 (R-1).
       - key: THINKING_SIGNAL_ENABLED
         value: "false"
       # ---- Anruf an die eigene Nummer (OC-P1) ---- Default AUS / Liste LEER
@@ -437,6 +458,13 @@ services:
       - key: OWNER_SELF_CALL_ENABLED
         sync: false
       - key: OWNER_SELF_CALL_TENANT_IDS
+        sync: false
+      # ---- Owner-Ton bei EINGEHENDEN Anrufen (IEP-P6) ---- Default AUS / Liste LEER
+      # (fail-closed): Fremd-Wortlaut fuer jeden Anrufer, Bestandsverhalten. Beide mit
+      # sync: false aus demselben Grund wie OWNER_SELF_CALL_* darueber.
+      - key: INBOUND_OWNER_GREETING_ENABLED
+        sync: false
+      - key: INBOUND_OWNER_GREETING_TENANT_IDS
         sync: false
       # Plattform-BEOBACHTUNG, kein Gate: seit KS-P9/E10 sperrt die Plattform-Achse nichts
       # mehr - dieser Wert ist die Bezugsgroesse von PLATFORM_SPEND_WARN_PERCENT (und der
@@ -460,11 +488,19 @@ services:
       # gemessen), NICHT der Outbound-Worst-Case. Unset -> Code-Default 6.
       - key: VOICE_TARIFF_INBOUND_CENTS
         value: "6"
-      # LCT P4b - Vollkosten-Untergrenze (EUR-Cent). Sinkt VOICE_TARIFF_DOMESTIC_CENTS
-      # darunter bei duenner Abgleich-Deckung, warnt der Boot (WARN, kein exit).
-      # 10 = teuerste aktivierbare Konfiguration (inkl. ai-voice-assistant), Kurs 0,92.
+      # LCT P4b/KV2-10 - Vollkosten-Untergrenze (EUR-Cent). Sinkt VOICE_TARIFF_DOMESTIC_CENTS
+      # darunter, warnt der Boot (WARN, kein exit) - seit KV2-10 DECKUNGS-UNABHAENGIG.
+      # 15 = p95 Vollkosten/Minute der Route el_convai_sip aus der KV2-10-Stichprobe
+      # (B2+O2: 0,1576 USD x 0,92 = 14,5 -> 15; ohne Eigen-Achsen, Kurs 0,92).
       - key: VOICE_TARIFF_FULL_COST_FLOOR_CENTS
-        value: "10"
+        value: "15"
+      # KV2-10 - Grundbetrag des zweiteiligen Tarifs je Route (csv-Karte profil:cents,
+      # EUR-Cent je ANRUF). Leer = alle Routen 0 ("noch nicht gesetzt"). Der
+      # Tarifpaar-Waechter misst - JUSTIERT NICHTS (Owner-Entscheidung 6). Vorschlag aus
+      # der KV2-10-Stichprobe: el_convai_sip:20 (dazu Minutensatz 18). Unbekanntes Profil
+      # oder Muell-Cent -> Boot-Refusal.
+      - key: VOICE_TARIFF_GRUNDBETRAG_CENTS
+        value: ""
       # Untergrenze aus spendCapCoherence Klausel B (FATAL, exit 1):
       # VOICE_TARIFF_DEFAULT_CENTS * RESERVE_LEAD_MINUTES(2), seit KS-P3
       # 30 * 2 = 60. Darunter faellt jedes Ziel ohne gemessenen Inlandssatz vor dem Dial
@@ -502,10 +538,26 @@ services:
       # C8b: monatlicher Selbsttest ueber beide Kanaele. 0 = komplett aus.
       - key: OUTAGE_ALERT_SELF_TEST_INTERVAL_MS
         value: "2592000000"
+      # ---- Inbound-Ausfall-Melder (IEX-B1) ----
+      # Dieselbe Erkennungsregel, eigene Klasse: meldet einen systematischen Ausfall des
+      # EL-Inbound-Pfads (Anrufer hoert den Fehlersatz statt des Assistenten). Erfolg ist
+      # hier die gelungene Uebergabe, NICHT answeredAt. 0 = komplett aus.
+      - key: INBOUND_OUTAGE_ALERT_WINDOW_MS
+        value: "21600000"
+      - key: INBOUND_OUTAGE_ALERT_MIN_FAILURES
+        value: "2"
+      - key: INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS
+        value: "20"
+      - key: INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT
+        value: "10"
       # C8 (Owner-Entscheidung F-8): 24-h-Eskalation eines haengenden Kuendigungs-
       # Nummern-HOLD (platform_number_in_use) ueber denselben Meldeweg. 0 = komplett aus.
       - key: PLATFORM_HOLD_ESCALATION_MAX_AGE_MS
         value: "86400000"
+      # GP-P0: meldet einen zahlenden Mandanten ohne Live-Nummer (Vorfall 11.09.2026).
+      # Reine Beobachtung, kein Kauf, kein Versand. 0 = komplett aus.
+      - key: PAID_WITHOUT_NUMBER_GRACE_MS
+        value: "3600000"
       # Betreiber-Zieladresse, der PRIMAERE Kanal (haengt an keinem Carrier). Secret-frei,
       # aber sync:false (Dashboard-verwaltet, Muster PLATFORM_ANI_E164). WARNUNG: bleibt
       # dieser Wert UND PLATFORM_ALERT_SMS_TO gemeinsam leer, waehrend
@@ -537,6 +589,8 @@ services:
         value: "75"
       - key: TTS_QUOTA_CYCLE_ANCHOR_DAY
         value: "3"
+      # KV2-10: GANZZAHL US-Cent LISTENPREIS (6,00 USD/Monat) - die Route rechnet ueber
+      # den EINEN Kurs nach EUR-Cent um. ENV-Name unveraendert (Rename ist eigene Entscheidung).
       - key: PLATFORM_FIXED_COST_CENTS_PER_MONTH
         value: "600"
       - key: NUMBER_MONTHLY_COST_CENTS
@@ -554,6 +608,9 @@ services:
         value: "10000"
       - key: LLM_BREAKER_COOLDOWN_MS
         value: "30000"
+      # FW2: Haltedauer des Guthaben-Latch (900000 ms = 15 min).
+      - key: LLM_BILLING_LATCH_COOLDOWN_MS
+        value: "900000"
       # L0-Instrumentierung: PII-freie Latenz-/STT-Gap-Logs UND (GAP-35) das
       # Ablehnungs-Ereignis mit Land/Sprache. Im Mehr-Laender-Betrieb
       # (ALLOWED_COUNTRY_CODES > 1 Eintrag bzw. "*") ist das die EINZIGE Log-Zeile, an
@@ -569,6 +626,9 @@ services:
       # OUT-05: Reserve-Backstop-Puffer (ms) ueber der Call-Max-Dauer.
       - key: RESERVE_RELEASE_GRACE_MS
         value: "15000"
+      # IE2: Takt (ms) des wiederkehrenden Geld-Waechters je aktivem Anruf. 0 = aus.
+      - key: BUDGET_WATCHDOG_INTERVAL_MS
+        value: "15000"
       # A6 (F11): Watchdog-Obergrenze (ms) fuer den SIGTERM-Graceful-Shutdown-Drain.
       - key: SHUTDOWN_DRAIN_TIMEOUT_MS
         value: "8000"
@@ -582,6 +642,11 @@ services:
         value: "false"
       - key: RATE_LIMIT_PER_MIN
         value: "120"
+      # SEC-P3: Herkunftspruefung der Self-Service-Schreibrouten. Default ist ohnehin
+      # true - hier gepinnt, damit der Schalter im Blueprint sichtbar ist. Achtung: die
+      # Live-Services sind Dashboard-managed, diese Zeile allein aendert Live nichts.
+      - key: CSRF_ENFORCE
+        value: "true"
       - key: RETENTION_DAYS
         value: "30"
       # P2b: Diagnose-Retention in Produktion vorerst AUS. Erst auf "7" stellen, wenn die
@@ -627,7 +692,8 @@ services:
       - key: LOGIN_COOKIE_TTL_SECONDS
         value: "1800"
       # ---- Multi-Tenant + Self-Service (web-session-only) ----
-      # MULTI_TENANT: Tenant-Scoping aktivieren (Default aus = Owner byte-identisch).
+      # MULTI_TENANT: seit E4 KEIN Tenant-Scoping mehr (das gilt unbedingt, in jeder
+      # Umgebung gleich) - nur noch die Self-Service-Reife (isSelfServiceLive).
       - key: MULTI_TENANT
         value: "false"
       # SELF_SERVICE_ENABLED: Kunden-Self-Service (/api/self-service/*). WEB-SESSION-ONLY:
@@ -648,9 +714,17 @@ services:
         value: "5"
       - key: SEND_SMS_SUMMARY
         value: "true"
-      - key: VOICE_ENGINE
-        value: budget
-      # PUBLIC_URL nicht noetig: Render setzt RENDER_EXTERNAL_URL automatisch
+      # ---- Angekuendigter Origin (E5/S2) ----
+      # PUBLIC_URL ist der ANGEKUENDIGTE kanonische Origin: Token-Audience
+      # (<PUBLIC_URL>/mcp), PRM-resource, 401-Metadaten-Verweis UND die Allowlist der
+      # /mcp-Herkunftswache. Er darf NICHT implizit aus RENDER_EXTERNAL_URL geerbt werden -
+      # eine Render-seitige Domain-/Namensaenderung verschoebe sonst Audience, Allowlist
+      # und alle Webhook-Ziele in einem Zug. Owner-Entscheidung E-1: app.sundartha.com.
+      # WAHRHEIT IST DAS DASHBOARD (s. Kopf dieser Datei) - dieser Eintrag ist Doku und
+      # setzt den Wert nur, falls das Blueprint je synchronisiert wird. Betriebsschritt
+      # (Etappe 8 / S2-A9): Live-Wert LESEN, nur bei Abweichung setzen.
+      - key: PUBLIC_URL
+        value: https://app.sundartha.com
 
   # ---- 2) Produkt-Frontend (W0, Static Site aufs CDN) ----
   # Eigenstaendiges Astro-Paket unter apps/web/. Deployt getrennt vom Gateway;
@@ -711,6 +785,14 @@ services:
       - path: /*
         name: X-Frame-Options
         value: DENY
+      # HSTS (SEC-P5). Wert MUSS mit HSTS_HEADER_VALUE in src/middleware.js
+      # uebereinstimmen - test/sec-p5-web-haertung.test.js haelt beide Seiten fest.
+      # ACHTUNG, gilt wie fuer die routes darueber: dieser Static-Service ist
+      # dashboard-managed. Ein render.yaml-Push aendert die Live-Header NICHT; der
+      # Eintrag hier ist die Quelle der Wahrheit fuer den Owner-Schritt im Dashboard.
+      - path: /*
+        name: Strict-Transport-Security
+        value: "max-age=15552000; includeSubDomains"
       # Strikte CSP: rein statische Marketing-Site (kein Auth/Secret/User-Input,
       # keine /api). Das Fluegel-Logo ist eine reine CSS-Keyframe-Animation (kein
       # WebGL/Pixi) -> KEIN 'unsafe-eval' noetig. default-src 'self' deckt

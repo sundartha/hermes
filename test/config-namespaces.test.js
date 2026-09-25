@@ -21,7 +21,11 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // des EL-Anrufstarts, Gegenstueck zu fakeOriginate) -> 11.
   // OUTBOUND-E4: outboundAniGateEnabled + outboundAniGateMaxAgeMs ergaenzt (der ANI-Riegel,
   // Default aus) -> 13.
-  safety: 13,
+  // SEC-P3: csrfEnforce ergaenzt (Herkunftspruefung der Self-Service-Schreibrouten) -> 14.
+  // IE2: budgetWatchdogIntervalMs ergaenzt (Takt des Geld-Waechters) -> 15.
+  // E5: mcpAllowedOrigins + mcpOriginEnforce ergaenzt (Allowlist + Notventil der
+  // /mcp-Herkunftswache) -> 17.
+  safety: 17,
   // P6 (Budget-Achsen, Fruehwarnung): platformSpendWarnPercent + platformAlertSmsTo
   // ergaenzt (Fruehwarn-Schwelle + Betreiber-SMS-Ziel) -> 17 statt 15.
   // P7 (Budget-Achsen, Der Flip): budgetMonthEnabled ergaenzt (Spend-Monat-Flag) -> 18.
@@ -50,14 +54,32 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // OUTBOUND-E4: outboundDriftMinIntervalMs + outboundDriftStaleMs +
   // outboundDriftBalanceMinHours ergaenzt (Drift-Waechter-Mindestfrist, Stale-Grenze,
   // Guthaben-Reichweiten-Schwelle) -> 48.
-  billing: 48,
+  // KV2-6: kostenHeartbeatFensterH ergaenzt (Fensterlaenge des faelligkeits-
+  // unabhaengigen Herzschlags je Traeger) -> 49.
+  // KV2-7: costSettleDeadlineHours ergaenzt (Frist bis zum Zwangs-Abschluss eines
+  // Anrufs ohne vollstaendige Belegmenge) -> 50.
+  // KV2-9: elEvidenceMinAgeMinutes ergaenzt (Mindestalter vor dem zweiten, reifenden
+  // ElevenLabs-Abruf) -> 51.
+  // KV2-10: voiceTariffGrundbetragCentsJeRoute ergaenzt (Grundbetrag des zweiteiligen
+  // Tarifs je Route, csv-Karte); platformFixedCostCentsPerMonth UMBENANNT in
+  // platformFixedCostUsdCentsPerMonth (USD-Listenpreis statt faelschlich gelabelter
+  // EUR-Cent - menge neutral) -> 52.
+  // GP-P0 (PLAN-GELDPFAD.md): paidWithoutNumberGraceMs ergaenzt (Frist, ab der ein
+  // zahlender Mandant ohne Live-Nummer gemeldet wird) -> 53.
+  // GP-P6 (PLAN-GELDPFAD.md): priceDriftMinIntervalMs + priceDriftUnknownEscalateAfter
+  // ergaenzt (Takt des Preis-Waechters und die Grenze seiner Unwissenheits-Meldung) -> 55.
+  // IEX-B1: inboundOutageAlertWindowMs + -MinFailures + -MinAttempts + -FailSharePercent
+  // ergaenzt (eigene Schwellen der Inbound-Ausfall-Klasse des Betreiber-Melders) -> 59.
+  billing: 59,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
   // den Weltdefault-Flip, s. src/store/defaults.js) -> 14.
   // OUTBOUND-E1: platformAniE164 ergaenzt (Plattform-Absendernummer, aus der der Boot die
   // Plattform-Nummern-Bindung ableitet) -> 15.
-  provisioning: 15,
+  // GP-P3: provisioningRetryMaxAttempts ergaenzt (Versuchsdeckel des automatischen
+  // Wiederanlaufs nach Kartenwechsel) -> 16.
+  provisioning: 17,
   // 312k-Phase 4: workosManagementApiKey ergaenzt (eigener Schluessel fuer die WorkOS-
   // Nutzerloeschung beim Vertragsende, getrennt vom Anmeldeschluessel oidcClientSecret) -> 16.
   auth: 16,
@@ -75,8 +97,11 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // B5: llmProvider + deepseekApiKey ergaenzt (Anbieter-Wahl + Schluessel des
   // Fremdadapters) -> 14.
   // FIX-1: summaryTimeoutMs ergaenzt (eigener Timeout der Zusammenfassung) -> 15.
-  llm: 15,
-  telnyx: 2,
+  // FW2: llmProviderFallback + llmBillingLatchCooldownMs ergaenzt (Ausweich-Anbieter des
+  // Guthaben-Latch + seine Haltedauer) -> 17.
+  llm: 17,
+  // IE6-S1: telnyxAssistant (18 Sub-Keys, eigenes Namespace-Blatt) entfernt -> 1.
+  telnyx: 1,
   // AL-P7b: thinkingSignalEnabled ergaenzt (Denk-Signal-Flag) -> 11.
   // STT-A1: sttProfile ergaenzt (neutrale STT-Wahl, EIN Config-Schluessel fuer alle
   // Telefonie-Adapter) -> 12.
@@ -89,7 +114,11 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // kein neuer primitiver Key -> 15.
   // OC-P1: ownerSelfCallEnabled + ownerSelfCallTenantIds ergaenzt (Schalter + Tenant-
   // Allowlist der Offenlegungs-Ausnahme, PLAN-OWNER-CALL) -> 17.
-  voice: 17,
+  // IE6-S2: openaiApiKey + realtimeModel + realtimeVoice entfernt (nur die Realtime-Bridge
+  // las sie) -> 16.
+  // IEP-P6: inboundOwnerGreetingEnabled + inboundOwnerGreetingTenantIds ergaenzt (Schalter
+  // + Tenant-Allowlist des INBOUND-Owner-Tons, eigene Achse neben OWNER_SELF_CALL_*) -> 18.
+  voice: 18,
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
   // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
   // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
@@ -99,14 +128,18 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // OUTBOUND-E5: telnyxSipTrunkUsername + telnyxSipTrunkPassword ergaenzt (Digest-
   // Zugangsdaten der SIP-Trunk-FQDN-Connection, nur fuer das Anlegen einer EL-
   // Nummernregistrierung) -> 11.
-  telephony: 11,
+  // IE6-S1: telnyxDialTimeoutSecs entfernt (nur vom Assistant-Pfad genutzt) -> 10.
+  telephony: 10,
   // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
   // AL-P13: consultEnabled ergaenzt (Consult-Kanal am Call, Default aus) -> 7.
   // AL-P14: inCallConsultEnabled ergaenzt (Rueckfrage IM Gespraech, Default aus) -> 8.
   // GQ-P2: consultWaitMs + consultOpenMs ergaenzt (die zwei Consult-Fristen) -> 10.
-  tenancy: 10,
+  // P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs ergaenzt (die drei
+  // Fristen des gestaffelten EL-Rueckfrage-Halts) -> 13.
+  tenancy: 13,
   // P1 (i18n-Fix): deployedCommit ergaenzt (Deploy-Commit fuer /healthz + Boot-Banner) -> 8.
-  server: 8,
+  // E7: openaiAppsChallengeToken ergaenzt (Domain-Ownership-Token, O-4/O-5) -> 9.
+  server: 9,
   store: 3,
   metrics: 1,
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
@@ -118,6 +151,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // IM Gespraech, src/research/in-call.js; Anbieter-Tausch AL-P10c, Anzahl
   // unveraendert) -> 7.
   research: 7,
+  // IEL-B10: renderApiKey aus voice.elevenLabsInbound in einen eigenen Werkzeug-Namespace
+  // verschoben (nur scripts/ lesen ihn, nie der Server) -> 1.
+  werkzeug: 1,
 };
 // B5: llmProvider + deepseekApiKey ergaenzt -> 143.
 // FIX-1: summaryTimeoutMs ergaenzt -> 144.
@@ -138,12 +174,40 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs (billing) ergaenzt -> 167.
 // OUTBOUND-E4: 2 (safety) + 3 (billing) + 2 (telephony) ergaenzt -> 174.
 // OUTBOUND-E5: 2 (telephony: telnyxSipTrunkUsername/-Password) ergaenzt -> 176.
+// KV2-6: kostenHeartbeatFensterH (billing) ergaenzt -> 177.
 // numberRegistrationEnabled liegt INNERHALB des bereits gezaehlten nested Objekts
 // voice.elevenLabsOutbound (Muster elevenLabsOutbound selbst, s.o.) - kein neuer
 // primitiver Key auf der voice-Ebene, die Summe steigt dadurch NICHT zusaetzlich.
-const EXPECTED_TOTAL_KEYS = 176;
+// KV2-7: costSettleDeadlineHours (billing) ergaenzt -> 178.
+// KV2-9: elEvidenceMinAgeMinutes (billing) ergaenzt -> 179.
+// KV2-10: voiceTariffGrundbetragCentsJeRoute (billing) ergaenzt; platformFixedCost… ->
+// platformFixedCostUsdCentsPerMonth umbenannt (menge neutral) -> 180.
+// P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs (tenancy) ergaenzt ->
+// 183.
+// SEC-P3: csrfEnforce (safety) ergaenzt -> 184.
+// SEC-P4: elevenLabsTenantTokenRequired (voice) ergaenzt -> 185.
+// FW2: llmProviderFallback + llmBillingLatchCooldownMs (llm) ergaenzt -> 187.
+// ACHTUNG beim Merge beider Ketten (2026-09-10): SEC und FW zaehlten unabhaengig von 183
+// aus und schrieben BEIDE "-> 185". Git hat die identische Zahlzeile stillschweigend
+// zusammengefuehrt - die Summe war dadurch um 2 zu niedrig. Gemessen, nicht gerechnet.
+// GP-P0: paidWithoutNumberGraceMs (billing) ergaenzt -> 188.
+// GP-P3: provisioningRetryMaxAttempts (provisioning) ergaenzt -> 189.
+// GP-P4: provisioningRetryMinIntervalMs (provisioning) ergaenzt -> 190.
+// GP-P6: priceDriftMinIntervalMs + priceDriftUnknownEscalateAfter (billing) ergaenzt -> 192.
+// IE2: budgetWatchdogIntervalMs (safety) ergaenzt -> 193.
+// IE3: elevenLabsInbound (voice, gruppiert wie elevenLabsOutbound - ein Namespace-Blatt,
+// egal wie viele Schluessel spaeter darin liegen) ergaenzt -> 194.
+// IE6-S1: telnyxAssistant (EIN Namespace-Blatt, nicht seine 18 internen Sub-Keys) +
+// telnyxDialTimeoutSecs entfernt -> 192.
+// IE6-S2: openaiApiKey + realtimeModel + realtimeVoice entfernt -> 189.
+// IEL-B10: werkzeug.renderApiKey ergaenzt (voice.elevenLabsInbound bleibt EIN Blatt) -> 190.
+// IEP-P6: inboundOwnerGreetingEnabled + inboundOwnerGreetingTenantIds (voice) ergaenzt -> 192.
+// IEX-B1: vier Inbound-Ausfall-Schwellen (billing) ergaenzt -> 196.
+// E5: mcpAllowedOrigins + mcpOriginEnforce (safety) ergaenzt -> 198.
+// E7: openaiAppsChallengeToken (server) ergaenzt -> 199.
+const EXPECTED_TOTAL_KEYS = 199;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (176 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die gepinnten Counts und disjunkte Blaetter", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -164,7 +228,7 @@ test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkt
   );
 });
 
-test("Oberflaeche: config traegt GENAU die 15 Namespaces (enumerable UND ueber 'in' erreichbar), kein flacher Key mehr", () => {
+test("Oberflaeche: config traegt GENAU die gepinnten Namespaces (enumerable UND ueber 'in' erreichbar), kein flacher Key mehr", () => {
   assert.equal(new Set(Object.keys(config)).size, Object.keys(CONFIG_NAMESPACES).length);
   assert.deepEqual(Object.keys(config).sort(), Object.keys(CONFIG_NAMESPACES).sort());
   for (const namespace of Object.keys(CONFIG_NAMESPACES)) {
@@ -276,11 +340,43 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // innerhalb des bereits gezaehlten nested Objekts voice.elevenLabsOutbound (dessen
   // primitive Blaetter durchlaeuft dieser Test nicht einzeln, s. continue oben) - checked
   // steigt dadurch NICHT.
-  const EXPECTED_PRIMITIVE_LEAVES = 165;
+  // KV2-6: kostenHeartbeatFensterH ist primitiv (Zahl, kein Array/nested Objekt) -> 166.
+  // KV2-7: costSettleDeadlineHours ist primitiv (Zahl, kein Array/nested Objekt) -> 167.
+  // KV2-9: elEvidenceMinAgeMinutes ist primitiv (Zahl, kein Array/nested Objekt) -> 168.
+  // KV2-10: voiceTariffGrundbetragCentsJeRoute ist das SIEBTE nested Objekt (csv-Karte
+  // profil:cents, kein primitives Blatt, s. continue oben) -> checked bleibt 168; der
+  // Rename platformFixedCostCentsPerMonth -> platformFixedCostUsdCentsPerMonth bleibt
+  // primitiv (Zahl) und verschiebt nichts.
+  // P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs sind alle drei
+  // primitiv (Zahl, kein Array/nested Objekt) -> 171.
+  // SEC-P3: csrfEnforce ist primitiv (Boolean, kein Array/nested Objekt) -> 172.
+  // SEC-P4: elevenLabsTenantTokenRequired ist primitiv (Boolean, kein Array/nested
+  // Objekt) -> 173.
+  // FW2: llmProviderFallback (String) + llmBillingLatchCooldownMs (Zahl) sind beide
+  // primitiv (kein Array/nested Objekt) -> 175. Zur doppelten Zaehlung s. den Hinweis
+  // bei EXPECTED_TOTAL_KEYS.
+  // GP-P0: paidWithoutNumberGraceMs ist primitiv (Zahl, kein Array/nested Objekt) -> 176.
+  // GP-P3: provisioningRetryMaxAttempts ist primitiv (Zahl, kein Array/nested Objekt) -> 177.
+  // GP-P4: provisioningRetryMinIntervalMs ist ebenfalls primitiv (Zahl) -> 178.
+  // GP-P6: priceDriftMinIntervalMs + priceDriftUnknownEscalateAfter sind primitiv (Zahlen) -> 180.
+  // IE2: budgetWatchdogIntervalMs ist primitiv (Zahl, kein Array/nested Objekt) -> 181.
+  // IE6-S1: telnyxDialTimeoutSecs (primitives Blatt) entfernt -> 180. telnyxAssistant war
+  // selbst ein nested Objekt (continue oben) und trug nie zu checked bei - kein
+  // weiterer Abzug.
+  // IE6-S2: openaiApiKey + realtimeModel + realtimeVoice sind drei primitive Strings -> 177.
+  // IEL-B10: werkzeug.renderApiKey ist primitiv (String); vorher lag er im nested Objekt
+  // voice.elevenLabsInbound und zaehlte nicht -> 178.
+  // IEP-P6: inboundOwnerGreetingEnabled ist primitiv (Boolean) -> 179.
+  // inboundOwnerGreetingTenantIds ist das SECHSTE Array (kein primitives Blatt, s.u.).
+  // IEX-B1: die vier Inbound-Ausfall-Schwellen sind alle primitiv (Zahlen) -> 183.
+  // E5: mcpOriginEnforce ist primitiv (Boolean) -> 184. mcpAllowedOrigins ist das
+  // SIEBTE Array (kein primitives Blatt, s.u.).
+  // E7: openaiAppsChallengeToken ist primitiv (String, kein Array/nested Objekt) -> 185.
+  const EXPECTED_PRIMITIVE_LEAVES = 185;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,
-    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 5 Arrays - 6 nested Objekte) geprueft`,
+    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 7 Arrays - 7 nested Objekte) geprueft`,
   );
 });
 

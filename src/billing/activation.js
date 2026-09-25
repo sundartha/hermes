@@ -82,7 +82,8 @@ async function syncNumberSetupFeeExemption({ store, billing, tenant }) {
 // OHNE den Statuswechsel vorwegzunehmen, und erst ein GEKLAERTES Provisioning-Ergebnis
 // (provisionCleared) aktiviert den Tenant. Liefert zusaetzlich { activated, provisioned } -
 // die Aufrufer (webhook.js/subscribe.js) auditieren beides und koennen bei activated===false
-// einen Plattform-Alarm ausloesen.
+// einen Plattform-Alarm ausloesen. FW1-B: bei activated===true nimmt sie zusaetzlich eine
+// vorher gesetzte Zahlungsbeanstandung zurueck (clearBillingHold + periodCreditRevoked:false).
 export async function activatePaidTenant({ store, accounts, provision, billing, tenant }) {
   store.setKycLevel(tenant, KYC_LEVEL.CARD);
   // tenant-prolif-c (Invariante 2): der Tenant hat gerade bezahlt -> den Grace-Anker loeschen,
@@ -117,11 +118,33 @@ export async function activatePaidTenant({ store, accounts, provision, billing, 
   // (tenantActiveSubscriber, tenantInactive) den Tenant bis zum naechsten Login als gesperrt ->
   // Outbound waere trotz bezahltem Abo zu.
   await store.ensureTenant(tenant);
+  // FW1-B (F8): die Ruecknahme der Beanstandungs-Wirkung gehoert an DIESE eine Stelle -
+  // jeder Aktivierungspfad laeuft hier durch (Stripe-Webhook UND Self-Service-Rueckkehr
+  // ueber activateSubscriptionFromCheckoutSession/subscribeAndActivate). Vorher stand sie
+  // nur im Webhook-Zweig: ein Rueckkehrer mit vorheriger Zahlungsbeanstandung waere danach
+  // status=active gewesen, haette aber ein geschlossenes Outbound-Gate (billingHoldActive,
+  // telephony/outbound-gates.js) und 0 Periodenminuten (includedMinutesFor, plan-caps.js)
+  // behalten. Die BEDINGUNG wandert nicht mit: hier ankommen heisst bestaetigtes Abo
+  // (CONFIRMED_SUBSCRIPTION_STATUS) plus geklaertes Provisioning (provisionCleared).
+  store.clearBillingHold(tenant);
+  store.setTenantSubscription(tenant, { periodCreditRevoked: false });
+  // Nachstempeln: stampBudgetPeriodIfPaid laeuft frueh in dieser Funktion und kehrt bei
+  // aktivem Hold bewusst OHNE Stempel zurueck. Genau ein Rueckkehrer MIT Hold traefe das -
+  // Hold geraeumt, Periodenguthaben zurueck, aber ohne Perioden-Anker faellt das Gate auf
+  // die strengere Lebenszeit-Achse. Derselbe Helfer ein zweites Mal (idempotent: gleicher
+  // Schluessel -> false); der Rueckgabewert ist die ODER-Verknuepfung beider Aufrufe, damit
+  // die bestehende Audit-Zeile budget_period=reset|kept wahr bleibt.
+  const budgetPeriodStartedAfterHold = stampBudgetPeriodIfPaid({ store, tenant });
   // A2: zusaetzlicher idempotenter Effekt NACH KYC->Wartezustand->provision->Status - plan-
   // abgeleitetes Rechteprofil auf die tenantId. SKIP wirft NICHT, damit KYC/Status/provision
   // bei fehlendem Plan stehen bleiben (idempotenter Retry / der A3-Backfill holt das Profil
   // nach). PAYMENT_ENABLED-Gate: der Pfad ist nur payment-gegated erreichbar (server.js
   // Webhook 404 / Self-Service 404) -> aus = byte-identisch (Regel 3). accounts wird nur noch
   // fuer setStatus gebraucht (Profil keyt seit Phase S auf die tenantId).
-  return { profile, activated: true, provisioned, budgetPeriodStarted };
+  return {
+    profile,
+    activated: true,
+    provisioned,
+    budgetPeriodStarted: budgetPeriodStarted || budgetPeriodStartedAfterHold,
+  };
 }

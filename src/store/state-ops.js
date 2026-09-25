@@ -25,6 +25,7 @@ import {
   sanitizeProfile,
   resolveProfileFrom,
   MAX_NOTIFICATIONS,
+  WEBHOOK_ANCHOR_HISTORY,
   DEFAULT_PROVIDER,
   PROVIDER,
   DEFAULT_COUNTRY,
@@ -40,6 +41,7 @@ import {
   CONSULT_ANSWER,
   CONSULT_WAIT,
   GLOBAL_CAP_REASON,
+  NEEDS_MANUAL_RECONCILE_REASON,
   REQUEST_NUMBER_REASON,
   TENANT_STATUS,
   PROVISIONING_JOB_STATUS,
@@ -51,6 +53,7 @@ import {
   MODEL_PRICE_RATE_FIELDS,
   isBookableCents,
   isCorrectionCents,
+  isProviderMicroCents,
   PROVIDER_RATE_SCALE,
   USAGE_CORRUPT_REASON,
   globalCapCents,
@@ -59,8 +62,29 @@ import {
   COST_TRUING_SOURCE,
   NUMBER_HOLD_REASON,
 } from "./defaults.js";
+// KV2-3: das Regelwerk des Kosten-Buchs (Wertebereiche, Waechter, detail-Allowlist,
+// Summenregel). Blatt-Modul, importiert nur defaults.js -> kein Zyklus (Muster
+// call-result.js / number-denylist.js).
+import {
+  assertCostEvidenceInput,
+  buildCostEvidenceRow,
+  canSetEvidenceMaturity,
+  costEvidenceFortschreibung,
+  isTerminalMaturity,
+} from "./cost-evidence.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS, languageForCountry } from "../i18n/locales.js";
 import { planCapCents } from "../billing/plan-caps.js";
+// GP-P0: die EINE Ableitung "Beginn der laufenden Abrechnungsperiode" (G5). period.js ist
+// ein Blatt-Modul ohne eigene Imports -> kein Zyklus in den Store-Graph (Muster plan-
+// caps.js/kostenarten.js). Der Kopfkommentar dieser Datei grenzt die Spend-Monat-Achse
+// bewusst gegen diese Stripe-Periode ab; hier ist die Stripe-Periode gemeint.
+import { resolvePeriodStartIso } from "../billing/period.js";
+// KV2-2: die Kostenprofil-Registry der Engine-Weiche. Import-frei von src/telephony/*
+// (s. Kopfkommentar kostenarten.js) - kein Zyklus in den Store-Graph.
+import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
+// IEL-B4a: das EINE Zustands-Praedikat der Inbound-Bruecke. Blatt-Modul (importiert nur
+// kostenarten.js) -> kein Zyklus in den Store-Graph (Muster sip-call-id.js).
+import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
 import { isKnownPlanSlug } from "../plans.js";
 // GAP-14: Wert-Guard fuer updateSettings (greeting muss den Inbound-Pflichtsatz tragen).
 // inbound-notice.js ist ein Blatt-Modul (kein Rueckimport, kein Zyklus).
@@ -77,7 +101,7 @@ import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 // die das MCP-Werkzeug get_transcript nutzt. Keine zweite Feldliste (G5/S2).
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 // F2-Newsletter-Recipients: timing-sicherer Token-Vergleich fuer die beiden oeffentlichen
-// Token-Scans (confirm/unsubscribe) - Muster call.streamToken-Pruefung in bridge.js.
+// Token-Scans (confirm/unsubscribe) - timing-sicher, kein === (Absolute Regel 3).
 import { safeEqual } from "../util.js";
 // AL-P12: K (=3) lebt im Prompt-Modul, weil dort auch das Zeichenbudget haengt - die
 // Query darf nicht mehr Eintraege liefern, als der Prompt je rendern kann (EINE Quelle).
@@ -134,6 +158,12 @@ export function makeDefaultState() {
     // quantity, costCents, occurredAt, stripeMeterSent }]. Eintraege werden NIE
     // mutiert, nur stripeMeterSent flippt beim Flush.
     usageEvents: [],
+    // KV2-3: das KOSTEN-Buch (call_cost_evidence) - eine Zeile je (callId, traeger),
+    // append-only nach vorne. Getrennt vom Erloes-Buch usageEvents (Owner-Entscheidung 1):
+    // dort stehen Kundenerloese, hier Lieferantenkosten. [{ id, tenantId, callId, traeger,
+    // reife, betragMikroCents, waehrung, quelle, belegRef, versuche, gemessenAt,
+    // abstandZumGespraechsendeS, detail }]
+    callCostEvidence: [],
     // In-Flight-Reserven (OUT-05): tenantId -> GANZZAHL Cents noch nicht abgerechneter
     // Worst-Case-Kosten laufender Outbound-Calls. STRUKTURELL EPHEMER: nie auf Platte
     // (json.save schliesst es aus), nie in pg (kein Flush) -> ein Neustart startet bei 0
@@ -187,6 +217,27 @@ export function openingLineHash(line) {
   return crypto.createHash("sha256").update(line, "utf8").digest("hex");
 }
 
+// Die zwei Owner-Markierungen eines Anrufs. Dieselbe Frage, zwei Richtungen - deshalb
+// EINE Stelle, die sie baut (G5), und nicht zwei Zeilen im ohnehin langen createCall.
+//
+// calleeIsOwner (OC-P1, PLAN-OWNER-CALL): war das ZIEL dieses Outbound die eigene
+// hinterlegte Nummer des ANRUFENDEN Tenants? Daran haengt ein gesetzlicher Pflichtsatz
+// (Absolute Regel 2), ausgewertet in routes/api-calls.js.
+// callerIsOwner (IEP-P6): kam dieser EINGEHENDE Anruf VON der eigenen hinterlegten Nummer
+// des ANGERUFENEN Tenants? Daran haengt AUSSCHLIESSLICH die Anrede, ausgewertet in
+// routes/voice.js. Ausdruecklich ein EIGENES Feld: die Ordnungsregel "ein eingehender
+// Anruf traegt calleeIsOwner strukturell nie als true" (src/claude.js) traegt zwei
+// Outbound-Waechter und darf nicht still falsch werden.
+//
+// Fuer BEIDE gilt: AUSSCHLIESSLICH serverseitig gesetzt (src/callee-is-owner.js), nie roh
+// aus einem Request-Body. SET-ONCE - danach schreibt sie niemand mehr, damit eine
+// Nummern-Aenderung die Entscheidung nicht nachtraeglich kippt. `=== true` statt Rohwert:
+// Default false ist fail-closed (Offenlegung bzw. Fremd-Wortlaut) und byte-identisch zur
+// pg-Hydrierung (rowToCall). Auf dem Record steht NUR das Boolean, NIE die Nummer.
+function ownerMarkierungen({ calleeIsOwner, callerIsOwner }) {
+  return { calleeIsOwner: calleeIsOwner === true, callerIsOwner: callerIsOwner === true };
+}
+
 export function createCall(
   s,
   {
@@ -208,6 +259,7 @@ export function createCall(
     reserveCents,
     diagnostic,
     calleeIsOwner,
+    callerIsOwner,
   },
 ) {
   const call = {
@@ -284,6 +336,11 @@ export function createCall(
     // unten - Auflage B5, traegt zugleich den Deckel). Initial null - byte-identisch
     // zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
     lookupLog: null,
+    // ST3 (O3): diagnostisches Zaehlfeld der Stimmen-Detektoren ([el-tags]/[el-b1]),
+    // gesetzt am Gespraechsende (recordElDetectorCounts). Initial null - byte-identisch
+    // zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift. NIE nach aussen
+    // (publicCall strippt es wie costProfile).
+    elDetectorCounts: null,
     // F2 P9 (M2): persistierter Summary-SMS-Dedup-Marker (ISO-Zeit nach erfolgreichem
     // Send, sonst null). Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
     // json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt ihn wie streamToken/_finished).
@@ -343,15 +400,8 @@ export function createCall(
     // Request-Body. Default false = Bestandsverhalten (Purge nach Summary); undefined/
     // fehlend -> false, byte-identisch zur pg-Hydrierung (rowToCall).
     diagnostic: diagnostic === true,
-    // OC-P1 (PLAN-OWNER-CALL): war das Ziel dieses Outbound die eigene hinterlegte
-    // Nummer des ANRUFENDEN Tenants - bei eingeschaltetem Schalter und gepinntem Tenant?
-    // Wird AUSSCHLIESSLICH serverseitig gesetzt (src/callee-is-owner.js, ausgewertet in
-    // routes/api-calls.js) - nie roh aus dem Request-Body. SET-ONCE: danach schreibt es
-    // niemand mehr, damit eine Nummern-Aenderung zwischen Auftragsannahme und Klingeln
-    // die Entscheidung nicht mehr kippen kann. `=== true` statt Rohwert: Default false ist
-    // NICHT-Owner ist Offenlegung (fail-closed), byte-identisch zur pg-Hydrierung
-    // (rowToCall). Auf dem Record steht NUR dieses Boolean, NIE die Nummer.
-    calleeIsOwner: calleeIsOwner === true,
+    // Die zwei Owner-Markierungen, an EINER Stelle gebaut (s. ownerMarkierungen oben).
+    ...ownerMarkierungen({ calleeIsOwner, callerIsOwner }),
     // OUT-05 (F2): Worst-Case-Reserve dieses Calls (GANZZAHL Cents) + Idempotenz-Schloss der
     // Freigabe. reserveCents/reserveReleased sind reine Referenz-/Idempotenz-Daten fuer
     // releaseOutboundReserve + den Backstop-Timer; der Reserve-LEDGER (s.reservations) ist
@@ -378,6 +428,11 @@ export function createCall(
     // der Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) einen laufenden Anruf
     // bindet. Initial null - byte-identisch zur pg-Hydrierung (rowToCall).
     elevenlabsConversationId: null,
+    // IEL-B4a (E5): der persistierte Brueckenzustand des EL-Inbound-Wegs - drei set-once
+    // ISO-Marker (bindInboundElConversation / markInboundElFallback /
+    // markInboundElNachlaufStarted). Initial null - byte-identisch zur pg-Hydrierung
+    // (rowToCall), kein json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt sie).
+    elBoundAt: null, elFallbackAt: null, elNachlaufStartedAt: null,
     // PHASE-6-VORAUSSETZUNG (Fertig-Punkt 7, "die Kosten sind gemessen, aufgeschluesselt
     // nach ElevenLabs, Sprachmodell und Telefonie"): die SIP-Call-ID des ausgehenden Legs
     // (Form "otb_..."). Der EINZIGE Join zwischen unseren zwei Kostenquellen auf der
@@ -387,6 +442,11 @@ export function createCall(
     // Additiv nullable: nur der ElevenLabs-Weg setzt sie, jeder andere Call bleibt null -
     // byte-identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
     sipCallId: null,
+    // KV2-2: das Kostenprofil dieses Anrufs. Bewusst NICHT hier befuellt, auch wenn der
+    // Aufrufer es wuesste - es wird an der ENGINE-WEICHE gesetzt (4.3), weil die
+    // Erzeugungsstelle den Traeger nicht kennt (der ConvAI-Umstieg hat keine der beiden
+    // createCall-Stellen angefasst). Initial null - byte-identisch zur pg-Hydrierung.
+    costProfile: null,
     // ABNAHME-D1 (Owner-Auftrag: eigene Felder im Ergebnisschema, additiv NEBEN summary/
     // result). Vom Agenten waehrend des Gespraechs STRUKTURIERT gesammelt (ElevenLabs
     // Data Collection, analysis.data_collection_results) statt nur als Freitext in
@@ -420,6 +480,12 @@ export function createCall(
     fromActualE164: null,
     fromSource: null,
     fromRegistrationSource: null,
+    // SEC-P1: Ringpuffer der bereits verarbeiteten /voice/turn-Ereignis-Anker
+    // (PII-FREI: Zufallsmarke bzw. sha256 des signierten Umschlags, NIE Wortlaut).
+    // Ueberlebt den Neustart -> eine Wiederholung loest danach keine zweite
+    // Modellrunde mehr aus. Reine Zuweisung ohne Operator (die gepinnte Komplexitaet
+    // dieser Altlast-Funktion bleibt unveraendert, s. eslint-legacy-exceptions.json).
+    webhookAnchors: [],
     actionItemIds: [],
   };
   s.calls.unshift(call);
@@ -431,39 +497,10 @@ export function getCall(s, id) {
   return s.calls.find((c) => c.id === id || c.twilioSid === id) || null;
 }
 
-// Korrelation ueber die Telnyx-eigene call_control_id (Brain-Shim, E1). Fail-closed:
-// leere/unbekannte ID -> null (ein Call ohne callControlId ist per Definition kein Treffer).
-export function getCallByControlId(s, callControlId) {
-  if (!callControlId) return null;
-  return s.calls.find((c) => c.callControlId === callControlId) || null;
-}
-
 export function addTranscript(s, callId, role, text) {
   const call = getCall(s, callId);
   if (!call) return false;
   call.transcript.push({ role, text, at: new Date().toISOString() });
-  return true;
-}
-
-// GQ-H1-a: Telnyx hat die zuletzt erzeugte Antwort verworfen, bevor sie gesprochen wurde
-// (seine gespiegelte Nachrichtenliste ist zwischen zwei Requests nicht gewachsen). Sie darf
-// nicht als "bereits gesagt" im Kontext des naechsten Turns, in der Zusammenfassung oder in
-// der Nachricht an den Owner stehen - ein Agent, dessen Kontext behauptet, er habe etwas
-// gesagt, verhaelt sich zwangslaeufig unsinnig.
-//
-// Entfernt NUR eine ABSCHLIESSENDE agent-Zeile. Steht dort etwas anderes (caller-Zeile,
-// leeres Transkript), passiert nichts: fail-safe-Richtung, lieber eine Zeile zu viel im
-// Transkript als eine echte, gesprochene Aeusserung geloescht. Die caller-Zeile des
-// verworfenen Turns bleibt bewusst stehen - der Anrufer HAT diese Worte gesagt (sie sind
-// ein Praefix der vollstaendigen Aeusserung), sie behauptet also nichts Falsches.
-//
-// Reine Mutation, kein IO. Liefert true, wenn etwas entfernt wurde -> der Backend-Wrapper
-// save()t nur dann.
-export function dropLastAgentTranscript(s, callId) {
-  const call = getCall(s, callId);
-  if (!call || call.transcript.length === 0) return false;
-  if (call.transcript[call.transcript.length - 1].role !== "agent") return false;
-  call.transcript.pop();
   return true;
 }
 
@@ -561,13 +598,14 @@ export function exportTenantData(s, tenantId) {
 // ist ein No-op (der zuerst gesetzte Marker gewinnt -> stabiler Zeitstempel, kein Doppel-
 // Schreiben). Fehlender call (null) -> changed=false, KEIN Throw (ein verspaeteter Retry
 // fuer einen unbekannten Call darf den Setter nicht crashen). Liefert { call, changed }
-// (Wrapper-Kontrakt: save NUR bei changed). BEWUSST nur fuer die drei Set-once-ISO-Marker:
-// recordFailureReason (value-gated + 3. Arg) und setCallEndedAt (status-gated, expliziter
-// Anker) haben andere Semantik und bleiben getrennt.
-function setOnceTimestamp(call, fieldName) {
+// (Wrapper-Kontrakt: save NUR bei changed). recordFailureReason (value-gated + 3. Arg) und
+// setCallEndedAt (status-gated, expliziter Anker) haben andere Semantik und bleiben
+// getrennt. atIso fehlt -> jetzt (alle Bestandsaufrufer); IEL-B4a reicht die Zeit explizit
+// herein (Fake-Uhr-faehig).
+function setOnceTimestamp(call, fieldName, atIso = new Date().toISOString()) {
   let changed = false;
   if (call && !call[fieldName]) {
-    call[fieldName] = new Date().toISOString();
+    call[fieldName] = atIso;
     changed = true;
   }
   return { call, changed };
@@ -657,6 +695,74 @@ export function markSummaryMailSent(s, callId) {
 // Voice-Minuten NICHT erneut. Wrapper saved bei changed.
 export function markBilled(s, callId) {
   return setOnceTimestamp(getCall(s, callId), "billedAt");
+}
+
+// IEL-B4a: Brueckenzustand
+//
+// Kanonische ISO-Form (genau Date#toISOString). Die pg-Spalten sind TIMESTAMPTZ: ein
+// unlesbarer Wert liesse den Flush ALLER Anrufe scheitern, eine andere lesbare Form kaeme
+// als anderer String zurueck (json<->pg-Drift). Verworfen, nicht geworfen (Muster
+// recordSipCallId): der Schreiber sieht changed/bound false.
+function istKanonischerIsoZeitpunkt(wert) {
+  if (typeof wert !== "string" || Number.isNaN(Date.parse(wert))) return false;
+  return new Date(wert).toISOString() === wert;
+}
+
+// Set-once-Marker mit EXPLIZITER Zeit: eine Fabrik fuer zwei Felder (G5, Muster
+// recordProviderHandleOnce). Liefert { call, changed } (E18: der Nachlauf-Start verzweigt
+// auf changed). Fehlender Call -> { call: null, changed: false }.
+const markOnceAt = (fieldName) => (state, callId, atIso) => {
+  const call = getCall(state, callId);
+  if (!istKanonischerIsoZeitpunkt(atIso)) return { call, changed: false };
+  return setOnceTimestamp(call, fieldName, atIso);
+};
+
+// E5/E8: der Rueckfall-Marker. Set-once, OHNE Zustands-Vorbedingung: ein Rueckfall nach
+// Bindung ist erlaubt und ergibt RUECKFALL (Rangfolge in bridgeStateOf).
+export const markInboundElFallback = markOnceAt("elFallbackAt");
+
+// E7(d)/E17/E18: Beginn des Nachlaufs = Carrier-Ende. Set-once; changed:true genau beim
+// ersten Setzen - das Start-Tor der Poll-Schleife (B4).
+export const markInboundElNachlaufStarted = markOnceAt("elNachlaufStartedAt");
+
+// E5/E11: die EINE Bindungs-Operation. Pruefen und Setzen in DERSELBEN synchronen Op
+// (Muster recordProviderHandleOnce). Die Vorbedingung ist das Praedikat selbst, nicht
+// eine zweite Formulierung davon (G5):
+//   WARTET                          -> bindet (Conversation-ID + elBoundAt), changed+bound
+//   GEBUNDEN, dieselbe ID           -> idempotent: bound true, changed false (nichts Neues)
+//   GEBUNDEN mit anderer ID, RUECKFALL, KEIN_EL_INBOUND, kein Call -> bound false
+// Ungueltige Eingabe (leere/Nicht-String-ID, nicht kanonische Zeit) -> bound false.
+// Objekt-Parameter statt vier Positionen (F1, Muster recordActualSender).
+export function bindInboundElConversation(state, callId, { conversationId, nowIso }) {
+  const call = getCall(state, callId);
+  const eingabeGueltig =
+    typeof conversationId === "string" && conversationId !== "" && istKanonischerIsoZeitpunkt(nowIso);
+  if (!eingabeGueltig) return { call, changed: false, bound: false };
+  const zustand = bridgeStateOf(call);
+  if (zustand === BRIDGE_STATE.GEBUNDEN) {
+    return { call, changed: false, bound: call.elevenlabsConversationId === conversationId };
+  }
+  if (zustand !== BRIDGE_STATE.WARTET) return { call, changed: false, bound: false };
+  call.elevenlabsConversationId = conversationId;
+  call.elBoundAt = nowIso;
+  return { call, changed: true, bound: true };
+}
+
+// SEC-P1: die Anker EINES verarbeiteten Turn-Webhooks anhaengen; aeltere fallen aus dem
+// Ringpuffer (WEBHOOK_ANCHOR_HISTORY). Unbekannter Call -> changed=false, KEIN Throw
+// (ein verspaeteter Retry darf den Setter nicht crashen, Muster setOnceTimestamp).
+// Bereits bekannte Anker werden nicht doppelt geschrieben -> kein Flush ohne Aenderung.
+// Zustand ausgeschrieben (state statt s, Muster trueUpAnsweredAt/markInboxEntry): eine
+// neue einbuchstabige Kennung ueberschritte die im Bestand eingefrorene
+// id-length-Ausnahme dieser Datei (eslint-suppressions.json, exakter Zaehler).
+export function recordWebhookAnchors(state, callId, anchors) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false };
+  const known = call.webhookAnchors ?? [];
+  const fresh = anchors.filter((anchor) => !known.includes(anchor));
+  if (!fresh.length) return { call, changed: false };
+  call.webhookAnchors = [...known, ...fresh].slice(-WEBHOOK_ANCHOR_HISTORY);
+  return { call, changed: true };
 }
 
 // INBOX-P1: Qualifikations-Marker. qualifies=false -> No-op.
@@ -806,10 +912,54 @@ export function recordCallCostTruingResult(s, callId, { source, actualCostMicroC
   if (!call || call.costTruedAt !== null || !Object.values(COST_TRUING_SOURCE).includes(source))
     return { call: call || null, changed: false };
   call.costTruingAttempts = nextCostTruingAttempt(call);
-  if (Number.isSafeInteger(actualCostMicroCents) && actualCostMicroCents >= 0)
+  if (isProviderMicroCents(actualCostMicroCents))
     call.actualCostMicroCents = actualCostMicroCents;
   call.costTruedSource = source;
   if (closedAt) call.costTruedAt = closedAt;
+  return { call, changed: true };
+}
+
+// KV2-7/KV2-8: Abschluss OHNE Messung. Der Faelligkeitslauf schliesst einen Anruf, fuer
+// den in diesem Sweep gar nicht gemessen wurde (nicht abrufbar oder Versuche erschoepft)
+// und dessen Frist abgelaufen ist. Bewusst NICHT ueber recordCallCostTruingResult: das
+// dort verbrauchte nextCostTruingAttempt waere ein Versuch, den niemand unternommen hat -
+// der Versuchszaehler bleibt hier unberuehrt.
+// KV2-8 ergaenzt Herkunft und Betrag. Der frueher hier notierte Einwand ("ein
+// Herkunftswert waere eine Messaussage, die es nicht gibt") faellt mit den zwei neuen
+// Werten weg: kostenbuch_vollbeleg/kostenbuch_teilbeleg sind Aussagen ueber das
+// KOSTEN-BUCH, keine ueber eine Messung. source=null laesst das Feld stehen, wie bisher;
+// ein unbekannter Wert wird verworfen (derselbe Wertebereichs-Riegel wie in
+// recordCallCostTruingResult). Optionsobjekt statt drittem/viertem Positionsargument (F1).
+// SET-ONCE wie der Bestand: ein bereits geschlossener Anruf ist ein No-Op.
+// Liefert { call, changed }.
+// Zustandsparameter ausgeschrieben statt der ueblichen 's'-Konvention dieser Datei
+// (Lint-Budget: id-length 's' ist in eslint-legacy-exceptions.json exakt gepinnt, ein
+// Anheben braucht Eigentuemer-Freigabe - kein Bau-Agent setzt das selbst fest).
+export function schliesseKostenAbgleich(state, callId, { closedAt, source = null, actualCostMicroCents = null }) {
+  const call = getCall(state, callId);
+  if (!call || call.costTruedAt !== null || !closedAt) return { call: call || null, changed: false };
+  if (source !== null && Object.values(COST_TRUING_SOURCE).includes(source)) call.costTruedSource = source;
+  if (isProviderMicroCents(actualCostMicroCents)) call.actualCostMicroCents = actualCostMicroCents;
+  call.costTruedAt = closedAt;
+  return { call, changed: true };
+}
+
+// KV2-7, Phasenschnitt-Nachlauf (4.7): oeffnet einen im Fenster KV2-5..KV2-7 faelschlich
+// gelatchten Anruf wieder. DIE EINZIGE Stelle im System, die costTruedAt zuruecksetzt -
+// zulaessig, weil der set-once-Riegel gegen doppelte BUCHUNG schuetzt und bis
+// einschliesslich KV2-7 kein Cent bewegt wurde (applyCostCorrectionCents ist fuer diese
+// Anrufe nie gelaufen, KV2-5 ruft bookCorrectionFor fuer die EL-Route nicht). Bereits
+// offen -> No-Op (Idempotenz des einmaligen Laufs). Liefert { call, changed }.
+// KV2-9: der zweite einmalige Nachlauf oeffnet auch Anrufe, die KV2-8 bereits zwangs-
+// gesettelt hat. Der Schutz gegen die doppelte Buchung wandert dorthin, wo er hingehoert -
+// in das Praedikat des Nachlaufs (billing/nachlauf-phasenschnitt.js, Bedingung 5: nur
+// Anrufe, deren Belegsumme UNTER der Schaetzung liegt, bei denen also nichts gebucht
+// wurde). Diese Funktion bleibt unveraendert dumm: sie setzt costTruedAt auf null und
+// entscheidet nichts.
+export function oeffneKostenAbgleichErneut(state, callId) {
+  const call = getCall(state, callId);
+  if (!call || call.costTruedAt === null) return { call: call || null, changed: false };
+  call.costTruedAt = null;
   return { call, changed: true };
 }
 
@@ -859,6 +1009,17 @@ export function cappedEndedAtMs(call, nowMs, defaultMaxDurationS) {
   return Math.min(nowMs, anchor + callLimitMs(call, defaultMaxDurationS));
 }
 
+// IEL-B4a (E17): Carrier-Ende eines Calls in ms - EINE Funktion fuer Buchung (Ende-Anker)
+// und Live-Term. Ohne elNachlaufStartedAt -> nowMs (Outbound/Budget byte-identisch). Mit
+// Marker -> min(nowMs, Marker): ein Call im Nachlauf waechst nicht weiter. Unlesbarer Marker
+// -> NaN (Math.min reicht es durch) - faehrt den Live-Term fail-closed wie
+// liveVoiceMinutesOf bei fehlendem Start-Anker. Rein, kein Aufrufer in B4a.
+export function carrierEndMsOf(call, nowMs) {
+  const nachlaufStartIso = call.elNachlaufStartedAt;
+  if (!nachlaufStartIso) return nowMs;
+  return Math.min(nowMs, Date.parse(nachlaufStartIso));
+}
+
 // CDF1 (Report #2 5.4): persistiert den maschinenlesbaren Fehlergrund (mapped Token) am
 // Call-Record. Set-once + nur bei truthy reason (Muster markSummarySmsSent): ein spaeter
 // /voice/status-Retry ueberschreibt den ersten Grund nicht; reason=null (completed) -> No-op
@@ -891,7 +1052,7 @@ const recordProviderHandleOnce = (field) => (state, callId, handle) => {
   return { call, changed };
 };
 
-export const recordTelnyxConversationId = recordProviderHandleOnce("telnyxConversationId");
+// EL-BL1: set-once - eine zweite Kennung desselben Anrufs ueberschreibt die erste nicht.
 export const recordElevenlabsConversationId = recordProviderHandleOnce(
   "elevenlabsConversationId",
 );
@@ -930,6 +1091,31 @@ export function recordSipCallId(state, callId, sipCallId) {
   return setSipCallIdOnce(state, callId, sipCallId);
 }
 
+const setCostProfileOnce = recordProviderHandleOnce("costProfile");
+
+// KV2-2: das Kostenprofil, gesetzt an der Engine-Weiche. Zwei Fehlrichtungen, bewusst
+// UNGLEICH behandelt (Abnahmekriterium (b)):
+//   unbekannter Wert -> WIRFT. Der Wert kann nur aus KOSTENPROFIL kommen (die Weichen
+//     lesen den Enum, nie ein Literal); ein Treffer hier ist ein Programmierfehler, den
+//     der Inventar-Test (c) in CI faengt, bevor er je einen Anruf sieht.
+//   fehlender Wert   -> WIRFT NICHT. Ein Wahlpfad, der das Setzen vergisst, darf keinen
+//     Anruf verhindern (4.3: die schlechteste Folge eines NEUEN Fehlers ist "kein
+//     Refund", niemals "kein Anruf"). Fail-closed wird stattdessen das Settlement.
+// Die console-Zeile ist dieselbe eng begrenzte Ausnahme wie beim Join-Schluessel-
+// Waechter oben (dieses Modul ist sonst IO-frei); sie ist PII- und secret-frei. Die
+// Eskalation zum Betreiber-Alarm (kosten:profil-fehlt, 4.9) gehoert KV2-6 - sie hier
+// zu verdrahten waere ein zweiter Meldeweg (G5) und braeuchte IO in state-ops.
+export function recordCostProfile(state, callId, profil) {
+  if (!profil) {
+    console.warn(`[kostenprofil] fehlt call=${callId} - Anruf entsteht trotzdem, kein Settlement`);
+    return { call: getCall(state, callId), changed: false };
+  }
+  if (!istBekanntesKostenprofil(profil)) {
+    throw new Error(`recordCostProfile: unbekanntes Kostenprofil '${profil}'`);
+  }
+  return setCostProfileOnce(state, callId, profil);
+}
+
 // KS-EL1: der GRUND, warum trueUpAnsweredAt oben KEINEN Anker ermitteln konnte (additiv
 // nullable). Set-once + value-gated ueber DIESELBE Fabrik wie die Provider-Handles - die
 // Form ist identisch (ein String-Feld, einmal gesetzt, ein spaeterer Aufruf ueberschreibt
@@ -942,6 +1128,13 @@ export const recordAnsweredUnclearReason = recordProviderHandleOnce("answeredUnc
 // set-once-Fabrik wie die Provider-Handles darueber (G5) - ein zweiter Anlauf desselben
 // Anrufs traegt denselben Wert, und der frueheste zaehlt.
 export const recordFromRegistrationSource = recordProviderHandleOnce("fromRegistrationSource");
+
+// ST3 (Owner-Entscheidung 6, tasks/PLAN-AGENTEN-STIMME.md O3): diagnostisches Zaehlfeld
+// der Stimmen-Detektoren ([el-tags]/[el-b1]) am Call - PII-FREI (nur Zaehler, nie Text),
+// KEINE Transkript-Aenderung (Art. 50). Dieselbe set-once-Fabrik wie die Handles daneben:
+// das Zaehlobjekt ist immer truthy, auch der Normalfall {elTags:0, elB1:0} wird gesetzt,
+// und ein wiederholter Ergebnisabruf desselben Gespraechs ueberschreibt ihn nicht.
+export const recordElDetectorCounts = recordProviderHandleOnce("elDetectorCounts");
 
 // OUTBOUND-E5: das geteilte Vokabular fuer call.fromSource - WOHER die Messung von
 // fromActualE164 kommt. Beide bekannten Schreiber (telnyx-origination.js, elevenlabs/
@@ -1155,19 +1348,31 @@ function consultAlive(ageMs, openMs) {
   return Number.isFinite(ageMs) && Number.isFinite(openMs) && ageMs < openMs;
 }
 
+// P2: die gemeinsame Vorpruefung BEIDER Schreibkanten einer Rueckfrage (Quittung und
+// Antwort). EINE Reihenfolge der Ablehnungen (G5): Call vorbei -> unbekanntes Ereignis ->
+// nicht mehr offen. Zwei Formulierungen koennten auseinanderlaufen, und dann naehme die
+// eine Kante an, was die andere Millisekunden spaeter verwirft. Reiner Leser.
+function openConsultFor(s, callId, eventId) {
+  const call = getCall(s, callId);
+  if (!call || call.status !== "active")
+    return { call: call || null, consult: null, outcome: CONSULT_ANSWER.CALL_ENDED };
+  const consult = Array.isArray(call.consults)
+    ? call.consults.find((c) => c.id === eventId)
+    : null;
+  if (!consult) return { call, consult: null, outcome: CONSULT_ANSWER.UNKNOWN_EVENT };
+  if (consult.status !== CONSULT_STATUS.OPEN)
+    return { call, consult, outcome: CONSULT_ANSWER.ALREADY_ANSWERED };
+  return { call, consult, outcome: null };
+}
+
 // Antwort einspeisen. facts sind BEREITS validiert (validateAssistantContext an der
 // Route) - diese Ebene kennt keine Validierung, sie fuehrt Buch (G30/G34: eine
 // Abstraktionsebene). Reihenfolge der Ablehnungen ist bindend: Call vorbei ->
 // unbekanntes Ereignis -> schon beantwortet -> Frist abgelaufen.
 export function answerConsult(s, callId, { eventId, facts, nowMs, openMs }) {
-  const call = getCall(s, callId);
-  const reject = (outcome) => ({ call: call || null, changed: false, outcome, mergedFacts: 0 });
-  if (!call || call.status !== "active") return reject(CONSULT_ANSWER.CALL_ENDED);
-  const consult = Array.isArray(call.consults)
-    ? call.consults.find((c) => c.id === eventId)
-    : null;
-  if (!consult) return reject(CONSULT_ANSWER.UNKNOWN_EVENT);
-  if (consult.status !== CONSULT_STATUS.OPEN) return reject(CONSULT_ANSWER.ALREADY_ANSWERED);
+  const { call, consult, outcome } = openConsultFor(s, callId, eventId);
+  const reject = (o) => ({ call: call || null, changed: false, outcome: o, mergedFacts: 0 });
+  if (outcome) return reject(outcome);
   // GQ-P2: NUR der In-Call-Consult hat eine Wanduhr-Frist. Consult #0 (Klingelzeit,
   // AL-P13) wartet ausschliesslich auf den Client und darf nie an der Uhr sterben - er
   // ueberspringt dieses Gate vollstaendig (Bestandsverhalten byte-identisch). Fuer den
@@ -1404,6 +1609,66 @@ export function markConsultAnswerDelivered(s, callId) {
       marked += 1;
     }
   return { call, changed: marked > 0, marked };
+}
+
+// P2 (Stufe 0, N-10): die FRAGE ist bei einem pollenden Client angekommen. Nebeneffekt im
+// Namen (N7). askDeliveredAt und NICHT deliveredAt: deliveredAt ist seit GQ-P7 vergeben
+// und bedeutet das GEGENTEIL - dass die ANTWORT einen Modell-Turn gesehen hat
+// (answerAwaitsDelivery). Dasselbe Feld doppelt zu belegen wuerde das Zustellfenster der
+// Budget-Engine dauerhaft schliessen.
+// EINMALIG: der ERSTE Zeitpunkt bleibt stehen. Ein Client, der dieselbe Frage nach einem
+// verlorenen Poll erneut zieht, verschoebe sonst die Frist, gegen die er gemessen wird.
+export function markConsultAskDelivered(s, callId, eventId) {
+  const call = getCall(s, callId);
+  const consult = Array.isArray(call?.consults)
+    ? call.consults.find((c) => c.id === eventId)
+    : null;
+  if (!consult || consult.status !== CONSULT_STATUS.OPEN || consult.askDeliveredAt)
+    return { call: call || null, changed: false };
+  consult.askDeliveredAt = new Date().toISOString();
+  return { call, changed: true };
+}
+
+// P2 (Stufe 1): die QUITTUNG - "ich habe die Frage, ich arbeite daran". Nebeneffekt im
+// Namen (N7). Sie haengt an DERSELBEN Berechtigung wie die Antwort (SCOPE 2), deshalb
+// dieselbe Route, dieselbe Vorpruefung (openConsultFor), dieselben Ablehnungscodes.
+// IDEMPOTENT: eine zweite Quittung ist accepted mit changed:false - ein wiederholender
+// Client soll nicht in einen Fehler laufen.
+export function ackConsult(s, callId, { eventId }) {
+  const { call, consult, outcome } = openConsultFor(s, callId, eventId);
+  if (outcome) return { call: call || null, changed: false, outcome };
+  if (consult.ackedAt) return { call, changed: false, outcome: CONSULT_ANSWER.ACCEPTED };
+  consult.ackedAt = new Date().toISOString();
+  return { call, changed: true, outcome: CONSULT_ANSWER.ACCEPTED };
+}
+
+// P2 (S1-1-Fix, Review Runde 1): der Abbruch EINER Stufe - Status UND Grund in EINEM
+// Schritt, EIN Schreibweg. GEZIELTE Mutation ueber consultId, NICHT mehr ueber
+// advanceInCallConsult: dessen Suche nach "der ersten offenen Rueckfrage"
+// (inCallConsults(call).find(...), Array-Position) trifft bei ZWEI GLEICHZEITIG offenen
+// In-Call-Consults (MAX_OPEN_POLLS_PER_CALL=2, consult/delivery.js) nicht zuverlaessig
+// GENAU den Consult, dessen eigene Stufe gerade abgelaufen ist - der Aufrufer
+// (conversation/consult-raised.js:awaitAnswer) hat sein Stufen-Ergebnis (expiredStage)
+// bereits fuer GENAU diese consultId gerechnet. Verwechselte Reihenfolge hiess: der
+// falsche (noch legitime) Consult wurde auf timed_out gesetzt, waehrend der eigentliche
+// Ziel-Consult unveraendert offen blieb, OHNE timeoutReason - und awaitAnswer gab dem
+// Anbieter trotzdem bedingungslos "timed out" zurueck (Phantom-Datensatz, E-2).
+//
+// stageMs ist die Frist, die laut expiredStage gerade gerissen ist; consultAlive prueft
+// dieselbe Wanduhr-Formel wie advanceInCallConsult (EINE Quelle, G5). Unbekannte Kennung
+// oder ein Consult, der nicht mehr OPEN ist (schon beantwortet/abgelaufen/verwaist),
+// ist ein No-op - der Aufrufer hat dann bereits einen anderen Zweig genommen
+// (consult.status !== OPEN direkt in awaitAnswer) und diese Funktion darf ihn nicht
+// nachtraeglich ueberschreiben.
+export function timeOutStagedConsult(s, callId, { consultId, reason, nowMs, stageMs }) {
+  const call = getCall(s, callId);
+  const consult = call?.consults?.find((c) => c.id === consultId) ?? null;
+  const idle = { call: call || null, changed: false, wait: CONSULT_WAIT.NONE };
+  if (!consult || consult.status !== CONSULT_STATUS.OPEN) return idle;
+  if (consultAlive(consultAgeMs(consult, nowMs), stageMs)) return idle;
+  consult.status = CONSULT_STATUS.TIMED_OUT;
+  consult.timeoutReason = reason;
+  return { call, changed: true, wait: CONSULT_WAIT.TIMED_OUT };
 }
 
 // AL-P14: der Client hat auf diesen Call gepollt. EPHEMER (kein save, keine Spalte -
@@ -2032,22 +2297,32 @@ export function tenantSuspendedAt(s, tenantId) {
 
 // ---- Stripe-Customer/Karte pro Tenant (Pay1) ----
 // Setzt die Stripe-Referenzen eines Tenants. Reine Mutation, kein IO (Wrapper saved).
-// patch = { customerId?, paymentMethodId? }: NUR uebergebene Keys werden gesetzt
-// (selektiver Patch via !== undefined, kein Ueberschreiben mit undefined) - so kann
-// der Aufrufer customerId und paymentMethodId unabhaengig voneinander setzen.
+// patch = { customerId?, paymentMethodId?, paymentMethodType? }: NUR uebergebene Keys
+// werden gesetzt (selektiver Patch via !== undefined, kein Ueberschreiben mit undefined) -
+// so kann der Aufrufer die Felder unabhaengig voneinander setzen.
 // Fehlender Tenant wirft (kein stilles No-Op, Muster wie setKycLevel).
 // stripe_customer_id/payment_method_id sind KEINE Secrets (opake cus_/pm_-Referenzen)
-// -> speicherbar. Liefert den Tenant.
-export function setTenantStripe(s, tenantId, { customerId, paymentMethodId } = {}) {
+// -> speicherbar.
+// GP-P2: paymentMethodType ist der Stripe-Enum der Zahlungsmethode ('card', 'link', ...),
+// additiv nullable, KEIN Secret. Er gehoert untrennbar zu paymentMethodId - wer nur die Id
+// patcht, hinterlaesst den Typ der VORIGEN Methode. Schreibende Aufrufer nehmen deshalb
+// bindPaymentMethodOnTenant (billing/card-setup.js), nie diesen Patch direkt.
+// Liefert den Tenant.
+export function setTenantStripe(
+  s,
+  tenantId,
+  { customerId, paymentMethodId, paymentMethodType } = {},
+) {
   const tenant = findTenant(s, tenantId);
   if (!tenant) throw new Error(`setTenantStripe: Tenant ${tenantId} nicht gefunden`);
   if (customerId !== undefined) tenant.stripeCustomerId = customerId;
   if (paymentMethodId !== undefined) tenant.stripePaymentMethodId = paymentMethodId;
+  if (paymentMethodType !== undefined) tenant.stripePaymentMethodType = paymentMethodType;
   return tenant;
 }
 
 // Lese-Query der Stripe-Referenzen eines Tenants (Pay1). Reine Query, kein IO.
-// Liefert STETS ein Objekt mit beiden Feldern (fehlend -> null, nie undefined) -
+// Liefert STETS ein Objekt mit allen drei Feldern (fehlend -> null, nie undefined) -
 // so braucht der Aufrufer (server.js Customer-Match) keinen optional-chaining-Train
 // auf den Tenant-Datensatz (G36) und die Tenant-Form-Kenntnis lebt hier (eine Quelle, G5).
 export function tenantStripe(s, tenantId) {
@@ -2055,6 +2330,7 @@ export function tenantStripe(s, tenantId) {
   return {
     customerId: tenant?.stripeCustomerId ?? null,
     paymentMethodId: tenant?.stripePaymentMethodId ?? null,
+    paymentMethodType: tenant?.stripePaymentMethodType ?? null,
   };
 }
 
@@ -2226,6 +2502,16 @@ export function findTenantByCustomer(s, customerId) {
   return s.tenants.find((t) => t.stripeCustomerId === customerId) ?? null;
 }
 
+// FW1-A: existiert der Tenant? Reine Query, kein IO, kein Write. Formuliert ueber das
+// vorhandene findTenant - EINE Quelle der Existenz-Regel (G5), keine zweite Suchlogik.
+// Der Webhook braucht das Praedikat, weil metadata.tenant_ref eines Stripe-Objekts einen
+// Tenant NENNEN kann, den es hier nicht (mehr) gibt: Stripe traegt die Metadata dauerhaft
+// am Objekt, auch nach dem Loeschen des Datensatzes oder aus einer fremden Umgebung.
+// Ungeprueft weitergereicht wirft der erste Schreibzugriff (setTenantSubscription).
+export function tenantExists(state, tenantId) {
+  return findTenant(state, tenantId) !== null;
+}
+
 // ---- Billing-Hold (GAP-03, O2) ----
 // Setzt/loescht den Outbound-Sperrgrund eines Tenants + optionale Frist (dueAtIso, ISO).
 // Reine Mutation, kein IO (Wrapper saved). Fehlender Tenant -> No-Op (Muster
@@ -2372,7 +2658,7 @@ export function tenantHasLiveNumber(s, tenantId) {
   return liveNumbers(s, tenantId).length > 0;
 }
 
-// Merkt EINEN global_cap-Skip auf dem Tenant (Fix B, reine Observability: KEIN Trigger,
+// Merkt EINEN Skip-Grund auf dem Tenant (Fix B, reine Observability: KEIN Trigger,
 // KEIN Retry, KEIN Cap-Bypass - Invariante 2 PLAN-PROVISIONING-CAP.md). requestNumber ist
 // die EINE Quelle (G5) fuer /api/onboard UND den Webhook-Pfad (requestNumberForPaidTenant)
 // - beide profitieren automatisch, ohne den Skip-Zustand selbst durchzureichen.
@@ -2387,6 +2673,35 @@ function markNumberProvisionSkipped(tenant, reason) {
 function clearNumberProvisionSkip(tenant) {
   tenant.numberProvisionSkipReason = null;
   tenant.numberProvisionSkipAt = null;
+}
+
+// GP-P3: der Versuchszaehler des automatischen Wiederanlaufs. Gezaehlt werden die
+// terminal 'failed' Nummern-Datensaetze eines Mandanten - genau der Ledger, den jeder
+// Neuanlauf verlaengert: er legt eine NEUE numberId mit frischen Idempotenz-Schluesseln
+// an, und occupiesCapacity zaehlt 'failed' nicht zur Cap, also greift
+// MAX_NUMBERS_PER_TENANT hier nie. Reine Query, kein IO. KEIN zweiter Zaehler daneben
+// (G5): eine zweite Buchfuehrung ueber dieselbe Tatsache koennte von ihr abdriften.
+// Parameter bewusst 'state'/'number' statt der Datei-Kurzform 's'/'n': die Kurznamen
+// sind in dieser Datei Altlast (eslint id-length, eslint-legacy-exceptions.json) - neuer
+// Code vergroessert sie nicht.
+export function failedNumberCount(state, tenantId) {
+  return state.numbers.filter(
+    (number) => number.tenantId === tenantId && number.status === NUMBER_STATUS.FAILED,
+  ).length;
+}
+
+// GP-P3: terminaler Uebergang bei erschoepftem Deckel - derselbe Skip-Marker, den
+// requestNumber fuer global_cap nutzt (bereits persistiert, JSON-Spiegel UND
+// number_provision_skip_reason in Postgres). Idempotent (zweiter Aufruf -> changed:false,
+// kein unnoetiges save). Der Rueckweg bleibt offen: requestNumber raeumt den Marker bei
+// jedem erfolgreichen Anlauf ueber clearNumberProvisionSkip ab. Reine Mutation, kein IO
+// (Wrapper saved bei changed). Nebeneffekt im Namen (N7).
+export function markTenantNeedsManualReconcile(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
+  if (!tenant || tenant.numberProvisionSkipReason === NEEDS_MANUAL_RECONCILE_REASON)
+    return { tenant: tenant ?? null, changed: false };
+  markNumberProvisionSkipped(tenant, NEEDS_MANUAL_RECONCILE_REASON);
+  return { tenant, changed: true };
 }
 
 // Fragt eine neue Nummer fuer einen Tenant an (Onboarding, ZAHLUNGSFREI). Die
@@ -2737,6 +3052,36 @@ export function attachNumberRegistration(state, numberId, providerAgentPhoneNumb
   return number;
 }
 
+// IEX-A8 (E8): "kein Beleg" = beide Felder ABWESEND (Muster privateNumber: entfernen statt null) -
+// json und pg (rowToNumber) tragen damit dieselbe Form. EINE Liste der Feldnamen fuer Loeschen UND Freigabe (G5).
+const INBOUND_TRUNK_BELEG_FELDER = Object.freeze(["elInboundTrunkBelegtAt", "elInboundTrunkZugangFp"]);
+
+function hatInboundTrunkBeleg(number) {
+  return INBOUND_TRUNK_BELEG_FELDER.some((feld) => number[feld] !== undefined && number[feld] !== null);
+}
+
+// IEX-A8 (E8): setzt BEIDE Felder nach einem Lesebeleg. Nur fuer eine AKTIVE Nummer (Rennen Sweep-GET vs.
+// Freigabe: eine freigegebene Zeile bekommt nie wieder einen Beleg). Set-once je Zugang: gleicher Fingerabdruck
+// schon belegt -> changed=false (kein Flush je Boot je Nummer). Unbekannte/nicht aktive Nummer -> changed=false,
+// kein Wurf (Sweep ist fail-soft). Fehlende Eingaben = Programmierfehler -> Wurf mit Kontext (P8).
+export function markNumberElInboundTrunkBelegt(state, numberId, { nowIso, zugangFp }) {
+  if (!nowIso || !zugangFp) throw new Error("markNumberElInboundTrunkBelegt: nowIso und zugangFp sind Pflicht");
+  const number = findNumber(state, numberId);
+  if (number?.status !== NUMBER_STATUS.ACTIVE) return { number, changed: false };
+  if (number.elInboundTrunkZugangFp === zugangFp && number.elInboundTrunkBelegtAt) return { number, changed: false };
+  number.elInboundTrunkBelegtAt = nowIso;
+  number.elInboundTrunkZugangFp = zugangFp;
+  return { number, changed: true };
+}
+
+// IEX-A8 (E8): NUR bei belegter ABWEICHUNG (der Aufrufer entscheidet, nie bei UNBEKANNT).
+export function clearNumberElInboundTrunkBeleg(state, numberId) {
+  const number = findNumber(state, numberId);
+  if (!number || !hatInboundTrunkBeleg(number)) return { number, changed: false };
+  for (const feld of INBOUND_TRUNK_BELEG_FELDER) delete number[feld];
+  return { number, changed: true };
+}
+
 // provisioning -> capturing: Geld-Einzug laeuft (Stripe capture). NUR im Payment-
 // Pfad (provisionNumber mit deps.billing). activateNumber deckt capturing -> active ab.
 export function beginCapturing(s, numberId) {
@@ -2788,6 +3133,9 @@ export function releaseNumber(s, numberId) {
   // laeuft im Freigabe-Kern (release-reconcile.js) VOR dieser Mutation; hier faellt nur die
   // Kennung, damit keine Zeile auf eine geloeschte Registrierung zeigt.
   number.providerAgentPhoneNumberId = null;
+  // IEX-A8 (E8): der Registrierungs-Beleg haengt an der Registrierung und geht mit ihr - keine freigegebene Zeile
+  // traegt einen Beleg (Wiederkauf derselben DID beginnt ohne Beleg).
+  for (const feld of INBOUND_TRUNK_BELEG_FELDER) delete number[feld];
   const asg = s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt);
   if (asg) asg.releasedAt = new Date().toISOString();
   return number;
@@ -3046,6 +3394,59 @@ export function platformHoldEscalationCandidates(state, { nowMs, maxAgeMs }) {
   return candidates;
 }
 
+// ---- GP-P0 (PLAN-GELDPFAD.md 2): "zahlender Mandant ohne Nummer" ------------------
+// Der Vorfall vom 11.09.2026 war NUR durch manuelle DB-Forensik sichtbar: der
+// Boot-Klassifikator sieht ausschliesslich QUEUED-Jobs (s. classifyQueuedProvisioning-
+// Jobs oben), ein Mandant mit aktivem Abo und einer Nummer auf 'failed' hat gar keinen
+// offenen Job mehr. Dieser Selektor schliesst GENAU diese Luecke - und NUR sie: er
+// beobachtet, er handelt nicht (kein Kauf, kein Retry, kein Anbieter-Aufruf).
+//
+// REIN + IO-frei (mutiert state NICHT, kein Date.now): nowMs/graceMs/kycMinLevel
+// injiziert (Muster platformHoldEscalationCandidates/classifyNumbersForRelease).
+//
+// ZEITANKER ist der Beginn der laufenden Stripe-Abrechnungsperiode (resolvePeriodStart-
+// Iso, EINE Quelle, G5). Kein Anker (weder current_period_start noch -end) -> Alter
+// unbekannt -> fail-closed KEIN Befund. Das haelt genau zwei Klassen draussen, beide
+// gewollt: den Owner-/Bootstrap-Mandanten (seedBootstrapKyc gibt ihm id_verified, er
+// besteht tenantActiveSubscriber - aber er hat kein Stripe-Abo) und jedes frische Abo,
+// dessen Webhook noch aussteht.
+// VORBEHALT, bewusst getragen: der Anker wandert mit JEDER Periode. In der ersten
+// Stunde nach einer Verlaengerung ist er juenger als graceMs - ein in diesem Fenster
+// neu entstehender Fall wird EINEN Sweep spaeter gemeldet, nicht gar nicht.
+//
+// "Live-Nummer" ist tenantHasLiveNumber (liveNumbers/occupiesCapacity, EINE Quelle,
+// G5): released/failed zaehlen nicht. FOLGE, ausdruecklich: ein Mandant, der dauerhaft
+// auf requested/provisioning haengt, HAT eine Live-Nummer und erscheint hier NICHT -
+// diese Klasse deckt der Boot-Reconciler ab, nicht dieser Selektor.
+//
+// Langer Parametername 'state' statt des in dieser Datei ueblichen 's' (G16/N1,
+// eslint id-length): der bereits gepinnte Altlast-Fund darf durch neuen Code NICHT
+// weiter wachsen - dieselbe Begruendung wie bei platformHoldEscalationCandidates oben.
+export function paidWithoutNumberCandidates(state, { nowMs, graceMs, kycMinLevel }) {
+  const candidates = [];
+  for (const tenant of state.tenants) {
+    if (!tenantActiveSubscriber(state, tenant.id, kycMinLevel)) continue;
+    if (tenantHasLiveNumber(state, tenant.id)) continue;
+    const paidSinceIso = resolvePeriodStartIso(tenantSubscription(state, tenant.id));
+    if (!paidSinceIso) continue; // fail-closed: kein Anker -> kein Befund
+    const paidSinceMs = Date.parse(paidSinceIso);
+    if (Number.isNaN(paidSinceMs)) continue; // fail-closed, Muster suspendedAt oben
+    if (nowMs - paidSinceMs <= graceMs) continue;
+    candidates.push({ tenantId: tenant.id, paidSinceIso });
+  }
+  return candidates;
+}
+
+// GP-P4 (PLAN-GELDPFAD.md 2): die Mandantenliste als reine Kennungsliste. Bewusst OHNE
+// Filter: welche Mandanten der zeitgesteuerte Wiederanlauf anstoesst, entscheidet der
+// GEMEINSAME Kern (billing/provision-retry.js resolveAutoProvisionRetry) - ein zweiter
+// Filter hier waere eine zweite Buchfuehrung ueber dieselbe Frage (G5) und koennte von
+// ihm abdriften. Reine Query, kein IO. Liefert Kennungen, KEINE Tenant-Objekte: kein
+// Mandanten-Record verlaesst state-ops.
+export function allTenantIds(state) {
+  return tenantsOf(state).map((tenant) => tenant.id);
+}
+
 // Liest die WorkOS-Identitaet (sub, aus dem verifizierten IdP-Profil beim Login gebunden,
 // s. registerTenant/resolveOrCreateTenant idp_subject) eines Tenants. Reine Query, kein IO.
 // Genutzt vom Vertragsende-Aufraeumen (312k-Phase 4): die Nutzer-Kennung fuer die WorkOS-
@@ -3101,6 +3502,41 @@ export function tenantsPendingCancellationMail(s) {
 // reaktivierter kommt von selbst wieder hinein. REIN + IO-frei (mutiert s NICHT).
 export function tenantsForStripeReconcile(s) {
   return tenantsOf(s).filter((t) => t.stripeSubscriptionId && !t.suspendedAt);
+}
+
+// ---- CL1-B3: Bestandsheiler fuer TOTE Abo-Referenzen ----
+// Selektor fuer reconcileStaleSubscriptions (billing/stale-subscription-reconcile.js):
+// Tenants, die eine Abo-Referenz TRAGEN, aber NICHT aktiv sind. Das ist die
+// Kandidatenmenge des Aussperrungs-Befunds (status=suspended + stehengebliebene
+// stripeSubscriptionId -> 403 im Dashboard UND 409 beim Neu-Abo).
+// Bewusst NICHT dieselbe Menge wie tenantsForStripeReconcile darueber: der beantwortet
+// "darf ich noch sperren?" (Abo da, NICHT suspendiert -> verlorener Webhook), dieser
+// hier "ist die Referenz tot?" (Abo-Referenz da, NICHT aktiv). Gegenlaeufige Fragen,
+// gegenlaeufige Wirkung - deshalb zwei Selektoren statt eines Flag-Arguments (F3/G15).
+// REIN + IO-frei (mutiert state NICHT). Wer die Referenz wirklich verliert, entscheidet
+// ausschliesslich Stripe (kein Blind-Update, s. Executor). Parameter ausgeschrieben
+// (state/tenant statt s/t wie in der Nachbarfunktion oben): id-length ist fuer diese
+// Datei bereits am gepinnten Altlast-Limit (eslint-legacy-exceptions.json), dessen
+// Anhebung Eigentuemer-Freigabe braucht (test/check-staged-suppressions.test.js,
+// "Altlast-Ratsche") - neue Zeilen wachsen den Pin also bewusst nicht mit.
+export function tenantsForStaleSubscriptionReconcile(state) {
+  return tenantsOf(state).filter(
+    (tenant) => tenant.stripeSubscriptionId && tenant.status !== TENANT_STATUS.ACTIVE,
+  );
+}
+
+// GP-P2-Nachtrag: Kandidaten fuer den Typ-Nachtrag der Zahlungsmethode - eine gebundene
+// Referenz OHNE gespeicherten Typ. GP-P2 hat das Feld additiv eingefuehrt und bewusst
+// keinen Backfill gefahren; jeder VOR GP-P2 gebundene Mandant traegt es deshalb als null.
+// Das ist nicht bloss eine Luecke in der Anzeige: isHoldCapablePaymentMethodType ist
+// fail-closed, null gilt als UNGEEIGNET - und damit ueberspringt der automatische
+// Wiederanlauf (resolveAutoProvisionRetry, GP-P3/GP-P4) genau die Mandanten dauerhaft,
+// die er retten soll. Ohne diesen Nachtrag bleibt ein zahlender Bestandskunde ohne
+// Nummer haengen, bis ein Mensch eingreift.
+export function tenantsForPaymentMethodTypeReconcile(state) {
+  return tenantsOf(state).filter(
+    (tenant) => tenant.stripePaymentMethodId && !tenant.stripePaymentMethodType,
+  );
 }
 
 // ---- Newsletter-Einwilligung pro Tenant (Opt-in, DSGVO Art. 7 Abs. 1) ----
@@ -3840,7 +4276,7 @@ export function applyCostCorrectionCents(s, tenantId,
 // seedTenantDefaultBudget ueberspringt bei 0. Ein bedingungsloser Fallback lieferte bei
 // Live-Wert 0 einen Cap von 0: budgetExceeded (>=) waere fuer JEDEN Tenant ohne Zeile
 // true - jeder Outbound blockt, der KOSTENLOSE Inbound-Pfad weist ab (routes/voice.js)
-// und der Shim legt mitten im laufenden Gespraech auf (telnyx-llm-shim.js). Das waere ein
+// und ein Aufrufer legt mitten im laufenden Gespraech auf. Das waere ein
 // Totalausfall der Telefonie. Derselbe Vergleich faengt zugleich einen fehlenden oder
 // nicht-numerischen Wert ab (undefined > 0 ist false) und landet dann ebenfalls auf dem
 // Bestandsverhalten - die Abweichung geht immer Richtung Bestand, nie Richtung 0-Cap.
@@ -4005,7 +4441,7 @@ export function liveBudgetExceeded(s, tenantId, liveCents, cfg, nowIso) {
 // x>=cap - bit-identisch zum frueheren Float-Gate.
 // Ein unbuchbarer Bucket (D7, jetzt auf BEIDEN Seiten geprueft) sperrt fail-closed mit
 // eigenem Grund usage_korrupt - im Extremfall beendet das einen LAUFENDEN Call
-// (telnyx-llm-shim) und weist kostenlosen Inbound ab (voice.js). Bei NaN-Verbrauch ist
+// und weist kostenlosen Inbound ab (voice.js). Bei NaN-Verbrauch ist
 // genau das richtig, und der eigene Grund macht es vom echten "Budget erschoepft"
 // unterscheidbar.
 export function budgetExceeded(s, tenantId, cfg, nowIso) {
@@ -4262,6 +4698,59 @@ export function markMeterEventsSent(s, eventIds) {
   return n;
 }
 
+// ---- KV2-3: das Kosten-Buch (call_cost_evidence) --------------------------------------
+// Zwei Operationen, sonst nichts: NICHTS liest dieses Buch in dieser Phase, nichts bucht
+// daraus. Das REGELWERK (Wertebereiche, Waechter, detail-Allowlist, Summenregel) liegt in
+// store/cost-evidence.js; hier steht ausschliesslich, was den Zustand beruehrt.
+
+// Die eine Zeile eines Paares (callId, traeger), oder undefined. EINE Fundstelle-Regel
+// (G5) fuer Mutator und Query.
+function findCostEvidence(s, callId, traeger) {
+  return s.callCostEvidence.find((zeile) => zeile.callId === callId && zeile.traeger === traeger);
+}
+
+// Belegzeile anlegen ODER nach vorne fortschreiben. FAIL-CLOSED, es WIRFT (nicht
+// verwirft) - anders als recordSipCallId, und aus demselben Grund wie recordCostProfile
+// (KV2-2): der Aufrufer ist Code, kein Anbieter. Anbieter-Daten sind VOR dem Aufruf zu
+// pruefen (KV2-4 Kriterium (b) verlangt genau das), damit ein leerer cost_fiat nicht als
+// Ausnahme im Ergebnispfad landet. tenantId kommt aus dem ANRUF, nie vom Aufrufer.
+// Liefert { evidence, changed } (Wrapper saven bei changed).
+export function recordCallCostEvidence(s, eingabe) {
+  const { callId, traeger, reife } = eingabe;
+  const call = getCall(s, callId);
+  if (!call) throw new Error(`recordCallCostEvidence: Anruf '${callId}' nicht gefunden`);
+  assertCostEvidenceInput(eingabe);
+  const vorhanden = findCostEvidence(s, callId, traeger);
+  if (!vorhanden) {
+    const zeile = buildCostEvidenceRow({
+      id: newId("cce"), tenantId: call.tenantId, callId, eingabe,
+    });
+    s.callCostEvidence.push(zeile);
+    return { evidence: zeile, changed: true };
+  }
+  if (!canSetEvidenceMaturity(vorhanden.reife, reife))
+    throw new Error(
+      `recordCallCostEvidence: Reife-Rueckschritt '${vorhanden.reife}' -> '${reife}' ` +
+        `(call=${callId}, traeger=${traeger})`,
+    );
+  // (b)(iii): derselbe TERMINALE Zustand erneut ist ein echtes No-Op - auch die
+  // Wertfelder bleiben unberuehrt, damit ein wiederholter Sweep nichts nachtraeglich
+  // verschiebt (und nicht scheitert).
+  if (vorhanden.reife === reife && isTerminalMaturity(reife))
+    return { evidence: vorhanden, changed: false };
+  vorhanden.reife = reife;
+  Object.assign(vorhanden, costEvidenceFortschreibung(vorhanden, eingabe));
+  return { evidence: vorhanden, changed: true };
+}
+
+// Alle Belegzeilen EINES Anrufs, stabil nach traeger sortiert (deterministische Form fuer
+// die Backend-Paritaet). Reine Query, kein IO, kein save.
+export function callCostEvidence(s, callId) {
+  return s.callCostEvidence
+    .filter((zeile) => zeile.callId === callId)
+    .sort((links, rechts) => links.traeger.localeCompare(rechts.traeger));
+}
+
 // ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
 // s.reservations (tenantId -> GANZZAHL Cents) haelt die noch nicht abgerechneten
 // Worst-Case-Kosten laufender Outbound-Calls, damit der Budget-Gate (pro-Tenant-Decke)
@@ -4307,6 +4796,25 @@ export function releaseOutboundReserve(s, call) {
   if (!call || !call.reserveCents || call.reserveReleased) return false;
   s.reservations[call.tenantId] = Math.max(0, reservationFor(s, call.tenantId) - call.reserveCents);
   call.reserveReleased = true;
+  return true;
+}
+
+// E3/S3-A4: Freigabe einer Reserve, zu der es KEINEN Anruf-Datensatz gibt. Nur zwei Aufrufer
+// (routes/api-calls.js): der deduplizierte Aufruf und die Fehlerklammer vor createCall - beide
+// haben selbst reserviert und legen nachweislich keinen Datensatz an.
+//
+// INVARIANTE, die diese Funktion von releaseOutboundReserve trennt: existiert ein Datensatz,
+// gilt AUSSCHLIESSLICH releaseOutboundReserve mit seinem call.reserveReleased-Schloss. Hier gibt
+// es kein Schloss (es gibt nichts, woran es haengen koennte) - deshalb darf diese Funktion NIE
+// fuer einen Betrag laufen, der an einem Datensatz haengt. Zwei Freigabewege fuer denselben
+// Betrag senkten den Ledger unter den Ist-Stand und hoehlten die pro-Tenant-Kostendecke aus
+// (Absolute Regel 1).
+//
+// Clamp >= 0 und die Buchbarkeits-Pruefung wie im Original (isBookableCents, EINE Quelle fuer
+// alle Geld-Kanten): ein unbuchbarer Betrag darf den Ledger NIE senken. Nebeneffekt im Namen (N7).
+export function releaseOutboundReserveCents(s, tenantId, cents) {
+  if (!isBookableCents(cents)) return false;
+  s.reservations[tenantId] = Math.max(0, reservationFor(s, tenantId) - cents);
   return true;
 }
 
@@ -4529,10 +5037,16 @@ export function markCrossCheckAttempted(s, monthKey) {
 }
 
 // Summe der abgerufenen Ist-Kosten (actualCostMicroCents, PROVIDER-Waehrung/USD-Mikro-Cent,
-// UNVERAENDERT) aller TELNYX-Calls, deren Buchungsmonat monthKey ist. NUR Telnyx: die
-// Provider-Rechnung (Zahl 1 der Gegenprobe) ist ausschliesslich Telnyx-Verkehr - eine
-// Beimischung von Altzeilen fremder Anbieter waere kein Vergleich zwischen gleichen
-// Groessen.
+// UNVERAENDERT) aller TELNYX-Calls, deren Buchungsmonat monthKey ist. Der Provider-Filter
+// haelt Altzeilen fremder Anbieter heraus.
+//
+// AB KV2-8 IST DAS DIE GESAMT-IST-SUMME UEBER ALLE TRAEGER JE ANRUF - und damit NICHT
+// mehr die Bezugsgroesse der RECHNUNGS-Differenz: call.actualCostMicroCents traegt seit
+// dem Settlement die Belegsumme des Kosten-Buchs (bei einem EL-Anruf also auch den
+// ElevenLabs-Anteil, obwohl der Anruf provider=telnyx fuehrt). Gegen eine Telnyx-Rechnung
+// verglichen waere das eine Mischdifferenz; dafuer bildet cost-cross-check.js die
+// traeger-getrennte Summe (belegSummeJeTraegerFuerMonat + TELNYX_SWEEP_TRAEGER). Diese
+// Funktion bleibt die Bezugsgroesse der GATE-Differenz (Ist gegen gebuchte Carrier-Cent).
 // Monatsanker ist estimatedCostSpendMonthKey - DERSELBE Anker, unter dem
 // reconcileVoiceBudget/bookCents auf die Gate-Achse gebucht haben (KS-P5 Bucket-Brigade) -
 // NICHT endedAt: Zahl 2 und Zahl 3 der Gegenprobe muessen ueber denselben Zeit-Anker-Typ

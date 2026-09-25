@@ -17,7 +17,6 @@
 // BASE_ENV).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../src/config.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import {
   operatorChannelTenant,
@@ -36,16 +35,6 @@ import {
 
 // --- Unit-Test-Helfer (Muster request-tenant-unit.test.js, EINE Datei = eigene Kopie,
 // Repo-Konvention - siehe reqWith/fakeRes in u.a. error-handler.test.js) ---
-
-function withMultiTenant(value, fn) {
-  const saved = config.tenancy.multiTenant;
-  config.tenancy.multiTenant = value;
-  try {
-    return fn();
-  } finally {
-    config.tenancy.multiTenant = saved;
-  }
-}
 
 function makeStore(map = {}) {
   const calls = [];
@@ -116,58 +105,31 @@ test("AUTH-P3-3: operatorChannelTenant, externer Socket -> TENANT_REJECT (mit un
 
 // === requestTenant / requireTenant ==============================================
 
-test("AUTH-P3-4: requestTenant, Flag AUS, externer Aufrufer -> TENANT_REJECT, kein Lookup", () => {
+test("AUTH-P3-4: requestTenant, keinerlei Identitaet, externer Socket -> TENANT_REJECT, kein Lookup", () => {
+  // E4: vormals zwei Faelle (Flag AUS / Flag AN) - der Flag-Kurzschluss ist entfernt,
+  // beide fielen auf denselben Pfad (operatorChannelTenant) und sind damit EIN Fall.
   const store = makeStore();
   const { requestTenant } = makeRequestTenant(store);
-  withMultiTenant(false, () => {
-    assert.equal(requestTenant(reqWith({ remoteAddress: EXTERNAL_ADDR })), TENANT_REJECT);
-  });
-  assert.deepEqual(store.calls, [], "Flag-aus-Pfad darf store.resolveTenant nie aufrufen");
+  assert.equal(requestTenant(reqWith({ remoteAddress: EXTERNAL_ADDR })), TENANT_REJECT);
+  assert.deepEqual(store.calls, [], "der identitaetslose Pfad darf store.resolveTenant nie aufrufen");
 });
 
-test("AUTH-P3-5: requestTenant, Flag AUS, Loopback ohne XFF -> BOOTSTRAP_TENANT_ID, kein Lookup", () => {
+test("AUTH-P3-5: requestTenant, keinerlei Identitaet, Loopback ohne XFF (stdio/MCP) -> BOOTSTRAP_TENANT_ID, kein Lookup", () => {
+  // E4: vormals zwei Faelle (Flag AUS / Flag AN) - siehe AUTH-P3-4.
   const store = makeStore();
   const { requestTenant } = makeRequestTenant(store);
-  withMultiTenant(false, () => {
-    assert.equal(
-      requestTenant(reqWith({ remoteAddress: "127.0.0.1", headers: {} })),
-      BOOTSTRAP_TENANT_ID,
-    );
-  });
+  assert.equal(
+    requestTenant(reqWith({ remoteAddress: "127.0.0.1", headers: {} })),
+    BOOTSTRAP_TENANT_ID,
+  );
   assert.deepEqual(store.calls, [], "In-Process-Pfad bleibt byte-identisch (kein Lookup)");
 });
 
-test("AUTH-P3-6: requestTenant, Flag AN, keinerlei Identitaet, externer Socket -> TENANT_REJECT", () => {
-  const store = makeStore();
-  const { requestTenant } = makeRequestTenant(store);
-  withMultiTenant(true, () => {
-    assert.equal(
-      requestTenant(reqWith({ remoteAddress: EXTERNAL_ADDR, headers: {} })),
-      TENANT_REJECT,
-    );
-  });
-  assert.deepEqual(store.calls, []);
-});
-
-test("AUTH-P3-7: requestTenant, Flag AN, keinerlei Identitaet, Loopback ohne XFF (stdio/MCP) -> BOOTSTRAP_TENANT_ID", () => {
-  const store = makeStore();
-  const { requestTenant } = makeRequestTenant(store);
-  withMultiTenant(true, () => {
-    assert.equal(
-      requestTenant(reqWith({ remoteAddress: "127.0.0.1", headers: {} })),
-      BOOTSTRAP_TENANT_ID,
-    );
-  });
-  assert.deepEqual(store.calls, []);
-});
-
-test("AUTH-P3-8: requireTenant, Flag AUS, externer Aufrufer -> 403, null", () => {
+test("AUTH-P3-8: requireTenant, externer Aufrufer -> 403, null", () => {
   const store = makeStore();
   const { requireTenant } = makeRequestTenant(store);
   const res = fakeRes();
-  const out = withMultiTenant(false, () =>
-    requireTenant(reqWith({ remoteAddress: EXTERNAL_ADDR }), res),
-  );
+  const out = requireTenant(reqWith({ remoteAddress: EXTERNAL_ADDR }), res);
   assert.equal(out, null);
   assert.equal(res.statusCode, 403);
   assert.ok(res.body && typeof res.body.error === "string", "403-Body traegt eine Fehlermeldung");

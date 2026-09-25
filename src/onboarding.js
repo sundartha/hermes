@@ -33,25 +33,35 @@
 // FRUEHER als zuvor (vor jedem Provider-Kontakt).
 //
 // R4-PRAEZISIERUNG (GAP-11) - sie steht NICHT im Ermessen dieser Implementierung,
-// sondern folgt der Owner-Entscheidung vom 2026-07-28, protokolliert in der Phasen-
-// Spezifikation der Gates-Fix-Kette (Abschnitt P4, Nachtrag zur Reihenfolgen-Frage):
-// Die Einrichtungsgebuehr, die dieser Hold reserviert, ist per Konfiguration
-// abgeschaltet - der Kunde zahlt sein Abo und sonst nichts; die Nummer ist unsere
-// Kosten, gedeckt vom Abo. searchNumbers ist eine reine Preisabfrage: kostenlos,
-// reserviert nichts, kauft nichts. Die geld-tragende Zusage lautet deshalb praezise
-// "kein KAUF ohne reserviertes Geld" (statt: kein Kontakt zum Provider) - orderNumber,
-// der einzige geldbewegende Schritt, liegt weiterhin strikt HINTER dem erfolgreichen
-// Hold. AKZEPTIERTES RESTRISIKO: ein Tenant mit hinterlegter, aber am Hold abgelehnter
-// Karte loest je manuellem Provisionierungs-Versuch (kein Auto-Retry) einen
-// zusaetzlichen read-only Suchaufruf beim Provider aus, BEVOR der Hold scheitert. Es
-// wird dabei nie Geld bewegt und keine Nummer gekauft - das Restrisiko ist
-// Provider-Traffic, kein Geldverlust.
+// sondern folgt der Owner-Entscheidung vom 2026-09-11 (Geldpfad-Plan, Abschnitt 3.2).
+// Sie ueberholt die aeltere R4-Position vom 2026-07-28, die hier eine abgeschaltete
+// Einrichtungsgebuehr behauptete: die Gebuehr ist gewollt, der Kunde zahlt sie
+// zusaetzlich zum Abo. Wie hoch der Betrag ist, entscheidet holdAmountForProviderPrice
+// weiter oben - der Einmalpreis des Providers, ersatzweise die hereingereichte
+// Pauschale aus NUMBER_SETUP_FEE_CENTS. Null wird er nie: der Boot-Waechter erzwingt
+// bei PAYMENT_ENABLED=true einen ganzzahligen Wert groesser null (config.js), und die
+// Oberflaeche weist den Betrag vor dem Checkout aus (self-service-routes.js). Ob der
+// Hold am Ende eingezogen oder storniert wird, entscheidet allein numberSetupFeeExempt
+// in settleSetupFeeHold. Quelle dieses Feldes ist die Rechnungssumme des laufenden
+// Abos: eine Nullrechnung befreit (retrieveSubscription in billing/stripe.js,
+// fail-closed - unbekannt heisst nicht befreit). Die Rechnungssumme ist dabei ein
+// bewusst gewaehlter Stellvertreter fuer "zahlt ohnehin nichts", kein Zufall; ein
+// eigenes Befreiungs-Signal gibt es absichtlich nicht (Owner-Entscheidung vom selben
+// Tag). searchNumbers ist eine reine Preisabfrage: kostenlos, reserviert nichts, kauft
+// nichts. Die geld-tragende Zusage lautet deshalb praezise "kein KAUF ohne reserviertes
+// Geld" (statt: kein Kontakt zum Provider) - orderNumber, der einzige geldbewegende
+// Schritt, liegt weiterhin strikt HINTER dem erfolgreichen Hold. AKZEPTIERTES
+// RESTRISIKO: ein Tenant mit hinterlegter, aber am Hold abgelehnter Karte loest je
+// manuellem Provisionierungs-Versuch (kein Auto-Retry) einen zusaetzlichen read-only
+// Suchaufruf beim Provider aus, BEVOR der Hold scheitert. Es wird dabei nie Geld bewegt
+// und keine Nummer gekauft - das Restrisiko ist Provider-Traffic, kein Geldverlust.
 import {
   beginProvisioning,
   beginCapturing,
   activateNumber,
   attachNumberPaymentIntent,
   attachNumberRegistration,
+  markNumberElInboundTrunkBelegt,
   failNumber,
   releaseNumber,
   findNumber,
@@ -63,6 +73,8 @@ import {
   holdAmountForProviderPrice,
   monthlyCostCentsForProviderPrice,
 } from "./telephony/provisioning-geo.js";
+import { isHoldCapablePaymentMethodType } from "./billing/payment-method-eligibility.js";
+import { TRUNK_BELEG } from "./elevenlabs/inbound-trunk-beleg.js";
 
 // R5 (Phase P7): statt limit:1 mehrere Kandidaten holen und den ersten verfuegbaren
 // waehlen. Eine einzelne Treffer-Anfrage scheitert haeufiger an einer zwischenzeitlich
@@ -81,7 +93,7 @@ export async function provisionNumber(
   deps,
   { numberId, countryCode, connectionId, type, holdAmountCents, currency },
 ) {
-  const { provisioner, billing, sipRegistrar, logger = console } = deps;
+  const { provisioner, billing, sipRegistrar, inboundTrunkSchreiber, logger = console } = deps;
   const number = findNumber(state, numberId);
   if (!number) throw new Error(`provisionNumber: Nummer ${numberId} nicht gefunden`);
 
@@ -173,6 +185,9 @@ export async function provisionNumber(
   // wuerde eine bezahlte, funktionierende Nummer auf 'failed' zurueckrollen - genau die
   // Kaskade, die es nicht geben darf.
   await registriereNummerFailSoft(state, activatedNumber, { sipRegistrar, logger });
+  // IEX-A10 (E13): Inbound-Trunk DIESER DID. Optionale Dependency (Gate zu, u. a. Scope allowlist ->
+  // nicht injiziert -> No-op, Bestand byte-identisch). Fehlertolerant wie die Registrierung.
+  await schreibeInboundTrunkFailSoft(state, activatedNumber, { inboundTrunkSchreiber, logger });
   return activatedNumber;
 }
 
@@ -192,6 +207,27 @@ async function registriereNummerFailSoft(state, number, { sipRegistrar, logger =
   } catch (err) {
     logger.warn(
       `[el-registrierung] FEHLGESCHLAGEN number=${number.id}: ${err.message} - DID bleibt nutzbar, Registrierung nachholbar`,
+    );
+  }
+}
+
+// Schreibt beim Anbieter den Inbound-Trunk und setzt NUR bei Lesebeleg BELEGT die Beleg-Felder am
+// state (der Aufrufer persistiert). Kein Wurf nach aussen: eine bezahlte, aktive DID darf daran nie
+// scheitern. Ohne Beleg hoert die DID unter registrierte_dids den Fehlersatz, bis der naechste
+// Boot-Sweep sie repariert (E15(i)/E16). Log nur nummer_id + Beleg-Token, nie Fehlertext.
+async function schreibeInboundTrunkFailSoft(state, number, { inboundTrunkSchreiber, logger = console }) {
+  if (!inboundTrunkSchreiber || !number.providerAgentPhoneNumberId) return;
+  try {
+    const beleg = await inboundTrunkSchreiber.ensureInboundTrunk(number);
+    if (beleg === TRUNK_BELEG.BELEGT)
+      markNumberElInboundTrunkBelegt(state, number.id, {
+        nowIso: new Date().toISOString(),
+        zugangFp: inboundTrunkSchreiber.zugangFp,
+      });
+    logger.log(`[el-trunk] onboarding nummer_id=${number.id} beleg=${beleg}`);
+  } catch {
+    logger.warn(
+      `[el-trunk] onboarding FEHLGESCHLAGEN nummer_id=${number.id} - DID bleibt nutzbar, Boot-Sweep prueft erneut`,
     );
   }
 }
@@ -217,14 +253,31 @@ async function findPurchasableNumber(state, numberId, { provisioner, countryCode
   }
 }
 
-// Fail-closed-Gate VOR jedem Provider-Call: ohne hinterlegte Karte kein Kauf und keine
-// Preis-Suche. EINE Stelle, die tenantStripe liest (G5); der Hold bekommt das Ergebnis
-// gereicht. Fehlermeldung woertlich wie bisher (Bestandstest pinnt sie).
+// Fail-closed-Gate VOR jedem Provider-Call: ohne GEEIGNETE Zahlungsmethode kein Kauf und
+// keine Preis-Suche. EINE Stelle, die tenantStripe liest (G5); der Hold bekommt das
+// Ergebnis gereicht. Zwei getrennte Gruende, zwei getrennte Meldungen:
+//   1. gar nichts hinterlegt - Meldung woertlich wie bisher (Bestandstest pinnt sie);
+//   2. GP-P2 (Vorfall 11.09.2026): hinterlegt, aber ohne getrennte Autorisierung. Der
+//      Mandant des Vorfalls trug eine Zahlungsmethode vom Typ 'link'; sie bezahlte das
+//      Abo (4,99 EUR) und lehnte sechs Sekunden spaeter den 92-Cent-Hold ab. Dieser Fall
+//      endete bisher NACH dem Geld-Call in einem generischen insufficient_funds - er endet
+//      jetzt VOR jedem Anbieter-Kontakt, mit dem Typ als Grund. Unbekannter Typ (null,
+//      jeder Bestands-Mandant ohne Backfill) faellt mit durch: Owner-Entscheidung
+//      2026-09-11, Frage 5 - Unbekannt gilt als ungeeignet. Der Rueckweg ist GP-P3.
+// Der Typ wird als Enum in die Meldung uebernommen, nicht als Freitext (GP-P1-Muster:
+// Etikett=Wert); sie landet ueber den Orchestrator dauerhaft in job.lastError.
 function requireTenantCard(state, numberId, tenantId) {
   const card = tenantStripe(state, tenantId);
   if (!card.customerId || !card.paymentMethodId) {
     failNumber(state, numberId);
     throw new Error(`provisionNumber: Tenant ${tenantId} hat kein hinterlegtes Zahlungsmittel`);
+  }
+  if (!isHoldCapablePaymentMethodType(card.paymentMethodType)) {
+    failNumber(state, numberId);
+    throw new Error(
+      `provisionNumber: Tenant ${tenantId} hat ein Zahlungsmittel ohne getrennte Autorisierung ` +
+        `(payment_method_type=${card.paymentMethodType ?? "unbekannt"})`,
+    );
   }
   return card;
 }

@@ -1,4 +1,4 @@
-// Voice-Gateway: Provider-Webhooks (Inbound/Outbound), Audio-Bridge (Realtime),
+// Voice-Gateway: Provider-Webhooks (Inbound/Outbound),
 // MCP ueber Streamable HTTP (/mcp), REST-API fuer Dashboard & stdio-MCP.
 // MUSS erste Importzeile bleiben (vor store.js) - globales Crash-Netz, ESM-Eval-Order (T-P0-07).
 import "./process-guards.js";
@@ -7,11 +7,10 @@ import * as store from "./store.js";
 import { planSummarySms } from "./sms-summary.js";
 import { summarizeCall } from "./claude.js";
 import { qualifiesAsInboxEntry } from "./inbox-entry.js";
-import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "./telnyx-conversation-watchdog.js";
-import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { audit } from "./util.js";
+import { makeDurableAudit } from "./durable-audit.js";
 import { voiceControl, messaging, numberProvisioning, providerConfigRead } from "./telephony/registry.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
@@ -19,8 +18,14 @@ import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-
 import { makeCallFinish } from "./telephony/call-finish.js";
 import { makeOutageWatch } from "./telephony/outage-report.js";
 import { makeDriftWatch } from "./telephony/outbound-drift-watch.js";
+import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.js";
+import { makePriceDriftWatch } from "./billing/price-drift-watch.js";
+import { makeProvisionRetryWatch } from "./billing/provision-retry-sweep.js";
 import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
+import { makeInboundBridges, umleitenOderAuflegen } from "./elevenlabs/inbound-bridges.js";
+import { makeTrunkSweep } from "./elevenlabs/inbound-trunk-beleg.js";
+import { inboundTrunkSchreiberWennErlaubt } from "./elevenlabs/nummern-registrierung.js";
 import { metrics } from "./metrics.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
@@ -43,6 +48,7 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeMetering } from "./billing/metering.js";
 import { makeCostTruing } from "./billing/cost-truing.js";
+import { fetchConversation } from "./elevenlabs/convai.js";
 import { makeCostCrossCheck } from "./billing/cost-cross-check.js";
 import {
   makeRequestTenant,
@@ -51,7 +57,7 @@ import {
   TENANT_REJECT,
 } from "./request-tenant.js";
 import { makeConsultDelivery } from "./consult/delivery.js";
-import { consultAllowedFor } from "./consult/gate.js";
+import { consultAllowedForCall } from "./consult/gate.js";
 import { elevenLabsLookupAvailableFor } from "./research/registry.js";
 import { buildApp } from "./app.js";
 import { bootServer } from "./boot.js";
@@ -104,15 +110,6 @@ const { gates: outboundGates } = makeOutboundGates({
 // Aufrufer (finishCall / Provisioning-Drain), nicht im Modul.
 const metering = makeMetering({ store });
 
-// Kosten-Abgleich (LCT P3) EINMAL beim Boot verdrahtet (Naht wie metering, INV-7). Der
-// Laufriegel lebt im Factory-Scope = EIN Riegel pro Prozess, den Intervall (boot.js) und
-// manueller Endpunkt (api-billing.js) sich teilen - zwei Instanzen haetten zwei Riegel und
-// damit keinen. voiceControl kommt aus der Registry (Adapter ohne fetchCostRecordPool/
-// assignCostRecords -> sauberer No-op). Schreibt ausschliesslich P2-Felder; kein Gate,
-// kein Meter, keine Buchung wird beruehrt. messaging (LCT P5, Drift-Waechter-Alarm) ist
-// dieselbe Instanz wie bei outboundGates/callFinish (kein zweiter Messaging-Zugang, DIP).
-const costTruing = makeCostTruing({ store, config, voiceControl, audit, messaging });
-
 // KV-M4: monatliche Gegenprobe (reine Beobachtung) EINMAL beim Boot verdrahtet (Naht wie
 // costTruing, INV-7). Dieselbe voiceControl-Registry (Telnyx-only, kein Abgleich moeglich
 // -> sauberer No-op, Muster costTruing). Liest NUR die Gate-Achse und den Ledger, schreibt
@@ -133,6 +130,49 @@ const costCrossCheck = makeCostCrossCheck({ store, config, voiceControl });
 // bekommt seine EIGENE Instanz) - zwei Instanzen sind unbedenklich, kein Doppel-Zustand.
 const mailer = selectMailer(config);
 
+// KV2-1: spaet gebundene Audit-Sink-Zelle (Muster accountsRef unten). Initialwert null;
+// gesetzt NUR im pg-gated guardedBoot-Block (wireWebLogin, das makeAuditStore ohnehin
+// baut). STORE_BACKEND=json / pg-Ausfall -> bleibt null -> der durable Zweig ist ein
+// fail-soft No-op (bewusste Festlegung, Plan 4.10).
+const auditStoreRef = { current: null };
+
+// KV2-1: die EINE Audit-Funktion des Kostenpfads - Konsolenzeile wie bisher, PLUS durabel
+// in audit_log. util.js#audit ist ausschliesslich ein console.log; genau deshalb lieferte
+// `select ... from audit_log where action='cost_truing_befund'` 11 Tage lang 0 Zeilen,
+// waehrend der Befund korrekt feuerte (AUFTRAG B3).
+const durableAudit = makeDurableAudit({ audit, auditStoreRef });
+
+// P3 (N-10): derselbe durable Weg, an EINEN Mandanten gebunden - fuer Ereignisse, die
+// einem Mandanten gehoeren statt der Plattform (heute: der abgebrochene Rueckfrage-Halt
+// des ElevenLabs-Webhooks). Kein zweiter Schreibpfad (E-1): dieselbe Fabrik, dieselbe
+// spaet gebundene Zelle, dasselbe fail-soft. Die Instanz ist eine Closure ohne Zustand -
+// sie je Ereignis zu bauen kostet nichts und haelt die Verdrahtung hier oben (P15).
+const durableAuditFor = (tenantId) => makeDurableAudit({ audit, auditStoreRef, tenantId });
+
+// Kosten-Abgleich (LCT P3) EINMAL beim Boot verdrahtet (Naht wie metering, INV-7). Der
+// Laufriegel lebt im Factory-Scope = EIN Riegel pro Prozess, den Intervall (boot.js) und
+// manueller Endpunkt (api-billing.js) sich teilen - zwei Instanzen haetten zwei Riegel und
+// damit keinen. voiceControl kommt aus der Registry (Adapter ohne fetchCostRecordPool/
+// assignCostRecords -> sauberer No-op). Schreibt ausschliesslich P2-Felder; kein Gate,
+// kein Meter, keine Buchung wird beruehrt. messaging (LCT P5, Drift-Waechter-Alarm) ist
+// dieselbe Instanz wie bei outboundGates/callFinish (kein zweiter Messaging-Zugang, DIP).
+// KV2-1: NACH selectMailer verdrahtet (vorher davor) - der Befundkanal geht seit dieser
+// Phase ueber denselben Meldeweg wie der Ausfall-Melder (Plan 4.9/4.10) und braucht
+// deshalb den Mailer. Dieselbe Umstellung, die outageWatch schon hinter sich hat.
+// KV2-9: der ZWEITE, reifende EL-Abruf (GET /v1/convai/conversations/{id}) als schmaler,
+// rein LESENDER Port - der Billing-Pfad kennt damit keinen Anbieter (DIP, Muster telnyxRead/
+// elRead). BEWUSST als Closure hier und NICHT als Fabrik: makeElConfigRead existiert nur,
+// weil DIESELBE Closure zusaetzlich im CLI-Weg (scripts/check-outbound-drift.mjs) stand -
+// fuer diesen Abruf gibt es genau einen Aufrufer.
+const elKostenRead = {
+  fetchConversation: (conversationId) =>
+    fetchConversation({ fetchImpl: fetch, account: config.voice.elevenLabsOutbound, conversationId }),
+};
+
+const costTruing = makeCostTruing({
+  store, config, voiceControl, audit: durableAudit, messaging, mailer, elKostenRead,
+});
+
 // OUTBOUND-E3b: vierter, unabhaengiger Sweep-Zweig (Muster costTruing/costCrossCheck,
 // INV-7) - schliesst offene Ausfall-Marker, deren Fenster inzwischen gesund ist (D9: der
 // Ausloeser in finishCall sieht nur not-placed-Anrufe und kann "erholt" nie selbst
@@ -149,6 +189,31 @@ const outageWatch = makeOutageWatch({ store, config, audit, messaging, mailer })
 // stand dieselbe Closure wortgleich auch in scripts/check-outbound-drift.mjs.
 const elRead = makeElConfigRead(config);
 const driftWatch = makeDriftWatch({ store, config, audit, messaging, mailer, telnyxRead, elRead });
+// IEX-A8 (E8/E11): Registrierungs-Beleg-Sweep, EIN Lauf nach listen (boot.js). elRead ist dieselbe Instanz wie
+// beim Drift-Waechter (EIN EL-Nummern-GET, makeElConfigRead, G5/INV-7). Liest nur beim Anbieter; schreibt nur
+// die zwei Beleg-Felder am eigenen Datensatz.
+// IEX-A10 (E16): Reparatur-Hook nur bei offenem Schreib-Gate (inkl. Scope registrierte_dids); sonst
+// undefined = nur Lesebeleg wie IEX-A8.
+const inboundTrunkSweep = makeTrunkSweep({ store, config, elRead, reparatur: inboundTrunkSchreiberWennErlaubt(config) });
+
+// GP-P0: ACHTER, unabhaengiger Sweep-Zweig (Muster outageWatch/driftWatch, INV-7).
+// durableAudit statt audit: der Befund muss die Log-Rotation ueberleben - genau das war
+// der Vorfall vom 11.09. (Muster costTruing, KV2-1). KEIN messaging/mailer: die Phase
+// meldet auf der Notiz-Stufe (WARN -> Audit -> Marker), sie alarmiert nicht.
+const paidWithoutNumberWatch = makePaidWithoutNumberWatch({ store, config, audit: durableAudit });
+
+// GP-P6: ZEHNTER Sweep-Zweig + eigener Boot-Lauf (Muster driftWatch, INV-7). lesePreis ist
+// der rein LESENDE Stripe-Abruf des bestehenden Adapters - kein zweiter HTTP-Client, kein
+// Geld-Aufruf. durableAudit wie GP-P0 (der Befund muss die Log-Rotation ueberleben);
+// messaging/mailer sind dieselben Instanzen wie ueberall sonst (DIP).
+const priceDriftWatch = makePriceDriftWatch({
+  store,
+  config,
+  audit: durableAudit,
+  messaging,
+  mailer,
+  lesePreis: (priceId) => stripeBilling.retrievePriceAmount(priceId),
+});
 
 // F2-Mail: Accounts-Zugriff (Konto-E-Mail) haengt an accounts.accountByTenant (web-auth.js),
 // das NUR existiert, wenn der pg-gated Web-Login-Block durchlaeuft (wireWebLogin, asynchron
@@ -162,8 +227,8 @@ const accountsRef = { current: null };
 
 // call-finish (P4): finishCall (Settlement/Summary/SMS/Mail) + releaseReserve (Reserve-
 // Freigabe) EINMAL beim Boot verdrahtet (Naht wie metering/outboundGates, nicht im Handler;
-// INV-7). EINE Instanz: dieselbe finishCall-Referenz geht an attachMediaBridge UND - via
-// makeVoiceRoutes - makeCallControlIngest
+// INV-7). EINE Instanz: dieselbe finishCall-Referenz geht an makeVoiceRoutes und
+// call-lifecycle
 // (call._finished/billedAt-Guards verlangen Identitaet). metering ist oben konstruiert (P1);
 // die paymentEnabled-Gating-Bedingung bleibt im finishCall-Body (INV-9), Cents bleiben Ganzzahl.
 const callFinish = makeCallFinish({
@@ -185,21 +250,35 @@ const callFinish = makeCallFinish({
 // demselben Gespraech. Konstruiert NACH callFinish (linearer DAG): finishCall kommt fertig
 // gebunden herein, terminateAndBillCall/billThunk sind dieselben Bausteine wie in
 // call-lifecycle (kein zweiter, buchungsfreier Terminierungspfad, INV-9).
+//
+// IEL-B4 (E7b): Beende-Versuch des Telnyx-Elternbeins eines ueberbrueckten Inbound-Calls
+// (Nachlauf-Frist, 3x 401/404). DIESELBE Handle-Entscheidung wie Cap und cancel_call
+// (hangUpAction, eine Quelle); ohne Call oder Handle kein Versuch (fail-safe wie dort).
+// IEL-B6: benannt, weil die Frist-Wirkung der Inbound-Bruecken (inboundBridges unten)
+// dieselbe Instanz nutzt (G5).
+const endCarrierCall = (callId) => {
+  const call = store.getCall(callId);
+  const auflegen = call ? hangUpAction(voiceControl, call, call.twilioSid) : null;
+  return auflegen?.();
+};
 const elevenLabsOutbound = makeElevenLabsOutbound({
   store,
   config,
   terminateAndBillCall,
   billThunk,
   finishCall: callFinish.finishCall,
-  // DASSELBE Tor, das der Rueckfrage-Webhook fragt, bevor er eine Rueckfrage annimmt -
-  // hier verdrahtet statt in outbound.js importiert (Begruendung an der Signatur dort).
-  consultAllowedFor,
+  // DASSELBE Praedikat, das der Rueckfrage-Webhook fragt, bevor er eine Rueckfrage annimmt
+  // (inkl. Owner-Bedingung) - hier verdrahtet statt in outbound.js importiert (Begruendung
+  // an der Signatur dort).
+  consultAllowedForCall,
   // Thema B: dasselbe Muster fuer das Recherche-Tor - die EINE Torkette aus
   // research/registry.js, die auch der Lookup-Webhook fragt.
   lookupAvailableFor: elevenLabsLookupAvailableFor,
   // OUTBOUND-E5 (F3): der Absender-Rueckfall-Zaehler - hier verdrahtet statt in
   // outbound.js importiert (Begruendung an der Signatur dort, Lehre test-base-env-drift).
   metrics,
+  // IEL-B4 (E7b): s. endCarrierCall darueber.
+  endCarrierCall,
 });
 
 // call-lifecycle (P5): Cap-Timer (Max-Dauer), Reserve-Release-Backstop, Re-Attach-Wrapper
@@ -220,10 +299,21 @@ const lifecycle = makeCallLifecycle({
   // elevenLabsHangUpAction selbst ist PURE (keine IO) und deshalb ein direkter Import in
   // call-lifecycle.js, kein zweiter DI-Slot hier.
   billThunk, endActiveCall: elevenLabsOutbound.endActiveCall,
+  // IEL-B5 (E10): Ergebnis-Teil des Bruecken-Beende-Thunks - dieselbe Instanz (INV-7).
+  awaitAndPersistInboundElResult: elevenLabsOutbound.awaitAndPersistInboundElResult,
   reattachActiveCallCore,
   cappedEndedAtMs,
   classifyCallTime,
   blockingBudgetAxis, // KS-P1b: die EINE Geld-Achse fuer die Re-Attach-Pruefung
+});
+
+// IEL-B6 (E9): Frist-Timer der wartenden Inbound-EL-Bruecken. EINE Instanz (INV-7): die
+// Init-Route loescht, der Boot re-armiert, B8 armiert. Die Wirkung ist Live-Umleitung auf den
+// Rueckfall, sonst Auflegen ueber dasselbe endCarrierCall wie der Nachlauf - nie Stille.
+const inboundBridges = makeInboundBridges({
+  store,
+  umleiten: ({ call, rueckfallUrl }) =>
+    umleitenOderAuflegen({ voiceControl, endCarrierCall, call, url: `${config.server.publicUrl}${rueckfallUrl}` }),
 });
 
 // provisioning-orchestrator (P6): enqueue/trigger/drain(single-flight)/reconcile fuer den
@@ -250,19 +340,23 @@ const provisioning = makeProvisioningOrchestrator({
   findNumber,
 });
 
-// stab-p9 (Kosten-Notaus): EIN ConversationWatchdog, geteilt von Shim (Loop-Guard +
-// Dead-Air-Feed pro Turn) und Call-Control-Ingest (Dead-Air armieren bei ai_assistant_start,
-// stoppen bei hangup). Terminierung ueber das GETEILTE Call-Control-Hangup-Primitiv (auch
-// der Shim nutzt makeCallControlTerminator fuer Budget-Kill/end_call, S2). EINMAL beim Boot
-// verdrahtet (Naht wie metering/callFinish/lifecycle/provisioning, INV-7); geht als deps-
-// Eintrag an buildApp (Shim-Mount + Voice-Routes teilen sich die EINE Instanz).
-const conversationWatchdog = makeConversationWatchdog({
+// GP-P4 (PLAN-GELDPFAD.md 2): neunter Zweig des Stunden-Sweeps. HIER und nicht oben bei
+// paidWithoutNumberWatch: der Zweig braucht triggerTenantProvisioning, das erst mit dem
+// Orchestrator darueber existiert. durableAudit statt audit - ein automatischer
+// Kaufanstoss muss die Log-Rotation ueberleben (Muster paidWithoutNumberWatch).
+const provisionRetryWatch = makeProvisionRetryWatch({
+  store,
   config,
-  terminate: makeCallControlTerminator({ store, voiceControl, logPrefix: WATCHDOG_LOG_PREFIX }),
+  provision: provisioning.triggerTenantProvisioning,
+  audit: durableAudit,
+  // GP-P5: rein LESENDE Naht (retrievePaymentMethodType) - der Zweig loest einen
+  // unbekannten Zahlungsmittel-Typ selbst auf, statt ihn fail-closed als "ungeeignet" zu
+  // behandeln und den Mandanten dauerhaft zu ueberspringen. Bewegt kein Geld.
+  billing: stripeBilling,
 });
 
 // Play-TTS-Seam: haelt vorab synthetisierte Agent-Audios kurz + einmalig (PII). EINMAL
-// beim Boot verdrahtet (Naht wie conversationWatchdog, INV-7).
+// beim Boot verdrahtet (Naht wie callFinish, INV-7).
 const ttsStore = createTtsStore({ ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs });
 
 // LCT P7 (Fixkosten sichtbar machen): Alarm bei ueberschrittener ElevenLabs-Kontingent-
@@ -286,7 +380,7 @@ function onTtsQuotaWarning(warning) {
 const directiveSynth = makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning: onTtsQuotaWarning });
 
 // AL-P13: Consult-Zustellung (Stufe 0: kurzer, client-gezogener Long-Poll). EINMAL beim
-// Boot verdrahtet (Naht wie ttsStore/conversationWatchdog, INV-7): Poll-Zaehler und
+// Boot verdrahtet (Naht wie ttsStore/callFinish, INV-7): Poll-Zaehler und
 // Drain-Flag leben im Factory-Scope = EINE Obergrenze pro Prozess. Geht an buildApp
 // (Consult-Routen) UND an bootServer (Shutdown-Drain loest offene Polls auf).
 const consultDelivery = makeConsultDelivery({ store });
@@ -298,7 +392,7 @@ const voiceRender = makeVoiceRender({ config });
 // ---------------- Kompositionswurzel (Server-Slim P15) ----------------
 // buildApp(deps) verdrahtet die komplette Express-App (Middleware, Wiring, Router-Mounts,
 // src/app.js); bootServer(deps) fuehrt die Boot-Sequenz aus (store.load, Retention,
-// Fail-closed-Gates, listen, Audio-Bridge, Graceful-Shutdown, src/boot.js). Beide teilen
+// Fail-closed-Gates, listen, Graceful-Shutdown, src/boot.js). Beide teilen
 // sich EIN deps-Buendel (F1: je Funktion 1 Argument). buildApp MUSS vollstaendig durchlaufen
 // (inkl. dem awaited guardedBoot-Block), BEVOR bootServer startet - store.load() wird NICHT
 // vorgezogen (Pre-Mortem 11: scheduleReleaseReconcile feuert weiterhin vor store.load, exakt
@@ -313,17 +407,29 @@ const deps = {
   outboundGates,
   requestTenant,
   requireTenant,
-  conversationWatchdog,
   ttsStore,
   directiveSynth,
   voiceRender,
   costTruing,
   costCrossCheck,
+  // KV2-1: durabler Audit-Sink des Kostenpfads - auditStoreRef geht an buildApp/
+  // wireWebLogin (das die Zelle befuellt), durableAudit an bootServer/assertBootGates
+  // (das den Boot-Befund darueber schreibt).
+  auditStoreRef,
+  durableAudit,
+  durableAuditFor,
   outageWatch,
   driftWatch,
+  paidWithoutNumberWatch,
+  provisionRetryWatch,
+  priceDriftWatch,
   messaging,
   consultDelivery,
   elevenLabsOutbound,
+  // IEL-B6: die EINE Frist-Instanz der Inbound-Bruecken (Init-Route + Boot-Re-Arm).
+  inboundBridges,
+  // IEX-A8: Boot-Lauf des Registrierungs-Beleg-Sweeps (bootServer, listen-Callback).
+  inboundTrunkSweep,
   // F2-Mail: die spaet gebundene Accounts-Zelle (s. Kommentar oben) - buildApp reicht sie
   // bis wireWebLogin durch, das accountsRef.current NACH dem Bau von accounts setzt.
   accountsRef,

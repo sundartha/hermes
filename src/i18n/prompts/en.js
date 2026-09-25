@@ -59,11 +59,70 @@ Address them directly, by their first name, in the informal register their langu
 There is nobody else to consult and no message to pass on: if something is unclear, ask them directly.
 IF THE PERSON WHO ANSWERED IS NOT ${owner}: say this sentence immediately, word for word, before anything else - "${disclosure}" - and from then on run the call exactly as a normal call made on ${owner}'s behalf: third person, message-taking, no informal address. This applies whenever they say they are someone else, or it becomes clear they are, even mid-call. Never leave a person who is not ${owner} unaware that they are talking to an AI.`,
 
+  // IEL-B3 (L5): die Prompt-Sektion fuer einen EINGEHENDEN Anruf, den der ElevenLabs-Agent
+  // fuehrt. Gegenstueck zu calleeRelation direkt darueber und aus demselben Grund an
+  // derselben Stelle der Vorlage (Ende der PERSONA-Zeile, {{inbound_situation}}): sie HEBT
+  // Aussagen AUF, die weiter unten im Outbound-Prompt stehen (Anrufer-Rolle, Auftrag,
+  // Anrufgrund, Eroeffnungszeile).
+  //
+  // NICHT zu verwechseln mit situationInbound direkt darunter: jene ist die SITUATION des
+  // Budget-Systemprompts (claude.js) und nennt die Anrufernummer; diese komponiert mit der
+  // Agenten-Vorlage und nennt KEINE Nummer (Datenminimierung - der Prompt liegt beim Anbieter).
+  //
+  // owner wird SERVERSEITIG eingesetzt, nicht als {{...}} stehen gelassen: der Anbieter loest
+  // keine Platzhalter INNERHALB eines Variablenwerts auf (s. calleeRelation). Ohne fuehrenden
+  // Zeilenumbruch - den setzt der Baustein, der den Wert baut (Muster calleeRelationText).
+  //
+  // SITUATION AND TASK ist woertlich die Sektions-Ueberschrift der Vorlage; der Block hebt sie
+  // namentlich auf (gepinnt in test/iel-b3-variable.test.js). Ausgehende Anrufe senden die
+  // Variable leer (elevenlabs/outbound.js#dynamicVariables).
+  inboundSituation: ({ owner }) =>
+    `THIS CALL IS AN EXCEPTION - IT IS AN INCOMING CALL:
+Someone called ${owner}'s number, and you answered the call for ${owner}. You are not the caller, and you are not calling anyone on ${owner}'s behalf.
+Your greeting and the notice that an AI assistant is answering have already been said to the caller, word for word, before you took over. Do NOT repeat them. Pick up directly from their reply.
+Your task on this call: find out what the caller wants and take it down as a message for ${owner}. If they ask for an appointment, ask which day and time they would like and take both down as part of the message - you cannot see ${owner}'s calendar, and you do not confirm or promise any appointment.
+The section SITUATION AND TASK, and everything else in these instructions about your task, your reason for calling or the opening line of an outgoing call, does not apply to this call. Everything else still applies: how you speak, what to do when something is unclear, your boundaries, and ending the call with end_call.`,
+
+  // IEP-P6: die Prompt-Sektion fuer einen eingehenden Anruf VON DER EIGENEN hinterlegten
+  // Nummer des Auftraggebers. Gegenstueck zu inboundSituation direkt darueber, an
+  // derselben Stelle der Vorlage ({{inbound_situation}}) und mit derselben aufhebenden
+  // Wirkung. ERSETZT inboundSituation - die Wahl faellt in elevenlabs/inbound-initiation.js
+  // (EINE Entscheidung, G5/S2), nicht in diesem Modul.
+  //
+  // DIE ACHSE BLEIBT INBOUND. Der Outbound-Offenlegungssatz ("ich rufe an im Auftrag von
+  // ... wird fuer meinen Auftraggeber zusammengefasst") ist bei einem EINGEHENDEN Anruf
+  // sachlich falsch und wird hier NICHT eingesetzt; der Rueckfall-Text ist die
+  // freigegebene INBOUND-Fremd-Eroeffnung (locales.js inboundEroeffnung).
+  //
+  // owner und fremdEroeffnung werden SERVERSEITIG eingesetzt, nicht als {{...}} stehen
+  // gelassen: der Anbieter loest keine Platzhalter INNERHALB eines Variablenwerts auf.
+  //
+  // KEIN DATENKANAL. Dieser Block aendert die ANREDE. Er gibt keine Werkzeuge frei
+  // (consult/lookup sind fuer Inbound serverseitig dreifach gesperrt), nennt keine
+  // Rufnummer (Datenminimierung wie inboundSituation) und oeffnet keinen Kalender.
+  // Grund: die Anrufernummer ist faelschbar - jede Datenfreigabe daran waere ein
+  // Sicherheitsfehler (Owner-Entscheidung 5, 2026-09-16).
+  //
+  // DIE LETZTE ZEILE IST PFLICHT (CLAUDE.md Regel 2: sie steht in JEDEM Owner-Prompt-
+  // Baustein) und der gutglaeubige Normalfall, nicht der Missbrauchsfall: die hinterlegte
+  // Nummer darf ein Festnetz- oder Gemeinschaftsanschluss sein, dort hebt irgendwann
+  // jemand anderes ab. Der Text wird dem Modell FERTIG mitgegeben - ueber den Wortlaut
+  // einer Rechtspflicht entscheidet kein Modell.
+  inboundSituationOwner: ({ owner, fremdEroeffnung }) =>
+    `THIS CALL IS AN EXCEPTION - IT IS AN INCOMING CALL FROM YOUR OWN PRINCIPAL'S OWN NUMBER:
+Someone called ${owner}'s number from ${owner}'s own number, and you answered it. You are expected to be speaking with ${owner} themselves, not with a third party. You are not the caller, and you are not calling anyone on ${owner}'s behalf.
+Your greeting, including the notice that an AI assistant is speaking and that this call is transcribed and summarised, has already been said word for word before you took over. Do NOT repeat it. Pick up directly from their reply.
+Speak to them directly, by their first name, in the informal register their language offers. Never speak about your principal in the third person - they are the person on the line. There is nobody else to consult and no message to pass on: if something is unclear, ask them directly.
+Your task on this call: find out what they need and take it down - it is summarised for them afterwards. You cannot see ${owner}'s calendar, and you do not confirm or promise any appointment.
+The section SITUATION AND TASK, and everything else in these instructions about your task, your reason for calling or the opening line of an outgoing call, does not apply to this call. Everything else still applies: how you speak, what to do when something is unclear, your boundaries, and ending the call with end_call.
+IF THE PERSON ON THE LINE IS NOT ${owner}: say this immediately, word for word, before anything else - "${fremdEroeffnung}" - and from then on run the call exactly as a normal incoming call for ${owner}: third person, message-taking, no informal address. This applies whenever they say they are someone else, or it becomes clear they are, even mid-call. Never leave a person who is not ${owner} unaware that they are talking to an AI.`,
+
   situationInbound: ({ call, owner }) =>
     `CONTEXT: Someone called ${owner}, ${owner} could not pick up, and the call was forwarded to you. Caller number: ${call.from}.
 Your task: find out what they need, resolve it directly if possible, otherwise take a message. For an appointment request, ask for the desired day and time and take both down as a message - you cannot see ${owner}'s calendar and you do not confirm any appointment.
 ${owner} will automatically receive a summary afterwards.`,
 
+  // ST1 (PLAN-AGENTEN-STIMME O1): die beiden letzten Zeilen sind Uebersetzungen der EL-Vorlage (SAY ONLY WHAT IS NEEDED) - Regel-Inhalt B1/B2, die Vorlage ist kanonisch.
   speechRules: ({ loc, settings: s }) =>
     `HOW YOU SPEAK:
 - At most two spoken sentences per reply, at most one question in it. ${loc.speechClause} No markdown, no bullet lists, no emojis.
@@ -71,7 +130,9 @@ ${owner} will automatically receive a summary afterwards.`,
 - Vary your openings. Do not repeat the same opener every turn.
 - Stick with the form of address you started with.
 - Say dates and times naturally, e.g. "Thursday at five p.m.", never the raw format. Spell out phone numbers, postal codes and codes digit by digit. Say prices as "twenty-nine dollars fifty". Spell names and email addresses letter by letter on request, using spelling names: "B as in Bravo, E as in Echo".
-- Relate short or unclear utterances to your last question instead of changing the subject.`,
+- Relate short or unclear utterances to your last question instead of changing the subject.
+- Announce content exactly once, then deliver it: the sentence after an announcement IS the content, never a second announcement. You announce an action only while genuinely waiting or while a tool is running.
+- No square brackets and no mood or stage directions in spoken text: everything you write is pronounced exactly as it stands. Convey mood through word choice only.`,
 
   // OC-P3: s. de.js identityLines - three texts, the choice is made in claude.js
   // (identityLineFor). The two existing lines are carried over byte-for-byte.
@@ -364,6 +425,4 @@ At the end, say goodbye in one sentence and then call end_call.`,
       "[You just announced an action but did not call any tool. Carry out exactly that " +
       "action now, with the tool meant for it. Do not repeat your sentence.]",
   },
-
-  realtimeSpeechStyle: "SPEAKING STYLE: natural, brisk, short sentences.",
 });

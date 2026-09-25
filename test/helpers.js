@@ -13,6 +13,11 @@ import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
+import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.js";
+import {
+  SIP_PASSWORD_MIN_LENGTH,
+  INIT_WEBHOOK_TOKEN_MIN_LENGTH,
+} from "../src/elevenlabs/inbound-path-decision.js";
 
 // ROOT exportiert (AM3): single-origin-serving.test.js bildet einen RELATIVEN
 // WEB_DIST_DIR gegen das Arbeitsverzeichnis des Spawn-Childs (= ROOT).
@@ -108,6 +113,19 @@ export const BASE_ENV = {
   // Ohne diese Zeile leakt eine lokale .env mit OUTBOUND_FROZEN=true via dotenv in Spawn-Tests
   // -> Baseline-Drift (Lehre test-base-env-drift). outbound-frozen.test.js setzt es explizit.
   OUTBOUND_FROZEN: "false",
+  // SEC-P3: Herkunftspruefung neutral auf den PRODUKTIONS-Default gepinnt (an), nicht
+  // auf den bequemen Wert. Spawn-Tests senden keinen Origin-Header und sind davon
+  // unberuehrt; ohne die Zeile leakt eine lokale .env mit CSRF_ENFORCE=false via dotenv
+  // in jeden Spawn-Test und deaktivierte die Sicherung unbemerkt.
+  CSRF_ENFORCE: "true",
+  // E5: die /mcp-Herkunftswache neutral auf den PRODUKTIONS-Default (scharf) und die
+  // additive Allowlist leer. Beide Zeilen sind Pflicht (Lehre test-base-env-drift): ohne
+  // sie leakt eine lokale .env via dotenv in JEDEN Spawn-Test - ein lokales
+  // MCP_ORIGIN_ENFORCE=false deaktivierte die Sicherung unbemerkt, ein lokaler Eintrag in
+  // MCP_ALLOWED_ORIGINS machte den Deny-Fall gruen, ohne dass er greift.
+  // test/s2-mcp-origin.test.js setzt beide gezielt.
+  MCP_ORIGIN_ENFORCE: "true",
+  MCP_ALLOWED_ORIGINS: "",
   // OUTBOUND-E4: der ANI-Riegel ist ein SICHERHEITS-Gate (kann Anrufe ablehnen) - neutral
   // AUS, byte-identisch zum Produktions-Default. Kein Bestandstest soll ihn ungewollt
   // scharf schalten; test/outbound-ani-gate.test.js setzt ihn explizit.
@@ -118,6 +136,12 @@ export const BASE_ENV = {
   // eine Anbieter-Abfrage (Lehre test-base-env-drift). test/outbound-drift-*.test.js
   // fahren den Kern/die Watch-Funktion direkt, ohne den echten Boot-Takt zu brauchen.
   OUTBOUND_DRIFT_MIN_INTERVAL_MS: "0",
+  // GP-P6: derselbe Grund wie eine Zeile darueber - der Preis-Waechter macht
+  // Anbieter-IO (Stripe-GET). 0 = KOMPLETT AUS, damit kein Spawn-Test beim Boot in einen
+  // Anbieter-Abruf laeuft (Lehre test-base-env-drift). Die Eskalations-Grenze wird
+  // trotzdem neutral gepinnt, damit eine lokale .env sie nicht in Spawn-Tests leakt.
+  PRICE_DRIFT_MIN_INTERVAL_MS: "0",
+  PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER: "3",
   ALLOWED_COUNTRY_CODES: "*", // Land-Gate fuer Altbestand neutral; number-gate.test.js setzt es explizit
   MAX_CALLS_PER_HOUR: "100", // hoch genug, dass es Altbestand-Tests nicht bremst (wie RATE_LIMIT_PER_MIN)
   PROFILES_JSON: "", // Profile-Seed leer; einzelne Tests setzen es explizit
@@ -148,6 +172,11 @@ export const BASE_ENV = {
   // taeuscht kuenftigen Lesern eine wirksame Klemme vor und schuetzt vor nichts.
   CAP_FAREWELL_LEAD_MS: "20000", // P3.1: neutraler Default, sonst leakt lokales .env in Spawn-Tests
   RESERVE_RELEASE_GRACE_MS: "15000", // OUT-05 F2: neutraler Default, sonst leakt lokales .env in Spawn-Tests
+  // IE2 (Lehre test-base-env-drift): bewusst der MAX-Wert, nicht 0. Die Geld-Wache bleibt in
+  // Spawn-Tests ARMIERT (keine abgeschaltete Sicherung, G4), wird aber innerhalb eines
+  // Testlaufs nie faellig - deterministisch, ohne Bestandsverhalten zu verschieben. Ein
+  // Spawn-Test, der den Sperrfall braucht, ueberschreibt den Wert ausdruecklich.
+  BUDGET_WATCHDOG_INTERVAL_MS: "600000",
   FAKE_ORIGINATE: "false", // OUT-05 F2: Test-Seam AUS; einzelne Tests setzen ihn explizit
   SHUTDOWN_DRAIN_TIMEOUT_MS: "8000", // A6 F11: neutraler Default, sonst leakt lokales .env in Spawn-Tests
   STT_SPEECH_TIMEOUT_SEC: "2", // G3: neutraler Default, sonst leakt lokales .env in Spawn-Tests (test-base-env-drift)
@@ -176,10 +205,13 @@ export const BASE_ENV = {
   // test/oc-p1-owner-call-http.test.js setzt beide explizit.
   OWNER_SELF_CALL_ENABLED: "false",
   OWNER_SELF_CALL_TENANT_IDS: "",
-  VOICE_ENGINE: "budget",
-  OPENAI_API_KEY: "",
-  REALTIME_MODEL: "gpt-realtime",
-  REALTIME_VOICE: "alloy",
+  // IEP-P6: dieselbe Begruendung eine Achse weiter - der INBOUND-Owner-Ton in Spawn-Tests
+  // neutral AUS und Allowlist LEER (= Bestandsverhalten, Fremd-Wortlaut fuer jeden
+  // Anrufer). Ohne diese zwei Zeilen leckt eine lokale .env via dotenv in JEDEN
+  // Spawn-Test (Lehre test-base-env-drift) und faerbte den ersten gesprochenen Satz.
+  // test/iep-p6-owner-ton.test.js setzt beide explizit.
+  INBOUND_OWNER_GREETING_ENABLED: "false",
+  INBOUND_OWNER_GREETING_TENANT_IDS: "",
   // ---- Telnyx (zweiter Provider) ----
   // Nummern sind keine Env-Var mehr (s.o.). Keys/IDs neutral leer; Tests, die
   // Telnyx-Outbound brauchen, seeden eine Telnyx-Owner-Nummer via ownerNumber.
@@ -194,7 +226,6 @@ export const BASE_ENV = {
   TELNYX_PUBLIC_KEY: "",
   TELNYX_API_BASE: "",
   TELNYX_CONNECTION_ID: "",
-  TELNYX_CALL_CONTROL_APP_ID: "",
   // OUTBOUND-E4: neutral leer, sonst leakt eine lokale .env in Spawn-Tests (Lehre
   // test-base-env-drift). Wirkungslos hier, weil OUTBOUND_DRIFT_MIN_INTERVAL_MS=0 den
   // Waechter ohnehin komplett aushaelt - Pin trotzdem, Muster TELNYX_CONNECTION_ID.
@@ -206,61 +237,9 @@ export const BASE_ENV = {
   TELNYX_SIP_TRUNK_USERNAME: "",
   TELNYX_SIP_TRUNK_PASSWORD: "",
   TELNYX_ACCOUNT_SID: "",
-  // Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT P1) neutral AUS
-  // (fail-closed): der Shim antwortet 404, der Live-Pfad ist byte-identisch. Ohne diese
-  // Zeile leakt eine lokale .env mit TELNYX_AI_ASSISTANT_ENABLED=true via dotenv in
-  // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift). Der Shim-HTTP-Test setzt
-  // sie explizit auf "true".
-  TELNYX_AI_ASSISTANT_ENABLED: "false",
-  // P5: neutrale Defaults, sonst leakt eine lokale .env mit TELNYX_ASSISTANT_ID/
-  // TELNYX_SHIM_MAX_TURNS_PER_MIN via dotenv in Spawn-Tests -> Baseline-Drift (Lehre
-  // test-base-env-drift). Leere assistantId -> P4.5 onSpeakEnded skippt fail-safe.
-  TELNYX_ASSISTANT_ID: "",
-  TELNYX_SHIM_MAX_TURNS_PER_MIN: "30",
-  // stab-p9: neutrale Defaults (= config.js-Fallback), sonst leakt eine lokale .env mit
-  // TELNYX_DEAD_AIR_TIMEOUT_S/TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS via dotenv in Spawn-Tests
-  // -> Baseline-Drift (Lehre test-base-env-drift).
-  TELNYX_DEAD_AIR_TIMEOUT_S: "45",
-  TELNYX_OPENING_SPEAK_TIMEOUT_S: "45",
-  TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS: "8",
-  // Shim-Auth (E2/E3) neutral leer, sonst leakt eine lokale .env via dotenv in Spawn-Tests
-  // -> Baseline-Drift (Lehre test-base-env-drift). Flag-an-Spawn-Tests brauchen das Secret
-  // fuer den Boot (TELNYX_ASSISTANT_BOOT_ENV traegt es explizit).
-  TELNYX_SHIM_SHARED_SECRET: "",
-  TELNYX_SHIM_API_KEY_REF: "",
-  // OBS-FLAG neutral AUS, sonst leakt eine lokale .env mit TELNYX_SHIM_DEBUG_SHAPE=true
-  // via dotenv in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
-  TELNYX_SHIM_DEBUG_SHAPE: "false",
-  // AL-P7 neutral AUS (= config.js-Fallback), sonst leakt eine lokale .env mit
-  // TELNYX_SHIM_TOKEN_STREAMING=true in Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_SHIM_TOKEN_STREAMING: "false",
-  // GQ-P1: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
-  // TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN=false in Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN: "true",
-  // GQ-P18: in Spawn-Tests neutral AUS (0). Nicht der Prod-Default: sonst leakte eine
-  // lokale .env in die Spawn-Tests (Lehre test-base-env-drift), und ein Spawn-Test kann
-  // die Sperre ohnehin nicht beobachten - sie braucht zwei gleichzeitige Requests desselben
-  // Calls. Sie wird unit-nah gefahren (test/gq-p18-speech-gate.test.js, injizierte Timer).
-  TELNYX_SHIM_EXTEND_HOLD_MS: "0",
-  // GQ-P5: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
-  // TELNYX_SHIM_IGNORE_PROVIDER_NUDGE=false in Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_SHIM_IGNORE_PROVIDER_NUDGE: "true",
-  // GQ-P6: Prod-Default (60) explizit gepinnt, sonst leakt eine lokale .env mit einem
-  // abweichenden TELNYX_DIAL_TIMEOUT_SECS in Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_DIAL_TIMEOUT_SECS: "60",
-  // GQ-P3: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
-  // TELNYX_INBOUND_HANDOFF_ENABLED=false via dotenv in Spawn-Tests (Lehre
-  // test-base-env-drift). Wirkt ohnehin nur bei TELNYX_AI_ASSISTANT_ENABLED=true.
-  TELNYX_INBOUND_HANDOFF_ENABLED: "true",
-  // GQ-P4: neutral auf dem Code-Fallback gepinnt, sonst leakt eine lokale .env via dotenv
-  // in die Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_MAX_CONSECUTIVE_FAILED_TURNS: "3",
-  TELNYX_FAILED_TURN_FAREWELL_TEXT: "",
-  // ElevenLabs-TTS neutral aus (Gate = REF+VOICE_ID leer -> Azure-Bestand). Ohne
-  // diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_ELEVENLABS_API_KEY_REF: "",
+  // ElevenLabs-TTS neutral aus (Gate = VOICE_ID leer -> Azure-Bestand). Ohne
+  // diese Zeile leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_ELEVENLABS_VOICE_ID: "",
-  TELNYX_ELEVENLABS_MODEL: "",
   // Play-TTS neutral aus (Gate = ELEVENLABS_PLAY_TTS_ENABLED=false -> Azure-Bestand).
   // Ohne diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   ELEVENLABS_PLAY_TTS_ENABLED: "false",
@@ -275,6 +254,7 @@ export const BASE_ENV = {
   ELEVENLABS_API_BASE: "http://127.0.0.1:9",
   ELEVENLABS_OUTPUT_FORMAT: "",
   ELEVENLABS_SYNTH_TIMEOUT_MS: "2000",
+  ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS: "10000",
   ELEVENLABS_TTS_TOKEN_TTL_MS: "60000",
   // ---- ElevenLabs-Outbound (der Zweig, der ECHTE Anrufe ausloest) ----
   // Diese fuenf fehlten und leakten damit aus der lokalen .env in jeden Spawn-Test
@@ -284,6 +264,10 @@ export const BASE_ENV = {
   // ELEVENLABS_OUTBOUND_ENABLED=true setzt (fuer einen echten Testanruf noetig),
   // liefe sonst die GANZE Suite mit aktivem Anruf-Zweig. Das Gate gehoert hierher.
   ELEVENLABS_OUTBOUND_ENABLED: "false",
+  // SEC-P4: der Mandanten-Riegel der Werkzeug-Webhooks, neutral auf seinen Default
+  // gepinnt (Lehre test-base-env-drift) - sonst faerbte eine lokale .env, die ihn
+  // scharfstellt, jeden Spawn-Test. test/sec-p4-mandanten-token.test.js setzt ihn gezielt.
+  ELEVENLABS_TENANT_TOKEN_REQUIRED: "false",
   ELEVENLABS_AGENT_ID: "",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "",
   // OUTBOUND-E5: neutral AUS, sonst leakt eine lokale .env mit
@@ -297,6 +281,29 @@ export const BASE_ENV = {
   // hineinlaufen: deren Boot-Re-Arm pollt dann waehrend fremder Zusicherungen los.
   // Bewusst weit ueber jeder Testfrist - Tests, die den Poll messen, setzen ihn selbst.
   ELEVENLABS_RESULT_POLL_MS: "60000",
+  // IE3: neutral AUS, sonst leakt eine lokale .env mit ELEVENLABS_INBOUND_ENABLED=true
+  // via dotenv in jeden Spawn-Test (Lehre test-base-env-drift). test/ie3-...test.js setzt
+  // ihn gezielt auf "true".
+  ELEVENLABS_INBOUND_ENABLED: "false",
+  // IEL-B1: neutral LEER (= niemand gepinnt, kein Zugang), sonst leakt eine lokale .env
+  // via dotenv in jeden Spawn-Test (Lehre test-base-env-drift) - bei diesen Schluesseln mit
+  // Secret-Folge. Tests mit Schalter an setzen EL_INBOUND_ACCESS_BOOT_ENV (unten).
+  ELEVENLABS_INBOUND_TENANT_IDS: "",
+  // IEX-A9: neutral LEER (= Default allowlist in config.js), sonst leakt eine lokale .env mit
+  // registrierte_dids in jeden Spawn-Test (Lehre test-base-env-drift). Der Golden-Test faehrt so den Default.
+  ELEVENLABS_INBOUND_SCOPE: "",
+  // IEP-P2: gepinnt, damit eine lokale .env nicht in Spawn-Tests leakt (Lehre
+  // test-base-env-drift). Leer = der config-Default greift (Muster ELEVENLABS_INBOUND_SCOPE).
+  ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED: "",
+  ELEVENLABS_INBOUND_SIP_USER: "",
+  ELEVENLABS_INBOUND_SIP_PASSWORD: "",
+  ELEVENLABS_INIT_WEBHOOK_TOKEN: "",
+  // IEL-B9: Werkzeug-Schluessel neutral leer (Lehre test-base-env-drift).
+  RENDER_API_KEY: "",
+  // E7: neutral LEER, sonst leakt ein lokal in .env eingetragener Challenge-Token via
+  // dotenv in JEDEN Spawn-Test (Lehre test-base-env-drift) - der 404-Fall (Normalfall
+  // der Suite) waere dort still ein 200. Der Positiv-Test setzt den Wert per Override.
+  OPENAI_APPS_CHALLENGE_TOKEN: "",
   // ---- Store-Backend + Onboarding/Provisioning ----
   // Neutral + fail-closed: json-Store, kein echter Nummern-Kauf. Tests, die das
   // brauchen (pg, Cap, echtes Provisioning), setzen es explizit per env-Override.
@@ -311,6 +318,15 @@ export const BASE_ENV = {
   PROVISIONING_ENABLED: "false",
   PROVISIONING_COUNTRY: "DE",
   PROVISIONING_REDRIVE_MAX_AGE_MS: "0",
+  // GP-P3: 0 = automatischer Wiederanlauf aus (Muster PROVISIONING_REDRIVE_MAX_AGE_MS) -
+  // sonst leakt eine lokale .env via dotenv in Spawn-Tests und ein Fixture-Mandant mit
+  // 'failed'-Nummer koennte dort unbeabsichtigt einen Kaufanstoss ausloesen.
+  PROVISIONING_RETRY_MAX_ATTEMPTS: "0",
+  // GP-P4: 0 = der zeitgesteuerte Wiederanlauf ist aus (Muster
+  // PROVISIONING_RETRY_MAX_ATTEMPTS oben) - sonst leakt eine lokale .env via dotenv in
+  // Spawn-Tests und ein Fixture-Mandant mit 'failed'-Nummer koennte im Stunden-Sweep
+  // unbeabsichtigt einen Kaufanstoss ausloesen.
+  PROVISIONING_RETRY_MIN_INTERVAL_MS: "0",
   RELEASE_GRACE_DAYS: "0", // tenant-prolif-d: neutraler fail-closed Default (sonst leakt lokales .env in Spawn-Tests)
   // Kauf-Land-Override aus (Default): number.country = Herkunftsland, byte-identisch.
   // Ohne diese Zeile leakt eine lokale .env mit FORCE_NUMBER_COUNTRY=US via dotenv in
@@ -395,6 +411,12 @@ export const BASE_ENV = {
   // dotenv in die Spawn-Tests (Lehre test-base-env-drift).
   CONSULT_WAIT_MS: "4000",
   CONSULT_OPEN_MS: "47000",
+  // P2: die drei EL-Rueckfrage-Fristen neutral auf den Produktions-Default gepinnt, sonst
+  // leakt eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift).
+  // Die EL-Webhook-Tests setzen sie explizit kurz (s. dort).
+  EL_CONSULT_DELIVERY_MS: "5000",
+  EL_CONSULT_ACK_MS: "5000",
+  EL_CONSULT_ANSWER_MS: "30000",
   // AL-P7b: Denk-Signal in Spawn-Tests neutral AUS (Default). Ohne diese Zeile leakt eine
   // lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift);
   // al-p7b-*.test.js setzen es explizit auf "true".
@@ -436,6 +458,15 @@ export const BASE_ENV = {
   COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control",
   COST_TRUING_MIN_COVERAGE_PERCENT: "80",
   COST_TRUING_COVERAGE_STALL_SWEEPS: "8",
+  // KV2-6: Herzschlag-Fenster auf dem Code-Default gepinnt (Lehre test-base-env-drift) -
+  // ohne diese Zeile faerbte eine lokale .env die Spawn-Suite.
+  KOSTEN_HEARTBEAT_FENSTER_H: "6",
+  // KV2-7: Settlement-Frist auf dem Code-Default gepinnt (Lehre test-base-env-drift) -
+  // ohne diese Zeile faerbte eine lokale .env die Spawn-Suite.
+  COST_SETTLE_DEADLINE_HOURS: "48",
+  // KV2-9: Mindest-Reifealter auf dem Code-Default gepinnt (Lehre test-base-env-drift) -
+  // ohne diese Zeile faerbte eine lokale .env die Spawn-Suite.
+  EL_EVIDENCE_MIN_AGE_MINUTES: "15",
   COST_DRIFT_WARN_PERCENT: "50",
   COST_ALERT_DEBOUNCE_MS: "86400000",
   // LCT P5 (Drift-Waechter): auf den Code-Default gepinnt (Lehre test-base-env-drift).
@@ -460,6 +491,12 @@ export const BASE_ENV = {
   // LCT P4b: Vollkosten-Boot-Guard test-neutral aus (Schwelle 0 => 0<0 false => still),
   // analog VOICE_TARIFF_DOMESTIC_CENTS=0. Die P4b-Tests setzen die Schwelle explizit.
   VOICE_TARIFF_FULL_COST_FLOOR_CENTS: "0",
+  // KV2-10: die Grundbetrag-Karte neutral leer gepinnt (fail-closed Default {} = alle
+  // Routen 0, "noch nicht gesetzt") - ohne diese Zeile laedt dotenv eine lokale .env mit
+  // z.B. "el_convai_sip:muell" in JEDES Spawn-Kind (routeCentsEnv -> fatalConfigErrors ->
+  // Boot-Refusal in der ganzen Spawn-Suite, Lehre test-base-env-drift). .env.example
+  // laedt den Owner aktiv zum Setzen ein - genau deshalb braucht die Suite die Klemme.
+  VOICE_TARIFF_GRUNDBETRAG_CENTS: "",
   DEFAULT_TENANT_BUDGET_CENTS: "0",
   // P6 (Budget-Achsen, Fruehwarnung): neutral AUS (0 = kein Ereignis, byte-identisch
   // zum Bestand) - sonst leakt eine lokale .env via dotenv in Spawn-Tests (Lehre
@@ -488,10 +525,24 @@ export const BASE_ENV = {
   // 0 = C8b-Selbsttest aus, bis ein Test ihn ausdruecklich scharf schaltet (Muster
   // OUTAGE_ALERT_WINDOW_MS oben).
   OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: "0",
+  // IEX-B1: Inbound-Ausfall-Melder in Spawn-Tests neutral AUS (0), NICHT der
+  // Produktions-Default (Muster OUTAGE_ALERT_WINDOW_MS oben). Ohne diese Zeile leakt ein
+  // lokaler .env-Wert via dotenv in jeden Spawn-Test (Lehre test-base-env-drift) und ein
+  // beliebiger Spawn-Test mit einem gescheiterten EL-Inbound-Fixture erzeugte
+  // unbeabsichtigt Betreiber-Befunde. Die drei Schwellen auf ihren Defaults, damit ein
+  // lokaler Experimentierwert keine fremde Baseline verschiebt.
+  INBOUND_OUTAGE_ALERT_WINDOW_MS: "0",
+  INBOUND_OUTAGE_ALERT_MIN_FAILURES: "2",
+  INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS: "20",
+  INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT: "10",
   // 0 = C8-HOLD-Eskalation aus (Muster OUTAGE_ALERT_WINDOW_MS oben) - sonst koennte ein
   // Spawn-Test mit einem laengst suspendierten Fixture-Tenant unbeabsichtigt eine
   // Betreiber-Meldung ausloesen, ohne jeden Bezug zu C8.
   PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: "0",
+  // GP-P0: 0 = Beobachtung aus (Muster PLATFORM_HOLD_ESCALATION_MAX_AGE_MS oben) - sonst
+  // koennte ein Spawn-Test mit einem Fixture-Abo ohne Nummer unbeabsichtigt einen
+  // Betreiber-Befund erzeugen, ohne jeden Bezug zu GP-P0.
+  PAID_WITHOUT_NUMBER_GRACE_MS: "0",
   // P7 (Budget-Achsen, Der Flip): neutral AUS (Default, byte-identisch zum Bestand) - sonst
   // leakt eine lokale .env mit BUDGET_MONTH_ENABLED=true via dotenv in Spawn-Tests (Lehre
   // test-base-env-drift) und faerbt die Suite umgebungsabhaengig.
@@ -520,6 +571,18 @@ export const BASE_ENV = {
   OAUTH_AUDIENCE: "",
   RENDER_EXTERNAL_URL: "",
 };
+
+// Alle .js-Quelltexte unter einem REPO-RELATIVEN Verzeichnis als [pfad, inhalt]-Paare (Pfade
+// bleiben repo-relativ, z.B. "src/config.js"). Grundlage der Grep-Tests, die eine Invariante
+// ueber den ganzen Baum halten ("genau EINE Lesestelle"). Seit IEP-P2 hier statt in je einer
+// Testdatei - zwei Nutzer, eine Quelle (G5).
+export function quelltexteUnter(verzeichnis) {
+  return fs.readdirSync(path.join(ROOT, verzeichnis), { withFileTypes: true }).flatMap((eintrag) => {
+    const relativ = path.join(verzeichnis, eintrag.name);
+    if (eintrag.isDirectory()) return quelltexteUnter(relativ);
+    return eintrag.name.endsWith(".js") ? [[relativ, fs.readFileSync(path.join(ROOT, relativ), "utf8")]] : [];
+  });
+}
 
 // Erste nicht-interne IPv4-Adresse - Requests dorthin gelten serverseitig
 // nicht als localhost (req.socket.remoteAddress != 127.0.0.1).
@@ -784,6 +847,9 @@ export function storeOpsFacade(state) {
     // aber die Attrappe muss die Methode kennen, sonst wirft der Ergebnisweg einen
     // TypeError.
     recordSipCallId: () => {},
+    // ST3: Zaehlfeld der Stimmen-Detektoren - dieselbe Begruendung wie recordSipCallId
+    // direkt darueber (kein Aufrufer dieser Facade liest es).
+    recordElDetectorCounts: () => {},
     // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber - originateCall
     // (absenderFuerAnruf) und persistProviderResult (recordAbsenderMessung) rufen beide
     // ueber die ECHTEN Mutatoren, sonst wirft der Anrufstart/Ergebnisweg einen TypeError.
@@ -885,6 +951,13 @@ export function fakeBilling(overrides = {}) {
     async reportMeter(args) {
       log.push(["reportMeter", args]);
     }, // P6b3-Meter-Aufzeichner
+    // GP-P2: der Port ist um den rein lesenden Typ-Nachschlag gewachsen - das GETEILTE
+    // Double waechst mit (sonst baut jeder Test ihn neu, S2). Default 'card': die
+    // Bestandsfixturen hinterlegen eine echte Karte.
+    async retrievePaymentMethodType(id) {
+      log.push(["retrievePaymentMethodType", id]);
+      return PAYMENT_METHOD_TYPE_CARD;
+    },
   };
   return { log, ...base, ...overrides };
 }
@@ -1093,18 +1166,22 @@ export function makeTelnyxSigner() {
   };
 }
 
-// P10: assertConfig verlangt bei aktivem TELNYX_AI_ASSISTANT_ENABLED-Flag zusaetzlich
-// ASSISTANT_ID/API_KEY/CONNECTION_ID (fail-closed Boot) - Flag-an-Spawn-Tests brauchen
-// die drei Werte oft NUR, damit der Server ueberhaupt startet, nicht fuer ihre
-// eigentliche Aussage. EINE Quelle (G5/S2) statt der frueher in telnyx-p5-gate-proof +
-// telnyx-p5-origination + telnyx-p8-inbound + telnyx-p9-flag-matrix + telnyx-shim-route
-// fuenffach (teils voll, teils als 2-Key-Teilsatz) kopierten Fixture.
-export const TELNYX_ASSISTANT_BOOT_ENV = Object.freeze({
-  TELNYX_ASSISTANT_ID: "asst_x",
-  TELNYX_API_KEY: "key_x",
-  TELNYX_CONNECTION_ID: "conn_x",
-  TELNYX_CALL_CONTROL_APP_ID: "ccapp_x",
-  TELNYX_SHIM_SHARED_SECRET: "shim_secret_x",
+// GP-P6: seit assertPricedPlans (boot.js) ist eine Price-Id je Katalog-Slug Boot-Pflicht,
+// sobald PAYMENT_ENABLED=true ist. Jeder Spawn-Test mit aktivem Payment braucht sie - EINE
+// Quelle (G5/S2). Die Werte sind Attrappen, kein Test ruft Stripe.
+export const PLAN_PRICE_BOOT_ENV = Object.freeze({
+  STRIPE_STARTER_PRICE_ID: "price_test_starter",
+  STRIPE_BUSINESS_PRICE_ID: "price_test_business",
+});
+
+// IEL-B1: seit dem Boot-Riegel (boot-guard.js#elInboundAccessFindings) bootet
+// ELEVENLABS_INBOUND_ENABLED=true nur mit vollstaendigem Zugang. EINE Quelle (G5, Muster
+// PLAN_PRICE_BOOT_ENV). Attrappen in EXAKTER Mindestlaenge (Grenzfall gilt als gueltig);
+// kein Anbieter sieht sie je.
+export const EL_INBOUND_ACCESS_BOOT_ENV = Object.freeze({
+  ELEVENLABS_INBOUND_SIP_USER: "iel-test-sip-user",
+  ELEVENLABS_INBOUND_SIP_PASSWORD: "p".repeat(SIP_PASSWORD_MIN_LENGTH),
+  ELEVENLABS_INIT_WEBHOOK_TOKEN: "t".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH),
 });
 
 // POST /api/calls (Outbound-Origination-Trigger). Liefert die rohe fetch-Response
@@ -1121,10 +1198,9 @@ export function placeCall(srv, to = TELNYX_TEST_PEER_NUMBER) {
 // WERT ist belanglos, SKIP_TWILIO_SIGNATURE_CHECK ueberspringt die Krypto - die PRAESENZ
 // waehlt den Provider). C-P3: der frueher vorhandene telnyx:false-Zweig (Twilio-Header)
 // ist entfallen, es gibt keinen NICHT-Telnyx-Inbound-Pfad mehr.
-// callSid: das Telnyx-TeXML-Feld, das die
-// call_control_id des Inbound-Legs TRAEGT (GQ-P3, gemessen) - es gibt kein separates
-// CallControlId-Feld mehr. callSid: null laesst das Feld WEG und erzeugt damit den
-// Defektfall, gegen den der laute Rueckfall sichert. Liefert die rohe fetch-Response.
+// callSid: das CallSid des Inbound-Legs. callSid: null laesst das Feld WEG und erzeugt
+// damit den Defektfall, gegen den der laute Rueckfall sichert. Liefert die rohe
+// fetch-Response.
 export function postTelnyxIncoming(
   srv,
   { callSid = "CAtest", from = TELNYX_TEST_PEER_NUMBER, to = TELNYX_TEST_TENANT_NUMBER } = {},
@@ -1138,10 +1214,23 @@ export function postTelnyxIncoming(
   });
 }
 
+// IEL-B1: die zwei server-erzeugten Zufallsanteile einer /voice/incoming-Antwort auf feste
+// Platzhalter - EINE Quelle fuer jeden Byte-Vergleich des Inbound-TeXML.
+export function normalizeIncomingTexml(texml) {
+  return texml
+    .replaceAll(/callId=call_[a-zA-Z0-9]+/g, "callId=call_X")
+    .replaceAll(/turnToken=[a-f0-9]+/g, "turnToken=X");
+}
+
 // Seedet EINE aktive Telnyx-Nummer (TELNYX_TEST_TENANT_NUMBER) am Owner-Tenant - Inbound-
 // Routing (/voice/incoming) braucht eine passende aktive Nummer im Store, sonst greift das
 // To-Routing nicht.
-export function seedWithTelnyxNumber() {
+// IP2: language optional additiv ergaenzt (byte-identisch fuer alle Bestandsaufrufe
+// ohne Argument, JSON.stringify laesst einen undefined-Wert weg). Die Inbound-Hoerprobe
+// (scripts/inbound-hoerprobe.mjs) pinnt hierueber "de", statt vom ambienten
+// WORLD_DEFAULT_LANGUAGE_ENABLED-Flag abzuhaengen (Test-Suite pinnt "true"/en, der
+// Code-Fallback ist "false"/de - zwei verschiedene Wahrheiten fuer denselben Aufrufer).
+export function seedWithTelnyxNumber({ language } = {}) {
   return seedState({
     tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas" }],
     numbers: [
@@ -1152,6 +1241,7 @@ export function seedWithTelnyxNumber() {
         provider: "telnyx",
         status: "active",
         providerNumberId: null,
+        language,
       },
     ],
   });

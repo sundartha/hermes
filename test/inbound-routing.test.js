@@ -58,7 +58,7 @@ function geoSeed(extraSettings = {}) {
 }
 
 test("unbekannte To -> fail-closed Hangup + Audit, kein Stream, kein Call-Record", async () => {
-  const srv = await startServer({ env: { VOICE_ENGINE: "realtime" } });
+  const srv = await startServer();
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",

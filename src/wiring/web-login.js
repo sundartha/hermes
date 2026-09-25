@@ -30,7 +30,7 @@ import {
 } from "../web-auth.js";
 import { makePortalStore } from "../store/portal.js";
 import { makeAuditStore } from "../audit-store.js";
-import { makeSelfServiceRoutes } from "../self-service-routes.js";
+import { mountSelfServiceRoutes } from "../self-service-routes.js";
 import { createRateLimiter } from "../middleware.js";
 import { setTenantIdentityIfAbsent } from "../store/state-ops.js";
 import { runReleaseReconcile } from "../release-reconcile.js";
@@ -158,7 +158,10 @@ export async function wireWebLogin({
   // F2-Mail: spaet gebundene Accounts-Zelle (server.js, Muster operatorAuth in app.js).
   // Optional (Default undefined) - der Routen-Inventar-Test (route-auth-inventory.test.js)
   // baut den Graph ohne sie; der Guard unten macht das No-op statt eines TypeErrors.
-  accountsRef,
+  // KV2-1: auditStoreRef ist dieselbe Art spaet gebundener Zelle wie accountsRef -
+  // optional, der Routen-Inventar-Test baut den Graph ohne sie; der Guard unten macht
+  // das No-op statt eines TypeErrors.
+  accountsRef, auditStoreRef,
 }) {
   const portalRunner = await createPortalRunner();
   const oidc = makeOidc(config);
@@ -173,7 +176,12 @@ export async function wireWebLogin({
   // jedem Call-Ende frisch und findet ab hier die echte accounts-Instanz.
   if (accountsRef) accountsRef.current = accounts;
   const sessions = makeSessions(portalRunner);
-  const auditStore = makeAuditStore(portalRunner);
+  // KV2-1: dieselbe EINE Instanz (G5/DIP) bekommt der Kostenpfad ueber die spaet gebundene
+  // Zelle - kein zweiter Runner, kein zweiter Pool, kein zweiter audit_log-Schreibweg.
+  // Object.assign statt direkter Property-Zuweisung (G25/Clean-Code-Ratsche dieser Datei,
+  // eslint-suppressions.json no-param-reassign): dieselbe Wirkung, ohne den bestehenden
+  // Fund um einen zweiten zu vermehren.
+  const auditStore = makeAuditStore(portalRunner); if (auditStoreRef) Object.assign(auditStoreRef, { current: auditStore });
   // EINE Instanz (G5), geteilt vom DID-Release-Reconciler UND dem 312k-Phase-4-
   // Vertragsende-Aufraeumen - beide releasen ausschliesslich Telnyx-DIDs ueber denselben Port.
   const telnyxProvisioner = numberProvisioning(PROVIDER.TELNYX);
@@ -315,7 +323,7 @@ export async function wireWebLogin({
   // gesichert, keine Admin-Sitzung. audit = util.audit (nur Keys, keine Werte/PII).
   if (isSelfServiceLive(config)) {
     app.use(
-      makeSelfServiceRoutes({
+      mountSelfServiceRoutes({
         store,
         webAuthMw,
         webAuthPendingMw,

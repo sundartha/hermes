@@ -5,6 +5,12 @@
 // (src/tts/directive-synth.js) noch eine Netzreserve. Beides addiert sich zur selben
 // Wanduhr. Reine Funktionen, KEIN config-Import (der Aufrufer reicht die Werte) -
 // damit ist die Rechnung ohne Env-Bastelei testbar.
+//
+// IE7: seit dem Streaming-Umbau wartet der Webhook nur noch auf das ERSTE Audio-Paket.
+// synthTimeoutMs IST genau diese Frist und bleibt deshalb unveraendert Summand dieser
+// Rechnung - die Zahlen aendern sich nicht. Die Gesamtfrist des Hintergrund-Stroms
+// (ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS) liegt NICHT auf dieser Wanduhr und ist hier bewusst
+// KEIN Summand: sie laeuft, nachdem der Webhook geantwortet hat.
 
 export const PROVIDER_WEBHOOK_HARDCUT_MS = 15000; // externer Vertragswert
 export const TURN_NETWORK_RESERVE_MS = 1500; // Express+Render-Roundtrip, TeXML-Render, Store-Schreibvorgang
@@ -23,9 +29,9 @@ export function llmTurnBudgetMs({ requestTimeoutMs, maxRetries, backoffMs }) {
   return attempts * requestTimeoutMs + backoffSum;
 }
 
-// Alles, was im selben Webhook NEBEN den llm.complete-Ketten liegt: Play-TTS-Vorab-
-// Synthese + Netzreserve. EINE Quelle (G5) - sonst rechnen turnBudgetMs,
-// turnLoopDeadlineMs und enforcedTurnWorstCaseMs dreimal dieselbe Summe.
+// Alles, was im selben Webhook NEBEN den llm.complete-Ketten liegt: das Warten auf das
+// erste Audio-Paket der Play-TTS-Synthese (IE7) + Netzreserve. EINE Quelle (G5) - sonst
+// rechnen turnBudgetMs, turnLoopDeadlineMs und enforcedTurnWorstCaseMs dreimal dieselbe Summe.
 function turnOverheadMs(synthTimeoutMs) {
   return synthTimeoutMs + TURN_NETWORK_RESERVE_MS;
 }
@@ -71,50 +77,3 @@ export function roundFitsDeadline({ elapsedMs, deadlineMs, requestTimeoutMs }) {
   return elapsedMs + requestTimeoutMs <= deadlineMs;
 }
 
-// Was ein Turn MIT greifender Frist im schlechtesten Fall wirklich braucht: die letzte
-// zugelassene Runde startet spaetestens bei (Frist - ein Versuch) und faehrt danach ihre
-// volle Retry-Kette; mehr als MAX_TOOL_ROUNDS_PER_TURN Ketten gibt es ohnehin nie. Ohne
-// die Frist waere es schlicht Runden * Kette (mit Defaults 48 500 ms) - genau die Zahl,
-// die den Dead-Air-Watchdog reisst.
-// GQ-P18: die Shim-Frist taucht hier NICHT mehr auf. Bis GQ-P17 hielt sie den Turn an und
-// addierte sich auf dieselbe Wanduhr; die Sprechsperre (telnyx-speech-gate.js) haelt nur
-// noch das SPRECHEN zurueck und laesst den Turn unveraendert schnell laufen - ein Aufschlag
-// hier waere seit dem Umbau eine Luege ueber die Turn-Dauer.
-export function enforcedTurnWorstCaseMs({
-  requestTimeoutMs,
-  maxRetries,
-  backoffMs,
-  synthTimeoutMs,
-}) {
-  const chainMs = llmTurnBudgetMs({ requestTimeoutMs, maxRetries, backoffMs });
-  const lastRoundStartMs = Math.max(
-    0,
-    Math.min(
-      turnLoopDeadlineMs(synthTimeoutMs) - requestTimeoutMs,
-      (MAX_TOOL_ROUNDS_PER_TURN - 1) * chainMs,
-    ),
-  );
-  return lastRoundStartMs + chainMs + turnOverheadMs(synthTimeoutMs);
-}
-
-// null = haelt; sonst { worstCaseMs, limitMs, overrunMs } fuer die Boot-Warnung.
-// Bezugsgroesse ist der Dead-Air-Watchdog des Assistant-Pfads (TELNYX_DEAD_AIR_TIMEOUT_S):
-// er beendet den Call, wenn zwischen zwei Lebenszeichen zu viel Zeit vergeht - ein
-// einzelner, zu langer Turn reisst genau ihn. Der Telnyx-EIGENE LLM-Timeout ist die zweite
-// Bezugsgroesse; solange AL-P2 ihn nicht gemessen hat, wird er hier NICHT geraten.
-export function deadAirOverrun({
-  deadAirTimeoutMs,
-  requestTimeoutMs,
-  maxRetries,
-  backoffMs,
-  synthTimeoutMs,
-}) {
-  const worstCaseMs = enforcedTurnWorstCaseMs({
-    requestTimeoutMs,
-    maxRetries,
-    backoffMs,
-    synthTimeoutMs,
-  });
-  if (worstCaseMs <= deadAirTimeoutMs) return null;
-  return { worstCaseMs, limitMs: deadAirTimeoutMs, overrunMs: worstCaseMs - deadAirTimeoutMs };
-}

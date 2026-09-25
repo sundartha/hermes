@@ -74,12 +74,7 @@ function promptInputs(call) {
     // Frage entscheidet ueber den Werkzeugsatz UND ueber die GRENZEN-Zeile.
     // Ein Prompt, der "du kannst nichts nachschlagen" sagt, waehrend das Werkzeug
     // danebensteht, ist genau die Klasse Widerspruch, an der Haiku kippt.
-    // AL-P10b-fix: die Zusage gilt fuer BEIDE Aufrufer dieses Prompts. Budget-Engine:
-    // agentTools schaltet mit demselben Praedikat. Realtime-Bridge: ihr Werkzeugsatz
-    // (realtimeTools = toolDefs) traegt look_up nie, deshalb liefert lookupAvailableFor
-    // unter VOICE_ENGINE=realtime fail-closed false (Engine-Faktor in
-    // research/in-call.js lookupProviderFor). Vorher stimmte der Satz nur fuer die
-    // Budget-Engine - der Realtime-Prompt versprach eine Faehigkeit ohne Werkzeug.
+    // agentTools schaltet mit demselben Praedikat.
     lookupAvailable: lookupAvailableFor(call),
     // WW-P3: dieselbe Regel wie lookupAvailable, EINE Quelle (G5) fuer "wird get_consult
     // in diesem Zug angeboten?" - dieselbe Frage entscheidet ueber den Werkzeugsatz
@@ -236,8 +231,8 @@ function boundaryRules({
   if (!s.allowPersonalData) lines.push(b.personalData(owner));
   if (!s.allowBankData) lines.push(b.bankData);
   // AL-P10b: genau EINE Zeile wechselt. lookupAvailable=false (Flag aus, Inbound,
-  // Realtime-Engine, Kontingent erschoepft, kein Tenant-Recht) -> b.noLookup -> Prompt
-  // byte-identisch zum Bestand.
+  // Kontingent erschoepft, kein Tenant-Recht) -> b.noLookup -> Prompt byte-identisch
+  // zum Bestand.
   lines.push(
     b.noCalendar(owner),
     // WW-F1: die Zeile bleibt unbedingt (E1: "du buchst KEINE Termine fest" steht in
@@ -516,8 +511,8 @@ const TAKE_MESSAGE_TOOL_NAME = "take_message";
 // NICHT in diese Liste: es beendet den Turn selbst und darf den Ausstieg der Runde
 // nicht ueber die Seiteneffekt-Regel steuern.
 // Die Liste ist bewusst eine NAMENS-Liste und kein Feld an den toolDefs-Objekten: die
-// gehen 1:1 an Anthropic (agentTurn) UND an die Realtime-API (bridge.js realtimeTools),
-// ein Zusatzfeld waere dort ein unbekanntes Schema-Feld.
+// gehen 1:1 an den LLM-Adapter (agentTurn), ein Zusatzfeld waere dort ein unbekanntes
+// Schema-Feld.
 // Fail-safe-Richtung: ein UNBEKANNTER Name gilt als informationsliefernd -> der Loop
 // laeuft weiter wie im Bestand.
 const SIDE_EFFECT_ONLY_TOOL_NAMES = Object.freeze(
@@ -561,8 +556,8 @@ function isStreamSafeTool(name) {
   return STREAM_SAFE_TOOL_NAMES.has(name);
 }
 
-// Fester Tool-Satz fuer BEIDE Engines (Budget-Tool-Loop + Realtime-Bridge ueber
-// realtimeTools). Seit P1b (Owner-Entscheidung E1) OHNE Kalender-/Buchungs-Tool: der
+// Fester Tool-Satz des Budget-Tool-Loops. Seit P1b (Owner-Entscheidung E1) OHNE
+// Kalender-/Buchungs-Tool: der
 // Telefon-Agent nimmt Terminwuensche nur als Nachricht auf, er bucht nichts und liest
 // im Gespraech keinen Kalender. Der Kalender bleibt ein Owner-Werkzeug auf einer
 // ANDEREN Achse (MCP-seitig + im Dashboard), gegated ueber resolveProfile, von hier aus
@@ -621,14 +616,18 @@ function getConsultToolDef(language) {
   };
 }
 
-// Werkzeugsatz DIESES Turns. toolDefs bleibt der feste Satz beider Engines (die
-// Realtime-Bridge und agentToolNames lesen weiter dort); nur der Budget-/Shim-Turn
-// bekommt den Notausgang dazu, und nur wenn er in diesem Call auch bedient werden kann.
+// Werkzeugsatz DIESES Turns. toolDefs bleibt der feste Satz (agentToolNames liest
+// weiter dort); nur der Budget-Turn bekommt den Notausgang dazu, und nur wenn er in
+// diesem Call auch bedient werden kann.
 // KOSTEN-HINWEIS: Werkzeugangebot + Systemanweisung sind das cachefaehige Praefix
 // (LlmRequest.cachePrefix) - taucht das Werkzeug mitten im Call auf oder verschwindet
 // es, faellt dieses Praefix genau einmal. Bewusst in Kauf genommen; die Alternative
 // waere ein dauerhaft angebotenes Werkzeug ohne Empfaenger.
-function agentTools(call) {
+// SEC-P6 (Waechter 3): exportiert, weil der Werkzeugsatz des Telefon-Agenten GENAU HIER
+// entsteht - toolDefs ist nur der Basissatz. Ohne diesen Export ist der GESCHLOSSENE Satz
+// (kein fuenftes Werkzeug) nicht messbar; die Bestandstests pruefen bis heute nur
+// includes(). Reiner Lese-Zugriff, kein Aufrufer in src/ kommt hinzu.
+export function agentTools(call) {
   const tools = toolDefs(call.language);
   if (consultAvailableFor(call)) tools.push(getConsultToolDef(call.language));
   // AL-P10b: dieselbe Sperre wie get_consult - outbound-only, aktiver Call, Kontingent,
@@ -697,19 +696,15 @@ export function execTool(call, name, input) {
 // dieser Zustand NICHT erreichbar, weil server.js die Greeting-/Opening-Zeile synchron
 // per addTranscript() IN /voice/incoming BZW. /voice/outbound eintraegt, BEVOR der erste
 // agentTurn-Aufruf ueberhaupt stattfindet. Erreichbar ist der Zustand ueber den zweiten
-// Aufrufer, den Telnyx-LLM-Shim (telnyx-llm-shim.js): dort spricht ein Call-Control-
-// Speak-Node die Disclosure/Greeting, OHNE sie ins Transkript zu schreiben - der erste
-// agentTurn-Aufruf trifft dort auf ein tatsaechlich leeres Transkript. Der Stiller-
+// Aufrufer, der die Eroeffnung nicht ins Transkript schreibt (bis IE6-S1 der Telnyx-Shim;
+// heute kein Produktionsaufrufer, Rest-Befund R-1). Der Stiller-
 // Folge-Turn-Marker haelt die Anthropic-messages-Kette gueltig (Abschluss mit
 // user-Turn), sobald der Agent schon gesprochen hat und der Anrufer nichts
 // Substanzielles beitrug, OHNE dem Modell erneut "beginne/begruesse" zu signalisieren
 // (behebt R4). Richtungsneutral - die konkrete Reaktion steuert der systemPrompt.
 
-// Rueckgespielt an das Modell, wenn ein end_call unterdrueckt wird (Outbound, noch keine
-// substanzielle Antwort). EINE Quelle fuer beide Engines: Budget-Tool-Loop UND
-// Realtime-bridge.js (dort function_call_output). G5/G27. P11: sprachabhaengig - der
-// Export wechselt von einer Konstante zu einer Funktion, weil die Sprache jetzt am
-// call haengt (beide Engines reichen call durch).
+// Rueckgespielt an das Modell, wenn ein end_call unterdrueckt wird (noch keine
+// substanzielle Antwort). G5/G27. P11: sprachabhaengig - die Sprache haengt am call.
 export function endCallWaitInstruction(call) {
   return localeFor(call.language).prompt.turnControl.endCallWait;
 }
@@ -767,8 +762,7 @@ function unansweredAgentTurns(transcript) {
 }
 
 // EINE strukturell erzwungene Invariante (G27): der Frueh-
-// auflege-Schutz gilt fuer JEDE Voice-Engine (Budget-agentTurn UND Realtime-bridge.js),
-// nicht mehr nur per Kommentar. Unterdrueckt end_call, solange (i) keine Anrufer-
+// auflege-Schutz im Budget-agentTurn. Unterdrueckt end_call, solange (i) keine Anrufer-
 // Aeusserung vorliegt UND (ii) die Zahl konsekutiver Leer-Turns die Schwelle
 // (maxEmptyTurns) noch nicht erreicht hat. Rein, kein Nebeneffekt (N7).
 // unansweredAgentTurns bleibt modul-privat.
@@ -792,30 +786,25 @@ export function shouldSuppressEndCall(call) {
   return !substantialCallerSeen && !emptyTurnsReached;
 }
 
-// Der Shaper lebt seit AL-P7 in src/speech-shape.js (geteilter Kern mit dem chunk-
-// sicheren Zwilling des Token-Streams, G5). Der Re-Export haelt die Bestands-Importpfade
-// gueltig (bridge.js, Tests) - EINE Implementierung, kein zweiter Shaper.
-export { shapeForSpeech };
-
 // AL-P6: Grund-Token eines vorzeitig beendeten Tool-Loops. Die GELD-Gruende kommen aus
-// budget-gate.js (BUDGET_AXIS - dieselben Token wie im Shim-Log); hier steht nur die
+// budget-gate.js (BUDGET_AXIS); hier steht nur die
 // ZEIT-Achse. null = der Loop lief regulaer zu Ende.
 export const TURN_STOP_DEADLINE = "deadline";
 
 // GQ-P1: der Tool-Loop wurde zugunsten einer VOLLSTAENDIGEREN Fassung derselben Aeusserung
 // abgebrochen. Eigenes Token neben der ZEIT-Achse, damit die Log-Auswertung den Riegel vom
 // Fristablauf trennt. KEINE Geld-Achse - isBudgetAxis (budget-gate.js) erkennt es nicht,
-// der Shim-Notaus bleibt damit unberuehrt.
+// der Notaus des Aufrufers bleibt damit unberuehrt.
 export const TURN_STOP_SUPERSEDED = "superseded";
 
 // Die EINE Frage vor JEDER Schleifenrunde: darf sie noch gefahren werden? Liefert den
 // maschinenlesbaren Grund oder null. Zwei Achsen mit bewusst UNTERSCHIEDLICHER Reichweite:
 //   - GELD (Regel 1) gilt ab der ERSTEN Runde. bookTokenUsage laeuft in JEDER Runde;
-//     geprueft wurde bisher nur EINMAL vor dem Turn (Shim Schritt 6) bzw. gar nicht
+//     geprueft wurde bisher nur EINMAL vor dem Turn bzw. gar nicht
 //     (/voice/turn). Ein erschoepfter Cap darf keinen einzigen Token mehr kosten.
 //   - ZEIT erst ab der ZWEITEN Runde: die erste laeuft immer, sonst koennte eine zu knapp
 //     konfigurierte Frist den Agenten stumm schalten (fail-safe Richtung Bestand). Eine
-//     solche Konfiguration meldet der Boot-Waechter (warnTurnOutlivesDeadAir).
+//     solche Konfiguration meldet der Boot-Waechter (warnTurnBudgetOverrun).
 // Nicht injizierbar (Regel 1): ein Gate, das ein Aufrufer per No-op abschalten darf, ist
 // keines. Injizierbar ist allein die REAKTION beim Aufrufer.
 function roundStopReason({ call, roundIndex, elapsedMs, deadlineMs }) {
@@ -858,8 +847,8 @@ function promptCharsOf({ system, tools, messages }) {
 
 // AL-P7: der Satz-Abnehmer DIESER Runde - oder null, wenn nicht gestreamt werden darf.
 // Drei Bedingungen, jede fail-closed:
-//   1. Es gibt ueberhaupt einen Abnehmer (nur der Shim-Pfad liefert einen; die
-//      Budget-Engine rendert ein fertiges TeXML-Dokument und kann nichts inkrementell).
+//   1. Es gibt ueberhaupt einen Abnehmer (seit IE6-S1 liefert kein Produktionsaufrufer
+//      einen; R-1, entfaellt mit IE6 Stufe 3).
 //   2. AL-P17 (E1): JEDES angebotene Werkzeug ist bekannt und STROM-SICHER
 //      (isStreamSafeTool). Bis AL-P17 stand hier die schaerfere Bedingung
 //      "ausschliesslich Seiteneffekt-Werkzeuge". Sie sperrte live in JEDEM Turn, weil
@@ -943,9 +932,9 @@ async function completeRound({ call, params, stream }) {
 // keinen durch). Drittes Argument als OBJEKT, damit spaetere Abnehmer keine weitere
 // Positions-Stelle brauchen (F1).
 // Der Ergebnistext EINES Werkzeugs dieser Runde. get_consult (AL-P14) und look_up
-// (AL-P10b) laufen NIE durch execTool - dort gibt es bewusst keinen Case, das ist der
-// zweite Riegel fuer die Realtime-Bridge, die execTool direkt ruft und beide Werkzeuge
-// nicht bedienen kann (sie bekommt tc.unknownTool). Beide Ergebnisse stehen fest, bevor
+// (AL-P10b) laufen NIE durch execTool - dort gibt es bewusst keinen Case; execTool
+// liefert fuer beide tc.unknownTool (zweiter Riegel neben dem Werkzeugsatz). Beide
+// Ergebnisse stehen fest, bevor
 // diese Funktion laeuft; ihr jeweiliger Entscheider liefert garantiert non-null, wenn
 // der Name in dieser Runde vorkam. Ein Objekt statt vier Positionen (F1).
 function toolResultText({ call, toolCall, consult, lookup }) {
@@ -965,12 +954,11 @@ function consultTurnMarker(consultWait, turnControl) {
   return "";
 }
 
-// GQ-P1: abortSignal ist der optionale Riegel des Shims (telnyx-turn-supersede.js). Ohne
-// ihn ist dieser Turn byte-identisch zum Bestand - /voice/turn (routes/voice.js) reicht
-// keinen durch. Der Abbruch ist KOOPERATIV: gelesen wird an der Schleifengrenze und vor
-// dem Transkript-Schreiben, NICHT im Modell-Aufruf. Damit bleibt die Kosten-Buchhaltung
-// (completeRound: genau EINE Buchung je Modellrunde) unangetastet. Stumm geschaltet wird
-// der Turn nicht hier, sondern am Sprech-Draht des Shims.
+// GQ-P1: abortSignal ist der optionale kooperative Abbruch (ohne Produktionsaufrufer seit
+// IE6-S1, R-1) - /voice/turn (routes/voice.js) reicht keinen durch. Der Abbruch ist
+// KOOPERATIV: gelesen wird an der Schleifengrenze und vor dem Transkript-Schreiben, NICHT
+// im Modell-Aufruf. Damit bleibt die Kosten-Buchhaltung (completeRound: genau EINE Buchung
+// je Modellrunde) unangetastet.
 export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal } = {}) {
   // G3/G26-Fix: das Transkript-Record-Gate ist
   // RICHTUNGSLOS und byte-identisch zum fruehen Master-Stand (41ce40b:
@@ -985,8 +973,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     store.addTranscript(call.id, "caller", callerText);
     // AL-P1 (Abbruch-Achse): derselbe Riegel wie das Transkript-Recording - genau dann,
     // wenn der Anrufer wirklich etwas gesagt hat. Purge-fest (purgeTranscript leert nur
-    // transcript). BEWUSSTE GRENZE: der Realtime-Pfad (bridge.js) laeuft nicht durch
-    // agentTurn und zaehlt nicht mit - er ist nicht der live laufende Pfad (O1).
+    // transcript).
     store.countCallerTurn(call.id);
   }
 
@@ -1034,9 +1021,9 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     last.content = `${last.content}\n${consultMarker}`;
   }
 
-  // T1-Sicherungsboden: siehe shouldSuppressEndCall oben (EINE Quelle,
-  // von Budget-agentTurn UND Realtime-bridge.js genutzt, G27). Der Guard erzwingt end_call
-  // NIE - das Modell entscheidet, der Guard unterdrueckt nur ein verfruehtes Auflegen.
+  // T1-Sicherungsboden: siehe shouldSuppressEndCall oben (EINE Quelle, G27). Der Guard
+  // erzwingt end_call NIE - das Modell entscheidet, der Guard unterdrueckt nur ein
+  // verfruehtes Auflegen.
   // Zeitliches Notaus bleibt die guthaben-abgeleitete Notbremse am Call (KS-P3).
   const suppressEndCall = shouldSuppressEndCall(call);
 
@@ -1313,7 +1300,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     // NACH der Ueberbrueckung (der Anrufer hoert den Satz, WAEHREND gesucht wird - genau
     // die Reihenfolge, die der AL-P7b-Kommentar oben vorwegnimmt) und VOR dem
     // tool_result-Mapping (das Ergebnis IST das tool_result). execTool bleibt dadurch
-    // synchron - die Realtime-Bridge ruft es unveraendert direkt auf.
+    // synchron.
     // loopContinues wird durchgereicht: endet der Zug ohnehin, wird KEINE Suche
     // ausgeloest und KEINE Gebuehr gebucht (Regel 1).
     const lookup = await performLookupRequest({ call, toolUses: toolCalls, loopContinues });
@@ -1368,13 +1355,12 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
   });
 
   // GQ-P1: der Turn wurde verdraengt - eine vollstaendigere Fassung derselben Aeusserung
-  // wird gerade beantwortet. Er hat NICHTS gesprochen (der Sprech-Draht des Shims ist im
-  // Moment der Verdraengung stumm), also darf er auch KEINE agent-Zeile ins Transkript
-  // schreiben: sie waere im naechsten Turn "bereits Gesagtes" in der Message-Kette und im
-  // Dashboard/DSGVO-Export das zweite agent-Segment auf dieselbe Aeusserung - genau der
-  // Befund, den dieser Riegel beseitigt. endCall faellt bewusst weg: die Auflege-
-  // Entscheidung trifft der Turn, der die VOLLSTAENDIGE Aeusserung beantwortet.
-  // stopReason bleibt echt - eine Geld-Achse muss den Shim-Notaus weiter ausloesen.
+  // wird gerade beantwortet. Er hat NICHTS gesprochen, also darf er auch KEINE agent-Zeile
+  // ins Transkript schreiben: sie waere im naechsten Turn "bereits Gesagtes" in der
+  // Message-Kette und im Dashboard/DSGVO-Export das zweite agent-Segment auf dieselbe
+  // Aeusserung - genau der Befund, den dieser Riegel beseitigt. endCall faellt bewusst weg:
+  // die Auflege-Entscheidung trifft der Turn, der die VOLLSTAENDIGE Aeusserung beantwortet.
+  // stopReason bleibt echt - eine Geld-Achse muss den Notaus des Aufrufers weiter ausloesen.
   if (abortSignal?.aborted)
     return {
       speech: "",
@@ -1400,8 +1386,8 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
   // ist in test/l0-metrics.test.js woertlich gepinnt). EINE Quelle bleibt firedTools.
   // toolNames statt tools: es sind NAMEN - genau daran haengt die PII-Freiheit der Logzeile.
   // AL-P6: stopReason ist rein additiv (null im Normalfall). Der Aufrufer entscheidet die
-  // REAKTION: der Shim beendet ueber Call-Control, die Budget-Engine ueber den TeXML-
-  // Render. Die PRUEFUNG liegt an genau einer Stelle (oben, roundStopReason).
+  // REAKTION - die Budget-Engine ueber den TeXML-Render. Die PRUEFUNG liegt an genau einer
+  // Stelle (oben, roundStopReason).
   // AL-P7b: zwei rein additive Felder. speechStreamed loest den Aufrufer von der
   // Chunk-ZAHL (die seit der Ueberbrueckung nicht mehr "der Turn-Text ist gesprochen"
   // bedeutet); thinkingSignalSpoken ist der PII-freie Diskriminator der Live-Abnahme.
@@ -1413,7 +1399,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
   // der Fehler, den AL-D2 mit speechWireOpen gerade repariert hat. Folge, ausdruecklich:
   // im heutigen Werkzeugsatz ist jede Runde mit offenem Draht armiert, also ist das Feld
   // in Live-Turns dauerhaft false. Der Live-Diskriminator DIESER Faehigkeit ist deshalb
-  // streamArmedRounds (hier) bzw. streamChunks (Shim), nicht thinkingSignalSpoken.
+  // streamArmedRounds (hier), nicht thinkingSignalSpoken.
   return {
     speech,
     speechStreamed,

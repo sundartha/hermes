@@ -17,34 +17,49 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
-import { FROM_SOURCE } from "../src/store/state-ops.js";
+import { FROM_SOURCE, makeDefaultState, recordCallCostEvidence, callCostEvidence, recordElDetectorCounts } from "../src/store/state-ops.js";
+import { BOOTSTRAP_TENANT_ID, REIFE } from "../src/store/defaults.js";
+import { KOSTENART } from "../src/billing/kostenarten.js";
 import { terminateAndBillCall } from "../src/telephony/call-termination.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { waitUntil, withFetch } from "./helpers.js";
 import {
   CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES,
+  CONVERSATION_DONE_MIT_KOSTEN,
   CONVERSATION_DONE_WITH_ANALYSIS,
+  CONVERSATION_DONE_WITH_DATA_COLLECTION,
   CONVERSATION_FAILED_INVALID_DESTINATION,
   CONVERSATION_MIT_KLAMMER_MARKEN,
+  CONVERSATION_VORFALL_2026_09_02,
 } from "./fixtures/elevenlabs-conversations.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const HTTP_OK = 200;
+// KV2-4-gepinnter Mikro-Cent-Wert von CONVERSATION_DONE_MIT_KOSTEN.metadata.cost_fiat
+// (0,10420301650668388 USD) - EINE Quelle statt eines zweiten, hier getippten Werts.
+const CONVERSATION_DONE_MIT_KOSTEN_MIKRO_CENTS = 10_420_301;
 
 // Faengt genau die Werte ab, die persistProviderResult/applyAnsweredAnchor an den Store
 // weiterreichen - dieselben Felder, die get_transcript und die Kostendecke lesen. Der Call
 // entsteht HIER (statt als Parameter uebergeben zu werden) - sonst waere das Mutieren
 // seiner Felder im endCallRecord-Fake unten ein no-param-reassign-Verstoss (P6/F2).
 function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
+  // F-2 (tasks/kostenv2/befunde-kette.md): NICHT laenger ein Ad-hoc-Objekt. Ein ECHTER
+  // state-ops-Zustand (makeDefaultState), damit recordCallCostEvidence/callCostEvidence
+  // unten an die ECHTEN state-ops-Funktionen delegieren koennen statt in einem
+  // Ad-hoc-'load()' zu landen, das die beiden Methoden nie kannte.
+  const state = makeDefaultState();
   const call = {
     id,
+    tenantId: BOOTSTRAP_TENANT_ID,
     status: "active",
     elevenlabsConversationId,
     answeredAt,
     startedAt: answeredAt,
     endedAt: null,
   };
+  state.calls.push(call);
   const captured = {
     transcript: [],
     summary: undefined,
@@ -56,7 +71,7 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
   };
   const store = {
     getCall: () => call,
-    load: () => ({ calls: [call] }),
+    load: () => state,
     addTranscript: (_id, role, message) => captured.transcript.push({ role, message }),
     recordProviderCallResult: (_id, { summary, objectiveAchieved }) => {
       captured.summary = summary;
@@ -97,15 +112,24 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
       call.endedAt = new Date().toISOString();
       return call;
     },
+    // F-2 (tasks/kostenv2/befunde-kette.md): NICHT laenger weggelassen. Ohne diese zwei
+    // Methoden verschluckte der fail-soft-Zweig aus KV2-4 den Belegweg lautlos -
+    // ausgerechnet in dem Test, der gegen ECHTE Anbieter-Antworten prueft. Delegiert an
+    // die ECHTEN state-ops-Funktionen (kein zweites, vereinfachtes Store-Verhalten).
+    recordCallCostEvidence: (eingabe) => recordCallCostEvidence(state, eingabe),
+    callCostEvidence: (callId) => callCostEvidence(state, callId),
+    // ST3: bewusst DELEGIEREND statt No-op (Muster recordCallCostEvidence direkt darueber)
+    // - AS7/AS8 lesen call.elDetectorCounts am ECHTEN state-ops-Zustand.
+    recordElDetectorCounts: (id, zaehlung) => recordElDetectorCounts(state, id, zaehlung),
   };
-  return { call, store, captured };
+  return { call, store, captured, state };
 }
 
 // EIN Poll-Takt gegen EINEN Gespraechs-Datensatz (Fixture) - der Anbieter antwortet sofort
 // mit dem uebergebenen Datensatz, egal welche Kennung angefragt wird (jeder Test hier
 // fragt genau eine Kennung ab).
 async function pollFixtureConversation(fixture) {
-  const { call, store, captured } = makeCapturingStore({
+  const { call, store, captured, state } = makeCapturingStore({
     id: `call_${fixture.conversation_id}`,
     elevenlabsConversationId: fixture.conversation_id,
     answeredAt: new Date().toISOString(),
@@ -128,7 +152,7 @@ async function pollFixtureConversation(fixture) {
       await waitUntil(() => billed);
     },
   );
-  return { call, captured };
+  return { call, captured, state };
 }
 
 // ---- FAILED: SIP 404 "Invalid destination number" -------------------------------------
@@ -305,4 +329,151 @@ test("Riegel Klammer-Marken: derselbe Datensatz ohne Marken schlaegt NICHT an (P
       "Positiv-Kontrolle der Kontrolle: es wurde ueberhaupt ein Transkript verarbeitet",
     );
   });
+});
+
+// ---- ST3 (O3): die zwei Detektoren am VORFALL 2026-09-02 (AS7/AS8) -----------------------
+// AS7/AS8 leben hier und nicht in test/el-stimme-abnahme.test.js, weil hier der Poll-
+// Treiber (pollFixtureConversation, mitAufgezeichnetemFehlerlog, makeCapturingStore)
+// steht - Verlagerung statt Duplikation (G5). AS7 misst am ECHTEN Vorfalls-Datensatz:
+// BEIDE Defekte derselben Aeusserung ([fröhlich] als B2-Marke, die doppelte Ankuendigung
+// als B1) muessen JE GENAU EINMAL melden, das Zaehlfeld beide tragen - und das
+// Transkript bleibt unveraendert (Art. 50: das Transkript ist der Nachweis, stilles
+// Strippen machte aus dem Nachweis eine Schoenschrift).
+
+// Vollsaetze aus dem gespeicherten Transkript (Satzgrenzen wie die Heuristik) - fuer den
+// R8-Leak-Check: keine dieser Zeilen darf in einer [el-b1]-Meldung stehen. Ab dieser
+// Laenge gilt ein Satz als Vollsatz (kuerzere Fragment tragen keinen Gespraechsinhalt).
+const MINIMALE_VOLLSATZ_LAENGE = 20;
+const vollsaetzeVon = (transcript) =>
+  transcript
+    .flatMap((eintrag) => eintrag.message.split(/\n+|(?<=[.!?])\s+/))
+    .filter((satz) => satz.length > MINIMALE_VOLLSATZ_LAENGE);
+
+test("[abgenommen AS7] Vorfalls-Fixture 2026-09-02: [el-b1] feuert genau 1x, [el-tags] meldet [fröhlich], Transkript unveraendert gespeichert, Meldung ohne Vollsaetze, Fixture anonymisiert", async () => {
+  await mitAufgezeichnetemFehlerlog(async (zeilen) => {
+    const { call, captured } = await pollFixtureConversation(CONVERSATION_VORFALL_2026_09_02);
+
+    // (a) [el-b1]: GENAU EINE Meldung, Trefferzahl 1, die gemessenen Cues, der Zeilenindex
+    // der dritten Sprechzeile (0-basiert, inklusive der Anrufer-Zeile - so wie
+    // persistProviderResult die Liste sieht).
+    const b1Zeilen = zeilen.filter((zeile) => zeile.startsWith("[el-b1]"));
+    assert.equal(b1Zeilen.length, 1, `erwartet genau eine [el-b1]-Meldung, Log: ${zeilen.join(" | ")}`);
+    const b1Meldung = b1Zeilen[0];
+    assert.match(b1Meldung, /treffer=1\b/, `erwartet treffer=1, Meldung: ${b1Meldung}`);
+    assert.ok(b1Meldung.includes("cues=gut+klar"), `die Meldung nennt die Cues nicht: ${b1Meldung}`);
+    assert.ok(b1Meldung.includes("zeilen=2"), `die Meldung nennt den Zeilenindex nicht: ${b1Meldung}`);
+
+    // (b) [el-tags]: dieselbe Aeusserung, derselbe Treffer - die Marke [fröhlich] (B2).
+    const tagsMeldung = zeilen.find((zeile) => zeile.startsWith("[el-tags]"));
+    assert.ok(tagsMeldung, `keine [el-tags]-Meldung. Log: ${zeilen.join(" | ")}`);
+    assert.match(tagsMeldung, /treffer=1\b/, `erwartet treffer=1, Meldung: ${tagsMeldung}`);
+    assert.ok(tagsMeldung.includes("[fröhlich]"), `die Meldung nennt [fröhlich] nicht: ${tagsMeldung}`);
+
+    // (c) Art.-50-Pin: das Transkript kommt WOERTLICH in den Store - Marke, Gedicht-Wortlaut
+    // und die doppelte Ankuendigung unveraendert (Rollen wie der Bestandstest uebersetzt).
+    assert.deepEqual(
+      captured.transcript,
+      [
+        { role: "agent", message: CONVERSATION_VORFALL_2026_09_02.transcript[0].message },
+        { role: "caller", message: CONVERSATION_VORFALL_2026_09_02.transcript[1].message },
+        { role: "agent", message: CONVERSATION_VORFALL_2026_09_02.transcript[2].message },
+      ],
+      "das Vorfall-Transkript muss unveraendert gespeichert werden (MELDEN, NICHT ENTFERNEN)",
+    );
+
+    // (d) Zaehlfeld (Owner-Entscheidung 6): beide Detektoren am Call - PII-frei, nur Zaehler.
+    assert.deepEqual(call.elDetectorCounts, { elTags: 1, elB1: 1 });
+
+    // (e) R8: KEIN Vollsatz des Transkripts steht in der [el-b1]-Meldung - nur Cues und
+    // Indizes duerfen gemeldet werden (PII-/Gespraechsschutz, Absolute Regel 4).
+    for (const satz of vollsaetzeVon(captured.transcript)) {
+      assert.ok(!b1Meldung.includes(satz), `Vollsatz geleakt: "${satz}" in "${b1Meldung}"`);
+    }
+
+    // (f) Anonymisierung der Fixture (Modulkopf-Pflicht): kein Eigentuemernamen, keine
+    // Klartext-Rufnummer (Bestandsmuster: Nummern nur als maskNumber-Token).
+    const fixtureSerialisiert = JSON.stringify(CONVERSATION_VORFALL_2026_09_02);
+    assert.ok(!fixtureSerialisiert.includes("Antonio"), "der Eigentuemernamen (Vorname) steht in der Fixture");
+    assert.ok(!fixtureSerialisiert.includes("Fotiadis"), "der Eigentuemernamen (Nachname) steht in der Fixture");
+    assert.ok(
+      !/(\+|")\d{7,}/.test(fixtureSerialisiert),
+      "eine Klartext-Rufnummer steht in der Fixture (erlaubt sind nur maskNumber-Token)",
+    );
+  });
+});
+
+// AS8: Gegenprobe - dieselben Detektoren an den SAUBEREN Echtfall-Fixtures. Ohne diesen
+// Fall bestuende auch eine Heuristik, die bei JEDEM Gespraech meldet. Positivkontrolle
+// je Runde: es wurde wirklich ein Transkript verarbeitet (Stille ohne Inhalt bewiese
+// nichts), und die Klammer-Marken-Runde trennt die Achsen: elTags zaehlt, elB1 bleibt 0.
+test("[abgenommen AS8] Gegenprobe an sauberen Echtfall-Fixtures (Anruf-7/8-Charakter): beide Detektoren still, Zaehlfeld 0", async () => {
+  const saubereFixtures = [
+    CONVERSATION_DONE_WITH_ANALYSIS,
+    CONVERSATION_DONE_MIT_KOSTEN,
+    CONVERSATION_DONE_WITH_DATA_COLLECTION,
+  ];
+  for (const fixture of saubereFixtures) {
+    await mitAufgezeichnetemFehlerlog(async (zeilen) => {
+      const { call, captured } = await pollFixtureConversation(fixture);
+      assert.ok(
+        captured.transcript.length > 0,
+        "Positivkontrolle: es wurde ueberhaupt ein Transkript verarbeitet",
+      );
+      assert.deepEqual(
+        zeilen.filter((zeile) => zeile.startsWith("[el-tags]") || zeile.startsWith("[el-b1]")),
+        [],
+        `an einer sauberen Fixture meldet ein Detektor: ${zeilen.join(" | ")}`,
+      );
+      assert.deepEqual(
+        call.elDetectorCounts,
+        { elTags: 0, elB1: 0 },
+        "der Normalfall {elTags:0, elB1:0} muss gesetzt werden (kein Verschlucken)",
+      );
+    });
+  }
+
+  // Trennschaerfe: der Anruf-6-Datensatz (Klammer-Defekt OHNE Doppelankuendigung) zaehlt
+  // NUR auf elTags - feuerte [el-b1] hier auch, messe die Heuristik Marken, nicht B1.
+  await mitAufgezeichnetemFehlerlog(async (zeilen) => {
+    const { call, captured } = await pollFixtureConversation(CONVERSATION_MIT_KLAMMER_MARKEN);
+    assert.ok(captured.transcript.length > 0, "Positivkontrolle: es wurde ueberhaupt ein Transkript verarbeitet");
+    assert.equal(
+      zeilen.filter((zeile) => zeile.startsWith("[el-b1]")).length,
+      0,
+      `[el-b1] meldet am Anruf-6-Datensatz (keine Doppelankuendigung): ${zeilen.join(" | ")}`,
+    );
+    assert.deepEqual(call.elDetectorCounts, { elTags: 4, elB1: 0 });
+  });
+});
+
+// ---- F-2 (tasks/kostenv2/befunde-kette.md): der Belegweg laeuft jetzt wirklich mit -----
+// Vorher verschluckte makeCapturingStore#load ("ein Ad-hoc-Objekt ohne
+// recordCallCostEvidence/callCostEvidence") den Belegweg lautlos: recordElevenLabsKosten-
+// Belege faengt JEDEN Fehler fail-soft ab (KV2-4-Vertrag) - ein TypeError landete darin
+// unbemerkt. F-2a/F-2b pruefen den ECHTEN Belegweg auf dem ECHTEN Poll-Pfad.
+
+test("F-2a: der Belegweg laeuft mit - die telnyx_sip-Zeile (reife=erwartet) steht nach dem Poll, unabhaengig vom EL-Betrag", async () => {
+  const { state } = await pollFixtureConversation(CONVERSATION_DONE_WITH_ANALYSIS);
+
+  const belege = callCostEvidence(state, `call_${CONVERSATION_DONE_WITH_ANALYSIS.conversation_id}`);
+  const telnyxSip = belege.find((zeile) => zeile.traeger === KOSTENART.TELNYX_SIP);
+  assert.ok(telnyxSip, "die erwartete telnyx_sip-Zeile fehlt - der Belegweg lief NICHT mit");
+  assert.equal(telnyxSip.reife, REIFE.ERWARTET, "'wir erwarten einen SIP-Beleg' ist unabhaengig vom EL-Betrag");
+});
+
+test("F-2b: CONVERSATION_DONE_MIT_KOSTEN auf dem echten Poll-Pfad - EL-Zeile vorlaeufig mit dem GEMESSENEN Betrag, telnyx_sip erwartet", async () => {
+  const { state } = await pollFixtureConversation(CONVERSATION_DONE_MIT_KOSTEN);
+
+  const belege = callCostEvidence(state, `call_${CONVERSATION_DONE_MIT_KOSTEN.conversation_id}`);
+  const elZeile = belege.find((zeile) => zeile.traeger === KOSTENART.ELEVENLABS_CONVAI);
+  assert.ok(elZeile, "die elevenlabs_convai-Zeile fehlt - der Belegweg lief NICHT mit");
+  assert.equal(elZeile.reife, REIFE.VORLAEUFIG);
+  // 0,10420301650668388 USD -> 10_420_301 Mikro-Cent (bereits in KV2-4 gegen dieselbe
+  // Fixture gepinnt) - HIER erstmals auf dem echten Poll-Pfad, nicht nur per Direktaufruf.
+  assert.equal(elZeile.betragMikroCents, CONVERSATION_DONE_MIT_KOSTEN_MIKRO_CENTS);
+  assert.equal(elZeile.belegRef, CONVERSATION_DONE_MIT_KOSTEN.conversation_id);
+
+  const telnyxSip = belege.find((zeile) => zeile.traeger === KOSTENART.TELNYX_SIP);
+  assert.ok(telnyxSip, "die erwartete telnyx_sip-Zeile fehlt");
+  assert.equal(telnyxSip.reife, REIFE.ERWARTET);
 });

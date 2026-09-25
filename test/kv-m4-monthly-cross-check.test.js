@@ -12,9 +12,11 @@ import {
   makeDefaultState,
   createCall,
   recordUsageEvent,
+  recordCallCostEvidence,
   crossCheckDueMonthKey,
 } from "../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, PROVIDER, USAGE_EVENT_KIND } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, PROVIDER, REIFE, USAGE_EVENT_KIND } from "../src/store/defaults.js";
+import { KOSTENART } from "../src/billing/kostenarten.js";
 import { makeCostCrossCheck } from "../src/billing/cost-cross-check.js";
 import { runSweepTick } from "../src/boot.js";
 import { makeStubStore, fakeConfig, fakeVoiceControl } from "./cost-truing-harness.js";
@@ -44,6 +46,19 @@ function makeTruedCall(state, { monthKey, actualCostMicroCents, provider = PROVI
   call.costTruedAt = costTruedAt;
   call.actualCostMicroCents = actualCostMicroCents;
   return call;
+}
+
+// KV2-8 (f): drei unterscheidbare Betraege - jede Zahl steht fuer genau einen Sachverhalt,
+// damit eine Verwechslung im Test sichtbar wird statt sich wegzukuerzen.
+const TELNYX_BUCH_MICRO_CENTS = 40_100;
+const EL_BUCH_MICRO_CENTS = 560_000;
+const RAUSCHEN_MICRO_CENTS = 999_999;
+
+// Eine Belegzeile im Kosten-Buch (echter state-ops-Schreibweg, kein vereinfachtes Mock).
+function seedBuchzeile(state, { callId, traeger, mikroCents }) {
+  return recordCallCostEvidence(state, {
+    callId, traeger, reife: REIFE.BELEGT, betragMikroCents: mikroCents, waehrung: "USD", quelle: "sweep_kostenbeleg",
+  }).evidence;
 }
 
 function makeLedgerEvent(state, { kind, costCents, occurredAt }) {
@@ -101,15 +116,91 @@ test("KV-M4-1 Rechnungstest mit gestellten Zahlen: drei Rohwerte und zwei Differ
   assert.deepEqual(result, { skipped: false, monthKey: DUE_MONTH_KEY });
 
   // Von Hand gerechnet (keine Naeherung, kein Aufruf derselben Produktionsfunktion):
-  //   diff_rechnung_minus_ist = 1.245.000.000 - 1.198.000.000 = 47.000.000
   //   konvertiert = ceil(1.198.000.000 * 920.000 / 1e12) = ceil(1102,16) = 1103
   //   diff_ist_minus_gate = 1103 - 920 = 183
+  // KV2-8: dieser Monat traegt KEINE Kosten-Buch-Zeile (die Calls sind reine
+  // call-Ebene-Fixturen) -> ist_je_traeger=keine und die RECHNUNGS-Differenz ist
+  // ausdruecklich nicht verfuegbar statt einer erfundenen 0.
   const expectedLine =
     "[cost-cross-check] monat=2026-07 telnyx_rechnung_usd_micro_cent=1245000000 " +
-    "ist_calls_usd_micro_cent=1198000000 diff_rechnung_minus_ist_usd_micro_cent=47000000 " +
-    "gate_carrier_eur_cent=920 ist_konvertiert_eur_cent(rate=920000)=1103 " +
+    "ist_telnyx_usd_micro_cent=null diff_rechnung_minus_ist=nicht_verfuegbar(reason=kein_kostenbuch) " +
+    "ist_je_traeger=keine " +
+    "ist_gesamt_usd_micro_cent=1198000000 gate_carrier_eur_cent=920 " +
+    "ist_konvertiert_eur_cent(rate=920000)=1103 " +
     "diff_ist_minus_gate_eur_cent=183";
   assert.ok(logs.includes(expectedLine), `Log-Zeile weicht ab.\nErwartet: ${expectedLine}\nErhalten: ${logs.join("\n")}`);
+});
+
+// ---- KV2-8 (f): Traeger-Trennung - die Rechnungs-Differenz sieht NUR Telnyx-Traeger ----
+
+test("KV2-8 (f) zwei Traeger im Kosten-Buch: die Rechnungs-Differenz enthaelt den EL-Betrag NICHT", async () => {
+  const state = makeDefaultState();
+  const telnyxCall = makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 0 });
+  const elCall = makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 0 });
+  // Ein Anruf ausserhalb des faelligen Monats - seine Buchzeile darf NICHT mitzaehlen.
+  const fremderMonat = makeTruedCall(state, { monthKey: OTHER_MONTH_KEY, actualCostMicroCents: 0 });
+  // Ein noch NICHT abgeglichener Anruf des faelligen Monats - dito.
+  const offen = makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 0, costTruedAt: null });
+
+  seedBuchzeile(state, { callId: telnyxCall.id, traeger: KOSTENART.TELNYX_CALL_RECORDS, mikroCents: TELNYX_BUCH_MICRO_CENTS });
+  seedBuchzeile(state, { callId: elCall.id, traeger: KOSTENART.ELEVENLABS_CONVAI, mikroCents: EL_BUCH_MICRO_CENTS });
+  seedBuchzeile(state, { callId: fremderMonat.id, traeger: KOSTENART.TELNYX_SIP, mikroCents: RAUSCHEN_MICRO_CENTS });
+  seedBuchzeile(state, { callId: offen.id, traeger: KOSTENART.TELNYX_SIP, mikroCents: RAUSCHEN_MICRO_CENTS });
+
+  // Die call-Ebene traegt fuer diesen Test 0 - so ist ist_gesamt nachweislich eine ANDERE
+  // Groesse als ist_telnyx und der Test kann nicht zufaellig gruen sein.
+  const store = makeStubStore(state);
+  const config = fakeConfig({ providerToBucketRateMicro: 1_000_000 });
+  const invoiceTotalMicroCents = 900_000;
+  const voiceControl = fakeVoiceControl({
+    telnyx: { async fetchMonthlyInvoiceTotal() { return { ok: true, totalMicroCents: invoiceTotalMicroCents, currency: "USD" }; } },
+  });
+  const { runMonthlyCrossCheck } = makeCostCrossCheck({ store, config, voiceControl });
+
+  const logs = await captureConsole(async () => {
+    await runMonthlyCrossCheck(NOW_ISO);
+  });
+
+  const zeile = logs.find((eintrag) => eintrag.startsWith("[cost-cross-check] monat="));
+  assert.ok(zeile, `keine Gegenprobe-Zeile: ${logs.join("\n")}`);
+  // GERECHNET, nicht abgeschrieben: die Rechnungs-Differenz bezieht sich AUSSCHLIESSLICH
+  // auf den Telnyx-Traeger - der EL-Betrag steckt NICHT darin.
+  const erwarteteDiff = invoiceTotalMicroCents - TELNYX_BUCH_MICRO_CENTS;
+  assert.ok(zeile.includes(`ist_telnyx_usd_micro_cent=${TELNYX_BUCH_MICRO_CENTS}`), zeile);
+  assert.ok(zeile.includes(`diff_rechnung_minus_ist_usd_micro_cent=${erwarteteDiff}`), zeile);
+  assert.ok(
+    !zeile.includes(`diff_rechnung_minus_ist_usd_micro_cent=${invoiceTotalMicroCents - (TELNYX_BUCH_MICRO_CENTS + EL_BUCH_MICRO_CENTS)}`),
+    `die Mischdifferenz (Telnyx-Rechnung gegen Telnyx+EL) darf NICHT in der Zeile stehen: ${zeile}`,
+  );
+  // Beide Traeger sind sichtbar, alphabetisch, mit ihrem eigenen Betrag.
+  assert.ok(
+    zeile.includes(`ist_je_traeger=${KOSTENART.ELEVENLABS_CONVAI}(${EL_BUCH_MICRO_CENTS}),${KOSTENART.TELNYX_CALL_RECORDS}(${TELNYX_BUCH_MICRO_CENTS})`),
+    zeile,
+  );
+  // ist_gesamt kommt weiterhin von der call-Ebene und ist hier nachweislich eine andere Zahl.
+  assert.ok(zeile.includes("ist_gesamt_usd_micro_cent=0"), zeile);
+  assert.notEqual(TELNYX_BUCH_MICRO_CENTS, 0, "Vorbedingung: ist_telnyx !== ist_gesamt");
+});
+
+test("KV2-8 (f) leeres Kosten-Buch: ist_je_traeger=keine und KEINE erfundene Rechnungs-Differenz", async () => {
+  const state = makeDefaultState();
+  makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 4_010_000 });
+  const store = makeStubStore(state);
+  const config = fakeConfig();
+  const voiceControl = fakeVoiceControl({
+    telnyx: { async fetchMonthlyInvoiceTotal() { return { ok: true, totalMicroCents: 5_000_000, currency: "USD" }; } },
+  });
+  const { runMonthlyCrossCheck } = makeCostCrossCheck({ store, config, voiceControl });
+
+  const logs = await captureConsole(async () => {
+    await runMonthlyCrossCheck(NOW_ISO);
+  });
+
+  const zeile = logs.find((eintrag) => eintrag.startsWith("[cost-cross-check] monat="));
+  assert.ok(zeile.includes("ist_je_traeger=keine"), zeile);
+  assert.ok(zeile.includes("diff_rechnung_minus_ist=nicht_verfuegbar(reason=kein_kostenbuch)"), zeile);
+  assert.ok(!zeile.includes("diff_rechnung_minus_ist_usd_micro_cent="), `keine erfundene Differenz: ${zeile}`);
+  assert.ok(zeile.includes("ist_gesamt_usd_micro_cent=4010000"), `ist_gesamt kommt weiterhin von der call-Ebene: ${zeile}`);
 });
 
 test("KV-M4-2 Idempotenz: zwei Sweeps im selben Kalendermonat loesen genau EINEN Provider-Aufruf aus", async () => {
@@ -196,7 +287,7 @@ test("KV-M4-4 Provider antwortet mit Fehler: kein Wurf, Log zeigt nicht_verfuegb
 
   assert.deepEqual(result, { skipped: false, monthKey: DUE_MONTH_KEY }, "runMonthlyCrossCheck wirft NICHT weiter");
   assert.ok(
-    logs.some((l) => l === "[cost-cross-check] monat=2026-07 telnyx_rechnung=nicht_verfuegbar(reason=provider_error) ist_calls_usd_micro_cent=100 gate_carrier_eur_cent=0"),
+    logs.some((zeile) => zeile === "[cost-cross-check] monat=2026-07 telnyx_rechnung=nicht_verfuegbar(reason=provider_error) ist_je_traeger=keine ist_gesamt_usd_micro_cent=100 gate_carrier_eur_cent=0"),
     `unerwartete Log-Zeile: ${logs.join("\n")}`,
   );
 
@@ -225,7 +316,7 @@ test("KV-M4-5 Provider liefert keine Rechnung fuer den Monat: dieselbe Behandlun
 
   assert.deepEqual(result, { skipped: false, monthKey: DUE_MONTH_KEY });
   assert.ok(
-    logs.some((l) => l.includes("telnyx_rechnung=nicht_verfuegbar(reason=invoice_not_found)")),
+    logs.some((zeile) => zeile.includes("telnyx_rechnung=nicht_verfuegbar(reason=invoice_not_found)")),
     `unerwartete Log-Zeile: ${logs.join("\n")}`,
   );
 
@@ -249,7 +340,7 @@ test("KV-M4-6 Leerer Monat: keine Calls, keine Ledger-Belege -> beide Summen 0 (
 
   assert.deepEqual(result, { skipped: false, monthKey: DUE_MONTH_KEY });
   assert.ok(
-    logs.some((l) => l === "[cost-cross-check] monat=2026-07 telnyx_rechnung=nicht_verfuegbar(reason=invoice_not_found) ist_calls_usd_micro_cent=0 gate_carrier_eur_cent=0"),
+    logs.some((zeile) => zeile === "[cost-cross-check] monat=2026-07 telnyx_rechnung=nicht_verfuegbar(reason=invoice_not_found) ist_je_traeger=keine ist_gesamt_usd_micro_cent=0 gate_carrier_eur_cent=0"),
     `unerwartete Log-Zeile: ${logs.join("\n")}`,
   );
 });
@@ -267,7 +358,7 @@ test("KV-M4-7 erster Lauf ueberhaupt: crossCheckDueMonthKey liefert den Vormonat
 async function captureConsoleError(fn) {
   const lines = [];
   const orig = console.error;
-  console.error = (...a) => lines.push(a.map(String).join(" "));
+  console.error = (...teile) => lines.push(teile.map(String).join(" "));
   try {
     await fn();
   } finally {
@@ -276,91 +367,76 @@ async function captureConsoleError(fn) {
   return lines;
 }
 
-test("KV-M4-8 Sweep-Isolation: ein werfender costCrossCheck haelt costTruing, provisioning und outageWatch NICHT auf (Test gegen die boot.js-Verdrahtung selbst)", async () => {
-  let costTruingCalled = false;
-  let provisioningCalled = false;
-  let outageWatchCalled = false;
-  const costTruingFake = { async runCostTruingSweep() { costTruingCalled = true; return {}; } };
-  const provisioningFake = { async settleDueNumberMonthMeters() { provisioningCalled = true; return {}; } };
-  const throwingCostCrossCheck = { async runMonthlyCrossCheck() { throw new Error("kv-m4-8-boom"); } };
-  // OUTBOUND-E3b: vierter, unabhaengiger Zweig - er wird trotz der drei Wuerfe der
-  // uebrigen Zweige ausgefuehrt UND wirft selbst, um die Isolation in BEIDE Richtungen zu
-  // belegen (er haelt die anderen nicht auf, die anderen halten ihn nicht auf).
-  // C8b (Review-Blocker Runde 2): FUENFTER Zweig (Alarmkanal-Selbsttest) - derselbe
-  // Fake muss BEIDE Methoden bedienen, die runSweepTick auf outageWatch aufruft.
-  // C8 (Nachbesserung, F-8): SECHSTER Zweig (HOLD-Eskalation) - der Fake muss ALLE DREI
-  // Methoden bedienen, sonst wirft runSweepTick synchron auf einer undefined-Methode statt
-  // die Isolation der uebrigen Zweige zu belegen.
-  let selfTestCalled = false;
-  let holdEscalationCalled = false;
-  const throwingOutageWatch = {
-    async runRecoverySweep() {
-      outageWatchCalled = true;
-      throw new Error("kv-m4-8-outage-boom");
-    },
-    async runAlertChannelSelfTest() {
-      selfTestCalled = true;
-      throw new Error("kv-m4-8-self-test-boom");
-    },
-    async runHoldEscalationSweep() {
-      holdEscalationCalled = true;
-      throw new Error("kv-m4-8-hold-escalation-boom");
-    },
+// Die WERFENDEN Zweige von runSweepTick - je Eintrag: das Objekt im deps-Buendel, die
+// Methode, die runSweepTick darauf ruft, das Log-Praefix ihres .catch() und der Fehlertext
+// der Attrappe. EINE Liste statt neun handgerollter Attrappen + neun Assertionspaaren
+// (G5): ein neuer Zweig kommt als EIN Eintrag dazu, nicht als drei verstreute Stellen.
+//
+// Warum ALLE werfen: die Isolation muss in BEIDE Richtungen belegt sein - ein werfender
+// Zweig haelt die uebrigen nicht auf, und die uebrigen halten ihn nicht auf. Fehlt auch
+// nur eine Methode in der Attrappe, wirft runSweepTick SYNCHRON auf undefined (der Wurf
+// liegt VOR dem Promise, das .catch() faengt ihn nicht) - genau der Produktionsschaden,
+// den test/sweep-fabrik-vertrag.test.js strukturell abdeckt.
+const WERFENDE_ZWEIGE = [
+  { zweig: "costCrossCheck", methode: "runMonthlyCrossCheck", logPraefix: "[cost-cross-check]", fehler: "kv-m4-8-boom" },
+  { zweig: "outageWatch", methode: "runRecoverySweep", logPraefix: "[outage-watch]", fehler: "kv-m4-8-outage-boom" },
+  { zweig: "outageWatch", methode: "runAlertChannelSelfTest", logPraefix: "[outage-watch]", fehler: "kv-m4-8-self-test-boom" },
+  { zweig: "outageWatch", methode: "runHoldEscalationSweep", logPraefix: "[outage-watch]", fehler: "kv-m4-8-hold-escalation-boom" },
+  { zweig: "driftWatch", methode: "runDriftSweep", logPraefix: "[drift-watch]", fehler: "kv-m4-8-drift-boom" },
+  { zweig: "paidWithoutNumberWatch", methode: "runPaidWithoutNumberSweep", logPraefix: "[paid-no-number]", fehler: "kv-m4-8-paid-no-number-boom" },
+  { zweig: "provisionRetryWatch", methode: "runProvisionRetrySweep", logPraefix: "[provision-retry-sweep]", fehler: "kv-m4-8-provision-retry-boom" },
+  { zweig: "priceDriftWatch", methode: "runPriceDriftSweep", logPraefix: "[price-drift]", fehler: "kv-m4-8-price-drift-boom" },
+];
+
+// Die beiden Zweige, die SAUBER zurueckkehren - an ihnen wird gemessen, dass die Wuerfe
+// der uebrigen sie nicht aufhalten.
+const STILLE_ZWEIGE = [
+  { zweig: "costTruing", methode: "runCostTruingSweep" },
+  { zweig: "provisioning", methode: "settleDueNumberMonthMeters" },
+];
+
+const laufSchluessel = ({ zweig, methode }) => `${zweig}.${methode}`;
+
+// Build (P13): das vollstaendige deps-Buendel fuer runSweepTick + ein Protokoll, welche
+// Methode tatsaechlich lief.
+function baueSweepAttrappen() {
+  const gerufen = {};
+  const zweige = {};
+  const attrappe = (eintrag, rumpf) => {
+    zweige[eintrag.zweig] = zweige[eintrag.zweig] || {};
+    zweige[eintrag.zweig][eintrag.methode] = async () => {
+      gerufen[laufSchluessel(eintrag)] = true;
+      return rumpf();
+    };
   };
-  // OUTBOUND-E4: SIEBTER, unabhaengiger Zweig (Drift-Waechter) - er wird trotz der
-  // Wuerfe der uebrigen sechs Zweige ausgefuehrt UND wirft selbst (Isolation in BEIDE
-  // Richtungen). Zusatzauftrag A: OHNE diesen siebten Fake in der Attrappe waere GENAU
-  // dieser Concern (Fabrik-Rueckgabe vs. tatsaechlich gerufene Methoden) hier sofort
-  // sichtbar geworden - test/sweep-fabrik-vertrag.test.js deckt ihn jetzt strukturell.
-  let driftWatchCalled = false;
-  const throwingDriftWatch = {
-    async runDriftSweep() {
-      driftWatchCalled = true;
-      throw new Error("kv-m4-8-drift-boom");
-    },
-  };
+  for (const eintrag of STILLE_ZWEIGE) attrappe(eintrag, () => ({}));
+  for (const eintrag of WERFENDE_ZWEIGE)
+    attrappe(eintrag, () => {
+      throw new Error(eintrag.fehler);
+    });
+  return { zweige, gerufen };
+}
+
+test("KV-M4-8 Sweep-Isolation: ein werfender Zweig haelt keinen der uebrigen auf (Test gegen die boot.js-Verdrahtung selbst)", async () => {
+  const { zweige, gerufen } = baueSweepAttrappen();
 
   const errorLogs = await captureConsoleError(async () => {
-    // runSweepTick selbst ist SYNCHRON (kein await zwischen den sieben Zweigen) - der
+    // runSweepTick selbst ist SYNCHRON (kein await zwischen den neun Zweigen) - der
     // Aufruf darf nicht werfen, obwohl mehrere Zweige rejecten.
-    assert.doesNotThrow(() => {
-      runSweepTick({
-        costTruing: costTruingFake,
-        provisioning: provisioningFake,
-        costCrossCheck: throwingCostCrossCheck,
-        outageWatch: throwingOutageWatch,
-        driftWatch: throwingDriftWatch,
-      });
-    });
-    // Alle sieben Zweige sind fire-and-forget - eine Microtask-Runde reicht, damit auch
+    assert.doesNotThrow(() => runSweepTick(zweige));
+    // Alle neun Zweige sind fire-and-forget - eine Microtask-Runde reicht, damit auch
     // die werfenden Promises ihr .catch() durchlaufen, bevor der Test endet.
     await new Promise((resolve) => setImmediate(resolve));
   });
 
-  assert.equal(costTruingCalled, true, "costTruing.runCostTruingSweep lief trotz werfendem costCrossCheck");
-  assert.equal(provisioningCalled, true, "provisioning.settleDueNumberMonthMeters lief trotz werfendem costCrossCheck");
-  assert.equal(outageWatchCalled, true, "outageWatch.runRecoverySweep lief trotz werfendem costCrossCheck");
-  assert.ok(
-    errorLogs.some((l) => l === "[cost-cross-check] kv-m4-8-boom"),
-    `der Wurf wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
-  );
-  assert.ok(
-    errorLogs.some((zeile) => zeile === "[outage-watch] kv-m4-8-outage-boom"),
-    `der vierte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
-  );
-  assert.equal(selfTestCalled, true, "outageWatch.runAlertChannelSelfTest lief trotz werfendem costCrossCheck");
-  assert.ok(
-    errorLogs.some((zeile) => zeile === "[outage-watch] kv-m4-8-self-test-boom"),
-    `der fuenfte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
-  );
-  assert.equal(holdEscalationCalled, true, "outageWatch.runHoldEscalationSweep lief trotz werfendem costCrossCheck");
-  assert.ok(
-    errorLogs.some((zeile) => zeile === "[outage-watch] kv-m4-8-hold-escalation-boom"),
-    `der sechste Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
-  );
-  assert.equal(driftWatchCalled, true, "driftWatch.runDriftSweep lief trotz der Wuerfe der uebrigen Zweige");
-  assert.ok(
-    errorLogs.some((zeile) => zeile === "[drift-watch] kv-m4-8-drift-boom"),
-    `der siebte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
-  );
+  for (const eintrag of STILLE_ZWEIGE)
+    assert.equal(gerufen[laufSchluessel(eintrag)], true, `${laufSchluessel(eintrag)} lief trotz der Wuerfe der uebrigen Zweige nicht`);
+
+  for (const eintrag of WERFENDE_ZWEIGE) {
+    assert.equal(gerufen[laufSchluessel(eintrag)], true, `${laufSchluessel(eintrag)} lief trotz der Wuerfe der uebrigen Zweige nicht`);
+    assert.ok(
+      errorLogs.some((zeile) => zeile === `${eintrag.logPraefix} ${eintrag.fehler}`),
+      `${laufSchluessel(eintrag)}: der Wurf wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
+    );
+  }
 });

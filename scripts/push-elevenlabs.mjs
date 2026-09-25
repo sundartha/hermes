@@ -6,12 +6,14 @@
 // Wege - Handarbeit im Dashboard oder ein Wegwerf-Spike. Beides ist nicht
 // wiederholbar und hinterlaesst keine Spur, welcher Wert warum gesetzt wurde.
 //
-// DIE SIEBEN RIEGEL, in der Reihenfolge ihrer Wichtigkeit:
+// DIE ACHT RIEGEL, in der Reihenfolge ihrer Wichtigkeit:
 //
-// 1. GESPERRTE FELDER. retention_days und record_voice werden NIE geschrieben,
-//    in KEINE Richtung - weder als genanntes Feld (Abbruch vor jedem
-//    Netzzugriff) noch als blinder Passagier im fertigen Patch-Koerper
-//    (Abbruch vor dem PATCH). Begruendung an GESPERRTE_FELDER.
+// 1. GESPERRTE FELDER. retention_days wird NIE geschrieben, in KEINE Richtung -
+//    weder als genanntes Feld (Abbruch vor jedem Netzzugriff) noch als blinder
+//    Passagier im fertigen Patch-Koerper (Abbruch vor dem PATCH). record_voice
+//    ist nennbar, aber NUR in Richtung false: jeder andere Wert im fertigen
+//    Koerper bricht vor dem PATCH ab. Begruendung an GESPERRTE_FELDER und
+//    RECORD_VOICE_ERLAUBT.
 // 2. KEIN BLINDER PASSAGIER. Jeder Blatt-Pfad des fertigen Koerpers muss unter
 //    einem Pfad liegen, den der Lauf ausdruecklich zum Schreiben gewaehlt hat.
 //    Geprueft wird der KOERPER, nicht die Absicht, die ihn gebaut hat - sonst
@@ -30,8 +32,8 @@
 // 5. NUR DIE BENANNTEN FELDER. Mit --felder=<feld,feld> wird genau gesagt, was
 //    geschrieben werden darf; jedes andere besessene Feld bleibt unberuehrt,
 //    auch wenn es abweicht. Das ist die Grundfunktion und keine Erweiterung:
-//    "abweichend" heisst nicht "soll geaendert werden". Die Aufbewahrungs-Felder
-//    etwa stehen am Live-Agenten bewusst anders als in der Vorlage - ein Push,
+//    "abweichend" heisst nicht "soll geaendert werden". Die Aufbewahrung
+//    (retention_days) etwa steht am Live-Agenten bewusst anders als in der Vorlage - ein Push,
 //    der sie als Nebenwirkung mitnimmt, dreht eine Entscheidung um, die niemand
 //    zur Abstimmung gestellt hat. Ein unbekannter Feldname bricht ab: eine
 //    Auswahl, die Tippfehler verschluckt, schuetzt nicht.
@@ -50,6 +52,14 @@
 //    eine Besitz-Erklaerung, die nicht traegt, eine verletzte Regel der Vorlage
 //    oder ein unverstandenes Argument: Abbruch mit Exit 1, ohne jeden
 //    Schreibversuch.
+// 8. FREIGABEN-WACHE (IEL-B9, Spec §4 Agent-Overrides). Traegt der fertige Koerper
+//    den Agent-Schalter "Init-Daten per Webhook holen" (init_webhook_schalter), wird
+//    er NUR geschrieben, wenn --felder ihn ausdruecklich nennt, der PATCH unter
+//    platform_settings.overrides NICHTS ausser diesem Schluessel traegt, die
+//    Freigaben-Karte (conversation_config_override) lesbar ist und keine
+//    agent.prompt-Freigabe offen steht. Die Karte wird vorher geschnappschusst und
+//    nachher tief verglichen - ein Schalter-PATCH, der sie veraendert, ist ROT.
+//    Laeuft auch im Trockenlauf.
 //
 // WAS DAS WERKZEUG NICHT KANN: Felder, deren Vergleichs-Art mehrere Stellen zu
 // einer MENGE zusammenfasst (namen, variablen, texte). Aus "diese Namen fehlen"
@@ -70,14 +80,45 @@
 // abweichen, liest nach dem Schreiben erneut und meldet ROT, sobald die
 // Wirklichkeit schlechter ausfaellt als die Vorhersage.
 //
+// WORKSPACE-INIT-WEBHOOK (IEL-B9, Spec E14/E21): ein eigener Modus, der KEINEN
+// Agenten, sondern die Workspace-Settings schreibt
+// (conversation_initiation_client_data_webhook) - er gilt fuer JEDEN Agenten des
+// Workspace mit Schalter.
+// - Ziel ist init-webhook-ziel.js#initWebhookUrl, eine Repo-Konstante - nie die
+//   oeffentliche Adresse der lokalen Konfiguration.
+// - Vor dem Setzen steht das Ziel-Urteil aus der Render-API fuer
+//   HERMES_RENDER_SERVICE_ID; ROT heisst 0 Aufrufe an ElevenLabs. RENDER_API_KEY
+//   kommt ueber src/config.js (Werkzeug-Schluessel, nie im Dienst) und wird nie ausgegeben.
+// - Der Header x-hermes-init-token wird als Workspace-Secret-Verweis ({secret_id})
+//   geschrieben, NIE als String. Dieses Skript liest keinen Geheimnis-Wert - auch
+//   nicht das Init-Token aus der Env; das Secret legt B10 beim Anbieter an.
+// - Trockenlauf ist der Default; --ausfuehren schreibt, liest zurueck und prueft.
+// - --entfernen laeuft OHNE Ziel-Urteil: er schreibt weder Adresse noch Secret, und
+//   der Rueckweg darf nicht davon abhaengen, ob Render lesbar ist.
+// - GEGENPROBE: ob der PATCH andere Workspace-Settings ersetzt, ist ungemessen.
+//   Deshalb werden alle uebrigen Top-Level-Schluessel vorher und nachher tief
+//   verglichen; eine Abweichung ist ROT (nur Schluesselnamen, nie Werte).
+//
 // Aufruf:  npm run elevenlabs:push                        (Trockenlauf, alle Felder Kandidat)
 //          npm run elevenlabs:push -- <agent_id>          (Trockenlauf, anderer Agent)
 //          npm run elevenlabs:push -- --felder=prompt     (Trockenlauf, nur dieses Feld)
 //          npm run elevenlabs:push -- --felder=prompt --ausfuehren   (schreibt wirklich)
+//          npm run elevenlabs:push -- --workspace-init-webhook --secret-id=<id> [--ausfuehren]
+//          npm run elevenlabs:push -- --workspace-init-webhook --entfernen [--ausfuehren]
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 import { config } from "../src/config.js";
+import { fetchConvaiSettings, patchConvaiSettings } from "../src/elevenlabs/convai.js";
+import {
+  HERMES_RENDER_SERVICE_ID,
+  ZIEL_URTEIL,
+  initWebhookUrl,
+  renderDienstZiel,
+  zielUrteil,
+} from "../src/elevenlabs/init-webhook-ziel.js";
+import { INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.js";
 
 import {
   AGENTEN_PFAD_PREFIX,
@@ -95,6 +136,7 @@ import {
   SCHREIBWEG_JE_SCHLUESSEL,
   besesseneFeldNamen,
   eintraegeAus,
+  livePfadeVon,
   setzeAnPfad,
   vergleicheBesitz,
   wertAnPfad,
@@ -116,6 +158,17 @@ const ARG_START = 2;
 const LISTEN_TRENNER = ", ";
 // Grosszuegiger als der Lese-Abruf: der Patch traegt den vollen System-Prompt.
 const SCHREIB_TIMEOUT_MS = 30000;
+// IEL-B9: der eigene Modus fuer die Workspace-Settings und seine zwei Pflicht-Alternativen.
+const WORKSPACE_INIT_WEBHOOK_FLAG = "--workspace-init-webhook";
+const SECRET_ID_FLAG = "--secret-id";
+const ENTFERNEN_FLAG = "--entfernen";
+// IEL-B9: die zwei Besitz-Felder, die die Freigaben-Wache liest - ihre Pfade kommen aus der
+// Vorlage (livePfadeVon), nicht aus Literalen hier.
+const INIT_WEBHOOK_SCHALTER_FELD = "init_webhook_schalter";
+const FREIGABEN_FELD = "conversation_config_override_erlaubnisse";
+const AGENT_PROMPT_FREIGABEN = "agent.prompt";
+export const INIT_WEBHOOK_SETTINGS_SCHLUESSEL = "conversation_initiation_client_data_webhook";
+const OHNE_WERT_MARKE = "-";
 
 const { apiKey, apiBase } = config.voice.elevenLabsPlayTts;
 
@@ -142,6 +195,32 @@ function mitFehler(stand, fehler) {
   return { ...stand, fehler: [...stand.fehler, fehler] };
 }
 
+// Die Schalter OHNE Wert und das Feld des Standes, das sie setzen. EINE Tabelle statt je
+// eines Zweiges: "nimmt keinen Wert" ist fuer alle dieselbe Regel.
+const SCHALTER_OHNE_WERT = Object.freeze({
+  [BESTAETIGUNGS_FLAG]: "ausfuehren",
+  [WORKSPACE_INIT_WEBHOOK_FLAG]: "workspaceInitWebhook",
+  [ENTFERNEN_FLAG]: "entfernen",
+});
+
+function mitFeldauswahl({ stand, token, wert }) {
+  const namen = feldNamenAus(wert);
+  if (namen.length === 0) {
+    return mitFehler(
+      stand,
+      `${token} - ${FELDER_FLAG} braucht mindestens einen Feldnamen, z.B. ${FELDER_FLAG}=prompt${FELDER_TRENNER}language`,
+    );
+  }
+  return { ...stand, auswahl: [...(stand.auswahl ?? []), ...namen] };
+}
+
+function mitSecretId({ stand, token, wert }) {
+  if (wert === null || wert.trim() === "") {
+    return mitFehler(stand, `${token} - ${SECRET_ID_FLAG} braucht einen Wert, z.B. ${SECRET_ID_FLAG}=<secret_id>`);
+  }
+  return { ...stand, secretId: wert };
+}
+
 // EIN Schalter, auf den bisherigen Stand angewandt - liefert den neuen Stand,
 // ohne den alten zu veraendern. Alles Unverstandene wird zu einem Eintrag in
 // fehler[], nie zu einem stillen Ueberspringen: wer "--ausfuehren=true" oder
@@ -149,25 +228,36 @@ function mitFehler(stand, fehler) {
 // wortlos verschluckt, schreibt am Ende etwas anderes als das Gemeinte.
 function wendeSchalterAn(stand, token) {
   const { name, wert } = zerlegeSchalter(token);
-  if (name === BESTAETIGUNGS_FLAG) {
-    if (wert !== null)
-      return mitFehler(stand, `${token} - ${BESTAETIGUNGS_FLAG} nimmt keinen Wert`);
-    return { ...stand, ausfuehren: true };
+  if (Object.hasOwn(SCHALTER_OHNE_WERT, name)) {
+    if (wert !== null) return mitFehler(stand, `${token} - ${name} nimmt keinen Wert`);
+    return { ...stand, [SCHALTER_OHNE_WERT[name]]: true };
   }
-  if (name === FELDER_FLAG) {
-    const namen = feldNamenAus(wert);
-    if (namen.length === 0) {
-      return mitFehler(
-        stand,
-        `${token} - ${FELDER_FLAG} braucht mindestens einen Feldnamen, z.B. ${FELDER_FLAG}=prompt${FELDER_TRENNER}language`,
-      );
-    }
-    return { ...stand, auswahl: [...(stand.auswahl ?? []), ...namen] };
-  }
+  if (name === FELDER_FLAG) return mitFeldauswahl({ stand, token, wert });
+  if (name === SECRET_ID_FLAG) return mitSecretId({ stand, token, wert });
   return mitFehler(
     stand,
-    `${token} - unbekannter Schalter (bekannt: ${BESTAETIGUNGS_FLAG}, ${FELDER_FLAG}=<feld${FELDER_TRENNER}feld>)`,
+    `${token} - unbekannter Schalter (bekannt: ${BESTAETIGUNGS_FLAG}, ${FELDER_FLAG}=<feld${FELDER_TRENNER}feld>, ${WORKSPACE_INIT_WEBHOOK_FLAG}, ${SECRET_ID_FLAG}=<secret_id>, ${ENTFERNEN_FLAG})`,
   );
+}
+
+// Rein. Der Workspace-Modus schreibt Settings, keinen Agenten: Feldauswahl und
+// Agenten-Kennung sind dort Widersprueche, und er verlangt GENAU eine Absicht -
+// setzen (--secret-id) oder entfernen. Umgekehrt sind beide ohne den Modus sinnlos.
+function modusFehler(stand, frei) {
+  const hatAbsicht = stand.secretId !== null || stand.entfernen;
+  if (!stand.workspaceInitWebhook) {
+    return hatAbsicht ? [`${SECRET_ID_FLAG} und ${ENTFERNEN_FLAG} gelten nur mit ${WORKSPACE_INIT_WEBHOOK_FLAG}`] : [];
+  }
+  const fehler = [];
+  if (stand.auswahl !== null || frei.length > 0) {
+    fehler.push(
+      `${WORKSPACE_INIT_WEBHOOK_FLAG} schreibt Workspace-Settings und keinen Agenten - weder ${FELDER_FLAG} noch eine Agenten-Kennung`,
+    );
+  }
+  if ((stand.secretId !== null) === stand.entfernen) {
+    fehler.push(`${WORKSPACE_INIT_WEBHOOK_FLAG} verlangt genau eins: ${SECRET_ID_FLAG}=<secret_id> oder ${ENTFERNEN_FLAG}`);
+  }
+  return fehler;
 }
 
 // Freies Argument = Agenten-Kennung, Schalter = Verhalten. auswahl === null
@@ -177,9 +267,20 @@ function leseArgumente(argv) {
   const argumente = argv.slice(ARG_START);
   const frei = argumente.filter((wert) => !wert.startsWith(FLAG_PRAEFIX));
   const schalter = argumente.filter((wert) => wert.startsWith(FLAG_PRAEFIX));
-  const start = { ausfuehren: false, auswahl: null, fehler: [] };
+  const start = {
+    ausfuehren: false,
+    auswahl: null,
+    workspaceInitWebhook: false,
+    secretId: null,
+    entfernen: false,
+    fehler: [],
+  };
   const stand = schalter.reduce(wendeSchalterAn, start);
-  return { ...stand, agentId: frei[0] || LIVE_AGENT_ID };
+  return {
+    ...stand,
+    fehler: [...stand.fehler, ...modusFehler(stand, frei)],
+    agentId: frei[0] || LIVE_AGENT_ID,
+  };
 }
 
 // Die Auswahl gegen die Besitz-Erklaerung der Vorlage. Ein Name, den die
@@ -333,7 +434,8 @@ export function mitSchreibwerten({ schreibbar, vorlage, live }) {
 // Der Patch-Koerper entsteht AUSSCHLIESSLICH aus den besessenen Live-Pfaden der
 // abweichenden Felder. Es gibt keinen Zweig, der eine ganze Konfiguration
 // uebernimmt - was hier nicht als Pfad steht, kann nicht gesendet werden.
-function bauePatchKoerper(schreibbar) {
+// Exportiert fuer den Test, der eine im Speicher veraenderte Vorlage durch dieselben reinen Schritte schickt (ladeVorlage hat keine Naht).
+export function bauePatchKoerper(schreibbar) {
   const koerper = {};
   for (const abweichung of schreibbar) {
     setzeAnPfad(koerper, zielPfad(abweichung), abweichung.schreibWert);
@@ -357,26 +459,40 @@ function simuliereSchreiben({ live, schreibbar }) {
 
 // --- Riegel am fertigen Koerper (Riegel 1 und 2) ---
 
-// DIE SPERRLISTE. Diese zwei Felder schreibt dieses Werkzeug NIE - unabhaengig
+// DIE SPERRLISTE. Dieses Feld schreibt dieses Werkzeug NIE - unabhaengig
 // davon, in welche Richtung der Wert ginge.
 //
-// WARUM GENAU DIESE ZWEI: sie tragen die Eigentuemer-Entscheidung vom
-// 2026-08-15 - Aufbewahrung (retention_days) und Mitschnitt (record_voice)
-// bleiben vorerst AN, solange an echten Anrufen gemessen wird; VOR DEM ERSTEN
-// FREMDKUNDEN wird auf G7 zurueckgedreht. Beides sind keine
-// Konfigurationsfragen, sondern Aussagen darueber, was mit den Gespraechen
-// echter Menschen geschieht. Reist so ein Feld versehentlich mit, ist der
-// Schaden nicht "falscher Wert", sondern ein Rechtsproblem - und ein
-// versehentliches ABschalten waere genauso falsch wie ein versehentliches
-// Anschalten, deshalb sperrt die Liste beide Richtungen.
+// WARUM retention_days: die Aufbewahrung traegt die Eigentuemer-Entscheidung vom
+// 2026-08-15 - sie bleibt vorerst AN, solange an echten Anrufen gemessen wird;
+// VOR DEM ERSTEN FREMDKUNDEN wird auf G7 zurueckgedreht. Das ist keine
+// Konfigurationsfrage, sondern eine Aussage darueber, was mit den Gespraechen
+// echter Menschen geschieht, und an ihr haengen die Transkripte. Reist das Feld
+// versehentlich mit, ist der Schaden nicht "falscher Wert", sondern ein
+// Rechtsproblem oder verlorene Transkripte - ein versehentliches Kuerzen waere
+// genauso falsch wie ein Verlaengern, deshalb sperrt die Liste beide Richtungen.
 //
 // WARUM ZUSAETZLICH ZUR AUSNAHME IN DER VORLAGE: die Ausnahme ("ausgenommen",
 // Riegel 5) ist ein Riegel gegen Unachtsamkeit und laesst sich durch Nennung
 // uebersteuern - sie schuetzt gegen den unbedachten Lauf, nicht gegen den
 // falschen Tastendruck und nicht gegen einen kuenftigen Umbau, der den Koerper
-// anders baut. Diese Liste laesst sich nicht uebersteuern; das Zurueckdrehen
-// auf G7 geschieht bewusst ausserhalb dieses Werkzeugs und damit von Hand.
-const GESPERRTE_FELDER = ["retention_days", "record_voice"];
+// anders baut. Diese Liste laesst sich nicht uebersteuern; das Zurueckdrehen der
+// Aufbewahrung auf G7 geschieht bewusst ausserhalb dieses Werkzeugs.
+const GESPERRTE_FELDER = ["retention_days"];
+
+// DIE RICHTUNGS-AUSNAHME. record_voice (Audio-Mitschnitt) stand bis 2026-09-15
+// ebenfalls auf der Sperrliste. Owner-Entscheidung O2 vom 2026-09-15: der
+// Mitschnitt geht am Agenten aus. Geoeffnet wird GENAU diese eine Richtung:
+// record_voice ist in --felder nennbar, und Riegel 1c (falscheRichtungStellen)
+// bricht vor dem PATCH ab, sobald der fertige Koerper dort irgendeinen anderen
+// Wert als false traegt. Das Wieder-Einschalten bleibt mit diesem Werkzeug
+// unmoeglich. feld ist zugleich Besitz-Name und Blatt-Schluessel im Koerper -
+// dieselbe Gleichsetzung wie bei GESPERRTE_FELDER.
+const RECORD_VOICE_ERLAUBT = Object.freeze({
+  feld: "record_voice",
+  wert: false,
+  seit: "2026-09-15",
+  grund: "Owner-Entscheidung O2 - Audio-Mitschnitt am Agenten aus, das Wieder-Einschalten bleibt gesperrt",
+});
 
 function istZweig(wert) {
   return wert !== null && typeof wert === "object" && !Array.isArray(wert);
@@ -408,6 +524,9 @@ function gesperrteInAuswahl(auswahl) {
 // worden zu sein. Sieht anders als blattPfade auch in Listen hinein: ein
 // Riegel, der eine Ablageform auslaesst, ist keiner - und welche Form der
 // Anbieter morgen erwartet, entscheidet nicht dieses Werkzeug.
+//
+// trifft(schluessel, wert) entscheidet je Stelle; den Wert braucht nur die
+// Richtungs-Ausnahme (Riegel 1c), die Sperrliste sieht allein den Namen.
 function stellenMitSchluessel(wert, praefix, trifft) {
   if (wert === null || typeof wert !== "object") return [];
   const eintraege = Array.isArray(wert)
@@ -415,13 +534,24 @@ function stellenMitSchluessel(wert, praefix, trifft) {
     : Object.entries(wert);
   return eintraege.flatMap(([schluessel, kind]) => {
     const pfad = praefix === "" ? schluessel : `${praefix}${PFAD_TRENNER}${schluessel}`;
-    const treffer = trifft(schluessel) ? [pfad] : [];
+    const treffer = trifft(schluessel, kind) ? [pfad] : [];
     return [...treffer, ...stellenMitSchluessel(kind, pfad, trifft)];
   });
 }
 
 function gesperrteStellen(koerper) {
   return stellenMitSchluessel(koerper, "", (schluessel) => GESPERRTE_FELDER.includes(schluessel));
+}
+
+// RIEGEL 1c: record_voice mit einem anderen Wert als dem erlaubten, irgendwo im
+// fertigen Koerper - Listen eingeschlossen, wie bei 1b. Strikt ungleich: null,
+// "false" oder 0 sind nicht false und brechen ab (fail-closed).
+function falscheRichtungStellen(koerper) {
+  return stellenMitSchluessel(
+    koerper,
+    "",
+    (schluessel, wert) => schluessel === RECORD_VOICE_ERLAUBT.feld && wert !== RECORD_VOICE_ERLAUBT.wert,
+  );
 }
 
 // RIEGEL 2b: Entwickler-Doku, die mitreist. Diese Vorlage erklaert sich selbst
@@ -479,6 +609,13 @@ export function koerperVerstoesse({ koerper, abweichungen, auswahl }) {
       `ENTWICKLER-DOKU IM KOERPER - diese Schluessel erklaeren die Vorlage und gehoeren nicht zum Anbieter-Schema: ${doku.join(LISTEN_TRENNER)}. Der Hinweis gehoert eine Ebene hoeher, wo der Vergleich ihn ohnehin auslaesst.`,
     );
   }
+  const falscheRichtung = falscheRichtungStellen(koerper);
+  if (falscheRichtung.length > 0) {
+    const { feld, wert, seit, grund } = RECORD_VOICE_ERLAUBT;
+    befunde.push(
+      `RICHTUNG GESPERRT - ${feld} wird nur als ${wert} geschrieben (seit ${seit}: ${grund}); der Patch-Koerper traegt dort einen anderen Wert an: ${falscheRichtung.join(LISTEN_TRENNER)}.`,
+    );
+  }
   const fremd = blindePassagiere({ koerper, erlaubt: erlaubtePfade({ abweichungen, auswahl }) });
   if (fremd.length > 0) {
     befunde.push(
@@ -486,6 +623,71 @@ export function koerperVerstoesse({ koerper, abweichungen, auswahl }) {
     );
   }
   return befunde;
+}
+
+// --- Freigaben-Wache (Riegel 8, IEL-B9) ---
+
+// P2: der Schalter reist nie als Nebenwirkung eines Laufs ohne ausdrueckliche Nennung -
+// sonst setzte ein unbedachtes "alles, was abweicht" ihn vor Runbook-Schritt 6.
+function schalterNurAusdruecklich(auswahl) {
+  if (auswahl !== null && auswahl.includes(INIT_WEBHOOK_SCHALTER_FELD)) return [];
+  return [
+    `SCHALTER NUR AUSDRUECKLICH - ${INIT_WEBHOOK_SCHALTER_FELD} wird nur mit ${FELDER_FLAG}=${INIT_WEBHOOK_SCHALTER_FELD} geschrieben, nie als Nebenwirkung eines anderen Laufs.`,
+  ];
+}
+
+function karteNichtLesbar(vorher) {
+  if (vorher.gefunden && istZweig(vorher.wert)) return [];
+  return ["FREIGABEN-KARTE NICHT LESBAR - ohne Schnappschuss kein Beleg, dass der Schalter-PATCH sie unberuehrt laesst."];
+}
+
+// Eine schon offene agent.prompt-Freigabe hiesse: mit dem Schalter koennte jeder Anrufstart
+// den Systemprompt uebersteuern. Dann wird nicht geschaltet, sondern zuerst die Karte repariert.
+function offenePromptFreigaben(karte) {
+  if (!istZweig(karte)) return [];
+  const promptZweig = wertAnPfad(karte, AGENT_PROMPT_FREIGABEN);
+  if (!promptZweig.gefunden) return [];
+  return blattPfade(promptZweig.wert, AGENT_PROMPT_FREIGABEN)
+    .filter((pfad) => wertAnPfad(karte, pfad).wert === true)
+    .map((pfad) => `FREIGABE SCHON OFFEN - ${pfad} = true. Erst ${FELDER_FLAG}=${FREIGABEN_FELD} ${BESTAETIGUNGS_FLAG}, dann der Schalter.`);
+}
+
+function geschwisterImKoerper(koerper, schalterPfad) {
+  const eltern = schalterPfad.split(PFAD_TRENNER).slice(0, -1).join(PFAD_TRENNER);
+  const geschwister = blattPfade(koerper, "").filter(
+    (pfad) => pfad.startsWith(`${eltern}${PFAD_TRENNER}`) && pfad !== schalterPfad,
+  );
+  if (geschwister.length === 0) return [];
+  return [`MEHR ALS DER SCHALTER unter ${eltern}: ${geschwister.join(LISTEN_TRENNER)} - der Schalter-PATCH traegt dort nur ihn.`];
+}
+
+// Aktiv, sobald der FERTIGE Koerper den Schalter-Pfad traegt (Riegel am Koerper, nicht an der
+// Absicht). Liefert die Befunde und den Vorher-Schnappschuss der Freigaben-Karte.
+function freigabenWache({ vorlage, live, koerper, auswahl }) {
+  const [schalterPfad] = livePfadeVon(vorlage, INIT_WEBHOOK_SCHALTER_FELD);
+  if (!schalterPfad || !wertAnPfad(koerper, schalterPfad).gefunden) return { aktiv: false, befunde: [] };
+  const [freigabenPfad] = livePfadeVon(vorlage, FREIGABEN_FELD);
+  const vorher = freigabenPfad ? wertAnPfad(live, freigabenPfad) : { gefunden: false };
+  return {
+    aktiv: true,
+    freigabenPfad,
+    vorher: vorher.wert,
+    befunde: [
+      ...schalterNurAusdruecklich(auswahl),
+      ...karteNichtLesbar(vorher),
+      ...offenePromptFreigaben(vorher.wert),
+      ...geschwisterImKoerper(koerper, schalterPfad),
+    ],
+  };
+}
+
+// Je Blatt der Karte eine Zeile - im Trockenlauf wie vor dem PATCH, damit der Stand, gegen den
+// nachher verglichen wird, sichtbar ist. Die Karte traegt nur Wahrheitswerte.
+function meldeFreigaben(wache) {
+  if (!istZweig(wache.vorher)) return;
+  for (const pfad of blattPfade(wache.vorher, "")) {
+    console.log(`${LOG_PREFIX} FREIGABE ${pfad}=${JSON.stringify(wertAnPfad(wache.vorher, pfad).wert)}`);
+  }
 }
 
 // --- Schreiben (die einzige Stelle im Repo, die den Agenten veraendert) ---
@@ -634,9 +836,16 @@ function brichAb(befunde, schluss) {
   return 1;
 }
 
+// Riegel 8, zweite Haelfte: die Karte nach dem PATCH gegen den Schnappschuss davor. Nur der
+// Pfad wird gemeldet, nie Werte.
+function freigabenVeraendert({ wache, nachher }) {
+  if (!wache.aktiv) return false;
+  return !isDeepStrictEqual(wertAnPfad(nachher, wache.freigabenPfad).wert, wache.vorher);
+}
+
 // Der Schreibteil. Getrennt vom Trockenlauf, damit an EINER Stelle steht, was
 // nur mit ausdruecklicher Bestaetigung passiert.
-async function fuehreAus({ agentId, vorlage, befund, schreibbar, danach, koerper }) {
+async function fuehreAus({ agentId, vorlage, befund, schreibbar, danach, koerper, wache }) {
   if (befund.verletzungen.length > 0) {
     console.error(
       `${LOG_PREFIX} Abbruch (fail-closed): ${befund.verletzungen.length} Verbote der Vorlage sind am Live-Agenten verletzt (oben genannt). In eine Konfiguration, von der bekannt ist, dass sie eine Regel bricht, wird nicht geschrieben - der Push wuerde einen Teil richtig stellen und den Bruch bestehen lassen. NICHTS gesendet.`,
@@ -658,6 +867,12 @@ async function fuehreAus({ agentId, vorlage, befund, schreibbar, danach, koerper
   // das jetzt abweicht, obwohl die Vorhersage es nicht nannte, heisst, dass der
   // Patch mehr angefasst hat als seine Pfade.
   const nachher = await holeLiveAgenten(agentId);
+  if (freigabenVeraendert({ wache, nachher })) {
+    console.error(
+      `${LOG_PREFIX} ROT nach dem Schreiben - die Freigaben-Karte ${wache.freigabenPfad} weicht vom Vorher-Schnappschuss ab. RUECKWEG SOFORT: npm run elevenlabs:push -- ${FELDER_FLAG}=${FREIGABEN_FELD} ${BESTAETIGUNGS_FLAG}, danach Schalter false (Vorlage lokal false + ${FELDER_FLAG}=${INIT_WEBHOOK_SCHALTER_FELD} ${BESTAETIGUNGS_FLAG}).`,
+    );
+    return 1;
+  }
   const geprueft = vergleicheBesitz({ vorlage, live: nachher });
   const vorhergesagt = new Set(feldNamen(danach.abweichungen));
   const unerwartet = feldNamen(geprueft.abweichungen).filter((feld) => !vorhergesagt.has(feld));
@@ -685,18 +900,23 @@ export async function runCli(argv = process.argv) {
     );
     return 1;
   }
-  const { agentId, ausfuehren, auswahl, fehler } = leseArgumente(argv);
+  const { agentId, ausfuehren, auswahl, workspaceInitWebhook, secretId, entfernen, fehler } = leseArgumente(argv);
   if (fehler.length > 0) {
     return brichAb(fehler, `${fehler.length} Argumente nicht verstanden. NICHTS gesendet.`);
   }
+  if (workspaceInitWebhook) return await laufeWorkspaceInitWebhook({ secretId, entfernen, ausfuehren });
+  return await laufeAgentenPush({ agentId, ausfuehren, auswahl });
+}
 
+// Der Agenten-Push (Riegel 1-8): lesen, vergleichen, Koerper bauen, pruefen, dann schreiben.
+async function laufeAgentenPush({ agentId, ausfuehren, auswahl }) {
   // Riegel 1a - so frueh wie moeglich: hier ist noch nichts geladen und nichts
   // gerufen, der Abbruch kann also gar nichts angefasst haben.
   const gesperrt = gesperrteInAuswahl(auswahl);
   if (gesperrt.length > 0) {
     return brichAb(
       [],
-      `${FELDER_FLAG} nennt gesperrte Felder: ${gesperrt.join(LISTEN_TRENNER)}. Diese Felder schreibt dieses Werkzeug nie, in keine Richtung - Aufbewahrung und Mitschnitt sind eine Datenschutz-Entscheidung und keine Konfiguration (s. GESPERRTE_FELDER). NICHTS gesendet.`,
+      `${FELDER_FLAG} nennt gesperrte Felder: ${gesperrt.join(LISTEN_TRENNER)}. Diese Felder schreibt dieses Werkzeug nie, in keine Richtung - die Aufbewahrung ist eine Datenschutz-Entscheidung und keine Konfiguration (s. GESPERRTE_FELDER). NICHTS gesendet.`,
     );
   }
 
@@ -748,6 +968,12 @@ export async function runCli(argv = process.argv) {
       `der Patch-Koerper haelt der Pruefung nicht stand (${verstoesse.length} Befunde, oben genannt). Nicht gefiltert, nicht uebersprungen, nicht gewarnt - Halt. NICHTS gesendet.`,
     );
   }
+  // Riegel 8 - ebenfalls vor der Weiche, damit der Trockenlauf dieselbe Antwort gibt.
+  const wache = freigabenWache({ vorlage, live, koerper, auswahl });
+  if (wache.aktiv) meldeFreigaben(wache);
+  if (wache.befunde.length > 0) {
+    return brichAb(wache.befunde, "Freigaben-Wache (IEL-B9) - ROT ohne PATCH. NICHTS gesendet.");
+  }
 
   if (!ausfuehren) {
     console.log(
@@ -755,7 +981,122 @@ export async function runCli(argv = process.argv) {
     );
     return 0;
   }
-  return await fuehreAus({ agentId, vorlage, befund, schreibbar, danach, koerper });
+  return await fuehreAus({ agentId, vorlage, befund, schreibbar, danach, koerper, wache });
+}
+
+// --- Workspace-Init-Webhook (IEL-B9, E14/E21) ---
+
+// Rein. Setzen: Adresse aus der Repo-Konstante, Header NUR als Secret-Verweis. Entfernen: der
+// Schluessel wird null - weder Adresse noch Secret reisen mit.
+export function initWebhookKoerper({ secretId, entfernen }) {
+  if (entfernen) return { [INIT_WEBHOOK_SETTINGS_SCHLUESSEL]: null };
+  return {
+    [INIT_WEBHOOK_SETTINGS_SCHLUESSEL]: {
+      url: initWebhookUrl(),
+      request_headers: { [INIT_TOKEN_HEADER]: { secret_id: secretId } },
+    },
+  };
+}
+
+function adressBefunde(webhook) {
+  if (webhook?.url === initWebhookUrl()) return [];
+  return [`ADRESSE WEICHT AB - ${INIT_WEBHOOK_SETTINGS_SCHLUESSEL}.url ist nicht ${initWebhookUrl()}.`];
+}
+
+// Jeder String-Wert unter request_headers waere ein Klartext-Geheimnis beim Anbieter (E14) -
+// gemeldet wird nur der Header-NAME, nie der Wert.
+function headerBefunde({ webhook, secretId }) {
+  const kopf = istZweig(webhook?.request_headers) ? webhook.request_headers : {};
+  const klartext = Object.keys(kopf).filter((name) => typeof kopf[name] === "string");
+  const befunde = klartext.map((name) => `HEADER IST STRING (Klartext-Secret, E14) - request_headers.${name}`);
+  const token = kopf[INIT_TOKEN_HEADER];
+  if (typeof token !== "string" && !(istZweig(token) && token.secret_id === secretId)) {
+    befunde.push(`SECRET-VERWEIS FEHLT - request_headers.${INIT_TOKEN_HEADER} traegt nicht secret_id ${secretId}.`);
+  }
+  return befunde;
+}
+
+// Rein. Der Beleg nach dem Schreiben, aus dem ZURUECKGELESENEN Stand; Befunde ohne Werte.
+export function initWebhookLesebeleg({ settings, secretId, entfernen }) {
+  const webhook = settings?.[INIT_WEBHOOK_SETTINGS_SCHLUESSEL];
+  if (entfernen) {
+    const leer = webhook === null || webhook === undefined;
+    return leer ? [] : [`INIT-WEBHOOK NOCH GESETZT - ${INIT_WEBHOOK_SETTINGS_SCHLUESSEL} ist nach dem Entfernen nicht leer.`];
+  }
+  return [...adressBefunde(webhook), ...headerBefunde({ webhook, secretId })];
+}
+
+// Rein (P5). Ob der PATCH andere Workspace-Settings ersetzt, ist ungemessen: alle uebrigen
+// Top-Level-Schluessel vorher/nachher tief verglichen. Gemeldet werden nur NAMEN.
+export function uebrigeSettingsVeraendert(vorher, nachher) {
+  const schluessel = new Set([...Object.keys(vorher ?? {}), ...Object.keys(nachher ?? {})]);
+  schluessel.delete(INIT_WEBHOOK_SETTINGS_SCHLUESSEL);
+  const veraendert = [...schluessel].filter((name) => !isDeepStrictEqual(vorher?.[name], nachher?.[name]));
+  if (veraendert.length === 0) return [];
+  return [`GEGENPROBE ROT - Workspace-Settings veraendert: ${veraendert.sort().join(LISTEN_TRENNER)}`];
+}
+
+// RENDER_API_KEY ueber src/config.js (Werkzeug-Namespace) - nie ausgegeben.
+async function zielUrteilVomDienst() {
+  const dienst = await renderDienstZiel({
+    fetchImpl: fetch,
+    apiKey: config.werkzeug.renderApiKey,
+    serviceId: HERMES_RENDER_SERVICE_ID,
+  });
+  return zielUrteil(dienst);
+}
+
+function meldeZielUrteil(urteil) {
+  const gruen = urteil.urteil === ZIEL_URTEIL.GRUEN;
+  const status = urteil.status === undefined ? "" : ` status=${urteil.status}`;
+  const zeile = `${LOG_PREFIX} ZIEL-URTEIL ${gruen ? "GRUEN" : "ROT"} - wirksamer Origin ${urteil.wirksamerOrigin ?? "leer"}, Ziel ${initWebhookUrl()}, grund=${urteil.grund ?? OHNE_WERT_MARKE}${status}`;
+  if (gruen) console.log(zeile);
+  else console.error(zeile);
+}
+
+// Was der Lauf vorhat. Vom Vorher-Stand nur "gesetzt ja/nein" - nie Header-Werte.
+function meldeInitWebhookPlan({ vorher, secretId, entfernen }) {
+  const gesetzt = vorher?.[INIT_WEBHOOK_SETTINGS_SCHLUESSEL] ? "ja" : "nein";
+  console.log(`${LOG_PREFIX} Workspace-Init-Webhook vorher gesetzt: ${gesetzt}`);
+  if (entfernen) {
+    console.log(`${LOG_PREFIX} WUERDE ENTFERNEN - ${INIT_WEBHOOK_SETTINGS_SCHLUESSEL} = null`);
+    return;
+  }
+  console.log(
+    `${LOG_PREFIX} WUERDE SETZEN - url ${initWebhookUrl()}, Header ${INIT_TOKEN_HEADER} als secret_id ${secretId}`,
+  );
+}
+
+async function laufeWorkspaceInitWebhook({ secretId, entfernen, ausfuehren }) {
+  // P4: nur der Setz-Lauf braucht das Ziel-Urteil; der Rueckweg haengt nicht an Render.
+  if (!entfernen) {
+    const urteil = await zielUrteilVomDienst();
+    meldeZielUrteil(urteil);
+    if (urteil.urteil !== ZIEL_URTEIL.GRUEN) {
+      return brichAb([], `Ziel-Urteil ROT (grund=${urteil.grund}) - 0 Aufrufe an ElevenLabs, NICHTS gesendet.`);
+    }
+  }
+  const account = { apiKey, apiBase };
+  const vorher = await fetchConvaiSettings({ fetchImpl: fetch, account });
+  const koerper = initWebhookKoerper({ secretId, entfernen });
+  meldeInitWebhookPlan({ vorher, secretId, entfernen });
+  if (!ausfuehren) {
+    console.log(
+      `${LOG_PREFIX} TROCKENLAUF - nichts gesendet, die Workspace-Settings sind unveraendert. Zum wirklichen Schreiben: ${BESTAETIGUNGS_FLAG} anhaengen.`,
+    );
+    return 0;
+  }
+  await patchConvaiSettings({ fetchImpl: fetch, account, body: koerper });
+  const nachher = await fetchConvaiSettings({ fetchImpl: fetch, account });
+  const befunde = [
+    ...initWebhookLesebeleg({ settings: nachher, secretId, entfernen }),
+    ...uebrigeSettingsVeraendert(vorher, nachher),
+  ];
+  if (befunde.length > 0) return brichAb(befunde, "Lesebeleg ROT nach dem Schreiben.");
+  console.log(
+    `${LOG_PREFIX} OK - Init-Webhook ${entfernen ? "entfernt" : `gesetzt, secret_id ${secretId}`}, zurueckgelesen.`,
+  );
+  return 0;
 }
 
 const istHauptmodul = fileURLToPath(import.meta.url) === resolve(process.argv[1] || "");

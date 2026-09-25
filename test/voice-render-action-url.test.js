@@ -4,7 +4,7 @@
 // config.publicUrl zur Laufzeit gelesen).
 //
 // C-P4: hier standen zwei Tests, deren Gegenstand der UNTERSCHIED zwischen zwei Anbietern
-// war ("twilio -> relative Action-URL", "streamDirectives -> Twilio-Media-Pfad"). Mit dem
+// war ("twilio -> relative Action-URL", ein Media-Pfad-Test). Mit dem
 // Ausbau haben sie keinen Gegenstand mehr und sind entfallen. Beim Entfernen ist ein
 // BEFUND aufgefallen, der weiter unten als Charakterisierung festgehalten ist.
 import { test } from "node:test";
@@ -22,37 +22,23 @@ test("S1-14b: telnyx-Call -> absolute Action-URL (config.publicUrl-Praefix)", ()
     { id: "call_2", provider: "telnyx", language: "de" },
     "Hallo",
   );
-  assert.equal(gatherD.action, "https://agent.test/voice/turn?callId=call_2");
-  assert.equal(redirectD.url, "https://agent.test/voice/turn?callId=call_2");
-});
-
-// S3 (P8-Testluecke): streamDirectives() - https->wss-Ersetzung + MEDIA_PATH + Param-Form
-// (call_id/stream_token).
-test("S3: streamDirectives -> telnyx-Media-Pfad + Param-Form", () => {
-  const { streamDirectives } = makeVoiceRender({ config: fakeConfig });
-  const [stream] = streamDirectives({ id: "call_10", provider: "telnyx", streamToken: "tok10" });
-  assert.equal(stream.url, "wss://agent.test/media/telnyx");
-  assert.deepEqual(stream.params, [
-    { name: "call_id", value: "call_10" },
-    { name: "stream_token", value: "tok10" },
-  ]);
-});
-
-// C-P1: der vierte DEFAULT_PROVIDER-Leser (MEDIA_PATH-Rueckfall) war bisher ungetestet -
-// der Test oben setzt provider explizit. Literal statt MEDIA_PATH[DEFAULT_PROVIDER],
-// damit die Assertion beim Zurueckdrehen des Flips ROT wird statt mitzuwandern.
-test("C-P1: streamDirectives ohne call.provider -> Media-Pfad des Rueckfalls (Telnyx)", () => {
-  const { streamDirectives } = makeVoiceRender({ config: fakeConfig });
-  const [stream] = streamDirectives({ id: "call_11", streamToken: "tok11" });
-  assert.equal(stream.url, "wss://agent.test/media/telnyx");
+  // SEC-P1: die Action-URL traegt seither eine frische Turn-Marke je gerendertem Gather
+  // (Ereignis-Anker des Wiederholungs-Riegels). Praefix byte-genau, die Marke als FORM
+  // (16 Hex-Zeichen aus 8 Zufallsbytes) - ein fester Wert waere per Definition nicht
+  // frisch. Gather und Redirect MUESSEN dieselbe Marke tragen: bei TeXML feuert genau
+  // eines von beiden, also gehoert zu einem Gather genau EIN Ereignis-Anker.
+  assert.match(
+    gatherD.action,
+    /^https:\/\/agent\.test\/voice\/turn\?callId=call_2&turnToken=[0-9a-f]{16}$/,
+  );
+  assert.equal(redirectD.url, gatherD.action);
 });
 
 // CHARAKTERISIERUNG (C-P4-Befund, BEWUSST NICHT GEFIXT - Scope).
 //
-// Die drei provider-lesenden Stellen in voice-render.js sind sich NICHT einig, was bei
+// Die zwei provider-lesenden Stellen in voice-render.js sind sich NICHT einig, was bei
 // einem Call OHNE provider-Feld gilt:
 //   - render()          -> voiceRenderer(undefined) -> DEFAULT_PROVIDER = Telnyx -> TeXML
-//   - streamDirectives  -> MEDIA_PATH[undefined] || MEDIA_PATH[DEFAULT_PROVIDER] -> Telnyx
 //   - turnDirectives    -> call.provider === PROVIDER.TELNYX ist FALSE -> base = ""
 //                          -> RELATIVE Action-URL
 // Ergebnis: TeXML mit relativer Action-URL - genau die Kombination, die der Kommentar an
@@ -71,6 +57,6 @@ test("C-P1: streamDirectives ohne call.provider -> Media-Pfad des Rueckfalls (Te
 test("BEFUND (Charakterisierung): Call ohne provider -> TeXML-Renderer, aber RELATIVE Action-URL", () => {
   const { turnDirectives } = makeVoiceRender({ config: fakeConfig });
   const [gatherD, redirectD] = turnDirectives({ id: "call_12", language: "de" }, "Hallo");
-  assert.equal(gatherD.action, "/voice/turn?callId=call_12");
-  assert.equal(redirectD.url, "/voice/turn?callId=call_12");
+  assert.match(gatherD.action, /^\/voice\/turn\?callId=call_12&turnToken=[0-9a-f]{16}$/);
+  assert.equal(redirectD.url, gatherD.action);
 });

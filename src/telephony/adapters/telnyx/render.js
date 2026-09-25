@@ -3,12 +3,38 @@
 // TeXML wird als String gebaut (Telnyx liefert keinen TwiML-aequivalenten Builder).
 // Fail-closed: unbekanntes voiceProfile -> wirft. STREAM
 // rendert seit P7 echtes <Connect><Stream> (Telnyx-Realtime ueber Port 4).
+//
+// KEIN ElevenLabs-ZWEIG AM <Say> - UND GENAU DAS IST DER RIEGEL (IP3). Bis IP3 schaltete
+// dieser Renderer auf den Telnyx-gehosteten ElevenLabs-LIVE-RELAY um
+// (<Say voice="ElevenLabs.<Model>.<VoiceId>" api_key_ref="...">), sobald
+// TELNYX_ELEVENLABS_API_KEY_REF UND TELNYX_ELEVENLABS_VOICE_ID beide gesetzt waren -
+// ohne Flag, ohne Logzeile, also eine Selbstarmierung. Der Relay ist A/B-belegt DEFEKT
+// (Messung 2026-07-06): er unterdrueckt den Inbound-Audio-Track, Deepgram liefert ein
+// LEERES Transkript, der Agent hoert den Anrufer nicht. Der ElevenLabs-Weg dieses
+// Adapters ist die Vorab-Synthese via <Play> (src/tts/directive-synth.js, Flag
+// ELEVENLABS_PLAY_TTS_ENABLED): eine STATISCHE Datei laesst den Inbound-Track leben.
+// Ein `elevenLabs`-Schluessel in opts ist seit IP3 INERT und kein Fehler - ein Wurf
+// mitten im Gespraech waere eine neue Fehlerquelle. Gepinnt in
+// test/telnyx-elevenlabs-render.test.js.
 import { DIRECTIVE, VOICE_PROFILE } from "../../directives.js";
 import { sttLocaleForVoiceProfile } from "../../voice-locale.js";
-import { elevenLabsVoiceNameFor, hasElevenLabsVoice } from "./elevenlabs-voice.js";
 import { sttAttrs } from "./stt-model.js";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
+
+// IEL-B7: Grenzen des TeXML-<Dial> (Telnyx-Doku Dial-Verb, abgerufen 2026-09-15): timeLimit
+// 60-14400 s, Default 14400. Immer gesetzt und geklemmt - weggelassen hiesse vier Stunden
+// Bruecke. Anbieter-Grenze, deshalb hier im Adapter und nicht in der neutralen Direktive.
+const DIAL_TIME_LIMIT_MIN_S = 60;
+const DIAL_TIME_LIMIT_MAX_S = 14400;
+// IEL-B7-S1a-Nachtrag: Grenzen des timeout-Attributs (Ring-Zeit bis zum Abbruch, dieselbe
+// Telnyx-Doku wie timeLimit oben): 5-600 s. Ohne Klemmung wuerde ein fehlendes timeoutS
+// wortwoertlich zu timeout="undefined" im TeXML fuehren - derselbe Fehler, den timeLimitS
+// bereits ueber dialTimeLimitS vermeidet.
+const DIAL_TIMEOUT_MIN_S = 5;
+const DIAL_TIMEOUT_MAX_S = 600;
+// Das SIP-Bein meldet nur "answered": damit startet die innere Bindungsfrist (E9-1).
+const SIP_STATUS_CALLBACK_EVENT = "answered";
 
 // Logisches Voice-Profil -> Telnyx-TeXML-Voice-NAME. Telnyx TeXML akzeptiert
 // Azure-NTTS-Voices im Format "Azure.<locale>-<VoiceId>Neural" (Telnyx-Doku, Say-Verb;
@@ -25,15 +51,20 @@ const TELNYX_VOICE_NAME = Object.freeze({
   [VOICE_PROFILE.EN_FEMALE_NEURAL]: "Azure.en-GB-SoniaNeural",
 });
 
-// XML-Sonderzeichen escapen (&, <, >, ", ' -> Entities). & zuerst, sonst werden
-// die nachfolgenden Entities doppelt escaped.
-function escapeXml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+// XML-Sonderzeichen -> Entities. Eine Ersetzungsrunde statt einer verketteten .replace-
+// Kette (G36, Gesetz von Demeter) - dieselbe Wirkung, weil jedes Sonderzeichen in der
+// Eingabe hoechstens einmal getroffen wird, also keine Reihenfolge-Abhaengigkeit besteht
+// (& muesste bei einer Kette zuerst stehen, hier ist das gegenstandslos).
+const XML_ENTITY_BY_CHAR = Object.freeze({
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&apos;",
+});
+
+function escapeXml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => XML_ENTITY_BY_CHAR[char]);
 }
 
 // Exportiert (P4.5, G5): der Call-Control-speak-Adapter (voice.js) nutzt dieselbe
@@ -46,38 +77,10 @@ export function voiceAttrs(profile) {
 }
 
 // Attribut-Objekt -> ' k="v" ...' in Einfuege-Reihenfolge (vertraglich, Snapshot).
-function attrString(obj) {
-  return Object.entries(obj)
-    .map(([k, v]) => ` ${k}="${escapeXml(v)}"`)
+function attrString(attrs) {
+  return Object.entries(attrs)
+    .map(([key, value]) => ` ${key}="${escapeXml(value)}"`)
     .join("");
-}
-
-// ElevenLabs-TTS: Telnyx relayt
-// <Say voice="ElevenLabs.<Model>.<VoiceId>" api_key_ref="..."> an die ElevenLabs-
-// API; der ElevenLabs-API-Key liegt als Telnyx-Integration-Secret und wird ueber
-// den api_key_ref-IDENTIFIER referenziert. opts.elevenLabs injiziert die Registry
-// aus config.telnyx.telnyxElevenLabs - der Renderer bleibt config-frei und pur. KEIN
-// language-Attribut am ElevenLabs-Say: die Voice ist multilingual, die gesprochene
-// Sprache folgt dem Text (Telnyx-Doku-Beispiel traegt keins). Die VOICE-ID folgt seit P9
-// trotzdem der Sprache (Owner-Entscheidung 2026-07-27): das MODELL ist multilingual, die
-// Sprecherin soll dennoch Muttersprachlerin sein - kein Widerspruch. Gate fail-safe statt
-// fail-closed: ElevenLabs NUR wenn apiKeyRef UND voiceId gesetzt, sonst Azure-
-// Bestand byte-identisch - ein halbes/leeres Env ist ein Betriebszustand, kein
-// Programmierfehler, und darf kein laufendes Gespraech toeten (anders als das
-// werfende voiceAttrs beim Code-Enum voiceProfile). KORRIGIERT (A/B-belegt
-// 2026-07-06): Der ElevenLabs-LIVE-RELAY unterdrueckt den Inbound-Track ->
-// Deepgram-STT liefert LEER (Agent hoert den Angerufenen NICHT). Die Relay-
-// Attribute bleiben als Referenz erhalten, sind aber NICHT der Sprech-Pfad der
-// Wahl. Native Wiedergabe einer vorab synthetisierten Datei via <Play> (audioUrl,
-// server.js Play-TTS-Seam) laesst den Inbound-Track leben - das ist der aktive Weg.
-// Risiken im Live-Smoke-Gate (tasks/todo.md): Telnyx-Verhalten bei leerem
-// ElevenLabs-Guthaben/ungueltigem Key ist undokumentiert (kein Auto-Fallback); die
-// TTS-Zeichen aller Tenants laufen ohne per-Tenant-Metering aufs Owner-ElevenLabs-Konto.
-function sayVoiceAttrs(d, opts) {
-  const el = opts.elevenLabs;
-  if (hasElevenLabsVoice(el))
-    return { voice: elevenLabsVoiceNameFor(el, d.voiceProfile), api_key_ref: el.apiKeyRef };
-  return voiceAttrs(d.voiceProfile);
 }
 
 // <Play> einer vorab synthetisierten Audiodatei (native Telnyx-Wiedergabe, KEIN Relay).
@@ -86,9 +89,9 @@ function renderPlay(url) {
   return `<Play>${escapeXml(url)}</Play>`;
 }
 
-function renderSay(d, opts) {
-  if (d.audioUrl) return renderPlay(d.audioUrl);
-  return `<Say${attrString(sayVoiceAttrs(d, opts))}>${escapeXml(d.text)}</Say>`;
+function renderSay(directive) {
+  if (directive.audioUrl) return renderPlay(directive.audioUrl);
+  return `<Say${attrString(voiceAttrs(directive.voiceProfile))}>${escapeXml(directive.text)}</Say>`;
 }
 
 // Telnyx-TeXML-Gather-Attribute (Spracherkennung). transcriptionEngine ist PFLICHT,
@@ -114,64 +117,131 @@ function renderSay(d, opts) {
 // speechModel/actionOnEmptyResult bleiben Twilio-spezifisch und ungesetzt. Attribut-
 // Reihenfolge ist vertraglich (Einfuege-Reihenfolge); der Snapshot-Test nagelt sie fest
 // (DE bleibt dadurch byte-identisch).
-function gatherAttrs(d, opts) {
+function gatherAttrs(directive, opts) {
   const stt = sttAttrs(opts.sttProfile);
   return {
     input: "speech",
-    language: voiceAttrs(d.voiceProfile).language,
+    language: voiceAttrs(directive.voiceProfile).language,
     transcriptionEngine: stt.engine,
     model: stt.model,
-    speechTimeout: d.speechTimeoutSec === undefined ? "auto" : String(d.speechTimeoutSec),
+    speechTimeout: directive.speechTimeoutSec === undefined ? "auto" : String(directive.speechTimeoutSec),
   };
 }
 
-function renderGather(d, opts) {
-  const open = `<Gather${attrString(gatherAttrs(d, opts))} action="${escapeXml(d.action)}" method="POST">`;
-  const prompt = gatherPrompt(d, opts);
+function renderGather(directive, opts) {
+  const open = `<Gather${attrString(gatherAttrs(directive, opts))} action="${escapeXml(directive.action)}" method="POST">`;
+  const prompt = gatherPrompt(directive);
   if (!prompt) return open.replace(/>$/, "/>");
   return `${open}${prompt}</Gather>`;
 }
 
 // Prompt-Inhalt des Gathers: vorab synthetisiertes Audio (promptAudioUrl) -> <Play>,
 // sonst der bestehende innere <Say> (byte-identisch), leer -> "" (self-closing oben).
-function gatherPrompt(d, opts) {
-  if (d.promptAudioUrl) return renderPlay(d.promptAudioUrl);
-  if (d.promptText) return renderSay({ text: d.promptText, voiceProfile: d.voiceProfile }, opts);
+function gatherPrompt(directive) {
+  if (directive.promptAudioUrl) return renderPlay(directive.promptAudioUrl);
+  if (directive.promptText)
+    return renderSay({ text: directive.promptText, voiceProfile: directive.voiceProfile });
   return "";
 }
 
-// Realtime-Media-Stream als TeXML <Connect><Stream> mit <Parameter>-Kindern.
-// Parameter-Reihenfolge ist vertraglich (Snapshot-Test).
-function renderStream(d) {
-  const params = d.params
-    .map((p) => `<Parameter name="${escapeXml(p.name)}" value="${escapeXml(p.value)}"/>`)
-    .join("");
-  return `<Connect><Stream url="${escapeXml(d.url)}">${params}</Stream></Connect>`;
+// Sekundenwert einer Dial-Direktive pruefen und klemmen: eine Funktion fuer timeout UND
+// timeLimit (G5, keine zwei fast identischen Checks) statt separater Pruefungen pro Feld.
+// Grenzen als Objekt (F1, <=3 Argumente) statt zwei weiterer Einzelparameter.
+// Fehlertext nennt nur den Feldnamen, nie einen Attributwert (Passwort liegt in derselben
+// Direktive).
+function clampDialSeconds(seconds, fieldName, { minS, maxS }) {
+  if (!Number.isFinite(seconds)) throw new Error(`Dial-Direktive: ${fieldName} ist keine Zahl`);
+  return Math.min(maxS, Math.max(minS, seconds));
+}
+
+// Pflichtfelder der Dial-Direktive (uri, username, password, callerId, statusCallbackUrl):
+// fail-closed statt stillem String(undefined) -> "undefined" im TeXML (IEL-B7-S1a). Ein
+// SIP-INVITE mit woertlich falschem Digest-Username an eine echte Gegenstelle
+// (sip.rtc.elevenlabs.io) darf nie klaglos rausgehen. Eine Pruef-Funktion fuer alle fuenf
+// Felder (G5, keine Duplizierung) statt fuenf gleichlautender Checks; der Feldname im
+// Fehlertext ist kein Wert der Direktive (username/password/callerId/uri/statusCallbackUrl
+// sind reine Schluesselnamen, keine Secrets).
+function requireDialField(directive, fieldName) {
+  const value = directive[fieldName];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Dial-Direktive: ${fieldName} fehlt oder ist kein nichtleerer String`);
+  }
+  return value;
+}
+
+// IEX-A4 (A1): answerOnBridge nur bei ausdruecklichem true. Fehlend, false oder ein anderer Typ
+// rendern nichts (Anbieter-Default false, Bestandsform) - das ist die belegte Richtung: ein
+// beantwortetes Bein spricht nach gescheitertem Dial den Fehlersatz. Erstes Attribut am <Dial>.
+function answerOnBridgeAttr(directive) {
+  return directive.answerOnBridge === true ? { answerOnBridge: "true" } : {};
+}
+
+// IEP-P2: Telnyx nennt das Attribut audioUrl - "custom ringback tone ... while waiting for the
+// call to be answered" (Telnyx-Doku Dial-Verb, festgehalten in tasks/iex-r1-eroeffnung.md,
+// Abschnitt "Was hoert der Anrufer waehrend <Dial>?"). Neutral heisst das Feld ringbackAudioUrl;
+// der Provider-Name lebt nur hier, wie bei voiceAttrs. Nur ein nichtleerer String rendert etwas -
+// fehlend, leer oder anderer Typ bleiben byte-gleich zum Bestand (Anbieter-Default: eigener
+// Landes-Freiton). ringTone wird bewusst NIE gesetzt: sein Default ist genau der
+// 440/480-Hz-Doppelton, den der Owner in Test #2 als Netz-Klingeln hoerte.
+function ringbackAudioAttr(directive) {
+  const url = directive.ringbackAudioUrl;
+  return typeof url === "string" && url.length > 0 ? { audioUrl: url } : {};
+}
+
+// <Dial><Sip>: alle Attribute und die URI laufen durch escapeXml (attrString). Attribut-
+// Reihenfolge ist vertraglich (Snapshot test/iel-dial-render.test.js).
+function renderDialSip(directive) {
+  const uri = requireDialField(directive, "uri");
+  const username = requireDialField(directive, "username");
+  const password = requireDialField(directive, "password");
+  const callerId = requireDialField(directive, "callerId");
+  const statusCallbackUrl = requireDialField(directive, "statusCallbackUrl");
+  const dial = attrString({
+    ...answerOnBridgeAttr(directive),
+    ...ringbackAudioAttr(directive),
+    callerId,
+    timeout: clampDialSeconds(directive.timeoutS, "timeoutS", {
+      minS: DIAL_TIMEOUT_MIN_S,
+      maxS: DIAL_TIMEOUT_MAX_S,
+    }),
+    timeLimit: clampDialSeconds(directive.timeLimitS, "timeLimitS", {
+      minS: DIAL_TIME_LIMIT_MIN_S,
+      maxS: DIAL_TIME_LIMIT_MAX_S,
+    }),
+  });
+  const sip = attrString({
+    username,
+    password,
+    statusCallback: statusCallbackUrl,
+    statusCallbackEvent: SIP_STATUS_CALLBACK_EVENT,
+  });
+  return `<Dial${dial}><Sip${sip}>${escapeXml(uri)}</Sip></Dial>`;
 }
 
 // Eine Direktive in TeXML uebersetzen (eine Abstraktionsebene, G34).
-function renderDirective(d, opts) {
-  switch (d.kind) {
+function renderDirective(directive, opts) {
+  switch (directive.kind) {
     case DIRECTIVE.SAY:
-      return renderSay(d, opts);
+      return renderSay(directive);
     case DIRECTIVE.GATHER:
-      return renderGather(d, opts);
+      return renderGather(directive, opts);
     case DIRECTIVE.REDIRECT:
-      return `<Redirect method="POST">${escapeXml(d.url)}</Redirect>`;
+      return `<Redirect method="POST">${escapeXml(directive.url)}</Redirect>`;
     case DIRECTIVE.HANGUP:
       return "<Hangup/>";
-    case DIRECTIVE.STREAM:
-      return renderStream(d);
+    case DIRECTIVE.DIAL_SIP:
+      return renderDialSip(directive);
     default:
-      throw new Error(`unbekannte Direktive: ${d.kind}`);
+      throw new Error(`unbekannte Direktive: ${directive.kind}`);
   }
 }
 
-// opts (optional, Telnyx-eigene Erweiterung ueber den Port hinaus): { elevenLabs, sttProfile }
-// - die Registry injiziert config.telnyx.telnyxElevenLabs, Aufrufe ohne opts bleiben
-// byte-identisch zum Bestand (Azure). sttProfile ist die neutrale STT-Wahl (stt-profile.js);
-// fehlt sie, greift das Default-Profil.
+// opts (optional, Telnyx-eigene Erweiterung ueber den Port hinaus): { sttProfile } - die
+// neutrale STT-Wahl (stt-profile.js), von der Registry lazy injiziert; fehlt sie (arg-loser
+// Aufruf), greift das Default-Profil und das TeXML bleibt byte-identisch zum Bestand.
 /** @type {import("../../ports.js").VoiceRenderer["renderDirectives"]} */
 export function renderDirectives(directives, opts = {}) {
-  return XML_DECL + "<Response>" + directives.map((d) => renderDirective(d, opts)).join("") + "</Response>";
+  return (
+    XML_DECL + "<Response>" + directives.map((directive) => renderDirective(directive, opts)).join("") + "</Response>"
+  );
 }

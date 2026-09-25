@@ -31,7 +31,11 @@ const PAY_ARGS = { ...ARGS, holdAmountCents: 500, currency: "eur" };
 function seedRequested() {
   const s = makeDefaultState();
   registerTenant(s, "t_user1");
-  setTenantStripe(s, "t_user1", { customerId: "cus_1", paymentMethodId: "pm_1" });
+  setTenantStripe(s, "t_user1", {
+    customerId: "cus_1",
+    paymentMethodId: "pm_1",
+    paymentMethodType: "card", // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
+  });
   const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
   return { s, numberId: number.id };
 }

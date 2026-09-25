@@ -30,7 +30,7 @@ import { SPOKEN_TRANSLITERATION_STEMS } from "./umlaut-stems-helper.js";
 process.env.CONSULT_ENABLED = "true";
 process.env.ASSISTANT_CONTEXT_ENABLED = "true";
 const { makeElevenLabsOutbound } = await import("../src/elevenlabs/outbound.js");
-const { consultAllowedFor } = await import("../src/consult/gate.js");
+const { consultAllowedForCall } = await import("../src/consult/gate.js");
 const { LOCALES } = await import("../src/i18n/locales.js");
 const { OVERRIDE_ALLOWED_LEAF_PATHS, startOutboundCall } =
   await import("../src/elevenlabs/convai.js");
@@ -78,7 +78,7 @@ function ownerStore(tenantContext) {
 
 // EIN Abgriff fuer alle Faelle - die geteilte Attrappe, keine zweite.
 async function koerperFuer({ call, store = pinStore({ profil: { allowConsult: true } }) }) {
-  return sendeAnrufstartKoerper({ makeElevenLabsOutbound, consultAllowedFor, store, call });
+  return sendeAnrufstartKoerper({ makeElevenLabsOutbound, consultAllowedForCall, store, call });
 }
 
 const rumpfVon = (koerper) => koerper.conversation_initiation_client_data;
@@ -202,8 +202,9 @@ describe("OC-P2-B: das Owner-Ziel bekommt die KI-Eroeffnung und die Prompt-Sekti
   it("OC-P2-B7: opening_line reist im Owner-Fall weiterhin mit", async () => {
     const variablen = variablenVon(await koerperFuer({ call: ownerZiel("de") }));
 
-    // Die voicemail_message der Vorlage referenziert {{opening_line}} - ein Weglassen waere
-    // der 1008-Abbruch, obwohl die Zeile in der Eroeffnung bereits steckt.
+    // first_message referenziert {{opening_line}}, und seit DE1 geht dieselbe Zeile als
+    // WERT in {{voicemail_line}} ein - ein Weglassen waere der 1008-Abbruch, obwohl die
+    // Zeile in der Eroeffnung bereits steckt.
     assert.ok(variablen.opening_line.length > 0);
   });
 });

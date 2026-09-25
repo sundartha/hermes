@@ -1,7 +1,9 @@
 // Neutrale Call-Direktiven (provider-unabhaengig). Der Core (server.js) baut eine
 // Liste solcher Direktiven; der Adapter (renderDirectives) uebersetzt sie in
 // TwiML/TeXML. Voice-Namen (Polly...) verlassen den Core nie - hier steht nur
-// der LOGISCHE Profilname.
+// der LOGISCHE Profilname. Einzige Ausnahme: das optionale Feld voiceId (IEL-B7a/E19),
+// eine rohe ElevenLabs-Stimm-ID fuer die Play-TTS-Vorabsynthese. Der Renderer liest es
+// nicht; ohne Feld hat jede Direktive exakt die Bestandsform.
 
 // Logische Voice-Profile. Der Adapter mappt sie auf provider-spezifische
 // Voice-Bezeichner. Werte sind deckungsgleich mit src/i18n/locales.js
@@ -19,7 +21,7 @@ export const DIRECTIVE = Object.freeze({
   GATHER: "gather", // Sprach-Eingabe einsammeln; optionaler Prompt + Folge-Action
   HANGUP: "hangup",
   REDIRECT: "redirect",
-  STREAM: "stream", // Realtime: Media-Stream an die Bridge
+  DIAL_SIP: "dial_sip", // IEL-B7: Anruf an eine SIP-Gegenstelle ueberbruecken
 });
 
 // --- Builder (intentions-ausdrueckende Namen, <=3 Args via Objekt-Param) ---
@@ -35,6 +37,20 @@ export const say = (text, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL, audioUr
   audioUrl,
 });
 
+// IEL-B7a (E19): voiceId entsteht NUR mit nichtleerem String. Leer oder fehlend -> kein
+// Feld, die Direktive behaelt ihre Bestandsform (deepStrictEqual-gleich, B8: "bei leerem
+// Wert kein Feld"). Eine Quelle fuer say und gather (G5).
+const voiceIdField = (voiceId) => (typeof voiceId === "string" && voiceId.length > 0 ? { voiceId } : {});
+
+// IEL-B7a (E19): gesprochener Satz in einer ausdruecklich gewaehlten ElevenLabs-Stimme
+// (EL-Inbound: Fehlersatz in der Stimme des Agenten). Objekt-Parameter
+// statt eines 4. Positionsarguments an say (F1). voiceProfile bleibt fuer den Azure-Rueckfall
+// und die Sprach-Pflicht-Logik von say (undefined -> say-Default).
+export const sayWithVoiceId = ({ text, voiceProfile, voiceId }) => ({
+  ...say(text, voiceProfile),
+  ...voiceIdField(voiceId),
+});
+
 // Sprach-Turn: optionaler Prompt (say im Gather) + Action-URL fuers Ergebnis.
 // promptText leer -> Gather ohne inneren Say (Bestandsverhalten gatherTurn).
 // speechTimeoutSec (optional, Sekunden): festes STT-Endpointing statt provider-Default
@@ -42,12 +58,14 @@ export const say = (text, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL, audioUr
 // Weglassen -> Renderer bleibt byte-identisch beim "auto"-Bestand.
 // promptAudioUrl (optional): wie audioUrl bei say, aber fuer den inneren Gather-Prompt
 // (<Play> statt innerem <Say>). Weglassen -> byte-identisch (Muster speechTimeoutSec).
+// voiceId (optional, IEL-B7a/E19): wie bei sayWithVoiceId; weglassen oder "" -> byte-identisch.
 export const gather = ({
   promptText,
   action,
   voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL,
   speechTimeoutSec,
   promptAudioUrl,
+  voiceId,
 }) => ({
   kind: DIRECTIVE.GATHER,
   promptText,
@@ -55,11 +73,43 @@ export const gather = ({
   voiceProfile,
   speechTimeoutSec,
   promptAudioUrl,
+  ...voiceIdField(voiceId),
 });
 
 export const hangup = () => ({ kind: DIRECTIVE.HANGUP });
 
 export const redirect = (url) => ({ kind: DIRECTIVE.REDIRECT, url });
 
-// Realtime-Media-Stream. params = [{name, value}, ...] (call_id, stream_token).
-export const stream = ({ url, params }) => ({ kind: DIRECTIVE.STREAM, url, params });
+// IEL-B7 (L1/E9): Bruecke an eine SIP-Gegenstelle mit Digest-Zugang. Neutral: Sekunden als
+// Zahl, die zulaessigen Grenzen des Anbieters setzt der Adapter (Renderer). statusCallbackUrl
+// empfaengt das answered-Ereignis des SIP-Beins. password ist SECRET - Direktiven werden nie
+// geloggt, nur gerendert.
+// answerOnBridge (optional, IEX-A4): true -> der eingehende Anruf bleibt unbeantwortet, bis das
+// SIP-Bein annimmt (Freizeichen statt Stille). Nur ausdrueckliches true wirkt (Regel im Renderer);
+// weglassen -> TeXML byte-gleich zum Bestand.
+// ringbackAudioUrl (optional, IEP-P2): Audio, das dem Anrufer waehrend der Dial-Wartezeit statt
+// des Anbieter-Freitons vorgespielt wird. Neutraler Name - der Provider-Attributname lebt nur im
+// Adapter. Nur ein nichtleerer String wirkt (Regel im Renderer); weglassen -> TeXML byte-gleich
+// zum Bestand.
+export const dialSip = ({
+  uri,
+  username,
+  password,
+  callerId,
+  timeoutS,
+  timeLimitS,
+  statusCallbackUrl,
+  answerOnBridge,
+  ringbackAudioUrl,
+}) => ({
+  kind: DIRECTIVE.DIAL_SIP,
+  uri,
+  username,
+  password,
+  callerId,
+  timeoutS,
+  timeLimitS,
+  statusCallbackUrl,
+  answerOnBridge,
+  ringbackAudioUrl,
+});

@@ -14,14 +14,14 @@
 // passen). Inline-Styles wären unter der Produktions-CSP (default-src 'self')
 // blockiert — darum trägt jedes Element seine Klasse aus hermes-demo.css.
 //
-// Sprache: SSR liefert Deutsch (die indexierte Fassung, Muster der ganzen
-// Startseite); der DE/EN-Umschalter der Seite (hermes-scroll.js applyLang)
-// tauscht zur Laufzeit das innerHTML aller [data-i18n]-Elemente — die
-// EN-Texte der Demo leben darum ZUSÄTZLICH im EN-Wörterbuch von
+// Sprache: die Komponente rendert serverseitig in der Sprache ihrer Seite.
+// Die Startseite ist seit dem Default-Wechsel 2026-09-10 englisch und bindet
+// sie als <HermesDemo lang="en" /> ein; /so-funktionierts bleibt deutsch und
+// nutzt den Default. Der EN/DE-Umschalter der Startseite (hermes-scroll.js
+// applyLang) tauscht zur Laufzeit das innerHTML aller [data-i18n]-Elemente —
+// die DE-Texte der Demo leben darum ZUSÄTZLICH im DE-Wörterbuch von
 // hermes-scroll.js (Präfix "hd..."). Sprachneutrale Werte (Rufnummer,
-// Werkzeugliste, "Live", "Hermes") tragen bewusst KEINEN Key. Das
-// DEMO-Objekt hier bleibt die Quelle für Seiten, die die Komponente mit
-// lang="en" serverseitig rendern.
+// Werkzeugliste, "Live", "Hermes") tragen bewusst KEINEN Key.
 //
 // Füllt seinen Elternrahmen (.demo-frame auf der Startseite, .sheet__demo im
 // Blatt). Die Maße hängen am Container, nicht am Fenster.

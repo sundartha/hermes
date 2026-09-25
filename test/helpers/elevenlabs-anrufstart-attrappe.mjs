@@ -73,7 +73,7 @@ export function pinCall() {
 // Einheit gegen outbound.js, keine Server-/Store-Integration.
 //
 // profil ist ein PROFIL und keine fertige Ja/Nein-Antwort: der Torzustand muss durch die
-// echte Torkette (consultAllowedFor) laufen, sonst prueft ein Test die Attrappe statt das
+// echte Torkette (consultAllowedForCall) laufen, sonst prueft ein Test die Attrappe statt das
 // Tor (Lehre b1-messwerkzeug-attrappe).
 //
 // tenantContext liefert seit OC-P2 auch firstName - der Anrufstart liest ihn fuer die
@@ -96,6 +96,9 @@ export function pinStore({
     // Die Methode muss aber existieren, sonst wirft der Anrufstart einen TypeError,
     // NACHDEM der Anruf schon losgelaufen waere.
     recordSipCallId: () => {},
+    // ST3: Zaehlfeld der Stimmen-Detektoren - dieselbe Begruendung wie recordSipCallId
+    // direkt darueber (der Ergebnisweg zaehlt, diese Attrappe misst den Anfragekoerper).
+    recordElDetectorCounts: () => {},
     // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber - die
     // Absender-Auswahl (absenderFuerAnruf) ruft beide VOR dem Netzzugriff; ohne die
     // Methoden wirft der Anrufstart einen TypeError, bevor die Attrappe je den
@@ -107,9 +110,18 @@ export function pinStore({
   };
 }
 
+// IP4: der Anker-Test misst gegen die Aufloesung elevenLabsVoiceIdFor(<dieser Wert>,
+// profil) - er darf den Wert nicht abschreiben (G5), sonst pinnt er die Attrappe.
+export const PIN_PLATTFORM_STIMME = "pin-plattform-stimme";
+
 export function pinConfig() {
   return {
     voice: {
+      // SEC-P4: das Plattform-Geheimnis, aus dem der Anrufstart den Mandanten-Token
+      // ableitet. Eine ECHTE Antwort und kein Leerwert (Lehre b1-messwerkzeug-attrappe):
+      // mit "" liefe die Ableitung in ihren Leerast und der Golden-Vergleich pinnte nur
+      // den leeren String statt der Ableitung.
+      elevenLabsToolToken: "pin-tool-token",
       elevenLabsOutbound: {
         apiKey: "pin-test-key",
         agentId: "pin-agent",
@@ -120,7 +132,7 @@ export function pinConfig() {
     },
     // Die global konfigurierte Plattform-Stimme, aus der die Sprach-/Stimmwahl die
     // Stimme dieses Anrufs ableitet (src/elevenlabs/call-locale.js).
-    telnyx: { telnyxElevenLabs: { voiceId: "pin-plattform-stimme" } },
+    telnyx: { telnyxElevenLabs: { voiceId: PIN_PLATTFORM_STIMME } },
     // Muss false sein: der Fake-Schalter ueberspringt dynamicVariables(...) komplett -
     // mit ihm gaebe es kein Objekt zum Abgreifen.
     safety: { fakeOriginateElevenlabs: false },
@@ -143,9 +155,9 @@ export function pinConfig() {
 // Attrappe, keine zweite fetch-Ersetzung - zwei Attrappen wuerden driften.
 export async function sendeAnrufstartKoerper({
   makeElevenLabsOutbound,
-  consultAllowedFor,
+  consultAllowedForCall,
   store = pinStore(),
-  // Thema B: das Recherche-Tor, analog consultAllowedFor - ohne Wert greift der
+  // Thema B: das Recherche-Tor, analog consultAllowedForCall - ohne Wert greift der
   // fail-closed Fabrik-Default (lookup_available = "unavailable").
   lookupAvailableFor,
   // Thema A: der Anruf-Datensatz, damit Wert-Tests openingLine/Hash setzen koennen.
@@ -168,7 +180,7 @@ export async function sendeAnrufstartKoerper({
       // Das ECHTE Tor, vom Aufrufer hereingereicht - bewusst OHNE Default: ein
       // eingebauter Rueckfall waere ein zweites Tor, und der Torzustand wuerde dann
       // gegen eine Attrappe gemessen statt gegen die Entscheidung, die er abbildet.
-      consultAllowedFor,
+      consultAllowedForCall,
       lookupAvailableFor,
     });
     await originateCall(call);

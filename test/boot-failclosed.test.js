@@ -275,16 +275,6 @@ test("B4A-BOOT-3: eine DATIERTE Snapshot-ID ist ein anderer Schluessel -> Boot b
   assert.match(output, /claude-haiku-4-5-20251001/);
 });
 
-test("B4A-BOOT-4 (N-2): REALTIME_MODEL ohne Preiseintrag startet NORMAL - dieser Pfad bucht keine Token", async () => {
-  const srv = await startServer({ env: { REALTIME_MODEL: "irgendwas-ohne-preis" } });
-  try {
-    assert.equal((await fetch(`${srv.localUrl}/healthz`)).status, 200);
-    assert.doesNotMatch(srv.stdout, /Start abgebrochen/, "ein Abbruch dafuer waere ein Abbruch ohne Schutzwirkung");
-  } finally {
-    await srv.stop();
-  }
-});
-
 test("B4A-BOOT-5: die ausgelieferte Konfiguration startet und nennt im Banner ihre Preisstaffeln", async () => {
   const srv = await startServer({});
   try {

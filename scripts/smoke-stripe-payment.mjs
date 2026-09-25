@@ -20,6 +20,7 @@ import {
   setTenantStripe,
 } from "../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../src/store/defaults.js";
+import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.js";
 import { fakeProvisioner } from "../test/helpers.js"; // eine Quelle (G5): kein zweites Double
 
 const TEST_KEY_PREFIX = "sk_test_"; // fail-closed: nur Stripe-TEST-Keys
@@ -96,7 +97,13 @@ async function main() {
   const { customerId } = await stripeBilling.createCustomer({ tenantRef: SMOKE_TENANT });
   // Schritt 2: Test-Karte attachen + als default setzen.
   const paymentMethodId = await attachTestCard(customerId);
-  setTenantStripe(state, SMOKE_TENANT, { customerId, paymentMethodId });
+  // GP-P2: attachTestCard haengt eine echte Test-KARTE an - der Typ gehoert mit in die
+  // Bindung, sonst faellt der Smoke am Eignungs-Gate durch, bevor er Stripe erreicht.
+  setTenantStripe(state, SMOKE_TENANT, {
+    customerId,
+    paymentMethodId,
+    paymentMethodType: PAYMENT_METHOD_TYPE_CARD,
+  });
 
   const requested = requestNumber(state, {
     tenantId: SMOKE_TENANT,

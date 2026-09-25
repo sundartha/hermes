@@ -1,12 +1,11 @@
-// Telnyx-Adapter: EINE Quelle fuer das ElevenLabs-Voice-Format und das Vollstaendigkeits-
-// Gate der Plattform-Stimme. Genutzt vom TeXML-Renderer (render.js), vom Call-Control-
-// speak (voice.js) und vom Assistant-Provisioner (scripts/) - kein Wert-Duplikat (G5/S2).
+// Telnyx-Adapter: EINE Quelle fuer die Sprach-Aufloesung der Stimm-ID - kein
+// Wert-Duplikat (G5/S2). Konsumenten JE FUNKTION:
+//   elevenLabsVoiceIdFor -> src/elevenlabs/call-locale.js (Outbound-Anrufstart) und
+//                           src/tts/directive-synth.js (Play-TTS-Vorabsynthese)
+//   ELEVENLABS_VOICE_ID_BY_PROFILE -> scripts/iel-geheimnisse-belege.mjs#stimmenBeleg (nur lesend,
+//                           Probe-Synthese je Profil-Stimme, IEL-B10)
 // Rein: kein IO, kein config-Import (der Aufrufer reicht die Registry-Werte herein).
 import { VOICE_PROFILE } from "../../directives.js";
-
-const ELEVENLABS_PROVIDER = "ElevenLabs";
-// Telnyx-Model-Slot-Default in <Provider>.<Model>.<VoiceId> (Telnyx dokumentiert "Default").
-const DEFAULT_MODEL = "Default";
 
 // Sprach-aufgeloeste ElevenLabs-Stimmen (Owner-Entscheidung 2026-08-18, bindende IDs -
 // vom Eigentuemer selbst angehoert und ausgewaehlt). Kuratierte Produkt-Daten auf
@@ -33,34 +32,16 @@ const DEFAULT_MODEL = "Default";
 // gemessen, alte wie neue). Die einzige belastbare Probe ist eine winzige Synthese
 // (POST /v1/text-to-speech/{id}); die liefert 200 fuer genau die IDs, die die Liste
 // nicht kennt.
-const ELEVENLABS_VOICE_ID_BY_PROFILE = Object.freeze({
+export const ELEVENLABS_VOICE_ID_BY_PROFILE = Object.freeze({
   [VOICE_PROFILE.DE_FEMALE_NEURAL]: "cqPdIo76zSHFDcSZpFov",
   [VOICE_PROFILE.FR_FEMALE_NEURAL]: "WeAAwKYcS06VmXw086yZ",
   [VOICE_PROFILE.EN_FEMALE_NEURAL]: "ZSNL4hPqCnqoMPaI4jGX",
 });
 
-/** Reines Namensformat <Provider>.<Model>.<VoiceId>. @param {{voiceId: string, model?: string}} el */
-export function elevenLabsVoiceName(el) {
-  return `${ELEVENLABS_PROVIDER}.${el.model || DEFAULT_MODEL}.${el.voiceId}`;
-}
-
 // Sprach-aufgeloeste rohe Voice-ID: Profil mit eigener Stimme -> diese, sonst die
-// injizierte Plattform-Stimme (DE). EINE Aufloesungsstelle fuer beide Konsumenten
-// (Renderer-Voice-Name unten UND der Play-TTS-Vorabsynthese-Pfad in src/tts/*, der
-// dieselbe Aufloesung braucht statt einer zweiten globalen Stimme, G5/S2).
+// injizierte Plattform-Stimme. EINE Aufloesungsstelle fuer ihre beiden Konsumenten - die
+// Play-TTS-Vorabsynthese (src/tts/directive-synth.js) und den Outbound-Anrufstart
+// (src/elevenlabs/call-locale.js) - statt einer zweiten globalen Stimme daneben (G5/S2).
 export function elevenLabsVoiceIdFor(defaultVoiceId, voiceProfile) {
   return ELEVENLABS_VOICE_ID_BY_PROFILE[voiceProfile] || defaultVoiceId;
-}
-
-// Sprach-aufgeloester Voice-Name: Komposition aus der ID-Aufloesung + Namensformat
-// (kein zweiter Formatierungs- oder Aufloesungsort, G5).
-export function elevenLabsVoiceNameFor(el, voiceProfile) {
-  return elevenLabsVoiceName({ model: el.model, voiceId: elevenLabsVoiceIdFor(el.voiceId, voiceProfile) });
-}
-
-// Fail-SAFE-Gate (kein Programmierfehler, anders als das werfende voiceAttrs): eine halbe/
-// leere Env ist ein Betriebszustand -> Azure-Bestand statt totem Call. Beide Pflichtteile
-// noetig: ohne voiceId gibt es keine Stimme, ohne apiKeyRef keinen ElevenLabs-Zugang.
-export function hasElevenLabsVoice(el) {
-  return Boolean(el && el.voiceId && el.apiKeyRef);
 }

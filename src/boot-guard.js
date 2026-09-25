@@ -9,6 +9,11 @@ import {
   PLATFORM_NUMBER_PURPOSE,
 } from "./store/defaults.js";
 import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.js";
+import { usableFallbackProvider } from "./llm/provider.js";
+// IEL-B1: die EINE Definition von "Zugang des EL-Inbound-Wegs vollstaendig" (rein, config-frei).
+import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.js";
+import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "./elevenlabs/inbound-scope.js";
+import { normalisierterOrigin } from "./middleware.js";
 
 // Boot-Entkopplung (OT-1, AC5). Fuehrt einen Boot-Teilschritt aus und kappt seinen
 // Blast-Radius: faengt jeden Fehler, loggt ihn laut + secret-frei (nur err.message)
@@ -94,6 +99,27 @@ export function sttProfileFindings(sttProfile) {
         `STT_PROFILE='${sttProfile}' ist unbekannt. Gueltig: ` +
         `${Object.values(STT_PROFILE).join("|")}.`,
       fatal: true,
+    },
+  ];
+}
+
+export const LLM_FALLBACK_FINDING = Object.freeze({ SAME_AS_PRIMARY: "llm_fallback_same_as_primary" });
+
+// FW2: gesetzt, aber wirkungslos. WARN, kein exit(1) - der Fehlausgang ist der
+// Bestandszustand (kein Ausweichen), ein Boot-Refusal tauschte einen Tippfehler gegen
+// einen Telefonie-Totalausfall (Praezedenz warnTariffDrift/warnNumberOriginDecoupled).
+// Rein, arg-injiziert, config-frei (Muster driftConfigFindings).
+export function llmFallbackFindings({ provider, fallback } = {}) {
+  if (!fallback) return [];
+  if (usableFallbackProvider({ provider, fallback })) return [];
+  return [
+    {
+      code: LLM_FALLBACK_FINDING.SAME_AS_PRIMARY,
+      fatal: false,
+      message:
+        `LLM_PROVIDER_FALLBACK=${fallback} ist identisch mit LLM_PROVIDER - es gibt keinen Anbieter, ` +
+        "auf den ausgewichen werden koennte; der Guthaben-Latch bleibt wirkungslos. Wert im " +
+        "Render-Dashboard auf einen ANDEREN gueltigen Anbieter setzen oder leeren.",
     },
   ];
 }
@@ -206,6 +232,14 @@ export function unpricedModels(modelIds, modelPricesUsd) {
   return modelIds.filter((id) => !Object.hasOwn(modelPricesUsd, id));
 }
 
+// GP-P6 (a): Katalog-Slugs OHNE konfigurierte Stripe-Price-Id. Reines Praedikat wie
+// unpricedModels - es entscheidet die Schwere NICHT (das tut assertPricedPlans in
+// boot.js). priceIdOf wird INJIZIERT statt hier importiert: der Guard bleibt damit frei
+// von config/subscribe und ohne Umgebung testbar (Muster unpricedModels(ids, tabelle)).
+export function unpricedPlanSlugs(slugs, priceIdOf) {
+  return slugs.filter((slug) => !priceIdOf(slug));
+}
+
 // B4a: Veralterung der Preisliste sichtbar machen. asOf ist unser Abrufdatum; wird es alt,
 // ist die Tabelle eine ANNAHME ohne Beleg. WARN, NIE fatal - ein Kalendertag darf die
 // Telefonie nicht lahmlegen. Ein Quartal ist derselbe Takt, in dem usdToEur laut
@@ -227,39 +261,37 @@ export function stalePriceFindings(modelPricesUsd, todayIso) {
 }
 
 // LCT P4b: Vollkosten-Boot-Guard (WARN). Sichert die spaetere Owner-Tarifsenkung ab.
-// Feuert GENAU in der KONJUNKTION: der gesenkte Tarif liegt unter der Vollkostenschwelle
-// UND die Abgleich-Deckung ist duenn. Nur EINE der beiden -> KEINE Meldung. WARN, kein
-// exit(1) (Praezedenz warnUnpricedModels/warnAlertChannelUnset): ein Boot-Refusal tauschte
-// ein Kostenproblem gegen einen Telefonie-Totalausfall.
+// Seit KV2-10 feuert er auf belowFloor ALLEIN (deckungs-unabhaengig, Kriterium (c)): bis
+// KV2-9 stand hier die KONJUNKTION aus Unterschreitung UND duenner Abgleich-Deckung - das
+// Ziel der ganzen Kette ist es aber, die Deckung UEBER die Schwelle zu heben, und in dem
+// Moment haette der Boden-Waechter verstummt, auch bei einem Tarif unter Vollkosten. Eine
+// Sicherung, die die eigene Kette abschaltet, ist keine (angriff-kritiker.md K6). Die
+// Deckung bleibt als Kontext in der Nachricht stehen, ist aber NIE Ausloeser.
+// WARN, kein exit(1) (Praezedenz warnUnpricedModels/warnAlertChannelUnset): ein
+// Boot-Refusal tauschte ein Kostenproblem gegen einen Telefonie-Totalausfall. Dies ist
+// eine Diagnose, kein Geld-Gate (Regel 1 bleibt unberuehrt).
 //
-// Was dieser Guard NICHT leistet (ausdruecklich): er feuert nur in der Konjunktion.
-// Vorbedingung 1 (Vollkostendeckung) ist damit NICHT eigenstaendig ueberwacht - bei hoher
-// Deckung schweigt er auch unter der Vollkostenschwelle (Test (q) pinnt das). Solange der
-// Assistant-Pfad im Code steht, verlangt jede Aenderung von VOICE_TARIFF_FULL_COST_FLOOR_CENTS
-// eine erneute Pruefung gegen den konfigurierten Tarif.
-//
-// coveragePercent wird HEREINGEREICHT, nicht hier gerechnet: die eine Quelle ist
-// costTruingCoveragePercent(store) aus P3 (G5). Nenner 0 liefert dort bereits 0% (kein
-// Freispruch) - ein leerer Spiegel bei gesenktem Tarif ist damit WARN, nicht Schweigen.
-// KEINE Literale (10, 80) im Rumpf - beide Schwellen kommen als benannte Konstanten herein.
+// coveragePercent/minCoveragePercent werden HEREINGEREICHT, nicht hier gerechnet: die eine
+// Quelle ist costTruingCoveragePercent(store) aus P3 (G5). Nenner 0 liefert dort bereits
+// 0% (kein Freispruch) - ein leerer Spiegel bei gesenktem Tarif ist damit WARN, nicht
+// Schweigen. KEINE Literale im Rumpf - beide Schwellen kommen als benannte Argumente herein.
 export const VOICE_TARIFF_FLOOR_FINDING = Object.freeze({
   BELOW_FULL_COST: "voice_tariff_below_full_cost", // WARN
 });
 
 export function voiceTariffFloorFindings({ domesticTariffCents, fullCostFloorCents, coveragePercent, minCoveragePercent }) {
   const belowFloor = domesticTariffCents < fullCostFloorCents;
-  const thinCoverage = coveragePercent < minCoveragePercent;
-  if (!(belowFloor && thinCoverage)) return [];
+  if (!belowFloor) return [];
   return [
     {
       code: VOICE_TARIFF_FLOOR_FINDING.BELOW_FULL_COST,
       fatal: false,
       message:
         `VOICE_TARIFF_DOMESTIC_CENTS=${domesticTariffCents} liegt unter der Vollkostenschwelle ` +
-        `VOICE_TARIFF_FULL_COST_FLOOR_CENTS=${fullCostFloorCents}, waehrend die Abgleich-Deckung ` +
-        `${coveragePercent}% unter COST_TRUING_MIN_COVERAGE_PERCENT=${minCoveragePercent}% liegt - ` +
-        "der gesenkte Tarif ist der Buchungswert jedes nicht abgeglichenen Calls und wird von der " +
-        "Messung nicht gedeckt.",
+        `VOICE_TARIFF_FULL_COST_FLOOR_CENTS=${fullCostFloorCents} (Abgleich-Deckung ${coveragePercent}%, ` +
+        `COST_TRUING_MIN_COVERAGE_PERCENT=${minCoveragePercent}% - Kontext, seit KV2-10 kein ` +
+        "Ausloeser mehr) - der gesenkte Tarif ist der Buchungswert jedes nicht abgeglichenen Calls " +
+        "und wird von der Messung nicht gedeckt.",
     },
   ];
 }
@@ -458,6 +490,63 @@ export const ALERT_CHANNEL_FINDING = Object.freeze({
 // die Funktion nimmt nur den mail-Namespace als Argument.
 export function mailerKonstruierbar({ brevoApiKey, smtpHost } = {}) {
   return Boolean(brevoApiKey || smtpHost);
+}
+
+// KV2-1: WELCHE Betreiber-Kanaele tatsaechlich einsatzbereit sind. EINE Quelle (G5) fuer
+// zwei Leser: den Boot-Befund unten UND die Sweep-Zeile des Kostenpfads
+// (billing/cost-truing.js#logSweepLine, Feld kanaele=). Mail zaehlt nur mit Adresse UND
+// konstruierbarem Mailer - dieselbe Bedingung, die alertChannelFindings anlegt (G26/G2),
+// hier NICHT ein zweites Mal formuliert, sondern ueber mailerKonstruierbar gelesen.
+// Arg-injiziert wie der Rest dieser Datei; die Aufrufer reichen ihre zwei Namespaces
+// herein (Muster alertChannelInputs).
+export const ALARM_KANAL = Object.freeze({ MAIL: "mail", SMS: "sms", KEINE: "keine" });
+
+export function betreiberAlarmKanaele({ billing, mail }) {
+  const kanaele = [];
+  if (mail.platformAlertMailTo && mailerKonstruierbar(mail)) kanaele.push(ALARM_KANAL.MAIL);
+  if (billing.platformAlertSmsTo) kanaele.push(ALARM_KANAL.SMS);
+  return kanaele;
+}
+
+// Ihre Schreibweise in Log/Audit. Die leere Menge heisst ausdruecklich "keine" und NICHT
+// "" - ein leeres Feld ist in einer Log-Zeile von einem FEHLENDEN Feld nicht zu
+// unterscheiden, und genau diese Verwechslung ist der Zustand, den KV2-1 beendet.
+// Die ZIELE selbst (Adresse/Nummer) stehen hier NIE - nur die Kanal-Arten.
+export function alarmKanalZeile(kanaele) {
+  return kanaele.length > 0 ? kanaele.join(",") : ALARM_KANAL.KEINE;
+}
+
+// KV2-1 (Plan 4.9, Kriterium (d)): der Kostenpfad meldet ab dieser Phase ueber denselben
+// Betreiber-Meldeweg wie der Ausfall-Melder - haengt aber an KEINEM Schalter: der
+// Kosten-Sweep laeuft unkonditional (LCT P8). Ein fehlendes Alarm-Ziel ist hier deshalb
+// IMMER ein Befund, unabhaengig von ELEVENLABS_OUTBOUND_ENABLED und OUTAGE_ALERT_WINDOW_MS
+// (die zusammen den fatalen BOTH_UNSET_WITH_OUTBOUND-Riegel oben gaten - der deckt diesen
+// Fall also NICHT ab).
+// WARN, NICHT fatal: ein Boot-Refusal tauschte ein Beobachtungsproblem gegen einen
+// Telefonie-Totalausfall (Praezedenz COVERAGE_BELOW_THRESHOLD, s. dort). Die Sichtbarkeit
+// kommt stattdessen aus dem DURABLEN Eintrag, den der Aufrufer schreibt (boot.js) - ein
+// Boot-WARN im Log eines Free-Tier-Dynos ist genau die Spur, deren Wertlosigkeit diese
+// Phase belegt hat (AUFTRAG B3).
+export const KOSTEN_ALARM_FINDING = Object.freeze({
+  NO_TARGET: "kosten_alarm_ohne_ziel", // WARN
+});
+
+export function kostenAlarmFindings({ billing, mail }) {
+  if (betreiberAlarmKanaele({ billing, mail }).length > 0) return [];
+  return [{
+    code: KOSTEN_ALARM_FINDING.NO_TARGET,
+    fatal: false,
+    // Bewusst NICHT das Wort "Deckungsquote" (unscoped /Deckungsquote/-Assertion in
+    // test/cost-truing-booking-guard.test.js (p2) prueft die ANDERE, bereits bestehende
+    // Boot-Warnung costTruingBookingFindings - eine zweite Fundstelle desselben Worts
+    // liesse diesen Test bei 100% Deckung faelschlich rot laufen, obwohl das Verhalten
+    // korrekt ist).
+    message:
+      "Weder PLATFORM_ALERT_MAIL_TO (mit BREVO_API_KEY oder SMTP_HOST) noch " +
+      "PLATFORM_ALERT_SMS_TO ist gesetzt - jeder Kosten-Befund (zu geringer Beleg-Anteil, " +
+      "Belegausfall) landet ausschliesslich im Log und in audit_log, es sieht ihn " +
+      "niemand. Mindestens einen vollstaendigen Kanal setzen.",
+  }];
 }
 
 export function alertChannelInputs({ billing, mail, voice }) {
@@ -691,21 +780,25 @@ export function costTruingBookingFindings({
   return findings;
 }
 
-// KV-P7: zwei latente Kosten-Pfade, beide WARN (kein exit(1) - ein Guard, der den Boot in
-// einer Konfiguration verweigert, an die niemand gedacht hat, waere ein selbst
-// verursachter Telefonie-Totalausfall, Praezedenz warnUnpricedModels). Beide Befunde
-// machen eine bestehende, blinde Sicherung LAUT statt sie zu verschaerfen - Klaerung s.
-// tasks/kv-p7-tts-klaerung.md.
+// KV-P7/IE3: ZWEI latente Kosten-Pfade. PLAY_TTS_UNPRICED bleibt WARN (kein exit(1) - ein
+// Guard, der den Boot in einer Konfiguration verweigert, an die niemand gedacht hat, waere
+// ein selbst verursachter Telefonie-Totalausfall, Praezedenz warnUnpricedModels).
+// EL_INBOUND_CARRIER_UNCOLLECTED ist FATAL: ein Anrufweg, dessen Kostenpfad keinen
+// Einsammler hat, darf nicht scharf sein (Muster REQUIRED_TYPES_EMPTY).
 export const LATENT_COST_PATH_FINDING = Object.freeze({
   PLAY_TTS_UNPRICED: "play_tts_unpriced", // WARN
-  REALTIME_NO_MIDCALL_BUDGET: "realtime_no_midcall_budget", // WARN
+  EL_INBOUND_CARRIER_UNCOLLECTED: "el_inbound_carrier_uncollected", // FATAL (IE3)
 });
 
 // Reine Entscheidung (arg-injiziert, config-frei, testbar; Muster alertChannelFindings).
-// realtimeMidCallBudgetCheck OHNE Default (kein "= false"): ein vergessenes Argument soll
-// einen UEBERFLUESSIGEN WARN erzeugen, nie ein stilles Verstummen der Pruefung - die
-// richtige Fehlrichtung fuer einen Sicherheits-Guard.
-export function latentCostPathFindings({ playTtsEnabled, realtimeEngineSelected, realtimeMidCallBudgetCheck }) {
+// elInboundCarrierHasCollector OHNE Default (kein "= false"): ein vergessenes Argument
+// soll einen UEBERFLUESSIGEN Befund erzeugen, nie ein stilles Verstummen der Pruefung -
+// die richtige Fehlrichtung fuer einen Sicherheits-Guard.
+export function latentCostPathFindings({
+  playTtsEnabled,
+  elInboundEnabled,
+  elInboundCarrierHasCollector,
+}) {
   const findings = [];
   if (playTtsEnabled) {
     findings.push({
@@ -721,18 +814,202 @@ export function latentCostPathFindings({ playTtsEnabled, realtimeEngineSelected,
         "Monatsgebuehr auf Anrufe umgelegt wird (Preisfrage, tasks/kv-p7-tts-klaerung.md).",
     });
   }
-  if (realtimeEngineSelected && !realtimeMidCallBudgetCheck) {
+  // IE3: ein Anrufweg, dessen Kostenpfad keinen Einsammler hat, darf nicht scharf sein.
+  // Riegel fuer den neuen Inbound-Weg (unser Bein, Gespraech beim EL-Agenten). Er haengt
+  // am KOSTENPFAD, nicht am Schalternamen: sobald das Profil telnyx_inbound_el_convai
+  // mindestens einen Pflicht-Traeger MIT Einsammler fuehrt, verschwindet er von selbst -
+  // und wenn jemand die Katalogzeile entfernt oder ihre Traeger auf nicht_belegpflichtig
+  // setzt, startet der Prozess mit scharfem Schalter nicht mehr.
+  if (elInboundEnabled && !elInboundCarrierHasCollector) {
     findings.push({
-      code: LATENT_COST_PATH_FINDING.REALTIME_NO_MIDCALL_BUDGET,
-      fatal: false,
+      code: LATENT_COST_PATH_FINDING.EL_INBOUND_CARRIER_UNCOLLECTED,
+      fatal: true,
       message:
-        "VOICE_ENGINE=realtime, aber die Realtime-Bruecke prueft nach Gespraechsbeginn " +
-        "KEINE Geld-Achse mehr - nur einen Max-Dauer-Timer (src/bridge.js). Die " +
-        "Budget-Engine prueft blockingBudgetAxis vor JEDER Turn-Runde (src/claude.js, " +
-        "roundStopReason); ein Tenant kann seine Kostendecke im laufenden Gespraech " +
-        "ueberziehen. Handlung: VOICE_ENGINE=budget lassen, bis die Bruecke dieselbe " +
-        "Pruefung fuehrt (dann REALTIME_MID_CALL_BUDGET_CHECK in src/bridge.js auf true).",
+        "ELEVENLABS_INBOUND_ENABLED=true, aber das Kostenprofil telnyx_inbound_el_convai " +
+        "fuehrt keinen Kostentraeger mit Beleg-Einsammler (src/billing/kostenarten.js) - " +
+        "jeder eingehende Anruf auf diesem Weg erzeugt Anbieterkosten (das " +
+        "ElevenLabs-Gespraech UND unser Telnyx-Bein), die in keinem Buch und auf keiner " +
+        "Gate-Achse landen. Handlung: ELEVENLABS_INBOUND_ENABLED=false setzen, oder erst " +
+        "die Katalogzeile mit Einsammler bauen.",
     });
   }
   return findings;
+}
+
+// IEL-B1: Schalter an, aber der Weg kann nie zustande kommen (SIP-Digest ohne Benutzer/
+// Passwort, Init-Webhook ohne tragfaehiges Geheimnis) -> FATAL. Ein Schalter, der "an"
+// meldet und still immer den Budget-Pfad faehrt, waere genau die Blindheit, die der
+// Owner-Testanruf sonst erst am Telefon entdeckt. Der Befund nennt NUR Schluesselnamen
+// und Mangel, nie einen Wert und keine Laenge (Regel 4). Alle Maengel in EINER Meldung:
+// applyBootFindings druckt nur den ersten fatalen Befund.
+export const EL_INBOUND_ACCESS_FINDING = Object.freeze({
+  INCOMPLETE: "el_inbound_access_incomplete", // FATAL (IEL-B1)
+});
+
+function zugangsMangelText(defekt) {
+  return `${defekt.envKey} ${defekt.mangel}`;
+}
+
+export function elInboundAccessFindings(inbound) {
+  if (inbound.enabled !== true) return [];
+  const defekte = inboundElAccessDefects(inbound);
+  if (defekte.length === 0) return [];
+  return [
+    {
+      code: EL_INBOUND_ACCESS_FINDING.INCOMPLETE,
+      fatal: true,
+      message:
+        "ELEVENLABS_INBOUND_ENABLED=true, aber der Zugang des EL-Inbound-Wegs ist " +
+        `unvollstaendig: ${defekte.map(zugangsMangelText).join(", ")}. Handlung: ` +
+        "ELEVENLABS_INBOUND_ENABLED=false setzen oder die Geheimnisse per Skript-Lauf neu setzen.",
+    },
+  ];
+}
+
+// IEX-A9 (E9/A5): unbekannter ELEVENLABS_INBOUND_SCOPE -> FATAL, unabhaengig vom Schalter (Muster
+// sttProfileFindings): ein Tippfehler faellt beim Deploy auf, nicht erst beim Einschalten. Die Meldung
+// nennt NIE den eingegebenen Wert (Log-Injection), nur Schluessel und gueltige Werte.
+export const EL_INBOUND_SCOPE_FINDING = Object.freeze({
+  UNKNOWN: "el_inbound_scope_unknown", // FATAL (IEX-A9)
+});
+
+export function elInboundScopeFindings(scope) {
+  if (isInboundElScope(scope)) return [];
+  return [
+    {
+      code: EL_INBOUND_SCOPE_FINDING.UNKNOWN,
+      fatal: true,
+      message:
+        `ELEVENLABS_INBOUND_SCOPE ist unbekannt. Gueltig: ${Object.values(INBOUND_EL_SCOPE).join("|")}. ` +
+        `Handlung: Wert korrigieren oder leeren (Default ${DEFAULT_INBOUND_EL_SCOPE}).`,
+    },
+  ];
+}
+
+// ---- E5/S2-A6: Eindeutigkeit des ANGEKUENDIGTEN Origins ---------------------------
+// Warum FATAL und nicht WARN (die Praezedenz llmFallbackFindings oben waehlt WARN,
+// ausdruecklich weil "ein Boot-Refusal einen Tippfehler gegen einen Telefonie-
+// Totalausfall tauschte" - der Fall ist hier benannt, nicht uebersehen): die vier
+// Befunde beschreiben nicht einen wirkungslosen Schalter, sondern eine
+// SICHERHEITSRELEVANTE Uneindeutigkeit. Laufen aud-Erwartung (src/auth.js audience())
+// und Metadaten-Verweis auseinander, prueft der Server eine andere Audience als die, die
+// er dem Client ankuendigt - der Client kann sich nie erfolgreich autorisieren, und
+// niemand merkt es. Ein PUBLIC_URL mit Pfad erzeugt eine "Audience", die kein Origin
+// ist (T-32 friert scheme/host/port ein). Gegen den Telefonie-Totalausfall ist der
+// Schutz die REIHENFOLGE, nicht die Abschwaechung: Live-Werte lesen BEVOR deployed wird
+// (F-b/F-e); am 2026-09-18 belegen zwei oeffentliche Reads, dass PRM.resource ===
+// publicUrl + "/mcp" gilt, dieser Riegel beim ersten Deploy also nicht fatal werden kann.
+export const ANGEKUENDIGTER_ORIGIN_FINDING = Object.freeze({
+  AUDIENCE_DIVERGENT: "angekuendigte_audience_divergent",
+  PUBLIC_URL_UNPARSBAR: "public_url_unparsbar",
+  PUBLIC_URL_MIT_PFAD: "public_url_mit_pfad",
+  PUBLIC_URL_UNSICHER: "public_url_unsicher",
+  ALLOWLIST_UNPARSBAR: "mcp_allowlist_unparsbar",
+});
+
+// Pfad, den die kanonische MCP-Audience an den angekuendigten Origin anhaengt (G25).
+const MCP_AUDIENCE_PFAD = "/mcp";
+const HTTPS_PROTOKOLL = "https:";
+const RAND_SCHRAEGSTRICHE = /\/+$/;
+
+// Vergleichsform beider Audience-Seiten: getrimmt, ohne abschliessende Schraegstriche.
+// BEWUSST NICHT stripTrailingSlash (src/config.js): das entfernt GENAU EINEN Slash und
+// lebt in dem config-Modul, das diese Datei absichtlich nicht importiert. Ein live
+// gemeintes ".../mcp/" darf keinen Boot-Abbruch ausloesen (Nachbesserung PM-8).
+// EXPORTIERT (E8): config.js' PRODUCTION_FOOTGUNS-Eintrag fuer OAUTH_AUDIENCE
+// vergleicht gegen dieselbe Vergleichsform - keine zweite, eigene Normalisierungs-
+// Formel (G5). Der Footgun-Eintrag dort ist bewusst redundant zu
+// angekuendigterOriginFindings() (die hier laeuft unconditional, nicht nur in
+// Produktion) - er nutzt exakt diese Funktionen, keine neue Logik.
+export function fuerAudienceVergleich(wert) {
+  return String(wert ?? "").trim().replace(RAND_SCHRAEGSTRICHE, "");
+}
+
+// Die kanonische Audience aus dem angekuendigten Origin. MUSS identisch bleiben zu
+// audience() in src/auth.js (dort `oauthAudience || ${publicUrl}/mcp`). Diese Gleichheit
+// ist NICHT per Konvention gesichert: test/s2-mcp-origin.test.js vergleicht den Wert
+// gegen die resource-Angabe, die der laufende Server unter
+// /.well-known/oauth-protected-resource ausliefert.
+export function kanonischeAudience(publicUrl) {
+  return `${fuerAudienceVergleich(publicUrl)}${MCP_AUDIENCE_PFAD}`;
+}
+
+function audienceFindings({ publicUrl, oauthAudience }) {
+  if (!oauthAudience) return [];
+  const erwartet = kanonischeAudience(publicUrl);
+  if (fuerAudienceVergleich(oauthAudience) === erwartet) return [];
+  return [
+    {
+      code: ANGEKUENDIGTER_ORIGIN_FINDING.AUDIENCE_DIVERGENT,
+      fatal: true,
+      message:
+        `OAUTH_AUDIENCE weicht von der kanonischen MCP-Audience ab (erwartet: ${erwartet}). ` +
+        "Handlung: Wert leeren (dann gilt der kanonische Default) oder exakt darauf setzen.",
+    },
+  ];
+}
+
+// publicUrl LEER liefert bewusst [] - dafuer gibt es schon einen Eigentuemer
+// (assertConfig, config.js: leer oder CHANGE-ME -> Boot-Refusal). Zwei Riegel auf
+// dieselbe Aussage waeren zwei Orte, die auseinanderlaufen koennen.
+function publicUrlFindings({ publicUrl, isProduction }) {
+  const wert = fuerAudienceVergleich(publicUrl);
+  if (!wert) return [];
+  let url;
+  try {
+    url = new URL(wert);
+  } catch {
+    return [
+      {
+        code: ANGEKUENDIGTER_ORIGIN_FINDING.PUBLIC_URL_UNPARSBAR,
+        fatal: true,
+        message:
+          "PUBLIC_URL ist keine absolute URL (erwartet z.B. https://app.example.com, ohne Pfad).",
+      },
+    ];
+  }
+  const findings = [];
+  if (url.pathname !== "/" || url.search || url.hash)
+    findings.push({
+      code: ANGEKUENDIGTER_ORIGIN_FINDING.PUBLIC_URL_MIT_PFAD,
+      fatal: true,
+      message:
+        "PUBLIC_URL traegt Pfad, Query oder Fragment. Der angekuendigte Origin ist nur " +
+        "scheme://host[:port] - alles danach entfernen.",
+    });
+  if (isProduction && url.protocol !== HTTPS_PROTOKOLL)
+    findings.push({
+      code: ANGEKUENDIGTER_ORIGIN_FINDING.PUBLIC_URL_UNSICHER,
+      fatal: true,
+      message: "PUBLIC_URL ist im Hosting nicht https (gleiche Linie wie isInsecureHttpIssuer).",
+    });
+  return findings;
+}
+
+// Meldung nennt die POSITION, nie den Wert (Muster elInboundScopeFindings: kein Echo
+// eines eingegebenen Strings ins Log).
+function allowlistFindings(allowedOrigins) {
+  return allowedOrigins
+    .map((eintrag, index) => ({ eintrag, position: index + 1 }))
+    .filter(({ eintrag }) => !normalisierterOrigin(eintrag))
+    .map(({ position }) => ({
+      code: ANGEKUENDIGTER_ORIGIN_FINDING.ALLOWLIST_UNPARSBAR,
+      fatal: true,
+      message:
+        `MCP_ALLOWED_ORIGINS: Eintrag ${position} ist kein absoluter http(s)-Origin ` +
+        "(erwartet z.B. https://chatgpt.com, ohne Pfad). Der Wert wird bewusst nicht geloggt.",
+    }));
+}
+
+export function angekuendigterOriginFindings({
+  publicUrl,
+  oauthAudience,
+  allowedOrigins = [],
+  isProduction = false,
+} = {}) {
+  return [
+    ...audienceFindings({ publicUrl, oauthAudience }),
+    ...publicUrlFindings({ publicUrl, isProduction }),
+    ...allowlistFindings(allowedOrigins),
+  ];
 }

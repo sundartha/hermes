@@ -14,17 +14,23 @@
 // entgegen, NICHT eine fertige Sprache: eine eigene Kette neben resolveCallLanguage waere
 // genau der Weg, auf dem die Regel still auseinanderlaeuft.
 //
-// AUS DEM DATENSATZ, NICHT VOM AUFRUFER (Eigentuemer-Entscheidung 16.08.2026, Punkt 4):
-// beide Werte werden aus Mandant und Angerufenem abgeleitet. Es gibt keinen Parameter,
-// ueber den ein MCP-Aufrufer sie setzen koennte - place_call fuehrt bewusst KEIN
-// Sprachfeld (LANG-15, mcp-tools.js), und diese Naht liest ausschliesslich den
-// gespeicherten Zustand. Sonst haette sich jemand ueber einen Umweg doch einen eigenen
-// Agenten gebaut.
+// DER AUFRUFER NENNT DIE GESPRAECHSSPRACHE, NIE DIE OFFENLEGUNGSSPRACHE (F-2,
+// 2026-09-06, loest die Regel vom 16.08.2026 ab): place_call fuehrt seit P4a ein
+// optionales language-Feld; es entscheidet, in welcher Sprache das GESPRAECH gefuehrt
+// wird, und ist am Datensatz aufgeloest (call.language, routes/api-calls.js). In welcher
+// Sprache der OFFENLEGUNGSSATZ ankommt, entscheidet weiterhin ausschliesslich der Server
+// aus dem Angerufenen - kein Feld, kein Prompt, kein Setting erreicht diese Frage
+// (Artikel 50 EU AI Act). Genau deshalb stehen unten ZWEI Funktionen und nicht mehr EIN
+// Kurzschluss-ODER: zwei Fragen, die sich eine Zeile teilen, laufen auseinander.
 //
 // REIN: kein IO, kein config-Import. defaultVoiceId kommt herein statt hier gelesen zu
 // werden (DIP, wie bei elevenLabsVoiceIdFor selbst) - Deutsch hat in der Stimmen-Karte
 // ABSICHTLICH keinen eigenen Eintrag, seine Stimme IST die global konfigurierte
 // Plattform-Stimme.
+//
+// DE1 (2026-09-04): seit dieser Phase entsteht auf demselben Weg auch der
+// Anrufbeantworter-Text (providerVoicemailMessage) - dieselbe Quelle, dieselbe
+// Offenlegung zuerst, nur ein anderer Ort am Agenten.
 import { LANGUAGE_FOR_COUNTRY, localeFor } from "../i18n/locales.js";
 import { countryForE164 } from "../store/defaults.js";
 import { resolveCallLanguage } from "../store/state-ops.js";
@@ -45,6 +51,26 @@ import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-vo
 function calleeLanguage(to) {
   const land = countryForE164(to);
   return (land && LANGUAGE_FOR_COUNTRY[land]) || null;
+}
+
+// P4a (F-2 Punkt 2): die Sprache des GESPRAECHS. Sie steht am Anruf-Datensatz
+// (call.language) - dort hat routes/api-calls.js Sprachwunsch und resolveCallLanguage
+// bereits zu EINEM Wert gemacht. Der Rueckfall ist DIESELBE Auftraggeber-Kette, keine
+// zweite Regel; ein Bestandsaufruf ohne callLanguage verhaelt sich unveraendert.
+// WAS HIER NICHT MEHR STEHT: calleeLanguage(to). Bis F-2 gewann die aus der Zielnummer
+// abgeleitete Sprache deterministisch - ein portugiesischer Auftrag an eine deutsche
+// Nummer war damit nicht ausdrueckbar (W5).
+function conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }) {
+  return callLanguage || resolveCallLanguage(state, { tenantId, numberRecord });
+}
+
+// Die Sprache des OFFENLEGUNGSSATZES - WOERTLICH die Kette, die bis P4a beide Fragen
+// beantwortet hat: die belegbare Sprache des Angerufenen, sonst die Auftraggeber-Kette.
+// Sie bleibt byte-identisch, damit fuer JEDEN Anruf, den es heute gibt, exakt derselbe
+// Satz in exakt derselben Sprache herauskommt (E-2). Neu ist allein, dass die
+// GESPRAECHSSPRACHE davon abweichen darf.
+function disclosureLanguageOf(state, { tenantId, numberRecord, to }) {
+  return calleeLanguage(to) || resolveCallLanguage(state, { tenantId, numberRecord });
 }
 
 // Der Anrufgrund reist als Platzhalter des ANBIETERS, nicht als Wert: was hier steht, ist
@@ -94,6 +120,30 @@ export function providerOpeningFor(language) {
 }
 
 /**
+ * Die vollstaendige Anrufbeantworter-Nachricht EINES Anrufs, in der Sprache des Anrufs.
+ *
+ * DIESELBE REIHENFOLGE UND DIESELBE QUELLE wie providerOpening darueber: der
+ * Offenlegungssatz WOERTLICH und als ALLERERSTES (Absolute Regel 2, Artikel 50 EU AI
+ * Act - er gilt auch fuer eine Nachricht auf dem Anrufbeantworter), dahinter der
+ * sprachliche Rest aus demselben Bundle. Es gibt keine zweite Fassung und keine
+ * Uebersetzung: was gesprochen wird, steht in src/i18n/locales.js.
+ *
+ * WARUM DAS UEBERHAUPT HIER ENTSTEHT (Messung 2026-09-04, DE1): am Agenten liegt dieser
+ * Text unter built_in_tools.voicemail_detection.params - ein Pfad, den WEDER ein
+ * language_preset NOCH eine conversation_config_override im Anbieter-Schema fuehrt.
+ * Beide Uebersteuerungswege scheiden damit aus. Der einzige tragfaehige Weg ist die
+ * dynamische Variable: der Anbieter loest sie in genau diesem Feld auf (Schema
+ * VoicemailDetectionToolConfig.voicemail_message, "Supports dynamic variables"), und
+ * live tut er es bereits fuer {{owner_name}}/{{opening_line}}.
+ *
+ * @param {{locale: object, ownerName: string, openingLine: string}} args
+ * @returns {string}
+ */
+export function providerVoicemailMessage({ locale, ownerName, openingLine }) {
+  return [locale.disclosure(ownerName), locale.voicemailBody(openingLine)].join(" ");
+}
+
+/**
  * Sprache, Stimme und Offenlegungssatz EINES Anrufs, abgeleitet aus dem gespeicherten
  * Zustand. Vier Rueckgabewerte, jeder mit genau einem Abnehmer im Anrufstart
  * (src/elevenlabs/outbound.js):
@@ -108,10 +158,12 @@ export function providerOpeningFor(language) {
  *                               Er ist Agenten-Konfiguration, kein Anruf-Parameter: der
  *                               Traeger je Sprache ist das language_preset am Agenten.
  *                               SEIT OC-P2 mit GENAU EINER Ausnahme:
- *                               agent.first_message steht auf der OWNER-Menge
- *                               (convai.js#OVERRIDE_OWNER_ONLY_LEAF_PATHS) und wird
- *                               ausschliesslich bei call.calleeIsOwner === true gesendet
- *                               (elevenlabs/outbound.js#ownerFirstMessage). Fuer jeden
+ *                               agent.first_message steht auf der OWNER-Menge, seit P4a
+ *                               erweitert um die Abweichungs-Lage (convai.js
+ *                               #OVERRIDE_FIRST_MESSAGE_LEAF_PATHS) und wird
+ *                               ausschliesslich bei call.calleeIsOwner === true ODER bei
+ *                               abweichender Gespraechs-/Offenlegungssprache gesendet
+ *                               (elevenlabs/outbound.js#perCallFirstMessage). Fuer jeden
  *                               anderen Anruf bleibt es verboten und der Wortlaut bleibt
  *                               statischer Anbieter-Text. Diese Naht ist die EINE
  *                               Quelle des Wortlauts, gegen die sich das Preset messen
@@ -119,38 +171,49 @@ export function providerOpeningFor(language) {
  *                               keine zweite, selbst uebersetzte Fassung entsteht.
  *   disclosureOwnerFallback  -> der Ausdruck, der IN diesem Satz an die Stelle des
  *                               Auftraggeber-Namens tritt, wenn keiner vorliegt - in der
- *                               Sprache des Anrufs, nicht in einer anderen.
+ *                               OFFENLEGUNGSsprache, nicht in der Gespraechssprache.
  *
- * Die Sprache kommt aus dem aufgeloesten LOCALE (locale.language), nicht aus dem rohen
- * Ergebnis von resolveCallLanguage: eine unbekannte/vertippte Spracheinstellung faellt in
+ * Die Sprachen kommen aus den aufgeloesten LOCALES (locale.language), nicht aus dem
+ * rohen Ergebnis der Ketten: eine unbekannte/vertippte Spracheinstellung faellt in
  * localeFor fail-safe auf den Weltdefault: Stimme und Offenlegungssatz sind dann englisch,
  * und der Agent bekaeme mit dem rohen Wert eine Sprache, zu der beides nicht passt.
  *
- * VORRANG DES ANGERUFENEN (17.08.2026): laesst sich seine Sprache aus seiner Rufnummer
- * BELEGEN, gewinnt sie - sonst gilt unveraendert die Auftraggeber-Kette. Die Offenlegung
- * muss von der angerufenen Person VERSTANDEN werden, sonst erfuellt sie ihren Zweck nicht
- * (Artikel 50 EU AI Act, Fertig-Punkt 10). Ohne diesen Vorrang haengt der erste Satz an
- * der Herkunft des AUFTRAGGEBERS: gemessen am lokalen Stand haette ein Anruf an eine
- * deutsche Mobilnummer auf FRANZOESISCH begonnen (tenant.defaultLanguage "fr", weil unsere
- * US-Nummer keinen eigenen Sprachanker traegt) - richtig aufgeloest nach der alten Regel
- * und trotzdem der falsche Satz.
- * KEINE ZWEITE KETTE: der Rueckfall ist wortgleich die alte Aufloesung, nur mit einem
- * neuen, hoeher gewichteten EINGANG davor. Bewusst NUR auf dieser Strecke - resolveCall-
- * Language traegt auch den Inbound-Weg, wo es keinen "Angerufenen" in diesem Sinn gibt.
+ * VORRANG DES ANGERUFENEN gilt fuer die OFFENLEGUNG (17.08.2026, seit P4a auf
+ * disclosureLanguageOf konzentriert): laesst sich seine Sprache aus seiner Rufnummer
+ * BELEGEN, gewinnt sie fuer den Pflichtsatz - sonst gilt unveraendert die
+ * Auftraggeber-Kette. Die Offenlegung muss von der angerufenen Person VERSTANDEN werden,
+ * sonst erfuellt sie ihren Zweck nicht (Artikel 50 EU AI Act, Fertig-Punkt 10). Die
+ * GESPRAECHSSPRACHE (conversationLanguageOf) folgt seit P4a stattdessen dem Sprachwunsch
+ * des Auftraggebers, sonst derselben Auftraggeber-Kette (F-2 Punkt 2).
+ * KEINE ZWEITE KETTE: resolveCallLanguage traegt beide Funktionen als gemeinsamen
+ * Rueckfall - bewusst NUR auf dieser Strecke, resolveCallLanguage selbst traegt auch den
+ * Inbound-Weg, wo es keinen "Angerufenen" in diesem Sinn gibt.
  *
  * @param {object} state Store-Zustand (store.load())
  * @param {{tenantId: string, numberRecord: object|null, ownerName: string|null,
- *   defaultVoiceId: string, to: string|null}} args
- * @returns {{language: string, voiceId: string, firstMessage: string,
- *   disclosureOwnerFallback: string}}
+ *   defaultVoiceId: string, to: string|null, callLanguage?: string|null}} args
+ * @returns {{language: string, disclosureLanguage: string, voiceId: string,
+ *   firstMessage: string, disclosureOwnerFallback: string}}
  */
-export function callLocaleFor(state, { tenantId, numberRecord, ownerName, defaultVoiceId, to }) {
-  const gewaehlt = calleeLanguage(to) || resolveCallLanguage(state, { tenantId, numberRecord });
-  const locale = localeFor(gewaehlt);
+export function callLocaleFor(
+  state,
+  { tenantId, numberRecord, ownerName, defaultVoiceId, to, callLanguage },
+) {
+  const gespraech = localeFor(conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }));
+  const offenlegung = localeFor(disclosureLanguageOf(state, { tenantId, numberRecord, to }));
   return {
-    language: locale.language,
-    voiceId: elevenLabsVoiceIdFor(defaultVoiceId, locale.voiceProfile),
-    firstMessage: providerOpening(locale, ownerName),
-    disclosureOwnerFallback: locale.disclosureOwnerFallback,
+    language: gespraech.language,
+    disclosureLanguage: offenlegung.language,
+    // Die Stimme folgt dem GESPRAECH: sie spricht die restlichen Minuten, nicht den
+    // ersten Satz. Die Stimmen sind mehrsprachig, die Sprache des Pflichtsatzes ist es
+    // nicht - deshalb faellt die Trennung genau hier und nicht bei der Stimme.
+    voiceId: elevenLabsVoiceIdFor(defaultVoiceId, gespraech.voiceProfile),
+    // Die Eroeffnung beginnt IMMER mit dem Pflichtsatz in der Sprache des ANGERUFENEN
+    // (E-1/E-2) - unveraendert zum Bestand, auch wenn das Gespraech danach eine andere
+    // Sprache spricht.
+    firstMessage: providerOpening(offenlegung, ownerName),
+    // Der Ausdruck tritt IN diesen Satz an die Stelle des Namens - also dieselbe Sprache
+    // wie der Satz, nie die des Gespraechs.
+    disclosureOwnerFallback: offenlegung.disclosureOwnerFallback,
   };
 }

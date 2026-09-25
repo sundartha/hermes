@@ -16,7 +16,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, adminOnly, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, adminOnly, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeBillingRoutes } from "../src/routes/api-billing.js";
 import { makeOnboardRoutes } from "../src/routes/api-onboard.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -50,7 +50,7 @@ const OPERATOR_CONFIG = withConfigNamespaces({
   geoEnabled: false,
   defaultTenantBudgetCents: 0,
   numberMonthlyCostCents: 92,
-  platformFixedCostCentsPerMonth: 600,
+  platformFixedCostUsdCentsPerMonth: 600,
   ttsCharacterQuota: 39981,
   ttsCharacterQuotaWarnPercent: 0,
   ttsQuotaCycleAnchorDay: 1,
@@ -188,7 +188,7 @@ async function setup() {
 
 function request(app, route, sessionId) {
   const headers = { "Content-Type": "application/json" };
-  if (sessionId) headers.Cookie = `session=${encodeURIComponent(signValue(sessionId, SECRET))}`;
+  if (sessionId) headers.Cookie = `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(sessionId, SECRET))}`;
   return fetch(`${app.base}${route.path}`, {
     method: route.method,
     headers,

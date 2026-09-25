@@ -90,28 +90,3 @@ test("Inbound-Pflichtsatz: ein Greeting MIT Marker wird angenommen (Gegenprobe)"
   assert.equal(settingsFor(s, BOOTSTRAP_TENANT_ID).greeting, withMarker);
   assert.ok(changed.includes("greeting"));
 });
-
-test("Inbound-Pflichtsatz: auch die Realtime-Engine rendert ihn vor dem Stream-Handoff", async () => {
-  // P10: language explizit "de" - Subjekt dieses Tests ist der Realtime-Rendering-Pfad,
-  // nicht die Sprachaufloesung. Ohne den Pin faellt der ungeseedete Tenant auf den
-  // Weltdefault (en) durch und der Pflichtsatz-Assert (INBOUND_NOTICES.de) schlaegt fehl.
-  const srv = await startServer({
-    env: { VOICE_ENGINE: "realtime" },
-    seed: seedState({ settings: { language: "de" } }),
-  });
-  try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
-      method: "POST",
-      body: new URLSearchParams({
-        CallSid: "CAgap14realtime",
-        From: "+4915112345678",
-        To: OWNER_TEST_NUMBER.e164,
-      }),
-    });
-    const body = await res.text();
-    assert.ok(body.includes(INBOUND_NOTICES.de), `Pflichtsatz fehlt im Realtime-Pfad: ${body}`);
-    assert.ok(body.includes('name="stream_token"'), `Stream-Handoff fehlt: ${body}`);
-  } finally {
-    await srv.stop();
-  }
-});

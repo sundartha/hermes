@@ -16,6 +16,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeOutageWatch } from "../src/telephony/outage-report.js";
 import { makeDriftWatch } from "../src/telephony/outbound-drift-watch.js";
+import { makePaidWithoutNumberWatch } from "../src/billing/paid-without-number-watch.js";
+import { makeProvisionRetryWatch } from "../src/billing/provision-retry-sweep.js";
+import { makePriceDriftWatch } from "../src/billing/price-drift-watch.js";
 import { runSweepTick } from "../src/boot.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
@@ -98,4 +101,35 @@ test("Z-A4: runSweepTick mit einer Fabrik-Rueckgabe, der eine Methode fehlt, WIR
     /runHoldEscalationSweep is not a function/,
     "ein fehlender Zweig muss runSweepTick SYNCHRON zum Werfen bringen - genau der Produktionsschaden, den GP-1 belegt",
   );
+});
+
+test("Z-A5: jede von runSweepTick auf paidWithoutNumberWatch gerufene Methode existiert auf makePaidWithoutNumberWatch(...) und ist eine Funktion", () => {
+  const methoden = gerufeneMethoden("paidWithoutNumberWatch");
+  const watch = makePaidWithoutNumberWatch({
+    store: fakeDeps().store,
+    config: withConfigNamespaces({ paidWithoutNumberGraceMs: 0 }),
+    audit: () => {},
+  });
+  pruefeVertrag(watch, methoden, "paidWithoutNumberWatch");
+});
+
+test("Z-A6: jede von runSweepTick auf provisionRetryWatch gerufene Methode existiert auf makeProvisionRetryWatch(...) und ist eine Funktion", () => {
+  const methoden = gerufeneMethoden("provisionRetryWatch");
+  const watch = makeProvisionRetryWatch({
+    store: fakeDeps().store,
+    config: withConfigNamespaces({ provisioningRetryMinIntervalMs: 0, provisioningRetryMaxAttempts: 0 }),
+    provision: async () => {},
+    audit: () => {},
+  });
+  pruefeVertrag(watch, methoden, "provisionRetryWatch");
+});
+
+test("Z-A7: jede von runSweepTick auf priceDriftWatch gerufene Methode existiert auf makePriceDriftWatch(...) und ist eine Funktion", () => {
+  const methoden = gerufeneMethoden("priceDriftWatch");
+  const watch = makePriceDriftWatch({
+    ...fakeDeps(),
+    config: withConfigNamespaces({ paymentEnabled: false, priceDriftMinIntervalMs: 0 }),
+    lesePreis: async () => ({}),
+  });
+  pruefeVertrag(watch, methoden, "priceDriftWatch");
 });

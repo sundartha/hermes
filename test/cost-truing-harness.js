@@ -12,10 +12,18 @@
 // telnyx-cost-records.test.js) - genau wie sie telnyxVoice/cost-truing.js dynamisch holen.
 import {
   createCall, recordCallCostTruingResult, applyCostCorrectionCents, recordRelayTtsCharacters,
-  markCrossCheckAttempted,
+  markCrossCheckAttempted, recordCallCostEvidence, callCostEvidence,
+  schliesseKostenAbgleich, oeffneKostenAbgleichErneut,
 } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+// KV2-1: die drei neuen Kadenz-/Entprell-Defaults der fakeConfig lesen den ECHTEN
+// Produktions-Fallback statt einen zweiten, hier getippten Zahlenwert zu erfinden (G5,
+// G25 - kein neuer Magic-Number-Fund in dieser bereits an eslint-suppressions.json
+// gepinnten Datei). config.js wird ueber config-namespaces-helper.js an dieser Stelle
+// ohnehin schon statisch importiert (s. Kopf-Kommentar oben) - kein zweiter Importpfad,
+// kein zusaetzliches test-base-env-drift-Risiko.
+import { config as prodDefaults } from "../src/config.js";
 
 const MS_PER_MINUTE = 60 * 1000;
 
@@ -57,6 +65,32 @@ export function makeStubStore(state, { nowMs = Date.now(), billing = fakeConfig(
     markCostCrossCheckAttempted(monthKey) {
       markCrossCheckAttempted(state, monthKey);
     },
+    // KV2-5: das Kosten-Buch - dieselbe Delegation an die ECHTEN state-ops-Funktionen
+    // (kein zweites, vereinfachtes Verhalten), damit die Sweep-Tests ueber den echten
+    // Schreibweg laufen statt in schreibeSweepKostenbeleg's fail-soft-catch zu landen.
+    recordCallCostEvidence(eingabe) {
+      return recordCallCostEvidence(state, eingabe);
+    },
+    callCostEvidence(callId) {
+      return callCostEvidence(state, callId);
+    },
+    // KV2-7: Schliessregel-Mutatoren - dieselbe Delegation an die ECHTEN state-ops-
+    // Funktionen (kein zweites, vereinfachtes Verhalten).
+    schliesseKostenAbgleich(callId, eingabe) {
+      const { call, changed } = schliesseKostenAbgleich(state, callId, eingabe);
+      if (changed) writes.push({ callId, ...eingabe });
+      return call;
+    },
+    oeffneKostenAbgleichErneut(callId) {
+      const { call } = oeffneKostenAbgleichErneut(state, callId);
+      return call;
+    },
+    // KV2-1: der Befundkanal laeuft ueber den Betreiber-Meldeweg und schreibt dabei den
+    // durablen Marker (state.outageAlerts) - dieselben zwei Store-Methoden, die
+    // outage-report.js ueberall nutzt. Der Lock ist hier ein Direktaufruf: der Stub kennt
+    // keine Nebenlaeufigkeit, und ein zweites Lock-Verhalten waere eine zweite Wahrheit.
+    withStoreLock(fn) { return Promise.resolve().then(fn); },
+    save() {},
   };
 }
 
@@ -72,6 +106,19 @@ export function fakeConfig(overrides = {}) {
     costTruingRequiredRecordTypes: [],
     costTruingMinCoveragePercent: 80,
     costTruingCoverageStallSweeps: 8,
+    // KV2-9: ECHTER Prod-Fallback (s. prodDefaults-Import oben) statt eines zweiten,
+    // hier getippten Werts - ohne ihn waere minAgeMs NaN und der Reifungs-Zweig in JEDEM
+    // Bestands-Sweep-Test strukturell stumm (statt nur mangels Port).
+    elEvidenceMinAgeMinutes: prodDefaults.billing.elEvidenceMinAgeMinutes,
+    // KV2-6: ECHTER Prod-Fallback (s. prodDefaults-Import oben) statt eines zweiten,
+    // hier getippten Zahlenwerts - sonst waere das Herzschlag-Fenster in den
+    // Bestands-Sweep-Tests undefined und der Herzschlag dort strukturell stumm.
+    kostenHeartbeatFensterH: prodDefaults.billing.kostenHeartbeatFensterH,
+    // KV2-1: die Kadenz-Quelle der zeitbasierten Stall-Terminierung (Default = ECHTER
+    // Prod-Fallback, s. Import oben). Ohne einen Default hier waere
+    // costTruingCoverageStallSweeps * undefined = NaN, und JEDER Vergleich mit NaN ist
+    // false - coverage_stalled feuerte dann bei JEDEM Sweep 1, unabhaengig vom Fenster.
+    costTruingSweepIntervalMs: prodDefaults.billing.costTruingSweepIntervalMs,
     costDriftWarnPercent: 50,
     costAlertDebounceMs: 24 * 60 * 60 * 1000,
     voiceTariffDomesticCents: 20,
@@ -80,6 +127,12 @@ export function fakeConfig(overrides = {}) {
     providerToBucketRateMicro: 1_000_000,
     costCalibrationMinSamples: 20,
     platformAlertSmsTo: "",
+    // KV2-1: Entprellung der VOLL-Stufe (Plan 4.9). ECHTER Prod-Fallback (grosszuegig);
+    // Tests, die die Entprellung selbst pruefen, setzen sie explizit herunter.
+    outageAlertDebounceMs: prodDefaults.billing.outageAlertDebounceMs,
+    outageAlertRetryMs: prodDefaults.billing.outageAlertRetryMs,
+    // Alarm-Ziel default leer (BASE_ENV-Zustand) -> kanaele=keine, kein Versand.
+    platformAlertMailTo: "",
     // KV-P7: Fallback-Werte aus src/config.js (ttsCharacterQuota/-WarnPercent/
     // ttsQuotaCycleAnchorDay) - ohne sie liest recordRelayTtsCharacters (bumpPlatformTtsQuota)
     // cfg.ttsCharacterQuota als undefined (withConfigNamespaces delegiert auf den flachen
@@ -127,6 +180,18 @@ export function fakeVoiceControl(byProvider) {
   };
 }
 
+// KV2-10 Review (G5): Mail-/SMS-Spione der Kanal-Tests - vorher byte-identisch in
+// kv2-1-kosten-alarm-naht.test.js und kv2-10-tarifpaar.test.js gepflegt, obwohl beide
+// ohnehin makeStubStore/fakeConfig aus DIESEM Harness ziehen. EINE Quelle: wer den
+// Stub-Store teilt, teilt auch die Kanal-Spione.
+export function fakeSpies() {
+  const mailCalls = [];
+  const smsCalls = [];
+  const mailer = { async sendMail(args) { mailCalls.push(args); } };
+  const messaging = () => ({ async sendSms(args) { smsCalls.push(args); } });
+  return { mailCalls, smsCalls, mailer, messaging };
+}
+
 // Der KOEDER aller Beleg-Fixturen (Spec A2): ein Feld, das der Code NICHT als
 // Zuordnungsquelle verwenden darf. Es traegt immer dieselbe FREMDE UUID - liest der Code
 // telnyx_leg_id, kommt kein einziger erwarteter Beleg herein und jede Erwartung faellt.
@@ -155,7 +220,7 @@ export function stubCountingFetch({ status = 200, ok = true, bodyFor = () => ({ 
 // telnyx_session_id, Zeitfelder started_at/finished_at, cost als STRING, billed_sec als
 // Zahl - dazu der Koeder. Der Anker fehlt bewusst, wenn callControlId null ist: das ZWEITE
 // Bein desselben Anrufs traegt ihn laut Messung nicht und kommt nur ueber die Session herein.
-export function measuredSipTrunkingRecord({ at, sessionId, callControlId = null, cost = "0.0401", billedSec = 60 }) {
+export function measuredSipTrunkingRecord({ at, sessionId, callControlId = null, sipCallId = undefined, cost = "0.0401", billedSec = 60 }) {
   const record = {
     record_type: "sip-trunking",
     cost,
@@ -167,6 +232,7 @@ export function measuredSipTrunkingRecord({ at, sessionId, callControlId = null,
     billed_sec: billedSec,
   };
   if (callControlId) record.call_control_id = callControlId;
+  if (sipCallId) record.sip_call_id = sipCallId;
   return record;
 }
 

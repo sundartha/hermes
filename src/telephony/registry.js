@@ -20,7 +20,6 @@ import { renderDirectives as telnyxRenderDirectives } from "./adapters/telnyx/re
 import { verifyInboundSignature as telnyxVerify } from "./adapters/telnyx/signature.js";
 import { telnyxNumberProvisioning } from "./adapters/telnyx/numbers.js";
 import { telnyxConfigRead } from "./adapters/telnyx/config-read.js";
-import { telnyxMedia } from "./adapters/telnyx/media.js";
 import { telnyxWebhookEvents } from "./adapters/telnyx/webhook-events.js";
 import { DEFAULT_PROVIDER, PROVIDER } from "../store/defaults.js";
 import { config } from "../config.js";
@@ -37,15 +36,9 @@ const fakeVoice = {
     return { sid: `fake_${crypto.randomBytes(8).toString("hex")}` };
   },
   async endCall() {},
-  // Call-Control-Variante (P4): netzfreie Aequivalente, damit ein fakeOriginate-Testpfad,
-  // der die neuen Methoden ruft (ab P5), nicht crasht. fakeVoice bleibt vollstaendiger
-  // VoiceControl-Ersatz (G11 - keine Teil-Implementierung des Ports).
-  async originateViaCallControl() {
-    return { callControlId: `fake_cc_${crypto.randomBytes(8).toString("hex")}` };
-  },
+  // Altbestand-Hangup (hangUpAction): netzfreies Aequivalent, damit ein fakeOriginate-
+  // Testpfad, der die Methode ruft, nicht crasht.
   async endCallViaCallControl() {},
-  async startAssistant() {},
-  async speak() {},
 };
 
 // EINZIGE Provider->Port-Registrierung. Ein zweiter Provider wird HIER an einer
@@ -57,7 +50,6 @@ const fakeVoice = {
 const PORT = Object.freeze({
   VOICE_CONTROL: "voiceControl",
   MESSAGING: "messaging",
-  MEDIA_TRANSPORT: "mediaTransport",
   WEBHOOK_EVENTS: "webhookEvents",
   NUMBER_PROVISIONING: "numberProvisioning",
   // OUTBOUND-E4: rein LESENDER Port (Drift-Waechter). Eigener Name statt eines
@@ -70,7 +62,6 @@ const PORT = Object.freeze({
 const ADAPTERS = Object.freeze({
   [PORT.VOICE_CONTROL]: { [PROVIDER.TELNYX]: telnyxVoice },
   [PORT.MESSAGING]: { [PROVIDER.TELNYX]: telnyxMessaging },
-  [PORT.MEDIA_TRANSPORT]: { [PROVIDER.TELNYX]: telnyxMedia },
   [PORT.WEBHOOK_EVENTS]: { [PROVIDER.TELNYX]: telnyxWebhookEvents },
   [PORT.NUMBER_PROVISIONING]: { [PROVIDER.TELNYX]: telnyxNumberProvisioning },
   [PORT.PROVIDER_CONFIG_READ]: { [PROVIDER.TELNYX]: telnyxConfigRead },
@@ -79,16 +70,9 @@ const ADAPTERS = Object.freeze({
   // Aufruf, NICHT zur Import-Zeit (P15: kein Lazy-Init-Singleton, config-Bindung an der
   // Kompositionsstelle). sttProfile ist die neutrale STT-Wahl und geht als PROFIL durch,
   // nicht als aufgeloester Anbieter-String: die Uebersetzung gehoert in den Adapter.
-  // Beide Telnyx-Pfade (Gather hier, Assistant in adapters/telnyx/voice.js) speisen sich
-  // aus DEMSELBEN Config-Schluessel - zwei Schluessel waeren die alte Duplizierung,
-  // nur von den Modell-Strings auf die Env-Namen verschoben.
   [PORT.VOICE_RENDERER]: {
     [PROVIDER.TELNYX]: {
-      renderDirectives: (d) =>
-        telnyxRenderDirectives(d, {
-          elevenLabs: config.telnyx.telnyxElevenLabs,
-          sttProfile: config.voice.sttProfile,
-        }),
+      renderDirectives: (d) => telnyxRenderDirectives(d, { sttProfile: config.voice.sttProfile }),
     },
   },
 });
@@ -107,13 +91,11 @@ function pick(port, provider) {
 // drei verstreuten provider===PROVIDER.TELNYX-Checks (S2-22). Fail-closed: fehlender
 // Provider ODER fehlende Capability -> false.
 export const CAPABILITY = Object.freeze({
-  AI_ASSISTANT: "aiAssistant", // Telnyx Call-Control-AI-Assistant-Pfad
   PLAY_AUDIO_TTS: "playAudioTts", // <Play>-Vorab-Synthese (ElevenLabs) statt <Say>
 });
 
 const PROVIDER_CAPABILITIES = Object.freeze({
   [PROVIDER.TELNYX]: Object.freeze({
-    [CAPABILITY.AI_ASSISTANT]: true,
     [CAPABILITY.PLAY_AUDIO_TTS]: true,
   }),
 });
@@ -132,13 +114,8 @@ export const voiceControl = (provider = DEFAULT_PROVIDER) => {
 /** @returns {import("./ports.js").Messaging} */
 export const messaging = (provider = DEFAULT_PROVIDER) => pick(PORT.MESSAGING, provider);
 
-// MediaTransport (Port 4, Realtime-WS-Frame-Schicht, Aufrufer bridge.js). Provider-
-// aware wie voiceControl: Default = DEFAULT_PROVIDER (eine Quelle, G5).
-/** @returns {import("./ports.js").MediaTransport} */
-export const mediaTransport = (provider = DEFAULT_PROVIDER) => pick(PORT.MEDIA_TRANSPORT, provider);
-
 // WebhookEvents (Port 5, reines Parsing VOR den Safety-Gates). Provider-aware wie
-// mediaTransport: Default = DEFAULT_PROVIDER (eine Quelle, G5).
+// voiceControl: Default = DEFAULT_PROVIDER (eine Quelle, G5).
 // Dispatch bewusst per provider-Param (NICHT header-basiert wie inboundSignatureVerifier):
 // alle 3 Call-Sites kennen provider bereits vertrauenswuerdig aus dem Store bzw. aus
 // providerFromHeaders+erfolgreicher Signaturpruefung weiter oben im Request-Pfad -
@@ -160,10 +137,13 @@ export const numberProvisioning = (provider = PROVIDER.TELNYX) =>
 export const providerConfigRead = (provider = PROVIDER.TELNYX) =>
   pick(PORT.PROVIDER_CONFIG_READ, provider);
 
-// Telnyx bekommt die ElevenLabs-TTS-Konfiguration (globale Plattform-Stimme) lazy
-// zur Render-Zeit injiziert (Sonderfall b, siehe ADAPTERS oben) - der Renderer selbst
-// bleibt config-frei/pur (Snapshot-Tests ohne Env). Gate liegt im Renderer
-// (apiKeyRef+voiceId leer -> Azure byte-identisch).
+// Telnyx bekommt die STT-Profil-Wahl lazy zur Render-Zeit injiziert (Sonderfall b, siehe
+// ADAPTERS oben) - der Renderer selbst bleibt config-frei/pur (Snapshot-Tests ohne Env).
+// Die ElevenLabs-Plattform-Stimme wird hier seit IP3 NICHT mehr injiziert: der
+// Relay-Zweig am <Say> ist entfernt (A/B-belegt defekt, Begruendung im Modulkopf von
+// adapters/telnyx/render.js); der ElevenLabs-Weg der Budget-Engine ist die
+// <Play>-Vorabsynthese. Der Call-Control-speak-Pfad liest den Config-Block weiterhin
+// direkt (adapters/telnyx/voice.js) - diese Aenderung erreicht ihn nicht.
 /** @returns {import("./ports.js").VoiceRenderer} */
 export const voiceRenderer = (provider = DEFAULT_PROVIDER) => pick(PORT.VOICE_RENDERER, provider);
 

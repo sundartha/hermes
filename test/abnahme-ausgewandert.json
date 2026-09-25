@@ -16,5 +16,65 @@
     "file": "test/elevenlabs-agent-werkzeuge.test.js",
     "test": "[abgenommen R16] der ElevenLabs-Prompt nennt get_consult nur, wenn das Rueckfrage-Gate es zulaesst",
     "seit": "2026-08-17"
+  },
+  {
+    "id": "AS1",
+    "file": "test/el-stimme-abnahme.test.js",
+    "test": "[abgenommen AS1] ST0-Forensik im Befund-Doc - Drift-Exit-Code, Abweichungsfelder und [el-tags]-Trefferzahl stehen als Zahlen",
+    "seit": "2026-09-03"
+  },
+  {
+    "id": "AS2",
+    "file": "test/el-stimme-abnahme.test.js",
+    "test": "[abgenommen AS2] Vorlage traegt B1-Regel, B2-Ergaenzung und neuen soft_timeout-Override - und die Art-50-Felder bleiben unberuehrt",
+    "seit": "2026-09-03"
+  },
+  {
+    "id": "AS3",
+    "file": "test/el-stimme-abnahme.test.js",
+    "test": "[abgenommen AS3] alle drei i18n-speechRules (de/en/fr) tragen die B1-Zeile UND die B2-Zeile",
+    "seit": "2026-09-03"
+  },
+  {
+    "id": "AS4",
+    "file": "test/el-stimme-abnahme.test.js",
+    "test": "[abgenommen AS4] keiner der neuen Regeltexte enthaelt ein eckiges Klammer-Zeichen",
+    "seit": "2026-09-03"
+  },
+  {
+    "id": "AS5",
+    "file": "test/el-stimme-abnahme.test.js",
+    "test": "[abgenommen AS5] Vorlage pinnt die zwei Filler-Stellschrauben als Besitz (Feldname, beide Pfade, SOLL-Wert, Aenderungsweg) und fuehrt die zwei LIVE-only Erlaubnis-Schluessel mit false",
+    "seit": "2026-09-03"
+  },
+  {
+    "id": "AS6",
+    "file": "test/el-stimme-abnahme.test.js",
+    "test": "[abgenommen AS6] Drift-Lauf Exit-Code 0 nach dem Push als 'ST2 Push-Protokoll' im Befund-Doc dokumentiert",
+    "seit": "2026-09-03"
+  },
+  {
+    "id": "AS7",
+    "file": "test/el-fixtures-echte-antworten.test.js",
+    "test": "[abgenommen AS7] Vorfalls-Fixture 2026-09-02: [el-b1] feuert genau 1x, [el-tags] meldet [fröhlich], Transkript unveraendert gespeichert, Meldung ohne Vollsaetze, Fixture anonymisiert",
+    "seit": "2026-09-03"
+  },
+  {
+    "id": "AS8",
+    "file": "test/el-fixtures-echte-antworten.test.js",
+    "test": "[abgenommen AS8] Gegenprobe an sauberen Echtfall-Fixtures (Anruf-7/8-Charakter): beide Detektoren still, Zaehlfeld 0",
+    "seit": "2026-09-03"
+  },
+  {
+    "id": "AS9",
+    "file": "test/el-stimme-abnahme.test.js",
+    "test": "[abgenommen AS9] Kommentarblock an reportAudioTags nennt den Vorfall 2026-09-02 mit Doc-Verweis",
+    "seit": "2026-09-03"
+  },
+  {
+    "id": "AS11",
+    "file": "test/el-stimme-abnahme.test.js",
+    "test": "[abgenommen AS11] lessons.md traegt die EL-Regel mit den VIER Kernsaetzen (Signatur-Phrasen)",
+    "seit": "2026-09-04"
   }
 ]

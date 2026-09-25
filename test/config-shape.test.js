@@ -1,6 +1,6 @@
-// Struct-3 (C6a, PLAN-FRAGILITY-REMEDIATION.md P5): Proxy-Guard-Mechanismus + erste
-// Feature-Gruppierung (telnyxAssistant). Reiner Unit-Test, offline, kein Server-Spawn,
-// keine .env (Muster config-prod-footguns.test.js).
+// Struct-3 (C6a, PLAN-FRAGILITY-REMEDIATION.md P5): Proxy-Guard-Mechanismus + Config-
+// Gruppierung (telnyxElevenLabs, seit IE6-S1 die erste, telnyxAssistant ist entfernt).
+// Reiner Unit-Test, offline, kein Server-Spawn, keine .env (Muster config-prod-footguns.test.js).
 // PA-11: zusaetzlich Fresh-Import-Regression fuer die Trailing-Slash-Configs, Env je
 // Fall gesetzt+restauriert (Muster Query-String-Cache-Buster wie config-boolenv.test.js).
 // PA-20 (Flip): alle Zugriffe auf config.<ns>.<key> umgestellt (Flach-Aliase entfernt).
@@ -20,8 +20,8 @@ test("Proxy-Guard: unbekannter verschachtelter Key wirft TypeError", () => {
 });
 
 test("Proxy-Guard: legitimer Zugriff liefert weiterhin den echten Default-Wert", () => {
-  assert.equal(typeof config.telnyx.telnyxElevenLabs.model, "string");
-  assert.equal(config.telnyx.telnyxElevenLabs.model, "Default");
+  assert.equal(typeof config.voice.elevenLabsPlayTts.outputFormat, "string");
+  assert.equal(config.voice.elevenLabsPlayTts.outputFormat, "mp3_44100_128");
 });
 
 test("Proxy-Guard: Arrays bleiben unverpackte echte Arrays (keine Namens-Zugriffe)", () => {
@@ -55,43 +55,8 @@ test("Proxy-Guard: Symbol-Zugriffe werden NICHT bewacht (kein Crash bei util.ins
 // value.then - beides normale property-Reads, die der Guard sonst als unbekannten Key
 // missversteht und einen TypeError wirft statt zu serialisieren/aufzuloesen.
 test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duck-Typing)", () => {
-  assert.doesNotThrow(() => JSON.stringify(config.telnyx.telnyxAssistant));
-  assert.deepEqual(JSON.parse(JSON.stringify(config.telnyx.telnyxAssistant)), {
-    enabled: false,
-    assistantId: "",
-    callControlAppId: "",
-    shimMaxTurnsPerMin: 30,
-    deadAirTimeoutS: 45,
-    openingSpeakTimeoutS: 45,
-    loopGuardMaxEmptyTurns: 8,
-    shimSharedSecret: "",
-    shimApiKeyRef: "",
-    shimDebugShape: false,
-    shimTokenStreaming: false,
-    // GQ-P1: neuer Schalter, DEFAULT AN (anders als die uebrigen Shim-Flags - der Riegel
-    // ist der korrigierte Bestand, nicht ein Opt-in).
-    shimSupersedeExtendedTurn: true,
-    // GQ-P5: Riegel gegen den Provider-Anstoss (Telnyx' user_idle_reply_secs). DEFAULT AN
-    // wie shimSupersedeExtendedTurn - "aus" ist der gemessene Fehlerzustand, in dem der
-    // Shim die alte Aeusserung erneut beantwortet und ausspricht.
-    shimIgnoreProviderNudge: true,
-    // GQ-P3: der Rueckweg fuer den Inbound-Handoff. DEFAULT AUS seit 2026-08-04 - am
-    // Live-Anruf gemessen feuert der Handoff VOR dem answered-Ereignis und Telnyx lehnt
-    // mit 422 (90034 Call not answered yet) ab; der Anrufer hoert nur die Fehleransage.
-    inboundHandoffEnabled: false,
-    // GQ-P4: max. konsekutive Turn-Fehlschlaege vor dem hoerbaren Abschied (Default 3)
-    // + optionaler Ueberschreib-Text (Default leer = sprachabhaengiger Locale-Default).
-    maxConsecutiveFailedTurns: 3,
-    failedTurnFarewellText: "",
-    // GQ-P17: Haltefrist (ms) vor dem Modell-Aufruf gegen die fragmentierte
-    // Spracherkennung. Default 3000 = die weiteste gemessene Fragment-Luecke ist gedeckt;
-    // 0 waere der Rueckweg auf das Bestandsverhalten (zwei Antworten).
-    shimExtendHoldMs: 3000,
-    // Messschalter (transcriptionFields, adapters/telnyx/voice.js): DEFAULT AN = Bestand
-    // byte-identisch (Pro-Call-transcription-Block wird gesendet). "false" ist NUR fuer
-    // einen begleiteten Testanruf gedacht.
-    perCallTranscriptionEnabled: true,
-  });
+  assert.doesNotThrow(() => JSON.stringify(config.telnyx.telnyxElevenLabs));
+  assert.deepEqual(JSON.parse(JSON.stringify(config.telnyx.telnyxElevenLabs)), { voiceId: "" });
 });
 
 test("Proxy-Guard: JSON.stringify auf die Top-Level-Config wirft nicht (toJSON-Duck-Typing)", () => {
@@ -99,57 +64,19 @@ test("Proxy-Guard: JSON.stringify auf die Top-Level-Config wirft nicht (toJSON-D
 });
 
 test("Proxy-Guard: await/Promise.resolve auf eine Config-Gruppe wirft nicht (then-Duck-Typing)", async () => {
-  const awaited = await config.telnyx.telnyxAssistant;
-  assert.equal(awaited.shimMaxTurnsPerMin, 30); // Objekt kommt unveraendert/lesbar durch
-  const resolved = await Promise.resolve(config.telnyx.telnyxAssistant);
-  assert.equal(resolved.shimMaxTurnsPerMin, 30);
+  const awaited = await config.telnyx.telnyxElevenLabs;
+  assert.equal(awaited.voiceId, ""); // Objekt kommt unveraendert/lesbar durch
+  const resolved = await Promise.resolve(config.telnyx.telnyxElevenLabs);
+  assert.equal(resolved.voiceId, "");
 });
 
 test("Proxy-Guard: then/toJSON bleiben fuer echte unbekannte Keys weiterhin bewacht", () => {
-  assert.throws(() => config.telnyx.telnyxAssistant.doesNotExistNested, TypeError);
+  assert.throws(() => config.telnyx.telnyxElevenLabs.doesNotExistNested, TypeError);
 });
 
-// Teil 2: telnyxAssistant-Gruppierung (P5, erstes Feature-Grouping).
-test("telnyxAssistant: alle 18 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
-  assert.equal(config.telnyx.telnyxAssistant.enabled, false);
-  assert.equal(config.telnyx.telnyxAssistant.assistantId, "");
-  assert.equal(config.telnyx.telnyxAssistant.callControlAppId, "");
-  assert.equal(config.telnyx.telnyxAssistant.shimMaxTurnsPerMin, 30);
-  assert.equal(config.telnyx.telnyxAssistant.deadAirTimeoutS, 45);
-  assert.equal(config.telnyx.telnyxAssistant.openingSpeakTimeoutS, 45);
-  assert.equal(config.telnyx.telnyxAssistant.loopGuardMaxEmptyTurns, 8);
-  assert.equal(config.telnyx.telnyxAssistant.shimSharedSecret, "");
-  assert.equal(config.telnyx.telnyxAssistant.shimApiKeyRef, "");
-  assert.equal(config.telnyx.telnyxAssistant.shimDebugShape, false);
-  assert.equal(config.telnyx.telnyxAssistant.shimTokenStreaming, false);
-  assert.equal(config.telnyx.telnyxAssistant.shimSupersedeExtendedTurn, true);
-  assert.equal(config.telnyx.telnyxAssistant.shimIgnoreProviderNudge, true);
-  assert.equal(config.telnyx.telnyxAssistant.inboundHandoffEnabled, false);
-  assert.equal(config.telnyx.telnyxAssistant.maxConsecutiveFailedTurns, 3);
-  assert.equal(config.telnyx.telnyxAssistant.failedTurnFarewellText, "");
-  assert.equal(config.telnyx.telnyxAssistant.shimExtendHoldMs, 3000);
-  assert.equal(config.telnyx.telnyxAssistant.perCallTranscriptionEnabled, true);
-});
-
-// Regression: der alte flache Pfad existiert NACHWEISLICH nicht mehr - waere er
-// (versehentlich re-addiert) doch da, faellt dieser Test durch statt den Sinn der
-// Migration stillschweigend zu unterlaufen.
-test("telnyxAssistant: die 10 alten flachen Config-Pfade existieren nicht mehr", () => {
-  const oldFlatKeys = [
-    "telnyxAiAssistantEnabled",
-    "telnyxAssistantId",
-    "telnyxCallControlAppId",
-    "telnyxShimMaxTurnsPerMin",
-    "telnyxDeadAirTimeoutS",
-    "telnyxOpeningSpeakTimeoutS",
-    "telnyxLoopGuardMaxEmptyTurns",
-    "telnyxShimSharedSecret",
-    "telnyxShimApiKeyRef",
-    "telnyxShimDebugShape",
-  ];
-  for (const key of oldFlatKeys) {
-    assert.throws(() => config[key], TypeError, `config.${key} sollte nicht mehr existieren`);
-  }
+// IE6-S1: telnyxAssistant ist entfernt - der Namespace traegt nur noch telnyxElevenLabs.
+test("telnyx-Namespace: telnyxAssistant existiert nicht mehr", () => {
+  assert.throws(() => config.telnyx.telnyxAssistant, TypeError);
 });
 
 // PA-20 (Flip): die Flach-Aliase (auch die 3 nested Blaetter selbst) sind entfernt - die

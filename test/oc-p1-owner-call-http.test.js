@@ -4,11 +4,10 @@
 // Zusage aus 2.2 "zwei Exporte, ein Vergleich" in Testform).
 //
 // FAKE_ORIGINATE=true legt NUR den TeXML-Zweig trocken (src/telephony/registry.js). Steht
-// in der lokalen .env ELEVENLABS_OUTBOUND_ENABLED=true oder TELNYX_AI_ASSISTANT_ENABLED=
-// true, verzweigt die Route VOR dem trockengelegten Zweig (api-calls.js:290 bzw. :304) -
-// dann waere das ein ECHTER Anruf mit echten Kosten (Absolute Regel 1). BASE_ENV pinnt
-// beide bereits auf "false"; hier stehen sie trotzdem ausdruecklich, weil dieser Test
-// GENAU von ihnen abhaengt.
+// in der lokalen .env ELEVENLABS_OUTBOUND_ENABLED=true, verzweigt die Route VOR dem
+// trockengelegten Zweig - dann waere das ein ECHTER Anruf mit echten Kosten (Absolute
+// Regel 1). BASE_ENV pinnt das bereits auf "false"; hier steht es trotzdem ausdruecklich,
+// weil dieser Test GENAU davon abhaengt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
@@ -36,7 +35,6 @@ const BASE_CALL_ENV = {
   ALLOWED_COUNTRY_CODES: "+49",
   FAKE_ORIGINATE: "true",
   ELEVENLABS_OUTBOUND_ENABLED: "false",
-  TELNYX_AI_ASSISTANT_ENABLED: "false",
 };
 
 const postCall = (url, body) =>

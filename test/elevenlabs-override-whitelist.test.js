@@ -28,7 +28,7 @@ import test from "node:test";
 
 import {
   OVERRIDE_ALLOWED_LEAF_PATHS,
-  OVERRIDE_OWNER_ONLY_LEAF_PATHS,
+  OVERRIDE_FIRST_MESSAGE_LEAF_PATHS,
   startOutboundCall,
 } from "../src/elevenlabs/convai.js";
 import { wertAnPfad } from "../scripts/lib/elevenlabs-besitz.mjs";
@@ -204,16 +204,16 @@ test("EL-OVERRIDE TEIL 3: die Code-Whitelist und die Besitz-Karte der Vorlage ne
   // nach Anruf unterscheiden. Der Code fuehrt seit OC-P2 ZWEI Mengen und ist damit
   // strenger: die Owner-Menge greift nur bei call.calleeIsOwner === true. Verglichen wird
   // deshalb gegen die VEREINIGUNG, und die Aufteilung selbst wird darunter gepinnt.
-  const codePfade = [...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_OWNER_ONLY_LEAF_PATHS].sort();
+  const codePfade = [...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_FIRST_MESSAGE_LEAF_PATHS].sort();
 
   assert.deepEqual(
     kartePfade,
     codePfade,
-    `die Vorlage erlaubt ${JSON.stringify(kartePfade)}, der Code (src/elevenlabs/convai.js#OVERRIDE_ALLOWED_LEAF_PATHS + OVERRIDE_OWNER_ONLY_LEAF_PATHS) erlaubt ${JSON.stringify(codePfade)} - beide muessen identisch sein, sonst driften Waechter und Besitz-Karte auseinander`,
+    `die Vorlage erlaubt ${JSON.stringify(kartePfade)}, der Code (src/elevenlabs/convai.js#OVERRIDE_ALLOWED_LEAF_PATHS + OVERRIDE_FIRST_MESSAGE_LEAF_PATHS) erlaubt ${JSON.stringify(codePfade)} - beide muessen identisch sein, sonst driften Waechter und Besitz-Karte auseinander`,
   );
 
   assert.ok(
-    OVERRIDE_OWNER_ONLY_LEAF_PATHS.includes("agent.first_message"),
+    OVERRIDE_FIRST_MESSAGE_LEAF_PATHS.includes("agent.first_message"),
     "agent.first_message gehoert in die OWNER-Menge - sonst waere die Owner-Eroeffnung gar nicht sendbar",
   );
   assert.ok(

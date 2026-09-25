@@ -8,12 +8,16 @@
 // Konstante (INV-1), gespeist an captureRawBody + wireWebLogin(stripeWebhookPath).
 import path from "path";
 import express from "express";
-import { securityHeaders, createRateLimiter, errorHandler } from "./middleware.js";
+import {
+  securityHeaders,
+  createRateLimiter,
+  errorHandler,
+  makeFixedWindowCounter,
+  RATE_WINDOW_MS,
+  RATE_SWEEP_INTERVAL_MS,
+} from "./middleware.js";
 import { registerWellKnown } from "./auth.js";
 import { PLAN_CATALOG } from "./plans.js";
-import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
-import { agentTurn } from "./claude.js";
-import { localeFor } from "./i18n/locales.js";
 import { configFingerprint } from "./config-fingerprint.js";
 import {
   voiceControl,
@@ -22,10 +26,15 @@ import {
   providerFromHeaders,
 } from "./telephony/registry.js";
 import { terminateAndBillCall, hangUpAction, billThunk, elevenLabsHangUpAction } from "./telephony/call-termination.js";
-import { originateAiAssistantCall } from "./telnyx-origination.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeVoiceRoutes } from "./routes/voice.js";
 import { makeElevenLabsWebhookRoutes } from "./routes/webhooks-elevenlabs.js";
+import {
+  INIT_FEHLVERSUCHE_PRO_MIN,
+  initTokenSchranke,
+  istInitWebhookAnfrage,
+  makeElevenLabsInitWebhookRoutes,
+} from "./routes/webhooks-elevenlabs-init.js";
 import { makeConsultRaised } from "./conversation/consult-raised.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeInboxRoutes } from "./routes/api-inbox.js";
@@ -61,11 +70,17 @@ const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
 // /voice-Praefix als EINE Quelle (G5): rawBody-Capture und der Rate-Limit-Bypass
 // teilen denselben Praefix.
 const VOICE_PATH_PREFIX = "/voice";
+// E7 (O-4): der Challenge-Pfad ist woertlich vorgeschrieben - kein Praefix, kein Suffix,
+// kein Tenant-Segment. Als Konstante, damit der Handler unten keinen nackten Magic-String
+// traegt (G25). Die zweite Nennung in src/route-policy.js bleibt bewusst ein Literal
+// (dort begruendet und mechanisch bewacht).
+const OPENAI_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 // Statuscodes als benannte Konstanten (G25): die Umleitung und die Grenzen, innerhalb
 // derer ein Body-Parser-Fehler als Eingabefehler des Aufrufers gilt (400 einschliesslich
 // bis 500 ausschliesslich).
 const HTTP_FOUND = 302;
 const HTTP_BAD_REQUEST = 400;
+const HTTP_NOT_FOUND = 404;
 const HTTP_SERVER_ERROR = 500;
 // rawBody fuer /voice (Telnyx) UND den Stripe-Webhook erfassen: beide pruefen
 // gegen den unveraenderten Body. Die Erfassung aendert das Parsen NICHT (verify
@@ -94,6 +109,17 @@ function respondToParserError(err, res, next) {
 const withParserErrors = (parser) => (req, res, next) =>
   parser(req, res, (err) => respondToParserError(err, res, next));
 
+// IEX-A7/E12: eigener Fehlversuch-Zaehler der Init-Schranke - getrennt vom globalen Limiter,
+// dessen Zaehlung diese Anfragen nie sieht.
+function makeInitTokenSchranke(config) {
+  const zaehler = makeFixedWindowCounter({
+    windowMs: RATE_WINDOW_MS,
+    limit: INIT_FEHLVERSUCHE_PRO_MIN,
+    sweepMs: RATE_SWEEP_INTERVAL_MS,
+  });
+  return initTokenSchranke({ config, zaehler });
+}
+
 export function installGlobalMiddleware({ app, config }) {
   app.use(securityHeaders);
 
@@ -103,8 +129,14 @@ export function installGlobalMiddleware({ app, config }) {
   // Proxy-Weiterleitung. NICHT per isLocalSocket allein - hinter Render erscheint auch
   // externer Traffic als Loopback (-> sonst liefe das Limit fuer den ganzen Internet-
   // Traffic ins Leere). isTrustedLocalCaller verlangt zusaetzlich kein X-Forwarded-For.
+  // POST auf den Init-Webhook (IEX-A7/E12) laeuft STATT des globalen Limiters durch die
+  // Init-Token-Schranke - VOR den Parsern und VOR der Loopback-Ausnahme, damit ein
+  // ungueltiges Token nie geparst wird, egal von wo. Geteilte Anbieter-IPs: nur ungueltige
+  // Tokens zaehlen, ein gueltiges wird nie gedrosselt.
   const rateLimiter = createRateLimiter(config.safety.rateLimitPerMin);
+  const initSchranke = makeInitTokenSchranke(config);
   app.use((req, res, next) => {
+    if (istInitWebhookAnfrage(req)) return initSchranke(req, res, next);
     if (req.path.startsWith(VOICE_PATH_PREFIX) || isTrustedLocalCaller(req)) return next();
     rateLimiter(req, res, next);
   });
@@ -115,7 +147,7 @@ export function installGlobalMiddleware({ app, config }) {
   app.use(withParserErrors(express.json({ limit: BODY_LIMIT, verify: captureRawBody }))); // eigene API + MCP
 }
 
-export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }) {
+export function registerPublicRoutes({ app, config }) {
   // ---- Routen, die vor jeder Identitaet erreichbar sein muessen. Jede einzeln in
   // src/route-policy.js (PUBLIC_ROUTES) begruendet und maschinell gegen den
   // Produktions-Routengraph geprueft (test/route-auth-inventory.test.js).
@@ -138,28 +170,24 @@ export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }
   // plans.js, drift-getestet). BK1 (Dashboard-Kacheln) konsumiert ihn.
   app.get("/api/plans", (_req, res) => res.json(PLAN_CATALOG));
 
-  registerWellKnown(app);
+  // ---- GET /.well-known/openai-apps-challenge: Domain-Ownership (O-4/O-5) --------
+  // AUTH-AUSNAHME (Absolute Regel 3, begruendet): OpenAI ruft diesen Pfad ohne jede
+  // Identitaet ab - der Zweck IST die unauthentifizierte Abholbarkeit. Eintrag mit
+  // Begruendung in src/route-policy.js, gepinnt im ROUTE_FINGERPRINT und in der
+  // Erwartungstabelle von scripts/probe-auth.sh.
+  // Antwortet NUR mit dem zugewiesenen Klartext-Token: kein JSON, keine Liste, kein
+  // Zeilenumbruch (O-4 woertlich). Leerer/ungesetzter Wert -> 404 wie eine nicht
+  // existierende Route: fail-closed, ohne zu verraten, dass hier etwas vorbereitet ist.
+  // EIN Wert, weil O-5 den Pfad ignoriert - die Challenge gilt dem HOST.
+  // Laufzeit-Pruefung statt bedingter Registrierung: eine nur-bei-Token gemountete
+  // Route waere im geprueften Routengraph unsichtbar (src/route-policy.js, Klasse (c)).
+  app.get(OPENAI_CHALLENGE_PATH, (_req, res) => {
+    const token = config.server.openaiAppsChallengeToken;
+    if (!token) return res.status(HTTP_NOT_FOUND).end();
+    res.type("text/plain").send(token);
+  });
 
-  // ---- Telnyx AI Assistant Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1) ----------------
-  // AUTH-AUSNAHME (Regel 3, begruendet): Telnyx BYO-LLM ruft diesen /v1/chat/completions-
-  // kompatiblen Endpunkt SERVERSEITIG (kann keinen Session-Cookie senden), mit EIGENER
-  // fail-closed Absicherung im Handler (analog /voice/tts/:token): 404 bei
-  // TELNYX_AI_ASSISTANT_ENABLED aus (Existenz hinter dem Flag); statisches Bearer-
-  // Integration-Secret (E2) timing-sicher via safeEqual + call_control_id-Korrelation aus
-  // forward_metadata (E1) gegen den Store-Call-Record (403 sonst); Budget-Gate pro Turn (kein
-  // Token-Burn ueber dem Cap). NICHT unter /voice -> die Ed25519-Signaturpruefung (P4.5)
-  // bleibt unberuehrt. Das Registrieren deaktiviert KEINE bestehende Middleware (Express
-  // fuehrt sie fuer andere Pfade unveraendert weiter aus, Invariante 4).
-  // Kosten-Notaus: EIN ConversationWatchdog, geteilt von Shim (Loop-Guard +
-  // Dead-Air-Feed pro Turn) und Call-Control-Ingest (Dead-Air armieren bei ai_assistant_start,
-  // stoppen bei hangup). Terminierung ueber das GETEILTE Call-Control-Hangup-Primitiv (auch
-  // der Shim nutzt makeCallControlTerminator fuer Budget-Kill/end_call, S2). watchdog kommt
-  // als die EINE Wurzel-Instanz herein (INV-7, in server.js konstruiert).
-  // KS-P1b: reattachActiveCallByControlId = dieselbe EINE lifecycle-Instanz (INV-7), die
-  // /voice/turn|outbound|status und der Call-Control-Ingest nutzen. Ohne sie verwirft der
-  // Shim ein laufendes Gespraech nach einem Instanzwechsel mit 403, waehrend der Call beim
-  // Provider ohne Cap-Timer und ohne Dead-Air-Watchdog weiterlaeuft.
-  app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog, reattachActiveCallByControlId: lifecycle.reattachActiveCallByControlId }));
+  registerWellKnown(app);
 
   // P5: "/" hat kein Index (public/ traegt nur statische Marken-Assets) -> ginge sonst auf 404.
   // 302 auf den Login (= Registrierung, Strategie R2). VOR express.static gemountet wie
@@ -311,7 +339,6 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       audit,
       outboundGates,
       voiceControl,
-      originateAiAssistantCall,
       // EL-Anrufstart: die EINE Instanz aus server.js (INV-7, Naht wie callFinish) - sie
       // haelt den ziehenden Ergebnisweg des Anbieters. Fehlt sie im deps-Buendel, bleibt
       // der Platz LEER statt hier zu werfen: makeCallRoutes setzt dann seinen
@@ -323,6 +350,8 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       // konkrete Implementierung (dieselbe elevenLabsOutbound-Instanz wie oben).
       elevenLabsHangUpAction,
       endActiveCall: elevenLabsOutbound?.endActiveCall,
+      // IEL-B5 (E10): Ergebnis-Teil des Bruecken-Beende-Thunks fuer cancel_call.
+      awaitAndPersistInboundElResult: elevenLabsOutbound?.awaitAndPersistInboundElResult,
       billThunk,
       finishCall: callFinish.finishCall,
       arm: {
@@ -407,8 +436,9 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
   // Das /mcp-Trio (POST mit mcpAuth, GET/DELETE -> 405) lebt in src/routes/mcp.js
   // (makeMcpRoutes, DI-Muster wie makeBillingRoutes/makeVoiceRoutes) - reine Verschiebung,
   // Verhalten unveraendert. Mount an UNVERAENDERTER Position: nach makeOnboardRoutes, vor
-  // errorHandler (INV-2). mcpAuth (src/auth.js) bleibt die EINZIGE Absicherung auf POST,
-  // fail-closed. Stateless pro Request
+  // errorHandler (INV-2). mcpAuth (src/auth.js) bleibt die einzige IDENTITAETS-Pruefung
+  // auf POST, fail-closed; die Herkunftswache (mcpOriginOnlyMiddleware, E5) laeuft im
+  // Modul davor und ersetzt sie nicht. Stateless pro Request
   // (INV-8) + res.on("close")-Cleanup sind ins Modul mitgewandert. requestTenant = die EINE
   // Wurzel-Instanz (INV-7).
   app.use(makeMcpRoutes({ config, store, requestTenant }));
@@ -424,11 +454,15 @@ export async function buildApp(deps) {
     callFinish,
     lifecycle,
     provisioning,
-    conversationWatchdog,
     ttsStore,
     directiveSynth,
     voiceRender,
     messaging,
+    // IEL-B5: die EINE EL-Instanz - /voice/status startet ueber sie den Nachlauf (INV-7).
+    elevenLabsOutbound,
+    // IEL-B6: die EINE Frist-Instanz der Inbound-Bruecken (INV-7) - die Init-Route loescht ihre
+    // Fristen bei der ersten Bindung. B8: auch die Voice-Routen.
+    inboundBridges,
     // EL-BL4: die EINE ConsultDelivery-Instanz (INV-7). registerApiRoutes nimmt sie fuer
     // die Poll-Route direkt aus deps; DIESE Ebene braucht sie selbst, weil der
     // ElevenLabs-Rueckfrage-Webhook hier gemountet wird und auf ihren Slot-Zaehlern und
@@ -437,6 +471,11 @@ export async function buildApp(deps) {
     // F2-Mail: spaet gebundene Accounts-Zelle (server.js) - an wireWebLogin durchgereicht,
     // das accountsRef.current NACH dem Bau von accounts setzt (Muster operatorAuth unten).
     accountsRef,
+    // KV2-1: dieselbe Mechanik fuer den durablen Audit-Sink des Kostenpfads.
+    auditStoreRef,
+    // P3: der mandanten-gebundene durable Auditor (server.js) - der EL-Rueckfrage-Webhook
+    // schreibt damit die Spur eines gescheiterten Halts. Kein neuer Weg, dieselbe Fabrik.
+    durableAuditFor,
     // DIP-Seam (PLAN-AUTH-GATE P1) - dieselbe Naht, die wireWebLogin intern schon nutzt,
     // nur eine Ebene hoeher gezogen: der Routen-Inventar-Test
     // (test/route-auth-inventory.test.js) muss den PRODUKTIONS-Routengraph bauen
@@ -452,7 +491,7 @@ export async function buildApp(deps) {
   app.set("trust proxy", 1);
 
   installGlobalMiddleware({ app, config });
-  registerPublicRoutes({ app, config, store, watchdog: conversationWatchdog, lifecycle });
+  registerPublicRoutes({ app, config });
   registerPathRedirects({ app });
 
   // ---- OIDC-Browser-Login (/auth/*) -----------------------------------
@@ -491,6 +530,8 @@ export async function buildApp(deps) {
         messaging,
         // F2-Mail: wireWebLogin setzt accountsRef.current NACH dem Bau von accounts.
         accountsRef,
+        // KV2-1: dieselbe Mechanik fuer den durablen Audit-Sink des Kostenpfads.
+        auditStoreRef,
       });
     });
   }
@@ -503,12 +544,11 @@ export async function buildApp(deps) {
 
   // ---- Voice-Webhooks -----------------------------------------------------------------
   // Alle /voice/* (GET /voice/tts/:token, app.use("/voice",sig-MW), incoming/turn/outbound/
-  // status/call-control) leben in routes/voice.js (makeVoiceRoutes, DI-Muster wie
+  // status) leben in routes/voice.js (makeVoiceRoutes, DI-Muster wie
   // makeCallRoutes). Mount an UNVERAENDERTER Position: nach express.static(publicDir), vor
   // makeCallRoutes (INV-2). Sicherung ist die Provider-Signaturpruefung, fail-closed. INV-4: TTS-Route
   // VOR der Sig-MW (im Router festgehalten). finishCall = die EINE callFinish-Instanz
-  // (INV-7); watchdog = der EINE conversationWatchdog (geteilt mit dem Shim);
-  // voiceRender/directiveSynth/ttsStore/lifecycle = die EINEN Wurzel-Instanzen.
+  // (INV-7); voiceRender/directiveSynth/ttsStore/lifecycle = die EINEN Wurzel-Instanzen.
   app.use(
     makeVoiceRoutes({
       store,
@@ -519,13 +559,15 @@ export async function buildApp(deps) {
       ttsStore,
       lifecycle,
       finishCall: callFinish.finishCall,
-      voiceControl,
       webhookEvents,
       providerFromHeaders,
       inboundSignatureVerifier,
       terminateAndBillCall,
       billThunk,
-      watchdog: conversationWatchdog,
+      startInboundNachlauf: elevenLabsOutbound?.startInboundNachlauf,
+      // IEL-B8: die EINE Frist-Instanz (INV-7) - /voice/incoming armiert, /voice/el-rueckfall loescht,
+      // /voice/el-bein armiert die innere Frist.
+      inboundBridges,
     }),
   );
 
@@ -540,8 +582,7 @@ export async function buildApp(deps) {
   // (volle Begruendung im Routenmodul + src/route-policy.js). NICHT unter /voice: die
   // Ed25519-Signaturpruefung dort bleibt unberuehrt. Die Wirkung laeuft ueber den
   // BESTEHENDEN Consult-Kanal (call.consults, AL-P13); makeConsultRaised haelt selbst
-  // keinen Zustand und wird deshalb hier in der Kompositionswurzel gebaut, wie
-  // makeTelnyxLlmShim.
+  // keinen Zustand und wird deshalb hier in der Kompositionswurzel gebaut.
   //
   // BEIDE Nahtstellen zeigen auf DIESELBE consultDelivery-Instanz (INV-7), und zwar
   // aus zwei Gruenden: ihre Slot-Zaehler begrenzen, wie viele Verbindungen gleichzeitig
@@ -555,8 +596,19 @@ export async function buildApp(deps) {
       config,
       consultSlots: consultDelivery,
       onConsultRaised: makeConsultRaised({ store, isDraining: consultDelivery.isDraining }),
+      // P3 (N-10): der durable, mandanten-gebundene Audit-Weg. OHNE Default und bewusst:
+      // ein stiller No-op verstecke genau die Blindheit, die diese Phase behebt. Dass die
+      // Verdrahtung steht, pinnt test/el-consult-timeout-spur.test.js (P3-7).
+      auditFor: durableAuditFor,
     }),
   );
+
+  // ---- IEL-B6: Conversation-Initiation-Webhook (POST /webhooks/elevenlabs/init) ----------
+  // AUTH-AUSNAHME (Regel 3, begruendet in src/route-policy.js und im Routenmodul): Geheimnis-
+  // Header, dann Zuordnung ueber das Bindungs-Token an einen wartenden Inbound-EL-Anruf. NICHT
+  // unter /voice; statt des globalen Limiters haengt die Init-Token-Schranke vor den Parsern
+  // (installGlobalMiddleware, IEX-A7).
+  app.use(makeElevenLabsInitWebhookRoutes({ store, config, bridges: inboundBridges }));
 
   // ================= REST-API (Dashboard + MCP-Tools) + MCP-Transport ==============
   // Die Mount-Sequenz selbst steht in registerApiRoutes (oben) - Position, Reihenfolge

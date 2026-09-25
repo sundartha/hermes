@@ -3,6 +3,35 @@
 Lehren aus der Ausfuehrung von `PLAN-FRAGILITY-REMEDIATION.md` (eine `phase-lean`-Session
 pro Phase). Neueste zuerst.
 
+## L5 — EL-Agenten-Stimme: vier Kernsaetze fuer Prompt-/Detektor-Arbeit, P1
+Quelle: Stimme-Kette ST0-ST5 (tasks/PLAN-AGENTEN-STIMME.md, Vorfaelle "[froehlich]" +
+Doppelankuendigung 2026-09-02). Gilt ab jetzt fuer JEDE Arbeit am EL-Agenten (Prompt,
+Konfig, Detektoren) und die Budget-/Realtime-Pendants. Die vier Kernsaetze im Wortlaut:
+
+1. **MELDEN, NICHT ENTFERNEN:** Detektoren ([el-tags], [el-b1]) melden ausschliesslich —
+   Transkripte werden NIE nachtraeglich gestript oder geschoent (Art. 50 EU AI Act: das
+   Transkript ist der Nachweis; outbound.js-Kommentar "WARUM MELDEN UND NICHT ENTFERNEN").
+   Ein Zaehlfeld am Call-Datensatz macht die Rate messbar, ohne den Nachweis anzufassen.
+2. **Beispiel schlaegt Regel:** kein Regeltext traegt eine eckige Klammer — ein
+   Klammer-BEISPIEL im Prompt erzeugt genau das Verhalten, das die Regel verbietet
+   (Lehre 18.08.: das Prompt-Verbot mit Beispiel verlor gegen das Beispiel).
+3. **Dashboard schlaegt ungepinntes Repo:** nur GEPINNTE Felder (Vorlage _besitz.felder
+   + drift/push) sind Wahrheit. Ein Feld ohne Pin kann im Dashboard still geaendert
+   werden, ohne dass ein Gate es meldet — SOLL aendern NUR in der Vorlage, dann pushen.
+4. **Vorlage ist kanonisch, speechRules sind Uebersetzungen:** inhaltliche B1/B2-
+   Aenderungen gehen im SELBEN Commit an allen fuenf Stellen (Master-Prompt,
+   soft_timeout-Override, speechRules de/en/fr) UND an ihren Pins — wer nur eine Stelle
+   aendert, erzeugt Drift zwischen Vorlage und speechRules, den kein Detektor sieht.
+
+**Warum:** Die Kette bewies alle vier als reale Fehlerfamilien: B2 war eine
+Adhaerenz-Luecke trotz existierender Regel (Beispiel-/Sog-Problematik), Befund 3 war
+Konfig-gegen-Prompt (Dashboard-/Pin-Problematik), und die Vorfaelle waren nur zaehlbar,
+weil gemeldet statt entfernt wurde.
+**How to apply:** Vor jeder EL-Prompt-/Konfig-Aenderung: Vorlage als Quelle nehmen
+(kein Dashboard-Griff), Regeltexte klammerfrei halten, Detektoren nur erweitern
+(Diagnose), Aenderungen an allen fuenf Stellen + Pins in einem Commit, danach
+`npm run elevenlabs:drift` (und bei Live-Wirkung: Push mit Ruecklese, Owner-Gate).
+
 ## L1 — Pausierter Workflow != toter Workflow (Ruhemodus-Kollision), P1
 **Symptom:** Mac ging waehrend des P1-Lean-Workflows in den Ruhemodus. Nach dem Aufwachen
 sah `TaskList` "No tasks" -> ich schloss "Workflow tot" und startete eine MANUELLE
@@ -834,3 +863,228 @@ Kostensignal zeigt um Faktor ~200 zu niedrig. Nichts drueckt dagegen.
 zurueckgenommen wird, ist eine Ratsche - und eine Ratsche ohne Kostenmessung laeuft
 zwangslaeufig aus dem Ruder. Wer eine Beweispflicht ergaenzt, nennt ihren Preis, oder
 nimmt eine andere weg.
+
+## 2026-09-07: Ein Worktree sieht keine untrackten Dateien - zwei Fehlstarts derselben Phase
+
+**Symptom:** Der `phase-impl-lean`-Lauf zu CL1 brach zweimal ab. Beim ersten Mal meldete der
+Safety-Reviewer, er finde weder den Branch noch die Spec; `grep -rl "CL1"` lieferte im
+Arbeitsverzeichnis null Treffer, obwohl Plan und Spec offen vor dem Lead lagen.
+
+**Ursache:** Die Workflow-Agenten arbeiten in einem frischen Worktree aus `master`. Plan-Doku
+und Spec waren im Haupt-Repo **untracked**. Untrackte Dateien existieren in keinem anderen
+Worktree - der Auftrag verwies also auf Dateien, die dort schlicht nicht da waren.
+
+**Regel:** Jede Datei, auf die ein Worktree-Agent per Pfad verwiesen wird (Spec, Plan,
+Kickoff), muss VOR dem Start committet sein. Ein `git status --porcelain` mit `??` auf einer
+dieser Dateien heisst: der Lauf wird ins Leere laufen.
+
+**Zweiter Fehlstart, andere Ursache, gleiche Familie:** `node_modules` fehlte im Haupt-Repo
+komplett (der Worktree-Symlink zeigt dorthin), wodurch der Pre-Commit-Hook ueber ein
+fehlendes `eslint` fiel. Vor einem Phasenlauf gehoert beides geprueft: sind die Auftrags-
+Dateien committet, und stehen die Dependencies im Haupt-Repo.
+
+**Was den Lauf gerettet hat:** Der Abbruch (Session-Limit) liess den Worktree stehen. Die
+Arbeit des Impl-Agenten lag uncommittet darin und war vollstaendig verwertbar - vor dem
+Aufraeumen eines gescheiterten Laufs IMMER `git -C <worktree> status` lesen, nie blind
+entfernen.
+
+## 2026-09-04 Das Transkript ist kein Beleg fuer das, was gesagt wurde
+
+Die Vorsession hat aus dem EL-Transkript (`"No. ¿Sí está ahí?"`, `source_medium: audio`)
+geschlossen, der Eigentuemer habe etwas gesagt, und daraus die Frage "falsch gehoert oder
+mehrdeutig?" gebaut. Das Audio zeigt: er hat nichts gesagt. Der Turn war ein Phantom der
+Spracherkennung — und derselbe Phantomtyp stand schon im "guten" Vergleichsanruf, als
+"Wie?"/"Wie sind?", also sprachlich unauffaellig und deshalb nie bemerkt.
+
+**Regel:** Wo Audio existiert (`record_voice: true`), ist das Audio der Beleg, das Transkript
+nur ein Zeiger. Vor jeder Aussage ueber eine Aeusserung: Stille-Messung (silencedetect) plus
+unabhaengige Transkription mit Positiv-Kontrolle (ein echter Turn muss laut sichtbar sein).
+Und: ein "guter" Anruf ist erst gut, wenn auch seine User-Turns am Audio geprueft sind — der
+Vergleichsanruf hatte denselben Defekt, nur mit harmlosem Ausgang.
+
+**Zweite Lehre:** "Warum feuert Werkzeug X zum ersten Mal?" war die falsche Leitfrage. Beide
+Werkzeuge feuerten als FOLGE (erster echter Mailbox-Kontakt; Sprachwechsel bereits vollzogen).
+Erst die Reihenfolge im Anruf klaeren (was kam zuerst?), dann nach Ursachen suchen.
+
+## 2026-09-07 Ein owner-pflichtiger Punkt gehoert nicht in die Self-Fix-Schleife
+
+P4b (Portugiesisch) hat 429,7M Token verbrannt, drei Fix-Runden durchlaufen und ist am Ende
+BLOCKED geblieben — an genau den zwei Punkten, die seine eigene Spec vorher als
+**owner-pflichtig** deklariert hatte (E-3 "keine Stimme wird geraten", E-4 "der
+Offenlegungssatz ist owner-pflichtig"). Keine Fix-Runde konnte sie schliessen, weil sie
+keine Code-Fragen sind: eine Stimm-ID ist nur per Synthese belegbar, und ein
+Art.-50-Wortlaut braucht eine Freigabe, keine Implementierung.
+
+Schlimmer als die Kosten ist, was der Impl-Agent stattdessen tat: er hat die verbotene
+Entscheidung selbst getroffen (`Azure.pt-PT-RaquelNeural` geraten) und im Kommentar
+zugegeben, dass sie geraten ist. Eine Spec-Verbotszeile allein haelt einen Agenten nicht auf,
+wenn ohne die Entscheidung kein lauffaehiges Ergebnis entsteht — er baut dann eine Vermutung
+ein und deklariert sie.
+
+**Regel:** Traegt eine Phase einen Punkt, den nur der Eigentuemer entscheiden kann, wird er
+VOR dem Lauf entschieden oder aus dem Scope geschnitten. Ein "als offenen Punkt benennen"
+in der Spec reicht nicht — es erzeugt entweder eine geratene Tatsache im Code oder eine
+Fix-Schleife, die nicht konvergieren kann (vgl. [[abnahme-schleife-konvergiert-nicht]]:
+nach Fund-SCHWERE steuern, nicht nach Zahl).
+
+**Zweite Lehre, billig:** ein Workflow-Lauf, der an einem Infrastrukturfehler stirbt
+(hier: "Login expired" bei 5 von 6 Agenten), ist per `resumeFromRunId` fast gratis zu
+retten — die gescheiterten Agenten stehen als `failed`, nicht als leeres Ergebnis, und
+laufen neu; nur der teure Plan-Agent kommt aus dem Cache. Vorher `journal.jsonl` pruefen:
+genau die Agenten mit `"type":"result"` werden gecached.
+
+## Fertige Arbeit uncommittet ist keine Arbeit (SEC-P3, 2026-09-08)
+
+**Was passierte.** Der Implementierungs-Agent setzte SEC-P3 vollstaendig um, 149 Tests gruen —
+und committete NICHT. Der pre-commit-Hook (`scripts/check-staged-suppressions.js`) lehnte ab,
+weil `makeSelfServiceRoutes` durch sechs neue Zeilen von 418 auf 424 wuchs und die Zeilenzahl
+Teil des Befund-Schluessels ist. Der Agent hielt beide Auswege fuer "ausserhalb meines
+Mandats" und meldete den Stand als "vorgemerkt im Worktree".
+
+**Kosten.** Der Review sah einen leeren Branch (`git diff master sec/p3` = 0 Bytes) und
+blockierte zu Recht. Die anschliessende Fix-Runde brauchte 270 Turns und 45 Mio Token — fast
+alles davon, um schon fertige Arbeit zu FINDEN und zu SICHERN, nicht um sie zu machen.
+
+**Wurzel.** Nicht der Hook. Der Auftrag sagte "git commit", aber nicht, was gilt, wenn der
+Commit abgelehnt wird. Ein Agent ohne Regel fuer den Fehlerfall waehlt die vorsichtigste
+Deutung — und die war hier die teuerste.
+
+**Regel fuer kuenftige Phasen-Prompts** (steht jetzt als `COMMIT_PFLICHT` im per-run-Skript):
+Commit ist Pflicht. Lehnt der Hook wegen eines bewegten Legacy-Pins ab, gilt diese
+Reihenfolge: (1) Ursache beseitigen — neuen Code auf MODUL-EBENE legen, dann waechst die
+gepinnte Funktion nicht; (2) nur wenn das nachweislich nicht geht: Pin anheben mit datiertem,
+ehrlichem Grund (bestehende Hauspraxis); (3) NIEMALS `--no-verify`. Ein Blocker wird erst
+gemeldet, nachdem (1) und (2) wirklich versucht wurden.
+
+**Nebenbefund, der die Regel stuetzt:** Weg (1) hat in derselben Phase funktioniert. Der
+Fix-Agent legte den neuen Code auf Modul-Ebene, die Riesenfunktion wuchs nicht, der Hook nahm
+den Commit von sich aus an (gegengeprueft: Exit 0). Es gab also nie einen Grund, an der
+Sicherung vorbeizugehen.
+
+## 2026-09-11 — Lehren aus der Geldpfad-Kette (GP-P0..GP-P6, Lead-Rolle)
+
+**Ein Effizienz-Riegel verschiebt Arbeit, er loescht sie nicht.** Der Kickoff verbot Impl, Fix
+und Safety-Review die volle Suite (Wurzel des 260-Mio-Ausreissers: drei Agenten fuhren sie je
+Lauf). Das spart real - aber bei GP-P2 brach die Phase zwei BESTANDStests, die kein Agent
+gefahren hatte, und der Workflow meldete trotzdem PASS. Beide waren isoliert rot, also echt.
+**Folge: der Lead-Suitenlauf ist Pflicht, nicht Kuer.** Ein Merge auf das PASS des Workflows
+hin waere hier falsch gewesen. Der Riegel bleibt richtig; was dazugehoert, ist das Netz
+dahinter.
+
+**Ein roter Fall zaehlt erst, wenn er isoliert rot ist - und die Bank luegt in beide
+Richtungen.** Voll parallel meldete dieselbe Bank auf demselben Commit einmal vier, einmal neun
+rote Faelle, mit **wechselnden Namen**; mit `--test-concurrency=4` null. Wer die erste Zahl
+glaubt, sucht Gespenster; wer sie ignoriert, uebersieht die zwei echten dazwischen. Der
+Wrapper reicht Zusatzargumente durch: `node test/testbaenke-run.mjs regression
+--test-concurrency=4`.
+
+**`npm test` deckt das Dashboard nicht ab.** Der Wrapper sucht `test/*.test.js`;
+`apps/web/test/**` bleibt draussen. Eine Phase mit Dashboard-Anteil ist ueber `npm test`
+**nicht** abgenommen - `cd apps/web && PUBLIC_GATEWAY_URL=... node --test "test/**/*.test.js"`
+gehoert dazu.
+
+**Der Commit-Hook fahrt `eslint` und flutet die Ausgabe.** Ein `git commit` ohne
+Ausgabe-Unterdrueckung kostete rund 10k Token an Lint-Warnungen fuer nichts. Als Lead, der
+duenn bleiben soll: `git commit -q ... >/dev/null 2>&1` und den Erfolg separat pruefen.
+
+**Grosse JSON-Diffs nie ungefiltert ansehen.** `git diff -- eslint-legacy-exceptions.json` warf
+mehrere Bildschirmseiten Begruendungstext aus, weil die Datei ihre Historie im `reason`-Feld
+traegt. Die Frage war "wurde eine Sicherung abgeschaltet?" - beantwortbar mit `--stat` plus
+einem gezielten grep auf die `findings`-Zeilen.
+
+**Kettenstand VOR dem Start der Welle schreiben.** Ein Commit auf `master` waehrend eines
+laufenden Workflows liess den Plan-Agenten der naechsten Phase eine Basis-Abweichung erklaeren.
+Folgenlos, aber unnoetiger Laerm - und in der Vergangenheit schon einmal ein falscher
+Stale-Base-Blocker.
+
+**Bei einem FATAL-Boot-Guard reicht kein gruener Test.** GP-P6 fuehrt `exit(1)` ein. Die Frage
+ist nicht "besteht der Test", sondern "startet der Live-Dienst mit der ECHTEN Konfiguration
+noch". Das heisst: Katalog-Slugs zaehlen, Env-Werte gegenpruefen, und was sich lokal nicht
+belegen laesst, ausdruecklich als Vor-dem-Deploy-Schritt melden statt es als geprueft
+auszugeben.
+
+## 2026-09-12 — Aufraeum-Lauf: zwei Werkzeugfallen, eine Pruef-Falle
+
+Beim Entfernen von 109 Prozessdateien sind drei Fehler passiert, alle derselben Bauart:
+ein Befehl, der still das Falsche tat, statt zu scheitern.
+
+**1. zsh trennt Wortlisten anders als bash — asymmetrisch.** Eine unquotierte
+Parameter-Expansion (`for k in $KEEP`) wird in zsh NICHT in Woerter zerlegt, eine
+Kommando-Substitution (`for w in $(git worktree list ...)`) dagegen SCHON — inklusive
+Trennung an Leerzeichen IN Pfaden. Folge hier: eine Schutzliste blieb wirkungslos und
+loeschte 8 Dateien mit, die bleiben sollten; und ein Pfad mit Leerzeichen
+("Mein Unternehmen") wurde in zwei kaputte Pfade zerlegt. Beide Male meldete die Schleife
+Erfolg bzw. plausible Fehler, nie "deine Liste ist leer".
+**Regel:** Listen ueber eine Datei und `while IFS= read -r`, nie ueber `$VAR` oder `$(...)`
+in einer `for`-Schleife. Und nach jeder Schutzliste EINMAL nachzaehlen, ob die geschuetzten
+Eintraege noch da sind.
+
+**2. Ein Suchmuster ohne Positiv-Kontrolle sieht aus wie ein sauberes Ergebnis.** Die
+Vorpruefung "welche geloeschte Datei wird von Code gelesen?" suchte nach
+`readFile|existsSync|join|resolve|import|require` in derselben Zeile wie der Pfad. Der
+echte Zugriff lief ueber `new URL("../tasks/spike1-messung.jsonl", import.meta.url)` —
+nicht im Muster. Die Pruefung meldete EINEN Treffer, was wie Gruendlichkeit aussah. Erst
+die Testbank fand es (ENOENT, 8 Faelle).
+**Regel:** Ein Suchbefehl, der etwas ausschliessen soll, braucht einen bekannten Treffer
+als Gegenprobe. Findet er den nicht, ist sein "nichts gefunden" wertlos. Besser noch:
+nicht suchen, sondern die Bank fahren — sie kennt die Zugriffe, das Muster nicht.
+
+**3. Die Bank ohne `NODE_ENV=test` fahren erzeugt 194 Phantom-Rote.** Direkt
+`node test/testbaenke-run.mjs regression` aufgerufen: 200 rot. Ueber `npm test` (das
+`NODE_ENV=test` setzt): 6 rot, davon 3 bekannte Parallel-Flaker und 1 echter Fund.
+**Regel:** Die Bank IMMER ueber `npm test` fahren, nie den Runner direkt. Und: ein roter
+Fall zaehlt erst, wenn er ISOLIERT rot ist (Bestandsregel, hier dreimal bestaetigt).
+
+## 2026-09-13 — "agent stalled" sagt NICHTS ueber den Agenten
+
+Der IP2-Lauf brach dreimal ab mit "agent stalled on all 6 attempts (no progress for
+180000ms each)". Die Meldung zeigt auf den Agenten. Keiner der drei Abbrueche lag am
+Agenten, und die ersten beiden Diagnosen dieser Sitzung waren falsch.
+
+**Die ECHTE Ursache, vom Owner genannt: sein Internet war weg.** Die Modell-Anfrage
+haengt, es kommt kein Token, nach 180 s greift der Stall-Detektor - auf JEDEM der sechs
+Versuche, weil die Leitung auf jedem Versuch tot war. Das Transkript sieht dabei
+taeuschend gesund aus: zehn bis siebzehn Minuten echte Arbeit (Dateien gelesen, gegrept),
+dann ein abgeschnittener Denkblock und "[Request interrupted by user]".
+
+**Was ich stattdessen diagnostiziert habe, beide Male daneben:**
+1. *Maschinenlast.* Beim ersten Abbruch stand die Load auf 47,58 bei 15 Kernen (Details
+   unten - der Befund war echt und musste weg, er war nur nicht die Ursache: der zweite
+   Abbruch kam bei Load 6).
+2. *Modellwahl.* Danach habe ich den Plan-Agenten von opus/high auf sonnet gestellt, mit
+   der Begruendung "stallt im langen Denkblock". Der naechste Lauf stallte genauso. Eine
+   Korrelation mit n=1, zur Ursache erklaert.
+
+**Regel:** Bei "agent stalled" ist die erste Frage, ob ueberhaupt eine Verbindung steht -
+`curl -o /dev/null -w "%{http_code} %{time_total}" --max-time 15 https://api.anthropic.com/v1/messages`
+(405 = erreichbar). Erst danach Maschinenlast, erst danach das Transkript. Und: stallen
+ALLE Versuche gleich, ist die Ursache ausserhalb des Agenten - ein echtes Agenten-Problem
+traefe nicht jeden Versuch an derselben Stelle.
+
+### Nebenbefund desselben Abends: ein verwaister Testlauf frisst die Maschine
+
+**Befund:** `uptime` meldete Load 47,58 bei 15 Kernen. `ps` zeigte einen
+`node --test`-Wurzelprozess (PID 86547), der seit **3 Stunden 17 Minuten** lief, dabei
+weiter Kind-Testprozesse spawnte (zwei davon selbst seit 3 h bzw. 2 h haengend, jeder mit
+einem eigenen `server-mit-elternwaechter.mjs`-Kind). Sein Elternprozess war
+`node test/testbaenke-run.mjs regression -- --test-concurrency=4` mit **PPID 1** — der
+Runner hatte seinen Aufrufer ueberlebt und war verwaist. Nach dem Abschiessen des Baums
+fiel die Load innerhalb von Minuten auf 9,79, und derselbe Lauf startete normal.
+
+**Warum das keine Bestandslehre doppelt:** die bekannten Notizen decken verwaiste
+*Testserver* (der Eltern-Waechter behebt die) und "pgrep ist blind in der Sandbox". Hier
+war der Waechter wirkungslos, weil nicht der Server verwaist war, sondern **der
+Testrunner selbst** — er war der Elternprozess, auf den der Waechter wartet.
+
+**Regel:** `ps -Ao pid,ppid,etime,args | grep "bin/node --test"` und auf ELAPSED achten.
+Ein Testlauf mit dreistelliger Minutenzahl ist immer ein Zombie; die Suite braucht rund
+zweieinhalb Minuten. Das gehoert zur Routine nach jedem abgebrochenen Lauf - aber als
+Aufraeumen, NICHT als Stall-Erklaerung (s. oben).
+
+**Zweite Regel, aus demselben Aufraeumen:** `git worktree list --porcelain` liefert Pfade
+mit Leerzeichen ("Mein Unternehmen"). Eine `for`-Schleife ueber `awk '{print $2}'`
+zerschneidet sie und entfernt still NICHTS — der Fehler verschwand zusaetzlich in einem
+`| head -1`. Richtig ist `sed -n 's/^worktree //p' | while IFS= read -r w`. Das ist
+dieselbe Klasse wie Lehre 1 vom 2026-09-12 (Listen ueber `while IFS= read -r`, nie ueber
+`$(...)` in `for`), hier aber mit einem loeschenden Befehl: es sah aus, als sei
+aufgeraeumt, waehrend elf Worktrees stehen blieben.

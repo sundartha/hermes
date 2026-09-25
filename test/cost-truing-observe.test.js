@@ -377,7 +377,9 @@ test("(h2) Gegenprobe: dieselben Records mit ERFUELLTER Pflicht-Menge -> 'telnyx
     store, config, voiceControl: fakeVoiceControl({ telnyx: control }), audit: () => {}, now: () => nowMs,
   });
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.DETAIL_RECORDS);
+  // KV2-8: erfuellte Pflicht-Menge + vollstaendiges Kosten-Buch -> 'kostenbuch_vollbeleg'
+  // (beweisende Herkunft, wie 'telnyx_detail_records' es vor dieser Phase war).
+  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG);
 });
 
 test("(h3) Gegenprobe: dieselben Records mit NICHT erfuellter Pflicht-Menge -> 'incomplete'", async () => {
@@ -455,7 +457,12 @@ test("(j1) Deckung unter Schwelle -> genau ein Befund je Entprellfenster, PII-fr
   const store = makeStubStore(state);
   const { calls: auditCalls, audit } = auditSpy();
   let clock = nowMs;
-  const config = fakeConfig({ costTruingMinCoveragePercent: 80, costAlertDebounceMs: 1000, costTruingCoverageStallSweeps: 100 });
+  // KV2-1: die VOLL-Stufe (coverage_below_threshold) entprellt seit dieser Phase am
+  // durablen Marker (outageAlertDebounceMs/-RetryMs), nicht mehr an costAlertDebounceMs.
+  const config = fakeConfig({
+    costTruingMinCoveragePercent: 80, outageAlertDebounceMs: 1000, outageAlertRetryMs: 1000,
+    costTruingCoverageStallSweeps: 100,
+  });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({}), audit, now: () => clock,
   });
@@ -466,6 +473,12 @@ test("(j1) Deckung unter Schwelle -> genau ein Befund je Entprellfenster, PII-fr
   clock += 500; // innerhalb des Entprellfensters (1000ms)
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
   assert.equal(auditCalls.filter((c) => c.event === "cost_truing_befund").length, 1, "Sweep 2 (innerhalb Debounce): kein zweiter Befund");
+  // KV2-1 Kriterium (b): ein entprellter VOLL-Befund faellt auf die Notiz-Stufe zurueck
+  // (meldeBetreiberNotiz) statt ganz zu schweigen - "nie stumm" gilt fuer JEDEN Lauf.
+  assert.equal(
+    auditCalls.filter((entry) => entry.event === "cost_truing_befund_entprellt").length, 1,
+    "Sweep 2: der entprellte Versand hinterlaesst trotzdem eine Audit-Zeile",
+  );
 
   clock += 1000; // Fenster jetzt abgelaufen (1500ms seit Sweep 1)
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
@@ -486,16 +499,26 @@ test("(j2) Deckung bleibt COST_TRUING_COVERAGE_STALL_SWEEPS Sweeps unter der Sch
   const store = makeStubStore(state);
   const { calls: auditCalls, audit } = auditSpy();
   let clock = nowMs;
-  const DEBOUNCE_MS = 100;
-  const config = fakeConfig({ costTruingMinCoveragePercent: 80, costAlertDebounceMs: DEBOUNCE_MS, costTruingCoverageStallSweeps: 3 });
+  // KV2-1: die Stall-Terminierung laeuft seit dieser Phase in ZEIT (firstSeenAt am
+  // durablen Marker), nicht mehr ueber einen prozesslokalen Sweep-Zaehler - gemessen wird
+  // also gegen costTruingCoverageStallSweeps * costTruingSweepIntervalMs.
+  // outageAlertDebounceMs/-RetryMs klein, damit jeder Sweep erneut melden darf.
+  const SWEEP_INTERVAL_MS = 1000;
+  const config = fakeConfig({
+    costTruingMinCoveragePercent: 80, costTruingCoverageStallSweeps: 3,
+    costTruingSweepIntervalMs: SWEEP_INTERVAL_MS, outageAlertDebounceMs: 1, outageAlertRetryMs: 1,
+  });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({}), audit, now: () => clock,
   });
 
-  for (let sweep = 1; sweep <= 3; sweep++) {
-    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-    clock += DEBOUNCE_MS + 1; // jedes Fenster erneut ablaufen lassen
-  }
+  // Erster Sweep bei t0 (nur coverage_below_threshold moeglich - noch nichts "seit"
+  // laenger als die Stall-Schwelle her). Zweiter Sweep NACH der Stall-Schwelle: erst dann
+  // ist sie ueberschritten -> zusaetzlich coverage_stalled.
+  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  clock += 3 * SWEEP_INTERVAL_MS; // == costTruingCoverageStallSweeps oben
+  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+
   const stalled = auditCalls.filter((entry) => entry.detail.includes("coverage_stalled"));
   assert.equal(stalled.length, 1, "genau ein coverage_stalled nach Erreichen der Stall-Grenze");
 });
@@ -563,9 +586,16 @@ test("(j4) 1.500 Anfragen je Sweep -> genau ein Befund je Entprellfenster (Log +
 
   assert.equal(volumeFindings().length, 1, "zwei Sweeps im Entprellfenster -> genau ein Befund");
   assert.equal(volumeFindings()[0].detail, "grund=requests_above_threshold anfragen=1500 schwelle=1440");
+  // KV2-1: seit dieser Phase laeuft die Notiz-Stufe ueber den Betreiber-Meldeweg
+  // (meldeBetreiberNotiz), der SELBST eine eigene, knappe WARN-Zeile schreibt
+  // ("[outage] cost_truing_befund klasse=kosten:requests_above_threshold") - zusaetzlich
+  // zur bestehenden detaillierten Zeile ("[cost-truing] Befund grund=..."). Beide Zeilen
+  // enthalten den Code-String, deshalb ZWEI statt EIN Treffer - genau EIN Sendevorgang
+  // bleibt es trotzdem (volumeFindings().length oben, messaging.calls.length unten).
+  const WARN_ZEILEN_JE_NOTIZ_BEFUND = 1 + 1; // detaillierte Zeile + Meldeweg-Klassenzeile
   assert.equal(
-    spies.warns.filter((l) => l.includes("requests_above_threshold")).length, 1,
-    "der Befund steht auch im Log, genau einmal",
+    spies.warns.filter((l) => l.includes("requests_above_threshold")).length, WARN_ZEILEN_JE_NOTIZ_BEFUND,
+    "der Befund steht im Log: die detaillierte Zeile UND die Meldeweg-Klassenzeile, je einmal",
   );
   assert.equal(messaging.calls.length, 0, "kein neuer Alarmweg: der Waechter verschickt keine SMS (PM-7)");
   assert.doesNotMatch(

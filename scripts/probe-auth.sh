@@ -89,13 +89,15 @@ oeffentlich|GET|/healthz|200|keine|Keep-Alive und Deploy-Wahrheit, vor jeder Aut
 oeffentlich|GET|/api/plans|200|keine|oeffentlicher Tarifkatalog, registerPublicRoutes
 oeffentlich|GET|/.well-known/oauth-protected-resource|200|keine|OAuth-Metadata, registerWellKnown
 oeffentlich|GET|/.well-known/oauth-protected-resource/mcp|200|keine|OAuth-Metadata (MCP-Variante)
-oeffentlich|POST|/v1/chat/completions|403|keine|Telnyx-Shim: Flag an, Bearer fehlt -> 403 (Flag aus waere 404)
+oeffentlich|GET|/.well-known/openai-apps-challenge|404|keine|Domain-Ownership-Token nicht gesetzt; Route existiert (O-4)
+fehlt|POST|/v1/chat/completions|404|keine|in IE6-S1 geloescht (Assistant-Shim); 404 unabhaengig von Env
 oeffentlich|GET|/auth/login|302|keine|Einstieg in den OIDC-Login
 oeffentlich|GET|/auth/callback|302|keine|ohne state-Cookie -> Neustart des Flows
 oeffentlich|POST|/auth/logout|204|keine|ohne Sitzung wirkungslos
 oeffentlich|POST|/webhooks/stripe|400|keine|HMAC-Pruefung schlaegt fehl (PAYMENT_ENABLED aus waere 404)
 oeffentlich|POST|/webhooks/elevenlabs/consult|403|keine|Werkzeug-Token fehlt -> 403, auch bei leerem ELEVENLABS_TOOL_TOKEN
 oeffentlich|POST|/webhooks/elevenlabs/lookup|403|keine|Werkzeug-Token fehlt -> 403, gleiche Bauart wie consult (Thema B)
+oeffentlich|POST|/webhooks/elevenlabs/init|403|keine|Init-Token fehlt -> 403, auch bei leerem ELEVENLABS_INIT_WEBHOOK_TOKEN (IEL-B6)
 oeffentlich|GET|/tenant.html|302|keine|Altpfad-Umleitung auf /app
 oeffentlich|GET|/login|302|keine|AUTH-P7-Umleitung auf /auth/login
 oeffentlich|GET|/signin|302|keine|AUTH-P7-Umleitung auf /auth/login
@@ -112,7 +114,8 @@ oeffentlich|POST|/voice/incoming|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/turn|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/outbound|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/status|403|keine|Provider-Signatur fail-closed
-oeffentlich|POST|/voice/call-control|403|keine|Provider-Signatur fail-closed
+oeffentlich|POST|/voice/el-rueckfall|403|keine|Provider-Signatur fail-closed
+oeffentlich|POST|/voice/el-bein|403|keine|Provider-Signatur fail-closed
 oeffentlich|GET|/mcp|405|keine|Transport ist POST-only
 oeffentlich|DELETE|/mcp|405|keine|Transport ist POST-only
 sitzung|POST|/mcp|401|mcpauth|mcpAuth fail-closed (Bearer-Challenge, keine Basic-)

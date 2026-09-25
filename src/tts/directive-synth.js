@@ -1,13 +1,17 @@
 // Play-TTS-Direktiven-Synth (Server-Slim P2, reine Verschiebung aus server.js). Die Factory
 // schliesst config + die EINE ttsStore-Instanz (INV-7); providerSupports/CAPABILITY
-// (P5, registry.js)/DIRECTIVE/synthesizeSpeech importiert das Modul selbst (EINE Quelle
+// (P5, registry.js)/DIRECTIVE/synthesizeSpeechStream importiert das Modul selbst (EINE Quelle
 // je, G5). fetch bleibt das Node-Globale (NICHT importieren, sonst driftet der
 // Timeout-Pfad gegen den Bestand).
 //
 // Play-TTS-Einwebung (fail-safe): synthetisiert die gesprochenen Texte einer Direktiven-
-// Liste zur Webhook-Zeit (hartes Timeout in synthesizeSpeech), legt die Bytes in den
-// ttsStore und webt die Serve-URL als audioUrl/promptAudioUrl ein -> der Telnyx-Renderer
-// gibt <Play> statt <Say>. Flag AUS oder Nicht-Telnyx oder Synth-Fehler/Timeout oder
+// Liste zur Webhook-Zeit, legt die Audio-ZUSAGE in den ttsStore und webt die Serve-URL
+// als audioUrl/promptAudioUrl ein -> der Telnyx-Renderer gibt <Play> statt <Say>.
+// IE7: gewartet wird nur noch auf das ERSTE Audio-Paket (cfg.synthTimeoutMs); erst danach
+// entsteht ein <Play>, und damit bleibt der Azure-Rueckfall an seiner heutigen Naht - VOR
+// dem Rendern. Der Rest des Stroms laeuft im Hintergrund und wird beim Provider-Abruf
+// (GET /voice/tts/:token) abgewartet, nicht hier.
+// Flag AUS oder Nicht-Telnyx oder Synth-Fehler/Timeout (auch: kein erstes Paket) oder
 // erschoepftes ElevenLabs-Kontingent (GAP-09) -> Liste UNVERAENDERT zurueck -> Azure-<Say>
 // byte-identisch (NIE den Call toeten). Genau EIN sprechender Text pro Turn -> genau ein
 // Synth-Call pro Webhook.
@@ -20,7 +24,7 @@
 // ein Fehlschlag/Fallback zaehlt NICHT (der Zaehler soll die Wand vermessen, nicht
 // ueberschaetzen). Kein await auf den Warn-Callback: der Webhook-Pfad darf nie auf den
 // SMS-Versand warten (fire-and-forget liegt bereits in sendFailSoftAlertSms).
-import { synthesizeSpeech } from "./synth.js";
+import { synthesizeSpeechStream } from "./synth.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { DIRECTIVE } from "../telephony/directives.js";
 import { ttsQuotaExhausted } from "../store/state-ops.js";
@@ -45,11 +49,16 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
   async function withPlayAudio(d, cfg) {
     const text = d.kind === DIRECTIVE.GATHER ? d.promptText : d.kind === DIRECTIVE.SAY ? d.text : "";
     if (!text) return d;
-    // P9: die Vorabsynthese folgt derselben Sprach-Aufloesung wie der <Say>-Renderer
-    // (elevenLabsVoiceIdFor, EINE Quelle) statt der globalen Plattform-Stimme - sonst
-    // klingt der Play-TTS-Pfad in jeder Sprache gleich, obwohl VOICE-12 das fuer <Say>
-    // bereits loest (B2, Review GATES-P9).
-    const voiceId = elevenLabsVoiceIdFor(cfg.voiceId, d.voiceProfile);
+    // P9/IP3: EINZIGER sprachaufgeloester Sprechpfad der Budget-Engine. Bis IP3 loeste
+    // auch der <Say>-Renderer sprachabhaengig auf; mit dem entfernten Relay-Zweig ist
+    // diese Stelle hier die letzte - deshalb liegt der Katalog-Messpunkt VOICE-12 seit
+    // IP3 an ihr (test/directive-synth.test.js). elevenLabsVoiceIdFor bleibt die EINE
+    // Aufloesungsquelle, geteilt mit dem Outbound-Anrufstart (G5).
+    // IEL-B7a (E19): eine an der Direktive gesetzte Stimme gewinnt (EL-Inbound: Fehlersatz
+    // in der Stimme des Agenten). Ohne Feld - jeder heutige Aufrufer - bleibt die Aufloesung
+    // oben byte-identisch; ein leerer String zaehlt als nicht gesetzt. Riegel, Buchung und
+    // Azure-Rueckfall laufen unveraendert durch synthToServeUrl.
+    const voiceId = d.voiceId || elevenLabsVoiceIdFor(cfg.voiceId, d.voiceProfile);
     const url = await synthToServeUrl(text, { ...cfg, voiceId });
     if (!url) return d; // fail-safe -> Azure-<Say>
     return d.kind === DIRECTIVE.GATHER ? { ...d, promptAudioUrl: url } : { ...d, audioUrl: url };
@@ -70,14 +79,15 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
       return null; // erschoepft heisst NICHT bezahlen -> kein Provider-Aufruf
     }
     const chars = text.length; // VOR dem Aufruf bekannt (LCT P7)
-    const result = await synthesizeSpeech(text, {
+    const result = await synthesizeSpeechStream(text, {
       fetchImpl: fetch,
       apiKey: cfg.apiKey,
       voiceId: cfg.voiceId,
       model: cfg.model,
       apiBase: cfg.apiBase,
       outputFormat: cfg.outputFormat,
-      timeoutMs: cfg.synthTimeoutMs,
+      firstChunkTimeoutMs: cfg.synthTimeoutMs,
+      totalTimeoutMs: cfg.synthTotalTimeoutMs,
     });
     if (!result.ok) {
       // Beobachtbarkeit: stille Degradation auf Azure sichtbar machen (Betriebs-Symptom
@@ -89,18 +99,40 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
       return null;
     }
     // LCT P7: NUR bei result.ok verbuchen, platformweit (ausserhalb RLS, kein Gate liest es).
+    // IE7: "ok" heisst jetzt "das erste Audio-Paket ist da", nicht mehr "die Datei ist
+    // fertig" - die Buchung rueckt damit auf den Moment, in dem ElevenLabs den Auftrag
+    // angenommen hat. Genau einmal je erfolgreichem Synth, unveraendert.
     const warning = store.recordTtsCharacters(chars, nowIso);
     // GAP-09 Nach-Buchungs-Riegel: diese Buchung war reine Overage -> Audio verwerfen,
     // Direktive bleibt unveraendert -> Azure-<Say>. KEIN onQuotaWarning: diese Meldung
     // kommt bei JEDEM Aufruf (sie ist der Riegel, nicht der Alarm) - alarmiert wuerde
     // eine SMS je Turn. Der Alarm ist die warn-once-Schwelle darunter.
     if (warning?.exhausted) {
+      // Die Zeichen sind bezahlt (der Anbieter hat den Auftrag angenommen), das Audio
+      // wird verworfen -> Azure-<Say>. Der Hintergrund-Strom laeuft an seiner Gesamtfrist
+      // aus; er lehnt NIE ab (synth.js), ein fallengelassenes Versprechen ist hier also
+      // kein unhandledRejection.
       warnQuotaDegradation(warning);
       return null;
     }
     if (warning) onQuotaWarning(warning);
-    const token = ttsStore.put(result.bytes, result.contentType);
+    const token = ttsStore.put({ contentType: result.contentType, bytes: loggedAudioBytes(result) });
     return `${config.server.publicUrl}/voice/tts/${token}`;
+  }
+
+  // IE7-Beobachtbarkeit: GENAU EINE Zeile je Synthese, geschrieben wenn der Strom endet -
+  // der einzige Ort, an dem die beiden Zeiten dieser Phase nebeneinander stehen (Wartezeit
+  // des Webhooks = erstes Paket; Gesamtdauer der Synthese). Zahlen und ein Zustandswort,
+  // NIE Token, Bytes oder Key (Regel 4). Der Modellname steht bewusst NICHT hier: er ist
+  // Konfiguration und wird dort gelesen, wo er gesetzt wird (G5 - nie zwei Quellen fuer
+  // einen Sachverhalt).
+  async function loggedAudioBytes(result) {
+    const audio = await result.audio;
+    console.log(
+      `[play-tts] Synthese ${audio.complete ? "vollstaendig" : "abgebrochen"} ` +
+        `(erstes Audio ${result.firstChunkMs} ms, Gesamt ${audio.totalMs} ms)`,
+    );
+    return audio.bytes;
   }
 
   return { synthesizeDirectiveAudio };

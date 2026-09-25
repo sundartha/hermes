@@ -20,15 +20,21 @@
 // gemountet: die Ed25519-Signaturpruefung des Providers gilt dort weiter unveraendert.
 //
 // REIHENFOLGE DER SICHERUNGEN ist bindend und steht im Handler noch einmal einzeln:
-// Geheimnis -> Bindung an einen laufenden Anruf (und damit an seinen Mandanten) ->
+// Geheimnis -> Bindung an einen laufenden Anruf UND an dessen Mandanten (SEC-P4) ->
 // Faehigkeit -> Geld -> erst dann die Wirkung. Es gibt keinen "anfragenden Mandanten":
 // der Webhook traegt ausser dem Plattform-Token keine Identitaet, der Mandant kann NUR aus
-// dem gebundenen Anruf kommen.
+// dem gebundenen Anruf kommen - und ob der Aufruf FUER diesen Mandanten sprechen darf,
+// beantwortet seit SEC-P4 der aus ihm abgeleitete Werkzeug-Token
+// (elevenlabs/tenant-tool-token.js).
+// NACH AUSSEN tragen alle DREI ersten Stufen denselben Ablehnungsgrund: ein abweichender
+// Grund verriet, dass der gebundene Anruf existiert und die Bindung an ihn gelungen war.
+// Nur das LOG unterscheidet sie weiter (Diagnose).
 import { Router } from "express";
 import { blockingBudgetAxis } from "../budget-gate.js";
-import { consultAllowedFor } from "../consult/gate.js";
+import { consultAllowedForCall } from "../consult/gate.js";
 import { MAX_IN_CALL_CONSULTS_PER_CALL } from "../consult/in-call.js";
 import { CONSULT_RESULT } from "../conversation/consult-raised.js";
+import { TENANT_TOKEN_VERDICT, tenantTokenVerdict } from "../elevenlabs/tenant-tool-token.js";
 import { localeFor } from "../i18n/locales.js";
 import { bookLookupSearchFee } from "../llm-usage.js";
 import { lookupFactsFrom, sanitizeLookupQuery } from "../research/lookup-guard.js";
@@ -45,6 +51,10 @@ export const ELEVENLABS_CONSULT_PATH = "/webhooks/elevenlabs/consult";
 // der Rueckfrage-Webhook darueber, gleiche Domain, gleicher Token, gleiche Bindung.
 export const ELEVENLABS_LOOKUP_PATH = "/webhooks/elevenlabs/lookup";
 const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
+// Log-Praefix je Webhook - EINMAL benannt, weil beide Webhooks seit SEC-P4 denselben
+// Ablehnungsweg teilen (toolDenied) und der Praefix dort ein Wert ist.
+const CONSULT_LOG_TAG = "el-consult";
+const LOOKUP_LOG_TAG = "el-lookup";
 // Thema B, Review-Befund B4: EIGENE Frist statt LOOKUP_TIMEOUT_MS (2500 ms) - deren
 // Herleitung ist die Turn-Frist der BUDGET-Engine (turnLoopDeadlineMs 11500 ms), eine
 // Groesse, die es auf diesem Weg nicht gibt (Lehre calibration-scope: eine Messung gilt
@@ -52,6 +62,12 @@ const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
 // Werkzeug; 6000 ms lassen ~4 s Marge fuer Netz + Verarbeitung, statt 7,5 s bezahltes
 // Budget verfallen zu lassen (die Gebuehr faellt VOR dem Absenden).
 const EL_LOOKUP_TIMEOUT_MS = 6000;
+
+// P3 (N-10): die Aktion des durablen Audit-Eintrags fuer einen gescheiterten Halt.
+// Modul-lokale gefrorene Kennung nach dem Bestandsmuster AUDIT_ACTION
+// (billing/contract-end-cleanup.js, telephony/outage-report.js) - hier EINE Zeichenkette,
+// deshalb eine Konstante statt eines Objekts (S4: keine Indirektion ohne Mehrwert).
+const CONSULT_TIMEOUT_AUDIT_ACTION = "consult_timeout";
 
 // Die vier Ablehnungscodes. 402 nach dem Bestandsmuster der Geld-Denials
 // (telephony/outbound-gates.js), 404 statt 403 nach dem Bestandsmuster der Call-Routen
@@ -65,6 +81,16 @@ const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
 const HTTP_SERVER_ERROR = 500;
 
+// SEC-P4: DER EINE Ablehnungsgrund NACH AUSSEN fuer jede Ablehnung, die von der Bindung
+// an einen konkreten Anruf abhaengt. GEMESSEN war der Defekt genau hier: eine erfundene
+// Kennung antwortete "kein_laufender_anruf", die Kennung des Anrufs eines FREMDEN
+// Mandanten "kanal_nicht_freigegeben" - der abweichende Grund verriet, dass der fremde
+// Anruf existiert und die Bindung an ihn gelungen war. Im LOG bleiben beide Faelle
+// unterscheidbar (Diagnose - ohne sie waere der naechste echte Vorfall nicht mehr
+// aufklaerbar), in der ANTWORT nicht mehr. Der WERT ist der bestehende, damit kein
+// zweites Vokabular entsteht.
+const DENIAL_NO_ADDRESSABLE_CALL = "kein_laufender_anruf";
+
 // Was das Laufwerk seinem Modell als Werkzeug-Ergebnis vorlegt. Alle drei Texte sind
 // bestehende, sprachrichtige Steuertexte (i18n/prompts/*) - der Server erfindet hier keine
 // neue Rede. Eine Antwort OHNE uebernommene Fakten (der geteilte key_facts-Deckel war voll)
@@ -74,6 +100,59 @@ function toolResultText(outcome, locale) {
   const control = locale.prompt.turnControl;
   if (outcome.kind === CONSULT_RESULT.REJECTED) return control.consultDeclined;
   return outcome.facts.length ? outcome.facts.join(" ") : control.consultTimeout;
+}
+
+// P2: die Antwort-Huelle an den Anbieter, ausgelagert statt inline in handleConsult (G30/
+// eine Abstraktionsebene) - reiner Aufruf ohne eigenen Verzweigungspunkt haelt
+// handleConsult unter der Komplexitaetsgrenze. reason ist MASCHINENLESBAR und PII-frei
+// (ein Zustands-Token, kein Gespraechsinhalt) - gesprochen wird er nie, alle drei
+// Abbruchgruende tragen denselben bestehenden Timeout-Text (E-4, s. toolResultText).
+function consultResponseBody(outcome, locale) {
+  return {
+    status: outcome.kind,
+    reason: outcome.reason ?? null,
+    answer: toolResultText(outcome, locale),
+  };
+}
+
+// P3: die Detailzeile des Eintrags - und ihr PII-Riegel ist der Kern dieser Phase
+// (I-2, Absolute Regel 4/5): ausschliesslich server-eigene Kennungen, ein maschinenlesbarer
+// Grund-Token und Millisekunden. NIE Fragetext, Antwort, Rufnummer, Transkriptfragment.
+// Der Mandant steht NICHT in dieser Zeile: er steht in der Spalte tenant_id des Eintrags
+// (kein zweiter Ort fuer dieselbe Tatsache, G5).
+// EIGENE Schluessel fuer die GEMESSENEN Spannen: zustellung_ms/quittung_ms sind in der
+// [consult-raised]-Zeile bereits mit den FRISTEN belegt, und zwei Sachverhalte auf einem
+// Label sind im Log ein echter Defekt (Lehre live-cost-tracing). Eine nie erreichte Stufe
+// laesst ihren Schluessel WEG - kein Platzhalter, der sich als "0 ms" lesen liesse.
+function consultTimeoutDetail(callId, reason, trace) {
+  const felder = [
+    `call=${callId}`,
+    `consult=${trace.consultId}`,
+    `grund=${reason}`,
+    `halt_ms=${trace.holdMs}`,
+  ];
+  if (trace.deliveredAfterMs !== null) felder.push(`zugestellt_nach_ms=${trace.deliveredAfterMs}`);
+  if (trace.ackedAfterMs !== null) felder.push(`quittiert_nach_ms=${trace.ackedAfterMs}`);
+  return felder.join(" ");
+}
+
+// P3 (N-10): die dauerhafte Spur eines gescheiterten Halts. Nebeneffekt im Namen (N7).
+// UNBEDINGT gerufen und selbst verzweigend, NICHT als if am Aufrufort: handleConsult steht
+// exakt auf der Komplexitaetsgrenze (gemessen 10 von 10, eslint complexity max 10) - ein
+// weiterer Zweig dort waere ein Blocker. Dasselbe Motiv wie bei consultResponseBody (P2).
+// GENAU EIN Eintrag je gescheitertem Consult (E-2): abortTrace ist ausschliesslich beim
+// gestaffelten Abbruch gesetzt - nicht bei Erfolg, nicht bei Ablehnung, nicht bei
+// Drain/Call-Ende, und eine spaete, verworfene Antwort erreicht diesen Pfad nie.
+// Der Weg ist fail-soft und NICHT blockierend (durable-audit.js faengt jeden Schreibfehler
+// laut und inhaltsfrei ab, ohne await): der Halt ist hier ohnehin vorbei und wird nicht
+// verlaengert, ein Schreibfehler kann den laufenden Anruf nicht beruehren (I-3).
+function traceConsultAbort({ call, outcome, auditFor }) {
+  if (!outcome.abortTrace) return;
+  auditFor(call.tenantId)(
+    CONSULT_TIMEOUT_AUDIT_ACTION,
+    null,
+    consultTimeoutDetail(call.id, outcome.reason, outcome.abortTrace),
+  );
 }
 
 // Bindung ueber die opake Anbieter-Kennung am Call-Datensatz - dasselbe Muster wie das
@@ -90,6 +169,55 @@ function activeCallBoundTo(store, conversationId) {
       (call) => call.elevenlabsConversationId === conversationId && call.status === "active",
     ) || null
   );
+}
+
+// EIN Ablehnungsweg fuer BEIDE Werkzeug-Webhooks (G5/S2 - vorher zweimal dieselbe
+// Bauart, einmal auf Modul-Ebene, einmal als Closure). logGrund ist der PRAEZISE Grund
+// fuer die Diagnose, antwortGrund der, den der Aufrufer sehen darf; sie fallen nur dort
+// auseinander, wo die Ablehnung von einem gebundenen Anruf abhaengt (denyBoundCall).
+// NIE die Nutzlast, nie ein Stueck des Geheimnisses (Absolute Regel 4).
+function toolDenied({ res, tag, status, logGrund, antwortGrund = logGrund, callId = null }) {
+  console.log(`[${tag}] abgelehnt grund=${logGrund}${callId ? ` call=${callId}` : ""}`);
+  return res.status(status).json({ error: antwortGrund });
+}
+
+// SEC-P4: die Ablehnung, die von einem GEBUNDENEN Anruf abhaengt - immer 404, nach aussen
+// immer derselbe Grund. EINE Stelle, damit ein kuenftiger vierter Fall nicht wieder einen
+// eigenen Grund erfindet.
+function denyBoundCall({ res, tag, logGrund, callId = null }) {
+  return toolDenied({
+    res,
+    tag,
+    status: HTTP_NOT_FOUND,
+    logGrund,
+    antwortGrund: DENIAL_NO_ADDRESSABLE_CALL,
+    callId,
+  });
+}
+
+// SEC-P4, Schritt 2 BEIDER Webhooks: welcher laufende Anruf gehoert zu diesem Aufruf -
+// und darf dieser Aufruf fuer dessen Mandanten sprechen? Liefert entweder den Anruf oder
+// den praezisen Grund fuers Log; der Aufrufer verzweigt EINMAL. Zusammengefasst und nicht
+// als zwei ifs am Aufrufort, weil handleConsult exakt auf der Komplexitaetsgrenze steht
+// (eslint complexity max 10) - dieselbe Ueberlegung wie bei traceConsultAbort.
+//
+// FEHLT (der Aufruf traegt gar keinen Wert) ist der UEBERGANGSFALL: die heutige
+// Werkzeug-Definition am Anbieter schickt ihn noch nicht mit, und ein Server, der
+// verlangt, was der Anbieter nicht sendet, laesst den Agenten im laufenden Gespraech
+// stumm stehen. Solange der scharfe Schalter aus ist, gilt deshalb das heutige
+// Verhalten. Ein VORGELEGTER falscher Wert wird IMMER abgelehnt.
+function boundCallFor({ store, config, req }) {
+  const call = activeCallBoundTo(store, req.body?.conversation_id);
+  if (!call) return { call: null, logGrund: "kein_laufender_anruf", callId: null };
+  const urteil = tenantTokenVerdict({
+    secret: config.voice.elevenLabsToolToken,
+    tenantId: call.tenantId,
+    presented: req.body?.tenant_token,
+  });
+  if (urteil === TENANT_TOKEN_VERDICT.PASSEND) return { call, logGrund: null, callId: call.id };
+  if (urteil === TENANT_TOKEN_VERDICT.FEHLT && config.voice.elevenLabsTenantTokenRequired !== true)
+    return { call, logGrund: null, callId: call.id };
+  return { call: null, logGrund: `mandant_${urteil}`, callId: call.id };
 }
 
 // ---- Thema B (2026-08-19): der Recherche-Webhook (Werkzeug look_up) ------------------
@@ -113,13 +241,8 @@ function activeCallBoundTo(store, conversationId) {
 // MODUL-EBENE statt Factory-Closure (G30, haelt makeElevenLabsWebhookRoutes unter der
 // Zeilengrenze - Muster elevenlabs/outbound.js); die Laufzeit-Instanzen reisen als EIN
 // deps-Objekt (F1).
-function lookupDenied(res, status, grund) {
-  console.log(`[el-lookup] abgelehnt grund=${grund}`);
-  return res.status(status).json({ error: grund });
-}
-
 function lookupAnswer(res, { callId, status, answer }) {
-  console.log(`[el-lookup] call=${callId} ergebnis=${status}`);
+  console.log(`[${LOOKUP_LOG_TAG}] call=${callId} ergebnis=${status}`);
   return res.json({ status, answer });
 }
 
@@ -141,12 +264,12 @@ function preflightLookup({ call, query, control, res }) {
   const declined = () =>
     lookupAnswer(res, { callId: call.id, status: "declined", answer: control.lookUpDeclinedSpoken });
   if (elevenLabsLookupCount(call) >= LOOKUP_MAX_PER_CALL) {
-    console.log(`[el-lookup] abgelehnt grund=kontingent call=${call.id}`);
+    console.log(`[${LOOKUP_LOG_TAG}] abgelehnt grund=kontingent call=${call.id}`);
     return { done: declined() };
   }
   const sanitized = sanitizeLookupQuery(query, call);
   if (!sanitized) {
-    console.warn(`[el-lookup] verworfen grund=egress call=${call.id}`);
+    console.warn(`[${LOOKUP_LOG_TAG}] verworfen grund=egress call=${call.id}`);
     return { done: declined() };
   }
   return { sanitized };
@@ -167,7 +290,7 @@ async function executeLookup({ store, call, provider, query, control, res }) {
     dauerMs,
   });
   console.log(
-    `[el-lookup] fertig call=${call.id} ok=${result.ok === true} dauer_ms=${dauerMs} fakten=${facts.length}`,
+    `[${LOOKUP_LOG_TAG}] fertig call=${call.id} ok=${result.ok === true} dauer_ms=${dauerMs} fakten=${facts.length}`,
   );
   if (!facts.length) {
     return lookupAnswer(res, {
@@ -191,25 +314,51 @@ async function handleLookup(req, res, { store, config }) {
   // 1) Geteiltes Geheimnis - identisch zu handleConsult (fail-closed, safeEqual).
   const secret = config.voice.elevenLabsToolToken;
   if (!secret || !safeEqual(req.get(TOOL_TOKEN_HEADER) || "", secret))
-    return lookupDenied(res, HTTP_FORBIDDEN, "token");
+    return toolDenied({ res, tag: LOOKUP_LOG_TAG, status: HTTP_FORBIDDEN, logGrund: "token" });
 
-  // 2) Bindung an einen LAUFENDEN Anruf und damit an den Mandanten.
-  const call = activeCallBoundTo(store, req.body?.conversation_id);
-  if (!call) return lookupDenied(res, HTTP_NOT_FOUND, "kein_laufender_anruf");
+  // 2) Bindung an einen LAUFENDEN Anruf, an dessen Mandanten und - seit SEC-P4 - an den
+  // aus diesem Mandanten abgeleiteten Werkzeug-Token (boundCallFor).
+  const bindung = boundCallFor({ store, config, req });
+  if (!bindung.call)
+    return denyBoundCall({
+      res,
+      tag: LOOKUP_LOG_TAG,
+      logGrund: bindung.logGrund,
+      callId: bindung.callId,
+    });
+  const call = bindung.call;
 
   // 3) Faehigkeit (Auflagen B1/B4): Richtung, Master-Schalter, Secret und das
   // Per-Tenant-Recht allowLookup - DIESELBE Torkette, die der Anrufstart fuer
   // {{lookup_available}} fragt (research/registry.js). 404 wie beim Consult.
   const provider = elevenLabsLookupProviderFor(call, store.resolveProfile);
-  if (!provider) return lookupDenied(res, HTTP_NOT_FOUND, "kanal_nicht_freigegeben");
+  if (!provider)
+    return denyBoundCall({
+      res,
+      tag: LOOKUP_LOG_TAG,
+      logGrund: "kanal_nicht_freigegeben",
+      callId: call.id,
+    });
 
   // 4) Geld (Absolute Regel 1): die gerissene pro-Tenant-Decke sperrt auch diesen Weg.
   const budgetAxis = blockingBudgetAxis({ store, billing: config.billing, tenantId: call.tenantId });
-  if (budgetAxis) return lookupDenied(res, HTTP_PAYMENT_REQUIRED, budgetAxis);
+  if (budgetAxis)
+    return toolDenied({
+      res,
+      tag: LOOKUP_LOG_TAG,
+      status: HTTP_PAYMENT_REQUIRED,
+      logGrund: budgetAxis,
+    });
 
   // 5) Nutzlast.
   const query = lookupPayloadQuery(req);
-  if (!query) return lookupDenied(res, HTTP_BAD_REQUEST, "keine_anfrage");
+  if (!query)
+    return toolDenied({
+      res,
+      tag: LOOKUP_LOG_TAG,
+      status: HTTP_BAD_REQUEST,
+      logGrund: "keine_anfrage",
+    });
 
   const control = localeFor(call.language).prompt.turnControl;
   // 6+7) Kontingent und Egress (preflightLookup): beide antworten declined mit
@@ -231,20 +380,18 @@ async function handleLookup(req, res, { store, config }) {
  *   consultSlots = die EINE ConsultDelivery-Instanz des Prozesses (consult/delivery.js).
  *   Ihre Slot-Zaehler begrenzen, wie viele Verbindungen gleichzeitig an EINEM Anruf bzw.
  *   EINEM Mandanten haengen duerfen - dieser Webhook ist ein solcher Halter.
+ *   auditFor = (tenantId) => durable schreibender Auditor (durable-audit.js, in server.js
+ *   gebunden). P3: der gescheiterte Rueckfrage-Halt bekommt damit einen Eintrag in
+ *   audit_log - fail-soft, inhaltsfrei, ohne neue Route und ohne neue Auth-Ausnahme.
  */
-export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, consultSlots }) {
+export function makeElevenLabsWebhookRoutes({
+  store,
+  config,
+  onConsultRaised,
+  consultSlots,
+  auditFor,
+}) {
   const router = Router();
-
-  // Jede greifende Sicherung wird LAUT statt stumm (Diagnose-Muster des Brain-Shims):
-  // ausschliesslich der Grund-Token und - wo vorhanden - die server-eigene Call-Kennung.
-  // NIE die Nutzlast, nie ein Stueck des Geheimnisses (Absolute Regel 4).
-  function denied(res, status, grund) {
-    console.log(`[el-consult] abgelehnt grund=${grund}`);
-    return res.status(status).json({ error: grund });
-  }
-
-  // Bindung: s. activeCallBoundTo (Modul-Ebene) - EINE Funktion fuer beide Webhooks.
-  const activeCallByConversationId = (conversationId) => activeCallBoundTo(store, conversationId);
 
   // Faehigkeits-Schnittmenge des Kanals (consult/gate.js) PLUS das eigene Flag der
   // Rueckfrage IM Gespraech: diese Frage entsteht aus FREMDER Rede - der Angerufene hat
@@ -265,11 +412,20 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
   // RICHTUNG ist der Sicherheitskern (consult/in-call.js): die Rede eines fremden
   // Inbound-Anrufers darf NIE als "Rueckfrage" in den Kontext des Tenants exportiert
   // werden. KONTINGENT ist der Kosten-Riegel: jede angenommene Rueckfrage haelt das
-  // kostende Gespraech bis CONSULT_OPEN_MS offen.
+  // kostende Gespraech bis hoechstens EL_CONSULT_ANSWER_MS offen (P2, gestaffelt).
+  //
+  // calleeIsOwner ist AUS DEMSELBEN GRUND uebernommen und faellt nicht unter die
+  // ausgelassenen Turn-Fakten: es ist eine Tatsache ueber das ZIEL dieses Anrufs, vor dem
+  // Waehlen einmal entschieden und danach unveraenderlich am Datensatz (OC-P1) - keine
+  // Aussage ueber unsere Turn-Schleife, die auf diesem Weg gar nicht laeuft. Der Anrufstart
+  // rechnet mit DEMSELBEN Praedikat (consultAllowedForCall, consult/gate.js), und dass es
+  // hier gefehlt hat, war der Defekt vom 06.09.2026: den eigenen Auftraggeber zu fragen,
+  // waehrend man mit ihm telefoniert, kann niemand beantworten - die Leitung stand still,
+  // bis zur Haltefrist ablief.
   function consultAllowed(call) {
     return (
       config.tenancy.inCallConsultEnabled === true &&
-      consultAllowedFor(store.resolveProfile(call.tenantId)) &&
+      consultAllowedForCall(call, store.resolveProfile(call.tenantId)) &&
       call.direction === "outbound" &&
       consultQuotaUsed(call) < MAX_IN_CALL_CONSULTS_PER_CALL
     );
@@ -304,15 +460,29 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     // zu pruefen" (Empty-Secret-Trap: safeEqual("", "") waere true).
     const secret = config.voice.elevenLabsToolToken;
     if (!secret || !safeEqual(req.get(TOOL_TOKEN_HEADER) || "", secret))
-      return denied(res, HTTP_FORBIDDEN, "token");
+      return toolDenied({ res, tag: CONSULT_LOG_TAG, status: HTTP_FORBIDDEN, logGrund: "token" });
 
-    // 2) Bindung an Anruf und damit an den Mandanten.
-    const call = activeCallByConversationId(req.body?.conversation_id);
-    if (!call) return denied(res, HTTP_NOT_FOUND, "kein_laufender_anruf");
+    // 2) Bindung an den Anruf, an dessen Mandanten und - seit SEC-P4 - an den aus diesem
+    // Mandanten abgeleiteten Werkzeug-Token (boundCallFor, Modul-Ebene, beide Webhooks).
+    const bindung = boundCallFor({ store, config, req });
+    if (!bindung.call)
+      return denyBoundCall({
+        res,
+        tag: CONSULT_LOG_TAG,
+        logGrund: bindung.logGrund,
+        callId: bindung.callId,
+      });
+    const call = bindung.call;
 
     // 3) Faehigkeit. Fehlt sie -> 404 wie an der /api-Kante: die Existenz des Kanals ist
     // selbst eine Information.
-    if (!consultAllowed(call)) return denied(res, HTTP_NOT_FOUND, "kanal_nicht_freigegeben");
+    if (!consultAllowed(call))
+      return denyBoundCall({
+        res,
+        tag: CONSULT_LOG_TAG,
+        logGrund: "kanal_nicht_freigegeben",
+        callId: call.id,
+      });
 
     // 4) Geld (Absolute Regel 1): die gerissene pro-Tenant-Decke sperrt AUCH diesen Weg -
     // eine Rueckfrage haelt das Gespraech offen und kostet damit Leitungsminuten.
@@ -321,16 +491,29 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
       billing: config.billing,
       tenantId: call.tenantId,
     });
-    if (budgetAxis) return denied(res, HTTP_PAYMENT_REQUIRED, budgetAxis);
+    if (budgetAxis)
+      return toolDenied({
+        res,
+        tag: CONSULT_LOG_TAG,
+        status: HTTP_PAYMENT_REQUIRED,
+        logGrund: budgetAxis,
+      });
 
     // 5) Nutzlast-Form: question liegt flach auf oberster Ebene (voller Anbieter-Beleg an
     // payloadQuestion). Fehlt sie, ist das ein FEHLER, keine leere Frage.
     const question = payloadQuestion(req);
-    if (!question) return denied(res, HTTP_BAD_REQUEST, "keine_frage");
+    if (!question)
+      return toolDenied({
+        res,
+        tag: CONSULT_LOG_TAG,
+        status: HTTP_BAD_REQUEST,
+        logGrund: "keine_frage",
+      });
 
     // 6) Gleichzeitigkeit - und erst DANN die Wirkung. Dieser Aufruf ist ein blockierender
-    // Halter: er haelt die Verbindung des Anbieters bis CONSULT_OPEN_MS offen. Ohne
-    // Obergrenze kann derselbe Anruf beliebig viele davon gleichzeitig aufziehen (gemessen:
+    // Halter: er haelt die Verbindung des Anbieters gestaffelt offen (P2, hoechstens
+    // EL_CONSULT_ANSWER_MS + ein Poll-Tick). Ohne Obergrenze kann derselbe Anruf beliebig
+    // viele davon gleichzeitig aufziehen (gemessen:
     // 8 parallele Aufrufe, alle gehalten). Gezaehlt wird auf den BESTEHENDEN Slot-Zaehlern
     // des Kanals (MAX_OPEN_POLLS_PER_CALL / MAX_OPEN_POLLS_PER_TENANT, consult/delivery.js),
     // nicht auf einem zweiten daneben - "wie viele Verbindungen haengen an diesem Anruf"
@@ -339,13 +522,17 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     const held = await consultSlots.withOpenSlot(call.id, call.tenantId, () =>
       onConsultRaised({ callId: call.id, question }),
     );
-    if (!held.granted) return denied(res, HTTP_NOT_FOUND, "kein_freier_platz");
+    if (!held.granted)
+      return toolDenied({
+        res,
+        tag: CONSULT_LOG_TAG,
+        status: HTTP_NOT_FOUND,
+        logGrund: "kein_freier_platz",
+      });
     const outcome = held.value;
-    console.log(`[el-consult] call=${call.id} ergebnis=${outcome.kind}`);
-    return res.json({
-      status: outcome.kind,
-      answer: toolResultText(outcome, localeFor(call.language)),
-    });
+    console.log(`[${CONSULT_LOG_TAG}] call=${call.id} ergebnis=${outcome.kind}`);
+    traceConsultAbort({ call, outcome, auditFor });
+    return res.json(consultResponseBody(outcome, localeFor(call.language)));
   }
 
   // Eigenes Fehler-Netz statt des zentralen (app.js): Express 4 reicht die Rejection eines
@@ -358,7 +545,7 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     try {
       return await handleConsult(req, res);
     } catch (err) {
-      console.error(`[el-consult] fehler: ${err?.stack || err?.message || "unbekannt"}`);
+      console.error(`[${CONSULT_LOG_TAG}] fehler: ${err?.stack || err?.message || "unbekannt"}`);
       if (res.headersSent) return res.end();
       return res.status(HTTP_SERVER_ERROR).json({ error: "intern" });
     }
@@ -369,7 +556,7 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     try {
       return await handleLookup(req, res, { store, config });
     } catch (err) {
-      console.error(`[el-lookup] fehler: ${err?.stack || err?.message || "unbekannt"}`);
+      console.error(`[${LOOKUP_LOG_TAG}] fehler: ${err?.stack || err?.message || "unbekannt"}`);
       if (res.headersSent) return res.end();
       return res.status(HTTP_SERVER_ERROR).json({ error: "intern" });
     }

@@ -41,6 +41,25 @@ export const AUTH_STATE = Object.freeze({
 // (App-Shell) nicht auseinanderdriften.
 export const AUTH_EVENT = "hermes:authstate";
 
+// Owner-Befund 18.09.2026 ("der Update-Knopf geht nicht"): die Web-Session lebt eine
+// Stunde (SESSION_TTL_SECONDS), das Dashboard bleibt aber beliebig lange offen. Danach
+// antwortet JEDER Aufruf mit 401, waehrend die Seite noch "eingeloggt" aussieht - im
+// Render-Log vom 17.09.2026 stehen acht Klicks auf den Kartenwechsel der Nummernkarte,
+// alle "auth_failed grund=no_session", und im Browser passierte nichts. Jede 401 meldet
+// sich darum zusaetzlich ueber dieses Event; die Auth-Insel prueft daraufhin den Zustand
+// neu und schaltet die ganze Seite auf "Anmeldung erforderlich" um (statt dass jeder
+// Knopf einzeln ins Leere laeuft). Das Event traegt keine Daten - die Quelle der
+// Wahrheit bleibt der state-Fetch der Auth-Insel.
+export const SESSION_EXPIRED_EVENT = "hermes:session-expired";
+
+// Meldet eine 401 an die Auth-Insel. Eigene Funktion, weil ein Aufrufer (die
+// Newsletter-Einwilligung in lib/subscribe.js) bewusst am apiRequest-Wrapper vorbei
+// laeuft. Ohne DOM (node:test) ein No-Op.
+export function notifySessionExpired() {
+  if (typeof document === "undefined") return;
+  document.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+}
+
 // Fehler eines API-Aufrufs mit HTTP-Status. Der Aufrufer (loadAuthState)
 // unterscheidet 401/403 darueber, ohne den rohen Response durchzureichen.
 export class ApiError extends Error {
@@ -91,6 +110,7 @@ async function apiRequest(path, { method = "GET", parseJson = true, body } = {})
   }
   const res = await fetch(path, options);
   if (!res.ok) {
+    if (res.status === HTTP_UNAUTHORIZED) notifySessionExpired();
     const info = await readErrorInfo(res);
     throw new ApiError(res.status, `${method} ${path} -> ${res.status}`, info);
   }
@@ -121,10 +141,14 @@ export async function logout() {
 // Optionaler plan (Kachel-Flow, BK2): wird als Body { plan } mitgesendet, damit die
 // Rueckkehr (billing/return) den getragenen Plan direkt bucht (gefuehrter no_card-Pfad).
 // OHNE plan geht KEIN Body raus -> byte-identisch zum reinen "Karte hinterlegen".
+// GP-P3: die EINE Adresse der Karten-Erfassung (G5/G25) - startBillingSetupCheckout ruft
+// sie, numberPlaceholderAction zeigt auf sie. Zwei getippte Literale wuerden driften.
+export const BILLING_SETUP_CHECKOUT_PATH = "/api/self-service/billing/setup-checkout";
+
 export async function startBillingSetupCheckout(plan) {
   const options = { method: "POST" };
   if (plan !== undefined) options.body = { plan };
-  const { url } = await apiRequest("/api/self-service/billing/setup-checkout", options);
+  const { url } = await apiRequest(BILLING_SETUP_CHECKOUT_PATH, options);
   // Contract-Grenze (R5): das Backend garantiert { url } -- ein 200 ohne url
   // waere ein Drift. Fail-closed pruefen, statt window.location.assign(undefined)
   // an den Aufrufer durchzureichen (G26: null/undefined nie ungeprueft nutzen).
@@ -133,17 +157,14 @@ export async function startBillingSetupCheckout(plan) {
   return url;
 }
 
-// Bucht ein Abo (POST same-origin, JSON-Body { plan }). Loest beim Backend ECHTES
-// wiederkehrendes Geld aus (Recurring) -> NUR vom expliziten Subscribe-Klick. Erfolg:
-// { plan, currentPeriodEnd } + der Tenant wird aktiv. Wirft ApiError bei non-2xx; der
-// .next ("setup-checkout") steuert die gefuehrte Folge (Funnel) in lib/subscribe.js.
-export function startBillingSubscribe(plan) {
-  return apiRequest("/api/self-service/billing/subscribe", { method: "POST", body: { plan } });
-}
+// (Der Wrapper um POST /billing/subscribe ist entfallen: seit der Tarif-Klick ausnahmslos
+// ueber die gehostete Stripe-Seite laeuft, ruft das Dashboard die Sofort-Abbuchungs-Route
+// nirgends mehr auf. Die Route selbst bleibt am Gateway bestehen - ein toter Client-Wrapper
+// waere nur eine Einladung, den alten Weg versehentlich wieder zu verdrahten.)
 
 // 312k-P3: Vormerkung/Ruecknahme der Kuendigung zum Periodenende (§ 312k BGB). Beide
 // POST same-origin, KEIN Body (die Identitaet kommt aus der Session, nie aus dem Client -
-// Muster startBillingSubscribe ohne Body-Identitaet). Erfolg (auch beim idempotenten
+// die Identitaet reist nie im Body). Erfolg (auch beim idempotenten
 // Doppelklick, s. Gateway self-service-routes.js): { cancelAtPeriodEnd, currentPeriodEnd }.
 // Wirft ApiError bei non-2xx (409 no_subscription, 401 abgelaufene Session).
 export function startBillingCancel() {
@@ -183,6 +204,9 @@ export function agentInfo(data) {
     number: agent.number || "",
     owner: agent.owner || "",
     numberStatus: agent.numberStatus || "",
+    // GP-P5, additiv: fehlt das Feld (aelterer Server), bleibt es "" - die Leser unten
+    // fallen dann auf ihr Bestandsverhalten zurueck.
+    numberStatusReason: agent.numberStatusReason || "",
   };
 }
 
@@ -225,7 +249,11 @@ const NUMBER_TEXT_NO_NUMBER_DE = "Noch keine Nummer zugewiesen";
 const NUMBER_TEXT_SETTING_UP = "Setting up your number…";
 const NUMBER_TEXT_SETTING_UP_DE = "Deine Nummer wird eingerichtet…";
 const NUMBER_TEXT_SETUP_FAILED = "Number setup failed";
-const NUMBER_TEXT_SETUP_FAILED_DE = "Einrichtung der Nummer fehlgeschlagen";
+// Owner-Entscheid 15.09.2026: "Einrichtung der Nummer fehlgeschlagen" war mit 37
+// Zeichen der laengste Statussatz und brach in der mittleren Fassung neben dem Knopf
+// auf drei Zeilen um -- die Karte wurde dadurch hoeher als dieselbe Karte mit einer
+// Nummer. "der Nummer" steht ohnehin als Label ("DEINE NUMMER") direkt darueber.
+const NUMBER_TEXT_SETUP_FAILED_DE = "Einrichtung fehlgeschlagen";
 const NUMBER_TEXT_SETUP_BLOCKED = "Number setup delayed — capacity limit reached";
 const NUMBER_TEXT_SETUP_BLOCKED_DE = "Einrichtung verzögert — Kapazitätsgrenze erreicht";
 
@@ -240,6 +268,80 @@ export function numberPlaceholderText(data) {
   if (numberStatus === NUMBER_STATUS.FAILED) return tPair(NUMBER_TEXT_SETUP_FAILED, NUMBER_TEXT_SETUP_FAILED_DE);
   if (numberStatus === NUMBER_STATUS.BLOCKED) return tPair(NUMBER_TEXT_SETUP_BLOCKED, NUMBER_TEXT_SETUP_BLOCKED_DE);
   return tPair(NUMBER_TEXT_NO_NUMBER, NUMBER_TEXT_NO_NUMBER_DE);
+}
+
+// GP-P6 Runde 3 (Owner-Befund 15.09.2026): das Label sagt nur noch "Update" -- WAS
+// aktualisiert wird, traegt das Kartensymbol im Knopf (AgentChip.astro, dasselbe
+// Symbol wie in der Billing-Insel). "Update payment method" war auf schmalen Breiten
+// der breiteste Block der Karte und hat den Knopf fett und klobig wirken lassen.
+const NUMBER_ACTION_FIX_PAYMENT = "Update";
+const NUMBER_ACTION_FIX_PAYMENT_DE = "Aktualisieren";
+
+// GP-P5: der Grund, den der Server seit dieser Etappe mitliefert (agent.numberStatusReason,
+// self-service-routes.js). Contract-Grenze (R5): die EINE Stelle, an der das Frontend
+// diese Form annimmt. Fehlt das Feld (aelterer Server), bleibt es leer - jede
+// Verwendungsstelle unten faellt dann auf ihr neutrales Verhalten zurueck.
+export const NUMBER_REASON = Object.freeze({
+  PAYMENT_METHOD: "payment_method_unsuitable",
+  RETRY_PENDING: "retry_pending",
+  MANUAL: "manual_review",
+});
+export function numberStatusReason(data) {
+  const reason = agentInfo(data).numberStatusReason;
+  return typeof reason === "string" ? reason : "";
+}
+
+// GP-P3/GP-P5: der failed-Platzhalter bekommt eine ECHTE Aktion statt eines passiven
+// Satzes - die Ursache des Vorfalls vom 11.09.2026 war eine Zahlungsmethode, die keinen
+// Hold traegt, und dagegen hilft genau ein Kartenwechsel. Nach dem erfolgreichen Wechsel
+// stoesst der Server das Provisioning selbst wieder an (self-service-routes.js,
+// billing/return) - dieser Knopf braucht KEINEN neuen Endpunkt.
+//
+// GP-P5 schaerft die Bedingung: die Aktion erscheint NUR, wenn der Server die
+// Zahlungsmethode auch tatsaechlich als Ursache nennt. Vorher truege sie jeder
+// failed-Zustand - auch der, in dem gerade automatisch weiterprobiert wird (dann waere
+// sie ein Fehlalarm) und der, in dem die Versuche erschoepft sind (dann waere sie eine
+// LEERE Zusage: ein Kartenwechsel stoesst nach dem Deckel nichts mehr an, s.
+// resolveAutoProvisionRetry - nur der Handbetrieb hilft noch).
+// Kein Grund vom Server (aelterer Stand) -> Bestandsverhalten: Aktion bei failed zeigen.
+// Rein (kein DOM, kein fetch) -> mit node:test unit-testbar.
+export function numberPlaceholderAction(data) {
+  const { numberStatus } = agentInfo(data);
+  if (numberStatus !== NUMBER_STATUS.FAILED) return null;
+  const reason = numberStatusReason(data);
+  if (reason && reason !== NUMBER_REASON.PAYMENT_METHOD) return null;
+  return {
+    label: tPair(NUMBER_ACTION_FIX_PAYMENT, NUMBER_ACTION_FIX_PAYMENT_DE),
+    href: BILLING_SETUP_CHECKOUT_PATH,
+  };
+}
+
+// GP-P5: der erklaerende Satz zum failed-Zustand. Er sagt, WARUM es haengt und was als
+// Naechstes passiert - die drei Faelle verlangen vom Kunden Unterschiedliches: selbst
+// handeln, warten, oder sich melden. Ohne ihn stand im Dashboard nur "Einrichtung der
+// Nummer fehlgeschlagen", und der Kunde konnte nicht wissen, dass bei ihm ausschliesslich
+// eine Karte hilft. "" = kein Satz (kein failed-Zustand oder aelterer Server ohne Grund).
+// Owner-Befund 15.09.2026: der deutsche Satz war "sehr, sehr lang" und lief am Handy
+// ueber vier Zeilen. Beide Sprachen tragen jetzt denselben, knappen Bau -- Ursache,
+// dann was zu tun ist und wo, dann die Entwarnung. Das "wo" (Abrechnung/Billing) ist
+// neu und traegt die Aufgabe des Knopfes, der am Handy entfaellt.
+const NUMBER_HINT_PAYMENT =
+  "Your card doesn't cover the setup fee. Add a new one under Billing - setup then continues.";
+const NUMBER_HINT_PAYMENT_DE =
+  "Deine Karte deckt die Einrichtungsgebühr nicht. Neue Karte unter Abrechnung — dann geht es weiter.";
+const NUMBER_HINT_RETRY = "We're automatically trying again - no action needed.";
+const NUMBER_HINT_RETRY_DE = "Wir versuchen es automatisch erneut — du musst nichts tun.";
+const NUMBER_HINT_MANUAL = "We couldn't set up your number. Please get in touch and we'll sort it out.";
+const NUMBER_HINT_MANUAL_DE =
+  "Wir konnten deine Nummer nicht einrichten. Melde dich bei uns, wir bringen das in Ordnung.";
+const NUMBER_HINTS = Object.freeze({
+  [NUMBER_REASON.PAYMENT_METHOD]: () => tPair(NUMBER_HINT_PAYMENT, NUMBER_HINT_PAYMENT_DE),
+  [NUMBER_REASON.RETRY_PENDING]: () => tPair(NUMBER_HINT_RETRY, NUMBER_HINT_RETRY_DE),
+  [NUMBER_REASON.MANUAL]: () => tPair(NUMBER_HINT_MANUAL, NUMBER_HINT_MANUAL_DE),
+});
+export function numberPlaceholderHint(data) {
+  const hint = NUMBER_HINTS[numberStatusReason(data)];
+  return hint ? hint() : "";
 }
 
 // Liest den Karten-Status aus der state-Antwort -- die EINE Stelle, an der das
@@ -317,10 +419,9 @@ function listFrom(data, key) {
   return Array.isArray(value) ? value : [];
 }
 export const callsFrom = (data) => listFrom(data, "calls");
-// OUTBOUND-E3a (F2a, L8): der Benachrichtigungs-Feed lag bereits in beiden state-
-// Antworten (routes/api-read.js, self-service-routes.js), wurde aber von KEINER Zeile im
-// Frontend gelesen - reine Frontend-Luecke. {id, title, body, at, callId} (state-ops.js).
-export const notificationsFrom = (data) => listFrom(data, "notifications");
+// Der Benachrichtigungs-Feed (data.notifications) steht weiterhin in beiden
+// state-Antworten, wird aber seit 2026-09-10 (Owner-Wunsch) von KEINER Zeile
+// im Frontend gelesen -- kein Leser, also auch kein Selektor hier.
 
 // Live-Dot: der Agent gilt als "live", sobald MINDESTENS ein Call aktiv ist.
 // Gleiche Bedingung wie im Bestand (tenant.html: calls.some status==="active").
@@ -472,13 +573,16 @@ export const SETTINGS_FREE_FIELDS = Object.freeze(["agentName", "language", "age
 // SELF_SERVICE_RESTRICT_ONLY_FIELDS in src/self-service.js.
 export const SETTINGS_RESTRICT_ONLY_FIELDS = Object.freeze(["allowPersonalData", "allowBankData"]);
 
-// Sprach-Optionen des language-Dropdowns. "" = "Automatic (by number)" (das
+// Sprach-Optionen des language-Dropdowns. "" = "Automatic" (das
 // Override leeren); die uebrigen Codes spiegeln SUPPORTED_LANGUAGES
 // (src/i18n/locales.js = Object.keys(LOCALES)). Hier zentralisiert + drift-
 // getestet, damit eine 4. Backend-Sprache nicht still im Dropdown fehlt (G22).
 // Der Server validiert language ohnehin fail-closed gegen SUPPORTED_LANGUAGES.
 export const SETTINGS_LANGUAGES = Object.freeze([
-  { value: "", label: "Automatic (by number)" },
+  // Owner-Entscheid 15.09.2026: nur noch "Automatic" -- der Klammerzusatz "(by number)"
+  // stand in der Kachel neben dem Kuerzel AUTO und hat die Zeile am Handy umbrechen
+  // lassen. Was "automatisch" heisst, erklaert der Satz ueber den Kacheln.
+  { value: "", label: "Automatic" },
   { value: "de", label: "German" },
   { value: "fr", label: "French" },
   { value: "en", label: "English" },
@@ -491,7 +595,7 @@ export const SETTINGS_LANGUAGES = Object.freeze([
 // auf jedem AUTH_EVENT inkl. des vom Sprachumschalter re-dispatchten), um die
 // sichtbare Beschriftung auf die aktuelle Sprache zu bringen.
 export const SETTINGS_LANGUAGE_LABELS_DE = Object.freeze({
-  "": "Automatisch (nach Nummer)",
+  "": "Automatisch",
   de: "Deutsch",
   fr: "Französisch",
   en: "Englisch",
@@ -506,6 +610,19 @@ export const SETTINGS_LANGUAGE_LABELS_EN = Object.freeze(
 // Sprachbewusste Kachel-Beschriftung. Unbekannter Wert -> der rohe Wert (nie leer).
 export function settingsLanguageLabel(value) {
   return tDyn({ en: SETTINGS_LANGUAGE_LABELS_EN, de: SETTINGS_LANGUAGE_LABELS_DE }, value) || value;
+}
+
+// Owner-Entscheid 15.09.2026: der Zusatz "(by number)" steht ab 620px wieder in der
+// Auto-Kachel -- dort ist Platz, und die Zeile wirkt ohne ihn leer. Am Handy blendet
+// panels.css ihn aus. Er ist darum ein EIGENER String neben dem Label und nicht Teil
+// von ihm: nur CSS kann entscheiden, ob die Breite reicht, und ein halber Textknoten
+// laesst sich nicht ausblenden. Kachel ohne Zusatz -> "" (kein leerer Klammerrest).
+const SETTINGS_LANGUAGE_QUALIFIERS_EN = Object.freeze({ "": "(by number)" });
+const SETTINGS_LANGUAGE_QUALIFIERS_DE = Object.freeze({ "": "(nach Nummer)" });
+export function settingsLanguageQualifier(value) {
+  return (
+    tDyn({ en: SETTINGS_LANGUAGE_QUALIFIERS_EN, de: SETTINGS_LANGUAGE_QUALIFIERS_DE }, value) || ""
+  );
 }
 
 // Die Permission-Toggles der UI (Reihenfolge + Beschriftung). Es sind GENAU die

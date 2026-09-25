@@ -3,7 +3,7 @@
 // (Server-Slim P4). Die Factory schliesst store/config/metering/messaging/summarizeCall/
 // planSummarySms/audit; USAGE_EVENT_KIND importiert das Modul selbst (EINE Quelle, G5).
 // EINE Instanz je Prozess (Wurzel-Scope, INV-7): dieselbe finishCall-Referenz geht an
-// attachMediaBridge UND makeCallControlIngest - die In-Memory-Guards (call._finished) und
+// makeVoiceRoutes und call-lifecycle - die In-Memory-Guards (call._finished) und
 // der persistierte billedAt-Marker verlangen Identitaet. Die paymentEnabled-Gating-Bedingung
 // (Voice-Minuten-Meter) bleibt im finishCall-Body (INV-9); reconcileVoiceBudget
 // laeuft immer, releaseReserve wird intra-modul aufgerufen. P2b: die injizierte config
@@ -24,12 +24,27 @@ import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";
 import { planNotPlacedMail } from "../mail-not-placed.js";
 import { reportSystematicOutage } from "./outage-report.js";
+import { BRIDGE_STATE, bridgeStateOf, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.js";
 // F2-Newsletter-Recipients: EINE Quelle fuer den Abmelde-Link-URL-Bau (G5), geteilt mit
 // self-service-routes.js (Bestaetigungs-Mail-Link nutzt das Confirm-Pendant dort).
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
 
 // Provider-SMS-Segmentgrenze (Zusammenfassungs-SMS wird hierauf gekuerzt).
 const SMS_BODY_MAX_CHARS = 1500;
+
+// IEX-A2 (E5): EINE Logzeile je gescheiterter EL-Uebergabe (Betreiber-Sicht, Spec 9 F3). PII-frei:
+// callId ist server-generiert, failureReason ist ein gefiltertes Token.
+const EL_UEBERGABE_LOG_PREFIX = "[el-uebergabe]";
+const GRUND_KEINER = "keiner";
+const GESCHEITERT_ZUSTAND_FUER_LOG = Object.freeze({
+  [BRIDGE_STATE.WARTET]: "wartet",
+  [BRIDGE_STATE.RUECKFALL]: "rueckfall",
+  [BRIDGE_STATE.KEIN_EL_INBOUND]: "abgewiesen", // Marker am Budget-Profil (O5, ab IEX-A9)
+});
+function logGescheiterteUebergabe(call) {
+  const zustand = GESCHEITERT_ZUSTAND_FUER_LOG[bridgeStateOf(call)];
+  console.log(`${EL_UEBERGABE_LOG_PREFIX} gescheitert call=${call.id} grund=${call.failureReason || GRUND_KEINER} zustand=${zustand}`);
+}
 
 // Die Action Items, die zu DIESEM Anruf bereits im Store stehen - als blosse Texte, in
 // derselben Form, die summarizeCall auf dem Bestandsweg liefert (die Zusammenfassungs-SMS
@@ -246,7 +261,7 @@ export function makeCallFinish({
   }
 
   // ---------------- Call zu Ende -> Summary + Notification + SMS ----------------
-  // Idempotent: kann von Status-Callback, Bridge und cancel_call gleichzeitig angestossen werden.
+  // Idempotent: kann von Status-Callback, Cap-Timer und cancel_call gleichzeitig angestossen werden.
   async function finishCall(call) {
     if (!call || call._finished) return;
     call._finished = true;
@@ -265,6 +280,24 @@ export function makeCallFinish({
     }
     await releaseReserve(call); // OUT-05 (F2): Worst-Case-Reserve abbauen; Ist-Minuten bleiben in costCents
     store.save();
+
+    // IEX-A2 (E5/O3): gescheiterte Uebergabe an den EL-Agenten -> keine Notification, keine
+    // NUTZER-Mail, kein summarizeCall, keine SMS, kein Inbox-Eintrag. Die Buchung oben
+    // ist gelaufen (Traeger-Minuten sind real, Tenant-Decke sieht sie - Regel 1).
+    //
+    // IEX-B1: dieselbe Naht ist der Ausloeser des BETREIBER-Melders - dieselbe Funktion,
+    // die der not-placed-Zweig unten ueber reportFailedCall ruft (kein zweiter Meldeweg,
+    // G5). Ohne sie faellt ein Totalausfall des EL-Inbound-Pfads NIEMANDEM auf: O3
+    // verbietet jede Tenant-/Owner-Benachrichtigung, und im Log sucht nur, wer schon
+    // weiss, dass etwas kaputt ist. O3 bleibt unangetastet - reportSystematicOutage meldet
+    // ausschliesslich an den Betreiber-Kanal (Mail/SMS aus der Plattform-Config), nie an
+    // den Tenant und nie an den Owner. Vollstaendig fail-soft (eigenes try/catch dort):
+    // ein Fehler hier darf den Anruf-Abschluss nie abbrechen.
+    if (uebergabeGescheitert(call)) {
+      logGescheiterteUebergabe(call);
+      await reportSystematicOutage({ store, config, call, audit, messaging, mailer });
+      return;
+    }
 
     if (call.status !== "completed" || !call.transcript.length) {
       const target = call.direction === "outbound" ? call.to : call.from;
@@ -379,16 +412,7 @@ export function makeCallFinish({
       // Kanaele - SMS und Mail). Der eigentliche Mail-Bau + Versand steht in
       // sendSummaryMails (Modul-Top, reine Verschiebung fuer die Funktionslaenge).
       await sendSummaryMails({
-        store,
-        config,
-        call,
-        mailer,
-        accounts: accountsRef.current,
-        audit,
-        t,
-        who,
-        result,
-        aiCount,
+        store, config, call, mailer, accounts: accountsRef.current, audit, t, who, result, aiCount,
       });
     } catch (err) {
       console.error("[summary]", err.message);

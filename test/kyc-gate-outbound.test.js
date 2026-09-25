@@ -110,11 +110,14 @@ test("Flag an: Tenant OHNE kyc_level (Nicht-Subscriber, eigene Nummer) -> 403 (T
   }
 });
 
-test("Flag AUS: Owner-Pfad passiert via Boot-Seed id_verified (kein Selbst-Aussperren)", async () => {
-  const srv = await startServer({ env: { ALLOWED_NUMBERS: TO }, seed: seedKyc("none") }); // MULTI_TENANT default false
+test("Betreiber-Kanal (keine Identitaet): Owner-Pfad passiert via Boot-Seed id_verified (kein Selbst-Aussperren)", async () => {
+  // E4: eine mitgeschickte Identitaet wird NICHT mehr ignoriert (der Flag-Kurzschluss
+  // ist entfernt) - der Owner-Pfad entsteht hier ausschliesslich ueber den identitaets-
+  // losen Betreiber-Kanal (operatorChannelTenant), nicht ueber ein wirkungsloses Flag.
+  const srv = await startServer({ env: { ALLOWED_NUMBERS: TO }, seed: seedKyc("none") });
   try {
-    const res = await placeCall(srv, SUB_A); // Identitaet ignoriert -> Owner
-    assert.equal(res.status, 500, "Flag aus -> tenantId=owner, Boot-Seed id_verified -> KYC passiert");
+    const res = await placeCall(srv, null); // keine Identitaet -> operatorChannelTenant -> Owner
+    assert.equal(res.status, 500, "identitaetslos -> tenantId=owner, Boot-Seed id_verified -> KYC passiert");
     const call = outboundCalls(srv)[0];
     assert.equal(call.tenantId, BOOTSTRAP_TENANT_ID);
     assert.equal(call.from, OWNER_NUMBER);

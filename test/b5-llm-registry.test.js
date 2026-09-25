@@ -131,7 +131,9 @@ test("B5-R6: LLM_PROVIDER=deepseek ohne DEEPSEEK_API_KEY verweigert den Boot ben
     env: { LLM_PROVIDER: "deepseek", DEEPSEEK_API_KEY: "" },
   });
   assert.equal(code, 1);
-  assert.match(output, /DEEPSEEK_API_KEY \(weil LLM_PROVIDER=deepseek\)/);
+  // FW2: der REQUIRED_CONFIG-Eintrag deckt jetzt ZWEI Anlaesse (LLM_PROVIDER UND
+  // LLM_PROVIDER_FALLBACK=deepseek), der Name nennt seither beide Env-Variablen.
+  assert.match(output, /DEEPSEEK_API_KEY \(weil LLM_PROVIDER\/LLM_PROVIDER_FALLBACK=deepseek\)/);
 });
 
 test("B5-R7: der Beweis der Phase - Anbieterwechsel ist eine reine Env-Operation, der Dienst startet und hat Preise", async () => {

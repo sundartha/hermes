@@ -12,142 +12,151 @@
  *      Fuer Entwickler) plus aufsteigendes Fussband.
  *   2. Tastatur-Navigation, die auf die Ruhepunkte der Sektionen springt.
  *   3. Vollbild-Blaetter am Handy (Menue, Sektionen, Rechtstexte).
- *   4. Sprachumschalter DE/EN.
+ *   4. Sprachumschalter EN/DE (Default EN).
  * ========================================================================== */
 
 /* ------------------------------------------------------------------ Sprache */
 
-/* Deutsch steht IM HTML (das ist die indexierte Fassung). Hier liegt nur die
- * englische Gegenfassung; beim ersten Umschalten wird der deutsche Stand je
- * Element eingefroren, damit das Zurueckschalten verlustfrei ist. */
-const EN = {
-  howItWorks: "How it works",
-  pricing: "Pricing",
-  forDevs: "For developers",
-  getNumber: "Get a number",
-  logIn: "Log in",
-  signUp: "Sign up",
-  heroTitle: '<span class="l1">Give your AI</span> <span>a <em>phone number</em>.</span>',
-  heroLead:
-    "Hermes answers calls and handles them for you. One connection over <strong>MCP</strong> — and your AI gets a voice.",
-  howtoTitle: "One connection, <em>two minutes</em>.",
-  howtoLead:
-    "One connection over <strong>MCP</strong>, no setup — your AI is reachable on a real number in under two minutes.",
-  priceTitle: "Two plans, <em>no surprises</em>.",
-  priceLead:
-    "Choose the plan that fits you. <strong>Cancel monthly</strong>, <strong>no hidden costs</strong>.",
+/* Englisch steht IM HTML (das ist seit dem Default-Wechsel 2026-09-10 die
+ * indexierte Fassung). Hier liegt nur die deutsche Gegenfassung; beim ersten
+ * Umschalten wird der englische Stand je Element eingefroren, damit das
+ * Zurueckschalten verlustfrei ist. */
+const DE = {
+  howItWorks: "So funktioniert's",
+  pricing: "Preise",
+  forDevs: "Für Entwickler",
+  getNumber: "Nummer holen",
+  logIn: "Login",
+  signUp: "Registrieren",
+  heroTitle: "<span class=\"l1\">Gib deiner KI</span> <span>eine <em>Telefonnummer</em>.</span>",
+  heroLead: "Hermes nimmt Anrufe an und führt sie für dich. Ein Anschluss über <strong>MCP</strong> — und deine KI hat eine Stimme.",
+  howtoTitle: "Ein Anschluss, <em>zwei Minuten</em>.",
+  howtoLead: "Ein Anschluss über <strong>MCP</strong>, kein Setup — deine KI ist in unter zwei Minuten unter einer echten Nummer erreichbar.",
+  priceTitle: "Zwei Tarife, <em>keine Überraschungen</em>.",
+  priceLead: "Wähle das Paket, welches zu dir passt. <strong>Monatlich kündbar</strong>, <strong>keine versteckten Kosten</strong>.",
   starterLabel: "Starter",
   businessLabel: "Business",
-  popular: "Popular",
-  perMonth: "/ month",
-  starterF1: "<strong>30 minutes</strong> of calls per month",
-  starterF2: "Answers every call for you",
-  starterF3: "Summarizes every call for you",
-  starterF4: "Email support",
-  starterCta: "Choose Starter",
-  businessF1: "<strong>120 minutes</strong> of calls per month",
-  businessF2: "Answers <em>and</em> calls out for you",
-  businessF3: "Handles tasks independently for you",
-  businessF4: "Priority support",
-  businessCta: "Choose Business",
-  footnote: "Out of minutes? You get a heads-up — never an automatic surcharge.",
-  devTitle: "One endpoint, <em>two ways</em>.",
-  devLead:
-    "Hermes is an <strong>MCP</strong> server. Connect it in the AI tool of your choice or straight from the terminal.",
-  devWayA: "In your AI tool",
-  devWayATitle: "Add it as a connector",
-  devWayB: "In the terminal",
-  devWayBTitle: "With a single command",
-  devWindowTitle: "Settings › Connectors",
-  devAddRow: "Add custom connector",
+  popular: "Beliebt",
+  /* Preisnotation folgt der Sprache: englisch "€4.99" (Punkt, Symbol vorn),
+   * deutsch "4,99 €" (Komma, Symbol nachgestellt). Dieselbe Regel wie
+   * lib/plans.js formatPlanPrice -- die Betraege selbst stehen im
+   * Tarif-Katalog (lib/plans.js), der Gleichlauf ist test-gepinnt
+   * (apps/web/test/pages.test.js). */
+  starterPrice: "4,99 €",
+  businessPrice: "9,99 €",
+  perMonth: "/ Monat",
+  starterF1: "<strong>30 Minuten</strong> Gespräche pro Monat",
+  starterF2: "Nimmt jeden Anruf für dich an",
+  starterF3: "Fasst jedes Gespräch für dich zusammen",
+  starterF4: "E-Mail-Support",
+  starterCta: "Starter wählen",
+  businessF1: "<strong>120 Minuten</strong> Gespräche pro Monat",
+  businessF2: "Nimmt an <em>und</em> telefoniert für dich raus",
+  businessF3: "Erledigt Aufgaben eigenständig für dich",
+  businessF4: "Priorisierter Support",
+  businessCta: "Business wählen",
+  footnote: "Minuten aufgebraucht? Du bekommst einen Hinweis — kein automatischer Aufpreis.",
+  devTitle: "Ein Endpoint, <em>zwei Wege</em>.",
+  devLead: "Hermes ist ein <strong>MCP</strong>-Server. Verbinde ihn im KI-Tool deiner Wahl oder direkt aus dem Terminal.",
+  devWayA: "Im KI-Tool",
+  devWayATitle: "Als Konnektor hinzufügen",
+  devWayB: "Im Terminal",
+  devWayBTitle: "Mit einem Befehl",
+  devWindowTitle: "Einstellungen › Konnektoren",
+  devAddRow: "Benutzerdefinierten Connector",
   devFieldName: "Name",
-  devFieldUrl: "Server URL",
-  devConnectBtn: "Connect",
+  devFieldUrl: "Server-URL",
+  devConnectBtn: "Verbinden",
   devTerminalTitle: "zsh — hermes",
-  devOut1: "✓ Added MCP server “hermes”",
-  devOut2: "✓ Connected · tools available",
-  devToolsLabel: "Just ask — for example",
-  devAsk1: "“Who called today, and what did they want?”",
-  devAsk2: "“Call Mr. Müller and move his appointment to Thursday.”",
-  devFootnote:
-    "Streamable HTTP, OAuth on first connect. Works with Claude, Codex and any MCP client.",
-  step1Title: "Get a number",
-  step1Desc: "A real phone number, active in two minutes. No contract, no hardware.",
-  step2Title: "Connect your AI",
-  step2Desc: "One connection over MCP. Your AI then knows who called and what to do.",
-  step3Title: "Let it answer",
-  step3Desc: "Hermes talks, listens, books appointments and takes notes. You read the summary.",
-  language: "Language",
-  privacy: "Privacy",
-  imprint: "Imprint",
-  terms: "Terms",
-  contact: "Contact",
-  footerCopy: "© Sundartha — Hermes, your phone assistant",
-  copyLabel: "Copy",
-  copiedLabel: "Copied",
+  devOut1: "✓ MCP-Server „hermes“ hinzugefügt",
+  devOut2: "✓ Verbunden · Tools verfügbar",
+  devToolsLabel: "Frag danach — zum Beispiel",
+  devAsk1: "„Wer hat heute angerufen und was wollten sie?“",
+  devAsk2: "„Ruf Herrn Müller an und verschiebe den Termin auf Donnerstag.“",
+  devFootnote: "Streamable HTTP, OAuth beim ersten Verbinden. Läuft mit Claude, Codex und jedem MCP-Client.",
+  step1Title: "Nummer holen",
+  step1Desc: "Eine echte Rufnummer, in zwei Minuten aktiv. Kein Vertrag, keine Hardware.",
+  step2Title: "KI verbinden",
+  step2Desc: "Ein Anschluss über MCP. Deine KI weiß danach, wer angerufen hat und was zu tun ist.",
+  step3Title: "Abnehmen lassen",
+  step3Desc: "Hermes spricht, hört zu, vereinbart Termine und schreibt mit. Du liest das Protokoll.",
+  language: "Sprache",
+  contact: "Kontakt",
+  footerCopy: "© Sundartha — Hermes, dein Telefonassistent",
+  copyLabel: "Kopieren",
   /* Einwilligungs-Karte (components/site/CookieConsent.astro, scripts/consent.js). */
-  cookieSettings: "Cookie settings",
-  ckTitle: "Cookies &amp; privacy",
-  ckText:
-    'We only store on your device what the site needs: your language choice and this decision. Analytics or marketing services run only once you agree. <a href="/datenschutz">More in the privacy policy</a>.',
-  ckNecessary: "Necessary",
-  ckNecessaryDesc: "Language choice, login in the customer area and this setting. Always on.",
-  ckStats: "Analytics",
-  ckStatsDesc: "Anonymous reach measurement so we can improve the site. Not in use yet.",
+  cookieSettings: "Cookie-Einstellungen",
+  ckTitle: "Cookies &amp; Datenschutz",
+  ckText: "Wir speichern auf deinem Gerät nur, was die Seite braucht: deine Sprachwahl und diese Entscheidung. Statistik- oder Marketing-Dienste laufen erst, wenn du zustimmst. <a href=\"/datenschutz\">Mehr im Datenschutz</a>.",
+  ckNecessary: "Notwendig",
+  ckNecessaryDesc: "Sprachwahl, Login im Kundenbereich und diese Einstellung. Immer aktiv.",
+  ckStats: "Statistik",
+  ckStatsDesc: "Anonyme Reichweitenmessung, damit wir die Seite verbessern können. Derzeit nicht im Einsatz.",
   ckMarketing: "Marketing",
-  ckMarketingDesc: "Advertising and social media services. Not in use yet.",
-  ckAcceptAll: "Accept all",
-  ckNecessaryOnly: "Necessary only",
-  ckSave: "Save selection",
-  ckSettings: "Settings",
-  /* HermesDemo (Session-Stream, components/HermesDemo.astro): die EN-Fassung
+  ckMarketingDesc: "Werbe- und Social-Media-Dienste. Derzeit nicht im Einsatz.",
+  ckAcceptAll: "Alle akzeptieren",
+  ckNecessaryOnly: "Nur notwendige",
+  ckSave: "Auswahl speichern",
+  ckSettings: "Einstellungen",
+  /* HermesDemo (Session-Stream, components/HermesDemo.astro): die DE-Fassung
    * aller uebersetzbaren Demo-Texte. Sprachneutrale Werte (Rufnummer,
    * Werkzeugliste, "Live", Sprecher "Hermes") tragen im Markup bewusst
    * keinen data-i18n-Key. hdToolcall traegt Inline-HTML (innerHTML-Swap,
    * Muster heroTitle). */
-  hdWinTitle: "your-ai — Hermes session",
-  hdScene1: "01 · Connect & instruct",
-  hdScene2: "02 · Hermes makes the call",
-  hdScene3: "03 · The result",
-  hdEv1k: "Hermes number active",
-  hdEv2k: "Connected as an MCP connector",
-  hdYouLabel: "You, to your AI",
-  hdAiLabel: "Your AI",
-  hdUserMsg: "Can you get me a check-up appointment with Dr. Behrens this week?",
-  hdAiMsg1: "Sure — I'll give the practice a quick call.",
-  hdToolcall: '<span class="hd-toolcall__fn">place_call</span>("Dr. Behrens\' practice")',
-  hdCallLabel: "Outgoing call",
-  hdCallee: "Dr. Behrens' practice",
-  hdSpeakerThem: "Practice",
-  hdL1: "Hi, I'm the AI assistant for Jonas. I'd like to book an appointment for him.",
-  hdL2: "Sure, what is it about?",
-  hdL3: "A check-up. Would Thursday, August 14th work?",
-  hdL4: "Thursday would be free.",
-  hdL5: "That works well, let's take it. Under the name Kroh.",
-  hdHangup: "Call ended · 0:47",
-  hdAiMsg2: "Done! Thursday, Aug 14 at 11:30 am with Dr. Behrens — I've added it to your calendar.",
-  hdR1k: "Appointment",
-  hdR1v: "Thursday, Aug 14 · 11:30 am · Dr. Behrens' practice",
-  hdR2v: "Summary & transcript are waiting in your dashboard",
-  hdStep1: "Give the task",
-  hdStep2: "Hermes calls",
-  hdStep3: "The result",
+  hdWinTitle: "deine-ki — Hermes-Session",
+  hdScene1: "01 · Verbinden & beauftragen",
+  hdScene2: "02 · Hermes telefoniert",
+  hdScene3: "03 · Das Ergebnis",
+  hdEv1k: "Hermes-Nummer aktiv",
+  hdEv2k: "Als MCP-Connector verbunden",
+  hdYouLabel: "Du, an deine KI",
+  hdAiLabel: "Deine KI",
+  hdUserMsg: "Kannst du mir für diese Woche einen Kontrolltermin bei Dr. Behrens machen?",
+  hdAiMsg1: "Klar — ich rufe die Praxis kurz an.",
+  hdToolcall: "<span class=\"hd-toolcall__fn\">place_call</span>(\"Praxis Dr. Behrens\")",
+  hdCallLabel: "Ausgehender Anruf",
+  hdCallee: "Praxis Dr. Behrens",
+  hdSpeakerThem: "Praxis",
+  hdL1: "Hallo, ich bin der KI-Assistent von Jonas. Ich würde gern einen Termin für ihn vereinbaren.",
+  hdL2: "Gerne, worum geht es denn?",
+  hdL3: "Um eine Kontrolluntersuchung. Ginge es am Donnerstag, dem 14. August?",
+  hdL4: "Donnerstag wäre frei.",
+  hdL5: "Das passt gut, den nehmen wir. Auf den Namen Kroh.",
+  hdHangup: "Anruf beendet · 0:47",
+  hdAiMsg2: "Erledigt! Donnerstag, 14. Aug. um 11:30 bei Dr. Behrens — ich hab dir den Termin eingetragen.",
+  hdR1k: "Termin",
+  hdR1v: "Donnerstag, 14. Aug. · 11:30 · Praxis Dr. Behrens",
+  hdR2v: "Zusammenfassung & Transkript liegen in deinem Dashboard",
+  hdStep1: "Auftrag geben",
+  hdStep2: "Hermes telefoniert",
+  hdStep3: "Ergebnis",
+  privacy: "Datenschutz",
+  imprint: "Impressum",
+  terms: "AGB",
+  copiedLabel: "Kopiert",
 };
 
-const LANG_KEY = "hermes.lang";
-const de = new Map();
-let lang = "de";
+/* Der Schluessel traegt seit dem Default-Wechsel eine Version. Grund: unter dem
+ * alten Schluessel "hermes.lang" liegen Wahlen aus der Zeit, als Deutsch der
+ * Default war - die wuerden Englisch fuer jeden Rueckkehrer aushebeln. Ab v2
+ * zaehlt nur, was jemand NACH dem Wechsel bewusst gewaehlt hat; der alte
+ * Eintrag wird beim ersten Besuch entfernt (s. init), damit nichts
+ * Verwaistes zurueckbleibt, das der Datenschutztext nicht mehr beschreibt. */
+const LANG_KEY = "hermes.lang.v2";
+const LEGACY_LANG_KEY = "hermes.lang";
+const en = new Map();
+let lang = "en";
 
 function i18nNodes() {
   return document.querySelectorAll("[data-i18n]");
 }
 
 function applyLang(next) {
-  lang = next === "en" ? "en" : "de";
+  lang = next === "de" ? "de" : "en";
   for (const node of i18nNodes()) {
     const key = node.dataset.i18n;
-    if (!de.has(key)) de.set(key, node.innerHTML);
-    const value = lang === "en" ? EN[key] : de.get(key);
+    if (!en.has(key)) en.set(key, node.innerHTML);
+    const value = lang === "de" ? DE[key] : en.get(key);
     if (typeof value === "string") node.innerHTML = value;
   }
   document.documentElement.lang = lang;
@@ -473,7 +482,7 @@ function wireCopy() {
       } catch {
         /* Ohne Zwischenablage-Recht bleibt die Adresse trotzdem lesbar. */
       }
-      btn.textContent = lang === "en" ? EN.copiedLabel : "Kopiert";
+      btn.textContent = lang === "de" ? DE.copiedLabel : "Copied";
       setTimeout(() => {
         btn.textContent = label;
       }, 1800);
@@ -544,10 +553,11 @@ function init() {
   wireKeyboard();
 
   try {
+    localStorage.removeItem(LEGACY_LANG_KEY);
     const saved = localStorage.getItem(LANG_KEY);
-    if (saved === "en") applyLang("en");
+    if (saved === "de") applyLang("de");
   } catch {
-    /* Kein Speicher, keine Vorauswahl — Deutsch bleibt. */
+    /* Kein Speicher, keine Vorauswahl — Englisch bleibt. */
   }
 
   if (!page) return;

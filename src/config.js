@@ -5,8 +5,24 @@ import { fileURLToPath } from "url";
 import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
 // GAP-07: boot-guard.js und telephony/stt-profile.js importieren ihrerseits nur
 // import-freie bzw. Blatt-Module -> kein Zyklus, obwohl beide sonst downstream sitzen.
-import { alertChannelFindings, alertChannelInputs } from "./boot-guard.js";
+import {
+  alertChannelFindings,
+  alertChannelInputs,
+  fuerAudienceVergleich,
+  kanonischeAudience,
+} from "./boot-guard.js";
+// KV2-10: die gueltigen Werte von VOICE_TARIFF_GRUNDBETRAG_CENTS sind die Kostenprofile
+// der Engine-Weiche. billing/kostenarten.js ist importfrei (Blatt, Praezedenz boot-guard
+// oben) - kein Zyklus, keine zweite Routen-Liste hier.
+import { KOSTENPROFIL } from "./billing/kostenarten.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
+// IEX-A9: Blatt-Modul ohne Imports (kein Zyklus).
+import { DEFAULT_INBOUND_EL_SCOPE } from "./elevenlabs/inbound-scope.js";
+// IEP-P2: EINE Quelle fuer den Asset-Pfad (Schreiber: Dial-Direktive, Leser: Boot-Riegel unten).
+// inbound-rueckfall.js haengt nur an Modulen, die hier ohnehin schon im Graphen liegen
+// (store/defaults.js, utils/timer.js, billing/kostenarten.js) plus telephony/directives.js, einem
+// import-freien Blatt - kein Zyklus.
+import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.js";
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
 // G5: die Minute lebt in utils/timer.js (import-freies Blatt, kein Zyklus) - dieselbe
 // Zahl, gegen die Abrechnung und Consult-Fristen rechnen. Stunde/Tag leiten hier ab.
@@ -53,6 +69,12 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
 // kommt, gehoert in einen anderen Gespraechsabschnitt (Kein Fail-open).
 const CONSULT_WAIT_MAX_MS = 60_000;
 const CONSULT_OPEN_MAX_MS = 300_000;
+// P2 (W2): Obergrenze JEDER der drei EL-Rueckfrage-Fristen. Bindend ist
+// response_timeout_secs = 60 am Werkzeug get_consult (live gemessen, Vorlage
+// tools.get_consult.tool_config); 55 s lassen 5 s fuer Netz und Verarbeitung. EINE Zahl
+// fuer alle drei Stufen (G5) - eine Stufe, die ueber das Werkzeug-Zeitlimit hinaus haelt,
+// laesst den Anbieter den Aufruf abbrechen, statt zu antworten.
+const EL_CONSULT_STAGE_MAX_MS = 55_000;
 
 // Sentinel fuer einen Boot ohne Deploy-Metadatum (lokal / fremder Host). Exportiert,
 // damit Boot-Banner-, /healthz- und Testcode denselben Wert nutzen (G25/G5).
@@ -201,6 +223,12 @@ const MS_PER_DAY = HOURS_PER_DAY * MS_PER_HOUR;
 // (G25: benannte Konstanten statt Zahlenketten im Ausdruck).
 const OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT = 6;
 const OUTAGE_ALERT_RETRY_MINUTES_DEFAULT = 15;
+// IEX-B1: Beobachtungsfenster des INBOUND-Ausfall-Melders - laenger als die Outbound-
+// Stunde, weil Inbound ein anderes Verkehrsregime hat (Begruendung am Blatt unten).
+const INBOUND_OUTAGE_ALERT_WINDOW_HOURS_DEFAULT = 6;
+// FW2: Standard-Haltedauer des Guthaben-Latch (G25/G35, Muster
+// OUTAGE_ALERT_RETRY_MINUTES_DEFAULT).
+const LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT = 15;
 // OUTBOUND-E3b (Review-Blocker Runde 2, C8b/Plan-Abschnitt "Meldeweg und Alarm-Body"): ein
 // Kanal, der zwoelf Monate nie ausgeloest wurde, ist kein bewiesener Kanal - der Selbsttest
 // laeuft im selben monatlichen Rhythmus, den der Plan nennt.
@@ -208,6 +236,10 @@ const OUTAGE_ALERT_SELF_TEST_DAYS_DEFAULT = 30;
 // C8 (F-8): Eskalations-Schwelle einer haengenden Kuendigungs-Nummernfreigabe - "24-h-
 // Eskalation" ist der woertliche Owner-Beschluss (Plan-Abschnitt 9).
 const PLATFORM_HOLD_ESCALATION_HOURS_DEFAULT = 24;
+// GP-P0 (PLAN-GELDPFAD.md): Frist, die ein aktiver Subscriber ohne Live-Nummer bleiben
+// darf, bevor der Selektor ihn meldet. 1 h, weil der Sweep im Stunden-Takt laeuft - eine
+// kuerzere Frist meldete nur Rauschen.
+const PAID_WITHOUT_NUMBER_GRACE_HOURS_DEFAULT = 1;
 
 // Reine EUR->Cents-Rundung (G26: Money at rest ist Ganzzahl). Eigene, exportierte
 // Funktion statt Inline-Ausdruck, DAMIT ein Unit-Test die Float-Falle direkt trifft:
@@ -218,9 +250,10 @@ export function eurToCents(eur) {
   return Math.round(eur * CENTS_PER_EUR);
 }
 
-// Voice-Engine-Namen (G25/G11): EINE Quelle statt verstreuter "budget"/"realtime"-Literale
-// in config.js, routes/voice.js, telephony/call-lifecycle.js, routes/api-calls.js, boot.js.
-export const VOICE_ENGINE = Object.freeze({ BUDGET: "budget", REALTIME: "realtime" });
+// Name der einzigen Voice-Engine (G25). Seit IE6-S2 kein Schalter mehr: die Realtime-
+// Bridge ist entfernt, VOICE_ENGINE aus der Umgebung wird nicht mehr gelesen. Der Wert
+// bleibt als benanntes Statusfeld (Boot-Banner, agent.voiceEngine, get_agent_status).
+export const VOICE_ENGINE = Object.freeze({ BUDGET: "budget" });
 
 // PA-11 (S2-trailingslash, G5): EINE Quelle fuer das 7x wiederholte Trailing-Slash-
 // Idiom. Entfernt genau EINEN abschliessenden Slash, damit `${base}/pfad` nie zu
@@ -234,11 +267,38 @@ export function stripTrailingSlash(url) {
 // Kommaliste -> getrimmte, nicht-leere Eintraege. EINE Quelle (G5) fuer die drei
 // Listen-Envs (Laendervorwahlen, record_types, Admin-Mails); die Aufrufkette lebt damit
 // hier statt dreimal am Ort (G36, Gesetz von Demeter). Fehlende Var -> leere Liste.
-function csvEnv(raw) {
+// Exportiert fuer scripts/iel-geheimnisse-schalter.mjs (Allowlist-Uebernahme, dieselbe Zerlegung
+// wie am Server).
+export function csvEnv(raw) {
   return (raw || "")
     .split(",")
     .map((eintrag) => eintrag.trim())
     .filter(Boolean);
+}
+
+// KV2-10: csv-KARTE "profil:cents" -> Objekt (z.B. "el_convai_sip:23,telnyx_budget:5").
+// Fail-closed wie numEnv: ein unbekanntes Profil, ein Muell-Cent oder ein Eintrag ohne
+// Trenner landet in fatalConfigErrors (Boot-Refusal), nie still als 0 - ein vertippter
+// Grundbetrag muesste sonst erst am Alarm-Bildschirm auffallen. abwesend/leer -> {}
+// (alle Routen 0 = "noch nicht gesetzt", die heutige Reserve-Wahrheit). gueltigeRouten
+// kommt vom Aufrufer (Object.values(KOSTENPROFIL), EINE Quelle) - diese Datei fuehrt
+// keine zweite Routen-Liste.
+function routeCentsEnv(name, raw, gueltigeRouten) {
+  const karte = {};
+  for (const eintrag of csvEnv(raw)) {
+    const trennIndex = eintrag.lastIndexOf(":");
+    const profil = trennIndex === -1 ? "" : eintrag.slice(0, trennIndex);
+    const cents = trennIndex === -1 ? null : parseNumEnv(eintrag.slice(trennIndex + 1), true);
+    if (!gueltigeRouten.includes(profil) || cents === null || cents < 0) {
+      fatalConfigErrors.push(
+        `${name}="${eintrag}" ist keine gueltige Karte profil:ganze-cent ` +
+          `(gueltige Profile: ${gueltigeRouten.join("|")}).`,
+      );
+      continue;
+    }
+    karte[profil] = cents;
+  }
+  return karte;
 }
 
 // Getrimmter Grossbuchstaben-Wert (Laendercode). Gleiche Begruendung wie csvEnv:
@@ -458,6 +518,14 @@ const rawConfig = {
   // B5: Schluessel des Fremdadapters. Boot-Pflicht NUR bei LLM_PROVIDER=deepseek
   // (assertConfig) - sonst ist leer der Normalfall.
   deepseekApiKey: process.env.DEEPSEEK_API_KEY || "",
+  // FW2: Ausweich-Anbieter fuer den Guthaben-Latch. Leer/ungesetzt = Funktion AUS
+  // (Verhalten byte-identisch zum Bestand). Gleiche gueltige Menge wie LLM_PROVIDER,
+  // unbekannter Wert bricht den Boot ab (enumEnv). Identisch mit LLM_PROVIDER = kein
+  // Ausweichen moeglich -> Konfig-Warnung beim Boot (llmFallbackFindings, boot-guard.js).
+  llmProviderFallback: enumEnv("LLM_PROVIDER_FALLBACK", process.env.LLM_PROVIDER_FALLBACK, {
+    allowed: LLM_PROVIDER_VALUES,
+    fallback: "",
+  }),
   // B4a: MUSS eine Preisstaffel in MODEL_PRICE_SCHEDULES haben - sonst bricht der Boot ab
   // (assertPricedModels, src/boot.js). Eine DATIERTE Snapshot-ID ist ein ANDERER Schluessel.
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
@@ -505,6 +573,12 @@ const rawConfig = {
   }),
   llmBreakerCooldownMs: numEnv("LLM_BREAKER_COOLDOWN_MS", process.env.LLM_BREAKER_COOLDOWN_MS, {
     fallback: 30000,
+    min: 1,
+  }),
+  // FW2: wie lange der Guthaben-Vermerk haelt. Der Latch ist ein Notbehelf MIT
+  // Verfallsdatum - ein wieder aufgeladenes Konto uebernimmt ohne Neustart wieder.
+  llmBillingLatchCooldownMs: numEnv("LLM_BILLING_LATCH_COOLDOWN_MS", process.env.LLM_BILLING_LATCH_COOLDOWN_MS, {
+    fallback: LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT * MS_PER_MINUTE,
     min: 1,
   }),
 
@@ -636,42 +710,20 @@ const rawConfig = {
   telnyxSipTrunkUsername: (process.env.TELNYX_SIP_TRUNK_USERNAME || "").trim(),
   // SECRET - nie loggen, nie in eine API-/MCP-Antwort, nie in einen Fehlertext.
   telnyxSipTrunkPassword: process.env.TELNYX_SIP_TRUNK_PASSWORD || "",
-  // GQ-P6: wie lange Telnyx auf das Abheben wartet, bevor es mit hangup_cause=timeout
-  // aufgibt (POST /v2/calls, Feld timeout_secs). Anbieter-Doku: "Minimum value is 5
-  // seconds. Maximum value is 600 seconds", **Default 30**.
-  // Wir haben das Feld nie gesetzt und liefen damit auf den 30-s-Default. Live gemessen
-  // am 2026-08-05: die Zustellung von der US-DID nach DE braucht rund 30 Sekunden, bis es
-  // beim Ziel ueberhaupt klingelt - call_msfqk80elik1 wurde bei 30,5 s gerade noch
-  // angenommen, call_msftumfim338 lief bei 31,7 s in den Timeout, ohne je zu klingeln.
-  // Die Provider-Frist und die Zustelldauer kollidierten also frontal.
-  // Das ist eine MILDERUNG, nicht die Wurzel: die eigentliche Ursache der langsamen
-  // Zustellung ist die US-Absendernummer (FORCE_NUMBER_COUNTRY=US), Abhilfe waere eine
-  // +49-DID (siehe telnyx-fresh-did-no-de-routing). Laenger warten kostet nichts, solange
-  // niemand abhebt - Telnyx berechnet erst ab dem Abheben.
-  telnyxDialTimeoutSecs: numEnv("TELNYX_DIAL_TIMEOUT_SECS", process.env.TELNYX_DIAL_TIMEOUT_SECS, {
-    fallback: 60,
-    min: 5,
-    max: 600,
-  }),
-  // ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme, optional). Gate im
-  // Telnyx-Renderer (via Registry injiziert): ElevenLabs-Say NUR wenn apiKeyRef
-  // UND voiceId gesetzt sind - sonst Azure-Bestand byte-identisch. apiKeyRef =
-  // IDENTIFIER des Telnyx-Integration-Secrets, das den ElevenLabs-API-Key haelt
-  // (der Key selbst liegt NUR bei Telnyx, nie hier). Bewusste Vereinfachung:
-  // EIN Plattform-Key - TTS-Zeichen aller Tenants laufen ohne per-Tenant-
-  // Metering aufs Owner-ElevenLabs-Konto (Paid-Plan noetig).
+  // Globale ElevenLabs-Plattform-Stimme: der Rueckfallwert der Stimm-Karte, wenn eine
+  // Sprache keine eigene Kennung hat (elevenLabsVoiceIdFor). EIN Leser:
+  // elevenlabs/outbound.js#callLocaleOf (defaultVoiceId). Der Env-Name ist historisch
+  // (bis IP3 Telnyx-Relay, bis IE6-S1 Assistant-Pfad) - eine Umbenennung ist eine
+  // eigene Entscheidung, nicht Teil dieser Phase.
   telnyxElevenLabs: {
-    apiKeyRef: process.env.TELNYX_ELEVENLABS_API_KEY_REF || "",
     voiceId: process.env.TELNYX_ELEVENLABS_VOICE_ID || "",
-    // Model-Slot in ElevenLabs.<Model>.<VoiceId> (Telnyx dokumentiert "Default"
-    // und "v3"; andere Slugs nur nach Live-Probe nutzen).
-    model: process.env.TELNYX_ELEVENLABS_MODEL || "Default",
   },
 
   // Play-TTS: ElevenLabs-Stimme via <Play> in der Budget-Engine (Telnyx). GETRENNT vom
-  // Relay-Block telnyxElevenLabs oben: dort baut Telnyx einen Live-Relay-Stream (der den
-  // Inbound-Track unterdrueckt -> STT leer, A/B-belegt); HIER synthetisiert unser Server
-  // die mp3 vorab und Telnyx spielt eine STATISCHE Datei -> Inbound-Track lebt. Gate
+  // Block telnyxElevenLabs oben: dort baute Telnyx bis IP3 einen Live-Relay-Stream (der
+  // den Inbound-Track unterdrueckte -> STT leer, A/B-belegt; Zweig entfernt); HIER
+  // synthetisiert unser Server die mp3 vorab und Telnyx spielt eine STATISCHE Datei ->
+  // Inbound-Track lebt. Gate
   // Default AUS (Muster PAYMENT_ENABLED) -> Azure-<Say> byte-identisch. apiKey ist SECRET.
   elevenLabsPlayTts: {
     enabled: boolEnv("ELEVENLABS_PLAY_TTS_ENABLED", process.env.ELEVENLABS_PLAY_TTS_ENABLED, {
@@ -683,18 +735,38 @@ const rawConfig = {
     // umgebenden Whitespace, das Trimmen ist reine Haertung.
     apiKey: ELEVENLABS_API_KEY, // SECRET, nie loggen/leaken
     voiceId: (process.env.ELEVENLABS_VOICE_ID || "").trim(),
-    model: (process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5").trim(), // Latenz-optimiert
+    // IE7/Owner-Entscheidung 2026-09-13: EIN Modell fuer ALLE Sprachen - es gibt keine
+    // Modellwahl je Sprache und es soll auch keine geben. Der Latenz-Grund fuer
+    // eleven_flash_v2_5 ist mit dem Streaming-Umbau entfallen (erstes Paket 351-391 ms
+    // statt 2596-6370 ms Vollabruf). Rueckweg ohne Codeaenderung, falls das Modell doch
+    // die Ursache ist: ELEVENLABS_MODEL=eleven_flash_v2_5.
+    model: (process.env.ELEVENLABS_MODEL || "eleven_v3_conversational").trim(),
     apiBase: ELEVENLABS_API_BASE,
     outputFormat: (process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128").trim(), // Owner-Wahl mp3
-    // GAP-22: 4000 sprengte zusammen mit dem LLM-Worst-Case (11250 ms) den 15-s-Hardcut.
-    // Der Schnitt liegt bewusst HIER und nicht bei den LLM-Werten: ein Synthese-Timeout
-    // faellt fail-safe auf Azure-<Say> zurueck (der Call ueberlebt), ein gekuerzter
-    // LLM-Timeout kostet Antworten. 11250 + 2000 + 1500 (Reserve) = 14750 <= 15000.
+    // IE7: die Frist bis zum ERSTEN Audio-Paket, NICHT mehr bis zur fertigen Datei
+    // (src/tts/synth.js streamt). Genau dieses Warten liegt noch auf der Webhook-Wanduhr
+    // und bleibt deshalb Summand der Rechnung in src/turn-budget.js (EINE Quelle):
+    // 11250 + 2000 + 1500 (Reserve) = 14750 <= 15000. Gemessen liegt das erste Paket bei
+    // 351-391 ms; 2000 ms ist der Puffer darueber.
+    // GAP-22 (unveraendert gueltig): der Schnitt liegt bewusst HIER und nicht bei den
+    // LLM-Werten - ein Synthese-Timeout faellt fail-safe auf Azure-<Say> zurueck (der Call
+    // ueberlebt), ein gekuerzter LLM-Timeout kostet Antworten.
     synthTimeoutMs: numEnv("ELEVENLABS_SYNTH_TIMEOUT_MS", process.env.ELEVENLABS_SYNTH_TIMEOUT_MS, {
       fallback: 2000,
       min: 500,
       max: 10000,
     }),
+    // IE7: Gesamtfrist des HINTERGRUND-Stroms, ab Aufrufbeginn. Sie liegt NICHT auf der
+    // Webhook-Wanduhr (der Webhook hat nach dem ersten Paket schon geantwortet) und taucht
+    // in src/turn-budget.js deshalb bewusst NICHT auf. Sie begrenzt, wie lange
+    // GET /voice/tts/:token auf den Rest warten kann; reisst sie, liefert der Abruf das
+    // bisher Empfangene - ein abgeschnittener gesprochener Satz, nie Stille. Gemessen:
+    // vollstaendig nach 1761-2101 ms. Bleibt bewusst unter ELEVENLABS_TTS_TOKEN_TTL_MS.
+    synthTotalTimeoutMs: numEnv(
+      "ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS",
+      process.env.ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS,
+      { fallback: 10000, min: 1000, max: 30000 },
+    ),
     tokenTtlMs: numEnv("ELEVENLABS_TTS_TOKEN_TTL_MS", process.env.ELEVENLABS_TTS_TOKEN_TTL_MS, {
       fallback: 60000,
       min: 5000,
@@ -712,12 +784,26 @@ const rawConfig = {
   // oben: ein eingefuegtes Newline waere sonst ein Geheimnis, das nie passt.
   elevenLabsToolToken: (process.env.ELEVENLABS_TOOL_TOKEN || "").trim(),
 
+  // SEC-P4: der SCHARFE Zustand der Mandanten-Bindung dieses Tokens
+  // (elevenlabs/tenant-tool-token.js). DEFAULT AUS, und das ist keine Bequemlichkeit:
+  // die Werkzeug-Definition am Anbieter schickt den abgeleiteten Wert noch nicht mit
+  // (ihr Push ist eine Eigentuemer-Handlung). AN, bevor der Anbieter sendet, hiesse:
+  // look_up und get_consult antworten 404, die In-Call-Recherche stirbt und der Agent
+  // steht im laufenden Gespraech stumm da (Lehre in-call-research-is-mandatory). AUS
+  // wird ein FEHLENDER Wert wie bisher behandelt, ein VORGELEGTER falscher Wert aber
+  // schon jetzt abgelehnt.
+  elevenLabsTenantTokenRequired: boolEnv(
+    "ELEVENLABS_TENANT_TOKEN_REQUIRED",
+    process.env.ELEVENLABS_TENANT_TOKEN_REQUIRED,
+    { fallback: false },
+  ),
+
   // ---- ElevenLabs-Anrufstart (Convai SIP-Trunk-Outbound; optional) ----
-  // Dritter Outbound-Weg neben TeXML und Telnyx-Call-Control: das Gespraech fuehrt der
+  // Zweiter Outbound-Weg neben TeXML: das Gespraech fuehrt der
   // Agent des ANBIETERS. Der PROVIDER des Anrufs bleibt telnyx - die DID liegt dort,
   // ElevenLabs haengt per SIP-Trunk daran; es ist ein ENGINE-Zweig, kein zweiter Anbieter.
-  // Der Weichenschalter steht DEFAULT AUS (fail-closed, Muster TELNYX_AI_ASSISTANT_ENABLED):
-  // aus -> jeder Anruf laeuft unveraendert ueber die Telnyx-Zweige.
+  // Der Weichenschalter steht DEFAULT AUS (fail-closed, Muster PAYMENT_ENABLED):
+  // aus -> jeder Anruf laeuft unveraendert ueber den TeXML-Zweig.
   elevenLabsOutbound: {
     enabled: boolEnv("ELEVENLABS_OUTBOUND_ENABLED", process.env.ELEVENLABS_OUTBOUND_ENABLED, {
       fallback: false,
@@ -762,229 +848,66 @@ const rawConfig = {
     ),
   },
 
-  // ---- Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1; optional) ----
-  // C6a (P5): gruppiert (10 zusammengehoerige Keys, Praezedenzfall telnyxElevenLabs) -
-  // erste Grouping-Phase hinter dem Config-Proxy-Guard. Zugriff ausschliesslich ueber
-  // config.telnyx.telnyxAssistant.<key>; der Proxy wirft laut bei jedem uebersehenen alten
-  // flachen Zugriff (config.telnyxAssistantId etc. existiert nicht mehr).
-  telnyxAssistant: {
-    // Master-Flag fuer den in-house Custom-LLM-Shim (/v1/chat/completions). DEFAULT AUS
-    // (fail-closed, Muster PAYMENT_ENABLED): der Endpunkt antwortet 404 bis zum Cutover
-    // (Existenz hinter dem Flag -> keine monatelang offene Angriffsflaeche zwischen Merge
-    // und Live). Bei Flag aus bleibt der Live-CALL-Pfad (Budget/Realtime-Engine) byte-
-    // identisch. Volle 4-Orte-Doku + assertConfig/Footgun-Pflichtcheck: P10.
-    enabled: boolEnv("TELNYX_AI_ASSISTANT_ENABLED", process.env.TELNYX_AI_ASSISTANT_ENABLED, {
+  // ---- ElevenLabs-Inbound (Kandidat K1, PLAN-INBOUND-PARITAET.md) ----
+  // Der Gegenpart zu elevenLabsOutbound in der EINGEHENDEN Richtung: unser Webhook nimmt
+  // an, laeuft durch alle sieben Sicherungen und uebergibt das Bein DANACH per SIP an denselben
+  // Agenten, der den Hinweis in seiner Eroeffnung spricht (IEX-A3). Der PROVIDER bleibt telnyx, das Carrier-Bein
+  // bleibt unser (und damit der Hangup-Griff).
+  // DEFAULT AUS, fail-closed wie alle Engine-Weichen.
+  //
+  // STAND IEX-A9: dreiwertige Sprechpfad-Weiche in /voice/incoming (inboundPfadEntscheidung). Weitere Leser: drei
+  // Boot-Riegel (latentCostPathFindings: Kostenpfad hat Einsammler; elInboundAccessFindings:
+  // Zugang vollstaendig; elInboundScopeFindings: Scope bekannt) und die Banner-Zeile. Die Reihenfolge, die der Kostenarten-Katalog
+  // verlangt, bleibt: die Katalogzeile und ihr Riegel stehen, BEVOR der Weg live gehen kann -
+  // "Flag an, Kosten unsichtbar" ist damit strukturell ausgeschlossen, nicht per Disziplin.
+  elevenLabsInbound: {
+    enabled: boolEnv("ELEVENLABS_INBOUND_ENABLED", process.env.ELEVENLABS_INBOUND_ENABLED, {
       fallback: false,
     }),
-    // P5: ID des in P7 provisionierten Telnyx-AI-Assistants (ai_assistant_start). Leer ->
-    // P4.5 onSpeakEnded skippt fail-safe (Disclosure+Settlement laufen unabhaengig weiter).
-    // Bei aktivem Flag ist die ID Boot-Pflicht (assertConfig, P10).
-    assistantId: process.env.TELNYX_ASSISTANT_ID || "",
-    // ID der Call-Control-Application, ueber die originateViaCallControl (POST /v2/calls)
-    // waehlt. EIGENE Var, weil Telnyx hier einen ANDEREN Objekttyp erwartet als TeXML:
-    // wird die TeXML-ID (telnyxConnectionId) gesendet, lehnt Telnyx deterministisch ab mit
-    // HTTP 422 "10015 Invalid value for connection_id (Call Control App ID)" - der Live-Bug
-    // vom 2026-07-10 (RCA: tasks/rca-place-call-422.md). Bei aktivem Flag Boot-Pflicht.
-    callControlAppId: process.env.TELNYX_CALL_CONTROL_APP_ID || "",
-    // P5: max. Shim-Turns pro callId und Minute (Toll-/Token-Fraud-Bremse VOR agentTurn,
-    // zusaetzlich zum IP-Limiter aus rateLimitPerMin + dem Budget-Cap). Das Zeitfenster
-    // selbst ist eine Modul-Konstante im Shim (Muster middleware RATE_WINDOW_MS). Ein zu
-    // hoher Wert im Hosting bei aktivem Flag ist ein Footgun (productionFootguns, P10).
-    shimMaxTurnsPerMin: numEnv(
-      "TELNYX_SHIM_MAX_TURNS_PER_MIN",
-      process.env.TELNYX_SHIM_MAX_TURNS_PER_MIN,
-      { fallback: 30, min: 1 },
-    ),
-    // stab-p9 (Kosten-Notaus, PLAN-STABILIZE-LAUNCH.md P9): Dead-Air-Watchdog. Sekunden OHNE
-    // weiteres Lebenszeichen (Shim-Turn) nach ai_assistant_start, ab denen der Call als stille
-    // TTS-Fehlfunktion gilt und KONTROLLIERT beendet wird. KONSERVATIV: deutlich ueber einer
-    // normalen Denk-/Sprechpause -> Normalfluss terminiert NIE (scharfe Kalibrierung aus P4/P5).
-    // Nur im Assistant-Pfad wirksam (Flag aus -> nie armiert). Min 5, max 300: ein
-    // Dead-Air-Watchdog jenseits von 5 Minuten ist keine Bremse mehr, sondern inert
-    // (dieselbe Footgun-Logik wie min 5). Bewusst NICHT mehr aus MAX_CALL_DURATION_CAP_S
-    // abgeleitet - seit KS-P3 ist die Gespraechsfrist guthaben-abgeleitet, ein daran
-    // gekoppeltes Watchdog-Maximum waere eine Kopplung ohne Sachgrund.
-    deadAirTimeoutS: numEnv("TELNYX_DEAD_AIR_TIMEOUT_S", process.env.TELNYX_DEAD_AIR_TIMEOUT_S, {
-      fallback: 45,
-      min: 5,
-      max: 300,
-    }),
-    // Befund 2 (PLAN-TELNYX-AI-ASSISTANT-NO-AUDIO.md): Telnyx' Speak-Command kann verstummen,
-    // OHNE je ein call.speak.started/ended/failed zu emittieren (Live-Test Call 2/3, 2026-07-14).
-    // Ohne Terminal-Event haengt der Opening-Speak-Node bis zum manuellen Hangup in Stille. Dieser
-    // Timeout behandelt ein fehlendes Terminal-Event nach N Sekunden wie ein call.speak.failed
-    // (Azure-Retry falls Assistant-Config frei, sonst Fail-Safe = kein Assistant-Start). 45s: reale
-    // Sprechdauer Call 1 (command->speak.ended) war 16.57s -> 45s laesst Spielraum fuer laengere
-    // Anliegen-Saetze + Netz-Jitter, ohne bei einem echten Stall endlos zu warten. min 10 / max 120
-    // via numEnv (Wert < 10 -> Boot-Refusal ueber fatalConfigErrors, > 120 -> Clamp): 0 oder absurd
-    // hoch wuerde den Guard sonst lautlos inert schalten (P9-CFG1-Footgun, analog deadAirTimeoutS).
-    openingSpeakTimeoutS: numEnv(
-      "TELNYX_OPENING_SPEAK_TIMEOUT_S",
-      process.env.TELNYX_OPENING_SPEAK_TIMEOUT_S,
-      { fallback: 45, min: 10, max: 120 },
-    ),
-    // stab-p9 (b): Per-Conversation-Loop-Guard. Max. KONSEKUTIVE nicht-substanzielle
-    // (leere/Echo-)Shim-Turns, bevor der Call kontrolliert beendet wird - ZUSAETZLICH zum
-    // per-Minute-Rate-Limiter (shimMaxTurnsPerMin) und zum Budget-Cap. Substanz = dieselbe
-    // Definition wie stab-p7 (callerSubstanceMinLen). Ein substanzieller Turn setzt den Zaehler
-    // zurueck -> Normalfluss loest NIE aus. Hoeher als maxEmptyTurns (der weichere end_call-Guard),
-    // damit die weicheren Mechanismen zuerst greifen. Min 3, max 50 (Muster deadAirTimeoutS):
-    // ohne Obergrenze wuerde ein im Hosting versehentlich absurd hoher Wert (z.B. 999999) diesen
-    // Kosten-Notaus lautlos inert schalten (Review-Befund P9-CFG1) - der Clamp verhindert das
-    // unabhaengig vom gesetzten Wert, ganz ohne eigenen Footgun-Boot-Check.
-    loopGuardMaxEmptyTurns: numEnv(
-      "TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS",
-      process.env.TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS,
-      { fallback: 8, min: 3, max: 50 },
-    ),
-    // E2: statisches Telnyx-Integration-Secret, das der Shim als Bearer erwartet (Server
-    // liest es zur Bearer-Pruefung). SECRET - nie loggen/leaken. Bei aktivem Flag Boot-
-    // Pflicht (assertConfig), sonst kann der Shim NIE authentifizieren (fail-closed).
-    shimSharedSecret: process.env.TELNYX_SHIM_SHARED_SECRET || "",
-    // E3: NAME des Telnyx-Integration-Secrets, das denselben WERT haelt (external_llm.
-    // llm_api_key_ref). NUR das Provisioning-Skript liest ihn; der Server nie -> KEIN
-    // assertConfig-Check (nur REQUIRED-Gate im Skript). Analog telnyxElevenLabs.apiKeyRef.
-    shimApiKeyRef: process.env.TELNYX_SHIM_API_KEY_REF || "",
-    // OBS-FLAG (Diagnose): einmaliger, default-off Shape-Dump im Shim. Flag AN -> der Shim
-    // loggt pro authentifiziertem Turn EINE keys-only-Zeile (Top-Level-Feldnamen des
-    // forward_metadata-Body + zwei Booleans, WELCHE Position die call_control_id traegt),
-    // NIE Werte. Nur fuer den EINEN ueberwachten Diagnose-Call; danach wieder AUS. Neutraler
-    // Default, NICHT boot-required (kein assertConfig/Footgun), keine Verhaltensaenderung am Gate.
-    shimDebugShape: boolEnv("TELNYX_SHIM_DEBUG_SHAPE", process.env.TELNYX_SHIM_DEBUG_SHAPE, {
-      fallback: false,
-    }),
-    // AL-P7: echtes Token-Streaming des Shim-Turns. DEFAULT AUS (fail-closed): aus heisst
-    // byte-identisch zum Bestand - agentTurn bekommt keinen Satz-Abnehmer, llm.js streamt
-    // nicht, die SSE-Antwort ist wieder EIN content-Chunk. Wirkt nur zusammen mit einem
-    // Request, der stream:true verlangt (Telnyx tut das live). Kein Footgun-Eintrag: das
-    // Flag entwaffnet keine Sicherung, es aendert nur die Draht-Kadenz.
-    shimTokenStreaming: boolEnv(
-      "TELNYX_SHIM_TOKEN_STREAMING",
-      process.env.TELNYX_SHIM_TOKEN_STREAMING,
-      { fallback: false },
-    ),
-    // GQ-P1 (Befund B-1): Riegel gegen ZWEI gesprochene Antworten auf EINE Aeusserung.
-    // Die Spracherkennung liefert kumulative Zwischenstaende; ein Request, dessen Text den
-    // Vorgaenger nur fortschreibt (Sonde A: prevRelation "extends"), beantwortet dieselbe
-    // Aeusserung ein zweites Mal. Laeuft der Vorgaenger-Turn dann noch UND hat er noch
-    // nichts gesprochen, wird er verdraengt: er spricht nicht, schreibt keine agent-Zeile
-    // und antwortet mit einer leeren, gueltigen Completion.
-    // DEFAULT AN - bewusst ANDERS als die uebrigen Shim-Flags. Der Schalter entwaffnet
-    // KEINE Sicherung (er entscheidet nur, WELCHER von zwei Turns spricht); "aus" ist der
-    // fehlerhafte Bestand mit Doppelrede. Umlegen stellt den Bestand ohne Deploy wieder her.
-    shimSupersedeExtendedTurn: boolEnv(
-      "TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN",
-      process.env.TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN,
+    // IEL-B1: WELCHE Tenants den EL-Inbound-Weg ueberhaupt bekommen. LEER = NIEMAND, nie
+    // JEDER (Muster ownerSelfCallTenantIds). Einmal gesplittet/getrimmt (csvEnv), das
+    // Praedikat (elevenlabs/inbound-path-decision.js) vergleicht nur noch strikt.
+    tenantIds: csvEnv(process.env.ELEVENLABS_INBOUND_TENANT_IDS),
+    // IEX-A9 (E9): WIRKUNGSBEREICH des Wegs - allowlist (nur tenantIds, Default = heutiges Verhalten) oder
+    // registrierte_dids (jede aktive DID mit gueltigem Registrierungs-Beleg; Tenant-Liste ohne Wirkung; ohne
+    // Beleg Fehlersatz + Auflegen). Kein Wildcard. Getrimmt wie sttProfile; ein unbekannter Wert bricht den
+    // BOOT ab (boot-guard elInboundScopeFindings), nicht erst den Anruf.
+    scope: (process.env.ELEVENLABS_INBOUND_SCOPE || DEFAULT_INBOUND_EL_SCOPE).trim(),
+    // IEP-P2 (Owner-Entscheidung 10): durchgehender, vorab gerenderter Begruessungslaut
+    // (Komfortrauschen, IEP-P2b) waehrend der Dial-Wartezeit statt des Telnyx-US-Freitons.
+    // DEFAULT AN - anders als sonst bei neuen
+    // Schaltern, und das ist Absicht: der Aus-Zustand ist die Sofortannahme OHNE Fuellung, und
+    // genau die ist hoerbar schlechter als heute (Stille statt Freiton). Der Schalter ist der
+    // einzeln revertierbare Rueckweg der FUELLUNG; der Rueckweg der SOFORTANNAHME ist
+    // EL_DIAL_ANSWER_ON_BRIDGE im Code. Wirkt nur auf dem EL-Inbound-Pfad:
+    // ELEVENLABS_INBOUND_ENABLED=false oder ein nicht gepinnter Tenant sehen unveraendert das
+    // heutige Inbound-TeXML.
+    begruessungslautEnabled: boolEnv(
+      "ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED",
+      process.env.ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED,
       { fallback: true },
     ),
-    // GQ-P5 (Befund N-1): Riegel gegen den Provider-Anstoss. Telnyx stoesst nach
-    // telephony_settings.user_idle_reply_secs Sekunden Anrufer-Stille selbst einen Turn an
-    // (Anbieter-Schema: "the assistant will prompt the user to respond"); dieser POST traegt
-    // keine neue Aeusserung, sondern endet auf einer System-Nachricht. Der Shim las nur die
-    // letzte user-Rolle, beantwortete die ALTE Aeusserung erneut und sprach sie aus - die
-    // eigene Sprechzeit ist wieder Stille, also folgte der naechste Anstoss. Am Live-Anruf
-    // call_msf0epenyv9g sechs Runden ("Ich warte still.").
-    // DEFAULT AN - bewusst wie shimSupersedeExtendedTurn, anders als die uebrigen
-    // Shim-Flags: "aus" ist der gemessene Fehlerzustand, nicht der sichere Bestand.
-    // Umlegen stellt ihn ohne Deploy wieder her (Render-Dashboard).
-    // Er entwaffnet KEINE Sicherung: Loop-Guard, Rate-Gate und die pro-Tenant-Kostendecke
-    // liegen VOR dieser Entscheidung, der Dead-Air-Notaus wird weiter gefuettert (der
-    // Anstoss bleibt ein Lebenszeichen) -> kein assertConfig-/Footgun-Eintrag.
-    shimIgnoreProviderNudge: boolEnv(
-      "TELNYX_SHIM_IGNORE_PROVIDER_NUDGE",
-      process.env.TELNYX_SHIM_IGNORE_PROVIDER_NUDGE,
-      { fallback: true },
-    ),
-    // GQ-P3 (Befund B-9, Owner-Entscheidung O-1): schaltet den INBOUND-Handoff auf den
-    // Call-Control-Assistant. Der Master-Schalter oben (TELNYX_AI_ASSISTANT_ENABLED) hat
-    // Inbound nie erreicht - er stand live auf true, waehrend jeder eingehende Anruf ueber
-    // die Budget-Engine lief, weil der erwartete TeXML-Feldname geraten und falsch war.
-    // DEFAULT AN - bewusst wie shimSupersedeExtendedTurn, anders als die uebrigen
-    // Shim-Flags: dieser Schalter ist der RUECKWEG der Phase, nicht ihr Ausloeser. "aus"
-    // stellt die Budget-Engine fuer Inbound OHNE Deploy wieder her (Render-Dashboard).
-    // Er entwaffnet KEINE Sicherung: Kostendecke (beide Richtungen), OUTBOUND_FROZEN,
-    // Denylist, Land-Gate, Stundenlimit, Max-Dauer und die Ed25519-Signaturpruefung
-    // liegen samt und sonders VOR dieser Entscheidung und sind von ihr unerreichbar ->
-    // kein assertConfig-/Footgun-Eintrag (Muster shimTokenStreaming).
-    // KOSTENFOLGE, ausdruecklich: der Assistant-Pfad kostet nach eigener Messung (KV-M1)
-    // ~5 US-Cent je angefangener Minute gegen 1,87 auf der Budget-Engine - Inbound wird
-    // rund dreimal teurer. Vom Owner am 2026-08-04 zugestimmt; gedeckelt bleibt es allein
-    // durch die pro-Tenant-Kostendecke, die seit KV-P2 auch Inbound sperrt.
-    // DEFAULT AUS seit 2026-08-04: der Handoff feuert zu FRUEH. Am Live-Anruf gemessen
-    // (call_msf0q18o473z / call_msf0qch6nect): auf `inbound_path path=assistant` folgt
-    // 370 ms spaeter `HTTP 422 (90034 Call not answered yet)` - die Call-Control-API
-    // verlangt einen bereits ANGENOMMENEN Anruf, waehrend TeXML beim Inbound implizit
-    // annimmt. Der Anrufer hoert daraufhin nur die Fehleransage. Der Handoff muss auf
-    // das answered-Ereignis warten, bevor er startet; bis dahin bleibt Inbound auf der
-    // Budget-Engine (Bestandsverhalten, funktionsfaehig).
-    inboundHandoffEnabled: boolEnv(
-      "TELNYX_INBOUND_HANDOFF_ENABLED",
-      process.env.TELNYX_INBOUND_HANDOFF_ENABLED,
-      { fallback: false },
-    ),
-    // GQ-P4 (Befund B-10, A2): wie viele Modell-Turns desselben Calls UNMITTELBAR
-    // nacheinander scheitern duerfen, bevor der Agent hoerbar und hoeflich beendet.
-    // Am 2026-08-04 lief ein Anruf 52 Sekunden mit SIEBEN gescheiterten Turns weiter -
-    // stumm fuer den Owner, teuer auf der Carrier-Achse.
-    // KONSEKUTIV: jeder erfolgreiche Turn setzt zurueck.
-    // min 2 ist die harte Untergrenze der Phase ("ein einzelner Ausrutscher darf kein
-    // Gespraech beenden"); max 10, weil der Notaus darueber inert waere (Muster
-    // loopGuardMaxEmptyTurns). Fallback 3: bei den live gemessenen ~11 s je erschoepftem
-    // Turn ([metrics] llm retries-exhausted latencyMs 11215) sind das rund 35 s Ausfall -
-    // lang genug fuer einen Ausrutscher, kurz genug gegen die 52 s des Vorfalls.
-    // Der Wert SCHWAECHT KEINE Sicherung (er beendet ZUSAETZLICH; Max-Dauer, Dead-Air und
-    // Budget-Kill bleiben unberuehrt) -> kein assertConfig-/Footgun-Eintrag.
-    maxConsecutiveFailedTurns: numEnv(
-      "TELNYX_MAX_CONSECUTIVE_FAILED_TURNS",
-      process.env.TELNYX_MAX_CONSECUTIVE_FAILED_TURNS,
-      { fallback: 3, min: 2, max: 10 },
-    ),
-    // GQ-P4 (A2): Abschiedssatz bei anhaltendem Ausfall. LEER = der sprachabhaengige
-    // Default aus dem Locale-Bundle (locales.js llmGiveUpFarewell, korrekte Umlaute je
-    // Sprache) - das ist der empfohlene Betrieb. Ein gesetzter Wert ueberschreibt ihn fuer
-    // JEDE Sprache; im mehrsprachigen Betrieb also nur mit Bedacht setzen.
-    // GESPROCHENER Text: korrekte Umlaute, kein Fachjargon, keine Schuldzuweisung, keine
-    // technischen Codes gegenueber der Gegenstelle.
-    failedTurnFarewellText: process.env.TELNYX_FAILED_TURN_FAREWELL_TEXT || "",
-    // GQ-P18: wie lange der Sprech-Draht eines Shim-Turns zurueckgehalten wird, in
-    // Millisekunden. Die Spracherkennung (deepgram/nova-3) liefert eine Aeusserung in
-    // mehreren POSTs; jeder POST loeste einen vollen Turn aus - am 2026-08-09 zwei
-    // unabhaengige look_up-Recherchen und zwei gesprochene Wetterberichte mit
-    // widersprechenden Zahlen. Fuer nova-3 existiert KEIN Turn-End-Regler beim Anbieter (die
-    // eot_*-Werte unserer Live-Config gelten nur fuer deepgram/flux, und der Pro-Call-Block
-    // kann laut OpenAPI ueberhaupt nur model+language tragen), also liegt der Hebel bei uns.
-    // Solange nichts gesprochen wurde, kann ein Request mit fortgeschriebenem Text den
-    // laufenden Turn stumm ueberholen (telnyx-turn-supersede.js) - genau dieses Fenster
-    // haelt der Wert offen.
-    // Er VERZOEGERT KEINE ANTWORT: spaetestens am Turn-Ende geht alles raus. Der Preis
-    // faellt nur bei Turns an, die laenger dauern als die Frist - dort kommt das ERSTE Wort
-    // um bis zu diese Frist spaeter. 0 = aus (Rueckweg ohne Deploy, Bestandsverhalten).
-    // 3000 deckt 7 der 11 gemessenen Fragment-Luecken (1314-5476 ms); die hold-Log-Zeile
-    // (outcome silenced/released/flushed) ist die Datengrundlage zum Trimmen.
-    // max 3500, weil die Frist sonst in Telnyx' eigenes Anstoss-Fenster laeuft
-    // (telephony_settings.user_idle_reply_secs, Live-Wert 4 s).
-    // Sie entwaffnet KEINE Sicherung: Loop-Guard, Rate-Gate, Kostendecke und Anstoss-Riegel
-    // liegen VOR ihr, der Dead-Air-Notaus wurde bereits gefuettert (observeTurn) -> kein
-    // assertConfig-/Footgun-Eintrag (Muster shimTokenStreaming); der Clamp deckelt den Rest.
-    shimExtendHoldMs: numEnv("TELNYX_SHIM_EXTEND_HOLD_MS", process.env.TELNYX_SHIM_EXTEND_HOLD_MS, {
-      fallback: 3000,
-      min: 0,
-      max: 3500,
-    }),
-    // Messschalter fuer EINE unbelegte Anbieter-Frage (s. transcriptionFields, adapters/
-    // telnyx/voice.js): ob der Pro-Call-transcription-Block das Assistant-eigene
-    // transcription-Objekt ERSETZT oder in es hineinMERGED, sagt die Telnyx-Doku nicht.
-    // DEFAULT AN = Bestand byte-identisch (der Block wird weiter gesendet). "false" bringt
-    // transcriptionFields dazu, IMMER {} zu liefern - ausschliesslich fuer EINEN begleiteten
-    // Testanruf, danach zurueckstellen. Kein Dauerbetrieb, kein assertConfig-/Footgun-
-    // Eintrag: der Schalter entwaffnet keine Sicherung, er aendert nur, ob ein optionales
-    // JSON-Feld mitgesendet wird.
-    perCallTranscriptionEnabled: boolEnv(
-      "TELNYX_PER_CALL_TRANSCRIPTION_ENABLED",
-      process.env.TELNYX_PER_CALL_TRANSCRIPTION_ENABLED,
-      { fallback: true },
-    ),
+    // IEL-B1: Digest-Zugang, mit dem unser <Dial><Sip> sich bei ElevenLabs anmeldet - EIN
+    // gemeinsamer Zugang fuer alle gepinnten DIDs. Passwort SECRET - nie loggen/leaken.
+    // .trim() wie bei elevenLabsToolToken: ein eingefuegtes Newline waere ein Zugang, der
+    // nie passt. Mindestlaenge und Boot-Riegel: inbound-path-decision.js / boot-guard.js.
+    sipUser: (process.env.ELEVENLABS_INBOUND_SIP_USER || "").trim(),
+    sipPassword: (process.env.ELEVENLABS_INBOUND_SIP_PASSWORD || "").trim(), // SECRET
+    // IEL-B1: geteiltes Geheimnis des Conversation-Initiation-Webhooks. SECRET - nie
+    // loggen, nie in eine Antwort. Heute liest es nur der Boot-Riegel.
+    initWebhookToken: (process.env.ELEVENLABS_INIT_WEBHOOK_TOKEN || "").trim(), // SECRET
   },
+
+  // ---- Werkzeug-Schluessel (IEL-B9/B10) - KEIN Serverwert, eigener Namespace `werkzeug` ----
+  // RENDER_API_KEY: nur Werkzeuge lesen ihn - scripts/push-elevenlabs.mjs (Ziel-Urteil des
+  // Workspace-Init-Webhooks, nur GET) und scripts/iel-geheimnisse.mjs (GET + PUT auf genau fuenf
+  // benannte Render-Schluessel). Bis IEL-B10 lag er unter voice.elevenLabsInbound; dort stand er
+  // neben den Inbound-Geheimnissen, die das Geheimnis-Werkzeug nie aus der lokalen Konfiguration
+  // lesen darf (Abnahme-Grep der Spec). Eigener Namespace = EIN Leser, keine zweite process.env-Stelle
+  // ausserhalb dieser Datei (G5/G35). Voller Render-Workspace-Zugriff: SECRET, nie loggen, nie in
+  // render.yaml, nie im Dienst gesetzt. Die Render-BASIS ist bewusst KEIN Env-Wert (Konstante in
+  // src/render-api.js).
+  renderApiKey: (process.env.RENDER_API_KEY || "").trim(), // SECRET
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
   // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.
@@ -1068,6 +991,26 @@ const rawConfig = {
   // costTruingAttempts). Danach gilt der Call als abgeschlossen + 'unavailable', damit
   // der Job nicht ewig gegen tote Calls laeuft. min 1 - 0 hiesse "nie abgleichen".
   costTruingMaxAttempts: numEnv("COST_TRUING_MAX_ATTEMPTS", process.env.COST_TRUING_MAX_ATTEMPTS, { fallback: 5, min: 1 }),
+  // KV2-7 (Owner-Entscheidung 3, 2026-08-30): Frist bis zum Zwangs-Abschluss eines
+  // Anrufs, in Stunden. Nach ihr wird geschlossen, auch wenn ein Pflicht-Traeger fehlt
+  // (Matrix 4.6: nachbuchen ja, erstatten nie). VORGABE, kein Default: 48. Sie ist
+  // bewusst grosszuegig - der "binnen Stunden"-Anspruch haengt am Herzschlag (KV2-6),
+  // nicht an dieser Frist. min 1: eine Frist von 0 schloesse jeden Anruf sofort und
+  // machte die Belegsammlung wirkungslos. Muss KLEINER bleiben als das providerseitige
+  // Belegfenster (PROVIDER_COST_RECORD_WINDOW_DAYS = 7, cost-truing.js), sonst schliesst
+  // die Frist erst, wenn der Beleg strukturell nicht mehr zu holen ist.
+  costSettleDeadlineHours: numEnv("COST_SETTLE_DEADLINE_HOURS", process.env.COST_SETTLE_DEADLINE_HOURS, { fallback: 48, min: 1 }),
+  // KV2-9 (Plan 4.4): Mindestalter eines beendeten Gespraechs, bevor der ZWEITE
+  // ElevenLabs-Abruf die Belegzeile von 'vorlaeufig' auf 'belegt' hebt.
+  // DER WERT IST VERMUTET, NICHT GEMESSEN (befund-elevenlabs.md 2): belegt ist
+  // Stabilitaet ab 4 h 20 min (26 byteidentische Abrufe); das Verhalten in den ersten
+  // Sekunden bis Minuten nach Gespraechsende hat NIE jemand gemessen, weil es in der
+  // Kontohistorie keinen juengeren Anruf gab und ein Testanruf verboten war. 15 Minuten
+  // sind der bewusst grosszuegige Abstand dazwischen. Der Abweichungszaehler in der
+  // Sweep-Zeile IST die nachgeholte Messung (Abnahme (f)): zeigt er ueber N Anrufen 0,
+  // darf die Frist gesenkt werden - als OWNER-Entscheidung, nie automatisch.
+  // min 0 (sofort reifen) ist zulaessig und der Rollback-Hebel nach unten.
+  elEvidenceMinAgeMinutes: numEnv("EL_EVIDENCE_MIN_AGE_MINUTES", process.env.EL_EVIDENCE_MIN_AGE_MINUTES, { fallback: 15, min: 0 }),
   // Pflicht-Menge der record_types, die ein GESUNDER Call zeigen muss. CODE-DEFAULT IST
   // DIE LEERE MENGE, und leer bedeutet 'incomplete' - nicht "alles erlaubt", sondern
   // "nichts bewiesen". BEWUSST KEIN geratener Nicht-leer-Default: ein vorbelegtes
@@ -1076,6 +1019,14 @@ const rawConfig = {
   // gesetzt, wenn sie am Live-Beleg gemessen ist (Kandidaten aus der Messung vom
   // 2026-07-20: sip-trunking, call-control, speech-to-text, text-to-speech, recording,
   // inference, ai-voice-assistant - "call" existiert NICHT).
+  // KV2-5: dieser Wert ist seit der Umstellung auf profil-adressierte Pflichtmengen die
+  // Pflicht-Typmenge der ZWEI Telnyx-Profile mit Env-Marker (telnyx_budget,
+  // telnyx_inbound_budget) - unveraendert wie zuvor global.
+  // Das Profil el_convai_sip liest ihn NICHT: es fuehrt seine eigene, am Anbieter gemessene
+  // Menge als Literal in src/billing/kostenarten.js (KOSTENPROFILE[...].pflichttypen).
+  // Eine Aenderung hier bewegt weiterhin beide Telnyx-Profile gleichzeitig - bewusst
+  // akzeptiertes Restrisiko (Spec KV2-5(f)); eine Aufteilung waere eine
+  // Verhaltensaenderung an der Erstattungsbedingung.
   costTruingRequiredRecordTypes: csvEnv(process.env.COST_TRUING_REQUIRED_RECORD_TYPES),
   // Vorbedingung des Flips (P4/P4b lesen DIESELBE Schwelle, bewusst keine zweite):
   // Mindest-Deckungsquote in Prozent. Wird sie unterschritten, meldet jeder Sweep den
@@ -1086,6 +1037,18 @@ const rawConfig = {
   // Eskalation + Owner-Entscheidung (Ursache beheben oder Abbruch nach P3/P5).
   // 8 x 1 h Kadenz (COST_TRUING_SWEEP_INTERVAL_MS) = rund 8 h statt frueher zwei Tage.
   costTruingCoverageStallSweeps: numEnv("COST_TRUING_COVERAGE_STALL_SWEEPS", process.env.COST_TRUING_COVERAGE_STALL_SWEEPS, { fallback: 8, min: 1 }),
+  // KV2-6: Fensterlaenge des HERZSCHLAGS in Stunden ("gab es in den letzten N Stunden
+  // beendete Anrufe mit einem Profil, das Traeger X als Pflicht fuehrt, und wurde KEIN
+  // einziger Beleg dieses Traegers angelegt?"). Diese Klasse haengt an KEINER Faelligkeit
+  // und ist die einzige, die den Zustand vom 19.08. binnen Stunden gemeldet haette.
+  // 0 schaltet den Herzschlag AUS (Rollback-Hebel, Muster OUTAGE_ALERT_WINDOW_MS /
+  // OUTAGE_ALERT_SELF_TEST_INTERVAL_MS) - sichtbar als herzschlag=aus in der Sweep-Zeile,
+  // nicht still. Der Sweep zieht von diesem Fenster zusaetzlich eine ABGELEITETE Karenz
+  // ab (COST_TRUING_DELAY_MINUTES + COST_TRUING_SWEEP_INTERVAL_MS): ein Anruf, der gerade
+  // erst endete, kann noch keinen Telnyx-Beleg haben, und ein Alarm darauf waere der
+  // Dauer-Alarm, den 4.4 verwirft. Ein Fenster KLEINER als diese Karenz ergibt ein leeres
+  // Fenster - dann meldet die Sweep-Zeile herzschlag=aus.
+  kostenHeartbeatFensterH: numEnv("KOSTEN_HEARTBEAT_FENSTER_H", process.env.KOSTEN_HEARTBEAT_FENSTER_H, { fallback: 6, min: 0 }),
   // Ab welcher relativen Abweichung Ist/Schaetzung eine WARN-Zeile faellt (D2).
   costDriftWarnPercent: numEnv("COST_DRIFT_WARN_PERCENT", process.env.COST_DRIFT_WARN_PERCENT, { fallback: 50, min: 0 }),
   // Entprellfenster je Befund-Code (Default 24 h). Ohne sie meldete der Sweep denselben
@@ -1150,24 +1113,37 @@ const rawConfig = {
     min: 0,
   }),
   // LCT P4b (Vollkosten-Boot-Guard): Untergrenze, unter die VOICE_TARIFF_DOMESTIC_CENTS
-  // nicht sinken darf, ohne dass ein Boot-Guard (WARN) anschlaegt, solange die
-  // Abgleich-Deckung duenn ist. GANZZAHL EUR-Cent (wie der Tarif). Herleitung ueber die
-  // teuerste AKTIVIERBARE Konfiguration, Kurs 0,92 (USD-ct -> EUR-ct, Kap.-2.1-Regel):
-  //
-  //   Zustand Assistant-Pfad                   | Schwelle | Herleitung
-  //   im Code UND per Env (TELNYX_AI_ASSISTANT_ENABLED) aktivierbar | 10 | 10,4 USD-ct x 0,92 = 9,568 -> aufgerundet
-  //   nach VOLLZOGENEM Rueckbau aus voice.js + config.js           |  5 |  5,4 USD-ct x 0,92 = 4,968 -> aufgerundet
-  //
-  // AUSLOESER fuer den Wechsel auf 5 ist der GEMERGTE Rueckbau (ein grep, der
-  // startAssistant / ai_assistant_start nicht mehr findet), NICHT die Absicht. Solange der
-  // Pfad im Code steht, gilt 10 - eine Absichtserklaerung entfernt keinen Code-Pfad. Default 10.
-  // min:0 ist die test-neutrale Abschaltung (wie VOICE_TARIFF_DOMESTIC_CENTS=0 in der Suite):
-  // unset faellt auf 10 (armiert) zurueck; 0 deaktiviert den WARN bewusst und sichtbar (er ist
-  // eine Diagnose, kein Geld-Gate - kein per-Default abgeschaltetes Safety-Gate).
+  // nicht sinken darf, ohne dass ein Boot-Guard (WARN) anschlaegt. Seit KV2-10
+  // DECKUNGS-UNABHAENGIG (belowFloor allein ist Ausloeser, s. boot-guard.js). GANZZAHL
+  // EUR-Cent (wie der Tarif). Neuherleitung KV2-10 aus der gemessenen Vollkosten-
+  // Stichprobe statt aus der (noch) aktivierbaren Assistant-Konfiguration: p95 der
+  // Vollkosten je Minute der Route el_convai_sip (B2+O2: 0,1576 USD x 0,92 = 14,5 ->
+  // aufgerundet 15; ohne Eigen-Achsen, Kurs 0,92). Mit gesetztem Grundbetrag
+  // (VOICE_TARIFF_GRUNDBETRAG_CENTS) kann die Schwelle sinken - Neuherleitung dann ueber
+  // den Tarifpaar-Report (cost-calibration.js). min:0 ist die test-neutrale Abschaltung
+  // (wie VOICE_TARIFF_DOMESTIC_CENTS=0 in der Suite): unset faellt auf 15 (armiert)
+  // zurueck; 0 deaktiviert den WARN bewusst und sichtbar (er ist eine Diagnose, kein
+  // Geld-Gate - kein per-Default abgeschaltetes Safety-Gate).
   voiceTariffFullCostFloorCents: numEnv(
     "VOICE_TARIFF_FULL_COST_FLOOR_CENTS",
     process.env.VOICE_TARIFF_FULL_COST_FLOOR_CENTS,
-    { fallback: 10, min: 0 },
+    { fallback: 15, min: 0 },
+  ),
+  // KV2-10 (Owner-Entscheidung 5): Grundbetrag des ZWEITEILIGEN Tarifs, je Route
+  // (Kostenprofil) in GANZZAHL EUR-Cent je ANRUF - csv-Karte profil:cents. Der Minutensatz
+  // bleibt voiceTariffDomesticCents (Outbound-Routen) bzw. voiceTariffInboundCents
+  // (Inbound-Routen); der Tarifpaar-Waechter (cost-calibration.js) prueft beide gegeneinander.
+  // Herkunft des Vorschlags: KV2-10-Stichprobe, 20 ct + 18 ct/min fuer el_convai_sip.
+  // GESETZT wird der Wert vom Menschen (Owner-Entscheidung 6: keine automatische
+  // Justierung). Default {} = alle Routen 0 ("noch nicht gesetzt") - genau die heutige
+  // Reserve-Wahrheit: dieser Grundbetrag geht in KEINE Reserve-Rechnung (KV2-10
+  // Scope-Riegel), die waere eine eigene Phase. OFFENER PUNKT: der Waechter misst erst,
+  // wenn eine je-Anruf-Quelle fuer die Eigen-Achsen existiert (eigenCentJeAnruf, s.
+  // cost-calibration.js) - bis dahin meldet jede Zeile tarifpaar_zu_wenig_proben.
+  voiceTariffGrundbetragCentsJeRoute: routeCentsEnv(
+    "VOICE_TARIFF_GRUNDBETRAG_CENTS",
+    process.env.VOICE_TARIFF_GRUNDBETRAG_CENTS,
+    Object.values(KOSTENPROFIL),
   ),
   voiceTariffDomesticPrefixes: VOICE_TARIFF_DOMESTIC_PREFIXES,
   // Per-Tenant Default-Kostendecke (GANZZAHL Cents, G26). ZWEI Wirkungen (P2a/D3):
@@ -1271,6 +1247,54 @@ const rawConfig = {
     process.env.OUTAGE_ALERT_SELF_TEST_INTERVAL_MS,
     { fallback: OUTAGE_ALERT_SELF_TEST_DAYS_DEFAULT * MS_PER_DAY, min: 0 },
   ),
+  // ---- Inbound-Ausfall-Melder (IEX-B1, tasks/iex-b-spec.md) ----
+  // Eigene Klasse fuer den systematischen Ausfall des EL-INBOUND-Pfads: Erfolg ist hier
+  // die gelungene Uebergabe an den Agenten, NICHT answeredAt (seit der Sofortannahme
+  // traegt jeder eingehende Anruf answeredAt - die Outbound-Definition ergaebe einen
+  // Melder, der nie ausloest). 0 = Melder KOMPLETT AUS (Rollback-Hebel, Muster
+  // outageAlertWindowMs).
+  //
+  // 6 h statt der Outbound-Stunde: der Melder urteilt rueckwaerts, ein laengeres Fenster
+  // verzoegert nichts, es sammelt mehr Beleg. Outbound erreicht in einer Stunde genug
+  // Versuche, Inbound nicht - heute laeuft EIN Tenant ueber EL, nach dem Rollout drei DIDs
+  // mit niedriger Einzelfrequenz. Mit dem Outbound-Fenster koennte ein Totalausfall
+  // stundenlang unbemerkt bleiben, schlicht weil in keiner einzelnen Stunde zwei Anrufe
+  // eingehen. ANNAHME dahinter (heute nicht gemessen, es gibt die Zahlen noch nicht):
+  // wenige Anrufe je Stunde ueber drei DIDs, und ein Rueckfall ist im Normalbetrieb
+  // selten. Nachziehen zwei Wochen nach dem Rollout aus der Prod-DB (GEBUNDEN vs.
+  // RUECKFALL je Woche) - reine Env-Aenderung, kein Code-Deploy.
+  inboundOutageAlertWindowMs: numEnv(
+    "INBOUND_OUTAGE_ALERT_WINDOW_MS",
+    process.env.INBOUND_OUTAGE_ALERT_WINDOW_MS,
+    { fallback: INBOUND_OUTAGE_ALERT_WINDOW_HOURS_DEFAULT * MS_PER_HOUR, min: 0 },
+  ),
+  // K1 (kleines Volumen): 2 statt der Outbound-3. Ein gezaehlter Fehler ist hier kein
+  // Fremdverschulden, sondern UNSER eigener Vermerk (elFallbackAt wird an genau einer
+  // Stelle gesetzt) - jede solche Zeile heisst "ein Anrufer hat statt des Assistenten den
+  // Fehlersatz gehoert". Zwei davon im Fenster OHNE eine einzige gelungene Uebergabe
+  // dazwischen (K1 verlangt erfolge===0 bzw. mehrere Tenants) ist kein Rauschen.
+  inboundOutageAlertMinFailures: numEnv(
+    "INBOUND_OUTAGE_ALERT_MIN_FAILURES",
+    process.env.INBOUND_OUTAGE_ALERT_MIN_FAILURES,
+    { fallback: 2, min: 1 },
+  ),
+  // Mindestnenner wie Outbound: die Grenze, ab der ein Anteil ueberhaupt aussagt. Darunter
+  // entscheidet K1.
+  inboundOutageAlertMinAttempts: numEnv(
+    "INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS",
+    process.env.INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS,
+    { fallback: 20, min: 1 },
+  ),
+  // K2-Schwelle in Prozent (ganzzahlig): 10 statt der Outbound-20. Ein gescheitertes
+  // Inbound-Gespraech ist fuer den Anrufer ein Totalverlust (kein Retry wie beim
+  // Outbound-Auftrag). Konsistenzprobe an der Klassengrenze: bei versuche=20 verlangt K2
+  // fehler*100 >= 20*10, also fehler>=2 - exakt minFailures. K1 und K2 partitionieren die
+  // Volumen-Achse damit nahtlos, K2 ist an der Grenze nie schwaecher als K1.
+  inboundOutageAlertFailSharePercent: numEnv(
+    "INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT",
+    process.env.INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT,
+    { fallback: 10, min: 0, max: 100 },
+  ),
   // C8 (Owner-Entscheidung F-8, PLAN-OUTBOUND-RESILIENZ.md Abschnitt 9): "Darf eine
   // Kuendigung wegen einer Plattform-Bindung haengen bleiben? Ja, mit HOLD + Audit +
   // 24-h-Eskalation." Mindestalter (ab tenant.suspendedAt), ab dem ein HOLD
@@ -1281,6 +1305,17 @@ const rawConfig = {
     "PLATFORM_HOLD_ESCALATION_MAX_AGE_MS",
     process.env.PLATFORM_HOLD_ESCALATION_MAX_AGE_MS,
     { fallback: PLATFORM_HOLD_ESCALATION_HOURS_DEFAULT * MS_PER_HOUR, min: 0 },
+  ),
+  // GP-P0 (PLAN-GELDPFAD.md 2): Mindestdauer, die ein AKTIVER, verifizierter Subscriber
+  // ohne Live-Nummer bleiben darf, bevor der Beobachtungs-Zweig des Stunden-Sweeps GENAU
+  // EINEN Betreiber-Befund erzeugt. Gemessen ab dem Beginn der laufenden Stripe-
+  // Abrechnungsperiode (billing/period.js#resolvePeriodStartIso - EIN Zeitbegriff, kein
+  // zweiter Anker). 0 = Beobachtung KOMPLETT AUS (Rollback-Hebel, Muster
+  // platformHoldEscalationMaxAgeMs).
+  paidWithoutNumberGraceMs: numEnv(
+    "PAID_WITHOUT_NUMBER_GRACE_MS",
+    process.env.PAID_WITHOUT_NUMBER_GRACE_MS,
+    { fallback: PAID_WITHOUT_NUMBER_GRACE_HOURS_DEFAULT * MS_PER_HOUR, min: 0 },
   ),
   // ---- Drift-Waechter (OUTBOUND-E4, F4, PLAN-OUTBOUND-RESILIENZ.md E-6) ----
   // Mindestfrist zwischen zwei beanspruchten Laeufen (PM-26, Single-Flight/Deploy-
@@ -1342,8 +1377,14 @@ const rawConfig = {
     min: 1,
     max: 28,
   }),
-  // ElevenLabs-Fixkosten in GANZZAHL EUR-Cent (belegt: 6,00 USD/Monat -> 600 EUR-Cent).
-  platformFixedCostCentsPerMonth: numEnv(
+  // KV2-10 (Katalogzeile #8, Waehrungs-Klarstellung): ElevenLabs-Grundgebuehr in GANZZAHL
+  // US-Cent (LISTENPREIS; belegt: next_invoice.subtotal_cents = 600 = 6,00 USD,
+  // befund-elevenlabs.md 3). Vor KV2-10 hiess der Key platformFixedCostCentsPerMonth und
+  // wurde in api-billing.js als EUR-Cent angezeigt, obwohl die Rechnung auf US-Cent lautet;
+  // jetzt rechnet die Route ueber DEN EINEN Kurs nach EUR-Cent um und gibt den
+  // USD-Listenpreis separat mit. Der ENV-NAME bleibt unveraendert (Rename einer Env ist
+  // eine eigene Entscheidung, Praezedenz SKIP_TWILIO_SIGNATURE_CHECK).
+  platformFixedCostUsdCentsPerMonth: numEnv(
     "PLATFORM_FIXED_COST_CENTS_PER_MONTH",
     process.env.PLATFORM_FIXED_COST_CENTS_PER_MONTH,
     { fallback: 600, min: 0 },
@@ -1354,11 +1395,31 @@ const rawConfig = {
     min: 0,
   }),
   // ---- Abo-Buchung (Stripe Recurring, W4) ----
-  // Stripe-Price-Ids (recurring monatlich, EUR) je Tier. Leer = Tier nicht buchbar
-  // (priceIdForPlan -> null -> Route 500, KEIN Boot-Stop). Opake price_-Referenzen,
+  // Stripe-Price-Ids (recurring monatlich, EUR) je Tier. Leer ist seit GP-P6 bei
+  // PAYMENT_ENABLED=true ein BOOT-REFUSAL (boot.js#assertPricedPlans gegen PLAN_CATALOG);
+  // bei PAYMENT_ENABLED=false bleibt leer folgenlos. Opake price_-Referenzen,
   // KEINE Secrets.
   stripeStarterPriceId: process.env.STRIPE_STARTER_PRICE_ID || "",
   stripeBusinessPriceId: process.env.STRIPE_BUSINESS_PRICE_ID || "",
+  // ---- Preis-Waechter (GP-P6, PLAN-GELDPFAD.md) ----
+  // Mindestabstand zweier Preis-Pruefungen. Der Waechter haengt im Stunden-Sweep, prueft
+  // aber nur einmal am Tag (Owner-Entscheidung 11.09.2026, Frage 12): Stripe-Preise
+  // aendern sich seltener als Telefonie-Konfiguration, und jede Pruefung ist ein
+  // Anbieter-Aufruf. 0 = der Waechter ist KOMPLETT AUS (Rollback-Hebel, Muster
+  // outboundDriftMinIntervalMs).
+  priceDriftMinIntervalMs: numEnv("PRICE_DRIFT_MIN_INTERVAL_MS", process.env.PRICE_DRIFT_MIN_INTERVAL_MS, {
+    fallback: MS_PER_DAY,
+    min: 0,
+  }),
+  // Aufeinanderfolgende Laeufe OHNE Urteil (Netzfehler/fehlendes Lese-Scope), nach denen
+  // der Waechter seine eigene Unwissenheit meldet - GENAU EINMAL. Ein einzelner
+  // Netzfehler ist keine Betreiber-Meldung wert, ein dauerhaft fehlendes Scope sehr wohl
+  // (Owner-Frage 13). 0 = Unwissenheits-Eskalation AUS.
+  priceDriftUnknownEscalateAfter: numEnv(
+    "PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER",
+    process.env.PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER,
+    { fallback: 3, min: 0 },
+  ),
   // Stripe-Webhook-Signing-Secret (whsec_...). SECRET - nie loggen/leaken. Leer +
   // PAYMENT_ENABLED -> assertConfig Boot-Refusal (Webhook fail-closed unverifizierbar).
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
@@ -1446,6 +1507,13 @@ const rawConfig = {
   // brauchen (EINE Quelle, G5). Ungesetzt (lokal) -> Sentinel statt leerem String:
   // "unbekannt" ist eine ehrliche Antwort, "" saehe im Smoke wie ein Feldfehler aus.
   deployedCommit: process.env.RENDER_GIT_COMMIT || DEPLOYED_COMMIT_UNKNOWN,
+  // E7 (O-4/O-5): von OpenAI zugewiesener Domain-Ownership-Token der Einreichung.
+  // .trim(), weil der Wert beim Einfuegen ins Dashboard leicht einen Zeilenumbruch
+  // mitnimmt - der waere Teil des "exakten Tokens" und liesse die Verifikation
+  // unsichtbar scheitern. Wird beim PROZESSSTART gelesen: ein spaeter nachgetragener
+  // Token wirkt erst mit dem naechsten Start des Dienstes. Er authentifiziert
+  // niemanden - er ist ein statischer Eigentumsnachweis fuer den HOST, kein Credential.
+  openaiAppsChallengeToken: (process.env.OPENAI_APPS_CHALLENGE_TOKEN || "").trim(),
   // Passwort-Schutz fuer Dashboard + API im oeffentlichen Hosting (User: admin). Leer = offen (nur lokal ok).
   dashboardPassword: process.env.DASHBOARD_PASSWORD || "",
   sendSmsSummary: boolEnv("SEND_SMS_SUMMARY", process.env.SEND_SMS_SUMMARY, { fallback: true }),
@@ -1521,6 +1589,32 @@ const rawConfig = {
     // grosser Wert oeffnet den Doppelkauf-Pfad. Clamp (kein Boot-Refusal, Schwester-Muster wie
     // TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS): numEnv klemmt n>max auf max.
     { fallback: 0, min: 0, max: MS_PER_DAY - 1 },
+  ),
+  // GP-P3 (PLAN-GELDPFAD.md 2): Versuchsdeckel je Mandant fuer den AUTOMATISCHEN
+  // Wiederanlauf des Nummern-Provisionings nach einem Kartenwechsel. Gezaehlt werden die
+  // terminal 'failed' Nummern-Datensaetze des Mandanten (state-ops failedNumberCount).
+  // Erschoepft -> needs_manual_reconcile, Uebergabe an den Handbetrieb (POST
+  // /api/onboard/retry, admin-only - der Deckel gilt dort NICHT, sonst gaebe es keinen
+  // Ausweg). 0 = automatischer Wiederanlauf KOMPLETT AUS (Rollback-Hebel, Muster
+  // provisioningRedriveMaxAgeMs) - ausdruecklich NICHT "sofort erschoepft". Der Deckel
+  // ERSETZT keine Cap (MAX_NUMBERS/MAX_NUMBERS_PER_TENANT bleiben unberuehrt), er
+  // ergaenzt sie an genau der Achse, an der sie strukturell nicht greifen.
+  provisioningRetryMaxAttempts: numEnv(
+    "PROVISIONING_RETRY_MAX_ATTEMPTS",
+    process.env.PROVISIONING_RETRY_MAX_ATTEMPTS,
+    { fallback: 3, min: 0 },
+  ),
+  // GP-P4 (PLAN-GELDPFAD.md 2): Mindestfrist zwischen zwei AUTOMATISCHEN Anstoessen
+  // DESSELBEN Mandanten durch den zeitgesteuerten Wiederanlauf (Entprellung). Gemessen ab
+  // dem letzten beanspruchten Anstoss (Zeitanker in state.outageAlerts, Muster drift:lauf).
+  // Default 24 h: der Sweep haengt im Stunden-Takt - eine kuerzere Frist verbrennt den
+  // Deckel PROVISIONING_RETRY_MAX_ATTEMPTS=3 in drei Stunden. 0 = der zeitgesteuerte
+  // Zweig ist KOMPLETT AUS (Rollback-Hebel, Muster outboundDriftMinIntervalMs); der
+  // ereignisgetriebene Wiederanlauf nach Kartenwechsel (GP-P3) bleibt davon unberuehrt.
+  provisioningRetryMinIntervalMs: numEnv(
+    "PROVISIONING_RETRY_MIN_INTERVAL_MS",
+    process.env.PROVISIONING_RETRY_MIN_INTERVAL_MS,
+    { fallback: MS_PER_DAY, min: 0 },
   ),
   // tenant-prolif-d: Grace-Periode (TAGE) bis zum automatischen DID-Release eines
   // suspendierten Tenants. 0 (Default) = Observe-Only fail-closed: der Reconcile gibt
@@ -1598,6 +1692,39 @@ const rawConfig = {
     fallback: 47000,
     min: 0,
     max: CONSULT_OPEN_MAX_MS,
+  }),
+  // P2 (W2/E-1): der Halt des ElevenLabs-Rueckfrage-Webhooks ist GESTAFFELT - erst wird
+  // geprueft, ob der Kanal traegt, dann wird auf die Antwort gewartet. Eine pauschale
+  // Frist kann "kann hier ueberhaupt jemand antworten?" (Millisekunden) und "wie lautet
+  // die Antwort?" (Sekunden) nicht gleichzeitig beantworten.
+  // ENV-AENDERBAR und NICHT Modul-Konstante (E-1): genau die Zahl, die den Kanal toeten
+  // kann, muss ohne Code-Aenderung korrigierbar sein.
+  // ALLE DREI SIND VORLAEUFIG (E-6): fuer Stufe 0 und 1 existiert KEINE Messung, weil
+  // genau diese Zeitpunkte bis heute nicht protokolliert werden (N-10). Sie sind in EINE
+  // Richtung sicher gewaehlt - zu kurz heisst "der Agent redet weiter", zu lang heisst
+  // "Stille am Telefon". P3 liefert die Telemetrie, aus der beide nachkalibriert werden.
+  // Stufe 0: wurde die Frage an einen pollenden Client AUSGELIEFERT?
+  elConsultDeliveryMs: numEnv("EL_CONSULT_DELIVERY_MS", process.env.EL_CONSULT_DELIVERY_MS, {
+    fallback: 5000,
+    min: 0,
+    max: EL_CONSULT_STAGE_MAX_MS,
+  }),
+  // Stufe 1: hat der Client quittiert? ZUSAETZLICH zu Stufe 0 (Summe = 10 000 ms ab
+  // Entstehung). Das Ausbleiben der Quittung IST der Berechtigungstest: fehlt die
+  // Connector-Berechtigung fuer answer_consult, laeuft die Quittung in denselben Dialog
+  // und bleibt aus - Abbruch nach 10 s statt nach 47 s (N-10, Aussage des Eigentuemers).
+  elConsultAckMs: numEnv("EL_CONSULT_ACK_MS", process.env.EL_CONSULT_ACK_MS, {
+    fallback: 5000,
+    min: 0,
+    max: EL_CONSULT_STAGE_MAX_MS,
+  }),
+  // Stufe 2: die eigentliche Antwort, GESAMT ab Entstehung. GEMESSEN hergeleitet: alle je
+  // beantworteten Rueckfragen dieses Tenants kamen in 7,8-19,6 s (5 Faelle, gesamte
+  // Historie) - 30 s tragen diesen Normalfall mit Marge.
+  elConsultAnswerMs: numEnv("EL_CONSULT_ANSWER_MS", process.env.EL_CONSULT_ANSWER_MS, {
+    fallback: 30000,
+    min: 0,
+    max: EL_CONSULT_STAGE_MAX_MS,
   }),
   // Self-Service-Schicht (I9): getrenntes Tenant-Dashboard + Self-Service-Settings-
   // Route hinter eigenem Reife-Flag. DEFAULT AUS (fail-closed): die Self-Service-
@@ -1694,6 +1821,23 @@ const rawConfig = {
     fallback: 15000,
     min: 0,
   }),
+  // IE2 (PLAN-INBOUND-PARITAET.md): Takt des wiederkehrenden Geld-Waechters je aktivem
+  // Anruf (telephony/budget-watchdog.js). Er fragt die EINE Achse (blockingBudgetAxis) und
+  // beendet ueber den EINEN Terminierungspfad - B8: alle vier bestehenden Fragestellen sind
+  // ereignisgebunden (Turn-Runde, Shim-Turn, EL-Werkzeug-Webhook, /voice/*-Re-Attach); ein
+  // Anruf ohne Turn und ohne Werkzeug erreicht die Decke nie.
+  // Der Betrag IST die bewusst akzeptierte Ueberziehung zwischen zwei Runden: hoechstens
+  // dieser Takt an Gespraechszeit je laufendem Leg (bei VOICE_TARIFF_DEFAULT_CENTS=30
+  // rund 7,5 Cent), nicht kumulativ - jede Runde liest den Ist-Stand. Deutlich unter der
+  // Abrechnungsminute (Telnyx rundet auf 60 s auf), damit die Ueberziehung keine ganze
+  // Carrier-Minute erreicht.
+  // 0 = KOMPLETT AUS (Rueckfall-Hebel ohne Deploy, Muster PRICE_DRIFT_MIN_INTERVAL_MS).
+  // Max 600000 (10 min) gegen absurde Werte - laenger als der Max-Dauer-Cap waere sinnlos.
+  budgetWatchdogIntervalMs: numEnv("BUDGET_WATCHDOG_INTERVAL_MS", process.env.BUDGET_WATCHDOG_INTERVAL_MS, {
+    fallback: 15000,
+    min: 0,
+    max: 600000,
+  }),
   // A6 (F11): Watchdog-Obergrenze (ms) fuer den SIGTERM/SIGINT-Graceful-Shutdown. Der Drain
   // laesst in-flight Requests fertig und flusht dann den Store; laeuft er laenger, kappt der
   // Watchdog hart mit exit(0). Default 8000 (Render sendet nach SIGTERM erst nach ~30s SIGKILL
@@ -1736,10 +1880,9 @@ const rawConfig = {
   // und agentTurn spricht diesen Satz, sobald der Tool-Loop weiterlaeuft (hoechstens EINMAL
   // pro Turn). DEFAULT AUS (fail-closed): aus -> der Prompt-Block entfaellt ersatzlos
   // (byte-identischer Systemprompt) und es geht kein zusaetzliches Fragment auf die Leitung.
-  // Wirkt NUR zusammen mit einem Abnehmer, also im Shim-Pfad mit
-  // TELNYX_SHIM_TOKEN_STREAMING=true (AL-P7 ist Vorbedingung); die Budget-Engine reicht
-  // keinen Abnehmer durch und bleibt unberuehrt. Kein Footgun-Eintrag: das Flag entwaffnet
-  // keine Sicherung, es aendert nur, WAS gesprochen wird.
+  // Der Prompt-Block wirkt; einen Abnehmer fuer den gesprochenen Ueberbrueckungssatz gibt
+  // es seit IE6-S1 nicht mehr (Rest-Befund R-1, entfaellt mit IE6 Stufe 3). Kein
+  // Footgun-Eintrag: das Flag entwaffnet keine Sicherung, es aendert nur, WAS gesprochen wird.
   thinkingSignalEnabled: boolEnv("THINKING_SIGNAL_ENABLED", process.env.THINKING_SIGNAL_ENABLED, {
     fallback: false,
   }),
@@ -1776,12 +1919,57 @@ const rawConfig = {
   // der sich an einen Env-Flip erinnert. Vor dem Launch gehoert hier ausschliesslich ein
   // Account hinein, der uns gehoert.
   ownerSelfCallTenantIds: csvEnv(process.env.OWNER_SELF_CALL_TENANT_IDS),
+  // IEP-P6: Scharfschalter des INBOUND-Owner-Tons - ruft der Owner von seiner hinterlegten
+  // eigenen Nummer an, wird er per Vornamen begruesst. DEFAULT AUS (fail-closed): aus ->
+  // callerIsOwner ist fuer JEDEN Anruf false -> Fremd-Wortlaut ueberall, exaktes
+  // Bestandsverhalten. Er aendert AUSSCHLIESSLICH die Anrede: kein Datenkanal, kein
+  // Werkzeug, kein Recht haengt daran (Owner-Entscheidung 5).
+  // BEWUSST NICHT OWNER_SELF_CALL_ENABLED mitbenutzt: jener Schalter ist in
+  // PLAN-SECURITY.md als Launch-Ruecknahme der OUTBOUND-Offenlegungs-Ausnahme eingetragen.
+  // Ein geteilter Schalter machte eine Inbound-Abschaltung zum Offenlegungs-Ereignis im
+  // Outbound und umgekehrt. Kein Footgun-Eintrag: er entwaffnet keine Sicherung.
+  inboundOwnerGreetingEnabled: boolEnv(
+    "INBOUND_OWNER_GREETING_ENABLED",
+    process.env.INBOUND_OWNER_GREETING_ENABLED,
+    { fallback: false },
+  ),
+  // IEP-P6: WELCHE Tenants den Owner-Ton ueberhaupt ausloesen duerfen. LEER = NIEMAND, nie
+  // JEDER (Lehre streaming-armierung-allowlist). Einmal gesplittet/getrimmt (csvEnv).
+  // Warum die Liste traegt: die hinterlegte eigene Nummer ist format- und land-, NICHT
+  // eigentums-verifiziert und ueber POST /api/self-service/private-number von jedem
+  // eingeloggten Tenant setzbar (PLAN-SECURITY.md, Launch-Blocker).
+  inboundOwnerGreetingTenantIds: csvEnv(process.env.INBOUND_OWNER_GREETING_TENANT_IDS),
   // Rate-Limit pro IP und Minute fuer alle Routen ausser /voice (Provider-Webhooks;
   // localhost-Socket ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min)
   // plus Interaktionen.
   rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", process.env.RATE_LIMIT_PER_MIN, {
     fallback: 120,
     min: 0,
+  }),
+  // SEC-P3: Herkunftspruefung auf den zustandsaendernden Self-Service-Routen. Default AN.
+  // Der Schalter existiert ALS RUECKFALL, nicht als Bequemlichkeit: bricht ein Deployment
+  // die Annahme "Origin-Host == Request-Host" (z.B. ein Proxy, der den Host-Header
+  // umschreibt), ist das Dashboard sonst nicht mehr bedienbar. BEWUSST NICHT in
+  // PRODUCTION_FOOTGUNS: jeder Treffer dort ist FATAL - ein Not-Aus, der den Boot
+  // verweigert, ist kein Not-Aus.
+  csrfEnforce: boolEnv("CSRF_ENFORCE", process.env.CSRF_ENFORCE, { fallback: true }),
+  // E5 (MCP-Spec T-06): ADDITIVE Allowlist der /mcp-Herkunftswache. Leer = nur der
+  // angekuendigte Origin (PUBLIC_URL) ist erlaubt; leere Liste heisst NIE "alles
+  // erlaubt". Heilweg, wenn ein echter Client mit unbekanntem Origin ausgesperrt wird:
+  // den Host aus der Logzeile `grund=mcp_cross_origin origin=<host>` hier nachtragen.
+  // Jeder Eintrag MUSS ein absoluter http(s)-Origin ohne Pfad sein - ein Tippfehler
+  // sperrt sonst still den gemeinten Partner aus und wird deshalb beim Boot abgelehnt
+  // (boot-guard.angekuendigterOriginFindings).
+  mcpAllowedOrigins: csvEnv(process.env.MCP_ALLOWED_ORIGINS),
+  // E5/Owner-Entscheidung E-4: NOTVENTIL der /mcp-Herkunftswache, Default SCHARF. Wie
+  // csrfEnforce (s.o.) existiert der Schalter ALS RUECKFALL, nicht als Bequemlichkeit -
+  // und aus einem noch haerteren Grund: die Wache antwortet 403 VOR mcpAuth, ein
+  // Origin-sendender Client sieht dann nie die 401-Bearer-Challenge (src/auth.js,
+  // deny401) und kann sich nicht einmal neu autorisieren. Ohne Schalter ist der einzige
+  // Reparaturweg ein Deploy. BEWUSST NICHT in PRODUCTION_FOOTGUNS: jeder Treffer dort ist
+  // FATAL - ein Not-Aus, der den Boot verweigert, ist kein Not-Aus.
+  mcpOriginEnforce: boolEnv("MCP_ORIGIN_ENFORCE", process.env.MCP_ORIGIN_ENFORCE, {
+    fallback: true,
   }),
   // NUR fuer lokale Tests ohne Twilio (z.B. curl gegen /voice/*). Niemals im Hosting setzen!
   skipTwilioSignatureCheck: boolEnv(
@@ -1940,12 +2128,9 @@ const rawConfig = {
   platformAlertMailTo: process.env.PLATFORM_ALERT_MAIL_TO || "",
 
   // ---- Voice-Engine ----
-  // "budget"  = Provider-eigene STT/TTS (Telnyx TeXML) + Claude Haiku (quasi gratis, Default)
-  // "realtime"= OpenAI Realtime API (Speech-to-Speech, Barge-in, ~0,30-0,50 EUR/min)
-  voiceEngine: process.env.VOICE_ENGINE || VOICE_ENGINE.BUDGET,
-  openaiApiKey: process.env.OPENAI_API_KEY || "",
-  realtimeModel: process.env.REALTIME_MODEL || "gpt-realtime",
-  realtimeVoice: process.env.REALTIME_VOICE || "alloy",
+  // Fester Statuswert (IE6-S2), nicht konfigurierbar: ein gelesener, aber wirkungsloser
+  // Env-Wert waere eine Statusluege (G2), ein Schalter ohne zweite Stellung toter Code (G9).
+  voiceEngine: VOICE_ENGINE.BUDGET,
 
   // ---- Spracherkennung (STT) ----
   // Neutrale Wahl der Erkennungs-Engine, EINMAL fuer alle Pfade. Jeder Telefonie-Adapter
@@ -2094,25 +2279,27 @@ function guardedConfig(target, path = "config") {
 // Fatal-Push, kein Doppel-Eval. rawConfig selbst bleibt der interne Speicher, wird aber
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
-  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
-  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
+  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "budgetWatchdogIntervalMs", "rateLimitPerMin", "csrfEnforce", "mcpAllowedOrigins", "mcpOriginEnforce", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "inboundOutageAlertWindowMs", "inboundOutageAlertMinFailures", "inboundOutageAlertMinAttempts", "inboundOutageAlertFailSharePercent", "platformHoldEscalationMaxAgeMs", "paidWithoutNumberGraceMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso", "priceDriftMinIntervalMs", "priceDriftUnknownEscalateAfter"],
+  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "provisioningRetryMaxAttempts", "provisioningRetryMinIntervalMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -
   // eigener Namespace statt Anhaengsel an auth/billing (eigenstaendige Domaene, s.
   // brevo-mail.js/smtp-mail.js/billing/cancellation-mail.js). HTTP-Fortsetzung:
   // brevoApiKey ergaenzt (Render sperrt SMTP auf kostenlosen Plaenen) -> 6.
   mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom", "platformAlertMailTo"],
-  llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
-  telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
-  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
-  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
-  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
-  server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
+  llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "llmProviderFallback", "llmBillingLatchCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
+  telnyx: ["telnyxElevenLabs"],
+  voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
+  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
+  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
+  server: ["port", "publicUrl", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],
   research: ["researchEnabled", "researchMaxUses", "researchSearchFeeCents", "lookupEnabled", "lookupSearchFeeCents", "exaApiKey", "exaApiBase"],
+  // IEL-B10: Schluessel, die nur Werkzeuge (scripts/) lesen - nie der Server.
+  werkzeug: ["renderApiKey"],
 });
 
 // EINE Gruppen-Fabrik (G5) fuer beide Oberflaechen: jedes Blatt ist Getter+Setter auf
@@ -2215,14 +2402,6 @@ function isInsecureHttpIssuer(issuerUrl) {
   );
 }
 
-// C-Telnyx-Backstop (PLAN-TELNYX-AI-ASSISTANT.md, P10): Obergrenze fuer die per-callId-
-// Shim-Turn-Rate. telnyxShimMaxTurnsPerMin ist die Token-/Toll-Fraud-Bremse VOR agentTurn
-// (Regel 1); numEnv erzwingt nur min:1, keine Obergrenze. Ein absurd hoher Wert im Hosting
-// bei aktivem Assistant setzt die Bremse praktisch ausser Kraft -> fail-closed. Backstop,
-// KEIN Tuning-Knopf (Muster metrics.js MAX_TRACKED_CALLS) -> Modul-Konstante, keine Env-Var.
-// 120 = grosszuegig (4x Default 30, 2 Turns/s), aber weit unter fraud-relevanten Werten.
-const TELNYX_SHIM_MAX_TURNS_CEILING = 120;
-
 // Produktions-Footguns (H1): Konfigurationen, die im oeffentlichen Hosting (Render
 // setzt RENDER_EXTERNAL_URL) das Dashboard/API oeffentlich oeffnen ODER ein Safety-
 // Gate lautlos abschalten. Eine vergessene/verkehrte Env darf NICHT als blosse
@@ -2262,21 +2441,28 @@ const PRODUCTION_FOOTGUNS = Object.freeze([
       "STORE_BACKEND ist nicht 'pg' - der json-Store liegt auf Renders fluechtigem Dateisystem (Datenverlust bei jedem Deploy/Neustart). Im Hosting STORE_BACKEND=pg + DATABASE_URL Pflicht.",
   },
   {
+    // E8 (PLAN-OPENAI.md Etappe 8): der ANGEKUENDIGTE Origin (die Audience, die der
+    // Server per Well-known bewirbt) muss mit der kanonischen MCP-Audience
+    // uebereinstimmen - sonst kann sich kein Client je erfolgreich autorisieren.
+    // Bewusst redundant zu angekuendigterOriginFindings() (src/boot-guard.js, laeuft
+    // schon unconditional, nicht nur in Produktion, und wuerde denselben Boot heute
+    // schon verweigern): dieser Eintrag macht die Abnahme AUCH ueber den
+    // Produktions-Footgun-Kanal sichtbar, ohne eine zweite Vergleichsformel zu
+    // erfinden - fuerAudienceVergleich/kanonischeAudience sind dieselben Funktionen.
+    trifftZu: (cfg) =>
+      Boolean(cfg.auth.oauthAudience) &&
+      fuerAudienceVergleich(cfg.auth.oauthAudience) !== kanonischeAudience(cfg.server.publicUrl),
+    befund:
+      "OAUTH_AUDIENCE weicht von der kanonischen MCP-Audience (PUBLIC_URL + /mcp) ab - " +
+      "Wert leeren (kanonischer Default) oder exakt darauf setzen.",
+  },
+  {
     // DEV_LOGIN_ENABLED ist ein lokaler Login-Shim (umgeht WorkOS) - im Hosting NIE erlaubt.
     // config.auth.devLoginEnabled ist auf Render ohnehin neutralisiert (=== false); diese zweite,
     // unabhaengige Sperre liest die ROHE Env, damit eine versehentlich auf Render gesetzte
     // DEV_LOGIN_ENABLED=true den Boot verweigert statt still ignoriert zu werden (Regel 3).
     trifftZu: () => process.env.DEV_LOGIN_ENABLED === "true",
     befund: "DEV_LOGIN_ENABLED=true - Login-Shim umgeht WorkOS (im Hosting unzulaessig).",
-  },
-  {
-    // C-Telnyx: aktiver Assistant + entwaffnete Shim-Rate-Bremse (Regel 1). Nur wenn das
-    // Flag an ist (Flag aus -> Shim 404, Bremse inert -> kein Footgun).
-    trifftZu: (cfg) =>
-      cfg.telnyx?.telnyxAssistant?.enabled &&
-      cfg.telnyx?.telnyxAssistant?.shimMaxTurnsPerMin > TELNYX_SHIM_MAX_TURNS_CEILING,
-    befund:
-      "TELNYX_SHIM_MAX_TURNS_PER_MIN zu hoch - die per-Call-Turn-Bremse (Token-/Toll-Fraud) waere praktisch aus (im Hosting bei aktivem Assistant unzulaessig).",
   },
 ]);
 
@@ -2315,8 +2501,14 @@ const REQUIRED_CONFIG = Object.freeze([
     // nicht-transient, also Degradation in jedem Turn, und das erst im Anruf sichtbar.
     // ANTHROPIC_API_KEY bleibt bewusst UNBEDINGT Pflicht (eine Lockerung waere das
     // Aufweichen einer bestehenden Pruefung ohne Not - B5 stellt den Live-Anbieter nicht um).
-    fehlt: () => config.llm.llmProvider === LLM_PROVIDER.DEEPSEEK && !config.llm.deepseekApiKey,
-    name: "DEEPSEEK_API_KEY (weil LLM_PROVIDER=deepseek)",
+    // FW2: derselbe Schluessel, zweiter Anlass - ein gesetzter Ausweich-Anbieter ohne
+    // Schluessel wuerde JEDEN Aufruf nach dem Latch mit 401 beantworten, also genau im
+    // Notfall versagen.
+    fehlt: () =>
+      (config.llm.llmProvider === LLM_PROVIDER.DEEPSEEK ||
+        config.llm.llmProviderFallback === LLM_PROVIDER.DEEPSEEK) &&
+      !config.llm.deepseekApiKey,
+    name: "DEEPSEEK_API_KEY (weil LLM_PROVIDER/LLM_PROVIDER_FALLBACK=deepseek)",
   },
   {
     fehlt: () => !config.server.publicUrl || config.server.publicUrl.includes("CHANGE-ME"),
@@ -2337,8 +2529,10 @@ const REQUIRED_CONFIG = Object.freeze([
   {
     // W4: das Webhook-Signing-Secret ist sicherheitskritisch (ohne ist der Stripe-Webhook
     // fail-closed unverifizierbar -> kein Abo-Lifecycle). Boot-Pflicht bei aktivem Payment
-    // (Muster STRIPE_SECRET_KEY). Die Price-Ids sind BEWUSST keine Boot-Pflicht: ein Tier
-    // darf unbuchbar bleiben (Route-500), das stoppt den Boot nicht.
+    // (Muster STRIPE_SECRET_KEY). Die Price-Ids stehen NICHT in dieser Tabelle, sind seit
+    // GP-P6 aber sehr wohl Boot-Pflicht bei aktivem Payment - geprueft in
+    // boot.js#assertPricedPlans gegen PLAN_CATALOG, nicht hier (die Slug->Price-Zuordnung
+    // lebt in billing/subscribe.js, G13).
     fehlt: () => config.billing.paymentEnabled && !config.billing.stripeWebhookSecret,
     name: "STRIPE_WEBHOOK_SECRET (weil PAYMENT_ENABLED=true)",
   },
@@ -2359,35 +2553,18 @@ const REQUIRED_CONFIG = Object.freeze([
       !existsSync(path.join(config.server.webDistDir, "index.html")),
     name: "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",
   },
-  // C-Telnyx (PLAN-TELNYX-AI-ASSISTANT.md, P10): der AI-Assistant-Pfad braucht bei aktivem
-  // Flag die volle Origination-/Shim-Config, sonst bootet der Dienst in einen "Flag an, aber
-  // Assistant/Shim unkonfiguriert"-Zustand (Regel 1/3, fail-closed). publicUrl ist bereits
-  // oben Pflicht (Custom-LLM-URL des Assistants zeigt dorthin). apiKey/callControlAppId tragen
-  // die Call-Control-Origination + Hangup; assistantId feuert ai_assistant_start (P5/P7);
-  // connectionId (TeXML) bleibt Pflicht, weil der Inbound-/Nummern-Pfad weiter darueber laeuft.
   {
-    fehlt: () => assistantEnabled() && !config.telnyx.telnyxAssistant.assistantId,
-    name: "TELNYX_ASSISTANT_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)",
-  },
-  {
-    fehlt: () => assistantEnabled() && !config.telephony.telnyxApiKey,
-    name: "TELNYX_API_KEY (weil TELNYX_AI_ASSISTANT_ENABLED=true)",
-  },
-  {
-    fehlt: () => assistantEnabled() && !config.telephony.telnyxConnectionId,
-    name: "TELNYX_CONNECTION_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)",
-  },
-  {
-    fehlt: () => assistantEnabled() && !config.telnyx.telnyxAssistant.callControlAppId,
-    name: "TELNYX_CALL_CONTROL_APP_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)",
-  },
-  {
-    fehlt: () => assistantEnabled() && !config.telnyx.telnyxAssistant.shimSharedSecret,
-    name: "TELNYX_SHIM_SHARED_SECRET (weil TELNYX_AI_ASSISTANT_ENABLED=true)",
+    // IEP-P2: Fuellung an, Asset fehlt -> Telnyx bekaeme eine 404-URL und spielte wieder seinen
+    // US-Freiton. Sichtbarer Boot-Fehler statt stiller Regression (Muster WEB_DIST_DIR-Build).
+    // Die Datei ist repo-committet; der Riegel faengt Auslieferungs- und Umbenennungsfehler,
+    // nicht den Normalbetrieb.
+    fehlt: () =>
+      config.voice.elevenLabsInbound.begruessungslautEnabled &&
+      !existsSync(path.join(config.server.publicDir, EL_BEGRUESSUNGSLAUT_PFAD)),
+    name: `Begruessungslaut-Asset (public${EL_BEGRUESSUNGSLAUT_PFAD} fehlt - node scripts/render-begruessungslaut.mjs)`,
   },
 ]);
 
-const assistantEnabled = () => config.telnyx.telnyxAssistant.enabled === true;
 const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
 
 // Fatal-Befunde, die den Boot stoppen (fail-closed statt stillem Gate-Aus):

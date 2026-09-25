@@ -18,38 +18,6 @@
  */
 
 /**
- * @typedef {Object} CallControlOriginateParams
- *   Origination ueber Telnyx Call Control (AI-Assistant-Pfad, P4) statt TeXML. Call Control
- *   buendelt die Event-Webhooks in EINER webhook_url (kein getrenntes url/statusCallback).
- * @property {string} from         - Absender-Nummer (E.164), aktive Store-Nummer des Tenants
- * @property {string} to           - Zielnummer (E.164, bereits gegated)
- * @property {string} [webhookUrl] - Call-Control-Event-Webhook (call.answered/speak.ended/hangup, P4.5)
- * @property {string} [method]     - HTTP-Methode fuer den Webhook ("POST")
- * @property {number} [timeLimit]  - Max-Gespraechsdauer in Sek. (Defense-in-Depth; harter Timer bleibt server.js)
- *
- * Die KLINGELfrist (timeout_secs) ist bewusst KEIN Parameter: sie ist eine Provider-
- * Eigenschaft und kommt im Adapter aus der Konfiguration (config.telephony.telnyxDialTimeoutSecs),
- * damit kein Aufrufer sie versehentlich unterbietet.
- */
-
-/**
- * @typedef {Object} CallControlResult
- * @property {string} callControlId - Call-Control-ID (data.call_control_id). EIGENES Feld,
- *   NICHT sid ueberladen: Boot-Recovery (P6) adressiert den Hangup ueber diese ID-Form.
- */
-
-/**
- * @typedef {Object} StartAssistantParams
- * @property {string} callControlId    - Ziel-Call (aus originateViaCallControl)
- * @property {string} assistantId      - Telnyx-AI-Assistant-Referenz (Caller/P5/P7 liefert sie)
- * @property {string} [language]       - NEUTRALE Gespraechssprache (call.language: "de"|"fr"|"en",
- *   Werte aus src/i18n/locales.js) - KEIN Provider-String. Der Adapter mappt sie intern auf den
- *   STT-Sprach-Hint (afix-p2/R2). Fehlt der Wert, sendet der Adapter KEIN transcription-Feld ->
- *   Body byte-identisch zum Bestand. Nur der Ingest-Pfad reicht call.language durch; der
- *   Inbound-Pfad bleibt in dieser Phase BYTE-IDENTISCH (STT-Sprach-Hint dort folgt in P6).
- */
-
-/**
  * @typedef {Object} InboundRequest
  * @property {Object<string,string>} headers - Request-Header (lowercase keys, z.B. telnyx-signature-ed25519)
  * @property {Buffer} rawBody  - unveraenderter Roh-Body; fuer die Telnyx-Ed25519-Pruefung
@@ -128,28 +96,21 @@
  *   Startet einen Outbound-Call (TeXML). Heute: calls.create(...).
  * @property {(providerCallSid: string) => Promise<void>} endCall
  *   Beendet einen laufenden Call (TeXML). Heute: calls(sid).update({status:"completed"}).
- * @property {(params: CallControlOriginateParams) => Promise<CallControlResult>} [originateViaCallControl]
- *   Call-Control-Variante der Origination (AI-Assistant-Pfad, P4). Aktuell NUR Telnyx
- *   implementiert (wie NumberProvisioning) - deshalb OPTIONAL am Port. Liefert callControlId.
  * @property {(callControlId: string) => Promise<void>} [endCallViaCallControl]
- *   Call-Control-Hangup (POST /v2/calls/{id}/actions/hangup). ZUSAETZLICH zu endCall (TeXML,
- *   unveraendert). Telnyx-only.
- * @property {(params: StartAssistantParams) => Promise<void>} [startAssistant]
- *   Haengt den Telnyx-AI-Assistant an den Call-Control-Call an (ai_assistant_start). Telnyx-only.
- * @property {(params: {callControlId: string, text: string, voiceProfile: string, useAssistantVoice?: boolean}) => Promise<void>} [speak]
- *   Deterministischer Call-Control-Speak-Node (Disclosure vor ai_assistant_start, P4.5). Telnyx-only.
- *   useAssistantVoice (optional, Default false): SEMANTISCHER Wunsch "sprich mit derselben
- *   Stimme, die der AI-Assistant danach benutzt, sofern der Adapter sie kennt" - KEIN
- *   Provider-String; das Mapping auf die Provider-Payload lebt adapter-intern. Fehlt der
- *   Parameter (Inbound-Pfad), ist das Verhalten byte-identisch zum Bestand.
+ *   Call-Control-Hangup fuer persistierten Altbestand (hangUpAction). ZUSAETZLICH zu endCall
+ *   (TeXML, unveraendert). Telnyx-only.
+ * @property {(providerCallSid: string, url: string) => Promise<void>} [redirectCall]
+ *   IEL-B7 (E9): leitet einen LAUFENDEN TeXML-Call live auf neue TeXML-Anweisungen um (Url,
+ *   POST). OPTIONAL wie endCallViaCallControl: fehlt die Methode, zaehlt das beim Aufrufer als
+ *   gescheiterte Umleitung (inbound-bridges.js legt dann auf - nie Stille). Wirft MIT
+ *   Status, NIE mit API-Key oder Roh-Body.
  * @property {(params?: VoiceCostRecordPoolParams) => Promise<VoiceCostRecordPool>} [fetchCostRecordPool]
  *   Roh-Belege EINES Sweeps (Provider-CDR), gedacht fuer EINEN Aufruf je Sweep VOR der
  *   Kandidatenschleife: der Abruf ist schleifeninvariant (nur filter[record_type] +
  *   page[size] + page[number]), die Zuordnung nicht. Je Typ wird aufsteigend geblaettert,
  *   bis die letzte Seite erreicht, das Fenster verlassen oder die Seitenobergrenze
- *   getroffen ist; letzteres liefert complete:false. Telnyx-only wie
- *   originateViaCallControl; fehlt die Methode, faellt der Aufrufer auf "kein Abgleich"
- *   zurueck (konservativer Fall).
+ *   getroffen ist; letzteres liefert complete:false. Telnyx-only; fehlt die Methode,
+ *   faellt der Aufrufer auf "kein Abgleich" zurueck (konservativer Fall).
  *   Der Abruf ist gedrosselt und kann deshalb bis zur naechsten vollen Minute blockieren.
  *   WIRFT NIE. ok:false heisst "nicht gemessen" und NIEMALS "Kosten = 0".
  * @property {(pool: VoiceCostRecordPool, params: VoiceCostRecordsParams) => VoiceCostRecordsResult} [assignCostRecords]
@@ -252,33 +213,6 @@
  * @property {() => Promise<{availableCreditMicroCents: number|null}>} getBalance
  *   Pruefung 8: Kontostand (GANZZAHL Mikro-Cent der Provider-Waehrung, G26). Nicht
  *   parsebar -> null, NIE 0 (eine still zu 0 gewordene Zahl saehe aus wie eine Messung).
- */
-
-/**
- * @typedef {Object} MediaFrame
- *   Neutrales Media-Stream-Frame (Port 4). KEIN Provider-Feld (kein streamSid/
- *   stream_id) im Vertrag - streamRef ist die neutrale Stream-Referenz.
- * @property {"start"|"media"|"stop"|"other"} event
- * @property {string} [streamRef]       - neutrale Stream-Referenz (Twilio: streamSid; Telnyx: stream_id)
- * @property {string} [callId]          - Call-ID aus den start-Parametern (Anti-Hijack-Lookup)
- * @property {string} [streamToken]     - stream_token aus den start-Parametern (safeEqual-Pruefung)
- * @property {string} [providerCallRef] - provider-seitige Call-Referenz (-> call.twilioSid/endCall)
- * @property {string} [payload]         - Audio-Payload (G.711 u-law base64), nur bei event=media
- */
-
-/**
- * @typedef {Object} MediaTransport
- *   Port 4 (Aufrufer: bridge.js, HEIKLE STELLE). Kapselt die provider-spezifische
- *   WS-Frame-Schicht des Realtime-Streams; die OpenAI-Seite der Bridge bleibt
- *   provider-agnostisch. Reine Funktionen (kein IO, kein State) - unit-testbar.
- * @property {(msg: object) => MediaFrame} parseMediaFrame
- *   Roh-WS-Nachricht (JSON.parse't) -> neutrales MediaFrame. Unbekannte Events -> event:"other".
- * @property {(params: {payload: string, streamRef?: string}) => object} buildMediaFrame
- *   Neutrale Audio-Payload -> Provider-WS-Objekt (KI-Audio raus). Twilio braucht streamRef, Telnyx nicht.
- * @property {(params: {streamRef?: string}) => object} clearPlayback
- *   Barge-in: Provider-WS-Objekt, das die gepufferte Wiedergabe verwirft
- *   ({event:"clear"}; Telnyx ohne stream_id - streamRef bleibt optional, weil Twilio
- *   Media Streams dort streamSid verlangt).
  */
 
 /**

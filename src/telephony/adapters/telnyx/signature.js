@@ -20,7 +20,12 @@ const SPKI_ED25519_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const ED25519_RAW_KEY_LEN = 32;
 
 const SIG_HEADER = "telnyx-signature-ed25519";
-const TS_HEADER = "telnyx-timestamp";
+// SEC-P1: exportiert, weil der Wiederholungs-Riegel (telephony/webhook-idempotenz.js)
+// seinen Umschlag-Fingerabdruck ueber EXAKT dieselben Bytes bildet, die hier signiert
+// geprueft werden (`${ts}|${rawBody}`). Der Header-Name hat damit weiterhin genau EINE
+// Heimat (G5) statt einer zweiten Schreibweise im Riegel. Die Pruefung selbst ist
+// unveraendert.
+export const TS_HEADER = "telnyx-timestamp";
 
 // Liest den Telnyx-Public-Key aus config und macht ihn zu einem KeyObject. PEM
 // (enthaelt "BEGIN") wird direkt geladen; sonst als base64-raw-32-Byte ueber den

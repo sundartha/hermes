@@ -53,6 +53,11 @@ const CONSULT_ON_ENV = Object.freeze({
   ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN,
   CONSULT_WAIT_MS: "200",
   CONSULT_OPEN_MS: "1500",
+  // P2: der EL-Halt laeuft seit P2 nicht mehr gegen CONSULT_OPEN_MS, sondern gegen diese
+  // drei Fristen - kurz nachgezogen, sonst haelt jeder Fall dieser Datei 5 s statt 1,5 s.
+  EL_CONSULT_DELIVERY_MS: "400",
+  EL_CONSULT_ACK_MS: "400",
+  EL_CONSULT_ANSWER_MS: "1500",
 });
 
 const post = (srv, body) =>

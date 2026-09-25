@@ -25,6 +25,14 @@ const DEMO_EVENTS = [
 // Hoechstens so viele Notifications behalten (Ring-Puffer, neueste zuerst).
 export const MAX_NOTIFICATIONS = 50;
 
+// SEC-P1: Hoechstens so viele Ereignis-Anker je Anruf behalten (Ring-Puffer der bereits
+// verarbeiteten /voice/turn-Webhooks, neueste zuletzt). Zwei Anker je Runde plus Reserve -
+// ein Anbieter-Retry trifft immer die juengste Runde, aeltere braucht niemand mehr. Hier
+// statt in telephony/webhook-idempotenz.js, weil state-ops den Deckel anwendet und ein
+// Store-Modul keine Telefonie-Kette (und ueber sie config) importieren soll - Muster
+// MAX_NOTIFICATIONS darueber.
+export const WEBHOOK_ANCHOR_HISTORY = 6;
+
 // Telefonie-Provider fuer den config-derived Nummern-Seed (number-Tabelle). Benannte
 // Konstante (G25), eine Quelle (G5/G13) fuer state-ops.seedBootstrapNumber,
 // pg.flushNumbers, migrate.seedDefaults; die telephony-registry importiert dieselben
@@ -127,6 +135,13 @@ export const NUMBER_HOLD_REASON = Object.freeze({
 // nicht Teil dieser Phase.
 export const GLOBAL_CAP_REASON = "global_cap";
 
+// GP-P3: terminaler Skip-Grund am Tenant - der automatische Wiederanlauf hat seinen
+// Versuchsdeckel (PROVISIONING_RETRY_MAX_ATTEMPTS) erschoepft und uebergibt an den
+// Handbetrieb (POST /api/onboard/retry, admin-only). Wert identisch zum bereits
+// bestehenden Rueckgabegrund von resolveProvisionRetry - EINE Quelle statt dreier
+// getippter Literale (G25/G5).
+export const NEEDS_MANUAL_RECONCILE_REASON = "needs_manual_reconcile";
+
 // Skip-Gruende von requestNumber() als Enum (G25/G11): EINE Quelle statt verstreuter
 // String-Literale in state-ops.js. GLOBAL_CAP bleibt der bestehende GLOBAL_CAP_REASON-
 // Export (kein Duplikat, Wert identisch).
@@ -182,12 +197,62 @@ export const USAGE_EVENT_KIND = Object.freeze({
 // aber ein anderer Sachverhalt und deshalb ein eigener Zustand (zwei Ursachen teilen sich
 // NICHT ein Label). 'unavailable' = nicht gemessen (ok:false, leere Antwort, unparsbare
 // Summe) und NIEMALS "Kosten = 0".
+// KV2-8 (Plan 4.8): zwei neue Werte. 'telnyx_detail_records' bleibt - er steht an
+// Bestandszeilen von VOR dieser Phase und behauptet dort weiterhin die Wahrheit; neu
+// geschrieben wird er nur noch im Rueckfall (unvollstaendiges Buch ohne abgelaufene
+// Frist). Die Regel dieser Enum ("zwei Ursachen teilen sich NICHT ein Label") ist der
+// Grund fuer ZWEI Werte statt eines: "alle Pflicht-Traeger belegt" und "Frist abgelaufen,
+// Teilbeleg" sind verschiedene Sachverhalte, und ein Settlement aus dem Kosten-Buch darf
+// nicht 'telnyx_detail_records' behaupten (Abnahme (e)).
 export const COST_TRUING_SOURCE = Object.freeze({
   DETAIL_RECORDS: "telnyx_detail_records",
+  KOSTENBUCH_VOLLBELEG: "kostenbuch_vollbeleg",
+  KOSTENBUCH_TEILBELEG: "kostenbuch_teilbeleg",
   INCOMPLETE: "incomplete",
   NO_ESTIMATE: "no_estimate",
   UNAVAILABLE: "unavailable",
 });
+
+// KV2-8: WELCHE Herkunft "vollstaendig bewiesen" bedeutet - EINE Quelle fuer die drei
+// Leser (coverageBreakdown und countOutcome in cost-truing.js, isDriftSample in
+// cost-calibration.js). Vor dieser Phase stand der Vergleich `=== DETAIL_RECORDS`
+// dreimal getrennt da; mit einem ZWEITEN beweisenden Wert waeren daraus drei einzeln
+// nachzuziehende Stellen geworden (G5) - genau der Fehlertyp, an dem die Deckungsquote
+// still auf 0 % gefallen waere.
+const BEWEISENDE_HERKUNFT = Object.freeze([
+  COST_TRUING_SOURCE.DETAIL_RECORDS,
+  COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG,
+]);
+
+export function istBeweisendeHerkunft(source) {
+  return BEWEISENDE_HERKUNFT.includes(source);
+}
+
+// KV2-3: Reife einer Belegzeile im Kosten-Buch (call_cost_evidence.reife). VIER
+// Auspraegungen. Der frueher hier vorgesehene fuenfte Wert 'beleg_ausgeblieben' ENTFAELLT
+// (Owner-Entscheidung 16, DEFAULT uebernommen am 2026-08-30, nicht ausdruecklich
+// entschieden): kein Schreiber, keine Zeile der Matrix 4.6, kein Endzustand aus KV2-7 -
+// ein Enum-Wert ohne Schreiber ist toter Code im Schema.
+export const REIFE = Object.freeze({
+  ERWARTET: "erwartet",
+  VORLAEUFIG: "vorlaeufig",
+  BELEGT: "belegt",
+  STRUKTURELL_UNBESCHAFFBAR: "beleg_strukturell_unbeschaffbar",
+});
+
+// Die FORTSCHRITTS-Ordnung: Position = Rang. Ein Uebergang ist erlaubt, wenn der Rang
+// nicht SINKT (Ueberspringen von 'vorlaeufig' eingeschlossen, Gleichstand erlaubt ->
+// Idempotenz). Ein Rueckschritt wirft (Mutator in state-ops.js).
+export const REIFE_FORTSCHRITT = Object.freeze([REIFE.ERWARTET, REIFE.VORLAEUFIG, REIFE.BELEGT]);
+
+// TERMINALE Zustaende - sie stehen NEBEN der Ordnung, nicht darin: aus jedem
+// Fortschritts-Zustand erreichbar (kein Rueckschritt, wirft nicht), aus ihnen fuehrt
+// KEIN Uebergang mehr heraus (auch nicht nach 'belegt').
+export const REIFE_TERMINAL = Object.freeze([REIFE.STRUKTURELL_UNBESCHAFFBAR]);
+
+// Welche Reifegrade in die Belegsumme zaehlen (4.5). 'erwartet' traegt NICHTS bei - es hat
+// keinen Betrag, nicht den Betrag 0. EINE Quelle, damit KV2-8 die Regel nicht neu erfindet.
+export const REIFE_SUMMIERBAR = Object.freeze([REIFE.VORLAEUFIG, REIFE.BELEGT]);
 
 // Cent<->EUR-Bruecke (G25): EUR-Ableitung an Anzeige-/Persistenz-Kanten (z.B.
 // api-read.js usageView, pg.js flushUsage). Das Budget-Gate selbst vergleicht rein
@@ -273,6 +338,14 @@ export const PROVIDER_RATE_SCALE = 1_000_000;
 // Bestandspfad (D12) und wird NICHT aufgeweicht, sondern bekommt einen Nachbarn.
 export function isCorrectionCents(x) {
   return Number.isFinite(x) && Number.isInteger(x);
+}
+
+// Ist x ein gueltiger ANBIETER-Betrag in Mikro-Cent? Schwester von isBookableCents auf der
+// feineren Achse: isSafeInteger statt isFinite+isInteger, weil Mikro-Cent-Summen gross
+// werden. Bisher stand genau dieser Ausdruck inline in recordCallCostTruingResult; das
+// Kosten-Buch (KV2-3) waere die zweite Kopie gewesen (G5).
+export function isProviderMicroCents(wert) {
+  return Number.isSafeInteger(wert) && wert >= 0;
 }
 
 // Preis-Bezugsgroesse der Anthropic-Preisstaffel (USD pro 1 Mio. Tokens). Benannt
@@ -392,6 +465,22 @@ export const CONSULT_ANSWER = Object.freeze({
   // unterscheidbar bleiben - genau daran haengt die Diagnose des Rueckkanals.
   DEADLINE_PASSED: "deadline_passed",
 });
+
+// P2 (W2): warum der gestaffelte Halt endete. Maschinenlesbar - er steht am Datensatz
+// (P3 auditiert ihn dort ohne Rateschritt) und in der HTTP-Antwort an den Anbieter, NIE
+// im Gespraech: alle drei sprechen den bestehenden Timeout-Text (E-4).
+export const CONSULT_TIMEOUT_REASON = Object.freeze({
+  NOT_DELIVERED: "not_delivered", // Stufe 0: kein pollender Client hat die Frage bekommen
+  NOT_ACKED: "not_acked", // Stufe 1: zugestellt, aber niemand quittiert -> nicht bedienbar
+  TIMEOUT: "timeout", // Stufe 2: quittiert, aber keine Antwort in der Gesamtfrist
+});
+
+// P2: die zwei Modi von answer_consult. KEIN neues Werkzeug (SCOPE 2): ein eigenes
+// ack_consult haette eine eigene Connector-Berechtigung, die per Default wieder auf
+// "nachfragen" stuende - die Falle waere identisch nachgebaut. Fehlender Modus = FINAL,
+// damit jeder Bestands-Aufrufer byte-identisch bleibt.
+export const CONSULT_ANSWER_MODE = Object.freeze({ WORKING: "working", FINAL: "final" });
+
 // Konservativster der drei Wege: ohne ausdrueckliche Angabe gibt der Agent ein Angebot
 // ausserhalb seines Spielraums als Nachricht weiter, statt ab- oder zuzusagen.
 export const MANDATE_OUT_OF_SCOPE_DEFAULT = MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE;
@@ -451,7 +540,7 @@ function nextWeekday(daysAhead, hour) {
 // Default der einzige Wert, den updateSettings nach dem Guard (state-ops) nicht mehr
 // zurueckschreiben koennte. Zusammensetzung statt zweiter Literal-Kopie des Satzes (G5).
 export const DEFAULT_GREETING = withInboundNotice(
-  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht fuer {owner} aufnehmen. Wie kann ich helfen?",
+  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht für {owner} aufnehmen. Wie kann ich helfen?",
   INBOUND_NOTICES.de,
 );
 

@@ -59,13 +59,7 @@ config.safety.maxCallsPerHour > 0
       `MAX_CALLS_PER_HOUR ist ${config.safety.maxCallsPerHour}`,
       "0 oder ungueltig -> jeder Outbound-Call wird gesperrt (Not-Aus)",
     );
-if (config.voice.voiceEngine === "realtime") {
-  config.voice.openaiApiKey
-    ? ok("Voice-Engine: realtime, OPENAI_API_KEY gesetzt")
-    : bad("VOICE_ENGINE=realtime, aber OPENAI_API_KEY fehlt");
-} else {
-  ok("Voice-Engine: budget (Telnyx TeXML STT/TTS + Claude Haiku)");
-}
+ok("Voice-Engine: budget (Telnyx TeXML STT/TTS + Claude Haiku)");
 // MCP-Auth-Modus melden (Detailpruefung fuer oauth weiter unten in Abschnitt 5)
 if (config.auth.mcpAuth === "oauth") {
   config.auth.oauthIssuerUrl
@@ -103,28 +97,6 @@ if (config.llm.anthropicApiKey) {
     } else bad(`API-Key abgelehnt (HTTP ${r.status})`, "Key unter console.anthropic.com pruefen");
   } catch (e) {
     bad("Anthropic nicht erreichbar: " + e.message);
-  }
-}
-
-// ---------- 3. OpenAI (nur bei realtime) ----------
-if (config.voice.voiceEngine === "realtime" && config.voice.openaiApiKey) {
-  h("3. OpenAI (Realtime-Engine)");
-  try {
-    const r = await fetch("https://api.openai.com/v1/models", {
-      headers: { Authorization: `Bearer ${config.voice.openaiApiKey}` },
-    });
-    if (r.ok) {
-      const ids = (await r.json()).data?.map((m) => m.id) || [];
-      ok("API-Key gueltig");
-      ids.includes(config.voice.realtimeModel)
-        ? ok(`Realtime-Modell verfuegbar: ${config.voice.realtimeModel}`)
-        : wrn(
-            `Modell '${config.voice.realtimeModel}' nicht gelistet`,
-            "Fallback: REALTIME_MODEL=gpt-4o-realtime-preview",
-          );
-    } else bad(`OpenAI-Key abgelehnt (HTTP ${r.status})`);
-  } catch (e) {
-    bad("OpenAI nicht erreichbar: " + e.message);
   }
 }
 

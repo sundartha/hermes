@@ -82,8 +82,8 @@ export const AUSNAHME_UEBERFAELLIG_MARKE = "AUSNAHME UEBERFAELLIG";
 // Hoechstalter einer Ausnahme in Tagen. WARUM UEBERHAUPT EINE FRIST: die Vorlage
 // sagt ausdruecklich "vorerst" und "eine Ausnahme ist kein Dauerzustand" - ohne
 // gemessenes Hoechstalter ist das eine Absichtserklaerung, die nichts durchsetzt.
-// Die zwei heute ausgenommenen Felder sind Aufbewahrung und Mitschnitt fremder
-// Gespraeche; beide stehen live AN und sollen laut Eigentuemer-Entscheidung vor
+// Das heute ausgenommene Feld ist die Aufbewahrung fremder Gespraeche
+// (retention_days); sie steht live AN und soll laut Eigentuemer-Entscheidung vor
 // dem ersten Fremdkunden zurueckgedreht werden.
 // WARUM 90 TAGE: ein Quartal ist lang genug, dass eine laufende Messphase nicht
 // woechentlich unterbrochen wird, und kurz genug, dass aus "vorerst" nicht
@@ -782,6 +782,15 @@ export function besesseneFeldNamen(vorlage) {
   const eintraege = vorlage?.[BESITZ_SCHLUESSEL]?.[FELDER_SCHLUESSEL];
   if (!Array.isArray(eintraege)) return [];
   return eintraege.map((eintrag) => eintrag?.feld).filter((feld) => typeof feld === "string");
+}
+
+// Die Live-Pfade EINES besessenen Feldes, wie die Vorlage sie erklaert; leer, wenn es das Feld
+// nicht gibt. Steht hier aus demselben Grund wie besesseneFeldNamen: kein zweiter Ort soll den
+// Aufbau der Besitz-Erklaerung kennen.
+export function livePfadeVon(vorlage, feld) {
+  const eintraege = vorlage?.[BESITZ_SCHLUESSEL]?.[FELDER_SCHLUESSEL];
+  const eintrag = Array.isArray(eintraege) ? eintraege.find((kandidat) => kandidat?.feld === feld) : undefined;
+  return Array.isArray(eintrag?.live) ? eintrag.live : [];
 }
 
 // Was die Vorlage ausdruecklich NICHT besitzt - wird mitgemeldet, damit die

@@ -106,6 +106,9 @@ function spyStore(call) {
     // haengt nicht an ihm, aber die Attrappe muss die Methode kennen, sonst wirft
     // der Ergebnisweg einen TypeError.
     recordSipCallId: () => {},
+    // ST3: Zaehlfeld der Stimmen-Detektoren - dieselbe Begruendung wie recordSipCallId
+    // direkt darueber; NICHT im order-Tracking (keine Reihenfolge-Assertion betrifft es).
+    recordElDetectorCounts: () => {},
     // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber.
     recordFromRegistrationSource: () => {},
     recordActualSender: () => {},
@@ -360,7 +363,6 @@ function baseRouteDeps(store, extra) {
     audit: () => {},
     outboundGates: [],
     voiceControl: () => ({ async endCall() {}, async endCallViaCallControl() {} }),
-    originateAiAssistantCall: async () => {},
     terminateAndBillCall,
     hangUpAction,
     billThunk,

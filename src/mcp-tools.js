@@ -25,6 +25,7 @@ import {
   MAX_CALL_DURATION_CAP_S,
   MANDATE_OUT_OF_SCOPE_VALUES,
   KEY_FACTS_LIMITS,
+  CONSULT_ANSWER_MODE,
 } from "./store/defaults.js";
 import { CONSULT_EVENT, CONSULT_POLL_ABORT_MS } from "./consult/delivery.js";
 import { resolveGatewayUrl } from "./config.js";
@@ -32,7 +33,7 @@ import { resolveGatewayUrl } from "./config.js";
 // Karte definiert wird (src/call-result.js) - EINE Quelle fuer MCP-Sicht UND die
 // Inbox-Projektion in state-ops.js. Hier NUR noch importiert, nie zweitdefiniert (G5).
 import { resultCardView } from "./call-result.js";
-import { localeFor } from "./i18n/locales.js";
+import { localeFor, SUPPORTED_LANGUAGES } from "./i18n/locales.js";
 import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
@@ -286,6 +287,22 @@ const CONSULT_ANSWER_CONFLICT_STATUS = 409;
 const ABORT_ERROR_NAMES = new Set(["AbortError", "TimeoutError"]);
 const isAbortError = (err) => ABORT_ERROR_NAMES.has(err?.name);
 
+// E3 (T-27): die Frist des EINEN Hops, der einen echten Anruf ausloest. Sie ist STRUKTURELL
+// groesser als das gesamte Vorwahl-Budget des Servers, damit ein Zeitablauf nie einen
+// laufenden Anrufstart kappt - am Seam abgelesen, nicht geraten:
+//   Anrufstart blockiert ueber die Klingelphase: REQUEST_TIMEOUT_MS 120000
+//     (elevenlabs/convai.js, dort GEMESSEN: 40,3 s blosses Klingeln)
+// + Pre-Call-Briefing: config.llm.briefingTimeoutMs (6000), BRIEFING_MAX_RETRIES = 0
+// + Eroeffnungszeile: DERSELBE Wert, OPENING_MAX_RETRIES = 0 (elevenlabs/opening-line-llm.js)
+// Backoff faellt weg: withRetry (llm.js) schlaeft nur VOR einem Retry, bei max=0 also nie.
+// Summe 132000, hier 180000 - 48 s Kopf.
+// KEIN Env-Knopf: eine kuerzere Frist erzeugt genau die Waise, die diese Etappe beseitigt
+// (der Abbruch verhindert den Anruf nicht, er kappt nur unsere Kennung). Praezedenz fuer
+// "interner Transport-Bound, kein Operator-Knopf" ist REQUEST_TIMEOUT_MS selbst.
+// Wer PRECALL_BRIEFING_TIMEOUT_MS anhebt, muss hier nachrechnen -
+// test/openai-s3-hop-frist.test.js faellt dann rot.
+export const PLACE_CALL_HOP_TIMEOUT_MS = 180000;
+
 const NO_CONSULT_EVENT = Object.freeze({
   event: CONSULT_EVENT.NONE,
   eventId: null,
@@ -323,6 +340,10 @@ const CALL_OUTPUT = {
   result_summary: z.string().nullable(),
   objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
   context_received: CONTEXT_RECEIVED_OUTPUT,
+  // E3 (N-11): lief die Aktion schon? true = der zurueckgegebene Anruf lief bereits, es wurde
+  // kein zweiter gestartet. NUR hier, NICHT in CALL_STATUS_OUTPUT - get_call_status bleibt
+  // unveraendert.
+  deduplicated: z.boolean(),
 };
 
 // I10: defensive Normalisierung des context_received-Metas aus der Gateway-Antwort
@@ -525,7 +546,7 @@ const OPEN_QUESTIONS_FIELD = z
 // Bestands-Beschreibung von place_call, byte-identisch aus dem Tool-Deskriptor
 // herausgeloest (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
 const PLACE_CALL_DESCRIPTION =
-  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately and shows a live card that updates itself (status, duration, transcript, result). You do NOT need to poll - if no live update arrives, get_call_status remains available as a fallback.";
+  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call is billed per minute to the caller's account and is NOT reversible once placed. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately; some clients also show a live card that updates itself, but this is NOT guaranteed - ALWAYS poll get_call_status with the call_id until it reports a final status. Calling it again for a running number returns that same call (deduplicated: true).";
 
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
@@ -556,6 +577,69 @@ const placeCallDescription = (consultLoop) =>
 // eslint-legacy-exceptions.json pinnt sie).
 const CANCEL_CALL_DESCRIPTION =
   "Cancels the call record and stops billing right away. Whether the phone line itself actually drops is NOT guaranteed on every call path - when it is not, the response says so explicitly instead of claiming a clean hangup.";
+
+// MCP-Annotations (Phase E2, P0-1): Nebenwirkungs-Kennzeichnung je Werkzeug, die ein
+// Client OHNE Beschreibungs-Text lesen kann (MCP-Spec "Tool Annotations"). destructiveHint
+// und idempotentHint sind laut Spec nur bedeutungstragend, wenn das Nur-Lese-Feld false
+// ist - deshalb fehlen sie bei den reinen Lese-Werkzeugen bewusst (kein toter Wert).
+// N-02/N-03: das sind HINTS, keine Garantie - ein Client darf seine Nutzungsentscheidung
+// nicht allein darauf stuetzen; die Beschreibungstexte bleiben die eigentliche Quelle.
+// title ist EIN Anzeigename fuer BEIDE Registrierwege (W-09: title > annotations.title >
+// name) - der Legacy-Weg (server.tool) kennt kein eigenes Top-Level-title, deshalb steht
+// er hier bewusst NICHT bei den uiTool-Konfigs (sonst zwei Titel-Regeln je Registrierweg).
+// Wie die Beschreibungen einsprachig Englisch (Systemgrenze O14 oben) - nur das
+// Client-Modell liest das, keine Tenant-Sprache.
+// EIN modulweiter Wahrheitstabelle statt zehn Inline-Literalen (Owner-Auflage
+// "registerTools darf NICHT wachsen", s. Kommentar bei CHECK_INBOX_DESCRIPTION/
+// CANCEL_CALL_DESCRIPTION) - dieselbe Auslagerung wie CALL_OUTPUT/CALENDAR_OUTPUT/
+// MY_NUMBER_OUTPUT. Reihenfolge = Registrierreihenfolge (Vollstaendigkeit gegen die Datei
+// abzaehlbar). await_call_event ist NICHT readOnly: seine Route schreibt zwei Felder
+// (noteConsultPoll/markConsultAskDelivered, routes/api-calls.js + state-ops.js) - der
+// Code widerspricht damit einer frueheren Einschaetzung, und der Code gewinnt.
+const TOOL_ANNOTATIONS = {
+  place_call: {
+    title: "Place a phone call",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+  await_call_event: {
+    title: "Wait for call update",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  answer_consult: {
+    title: "Answer call question",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+  get_call_status: { title: "Get call status", readOnlyHint: true, openWorldHint: true },
+  get_transcript: { title: "Get call transcript", readOnlyHint: true, openWorldHint: true },
+  cancel_call: {
+    title: "Cancel a call",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  get_my_number: { title: "Agent phone number", readOnlyHint: true, openWorldHint: false },
+  list_calls: { title: "List calls", readOnlyHint: true, openWorldHint: false },
+  check_inbox: {
+    title: "Check inbox",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  list_action_items: { title: "List action items", readOnlyHint: true, openWorldHint: false },
+  get_calendar: { title: "Get calendar", readOnlyHint: true, openWorldHint: false },
+  get_agent_status: { title: "Get agent status", readOnlyHint: true, openWorldHint: false },
+};
 
 // ctx (Phase 2): { identity, scopedTenant, allowCalendar }. identity wird per Closure
 // an jeden REST-Aufruf gehaengt (X-Internal-Identity); scopedTenant (AM6) ebenso als
@@ -597,6 +681,26 @@ export function registerTools(
       });
     } catch (err) {
       if (isAbortError(err)) return NO_CONSULT_EVENT;
+      throw err;
+    }
+  };
+  // E3: eigener, benannter Zugang fuer den EINEN Aufruf, der einen echten Anruf ausloest -
+  // dasselbe Muster wie pollConsult (kein viertes Positions-Argument an call(), keine zweite
+  // fetch-Implementierung). call() selbst bleibt unangetastet, die uebrigen Werkzeuge damit
+  // byte-identisch. Der Zeitablauf wird hier NICHT geschluckt (anders als beim Long-Poll):
+  // er wird zu einer stabilen Kennung, die wrapHandler in der Tenant-Sprache ausgibt.
+  const placeCallHop = async (body) => {
+    try {
+      return await api({
+        method: "POST",
+        path: "/api/calls",
+        body,
+        identity,
+        scopedTenant,
+        timeoutMs: PLACE_CALL_HOP_TIMEOUT_MS,
+      });
+    } catch (err) {
+      if (isAbortError(err)) throw new ToolError(MCP_ERROR_CODE.CALL_START_UNCONFIRMED);
       throw err;
     }
   };
@@ -646,7 +750,10 @@ export function registerTools(
     };
 
   // Bestands-Tools: positionsbasiertes server.tool (frozen API, kein outputSchema/_meta).
-  const tool = (name, desc, schema, handler) => server.tool(name, desc, schema, wrapHandler(handler));
+  // server.tool nimmt Annotations als viertes von fuenf Positionsargumenten (frozen API,
+  // E2). Viertes Argument als EIN Objekt statt fuenftem Parameter (F1, max-params haelt).
+  const tool = (name, desc, schema, { annotations, handler }) =>
+    server.tool(name, desc, schema, annotations, wrapHandler(handler));
 
   // Wie tool(), aber ueber registerTool(config) -> erlaubt outputSchema (Stufe 0
   // schema-validiert) und _meta.ui.resourceUri (Stufe 1). config ohne _meta ->
@@ -665,6 +772,7 @@ export function registerTools(
     "place_call",
     {
       description: placeCallDescription(consultAllowed),
+      annotations: TOOL_ANNOTATIONS.place_call,
       inputSchema: {
         to: z
           .string()
@@ -767,10 +875,29 @@ export function registerTools(
           .describe(
             "Optional structured BACKGROUND for the conversation (only for the agent's information, ADDITIONAL to the briefing). The agent speaks as the personal AI assistant of the principal, NEVER as Claude/Gemini; only pass on what the task requires. NO secrets.",
           ),
-        // LANG-15: KEIN language-Feld hier. Die Sprache wird serverseitig ausschliesslich
-        // ueber store.resolveCallLanguage (Geo/Settings, Weltdefault siehe DEFAULT_LANGUAGE)
-        // aufgeloest - ein Client-Feld waere wirkungslos und dessen Beschreibung wuerde
-        // veralten (Bestand nannte faelschlich 'de' statt des Weltdefaults 'en').
+        // LANG-15 AUFGEHOBEN (Owner-Entscheidung F-2, 2026-09-06, PLAN-ANRUFDEFEKTE.md
+        // Abschnitt 6): das Feld gibt es wieder - und es WIRKT. Bis dahin entschied allein
+        // die Zielnummer; ein portugiesischer Auftrag an eine deutsche Nummer war nicht
+        // ausdrueckbar und der Widerspruch wurde STILL ignoriert (W5, gemessen an
+        // call_mtq08ett4l3o). Ohne Angabe gilt ab hier die Sprache des AUFTRAGGEBERS, nicht
+        // mehr die des Ziellandes; ein nicht unterstuetzter Code wird mit 400
+        // unsupported_language abgelehnt statt auf den Weltdefault gedreht.
+        // WAS DIESES FELD NICHT KANN (hartes Gate, F-2 Punkt 4 / PM-2): die Sprache des
+        // OFFENLEGUNGSSATZES bestimmen. Die folgt weiterhin dem ANGERUFENEN
+        // (elevenlabs/call-locale.js) - eine client-gewaehlte Sprache darf nicht darueber
+        // entscheiden, ob ein Mensch die Artikel-50-Aufklaerung versteht.
+        // Der Katalog reist aus SUPPORTED_LANGUAGES in den Text, nicht getippt: sonst
+        // veraltet die Beschreibung mit der naechsten Sprache (P4b).
+        language: z
+          .string()
+          .optional()
+          .describe(
+            `The language the agent SPEAKS in this call - one of: ${SUPPORTED_LANGUAGES.join(", ")}. ` +
+              "Leave it out unless the user asked for a particular language: without it the call " +
+              "is held in the principal's own language. An unsupported code is REJECTED with an " +
+              "error instead of being ignored. This does NOT change the language of the mandatory " +
+              "AI disclosure - that always follows the person being called.",
+          ),
         // S1-6 DiD: schema-seitig bereits positiv/ganzzahlig/gecappt (der eigentliche
         // Wurzelfix sitzt in outbound-gates.js resolveMaxDurationS, das JEDEN Body-Wert
         // - auch einen durch diese Zod-Grenze rutschenden - nochmal klemmt).
@@ -802,7 +929,7 @@ export function registerTools(
       ...enableWidgetUi(WIDGET_CALL),
     },
     async (args) => {
-      const r = await call("POST", "/api/calls", args);
+      const r = await placeCallHop(args);
       requireFields(r, { callId: "string" });
       const data = {
         call_id: r.callId,
@@ -813,18 +940,23 @@ export function registerTools(
         result_summary: null,
         objective_achieved: null,
         context_received: normalizeContextReceived(r.context_received), // I10
+        // E3: defensive Normalisierung wie normalizeContextReceived - ein Gateway-Body ohne
+        // das additive Feld (aelterer Mock) darf nicht crashen; fail-closed auf false, nie
+        // auf Verdacht "war schon da".
+        deduplicated: !!r.deduplicated,
       };
       // AL-P13: der Berechtigungs-Hinweis haengt EINMAL JE ANRUF am place_call-Ergebnis,
       // NICHT an jedem Poll - ein einmaliger Einrichtungs-Schritt ist zumutbar, ein Klick
       // pro Rueckfrage nicht. Kanal aus -> Textblock byte-identisch zum Bestand.
       const started = JSON.stringify({ call_id: data.call_id, status: data.status }, null, 2);
+      // E3 (N-11): der Dedup-Hinweis reist als eigene Zeile, NICHT im started-JSON-Block
+      // (der bleibt byte-identisch gepinnt, test/mcp-ui.test.js).
+      const hinweise = [
+        data.deduplicated ? loc.mcp.callAlreadyRunningHint : null,
+        consultAllowed ? loc.mcp.consultPermissionHint : null,
+      ].filter(Boolean);
       return {
-        content: [
-          {
-            type: "text",
-            text: consultAllowed ? `${started}\n${loc.mcp.consultPermissionHint}` : started,
-          },
-        ],
+        content: [{ type: "text", text: [started, ...hinweise].join("\n") }],
         structuredContent: data,
       };
     },
@@ -844,6 +976,7 @@ export function registerTools(
           "answer carries the complete result (summary and whether the objective was achieved), " +
           "so there is no need to call get_transcript separately. event=\"none\" simply means " +
           "nothing happened yet: call it again. This tool NEVER returns audio.",
+        annotations: TOOL_ANNOTATIONS.await_call_event,
         inputSchema: {
           call_id: z.string().describe("The call_id from place_call"),
           after_event_id: z
@@ -878,27 +1011,51 @@ export function registerTools(
         // jetzt denselben Unbekannt-Ausgang wie MCP_CONSULT_INSTRUCTIONS: ehrlich melden
         // statt erfinden, statt auf den abwesenden Menschen zu warten.
         description:
-          "Answers a question the phone agent asked during a running call. Give SHORT factual " +
-          "answers - one entry per question, each at most " +
+          "Answers a question the phone agent asked during a running call. " +
+          // P2 (SCOPE 2): die Quittung ist die ERSTE Pflicht nach Erhalt der Frage - sie
+          // ist zugleich der Berechtigungstest. Bleibt sie aus, bricht der Server den
+          // Halt nach wenigen Sekunden ab, statt den Anrufer 47 s stumm warten zu lassen.
+          "FIRST, the moment you receive the question, call this tool once with " +
+          'status="working" and no answers - that tells the agent someone is on it. ' +
+          'THEN send the real answer with status="final" (the default). ' +
+          "Give SHORT factual answers - one entry per question, each at most " +
           KEY_FACTS_LIMITS.maxLen +
           " characters; longer answers are REJECTED and the question stays open. Do NOT invent " +
           "facts: if you do not know, say so honestly here instead of guessing. Answers reach " +
           "the agent as background information only.",
+        annotations: TOOL_ANNOTATIONS.answer_consult,
         inputSchema: {
           call_id: z.string().describe("The call_id from place_call"),
           event_id: z.string().describe("The event_id from await_call_event"),
+          status: z
+            .enum([CONSULT_ANSWER_MODE.WORKING, CONSULT_ANSWER_MODE.FINAL])
+            .optional()
+            .describe(
+              '"working" = acknowledge immediately, no answers needed. "final" (default) = the answer.',
+            ),
           answers: z
             .array(z.string())
-            .describe("One short answer per open question, in the order the questions were given."),
+            .optional()
+            .describe(
+              "One short answer per open question, in the order the questions were given. " +
+                'Required unless status is "working".',
+            ),
         },
         outputSchema: ANSWER_CONSULT_OUTPUT,
       },
-      async ({ call_id, event_id, answers }) => {
+      async ({ call_id, event_id, status, answers }) => {
         try {
           const r = await call("POST", `/api/calls/${call_id}/consult/answer`, {
             event_id,
+            status,
             answers,
           });
+          if (status === CONSULT_ANSWER_MODE.WORKING) {
+            return {
+              content: [{ type: "text", text: loc.mcp.consultAckAccepted }],
+              structuredContent: { accepted: true, merged_facts: 0 },
+            };
+          }
           const mergedFacts = typeof r?.merged_facts === "number" ? r.merged_facts : 0;
           return {
             content: [{ type: "text", text: loc.mcp.consultAnswerAccepted(mergedFacts) }],
@@ -956,7 +1113,8 @@ export function registerTools(
     "get_call_status",
     {
       description:
-        "Returns the live state of a call: status (dialing|in_progress|completed|failed|cancelled), duration and the last transcript lines. The live card from place_call normally updates itself; this tool remains available as a manual fallback if no live update arrives.",
+        "Returns the live state of a call: status (dialing|in_progress|completed|failed|cancelled), duration and the last transcript lines. Some clients also show a live card that updates itself; call this tool regardless whenever the current state is needed, it always reflects it.",
+      annotations: TOOL_ANNOTATIONS.get_call_status,
       inputSchema: { call_id: z.string().describe("The call_id from place_call") },
       outputSchema: CALL_STATUS_OUTPUT,
     },
@@ -972,7 +1130,8 @@ export function registerTools(
     "get_transcript",
     {
       description:
-        "After the call has ended, returns the result summary and whether the objective was achieved. For data protection reasons the raw transcript is not kept after the summary (data minimisation) and is NOT returned - only summary and objective status. Call this only once get_call_status reports status=completed.",
+        "After the call has ended, returns the result summary and whether the objective was achieved. This tool NEVER returns the raw transcript - whether the server keeps it afterwards on its own follows the diagnostic rule of place_call's diagnostic field and is independent of this response. Call this only once get_call_status reports status=completed.",
+      annotations: TOOL_ANNOTATIONS.get_transcript,
       inputSchema: { call_id: z.string().describe("The call_id from place_call") },
       outputSchema: TRANSCRIPT_OUTPUT,
     },
@@ -1015,7 +1174,10 @@ export function registerTools(
     "cancel_call",
     CANCEL_CALL_DESCRIPTION,
     { call_id: z.string().describe("The call_id from place_call") },
-    async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
+    {
+      annotations: TOOL_ANNOTATIONS.cancel_call,
+      handler: async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
+    },
   );
 
   // Stufe 0 (Text byte-identisch zum Bestand) + structuredContent (Whitelist) + Stufe 1
@@ -1026,6 +1188,7 @@ export function registerTools(
     "get_my_number",
     {
       description: "Returns the phone number of the phone agent.",
+      annotations: TOOL_ANNOTATIONS.get_my_number,
       inputSchema: {},
       outputSchema: MY_NUMBER_OUTPUT,
       ...enableWidgetUi(WIDGET_MY_NUMBER),
@@ -1054,6 +1217,7 @@ export function registerTools(
     {
       description:
         "Lists the agent's most recent calls (inbound and outbound) with status and summary.",
+      annotations: TOOL_ANNOTATIONS.list_calls,
       inputSchema: {},
       outputSchema: CALLS_OUTPUT,
       ...enableWidgetUi(WIDGET_CALLS),
@@ -1083,6 +1247,7 @@ export function registerTools(
     "check_inbox",
     {
       description: CHECK_INBOX_DESCRIPTION,
+      annotations: TOOL_ANNOTATIONS.check_inbox,
       inputSchema: { include_seen: INCLUDE_SEEN_FIELD },
       outputSchema: INBOX_OUTPUT,
     },
@@ -1103,19 +1268,22 @@ export function registerTools(
   // Leertext und Termin-Praefix folgen der Tenant-Sprache (MCP-14): sie kommen aus
   // DEMSELBEN Locale-Buendel wie Rollen-Praefix, Fehler- und Leertexte (loc.mcp), kein
   // zweiter Lookup. DE bleibt byte-identisch zum Bestand.
-  tool("list_action_items", "Lists open action items from all calls.", {}, async () => {
-    const s = await call("GET", "/api/state");
-    requireFields(s, { actionItems: "array" });
-    const open = s.actionItems.filter((a) => !a.done);
-    if (!open.length) return text(loc.mcp.emptyActionItems);
-    return text(
-      open
-        .map(
-          (a) =>
-            `[${a.id}] ${a.type === "appointment" ? loc.mcp.appointmentPrefix : ""}${a.text}`,
-        )
-        .join("\n"),
-    );
+  tool("list_action_items", "Lists open action items from all calls.", {}, {
+    annotations: TOOL_ANNOTATIONS.list_action_items,
+    handler: async () => {
+      const s = await call("GET", "/api/state");
+      requireFields(s, { actionItems: "array" });
+      const open = s.actionItems.filter((a) => !a.done);
+      if (!open.length) return text(loc.mcp.emptyActionItems);
+      return text(
+        open
+          .map(
+            (a) =>
+              `[${a.id}] ${a.type === "appointment" ? loc.mcp.appointmentPrefix : ""}${a.text}`,
+          )
+          .join("\n"),
+      );
+    },
   });
 
   // Kalender-Tool nur registrieren, wenn das Profil es erlaubt (Phase 2). Ein
@@ -1129,6 +1297,7 @@ export function registerTools(
       "get_calendar",
       {
         description: "Shows the owner's next calendar entries.",
+        annotations: TOOL_ANNOTATIONS.get_calendar,
         inputSchema: {},
         outputSchema: CALENDAR_OUTPUT,
         ...enableWidgetUi(WIDGET_CALENDAR),
@@ -1168,6 +1337,7 @@ export function registerTools(
     {
       description:
         "Status of the phone agent: phone number, voice engine, model, monthly usage, permissions.",
+      annotations: TOOL_ANNOTATIONS.get_agent_status,
       inputSchema: {},
       outputSchema: AGENT_STATUS_OUTPUT,
       ...enableWidgetUi(WIDGET_AGENT_STATUS),

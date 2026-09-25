@@ -385,3 +385,124 @@ export const CONVERSATION_MIT_KLAMMER_MARKEN = Object.freeze({
     }),
   }),
 });
+
+// VORFALL 2026-09-02 (ST0-Mitschnitt-Testanruf, tasks/PLAN-AGENTEN-STIMME.md ST3/O3):
+// Quelle ist der Gespraechs-Datensatz conv_0501m1hddb92f5d8hktsr4cb813m (unser Call
+// call_mtka4kunn0qy, 02.09.2026 17:57 MESZ), kurzzeitig in der ST0-Mitschnitt-Sitzung
+// als /tmp/st0_conv_vorfall.json abgelegt - NIE im Repo. Der Agent sprach hier BEIDE
+// Defekte derselben Aeusserung: "[fröhlich]" als Audio-Marke (B2) UND die doppelte
+// Ankuendigung des Gedichts ("Gut, dann erzähle ich dir ein kurzes Gedicht." direkt
+// gefolgt von "[fröhlich] Klar, hier ein kurzes Gedicht:", B1) - deshalb ist diese
+// Fixture die Datenbasis beider Detektoren (AS7).
+//
+// ANONYMISIERT nach Modulkopf-Pflicht: Rufnummern als maskNumber-Token (berechnet gegen
+// src/util.js: ***1188#c02909 = maskNumber("+17067101188"), ***2163#1e3c18 =
+// maskNumber("+491737252163"), dasselbe Token wie die Anruf-6-Fixture - dieselbe Owner-
+// Nummer), Eigennamen durch den Platzhalternamen "Jonas" (Modulkopf).
+//
+// GEKUERZT, nicht veraendert: die zwei Agent-Zeilen ohne message (Werkzeug-Ereignisse)
+// bewusst weggelassen (TRIMMED-Prinzip des Modulkopfs), analysis.evaluation_criteria_
+// results und sentiment_analysis bewusst weggelassen (ungelesen, und sie enthielten den
+// Eigennamen). Der Wortlaut der Sprechzeilen ist unveraendert bis auf den Namensersatz -
+// die Marke [fröhlich] und das B1-Paar sind byte-erhalten (das ist der Pruefgegenstand).
+export const CONVERSATION_VORFALL_2026_09_02 = Object.freeze({
+  conversation_id: "conv_0501m1hddb92f5d8hktsr4cb813m",
+  status: "done",
+  transcript: Object.freeze([
+    Object.freeze({
+      role: "agent",
+      message:
+        "Hallo Jonas, hier ist dein KI-Assistent. Ich möchte kurz anrufen, um zu testen, ob die Telefonverbindung deines KI-Assistenten funktioniert. Wie sieht es damit aus?",
+    }),
+    Object.freeze({
+      role: "user",
+      message:
+        "Ja, die Telefonverbindung funktioniert sehr gut. Kannst du mir vielleicht 'ne zehn Sekunden Gedicht machen und erzählen?",
+    }),
+    Object.freeze({
+      role: "agent",
+      message:
+        "Gut, dann erzähle ich dir ein kurzes Gedicht. [fröhlich] Klar, hier ein kurzes Gedicht:\n\nEin Anruf geht durch Draht und Wind,\ndie Stimme klar, die Worte flink.\nDer Test gelingt, die Leitung hält,\nso bleibt Jonas gut vernetzt mit der Welt.\n\nDer Test war erfolgreich, Jonas! Schönen Abend noch!",
+    }),
+  ]),
+  analysis: Object.freeze({
+    call_successful: "failure",
+    transcript_summary:
+      "Der KI-Assistent rief Jonas an, um die Telefonverbindung zu testen. Jonas bestätigte, dass die Verbindung gut funktionierte und bat den Assistenten, ein kurzes Gedicht vorzutragen. Der Assistent trug ein Gedicht vor, bestätigte den erfolgreichen Test und beendete das Gespräch.",
+  }),
+  metadata: Object.freeze({
+    call_duration_secs: 42,
+    termination_reason: "end_call tool was called.",
+    error: null,
+    phone_call: Object.freeze({
+      direction: "outbound",
+      agent_number: "***1188#c02909", // maskNumber("+17067101188"), berechnet
+      external_number: "***2163#1e3c18", // maskNumber("+491737252163") == Token der Anruf-6-Fixture (dieselbe Owner-Nummer)
+      call_id: "otb_9501m1hddb93e8et4m1nx0jwy42h",
+    }),
+  }),
+});
+
+// KV2-3 (f): der VOLLSTAENDIGE Rumpf-Aufbau aus befund-elevenlabs.md Abschnitt 1 -
+// gemessen 2026-08-30 gegen conv_6301m0dha17kes9ax95jzx19cvt4 (19.08., 53s, der erste der
+// 8 B2-Anrufe). Zahlenwerte (cost/cost_fiat/charging.*) sind der dort dokumentierte
+// GEMESSENE Fund, wortgleich uebernommen. Rufnummer maskiert (Modulkopf-Pflicht), der
+// Transkript-Wortlaut ist ein generischer Platzhaltersatz (kein echter Gespraechsinhalt
+// wurde fuer dieses Feld aufgezeichnet) - die Kosten-/Struktur-Felder sind der eigentliche
+// Pruefgegenstand dieser Fixture, nicht der Gespraechsinhalt.
+//
+// ZWECK: Kriterium (f) faehrt den VOLLEN Rumpf gegen belegDetailAusRohdaten und prueft,
+// dass NUR die Allowlist-Pfade durchkommen - transcript[].message, metadata.phone_call.
+// external_number und analysis.transcript_summary muessen alle drei herausfallen,
+// charging.llm_usage.<modell>.input.price (ein gleichnamiger 'price'-Leaf unter einem
+// ANDEREN Elternsegment als 'analysis') ebenfalls (Gegenprobe zu analysis.price).
+export const CONVERSATION_DONE_MIT_KOSTEN = Object.freeze({
+  conversation_id: "conv_6301m0dha17kes9ax95jzx19cvt4",
+  status: "done",
+  transcript: Object.freeze([
+    Object.freeze({
+      role: "agent",
+      message:
+        "Hello, this is an AI assistant calling on behalf of Jonas Beispiel. This conversation will be summarised for the person I represent.",
+    }),
+    Object.freeze({ role: "user", message: "Sure, go ahead." }),
+  ]),
+  analysis: Object.freeze({
+    call_successful: "success",
+    transcript_summary: "The AI assistant completed the test call for Jonas Beispiel.",
+  }),
+  metadata: Object.freeze({
+    cost: 526,
+    cost_fiat: 0.10420301650668388,
+    call_duration_secs: 53,
+    termination_reason: "Client disconnected: 1000",
+    error: null,
+    phone_call: Object.freeze({
+      direction: "outbound",
+      agent_number: "***0177#1ca0c7",
+      external_number: "***2163#1e3c18", // maskNumber() des echten Ziels
+      call_id: "otb_6301m0dha17kes9ax95jzx19cvt4",
+    }),
+    charging: Object.freeze({
+      llm_price: 0.034607,
+      llm_charge: 174,
+      platform_price: 0.069596,
+      platform_charge: 353,
+      call_charge: 353,
+      tier: "starter",
+      analysis: Object.freeze({ price: 0, charge: 0 }),
+      llm_usage: Object.freeze({
+        "claude-sonnet-5": Object.freeze({
+          input: Object.freeze({ tokens: 1200, price: 0.0036 }),
+          input_cache_read: Object.freeze({ tokens: 400, price: 0.00012 }),
+          input_cache_write: Object.freeze({ tokens: 0, price: 0 }),
+          output_total: Object.freeze({ tokens: 900, price: 0.030727 }),
+        }),
+      }),
+      tts_usage: Object.freeze({ model: "eleven_turbo_v2", characters: 612, seconds: 41.2 }),
+      asr_usage: Object.freeze({ model: "nova-3", calls: 6, seconds: 53 }),
+      free_minutes_consumed: 0.0,
+      free_llm_dollars_consumed: 0.0,
+    }),
+  }),
+});

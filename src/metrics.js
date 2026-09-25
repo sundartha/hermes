@@ -86,14 +86,6 @@ export function createMetrics({
     log("stt_gap", { callId, gapMs: now() - prev });
   }
 
-  // Wanduhr-Dauer eines agentTurn IM SHIM (C-Telnyx, P10). PII-frei: callId + Millisekunden.
-  // ACHTUNG: das ist die GESAMT-Turn-Dauer (Fake-Stream), NICHT Time-to-first-Token -
-  // echtes TTFT braucht P3b-Streaming bzw. Telnyx-Live-Telemetrie (end_user_perceived_latency_ms).
-  function logShimTurn({ callId, latencyMs }) {
-    if (!enabled) return;
-    log("shim_turn", { callId, latencyMs });
-  }
-
   // ZEICHENZAHL des in einem Turn Gehoerten (P2a, Voraussetzung fuer die Endpointing-
   // Kalibrierung P9). Ein Absacken des Medians nach einem Endpointing-Flip ist das
   // Truncation-Signal - eine LAENGE ist kein Inhalt, identisches PII-Niveau wie logTurn.
@@ -127,7 +119,6 @@ export function createMetrics({
     logTurn,
     recordTurnRendered,
     logTurnGap,
-    logShimTurn,
     logSpeechResult,
     logCallDenied,
     logSenderFallback,
@@ -136,7 +127,7 @@ export function createMetrics({
 
 // Prozessweiter Singleton (P15). Konsumenten: claude.js (llmCall via createLlmClient,
 // logTurn) + routes/voice.js (recordTurnRendered/logTurnGap/logSpeechResult im /voice/turn)
-// + telnyx-llm-shim.js (logShimTurn im Custom-LLM-Shim, C-Telnyx P10)
+
 // + routes/api-calls.js (logCallDenied in der Denial-Senke von POST /api/calls)
 // + elevenlabs/outbound.js (logSenderFallback beim Absender-Rueckfall, OUTBOUND-E5).
 export const metrics = createMetrics();

@@ -55,6 +55,25 @@ async function completeCall(srv, callId) {
 // costCents des Owner-Buckets aus dem PERSISTIERTEN Store (Quelle der Wahrheit).
 const ownerCostCents = (srv) => srv.readStore().usage[BOOTSTRAP_TENANT_ID].costCents;
 
+// KV2-10-Nachbesserung (Race, nicht Verhaltensaenderung): terminateAndBillCall feuert
+// bill() als NICHT erwartete Promise (telephony/call-termination.js), und finishCall
+// schreibt den Store erst NACH einem await (releaseReserve). waitForLog wartet nur auf
+// die [voice/status]-Zeile, die VOR dem Settlement geloggt wird - unter paralleler
+// Suite-Last las der Parent damit gelegentlich den Stand von VOR der Buchung (reproduzierbar
+// rot, seit die Suite um eine Spawn-Datei wuchs). Pollen bis der Wert den vorherigen
+// verlassen hat; schlaegt die Buchung fehl, laeuft die Frist ab und die Assertion faellt
+// mit derselben Diagnose wie vorher.
+const BUCHUNGS_FRIST_MS = 3000;
+const POLL_TAKT_MS = 20;
+async function ownerCostCentsNachBuchung(srv, standDavor) {
+  const frist = Date.now() + BUCHUNGS_FRIST_MS;
+  for (;;) {
+    const cents = ownerCostCents(srv);
+    if (cents !== standDavor || Date.now() > frist) return cents;
+    await new Promise((aufloesen) => setTimeout(aufloesen, POLL_TAKT_MS));
+  }
+}
+
 test("Reconcile-Verdrahtung: outbound bucht tarif-x-minuten, inbound bucht den kalibrierten Inbound-Satz", async () => {
   const srv = await startServer({
     env: {
@@ -103,19 +122,19 @@ test("Reconcile-Verdrahtung: outbound bucht tarif-x-minuten, inbound bucht den k
     // flache Seed-Form).
     await completeCall(srv, "rc_inbound");
     const afterInbound = BILLED_MINUTES * INBOUND_TARIFF_CENTS;
-    assert.equal(ownerCostCents(srv), afterInbound, "Inbound bucht Minuten x kalibrierten Inbound-Satz");
+    assert.equal(await ownerCostCentsNachBuchung(srv, 0), afterInbound, "Inbound bucht Minuten x kalibrierten Inbound-Satz");
 
     // (1)+(3) OUTBOUND Inland: Reconcile bucht BILLED_MINUTES x Inlandstarif, additiv auf
     // dem Inbound-Beleg oben.
     await completeCall(srv, "rc_out_dom");
     const afterDomestic = afterInbound + BILLED_MINUTES * DOMESTIC_TARIFF_CENTS;
-    assert.equal(ownerCostCents(srv), afterDomestic, "Outbound Inland: Minuten x Inlandstarif additiv gebucht");
+    assert.equal(await ownerCostCentsNachBuchung(srv, afterInbound), afterDomestic, "Outbound Inland: Minuten x Inlandstarif additiv gebucht");
 
     // (3) OUTBOUND International: derselbe Pfad tarifiert das Leg -> der teurere
     // Default-Tarif kommt OBENDRAUF (beweist die Kopplung ans Leg, nicht pauschal).
     await completeCall(srv, "rc_out_intl");
     const afterIntl = afterDomestic + BILLED_MINUTES * DEFAULT_TARIFF_CENTS;
-    assert.equal(ownerCostCents(srv), afterIntl, "Outbound International: Default-Tarif additiv gebucht");
+    assert.equal(await ownerCostCentsNachBuchung(srv, afterDomestic), afterIntl, "Outbound International: Default-Tarif additiv gebucht");
   } finally {
     await srv.stop();
   }

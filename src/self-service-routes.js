@@ -13,6 +13,8 @@
 // store.updateSettings (greeting nur als Vorlage; Permission-Flags nur restriktiver;
 // alles andere abgelehnt). updateSettings bleibt UNVERAENDERT.
 import { Router } from "express";
+import { createSameOriginGuard } from "./middleware.js";
+import { promptLineRejection } from "./routes/_validation.js";
 import { selfServicePatch, hasCardOnFile, lockedSelfServiceKeys } from "./self-service.js";
 import { greetingTemplatesFor } from "./i18n/greeting-catalog.js";
 import { PERSONA_STYLE_IDS, localeFor } from "./i18n/locales.js";
@@ -28,12 +30,21 @@ import {
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
 import { attemptCancellationMailConfirm } from "./billing/cancellation-mail.js";
 import { provisionAuditDetail } from "./billing/provision-outcome.js";
+// GP-P5: resolveAutoProvisionRetry ist der REINE Kern desselben Moduls - dieselbe
+// Beurteilung, die den automatischen Wiederanlauf steuert, hier nur lesend fuer die
+// Anzeige (G5: keine zweite Meinung ueber denselben Zustand).
+import {
+  PROVISION_RETRY_OUTCOME,
+  resolveAutoProvisionRetry,
+  retriggerFailedProvisioning,
+} from "./billing/provision-retry.js";
 import {
   publicCall,
   activeNumberFor,
   numberStatusFor,
   upcomingCalendar,
   tenantLanguage,
+  NUMBER_DISPLAY_STATUS,
 } from "./store/views.js";
 import { tenantGeo } from "./store/state-ops.js";
 import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
@@ -68,6 +79,61 @@ import { hashEmail } from "./util.js";
 // nacktes 409 als Sackgasse zu sehen. Kein Magic-String (G25); spiegelbildlich
 // SETUP_CHECKOUT_NEXT im Frontend (Contract-String ueber die Origin-Grenze, wie die error-Codes).
 const NEXT_SETUP_CHECKOUT = "setup-checkout";
+
+// ---- GP-P5: WARUM die Nummern-Einrichtung haengt --------------------------------
+// Das Dashboard zeigte bei 'failed' genau einen Satz: "Einrichtung der Nummer
+// fehlgeschlagen". Kein Grund, kein naechster Schritt - obwohl der Server den Grund seit
+// GP-P2/P3 KENNT. Fuer den Vorfall vom 11.09. war der Unterschied entscheidend: die
+// Zahlungsmethode (Typ 'link') kann strukturell keinen Hold tragen, es half also kein
+// Warten und kein erneutes Klicken, sondern ausschliesslich eine Karte. Genau das stand
+// nirgends.
+//
+// EINE Quelle (G5): der Grund kommt aus DEMSELBEN Entscheidungskern, der ueber den
+// automatischen Wiederanlauf entscheidet (resolveAutoProvisionRetry) - keine zweite,
+// driftfaehige Beurteilung derselben Lage. Der Kern ist rein und liest nur den State;
+// diese Lesekante bewegt kein Geld und stoesst nichts an.
+//
+// Die Kunden-Vokabel ist BEWUSST GROEBER als das interne Enum: sie unterscheidet nur,
+// was der Kunde unterschiedlich behandeln muss - selbst handeln (Karte), warten (laeuft
+// automatisch), oder Support. Interne Ausgaenge wie DISABLED (Not-Aus) oder ERROR nennen
+// wir ihm nicht als solche; fuer ihn zaehlt, dass von allein nichts mehr passiert.
+// Sprachneutrale Token wie ueberall in dieser Datei - die Texte liegen im Frontend
+// (apps/web/src/lib/api.js).
+const NUMBER_SETUP_REASON = Object.freeze({
+  PAYMENT_METHOD: "payment_method_unsuitable", // Kunde kann handeln: Karte hinterlegen
+  RETRY_PENDING: "retry_pending", // laeuft automatisch weiter, nichts zu tun
+  MANUAL: "manual_review", // von allein passiert nichts mehr -> Support
+});
+
+const REASON_JE_AUSGANG = Object.freeze({
+  [PROVISION_RETRY_OUTCOME.PAYMENT_METHOD_UNSUITABLE]: NUMBER_SETUP_REASON.PAYMENT_METHOD,
+  [PROVISION_RETRY_OUTCOME.RETRY]: NUMBER_SETUP_REASON.RETRY_PENDING,
+  [PROVISION_RETRY_OUTCOME.THROTTLED]: NUMBER_SETUP_REASON.RETRY_PENDING,
+});
+
+// Der Grund NUR im 'failed'-Zustand. Die Gate-Reihenfolge des Kerns beantwortet den
+// Not-Aus (DISABLED) VOR dem Zustands-Gate - ohne diese eigene Vorpruefung truege ein
+// abgeschalteter Wiederanlauf jedem Mandanten einen Grund an, auch dem mit laufender
+// Nummer. Unbekannter/kuenftiger Ausgang -> MANUAL (fail-closed: lieber "meld dich"
+// als eine Zusage, dass es von allein weitergeht).
+function numberSetupReason(state, { tenantId, numberStatus, maxAttempts }) {
+  if (numberStatus !== NUMBER_DISPLAY_STATUS.FAILED) return "";
+  const { outcome } = resolveAutoProvisionRetry(state, { tenantId, maxAttempts });
+  return REASON_JE_AUSGANG[outcome] || NUMBER_SETUP_REASON.MANUAL;
+}
+
+// Die Agent-Sicht der /state-Antwort an EINER Stelle (Muster paymentView): Nummer,
+// Besitzer, Anzeige-Status - und additiv der Grund. Ein aelterer Client ohne das Feld
+// rendert unveraendert.
+function agentView(state, { tenantId, ownerName, maxAttempts }) {
+  const numberStatus = numberStatusFor(state, tenantId);
+  return {
+    number: activeNumberFor(state, tenantId),
+    owner: ownerName,
+    numberStatus,
+    numberStatusReason: numberSetupReason(state, { tenantId, numberStatus, maxAttempts }),
+  };
+}
 
 // F2 P6: maskiert die EIGENE private Summary-Nummer fuer die Self-Service-Read-View
 // (Decision #5, H4). Zeigt NUR den Laendercode (erste 3 Zeichen) + die letzten 4 Ziffern,
@@ -219,9 +285,19 @@ async function setSubscriptionCancellation({ store, billing, tenant, cancel }) {
 // Express 4 leitet abgelehnte Promises aus async-Handlern NICHT an die Fehler-Kette ->
 // ein geworfener Stripe-/Netzwerkfehler liesse die Anfrage HAENGEN (nie ein Response,
 // haengende Verbindung = Verfuegbarkeitsrisiko bei Skala). Dieser Wrapper faengt den
-// Fehler, loggt NUR die Fehlermeldung (op+Status, kein Secret - Regel 4) und ruft einen
-// Responder (JSON 502 bzw. Redirect), sodass IMMER geantwortet wird. Erwartete fachliche
-// Ablehnungen (no_card etc.) laufen NICHT hierueber - die behandelt der Handler selbst.
+// Fehler, loggt err.message und ruft einen Responder (JSON 502 bzw. Redirect), sodass
+// IMMER geantwortet wird. Erwartete fachliche Ablehnungen (no_card etc.) laufen NICHT
+// hierueber - die behandelt der Handler selbst.
+//
+// WAS IN DIESER ZEILE LANDET, GENAU (GP-P1 - der alte Kommentar behauptete pauschal
+// "op+Status, kein Secret" und war fuer die Stufe-3-Aufrufer falsch): Secrets nie, die
+// liegen nur im Request-Header (Regel 4). Der Abo-Aufbau (subscribe -> createSubscription)
+// liefert seit GP-P1 op + HTTP-Status + das Enum-Trio code/decline_code/type - genau die
+// Zeile, die am 11.09.2026 fehlte, ohne die Kundendaten, die damals stattdessen drin
+// standen. VERBLIEBEN: die beiden Checkout-SESSION-Aufbauten (setup-checkout) haengen
+// weiterhin den Provider-Rohtext an - dort ist noch keine Zahlungsmethode am Vorgang,
+// der Koerper traegt also keine Kundendaten. Das ist eine benannte Reichweite, keine
+// Zusage fuer jeden kuenftigen Aufrufer.
 function asyncBilling(fn, onError) {
   return async (req, res) => {
     try {
@@ -248,6 +324,30 @@ const billingUnavailable = (res) => res.status(502).json({ error: "billing_unava
 // 312k-Phase 5: mailer ist OPTIONAL injiziert (Default null -> attemptCancellationMailConfirm
 // erkennt "kein Mailer konstruiert" fail-soft, Muster workos in contract-end-cleanup.js).
 // NUR die cancel-Route greift darauf zu (resume bekommt bewusst KEINE Mail, s. Auftrag).
+// GP-P3: Nachlauf der reinen Karten-Rueckkehr, nachdem die Karte gebunden ist. Zwei
+// Schritte auf EINER Abstraktionsebene: das gescheiterte Nummern-Provisioning wieder
+// anstossen und den Ausgang dieser Entscheidung auditieren (ohne ihn waere im Betrieb
+// nicht unterscheidbar, ob angestossen oder stillschweigend nichts getan wurde).
+//
+// Mit dem Anstoss wird aus der reinen Karten-Speicher-Route eine GELDBEWEGENDE - sie
+// traegt das Abo-/KYC-Gate deshalb selbst. Es sitzt im Entscheidungskern
+// (billing/provision-retry.js), zusammen mit dem Versuchsdeckel und der Eignung der
+// frisch gebundenen Zahlungsmethode. Steht der Mandant nicht auf 'failed', ist der
+// ganze Nachlauf ein No-op und die Antwort byte-identisch zum Bestand.
+//
+// Fail-soft: die Karte IST an dieser Stelle gebunden - ein Fehlschlag des Wiederanlaufs
+// darf daraus nie "Karte fehlgeschlagen" machen (retriggerFailedProvisioning
+// wirft nie). Deshalb steht er NACH der Bindung und nicht in ihr.
+async function finishCardOnlyReturn({ store, provision, config, audit, req, tenant }) {
+  const { outcome } = await retriggerFailedProvisioning({
+    store,
+    provision,
+    tenantId: tenant,
+    maxAttempts: config.provisioning.provisioningRetryMaxAttempts,
+  });
+  audit("self_service_card_saved", req, `tenant=${tenant} wiederanlauf=${outcome}`);
+}
+
 export function makeSelfServiceRoutes({
   store,
   webAuthMw,
@@ -353,11 +453,11 @@ export function makeSelfServiceRoutes({
       // Menge ist bereits durch MAX_NOTIFICATIONS im Store begrenzt (wie actionItems).
       notifications: data.notifications,
       calendar: upcomingCalendar(store, tenant),
-      agent: {
-        number: activeNumberFor(agentState, tenant),
-        owner: ctx.ownerName,
-        numberStatus: numberStatusFor(agentState, tenant),
-      },
+      agent: agentView(agentState, {
+        tenantId: tenant,
+        ownerName: ctx.ownerName,
+        maxAttempts: config.provisioning.provisioningRetryMaxAttempts,
+      }),
     });
   });
 
@@ -702,7 +802,9 @@ export function makeSelfServiceRoutes({
             audit("self_service_card_mismatch", req, `tenant=${tenant}`);
             return res.status(403).json({ error: "Customer-Mismatch" });
           }
-          audit("self_service_card_saved", req, `tenant=${tenant}`);
+          // GP-P3: Nachlauf der reinen Karten-Rueckkehr (Wiederanlauf + Audit) - er lebt
+          // als eigene Funktion ausserhalb dieser Router-Fabrik (G30).
+          await finishCardOnlyReturn({ store, provision, config, audit, req, tenant });
           return res.redirect(CHECKOUT_RETURN.CARD_OK); // 302 -> "Karte hinterlegt"
         }
 
@@ -890,6 +992,49 @@ export function makeSelfServiceRoutes({
   );
 
   return router;
+}
+
+// SEC-P3: Herkunftspruefung (CSRF) + Eingabegrenze fuer agentName - als eigener,
+// kleiner Router VOR makeSelfServiceRoutes montiert, statt in der Router-Fabrik
+// selbst (G30/G34: eine Aufgabe pro Funktion, makeSelfServiceRoutes bleibt
+// unveraendert). Praefix-Montage, KEIN nacktes router.use(mw) und KEINE Liste
+// einzelner Routen:
+//   * nackt waere ein Fehler - dieser Router wird in wiring/web-login.js VOR /voice,
+//     express.static und registerApiRoutes gemountet; die Schicht liefe damit an
+//     JEDEM spaeteren Request entlang, /voice/incoming eingeschlossen.
+//   * eine Routen-Liste driftet - eine kuenftige Self-Service-Route waere still
+//     ungeschuetzt. Der Praefix nimmt sie automatisch mit.
+// Sichere Methoden bleiben unberuehrt (s. createSameOriginGuard), damit der
+// Stripe-Redirect GET /api/self-service/billing/return unveraendert durchlaeuft; die
+// beiden oeffentlichen GET /newsletter/* liegen ausserhalb des Praefixes.
+export function mountSelfServiceRoutes(deps) {
+  const guarded = Router();
+  guarded.use(
+    "/api/self-service",
+    createSameOriginGuard({ enforce: deps.config.safety.csrfEnforce }),
+  );
+  guarded.use("/api/self-service/settings", rejectInvalidAgentName(deps.audit));
+  guarded.use(makeSelfServiceRoutes(deps));
+  return guarded;
+}
+
+// Antwortcode der agentName-Eingabegrenze. Benannt wie im Bestand
+// (routes/webhooks-elevenlabs.js) statt als nackte Zahl im Handler.
+const HTTP_BAD_REQUEST = 400;
+
+// Laenge + Steuerzeichen VOR jedem Schreibzugriff - der Befund war 200 mit 20.000
+// gespeicherten Zeichen. Geprueft wird req.body.agentName DIREKT (nicht der von
+// selfServicePatch gefilterte Patch): fuer dieses eine Feld aequivalent, weil
+// selfServicePatch es ungeprueft durchreicht (agentName in SELF_SERVICE_FREE_FIELDS,
+// Typ-Check macht ausschliesslich updateSettings - s. self-service.js). Die Antwort
+// nennt den Grund und NICHT den abgelehnten Wert.
+function rejectInvalidAgentName(audit) {
+  return function agentNameLimitMiddleware(req, res, next) {
+    const rejection = promptLineRejection("agentName", req.body?.agentName);
+    if (!rejection) return next();
+    audit("self_service_settings_denied", req, `field=agentName reason=${rejection}`);
+    res.status(HTTP_BAD_REQUEST).json({ error: "invalid_agent_name", reason: rejection });
+  };
 }
 
 // W4/AM4: reason -> { HTTP-Status, JSON-Body } in EINEM Switch (kein Magic-String/Number,

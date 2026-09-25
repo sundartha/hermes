@@ -10,34 +10,31 @@
 //              -> Twilio-kompatible Call-Resource, sid = CallSid.
 //   endCall:   POST {base}/v2/texml/Accounts/{account_sid}/Calls/{call_sid}
 //              (form, Status=completed) -> beendet den Call (Twilio-kompatibel).
+//   redirectCall: POST {base}/v2/texml/Accounts/{account_sid}/Calls/{call_sid}
+//              (form, Url + Method) -> leitet den Live-Call um (Telnyx Update-Call, 2026-09-15).
 import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
-import { voiceAttrs } from "./render.js";
-import { sttAttrs } from "./stt-model.js";
-import { elevenLabsVoiceName, hasElevenLabsVoice } from "./elevenlabs-voice.js";
 import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.js";
 import { createMinuteWindowThrottle } from "./rate-limit.js";
 
 const TEXML_BASE = "/v2/texml";
-// Call-Control-Basis (P4, AI-Assistant-Pfad): Origination/Hangup/ai_assistant_start laufen
-// ueber /v2/calls + Action-Endpunkte, NICHT ueber TeXML. Der TeXML-Pfad bleibt daneben unveraendert.
+// Call-Control-Basis (Hangup-Altbestand): endCallViaCallControl laeuft ueber
+// /v2/calls + Action-Endpunkte, NICHT ueber TeXML. Der TeXML-Pfad bleibt daneben unveraendert.
 const CALL_CONTROL_BASE = "/v2/calls";
 const FORM_HEADERS_TYPE = "application/x-www-form-urlencoded";
 const JSON_HEADERS_TYPE = "application/json";
-// Call-Control-Action-Slugs (Teil des URL-Vertrags, benannt gegen Tippfehler; G25).
+// Call-Control-Action-Slug (Teil des URL-Vertrags, benannt gegen Tippfehler; G25).
 const HANGUP_ACTION = "hangup";
-const ASSISTANT_START_ACTION = "ai_assistant_start";
-const SPEAK_ACTION = "speak";
 
-// AMD-Feldnamen (GAP-21). TeXML ist Twilio-kompatibel (PascalCase-Formfelder), Call
-// Control spricht snake_case-JSON. VORBEDINGUNG der Phase: beide Namen VOR dem
-// Scharfschalten gegen einen echten Objekt-GET der Live-API belegen - bis dahin schuetzt
-// MACHINE_DETECTION_ENABLED=false. Call Control bekommt bewusst NUR das Modus-Feld
-// (keine zusaetzliche *_config-Struktur): jede weitere geratene Feldform ist ein
-// zusaetzliches 422-Risiko auf einem Pfad, der heute nicht der Live-Budget-Pfad ist.
+// TeXML-Update-Call-Werte (Teil des Formvertrags, G25).
+const TEXML_STATUS_COMPLETED = "completed";
+const REDIRECT_URL_METHOD = "POST"; // die /voice-Routen nehmen POST an
+
+// AMD-Feldnamen (GAP-21). TeXML ist Twilio-kompatibel (PascalCase-Formfelder).
+// VORBEDINGUNG der Phase: den Namen VOR dem Scharfschalten gegen einen echten Objekt-GET
+// der Live-API belegen - bis dahin schuetzt MACHINE_DETECTION_ENABLED=false.
 const TEXML_AMD_FIELD = "AnsweringMachineDetection";
 const TEXML_AMD_TIMEOUT_FIELD = "MachineDetectionTimeout";
-const CALL_CONTROL_AMD_FIELD = "answering_machine_detection";
 const AMD_MODE_DETECT = "detect";
 
 // ---- CDR/Ist-Kosten (PLAN-LIVE-COST-TRACING P1) ----
@@ -98,7 +95,7 @@ const RATE_LIMITED_STATUS = 429;
 const RATE_LIMIT_RESET_HEADER = "x-ratelimit-reset";
 const MS_PER_SECOND = 1000;
 // EINE Drossel je Prozess: das Kontingent gehoert dem ENDPUNKT, nicht dem einzelnen Aufruf.
-// Sie gilt AUSSCHLIESSLICH fuer den Belegabruf - Origination, Assistant-Start, speak und
+// Sie gilt AUSSCHLIESSLICH fuer den Belegabruf - Origination, Hangup und
 // Nummernkauf laufen NICHT hierdurch, weil die Kontingente pro Endpunkt konfiguriert sind
 // (gemessen: /v2/usage_reports traegt "5, 5;w=1"). Ein gedrosselter Origination-Pfad wuerde
 // einen echten Anruf um bis zu eine Minute verzoegern - genau das darf nie passieren.
@@ -136,8 +133,19 @@ function logInvoiceFetchFailure(err) {
 //
 // Stufe 1 (Anker): DAS Feld, das die Belege mit der uebergebenen Leg-Referenz verbindet.
 // providerLegIdOf(call) liefert in BEIDEN Pfaden eine `v3:`-Token (twilioSid im TeXML-/
-// Budget-Pfad, callControlId im Assistant-Pfad) - genau die Form traegt call_control_id.
-const ANCHOR_ID_FIELD = "call_control_id";
+// Budget-Pfad, callControlId im Altbestand des entfernten Assistant-Pfads) - genau die
+// Form traegt call_control_id.
+// KV2-5: zwei Felder statt eines. Zwei Anrufwege fuehren zwei Primaerschluessel:
+//   call_control_id - TeXML-/Budget-Pfad und der Altbestand des entfernten Assistant-Pfads
+//   (`v3:`-Token, providerLegIdOf)
+//   sip_call_id     - der SIP-Trunk-Weg der ElevenLabs-Anrufe (`otb_`-Kennung)
+// GEMESSEN 2026-08-30 (befund-telnyx.md O1): von 13 sip-trunking-Belegen im EL-Zeitraum
+// tragen ALLE 13 sip_call_id und KEINER call_control_id; fuer alle 12 bekannten
+// sip_call_id-Werte liefert der Pool genau EINEN Treffer. Der Bestandsmechanismus haette
+// jeden dieser Belege als session_unresolved verworfen.
+// Die beiden Namensraeume koennen einander nicht treffen (`v3:` gegen `otb_`), der
+// Vergleich bleibt strikte String-Gleichheit - kein Fuzzy, keine Session-Heuristik.
+const ANCHOR_ID_FIELDS = Object.freeze(["call_control_id", "sip_call_id"]);
 // Stufe 2 (Aufspannen): die zwei Feldnamen, unter denen Belege eine Provider-Session
 // fuehren - sip-trunking/call-control/recording/ai-voice-assistant schreiben
 // telnyx_session_id, speech-to-text/text-to-speech call_session_id; kein Beleg traegt
@@ -217,23 +225,8 @@ const RECORD_TIMESTAMP_FIELDS = Object.freeze(["recorded_at", "created_at"]);
 // der ElevenLabs-Verbrauch je Anruf ablesbar - ohne zweiten Anbieter-Zugang und ohne
 // Key-je-Tenant (skaliert nicht auf Millionen Nutzer).
 const TTS_RECORD_TYPE = "text-to-speech";
-// BEWUSST NICHT ELEVENLABS_VOICE_SETTINGS_TYPE wiederverwendet (gleicher Wortlaut, weiter
-// unten): das ist der Union-Diskriminator von SpeakRequest.voice_settings (Telnyx-OpenAPI),
-// hier ist es ein GEMESSENER Feldwert der Beleg-API. Zwei unabhaengige Provider-Vertraege,
-// die getrennt driften koennen - eine gemeinsame Konstante waere kuenstliche Kopplung (G13).
+// Ein GEMESSENER Feldwert der Beleg-API (unabhaengig vom Telnyx-Provider-String).
 const ELEVENLABS_COST_RECORD_PROVIDER = "elevenlabs";
-// SpeakRequest.voice_settings ist laut Telnyx-OpenAPI eine per `type` diskriminierte Union;
-// ElevenLabsVoiceSettings verlangt type="elevenlabs" (das ASSISTANT-Objekt dagegen hat ein
-// flaches voice_settings OHNE type - deshalb lebt der Token hier, nicht im Provisioner).
-const ELEVENLABS_VOICE_SETTINGS_TYPE = "elevenlabs";
-
-// Sprach-Hints, fuer die wir die Sprache explizit setzen statt sie raten zu lassen (Telnyx-OpenAPI,
-// TranscriptionConfig.language). Die Liste deckt die drei Gespraechssprachen (de/fr/en) mit ab;
-// alles ausserhalb -> "auto", damit Telnyx' Spracherkennung den Hint setzt. "multi" bedeutet dort
-// woertlich "no language hint" und ist der LIVE-DEFEKT (R2: Deutsch kam als NL/EN-Kauderwelsch
-// an) - dieser Adapter sendet es NIE.
-const STT_LANGUAGE_HINTS = Object.freeze(["en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"]);
-const STT_LANGUAGE_AUTO = "auto";
 
 // HTTP-Fehler werfen MIT Status (P8) und - falls vorhanden - dem Telnyx-Fehlercode/-titel,
 // damit der echte Ablehnungsgrund (z.B. Caller-ID nicht zugewiesen, Land im Voice-Profil
@@ -255,8 +248,8 @@ function headers(contentType = FORM_HEADERS_TYPE) {
 
 // OBS-2: PII-freie Erfolgs-Spur pro Call-Control-Op (Op-Name + HTTP-Status + call_control_id-
 // PRAESENZ als Boolean). NIE der callControlId-WERT, NIE der API-Key (Regel 4). Eine Stelle (G5)
-// als EINZIGE Quelle des Erfolgs-Log-Formats, von den Action-Posts (postCallControlAction) und der
-// Origination geteilt. Nur auf dem Erfolgspfad erreichbar (assertTelnyxOk wirft vorher).
+// als EINZIGE Quelle des Erfolgs-Log-Formats, von den Action-Posts (postCallControlAction)
+// genutzt. Nur auf dem Erfolgspfad erreichbar (assertTelnyxOk wirft vorher).
 function logCallControlOk(op, status, ccidPresent) {
   console.log(`[telnyx/voice] ${op} ok status=${status} ccid=${ccidPresent}`);
 }
@@ -275,17 +268,16 @@ async function parseTelnyxBody(res) {
   return { data: json.data || json, meta: json.meta };
 }
 
-// Bestands-Projektion fuer EINZEL-Ressourcen (originateCall, originateViaCallControl):
+// Bestands-Projektion fuer EINZEL-Ressourcen (originateCall):
 // nur die Nutzlast, Verhalten und Rueckgabeform unveraendert.
 async function parseTelnyxResource(res) {
   return (await parseTelnyxBody(res)).data;
 }
 
-// Gemeinsames Fetch-Skelett fuer Call-Control-Actions (G5): endCallViaCallControl und
-// startAssistant posten beide auf {base}/v2/calls/{callControlId}/actions/{action} mit
-// JSON-Body und pruefen ueber denselben assertTelnyxOk-Helper. action/body/op als EIN
-// Optionsobjekt (F1, sonst 4 lose Argumente). originateViaCallControl bleibt separat -
-// andere URL-Form (kein callControlId/actions-Pfad) und eigenes Response-Parsing.
+// Fetch-Skelett fuer Call-Control-Actions: endCallViaCallControl postet auf
+// {base}/v2/calls/{callControlId}/actions/{action} mit JSON-Body und prueft ueber
+// denselben assertTelnyxOk-Helper. action/body/op als EIN Optionsobjekt (F1, sonst 4 lose
+// Argumente).
 async function postCallControlAction(callControlId, { action, body, op }) {
   const res = await fetch(
     `${config.telephony.telnyxApiBase}${CALL_CONTROL_BASE}/${callControlId}/actions/${action}`,
@@ -295,67 +287,17 @@ async function postCallControlAction(callControlId, { action, body, op }) {
   logCallControlOk(op, res.status, Boolean(callControlId));
 }
 
-// Voice-Felder des speak-Bodys (eine Aufgabe, eine Abstraktionsebene: G30/G34).
-// ElevenLabs-Zweig = ABSICHTLICH die GLOBALE Plattform-Stimme (el, NICHT die
-// sprachaufgeloeste voiceProfile-Stimme aus P9), NIE die per-voiceProfile aufgeloeste ID:
-// dieser speak-Node ist die Pflicht-Offenlegung unmittelbar VOR ai_assistant_start, und
-// die Telnyx-Assistant-Ressource danach hat EIN global provisioniertes Voice-Setting
-// (scripts/telnyx-assistant-provision.mjs), keine Per-Call-Sprachaufloesung. Wuerde dieser
-// speak-Node sprachabhaengig eine andere Stimme waehlen als der folgende Assistant, spraeche
-// derselbe Call in zwei Stimmen (RCA-Wurzel R5: "EINE Stimme im ganzen Call" verletzt) -
-// genau der Fehler, den P9 hier kurzzeitig eingefuehrt und Review-Runde 2 zurueckgenommen
-// hat (Gates-P9 B-R5-Nachtrag). KEIN `language`: im SpeakRequest optional (required =
-// payload+voice), es steuert die Azure-/Telnyx-TTS-Sprache; ElevenLabs-Modelle sind
-// multilingual und folgen dem Text (gleiche Entscheidung wie der TeXML-Say in render.js).
-// Die sprachaufgeloeste voiceProfile-Stimme (P9, VOICE-12) bleibt auf dem TeXML-Renderer
-// (render.js) und dem Play-TTS-Vorabsynthese-Pfad (directive-synth.js) beschraenkt - beide
-// haben keinen nachfolgenden Assistant, der die Stimme wechseln koennte.
-// Fail-SAFE (Fallback a): unvollstaendige ElevenLabs-Config -> Azure-Bestand byte-identisch.
-function speakVoiceFields({ voiceProfile, useAssistantVoice }) {
-  const el = config.telnyx.telnyxElevenLabs;
-  if (useAssistantVoice && hasElevenLabsVoice(el))
-    return {
-      voice: elevenLabsVoiceName(el),
-      voice_settings: { type: ELEVENLABS_VOICE_SETTINGS_TYPE, api_key_ref: el.apiKeyRef },
-    };
-  return voiceAttrs(voiceProfile); // { voice, language } - Bestand
-}
-
-// Observability: EINE Quelle fuer "ist die Assistant-Stimme ueberhaupt konfiguriert?"
-// - der Ingest-Log-Marker kann damit nie von dem abweichen, was speak wirklich sendet (G5).
-export function assistantVoiceConfigured() {
-  return hasElevenLabsVoice(config.telnyx.telnyxElevenLabs);
-}
-
-// Neutrale Gespraechssprache (call.language: de|fr|en) -> Telnyx-transcription-Felder. Das Mapping
-// lebt ADAPTER-INTERN (kein Provider-String durch den Port) in startAssistant (G5), das von
-// Ingest- UND Inbound-Pfad genutzt wird; beide reichen call.language durch (GAP-24).
-// Der Ohne-language-Zweig bleibt der Grenzfall (Sprache nicht aufloesbar): dann KEIN
-// transcription-Feld, Body byte-identisch zum Bestand.
-// Sprache ausserhalb der Hint-Liste (auch "multi") -> "auto": Telnyx-Detection statt Hint-los.
-//
-// Das MODELL muss mitgesendet werden - TranscriptionConfig.model hat laut Telnyx-OpenAPI
-// den Default "distil-whisper/distil-large-v2" (ENGLISCH-ONLY, non-streaming); ein
-// transcription-Block ohne model kippt die STT still auf Englisch. Es kommt aus derselben
-// Quelle wie der TeXML-Gather (stt-model.js) und aus DEMSELBEN Config-Schluessel - zwei
-// Schluessel haetten die Duplizierung nur von den Modell-Strings auf die Env-Namen
-// verschoben. Ein Engine-Feld gibt es hier NICHT: Call-Control-JSON kennt keines.
-//
-// TELNYX_PER_CALL_TRANSCRIPTION_ENABLED (Default true, Bestand byte-identisch): schaltet
-// AUS, ob dieser Block ueberhaupt gesendet wird - nicht die Sprachaufloesung selbst.
-// UNBELEGT ist, ob Telnyx den Pro-Call-Block gegen das Assistant-eigene transcription-
-// Objekt (inkl. settings.smart_format) MERGED oder es damit ERSETZT; die Anbieter-Doku
-// sagt dazu nichts. Faellt der Block weg (Schalter aus) UND ersetzt Telnyx tatsaechlich
-// statt zu mergen, greift der oben beschriebene OpenAPI-Default distil-whisper/
-// distil-large-v2 (ENGLISCH-ONLY) - genau das ist die zu messende Unsicherheit. Der
-// Schalter ist ausschliesslich fuer EINEN begleiteten Testanruf gedacht, danach wieder auf
-// "true" (bzw. ungesetzt) zurueckstellen - kein Dauerbetrieb.
-function transcriptionFields(language) {
-  if (!config.telnyx.telnyxAssistant.perCallTranscriptionEnabled) return {};
-  if (!language) return {};
-  const hint = STT_LANGUAGE_HINTS.includes(language) ? language : STT_LANGUAGE_AUTO;
-  const { model } = sttAttrs(config.voice.sttProfile);
-  return { transcription: { model, language: hint } };
+// EINE Stelle (G5) fuer die TeXML-Call-Ressource: Config-Pruefung, URL, Bearer-Form-Header und
+// Fehlerform - geteilt von endCall (Status) und redirectCall (Url). form/op als Objekt (F1).
+async function updateTexmlCall(callSid, { form, op }) {
+  if (!config.telephony.telnyxApiKey) throw new Error(`Telnyx ${op}: TELNYX_API_KEY fehlt`);
+  if (!config.telephony.telnyxAccountSid)
+    throw new Error(`Telnyx ${op}: TELNYX_ACCOUNT_SID fehlt`);
+  const res = await fetch(
+    `${config.telephony.telnyxApiBase}${TEXML_BASE}/Accounts/${config.telephony.telnyxAccountSid}/Calls/${callSid}`,
+    { method: "POST", headers: headers(), body: form },
+  );
+  await assertTelnyxOk(res, op, ATTACH_STATUS);
 }
 
 // ---- CDR/Ist-Kosten Helfer (PLAN-LIVE-COST-TRACING P1) ----
@@ -374,8 +316,11 @@ function recordSessionRefs(raw) {
 
 // Stufe 1: zeigt der Beleg DIREKT auf die uebergebene Leg-Referenz? Exakte Gleichheit auf
 // einer global eindeutigen Provider-ID - der staerkste Zugehoerigkeitsbeweis hier.
+// Log-Weg-Zaehler bleibt EIN `via_anchor` (kein vierter Schluessel): das Log-Format ist
+// testgepinnt (formatAssignmentRoutes, tasks/lct-DEPLOY-CHECKLIST.md), und beide Felder
+// sind derselbe Sachverhalt - ein Primaerschluessel-Treffer der Stufe 1.
 function matchesAnchor(raw, legId) {
-  return Boolean(raw[ANCHOR_ID_FIELD]) && String(raw[ANCHOR_ID_FIELD]) === legId;
+  return ANCHOR_ID_FIELDS.some((feld) => Boolean(raw[feld]) && String(raw[feld]) === legId);
 }
 
 // Stufe 1, aufgesammelt: die Provider-Sessions, die beweisbar zu diesem Call gehoeren.
@@ -738,58 +683,24 @@ export const telnyxVoice = {
   // Konstante, daher aus config statt durch den Port-Vertrag gereicht (endCall
   // bekommt nur den CallSid).
   async endCall(callSid) {
-    if (!config.telephony.telnyxApiKey) throw new Error("Telnyx endCall: TELNYX_API_KEY fehlt");
-    if (!config.telephony.telnyxAccountSid)
-      throw new Error("Telnyx endCall: TELNYX_ACCOUNT_SID fehlt");
-    const res = await fetch(
-      `${config.telephony.telnyxApiBase}${TEXML_BASE}/Accounts/${config.telephony.telnyxAccountSid}/Calls/${callSid}`,
-      { method: "POST", headers: headers(), body: new URLSearchParams({ Status: "completed" }) },
-    );
-    await assertTelnyxOk(res, "endCall", ATTACH_STATUS);
-  },
-
-  // --- Call-Control-Variante (P4, AI-Assistant-Pfad) ---
-  // Verifiziert gegen die Telnyx-Call-Control-Doku, live UNBESTAETIGT (erste Call-Control-
-  // Verdrahtung -> mit dem Owner in P5/P7 live fixen, falls die API abweicht). Feldnamen
-  // und die ai_assistant_start-Body-Form sind Doku-Stand, kein Live-Beweis.
-
-  // Outbound-Call ueber Call Control originieren (statt TeXML). Liefert die call_control_id
-  // als EIGENES Feld (callControlId) - NICHT sid ueberladen: die Boot-Recovery (P6) adressiert
-  // den Hangup ueber genau diese ID-Form. KEINE Store-Persistenz hier (Caller/P5 persistiert).
-  //
-  // connection_id ist hier die ID einer Call-Control-Application, NICHT die TeXML-Application
-  // aus telnyxConnectionId - Telnyx fuehrt beide als getrennte Objekttypen. Die TeXML-ID zu
-  // senden lehnt Telnyx deterministisch ab: HTTP 422 "10015 Invalid value for connection_id
-  // (Call Control App ID)" (Live-Bug 2026-07-10, tasks/rca-place-call-422.md). Der TeXML-Pfad
-  // (originateCall, Nummern-Routing) benutzt weiterhin telnyxConnectionId.
-  async originateViaCallControl({ from, to, webhookUrl, method, timeLimit }) {
-    if (!config.telephony.telnyxApiKey)
-      throw new Error("Telnyx originateViaCallControl: TELNYX_API_KEY fehlt");
-    if (!config.telnyx.telnyxAssistant.callControlAppId)
-      throw new Error("Telnyx originateViaCallControl: TELNYX_CALL_CONTROL_APP_ID fehlt");
-    const payload = { connection_id: config.telnyx.telnyxAssistant.callControlAppId, to, from };
-    if (webhookUrl) payload.webhook_url = webhookUrl;
-    if (method) payload.webhook_url_method = method;
-    // Defense-in-Depth wie originateCall: server.js setzt zusaetzlich den harten Max-Dauer-
-    // Timer (Absolute Regel). time_limit_secs greift zusaetzlich, falls Telnyx es honoriert.
-    if (timeLimit) payload.time_limit_secs = timeLimit;
-    // GQ-P6: Klingelfrist explizit setzen. Ohne das Feld gilt der Telnyx-Default von 30 s
-    // ("Minimum value is 5 seconds. Maximum value is 600 seconds", Anbieter-Doku) - und der
-    // reicht nicht, wenn die Zustellung selbst schon rund 30 s braucht (US-DID nach DE, am
-    // 2026-08-05 live gemessen). Kein Kostenrisiko: berechnet wird erst ab dem Abheben.
-    payload.timeout_secs = config.telephony.telnyxDialTimeoutSecs;
-    if (config.telephony.machineDetection.enabled) payload[CALL_CONTROL_AMD_FIELD] = AMD_MODE_DETECT;
-    const res = await fetch(`${config.telephony.telnyxApiBase}${CALL_CONTROL_BASE}`, {
-      method: "POST",
-      headers: headers(JSON_HEADERS_TYPE),
-      body: JSON.stringify(payload),
+    await updateTexmlCall(callSid, {
+      form: new URLSearchParams({ Status: TEXML_STATUS_COMPLETED }),
+      op: "endCall",
     });
-    await assertTelnyxOk(res, "originateViaCallControl", ATTACH_STATUS);
-    const data = await parseTelnyxResource(res);
-    // OBS-2: ccid-PRAESENZ hier = ob die Antwort eine call_control_id trug (nie der Wert).
-    logCallControlOk("originateViaCallControl", res.status, Boolean(data.call_control_id));
-    return { callControlId: data.call_control_id };
   },
+
+  // IEL-B7 (E9): Live-Umleitung eines laufenden TeXML-Calls (Telnyx Update-Call: Url + Method).
+  // Traegt KEIN Status-Feld - ein Status=completed wuerde auflegen statt umleiten. Leere
+  // callSid -> fail-closed ohne Netz (sonst POST auf die Collection-Ressource).
+  async redirectCall(callSid, url) {
+    if (!callSid) throw new Error("Telnyx redirectCall: callSid fehlt");
+    await updateTexmlCall(callSid, {
+      form: new URLSearchParams({ Url: url, Method: REDIRECT_URL_METHOD }),
+      op: "redirectCall",
+    });
+  },
+
+  // --- Call-Control-Hangup (Altbestand: Legs mit persistierter callControlId, s. hangUpAction) ---
 
   // Laufenden Call-Control-Call beenden: POST /v2/calls/{callControlId}/actions/hangup.
   // GETRENNTE Methode neben der TeXML-endCall(callSid) - die bleibt byte-identisch fuer den
@@ -803,48 +714,6 @@ export const telnyxVoice = {
       action: HANGUP_ACTION,
       body: {},
       op: "endCallViaCallControl",
-    });
-  },
-
-  // Telnyx-AI-Assistant an den laufenden Call-Control-Call anhaengen (ai_assistant_start).
-  // Provider-neutraler Transport: assistantId liefert der Caller (P5/P7); der Adapter erzeugt/
-  // persistiert KEINE Assistant-Config/Secrets. Voice/Greeting/interruption_settings sind
-  // Assistant-Config (P7), NICHT hier. Ob der per-Call-transcription-Block das Assistant-
-  // eigene transcription-Objekt ERSETZT oder in es hineinMERGED, ist UNBELEGT (Doku sagt
-  // nichts dazu, s. transcriptionFields); language ist OPTIONAL - fehlt sie, sendet der
-  // Adapter KEIN transcription-Feld und der Body bleibt Bestand. Beide Aufrufer reichen
-  // call.language durch: telnyx-call-control-ingest.js (Outbound-Ingest) und
-  // telnyx-inbound.js (Inbound, GAP-24).
-  async startAssistant({ callControlId, assistantId, language }) {
-    if (!config.telephony.telnyxApiKey)
-      throw new Error("Telnyx startAssistant: TELNYX_API_KEY fehlt");
-    if (!callControlId) throw new Error("Telnyx startAssistant: callControlId fehlt");
-    if (!assistantId) throw new Error("Telnyx startAssistant: assistantId fehlt");
-    await postCallControlAction(callControlId, {
-      action: ASSISTANT_START_ACTION,
-      body: { assistant: { id: assistantId }, ...transcriptionFields(language) },
-      op: "startAssistant",
-    });
-  },
-
-  // Deterministischer Call-Control-Speak-Node (P4.5): server-seitiges TTS EINES Textes
-  // VOR ai_assistant_start (Pflicht-Offenlegung, Regel 2). voiceProfile -> Telnyx-Voice/
-  // Language ueber dieselbe Map wie der TeXML-Renderer (voiceAttrs, G5), sofern useAssistantVoice
-  // fehlt/false ODER die ElevenLabs-Config unvollstaendig ist (Azure-Neural, byte-identisch zum
-  // Bestand). useAssistantVoice=true + vollstaendige Config -> dieselbe ElevenLabs-Stimme, die
-  // der AI-Assistant danach spricht (RCA-Wurzel R5, speakVoiceFields). Der fruehere ElevenLabs-
-  // LIVE-RELAY-Befund (unterdrueckt den Inbound-Track) gilt fuer den TeXML-Gather-Pfad
-  // (Inbound-Track, render.js), NICHT fuer diesen Call-Control-speak: hier folgt kein Gather,
-  // sondern ai_assistant_start - es gibt keinen Inbound-Track zu unterdruecken. Body-Feldform
-  // live UNBESTAETIGT (wie P4) -> mit Owner in P5/P11 fixen. Leere ID/Text -> fail-closed.
-  async speak({ callControlId, text, voiceProfile, useAssistantVoice = false }) {
-    if (!config.telephony.telnyxApiKey) throw new Error("Telnyx speak: TELNYX_API_KEY fehlt");
-    if (!callControlId) throw new Error("Telnyx speak: callControlId fehlt");
-    if (!text) throw new Error("Telnyx speak: text fehlt");
-    await postCallControlAction(callControlId, {
-      action: SPEAK_ACTION,
-      body: { payload: text, ...speakVoiceFields({ voiceProfile, useAssistantVoice }) },
-      op: "speak",
     });
   },
 

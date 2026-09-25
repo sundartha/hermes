@@ -12,7 +12,7 @@ import express from "express";
 import { PGlite } from "@electric-sql/pglite";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
-import { webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makePortalStore } from "../src/store/portal.js";
 
 const SECRET = "portal-route-secret-0123456789";
@@ -86,7 +86,7 @@ test("/api/portal/state ohne Session -> 401 (fail-closed)", async () => {
 test("/api/portal/state mit aktiver Kunden-Session -> nur eigene (leere) Calls, kein Owner-Leak", async () => {
   const s = await setup();
   try {
-    const cookie = `session=${encodeURIComponent(signValue(s.sessionId, SECRET))}`;
+    const cookie = `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(s.sessionId, SECRET))}`;
     const res = await get(`${s.base}/api/portal/state`, cookie);
     assert.equal(res.status, 200);
     const body = JSON.parse(res.body);

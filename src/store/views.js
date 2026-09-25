@@ -6,8 +6,9 @@
 import { NUMBER_STATUS, GLOBAL_CAP_REASON } from "./defaults.js";
 import { findTenant, resolveCallLanguage } from "./state-ops.js";
 
-// Call-Record fuer API-Antworten: streamToken (Zugangsgeheimnis des /media-Streams)
-// und interne Flags duerfen den Server nie verlassen. summarySmsSentAt (F2 P9) ist ein
+// Call-Record fuer API-Antworten: streamToken (Altfeld des mit IE6-S2 entfernten
+// Media-Streams; Spalte bleibt, verlaesst den Server nie) und interne Flags duerfen
+// den Server nie verlassen. summarySmsSentAt (F2 P9) ist ein
 // rein interner persistierter Dedup-Marker -> wie _finished gestrippt (kein API-Leak).
 // KS-P5: die zwei Belastungs-Anker (estimatedCostSpendMonthKey/estimatedCostPeriodKey)
 // verlassen die API ebenfalls NICHT - sie gehoeren zur selben internen Abrechnungs-Achse
@@ -51,6 +52,23 @@ export function publicCall({
   // OUTBOUND-E5: rein interner Betriebs-Marker (Muster summarySmsSentAt/telnyxConversationId).
   // Er beantwortet eine Betreiber-Frage ("ging die eigene DID raus?"), keine Nutzer-Frage.
   fromRegistrationSource,
+  // KV2-2: das Kostenprofil ist ein Betreiber-Datum wie die uebrigen Kosten-Felder
+  // darueber (estimatedCostCents … costTruingAttempts) - es beantwortet keine
+  // Nutzerfrage und hat in /api/state nichts verloren.
+  costProfile,
+  // ST3: Betreiber-Diagnose-Zaehler der Stimmen-Detektoren (PII-frei) - beantwortet
+  // keine Nutzerfrage, Muster costProfile (kein /api/state-Leak).
+  elDetectorCounts,
+  // SEC-P1: die Ereignis-Anker sind ein rein interner Wiederholungs-Riegel (Muster
+  // summarySmsSentAt/costProfile) - keine Nutzerfrage, kein Anzeige-Vertrag. Haelt
+  // /api/state, die Self-Service-Antwort und die MCP-Ausgaben BYTE-IDENTISCH.
+  webhookAnchors,
+  // IEL-B4a: der Brueckenzustand ist ein interner Ablauf-Riegel (Muster webhookAnchors/
+  // costProfile) - keine Nutzerfrage. Haelt /api/state, /api/calls/:id, den Art.-15-Export,
+  // die Self-Service-Antwort und die MCP-Ausgaben BYTE-IDENTISCH zum Bestand.
+  elBoundAt,
+  elFallbackAt,
+  elNachlaufStartedAt,
   ...rest
 }) {
   return rest;

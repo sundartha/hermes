@@ -118,6 +118,9 @@ function makeCapturingStore(conversationId) {
     // haengt nicht an ihm, aber die Attrappe muss die Methode kennen, sonst wirft
     // der Ergebnisweg einen TypeError.
     recordSipCallId: () => {},
+    // ST3: Zaehlfeld der Stimmen-Detektoren - dieselbe Begruendung wie recordSipCallId
+    // direkt darueber.
+    recordElDetectorCounts: () => {},
     // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber.
     recordFromRegistrationSource: () => {},
     recordActualSender: () => {},

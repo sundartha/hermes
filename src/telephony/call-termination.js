@@ -1,7 +1,11 @@
+// IEL-B5: reines Blatt-Praedikat (importiert nur die Kostenprofil-Registry, kein IO/Netz) -
+// dieselbe Ausnahme wie store/state-ops.js; die Kante zu zustandsbehafteten elevenlabs-Modulen bleibt DI.
+import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
+
 // F10 Runde 2 (S1/G5), C5 (Struct-4): der EINE Terminierungspfad, den JEDER Beender eines
-// aktiven Calls IN DER BUDGET-ENGINE durchlaeuft - fuenf Ausloeser: Max-Dauer-Cap-Timer
-// (terminateCappedCall), cancel_call, place_call-Dial-Fehlschlag, /voice/status und der
-// Telnyx-onHangup - Reihenfolge fest: erst persistieren, dann den Provider-
+// aktiven Calls IN DER BUDGET-ENGINE durchlaeuft - vier Ausloeser: Max-Dauer-Cap-Timer
+// (terminateCappedCall), cancel_call, place_call-Dial-Fehlschlag und /voice/status -
+// Reihenfolge fest: erst persistieren, dann den Provider-
 // Leg auflegen (awaited), ERST DANACH billing/summary/SMS anstossen (fire-and-forget). Die
 // umgekehrte Reihenfolge hielte den Anruf beim Provider technisch live, waehrend die
 // Buchungskette (echter LLM-Roundtrip in summarizeCall ueber src/llm.js mit EIGENEM
@@ -11,11 +15,6 @@
 // gebundene Thunks rein (persistEnd/hangUp/bill), keine Abhaengigkeit auf store/
 // voiceControl/finishCall aus server.js -> offline ohne Server/Store/Netz unit-
 // testbar (Muster sms-summary.js).
-//
-// Die REALTIME-Engine (bridge.js) terminalisiert NICHT ueber diesen Weg: ihr finalize()
-// beendet den Call idempotent (closed-Guard) via store.endCallRecord + onCallEnded (in Prod
-// = callFinish.finishCall, gebucht genau einmal), NICHT ueber terminateAndBillCall. Beide
-// Wege buchen heute korrekt genau einmal - dieser Helfer ist der Budget-Engine-Pfad.
 //
 // hangUp ist optional (null/undefined), wenn (noch) kein Provider-Call-Sid existiert -
 // dann wird der Hangup-Versuch uebersprungen, persistiert+gebucht wird trotzdem.
@@ -71,7 +70,9 @@ export function billThunk(finishCall, store, callId) {
 }
 
 // P6 (Regel 1 / Befund 1): waehlt Hangup-Endpunkt+ID anhand der Call-FORM, NICHT der
-// voiceEngine. Ein Call-Control-Call (callControlId gesetzt, C-Telnyx) wird ueber
+// voiceEngine. Ein Call-Control-Altbestand (callControlId gesetzt - seit IE6-S1 nur noch
+// persistierter Altbestand; rearmActiveCallTimers muss solche Legs nach einem Neustart
+// weiter beenden koennen) wird ueber
 // endCallViaCallControl(callControlId) beendet; ein TeXML-Call ueber endCall(
 // providerCallSid) - byte-identisch zum Bestand. EINE Quelle (G5) fuer terminateCappedCall
 // UND cancel_call, damit die ID-/Endpunkt-Entscheidung nicht an zwei Stellen driftet.
@@ -98,14 +99,41 @@ export function hangUpAction(voiceControl, call, providerCallSid) {
 // die Leitung laeuft weiter und kostet weiter.
 //
 // endActiveCall kommt INJIZIERT (DIP, wie voiceControl bei hangUpAction) - KEINE
-// Import-Kante von telephony/** nach elevenlabs/**: dieses Modul kennt weder ElevenLabs
-// noch das Netz, nur die Call-FORM. Der Aufrufer (server.js/app.js, Kompositionswurzel)
-// bindet die echte Implementierung (elevenlabs/outbound.js#endActiveCall: Ergebnisabruf+
+// Import-Kante zu zustandsbehafteten elevenlabs/**-Modulen: dieses Modul kennt kein Netz,
+// nur die Call-FORM und das reine Brueckenzustands-Praedikat. Der Aufrufer (server.js/
+// app.js, Kompositionswurzel) bindet die echte Implementierung (elevenlabs/outbound.js#endActiveCall: Ergebnisabruf+
 // Persistenz ZUERST, Loeschversuch DANACH). Fehlt endActiveCall (Kanal nicht verdrahtet
 // oder Test ohne EL-Wiring) -> null, derselbe fail-safe wie bei hangUpAction ohne Handle.
 export function elevenLabsHangUpAction(endActiveCall, call) {
   if (!call.elevenlabsConversationId || typeof endActiveCall !== "function") return null;
+  // IEL-B5 (E7b): ein Inbound-EL-Bein wird nie per DELETE beendet (nimmt Transkript und
+  // Buchungsbeleg beim Anbieter mit) - beendet wird ueber das Traeger-Bein.
+  if (bridgeStateOf(call) !== BRIDGE_STATE.KEIN_EL_INBOUND) return null;
   return () => endActiveCall(call.id);
+}
+
+// IEL-B5 (E10): die EINE Auswahl des Beende-Thunks fuer terminateActiveCall UND cancel_call (G5).
+// hangUp = die heutige Auswahl des Aufrufers (Traeger-Thunk ?? EL-Thunk); fuer einen
+// Inbound-EL-Call ist das per elevenLabsHangUpAction nur noch der Traeger-Thunk oder null.
+// GEBUNDEN -> Traeger auflegen, dann Ergebnis begrenzt abwarten und persistieren (vor der
+// Buchung, terminateAndBillCall awaitet hangUp). WARTET/RUECKFALL/kein EL-Inbound -> hangUp
+// unveraendert. Ein Objekt-Argument (F1).
+export function hangUpForCall({ call, hangUp, awaitAndPersistInboundElResult }) {
+  if (bridgeStateOf(call) !== BRIDGE_STATE.GEBUNDEN) return hangUp;
+  return bridgedInboundHangUp({ carrierHangUp: hangUp, awaitAndPersistInboundElResult, callId: call.id });
+}
+
+// Reihenfolge bindend (E10): erst Leitung/Kosten stoppen, dann Ergebnis sichern. finally: ein
+// gescheiterter Traeger-Hangup verhindert den Ergebnisabruf nicht; der Fehler geht danach
+// unveraendert an onHangUpError des Aufrufers.
+function bridgedInboundHangUp({ carrierHangUp, awaitAndPersistInboundElResult, callId }) {
+  return async () => {
+    try {
+      await carrierHangUp?.();
+    } finally {
+      await awaitAndPersistInboundElResult(callId);
+    }
+  };
 }
 
 // OUTBOUND-E3b (Befund C-A aus dem E3a-Safety-Review) + G27/C2-Fix (Runde 3): die
@@ -116,9 +144,7 @@ export function elevenLabsHangUpAction(endActiveCall, call) {
 // blieb GRUEN. Diese Funktion ist die EINE Formulierung fuer diese VIER Naehte (Geltungs-
 // bereich: test/fehlergrund-reihenfolge-riegel.test.js#ORDER_CRITICAL_FILES) - sie liefert
 // den persistEnd-Thunk, in dem der Grund per Konstruktion ZUERST steht - es gibt an diesen
-// Naehten danach keine Anweisung mehr, die man hinter das await schieben KOENNTE. EINE
-// fuenfte Naht (telnyx-call-control-ingest.js#recordHangupOutcome) bleibt bewusst
-// aussenvor - Begruendung im Kommentarkopf des Riegel-Tests.
+// Naehten danach keine Anweisung mehr, die man hinter das await schieben KOENNTE.
 // store.recordFailureReason ist set-once und bei null ein No-op (store/state-ops.js:854).
 // EIN Options-Argument (F1: max-params 3).
 export function persistEndWithReason({ store, callId, reason, endCall }) {

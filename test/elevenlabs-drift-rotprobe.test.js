@@ -35,8 +35,10 @@
 //   - conversation_config_override_erlaubnisse traegt zwei PUSH-ABSICHTEN
 //     (tts.voice_id SOLL true, conversation.text_only SOLL false) - der echte
 //     Agent fuehrt beide bis zum naechsten Push andersherum;
-//   - retention_days (SOLL 0) und record_voice (SOLL false) sind in der Vorlage
-//     mit Grund und Datum "ausgenommen" - der echte Agent fuehrt -1 bzw. true.
+//   - retention_days (SOLL 0) ist in der Vorlage mit Grund und Datum
+//     "ausgenommen" - der echte Agent fuehrt -1;
+//   - record_voice (SOLL false) ist seit 2026-09-15 Push-Absicht (Owner O2) -
+//     der echte Agent fuehrt bis zum Push true.
 // Der echte Live-Stand gehoert deshalb NICHT in eine Testdatei: er aendert sich
 // beim naechsten Push, und ein Test, der ihn abschreibt, misst danach
 // Vergangenheit statt den Waechter.
@@ -83,6 +85,18 @@ const ABWEICHENDER_WERT = "Wert aus der Rotprobe, nicht der Live-Stand";
 const LIVE_ERLAUBNIS_TEXT_ONLY =
   "platform_settings.overrides.conversation_config_override.conversation.text_only";
 const VORLAGE_MAX_DAUER = "agent.conversation_config.conversation.max_duration_seconds";
+// Das Blatt des Anrufbeantworter-Werkzeugs. Der Besitz-Eintrag zeigt seit SP2 auf die
+// SAMMLUNG built_in_tools (art "texte") - verglichen wird ueber je_eintrag weiterhin genau
+// dieses Blatt, jetzt an JEDEM eingebauten Werkzeug.
+const FELD_VOICEMAIL = "voicemail_message";
+const LIVE_VOICEMAIL_BLATT =
+  "conversation_config.agent.prompt.built_in_tools.voicemail_detection.params.voicemail_message";
+// Der Platzhalter, den die Vorlage seit DE1 an diesem Blatt fuehrt.
+const VOICEMAIL_PLATZHALTER = "{{voicemail_line}}";
+// Traegt den Platzhalter weiter, damit GENAU EIN Feld abweicht: ohne ihn faellt zusaetzlich
+// dynamic_variables aus (die Variablennamen werden aus diesem Blatt gelesen), und der Fall
+// zeigte dann auf zwei Felder statt auf das gepruefte.
+const ZURUECKGESCHRIEBENER_TEXT = `${ABWEICHENDER_WERT} ${VOICEMAIL_PLATZHALTER}`;
 
 // Die Verbiegungen. Erfunden ist hier nur der ABWEICHENDE Wert - der Sollwert
 // kommt in jedem Fall aus der Vorlagendatei.
@@ -309,6 +323,29 @@ describe("Drift-Waechter: absichtliche Abweichungen durch den echten Vergleich",
       feld: "conversation_config_override_erlaubnisse",
       istWertMuster: /"text_only":true/,
     });
+  });
+
+  // SP2 (2026-09-04): dieser Eintrag wechselte von art "wert" (ein Blatt) auf art "texte"
+  // ueber der Sammlung built_in_tools - noetig fuer die SCHREIBSEITE, weil der Anbieter das
+  // Werkzeug-Objekt beim PATCH ersetzt. Die Leseseite muss dabei in BEIDE Richtungen
+  // wachsam bleiben; ein Waechter an einer Artikel-50-Stelle, der nach einem Umbau nur noch
+  // behauptet zu pruefen, ist schlimmer als keiner.
+  it("voicemail_message: im Dashboard steht wieder gesprochener Text im Anrufbeantworter-Werkzeug - gefangen", () => {
+    const befund = befundZu((live) =>
+      setzeAnPfad(live, LIVE_VOICEMAIL_BLATT, ZURUECKGESCHRIEBENER_TEXT),
+    );
+    pruefeGefangen({ befund, feld: FELD_VOICEMAIL, istWertMuster: new RegExp(ABWEICHENDER_WERT) });
+  });
+
+  it("voicemail_message: das Blatt verschwindet ganz - gefangen, und zwar zweimal", () => {
+    const befund = befundZu((live) => entferneAnPfad(live, LIVE_VOICEMAIL_BLATT));
+    assert.deepEqual(befund.fehler, [], `die Besitz-Erklaerung traegt nicht: ${befund.fehler}`);
+    // Zwei Felder, nicht eines - deshalb hier NICHT pruefeGefangen: art "texte" setzt die
+    // (fehlt)-Marke fuer das verschwundene Blatt, und dynamic_variables liest die
+    // Variablennamen aus demselben Blatt. Beide schlagen an, und genau dafuer ist die Art
+    // gebaut: ein geloeschter Text darf nicht wie Uebereinstimmung aussehen.
+    assert.deepEqual(betroffeneFelder(befund).sort(), ["dynamic_variables", FELD_VOICEMAIL]);
+    assert.equal(befund.ok, false, "das geloeschte Blatt wurde nicht als Abweichung gewertet");
   });
 });
 

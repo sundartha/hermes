@@ -106,6 +106,7 @@ const STATE_FIELD_DEFAULTS = Object.freeze({
   provisioningJobs: () => [], // P6b2: Job-Spur in bestehenden Stores nachziehen
   tenantBudgets: () => [], // P6b3: per-Tenant-Kostendecke nachziehen
   usageEvents: () => [], // P6b3: append-only Usage-Ledger nachziehen
+  callCostEvidence: () => [], // KV2-3: Kosten-Buch in bestehenden Stores nachziehen
   reservations: () => ({}), // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
   subIndex: () => ({}), // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
   platformTtsUsage: emptyPlatformTtsUsage, // LCT P7: Bestands-store.json ohne die Zeile nachziehen
@@ -244,6 +245,14 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   // (json<->pg-Parity - rowToCall liefert null). Ein Bestands-store.json ohne das Feld
   // hydriert damit strukturell auf null statt auf undefined.
   sipCallId: null,
+  // KV2-2: Kostenprofil (json<->pg-Parity - rowToCall liefert null). Ein Bestands-
+  // store.json ohne das Feld hydriert strukturell auf null, nie auf undefined.
+  costProfile: null,
+  // IEL-B4a: die drei Bruecken-Marker (json<->pg-Parity, rowToCall liefert null). Ein
+  // Bestands-store.json ohne die Felder hydriert strukturell auf null, nie auf undefined.
+  elBoundAt: null,
+  elFallbackAt: null,
+  elNachlaufStartedAt: null,
   callerTurns: 0,
   // AL-P11: Ergebnis-Karte (json<->pg-Parity, rowToCall liefert null).
   result: null,
@@ -256,14 +265,27 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   // eine Frage, an der ab OC-P2 ein Pflichtsatz haengt. false ist fuer JEDEN Bestandsanruf
   // die richtige Antwort (NICHT-Owner -> Offenlegung), deshalb kein Backfill.
   calleeIsOwner: false,
+  // IEP-P6: Inbound-Owner-Markierung (json<->pg-Parity - die pg-Spalte ist NOT NULL
+  // DEFAULT FALSE, rowToCall liefert fuer jede Bestandszeile strikt false). false ist
+  // fuer JEDEN Bestandsanruf die richtige Antwort (Fremd-Wortlaut) -> kein Backfill.
+  callerIsOwner: false,
   // INBOX-P1: die zwei Inbox-Marker (json<->pg-Parity, rowToCall liefert null).
   inboxEntryAt: null,
   inboxSeenAt: null,
+  // SEC-P1: Bestands-store.json ohne das Feld hydriert auf [] (pg-Parity: rowToCall
+  // liefert fuer eine Bestandszeile ebenfalls []). Kein Backfill noetig - ein
+  // Bestands-Anruf ist beendet und bekommt keinen Turn-Webhook mehr.
+  webhookAnchors: [],
 });
 
 function migrateCallFields(calls) {
   for (const call of calls) {
-    for (const [field, fallback] of Object.entries(CALL_FIELD_DEFAULTS)) call[field] ??= fallback;
+    // SEC-P1: Listen-Defaults werden KOPIERT. Die Karte oben ist eingefroren, ihre Werte
+    // sind es nicht - ein direkt zugewiesenes [] waere EIN geteiltes Array in allen
+    // migrierten Calls (derselbe stille Alias, den STATE_FIELD_DEFAULTS mit Fabriken
+    // vermeidet). Skalare Defaults bleiben unveraendert.
+    for (const [field, fallback] of Object.entries(CALL_FIELD_DEFAULTS))
+      call[field] ??= Array.isArray(fallback) ? [...fallback] : fallback;
   }
   return calls;
 }
@@ -411,10 +433,6 @@ export function getCall(id) {
   return ops.getCall(load(), id);
 }
 
-export function getCallByControlId(callControlId) {
-  return ops.getCallByControlId(load(), callControlId);
-}
-
 // F12 (A6): Der EINE json-Prozess hat keinen divergenten Spiegel - er kennt jeden Call.
 // Re-Attach ist daher identisch zu getCall (unbekannte id -> null). Der server.js-Re-
 // Attach-Pfad bleibt unter STORE_BACKEND=json byte-identisch zum Bestand: im fail-closed
@@ -422,29 +440,11 @@ export function getCallByControlId(callControlId) {
 // logUnknown-Hangup wie zuvor (voice-unknown-call-log.test.js bleibt gruen).
 export const attachActiveCall = getCall;
 
-// KS-P1b: dieselbe Begruendung wie attachActiveCall, nur ueber die Telnyx-eigene
-// call_control_id (der Shim kennt keine callId). Der json-Prozess hat keinen divergenten
-// Spiegel -> Re-Attach ist identisch zur Spiegel-Query. Der Status-Guard sitzt im
-// Re-Attach-Kern (telephony/reattach.js), exakt wie bei attachActiveCall.
-export const attachActiveCallByControlId = getCallByControlId;
-
 export function addTranscript(callId, role, text) {
   if (ops.addTranscript(load(), callId, role, text)) save();
 }
 
 // Roh-Transkript-Purge (#7): leert das Transkript des Calls + persistiert (save()
-// GQ-H1-a: verworfene Antwort aus dem Transkript nehmen. Muster identisch zu
-// addTranscript (changed -> save).
-// LIEFERT den Befund zurueck - anders als addTranscript/purgeTranscript, die nichts
-// zurueckgeben. Der Shim verzweigt darauf (nur eine tatsaechliche Entfernung erzeugt die
-// discarded_answer-Zeile). Ohne das return meldet die Operation still undefined, die
-// Entfernung passiert - und das Messinstrument der Phase bleibt blind.
-export function dropLastAgentTranscript(callId) {
-  const entfernt = ops.dropLastAgentTranscript(load(), callId);
-  if (entfernt) save();
-  return entfernt;
-}
-
 // schreibt den Gesamt-Store). Muster identisch zu addTranscript (changed -> save).
 export function purgeTranscript(callId) {
   if (ops.purgeTranscript(load(), callId)) save();
@@ -488,6 +488,13 @@ export function recordAnsweredUnclearReason(callId, reason) {
   return call;
 }
 
+// ST3: Zaehlfeld der Stimmen-Detektoren - mutiert -> save bei changed (Muster oben).
+export function recordElDetectorCounts(callId, zaehlung) {
+  const { call, changed } = ops.recordElDetectorCounts(load(), callId, zaehlung);
+  if (changed) save();
+  return call;
+}
+
 export function endCallRecord(callId, status = "completed") {
   const { call, changed } = ops.endCallRecord(load(), callId, status);
   if (changed) save();
@@ -519,6 +526,13 @@ export function markSummaryMailSent(callId) {
 // F9 (A6): persistierter Bucht-Marker - mutiert -> save bei changed (Muster markSummarySmsSent).
 export function markBilled(callId) {
   const { call, changed } = ops.markBilled(load(), callId);
+  if (changed) save();
+  return call;
+}
+
+// SEC-P1: Ereignis-Anker am Call - mutiert -> save bei changed (Muster markBilled).
+export function recordWebhookAnchors(callId, anchors) {
+  const { call, changed } = ops.recordWebhookAnchors(load(), callId, anchors);
   if (changed) save();
   return call;
 }
@@ -555,6 +569,22 @@ export function recordCallCostTruingResult(callId, outcome) {
   return call;
 }
 
+// KV2-7: Abschluss ohne Messung (Faelligkeitslauf) - mutiert -> save bei changed (Muster
+// recordCallCostTruingResult).
+export function schliesseKostenAbgleich(callId, eingabe) {
+  const { call, changed } = ops.schliesseKostenAbgleich(load(), callId, eingabe);
+  if (changed) save();
+  return call;
+}
+
+// KV2-7, Phasenschnitt-Nachlauf: setzt costTruedAt zurueck auf null - mutiert -> save bei
+// changed (Muster recordCallCostTruingResult).
+export function oeffneKostenAbgleichErneut(callId) {
+  const { call, changed } = ops.oeffneKostenAbgleichErneut(load(), callId);
+  if (changed) save();
+  return call;
+}
+
 // CDF1 (Report #2 5.4): persistierter Fehlergrund (mapped Token): mutiert -> save bei
 // changed (Muster wie markSummarySmsSent). Der Grund ueberlebt den Prozess-Restart.
 export function recordFailureReason(callId, reason) {
@@ -563,17 +593,9 @@ export function recordFailureReason(callId, reason) {
   return call;
 }
 
-// AL-P1: Conversation-UUID + Anrufer-Turn-Zaehler - Wrapper-Paritaet zu pg.js. BEIDE
-// saven: die Felder liegen persistent auf Platte (migrateCallDiagnosticFields).
-export function recordTelnyxConversationId(callId, conversationId) {
-  const { call, changed } = ops.recordTelnyxConversationId(load(), callId, conversationId);
-  if (changed) save();
-  return call;
-}
-
-// EL-BL1: dasselbe fuer das ElevenLabs-Handle - Wrapper-Paritaet zu pg.js. Saved wie
-// recordTelnyxConversationId: das Feld liegt persistent auf Platte, und ohne Save waere
-// die Bindung nach einem Prozess-Neustart weg (der Webhook fiele auf 404 zurueck).
+// EL-BL1: das ElevenLabs-Handle - Wrapper-Paritaet zu pg.js. Saved, weil das Feld
+// persistent auf Platte liegt, und ohne Save waere die Bindung nach einem Prozess-
+// Neustart weg (der Webhook fiele auf 404 zurueck).
 export function recordElevenlabsConversationId(callId, conversationId) {
   const { call, changed } = ops.recordElevenlabsConversationId(load(), callId, conversationId);
   if (changed) save();
@@ -588,6 +610,41 @@ export function recordSipCallId(callId, sipCallId) {
   const { call, changed } = ops.recordSipCallId(load(), callId, sipCallId);
   if (changed) save();
   return call;
+}
+
+// KV2-2: das an der Engine-Weiche gesetzte Kostenprofil - Wrapper-Paritaet zu pg.js.
+// Saved bei changed - das Profil liegt persistent, und ohne Save waere es nach einem
+// Neustart weg.
+export function recordCostProfile(callId, profil) {
+  const { call, changed } = ops.recordCostProfile(load(), callId, profil);
+  if (changed) save();
+  return call;
+}
+
+// IEL-B4a: Save NUR bei Aenderung, Rueckgabe = volles Op-Ergebnis. Die Aufrufer (B4/B6/B8)
+// verzweigen auf changed bzw. bound. Eine Stelle fuer "speichern wenn geaendert" (G5).
+function speichereBeiAenderung(ergebnis) {
+  if (ergebnis.changed) save();
+  return ergebnis;
+}
+// IEL-B4a (E5): Wrapper-Paritaet zu pg.js. Ohne Save waere der Brueckenzustand nach einem
+// Neustart weg - genau der Fall, den E5 ausschliesst.
+export function bindInboundElConversation(callId, bindung) {
+  return speichereBeiAenderung(ops.bindInboundElConversation(load(), callId, bindung));
+}
+export function markInboundElFallback(callId, nowIso) {
+  return speichereBeiAenderung(ops.markInboundElFallback(load(), callId, nowIso));
+}
+export function markInboundElNachlaufStarted(callId, nowIso) {
+  return speichereBeiAenderung(ops.markInboundElNachlaufStarted(load(), callId, nowIso));
+}
+// IEX-A8 (E8): Registrierungs-Beleg - Wrapper-Paritaet zu pg.js (Muster markInboundElFallback: Save NUR bei
+// Aenderung, Rueckgabe = volles Op-Ergebnis). Ohne Save waere der Beleg nach einem Neustart weg.
+export function markNumberElInboundTrunkBelegt(numberId, beleg) {
+  return speichereBeiAenderung(ops.markNumberElInboundTrunkBelegt(load(), numberId, beleg));
+}
+export function clearNumberElInboundTrunkBeleg(numberId) {
+  return speichereBeiAenderung(ops.clearNumberElInboundTrunkBeleg(load(), numberId));
 }
 
 // OUTBOUND-E5: Wrapper-Paritaet zu pg.js (Muster recordSipCallId).
@@ -651,6 +708,29 @@ export function answerConsult(callId, input) {
 // einen Instanzwechsel ueberleben (sonst oeffnet dieselbe Antwort ein zweites Zustellfenster).
 export function markConsultAnswerDelivered(callId) {
   const result = ops.markConsultAnswerDelivered(load(), callId);
+  if (result.changed) save();
+  return result;
+}
+
+// P2 (Stufe 0): saved wie markConsultAnswerDelivered - askDeliveredAt liegt in derselben
+// consults-Spalte und muss einen Instanzwechsel ueberleben.
+export function markConsultAskDelivered(callId, eventId) {
+  const result = ops.markConsultAskDelivered(load(), callId, eventId);
+  if (result.changed) save();
+  return result;
+}
+
+// P2 (Stufe 1): saved wie oben - die Quittung ist genauso persistent wie die Zustellung.
+export function ackConsult(callId, input) {
+  const result = ops.ackConsult(load(), callId, input);
+  if (result.changed) save();
+  return result;
+}
+
+// P2: der gestaffelte Abbruch - Status und Grund in einem Schreibweg, saved wie
+// advanceInCallConsult (derselbe Zustand, dieselbe Spalte).
+export function timeOutStagedConsult(callId, input) {
+  const result = ops.timeOutStagedConsult(load(), callId, input);
   if (result.changed) save();
   return result;
 }
@@ -875,6 +955,11 @@ export function releaseOutboundReserve(call) {
   return ops.releaseOutboundReserve(load(), call);
 }
 
+// E3: KEIN save() - dieselbe Begruendung wie oben (reservations ist strukturell ephemer).
+export function releaseOutboundReserveCents(tenantId, cents) {
+  return ops.releaseOutboundReserveCents(load(), tenantId, cents);
+}
+
 export function reservationOf(tenantId) {
   return ops.reservationFor(load(), tenantId);
 }
@@ -947,6 +1032,18 @@ export function recordUsageEvent(input) {
   const event = ops.recordUsageEvent(load(), input);
   save();
   return event;
+}
+
+// KV2-3: Kosten-Buch. Wrapper-Paritaet zu pg.js. Der Mutator saved immer, wenn er etwas
+// bewegt hat; die Query saved nie (Muster recordUsageEvent / dailySmsCount).
+export function recordCallCostEvidence(eingabe) {
+  const { evidence, changed } = ops.recordCallCostEvidence(load(), eingabe);
+  if (changed) save();
+  return evidence;
+}
+
+export function callCostEvidence(callId) {
+  return ops.callCostEvidence(load(), callId);
 }
 
 // Tages-Cap-Zaehler der gesendeten Summary-SMS eines Tenants (F2 P8): reine Query
@@ -1064,6 +1161,11 @@ export function findTenantBySubscription(subscriptionId) {
 // billingHoldActive ist reine Query; now an der IO-Grenze erzeugt (Muster budgetExceeded).
 export function findTenantByCustomer(customerId) {
   return ops.findTenantByCustomer(load(), customerId);
+}
+
+// FW1-A: reine Query (kein save), analog findTenantBySubscription/findTenantByCustomer.
+export function tenantExists(tenantId) {
+  return ops.tenantExists(load(), tenantId);
 }
 
 export function setBillingHold(tenantId, patch) {

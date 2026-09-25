@@ -3,8 +3,10 @@
 // Der Versand ist bewusst getrennt (outage-report.js, Clean-Code-Auftrag: "die Frage wird
 // an genau einem Ort beantwortet, der Versand ist davon getrennt").
 //
-// Gezaehlt wird NUR die Basis-Klasse not-placed (Schuld bei uns/Anbieter, E-2/E3a).
-// unreachable (Ziel-Schuld) und result-unknown (Anbieter-5xx/Timeout, PM-20) zaehlen NIE.
+// Auf dem OUTBOUND-Weg wird nur die Basis-Klasse not-placed gezaehlt (Schuld bei
+// uns/Anbieter, E-2/E3a); unreachable (Ziel-Schuld) und result-unknown (Anbieter-5xx/
+// Timeout, PM-20) zaehlen NIE. WAS jeweils zaehlt, ist seit IEX-B1 die ZAEHLWEISE der
+// Ausfall-Klasse (outage-classes.js) - dieses Modul haelt die Regel, nicht die Auswahl.
 //
 // Der EIMER ist das Fehlergrund-Token OHNE Carrier-Suffix: "not-placed:invite-403-D51"
 // und "not-placed:invite-403" sind DERSELBE Eimer (zwei Carrier mit derselben
@@ -40,28 +42,43 @@ const PERCENT_BASE = 100;
 // der Regel einzuschmuggeln. null/leer -> null.
 export const outageBucket = reasonWithoutCarrier;
 
+// Die ZAEHLWEISE einer Ausfall-Klasse: drei reine Praedikate, sonst nichts. Wer zaehlt in
+// den Nenner (zaehltMit), was belegt einen funktionierenden Pfad (belegtErfolg), was belegt
+// das Scheitern GENAU dieser Klasse (belegtFehler). Dieser Satz ist die Bestandsdefinition,
+// woertlich aus dem Rumpf von outageWindow herausgezogen, und zugleich dessen Default: jeder
+// Aufrufer, der keine Zaehlweise nennt, bekommt die Regel byte-gleich zum Bestand (IEX-B1
+// I1). Ein eingehender Fehlschlag ist kein Outbound-Ausfall. erfolge = answeredAt gesetzt
+// (E-2-Lehre: status ist keine Wahrheit, answeredAt ist der einzige Beleg fuer einen
+// funktionierenden Waehlweg - der 27.08.-Datensatz zeigte status=failed, answered_at=NULL
+// bei allen vier Versuchen). Die ZWEITE Zaehlweise (Inbound-EL) steht in outage-classes.js
+// und darf hier nicht importiert werden (Zyklus); sie muss es auch nicht - dieses Modul
+// bleibt die reine Regel, die Registry dort die Bindung.
+export const ZAEHLWEISE_OUTBOUND = Object.freeze({
+  zaehltMit: (call) => call.direction === "outbound",
+  belegtErfolg: (call) => Boolean(call.answeredAt),
+  belegtFehler: (call, bucket) => outageBucket(call.failureReason) === bucket,
+});
+
 // Reines Zeitfenster ueber die PERSISTENTEN Anruf-Zeilen (PM-23: kein Ringpuffer, kein
 // In-Memory-Zaehler - das Fenster wird bei jedem Aufruf frisch aus store.load().calls
 // abgeleitet und ueberlebt damit jeden Prozess-Neustart, ohne selbst etwas zu speichern).
-// Zaehlt NUR direction==="outbound" (ein eingehender Fehlschlag ist kein Outbound-
-// Ausfall) mit endedAt im Fenster [nowMs-windowMs, nowMs]. erfolge = answeredAt gesetzt
-// (E-2-Lehre: status ist keine Wahrheit, answeredAt ist der einzige Beleg fuer einen
-// funktionierenden Waehlweg - der 27.08.-Datensatz zeigte status=failed,
-// answered_at=NULL bei allen vier Versuchen). fehler/tenants zaehlen NUR Zeilen, deren
-// EIMER exakt dem uebergebenen bucket entspricht.
-export function outageWindow(calls, { nowMs, windowMs, bucket }) {
+// Gezaehlt werden Zeilen mit endedAt im Fenster [nowMs-windowMs, nowMs] nach der
+// uebergebenen Zaehlweise; fehler/tenants zaehlen NUR Zeilen, deren EIMER exakt dem
+// uebergebenen bucket entspricht (Klassen ohne Eimer-Begriff ignorieren ihn - ihr
+// belegtFehler nimmt das zweite Argument gar nicht erst an).
+export function outageWindow(calls, { nowMs, windowMs, bucket, zaehlweise = ZAEHLWEISE_OUTBOUND }) {
   const zahlen = { fehler: 0, versuche: 0, erfolge: 0, tenants: 0 };
   const betroffeneTenants = new Set();
   for (const call of calls) {
-    if (call.direction !== "outbound") continue;
+    if (!zaehlweise.zaehltMit(call)) continue;
     const endedMs = Date.parse(call.endedAt || "");
     if (Number.isNaN(endedMs) || endedMs < nowMs - windowMs || endedMs > nowMs) continue;
     zahlen.versuche += 1;
-    if (call.answeredAt) {
+    if (zaehlweise.belegtErfolg(call)) {
       zahlen.erfolge += 1;
       continue;
     }
-    if (outageBucket(call.failureReason) !== bucket) continue;
+    if (!zaehlweise.belegtFehler(call, bucket)) continue;
     zahlen.fehler += 1;
     betroffeneTenants.add(call.tenantId);
   }

@@ -5,6 +5,7 @@
 // diese Konstanten je Host-Konvention zu Detektoren/Renderern binden (EINE Quelle je
 // Cluster statt Copy-Paste pro Host, G5); Widget-HTML/-Titel host-agnostisch aus dem Katalog.
 import { hasWidget, widgetHtml, widgetTitle } from "./widget-catalog.js";
+import { config } from "../config.js";
 
 // mimeType der UI-Resource: exakt dieser String, sonst rendert kein Host (P0-Befund).
 export const UI_MIME = "text/html;profile=mcp-app";
@@ -52,6 +53,33 @@ export const CHATGPT_META_KEY = "openai/outputTemplate";
 // fail-closed: true NUR wenn der Host die UI-Capability mit CHATGPT_UI_MIME deklariert.
 // Symmetrisch zu capabilityDeclaresUi; disjunkter mimeType -> eindeutige Adapter-Wahl.
 export const capabilityDeclaresChatgptUi = makeCapabilityDetector(CHATGPT_UI_MIME);
+
+// ---- Einreichungs-Pflichtfelder am Widget-_meta (T-30/T-31) ----------------------
+// T-30: die CSP muss EXAKT die Domains nennen, von denen die Komponente laedt. Gemessen
+// ueber alle 5 Widget-Quellen und alle injizierten Bausteine (12 Dateien): sie laden von
+// NIRGENDWO - 0 Treffer fuer fetch/XHR/WebSocket/EventSource/sendBeacon/importScripts,
+// kein @font-face, keine absolute URL (die einzige, der w3.org-SVG-Namespace, steht
+// INNERHALB eines data:-URI), Bilder nur als data:-URI, kein iframe/embed/object.
+// Beide Listen sind deshalb LEER - jede weitere Angabe waere eine Falschangabe.
+// frameDomains entfaellt (laut T-30 optional, 0 Frames). Der einzige Aussenkanal ist
+// parent.postMessage - kein Netz-Ladevorgang, von einer CSP nicht adressiert.
+export const UI_CSP = Object.freeze({
+  connectDomains: Object.freeze([]),
+  resourceDomains: Object.freeze([]),
+});
+
+// T-31: pro Plugin eindeutiger Origin. Owner-Entscheidung: der Server-Origin aus
+// config.server.publicUrl - KEIN eigenes Env, damit es keine zweite Wahrheit ueber den
+// eigenen Origin gibt (derselbe Wert speist Token-Audience, PRM und die /mcp-
+// Herkunftswache; ein leerer oder divergenter Wert verweigert in Produktion ohnehin den
+// Boot). Fehlt er lokal, ENTFAELLT das Feld, statt einen falschen Origin zu behaupten.
+// Liest zur AUFRUFZEIT, nicht zur Modul-Ladezeit: die config-Blaetter sind Getter auf
+// einen gemeinsamen Speicher-Slot, und die In-Process-Tests setzen den Wert nach dem
+// Import. Kein Cache - ein gecachter Wert waere ein Lazy-Init-Antipattern (P15).
+export function uiSubmissionMeta() {
+  const domain = config.server.publicUrl;
+  return domain ? { csp: UI_CSP, domain } : { csp: UI_CSP };
+}
 
 // Baut einen UiRenderer (DIP-Port, ports.js) fuer eine Host-Konvention. Host-unabhaengig:
 // hasWidget/resourceUri/registerResource; host-spezifisch NUR mimeType + die _meta-Form

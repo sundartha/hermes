@@ -11,10 +11,16 @@
 // weiter. Test-Seam-Namen (messagesCreate/messagesStream bei Anthropic,
 // chatCompletionsFetch bei DeepSeek) gehoeren dem jeweiligen Adapter; ein Adapter
 // ignoriert, was er nicht kennt - dieselbe Regel wie fuer unbekannte Request-Schluessel.
+//
+// FW2: mit konfiguriertem Ausweich-Anbieter routet createLlmProvider je Aufruf zwischen
+// ZWEI fertig gebauten Adaptern (an einer Datenstruktur, s. makeLatchRoutedProvider) -
+// kein Lazy-Init (P15), keine Zusatzlatenz im Normalfall. Ohne Fallback ist das Verhalten
+// byte-identisch zum Bestand (nackter Adapter, kein Routing-Wrapper).
 import { config } from "../config.js";
-import { LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./provider.js";
+import { LLM_PROVIDER, LLM_PROVIDER_VALUES, usableFallbackProvider } from "./provider.js";
 import { anthropicErrors, createAnthropicProvider } from "./adapters/anthropic.js";
 import { createDeepseekProvider, deepseekErrors } from "./adapters/deepseek.js";
+import { billingBlocked, markBillingBlocked } from "./billing-latch.js";
 
 const ADAPTERS = Object.freeze({
   [LLM_PROVIDER.ANTHROPIC]: Object.freeze({
@@ -36,8 +42,7 @@ const ADAPTERS = Object.freeze({
 // state-ops.js). Wirft fail-closed und nennt Wert + gueltige Menge - unerreichbar,
 // solange enumEnv (config.js) den Boot vorher abbricht, aber die Registry verlaesst sich
 // nicht darauf (Muster pick(), telephony/registry.js). Nie ein Secret in der Meldung.
-function adapterEntry() {
-  const provider = config.llm.llmProvider;
+function adapterEntry(provider) {
   if (!Object.hasOwn(ADAPTERS, provider))
     throw new Error(
       `LLM_PROVIDER '${provider}' nicht unterstuetzt (gueltig: ${LLM_PROVIDER_VALUES.join("|")})`,
@@ -45,10 +50,56 @@ function adapterEntry() {
   return ADAPTERS[provider];
 }
 
+// FW2: der wirksame Ausweich-Anbieter dieses Prozesses ("" = Funktion aus).
+function fallbackProviderId() {
+  return usableFallbackProvider({
+    provider: config.llm.llmProvider,
+    fallback: config.llm.llmProviderFallback,
+  });
+}
+
+// FW2: WELCHER Anbieter faehrt die NAECHSTE Anfrage. Guard-Clauses statt Ternary; ohne
+// konfigurierten Fallback ist die Antwort byte-identisch zum Bestand.
+function routedProviderId(nowMs) {
+  const primary = config.llm.llmProvider;
+  const fallback = fallbackProviderId();
+  if (!fallback) return primary;
+  if (!billingBlocked({ provider: primary, nowMs })) return primary;
+  return fallback;
+}
+
+function buildAdapter(provider, options) {
+  const entry = adapterEntry(provider);
+  return entry.create({ ...options, apiKey: entry.apiKey() });
+}
+
+// FW2: EIN Port-Objekt, zwei fertig gebaute Adapter, die Wahl je Aufruf an einer Map.
+// Kein Lazy-Init (P15), keine Zusatzlatenz (nie zwei Anbieter je Anfrage), und die
+// Fehler-Klassifikation folgt dem TATSAECHLICH benutzten Anbieter.
+function makeLatchRoutedProvider(adapterByProvider) {
+  const current = () => adapterByProvider.get(routedProviderId(Date.now()));
+  return {
+    complete: (request) => current().complete(request),
+    completeStream: (request, sink) => current().completeStream(request, sink),
+    errors: {
+      isTransient: (err) => current().errors.isTransient(err),
+      isBillingError: (err) => current().errors.isBillingError(err),
+    },
+  };
+}
+
 /** @returns {import("./ports.js").LlmProvider} */
 export function createLlmProvider(options = {}) {
-  const entry = adapterEntry();
-  return entry.create({ ...options, apiKey: entry.apiKey() });
+  const primary = config.llm.llmProvider;
+  const fallback = fallbackProviderId();
+  const primaryAdapter = buildAdapter(primary, options);
+  if (!fallback) return primaryAdapter; // Bestand, unveraendert
+  return makeLatchRoutedProvider(
+    new Map([
+      [primary, primaryAdapter],
+      [fallback, buildAdapter(fallback, options)],
+    ]),
+  );
 }
 
 // Die Fehler-Klassifikation des AKTIVEN Anbieters, OHNE einen Client zu bauen: die beiden
@@ -56,5 +107,16 @@ export function createLlmProvider(options = {}) {
 // und ein Client je Fehlerfrage waere absurd.
 /** @returns {import("./ports.js").LlmErrorClassification} */
 export function activeLlmErrors() {
-  return adapterEntry().errors;
+  return adapterEntry(routedProviderId(Date.now())).errors;
+}
+
+// FW2: der Guthaben-Ausfall des AKTUELL gerouteten Anbieters wird vermerkt. Ohne
+// konfigurierten Fallback passiert NICHTS (Invariante "ungesetzt = byte-identisch").
+// Rueckgabe null = Funktion aus; sonst das, was die Sicht-Zeile braucht.
+export function latchBillingBlockedProvider(nowMs) {
+  if (!fallbackProviderId()) return null;
+  const blockedProvider = routedProviderId(nowMs);
+  const cooldownMs = config.llm.llmBillingLatchCooldownMs;
+  const freshlyLatched = markBillingBlocked({ provider: blockedProvider, nowMs, cooldownMs });
+  return { blockedProvider, nextProvider: routedProviderId(nowMs), cooldownMs, freshlyLatched };
 }

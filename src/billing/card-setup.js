@@ -32,7 +32,8 @@ export async function ensureCustomer({ store, billing, tenant }) {
 // ermittelt den Customer idempotent (ensureCustomer) und startet den Checkout. Meldet der
 // Provider CustomerMissing (gespeicherte ODER frisch angelegte Id existiert dort nicht -
 // Test/Live-Wechsel, Dashboard-Cleanup, Sichtbarkeits-Verzoegerung), werden die stale
-// Referenzen verworfen (paymentMethodId haengt am toten Customer und ist ohne ihn wertlos),
+// Referenzen verworfen (paymentMethodId haengt am toten Customer und ist ohne ihn wertlos,
+// ebenso ihr Typ),
 // EIN frischer Customer angelegt und der Checkout nach retryDelayMs GENAU EINMAL wiederholt.
 // Ein zweiter Fehlschlag propagiert unveraendert (kein Loop; Route -> 502 wie bisher).
 // healed=true signalisiert dem Route-Layer den alarmierbaren Audit-Event (gehaeufte Heals
@@ -50,7 +51,7 @@ export async function startCheckoutWithStaleCustomerHeal(
     if (!(err instanceof CustomerMissingError)) throw err;
     // Erst nullen, DANN neu anlegen: schlaegt createCustomer fehl, bleibt ein sauberer
     // leerer Zustand (naechster Klick startet frisch) statt der stalen Referenz.
-    store.setTenantStripe(tenant, { customerId: null, paymentMethodId: null });
+    clearTenantPaymentMethod(store, tenant);
     const freshCustomerId = await ensureCustomer({ store, billing, tenant });
     // Wartezeit vor dem Retry: ueberbrueckt die live beobachtete Stripe-Sichtbarkeits-
     // Verzoegerung zwischen createCustomer und dem naechsten API-Call (Nachtrag 3).
@@ -69,13 +70,46 @@ export function customerMatches(store, tenant, customerId) {
   return !!stored && stored === customerId;
 }
 
+// GP-P2: Referenz und Typ sind EINE Einheit - wer eine Zahlungsmethode bindet, schreibt
+// beides. Erzwungene Konstruktion statt Disziplin an vier Schreibstellen (G5): ohne diese
+// Funktion muesste jede Stelle daran denken, den Typ mitzuschreiben, und eine vergessene
+// Stelle hinterliesse eine neue Karte mit dem STALEN Typ der alten - der einzige Zustand,
+// den das Eignungs-Gate (onboarding.js requireTenantCard) nicht erkennen kann, weil er
+// wie ein gueltiger aussieht. undefined wird bewusst zu null normalisiert: setTenantStripe
+// patcht selektiv (!== undefined) und liesse undefined den Altwert stehen.
+// Ein UNBEKANNTER Typ (null) wird geschrieben, nicht verschwiegen - ueber Eignung
+// entscheidet genau eine Stelle, und die faellt bei null fail-closed durch
+// (Owner-Entscheidung 2026-09-11, Frage 5). customerId bleibt optional: der Webhook-
+// Race-Fix patcht nur die Karte, nie den Customer. Nebeneffekt im Namen (N7).
+export function bindPaymentMethodOnTenant(
+  store,
+  tenant,
+  { customerId, paymentMethodId, paymentMethodType },
+) {
+  const patch = { paymentMethodId, paymentMethodType: paymentMethodType ?? null };
+  if (customerId !== undefined) patch.customerId = customerId;
+  store.setTenantStripe(tenant, patch);
+}
+
+// Gegenstueck (GP-P2): loescht die Zahlungsmittel-Referenzen VOLLSTAENDIG. Ohne den Typ
+// bliebe am toten Customer ein 'card' haengen, das der naechsten, noch ungebundenen
+// Zahlungsmethode Eignung bescheinigte. Nebeneffekt im Namen (N7).
+export function clearTenantPaymentMethod(store, tenant) {
+  store.setTenantStripe(tenant, {
+    customerId: null,
+    paymentMethodId: null,
+    paymentMethodType: null,
+  });
+}
+
 // Bindet das in einer abgeschlossenen Checkout-Session erfasste payment_method an
 // den Tenant - fail-closed ueber customerMatches (R4). Bei Mismatch wird NICHTS
 // gespeichert und { ok: false } geliefert; der Aufrufer uebersetzt das in seine
 // Antwortform + Audit. Bei Erfolg ist die Karte hinterlegt (Nebeneffekt im Namen, N7).
 export async function bindCardFromSession({ store, billing, tenant, sessionId }) {
-  const { customerId, paymentMethodId } = await billing.getCheckoutSessionResult(sessionId);
+  const { customerId, paymentMethodId, paymentMethodType } =
+    await billing.getCheckoutSessionResult(sessionId);
   if (!customerMatches(store, tenant, customerId)) return { ok: false };
-  store.setTenantStripe(tenant, { customerId, paymentMethodId });
+  bindPaymentMethodOnTenant(store, tenant, { customerId, paymentMethodId, paymentMethodType });
   return { ok: true };
 }

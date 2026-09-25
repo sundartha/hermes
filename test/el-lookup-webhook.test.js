@@ -8,7 +8,9 @@
 //
 //   L1  403  Token fehlt/falsch/leer (fail-closed) - keine Wirkung, nichts im Log
 //   L2  404  Kennung erfunden / Anruf beendet (kein Existenz-Leck)
-//   L3  404  nicht berechtigt: Tenant ohne allowLookup (Auflage B1/B4)
+//   L3  404  nicht berechtigt: Tenant ohne allowLookup (Auflage B1/B4) - seit SEC-P4
+//            mit dem EINHEITLICHEN Ablehnungsgrund kein_laufender_anruf; der praezise
+//            Grund kanal_nicht_freigegeben steht nur noch im Log
 //   L4  402  pro-Tenant-Kostendecke gerissen (Absolute Regel 1)
 //   L5  400  Nutzlast ohne query
 //   L6  200  declined: Deckel LOOKUP_MAX_PER_CALL erreicht (Auflage B3 - ROTPROBE:
@@ -233,11 +235,14 @@ test("EL-LOOKUP L2: erfundene Kennung und beendeter Anruf -> 404, kein Suchdiens
   });
 });
 
-test("EL-LOOKUP L3: Tenant ohne allowLookup -> 404 kanal_nicht_freigegeben (B1/B4), Suchdienst NIE gerufen", async (ctx) => {
+test("EL-LOOKUP L3: Tenant ohne allowLookup -> 404 mit einheitlichem Ablehnungsgrund (B1/B4, SEC-P4), Suchdienst NIE gerufen", async (ctx) => {
   await withLookupServer({}, async ({ srv, exa }) => {
     const res = await withToken(srv, { conversation_id: FOREIGN_CONVERSATION_ID, query: QUERY });
     assert.equal(res.status, HTTP_NOT_FOUND);
-    assert.deepEqual(await res.json(), { error: "kanal_nicht_freigegeben" });
+    // SEC-P4: der Grund ist nach aussen derselbe wie bei einer erfundenen Kennung -
+    // ein abweichender Grund verriete, dass dieser fremde Anruf existiert. Unterschieden
+    // wird nur noch im Log.
+    assert.deepEqual(await res.json(), { error: "kein_laufender_anruf" });
     assert.equal(exa.requests.length, 0);
 
     await ctx.test("Positiv-Kontrolle: derselbe Request am BERECHTIGTEN Anruf laeuft durch", async () => {
@@ -248,11 +253,11 @@ test("EL-LOOKUP L3: Tenant ohne allowLookup -> 404 kanal_nicht_freigegeben (B1/B
   });
 });
 
-test("EL-LOOKUP L3c (B2-ROTPROBE, Sicherheitskern): INBOUND-Anruf -> 404, die Rede eines fremden Anrufers erreicht NIE den Suchdienst", async () => {
+test("EL-LOOKUP L3c (B2-ROTPROBE, Sicherheitskern): INBOUND-Anruf -> 404 (einheitlicher Grund seit SEC-P4), die Rede eines fremden Anrufers erreicht NIE den Suchdienst", async () => {
   await withLookupServer({}, async ({ srv, exa }) => {
     const res = await withToken(srv, { conversation_id: INBOUND_CONVERSATION_ID, query: QUERY });
     assert.equal(res.status, HTTP_NOT_FOUND);
-    assert.deepEqual(await res.json(), { error: "kanal_nicht_freigegeben" });
+    assert.deepEqual(await res.json(), { error: "kein_laufender_anruf" });
     assert.equal(exa.requests.length, 0);
     // Positiv-Kontrolle: derselbe Owner-Tenant, gleicher Server - nur die Richtung
     // unterscheidet die Faelle. Ohne sie bestuende auch ein Gate, das immer ablehnt.

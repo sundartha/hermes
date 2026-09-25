@@ -21,9 +21,14 @@ import { Router } from "express";
 import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.js";
 import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate.js";
-import { SWEEP_TRIGGER } from "../billing/cost-truing.js";
-import { tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
+import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-truing.js";
+import { kostenBuchBericht } from "../billing/kosten-deckung.js";
+import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
 import { countActiveNumbers } from "../store/views.js";
+// KV2-10: die einzige Stelle, die US-Cent (Listenpreis) ueber DEN EINEN Kurs nach EUR-Cent
+// hebt - MICRO_CENTS_PER_CENT ist die Skala der geteilten Umrechnungsfunktion (G5: EINE
+// Quelle je Idiom, kein hier getippter zweiter 1e6-Faktor).
+import { MICRO_CENTS_PER_CENT } from "../store/defaults.js";
 // P14: dieselbe EINE Quelle der Stripe-Rueckkehr-Ziele wie self-service-routes.js
 // (frueher stand die cancelUrl hier als zweites Inline-Literal, driftfaehig, G5).
 import { CHECKOUT_RETURN } from "../portal-paths.js";
@@ -32,6 +37,10 @@ import { internalOnly } from "../wiring/internal-only.js";
 
 // Status-Marker der gebundenen Karte (kein Magic-String, G25). Nur checkout-return.
 const CARD_ON_FILE_STATUS = "card_on_file";
+
+// HTTP-Status der Nicht-berechenbar-Antwort von platform-costs (G25, Naming wie
+// src/app.js/webhooks-elevenlabs.js).
+const HTTP_SERVER_ERROR = 500;
 
 // deps: { config, store, audit, billing, tenant, costTruing, operatorAuth }. config ist
 // das globale Config-Objekt (paymentEnabled/publicUrl/stripeCustomerRetryDelayMs).
@@ -148,17 +157,54 @@ export function makeBillingRoutes({
   operator.get("/api/billing/platform-costs", (req, res) => {
     const nowIso = new Date().toISOString();
     const activeNumbers = countActiveNumbers(store.load());
+    // KV2-10: der ElevenLabs-Wert ist ein USD-LISTENPREIS (600 US-ct = 6,00 USD) und wird
+    // hier ueber DEN EINEN Kurs in EUR-Cent umgerechnet (600 x 0,92 = 552, aufgerundet in
+    // der geteilten Funktion) - vorher wurde er unumgerechnet als "EUR-Cent" ausgegeben.
+    // elevenLabsUsdCents reist separat mit, damit kein Konsument die Waehrungen verwechselt.
+    const elevenLabsUsdCents = config.billing.platformFixedCostUsdCentsPerMonth;
+    const elevenLabsCents =
+      providerMicroCentsToBucketCents(elevenLabsUsdCents * MICRO_CENTS_PER_CENT, config.billing.providerToBucketRateMicro);
+    // KV2-10 Review (G26/PM-4): die geteilte Umrechnung liefert dokumentiert null, sobald
+    // das Produkt den sicheren Ganzzahlbereich verlaesst (US-Listenpreis ab rund 98 USD
+    // je Monat bei Kurs 0,92 - realistisch, die Env hat kein max). null + didRentCents
+    // koerzierte null zuvor still zu 0 und liess den ElevenLabs-Anteil aus der Summe
+    // verschwinden. "Nicht berechenbar ist nicht kostet nichts": der Anzeige-Endpunkt
+    // lehnt mit diagnosefaehiger Meldung ab, statt eine zu niedrige Betreiber-Zahl
+    // still auszugeben. Reine Anzeige - kein Gate liest diese Route.
+    if (elevenLabsCents === null) {
+      return res.status(HTTP_SERVER_ERROR).json({
+        error:
+          "ElevenLabs-Fixkosten nicht berechenbar: Produkt aus PLATFORM_FIXED_COST_CENTS_PER_MONTH und PROVIDER_TO_BUCKET_RATE_MICRO ueberschreitet den sicheren Ganzzahlbereich",
+      });
+    }
     const didRentCents = config.billing.numberMonthlyCostCents * activeNumbers;
-    const fixedCostCentsPerMonth = config.billing.platformFixedCostCentsPerMonth + didRentCents;
+    const fixedCostCentsPerMonth = elevenLabsCents + didRentCents;
     res.json({
       currency: "EUR",
       listPriceNotBilled: true,
-      elevenLabsCents: config.billing.platformFixedCostCentsPerMonth,
+      elevenLabsUsdCents,
+      elevenLabsCents,
       didRentCents,
       activeNumbers,
       fixedCostCentsPerMonth,
       ttsQuota: store.platformTtsUsageView(nowIso),
     });
+  });
+
+  // ---- Deckung je Traeger + Herzschlag (KV2-6) ----
+  // Hinter einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese Sicherung gar
+  // nicht gemountet. NICHT tenant-gescopt - dieselbe Naht und Begruendung wie cost-drift
+  // und platform-costs daneben (Plattform-Aggregat ueber alle Tenants). REINE ANZEIGE:
+  // kein Gate, keine Reserve, keine Buchung liest diese Route; sie rechnet dieselbe
+  // Kennzahl wie der Sweep aus DERSELBEN Funktion (G5), nicht aus einer zweiten Formel.
+  // Antwort ist PII- und secret-frei: Traegernamen (Katalog-IDs), Zaehler, Prozente, die
+  // gerenderte Zeile und die Befund-Codes. Keine Call-ID, keine Tenant-Kennung, keine
+  // Rufnummer, kein Alarm-Empfaenger.
+  operator.get("/api/billing/kosten-deckung", (req, res) => {
+    res.json(kostenBuchBericht({
+      state: store.load(), billing: config.billing, nowMs: Date.now(),
+      deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS,
+    }));
   });
 
   // ---- Stripe-Rueckkehr nach der Karten-Erfassung, Gegenstueck zu setup-checkout ----

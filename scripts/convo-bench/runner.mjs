@@ -43,7 +43,7 @@ export const DEFAULT_LLM_PROVIDER_FOR_BENCH = LLM_PROVIDER.ANTHROPIC;
 const BENCH_MAX_BUDGET_EUR = "20";
 const BENCH_CALL_ID_PREFIX = "call_bench";
 // Dummy-Telnyx-Owner-Nummer NUR fuer die Bench (nie real gekauft/angerufen - Provider-
-// Credentials bleiben leer, VOICE_ENGINE=budget, kein /api/calls -> physisch kein Dial).
+// Credentials bleiben leer, kein /api/calls -> physisch kein Dial).
 const BENCH_TELNYX_OWNER = Object.freeze({ e164: "+13125557000", provider: "telnyx" });
 
 const SUMMARY_POLL_TIMEOUT_MS = 20000;
@@ -94,7 +94,6 @@ export function buildEnv({ apiKey, deepseekApiKey, llmProvider, agentModel, scen
     METRICS_ENABLED: "true",
     ASSISTANT_CONTEXT_ENABLED: scenario.assistantContextEnabled ? "true" : "false",
     MAX_BUDGET_EUR: BENCH_MAX_BUDGET_EUR,
-    VOICE_ENGINE: "budget",
     ...(scenario.env ?? {}),
     ...driverEnv,
     ...searchEnv,
@@ -105,8 +104,8 @@ export function buildEnv({ apiKey, deepseekApiKey, llmProvider, agentModel, scen
 // searchFacts-Angabe - haelt startExaFake({facts}) auch ohne Szenario-Deklaration lauffaehig.
 const DEFAULT_SEARCH_FACTS = Object.freeze([{ title: "Bench-Treffer", highlight: "Bench-Auszug" }]);
 
-// F1: Objekt statt drittem losem Argument - extra (treiber-eigene Seed-Felder, z.B.
-// callControlId/assistantId des Shim-Treibers) geht ans Ende von seedCall durch.
+// F1: Objekt statt drittem losem Argument - extra (treiber-eigene Seed-Felder) geht ans
+// Ende von seedCall durch.
 // AL-P0: tenantId kommt jetzt vom Aufrufer (Default BOOTSTRAP_TENANT_ID, s.
 // runScenarioRepeat) statt hart im Objekt zu stehen - Voraussetzung fuer
 // scenario.tenantId/scenario.profile (s. benchTenantsFor/assertProfileTenantIsSettable).
@@ -296,8 +295,7 @@ export async function runScenarioRepeat({
   // muss stehen, bevor der Server startet.
   const transport = await DRIVERS[driverId].create({ scenario, provider });
   const searchFake = scenario.fakeSearch
-    ? await startExaFake({ facts: scenario.searchFacts ?? DEFAULT_SEARCH_FACTS })
-    : null;
+    ? await startExaFake({ facts: scenario.searchFacts ?? DEFAULT_SEARCH_FACTS }) : null;
   const searchEnv = searchFake ? { EXA_API_BASE: searchFake.url } : {};
   const call = isInbound
     ? null
@@ -425,6 +423,10 @@ export async function runScenarioRepeat({
         judge_model: judgeModel,
         provider,
         driver: driverId,
+        // BEW-1 (PLAN-INBOUND-PARITAET IP2): Richtung des Szenarios direkt an der
+        // Zahl, die spaeter isoliert (JSON, Zusammenfassung) gelesen wird - nie mehr
+        // stillschweigend als Aussage ueber den anderen Pfad lesbar.
+        direction: scenario.direction,
         git_rev: gitRev(),
       },
       transcript,
@@ -446,7 +448,6 @@ export async function runScenarioRepeat({
       // Persona-Call) - err.message der Anthropic-SDK-Fehlerklassen enthaelt NIE den
       // Key selbst (nur HTTP-Status + API-Fehlertyp/-message).
       persona_error: personaError,
-      shim_gates: transport.diagnostics().shim_gate_reasons ?? [],
     };
   } finally {
     // AL-D3: die Pumpe steht ZUERST (ihr laufender Fetch haengt sonst an einem bereits

@@ -32,14 +32,56 @@
      verschiedener margins (Owner-Befund 2: Begruessungsbereich kompakter). */
   --dash-rhythm: clamp(16px, 1.3vw, 24px);
   /* Nav-Spaltenbreite, geteilt zwischen .dash-layout und .dash-nav (Abschnitt 2). */
-  --dash-nav-w: clamp(200px, 12vw, 240px);
+  /* Runde 15 (Owner): die Navigationsspalte nimmt einen Teil des Platzes auf, den der
+     Inhalt links dazugewonnen hat (12vw/240 -> 15vw/290). Der Rest geht an die Karten
+     daneben, damit sich der frueher ungenutzte Weissraum auf beide Seiten verteilt. */
+  --dash-nav-w: clamp(200px, 15vw, 290px);
+  /* Die EINE waagerechte Geometrie der App: Kopfzeile und Inhalt teilen sich
+     Deckelung und Polster, sonst fluchtet der Inhalt nicht mit Logo und
+     Anmelden-Knopf (Owner-Ankerpunkte, s. .app-header weiter unten). */
+  --app-measure: 1760px;
+  --app-gutter: clamp(20px, 3.4vw, 44px);
 }
 
 /* .app-main (app-hermes.css) saettigte bei ~1333px Breite / ~1000px Hoehe --
    Basiswerte (1320px / 3.4vh / 3vw) unveraendert, nur die Kappen wachsen. */
+/* Runde 13 (Owner-Befund 15.09.2026): das obere Polster gibt ein Stueck ab, damit
+   der Inhalt naeher am Markenblock steht (Basiswert und Kappe gleich weit
+   gesenkt: 22/3.4vh/44 -> 18/2.6vh/34, dieselbe Senkung wie in app-hermes.css).
+   Die zweite Haelfte des Abstands kommt aus der Unterkante des Kopfes. */
+/* Runde 14, zweiter Durchgang (Owner): RECHTS bleibt der Inhalt am Anmelden-
+   Knopf (--app-gutter, dieselbe Kante wie die Kopfzeile), LINKS steht er wieder
+   auf dem alten, eingerueckten Mass -- "das fand ich besser". Die linke Einrueckung
+   ist darum die frueher wirksame Rechnung: der halbe Rest zur alten 1320px-Spalte
+   plus das alte 3vw-Polster. Unter 1320px Breite faellt der erste Summand auf 0
+   und es bleibt exakt das alte Polster; das Handy (≤768px, app-hermes.css) ist
+   davon ohnehin nicht betroffen. Der Inhalt gewinnt also nur nach RECHTS dazu --
+   dort, wo der Owner den Leerraum weghaben wollte. */
+/* Runde 15 (Owner-Entscheid 15.09.2026, revidiert Runde 14): der Inhalt steht jetzt
+   auch LINKS auf der Kante der Kopfzeile -- also genau unter dem Fluegel-Logo. Die
+   frueher eingerueckte Rechnung (halber Rest zur 1320px-Spalte + 3vw) liess bei
+   1650px rund 150px Weissraum zwischen Logo und Navigationsblase stehen. Kopf und
+   Inhalt teilen sich damit beide Kanten und dieselbe Deckelung; der gewonnene Platz
+   geht je zur Haelfte an die Navigationsspalte (--dash-nav-w) und an die Karten
+   daneben. Unter 1320px aendert sich nichts -- dort war das alte Polster schon
+   identisch mit --app-gutter. */
 .app-main {
-  max-width: clamp(1320px, 75vw, 1440px);
-  padding: clamp(22px, 3.4vh, 44px) clamp(20px, 3vw, 56px) 56px;
+  max-width: var(--app-measure);
+  margin-inline: auto;
+  padding: clamp(18px, 2.6vh, 34px) var(--app-gutter) 56px;
+}
+
+/* Owner-Befund 15.09.2026: "Sign in ist mein Ankerpunkt rechts" -- die Karten
+   endeten aber 51,7px weiter innen als der Knopf (Kopf: volle Breite mit 44px
+   Polster; Inhalt: auf 1320px gedeckelt, zentriert, eigenes 3vw-Polster).
+   Kopfzeile und Inhalt teilen sich darum jetzt Deckelung und RECHTES Polster
+   (--app-measure / --app-gutter, Abschnitt 0), womit die Nummernkarte und jede
+   Karte darunter exakt unter dem Anmelden-Knopf enden -- auf jeder Breite. Die
+   linke Kante blieb auf Owner-Wunsch, wo sie war (s. .app-main oben). */
+.app-header {
+  max-width: var(--app-measure);
+  margin-inline: auto;
+  padding-inline: var(--app-gutter);
 }
 
 /* Kartenpolster global (.card, app-hermes.css) -- wirkt einheitlich auf alle
@@ -53,11 +95,32 @@
 
 /* .dash-head war bisher ungestylt (reiner Container). Jetzt: Text links,
    Nummernkarte (AgentChip) rechts. */
+/* GP-P6 (Owner-Befund 15.09.2026): Flex mit Umbruch statt `grid 1fr auto`. Die
+   Nummernkarte ist im Stoerfall (Statussatz + Erklaersatz + Knopf) deutlich
+   breiter als im Normalfall; in der Grid-Fassung nahm die auto-Spalte sich ihre
+   max-content-Breite und die Begruessung links wurde bis auf 0 gequetscht. Mit
+   `flex: 0 0 auto` an der Karte und einer Mindestbreite an der Begruessung
+   rutscht die Karte stattdessen sauber in eine eigene Zeile, sobald es neben der
+   Begruessung nicht mehr reicht -- kein :has(), kein JS, ein Regelwerk fuer
+   beide Zustaende. */
+/* Owner-Befund 15.09.2026 (Runde 9): die Begruessung klebte an der "Your area"-
+   Pille (6px) und stand weit weg von der Nummernkarte (28px) -- am Handy sass
+   "Welcome" damit sichtbar nicht mittig zwischen den beiden Blasen. Der Abstand
+   nach oben waechst darum (s. .dash-head__intro), der nach unten schrumpft:
+   17,6px optisch ueber der Schrift, 18px darunter. Nebeneinander (Desktop) ist
+   der Abstand waagerecht und bleibt bei 28px -- darum getrennte Achsen.
+   `align-items: stretch` statt `center`: die Nummernkarte nimmt so die Hoehe des
+   Begruessungsblocks an: Pille und Kartenoberkante fluchten oben, Schriftgrund
+   und Kartenunterkante unten -- genau die Buendigkeit, die der Owner behalten
+   wollte, obwohl "Welcome" tiefer rutscht (die Karte zentriert ihren Inhalt in
+   der gewonnenen Hoehe, s. .agent-chip). Beim Umbruch (eigene Zeile) hat stretch
+   keine Wirkung, dort zaehlt nur noch row-gap. */
 .dash-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 28px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  column-gap: 28px;
+  row-gap: 18px;
 }
 
 /* Owner-Befund 2: kompaktere Stapelung Eyebrow/Begruessung (kleinerer Abstand
@@ -65,7 +128,17 @@
 .dash-head__intro {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  /* Runde 9 (s. .dash-head): 6px -> 14px. Optisch sind das 17,6px zwischen der
+     Unterkante der Pille und der Oberkante der Schrift -- so viel, wie unter der
+     Begruessung bis zur Karte bleibt. */
+  gap: 14px;
+  /* Owner-Befund 15.09.2026: der Block steht OBEN in der Zeile, nicht mittig. Ist die
+     Karte daneben hoeher (Stoerfall), rutschte die "Dein Bereich"-Pille sonst unter die
+     Kartenoberkante -- der Owner will beide Oberkanten auf einer Linie. */
+  justify-content: flex-start;
+  /* GP-P6: waechst in die freie Breite, faellt aber nie unter ~320px -- darunter
+     bekommt die Nummernkarte ihre eigene Zeile (s. .dash-head). */
+  flex: 1 1 320px;
   min-width: 0;
 }
 
@@ -125,14 +198,40 @@
   display: grid;
   grid-template-columns: var(--dash-nav-w) minmax(0, 1fr);
   align-items: start;
-  gap: 28px;
+  column-gap: 28px;
+  row-gap: var(--dash-rhythm);
 }
 
+/* Owner-Befund 15.09.2026: die Navigationsblase endete nicht auf derselben Linie
+   wie die erste Karte daneben. Ursache: die vier Abschnitte lagen in EINER
+   Rasterzelle (eigener Flex-Stapel), die Navigation daneben in einer zweiten --
+   ihre Hoehe kam aus ihren vier Eintraegen und hatte mit der Karte nichts zu tun.
+   Mit `display: contents` verschwindet der Zwischenbehaelter: jede Sektion wird
+   selbst eine Rasterzelle in Spalte 2, die Navigation sitzt in Zeile 1 neben der
+   ERSTEN Karte und endet mit `align-self: stretch` exakt auf deren Unterkante --
+   automatisch, egal wie hoch die Karte gerade ist. Der Kartenabstand kommt jetzt
+   aus dem row-gap des Rasters (derselbe Takt-Token wie vorher im Flex-gap). */
 .dash-sections {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dash-rhythm);
+  display: contents;
+}
+
+.dash-sections > * {
+  grid-column: 2;
   min-width: 0;
+}
+
+/* Buendig in BEIDE Richtungen: die erste Karte und die Navigation teilen sich
+   Zeile 1, also zieht die kuerzere der beiden auf die Hoehe der laengeren --
+   ohne diese Regel waere nur die Navigation gewachsen (stretch dehnt, schrumpft
+   aber nie unter die eigene Inhaltshoehe: vier Eintraege = 201px gegen 168px
+   Karte). Die Karte selbst muss die gewonnene Hoehe mitnehmen, darum height:100%
+   am Kind. */
+.dash-sections > *:first-child {
+  align-self: stretch;
+}
+
+.dash-sections > *:first-child > .card {
+  height: 100%;
 }
 
 /* Anker-Sprungziele: Kopf einer Sektion soll ca. 96px unter der Oberkante
@@ -156,7 +255,10 @@
   gap: 4px;
   width: var(--dash-nav-w);
   padding: 6px;
-  align-self: start;
+  /* Zeile 1 neben der ersten Karte, auf deren volle Hoehe gezogen (s. .dash-sections). */
+  grid-column: 1;
+  grid-row: 1;
+  align-self: stretch;
   background: rgba(8, 22, 46, 0.52);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
@@ -172,7 +274,10 @@
   border-radius: 12px;
   background: transparent;
   color: rgba(255, 255, 255, 0.62);
-  font-size: clamp(14.5px, 1vw, 17px);
+  /* Runde 15 (Owner): eine Spur groesser, weil die Spalte breiter geworden ist --
+     aber nur die Kappe (17 -> 18px), damit die Blase nicht in die Hoehe waechst und
+     unten buendig zur Calls-Karte bleibt. */
+  font-size: clamp(14.5px, 1.05vw, 18px);
   font-weight: 500;
   text-decoration: none;
   transition: background 0.2s ease, color 0.2s ease;
@@ -192,7 +297,7 @@
 
 .dash-nav__num {
   font-family: var(--app-mono);
-  font-size: clamp(10px, 0.7vw, 12px);
+  font-size: clamp(10px, 0.75vw, 13px);
   letter-spacing: 0.06em;
   color: rgba(255, 255, 255, 0.42);
   flex-shrink: 0;
@@ -213,30 +318,298 @@
    der bis 24px wachsenden Kappe) -- Inhalt und Kartenrand fallen enger
    zusammen, der Punkt wirkt dadurch naeher an der Nummernmitte. Horizontales
    Polster bleibt unveraendert (kein Befund dazu). */
+/* GP-P6 (Owner-Befund 15.09.2026): EINE Textachse fuer alles im Block. Der
+   Radiopunkt haengt als einziges Element in der Gasse davor; Label, Nummer bzw.
+   Statuszeile und Erklaersatz fluchten darum exakt uebereinander. Vorher standen
+   Label und Erklaersatz am Punkt, die Nummernzeile aber um Punkt+Spalte
+   eingerueckt -- bei einer Ziffernreihe faellt das kaum auf, bei einem Satz wie
+   "Number setup failed" liest es sich als Versatz. */
 .agent-chip {
+  --chip-dot: 10px;
+  --chip-dot-gap: 12px;
+  --chip-axis: calc(var(--chip-dot) + var(--chip-dot-gap));
+  /* Die Ziffernstufe als eigener Wert, weil ZWEI Regeln sie brauchen: die Nummer selbst
+     (unten) und die Mindesthoehe ihrer Zeile im Block ab 981px. Ohne gemeinsame Quelle
+     laufen die beiden auseinander, sobald jemand die Ziffern anfasst. 1.5 ist die
+     Zeilenhoehe des Dashboard-Fliesstexts, die die Ziffernzeile erbt (gemessen:
+     26,35px Schrift -> 39,5px Zeile). */
+  --chip-number-size: clamp(22px, 1.83vw, 30px);
+  --chip-number-line: calc(var(--chip-number-size) * 1.5);
+  /* GP-P6: die Karte ist jetzt zweizeilig -- oben .agent-chip__main (Text + Knopf),
+     darunter der Erklaersatz ueber die volle Breite. Solange kein Hinweis da ist
+     (Normalfall), ist die zweite Zeile [hidden] und die Karte sieht aus wie zuvor. */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /* Runde 9: die Karte wird im Kopfbereich auf die Hoehe des Begruessungsblocks
+     gestreckt (s. .dash-head) -- ihr Inhalt bleibt dabei mittig statt oben zu
+     kleben. Ohne Streckung (eigene Zeile, Handy) aendert das nichts. */
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  min-width: 240px;
+  /* GP-P6: nimmt im Stoerfall die Breite, die der Erklaersatz braucht, bleibt aber
+     im Kopfbereich (s. .dash-head) und rutscht notfalls in die eigene Zeile. */
+  flex: 0 0 auto;
+  max-width: 100%;
+  padding: 16px clamp(20px, 1.6vw, 28px);
+}
+
+/* Die Kopfzeile der Karte: Textblock links, Knopf rechts (margin-left:auto). */
+.agent-chip__main {
   display: flex;
   align-items: center;
   gap: 18px;
-  margin: 0;
-  min-width: 240px;
-  padding: 16px clamp(20px, 1.6vw, 28px);
+  min-width: 0;
+}
+
+/* GP-P6 (Owner-Entscheidung 15.09.2026): die Karte bleibt in BEIDEN Zustaenden das
+   kompakte, abgerundete Viereck rechts neben der Begruessung. Eine Zwischenfassung gab
+   dem Stoerfall eine eigene, volle Kopfzeile -- das riss zu viel Weissraum auf, und die
+   Karte waere beim Wechsel auf eine aktive Nummer von dort wieder weggesprungen. Der
+   Stoerfall darf nur etwas BREITER werden als der Normalfall, nicht anders platziert. */
+.agent-chip--notice {
+  /* Gemessen: der laengere deutsche Erklaersatz braucht rund 530px Textspalte, damit er
+     nicht ein zweites Mal umbricht; mit Polster, Punkt-Gasse, Spalte und Knopf ergibt das
+     diesen Deckel. Reicht der Platz neben der Begruessung nicht, rutscht die Karte von
+     selbst in die eigene Zeile (sie schrumpft nicht, s. .dash-head). Ab 981px gilt
+     stattdessen die feste Breite aus dem Block weiter unten -- dort ist die Karte in
+     BEIDEN Zustaenden gleich gross (Owner-Entscheid 15.09.2026). */
+  max-width: min(100%, 920px);
+}
+
+/* Ab 981px -- dort, wo auch die Navigationsspalte steht -- ist die Karte ein Raster aus
+   Textspalte und Knopfspalte, KEIN Zeilenstapel: der Knopf sitzt senkrecht mittig zum
+   GANZEN Textblock, der Erklaersatz endet an der Knopfspalte. Darunter (Handy UND
+   mittlere Fassung) gilt die kompakte Fassung: Statusblock links, kleiner Knopf rechts
+   daneben, Erklaersatz darunter -- sie braucht nur halb so viel Breite und ist damit die
+   einzige, die in einer halben Kopfzeile funktioniert (Owner-Entscheid 15.09.2026).
+   `display:contents` an .agent-chip__main hebt nur die Zwischenschachtel auf; die Kinder
+   werden Rasterzellen. */
+@media (min-width: 981px) {
+  .agent-chip {
+    /* Owner-Entscheid 15.09.2026 ("die beiden Varianten vereinheitlichen"): die Karte hat
+       am Desktop in BEIDEN Zustaenden dieselbe Groesse -- gleiche Breite, gleiche
+       Mindesthoehe, gleiche rechte Kante. Vorher war der Stoerfall 656px und der
+       Normalfall 504px breit und 19px flacher; beim Zustandswechsel sprang damit die
+       ganze Kopfzeile (Begruessung rutschte mit). Die Mindesthoehe ist die natuerliche
+       Hoehe des Stoerfalls mit dem laengeren deutschen Erklaersatz (3 Zeilen). */
+    /* Owner-Befund 15.09.2026: 660px liessen zwischen Rufnummer und Kopier-Pille rund
+       180px Luft ("viel zu viel Abstand"). 560px sind die Breite, bei der beide Saetze
+       des Erklaertexts noch je EINE Zeile brauchen -- schmaler waere die Karte im
+       Stoerfall wieder hoeher als mit einer Nummer. Rest-Luft neben der Nummer: 83px. */
+    flex: 0 0 clamp(460px, 34vw, 560px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    /* Owner-Befund 15.09.2026: "Deine Nummer" stand im Nummern-Zustand tiefer als im
+       Stoerfall -- beide Karten zentrierten ihren Inhalt senkrecht, und der Inhalt ist
+       unterschiedlich hoch (zwei bzw. drei Zeilen). Der Inhalt stand darum oben:
+       das Label sitzt in BEIDEN Zustaenden genau ein Kartenpolster unter der Oberkante,
+       und die Oberkante flieht wiederum mit der "Dein Bereich"-Pille.
+       Owner-Befund 16.09.2026 -- der Preis dafuer: die Karte ist im Kopfbereich auf die
+       Hoehe des Begruessungsblocks GESTRECKT (align-items:stretch an .dash-head, Runde 9),
+       ihr Inhalt ist aber kuerzer. Mit `start` fiel der gesamte Ueberschuss nach unten:
+       ohne Nummer 17px ueber dem Label und 40,7px unter dem Satz -- "oben so eng, unten so
+       viel Platz". Gegenmassnahme in zwei Teilen, damit BEIDE Befunde erledigt sind:
+       (1) der Inhalt steht wieder mittig, (2) die Nummernzeile behaelt ihre Hoehe auch
+       dann, wenn statt Ziffern ein Satz darin steht (s. .agent-chip__row unten) -- damit
+       ist der Inhalt in beiden Zustaenden GLEICH hoch und das Label rutscht beim Wechsel
+       nicht mehr. Der Stoerfall bleibt davon unberuehrt: dort ist die Karte hoeher als
+       der Begruessungsblock, streckt also nichts und sitzt schon mittig. */
+    align-content: center;
+    column-gap: clamp(18px, 1.6vw, 28px);
+    row-gap: 4px;
+  }
+  .agent-chip__main {
+    display: contents;
+  }
+  .agent-chip__body,
+  .agent-chip__hint {
+    grid-column: 1;
+  }
+  /* Der Textblock steht oben in seiner Rasterzeile. Ist der Knopf daneben hoeher als
+     Label + Statussatz (Stoerfall: 49 gegen 48px), zentrierte die Zeile den Block sonst
+     und "Deine Nummer" rutschte 2,5px tiefer als im Nummern-Zustand -- genau der
+     Versatz, den der Owner gesehen hat. */
+  .agent-chip__body {
+    align-self: start;
+  }
+  /* Teil (2) zum Befund oben: die Zeile behaelt die Hoehe einer Ziffernreihe, auch wenn
+     statt Ziffern der kuerzere Statussatz darin steht (20,2 gegen 26,4px Schrift = 25,2
+     gegen 39,5px Zeile). Ohne das waere der Inhalt der Karte je nach Zustand
+     unterschiedlich hoch und das mittig gesetzte Label saesse mal 21,7px, mal 28,8px
+     unter der Oberkante -- genau der Versatz, den der Owner am 15.09. beanstandet hat.
+     Der Satz selbst bleibt unveraendert, er bekommt nur Luft um sich; die Zeile ist ein
+     Flex-Container mit align-items:center, Punkt und Text stehen darin weiter mittig.
+     NICHT im Stoerfall (--notice): dort traegt die Karte zusaetzlich den Erklaersatz,
+     ist dadurch hoeher als der Begruessungsblock und bestimmt ihre Hoehe selbst -- 14px
+     mehr waeren dort reine Karteninflation. */
+  .agent-chip:not(.agent-chip--notice) .agent-chip__row {
+    min-height: var(--chip-number-line);
+  }
+  .agent-chip__action,
+  .agent-chip__copy {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+  }
+  /* Owner-Befund 15.09.2026: das Mono-Label wirkte am Desktop kleiner als in der
+     mittleren Fassung -- dort steht es ueber einer 20px-Ziffernreihe, hier ueber einer
+     30px-Reihe, bei gleicher Labelgroesse. Eine Stufe groesser bringt es optisch auf
+     dieselbe Ebene. */
+  .agent-chip__label {
+    font-size: 12px;
+  }
+  /* Der Erklaersatz laeuft unter BEIDEN Spalten durch -- genauso wie in der mittleren
+     Fassung. Erst dadurch passt jeder seiner beiden Saetze in der schmaleren Karte noch
+     auf eine Zeile, und der Stoerfall bleibt so hoch wie die Karte mit einer Nummer.
+     Der Knopf steht dafuer in der Statuszeile (oben rechts), nicht ueber beide Zeilen
+     gespannt -- dieselbe Stelle, an der im Normalfall die Kopier-Pille sitzt. */
+  .agent-chip--notice .agent-chip__hint {
+    grid-column: 1 / -1;
+  }
+  /* Die Breite kommt jetzt aus flex-basis oben -- derselbe Wert fuer beide Zustaende.
+     Der alte Deckel des Stoerfalls wuerde ihn wieder breiter machen als den Normalfall. */
+  .agent-chip--notice {
+    max-width: none;
+  }
 }
 
 /* Label ueber Nummer bleibt linksbuendig -- der Block traegt jetzt BEIDES:
    das Mono-Label (oben) und die Nummern-Zeile (unten, s. .agent-chip__row). */
 .agent-chip__body {
   align-items: flex-start;
+  min-width: 0;
+}
+
+/* GP-P6: Label und Erklaersatz auf dieselbe Achse wie Nummer/Statuszeile ruecken
+   (der Punkt haengt links davor). EINE Deklaration statt zweier Einzelwerte, damit
+   die Achse nicht auseinanderlaeuft. */
+.agent-chip__label,
+.agent-chip__hint {
+  padding-left: var(--chip-axis);
+}
+
+/* Owner-Audit 15.09.2026: das Kartenlabel war als einziges Mono-Kleinlabel im
+   Dashboard 10px/600 mit 0.18em -- alle anderen (.billing-section__title,
+   .field-label) stehen auf 10.5px/400 mit 0.14em. Gleiche Ebene, gleiche Stufe. */
+.agent-chip__label {
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 /* Feedback-Runde 2 (Befund 1): die Nummern-Zeile -- NUR Punkt + Nummer, NICHT
    das Label. align-items:center zentriert den Punkt darum ausschliesslich zur
    Nummer (Ziffernhoehe), das Label darueber zieht ihn nicht mehr nach oben
    (vorher war der Punkt Geschwister des gesamten Label+Nummer-Blocks). */
+/* Owner-Entscheid 15.09.2026: die Zeile IST der Kopier-Knopf (<button>). Alle
+   Knopf-Voreinstellungen des Browsers werden hier zurueckgenommen -- sie soll wie der
+   Textblock aussehen, den sie vorher war. Der Fokusring bleibt (Tastaturbedienung). */
 .agent-chip__row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--chip-dot-gap);
   min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: color 0.2s ease;
+}
+
+/* Im Stoerfall steht hier ein Satz statt Ziffern -- dann ist der Knopf disabled
+   (AgentChip.astro) und darf sich in nichts von reinem Text unterscheiden. */
+.agent-chip__row:disabled {
+  cursor: default;
+}
+
+/* Owner-Befund 15.09.2026, dritte Runde: das Kopieren ist auf schmalen Breiten ein
+   runder 44px-Knopf (Apple-Mindestgroesse fuer Tippziele) mit 19px-Symbol. Weder die
+   99px-Pille (drueckte die Nummer auf zwei Zeilen) noch das freischwebende 40px-Feld
+   in der Zeilenmitte ("sieht ein bisschen komisch aus") -- er haengt jetzt an der
+   rechten Kartenkante und ist senkrecht mittig zur ganzen Karte, also zu Label UND
+   Nummer. Das gibt ihm einen sichtbaren Anker statt Weissraum ringsum, und es ist
+   dieselbe Kante, an der am Desktop die Kopier-Pille steht (Positionierung im
+   ≤980-Block weiter unten). */
+.agent-chip__row-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.agent-chip__row-icon {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+}
+
+.agent-chip__row:hover .agent-chip__row-copy,
+.agent-chip__row:focus-visible .agent-chip__row-copy {
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+/* Kein Kopier-Feld, solange dort ein Satz steht (Stoerfall / noch keine Nummer). */
+.agent-chip__row:disabled .agent-chip__row-copy {
+  display: none;
+}
+
+/* Rueckmeldung "kopiert" auf schmalen Breiten, wo die Pille ausgeblendet ist: die
+   Ziffernreihe faerbt sich kurz gruenlich (derselbe Ton wie .is-copied an der Pille). */
+.agent-chip__row.is-copied,
+/* .agent-chip__number traegt eine eigene Farbe (app-hermes.css) und wuerde die
+   geerbte gruene sonst ueberschreiben -- darum ausdruecklich mitgenannt. */
+.agent-chip__row.is-copied .agent-chip__number {
+  color: #7fe0b0;
+}
+
+.agent-chip__row.is-copied .agent-chip__row-copy {
+  border-color: rgba(127, 224, 176, 0.45);
+  background: rgba(127, 224, 176, 0.16);
+}
+
+/* Ab 620px traegt die Pille rechts das Kopieren sichtbar -- dort waere das runde Feld
+   hinter der Nummer eine Dopplung. Die Zeile bleibt trotzdem klickbar. */
+@media (min-width: 620px) {
+  .agent-chip__row-copy {
+    display: none;
+  }
+}
+
+/* Die unsichtbare Meldezeile ("Copied") -- im Barrierebaum, nie im Bild. */
+.agent-chip__live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Unter 981px ist die Pille ausgeblendet (shell.css weiter unten) und die Ziffernreihe
+   der einzige Kopier-Weg -- die Nummer bekommt dort die volle Kartenbreite und darf
+   darum nie umbrechen. Nur echte Ziffern: der Statussatz des Stoerfalls muss umbrechen
+   duerfen (er ist ein Satz, keine Nummer). */
+.agent-chip__number:not(.is-status) {
+  white-space: nowrap;
 }
 
 /* Mono nur fuer das Label darueber (app-hermes.css); die Nummer selbst
@@ -246,10 +619,81 @@
    Screens mit (Abschnitt 0-Prinzip: unter ~1200px identisch zu vorher). */
 .agent-chip__number {
   font-family: var(--app-mono);
-  font-size: clamp(22px, 1.83vw, 30px);
+  /* Wert steht oben an .agent-chip (die Mindesthoehe der Zeile rechnet mit ihm). */
+  font-size: var(--chip-number-size);
 }
 
-.agent-chip__copy {
+/* GP-P6 (Owner-Befund 15.09.2026): steht KEINE Nummer da, sondern ein Satz
+   ("Number setup failed", "Setting up your number…"), dann traegt er auch nicht
+   die Ziffern-Optik: Sans statt Mono, ruhige Groesse statt 22-30px. Genau diese
+   Ziffernzeile hat die Karte im Stoerfall hoch und die Zeile eng gemacht. Die
+   Klasse setzt AgentChip.astro, sobald data.number fehlt. */
+/* GP-P6 Runde 2 (Owner-Befund 15.09.2026, Schrift-Vereinheitlichung): der Statussatz
+   traegt exakt die Schrift der Abschnitts-Ueberschriften im Dashboard ("My agent
+   settings", `.app-main h2`) -- gleiche Familie, gleiche Kappe. Er IST die Ueberschrift
+   dieser Karte; Mono ist fuer Ziffern und Kleinlabels reserviert. */
+.agent-chip__number.is-status {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-normal);
+  /* Eine Stufe unter `.app-main h2` (clamp(20px, 2vw, 36px)): die Karte im Seitenkopf
+     ist kleiner als ein Panel, und der laengere deutsche Satz ("Einrichtung der Nummer
+     fehlgeschlagen") bricht auf der h2-Stufe zweizeilig um. */
+  font-size: clamp(19px, 1.4vw, 24px);
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+/* GP-P5: der erklaerende Satz unter Nummer und Aktion. Ruhige Nebenangabe (Sans,
+   gedaempft) - er erscheint nur im failed-Zustand und soll den Chip im Kopf nicht in
+   die Breite treiben, deshalb die Zeilenbreite begrenzt. */
+/* GP-P6: der Satz steht jetzt in der zweiten Kartenzeile und hat die volle Breite --
+   42ch neben dem Knopf ergaben vier Zeilen (Deutsch) und genau die Hoehe, die der Owner
+   beanstandet hat. Die Kappe ist nur noch eine Lesbarkeitsgrenze; schmalere Fenster
+   brechen den Satz weiterhin von selbst um. */
+/* GP-P6 Runde 2 (Schrift-Vereinheitlichung): identisch zu `.muted` im Dashboard
+   ("Takes effect on the next call.") -- Space Grotesk 15px/1.5, gedaempftes Weiss.
+   Vorher 12-14px, also eine eigene, nirgends sonst verwendete Stufe. */
+.agent-chip__hint {
+  margin-top: 0;
+  max-width: 82ch;
+  color: rgba(255, 255, 255, 0.62);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* GP-P6 Runde 2 (Owner-Befund): jeder Satz beginnt in einer eigenen Zeile. Vorher lief
+   der Text als ein Block durch und brach mitten im zweiten Satz um ("... Add a card -
+   setup / restarts automatically."), was wie ein Fehler aussah. */
+.agent-chip__hint-line {
+  display: block;
+}
+
+/* Owner-Befund 18.09.2026: Rueckmeldung, wenn der Kartenwechsel nicht starten konnte
+   (AgentChip.astro, #agent-number-msg). Vorher endete dieser Fall stumm und der Knopf
+   wirkte tot. Gleiche Achse und Stufe wie der Erklaersatz darueber, aber in der
+   Bernsteinfarbe des Stoerfall-Punkts (.live-dot--alert) -- kein neuer Farbwert, gleiche
+   Bedeutung. In beiden Raster-Fassungen (ab 620px) laeuft die Zeile wie der Erklaersatz
+   unter beiden Spalten durch; im Flex-Stapel darunter ist grid-column wirkungslos. */
+.agent-chip__msg {
+  grid-column: 1 / -1;
+  padding-left: var(--chip-axis);
+  color: #f0b366;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+@media (max-width: 980px) {
+  .agent-chip__msg {
+    font-size: 13.5px;
+  }
+}
+
+/* GP-P3: der Aktions-Knopf (failed-Nummer) teilt die Optik des Kopier-Knopfs -
+   angehaengter Selektor statt einer zweiten, driftenden Deklaration (S2). */
+.agent-chip__copy,
+.agent-chip__action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -262,12 +706,17 @@
   background: rgba(255, 255, 255, 0.06);
   color: #ffffff;
   font-family: var(--font-sans);
-  font-size: clamp(14px, 1vw, 16px);
+  /* Owner-Audit 15.09.2026: beide Knoepfe der Nummernkarte laufen auf der
+     Geister-Knopf-Stufe des Dashboards (15px/500, wie "Add a different card" und
+     "Remove") statt auf einer eigenen 14-16px-Kappe. */
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
-.agent-chip__copy:hover {
+.agent-chip__copy:hover,
+.agent-chip__action:hover {
   border-color: rgba(255, 255, 255, 0.42);
 }
 
@@ -277,6 +726,38 @@
   flex-shrink: 0;
 }
 
+/* GP-P6 Runde 3 (Owner-Befund 15.09.2026): das Kartensymbol im Aktions-Knopf. Es
+   traegt die Bedeutung, die vorher im langen Label "Update payment method" stand --
+   dasselbe Symbol wie in der Billing-Insel, damit der Knopf und die Karte dort
+   erkennbar auf dieselbe Sache zeigen. 24x16-Seitenverhaeltnis wie die Vorlage. */
+.agent-chip__action-icon {
+  width: 19px;
+  height: 12.7px;
+  flex-shrink: 0;
+}
+
+.agent-chip__action-label {
+  white-space: nowrap;
+}
+
+/* Owner-Entscheid 15.09.2026, letzte Runde: die mittlere Fassung ist die Vorlage --
+   der Kopier-Knopf am Desktop bekommt exakt dieselben Masse (36px hoch, 14px seitlich,
+   13,5px Schrift, 6px Gasse) statt der groesseren Grundwerte oben. Der Update-Knopf
+   teilt sie, damit die beiden Zustaende derselben Karte nicht unterschiedlich grosse
+   Knoepfe tragen. Der Block steht bewusst HIER, also NACH den Grundwerten -- weiter
+   oben im Raster-Block wuerde er von ihnen ueberschrieben (gleiche Spezifitaet,
+   spaeter im Blatt gewinnt). */
+@media (min-width: 981px) {
+  .agent-chip__copy,
+  .agent-chip__action {
+    min-height: 36px;
+    padding-block: 0;
+    padding-inline: 14px;
+    font-size: 13.5px;
+    gap: 6px;
+  }
+}
+
 /* "Copied"-Rueckmeldung: gruenliche Einfaerbung + kurze Pop-Skalierung. */
 .agent-chip__copy.is-copied {
   color: #7fe0b0;
@@ -284,6 +765,13 @@
   background: rgba(127, 224, 176, 0.16);
   animation: agent-copy-pop 0.18s var(--motion-ease);
 }
+
+/* GP-P6 (Owner-Befund 15.09.2026): der Aktions-Knopf sass frueher als vierte Zeile
+   UNTER der Nummer (margin-left:0) -- zusammen mit dem Statussatz in Ziffernoptik
+   ergab das eine auffallend hohe, links unbuendige Karte. Jetzt gilt fuer ihn das
+   gleiche margin-left:auto wie fuer den Kopier-Knopf: rechts, senkrecht mittig,
+   auf der Hoehe des Textblocks. Beide Knoepfe schliessen sich gegenseitig aus
+   (Kopieren nur mit Nummer, Aktion nur ohne), sie kollidieren also nie. */
 
 @keyframes agent-copy-pop {
   0% {
@@ -312,13 +800,22 @@
    hier nur Groesse + Farbe + Puls-Keyframes ergaenzt. Gruenton identisch zur
    "Copied"-Rueckmeldung (rgba(127, 224, 176, …), s.o.) -- kein neuer Hex-Wert. */
 .agent-chip__row .live-dot {
-  width: 10px;
-  height: 10px;
+  width: var(--chip-dot);
+  height: var(--chip-dot);
 }
 
 .live-dot:not(.live-dot--off) {
   background: #7fe0b0;
   animation: agent-dot-pulse 2s ease-in-out infinite;
+}
+
+/* GP-P6 (Owner-Befund 15.09.2026): haengt das Setup, faerbt sich der Punkt bernstein
+   statt grau. Vorher trug allein die Schriftgroesse des Statussatzes die Dringlichkeit;
+   die ist jetzt klein, also uebernimmt das die Farbe. Zwei Klassen liegen gleichzeitig
+   am Element (--off + --alert), darum hier die hoehere Spezifitaet statt Reihenfolge.
+   Bernstein statt Rot: es ist ein loesbarer Zwischenstand, kein Ausfall. */
+.live-dot.live-dot--alert {
+  background: #f0b366;
 }
 
 @keyframes agent-dot-pulse {
@@ -336,40 +833,265 @@
 /* ≤900px (Spec §5): Seitenkopf stapelt, Nummernkarte volle Breite. Eigener
    Breakpoint, unabhaengig vom Nav-Umbruch bei 980px (Spec §6) -- beide sind
    im Entwurf getrennt benannt. */
-@media (max-width: 900px) {
-  .dash-head {
-    grid-template-columns: minmax(0, 1fr);
+/* 620-980px (Owner-Entscheid 15.09.2026): auch in der mittleren Fassung steht die
+   Nummernkarte RECHTS neben der Begruessung wie am Desktop. Dafuer teilen sich beide
+   die Zeile zu gleichen Teilen (gleiche Flex-Basis), statt dass die Karte ihre
+   Inhaltsbreite nimmt und die Begruessung in die Zeile darueber draengt. */
+@media (min-width: 620px) and (max-width: 980px) {
+  .dash-head__intro {
+    /* Die Begruessung braucht in dieser Fassung nur ihre eigene Zeilenbreite -- die
+       Karte daneben traegt im Stoerfall Statussatz, Knopf UND Erklaersatz und gewinnt
+       mit jedem Pixel eine Umbruchstelle weniger (Owner-Entscheid 15.09.2026:
+       vereinheitlichte, ruhige Kartenform in beiden Zustaenden). */
+    flex: 1 1 190px;
   }
   .agent-chip {
+    /* 190 + 28 (Spaltenabstand) + 350 = 568px passen auch bei 620px Fensterbreite noch
+       nebeneinander (die Kopfzeile misst dort rund 580px). Owner-Befund 15.09.2026:
+       breiter machte die Karte im Nummern-Zustand leer ("viel zu viel White Space") --
+       die Begruessung bekommt den Unterschied. */
+    flex: 1 1 350px;
+    max-width: none;
+    width: auto;
+  }
+}
+
+/* Unter 620px stapelt der Kopf: die Karte bekommt ihre eigene Zeile ueber die
+   volle Breite (flex-basis 100%). */
+@media (max-width: 619px) {
+  .agent-chip {
+    flex: 1 1 100%;
     width: 100%;
     min-width: 0;
   }
 }
 
-/* Befund 2 (Fix-Runde): unter 560px darf der Kopier-Knopf umbrechen -- dann
-   aber volle Breite unter der Nummer, nicht nur so schmal wie sein Label. */
-@media (max-width: 559px) {
-  .agent-chip {
+/* Die kompakte Fassung der Nummernkarte: bis 980px (Handy UND mittlere Fassung). */
+@media (max-width: 980px) {
+  /* GP-P6: der Umbruch gehoert jetzt an die Kopfzeile der Karte (.agent-chip selbst
+     ist die Spalte Kopfzeile + Erklaersatz). */
+  .agent-chip__main {
     flex-wrap: wrap;
+    gap: 10px;
   }
-  .agent-chip__copy {
+  /* Runde 9: seitliches Polster wie bei allen anderen Karten am Handy (16px,
+     app-hermes.css) statt 20px, und eine engere Punkt-Gasse -- zusammen die
+     rund 30px, die Nummer und Icon-Knopf brauchen, um auf 320px-Geraeten noch
+     in EINER Zeile zu stehen. */
+  .agent-chip {
+    --chip-dot-gap: 10px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  /* Block und Zeile nehmen die volle Kartenbreite -- damit ist die ganze Zeile
+     Tippflaeche, nicht nur die Ziffern. */
+  .agent-chip__body,
+  .agent-chip__row {
     width: 100%;
+  }
+  .agent-chip {
+    position: relative;
+  }
+  /* GP-P6 Runde 3 (Owner-Befund 15.09.2026): am Handy laufen die Saetze wieder als EIN
+     Absatz. Auf schmaler Breite bricht jeder Satz ohnehin um; zwei erzwungene Zeilen
+     oben drauf haben die Karte aufgeblaeht ("zu viele Umbrueche"). Am Desktop bleibt es
+     bei einer Zeile je Satz -- dort ist genug Breite, dass keine zusaetzlich umbricht. */
+  .agent-chip__hint-line {
+    display: inline;
+  }
+  .agent-chip__hint-line + .agent-chip__hint-line::before {
+    content: " ";
+  }
+  /* In der mittleren Fassung hat die Karte nur die halbe Kopfzeile (gemessen 279px bei
+     637px Fensterbreite). Neben dem deutschen Statussatz bleibt dort kein Platz fuer den
+     Knopf -- er stand sonst als riesige Pille rechts und drueckte "Einrichtung der
+     Nummer fehlgeschlagen" auf drei Zeilen. Er steht darum UNTER dem Statusblock und
+     haelt seine Inhaltsbreite (nicht ueber die ganze Karte gestreckt). Am Handy, wo die
+     Karte die volle Zeilenbreite hat, uebernimmt der Block ganz unten. */
+  .agent-chip__action {
+    width: auto;
+    min-height: 40px;
+    padding-block: 0;
+    padding-inline: 18px;
     margin-left: 0;
+  }
+  /* Damit Punkt + Nummer + Icon-Knopf in EINE Zeile passen (und nicht wieder
+     umbrechen), skaliert die Ziffernreihe am Handy mit der Breite: 22px bleiben
+     das Maximum, 16px die Untergrenze fuer sehr schmale Geraete (320px). Der
+     Statussatz des Stoerfalls hat seine eigene Stufe (.is-status) und bleibt
+     davon unberuehrt. */
+  /* Gesetzt wird die gemeinsame Groesse an der Karte, nicht die Schriftgroesse an der
+     Nummer: die Mindesthoehe der Zeile rechnet mit demselben Wert (s. .agent-chip). */
+  .agent-chip {
+    --chip-number-size: clamp(16px, 5.2vw, 22px);
+  }
+  /* Owner-Befund: der Erklaersatz war am Handy "schon sehr gross". Eine Stufe
+     unter dem Fliesstext, wie die Fussnoten in den Karten darunter. */
+  .agent-chip__hint {
+    font-size: 13.5px;
   }
 }
 
-/* 761-980px (Spec §6): Navigation wird zur waagerechten Leiste ueber dem
-   Inhalt -- vier Kacheln nebeneinander, Inhalt zentriert/zweizeilig (Nummer
-   ueber Label statt links daneben). Dieselbe Leiste gilt bis ≤760px, dort
-   schrumpft nur noch die Label-Schrift (naechster Block). */
+/* Owner-Entscheid 15.09.2026 (Handy): der Aktions-Knopf entfaellt hier GANZ -- in
+   beiden Sprachen. Er hat die Statuszeile so schmal gemacht, dass "Einrichtung der
+   Nummer fehlgeschlagen" umbrach; seine Aufgabe steht jetzt im Satz darunter ("Neue
+   Karte unter Abrechnung hinterlegen"), und die Karte hat denselben ruhigen Bau wie
+   mit einer Nummer: Ueberschrift auf EINER Zeile, Text darunter. Am Desktop und in der
+   mittleren Fassung, wo die Breite reicht, bleibt der Knopf. */
+@media (max-width: 619px) {
+  .agent-chip__action {
+    display: none;
+  }
+  /* Owner-Entscheid 15.09.2026: der runde Icon-Knopf ist jetzt NUR noch die
+     Handy-Fassung -- ab 620px traegt die Karte dieselbe Kopier-Pille wie am Desktop
+     ("das Copyzeichen von der Desktop-Variante auch fuer die mittlere Variante").
+     Am Handy bleibt er, weil neben einer 17-stelligen Rufnummer kein Platz fuer das
+     Wort ist (gemessen: Pille 99px, verfuegbar 63px). */
+  .agent-chip__copy {
+    display: none;
+  }
+  /* Er haengt an der rechten Kartenkante und steht senkrecht mittig zur Karte (Label
+     UND Nummer), nicht nur zur Ziffernzeile. Absolut gesetzt, damit er die Zeilenhoehe
+     nicht aufzieht und die Nummer die volle Breite behaelt; als Kind des Zeilen-Knopfes
+     loest ein Tipp darauf trotzdem das Kopieren aus. */
+  .agent-chip__row-copy {
+    position: absolute;
+    top: 50%;
+    right: 16px;
+    transform: translateY(-50%);
+  }
+  /* Schutzstreifen, damit eine sehr lange Nummer nie unter den Knopf laeuft. Nur im
+     Nummern-Zustand: im Stoerfall gibt es dort keinen Knopf, und der Satz soll die
+     ganze Breite haben. */
+  .agent-chip__row:not(:disabled) {
+    padding-right: 52px;
+  }
+  /* Eine Zeile, in beiden Sprachen: der deutsche Satz ist mit 26 Zeichen der laengere
+     und bestimmt darum die Stufe. Er skaliert mit der Breite, damit er auch auf 320px
+     nicht umbricht. */
+  .agent-chip__number.is-status {
+    font-size: clamp(15px, 4.6vw, 19px);
+    white-space: nowrap;
+  }
+}
+
+/* Owner-Entscheid 15.09.2026: die mittlere Fassung baut die Karte wie der Desktop --
+   Textblock links, Knopf OBEN RECHTS neben dem Statussatz, Erklaersatz darunter ueber
+   die volle Kartenbreite. Vorher stand der Knopf UNTER dem Satz; die Karte war dadurch
+   eine Zeile hoeher als dieselbe Karte mit einer Nummer, und die beiden Zustaende sahen
+   nebeneinander unterschiedlich aus ("genau gleich ... auf eine Hoehe, dieselbe
+   Groesse"). Der Block steht NACH dem ≤980-Block, damit er dessen Flex-Fassung
+   ueberschreibt (gleiche Spezifitaet, spaeter gewinnt). */
+@media (min-width: 620px) and (max-width: 980px) {
+  .agent-chip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    /* Wie am Desktop: der Inhalt stand oben, damit "Deine Nummer" in beiden Zustaenden
+       auf derselben Hoehe sitzt (Owner-Befund 15.09.2026). Seit dem Owner-Befund vom
+       16.09.2026 steht er mittig -- dieselbe Begruendung und dasselbe Gegenstueck
+       (gleiche Zeilenhoehe fuer Ziffern und Statussatz) wie im Block ab 981px. */
+    align-content: center;
+    column-gap: 12px;
+    row-gap: 4px;
+    /* Owner-Befund 15.09.2026: keine Mindesthoehe mehr. Die Karte ist so hoch wie ihr
+       Inhalt und wird von .dash-head (align-items: stretch) auf die Hoehe des
+       Begruessungsblocks gezogen -- im Nummern-Zustand also exakt von der Oberkante der
+       "Dein Bereich"-Pille bis zur Grundlinie der Begruessung. Eine feste Mindesthoehe
+       liess darunter ein totes Feld stehen. */
+    padding-block: 14px;
+  }
+  /* Dieselbe Pille wie am Desktop, in derselben Rasterzelle wie der Update-Knopf --
+     der runde Icon-Knopf bleibt der Handy-Fassung vorbehalten (Owner-Entscheid
+     15.09.2026: "das Copyzeichen von der Desktop-Variante auch fuer die mittlere
+     Variante", in beiden Zustaenden). */
+  .agent-chip__copy {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    margin-left: 0;
+    min-height: 36px;
+    padding-block: 0;
+    padding-inline: 14px;
+    font-size: 13.5px;
+    gap: 6px;
+  }
+  /* Die Zwischenschachtel faellt weg, damit Textblock und Knopf echte Rasterzellen
+     werden -- dasselbe Mittel wie am Desktop. */
+  .agent-chip__main {
+    display: contents;
+  }
+  .agent-chip__body {
+    grid-column: 1;
+    grid-row: 1;
+    /* wie am Desktop: oben in der Zeile, damit das Label in beiden Zustaenden auf
+       derselben Hoehe sitzt. */
+    align-self: start;
+  }
+  .agent-chip__action {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    width: auto;
+    margin-left: 0;
+    /* Kompakter als am Desktop: neben dem deutschen Statussatz zaehlt in dieser
+       Breite jedes Pixel. */
+    min-height: 36px;
+    padding-inline: 12px;
+    font-size: 13.5px;
+    gap: 6px;
+  }
+  /* Der Erklaersatz laeuft unter BEIDEN Spalten durch -- eine zusaetzlich schmale
+     Textspalte neben dem Knopf traegt in einer halben Kopfzeile nicht. */
+  .agent-chip__hint {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  /* Neben dem 44px-Kopierknopf bleibt in dieser Breite weniger Platz als am Handy:
+     die Ziffernreihe skaliert darum mit (volle 22px erst ab ~760px). Der Wert steht an
+     der Karte, weil die Mindesthoehe der Zeile mit ihm rechnet (s. .agent-chip). */
+  .agent-chip {
+    --chip-number-size: clamp(16px, 2.9vw, 22px);
+  }
+  /* Wie am Desktop (Owner-Befund 16.09.2026): die Zeile behaelt die Hoehe einer
+     Ziffernreihe, auch wenn statt Ziffern der kuerzere Statussatz darin steht. Sonst
+     faellt der Ueberschuss der gestreckten Karte komplett nach unten -- gemessen bei
+     980px: 15px ueber dem Label, 27,2px unter dem Satz. */
+  .agent-chip:not(.agent-chip--notice) .agent-chip__row {
+    min-height: var(--chip-number-line);
+  }
+  /* Der Statussatz teilt sich die Zeile mit dem Knopf und skaliert darum ebenfalls
+     mit der Breite -- gemessen bleibt er so in beiden Sprachen einzeilig. */
+  .agent-chip__number.is-status {
+    font-size: clamp(15px, 2.4vw, 19px);
+  }
+}
+
+/* 761-980px (Spec §6) und Owner-Entscheid 15.09.2026: in der mittleren Fassung
+   steht die Navigation als waagerechte Leiste ueber dem Inhalt -- vier Kacheln
+   nebeneinander, genau wie am Handy ("das so handeln wie in der Mobile Version").
+   Die linke Spalte gibt es erst ab 981px. */
 @media (max-width: 980px) {
   .dash-layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* Einspaltig: die Abschnitte stapeln wieder untereinander, die Leiste steht
+     als erste Zeile darueber -- also zurueck auf die automatische Platzierung. */
+  .dash-sections > * {
+    grid-column: 1;
+  }
+  .dash-sections > *:first-child {
+    align-self: auto;
+  }
+  .dash-sections > *:first-child > .card {
+    height: auto;
   }
   .dash-nav {
     position: static;
     top: auto;
     width: auto;
+    grid-column: 1;
+    grid-row: auto;
+    align-self: auto;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
@@ -384,8 +1106,7 @@
   }
 }
 
-/* ≤760px: dieselbe waagerechte Leiste (vier Kacheln in einer Reihe, siehe
-   980px-Block oben) -- nur die Labels duerfen schrumpfen (Spec §6). */
+/* ≤760px: dieselbe waagerechte Leiste, nur die Labels duerfen schrumpfen. */
 @media (max-width: 760px) {
   .dash-nav__label {
     font-size: 12px;
@@ -394,6 +1115,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .agent-chip__copy,
+  .agent-chip__action,
   .live-dot {
     animation: none;
   }
@@ -412,6 +1134,15 @@
   display: flex;
   align-items: center;
   gap: 18px;
+}
+
+/* Owner-Befund 15.09.2026: "Signed in as <Name>" neben dem Umschalter ist eine
+   Doppelung -- der Name steht zwei Zeilen darunter in der Begruessung ("Welcome,
+   Jonas Kroh"). Am Handy schob der Satz Umschalter und Abmelden-Knopf sogar in
+   eine zweite Kopfzeile. Er entfaellt darum in JEDER Fassung. display:none statt
+   Textaenderung: Wiring, Uebersetzung und Barrierebaum bleiben unangetastet. */
+.auth-who {
+  display: none;
 }
 
 .lang-toggle {
@@ -438,13 +1169,123 @@
   color: #ffffff;
 }
 
-/* ≤480px: der Kopfbereich wrapt schon ab 768px (app-hermes.css); hier nur
-   der Umschalter selbst etwas kompakter, damit er neben Sign out passt. */
+/* ≤768px: ab hier ist der Markenblock 38px hoch (app-hermes.css) -- der
+   Anmelden-/Abmelden-Knopf stand mit 48px daneben ueberproportioniert da, oben
+   wie unten ueberstehend, und klebte am EN/DE-Umschalter (Owner-Befund
+   15.09.2026). Feste 38px Hoehe statt padding-block: so ist die Pille oben UND
+   unten exakt buendig mit Fluegel und Schriftzug. Schmaler wird sie ueber
+   kleinere Innenraender und 15px (die App-Schriftgroesse) statt 16px; der
+   groessere Flex-Abstand loest sie vom Umschalter. Rechtsbuendig bleibt sie
+   ueber das space-between des Headers -- daran wird nichts geaendert. */
+@media (max-width: 768px) {
+  .auth-island {
+    gap: 20px;
+    /* Reicht die Zeile doch einmal nicht (sehr schmale Geraete, lange
+       Uebersetzung), bricht die Insel um -- dann steht sie rechts statt links:
+       ein allein stehendes Kind einer umgebrochenen Zeile ignoriert
+       space-between, dieses margin nicht. */
+    margin-left: auto;
+  }
+  .auth-island .btn {
+    height: 38px;
+    padding-block: 0;
+    padding-inline: 16px;
+    font-size: 15px;
+  }
+}
+
+/* ≤480px: hier nur der Umschalter selbst etwas kompakter, damit er neben dem
+   Knopf passt -- der Abstand bleibt spuerbar groesser als die alten 12px. */
 @media (max-width: 480px) {
   .auth-island {
-    gap: 12px;
+    gap: 18px;
   }
   .lang-toggle {
     font-size: 12px;
   }
+}
+
+/* ------------------------------------------------ 6. Zustandskarten ------ */
+
+/* Owner-Befund 15.09.2026 zum Fehlerzustand (#region-error): "sieht vom Design her
+   richtig kacke aus". Er war ungestaltet -- eine .card ueber die volle Inhaltsbreite,
+   darin eine fette Sans-Ueberschrift (30px/700), eine Textzeile und ein Knopf, alle
+   drei ohne jeden Abstand uebereinander. Ein Zustand, der die ganze App ersetzt, ist
+   kein Panel: schmale, mittige Karte, ein Zeichen als Anker, Ueberschrift in der
+   Marken-Serif wie alle anderen Ueberschriften, ruhige Erklaerzeile auf der `.muted`-
+   Stufe, Knopf mit Luft darueber. */
+.state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 560px;
+  margin: clamp(24px, 6vh, 64px) auto;
+  padding: clamp(32px, 4vw, 48px) clamp(24px, 3vw, 40px);
+  text-align: center;
+}
+
+/* Bernstein wie der Punkt der Nummernkarte im Stoerfall (shell.css
+   .live-dot--alert) -- kein neuer Farbwert, gleiche Bedeutung: loesbar, kein Ausfall. */
+.state-card__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(240, 179, 102, 0.45);
+  border-radius: 999px;
+  background: rgba(240, 179, 102, 0.12);
+  color: #f0b366;
+  font-family: var(--font-heading);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.state-card h1 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: var(--weight-normal);
+  font-size: clamp(24px, 2.2vw, 34px);
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.state-card p {
+  margin: 0;
+  max-width: 44ch;
+  color: rgba(255, 255, 255, 0.62);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.state-card__action {
+  margin-top: 6px;
+  min-width: 160px;
+  padding: 14px 30px;
+  font-size: 15px;
+}
+
+/* Owner-Befund 16.09.2026, Nachsuche zur Nummernkarte ("guck mal, ob das Problem noch
+   woanders ist"): dieselbe Ursache im Wartezustand. Die Kachelflaeche ist ohne Tarife
+   0px hoch -- ihr eigener Abstand nach oben (16px) bleibt aber stehen und laesst unten
+   im Kasten ein totes Feld (gemessen 152px Kasten, Inhalt endet 16px vor der
+   Unterkante). Bekanntes Muster: derselbe Fall stand in der Billing-Karte, wo der
+   Tarif-Umschlag mit aktivem Abo sichtbar blieb, obwohl alle Kinder versteckt waren
+   (Audit-Runde 15.09.2026, dort ueber ein hidden-Toggle geloest). Hier reicht `:empty`:
+   der Behaelter traegt im Markup keine Leerzeichen und wird per replaceChildren
+   geleert, ist also wirklich leer, wenn keine Kachel gerendert wurde. */
+#pending-tiles:empty {
+  display: none;
+}
+
+/* Gleiche Ueberschriften-Schrift auch im Wartezustand -- die Karte daneben bleibt
+   sonst unangetastet (sie traegt die Tarif-Kacheln). */
+#region-pending h1 {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-normal);
+  font-size: clamp(24px, 2.2vw, 34px);
+  line-height: 1.15;
+  letter-spacing: 0;
 }

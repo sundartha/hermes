@@ -14,7 +14,7 @@ import {
   ApiError,
   HTTP_CONFLICT,
   HTTP_UNAUTHORIZED,
-  startBillingSubscribe,
+  notifySessionExpired,
   startBillingSetupCheckout,
   startBillingCancel,
   startBillingResume,
@@ -44,10 +44,10 @@ const PLAN_ATTR = "plan"; // data-plan: Slug am Subscribe-Button (delegierter Kl
 const FEE_NOTICE_PREFIX = "+ "; // sprachneutral (Zahlenpraefix), keine DE-Variante noetig
 const FEE_NOTICE_SUFFIX = " one-time number setup fee";
 const FEE_NOTICE_SUFFIX_DE = " einmalige Einrichtungsgebühr für die Nummer";
-// AM4: Funnel-Hinweis aus dem no_card-Response (Feld next). Spiegelt NEXT_SETUP_CHECKOUT in
-// src/self-service-routes.js -- ein Contract-String ueber die Origin-Grenze (kein gemeinsames
-// Modul im Build-freien Frontend, wie die gespiegelten Settings-/error-Strings).
-const SETUP_CHECKOUT_NEXT = "setup-checkout";
+// (Der frueher hier gespiegelte Funnel-Hinweis next="setup-checkout" aus dem no_card-
+// Response ist entfallen: der Tarif-Klick geht jetzt IMMER direkt in den Checkout, es
+// gibt keinen zweiten Weg mehr, in den der Server ihn weisen muesste. Der Server sendet
+// das Feld weiterhin - POST /billing/subscribe bleibt als Endpunkt bestehen.)
 
 const MS_PER_SECOND = 1000;
 const DATE_LOCALE = "en-US";
@@ -79,7 +79,7 @@ function subscribeMessage(key) {
 // Preis-Zeile: formatierter Preis + " /month" als eigener Span. Beide ueber el()/
 // textContent (Preis aus dem Ganzzahl-Cents-Katalog, formatPlanPrice).
 function priceLine(doc, plan) {
-  const line = el(doc, "div", "plan-price", formatPlanPrice(plan.amountCents, plan.currency));
+  const line = el(doc, "div", "plan-price", formatPlanPrice(plan.amountCents, plan.currency, getLang()));
   line.append(el(doc, "span", "plan-per", tPair(PRICE_CADENCE, PRICE_CADENCE_DE)));
   return line;
 }
@@ -96,7 +96,7 @@ function featureList(doc, features) {
 // identisch zum Bestand). Wiederverwendet formatPlanPrice (G5, EINE Preis-Formatierung).
 function feeLine(doc, fee) {
   if (!fee) return null;
-  const price = formatPlanPrice(fee.amountCents, fee.currency);
+  const price = formatPlanPrice(fee.amountCents, fee.currency, getLang());
   const suffix = tPair(FEE_NOTICE_SUFFIX, FEE_NOTICE_SUFFIX_DE);
   return el(doc, "div", "plan-fee", `${FEE_NOTICE_PREFIX}${price}${suffix}`);
 }
@@ -201,47 +201,31 @@ function isUnauthorized(err) {
   return err instanceof ApiError && err.status === HTTP_UNAUTHORIZED;
 }
 
-// Gefuehrter no_card-Pfad: keine Karte -> Stripe-Checkout MIT getragenem Plan
-// (startBillingSetupCheckout(plan) -> Rueckkehr bucht den Plan). 401 -> Session
-// abgelaufen; sonst generischer Checkout-Fehler. navigate kapselt den Browser-
-// Redirect (DI -> testbar, kein direktes window in der Maschine).
-async function guidedCardSetup(plan, { onMessage, navigate }) {
-  try {
-    const url = await startBillingSetupCheckout(plan);
-    navigate(url);
-  } catch (err) {
-    onMessage(
-      isUnauthorized(err) ? subscribeMessage("sessionExpired") : subscribeMessage("checkoutFailed"),
-      false,
-    );
-  }
+// Fehler-Zweige des Tarif-Klicks: 409 -> der Tenant hat bereits ein Abo (der Server
+// gated das VOR jedem Stripe-Call, self-service-routes.js setup-checkout); 401 ->
+// Session abgelaufen; alles andere -> generischer Checkout-Fehler. Fail-closed: nie
+// als Erfolg deuten, nie eine Buchung behaupten, die nicht stattgefunden hat.
+function checkoutErrorMessage(err) {
+  if (isConflict(err)) return subscribeMessage("alreadySubscribed");
+  if (isUnauthorized(err)) return subscribeMessage("sessionExpired");
+  return subscribeMessage("checkoutFailed");
 }
 
-// Fehler-Zweige der Subscribe-Maschine (Port tenant.html subscribePlan): 409 no_card
-// -> gefuehrter Checkout; 409 sonst (already_subscribed) -> Hinweis; 401 -> Session
-// abgelaufen; alles andere -> generischer Fehler. Fail-closed: nie als Erfolg deuten.
-async function handleSubscribeError(err, plan, opts) {
-  // Funnel statt Sackgasse: der Server weist per next="setup-checkout" in die Karten-
-  // Erfassung (no_card). Diskriminierung ueber den expliziten next-Hinweis, nicht ueber die
-  // ueberladene error-Zeichenkette; das verbleibende 409 (kein next) = already_subscribed.
-  if (isConflict(err) && err.next === SETUP_CHECKOUT_NEXT) {
-    await guidedCardSetup(plan, opts);
-    return;
-  }
-  if (isConflict(err)) return opts.onMessage(subscribeMessage("alreadySubscribed"), false);
-  if (isUnauthorized(err)) return opts.onMessage(subscribeMessage("sessionExpired"), false);
-  return opts.onMessage(subscribeMessage("failed"), false);
-}
-
-// Ein Subscribe-Lauf: POST {plan}. Erfolg -> Rueckmeldung + onSubscribed (re-fetch
-// /state + AUTH_EVENT bzw. Reload, je nach Pfad). Misserfolg -> handleSubscribeError.
+// Ein Tarif-Klick: IMMER die gehostete Stripe-Checkout-Seite (Owner-Entscheidung
+// 2026-09-11). Vorher lief der Klick zuerst auf POST /billing/subscribe und landete
+// nur OHNE hinterlegte Karte (409 no_card) im Checkout - mit Karte-on-file wurde der
+// Tarif also ohne jede Bestaetigungsseite sofort off-session abgebucht. Jetzt gibt es
+// EINEN Weg (G5) fuer beide Faelle: setup-checkout traegt den Plan, Stripe zeigt
+// Betrag/Tarif/Zahlungsmittel, und erst die Rueckkehr (/billing/return?plan=...) bucht
+// und aktiviert (activateSubscriptionFromCheckoutSession). Der Kunde sieht damit auch
+// eine Kartenablehnung bei Stripe, statt sie nur als stillen Fehlschlag danach zu
+// erleben. navigate kapselt den Browser-Redirect (DI -> testbar, kein direktes window).
 async function runSubscribe(plan, opts) {
   try {
-    await startBillingSubscribe(plan);
-    opts.onMessage(subscribeMessage("booked"), true);
-    await opts.onSubscribed();
+    const url = await startBillingSetupCheckout(plan);
+    opts.navigate(url);
   } catch (err) {
-    await handleSubscribeError(err, plan, opts);
+    opts.onMessage(checkoutErrorMessage(err), false);
   }
 }
 
@@ -254,11 +238,15 @@ function browserNavigate(url) {
 // Verdrahtet einen Container mit Plan-Kacheln: EIN delegierter Klick-Listener am
 // stabilen Container (die Kacheln werden bei jedem Render ersetzt -> kein Binding
 // pro Button, kein Leak). Klick auf einen data-plan-Button -> runSubscribe.
-//   onSubscribed: nach erfolgreicher Buchung aufgerufen (re-fetch /state bzw. Reload).
-//   onMessage(text, ok): Rueckmeldung anzeigen.
+//   onMessage(text, ok): Rueckmeldung anzeigen (nur der Fehlerfall - der Erfolgsfall
+//     verlaesst die Seite Richtung Stripe und meldet sich erst nach der Rueckkehr
+//     ueber ?sub=ok, s. returnMessageText).
 //   navigate(url): Browser-Redirect (Default window.location; injizierbar fuer Tests).
-export function wireSubscribe(container, { onSubscribed, onMessage, navigate = browserNavigate } = {}) {
-  // Doppelklick-Schutz (Payment-Neugestaltung): waehrend ein Subscribe-Request laeuft,
+// KEIN onSubscribed mehr: seit der Tarif-Klick ausnahmslos ueber die gehostete
+// Stripe-Seite laeuft, gibt es im Klick-Pfad keine Buchung, die ein Re-Fetch zeigen
+// koennte - die Seite wird verlassen und kehrt nach dem Checkout neu geladen zurueck.
+export function wireSubscribe(container, { onMessage, navigate = browserNavigate } = {}) {
+  // Doppelklick-Schutz (Payment-Neugestaltung): waehrend ein Checkout-Start laeuft,
   // ignoriert der Listener JEDEN weiteren Klick (auf jede Kachel) - kein zweiter POST,
   // bevor der erste beantwortet ist. busy lebt im Closure DIESES Aufrufs (ein Container
   // = eine Maschine, gleiches Muster wie wireCancelControls unten).
@@ -269,7 +257,7 @@ export function wireSubscribe(container, { onSubscribed, onMessage, navigate = b
     const btn = event.target.closest("[data-plan]");
     if (!btn || busy) return undefined;
     busy = true;
-    return runSubscribe(btn.dataset[PLAN_ATTR], { onSubscribed, onMessage, navigate }).finally(() => {
+    return runSubscribe(btn.dataset[PLAN_ATTR], { onMessage, navigate }).finally(() => {
       busy = false;
     });
   });
@@ -300,24 +288,31 @@ function planChoiceText(key) {
 
 // Rahmt die suspended-Region als prominente Plan-Auswahl: aktivierende H1, erklaerender
 // Untertitel, Plan-Kacheln aus dem Build-Spiegel, sichtbarer Skip-Link. REIN DOM (doc + els),
-// kein Netz. els = { title, subtitle, tiles, skip }. fee (Phase A) optional, an planTiles
-// durchgereicht (numberSetupFeeFrom, null -> keine Gebuehren-Zeile). NUR bei PAYMENT_ENABLED aufgerufen
+// kein Netz. els = { title, subtitle, tiles, skip, restore }. Von den beiden Knoepfen ist
+// IMMER genau einer sichtbar (CL1-B4). fee (Phase A) optional, an planTiles durchgereicht
+// (numberSetupFeeFrom, null -> keine Gebuehren-Zeile). NUR bei PAYMENT_ENABLED aufgerufen
 // (Aufrufer-Guard) -> ohne Payment byte-identisch.
 export function renderPlanChoice(doc, els, fee = null) {
   els.title.textContent = planChoiceText("title");
   els.subtitle.textContent = planChoiceText("subtitle");
   els.tiles.replaceChildren(...planTiles(doc, fee));
   els.skip.hidden = false;
+  // Object.assign statt direkter Zuweisung (no-param-reassign/props:true - dieselbe
+  // Wirkung, ohne die bestehende Unterdrueckungszahl der Datei zu bewegen).
+  Object.assign(els.restore, { hidden: true });
 }
 
 // "Maybe later": blendet die Plan-Auswahl aus, zeigt das ruhige Pending-Banner. REIN DOM,
 // ruft KEIN subscribe/setStatus (Invariante AM3: aktiviert nichts, /state bleibt 403).
-// Einbahn (Reload bringt die Auswahl zurueck) - bewusst minimal (YAGNI).
+// CL1-B4: der Zustand behaelt einen Ausgang - der Skip-Knopf weicht dem Rueckweg zur
+// Plan-Auswahl. Vorher blieb eine Ansicht ohne Link, Knopf oder Retry zurueck; einziger
+// Rueckweg war ein manueller Reload, der nirgends angeboten wurde.
 export function dismissPlanChoice(els) {
   els.title.textContent = planChoiceText("bannerTitle");
   els.subtitle.textContent = planChoiceText("bannerText");
   els.tiles.replaceChildren();
   els.skip.hidden = true;
+  Object.assign(els.restore, { hidden: false });
 }
 
 // ---- 312k-P3: Kuendigungs-Weg (§ 312k BGB) ------------------------------------
@@ -613,6 +608,7 @@ async function postNewsletterConsent(consent) {
     body: JSON.stringify({ consent }),
   });
   if (!res.ok) {
+    if (res.status === HTTP_UNAUTHORIZED) notifySessionExpired();
     let code;
     try {
       const body = await res.json();
@@ -775,13 +771,56 @@ export function newsletterRecipientBadgeClass(status) {
   return status === "confirmed" ? "active" : "cancelled";
 }
 
-const RECIPIENT_EMPTY = "No additional recipients yet.";
-const RECIPIENT_EMPTY_DE = "Noch keine weiteren Empfänger.";
+// Owner-Frage 15.09.2026 ("was ist der Unterschied zwischen Recipients und
+// Additional Recipients?"): keiner -- die Karte hat EINE Liste, die Konto-Adresse
+// ist die erste Zeile darin. Die Leermeldung sprach trotzdem von "additional
+// recipients" und erfand damit eine zweite Kategorie. Sie sagt jetzt schlicht,
+// dass sonst noch niemand drinsteht.
+const RECIPIENT_EMPTY = "No one else yet.";
+const RECIPIENT_EMPTY_DE = "Sonst noch niemand.";
 const RECIPIENT_REMOVE_LABEL = "Remove recipient";
 const RECIPIENT_REMOVE_LABEL_DE = "Empfänger entfernen";
 const RECIPIENT_PENDING_HINT = "Confirmation email sent";
 const RECIPIENT_PENDING_HINT_DE = "Bestätigungs-E-Mail gesendet";
 const RECIPIENT_STATUS_PENDING = "pending";
+
+// Owner-Befund 16.09.2026 ("das Kreuz ist nicht mittig"): das Kreuz war das
+// Schriftzeichen "×" (U+00D7). Ein Glyph sitzt nie exakt in der Mitte seiner
+// Zeilenbox -- er haengt an der Grundlinie, und das Malkreuz liegt auf der
+// Mathematik-Achse darueber; zentriert wird aber die Box. Gemessen im
+// Screenshot: rund 2 px zu tief. Zwei gezeichnete Linien in einem quadratischen
+// viewBox haben das Problem nicht. Exakt dieselbe Zeichnung wie der
+// Schliessen-Knopf des Anruf-Fensters (CallsIsland.astro) -- damit es EIN Kreuz
+// im Dashboard gibt und nicht zwei verschiedene.
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// Attribute als Paar-Liste, nicht als Objekt: ein Objektschluessel "d" (das
+// Pfad-Attribut eines <path>) faellt sonst unter die id-length-Regel und waere ein
+// NEUER Lint-Befund in dieser Bestandsdatei -- das Aufraeum-Gate des pre-commit-
+// Hooks laesst eine Aenderung hier nur durch, solange sich die Befundmenge nicht
+// bewegt (scripts/check-staged-suppressions.js, Stufe 2).
+function svgEl(doc, tag, attrs) {
+  const node = doc.createElementNS(SVG_NS, tag);
+  for (const [name, value] of attrs) node.setAttribute(name, value);
+  return node;
+}
+
+function removeCross(doc) {
+  const svg = svgEl(doc, "svg", [
+    ["viewBox", "0 0 16 16"],
+    ["aria-hidden", "true"],
+    ["focusable", "false"],
+  ]);
+  svg.append(
+    svgEl(doc, "path", [
+      ["d", "M4 4 L12 12 M12 4 L4 12"],
+      ["stroke", "currentColor"],
+      ["stroke-width", "1.5"],
+      ["stroke-linecap", "round"],
+    ]),
+  );
+  return svg;
+}
 
 // Eine Empfaenger-Zeile: Adresse (Sans) + Status-Pille + Ghost-Kreuz zum
 // Entfernen; eine pending-Zeile traegt zusaetzlich den Mono-Hinweis (Auftrag).
@@ -800,9 +839,10 @@ function recipientRow(doc, recipient, onRemove) {
       newsletterRecipientStatusLabel(recipient.status),
     ),
   );
-  const removeBtn = el(doc, "button", "newsletter-recipient__remove", "×");
+  const removeBtn = el(doc, "button", "newsletter-recipient__remove");
   removeBtn.type = "button";
   removeBtn.setAttribute("aria-label", tPair(RECIPIENT_REMOVE_LABEL, RECIPIENT_REMOVE_LABEL_DE));
+  removeBtn.append(removeCross(doc));
   removeBtn.addEventListener("click", () => onRemove(recipient.email, removeBtn));
   main.append(removeBtn);
   li.append(main);

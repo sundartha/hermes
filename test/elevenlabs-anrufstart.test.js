@@ -278,7 +278,20 @@ function seedOwner(tenantOverrides = {}) {
 // Tenant A mit eigener aktiver Telnyx-Nummer. Per Default passiert er JEDES Gate (am
 // laufenden Server nachgemessen); jeder Fall senkt genau eine Achse ab. Fehlende Werte
 // werden WEGGELASSEN statt auf null gesetzt - die fail-closed-Praedikate lesen "fehlend".
-function seedTenantA({ kycLevel = "card", ownerName = "Alice A", status = "active" } = {}) {
+// P4a (F-2 Punkt 2): defaultLanguage ist NEU und bleibt fuer jeden Bestandsaufruf
+// undefined (keine Verhaltensaenderung) - nur die drei Faelle, die seit P4a die
+// GESPRAECHSSPRACHE des Tenants selbst pruefen, setzen ihn ausdruecklich. VORHER liess
+// sich das nicht messen: die Gespraechssprache folgte dem Angerufenen (calleeLanguage),
+// die Sprache des Tenants selbst war irrelevant. Seit der Umkehrung ist sie es nicht mehr
+// - TENANT_A braucht deshalb hier dieselbe Sprache wie sein DE-Ziel (TELNYX_TEST_PEER_
+// NUMBER), sonst misst ein Bestandsfall ploetzlich die neue Abweichungs-Lage, die er gar
+// nicht pruefen will.
+function seedTenantA({
+  kycLevel = "card",
+  ownerName = "Alice A",
+  status = "active",
+  defaultLanguage,
+} = {}) {
   return seedState({
     tenants: [
       { id: BOOTSTRAP_TENANT_ID, status: "active" },
@@ -288,6 +301,7 @@ function seedTenantA({ kycLevel = "card", ownerName = "Alice A", status = "activ
         idpSubject: SUBJECT_A,
         ...(ownerName ? { ownerName } : {}),
         ...(kycLevel ? { kycLevel } : {}),
+        ...(defaultLanguage ? { defaultLanguage } : {}),
       },
     ],
     numbers: [
@@ -814,7 +828,11 @@ test("EL-START T4 (b): Anbieter bricht die Verbindung ab -> 500, Call failed, ke
 
 test("EL-START T5 (a): der Anrufstart uebergibt owner_name und uebersteuert first_message NICHT", async (ctx) => {
   await withElevenLabs(
-    { seed: seedOwner(), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
+    // P4a: defaultLanguage "de" haelt die GESPRAECHSSPRACHE deckungsgleich mit der
+    // OFFENLEGUNGSSPRACHE des DE-Ziels (TELNYX_TEST_PEER_NUMBER) - dieser Fall misst den
+    // Bestandsfall OHNE Abweichung (kein first_message), nicht die seit P4a neue
+    // Abweichungs-Lage (die hat ihren eigenen Nachbau in test/place-call-sprachwahl.test.js, G5).
+    { seed: seedOwner({ defaultLanguage: "de" }), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
     async ({ srv, mock }) => {
       const res = await placeCall(srv);
       assert.equal(res.status, HTTP_OK, "Vorbedingung: der Anruf muss ueberhaupt starten");
@@ -1034,7 +1052,11 @@ function spracheDesAnrufs(anfrage) {
 
 test("EL-START T5 (d): der Offenlegungssatz haengt an keiner Variablen ohne Default - blanker Auftraggeber-Name, Satz bleibt vollstaendig (Artikel 50 EU AI Act)", async (ctx) => {
   await withElevenLabs(
-    { env: MULTI, seed: seedTenantA({ ownerName: OWNER_NAME_BLANK }) },
+    // P4a: defaultLanguage "de" haelt die GESPRAECHSSPRACHE deckungsgleich mit der
+    // OFFENLEGUNGSSPRACHE des DE-Ziels (TELNYX_TEST_PEER_NUMBER) - dieser Fall misst den
+    // Bestandsfall OHNE Abweichung, nicht die seit P4a neue Abweichungs-Lage (die hat
+    // ihren eigenen Nachbau in test/place-call-sprachwahl.test.js, G5).
+    { env: MULTI, seed: seedTenantA({ ownerName: OWNER_NAME_BLANK, defaultLanguage: "de" }) },
     async ({ srv, mock }) => {
       const res = await placeCall(srv, SUBJECT_A);
       assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf startet: ${await res.text()}`);
@@ -1115,22 +1137,41 @@ test("EL-START T5 (d): der Offenlegungssatz haengt an keiner Variablen ohne Defa
 //     ... -> ConversationalConfigAPIModel-Input.turn -> TurnConfig; boolean, Default FALSE,
 //     "When off, user speech during a non-interruptible turn is ignored and won't trigger
 //     a turn."
-// Beide Anbieter-Defaults arbeiten GEGEN uns - genau deshalb reicht "im Dashboard richtig
-// eingestellt" nicht und der Besitz ist Pflicht.
+// Bis zum 2026-09-04 arbeiteten BEIDE Anbieter-Defaults gegen uns - genau deshalb reicht
+// "im Dashboard richtig eingestellt" nicht und der Besitz ist Pflicht. Fuer Haelfte (2) hat
+// sich das gedreht, s. den Nachtrag direkt darunter.
+//
+// GEDREHT am 2026-09-04 (SP1-B), Haelfte (2): transcribe_on_disabled_interruptions steht ab
+// jetzt auf FALSE. Der Zusatz war 2026-08-18 dafuer gedacht, ein echtes "Ja, hallo?"
+// waehrend der gesperrten Eroeffnung nicht zu verlieren. GEMESSEN am 2026-09-04, was er
+// stattdessen durchlaesst: die Echtzeit-Erkennung des Anbieters erzeugt intermittierend
+// PHANTOM-Zuege aus Stille (Audio-Beleg: digitale Stille zwischen 7,13 s und 9,15 s,
+// tasks/UEBERGABE-SPRACHDEFEKT.md BELEGT 15). Einer davon kam bei t=2 als spanischer
+// User-Zug beim Modell an, das Modell ging mit, language_detection verriegelte danach
+// Erkennung und Stimme auf Spanisch. Mit false erreicht nichts aus dem gesperrten Zug das
+// Modell - der Pfad ist zu. PREIS, BEWUSST AKZEPTIERT: echte Rede waehrend der Offenlegung
+// geht verloren; beantworten haette das Modell sie ohnehin erst danach koennen.
+//
+// DIE ZWEI FELDER TRAGEN DAMIT VERSCHIEDENE SOLL-WERTE. Deshalb steht der SOLL-Wert ab
+// jetzt AM EINTRAG und nicht mehr als gemeinsames true in der Zusicherung: ein gemeinsamer
+// Wert wuerde beim naechsten Auseinanderlaufen still das falsche Feld verteidigen.
+// disable_first_message_interruptions bleibt true - an ihm haengt Artikel 50 EU AI Act.
 const OFFENLEGUNG_UNTERBRECHUNG = Object.freeze([
   Object.freeze({
     feld: "disable_first_message_interruptions",
     vorlagePfad: "agent.conversation_config.agent.disable_first_message_interruptions",
     livePfad: "conversation_config.agent.disable_first_message_interruptions",
+    soll: true,
     zweck:
-      "sperrt die Unterbrechung fuer den ERSTEN Satz und nur fuer ihn - ohne ihn bricht ein Huster auf der Leitung die Offenlegung ab",
+      "sperrt die Unterbrechung fuer den ERSTEN Satz und nur fuer ihn - ohne ihn bricht ein Huster auf der Leitung die Offenlegung ab, und Artikel 50 EU AI Act haengt an ihr",
   }),
   Object.freeze({
     feld: "transcribe_on_disabled_interruptions",
     vorlagePfad: "agent.conversation_config.turn.transcribe_on_disabled_interruptions",
     livePfad: "conversation_config.turn.transcribe_on_disabled_interruptions",
+    soll: false,
     zweck:
-      "haelt fest, was die Gegenstelle waehrend des gesperrten Zuges sagt - der Anbieter-Default false wirft es weg, und der Agent weiss hinterher nicht, dass sie geredet hat",
+      "verwirft, was waehrend des gesperrten Zuges erkannt wird - mit true kam ein Phantom-Zug der Anbieter-Erkennung als echter User-Zug beim Modell an und kippte den Anruf in eine fremde Sprache (2026-09-04, s. tasks/UEBERGABE-SPRACHDEFEKT.md)",
   }),
 ]);
 
@@ -1145,11 +1186,11 @@ test("EL-START T5 (f, Mechanismus): die Offenlegung ist gegen Unterbrechung gesi
     "die Besitz-Erklaerung der Vorlage ist leer - dann prueft die zweite Haelfte unten nichts",
   );
 
-  for (const { feld, vorlagePfad, livePfad, zweck } of OFFENLEGUNG_UNTERBRECHUNG) {
+  for (const { feld, vorlagePfad, livePfad, soll, zweck } of OFFENLEGUNG_UNTERBRECHUNG) {
     assert.equal(
       blattAnPfad(vorlage, vorlagePfad),
-      true,
-      `${TEMPLATE_PATH}: ${vorlagePfad} ist nicht true. Das Feld ${zweck}. Ohne SOLL-Wert kann kein Push die Offenlegung sichern - Artikel 50 EU AI Act haengt daran (s. agent.conversation_config._offenlegung_unterbrechung_hinweis).`,
+      soll,
+      `${TEMPLATE_PATH}: ${vorlagePfad} steht nicht auf ${soll}. Das Feld ${zweck}. Ohne SOLL-Wert in der Vorlage gibt es nichts, was ein Push an den Agenten bringen und der Drift-Waechter verteidigen koennte.`,
     );
 
     const eintrag = besitzFelder.find((kandidat) => kandidat.feld === feld);
@@ -2055,7 +2096,9 @@ test("EL-START T11 (Thema A): opening_line reist geprueft an den Anbieter UND li
     // ANTHROPIC_BASE_URL auf die EL-Attrappe: jeder LLM-Versuch endet dort als schneller
     // 404 (nicht-transient, kein Retry) - kein echtes Netz, kein Warten; die Treppe
     // faellt deterministisch auf Stufe 2 (Auftrag in der Bestands-Bruecke).
-    { env: MULTI, seed: seedTenantA() },
+    // P4a: defaultLanguage "de" haelt die GESPRAECHSSPRACHE deckungsgleich mit der
+    // OFFENLEGUNGSSPRACHE des DE-Ziels - dieselbe Begruendung wie bei T5 (d) oben.
+    { env: MULTI, seed: seedTenantA({ defaultLanguage: "de" }) },
     async ({ srv, mock }) => {
       const res = await placeCall(srv, SUBJECT_A);
       assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf startet: ${await res.text()}`);

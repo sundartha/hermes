@@ -2,16 +2,19 @@
 // KV-P2 richtungsoffen). Reine Verschiebung aus server.js (Server-Slim P1). Die Factory
 // schliesst NUR den store - die Monatsmiete kommt seit P5 aus dem Nummern-Datensatz, nicht
 // mehr aus config; die Kosten-/Kind-Quellen (tariffCentsPerMin, config.billing.
-// voiceTariffInboundCents, USAGE_EVENT_KIND) und die Faelligkeits-Regel
+// voiceTariffInboundCents, KOSTENPROFIL, USAGE_EVENT_KIND) und die Faelligkeits-Regel
 // (numbersDueForMonthMeter) importiert das Modul selbst (EINE Quelle je, G5). Die
 // paymentEnabled-Gating-Bedingung liegt beim AUFRUFER (finishCall / Provisioning-Drain /
 // Monatsmiete-Ausloeser), NICHT hier: reconcileVoiceBudget laeuft immer,
 // recordVoiceMinuteMeter / recordNumberMonthMeter nur im Payment-Pfad.
 import { config as defaultConfig } from "../config.js";
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
-import { callStartAnchorMs, chargeAnchorsOfUsage, numbersDueForMonthMeter } from "../store/state-ops.js";
+import { callStartAnchorMs, carrierEndMsOf, chargeAnchorsOfUsage, numbersDueForMonthMeter } from "../store/state-ops.js";
 import { tariffCentsPerMin } from "../telephony/outbound-gates.js";
 import { MS_PER_MINUTE } from "../utils/timer.js";
+// IEL-B2: das Kostenprofil entscheidet mit ueber den Inbound-Satz (kostenarten.js ist
+// import-frei - kein Zyklus in den Store-Graph).
+import { KOSTENPROFIL } from "./kostenarten.js";
 
 // Abgerechnete Voice-Minuten EINES Calls (ceil ab answeredAt bis endedAt, Provider-
 // Minutentakt). Nie beantwortet -> 0. EINE Minuten-Quelle (G5) fuer Stripe-Voice-Meter,
@@ -42,9 +45,19 @@ export function voiceMinutesOf(call) {
 // 16-fach ueber dem an KV-M1 gemessenen Ist von 1,87 US-Cent je angefangener Minute.
 // Seither traegt Inbound einen eigenen, kalibrierten Satz; er wird an GENAU DIESER
 // EINEN Stelle gelesen (kein zweiter Tarif-Pfad, G5).
+// IEL-B2 (E3): der kalibrierte Inbound-Satz ist an einem Bein gemessen, dessen Gespraech
+// UNSER Turn-Loop fuehrt. Fuehrt der ElevenLabs-Agent das Gespraech (Kostenprofil
+// telnyx_inbound_el_convai), traegt das Bein die EL-Konversationskosten - es zahlt dann
+// den Leg-Satz wie Outbound-EL fuer dasselbe Nummernpaar (isDomesticLeg ist symmetrisch;
+// unbekannte Gegenstelle -> Default-Satz, fail-closed). Jedes andere Inbound-Profil und
+// ein Bein ohne Profil bleiben beim kalibrierten Satz.
 export function callTariffCentsPerMin(call) {
-  if (call.direction === "inbound") return defaultConfig.billing.voiceTariffInboundCents;
+  if (billsCalibratedInboundRate(call)) return defaultConfig.billing.voiceTariffInboundCents;
   return tariffCentsPerMin(call.to, call.from);
+}
+
+function billsCalibratedInboundRate(call) {
+  return call.direction === "inbound" && call.costProfile !== KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
 }
 
 // KS-P2: die bereits verstrichenen, aber noch NICHT gebuchten Minuten EINES laufenden
@@ -62,8 +75,12 @@ export function callTariffCentsPerMin(call) {
 //     unter den gebuchten Wert druecken;
 //   unlesbarer Anker      -> NaN, KEIN stilles 0. Der Riegel sitzt an der Geld-Kante
 //     (liveBudgetExceeded), wo jeder andere unbrauchbare Geldwert auch endet.
+//
+// IEL-B4 (E17): Ende = Carrier-Ende (dieselbe Funktion wie der Ende-Anker der Buchung). Ein
+// ueberbrueckter Inbound-Call im Nachlauf hat keine Leitung mehr und waechst nicht weiter in
+// die Tenant-Decke. Ohne Nachlauf-Marker = nowMs -> Outbound/Budget byte-identisch.
 function liveVoiceMinutesOf(call, nowMs) {
-  const elapsedMs = nowMs - callStartAnchorMs(call);
+  const elapsedMs = carrierEndMsOf(call, nowMs) - callStartAnchorMs(call);
   if (!Number.isFinite(elapsedMs)) return NaN;
   return Math.max(0, Math.ceil(elapsedMs / MS_PER_MINUTE));
 }

@@ -1,7 +1,6 @@
 // I1: Identitaets-Funktionen (systemPrompt/disclosureSentence) ziehen ihren Namen
-// ueber tenantContext(call.tenantId), NICHT mehr global. Deckt den Realtime-Pfad,
-// den der curl-Greeting nicht erreicht (server.js returnt im realtime-Pfad VOR dem
-// Greeting-Bau). Rein-Unit: beide Funktionen tragen call -> kein Spawn noetig.
+// ueber tenantContext(call.tenantId), NICHT mehr global. Rein-Unit: beide Funktionen
+// tragen call -> kein Spawn noetig.
 // DATA_DIR im before vor dem ersten config-Import (Repo-Regel, wie tenant-context.test.js).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";

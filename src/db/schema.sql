@@ -37,6 +37,11 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS kyc_level TEXT;
 -- Referenzen (cus_/pm_), KEINE Secrets. Muster wie kyc_level (idempotent, kein CHECK).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_customer_id       TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_payment_method_id TEXT;
+-- GP-P2 (Vorfall 11.09.2026): der Stripe-Enum-Typ der gespeicherten Zahlungsmethode
+-- ('card', 'link', ...). NULL = unbekannt (Bestand vor GP-P2, kein Backfill) -> das
+-- Eignungs-Gate faellt fail-closed durch. Opaker Enum, KEIN Secret. Muster wie
+-- stripe_payment_method_id (idempotent, kein CHECK - die Allowlist lebt im Code).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_payment_method_type TEXT;
 -- Abo-Referenzen pro Tenant (W4) additiv NULLABLE. NULL = kein aktives Abo. Opake
 -- Stripe-Referenzen (sub_/price-slug/Unix-s), KEINE Secrets. Muster wie stripe_* (kein
 -- CHECK). current_period_end als BIGINT (Unix-Sekunden, wie Stripe liefert).
@@ -275,6 +280,10 @@ CREATE TABLE IF NOT EXISTS call (
   -- Bestandszeile ist per Definition NICHT-Owner - also Offenlegung. Auf der Zeile steht
   -- NUR dieses Boolean, NIE die Nummer.
   callee_is_owner BOOLEAN NOT NULL DEFAULT FALSE,
+  -- IEP-P6: kam dieser EINGEHENDE Anruf von der eigenen hinterlegten Nummer des
+  -- ANGERUFENEN Tenants? Faerbt AUSSCHLIESSLICH die Anrede. NOT NULL DEFAULT FALSE ist
+  -- die fail-closed Form: jede Bestandszeile ist per Definition NICHT-Owner.
+  caller_is_owner BOOLEAN NOT NULL DEFAULT FALSE,
   -- LCT P2 (Ist-Kosten-Achse): estimated_cost_cents ist der TATSAECHLICH gebuchte
   -- Schaetzbetrag (GANZZAHL Cents, reconcileVoiceBudget), NIE spaeter aus dem
   -- Tarif rekonstruiert. actual_cost_micro_cents ist BIGINT (nicht NUMERIC/Float, G26) in
@@ -312,6 +321,11 @@ CREATE TABLE IF NOT EXISTS call (
   -- Kosten-Kette jointe, existieren auf der SIP-Trunk-Strecke nicht). Additiv NULLABLE -
   -- nur der ElevenLabs-Pfad setzt sie, jeder andere Call bleibt NULL.
   sip_call_id TEXT,
+  -- KV2-2: das an der ENGINE-WEICHE gesetzte Kostenprofil dieses Anrufs (set-once,
+  -- Registry src/billing/kostenarten.js). Additiv NULLABLE: eine Altzeile von VOR der
+  -- Kette traegt NULL und faellt in KV2-7 auf ein Legacy-Profil (4.6) - KEIN Backfill,
+  -- rueckwirkend ist die Engine eines Altanrufs nicht mehr feststellbar.
+  cost_profile TEXT,
   -- AL-P1 (Abbruch-Achse): Anzahl Turns dieses Calls mit nicht-leerer Anrufer-
   -- Aeusserung. PII-FREI (nur ein Zaehler, nie Text) und PURGE-FEST: purgeTranscript
   -- leert call.transcript nach der Summary, "null Anrufer-Zeilen" traefe danach auf
@@ -359,7 +373,23 @@ CREATE TABLE IF NOT EXISTS call (
   -- Additiv NULLABLE, KEIN Backfill.
   from_actual_e164 TEXT,
   from_source TEXT,
-  from_registration_source TEXT
+  from_registration_source TEXT,
+  -- ST3 (O3, NUR Diagnose): Zaehlfeld der Stimmen-Detektoren [el-tags]/[el-b1]
+  -- ({elTags,elB1}), PII-FREI (nur Zaehler, nie Text), KEINE Transkript-Aenderung
+  -- (Art. 50). Additiv NULLABLE: nur der ElevenLabs-Ergebnisweg setzt sie.
+  -- Muster lookup_log.
+  el_detector_counts JSONB,
+  -- SEC-P1: Ereignis-Anker bereits verarbeiteter /voice/turn-Webhooks (JSONB-Array,
+  -- PII-frei: Zufallsmarke bzw. sha256 des signierten Umschlags, NIE Wortlaut).
+  -- Additiv NULLABLE -> Bestandszeile = NULL = "keine Wiederholung bekannt".
+  webhook_anchors JSONB,
+  -- IEL-B4a (E5): persistierter Brueckenzustand des EL-Inbound-Wegs - drei set-once
+  -- Zeitpunkte (Bindung, Rueckfall, Nachlauf-Start). Additiv NULLABLE, KEIN Backfill: vor
+  -- IEL-B8 setzt kein Code das Profil telnyx_inbound_el_convai, NULL ist fuer jede
+  -- Bestandszeile der wahre Wert.
+  el_bound_at TIMESTAMPTZ,
+  el_fallback_at TIMESTAMPTZ,
+  el_nachlauf_started_at TIMESTAMPTZ
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -394,6 +424,8 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS diagnostic BOOLEAN NOT NULL DEFAULT FA
 -- Idempotent; frische DB = No-op. DEFAULT FALSE fuellt Bestandszeilen ohne Backfill -
 -- der Default IST die richtige Antwort fuer alles Alte (NICHT-Owner -> Offenlegung).
 ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_is_owner BOOLEAN NOT NULL DEFAULT FALSE;
+-- IEP-P6: Inbound-Owner-Markierung nachziehen. Idempotent; frische DB = No-op.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS caller_is_owner BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS inbox_entry_at TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS inbox_seen_at TEXT;
 -- P6: Mandats-Spalte auf Bestands-call-Tabellen nachziehen (Muster context).
@@ -441,6 +473,12 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS elevenlabs_conversation_id TEXT;
 -- Abbruch-Pfad (convai.js#endConversation). Rueckwirkend ist er fuer keinen einzigen
 -- Bestands-Anruf mehr erhebbar; die Kennung misst ab Deploy vorwaerts.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS sip_call_id TEXT;
+
+-- KV2-2: Kostenprofil auf Bestands-call-Tabellen nachziehen (Muster sip_call_id).
+-- Idempotent; frische DB = No-op. KEIN Backfill (migrate() laeuft auf EINER Connection
+-- mit app.current_tenant auf BOOTSTRAP_TENANT_ID und saehe unter FORCE-RLS ohnehin nur
+-- die Bootstrap-Zeilen). NULL = "vor der Kette entstanden", 4.6.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_profile TEXT;
 
 -- AL-P11: Ergebnis-Karte auf Bestands-call-Tabellen nachziehen (Muster context/mandate).
 -- Idempotent; frische DB = No-op.
@@ -495,6 +533,21 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone_at TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS from_actual_e164        TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS from_source             TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS from_registration_source TEXT;
+
+-- ST3: Detektor-Zaehlfeld auf Bestands-call-Tabellen nachziehen (Muster
+-- answered_unclear_reason). Idempotent; frische DB = No-op. KEIN Backfill: die Zahl
+-- misst ab Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS el_detector_counts JSONB;
+
+-- SEC-P1: Ereignis-Anker auf Bestands-call-Tabellen nachziehen (Muster
+-- el_detector_counts). Idempotent; frische DB = No-op. KEIN Backfill: Bestands-Anrufe
+-- sind beendet und bekommen keinen Turn-Webhook mehr.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS webhook_anchors JSONB;
+-- IEL-B4a: Brueckenzustand auf Bestands-call-Tabellen nachziehen (Muster webhook_anchors).
+-- Idempotent; frische DB = No-op. KEIN Backfill (s. CREATE-TABLE-Kommentar).
+ALTER TABLE call ADD COLUMN IF NOT EXISTS el_bound_at TIMESTAMPTZ;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS el_fallback_at TIMESTAMPTZ;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS el_nachlauf_started_at TIMESTAMPTZ;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).
@@ -668,7 +721,10 @@ CREATE TABLE IF NOT EXISTS number (
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   -- OUTBOUND-E5 (F3): die ElevenLabs-Nummernregistrierung dieser DID, s. ALTER-Kommentar
   -- weiter unten. Additiv NULLABLE.
-  provider_agent_phone_number_id TEXT
+  provider_agent_phone_number_id TEXT,
+  -- IEX-A8 (E8): Registrierungs-Beleg des EL-Inbound-Trunks, s. ALTER-Kommentar unten. Additiv NULLABLE.
+  el_inbound_trunk_belegt_at TIMESTAMPTZ,
+  el_inbound_trunk_zugang_fp TEXT
 );
 -- Forward-compat fuer eine bestehende number-Tabelle (idempotent). Bestehende
 -- (geseedete) Nummern sind in Benutzung -> Default 'active'. e164 von NOT NULL auf
@@ -700,6 +756,13 @@ ALTER TABLE number ADD COLUMN IF NOT EXISTS monthly_cost_cents INTEGER;
 -- RLS: number traegt bereits ENABLE/FORCE ROW LEVEL SECURITY + Policy tenant_isolation
 -- (schema.sql:901-902) - eine additive Spalte erbt sie, es entsteht KEINE neue Policy.
 ALTER TABLE number ADD COLUMN IF NOT EXISTS provider_agent_phone_number_id TEXT;
+-- IEX-A8 (E8): Lesebeleg des Boot-Sweeps, dass die EL-Registrierung DIESER DID einen Inbound-Trunk mit dem
+-- laufenden Digest-Zugang traegt (belegt_at = erster Beleg mit diesem Zugang), plus Fingerabdruck dieses Zugangs
+-- (16 Hex von SHA-256 ueber den SIP-Benutzer, nie das Passwort). NULL = kein Beleg. Kein Backfill: der Sweep belegt
+-- den Bestand beim naechsten Boot. RLS: number traegt bereits ENABLE/FORCE RLS + tenant_isolation - die
+-- additiven Spalten erben sie, KEINE neue Policy.
+ALTER TABLE number ADD COLUMN IF NOT EXISTS el_inbound_trunk_belegt_at TIMESTAMPTZ;
+ALTER TABLE number ADD COLUMN IF NOT EXISTS el_inbound_trunk_zugang_fp TEXT;
 
 -- number_assignment: Historie Nummer<->Tenant (Recycling-Hygiene). assigned_at bei
 -- Aktivierung, released_at bei Freigabe. Eine frisch freigegebene Nummer wird nicht
@@ -862,6 +925,55 @@ ALTER TABLE usage_event ADD COLUMN IF NOT EXISTS number_id TEXT;
 -- (~2,1 Mrd.) schon bei wenigen zehn Euro KI-Kosten in Mikro-Cent-Aufloesung.
 ALTER TABLE usage_event ADD COLUMN IF NOT EXISTS cost_micro_cents BIGINT;
 
+-- call_cost_evidence (KV2-3): das KOSTEN-Buch - eine Zeile je (call_id, traeger),
+-- append-only nach vorne (reife steigt, faellt nie). NICHT zu verwechseln mit
+-- usage_event: das ist das ERLOES-Buch (Stripe-Meter-Quelle, Owner-Entscheidung 1 vom
+-- 2026-08-30 - Lieferantenkosten gehoeren dort NICHT hinein).
+-- call_id BEWUSST OHNE FK (identische Begruendung wie usage_event.call_id): ein
+-- Call-Erase/Prune darf den Kostennachweis NIE mitnehmen. tenant_id mit FK + RLS bleibt
+-- die Isolationslinie.
+-- betrag_mikro_cents NULLABLE und im Zustand 'erwartet' IMMER NULL, nie 0 - dieselbe
+-- Regel wie usage_event.cost_micro_cents ("eine 0 waere eine erfundene Messung").
+-- BIGINT (G26), weil Mikro-Cent den INT4-Bereich sofort sprengt.
+-- detail traegt AUSSCHLIESSLICH Preis-/Mengenfelder (Allowlist in store/cost-evidence.js,
+-- am einzigen Schreibweg erzwungen): KEIN Transkript, KEINE Rufnummer, kein Rohbody.
+-- beleg_ref traegt AUSSCHLIESSLICH die opake Anbieter-Belegkennung (conv_.../otb_...).
+-- KEIN CHECK-Constraint auf reife/traeger: die Gueltigkeit lebt fail-closed im Mutator
+-- (eine Quelle, Muster kyc_level).
+-- nachreifbar (KV2-4): kann diese Zeile spaeter noch auf 'belegt' gehoben werden? FALSE
+-- setzt ausschliesslich der EL-Abbruchweg (elevenlabs/outbound.js#endActiveCall ->
+-- convai.js#endConversation, ein DELETE beim Anbieter). NICHT dasselbe wie reife=
+-- beleg_strukturell_unbeschaffbar: der Betrag dieser Zeile zaehlt WEITER in die
+-- Belegsumme (Matrix 4.6: "nachbuchen mit dem, was da ist"), sie kann nur nicht mehr
+-- reifen. Der gleichnamige Zustand AM ANRUF (KV2-7) ist eine andere Ebene.
+-- EINBAHNSTRASSE: FALSE kommt nie wieder auf TRUE (state-ops#recordCallCostEvidence).
+-- KV2-9: zweiter Schreiber ist der Reifungs-Abruf, wenn der Anbieter mit HTTP 404
+-- antwortet - das ist derselbe Sachverhalt von der anderen Seite gesehen (das DELETE des
+-- Abbruchwegs hat den Datensatz mitgenommen). EINBAHNSTRASSE unveraendert.
+CREATE TABLE IF NOT EXISTS call_cost_evidence (
+  id                            TEXT PRIMARY KEY,
+  tenant_id                     TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  call_id                       TEXT NOT NULL,
+  traeger                       TEXT NOT NULL,
+  reife                         TEXT NOT NULL,
+  betrag_mikro_cents            BIGINT,
+  waehrung                      TEXT,
+  quelle                        TEXT,
+  beleg_ref                     TEXT,
+  versuche                      INT NOT NULL DEFAULT 0,
+  gemessen_at                   TEXT,
+  abstand_zum_gespraechsende_s  INT,
+  detail                        JSONB,
+  nachreifbar                   BOOLEAN NOT NULL DEFAULT TRUE
+);
+-- Forward-compat (Muster tenant.status): Bestandszeilen bekommen TRUE - vor KV2-4 gab es
+-- keinen Schreiber, der eine Zeile als nicht nachreifbar haette markieren koennen.
+ALTER TABLE call_cost_evidence ADD COLUMN IF NOT EXISTS nachreifbar BOOLEAN NOT NULL DEFAULT TRUE;
+-- EINE Zeile je (call_id, traeger) - der Idempotenz-Riegel auch in der DB, nicht nur
+-- im Spiegel (Kriterium (a)).
+CREATE UNIQUE INDEX IF NOT EXISTS call_cost_evidence_call_traeger_idx
+  ON call_cost_evidence (call_id, traeger);
+
 -- account: identity(sub)->tenant Resolver. RLS-EXEMPT (laeuft VOR app.current_tenant).
 -- tenant_id NICHT unique -> Schema traegt spaeter mehrere Accounts pro Tenant (B2B),
 -- jetzt aber Single-User pro Tenant (B2C). role: member|admin.
@@ -946,6 +1058,8 @@ ALTER TABLE cost_cross_check   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cost_cross_check   FORCE  ROW LEVEL SECURITY;
 ALTER TABLE outage_alert       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE outage_alert       FORCE  ROW LEVEL SECURITY;
+ALTER TABLE call_cost_evidence ENABLE ROW LEVEL SECURITY;
+ALTER TABLE call_cost_evidence FORCE  ROW LEVEL SECURITY;
 
 -- tenant_isolation-Policies: USING filtert lesbare/aenderbare Zeilen, WITH CHECK
 -- prueft NEU geschriebene Zeilen (INSERT + UPDATE-Ergebnis). Beide Klauseln sind
@@ -1032,5 +1146,9 @@ CREATE POLICY tenant_isolation ON tenant_budget
   WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON usage_event;
 CREATE POLICY tenant_isolation ON usage_event
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
+DROP POLICY IF EXISTS tenant_isolation ON call_cost_evidence;
+CREATE POLICY tenant_isolation ON call_cost_evidence
   USING (tenant_id = current_setting('app.current_tenant', true))
   WITH CHECK (tenant_id = current_setting('app.current_tenant', true));

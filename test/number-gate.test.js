@@ -316,7 +316,12 @@ test("Pro-Stunde-Limit (MAX_CALLS_PER_HOUR)", async (t) => {
   await t.test("unter dem Limit passiert das Gate", async () => {
     const srv = await startServer({
       env,
-      seed: seedState({ calls: [seedCall({ id: "c1", startedAt: recent() })] }),
+      // E3: eigenes Ziel fuer den Seed-Call, ANDERS als ALLOWED - sonst waere c1 (status
+      // "active", startedAt jetzt) ein Dedup-Treffer fuer den frischen postCall(ALLOWED)
+      // unten, und die Antwort waere 200 (dedupliziert) statt 500. Der Seed-Call zaehlt
+      // nur ins Stundenfenster (countOutboundCallsSince, richtungsoffen ueber alle
+      // Ziele) - sein "to" ist fuer DIESEN Test bedeutungslos.
+      seed: seedState({ calls: [seedCall({ id: "c1", to: "+4915199999999", startedAt: recent() })] }),
     });
     try {
       const res = await postCall(srv.localUrl, ALLOWED);

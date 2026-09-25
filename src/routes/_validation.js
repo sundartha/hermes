@@ -33,6 +33,13 @@ export const TEXT_LIMITS = {
   briefing: 2000,
   constraints: 2000,
   title: 200,
+  // SEC-P3: der Agentenname laeuft in den System-Prompt (i18n/prompts/*.js persona)
+  // UND wird im ersten Satz gesprochen. 80 Zeichen tragen jeden echten Namen; der
+  // gemessene Befund (20.000 Zeichen -> 200, alles gespeichert) faellt damit. Der Wert
+  // steht HIER und nicht in config.js: dieselbe Frage ("wie lang darf ein Text werden,
+  // der in den Prompt laeuft") hat im Haus genau eine Quelle (G5), und ein Env-Knopf
+  // dafuer haette keinen Betriebsanlass.
+  agentName: 80,
   // P3 (PLAN-PERSONAL-ASSISTANT): Per-Call-Kontext-Teilfelder. Hart gecappt gegen
   // Kosten/DoS/Injection (Leitplanke 6); briefing/constraints-Limits bleiben unberuehrt.
   "context.summary": 1000,
@@ -56,6 +63,38 @@ export function invalidText(name, value) {
   if (typeof value !== "string") return `${name} muss ein String sein`;
   if (value.length > TEXT_LIMITS[name])
     return `${name} ist zu lang (max. ${TEXT_LIMITS[name]} Zeichen)`;
+  return null;
+}
+
+// C0-/C1-Steuerzeichen inklusive Zeilenumbruch - die Zeichen, mit denen sich eine
+// Prompt-Struktur aufbrechen laesst. BEWUSST KEINE Zeichen-Allowlist: das Produkt ist
+// weltweit ausgelegt, eine lateinische Allowlist wuerde "Zoe" mit Trema, kyrillische,
+// arabische und chinesische Namen verwerfen. Als Codepoint-Grenzen statt als Regex
+// mit literalen Steuerzeichen (no-control-regex): dieselbe Menge, aber lesbar und
+// ohne unsichtbare Zeichen im Quelltext.
+const C0_LETZTER = 0x1f; // Steuerzeichen 0x00-0x1F, inkl. \n und \r
+const DEL = 0x7f;
+const C1_LETZTER = 0x9f; // 0x7F-0x9F: DEL + die C1-Steuerzeichen
+
+function steuerzeichen(codePoint) {
+  return codePoint <= C0_LETZTER || (codePoint >= DEL && codePoint <= C1_LETZTER);
+}
+
+// Ablehnungsgrund als sprachneutraler Token oder null - EINZEILIGES Freitextfeld, das
+// in den System-Prompt laeuft. BEWUSST anderer Vertrag als das Geschwister invalidText
+// (deutscher Fehlertext): die Self-Service-Oberflaeche antwortet in der WEB-09-
+// Vokabelform (invalid_private_number, no_card), der Client uebersetzt selbst.
+// BEWUSST NICHT in invalidText hineingebaut: briefing/constraints duerfen Zeilen-
+// umbrueche tragen - eine gemeinsame Regel waere dort ein Ausfall, kein Schutz.
+// Laenge in CODEPOINTS ([...value]), nicht in UTF-16-Einheiten: eine Code-Unit-Zaehlung
+// bestraft nicht-lateinische Schrift und Emoji systematisch.
+// Nicht-Strings gehen UNVERAENDERT durch: updateSettings verwirft sie seit jeher still
+// per typeof-Whitelist (200 ohne Wirkung); daraus hier 400 zu machen waere eine zweite,
+// ungefragte Verhaltensaenderung.
+export function promptLineRejection(name, value) {
+  if (typeof value !== "string") return null;
+  if ([...value].length > TEXT_LIMITS[name]) return "too_long";
+  if ([...value].some((zeichen) => steuerzeichen(zeichen.codePointAt(0)))) return "control_chars";
   return null;
 }
 

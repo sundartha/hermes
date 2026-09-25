@@ -98,6 +98,13 @@ test("OC-P1-53: json-Bestandszeile OHNE calleeIsOwner-Feld hydriert ueber load()
   const call = loaded.calls.find((entry) => entry.id === "call_bestand_oc_p1");
   assert.strictEqual(call.calleeIsOwner, false, "Bestandszeile hydriert auf false, nie undefined");
   assert.equal(typeof call.calleeIsOwner, "boolean");
+  // IEP-P6: dieselbe Bestandszeile traegt auch die Inbound-Markierung nicht - sie hydriert
+  // aus CALL_FIELD_DEFAULTS ebenfalls auf false (Fremd-Wortlaut). Hier mitgeprueft und
+  // nicht in einem eigenen Test, weil json.js#load() sein state modulweit cached: es gibt
+  // pro Prozess nur DIESEN einen Ladevorgang.
+  assert.ok(!("callerIsOwner" in bestandsCall), "Vorbedingung: Bestandsform ohne das Feld");
+  assert.strictEqual(call.callerIsOwner, false, "Bestandszeile hydriert auf false, nie undefined");
+  assert.equal(typeof call.callerIsOwner, "boolean");
 });
 
 // ---- pg ----
@@ -134,6 +141,78 @@ test("OC-P1-56: pg-Bestandszeile ohne Wert (Spalten-Default) -> Reopen -> false"
   await reopened.init();
   const call = reopened.getCall(created.id);
   assert.strictEqual(call.calleeIsOwner, false);
+});
+
+// ---- IEP-P6: dasselbe fuer die INBOUND-Owner-Markierung (callerIsOwner) ----------------
+// Eigene Spalte, eigenes Feld, dieselbe Form: set-once, strikt Boolean, Bestandszeile ->
+// false. Hier statt in test/iep-p6-owner-ton.test.js, weil die Ladereihenfolge-Verdrahtung
+// (DATA_DIR vor jedem store-Import) genau hier schon steht - eine zweite Kopie waere G5.
+const newInboundCallInput = (over = {}) =>
+  newCallInput({ direction: "inbound", from: "+491737252163", to: "+4930111222333", ...over });
+
+test("IEP-P6-40: json createCall({callerIsOwner:true}) -> true; ohne Parameter false (Boolean, nie undefined)", () => {
+  const state = seedState({});
+  assert.strictEqual(createCall(state, newInboundCallInput({ callerIsOwner: true })).callerIsOwner, true);
+  const ohne = createCall(state, newInboundCallInput());
+  assert.strictEqual(ohne.callerIsOwner, false);
+  assert.equal(typeof ohne.callerIsOwner, "boolean");
+});
+
+test('IEP-P6-41: Rohwerte ("true", 1, {}) -> false, nie der Rohwert', () => {
+  const state = seedState({});
+  assert.strictEqual(createCall(state, newInboundCallInput({ callerIsOwner: "true" })).callerIsOwner, false);
+  assert.strictEqual(createCall(state, newInboundCallInput({ callerIsOwner: 1 })).callerIsOwner, false);
+  assert.strictEqual(createCall(state, newInboundCallInput({ callerIsOwner: {} })).callerIsOwner, false);
+});
+
+test("IEP-P6-42: die zwei Owner-Felder sind unabhaengig - keines setzt das andere", () => {
+  const state = seedState({});
+  const eingehend = createCall(state, newInboundCallInput({ callerIsOwner: true }));
+  assert.strictEqual(eingehend.callerIsOwner, true);
+  assert.strictEqual(eingehend.calleeIsOwner, false, "Inbound-Owner-Ton setzt den OUTBOUND-Waechter nicht");
+
+  const ausgehend = createCall(state, newCallInput({ calleeIsOwner: true }));
+  assert.strictEqual(ausgehend.calleeIsOwner, true);
+  assert.strictEqual(ausgehend.callerIsOwner, false);
+});
+
+test("IEP-P6-43: pg createCall(true) -> save -> Reopen -> callerIsOwner === true", async () => {
+  const { store, runner } = await makePgTestStore();
+  const created = store.createCall(newInboundCallInput({ callerIsOwner: true }));
+  await store.save();
+  const reopened = makePgStore(runner);
+  await reopened.init();
+  assert.strictEqual(reopened.getCall(created.id).callerIsOwner, true, "Spalte + Flush + Hydrat gemappt");
+});
+
+test("IEP-P6-44: pg-Bestandszeile ohne Wert (Spalten-Default) -> Reopen -> false", async () => {
+  const { store, runner, db } = await makePgTestStore();
+  const created = store.createCall(newInboundCallInput());
+  await store.save();
+  await db.query("UPDATE call SET caller_is_owner = DEFAULT WHERE id = $1", [created.id]);
+  const reopened = makePgStore(runner);
+  await reopened.init();
+  const call = reopened.getCall(created.id);
+  assert.strictEqual(call.callerIsOwner, false);
+  assert.equal(typeof call.callerIsOwner, "boolean");
+});
+
+test("IEP-P6-45: pg set-once - eine spaetere In-Memory-Aenderung ueberlebt KEINEN zweiten Flush", async () => {
+  const { store, runner } = await makePgTestStore();
+  const created = store.createCall(newInboundCallInput({ callerIsOwner: false }));
+  await store.save();
+
+  // Die Spalte steht bewusst NICHT im ON CONFLICT DO UPDATE SET (Muster callee_is_owner).
+  store.getCall(created.id).callerIsOwner = true;
+  await store.save();
+
+  const reopened = makePgStore(runner);
+  await reopened.init();
+  assert.strictEqual(
+    reopened.getCall(created.id).callerIsOwner,
+    false,
+    "set-once: der Create-Wert bleibt massgeblich, ein spaeterer Flush schreibt ihn nicht um",
+  );
 });
 
 test("OC-P1-57: pg set-once - eine spaetere In-Memory-Aenderung ueberlebt KEINEN zweiten Flush", async () => {

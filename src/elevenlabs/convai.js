@@ -1,8 +1,10 @@
 // ---- ElevenLabs Convai: der EINE HTTP-Zugang des Anrufstart-Zweigs -------------------
-// Sieben Endpunkte: den Anrufstart (POST), den ziehenden Ergebnisabruf (GET), den
+// Fuenfzehn Endpunkte: den Anrufstart (POST), den ziehenden Ergebnisabruf (GET), den
 // Beende-Versuch (DELETE, Owner-Auftrag 15.08.2026), den Nummernabruf (GET, OUTBOUND-E4/
 // Pruefung 1 des Drift-Waechters) - dazu die drei der Nummernregistrierung (Liste/Anlegen/
-// Loeschen, OUTBOUND-E5). Rein IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie
+// Loeschen, OUTBOUND-E5), dazu Lesen/Schreiben der Workspace-Settings (IEL-B9,
+// Init-Webhook), dazu die sechs des Geheimnis-Werkzeugs (IEL-B10: Secret-Liste/-Anlegen/
+// -Aktualisieren, Registrierungs-PATCH, Conversation-Liste, Agent-Abruf). Rein IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie
 // src/tts/synth.js) - der Zweig laesst sich damit gegen eine Attrappe fahren, ohne dass je
 // ein echter Anruf oder eine echte Registrierung entsteht.
 //
@@ -21,6 +23,8 @@
 // 4/5): er kann Nummern-/Auth-Fragmente tragen, und fuer die Kategorisierung reicht der
 // Status. Weitergegeben wird ausschliesslich err.providerStatus.
 
+import { disclosurePrefixFor } from "../i18n/locales.js";
+
 const OUTBOUND_CALL_PATH = "/v1/convai/sip-trunk/outbound-call";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 const PHONE_NUMBER_PATH = "/v1/convai/phone-numbers/";
@@ -28,6 +32,24 @@ const PHONE_NUMBER_PATH = "/v1/convai/phone-numbers/";
 // Einzelpfad-Suffix) - anders als PHONE_NUMBER_PATH oben, das einen EINZELNEN
 // Nummer-Datensatz adressiert (Loeschen bleibt auf PHONE_NUMBER_PATH + id).
 const PHONE_NUMBERS_PATH = "/v1/convai/phone-numbers";
+// IEL-B9: Workspace-Settings (conversation_initiation_client_data_webhook), [R1] GET-WS.
+const CONVAI_SETTINGS_PATH = "/v1/convai/settings";
+// IEL-B10, belegt aus elevenlabs.io/docs/api-reference (gelesen 2026-09-15):
+//   GET   /v1/convai/secrets?search=&page_size=   -> {secrets:[{type,secret_id,name,used_by}], next_cursor}
+//                                                    (page_size max 100, search = Namenspraefix)
+//   POST  /v1/convai/secrets        {type:"new", name, value}    -> {type:"stored", secret_id, name}
+//   PATCH /v1/convai/secrets/{id}   {type:"update", name, value} -> {type:"stored", secret_id, name}
+//   GET   /v1/convai/conversations?agent_id=&call_start_after_unix=&page_size=
+//         -> {conversations:[{conversation_id, direction, start_time_unix_secs, status, ...}], has_more,
+//            next_cursor}; direction ist KEIN Filterparameter (page_size max 100)
+//   GET   /v1/convai/agents/{id}    -> conversation_config.tts.{voice_id, model_id}
+//   PATCH /v1/convai/phone-numbers/{id} inbound_trunk_config{credentials, allowed_numbers,
+//         allowed_addresses, media_encryption (Doku-Default "allowed")}
+const CONVAI_SECRETS_PATH = "/v1/convai/secrets";
+const CONVERSATIONS_PATH = "/v1/convai/conversations";
+const AGENT_PATH = "/v1/convai/agents/";
+const SECRET_TYP_NEU = "new";
+const SECRET_TYP_UPDATE = "update";
 const API_KEY_HEADER = "xi-api-key";
 
 // Interner Transport-Bound, kein Operator-Knopf (Praezedenz ERROR_DETAIL_MAX_LEN in
@@ -45,10 +67,9 @@ const API_KEY_HEADER = "xi-api-key";
 //     verhindert den Anruf also nicht, er kappt nur unsere Kennung: der Record wurde
 //     failed und abgerechnet, ohne conversation_id und ohne je einen Ergebnisabruf.
 // 15 s waren damit kuerzer als das blosse Klingeln. Der Wert muss die Klingelphase
-// tragen, und deren Obergrenze ist die Waehlfrist der Plattform (telnyxDialTimeoutSecs,
-// Default 60 s) - nicht die Gespraechsdauer. 120 s = diese 60 s plus Reserve, und
-// weiterhin ein Vielfaches unter der Max-Gespraechsdauer (1800 s): ein stummer Anbieter
-// kann einen Aufrufer damit nie ueber ein ganzes Gespraech haengen lassen.
+// tragen (gemessen bis 40 s, s. o.), nicht die Gespraechsdauer. 120 s liegen mit Reserve
+// darueber und weiterhin ein Vielfaches unter der Max-Gespraechsdauer (1800 s): ein
+// stummer Anbieter kann einen Aufrufer damit nie ueber ein ganzes Gespraech haengen lassen.
 //
 // Bleibt der DEFAULT fuer jeden Aufruf, der keine eigene Frist mitbringt (Anrufstart, der
 // regulaere Poll-Takt). Exportiert, damit ein kuerzerer Override (s. timeoutMs unten,
@@ -105,8 +126,17 @@ export const OVERRIDE_ALLOWED_LEAF_PATHS = Object.freeze(["agent.language", "tts
 // _besitz.felder[conversation_config_override_erlaubnisse]). Wir brechen den GESAMTEN
 // Anrufstart ab. Ein stiller Filter waere derselbe Fehler wie einst bei
 // context.open_questions.
-export const OVERRIDE_OWNER_ONLY_LEAF_PATHS = Object.freeze(["agent.first_message"]);
+// UMBENANNT (P4a): die Menge ist nicht mehr owner-only - seit F-2 darf agent.first_message
+// auch dann reisen, wenn Gespraechs- und Offenlegungssprache auseinanderlaufen (s.
+// assertDisclosureCarried). Der Name nennt jetzt das Feld statt einer von zwei Lagen.
+export const OVERRIDE_FIRST_MESSAGE_LEAF_PATHS = Object.freeze(["agent.first_message"]);
 const OVERRIDE_PATH_SEPARATOR = ".";
+
+// EIN Zugriffspfad fuer beide Waechter (G5) - conversation_config_override liegt drei
+// Ebenen tief, und ein zweiter, an derselben Stelle getippter Zugriff koennte abdriften.
+function overrideOf(body) {
+  return body?.conversation_initiation_client_data?.conversation_config_override;
+}
 
 function isPlainObject(wert) {
   return wert !== null && typeof wert === "object" && !Array.isArray(wert);
@@ -116,7 +146,8 @@ function isPlainObject(wert) {
 // Objekt darunter (ein Array-Wert wie asr.keywords zaehlt selbst als Blatt - kein
 // Array-Pfad steht auf der Whitelist, ein Aufloesen der Eintraege braechte nichts). Ein
 // leeres Objekt traegt keinen Blatt-Pfad: nichts gesetzt, nichts zu verbieten.
-function overrideLeafPaths(wert, prefix) {
+// IEL-B6: derselbe Pfad-Waechter fuer die Init-Antwort (G5) - deshalb exportiert.
+export function overrideLeafPaths(wert, prefix) {
   if (!isPlainObject(wert)) return prefix.length ? [prefix.join(OVERRIDE_PATH_SEPARATOR)] : [];
   return Object.entries(wert).flatMap(([schluessel, kind]) =>
     overrideLeafPaths(kind, [...prefix, schluessel]),
@@ -135,16 +166,32 @@ function overrideLeafPaths(wert, prefix) {
 // Flag-Argumenten, F3/G15, zielt auf Verhaltens-Selektoren des Aufrufers - hier waere die
 // Aufspaltung der gefaehrlichere Weg). FAIL-CLOSED per Default: ein kuenftiger Aufrufer,
 // der den Wert vergisst, bekommt die strenge Menge.
-function assertOverrideWhitelisted(body, callId, calleeIsOwner = false) {
-  const override = body?.conversation_initiation_client_data?.conversation_config_override;
+//
+// P4a: dieselbe Haltung gilt fuer die zweite Lage, in der agent.first_message erlaubt ist
+// - Gespraechs-/Offenlegungssprache weichen ab (spracheWeichtAb weiter unten). Beide Lagen
+// oeffnen dieselbe Menge OVERRIDE_FIRST_MESSAGE_LEAF_PATHS, weil der Anbieter nur EINEN
+// first_message-Pfad kennt; welche Lage zutrifft, entscheidet danach assertDisclosureCarried.
+// Die erlaubte Menge FUER DIESEN Anruf - EINE Entscheidung, aus der Waechter UND Log/
+// Fehlertext lesen (G30: das Zusammensetzen ist keine eigene Aufgabe der Pruef-Funktion).
+function erlaubtePfadeFuer(override, { calleeIsOwner, disclosureLanguage }) {
+  const firstMessageErlaubt = calleeIsOwner === true || spracheWeichtAb(override, disclosureLanguage);
+  return firstMessageErlaubt
+    ? [...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_FIRST_MESSAGE_LEAF_PATHS]
+    : OVERRIDE_ALLOWED_LEAF_PATHS;
+}
+
+// Die verbotenen Pfade dieses Koerpers - ein Wert, der gar kein Objekt ist, zaehlt selbst
+// als EIN Verstoss (kaputte Form ist keine Nicht-Pruefung).
+function verboteneOverridePfade(override, erlaubt) {
+  if (!isPlainObject(override)) return ["(conversation_config_override ist kein Objekt)"];
+  return overrideLeafPaths(override, []).filter((pfad) => !erlaubt.includes(pfad));
+}
+
+function assertOverrideWhitelisted(body, callId, { calleeIsOwner = false, disclosureLanguage = null } = {}) {
+  const override = overrideOf(body);
   if (override === undefined || override === null) return;
-  const erlaubt =
-    calleeIsOwner === true
-      ? [...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_OWNER_ONLY_LEAF_PATHS]
-      : OVERRIDE_ALLOWED_LEAF_PATHS;
-  const verboten = isPlainObject(override)
-    ? overrideLeafPaths(override, []).filter((pfad) => !erlaubt.includes(pfad))
-    : ["(conversation_config_override ist kein Objekt)"];
+  const erlaubt = erlaubtePfadeFuer(override, { calleeIsOwner, disclosureLanguage });
+  const verboten = verboteneOverridePfade(override, erlaubt);
   if (verboten.length === 0) return;
   console.error(
     `[el-outbound] conversation_config_override abgelehnt (call=${callId}): verbotene(r) Pfad(e) ${verboten.join(", ")} - erlaubt sind ausschliesslich ${erlaubt.join(", ")}`,
@@ -152,6 +199,57 @@ function assertOverrideWhitelisted(body, callId, calleeIsOwner = false) {
   throw new Error(
     `ElevenLabs-Anrufstart abgebrochen: conversation_config_override enthaelt nicht erlaubte(n) Pfad(e) (${verboten.join(", ")})`,
   );
+}
+
+// P4a: laeuft die Gespraechssprache von der Offenlegungssprache weg? Der Vergleich liest
+// die gesendete Sprache aus dem KOERPER und die Offenlegungssprache aus der AUFLOESUNG -
+// zwei Quellen, sonst waere er tautologisch. disclosureLanguage === null heisst
+// "unbekannt" (Bestandsaufrufer) und damit "keine Abweichung nachweisbar".
+const spracheWeichtAb = (override, disclosureLanguage) =>
+  disclosureLanguage !== null && override?.agent?.language !== disclosureLanguage;
+
+// P4a (Artikel 50 EU AI Act, Absolute Regel 2, I-1): weicht die Gespraechssprache von der
+// Offenlegungssprache ab, MUSS dieser Anruf seine Eroeffnung selbst mitbringen UND sie MUSS
+// mit dem Pflichtsatz der OFFENLEGUNGSSPRACHE beginnen. Sonst spraeche der Anbieter den Satz
+// seines language_presets - in der Sprache, die der Auftraggeber gewaehlt hat, nicht der
+// Angerufene. Gemessen wird der namensunabhaengige Anfang (disclosurePrefixFor): den
+// Auftraggeber-Namen kennt dieser Waechter nicht, den Pflichtsatz schon.
+// EINZIGE AUSNAHME: das eigene Ziel (OC-P2) - dort ersetzt die Owner-Begruessung den Satz
+// per Eigentuemer-Entscheidung; eine Eroeffnung braucht es auch dort.
+// WIRFT VOR JEDEM NETZZUGRIFF - eine still ignorierte Uebersteuerung ist auf diesem Weg
+// erprobt (der Anbieter meldet keinen Fehler), und eine still fehlende Offenlegung waere
+// keine Offenlegung.
+const fehlendeEroeffnung = (eroeffnung) => typeof eroeffnung !== "string" || !eroeffnung;
+
+function fehlendeEroeffnungFehler(callId, override, disclosureLanguage) {
+  return new Error(
+    `Anrufstart abgebrochen (call=${callId}): agent.language=${override?.agent?.language} weicht von ` +
+      `der Offenlegungssprache ${disclosureLanguage} ab, aber der Anruf bringt keine eigene ` +
+      "agent.first_message mit - der Anbieter spraeche den Pflichtsatz seines Presets.",
+  );
+}
+
+function falscherPflichtsatzFehler(callId, disclosureLanguage) {
+  return new Error(
+    `Anrufstart abgebrochen (call=${callId}): agent.first_message beginnt nicht mit dem ` +
+      `Offenlegungssatz der Sprache ${disclosureLanguage} (Artikel 50 EU AI Act).`,
+  );
+}
+
+// Der einzige Fall, in dem eine getragene Eroeffnung TROTZDEM nicht den Pflichtsatz
+// beweisen muss: das eigene Ziel (OC-P2), wo die Owner-Begruessung an seine Stelle tritt.
+function pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner) {
+  if (calleeIsOwner === true) return false;
+  return !eroeffnung.startsWith(disclosurePrefixFor(disclosureLanguage));
+}
+
+function assertDisclosureCarried(body, callId, { calleeIsOwner = false, disclosureLanguage = null } = {}) {
+  const override = overrideOf(body);
+  if (!spracheWeichtAb(override, disclosureLanguage)) return;
+  const eroeffnung = override?.agent?.first_message;
+  if (fehlendeEroeffnung(eroeffnung)) throw fehlendeEroeffnungFehler(callId, override, disclosureLanguage);
+  if (pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner))
+    throw falscherPflichtsatzFehler(callId, disclosureLanguage);
 }
 
 // EINE Stelle fuer Basis-URL, Schluessel-Header, Timeout und Fehlerpruefung (G5): beide
@@ -209,12 +307,24 @@ export function startResultOf(antwort) {
  * conversation_config_override etwas ausserhalb der Whitelist setzt (s.
  * assertOverrideWhitelisted oben) - callId dient nur diesem Log, kein Fachwert.
  * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, body: object,
- *   callId?: string, calleeIsOwner?: boolean}} args calleeIsOwner: OC-P2 - nur bei true
- *   ist zusaetzlich OVERRIDE_OWNER_ONLY_LEAF_PATHS erlaubt; Default false (fail-closed).
+ *   callId?: string, calleeIsOwner?: boolean, disclosureLanguage?: string|null}} args
+ *   calleeIsOwner: OC-P2 - nur bei true (oder bei P4a-Sprachabweichung) ist zusaetzlich
+ *   OVERRIDE_FIRST_MESSAGE_LEAF_PATHS erlaubt; Default false (fail-closed).
+ *   disclosureLanguage: P4a - die aufgeloeste Sprache des Pflichtsatzes; Default null
+ *   (unbekannt = Bestandsaufrufer, keine Abweichung nachweisbar, fail-closed).
  * @returns {Promise<{conversationId: string|null}>}
  */
-export async function startOutboundCall({ fetchImpl, account, body, callId, calleeIsOwner = false }) {
-  assertOverrideWhitelisted(body, callId, calleeIsOwner);
+export async function startOutboundCall({
+  fetchImpl,
+  account,
+  body,
+  callId,
+  calleeIsOwner = false,
+  disclosureLanguage = null,
+}) {
+  const eroeffnungsKontext = { calleeIsOwner, disclosureLanguage };
+  assertOverrideWhitelisted(body, callId, eroeffnungsKontext);
+  assertDisclosureCarried(body, callId, eroeffnungsKontext);
   const antwort = await convaiFetch({
     fetchImpl,
     account,
@@ -364,5 +474,131 @@ export function deletePhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs
     account,
     path: PHONE_NUMBER_PATH + encodeURIComponent(phoneNumberId),
     timeoutMs,
+  });
+}
+
+/**
+ * IEL-B9: NUR LESEND. Workspace-Settings des Kontos (Init-Webhook, [R1] GET-WS). Wirft mit
+ * err.providerStatus (assertConvaiOk), der Fehler-RUMPF wird nie gelesen. KEIN Retry.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, timeoutMs?: number}} args
+ */
+export function fetchConvaiSettings({ fetchImpl, account, timeoutMs = REQUEST_TIMEOUT_MS }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: CONVAI_SETTINGS_PATH,
+    op: "Workspace-Settings-Abruf",
+    init: { method: "GET" },
+    timeoutMs,
+  });
+}
+
+/**
+ * IEL-B9: SCHREIBZUGRIFF - PATCH der Workspace-Settings. Einziger Aufrufer:
+ * scripts/push-elevenlabs.mjs --workspace-init-webhook --ausfuehren. KEIN Retry: ob der PATCH
+ * andere Settings beruehrt, ist ungemessen - die Gegenprobe macht der Aufrufer.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, body: object}} args
+ */
+export function patchConvaiSettings({ fetchImpl, account, body }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: CONVAI_SETTINGS_PATH,
+    op: "Workspace-Settings-Schreiben",
+    init: { method: "PATCH", body: JSON.stringify(body) },
+  });
+}
+
+/**
+ * IEL-B10: NUR LESEND. Workspace-Secrets, gefiltert per Namenspraefix. Die Antwort traegt nie einen
+ * Secret-Wert. Einziger Aufrufer: scripts/iel-geheimnisse-*.mjs. KEIN Retry.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, search: string, pageSize: number}} args
+ */
+export function listConvaiSecrets({ fetchImpl, account, search, pageSize }) {
+  const query = new URLSearchParams({ search, page_size: String(pageSize) });
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: `${CONVAI_SECRETS_PATH}?${query}`,
+    op: "Secret-Liste",
+    init: { method: "GET" },
+  });
+}
+
+/**
+ * IEL-B10: SCHREIBZUGRIFF - legt ein Workspace-Secret an. Einziger Aufrufer:
+ * scripts/iel-geheimnisse-*.mjs (setzen --ausfuehren). KEIN Retry; der Fehler-RUMPF wird nie gelesen
+ * (er koennte den gesendeten Wert spiegeln).
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, name: string, value: string}} args
+ */
+export function createConvaiSecret({ fetchImpl, account, name, value }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: CONVAI_SECRETS_PATH,
+    op: "Secret-Anlegen",
+    init: { method: "POST", body: JSON.stringify({ type: SECRET_TYP_NEU, name, value }) },
+  });
+}
+
+/**
+ * IEL-B10: SCHREIBZUGRIFF - aktualisiert den Wert eines bestehenden Workspace-Secrets. Einziger
+ * Aufrufer: scripts/iel-geheimnisse-*.mjs (setzen --ausfuehren). KEIN Retry.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, secretId: string, name: string, value: string}} args
+ */
+export function updateConvaiSecret({ fetchImpl, account, secretId, name, value }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: `${CONVAI_SECRETS_PATH}/${encodeURIComponent(secretId)}`,
+    op: "Secret-Aktualisieren",
+    init: { method: "PATCH", body: JSON.stringify({ type: SECRET_TYP_UPDATE, name, value }) },
+  });
+}
+
+/**
+ * IEL-B10: SCHREIBZUGRIFF - PATCH einer Nummernregistrierung (inbound_trunk_config). Aufrufer:
+ * scripts/iel-geheimnisse-*.mjs (setzen --ausfuehren) und nummern-registrierung.js#makeInboundTrunkSchreiber
+ * (IEX-A10). KEIN Retry; der Koerper traegt
+ * Zugangsdaten, der Fehler-RUMPF wird nie gelesen.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, phoneNumberId: string, body: object}} args
+ */
+export function patchPhoneNumber({ fetchImpl, account, phoneNumberId, body }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: PHONE_NUMBER_PATH + encodeURIComponent(phoneNumberId),
+    op: "Nummernregistrierung-Aendern",
+    init: { method: "PATCH", body: JSON.stringify(body) },
+  });
+}
+
+/**
+ * IEL-B10: NUR LESEND. Conversation-Liste mit den Query-Parametern des Aufrufers. Einziger
+ * Aufrufer: scripts/iel-geheimnisse-*.mjs (conversation-beleg). KEIN Retry.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, query: Record<string, string>}} args
+ */
+export function listConversations({ fetchImpl, account, query }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: `${CONVERSATIONS_PATH}?${new URLSearchParams(query)}`,
+    op: "Gespraechsliste",
+    init: { method: "GET" },
+  });
+}
+
+/**
+ * IEL-B10: NUR LESEND. Konfiguration eines Agenten. Einziger Aufrufer:
+ * scripts/iel-geheimnisse-*.mjs (stimmen-beleg). KEIN Retry.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, agentId: string}} args
+ */
+export function fetchAgent({ fetchImpl, account, agentId }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: AGENT_PATH + encodeURIComponent(agentId),
+    op: "Agent-Abruf",
+    init: { method: "GET" },
   });
 }

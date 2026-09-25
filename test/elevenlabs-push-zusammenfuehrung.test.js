@@ -17,17 +17,33 @@
 // OHNE DIE POSITIV-KONTROLLE BEWIESE FALL 3 NICHTS: ein Schreibweg, der immer
 // abbricht, besteht jede Rotprobe. Deshalb steht daneben derselbe Aufbau ohne
 // den fremden Schluessel, der sauber durchlaeuft.
+//
+// SEIT SP2 (2026-09-04) IST data_collection NICHT MEHR DER EINZIGE ANWENDUNGSFALL:
+// derselbe Schreibweg traegt jetzt auch die eingebauten Werkzeuge
+// (built_in_tools), weil der Anbieter das Werkzeug-Objekt beim PATCH ERSETZT
+// statt zu mergen - ein Koerper mit nur dem Blattpfad endete in HTTP 400. Der
+// Abschnitt am Dateiende misst genau das an derselben Mechanik.
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
+import { setzeAnPfad, vergleicheBesitz, wertAnPfad } from "../scripts/lib/elevenlabs-besitz.mjs";
 import {
   KEIN_AUFRUF,
+  LIVE_MIT_DATENSCHUTZ,
   TEST_SCHLUESSEL,
+  UNKONFIGURIERTES_WERKZEUG,
+  VOICEMAIL_LIVE_TEXT,
   laufeMitAttrappe,
+  liveWerkzeuge,
   schreibendeAufrufe,
 } from "./helpers/elevenlabs-push-attrappe.mjs";
 
 process.env.ELEVENLABS_API_KEY = TEST_SCHLUESSEL;
+// Beide DYNAMISCH und erst nach dem Schluessel: sie ziehen src/config.js mit, das den
+// Schluessel beim Laden EINMAL liest. Ein statisches import wuerde hochgezogen und jeden Lauf
+// fail-closed abbrechen lassen, bevor er den gemessenen Riegel ueberhaupt erreicht.
+// (elevenlabs-besitz.mjs oben bleibt statisch - reine Rechnung, keine Konfiguration.)
+const { ladeVorlage } = await import("../scripts/lib/elevenlabs-agent-lesen.mjs");
 const {
   koerperVerstoesse,
   mitSchreibwerten,
@@ -279,5 +295,228 @@ describe("Die Zusammenfuehrung fasst den gelesenen Live-Stand nicht an", () => {
       "ALT",
       "der GELESENE Live-Stand wurde mitveraendert - dann rechnet die Vorhersage gegen einen Stand, den sie selbst umgeschrieben hat",
     );
+  });
+});
+
+// ---- SP2: die eingebauten Werkzeuge als Sammlung --------------------------------------
+// Der Anbieter ERSETZT ein Werkzeug-Objekt beim PATCH, statt zu mergen: ein Koerper, der nur
+// das Blatt built_in_tools.voicemail_detection.params.voicemail_message trug, endete am
+// 2026-09-04 mit HTTP 400 ("Field required, param: ...voicemail_detection.name") - damit war
+// KEIN Werkzeug-Feld pushbar. Der Besitz-Eintrag zeigt seither auf die SAMMLUNG
+// built_in_tools (art "texte", je_eintrag "params.voicemail_message") und erklaert denselben
+// Schreibweg wie die Sprach-Presets. Gemessen wird hier, dass der Koerper das VOLLE Werkzeug
+// traegt und trotzdem nur dieses eine Blatt aus der Vorlage kommt.
+const WERKZEUGE_LIVE_PFAD = "conversation_config.agent.prompt.built_in_tools";
+const WERKZEUGE_VORLAGE_PFAD = "agent.conversation_config.agent.prompt.built_in_tools";
+const WERKZEUG_FELD = "voicemail_message";
+const BLATT = "params.voicemail_message";
+const VOICEMAIL = "voicemail_detection";
+const END_CALL = "end_call";
+const SPRACHERKENNUNG = "language_detection";
+// Der Platzhalter, den die Vorlage seit DE1 fuehrt - nicht der Text, den der Anbieter daraus
+// macht (der entsteht pro Anruf in src/elevenlabs/outbound.js).
+const SOLL_TEXT = "{{voicemail_line}}";
+// Die Marke, die art "texte" fuer ein fehlendes Blatt setzt.
+const FEHLT = "(fehlt)";
+// Die zwei Stellen der Koerper-Zeile, an denen Fall (5) sie auseinandernimmt.
+const KOERPER_MARKE = "PATCH-KOERPER";
+const PFAD_LISTE_MARKE = "nichts sonst: ";
+const LISTEN_TRENNER = ", ";
+
+const ECHTE_VORLAGE = ladeVorlage();
+
+// Die Werkzeug-Fabrik liegt beim gestellten Live-Agenten (helpers/…-attrappe.mjs) und nicht
+// hier: derselbe Aufbau traegt seit SP2 auch LIVE_MIT_DATENSCHUTZ, und zwei Fabriken fuer
+// dieselbe Sammlung wuerden gegeneinander driften.
+function liveMitWerkzeugen(werkzeuge) {
+  const live = structuredClone(LIVE_MIT_DATENSCHUTZ);
+  setzeAnPfad(live, WERKZEUGE_LIVE_PFAD, werkzeuge);
+  return live;
+}
+
+// Die Vorlagen-Seite spiegelt die echte Vorlage: drei Werkzeuge, nur type und name, das
+// Anrufbeantworter-Werkzeug zusaetzlich mit dem besessenen Blatt UND einem Doku-Schluessel.
+// Der beweist Zusage (2) doppelt - der Koerper darf ihn nicht tragen.
+function werkzeugVorlage() {
+  const vorlage = {};
+  setzeAnPfad(vorlage, WERKZEUGE_VORLAGE_PFAD, {
+    [SPRACHERKENNUNG]: { type: "system", name: SPRACHERKENNUNG },
+    [END_CALL]: { type: "system", name: END_CALL },
+    [VOICEMAIL]: {
+      type: "system",
+      name: VOICEMAIL,
+      params: { voicemail_message: SOLL_TEXT },
+      _begruendung: "Doku der Vorlage - sie gehoert nicht in die Konfiguration des Anbieters.",
+    },
+  });
+  return vorlage;
+}
+
+// Die Mengen-Form, die art "texte" vergleicht: "<name> = <text>", alphabetisch. Von Hand nur
+// an der gestellten Abweichung - im echten Lauf (Fall 5 und 6) baut der Vergleichs-Kern sie
+// selbst.
+function texteMenge(voicemailText) {
+  return [
+    `${END_CALL} = ${FEHLT}`,
+    `${SPRACHERKENNUNG} = ${FEHLT}`,
+    `${VOICEMAIL} = ${voicemailText}`,
+  ];
+}
+
+function werkzeugAbweichung() {
+  return {
+    feld: WERKZEUG_FELD,
+    art: "texte",
+    livePfade: [WERKZEUGE_LIVE_PFAD],
+    vorlagePfade: [WERKZEUGE_VORLAGE_PFAD],
+    schreibweg: "je_schluessel",
+    schreibwegBesitz: [BLATT],
+    soll: { vorhanden: true, wert: texteMenge(SOLL_TEXT) },
+    ist: { vorhanden: true, wert: texteMenge(VOICEMAIL_LIVE_TEXT) },
+    ausgenommen: null,
+  };
+}
+
+function fuehreWerkzeugeZusammen(werkzeuge) {
+  return mitSchreibwerten({
+    schreibbar: [werkzeugAbweichung()],
+    vorlage: werkzeugVorlage(),
+    live: liveMitWerkzeugen(werkzeuge),
+  });
+}
+
+// Der Koerper, wie ihn das Kommando aus einem Schreibwert baut - gebraucht fuer die Riegel,
+// die den FERTIGEN Koerper ansehen.
+function koerperMit(schreibWert) {
+  const koerper = {};
+  setzeAnPfad(koerper, WERKZEUGE_LIVE_PFAD, schreibWert);
+  return koerper;
+}
+
+// Gestufter Leser statt einer Punktkette ueber fuenf Ebenen (G36).
+function voicemailTextVon(schreibWert) {
+  return wertAnPfad(schreibWert, `${VOICEMAIL}.${BLATT}`).wert;
+}
+
+describe("SP2: der Patch-Koerper traegt das ganze Werkzeug, geaendert wird ein Blatt", () => {
+  it("(1) der Koerper fuehrt ALLE eingebauten Werkzeuge der Live-Sammlung", () => {
+    const { schreibbar, fehler } = fuehreWerkzeugeZusammen(liveWerkzeuge());
+    assert.deepEqual(fehler, []);
+    assert.deepEqual(Object.keys(schreibbar[0].schreibWert).sort(), [
+      END_CALL,
+      SPRACHERKENNUNG,
+      VOICEMAIL,
+    ]);
+  });
+
+  it("(2) name, type und die nicht besessenen params bleiben byte-identisch, Doku reist nicht mit", () => {
+    const werkzeuge = liveWerkzeuge();
+    const { schreibbar } = fuehreWerkzeugeZusammen(werkzeuge);
+    const wert = schreibbar[0].schreibWert;
+    for (const name of [END_CALL, SPRACHERKENNUNG]) {
+      assert.deepEqual(
+        wert[name],
+        werkzeuge[name],
+        `${name} wurde veraendert - die Vorlage fuehrt an diesem Werkzeug kein besessenes Blatt`,
+      );
+    }
+    const gemeint = werkzeuge[VOICEMAIL];
+    assert.equal(wert[VOICEMAIL].name, gemeint.name);
+    assert.equal(wert[VOICEMAIL].type, gemeint.type);
+    assert.equal(wert[VOICEMAIL].params.system_tool_type, gemeint.params.system_tool_type);
+    // Riegel 2b am fertigen Koerper: der _-Schluessel der Vorlage waere hier ein Befund.
+    assert.deepEqual(
+      koerperVerstoesse({
+        koerper: koerperMit(wert),
+        abweichungen: [werkzeugAbweichung()],
+        auswahl: [WERKZEUG_FELD],
+      }),
+      [],
+    );
+  });
+
+  it("(3) nur voicemail_message traegt den Vorlagenwert", () => {
+    const { schreibbar } = fuehreWerkzeugeZusammen(liveWerkzeuge());
+    assert.equal(voicemailTextVon(schreibbar[0].schreibWert), SOLL_TEXT);
+  });
+
+  it("(3) Positiv-Kontrolle: stimmt der Live-Text schon, ist es derselbe Wert - keine Zufallsuebereinstimmung", () => {
+    const { schreibbar } = fuehreWerkzeugeZusammen(liveWerkzeuge(SOLL_TEXT));
+    assert.equal(voicemailTextVon(schreibbar[0].schreibWert), SOLL_TEXT);
+  });
+
+  it("(3b) ein live auf null stehendes Systemwerkzeug reist NICHT mit - es traegt keine Konfiguration", () => {
+    const { schreibbar } = fuehreWerkzeugeZusammen(liveWerkzeuge());
+    assert.ok(
+      !(UNKONFIGURIERTES_WERKZEUG in schreibbar[0].schreibWert),
+      `${UNKONFIGURIERTES_WERKZEUG} steht live auf null und gehoert damit nicht in den Koerper`,
+    );
+  });
+});
+
+describe("SP2: ein nur live vorhandenes Werkzeug bricht ab, statt zu verschwinden", () => {
+  it("(4) die Zusammenfuehrung meldet es mit der BESTEHENDEN Meldung und liefert keinen Schreibwert", () => {
+    const werkzeuge = liveWerkzeuge();
+    werkzeuge[FREMD] = { name: FREMD, type: "system", params: {} };
+    const { schreibbar, fehler } = fuehreWerkzeugeZusammen(werkzeuge);
+    assert.equal(fehler.length, 1, `genau ein Fehler erwartet, waren: ${fehler}`);
+    assert.match(fehler[0], /fuehrt Schluessel, die die Vorlage nicht kennt/);
+    assert.match(fehler[0], new RegExp(FREMD));
+    assert.deepEqual(schreibbar, [], "trotz Fehler blieb ein Schreibwert stehen");
+  });
+
+  it("(4) Positiv-Kontrolle: derselbe Aufbau ohne das fremde Werkzeug laeuft sauber durch", () => {
+    const { schreibbar, fehler } = fuehreWerkzeugeZusammen(liveWerkzeuge());
+    assert.deepEqual(fehler, []);
+    assert.equal(schreibbar.length, 1);
+  });
+});
+
+describe("SP2: am ganzen Kommando, gegen die ECHTE Vorlage", () => {
+  it("(5) der Trockenlauf baut einen Koerper, dessen Blatt-Pfade AUSSCHLIESSLICH unter built_in_tools liegen", async () => {
+    const lauf = await laufeMitAttrappe({
+      runCli: RUN_CLI,
+      argumente: [`--felder=${WERKZEUG_FELD}`],
+      live: liveMitWerkzeugen(liveWerkzeuge()),
+    });
+    assert.equal(lauf.code, 0, `Exit 0 erwartet, Ausgabe war: ${lauf.ausgabe}`);
+    assert.deepEqual(schreibendeAufrufe(lauf.aufrufe), [], "es wurde geschrieben");
+    const zeile = lauf.ausgabe.split("\n").find((eine) => eine.includes(KOERPER_MARKE));
+    assert.ok(zeile, `keine ${KOERPER_MARKE}-Zeile, Ausgabe war: ${lauf.ausgabe}`);
+    const pfade = zeile.split(PFAD_LISTE_MARKE)[1].split(LISTEN_TRENNER);
+    // Ohne diese Zeile bestuende die Schleife darunter auch ueber einer leeren Liste - ein
+    // Riegel, der nichts ansieht, sieht aus wie einer, der nichts findet.
+    assert.ok(
+      pfade.includes(`${WERKZEUGE_LIVE_PFAD}.${VOICEMAIL}.${BLATT}`),
+      `das gemeinte Blatt steht gar nicht im Koerper: ${pfade.join(LISTEN_TRENNER)}`,
+    );
+    for (const pfad of pfade) {
+      assert.ok(
+        pfad.startsWith(`${WERKZEUGE_LIVE_PFAD}.`),
+        `der Koerper traegt einen Pfad ausserhalb der Werkzeug-Sammlung: ${pfad}`,
+      );
+    }
+  });
+
+  it("(6) Vorhersage: voicemail_message wird gruen, nichts sonst wird neu rot", () => {
+    const live = liveMitWerkzeugen(liveWerkzeuge());
+    const vorher = vergleicheBesitz({ vorlage: ECHTE_VORLAGE, live });
+    assert.deepEqual(vorher.fehler, [], `die Besitz-Erklaerung traegt nicht: ${vorher.fehler}`);
+    const abweichung = vorher.abweichungen.find((eine) => eine.feld === WERKZEUG_FELD);
+    assert.ok(abweichung, `${WERKZEUG_FELD} weicht gar nicht ab - der Fall misst nichts`);
+    const { schreibbar, fehler } = mitSchreibwerten({
+      schreibbar: [abweichung],
+      vorlage: ECHTE_VORLAGE,
+      live,
+    });
+    assert.deepEqual(fehler, []);
+    const klon = structuredClone(live);
+    setzeAnPfad(klon, WERKZEUGE_LIVE_PFAD, schreibbar[0].schreibWert);
+    const nachher = vergleicheBesitz({ vorlage: ECHTE_VORLAGE, live: klon });
+    assert.deepEqual(nachher.fehler, []);
+    const felderVon = (befund) => befund.abweichungen.map((eine) => eine.feld);
+    const ohne = (links, rechts) => links.filter((feld) => !rechts.includes(feld));
+    assert.deepEqual(ohne(felderVon(vorher), felderVon(nachher)), [WERKZEUG_FELD]);
+    assert.deepEqual(ohne(felderVon(nachher), felderVon(vorher)), []);
   });
 });

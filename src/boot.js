@@ -1,6 +1,6 @@
 // ---- Boot-Sequenz (Server-Slim P15) ---------------------------------------------
 // bootServer(deps) startet den fertig verdrahteten app: store.load, DSGVO-Retention,
-// Fail-closed-Boot-Gates, listen+Banner, Audio-Bridge, Provisioning-Reconcile,
+// Fail-closed-Boot-Gates, listen+Banner, Provisioning-Reconcile,
 // Graceful-Shutdown. REINE Verschiebung aus server.js (byte-identische Reihenfolge,
 // Log-Zeilen, exit-Codes). INV-5: rearmActiveCallTimers NACH allen exit1-Gates,
 // unmittelbar VOR listen; kein Gate danach ruft process.exit(1). INV-6: die
@@ -10,7 +10,6 @@ import {
   gatewayUrlForPort,
   setBoundGatewayPort,
   todayIsoDate,
-  VOICE_ENGINE,
 } from "./config.js";
 import { configFingerprint } from "./config-fingerprint.js";
 import {
@@ -18,9 +17,12 @@ import {
   meterMappingGaps,
   spendCapCoherence,
   unpricedModels,
+  unpricedPlanSlugs,
   providerRateOutOfBand,
   alertChannelFindings,
   alertChannelInputs,
+  kostenAlarmFindings,
+  ALARM_KANAL,
   costTruingBookingFindings,
   voiceTariffFloorFindings,
   planCapUnderivableFindings,
@@ -33,15 +35,24 @@ import {
   platformAniFindings,
   platformAlertSenderFindings,
   driftConfigFindings,
+  llmFallbackFindings,
+  elInboundAccessFindings,
+  elInboundScopeFindings,
+  angekuendigterOriginFindings,
 } from "./boot-guard.js";
+import {
+  inboundElAllowlistProbeLine,
+  inboundElPinnedTenantCount,
+} from "./elevenlabs/inbound-path-decision.js";
 import { hasActiveNumber } from "./store/views.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
+// IP4: der GETEILTE Sprechpfad-Namensvorrat (kein zweiter Ortsname fuer dasselbe) - rein,
+// ohne config-Import, der Namespace wird hereingereicht.
+import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.js";
 // LCT-FIX-1: welche Belegtypen einem Call zugeordnet werden koennen, weiss der Adapter, der
 // die Belege liest - der Boot-Guard bleibt eine reine, arg-injizierte Entscheidung.
-// Provider-Konstante, kein Transport: dieselbe Richtung wie telnyx-call-control-ingest.js
-// (assistantVoiceConfigured).
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
-import { attachMediaBridge, REALTIME_MID_CALL_BUDGET_CHECK } from "./bridge.js";
+import { pflichtTraegerFuerProfil, KOSTENPROFIL } from "./billing/kostenarten.js";
 import {
   USAGE_EVENT_KIND,
   BOOTSTRAP_TENANT_ID,
@@ -62,12 +73,15 @@ import {
 // boot.js nicht.
 import { CONSULT_OPEN_MS } from "./consult/in-call.js";
 import { SWEEP_TRIGGER, costTruingCoveragePercent } from "./billing/cost-truing.js";
-import { tariffDriftReportFromConfig, driftLine } from "./billing/cost-calibration.js";
+import { tariffDriftReportFromConfig, driftLine, tarifpaarReport, tarifpaarZeile } from "./billing/cost-calibration.js";
 import { CATALOG_SLUGS } from "./plans.js";
+// GP-P6 (a): die EINE Slug->Price-Quelle (G5) - das Gate vergleicht Config gegen Config,
+// ohne eine zweite Zuordnung zu tippen. Kein Zyklus: subscribe.js importiert boot.js nicht.
+import { priceIdForPlan } from "./billing/subscribe.js";
 import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
-import { deadAirOverrun, turnBudgetOverrun } from "./turn-budget.js";
-import { MS_PER_MINUTE, MS_PER_SECOND } from "./utils/timer.js";
+import { turnBudgetOverrun } from "./turn-budget.js";
+import { MS_PER_MINUTE } from "./utils/timer.js";
 // GAP-19: EIN Praedikat fuer beide Haelften - der Boot meldet genau die Konstellation, die
 // in der Outbound-Kette das Herkunfts-Gate abschaltet (G5). Kein Zyklus: outbound-gates.js
 // importiert boot.js nicht.
@@ -164,9 +178,7 @@ function assertSpendCapCoherence(config) {
 // das Muster).
 //
 // Geprueft werden GENAU zwei Werte, unveraendert: claudeModel und briefingModel (letzterer
-// UNABHAENGIG von precallBriefingEnabled). NICHT geprueft wird realtimeModel: der
-// Realtime-Pfad bucht keine Token (kein bookTokenUsage-Aufrufer in bridge.js) - ein
-// Abbruch dafuer waere ein Abbruch ohne Schutzwirkung.
+// UNABHAENGIG von precallBriefingEnabled).
 function assertPricedModels(config) {
   const unpriced = unpricedModels([config.llm.claudeModel, config.llm.briefingModel], config.llm.modelPricesUsd);
   if (!unpriced.length) return;
@@ -175,6 +187,23 @@ function assertPricedModels(config) {
       "jedes konfigurierte Modell braucht eine Staffel in MODEL_PRICE_SCHEDULES (src/config.js), " +
       "BEVOR CLAUDE_MODEL/PRECALL_BRIEFING_MODEL darauf gestellt wird. Eine DATIERTE " +
       "Snapshot-ID ist ein ANDERER Schluessel als der Alias.",
+  );
+  process.exit(1);
+}
+
+// GP-P6 (a): ein buchbarer Tarif ohne Stripe-Price-Id ist bei aktivem Geldpfad keine
+// Route-500 mehr, sondern ein Boot-Refusal (PLAN-GELDPFAD.md GP-P6). Rein lokal, Config
+// gegen Config, KEIN Netz - deshalb darf er fatal sein (Muster assertPricedModels).
+// PAYMENT_ENABLED=false laesst ihn vollstaendig aus: sonst stirbt jeder Entwickler- und
+// Testboot (Muster isPositiveIntegerFee, "FATAL nur im Payment-Pfad").
+function assertPricedPlans(config) {
+  if (!config.billing.paymentEnabled) return;
+  const unpriced = unpricedPlanSlugs(CATALOG_SLUGS, (slug) => priceIdForPlan(slug, config));
+  if (!unpriced.length) return;
+  console.error(
+    `[boot] Start abgebrochen: Katalog-Tarif(e) ohne Stripe-Price-Id: ${unpriced.join(",")} - ` +
+      "bei PAYMENT_ENABLED=true braucht JEDER Slug aus PLAN_CATALOG (src/plans.js) eine " +
+      "STRIPE_<TARIF>_PRICE_ID. Ein buchbarer Tarif ohne Price ist eine Preisseite, die nichts verkauft.",
   );
   process.exit(1);
 }
@@ -226,18 +255,28 @@ function currentCoverage(config, store) {
 // (telephony/adapters/telnyx/voice.js). Quote unter der Schwelle = WARN, kein exit(1) -
 // ein Boot-Refusal tauschte ein Kostenproblem gegen einen Telefonie-Totalausfall (Praezedenz
 // warnTariffDrift); die laute Linie ist der Befund coverage_below_threshold aus dem Sweep.
-function assertCostTruingBooking(config, store) {
-  const findings = costTruingBookingFindings({
-    requiredRecordTypes: config.billing.costTruingRequiredRecordTypes,
-    assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES,
-    ...currentCoverage(config, store),
-  });
+// LCT P4 / KV2-2 (G5): EIN Umgang mit einer Befundmenge, in der fatale und warnende
+// Befunde gemeinsam auftreten koennen (fatal zuerst, dann alle als WARN). Vorher stand
+// dieser Block wortgleich zweimal (assertCostTruingBooking, und die neue fatale Variante
+// von latentCostPathFindings haette einen dritten, byte-identischen Zwilling erzeugt) -
+// genau die Doppelstruktur, die dieser Plan beendet.
+function applyBootFindings(findings) {
   const fatal = findings.find((finding) => finding.fatal);
   if (fatal) {
     console.error(`[boot] Start abgebrochen: ${fatal.message}`);
     process.exit(1);
   }
   for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+}
+
+function assertCostTruingBooking(config, store) {
+  applyBootFindings(
+    costTruingBookingFindings({
+      requiredRecordTypes: config.billing.costTruingRequiredRecordTypes,
+      assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES,
+      ...currentCoverage(config, store),
+    }),
+  );
 }
 
 // LCT P5: Alarmkanal-Guard (alertChannelFindings). Loggt NIE den Wert (der besetzte Fall
@@ -258,6 +297,17 @@ function warnAlertChannelUnset(config) {
   });
   for (const finding of alertChannelFindings(alertChannelConfig))
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+}
+
+// KV2-1 (Kriterium (d)): der Alarm-Empfaenger des KOSTENpfads als harte Vorbedingung.
+// WARN wie warnAlertChannelUnset - PLUS ein DURABLER Eintrag: die ganze Phase existiert,
+// weil eine Log-Zeile auf einem Free-Tier-Dyno keine Spur ist (AUFTRAG B3). Der Wert wird
+// NIE geloggt; das Detail nennt nur die Kanal-Art.
+function warnKostenAlarmZielUnset(config, durableAudit) {
+  const [finding] = kostenAlarmFindings({ billing: config.billing, mail: config.mail });
+  if (!finding) return;
+  console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+  durableAudit(finding.code, null, `kanaele=${ALARM_KANAL.KEINE}`);
 }
 
 // OUTBOUND-E1: reine Diagnose, NIE fatal (s. platformAniFindings). Loggt die Nummer nie.
@@ -292,9 +342,25 @@ function warnTariffDrift(config, store) {
   else console.log(line);
 }
 
+// KV2-10: Tarifpaar-Waechter, Ausloeser Boot (Kriterium (e)). GENAU EINE Zeile fuer ALLE
+// Routen (Muster warnTariffDrift: keine Zeile je Route je Boot - WARN-Muedigkeit). KEIN
+// SMS/KEIN Mail hier - der laufende Alarm haengt am Sweep (cost-truing.js, derselbe Grund
+// wie beim Drift-Waechter: der Boot feuert einmal je Prozessstart). KEIN Audit: der Befund
+// aendert nichts daran, WAS der Dienst ablehnt. eigenCentJeAnruf bleibt null, solange keine
+// je-Anruf-Quelle fuer die Eigen-Achsen existiert (benannter offener Punkt, s. Kopfkommentar
+// der Tarifpaar-Sektion in cost-calibration.js) - der Waechter ist dann sichtbar-wartend
+// (tarifpaar_zu_wenig_proben), nie scheinbar-messend.
+function warnTarifpaar(config, store) {
+  const report = tarifpaarReport({ state: store.load(), eigenCentJeAnruf: null, billing: config.billing });
+  const line = `[boot] Tarifpaar: ${report.map(tarifpaarZeile).join(" | ")}`;
+  if (report.some((entry) => entry.code !== null)) console.warn(line);
+  else console.log(line);
+}
+
 // LCT P4b: Vollkosten-Boot-Guard (WARN). Haelt den konfigurierten Inlandstarif gegen die
-// Vollkostenschwelle UND die live aus dem Spiegel gerechnete Deckungsquote. Feuert nur in
-// der Konjunktion (voiceTariffFloorFindings). Deckungsquote + Schwelle liefert currentCoverage
+// Vollkostenschwelle; die live aus dem Spiegel gerechnete Deckungsquote reist als Kontext
+// mit (voiceTariffFloorFindings feuert seit KV2-10 auf belowFloor ALLEIN, nicht mehr in
+// der Konjunktion mit duenner Deckung). Deckungsquote + Schwelle liefert currentCoverage
 // (dieselbe EINE Quelle wie der P4-Guard). WARN, kein exit(1). An KEIN Flag gekoppelt: der
 // Tarif ist auch ohne aktive Korrekturbuchung der Buchungswert jedes nicht abgeglichenen Calls.
 function warnVoiceTariffBelowFullCost(config, store) {
@@ -325,29 +391,13 @@ function warnTurnBudgetOverrun(config) {
   );
 }
 
-// AL-P6: der Bestands-Waechter oben misst EINE llm.complete-Kette gegen den Provider-
-// Hardcut. Dieser hier misst den TURN als Ganzes (bis zu MAX_TOOL_ROUNDS_PER_TURN Runden,
-// mit greifender Frist) gegen den Dead-Air-Watchdog des Assistant-Pfads: reisst der Turn
-// ihn, beendet der Watchdog mitten im Satz. WARN, kein exit(1) - eine gesprengte Wanduhr
-// ist kein Safety-Gate (Muster warnTurnBudgetOverrun). Nur bei aktivem Assistant-Pfad:
-// ohne Flag wird der Dead-Air-Timer nie armiert, die Warnung waere irrefuehrend
-// (Praezedenz warnMissingProvisioningConnection).
-function warnTurnOutlivesDeadAir(config) {
-  if (!config.telnyx.telnyxAssistant.enabled) return;
-  const finding = deadAirOverrun({
-    deadAirTimeoutMs: config.telnyx.telnyxAssistant.deadAirTimeoutS * MS_PER_SECOND,
-    requestTimeoutMs: config.llm.llmRequestTimeoutMs,
-    maxRetries: config.llm.llmMaxRetries,
-    backoffMs: config.llm.llmBackoffMs,
-    synthTimeoutMs: config.voice.elevenLabsPlayTts.synthTimeoutMs,
-  });
-  if (!finding) return;
-  console.warn(
-    `[boot] Konfig-Warnung: ein Turn kann ${finding.worstCaseMs} ms dauern und reisst den ` +
-      `Dead-Air-Watchdog ${finding.limitMs} ms um ${finding.overrunMs} ms ` +
-      "(TELNYX_DEAD_AIR_TIMEOUT_S/LLM_REQUEST_TIMEOUT_MS/LLM_MAX_RETRIES/LLM_BACKOFF_MS/" +
-      "ELEVENLABS_SYNTH_TIMEOUT_MS).",
-  );
+// FW2: der Ausweich-Anbieter ist gesetzt, kann aber nicht ausweichen. WARN (s. Guard).
+function warnLlmFallbackUnusable(config) {
+  for (const finding of llmFallbackFindings({
+    provider: config.llm.llmProvider,
+    fallback: config.llm.llmProviderFallback,
+  }))
+    console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
 // GAP-19 (erste Haelfte): FORCE_NUMBER_COUNTRY entkoppelt das Kauf-Land vom Herkunftsland -
@@ -405,32 +455,66 @@ function warnElRegistrationSipCredsMissing(config) {
   );
 }
 
-// KV-P7: zwei latente Kosten-Pfade sichtbar machen (latentCostPathFindings, s.
-// boot-guard.js fuer die Begruendung je Befund). WARN, kein exit(1) - Muster
-// warnAlertChannelUnset. realtimeMidCallBudgetCheck kommt aus GENAU EINER Quelle
-// (REALTIME_MID_CALL_BUDGET_CHECK, src/bridge.js) - kein zweites Flag hier.
-function warnLatentCostPaths(config) {
-  const findings = latentCostPathFindings({
-    playTtsEnabled: config.voice.elevenLabsPlayTts.enabled,
-    realtimeEngineSelected: config.voice.voiceEngine === VOICE_ENGINE.REALTIME,
-    realtimeMidCallBudgetCheck: REALTIME_MID_CALL_BUDGET_CHECK,
-  });
-  for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+// KV-P7/IE3: zwei latente Kosten-Pfade sichtbar machen (latentCostPathFindings, s.
+// boot-guard.js fuer die Begruendung je Befund). Der IE3-Befund kann FATAL sein - Name
+// deshalb "assert" statt "warn" (N7), Umgang ueber applyBootFindings (G5).
+function assertLatentCostPaths(config) {
+  // IE3: EINE Quelle fuer "hat der neue Inbound-Weg einen belegten Kostenpfad" - die
+  // Profil-Registry, nicht ein zweites Flag hier. Benanntes Zwischenergebnis (G19), weil
+  // die Ableitung eine Aussage ist: leere Liste heisst "unbekanntes Profil ODER kein
+  // Traeger mit Einsammler", und beides ist genau der Fall, den der Riegel faengt.
+  const elInboundPflichtTraeger = pflichtTraegerFuerProfil(KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI);
+  applyBootFindings(
+    latentCostPathFindings({
+      playTtsEnabled: config.voice.elevenLabsPlayTts.enabled,
+      elInboundEnabled: config.voice.elevenLabsInbound.enabled,
+      elInboundCarrierHasCollector: elInboundPflichtTraeger.length > 0,
+    }),
+  );
+}
+
+// IEL-B1: Zugang des EL-Inbound-Wegs (elInboundAccessFindings, Begruendung dort). FATAL
+// moeglich -> "assert" (N7), Umgang ueber applyBootFindings (G5).
+function assertElInboundAccess(config) {
+  applyBootFindings(elInboundAccessFindings(config.voice.elevenLabsInbound));
+}
+
+// IEX-A9: Scope des EL-Inbound-Wegs (elInboundScopeFindings, Begruendung dort). FATAL moeglich -> "assert".
+function assertElInboundScope(config) {
+  applyBootFindings(elInboundScopeFindings(config.voice.elevenLabsInbound.scope));
+}
+
+// E5/S2-A6: Eindeutigkeit des ANGEKUENDIGTEN Origins (angekuendigterOriginFindings,
+// Begruendung fuer FATAL steht dort). Kann exit(1) -> "assert", und damit PFLICHTGEMAESS
+// vor rearmActiveCallTimers (INV-5).
+function assertAngekuendigterOrigin(config) {
+  applyBootFindings(
+    angekuendigterOriginFindings({
+      publicUrl: config.server.publicUrl,
+      oauthAudience: config.auth.oauthAudience,
+      allowedOrigins: config.safety.mcpAllowedOrigins,
+      isProduction: config.server.isProduction,
+    }),
+  );
 }
 
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel B) ist
 // das fuenfte, assertProviderRateInBand (LCT P4) das sechste, assertCostTruingBooking
-// (LCT P4) das siebte, assertSttProfile (STT-A1) das achte und assertPricedModels (B4a)
-// das neunte, das noch process.exit(1) rufen kann - warnStaleModelPrices/
-// warnAlertChannelUnset/warnTariffDrift/warnNumberOriginDecoupled/
-// warnMissingProvisioningConnection/warnLatentCostPaths/warnElRegistrationSipCredsMissing
-// sind reine Diagnose (nie fatal).
-function assertBootGates(config, store) {
+// (LCT P4) das siebte, assertSttProfile (STT-A1) das achte, assertPricedModels (B4a)
+// das neunte, assertPricedPlans (GP-P6) das zehnte, assertLatentCostPaths (IE3) das elfte,
+// assertElInboundAccess (IEL-B1) das zwoelfte, assertElInboundScope (IEX-A9) das dreizehnte und
+// assertAngekuendigterOrigin (E5/S2-A6) das vierzehnte, das noch process.exit(1)
+// rufen kann - warnStaleModelPrices/warnAlertChannelUnset/warnTariffDrift/
+// warnNumberOriginDecoupled/warnMissingProvisioningConnection/
+// warnElRegistrationSipCredsMissing/warnLlmFallbackUnusable (FW2) sind reine Diagnose
+// (nie fatal). warnKostenAlarmZielUnset
+// (KV2-1) ist ebenfalls reine Diagnose, nie fatal - PLUS ein durabler Eintrag (s. dort).
+function assertBootGates(config, store, durableAudit) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
-  // GAR NICHT gestartet - kein app.listen, kein /voice, kein /mcp, keine Audio-Bridge.
+  // GAR NICHT gestartet - kein app.listen, kein /voice, kein /mcp.
   // Lieber kein Dienst als ein Dienst mit lautlos abgeschaltetem Budget-/Kosten-Gate
   // (R4 Toll-Fraud). Die actionable Diagnose hat assertConfig() bereits ausgegeben.
   if (!ok) {
@@ -493,20 +577,26 @@ function assertBootGates(config, store) {
   // sie vor rearmActiveCallTimers() stehen (INV-5, s.u. in bootServer).
   assertSpendCapCoherence(config);
   assertPricedModels(config); // B4a: FATAL, s. dort
+  assertPricedPlans(config); // GP-P6: FATAL nur bei PAYMENT_ENABLED=true, s. dort
   warnStaleModelPrices(config); // B4a: WARN
   assertProviderRateInBand(config);
   assertCostTruingBooking(config, store);
   assertSttProfile(config);
+  assertAngekuendigterOrigin(config); // E5/S2-A6: kann exit(1)
   warnAlertChannelUnset(config);
+  warnKostenAlarmZielUnset(config, durableAudit); // KV2-1, WARN + durabel
   warnPlatformAniUnset(config); // OUTBOUND-E1, WARN
   warnOutboundDriftConfigUnset(config); // OUTBOUND-E4, WARN
   warnTariffDrift(config, store);
+  warnTarifpaar(config, store); // KV2-10, WARN: Tarifpaar-Waechter feuert beim Start
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
   warnTurnBudgetOverrun(config); // GAP-22, WARN
-  warnTurnOutlivesDeadAir(config); // AL-P6, WARN
+  warnLlmFallbackUnusable(config); // FW2, WARN
   warnNumberOriginDecoupled(config); // GAP-19, WARN
   warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
-  warnLatentCostPaths(config); // KV-P7, WARN
+  assertLatentCostPaths(config); // KV-P7/IE3: kann exit(1)
+  assertElInboundAccess(config); // IEL-B1: kann exit(1)
+  assertElInboundScope(config); // IEX-A9: kann exit(1)
   warnElRegistrationSipCredsMissing(config); // OUTBOUND-E5, WARN
 }
 
@@ -526,65 +616,59 @@ export function budgetAxisLabel(budgetMonthEnabled, axisLabelWhenFlagOff) {
     : `${axisLabelWhenFlagOff} (BUDGET_MONTH_ENABLED=false)`;
 }
 
-// AL-P1 (O1-Sonde): welcher Pfad live laeuft, waren ZWEI unabhaengige Schalter -
-// VOICE_ENGINE stand im Banner, das Assistant-Flag nirgends. Genau diese Blindheit hat den
-// Plan eine Messrunde gekostet. Eigene Funktion, damit die Banner-Zeile eine
-// Abstraktionsebene bleibt (G34) und die Bedingung einen Namen hat (G28).
-export function assistantPathLabel(assistantEnabled) {
-  return envFlagState("TELNYX_AI_ASSISTANT_ENABLED", assistantEnabled);
-}
-
-// GQ-P3: der Master-Schalter darueber meldete "AKTIV", waehrend INBOUND ueber die
-// Budget-Engine lief - diese Luege darf nicht zurueckkehren. Beide Schalter getrennt,
-// unkonditional (Muster capabilityProbeLines): eine im Aus-Zustand verschwindende Zeile
-// waere im Live-Log nicht von einem Deploy ohne Sonde zu unterscheiden.
-// Die Zeile faellt KEIN Gesamturteil - Provider und Body-Feld entscheiden je Anruf und
-// stehen in der inbound_path-Zeile je Leg (telnyx-inbound.js).
-export function inboundHandoffProbeLine(telnyxAssistant) {
+// IP4: welchen Inbound-Sprechpfad diese Instanz faehrt. Bis hierher war das am laufenden
+// Dienst nicht ablesbar - genau die Blindheit, an der "klingt anders als Outbound" haengt
+// (der Unterschied ist EIN Flag, nicht zwei driftende Schalter).
+//
+// EIN SACHVERHALT, ZWEI FRAGEN - und nur EINE Ableitung: die KV-M0-Zeile "Modelle: ..."
+// nennt den WERT des Schalters (Konfigurations-Abzug), diese hier den daraus folgenden
+// PFAD-Token. Abgeleitet wird er an genau einer Stelle (armedInboundSprechpfad,
+// telephony/sprechpfad.js) - derselbe Namensvorrat, den die Hoerprobe am gerenderten
+// TeXML misst (scripts/inbound-hoerprobe.mjs). Kein zweiter Ortsname fuer dasselbe.
+//
+// Unkonditional wie die AL-P16-Sonden: eine im Aus-Zustand verschwindende Zeile waere im
+// Live-Log nicht von einem Deploy ohne die Sonde zu unterscheiden. Sie faellt KEIN Urteil
+// je Anruf (s. armedInboundSprechpfad) - der Rueckfall steht ausdruecklich in der Zeile.
+export function inboundSprechpfadBannerLine(voice) {
   return probeLine(
-    "Inbound-Handoff",
-    envFlagState("TELNYX_INBOUND_HANDOFF_ENABLED", telnyxAssistant.inboundHandoffEnabled),
-    `wirkt nur mit TELNYX_AI_ASSISTANT_ENABLED=${telnyxAssistant.enabled} und Telnyx als Inbound-Provider`,
+    "Inbound-Sprechpfad",
+    `${armedInboundSprechpfad(voice.elevenLabsPlayTts)} (ELEVENLABS_PLAY_TTS_ENABLED=${voice.elevenLabsPlayTts.enabled})`,
+    `${SPRECHPFAD.PLAY_TTS} faellt bei erschoepftem Kontingent, Synthese-Fehler oder ` +
+      `Anbieter ohne Play-Audio fail-safe auf ${SPRECHPFAD.AZURE_SAY} zurueck`,
   );
 }
 
-// Messschalter (transcriptionFields, adapters/telnyx/voice.js): welcher Wert live steht,
-// war in diesem Projekt mehrfach nicht ablesbar - ein Schalter ohne Sonde ist eine neue
-// blinde Stelle (Muster inboundHandoffProbeLine, unkonditional). Fuer EINEN begleiteten
-// Testanruf gedacht, kein Dauerbetrieb.
-export function perCallTranscriptionProbeLine(telnyxAssistant) {
-  return probeLine(
-    "Pro-Call-Transkription",
-    envFlagState(
-      "TELNYX_PER_CALL_TRANSCRIPTION_ENABLED",
-      telnyxAssistant.perCallTranscriptionEnabled,
-    ),
-    "aus -> kein transcription-Feld im Call-Control-Body, Assistant-Config entscheidet allein",
-  );
+// IEL-B1: ist der EL-Inbound-Schalter an, und wie viele Tenants sind gepinnt? Nur Zustand
+// und Anzahl - NIE eine Tenant-ID (Regel 4/PII). Unkonditional wie die Sprechpfad-Zeile:
+// eine im Aus-Zustand fehlende Zeile waere von einem Deploy ohne sie nicht unterscheidbar.
+// IEX-A9 (E11): plus scope=<s> - der Wert ist zu diesem Zeitpunkt vom Boot-Befund geprueft (Enum, nie
+// Freitext).
+export function inboundElBannerLine(elevenLabsInbound) {
+  const zustand = elevenLabsInbound.enabled ? "an" : "aus";
+  return `Inbound-EL: ${zustand}, ${inboundElPinnedTenantCount(elevenLabsInbound.tenantIds)} Tenants, scope=${elevenLabsInbound.scope}`;
 }
 
 // AL-P14: der In-Call-Consult exportiert Inhalte aus einem LAUFENDEN Gespraech an den
 // MCP-Host. Ein solcher Schalter darf nicht unbemerkt scharf sein (Muster
-// assistantPathLabel). Aus -> keine Zeile, Banner byte-identisch.
+// thinkingSignalBannerLine). Aus -> keine Zeile, Banner byte-identisch.
 export function inCallConsultBannerLine(tenancy) {
   return tenancy.inCallConsultEnabled ? "In-Call-Consult: AKTIV (IN_CALL_CONSULT_ENABLED=true)" : "";
 }
 
-// AL-P7: welcher Draht live laeuft, darf nicht wieder nur im Code stehen (die
-// Assistant-Flag-Blindheit hat den Plan schon eine Messrunde gekostet). Aus -> keine
-// Zeile, Banner byte-identisch (Muster inCallConsultBannerLine).
-export function tokenStreamingBannerLine(telnyxAssistant) {
-  return telnyxAssistant.shimTokenStreaming
-    ? "Token-Streaming: AKTIV (TELNYX_SHIM_TOKEN_STREAMING=true)"
-    : "";
-}
-
 // AL-P7b: das Denk-Signal aendert, WAS der Anrufer hoert. Ein solcher Schalter darf nicht
-// unbemerkt scharf sein (Muster tokenStreamingBannerLine / inCallConsultBannerLine, und die
+// unbemerkt scharf sein (Muster inCallConsultBannerLine, und die
 // Repo-Lehre "Deploy-Stand nie aus einer Notiz lesen"). Aus -> keine Zeile, Banner
 // byte-identisch.
 export function thinkingSignalBannerLine(voice) {
   return voice.thinkingSignalEnabled ? "Denk-Signal: AKTIV (THINKING_SIGNAL_ENABLED=true)" : "";
+}
+
+// IEP-P6: der Inbound-Owner-Ton aendert, WAS der Anrufer als ersten Satz hoert. Ein
+// solcher Schalter darf nicht unbemerkt scharf sein (Muster thinkingSignalBannerLine).
+// Nur Zustand und ANZAHL - nie eine Tenant-ID (Regel 4/PII).
+export function inboundOwnerGreetingBannerLine(voice) {
+  if (!voice.inboundOwnerGreetingEnabled) return "";
+  return `Inbound-Owner-Ton: AKTIV (INBOUND_OWNER_GREETING_ENABLED=true, ${voice.inboundOwnerGreetingTenantIds.length} Tenants)`;
 }
 
 // ---- AL-P16: Boot-Sonden fuer die blinden Schalter -------------------------------
@@ -804,7 +888,7 @@ function publicUrlOrHint(server) {
   return server.publicUrl || "PUBLIC_URL fehlt!";
 }
 
-function logBootBanner(config, port) {
+function logBootBanner(config, port, state) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
   // Wert aus derselben Quelle, G5) und wird von docs/RUNBOOK-RESTORE.md gelesen.
@@ -814,17 +898,19 @@ function logBootBanner(config, port) {
   console.log(`\n  Hermes Gateway laeuft auf ${gatewayUrlForPort(port)}`);
   console.log(`  Dashboard:      ${gatewayUrlForPort(port)}`);
   console.log(
-    `  Voice-Engine:   ${config.voice.voiceEngine}${config.voice.voiceEngine === VOICE_ENGINE.REALTIME && !config.voice.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
+    `  Voice-Engine:   ${config.voice.voiceEngine}`,
   );
-  console.log(`  Assistant-Pfad: ${assistantPathLabel(config.telnyx.telnyxAssistant.enabled)}`);
-  console.log(`  ${inboundHandoffProbeLine(config.telnyx.telnyxAssistant)}`);
-  console.log(`  ${perCallTranscriptionProbeLine(config.telnyx.telnyxAssistant)}`);
+  console.log(`  ${inboundSprechpfadBannerLine(config.voice)}`);
+  console.log(`  ${inboundElBannerLine(config.voice.elevenLabsInbound)}`);
+  // IEL-B1 (E13): serverseitiger Tenant-DID-Beleg ohne Prod-DB - aus dem GELADENEN Store,
+  // unabhaengig vom Schalter, nur letzte Ziffern, nie Tenant-ID.
+  console.log(`  ${inboundElAllowlistProbeLine({ state, tenantIds: config.voice.elevenLabsInbound.tenantIds })}`);
   const inCallConsult = inCallConsultBannerLine(config.tenancy);
   if (inCallConsult) console.log(`  ${inCallConsult}`);
-  const tokenStreaming = tokenStreamingBannerLine(config.telnyx.telnyxAssistant);
-  if (tokenStreaming) console.log(`  ${tokenStreaming}`);
   const thinkingSignal = thinkingSignalBannerLine(config.voice);
   if (thinkingSignal) console.log(`  ${thinkingSignal}`);
+  const inboundOwnerGreeting = inboundOwnerGreetingBannerLine(config.voice);
+  if (inboundOwnerGreeting) console.log(`  ${inboundOwnerGreeting}`);
   // AL-P16: die Sonden stehen unkonditional, auch im Aus-Zustand (s. Kommentar bei
   // capabilityProbeLines).
   for (const line of capabilityProbeLines(config)) console.log(`  ${line}`);
@@ -984,7 +1070,7 @@ export function derivePlatformNumberBindings({ config, store }) {
 // Zweig traegt zusaetzlich sein eigenes .catch() (zweite Linie, Muster der beiden
 // Bestandszweige). test/kv-m4-monthly-cross-check.test.js (KV-M4-8) belegt die Isolation
 // direkt gegen diese Funktion, nicht nur als Behauptung im Kommentar.
-export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch }) {
+export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }) {
   void costTruing
     .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
     .catch((err) => console.error("[cost-truing]", err.message));
@@ -1022,6 +1108,29 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageW
   void driftWatch
     .runDriftSweep()
     .catch((err) => console.error("[drift-watch]", err.message));
+  // GP-P0 (PLAN-GELDPFAD.md 2): ACHTER, unabhaengiger Schritt im selben Stunden-Takt -
+  // meldet einen aktiven, verifizierten Subscriber, der laenger als die Frist keine
+  // Live-Nummer hat. Kein zweiter Timer, keine neue Ressource. Reine Beobachtung: dieser
+  // Zweig kauft nichts und stoesst nichts an. Frist + Entprellung sitzen IM Waechter,
+  // nicht hier.
+  void paidWithoutNumberWatch
+    .runPaidWithoutNumberSweep()
+    .catch((err) => console.error("[paid-no-number]", err.message));
+  // GP-P4 (PLAN-GELDPFAD.md 2): NEUNTER, unabhaengiger Schritt im selben Stunden-Takt -
+  // stoesst einen zahlenden Mandanten ohne Live-Nummer erneut an, wenn die letzte
+  // Ablehnung NICHT strukturell ist und der Versuchszaehler frei ist. Kein zweiter Timer,
+  // keine neue Ressource. Anders als der achte Zweig beobachtet dieser nicht, er HANDELT:
+  // Mindestfrist, Deckel und Eignungs-Gate sitzen IM Zweig (geteilter Kern
+  // billing/provision-retry.js), nicht hier.
+  void provisionRetryWatch
+    .runProvisionRetrySweep()
+    .catch((err) => console.error("[provision-retry-sweep]", err.message));
+  // GP-P6 (PLAN-GELDPFAD.md 2): ZEHNTER, unabhaengiger Schritt im selben Stunden-Takt -
+  // vergleicht den ANGEZEIGTEN Katalogpreis mit dem, was Stripe wirklich abbucht. Kein
+  // zweiter Timer. Der Tages-Takt (PRICE_DRIFT_MIN_INTERVAL_MS) sitzt IM Waechter.
+  void priceDriftWatch
+    .runPriceDriftSweep()
+    .catch((err) => console.error("[price-drift]", err.message));
 }
 
 // EL-NEUSTART-4: das Netz unter dem Drain. Eine offene Rueckfrage haengt an einem Warter
@@ -1090,14 +1199,13 @@ export async function bootServer({
   config,
   store,
   lifecycle,
-  // Boot-Re-Arm der Dead-Air-Wache (s. unten bei rearmActiveCallTimers). Dieselbe EINE
-  // Instanz, die Shim und Call-Control-Ingest teilen (INV-7) - server.js reicht sie im
-  // deps-Buendel bereits durch, hier wird sie nur ausgepackt.
-  conversationWatchdog,
   callFinish,
   provisioning,
   costTruing,
   costCrossCheck,
+  // KV2-1: die EINE Audit-Funktion des Kostenpfads (Konsole + durabel) - der Boot-Befund
+  // warnKostenAlarmZielUnset schreibt ueber sie denselben durablen Marker wie der Sweep.
+  durableAudit,
   // OUTBOUND-E3b: vierter, unabhaengiger Zweig desselben Stunden-Sweeps (runSweepTick) -
   // dieselbe EINE Instanz wie costTruing/costCrossCheck (INV-7), server.js reicht sie im
   // deps-Buendel durch.
@@ -1105,12 +1213,29 @@ export async function bootServer({
   // OUTBOUND-E4: siebter, unabhaengiger Zweig desselben Stunden-Sweeps (runSweepTick) +
   // eigener Boot-Lauf. Dieselbe EINE Instanz (INV-7), server.js reicht sie durch.
   driftWatch,
+  // GP-P0: achter, unabhaengiger Zweig desselben Stunden-Sweeps. Dieselbe EINE Instanz
+  // (INV-7), server.js reicht sie durch. KEIN eigener Boot-Lauf: der Befund ist
+  // zeit-basiert und verliert nichts, wenn er erst im ersten Tick faellt.
+  paidWithoutNumberWatch,
+  // GP-P4: neunter, unabhaengiger Zweig desselben Stunden-Sweeps. Dieselbe EINE Instanz
+  // (INV-7), server.js reicht sie durch. KEIN eigener Boot-Lauf: ein Deploy-Sturm duerfte
+  // sonst je Neustart einen Kaufanstoss ausloesen - die Mindestfrist faengt das zwar ab,
+  // aber der Zweig braucht den Boot-Lauf gar nicht (der naechste Tick genuegt).
+  provisionRetryWatch,
+  // GP-P6: zehnter, unabhaengiger Zweig desselben Stunden-Sweeps + eigener Boot-Lauf.
+  // Dieselbe EINE Instanz (INV-7), server.js reicht sie durch.
+  priceDriftWatch,
   messaging,
   consultDelivery,
   // Boot-Re-Arm des EL-Ergebnisabrufs (s. unten bei rearmActiveConversationPolls). Dieselbe
   // EINE Instanz wie bei makeCallRoutes (INV-7) - server.js reicht sie im deps-Buendel
   // bereits durch, hier wird sie nur ausgepackt.
   elevenLabsOutbound,
+  // IEL-B6: Boot-Re-Arm der aeusseren Bruecken-Frist (s. unten bei rearmDeadlines). Dieselbe
+  // EINE Instanz wie an der Init-Route (INV-7).
+  inboundBridges,
+  // IEX-A8 (E8/E11): Registrierungs-Beleg-Sweep. Dieselbe EINE Instanz (INV-7), server.js reicht sie durch.
+  inboundTrunkSweep,
 }) {
   // S1-4: json.js wirft aus load(), wenn ein korrupter Store NICHT forensisch gesichert
   // werden konnte (statt ihn still mit Defaults zu ueberschreiben). Ohne dieses explizite
@@ -1134,7 +1259,7 @@ export async function bootServer({
   const openPlatformBindings = derivePlatformNumberBindings({ config, store });
   for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
     console.warn(`[boot] ${finding.message}`);
-  assertBootGates(config, store);
+  assertBootGates(config, store, durableAudit);
 
   // LCT P3: Kosten-Abgleich im Beobachtungsmodus. Muster der beiden bestehenden
   // periodischen Jobs (Retention hier, DID-Release-Reconciler in wiring/web-login.js):
@@ -1164,7 +1289,7 @@ export async function bootServer({
   // mit (runSweepTick oben, exportiert und direkt testbar) - kein zweiter Timer, keine
   // neue Ressource.
   setInterval(
-    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch }),
+    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }),
     config.billing.costTruingSweepIntervalMs,
   ).unref();
 
@@ -1179,32 +1304,32 @@ export async function bootServer({
   // OT-4). Kein Gate danach darf mehr process.exit(1) rufen.
   lifecycle.rearmActiveCallTimers();
 
-  // Zweite Achse desselben Boot-Problems: der Cap-Re-Arm darueber deckt ein ueberlebendes
-  // Leg mit Groessenordnung MAX_CALL_DURATION_CAP_S, die Dead-Air-Frist des Gespraechs-
-  // Waechters mit Groessenordnung 45 s - dessen Timer nimmt ein Deploy genauso mit, und
-  // sein einziger Armierer (ai_assistant_start, Call-Control-Ingest) kommt fuer ein bereits
-  // laufendes Gespraech nie wieder. UNMITTELBAR NACH dem Cap-Re-Arm und aus DESSEN
-  // Ergebnis: der Zombie-Zweig dort setzt den Endstatus synchron (persistEnd laeuft vor dem
-  // ersten await in terminateAndBillCall), der Schnappschuss traegt also nur noch Zeilen,
-  // die wirklich weiterlaufen; welche davon ein Assistant-Leg sind, entscheidet der
-  // Waechter an den Merkmalen AM CALL, nicht an einem Flag (isRunningAssistantLeg).
-  // Setzt ausschliesslich Timer - INV-5 (kein exit(1) nach dem Re-Arm) bleibt unberuehrt,
-  // der Max-Dauer-Cap und sein Re-Arm sind unveraendert.
-  conversationWatchdog.rearmActiveCalls(store.load().calls);
+  // IE2: dieselbe Boot-Naht fuer die GELD-Achse. Der Cap-Re-Arm darueber deckt ein
+  // ueberlebendes Leg gegen die ZEIT, dieser gegen das GUTHABEN - B8: ohne wiederkehrende
+  // Frage wirkt die pro-Tenant-Decke mid-call nur, wenn ein Turn oder ein Werkzeug feuert.
+  // UNMITTELBAR NACH dem Cap-Re-Arm und aus DESSEN Ergebnis: dessen Zombie-Zweig setzt den
+  // Endstatus synchron (persistEnd laeuft vor dem ersten await in terminateAndBillCall), der
+  // Schnappschuss traegt also nur noch Zeilen, die wirklich weiterlaufen. Setzt
+  // ausschliesslich Timer - INV-5 (kein exit(1) nach dem Re-Arm) bleibt unberuehrt.
+  lifecycle.rearmBudgetWatchdogs();
 
-  // Dritte Achse desselben Boot-Problems: die beiden Re-Arms darueber holen Timer zurueck,
+  // Zweite Achse desselben Boot-Problems: die beiden Re-Arms darueber holen Timer zurueck,
   // die der Neustart genommen hat - diese Naht schliesst den Zustand, den kein Timer mehr
   // erreicht (s. expireOrphanedConsults). NACH dem Cap-Re-Arm, damit ein dort terminalisierter
   // Zombie hier gar nicht erst als laufender Anruf auftaucht.
   expireOrphanedConsults(store);
 
-  // Vierte Achse desselben Boot-Problems (Owner-Auftrag 15.08.2026, Aufgabe 2): der
+  // Dritte Achse desselben Boot-Problems (Owner-Auftrag 15.08.2026, Aufgabe 2): der
   // ziehende EL-Ergebnisabruf (elevenlabs/outbound.js#scheduleResultPoll) ist ein reiner
   // In-Prozess-setTimeout mit originateCall als einzigem Ausloeser - ein Neustart nimmt ihn
   // mit, ein aktiver EL-Call bleibt fuer immer "active". Setzt ausschliesslich Timer bzw.
   // terminiert ueber denselben EINEN Terminierungspfad wie jeder andere Zombie (INV-5: kein
   // exit(1) danach).
   elevenLabsOutbound.rearmActiveConversationPolls();
+
+  // IEL-B6 (E9): vierte Achse - die aeussere Bruecken-Frist jedes WARTET-Calls, Restfrist aus
+  // answeredAt. Setzt ausschliesslich Timer (INV-5: kein exit(1) danach).
+  inboundBridges.rearmDeadlines();
 
   const httpServer = app.listen(config.server.port, () => {
     // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port
@@ -1214,7 +1339,12 @@ export async function bootServer({
     // nach listen() bekannter Wert ist keine Umgebungs-Konfiguration. Ein gesetztes
     // GATEWAY_URL bleibt vorrangig - genau wie beim frueheren ||=.
     setBoundGatewayPort(port);
-    logBootBanner(config, port);
+    logBootBanner(config, port, store.load());
+    // IEX-A8 (E11): Beleg-Zahlen stehen AUSSCHLIESSLICH in der Zeile, die der Sweep NACH seinem letzten GET
+    // schreibt - die Vor-listen-Sonde (inboundElAllowlistProbeLine) zeigt nur den DB-Stand davor und nennt keine.
+    // Fire-and-forget NACH den Boot-Logs (Muster driftWatch.runBootProbe): Anbieter-IO blockiert weder listen noch
+    // Healthcheck; runBootSweep rejectet nie. Setzt keine Timer und ruft kein exit - INV-5 unberuehrt.
+    void inboundTrunkSweep.runBootSweep();
     // PROV-01/F5: Crash-verwaiste Provisioning-Jobs beim Boot reconcilen. Fire-and-forget NACH
     // den Boot-Logs - blockiert weder listen noch Healthcheck; der Boot-Guard (hasActiveNumber)
     // lief bereits davor. Gated auf PROVISIONING_ENABLED, Default Observe-Only (maxAge=0).
@@ -1237,10 +1367,11 @@ export async function bootServer({
     // Timeout je Abfrage und seine Mindestfrist (OUTBOUND_DRIFT_MIN_INTERVAL_MS) - ohne
     // sie liefe er bei einem externen 10-Minuten-Ping bis zu 144x/Tag statt einmal.
     void driftWatch.runBootProbe().catch((err) => console.error("[drift-watch] Boot-Sonde:", err.message));
+    // GP-P6: EIN Lauf beim Start - fire-and-forget NACH den Boot-Logs (Muster
+    // driftWatch.runBootProbe direkt darueber). Anbieter-IO gehoert nie an die
+    // Boot-Sequenz; die Mindestfrist im Waechter macht daraus hoechstens EINEN Abruf/Tag.
+    void priceDriftWatch.runBootProbe().catch((err) => console.error("[price-drift] Boot-Sonde:", err.message));
   });
-
-  // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)
-  attachMediaBridge(httpServer, callFinish.finishCall);
 
   // AL-P13: offene Consult-Polls werden VOR httpServer.close() aufgeloest. Ohne das
   // haelt ein 22-s-Poll den Drain auf, der Watchdog kappt mit exit(0) - und der

@@ -6,9 +6,20 @@
 // tariffCentsPerMin (src/telephony/outbound-gates.js) wird von dieser Phase NICHT
 // importiert und NICHT beruehrt. Seit P5 wird nur das reine Praefix-Praedikat
 // hasCountryPrefix aus demselben Modul geteilt (EINE Praefix-Frage, kein Tarif-Lookup).
-import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, PROVIDER_RATE_SCALE } from "../store/defaults.js";
+import {
+  MICRO_CENTS_PER_CENT,
+  PROVIDER_RATE_SCALE,
+  isProviderMicroCents,
+  istBeweisendeHerkunft,
+} from "../store/defaults.js";
 import { hasCountryPrefix } from "../telephony/outbound-gates.js";
 import { voiceMinutesOf } from "./metering.js";
+// KV2-10: Route = Kostenprofil der Engine-Weiche; EINE Quelle (G5), keine hier gepflegte
+// zweite Routen-Liste. Beide Importe sind zyklus-frei (kostenarten.js ist importfrei,
+// kosten-projektion.js importiert cost-calibration.js nicht).
+import { KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
+import { settlementProjektion } from "./kosten-projektion.js";
+import { LEERE_LISTE } from "./kosten-abschluss.js";
 
 // Groesse des rollenden Fensters: die juengsten N abgeglichenen Calls je Praefix.
 // KEINE Env (G35): der Operator steuert die Aussagekraft ueber die Mindest-Stichprobe,
@@ -46,8 +57,13 @@ const ALERTABLE_DRIFT_CODES = Object.freeze([
   TARIFF_DRIFT_FINDING.CONVERSION_ERROR,
 ]);
 
-// Nur BEWIESEN vollstaendig abgeglichene Calls (costTruedSource === DETAIL_RECORDS)
-// sind Stichproben. 'incomplete' ist systematisch ZU NIEDRIG - liesse man es zu,
+// Nur BEWIESEN vollstaendig abgeglichene Calls sind Stichproben - seit KV2-8 zwei
+// Herkunftswerte (Bestandszeilen 'telnyx_detail_records', neue Settlements
+// 'kostenbuch_vollbeleg'), abgefragt ueber die EINE Quelle in defaults.js statt ueber eine
+// hier gepflegte zweite Liste (G5). 'kostenbuch_teilbeleg' ist wie 'incomplete'
+// systematisch ZU NIEDRIG und bleibt draussen - sonst alarmierte der Waechter gegen seine
+// eigene Datenluecke.
+// 'incomplete' ist systematisch ZU NIEDRIG - liesse man es zu,
 // erzeugte die lueckenhafte Messung selbst den Befund 'overestimate' und der Waechter
 // alarmierte gegen seine eigene Datenluecke (P4-Risiko/PM-8).
 // Praefix an BEIDEN Enden (P5, Herkunfts-Achse): Stichprobe ist nur, was auch zum
@@ -56,7 +72,7 @@ const ALERTABLE_DRIFT_CODES = Object.freeze([
 // verschiedene Groessen.
 function isDriftSample(call, prefix) {
   return (
-    call.costTruedSource === COST_TRUING_SOURCE.DETAIL_RECORDS &&
+    istBeweisendeHerkunft(call.costTruedSource) &&
     hasCountryPrefix(call.to, prefix) &&
     hasCountryPrefix(call.from, prefix)
   );
@@ -75,6 +91,16 @@ function providerMicroCentsPerMinOf(call) {
   return Math.ceil(call.actualCostMicroCents / minutes);
 }
 
+// Nearest-Rank-Perzentil EINES aufsteigend sortierten Ganzzahl-Feldes (KV2-10, G5: EIN
+// Idiom fuer den Praefix- UND den Routen-Waechter, vorher stand der Rang-Ausdruck nur in
+// measuredCentsPerMinByPrefix). werte MUSS aufsteigend sortiert sein; n <= 20 liefert fuer
+// p95 den Hoechstwert (Rank ceil(0,95*8) = 8) - ein einzelner Ausreisser traegt dann allerdings
+// auch den ganzen Wert; das ist die bekannte p95-Eigenschaft, keine neue.
+export function nearestRankWert(werte, percent) {
+  const rank = Math.ceil((werte.length * percent) / PERCENT_BASE) - 1;
+  return werte[rank];
+}
+
 // REINE Funktion, KEIN Zeitzugriff im Rumpf (Muster voiceMinutesUsedSince: was nach
 // "zuletzt" aussieht, kommt aus den Daten - endedAt -, nie aus der Uhr).
 // Liefert { samples, p95ProviderMicroCentsPerMin } - die EINHEIT steht im Feldnamen,
@@ -90,8 +116,7 @@ export function measuredCentsPerMinByPrefix(calls, prefix) {
     .filter((r) => r !== null)
     .sort((a, b) => a - b); // aufsteigend fuer den Rang
   if (rates.length === 0) return { samples: 0, p95ProviderMicroCentsPerMin: null };
-  const rank = Math.ceil((rates.length * DRIFT_PERCENTILE) / PERCENT_BASE) - 1;
-  return { samples: rates.length, p95ProviderMicroCentsPerMin: rates[rank] };
+  return { samples: rates.length, p95ProviderMicroCentsPerMin: nearestRankWert(rates, DRIFT_PERCENTILE) };
 }
 
 // WAEHRUNGSRICHTUNG, explizit - in der Planungsphase zweimal die Wurzel eines Befundes:
@@ -182,4 +207,252 @@ export function driftLine(entry) {
   const befund = `befund=${entry.code ?? "im_band"}`;
   if (entry.code === TARIFF_DRIFT_FINDING.CONVERSION_ERROR) return `${head} ${configured} ${befund}`;
   return `${head} ${configured} gemessen=${entry.measuredCentsPerMin}ct ${befund}`;
+}
+
+// ---- KV2-10 (Plan 5/KV2-10, Owner-Entscheidungen 5+6): Tarifpaar-Waechter je Route ----
+// Misst - justiert NICHT (Owner-Entscheidung 6, 2026-08-30: der Waechter misst und
+// alarmiert, die Zahl setzt ein Mensch; der Kopfkommentar dieser Datei bleibt Wahrheit).
+// Der Tarif ist ZWEITEILIG (Owner-Entscheidung 5): Grundbetrag je ANRUF plus Minutensatz,
+// je Route (Kostenprofil der Engine-Weiche) - die EL-Kosten haben einen grossen fixen
+// Anteil je Anruf, und Telnyx rundet immer auf die volle Minute auf; ein einzelner
+// Minutensatz muesste den 8-Sekunden-Anruf decken und ueberzahlte jeden langen.
+//
+// VOLLKOSTEN je Anruf = Belegsumme (alle Traeger, Provider-Mikro -> Bucket ueber DIE EINE
+// Kursfunktion) PLUS Eigen-Cent (Katalogzeilen #4 ai_token und #5 research_fee - sie fallen
+// auch auf dem EL-Weg an, AUFTRAG B2/R9-2). Fuer die Eigen-Achsen existiert KEINE
+// je-Anruf-Quelle: bookTokenUsage schreibt usage_event nur mit callId fuer die
+// Zusammenfassung (Briefing/Eroeffnungssatz buchen callId:null, sie laufen VOR
+// store.createCall), research_fee schreibt gar kein usage_event. Der Waechter nimmt sie
+// deshalb als INJIZIERTE Quelle entgegen (eigenCentJeAnruf, Default null); null heisst
+// benannt "keine je-Anruf-Quelle": JEDER Anruf wird als Stichprobe verweigert und der
+// Report meldet tarifpaar_zu_wenig_proben - laut, nicht alarmierend, in jeder Sweep- und
+// Boot-Zeile sichtbar. Kein geratener Zuschlag, keine tenant-weite Mittelung (Fabrikation),
+// kein toter Bauform-Zweig hinter einem Flag. Der Waechter misst runtime erst, wenn diese
+// Quelle existiert (per-Call-Erfassung der Eigen-Achsen - eigene Phase nach KV2-10); bis
+// dahin ist er sichtbar-wartend, nie scheinbar-messend.
+
+export const TARIFPAAR_FINDING = Object.freeze({
+  // konfiguriertes Paar deckt die p95-Stichprobe nicht - die geldrelevante Richtung
+  UNTERSCHAETZT: "tarifpaar_unterschaetzt",
+  // sichtbar, NICHT alarmierbar (Muster insufficient_samples)
+  ZU_WENIG_PROBEN: "tarifpaar_zu_wenig_proben",
+});
+
+// Ausschluss-Gruende EINES Anrufs aus der Stichprobe (nur Zaehler, keine zweite Meinung -
+// dieselbe Regel wie COVERAGE_BUCKET in cost-truing.js).
+export const TARIFPAAR_FEHLGRUND = Object.freeze({
+  // kein beweisender costTruedSource (istBeweisendeHerkunft) - auch jeder laufende Anruf
+  HERKUNFT: "herkunft",
+  // Kriterium (b): Profil-SOLL nicht erfuellt (settlementProjektion.vollBelegt === false)
+  BELEG_UNVOLLSTAENDIG: "beleg_unvollstaendig",
+  // R9-2: keine je-Anruf-Quelle fuer #4/#5 -> KEIN Sample (systematisch zu niedrig)
+  EIGEN_ACHSEN: "eigen_achsen",
+  // Belegsumme unbrauchbar oder Kurs-Umrechnung verliess den sicheren Integer-Bereich
+  UEBERLAUF: "ueberlauf",
+  // voiceMinutesOf <= 0 (keine bewertbare Menge)
+  MINUTEN: "minuten",
+});
+
+// Vollkosten EINES Anrufs in BUCKET-Cent (EUR): Belegsumme (Provider-Mikro -> Bucket ueber
+// DIE EINE Kursfunktion) + Eigen-Cent. null bei unbrauchbarer Belegsumme oder Ueberlauf -
+// nie still 0 (PM-4/G26: "nicht berechenbar" ist nicht "kostet nichts").
+export function vollkostenCentsJeAnruf({ belegMikroCents, eigenCent }, rateMicro) {
+  if (!isProviderMicroCents(belegMikroCents)) return null;
+  const belegCents = providerMicroCentsToBucketCents(belegMikroCents, rateMicro);
+  if (belegCents === null) return null;
+  const vollkostenCents = belegCents + eigenCent;
+  return Number.isSafeInteger(vollkostenCents) ? vollkostenCents : null;
+}
+
+// Die Eigen-Cent je Anruf aus der injizierten Quelle. null heisst "kein Wert fuer DIESEN
+// Anruf" - die Quelle existiert prozessweit nicht (null) oder fuer diesen Call nicht;
+// beides ist R9-2 und verweigert die Stichprobe, statt sie zu niedrig zu messen.
+function eigenCentOf(eigenCentJeAnruf, callId) {
+  const wert = eigenCentJeAnruf?.get(callId);
+  return Number.isSafeInteger(wert) && wert >= 0 ? wert : null;
+}
+
+// Belegzeilen eines States nach callId gruppiert (EIN Durchlauf statt eines Lookups je
+// Anruf; Muster belegSummeJeTraegerFuerMonat in kosten-projektion.js).
+function belegzeilenJeCall(zeilen) {
+  const jeCall = new Map();
+  for (const zeile of Array.isArray(zeilen) ? zeilen : []) {
+    if (!jeCall.has(zeile.callId)) jeCall.set(zeile.callId, []);
+    jeCall.get(zeile.callId).push(zeile);
+  }
+  return jeCall;
+}
+
+// Bewertet EINEN Anruf als Stichprobe ODER nennt den Ausschlussgrund - genau einer von
+// beiden Ausgaengen. Die Reihenfolge ist eine Aussage (beweisende Herkunft ist die
+// billigste Pruefung am Call selbst, die Kurs-Arithmetik kommt zuletzt): ein Anruf, der
+// an MEHREREN Bedingungen krankt, zaehlt bei der aussagekraeftigsten, naechstliegenden.
+// EIGEN_ACHSEN steht bewusst VOR MINUTEN: die Quelle ist die globale Luecke dieser Phase,
+// ohne sie waere jede andere Aussage eine am unvollstaendigen Material.
+function stichprobeOderFehlgrund({ call, belege, eigenCentJeAnruf, rateMicro }) {
+  if (!istBeweisendeHerkunft(call.costTruedSource)) return { fehlgrund: TARIFPAAR_FEHLGRUND.HERKUNFT };
+  const projektion = settlementProjektion({ call, belege });
+  if (!projektion.vollBelegt) return { fehlgrund: TARIFPAAR_FEHLGRUND.BELEG_UNVOLLSTAENDIG };
+  const eigenCent = eigenCentOf(eigenCentJeAnruf, call.id);
+  if (eigenCent === null) return { fehlgrund: TARIFPAAR_FEHLGRUND.EIGEN_ACHSEN };
+  const minuten = voiceMinutesOf(call);
+  if (minuten <= 0) return { fehlgrund: TARIFPAAR_FEHLGRUND.MINUTEN };
+  const vollkostenCents = vollkostenCentsJeAnruf({ belegMikroCents: projektion.summeMikroCents, eigenCent }, rateMicro);
+  if (vollkostenCents === null) return { fehlgrund: TARIFPAAR_FEHLGRUND.UEBERLAUF };
+  return { stichprobe: { route: kostenprofilFuerAnruf(call), minuten, vollkostenCents } };
+}
+
+// Alle Stichproben je Route. Liefert { jeRoute: Map<route, stichproben[]>, ausgeschlossen:
+// Map<fehlgrund, anzahl> } mit stichprobe = { route, minuten, vollkostenCents }. jeRoute
+// startet mit LEERER Liste je bekannter Route (eine Route ohne Anrufe ist eine Aussage,
+// keine Abwesenheit - Muster prefixes im Praefix-Waechter). Der Waechter hat KEIN
+// rollendes Fenster (DRIFT_SAMPLE_WINDOW passt nicht: der Grundbetrag braucht die
+// KURZEN Anrufe, ein Fenster ueber die juengsten N wuerde sie proportional verduennen).
+export function vollkostenStichprobenJeRoute({ state, eigenCentJeAnruf, rateMicro }) {
+  const jeRoute = new Map(Object.values(KOSTENPROFIL).map((route) => [route, []]));
+  const ausgeschlossen = new Map();
+  const belegeNachCall = belegzeilenJeCall(state?.callCostEvidence);
+  for (const call of Array.isArray(state?.calls) ? state.calls : []) {
+    const ergebnis = stichprobeOderFehlgrund({
+      call,
+      belege: belegeNachCall.get(call.id) ?? [],
+      eigenCentJeAnruf,
+      rateMicro,
+    });
+    if (ergebnis.fehlgrund !== undefined) {
+      ausgeschlossen.set(ergebnis.fehlgrund, (ausgeschlossen.get(ergebnis.fehlgrund) ?? 0) + 1);
+      continue;
+    }
+    jeRoute.get(ergebnis.stichprobe.route).push(ergebnis.stichprobe);
+  }
+  return { jeRoute, ausgeschlossen };
+}
+
+// Der VORSCHLAG aus den Stichproben EINER Route: grundbetragCents = p95 der Vollkosten je
+// Anruf; minutensatzCents = p95 von ceil(vollkosten/minuten). Beweisbar deckend: der
+// Grundbetrag allein deckt bereits die p95 der Je-Anruf-Kosten (Minutensatz >= 0 addiert).
+// null bei 0 Stichproben - kein Paar aus dem Nichts (PM-4).
+export function tarifpaarVorschlag(stichproben) {
+  if (stichproben.length === 0) return null;
+  const vollkostenAufsteigend = stichproben
+    .map((stichprobe) => stichprobe.vollkostenCents)
+    .sort((links, rechts) => links - rechts);
+  const jeMinuteAufsteigend = stichproben
+    .map((stichprobe) => Math.ceil(stichprobe.vollkostenCents / stichprobe.minuten))
+    .sort((links, rechts) => links - rechts);
+  return {
+    grundbetragCents: nearestRankWert(vollkostenAufsteigend, DRIFT_PERCENTILE),
+    minutensatzCents: nearestRankWert(jeMinuteAufsteigend, DRIFT_PERCENTILE),
+  };
+}
+
+// Deckt das KONFIGURIERTE Paar die p95-Stichprobe? p95 der Restwerte
+// (vollkosten - (grundbetrag + minutensatz * minuten)) <= 0 -> true. Paar null oder keine
+// Stichprobe -> false ("keine Aussage" wird nie als "gedeckt" gelesen, PM-4).
+export function tarifpaarDecktStichproben(paar, stichproben) {
+  if (paar === null || stichproben.length === 0) return false;
+  const restAufsteigend = stichproben
+    .map((stichprobe) => stichprobe.vollkostenCents - (paar.grundbetragCents + paar.minutensatzCents * stichprobe.minuten))
+    .sort((links, rechts) => links - rechts);
+  return nearestRankWert(restAufsteigend, DRIFT_PERCENTILE) <= 0;
+}
+
+// Der Ausschluss-Zaehler als Zeilen-Fragment (Muster zaehlListe): feste Reihenfolge nach
+// der TARIFPAAR_FEHLGRUND-Deklaration, nur Zaehler > 0, nie gerundet. LEERE_LISTE
+// ("keine") heisst: fuer diese Messung wurde NIEMAND ausgeschlossen - die Route hat
+// schlicht keine Anrufe (proben=0 daneben nennt denselben Sachverhalt).
+function fehlgrundZeile(ausgeschlossen) {
+  const teile = Object.values(TARIFPAAR_FEHLGRUND)
+    .filter((grund) => (ausgeschlossen.get(grund) ?? 0) > 0)
+    .map((grund) => `${grund}(${ausgeschlossen.get(grund)})`);
+  return teile.length > 0 ? teile.join(",") : LEERE_LISTE;
+}
+
+// Ein Eintrag EINER Route: entscheidet zu_wenig_proben VOR jeder Paar-Aussage (Muster
+// driftEntryForPrefix - unter der Mindestprobe gibt es KEINE Tarif-Aussage), bildet dann
+// Vorschlag und Klassifikation. fehlgrund ist das GERENDERTE Fragment aus
+// vollkostenStichprobenJeRoute (global, nicht je Route: die EIGEN_ACHSEN-Quelle ist eine
+// prozessweite Luecke, kein Routen-Merkmal). minSamples teilt sich bewusst mit dem
+// Praefix-Waechter (costCalibrationMinSamples, G5): dieselbe Frage - ab wann ist eine
+// Stichprobe eine Aussage - hat eine Antwort.
+export function tarifpaarEintrag({ route, stichproben, konfiguriert, minSamples, fehlgrund }) {
+  const base = { route, proben: stichproben.length, konfiguriert, fehlgrund };
+  if (stichproben.length < minSamples)
+    return { ...base, vorschlag: null, code: TARIFPAAR_FINDING.ZU_WENIG_PROBEN };
+  return {
+    ...base,
+    vorschlag: tarifpaarVorschlag(stichproben),
+    code: tarifpaarDecktStichproben(konfiguriert, stichproben) ? null : TARIFPAAR_FINDING.UNTERSCHAETZT,
+  };
+}
+
+// Routen, deren konfigurierter Minutensatz der INBOUND-Satz ist (voiceTariffInboundCents
+// statt voiceTariffDomesticCents). EINE benannte Stelle: die Richtung eines Profils steht
+// im Katalog bewusst nicht als Feld (KV2-10 ruehrt die Registry nicht an), ein zweiter
+// verstreuter Vergleich liefe beim ersten neuen Inbound-Profil auseinander (G5/G27).
+const INBOUND_KOSTENPROFILE = new Set([
+  KOSTENPROFIL.TELNYX_INBOUND_BUDGET,
+  // IE3: das zweite Inbound-Profil - genau der Fall, den der Kommentar oben angekuendigt
+  // hat. Die LIVE-Buchung (metering.js#callTariffCentsPerMin) bepreist dieses Profil seit
+  // IEL-B2 mit dem Leg-Satz; der Tarifpaar-Waechter vergleicht es hier weiterhin gegen den
+  // Inbound-Satz - offener Befund, eigene Entscheidung (Diagnose, kein Gate). Ohne diesen
+  // Eintrag verglich der Tarif-Waechter die Vollkosten eines INBOUND-Anrufs gegen den
+  // OUTBOUND-Satz. Keine Tarifaenderung, eine Einordnung.
+  KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
+]);
+
+// Das KONFIGURIERTE Paar EINER Route. Grundbetrag 0 = "noch nicht gesetzt" - genau die
+// heutige Reserve-Wahrheit: der Grundbetrag geht in KEINE Reserve-Rechnung (KV2-10
+// Scope-Riegel), der Waechter prueft ihn trotzdem, damit eingesetzte Werte sofort wirken.
+// Object.hasOwn statt Roh-Index: die echte Config ist ein guardedConfig-PROXY, dessen
+// get-Trap bei einem unbekannten Schluessel wirft (Tippfehler-Riegel) - ein Routen-Lookup
+// in der Karte ist aber KEIN Tippfehler, sondern der Normalfall "Route noch nicht
+// gesetzt". Object.hasOwn laeuft ueber [[GetOwnProperty]], keinen Trap (Praezedenz
+// unpricedModels in boot-guard.js, dasselbe Muster fuer modelPricesUsd).
+function konfiguriertesPaar(route, billing) {
+  const grundbetragJeRoute = billing.voiceTariffGrundbetragCentsJeRoute ?? {};
+  return {
+    grundbetragCents: Object.hasOwn(grundbetragJeRoute, route) ? grundbetragJeRoute[route] : 0,
+    minutensatzCents: INBOUND_KOSTENPROFILE.has(route) ? billing.voiceTariffInboundCents : billing.voiceTariffDomesticCents,
+  };
+}
+
+// config -> Argumente an EINER Stelle (Muster tariffDriftReportFromConfig): Boot, Sweep
+// und Tests bauen den Aufruf NICHT je selbst zusammen. tariffCentsPerMin wird bewusst
+// NICHT importiert (P5-12) - die konfigurierten Saetze reisen als Argumente.
+export function tarifpaarReport({ state, eigenCentJeAnruf, billing }) {
+  const { jeRoute, ausgeschlossen } = vollkostenStichprobenJeRoute({
+    state,
+    eigenCentJeAnruf,
+    rateMicro: billing.providerToBucketRateMicro,
+  });
+  const fehlgrund = fehlgrundZeile(ausgeschlossen);
+  return [...jeRoute.entries()].map(([route, stichproben]) =>
+    tarifpaarEintrag({
+      route,
+      stichproben,
+      konfiguriert: konfiguriertesPaar(route, billing),
+      minSamples: billing.costCalibrationMinSamples,
+      fehlgrund,
+    }),
+  );
+}
+
+// Nur UNTERSCHAETZT ist alarmierbar (Muster ALERTABLE_DRIFT_CODES: zu_wenig_proben ist
+// sichtbar, aber nie Kanal-Laerm - sonst wird der Kanal gegen Datenknappheit trainiert).
+export function alertbareTarifpaarBefunde(report) {
+  return report.filter((eintrag) => eintrag.code === TARIFPAAR_FINDING.UNTERSCHAETZT);
+}
+
+// Eine PII-freie Zeile je Eintrag: Routen-/Profilnamen und Cent-Betraege, keine Call-ID,
+// keine Rufnummer, keine Tenant-Kennung (testgepinnt). Nennt IMMER proben=; bei
+// zu_wenig_proben zusaetzlich fehlgrund= (laut, nicht still), KEINEN vorschlag (null
+// laese sich als 0 ct lesen - dieselbe Regel wie "gemessen=null" in driftLine).
+export function tarifpaarZeile(eintrag) {
+  const head = `route=${eintrag.route} proben=${eintrag.proben}`;
+  const befund = `befund=${eintrag.code ?? "im_band"}`;
+  if (eintrag.code === TARIFPAAR_FINDING.ZU_WENIG_PROBEN) return `${head} fehlgrund=${eintrag.fehlgrund} ${befund}`;
+  const vorschlag = `${eintrag.vorschlag.grundbetragCents}ct+${eintrag.vorschlag.minutensatzCents}ct/min`;
+  const konfiguriert = `${eintrag.konfiguriert.grundbetragCents}ct+${eintrag.konfiguriert.minutensatzCents}ct/min`;
+  return `${head} vorschlag=${vorschlag} konfiguriert=${konfiguriert} ${befund}`;
 }

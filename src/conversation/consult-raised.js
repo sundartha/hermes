@@ -10,20 +10,29 @@
 //
 // ES WIRD GEWARTET, und das ist der Unterschied zu AL-P14: der Werkzeug-Aufruf des
 // Anbieters ist ein Frage-Antwort-Zyklus - das Laufwerk haelt seinen Request offen und legt
-// unsere Antwort seinem Modell als Werkzeug-Ergebnis vor. Haltezeit ist CONSULT_OPEN_MS,
-// exakt das Fenster, in dem store.answerConsult eine Antwort ueberhaupt noch annimmt
-// (G5: EINE Frist, nicht zwei) und knapp unter dem response_timeout_secs der
-// Agenten-Vorlage. Zeitablauf ist ein GUELTIGES Ergebnis, kein Fehler - Muster
-// ConsultDelivery.waitForEvent, aus dem auch die Tick-Kadenz kommt.
+// unsere Antwort seinem Modell als Werkzeug-Ergebnis vor. Zeitablauf ist ein GUELTIGES
+// Ergebnis, kein Fehler - Muster ConsultDelivery.waitForEvent, aus dem auch die
+// Tick-Kadenz kommt.
+//
+// P2 (W2): der Halt ist GESTAFFELT, nicht pauschal, und das ist KEINE Verletzung von G5
+// ("EINE Frist, nicht zwei"): die drei Fristen beantworten drei VERSCHIEDENE Fragen
+// ("kommt die Frage bei einem Client an?", "arbeitet dort jemand daran?", "wie lautet die
+// Antwort?"), nicht dieselbe Frage zweimal. CONSULT_OPEN_MS bleibt unveraendert der Wert
+// des MCP-Long-Poll-Wegs (E-5) und wird von dieser Datei nicht mehr gelesen.
+//
+// P3 (N-10): der gestaffelte Abbruch liefert zusaetzlich eine INHALTSFREIE Spur
+// (abortTrace) mit - sie ist die Messung, die am 06.09. fehlte und deren Fehlen die
+// Aufklaerung auf eine Zeugenaussage angewiesen liess. Sie verlaesst den Server NICHT
+// Richtung Anbieter (consultResponseBody baut seine drei Felder ausdruecklich selbst).
 //
 // STOP-PRAEDIKAT ist die EIGENE Rueckfrage, nicht "irgendeine offene": store.pendingConsult
 // wuerde sofort auf die gerade selbst gestellte Frage ansprechen (Port-Befund 1) und der
 // Aufruf kaeme mit leeren Haenden zurueck. Gewartet wird deshalb auf GENAU DEN Datensatz,
 // den dieser Aufruf angelegt hat, wiedererkannt an seiner Kennung.
+import { config } from "../config.js";
 import { CONSULT_POLL_TICK_MS } from "../consult/delivery.js";
-import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { sanitizeConsultQuestion } from "../consult/question.js";
-import { CONSULT_STATUS } from "../store/defaults.js";
+import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON } from "../store/defaults.js";
 // EL-NEUSTART-9: die Schliessung MIT Verwaisungs-Marker. Direkt aus state-ops, wie das
 // Boot-Netz sie ruft (src/boot.js) - die Fassade fuehrt diese Operation nicht, und eine
 // zweite, eigene Formulierung im Drain waere genau der zweite Mechanismus, den der
@@ -38,16 +47,84 @@ export const CONSULT_RESULT = Object.freeze({
   TIMEOUT: "timeout",
 });
 
+// P2 (W2): die drei Fristen des gestaffelten Halts, ABSOLUT ab Entstehung der Rueckfrage.
+// ackDeadlineMs ist die SUMME (die Spec nennt Stufe 1 "zusaetzlich"), damit im Code nur
+// noch absolute Grenzen stehen und keine Stelle zweimal addiert.
+export const EL_CONSULT_STAGES = Object.freeze({
+  deliveryDeadlineMs: config.tenancy.elConsultDeliveryMs,
+  ackDeadlineMs: config.tenancy.elConsultDeliveryMs + config.tenancy.elConsultAckMs,
+  answerDeadlineMs: config.tenancy.elConsultAnswerMs,
+});
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // facts ist NIE undefined - der Aufrufer darf es unabhaengig vom Ausgang iterieren.
 const rejected = (reason) => ({ kind: CONSULT_RESULT.REJECTED, facts: [], reason });
-const timedOut = (reason) => ({ kind: CONSULT_RESULT.TIMEOUT, facts: [], reason });
+// P3 (N-10): abortTrace ist NUR beim gestaffelten Abbruch gesetzt (E-2) - Drain, Call-Ende
+// und "Consult verschwunden" sind KEINE gescheiterten Rueckfragen dieses Halts und tragen
+// weiterhin null. Der Diskriminator ist damit strukturell, nicht ein Zeichenketten-Vergleich
+// auf reason beim Aufrufer.
+const timedOut = (reason, abortTrace = null) => ({
+  kind: CONSULT_RESULT.TIMEOUT,
+  facts: [],
+  reason,
+  abortTrace,
+});
 
-// PII-frei (Absolute Regel 4): server-eigene Kennungen und die Frist, NIE die Frage, nie
+// P2: WELCHE Stufe hat ihr Ziel verfehlt? REIN - kein Store-Zugriff, kein Schreiben, keine
+// Uhr. Genau deshalb ist der Fristnachweis ohne Server pruefbar (test/el-consult-
+// staffelung.test.js). Eine Aufgabe, eine Abstraktionsebene (G30/G34).
+//
+// I-7: die Reihenfolge ist bindend, und die GESAMTFRIST steht zuletzt OHNE Vorbedingung.
+// Es gibt damit keinen Pfad, auf dem eine Stufe die naechste ueberspringt und laenger
+// haelt als answerDeadlineMs - egal, welche Marker fehlen.
+// E-3: geprueft wird nur das FEHLEN des Markers. Ein Client, der ohne Vorab-Quittung
+// direkt antwortet, wird von diesem Praedikat nie erreicht - der ANSWERED-Zweig im
+// Wartelauf liegt davor.
+// P3: Zeitspanne zwischen zwei ISO-Stempeln in ms. null, wo die Stufe nie erreicht wurde
+// (fehlender Stempel) oder ein Stempel unlesbar ist - fail-closed nach dem Muster von
+// consultAgeMs/consultAlive (state-ops): lieber KEIN Wert als ein erfundener. Genau dieser
+// null-Fall ist die Aussage "Stufe nicht erreicht", die die Kalibrierung braucht.
+function spanMs(vonIso, bisIso) {
+  const von = Date.parse(vonIso ?? "");
+  const bis = Date.parse(bisIso ?? "");
+  return Number.isFinite(von) && Number.isFinite(bis) ? bis - von : null;
+}
+
+// P3 (N-10): die INHALTSFREIE Spur eines gescheiterten Halts - genau die Kennung und die
+// drei Zahlen, aus denen die vorlaeufigen Fristen von Stufe 0/1 nachkalibriert werden
+// (PLAN-ANRUFDEFEKTE P2, "Herleitung der Zahlen"). Der GRUND steht nicht hier: er steht am
+// Ergebnis selbst (reason) und wird nicht verdoppelt (G5).
+// Was hier NIE hineingehoert: Fragetext, Antworttext, Rufnummer, Transkriptfragment
+// (Absolute Regel 4/5). holdMs kommt von der Wanduhr DES WARTERS (startedAtMs), nicht aus
+// askedAt - dieselbe Quelle, gegen die auch die Fristen gemessen werden.
+function makeAbortTrace(consult, holdMs) {
+  return {
+    consultId: consult.id,
+    holdMs,
+    deliveredAfterMs: spanMs(consult.askedAt, consult.askDeliveredAt),
+    ackedAfterMs: spanMs(consult.askDeliveredAt, consult.ackedAt),
+  };
+}
+
+function expiredStage(consult, ageMs, stages) {
+  if (!consult.askDeliveredAt && ageMs >= stages.deliveryDeadlineMs)
+    return { reason: CONSULT_TIMEOUT_REASON.NOT_DELIVERED, stageMs: stages.deliveryDeadlineMs };
+  if (!consult.ackedAt && ageMs >= stages.ackDeadlineMs)
+    return { reason: CONSULT_TIMEOUT_REASON.NOT_ACKED, stageMs: stages.ackDeadlineMs };
+  if (ageMs >= stages.answerDeadlineMs)
+    return { reason: CONSULT_TIMEOUT_REASON.TIMEOUT, stageMs: stages.answerDeadlineMs };
+  return null;
+}
+
+// PII-frei (Absolute Regel 4): server-eigene Kennungen und die Fristen, NIE die Frage, nie
 // eine Nummer, nie ein Stueck Gespraechsinhalt. Muster logConsultAsked (consult/in-call.js).
-function logConsultRaised(callId, consultId, holdMs) {
-  console.log(`[consult-raised] gestellt call=${callId} event=${consultId} offen_ms=${holdMs}`);
+function logConsultRaised(callId, consultId, stages) {
+  console.log(
+    `[consult-raised] gestellt call=${callId} event=${consultId} ` +
+      `zustellung_ms=${stages.deliveryDeadlineMs} quittung_ms=${stages.ackDeadlineMs} ` +
+      `antwort_ms=${stages.answerDeadlineMs}`,
+  );
 }
 
 function keyFactsOf(call) {
@@ -61,8 +138,8 @@ function consultById(call, consultId) {
 }
 
 /**
- * @param {{store: object, isDraining?: () => boolean, holdMs?: number, tickMs?: number}} deps
- *   holdMs/tickMs sind TEST-OVERRIDES nach dem Repo-Idiom von makeConsultDelivery; die
+ * @param {{store: object, isDraining?: () => boolean, stages?: object, tickMs?: number}} deps
+ *   stages/tickMs sind TEST-OVERRIDES nach dem Repo-Idiom von makeConsultDelivery; die
  *   Produktionsverdrahtung uebergibt sie nie.
  *   isDraining = das Drain-Signal des Consult-Kanals (consult/delivery.js). Default
  *   "nie" haelt jeden Bestands-Aufrufer unveraendert; die Produktionsverdrahtung reicht
@@ -74,7 +151,7 @@ function consultById(call, consultId) {
 export function makeConsultRaised({
   store,
   isDraining = () => false,
-  holdMs = CONSULT_OPEN_MS,
+  stages = EL_CONSULT_STAGES,
   tickMs = CONSULT_POLL_TICK_MS,
 }) {
   // Der Datensatz, den emitConsult gerade angelegt hat: emitConsult liefert den CALL
@@ -113,18 +190,24 @@ export function makeConsultRaised({
   // wieder rueckfragen.
   //
   // Die Unterscheidung "verwaist" gegen "abgelaufen, weil niemand antwortete" trifft die
-  // Naht selbst, an derselben Wanduhr wie beim harten Abbruch - die Frist ist holdMs,
-  // dieselbe Zahl, gegen die dieser Warter laeuft (G5, keine zweite Zahl). Im Zweifel gilt
-  // BEZAHLT, dann bleibt der Platz verbraucht. Geschrieben wird nach dem mutate-then-save()-
-  // Muster des Boot-Netzes; das Zeitfenster des Drains bleibt gewahrt, weil zwischen load(),
-  // Mutation und save() kein await liegt.
+  // Naht selbst, an derselben Wanduhr wie beim harten Abbruch - die Frist ist die
+  // Gesamtfrist, die maximale Lebensdauer eines Warters (G5, keine zweite Zahl). Im
+  // Zweifel gilt BEZAHLT, dann bleibt der Platz verbraucht. Geschrieben wird nach dem
+  // mutate-then-save()-Muster des Boot-Netzes; das Zeitfenster des Drains bleibt gewahrt,
+  // weil zwischen load(), Mutation und save() kein await liegt.
   function closeOrphaned(callId, nowMs) {
-    const { changed } = expireOrphanedConsults(store.load(), callId, { nowMs, openMs: holdMs });
+    const { changed } = expireOrphanedConsults(store.load(), callId, {
+      nowMs,
+      openMs: stages.answerDeadlineMs,
+    });
     if (changed) store.save();
   }
 
   async function awaitAnswer({ callId, consultId }) {
-    const deadlineMs = Date.now() + holdMs;
+    // Die eigene Wanduhr des Warters, wie bisher - NICHT consult.askedAt: der Datensatz
+    // wird Sekundenbruchteile frueher gestempelt, und ein Date.parse an dieser Stelle
+    // waere eine zweite, brechbare Zeitquelle im heissen Pfad.
+    const startedAtMs = Date.now();
     for (;;) {
       const call = store.getCall(callId);
       // Der Anruf ist vorbei -> es wartet niemand mehr auf eine Antwort. Ohne diesen
@@ -138,27 +221,27 @@ export function makeConsultRaised({
       // Nicht mehr offen und nicht beantwortet = abgelaufen/verfallen (expireOpenConsults,
       // Wartezeit-Schritt). Der Grund-Token ist der Status selbst, PII-frei.
       if (consult.status !== CONSULT_STATUS.OPEN) return timedOut(consult.status);
-      // EL-NEUSTART-6: der Fristablauf ist ein ZUSTAND, nicht bloss ein Ergebnis dieses
-      // Aufrufs. Ohne diesen Schritt blieb der Datensatz OPEN stehen, obwohl niemand mehr
-      // auf eine Antwort wartet: ein frischer Long-Poll bekaeme die tote Frage erneut
-      // vorgelegt, answerConsult wiese die Antwort darauf als verfristet ab - und beim
-      // naechsten Start waere eine BEZAHLTE abgelaufene Rueckfrage nicht von einer frisch
-      // verwaisten zu unterscheiden (expireOrphanedConsults, src/boot.js).
-      //
-      // Derselbe Zustandsschritt wie in der Turn-Schleife der Budget-Engine
-      // (consult/in-call.js -> advanceConsultWait) und derselbe Status timed_out: niemand
-      // hat geantwortet, der Anruf ist NICHT beendet. Kein zweiter Schreibweg daneben.
-      // waitMs IST hier holdMs: der Anbieter-Warter kennt keine kurze Ueberbrueckungsfrist,
-      // er wartet die ganze Haltefrist. Erreichbar ist per Konstruktion ohnehin nur der
-      // Fristablauf-Zweig - deadlineMs liegt nie vor askedAt + holdMs.
       const nowMs = Date.now();
-      if (nowMs >= deadlineMs) {
-        store.advanceInCallConsult(callId, { nowMs, waitMs: holdMs, openMs: holdMs });
-        return timedOut("frist_abgelaufen");
+      const ageMs = nowMs - startedAtMs;
+      // P2: EIN Praedikat entscheidet ueber alle drei Stufen (expiredStage, rein). Der
+      // Datensatz wird beim Abbruch geschlossen UND traegt den Grund - ein offener
+      // Datensatz ohne Zustellweg ist ein Phantom (E-2): eine spaetere Antwort auf ihn
+      // wird von answerConsult danach zuverlaessig abgelehnt, statt still zu gelingen.
+      const stage = expiredStage(consult, ageMs, stages);
+      if (stage) {
+        store.timeOutStagedConsult(callId, {
+          consultId,
+          reason: stage.reason,
+          nowMs,
+          stageMs: stage.stageMs,
+        });
+        // P3: dieselbe Zahl, gegen die die Stufe entschieden wurde, ist die tatsaechlich
+        // gehaltene Dauer - keine zweite Messung daneben (G5).
+        return timedOut(stage.reason, makeAbortTrace(consult, ageMs));
       }
       // EL-BEFUND-4: Drain-Freigabe, gleiche Stelle und gleicher Grund wie in
       // ConsultDelivery.waitForEvent. Ohne sie haelt dieser Warter beim Deploy
-      // httpServer.close() bis zu CONSULT_OPEN_MS auf, der Shutdown-Watchdog kappt mit
+      // httpServer.close() bis zur Gesamtfrist auf, der Shutdown-Watchdog kappt mit
       // exit(0) - und der finale Store-Flush faellt aus (Datenverlust bei jedem Deploy).
       //
       // EL-NEUSTART-4: von den drei Beteiligten ueberlebt nur der DATENSATZ den Neustart -
@@ -195,7 +278,7 @@ export function makeConsultRaised({
     if (!asked) return rejected("frage_abgelehnt");
     const consult = raise(callId, asked);
     if (!consult) return rejected("nicht_emittiert");
-    logConsultRaised(callId, consult.id, holdMs);
+    logConsultRaised(callId, consult.id, stages);
     return awaitAnswer({ callId, consultId: consult.id });
   };
 }
