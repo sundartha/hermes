@@ -1020,6 +1020,26 @@ CREATE TABLE IF NOT EXISTS audit_log (
   detail     TEXT
 );
 
+-- cookie_consent_log: Nachweis der Cookie-Einwilligung (Art. 7 Abs. 1 DSGVO), append-only.
+-- Eine Zeile je Entscheidung eines Website-Besuchers; der aktuelle Stand einer
+-- Einwilligung ist die juengste Zeile ihrer consent_id. BEWUSST ohne IP, User-Agent,
+-- Account oder Tenant (Datenminimierung) - consent_id ist eine Zufalls-UUID aus dem
+-- Browser, site nur der Host der Seite. Keine tenant_id -> keine RLS-Dimension; die
+-- Tabelle wird NIE ueber portalStore/Kunden-Reads exponiert. Aufbewahrung 3 Jahre,
+-- geloescht vom Sweep in src/cookie-consent-log.js.
+CREATE TABLE IF NOT EXISTS cookie_consent_log (
+  id          BIGSERIAL PRIMARY KEY,
+  at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  consent_id  UUID NOT NULL,
+  version     INTEGER NOT NULL,
+  statistics  BOOLEAN NOT NULL,
+  marketing   BOOLEAN NOT NULL,
+  site        TEXT NOT NULL
+);
+-- Nachweis-Abfrage "was hat dieser Browser wann entschieden?" und der Fristen-Sweep.
+CREATE INDEX IF NOT EXISTS cookie_consent_log_consent_idx ON cookie_consent_log (consent_id, at);
+CREATE INDEX IF NOT EXISTS cookie_consent_log_at_idx ON cookie_consent_log (at);
+
 -- ---- Row Level Security (zweite Verteidigungslinie) ----
 -- Primaerlinie ist der app-seitige tenant_id-Filter; RLS faengt vergessene
 -- Filter ab. Policy: Zeile sichtbar/aenderbar nur, wenn tenant_id der GUC

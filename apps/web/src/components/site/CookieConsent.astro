@@ -12,9 +12,15 @@
 //
 // Verhalten: scripts/consent.js. Kein Inline-Style, kein Inline-Script — die
 // Produktions-CSP (default-src 'self') laesst beides nicht zu. Startet mit
-// `hidden`; consent.js zeigt die Karte nur, wenn noch keine Entscheidung
-// gespeichert ist (oder ueber [data-consent-open]).
+// `hidden`; consent.js zeigt die Karte ungefragt nur, wenn noch keine
+// Entscheidung gespeichert ist UND ein gesperrtes Skript auf Einwilligung wartet
+// (sonst nur ueber [data-consent-open]).
+//
+// data-consent-log: Ziel des Einwilligungs-Protokolls (lib/routes.js). Absolut auf
+// den Gateway — die CSP der Static Site muss diesen Origin in connect-src fuehren
+// (docs/RUNBOOK-ANALYTICS-CONSENT.md).
 import "../../styles/consent.css";
+import { COOKIE_CONSENT_URL } from "../../lib/routes.js";
 
 const { lang = "de" } = Astro.props;
 
@@ -57,7 +63,7 @@ const TEXT = {
 const c = TEXT[lang === "en" ? "en" : "de"];
 ---
 
-<div class="consent" data-consent-root data-prefs="0" hidden>
+<div class="consent" data-consent-root data-prefs="0" data-consent-log={COOKIE_CONSENT_URL} hidden>
   <section class="consent__card" role="dialog" aria-labelledby="consent-title" aria-describedby="consent-text" tabindex="-1">
     <h2 class="consent__title" id="consent-title" data-i18n="ckTitle" set:html={c.title}></h2>
     <p class="consent__text" id="consent-text" data-i18n="ckText" set:html={c.text}></p>

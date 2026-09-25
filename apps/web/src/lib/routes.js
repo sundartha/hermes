@@ -27,3 +27,9 @@ if (!GATEWAY_URL) {
 // Login = Registrierung (Account entsteht beim ersten OIDC-Login). Get-started/
 // Log-in/Sign-in-CTAs zeigen alle hierher — absolut auf den Gateway-Auth-Origin.
 export const LOGIN_URL = `${GATEWAY_URL}/auth/login`;
+
+// Einwilligungs-Protokoll des Gateways (Nachweis Art. 7 Abs. 1 DSGVO). consent.js
+// schickt jede Cookie-Entscheidung per Beacon dorthin. Der Pfad spiegelt
+// COOKIE_CONSENT_PATH aus src/cookie-consent-log.js (Wurzelprojekt, eigenes Paket -
+// kein Import moeglich); test/cookie-consent-client.test.js haelt beide gleich.
+export const COOKIE_CONSENT_URL = `${GATEWAY_URL}/api/cookie-consent`;

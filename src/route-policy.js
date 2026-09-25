@@ -27,6 +27,7 @@
 // das fuer den Altpfad ausdruecklich.
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 import { ELEVENLABS_INIT_PATH } from "./routes/webhooks-elevenlabs-init.js";
+import { COOKIE_CONSENT_PATH } from "./cookie-consent-log.js";
 
 // Benannte Auth-Middlewares. Der Inventar-Test erkennt sie an handler.name in der
 // Route-Handler-Kette. INVARIANTE: diese Middlewares MUESSEN benannte Funktionen
@@ -212,6 +213,19 @@ export const PUBLIC_ROUTES = Object.freeze([
       "HANDLER-INTERNE AUTH (F2-Newsletter-Recipients): Muster /newsletter/confirm oben, " +
       "permanenter Abmelde-Token (kein Ablauf, das Opt-out muss jederzeit moeglich sein), " +
       "timing-sicher verglichen (safeEqual, state-ops.js unsubscribeNewsletterRecipientByToken).",
+  },
+  {
+    method: "POST",
+    path: COOKIE_CONSENT_PATH,
+    reason:
+      "Cookie-Einwilligungs-Protokoll (Nachweis Art. 7 Abs. 1 DSGVO): Besucher der " +
+      "Marketing-Seite haben keine Sitzung, der Beleg entsteht VOR jeder Identitaet. " +
+      "Schreibt ausschliesslich eine anonyme, append-only Zeile (Zufalls-UUID des " +
+      "Browsers, Banner-Version, zwei Booleans, Host aus dem Origin) - keine IP, kein " +
+      "Tenant, kein Account. Liest nichts, liefert nichts zurueck (204), loest weder " +
+      "Anruf noch SMS noch Zahlung aus. Strikte Eingabepruefung (UUID-v4, Ganzzahl-" +
+      "Version, echte Booleans, 1-kB-Body), sonst 400; die Schreibrate deckelt der " +
+      "globale Per-IP-Rate-Limiter.",
   },
   {
     method: "POST",
