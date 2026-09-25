@@ -163,6 +163,9 @@ function runOwnScript(doc, options) {
   sandbox.clearTimeout = (id) => timeoutFns.delete(id);
 
   if (options && options.readyBeforeScript) sandbox[UI_READY_FLAG] = true;
+  // Neulade-Tests (q)-(s): ein gemeinsamer Speicher ueber zwei Karten-Instanzen = dieselbe
+  // Karte nach einem Neuladen. Ohne Option fehlt localStorage ganz (gesperrte Sandbox).
+  if (options && options.localStorage) sandbox.localStorage = options.localStorage;
 
   vm.createContext(sandbox);
   if (options && options.withI18n) vm.runInContext(scriptBodyOf(I18N_SCRIPT), sandbox);
@@ -447,6 +450,80 @@ test("(k) Replay nach placed: Karte bleibt Live-Karte, kein Knopf-Effekt, 0 weit
   assert.equal(placeCallToolCall(env).length, 1, "kein weiterer Versand durch den Replay");
 });
 
+const USED_HINT_EN = "This confirmation was already sent — do not confirm again; check list_calls.";
+
+function makeFakeStorage() {
+  const items = new Map();
+  return {
+    getItem: (key) => (items.has(key) ? items.get(key) : null),
+    setItem: (key, value) => items.set(key, String(value)),
+    dump: () => [...items.values()].join(""),
+  };
+}
+
+function clickedCard(storage, pushOverrides) {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc, { withI18n: true, localStorage: storage });
+  env.uiReady();
+  env.emit(awaitingConfirmationPush({}, pushOverrides));
+  doc.get("[data-confirm-button]").click();
+  return { doc, env };
+}
+
+test("(q) Server meldet confirmation_used: Hinweis 'schon abgeschickt', Knopf ausgeblendet+gesperrt, kein zweites Senden; generischer isError bleibt 'rejected' (Positiv-Kontrolle)", () => {
+  const { doc, env } = clickedCard(undefined);
+  env.emit({
+    id: env.posted[0].id,
+    result: { isError: true, content: [{ type: "text", text: "server text" }], structuredContent: { status: "confirmation_used" } },
+  });
+  assert.equal(doc.get("[data-confirm-hint-text]").textContent, USED_HINT_EN);
+  assert.equal(doc.get("[data-confirm-button]").disabled, true);
+  assert.equal(doc.get("[data-confirm-button]").style.display, "none", "kein Waehl-Knopf mehr angeboten");
+  doc.get("[data-confirm-button]").click();
+  assert.equal(placeCallToolCall(env).length, 1);
+  assert.equal(uiMessages(env).length, 0);
+
+  // Positiv-Kontrolle: ohne das Maschinenfeld bleibt es beim Ablehnungstext des Servers.
+  const { doc: otherDoc, env: otherEnv } = clickedCard(undefined);
+  otherEnv.emit({ id: otherEnv.posted[0].id, result: { isError: true, content: [{ type: "text", text: "server text" }] } });
+  assert.equal(otherDoc.get("[data-confirm-hint-text]").textContent, "server text");
+  assert.equal(otherDoc.get("[data-confirm-button]").style.display, "");
+});
+
+test("(r) Neuladen nach dem Klick (gemeinsamer Speicher): derselbe Push startet in 'schon abgeschickt', 0 place_call; anderer Code bleibt bestaetigbar (Positiv-Kontrolle); kein Klartext-Code im Speicher", () => {
+  const storage = makeFakeStorage();
+  clickedCard(storage); // erste Instanz: Klick, dann "Neuladen" (Antwort egal)
+
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc, { withI18n: true, localStorage: storage });
+  env.uiReady();
+  env.emit(awaitingConfirmationPush());
+  assert.equal(doc.get("[data-confirm-hint-text]").textContent, USED_HINT_EN);
+  assert.equal(doc.get("[data-confirm-button]").style.display, "none");
+  assert.equal(doc.get("[data-confirm-to]").textContent, TO, "Vorschau bleibt sichtbar");
+  doc.get("[data-confirm-button]").click();
+  env.emit(awaitingConfirmationPush()); // erneuter Push desselben Codes
+  assert.equal(placeCallToolCall(env).length, 0, "kein zweiter Anruf durch Neuladen/Replay");
+  assert.ok(!storage.dump().includes(CODE), "Code nie im Klartext im Speicher");
+
+  const fresh = clickedCard(storage, { "hermes/confirmation_code": "ZZZZZZ" });
+  assert.equal(placeCallToolCall(fresh.env).length, 1, "ein neuer Code bleibt bestaetigbar");
+});
+
+test("(s) Speicher gesperrt (Zugriff wirft): Karte bestaetigt trotzdem genau einmal - Sicherung ist dann die Server-Antwort", () => {
+  const locked = {
+    getItem: () => {
+      throw new Error("SecurityError");
+    },
+    setItem: () => {
+      throw new Error("SecurityError");
+    },
+  };
+  const { doc, env } = clickedCard(locked);
+  assert.equal(placeCallToolCall(env).length, 1);
+  assert.equal(doc.get("[data-confirm-button]").disabled, true);
+});
+
 test("(l) XSS: objective/briefing/context.summary landen woertlich als Text, kein Element erzeugt", () => {
   const doc = makeFakeDocument();
   const payload = '<img src=x onerror=alert(1)>';
@@ -621,6 +698,40 @@ test("(e-http) Draht-Rundlauf HTTP Legacy: echtes prepare_call -> dieselbe Karte
     assert.equal(msgs.length, 1, "genau EINE ui/message");
     assert.match(JSON.stringify(msgs[0]), new RegExp(placed.structuredContent.call_id));
     assert.ok(!JSON.stringify(msgs[0]).includes(prep._meta[CONFIRMATION_META_KEY]), "der Code steht nie in der ui/message");
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("(e-reload) Draht: neu geladene Karte klickt denselben, schon verbrauchten Code -> confirmation_used, KEIN zweiter Anruf, Karte bietet keinen Klick mehr an", async () => {
+  const srv = await startServer({
+    env: { FAKE_ORIGINATE: "true", ALLOWED_COUNTRY_CODES: "*", MCP_UI_ENABLED: "true", CALL_CONFIRMATION_SECRET: E2E_SECRET },
+  });
+  try {
+    const before = srv.readStore().calls.length;
+    const prep = await readToolResult(await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("prepare_call", E2E_PREVIEW_ARGS)));
+    const first = widgetPlaceCallFromRealPreview(prep);
+    const placed = await readToolResult(
+      await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", first.call.params.arguments)),
+    );
+    assert.ok(placed.structuredContent.call_id, "Positiv-Kontrolle: der erste Klick waehlt");
+    assert.equal(srv.readStore().calls.length, before + 1);
+
+    // Neuladen ohne Karten-Speicher (schlechtester Fall): dieselbe Vorschau, derselbe Code.
+    const reloaded = widgetPlaceCallFromRealPreview(prep);
+    const replay = await readToolResult(
+      await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", reloaded.call.params.arguments)),
+    );
+    assert.equal(replay.isError, true);
+    assert.equal(replay.structuredContent.status, "confirmation_used", "Server meldet den verbrauchten Code eindeutig");
+    assert.ok(!JSON.stringify(replay).includes(prep._meta[CONFIRMATION_META_KEY]), "Antwort nennt den Code nie");
+    assert.equal(srv.readStore().calls.length, before + 1, "kein zweiter Anruf-Datensatz");
+
+    const { env: reloadedEnv, doc: reloadedDoc } = reloaded;
+    reloadedEnv.emit({ id: reloaded.call.id, result: replay });
+    assert.equal(reloadedDoc.get("[data-confirm-button]").style.display, "none", "kein zweiter Waehl-Klick angeboten");
+    reloadedDoc.get("[data-confirm-button]").click();
+    assert.equal(placeCallToolCall(reloadedEnv).length, 1, "kein weiteres Senden");
   } finally {
     await srv.stop();
   }

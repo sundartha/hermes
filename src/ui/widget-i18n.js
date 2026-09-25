@@ -91,6 +91,8 @@ export const WIDGET_DICT = {
       "Bestätigung abgelaufen — bitte um ein neues prepare_call.",
     "Unclear whether the call was placed — do not confirm again; check list_calls.":
       "Unklar, ob der Anruf gestartet wurde — nicht erneut bestätigen; list_calls prüfen.",
+    "This confirmation was already sent — do not confirm again; check list_calls.":
+      "Diese Bestätigung wurde bereits abgeschickt — nicht erneut bestätigen; list_calls prüfen.",
     "Call was not started — ask for a new prepare_call.":
       "Anruf wurde nicht gestartet — bitte um ein neues prepare_call.",
     "Confirmed the call to {to} (call_id {call_id}).":
@@ -151,6 +153,8 @@ export const WIDGET_DICT = {
       "Confirmation expirée — redemandez un prepare_call.",
     "Unclear whether the call was placed — do not confirm again; check list_calls.":
       "Incertain si l'appel a été lancé — ne confirmez pas à nouveau ; vérifiez list_calls.",
+    "This confirmation was already sent — do not confirm again; check list_calls.":
+      "Cette confirmation a déjà été envoyée — ne confirmez pas à nouveau ; vérifiez list_calls.",
     "Call was not started — ask for a new prepare_call.":
       "Appel non lancé — redemandez un prepare_call.",
     "Confirmed the call to {to} (call_id {call_id}).":

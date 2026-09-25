@@ -280,6 +280,17 @@ this limit are held in the memory of each server instance: they reset on restart
 several instances a used code could be replayed on another instance while it is still valid,
 and the guessing limit applies per instance.
 
+A code the same account has already used is answered with its own error result: its
+`structuredContent.status` is `confirmation_used` and its text says the call was already sent
+and that `place_call` must not be called again for it. The result names neither the code nor the
+destination, and it is given only to the account that used the code. This answer does not count
+as a failed guess. The card treats it as final: it shows that the confirmation was already sent
+and no longer offers a confirm button. The card also remembers a fingerprint of a code it sent
+(not the code itself) in its own browser storage when the host allows it, so a reloaded card
+that receives the same preview again starts in that state without sending anything. Where the
+host blocks that storage, the server answer above is the only safeguard, with the per-instance
+limits described in the previous paragraph.
+
 The server does not detect whether the connecting host displays the card or keeps `_meta` from
 the model - once card confirmation is enabled, every connecting host receives the code in
 `_meta`. The Hermes card widget (its own iframe script, not the model) reads the code from

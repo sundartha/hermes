@@ -131,6 +131,13 @@ export const MCP_TEXTS = Object.freeze({
     // auch der KARTE selbst bei einer Ablehnung (isError -> content[0].text, s.
     // src/ui/widgets/call.html serverRejectionText) - er muss also fuer beide Adressaten
     // verstaendlich bleiben.
+    // T2-14-Nachbesserung: place_call mit einem Code, den dieser Mandant schon verbraucht hat
+    // (Karte neu geladen, Doppel-Zustellung). Der Anruf dazu wurde schon abgeschickt - kein
+    // "noch nicht bestaetigt", kein Retry-Rat. Nennt weder Code noch Ziel.
+    confirmationAlreadyUsed:
+      "Dieser Bestaetigungscode wurde bereits verwendet - der Anruf dazu wurde schon " +
+      "abgeschickt. place_call dafuer nicht erneut aufrufen; den Stand mit list_calls oder " +
+      "get_call_status pruefen. Fuer einen weiteren Anruf neu mit prepare_call vorbereiten.",
     confirmationRequired: (to, objective) =>
       `Dieser Anruf ist noch nicht bestaetigt (Ziel: ${to}, Anliegen: ${objective}). Der ` +
       "Nutzer muss ihn in der Hermes-Karte bestaetigen; bestaetigt er, waehlt die Karte " +
@@ -261,6 +268,13 @@ export const MCP_TEXTS = Object.freeze({
     // confirmationRequired - the card places a confirmed call itself, the model never gets
     // the code. This text also renders inside the card itself on a rejection (isError ->
     // content[0].text, s. src/ui/widgets/call.html serverRejectionText).
+    // T2-14 follow-up: place_call with a code this tenant already used (card reloaded,
+    // duplicate delivery). Its call was already sent - never "not confirmed yet", never a
+    // retry hint. Names neither the code nor the destination.
+    confirmationAlreadyUsed:
+      "This confirmation code was already used - its call was already sent. Do not call " +
+      "place_call for it again; check list_calls or get_call_status. For another call, " +
+      "call prepare_call again.",
     confirmationRequired: (to, objective) =>
       `This call is not confirmed yet (destination: ${to}, purpose: ${objective}). The ` +
       "user must confirm it in the Hermes card; once confirmed, the card places the call " +
@@ -350,6 +364,13 @@ export const MCP_TEXTS = Object.freeze({
     // confirmationRequired - c'est la carte qui passe l'appel confirmé elle-même, le modèle
     // ne reçoit jamais le code. Ce texte s'affiche aussi dans la carte elle-même en cas de
     // refus (isError -> content[0].text, s. src/ui/widgets/call.html serverRejectionText).
+    // T2-14 suivi : place_call avec un code deja utilise par ce locataire (carte rechargee,
+    // double livraison). Son appel a deja ete envoye - jamais "pas encore confirme", jamais
+    // de conseil de reessai. Ne nomme ni le code ni la destination.
+    confirmationAlreadyUsed:
+      "Ce code de confirmation a déjà été utilisé - son appel a déjà été envoyé. " +
+      "N'appelez pas à nouveau place_call pour lui ; vérifiez list_calls ou get_call_status. " +
+      "Pour un autre appel, rappelez prepare_call.",
     confirmationRequired: (to, objective) =>
       `Cet appel n'est pas encore confirmé (destination : ${to}, objet : ${objective}). ` +
       "L'utilisateur doit le confirmer dans la carte Hermes ; une fois confirmé, la carte " +

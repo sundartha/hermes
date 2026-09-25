@@ -6425,8 +6425,8 @@ ruft `place_call` selbst ueber die Host-Tool-Bruecke auf -> bei Erfolg genau EIN
 `ui/message` mit `call_id`+Ziel (nie Code, nie briefing/context) -> die Karte laeuft als
 Live-Karte (Self-Poll) weiter, bis ein Terminalstatus erreicht ist.
 
-**Fehlerpfade, fail-closed:** abgelaufener/verbrauchter Code -> Hinweis "neu vorbereiten",
-kein Versand; Host antwortet nicht (Timeout) oder mit JSON-RPC-Fehler -> Zustand "unklar",
+**Fehlerpfade, fail-closed:** abgelaufener Code -> Hinweis "neu vorbereiten", kein Versand;
+schon abgeschickter/verbrauchter Code -> Zustand "used" (s. Runde 3 unten), kein Knopf mehr; Host antwortet nicht (Timeout) oder mit JSON-RPC-Fehler -> Zustand "unklar",
 genau EINE Nachricht ohne Code, kein zweiter Versand bei erneutem Klick; lehnt der Server
 `place_call` ab (z.B. ein Safety-Gate) -> die Karte zeigt den serverseitigen Ablehnungstext
 (`content[0].text`, derselbe Text wie `confirmationRequired`/die uebrigen Gate-Texte, KEIN
@@ -6440,6 +6440,29 @@ Terminalstatus, kein Poll mehr). Fix: Polling startet nach einer erfolgreichen B
 neu, ausser der Status ist bereits terminal. Ausserdem wurden die Modelltexte (s.
 T2-13-Abschnitt oben) auf den tatsaechlichen Ablauf nachgezogen: das Modell ruft `place_call`
 fuer einen bestaetigten Anruf nie selbst auf und erhaelt den Code zu keinem Zeitpunkt.
+
+**Nachbesserung Runde 3 (Safety-Befund "Karte nach Neuladen"):** vorher merkte sich die Karte
+nicht, dass sie schon bestaetigt hatte. Ein Neuladen (oder ein erneuter Push desselben
+`prepare_call`-Ergebnisses) machte den Knopf wieder bedienbar, und der Server beantwortete den
+verbrauchten Code mit demselben generischen `confirmationRequired` ("noch nicht bestaetigt") wie
+einen nie ausgestellten - falsch, der Anruf lief schon. Jetzt:
+- Server: die Bestaetigungs-Route meldet einen Code, den DERSELBE Mandant in einem noch
+  akzeptierten Fenster schon verbraucht hat, als `reason: "already_used"`
+  (`src/routes/api-call-confirmations.js` `wasCodeUsed`, liest nur das bestehende
+  Einmal-Verbrauch-Register). `place_call` macht daraus ein eigenes Fehlerergebnis mit
+  `structuredContent.status = "confirmation_used"` und dem Text `confirmationAlreadyUsed` (kein
+  Code, kein Ziel). Kein Treffer-Orakel: im Register stehen nur schon verbrauchte, wertlose
+  Codes; fremder Mandant und falscher Code bleiben generisch. Die Pruefung laeuft vor der
+  Fehlversuchsbremse und zaehlt nicht als Fehlversuch.
+- Karte: neuer Endzustand "used" (Hinweis "schon abgeschickt", Knopf ausgeblendet) bei dieser
+  Serverantwort; zusaetzlich merkt sie sich beim Absenden einen FNV-Fingerabdruck von
+  Code+Ablauf (nie den Klartext-Code) in `localStorage`, sodass eine neu geladene Karte mit
+  demselben Push direkt in "used" startet, ohne zu senden.
+- Grenze, bewusst akzeptiert: ist `localStorage` gesperrt (Sandbox ohne eigenen Ursprung) UND
+  wurde der Server seit dem Verbrauch neu gestartet (oder laeuft der Klick auf einer anderen
+  Instanz), ist der noch gueltige Code (<= 10 min) dort wieder frei - ein Klick auf die neu
+  geladene Karte kann dann einen zweiten Anruf ausloesen. Das ist dieselbe
+  Prozessspeicher-Grenze wie im T2-13-Abschnitt oben; alle Gates laufen dabei unveraendert.
 
 **Offener Owner-Punkt (Deploy-Vorbedingung):** ob der Host das Ergebnis-`_meta` von
 `prepare_call` tatsaechlich an das Iframe durchreicht (`ui/notifications/tool-result`) und ob

@@ -274,6 +274,19 @@
     var CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
     var CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
     var STATUS_AWAITING_CONFIRMATION = "awaiting_confirmation";
+    // place_call-Fehlerergebnis fuer einen schon verbrauchten Code (mcp-tools.js
+    // CONFIRMATION_USED_STATUS, dupliziert) - sprachunabhaengiges Maschinenfeld.
+    var STATUS_CONFIRMATION_USED = "confirmation_used";
+    // Lokales Gedaechtnis "Code schon abgeschickt" (ueberlebt ein Neuladen der Karte, s.
+    // rememberConfirmationSent). Best-effort: ist der Speicher gesperrt (Sandbox ohne
+    // eigenen Ursprung), bleibt die Server-Antwort STATUS_CONFIRMATION_USED die Sicherung.
+    var SENT_CONFIRMATIONS_STORAGE_KEY = "hermes/call-confirmations-sent";
+    // FNV-1a-32 (Fingerabdruck statt Klartext-Code im Speicher, s. confirmationFingerprint).
+    var FNV_OFFSET_BASIS = 2166136261;
+    var FNV_PRIME = 16777619;
+    var HEX_RADIX = 16;
+    var CONFIRMATION_USED_HINT = "This confirmation was already sent — do not confirm again; check list_calls.";
+    var UNCERTAIN_HINT = "Unclear whether the call was placed — do not confirm again; check list_calls.";
     // Antwortfrist: GROESSER als der Server-Hop-Timeout (180000, mcp-tools.js) + Marge.
     var PLACE_CALL_RESPONSE_TIMEOUT_MS = 200000;
     // Die neun Argumente aus PLACE_CALL_REQUEST_SCHEMA - nie "status"; Anzeige=Gesendetes.
@@ -442,7 +455,9 @@
 
     // pendingConfirmation: EIN eingefrorenes Objekt { args, code, expiresAtMs }, einzige
     // Quelle fuer Anzeige+Argumente. confirmState: none->awaiting->submitting->
-    // placed|rejected|uncertain|expired; jeder Endzustand ausser placed sperrt den Knopf.
+    // placed|rejected|uncertain|expired|used; jeder Endzustand ausser placed sperrt den Knopf,
+    // "used" (Code schon abgeschickt: lokal gemerkt ODER vom Server gemeldet) blendet ihn aus.
+    // Ein Push eines schon abgeschickten Codes (Neuladen der Karte) startet direkt in "used".
     var confirmState = "none";
     var pendingConfirmation = null;
     var confirmResponseTimerId = null;
@@ -583,6 +598,65 @@
       var btn = doc.querySelector("[data-confirm-button]");
       if (!btn) return;
       btn.disabled = confirmState !== "awaiting" || !confirmCodeUsable();
+      btn.style.display = confirmState === "used" ? "none" : "";
+    }
+
+    // Einziger Uebergang in einen Endzustand der Bestaetigung (rejected/expired/uncertain/used):
+    // Zustand setzen, Hinweis zeigen, Knopf nachziehen.
+    function enterConfirmEndState(state, hintText) {
+      confirmState = state;
+      showConfirmHint(hintText);
+      updateConfirmButtonState();
+    }
+
+    // "unklar" statt "fehlgeschlagen" (ein Host-Fehler/-Timeout beweist keinen Fehlschlag).
+    function enterUncertainState() {
+      enterConfirmEndState("uncertain", t(UNCERTAIN_HINT));
+      sendUncertainMessage();
+    }
+
+    // Fingerabdruck Code+Ablauf: kein Klartext-Code im Speicher. KEIN Geheimnisschutz (der
+    // Suchraum des Codes ist klein) - er gehoert aber ohnehin zu einem schon abgeschickten,
+    // serverseitig verbrauchten Code.
+    function confirmationFingerprint(confirmation) {
+      var input = confirmation.code + "|" + confirmation.expiresAtMs;
+      var hash = FNV_OFFSET_BASIS;
+      for (var i = 0; i < input.length; i++) {
+        hash ^= input.charCodeAt(i);
+        hash = Math.imul(hash, FNV_PRIME) >>> 0;
+      }
+      return hash.toString(HEX_RADIX);
+    }
+
+    // { fingerprint: expiresAtMs } - leer, wenn der Speicher fehlt, gesperrt oder kaputt ist.
+    function readSentConfirmations() {
+      try {
+        var parsed = JSON.parse(window.localStorage.getItem(SENT_CONFIRMATIONS_STORAGE_KEY) || "{}");
+        return isRecord(parsed) ? parsed : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function wasConfirmationSent(confirmation) {
+      if (!confirmation.code) return false;
+      return Object.prototype.hasOwnProperty.call(readSentConfirmations(), confirmationFingerprint(confirmation));
+    }
+
+    // Beim Absenden gemerkt (nicht erst beim Erfolg): auch ein Neuladen WAEHREND der Antwort
+    // bietet keinen zweiten Klick an. Abgelaufene Eintraege fallen dabei heraus.
+    function rememberConfirmationSent(confirmation) {
+      var sent = readSentConfirmations();
+      var kept = {};
+      Object.keys(sent).forEach(function (fp) {
+        if (sent[fp] > Date.now()) kept[fp] = sent[fp];
+      });
+      kept[confirmationFingerprint(confirmation)] = confirmation.expiresAtMs;
+      try {
+        window.localStorage.setItem(SENT_CONFIRMATIONS_STORAGE_KEY, JSON.stringify(kept));
+      } catch (e) {
+        // Speicher gesperrt/voll: die Server-Antwort STATUS_CONFIRMATION_USED bleibt die Sicherung.
+      }
     }
 
     var CONFIRM_OPTIONAL_ROWS = BOUND_ARG_FIELDS.filter(function (f) { return f !== "to" && f !== "objective"; }); // abgeleitet
@@ -605,7 +679,9 @@
           setDisplayText("[data-cf-" + field + "]", display);
         }
       }
-      if (confirmCodeUsable()) {
+      if (confirmState === "used") {
+        showConfirmHint(t(CONFIRMATION_USED_HINT));
+      } else if (confirmCodeUsable()) {
         setElementVisible("[data-confirm-hint]", false);
       } else {
         showConfirmHint(t("Confirmation code unavailable — ask for a new prepare_call."));
@@ -631,7 +707,7 @@
       var expiresRaw = meta && isRecord(meta) ? meta[CONFIRMATION_EXPIRES_META_KEY] : null;
       var expiresAtMs = typeof expiresRaw === "string" ? Date.parse(expiresRaw) : NaN;
       pendingConfirmation = { args: args, code: code, expiresAtMs: isNaN(expiresAtMs) ? null : expiresAtMs };
-      confirmState = "awaiting";
+      confirmState = wasConfirmationSent(pendingConfirmation) ? "used" : "awaiting";
       renderConfirmation();
     }
 
@@ -683,12 +759,7 @@
       }
       if (confirmState !== "submitting" && !wasTimedOut) return; // schon rejected/expired: kein zweiter Effekt
       if (m.error) {
-        if (!wasTimedOut) {
-          confirmState = "uncertain";
-          showConfirmHint(t("Unclear whether the call was placed — do not confirm again; check list_calls."));
-          updateConfirmButtonState();
-          sendUncertainMessage();
-        }
+        if (!wasTimedOut) enterUncertainState();
         return;
       }
       var result = m.result;
@@ -703,11 +774,12 @@
         if (!wasTimedOut) sendPlacedMessage(callId);
         return;
       }
-      if (!wasTimedOut) {
-        confirmState = "rejected";
-        showConfirmHint(serverRejectionText(result));
-        updateConfirmButtonState();
+      if (wasTimedOut) return;
+      if (isRecord(structured) && structured.status === STATUS_CONFIRMATION_USED) {
+        enterConfirmEndState("used", t(CONFIRMATION_USED_HINT));
+        return;
       }
+      enterConfirmEndState("rejected", serverRejectionText(result));
     }
 
     // Nie der Code.
@@ -716,29 +788,25 @@
       return (first && typeof first.text === "string" && first.text.trim()) || t("Call was not started — ask for a new prepare_call.");
     }
 
-    // "unklar" statt "fehlgeschlagen" (ein Host-Timeout beweist keinen Fehlschlag).
     function onConfirmResponseTimeout() {
       confirmResponseTimerId = null;
       if (confirmState !== "submitting") return;
-      confirmState = "uncertain";
-      showConfirmHint(t("Unclear whether the call was placed — do not confirm again; check list_calls."));
-      updateConfirmButtonState();
-      sendUncertainMessage();
+      enterUncertainState();
     }
 
     // EINZIGER Sendeort: 1) Doppelklick-Sperre synchron. 2) Code/Ablauf pruefen. 3) Senden;
-    // nur bei Versand (true) -> "submitting", sonst bleibt der Knopf aktiv.
+    // nur bei Versand (true) -> lokal als abgeschickt merken + "submitting", sonst bleibt der
+    // Knopf aktiv.
     function onConfirmButtonClick() {
       if (confirmState !== "awaiting") return;
       if (!confirmCodeUsable()) {
-        confirmState = "expired";
-        showConfirmHint(t("Confirmation expired — ask for a new prepare_call."));
-        updateConfirmButtonState();
+        enterConfirmEndState("expired", t("Confirmation expired — ask for a new prepare_call."));
         return;
       }
       var callArgs = Object.assign({}, pendingConfirmation.args); // schon gefiltert
       callArgs.confirmation_code = pendingConfirmation.code;
       if (!sendToolCall(TOOL_PLACE_CALL, callArgs)) return; // Handshake noch nicht fertig
+      rememberConfirmationSent(pendingConfirmation);
       confirmState = "submitting";
       updateConfirmButtonState();
       confirmResponseTimerId = setTimeout(onConfirmResponseTimeout, PLACE_CALL_RESPONSE_TIMEOUT_MS);

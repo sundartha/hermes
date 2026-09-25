@@ -40,6 +40,7 @@ import { MCP_ERROR_CODE, MCP_TEXTS } from "./i18n/mcp-texts.js";
 // nicht kopiert, nicht nachgebaut. Wiederverwendung an genau der Naht, an der
 // failure_reason den Server verlaesst (callOutcomeView unten).
 import { failureReasonBase } from "./telephony/failure-reason.js";
+import { CONFIRMATION_ALREADY_USED_REASON } from "./call-confirmation.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
 // NICHT MEHR EXPORTIERT: der einzige Fremdnutzer war src/conversation/outcome-to-mcp-
@@ -1182,6 +1183,22 @@ function withWidgetLocale(config, handler, language) {
 // Rendering-Detail, sondern das Geheimnis selbst. T2-14: dupliziert in call.html (dort), eine Aenderung NUR hier deaktiviert den Bestaetigen-Knopf lautlos.
 const CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
 const CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
+// T2-14-Nachbesserung: Maschinenfeld im place_call-Fehlerergebnis fuer einen schon
+// verbrauchten Code (Route-Grund CONFIRMATION_ALREADY_USED_REASON). Die Karte (call.html,
+// dort dupliziert) erkennt daran sprachunabhaengig, dass ihr Anruf schon abgeschickt wurde,
+// und bietet keinen zweiten Klick an. Traegt weder Code noch Register-Interna.
+const CONFIRMATION_USED_STATUS = "confirmation_used";
+
+function confirmationUsedResult(loc) {
+  return { ...errText(loc.mcp.confirmationAlreadyUsed), structuredContent: { status: CONFIRMATION_USED_STATUS } };
+}
+
+// Ergebnis fuer ein nicht bestaetigtes place_call: schon verbrauchter Code -> eigenes Ergebnis
+// (confirmationUsedResult), sonst der generische Hinweis confirmationRequired.
+function unconfirmedResult(loc, confirmResult) {
+  if (confirmResult.reason === CONFIRMATION_ALREADY_USED_REASON) return confirmationUsedResult(loc);
+  return errText(loc.mcp.confirmationRequired(confirmResult.preview.to, confirmResult.preview.objective));
+}
 
 // T2-13 (N-10, Schritt 6): woertlich verschoben aus dem place_call-inputSchema-Literal -
 // prepare_call und place_call teilen sich JETZT dieses eine Schema (confirmation_code
@@ -1541,7 +1558,7 @@ export function registerTools(
       });
       requireFields(confirmResult, { preview: "object" });
       if (!confirmResult.confirmed) {
-        return errText(loc.mcp.confirmationRequired(confirmResult.preview.to, confirmResult.preview.objective));
+        return unconfirmedResult(loc, confirmResult);
       }
       const r = await placeCallHopCall(request);
       requireFields(r, { callId: "string" });
