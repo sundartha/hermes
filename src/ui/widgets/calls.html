@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Hermes — Calls</title>
 <style>
-  /* Gemeinsamer Olympus-HUD-Kartenrahmen (H4) - siehe agent-status.html fuer
+  /* Gemeinsamer Olympus-HUD-Kartenrahmen - siehe agent-status.html fuer
      die ausfuehrliche Begruendung. Der .list-Wrapper UND die Basis-Regeln
      .list .row/.list .row:first-child/.list .cell kommen ebenfalls aus
      HUD_CARD_CSS (geteilt, s. hud-card-css.js). */
@@ -43,7 +43,7 @@
       <span class="hero-title" data-i18n="Recent calls">Recent calls</span>
     </div>
     <!-- Objekt-Listen-Slot: data-mcp-row deklariert die Sub-Felder je Eintrag; das
-         W1-Binding (widget-bind.js) rendert je Call eine Row (textContent, XSS-sicher).
+         Binding (widget-bind.js) rendert je Call eine Row (textContent, XSS-sicher).
          class="list" ist ein reiner Styling-Hook (position/z-index gegen das
          Scanline-Overlay) - data-mcp/data-mcp-row bleiben unveraendert. -->
     <div class="list" data-mcp="calls" data-mcp-row="direction,counterparty,status,startedAt,summary"></div>

@@ -160,10 +160,20 @@ const EXPECTED_RESOURCE_META = {
 // Beschreibungen unveraendert. Beide Pfade weiterhin byte-identisch. Actual-Wert aus dem roten
 // Diff uebernommen, nicht geschaetzt. Voriger Sollwert (beide Pfade):
 // 7f16173f41dfe310b819b8b643ff950645f54a1a3cab7a2d3420a034bb6df551.
+// Neu gepinnt (Kommentar-Bereinigung, Review-Befund): interne Prozess-Verweise (Phasen-/
+// Test-Kennungen, Verweise auf inzwischen geloeschte PLAN-/Spec-Dateien, "Owner"-Formulierungen)
+// aus den ausgelieferten Widget-Kommentaren entfernt (call.html direkt, sowie die geteilten,
+// ROH eingebetteten Quellen hud-card-css.js/wing-canvas-mount-idle.js/wing-canvas-engine.js) +
+// zwei sachliche Kommentar-Korrekturen in call.html (s. src/ui/widget-versions.json) - reiner
+// Kommentar-Fix, kein Verhalten, aber ausgeliefertes HTML aendert sich -> neue Version aller
+// vier Widgets (agent-status 7, my-number 8, calls 7, call 9). Werkzeug-Beschreibungen
+// unveraendert. Beide Pfade weiterhin byte-identisch. Actual-Wert aus dem roten Diff
+// uebernommen, nicht geschaetzt. Voriger Sollwert (beide Pfade):
+// b12f140a2ff461cf0b24d24d0135e285889834324d7038e757028aa547ce54f4.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "b12f140a2ff461cf0b24d24d0135e285889834324d7038e757028aa547ce54f4";
+  "84cbfd1c490a3bcf03966dced65016655181667f39387f6f3772a3ce81bf5cb3";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "b12f140a2ff461cf0b24d24d0135e285889834324d7038e757028aa547ce54f4";
+  "84cbfd1c490a3bcf03966dced65016655181667f39387f6f3772a3ce81bf5cb3";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

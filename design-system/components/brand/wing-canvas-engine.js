@@ -4,8 +4,8 @@
 // (test/mcp-ui-wing-canvas-sync.test.js) erzwingt die Gleichheit - bei einer
 // Aenderung IMMER beide Orte pflegen.
 //
-// Hermes-Fluegel als deformierbares Canvas2D-Dreiecksnetz (Portierung aus dem
-// H0-Spike, Mathe 1:1 aus apps/hermes-animation-lab/src/wing/{HermesWing.ts,
+// Hermes-Fluegel als deformierbares Canvas2D-Dreiecksnetz (Portierung aus einem
+// Prototyp, Mathe 1:1 aus apps/hermes-animation-lab/src/wing/{HermesWing.ts,
 // deform.ts,motionState.ts,presets.ts}). Kein Pixi/GSAP/CDN, self-contained IIFE,
 // globaler Einstieg window.HermesWingCanvas.mount(host, opts). Status-Timelines
 // (idle/connecting/working/success/error) + Mini-Timeline-Runtime (GSAP-Ersatz)
@@ -38,9 +38,9 @@
   // Einschwingzeit der idle-Timeline (aus dem Ruhezustand in den Drift).
   var SETTLE = 0.3;
 
-  // ---- H2-Produktionskonstanten (H0-Messwerte) ----
+  // ---- Produktionskonstanten (gemessene Werte) ----
   var HERMES_GOLD = "#e6be5c";
-  var GOLD_ENABLED = false; // Owner-Gate auf Quell-Ebene
+  var GOLD_ENABLED = false; // bewusst deaktiviert auf Quell-Ebene
   var GOLD_STRENGTH = 0.35;
   var GOLD_PULSE_GAIN = 0.25;
   var FPS_CAP_DEFAULT = 30; // Cap 30 traegt bequem
@@ -348,7 +348,7 @@
     ctx.restore();
   }
 
-  // ---- H2-Produktionshelfer ----
+  // ---- Produktionshelfer ----
   function hexToRgb(hex) {
     var bigint = parseInt(hex.replace("#", ""), 16);
     var r = (bigint >> 16) & 0xff;

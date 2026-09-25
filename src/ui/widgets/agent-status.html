@@ -6,12 +6,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Hermes — Agent Status</title>
 <style>
-  /* Gemeinsamer Olympus-HUD-Kartenrahmen (H4, Muster call.html/H3): Tokens,
+  /* Gemeinsamer Olympus-HUD-Kartenrahmen (Muster: call.html): Tokens,
      Karten-Chrome, Wing-Mount-Bereich und Fuss kommen aus EINER Quelle
      (hud-card-css.js), injiziert von widget-catalog.js (withHudCardCss) - G5/S2,
      dieselben ~35 Zeilen sonst 4x wortgleich in den Read-only-Widgets kopiert. */
   /*__HUD_CARD_CSS__*/
-  /* Wing-Marke: CSS aus wing-markup.js injiziert (dunkle idle-Auspraegung, H4 -
+  /* Wing-Marke: CSS aus wing-markup.js injiziert (dunkle idle-Auspraegung,
      siehe widget-catalog.js WIDGET_DEFS.agent-status.wing). */
   /*__WING_CSS__*/
   /* Statische HUD-Zeilen (Schluessel/Wert) - nur dieses Widget braucht sie
@@ -50,11 +50,11 @@
     </div>
     <div class="foot"><span data-mcp="number">—</span><span>Hermes</span></div>
   </div>
-  <!-- Read-only Widget (W3/H4): kein Callback, kein Tool-Trigger, kein
-       Button-Element. Das eingefuegte Binding-Script (widget-bind.js, W1)
+  <!-- Read-only Widget: kein Callback, kein Tool-Trigger, kein
+       Button-Element. Das eingefuegte Binding-Script (widget-bind.js)
        fuellt data-mcp-* aus dem host-gepushten structuredContent (SEP-1865).
        Der Wing-Canvas-Mount direkt darunter montiert die Engine ruhig im
-       idle-Zustand (H4, H0-Freigabe) - scheitert das, bleibt die CSS-WingMark
+       idle-Zustand - scheitert das, bleibt die CSS-WingMark
        oben im Markup sichtbar (Fail-Safe, Absolute Regel 3). -->
   <!--__WING_CANVAS_MOUNT__-->
 </body>
