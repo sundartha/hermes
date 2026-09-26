@@ -6597,3 +6597,24 @@ Abschalter waere eine neue abschaltbare Sicherung).
 **Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Store/REST/
 Sprachagent/Prompts, `src/ui/widgets/call.html`, Werkzeugtexte/`server-instructions`
 (byte-gleich master).
+
+## OpenAI-T2-16 — Hinweis und Einwilligung zu Gesundheitsangaben auf der Bestaetigungskarte (O-15)
+
+**Was gebaut ist:** `prepare_call` liefert im Ergebnis-`_meta` (fuer das Modell verborgen,
+neben Code und Ablauf) den lokalisierten Text `callDataNotice` (`src/i18n/mcp-texts.js`,
+de/en/fr) unter `hermes/call_data_notice`. Die Karte (`src/ui/widgets/call.html`) zeigt ihn
+direkt ueber "Anruf bestaetigen"; fehlt er oder ist er leer, bleibt der Knopf gesperrt
+(`confirmCodeUsable`, fail-closed). Inhalt: Angaben der Karte inkl. Gesundheitsangaben gehen an
+Agent und Anbieter, koennen dem Angerufenen gesagt werden, werden mit dem Anruf gespeichert;
+nur noetige Gesundheitsangaben; Bestaetigen = ausdrueckliche Einwilligung. `prepare_call`
+speichert nichts - der Hinweis steht also vor der Erhebung.
+
+**Grenzen (bewusst):** der Server erkennt Gesundheitsangaben nicht (Stichwortsperre traefe die
+erlaubten Arzttermine), deshalb steht der Hinweis auf JEDER Karte. Kein separates
+Einwilligungsfeld; ob Klick + Hinweis rechtlich genuegen, ist Rechtstext (Owner). Wie die
+Bestaetigung selbst gilt: reicht ein Host `_meta` ans Modell weiter, sieht auch das Modell den
+Hinweis und koennte sich selbst bestaetigen (s. OpenAI-T2-13).
+
+**Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Werkzeugtexte und
+`server-instructions` (tools/list-Hash unveraendert bis auf das Call-Widget, Version 10),
+Sprachagent/Prompts. Rueckbau: Revert des Commits.
