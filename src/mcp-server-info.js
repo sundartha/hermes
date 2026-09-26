@@ -127,10 +127,21 @@ export const CALL_PURPOSE_SHORT_RULE = `Not for ${listWithOr(
 // Quittung. Die vollen Bestandssaetze bleiben byte-identisch HINTER dem Kern
 // (BASE_DETAILS unten) - Doku-Zitate und Bestandspins auf ihren Wortlaut bleiben
 // gueltig, nur die Reihenfolge im Gesamttext aendert sich.
+//
+// Die Sequenz nennt das Schema-Feld `confirmation_code` NUR als Verbot: place_call
+// verlangt es laut eigener Beschreibung ("REQUIRES a confirmation_code"), und ohne den
+// exakten Feldnamen im Verbot liegt es nahe, den Nutzer nach dem Code zu fragen. Der
+// Code steht nur im _meta der Karte; das Modell kennt ihn nie, fragt nie danach und
+// ruft place_call nie selbst auf. Bewusst NICHT uebernommen aus der fruehen Planfassung:
+// "place_call mit dem Code aus der Nachricht des Nutzers" (seit der Karten-Bestaetigung
+// ruft die Karte place_call selbst - die Positivform waere eine Anleitung zur
+// Selbstbestaetigung) und await_call_event im Basis-Kern (dort nicht registriert, s.
+// CORE_CONSULT_LOOP). Der Consult-Kern liegt knapp unter 512 Zeichen - der Draht-Test
+// test/openai-t2-17-instructions-kern.test.js schlaegt an, sobald er darueber waechst.
 const CORE_SEQUENCE =
-  "Before every place_call, call prepare_call first; the user confirms in the Hermes " +
-  "card, which then places the call - never call place_call yourself or invent a " +
-  "confirmation code.";
+  "Call prepare_call before every phone call; only the Hermes card places it, after " +
+  "the user confirms - never call place_call yourself, never ask the user for or " +
+  "invent a confirmation_code.";
 // NUR im Consult-Kern: ohne Consult-Freigabe ist await_call_event nicht registriert,
 // dieselbe Regel wie beim Bestandstext (Pins P4 Fall 4/5, Kommentar unten).
 const CORE_CONSULT_LOOP =

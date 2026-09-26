@@ -18,7 +18,9 @@ const PROTOCOL_VERSION = "2025-06-18";
 const RAW_TOOLS_RESULT = z.object({ tools: z.array(z.any()) });
 // Bootstrap-Tenant fuer OAuth (wie test/openai-t2-11-werkzeugtexte.test.js); der zweite
 // sub bleibt ungeseeded -> kein Mandant -> Stub-Fassade (src/mcp-no-tenant.js).
-const OAUTH_SUBJECT = "sub-mcp-draht-pfade";
+// OAUTH_SUBJECT exportiert: test/openai-t2-17-instructions-kern.test.js misst damit
+// zusaetzliche OAuth-Pfade (MCP_UI_ENABLED=true), ohne den Snapshot-Code zu kopieren.
+export const OAUTH_SUBJECT = "sub-mcp-draht-pfade";
 const NO_TENANT_SUBJECT = "sub-mcp-draht-pfade-ohne-mandant";
 
 async function httpToolsList(url, token) {
@@ -55,7 +57,8 @@ export async function legacySnapshot(env) {
   }
 }
 
-async function oauthSnapshot({ subject, env = {} }) {
+// T2-17: exportiert, s. Kommentar bei legacySnapshot oben.
+export async function oauthSnapshot({ subject, env = {} }) {
   const idp = await startIdp();
   const srv = await startServer({
     seed: seedState({}),
