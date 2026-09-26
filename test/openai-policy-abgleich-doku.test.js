@@ -5,7 +5,7 @@
 //   1. Anker-Block: an jeder genannten Stelle steht der Anker-Text; jede datei:zeile-Angabe
 //      im Fliesstext steht im Block (und umgekehrt).
 //   2. Werkzeug-Zitate: jedes Zitat steht woertlich im ECHTEN tools/list - ueber HTTP /mcp
-//      (Legacy-Token, mit Consult = alle 11 Werkzeuge) UND ueber stdio. Nie das
+//      (Legacy-Token, mit Consult = alle 12 Werkzeuge) UND ueber stdio. Nie das
 //      registerTool-Konfigobjekt pruefen: das SDK verwirft unbekannte Felder still, ein Test
 //      darauf beweist nichts.
 //   3. Jedes Policy-Zitat (Zeile "> \"...") nennt eine OpenAI-URL.
@@ -14,8 +14,9 @@
 //   5. Ehrlichkeit der Quellen: jedes Zitat aus einer Seite, die beim Abgleich nicht direkt
 //      abrufbar war, traegt den Nachpruef-Vermerk. Wer den Vermerk entfernt, muss die Seite
 //      gegengelesen haben und diesen Test bewusst anpassen.
-//   6. Jede Luecke in Teil C nennt ein Ziel (geplant, keinem Arbeitspaket zugeordnet oder
-//      ohne Betreiber-Entscheidung) - keine Luecke ohne Aussage, wie es mit ihr weitergeht.
+//   6. Jede Luecke in Teil C nennt ein benanntes Ziel (Entscheidung des Betreibers, bewusst
+//      nicht umgesetzt mit Grund, geplante Aenderung) - keine Luecke ohne Aussage, wie es mit
+//      ihr weitergeht, und kein unbestimmtes "noch keinem Arbeitspaket zugeordnet".
 //
 // Testnamen tragen KEIN Katalog-/ABNAHME-Praefix (package.json i18nCatalogPattern/
 // abnahmePattern), sonst landet dieser Test im falschen Lauf.
@@ -56,7 +57,11 @@ const GAPS_SECTION = { begin: "## Teil C: Luecken", end: "## Anker (maschinenles
 const GAP_ITEM_START = /^\d+\. \*\*/m;
 // Der Ziel-Wert darf ueber einen Zeilenumbruch laufen; geprueft wird der Text mit
 // zusammengezogenem Leerraum.
-const GAP_TARGET = /Ziel[^:]*: (planned: |open, not yet assigned to a work package|open, no owner decision yet)/;
+// Genau drei benannte Ziel-Formen, jede mit Inhalt nach dem Doppelpunkt (was entschieden, warum
+// nicht umgesetzt, was geaendert wird).
+const GAP_TARGET = /Ziel: (Entscheidung des Betreibers|bewusst nicht umgesetzt|geplante Aenderung): \S/;
+// Unbestimmte Ziele ohne Entscheidung, Grund oder Aenderung - duerfen nicht (mehr) vorkommen.
+const UNDETERMINED_TARGET = /not yet assigned|no owner decision yet|open, /i;
 // Interne Kennungen (Phasen, Befunde, Owner-Punkte, Branches), E.164-artige Nummern,
 // Secret-Muster. Das Dokument kann an OpenAI gehen.
 const FORBIDDEN_PATTERNS = [
@@ -263,5 +268,10 @@ test("Policy-Abgleich: jede Luecke in Teil C nennt ein Ziel", () => {
   for (const item of items) {
     const flat = item.replace(/\s+/g, " ");
     assert.match(flat, GAP_TARGET, `Luecke ohne Ziel: ${flat.slice(0, ERROR_EXCERPT_CHARS)}`);
+    assert.doesNotMatch(flat, UNDETERMINED_TARGET, `unbestimmtes Ziel: ${flat.slice(0, ERROR_EXCERPT_CHARS)}`);
   }
+  // Positiv-Kontrolle: die fruehere, unbestimmte Form faellt durch.
+  const former = "Ziel: open, not yet assigned to a work package.";
+  assert.doesNotMatch(former, GAP_TARGET, "Kontrolle: unbestimmtes Ziel ist kein benanntes Ziel");
+  assert.match(former, UNDETERMINED_TARGET, "Kontrolle: unbestimmtes Ziel wird erkannt");
 });

@@ -170,10 +170,43 @@ const EXPECTED_RESOURCE_META = {
 // unveraendert. Beide Pfade weiterhin byte-identisch. Actual-Wert aus dem roten Diff
 // uebernommen, nicht geschaetzt. Voriger Sollwert (beide Pfade):
 // b12f140a2ff461cf0b24d24d0135e285889834324d7038e757028aa547ce54f4.
+// Neu gepinnt (Werkzeugtexte T2-16): prepare_call/place_call-Beschreibungen tragen die
+// Zweckbindung (Nutzungsregel, keine Pruefung) und den Hinweis zu sensiblen Mandaten,
+// briefing/context sind minimiert und markenneutral, on_out_of_scope nennt ehrlich, dass es
+// nicht auf jedem Anrufweg wirkt. Widgets unveraendert. Beide Pfade weiterhin byte-identisch.
+// Actual-Wert aus dem roten Diff uebernommen, nicht geschaetzt. Voriger Sollwert (beide
+// Pfade): 84cbfd1c490a3bcf03966dced65016655181667f39387f6f3772a3ce81bf5cb3.
+// Neu gepinnt (Nachbesserung Werkzeugtexte): die Zweckregel ist enger gefasst (Auftrag auch
+// fuer Angehoerige, nur Massenanwahl ausgeschlossen), der Satz zu sensiblen Mandaten laesst
+// die Terminwahl zu, und die context-Unterfelder nennen je einen engen Zweck. Widgets
+// unveraendert, beide Pfade weiterhin byte-identisch. Actual-Wert aus dem roten Diff
+// uebernommen. Voriger Sollwert (beide Pfade):
+// 3c641a85cb7a6882aa284ec39f48b23c132037780adf4bdd31ccbf51ffd4edb1.
+// Neu gepinnt (Datenhinweis vor der Bestaetigung): call.html zeigt den vom Server gelieferten
+// Hinweis zu Gesundheitsangaben ueber dem Bestaetigen-Knopf und bietet ohne ihn keinen Klick
+// an - NUR call aendert sich (Version 10), Werkzeug-Beschreibungen unveraendert. Beide Pfade
+// weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen. Voriger Sollwert
+// (beide Pfade): 543878b52eec4bfdb58f4843bf9c38344a2f483c3b39111095b74bbbbaec7de0.
+// Neu gepinnt (Datenhinweis vollstaendig): der Hinweis auf der Karte nennt alle besonderen
+// Datenkategorien und die Zweck-Zusage (kommt vom Server, nicht aus diesem Capture), die
+// Feldtexte von briefing/context sagen "Sensitive details" statt "Health details", und der
+// Kommentar zum Hinweis-Schluessel in call.html ist nachgezogen (Version 11). Beide Pfade
+// weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen. Voriger Sollwert
+// (beide Pfade): 987d92591ef5cbde08f6d70a7848c23e17a710b5357df4a8ed5a279f2766e23f.
+// Neu gepinnt (Datenhinweis ohne Einwilligungs-/Zusicherungsformel): der Kartentext kommt vom
+// Server (nicht aus diesem Capture); geaendert ist nur der Kommentar zum Hinweis-Schluessel in
+// call.html (Version 12). Werkzeug-Beschreibungen unveraendert, beide Pfade weiterhin
+// byte-identisch. Actual-Wert aus dem roten Diff uebernommen. Voriger Sollwert (beide Pfade):
+// 39bd5a582c9564ecff0c839613a83cec89c3f063d950254404d83e4dad71d5a2.
+// Neu gepinnt (Abgrenzung context/briefing): die context-Beschreibung beschraenkt das Feld auf
+// das, was das Briefing nicht enthaelt (Text kuerzer, Schema unveraendert). Widgets
+// unveraendert, beide Pfade weiterhin byte-identisch. Actual-Wert aus dem roten Diff
+// uebernommen. Voriger Sollwert (beide Pfade):
+// 956e76b6e36b9ff8e1d46e25d474e5fec4a995032523ad5105eba1f132f6a17c.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "84cbfd1c490a3bcf03966dced65016655181667f39387f6f3772a3ce81bf5cb3";
+  "180847f0bf2c2303ed2ec5dab715c429e80492a28403d4191374918bf0e3bf96";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "84cbfd1c490a3bcf03966dced65016655181667f39387f6f3772a3ce81bf5cb3";
+  "180847f0bf2c2303ed2ec5dab715c429e80492a28403d4191374918bf0e3bf96";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

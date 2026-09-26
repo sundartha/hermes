@@ -6597,3 +6597,63 @@ Abschalter waere eine neue abschaltbare Sicherung).
 **Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Store/REST/
 Sprachagent/Prompts, `src/ui/widgets/call.html`, Werkzeugtexte/`server-instructions`
 (byte-gleich master).
+
+## OpenAI-T2-16 — Datenhinweis und Zweckhinweis auf der Bestaetigungskarte (O-15, O-18)
+
+**Was gebaut ist (Endstand):** `prepare_call` liefert im Ergebnis-`_meta` (fuer das Modell
+verborgen, neben Code und Ablauf) den lokalisierten Text `callDataNotice`
+(`src/i18n/mcp-texts.js`, de/en/fr) unter `hermes/call_data_notice`. Die Karte
+(`src/ui/widgets/call.html`, Version 12) zeigt ihn direkt ueber "Anruf bestaetigen"; fehlt er
+oder ist er leer, bleibt der Knopf gesperrt (`confirmCodeUsable`, fail-closed). Das erzwingt
+die KARTE, nicht der Server: der Server stellt den Text nur bereit und prueft nicht, ob er
+angezeigt wurde. Inhalt:
+- Datenhinweis: die Angaben der Karte gehen an Agent und Anbieter, koennen dem Angerufenen
+  gesagt werden und werden mit dem Anruf gespeichert; das gilt auch fuer jede besondere
+  Kategorie aus Art. 9 Abs. 1 DSGVO, die einzeln genannt ist (Gesundheit, rassische/ethnische
+  Herkunft, politische Meinungen, religioese/weltanschauliche Ueberzeugungen,
+  Gewerkschaftszugehoerigkeit, genetische/biometrische Daten, Sexualleben/sexuelle
+  Orientierung); solche Angaben nur, wenn der Anruf sie braucht.
+- Zweckhinweis als Sachaussage: "Hermes ist nicht fuer Telemarketing oder unaufgeforderte
+  Werbe-, Verkaufs-, Wahlkampf- oder Massenanrufe gedacht." (dieselben Ausschluesse wie
+  `CALL_PURPOSE_EXCLUSIONS`).
+- KEINE Einwilligungs- und KEINE Zusicherungsformel: der Klick bestaetigt den Anruf nach dem
+  Hinweis, er ist keine Einwilligung und keine Erklaerung des Nutzers. Ein frueherer
+  Zwischenstand ("Mit dem Bestaetigen willigst du ausdruecklich ... ein und sicherst zu ...")
+  war Rechtstext und ist entfernt; `test/openai-t2-16-place-call-texte.test.js` T16-f macht
+  jede solche Formel im Kartentext rot und pinnt Kategorien und Zweckhinweis je Sprache.
+`prepare_call` speichert nichts - der Hinweis steht vor der Erhebung. Die Feldtexte von
+`briefing`/`context` begrenzen "Sensitive details only as needed".
+
+**Grenzen (bewusst):** der Server erkennt besondere Kategorien nicht (eine Stichwortsperre
+traefe die erlaubten Arzttermine), deshalb steht der Hinweis auf JEDER Karte; er prueft auch
+den Zweck nicht (eine Stichwortpruefung liesse sich umformulieren und traefe Reklamationen/
+Angebotsanfragen). Reicht ein Host `_meta` ans Modell weiter, sieht auch das Modell Hinweis und
+Code und koennte sich selbst bestaetigen (s. OpenAI-T2-13).
+
+**Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Sprachagent/Prompts.
+Werkzeugtexte: nur die in dieser Phase benannten Beschreibungen (Zweckregel, briefing/context,
+on_out_of_scope), Draht-Hash neu gepinnt.
+
+**Rueckbau:** der Kartenhinweis haengt an drei Stellen gemeinsam - `callDataNotice`
+(`src/i18n/mcp-texts.js`), der `_meta`-Schluessel in `src/mcp-tools.js` und die Hinweis-Zeile
+samt Sperre in `src/ui/widgets/call.html` (neue Widget-Version nach
+`src/ui/widget-versions.json`, Draht-Hash in `test/openai-p8-widget-ui.test.js` neu pinnen).
+Kein einzelner Commit-Revert; die Werkzeugtexte zieht `scripts/briefing-bench/README.md`
+("Rueckbau") zurueck.
+
+**Owner-Punkt (offen, Rechtstext):** ob und welche Einwilligungs- oder Zusicherungsformel der
+Nutzer vor dem Waehlen bestaetigt (Einwilligung in die Verarbeitung besonderer Datenkategorien,
+Erklaerung zum Anrufzweck), und ob der Hinweis rechtlich genuegt, entscheidet der Owner. Bis
+dahin enthaelt die Karte nur Datenhinweis und Zweckhinweis.
+
+**Deploy-Vorbedingung (offen): Messung der Modellwirkung der place_call-/prepare_call-Texte.**
+Der echte Lauf von `scripts/briefing-bench` (alt = master `66d95ae` gegen den neuen Stand,
+5 Laeufe je Szenario, Modell `claude-sonnet-5`, Schluessel nur als Umgebungsvariable, ohne
+`.env`) scheiterte am 2026-09-26 in beiden Staenden beim ersten Aufruf mit
+`Anbieterfehler 400: Your credit balance is too low to access the Anthropic API. Please go to
+Plans & Billing to upgrade or purchase credits.` Es gibt damit KEINEN Messpunkt, weder alt
+noch neu. Die Texte bleiben; vor dem Deploy ist der Lauf nach `scripts/briefing-bench/README.md`
+nachzuholen (Kriterien: Selbstnennung 0, erfundene Fakten 0, Luecken-Klasse neu >= alt,
+Verweigerung legitimer Anrufe neu <= alt, Abweisung der Missbrauchs-Anrufe neu >= alt).
+Verfehlt er ein Kriterium, sind die Werkzeugtexte nach "Rueckbau" im selben README
+zurueckzunehmen.

@@ -185,6 +185,26 @@ export const MCP_TEXTS = Object.freeze({
       "fuer diesen Anruf nicht selbst auf und nie einen Code raten oder erfinden; die Karte " +
       "meldet die call_id danach per Chat-Nachricht. Zeigt dieser Host keine Hermes-Karte, kann " +
       "hier kein Anruf ausgeloest werden - das dem Nutzer ehrlich sagen.",
+    // Datenhinweis zu besonderen Datenkategorien (alle Kategorien aus Art. 9 Abs. 1 DSGVO,
+    // Gesundheitsangaben zuerst, weil Arzttermine sie brauchen) plus ein neutraler Satz zum
+    // Zweck (dieselben Ausschluesse wie CALL_PURPOSE_EXCLUSIONS in src/mcp-server-info.js) -
+    // fuer den MENSCHEN, nicht fuer das Modell: steht nur im Ergebnis-_meta von prepare_call
+    // und wird von der Karte direkt ueber dem Bestaetigen-Knopf angezeigt; ohne diesen Text
+    // bietet die Karte keinen Klick an. Bewusst OHNE Einwilligungs- oder Zusicherungsformel:
+    // ob und welche Erklaerung der Nutzer vor dem Waehlen bestaetigt, ist Rechtstext und
+    // entscheidet der Owner (PLAN-SECURITY.md). Der Server prueft weder Kategorien noch Zweck
+    // und liefert den Text nur mit; dass er vor dem Klick sichtbar ist, erzwingt allein die
+    // Karte (ohne Text kein Klick). Erhoben (gespeichert, an Agent und Anbieter) wird erst
+    // nach dem Klick - prepare_call speichert nichts. Nutzerseitig: deshalb mit Umlauten.
+    callDataNotice:
+      "Vor dem Bestätigen: Die Angaben auf dieser Karte gehen an den KI-Agenten und die " +
+      "Anbieter, über die der Anruf läuft, können der angerufenen Person gesagt werden und " +
+      "werden mit dem Anruf gespeichert. Das gilt auch für besonders geschützte Angaben: " +
+      "Gesundheitsangaben, rassische oder ethnische Herkunft, politische Meinungen, religiöse " +
+      "oder weltanschauliche Überzeugungen, Gewerkschaftszugehörigkeit, genetische oder " +
+      "biometrische Daten, Sexualleben oder sexuelle Orientierung. Gib solche Angaben nur an, " +
+      "wenn dieser Anruf sie wirklich braucht. Hermes ist nicht für Telemarketing oder " +
+      "unaufgeforderte Werbe-, Verkaufs-, Wahlkampf- oder Massenanrufe gedacht.",
     // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
     // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
     emptyCalls: "Noch keine Anrufe.",
@@ -323,6 +343,14 @@ export const MCP_TEXTS = Object.freeze({
       "call yourself, and never guess or invent a code. The card reports the call_id back " +
       "in a chat message once it is placed. If this host does not show the Hermes card, " +
       "no call can be placed from here - tell the user so honestly.",
+    callDataNotice:
+      "Before you confirm: the details on this card go to the AI agent and the providers that " +
+      "run the call, may be told to the person you call, and are stored with the call record. " +
+      "This also applies to special categories of data: health details, racial or ethnic " +
+      "origin, political opinions, religious or philosophical beliefs, trade union membership, " +
+      "genetic or biometric data, sex life or sexual orientation. Only include such details if " +
+      "this call really needs them. Hermes is not meant for telemarketing or unsolicited " +
+      "advertising, sales, political campaign or mass calls.",
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
@@ -432,6 +460,15 @@ export const MCP_TEXTS = Object.freeze({
       "cet appel, et ne devinez ni n'inventez jamais de code. La carte signale la call_id " +
       "dans un message de chat une fois l'appel passé. Si cet hôte n'affiche pas la carte " +
       "Hermes, aucun appel ne peut être passé d'ici - dites-le honnêtement à l'utilisateur.",
+    callDataNotice:
+      "Avant de confirmer : les informations de cette carte sont transmises à l'agent IA et " +
+      "aux prestataires qui assurent l'appel, peuvent être communiquées à la personne appelée " +
+      "et sont conservées avec l'appel. Cela vaut aussi pour les catégories particulières de " +
+      "données : données de santé, origine raciale ou ethnique, opinions politiques, " +
+      "convictions religieuses ou philosophiques, appartenance syndicale, données génétiques " +
+      "ou biométriques, vie sexuelle ou orientation sexuelle. N'indiquez de telles informations " +
+      "que si cet appel en a vraiment besoin. Hermes n'est pas destiné au télémarketing ni " +
+      "aux appels publicitaires, commerciaux, de campagne politique ou de masse non sollicités.",
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",

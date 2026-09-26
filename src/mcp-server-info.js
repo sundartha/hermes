@@ -70,6 +70,55 @@ export const HERMES_SERVER_INFO = {
   ],
 };
 
+// Ausgeschlossene Anrufzwecke: EINE Tabelle, aus der die volle Zweckregel UND ihre
+// Kurzfassung in der place_call-Beschreibung gebaut werden. Jeder Eintrag MUSS `short`
+// ausdruecklich setzen: den Wortlaut in der Kurzfassung oder null, wenn er dort fehlt (der
+// Zeichen-Deckel der place_call-Texte, test/gq-b1-briefing-openness.test.js, ist knapp).
+// Eine neue Kategorie kann deshalb nicht still an der Kurzfassung vorbeilaufen; welche
+// Eintraege dort fehlen, pinnt test/openai-t2-16-place-call-texte.test.js, und
+// docs/OPENAI-POLICY-ABGLEICH.md nennt dieselben Luecken.
+export const CALL_PURPOSE_EXCLUSIONS = Object.freeze([
+  Object.freeze({ full: "telemarketing", short: "telemarketing" }),
+  Object.freeze({ full: "unsolicited advertising or sales calls", short: "unsolicited advertising" }),
+  Object.freeze({ full: "political campaigning", short: "political campaign calls" }),
+  Object.freeze({ full: "mass or automated dialling of many numbers", short: null }),
+]);
+
+// Aufzaehlung "a, b or c" (Kurzfassung) bzw. "a, b, or c" (volle Regel) - der Trenner vor
+// dem letzten Glied ist der einzige Unterschied, byte-identisch zum bisherigen Wortlaut. Ein
+// einzelnes Glied steht allein (kein fuehrendes "or"), eine leere Liste ergibt "".
+const LIST_SEPARATOR = ", ";
+const LAST_OR_FULL = ", or ";
+const LAST_OR_SHORT = " or ";
+export function listWithOr(items, lastSeparator) {
+  if (items.length <= 1) return items.join("");
+  return items.slice(0, -1).join(LIST_SEPARATOR) + lastSeparator + items.at(-1);
+}
+
+// Zweckbindung: EINE Quelle fuer die Server-Instructions (unten) UND die Beschreibung von
+// prepare_call (src/mcp-tools.js importiert sie) - wortgleich, keine zweite Formulierung.
+// Eine NUTZUNGSREGEL an das Modell, keine Pruefung: der Server prueft den Zweck eines Anrufs
+// nicht, der Satz traegt deshalb kein Durchsetzungs-Verb. Bewusst ENG, damit das Modell
+// legitime Anrufe nicht verweigert: erst die Positivliste (Termin, Verschiebung, Anfrage,
+// Reklamation), Auftrag auch fuer jemanden, fuer den der Nutzer handelt (Angehoerige);
+// ausgeschlossen nur Unaufgefordertes und MASSEN-/automatische Anwahl - mehrere gezielte
+// Anrufe (drei Friseure abtelefonieren) bleiben erlaubt.
+export const CALL_PURPOSE_RULE =
+  "Place calls only when the user asks for them, for themselves or someone they act for, " +
+  "such as booking, rescheduling, enquiring or complaining - not for " +
+  listWithOr(
+    CALL_PURPOSE_EXCLUSIONS.map((entry) => entry.full),
+    LAST_OR_FULL,
+  ) +
+  ".";
+
+// Kurzfassung fuer die place_call-Beschreibung (src/mcp-tools.js), aus derselben Tabelle:
+// nur die Eintraege mit `short`. Ebenfalls eine Nutzungsregel ohne Durchsetzungs-Verb.
+export const CALL_PURPOSE_SHORT_RULE = `Not for ${listWithOr(
+  CALL_PURPOSE_EXCLUSIONS.filter((entry) => entry.short !== null).map((entry) => entry.short),
+  LAST_OR_SHORT,
+)}.`;
+
 // AL-P13/T-21: Server-Instruktionen fuer den MCP-Host. ACHTUNG: `instructions` ist ein
 // Feld von ServerOptions, NICHT von Implementation - in HERMES_SERVER_INFO gesetzt
 // wuerde es still verworfen. Deshalb liegt hier NUR der Text plus der Options-Bauer;
@@ -118,7 +167,11 @@ export const MCP_BASE_INSTRUCTIONS =
   "argument, briefing and context included: after changing any of them, call " +
   "prepare_call again and let the user confirm again. If this host does not show " +
   "the Hermes card, or card confirmation is switched off for this server, no call can be " +
-  "placed from here - tell the user so honestly.";
+  "placed from here - tell the user so honestly. " +
+  // Zweckbindung HINTER der Bestaetigungs-Sequenz: die Sequenz gehoert nach vorn (OpenAI:
+  // "Keep the most important details in the first 512 characters"), die Zweckregel folgt.
+  // Steht im Basis-Block, damit sie ueber MCP_CONSULT_INSTRUCTIONS auch im Consult-Fall gilt.
+  CALL_PURPOSE_RULE;
 
 // Consult-Block bleibt modul-intern (kein dritter Export, keine dritte Wahrheit) - er
 // gilt NUR, wenn der Tenant await_call_event/answer_consult registriert bekommt.

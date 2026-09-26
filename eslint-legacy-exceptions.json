@@ -138,7 +138,7 @@
       "no-magic-numbers :: No magic number: 1000.": 1,
       "no-magic-numbers :: No magic number: 2.": 6,
       "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 18,
-      "max-lines-per-function :: Function 'registerTools' has too many lines (397). Maximum allowed is 100.": 1
+      "max-lines-per-function :: Function 'registerTools' has too many lines (394). Maximum allowed is 100.": 1
     }
   },
   "src/worker/provisioning-orchestrator.js": {

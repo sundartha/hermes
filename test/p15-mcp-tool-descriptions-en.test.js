@@ -82,7 +82,10 @@ const EXPECTED_MARKERS = {
   "place_call.mandate.decide_freely": ["WITHOUT", "WITHOUT", "NOT"],
   "place_call.mandate.fallback_order": [],
   "place_call.mandate.on_out_of_scope": ["OUTSIDE", "ONLY"],
-  "place_call.context": ["BACKGROUND", "ADDITIONAL", "NEVER", "NO"],
+  // Minimierung (OpenAI "no broad contextual fields"): ADDITIONAL entfaellt legitim - genau
+  // "ADDITIONAL to the briefing" machte context zum zweiten Sammeltrichter neben dem
+  // Briefing. BACKGROUND/NEVER/NO (Rolle, Secret-Verbot) bleiben in derselben Reihenfolge.
+  "place_call.context": ["BACKGROUND", "NEVER", "NO"],
   "place_call.context.summary": [],
   "place_call.context.key_facts": ["NO"],
   "place_call.context.recipient_relationship": [],
@@ -153,7 +156,7 @@ const EXPECTED_MARKERS = {
   "prepare_call.mandate.decide_freely": ["WITHOUT", "WITHOUT", "NOT"],
   "prepare_call.mandate.fallback_order": [],
   "prepare_call.mandate.on_out_of_scope": ["OUTSIDE", "ONLY"],
-  "prepare_call.context": ["BACKGROUND", "ADDITIONAL", "NEVER", "NO"],
+  "prepare_call.context": ["BACKGROUND", "NEVER", "NO"],
   "prepare_call.context.summary": [],
   "prepare_call.context.key_facts": ["NO"],
   "prepare_call.context.recipient_relationship": [],

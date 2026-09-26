@@ -1920,10 +1920,9 @@ test("EL-START T8 (Fallback): steht keine Zone fest, nennt der Agent gar keine a
 });
 
 // ---- T9: das Briefing des Auftraggebers ----------------------------------------------
-// ABSICHTLICH ROT. briefing ist das Feld, in das place_call den GANZEN Hintergrund aus dem
-// bisherigen Chat legt (src/mcp-tools.js: "Relevant context from the chat so far that the
-// agent needs for the call" - Namen, Vorlieben, Vorgeschichte, gewuenschtes Ergebnis und
-// Ton). Auf dem BESTANDSWEG traegt es den Systemprompt mit; auf diesem Weg spricht der
+// ABSICHTLICH ROT. briefing ist das Feld, in das place_call den Hintergrund legt, den
+// dieser Anruf braucht (src/mcp-tools.js: "Only the context this call needs" - Namen,
+// Vorlieben, Vorgeschichte, gewuenschtes Ergebnis und Ton). Auf dem BESTANDSWEG traegt es den Systemprompt mit; auf diesem Weg spricht der
 // Agent DES ANBIETERS und weiss ausschliesslich, was der Anrufstart ihm mitgibt.
 //
 // Unsere Seite nimmt es an und behaelt es: place_call fuehrt es im Schema, /api/calls legt
