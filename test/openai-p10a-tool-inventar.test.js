@@ -237,6 +237,36 @@ test("P10a (H7/H8): Tabelle A hat genau 11 Zeilen, ihre Namensmenge ist gleich K
   assertNameSetMatches("Tabelle A vs. K1", tableA.map((row) => row.name), parseTableB(doc).get("K1").names);
 });
 
+// ==================== Code-Verweise: Registrierzeilen ====================
+// Die Doku verweist den Pruefer je Werkzeug auf "registered `src/mcp-tools.js:<zeile>`". Diese
+// Zeilen drifteten schon einmal um rund 600 Zeilen, ohne dass ein Test anschlug. Hier: an jeder
+// genannten Zeile steht der uiTool(-Aufruf, und die Folgezeile nennt genau dieses Werkzeug;
+// dazu die zwei Strukturverweise der Tabelle A (Consult-Zweig, Annotations-Tabelle).
+const MCP_TOOLS_SOURCE = path.join(ROOT, "src", "mcp-tools.js");
+const REGISTERED_REF = /\*\*(\w+)\*\* \(registered `src\/mcp-tools\.js:(\d+)`/g;
+const STRUCTURE_REFS = [
+  { ref: /`if \(consultAllowed\)`, `src\/mcp-tools\.js:(\d+)`/, code: "if (consultAllowed) {" },
+  { ref: /`TOOL_ANNOTATIONS` \(`src\/mcp-tools\.js:(\d+)-\d+`\)/, code: "const TOOL_ANNOTATIONS = {" },
+];
+
+const sourceLine = (lines, lineNumber) => (lines[lineNumber - 1] ?? "").trim();
+
+test("P10a (H7/H8): jede Registrier-Zeilenangabe zeigt auf den uiTool-Aufruf genau dieses Werkzeugs", () => {
+  const doc = readDoc();
+  const lines = fs.readFileSync(MCP_TOOLS_SOURCE, "utf8").split("\n");
+  const refs = [...doc.matchAll(REGISTERED_REF)].map(([, name, line]) => ({ name, line: Number(line) }));
+  assert.equal(refs.length, EXPECTED_TABLE_A_ROWS, "je Werkzeug genau eine Registrier-Zeilenangabe");
+  for (const { name, line } of refs) {
+    assert.equal(sourceLine(lines, line), "uiTool(", `${name}: Zeile ${line} ist kein uiTool(-Aufruf`);
+    assert.equal(sourceLine(lines, line + 1), `"${name}",`, `${name}: Zeile ${line} registriert ein anderes Werkzeug`);
+  }
+  for (const { ref, code } of STRUCTURE_REFS) {
+    const match = doc.match(ref);
+    assert.ok(match, `Verweis ${ref} fehlt in der Doku`);
+    assert.equal(sourceLine(lines, Number(match[1])), code, `Zeile ${match[1]} ist nicht "${code}"`);
+  }
+});
+
 // ==================== Prosa == Maschinenblock ====================
 test("P10a (H7/H8): Prosatabelle A stimmt Zeile fuer Zeile und Spalte fuer Spalte mit dem Maschinenblock", () => {
   const doc = readDoc();

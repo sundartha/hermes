@@ -128,21 +128,24 @@ nie gemessen.
   - Zweckbindung als Nutzungsregel an das Modell: die Beschreibung von `prepare_call`, ueber
     das das Modell jeden Anruf zuerst vorbereitet (`src/mcp-tools.js:944`), und die
     Server-Instructions tragen denselben Satz woertlich aus einer gemeinsamen Quelle
-    (`src/mcp-server-info.js:81-85`). Er beschraenkt Anrufe auf Anliegen, um die der Nutzer fuer
+    (`src/mcp-server-info.js:103-109`). Er beschraenkt Anrufe auf Anliegen, um die der Nutzer fuer
     sich oder fuer jemanden bittet, fuer den er handelt, und schliesst Telemarketing,
     unaufgeforderte Werbe- und Verkaufsanrufe, Wahlkampf und die massenhafte oder automatische
     Anwahl vieler Nummern aus. Die Beschreibung von `place_call` traegt nur eine Kurzfassung
-    (`src/mcp-tools.js:914`), ohne Verkaufsanrufe, ohne Massenanwahl und ohne den Auftrag fuer
-    Dritte.
+    (`src/mcp-tools.js:914`, `src/mcp-server-info.js:114`), ohne Verkaufsanrufe, ohne
+    Massenanwahl und ohne den Auftrag fuer Dritte. Beide Fassungen entstehen aus derselben Liste
+    der ausgeschlossenen Zwecke (`src/mcp-server-info.js:80`); dort ist fuer jeden Zweck
+    festgelegt, ob er in der Kurzfassung steht.
     Werkzeugtext (prepare_call): "Place calls only when the user asks for them, for themselves or someone they act for, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or mass or automated dialling of many numbers."
     Werkzeugtext (place_call): "Not for telemarketing, unsolicited advertising or political campaign calls."
 - Was fehlt: eine serverseitige Pruefung des Zwecks. Die Zweckbindung ist eine Anweisung an
   das Modell im Chat, keine Pruefung: der Server liest den Zweck eines Anrufs nicht und lehnt
   keinen Anruf wegen seines Inhalts ab. Beleg: `grep -ciE 'telemarket|advertis|cold.?call|sales|political|campaign|marketing'`
-  liefert 2 Zeilen in `src/mcp-server-info.js` und 2 in `src/mcp-tools.js` (die Anweisungstexte
-  selbst) und 0 in `src/telephony/outbound-gates.js`, `src/routes/api-calls.js` und
-  `src/routes/_validation.js`, also in der Gate-Kette und der Eingabepruefung des Anrufpfads
-  (Gegenprobe desselben Aufrufs: `grep -ciE 'safety gates' src/mcp-tools.js` liefert 2). Folgt
+  findet diese Begriffe nur in `src/mcp-server-info.js`, wo die Anweisungstexte fuer
+  `prepare_call`, `place_call` und die Server-Instructions entstehen, und liefert 0 in
+  `src/telephony/outbound-gates.js`, `src/routes/api-calls.js` und `src/routes/_validation.js`,
+  also in der Gate-Kette und der Eingabepruefung des Anrufpfads (Gegenprobe, dass derselbe
+  Aufruf Treffer findet: `grep -ciE 'safety gates' src/mcp-tools.js` liefert Treffer). Folgt
   ein Modell der Anweisung nicht, passiert ein einzelner Werbeanruf alle Gates; die
   Mengen-Gates bremsen Masse, aber sie verhindern keinen einzelnen Werbeanruf.
 - Status: `teilweise`. Luecke 1 in Teil C.
@@ -688,7 +691,7 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
 1. **Keine serverseitige Zweckpruefung**: die Zweckbindung gegen Telemarketing, Werbe- und
    Verkaufsanrufe, Wahlkampf und Massenanwahl steht als Anweisung an das Modell woertlich in der
    Beschreibung von `prepare_call` (`src/mcp-tools.js:944`) und in den Server-Instructions
-   (`src/mcp-server-info.js:81-85`), als Kurzfassung in `place_call` (`src/mcp-tools.js:914`); der
+   (`src/mcp-server-info.js:103-109`), als Kurzfassung in `place_call` (`src/mcp-tools.js:914`); der
    Server prueft den Zweck eines Anrufs nicht. Klauseln: "telemarketing", "spam", "political
    campaigning".
    Ziel (serverseitige Zweckpruefung): open, no owner decision yet.
@@ -901,8 +904,10 @@ src/mcp-tools.js:1355 | Only the context this call needs
 src/mcp-tools.js:1396 | Not applied on every call path.
 src/mcp-tools.js:1438 | Optional structured BACKGROUND for the agent
 src/mcp-tools.js:944 | For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only
-src/mcp-tools.js:914 | Not for telemarketing, unsolicited advertising or political campaign calls.
-src/mcp-server-info.js:81-85 | export const CALL_PURPOSE_RULE
+src/mcp-tools.js:914 | CALL_PURPOSE_SHORT_RULE
+src/mcp-server-info.js:103-109 | export const CALL_PURPOSE_RULE
+src/mcp-server-info.js:114 | export const CALL_PURPOSE_SHORT_RULE
+src/mcp-server-info.js:80 | export const CALL_PURPOSE_EXCLUSIONS
 src/mcp-tools.js:1414-1434 | open_questions: OPEN_QUESTIONS_FIELD
 src/mcp-tools.js:1375 | decide_freely: z
 src/research/sanitize.js:2 | wir sehen die Query nicht, bevor sie rausgeht

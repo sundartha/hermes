@@ -13,7 +13,7 @@ import { compareReports, evaluateReply } from "../scripts/briefing-bench/metrike
 import { SCENARIOS, GAP_CLASS } from "../scripts/briefing-bench/szenarien.mjs";
 
 const RUNS = 5;
-const LEGIT_SCENARIOS = 3;
+const LEGIT_SCENARIOS = 4;
 const TOTAL_RUNS = RUNS * SCENARIOS.length;
 const GAP_RUNS = RUNS * SCENARIOS.filter((scenario) => scenario.luecke).length;
 
@@ -26,7 +26,7 @@ async function snapshot() {
 const benchWith = async (injection) =>
   runBench({ snapshot: await snapshot(), model: dummyModel({ injection }), runs: RUNS });
 
-test("briefing-bench: Szenarien decken jede Luecken-Klasse und drei legitime Anrufe ab", () => {
+test("briefing-bench: Szenarien decken jede Luecken-Klasse und vier legitime Anrufe ab", () => {
   const classes = SCENARIOS.map((scenario) => scenario.klasse);
   for (const klasse of [GAP_CLASS.SELF, GAP_CLASS.PRINCIPAL, GAP_CLASS.LOOKUP])
     assert.ok(classes.includes(klasse), klasse);

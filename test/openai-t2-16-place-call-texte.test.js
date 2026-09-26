@@ -7,7 +7,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MCP_WIRE_PATHS } from "./mcp-draht-pfade.js";
-import { CALL_PURPOSE_RULE } from "../src/mcp-server-info.js";
+import {
+  CALL_PURPOSE_EXCLUSIONS,
+  CALL_PURPOSE_RULE,
+  CALL_PURPOSE_SHORT_RULE,
+} from "../src/mcp-server-info.js";
 
 const BRAND_NAMES = /\b(claude|gemini|chatgpt|copilot|openai)\b/i;
 const FOREIGN_TOOL_CLASSES = /calendar, mail|mail, files/i;
@@ -30,6 +34,10 @@ const CONFIRMATION_SEQUENCE_START = "Before every place_call, call prepare_call 
 // Massenanwahl, und die Terminwahl bleibt bei sensiblen Mandaten erlaubt.
 const NARROW_PURPOSE = [/someone they act for/, /mass or automated dialling/];
 const APPOINTMENT_TIMES_ALLOWED = /decide_freely cover appointment times only/;
+// Ausschluesse, die in der place_call-Kurzfassung bewusst FEHLEN (Zeichen-Deckel). Genau diese
+// Luecke nennt docs/OPENAI-POLICY-ABGLEICH.md; eine neue Kategorie ohne Kurzfassung muss hier
+// und dort nachgetragen werden, sonst schlaegt der Test an.
+const EXCLUSIONS_MISSING_FROM_SHORT_RULE = ["mass or automated dialling of many numbers"];
 // Nur die Werte dieser _meta-Schluessel sind modell-lesbarer Text; die Schluessel selbst
 // heissen protokollbedingt "openai/..." und sind kein Werkzeugtext.
 const MODEL_READABLE_META_KEYS = ["openai/toolInvocation/invoking", "openai/toolInvocation/invoked"];
@@ -111,6 +119,19 @@ test("T16-kontrolle: der Scanner schlaegt auf dem alten Wortlaut an (Positiv-Kon
   assert.deepEqual(forbiddenHits([], "Answer with Claude."), [`instructions: ${BRAND_NAMES}`]);
 });
 
+test("T16-e: volle Zweckregel und Kurzfassung decken dieselbe Ausschluss-Tabelle ab", () => {
+  assert.ok(CALL_PURPOSE_EXCLUSIONS.length > 0, "Tabelle ist nicht leer");
+  for (const entry of CALL_PURPOSE_EXCLUSIONS) {
+    assert.ok(Object.hasOwn(entry, "short"), `${entry.full}: short ausdruecklich gesetzt`);
+    assert.ok(CALL_PURPOSE_RULE.includes(entry.full), `volle Regel nennt "${entry.full}"`);
+    if (entry.short !== null)
+      assert.ok(CALL_PURPOSE_SHORT_RULE.includes(entry.short), `Kurzfassung nennt "${entry.short}"`);
+  }
+  const missing = CALL_PURPOSE_EXCLUSIONS.filter((entry) => entry.short === null).map((entry) => entry.full);
+  assert.deepEqual(missing, EXCLUSIONS_MISSING_FROM_SHORT_RULE);
+  assert.doesNotMatch(CALL_PURPOSE_SHORT_RULE, ENFORCEMENT_WORDS, "Kurzfassung behauptet keine Pruefung");
+});
+
 for (const path of MCP_WIRE_PATHS) {
   test(`T16-a (${path.label}): kein Markenname, keine fremden Werkzeugklassen, kein Chat-Verlauf, kein zweiter Trichter`, async () => {
     const { tools, instructions } = await snapshotOf(path);
@@ -123,6 +144,7 @@ for (const path of MCP_WIRE_PATHS) {
     assertPurposeRule("prepare_call", toolByName(tools, "prepare_call").description);
     assertPurposeRule("instructions", instructions);
     const placeCall = toolByName(tools, "place_call").description;
+    assert.ok(placeCall.includes(CALL_PURPOSE_SHORT_RULE), "place_call traegt die Kurzfassung aus der Tabelle");
     const shortRule = sentenceWith(placeCall, /telemarketing/i);
     assert.ok(shortRule, "place_call traegt die Kurzfassung");
     assert.match(shortRule, /political campaign/i);

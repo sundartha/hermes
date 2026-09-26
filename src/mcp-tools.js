@@ -44,7 +44,7 @@ import { RESTRICTED_CATEGORY, firstRestrictedField, maskRestrictedText } from ".
 // nicht kopiert, nicht nachgebaut. Wiederverwendung an genau der Naht, an der
 // failure_reason den Server verlaesst (callOutcomeView unten).
 import { failureReasonBase } from "./telephony/failure-reason.js";
-import { CALL_PURPOSE_RULE } from "./mcp-server-info.js";
+import { CALL_PURPOSE_RULE, CALL_PURPOSE_SHORT_RULE } from "./mcp-server-info.js";
 import { CONFIRMATION_ALREADY_USED_REASON } from "./call-confirmation.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
@@ -906,12 +906,12 @@ const OPEN_QUESTIONS_FIELD = z
 // Pruefung - der Server prueft den Zweck eines Anrufs nicht, der Satz darf deshalb kein
 // Durchsetzungs-Verb tragen. Die volle, eng gefasste Regel (mit Positivliste, damit das
 // Modell Termin-, Rueckfrage- und Reklamationsanrufe NICHT verweigert) ist CALL_PURPOSE_RULE
-// (src/mcp-server-info.js) in PREPARE_CALL_DESCRIPTION und in MCP_BASE_INSTRUCTIONS; hier
-// nur die Kurzfassung, weil
-// der Zeichen-Deckel der place_call-Texte (test/gq-b1-briefing-openness.test.js) knapp
-// ist. Klein geschrieben: der Emphase-Pin oben bleibt unveraendert.
+// (src/mcp-server-info.js) in PREPARE_CALL_DESCRIPTION und MCP_BASE_INSTRUCTIONS; hier nur
+// CALL_PURPOSE_SHORT_RULE, weil der Zeichen-Deckel (test/gq-b1-briefing-openness.test.js) knapp
+// ist. Beide Fassungen kommen aus der Tabelle CALL_PURPOSE_EXCLUSIONS (dort begruendet).
+// Klein geschrieben: der Emphase-Pin oben bleibt unveraendert.
 const PLACE_CALL_DESCRIPTION =
-  "REQUIRES a confirmation_code that only the Hermes card can supply - call prepare_call FIRST with the same arguments so the user can confirm there; once they do, the card places the call itself and reports the call_id back in a chat message, so you never call this tool for that call and never guess or invent its code. Without a code from the card the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective, and is NOT reversible once placed; billed per minute to the caller's account. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits). A live-updating card is NOT guaranteed on every host - ALWAYS track the call via the call_id from that chat message, using get_call_status until it reports a final status. Not for telemarketing, unsolicited advertising or political campaign calls.";
+  "REQUIRES a confirmation_code that only the Hermes card can supply - call prepare_call FIRST with the same arguments so the user can confirm there; once they do, the card places the call itself and reports the call_id back in a chat message, so you never call this tool for that call and never guess or invent its code. Without a code from the card the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective, and is NOT reversible once placed; billed per minute to the caller's account. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits). A live-updating card is NOT guaranteed on every host - ALWAYS track the call via the call_id from that chat message, using get_call_status until it reports a final status. " + CALL_PURPOSE_SHORT_RULE;
 
 // T2-13 (N-10): Beschreibung von prepare_call - reine Vorschau, KEIN Anruf, KEINE Kosten.
 // Nennt ausdruecklich, dass der Code nur auf einem Host mit Kartenfaehigkeit ankommt (s.

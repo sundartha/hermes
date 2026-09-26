@@ -18,9 +18,9 @@
 
 ## Table A - all 12 tools, in registration order
 
-Registration order: `src/mcp-tools.js:922-1548` (the `uiTool(...)` calls inside
+Registration order: `src/mcp-tools.js:1599-2098` (the `uiTool(...)` calls inside
 `registerTools()`). Condition column: "always" (registered unconditionally) or "consult"
-(`if (consultAllowed)`, `src/mcp-tools.js:1121`). Over HTTP, `consultAllowed` is
+(`if (consultAllowed)`, `src/mcp-tools.js:1730`). Over HTTP, `consultAllowed` is
 `consultAllowedFor(profile)` (`src/routes/mcp.js:139`, `:163`) = `config.tenancy.consultEnabled
 === true && config.tenancy.assistantContextEnabled === true && profile?.allowConsult === true`
 (`src/consult/gate.js:19-25`).
@@ -40,9 +40,9 @@ Registration order: `src/mcp-tools.js:922-1548` (the `uiTool(...)` calls inside
 | list_action_items | List action items | always | true | false | false | - |
 | get_agent_status | Get agent status | always | true | false | false | - |
 
-`-` = hint not set. The values come from `TOOL_ANNOTATIONS` (`src/mcp-tools.js:655-733`), the
-single source every registration draws from (`src/mcp-tools.js:912-913`); the title is
-`annotations.title` and is also emitted as the top-level `title` (`src/mcp-tools.js:784-794`).
+`-` = hint not set. The values come from `TOOL_ANNOTATIONS` (`src/mcp-tools.js:1085-1172`), the
+single source every registration draws from (each `uiTool(...)` call sets `annotations: TOOL_ANNOTATIONS.<name>`, e.g. `src/mcp-tools.js:1603`); the title is
+`annotations.title` and is also emitted as the top-level `title` (`src/mcp-tools.js:1224-1233`).
 
 Machine-readable block (`name|title|condition|readOnlyHint|destructiveHint|openWorldHint|idempotentHint`):
 
@@ -85,8 +85,8 @@ OpenAI requires `readOnlyHint`, `destructiveHint` and `openWorldHint` on every t
 specification lists all annotation fields as optional (in the MCP SDK's
 `ToolAnnotationsSchema`, every field is `.optional()`); where the two differ, Hermes follows
 OpenAI and sets all three on all 12 tools, including `destructiveHint: false` on the read-only
-tools (`src/mcp-tools.js:614-620`). `idempotentHint` is optional in both; Hermes sets it only on
-tools that write (`src/mcp-tools.js:618-620`) - per the MCP specification it is meaningful only
+tools (`src/mcp-tools.js:1044-1048`). `idempotentHint` is optional in both; Hermes sets it only on
+tools that write (`src/mcp-tools.js:1048-1050`) - per the MCP specification it is meaningful only
 when `readOnlyHint` is false. The hints are hints; each tool's `description` states its effects
 in full.
 
@@ -116,7 +116,7 @@ Hermes applies it as three statements, and every value in Table A follows from o
 The hint describes what a tool can do, not what every single invocation does: a tool that sends
 to an external party on at least one path is `true`, even if some invocations send nothing.
 
-- **prepare_call** (registered `src/mcp-tools.js:1599`, handler `:1600-1632`, REST
+- **prepare_call** (registered `src/mcp-tools.js:1599`, handler `:1608-1640`, REST
   `POST /api/call-confirmations`). Previews an outbound call and, when card confirmation is
   switched on for the server, attaches a single-use confirmation code for the Hermes card that
   `place_call` then requires - see "Confirmation before placing a call" below. The server does
@@ -132,7 +132,7 @@ to an external party on at least one path is `true`, even if some invocations se
     been used, repeating `prepare_call` with the same arguments in the same five-minute
     window returns the same code; once that code has been used to place a call, repeating
     `prepare_call` returns a new code.
-- **place_call** (registered `src/mcp-tools.js:1654`, handler `:1672-1716`, REST
+- **place_call** (registered `src/mcp-tools.js:1653`, handler `:1680-1724`, REST
   `POST /api/calls`). As of this inventory, `place_call` additionally REQUIRES a
   `confirmation_code` from a preceding `prepare_call` call with identical arguments - see
   "Confirmation before placing a call" below. The annotations below are unchanged by that
@@ -146,8 +146,8 @@ to an external party on at least one path is `true`, even if some invocations se
   - `idempotentHint: false` - repeating the call for a number that has a call in progress
     returns that same call (`deduplicated: true`, stated in the description), but only while
     that call is running; a repeat after it has ended places a new, separately billed call
-    (`src/mcp-tools.js:635-639`).
-- **await_call_event** (registered `src/mcp-tools.js:1122`, REST `GET /api/calls/:id/consult`,
+    (`src/mcp-tools.js:1065-1069`).
+- **await_call_event** (registered `src/mcp-tools.js:1731`, REST `GET /api/calls/:id/consult`,
   `src/routes/api-calls.js:658-682`).
   - `readOnlyHint: false` - each call writes to the call record: it sets the call's "client
     last polled" timestamp to the current time (`noteConsultPoll`, `src/store/state-ops.js:1677-1680`,
@@ -169,7 +169,7 @@ to an external party on at least one path is `true`, even if some invocations se
     it is kept in memory only and not saved (`src/store/json.js:749-759`,
     `src/store/pg.js:453-460`). A repeated identical call therefore refreshes that one
     timestamp and adds nothing else.
-- **answer_consult** (registered `src/mcp-tools.js:1151`, REST
+- **answer_consult** (registered `src/mcp-tools.js:1760`, REST
   `POST /api/calls/:id/consult/answer`, `src/routes/api-calls.js:690-714`).
   - `readOnlyHint: false` - with `status="final"` it adds the answers to the running call's
     background facts (`mergeContextFacts`, `src/store/state-ops.js:1325-1335`, applied at
@@ -186,23 +186,23 @@ to an external party on at least one path is `true`, even if some invocations se
     not a claim that a repeat has a second effect: a repeated identical final answer is refused
     (HTTP 409 `already_answered`, `src/store/state-ops.js:1363-1364`, `:1373-1375`,
     `src/routes/api-calls.js:193`); the tool then returns `accepted: false` and adds nothing
-    (`src/mcp-tools.js:1235-1236`). A repeated `status="working"` acknowledgement is accepted and
+    (`src/mcp-tools.js:1813-1816`). A repeated `status="working"` acknowledgement is accepted and
     changes nothing (`src/store/state-ops.js:1640`). A repeat does return a different result
     than the first call (`accepted: false` instead of `true`).
-- **get_call_status** (registered `src/mcp-tools.js:1275`, REST `GET /api/calls/:id`,
+- **get_call_status** (registered `src/mcp-tools.js:1855`, REST `GET /api/calls/:id`,
   `src/routes/api-read.js:98-107`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the call record and writes
     nothing.
   - `openWorldHint: false` (O3) - it reads only the account's own store; it reports on a call
     but does not contact the carrier or the other party.
   - `idempotentHint` not set - read-only tool.
-- **get_call_result** (registered `src/mcp-tools.js:1570`, REST `GET /api/calls/:id`).
+- **get_call_result** (registered `src/mcp-tools.js:1885`, REST `GET /api/calls/:id`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the same call record as
     get_call_status and returns the result summary; it never returns the raw transcript and
     writes nothing.
   - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
-- **cancel_call** (registered `src/mcp-tools.js:1345`, REST `POST /api/calls/:id/cancel`,
+- **cancel_call** (registered `src/mcp-tools.js:1939`, REST `POST /api/calls/:id/cancel`,
   `src/routes/api-calls.js:717-772`).
   - `readOnlyHint: false`, `destructiveHint: true` - for a running call it marks the call record
     cancelled, stops billing right away, and attempts a hang-up where the call path allows it.
@@ -219,13 +219,13 @@ to an external party on at least one path is `true`, even if some invocations se
   - `idempotentHint: true` - for a call that is no longer running, the route only returns the
     call's current status and does nothing else (`src/routes/api-calls.js:721`); a repeat is a
     no-op, not an error.
-- **get_agent_number** (registered `src/mcp-tools.js:1638`, REST `GET /api/state`,
+- **get_agent_number** (registered `src/mcp-tools.js:1960`, REST `GET /api/state`,
   `src/routes/api-read.js:63-96`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the account's agent phone number
     and writes nothing.
   - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
-- **list_calls** (registered `src/mcp-tools.js:1389`, REST `GET /api/state`).
+- **list_calls** (registered `src/mcp-tools.js:1988`, REST `GET /api/state`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the account's recent calls and
     writes nothing; unlike check_inbox it marks nothing as seen.
   - `openWorldHint: false` (O3) - own store only.
@@ -245,12 +245,12 @@ to an external party on at least one path is `true`, even if some invocations se
     (`INBOX_MAX_ENTRIES`, `src/routes/api-inbox.js:31`) and marks those as seen. An identical
     second call therefore returns and marks the next entries (those reported as `remaining`)
     or calls that ended in between - each repeat can change state further.
-- **list_action_items** (registered `src/mcp-tools.js:1449`, REST `GET /api/state`).
+- **list_action_items** (registered `src/mcp-tools.js:2044`, REST `GET /api/state`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the open action items and writes
     nothing.
   - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
-- **get_agent_status** (registered `src/mcp-tools.js:1519`, REST `GET /api/state`).
+- **get_agent_status** (registered `src/mcp-tools.js:2070`, REST `GET /api/state`).
   - `readOnlyHint: true`, `destructiveHint: false` - it reads the agent's number, monthly usage
     and permissions and writes nothing.
   - `openWorldHint: false` (O3) - own store only.
@@ -354,8 +354,13 @@ model in the field description, not a server-side check.
     are asked while the phone is ringing, and only when the account's permission profile
     allows questions to the principal (`src/routes/api-calls.js:424-428`).
 - `constraints` and `mandate` - hard limits, and the optional frame within which the agent may
-  commit. `mandate.on_out_of_scope` is not applied on every call path; its description says
-  so, without naming the path.
+  commit. `mandate.on_out_of_scope` has no effect on the voice-agent path: that path passes on
+  only the decision frame, the fallback order and the booking boundary, not this setting
+  (`src/elevenlabs/outbound.js:615`, `:622`). Which path handles a call is decided by one
+  global switch (`src/config.js:808`, off by default in the code; evaluated in
+  `src/routes/api-calls.js:521`); this document makes no claim about the production value.
+  On that path, `decline` and `accept_best` are therefore not applied. The field's
+  description says only "Not applied on every call path." and does not name the path.
 - `language`, `max_duration_s`, `diagnostic` - call settings.
 - `confirmation_code` - added to the schema of `place_call` only (`src/mcp-tools.js:1670`);
   it comes from the Hermes card after the user confirms.
@@ -392,7 +397,7 @@ The counts are **measured on the real wire** (HTTP `/mcp` and the stdio child pr
 | K3 | HTTP (OAuth) | Account without a stored profile (`DEFAULT_PROFILE`, `src/store/defaults.js:1069-1078`) | Consult on | 10 |
 | K4 | HTTP (OAuth) | Account with the paid-plan profile (`planProfileFor("starter")`, `src/plans.js:107-141`, `:154-156`) | Consult on | 12 |
 | K5 | HTTP (OAuth) | Account with the same paid-plan profile | Consult off | 10 |
-| K6 | stdio (`src/mcp-server.js`) | no account (defaults `consultAllowed = false`, `src/mcp-tools.js:809-818`) | not applicable (stdio never registers the consult tools) | 10 |
+| K6 | stdio (`src/mcp-server.js`) | no account (defaults `consultAllowed = false`, `src/mcp-tools.js:1244-1246`, `:1496`) | not applicable (stdio never registers the consult tools) | 10 |
 
 The count still depends on exactly one thing: whether the consult channel is available.
 K1 and K4 both have it and both count 12; K2, K3, K5 and K6 all lack it and all count 10 -
@@ -427,7 +432,7 @@ with - it is not a fixed catalog:
   consult switched off, or the bootstrap owner with consult switched off - reaches 9.
 - The stdio entry point (Claude Desktop, or any local MCP client that launches
   `src/mcp-server.js`) never registers the two consult tools and so always reaches 9. The
-  reasons in the code: stdio has no client model that polls (`src/mcp-tools.js:806-808`), the
+  reasons in the code: stdio has no client model that polls (`src/mcp-tools.js:1244-1246`), the
   process calls `registerTools()` without `consultAllowed` (default `false`), and it has no
   store from which an account's consult permission could be resolved
   (`src/mcp-server.js:23-37`).
@@ -444,7 +449,7 @@ conditional tools:
 
 - The two consult tools (`await_call_event`, `answer_consult`) are registered only when the
   consult channel is available to the account; otherwise they are not registered at all
-  (`src/mcp-tools.js:1118-1121`). The same gate function decides whether the tools are
+  (`src/mcp-tools.js:1727-1730`). The same gate function decides whether the tools are
   registered and - extended by one per-call condition, `consultAllowedForCall`
   (`src/consult/gate.js:41-43`) - whether the channel is offered on a live call. Registering
   tools whose channel cannot work would put tools into `tools/list` that the account cannot
@@ -463,4 +468,4 @@ with a clear message.
 The transport does not add a further axis: since T2-01 there is only one renderer for every host
 (the ChatGPT-/Skybridge adapter is removed), and it shares the exact same tool registration -
 `enableWidgetUi` only changes per-tool `_meta`, never which tools exist
-(`src/mcp-tools.js:870-877`).
+(`src/mcp-tools.js:1539-1546`).
