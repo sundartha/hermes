@@ -6684,8 +6684,9 @@ geaendert), `CALL_PURPOSE_RULE`/`CALL_PURPOSE_SHORT_RULE`/`CALL_PURPOSE_EXCLUSIO
 **Rueckbau:** die Kern-Konstanten und der Bauer `instructionsCore()` in
 `src/mcp-server-info.js` sowie die Komposition von `MCP_BASE_INSTRUCTIONS`/
 `MCP_CONSULT_INSTRUCTIONS` aus Kern + `BASE_DETAILS` (+ `CONSULT_BLOCK`);
-`test/openai-t2-17-instructions-kern.test.js`; die Exporte `legacySnapshot`/
-`stdioSnapshot` in `test/mcp-draht-pfade.js` (Rueckbau: wieder modul-intern); der neue
+`test/openai-t2-17-instructions-kern.test.js`; die Exporte `legacySnapshot`/`oauthSnapshot`/
+`stdioSnapshot` und `OAUTH_SUBJECT` in `test/mcp-draht-pfade.js` (Rueckbau: wieder
+modul-intern); der neue
 Absatz in `docs/OPENAI-TOOL-INVENTORY.md` ("Purpose rule"-Abschnitt); die Ergaenzungen in
 `scripts/briefing-bench/README.md` ("Deploy-Vorbedingung", "Rueckbau"). Kein einzelner
 Commit-Revert (mehrere Dateien haengen am neuen Wortlaut, s. README).

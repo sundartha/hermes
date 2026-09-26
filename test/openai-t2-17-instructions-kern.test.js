@@ -42,7 +42,7 @@ const BASE_DETAILS_START = 'If a call reports a failure_reason starting with "';
 const ASCII_UPPER_BOUND = 127;
 const isAsciiOnly = (text) => [...text].every((char) => char.codePointAt(0) <= ASCII_UPPER_BOUND);
 
-// Zwei zusaetzliche Pfade mit MCP_UI_ENABLED=true - dieselben Snapshot-Bausteine wie
+// Fuenf zusaetzliche Pfade mit MCP_UI_ENABLED=true - dieselben Snapshot-Bausteine wie
 // test/mcp-draht-pfade.js (jetzt dort exportiert statt kopiert). "mit Consult" im Label
 // entscheidet unten, welche Pruefungen zusaetzlich greifen (isConsultLabel).
 const UI_ENABLED_PATHS = Object.freeze([

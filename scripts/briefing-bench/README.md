@@ -82,7 +82,8 @@ Doku-Zitate haengen am neuen Wortlaut. Zurueckzunehmen sind gemeinsam:
   `instructionsCore()` in `src/mcp-server-info.js`, sowie die Komposition von
   `MCP_BASE_INSTRUCTIONS`/`MCP_CONSULT_INSTRUCTIONS` aus Kern + `BASE_DETAILS` (+
   `CONSULT_BLOCK`); dazu `test/openai-t2-17-instructions-kern.test.js` und die exportierten
-  Snapshot-Bausteine (`legacySnapshot`/`stdioSnapshot`) in `test/mcp-draht-pfade.js`.
+  Snapshot-Bausteine (`legacySnapshot`/`oauthSnapshot`/`stdioSnapshot` und der
+  `OAUTH_SUBJECT`-Export) in `test/mcp-draht-pfade.js`.
 - Tests: `test/openai-t2-16-place-call-texte.test.js`, die Anker in
   `test/p15-mcp-tool-descriptions-en.test.js`, `test/gq-b1-briefing-openness.test.js`,
   `test/elevenlabs-anrufstart.test.js` und der Hash-Pin in `test/openai-p8-widget-ui.test.js`.
