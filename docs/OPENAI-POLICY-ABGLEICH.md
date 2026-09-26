@@ -403,7 +403,7 @@ nie gemessen.
   Jedes Unterfeld von `context` nennt in seiner Beschreibung einen engen Zweck (wozu der Agent
   es im Gespraech braucht) statt einer offenen Sammelkategorie (`src/mcp-tools.js:1431-1451`);
   die Notwendigkeit je Feld begruendet das Werkzeug-Inventar.
-  Werkzeugtext (place_call): "Optional structured BACKGROUND for the agent: fill a subfield only when this call needs it, without repeating the briefing."
+  Werkzeugtext (place_call): "Optional structured BACKGROUND, only for what the briefing lacks: fill a subfield only when this call needs it."
 - Was dagegen spricht: die Begrenzung steht nur in den Beschreibungen, das Schema erzwingt sie
   nicht. `context` besteht als zweites optionales Feld mit fuenf Unterfeldern neben dem
   `briefing` fort; der Abschnitt verlangt "Design the input schema to limit data collection by
@@ -770,9 +770,12 @@ bestehende Durchsetzung.
    der Nutzer vor dem Waehlen eine Erklaerung zum Zweck bestaetigt (Rechtstext); eine
    Stichwortpruefung ist bewusst nicht gebaut (Grund siehe "Telemarketing, Spam, Betrug").
 2. **`context` bleibt ein zweites optionales Feld** neben dem `briefing`
-   (`src/mcp-tools.js:1455`); die Begrenzung auf den Kontext des Anrufs steht in den
-   Beschreibungen, jedes Unterfeld nennt einen engen Zweck (`src/mcp-tools.js:1431-1451`),
-   das Schema erzwingt die Begrenzung aber nicht. Klauseln: "broad contextual fields",
+   (`src/mcp-tools.js:1455`); die Beschreibung beschraenkt `context` auf das, was das Briefing
+   nicht enthaelt, jedes Unterfeld nennt einen engen Zweck (`src/mcp-tools.js:1431-1451`),
+   das Schema erzwingt die Begrenzung aber nicht. Drei Unterfelder (Anlass, Beziehung zum
+   Angerufenen, gewuenschtes Ergebnis) decken Inhalte, die auch die Beschreibung von
+   `briefing` anfordert; eigenstaendig sind die Fakten, die der Agent korrekt nennen muss, und
+   die offenen Fragen an den Auftraggeber. Klauseln: "broad contextual fields",
    "Collection minimization", "Data boundaries".
    Ziel: Entscheidung des Betreibers: Wegfall von `context` oder Begrenzung im Schema - beides
    aendert die Eingabeschnittstelle von `place_call` und `prepare_call`.
@@ -1000,7 +1003,7 @@ src/routes/api-read.js:117-119 | Loeschung (Art. 17) hat KEINEN Endpunkt
 src/routes/api-read.js:119 | router.get("/api/tenant-data/export", internalOnly
 src/mcp-tools.js:1372 | Only the context this call needs
 src/mcp-tools.js:1413 | Not applied on every call path.
-src/mcp-tools.js:1455 | Optional structured BACKGROUND for the agent
+src/mcp-tools.js:1455 | Optional structured BACKGROUND, only for what the briefing lacks
 src/mcp-tools.js:944 | For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only
 src/mcp-tools.js:914 | CALL_PURPOSE_SHORT_RULE
 src/mcp-server-info.js:106-113 | export const CALL_PURPOSE_RULE
@@ -1082,7 +1085,7 @@ get_call_result | This tool NEVER returns the raw transcript
 place_call | SUMMARISE instead of copying in raw.
 place_call | Only so the agent can state why it calls: 1-3 sentences, not a copy of the chat.
 place_call | Only the context this call needs: what it is about, the names involved, relevant preferences and history, the desired outcome and tone.
-place_call | Optional structured BACKGROUND for the agent: fill a subfield only when this call needs it, without repeating the briefing.
+place_call | Optional structured BACKGROUND, only for what the briefing lacks: fill a subfield only when this call needs it.
 place_call | Sensitive details only as needed.
 place_call | Not applied on every call path.
 place_call | Not for telemarketing, unsolicited advertising or political campaign calls.

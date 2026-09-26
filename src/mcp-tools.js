@@ -1418,8 +1418,8 @@ export const PLACE_CALL_REQUEST_SCHEMA = {
       "Optional advance MANDATE: the frame within which the agent may decide ITSELF in the conversation, instead of returning every question as a message. Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance. Ask the user about their frame when an appointment or price question is to be expected in the call; without a mandate the agent can only answer 'When suits you?' with 'I will pass that on'. In a conflict with constraints, constraints ALWAYS win.",
     ),
   // Minimierung: context ist kein zweiter Sammeltrichter mehr ("ADDITIONAL to the briefing"
-  // lud dazu ein, neben dem Briefing noch mehr abzulegen) - ein Unterfeld nur, wenn der
-  // Anruf es braucht, ohne das Briefing zu wiederholen. Kein Markenname eines Chat-Modells
+  // lud dazu ein, neben dem Briefing noch mehr abzulegen) - NUR fuer das, was das Briefing
+  // nicht enthaelt, ein Unterfeld nur, wenn der Anruf es braucht. Kein Chat-Modell-Markenname
   // ("NEVER as you" statt "NEVER as Claude/Gemini"). Besonders geschuetzte Angaben begrenzt,
   // nicht verboten (Arzttermine). Jedes Unterfeld nennt seinen engen Zweck - wofuer der Agent es
   // im Gespraech braucht (Hintergrund-Zeile im Prompt, src/claude.js assistantContextSection
@@ -1452,7 +1452,7 @@ export const PLACE_CALL_REQUEST_SCHEMA = {
     })
     .optional()
     .describe(
-      "Optional structured BACKGROUND for the agent: fill a subfield only when this call needs it, without repeating the briefing. The agent speaks as the principal's personal AI assistant, NEVER as you. NO secrets; sensitive details only as needed.",
+      "Optional structured BACKGROUND, only for what the briefing lacks: fill a subfield only when this call needs it. The agent speaks as the principal's personal AI assistant, NEVER as you. NO secrets; sensitive details only as needed.",
     ),
   // LANG-15 AUFGEHOBEN (Owner-Entscheidung F-2, 2026-09-06, PLAN-ANRUFDEFEKTE.md
   // Abschnitt 6): das Feld gibt es wieder - und es WIRKT. Bis dahin entschied allein

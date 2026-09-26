@@ -334,9 +334,16 @@ model in the field description, not a server-side check.
 - `briefing` - only the context this call needs, summarised, no secrets or payment data,
   sensitive details only as needed. It reaches the voice agent on both call paths
   (`src/claude.js`, `src/elevenlabs/outbound.js:665-672`).
-- `context` - optional structured background; a subfield is to be filled only when the call
-  needs it, without repeating the briefing. It remains a second optional field next to
-  `briefing`; the schema does not force the limit. The server accepts it only while the
+- `context` - optional structured background, only for what the briefing lacks; a subfield is
+  to be filled only when the call needs it. It remains a second optional field next to
+  `briefing`; the schema does not force the limit. Why the field exists next to `briefing`:
+  it is rendered as a separate, labelled background block (`src/claude.js:357-367`), so facts
+  the agent must state correctly (`key_facts`) stay apart from free text, and `open_questions`
+  is the only way to put a question to the principal while the phone is ringing
+  (`src/routes/api-calls.js:424-428`). Where it overlaps: `summary`, `recipient_relationship`
+  and `desired_outcome` cover content the `briefing` description also asks for (what the call
+  is about, tone, desired outcome); the descriptions tell the model to put such content in
+  context only when the briefing lacks it, nothing in the schema enforces that. The server accepts it only while the
   assistant-context switch is on: otherwise the outbound gate sets it to null before the call
   is created (`src/telephony/outbound-gates.js:866-867`). When it is accepted, it goes into the
   prompt on the budget path (`src/claude.js:357-367`) and to the voice agent together with the
