@@ -4953,3 +4953,24 @@ lautlos um, deshalb bleibt es bewacht.
 zurueck (und die Ausnahme in der Vorlage faellt im selben Zug weg). E9 hat den Zustand
 nur SICHTBAR gemacht - im Rechtstext (`privacy.de.json`, Abschnitte "Daten aus Anrufen"
 und "Speicherdauer", beide mit dem gemessenen Wert) und hier. Kein Wert wurde geaendert.
+
+## COOKIE-CONSENT-LOG — Oeffentlicher Schreibpfad fuer den Einwilligungs-Nachweis (2026-09-25)
+
+**Was neu ist:** `POST /api/cookie-consent` (Klasse PUBLIC, `src/route-policy.js`). Die
+Marketing-Seite schickt jede Cookie-Entscheidung per Beacon an den Gateway; der schreibt
+eine append-only Zeile in `cookie_consent_log` (Nachweis nach Art. 7 Abs. 1 DSGVO).
+
+**Warum ohne Auth:** Besucher der Marketing-Seite haben keine Sitzung - der Beleg entsteht
+vor jeder Identitaet. Die Route liest nichts, liefert nichts (204), loest nichts aus.
+
+**Sicherungen:** strikte Eingabepruefung (UUID-v4, Ganzzahl-Version 1..999, echte
+Booleans, `text/plain`-Body max. 1 kB, Origin-Header Pflicht) -> sonst 400; globaler
+Per-IP-Rate-Limiter; nur im pg-Block gemountet. Datenminimierung: keine IP, kein
+User-Agent, kein Tenant/Account; `site` ist nur der Host aus dem Origin. Aufbewahrung
+3 Jahre (Sweep in `src/cookie-consent-log.js`).
+
+**Restrisiko (bewusst getragen):** jeder kann Zeilen mit erfundenen Zufalls-IDs schreiben
+(bis zum Rate-Limit). Das verfaelscht keinen echten Beleg - ein Beleg gilt nur fuer die
+Kennung, die im Browser des Besuchers steht - und kostet nur Speicher im Bereich weniger
+hundert Byte je Zeile. Eine Origin-Allowlist wuerde das nicht verhindern (Header ist
+ausserhalb des Browsers frei setzbar) und ist deshalb bewusst nicht gebaut.

@@ -30,6 +30,7 @@ import {
 } from "../web-auth.js";
 import { makePortalStore } from "../store/portal.js";
 import { makeAuditStore } from "../audit-store.js";
+import { mountCookieConsentLog } from "../cookie-consent-log.js";
 import { mountSelfServiceRoutes } from "../self-service-routes.js";
 import { createRateLimiter } from "../middleware.js";
 import { setTenantIdentityIfAbsent } from "../store/state-ops.js";
@@ -255,8 +256,7 @@ export async function wireWebLogin({
     }
   };
 
-  const loginRateLimiter = createRateLimiter(config.auth.loginRateLimitPerMin);
-  app.use("/auth", loginRateLimiter);
+  app.use("/auth", createRateLimiter(config.auth.loginRateLimitPerMin));
   app.use(
     makeWebAuthRoutes({
       secret: config.auth.sessionSecret,
@@ -313,6 +313,13 @@ export async function wireWebLogin({
   // jede Aktion auditiert; nicht-existenter Tenant -> 404. store: approve loescht den
   // suspended_at-Grace-Anker (tenant-prolif-c Invariante 2, G3-Fix).
   app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw, store }));
+
+  // ---- Cookie-Einwilligungs-Protokoll (Nachweis Art. 7 Abs. 1 DSGVO) ----------------
+  // AUTH-AUSNAHME (Regel 3, begruendet in src/route-policy.js und src/cookie-consent-log.js):
+  // Besucher der Marketing-Seite haben keine Sitzung; die Route schreibt nur eine anonyme
+  // Belegzeile. Hier im pg-Block, weil die Tabelle am portalRunner haengt (derselbe Runner,
+  // kein zweiter Pool) - ohne pg gibt es keinen Beleg-Speicher, die Route antwortet 404.
+  mountCookieConsentLog({ app, runner: portalRunner });
 
   // ---- Self-Service (I9 + #3): web-session-only, hinter webAuthMw ----------------
   // Konvergenz #3: Self-Service haengt jetzt am echten OIDC-Browser-Login statt am

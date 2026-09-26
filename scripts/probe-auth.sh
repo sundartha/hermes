@@ -110,6 +110,7 @@ oeffentlich|GET|/app/*|200|keine|SPA-Fallback auf die App-Shell
 oeffentlich|GET|/voice/tts/:token|404|keine|Einmal-Token ungueltig; Route existiert
 oeffentlich|GET|/newsletter/confirm|400|keine|Kein/ungueltiger Bestaetigungs-Token; neutrale Fehlseite
 oeffentlich|GET|/newsletter/unsubscribe|400|keine|Kein/ungueltiger Abmelde-Token; neutrale Fehlseite
+oeffentlich|POST|/api/cookie-consent|400|keine|Kein Origin/kein gueltiger Einwilligungs-Datensatz; schreibt nichts
 oeffentlich|POST|/voice/incoming|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/turn|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/outbound|403|keine|Provider-Signatur fail-closed
