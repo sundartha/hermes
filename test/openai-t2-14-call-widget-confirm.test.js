@@ -196,7 +196,7 @@ const CODE = "ABCDEF";
 // Datenhinweis (Gesundheitsangaben) im _meta von prepare_call - ohne ihn bietet die Karte
 // keinen Klick an (fail-closed). Echter Wortlaut kommt am Draht aus MCP_TEXTS.
 const NOTICE_META_KEY = "hermes/call_data_notice";
-const NOTICE = "Test notice: health details go to the agent; confirming means consent.";
+const NOTICE = "Test notice: health details go to the agent and the providers.";
 const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
 const CONFIRMATION_WINDOW_MINUTES = 5; // deckt sich mit call-confirmation.js CONFIRMATION_WINDOW_MINUTES
@@ -667,7 +667,7 @@ function widgetPlaceCallFromRealPreview(prep) {
   const notice = prep._meta?.[NOTICE_META_KEY];
   assert.ok(typeof notice === "string" && notice.length > 0, "Datenhinweis im _meta von prepare_call");
   // Draht-Bruecke zum Inhalt: der echte Server liefert genau einen der lokalisierten Texte,
-  // deren Vollstaendigkeit (alle besonderen Kategorien, Zweck-Zusage) T16-f prueft.
+  // deren Vollstaendigkeit (alle besonderen Kategorien, Zweckhinweis) T16-f prueft.
   assert.ok(
     Object.values(MCP_TEXTS).some((texts) => texts.callDataNotice === notice),
     "Datenhinweis am Draht ist ein vollstaendiger lokalisierter Text",
@@ -715,19 +715,19 @@ test("(t) Datenhinweis: sichtbar ueber dem Knopf; fehlt er oder ist er leer, kei
   }
 });
 
-test("(t2) Datenhinweis in jeder Sprache vorhanden, je Sprache eigener Wortlaut, nennt Gesundheitsangaben und Einwilligung", () => {
-  const healthAndConsent = {
-    de: [/Gesundheitsangaben/, /willigst du ausdr\u00fccklich/],
-    en: [/health details/, /explicitly consent/],
-    fr: [/donn\u00e9es de sant\u00e9/, /consentez express\u00e9ment/],
+test("(t2) Datenhinweis in jeder Sprache vorhanden, je Sprache eigener Wortlaut, nennt Gesundheitsangaben und den Zweckhinweis", () => {
+  const healthAndPurpose = {
+    de: [/Gesundheitsangaben/, /nicht f\u00fcr Telemarketing/],
+    en: [/health details/, /not meant for telemarketing/],
+    fr: [/donn\u00e9es de sant\u00e9/, /pas destin\u00e9 au t\u00e9l\u00e9marketing/],
   };
   const seen = new Set();
-  for (const [language, patterns] of Object.entries(healthAndConsent)) {
+  for (const [language, patterns] of Object.entries(healthAndPurpose)) {
     const notice = MCP_TEXTS[language].callDataNotice;
     for (const pattern of patterns) assert.match(notice, pattern, `${language}: ${pattern}`);
     seen.add(notice);
   }
-  assert.equal(seen.size, Object.keys(healthAndConsent).length, "keine Sprache faellt auf eine andere zurueck");
+  assert.equal(seen.size, Object.keys(healthAndPurpose).length, "keine Sprache faellt auf eine andere zurueck");
 });
 
 test("(e-http) Draht-Rundlauf HTTP Legacy: echtes prepare_call -> dieselbe Karte -> echtes place_call -> Erfolg -> genau 1 ui/message mit call_id, nie mit Code", async () => {

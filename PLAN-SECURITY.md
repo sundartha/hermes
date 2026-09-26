@@ -6632,3 +6632,19 @@ Call-Widget Version 11 nur wegen eines Kommentars). Gates und Offenlegungssatz u
 Offen (Owner): rechtliche Bewertung von Wortlaut und Form der Einwilligung; eine
 serverseitige inhaltliche Zweckpruefung ist bewusst nicht gebaut (umgehbar, traefe
 Reklamationen/Angebotsanfragen).
+
+**Korrektur (Einwilligungs-/Zusicherungsformel entfernt):** der Satz "Mit dem Bestaetigen
+willigst du ausdruecklich ... ein und sicherst zu, dass dies kein Telemarketing ... ist" (de/en/fr)
+ist Rechtstext und steht deshalb NICHT mehr auf der Karte. An seiner Stelle steht eine neutrale
+Sachaussage: "Hermes ist nicht fuer Telemarketing oder unaufgeforderte Werbe-, Verkaufs-,
+Wahlkampf- oder Massenanrufe gedacht." (dieselben Ausschluesse wie `CALL_PURPOSE_EXCLUSIONS`,
+gepinnt in `test/openai-t2-16-place-call-texte.test.js` T16-f, das zugleich jede Einwilligungs-
+oder Zusicherungsformel im Kartentext rot macht). Die Sperren der Karte bleiben unveraendert
+(ohne Hinweis kein Klick, `confirmCodeUsable`); Call-Widget Version 12 nur wegen eines
+Kommentars, der Text kommt vom Server. Der Klick ist damit eine Bestaetigung des ANRUFS nach
+einem Hinweis, KEINE Einwilligung und KEINE Zusicherung des Nutzers.
+
+**Owner-Punkt (offen, Rechtstext):** ob und welche Einwilligungs- oder Zusicherungsformel der
+Nutzer vor dem Waehlen bestaetigt (Einwilligung in die Verarbeitung besonderer Datenkategorien,
+Erklaerung zum Anrufzweck), entscheidet der Owner. Bis dahin enthaelt die Karte nur Datenhinweis
+und Zweckhinweis.

@@ -185,16 +185,17 @@ export const MCP_TEXTS = Object.freeze({
       "fuer diesen Anruf nicht selbst auf und nie einen Code raten oder erfinden; die Karte " +
       "meldet die call_id danach per Chat-Nachricht. Zeigt dieser Host keine Hermes-Karte, kann " +
       "hier kein Anruf ausgeloest werden - das dem Nutzer ehrlich sagen.",
-    // Hinweis und Einwilligung zu besonderen Datenkategorien (alle Kategorien aus Art. 9
-    // Abs. 1 DSGVO, Gesundheitsangaben zuerst, weil Arzttermine sie brauchen) plus die
-    // Zusage des Menschen zum Zweck (dieselben Ausschluesse wie CALL_PURPOSE_EXCLUSIONS in
-    // src/mcp-server-info.js) - fuer den MENSCHEN, nicht fuer das Modell: steht nur im
-    // Ergebnis-_meta von prepare_call und wird von der Karte direkt ueber dem
-    // Bestaetigen-Knopf angezeigt; ohne diesen Text bietet die Karte keinen Klick an. Der
-    // Server prueft weder die Kategorien noch den Zweck - er erzwingt nur, dass jeder Anruf
-    // ueber die Karte mit diesem Text bestaetigt wurde. Erhoben (gespeichert, an Agent und
-    // Anbieter gegeben) wird erst nach dem Klick - prepare_call speichert nichts.
-    // Nutzerseitiger Text: deshalb mit Umlauten.
+    // Datenhinweis zu besonderen Datenkategorien (alle Kategorien aus Art. 9 Abs. 1 DSGVO,
+    // Gesundheitsangaben zuerst, weil Arzttermine sie brauchen) plus ein neutraler Satz zum
+    // Zweck (dieselben Ausschluesse wie CALL_PURPOSE_EXCLUSIONS in src/mcp-server-info.js) -
+    // fuer den MENSCHEN, nicht fuer das Modell: steht nur im Ergebnis-_meta von prepare_call
+    // und wird von der Karte direkt ueber dem Bestaetigen-Knopf angezeigt; ohne diesen Text
+    // bietet die Karte keinen Klick an. Bewusst OHNE Einwilligungs- oder Zusicherungsformel:
+    // ob und welche Erklaerung der Nutzer vor dem Waehlen bestaetigt, ist Rechtstext und
+    // entscheidet der Owner (PLAN-SECURITY.md). Der Server prueft weder die Kategorien noch
+    // den Zweck - er erzwingt nur, dass jeder Anruf ueber die Karte mit diesem Text
+    // bestaetigt wurde. Erhoben (gespeichert, an Agent und Anbieter gegeben) wird erst nach
+    // dem Klick - prepare_call speichert nichts. Nutzerseitiger Text: deshalb mit Umlauten.
     callDataNotice:
       "Vor dem Bestätigen: Die Angaben auf dieser Karte gehen an den KI-Agenten und die " +
       "Anbieter, über die der Anruf läuft, können der angerufenen Person gesagt werden und " +
@@ -202,10 +203,8 @@ export const MCP_TEXTS = Object.freeze({
       "Gesundheitsangaben, rassische oder ethnische Herkunft, politische Meinungen, religiöse " +
       "oder weltanschauliche Überzeugungen, Gewerkschaftszugehörigkeit, genetische oder " +
       "biometrische Daten, Sexualleben oder sexuelle Orientierung. Gib solche Angaben nur an, " +
-      "wenn dieser Anruf sie wirklich braucht. Mit dem Bestätigen willigst du ausdrücklich in " +
-      "diese Verwendung enthaltener Gesundheitsangaben und anderer besonders geschützter " +
-      "Angaben ein und sicherst zu, dass dies kein Telemarketing und kein unaufgeforderter " +
-      "Werbe-, Verkaufs-, Wahlkampf- oder Massenanruf ist.",
+      "wenn dieser Anruf sie wirklich braucht. Hermes ist nicht für Telemarketing oder " +
+      "unaufgeforderte Werbe-, Verkaufs-, Wahlkampf- oder Massenanrufe gedacht.",
     // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
     // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
     emptyCalls: "Noch keine Anrufe.",
@@ -350,10 +349,8 @@ export const MCP_TEXTS = Object.freeze({
       "This also applies to special categories of data: health details, racial or ethnic " +
       "origin, political opinions, religious or philosophical beliefs, trade union membership, " +
       "genetic or biometric data, sex life or sexual orientation. Only include such details if " +
-      "this call really needs them. By confirming, you explicitly consent to this use of any " +
-      "health details or other special-category data included, and you confirm that this is " +
-      "not telemarketing and not an unsolicited advertising, sales, political campaign or mass " +
-      "call.",
+      "this call really needs them. Hermes is not meant for telemarketing or unsolicited " +
+      "advertising, sales, political campaign or mass calls.",
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
@@ -470,10 +467,8 @@ export const MCP_TEXTS = Object.freeze({
       "données : données de santé, origine raciale ou ethnique, opinions politiques, " +
       "convictions religieuses ou philosophiques, appartenance syndicale, données génétiques " +
       "ou biométriques, vie sexuelle ou orientation sexuelle. N'indiquez de telles informations " +
-      "que si cet appel en a vraiment besoin. En confirmant, vous consentez expressément à " +
-      "cette utilisation des données de santé ou autres données de catégorie particulière " +
-      "incluses, et vous confirmez qu'il ne s'agit ni de télémarketing ni d'un appel " +
-      "publicitaire, commercial, de campagne politique ou de masse non sollicité.",
+      "que si cet appel en a vraiment besoin. Hermes n'est pas destiné au télémarketing ni " +
+      "aux appels publicitaires, commerciaux, de campagne politique ou de masse non sollicités.",
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",

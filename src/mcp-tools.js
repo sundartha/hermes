@@ -1294,9 +1294,10 @@ function withWidgetLocale(config, handler, language) {
 // Rendering-Detail, sondern das Geheimnis selbst. T2-14: dupliziert in call.html (dort), eine Aenderung NUR hier deaktiviert den Bestaetigen-Knopf lautlos.
 const CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
 const CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
-// Hinweis/Einwilligung zu besonderen Datenkategorien + Zweck-Zusage des Menschen (O-15/O-18;
-// Text: callDataNotice, src/i18n/mcp-texts.js): lokalisiert, fuer den MENSCHEN auf der Karte,
-// im selben _meta wie der Code - fuer das Modell verborgen. Die Karte (call.html, dort
+// Datenhinweis zu besonderen Datenkategorien + neutraler Zweckhinweis, ohne Einwilligungs-
+// oder Zusicherungsformel (O-15/O-18; Text: callDataNotice, src/i18n/mcp-texts.js):
+// lokalisiert, fuer den MENSCHEN auf der Karte, im selben _meta wie der Code - fuer das
+// Modell verborgen. Die Karte (call.html, dort
 // dupliziert) zeigt ihn ueber dem Bestaetigen-Knopf und bietet OHNE ihn keinen Klick an. Der
 // Server prueft NICHT, ob solche Angaben enthalten sind oder wozu der Anruf dient - der
 // Hinweis steht auf jeder Karte.

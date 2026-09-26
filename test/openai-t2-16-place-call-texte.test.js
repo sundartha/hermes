@@ -177,11 +177,12 @@ for (const path of MCP_WIRE_PATHS) {
   });
 }
 
-// Datenhinweis auf der Bestaetigungskarte: "legally adequate consent" und "explicitly and
-// prominently disclosed" gelten fuer JEDE besondere Kategorie (Art. 9 Abs. 1 DSGVO), nicht nur
-// fuer Gesundheitsangaben; dazu die Zweck-Zusage des Menschen gegen dieselben Ausschluesse wie
-// die Zweckregel. Die Draht-Bruecke (der echte prepare_call-_meta traegt genau einen dieser
-// Texte, HTTP und stdio) prueft test/openai-t2-14-call-widget-confirm.test.js.
+// Datenhinweis auf der Bestaetigungskarte: nennt JEDE besondere Kategorie (Art. 9 Abs. 1
+// DSGVO), nicht nur Gesundheitsangaben, und dieselben Zweck-Ausschluesse wie die Zweckregel -
+// als neutrale Sachaussage. Eine Einwilligungs- oder Zusicherungsformel ist Rechtstext und
+// gehoert NICHT in die Karte (Entscheidung des Owners, PLAN-SECURITY.md). Die Draht-Bruecke
+// (der echte prepare_call-_meta traegt genau einen dieser Texte, HTTP und stdio) prueft
+// test/openai-t2-14-call-widget-confirm.test.js.
 const SPECIAL_CATEGORIES_BY_LANGUAGE = {
   de: [/Gesundheitsangaben/, /ethnische Herkunft/, /politische Meinungen/, /religiöse/,
     /weltanschauliche/, /Gewerkschaftszugehörigkeit/, /genetische/, /biometrische/,
@@ -192,44 +193,47 @@ const SPECIAL_CATEGORIES_BY_LANGUAGE = {
     /philosophiques/, /appartenance syndicale/, /génétiques/, /biométriques/, /vie sexuelle/,
     /orientation sexuelle/],
 };
-const CONSENT_COVERS_ALL_BY_LANGUAGE = {
-  de: /willigst du ausdrücklich in diese Verwendung enthaltener Gesundheitsangaben und anderer besonders geschützter Angaben ein/,
-  en: /explicitly consent to this use of any health details or other special-category data/,
-  fr: /consentez expressément à cette utilisation des données de santé ou autres données de catégorie particulière/,
+// Woerter einer Einwilligungs- oder Zusicherungsformel je Sprache - keines darf vorkommen.
+const CONSENT_OR_PLEDGE_BY_LANGUAGE = {
+  de: /willig|sicherst|zusicher|bestätigst, dass/i,
+  en: /consent|you confirm that|assure|warrant/i,
+  fr: /consent|vous confirmez qu|garantissez/i,
 };
-const PURPOSE_PLEDGE_BY_LANGUAGE = {
-  de: [/kein Telemarketing/, /unaufgeforderter/, /Werbe-/, /Verkaufs-/, /Wahlkampf-/, /Massenanruf/],
-  en: [/not telemarketing/, /unsolicited/, /advertising/, /sales/, /political campaign/, /mass/],
-  fr: [/télémarketing/, /non sollicité/, /publicitaire/, /commercial/, /campagne politique/, /de masse/],
+const PURPOSE_NOTE_BY_LANGUAGE = {
+  de: [/nicht für Telemarketing/, /unaufgeforderte/, /Werbe-/, /Verkaufs-/, /Wahlkampf-/, /Massenanrufe gedacht/],
+  en: [/not meant for telemarketing/, /unsolicited/, /advertising/, /sales/, /political campaign/, /mass calls/],
+  fr: [/pas destiné au télémarketing/, /non sollicités/, /publicitaires/, /commerciaux/, /campagne politique/, /de masse/],
 };
 
 // Je Ausschluss der Zweckregel (CALL_PURPOSE_EXCLUSIONS, Schluessel = voller Wortlaut) die
-// Stelle der englischen Zusage auf der Karte.
-const PLEDGE_FOR_EXCLUSION_EN = {
-  telemarketing: /not telemarketing/,
+// Stelle des englischen Zweckhinweises auf der Karte.
+const PURPOSE_NOTE_FOR_EXCLUSION_EN = {
+  telemarketing: /not meant for telemarketing/,
   "unsolicited advertising or sales calls": /unsolicited advertising, sales/,
   "political campaigning": /political campaign/,
-  "mass or automated dialling of many numbers": /mass call/,
+  "mass or automated dialling of many numbers": /mass calls/,
 };
 
-test("T16-f: Datenhinweis nennt je Sprache alle besonderen Kategorien, die Einwilligung fuer alle und die Zweck-Zusage", () => {
+test("T16-f: Datenhinweis nennt je Sprache alle besonderen Kategorien und den Zweckhinweis, ohne Einwilligungs- oder Zusicherungsformel", () => {
   for (const [language, categories] of Object.entries(SPECIAL_CATEGORIES_BY_LANGUAGE)) {
     const notice = MCP_TEXTS[language].callDataNotice;
     for (const category of categories) assert.match(notice, category, `${language}: ${category}`);
-    assert.match(notice, CONSENT_COVERS_ALL_BY_LANGUAGE[language], `${language}: Einwilligung deckt alle Kategorien`);
-    for (const pledge of PURPOSE_PLEDGE_BY_LANGUAGE[language]) assert.match(notice, pledge, `${language}: ${pledge}`);
+    assert.doesNotMatch(notice, CONSENT_OR_PLEDGE_BY_LANGUAGE[language], `${language}: keine Einwilligungs-/Zusicherungsformel`);
+    for (const note of PURPOSE_NOTE_BY_LANGUAGE[language]) assert.match(notice, note, `${language}: ${note}`);
   }
-  // Positiv-Kontrolle: der alte, nur auf Gesundheit bezogene Wortlaut faellt durch.
-  const altEn =
-    "Before you confirm: the details on this card, including any health details, go to the AI agent. " +
-    "By confirming, you explicitly consent to this use of any health details included.";
-  assert.doesNotMatch(altEn, SPECIAL_CATEGORIES_BY_LANGUAGE.en[1], "Kontrolle: alte Fassung ohne Herkunft");
-  assert.doesNotMatch(altEn, CONSENT_COVERS_ALL_BY_LANGUAGE.en, "Kontrolle: alte Einwilligung nur Gesundheit");
-  // Die Zusage deckt dieselben Ausschluesse wie die Zweckregel - eine neue Zweck-Kategorie
+  // Positiv-Kontrolle: die fruehere Fassung mit Einwilligung und Zusicherung faellt je Sprache durch.
+  const formerWithPledge = {
+    de: "Mit dem Bestätigen willigst du ausdrücklich ein und sicherst zu, dass dies kein Telemarketing ist.",
+    en: "By confirming, you explicitly consent to this use, and you confirm that this is not telemarketing.",
+    fr: "En confirmant, vous consentez expressément, et vous confirmez qu'il ne s'agit pas de télémarketing.",
+  };
+  for (const [language, former] of Object.entries(formerWithPledge))
+    assert.match(former, CONSENT_OR_PLEDGE_BY_LANGUAGE[language], `Kontrolle ${language}: alte Formel wird erkannt`);
+  // Der Zweckhinweis deckt dieselben Ausschluesse wie die Zweckregel - eine neue Zweck-Kategorie
   // ohne Eintrag hier (und ohne Nachzug des Kartentextes) faellt auf.
   for (const { full } of CALL_PURPOSE_EXCLUSIONS) {
-    const pledge = PLEDGE_FOR_EXCLUSION_EN[full];
-    assert.ok(pledge, `Zusage fuer "${full}" fehlt`);
-    assert.match(MCP_TEXTS.en.callDataNotice, pledge, full);
+    const note = PURPOSE_NOTE_FOR_EXCLUSION_EN[full];
+    assert.ok(note, `Zweckhinweis fuer "${full}" fehlt`);
+    assert.match(MCP_TEXTS.en.callDataNotice, note, full);
   }
 });

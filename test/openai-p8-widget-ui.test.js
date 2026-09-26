@@ -193,10 +193,15 @@ const EXPECTED_RESOURCE_META = {
 // Kommentar zum Hinweis-Schluessel in call.html ist nachgezogen (Version 11). Beide Pfade
 // weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen. Voriger Sollwert
 // (beide Pfade): 987d92591ef5cbde08f6d70a7848c23e17a710b5357df4a8ed5a279f2766e23f.
+// Neu gepinnt (Datenhinweis ohne Einwilligungs-/Zusicherungsformel): der Kartentext kommt vom
+// Server (nicht aus diesem Capture); geaendert ist nur der Kommentar zum Hinweis-Schluessel in
+// call.html (Version 12). Werkzeug-Beschreibungen unveraendert, beide Pfade weiterhin
+// byte-identisch. Actual-Wert aus dem roten Diff uebernommen. Voriger Sollwert (beide Pfade):
+// 39bd5a582c9564ecff0c839613a83cec89c3f063d950254404d83e4dad71d5a2.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "39bd5a582c9564ecff0c839613a83cec89c3f063d950254404d83e4dad71d5a2";
+  "956e76b6e36b9ff8e1d46e25d474e5fec4a995032523ad5105eba1f132f6a17c";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "39bd5a582c9564ecff0c839613a83cec89c3f063d950254404d83e4dad71d5a2";
+  "956e76b6e36b9ff8e1d46e25d474e5fec4a995032523ad5105eba1f132f6a17c";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
