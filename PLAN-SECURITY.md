@@ -6657,3 +6657,87 @@ nachzuholen (Kriterien: Selbstnennung 0, erfundene Fakten 0, Luecken-Klasse neu 
 Verweigerung legitimer Anrufe neu <= alt, Abweisung der Missbrauchs-Anrufe neu >= alt).
 Verfehlt er ein Kriterium, sind die Werkzeugtexte nach "Rueckbau" im selben README
 zurueckzunehmen.
+
+## OpenAI-T2-17 — Server-Instructions: Kern in die ersten 512 Zeichen (T-21)
+
+**Was:** Die Server-Instructions (`src/mcp-server-info.js`) beginnen jetzt mit einem
+verdichteten Kern-Vorspann statt mit dem bisherigen Bestandstext. Der Kern nennt in den
+ersten 512 Zeichen: die Bestaetigungs-Sequenz (`prepare_call` zuerst, nur die Hermes-Karte
+waehlt nach der Nutzerbestaetigung, das Modell ruft `place_call` nie selbst auf, fragt den
+Nutzer nie nach einem `confirmation_code` und erfindet keinen), die Zweckbindung als Kurzform
+(aus derselben Tabelle `CALL_PURPOSE_EXCLUSIONS` wie die Kurzfassung in `place_call`) und
+den Geld-Riegel (nicht erneut waehlen bei `"not-placed"`); im Consult-Fall zusaetzlich die
+sofortige Quittung (`answer_consult` mit `status="working"`). Die vollen Bestandssaetze
+(volle Zweckregel, Geld-Satz, Bestaetigungs-Sequenz, Consult-Block) bleiben byte-identisch
+hinter dem Kern - nur die Reihenfolge im Gesamttext aendert sich, kein Satz wurde
+umformuliert.
+
+**Pfade:** gemeinsame Quelle fuer HTTP `/mcp` (Legacy und OAuth, mit und ohne verknuepften
+Mandanten) und stdio; unabhaengig von `MCP_UI_ENABLED`. stdio pinnt Consult hart aus
+(`STDIO_CONSULT_LOOP`), liefert also immer nur den Basis-Kern.
+
+**Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Sprachagent/
+Prompts/ElevenLabs-/Telnyx-Template, `src/mcp-tools.js` (keine Werkzeugbeschreibung
+geaendert), `CALL_PURPOSE_RULE`/`CALL_PURPOSE_SHORT_RULE`/`CALL_PURPOSE_EXCLUSIONS`
+(unveraendert, nur zusaetzlich im Kern zitiert).
+
+**Rueckbau:** die Kern-Konstanten und der Bauer `instructionsCore()` in
+`src/mcp-server-info.js` sowie die Komposition von `MCP_BASE_INSTRUCTIONS`/
+`MCP_CONSULT_INSTRUCTIONS` aus Kern + `BASE_DETAILS` (+ `CONSULT_BLOCK`);
+`test/openai-t2-17-instructions-kern.test.js`; die Exporte `legacySnapshot`/`oauthSnapshot`/
+`stdioSnapshot` und `OAUTH_SUBJECT` in `test/mcp-draht-pfade.js` (Rueckbau: wieder
+modul-intern); der neue
+Absatz in `docs/OPENAI-TOOL-INVENTORY.md` ("Purpose rule"-Abschnitt); die Ergaenzungen in
+`scripts/briefing-bench/README.md` ("Deploy-Vorbedingung", "Rueckbau"). Kein einzelner
+Commit-Revert (mehrere Dateien haengen am neuen Wortlaut, s. README).
+
+**Deploy-Vorbedingung: erweitert die offene Messung aus OpenAI-T2-16 (oben), keine neue.**
+Die Server-Instructions sind Teil des `briefing-bench`-Schnappschusses
+(`scripts/briefing-bench/bench.mjs` liest `client.getInstructions()` und nutzt sie als
+System-Text) - der EINE ausstehende Lauf (alt `66d95ae` gegen den Endstand) misst damit
+automatisch auch diese Phase, sobald sie gemergt ist. Gemessener Versuch im Worktree
+dieser Phase, 2026-09-26, Schluessel nur als Umgebungsvariable, ohne `.env`:
+
+```
+NODE_ENV=test ANTHROPIC_API_KEY=... node scripts/briefing-bench/lauf.mjs run --modus anthropic --modell claude-sonnet-5 --laeufe 5 --tools <schnappschuss> --out <bericht>
+```
+
+scheitert weiterhin am selben Anbieterguthaben (wortgetreu, wie beim T2-16-Versuch):
+`Anbieterfehler 400: Your credit balance is too low to access the Anthropic API. Please go
+to Plans & Billing to upgrade or purchase credits.` Kein neuer Messpunkt; der Consult-Kern
+ist zusaetzlich vom stdio-Lauf des Benches strukturell nicht erreichbar (Consult ist dort
+aus) - benannte Luecke, kein Blocker fuer die Basis-Messung. Der eine echte Lauf bleibt
+Owner-Vorbedingung vor dem Deploy dieser und der T2-16-Phase gemeinsam.
+
+**Fix-Runde (Review-Befund "Plan verlangt `confirmation_code` und `await_call_event` im
+Kern"):** entschieden nach Sicherheit und dem Wortlaut der Primaerquelle
+(https://developers.openai.com/plugins/build/mcp-server: "Use server instructions for guidance
+that applies across tools, such as required tool sequences or shared rate limits. Keep the most
+important details in the first 512 characters. Do not repeat every tool description or try to
+change the model's personality.") - die Quelle nennt keine Pflicht-Woerter, sondern die
+Werkzeug-Sequenz.
+- **Uebernommen:** der Feldname `confirmation_code` steht jetzt im Kern, aber AUSSCHLIESSLICH
+  als Verbot ("never call place_call yourself, never ask the user for or invent a
+  confirmation_code"). Grund: `place_call` beschreibt sich selbst mit "REQUIRES a
+  confirmation_code"; ohne den exakten Feldnamen im Verbot liegt die Rueckfrage an den Nutzer
+  nahe. Der Code steht nur im `_meta` der Karte. Der Satz beginnt jetzt mit "Call prepare_call
+  before every phone call" statt "Before every place_call" - die alte Form setzte einen
+  eigenen `place_call` des Modells voraus, den es nie gibt. Draht-Test: jede Nennung von
+  `confirmation_code` im Gesamttext steht in einem Satzteil mit "never", mit
+  Positiv-Kontrolle (Anleitung zur Selbstbestaetigung bzw. Rueckfrage nach dem Code schlaegt
+  an).
+- **Bewusst NICHT uebernommen:** (a) die fruehe Planfassung "`place_call` mit dem Code aus der
+  Nachricht des Nutzers" - seit der serverseitigen Anruf-Bestaetigung ruft die Karte
+  `place_call` selbst; die Positivform waere eine Anleitung zur Selbstbestaetigung (Safety-
+  Fehler). (b) `await_call_event`/`done` im Basis-Kern - ohne Consult-Freigabe ist das
+  Werkzeug nicht registriert (Bestandspin `test/openai-p4-ergebnisstruktur-instructions.test.js`
+  verbietet die Nennung); den Verfolgungsweg ohne Consult (`get_call_status`) nennt bereits die
+  `place_call`-Beschreibung, die Quelle raet von Wiederholung ab. Im Consult-Kern stehen
+  `await_call_event` bis `event="done"` und `answer_consult` mit `status="working"` weiter.
+- **Laenge:** Kern Basis 386, Consult 506 Zeichen (vorher 378/498), gemessen am Draht auf allen
+  zwoelf Pfaden (HTTP Legacy/OAuth je mit/ohne Consult, OAuth ohne Mandant, stdio mit/ohne
+  Consult-Env, jeweils mit `MCP_UI_ENABLED` aus; dazu Legacy und OAuth je mit/ohne Consult sowie
+  stdio mit `MCP_UI_ENABLED=true`). Werkzeugbeschreibungen und ihre Laengendeckel unveraendert.
+- **Deploy-Vorbedingung gilt auch fuer diese Textaenderung:** derselbe eine `briefing-bench`-
+  Lauf (alt `66d95ae` gegen den Endstand) misst sie mit; kein zusaetzlicher Lauf, keine
+  Freigabe ohne ihn.

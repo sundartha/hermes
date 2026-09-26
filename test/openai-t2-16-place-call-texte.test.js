@@ -30,8 +30,11 @@ const SENSITIVE_MANDATES = /contracts, loans, insurance, tenancy, employment or 
 const CALL_TOOLS = ["prepare_call", "place_call"];
 // OpenAI: "Keep the most important details in the first 512 characters". Die
 // Bestaetigungs-Sequenz beginnt dort, die Zweckregel folgt ihr (nicht umgekehrt).
+// Anker ist der Satzanfang des Kern-Vorspanns (src/mcp-server-info.js CORE_SEQUENCE):
+// "before every phone call" statt "before every place_call", weil das Modell place_call
+// nie selbst aufruft - die Karte tut es.
 const INSTRUCTIONS_PRIORITY_CHARS = 512;
-const CONFIRMATION_SEQUENCE_START = "Before every place_call, call prepare_call first";
+const CONFIRMATION_SEQUENCE_START = "Call prepare_call before every phone call";
 // Enge Fassung (Verweigerungsrisiko): Auftrag auch fuer Angehoerige, ausgeschlossen nur die
 // Massenanwahl, und die Terminwahl bleibt bei sensiblen Mandaten erlaubt.
 const NARROW_PURPOSE = [/someone they act for/, /mass or automated dialling/];

@@ -56,10 +56,18 @@ muss anschlagen und den Vergleich durchfallen lassen (Exit 2). Das haelt
    Arbeitsbaum anzufassen:
    `mkdir /tmp/bb-alt && git archive 66d95ae src elevenlabs package.json | tar -x -C /tmp/bb-alt && ln -s "$PWD/node_modules" /tmp/bb-alt/node_modules`
 2. Schnappschuesse: `snapshot --repo /tmp/bb-alt --out /tmp/bb-alt.json` und
-   `snapshot --repo . --out /tmp/bb-neu.json`.
+   `snapshot --repo . --out /tmp/bb-neu.json`. `--repo .` misst den ENDSTAND - inklusive des
+   Kern-Vorspanns der Server-Instructions (Wichtigstes in den ersten 512 Zeichen), sofern diese
+   Phase bereits gemergt ist. Der eine echte Lauf erfolgt deshalb erst NACH dem Merge dieser
+   Phase, nicht vorher. Das gilt auch fuer den nachgeschaerften ersten Kern-Satz
+   (`prepare_call` zuerst, nur die Karte waehlt, nie nach einem `confirmation_code` fragen oder
+   einen erfinden): er steht im Basis-Text und wird von demselben Lauf mitgemessen.
 3. Je Stand `NODE_ENV=test ANTHROPIC_API_KEY=... node scripts/briefing-bench/lauf.mjs run --modus anthropic --modell <modell-id> --laeufe 5 --tools <schnappschuss> --out <bericht>`,
    gleiches Modell, gleiche Laeufe, beide Male mit DIESEM `lauf.mjs` (gleiche Szenarien und
-   Metriken - nur der Schnappschuss unterscheidet die Staende).
+   Metriken - nur der Schnappschuss unterscheidet die Staende). Der Kindprozess laeuft ueber
+   stdio (s. oben); dort ist Consult hart aus (`STDIO_CONSULT_LOOP`), der Kindprozess liefert
+   deshalb nur den Basis-Text. Der Consult-Kern des Kern-Vorspanns wird von diesem Lauf NICHT
+   gemessen - benannte Luecke, kein Blocker fuer die Basis-Messung.
 4. `vergleich --alt <bericht-alt> --neu <bericht-neu>`: `erfuellt: true` ist die Freigabe.
 
 ## Rueckbau, falls die Messung verfehlt
@@ -70,10 +78,16 @@ Doku-Zitate haengen am neuen Wortlaut. Zurueckzunehmen sind gemeinsam:
 - Texte: `src/mcp-tools.js` (Beschreibungen von `place_call`, `prepare_call`, `briefing`,
   `context` samt Unterfeldern, `on_out_of_scope`) und `src/mcp-server-info.js`
   (`CALL_PURPOSE_RULE`, Reihenfolge in `MCP_BASE_INSTRUCTIONS`).
+- Kern-Vorspann (Wichtigstes in den ersten 512 Zeichen): die Kern-Konstanten und der Bauer
+  `instructionsCore()` in `src/mcp-server-info.js`, sowie die Komposition von
+  `MCP_BASE_INSTRUCTIONS`/`MCP_CONSULT_INSTRUCTIONS` aus Kern + `BASE_DETAILS` (+
+  `CONSULT_BLOCK`); dazu `test/openai-t2-17-instructions-kern.test.js` und die exportierten
+  Snapshot-Bausteine (`legacySnapshot`/`oauthSnapshot`/`stdioSnapshot` und der
+  `OAUTH_SUBJECT`-Export) in `test/mcp-draht-pfade.js`.
 - Tests: `test/openai-t2-16-place-call-texte.test.js`, die Anker in
   `test/p15-mcp-tool-descriptions-en.test.js`, `test/gq-b1-briefing-openness.test.js`,
   `test/elevenlabs-anrufstart.test.js` und der Hash-Pin in `test/openai-p8-widget-ui.test.js`.
 - Doku: Zitate und Zeilenanker in `docs/OPENAI-POLICY-ABGLEICH.md` und
-  `docs/OPENAI-TOOL-INVENTORY.md`.
+  `docs/OPENAI-TOOL-INVENTORY.md` (dort auch der Absatz zum Kern-Vorspann).
 
 Danach `npm test`: rote Pins zeigen jede vergessene Stelle.

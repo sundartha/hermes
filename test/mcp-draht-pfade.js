@@ -18,7 +18,9 @@ const PROTOCOL_VERSION = "2025-06-18";
 const RAW_TOOLS_RESULT = z.object({ tools: z.array(z.any()) });
 // Bootstrap-Tenant fuer OAuth (wie test/openai-t2-11-werkzeugtexte.test.js); der zweite
 // sub bleibt ungeseeded -> kein Mandant -> Stub-Fassade (src/mcp-no-tenant.js).
-const OAUTH_SUBJECT = "sub-mcp-draht-pfade";
+// OAUTH_SUBJECT exportiert: test/openai-t2-17-instructions-kern.test.js misst damit
+// zusaetzliche OAuth-Pfade (MCP_UI_ENABLED=true), ohne den Snapshot-Code zu kopieren.
+export const OAUTH_SUBJECT = "sub-mcp-draht-pfade";
 const NO_TENANT_SUBJECT = "sub-mcp-draht-pfade-ohne-mandant";
 
 async function httpToolsList(url, token) {
@@ -43,7 +45,10 @@ async function httpSnapshot(url, token) {
   return { tools: await httpToolsList(url, token), instructions: await httpInstructions(url, token) };
 }
 
-async function legacySnapshot(env) {
+// T2-17: exportiert (statt modul-intern), damit ein zweiter Test (openai-t2-17-...)
+// zusaetzliche Pfade (z.B. MCP_UI_ENABLED=true) messen kann, ohne den Snapshot-Code zu
+// kopieren. MCP_WIRE_PATHS unten bleibt bei den bisherigen sieben Pfaden.
+export async function legacySnapshot(env) {
   const srv = await startServer({ seed: seedState({}), env });
   try {
     return await httpSnapshot(`${srv.localUrl}/mcp`, null);
@@ -52,7 +57,8 @@ async function legacySnapshot(env) {
   }
 }
 
-async function oauthSnapshot({ subject, env = {} }) {
+// T2-17: exportiert, s. Kommentar bei legacySnapshot oben.
+export async function oauthSnapshot({ subject, env = {} }) {
   const idp = await startIdp();
   const srv = await startServer({
     seed: seedState({}),
@@ -73,7 +79,8 @@ async function oauthSnapshot({ subject, env = {} }) {
   }
 }
 
-async function stdioSnapshot(env) {
+// T2-17: exportiert, s. Kommentar bei legacySnapshot oben.
+export async function stdioSnapshot(env) {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [MCP_SERVER_ENTRYPOINT],
