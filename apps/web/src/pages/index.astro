@@ -24,9 +24,13 @@ import { LOGIN_URL } from "../lib/routes.js";
 // auch /datenschutz, /impressum und /agb gebaut werden. Kein zweiter Textstand.
 // Die Rechtsdokumente selbst bleiben DEUTSCH (verbindlicher Wortlaut); nur ihre
 // Reiter-Beschriftungen folgen der Seitensprache.
-import HermesDemo from "../components/HermesDemo.astro";
+import HowtoSteps from "../components/HowtoSteps.astro";
 import CookieConsent from "../components/site/CookieConsent.astro";
 import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
+// Handy scrollt seit 2026-09-26 wie der Desktop (Owner-Entscheidung, revidiert
+// den Ein-Screen-Hero vom 2026-08-20). Als letzter Import, damit die Regeln
+// nach hermes.css und den Komponenten-Styles greifen.
+import "../styles/hermes-mobile-scroll.css";
 import privacy from "../data/legal/privacy.de.json";
 import imprint from "../data/legal/imprint.de.json";
 import terms from "../data/legal/terms.de.json";
@@ -38,6 +42,11 @@ const description =
 const MCP_URL = "https://app.sundartha.com/mcp";
 const MCP_CMD = `claude mcp add --transport http hermes ${MCP_URL}`;
 const CONTACT = "kontakt@sundartha.com";
+// Agenten-Einstieg (Owner-Auftrag 2026-09-25, Vorbild heycall-e.com): dieser Satz
+// wird in den eigenen KI-Agenten kopiert; public/agents.md ist die Anleitung fuer ihn.
+// Bewusst immer Englisch - er richtet sich an das Modell, nicht an den Menschen.
+const AGENT_GUIDE = "sundartha.com/agents.md";
+const AGENT_PROMPT = `Set up Hermes for me: https://${AGENT_GUIDE}`;
 
 // Die drei Rechtsdokumente im Blatt. "Kontakt" ist im Repo kein eigenes
 // Dokument (kein contact.de.json) — dafuer steht der mailto-Link, so wie es
@@ -63,6 +72,7 @@ const legalDocs = [
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="alternate" type="text/markdown" href={new URL("/agents.md", Astro.site)} title="Setup guide for AI agents" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Sundartha" />
     <meta property="og:title" content={title} />
@@ -141,15 +151,17 @@ const legalDocs = [
 
           <!-- ------------------------------------ Ebene 2: So funktioniert's -->
           <section class="howto-layer" aria-label="How it works">
+            <!-- Nur am Handy: Kopfzeile ueber der Ueberschrift, rechts der Fortschritt
+                 durch die drei Schritte (hermes-scroll.js setzt .is-on). -->
+            <p class="layer-eyebrow"><span data-i18n="howItWorks">How it works</span><span class="layer-progress" aria-hidden="true"><i></i><i></i><i></i></span></p>
             <h2 class="layer-title" data-i18n="howtoTitle">One connection, <em>two minutes</em>.</h2>
             <p class="layer-lead" data-i18n="howtoLead">One connection over <strong>MCP</strong>, no setup — your AI is reachable on a real number in under two minutes.</p>
-            <div class="demo-frame">
-              <HermesDemo lang="en" />
-            </div>
+            <HowtoSteps lang="en" />
           </section>
 
           <!-- ------------------------------------------- Ebene 3: Preise -->
           <section class="price-layer" aria-label="Pricing">
+            <p class="layer-eyebrow"><span data-i18n="pricing">Pricing</span></p>
             <h2 class="layer-title" data-i18n="priceTitle">Two plans, <em>no surprises</em>.</h2>
             <p class="layer-lead" data-i18n="priceLead">Choose the plan that fits you. <strong>Cancel monthly</strong>, <strong>no hidden costs</strong>.</p>
             <div class="price-grid">
@@ -186,7 +198,8 @@ const legalDocs = [
 
           <!-- -------------------------------------- Ebene 4: Entwickler -->
           <section class="dev-layer" aria-label="For developers">
-            <h2 class="layer-title" data-i18n="devTitle">One endpoint, <em>two ways</em>.</h2>
+            <p class="layer-eyebrow"><span data-i18n="forDevs">For developers</span></p>
+            <h2 class="layer-title" data-i18n="devTitle">One endpoint, <em>three ways</em>.</h2>
             <p class="layer-lead" data-i18n="devLead">Hermes is an <strong>MCP</strong> server. Connect it in the AI tool of your choice or straight from the terminal.</p>
             <div class="dev-grid">
               <div class="dev-card" data-dev-card="a">
@@ -258,6 +271,29 @@ const legalDocs = [
                 </span>
               </div>
             </div>
+            <div class="agent-try agent-try--dev">
+              <span class="agent-try__label" data-i18n="agentTryLabel">Try it with your AI</span>
+              <span class="agent-try__box">
+                <span class="agent-try__prompt">Set up Hermes for me: <span class="agent-try__url">{AGENT_GUIDE}</span></span>
+                <button class="agent-try__copy" type="button" data-copy={AGENT_PROMPT} data-i18n="copyLabel">Copy</button>
+              </span>
+            </div>
+            <!-- Nur am Handy: statt der beiden Fenster-Nachbauten EINE Glaskarte mit den
+                 drei Wegen - jeweils das, was man kopiert, und ein Copy-Knopf. -->
+            <div class="dev-list">
+              <div class="dev-list__row">
+                <span class="dev-list__head"><span class="dev-list__num">01</span><span class="dev-list__title" data-i18n="devWayATitle">Add it as a connector</span><button class="dev-list__copy" type="button" data-copy={MCP_URL} data-i18n="copyLabel">Copy</button></span>
+                <span class="dev-list__code"><span>{MCP_URL}</span></span>
+              </div>
+              <div class="dev-list__row">
+                <span class="dev-list__head"><span class="dev-list__num">02</span><span class="dev-list__title" data-i18n="devWayB">In the terminal</span><button class="dev-list__copy" type="button" data-copy={MCP_CMD} data-i18n="copyLabel">Copy</button></span>
+                <span class="dev-list__code"><span>claude mcp add --transport http hermes</span><span>{MCP_URL}</span></span>
+              </div>
+              <div class="dev-list__row">
+                <span class="dev-list__head"><span class="dev-list__num">03</span><span class="dev-list__title" data-i18n="agentTryLabel">Try it with your AI</span><button class="dev-list__copy" type="button" data-copy={AGENT_PROMPT} data-i18n="copyLabel">Copy</button></span>
+                <span class="dev-list__prompt">Set up Hermes for me: <strong>{AGENT_GUIDE}</strong></span>
+              </div>
+            </div>
             <p class="layer-note" data-i18n="devFootnote">Streamable HTTP, OAuth on first connect. Works with Claude, Codex and any MCP client.</p>
           </section>
 
@@ -309,34 +345,7 @@ const legalDocs = [
       </div>
       <span class="sheet__title" data-i18n="howtoTitle">One connection, <em>two minutes</em>.</span>
       <p class="sheet__lead" data-i18n="howtoLead">One connection over <strong>MCP</strong>, no setup — your AI is reachable on a real number in under two minutes.</p>
-      <div class="sheet__demo">
-        <HermesDemo lang="en" />
-      </div>
-      <div class="sheet__card">
-        <span class="step">
-          <span class="step__num">01</span>
-          <span class="step__body">
-            <span class="step__title" data-i18n="step1Title">Get a number</span>
-            <span class="step__text" data-i18n="step1Desc">A real phone number, active in two minutes. No contract, no hardware.</span>
-          </span>
-        </span>
-        <span class="rule" aria-hidden="true"></span>
-        <span class="step">
-          <span class="step__num">02</span>
-          <span class="step__body">
-            <span class="step__title" data-i18n="step2Title">Connect your AI</span>
-            <span class="step__text" data-i18n="step2Desc">One connection over MCP. Your AI then knows who called and what to do.</span>
-          </span>
-        </span>
-        <span class="rule" aria-hidden="true"></span>
-        <span class="step">
-          <span class="step__num">03</span>
-          <span class="step__body">
-            <span class="step__title" data-i18n="step3Title">Let it answer</span>
-            <span class="step__text" data-i18n="step3Desc">Hermes talks, listens, books appointments and takes notes. You read the summary.</span>
-          </span>
-        </span>
-      </div>
+      <HowtoSteps lang="en" variant="sheet" />
       <a class="sheet__cta" href={LOGIN_URL} data-i18n="getNumber">Get a number</a>
     </div>
 
@@ -406,8 +415,15 @@ const legalDocs = [
         </span>
         <button class="sheet__close" type="button" data-close-sheet aria-label="Close">×</button>
       </div>
-      <span class="sheet__title" data-i18n="devTitle">One endpoint, <em>two ways</em>.</span>
+      <span class="sheet__title" data-i18n="devTitle">One endpoint, <em>three ways</em>.</span>
       <p class="sheet__lead" data-i18n="devLead">Hermes is an <strong>MCP</strong> server. Connect it in the AI tool of your choice or straight from the terminal.</p>
+      <div class="agent-try agent-try--sheet">
+        <span class="agent-try__label" data-i18n="agentTryLabel">Try it with your AI</span>
+        <span class="agent-try__box">
+          <span class="agent-try__prompt">Set up Hermes for me: <span class="agent-try__url">{AGENT_GUIDE}</span></span>
+          <button class="agent-try__copy" type="button" data-copy={AGENT_PROMPT} data-i18n="copyLabel">Copy</button>
+        </span>
+      </div>
 
       <div class="sheet__card">
         <span class="dev-card__head">
@@ -583,7 +599,6 @@ const legalDocs = [
       // Hoisted script: Astro buendelt es als externes, same-origin Modul
       // (assetsInlineLimit 0) — CSP-konform ohne script-src 'unsafe-inline'.
       import "../scripts/hermes-scroll.js";
-      import "../scripts/hermes-demo.js";
     </script>
   </body>
 </html>

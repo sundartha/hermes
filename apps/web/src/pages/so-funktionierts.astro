@@ -1,28 +1,10 @@
 ---
 // So funktioniert's — ruhende Fassung der zweiten Ebene der Startseite.
 import Hermes from "../layouts/Hermes.astro";
-import HermesDemo from "../components/HermesDemo.astro";
+import HowtoSteps from "../components/HowtoSteps.astro";
 import { LOGIN_URL } from "../lib/routes.js";
 
 const MCP_URL = "https://app.sundartha.com/mcp";
-
-const steps = [
-  {
-    num: "01",
-    title: "Nummer holen",
-    text: "Eine echte Rufnummer, in zwei Minuten aktiv. Kein Vertrag, keine Hardware.",
-  },
-  {
-    num: "02",
-    title: "KI verbinden",
-    text: "Ein Anschluss über MCP. Deine KI weiß danach, wer angerufen hat und was zu tun ist.",
-  },
-  {
-    num: "03",
-    title: "Abnehmen lassen",
-    text: "Hermes spricht, hört zu, vereinbart Termine und schreibt mit. Du liest das Protokoll.",
-  },
-];
 ---
 
 <Hermes
@@ -35,25 +17,8 @@ const steps = [
     zwei Minuten unter einer echten Nummer erreichbar.
   </p>
 
-  <div class="doc-block doc-demo">
-    <HermesDemo />
-  </div>
-
-  <div class="doc-block doc-steps">
-    <div class="sheet__card">
-      {steps.map((step, index) => (
-        <>
-          {index > 0 && <span class="rule" aria-hidden="true"></span>}
-          <span class="step">
-            <span class="step__num">{step.num}</span>
-            <span class="step__body">
-              <span class="step__title">{step.title}</span>
-              <span class="step__text">{step.text}</span>
-            </span>
-          </span>
-        </>
-      ))}
-    </div>
+  <div class="doc-block">
+    <HowtoSteps variant="page" />
   </div>
 
   <div class="doc-block doc-steps">
@@ -77,7 +42,3 @@ const steps = [
     <a href={LOGIN_URL}>Nummer holen</a> und in zwei Minuten telefonieren lassen.
   </p>
 </Hermes>
-
-<script>
-  import "../scripts/hermes-demo.js";
-</script>

@@ -56,7 +56,7 @@ const DE = {
   businessF4: "Priorisierter Support",
   businessCta: "Business wählen",
   footnote: "Minuten aufgebraucht? Du bekommst einen Hinweis — kein automatischer Aufpreis.",
-  devTitle: "Ein Endpoint, <em>zwei Wege</em>.",
+  devTitle: "Ein Endpoint, <em>drei Wege</em>.",
   devLead: "Hermes ist ein <strong>MCP</strong>-Server. Verbinde ihn im KI-Tool deiner Wahl oder direkt aus dem Terminal.",
   devWayA: "Im KI-Tool",
   devWayATitle: "Als Konnektor hinzufügen",
@@ -134,6 +134,23 @@ const DE = {
   imprint: "Impressum",
   terms: "AGB",
   copiedLabel: "Kopiert",
+  /* How-it-works-Kacheln (components/HowtoSteps.astro). Titel/Texte nutzen die
+   * Keys step1Title ... step3Desc oben. Der kopierte Agenten-Satz selbst bleibt
+   * Englisch - er ist fuer das Modell. */
+  hgStep: "Schritt",
+  hgB11: "Eine echte Rufnummer",
+  hgB12: "In zwei Minuten aktiv",
+  hgB13: "Kein Vertrag, keine Hardware",
+  hgB21: "Ein Anschluss über MCP",
+  hgB22: "Claude, Codex oder jeder MCP-Client",
+  hgB23: "Deine KI weiß, wer angerufen hat",
+  hgB31: "Spricht und hört zu",
+  hgB32: "Vereinbart Termine",
+  hgB33: "Dein persönlicher Assistent, 24/7",
+  hgLive: "Aktiv",
+  hgReady: "Zusammenfassung da",
+  hgConnected: "Mit deiner KI verbunden",
+  agentTryLabel: "Mit deiner KI ausprobieren",
 };
 
 /* Der Schluessel traegt seit dem Default-Wechsel eine Version. Grund: unter dem
@@ -176,6 +193,13 @@ function applyLang(next) {
  * auseinanderlaufen. Reagiert live auf Drehen und Fenstergroesse. */
 const mq = window.matchMedia("(max-width:700px), (pointer:coarse) and (max-width:1024px)");
 const isMobile = () => mq.matches;
+/* Owner-Entscheidung 2026-09-26: das Handy scrollt wie der Desktop durch die
+ * Ebenen (revidiert den Ein-Screen-Hero vom 2026-08-20). Nur das Handy im
+ * QUERFORMAT (<= 500px hoch) bleibt beim Ein-Screen-Hero mit Vollbild-
+ * Blaettern - dort passt keine Ebene in die Hoehe. Dieselbe Abfrage steht in
+ * hermes-mobile-scroll.css. */
+const mqSheets = window.matchMedia("(pointer:coarse) and (max-width:1024px) and (max-height:500px)");
+const usesSheets = () => mqSheets.matches;
 
 function sheetEl(name) {
   return document.querySelector('.sheet[data-sheet="' + name + '"]');
@@ -213,7 +237,9 @@ function closeSheet() {
 const page = document.querySelector(".page");
 const copy = document.querySelector(".hero-copy");
 const hint = document.querySelector(".scroll-hint");
-const nav = document.querySelector(".nav-desktop");
+const navDesktop = document.querySelector(".nav-desktop");
+const navMobile = document.querySelector(".nav-mobile");
+const navEl = () => (navDesktop && navDesktop.offsetHeight ? navDesktop : navMobile);
 const howtoLayer = document.querySelector(".howto-layer");
 const howtoBg = document.querySelector(".howto-bg");
 const priceLayer = document.querySelector(".price-layer");
@@ -221,8 +247,23 @@ const devLayer = document.querySelector(".dev-layer");
 const devCardA = document.querySelector('[data-dev-card="a"]');
 const devCardB = document.querySelector('[data-dev-card="b"]');
 const footer = document.querySelector(".site-footer");
+const devList = document.querySelector(".dev-list");
+const devHead = devLayer ? devLayer.querySelectorAll(".layer-eyebrow, .layer-title") : [];
 
 const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* Handy (Owner-Entwurf v3, 2026-09-26): "So funktioniert's" zeigt die drei
+ * Schritt-Karten NACHEINANDER, je eine pro Scroll-Halt. Dafuer wird an der
+ * Stelle, an der die Ebene voll steht (HOWTO_REST), zusaetzlicher Scrollweg
+ * eingeschoben (STEP_RUN je Wechsel); alles danach verschiebt sich um genau
+ * diesen Weg. Der Desktop zeigt die drei Kacheln nebeneinander - dort ist der
+ * Einschub 0. Die Laenge der Buehne steht in hermes-mobile-scroll.css. */
+const HOWTO_REST = 1.55;
+const STEP_RUN = 0.9;
+const stepTiles = howtoLayer ? [...howtoLayer.querySelectorAll(".hg-tile")] : [];
+const stepBars = howtoLayer ? [...howtoLayer.querySelectorAll(".layer-progress i")] : [];
+const stepMode = () => isMobile() && !usesSheets() && stepTiles.length > 1;
+const stepExtra = (vh) => (stepMode() ? (stepTiles.length - 1) * STEP_RUN * vh : 0);
 let restGap = null;
 let devPlayed = false;
 let glideRaf = null;
@@ -231,6 +272,7 @@ let glideRaf = null;
  * Nav-Kante. Die Leiste bleibt transparent, darum darf die Schrift sie gar
  * nicht erreichen — auf niedrigen Fenstern ist der Weg entsprechend kurz. */
 function travel() {
+  const nav = navEl();
   if (!copy || !nav) return 0;
   if (restGap == null) {
     const atRest = !copy.style.transform || copy.style.transform === "translateY(0px)";
@@ -247,10 +289,13 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
 function apply() {
   if (!page) return;
 
-  if (isMobile() || reduced) {
+  // Bewegung reduzieren: die Ebenen werden trotzdem gezeigt (vorher blieben sie
+  // am Desktop dauerhaft unsichtbar - Preise/Entwickler waren nicht erreichbar).
+  // Die Uebergaenge haengen allein am Scrollen, laufen also nicht von selbst.
+  if (usesSheets()) {
     if (copy) {
-      copy.style.transform = "none";
-      copy.style.opacity = "1";
+      copy.style.setProperty("transform", "none", "important");
+      copy.style.setProperty("opacity", "1", "important");
     }
     if (hint) hint.style.opacity = "1";
     for (const layer of [howtoLayer, priceLayer, devLayer, footer]) {
@@ -264,13 +309,20 @@ function apply() {
   }
 
   const vh = Math.max(1, page.clientHeight);
-  const y = page.scrollTop;
+  const raw = page.scrollTop;
+  // Handy: waehrend des eingeschobenen Wegs steht die Zeitachse still und nur
+  // die Schritt-Karten wechseln; danach laeuft sie um den Einschub versetzt weiter.
+  const rest = vh * HOWTO_REST;
+  const extra = stepExtra(vh);
+  const y = raw <= rest ? raw : raw <= rest + extra ? rest : raw - extra;
+  applySteps(extra > 0 ? clamp01((raw - rest) / extra) : null);
   const p = clamp01(y / (vh * 0.88));
   const ease = easeOut(p);
 
   if (copy) {
-    copy.style.transform = "translateY(" + -travel() * ease + "px)";
-    copy.style.opacity = String(Math.max(0, 1 - p * 1.35));
+    // "important" am Element: das Handy-CSS pinnt den Hero-Text sonst fest.
+    copy.style.setProperty("transform", "translateY(" + -travel() * ease + "px)", "important");
+    copy.style.setProperty("opacity", String(Math.max(0, 1 - p * 1.35)), "important");
   }
   if (hint) hint.style.opacity = String(Math.max(0, 1 - p * 3));
 
@@ -284,7 +336,11 @@ function apply() {
   if (howtoLayer) {
     const q = clamp01((y - vh * 0.95) / (vh * 0.6));
     const qe = easeOut(q);
-    howtoLayer.style.opacity = String(qe * Math.max(0, 1 - px * 1.35));
+    const howtoOpacity = qe * Math.max(0, 1 - px * 1.35);
+    howtoLayer.style.opacity = String(howtoOpacity);
+    // Die Kachel-Animationen (HowtoSteps.astro) laufen nur, solange die Ebene
+    // sichtbar ist - spart Rechenzeit/Akku, und man sieht sie beim Ankommen.
+    howtoLayer.classList.toggle("is-visible", howtoOpacity > 0.02);
     howtoLayer.style.transform = "translateY(" + (34 * (1 - qe) - travel() * pxe) + "px)";
     howtoLayer.style.pointerEvents = q > 0.6 && px < 0.2 ? "auto" : "none";
     // Der Hintergrund wechselt mit der zweiten Ebene auf das Wolkenmeer.
@@ -341,7 +397,9 @@ function apply() {
   // Fussband: steigt ganz am Ende von der Unterkante herein, ueber der letzten
   // Ebene — wie ein Footer, nicht wie eine eigene Sektion.
   if (footer) {
-    const f = clamp01((y - vh * 4.55) / (vh * 0.5));
+    // Am Handy setzt das Band erst NACH dem Entwickler-Halt ein - sonst stuende
+    // dort schon ein Hauch Fussband unter der Karte.
+    const f = clamp01((y - vh * (stepMode() ? 4.68 : 4.55)) / (vh * 0.5));
     const fe = easeOut(f);
     footer.style.opacity = String(fe);
     footer.style.transform = "translateY(" + 100 * (1 - fe) + "%)";
@@ -349,20 +407,71 @@ function apply() {
     // Die letzte Ebene weicht dem Band aus, statt sich davon ueberdecken zu
     // lassen: das Band ist hoeher als der Bodenabstand der Ebene.
     if (devLayer) {
-      const base = vh <= 660 ? 34 : 44;
+      const base = stepMode() ? 20 : vh <= 660 ? 34 : 44;
       const lift = Math.max(0, footer.offsetHeight - base) * fe;
       devLayer.style.paddingBottom = base + lift + "px";
+      // Handy: die Ebene steht oben buendig (nicht mittig), der Bodenabstand
+      // allein hebt sie nicht an. Reicht die Karte ins Band, rueckt die ganze
+      // Ebene um genau die Ueberdeckung nach oben.
+      let headOpacity = "";
+      if (stepMode() && devList && fe > 0) {
+        const bottom = devList.offsetTop + devList.offsetHeight;
+        const overlap = Math.max(0, bottom - (vh - footer.offsetHeight)) * fe;
+        devLayer.style.transform = "translateY(" + -overlap + "px)";
+        // Rueckt die Ebene dabei unter die Kopfleiste, weicht ihr Kopf aus.
+        if (overlap > 0) headOpacity = String(Math.max(0, 1 - overlap / 36));
+      }
+      for (const head of devHead) head.style.opacity = headOpacity;
     }
   }
 }
 
+/* Schritt-Karten am Handy: s = 0 (Schritt 1) ... 1 (letzter Schritt). Jede
+ * Karte steht eine Weile ganz, dazwischen blendet sie weich ueber und gleitet
+ * dabei ein Stueck zur Seite. null = Desktop: alle Karten normal. */
+function applySteps(s) {
+  if (!stepTiles.length) return;
+  if (s == null) {
+    for (const tile of stepTiles) {
+      tile.style.opacity = "";
+      tile.style.transform = "";
+      tile.style.visibility = "";
+      tile.classList.remove("is-active");
+    }
+    return;
+  }
+  const t = s * (stepTiles.length - 1);
+  const current = Math.round(t);
+  stepTiles.forEach((tile, i) => {
+    const d = t - i;
+    const o = clamp01(1 - (Math.abs(d) - 0.22) / 0.3);
+    tile.style.opacity = String(o);
+    // Seitlich wie eine Galerie: die naechste Karte kommt von rechts, die
+    // vorige geht nach links - passt zum Wischen.
+    tile.style.transform = "translateX(" + -Math.max(-1, Math.min(1, d)) * 44 + "px)";
+    tile.style.visibility = o > 0.01 ? "visible" : "hidden";
+    tile.classList.toggle("is-active", i === current);
+  });
+  stepBars.forEach((bar, i) => bar.classList.toggle("is-on", i <= current));
+}
+
 /* Ruhepunkte: dort ist die jeweilige Ebene voll aufgestiegen und wird noch
- * nicht wieder nach oben weggezogen. Letzter Halt: Fussband ganz oben. */
-function sectionStops() {
+ * nicht wieder nach oben weggezogen. Letzter Halt: Fussband ganz oben. Am
+ * Handy liegen hinter "So funktioniert's" die Halte der Schritte 2 und 3;
+ * withSteps=false liefert nur die Sektionen (Index = data-goto). */
+function sectionStops(withSteps = true) {
   if (!page) return [0];
   const vh = page.clientHeight;
   const max = Math.max(0, page.scrollHeight - vh);
-  return [0, vh * 1.55, vh * 3.05, vh * 4.65, vh * 5.2].map((t) => Math.min(t, max));
+  const extra = stepExtra(vh);
+  const rest = vh * HOWTO_REST;
+  const steps = [];
+  if (withSteps && extra > 0) {
+    for (let i = 1; i < stepTiles.length; i++) steps.push(rest + i * STEP_RUN * vh);
+  }
+  return [0, rest, ...steps, vh * 3.05 + extra, vh * 4.65 + extra, vh * 5.2 + extra].map((t) =>
+    Math.min(t, max),
+  );
 }
 
 /* Eigene Scroll-Animation mit gleicher GESCHWINDIGKEIT statt gleicher Dauer:
@@ -394,7 +503,7 @@ function glideTo(top) {
 }
 
 function goToSection(index) {
-  const stops = sectionStops();
+  const stops = sectionStops(false);
   glideTo(stops[Math.min(index, stops.length - 1)]);
 }
 
@@ -410,7 +519,9 @@ function wireSectionTriggers() {
     const fromMenu = el.hasAttribute("data-from-menu");
     el.addEventListener("click", (event) => {
       event.preventDefault();
-      if (!isMobile()) {
+      if (!usesSheets()) {
+        // Aus dem Handy-Menue heraus: erst das Menue schliessen, dann gleiten.
+        if (fromMenu) setSheet(null, false);
         goToSection(Number(index));
         return;
       }
@@ -473,6 +584,42 @@ function wireLegal() {
   show("privacy");
 }
 
+/* Handy: die Schritt-Karten lassen sich auch seitlich wischen. Ein Wisch
+ * gleitet zum Halt des naechsten/vorigen Schritts - dieselbe Stelle, an die
+ * auch das Scrollen fuehrt, darum passen Karte und Fortschritt immer. */
+function wireStepSwipe() {
+  const zone = howtoLayer && howtoLayer.querySelector(".hg--layer");
+  if (!zone || !page) return;
+  let x0 = null;
+  let y0 = 0;
+  zone.addEventListener(
+    "touchstart",
+    (event) => {
+      const touch = event.touches[0];
+      x0 = touch.clientX;
+      y0 = touch.clientY;
+    },
+    { passive: true },
+  );
+  zone.addEventListener(
+    "touchend",
+    (event) => {
+      if (x0 == null || !stepMode()) return;
+      const touch = event.changedTouches[0];
+      const dx = touch.clientX - x0;
+      const dy = touch.clientY - y0;
+      x0 = null;
+      if (Math.abs(dx) < 44 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+      const vh = page.clientHeight;
+      const rest = vh * HOWTO_REST;
+      const t = clamp01((page.scrollTop - rest) / stepExtra(vh)) * (stepTiles.length - 1);
+      const next = Math.max(0, Math.min(stepTiles.length - 1, Math.round(t) + (dx < 0 ? 1 : -1)));
+      glideTo(rest + next * STEP_RUN * vh);
+    },
+    { passive: true },
+  );
+}
+
 function wireCopy() {
   for (const btn of document.querySelectorAll("[data-copy]")) {
     btn.addEventListener("click", async () => {
@@ -506,7 +653,7 @@ function wireKeyboard() {
     const target = event.target;
     if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName || "")))
       return;
-    if (!page || isMobile()) return;
+    if (!page || usesSheets()) return;
 
     const stops = sectionStops();
     if (event.key === "Home" || event.key === "End") {
@@ -550,6 +697,7 @@ function init() {
   wireSectionTriggers();
   wireLegal();
   wireCopy();
+  wireStepSwipe();
   wireKeyboard();
 
   try {
@@ -574,8 +722,10 @@ function init() {
     restGap = null;
     apply();
   };
-  if (mq.addEventListener) mq.addEventListener("change", onView);
-  else mq.addListener(onView);
+  for (const q of [mq, mqSheets]) {
+    if (q.addEventListener) q.addEventListener("change", onView);
+    else q.addListener(onView);
+  }
 
   // Beim Sichtbarwerden einmal nachziehen: im Hintergrund pausiert der Browser
   // die Frame-Schleife, der Scrollstand kann sich zwischenzeitlich geaendert haben.
