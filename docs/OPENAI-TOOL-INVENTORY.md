@@ -116,7 +116,7 @@ Hermes applies it as three statements, and every value in Table A follows from o
 The hint describes what a tool can do, not what every single invocation does: a tool that sends
 to an external party on at least one path is `true`, even if some invocations send nothing.
 
-- **prepare_call** (registered `src/mcp-tools.js:1455`, handler `:1447-1479`, REST
+- **prepare_call** (registered `src/mcp-tools.js:1591`, handler `:1600-1632`, REST
   `POST /api/call-confirmations`). Previews an outbound call and, when card confirmation is
   switched on for the server, attaches a single-use confirmation code for the Hermes card that
   `place_call` then requires - see "Confirmation before placing a call" below. The server does
@@ -132,7 +132,7 @@ to an external party on at least one path is `true`, even if some invocations se
     been used, repeating `prepare_call` with the same arguments in the same five-minute
     window returns the same code; once that code has been used to place a call, repeating
     `prepare_call` returns a new code.
-- **place_call** (registered `src/mcp-tools.js:1509`, handler `:1514-1558`, REST
+- **place_call** (registered `src/mcp-tools.js:1646`, handler `:1672-1716`, REST
   `POST /api/calls`). As of this inventory, `place_call` additionally REQUIRES a
   `confirmation_code` from a preceding `prepare_call` call with identical arguments - see
   "Confirmation before placing a call" below. The annotations below are unchanged by that
@@ -321,6 +321,38 @@ placed through `place_call` at all.
 reduces harm - delaying it adds no new cost and starts no new contact. `answer_consult` is
 time-critical and only ever runs inside a call that was already confirmed when it was placed; a
 card round-trip there would let the call time out.
+
+### Input fields of prepare_call and place_call
+
+Both tools share one input schema (`src/mcp-tools.js:1314`); a change to a field description
+applies to both. Length limits per field are enforced server-side
+(`src/routes/_validation.js:32-51`); everything else in this section is an instruction to the
+model in the field description, not a server-side check.
+
+- `to` - the number to dial; checked by the outbound gates before dialling.
+- `objective` - one sentence, read out to the called party right after the AI disclosure.
+- `briefing` - only the context this call needs, summarised, no secrets or payment data,
+  health details only as needed. It reaches the voice agent on both call paths
+  (`src/claude.js`, `src/elevenlabs/outbound.js:665-672`).
+- `context` - optional structured background; a subfield is to be filled only when the call
+  needs it, without repeating the briefing. It remains a second optional field next to
+  `briefing`; the schema does not force the limit. On the budget path it is used only when the
+  assistant-context switch is on (`src/claude.js:358`); on the voice-agent path it is passed
+  with the briefing (`src/elevenlabs/outbound.js:665-672`).
+- `constraints` and `mandate` - hard limits, and the optional frame within which the agent may
+  commit. `mandate.on_out_of_scope` is not applied on every call path; its description says
+  so, without naming the path.
+- `language`, `max_duration_s`, `diagnostic` - call settings.
+- `confirmation_code` - added to the schema of `place_call` only (`src/mcp-tools.js:1662`);
+  it comes from the Hermes card after the user confirms.
+
+Purpose rule. The descriptions of `prepare_call` and `place_call` and the server instructions
+tell the model to place calls only when the user asks for them on their own behalf, and not
+for telemarketing, unsolicited advertising or sales calls, political campaigning, or calling
+through lists of numbers. The description of `prepare_call` also tells the model not to give
+the agent a mandate for contracts, loans, insurance, tenancy, employment or legal matters.
+Both are usage rules for the model. The server does not check the purpose of a call and does
+not block a mandate by subject area.
 
 ## Table B - tool count and exact name set per configuration
 
