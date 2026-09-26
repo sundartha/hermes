@@ -6658,7 +6658,7 @@ Verweigerung legitimer Anrufe neu <= alt, Abweisung der Missbrauchs-Anrufe neu >
 Verfehlt er ein Kriterium, sind die Werkzeugtexte nach "Rueckbau" im selben README
 zurueckzunehmen.
 
-## OpenAI-T2-17 - Server-Instructions: Kern in die ersten 512 Zeichen
+## OpenAI-T2-17 — Server-Instructions: Kern in die ersten 512 Zeichen (T-21)
 
 **Was:** Die Server-Instructions (`src/mcp-server-info.js`) beginnen jetzt mit einem
 verdichteten Kern-Vorspann statt mit dem bisherigen Bestandstext. Der Kern nennt in den
