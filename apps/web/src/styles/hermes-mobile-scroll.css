@@ -1,0 +1,469 @@
+/* =============================================================================
+ * hermes-mobile-scroll.css — das Handy scrollt wie der Desktop
+ *
+ * Owner-Entscheidung 2026-09-26: am Handy dieselbe Scroll-Buehne wie am Desktop
+ * (Hero -> So funktioniert's -> Preise -> Entwickler -> Fussband). Revidiert den
+ * Ein-Screen-Hero mit Vollbild-Blaettern vom 2026-08-20.
+ *
+ * Gestaltung nach Owner-Entwurf v3 (2026-09-26, "blaue Kaesten ja, aber besser
+ * integriert"):
+ *  - EINE linke Kante wie im Hero: Kopfzeile und Ueberschrift stehen buendig
+ *    mit der Kante der Glaskarten (20px), nichts ist zentriert.
+ *  - Die Karten fuellen den Screen bis zum unteren Rand; zu den Schritten kommt
+ *    man per Scrollen oder seitlichem Wischen (wireStepSwipe im Skript).
+ *  - Feste Hierarchie je Ebene: kleine Kopfzeile -> grosse Serif-Ueberschrift ->
+ *    Glaskarte(n). Einleitungssaetze entfallen am Handy.
+ *  - Eine Aussage pro Screen: die drei Schritte erscheinen nacheinander beim
+ *    Scrollen (hermes-scroll.js, applySteps), oben rechts der Fortschritt.
+ *
+ * Nur das Handy im QUERFORMAT (<= 500px hoch) bleibt beim Ein-Screen-Hero -
+ * dort passt keine Ebene in die Hoehe (dieselbe Abfrage: usesSheets() im Skript).
+ *
+ * Als letzter Import der Startseite: die Regeln hier ueberstimmen die
+ * !important-Regeln des Handy-Blocks in hermes.css.
+ * ========================================================================== */
+
+/* Kopfzeile und Entwickler-Liste gibt es nur am Handy. */
+.layer-eyebrow,
+.dev-list {
+  display: none;
+}
+
+@media ((max-width: 700px) or ((pointer: coarse) and (max-width: 1024px))) and (not ((pointer: coarse) and (max-height: 500px))) {
+  /* ------------------------------------------------ Scroll-Buehne einschalten */
+  .page {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    height: 100svh !important;
+    overscroll-behavior-y: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* 620svh wie am Desktop + 2 x 90svh fuer die Schritte 2 und 3
+     (STEP_RUN in hermes-scroll.js). */
+  .pin-track {
+    height: 800svh !important;
+  }
+  .howto-layer,
+  .price-layer,
+  .dev-layer {
+    display: flex !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    padding-top: calc(114px + env(safe-area-inset-top, 0px)) !important;
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+    /* Boden bewusst OHNE !important: am Ende hebt das Skript den Bodenabstand
+       der Entwickler-Ebene an, damit das Fussband nichts verdeckt. */
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+  .site-footer {
+    display: flex !important;
+  }
+
+  /* ---------------------------------------------------------- Kopf je Ebene
+     Kopfzeile und Ueberschrift stehen buendig mit der KANTE der Karten
+     darunter (20px) - wie Apple-Abschnitte: Titel ueber der Kachel. */
+  .layer-eyebrow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0;
+    padding: 0 2px;
+    font: 500 12px/1 var(--sans);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #c3daf3;
+    text-shadow: 0 1px 12px rgba(7, 16, 38, 0.6);
+  }
+  .layer-progress {
+    display: flex;
+    gap: 6px;
+  }
+  .layer-progress i {
+    width: 22px;
+    height: 2px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.3);
+    transition: background 0.35s ease;
+  }
+  .layer-progress i.is-on {
+    background: #fff;
+  }
+  .layer-title {
+    margin-top: 14px !important;
+    padding: 0 2px;
+    white-space: normal !important;
+    text-align: left !important;
+    font-size: 40px !important;
+    line-height: 1.02 !important;
+    letter-spacing: -0.01em !important;
+  }
+  /* Zweiter Teil der Ueberschrift (kursiv) immer in der zweiten Zeile. */
+  .layer-title em::before {
+    content: "\A";
+    white-space: pre;
+  }
+  .howto-layer .layer-lead,
+  .price-layer .layer-lead,
+  .dev-layer .layer-lead,
+  .price-layer .layer-note,
+  .dev-layer .layer-note {
+    display: none !important;
+  }
+
+  /* ------------------------------------------------- So funktioniert's
+     Owner 2026-09-26: die Karten fuellen den Screen bis zum unteren Rand.
+     Die drei Karten liegen UEBEREINANDER in einer Zelle, die den ganzen Rest
+     der Hoehe nimmt; das Skript blendet je nach Scrollstand (oder Wischen)
+     genau eine ein. Die Animation bekommt den freien Platz als eigene Buehne. */
+  .hg--layer {
+    display: grid !important;
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    max-width: none;
+    margin: 22px 0 0 !important;
+    padding: 0;
+    touch-action: pan-y;
+  }
+  .hg--layer > .hg-tile {
+    grid-area: 1 / 1;
+    align-self: stretch;
+    will-change: opacity, transform;
+  }
+  .hg--layer .hg-anim {
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: center;
+    gap: clamp(12px, 2.2svh, 22px);
+    min-height: 0;
+  }
+  .hg--layer .hg-ring,
+  .hg--layer .hg-sync {
+    width: clamp(64px, 13svh, 120px);
+    height: clamp(64px, 13svh, 120px);
+  }
+  .hg--layer .hg-ring__tick {
+    font-size: clamp(24px, 4.4svh, 40px);
+  }
+  .hg--layer .hg-sync img {
+    height: clamp(30px, 6svh, 54px);
+  }
+  .hg--layer .hg-numline {
+    align-items: center;
+    text-align: center;
+  }
+  .hg--layer .hg-numline__digits {
+    font-size: clamp(20px, 3.2svh, 26px);
+  }
+  .hg--layer .hg-url {
+    font-size: clamp(16px, 2.5svh, 20px);
+  }
+  .hg--layer .hg-anim--call .hg-wave {
+    flex: none;
+    width: 100%;
+    height: clamp(56px, 12svh, 110px);
+  }
+  .hg--layer .hg-bar {
+    width: 5px;
+  }
+  /* Animationen laufen nur in der Karte, die gerade steht. */
+  .hg--layer > .hg-tile:not(.is-active) *,
+  .hg--layer > .hg-tile:not(.is-active) *::before,
+  .hg--layer > .hg-tile:not(.is-active) *::after {
+    animation-play-state: paused !important;
+  }
+
+  /* ------------------------------------------------------------ Tarife
+     Zwei Glaskarten, gleicher Aufbau: Name (+ Beliebt), grosser Preis, die
+     wichtigsten Leistungen, Knopf in voller Breite. */
+  .price-grid {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin-top: 22px !important;
+    padding: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  /* Beide Karten teilen sich die Hoehe bis zum unteren Rand; der Knopf sitzt
+     unten, der freie Platz liegt ueber ihm. */
+  .price-grid > .plan {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 22px 24px !important;
+    border-radius: 30px;
+    border: 1px solid rgba(207, 228, 250, 0.14);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 30%),
+      linear-gradient(160deg, rgba(24, 62, 110, 0.56) 0%, rgba(10, 30, 62, 0.6) 55%, rgba(8, 24, 50, 0.7) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 24px 48px -28px rgba(4, 14, 34, 0.7);
+    backdrop-filter: blur(22px) saturate(1.1);
+    -webkit-backdrop-filter: blur(22px) saturate(1.1);
+  }
+  .price-grid > .plan--featured {
+    border-color: rgba(207, 228, 250, 0.3);
+  }
+  .price-grid .plan__head {
+    justify-content: space-between;
+  }
+  .price-grid .plan__label {
+    font: 500 12px/1 var(--sans);
+    letter-spacing: 0.16em;
+    color: #c3daf3;
+  }
+  .price-grid .plan__badge {
+    padding: 5px 9px;
+    border: 0;
+    background: rgba(255, 255, 255, 0.14);
+    font-size: 10.5px;
+  }
+  .price-grid .plan__price {
+    margin-top: 12px;
+    font-size: 42px;
+  }
+  .price-grid .plan__per {
+    font-size: 14px;
+    font-weight: 400;
+  }
+  .price-grid .plan__features {
+    margin-top: 14px;
+    margin-bottom: 18px;
+    gap: 7px;
+    font-size: 15px;
+    line-height: 1.35;
+  }
+  /* Am Handy die drei wichtigsten Leistungen; der Support steht im Tarif-
+     Vergleich auf der Preisseite. */
+  .price-grid .plan__features > :nth-child(n + 4) {
+    display: none;
+  }
+  .price-grid .plan__cta {
+    margin-top: auto;
+    height: 50px;
+    font-size: 15px;
+  }
+  .price-grid .plan--featured .plan__cta {
+    background: #fff;
+    border-color: #fff;
+    color: #0c2a52;
+  }
+  .plan:hover,
+  .dev-card:hover {
+    transform: none;
+  }
+
+  /* -------------------------------------------------------- Entwickler
+     Statt der beiden Fenster-Nachbauten EINE Glaskarte mit drei Zeilen:
+     Connector-Adresse, Terminal-Befehl, Satz fuer die eigene KI. */
+  .dev-layer .dev-grid,
+  .dev-layer .agent-try--dev {
+    display: none !important;
+  }
+  /* Eine Karte bis zum unteren Rand, die drei Zeilen teilen sich die Hoehe.
+     Kommt das Fussband, waechst der Bodenabstand (Skript) und die Karte wird
+     kuerzer, statt verdeckt zu werden. */
+  .dev-list {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: 22px;
+    border-radius: 30px;
+    border: 1px solid rgba(207, 228, 250, 0.14);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 30%),
+      linear-gradient(160deg, rgba(24, 62, 110, 0.56) 0%, rgba(10, 30, 62, 0.6) 55%, rgba(8, 24, 50, 0.7) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 24px 48px -28px rgba(4, 14, 34, 0.7);
+    backdrop-filter: blur(22px) saturate(1.1);
+    -webkit-backdrop-filter: blur(22px) saturate(1.1);
+  }
+  .dev-list__row {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 18px 24px;
+  }
+  .dev-list__row + .dev-list__row {
+    border-top: 1px solid rgba(207, 228, 250, 0.14);
+  }
+  /* Kopf je Zeile: Nummer, Titel, rechts der Copy-Knopf - darunter hat der
+     Inhalt die volle Breite der Karte. */
+  .dev-list__head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 36px;
+    font: 500 16px/1.2 var(--sans);
+    color: #fff;
+  }
+  .dev-list__num {
+    font: 500 12px/1 var(--sans);
+    letter-spacing: 0.12em;
+    color: #c3daf3;
+  }
+  .dev-list__title {
+    flex: 1;
+    min-width: 0;
+  }
+  .dev-list__code {
+    display: flex;
+    flex-direction: column;
+    margin-top: 8px;
+    font: 400 clamp(11px, 3.1vw, 12.5px) / 1.55 var(--mono);
+    color: #e6f0fb;
+  }
+  /* Befehl in zwei festen Zeilen: "claude mcp add ..." und die Adresse. */
+  .dev-list__code > span {
+    white-space: nowrap;
+  }
+  .dev-list__prompt {
+    display: block;
+    margin-top: 8px;
+    font: 400 15px/1.4 var(--sans);
+    color: rgba(232, 242, 253, 0.92);
+  }
+  .dev-list__prompt strong {
+    font-weight: 500;
+    color: #fff;
+  }
+  .dev-list__copy {
+    flex: none;
+    min-width: 64px;
+    min-height: 36px;
+    padding: 0 13px;
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.12);
+    font: 500 13px/1 var(--sans);
+    color: #fff;
+    cursor: pointer;
+  }
+  /* 44px Tastflaeche ohne die Zeile aufzublaehen. */
+  .dev-list__copy {
+    position: relative;
+  }
+  .dev-list__copy::after {
+    content: "";
+    position: absolute;
+    inset: -4px -2px;
+  }
+
+  /* ------------------------------------------------------------ Fussband */
+  .site-footer {
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 12px !important;
+    padding: 18px 22px calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .site-footer__copy {
+    white-space: normal !important;
+    text-align: center;
+    font-size: 12.5px !important;
+  }
+  .site-footer__nav {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 10px 16px !important;
+  }
+  .site-footer__link {
+    font-size: 13px !important;
+  }
+  /* Die Sprungziele stehen am Handy schon im Menue - im Fussband nur die
+     Pflicht- und Service-Links, damit es flach bleibt. */
+  .site-footer__nav > [data-goto],
+  .site-footer__nav > a[href*="/auth/"] {
+    display: none !important;
+  }
+}
+
+/* Kurze Handy-Bildschirme (Safari-Leisten eingeblendet, iPhone SE): alles
+   ruecken zusammen, die Tarife legen den Preis in die Namenszeile. */
+@media ((max-width: 700px) or ((pointer: coarse) and (max-width: 1024px))) and (not ((pointer: coarse) and (max-height: 500px))) and (max-height: 760px) {
+  .howto-layer,
+  .price-layer,
+  .dev-layer {
+    padding-top: calc(100px + env(safe-area-inset-top, 0px)) !important;
+  }
+  .layer-title {
+    font-size: 36px !important;
+  }
+  .hg--layer,
+  .price-grid,
+  .dev-list {
+    margin-top: 18px !important;
+  }
+  .price-grid > .plan {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "head price" "feat feat" "cta cta";
+    grid-template-rows: auto auto 1fr;
+    align-items: center;
+    padding: 18px 22px !important;
+  }
+  .price-grid .plan__head {
+    grid-area: head;
+    justify-content: flex-start;
+    gap: 10px;
+  }
+  .price-grid .plan__price {
+    grid-area: price;
+    margin-top: 0;
+    font-size: 34px;
+  }
+  .price-grid .plan__features {
+    grid-area: feat;
+    margin-top: 12px;
+    margin-bottom: 0;
+    gap: 5px;
+    font-size: 14.5px;
+  }
+  .price-grid .plan__cta {
+    grid-area: cta;
+    align-self: end;
+    margin-top: 14px;
+    height: 46px;
+  }
+}
+
+/* Sehr kurz (iPhone SE mit Leisten, ~550px): Schritt-Karten schlanker. */
+@media ((max-width: 700px) or ((pointer: coarse) and (max-width: 1024px))) and (not ((pointer: coarse) and (max-height: 500px))) and (max-height: 600px) {
+  .price-grid .plan__features > :nth-child(n + 3) {
+    display: none;
+  }
+  .layer-title {
+    font-size: 32px !important;
+  }
+  .hg--layer .hg-tile__title {
+    font-size: 28px;
+  }
+  .hg--layer .hg-list {
+    margin-top: 14px;
+    gap: 10px;
+  }
+  .hg--layer .hg-list__item {
+    font-size: 15.5px;
+  }
+  .hg--layer .hg-anim {
+    margin-top: 18px;
+    padding: 14px 24px 16px;
+  }
+  .hg--layer .hg-ring,
+  .hg--layer .hg-sync {
+    width: 56px;
+    height: 56px;
+  }
+  .dev-list__row {
+    padding: 14px 22px;
+  }
+}
