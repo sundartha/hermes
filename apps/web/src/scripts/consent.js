@@ -14,34 +14,50 @@
  * Zusaetzlich: document-Event "hermes:consent" mit dem Stand als detail, und
  * window.hermesConsent = { get(), open() } fuer Fusszeilen-Links.
  *
+ * Nachweis (Art. 7 Abs. 1 DSGVO): jede Entscheidung geht zusaetzlich als Beacon an
+ * das Einwilligungs-Protokoll des Gateways (data-consent-log an der Karte, gesetzt aus
+ * lib/routes.js). Uebertragen werden nur Zufalls-ID, Banner-Version und die zwei
+ * Kategorien - s. src/cookie-consent-log.js im Wurzelprojekt.
+ *
+ * Widerruf: ein bereits geladenes Skript laesst sich nicht entladen. Wird eine
+ * Kategorie widerrufen, deren Skript auf der Seite schon laeuft, laedt die Seite neu.
+ *
+ * Der Banner erscheint ungefragt nur, wenn auf der Seite ein gesperrtes Skript auf
+ * Einwilligung wartet. Ohne solchen Dienst gibt es nichts zu fragen; ueber
+ * "Cookie-Einstellungen" laesst er sich trotzdem jederzeit oeffnen.
+ *
  * Astro buendelt diese Datei als externes, same-origin Modul (assetsInlineLimit
  * 0) — damit CSP-konform ohne script-src 'unsafe-inline'.
  * ========================================================================== */
 
+import {
+  CONSENT_CATEGORIES,
+  CONSENT_VERSION,
+  buildConsent,
+  logPayload,
+  needsReload,
+  newConsentId,
+  shouldPrompt,
+} from "./consent-core.js";
+
 const KEY = "hermes.consent";
-const VERSION = 1;
-const CATEGORIES = ["statistics", "marketing"];
+const BEACON_TYPE = "text/plain";
+const GATED_SELECTOR = 'script[type="text/plain"][data-consent]';
 
 function readConsent() {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed || parsed.version !== VERSION) return null;
+    if (!parsed || parsed.version !== CONSENT_VERSION) return null;
     return parsed;
   } catch {
     return null;
   }
 }
 
-function writeConsent(choice) {
-  const consent = {
-    version: VERSION,
-    ts: new Date().toISOString(),
-    necessary: true,
-    statistics: Boolean(choice.statistics),
-    marketing: Boolean(choice.marketing),
-  };
+function writeConsent(choice, previous) {
+  const consent = buildConsent({ choice, previous, id: newConsentId(crypto), now: new Date() });
   try {
     localStorage.setItem(KEY, JSON.stringify(consent));
   } catch {
@@ -56,7 +72,7 @@ function writeConsent(choice) {
 const CONTROL_ATTRS = new Set(["type", "data-consent", "data-src", "data-consent-done"]);
 
 function activateScripts(consent) {
-  const blocked = document.querySelectorAll('script[type="text/plain"][data-consent]');
+  const blocked = document.querySelectorAll(GATED_SELECTOR);
   for (const el of blocked) {
     const category = el.dataset.consent;
     if (!consent[category] || el.dataset.consentDone === "1" || !el.dataset.src) continue;
@@ -67,6 +83,30 @@ function activateScripts(consent) {
     script.src = el.dataset.src;
     el.dataset.consentDone = "1";
     el.after(script);
+  }
+}
+
+function activatedCategories() {
+  const running = new Set();
+  for (const el of document.querySelectorAll(GATED_SELECTOR)) {
+    if (el.dataset.consentDone === "1") running.add(el.dataset.consent);
+  }
+  return running;
+}
+
+/* Nachweis an das Protokoll. Fire-and-forget: sendBeacon ueberlebt auch das
+ * Neuladen nach einem Widerruf. text/plain ist ein CORS-"einfacher" Typ (kein
+ * Preflight). Scheitert der Versand, bleibt die Entscheidung trotzdem gueltig. */
+function logDecision(consent) {
+  const url = root ? root.dataset.consentLog : "";
+  if (!url || typeof navigator.sendBeacon !== "function") return;
+  try {
+    navigator.sendBeacon(
+      url,
+      new Blob([JSON.stringify(logPayload(consent))], { type: BEACON_TYPE }),
+    );
+  } catch {
+    /* Beacon abgelehnt (z. B. Blocker): kein Beleg, aber die Wahl gilt. */
   }
 }
 
@@ -124,8 +164,14 @@ function close() {
 }
 
 function decide(choice) {
-  const consent = writeConsent(choice);
+  const previous = readConsent();
+  const consent = writeConsent(choice, previous);
+  logDecision(consent);
   close();
+  if (needsReload({ previous, next: consent, activated: activatedCategories() })) {
+    window.location.reload();
+    return;
+  }
   announce(consent);
 }
 
@@ -143,7 +189,7 @@ function wire() {
     const action = button.dataset.consentAction;
     if (action === "all") {
       const all = {};
-      for (const category of CATEGORIES) all[category] = true;
+      for (const category of CONSENT_CATEGORIES) all[category] = true;
       decide(all);
     } else if (action === "necessary") {
       decide({});
@@ -174,7 +220,9 @@ function init() {
   const consent = readConsent();
   if (consent) {
     announce(consent);
-  } else {
+  } else if (
+    shouldPrompt({ consent, gatedScripts: document.querySelectorAll(GATED_SELECTOR).length })
+  ) {
     open(false);
   }
 }

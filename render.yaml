@@ -798,9 +798,16 @@ services:
       # WebGL/Pixi) -> KEIN 'unsafe-eval' noetig. default-src 'self' deckt
       # img/connect/style/frame dicht ab. Die Gateway-/App-CSP (vodafone-agent)
       # ist davon NICHT betroffen.
+      # connect-src fuehrt zusaetzlich den Gateway-Origin (PUBLIC_GATEWAY_URL oben):
+      # consent.js schickt jede Cookie-Entscheidung per sendBeacon an dessen
+      # Einwilligungs-Protokoll (/api/cookie-consent, Nachweis Art. 7 Abs. 1 DSGVO) -
+      # ohne den Eintrag blockiert der Browser den Beacon still. Gilt wie HSTS oben:
+      # der Service ist dashboard-managed, diese Zeile ist die Quelle der Wahrheit fuer
+      # den Owner-Schritt im Render-Dashboard (hermes-web UND hermes-web-staging).
+      # test/cookie-consent-client.test.js haelt Origin und PUBLIC_GATEWAY_URL gleich.
       - path: /*
         name: Content-Security-Policy
-        value: "default-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+        value: "default-src 'self'; script-src 'self'; connect-src 'self' https://app.sundartha.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
       # Hero-Video (Bug: Stocken/"Reload"-Optik nach laengerer Session; Root
       # Cause Single-GOP-Encoding behoben durch Re-Encode mit kurzem GOP + JS-
       # Seamless-Loop, siehe PLAN-HERO-VIDEO.md und SPEC-HERO-VIDEO-FIX.md):
