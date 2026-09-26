@@ -1,7 +1,7 @@
 # Hermes MCP tool inventory (for the OpenAI reviewer)
 
-> **Purpose.** The set of tools Hermes registers varies by transport and consult capability (9
-> or 11 tools). A reviewer who sees one set must not assume every user sees the same one. This
+> **Purpose.** The set of tools Hermes registers varies by transport and consult capability (10
+> or 12 tools). A reviewer who sees one set must not assume every user sees the same one. This
 > document records that variance - the exact name set per configuration - and, per tool, the
 > reasoning behind each of the three required annotations (`readOnlyHint`, `destructiveHint`,
 > `openWorldHint`) and the optional `idempotentHint`.
@@ -397,7 +397,7 @@ The counts are **measured on the real wire** (HTTP `/mcp` and the stdio child pr
 | K3 | HTTP (OAuth) | Account without a stored profile (`DEFAULT_PROFILE`, `src/store/defaults.js:1069-1078`) | Consult on | 10 |
 | K4 | HTTP (OAuth) | Account with the paid-plan profile (`planProfileFor("starter")`, `src/plans.js:107-141`, `:154-156`) | Consult on | 12 |
 | K5 | HTTP (OAuth) | Account with the same paid-plan profile | Consult off | 10 |
-| K6 | stdio (`src/mcp-server.js`) | no account (defaults `consultAllowed = false`, `src/mcp-tools.js:1244-1246`, `:1496`) | not applicable (stdio never registers the consult tools) | 10 |
+| K6 | stdio (`src/mcp-server.js`) | no account (defaults `consultAllowed = false`, `src/mcp-tools.js:1244-1246`, `:1513`) | not applicable (stdio never registers the consult tools) | 10 |
 
 The count still depends on exactly one thing: whether the consult channel is available.
 K1 and K4 both have it and both count 12; K2, K3, K5 and K6 all lack it and all count 10 -
@@ -423,15 +423,15 @@ TABLE-B-END
 The set of tools a reviewer or user sees depends on which account and transport they connect
 with - it is not a fixed catalog:
 
-- The full set of 11 tools is reached by the bootstrap owner account (`OWNER_PROFILE`) with
+- The full set of 12 tools is reached by the bootstrap owner account (`OWNER_PROFILE`) with
   both `CONSULT_ENABLED` and `ASSISTANT_CONTEXT_ENABLED` on (K1), and equally by any account on
   a paid plan (`starter` or `business`, `src/plans.js:146-149`) with the consult channel
   available (K4) - the two no longer differ, since `get_calendar` (the one tool that used to
   depend on the account's profile rather than on the consult switch) is gone.
 - Every account without the consult channel available - no stored profile, a paid plan with
-  consult switched off, or the bootstrap owner with consult switched off - reaches 9.
+  consult switched off, or the bootstrap owner with consult switched off - reaches 10.
 - The stdio entry point (Claude Desktop, or any local MCP client that launches
-  `src/mcp-server.js`) never registers the two consult tools and so always reaches 9. The
+  `src/mcp-server.js`) never registers the two consult tools and so always reaches 10. The
   reasons in the code: stdio has no client model that polls (`src/mcp-tools.js:1244-1246`), the
   process calls `registerTools()` without `consultAllowed` (default `false`), and it has no
   store from which an account's consult permission could be resolved
@@ -465,7 +465,7 @@ account without an active subscription and completed verification. For those acc
 any call is placed; its description says that disallowed destinations are refused by the server
 with a clear message.
 
-The transport does not add a further axis: since T2-01 there is only one renderer for every host
+The transport does not add a further axis: there is only one renderer for every host
 (the ChatGPT-/Skybridge adapter is removed), and it shares the exact same tool registration -
 `enableWidgetUi` only changes per-tool `_meta`, never which tools exist
 (`src/mcp-tools.js:1556-1563`).

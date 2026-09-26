@@ -229,11 +229,11 @@ function wireCondition(name, wire) {
   return CONDITION_BY_PRESENCE.get(presence) ?? `unerwartet:${presence}`;
 }
 
-// ==================== Tabelle A: 11 Zeilen, Namensmenge == K1 ====================
-test("P10a (H7/H8): Tabelle A hat genau 11 Zeilen, ihre Namensmenge ist gleich K1", () => {
+// ==================== Tabelle A: 12 Zeilen, Namensmenge == K1 ====================
+test("P10a (H7/H8): Tabelle A hat genau 12 Zeilen, ihre Namensmenge ist gleich K1", () => {
   const doc = readDoc();
   const tableA = parseTableA(doc);
-  assert.equal(tableA.length, EXPECTED_TABLE_A_ROWS, "Tabelle A traegt genau 11 Werkzeuge");
+  assert.equal(tableA.length, EXPECTED_TABLE_A_ROWS, "Tabelle A traegt genau 12 Werkzeuge");
   assertNameSetMatches("Tabelle A vs. K1", tableA.map((row) => row.name), parseTableB(doc).get("K1").names);
 });
 

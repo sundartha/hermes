@@ -1295,12 +1295,11 @@ function withWidgetLocale(config, handler, language) {
 const CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
 const CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
 // Datenhinweis zu besonderen Datenkategorien + neutraler Zweckhinweis, ohne Einwilligungs-
-// oder Zusicherungsformel (O-15/O-18; Text: callDataNotice, src/i18n/mcp-texts.js):
-// lokalisiert, fuer den MENSCHEN auf der Karte, im selben _meta wie der Code - fuer das
-// Modell verborgen. Die Karte (call.html, dort
-// dupliziert) zeigt ihn ueber dem Bestaetigen-Knopf und bietet OHNE ihn keinen Klick an. Der
-// Server prueft NICHT, ob solche Angaben enthalten sind oder wozu der Anruf dient - der
-// Hinweis steht auf jeder Karte.
+// oder Zusicherungsformel (O-15/O-18; Text: callDataNotice, src/i18n/mcp-texts.js): fuer den
+// MENSCHEN auf der Karte, im selben _meta wie der Code - fuer das Modell verborgen. Die Karte
+// (call.html, dort dupliziert) zeigt ihn ueber dem Bestaetigen-Knopf und bietet OHNE ihn
+// keinen Klick an. Der Server prueft NICHT, ob solche Angaben enthalten sind oder wozu der
+// Anruf dient - der Hinweis steht (lokalisiert) auf jeder Karte.
 const CALL_DATA_NOTICE_META_KEY = "hermes/call_data_notice";
 
 // Das _meta der prepare_call-Antwort fuer die Karte: Code, Ablauf und Datenhinweis - alles

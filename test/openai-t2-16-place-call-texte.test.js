@@ -12,6 +12,7 @@ import {
   CALL_PURPOSE_EXCLUSIONS,
   CALL_PURPOSE_RULE,
   CALL_PURPOSE_SHORT_RULE,
+  listWithOr,
 } from "../src/mcp-server-info.js";
 
 const BRAND_NAMES = /\b(claude|gemini|chatgpt|copilot|openai)\b/i;
@@ -213,6 +214,13 @@ const PURPOSE_NOTE_FOR_EXCLUSION_EN = {
   "political campaigning": /political campaign/,
   "mass or automated dialling of many numbers": /mass calls/,
 };
+
+test("T16-g: listWithOr an den Raendern - ein Glied steht allein, leer bleibt leer, mehrere wie bisher", () => {
+  assert.equal(listWithOr(["telemarketing"], " or "), "telemarketing");
+  assert.equal(listWithOr([], ", or "), "");
+  assert.equal(listWithOr(["a", "b"], " or "), "a or b");
+  assert.equal(listWithOr(["a", "b", "c"], ", or "), "a, b, or c");
+});
 
 test("T16-f: Datenhinweis nennt je Sprache alle besonderen Kategorien und den Zweckhinweis, ohne Einwilligungs- oder Zusicherungsformel", () => {
   for (const [language, categories] of Object.entries(SPECIAL_CATEGORIES_BY_LANGUAGE)) {

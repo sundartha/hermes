@@ -85,12 +85,15 @@ export const CALL_PURPOSE_EXCLUSIONS = Object.freeze([
 ]);
 
 // Aufzaehlung "a, b or c" (Kurzfassung) bzw. "a, b, or c" (volle Regel) - der Trenner vor
-// dem letzten Glied ist der einzige Unterschied, byte-identisch zum bisherigen Wortlaut.
+// dem letzten Glied ist der einzige Unterschied, byte-identisch zum bisherigen Wortlaut. Ein
+// einzelnes Glied steht allein (kein fuehrendes "or"), eine leere Liste ergibt "".
 const LIST_SEPARATOR = ", ";
 const LAST_OR_FULL = ", or ";
 const LAST_OR_SHORT = " or ";
-const listWithOr = (items, lastSeparator) =>
-  items.slice(0, -1).join(LIST_SEPARATOR) + lastSeparator + items.at(-1);
+export function listWithOr(items, lastSeparator) {
+  if (items.length <= 1) return items.join("");
+  return items.slice(0, -1).join(LIST_SEPARATOR) + lastSeparator + items.at(-1);
+}
 
 // Zweckbindung: EINE Quelle fuer die Server-Instructions (unten) UND die Beschreibung von
 // prepare_call (src/mcp-tools.js importiert sie) - wortgleich, keine zweite Formulierung.
