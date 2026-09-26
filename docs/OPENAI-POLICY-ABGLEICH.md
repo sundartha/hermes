@@ -95,8 +95,9 @@ nie gemessen.
   er NICHT; die muessen vor jeder Einreichung von Hand gegengelesen werden (siehe "Quellen").
 - Status: `Luecke`. Die Pflicht lautet "Do not ... facilitate": sie ist nicht teilweise
   erfuellbar, solange eine verbotene Nutzung ungehindert moeglich ist. Genau das ist beim
-  Code-Stand der Fall - folgt das Modell der Zweckbindung in den Werkzeugtexten nicht, passiert
-  ein einzelner Werbe- oder Wahlkampfanruf alle Gates (Luecke 1),
+  Code-Stand der Fall - folgt das Modell der Zweckbindung in den Werkzeugtexten nicht und
+  bestaetigt ein Mensch die Karte entgegen seiner Zusage, passiert ein einzelner Werbe- oder
+  Wahlkampfanruf alle Gates (Luecke 1),
   und weitere Luecken aus Teil C bestehen. "ongoing compliance" heisst ausserdem, dass dieses
   Dokument nach jeder Aenderung an Werkzeugtexten, Prompts oder Gates nachgezogen werden muss.
 - Ergebnis: Hermes haelt die Usage Policies beim Code-Stand NICHT vollstaendig ein. Dieses
