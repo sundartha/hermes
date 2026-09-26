@@ -236,10 +236,15 @@ test("unbekannte/leere Sprache faellt auf den EINEN Fallback (localeFor), nicht 
 // ==================== T9 ====================
 // Die Pruefbloecke je Textgruppe als eigene Funktionen (Komplexitaet je Funktion klein);
 // der Test ruft sie fuer jede Sprache in derselben Reihenfolge wie zuvor auf.
+// T2-15 (O-14): ein Eintrag kann statt eines festen Strings eine Funktion (field) =>
+// string sein (Muster agentStatus.planUsage unten, die RESTRICTED_*-Kennungen) - dann
+// muss der AUFGERUFENE Text nicht-leer sein, nicht die Funktion selbst.
 function assertErrorTextsComplete(texts, language) {
   for (const code of Object.values(MCP_ERROR_CODE)) {
+    const entry = texts.errors[code];
+    const rendered = typeof entry === "function" ? entry("feld") : entry;
     assert.ok(
-      typeof texts.errors[code] === "string" && texts.errors[code].length > 0,
+      typeof rendered === "string" && rendered.length > 0,
       `Fehlertext fuer Code "${code}" fehlt in Sprache "${language}" (sonst landet der rohe Code im Chat)`,
     );
   }

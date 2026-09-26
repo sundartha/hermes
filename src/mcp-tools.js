@@ -36,6 +36,10 @@ import { resolveGatewayUrl } from "./config.js";
 import { resultCardView } from "./call-result.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "./i18n/locales.js";
 import { MCP_ERROR_CODE, MCP_TEXTS } from "./i18n/mcp-texts.js";
+// T2-15 (O-14): reine Erkennung/Maskierung von Restricted Data (Zahlungskarte,
+// beschriftete behoerdliche Kennnummer, Zugangsdaten) an der MCP-Grenze - EINE Quelle
+// fuer Eingabepruefung UND Ausgabe-Maskierung (Umfang und Grenzen s. dort).
+import { RESTRICTED_CATEGORY, firstRestrictedField, maskRestrictedText } from "./restricted-data.js";
 // P5b (O-13 Teil 2): dieselbe Zerlegeregel wie der Erzeuger (Modul-Kopf dort) -
 // nicht kopiert, nicht nachgebaut. Wiederverwendung an genau der Naht, an der
 // failure_reason den Server verlaesst (callOutcomeView unten).
@@ -125,10 +129,15 @@ const makeDateFormatter = (dateLocale) => (iso) =>
 // fest, die Uebersetzung passiert an EINER Kante (wrapHandler). Vorher war der deutsche
 // Klartext selbst das Format zwischen Wurf und Kante - jede Sprachverzweigung haette
 // ihn an beiden Enden duplizieren muessen (G5).
+// T2-15 (O-14): field ist OPTIONAL und traegt NIE einen Wert - nur einen Schluesselpfad
+// (z.B. "objective", "context.key_facts"), fuer den wertfreien Restricted-Data-Text
+// (knownToolErrorCodeText unten). Bestehende Aufrufer ohne field bleiben unveraendert
+// (field bleibt undefined, wie vor dieser Erweiterung).
 class ToolError extends Error {
-  constructor(code) {
+  constructor(code, field) {
     super(code);
     this.code = code;
+    this.field = field;
   }
 }
 
@@ -189,8 +198,12 @@ function callOutcomeView(call) {
 // Kein Secret/Identitaet/Audio/Cross-Tenant-Feld passiert diese Funktion.
 // Praezisierung: diese Aussage geht ueber die FELDER dieser Funktion, nicht ueber den
 // INHALT jedes Feldes. Eines der Felder, last_transcript_lines, traegt woertliche
-// Zeilen der Gegenseite (Rohtext, den der Angerufene gesagt hat) unveraendert durch -
-// bewusst offener Befund, noch nicht behoben.
+// Zeilen der Gegenseite (Rohtext, den der Angerufene gesagt hat) unveraendert durch.
+// T2-15 (O-14): seit hier laeuft jede Zeile zusaetzlich durch maskRestrictedText -
+// Zahlungskartennummern, beschriftete behoerdliche Kennnummern und Zugangsdaten werden
+// maskiert (Grenzen der Erkennung s. restricted-data.js). Alles UEBRIGE (Namen, Adressen,
+// sonstige woertliche Aeusserungen) bleibt unveraendert durch - bewusst offener Befund,
+// noch nicht behoben (ausserhalb des O-14-Scopes dieser Phase).
 function pickCallStatus(callId, c, texts) {
   return {
     call_id: callId,
@@ -198,7 +211,7 @@ function pickCallStatus(callId, c, texts) {
     duration_s: durationS(c),
     last_transcript_lines: c.transcript
       .slice(-LAST_TRANSCRIPT_LINES)
-      .map((t) => `${t.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: ${t.text}`),
+      .map((t) => maskRestrictedText(`${t.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: ${t.text}`)),
   };
 }
 
@@ -238,10 +251,30 @@ export function pickTranscript(callId, c, texts = null) {
     texts && mapStatus(c) === "failed" ? texts.callFailedSummary(c.failureReason) : null;
   return {
     call_id: callId,
-    result_summary: c.summary || failureSummary || AWAIT_SUMMARY_PLACEHOLDER,
+    result_summary: maskRestrictedText(c.summary || failureSummary || AWAIT_SUMMARY_PLACEHOLDER),
     objective_achieved: c.objectiveAchieved ?? "unclear",
-    ...resultCardView(c.result),
+    ...maskedResultCard(c.result),
   };
+}
+
+// T2-15 (O-14): resultCardView() + Maskierung an EINER Stelle. pickTranscript UND
+// awaitEventView spreaden AUSSCHLIESSLICH ueber diese Funktion (nie resultCardView()
+// direkt) - sonst laeuft eine der beiden Sichten an der Maskierung vorbei (W3).
+// maskResultCardFields nimmt die bereits GEVIEWTE Karte (snake_case) entgegen, damit
+// inboxEntryForModel (die Karte kommt dort schon fertig geviewt aus state-ops.js) sie
+// ohne zweiten resultCardView()-Aufruf wiederverwenden kann.
+function maskResultCardFields(card) {
+  return {
+    outcome: maskRestrictedText(card.outcome),
+    commitments: card.commitments.map(maskRestrictedText),
+    counterparty_commitments: card.counterparty_commitments.map(maskRestrictedText),
+    open_points: card.open_points.map(maskRestrictedText),
+    next_step: maskRestrictedText(card.next_step),
+  };
+}
+
+function maskedResultCard(result) {
+  return maskResultCardFields(resultCardView(result));
 }
 
 // AL-P11: die fuenf Karten-Felder als eigenes Schema-Fragment - von CALL_RESULT_OUTPUT
@@ -292,11 +325,13 @@ function awaitEventView({ callId, event, finished, texts }) {
   return {
     event: event.event,
     event_id: event.eventId ?? null,
-    questions: Array.isArray(event.questions) ? event.questions : [],
+    // T2-15 (O-14): questions traegt die Rueckfrage des Sprachagenten - Freitext wie
+    // last_transcript_lines, deshalb maskiert.
+    questions: Array.isArray(event.questions) ? event.questions.map(maskRestrictedText) : [],
     ...outcome,
     result_summary: done?.result_summary ?? null,
     objective_achieved: done?.objective_achieved ?? null,
-    ...resultCardView(finished?.result),
+    ...maskedResultCard(finished?.result),
   };
 }
 
@@ -438,11 +473,40 @@ function isConfirmationUnavailable(err) {
   return err?.httpStatus === HTTP_SERVICE_UNAVAILABLE_STATUS && err?.reason === CONFIRMATION_UNAVAILABLE_REASON;
 }
 
+// T2-15 (O-14): Kategorie (restricted-data.js) -> stabile Fehler-Kennung (mcp-texts.js).
+// EINE Abbildungsstelle fuer beide Aufrufer unten (confirmCallHop und der
+// answer_consult-Handler, der rejectRestrictedData direkt inline aufruft - keine eigene
+// benannte Hop-Funktion).
+const RESTRICTED_CATEGORY_ERROR_CODE = Object.freeze({
+  [RESTRICTED_CATEGORY.PAYMENT_CARD]: MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD,
+  [RESTRICTED_CATEGORY.GOVERNMENT_ID]: MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID,
+  [RESTRICTED_CATEGORY.CREDENTIAL_SECRET]: MCP_ERROR_CODE.RESTRICTED_CREDENTIAL,
+});
+
+// prepare_call/place_call: `to` (Anrufziel, kann zufaellig Luhn-gueltig sein), der
+// Bestaetigungscode selbst und `language` sind vom Scan ausgenommen - alles UEBRIGE
+// (objective/briefing/context/...) wird geprueft, AUCH kuenftige Felder (fail-closed,
+// s. firstRestrictedField).
+const CALL_ARGS_EXEMPT_KEYS = Object.freeze(["to", "confirmation_code", "language"]);
+
+// Wirft VOR jedem Hop, der einen Bestaetigungscode ausstellt/verbraucht oder eine
+// Consult-Antwort weiterreicht (Pre-Mortem #1/#2: EINE Stelle fuer prepare_call UND
+// place_call). Die Argumente werden NICHT veraendert (keine Maskierung der Eingabe -
+// sonst zeigt die Karte etwas anderes, als woran der Bestaetigungscode gebunden wird).
+function rejectRestrictedData(body, exemptKeys) {
+  const hit = firstRestrictedField(body, exemptKeys);
+  if (hit) throw new ToolError(RESTRICTED_CATEGORY_ERROR_CODE[hit.category], hit.field);
+}
+
 // T2-13 (N-10): geteilter Hop zu POST /api/call-confirmations - prepare_call (ohne Code)
 // UND place_call (mit Code) rufen ihn mit demselben Body-Muster (EINE Quelle, kein
 // zweiter Fetch-Aufbau). MCP_HOP_TIMEOUT_MS/HOP_TIMEOUT wie jeder uebrige Hop (die Route
 // ist synchron, kein Long-Poll) - NUR die 503-Sonderlage bekommt eine eigene Kennung.
+// T2-15 (O-14): die Restricted-Data-Pruefung ist die ERSTE Anweisung, VOR dem try - ein
+// Treffer erreicht damit weder diesen Hop noch /api/calls (kein Code, kein Anruf-
+// Datensatz, keine Reservierung).
 async function confirmCallHop({ identity, scopedTenant, body }) {
+  rejectRestrictedData(body, CALL_ARGS_EXEMPT_KEYS);
   try {
     return await api({
       method: "POST",
@@ -474,8 +538,12 @@ function sanitizedDenialReason(reason) {
 
 // Schritt 1 (Vertrag s. toolErrorText unten): ein ToolError mit bekannter Kennung geht IMMER
 // vor - diese Zustaende koennen "die Aktion lief serverseitig trotzdem" bedeuten.
+// T2-15 (O-14): ein Tabellen-Eintrag kann statt eines festen Strings eine Funktion
+// (field) => string sein (Muster consultAnswerAccepted in mcp-texts.js) - fuer die
+// Restricted-Data-Texte, die den Feldpfad, aber NIE einen Wert nennen.
 function knownToolErrorCodeText(err, texts) {
-  return err?.code ? texts.errors[err.code] : undefined;
+  const entry = err?.code ? texts.errors[err.code] : undefined;
+  return typeof entry === "function" ? entry(err.field) : entry;
 }
 
 // Schritt 2: ein Gate-Ablehnungsgrund (err.reason, additiv aus dem REST-Body via api()).
@@ -684,7 +752,7 @@ function pickCall(c, formatDate) {
     status: mapStatus(c),
     startedAt: formatDate(c.startedAt),
   };
-  if (c.summary) entry.summary = c.summary;
+  if (c.summary) entry.summary = maskRestrictedText(c.summary); // T2-15 (O-14)
   return entry;
 }
 const CALL_LIST_ENTRY = z.object({
@@ -732,9 +800,18 @@ const INBOX_OUTPUT = { entries: z.array(INBOX_ENTRY), remaining: z.number() };
 // gegen die der Bestandskommentar bei pickTranscript argumentiert.
 // Fehlt der Zeitstempel, bleibt at null: new Date(null) formatierte die Epoche und
 // behauptete damit eine Anrufzeit von 1970 (G26, Praezision statt Vagheit).
+// T2-15 (O-14): summary/Ergebniskarte/action_items maskiert - rest traegt die
+// GEVIEWTE Karte (state-ops.inboxEntryView spreadet bereits resultCardView), deshalb
+// maskResultCardFields statt maskedResultCard (kein zweiter resultCardView()-Aufruf).
 function inboxEntryForModel(entry, formatDate) {
   const { started_at: startedAt, ...rest } = entry;
-  return { ...rest, at: startedAt ? formatDate(startedAt) : null };
+  return {
+    ...rest,
+    ...maskResultCardFields(rest),
+    at: startedAt ? formatDate(startedAt) : null,
+    summary: maskRestrictedText(rest.summary),
+    action_items: rest.action_items.map(maskRestrictedText),
+  };
 }
 
 // Stufe-0-Textzeile eines Eintrags aus den GEWHITELISTETEN Feldern - Text und
@@ -747,6 +824,18 @@ function inboxTextLine(entry, texts) {
   const summaryText = entry.summary ?? texts.inboxSummaryUnavailable;
   const actions = entry.action_items.map((item) => `\n  - ${item}`).join("");
   return `[${entry.call_id}] ${entry.caller} | ${entry.at} | ${summaryText}${actions}`;
+}
+
+// T2-15 (O-14, LECK-STELLE 2): list_action_items baute seinen Text bisher INLINE in
+// registerTools statt ueber eine View - Modul-Funktion (Muster inboxTextLine), die
+// zugleich maskiert UND den gepinnten registerTools-Befund klein haelt.
+function actionItemsText(items, texts) {
+  return items
+    .map(
+      (item) =>
+        `${item.type === "appointment" ? texts.appointmentPrefix : ""}${maskRestrictedText(item.text)}`,
+    )
+    .join("\n");
 }
 
 // WOERTLICH festgelegt (E-5). Einsprachig englisch (Systemgrenze O14) und mit einem
@@ -1655,12 +1744,13 @@ export function registerTools(
         outputSchema: ANSWER_CONSULT_OUTPUT,
       },
       async ({ call_id, event_id, status, answers }) => {
+        // T2-15 (O-14): wirft AUSSERHALB des try/catch - ein Treffer darf NICHT als
+        // "nicht angenommen" (400/409, notAccepted unten) getarnt werden, sondern muss
+        // als echter Tool-Fehler bei wrapHandler landen. Kein Ausnahme-Schluessel: JEDE
+        // Antwort wird geprueft (answer_consult nimmt kein `to`/`language` entgegen).
+        rejectRestrictedData({ answers }, []);
         try {
-          const r = await call("POST", `/api/calls/${call_id}/consult/answer`, {
-            event_id,
-            status,
-            answers,
-          });
+          const r = await call("POST", `/api/calls/${call_id}/consult/answer`, { event_id, status, answers });
           if (status === CONSULT_ANSWER_MODE.WORKING) {
             return {
               content: [{ type: "text", text: loc.mcp.consultAckAccepted }],
@@ -1772,6 +1862,9 @@ export function registerTools(
       // Textblock = Summary/Ziel-Sicht (kein call_id, analog get_call_status);
       // structuredContent ist die SSOT-Obermenge inkl. call_id (Whitelist). Roh-
       // Transkript taucht in KEINER Sicht auf (DSGVO).
+      // T2-15 (O-14, LECK-STELLE 1): die FELDER von data (schon maskiert), NICHT
+      // resultCardView(c.result) direkt - sonst stuende die Ergebniskarte im Text-Block
+      // weiterhin roh, obwohl structuredContent bereits maskiert ist.
       return {
         content: [
           {
@@ -1780,7 +1873,11 @@ export function registerTools(
               {
                 result_summary: data.result_summary,
                 objective_achieved: data.objective_achieved,
-                ...resultCardView(c.result),
+                outcome: data.outcome,
+                commitments: data.commitments,
+                counterparty_commitments: data.counterparty_commitments,
+                open_points: data.open_points,
+                next_step: data.next_step,
               },
               null,
               2,
@@ -1914,18 +2011,7 @@ export function registerTools(
       const s = await call("GET", "/api/state");
       requireFields(s, { actionItems: "array" });
       const open = s.actionItems.filter((item) => !item.done);
-      if (!open.length) return text(loc.mcp.emptyActionItems);
-      // T2-09 (O-13 Datenminimierung): keine interne Item-ID mehr in der Zeile - kein
-      // Werkzeug und keine REST-Route nimmt eine Action-Item-ID entgegen, sie ist also
-      // nicht "strictly required" (O-13-Ausnahme).
-      return text(
-        open
-          .map(
-            (item) =>
-              `${item.type === "appointment" ? loc.mcp.appointmentPrefix : ""}${item.text}`,
-          )
-          .join("\n"),
-      );
+      return open.length ? text(actionItemsText(open, loc.mcp)) : text(loc.mcp.emptyActionItems);
     },
   );
 

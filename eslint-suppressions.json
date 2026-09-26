@@ -606,11 +606,6 @@
       "count": 1
     }
   },
-  "src/i18n/mcp-texts.js": {
-    "id-length": {
-      "count": 3
-    }
-  },
   "src/i18n/prompts/de.js": {
     "id-length": {
       "count": 2

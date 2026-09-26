@@ -65,6 +65,13 @@ export const MCP_ERROR_CODE = Object.freeze({
   // SECRET leer, POST /api/call-confirmations antwortet 503 reason=confirmation_unavailable).
   // Neutraler Text, NIE der Env-Name oder ein Secret-Hinweis (Regel 4).
   CONFIRMATION_UNAVAILABLE: "confirmation_unavailable",
+  // O-14 (Restricted Data an der MCP-Grenze, src/restricted-data.js): die Eingabe enthaelt
+  // eine Zahlungskartennummer, eine beschriftete behoerdliche Kennnummer oder Zugangsdaten.
+  // Eine Kennung je Kategorie: der Text nennt die KATEGORIE und das Feld, nie den Wert
+  // (Abbildung Kategorie -> Kennung: RESTRICTED_CATEGORY_ERROR_CODE, mcp-tools.js).
+  RESTRICTED_PAYMENT_CARD: "restricted_payment_card",
+  RESTRICTED_GOVERNMENT_ID: "restricted_government_id",
+  RESTRICTED_CREDENTIAL: "restricted_credential",
 });
 
 export const MCP_TEXTS = Object.freeze({
@@ -112,6 +119,20 @@ export const MCP_TEXTS = Object.freeze({
         "bevor erneut angerufen wird.",
       [MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE]:
         "Der Bestaetigungsdienst ist derzeit nicht verfuegbar. Es wurde kein Anruf gestartet.",
+      // O-14: (field) => string statt eines festen Strings (Muster consultAnswerAccepted
+      // unten) - nennt FELD und KATEGORIE, NIE den gefundenen Wert. Es wurde nichts
+      // gesendet, die Angabe muss entfernt werden.
+      [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field) =>
+        `Nicht gesendet: das Feld ${field} enthaelt offenbar eine Zahlungskartennummer. ` +
+        "Hermes nimmt keine Zahlungskartendaten entgegen - bitte entfernen und erneut versuchen.",
+      [MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID]: (field) =>
+        `Nicht gesendet: das Feld ${field} enthaelt offenbar eine behoerdliche Kennnummer ` +
+        "(z.B. Sozialversicherungs-, Steuer- oder Ausweisnummer). Hermes nimmt solche " +
+        "Nummern nicht entgegen - bitte entfernen und erneut versuchen.",
+      [MCP_ERROR_CODE.RESTRICTED_CREDENTIAL]: (field) =>
+        `Nicht gesendet: das Feld ${field} enthaelt offenbar Zugangsdaten (Passwort, PIN, ` +
+        "Einmalcode, Schluessel oder Token). Hermes nimmt keine Zugangsdaten entgegen - " +
+        "bitte entfernen und erneut versuchen.",
     }),
     // T2-09: Ablehnungstexte je Gate-Grund (s. mcp-denial-texts.js), EINE Quelle je Sprache.
     denials: MCP_DENIAL_TEXTS.de,
@@ -186,7 +207,7 @@ export const MCP_TEXTS = Object.freeze({
     // E3 (N-11): tenant-sichtbarer Dedup-Hinweis, dasselbe Muster wie consultPermissionHint.
     callAlreadyRunningHint:
       "Dieser Anruf lief schon - zurueckgegeben wird der laufende Anruf, es wurde kein zweiter gestartet.",
-    consultAnswerAccepted: (n) => `${n} Angabe(n) an den Anruf uebergeben.`,
+    consultAnswerAccepted: (count) => `${count} Angabe(n) an den Anruf uebergeben.`,
     // P2 (SCOPE 2): NIE gesprochen, tenant-sichtbarer Chat-Text derselben Klasse wie
     // consultAnswerAccepted - die Quittung ("working") ist keine Antwort und braucht
     // deshalb einen eigenen Text statt consultAnswerAccepted(0).
@@ -259,6 +280,18 @@ export const MCP_TEXTS = Object.freeze({
         "calling again.",
       [MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE]:
         "The confirmation service is currently unavailable. No call was started.",
+      // O-14: (field) => string, names the FIELD and CATEGORY, never the value.
+      [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field) =>
+        `Not sent: the field ${field} contains what looks like a payment card number. ` +
+        "Hermes does not accept payment card data - remove it and try again.",
+      [MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID]: (field) =>
+        `Not sent: the field ${field} contains what looks like a government identifier ` +
+        "(such as a social security, tax, or passport number). Hermes does not accept such " +
+        "numbers - remove it and try again.",
+      [MCP_ERROR_CODE.RESTRICTED_CREDENTIAL]: (field) =>
+        `Not sent: the field ${field} contains what looks like a credential (password, PIN, ` +
+        "one-time code, key, or token). Hermes does not accept credentials - remove it and " +
+        "try again.",
     }),
     denials: MCP_DENIAL_TEXTS.en,
     // T2-13 (N-10): place_call without a valid confirmation_code - no call was placed (no
@@ -301,7 +334,7 @@ export const MCP_TEXTS = Object.freeze({
       "permission is granted.",
     callAlreadyRunningHint:
       "This call was already running - the running call is returned, no second call was started.",
-    consultAnswerAccepted: (n) => `${n} detail(s) passed on to the call.`,
+    consultAnswerAccepted: (count) => `${count} detail(s) passed on to the call.`,
     consultAckAccepted: "Consult acknowledged - the answer is expected next.",
     consultAnswerRejected:
       "Answer rejected (format or length). The question stays open - please answer more briefly.",
@@ -357,6 +390,18 @@ export const MCP_TEXTS = Object.freeze({
         "de rappeler.",
       [MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE]:
         "Le service de confirmation est actuellement indisponible. Aucun appel n'a été démarré.",
+      // O-14 : (field) => string, nomme le CHAMP et la CATÉGORIE, jamais la valeur.
+      [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field) =>
+        `Non envoyé : le champ ${field} semble contenir un numéro de carte de paiement. ` +
+        "Hermes n'accepte pas les données de carte de paiement - veuillez le supprimer et réessayer.",
+      [MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID]: (field) =>
+        `Non envoyé : le champ ${field} semble contenir un identifiant officiel (par exemple ` +
+        "un numéro de sécurité sociale, fiscal ou de passeport). Hermes n'accepte pas ces " +
+        "numéros - veuillez le supprimer et réessayer.",
+      [MCP_ERROR_CODE.RESTRICTED_CREDENTIAL]: (field) =>
+        `Non envoyé : le champ ${field} semble contenir des identifiants de connexion (mot de ` +
+        "passe, code PIN, code à usage unique, clé ou jeton). Hermes n'accepte pas ces " +
+        "identifiants - veuillez les supprimer et réessayer.",
     }),
     denials: MCP_DENIAL_TEXTS.fr,
     // T2-13 (N-10): place_call sans confirmation_code valide - aucun appel n'a été passé.
@@ -399,7 +444,7 @@ export const MCP_TEXTS = Object.freeze({
       "conversation que si l'autorisation d'outil du connecteur est accordée.",
     callAlreadyRunningHint:
       "Cet appel était déjà en cours - l'appel en cours est renvoyé, aucun second appel n'a été lancé.",
-    consultAnswerAccepted: (n) => `${n} information(s) transmise(s) à l'appel.`,
+    consultAnswerAccepted: (count) => `${count} information(s) transmise(s) à l'appel.`,
     consultAckAccepted: "Question accusée de réception - la réponse est attendue.",
     consultAnswerRejected:
       "Réponse rejetée (format ou longueur). La question reste ouverte - veuillez répondre plus brièvement.",

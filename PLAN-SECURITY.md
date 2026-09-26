@@ -6470,3 +6470,130 @@ er ein app-initiiertes `tools/call` auf das destruktive `place_call` ohne toten 
 ausfuehrt, ist fuer ChatGPT und Claude bisher UNGEMESSEN — nur eine echte Live-Probe in
 beiden Hosts kann das zeigen. T2-13 und T2-14 gehen nur gemeinsam und erst nach bestandener
 Probe live (s. Owner-Punkte des Baulaufs).
+
+## OpenAI-T2-15 — Restricted Data an der MCP-Grenze (O-14, Eingabepruefung + Ausgabe-Maskierung)
+
+Primaerquelle (woertlich, developers.openai.com/apps-sdk/app-submission-guidelines): "Do not
+collect, solicit, or process the following categories of Restricted Data: Information subject
+to Payment Card Information Data Security Standards (PCI DSS); Protected health information
+(PHI); Government identifiers (such as social security numbers); Access credentials and
+authentication secrets (such as API keys, MFA/OTP codes, or passwords)." Eine Pflicht, Freitext
+maschinell zu durchsuchen, nennt die Quelle nicht; Gesundheitsangaben, die fuer einen
+Arzttermin noetig sind, deckt die Sensitive-Data-Klausel ("strictly necessary").
+
+**Stand in einem Satz:** drei der vier Kategorien werden erkannt, abgelehnt und an der
+MCP-Ausgabe maskiert - Zahlungskarten vollstaendig nach Struktur, behoerdliche Kennnummern und
+Zugangsdaten nur, wenn sie beschriftet sind bzw. ein festes Secret-Format haben. PHI wird
+bewusst NICHT erkannt. O-14 ist damit NICHT vollstaendig erfuellt; offen bleiben PHI und der
+"solicit"-Teil (Feldbeschreibungen), s. unten.
+
+**Was erkannt wird** (reine Funktionen in `src/restricted-data.js`: `findRestrictedData`,
+`maskRestrictedText`, `firstRestrictedField` - kein Store, kein IO, kein Log; Sprachen de/en/fr):
+1. *Zahlungskarten:* 15-19 Ziffern, IIN-Ziffer 2-6, Luhn-Pruefsumme; 13-14 Ziffern (auch
+   Diners 4-6-4) NUR mit Kartenwort im Umfeld (s. Fehlalarm-Schutz). Schreibweisen:
+   zusammenhaengend, einheitliche 4er-Gruppen (Leerzeichen, Bindestrich, Punkt oder Komma -
+   auch "4111, 1111, 1111, 1111"), Amex 4-6-5, Diners 4-6-4. Eine anschliessende CVV-Gruppe
+   oder eine vorangestellte fremde Zahl verdeckt die Karte nicht (Gruppenfenster-Suche).
+2. *Behoerdliche Kennnummern, NUR beschriftet:* Label (SSN, social security (number),
+   Sozialversicherungsnummer/-nr, Steuer-ID, Steueridentifikationsnummer,
+   (Personal-)Ausweisnummer/-nr, (Reise-)Passnummer/-nr, passport number, numero de securite
+   sociale, NIR, numero fiscal, numero de passeport; Akzente optional) + optional ":"/"="/"#"
+   oder "is"/"ist"/"est" + Wert mit mindestens 6 Ziffern (Gruppen mit Leerzeichen, Punkt,
+   Bindestrich, Schraegstrich; z. B. "123-45-6789", "65 170839 J 003").
+3. *Zugangsdaten:* private Schluessel ab der PEM-Kopfzeile ("-----BEGIN ... PRIVATE KEY-----",
+   auch PGP "PRIVATE KEY BLOCK";
+   maskiert bis zur END-Zeile oder, fehlt sie, bis zum Textende, ohne Laengengrenze); Tokens
+   mit festem Praefix - AWS (AKIA/ASIA), GitHub (gh*_ und github_pat_), Slack, Stripe,
+   Google (AIza), "sk-"-Keys inkl. sk-proj-/sk-ant-, JWT - mit nach oben OFFENER Rumpflaenge
+   und '-'/'_' im Rumpf; maskiert wird immer das ganze Token. Linear, weil jedes Muster nur
+   an einem Token-Anfang beginnt (kein Token-Zeichen davor) - belegt mit 1-MB-Eingaben im
+   Test. Dazu beschriftete Werte: Label (password, passwort,
+   kennwort, mot de passe, pin, tan, otp, one-time code, einmalcode) + Pflicht-Trenner
+   (":", "=", "is", "ist", "est") + Wert mit mindestens 4 Zeichen, davon mindestens eines kein
+   Buchstabe (Ziffer oder Sonderzeichen; Satzzeichen am Ende zaehlen nicht).
+Labels matchen an Unicode-Wortgrenzen - "Pinnwand", "Tankstelle", "Gastank", "Spin" treffen nicht.
+
+**Wo, Eingabe (Ablehnung, VOR jedem Hop):** `prepare_call` und `place_call` teilen sich EINE
+Pruefstelle (`confirmCallHop`, `src/mcp-tools.js`) - ein Treffer verhindert Code-Ausstellung
+und Anruf; kein Code, kein Anruf-Datensatz, keine Reservierung. `answer_consult` prueft ueber
+denselben Mechanismus (`rejectRestrictedData`), ausserhalb des 400/409-Catch. Ausgenommen:
+`to`, `confirmation_code`, `language`. Der Ablehnungstext (Tenant-Sprache, `toolErrorText`)
+nennt Feld und Kategorie, nie den Wert; es wird nichts geloggt (bekannte Kennung, kein
+Log-Zweig). Die Argumente werden nicht veraendert, nur abgelehnt.
+
+**Wo, Ausgabe (Maskierung):** `get_call_status` (last_transcript_lines), `get_call_result`
+(result_summary + Ergebniskarte, structuredContent UND Text), `await_call_event` (questions +
+Ergebniskarte), `list_calls` (summary), `check_inbox` (summary + Ergebniskarte + action_items),
+`list_action_items`. Karte -> "****" + letzte 4 Ziffern; Kennnummer -> "[restricted-government-id]";
+Zugangsdaten -> "[restricted-credential]"; das Label bleibt stehen, der Rest des Textes
+byte-gleich. Store, REST, Sprachagent und Prompts bleiben ROH - maskiert wird nur an der
+MCP-Grenze.
+
+**Fehlalarm-Schutz:**
+- Rufnummern- und Referenzkontext: eine unformatierte Ziffernfolge mit einem solchen Wort in
+  den 32 Zeichen davor gilt nicht als Karte - nach einem Rufnummernwort nur bis 15 Ziffern
+  (E.164-Maximum, unabhaengig vom Praefix, weil Laendervorwahlen wie 49 in Kartenbereichen
+  liegen), nach einem Referenzwort nur ausserhalb der Kartenmarken-Praefixbereiche (Visa 4,
+  Mastercard 51-55/2221-2720, Amex 34/37, Discover 6011/644-649/65, Diners 36/38/300-305,
+  JCB 3528-3589, UnionPay 62, Maestro 50/56-69). Rufnummernwoerter: Rückrufnummer/Rueckrufnummer,
+  Rückruf, Rufnummer, Telefon(nummer), Tel., Handy, Mobil(e), Durchwahl, phone (number),
+  callback, call (me) back, numero de telephone, telephone, portable, rappel, joignable.
+  Referenzwoerter: Auftrags-, Bestell-, Kunden-, Rechnungs-, Vorgangsnummer, Aktenzeichen,
+  order number, reference, invoice, booking, numero de commande, numero client, facture.
+  Unicode-Wortgrenzen, Akzente optional.
+- 13-14 Ziffern ohne Kartenwort sind keine Karte (deutsche Mobilnummer ohne "+"
+  "4915112345678", "Auftragsnummer 2026092512345").
+- Ein Kartenwort (Teilstring card/carte/karte - deckt credit card, carte bancaire,
+  Kreditkarte, Kartennummer) vor ODER hinter der Folge gewinnt immer: es hebt die
+  Kontext-Ausnahme auf und senkt die Mindestlaenge auf 13. Eine gruppierte Folge
+  ("4111 1111 ...") ist nie ausgenommen.
+- IBAN: gueltige IBANs (Registry-Laenge des Landes + mod 97) werden aus der Kartensuche
+  ausgeblendet - vorher galten rund 5 % zufaelliger deutscher IBANs als Karte.
+- `to`/`confirmation_code`/`language` sind strukturell ausgenommen.
+
+**Ehrliche Grenzen (bewusst, keine Scheinsicherheit):**
+- *PHI wird nicht erkannt.* Keine Struktur; eine Stichwort-Sperre traefe genau die erlaubten
+  Faelle ("Zahnarzttermin wegen Zahnschmerzen"). Eine Diagnose im Freitext wird angenommen und
+  unmaskiert ausgegeben.
+- *Unbeschriftete Kennnummern werden nicht erkannt* ("123-45-6789" ohne "SSN" davor) - nicht
+  von Kunden-/Bestell-/Rufnummern unterscheidbar.
+- *Beschriftete Passwoerter nur aus Buchstaben* ("Passwort ist Sonnenschein") werden nicht
+  erkannt - sonst traefe die Regel "die PIN ist gesperrt"/"TAN ist abgelaufen". Ebenso ein
+  unbeschrifteter OTP-Code (nicht von einer beliebigen 6-stelligen Zahl unterscheidbar).
+- *Secrets ohne bekanntes Praefix und ohne Label* (ein frei formatierter API-Schluessel, ein
+  Token eines nicht gelisteten Anbieters) werden nicht erkannt; ebenso ein 13-14-stelliges
+  Kartenfenster ohne Kartenwort.
+- *Kartennummern als Zahlwoerter oder in Paar-/Dreiergruppen* (typische Diktat-Transkription)
+  werden nicht erkannt und bleiben in Transkript-Ausgaben sichtbar.
+- *Unformatierte 15-19-stellige Folge ohne Kontextwort* (z. B. eine lange Referenz- oder
+  internationale Rufnummer ohne "+"): bleibt ein moeglicher Fehlalarm (~10 % Luhn-Zufall bei
+  IIN 2-6) - Telefon-, Referenz- und Kartennummer sind ohne Kontext
+  strukturell nicht unterscheidbar. Ebenso eine Luhn-gueltige Bestellnummer in 4er-Gruppen
+  und eine Luhn-gueltige Referenznummer mit 15-19 Ziffern in einem Kartenmarken-
+  Praefixbereich: sie wird trotz Referenzwort als Karte abgelehnt und maskiert.
+- *IBAN/Bankkonto ist bewusst ausgenommen:* keine Kategorie der Richtlinie, und
+  `allowBankData` (Tenant-Freigabe fuer Bankdaten im Gespraech) bleibt nutzbar. Eine IBAN wird
+  weder abgelehnt noch maskiert.
+- *"solicit"-Teil offen:* die Werkzeug- und Feldbeschreibungen sind unveraendert
+  (tools/list byte-gleich master, Pin in `test/openai-p8-widget-ui.test.js`). Die Formulierung
+  folgt in einer eigenen Phase mit convo-bench-Beleg - bis dahin fordert keine Beschreibung
+  ausdruecklich dazu auf, Restricted Data wegzulassen, ausser den bestehenden Hinweisen
+  "NO secrets, passwords or payment data" (`briefing`), "NO secrets/passwords/payment data"
+  (`context.key_facts`) und "NO secrets" (`context`). Gesundheitsdaten und Kennnummern nennt
+  keine Beschreibung.
+
+**Abnahme am Draht** (`test/openai-t2-15-restricted-data.test.js`, HTTP Legacy + OAuth +
+stdio): `prepare_call` mit "4111 1111 1111 1111", "SSN 123-45-6789" oder "password:
+Hunter2secret!" -> isError, kein Code, Treffer nicht im Text; "Zahnarzttermin wegen
+Zahnschmerzen vereinbaren", "Rückrufnummer 4917000000001"/"Rueckrufnummer ...", eine IBAN ->
+normaler Code; alle drei Kategorien in den sechs Ausgabe-Werkzeugen maskiert, IBAN sichtbar,
+Store roh. Dazu (HTTP Legacy) sk-proj-/sk-ant-Key, JWT mit 700-Zeichen-Payload und
+github_pat_-Token in realistischer Laenge: abgelehnt, und in `get_call_status`/
+`get_call_result` ohne sichtbaren Token-Rest maskiert.
+
+**Rueckbau:** Revert der Commits dieser Phase (keine Env-Variable, kein Schalter - ein
+Abschalter waere eine neue abschaltbare Sicherung).
+
+**Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Store/REST/
+Sprachagent/Prompts, `src/ui/widgets/call.html`, Werkzeugtexte/`server-instructions`
+(byte-gleich master).
