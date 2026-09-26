@@ -6618,3 +6618,17 @@ Hinweis und koennte sich selbst bestaetigen (s. OpenAI-T2-13).
 **Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Werkzeugtexte und
 `server-instructions` (tools/list-Hash unveraendert bis auf das Call-Widget, Version 10),
 Sprachagent/Prompts. Rueckbau: Revert des Commits.
+
+**Nachbesserung (alle besonderen Kategorien + Zweck-Zusage):** der Hinweis nennt jetzt jede
+Kategorie aus Art. 9 Abs. 1 DSGVO einzeln (Gesundheit, rassische/ethnische Herkunft,
+politische Meinungen, religioese/weltanschauliche Ueberzeugungen, Gewerkschaftszugehoerigkeit,
+genetische/biometrische Daten, Sexualleben/sexuelle Orientierung); die Einwilligung per Klick
+deckt alle, und der Klick enthaelt die Zusage des Menschen, dass der Anruf kein Telemarketing
+und kein unaufgeforderter Werbe-, Verkaufs-, Wahlkampf- oder Massenanruf ist (dieselben
+Ausschluesse wie `CALL_PURPOSE_EXCLUSIONS`). Das ist eine Erklaerung des Nutzers, KEINE
+Pruefung: der Server liest weder Kategorien noch Zweck. Die Feldtexte von `briefing`/`context`
+sagen "Sensitive details only as needed" statt "Health details" (tools/list-Hash neu gepinnt,
+Call-Widget Version 11 nur wegen eines Kommentars). Gates und Offenlegungssatz unberuehrt.
+Offen (Owner): rechtliche Bewertung von Wortlaut und Form der Einwilligung; eine
+serverseitige inhaltliche Zweckpruefung ist bewusst nicht gebaut (umgehbar, traefe
+Reklamationen/Angebotsanfragen).

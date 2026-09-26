@@ -666,6 +666,12 @@ function widgetPlaceCallFromRealPreview(prep) {
   // verborgen), NICHT im Modelltext, und die Karte zeigt ihn vor dem Klick sichtbar an.
   const notice = prep._meta?.[NOTICE_META_KEY];
   assert.ok(typeof notice === "string" && notice.length > 0, "Datenhinweis im _meta von prepare_call");
+  // Draht-Bruecke zum Inhalt: der echte Server liefert genau einen der lokalisierten Texte,
+  // deren Vollstaendigkeit (alle besonderen Kategorien, Zweck-Zusage) T16-f prueft.
+  assert.ok(
+    Object.values(MCP_TEXTS).some((texts) => texts.callDataNotice === notice),
+    "Datenhinweis am Draht ist ein vollstaendiger lokalisierter Text",
+  );
   assert.ok(!JSON.stringify(prep.content).includes(notice), "Datenhinweis steht nicht im Modelltext");
   assert.equal(doc.get("[data-confirm-notice]").style.display, "", "Datenhinweis sichtbar");
   assert.equal(doc.get("[data-confirm-notice-text]").textContent, notice, "Datenhinweis woertlich angezeigt");

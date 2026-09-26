@@ -187,10 +187,16 @@ const EXPECTED_RESOURCE_META = {
 // an - NUR call aendert sich (Version 10), Werkzeug-Beschreibungen unveraendert. Beide Pfade
 // weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen. Voriger Sollwert
 // (beide Pfade): 543878b52eec4bfdb58f4843bf9c38344a2f483c3b39111095b74bbbbaec7de0.
+// Neu gepinnt (Datenhinweis vollstaendig): der Hinweis auf der Karte nennt alle besonderen
+// Datenkategorien und die Zweck-Zusage (kommt vom Server, nicht aus diesem Capture), die
+// Feldtexte von briefing/context sagen "Sensitive details" statt "Health details", und der
+// Kommentar zum Hinweis-Schluessel in call.html ist nachgezogen (Version 11). Beide Pfade
+// weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen. Voriger Sollwert
+// (beide Pfade): 987d92591ef5cbde08f6d70a7848c23e17a710b5357df4a8ed5a279f2766e23f.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "987d92591ef5cbde08f6d70a7848c23e17a710b5357df4a8ed5a279f2766e23f";
+  "39bd5a582c9564ecff0c839613a83cec89c3f063d950254404d83e4dad71d5a2";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "987d92591ef5cbde08f6d70a7848c23e17a710b5357df4a8ed5a279f2766e23f";
+  "39bd5a582c9564ecff0c839613a83cec89c3f063d950254404d83e4dad71d5a2";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

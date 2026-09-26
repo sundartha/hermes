@@ -37,6 +37,9 @@ nie gemessen.
   "Empower people") und die Bereichsliste unter "automation of high-stakes decisions".
   Gegenprobe: das Wort "telemarketing" steht NICHT in den Usage Policies und wurde als fehlend
   erkannt - es stammt aus den Plugin Guidelines und ist unten auch nur dort zugeordnet.
+  Am 2026-09-26 wurde der Volltext derselben Adresse erneut abgerufen (Kopfzeile unveraendert
+  "Effective: October 29, 2025", letzter Changelog-Eintrag 2025-10-29); jedes Zitat aus dieser
+  Seite steht dort unveraendert, ebenso die Abschnittstitel und die Bereichsliste.
 - OpenAI Plugin Guidelines: https://developers.openai.com/plugins/app-guidelines - Seitentitel
   "Plugin guidelines"; die Seite spricht durchgehend von "plugins". Am 2026-09-24 direkt von
   der Primaerquelle abgerufen (HTTP 200). Jedes Zitat aus dieser Seite und jeder genannte
@@ -144,6 +147,13 @@ nie gemessen.
     festgelegt, ob er in der Kurzfassung steht.
     Werkzeugtext (prepare_call): "Place calls only when the user asks for them, for themselves or someone they act for, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or mass or automated dialling of many numbers."
     Werkzeugtext (place_call): "Not for telemarketing, unsolicited advertising or political campaign calls."
+  - Zweck-Zusage des Menschen auf der Karte: der Hinweis direkt ueber dem Knopf "Anruf
+    bestaetigen" (`src/i18n/mcp-texts.js:347`) endet in jeder Sprache mit der Zusage, dass der
+    Anruf kein Telemarketing und kein unaufgeforderter Werbe-, Verkaufs-, Wahlkampf- oder
+    Massenanruf ist; mit dem Klick gibt der Mensch diese Zusage ab. Ohne diesen Hinweis bietet
+    die Karte keinen Klick an, und ohne Klick erhaelt `place_call` keinen Bestaetigungscode
+    (siehe "Bestaetigung je Anruf"). Das ist eine Erklaerung des Nutzers, keine Pruefung: der
+    Server kann nicht feststellen, ob sie zutrifft.
 - Was fehlt: eine serverseitige Pruefung des Zwecks. Die Zweckbindung ist eine Anweisung an
   das Modell im Chat, keine Pruefung: der Server liest den Zweck eines Anrufs nicht und lehnt
   keinen Anruf wegen seines Inhalts ab. Beleg: `grep -ciE 'telemarket|advertis|cold.?call|sales|political|campaign|marketing'`
@@ -154,7 +164,7 @@ nie gemessen.
   Aufruf Treffer findet: `grep -ciE 'safety gates' src/mcp-tools.js` liefert Treffer). Folgt
   ein Modell der Anweisung nicht, passiert ein einzelner Werbeanruf alle Gates; die
   Mengen-Gates und die Bestaetigung je Anruf bremsen Masse, aber sie verhindern keinen
-  einzelnen Werbeanruf, den ein Mensch bestaetigt. Eine Stichwortpruefung des Anliegens ist
+  einzelnen Werbeanruf, den ein Mensch entgegen seiner Zusage auf der Karte bestaetigt. Eine Stichwortpruefung des Anliegens ist
   bewusst nicht gebaut: sie liesse sich durch Umformulieren umgehen und traefe zugleich
   zulaessige Anrufe wie eine Reklamation oder die Frage nach einem Angebot.
 - Status: `teilweise`. Luecke 1 in Teil C.
@@ -331,8 +341,10 @@ nie gemessen.
 - Einschlaegig: ja. Massenanrufe sind ein klassisches Kampagnenwerkzeug.
 - Mechanismus: die Mengen-Gates (Stundenlimit, Ziel-Grenze, Kostendecke) und die Zweckbindung
   in der Beschreibung von `prepare_call` und in den Server-Instructions, die Wahlkampf und die
-  massenhafte oder automatische Anwahl vieler Nummern ausschliesst (Wortlaut und Beleg siehe "Telemarketing").
-  Die Zweckbindung ist eine Anweisung an das Modell; der Server prueft den Zweck nicht.
+  massenhafte oder automatische Anwahl vieler Nummern ausschliesst (Wortlaut und Beleg siehe "Telemarketing"),
+  dazu die Zusage des Menschen auf der Karte, dass der Anruf kein Wahlkampf- oder Massenanruf
+  ist. Die Zweckbindung ist eine Anweisung an das Modell, die Zusage eine Erklaerung des
+  Nutzers; der Server prueft den Zweck nicht.
 - Status: `teilweise`. Luecke 1 in Teil C.
 
 ### Minderjaehrige
@@ -426,27 +438,32 @@ nie gemessen.
   wird, waehrend ein Schluessel ohne bekanntes Praefix und ohne Beschriftung unerkannt bleibt.
 - Mechanismus, Hinweis und Einwilligung vor der Erhebung: die Karte zu `prepare_call` zeigt
   direkt ueber dem Knopf "Anruf bestaetigen" einen Hinweis in der Sprache des Kontos
-  (`src/i18n/mcp-texts.js:337`): die Angaben der Karte, auch Gesundheitsangaben, gehen an den
-  KI-Agenten und die Anbieter, ueber die der Anruf laeuft, koennen der angerufenen Person
-  gesagt werden und werden mit dem Anruf gespeichert; nur noetige Gesundheitsangaben; mit dem
-  Bestaetigen willigt der Nutzer ausdruecklich in diese Verwendung ein. Der Server liefert den
+  (`src/i18n/mcp-texts.js:347`): die Angaben der Karte gehen an den KI-Agenten und die
+  Anbieter, ueber die der Anruf laeuft, koennen der angerufenen Person gesagt werden und werden
+  mit dem Anruf gespeichert; das gilt auch fuer besondere Kategorien, die der Hinweis einzeln
+  nennt: Gesundheitsangaben, rassische oder ethnische Herkunft, politische Meinungen,
+  religioese oder weltanschauliche Ueberzeugungen, Gewerkschaftszugehoerigkeit, genetische
+  oder biometrische Daten, Sexualleben oder sexuelle Orientierung; solche Angaben nur, wenn der
+  Anruf sie wirklich braucht; mit dem Bestaetigen willigt der Nutzer ausdruecklich in diese
+  Verwendung enthaltener Gesundheitsangaben und anderer besonderer Kategorien ein. Der Server liefert den
   Hinweis in den fuer das Modell verborgenen Metadaten der Karte
   (`src/mcp-tools.js:1303`); fehlt er, bietet die Karte keinen Klick an (Funktion
   `confirmCodeUsable` in der Karte). `prepare_call` speichert nichts; gespeichert und
   weitergegeben wird erst nach dem Klick. Der Hinweis steht auf jeder Karte, unabhaengig davon,
-  ob Gesundheitsangaben enthalten sind - der Server erkennt sie nicht.
-- Nicht erkannt werden, bewusst: Gesundheitsangaben (keine Struktur; eine Stichwortsperre
+  ob solche Angaben enthalten sind - der Server erkennt sie nicht.
+- Nicht erkannt werden, bewusst: Gesundheitsangaben und die anderen besonderen Kategorien (keine Struktur; eine Stichwortsperre
   wuerde gerade die Terminvereinbarung beim Arzt verhindern, `src/restricted-data.js:20`);
   Kennnummern ohne Beschriftung; beschriftete Passwoerter nur aus Buchstaben; Kartennummern
   als Zahlwoerter oder in Zweier-/Dreiergruppen. IBAN und Bankkonto sind keine der vier
   Kategorien und werden weder abgelehnt noch maskiert (`src/restricted-data.js:28`).
 - Werkzeugbeschreibungen: sie schliessen Geheimnisse, Passwoerter und Zahlungsdaten aus und
-  begrenzen Gesundheitsangaben in `briefing` und `context` auf das Noetige; amtliche
-  Kennnummern nennen sie nicht.
+  begrenzen sensible Angaben in `briefing` und `context` auf das Noetige, ohne die
+  Kategorien einzeln aufzuzaehlen (das tut der Hinweis auf der Karte); amtliche Kennnummern
+  nennen sie nicht.
   Werkzeugtext (place_call): "NO secrets, passwords or payment data."
   Werkzeugtext (place_call): "NO secrets/passwords/payment data."
-  Werkzeugtext (place_call): "Health details only as needed."
-- Was fehlt: Gesundheitsangaben werden weder abgelehnt noch maskiert (bewusst, siehe oben);
+  Werkzeugtext (place_call): "Sensitive details only as needed."
+- Was fehlt: Gesundheitsangaben und die anderen besonderen Kategorien werden weder abgelehnt noch maskiert (bewusst, siehe oben);
   ihre Begrenzung ist eine Anweisung an das Modell und ein Hinweis an den Nutzer. Ob Hinweis
   und Einwilligung per Klick rechtlich genuegen, ist Sache des Rechtstextes; ein eigenes
   Einwilligungsfeld neben dem Knopf gibt es nicht. Die Liste der Restricted Data nennt
@@ -659,17 +676,19 @@ Anrufe bei Arztpraxen, Therapeuten oder Apotheken transportieren Gesundheitsbezu
 Telefonie-Anbieter, bei eingeschalteter Vorab-Recherche zur Suche von Anthropic, beim
 Nachschlag im Anruf als Suchanfrage an Exa (der Filter prueft keine Gesundheitsbegriffe), und
 ueber die Werkzeug-Antworten an OpenAI/ChatGPT. Die Maskierung der Werkzeug-Antworten erfasst
-Gesundheitsangaben nicht. Vor der Erhebung zeigt die Bestaetigungskarte einen Hinweis, dass
-die Angaben der Karte, auch Gesundheitsangaben, an Agent und Anbieter gehen und gespeichert
-werden, und dass das Bestaetigen die Einwilligung ist (Teil A, "Eingeschraenkte und besonders
-schutzwuerdige Daten"). Dieses Dokument benennt das; die rechtliche Bewertung ist Sache des
+Gesundheitsangaben nicht. Dasselbe gilt fuer die anderen besonderen Kategorien, wenn ein Anruf
+sie beruehrt (etwa ein Anruf bei einer Gemeinde, einer Gewerkschaft oder einer Beratungsstelle).
+Vor der Erhebung zeigt die Bestaetigungskarte einen Hinweis, der alle besonderen Kategorien
+einzeln nennt, sagt, dass die Angaben der Karte an Agent und Anbieter gehen und gespeichert
+werden, und das Bestaetigen zur ausdruecklichen Einwilligung macht (Teil A, "Eingeschraenkte
+und besonders schutzwuerdige Daten"). Dieses Dokument benennt das; die rechtliche Bewertung ist Sache des
 Rechtstextes.
 
 ### Kontrollen, die der Code dem Nutzer gibt
 
 - Jeden Anruf vor dem Waehlen pruefen und bestaetigen: die Karte zu `prepare_call` zeigt alle
-  Argumente und den Hinweis zu Gesundheitsangaben; ohne Klick wird nicht gewaehlt und nichts
-  gespeichert.
+  Argumente und den Hinweis zu besonderen Kategorien und zum Zweck; ohne Klick wird nicht
+  gewaehlt und nichts gespeichert.
 - Diagnose-Transkript abschalten: `diagnostic=false` bei `place_call`.
   Werkzeugtext (place_call): "Set it to false ONLY when the user explicitly does not want that transcript kept."
 - Laufenden Anruf abbrechen: `cancel_call` (`src/mcp-tools.js:1954`). Das beendet die
@@ -721,9 +740,11 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
    Verkaufsanrufe, Wahlkampf und Massenanwahl steht als Anweisung an das Modell woertlich in der
    Beschreibung von `prepare_call` (`src/mcp-tools.js:944`) und in den Server-Instructions
    (`src/mcp-server-info.js:103-109`), als Kurzfassung in `place_call` (`src/mcp-tools.js:914`); der
-   Server prueft den Zweck eines Anrufs nicht. Serverseitig gebremst wird nur die Masse:
-   Bestaetigung je Anruf durch einen Menschen (`src/call-confirmation.js:63`), Stundenlimit
-   und Ziel-Grenze. Klauseln: "telemarketing", "spam", "political campaigning".
+   Server prueft den Zweck eines Anrufs nicht. Jeder Anruf braucht die Bestaetigung eines
+   Menschen auf der Karte (`src/call-confirmation.js:63`), deren Hinweis die Zusage enthaelt,
+   dass es kein solcher Anruf ist (`src/i18n/mcp-texts.js:347`); ob die Zusage stimmt,
+   prueft der Server nicht. Serverseitig gebremst wird ausserdem die Masse: Stundenlimit und
+   Ziel-Grenze. Klauseln: "telemarketing", "spam", "political campaigning".
    Ziel (serverseitige Zweckpruefung): open, no owner decision yet.
 2. **`context` bleibt ein zweites optionales Feld** neben dem `briefing`
    (`src/mcp-tools.js:1455`); die Begrenzung auf den Kontext des Anrufs steht in den
@@ -732,11 +753,12 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
    "Collection minimization", "Data boundaries".
    Ziel (Begrenzung im Schema oder Wegfall von `context`): open, not yet assigned to a work
    package.
-3. **Gesundheitsangaben werden erhoben, nicht abgelehnt und nicht maskiert**: die
-   Beschreibungen von `briefing` und `context` begrenzen sie auf das Noetige
-   (`src/mcp-tools.js:1372`), die Bestaetigungskarte zeigt vor der Erhebung einen Hinweis und
-   macht das Bestaetigen zur Einwilligung (`src/mcp-tools.js:1303`); erkannt, abgelehnt oder
-   maskiert werden Gesundheitsangaben nicht, und amtliche Kennnummern werden nur mit
+3. **Gesundheitsangaben und andere besondere Kategorien werden erhoben, nicht abgelehnt und
+   nicht maskiert**: die Beschreibungen von `briefing` und `context` begrenzen sensible
+   Angaben auf das Noetige (`src/mcp-tools.js:1372`), die Bestaetigungskarte zeigt vor der
+   Erhebung einen Hinweis, der alle besonderen Kategorien nennt, und macht das Bestaetigen zur
+   Einwilligung (`src/mcp-tools.js:1303`); erkannt, abgelehnt oder maskiert werden diese
+   Angaben nicht, und amtliche Kennnummern werden nur mit
    Beschriftung erkannt. Ob Wortlaut und Form der Einwilligung rechtlich genuegen und ob
    Gesundheitsangaben fuer Arzttermine trotz der Restricted-Data-Liste zulaessig sind, ist
    nicht entschieden. Klauseln: "Restricted data", "Regulated Sensitive Data".
@@ -819,7 +841,7 @@ src/restricted-data.js:439 | const CREDENTIAL_LABELS
 src/restricted-data.js:20 | Gesundheitsdaten (PHI) werden NICHT erkannt
 src/restricted-data.js:28 | IBAN/Bankkonto ist KEINE Kategorie der Richtlinie
 src/mcp-tools.js:1303 | const CALL_DATA_NOTICE_META_KEY = "hermes/call_data_notice";
-src/i18n/mcp-texts.js:337 | callDataNotice:
+src/i18n/mcp-texts.js:347 | callDataNotice:
 src/call-confirmation.js:63 | export const CONFIRMATION_ALREADY_USED_REASON
 src/telephony/outbound-gates.js:699 | name: "outbound_frozen"
 src/telephony/outbound-gates.js:772 | name: "kyc"
@@ -1021,7 +1043,7 @@ place_call | SUMMARISE instead of copying in raw.
 place_call | Only so the agent can state why it calls: 1-3 sentences, not a copy of the chat.
 place_call | Only the context this call needs: what it is about, the names involved, relevant preferences and history, the desired outcome and tone.
 place_call | Optional structured BACKGROUND for the agent: fill a subfield only when this call needs it, without repeating the briefing.
-place_call | Health details only as needed.
+place_call | Sensitive details only as needed.
 place_call | Not applied on every call path.
 place_call | Not for telemarketing, unsolicited advertising or political campaign calls.
 prepare_call | Place calls only when the user asks for them, for themselves or someone they act for, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or mass or automated dialling of many numbers.

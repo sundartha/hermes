@@ -59,6 +59,8 @@ before(async () => {
 // T2-16-Nachbesserung (Deckel GESENKT): die context-Unterfelder tragen je einen engen Zweck,
 // kuerzer als vorher - gemessen 6665 ohne Kanal, 7067 mit Kanal. Der Deckel sinkt um 10 auf
 // 6690 / 7090; die Luft (25 / 23) entspricht wieder dem Stand davor.
+// Datenhinweis-Nachbesserung (Deckel unveraendert): briefing/context begrenzen "Sensitive
+// details" statt "Health details" (alle besonderen Kategorien) - gemessen 6671 / 7073.
 const PLACE_CALL_BUDGET_CHARS = 6690;
 const PLACE_CALL_WITH_CONSULT_BUDGET_CHARS = 7090;
 // T2-16 (neue Sicherung, keine Lockerung): die Top-Beschreibung von prepare_call zaehlt oben

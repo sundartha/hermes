@@ -185,17 +185,27 @@ export const MCP_TEXTS = Object.freeze({
       "fuer diesen Anruf nicht selbst auf und nie einen Code raten oder erfinden; die Karte " +
       "meldet die call_id danach per Chat-Nachricht. Zeigt dieser Host keine Hermes-Karte, kann " +
       "hier kein Anruf ausgeloest werden - das dem Nutzer ehrlich sagen.",
-    // Hinweis und Einwilligung zu Gesundheitsangaben auf der Bestaetigungskarte - fuer den
-    // MENSCHEN, nicht fuer das Modell: steht nur im Ergebnis-_meta von prepare_call und wird
-    // von der Karte direkt ueber dem Bestaetigen-Knopf angezeigt; ohne diesen Text bietet die
-    // Karte keinen Klick an. Erhoben (gespeichert, an Agent und Anbieter gegeben) wird erst
-    // nach dem Klick - prepare_call speichert nichts. Nutzerseitiger Text: deshalb mit Umlauten.
+    // Hinweis und Einwilligung zu besonderen Datenkategorien (alle Kategorien aus Art. 9
+    // Abs. 1 DSGVO, Gesundheitsangaben zuerst, weil Arzttermine sie brauchen) plus die
+    // Zusage des Menschen zum Zweck (dieselben Ausschluesse wie CALL_PURPOSE_EXCLUSIONS in
+    // src/mcp-server-info.js) - fuer den MENSCHEN, nicht fuer das Modell: steht nur im
+    // Ergebnis-_meta von prepare_call und wird von der Karte direkt ueber dem
+    // Bestaetigen-Knopf angezeigt; ohne diesen Text bietet die Karte keinen Klick an. Der
+    // Server prueft weder die Kategorien noch den Zweck - er erzwingt nur, dass jeder Anruf
+    // ueber die Karte mit diesem Text bestaetigt wurde. Erhoben (gespeichert, an Agent und
+    // Anbieter gegeben) wird erst nach dem Klick - prepare_call speichert nichts.
+    // Nutzerseitiger Text: deshalb mit Umlauten.
     callDataNotice:
-      "Vor dem Bestätigen: Die Angaben auf dieser Karte, auch Gesundheitsangaben, gehen an den " +
-      "KI-Agenten und die Anbieter, über die der Anruf läuft, können der angerufenen Person " +
-      "gesagt werden und werden mit dem Anruf gespeichert. Gib nur Gesundheitsangaben an, die " +
-      "dieser Anruf wirklich braucht. Mit dem Bestätigen willigst du ausdrücklich in diese " +
-      "Verwendung enthaltener Gesundheitsangaben ein.",
+      "Vor dem Bestätigen: Die Angaben auf dieser Karte gehen an den KI-Agenten und die " +
+      "Anbieter, über die der Anruf läuft, können der angerufenen Person gesagt werden und " +
+      "werden mit dem Anruf gespeichert. Das gilt auch für besonders geschützte Angaben: " +
+      "Gesundheitsangaben, rassische oder ethnische Herkunft, politische Meinungen, religiöse " +
+      "oder weltanschauliche Überzeugungen, Gewerkschaftszugehörigkeit, genetische oder " +
+      "biometrische Daten, Sexualleben oder sexuelle Orientierung. Gib solche Angaben nur an, " +
+      "wenn dieser Anruf sie wirklich braucht. Mit dem Bestätigen willigst du ausdrücklich in " +
+      "diese Verwendung enthaltener Gesundheitsangaben und anderer besonders geschützter " +
+      "Angaben ein und sicherst zu, dass dies kein Telemarketing und kein unaufgeforderter " +
+      "Werbe-, Verkaufs-, Wahlkampf- oder Massenanruf ist.",
     // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
     // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
     emptyCalls: "Noch keine Anrufe.",
@@ -335,10 +345,15 @@ export const MCP_TEXTS = Object.freeze({
       "in a chat message once it is placed. If this host does not show the Hermes card, " +
       "no call can be placed from here - tell the user so honestly.",
     callDataNotice:
-      "Before you confirm: the details on this card, including any health details, go to the " +
-      "AI agent and the providers that run the call, may be told to the person you call, and " +
-      "are stored with the call record. Only include health details this call really needs. " +
-      "By confirming, you explicitly consent to this use of any health details included.",
+      "Before you confirm: the details on this card go to the AI agent and the providers that " +
+      "run the call, may be told to the person you call, and are stored with the call record. " +
+      "This also applies to special categories of data: health details, racial or ethnic " +
+      "origin, political opinions, religious or philosophical beliefs, trade union membership, " +
+      "genetic or biometric data, sex life or sexual orientation. Only include such details if " +
+      "this call really needs them. By confirming, you explicitly consent to this use of any " +
+      "health details or other special-category data included, and you confirm that this is " +
+      "not telemarketing and not an unsolicited advertising, sales, political campaign or mass " +
+      "call.",
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
@@ -449,11 +464,16 @@ export const MCP_TEXTS = Object.freeze({
       "dans un message de chat une fois l'appel passé. Si cet hôte n'affiche pas la carte " +
       "Hermes, aucun appel ne peut être passé d'ici - dites-le honnêtement à l'utilisateur.",
     callDataNotice:
-      "Avant de confirmer : les informations de cette carte, y compris d'éventuelles données de " +
-      "santé, sont transmises à l'agent IA et aux prestataires qui assurent l'appel, peuvent être " +
-      "communiquées à la personne appelée et sont conservées avec l'appel. N'indiquez que les " +
-      "données de santé dont cet appel a vraiment besoin. En confirmant, vous consentez " +
-      "expressément à cette utilisation des données de santé incluses.",
+      "Avant de confirmer : les informations de cette carte sont transmises à l'agent IA et " +
+      "aux prestataires qui assurent l'appel, peuvent être communiquées à la personne appelée " +
+      "et sont conservées avec l'appel. Cela vaut aussi pour les catégories particulières de " +
+      "données : données de santé, origine raciale ou ethnique, opinions politiques, " +
+      "convictions religieuses ou philosophiques, appartenance syndicale, données génétiques " +
+      "ou biométriques, vie sexuelle ou orientation sexuelle. N'indiquez de telles informations " +
+      "que si cet appel en a vraiment besoin. En confirmant, vous consentez expressément à " +
+      "cette utilisation des données de santé ou autres données de catégorie particulière " +
+      "incluses, et vous confirmez qu'il ne s'agit ni de télémarketing ni d'un appel " +
+      "publicitaire, commercial, de campagne politique ou de masse non sollicité.",
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",

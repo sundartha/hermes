@@ -332,7 +332,7 @@ model in the field description, not a server-side check.
 - `to` - the number to dial; checked by the outbound gates before dialling.
 - `objective` - one sentence, read out to the called party right after the AI disclosure.
 - `briefing` - only the context this call needs, summarised, no secrets or payment data,
-  health details only as needed. It reaches the voice agent on both call paths
+  sensitive details only as needed. It reaches the voice agent on both call paths
   (`src/claude.js`, `src/elevenlabs/outbound.js:665-672`).
 - `context` - optional structured background; a subfield is to be filled only when the call
   needs it, without repeating the briefing. It remains a second optional field next to

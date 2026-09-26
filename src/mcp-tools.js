@@ -1294,12 +1294,12 @@ function withWidgetLocale(config, handler, language) {
 // Rendering-Detail, sondern das Geheimnis selbst. T2-14: dupliziert in call.html (dort), eine Aenderung NUR hier deaktiviert den Bestaetigen-Knopf lautlos.
 const CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
 const CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
-// Hinweis und Einwilligung zu Gesundheitsangaben (O-15, "collection and use is explicitly and
-// prominently disclosed"): lokalisierter Text fuer den MENSCHEN auf der Karte, im selben
-// _meta wie der Code - also fuer das Modell verborgen. Die Karte (call.html, dort dupliziert)
-// zeigt ihn direkt ueber dem Bestaetigen-Knopf und bietet OHNE ihn keinen Klick an: der Klick
-// ist damit nie ohne sichtbaren Hinweis moeglich. Der Server prueft NICHT, ob Gesundheits-
-// angaben enthalten sind - der Hinweis steht auf jeder Karte.
+// Hinweis/Einwilligung zu besonderen Datenkategorien + Zweck-Zusage des Menschen (O-15/O-18;
+// Text: callDataNotice, src/i18n/mcp-texts.js): lokalisiert, fuer den MENSCHEN auf der Karte,
+// im selben _meta wie der Code - fuer das Modell verborgen. Die Karte (call.html, dort
+// dupliziert) zeigt ihn ueber dem Bestaetigen-Knopf und bietet OHNE ihn keinen Klick an. Der
+// Server prueft NICHT, ob solche Angaben enthalten sind oder wozu der Anruf dient - der
+// Hinweis steht auf jeder Karte.
 const CALL_DATA_NOTICE_META_KEY = "hermes/call_data_notice";
 
 // Das _meta der prepare_call-Antwort fuer die Karte: Code, Ablauf und Datenhinweis - alles
@@ -1363,13 +1363,13 @@ export const PLACE_CALL_REQUEST_SCHEMA = {
   // Text fordert nur noch den Kontext DIESES Anrufs an, nicht "den Chat bisher", nennt
   // keine fremden Werkzeugklassen mehr (vorher "calendar, mail, files, chat") und keinen
   // Markennamen eines Chat-Modells (vorher "not as Claude/Gemini" - jetzt "not as you").
-  // Gesundheitsangaben sind fuer Arzttermine noetig und deshalb nicht verboten, sondern auf
-  // das Noetige begrenzt (Restricted-Data-Pruefung lehnt sie bewusst nicht ab).
+  // Besonders geschuetzte Angaben (Gesundheit u.ae.) sind fuer Arzttermine noetig: begrenzt,
+  // nicht verboten (Restricted-Data-Pruefung lehnt sie nicht ab; Kategorien: Kartenhinweis).
   briefing: z
     .string()
     .optional()
     .describe(
-      "Only the context this call needs: what it is about, the names involved, relevant preferences and history, the desired outcome and tone. SUMMARISE instead of copying in raw. NO secrets, passwords or payment data. Health details only as needed. Write only what you KNOW: never script an answer for a detail you are missing. For each gap, decide: could you answer it yourself during the call from your own tools and context? Then leave the gap open and declare that in one line. Can only the principal know it? Then write the honest line that they will get back on it. Can anyone look it up? Then write nothing. The agent speaks as the principal's personal AI assistant, not as you; phrase the context from their perspective.",
+      "Only the context this call needs: what it is about, the names involved, relevant preferences and history, the desired outcome and tone. SUMMARISE instead of copying in raw. NO secrets, passwords or payment data. Sensitive details only as needed. Write only what you KNOW: never script an answer for a detail you are missing. For each gap, decide: could you answer it yourself during the call from your own tools and context? Then leave the gap open and declare that in one line. Can only the principal know it? Then write the honest line that they will get back on it. Can anyone look it up? Then write nothing. The agent speaks as the principal's personal AI assistant, not as you; phrase the context from their perspective.",
     ),
   constraints: z
     .string()
@@ -1420,8 +1420,8 @@ export const PLACE_CALL_REQUEST_SCHEMA = {
   // Minimierung: context ist kein zweiter Sammeltrichter mehr ("ADDITIONAL to the briefing"
   // lud dazu ein, neben dem Briefing noch mehr abzulegen) - ein Unterfeld nur, wenn der
   // Anruf es braucht, ohne das Briefing zu wiederholen. Kein Markenname eines Chat-Modells
-  // ("NEVER as you" statt "NEVER as Claude/Gemini"). Gesundheitsangaben begrenzt, nicht
-  // verboten (Arzttermine). Jedes Unterfeld nennt seinen engen Zweck - wofuer der Agent es
+  // ("NEVER as you" statt "NEVER as Claude/Gemini"). Besonders geschuetzte Angaben begrenzt,
+  // nicht verboten (Arzttermine). Jedes Unterfeld nennt seinen engen Zweck - wofuer der Agent es
   // im Gespraech braucht (Hintergrund-Zeile im Prompt, src/claude.js assistantContextSection
   // bzw. src/elevenlabs/outbound.js backgroundText) - statt einer offenen Sammelkategorie;
   // die Notwendigkeit je Feld begruendet docs/OPENAI-TOOL-INVENTORY.md. Die Texte sind so
@@ -1452,7 +1452,7 @@ export const PLACE_CALL_REQUEST_SCHEMA = {
     })
     .optional()
     .describe(
-      "Optional structured BACKGROUND for the agent: fill a subfield only when this call needs it, without repeating the briefing. The agent speaks as the principal's personal AI assistant, NEVER as you. NO secrets; health details only as needed.",
+      "Optional structured BACKGROUND for the agent: fill a subfield only when this call needs it, without repeating the briefing. The agent speaks as the principal's personal AI assistant, NEVER as you. NO secrets; sensitive details only as needed.",
     ),
   // LANG-15 AUFGEHOBEN (Owner-Entscheidung F-2, 2026-09-06, PLAN-ANRUFDEFEKTE.md
   // Abschnitt 6): das Feld gibt es wieder - und es WIRKT. Bis dahin entschied allein
