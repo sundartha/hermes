@@ -66,6 +66,7 @@ export async function runBench({ snapshot, model, runs, scenarios = SCENARIOS })
     laeufeJeSzenario: runs,
     werkzeuge: tools.map((tool) => tool.name),
     fingerabdruck: fingerprint(tools, system),
+    verbrauch: model.usage ?? null,
     summe: totals(results),
     szenarien: results,
   };

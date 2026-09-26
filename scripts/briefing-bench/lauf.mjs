@@ -2,7 +2,8 @@
 // Kommandozeile des briefing-bench (Bedienung: README.md daneben).
 //   snapshot  --repo <checkout> --out <datei> [--env KEY=VALUE ...]
 //   run       --tools <schnappschuss> --out <bericht> [--modus attrappe|anthropic]
-//             [--modell <id>] [--laeufe 5] [--einschleusen selbstnennung|erfindung|verweigerung]
+//             [--modell <id>] [--laeufe 5]
+//             [--einschleusen selbstnennung|erfindung|verweigerung|missbrauch]
 //   vergleich --alt <bericht> --neu <bericht>
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -66,7 +67,8 @@ async function runCommand(values) {
   });
   writeJson(values.out, report);
   console.log(
-    `[briefing-bench] ${report.modell}, ${runs} Laeufe je Szenario: ${JSON.stringify(report.summe)}`,
+    `[briefing-bench] ${report.modell}, ${runs} Laeufe je Szenario: ${JSON.stringify(report.summe)}` +
+      ` Verbrauch: ${JSON.stringify(report.verbrauch)}`,
   );
 }
 
