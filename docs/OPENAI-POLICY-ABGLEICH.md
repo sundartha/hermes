@@ -126,12 +126,15 @@ nie gemessen.
   - Die Werkzeugbeschreibung sagt dem Modell, dass der Server entscheidet:
     Werkzeugtext (place_call): "Which destinations are allowed is decided by the server through its safety gates"
   - Zweckbindung als Nutzungsregel an das Modell: die Beschreibung von `prepare_call`, ueber
-    das das Modell jeden Anruf zuerst vorbereitet (`src/mcp-tools.js:940`), und die
-    Server-Instructions (`src/mcp-server-info.js:112`) beschraenken Anrufe auf Anliegen, um
-    die der Nutzer in eigener Sache bittet, und schliessen Telemarketing, unaufgeforderte
-    Werbe- und Verkaufsanrufe, Wahlkampf und das Abtelefonieren von Nummernlisten aus; die
-    Beschreibung von `place_call` traegt eine Kurzfassung (`src/mcp-tools.js:912`).
-    Werkzeugtext (prepare_call): "Use it only for calls the user asks for on their own behalf, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or calling through lists of numbers."
+    das das Modell jeden Anruf zuerst vorbereitet (`src/mcp-tools.js:944`), und die
+    Server-Instructions tragen denselben Satz woertlich aus einer gemeinsamen Quelle
+    (`src/mcp-server-info.js:81-85`). Er beschraenkt Anrufe auf Anliegen, um die der Nutzer fuer
+    sich oder fuer jemanden bittet, fuer den er handelt, und schliesst Telemarketing,
+    unaufgeforderte Werbe- und Verkaufsanrufe, Wahlkampf und die massenhafte oder automatische
+    Anwahl vieler Nummern aus. Die Beschreibung von `place_call` traegt nur eine Kurzfassung
+    (`src/mcp-tools.js:914`), ohne Verkaufsanrufe, ohne Massenanwahl und ohne den Auftrag fuer
+    Dritte.
+    Werkzeugtext (prepare_call): "Place calls only when the user asks for them, for themselves or someone they act for, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or mass or automated dialling of many numbers."
     Werkzeugtext (place_call): "Not for telemarketing, unsolicited advertising or political campaign calls."
 - Was fehlt: eine serverseitige Pruefung des Zwecks. Die Zweckbindung ist eine Anweisung an
   das Modell im Chat, keine Pruefung: der Server liest den Zweck eines Anrufs nicht und lehnt
@@ -265,21 +268,21 @@ nie gemessen.
     bleibt es ebenfalls bis zum Loeschlauf liegen. Was der Sprach-Anbieter selbst aufbewahrt,
     ist eine Einstellung dort (Teil B, offen). Fristen siehe Teil B.
 - Was an OpenAI geht: `get_call_status` liefert die letzten Zeilen des Gespraechs
-  (`src/mcp-tools.js:212`, hoechstens `LAST_TRANSCRIPT_LINES = 6`, `src/mcp-tools.js:52`), also
+  (`src/mcp-tools.js:213`, hoechstens `LAST_TRANSCRIPT_LINES = 6`, `src/mcp-tools.js:53`), also
   woertliche Aussagen des Dritten. Vor der Ausgabe werden darin Zahlungskartennummern,
-  beschriftete behoerdliche Kennnummern und Zugangsdaten maskiert (`src/mcp-tools.js:214`,
+  beschriftete behoerdliche Kennnummern und Zugangsdaten maskiert (`src/mcp-tools.js:215`,
   Umfang siehe "Eingeschraenkte und besonders schutzwuerdige Daten"); alles Uebrige - Namen,
   Adressen, Gesundheitsangaben, unbeschriftete Nummern - geht unveraendert heraus.
   Der Handler prueft den Anrufstatus nicht
-  (`src/mcp-tools.js:1822`); die Zeilen kommen aus dem gespeicherten Transkript
-  (`src/mcp-tools.js:213`). Sie gehen deshalb nicht nur waehrend des Anrufs an OpenAI/ChatGPT,
+  (`src/mcp-tools.js:1830`); die Zeilen kommen aus dem gespeicherten Transkript
+  (`src/mcp-tools.js:214`). Sie gehen deshalb nicht nur waehrend des Anrufs an OpenAI/ChatGPT,
   sondern auch danach, solange das Transkript existiert: nach einem abgebrochenen oder
   gescheiterten Anruf und nach einer gescheiterten Zusammenfassung bis zum Loeschlauf des
   Anrufs (Code-Default 30 Tage), bei einem Diagnose-Anruf bis zum Ende der Diagnose-Frist
   (Code-Default 7 Tage). Ein `cancel_call` beendet also die Verbindung, beendet aber nicht die
   Herausgabe der letzten Zeilen ueber `get_call_status`.
   Werkzeugtext (get_call_status): "duration and the last transcript lines"
-  `get_call_result` gibt nur Zusammenfassung und Ergebnis zurueck (`src/mcp-tools.js:1895`).
+  `get_call_result` gibt nur Zusammenfassung und Ergebnis zurueck (`src/mcp-tools.js:1903`).
   Werkzeugtext (get_call_result): "This tool NEVER returns the raw transcript"
 - Status: `teilweise`. Der Dritte willigt nicht ein; er wird nur informiert (Offenlegung).
   Luecke 8 in Teil C (Suchanfragen an Such-Anbieter), Luecke 11 (Rohzeilen nicht an den
@@ -315,8 +318,8 @@ nie gemessen.
 
 - Einschlaegig: ja. Massenanrufe sind ein klassisches Kampagnenwerkzeug.
 - Mechanismus: die Mengen-Gates (Stundenlimit, Ziel-Grenze, Kostendecke) und die Zweckbindung
-  in der Beschreibung von `prepare_call` und in den Server-Instructions, die Wahlkampf und das
-  Abtelefonieren von Nummernlisten ausschliesst (Wortlaut und Beleg siehe "Telemarketing").
+  in der Beschreibung von `prepare_call` und in den Server-Instructions, die Wahlkampf und die
+  massenhafte oder automatische Anwahl vieler Nummern ausschliesst (Wortlaut und Beleg siehe "Telemarketing").
   Die Zweckbindung ist eine Anweisung an das Modell; der Server prueft den Zweck nicht.
 - Status: `teilweise`. Luecke 1 in Teil C.
 
@@ -349,11 +352,14 @@ nie gemessen.
 - Einschlaegig: ja, `place_call` hat mehrere Freitextfelder.
 - Mechanismus: die Beschreibungen begrenzen das `briefing` auf den Kontext dieses Anrufs,
   verlangen Zusammenfassung statt Rohtext und lassen die Unterfelder von `context` nur fuellen,
-  wenn der Anruf sie braucht, ohne das `briefing` zu wiederholen (`src/mcp-tools.js:1351`,
-  `src/mcp-tools.js:1430`).
+  wenn der Anruf sie braucht, ohne das `briefing` zu wiederholen (`src/mcp-tools.js:1355`,
+  `src/mcp-tools.js:1438`).
   Werkzeugtext (place_call): "Only the context this call needs: what it is about, the names involved, relevant preferences and history, the desired outcome and tone."
   Werkzeugtext (place_call): "SUMMARISE instead of copying in raw."
-  Werkzeugtext (place_call): "What the call is about, summarised in 1-3 sentences (not a raw dump of the chat)."
+  Werkzeugtext (place_call): "Only so the agent can state why it calls: 1-3 sentences, not a copy of the chat."
+  Jedes Unterfeld von `context` nennt in seiner Beschreibung einen engen Zweck (wozu der Agent
+  es im Gespraech braucht) statt einer offenen Sammelkategorie (`src/mcp-tools.js:1414-1434`);
+  die Notwendigkeit je Feld begruendet das Werkzeug-Inventar.
   Werkzeugtext (place_call): "Optional structured BACKGROUND for the agent: fill a subfield only when this call needs it, without repeating the briefing."
 - Was dagegen spricht: die Begrenzung steht nur in den Beschreibungen, das Schema erzwingt sie
   nicht. `context` besteht als zweites optionales Feld mit fuenf Unterfeldern neben dem
@@ -383,9 +389,9 @@ nie gemessen.
   beiden oben zitierten sind das Zahlungskartendaten (PCI DSS) und Zugangsdaten bzw.
   Authentifizierungsgeheimnisse.
 - Mechanismus, Eingabe: `prepare_call` und `place_call` pruefen alle Argumente ausser `to`,
-  `confirmation_code` und `language` (`src/mcp-tools.js:490`), bevor ein Bestaetigungscode
-  ausgestellt oder ein Anruf gestartet wird (`src/mcp-tools.js:509`); `answer_consult` prueft
-  die Antworten (`src/mcp-tools.js:1785`). Ein Treffer ergibt einen Werkzeugfehler, der Feld
+  `confirmation_code` und `language` (`src/mcp-tools.js:491`), bevor ein Bestaetigungscode
+  ausgestellt oder ein Anruf gestartet wird (`src/mcp-tools.js:510`); `answer_consult` prueft
+  die Antworten (`src/mcp-tools.js:1793`). Ein Treffer ergibt einen Werkzeugfehler, der Feld
   und Kategorie nennt, nie den Wert; es entsteht kein Code und kein Anruf.
 - Mechanismus, Ausgabe: dieselbe Erkennung maskiert Treffer in `get_call_status`,
   `get_call_result`, `await_call_event`, `list_calls`, `check_inbox` und `list_action_items`
@@ -428,11 +434,11 @@ nie gemessen.
 > "Response minimization: Tool responses must return only data that is directly relevant to the user’s request and the tool’s stated purpose." - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Data collection")
 
 - Einschlaegig: ja.
-- Mechanismus: `get_call_result` filtert ueber eine Whitelist (`src/mcp-tools.js:1895`) und
+- Mechanismus: `get_call_result` filtert ueber eine Whitelist (`src/mcp-tools.js:1903`) und
   liefert nie das Roh-Transkript; `get_call_status` liefert hoechstens sechs letzte Zeilen
-  (`src/mcp-tools.js:52`), aber unabhaengig vom Anrufstatus, also auch nach dem Anruf, solange
+  (`src/mcp-tools.js:53`), aber unabhaengig vom Anrufstatus, also auch nach dem Anruf, solange
   ein Transkript gespeichert ist (Luecke 11 in Teil C).
-- `get_agent_status` gibt den Namen des Auftraggebers zurueck (`src/mcp-tools.js:714`); die
+- `get_agent_status` gibt den Namen des Auftraggebers zurueck (`src/mcp-tools.js:715`); die
   Beschreibung nennt ihn jetzt als Zweck.
 - Teilweise geprueft: welche Felder jedes der Werkzeuge zurueckgibt und zu welcher
   Datenkategorie sie gehoeren, steht in Teil B ("Werkzeug-Antworten Feld fuer Feld"). Ob jedes
@@ -516,17 +522,18 @@ Rahmen, die Ausweich-Reihenfolge und die Buchungsgrenze (`src/elevenlabs/outboun
 Werkzeugtext (place_call): "'decline' - politely refuse, without a counter-offer; 'accept_best' - accept and record the best offer made anyway."
 Fuer die Frage "menschliche Pruefung" ist die Abweichung konservativ (`accept_best` wirkt dort
 nicht). Die Beschreibung von `on_out_of_scope` sagt inzwischen selbst, dass die Einstellung nicht
-auf jedem Anrufweg angewendet wird (`src/mcp-tools.js:1392`):
+auf jedem Anrufweg angewendet wird (`src/mcp-tools.js:1396`):
 Werkzeugtext (place_call): "Not applied on every call path."
 Welcher Weg es ist, nennt sie nicht, und auf dem Sprach-Agenten-Weg bleibt die Einstellung
 wirkungslos. Fuer "descriptions that match behavior" bleibt das eine Luecke.
 
 **Sensible Bereiche.** Kein Code verhindert ein Mandat in den gelisteten Bereichen (Wohnen,
 Arbeit, Kredit, Versicherung, Recht, Medizin). Die Beschreibung von `prepare_call` weist das
-Modell an, bei Vertraegen, Krediten, Versicherungen, Miete, Arbeit und Rechtsfragen weder einen
-Rahmen noch `accept_best` zu setzen, sodass der Agent dort nichts zusagt
-(`src/mcp-tools.js:940`):
-Werkzeugtext (prepare_call): "For contracts, loans, insurance, tenancy, employment or legal matters, set neither decide_freely nor 'accept_best', so the agent commits to nothing there."
+Modell an, bei Vertraegen, Krediten, Versicherungen, Miete, Arbeit und Rechtsfragen den Rahmen
+auf Terminzeiten zu beschraenken und `accept_best` nicht zu setzen, sodass der Agent dort keine
+Bedingungen zusagt (`src/mcp-tools.js:944`). Eine Wohnungsbesichtigung oder ein
+Vorstellungsgespraech zu verschieben bleibt damit moeglich:
+Werkzeugtext (prepare_call): "For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only and do not set 'accept_best', so the agent agrees to no terms there."
 Das ist eine Anweisung an das Modell, keine serverseitige Sperre. Medizin ist darin bewusst
 nicht genannt: ein Rahmen fuer einen Arzttermin (etwa "jeder Vormittag naechste Woche") ist
 ein gewoehnlicher Anwendungsfall.
@@ -552,19 +559,19 @@ danach alle 6 Stunden (`src/boot.js:109`, `src/boot.js:1264-1265`).
 |---|---|---|---|---|
 | Konto: Login-Kennung, E-Mail, Rolle | Tabelle `account` (`src/db/schema.sql:980`) | Anmeldung, Zuordnung zum Mandanten | keine Frist im Code; Einzelzeilen fallen nur beim Abgleich verwaister Identitaeten (`src/web-auth.js:711`) | Login-Anbieter |
 | Sitzung | Tabelle `session` (`src/db/schema.sql:997`) | Browser-Sitzung | Ablaufzeitpunkt je Sitzung; kein Loeschlauf im Code gefunden | - |
-| Mandant: Name des Auftraggebers, eigene Nummer, Abrechnungs-Kennungen | Tabelle `tenant` (`src/db/schema.sql:13`), Spalten `owner_name` (`src/db/schema.sql:23`), `private_number` (`src/db/schema.sql:81`), `stripe_customer_id` (`src/db/schema.sql:38`), `stripe_subscription_id` (`src/db/schema.sql:48`) | Offenlegungssatz, Eigen-Anruf, Abrechnung | keine Frist im Code | Name des Auftraggebers: OpenAI/ChatGPT ueber `get_agent_status` (Feld `owner`, `src/mcp-tools.js:714`); Sprach-Anbieter als Variable `owner_name` des Sprach-Agenten (`src/elevenlabs/outbound.js:953`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs (`src/i18n/prompts/en.js:12`); Telefonie-Anbieter als Text der ersten Ansage des Budget-Wegs (`src/claude.js:452`); jeder Angerufene hoert ihn im Offenlegungssatz (`src/i18n/locales.js:622-624`). Vorname (Spalte `first_name`, `src/db/schema.sql:27`): Sprach-Anbieter in der Eroeffnung eines Anrufs an die eigene hinterlegte Nummer (`src/elevenlabs/outbound.js:1167-1169`). Eigene Nummer: kein Werkzeugfeld gibt sie als solche zurueck; ist sie Ziel eines Anrufs, steht sie im Anruf-Datensatz und geht als Nummer der Gegenseite an OpenAI/ChatGPT (`list_calls`, Feld `counterparty`, `src/mcp-tools.js:751`). Abrechnungs-Kennungen: Zahlungsanbieter |
-| Rufnummer des Assistenten (dem Mandanten zugeordnete, beim Telefonie-Anbieter gemietete Nummer) | Tabelle `number` (`src/db/schema.sql:714`), Spalte `provider` (`src/db/schema.sql:718`); Anzeige-Nummer des Mandanten (`src/routes/api-read.js:89`) | Anrufe annehmen und fuehren | der periodische Loeschlauf hat keinen Durchgang fuer diese Tabelle (`src/store/state-ops.js:5186`); was mit der Zeile nach einer Kuendigung und der Freigabe der Nummer geschieht, ist hier nicht untersucht | Telefonie-Anbieter; OpenAI/ChatGPT ueber `get_agent_number` (`src/mcp-tools.js:738`) und `get_agent_status` (Feld `number`, `src/mcp-tools.js:713`) |
-| Einstellungen | Tabelle `settings` (`src/db/schema.sql:163`) | Verhalten des Assistenten | keine Frist im Code | OpenAI/ChatGPT ueber `get_agent_status`: die drei Freigaben (Zusammenfassungen, persoenliche Daten, Bankdaten) als Feld `permissions` (`src/mcp-tools.js:719`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs: Name und Stil des Assistenten (`src/i18n/prompts/en.js:12`, `src/i18n/prompts/en.js:129`) und die Grenzen aus den Freigaben fuer persoenliche und Bankdaten (`src/claude.js:231-232`); Name des Assistenten in der Ergebnis-SMS an den Nutzer ueber den Telefonie-Anbieter (`src/telephony/call-finish.js:370`). Auf dem Sprach-Agenten-Weg geht laut Code keines dieser Felder an den Sprach-Anbieter (`grep -rnE "agentName|agentStyle|allowPersonalData|allowBankData" src/elevenlabs` liefert 0) |
+| Mandant: Name des Auftraggebers, eigene Nummer, Abrechnungs-Kennungen | Tabelle `tenant` (`src/db/schema.sql:13`), Spalten `owner_name` (`src/db/schema.sql:23`), `private_number` (`src/db/schema.sql:81`), `stripe_customer_id` (`src/db/schema.sql:38`), `stripe_subscription_id` (`src/db/schema.sql:48`) | Offenlegungssatz, Eigen-Anruf, Abrechnung | keine Frist im Code | Name des Auftraggebers: OpenAI/ChatGPT ueber `get_agent_status` (Feld `owner`, `src/mcp-tools.js:715`); Sprach-Anbieter als Variable `owner_name` des Sprach-Agenten (`src/elevenlabs/outbound.js:953`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs (`src/i18n/prompts/en.js:12`); Telefonie-Anbieter als Text der ersten Ansage des Budget-Wegs (`src/claude.js:452`); jeder Angerufene hoert ihn im Offenlegungssatz (`src/i18n/locales.js:622-624`). Vorname (Spalte `first_name`, `src/db/schema.sql:27`): Sprach-Anbieter in der Eroeffnung eines Anrufs an die eigene hinterlegte Nummer (`src/elevenlabs/outbound.js:1167-1169`). Eigene Nummer: kein Werkzeugfeld gibt sie als solche zurueck; ist sie Ziel eines Anrufs, steht sie im Anruf-Datensatz und geht als Nummer der Gegenseite an OpenAI/ChatGPT (`list_calls`, Feld `counterparty`, `src/mcp-tools.js:752`). Abrechnungs-Kennungen: Zahlungsanbieter |
+| Rufnummer des Assistenten (dem Mandanten zugeordnete, beim Telefonie-Anbieter gemietete Nummer) | Tabelle `number` (`src/db/schema.sql:714`), Spalte `provider` (`src/db/schema.sql:718`); Anzeige-Nummer des Mandanten (`src/routes/api-read.js:89`) | Anrufe annehmen und fuehren | der periodische Loeschlauf hat keinen Durchgang fuer diese Tabelle (`src/store/state-ops.js:5186`); was mit der Zeile nach einer Kuendigung und der Freigabe der Nummer geschieht, ist hier nicht untersucht | Telefonie-Anbieter; OpenAI/ChatGPT ueber `get_agent_number` (`src/mcp-tools.js:739`) und `get_agent_status` (Feld `number`, `src/mcp-tools.js:714`) |
+| Einstellungen | Tabelle `settings` (`src/db/schema.sql:163`) | Verhalten des Assistenten | keine Frist im Code | OpenAI/ChatGPT ueber `get_agent_status`: die drei Freigaben (Zusammenfassungen, persoenliche Daten, Bankdaten) als Feld `permissions` (`src/mcp-tools.js:720`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs: Name und Stil des Assistenten (`src/i18n/prompts/en.js:12`, `src/i18n/prompts/en.js:129`) und die Grenzen aus den Freigaben fuer persoenliche und Bankdaten (`src/claude.js:231-232`); Name des Assistenten in der Ergebnis-SMS an den Nutzer ueber den Telefonie-Anbieter (`src/telephony/call-finish.js:370`). Auf dem Sprach-Agenten-Weg geht laut Code keines dieser Felder an den Sprach-Anbieter (`grep -rnE "agentName|agentStyle|allowPersonalData|allowBankData" src/elevenlabs` liefert 0) |
 | Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/schema.sql:211`): `from_e164`/`to_e164` (`src/db/schema.sql:219-220`), `goal` (`src/db/schema.sql:220`), `briefing` (`src/db/schema.sql:227`), `constraints` (`src/db/schema.sql:228`), `context` (`src/db/schema.sql:252`), `mandate` (`src/db/schema.sql:256`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js:2036`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js:5125`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Vorab-Recherche die serverseitige Suche von Anthropic (`objective`, `briefing`, `constraints`, ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
-| Rueckfragen des Agenten an den Nutzer und dessen Antworten (nur bei freigegebenem Rueckfrage-Kanal) | Spalte `consults` am Anruf (`src/db/schema.sql:342`) | Rueckfrage waehrend des Anrufs | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT: die Fragen des Agenten, die aus dem laufenden Gespraech stammen, ueber `await_call_event` (Feld `questions`, `src/mcp-tools.js:330`). Die Antworten kommen aus ChatGPT ueber `answer_consult` (`src/mcp-tools.js:1787`, Route `src/routes/api-calls.js:740`) und sind fuer den Agenten im laufenden Gespraech bestimmt; der Weg von dort zum Sprachmodell- bzw. Sprach-Anbieter ist in diesem Dokument nicht Zeile fuer Zeile belegt |
-| Roh-Transkript | Tabelle `transcript_segment` (`src/db/schema.sql:554`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende nur bei Endstatus `completed` geleert (`src/telephony/call-finish.js:350`); bei jedem anderen Endstatus, z.B. `cancelled` nach `cancel_call` oder `failed` (Ruecksprung vor der Leerung, `src/telephony/call-finish.js:302`), und nach einer gescheiterten Zusammenfassung bleibt es bis zum Loeschlauf des Anrufs (30 Tage) | bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` (`src/mcp-tools.js:52`; Zahlungskartennummern, beschriftete behoerdliche Kennnummern und Zugangsdaten darin maskiert, alles Uebrige unveraendert), waehrend des Anrufs und danach, solange das Transkript gespeichert ist, also auch nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten Zusammenfassung (`src/mcp-tools.js:1822`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
-| Roh-Transkript eines Diagnose-Anrufs an die eigene hinterlegte Nummer | wie oben, Markierung `diagnostic` | nachtraegliche Analyse | 7 Tage (`src/config.js:2043-2047`). Aufbewahrung per Default AN: ohne Angabe behaelt der Server das Transkript, nur ein ausdrueckliches `diagnostic=false` bei `place_call` verhindert es (Opt-out, `src/diagnostic-retention.js:42`, `src/diagnostic-retention.js:56`). Die eigene hinterlegte Nummer ist nur auf Format und Land geprueft, NICHT darauf, dass sie dem Nutzer gehoert (`src/diagnostic-retention.js:48`); hat ein Nutzer eine fremde Nummer hinterlegt, ist es das Roh-Transkript eines Dritten | wie oben; insbesondere bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` fuer die ganze Frist (`src/mcp-tools.js:213`, `src/diagnostic-retention.js:72`) |
+| Rueckfragen des Agenten an den Nutzer und dessen Antworten (nur bei freigegebenem Rueckfrage-Kanal) | Spalte `consults` am Anruf (`src/db/schema.sql:342`) | Rueckfrage waehrend des Anrufs | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT: die Fragen des Agenten, die aus dem laufenden Gespraech stammen, ueber `await_call_event` (Feld `questions`, `src/mcp-tools.js:331`). Die Antworten kommen aus ChatGPT ueber `answer_consult` (`src/mcp-tools.js:1795`, Route `src/routes/api-calls.js:740`) und sind fuer den Agenten im laufenden Gespraech bestimmt; der Weg von dort zum Sprachmodell- bzw. Sprach-Anbieter ist in diesem Dokument nicht Zeile fuer Zeile belegt |
+| Roh-Transkript | Tabelle `transcript_segment` (`src/db/schema.sql:554`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende nur bei Endstatus `completed` geleert (`src/telephony/call-finish.js:350`); bei jedem anderen Endstatus, z.B. `cancelled` nach `cancel_call` oder `failed` (Ruecksprung vor der Leerung, `src/telephony/call-finish.js:302`), und nach einer gescheiterten Zusammenfassung bleibt es bis zum Loeschlauf des Anrufs (30 Tage) | bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` (`src/mcp-tools.js:53`; Zahlungskartennummern, beschriftete behoerdliche Kennnummern und Zugangsdaten darin maskiert, alles Uebrige unveraendert), waehrend des Anrufs und danach, solange das Transkript gespeichert ist, also auch nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten Zusammenfassung (`src/mcp-tools.js:1830`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
+| Roh-Transkript eines Diagnose-Anrufs an die eigene hinterlegte Nummer | wie oben, Markierung `diagnostic` | nachtraegliche Analyse | 7 Tage (`src/config.js:2043-2047`). Aufbewahrung per Default AN: ohne Angabe behaelt der Server das Transkript, nur ein ausdrueckliches `diagnostic=false` bei `place_call` verhindert es (Opt-out, `src/diagnostic-retention.js:42`, `src/diagnostic-retention.js:56`). Die eigene hinterlegte Nummer ist nur auf Format und Land geprueft, NICHT darauf, dass sie dem Nutzer gehoert (`src/diagnostic-retention.js:48`); hat ein Nutzer eine fremde Nummer hinterlegt, ist es das Roh-Transkript eines Dritten | wie oben; insbesondere bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` fuer die ganze Frist (`src/mcp-tools.js:214`, `src/diagnostic-retention.js:72`) |
 | Zusammenfassung, Ergebnis | `summary`, `result` am Anruf (`src/db/schema.sql:339`) | Bericht an den Nutzer | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (Werkzeug-Antworten), Benachrichtigungswege |
 | Woertliche Zitate im Ergebnis | `result.evidence` | Beleg zur Ergebnis-Karte | Code-Default 0 = Funktion aus, es wird nichts erhoben (`src/config.js:2057-2060`) | - |
-| Aufgaben (Action Items) | Tabelle `action_item` (`src/db/schema.sql:564`) | Nachbereitung | erledigte: 30 Tage; OFFENE unbefristet (`src/store/state-ops.js:5127`) | OpenAI/ChatGPT: offene Aufgaben ueber `list_action_items` (`src/mcp-tools.js:836`) und je Eingangs-Eintrag ueber `check_inbox` (Feld `action_items`, `src/store/state-ops.js:786`) |
+| Aufgaben (Action Items) | Tabelle `action_item` (`src/db/schema.sql:564`) | Nachbereitung | erledigte: 30 Tage; OFFENE unbefristet (`src/store/state-ops.js:5127`) | OpenAI/ChatGPT: offene Aufgaben ueber `list_action_items` (`src/mcp-tools.js:837`) und je Eingangs-Eintrag ueber `check_inbox` (Feld `action_items`, `src/store/state-ops.js:786`) |
 | Benachrichtigungen | Tabelle `notification` (`src/db/schema.sql:699`) | Hinweise an den Nutzer | 30 Tage | - |
 | Eingangs-Eintraege eingehender Anrufe: Anrufernummer, Anliegen | Anruf-Datensatz, `inbox_entry_at` (`src/db/schema.sql:369`), Gesehen-Markierung (`src/store/state-ops.js:835`) | Anruf-Eingang | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (`check_inbox`) |
-| Nutzung und Kosten | Tabellen `usage` (`src/db/schema.sql:589`), `usage_event` (`src/db/schema.sql:901`), `call_cost_evidence` (`src/db/schema.sql:953`) | Abrechnung, Kostendecke | keine Frist im Code | Zahlungsanbieter (Abrechnung); OpenAI/ChatGPT ueber `get_agent_status`: Zahl der Anrufe (Feld `calls`, `src/mcp-tools.js:715`) und Monatsnutzung in Prozent (Feld `planUsagePercent`, `src/mcp-tools.js:718`), kein Geldbetrag |
+| Nutzung und Kosten | Tabellen `usage` (`src/db/schema.sql:589`), `usage_event` (`src/db/schema.sql:901`), `call_cost_evidence` (`src/db/schema.sql:953`) | Abrechnung, Kostendecke | keine Frist im Code | Zahlungsanbieter (Abrechnung); OpenAI/ChatGPT ueber `get_agent_status`: Zahl der Anrufe (Feld `calls`, `src/mcp-tools.js:716`) und Monatsnutzung in Prozent (Feld `planUsagePercent`, `src/mcp-tools.js:719`), kein Geldbetrag |
 | Kalender | Tabelle `calendar_event` (`src/db/schema.sql:576`) | Anzeige der naechsten Termine | keine Frist im Code | keiner mehr - das MCP-Kalender-Werkzeug ist entfallen, die Daten bleiben im Store, gehen aber ueber kein Werkzeug mehr nach aussen |
 | Audit-Log | Tabelle `audit_log` (`src/db/schema.sql:1014`), append-only (`src/audit-store.js:1`) | Nachvollziehbarkeit sicherheitsrelevanter Aktionen | keine Frist im Code | - |
 
@@ -601,17 +608,17 @@ im Abschnitt "Minimale Antworten" behandelt.
 
 | Werkzeug | Felder der Antwort | Kategorie |
 |---|---|---|
-| `place_call` | `call_id`, `status`, `duration_s`, `last_transcript_lines` (beim Start leer), `failure_reason`, `result_summary`, `objective_achieved`, `context_received`, `deduplicated` (`src/mcp-tools.js:1688`) | Anruf-Datensatz |
-| `get_call_status` | `call_id`, `status`, `failure_reason`, `duration_s`, `last_transcript_lines` (`src/mcp-tools.js:207`) | Anruf-Datensatz, Roh-Transkript |
-| `await_call_event` (nur bei freigegebenem Rueckfrage-Kanal) | `event`, `event_id`, `questions`, `status`, `failure_reason`, `result_summary`, `objective_achieved`, fuenf Felder der Ergebnis-Karte (`src/mcp-tools.js:322`) | Rueckfragen, Anruf-Datensatz, Zusammenfassung und Ergebnis |
-| `answer_consult` (nur bei freigegebenem Rueckfrage-Kanal) | `accepted`, `merged_facts` (`src/mcp-tools.js:1797`) | keine personenbezogenen Daten in der Antwort; die Eingabe ist unter Rueckfragen erfasst |
-| `get_call_result` | `call_id`, `result_summary`, `objective_achieved`, fuenf Felder der Ergebnis-Karte (`src/mcp-tools.js:249`) | Zusammenfassung und Ergebnis |
+| `place_call` | `call_id`, `status`, `duration_s`, `last_transcript_lines` (beim Start leer), `failure_reason`, `result_summary`, `objective_achieved`, `context_received`, `deduplicated` (`src/mcp-tools.js:1696`) | Anruf-Datensatz |
+| `get_call_status` | `call_id`, `status`, `failure_reason`, `duration_s`, `last_transcript_lines` (`src/mcp-tools.js:208`) | Anruf-Datensatz, Roh-Transkript |
+| `await_call_event` (nur bei freigegebenem Rueckfrage-Kanal) | `event`, `event_id`, `questions`, `status`, `failure_reason`, `result_summary`, `objective_achieved`, fuenf Felder der Ergebnis-Karte (`src/mcp-tools.js:323`) | Rueckfragen, Anruf-Datensatz, Zusammenfassung und Ergebnis |
+| `answer_consult` (nur bei freigegebenem Rueckfrage-Kanal) | `accepted`, `merged_facts` (`src/mcp-tools.js:1805`) | keine personenbezogenen Daten in der Antwort; die Eingabe ist unter Rueckfragen erfasst |
+| `get_call_result` | `call_id`, `result_summary`, `objective_achieved`, fuenf Felder der Ergebnis-Karte (`src/mcp-tools.js:250`) | Zusammenfassung und Ergebnis |
 | `cancel_call` | `status`, bei einem Anruf ueber den Sprach-Agenten zusaetzlich technische Angaben zum Auflegen (`src/routes/api-calls.js:806-811`) | Anruf-Datensatz (nur Status) |
-| `get_agent_number` | `number` (`src/mcp-tools.js:737`) | Rufnummer des Assistenten |
-| `list_calls` | je Anruf `id`, `direction`, `counterparty`, `status`, `startedAt`, `summary` (`src/mcp-tools.js:747`) | Anruf-Datensatz (Nummer der Gegenseite; bei einem Anruf an die eigene hinterlegte Nummer ist es diese), Zusammenfassung |
+| `get_agent_number` | `number` (`src/mcp-tools.js:738`) | Rufnummer des Assistenten |
+| `list_calls` | je Anruf `id`, `direction`, `counterparty`, `status`, `startedAt`, `summary` (`src/mcp-tools.js:748`) | Anruf-Datensatz (Nummer der Gegenseite; bei einem Anruf an die eigene hinterlegte Nummer ist es diese), Zusammenfassung |
 | `check_inbox` | je Eintrag `call_id`, `caller`, `at`, `summary`, `summary_unavailable`, fuenf Felder der Ergebnis-Karte, `action_items`, `action_required`; dazu `remaining` (`src/store/state-ops.js:786`) | Eingangs-Eintraege, Zusammenfassung und Ergebnis, Aufgaben |
-| `list_action_items` | Text je offener Aufgabe (`src/mcp-tools.js:836`) | Aufgaben |
-| `get_agent_status` | `number`, `owner`, `calls`, `planUsagePercent`, `permissions` (`src/mcp-tools.js:711-720`) | Rufnummer des Assistenten, Mandant (Name des Auftraggebers), Nutzung und Kosten, Einstellungen |
+| `list_action_items` | Text je offener Aufgabe (`src/mcp-tools.js:837`) | Aufgaben |
+| `get_agent_status` | `number`, `owner`, `calls`, `planUsagePercent`, `permissions` (`src/mcp-tools.js:712-721`) | Rufnummer des Assistenten, Mandant (Name des Auftraggebers), Nutzung und Kosten, Einstellungen |
 
 `get_agent_status` nennt jetzt jedes Feld der Antwort beim Namen, einschliesslich des Namens
 des Auftraggebers (Feld `owner`):
@@ -633,13 +640,13 @@ Sache des Rechtstextes.
 
 - Diagnose-Transkript abschalten: `diagnostic=false` bei `place_call`.
   Werkzeugtext (place_call): "Set it to false ONLY when the user explicitly does not want that transcript kept."
-- Laufenden Anruf abbrechen: `cancel_call` (`src/mcp-tools.js:1932`). Das beendet die
+- Laufenden Anruf abbrechen: `cancel_call` (`src/mcp-tools.js:1940`). Das beendet die
   Verbindung und setzt den Status `cancelled` (`src/routes/api-calls.js:812`); es loescht das
   bis dahin entstandene Roh-Transkript NICHT. Das bleibt bis zum Loeschlauf des Anrufs
   gespeichert, und `get_call_status` liefert weiter dessen letzte Zeilen (Luecken 11 und 12 in
   Teil C).
 - Eingangs-Eintraege erneut lesen, ohne Markierungen zu aendern: `check_inbox` mit
-  `include_seen` (`src/mcp-tools.js:2012`).
+  `include_seen` (`src/mcp-tools.js:2020`).
   Werkzeugtext (check_inbox): "Re-read entries that were already marked as seen. Changes NO marker."
 - Einstellungen im Self-Service (`src/self-service-routes.js:467`): frei setzbar sind nur Name,
   Sprache und Stil des Assistenten (`src/self-service.js:20`), dazu zwei Freigaben fuer
@@ -679,31 +686,34 @@ Entscheidung des Betreibers (etwa Rechtstext, Fristen, Einwilligung, Identitaets
 noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
 
 1. **Keine serverseitige Zweckpruefung**: die Zweckbindung gegen Telemarketing, Werbe- und
-   Verkaufsanrufe, Wahlkampf und Nummernlisten steht als Anweisung an das Modell in der
-   Beschreibung von `prepare_call` (`src/mcp-tools.js:940`), als Kurzfassung in `place_call`
-   (`src/mcp-tools.js:912`) und in den Server-Instructions (`src/mcp-server-info.js:112`); der
+   Verkaufsanrufe, Wahlkampf und Massenanwahl steht als Anweisung an das Modell woertlich in der
+   Beschreibung von `prepare_call` (`src/mcp-tools.js:944`) und in den Server-Instructions
+   (`src/mcp-server-info.js:81-85`), als Kurzfassung in `place_call` (`src/mcp-tools.js:914`); der
    Server prueft den Zweck eines Anrufs nicht. Klauseln: "telemarketing", "spam", "political
    campaigning".
    Ziel (serverseitige Zweckpruefung): open, no owner decision yet.
 2. **`context` bleibt ein zweites optionales Feld** neben dem `briefing`
-   (`src/mcp-tools.js:1430`); die Begrenzung auf den Kontext des Anrufs steht in den
-   Beschreibungen, das Schema erzwingt sie nicht. Klauseln: "broad contextual fields",
+   (`src/mcp-tools.js:1438`); die Begrenzung auf den Kontext des Anrufs steht in den
+   Beschreibungen, jedes Unterfeld nennt einen engen Zweck (`src/mcp-tools.js:1414-1434`),
+   das Schema erzwingt die Begrenzung aber nicht. Klauseln: "broad contextual fields",
    "Collection minimization", "Data boundaries".
-   Ziel (ob `context` entfaellt oder enger wird): open, no owner decision yet.
+   Ziel (Begrenzung im Schema oder Wegfall von `context`): open, not yet assigned to a work
+   package.
 3. **Gesundheitsangaben ohne Einwilligungs- oder Hinweisstelle**: die Beschreibungen von
-   `briefing` und `context` begrenzen sie auf das Noetige (`src/mcp-tools.js:1351`), sie
+   `briefing` und `context` begrenzen sie auf das Noetige (`src/mcp-tools.js:1355`), sie
    werden aber weder abgelehnt noch maskiert, und vor der Erhebung steht keine Einwilligung
    und kein Hinweis; amtliche Kennnummern werden nur mit Beschriftung erkannt. Klauseln:
    "Restricted data", "Regulated Sensitive Data".
    Ziel (Einwilligung und Hinweis vor der Erhebung): open, no owner decision yet.
 4. **`on_out_of_scope` wirkt auf dem Sprach-Agenten-Weg nicht**
    (`src/elevenlabs/outbound.js:615`); die Beschreibung sagt nur, dass die Einstellung nicht
-   auf jedem Anrufweg angewendet wird (`src/mcp-tools.js:1392`). Klausel: "Descriptions that
+   auf jedem Anrufweg angewendet wird (`src/mcp-tools.js:1396`). Klausel: "Descriptions that
    match behavior".
    Ziel: open, not yet assigned to a work package.
 5. **Keine Sperre fuer Mandate in sensiblen Bereichen** (Wohnen, Arbeit, Kredit, Versicherung,
-   Recht, Medizin) (`src/mcp-tools.js:1371`); die Beschreibung von `prepare_call` weist das
-   Modell nur an, dort kein Mandat zu setzen (`src/mcp-tools.js:940`). Klausel: "automation of
+   Recht, Medizin) (`src/mcp-tools.js:1375`); die Beschreibung von `prepare_call` weist das
+   Modell nur an, dort den Rahmen auf Terminzeiten zu beschraenken und `accept_best` nicht zu
+   setzen (`src/mcp-tools.js:944`). Klausel: "automation of
    high-stakes decisions in sensitive areas without human review".
    Ziel (serverseitige Sperre): open, no owner decision yet.
 6. **Keine Loeschfrist** fuer Audit-Log (`src/db/schema.sql:1014`), Nutzungs- und
@@ -738,11 +748,11 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
     Ziel: open, no owner decision yet.
 11. **Rohzeilen nicht an den laufenden Anruf gebunden**: `get_call_status` gibt die letzten
     sechs Zeilen des gespeicherten Transkripts fuer jeden Anrufstatus zurueck
-    (`src/mcp-tools.js:1822`, `src/mcp-tools.js:213`), also auch nach dem Anruf -
+    (`src/mcp-tools.js:1830`, `src/mcp-tools.js:214`), also auch nach dem Anruf -
     nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten
     Zusammenfassung bis zum Loeschlauf, bei Diagnose-Anrufen fuer die ganze Diagnose-Frist
     (`src/diagnostic-retention.js:72`). Der Code nennt das selbst einen offenen Befund
-    (`src/mcp-tools.js:202-206`). Klauseln: "Response minimization", "privacy of others".
+    (`src/mcp-tools.js:203-207`). Klauseln: "Response minimization", "privacy of others".
     Ziel: open, not yet assigned to a work package.
 12. **Roh-Transkript nicht abgeschlossener Anrufe wird nicht geleert**: `finishCall` kehrt bei
     jedem Endstatus ausser `completed` vor der Leerung zurueck
@@ -761,10 +771,10 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
 ## Anker (maschinenlesbar)
 
 <!-- ANKER-BEGIN
-src/mcp-tools.js:214 | maskRestrictedText(
-src/mcp-tools.js:490 | const CALL_ARGS_EXEMPT_KEYS = Object.freeze(["to", "confirmation_code", "language"]);
-src/mcp-tools.js:509 | rejectRestrictedData(body, CALL_ARGS_EXEMPT_KEYS);
-src/mcp-tools.js:1785 | rejectRestrictedData({ answers }, []);
+src/mcp-tools.js:215 | maskRestrictedText(
+src/mcp-tools.js:491 | const CALL_ARGS_EXEMPT_KEYS = Object.freeze(["to", "confirmation_code", "language"]);
+src/mcp-tools.js:510 | rejectRestrictedData(body, CALL_ARGS_EXEMPT_KEYS);
+src/mcp-tools.js:1793 | rejectRestrictedData({ answers }, []);
 src/restricted-data.js:542 | export function maskRestrictedText(text)
 src/restricted-data.js:204 | function luhnValid(digits)
 src/restricted-data.js:344 | const GOVERNMENT_ID_LABELS
@@ -803,10 +813,10 @@ src/telephony/call-finish.js:322 | return;
 src/telephony/call-finish.js:296 | if (uebergabeGescheitert(call)) {
 src/routes/api-calls.js:812 | status: "cancelled"
 src/elevenlabs/outbound.js:1458 | billThunk(finishCall, store, callId)
-src/mcp-tools.js:212 | last_transcript_lines: c.transcript
-src/mcp-tools.js:213 | .slice(-LAST_TRANSCRIPT_LINES)
-src/mcp-tools.js:1822 | pickCallStatus(call_id, c, loc.mcp)
-src/mcp-tools.js:202-206 | bewusst offener Befund
+src/mcp-tools.js:213 | last_transcript_lines: c.transcript
+src/mcp-tools.js:214 | .slice(-LAST_TRANSCRIPT_LINES)
+src/mcp-tools.js:1830 | pickCallStatus(call_id, c, loc.mcp)
+src/mcp-tools.js:203-207 | bewusst offener Befund
 src/diagnostic-retention.js:72 | export function keepsTranscriptForDiagnosis(call, privacy)
 src/diagnostic-retention.js:42 | ein OPT-OUT: nur ein ausdruecklicher
 src/diagnostic-retention.js:56 | if (callerDeclined(requested)) return false;
@@ -817,8 +827,8 @@ src/self-service.js:68 | alles andere (allowSummaries
 src/self-service-routes.js:482 | store.updateSettings(tenant, clean)
 src/self-service-routes.js:488 | res.json(settings);
 src/self-service-routes.js:486-490 | rejected=
-src/mcp-tools.js:52 | const LAST_TRANSCRIPT_LINES = 6;
-src/mcp-tools.js:1895 | pickTranscript(call_id, c, loc.mcp)
+src/mcp-tools.js:53 | const LAST_TRANSCRIPT_LINES = 6;
+src/mcp-tools.js:1903 | pickTranscript(call_id, c, loc.mcp)
 src/i18n/prompts/en.js:157 | never claim something is done or booked
 src/db/schema.sql:1014 | CREATE TABLE IF NOT EXISTS audit_log
 src/audit-store.js:1 | Append-only Audit-Log-Schreiber
@@ -879,21 +889,22 @@ src/config.js:2095 | https://api.workos.com
 src/brevo-mail.js:22 | https://api.brevo.com
 src/smtp-mail.js:22 | import nodemailer from "nodemailer";
 src/render-api.js:3 | der Server spricht nie mit Render
-src/mcp-tools.js:1932 | "cancel_call"
-src/mcp-tools.js:2012 | "check_inbox"
+src/mcp-tools.js:1940 | "cancel_call"
+src/mcp-tools.js:2020 | "check_inbox"
 src/self-service-routes.js:467 | router.post("/api/self-service/settings", webAuthMw
 src/self-service-routes.js:501 | router.post("/api/self-service/private-number", webAuthMw
 src/store/defaults.js:610 | allowSummaries: true
 src/self-service-routes.js:628 | router.delete("/api/self-service/newsletter-recipients"
 src/routes/api-read.js:117-119 | Loeschung (Art. 17) hat KEINEN Endpunkt
 src/routes/api-read.js:119 | router.get("/api/tenant-data/export", internalOnly
-src/mcp-tools.js:1351 | Only the context this call needs
-src/mcp-tools.js:1392 | Not applied on every call path.
-src/mcp-tools.js:1430 | Optional structured BACKGROUND for the agent
-src/mcp-tools.js:940 | Use it only for calls the user asks for on their own behalf
-src/mcp-tools.js:912 | Not for telemarketing, unsolicited advertising or political campaign calls.
-src/mcp-server-info.js:112 | Place calls only when the user asks for them on their own behalf
-src/mcp-tools.js:1371 | decide_freely: z
+src/mcp-tools.js:1355 | Only the context this call needs
+src/mcp-tools.js:1396 | Not applied on every call path.
+src/mcp-tools.js:1438 | Optional structured BACKGROUND for the agent
+src/mcp-tools.js:944 | For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only
+src/mcp-tools.js:914 | Not for telemarketing, unsolicited advertising or political campaign calls.
+src/mcp-server-info.js:81-85 | export const CALL_PURPOSE_RULE
+src/mcp-tools.js:1414-1434 | open_questions: OPEN_QUESTIONS_FIELD
+src/mcp-tools.js:1375 | decide_freely: z
 src/research/sanitize.js:2 | wir sehen die Query nicht, bevor sie rausgeht
 src/precall-briefing.js:278 | settings.allowResearch === true
 src/research/registry.js:26 | PRECALL_PROVIDER = RESEARCH_PROVIDER.ANTHROPIC_WEB_SEARCH
@@ -920,24 +931,24 @@ src/web-auth.js:461-462 | firstName: user.first_name
 src/web-auth.js:205 | await applyTenantIdentity(tenantId, { firstName, lastName })
 src/routes/api-onboard.js:95-99 | Freitext
 src/store/state-ops.js:2216 | setKycLevel(s, tenantId, KYC_LEVEL.ID_VERIFIED);
-src/mcp-tools.js:711-720 | function pickAgentStatus(s, texts)
-src/mcp-tools.js:713 | number: s.agent.number ?? null
-src/mcp-tools.js:714 | owner: s.agent.owner ?? null
-src/mcp-tools.js:715 | calls: s.usage.calls
-src/mcp-tools.js:718 | planUsagePercent: s.usage.planUsagePercent ?? null
-src/mcp-tools.js:719 | permissions: permissionsSummary(s.settings, texts.permissionLabels)
-src/mcp-tools.js:737 | function pickMyNumber(s)
-src/mcp-tools.js:738 | return { number: s.agent.number ?? null };
-src/mcp-tools.js:747 | function pickCall(c, formatDate)
-src/mcp-tools.js:751 | counterparty: (c.direction === "outbound" ? c.to : c.from) ?? null
-src/mcp-tools.js:207 | function pickCallStatus(callId, c, texts)
-src/mcp-tools.js:249 | export function pickTranscript(callId, c, texts = null)
-src/mcp-tools.js:322 | function awaitEventView({ callId, event, finished, texts })
-src/mcp-tools.js:330 | questions: Array.isArray(event.questions) ? event.questions.map(maskRestrictedText) : []
-src/mcp-tools.js:1688 | const data = {
-src/mcp-tools.js:1787 | /consult/answer
-src/mcp-tools.js:1797 | structuredContent: { accepted: true, merged_facts: mergedFacts }
-src/mcp-tools.js:836 | ${maskRestrictedText(item.text)}
+src/mcp-tools.js:712-721 | function pickAgentStatus(s, texts)
+src/mcp-tools.js:714 | number: s.agent.number ?? null
+src/mcp-tools.js:715 | owner: s.agent.owner ?? null
+src/mcp-tools.js:716 | calls: s.usage.calls
+src/mcp-tools.js:719 | planUsagePercent: s.usage.planUsagePercent ?? null
+src/mcp-tools.js:720 | permissions: permissionsSummary(s.settings, texts.permissionLabels)
+src/mcp-tools.js:738 | function pickMyNumber(s)
+src/mcp-tools.js:739 | return { number: s.agent.number ?? null };
+src/mcp-tools.js:748 | function pickCall(c, formatDate)
+src/mcp-tools.js:752 | counterparty: (c.direction === "outbound" ? c.to : c.from) ?? null
+src/mcp-tools.js:208 | function pickCallStatus(callId, c, texts)
+src/mcp-tools.js:250 | export function pickTranscript(callId, c, texts = null)
+src/mcp-tools.js:323 | function awaitEventView({ callId, event, finished, texts })
+src/mcp-tools.js:331 | questions: Array.isArray(event.questions) ? event.questions.map(maskRestrictedText) : []
+src/mcp-tools.js:1696 | const data = {
+src/mcp-tools.js:1795 | /consult/answer
+src/mcp-tools.js:1805 | structuredContent: { accepted: true, merged_facts: mergedFacts }
+src/mcp-tools.js:837 | ${maskRestrictedText(item.text)}
 src/routes/api-calls.js:740 | const { event_id: eventId, answers, status } = req.body
 src/routes/api-calls.js:806-811 | status: "cancelled"
 src/routes/api-read.js:89 | number: activeNumberFor(s, tenantId)
@@ -966,14 +977,14 @@ place_call | Which destinations are allowed is decided by the server through its
 get_call_status | duration and the last transcript lines
 get_call_result | This tool NEVER returns the raw transcript
 place_call | SUMMARISE instead of copying in raw.
-place_call | What the call is about, summarised in 1-3 sentences (not a raw dump of the chat).
+place_call | Only so the agent can state why it calls: 1-3 sentences, not a copy of the chat.
 place_call | Only the context this call needs: what it is about, the names involved, relevant preferences and history, the desired outcome and tone.
 place_call | Optional structured BACKGROUND for the agent: fill a subfield only when this call needs it, without repeating the briefing.
 place_call | Health details only as needed.
 place_call | Not applied on every call path.
 place_call | Not for telemarketing, unsolicited advertising or political campaign calls.
-prepare_call | Use it only for calls the user asks for on their own behalf, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or calling through lists of numbers.
-prepare_call | For contracts, loans, insurance, tenancy, employment or legal matters, set neither decide_freely nor 'accept_best', so the agent commits to nothing there.
+prepare_call | Place calls only when the user asks for them, for themselves or someone they act for, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or mass or automated dialling of many numbers.
+prepare_call | For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only and do not set 'accept_best', so the agent agrees to no terms there.
 place_call | NO secrets, passwords or payment data.
 place_call | NO secrets/passwords/payment data.
 place_call | Starts a real phone call by the AI agent to a phone number, pursuing the given objective, and is NOT reversible once placed; billed per minute to the caller's account.
