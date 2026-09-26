@@ -6662,8 +6662,9 @@ zurueckzunehmen.
 
 **Was:** Die Server-Instructions (`src/mcp-server-info.js`) beginnen jetzt mit einem
 verdichteten Kern-Vorspann statt mit dem bisherigen Bestandstext. Der Kern nennt in den
-ersten 512 Zeichen: die Bestaetigungs-Sequenz (die Hermes-Karte waehlt, das Modell ruft
-`place_call` nie selbst auf und erfindet nie einen Code), die Zweckbindung als Kurzform
+ersten 512 Zeichen: die Bestaetigungs-Sequenz (`prepare_call` zuerst, nur die Hermes-Karte
+waehlt nach der Nutzerbestaetigung, das Modell ruft `place_call` nie selbst auf, fragt den
+Nutzer nie nach einem `confirmation_code` und erfindet keinen), die Zweckbindung als Kurzform
 (aus derselben Tabelle `CALL_PURPOSE_EXCLUSIONS` wie die Kurzfassung in `place_call`) und
 den Geld-Riegel (nicht erneut waehlen bei `"not-placed"`); im Consult-Fall zusaetzlich die
 sofortige Quittung (`answer_consult` mit `status="working"`). Die vollen Bestandssaetze
@@ -6706,3 +6707,36 @@ to Plans & Billing to upgrade or purchase credits.` Kein neuer Messpunkt; der Co
 ist zusaetzlich vom stdio-Lauf des Benches strukturell nicht erreichbar (Consult ist dort
 aus) - benannte Luecke, kein Blocker fuer die Basis-Messung. Der eine echte Lauf bleibt
 Owner-Vorbedingung vor dem Deploy dieser und der T2-16-Phase gemeinsam.
+
+**Fix-Runde (Review-Befund "Plan verlangt `confirmation_code` und `await_call_event` im
+Kern"):** entschieden nach Sicherheit und dem Wortlaut der Primaerquelle
+(https://developers.openai.com/plugins/build/mcp-server: "Use server instructions for guidance
+that applies across tools, such as required tool sequences or shared rate limits. Keep the most
+important details in the first 512 characters. Do not repeat every tool description or try to
+change the model's personality.") - die Quelle nennt keine Pflicht-Woerter, sondern die
+Werkzeug-Sequenz.
+- **Uebernommen:** der Feldname `confirmation_code` steht jetzt im Kern, aber AUSSCHLIESSLICH
+  als Verbot ("never call place_call yourself, never ask the user for or invent a
+  confirmation_code"). Grund: `place_call` beschreibt sich selbst mit "REQUIRES a
+  confirmation_code"; ohne den exakten Feldnamen im Verbot liegt die Rueckfrage an den Nutzer
+  nahe. Der Code steht nur im `_meta` der Karte. Der Satz beginnt jetzt mit "Call prepare_call
+  before every phone call" statt "Before every place_call" - die alte Form setzte einen
+  eigenen `place_call` des Modells voraus, den es nie gibt. Draht-Test: jede Nennung von
+  `confirmation_code` im Gesamttext steht in einem Satzteil mit "never", mit
+  Positiv-Kontrolle (Anleitung zur Selbstbestaetigung bzw. Rueckfrage nach dem Code schlaegt
+  an).
+- **Bewusst NICHT uebernommen:** (a) die fruehe Planfassung "`place_call` mit dem Code aus der
+  Nachricht des Nutzers" - seit der serverseitigen Anruf-Bestaetigung ruft die Karte
+  `place_call` selbst; die Positivform waere eine Anleitung zur Selbstbestaetigung (Safety-
+  Fehler). (b) `await_call_event`/`done` im Basis-Kern - ohne Consult-Freigabe ist das
+  Werkzeug nicht registriert (Bestandspin `test/openai-p4-ergebnisstruktur-instructions.test.js`
+  verbietet die Nennung); den Verfolgungsweg ohne Consult (`get_call_status`) nennt bereits die
+  `place_call`-Beschreibung, die Quelle raet von Wiederholung ab. Im Consult-Kern stehen
+  `await_call_event` bis `event="done"` und `answer_consult` mit `status="working"` weiter.
+- **Laenge:** Kern Basis 386, Consult 506 Zeichen (vorher 378/498), gemessen am Draht auf allen
+  zwoelf Pfaden (HTTP Legacy/OAuth je mit/ohne Consult, OAuth ohne Mandant, stdio mit/ohne
+  Consult-Env, jeweils mit `MCP_UI_ENABLED` aus; dazu Legacy und OAuth je mit/ohne Consult sowie
+  stdio mit `MCP_UI_ENABLED=true`). Werkzeugbeschreibungen und ihre Laengendeckel unveraendert.
+- **Deploy-Vorbedingung gilt auch fuer diese Textaenderung:** derselbe eine `briefing-bench`-
+  Lauf (alt `66d95ae` gegen den Endstand) misst sie mit; kein zusaetzlicher Lauf, keine
+  Freigabe ohne ihn.

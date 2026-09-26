@@ -59,7 +59,9 @@ muss anschlagen und den Vergleich durchfallen lassen (Exit 2). Das haelt
    `snapshot --repo . --out /tmp/bb-neu.json`. `--repo .` misst den ENDSTAND - inklusive des
    Kern-Vorspanns der Server-Instructions (Wichtigstes in den ersten 512 Zeichen), sofern diese
    Phase bereits gemergt ist. Der eine echte Lauf erfolgt deshalb erst NACH dem Merge dieser
-   Phase, nicht vorher.
+   Phase, nicht vorher. Das gilt auch fuer den nachgeschaerften ersten Kern-Satz
+   (`prepare_call` zuerst, nur die Karte waehlt, nie nach einem `confirmation_code` fragen oder
+   einen erfinden): er steht im Basis-Text und wird von demselben Lauf mitgemessen.
 3. Je Stand `NODE_ENV=test ANTHROPIC_API_KEY=... node scripts/briefing-bench/lauf.mjs run --modus anthropic --modell <modell-id> --laeufe 5 --tools <schnappschuss> --out <bericht>`,
    gleiches Modell, gleiche Laeufe, beide Male mit DIESEM `lauf.mjs` (gleiche Szenarien und
    Metriken - nur der Schnappschuss unterscheidet die Staende). Der Kindprozess laeuft ueber

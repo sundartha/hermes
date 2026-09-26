@@ -393,11 +393,14 @@ These are usage rules for the model. The server does not check the purpose of a 
 not block a mandate by subject area.
 
 The server instructions open with a condensed core, so a host that only reads the first 512
-characters still sees the essentials: confirmation happens in the Hermes card (the model never
-calls `place_call` itself and never invents a confirmation code), the same purpose exclusions as
-above in short form, and not to retry a call whose failure reason starts with `not-placed`; in
-consult mode the core also states the immediate acknowledgement (`answer_consult` with
-`status="working"`). The full sentences quoted above follow, unchanged, right after this core.
+characters still sees the essentials: `prepare_call` comes first and only the Hermes card places
+the call after the user confirms (the model never calls `place_call` itself and never asks the
+user for or invents a `confirmation_code` - the code is returned only in result metadata meant
+for the card), the same purpose exclusions as above in short form, and not to retry a call whose
+failure reason starts with `not-placed`; in consult mode the core also states the follow-up loop
+(`await_call_event` until `event="done"`) and the immediate acknowledgement (`answer_consult`
+with `status="working"`). The full sentences quoted above follow, unchanged, right after this
+core.
 
 ## Table B - tool count and exact name set per configuration
 
