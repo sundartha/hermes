@@ -102,6 +102,16 @@ export const MCP_BASE_INSTRUCTIONS =
   "for that call_id - it works for a failed call, not only a completed one - and tell the " +
   "user what failed, using its result_summary text as it is. " +
   "Never invent facts about the principal or the call: if you do not know something, say so. " +
+  // Zweckbindung: eine NUTZUNGSREGEL an das Modell, keine Pruefung - der Server prueft den
+  // Zweck eines Anrufs nicht, der Satz traegt deshalb kein Durchsetzungs-Verb. Steht im
+  // Basis-Block, damit er ueber die Komposition MCP_CONSULT_INSTRUCTIONS auch im
+  // Consult-Fall gilt. Bewusst ENG: erst die Positivliste (Termin, Verschiebung, Anfrage,
+  // Reklamation), ausgeschlossen nur Unaufgefordertes und Massenanwahl - eine breite Formel
+  // ("keine Werbung") liesse das Modell legitime Anrufe verweigern. Mit dem
+  // Zwecksatz in PREPARE_CALL_DESCRIPTION (src/mcp-tools.js) inhaltsgleich halten.
+  "Place calls only when the user asks for them on their own behalf, such as booking, " +
+  "rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising " +
+  "or sales calls, political campaigning, or calling through lists of numbers. " +
   // T2-13 (N-10): die Bestaetigungs-Sequenz vor jedem place_call - ein Satz, damit das
   // Modell nicht rein aus der Tool-Beschreibung raet, wann prepare_call an der Reihe ist.
   // KORRIGIERT (Safety-Review T2-13): "reveals a confirmation_code" liess offen, ob das

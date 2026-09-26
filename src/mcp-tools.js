@@ -901,8 +901,15 @@ const OPEN_QUESTIONS_FIELD = z
 // Anruf deshalb nicht mehr selbst auf, sondern wartet auf die Chat-Nachricht der Karte mit
 // der call_id (s. PREPARE_CALL_DESCRIPTION, MCP_BASE_INSTRUCTIONS). Emphase-Pin unveraendert
 // (["REQUIRES","FIRST","NOT","NOT","NOT","ALWAYS"]).
+// Zweckbindung (Kurzfassung): der letzte Satz ist eine NUTZUNGSREGEL an das Modell, keine
+// Pruefung - der Server prueft den Zweck eines Anrufs nicht, der Satz darf deshalb kein
+// Durchsetzungs-Verb tragen. Die volle, eng gefasste Regel (mit Positivliste, damit das
+// Modell Termin-, Rueckfrage- und Reklamationsanrufe NICHT verweigert) steht an
+// PREPARE_CALL_DESCRIPTION und in MCP_BASE_INSTRUCTIONS; hier nur die Kurzfassung, weil
+// der Zeichen-Deckel der place_call-Texte (test/gq-b1-briefing-openness.test.js) knapp
+// ist. Klein geschrieben: der Emphase-Pin oben bleibt unveraendert.
 const PLACE_CALL_DESCRIPTION =
-  "REQUIRES a confirmation_code that only the Hermes card can supply - call prepare_call FIRST with the same arguments so the user can confirm there; once they do, the card places the call itself and reports the call_id back in a chat message, so you never call this tool for that call and never guess or invent its code. Without a code from the card the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective, and is NOT reversible once placed; billed per minute to the caller's account. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits). A live-updating card is NOT guaranteed on every host - ALWAYS track the call via the call_id from that chat message, using get_call_status until it reports a final status.";
+  "REQUIRES a confirmation_code that only the Hermes card can supply - call prepare_call FIRST with the same arguments so the user can confirm there; once they do, the card places the call itself and reports the call_id back in a chat message, so you never call this tool for that call and never guess or invent its code. Without a code from the card the call is NOT placed. Starts a real phone call by the AI agent to a phone number, pursuing the given objective, and is NOT reversible once placed; billed per minute to the caller's account. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits). A live-updating card is NOT guaranteed on every host - ALWAYS track the call via the call_id from that chat message, using get_call_status until it reports a final status. Not for telemarketing, unsolicited advertising or political campaign calls.";
 
 // T2-13 (N-10): Beschreibung von prepare_call - reine Vorschau, KEIN Anruf, KEINE Kosten.
 // Nennt ausdruecklich, dass der Code nur auf einem Host mit Kartenfaehigkeit ankommt (s.
@@ -918,8 +925,19 @@ const PLACE_CALL_DESCRIPTION =
 // Tatsaechlich ruft die Karte place_call fuer einen bestaetigten Anruf komplett selbst auf -
 // das Modell ruft es fuer diesen Anruf nie, unabhaengig davon, ob/wann ein Code eintrifft.
 // Emphase-Pin unveraendert (["WITHOUT","EVERY"]).
+// Zweckbindung + sensible Bereiche: prepare_call ist seit der Karten-Bestaetigung der
+// Einstieg des Modells in jeden Anruf, deshalb stehen die beiden letzten Saetze HIER.
+// Beide sind NUTZUNGSREGELN an das Modell, keine Pruefung: der Server prueft weder den
+// Zweck eines Anrufs noch den Bereich eines Mandats - kein Satz darf deshalb ein
+// Durchsetzungs-Verb tragen (Test openai-t2-16-place-call-texte). Die Zweckbindung ist
+// bewusst ENG: die Positivliste (Termin, Verschiebung, Anfrage, Reklamation) steht vor dem
+// Ausschluss, und ausgeschlossen ist nur das Unaufgeforderte bzw. die Massenanwahl - eine
+// breite Formel ("keine Werbung") liesse das Modell legitime Anrufe verweigern. Der zweite
+// Satz nennt BEIDE Mandats-Wege, ueber die der Agent etwas zusagen kann: decide_freely und
+// den Ausgang 'accept_best' (der auf dem Budget-Weg auch ohne decide_freely zusagt, s.
+// mandateSection in src/claude.js). Klein geschrieben - der Emphase-Pin bleibt.
 const PREPARE_CALL_DESCRIPTION =
-  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is switched on for this server, the host can show a Hermes card where the user reviews and confirms the call; if they confirm, the card places the call itself with the confirmation code and reports the call_id back in a chat message - you never call place_call for that call, and never guess or invent its code. The confirmation covers every argument, briefing and context included: if you change any of them, call prepare_call again and let the user confirm again. If this host does not show the Hermes card, or card confirmation is switched off for this server, no call can be placed from here - tell the user so honestly and do not ask them for a code they cannot see. Call prepare_call again EVERY time the arguments change or a previous confirmation expired.";
+  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is switched on for this server, the host can show a Hermes card where the user reviews and confirms the call; if they confirm, the card places the call itself with the confirmation code and reports the call_id back in a chat message - you never call place_call for that call, and never guess or invent its code. The confirmation covers every argument, briefing and context included: if you change any of them, call prepare_call again and let the user confirm again. If this host does not show the Hermes card, or card confirmation is switched off for this server, no call can be placed from here - tell the user so honestly and do not ask them for a code they cannot see. Call prepare_call again EVERY time the arguments change or a previous confirmation expired. Use it only for calls the user asks for on their own behalf, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or calling through lists of numbers. For contracts, loans, insurance, tenancy, employment or legal matters, set neither decide_freely nor 'accept_best', so the agent commits to nothing there.";
 
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
@@ -1320,11 +1338,17 @@ export const PLACE_CALL_REQUEST_SCHEMA = {
   // answer") bleibt woertlich stehen, sie ist weiterhin wahr. Der Text nennt bewusst
   // KEIN Werkzeug: das Feld ist immer registriert, waehrend die Rueckfrage am Kanal
   // haengt - die Anweisung dazu steht am kanalabhaengigen PLACE_CALL_CONSULT_LOOP.
+  // Minimierung + Neutralitaet (OpenAI "fair play" und "no broad contextual fields"): der
+  // Text fordert nur noch den Kontext DIESES Anrufs an, nicht "den Chat bisher", nennt
+  // keine fremden Werkzeugklassen mehr (vorher "calendar, mail, files, chat") und keinen
+  // Markennamen eines Chat-Modells (vorher "not as Claude/Gemini" - jetzt "not as you").
+  // Gesundheitsangaben sind fuer Arzttermine noetig und deshalb nicht verboten, sondern auf
+  // das Noetige begrenzt (Restricted-Data-Pruefung lehnt sie bewusst nicht ab).
   briefing: z
     .string()
     .optional()
     .describe(
-      "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. Write only what you KNOW: never script an answer for a detail you are missing. For each gap, decide: could you answer it yourself during the call (calendar, mail, files, chat)? Then leave the gap open and declare that in one line. Can only the principal know it? Then write the honest line that they will get back on it. Can anyone look it up? Then write nothing. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
+      "Only the context this call needs: what it is about, the names involved, relevant preferences and history, the desired outcome and tone. SUMMARISE instead of copying in raw. NO secrets, passwords or payment data. Health details only as needed. Write only what you KNOW: never script an answer for a detail you are missing. For each gap, decide: could you answer it yourself during the call from your own tools and context? Then leave the gap open and declare that in one line. Can only the principal know it? Then write the honest line that they will get back on it. Can anyone look it up? Then write nothing. The agent speaks as the principal's personal AI assistant, not as you; phrase the context from their perspective.",
     ),
   constraints: z
     .string()
@@ -1356,17 +1380,27 @@ export const PLACE_CALL_REQUEST_SCHEMA = {
         .describe(
           "Preference order the agent works through on its own if the first choice does not work, e.g. 'Thursday morning first, otherwise Friday, otherwise next week'. Without this field it will not try any alternative on its own.",
         ),
+      // Ehrlicher Zusatz (letzter Satz): der Sprach-Agenten-Weg hat fuer diese Enum-Achse
+      // keinen Platz (src/elevenlabs/outbound.js, mandateText) - nur der Budget-Weg wendet
+      // sie an (src/claude.js, mandateSection). Die Beschreibung darf kein Verhalten
+      // versprechen, das nicht jeder Anrufweg liefert; das Verhalten selbst bleibt
+      // unveraendert. Klein geschrieben: der Emphase-Pin ["OUTSIDE","ONLY"] bleibt.
       on_out_of_scope: z
         .enum(MANDATE_OUT_OF_SCOPE_VALUES)
         .optional()
         .describe(
-          "What the agent does when an offer lies OUTSIDE decide_freely: 'take_message' (default) - record the offer with all details, pass it on and promise that the user will get back; 'decline' - politely refuse, without a counter-offer; 'accept_best' - accept and record the best offer made anyway. Set 'accept_best' ONLY when the user explicitly says that any option suits them.",
+          "What the agent does when an offer lies OUTSIDE decide_freely: 'take_message' (default) - record the offer with all details, pass it on and promise that the user will get back; 'decline' - politely refuse, without a counter-offer; 'accept_best' - accept and record the best offer made anyway. Set 'accept_best' ONLY when the user explicitly says that any option suits them. Not applied on every call path.",
         ),
     })
     .optional()
     .describe(
       "Optional advance MANDATE: the frame within which the agent may decide ITSELF in the conversation, instead of returning every question as a message. Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance. Ask the user about their frame when an appointment or price question is to be expected in the call; without a mandate the agent can only answer 'When suits you?' with 'I will pass that on'. In a conflict with constraints, constraints ALWAYS win.",
     ),
+  // Minimierung: context ist kein zweiter Sammeltrichter mehr ("ADDITIONAL to the briefing"
+  // lud dazu ein, neben dem Briefing noch mehr abzulegen) - ein Unterfeld nur, wenn der
+  // Anruf es braucht, ohne das Briefing zu wiederholen. Kein Markenname eines Chat-Modells
+  // ("NEVER as you" statt "NEVER as Claude/Gemini"). Gesundheitsangaben begrenzt, nicht
+  // verboten (Arzttermine). Die Unterfelder bleiben unveraendert.
   context: z
     .object({
       summary: z
@@ -1393,7 +1427,7 @@ export const PLACE_CALL_REQUEST_SCHEMA = {
     })
     .optional()
     .describe(
-      "Optional structured BACKGROUND for the conversation (only for the agent's information, ADDITIONAL to the briefing). The agent speaks as the personal AI assistant of the principal, NEVER as Claude/Gemini; only pass on what the task requires. NO secrets.",
+      "Optional structured BACKGROUND for the agent: fill a subfield only when this call needs it, without repeating the briefing. The agent speaks as the principal's personal AI assistant, NEVER as you. NO secrets; health details only as needed.",
     ),
   // LANG-15 AUFGEHOBEN (Owner-Entscheidung F-2, 2026-09-06, PLAN-ANRUFDEFEKTE.md
   // Abschnitt 6): das Feld gibt es wieder - und es WIRKT. Bis dahin entschied allein

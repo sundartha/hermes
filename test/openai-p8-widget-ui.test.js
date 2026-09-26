@@ -170,10 +170,16 @@ const EXPECTED_RESOURCE_META = {
 // unveraendert. Beide Pfade weiterhin byte-identisch. Actual-Wert aus dem roten Diff
 // uebernommen, nicht geschaetzt. Voriger Sollwert (beide Pfade):
 // b12f140a2ff461cf0b24d24d0135e285889834324d7038e757028aa547ce54f4.
+// Neu gepinnt (Werkzeugtexte T2-16): prepare_call/place_call-Beschreibungen tragen die
+// Zweckbindung (Nutzungsregel, keine Pruefung) und den Hinweis zu sensiblen Mandaten,
+// briefing/context sind minimiert und markenneutral, on_out_of_scope nennt ehrlich, dass es
+// nicht auf jedem Anrufweg wirkt. Widgets unveraendert. Beide Pfade weiterhin byte-identisch.
+// Actual-Wert aus dem roten Diff uebernommen, nicht geschaetzt. Voriger Sollwert (beide
+// Pfade): 84cbfd1c490a3bcf03966dced65016655181667f39387f6f3772a3ce81bf5cb3.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "84cbfd1c490a3bcf03966dced65016655181667f39387f6f3772a3ce81bf5cb3";
+  "3c641a85cb7a6882aa284ec39f48b23c132037780adf4bdd31ccbf51ffd4edb1";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "84cbfd1c490a3bcf03966dced65016655181667f39387f6f3772a3ce81bf5cb3";
+  "3c641a85cb7a6882aa284ec39f48b23c132037780adf4bdd31ccbf51ffd4edb1";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).
