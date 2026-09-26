@@ -6648,3 +6648,15 @@ einem Hinweis, KEINE Einwilligung und KEINE Zusicherung des Nutzers.
 Nutzer vor dem Waehlen bestaetigt (Einwilligung in die Verarbeitung besonderer Datenkategorien,
 Erklaerung zum Anrufzweck), entscheidet der Owner. Bis dahin enthaelt die Karte nur Datenhinweis
 und Zweckhinweis.
+
+**Deploy-Vorbedingung (offen): Messung der Modellwirkung der place_call-/prepare_call-Texte.**
+Der echte Lauf von `scripts/briefing-bench` (alt = master `66d95ae` gegen den neuen Stand,
+5 Laeufe je Szenario, Modell `claude-sonnet-5`, Schluessel nur als Umgebungsvariable, ohne
+`.env`) scheiterte am 2026-09-26 in beiden Staenden beim ersten Aufruf mit
+`Anbieterfehler 400: Your credit balance is too low to access the Anthropic API. Please go to
+Plans & Billing to upgrade or purchase credits.` Es gibt damit KEINEN Messpunkt, weder alt
+noch neu. Die Texte bleiben; vor dem Deploy ist der Lauf nach `scripts/briefing-bench/README.md`
+nachzuholen (Kriterien: Selbstnennung 0, erfundene Fakten 0, Luecken-Klasse neu >= alt,
+Verweigerung legitimer Anrufe neu <= alt, Abweisung der Missbrauchs-Anrufe neu >= alt).
+Verfehlt er ein Kriterium, sind die Werkzeugtexte nach "Rueckbau" im selben README
+zurueckzunehmen.

@@ -1,6 +1,6 @@
 # Hermes: Abgleich mit den OpenAI Usage Policies und Plugin Guidelines, Faktenblatt Datenschutz
 
-Stand: 2026-09-24. Sprache: nur Deutsch (eine englische Fassung gibt es bewusst nicht; wer
+Stand: 2026-09-26. Sprache: nur Deutsch (eine englische Fassung gibt es bewusst nicht; wer
 spaeter daraus zitiert, darf keine Einschraenkung und keinen Vorbehalt dieses Textes weglassen).
 
 Zweck: jede einschlaegige Klausel der OpenAI Usage Policies und der OpenAI Plugin Guidelines
@@ -46,7 +46,8 @@ nie gemessen.
   Abschnittstitel wurde Zeichen fuer Zeichen gegen den Seitentext geprueft (mit
   Gegenprobe: ein erfundener Satz wird als fehlend erkannt).
 - Werkzeugtexte: echter `tools/list` ueber HTTP `/mcp` im Legacy-Token-Modus mit Consult
-  (11 Werkzeuge) und ueber stdio (9 Werkzeuge, ohne die beiden Consult-Werkzeuge).
+  (12 Werkzeuge) und ueber stdio (10 Werkzeuge, ohne die beiden Consult-Werkzeuge), beide
+  Zahlen am Draht gezaehlt.
   Dass Werkzeugmenge und Texte im OAuth-Modus dieselben sind, belegt nicht dieses Dokument,
   sondern `docs/OPENAI-TOOL-INVENTORY.md`.
 - Die Zitate sind Zeichen fuer Zeichen aus dem Abruf kopiert (typografische Apostrophe und
@@ -90,21 +91,23 @@ nie gemessen.
   jede Klausel neben das, was der Code tut, und benennt, was er nicht tut. Serverseitig
   durchgesetzt ist nur, was unten mit Code-Stelle als Mechanismus steht; alles andere ist
   Luecke (Teil C).
+- Abgleich und Zusicherung sind getrennt: dieses Dokument ist der Abgleich. Die Zusicherung,
+  die Usage Policies einzuhalten, gibt der Betreiber bei der Einreichung selbst ab, in Kenntnis
+  von Teil C; dieses Dokument gibt sie nicht und ersetzt sie nicht.
 - Laufende Einhaltung: der Test zu diesem Dokument schlaegt fehl, wenn eine genannte Code-Stelle
   oder ein zitierter Werkzeugtext sich aendert. Aenderungen an den OpenAI-Seiten selbst erkennt
   er NICHT; die muessen vor jeder Einreichung von Hand gegengelesen werden (siehe "Quellen").
 - Status: `Luecke`. Die Pflicht lautet "Do not ... facilitate": sie ist nicht teilweise
   erfuellbar, solange eine verbotene Nutzung ungehindert moeglich ist. Genau das ist beim
   Code-Stand der Fall - folgt das Modell der Zweckbindung in den Werkzeugtexten nicht und
-  bestaetigt ein Mensch die Karte entgegen seiner Zusage, passiert ein einzelner Werbe- oder
-  Wahlkampfanruf alle Gates (Luecke 1),
+  bestaetigt ein Mensch die Karte trotz des Zweckhinweises darauf, passiert ein einzelner
+  Werbe- oder Wahlkampfanruf alle Gates (Luecke 1),
   und weitere Luecken aus Teil C bestehen. "ongoing compliance" heisst ausserdem, dass dieses
   Dokument nach jeder Aenderung an Werkzeugtexten, Prompts oder Gates nachgezogen werden muss.
-- Ergebnis: Hermes haelt die Usage Policies beim Code-Stand NICHT vollstaendig ein. Dieses
-  Dokument traegt keine Zusicherung der Einhaltung gegenueber OpenAI. Die Pflicht gilt erst als
-  erfuellt, wenn jede Luecke aus Teil C geschlossen ist oder der Betreiber sie ausdruecklich und
-  mit Begruendung als nicht einschlaegig festgehalten hat; bis dahin bleibt diese Zeile
-  `Luecke`, auch wenn einzelne Zeilen darunter `erfuellt` werden.
+- Ergebnis des Abgleichs: der Code schliesst nicht jede verbotene Nutzung aus. Jede Luecke in
+  Teil C hat deshalb ein benanntes Ziel: eine Entscheidung des Betreibers, "bewusst nicht
+  umgesetzt" mit Grund, oder eine geplante technische Aenderung. Diese Zeile bleibt `Luecke`,
+  solange Luecke 1 besteht, auch wenn einzelne Zeilen darunter `erfuellt` werden.
 
 ### Telemarketing, Spam, Betrug
 
@@ -138,36 +141,40 @@ nie gemessen.
   - Zweckbindung als Nutzungsregel an das Modell: die Beschreibung von `prepare_call`, ueber
     das das Modell jeden Anruf zuerst vorbereitet (`src/mcp-tools.js:944`), und die
     Server-Instructions tragen denselben Satz woertlich aus einer gemeinsamen Quelle
-    (`src/mcp-server-info.js:103-109`). Er beschraenkt Anrufe auf Anliegen, um die der Nutzer fuer
+    (`src/mcp-server-info.js:106-113`). Er beschraenkt Anrufe auf Anliegen, um die der Nutzer fuer
     sich oder fuer jemanden bittet, fuer den er handelt, und schliesst Telemarketing,
     unaufgeforderte Werbe- und Verkaufsanrufe, Wahlkampf und die massenhafte oder automatische
     Anwahl vieler Nummern aus. Die Beschreibung von `place_call` traegt nur eine Kurzfassung
-    (`src/mcp-tools.js:914`, `src/mcp-server-info.js:114`), ohne Verkaufsanrufe, ohne
+    (`src/mcp-tools.js:914`, `src/mcp-server-info.js:117`), ohne Verkaufsanrufe, ohne
     Massenanwahl und ohne den Auftrag fuer Dritte. Beide Fassungen entstehen aus derselben Liste
     der ausgeschlossenen Zwecke (`src/mcp-server-info.js:80`); dort ist fuer jeden Zweck
     festgelegt, ob er in der Kurzfassung steht.
     Werkzeugtext (prepare_call): "Place calls only when the user asks for them, for themselves or someone they act for, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or mass or automated dialling of many numbers."
     Werkzeugtext (place_call): "Not for telemarketing, unsolicited advertising or political campaign calls."
-  - Zweck-Zusage des Menschen auf der Karte: der Hinweis direkt ueber dem Knopf "Anruf
-    bestaetigen" (`src/i18n/mcp-texts.js:347`) endet in jeder Sprache mit der Zusage, dass der
-    Anruf kein Telemarketing und kein unaufgeforderter Werbe-, Verkaufs-, Wahlkampf- oder
-    Massenanruf ist; mit dem Klick gibt der Mensch diese Zusage ab. Ohne diesen Hinweis bietet
-    die Karte keinen Klick an, und ohne Klick erhaelt `place_call` keinen Bestaetigungscode
-    (siehe "Bestaetigung je Anruf"). Das ist eine Erklaerung des Nutzers, keine Pruefung: der
-    Server kann nicht feststellen, ob sie zutrifft.
+  - Zweckhinweis auf der Karte: der Hinweis direkt ueber dem Knopf "Anruf bestaetigen"
+    (`src/i18n/mcp-texts.js:346`) endet in jeder Sprache mit der Sachaussage, dass Hermes
+    nicht fuer Telemarketing oder unaufgeforderte Werbe-, Verkaufs-, Wahlkampf- oder
+    Massenanrufe gedacht ist. Ohne diesen Hinweis bietet die Karte keinen Klick an, und ohne
+    Klick erhaelt `place_call` keinen Bestaetigungscode (siehe "Bestaetigung je Anruf"). Der
+    Hinweis ist eine Information an den Nutzer, keine Erklaerung, die er abgibt, und keine
+    Pruefung.
 - Was fehlt: eine serverseitige Pruefung des Zwecks. Die Zweckbindung ist eine Anweisung an
-  das Modell im Chat, keine Pruefung: der Server liest den Zweck eines Anrufs nicht und lehnt
-  keinen Anruf wegen seines Inhalts ab. Beleg: `grep -ciE 'telemarket|advertis|cold.?call|sales|political|campaign|marketing'`
-  findet diese Begriffe nur in `src/mcp-server-info.js`, wo die Anweisungstexte fuer
-  `prepare_call`, `place_call` und die Server-Instructions entstehen, und liefert 0 in
-  `src/telephony/outbound-gates.js`, `src/routes/api-calls.js` und `src/routes/_validation.js`,
-  also in der Gate-Kette und der Eingabepruefung des Anrufpfads (Gegenprobe, dass derselbe
-  Aufruf Treffer findet: `grep -ciE 'safety gates' src/mcp-tools.js` liefert Treffer). Folgt
-  ein Modell der Anweisung nicht, passiert ein einzelner Werbeanruf alle Gates; die
-  Mengen-Gates und die Bestaetigung je Anruf bremsen Masse, aber sie verhindern keinen
-  einzelnen Werbeanruf, den ein Mensch entgegen seiner Zusage auf der Karte bestaetigt. Eine Stichwortpruefung des Anliegens ist
-  bewusst nicht gebaut: sie liesse sich durch Umformulieren umgehen und traefe zugleich
-  zulaessige Anrufe wie eine Reklamation oder die Frage nach einem Angebot.
+  das Modell im Chat und ein Hinweis an den Menschen auf der Karte, keine Pruefung: der Server
+  liest den Zweck eines Anrufs nicht. Serverseitig abgelehnt wird ein Anruf wegen seines
+  Inhalts nur, wenn die Argumente eingeschraenkte Daten enthalten (Zahlungskartennummern,
+  beschriftete amtliche Kennnummern, Zugangsdaten; `src/mcp-tools.js:510`, siehe
+  "Eingeschraenkte und besonders schutzwuerdige Daten") - nie wegen seines Zwecks. Beleg:
+  `grep -ciE 'telemarket|advertis|cold.?call|sales|political|campaign|marketing' <datei>`
+  liefert je Datei 0 in `src/telephony/outbound-gates.js` (Gate-Kette),
+  `src/routes/api-calls.js` (Anrufroute), `src/routes/_validation.js` (Eingabepruefung) und
+  `src/call-confirmation.js` (Bestaetigungscode). Gegenprobe mit demselben Muster:
+  in `src/mcp-server-info.js`, wo die Anweisungstexte entstehen, liefert es Treffer; und
+  `grep -ciE 'gate' <datei>` liefert in jeder der vier Dateien Treffer. Folgt ein Modell der
+  Anweisung nicht, passiert ein einzelner Werbeanruf alle Gates; die Mengen-Gates und die
+  Bestaetigung je Anruf bremsen Masse, aber sie verhindern keinen einzelnen Werbeanruf, den ein
+  Mensch trotz des Zweckhinweises auf der Karte bestaetigt. Eine Stichwortpruefung des
+  Anliegens ist bewusst nicht gebaut: sie liesse sich durch Umformulieren umgehen und traefe
+  zugleich zulaessige Anrufe wie eine Reklamation oder die Frage nach einem Angebot.
 - Status: `teilweise`. Luecke 1 in Teil C.
 
 ### Drohung, Einschuechterung, Belaestigung
@@ -343,9 +350,9 @@ nie gemessen.
 - Mechanismus: die Mengen-Gates (Stundenlimit, Ziel-Grenze, Kostendecke) und die Zweckbindung
   in der Beschreibung von `prepare_call` und in den Server-Instructions, die Wahlkampf und die
   massenhafte oder automatische Anwahl vieler Nummern ausschliesst (Wortlaut und Beleg siehe "Telemarketing"),
-  dazu die Zusage des Menschen auf der Karte, dass der Anruf kein Wahlkampf- oder Massenanruf
-  ist. Die Zweckbindung ist eine Anweisung an das Modell, die Zusage eine Erklaerung des
-  Nutzers; der Server prueft den Zweck nicht.
+  dazu der Zweckhinweis auf der Karte, dass Hermes nicht fuer Wahlkampf- oder Massenanrufe
+  gedacht ist. Die Zweckbindung ist eine Anweisung an das Modell, der Zweckhinweis eine
+  Information an den Nutzer; der Server prueft den Zweck nicht.
 - Status: `teilweise`. Luecke 1 in Teil C.
 
 ### Minderjaehrige
@@ -437,16 +444,17 @@ nie gemessen.
   Grenze ist, dass eine Nummer mit gueltiger Pruefsumme ohne passendes Kontextwort, oder als
   Referenznummer in einem Kartenmarken-Bereich, weiterhin als Karte abgelehnt und maskiert
   wird, waehrend ein Schluessel ohne bekanntes Praefix und ohne Beschriftung unerkannt bleibt.
-- Mechanismus, Hinweis und Einwilligung vor der Erhebung: die Karte zu `prepare_call` zeigt
+- Mechanismus, Hinweis vor der Erhebung: die Karte zu `prepare_call` zeigt
   direkt ueber dem Knopf "Anruf bestaetigen" einen Hinweis in der Sprache des Kontos
-  (`src/i18n/mcp-texts.js:347`): die Angaben der Karte gehen an den KI-Agenten und die
+  (`src/i18n/mcp-texts.js:346`): die Angaben der Karte gehen an den KI-Agenten und die
   Anbieter, ueber die der Anruf laeuft, koennen der angerufenen Person gesagt werden und werden
   mit dem Anruf gespeichert; das gilt auch fuer besondere Kategorien, die der Hinweis einzeln
   nennt: Gesundheitsangaben, rassische oder ethnische Herkunft, politische Meinungen,
   religioese oder weltanschauliche Ueberzeugungen, Gewerkschaftszugehoerigkeit, genetische
   oder biometrische Daten, Sexualleben oder sexuelle Orientierung; solche Angaben nur, wenn der
-  Anruf sie wirklich braucht; mit dem Bestaetigen willigt der Nutzer ausdruecklich in diese
-  Verwendung enthaltener Gesundheitsangaben und anderer besonderer Kategorien ein. Der Server liefert den
+  Anruf sie wirklich braucht. Eine Einwilligungs- oder Zusicherungsformel enthaelt der Hinweis
+  nicht: ob und welche Erklaerung der Nutzer vor dem Waehlen bestaetigt, ist Rechtstext und
+  entscheidet der Betreiber (Luecke 3). Der Server liefert den
   Hinweis in den fuer das Modell verborgenen Metadaten der Karte
   (`src/mcp-tools.js:1303`); fehlt er, bietet die Karte keinen Klick an (Funktion
   `confirmCodeUsable` in der Karte). `prepare_call` speichert nichts; gespeichert und
@@ -465,9 +473,10 @@ nie gemessen.
   Werkzeugtext (place_call): "NO secrets/passwords/payment data."
   Werkzeugtext (place_call): "Sensitive details only as needed."
 - Was fehlt: Gesundheitsangaben und die anderen besonderen Kategorien werden weder abgelehnt noch maskiert (bewusst, siehe oben);
-  ihre Begrenzung ist eine Anweisung an das Modell und ein Hinweis an den Nutzer. Ob Hinweis
-  und Einwilligung per Klick rechtlich genuegen, ist Sache des Rechtstextes; ein eigenes
-  Einwilligungsfeld neben dem Knopf gibt es nicht. Die Liste der Restricted Data nennt
+  ihre Begrenzung ist eine Anweisung an das Modell und ein Hinweis an den Nutzer. Eine
+  Einwilligung ("legally adequate consent") holt die Karte nicht ein: der Klick bestaetigt den
+  Anruf nach dem Hinweis, er ist keine Einwilligungserklaerung, und ein Einwilligungsfeld gibt
+  es nicht. Die Liste der Restricted Data nennt
   "Protected health information (PHI)" ohne Ausnahme; Hermes erhebt Gesundheitsangaben fuer
   Arzttermine trotzdem. Keine Beschreibung bittet darum, amtliche Kennnummern wegzulassen.
 - Status: `Luecke`. Teilweise gebaut (Eingabepruefung und Maskierung fuer drei der vier
@@ -680,10 +689,10 @@ ueber die Werkzeug-Antworten an OpenAI/ChatGPT. Die Maskierung der Werkzeug-Antw
 Gesundheitsangaben nicht. Dasselbe gilt fuer die anderen besonderen Kategorien, wenn ein Anruf
 sie beruehrt (etwa ein Anruf bei einer Gemeinde, einer Gewerkschaft oder einer Beratungsstelle).
 Vor der Erhebung zeigt die Bestaetigungskarte einen Hinweis, der alle besonderen Kategorien
-einzeln nennt, sagt, dass die Angaben der Karte an Agent und Anbieter gehen und gespeichert
-werden, und das Bestaetigen zur ausdruecklichen Einwilligung macht (Teil A, "Eingeschraenkte
-und besonders schutzwuerdige Daten"). Dieses Dokument benennt das; die rechtliche Bewertung ist Sache des
-Rechtstextes.
+einzeln nennt und sagt, dass die Angaben der Karte an Agent und Anbieter gehen und gespeichert
+werden (Teil A, "Eingeschraenkte und besonders schutzwuerdige Daten"); eine Einwilligung holt
+sie nicht ein. Dieses Dokument benennt das; die rechtliche Bewertung und eine etwaige
+Einwilligungsformel sind Sache des Rechtstextes.
 
 ### Kontrollen, die der Code dem Nutzer gibt
 
@@ -729,60 +738,67 @@ Rechtstextes.
 
 ## Teil C: Luecken
 
-Jede Luecke traegt ein Ziel. Die Ziel-Werte bedeuten: "planned: ..." - die Arbeit ist
-vorgesehen, aber nicht gebaut; bis sie gebaut ist, gilt die Luecke unveraendert. "open, not yet
-assigned to a work package" - die Luecke ist mit Arbeit an Werkzeugbeschreibung, Prompt oder
-Code zu schliessen, die noch keinem Arbeitspaket zugeordnet ist; sie wartet auf keine
-Entscheidung des Betreibers. "open, no owner decision yet" - die Luecke haengt an einer
-Entscheidung des Betreibers (etwa Rechtstext, Fristen, Einwilligung, Identitaetspruefung), die
-noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
+Jede Luecke traegt ein benanntes Ziel, in einer von drei Formen: "Entscheidung des
+Betreibers: ..." - die Luecke haengt an einer Entscheidung des Betreibers (etwa Rechtstext,
+Fristen, Identitaetspruefung, Umfang der Schnittstelle), die genannt ist, aber noch nicht
+gefallen ist. "bewusst nicht umgesetzt: ..." - die Luecke bleibt beim Code-Stand bestehen, der
+Grund steht dabei. "geplante Aenderung: ..." - die technische Aenderung ist benannt, aber nicht
+gebaut; bis sie gebaut ist, gilt die Luecke unveraendert. Kein Ziel-Wert behauptet eine
+bestehende Durchsetzung.
 
 1. **Keine serverseitige Zweckpruefung**: die Zweckbindung gegen Telemarketing, Werbe- und
    Verkaufsanrufe, Wahlkampf und Massenanwahl steht als Anweisung an das Modell woertlich in der
    Beschreibung von `prepare_call` (`src/mcp-tools.js:944`) und in den Server-Instructions
-   (`src/mcp-server-info.js:103-109`), als Kurzfassung in `place_call` (`src/mcp-tools.js:914`); der
+   (`src/mcp-server-info.js:106-113`), als Kurzfassung in `place_call` (`src/mcp-tools.js:914`); der
    Server prueft den Zweck eines Anrufs nicht. Jeder Anruf braucht die Bestaetigung eines
-   Menschen auf der Karte (`src/call-confirmation.js:63`), deren Hinweis die Zusage enthaelt,
-   dass es kein solcher Anruf ist (`src/i18n/mcp-texts.js:347`); ob die Zusage stimmt,
-   prueft der Server nicht. Serverseitig gebremst wird ausserdem die Masse: Stundenlimit und
-   Ziel-Grenze. Klauseln: "telemarketing", "spam", "political campaigning".
-   Ziel (serverseitige Zweckpruefung): open, no owner decision yet.
+   Menschen auf der Karte (`src/call-confirmation.js:63`), deren Hinweis sagt, dass Hermes
+   nicht fuer solche Anrufe gedacht ist (`src/i18n/mcp-texts.js:346`); was der Mensch damit
+   bestaetigt, prueft der Server nicht. Serverseitig gebremst wird ausserdem die Masse:
+   Stundenlimit und Ziel-Grenze. Klauseln: "telemarketing", "spam", "political campaigning".
+   Ziel: Entscheidung des Betreibers: ob eine serverseitige Zweckpruefung gebaut wird und ob
+   der Nutzer vor dem Waehlen eine Erklaerung zum Zweck bestaetigt (Rechtstext); eine
+   Stichwortpruefung ist bewusst nicht gebaut (Grund siehe "Telemarketing, Spam, Betrug").
 2. **`context` bleibt ein zweites optionales Feld** neben dem `briefing`
    (`src/mcp-tools.js:1455`); die Begrenzung auf den Kontext des Anrufs steht in den
    Beschreibungen, jedes Unterfeld nennt einen engen Zweck (`src/mcp-tools.js:1431-1451`),
    das Schema erzwingt die Begrenzung aber nicht. Klauseln: "broad contextual fields",
    "Collection minimization", "Data boundaries".
-   Ziel (Begrenzung im Schema oder Wegfall von `context`): open, not yet assigned to a work
-   package.
+   Ziel: Entscheidung des Betreibers: Wegfall von `context` oder Begrenzung im Schema - beides
+   aendert die Eingabeschnittstelle von `place_call` und `prepare_call`.
 3. **Gesundheitsangaben und andere besondere Kategorien werden erhoben, nicht abgelehnt und
    nicht maskiert**: die Beschreibungen von `briefing` und `context` begrenzen sensible
    Angaben auf das Noetige (`src/mcp-tools.js:1372`), die Bestaetigungskarte zeigt vor der
-   Erhebung einen Hinweis, der alle besonderen Kategorien nennt, und macht das Bestaetigen zur
-   Einwilligung (`src/mcp-tools.js:1303`); erkannt, abgelehnt oder maskiert werden diese
-   Angaben nicht, und amtliche Kennnummern werden nur mit
-   Beschriftung erkannt. Ob Wortlaut und Form der Einwilligung rechtlich genuegen und ob
-   Gesundheitsangaben fuer Arzttermine trotz der Restricted-Data-Liste zulaessig sind, ist
-   nicht entschieden. Klauseln: "Restricted data", "Regulated Sensitive Data".
-   Ziel (rechtliche Bewertung von Hinweis und Einwilligung): open, no owner decision yet.
+   Erhebung einen Hinweis, der alle besonderen Kategorien nennt (`src/mcp-tools.js:1303`), holt
+   aber keine Einwilligung ein; erkannt, abgelehnt oder maskiert werden diese Angaben nicht, und
+   amtliche Kennnummern werden nur mit Beschriftung erkannt. Klauseln: "Restricted data",
+   "Regulated Sensitive Data".
+   Ziel: Entscheidung des Betreibers: ob und welche Einwilligungsformel der Nutzer vor dem
+   Waehlen bestaetigt, ob der Hinweis rechtlich genuegt und ob Gesundheitsangaben fuer
+   Arzttermine trotz der Restricted-Data-Liste zulaessig sind (Rechtstext).
 4. **`on_out_of_scope` wirkt auf dem Sprach-Agenten-Weg nicht**
    (`src/elevenlabs/outbound.js:615`); die Beschreibung sagt nur, dass die Einstellung nicht
    auf jedem Anrufweg angewendet wird (`src/mcp-tools.js:1413`). Klausel: "Descriptions that
    match behavior".
-   Ziel: open, not yet assigned to a work package.
+   Ziel: bewusst nicht umgesetzt: die Wirkung haengt an der Vorlage des Sprach-Agenten; eine
+   Aenderung dort veraendert das Verhalten in echten Anrufen und wird nur mit eigener Messung
+   an Anrufen umgesetzt, nicht zusammen mit der Werkzeugschnittstelle. Bis dahin sagt die
+   Beschreibung, dass die Einstellung nicht auf jedem Anrufweg wirkt.
 5. **Keine Sperre fuer Mandate in sensiblen Bereichen** (Wohnen, Arbeit, Kredit, Versicherung,
    Recht, Medizin) (`src/mcp-tools.js:1392`); die Beschreibung von `prepare_call` weist das
    Modell nur an, dort den Rahmen auf Terminzeiten zu beschraenken und `accept_best` nicht zu
    setzen (`src/mcp-tools.js:944`). Klausel: "automation of
    high-stakes decisions in sensitive areas without human review".
-   Ziel (serverseitige Sperre): open, no owner decision yet.
+   Ziel: Entscheidung des Betreibers: ob eine serverseitige Sperre fuer Mandate in diesen
+   Bereichen gebaut wird.
 6. **Keine Loeschfrist** fuer Audit-Log (`src/db/schema.sql:1014`), Nutzungs- und
    Kostendaten (`src/db/schema.sql:901`), Konten (`src/db/schema.sql:980`); offene Aufgaben
    unbefristet (`src/store/state-ops.js:5127`). Klauseln: "data retention timelines",
    "Data practices".
-   Ziel: open, no owner decision yet.
+   Ziel: Entscheidung des Betreibers: Loeschfristen je Datenart.
 7. **Keine Loeschung und keine Auskunft im Self-Service** (`src/routes/api-read.js:117-119`,
    `src/routes/api-read.js:119`). Klausel: "any controls offered to your users".
-   Ziel: open, not yet assigned to a work package.
+   Ziel: Entscheidung des Betreibers: ob Loeschung und Auskunft als Funktion im Self-Service
+   angeboten werden oder weiter als Vorgang des Betreibers auf Anfrage.
 8. **Datenabfluss an Such-Anbieter nicht in der Werkzeugdefinition**, zwei Mechanismen:
    (a) Vorab-Recherche: bei eingeschalteter Recherche gehen `briefing`, `objective` und
    `constraints` an die Suche von Anthropic (`src/research/sanitize.js:17`,
@@ -792,19 +808,25 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
    Namensfilter (`src/research/lookup-guard.js:66-74`, `src/plans.js:125`).
    Klausel: "If a tool sends data outside the current environment ..., this must be clear
    from the tool definition."
-   Ziel fuer die Werkzeugdefinition: open, not yet assigned to a work package. Ob die
-   Datenschutzerklaerung den Nachschlag und den Angerufenen als Betroffenen nennt, ist Teil
-   von Luecke 13.
+   Ziel: bewusst nicht umgesetzt: die Beschreibungen von `place_call` und `prepare_call`
+   haben je einen festen Zeichen-Deckel, weil sie bei jedem Schritt des aufrufenden Modells
+   mitgesendet werden; der verbleibende Platz (unter 40 Zeichen je Deckel) reicht fuer einen
+   Satz zu Vorab-Recherche und Nachschlag nicht, und die Deckel werden dafuer nicht angehoben.
+   Ob die Datenschutzerklaerung die Recherche, den Nachschlag und den Angerufenen als
+   Betroffenen nennt, ist Teil von Luecke 13.
 9. **Kein Beratungsverbot im Gespraechsprompt** fuer medizinische oder rechtliche Auskunft an
    das Gegenueber (`src/i18n/prompts/en.js:157`). Klausel: "tailored advice that requires a
    license".
-   Ziel: open, not yet assigned to a work package.
+   Ziel: bewusst nicht umgesetzt: die Luecke liegt im Gespraechsprompt des Sprach-Agenten;
+   eine Aenderung dort veraendert das Verhalten in echten Anrufen und wird nur mit eigener
+   Messung an Anrufen umgesetzt, nicht zusammen mit der Werkzeugschnittstelle.
 10. **Auftraggeber-Name nicht identitaetsgeprueft**: der Name im Offenlegungssatz stammt aus
     dem Profil des Login-Anbieters (`src/web-auth.js:461-462`) bzw. aus Freitext im
     Betreiber-Onboarding (`src/routes/api-onboard.js:95-99`); die Pruefstufe fuer ausgehende
     Anrufe ist die Karte (`src/store/defaults.js:524`). Klauseln: "impersonation",
     "Identity theft, impersonation".
-    Ziel: open, no owner decision yet.
+    Ziel: Entscheidung des Betreibers: ob der Auftraggeber-Name vor ausgehenden Anrufen
+    identitaetsgeprueft wird.
 11. **Rohzeilen nicht an den laufenden Anruf gebunden**: `get_call_status` gibt die letzten
     sechs Zeilen des gespeicherten Transkripts fuer jeden Anrufstatus zurueck
     (`src/mcp-tools.js:1844`, `src/mcp-tools.js:214`), also auch nach dem Anruf -
@@ -812,20 +834,25 @@ noch nicht gefallen ist. Kein Ziel-Wert behauptet eine bestehende Durchsetzung.
     Zusammenfassung bis zum Loeschlauf, bei Diagnose-Anrufen fuer die ganze Diagnose-Frist
     (`src/diagnostic-retention.js:72`). Der Code nennt das selbst einen offenen Befund
     (`src/mcp-tools.js:203-207`). Klauseln: "Response minimization", "privacy of others".
-    Ziel: open, not yet assigned to a work package.
+    Ziel: geplante Aenderung: `get_call_status` gibt Rohzeilen nur noch waehrend eines
+    laufenden Anrufs zurueck (Antwortinhalt des Werkzeugs).
 12. **Roh-Transkript nicht abgeschlossener Anrufe wird nicht geleert**: `finishCall` kehrt bei
     jedem Endstatus ausser `completed` vor der Leerung zurueck
     (`src/telephony/call-finish.js:302`); das betrifft auch jeden per `cancel_call`
     abgebrochenen Anruf. Das Roh-Transkript mit den woertlichen Aussagen des Angerufenen bleibt
     bis zum Loeschlauf des Anrufs (Code-Default 30 Tage, `src/config.js:2036`). Klauseln:
     "Collection minimization", "privacy of others", "data retention timelines".
-    Ziel: open, not yet assigned to a work package.
+    Ziel: bewusst nicht umgesetzt: fuer nicht abgeschlossene Anrufe raeumt der Loeschlauf das
+    Roh-Transkript nach der Frist ab; eine Leerung schon beim Anrufende griffe in den
+    Abschlusspfad der Telefonie ein, der bei jedem Anrufende laeuft, und wird nicht zusammen
+    mit der Werkzeugschnittstelle geaendert.
 13. **Rechtstext fehlt in diesem Dokument**: Datenschutzerklaerung und AGB, darin
     Mindestalter, Offenlegung der Metadaten, Information des Angerufenen als Betroffenem und
     die tatsaechlichen Fristen. Teil B liefert nur die Faktengrundlage. Klauseln: "Plugin
     submissions must include a clear, published privacy policy", "Children and teens deserve
     special protection.", "Data practices".
-    Ziel: planned: legal text (privacy policy and terms), written by the operator.
+    Ziel: Entscheidung des Betreibers: Rechtstext (Datenschutzerklaerung und AGB), vom
+    Betreiber geschrieben.
 
 ## Anker (maschinenlesbar)
 
@@ -842,7 +869,7 @@ src/restricted-data.js:439 | const CREDENTIAL_LABELS
 src/restricted-data.js:20 | Gesundheitsdaten (PHI) werden NICHT erkannt
 src/restricted-data.js:28 | IBAN/Bankkonto ist KEINE Kategorie der Richtlinie
 src/mcp-tools.js:1303 | const CALL_DATA_NOTICE_META_KEY = "hermes/call_data_notice";
-src/i18n/mcp-texts.js:347 | callDataNotice:
+src/i18n/mcp-texts.js:346 | callDataNotice:
 src/call-confirmation.js:63 | export const CONFIRMATION_ALREADY_USED_REASON
 src/telephony/outbound-gates.js:699 | name: "outbound_frozen"
 src/telephony/outbound-gates.js:772 | name: "kyc"
@@ -964,8 +991,8 @@ src/mcp-tools.js:1413 | Not applied on every call path.
 src/mcp-tools.js:1455 | Optional structured BACKGROUND for the agent
 src/mcp-tools.js:944 | For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only
 src/mcp-tools.js:914 | CALL_PURPOSE_SHORT_RULE
-src/mcp-server-info.js:103-109 | export const CALL_PURPOSE_RULE
-src/mcp-server-info.js:114 | export const CALL_PURPOSE_SHORT_RULE
+src/mcp-server-info.js:106-113 | export const CALL_PURPOSE_RULE
+src/mcp-server-info.js:117 | export const CALL_PURPOSE_SHORT_RULE
 src/mcp-server-info.js:80 | export const CALL_PURPOSE_EXCLUSIONS
 src/mcp-tools.js:1431-1451 | open_questions: OPEN_QUESTIONS_FIELD
 src/mcp-tools.js:1392 | decide_freely: z
