@@ -21,7 +21,7 @@
 Registration order: `src/mcp-tools.js:1616-2112` (the `uiTool(...)` calls inside
 `registerTools()`). Condition column: "always" (registered unconditionally) or "consult"
 (`if (consultAllowed)`, `src/mcp-tools.js:1744`). Over HTTP, `consultAllowed` is
-`consultAllowedFor(profile)` (`src/routes/mcp.js:139`, `:163`) = `config.tenancy.consultEnabled
+`consultAllowedFor(profile)` (`src/routes/mcp.js:232`, `:262`) = `config.tenancy.consultEnabled
 === true && config.tenancy.assistantContextEnabled === true && profile?.allowConsult === true`
 (`src/consult/gate.js:19-25`).
 
@@ -116,7 +116,7 @@ Hermes applies it as three statements, and every value in Table A follows from o
 The hint describes what a tool can do, not what every single invocation does: a tool that sends
 to an external party on at least one path is `true`, even if some invocations send nothing.
 
-- **prepare_call** (registered `src/mcp-tools.js:1616`, handler `:1608-1640`, REST
+- **prepare_call** (registered `src/mcp-tools.js:1616`, handler `:1625-1654`, REST
   `POST /api/call-confirmations`). Previews an outbound call and, when card confirmation is
   switched on for the server, attaches a single-use confirmation code for the Hermes card that
   `place_call` then requires - see "Confirmation before placing a call" below. The server does
@@ -132,7 +132,7 @@ to an external party on at least one path is `true`, even if some invocations se
     been used, repeating `prepare_call` with the same arguments in the same five-minute
     window returns the same code; once that code has been used to place a call, repeating
     `prepare_call` returns a new code.
-- **place_call** (registered `src/mcp-tools.js:1667`, handler `:1680-1724`, REST
+- **place_call** (registered `src/mcp-tools.js:1667`, handler `:1694-1738`, REST
   `POST /api/calls`). As of this inventory, `place_call` additionally REQUIRES a
   `confirmation_code` from a preceding `prepare_call` call with identical arguments - see
   "Confirmation before placing a call" below. The annotations below are unchanged by that
@@ -148,12 +148,12 @@ to an external party on at least one path is `true`, even if some invocations se
     that call is running; a repeat after it has ended places a new, separately billed call
     (`src/mcp-tools.js:1065-1069`).
 - **await_call_event** (registered `src/mcp-tools.js:1745`, REST `GET /api/calls/:id/consult`,
-  `src/routes/api-calls.js:658-682`).
+  `src/routes/api-calls.js:699-723`).
   - `readOnlyHint: false` - each call writes to the call record: it sets the call's "client
     last polled" timestamp to the current time (`noteConsultPoll`, `src/store/state-ops.js:1677-1680`,
-    called at `src/routes/api-calls.js:667`), and when it returns a question it records the time
+    called at `src/routes/api-calls.js:708`), and when it returns a question it records the time
     that question was first delivered (`markConsultAskDelivered`,
-    `src/store/state-ops.js:1621-1630`, called at `src/routes/api-calls.js:679-680`). Its
+    `src/store/state-ops.js:1621-1630`, called at `src/routes/api-calls.js:720-721`). Its
     description says so ("Each call also writes to the call record ...").
   - `destructiveHint: false` - both writes only record that a client is polling and that a
     question reached it. Neither deletes or changes anything the user or the call produced, and
@@ -170,7 +170,7 @@ to an external party on at least one path is `true`, even if some invocations se
     `src/store/pg.js:453-460`). A repeated identical call therefore refreshes that one
     timestamp and adds nothing else.
 - **answer_consult** (registered `src/mcp-tools.js:1774`, REST
-  `POST /api/calls/:id/consult/answer`, `src/routes/api-calls.js:690-714`).
+  `POST /api/calls/:id/consult/answer`, `src/routes/api-calls.js:731-755`).
   - `readOnlyHint: false` - with `status="final"` it adds the answers to the running call's
     background facts (`mergeContextFacts`, `src/store/state-ops.js:1325-1335`, applied at
     `:1387`) and marks the question answered (`:1388-1391`); with `status="working"` it records
@@ -203,21 +203,21 @@ to an external party on at least one path is `true`, even if some invocations se
   - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
 - **cancel_call** (registered `src/mcp-tools.js:1953`, REST `POST /api/calls/:id/cancel`,
-  `src/routes/api-calls.js:717-772`).
+  `src/routes/api-calls.js:758-813`).
   - `readOnlyHint: false`, `destructiveHint: true` - for a running call it marks the call record
     cancelled, stops billing right away, and attempts a hang-up where the call path allows it.
     The cancellation cannot be reversed. As its description says, whether the phone line itself
     actually drops is not guaranteed on every call path; when it is not confirmed, the response
-    says so (`line_hangup_confirmed: false`, `src/routes/api-calls.js:764-770`) instead of
+    says so (`line_hangup_confirmed: false`, `src/routes/api-calls.js:806-811`) instead of
     claiming a clean hang-up. On a call path where no hang-up could be attempted at all (a call
     handled through the voice-agent path whose conversation handle is not yet known), the
-    response says that too (`hangup_attempted: false`, `src/routes/api-calls.js:769`).
+    response says that too (`hangup_attempted: false`, `src/routes/api-calls.js:810`).
   - `openWorldHint: true` (O1) - where the call path allows it, it sends a hang-up request to
     an external party (the telephony provider or the voice-agent provider). On the path where no
     attempt is possible it sends nothing, but the hint describes what the tool can do, not every
     invocation (see the rule above).
   - `idempotentHint: true` - for a call that is no longer running, the route only returns the
-    call's current status and does nothing else (`src/routes/api-calls.js:721`); a repeat is a
+    call's current status and does nothing else (`src/routes/api-calls.js:762`); a repeat is a
     no-op, not an error.
 - **get_agent_number** (registered `src/mcp-tools.js:1974`, REST `GET /api/state`,
   `src/routes/api-read.js:63-96`).
