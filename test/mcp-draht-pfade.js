@@ -43,7 +43,10 @@ async function httpSnapshot(url, token) {
   return { tools: await httpToolsList(url, token), instructions: await httpInstructions(url, token) };
 }
 
-async function legacySnapshot(env) {
+// T2-17: exportiert (statt modul-intern), damit ein zweiter Test (openai-t2-17-...)
+// zusaetzliche Pfade (z.B. MCP_UI_ENABLED=true) messen kann, ohne den Snapshot-Code zu
+// kopieren. MCP_WIRE_PATHS unten bleibt bei den bisherigen sieben Pfaden.
+export async function legacySnapshot(env) {
   const srv = await startServer({ seed: seedState({}), env });
   try {
     return await httpSnapshot(`${srv.localUrl}/mcp`, null);
@@ -73,7 +76,8 @@ async function oauthSnapshot({ subject, env = {} }) {
   }
 }
 
-async function stdioSnapshot(env) {
+// T2-17: exportiert, s. Kommentar bei legacySnapshot oben.
+export async function stdioSnapshot(env) {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [MCP_SERVER_ENTRYPOINT],

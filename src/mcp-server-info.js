@@ -119,6 +119,43 @@ export const CALL_PURPOSE_SHORT_RULE = `Not for ${listWithOr(
   LAST_OR_SHORT,
 )}.`;
 
+// T2-17 (T-21): Kern-Vorspann. OpenAI ("Keep the most important details in the first
+// 512 characters") sagt nicht, was "wichtig" heisst - hier: die Bestaetigungs-Sequenz
+// (die Karte waehlt, nie selbst mit einem Code), die Zweckbindung (Kurzform aus
+// derselben Tabelle wie CALL_PURPOSE_SHORT_RULE oben) und der Geld-Riegel (nicht
+// erneut waehlen bei "not-placed"); im Consult-Fall zusaetzlich die sofortige
+// Quittung. Die vollen Bestandssaetze bleiben byte-identisch HINTER dem Kern
+// (BASE_DETAILS unten) - Doku-Zitate und Bestandspins auf ihren Wortlaut bleiben
+// gueltig, nur die Reihenfolge im Gesamttext aendert sich.
+const CORE_SEQUENCE =
+  "Before every place_call, call prepare_call first; the user confirms in the Hermes " +
+  "card, which then places the call - never call place_call yourself or invent a " +
+  "confirmation code.";
+// NUR im Consult-Kern: ohne Consult-Freigabe ist await_call_event nicht registriert,
+// dieselbe Regel wie beim Bestandstext (Pins P4 Fall 4/5, Kommentar unten).
+const CORE_CONSULT_LOOP =
+  'While a call runs, call await_call_event until event="done"; answer a consult at ' +
+  'once: answer_consult status="working".';
+// Aus der Tabelle CALL_PURPOSE_EXCLUSIONS gebaut (eine Quelle, wie CALL_PURPOSE_RULE/
+// CALL_PURPOSE_SHORT_RULE oben): eine neue Kategorie verlaengert automatisch auch den
+// Kern und laesst den 512-Zeichen-Test anschlagen, statt still dahinter zu rutschen.
+const CORE_PURPOSE = `Only place calls the user asks for, never ${listWithOr(
+  CALL_PURPOSE_EXCLUSIONS.map((entry) => entry.full),
+  LAST_OR_FULL,
+)}.`;
+// G22: dasselbe NOT_PLACED-Token wie der Geld-Satz in BASE_DETAILS unten - eine
+// Umbenennung des Tokens verschiebt beide Stellen gemeinsam.
+const CORE_MONEY = `Never retry a "${NOT_PLACED}" call.`;
+
+// Baut den Kern je Modus: im Consult-Fall steht CORE_CONSULT_LOOP zwischen Sequenz und
+// Zweckbindung, im Basis-Fall entfaellt er (await_call_event ist dort nicht registriert).
+function instructionsCore(consultLoop) {
+  const sentences = consultLoop
+    ? [CORE_SEQUENCE, CORE_CONSULT_LOOP, CORE_PURPOSE, CORE_MONEY]
+    : [CORE_SEQUENCE, CORE_PURPOSE, CORE_MONEY];
+  return sentences.join(" ");
+}
+
 // AL-P13/T-21: Server-Instruktionen fuer den MCP-Host. ACHTUNG: `instructions` ist ein
 // Feld von ServerOptions, NICHT von Implementation - in HERMES_SERVER_INFO gesetzt
 // wuerde es still verworfen. Deshalb liegt hier NUR der Text plus der Options-Bauer;
@@ -126,9 +163,9 @@ export const CALL_PURPOSE_SHORT_RULE = `Not for ${listWithOr(
 // EINSPRACHIG ENGLISCH (O14): nur das Client-Modell liest ihn, nie der Tenant.
 //
 // T-21: instructions gelten jetzt IMMER, auch ohne Consult-Freigabe - deshalb zwei
-// Bausteine statt eines Textes. MCP_BASE_INSTRUCTIONS nennt nur Werkzeuge, die JEDER
-// Tenant registriert bekommt (await_call_event/answer_consult tun das nicht - die
-// bleiben daher ungenannt und stecken nur im Consult-Block unten).
+// Bausteine statt eines Textes. BASE_DETAILS (der bisherige Wortlaut, unten) nennt nur
+// Werkzeuge, die JEDER Tenant registriert bekommt (await_call_event/answer_consult tun
+// das nicht - die bleiben daher ungenannt und stecken nur im Consult-Kern/-Block).
 //
 // OUTBOUND-E3a: ohne den ersten Satz sieht das Modell nur das Basis-Token "not-placed"
 // (callOutcomeView kuerzt das Detail an der MCP-Kante weg), weiss nichts damit
@@ -145,7 +182,9 @@ export const CALL_PURPOSE_SHORT_RULE = `Not for ${listWithOr(
 // await_call_event/answer_consult oben.
 // T2-11 (N-12): der fruehere Toolname (versprach ein Transkript, das nie geliefert wurde)
 // ist auf get_call_result umbenannt, Wortlaut sonst unveraendert.
-export const MCP_BASE_INSTRUCTIONS =
+// T2-17: modul-intern statt exportiert - der Kern (oben) steht jetzt VOR diesem Text,
+// beide Tests und Doku lesen nur noch die zusammengesetzten Exporte unten.
+const BASE_DETAILS =
   `If a call reports a failure_reason starting with "${NOT_PLACED}", the call could not ` +
   "be placed because of a problem on our side. Do NOT retry the call: call get_call_result " +
   "for that call_id - it works for a failed call, not only a completed one - and tell the " +
@@ -168,9 +207,10 @@ export const MCP_BASE_INSTRUCTIONS =
   "prepare_call again and let the user confirm again. If this host does not show " +
   "the Hermes card, or card confirmation is switched off for this server, no call can be " +
   "placed from here - tell the user so honestly. " +
-  // Zweckbindung HINTER der Bestaetigungs-Sequenz: die Sequenz gehoert nach vorn (OpenAI:
-  // "Keep the most important details in the first 512 characters"), die Zweckregel folgt.
-  // Steht im Basis-Block, damit sie ueber MCP_CONSULT_INSTRUCTIONS auch im Consult-Fall gilt.
+  // Volle Zweckregel: die Kurzform (CORE_PURPOSE) steht bereits im Kern vor diesem Text
+  // (OpenAI: "Keep the most important details in the first 512 characters"); die volle
+  // Fassung mit Positivliste folgt hier unveraendert. Steht in BASE_DETAILS, damit sie
+  // ueber MCP_CONSULT_INSTRUCTIONS auch im Consult-Fall gilt.
   CALL_PURPOSE_RULE;
 
 // Consult-Block bleibt modul-intern (kein dritter Export, keine dritte Wahrheit) - er
@@ -207,13 +247,17 @@ const CONSULT_BLOCK =
   "find the answer that fast, say with answer_consult that you do not know instead of " +
   "waiting, so the agent can tell the other party that the principal will get back on it.";
 
-// AL-P13: der Text, der im Consult-Fall ausgeliefert wird. Name/Bedeutung bleiben (T-21
-// W-7): die Konstante heisst nach dem FALL, in dem sie ausgeliefert wird, nicht nach
-// ihrem letzten Absatz - sonst brechen die Pruefkommandos aus dem Plan und die
-// Bestandspins auf dieser Konstante (test/mcp-fehlergrund-rueckweg.test.js,
+// T2-17: die zwei ausgelieferten Texte. Name/Bedeutung bleiben (T-21 W-7): die
+// Konstanten heissen nach dem FALL, in dem sie ausgeliefert werden, nicht nach ihrem
+// letzten Absatz - sonst brechen die Pruefkommandos aus dem Plan und die Bestandspins
+// auf diesen Konstanten (test/mcp-fehlergrund-rueckweg.test.js,
 // test/gq-b1-briefing-openness.test.js). Komposition statt Ersatz: der Geld-Satz und
-// der Nicht-Erfinden-Satz gelten AUCH im Consult-Fall.
-export const MCP_CONSULT_INSTRUCTIONS = MCP_BASE_INSTRUCTIONS + " " + CONSULT_BLOCK;
+// der Nicht-Erfinden-Satz (in BASE_DETAILS) gelten AUCH im Consult-Fall. Anders als vor
+// T2-17 beginnt MCP_CONSULT_INSTRUCTIONS NICHT mehr mit MCP_BASE_INSTRUCTIONS - jeder
+// Modus bekommt seinen eigenen Kern (instructionsCore), BASE_DETAILS ist die geteilte
+// Fortsetzung dahinter.
+export const MCP_BASE_INSTRUCTIONS = `${instructionsCore(false)} ${BASE_DETAILS}`;
+export const MCP_CONSULT_INSTRUCTIONS = `${instructionsCore(true)} ${BASE_DETAILS} ${CONSULT_BLOCK}`;
 
 // serverOptions traegt inzwischen ZWEI Dinge (UI-Capabilities + instructions).
 // T-21: instructions sind IMMER gesetzt - der Basis-Block gilt auch fuer einen Tenant
