@@ -192,10 +192,10 @@ export const MCP_TEXTS = Object.freeze({
     // und wird von der Karte direkt ueber dem Bestaetigen-Knopf angezeigt; ohne diesen Text
     // bietet die Karte keinen Klick an. Bewusst OHNE Einwilligungs- oder Zusicherungsformel:
     // ob und welche Erklaerung der Nutzer vor dem Waehlen bestaetigt, ist Rechtstext und
-    // entscheidet der Owner (PLAN-SECURITY.md). Der Server prueft weder die Kategorien noch
-    // den Zweck - er erzwingt nur, dass jeder Anruf ueber die Karte mit diesem Text
-    // bestaetigt wurde. Erhoben (gespeichert, an Agent und Anbieter gegeben) wird erst nach
-    // dem Klick - prepare_call speichert nichts. Nutzerseitiger Text: deshalb mit Umlauten.
+    // entscheidet der Owner (PLAN-SECURITY.md). Der Server prueft weder Kategorien noch Zweck
+    // und liefert den Text nur mit; dass er vor dem Klick sichtbar ist, erzwingt allein die
+    // Karte (ohne Text kein Klick). Erhoben (gespeichert, an Agent und Anbieter) wird erst
+    // nach dem Klick - prepare_call speichert nichts. Nutzerseitig: deshalb mit Umlauten.
     callDataNotice:
       "Vor dem Bestätigen: Die Angaben auf dieser Karte gehen an den KI-Agenten und die " +
       "Anbieter, über die der Anruf läuft, können der angerufenen Person gesagt werden und " +

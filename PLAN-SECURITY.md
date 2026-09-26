@@ -6598,56 +6598,53 @@ Abschalter waere eine neue abschaltbare Sicherung).
 Sprachagent/Prompts, `src/ui/widgets/call.html`, Werkzeugtexte/`server-instructions`
 (byte-gleich master).
 
-## OpenAI-T2-16 — Hinweis und Einwilligung zu Gesundheitsangaben auf der Bestaetigungskarte (O-15)
+## OpenAI-T2-16 — Datenhinweis und Zweckhinweis auf der Bestaetigungskarte (O-15, O-18)
 
-**Was gebaut ist:** `prepare_call` liefert im Ergebnis-`_meta` (fuer das Modell verborgen,
-neben Code und Ablauf) den lokalisierten Text `callDataNotice` (`src/i18n/mcp-texts.js`,
-de/en/fr) unter `hermes/call_data_notice`. Die Karte (`src/ui/widgets/call.html`) zeigt ihn
-direkt ueber "Anruf bestaetigen"; fehlt er oder ist er leer, bleibt der Knopf gesperrt
-(`confirmCodeUsable`, fail-closed). Inhalt: Angaben der Karte inkl. Gesundheitsangaben gehen an
-Agent und Anbieter, koennen dem Angerufenen gesagt werden, werden mit dem Anruf gespeichert;
-nur noetige Gesundheitsangaben; Bestaetigen = ausdrueckliche Einwilligung. `prepare_call`
-speichert nichts - der Hinweis steht also vor der Erhebung.
+**Was gebaut ist (Endstand):** `prepare_call` liefert im Ergebnis-`_meta` (fuer das Modell
+verborgen, neben Code und Ablauf) den lokalisierten Text `callDataNotice`
+(`src/i18n/mcp-texts.js`, de/en/fr) unter `hermes/call_data_notice`. Die Karte
+(`src/ui/widgets/call.html`, Version 12) zeigt ihn direkt ueber "Anruf bestaetigen"; fehlt er
+oder ist er leer, bleibt der Knopf gesperrt (`confirmCodeUsable`, fail-closed). Das erzwingt
+die KARTE, nicht der Server: der Server stellt den Text nur bereit und prueft nicht, ob er
+angezeigt wurde. Inhalt:
+- Datenhinweis: die Angaben der Karte gehen an Agent und Anbieter, koennen dem Angerufenen
+  gesagt werden und werden mit dem Anruf gespeichert; das gilt auch fuer jede besondere
+  Kategorie aus Art. 9 Abs. 1 DSGVO, die einzeln genannt ist (Gesundheit, rassische/ethnische
+  Herkunft, politische Meinungen, religioese/weltanschauliche Ueberzeugungen,
+  Gewerkschaftszugehoerigkeit, genetische/biometrische Daten, Sexualleben/sexuelle
+  Orientierung); solche Angaben nur, wenn der Anruf sie braucht.
+- Zweckhinweis als Sachaussage: "Hermes ist nicht fuer Telemarketing oder unaufgeforderte
+  Werbe-, Verkaufs-, Wahlkampf- oder Massenanrufe gedacht." (dieselben Ausschluesse wie
+  `CALL_PURPOSE_EXCLUSIONS`).
+- KEINE Einwilligungs- und KEINE Zusicherungsformel: der Klick bestaetigt den Anruf nach dem
+  Hinweis, er ist keine Einwilligung und keine Erklaerung des Nutzers. Ein frueherer
+  Zwischenstand ("Mit dem Bestaetigen willigst du ausdruecklich ... ein und sicherst zu ...")
+  war Rechtstext und ist entfernt; `test/openai-t2-16-place-call-texte.test.js` T16-f macht
+  jede solche Formel im Kartentext rot und pinnt Kategorien und Zweckhinweis je Sprache.
+`prepare_call` speichert nichts - der Hinweis steht vor der Erhebung. Die Feldtexte von
+`briefing`/`context` begrenzen "Sensitive details only as needed".
 
-**Grenzen (bewusst):** der Server erkennt Gesundheitsangaben nicht (Stichwortsperre traefe die
-erlaubten Arzttermine), deshalb steht der Hinweis auf JEDER Karte. Kein separates
-Einwilligungsfeld; ob Klick + Hinweis rechtlich genuegen, ist Rechtstext (Owner). Wie die
-Bestaetigung selbst gilt: reicht ein Host `_meta` ans Modell weiter, sieht auch das Modell den
-Hinweis und koennte sich selbst bestaetigen (s. OpenAI-T2-13).
+**Grenzen (bewusst):** der Server erkennt besondere Kategorien nicht (eine Stichwortsperre
+traefe die erlaubten Arzttermine), deshalb steht der Hinweis auf JEDER Karte; er prueft auch
+den Zweck nicht (eine Stichwortpruefung liesse sich umformulieren und traefe Reklamationen/
+Angebotsanfragen). Reicht ein Host `_meta` ans Modell weiter, sieht auch das Modell Hinweis und
+Code und koennte sich selbst bestaetigen (s. OpenAI-T2-13).
 
-**Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Werkzeugtexte und
-`server-instructions` (tools/list-Hash unveraendert bis auf das Call-Widget, Version 10),
-Sprachagent/Prompts. Rueckbau: Revert des Commits.
+**Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Sprachagent/Prompts.
+Werkzeugtexte: nur die in dieser Phase benannten Beschreibungen (Zweckregel, briefing/context,
+on_out_of_scope), Draht-Hash neu gepinnt.
 
-**Nachbesserung (alle besonderen Kategorien + Zweck-Zusage):** der Hinweis nennt jetzt jede
-Kategorie aus Art. 9 Abs. 1 DSGVO einzeln (Gesundheit, rassische/ethnische Herkunft,
-politische Meinungen, religioese/weltanschauliche Ueberzeugungen, Gewerkschaftszugehoerigkeit,
-genetische/biometrische Daten, Sexualleben/sexuelle Orientierung); die Einwilligung per Klick
-deckt alle, und der Klick enthaelt die Zusage des Menschen, dass der Anruf kein Telemarketing
-und kein unaufgeforderter Werbe-, Verkaufs-, Wahlkampf- oder Massenanruf ist (dieselben
-Ausschluesse wie `CALL_PURPOSE_EXCLUSIONS`). Das ist eine Erklaerung des Nutzers, KEINE
-Pruefung: der Server liest weder Kategorien noch Zweck. Die Feldtexte von `briefing`/`context`
-sagen "Sensitive details only as needed" statt "Health details" (tools/list-Hash neu gepinnt,
-Call-Widget Version 11 nur wegen eines Kommentars). Gates und Offenlegungssatz unberuehrt.
-Offen (Owner): rechtliche Bewertung von Wortlaut und Form der Einwilligung; eine
-serverseitige inhaltliche Zweckpruefung ist bewusst nicht gebaut (umgehbar, traefe
-Reklamationen/Angebotsanfragen).
-
-**Korrektur (Einwilligungs-/Zusicherungsformel entfernt):** der Satz "Mit dem Bestaetigen
-willigst du ausdruecklich ... ein und sicherst zu, dass dies kein Telemarketing ... ist" (de/en/fr)
-ist Rechtstext und steht deshalb NICHT mehr auf der Karte. An seiner Stelle steht eine neutrale
-Sachaussage: "Hermes ist nicht fuer Telemarketing oder unaufgeforderte Werbe-, Verkaufs-,
-Wahlkampf- oder Massenanrufe gedacht." (dieselben Ausschluesse wie `CALL_PURPOSE_EXCLUSIONS`,
-gepinnt in `test/openai-t2-16-place-call-texte.test.js` T16-f, das zugleich jede Einwilligungs-
-oder Zusicherungsformel im Kartentext rot macht). Die Sperren der Karte bleiben unveraendert
-(ohne Hinweis kein Klick, `confirmCodeUsable`); Call-Widget Version 12 nur wegen eines
-Kommentars, der Text kommt vom Server. Der Klick ist damit eine Bestaetigung des ANRUFS nach
-einem Hinweis, KEINE Einwilligung und KEINE Zusicherung des Nutzers.
+**Rueckbau:** der Kartenhinweis haengt an drei Stellen gemeinsam - `callDataNotice`
+(`src/i18n/mcp-texts.js`), der `_meta`-Schluessel in `src/mcp-tools.js` und die Hinweis-Zeile
+samt Sperre in `src/ui/widgets/call.html` (neue Widget-Version nach
+`src/ui/widget-versions.json`, Draht-Hash in `test/openai-p8-widget-ui.test.js` neu pinnen).
+Kein einzelner Commit-Revert; die Werkzeugtexte zieht `scripts/briefing-bench/README.md`
+("Rueckbau") zurueck.
 
 **Owner-Punkt (offen, Rechtstext):** ob und welche Einwilligungs- oder Zusicherungsformel der
 Nutzer vor dem Waehlen bestaetigt (Einwilligung in die Verarbeitung besonderer Datenkategorien,
-Erklaerung zum Anrufzweck), entscheidet der Owner. Bis dahin enthaelt die Karte nur Datenhinweis
-und Zweckhinweis.
+Erklaerung zum Anrufzweck), und ob der Hinweis rechtlich genuegt, entscheidet der Owner. Bis
+dahin enthaelt die Karte nur Datenhinweis und Zweckhinweis.
 
 **Deploy-Vorbedingung (offen): Messung der Modellwirkung der place_call-/prepare_call-Texte.**
 Der echte Lauf von `scripts/briefing-bench` (alt = master `66d95ae` gegen den neuen Stand,
