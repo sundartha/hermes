@@ -126,6 +126,7 @@
   .confirm{position:relative;z-index:1;display:flex;flex-direction:column}
   .confirm .row-v{white-space:pre-line;max-width:62%;overflow-wrap:anywhere}
   .confirm-hint{color:rgba(255,255,255,.75);font-weight:600;font-size:12px}
+  .confirm .confirm-notice{max-width:100%;color:#fff;font-weight:600;font-size:12px}
   .confirm-button{width:100%;margin-top:14px;display:block;text-align:center;
     background:rgba(var(--color-accent-light-rgb),.16)}
   @media (prefers-reduced-motion: reduce) {
@@ -198,6 +199,7 @@
       <div class="row" data-cf-row="mandate" style="display:none"><span class="row-k" data-i18n="Mandate">Mandate</span><span class="row-v" data-cf-mandate>—</span></div>
       <div class="row" data-cf-row="context" style="display:none"><span class="row-k" data-i18n="Context">Context</span><span class="row-v" data-cf-context>—</span></div>
       <div class="row" data-cf-row="diagnostic" style="display:none"><span class="row-k" data-i18n="Diagnostic">Diagnostic</span><span class="row-v" data-cf-diagnostic>—</span></div>
+      <div class="row" data-confirm-notice style="display:none"><span class="row-v confirm-notice" data-confirm-notice-text>—</span></div>
       <div class="row" data-confirm-hint style="display:none"><span class="row-v confirm-hint" data-confirm-hint-text>—</span></div>
       <button type="button" class="hud-cancel confirm-button" data-confirm-button data-i18n="Confirm call">Confirm call</button>
     </div>
@@ -267,6 +269,8 @@
     // _meta-Schluessel von prepare_call (mcp-tools.js), dupliziert (self-contained Skript).
     var CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
     var CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
+    // Hinweis/Einwilligung zu Gesundheitsangaben, vom Server lokalisiert; ohne ihn kein Klick.
+    var CALL_DATA_NOTICE_META_KEY = "hermes/call_data_notice";
     var STATUS_AWAITING_CONFIRMATION = "awaiting_confirmation";
     // place_call-Fehlerergebnis "Code schon verbraucht" (mcp-tools.js, dupliziert).
     var STATUS_CONFIRMATION_USED = "confirmation_used";
@@ -542,11 +546,13 @@
       return stringifyLeaf(value);
     }
 
-    // Code vorhanden, nicht abgelaufen - einzige Stelle, Rendern UND Klick (fail-closed).
+    // Code UND Datenhinweis vorhanden, Code nicht abgelaufen - einzige Stelle, Rendern UND
+    // Klick (fail-closed): ohne sichtbaren Hinweis gibt es keine Bestaetigung.
     function confirmCodeUsable() {
       return Boolean(
         pendingConfirmation &&
           pendingConfirmation.code &&
+          pendingConfirmation.notice &&
           pendingConfirmation.expiresAtMs &&
           Date.now() < pendingConfirmation.expiresAtMs,
       );
@@ -629,6 +635,8 @@
       var args = pendingConfirmation.args;
       setDisplayText("[data-confirm-to]", args.to);
       setDisplayText("[data-confirm-objective]", args.objective);
+      setElementVisible("[data-confirm-notice]", Boolean(pendingConfirmation.notice));
+      if (pendingConfirmation.notice) setDisplayText("[data-confirm-notice-text]", pendingConfirmation.notice);
       for (var i = 0; i < CONFIRM_OPTIONAL_ROWS.length; i++) {
         var field = CONFIRM_OPTIONAL_ROWS[i];
         var present = Object.prototype.hasOwnProperty.call(args, field);
@@ -665,7 +673,13 @@
         : null;
       var expiresRaw = meta && isRecord(meta) ? meta[CONFIRMATION_EXPIRES_META_KEY] : null;
       var expiresAtMs = typeof expiresRaw === "string" ? Date.parse(expiresRaw) : NaN;
-      pendingConfirmation = { args: args, code: code, expiresAtMs: isNaN(expiresAtMs) ? null : expiresAtMs };
+      var noticeRaw = meta && isRecord(meta) ? meta[CALL_DATA_NOTICE_META_KEY] : null;
+      pendingConfirmation = {
+        args: args,
+        code: code,
+        expiresAtMs: isNaN(expiresAtMs) ? null : expiresAtMs,
+        notice: typeof noticeRaw === "string" && noticeRaw.trim() ? noticeRaw : null,
+      };
       confirmState = wasConfirmationSent(pendingConfirmation) ? "used" : "awaiting";
       renderConfirmation();
     }
@@ -753,7 +767,7 @@
       enterUncertainState();
     }
 
-    // EINZIGER Sendeort: 1) Doppelklick-Sperre synchron. 2) Code/Ablauf pruefen. 3) Senden;
+    // EINZIGER Sendeort: 1) Doppelklick-Sperre synchron. 2) Code/Ablauf/Hinweis pruefen. 3) Senden;
     // nur bei Versand (true) -> lokal als abgeschickt merken + "submitting", sonst bleibt der
     // Knopf aktiv.
     function onConfirmButtonClick() {

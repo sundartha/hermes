@@ -182,10 +182,15 @@ const EXPECTED_RESOURCE_META = {
 // unveraendert, beide Pfade weiterhin byte-identisch. Actual-Wert aus dem roten Diff
 // uebernommen. Voriger Sollwert (beide Pfade):
 // 3c641a85cb7a6882aa284ec39f48b23c132037780adf4bdd31ccbf51ffd4edb1.
+// Neu gepinnt (Datenhinweis vor der Bestaetigung): call.html zeigt den vom Server gelieferten
+// Hinweis zu Gesundheitsangaben ueber dem Bestaetigen-Knopf und bietet ohne ihn keinen Klick
+// an - NUR call aendert sich (Version 10), Werkzeug-Beschreibungen unveraendert. Beide Pfade
+// weiterhin byte-identisch. Actual-Wert aus dem roten Diff uebernommen. Voriger Sollwert
+// (beide Pfade): 543878b52eec4bfdb58f4843bf9c38344a2f483c3b39111095b74bbbbaec7de0.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "543878b52eec4bfdb58f4843bf9c38344a2f483c3b39111095b74bbbbaec7de0";
+  "987d92591ef5cbde08f6d70a7848c23e17a710b5357df4a8ed5a279f2766e23f";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "543878b52eec4bfdb58f4843bf9c38344a2f483c3b39111095b74bbbbaec7de0";
+  "987d92591ef5cbde08f6d70a7848c23e17a710b5357df4a8ed5a279f2766e23f";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

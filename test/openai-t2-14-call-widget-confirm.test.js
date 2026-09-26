@@ -22,6 +22,7 @@ import { widgetHtml, WIDGET_CALL } from "../src/ui/widget-catalog.js";
 import { BIND_SCRIPT, signalUiReady, UI_READY_FLAG } from "../src/ui/widget-bind.js";
 import { I18N_SCRIPT } from "../src/ui/widget-i18n.js";
 import { PLACE_CALL_HOP_TIMEOUT_MS } from "../src/mcp-tools.js";
+import { MCP_TEXTS } from "../src/i18n/mcp-texts.js";
 import { uiResourceUri } from "../src/ui/contract.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
@@ -192,6 +193,10 @@ function runOwnScript(doc, options) {
 const TO = "+491701234567";
 const OBJECTIVE = "I would like to book an appointment.";
 const CODE = "ABCDEF";
+// Datenhinweis (Gesundheitsangaben) im _meta von prepare_call - ohne ihn bietet die Karte
+// keinen Klick an (fail-closed). Echter Wortlaut kommt am Draht aus MCP_TEXTS.
+const NOTICE_META_KEY = "hermes/call_data_notice";
+const NOTICE = "Test notice: health details go to the agent; confirming means consent.";
 const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
 const CONFIRMATION_WINDOW_MINUTES = 5; // deckt sich mit call-confirmation.js CONFIRMATION_WINDOW_MINUTES
@@ -206,7 +211,12 @@ function awaitingConfirmationPush(overrides, metaOverrides) {
     method: "ui/notifications/tool-result",
     params: {
       structuredContent: { status: "awaiting_confirmation", to: TO, objective: OBJECTIVE, ...overrides },
-      _meta: { "hermes/confirmation_code": CODE, "hermes/confirmation_expires_at": EXPIRES_FUTURE, ...metaOverrides },
+      _meta: {
+        "hermes/confirmation_code": CODE,
+        "hermes/confirmation_expires_at": EXPIRES_FUTURE,
+        [NOTICE_META_KEY]: NOTICE,
+        ...metaOverrides,
+      },
     },
   };
 }
@@ -652,6 +662,13 @@ function widgetPlaceCallFromRealPreview(prep) {
     method: "ui/notifications/tool-result",
     params: { structuredContent: prep.structuredContent, _meta: prep._meta },
   });
+  // Draht-Beleg Datenhinweis: der echte Server liefert ihn im _meta (fuer das Modell
+  // verborgen), NICHT im Modelltext, und die Karte zeigt ihn vor dem Klick sichtbar an.
+  const notice = prep._meta?.[NOTICE_META_KEY];
+  assert.ok(typeof notice === "string" && notice.length > 0, "Datenhinweis im _meta von prepare_call");
+  assert.ok(!JSON.stringify(prep.content).includes(notice), "Datenhinweis steht nicht im Modelltext");
+  assert.equal(doc.get("[data-confirm-notice]").style.display, "", "Datenhinweis sichtbar");
+  assert.equal(doc.get("[data-confirm-notice-text]").textContent, notice, "Datenhinweis woertlich angezeigt");
   doc.get("[data-confirm-button]").click();
   const calls = placeCallToolCall(env);
   assert.equal(calls.length, 1, "die Karte hat place_call genau einmal gesendet");
@@ -667,6 +684,45 @@ function assertArgsMatchPreview(args, prep) {
   }
   assert.equal(args.confirmation_code, prep._meta[CONFIRMATION_META_KEY]);
 }
+
+test("(t) Datenhinweis: sichtbar ueber dem Knopf; fehlt er oder ist er leer, kein Klick (0 tools/call) - Positiv-Kontrolle mit Hinweis", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc);
+  env.uiReady();
+  env.emit(awaitingConfirmationPush());
+  assert.equal(doc.get("[data-confirm-notice]").style.display, "", "Hinweis-Zeile sichtbar");
+  assert.equal(doc.get("[data-confirm-notice-text]").textContent, NOTICE);
+  assert.equal(doc.get("[data-confirm-button]").disabled, false, "mit Hinweis bestaetigbar");
+  doc.get("[data-confirm-button]").click();
+  assert.equal(placeCallToolCall(env).length, 1, "Positiv-Kontrolle: mit Hinweis genau 1 place_call");
+
+  for (const missing of [undefined, "   ", { text: NOTICE }]) {
+    const docN = makeFakeDocument();
+    const envN = runOwnScript(docN);
+    envN.uiReady();
+    envN.emit(awaitingConfirmationPush({}, { [NOTICE_META_KEY]: missing }));
+    assert.equal(docN.get("[data-confirm-notice]").style.display, "none", "leere Hinweis-Zeile verborgen");
+    assert.equal(docN.get("[data-confirm-button]").disabled, true, `Knopf gesperrt ohne Hinweis (${JSON.stringify(missing)})`);
+    docN.get("[data-confirm-button]").click();
+    assert.equal(placeCallToolCall(envN).length, 0, "ohne Hinweis kein place_call");
+    assert.equal(docN.get("[data-confirm-hint]").style.display, "", "Hinweis 'neu vorbereiten' sichtbar");
+  }
+});
+
+test("(t2) Datenhinweis in jeder Sprache vorhanden, je Sprache eigener Wortlaut, nennt Gesundheitsangaben und Einwilligung", () => {
+  const healthAndConsent = {
+    de: [/Gesundheitsangaben/, /willigst du ausdr\u00fccklich/],
+    en: [/health details/, /explicitly consent/],
+    fr: [/donn\u00e9es de sant\u00e9/, /consentez express\u00e9ment/],
+  };
+  const seen = new Set();
+  for (const [language, patterns] of Object.entries(healthAndConsent)) {
+    const notice = MCP_TEXTS[language].callDataNotice;
+    for (const pattern of patterns) assert.match(notice, pattern, `${language}: ${pattern}`);
+    seen.add(notice);
+  }
+  assert.equal(seen.size, Object.keys(healthAndConsent).length, "keine Sprache faellt auf eine andere zurueck");
+});
 
 test("(e-http) Draht-Rundlauf HTTP Legacy: echtes prepare_call -> dieselbe Karte -> echtes place_call -> Erfolg -> genau 1 ui/message mit call_id, nie mit Code", async () => {
   const srv = await startServer({

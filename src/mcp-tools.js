@@ -1294,6 +1294,23 @@ function withWidgetLocale(config, handler, language) {
 // Rendering-Detail, sondern das Geheimnis selbst. T2-14: dupliziert in call.html (dort), eine Aenderung NUR hier deaktiviert den Bestaetigen-Knopf lautlos.
 const CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
 const CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
+// Hinweis und Einwilligung zu Gesundheitsangaben (O-15, "collection and use is explicitly and
+// prominently disclosed"): lokalisierter Text fuer den MENSCHEN auf der Karte, im selben
+// _meta wie der Code - also fuer das Modell verborgen. Die Karte (call.html, dort dupliziert)
+// zeigt ihn direkt ueber dem Bestaetigen-Knopf und bietet OHNE ihn keinen Klick an: der Klick
+// ist damit nie ohne sichtbaren Hinweis moeglich. Der Server prueft NICHT, ob Gesundheits-
+// angaben enthalten sind - der Hinweis steht auf jeder Karte.
+const CALL_DATA_NOTICE_META_KEY = "hermes/call_data_notice";
+
+// Das _meta der prepare_call-Antwort fuer die Karte: Code, Ablauf und Datenhinweis - alles
+// fuer das Modell verborgen, nur bei eingeschalteter Karte (s. Handler).
+function prepareCallCardMeta(confirmation, dataNotice) {
+  return {
+    [CONFIRMATION_CODE_META_KEY]: confirmation.code,
+    [CONFIRMATION_EXPIRES_META_KEY]: confirmation.expires_at,
+    [CALL_DATA_NOTICE_META_KEY]: dataNotice,
+  };
+}
 // T2-14-Nachbesserung: Maschinenfeld im place_call-Fehlerergebnis fuer einen schon
 // verbrauchten Code (Route-Grund CONFIRMATION_ALREADY_USED_REASON). Die Karte (call.html,
 // dort dupliziert) erkennt daran sprachunabhaengig, dass ihr Anruf schon abgeschickt wurde,
@@ -1625,10 +1642,7 @@ export function registerTools(
       const mcpUiEnabled = Boolean(callWidgetUi._meta);
       const meta =
         mcpUiEnabled && previewResult.confirmation
-          ? {
-              [CONFIRMATION_CODE_META_KEY]: previewResult.confirmation.code,
-              [CONFIRMATION_EXPIRES_META_KEY]: previewResult.confirmation.expires_at,
-            }
+          ? prepareCallCardMeta(previewResult.confirmation, loc.mcp.callDataNotice)
           : undefined;
       return {
         content: [

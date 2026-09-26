@@ -185,6 +185,17 @@ export const MCP_TEXTS = Object.freeze({
       "fuer diesen Anruf nicht selbst auf und nie einen Code raten oder erfinden; die Karte " +
       "meldet die call_id danach per Chat-Nachricht. Zeigt dieser Host keine Hermes-Karte, kann " +
       "hier kein Anruf ausgeloest werden - das dem Nutzer ehrlich sagen.",
+    // Hinweis und Einwilligung zu Gesundheitsangaben auf der Bestaetigungskarte - fuer den
+    // MENSCHEN, nicht fuer das Modell: steht nur im Ergebnis-_meta von prepare_call und wird
+    // von der Karte direkt ueber dem Bestaetigen-Knopf angezeigt; ohne diesen Text bietet die
+    // Karte keinen Klick an. Erhoben (gespeichert, an Agent und Anbieter gegeben) wird erst
+    // nach dem Klick - prepare_call speichert nichts. Nutzerseitiger Text: deshalb mit Umlauten.
+    callDataNotice:
+      "Vor dem Bestätigen: Die Angaben auf dieser Karte, auch Gesundheitsangaben, gehen an den " +
+      "KI-Agenten und die Anbieter, über die der Anruf läuft, können der angerufenen Person " +
+      "gesagt werden und werden mit dem Anruf gespeichert. Gib nur Gesundheitsangaben an, die " +
+      "dieser Anruf wirklich braucht. Mit dem Bestätigen willigst du ausdrücklich in diese " +
+      "Verwendung enthaltener Gesundheitsangaben ein.",
     // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
     // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
     emptyCalls: "Noch keine Anrufe.",
@@ -323,6 +334,11 @@ export const MCP_TEXTS = Object.freeze({
       "call yourself, and never guess or invent a code. The card reports the call_id back " +
       "in a chat message once it is placed. If this host does not show the Hermes card, " +
       "no call can be placed from here - tell the user so honestly.",
+    callDataNotice:
+      "Before you confirm: the details on this card, including any health details, go to the " +
+      "AI agent and the providers that run the call, may be told to the person you call, and " +
+      "are stored with the call record. Only include health details this call really needs. " +
+      "By confirming, you explicitly consent to this use of any health details included.",
     emptyCalls: "No calls yet.",
     emptyInbox: "No new calls.",
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
@@ -432,6 +448,12 @@ export const MCP_TEXTS = Object.freeze({
       "cet appel, et ne devinez ni n'inventez jamais de code. La carte signale la call_id " +
       "dans un message de chat une fois l'appel passé. Si cet hôte n'affiche pas la carte " +
       "Hermes, aucun appel ne peut être passé d'ici - dites-le honnêtement à l'utilisateur.",
+    callDataNotice:
+      "Avant de confirmer : les informations de cette carte, y compris d'éventuelles données de " +
+      "santé, sont transmises à l'agent IA et aux prestataires qui assurent l'appel, peuvent être " +
+      "communiquées à la personne appelée et sont conservées avec l'appel. N'indiquez que les " +
+      "données de santé dont cet appel a vraiment besoin. En confirmant, vous consentez " +
+      "expressément à cette utilisation des données de santé incluses.",
     emptyCalls: "Aucun appel pour le moment.",
     emptyInbox: "Aucun nouvel appel.",
     inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",
