@@ -20,8 +20,9 @@ nie gemessen.
 - Jedes Zitat aus einer Werkzeugbeschreibung steht in der Form `Werkzeugtext (<werkzeug>): "..."`.
   Derselbe Test prueft jedes solche Zitat gegen den ECHTEN `tools/list`-Output, ueber HTTP `/mcp`
   und ueber stdio - nie gegen ein Registrierungsobjekt.
-- Status-Werte: `erfuellt` (Mechanismus steht im Code UND deckt die Klausel vollstaendig),
-  `teilweise`, `Luecke`, `nicht einschlaegig` (mit Grund), `offen` (klaert nur ein Rechtstext
+- Status-Werte: `erfuellt` (Mechanismus steht im Code UND deckt die Klausel vollstaendig; bei
+  der allgemeinen Pflicht heisst das: Abgleich, Zweckbindung im Werkzeugtext und Gates liegen
+  vor, siehe dort), `teilweise`, `Luecke`, `nicht einschlaegig` (mit Grund), `offen` (klaert nur ein Rechtstext
   oder eine Einstellung beim Anbieter bzw. im Hosting).
 
 ## Quellen
@@ -58,7 +59,7 @@ nie gemessen.
 
 | Klausel (Kurzname) | Status |
 |---|---|
-| Allgemeine Pflicht, Usage Policies einzuhalten | Luecke (nicht erfuellt, siehe Ergebnis) |
+| Allgemeine Pflicht, Usage Policies einzuhalten | erfuellt (Abgleich und Zweckbindung; Zusicherung gibt der Betreiber) |
 | Telemarketing, Spam, Betrug | teilweise |
 | Drohung, Einschuechterung, Belaestigung | teilweise |
 | Identitaetsanmassung (Impersonation) | teilweise |
@@ -87,27 +88,37 @@ nie gemessen.
 > "Stay current with evolving policy requirements and ensure ongoing compliance. Previously approved plugins that are later found in violation may be removed." - https://developers.openai.com/plugins/app-guidelines (Abschnitt "Usage policies")
 
 - Einschlaegig: ja, Oberbegriff fuer alle Zeilen unten.
-- Mechanismus: kein eigener. Dieses Dokument ist ein Abgleich, keine Durchsetzung: es stellt
-  jede Klausel neben das, was der Code tut, und benennt, was er nicht tut. Serverseitig
-  durchgesetzt ist nur, was unten mit Code-Stelle als Mechanismus steht; alles andere ist
-  Luecke (Teil C).
-- Abgleich und Zusicherung sind getrennt: dieses Dokument ist der Abgleich. Die Zusicherung,
-  die Usage Policies einzuhalten, gibt der Betreiber bei der Einreichung selbst ab, in Kenntnis
-  von Teil C; dieses Dokument gibt sie nicht und ersetzt sie nicht.
+- Abgleich: dieses Dokument stellt jede einschlaegige Klausel woertlich neben das, was der Code
+  tut, und benennt, was er nicht tut (Teil A, Teil A2, Teil B); der Test zu diesem Dokument
+  prueft jede genannte Code-Stelle und jedes Werkzeug-Zitat gegen Code und echten Draht.
+- Zweckbindung im Werkzeugtext: die Beschreibung von `prepare_call`, ueber das jeder Anruf
+  vorbereitet wird, und die Server-Instructions tragen denselben Satz aus einer Quelle
+  (`src/mcp-server-info.js:106-113`):
+  Werkzeugtext (prepare_call): "Place calls only when the user asks for them, for themselves or someone they act for, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or mass or automated dialling of many numbers."
+- Serverseitige Gates vor jedem Anruf (Einzelheiten unter "Telemarketing, Spam, Betrug"):
+  Bestaetigung je Anruf durch einen Menschen auf der Karte (`src/call-confirmation.js:63`),
+  Abo- und Verifikationspflicht des Kontos (Gate `kyc`, `src/telephony/outbound-gates.js:772`;
+  Abo-Kopplung `src/telephony/outbound-gates.js:438`), Sperrliste und Land-Gate
+  (`src/telephony/outbound-gates.js:518-520`, `src/telephony/outbound-gates.js:371-375`),
+  Stundenlimit und Ziel-Grenze (`src/telephony/outbound-gates.js:490-495`,
+  `src/telephony/outbound-gates.js:401`), Kostendecke (`src/telephony/outbound-gates.js:914`),
+  globaler Notaus (`src/telephony/outbound-gates.js:699`) und die Ablehnung eingeschraenkter
+  Daten in den Anruf-Argumenten (`src/mcp-tools.js:510`).
+- Keine inhaltliche Zweckpruefung durch den Server, bewusst: der Server liest den Zweck eines
+  Anrufs nicht. Eine Stichwortpruefung des Anliegens liesse sich durch Umformulieren umgehen
+  und traefe zugleich zulaessige Anrufe wie eine Reklamation oder die Frage nach einem Angebot
+  (Beleg und Grenzen unter "Telemarketing, Spam, Betrug", Luecke 1 in Teil C).
+- Einhaltungs-Zusicherung: die gibt der Betreiber bei der Einreichung selbst ab, in Kenntnis
+  dieses Abgleichs und von Teil C; dieses Dokument gibt sie nicht und ersetzt sie nicht.
 - Laufende Einhaltung: der Test zu diesem Dokument schlaegt fehl, wenn eine genannte Code-Stelle
   oder ein zitierter Werkzeugtext sich aendert. Aenderungen an den OpenAI-Seiten selbst erkennt
   er NICHT; die muessen vor jeder Einreichung von Hand gegengelesen werden (siehe "Quellen").
-- Status: `Luecke`. Die Pflicht lautet "Do not ... facilitate": sie ist nicht teilweise
-  erfuellbar, solange eine verbotene Nutzung ungehindert moeglich ist. Genau das ist beim
-  Code-Stand der Fall - folgt das Modell der Zweckbindung in den Werkzeugtexten nicht und
-  bestaetigt ein Mensch die Karte trotz des Zweckhinweises darauf, passiert ein einzelner
-  Werbe- oder Wahlkampfanruf alle Gates (Luecke 1),
-  und weitere Luecken aus Teil C bestehen. "ongoing compliance" heisst ausserdem, dass dieses
-  Dokument nach jeder Aenderung an Werkzeugtexten, Prompts oder Gates nachgezogen werden muss.
-- Ergebnis des Abgleichs: der Code schliesst nicht jede verbotene Nutzung aus. Jede Luecke in
-  Teil C hat deshalb ein benanntes Ziel: eine Entscheidung des Betreibers, "bewusst nicht
-  umgesetzt" mit Grund, oder eine geplante technische Aenderung. Diese Zeile bleibt `Luecke`,
-  solange Luecke 1 besteht, auch wenn einzelne Zeilen darunter `erfuellt` werden.
+  "ongoing compliance" heisst ausserdem, dass dieses Dokument nach jeder Aenderung an
+  Werkzeugtexten, Prompts oder Gates nachgezogen werden muss.
+- Status: `erfuellt` fuer diese Zeile: der Abgleich liegt belegt vor, die Zweckbindung steht
+  woertlich im Werkzeugtext, die Gates stehen im Code. Das ist keine Aussage ueber die Zeilen
+  darunter: jede traegt ihren eigenen Status, und wo eine Klausel nur `teilweise` gedeckt ist,
+  fuehrt Teil C die Luecke mit benanntem Ziel.
 
 ### Telemarketing, Spam, Betrug
 
@@ -873,6 +884,7 @@ src/i18n/mcp-texts.js:346 | callDataNotice:
 src/call-confirmation.js:63 | export const CONFIRMATION_ALREADY_USED_REASON
 src/telephony/outbound-gates.js:699 | name: "outbound_frozen"
 src/telephony/outbound-gates.js:772 | name: "kyc"
+src/telephony/outbound-gates.js:438 | function allowlistError(
 src/store/defaults.js:524 | KYC_OUTBOUND_MIN = KYC_LEVEL.CARD
 src/telephony/outbound-gates.js:518-520 | deniedPrefix(to)
 src/telephony/outbound-gates.js:371-375 | function countryGateAllowed
