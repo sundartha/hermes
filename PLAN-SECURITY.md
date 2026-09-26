@@ -6657,3 +6657,52 @@ nachzuholen (Kriterien: Selbstnennung 0, erfundene Fakten 0, Luecken-Klasse neu 
 Verweigerung legitimer Anrufe neu <= alt, Abweisung der Missbrauchs-Anrufe neu >= alt).
 Verfehlt er ein Kriterium, sind die Werkzeugtexte nach "Rueckbau" im selben README
 zurueckzunehmen.
+
+## OpenAI-T2-17 - Server-Instructions: Kern in die ersten 512 Zeichen
+
+**Was:** Die Server-Instructions (`src/mcp-server-info.js`) beginnen jetzt mit einem
+verdichteten Kern-Vorspann statt mit dem bisherigen Bestandstext. Der Kern nennt in den
+ersten 512 Zeichen: die Bestaetigungs-Sequenz (die Hermes-Karte waehlt, das Modell ruft
+`place_call` nie selbst auf und erfindet nie einen Code), die Zweckbindung als Kurzform
+(aus derselben Tabelle `CALL_PURPOSE_EXCLUSIONS` wie die Kurzfassung in `place_call`) und
+den Geld-Riegel (nicht erneut waehlen bei `"not-placed"`); im Consult-Fall zusaetzlich die
+sofortige Quittung (`answer_consult` mit `status="working"`). Die vollen Bestandssaetze
+(volle Zweckregel, Geld-Satz, Bestaetigungs-Sequenz, Consult-Block) bleiben byte-identisch
+hinter dem Kern - nur die Reihenfolge im Gesamttext aendert sich, kein Satz wurde
+umformuliert.
+
+**Pfade:** gemeinsame Quelle fuer HTTP `/mcp` (Legacy und OAuth, mit und ohne verknuepften
+Mandanten) und stdio; unabhaengig von `MCP_UI_ENABLED`. stdio pinnt Consult hart aus
+(`STDIO_CONSULT_LOOP`), liefert also immer nur den Basis-Kern.
+
+**Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Sprachagent/
+Prompts/ElevenLabs-/Telnyx-Template, `src/mcp-tools.js` (keine Werkzeugbeschreibung
+geaendert), `CALL_PURPOSE_RULE`/`CALL_PURPOSE_SHORT_RULE`/`CALL_PURPOSE_EXCLUSIONS`
+(unveraendert, nur zusaetzlich im Kern zitiert).
+
+**Rueckbau:** die Kern-Konstanten und der Bauer `instructionsCore()` in
+`src/mcp-server-info.js` sowie die Komposition von `MCP_BASE_INSTRUCTIONS`/
+`MCP_CONSULT_INSTRUCTIONS` aus Kern + `BASE_DETAILS` (+ `CONSULT_BLOCK`);
+`test/openai-t2-17-instructions-kern.test.js`; die Exporte `legacySnapshot`/
+`stdioSnapshot` in `test/mcp-draht-pfade.js` (Rueckbau: wieder modul-intern); der neue
+Absatz in `docs/OPENAI-TOOL-INVENTORY.md` ("Purpose rule"-Abschnitt); die Ergaenzungen in
+`scripts/briefing-bench/README.md` ("Deploy-Vorbedingung", "Rueckbau"). Kein einzelner
+Commit-Revert (mehrere Dateien haengen am neuen Wortlaut, s. README).
+
+**Deploy-Vorbedingung: erweitert die offene Messung aus OpenAI-T2-16 (oben), keine neue.**
+Die Server-Instructions sind Teil des `briefing-bench`-Schnappschusses
+(`scripts/briefing-bench/bench.mjs` liest `client.getInstructions()` und nutzt sie als
+System-Text) - der EINE ausstehende Lauf (alt `66d95ae` gegen den Endstand) misst damit
+automatisch auch diese Phase, sobald sie gemergt ist. Gemessener Versuch im Worktree
+dieser Phase, 2026-09-26, Schluessel nur als Umgebungsvariable, ohne `.env`:
+
+```
+NODE_ENV=test ANTHROPIC_API_KEY=... node scripts/briefing-bench/lauf.mjs run --modus anthropic --modell claude-sonnet-5 --laeufe 5 --tools <schnappschuss> --out <bericht>
+```
+
+scheitert weiterhin am selben Anbieterguthaben (wortgetreu, wie beim T2-16-Versuch):
+`Anbieterfehler 400: Your credit balance is too low to access the Anthropic API. Please go
+to Plans & Billing to upgrade or purchase credits.` Kein neuer Messpunkt; der Consult-Kern
+ist zusaetzlich vom stdio-Lauf des Benches strukturell nicht erreichbar (Consult ist dort
+aus) - benannte Luecke, kein Blocker fuer die Basis-Messung. Der eine echte Lauf bleibt
+Owner-Vorbedingung vor dem Deploy dieser und der T2-16-Phase gemeinsam.

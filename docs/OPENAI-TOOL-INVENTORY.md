@@ -392,6 +392,13 @@ The description of `prepare_call` also says:
 These are usage rules for the model. The server does not check the purpose of a call and does
 not block a mandate by subject area.
 
+The server instructions open with a condensed core, so a host that only reads the first 512
+characters still sees the essentials: confirmation happens in the Hermes card (the model never
+calls `place_call` itself and never invents a confirmation code), the same purpose exclusions as
+above in short form, and not to retry a call whose failure reason starts with `not-placed`; in
+consult mode the core also states the immediate acknowledgement (`answer_consult` with
+`status="working"`). The full sentences quoted above follow, unchanged, right after this core.
+
 ## Table B - tool count and exact name set per configuration
 
 The counts are **measured on the real wire** (HTTP `/mcp` and the stdio child process
