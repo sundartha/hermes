@@ -56,12 +56,17 @@ before(async () => {
 // Kurzfassung der Zweckbindung an place_call und ein ehrlicher Satz an on_out_of_scope.
 // Gemessen vorher 6647 / 7049, nachher 6676 von 6700 ohne Kanal, 7078 von 7100 mit Kanal -
 // die Luft (24 / 22) liegt unter 50 Zeichen, deshalb kein Senken.
-const PLACE_CALL_BUDGET_CHARS = 6700;
-const PLACE_CALL_WITH_CONSULT_BUDGET_CHARS = 7100;
+// T2-16-Nachbesserung (Deckel GESENKT): die context-Unterfelder tragen je einen engen Zweck,
+// kuerzer als vorher - gemessen 6665 ohne Kanal, 7067 mit Kanal. Der Deckel sinkt um 10 auf
+// 6690 / 7090; die Luft (25 / 23) entspricht wieder dem Stand davor.
+const PLACE_CALL_BUDGET_CHARS = 6690;
+const PLACE_CALL_WITH_CONSULT_BUDGET_CHARS = 7090;
 // T2-16 (neue Sicherung, keine Lockerung): die Top-Beschreibung von prepare_call zaehlt oben
 // NICHT mit (Praefix place_call), traegt aber die volle Zweckbindung und den Satz zu
 // sensiblen Mandaten. Ohne eigenen Deckel wuechse genau dieser Text unbegrenzt. Gemessen:
-// 1328 Zeichen; Deckel = Messwert + 42.
+// 1328 Zeichen; Deckel = Messwert + 42. Nachbesserung (Deckel unveraendert): engere
+// Zweckregel und Terminwahl-Ausnahme bei sensiblen Mandaten, dafuer die doppelte
+// Wiederholungs-Pflicht zusammengefasst - gemessen 1335.
 const PREPARE_CALL_TOP_BUDGET_CHARS = 1370;
 const PREPARE_CALL_NAME = "prepare_call";
 const CONSULT_CTX = Object.freeze({ consultAllowed: true });

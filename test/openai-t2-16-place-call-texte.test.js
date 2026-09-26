@@ -7,6 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MCP_WIRE_PATHS } from "./mcp-draht-pfade.js";
+import { CALL_PURPOSE_RULE } from "../src/mcp-server-info.js";
 
 const BRAND_NAMES = /\b(claude|gemini|chatgpt|copilot|openai)\b/i;
 const FOREIGN_TOOL_CLASSES = /calendar, mail|mail, files/i;
@@ -21,6 +22,14 @@ const PURPOSE_POSITIVE_LIST = /booking, rescheduling, enquiring or complaining/;
 const OUT_OF_SCOPE_HONESTY = /not applied on every call path/i;
 const SENSITIVE_MANDATES = /contracts, loans, insurance, tenancy, employment or legal matters/;
 const CALL_TOOLS = ["prepare_call", "place_call"];
+// OpenAI: "Keep the most important details in the first 512 characters". Die
+// Bestaetigungs-Sequenz beginnt dort, die Zweckregel folgt ihr (nicht umgekehrt).
+const INSTRUCTIONS_PRIORITY_CHARS = 512;
+const CONFIRMATION_SEQUENCE_START = "Before every place_call, call prepare_call first";
+// Enge Fassung (Verweigerungsrisiko): Auftrag auch fuer Angehoerige, ausgeschlossen nur die
+// Massenanwahl, und die Terminwahl bleibt bei sensiblen Mandaten erlaubt.
+const NARROW_PURPOSE = [/someone they act for/, /mass or automated dialling/];
+const APPOINTMENT_TIMES_ALLOWED = /decide_freely cover appointment times only/;
 // Nur die Werte dieser _meta-Schluessel sind modell-lesbarer Text; die Schluessel selbst
 // heissen protokollbedingt "openai/..." und sind kein Werkzeugtext.
 const MODEL_READABLE_META_KEYS = ["openai/toolInvocation/invoking", "openai/toolInvocation/invoked"];
@@ -120,6 +129,17 @@ for (const path of MCP_WIRE_PATHS) {
     assert.doesNotMatch(shortRule, ENFORCEMENT_WORDS, "Kurzfassung behauptet keine Pruefung");
   });
 
+  test(`T16-d (${path.label}): Zweckregel wortgleich aus einer Quelle, eng, hinter der Bestaetigungs-Sequenz`, async () => {
+    const { tools, instructions } = await snapshotOf(path);
+    assert.ok(toolByName(tools, "prepare_call").description.includes(CALL_PURPOSE_RULE), "prepare_call");
+    assert.ok(instructions.includes(CALL_PURPOSE_RULE), "instructions");
+    for (const pattern of NARROW_PURPOSE) assert.match(CALL_PURPOSE_RULE, pattern);
+    const sequenceAt = instructions.indexOf(CONFIRMATION_SEQUENCE_START);
+    assert.ok(sequenceAt >= 0, "Bestaetigungs-Sequenz vorhanden");
+    assert.ok(sequenceAt < INSTRUCTIONS_PRIORITY_CHARS, `Sequenz beginnt bei ${sequenceAt}`);
+    assert.ok(sequenceAt < instructions.indexOf(CALL_PURPOSE_RULE), "Zweckregel steht hinter der Sequenz");
+  });
+
   test(`T16-c (${path.label}): on_out_of_scope ehrlich, sensible Mandate in prepare_call`, async () => {
     const { tools } = await snapshotOf(path);
     for (const name of CALL_TOOLS)
@@ -129,6 +149,7 @@ for (const path of MCP_WIRE_PATHS) {
     assert.ok(sentence, "Satz zu sensiblen Mandaten vorhanden");
     assert.match(sentence, /decide_freely/);
     assert.match(sentence, /accept_best/);
+    assert.match(sentence, APPOINTMENT_TIMES_ALLOWED, "Terminwahl bleibt erlaubt");
     assert.doesNotMatch(sentence, ENFORCEMENT_WORDS, "keine Pruefungs-Behauptung");
   });
 }

@@ -176,10 +176,16 @@ const EXPECTED_RESOURCE_META = {
 // nicht auf jedem Anrufweg wirkt. Widgets unveraendert. Beide Pfade weiterhin byte-identisch.
 // Actual-Wert aus dem roten Diff uebernommen, nicht geschaetzt. Voriger Sollwert (beide
 // Pfade): 84cbfd1c490a3bcf03966dced65016655181667f39387f6f3772a3ce81bf5cb3.
+// Neu gepinnt (Nachbesserung Werkzeugtexte): die Zweckregel ist enger gefasst (Auftrag auch
+// fuer Angehoerige, nur Massenanwahl ausgeschlossen), der Satz zu sensiblen Mandaten laesst
+// die Terminwahl zu, und die context-Unterfelder nennen je einen engen Zweck. Widgets
+// unveraendert, beide Pfade weiterhin byte-identisch. Actual-Wert aus dem roten Diff
+// uebernommen. Voriger Sollwert (beide Pfade):
+// 3c641a85cb7a6882aa284ec39f48b23c132037780adf4bdd31ccbf51ffd4edb1.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "3c641a85cb7a6882aa284ec39f48b23c132037780adf4bdd31ccbf51ffd4edb1";
+  "543878b52eec4bfdb58f4843bf9c38344a2f483c3b39111095b74bbbbaec7de0";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "3c641a85cb7a6882aa284ec39f48b23c132037780adf4bdd31ccbf51ffd4edb1";
+  "543878b52eec4bfdb58f4843bf9c38344a2f483c3b39111095b74bbbbaec7de0";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

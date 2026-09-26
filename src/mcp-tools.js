@@ -44,6 +44,7 @@ import { RESTRICTED_CATEGORY, firstRestrictedField, maskRestrictedText } from ".
 // nicht kopiert, nicht nachgebaut. Wiederverwendung an genau der Naht, an der
 // failure_reason den Server verlaesst (callOutcomeView unten).
 import { failureReasonBase } from "./telephony/failure-reason.js";
+import { CALL_PURPOSE_RULE } from "./mcp-server-info.js";
 import { CONFIRMATION_ALREADY_USED_REASON } from "./call-confirmation.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
@@ -904,8 +905,9 @@ const OPEN_QUESTIONS_FIELD = z
 // Zweckbindung (Kurzfassung): der letzte Satz ist eine NUTZUNGSREGEL an das Modell, keine
 // Pruefung - der Server prueft den Zweck eines Anrufs nicht, der Satz darf deshalb kein
 // Durchsetzungs-Verb tragen. Die volle, eng gefasste Regel (mit Positivliste, damit das
-// Modell Termin-, Rueckfrage- und Reklamationsanrufe NICHT verweigert) steht an
-// PREPARE_CALL_DESCRIPTION und in MCP_BASE_INSTRUCTIONS; hier nur die Kurzfassung, weil
+// Modell Termin-, Rueckfrage- und Reklamationsanrufe NICHT verweigert) ist CALL_PURPOSE_RULE
+// (src/mcp-server-info.js) in PREPARE_CALL_DESCRIPTION und in MCP_BASE_INSTRUCTIONS; hier
+// nur die Kurzfassung, weil
 // der Zeichen-Deckel der place_call-Texte (test/gq-b1-briefing-openness.test.js) knapp
 // ist. Klein geschrieben: der Emphase-Pin oben bleibt unveraendert.
 const PLACE_CALL_DESCRIPTION =
@@ -929,15 +931,17 @@ const PLACE_CALL_DESCRIPTION =
 // Einstieg des Modells in jeden Anruf, deshalb stehen die beiden letzten Saetze HIER.
 // Beide sind NUTZUNGSREGELN an das Modell, keine Pruefung: der Server prueft weder den
 // Zweck eines Anrufs noch den Bereich eines Mandats - kein Satz darf deshalb ein
-// Durchsetzungs-Verb tragen (Test openai-t2-16-place-call-texte). Die Zweckbindung ist
-// bewusst ENG: die Positivliste (Termin, Verschiebung, Anfrage, Reklamation) steht vor dem
-// Ausschluss, und ausgeschlossen ist nur das Unaufgeforderte bzw. die Massenanwahl - eine
-// breite Formel ("keine Werbung") liesse das Modell legitime Anrufe verweigern. Der zweite
-// Satz nennt BEIDE Mandats-Wege, ueber die der Agent etwas zusagen kann: decide_freely und
-// den Ausgang 'accept_best' (der auf dem Budget-Weg auch ohne decide_freely zusagt, s.
-// mandateSection in src/claude.js). Klein geschrieben - der Emphase-Pin bleibt.
+// Durchsetzungs-Verb tragen (Test openai-t2-16-place-call-texte). Der Zwecksatz ist
+// CALL_PURPOSE_RULE (wortgleich mit den Server-Instructions, Begruendung der engen Fassung
+// dort). Der zweite Satz nennt BEIDE Mandats-Wege, ueber die der Agent etwas zusagen kann:
+// decide_freely und den Ausgang 'accept_best' (der auf dem Budget-Weg auch ohne
+// decide_freely zusagt, s. mandateSection in src/claude.js). Er beschraenkt nur ZUSAGEN zu
+// Bedingungen, nicht die Terminwahl: eine Wohnungsbesichtigung oder ein
+// Vorstellungsgespraech zu verschieben bleibt mit Zeitrahmen in decide_freely moeglich.
+// Die Wiederholungs-Pflicht steht einmal (Satz mit EVERY) statt zweimal - das haelt den
+// Deckel der Top-Beschreibung (GQ-B1-04b). Klein geschrieben - der Emphase-Pin bleibt.
 const PREPARE_CALL_DESCRIPTION =
-  "Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is switched on for this server, the host can show a Hermes card where the user reviews and confirms the call; if they confirm, the card places the call itself with the confirmation code and reports the call_id back in a chat message - you never call place_call for that call, and never guess or invent its code. The confirmation covers every argument, briefing and context included: if you change any of them, call prepare_call again and let the user confirm again. If this host does not show the Hermes card, or card confirmation is switched off for this server, no call can be placed from here - tell the user so honestly and do not ask them for a code they cannot see. Call prepare_call again EVERY time the arguments change or a previous confirmation expired. Use it only for calls the user asks for on their own behalf, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or calling through lists of numbers. For contracts, loans, insurance, tenancy, employment or legal matters, set neither decide_freely nor 'accept_best', so the agent commits to nothing there.";
+  `Prepares a phone call for confirmation WITHOUT placing it: no cost, no call, nothing irreversible. Takes the exact same arguments as place_call. When card confirmation is switched on for this server, the host can show a Hermes card where the user reviews and confirms the call; if they confirm, the card places the call itself with the confirmation code and reports the call_id back in a chat message - you never call place_call for that call, and never guess or invent its code. The confirmation covers every argument, briefing and context included. If this host does not show the Hermes card, or card confirmation is switched off for this server, no call can be placed from here - tell the user so honestly and do not ask them for a code they cannot see. Call prepare_call again EVERY time any argument changes or a confirmation expired, and let the user confirm again. ${CALL_PURPOSE_RULE} For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only and do not set 'accept_best', so the agent agrees to no terms there.`;
 
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
@@ -1400,29 +1404,33 @@ export const PLACE_CALL_REQUEST_SCHEMA = {
   // lud dazu ein, neben dem Briefing noch mehr abzulegen) - ein Unterfeld nur, wenn der
   // Anruf es braucht, ohne das Briefing zu wiederholen. Kein Markenname eines Chat-Modells
   // ("NEVER as you" statt "NEVER as Claude/Gemini"). Gesundheitsangaben begrenzt, nicht
-  // verboten (Arzttermine). Die Unterfelder bleiben unveraendert.
+  // verboten (Arzttermine). Jedes Unterfeld nennt seinen engen Zweck - wofuer der Agent es
+  // im Gespraech braucht (Hintergrund-Zeile im Prompt, src/claude.js assistantContextSection
+  // bzw. src/elevenlabs/outbound.js backgroundText) - statt einer offenen Sammelkategorie;
+  // die Notwendigkeit je Feld begruendet docs/OPENAI-TOOL-INVENTORY.md. Die Texte sind so
+  // kurz gehalten, dass die Summe unter dem Deckel von GQ-B1-04 bleibt.
   context: z
     .object({
       summary: z
         .string()
         .optional()
         .describe(
-          "What the call is about, summarised in 1-3 sentences (not a raw dump of the chat).",
+          "Only so the agent can state why it calls: 1-3 sentences, not a copy of the chat.",
         ),
       key_facts: z
         .array(z.string())
         .optional()
         .describe(
-          "A few (max. 10) short bullet points with facts relevant to the conversation (names, dates, preferences). NO secrets/passwords/payment data.",
+          "Only facts the agent must state correctly, e.g. names, dates; max. 10 short items. NO secrets/passwords/payment data.",
         ),
       recipient_relationship: z
         .string()
         .optional()
-        .describe("Relationship of the principal to the called party, e.g. 'regular hairdresser', 'new customer'."),
+        .describe("Only if it sets the tone: how the principal knows the called party, e.g. 'regular hairdresser'."),
       desired_outcome: z
         .string()
         .optional()
-        .describe("The desired outcome from the principal's perspective, phrased briefly."),
+        .describe("Only so the agent knows when it is done: the result the principal wants, briefly."),
       open_questions: OPEN_QUESTIONS_FIELD,
     })
     .optional()

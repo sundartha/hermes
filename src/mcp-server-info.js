@@ -70,6 +70,20 @@ export const HERMES_SERVER_INFO = {
   ],
 };
 
+// Zweckbindung: EINE Quelle fuer die Server-Instructions (unten) UND die Beschreibung von
+// prepare_call (src/mcp-tools.js importiert sie) - wortgleich, keine zweite Formulierung.
+// Eine NUTZUNGSREGEL an das Modell, keine Pruefung: der Server prueft den Zweck eines Anrufs
+// nicht, der Satz traegt deshalb kein Durchsetzungs-Verb. Bewusst ENG, damit das Modell
+// legitime Anrufe nicht verweigert: erst die Positivliste (Termin, Verschiebung, Anfrage,
+// Reklamation), Auftrag auch fuer jemanden, fuer den der Nutzer handelt (Angehoerige);
+// ausgeschlossen nur Unaufgefordertes und MASSEN-/automatische Anwahl - mehrere gezielte
+// Anrufe (drei Friseure abtelefonieren) bleiben erlaubt.
+export const CALL_PURPOSE_RULE =
+  "Place calls only when the user asks for them, for themselves or someone they act for, " +
+  "such as booking, rescheduling, enquiring or complaining - not for telemarketing, " +
+  "unsolicited advertising or sales calls, political campaigning, or mass or automated " +
+  "dialling of many numbers.";
+
 // AL-P13/T-21: Server-Instruktionen fuer den MCP-Host. ACHTUNG: `instructions` ist ein
 // Feld von ServerOptions, NICHT von Implementation - in HERMES_SERVER_INFO gesetzt
 // wuerde es still verworfen. Deshalb liegt hier NUR der Text plus der Options-Bauer;
@@ -102,16 +116,6 @@ export const MCP_BASE_INSTRUCTIONS =
   "for that call_id - it works for a failed call, not only a completed one - and tell the " +
   "user what failed, using its result_summary text as it is. " +
   "Never invent facts about the principal or the call: if you do not know something, say so. " +
-  // Zweckbindung: eine NUTZUNGSREGEL an das Modell, keine Pruefung - der Server prueft den
-  // Zweck eines Anrufs nicht, der Satz traegt deshalb kein Durchsetzungs-Verb. Steht im
-  // Basis-Block, damit er ueber die Komposition MCP_CONSULT_INSTRUCTIONS auch im
-  // Consult-Fall gilt. Bewusst ENG: erst die Positivliste (Termin, Verschiebung, Anfrage,
-  // Reklamation), ausgeschlossen nur Unaufgefordertes und Massenanwahl - eine breite Formel
-  // ("keine Werbung") liesse das Modell legitime Anrufe verweigern. Mit dem
-  // Zwecksatz in PREPARE_CALL_DESCRIPTION (src/mcp-tools.js) inhaltsgleich halten.
-  "Place calls only when the user asks for them on their own behalf, such as booking, " +
-  "rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising " +
-  "or sales calls, political campaigning, or calling through lists of numbers. " +
   // T2-13 (N-10): die Bestaetigungs-Sequenz vor jedem place_call - ein Satz, damit das
   // Modell nicht rein aus der Tool-Beschreibung raet, wann prepare_call an der Reihe ist.
   // KORRIGIERT (Safety-Review T2-13): "reveals a confirmation_code" liess offen, ob das
@@ -128,7 +132,11 @@ export const MCP_BASE_INSTRUCTIONS =
   "argument, briefing and context included: after changing any of them, call " +
   "prepare_call again and let the user confirm again. If this host does not show " +
   "the Hermes card, or card confirmation is switched off for this server, no call can be " +
-  "placed from here - tell the user so honestly.";
+  "placed from here - tell the user so honestly. " +
+  // Zweckbindung HINTER der Bestaetigungs-Sequenz: die Sequenz gehoert nach vorn (OpenAI:
+  // "Keep the most important details in the first 512 characters"), die Zweckregel folgt.
+  // Steht im Basis-Block, damit sie ueber MCP_CONSULT_INSTRUCTIONS auch im Consult-Fall gilt.
+  CALL_PURPOSE_RULE;
 
 // Consult-Block bleibt modul-intern (kein dritter Export, keine dritte Wahrheit) - er
 // gilt NUR, wenn der Tenant await_call_event/answer_consult registriert bekommt.
