@@ -4,9 +4,11 @@
 // Konzept: EIN durchgehendes Agent-Session-Fenster erzählt die Geschichte
 // chronologisch aus Nutzersicht — wie ein Screen-Recording: Setup-Events
 // (Nummer aktiv, MCP verbunden) → der Auftrag an die eigene KI im Chat →
-// der Tool-Call (place_call) → der echte Anruf mit Live-Transkript → das
-// Ergebnis zurück im Chat. Drei Szenen im SELBEN Fenster (der Fensterkopf
-// bleibt stehen, nur der Inhalt zieht weiter) statt sechs getrennter Folien.
+// der Tool-Call (prepare_call, Bestätigung in der Hermes-Karte) → der echte
+// Anruf mit Live-Transkript → das Ergebnis zurück im Chat. Drei Szenen im
+// SELBEN Fenster (der Fensterkopf bleibt stehen, nur der Inhalt zieht weiter)
+// statt sechs getrennter Folien. Die Werkzeugliste (ev2v) nennt nur Werkzeuge,
+// die der MCP-Server heute anbietet; einen Kalender hat Hermes nicht mehr.
 //
 // Technik unverändert zum Vorgänger (bewährt + CSP-konform): die Zeit läuft
 // rein über CSS-Keyframes einer 76s-Schleife; hermes-demo.js setzt nur Pause,
@@ -36,12 +38,12 @@ const DEMO = {
     scene2: "02 · Hermes telefoniert",
     scene3: "03 · Das Ergebnis",
     ev1k: "Hermes-Nummer aktiv", ev1v: "+49 176 44 12 908",
-    ev2k: "Als MCP-Connector verbunden", ev2v: "place_call · list_calls · get_transcript · get_calendar",
+    ev2k: "Als MCP-Connector verbunden", ev2v: "prepare_call · place_call · list_calls · get_call_result",
     youLabel: "Du, an deine KI",
     aiLabel: "Deine KI",
     userMsg: "Kannst du mir für diese Woche einen Kontrolltermin bei Dr. Behrens machen?",
-    aiMsg1: "Klar — ich rufe die Praxis kurz an.",
-    toolName: "place_call",
+    aiMsg1: "Klar — bestätige den Anruf in der Hermes-Karte, dann ruft Hermes die Praxis an.",
+    toolName: "prepare_call",
     toolArg: "Praxis Dr. Behrens",
     callLabel: "Ausgehender Anruf",
     callee: "Praxis Dr. Behrens",
@@ -53,7 +55,7 @@ const DEMO = {
     l4: "Donnerstag wäre frei.",
     l5: "Das passt gut, den nehmen wir. Auf den Namen Kroh.",
     hangup: "Anruf beendet · 0:47",
-    aiMsg2: "Erledigt! Donnerstag, 14. Aug. um 11:30 bei Dr. Behrens — ich hab dir den Termin eingetragen.",
+    aiMsg2: "Erledigt! Donnerstag, 14. Aug. um 11:30 bei Dr. Behrens ist gebucht.",
     r1k: "Termin", r1v: "Donnerstag, 14. Aug. · 11:30 · Praxis Dr. Behrens",
     r2v: "Zusammenfassung & Transkript liegen in deinem Dashboard",
     live: "Live",
@@ -66,12 +68,12 @@ const DEMO = {
     scene2: "02 · Hermes makes the call",
     scene3: "03 · The result",
     ev1k: "Hermes number active", ev1v: "+49 176 44 12 908",
-    ev2k: "Connected as an MCP connector", ev2v: "place_call · list_calls · get_transcript · get_calendar",
+    ev2k: "Connected as an MCP connector", ev2v: "prepare_call · place_call · list_calls · get_call_result",
     youLabel: "You, to your AI",
     aiLabel: "Your AI",
     userMsg: "Can you get me a check-up appointment with Dr. Behrens this week?",
-    aiMsg1: "Sure — I'll give the practice a quick call.",
-    toolName: "place_call",
+    aiMsg1: "Sure — confirm the call in the Hermes card, then Hermes rings the practice.",
+    toolName: "prepare_call",
     toolArg: "Dr. Behrens' practice",
     callLabel: "Outgoing call",
     callee: "Dr. Behrens' practice",
@@ -83,7 +85,7 @@ const DEMO = {
     l4: "Thursday would be free.",
     l5: "That works well, let's take it. Under the name Kroh.",
     hangup: "Call ended · 0:47",
-    aiMsg2: "Done! Thursday, Aug 14 at 11:30 am with Dr. Behrens — I've added it to your calendar.",
+    aiMsg2: "Done! Thursday, Aug 14 at 11:30 am with Dr. Behrens is booked.",
     r1k: "Appointment", r1v: "Thursday, Aug 14 · 11:30 am · Dr. Behrens' practice",
     r2v: "Summary & transcript are waiting in your dashboard",
     live: "Live",
