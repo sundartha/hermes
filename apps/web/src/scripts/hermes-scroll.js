@@ -126,7 +126,7 @@ const DE = {
   hdAiMsg2: "Erledigt! Donnerstag, 14. Aug. um 11:30 bei Dr. Behrens ist gebucht.",
   hdR1k: "Termin",
   hdR1v: "Donnerstag, 14. Aug. · 11:30 · Praxis Dr. Behrens",
-  hdR2v: "Zusammenfassung & Transkript liegen in deinem Dashboard",
+  hdR2v: "Die Zusammenfassung liegt in deinem Dashboard",
   hdStep1: "Auftrag geben",
   hdStep2: "Hermes telefoniert",
   hdStep3: "Ergebnis",

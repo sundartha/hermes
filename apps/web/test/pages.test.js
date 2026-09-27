@@ -269,6 +269,13 @@ const INTERNAL_ID = /\b(T2-\d+|OW-[A-Z]|O-\d+|N-\d+|H-\d+)\b/;
 const TRANSCRIPT_PROMISE = /with (its|their) transcripts?|and (its|their) transcripts?/i;
 // Der Vorbehalt muss sichtbar dastehen, nicht nur die Zusage fehlen.
 const TRANSCRIPT_DELETION_NOTE = /transcript of a call is normally deleted once its summary has been created/;
+// Die Fristen gelten nur fuer unser System: der Anbieter der Gespraechs-Plattform speichert
+// das Gespraech eigenstaendig und loescht derzeit nicht automatisch (Datenschutzerklaerung
+// "Speicherdauer"). Ohne diesen Vorbehalt waere der Loesch-Hinweis eine falsche Zusage.
+const PROVIDER_RETENTION_NOTE = /voice platform provider stores conversations separately and does not currently delete them automatically/;
+// Astro entfernt einen Zeilenumbruch direkt vor einem Tag ersatzlos: ohne explizites
+// Leerzeichen klebt das Wort vor dem Link am Linktext ("email<a", "Our<a").
+const GLUED_LINK = /[A-Za-z]<a\s/;
 
 // Sichtbarer Text: Skripte/Styles raus, dann alle Tags. So pruefen die Regexe den
 // Text, den ein Mensch liest - nicht die gehashten Asset-Namen in Attributen.
@@ -313,6 +320,9 @@ test("Support-Seite: Positiv-Kontrolle - die Verbots-Regexe schlagen an", () => 
   for (const sample of ["each of your calls with its transcript", "your calls and their transcripts"]) {
     assert.match(sample, TRANSCRIPT_PROMISE, `Regex verfehlt "${sample}"`);
   }
+  for (const sample of ['by email<a href="mailto:x">', 'Our<a href="/kuendigen">']) {
+    assert.match(sample, GLUED_LINK, `Regex verfehlt "${sample}"`);
+  }
 });
 
 test("Support-Seite: indexierbar, kanonisch, Kontakt aus dem Bestand, keine erfundenen Zusagen", () => {
@@ -328,7 +338,10 @@ test("Support-Seite: indexierbar, kanonisch, Kontakt aus dem Bestand, keine erfu
   assert.doesNotMatch(text, UNBACKED_PROMISE, "Support-Seite verspricht etwas ohne Beleg");
   assert.doesNotMatch(text, INTERNAL_ID, "Support-Seite nennt eine interne Kennung");
   assert.doesNotMatch(text, TRANSCRIPT_PROMISE, "Support-Seite verspricht Transkripte im Kundenbereich");
-  assert.match(text.replace(/\s+/g, " "), TRANSCRIPT_DELETION_NOTE, "Support-Seite fehlt der Loesch-Vorbehalt zum Transkript");
+  const flatText = text.replace(/\s+/g, " ");
+  assert.match(flatText, TRANSCRIPT_DELETION_NOTE, "Support-Seite fehlt der Loesch-Vorbehalt zum Transkript");
+  assert.match(flatText, PROVIDER_RETENTION_NOTE, "Support-Seite fehlt der Vorbehalt zur Aufbewahrung beim Plattform-Anbieter");
+  assert.doesNotMatch(html, GLUED_LINK, "Support-Seite klebt ein Wort an einen Link");
 });
 
 test("Support-Seite: keine Quelle oder kein Link auf einen fremden Host", () => {
@@ -353,18 +366,26 @@ test("Sitemap enthaelt die Support-Seite", () => {
 
 // Die Erklaer-Demo nennt nur Werkzeuge, die der Server heute anbietet, und zeigt den
 // heutigen Ablauf: die KI bereitet den Anruf vor (prepare_call), der Mensch bestaetigt
-// ihn in der Hermes-Karte. Einen Kalender hat Hermes nicht mehr.
-const RETIRED_DEMO_CLAIMS = /get_transcript|get_my_number|get_calendar|added it to your calendar|Termin eingetragen/;
+// ihn in der Hermes-Karte. Einen Kalender hat Hermes nicht mehr, und das Wortprotokoll
+// wird nach der Zusammenfassung geloescht - die Demo verspricht kein Transkript im Dashboard.
+const RETIRED_DEMO_CLAIMS =
+  /get_transcript|get_my_number|get_calendar|added it to your calendar|Termin eingetragen|Summary & transcript|Zusammenfassung & Transkript/;
 const DEMO_PAGES = ["index.html", "so-funktionierts/index.html"];
 
-test("Demo nennt nur heutige Werkzeuge und keinen Kalender", () => {
+test("Demo: Positiv-Kontrolle - die Verbots-Regex schlaegt an", () => {
+  for (const sample of ["get_transcript", "Summary & transcript are waiting", "Zusammenfassung & Transkript liegen"]) {
+    assert.match(sample, RETIRED_DEMO_CLAIMS, `Regex verfehlt "${sample}"`);
+  }
+});
+
+test("Demo nennt nur heutige Werkzeuge, keinen Kalender und kein Dashboard-Transkript", () => {
   for (const page of DEMO_PAGES) {
     const html = readDist(page);
     assert.ok(html.includes("prepare_call"), `${page}: Demo zeigt prepare_call nicht`);
-    assert.doesNotMatch(html, RETIRED_DEMO_CLAIMS, `${page}: Demo nennt ein altes Werkzeug oder den Kalender`);
+    assert.doesNotMatch(html, RETIRED_DEMO_CLAIMS, `${page}: Demo nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript`);
   }
   // Das DE-Woerterbuch des Laufzeit-Umschalters traegt die Demo-Texte ein zweites Mal.
   const scroll = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
   assert.ok(scroll.includes("prepare_call"), "hermes-scroll.js: Demo zeigt prepare_call nicht");
-  assert.doesNotMatch(scroll, RETIRED_DEMO_CLAIMS, "hermes-scroll.js nennt ein altes Werkzeug oder den Kalender");
+  assert.doesNotMatch(scroll, RETIRED_DEMO_CLAIMS, "hermes-scroll.js nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript");
 });
