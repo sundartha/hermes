@@ -1,13 +1,16 @@
 # OpenAI-Einreichung, Technik Runde 2 - Uebersicht
 
-Stand: 27.09.2026, nach Sitzung 6. Kompakte Sicht fuer den Owner: was steht, was fehlt, was nur du
+Stand: 27.09.2026, nach Sitzung 6 und dem Deploy von `59beeb8`. Kompakte Sicht fuer den Owner: was steht, was fehlt, was nur du
 erledigen kannst, wo was liegt. Das ausfuehrliche Protokoll bleibt `tasks/openai-technik-2-stand.md`.
 
 ## 1. Kurzstand
 
-- **master `91ef8cc`**, lokal. **Nichts aus Runde 2 ist gepusht oder live.** Der lokale Ref
-  `upstream/master` (= Render-Deploy-Quelle) steht auf `728f053` (20.09.) und enthaelt weder den
-  Kettenstart `288376b` noch irgendeine Phase dieser Runde.
+- **LIVE seit 27.09.2026 ~18:35: `59beeb8`** (Runde 1 + Runde 2 bis T2-20 + Cookie-Consent aus upstream).
+  lokal = origin/master = upstream/master. Gateway per manuellem Deploy (autoDeploy ist AUS),
+  Website `hermes-web` per autoDeploy (AN) - `/support` ist live.
+- Nach dem Deploy von aussen gemessen: `/healthz` ok mit Commit `59beeb8`; Boot-Log ohne Warnung zu
+  `CALL_CONFIRMATION_SECRET` und `MCP_AUTH`; `/mcp` ohne Token -> 401 mit Bearer-Challenge und Scopes;
+  OAuth-Metadaten korrekt; `https://sundartha.com/support` -> 200, kein noindex.
 - **21 von 24 Phasen gemergt**, jede mit unabhaengiger Opus-Verifikation ("MERGE-FREIGABE ja").
 - Offen: **T2-21, T2-22, T2-24**, danach die **Schlussabnahme** (Messung aller 100 IDs).
 - Letzte Messung: Zwischenmessung 1 (24.09., master `1a31815`): 79 technische IDs, davon 55 ERFUELLT,
@@ -67,10 +70,10 @@ Bekannte kleine Restpunkte (kein Merge-Hindernis, in der Schlussabnahme entschei
 |---|---|---|---|
 | A1 | OW-G `PUBLIC_URL` | **erledigt** (23.09. von aussen gemessen) | - |
 | A2 | OW-B echtes Token | **erledigt** (23.09., `exp` + Scopes + `aud` passen) | - |
-| A3 | OW-N | `WORLD_DEFAULT_LANGUAGE_ENABLED` live pruefen | `true`; sonst zeigt der MCP-Fehlerkanal EN-Mandanten deutschen Text |
-| A4 | OW-H Werkzeugtext-Messung | Anthropic-Guthaben aufladen, dann `scripts/briefing-bench` echt mit n=5: Alt `66d95ae` gegen Endstand (Anleitung `scripts/briefing-bench/README.md`) | Selbstnennung 0, erfundene Fakten 0, Luecken neu >= alt, Verweigerung legitimer Anrufe neu <= alt, Missbrauch abgewiesen neu >= alt. Verfehlt -> Werkzeugtext-Commits zuruecknehmen (Anleitung README + PLAN-SECURITY) |
-| A5 | Bestaetigung vor dem Waehlen | `CALL_CONFIRMATION_SECRET` (>= 32 Zeichen) im Render-Dashboard setzen; `MCP_UI_ENABLED` nicht `false` | Boot ohne WARN `UNSET/TOO_SHORT` |
-| A6 | Deploy-Kopplungen | T2-13 + T2-14 nur gemeinsam; T2-11 + T2-12 nur gemeinsam (praktisch: master als Ganzes deployen) | - |
+| A3 | OW-N (OFFEN, jetzt live relevant) | `WORLD_DEFAULT_LANGUAGE_ENABLED` live pruefen | `true`; sonst zeigt der MCP-Fehlerkanal EN-Mandanten deutschen Text |
+| A4 | OW-H Werkzeugtext-Messung (OFFEN - ohne Messung deployt, Owner-Entscheidung 27.09.) | Anthropic-Guthaben aufladen, dann `scripts/briefing-bench` echt mit n=5: Alt `66d95ae` gegen Endstand (Anleitung `scripts/briefing-bench/README.md`) | Selbstnennung 0, erfundene Fakten 0, Luecken neu >= alt, Verweigerung legitimer Anrufe neu <= alt, Missbrauch abgewiesen neu >= alt. Verfehlt -> Werkzeugtext-Commits zuruecknehmen (Anleitung README + PLAN-SECURITY) |
+| A5 | Bestaetigung vor dem Waehlen | **erledigt 27.09.**: `CALL_CONFIRMATION_SECRET` (48 Zeichen) per Render-MCP gesetzt; Boot ohne WARN. `MCP_UI_ENABLED` nicht `false` (nicht gemessen) | - |
+| A6 | Deploy-Kopplungen | **erledigt**: master als Ganzes deployt | - |
 | A7 | Kenntnisnahme | Ab dem Deploy kann **kein Host ohne Widget-Karte mehr waehlen**: Claude Code (auch der claude.ai-Connector in Claude Code), stdio, API, `MCP_UI_ENABLED=false`. claude.ai-Web und ChatGPT rendern Karten | bewusst so; ein Rueckfallweg waere eine eigene Phase |
 | A8 | WorkOS-Aufraeumen | temporaeren Client `client_01M373KB0ZKABRXDMS4130KPMD` im WorkOS-Dashboard loeschen | - |
 
@@ -93,6 +96,8 @@ Bekannte kleine Restpunkte (kein Merge-Hindernis, in der Schlussabnahme entschei
 15. Werkzeugnamen, Pflichtfelder und Widget-URIs im ChatGPT Dev Mode mit dem passenden Profil in `docs/mcp-vertrag.json` vergleichen; fehlt eines, Profil ergaenzen.
 
 ### C. Website `/support` live bringen (OW-K)
+
+**Erledigt 27.09. per autoDeploy von `hermes-web` (ohne Labor-Schritt); Messung 4 bestanden. Offen nur Schritt 5.**
 
 1. Labor: `git fetch upstream && git checkout -b web-support upstream/master`, dann die T2-19-Commits
    `21fc199..78110e1` cherry-picken (nur `apps/web/**`), `git push upstream web-support:staging`.
