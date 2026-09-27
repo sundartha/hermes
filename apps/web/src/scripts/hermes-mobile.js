@@ -9,13 +9,23 @@
  *
  * Zustaende (README des Handoffs):
  *   active  0-4   aktueller Screen aus p = scrollTop / clientHeight
+ *   Blaettern     eine Geste = genau ein Screen, immer buendig (lib/mobile-pager.js)
  *   step    0-2   Autoplay (6.5 s) nur auf Screen 2, Tippen oder Wischen
- *   plan    0/1   Starter / Business, Start auf dem hervorgehobenen Tarif
+ *   plan    0/1   Starter / Pro, Start auf dem hervorgehobenen Tarif
  *   way     0-2   Connector / Terminal / Your AI
  *   copied        faellt nach 1.6 s zurueck
  *   lang    en/de folgt <html lang> (der Umschalter laeuft ueber hermes-scroll.js)
  * prefers-reduced-motion: kein Autoplay, kein Parallax, keine Staffel.
  * ========================================================================== */
+
+import {
+  WHEEL_QUIET_MS,
+  WHEEL_STEP_PX,
+  pageDuration,
+  pageStep,
+  pageTarget,
+  wheelPixels,
+} from "../lib/mobile-pager.js";
 
 /* Dieselbe Abfrage wie in hermes-mobile.css. */
 const MOBILE_QUERY = "(max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px)))";
@@ -30,6 +40,15 @@ const ARRIVE_DELAY_MS = 520;
 const COUNT_BASE_MS = 450;
 const COUNT_PER_SEGMENT_MS = 150;
 const SWIPE_MIN_PX = 40;
+/* Blaettern: ab dieser Strecke (px) steht fest, ob die Geste senkrecht
+ * (blaettern) oder waagerecht (Schritte auf Screen 2) gemeint ist; das Tempo
+ * am Ende misst sich ueber die letzten VELOCITY_WINDOW_MS; nach SETTLE_MS Ruhe
+ * wird eine fremd verursachte Zwischenposition (Fokus, Vorlesen) buendig
+ * gestellt. */
+const AXIS_LOCK_PX = 8;
+const VELOCITY_WINDOW_MS = 100;
+const MIN_SAMPLES = 2;
+const SETTLE_MS = 140;
 const PROGRESS_DIGITS = 4;
 const EASE_POWER = 3;
 /* Phasen der drei Animationen (ms nach dem Ankommen) und ab welcher Phase die
@@ -75,6 +94,15 @@ let copiedTimer = 0;
 let arriveTimer = 0;
 let countFrame = 0;
 let scrollFrame = 0;
+const pager = {
+  frame: 0,
+  target: 0,
+  drag: null,
+  wheelSum: 0,
+  wheelLocked: false,
+  wheelTimer: 0,
+  settleTimer: 0,
+};
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const relOf = (index, current) => {
@@ -90,6 +118,8 @@ const langAttr = (base) => `${base}-${state.lang === "de" ? "de" : "en"}`;
 
 function onScroll() {
   if (!scrollFrame) scrollFrame = requestAnimationFrame(update);
+  clearTimeout(pager.settleTimer);
+  if (!pager.frame && !pager.drag) pager.settleTimer = setTimeout(settle, SETTLE_MS);
 }
 
 function update() {
@@ -103,8 +133,163 @@ function update() {
 }
 
 function jump(index) {
-  const top = clamp(index, 0, el.screens.length - 1) * el.scroller.clientHeight;
-  el.scroller.scrollTo({ top, behavior: reduced.matches ? "auto" : "smooth" });
+  glideTo(clamp(index, 0, el.screens.length - 1));
+}
+
+/* ----------------------------------------------------------- Blaettern */
+
+/* Eine Geste bewegt genau einen Screen, und jede Fahrt endet buendig auf einem
+ * ganzen Screen - egal wie hart gewischt wurde. Der Finger zieht den Screen mit
+ * (hoechstens bis zum Nachbarn), beim Loslassen entscheidet lib/mobile-pager.js
+ * ueber weiter / zurueck; die Fahrt dorthin laeuft hier per requestAnimationFrame
+ * ueber scrollTop, damit --p, Parallax und Ankommen wie beim Scrollen folgen. */
+
+const pageHeight = () => el.scroller.clientHeight;
+
+/* Worauf die Seite gerade steht oder zufaehrt. */
+function pageIndex() {
+  if (pager.frame) return pager.target;
+  const height = pageHeight();
+  return height ? clamp(Math.round(el.scroller.scrollTop / height), 0, el.screens.length - 1) : 0;
+}
+
+function stopGlide() {
+  cancelAnimationFrame(pager.frame);
+  pager.frame = 0;
+}
+
+function glideTo(index) {
+  stopGlide();
+  pager.target = index;
+  const height = pageHeight();
+  const from = el.scroller.scrollTop;
+  const distance = index * height - from;
+  if (reduced.matches || Math.abs(distance) < 1) {
+    el.scroller.scrollTop = index * height;
+    return;
+  }
+  const duration = pageDuration(distance, height);
+  const start = performance.now();
+  const tick = (now) => {
+    const ratio = clamp((now - start) / duration, 0, 1);
+    el.scroller.scrollTop = from + distance * (1 - Math.pow(1 - ratio, EASE_POWER));
+    pager.frame = ratio < 1 ? requestAnimationFrame(tick) : 0;
+  };
+  pager.frame = requestAnimationFrame(tick);
+}
+
+/* Steht die Seite zwischen zwei Screens (der Browser rollt einen fokussierten
+ * Knopf ins Bild, Vorlesefunktion), faehrt sie buendig - auf den Screen mit dem
+ * Fokus, wenn er einer der beiden angeschnittenen ist, sonst auf den naechsten. */
+function settle() {
+  const height = pageHeight();
+  if (pager.frame || pager.drag || !height || !mobile.matches) return;
+  const exact = el.scroller.scrollTop / height;
+  if (Math.abs(exact - Math.round(exact)) * height <= 1) return;
+  const active = document.activeElement;
+  const focused = el.screens.indexOf(active && active.closest(".mh-screen"));
+  const cut = [Math.floor(exact), Math.ceil(exact)];
+  glideTo(cut.includes(focused) ? focused : clamp(Math.round(exact), 0, el.screens.length - 1));
+}
+
+function onPointerDown(event) {
+  if (!mobile.matches || event.pointerType === "mouse") return;
+  if (!event.isPrimary) {
+    // Zweiter Finger (Zoomen): Geste abbrechen, buendig stellen.
+    pager.drag = null;
+    glideTo(pageIndex());
+    return;
+  }
+  const base = pageIndex();
+  stopGlide();
+  pager.drag = {
+    id: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    top: el.scroller.scrollTop,
+    base,
+    axis: null,
+    samples: [{ time: event.timeStamp, pos: event.clientY }],
+  };
+}
+
+function onPointerMove(event) {
+  const drag = pager.drag;
+  if (!drag || event.pointerId !== drag.id) return;
+  const dx = event.clientX - drag.startX;
+  const dy = event.clientY - drag.startY;
+  if (!drag.axis) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < AXIS_LOCK_PX) return;
+    drag.axis = Math.abs(dy) >= Math.abs(dx) ? "y" : "x";
+  }
+  if (drag.axis !== "y") return;
+  const height = pageHeight();
+  const lowest = Math.max(0, drag.base - 1) * height;
+  const highest = Math.min(el.screens.length - 1, drag.base + 1) * height;
+  el.scroller.scrollTop = clamp(drag.top - dy, lowest, highest);
+  drag.samples.push({ time: event.timeStamp, pos: event.clientY });
+  const old = (sample) => event.timeStamp - sample.time > VELOCITY_WINDOW_MS;
+  while (drag.samples.length > MIN_SAMPLES && old(drag.samples[0])) {
+    drag.samples.shift();
+  }
+}
+
+/* Fingertempo am Ende in px/ms, positiv = Richtung naechster Screen. */
+function releaseVelocity(samples) {
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  const time = last.time - first.time;
+  return time > 0 ? (first.pos - last.pos) / time : 0;
+}
+
+function onPointerUp(event) {
+  const drag = pager.drag;
+  if (!drag || event.pointerId !== drag.id) return;
+  pager.drag = null;
+  if (drag.axis !== "y") {
+    // Antippen oder waagerechte Geste: die Seite bleibt, steht aber immer buendig.
+    glideTo(drag.base);
+    return;
+  }
+  const step = pageStep({
+    moved: el.scroller.scrollTop - drag.base * pageHeight(),
+    velocity: releaseVelocity(drag.samples),
+    height: pageHeight(),
+  });
+  glideTo(pageTarget(drag.base, step, el.screens.length));
+}
+
+function onPointerCancel(event) {
+  const drag = pager.drag;
+  if (!drag || event.pointerId !== drag.id) return;
+  pager.drag = null;
+  glideTo(pageIndex());
+}
+
+/* Mausrad und Trackpad: eine Geste = ein Screen; ihr Nachlauf zaehlt nicht. */
+function onWheel(event) {
+  if (!mobile.matches || event.ctrlKey) return;
+  event.preventDefault();
+  clearTimeout(pager.wheelTimer);
+  pager.wheelTimer = setTimeout(() => {
+    pager.wheelLocked = false;
+    pager.wheelSum = 0;
+  }, WHEEL_QUIET_MS);
+  if (pager.wheelLocked) return;
+  pager.wheelSum += wheelPixels(event.deltaY, event.deltaMode, pageHeight());
+  if (Math.abs(pager.wheelSum) < WHEEL_STEP_PX) return;
+  pager.wheelLocked = true;
+  glideTo(pageTarget(pageIndex(), pager.wheelSum, el.screens.length));
+  pager.wheelSum = 0;
+}
+
+function wirePager() {
+  const { scroller } = el;
+  scroller.addEventListener("pointerdown", onPointerDown);
+  scroller.addEventListener("pointermove", onPointerMove);
+  scroller.addEventListener("pointerup", onPointerUp);
+  scroller.addEventListener("pointercancel", onPointerCancel);
+  scroller.addEventListener("wheel", onWheel, { passive: false });
 }
 
 /* Screen wird aktiv: gestaffeltes Einblenden per CSS, Schritt 1 von vorn,
@@ -205,18 +390,20 @@ function typeLine(viz, speed) {
 }
 
 function wireSwipe() {
-  let startX = null;
+  let start = null;
   el.swipe.addEventListener("pointerdown", (event) => {
-    startX = event.clientX;
+    start = { left: event.clientX, top: event.clientY };
   });
   el.swipe.addEventListener("pointercancel", () => {
-    startX = null;
+    start = null;
   });
   el.swipe.addEventListener("pointerup", (event) => {
-    if (startX == null) return;
-    const dx = event.clientX - startX;
-    startX = null;
-    if (Math.abs(dx) <= SWIPE_MIN_PX) return;
+    if (start == null) return;
+    const dx = event.clientX - start.left;
+    const dy = event.clientY - start.top;
+    start = null;
+    // Nur eine ueberwiegend waagerechte Geste wechselt den Schritt; senkrecht blaettert.
+    if (Math.abs(dx) <= SWIPE_MIN_PX || Math.abs(dx) <= Math.abs(dy)) return;
     const next = state.step + (dx < 0 ? 1 : -1);
     if (next >= 0 && next < el.steps.length) setStep(next);
   });
@@ -442,6 +629,8 @@ function onKey(event) {
 /* --------------------------------------------------------------- Start */
 
 function stopAll() {
+  stopGlide();
+  pager.drag = null;
   clearTimeout(autoTimer);
   clearViz();
   cancelAnimationFrame(countFrame);
@@ -451,7 +640,9 @@ function stopAll() {
  * buendig stellen, der Zustand bleibt. */
 function realign() {
   if (!mobile.matches || state.active < 0) return;
-  el.scroller.scrollTop = state.active * el.scroller.clientHeight;
+  const index = pager.frame ? pager.target : state.active;
+  stopGlide();
+  el.scroller.scrollTop = index * el.scroller.clientHeight;
   update();
 }
 
@@ -510,6 +701,7 @@ function wire(root) {
   el.wayTabs.forEach((tab, i) => tab.addEventListener("click", () => setWay(i)));
   el.copy.addEventListener("click", copyActive);
   wireSwipe();
+  wirePager();
   document.addEventListener("keydown", onKey);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden && state.active === SCREEN_HOW) setStep(state.step);
@@ -533,6 +725,7 @@ function init() {
   buildPrice();
   applyLang(document.documentElement.lang);
   root.setAttribute("data-ready", "");
+  root.setAttribute("data-pager", "");
   refresh();
 }
 
