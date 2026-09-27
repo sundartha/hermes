@@ -75,7 +75,8 @@ to Hermes; Hermes itself has no password login and no MFA step for this path.
 ### 4. What happens on first connection
 
 - Operator commitment: the reviewer account already exists and is active with a paid
-  subscription and payment-card verification. The operator created it once through the regular Hermes web sign-up (the web
+  subscription and payment-card verification. The operator created it once, with an email address
+  not linked to any other Hermes account, through the regular Hermes web sign-up (the web
   login creates an account only for a verified email address, src/web-auth.js:365,
   src/web-auth.js:613; a new account starts suspended, src/web-auth.js:540) and then took out a
   regular subscription. Only the paid activation sets the verification level and requests a
@@ -210,7 +211,8 @@ und keinen MFA-Schritt.
 ### 4. Was bei der ersten Verbindung passiert
 
 - Zusage des Betreibers: das Reviewer-Konto existiert bereits und ist mit bezahltem Abo und
-  Kartenverifikation aktiv. Der Betreiber hat es einmal ueber die regulaere Hermes-Web-Anmeldung angelegt (der Web-Login
+  Kartenverifikation aktiv. Der Betreiber hat es einmal, mit einer E-Mail-Adresse, die keinem
+  anderen Hermes-Konto zugeordnet ist, ueber die regulaere Hermes-Web-Anmeldung angelegt (der Web-Login
   legt ein Konto nur fuer eine verifizierte E-Mail-Adresse an, src/web-auth.js:365,
   src/web-auth.js:613; ein neues Konto startet gesperrt, src/web-auth.js:540) und danach ein
   regulaeres Abo abgeschlossen. Erst die bezahlte Aktivierung setzt die Verifikationsstufe und

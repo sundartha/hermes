@@ -6751,8 +6751,12 @@ Items fuer das Reviewer-Konto). `src/` ist nicht angefasst: Gates, Offenlegung, 
 initialize und server-instructions sind byte-gleich zur Basis.
 
 **Reviewer-Konto = regulaerer Kunde.** Echtes Abo, echte Kartenverifikation (KYC), angelegt ueber
-einen Browser-Login in der Web-App (legt genau einen Mandanten an; die Nummer entsteht erst mit
-der bezahlten Aktivierung, `src/billing/activation.js`). KEINE Gate-Ausnahme: kein
+einen Browser-Login in der Web-App (legt genau einen Mandanten an - NUR mit einer E-Mail, die in
+Hermes noch keinem Konto zugeordnet ist: der Web-Login fuehrt Konten ueber die E-Mail zusammen,
+`src/web-auth.js` `resolveOrCreateTenant`, bekannte E-Mail eines nicht geschlossenen Mandanten ->
+dieser bestehende Mandant; mit einer schon benutzten E-Mail saehe der Reviewer dessen echte
+Anrufe und Transkripte, und das Seed-Skript schriebe dorthin; die Nummer entsteht erst mit der
+bezahlten Aktivierung, `src/billing/activation.js`). KEINE Gate-Ausnahme: kein
 `profile.unrestricted`, keine `profile.allowedNumbers` (beide heben das Outbound-Gate auf,
 `src/telephony/outbound-gates.js` `allowlistError`), NICHT in `OWNER_SELF_CALL_TENANT_IDS`
 (sonst entfiele der volle Offenlegungssatz bei einem Anruf an die hinterlegte eigene Nummer).
@@ -6763,13 +6767,26 @@ MCP-OAuth-Login legt nie einen Mandanten an und kauft nie eine Nummer (`requestT
 `test/openai-t2-20-reviewer-seed.test.js`).
 
 **Seed-Skript - Grenzen:**
-- Schreibt ausschliesslich ueber `createCall`, `recordProviderCallResult`, `endCallRecord`,
+- Schreibt ausschliesslich ueber `createCall`, `recordProviderCallResult`, `setCallEndedAt`,
   `addActionItem`. Nie Abo, KYC, Status, Profil, Nummer, Budget. Nebenwirkung von `createCall`:
   der reine Anzeige-Zaehler `usage[tenant].calls` waechst um die Zahl der angelegten Anrufe
   (kein Gate liest ihn); jedes andere Top-Level-Feld bleibt deep-equal (Test).
-- Nur INBOUND, sofort beendet, ohne `answeredAt`/`costProfile`/Transkript: ein Outbound-Datensatz
-  mit `startedAt=jetzt` zaehlte ins Stunden- und Ziel-Limit; ein aktiver Datensatz fiele dem
-  Watchdog zu; `answeredAt` zoege den Anruf in die Kosten-Nachtrags-Quote.
+- Nur INBOUND, im selben Zug beendet, ohne `answeredAt`/`costProfile`/Transkript: ein
+  Outbound-Datensatz mit `startedAt=jetzt` zaehlte ins Stunden- und Ziel-Limit; ein aktiver
+  Datensatz fiele dem Watchdog zu; `answeredAt` zoege den Anruf in die Kosten-Nachtrags-Quote.
+- **`endedAt` liegt VOR der Kosten-Ueberwachung** (Korrektur einer frueheren Fassung, die
+  behauptete, "kein costProfile" vermeide einen Betreiber-Alarm - falsch): `kostenBuchBericht`
+  (`src/billing/kosten-deckung.js`) zaehlt jeden beendeten Anruf, dessen `endedAt` im Beleg-
+  (7 Tage) oder Herzschlag-Fenster liegt, unabhaengig von `answeredAt`; ein fehlendes
+  `costProfile` ist selbst ein Befund (`profil-fehlt`), und die Legacy-Zuordnung zaehlt den
+  Anruf beim Traeger `telnyx_call_records` mit. Mit `endedAt=jetzt` meldete der Sweep nach der
+  Karenz `erfassung-tot` + `profil-fehlt`, danach bis zu 7 Tage `deckung-unter-schwelle` - alle
+  voll (Mail+SMS). Deshalb setzt das Skript `endedAt` auf jetzt minus das groessere der beiden
+  Fenster minus einen Tag (`reviewerSeedEndedAtIso`). Die Ueberwachung selbst ist
+  unangetastet. Test: `kostenBuchBericht` nach dem Seed sofort, nach der Karenz, nach 7 h,
+  nach 2 Tagen und mit vergroessertem Herzschlag-Fenster -> null Befunde. Preis: die
+  Seed-Anrufe fallen `RETENTION_DAYS` nach ihrem vordatierten Ende weg (Standard: rund 22
+  statt 30 Tage; bei `RETENTION_DAYS` <= 8 sofort); `duration_s` ist 0.
 - Verweigert den Betreiber-Mandanten, unbekannte Mandanten und eine leere Kennung; legt nie
   einen Mandanten an.
 - Trockenlauf ist Default (ohne `--apply` wird der Store nicht einmal geladen - Import-Spion-Test);
@@ -6783,7 +6800,7 @@ MCP-OAuth-Login legt nie einen Mandanten an und kauft nie eine Nummer (`requestT
   committeten Dateien (Dokument nur mit Platzhaltern, Hygiene-Test).
 
 **Offen beim Betreiber:** Konto beim Identitaetsanbieter ohne MFA und mit verifizierter E-Mail,
-Abo, Seed-Lauf gegen Produktion, Live-Probe in ChatGPT, Wahl der Testziel-Nummer.
+die in Hermes noch KEINEM Konto zugeordnet ist (Pflicht, s.o.), Abo, Seed-Lauf gegen Produktion, Live-Probe in ChatGPT, Wahl der Testziel-Nummer.
 
 **Rueckbau:** die zwei Skriptdateien, `docs/OPENAI-REVIEWER-ACCESS.md`, die drei Tests
 `test/openai-t2-20-reviewer-*.test.js` und dieser Abschnitt. Keine Env-Variable, kein Endpunkt.
