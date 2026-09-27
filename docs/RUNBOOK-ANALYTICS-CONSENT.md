@@ -12,10 +12,9 @@ das notwendige Sitzungs-Cookie.
   Startseite und allen `Hermes.astro`-Seiten. Entscheidung in
   `localStorage["hermes.consent"]` = `{version, id, ts, necessary, statistics, marketing}`
   (`id` = Zufalls-UUID des Browsers, bleibt ueber Aenderung und Widerruf gleich).
-- Der Banner erscheint **ungefragt nur**, wenn noch keine Entscheidung vorliegt UND auf
-  der Seite ein gesperrtes Skript (`<script type="text/plain" data-consent=...>`) wartet.
-  Ohne einwilligungspflichtigen Dienst gibt es nichts zu fragen. "Cookie-Einstellungen"
-  im Fussband oeffnet ihn immer.
+- Der Banner erscheint **ungefragt, solange noch keine Entscheidung vorliegt** - beim
+  ersten Besuch also immer, auch wenn heute nur Notwendiges laeuft (Owner-Entscheidung
+  2026-09-27). Danach oeffnet ihn "Cookie-Einstellungen" (Fussband, Rechts-Blatt).
 - **Widerruf:** wird eine Kategorie abgewaehlt, deren Skript auf der Seite schon laeuft,
   laedt die Seite neu (ein geladenes Skript laesst sich nicht entladen).
 - Notwendig (ohne Einwilligung, § 25 Abs. 2 Nr. 2 TDDDG): `hermes.lang.v2`
