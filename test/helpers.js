@@ -1393,13 +1393,20 @@ export const toolCall = (name, args = {}) => ({
 // der data:-Zeile (faellt auf rohes JSON zurueck, falls der Transport doch JSON liefert).
 // EINE Quelle fuer Tests, die den Tool-HTTP-Body parsen (heute parst kein anderer Test ihn).
 export async function readToolResult(res) {
+  return (await readRpcMessage(res)).result;
+}
+
+// Die GANZE JSON-RPC-Nachricht (result ODER error) aus einer /mcp-Antwort - fuer
+// Aufrufer, die einen JSON-RPC-Fehler vom Ergebnis unterscheiden muessen (z.B.
+// resources/list ohne registrierte Resources: -32601, test/mcp-draht-pfade.js).
+export async function readRpcMessage(res) {
   const body = await res.text();
   const trimmed = body.trim();
   const raw = trimmed.startsWith("{")
     ? trimmed
     : (body.split(/\r?\n/).find((l) => l.startsWith("data:")) || "").slice("data:".length).trim();
   if (!raw) throw new Error(`Keine JSON-RPC-Daten in der MCP-Antwort:\n${body}`);
-  return JSON.parse(raw).result;
+  return JSON.parse(raw);
 }
 
 // T2-05 (T-14): EINE geteilte Pruef-Funktion fuer die Re-Auth-Challenge, die ein

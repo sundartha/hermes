@@ -1,0 +1,1946 @@
+{
+  "_kommentar": [
+    "Kompatibilitaetsvertrag des Hermes-MCP-Servers: die am echten Draht (tools/list, resources/list, resources/read ueber HTTP /mcp und stdio) gemessenen Merkmale, die ein Host sich merken darf.",
+    "Zugesichert sind nur Kompatibilitaetsmerkmale: Werkzeugnamen je Konfigurationsprofil, Eingabe- und Ausgabe-Gerippe (Typen, Pflichtfelder, Constraints), Annotation-Hints, execution, securitySchemes, Widget-URIs und Resource-URIs. Beschreibungen, Titel, server-instructions und _meta-Texte sind kein Vertragsmerkmal - fuer OpenAI gehoeren Beschreibungen aber zur veroeffentlichten Definition; ein gruener Vertragstest belegt deshalb nicht, dass eine Aenderung den veroeffentlichten Vertrag wahrt (docs/RUNBOOK-MCP-UPDATE.md, Abschnitt 3).",
+    "Die Profile sind Test-Konfigurationen (test/mcp-kompatibilitaetsvertrag.test.js), keine Produktionswerte: welche Kombination live gilt, bestimmen die Werte im Hosting-Dashboard.",
+    "Aendern: nie von Hand abtippen. Der Vertragstest schreibt bei jeder Abweichung den gemessenen Ist-Stand samt stand_sha256 nach os.tmpdir(); profile und werkzeuge daraus uebernehmen und einen Eintrag an aenderungen anhaengen (datum, art additiv oder bruch, begruendung, stand_sha256). Vorgang und Regeln: docs/RUNBOOK-MCP-UPDATE.md.",
+    "veroeffentlichte_widget_uris: die Widget-URIs, auf die der veroeffentlichte Stand (veroeffentlichung) verweist und die der Server waehrend der Pruefungsluecke weiter ausliefern muss, obwohl der aktuelle Stand sie nicht mehr nennt. Leer, solange nichts veroeffentlicht ist; eine URI faellt wieder heraus, sobald die Marke auf einen Stand vorrueckt, der sie nicht mehr nennt. Jede gelistete URI muss am Draht mit den gepinnten Bytes ihrer Version lesbar sein. Vorgang: docs/RUNBOOK-MCP-UPDATE.md, Abschnitt Widget-URIs.",
+    "veroeffentlichung: null, solange OpenAI keinen Stand veroeffentlicht hat; danach { datum, stand_sha256 } des live gehaltenen Stands. Ab dann sperrt der Vertragstest jeden Bruch gegenueber diesem Stand, ein Ketteneintrag legitimiert keinen; einzige Ausnahme ist eine verdraengte, aber geschuetzte und weiter lesbare alte Widget-URI. Die Marke steht fuer den ganzen Stand, wandert nur vorwaerts und nur auf einen Stand, der vorher unter der bisherigen Marke sperrfrei committet war."
+  ],
+  "profile": {
+    "http-legacy": {
+      "werkzeuge": [
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {},
+      "widgets": {},
+      "ressourcen": []
+    },
+    "http-legacy-consult": {
+      "werkzeuge": [
+        "answer_consult",
+        "await_call_event",
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {},
+      "widgets": {},
+      "ressourcen": []
+    },
+    "http-legacy-ui": {
+      "werkzeuge": [
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {},
+      "widgets": {
+        "prepare_call": "ui://hermes/call/v12.html",
+        "place_call": "ui://hermes/call/v12.html",
+        "get_agent_number": "ui://hermes/my-number/v8.html",
+        "list_calls": "ui://hermes/calls/v7.html",
+        "get_agent_status": "ui://hermes/agent-status/v7.html"
+      },
+      "ressourcen": [
+        {
+          "uri": "ui://hermes/agent-status/v7.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/call/v12.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/calls/v7.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/my-number/v8.html",
+          "mimeType": "text/html;profile=mcp-app"
+        }
+      ]
+    },
+    "http-token": {
+      "werkzeuge": [
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {},
+      "widgets": {},
+      "ressourcen": []
+    },
+    "http-oauth": {
+      "werkzeuge": [
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {
+        "prepare_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "place_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_result": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "cancel_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_number": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_calls": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "check_inbox": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_action_items": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ]
+      },
+      "widgets": {},
+      "ressourcen": []
+    },
+    "http-oauth-consult": {
+      "werkzeuge": [
+        "answer_consult",
+        "await_call_event",
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {
+        "prepare_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "place_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "await_call_event": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "answer_consult": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_result": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "cancel_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_number": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_calls": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "check_inbox": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_action_items": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ]
+      },
+      "widgets": {},
+      "ressourcen": []
+    },
+    "http-oauth-consult-ui": {
+      "werkzeuge": [
+        "answer_consult",
+        "await_call_event",
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {
+        "prepare_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "place_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "await_call_event": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "answer_consult": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_result": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "cancel_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_number": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_calls": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "check_inbox": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_action_items": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ]
+      },
+      "widgets": {
+        "prepare_call": "ui://hermes/call/v12.html",
+        "place_call": "ui://hermes/call/v12.html",
+        "get_agent_number": "ui://hermes/my-number/v8.html",
+        "list_calls": "ui://hermes/calls/v7.html",
+        "get_agent_status": "ui://hermes/agent-status/v7.html"
+      },
+      "ressourcen": [
+        {
+          "uri": "ui://hermes/agent-status/v7.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/call/v12.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/calls/v7.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/my-number/v8.html",
+          "mimeType": "text/html;profile=mcp-app"
+        }
+      ]
+    },
+    "http-oauth-ui": {
+      "werkzeuge": [
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {
+        "prepare_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "place_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_result": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "cancel_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_number": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_calls": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "check_inbox": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_action_items": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ]
+      },
+      "widgets": {
+        "prepare_call": "ui://hermes/call/v12.html",
+        "place_call": "ui://hermes/call/v12.html",
+        "get_agent_number": "ui://hermes/my-number/v8.html",
+        "list_calls": "ui://hermes/calls/v7.html",
+        "get_agent_status": "ui://hermes/agent-status/v7.html"
+      },
+      "ressourcen": [
+        {
+          "uri": "ui://hermes/agent-status/v7.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/call/v12.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/calls/v7.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/my-number/v8.html",
+          "mimeType": "text/html;profile=mcp-app"
+        }
+      ]
+    },
+    "http-oauth-ohne-mandant": {
+      "werkzeuge": [
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {
+        "prepare_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "place_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_result": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "cancel_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_number": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_calls": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "check_inbox": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_action_items": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ]
+      },
+      "widgets": {},
+      "ressourcen": []
+    },
+    "http-oauth-ohne-mandant-ui": {
+      "werkzeuge": [
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {
+        "prepare_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "place_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_call_result": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "cancel_call": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_number": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_calls": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "check_inbox": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "list_action_items": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ],
+        "get_agent_status": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "openid",
+              "email",
+              "offline_access"
+            ]
+          }
+        ]
+      },
+      "widgets": {
+        "prepare_call": "ui://hermes/call/v12.html",
+        "place_call": "ui://hermes/call/v12.html",
+        "get_agent_number": "ui://hermes/my-number/v8.html",
+        "list_calls": "ui://hermes/calls/v7.html",
+        "get_agent_status": "ui://hermes/agent-status/v7.html"
+      },
+      "ressourcen": [
+        {
+          "uri": "ui://hermes/agent-status/v7.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/call/v12.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/calls/v7.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/my-number/v8.html",
+          "mimeType": "text/html;profile=mcp-app"
+        }
+      ]
+    },
+    "stdio": {
+      "werkzeuge": [
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {},
+      "widgets": {},
+      "ressourcen": []
+    },
+    "stdio-consult-env": {
+      "werkzeuge": [
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {},
+      "widgets": {},
+      "ressourcen": []
+    },
+    "stdio-ui": {
+      "werkzeuge": [
+        "cancel_call",
+        "check_inbox",
+        "get_agent_number",
+        "get_agent_status",
+        "get_call_result",
+        "get_call_status",
+        "list_action_items",
+        "list_calls",
+        "place_call",
+        "prepare_call"
+      ],
+      "sicherheitsschemata": {},
+      "widgets": {
+        "prepare_call": "ui://hermes/call/v12.html",
+        "place_call": "ui://hermes/call/v12.html",
+        "get_agent_number": "ui://hermes/my-number/v8.html",
+        "list_calls": "ui://hermes/calls/v7.html",
+        "get_agent_status": "ui://hermes/agent-status/v7.html"
+      },
+      "ressourcen": [
+        {
+          "uri": "ui://hermes/agent-status/v7.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/call/v12.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/calls/v7.html",
+          "mimeType": "text/html;profile=mcp-app"
+        },
+        {
+          "uri": "ui://hermes/my-number/v8.html",
+          "mimeType": "text/html;profile=mcp-app"
+        }
+      ]
+    }
+  },
+  "werkzeuge": {
+    "answer_consult": {
+      "eingabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "event_id"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "final",
+              "working"
+            ]
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ausgabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accepted",
+          "merged_facts"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "merged_facts": {
+            "type": "number"
+          }
+        }
+      },
+      "hinweise": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "await_call_event": {
+      "eingabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "call_id"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "after_event_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ausgabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commitments",
+          "counterparty_commitments",
+          "event",
+          "event_id",
+          "failure_reason",
+          "next_step",
+          "objective_achieved",
+          "open_points",
+          "outcome",
+          "questions",
+          "result_summary",
+          "status"
+        ],
+        "properties": {
+          "event": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "failure_reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "result_summary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "objective_achieved": {
+            "anyOf": [
+              {
+                "type": [
+                  "boolean",
+                  "string"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "commitments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "counterparty_commitments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "open_points": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "next_step": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "hinweise": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "cancel_call": {
+      "eingabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "call_id"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ausgabe": null,
+      "hinweise": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "check_inbox": {
+      "eingabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "include_seen": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ausgabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "entries",
+          "remaining"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action_items",
+                "action_required",
+                "at",
+                "call_id",
+                "caller",
+                "commitments",
+                "counterparty_commitments",
+                "next_step",
+                "open_points",
+                "outcome",
+                "summary",
+                "summary_unavailable"
+              ],
+              "properties": {
+                "call_id": {
+                  "type": "string"
+                },
+                "caller": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "at": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "summary": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "summary_unavailable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "commitments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "counterparty_commitments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "open_points": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "next_step": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "action_items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "action_required": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "remaining": {
+            "type": "number"
+          }
+        }
+      },
+      "hinweise": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "get_agent_number": {
+      "eingabe": {
+        "type": "object",
+        "properties": {}
+      },
+      "ausgabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "number"
+        ],
+        "properties": {
+          "number": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "hinweise": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": null,
+        "openWorldHint": false
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "get_agent_status": {
+      "eingabe": {
+        "type": "object",
+        "properties": {}
+      },
+      "ausgabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "calls",
+          "number",
+          "owner",
+          "permissions",
+          "planUsagePercent"
+        ],
+        "properties": {
+          "number": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "owner": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "calls": {
+            "type": "number"
+          },
+          "planUsagePercent": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "permissions": {
+            "type": "string"
+          }
+        }
+      },
+      "hinweise": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": null,
+        "openWorldHint": false
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "get_call_result": {
+      "eingabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "call_id"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ausgabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "commitments",
+          "counterparty_commitments",
+          "next_step",
+          "objective_achieved",
+          "open_points",
+          "outcome",
+          "result_summary"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "result_summary": {
+            "type": "string"
+          },
+          "objective_achieved": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "commitments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "counterparty_commitments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "open_points": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "next_step": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "hinweise": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": null,
+        "openWorldHint": false
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "get_call_status": {
+      "eingabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "call_id"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ausgabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "duration_s",
+          "failure_reason",
+          "last_transcript_lines",
+          "status"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "duration_s": {
+            "type": "number"
+          },
+          "last_transcript_lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "failure_reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "hinweise": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": null,
+        "openWorldHint": false
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "list_action_items": {
+      "eingabe": {
+        "type": "object",
+        "properties": {}
+      },
+      "ausgabe": null,
+      "hinweise": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": null,
+        "openWorldHint": false
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "list_calls": {
+      "eingabe": {
+        "type": "object",
+        "properties": {}
+      },
+      "ausgabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "calls"
+        ],
+        "properties": {
+          "calls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "counterparty",
+                "direction",
+                "id",
+                "startedAt",
+                "status"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "direction": {
+                  "type": "string"
+                },
+                "counterparty": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "status": {
+                  "type": "string"
+                },
+                "startedAt": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "hinweise": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": null,
+        "openWorldHint": false
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "place_call": {
+      "eingabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "objective",
+          "to"
+        ],
+        "properties": {
+          "to": {
+            "type": "string"
+          },
+          "objective": {
+            "type": "string"
+          },
+          "briefing": {
+            "type": "string"
+          },
+          "constraints": {
+            "type": "string"
+          },
+          "mandate": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "decide_freely": {
+                "type": "string"
+              },
+              "fallback_order": {
+                "type": "string"
+              },
+              "on_out_of_scope": {
+                "type": "string",
+                "enum": [
+                  "accept_best",
+                  "decline",
+                  "take_message"
+                ]
+              }
+            }
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "summary": {
+                "type": "string"
+              },
+              "key_facts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "recipient_relationship": {
+                "type": "string"
+              },
+              "desired_outcome": {
+                "type": "string"
+              },
+              "open_questions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "language": {
+            "type": "string"
+          },
+          "max_duration_s": {
+            "type": "integer",
+            "maximum": 1800,
+            "exclusiveMinimum": 0
+          },
+          "diagnostic": {
+            "type": "boolean"
+          },
+          "confirmation_code": {
+            "type": "string"
+          }
+        }
+      },
+      "ausgabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "context_received",
+          "deduplicated",
+          "duration_s",
+          "failure_reason",
+          "last_transcript_lines",
+          "objective_achieved",
+          "result_summary",
+          "status"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "duration_s": {
+            "type": "number"
+          },
+          "last_transcript_lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "failure_reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "result_summary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "objective_achieved": {
+            "anyOf": [
+              {
+                "type": [
+                  "boolean",
+                  "string"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "context_received": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "active",
+              "desired_outcome",
+              "key_facts_count",
+              "recipient_relationship",
+              "summary"
+            ],
+            "properties": {
+              "active": {
+                "type": "boolean"
+              },
+              "summary": {
+                "type": "boolean"
+              },
+              "key_facts_count": {
+                "type": "number"
+              },
+              "recipient_relationship": {
+                "type": "boolean"
+              },
+              "desired_outcome": {
+                "type": "boolean"
+              }
+            }
+          },
+          "deduplicated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "hinweise": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "prepare_call": {
+      "eingabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "objective",
+          "to"
+        ],
+        "properties": {
+          "to": {
+            "type": "string"
+          },
+          "objective": {
+            "type": "string"
+          },
+          "briefing": {
+            "type": "string"
+          },
+          "constraints": {
+            "type": "string"
+          },
+          "mandate": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "decide_freely": {
+                "type": "string"
+              },
+              "fallback_order": {
+                "type": "string"
+              },
+              "on_out_of_scope": {
+                "type": "string",
+                "enum": [
+                  "accept_best",
+                  "decline",
+                  "take_message"
+                ]
+              }
+            }
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "summary": {
+                "type": "string"
+              },
+              "key_facts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "recipient_relationship": {
+                "type": "string"
+              },
+              "desired_outcome": {
+                "type": "string"
+              },
+              "open_questions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "language": {
+            "type": "string"
+          },
+          "max_duration_s": {
+            "type": "integer",
+            "maximum": 1800,
+            "exclusiveMinimum": 0
+          },
+          "diagnostic": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ausgabe": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "objective",
+          "status",
+          "to"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "objective": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "max_duration_s": {
+            "type": "number"
+          },
+          "briefing": {
+            "type": "string"
+          },
+          "constraints": {
+            "type": "string"
+          },
+          "mandate": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "diagnostic": {
+            "type": "boolean"
+          }
+        }
+      },
+      "hinweise": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "ausfuehrung": {
+        "taskSupport": "forbidden"
+      }
+    }
+  },
+  "veroeffentlichte_widget_uris": [],
+  "veroeffentlichung": null,
+  "aenderungen": [
+    {
+      "datum": "2026-09-27",
+      "art": "erstfassung",
+      "begruendung": "Erstfassung aus dem Draht aller dreizehn Test-Profile: 12 Werkzeuge (10 ohne Consult, stdio immer 10), 4 Widget-Resources mit MCP_UI_ENABLED (auch im OAuth-Modus ohne Consult und ohne Mandant gemessen), securitySchemes nur im OAuth-Modus. Noch nichts veroeffentlicht.",
+      "stand_sha256": "77be164d4d5037e831c99d3ac4d49f96ff1fbb62edb2903fcaf3e967825394f3"
+    }
+  ]
+}
