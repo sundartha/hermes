@@ -26,6 +26,7 @@ import {
   pageTarget,
   wheelPixels,
 } from "../lib/mobile-pager.js";
+import { anchorFromHash } from "../lib/home-anchors.js";
 
 /* Dieselbe Abfrage wie in hermes-mobile.css. */
 const MOBILE_QUERY = "(max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px)))";
@@ -646,6 +647,14 @@ function realign() {
   update();
 }
 
+/* Unterseiten verlinken "So funktioniert's" und "Preise" als Anker der Startseite
+ * (lib/home-anchors.js): die Handy-Fassung steht dann gleich auf dem passenden
+ * Screen, ohne Fahrt vom Hero dorthin. */
+function openAnchor() {
+  const anchor = anchorFromHash(window.location.hash);
+  if (anchor && mobile.matches) el.scroller.scrollTop = anchor.index * el.scroller.clientHeight;
+}
+
 /* Handy-Abfrage oder Bewegungs-Wunsch geaendert: alles neu ableiten. */
 function refresh() {
   if (!mobile.matches) {
@@ -726,6 +735,7 @@ function init() {
   applyLang(document.documentElement.lang);
   root.setAttribute("data-ready", "");
   root.setAttribute("data-pager", "");
+  openAnchor();
   refresh();
 }
 

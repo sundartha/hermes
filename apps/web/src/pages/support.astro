@@ -6,31 +6,12 @@
 // Deshalb OHNE noindex (Produktion muss indexierbar sein; das Labor setzt noindex per
 // Header), in der Sitemap und im Fussband jeder Seite verlinkt.
 //
-// Jede Aussage folgt einem vorhandenen Weg - nichts wird erfunden:
-// - Kontakt: dieselbe oeffentliche Adresse wie Fussband, Impressum und Datenschutz.
-// - Anrufe: die juengsten Anrufe und, falls vorhanden, ihre Zusammenfassung im
-//   Kundenbereich (components/app/CallsIsland.astro, lib/render.js). Das Wortprotokoll
-//   wird nach der Zusammenfassung geloescht (src/telephony/call-finish.js purgeTranscript,
-//   Ausnahmen: Diagnose-Aufbewahrung, fehlgeschlagene Zusammenfassung); abgeschlossene
-//   Anrufe fallen nach der Frist der Datenschutzerklaerung ("Speicherdauer") weg. Darum
-//   keine Transkript-Zusage und keine Frist-Zahl hier - die Zahl steht nur im Rechtstext.
-// - Daten: Datenschutzerklaerung ("Einen Selbstbedienungs-Weg zur Loeschung gibt es im
-//   Dienst nicht."); die Loeschung hat serverseitig keinen Endpunkt (src/routes/api-read.js).
-// - Kuendigen: oeffentliche Seite /kuendigen (Kundenbereich oder E-Mail).
-// - Connector trennen: geschieht im KI-Programm; es gibt keine serverseitige
-//   Widerrufs-Route. Darum keine Menuepfade fremder Programme, dafuer beide Vorbehalte
-//   (laufender Anruf endet nicht, gespeicherte Daten bleiben).
-// Bewusst NICHT: Reaktionszeiten, Telefon, Formular, Preise - dafuer gibt es keinen Beleg.
-// Kein Inline-Style, kein Script, keine externe Quelle (Produktions-CSP default-src 'self').
+// Der Inhalt - und welcher Beleg hinter jeder Aussage steht - liegt in
+// components/site/SupportInfo.astro; derselbe Text erscheint als Reiter im Rechts-Blatt
+// der Startseite. Kein Inline-Style, kein Script, keine externe Quelle (Produktions-CSP
+// default-src 'self').
 import Hermes from "../layouts/Hermes.astro";
-import { LOGIN_URL } from "../lib/routes.js";
-import { LEGAL_CONTENT } from "../lib/legal-content.js";
-import { legalFooterLinks } from "../lib/legal.js";
-
-const CONTACT = "kontakt@sundartha.com";
-// Zeigt auf eine kuenftige EN-Fassung, sobald sie geliefert ist, sonst auf die
-// verbindliche deutsche - ein toter Link kann so nicht entstehen (lib/legal.js).
-const legalLinks = legalFooterLinks(LEGAL_CONTENT, "en");
+import SupportInfo from "../components/site/SupportInfo.astro";
 ---
 
 <Hermes
@@ -39,93 +20,5 @@ const legalLinks = legalFooterLinks(LEGAL_CONTENT, "en");
   description="How to get help with Hermes: contact, your calls, disconnecting Hermes from your AI assistant, access to and deletion of your data, and cancelling your contract."
 >
   <h1 class="doc-title">How can we <em>help</em>?</h1>
-  <p class="doc-lead">
-    Hermes is provided by Sundartha. If you need help with Hermes, email us at{" "}
-    <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
-  </p>
-
-  <div class="doc-block doc-steps">
-    <div class="sheet__card">
-      <span class="step">
-        <span class="step__num">01</span>
-        <span class="step__body">
-          <span class="step__title">Get help</span>
-          <span class="step__text">
-            Write to <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. If your question is about
-            a specific call, include its date and time.
-          </span>
-        </span>
-      </span>
-      <span class="rule" aria-hidden="true"></span>
-      <span class="step">
-        <span class="step__num">02</span>
-        <span class="step__body">
-          <span class="step__title">Your calls</span>
-          <span class="step__text">
-            <a href={LOGIN_URL}>Sign in to your customer area</a> to see your recent calls
-            and, where available, a summary of each. The word-for-word transcript of a call
-            is normally deleted once its summary has been created, and completed calls are
-            deleted automatically after the retention period stated in our privacy policy.
-            This applies to our own systems. Our voice platform provider stores
-            conversations separately and does not currently delete them automatically;
-            deleting them there is a separate step — see our privacy policy.
-          </span>
-        </span>
-      </span>
-      <span class="rule" aria-hidden="true"></span>
-      <span class="step">
-        <span class="step__num">03</span>
-        <span class="step__body">
-          <span class="step__title">Disconnect Hermes from ChatGPT or Claude</span>
-          <span class="step__text">
-            Remove the Hermes connector in the connector or app settings of the AI
-            assistant you connected it to. Please note: this does not end a call that is
-            already in progress, and it does not delete any data we have stored — see
-            “Access or delete your data” below.
-          </span>
-        </span>
-      </span>
-      <span class="rule" aria-hidden="true"></span>
-      <span class="step">
-        <span class="step__num">04</span>
-        <span class="step__body">
-          <span class="step__title">Access or delete your data</span>
-          <span class="step__text">
-            In your customer area you can view your recent calls and, where available,
-            their summaries; in our own systems, word-for-word transcripts are normally
-            not kept, while our voice platform provider stores conversations separately
-            (see “Your calls” above). Hermes has no self-service option for deleting your
-            data. For access to or deletion of your data, email{" "}
-            <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. Billing
-            records are kept for the statutory retention periods. The details are in our
-            privacy policy, linked below.
-          </span>
-        </span>
-      </span>
-      <span class="rule" aria-hidden="true"></span>
-      <span class="step">
-        <span class="step__num">05</span>
-        <span class="step__body">
-          <span class="step__title">Cancel your contract</span>
-          <span class="step__text">
-            You can cancel your Hermes contract in your customer area or by email. Our{" "}
-            <a href="/kuendigen">cancellation page</a> (in German) explains both ways.
-          </span>
-        </span>
-      </span>
-      <span class="rule" aria-hidden="true"></span>
-      <span class="step">
-        <span class="step__num">06</span>
-        <span class="step__body">
-          <span class="step__title">Legal</span>
-          <span class="step__text">
-            Our legal documents:{" "}
-            {legalLinks.map((link, index) => (
-              <>{index > 0 && " · "}<a href={link.href}>{link.label}</a></>
-            ))}. The binding versions of our legal documents are in German.
-          </span>
-        </span>
-      </span>
-    </div>
-  </div>
+  <SupportInfo />
 </Hermes>

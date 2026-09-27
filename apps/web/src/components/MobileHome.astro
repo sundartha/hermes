@@ -357,8 +357,8 @@ const SEGMENTS = 4;
           {legalDocs.map((entry) => (
             <a class="mh-link" href={entry.href} data-legal-open={entry.slug} data-mh-de={T.de[entry.slug]}>{T.en[entry.slug]}</a>
           ))}
-          <!-- § 312k BGB: gesetzlich vorgegebener Wortlaut, bleibt in jeder Sprache deutsch. -->
-          <a class="mh-link" href="/kuendigen">Verträge kündigen</a>
+          <!-- § 312k BGB: gesetzlich vorgegebener Wortlaut, bleibt in jeder Sprache deutsch. Oeffnet den Reiter im Rechts-Blatt (pages/index.astro). -->
+          <a class="mh-link" href="/kuendigen" data-legal-open="cancel">Verträge kündigen</a>
           <a class="mh-link" href={`mailto:${contact}`} data-mh-de={T.de.contact}>{T.en.contact}</a>
           <button class="mh-link" type="button" data-consent-open data-mh-de={T.de.cookies}>{T.en.cookies}</button>
         </nav>

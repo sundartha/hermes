@@ -15,6 +15,8 @@
  *   4. Sprachumschalter EN/DE (Default EN).
  * ========================================================================== */
 
+import { anchorFromHash } from "../lib/home-anchors.js";
+
 /* ------------------------------------------------------------------ Sprache */
 
 /* Englisch steht IM HTML (das ist seit dem Default-Wechsel 2026-09-10 die
@@ -571,10 +573,17 @@ function wireLegal() {
       show(pill.dataset.legalPill);
     });
   }
+  const legalSheet = sheetEl("legal");
   for (const trigger of document.querySelectorAll("[data-legal-open]")) {
     trigger.addEventListener("click", (event) => {
       event.preventDefault();
       show(trigger.dataset.legalOpen);
+      // Verweis INNERHALB des Blatts (Support -> Kuendigen, -> Datenschutz): nur den
+      // Reiter wechseln und zum Anfang, der Rueckweg ins Menue bleibt, wie er war.
+      if (legalSheet && legalSheet.contains(trigger)) {
+        legalSheet.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+        return;
+      }
       // "Zurueck ins Menue" nur, wenn der Ausloeser wirklich im Menue-Blatt
       // sitzt — vom .stack-foot oder Desktop-Fussband aus schliesst das
       // Rechts-Blatt einfach (kein erfundener Menue-Rueckweg).
@@ -693,6 +702,22 @@ function wireKeyboard() {
   });
 }
 
+/* Unterseiten verlinken "So funktioniert's" und "Preise" als Anker der Startseite
+ * (lib/home-anchors.js): beim Laden steht die Buehne gleich auf der Ebene, im
+ * Handy-Querformat oeffnet sich das passende Blatt. Die Handy-Fassung
+ * (hermes-mobile.js) liest denselben Anker selbst - dort ist die Buehne
+ * ausgeblendet (clientHeight 0), darum greift hier nichts. */
+function openAnchor() {
+  const target = anchorFromHash(window.location.hash);
+  if (!target) return;
+  if (usesSheets()) {
+    setSheet(target.sheet, false);
+    return;
+  }
+  if (!page || !page.clientHeight) return;
+  page.scrollTop = sectionStops(false)[target.index];
+}
+
 /* ------------------------------------------------------------------- Start */
 
 function init() {
@@ -733,6 +758,7 @@ function init() {
   // die Frame-Schleife, der Scrollstand kann sich zwischenzeitlich geaendert haben.
   document.addEventListener("visibilitychange", apply);
 
+  openAnchor();
   apply();
 }
 

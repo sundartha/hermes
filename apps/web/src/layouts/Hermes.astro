@@ -8,6 +8,7 @@ import "../styles/fonts.css";
 import "../styles/hermes.css";
 import "../styles/hermes-page.css";
 import { LOGIN_URL } from "../lib/routes.js";
+import { homeHref } from "../lib/home-anchors.js";
 import CookieConsent from "../components/site/CookieConsent.astro";
 import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
 
@@ -15,9 +16,13 @@ const { title, description, lang = "de", noindex = false } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const CONTACT = "kontakt@sundartha.com";
 
+// Owner-Wunsch 2026-09-27: "So funktioniert's" und "Preise" fuehren auf die Ebenen der
+// Startseite (Desktop-Buehne, Handy-Screens), nicht auf die ruhenden Unterseiten -
+// von /kuendigen & Co. aus landete man sonst auf den "falschen Layern". Die Seiten
+// /so-funktionierts und /preise bleiben unter ihrer URL erreichbar (Sitemap).
 const nav = [
-  { href: "/so-funktionierts", label: "So funktioniert's" },
-  { href: "/preise", label: "Preise" },
+  { href: homeHref("so-funktionierts"), label: "So funktioniert's" },
+  { href: homeHref("preise"), label: "Preise" },
 ];
 const legal = [
   { href: "/datenschutz", label: "Datenschutz" },

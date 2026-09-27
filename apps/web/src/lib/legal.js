@@ -139,11 +139,12 @@ export function legalRouteEntries(content, lang) {
 
 // Footer-Rechtslinks fuer eine Seitensprache: zeigt auf die uebersetzte Route,
 // wenn sie existiert, sonst auf die verbindliche DE-Route (D10) - ein toter
-// Link kann so nicht entstehen.
+// Link kann so nicht entstehen. slug: damit ein Link im Rechts-Blatt der Startseite
+// den passenden Reiter oeffnen kann (components/site/SupportInfo.astro).
 export function legalFooterLinks(content, lang) {
   return LEGAL_DOCUMENTS.map((entry) => {
     const hasTranslation = Boolean(findLegalDocument(content, entry.slug, lang));
     const targetLang = hasTranslation ? lang : BINDING_LEGAL_LANGUAGE;
-    return { href: entry.paths[targetLang], label: entry.label };
+    return { slug: entry.slug, href: entry.paths[targetLang], label: entry.label };
   });
 }
