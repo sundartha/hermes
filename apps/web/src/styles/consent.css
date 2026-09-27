@@ -46,10 +46,12 @@
   border-radius: 26px;
   color: #fff;
   font-family: var(--sans);
+  /* Deckend genug, dass Fliesstext dahinter (Rechts-Blatt, Unterseiten) nicht
+     durchschimmert; Himmel und Bild bleiben als weicher Schein sichtbar. */
   background: linear-gradient(
     160deg,
-    rgba(26, 56, 100, 0.66),
-    rgba(8, 22, 48, 0.86) 70%
+    rgba(24, 52, 94, 0.93),
+    rgba(8, 22, 48, 0.97) 70%
   );
   -webkit-backdrop-filter: blur(26px) saturate(1.4);
   backdrop-filter: blur(26px) saturate(1.4);
