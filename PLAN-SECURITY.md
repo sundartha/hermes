@@ -6747,8 +6747,11 @@ Werkzeug-Sequenz.
 **Was:** `docs/OPENAI-REVIEWER-ACCESS.md` (Reviewer-Anleitung EN/DE fuer die Einreichung, jede
 Aussage am Code verankert) und `scripts/seed-reviewer-demo.mjs` mit dem Kern
 `scripts/lib/reviewer-demo-seed.mjs` (drei beendete Inbound-Beispielanrufe samt offener Action
-Items fuer das Reviewer-Konto). `src/` ist nicht angefasst: Gates, Offenlegung, tools/list,
-initialize und server-instructions sind byte-gleich zur Basis.
+Items fuer das Reviewer-Konto). In `src/` nur die Naht fuer den DDL-freien Seed-Lauf (s.u.):
+`src/store/pg.js` (Schema-Schritt des `init` injizierbar, Default `migrate`, zeilenneutral) und
+`src/store/pg-runner.js` (Pool-Verdrahtung unveraendert aus `src/store.js` ausgelagert). Gates,
+Offenlegung, tools/list, initialize und server-instructions sind byte-gleich zur Basis; der
+Server-Boot migriert unveraendert.
 
 **Reviewer-Konto = regulaerer Kunde.** Echtes Abo, echte Kartenverifikation (KYC), angelegt ueber
 einen Browser-Login in der Web-App (legt genau einen Mandanten an - NUR mit einer E-Mail, die in
@@ -6802,11 +6805,38 @@ MCP-OAuth-Login legt nie einen Mandanten an und kauft nie eine Nummer (`requestT
   die Seed-Zeilen verloren oder der Flush des Skripts ueberschriebe Dienst-Schreibungen, auch
   Nutzungs- und Budget-Zaehler (Kostendecke faktisch zurueckgesetzt). Ablauf: Dienst stoppen ->
   Skript -> Dienst starten.
+- **pg-Lauf fuehrt KEINE DDL aus und laeuft aus dem deployten Commit** (Befund aus dem Review:
+  vorher importierte der pg-Lauf `src/store.js`, dessen `init` `migrate()` mit der DDL des
+  LOKALEN Checkouts gegen die Zieldatenbank ausfuehrte - lag der Checkout vor oder hinter dem
+  deployten Stand, landete fremde DDL auf der Produktions-DB, und der Flush schrieb alle
+  Mandanten in der Zeilenform dieses Stands zurueck). Jetzt: unter pg importiert das Skript die
+  Fassade nie (Import-Spion-Test) und oeffnet den Store ueber `src/store/pg-runner.js` +
+  `makePgStore(runner, { prepareSchema })` OHNE Migration
+  (`scripts/lib/pg-schema-abgleich.mjs`). An die Stelle von `migrate` tritt ein rein lesender
+  Abgleich gegen `information_schema.columns`: Soll ist das Schema, das die Migration DIESES
+  Checkouts in einer fluechtigen pglite-Instanz erzeugt. Fehlende Tabelle/Spalte (Checkout neuer
+  als die DB) oder unbekannte Spalte in einer bekannten Tabelle (Checkout aelter) -> Abbruch vor
+  Hydrierung und jedem Schreiben, Meldung nennt die Abweichung; unbekannte Tabellen bleiben aussen
+  vor (der Flush beruehrt sie nie). Tests gegen PGlite: Schema-Schnappschuss vorher/nachher
+  gleich, keine DDL ueber den protokollierenden Runner, keine Datenzeile geaendert; Positiv-
+  Kontrolle: `makePgStore` ohne Optionen (Server-Boot) migriert dieselbe DB weiter; Normalfall
+  unter einer Rolle ohne Superuser/BYPASSRLS (RLS/`app.current_tenant` greift, idempotent).
+  **Grenze:** verglichen werden nur Namen - ein geaenderter Spaltentyp oder eine geaenderte
+  Flush-Logik bei gleichem Schema faellt nicht auf. Deshalb bleibt Pflicht: Checkout auf genau
+  den live deployten Commit, `npm ci` (pglite ist Entwicklungs-Abhaengigkeit), dann der Lauf.
+  Nicht pruefbar ohne Prod-Zugriff: ob die Produktions-DB Spalten traegt, die `schema.sql` nie
+  angelegt hat (Handarbeit) - dann bricht der Lauf fail-closed ab.
+- Ergebnis wird geprueft: der Lauf wartet den Flush samt Ergebnis ab (`drainFlushes`); vorher
+  meldete ein gescheiterter pg-Flush (Transaktion zurueckgerollt) trotzdem "angelegt".
 - Ausgabe nur Zaehler; keine Mandanten-Kennung, Nummer oder Zugangsdaten in stdout oder in
   committeten Dateien (Dokument nur mit Platzhaltern, Hygiene-Test).
 
 **Offen beim Betreiber:** Konto beim Identitaetsanbieter ohne MFA und mit verifizierter E-Mail,
-die in Hermes noch KEINEM Konto zugeordnet ist (Pflicht, s.o.), Abo, Seed-Lauf gegen Produktion, Live-Probe in ChatGPT, Wahl der Testziel-Nummer.
+die in Hermes noch KEINEM Konto zugeordnet ist (Pflicht, s.o.), Abo, Seed-Lauf gegen Produktion
+(aus dem deployten Commit, Dienst gestoppt), Live-Probe in ChatGPT, Wahl der Testziel-Nummer.
 
-**Rueckbau:** die zwei Skriptdateien, `docs/OPENAI-REVIEWER-ACCESS.md`, die drei Tests
-`test/openai-t2-20-reviewer-*.test.js` und dieser Abschnitt. Keine Env-Variable, kein Endpunkt.
+**Rueckbau:** die drei Skriptdateien (`scripts/seed-reviewer-demo.mjs`,
+`scripts/lib/reviewer-demo-seed.mjs`, `scripts/lib/pg-schema-abgleich.mjs`),
+`docs/OPENAI-REVIEWER-ACCESS.md`, die drei Tests `test/openai-t2-20-reviewer-*.test.js` und
+dieser Abschnitt. Die Naht in `src/store/pg.js`/`src/store/pg-runner.js` kann bleiben (Default =
+heutiges Verhalten). Keine Env-Variable, kein Endpunkt.
