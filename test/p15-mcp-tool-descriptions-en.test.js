@@ -64,7 +64,11 @@ function captureDescriptions(ctx = {}) {
 // eine verlorene. Der Bestand vor P15 (deutsch) trug exakt dieselbe Marker-Zahl an
 // denselben Satzpositionen (Marker-Inventur im Phasenplan).
 const EXPECTED_MARKERS = {
-  place_call: ["NOT", "NOT", "ALWAYS"],
+  // T2-13 (N-10): REQUIRES/FIRST/NOT sind die neue Bestaetigungs-Pflicht am Satzanfang
+  // (confirmation_code aus prepare_call, sonst wird nicht gewaehlt) - bewusst nachgezogen
+  // statt weggeschrieben, Praezedenz max_duration_s/KS-P3. Die drei alten Marker
+  // (NOT reversible, just call it, NOT guaranteed/ALWAYS poll) bleiben unveraendert dahinter.
+  place_call: ["REQUIRES", "FIRST", "NOT", "NOT", "NOT", "ALWAYS"],
   "place_call.to": ["EXACTLY", "NEVER"],
   "place_call.objective": ["ONE", "VERBATIM", "BEFORE", "NO", "ALWAYS", "FIRST", "NOT"],
   // GQ-B1: die Vertroestungs-Sperre. KNOW ist die Verhaltensgarantie des Feldes (nur
@@ -78,7 +82,10 @@ const EXPECTED_MARKERS = {
   "place_call.mandate.decide_freely": ["WITHOUT", "WITHOUT", "NOT"],
   "place_call.mandate.fallback_order": [],
   "place_call.mandate.on_out_of_scope": ["OUTSIDE", "ONLY"],
-  "place_call.context": ["BACKGROUND", "ADDITIONAL", "NEVER", "NO"],
+  // Minimierung (OpenAI "no broad contextual fields"): ADDITIONAL entfaellt legitim - genau
+  // "ADDITIONAL to the briefing" machte context zum zweiten Sammeltrichter neben dem
+  // Briefing. BACKGROUND/NEVER/NO (Rolle, Secret-Verbot) bleiben in derselben Reihenfolge.
+  "place_call.context": ["BACKGROUND", "NEVER", "NO"],
   "place_call.context.summary": [],
   "place_call.context.key_facts": ["NO"],
   "place_call.context.recipient_relationship": [],
@@ -108,15 +115,15 @@ const EXPECTED_MARKERS = {
   "place_call.diagnostic": ["OWN", "NOT", "ONLY"],
   get_call_status: [],
   "get_call_status.call_id": [],
-  get_transcript: ["NEVER"],
-  "get_transcript.call_id": [],
+  get_call_result: ["NEVER"],
+  "get_call_result.call_id": [],
   // S1-2c (Owner-Auftrag 15.08.2026): die Beschreibung war eine Luege ("Cancels a running
   // call cleanly") - der REST-Pfad zusichert seit S1-4 keinen bestaetigten Leitungs-Abbruch
   // mehr. Die neue, wahrheitsgemaesse Fassung traegt EINE Emphase (NOT guaranteed) -
   // bewusst nachgezogen statt die Emphase wegzuschreiben, Praezedenz max_duration_s/KS-P3.
   cancel_call: ["NOT"],
   "cancel_call.call_id": [],
-  get_my_number: [],
+  get_agent_number: [],
   list_calls: [],
   // INBOX-P3: das Negativ-Verbot am Tool-Entscheidungspunkt (Pre-Mortem R-11). Die drei
   // Marker sind die Verhaltensgarantie des Werkzeugs - CONSUMING (der Abruf verbraucht),
@@ -126,8 +133,38 @@ const EXPECTED_MARKERS = {
   check_inbox: ["CONSUMING", "NOT", "NOT"],
   "check_inbox.include_seen": ["NO"],
   list_action_items: [],
-  get_calendar: [],
   get_agent_status: [],
+  // T2-13 (N-10): confirmation_code ist ein neues Pflichtfeld auf place_call (Schema
+  // optional, Pflicht im Handler - s. mcp-tools.js). SAME/REQUIRED/NOT sind die
+  // Verhaltensgarantien: gleiche Argumente wie prepare_call, Pflicht zum Waehlen,
+  // Ablehnung ohne gueltigen Code.
+  "place_call.confirmation_code": ["SAME", "REQUIRED", "NOT"],
+  // T2-13 (N-10): prepare_call ist neu registriert und teilt sich PLACE_CALL_REQUEST_SCHEMA
+  // mit place_call (dieselbe Modul-Konstante) - jedes Feld traegt deshalb DIESELBEN
+  // Emphase-Marker wie sein place_call-Gegenstueck oben, unter dem eigenen Pfad-Praefix.
+  // Safety-Review T2-13-Nachbesserung: die Beschreibung ist auf den echten Mechanismus
+  // zurueckgeschnitten (kein "host with/without card support", stattdessen "card
+  // confirmation enabled/disabled for this server" - es gibt keine Host-Erkennung, nur
+  // den globalen Schalter MCP_UI_ENABLED, s. Korrektur in mcp-tools.js/PLAN-SECURITY.md).
+  // Dadurch faellt ein WITHOUT weg (nur noch einmal im ersten Satz).
+  prepare_call: ["WITHOUT", "EVERY"],
+  "prepare_call.to": ["EXACTLY", "NEVER"],
+  "prepare_call.objective": ["ONE", "VERBATIM", "BEFORE", "NO", "ALWAYS", "FIRST", "NOT"],
+  "prepare_call.briefing": ["SUMMARISE", "NO", "KNOW"],
+  "prepare_call.constraints": [],
+  "prepare_call.mandate": ["MANDATE", "ITSELF", "NOTHING", "NO", "ALWAYS"],
+  "prepare_call.mandate.decide_freely": ["WITHOUT", "WITHOUT", "NOT"],
+  "prepare_call.mandate.fallback_order": [],
+  "prepare_call.mandate.on_out_of_scope": ["OUTSIDE", "ONLY"],
+  "prepare_call.context": ["BACKGROUND", "NEVER", "NO"],
+  "prepare_call.context.summary": [],
+  "prepare_call.context.key_facts": ["NO"],
+  "prepare_call.context.recipient_relationship": [],
+  "prepare_call.context.desired_outcome": [],
+  "prepare_call.context.open_questions": ["BEFORE"],
+  "prepare_call.language": ["SPEAKS", "REJECTED", "NOT"],
+  "prepare_call.max_duration_s": ["SHORTER"],
+  "prepare_call.diagnostic": ["OWN", "NOT", "ONLY"],
 };
 
 test("O14: keine der MCP-Tool-/Feld-Beschreibungen enthaelt noch deutschen Text", () => {

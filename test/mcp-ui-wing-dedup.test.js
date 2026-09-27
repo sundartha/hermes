@@ -15,7 +15,6 @@ import {
   WIDGET_AGENT_STATUS,
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
-  WIDGET_CALENDAR,
   WIDGET_CALL,
 } from "../src/ui/widget-catalog.js";
 import {
@@ -34,7 +33,6 @@ const STATIC_WIDGETS = [
   ["agent-status.html", WIDGET_AGENT_STATUS],
   ["my-number.html", WIDGET_MY_NUMBER],
   ["calls.html", WIDGET_CALLS],
-  ["calendar.html", WIDGET_CALENDAR],
 ];
 const ALL_WIDGETS = [...STATIC_WIDGETS, ["call.html", WIDGET_CALL]];
 

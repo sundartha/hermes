@@ -112,6 +112,10 @@ test("OUT-27 (Mechanismus, gruen) - der TeXML-Originationspfad reicht das gegate
         config,
         audit: () => {},
         outboundGates,
+        // T2-08 (T-27): der Claim-Lock prueft jetzt zusaetzlich callQuotaDenial(ctx) - ohne
+        // Verdrahtung wirft der fail-closed Default (503). Dieser Test will die Kette hinter
+        // dem Stub-Gate passieren lassen, also nie ablehnen (Muster outboundGates: []).
+        callQuotaDenial: () => null,
         voiceControl,
         terminateAndBillCall: async () => {},
         hangUpAction: () => null,

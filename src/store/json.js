@@ -661,7 +661,7 @@ export function recordActualSender(callId, herkunft) {
 
 // EL-Anrufstart: Zusammenfassung + Befund eines vom Anbieter gefuehrten Gespraechs -
 // Wrapper-Paritaet zu pg.js. Saved wie recordElevenlabsConversationId: beide Felder liegen
-// persistent auf Platte, und get_transcript liest sie nach dem Anruf.
+// persistent auf Platte, und get_call_result liest sie nach dem Anruf.
 export function recordProviderCallResult(callId, result) {
   const { call, changed } = ops.recordProviderCallResult(load(), callId, result);
   if (changed) save();

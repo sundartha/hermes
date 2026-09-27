@@ -92,7 +92,7 @@ const { requestTenant, requireTenant } = makeRequestTenant(store);
 // 2", PLAN-SECURITY.md) ueberhaupt bekommt. Ohne diese Verdrahtung faellt aniOwnershipRecheck
 // auf makeOutboundGates' Default-No-op zurueck und das Gate kann NIE ablehnen.
 const telnyxRead = providerConfigRead();
-const { gates: outboundGates } = makeOutboundGates({
+const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
   store,
   config,
   requestTenant,
@@ -405,6 +405,10 @@ const deps = {
   lifecycle,
   provisioning,
   outboundGates,
+  // T2-08 (T-27): dieselbe makeOutboundGates-Instanz wie outboundGates (s. Modul-Doc
+  // dort) - reicht die Quoten-Pruefung fuer den Claim-Lock-Re-Check durch (app.js ->
+  // makeCallRoutes).
+  callQuotaDenial,
   requestTenant,
   requireTenant,
   ttsStore,

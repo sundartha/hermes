@@ -58,7 +58,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
   // (E4): kein Env-Schalter hebt den Scope mehr auf. Ein Legacy-Call ohne tenantId
   // gehoert damit niemandem und ist fuer niemanden sichtbar - gewollt, denn "sichtbar
   // fuer alle" ist die Alternative. Die lesenden MCP-Tools (list_calls/
-  // list_action_items/get_my_number/get_agent_status) erben das Scoping AUTOMATISCH
+  // list_action_items/get_agent_number/get_agent_status) erben das Scoping AUTOMATISCH
   // ueber diese Route (mcp-tools.js unveraendert).
   router.get("/api/state", internalOnly, (req, res) => {
     const s = store.load();

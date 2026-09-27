@@ -4,6 +4,14 @@
 // Gefixt in P1: src/config-fingerprint.js + src/app.js /healthz + src/config.js
 // (deployedCommit). Reihe 1 (Spawn, Bestand) + 2-3 (Spawn, Raw-Value-/Diff-Beweis) +
 // 4-6 (Unit, DIP - configFingerprint nimmt config als Argument, kein Env/Spawn noetig).
+//
+// OpenAI-P10b: configHash verlaesst /healthz (Preimage-Befund - der Hash war live aus
+// 9216 Kandidaten eindeutig zurueckrechenbar, PLAN-SECURITY.md Abschnitt "OpenAI-P10b"
+// Punkt 1; ein
+// Vergleichswert BLEIBT noetig, wandert aber hinter eine Admin-Sitzung, s.
+// src/routes/api-deploy-info.js) + ins Boot-Log (src/boot.js, unveraendert). GAP-36s
+// urspruenglicher Zweck (Post-Deploy-Smoke, Rollback-Drill) bleibt darueber erfuellt -
+// Reihe 1-3 pruefen jetzt die neue Aufteilung statt der alten /healthz-Form.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
@@ -14,23 +22,20 @@ import { configFingerprint } from "../src/config-fingerprint.js";
 // SHA plausibel ist.
 const FAKE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
-test("/healthz weist commit und configHash aus (GAP-36, gefixt in P1)", async () => {
+test("/healthz weist commit aus, configHash NICHT mehr (GAP-36, gehaertet in OpenAI-P10b)", async () => {
   const srv = await startServer();
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.ok(typeof body.commit === "string" && body.commit.length > 0, "commit-Feld gesetzt");
-    assert.ok(
-      typeof body.configHash === "string" && body.configHash.length > 0,
-      "configHash-Feld gesetzt",
-    );
+    assert.equal("configHash" in body, false, "configHash darf /healthz nicht mehr verlassen");
   } finally {
     await srv.stop();
   }
 });
 
-test("/healthz-Antwort traegt genau {ok, commit, configHash} und keinen Rohwert (GAP-36)", async () => {
+test("/healthz-Antwort traegt genau {commit, ok} und keinen Rohwert, keinen 64-Hex-Hash (GAP-36)", async () => {
   const srv = await startServer({
     env: {
       RENDER_GIT_COMMIT: FAKE_COMMIT,
@@ -42,12 +47,14 @@ test("/healthz-Antwort traegt genau {ok, commit, configHash} und keinen Rohwert 
     const res = await fetch(`${srv.localUrl}/healthz`);
     const raw = await res.text();
     const body = JSON.parse(raw);
-    assert.deepEqual(Object.keys(body).sort(), ["commit", "configHash", "ok"]);
+    assert.deepEqual(Object.keys(body).sort(), ["commit", "ok"]);
     assert.equal(body.commit, FAKE_COMMIT);
-    assert.match(body.configHash, /^[a-f0-9]{64}$/);
-    // D8: Hex-Alphabet-Ausschluss statt Ziffernfolgen->=7-Regel (commit/configHash sind
-    // beide Hex-Strings, die zufaellig 7 Ziffern in Folge enthalten koennen). Jeder der
-    // markierten Rohwerte enthaelt mindestens ein Nicht-Hex-Zeichen -> kein Zufallstreffer.
+    // Kein 64-stelliger Hex-String im Rohtext - der Hash-Wert selbst (nicht nur seine
+    // Achsen) darf nicht mehr in der oeffentlichen Antwort stehen.
+    assert.doesNotMatch(raw, /[a-f0-9]{64}/);
+    // D8: Hex-Alphabet-Ausschluss statt Ziffernfolgen->=7-Regel (commit ist ein Hex-
+    // String, der zufaellig 7 Ziffern in Folge enthalten kann). Jeder der markierten
+    // Rohwerte enthaelt mindestens ein Nicht-Hex-Zeichen -> kein Zufallstreffer.
     for (const leak of ["+49", "+33", "sk_", "leakcanary", "eur"]) {
       assert.ok(!raw.includes(leak), `Rohwert '${leak}' darf nicht in /healthz auftauchen`);
     }
@@ -56,13 +63,19 @@ test("/healthz-Antwort traegt genau {ok, commit, configHash} und keinen Rohwert 
   }
 });
 
-test("zwei Konfigurationen liefern zwei configHash (GAP-36)", async () => {
+// OpenAI-P10b: configHash steht nicht mehr in der Antwort - der Vergleich laeuft jetzt
+// ueber die Boot-Log-Zeile "[boot] configHash=..." (zweite, unveraenderte Quelle,
+// src/boot.js). Vorbedingung prueft ZUERST, dass beide Captures wirklich einen Hash
+// tragen (nicht undefined) - sonst waere ein leerer Vergleich still gruen.
+test("zwei Konfigurationen liefern zwei configHash im Boot-Log (GAP-36)", async () => {
   const srvA = await startServer({ env: { ALLOWED_COUNTRY_CODES: "+49" } });
   const srvB = await startServer({ env: { ALLOWED_COUNTRY_CODES: "+49,+33" } });
   try {
-    const bodyA = await (await fetch(`${srvA.localUrl}/healthz`)).json();
-    const bodyB = await (await fetch(`${srvB.localUrl}/healthz`)).json();
-    assert.notEqual(bodyA.configHash, bodyB.configHash);
+    const matchA = srvA.stdout.match(/\[boot\] configHash=([a-f0-9]{64})/);
+    const matchB = srvB.stdout.match(/\[boot\] configHash=([a-f0-9]{64})/);
+    assert.ok(matchA, "Boot-Log A traegt keinen configHash");
+    assert.ok(matchB, "Boot-Log B traegt keinen configHash");
+    assert.notEqual(matchA[1], matchB[1]);
   } finally {
     await srvA.stop();
     await srvB.stop();

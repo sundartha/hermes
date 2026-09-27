@@ -118,6 +118,31 @@ test("T-P0-5-18: Hosting + divergentes OAUTH_AUDIENCE -> Boot verweigert (exit 1
   assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
 });
 
+// T2-04 (T-32): PUBLIC_URL fehlt im Hosting -> Boot verweigert. PROD_SAFE setzt
+// RENDER_EXTERNAL_URL (Produktionsprofil); BASE_ENV.PUBLIC_URL wird hier ausdruecklich
+// mit "" ueberschrieben, damit publicUrl auf den Hosting-Host zurueckfaellt und
+// REQUIRED_CONFIG (das nur publicUrl selbst prueft) gerade NICHT greift - exakt der
+// Fall, den T2-04 zusaetzlich schliesst.
+test("T2-04-04: Hosting + fehlendes PUBLIC_URL -> Boot verweigert (exit 1), nennt Var + Sollform", async () => {
+  const { code, output } = await startServerExpectExit({ env: { ...PROD_SAFE, PUBLIC_URL: "" } });
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /\[boot\] Start abgebrochen/);
+  assert.match(output, /PUBLIC_URL/);
+  assert.match(output, /https:\/\/<host>/);
+  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
+});
+
+// Spezifitaets-Gegenprobe: PUBLIC_URL ist gesetzt (aus BASE_ENV, via PROD_SAFE-Spread
+// nicht ueberschrieben) - der neue Footgun darf NICHT feuern. Der Boot scheitert
+// trotzdem (Bestands-Footgun STORE_BACKEND, kein echtes Postgres im Test, s. T-P0-5-14)
+// - das ist erwartet und nicht Gegenstand dieses Tests. Absichtlich NICHT auf
+// /PUBLIC_URL/ geprueft: dieser Name kommt auch im OAUTH_AUDIENCE-Befund vor.
+test("T2-04-05: Hosting + gesetztes PUBLIC_URL -> der neue Footgun feuert NICHT (Spezifitaet)", async () => {
+  const { code, output } = await startServerExpectExit({ env: { ...PROD_SAFE } });
+  assert.equal(code, 1, `erwartet exit 1 (Bestands-Footgun STORE_BACKEND), Output:\n${output}`);
+  assert.doesNotMatch(output, /der angekuendigte Origin faellt sonst still/);
+});
+
 test("T-P0-1-AC1-05: Hosting + STORE_BACKEND=json -> Boot verweigert (exit 1), nennt STORE_BACKEND", async () => {
   const { code, output } = await startServerExpectExit({ env: { ...PROD_SAFE, STORE_BACKEND: "json" } });
   assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);

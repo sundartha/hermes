@@ -29,14 +29,11 @@ const { withConfig } = makeConfigOverrides(config);
 
 // ---- geteilter Mini-Harness (Muster test/mcp-tools-i18n.test.js) ----
 
-// server.tool(name, desc, schema, annotations, handler) seit E2 - Restparameter statt
-// eines fuenften benannten Parameters (annotations sitzt an Position 4; max-params haelt).
+// Nur registerTool/registerResource: der Legacy-Weg tool() hat seit OpenAI-P2 keinen
+// Aufrufer mehr in src/.
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    tool(name, _desc, _schema, ...rest) {
-      handlers.set(name, rest.at(-1));
-    },
     registerTool(name, _config, handler) {
       handlers.set(name, handler);
     },
@@ -46,19 +43,20 @@ function captureTools(ctx) {
   return handlers;
 }
 
+const HTTP_OK = 200;
+
 async function listen(server) {
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  await new Promise((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
   const url = `http://127.0.0.1:${server.address().port}`;
-  return { url, close: () => new Promise((r) => server.close(r)) };
+  return { url, close: () => new Promise((resolveClose) => server.close(resolveClose)) };
 }
 
-function sendJson(res, { body = null, status = 200 } = {}) {
-  res.statusCode = status;
-  res.setHeader("content-type", "application/json");
+function sendJson(res, { body = null, status = HTTP_OK } = {}) {
+  res.writeHead(status, { "content-type": "application/json" });
   res.end(body == null ? "" : JSON.stringify(body));
 }
 
-async function startGatewayMock({ body = null, status = 200 } = {}) {
+async function startGatewayMock({ body = null, status = HTTP_OK } = {}) {
   const server = http.createServer((req, res) => sendJson(res, { body, status }));
   return listen(server);
 }
@@ -77,7 +75,7 @@ async function withGateway(body, fn) {
 }
 
 function toolText(result) {
-  return (result?.content || []).map((c) => c.text).join("\n");
+  return (result?.content || []).map((content) => content.text).join("\n");
 }
 
 const MCP_TOOLS_SRC = fs.readFileSync(path.join(ROOT, "src", "mcp-tools.js"), "utf8");
@@ -102,13 +100,13 @@ const AGENT_STATE_FIXTURE = {
 // ==================== T1 (ex MCP-04) ====================
 test("requireFields-Fehler folgt der Tenant-Sprache; DE ist byte-identisch zum Bestand (ex MCP-04)", async () => {
   await withGateway({}, async () => {
-    const handlersEn = captureTools({ identity: null, scopedTenant: "tenant-en-us", allowCalendar: true, language: "en" });
-    const resultEn = await handlersEn.get("get_calendar")();
+    const handlersEn = captureTools({ identity: null, scopedTenant: "tenant-en-us", language: "en" });
+    const resultEn = await handlersEn.get("list_calls")();
     assert.ok(resultEn?.isError, "degradierte Antwort -> isError-Tool-Antwort");
     assert.equal(toolText(resultEn), MCP_TEXTS.en.errors[MCP_ERROR_CODE.UPSTREAM_INCOMPLETE]);
 
-    const handlersDe = captureTools({ identity: null, scopedTenant: "tenant-de", allowCalendar: true, language: "de" });
-    const resultDe = await handlersDe.get("get_calendar")();
+    const handlersDe = captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" });
+    const resultDe = await handlersDe.get("list_calls")();
     assert.equal(
       toolText(resultDe),
       "Der Telefon-Agent hat eine unvollstaendige Antwort geliefert. Bitte spaeter erneut versuchen.",
@@ -130,12 +128,17 @@ test("Transkript-Rollen-Praefix folgt der Tenant-Sprache (ex MCP-06)", async () 
       const result = await handlers.get("get_call_status")({ call_id: "call_1" });
       const lines = result.structuredContent.last_transcript_lines;
       assert.ok(
-        lines.some((l) => l.startsWith(prefix)),
+        lines.some((line) => line.startsWith(prefix)),
         `Sprache ${language} muss das Rollen-Praefix "${prefix}" tragen`,
       );
     });
   }
 });
+
+function firstCallStartedAt(result) {
+  const { calls } = result.structuredContent;
+  return calls[0].startedAt;
+}
 
 // ==================== T3 (ex FMT-03) ====================
 test("list_calls formatiert startedAt nach dateLocale der Tenant-Sprache (ex FMT-03)", async () => {
@@ -143,11 +146,11 @@ test("list_calls formatiert startedAt nach dateLocale der Tenant-Sprache (ex FMT
   await withGateway({ calls }, async () => {
     const handlersDe = captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" });
     const resultDe = await handlersDe.get("list_calls")();
-    const startedAtDe = resultDe.structuredContent.calls[0].startedAt;
+    const startedAtDe = firstCallStartedAt(resultDe);
 
     const handlersEn = captureTools({ identity: null, scopedTenant: "tenant-en", language: "en" });
     const resultEn = await handlersEn.get("list_calls")();
-    const startedAtEn = resultEn.structuredContent.calls[0].startedAt;
+    const startedAtEn = firstCallStartedAt(resultEn);
 
     // Zeitzonen-unabhaengige Formprobe (kein Uhrzeit-Pin): de-DE nutzt Punkt-Trenner,
     // en-GB Schraegstrich - der Unterschied belegt, dass dateLocale konsumiert wird.
@@ -157,32 +160,14 @@ test("list_calls formatiert startedAt nach dateLocale der Tenant-Sprache (ex FMT
   });
 });
 
-// ==================== T4 (ex FMT-03 b) ====================
-test("get_calendar formatiert start/end ueber denselben Formatter (ex FMT-03 b)", async () => {
-  const calendar = [{ title: "Termin", start: "2026-06-26T09:59:50.000Z", end: "2026-06-26T10:30:00.000Z" }];
-  await withGateway({ calendar }, async () => {
-    const handlersDe = captureTools({ identity: null, scopedTenant: "tenant-de", allowCalendar: true, language: "de" });
-    const resultDe = await handlersDe.get("get_calendar")();
-    const startDe = resultDe.structuredContent.calendar[0].start;
-
-    const handlersEn = captureTools({ identity: null, scopedTenant: "tenant-en", allowCalendar: true, language: "en" });
-    const resultEn = await handlersEn.get("get_calendar")();
-    const startEn = resultEn.structuredContent.calendar[0].start;
-
-    assert.match(startDe, /\d{2}\.\d{2}\./);
-    assert.match(startEn, /\d{2}\/\d{2}/);
-    assert.notEqual(startDe, startEn);
-  });
-});
-
 // ==================== T5 (ex PROMPT-09) ====================
 test("mcp-tools.js traegt kein hartes de-DE-Literal mehr (ex PROMPT-09)", async () => {
   assert.doesNotMatch(MCP_TOOLS_SRC, /toLocaleString\("de-DE"/);
   await withGateway({}, async () => {
-    const handlersDe = captureTools({ identity: null, scopedTenant: "tenant-de", allowCalendar: true, language: "de" });
-    const handlersEn = captureTools({ identity: null, scopedTenant: "tenant-en", allowCalendar: true, language: "en" });
-    const textDe = toolText(await handlersDe.get("get_calendar")());
-    const textEn = toolText(await handlersEn.get("get_calendar")());
+    const handlersDe = captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" });
+    const handlersEn = captureTools({ identity: null, scopedTenant: "tenant-en", language: "en" });
+    const textDe = toolText(await handlersDe.get("list_calls")());
+    const textEn = toolText(await handlersEn.get("list_calls")());
     assert.notEqual(textDe, textEn, "dieselbe Fixture liefert unter de/en unterschiedliche Texte");
   });
 });
@@ -219,17 +204,17 @@ test("Tenant mit language=de bleibt im MCP-Kanal deutsch, auch bei scharfem Welt
   setWorldDefaultLanguageEnabled(true);
   try {
     await withGateway({}, async () => {
-      const handlers = captureTools({ identity: null, scopedTenant: "tenant-de", allowCalendar: true, language: "de" });
-      const resultCalendar = await handlers.get("get_calendar")();
+      const handlers = captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" });
+      const callsResult = await handlers.get("list_calls")();
       assert.equal(
-        toolText(resultCalendar),
+        toolText(callsResult),
         "Der Telefon-Agent hat eine unvollstaendige Antwort geliefert. Bitte spaeter erneut versuchen.",
       );
     });
     await withGateway(RICH_CALL(CALL_LINES_EN), async () => {
       const handlers = captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" });
       const result = await handlers.get("get_call_status")({ call_id: "call_1" });
-      assert.ok(result.structuredContent.last_transcript_lines.some((l) => l.startsWith("Gegenseite:")));
+      assert.ok(result.structuredContent.last_transcript_lines.some((line) => line.startsWith("Gegenseite:")));
     });
   } finally {
     setWorldDefaultLanguageEnabled(false);
@@ -241,54 +226,76 @@ test("unbekannte/leere Sprache faellt auf den EINEN Fallback (localeFor), nicht 
   const expected = localeFor(null).mcp.errors[MCP_ERROR_CODE.UPSTREAM_INCOMPLETE];
   for (const language of ["xx", "", null]) {
     await withGateway({}, async () => {
-      const handlers = captureTools({ identity: null, scopedTenant: "tenant-unknown", allowCalendar: true, language });
-      const result = await handlers.get("get_calendar")();
+      const handlers = captureTools({ identity: null, scopedTenant: "tenant-unknown", language });
+      const result = await handlers.get("list_calls")();
       assert.equal(toolText(result), expected, `language=${JSON.stringify(language)} muss auf localeFor(null) fallen`);
     });
   }
 });
 
 // ==================== T9 ====================
+// Die Pruefbloecke je Textgruppe als eigene Funktionen (Komplexitaet je Funktion klein);
+// der Test ruft sie fuer jede Sprache in derselben Reihenfolge wie zuvor auf.
+// T2-15 (O-14): ein Eintrag kann statt eines festen Strings eine Funktion (field) =>
+// string sein (Muster agentStatus.planUsage unten, die RESTRICTED_*-Kennungen) - dann
+// muss der AUFGERUFENE Text nicht-leer sein, nicht die Funktion selbst.
+function assertErrorTextsComplete(texts, language) {
+  for (const code of Object.values(MCP_ERROR_CODE)) {
+    const entry = texts.errors[code];
+    const rendered = typeof entry === "function" ? entry("feld") : entry;
+    assert.ok(
+      typeof rendered === "string" && rendered.length > 0,
+      `Fehlertext fuer Code "${code}" fehlt in Sprache "${language}" (sonst landet der rohe Code im Chat)`,
+    );
+  }
+}
+
+function assertPermissionLabelsComplete(texts, language) {
+  for (const key of ["summaries", "personalData", "bankData"])
+    assert.ok(texts.permissionLabels?.[key], `permissionLabels.${key} fehlt fuer ${language}`);
+}
+
+// P15/T3a: Leertexte + Feldnamen des get_agent_status-Blocks. Eine Luecke wuerde
+// "undefined" in einen tenant-sichtbaren Text rendern (G27: Struktur statt Disziplin).
+// INBOX-P3: emptyInbox/inboxSummaryUnavailable ergaenzt - ein fehlender Schluessel
+// schriebe "undefined" in genau die Antwort, die "kurz und eindeutig leer" sein soll.
+function assertPlainTextsComplete(texts, language) {
+  for (const key of [
+    "emptyCalls",
+    "callStillRunning",
+    "emptyInbox",
+    "inboxSummaryUnavailable",
+    // E3 (N-11): Dedup-Hinweis - eine Luecke schriebe "undefined" in den Textblock der
+    // Antwort auf einen deduplizierten place_call.
+    "callAlreadyRunningHint",
+  ])
+    assert.ok(
+      typeof texts[key] === "string" && texts[key].length > 0,
+      `${key} fehlt fuer ${language}`,
+    );
+}
+
+function assertAgentStatusTextsComplete(texts, language) {
+  for (const key of ["number", "owner", "calls", "permissions", "planUsageUnknown"])
+    assert.ok(texts.agentStatus?.[key], `agentStatus.${key} fehlt fuer ${language}`);
+  for (const key of ["planUsage"])
+    assert.equal(
+      typeof texts.agentStatus?.[key],
+      "function",
+      `agentStatus.${key} fehlt fuer ${language}`,
+    );
+}
+
 test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
   for (const language of SUPPORTED_LANGUAGES) {
     const texts = MCP_TEXTS[language];
     assert.ok(texts, `MCP_TEXTS[${language}] fehlt`);
     assert.ok(texts.roleAgent, `roleAgent fehlt fuer ${language}`);
     assert.ok(texts.roleCounterparty, `roleCounterparty fehlt fuer ${language}`);
-    for (const code of Object.values(MCP_ERROR_CODE)) {
-      assert.ok(
-        typeof texts.errors[code] === "string" && texts.errors[code].length > 0,
-        `Fehlertext fuer Code "${code}" fehlt in Sprache "${language}" (sonst landet der rohe Code im Chat)`,
-      );
-    }
-    for (const key of ["summaries", "personalData", "bankData"])
-      assert.ok(texts.permissionLabels?.[key], `permissionLabels.${key} fehlt fuer ${language}`);
-    // P15/T3a: Leertexte + Feldnamen des get_agent_status-Blocks. Eine Luecke wuerde
-    // "undefined" in einen tenant-sichtbaren Text rendern (G27: Struktur statt Disziplin).
-    // INBOX-P3: emptyInbox/inboxSummaryUnavailable ergaenzt - ein fehlender Schluessel
-    // schriebe "undefined" in genau die Antwort, die "kurz und eindeutig leer" sein soll.
-    for (const key of [
-      "emptyCalls",
-      "emptyCalendar",
-      "callStillRunning",
-      "emptyInbox",
-      "inboxSummaryUnavailable",
-      // E3 (N-11): Dedup-Hinweis - eine Luecke schriebe "undefined" in den Textblock der
-      // Antwort auf einen deduplizierten place_call.
-      "callAlreadyRunningHint",
-    ])
-      assert.ok(
-        typeof texts[key] === "string" && texts[key].length > 0,
-        `${key} fehlt fuer ${language}`,
-      );
-    for (const key of ["number", "owner", "voiceEngine", "model", "calls", "permissions", "planUsageUnknown"])
-      assert.ok(texts.agentStatus?.[key], `agentStatus.${key} fehlt fuer ${language}`);
-    for (const key of ["planUsage"])
-      assert.equal(
-        typeof texts.agentStatus?.[key],
-        "function",
-        `agentStatus.${key} fehlt fuer ${language}`,
-      );
+    assertErrorTextsComplete(texts, language);
+    assertPermissionLabelsComplete(texts, language);
+    assertPlainTextsComplete(texts, language);
+    assertAgentStatusTextsComplete(texts, language);
     // OUTBOUND-E3a: ein fehlender callFailedSummary schriebe "undefined" in genau den
     // Text, der dem Nutzer erklaeren soll, warum sein Anruf nicht zustande kam.
     assert.equal(
@@ -308,11 +315,11 @@ test("/mcp loest die Sprache aus dem Tenant-Feld auf (Wiring, Spawn)", async () 
   const srv = await startServer({ seed });
   try {
     const res = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("get_call_status", { call_id: "call_test1" }));
-    assert.equal(res.status, 200);
+    assert.equal(res.status, HTTP_OK);
     const result = await readToolResult(res);
     const lines = result.structuredContent.last_transcript_lines;
-    assert.ok(lines.some((l) => l.startsWith("Other party: ")));
-    assert.ok(!lines.some((l) => l.includes("Gegenseite")));
+    assert.ok(lines.some((line) => line.startsWith("Other party: ")));
+    assert.ok(!lines.some((line) => line.includes("Gegenseite")));
   } finally {
     await srv.stop();
   }
@@ -331,11 +338,11 @@ test("permissionsSummary-Feldnamen folgen der Tenant-Sprache; DE byte-identisch 
       "DE bleibt byte-identisch zum Bestand",
     );
     for (const language of ["en", "fr"]) {
-      const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+      const result = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
         .get("get_agent_status")();
-      assert.doesNotMatch(r.structuredContent.permissions, /PersoenlicheDaten|Bankdaten/,
+      assert.doesNotMatch(result.structuredContent.permissions, /PersoenlicheDaten|Bankdaten/,
         `Sprache ${language} darf keine deutschen Feldnamen tragen`);
-      assert.match(r.structuredContent.permissions,
+      assert.match(result.structuredContent.permissions,
         new RegExp(`^${MCP_TEXTS[language].permissionLabels.summaries}=true, `),
         "Wert kommt aus DEMSELBEN Locale-Buendel, kein zweiter Katalog");
     }
@@ -351,41 +358,31 @@ test("list_calls: Leertext folgt der Tenant-Sprache; DE byte-identisch (P15/T3a)
       .get("list_calls")();
     assert.equal(toolText(de), "Noch keine Anrufe.", "DE bleibt byte-identisch zum Bestand");
     for (const language of SUPPORTED_LANGUAGES) {
-      const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+      const result = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
         .get("list_calls")();
-      assert.equal(toolText(r), MCP_TEXTS[language].emptyCalls);
-    }
-  });
-});
-
-// ==================== T14 (P15/T3a) ====================
-test("get_calendar: Leertext folgt der Tenant-Sprache; DE byte-identisch (P15/T3a)", async () => {
-  await withGateway({ calendar: [] }, async () => {
-    const de = await captureTools({ identity: null, scopedTenant: "tenant-de", allowCalendar: true, language: "de" })
-      .get("get_calendar")();
-    assert.equal(toolText(de), "Kalender ist leer.", "DE bleibt byte-identisch zum Bestand");
-    for (const language of SUPPORTED_LANGUAGES) {
-      const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, allowCalendar: true, language })
-        .get("get_calendar")();
-      assert.equal(toolText(r), MCP_TEXTS[language].emptyCalendar);
+      assert.equal(toolText(result), MCP_TEXTS[language].emptyCalls);
     }
   });
 });
 
 // ==================== T15 (P15/T3a) ====================
-test("get_transcript bei laufendem Anruf: Hinweistext folgt der Tenant-Sprache (P15/T3a)", async () => {
+test("get_call_result bei laufendem Anruf: Hinweistext folgt der Tenant-Sprache (P15/T3a)", async () => {
   await withGateway({ status: "active" }, async () => {
     for (const language of SUPPORTED_LANGUAGES) {
-      const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
-        .get("get_transcript")({ call_id: "call_1" });
-      assert.equal(JSON.parse(toolText(r)).error, MCP_TEXTS[language].callStillRunning);
+      const result = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+        .get("get_call_result")({ call_id: "call_1" });
+      // T-19: der Satz bleibt byte-identisch, die JSON-Huelle faellt weg - errText()
+      // setzt isError statt eines {"error": ...}-Textblocks (siehe src/mcp-tools.js).
+      assert.equal(result.isError, true, `isError fuer Sprache ${language}`);
+      assert.equal(toolText(result), MCP_TEXTS[language].callStillRunning);
     }
     const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
-      .get("get_transcript")({ call_id: "call_1" });
+      .get("get_call_result")({ call_id: "call_1" });
+    assert.equal(de.isError, true, "isError fuer DE");
     assert.equal(
-      JSON.parse(toolText(de)).error,
+      toolText(de),
       "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
-      "DE bleibt byte-identisch zum Bestand",
+      "der SATZ bleibt byte-identisch, die JSON-Huelle faellt weg (T-19)",
     );
   });
 });
@@ -393,11 +390,12 @@ test("get_transcript bei laufendem Anruf: Hinweistext folgt der Tenant-Sprache (
 // ==================== T16 (P15/T3a) ====================
 // Der get_agent_status-Textblock traegt die Feldnamen der Tenant-Sprache. Der DE-Block ist
 // VOLLSTAENDIG byte-identisch zum Bestand (voller String-Vergleich, nicht nur Stichprobe).
+// P5a/O-13 Teil 1: Voice-Engine/Modell sind seit diesem Commit ABSICHTLICH nicht mehr Teil
+// des Blocks (interne Konfigurationswerte, keine Session-Selbstauskunft) - der Pin ist hier
+// bewusst nachgezogen, kein Testabbau.
 const AGENT_STATUS_TEXT_DE =
   "Agent-Nummer: +18643028341\n" +
   "Besitzer: Antonio\n" +
-  "Voice-Engine: budget\n" +
-  "Modell: claude-haiku\n" +
   "Calls bisher: 3\n" +
   "Monatsnutzung: 40 % des Minuten-Kontingents\n" +
   "Berechtigungen: Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
@@ -410,9 +408,9 @@ test("get_agent_status-Textblock: Feldnamen folgen der Sprache; DE byte-identisc
       assert.equal(toolText(de), AGENT_STATUS_TEXT_DE, "DE-Textblock byte-identisch zum Bestand");
 
       for (const language of ["en", "fr"]) {
-        const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+        const result = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
           .get("get_agent_status")();
-        const text = toolText(r);
+        const text = toolText(result);
         const labels = MCP_TEXTS[language].agentStatus;
         assert.match(text, new RegExp(`^${labels.number}: `), `${language}: uebersetztes Nummern-Label`);
         assert.ok(text.includes(`\n${labels.permissions}: `), `${language}: uebersetztes Berechtigungs-Label`);
@@ -448,8 +446,8 @@ test("registerTools ohne language-Argument nutzt den Weltdefault (P15/T3a)", asy
 test("Bestandstests der MCP-Schicht decken ein EN-Sprachszenario ab (ex MCP-12)", () => {
   const files = ["mcp-tools.test.js", "mcp-ui.test.js", "mcp-ui-widget-i18n.test.js"];
   let hits = 0;
-  for (const f of files) {
-    const src = fs.readFileSync(path.join(ROOT, "test", f), "utf8");
+  for (const file of files) {
+    const src = fs.readFileSync(path.join(ROOT, "test", file), "utf8");
     hits += (src.match(/language\s*[:=]\s*["']en/g) || []).length;
   }
   assert.ok(
@@ -466,9 +464,9 @@ test("Bestandstests der MCP-Schicht decken ein EN-Sprachszenario ab (ex MCP-12)"
 test("list_action_items: Leertext + Termin-Praefix folgen der Tenant-Sprache; DE byte-identisch", async () => {
   await withGateway({ actionItems: [] }, async () => {
     for (const language of SUPPORTED_LANGUAGES) {
-      const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+      const result = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
         .get("list_action_items")();
-      assert.equal(toolText(r), MCP_TEXTS[language].emptyActionItems);
+      assert.equal(toolText(result), MCP_TEXTS[language].emptyActionItems);
     }
     const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
       .get("list_action_items")();
@@ -478,48 +476,14 @@ test("list_action_items: Leertext + Termin-Praefix folgen der Tenant-Sprache; DE
     { actionItems: [{ id: "a1", text: "Zahnarzt", type: "appointment", done: false }] },
     async () => {
       for (const language of SUPPORTED_LANGUAGES) {
-        const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+        const result = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
           .get("list_action_items")();
-        assert.equal(toolText(r), `[a1] ${MCP_TEXTS[language].appointmentPrefix}Zahnarzt`);
+        // T2-09 (O-13): keine interne Item-ID mehr in der Zeile.
+        assert.equal(toolText(result), `${MCP_TEXTS[language].appointmentPrefix}Zahnarzt`);
       }
       const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
         .get("list_action_items")();
-      assert.equal(toolText(de), "[a1] (Termin) Zahnarzt", "DE bleibt byte-identisch");
+      assert.equal(toolText(de), "(Termin) Zahnarzt", "DE bleibt byte-identisch (bis auf die entfallene ID)");
     },
   );
-});
-
-// ==================== T17 (P10/MCP-14) ====================
-// Die befuellte get_calendar-Zeile folgt der Tenant-Sprache (nicht nur der Leertext), und
-// der Verbinder kommt aus DEMSELBEN Buendel wie die Zeitwerte aus demselben Formatter.
-test("get_calendar: die befuellte Zeile folgt der Tenant-Sprache; DE byte-identisch", async () => {
-  const calendar = [
-    { title: "Zahnarzt", start: "2026-06-26T09:59:50.000Z", end: "2026-06-26T10:30:00.000Z" },
-  ];
-  await withGateway({ calendar }, async () => {
-    for (const language of SUPPORTED_LANGUAGES) {
-      const r = await captureTools({
-        identity: null,
-        scopedTenant: `tenant-${language}`,
-        allowCalendar: true,
-        language,
-      }).get("get_calendar")();
-      const e = r.structuredContent.calendar[0];
-      assert.equal(toolText(r), MCP_TEXTS[language].calendarLine(e));
-    }
-    const de = await captureTools({
-      identity: null,
-      scopedTenant: "tenant-de",
-      allowCalendar: true,
-      language: "de",
-    }).get("get_calendar")();
-    assert.match(toolText(de), /^Zahnarzt: .+ bis .+$/, "DE bleibt byte-identisch (title: start bis end)");
-    const en = await captureTools({
-      identity: null,
-      scopedTenant: "tenant-en",
-      allowCalendar: true,
-      language: "en",
-    }).get("get_calendar")();
-    assert.doesNotMatch(toolText(en), / bis /, "EN traegt keinen deutschen Verbinder");
-  });
 });

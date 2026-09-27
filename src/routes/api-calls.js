@@ -43,10 +43,14 @@ import { hangUpForCall, persistEndWithReason } from "../telephony/call-terminati
 import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.js";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
-import { localeFor, supportedLanguageOf, SUPPORTED_LANGUAGES } from "../i18n/locales.js";
+import { localeFor, supportedLanguageOf } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { internalOnly } from "../wiring/internal-only.js";
+// T2-13 (N-10, Schritt 3): die zwei Sprach-Ablehnungen sind nach src/routes/_call-request.js
+// gewandert (reiner Extract) - dieselbe Bestaetigungs-Vorschau (POST /api/call-confirmations)
+// braucht GENAU diese Formen, keine zweite Kopie.
+import { unsupportedLanguageBody, languageUnavailableBody } from "./_call-request.js";
 
 // I10 (call-quality Impl-1): additives Meta in der /api/calls-Erfolgsantwort - zeigt dem
 // aufrufenden MCP-Client (place_call), WAS vom optionalen context tatsaechlich ankam.
@@ -98,6 +102,18 @@ export function endFailedCallWithReason(store, callId, providerStatus) {
 function elevenLabsCallNotWired() {
   throw new Error(
     "ELEVENLABS_OUTBOUND_ENABLED ist an, aber der Anrufstart ist nicht verdrahtet (deps.elevenLabsOutbound fehlt)",
+  );
+}
+
+// T2-08 (T-27): LAUTER Fallback fuer callQuotaDenial, dasselbe Muster wie
+// elevenLabsCallNotWired oben - eine fehlverdrahtete Kompositionswurzel darf die
+// Quoten-Pruefung im Claim-Lock nicht still abschalten (KEIN Default () => null, das
+// waere fail-open, Absolute Regel 1). Der Wurf landet im bestehenden Claim-catch (503
+// CLAIM_ERROR_MESSAGE, Reserve zurueck, NICHT gewaehlt) - dieselbe Senke wie ein Wurf aus
+// store.createCall.
+function callQuotaDenialNotWired() {
+  throw new Error(
+    "callQuotaDenial ist nicht verdrahtet (deps.callQuotaDenial fehlt) - Quoten-Pruefung im Claim-Lock kann nicht laufen",
   );
 }
 
@@ -244,39 +260,23 @@ function beobachteAblehnung({ store, audit, denial, req, tenantId }) {
   }
 }
 
-// P4a (F-2): die zwei Ablehnungen des Sprachwunsches. Beide sind reine EINGABEfehler und
-// laufen deshalb wie die Bestands-400er VOR jedem Gate - ohne Audit, ohne Metrik
-// (dieselbe Regel wie bei to/objective und E164_FORMAT_ERROR). Die unterstuetzten Codes
-// stehen IM error-String: der MCP-Weg reicht nur json.error an das aufrufende Modell
-// weiter (mcp-tools.js#api), ein Zusatzfeld saehe es nie. code/supported reisen zusaetzlich
-// fuer maschinelle Leser. Englisch, weil hier das Client-MODELL liest, nicht der Tenant
-// (Systemgrenze O14) - Gate-Ablehnungen an den Tenant bleiben davon unberuehrt.
-const UNSUPPORTED_LANGUAGE = "unsupported_language";
-const LANGUAGE_UNAVAILABLE = "language_unavailable";
-
-const unsupportedLanguageBody = () => ({
-  error: `${UNSUPPORTED_LANGUAGE}: language must be one of ${SUPPORTED_LANGUAGES.join(", ")}`,
-  code: UNSUPPORTED_LANGUAGE,
-  supported: SUPPORTED_LANGUAGES,
-});
-
-// P4a/E-1 (hartes Gate): der Wunsch gilt NUR auf dem Sprechweg, der Gespraechs- und
-// Offenlegungssprache getrennt beantwortet (ElevenLabs, elevenlabs/call-locale.js). Die
-// Der TeXML-Zweig rendert den Offenlegungssatz aus call.language (claude.js
-// disclosureSentence) - dort machte ein Wunsch die Sprache der PFLICHTAUSSAGE
-// client-bestimmt, und genau das verbietet F-2 Punkt 4 (PM-2). LAUT abgelehnt statt still
-// ignoriert: ein wirkungsloses Feld IST der Defekt, gegen den diese Phase gebaut ist.
-const languageUnavailableBody = () => ({
-  error:
-    `${LANGUAGE_UNAVAILABLE}: this deployment cannot separate the spoken language from the ` +
-    "mandatory AI disclosure - omit language",
-  code: LANGUAGE_UNAVAILABLE,
-});
+// T2-09 (O-13/O-20): additives, maschinenlesbares Feld an JEDER Gate-Ablehnung, die die
+// Route verlaesst. Quelle ist ausschliesslich denial.audit.grund (dieselbe Kennung, die
+// beobachteAblehnung schon fuer Audit/Metrik liest) - keine zweite Grund-Herleitung. Reine
+// 400-Eingabefehler tragen kein audit-Objekt (s.o.) und bleiben deshalb ohne reason: die
+// Rueckmeldung "was war falsch an meiner Eingabe" (z.B. objective zu lang) bleibt
+// unveraendert Text ohne Kennung. body/status/error/Audit/Metrik bleiben byte-identisch;
+// nur dieses eine Feld kommt hinzu.
+function denialResponseBody(denial) {
+  return denial.audit ? { ...denial.body, reason: denial.audit.grund } : denial.body;
+}
 
 // E3: 503 als benannte Konstante (G25; ausserdem haelt das die gepinnte
 // no-magic-numbers-Inventur dieser Datei unveraendert). Dieselbe Klasse wie der
 // Gate-Fehlerpfad (outbound-gates.js) - Dienst voruebergehend nicht moeglich, kein Anruf.
 const HTTP_SERVICE_UNAVAILABLE = 503;
+// Die Erfolgsantwort eines deduplizierten Aufrufs (antwortOhneNeuenAnruf), benannt wie oben.
+const HTTP_OK = 200;
 
 // Der Text der Fehlerklammer. Bewusst NICHT sprachabhaengig und bewusst generisch, dieselbe
 // Begruendung wie GATE_ERROR_MESSAGE (outbound-gates.js): die Sprachquelle koennte im
@@ -289,13 +289,26 @@ const CLAIM_ERROR_MESSAGE =
 // dasselbe Ziel wirklich serialisiert und es entsteht genau EIN Datensatz.
 // Das Praedikat liegt HINTER der vollstaendigen Gate-Kette und kann kein Gate ueberspringen -
 // die Aenderung ist strikt EINSCHRAENKEND (ein Fall mehr, in dem NICHT gewaehlt wird).
-function claimCallRecord({ store, ctx, felder, nowMs }) {
+//
+// T2-08 (T-27, Rennen Gate->Claim geschlossen): zwischen dem fruehen number_gate und
+// diesem Lock koennen Netz-awaits liegen (Pre-Call-Briefing, EL-Eroeffnungszeile) - in
+// diesem Fenster kann ein anderer, gleichzeitiger Request des SELBEN Tenants die Quote
+// bereits ausgeschoepft haben (gemessen: 8 parallele Requests bei Limit 2 -> 8 Datensaetze
+// ohne diese Pruefung, s. Spec Befund 3). callQuotaDenial(ctx) prueft deshalb HIER ERNEUT,
+// im selben synchronen Lock-Body wie die Dedup-Entscheidung - die einzige Stelle, an der
+// Zaehlen und Anlegen atomar zusammenfallen. Reihenfolge: Dedup zuerst (ein laufender Anruf
+// verbraucht ohnehin keinen neuen Slot), dann Quote, erst dann createCall.
+// created=false heisst: KEIN neuer Datensatz - entweder ein laufender Anruf (call) oder eine
+// Quoten-Ablehnung (denial). Beide Ausgaenge beantwortet antwortOhneNeuenAnruf (unten).
+function claimCallRecord({ store, ctx, felder, nowMs, callQuotaDenial }) {
   const laufender = findDuplicateOutboundCall(store.activeCallsFor(ctx.tenantId), {
     to: ctx.to,
     nowMs,
   });
-  if (laufender) return { call: laufender, deduplicated: true };
-  return { call: store.createCall(felder), deduplicated: false };
+  if (laufender) return { call: laufender, created: false };
+  const denial = callQuotaDenial(ctx);
+  if (denial) return { denial, created: false };
+  return { call: store.createCall(felder), created: true };
 }
 
 // E3: EINE Antwortform fuer beide Ausgaenge (G5) - der deduplizierte Aufruf beantwortet
@@ -313,6 +326,26 @@ function placeCallResponseBody({ call, ctx, config, deduplicated }) {
     deduplicated,
     context_received: contextReceivedMeta(ctx.context, config), // I10
     diagnostic: call.diagnostic, // P2b
+  };
+}
+
+// E3 + T2-08 (T-27): die Antwort auf einen Claim OHNE neuen Datensatz (claimCallRecord
+// created=false). Die Reserve ist zu diesem Zeitpunkt bereits zurueckgebucht (Aufrufer).
+// Quoten-Ablehnung im Claim-Lock -> derselbe Ausgang wie eine fruehe number_gate-Ablehnung
+// (Audit+Metrik ueber beobachteAblehnung, Status/Text aus dem Gate). Deduplizierter Aufruf
+// -> Audit place_call_dedup + die EINE Antwortform (placeCallResponseBody, 200). In beiden
+// Faellen KEIN Originate, KEIN Consult, KEIN Timer, KEIN Kostenprofil. Modul-Ebene
+// (Praezedenz beobachteAblehnung): die gepinnte Riesenfunktion waechst dadurch nicht.
+function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }) {
+  if (claim.denial) {
+    beobachteAblehnung({ store, audit, denial: claim.denial, req, tenantId: ctx.tenantId });
+    return { status: claim.denial.status, body: denialResponseBody(claim.denial) };
+  }
+  const { call } = claim;
+  audit("place_call_dedup", req, `to=${ctx.to} call=${call.id} tenant=${ctx.tenantId}`);
+  return {
+    status: HTTP_OK,
+    body: placeCallResponseBody({ call, ctx, config, deduplicated: true }),
   };
 }
 
@@ -343,6 +376,12 @@ export function makeCallRoutes({
   config,
   audit,
   outboundGates,
+  // T2-08 (T-27): die geteilte Quoten-Pruefung (Stundenlimit + Ziel-Cap) aus
+  // outbound-gates.js#makeOutboundGates - dieselbe Instanz wie im number_gate-Gate der
+  // outboundGates-Kette (EINE Quelle, kein zweiter Zaehler). Default wirft (s.o.,
+  // callQuotaDenialNotWired): eine fehlverdrahtete Kompositionswurzel darf die Pruefung
+  // im Claim-Lock nicht still auf "immer erlaubt" fallen lassen.
+  callQuotaDenial = callQuotaDenialNotWired,
   voiceControl,
   // EL-Anrufstart (dritter Outbound-Weg): die EINE Instanz aus server.js (INV-7) - sie
   // haelt den ziehenden Ergebnisweg, eine zweite haette eine zweite Abhol-Schleife.
@@ -419,7 +458,7 @@ export function makeCallRoutes({
     const denial = await runOutboundGates({ gates: outboundGates, ctx });
     if (denial) {
       beobachteAblehnung({ store, audit, denial, req, tenantId: ctx.tenantId });
-      return res.status(denial.status).json(denial.body);
+      return res.status(denial.status).json(denialResponseBody(denial));
     }
 
     // Ab hier ist ctx vollstaendig durch die Gate-Kette befuellt. KRITISCH: ctx.to ist die von
@@ -524,19 +563,21 @@ export function makeCallRoutes({
       };
       // E3: EIN synchroner Lock-Abschnitt - Dedup-Entscheidung UND Datensatz-Anlage.
       const claim = await store.withStoreLock(() =>
-        claimCallRecord({ store, ctx, felder, nowMs: Date.now() }),
+        claimCallRecord({ store, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
       );
       call = claim.call;
-      // E3: deduplizierter Aufruf - KEIN Originate, KEIN Consult, KEIN Timer, KEIN Kostenprofil.
-      // Die selbst gebuchte Reserve geht in einem ZWEITEN, kurzen Lock-Abschnitt zurueck (der
-      // erste traegt allein die Claim-Entscheidung), ohne Datensatz und damit ohne Stunden-
-      // oder Ziel-Kontingent-Verbrauch.
-      if (claim.deduplicated) {
+      // E3 + T2-08 (T-27): kein neuer Datensatz (deduplizierter Aufruf ODER im Lock erneut
+      // gepruefte Quote Stundenlimit/Ziel-Cap abgelehnt) - KEIN Originate, KEIN Consult, KEIN
+      // Timer, KEIN Kostenprofil. Die selbst gebuchte Reserve geht in einem ZWEITEN, kurzen
+      // Lock-Abschnitt zurueck (der erste traegt allein die Claim-Entscheidung), ohne
+      // Datensatz und damit ohne Stunden- oder Ziel-Kontingent-Verbrauch. Die Antwort
+      // (Ablehnung bzw. Dedup) formt antwortOhneNeuenAnruf.
+      if (!claim.created) {
         await store.withStoreLock(() =>
           store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents),
         );
-        audit("place_call_dedup", req, `to=${ctx.to} call=${call.id} tenant=${ctx.tenantId}`);
-        return res.json(placeCallResponseBody({ call, ctx, config, deduplicated: true }));
+        const antwort = antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config });
+        return res.status(antwort.status).json(antwort.body);
       }
       audit(
         "place_call",
@@ -719,8 +760,8 @@ export function makeCallRoutes({
     if (!callVisibleTo(call, requestTenant(req)))
       return res.status(404).json({ error: "not found" });
     if (call.status !== "active") return res.json({ status: call.status });
-    const requestedBy = internalIdentity(req) || OWNER_ID; // L5: forensisch nachvollziehbar
-    audit("cancel_call", req, `call=${call.id} requestedBy=${requestedBy}`);
+    // L5: requestedBy forensisch nachvollziehbar (interne Identitaet, sonst der Owner).
+    audit("cancel_call", req, `call=${call.id} requestedBy=${internalIdentity(req) || OWNER_ID}`);
     // S1-4 Fix (Owner-Auftrag 15.08.2026): hangUpAction() EINMAL ausgewertet (vorher
     // zweimal identisch aufgerufen, das erste Ergebnis nur als Boolean verworfen) -
     // providerHangUp ist zugleich der Telnyx-Thunk UND die Telnyx-Form-Erkennung.

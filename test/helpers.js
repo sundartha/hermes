@@ -18,6 +18,19 @@ import {
   SIP_PASSWORD_MIN_LENGTH,
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,
 } from "../src/elevenlabs/inbound-path-decision.js";
+// KEIN statischer Import von src/auth.js hier (Regressions-Fund, s. startIdp unten):
+// src/auth.js importiert src/config.js, dessen `config`-Konstante EINMALIG bei der
+// ERSTEN Ausfuehrung des Moduls gebaut wird (Zeile "export const config = ...").
+// helpers.js wird von praktisch jeder Testdatei statisch importiert, VOR jedem
+// `before()`-Hook - ein statischer Import hier haette config.js schon beim Laden
+// dieser Datei ausgewertet, mit dem `DATA_DIR` von VOR dem Test-Setup. Jede Testdatei,
+// die danach store.js im selben Prozess importiert (kein Kindprozess), haette dann ein
+// eingefrorenes, falsches `config.dataDir` bekommen - `store.getCall()` faende nichts
+// (Wurzel des Massenausfalls in test/afix-p4-*, test/al-*, test/cq-p4-*, ...). Der
+// dynamische Import unten in `startIdp()` verschiebt die erste config.js-Auswertung
+// auf den tatsaechlichen Aufrufzeitpunkt - der liegt in JEDEM bestehenden Aufrufer nach
+// dem eigenen Env-Setup, weil `startIdp()` einen Kindprozess-Server aufsetzt und sein
+// Ergebnis erst danach an `startServer({ env: {...} })` uebergeben wird.
 
 // ROOT exportiert (AM3): single-origin-serving.test.js bildet einen RELATIVEN
 // WEB_DIST_DIR gegen das Arbeitsverzeichnis des Spawn-Childs (= ROOT).
@@ -49,6 +62,20 @@ export const DOMESTIC_TEST_NUMBER = Object.freeze({ e164: "+4930111222333", prov
 export const OWNER_TEST_FIRST_NAME = "Jonas";
 export const OWNER_TEST_LAST_NAME = "Beispiel";
 const OWNER_TEST_NAME = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
+
+// P0-Baseline-Staffelung der registrierten Werkzeuge (tasks/openai-p0-entscheidungen.md):
+// Owner + beide Consult-Master-Schalter an -> alle elf Werkzeuge; stdio ohne
+// Consult-Faehigkeit -> neun; davon tragen genau neun ein outputSchema
+// (cancel_call/list_action_items ausgenommen, nur text(...)). EINE Quelle statt
+// Kopien in test/openai-p2-tool-metadaten.test.js und
+// test/openai-p3-security-schemes.test.js (G5) - kommt ein weiteres Werkzeug dazu oder
+// aendert sich die Consult-Faehigkeit, aendert sich die Zahl genau EINMAL.
+// T2-12 (O-25): get_calendar entfallen, zwoelf/zehn -> elf/neun.
+// T2-13 (N-10): prepare_call dazu (readOnly, outputSchema) - elf/neun -> zwoelf/zehn;
+// TOOLS_WITH_OUTPUT_SCHEMA neun -> zehn (prepare_call traegt eines).
+export const TOOL_COUNT_WITH_CONSULT = 12;
+export const TOOL_COUNT_WITHOUT_CONSULT = 10;
+export const TOOLS_WITH_OUTPUT_SCHEMA = 10;
 
 // ALLE config-relevanten Env-Variablen explizit setzen: dotenv fuellt nur
 // UNgesetzte Variablen, so kann eine lokale .env die Tests nicht beeinflussen.
@@ -570,6 +597,11 @@ export const BASE_ENV = {
   OAUTH_ISSUER_URL: "",
   OAUTH_AUDIENCE: "",
   RENDER_EXTERNAL_URL: "",
+  // T2-13 (N-10) default AUS (fail-closed, leer): Bestandssuite byte-identisch (prepare_call
+  // antwortet 503 confirmation_unavailable, keine Bestaetigung ausgestellt). Ohne diese
+  // Zeile leakt eine lokale .env mit CALL_CONFIRMATION_SECRET via dotenv in Spawn-Tests
+  // (Lehre test-base-env-drift). Der Draht-Test (openai-t2-13) setzt sie explizit.
+  CALL_CONFIRMATION_SECRET: "",
 };
 
 // Alle .js-Quelltexte unter einem REPO-RELATIVEN Verzeichnis als [pfad, inhalt]-Paare (Pfade
@@ -1256,6 +1288,9 @@ const KID = "test-key-1";
 // oeffentlichen Schluessel. Liefert Issuer-URL + Signierer. metadataPath waehlt
 // den Well-known-Pfad (WorkOS AuthKit nutzt oauth-authorization-server).
 export async function startIdp({ metadataPath = "/.well-known/openid-configuration" } = {}) {
+  // Dynamischer statt statischer Import (Begruendung am Datei-Kopf) - liest
+  // src/auth.js/config.js erst JETZT, nicht beim Laden von helpers.js.
+  const { OAUTH_SCOPES } = await import("../src/auth.js");
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const jwk = { ...(await exportJWK(publicKey)), kid: KID, alg: "RS256", use: "sig" };
 
@@ -1280,16 +1315,46 @@ export async function startIdp({ metadataPath = "/.well-known/openid-configurati
 
   // noSubject: true laesst den sub-Claim ganz weg (fuer den Fail-closed-Test:
   // verifiziertes Token ohne email UND sub).
-  const sign = (
-    claims = {},
-    { key = privateKey, exp = "5m", aud = MCP_AUDIENCE, iss = issuer, noSubject = false } = {},
-  ) => {
-    let jwt = new SignJWT({ ...claims })
+  // exp: null laesst den exp-Claim ganz weg (fuer den T-12-Test: Token ohne
+  // Ablaufzeit muss der Resource Server ablehnen). Default bleibt "5m" - alle
+  // bestehenden Aufrufer signieren weiterhin ein Token mit Ablaufzeit.
+  const buildJwt = (claims, { iss, aud, exp }) => {
+    if (exp === null) {
+      const jwt = new SignJWT({ ...claims })
+        .setProtectedHeader({ alg: "RS256", kid: KID })
+        .setIssuer(iss)
+        .setAudience(aud);
+      return jwt.setIssuedAt();
+    }
+    return new SignJWT({ ...claims })
       .setProtectedHeader({ alg: "RS256", kid: KID })
       .setIssuer(iss)
       .setAudience(aud)
       .setIssuedAt()
       .setExpirationTime(exp);
+  };
+
+  // T2-23 Commit B (T-12): Standard-Scope fuer signierte Test-Token ist die volle
+  // Produktions-Menge (OAUTH_SCOPES, src/auth.js - einzige Quelle der Literale).
+  // Ohne diesen Default wuerden ALLE Bestandsaufrufer von sign() (58 Stellen in 15
+  // Dateien), die bisher keinen scope-Claim setzen, nach Einfuehrung der
+  // Scope-Pruefung ploetzlich 403 statt 200 bekommen. Ein Aufrufer, der GEZIELT
+  // eine andere oder fehlende Scope-Menge braucht (T2-23-Scope-Tests), setzt
+  // `scope` (String) oder `scp` (Array/String) explizit in `claims` - das
+  // ueberschreibt diesen Default vollstaendig; `scope: null` erzwingt ausdruecklich
+  // "kein Scope-Claim im Token". Eigene Funktion statt Inline-Ternary in sign() -
+  // haelt dessen Komplexitaet unter dem Lint-Limit.
+  const DEFAULT_TEST_SCOPE = OAUTH_SCOPES.join(" ");
+  const mitScopeDefault = (claims) => {
+    if ("scope" in claims || "scp" in claims) return claims;
+    return { scope: DEFAULT_TEST_SCOPE, ...claims };
+  };
+
+  const sign = (
+    claims = {},
+    { key = privateKey, exp = "5m", aud = MCP_AUDIENCE, iss = issuer, noSubject = false } = {},
+  ) => {
+    let jwt = buildJwt(mitScopeDefault(claims), { iss, aud, exp });
     if (!noSubject) jwt = jwt.setSubject(claims.sub || "user-1");
     return jwt.sign(key);
   };
@@ -1328,13 +1393,37 @@ export const toolCall = (name, args = {}) => ({
 // der data:-Zeile (faellt auf rohes JSON zurueck, falls der Transport doch JSON liefert).
 // EINE Quelle fuer Tests, die den Tool-HTTP-Body parsen (heute parst kein anderer Test ihn).
 export async function readToolResult(res) {
+  return (await readRpcMessage(res)).result;
+}
+
+// Die GANZE JSON-RPC-Nachricht (result ODER error) aus einer /mcp-Antwort - fuer
+// Aufrufer, die einen JSON-RPC-Fehler vom Ergebnis unterscheiden muessen (z.B.
+// resources/list ohne registrierte Resources: -32601, test/mcp-draht-pfade.js).
+export async function readRpcMessage(res) {
   const body = await res.text();
   const trimmed = body.trim();
   const raw = trimmed.startsWith("{")
     ? trimmed
     : (body.split(/\r?\n/).find((l) => l.startsWith("data:")) || "").slice("data:".length).trim();
   if (!raw) throw new Error(`Keine JSON-RPC-Daten in der MCP-Antwort:\n${body}`);
-  return JSON.parse(raw).result;
+  return JSON.parse(raw);
+}
+
+// T2-05 (T-14): EINE geteilte Pruef-Funktion fuer die Re-Auth-Challenge, die ein
+// OAuth-Kein-Mandant-tools/call statt eines HTTP-403 liefert (src/mcp-no-tenant.js).
+// Genutzt von am6-oauth-tenant/request-tenant/profiles/e4-mandantentrennung-default
+// UND openai-t2-05-reauth-challenge (G5 - keine vier Kopien derselben Pruefung).
+export function assertReauthChallenge(result) {
+  assert.equal(result.isError, true);
+  const challenge = result._meta?.["mcp/www_authenticate"];
+  assert.ok(Array.isArray(challenge) && challenge.length === 1, "genau eine Challenge");
+  assert.ok(
+    challenge[0].startsWith('Bearer resource_metadata="https://agent.test/.well-known/oauth-protected-resource"'),
+    "resource_metadata zuerst, PUBLIC_URL aus BASE_ENV",
+  );
+  assert.ok(challenge[0].includes('scope="openid email offline_access"'));
+  assert.ok(challenge[0].includes('error="insufficient_scope"'));
+  assert.ok(challenge[0].includes('error_description="'));
 }
 
 // Startet src/server.js und ERWARTET einen Boot-Refusal (Exit statt listen). Fuer

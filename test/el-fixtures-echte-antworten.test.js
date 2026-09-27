@@ -41,7 +41,7 @@ const HTTP_OK = 200;
 const CONVERSATION_DONE_MIT_KOSTEN_MIKRO_CENTS = 10_420_301;
 
 // Faengt genau die Werte ab, die persistProviderResult/applyAnsweredAnchor an den Store
-// weiterreichen - dieselben Felder, die get_transcript und die Kostendecke lesen. Der Call
+// weiterreichen - dieselben Felder, die get_call_result und die Kostendecke lesen. Der Call
 // entsteht HIER (statt als Parameter uebergeben zu werden) - sonst waere das Mutieren
 // seiner Felder im endCallRecord-Fake unten ein no-param-reassign-Verstoss (P6/F2).
 function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {

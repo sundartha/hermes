@@ -1088,3 +1088,69 @@ zerschneidet sie und entfernt still NICHTS — der Fehler verschwand zusaetzlich
 dieselbe Klasse wie Lehre 1 vom 2026-09-12 (Listen ueber `while IFS= read -r`, nie ueber
 `$(...)` in `for`), hier aber mit einem loeschenden Befehl: es sah aus, als sei
 aufgeraeumt, waehrend elf Worktrees stehen blieben.
+
+## Autonome Wellen: Agenten fragen statt zu handeln (18.09.2026)
+
+**Beobachtet:** In einer autonomen Welle (Owner abwesend) sollten drei Agenten messen bzw. Specs
+schreiben. Zwei von drei haben stattdessen Fragen an den Owner formuliert und NICHTS geliefert -
+der Mess-Agent hat die ihm ausdruecklich erlaubten Render-Werkzeuge nicht einmal aufgerufen,
+sondern zurueckgefragt, ob er sie benutzen darf. 210k Token fuer null Messwerte.
+
+**Wurzel:** Subagenten bekommen `CLAUDE.md` injiziert. Dort steht "**Niemals raten. Bei
+Unsicherheit fragen.** Eine Annahme zu treffen ist immer schlechter, als nachzufragen". Diese
+Regel ist fuer interaktive Arbeit richtig und schlaegt in einer autonomen Welle ins Gegenteil um:
+der Agent hat einen erreichbaren Menschen unterstellt, den es nicht gab. Ein Agent sagte das
+woertlich: "der Auftrag wollte ein fertiges Spec ohne Rueckfragen, deine Anweisung wollte die
+Fragen. Deine Anweisung gilt."
+
+**Regel:** Wer einen Agenten in einer autonomen Welle startet, muss die Frage-Regel ausdruecklich
+aufheben - es genuegt NICHT, "autonom" zu schreiben. Wortlaut, der funktioniert:
+
+> **DU STELLST KEINE FRAGEN.** Der Owner hat alles freigegeben, was du brauchst, und ist nicht
+> erreichbar. Was du nicht messen/entscheiden kannst, notierst du als UNKNOWN mit Grund und
+> machst weiter. Die Regel "bei Unsicherheit fragen" aus CLAUDE.md ist fuer diesen Auftrag durch
+> eine ausdrueckliche Owner-Freigabe ersetzt - sie gilt hier nicht.
+
+Dazu die Freigaben KONKRET in den Prompt schreiben (Workspace-ID, Service-ID, was gelesen werden
+darf), nicht nur "du darfst lesen". Und den Unterschied benennen zwischen "darf ich?" (verboten)
+und "ging nicht, weil X" (erwuenscht).
+
+**Gegenprobe, dass es nicht Willkuer ist:** echte Owner-Entscheidungen - Origin-Wahl,
+Dedup-Verhalten, ein Gate aufweichen - bleiben Fragen. Der Unterschied ist, ob die Antwort im
+System messbar ist (dann messen) oder eine Praeferenz des Owners (dann fragen).
+
+## Der Lead blaeht seinen Kontext auf - jede Sitzung erneut (18.09.2026)
+
+**Owner-Korrektur, woertlich:** "Du hast mir zu viel Kontext, zu viel Tokens angehaeuft. 600.000,
+das ist viel zu viel. ... Ich wiederhole mich wirklich bei jeder Session. Ich sage immer das
+gleiche und jede Session macht immer den gleichen Fehler. Viel zu viel Kontext, viel zu wenig
+orchestriert, viel zu ineffizient. ... Weil je mehr Tokens und Kontext du hast, desto duemmer
+wirst du."
+
+**Was den Kontext konkret gefressen hat** (gemessen an dieser Sitzung, nicht geschaetzt):
+1. **Loop-Prompts.** Jeder `/loop`-Tick trug den kompletten Zustand als ~4000-Zeichen-Prompt.
+   Bei ~20 Ticks ist das der groesste Einzelposten - und er waechst mit jedem Tick, weil jeder
+   Tick den Stand des vorigen mitschleppt.
+2. **Selbst gelesene Diffs, Plan-Abschnitte, Lint-Zaehler, Test-Logs.** Jedes `git diff --stat`,
+   jedes `sed -n` in `PLAN-OPENAI.md`, jedes `grep` in `eslint-suppressions.json`.
+3. **Selbst geschriebene Specs.** Fuenf specFiles a 50-70 Zeilen, vom Lead getippt statt delegiert.
+4. **Selbst gefahrene Messungen.** curl gegen Live, Render-API, DB-Zaehlungen.
+
+**Die strukturelle Abhilfe - ein Vorsatz genuegt nicht:**
+- **Zustand in EINE Datei** (`tasks/<kette>/STAND.md`), der Loop-Prompt ist nur ein Zeiger:
+  "Lies tasks/<kette>/STAND.md und handle danach." Wer handelt, aktualisiert die Datei, nicht den
+  Prompt. Das allein entfernt den groessten Posten.
+- **Jede Leseaufgabe ist ein Subagent-Auftrag.** Diff pruefen, Report lesen, Testlog auswerten,
+  Spec schreiben, messen - alles delegiert, Rueckgabe max 5-10 Zeilen, ausdruecklich OHNE Diffs
+  und ohne Kommando-Ausgaben.
+- **Der Lead tippt nur noch:** Workflow starten, Rueckgabezeile lesen, `git merge --no-ff`,
+  STAND.md fortschreiben, berichten. Wer als Lead `cat src/...`, `git diff`, `grep` in Quellcode
+  oder `tail` auf einem Testlog tippt, hat die Rolle verlassen.
+- **Ein Agent = eine Frage, unter 100k Token.** Drei kleine schlagen einen, der "mal alles
+  anschaut" - und die Kosten wachsen quadratisch mit der Lebensdauer eines Agenten
+  (`.claude/refs/workflow.md` 2a).
+
+**Warum es trotzdem immer wieder passiert:** Selbst-Lesen fuehlt sich im Moment schneller an als
+einen Agenten zu beauftragen, und jede einzelne Entscheidung dafuer ist plausibel. Der Schaden ist
+kumulativ und faellt erst am Ende auf. Deshalb ist die Regel mechanisch formuliert (welche
+Kommandos der Lead nicht tippt), nicht als Haltung.

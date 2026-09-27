@@ -11,12 +11,11 @@ import {
   WIDGET_AGENT_STATUS,
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
-  WIDGET_CALENDAR,
 } from "../src/ui/widget-catalog.js";
 
 const CSS_PLACEHOLDER = "/*__HUD_CARD_CSS__*/";
 const MOUNT_PLACEHOLDER = "<!--__WING_CANVAS_MOUNT__-->";
-const READ_ONLY_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALENDAR];
+const READ_ONLY_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS];
 
 test("T-hud-css-inject-present: Platzhalter wird genau einmal durch HUD_CARD_CSS ersetzt", () => {
   const fixture = `<style>${CSS_PLACEHOLDER}</style>`;

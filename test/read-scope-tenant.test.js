@@ -10,7 +10,7 @@
 // Identitaets-Threading: die lesenden MCP-Tools rufen intern die localhost-REST-API
 // mit X-Internal-Identity. Der Test treibt GENAU diesen Pfad direkt (GET mit
 // X-Internal-Identity = idpSubject ueber den localhost-Socket) -> exakt der
-// requestTenant-REST-Pfad, den list_calls/get_transcript/... intern nutzen. Die
+// requestTenant-REST-Pfad, den list_calls/get_call_result/... intern nutzen. Die
 // MCP-Tabellen-Eintraege (8-11) sind ueber ihren REST-Pfad abgedeckt, nicht ueber
 // einen echten MCP-Roundtrip (mcp-tools keyt heute auf email|sub, nicht idpSubject
 // -> echte MCP-Tenant-Reads sind ein deferter Follow-up, fail-CLOSED, kein Leak).
@@ -19,7 +19,7 @@
 // Lesepfad MUSS einen Tabellen-Eintrag bekommen. Heute:
 //   GET /api/state    -> calls, actionItems, notifications, agent.{number,owner,
 //                        ownerNumber}, usage, settings, calendar
-//   GET /api/calls/:id -> get_call_status / get_transcript (Einzel-Call, id+twilioSid)
+//   GET /api/calls/:id -> get_call_status / get_call_result (Einzel-Call, id+twilioSid)
 // Plattform-Service-Config (model, voiceEngine) + globales Safety-Gate
 // (allowedNumbers) bleiben global (kein Tenant-Daten-Leck).
 import test from "node:test";
@@ -171,7 +171,7 @@ test("I5 /api/state agent-Block ist tenant-gescoped + fail-closed (Nummer/Owner/
   }
 });
 
-// ----- DAS GATE: GET /api/calls/:id (get_call_status / get_transcript) -----
+// ----- DAS GATE: GET /api/calls/:id (get_call_status / get_call_result) -----
 test("I5 /api/calls/:id ist tenant-gescoped: fremder Call -> 404 (nicht 403), beide id-Achsen", async () => {
   const srv = await startServer({ env: { MULTI_TENANT: "true" }, seed: seedTwoTenants() });
   try {

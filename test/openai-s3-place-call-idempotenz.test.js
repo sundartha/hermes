@@ -214,7 +214,10 @@ async function postCallTeilB({ store, config, audit = () => {} }) {
   let wahlversuche = 0;
   const { makeOutboundGates } = await import("../src/telephony/outbound-gates.js");
   const { makeCallRoutes } = await import("../src/routes/api-calls.js");
-  const outboundGates = makeOutboundGates({
+  // T2-08 (T-27): callQuotaDenial kommt aus DERSELBEN makeOutboundGates()-Instanz wie
+  // outboundGates (EINE Quelle) - der Claim-Lock prueft ihn jetzt zusaetzlich. testConfig()
+  // setzt grosszuegige Limits, die reale Pruefung lehnt hier nie ab.
+  const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
     store,
     config,
     requestTenant: () => TENANT,
@@ -222,7 +225,7 @@ async function postCallTeilB({ store, config, audit = () => {} }) {
     OWNER_ID: "owner",
     TENANT_REJECT: "reject",
     audit,
-  }).gates;
+  });
   const app = express();
   app.use(express.json());
   app.use(
@@ -231,6 +234,7 @@ async function postCallTeilB({ store, config, audit = () => {} }) {
       config,
       audit,
       outboundGates,
+      callQuotaDenial,
       voiceControl: () => ({
         originateCall: async () => {
           wahlversuche += 1;

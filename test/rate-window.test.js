@@ -30,3 +30,18 @@ test("Window-Reset: nach Ablauf des Fensters startet der Zaehler neu", async () 
   await new Promise((r) => setTimeout(r, 40));
   assert.equal(hit("k").allowed, true, "nach Fenster-Ablauf wieder erlaubt");
 });
+
+// T2-07-Nachbesserung: peek liest den Stand, ohne zu zaehlen - Grundlage der IP-Sperre vor
+// dem statischen Token-Vergleich (src/mcp-rate-limit.js ipSperre).
+test("peek zaehlt nicht mit und sperrt erst, wenn das Fenster ausgeschoepft ist", () => {
+  const hit = makeFixedWindowCounter({ windowMs: 60_000, limit: 2, sweepMs: 300_000 });
+  assert.equal(hit.peek("k").allowed, true, "unbekannter Schluessel frei");
+  assert.equal(hit.peek("k").allowed, true, "peek hat nicht gezaehlt");
+  hit("k");
+  assert.equal(hit.peek("k").allowed, true, "1 von 2 verbraucht - noch frei");
+  hit("k");
+  const voll = hit.peek("k");
+  assert.equal(voll.allowed, false, "2 von 2 verbraucht - naechster hit waere abgelehnt");
+  assert.ok(voll.retryAfterS > 0, "retryAfterS ist positiv");
+  assert.equal(hit.peek("b").allowed, true, "anderer Schluessel unberuehrt");
+});

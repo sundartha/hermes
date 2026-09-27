@@ -35,7 +35,7 @@ test("T-wing-canvas-inject-no-network: injizierter Block ist self-contained", ()
 // sichtbaren Text leaken - genau so in call.html gefunden).
 test("T-wing-canvas-inject-no-leak: kein __WING_ENGINE__-Rest im Serve-Output aller Widgets", async () => {
   const { widgetHtml } = await import("../src/ui/widget-catalog.js");
-  for (const id of ["call", "agent-status", "my-number", "calls", "calendar"]) {
+  for (const id of ["call", "agent-status", "my-number", "calls"]) {
     assert.ok(!widgetHtml(id).includes("__WING_ENGINE__"), `${id}: kein Platzhalter-Leak`);
   }
 });

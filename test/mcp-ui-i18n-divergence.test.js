@@ -16,13 +16,14 @@ import http from "node:http";
 import { registerTools } from "../src/mcp-tools.js";
 import { resolveLocale, WIDGET_DICT } from "../src/ui/widget-i18n.js";
 
+const HTTP_OK = 200;
+
 // ---- Mini-Harness (Muster test/mcp-tools.test.js, dupliziert - siehe dortiger Kommentar) ----
+// Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
+// server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern.
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    tool(name, _desc, _schema, handler) {
-      handlers.set(name, handler);
-    },
     registerTool(name, _config, handler) {
       handlers.set(name, handler);
     },
@@ -34,14 +35,13 @@ function captureTools(ctx) {
 
 async function startGatewayMock(body) {
   const server = http.createServer((req, res) => {
-    res.statusCode = 200;
-    res.setHeader("content-type", "application/json");
+    res.writeHead(HTTP_OK, { "content-type": "application/json" });
     res.end(JSON.stringify(body));
   });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     url: `http://127.0.0.1:${server.address().port}`,
-    close: () => new Promise((r) => server.close(r)),
+    close: () => new Promise((resolve) => server.close(resolve)),
   };
 }
 
@@ -100,13 +100,13 @@ test("UI-09: Charakterisierung heutiger Stand - drei Sprachachsen divergieren gl
   await withGateway(CALL_FIXTURE, async () => {
     const handlers = captureTools({ identity: null, scopedTenant: "tenant-fr" });
     const statusResult = await handlers.get("get_call_status")({ call_id: "call_1" });
-    const transcriptResult = await handlers.get("get_transcript")({ call_id: "call_1" });
+    const transcriptResult = await handlers.get("get_call_result")({ call_id: "call_1" });
 
     const summary = transcriptResult.structuredContent.result_summary;
     assert.match(summary, /[éèàâîïôûç]/i, "Achse D traegt franzoesische Zeichen (Fixture-Beweis)");
 
     const lines = statusResult.structuredContent.last_transcript_lines;
-    const calleeLine = lines.find((l) => l.includes("Bonjour, de quoi"));
+    const calleeLine = lines.find((line) => line.includes("Bonjour, de quoi"));
     assert.ok(calleeLine, "Gegenseiten-Zeile muss im Fixture-Transkript vorkommen");
     const prefix = calleeLine.split(":")[0]; // dynamisch extrahiert, NICHT hartkodiert
 
@@ -127,8 +127,8 @@ test("UI-09: Charakterisierung heutiger Stand - drei Sprachachsen divergieren gl
     // (Achse B2 liest gar kein Sprachfeld, MCP-06 im selben Block).
     const handlersOther = captureTools({ identity: null, scopedTenant: "tenant-en-us" });
     const statusResultOther = await handlersOther.get("get_call_status")({ call_id: "call_1" });
-    const calleeLineOther = statusResultOther.structuredContent.last_transcript_lines.find((l) =>
-      l.includes("Bonjour, de quoi"),
+    const calleeLineOther = statusResultOther.structuredContent.last_transcript_lines.find((line) =>
+      line.includes("Bonjour, de quoi"),
     );
     assert.equal(
       calleeLineOther.split(":")[0],

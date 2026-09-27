@@ -90,6 +90,7 @@ oeffentlich|GET|/api/plans|200|keine|oeffentlicher Tarifkatalog, registerPublicR
 oeffentlich|GET|/.well-known/oauth-protected-resource|200|keine|OAuth-Metadata, registerWellKnown
 oeffentlich|GET|/.well-known/oauth-protected-resource/mcp|200|keine|OAuth-Metadata (MCP-Variante)
 oeffentlich|GET|/.well-known/openai-apps-challenge|404|keine|Domain-Ownership-Token nicht gesetzt; Route existiert (O-4)
+oeffentlich|GET|/.well-known/security.txt|200|keine|RFC-9116-Kontakt, statischer Text
 fehlt|POST|/v1/chat/completions|404|keine|in IE6-S1 geloescht (Assistant-Shim); 404 unabhaengig von Env
 oeffentlich|GET|/auth/login|302|keine|Einstieg in den OIDC-Login
 oeffentlich|GET|/auth/callback|302|keine|ohne state-Cookie -> Neustart des Flows
@@ -144,6 +145,7 @@ sitzung|GET|/api/self-service/billing/status|401|webauth|Sitzungs-Cookie fehlt
 sitzung|POST|/api/self-service/billing/setup-checkout|401|webauth|Geld-Route, Sitzungs-Cookie fehlt
 sitzung|POST|/api/self-service/billing/subscribe|401|webauth|Geld-Route, Sitzungs-Cookie fehlt
 sitzung|GET|/api/self-service/billing/return|401|webauth|Sitzungs-Cookie fehlt
+sitzung|GET|/api/admin/deploy-info|401|webauth|webAuth vor adminOnly - 401 vor 403
 sitzung|GET|/api/admin/tenants|401|webauth|webAuth vor adminOnly - 401 vor 403
 sitzung|POST|/api/admin/tenants/:id/approve|401|webauth|webAuth vor adminOnly - 401 vor 403
 sitzung|POST|/api/admin/tenants/:id/suspend|401|webauth|webAuth vor adminOnly - 401 vor 403

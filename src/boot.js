@@ -35,6 +35,7 @@ import {
   platformAniFindings,
   platformAlertSenderFindings,
   driftConfigFindings,
+  callConfirmationSecretFindings,
   llmFallbackFindings,
   elInboundAccessFindings,
   elInboundScopeFindings,
@@ -329,6 +330,13 @@ function warnOutboundDriftConfigUnset(config) {
     console.warn(`[boot] ${finding.message}`);
 }
 
+// T2-13 (N-10): reine Diagnose, NIE fatal (s. callConfirmationSecretFindings) - fehlendes
+// UND zu kurzes Geheimnis. Loggt nie den Secret-Wert.
+function warnCallConfirmationSecretUnusable(config) {
+  for (const finding of callConfirmationSecretFindings({ secret: config.auth.callConfirmationSecret }))
+    console.warn(`[boot] ${finding.message}`);
+}
+
 // LCT P5: Drift-Waechter, Ausloeser 1 von 2 (Boot). GENAU EINE Zeile fuer ALLE Praefixe -
 // nicht eine je Praefix je Boot (Risiko-Abschnitt der Phase: WARN-Muedigkeit). WARN nur,
 // wenn ueberhaupt ein Befund vorliegt; ein durchweg im Band liegender Zustand loggt ruhig.
@@ -587,6 +595,7 @@ function assertBootGates(config, store, durableAudit) {
   warnKostenAlarmZielUnset(config, durableAudit); // KV2-1, WARN + durabel
   warnPlatformAniUnset(config); // OUTBOUND-E1, WARN
   warnOutboundDriftConfigUnset(config); // OUTBOUND-E4, WARN
+  warnCallConfirmationSecretUnusable(config); // T2-13, WARN
   warnTariffDrift(config, store);
   warnTarifpaar(config, store); // KV2-10, WARN: Tarifpaar-Waechter feuert beim Start
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
@@ -890,9 +899,12 @@ function publicUrlOrHint(server) {
 
 function logBootBanner(config, port, state) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
-  // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
-  // Wert aus derselben Quelle, G5) und wird von docs/RUNBOOK-RESTORE.md gelesen.
-  // Wortlaut der commit-Zeile bewusst unveraendert (das Runbook greppt sie).
+  // TEMP-DIAGNOSE mehr - die commit-Zeile ist der Log-seitige Zwilling von /healthz
+  // (derselbe Wert aus derselben Quelle, G5) und wird von docs/RUNBOOK-RESTORE.md
+  // gelesen; Wortlaut der commit-Zeile bewusst unveraendert (das Runbook greppt sie).
+  // Die configHash-Zeile ist seit OpenAI-P10b der EINZIGE oeffentlichkeits-unabhaengige
+  // Zwilling: configHash verliess /healthz (Preimage-Befund), lebt seither nur noch
+  // hier und hinter GET /api/admin/deploy-info (webAuthMw+adminMw).
   console.log(`  [boot] deployed commit=${config.server.deployedCommit}`);
   console.log(`  [boot] configHash=${configFingerprint(config)}`);
   console.log(`\n  Hermes Gateway laeuft auf ${gatewayUrlForPort(port)}`);
@@ -941,7 +953,8 @@ function logBootBanner(config, port, state) {
   // P7: WELCHE Decken das Gate misst, stand bisher nirgends im Log - nach einem Deploy war
   // nicht ablesbar, ob der Dienst die neuen Zahlen faehrt (der Betreiber muesste sie im
   // Dashboard nachschlagen). Reine Betreiber-Zahlen, kein Secret, kein PII; das Boot-Log
-  // ist operator-only (NICHT /healthz, das den Hash statt der Rohwerte traegt).
+  // ist operator-only (NICHT /healthz - das traegt seit OpenAI-P10b nur noch commit,
+  // weder Rohwerte noch den Hash darueber).
   console.log(
     `  Kosten-Decken:  Tenant-Default ${config.billing.defaultTenantBudgetCents} ct | ` +
       `Plattform-Warnschwelle ${config.billing.platformSpendCapCents} ct | ` +

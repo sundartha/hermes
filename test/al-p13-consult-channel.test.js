@@ -796,8 +796,13 @@ test("AL-P13-36: place_call-Beschreibung ist ohne Kanal byte-identisch, mit Kana
   assert.ok(looped.includes("await_call_event"));
 });
 
-test("AL-P13-37: mcpServerOptions ist ohne beide Schalter undefined (Bestand byte-identisch)", () => {
-  assert.equal(mcpServerInfo.mcpServerOptions({ uiEnabled: false, consultLoop: false }), undefined);
+test("AL-P13-37: mcpServerOptions setzt instructions immer, Consult-Block nur am Schalter (T-21)", () => {
+  // T-21: instructions sind IMMER gesetzt - die alte Byte-Identitaets-Zusage
+  // ("ohne beide Schalter undefined") gilt fuer diese Zeile nicht mehr.
+  assert.equal(
+    mcpServerInfo.mcpServerOptions({ uiEnabled: false, consultLoop: false }).instructions,
+    mcpServerInfo.MCP_BASE_INSTRUCTIONS,
+  );
   assert.equal(
     mcpServerInfo.mcpServerOptions({ uiEnabled: false, consultLoop: true }).instructions,
     mcpServerInfo.MCP_CONSULT_INSTRUCTIONS,
@@ -805,7 +810,7 @@ test("AL-P13-37: mcpServerOptions ist ohne beide Schalter undefined (Bestand byt
   assert.ok(mcpServerInfo.mcpServerOptions({ uiEnabled: true, consultLoop: false }).capabilities);
   assert.equal(
     mcpServerInfo.mcpServerOptions({ uiEnabled: true, consultLoop: false }).instructions,
-    undefined,
+    mcpServerInfo.MCP_BASE_INSTRUCTIONS,
   );
 });
 
@@ -976,7 +981,14 @@ test("AL-P13-50: answer_consult mit status=working gibt die feste Quittung zurue
 test("AL-P13-43: der Berechtigungs-Hinweis haengt EINMAL am place_call-Ergebnis", async () => {
   const { localeFor } = await import("../src/i18n/locales.js");
   const hint = localeFor("en").mcp.consultPermissionHint;
-  await withGateway([{ path: "/api/calls", status: 200, body: { callId: CALL_ID } }], async () => {
+  await withGateway(
+    [
+      // T2-13 (N-10): der Bestaetigungs-Hop laeuft VOR /api/calls - eigene Route noetig,
+      // sonst faellt confirmCallHop auf den 404-Default und place_call kommt nie an.
+      { path: "/api/call-confirmations", status: 200, body: { preview: {}, confirmed: true } },
+      { path: "/api/calls", status: 200, body: { callId: CALL_ID } },
+    ],
+    async () => {
     const withConsult = await captureRegistrations({ consultAllowed: true, language: "en" })
       .get("place_call")
       .handler({ to: "+4915112345678", objective: "Test" });

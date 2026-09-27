@@ -28,7 +28,7 @@
 // outbound-agent.template.json), src/elevenlabs/outbound.js liest sie
 // (collectedFieldsOf/persistProviderResult) und src/store/state-ops.js speichert sie
 // additiv am Anruf-Datensatz (recordProviderCollectedFields). Das exponierende MCP-Schema
-// (src/mcp-tools.js: pickTranscript/get_transcript) bleibt in diesem Paket bewusst
+// (src/mcp-tools.js: pickTranscript/get_call_result) bleibt in diesem Paket bewusst
 // unangetastet (Auftragsgrenze) - die vier Angaben sind heute als EIGENE Felder am
 // Call-Record lesbar, noch nicht ueber MCP; das ist eine eigene, spaetere Entscheidung
 // (das MCP-Schema nach aussen zu aendern).

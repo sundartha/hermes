@@ -7,7 +7,16 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { startServer, startIdp, seedState, seedCall, mcpPost } from "./helpers.js";
+import {
+  startServer,
+  startIdp,
+  seedState,
+  seedCall,
+  mcpPost,
+  toolCall,
+  readToolResult,
+  assertReauthChallenge,
+} from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TENANT_A = "t_a",
@@ -21,8 +30,7 @@ const PRIV_A = "+491737252163",
   PRIV_B = "+491737252164"; // hinterlegte eigene Nummern
 const HTTP_OK = 200,
   HTTP_UNAUTHORIZED = 401,
-  HTTP_NOT_FOUND = 404,
-  HTTP_FORBIDDEN = 403;
+  HTTP_NOT_FOUND = 404;
 // Positiv-Kontrolle E4-30: die vier Route-Dateien dieser Etappe (_tenant/api-read/
 // api-calls/mcp) - benannt statt einer nackten Zahl (G25).
 const MIN_ROUTE_FILE_COUNT = 4;
@@ -207,16 +215,28 @@ test("E4-19: Request ohne X-Internal-Identity ueber den Loopback -> Betreiber-Ka
 
 const oauthEnv = (idp) => ({ MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer });
 
-test("E4-17: /mcp, gueltiges Token OHNE Tenant-Zuordnung -> 403, keine Tool-Liste", async () => {
+// T2-05 (T-14) umbenannt: die Tool-Liste ist seit dieser Phase sichtbar (Pflicht fuer
+// die ChatGPT-Kontoverknuepfungs-UI), NUR der Aufruf ist gesperrt - der Stub liefert
+// einen Tool-Fehler mit Re-Auth-Challenge statt eines echten Ergebnisses.
+test("E4-17: /mcp, gueltiges Token OHNE Tenant-Zuordnung -> Tool-Liste sichtbar, Aufruf gesperrt", async () => {
   const idp = await startIdp();
   const srv = await startServer({ env: oauthEnv(idp), seed: seedTwoTenants() });
   try {
     const token = await idp.sign({ sub: SUB_GHOST });
-    const res = await mcpPost(`${srv.localUrl}/mcp`, token, { jsonrpc: "2.0", id: 1, method: "tools/list" });
-    const text = await res.text();
-    assert.equal(res.status, HTTP_FORBIDDEN);
-    assert.deepEqual(JSON.parse(text), { error: "Keine Tenant-Zuordnung fuer diese Identitaet." });
-    assert.ok(!text.includes("tools"), "keine Tool-Liste im 403-Body");
+    const listRes = await mcpPost(`${srv.localUrl}/mcp`, token, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/list",
+    });
+    assert.equal(listRes.status, HTTP_OK);
+    const listResult = await readToolResult(listRes);
+    assert.ok(Array.isArray(listResult.tools) && listResult.tools.length > 0);
+    const callRes = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("get_agent_number"));
+    assert.equal(callRes.status, HTTP_OK);
+    const result = await readToolResult(callRes);
+    assertReauthChallenge(result);
+    assert.ok(!JSON.stringify(result).includes(NUM_A), "NIE die Nummer eines fremden Mandanten");
+    assert.ok(!JSON.stringify(result).includes(NUM_B), "NIE die Nummer eines fremden Mandanten");
   } finally {
     await srv.stop();
     await idp.close();

@@ -15,13 +15,31 @@ import { planProfileFor } from "../src/plans.js";
 // Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
 // TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403/429/400 = ein Gate hat gesperrt.
 
+// T2-13 (N-10): CALL_CONFIRMATION_SECRET testweise gesetzt - ohne bestaetigten
+// confirmation_code wuerde place_call gar nicht mehr bis zum jeweils geprueften Profil-/
+// Nummern-Gate kommen.
+const TEST_CONFIRMATION_SECRET = "profile-tenant-key-test-secret-mind-32-zeichen";
 const oauthEnv = (idp, extra = {}) => ({
   MCP_AUTH: "oauth",
   OAUTH_ISSUER_URL: idp.issuer,
   MULTI_TENANT: "true",
   ALLOWED_COUNTRY_CODES: "*",
+  CALL_CONFIRMATION_SECRET: TEST_CONFIRMATION_SECRET,
   ...extra,
 });
+
+// Holt den Bestaetigungs-Code direkt an der Route (derselbe Loopback-Aufrufer wie der
+// MCP-Handler); tenantHeader bindet ihn - wie das echte /mcp-Gateway per
+// X-Internal-Tenant - an den Mandanten, dessen Gate der jeweilige Testfall pruefen will.
+async function confirmedPlaceCallArgs(localUrl, args, tenantHeader) {
+  const res = await fetch(`${localUrl}/api/call-confirmations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Internal-Tenant": tenantHeader },
+    body: JSON.stringify(args),
+  });
+  const json = await res.json();
+  return { ...args, confirmation_code: json.confirmation?.code };
+}
 
 // Ein telefonbarer Nicht-Owner-Tenant: aktiv, CARD-verifiziert, mit ownerName (passiert
 // KYC- + Identitaets-Gate). idpSubject macht ihn ueber resolveTenant auffindbar.
@@ -49,11 +67,12 @@ test("(a) Subscriber sub-only passiert das Profil-Gate -> keine_tenant_nummer, N
   });
   try {
     const token = await idp.sign({ sub: "sub-sub" }); // kein email-Claim
-    const res = await mcpPost(
-      `${srv.localUrl}/mcp`,
-      token,
-      toolCall("place_call", { to: "+4915123123201", objective: "Termin" }),
+    const placeCallArgs = await confirmedPlaceCallArgs(
+      srv.localUrl,
+      { to: "+4915123123201", objective: "Termin" },
+      "t_sub",
     );
+    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
     assert.notEqual(res.status, 401);
     // Block erst am Nummern-Gate (t_sub hat keine aktive Nummer) -> das Profil-Gate ist passiert.
     // tenant=t_sub im keine_tenant_nummer-Audit belegt die korrekte Tenant-Aufloesung.
@@ -81,11 +100,12 @@ test("(b) Owner sub-only nicht per Stundenlimit gesperrt (R2-Regressionsriegel)"
   });
   try {
     const token = await idp.sign({ sub: "owner-sub" }); // kein email-Claim
-    const res = await mcpPost(
-      `${srv.localUrl}/mcp`,
-      token,
-      toolCall("place_call", { to: "+4915123123202", objective: "Termin" }),
+    const placeCallArgs = await confirmedPlaceCallArgs(
+      srv.localUrl,
+      { to: "+4915123123202", objective: "Termin" },
+      "owner",
     );
+    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
     assert.notEqual(res.status, 401);
     await waitForLog(
       srv,
@@ -114,11 +134,12 @@ test("(c) Profilloser Tenant -> stundenlimit (DEFAULT_PROFILE greift, kein Leck)
   });
   try {
     const token = await idp.sign({ sub: "sub-np" });
-    const res = await mcpPost(
-      `${srv.localUrl}/mcp`,
-      token,
-      toolCall("place_call", { to: "+4915123123203", objective: "Termin" }),
+    const placeCallArgs = await confirmedPlaceCallArgs(
+      srv.localUrl,
+      { to: "+4915123123203", objective: "Termin" },
+      "t_np",
     );
+    const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
     assert.notEqual(res.status, 401);
     // Der numberGateError-Audit traegt grund + requestedBy (kein tenant=); das [mcp]-Log
     // zeigt tenant=t_np, requestedBy=sub-np bindet die Ablehnung an das Token.

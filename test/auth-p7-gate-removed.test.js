@@ -217,12 +217,15 @@ test("AUTH-P7-8: keine Wiederauferstehung im Quelltext", () => {
   );
   assert.deepEqual(gateModulTreffer, [], "keine Referenz auf das geloeschte Gate-Modul mehr");
 
-  // Positiv-Assertion: WWW-Authenticate darf NUR noch in src/auth.js vorkommen (die
-  // Bearer-Challenge von mcpAuth, B-1) - waere sie geloescht, wuerde diese Assertion
-  // rot statt stillschweigend gruen zu bleiben.
+  // Positiv-Assertion: WWW-Authenticate darf NUR noch in src/auth.js (die
+  // Bearer-Challenge von mcpAuth, B-1) UND src/middleware.js vorkommen - waere die
+  // Referenz in auth.js geloescht, wuerde diese Assertion rot statt stillschweigend
+  // gruen zu bleiben. middleware.js kam mit T2-06 (T-29) dazu: der Name steht dort NUR
+  // als Wert von Access-Control-Expose-Headers (createMcpCors) - der Browser darf den
+  // 401-Header lesen, das ist keine wiederauferstandene Basic-Auth-Challenge.
   const wwwAuthTreffer = files
     .filter((f) => /WWW-Authenticate/.test(contentsByFile.get(f)))
     .map((f) => path.relative(SRC_ROOT, f))
     .sort();
-  assert.deepEqual(wwwAuthTreffer, ["auth.js"]);
+  assert.deepEqual(wwwAuthTreffer, ["auth.js", "middleware.js"]);
 });
