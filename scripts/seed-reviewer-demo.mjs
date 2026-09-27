@@ -10,6 +10,19 @@
 // Verifikation und denselben Sicherungen wie jeder Kunde. Der Mandant muss vorher durch
 // einen Browser-Login in der Web-App entstanden sein.
 //
+// PFLICHT DES BETREIBERS vor dem ersten Login: das Reviewer-Konto beim Login-Anbieter mit
+// einer E-Mail anlegen, die in Hermes noch KEINEM Konto zugeordnet ist. Der Web-Login fuehrt
+// Konten ueber die E-Mail zusammen (src/web-auth.js resolveOrCreateTenant: bekannte E-Mail ->
+// bestehender Mandant). Mit einer schon benutzten E-Mail landete der Reviewer im Mandanten
+// dieses Kontos - samt dessen echten Anrufen und Transkripten -, und dieses Skript schriebe
+// seine Beispieldaten dorthin (es verweigert nur den Betreiber-Mandanten).
+//
+// Kosten-Ueberwachung: die Seed-Anrufe enden VOR dem Beleg- und Herzschlag-Fenster der
+// Kosten-Ueberwachung (Begruendung in scripts/lib/reviewer-demo-seed.mjs) und loesen deshalb
+// keinen Kosten-Alarm aus. Folge: sie fallen RETENTION_DAYS nach diesem vordatierten Ende
+// weg (mit der Standard-Konfiguration liegt es rund 8 Tage vor dem Lauf) - bei
+// RETENTION_DAYS von 8 oder weniger sofort, bei RETENTION_DAYS=0 nie.
+//
 // Ablauf:
 //   node scripts/seed-reviewer-demo.mjs                                  Trockenlauf (Default):
 //                                                                         zeigt die Datensaetze,
@@ -26,11 +39,15 @@
 // Skripts ueberschreibt, was der Dienst dazwischen geschrieben hat (auch Nutzungs- und
 // Budget-Zaehler). "Neustart danach" reicht deshalb nicht.
 //
-// Idempotent: ein zweiter Lauf legt nichts an ("nichts zu tun"). Beendete Anrufe fallen nach
-// der normalen Aufbewahrungsfrist weg; vor der Einreichung und bei langem Review erneut laufen
-// lassen. Die Ausgabe nennt nur Zaehler - nie Mandanten-Kennung, Nummern oder Texte des Stores.
+// Idempotent: ein zweiter Lauf legt nichts an ("nichts zu tun"). Die Seed-Anrufe fallen nach
+// der Aufbewahrungsfrist (ab ihrem vordatierten Ende) weg; vor der Einreichung und bei langem
+// Review erneut laufen lassen. Die Ausgabe nennt nur Zaehler - nie Mandanten-Kennung, Nummern oder Texte des Stores.
 import { parseArgs } from "node:util";
-import { REVIEWER_SEED_CALLS, applyReviewerSeed } from "./lib/reviewer-demo-seed.mjs";
+import {
+  REVIEWER_SEED_CALLS,
+  applyReviewerSeed,
+  reviewerSeedEndedAtIso,
+} from "./lib/reviewer-demo-seed.mjs";
 import { KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
 
 const EXIT_ABORT = 1;
@@ -80,13 +97,25 @@ function warnIfNotSubscriber(store, tenantId) {
   );
 }
 
-async function applySeed(tenantId) {
+// Ende-Zeitpunkt der Seed-Anrufe aus denselben Fensterlaengen, die der Kosten-Sweep liest
+// (Beleg-Fenster aus cost-truing.js, Herzschlag-Fenster aus der Konfiguration).
+async function seedEndedAtIso(billing) {
+  const { PROVIDER_COST_RECORD_WINDOW_MS } = await import("../src/billing/cost-truing.js");
+  return reviewerSeedEndedAtIso({
+    nowMs: Date.now(),
+    belegFensterMs: PROVIDER_COST_RECORD_WINDOW_MS,
+    heartbeatFensterH: billing.kostenHeartbeatFensterH,
+  });
+}
+
+async function applySeed(tenantId, billing) {
   // Dynamischer Import erst hier: der Trockenlauf laedt den Store nie, und unter pg laeuft der
   // Store-Import (init samt DDL) erst NACH der Dienst-gestoppt-Pruefung.
   const store = await import("../src/store.js");
+  const endedAtIso = await seedEndedAtIso(billing);
   let counts;
   try {
-    counts = applyReviewerSeed(store, tenantId);
+    counts = applyReviewerSeed(store, tenantId, endedAtIso);
   } catch (err) {
     return abort(`Abbruch: ${err.message}`);
   }
@@ -106,7 +135,7 @@ async function main() {
   const { config } = await import("../src/config.js");
   if (config.store.storeBackend === PG_BACKEND && !options["dienst-gestoppt"])
     return abort(PG_ABORT);
-  return applySeed(options.tenant);
+  return applySeed(options.tenant, config.billing);
 }
 
 await main();

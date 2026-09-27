@@ -1,25 +1,46 @@
 // Beispieldaten fuer das Reviewer-Konto der App-Einreichung: reine Logik, kein Env, kein
-// Store-Import. Der Aufrufer reicht die Store-Fassade herein (scripts/seed-reviewer-demo.mjs
-// bzw. die Tests); diese Datei entscheidet nur, WAS fehlt, und schreibt es ueber genau vier
-// Store-Funktionen: createCall, recordProviderCallResult, endCallRecord, addActionItem.
+// Store-Import. Der Aufrufer reicht die Store-Fassade und die Laengen der Kosten-Beobachtung
+// herein (scripts/seed-reviewer-demo.mjs bzw. die Tests); diese Datei entscheidet nur, WAS
+// fehlt, und schreibt es ueber genau vier Store-Funktionen: createCall,
+// recordProviderCallResult, setCallEndedAt, addActionItem.
 //
 // Verboten und deshalb hier nicht vorhanden: jede Aenderung an Abo, Verifikation (KYC),
 // Mandanten-Status, Profil, Nummer, Budget oder Nutzung. Das Reviewer-Konto bekommt dieselben
 // Sicherungen wie jeder Kunde; ein echtes Abo mit echter Verifikation richtet der Betreiber ein.
 // Die Datei legt NIE einen Mandanten an - ein unbekannter Mandant ist ein Abbruch.
 //
-// Warum nur Inbound, sofort beendet und ohne answeredAt:
+// Warum nur Inbound, beendet, mit Ende VOR der Kosten-Beobachtung und ohne answeredAt:
 // - createCall setzt startedAt=jetzt und status "active". Ein Outbound-Datensatz zaehlte
 //   damit ins Stunden- und Ziel-Limit (countOutboundCallsSince) und naehme dem Reviewer
 //   Testanrufe weg; deshalb nur Inbound.
-// - Ein aktiver Datensatz wuerde vom Watchdog aufgegriffen; deshalb endCallRecord im selben Zug.
-// - answeredAt zaehlt einen Anruf in die Kosten-Nachtrags-Quote; ohne Kostennachweis kaeme ein
-//   Betreiber-Alarm. Deshalb kein markAnswered, kein costProfile, kein Transkript.
+// - Ein aktiver Datensatz wuerde vom Watchdog aufgegriffen; deshalb setCallEndedAt im selben
+//   Zug.
+// - Die Kosten-Ueberwachung (kostenBuchBericht, src/billing/kosten-deckung.js) zaehlt JEDEN
+//   beendeten Anruf, dessen endedAt im Beleg- oder Herzschlag-Fenster liegt - unabhaengig von
+//   answeredAt. Ein Seed-Anruf traegt keine Provider-Leg-Referenz und bekommt deshalb nie
+//   einen Kostenbeleg; mit endedAt=jetzt meldete der Sweep nach der Karenz "erfassung-tot"
+//   und "profil-fehlt" und danach tagelang "deckung-unter-schwelle" (voll: Mail und SMS an
+//   den Betreiber) - Fehlalarme genau der Geldpfad-Ueberwachung. Deshalb liegt endedAt VOR
+//   dem aeltesten Rand beider Fenster (reviewerSeedEndedAtIso). Die Ueberwachung selbst
+//   bleibt unangetastet; der Seed-Anruf faellt nur in keines ihrer Fenster.
+// - Sichtbar bleibt startedAt (list_calls zeigt nur ihn); endedAt liegt davor, duration_s
+//   ist deshalb 0 (durationS klemmt bei 0). endedAt ist zugleich der Anker der
+//   Aufbewahrung: ein Seed-Anruf faellt RETENTION_DAYS nach seinem (vordatierten) Ende weg,
+//   also frueher als ein echter Anruf.
+// - Kein markAnswered, kein costProfile, kein Transkript: answeredAt zaehlte den Anruf in die
+//   Kosten-Nachtrags-Quote (coverageBreakdown); ohne answeredAt bleibt er dort
+//   "nie_beantwortet" und aus dem Nenner. Ein costProfile behauptete einen Kostenweg, den es
+//   nie gab, und verhinderte keinen Alarm (ein bekanntes Profil fuehrt denselben Traeger);
+//   sein Fehlen meldet kein "profil-fehlt", weil endedAt vor dem Herzschlag-Fenster liegt.
+import { MS_PER_HOUR } from "../../src/utils/timer.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 
 const INBOUND = "inbound";
 const ENDED_STATUS = "completed";
 const ACTION_ITEM_TYPE = "todo";
+const HOURS_PER_DAY = 24;
+// Sicherheitsabstand hinter dem aeltesten Fensterrand (Uhrversatz, spaete Sweeps).
+const SEED_END_MARGIN_MS = HOURS_PER_DAY * MS_PER_HOUR;
 
 // Anrufer-Nummern aus dem fiktiven NANP-Bereich +1 202 555 0100..0199 (fuer Film/Beispiele
 // reserviert, nie einem Anschluss zugeteilt). Keine realen Namen, keine E-Mail-Adressen, keine
@@ -83,10 +104,29 @@ export function planReviewerSeed(store, tenantId) {
   })).filter((step) => step.callId === null || step.missingItems.length > 0);
 }
 
-function createEndedInboundCall(store, tenantId, entry) {
+// Der Ende-Zeitpunkt der Seed-Anrufe: vor dem aeltesten Rand von Beleg-Fenster
+// (belegFensterMs = PROVIDER_COST_RECORD_WINDOW_MS) und Herzschlag-Fenster
+// (heartbeatFensterH = config.billing.kostenHeartbeatFensterH), minus Sicherheitsabstand.
+// fail-closed: ohne gueltige Fensterlaengen kein Zeitpunkt - "jetzt" als Rueckfall waere
+// genau der Alarm-Fall.
+export function reviewerSeedEndedAtIso({ nowMs, belegFensterMs, heartbeatFensterH }) {
+  const fensterMs = Math.max(belegFensterMs, heartbeatFensterH * MS_PER_HOUR);
+  if (!Number.isFinite(nowMs) || !Number.isFinite(fensterMs) || fensterMs <= 0) {
+    throw new Error("Fensterlaengen der Kosten-Beobachtung fehlen.");
+  }
+  return new Date(nowMs - fensterMs - SEED_END_MARGIN_MS).toISOString();
+}
+
+function assertEndedAtIso(endedAtIso) {
+  if (typeof endedAtIso !== "string" || !Number.isFinite(Date.parse(endedAtIso))) {
+    throw new Error("Ende-Zeitpunkt der Seed-Anrufe fehlt (reviewerSeedEndedAtIso).");
+  }
+}
+
+function createEndedInboundCall(store, { tenantId, entry, endedAtIso }) {
   const call = store.createCall({ direction: INBOUND, from: entry.from, to: null, tenantId });
   store.recordProviderCallResult(call.id, { summary: entry.summary, objectiveAchieved: null });
-  store.endCallRecord(call.id, ENDED_STATUS);
+  store.setCallEndedAt(call.id, ENDED_STATUS, endedAtIso);
   return call.id;
 }
 
@@ -98,10 +138,13 @@ function addMissingItems(store, callId, texts) {
 }
 
 // Schreibt die fehlenden Datensaetze; Speichern (store.save) ist Sache des Aufrufers.
-export function applyReviewerSeed(store, tenantId) {
+// endedAtIso kommt aus reviewerSeedEndedAtIso und wird VOR jedem Schreiben geprueft.
+export function applyReviewerSeed(store, tenantId, endedAtIso) {
+  assertEndedAtIso(endedAtIso);
   const counts = { callsCreated: 0, itemsCreated: 0 };
   for (const step of planReviewerSeed(store, tenantId)) {
-    const callId = step.callId ?? createEndedInboundCall(store, tenantId, step.entry);
+    const callId =
+      step.callId ?? createEndedInboundCall(store, { tenantId, entry: step.entry, endedAtIso });
     if (step.callId === null) counts.callsCreated += 1;
     counts.itemsCreated += addMissingItems(store, callId, step.missingItems);
   }

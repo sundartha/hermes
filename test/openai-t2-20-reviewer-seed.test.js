@@ -12,6 +12,10 @@
 //   Abo, KYC, Profile, Nummern, Budget, Nutzung, Einstellungen) bleibt deep-equal.
 // - Idempotenz, und dass ein OAuth-Login ueber /mcp die Daten zeigt, ohne einen Mandanten
 //   anzulegen oder eine Nummer zu kaufen.
+// - Kosten-Ueberwachung: nach dem Seed liefert kostenBuchBericht (die Quelle der Buch-Befunde
+//   des Kosten-Sweeps, voll gemeldet per Mail+SMS) zu keinem Zeitpunkt einen Befund, und die
+//   Kosten-Nachtrags-Quote bleibt unveraendert. Positiv-Kontrolle: dieselben Anrufe mit
+//   endedAt=jetzt loesen die Befunde aus.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -34,7 +38,18 @@ import {
 import { SPION_MARKE } from "./_import-spion-store.mjs";
 import * as ops from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
-import { REVIEWER_SEED_CALLS } from "../scripts/lib/reviewer-demo-seed.mjs";
+import {
+  REVIEWER_SEED_CALLS,
+  applyReviewerSeed,
+  reviewerSeedEndedAtIso,
+} from "../scripts/lib/reviewer-demo-seed.mjs";
+import { config } from "../src/config.js";
+import { kostenBuchBericht } from "../src/billing/kosten-deckung.js";
+import {
+  PROVIDER_COST_RECORD_WINDOW_MS,
+  costTruingCoveragePercent,
+} from "../src/billing/cost-truing.js";
+import { MS_PER_HOUR, MS_PER_MINUTE } from "../src/utils/timer.js";
 
 const SCRIPT = "scripts/seed-reviewer-demo.mjs";
 const SPION = "./test/_import-spion-store.mjs";
@@ -201,7 +216,10 @@ function assertSeedCalls(calls) {
     assert.equal(call.direction, "inbound");
     assert.equal(call.status, "completed");
     assert.equal(call.answeredAt ?? null, null, "answeredAt nie gesetzt");
-    assert.ok(call.endedAt, "endedAt gesetzt");
+    assert.ok(
+      Date.parse(call.endedAt) < Date.now() - PROVIDER_COST_RECORD_WINDOW_MS,
+      "endedAt liegt vor dem Beleg-Fenster der Kosten-Ueberwachung",
+    );
     assert.ok(SEED_SUMMARIES.has(call.summary), "summary = Seed-Text");
     assert.equal(call.costProfile ?? null, null, "kein costProfile");
   }
@@ -296,4 +314,99 @@ test("Reviewer-Seed: --apply schreibt nur Anrufe/Items, ist idempotent und ersch
       );
     },
   );
+});
+
+// ---- Kosten-Ueberwachung nach dem Seed -------------------------------------------------------
+
+const HOURS_PER_DAY = 24;
+// Pruefzeitpunkte aus dem Befund: nach 7 h (Herzschlag-Fenster vorbei) und nach 2 Tagen.
+const PRUEFPUNKT_STUNDEN = 7;
+const PRUEFPUNKT_TAGE = 2;
+const SIEBEN_STUNDEN_MS = PRUEFPUNKT_STUNDEN * MS_PER_HOUR;
+const ZWEI_TAGE_MS = PRUEFPUNKT_TAGE * HOURS_PER_DAY * MS_PER_HOUR;
+// Herzschlag-Fenster laenger als das Beleg-Fenster: der Ende-Zeitpunkt muss dem groesseren folgen.
+const HERZSCHLAG_TAGE = 10;
+const HERZSCHLAG_ZEHN_TAGE_H = HERZSCHLAG_TAGE * HOURS_PER_DAY;
+
+// Die Store-Fassade ueber einen In-Memory-Zustand: dieselben state-ops, die json- und
+// pg-Fassade umhuellen, ohne Datei und ohne Spawn.
+function opsFassade(state) {
+  return {
+    tenantExists: (tenantId) => ops.tenantExists(state, tenantId),
+    exportTenantData: (tenantId) => ops.exportTenantData(state, tenantId),
+    createCall: (input) => ops.createCall(state, input),
+    recordProviderCallResult: (callId, result) =>
+      ops.recordProviderCallResult(state, callId, result).call,
+    setCallEndedAt: (callId, status, endedAtIso) =>
+      ops.setCallEndedAt(state, callId, status, endedAtIso).call,
+    addActionItem: (callId, text, type) => ops.addActionItem(state, callId, text, type),
+  };
+}
+
+const karenzMs = (billing) =>
+  billing.costTruingDelayMinutes * MS_PER_MINUTE + billing.costTruingSweepIntervalMs;
+
+// Befund-Codes von kostenBuchBericht zu jedem Pruefzeitpunkt (Versatz ab dem Seed).
+function befundeJeZeitpunkt({ state, billing, seedMs }) {
+  const versaetze = [0, karenzMs(billing) + MS_PER_MINUTE, SIEBEN_STUNDEN_MS, ZWEI_TAGE_MS];
+  return versaetze.map((versatzMs) => ({
+    versatzMs,
+    codes: kostenBuchBericht({
+      state,
+      billing,
+      nowMs: seedMs + versatzMs,
+      deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS,
+    }).befunde.map((befund) => befund.code),
+  }));
+}
+
+function geseedeterZustand({ billing, seedMs, endedAtIso }) {
+  const state = reviewerStoreState();
+  const ende =
+    endedAtIso ??
+    reviewerSeedEndedAtIso({
+      nowMs: seedMs,
+      belegFensterMs: PROVIDER_COST_RECORD_WINDOW_MS,
+      heartbeatFensterH: billing.kostenHeartbeatFensterH,
+    });
+  applyReviewerSeed(opsFassade(state), REVIEWER_TENANT, ende);
+  return state;
+}
+
+const mitBefund = (befunde) => befunde.filter((eintrag) => eintrag.codes.length > 0);
+
+test("Reviewer-Seed: Kosten-Ueberwachung meldet nach dem Seed nichts, Quote unveraendert", async (ctx) => {
+  const seedMs = Date.now();
+
+  await ctx.test("Positiv-Kontrolle: endedAt=jetzt loest Buch-Befunde aus", () => {
+    const billing = config.billing;
+    const state = geseedeterZustand({
+      billing,
+      seedMs,
+      endedAtIso: new Date(seedMs).toISOString(),
+    });
+    assert.ok(
+      mitBefund(befundeJeZeitpunkt({ state, billing, seedMs })).length > 0,
+      "die Pruefung erkennt den Alarm-Fall",
+    );
+  });
+
+  await ctx.test("Standard-Konfiguration: sofort, nach Karenz, nach 7 h, nach 2 Tagen", () => {
+    const billing = config.billing;
+    const state = geseedeterZustand({ billing, seedMs });
+    assert.deepEqual(mitBefund(befundeJeZeitpunkt({ state, billing, seedMs })), []);
+  });
+
+  await ctx.test("Herzschlag-Fenster laenger als das Beleg-Fenster", () => {
+    const billing = { ...config.billing, kostenHeartbeatFensterH: HERZSCHLAG_ZEHN_TAGE_H };
+    const state = geseedeterZustand({ billing, seedMs });
+    assert.deepEqual(mitBefund(befundeJeZeitpunkt({ state, billing, seedMs })), []);
+  });
+
+  await ctx.test("Kosten-Nachtrags-Quote: vor und nach dem Seed gleich", () => {
+    const billing = config.billing;
+    const vorher = costTruingCoveragePercent(reviewerStoreState(), seedMs);
+    const nachher = costTruingCoveragePercent(geseedeterZustand({ billing, seedMs }), seedMs);
+    assert.equal(nachher, vorher);
+  });
 });
