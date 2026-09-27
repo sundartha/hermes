@@ -199,7 +199,7 @@ test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Lin
   assert.ok(!/\sstyle=/.test(mobile), "style-Attribut im Handy-Markup (CSP)");
   assert.ok(!mobile.includes("data-open-sheet"), "Handy-Kopf traegt wieder einen Menue-Knopf");
   assert.ok(
-    mobile.includes('<a class="mh-link" href="/kuendigen">Verträge kündigen</a>'),
+    mobile.includes('<a class="mh-link" href="/kuendigen" data-legal-open="cancel">Verträge kündigen</a>'),
     "Kuendigungs-Link im Handy-Fuss fehlt oder traegt eine Uebersetzung",
   );
 });
