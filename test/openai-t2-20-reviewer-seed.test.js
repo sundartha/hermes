@@ -8,6 +8,9 @@
 //   (Import-Spion mit Positiv-Kontrolle).
 // - Abbrueche ohne Schreiben: --apply ohne --tenant, unbekannter Mandant, Betreiber-Mandant,
 //   pg ohne --dienst-gestoppt (vor jedem Store-Import, also ohne Verbindungsversuch).
+// - pg mit --dienst-gestoppt importiert die Store-Fassade NIE (ihr Import migriert = DDL gegen
+//   die Zieldatenbank); der Weg endet an der unerreichbaren DB mit einem Abbruch des Skripts.
+//   Der Schema-Abgleich selbst ist in test/openai-t2-20-reviewer-seed-pg.test.js belegt.
 // - --apply aendert NUR calls und actionItems; jeder andere Top-Level-Schluessel (Mandanten,
 //   Abo, KYC, Profile, Nummern, Budget, Nutzung, Einstellungen) bleibt deep-equal.
 // - Idempotenz, und dass ein OAuth-Login ueber /mcp die Daten zeigt, ohne einen Mandanten
@@ -198,6 +201,19 @@ test("Reviewer-Seed: pg ohne --dienst-gestoppt bricht vor jedem Store-Import ab"
   });
   assert.equal(run.code, EXIT_ABORT);
   assert.match(run.stderr, /--dienst-gestoppt/);
+  assertUntouched(dataDir, run, rawBefore);
+});
+
+test("Reviewer-Seed: pg mit --dienst-gestoppt laedt die Store-Fassade nie (keine Migration)", () => {
+  const dataDir = normalizedDataDir();
+  const rawBefore = readRaw(dataDir);
+  const run = runSeed(dataDir, ["--apply", "--tenant", REVIEWER_TENANT, "--dienst-gestoppt"], {
+    STORE_BACKEND: "pg",
+    DATABASE_URL: "postgres://127.0.0.1:1/unerreichbar",
+  });
+  assert.equal(run.code, EXIT_ABORT);
+  assert.match(run.stderr, /\[seed-reviewer-demo\] Abbruch: /);
+  assert.ok(!run.stderr.includes("[store] FATAL"), "kein Boot-Pfad der Fassade");
   assertUntouched(dataDir, run, rawBefore);
 });
 
