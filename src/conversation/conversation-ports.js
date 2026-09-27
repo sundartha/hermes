@@ -13,7 +13,7 @@
 // damit (a) die Sicherheits-Pruefkette an dieser Naht haengen bleibt statt in
 // anbieter-spezifischem Code zu wandern, und (b) ein spaeterer dritter Anbieter kein
 // Umbau mehr ist. Dieser Port bildet NICHT den MCP-Vertrag (await_call_event,
-// answer_consult, place_call, get_transcript, ...) neu ab und darf ihn nicht formen - er
+// answer_consult, place_call, get_call_result, ...) neu ab und darf ihn nicht formen - er
 // sitzt DARUNTER. Wie ConsultRequest/ConsultAnswer auf answer_consult abgebildet werden,
 // ist Sache der Verdrahtung, nicht dieses Vertrags.
 //

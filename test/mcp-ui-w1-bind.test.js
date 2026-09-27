@@ -19,7 +19,6 @@ import {
   WIDGET_AGENT_STATUS,
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
-  WIDGET_CALENDAR,
   WIDGET_CALL,
 } from "../src/ui/widget-catalog.js";
 
@@ -27,7 +26,6 @@ const WIDGET_IDS = [
   WIDGET_AGENT_STATUS,
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
-  WIDGET_CALENDAR,
   WIDGET_CALL,
 ];
 
@@ -244,7 +242,7 @@ test("T-W1-AC9: applyField/renderLines direkt - mehrere Slots gleichen Schluesse
   assert.deepEqual(container.children.map((c) => c.textContent), ["a", "b", "c"]);
 });
 
-// ===== W-batch: generische Objekt-Listen-Bindung (list_calls / get_calendar) =====
+// ===== W-batch: generische Objekt-Listen-Bindung (list_calls) =====
 // Ein data-mcp-Slot rendert eine Liste von Objekten als wiederholte Rows. Pure Logik,
 // ohne DOM/Browser (Fake-DOM oben). XSS-Disziplin: nur textContent, nie innerHTML.
 

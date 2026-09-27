@@ -347,13 +347,20 @@ services:
       # angelegte Profile ueberleben sonst keinen Neustart). Leer = keine Profile.
       - key: PROFILES_JSON
         sync: false
-      # Auth-Modus fuer /mcp. Default leer = Legacy (Token unten oder localhost-only).
-      # Auf "oauth" umstellen, sobald der IdP (OAUTH_ISSUER_URL) steht und der
-      # End-to-End-Test gegen claude.ai gruen war (siehe PLAN-SECURITY.md, OAuth).
+      # Auth-Modus fuer /mcp: live laeuft "oauth" (D0-3, Messung 2026-09-20), der Wert
+      # ist Dashboard-gepflegt. sync: false statt eines Blueprint-value: ein Blueprint-
+      # Sync darf ihn NICHT stillschweigend auf "" zurueckziehen - "" (Legacy) und
+      # "token" sind nicht einreichungsfaehig (kein OAuth 2.1). P6: seit dieser Phase
+      # traegt auch der "" -/token-Zweig eine Bearer-Challenge ohne resource_metadata
+      # (src/auth.js). Der Ruecksturz war schon vorher am 401 erkennbar (kein Header,
+      # anderer Body als die oauth-Challenge) - P6 macht ihn NICHT erst erkennbar,
+      # sondern haertet nur den "" -/token-Zweig einheitlich mit einer Bearer-Challenge
+      # (Risiko-Eintrag PLAN-SECURITY.md, O-7).
       - key: MCP_AUTH
-        value: ""
+        sync: false
       # Pflicht fuers Hosting (Modus leer/token): ohne Token ist /mcp nur von
-      # localhost erreichbar. Render generiert den Wert; fuer den Claude-Connector auslesen.
+      # localhost erreichbar. Render generiert den Wert; fuer den Claude-Connector
+      # auslesen. Bei MCP_AUTH=oauth (Live-Modus) ungenutzt.
       - key: MCP_AUTH_TOKEN
         generateValue: true
       # Nur bei MCP_AUTH=oauth noetig: Issuer-URL des IdP (im Dashboard eintragen).
@@ -366,7 +373,7 @@ services:
       # Ein hier oder im Dashboard gesetzter, abweichender Wert ist Boot-Refusal
       # (boot-guard.angekuendigterOriginFindings) - und damit auch kein /voice.
       # AM6 (nur MCP_AUTH=oauth): WorkOS user.id (sub) des Owners -> bindet den Bootstrap-
-      # Tenant idempotent (idp_subject), damit get_my_number ueber den OAuth-sub nicht leer
+      # Tenant idempotent (idp_subject), damit get_agent_number ueber den OAuth-sub nicht leer
       # ist. Im Dashboard eintragen; opake user_-Id, kein Secret. Leer = kein Seed.
       - key: OWNER_IDP_SUBJECT
         sync: false
@@ -640,6 +647,8 @@ services:
       # oben) - dieselbe Boot-Haertung, derselbe Foot-Gun-Pin.
       - key: FAKE_ORIGINATE_ELEVENLABS
         value: "false"
+      # T2-07/T-28: je IP fuer alle Routen ausser POST /mcp, dort je Mandant (Ablehnungen
+      # weiter je IP) - s. src/mcp-rate-limit.js, .env.example.
       - key: RATE_LIMIT_PER_MIN
         value: "120"
       # SEC-P3: Herkunftspruefung der Self-Service-Schreibrouten. Default ist ohnehin
@@ -674,6 +683,11 @@ services:
         sync: false
       # WorkOS AuthKit Client-Secret. Secret -> im Dashboard.
       - key: OIDC_CLIENT_SECRET
+        sync: false
+      # T2-13 (N-10): Betriebsgeheimnis fuer den serverseitigen Bestaetigungs-Code vor dem
+      # Waehlen (>= 32 Zeichen, z.B. openssl rand -base64 48). Secret -> im Dashboard. Fehlt
+      # er, laeuft der Dienst weiter, aber per MCP waehlt niemand mehr (Boot-WARN, kein Refusal).
+      - key: CALL_CONFIRMATION_SECRET
         sync: false
       # WorkOS User-Management API-Basis (authorize/authenticate). Default api.workos.com
       # (gleich fuer Staging/Prod; Umgebung via client_id/API-Key). Nur Self-Hosting/Tests aendern.
@@ -723,6 +737,9 @@ services:
       # WAHRHEIT IST DAS DASHBOARD (s. Kopf dieser Datei) - dieser Eintrag ist Doku und
       # setzt den Wert nur, falls das Blueprint je synchronisiert wird. Betriebsschritt
       # (Etappe 8 / S2-A9): Live-Wert LESEN, nur bei Abweichung setzen.
+      # T2-04 (T-32): fehlt der Wert IM DASHBOARD (nicht hier), startet der Dienst nach
+      # dem Deploy nicht mehr (Boot-Refusal, exit 1) - der Origin einer OpenAI-App ist
+      # nach der Publikation unveraenderlich. Vor jedem Deploy im Dashboard pruefen.
       - key: PUBLIC_URL
         value: https://app.sundartha.com
 

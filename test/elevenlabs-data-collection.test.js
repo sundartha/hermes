@@ -193,7 +193,7 @@ test("recordCalleeConfirmedTimezone: UEBERSCHREIBBAR (Eigentuemer-Auflage) - ein
 // ---- Ebene 3: Ende-zu-Ende ueber den echten Poll-Weg (Muster el-fixtures-echte-antworten.test.js) ----
 
 // Faengt genau die Werte ab, die persistProviderResult an den Store weiterreicht -
-// dieselben Felder, die get_transcript/die Kostendecke bzw. (nach diesem Paket) der
+// dieselben Felder, die get_call_result/die Kostendecke bzw. (nach diesem Paket) der
 // Call-Datensatz selbst lesen. Muster makeCapturingStore (el-fixtures-echte-antworten.test.js),
 // um TEIL 2/3 zusaetzlich einzufangen.
 function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {

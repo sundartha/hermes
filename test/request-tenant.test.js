@@ -18,14 +18,17 @@ import {
   seedState,
   mcpPost as post,
   MCP_AUDIENCE as AUDIENCE,
+  toolCall,
+  readToolResult,
+  assertReauthChallenge,
 } from "./helpers.js";
 import { hashEmail } from "../src/util.js";
 
 const TENANT_B = "B";
 const SUB_B = "sub-b";
 const UNKNOWN_SUB = "sub-unbekannt";
+const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
-const HTTP_FORBIDDEN = 403;
 // Tenant B aktiv mit idpSubject -> resolveTenant trifft ihn ueber den sub-Claim.
 const seedTenantB = () =>
   seedState({ tenants: [{ id: TENANT_B, status: "active", idpSubject: SUB_B }] });
@@ -69,10 +72,17 @@ test("V2: bekannter sub -> tenant=B", async () => {
   }
 });
 
-test("V3: unbekannter sub -> /mcp 403 (E4-Torschluss, NIE Owner)", async () => {
-  // E4: TENANT_REJECT wird VOR dem [mcp]-Diagnose-Log abgewiesen (routes/mcp.js) - die
-  // Logzeile "tenant=reject" ist fuer diesen Fall kein erreichbarer Zustand mehr. Der
-  // Beleg ist jetzt der Response-Status + der auth_failed-Audit (Muster am6-oauth-tenant).
+// T2-05 (T-14): seit dieser Phase antwortet der OAuth-Kein-Mandant-Fall NICHT mehr mit
+// HTTP 403, sondern mit einem normalen tools/call-Ergebnis, dessen isError===true ist
+// und das eine Re-Auth-Challenge in _meta["mcp/www_authenticate"] traegt (Pflicht fuer
+// die ChatGPT-Kontoverknuepfungs-UI, geprueft mit assertReauthChallenge aus helpers.js).
+// Der auth_failed-Audit "grund=kein_tenant" bleibt unveraendert - nur die HTTP-
+// Antwortform aendert sich.
+test("V3: unbekannter sub -> Tool-Fehler mit Re-Auth-Challenge (T2-05, NIE Owner)", async () => {
+  // E4/T2-05: TENANT_REJECT wird VOR dem [mcp]-Diagnose-Log erkannt (routes/mcp.js) -
+  // die Logzeile "tenant=reject" ist fuer diesen Fall kein erreichbarer Zustand. Der
+  // Beleg ist jetzt der auth_failed-Audit + das Tool-Fehlerergebnis selbst (kein 403
+  // mehr im OAuth-Modus seit T2-05).
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp.issuer, { MULTI_TENANT: "true" }),
@@ -80,9 +90,9 @@ test("V3: unbekannter sub -> /mcp 403 (E4-Torschluss, NIE Owner)", async () => {
   });
   try {
     const token = await idp.sign({ sub: UNKNOWN_SUB });
-    const res = await post(`${srv.localUrl}/mcp`, token);
-    assert.equal(res.status, HTTP_FORBIDDEN);
-    assert.deepEqual(await res.json(), { error: "Keine Tenant-Zuordnung fuer diese Identitaet." });
+    const res = await post(`${srv.localUrl}/mcp`, token, toolCall("get_agent_number"));
+    assert.equal(res.status, HTTP_OK);
+    assertReauthChallenge(await readToolResult(res));
     await waitForLog(srv, /\[audit\] auth_failed .*path=\/mcp grund=kein_tenant/);
   } finally {
     await srv.stop();
@@ -90,13 +100,13 @@ test("V3: unbekannter sub -> /mcp 403 (E4-Torschluss, NIE Owner)", async () => {
   }
 });
 
-test("V4: verifiziertes Token OHNE sub -> /mcp 403 (E4-Torschluss, vorhandenes Token ist eine Identitaet, NIE Owner)", async () => {
+test("V4: verifiziertes Token OHNE sub -> Tool-Fehler mit Re-Auth-Challenge (T2-05, NIE Owner)", async () => {
   // FAIL-CLOSED-REGRESSION (AM6-Blocker R2): jose erzwingt den sub-Claim nicht. Ein
   // verifiziertes REMOTE-Token mit req.auth, aber ohne sub-Claim, ist eine VORHANDENE
   // Identitaet und darf NIE auf den Owner-/Bootstrap-Tenant kollabieren (sonst laese ein
   // subloser Angreifer Owner-PII und triebe place_call als Owner). Das Owner-Gate haengt
   // an der ABWESENHEIT von req.auth, nicht an einem falsy sub -> hier TENANT_REJECT, seit
-  // E4 mit 403 VOR dem [mcp]-Diagnose-Log abgewiesen.
+  // T2-05 als Tool-Fehler mit Re-Auth-Challenge beantwortet (kein 403 mehr im OAuth-Modus).
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp.issuer, { MULTI_TENANT: "true" }),
@@ -104,9 +114,9 @@ test("V4: verifiziertes Token OHNE sub -> /mcp 403 (E4-Torschluss, vorhandenes T
   });
   try {
     const token = await idp.sign({ email: "nosub@team.test" }, { noSubject: true });
-    const res = await post(`${srv.localUrl}/mcp`, token);
-    assert.equal(res.status, HTTP_FORBIDDEN);
-    assert.deepEqual(await res.json(), { error: "Keine Tenant-Zuordnung fuer diese Identitaet." });
+    const res = await post(`${srv.localUrl}/mcp`, token, toolCall("get_agent_number"));
+    assert.equal(res.status, HTTP_OK);
+    assertReauthChallenge(await readToolResult(res));
     await waitForLog(srv, /\[audit\] auth_failed .*path=\/mcp grund=kein_tenant/);
   } finally {
     await srv.stop();

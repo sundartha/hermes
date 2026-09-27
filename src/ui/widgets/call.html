@@ -8,8 +8,7 @@
 <style>
   /* Inline-Tokens: 1:1 aus apps/web/src/styles/tokens/primitives.css (navy-800/
      navy-900/navy-card kanonisch) + hero.css-Muster fuer die volldunkle Karte
-     (Olympus HUD, PLAN-WIDGET-HERMES-REDESIGN.md Abschnitt 3/6.2). Self-contained,
-     kein externer CSS-Import/Linkback. */
+     (Olympus HUD). Self-contained, kein externer CSS-Import/Linkback. */
   :root {
     --color-navy-800:#0f2d52; --color-navy-900:#0a2245; --color-navy-card:#13335c;
     --color-white:#fff;
@@ -20,8 +19,8 @@
     --wing-size:112px;
     /* Akzent-Lichtfarbe: aufgehellte Stufe von navy-700 (#1b4f86) fuer dunkle
        Karten - navy-700 selbst ist auf der volldunklen Karte zu dunkel fuer
-       Ring/Glow/Status-Pill (PLAN Abschnitt 3, drei dokumentierte Kandidaten:
-       navy-700/#5ea1e0/Gold - Owner bestaetigt am H6-Screenshot-Vergleich).
+       Ring/Glow/Status-Pill (drei gepruefte Kandidaten: navy-700/#5ea1e0/Gold -
+       #5ea1e0 nach Screenshot-Vergleich gewaehlt).
        NUR fuer Glow/Ring/Border/aktive Badges, nie als Flaechenfarbe. */
     --color-accent-light:#5ea1e0;
     --color-accent-light-strong:#8ec2ee;
@@ -72,7 +71,7 @@
   .hero{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 0 24px}
   /* Ring+Wing-Bereich: FESTE Groesse (168x168) - reserviert den Platz unabhaengig
      davon, ob die Canvas-Engine oder die CSS-WingMark aktiv ist (kein
-     reportSize-Jank, Kritik R9). */
+     reportSize-Jank). */
   .ring-wrap{position:relative;width:168px;height:168px;display:grid;place-items:center}
   .ring{position:absolute;inset:0;transform:rotate(-90deg)}
   .ring-track{fill:none;stroke:#fff;stroke-width:1.5;opacity:.14}
@@ -83,7 +82,7 @@
   .ring--muted .ring-arc{stroke:rgba(255,255,255,.4)}
   .ring--spin{animation:hermesRingSpin 3.4s linear infinite}
   @keyframes hermesRingSpin{to{transform:rotate(270deg)}}
-  /* Wing-Marke: CSS aus wing-markup.js injiziert (dunkle Auspraegung, H3 - siehe
+  /* Wing-Marke: CSS aus wing-markup.js injiziert (dunkle Auspraegung, siehe
      widget-catalog.js WIDGET_DEFS.call.wing). Statuswechsel bleibt ein
      Klassenwechsel (Fallback), Canvas-Engine ersetzt sie progressiv (s. Skript). */
   /*__WING_CSS__*/
@@ -105,7 +104,7 @@
      + Maeander-Fries (griechisches Schluesselband, inline-SVG-data-URI - kein
      externer Request, Muster WING_PNG) + Cancel solange der Anruf laeuft. Die
      frueheren Diagnose-/ID-Zeilen (call_id/roh-Status/bridge_format/Timestamp)
-     sind bewusst NICHT mehr sichtbar (Owner-Entscheidung 2026-07-02). */
+     sind bewusst NICHT mehr sichtbar (bewusste Design-Entscheidung). */
   .foot{position:relative;z-index:1;display:flex;align-items:center;gap:16px;
     margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12)}
   .foot-mark{font-size:10px;font-weight:600;letter-spacing:.42em;text-transform:uppercase;
@@ -123,6 +122,13 @@
   .hud-cancel:hover{border-color:var(--color-accent-light-strong);color:#fff;
     box-shadow:0 0 18px -4px var(--color-accent-light-glow);background:rgba(var(--color-accent-light-rgb),.08)}
   .hud-cancel:disabled{opacity:.6;cursor:default}
+  /* Bestaetigungs-Ansicht, wiederverwendet .row/.row-k/.row-v/.hud-cancel. */
+  .confirm{position:relative;z-index:1;display:flex;flex-direction:column}
+  .confirm .row-v{white-space:pre-line;max-width:62%;overflow-wrap:anywhere}
+  .confirm-hint{color:rgba(255,255,255,.75);font-weight:600;font-size:12px}
+  .confirm .confirm-notice{max-width:100%;color:#fff;font-weight:600;font-size:12px}
+  .confirm-button{width:100%;margin-top:14px;display:block;text-align:center;
+    background:rgba(var(--color-accent-light-rgb),.16)}
   @media (prefers-reduced-motion: reduce) {
     .ring--spin{animation:none}
     .pill--active .dot{animation:none}
@@ -161,7 +167,7 @@
          BIND_SCRIPT laeuft NACH dem Inline-Skript und wuerde formatierte Werte
          sonst wieder mit Rohwerten (Sekundenzahl, roher Reason-Token,
          true/false) ueberschreiben. Das Inline-Skript befuellt sie formatiert/
-         lokalisiert aus denselben Pushes (applyCallStatus/applyTranscript). -->
+         lokalisiert aus denselben Pushes (applyCallStatus/applyCallResult). -->
     <div class="rows">
       <div class="row"><span class="row-k" data-i18n="Duration">Duration</span><span class="row-v" data-duration-display>—</span></div>
       <div class="row lines" data-row="lines" data-mcp="last_transcript_lines"></div>
@@ -182,6 +188,22 @@
       </div>
     </div>
 
+    <!-- Verborgen bis awaiting_confirmation-Push, kein data-mcp. -->
+    <div class="confirm rows" data-confirm style="display:none">
+      <div class="row"><span class="row-k" data-i18n="To">To</span><span class="row-v" data-confirm-to>—</span></div>
+      <div class="row"><span class="row-k" data-i18n="Request">Request</span><span class="row-v" data-confirm-objective>—</span></div>
+      <div class="row" data-cf-row="briefing" style="display:none"><span class="row-k" data-i18n="Briefing">Briefing</span><span class="row-v" data-cf-briefing>—</span></div>
+      <div class="row" data-cf-row="language" style="display:none"><span class="row-k" data-i18n="Call language">Call language</span><span class="row-v" data-cf-language>—</span></div>
+      <div class="row" data-cf-row="max_duration_s" style="display:none"><span class="row-k" data-i18n="Max. duration">Max. duration</span><span class="row-v" data-cf-max_duration_s>—</span></div>
+      <div class="row" data-cf-row="constraints" style="display:none"><span class="row-k" data-i18n="Constraints">Constraints</span><span class="row-v" data-cf-constraints>—</span></div>
+      <div class="row" data-cf-row="mandate" style="display:none"><span class="row-k" data-i18n="Mandate">Mandate</span><span class="row-v" data-cf-mandate>—</span></div>
+      <div class="row" data-cf-row="context" style="display:none"><span class="row-k" data-i18n="Context">Context</span><span class="row-v" data-cf-context>—</span></div>
+      <div class="row" data-cf-row="diagnostic" style="display:none"><span class="row-k" data-i18n="Diagnostic">Diagnostic</span><span class="row-v" data-cf-diagnostic>—</span></div>
+      <div class="row" data-confirm-notice style="display:none"><span class="row-v confirm-notice" data-confirm-notice-text>—</span></div>
+      <div class="row" data-confirm-hint style="display:none"><span class="row-v confirm-hint" data-confirm-hint-text>—</span></div>
+      <button type="button" class="hud-cancel confirm-button" data-confirm-button data-i18n="Confirm call">Confirm call</button>
+    </div>
+
     <div class="foot">
       <span class="foot-mark" aria-hidden="true">Hermes</span>
       <span class="meander" aria-hidden="true"></span>
@@ -192,27 +214,26 @@
     <span class="slot-hidden" data-mcp="call_id">—</span>
     <span class="slot-hidden" data-mcp="status">—</span>
   </div>
-  <!-- Vereintes Widget (W1): EIN Iframe fuer den gesamten Anruf-Lebenszyklus
+  <!-- Vereintes Widget: EIN Iframe fuer den gesamten Anruf-Lebenszyklus
        (dialing -> in_progress -> completed/failed/cancelled). Der initiale call_id/
        status-Push von place_call laeuft ueber den GETEILTEN, bereits bewiesenen
        Empfangspfad (widget-bind.js, von der Katalog-Ladefunktion unten injiziert).
        Alles danach - Self-Poll, der ausgehende tools/call an den Host, Terminal-
-       Erkennung, get_transcript, Cancel - lebt in DIESEM eigenen Inline-Skript (Owner-
-       Entscheidung #3, PLAN-MCP-UI-LIVE-WIDGET.md Abschnitt 5): kein neues
-       widget-bridge.js-Modul, keine Katalog-Aenderung, exakt das etablierte Muster
-       der mittlerweile entfernten Vorlaeufer-Widgets (Cancel-Callback bzw.
-       Bruecken-Kandidaten-Spike, W3-Aufraeumen).
+       Erkennung, get_call_result, Cancel - lebt in DIESEM eigenen Inline-Skript:
+       kein neues widget-bridge.js-Modul, keine Katalog-Aenderung, exakt das
+       etablierte Muster der mittlerweile entfernten Vorlaeufer-Widgets
+       (Cancel-Callback bzw. Bruecken-Kandidaten-Spike).
        Eine minimale eigene Slot-Fuell-Funktion statt Import aus widget-bind.js ist
        bewusst dupliziert - ein self-contained Iframe-Script kann keinen ES-Import
        ziehen (derselbe Kompromiss wie im inzwischen entfernten Bruecken-Spike).
        XSS-Disziplin unveraendert: Werte landen NUR ueber textContent, nie als
        geparstes Markup.
-       H3 (Olympus-HUD): die Wing-Canvas-Engine wird ueber den WING_ENGINE-
+       Die Wing-Canvas-Engine (Olympus-HUD) wird ueber den WING_ENGINE-
        Platzhalter (siehe head, widget-catalog.js withWingEngine) injiziert -
        VOR diesem Skript. Der Platzhalter darf hier NICHT woertlich stehen:
        HTML-Kommentare nesten nicht, sein "Ende" wuerde diesen Kommentar
-       schliessen und den Rest als sichtbaren Text leaken (in H6-QA gefunden);
-       ausserdem ersetzt widget-catalog nur das ERSTE Vorkommen.
+       schliessen und den Rest als sichtbaren Text leaken (beim Testen
+       gefunden); ausserdem ersetzt widget-catalog nur das ERSTE Vorkommen.
        window.HermesWingCanvas ist beim
        Ausfuehren dieses Skripts deshalb bereits synchron verfuegbar (kein
        DOMContentLoaded-Umweg noetig). Autorenregel: DIESER Inline-Skript-Block
@@ -222,33 +243,53 @@
   (function () {
     "use strict";
 
-    // Self-Poll-Takt (Plan 6.1 Punkt 2) + Kein-Live-Update-Grenze (Plan 6.3).
+    // Self-Poll-Takt + Kein-Live-Update-Grenze.
     var POLL_INTERVAL_MS = 8000;
     var FALLBACK_TIMEOUT_MS = 15000;
 
     // Tool-Namen wie server-seitig registriert (src/mcp-tools.js).
     var TOOL_GET_STATUS = "get_call_status";
-    var TOOL_GET_TRANSCRIPT = "get_transcript";
+    var TOOL_GET_CALL_RESULT = "get_call_result";
     var TOOL_CANCEL = "cancel_call";
 
     // Wire-Formate der MCP-Apps-Spec (SEP-1865 / ext-apps 2026-01-26). METHOD_TOOLS_CALL
-    // ist der EINZIGE erlaubte App->Host-Sendeweg fuer Tool-Calls. Frueher feuerte das
-    // Widget zusaetzlich den ChatGPT-Adapter-Pfad (frueherer Konstantenname FORMAT_OPENAI,
-    // in claude.ai nicht vorhanden) und eine selbst erfundene Notification-Methode
-    // (frueherer Konstantenname METHOD_UI_TOOL_CALL): der Host beantwortete die unbekannte
-    // Methode mit einem JSON-RPC-Fehler, den er im Chat sichtbar machte. Diese Datei darf
-    // die frueheren Wire-Strings deshalb nirgends mehr woertlich enthalten (Spec-Gate,
-    // s. Test T-W1-call-F1).
+    // ist der EINZIGE erlaubte App->Host-Sendeweg fuer Tool-Calls; fruehere, erfundene
+    // Wire-Strings duerfen hier nirgends woertlich stehen (Spec-Gate, s.
+    // test/mcp-ui-w1-call-widget.test.js).
     // METHOD_TOOL_RESULT = Kanal A (Host-Push, den der geteilte BIND_SCRIPT ohnehin
     // bindet - wir werten ihn zusaetzlich selbst aus, um Terminal-Status zu erkennen).
     var METHOD_TOOLS_CALL = "tools/call";
     var METHOD_TOOL_RESULT = "ui/notifications/tool-result";
+    // GENAU EINE Chat-Nachricht nach bestaetigtem Anruf (call_id+Ziel, NIE der Code). Form
+    // orientiert sich an der MCP-Apps-Spec (ext-apps apps.mdx "ui/message").
+    var METHOD_UI_MESSAGE = "ui/message";
+
+    // Karte loest place_call SELBST aus - das Modell sieht den Code nie (nur _meta unten).
+    var TOOL_PLACE_CALL = "place_call";
+    // _meta-Schluessel von prepare_call (mcp-tools.js), dupliziert (self-contained Skript).
+    var CONFIRMATION_CODE_META_KEY = "hermes/confirmation_code";
+    var CONFIRMATION_EXPIRES_META_KEY = "hermes/confirmation_expires_at";
+    // Datenhinweis mit Zweckhinweis, vom Server lokalisiert; ohne ihn kein Klick.
+    var CALL_DATA_NOTICE_META_KEY = "hermes/call_data_notice";
+    var STATUS_AWAITING_CONFIRMATION = "awaiting_confirmation";
+    // place_call-Fehlerergebnis "Code schon verbraucht" (mcp-tools.js, dupliziert).
+    var STATUS_CONFIRMATION_USED = "confirmation_used";
+    // "Code abgeschickt"-Gedaechtnis ueber ein Neuladen hinweg (rememberConfirmationSent).
+    var SENT_CONFIRMATIONS_STORAGE_KEY = "hermes/call-confirmations-sent";
+    var FNV_OFFSET_BASIS = 2166136261; // FNV-1a-32, s. confirmationFingerprint
+    var FNV_PRIME = 16777619;
+    var CONFIRMATION_USED_HINT = "This confirmation was already sent — do not confirm again; check list_calls.";
+    var UNCERTAIN_HINT = "Unclear whether the call was placed — do not confirm again; check list_calls.";
+    // Antwortfrist: GROESSER als der Server-Hop-Timeout (180000, mcp-tools.js) + Marge.
+    var PLACE_CALL_RESPONSE_TIMEOUT_MS = 200000;
+    // Die neun Argumente aus PLACE_CALL_REQUEST_SCHEMA - nie "status"; Anzeige=Gesendetes.
+    var BOUND_ARG_FIELDS = ["to", "objective", "briefing", "constraints", "mandate", "context", "language", "max_duration_s", "diagnostic"];
 
     // Ready-Signal des geteilten BIND_SCRIPT (src/ui/widget-bind.js: UI_READY_FLAG /
     // UI_READY_EVENT) - gesetzt, sobald der Host die ui/initialize-Anfrage beantwortet
     // hat. Ein self-contained Iframe-Skript kann nicht importieren, die Namen sind hier
-    // deshalb woertlich dupliziert; der Sync-Test T-W1-call-F2-contract haelt beide
-    // Quellen zusammen (kein stiller Drift).
+    // deshalb woertlich dupliziert; ein Sync-Test (test/mcp-ui-w1-call-widget.test.js)
+    // haelt beide Quellen zusammen (kein stiller Drift).
     var UI_READY_FLAG = "__hermesUiReady";
     var UI_READY_EVENT = "hermes:ui-ready";
 
@@ -267,18 +308,10 @@
       ? window.HermesI18n.t
       : function (key) { return key; };
 
-    // Anzeige-Labels fuer die failure_reason-Basis-Token aus
-    // src/telephony/failure-reason.js#FAILURE_REASON_BASE_TOKENS ("no-answer" | "busy" |
-    // "canceled" | "failed" | "not-placed" | "unreachable" | "result-unknown", jeweils
-    // optional mit ":<detail>"); unbekannte Tokens erscheinen roh (Diagnosewert).
-    //
-    // OUTBOUND-E2 (Review-Blocker Runde 4, S2-A/G5): diese Tabelle ist NICHT die
-    // Klassifikation (die lebt einzig in failure-reason.js) - sie ist reine
-    // Praesentation, wie schon FAILURE_REASON_TEXTS (i18n/failure-reason-texts.js) ihre
-    // eigene, andersartige Formulierung (ganzer Satz statt kurzes Label) fuehrt. Die drei
-    // neuen Basis-Token muessen HIER genauso wie DORT eine Zeile bekommen - der
-    // Vollstaendigkeits-Waechter test/mcp-ui-widget-i18n.test.js (T-i18n-failure-labels)
-    // importiert FAILURE_REASON_BASE_TOKENS und faellt rot, wenn eine fehlt.
+    // Anzeige-Labels (reine Praesentation) fuer die failure_reason-Basis-Token aus
+    // src/telephony/failure-reason.js#FAILURE_REASON_BASE_TOKENS - die Klassifikation lebt
+    // nur dort; unbekannt -> "Failed" (failureReasonLabel). Ein neues Token braucht hier
+    // eine Zeile, sonst schlaegt der zugehoerige Test (test/mcp-ui-widget-i18n.test.js) fehl.
     var FAILURE_REASON_LABELS = {
       "no-answer": "No answer",
       "busy": "Busy",
@@ -287,24 +320,16 @@
       "not-placed": "Not placed",
       "unreachable": "Unreachable",
       "result-unknown": "Result unknown",
-      // OUTBOUND-E3a (Befund D-5): diese zwei internen Token existieren bereits als Satz
-      // in FAILURE_REASON_TEXTS (i18n/failure-reason-texts.js), hatten hier aber nie ein
-      // Kurzlabel - sie erschienen bislang ROH ("max-duration-cap") in der Karte.
+      // Diese zwei internen Token existieren bereits als Satz in FAILURE_REASON_TEXTS
+      // (i18n/failure-reason-texts.js), hatten hier aber nie ein Kurzlabel - sie
+      // erschienen bislang ROH ("max-duration-cap") in der Karte.
       "max-duration-cap": "Duration limit",
       "budget-exhausted": "Budget used up",
     };
 
-    // STATUS_VIEW: EIN kanonischer Eintrag pro Call-Status (dialing/in_progress/
-    // completed/failed/cancelled) statt vormals sechs paralleler Lookup-Maps ueber
-    // demselben Diskriminator (WING_STATUS_BY_CALL_STATUS, STATUS_PILL_LABEL,
-    // STATUS_PILL_CLASS, STATUS_PILL_DOT_STATUSES, HUD_PHASE_LABEL,
-    // RING_PRESET_BY_CALL_STATUS - H3-S2-1-Fix). One-Switch-Regel: ein neuer
-    // Call-Status braucht GENAU EINE neue STATUS_VIEW-Zeile, nicht sechs verstreute
-    // Map-Eintraege. Alle Werte 1:1 aus den vormaligen Maps uebernommen, nichts
-    // umbenannt/erfunden. Die 5 WingMark-Zustaende sind weiterhin fix vorgegeben
-    // (PLAN-MCP-WIDGET-BRANDING.md Abschnitt 3 + Kette T2) - kein sechster
-    // erfunden; cancelled faellt bewusst auf denselben wingStatus wie failed
-    // (Abschnitt 6, kein eigener Cancelled-State im Animation-Lab).
+    // STATUS_VIEW: EIN kanonischer Eintrag pro Call-Status (One-Switch-Regel: ein neuer
+    // Status braucht GENAU EINE Zeile). Die 5 WingMark-Zustaende sind fix - cancelled
+    // nutzt bewusst den wingStatus von failed.
     var WING_STATUS_IDLE = "idle";
 
     // Ring-Geometrie (Olympus-HUD): rein dekorativ, kein echter Fortschritts-
@@ -312,7 +337,7 @@
     // dialing/in_progress (CSS-Rotation via ring--spin), geschlossener Ring bei
     // completed, unterbrochener gedaempfter Ring bei failed/cancelled. Muss VOR
     // STATUS_VIEW stehen, da dessen ringPreset-Eintraege darauf aufbauen.
-    var RING_RADIUS_PX = 74; // deckt sich mit r="74" im SVG-Markup, s. T-W1-call-AC-hud-ring-sync
+    var RING_RADIUS_PX = 74; // deckt sich mit r="74" im SVG-Markup, s. test/mcp-ui-w1-call-widget.test.js
     var RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS_PX;
     var RING_ARC_DIALING_PX = 110;
     var RING_ARC_IN_PROGRESS_PX = 270;
@@ -320,45 +345,47 @@
     var RING_ARC_INTERRUPTED_GAP_PX = 23;
     var RING_PRESET_DEFAULT = { cls: "ring", dash: RING_CIRCUMFERENCE + " 0" };
 
+    // pillLabel/hudPhase tragen den Uebersetzungs-KEY: die Sprache steht erst mit dem ersten
+    // Tool-Ergebnis fest, t(...) laeuft deshalb erst zur Anwendezeit (updateStatusPill/-HudPhase).
     var STATUS_VIEW = {
       dialing: {
         wingStatus: "connecting",
-        pillLabel: t("Connecting"),
+        pillLabel: "Connecting",
         pillClass: "pill pill--active",
         dot: true,
-        hudPhase: t("Placing call"),
+        hudPhase: "Placing call",
         ringPreset: { cls: "ring ring--spin ring--accent", dash: RING_ARC_DIALING_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_DIALING_PX) },
       },
       in_progress: {
         wingStatus: "working",
-        pillLabel: t("Live"),
+        pillLabel: "Live",
         pillClass: "pill pill--active",
         dot: true,
-        hudPhase: t("In call"),
+        hudPhase: "In call",
         ringPreset: { cls: "ring ring--spin ring--accent-strong", dash: RING_ARC_IN_PROGRESS_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_IN_PROGRESS_PX) },
       },
       completed: {
         wingStatus: "success",
-        pillLabel: t("Completed"),
+        pillLabel: "Completed",
         pillClass: "pill pill--done",
         dot: false,
-        hudPhase: t("Call ended"),
+        hudPhase: "Call ended",
         ringPreset: { cls: "ring ring--accent-solid", dash: RING_CIRCUMFERENCE + " 0" },
       },
       failed: {
         wingStatus: "error",
-        pillLabel: t("Failed"),
+        pillLabel: "Failed",
         pillClass: "pill pill--muted",
         dot: false,
-        hudPhase: t("Call ended"),
+        hudPhase: "Call ended",
         ringPreset: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
       },
       cancelled: {
         wingStatus: "error",
-        pillLabel: t("Cancelled"),
+        pillLabel: "Cancelled",
         pillClass: "pill pill--muted",
         dot: false,
-        hudPhase: t("Call ended"),
+        hudPhase: "Call ended",
         ringPreset: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
       },
     };
@@ -383,20 +410,30 @@
       return classes;
     })();
 
-    // Fluegel-Held (Olympus-HUD, H3): Mount-Groesse der Canvas-Engine, deckt sich
-    // mit --wing-size im CSS oben - Kreuzpruefung gegen Drift siehe Test
-    // T-W1-call-AC-hud-ring-sync (test/mcp-ui-w1-call-widget.test.js).
+    // Fluegel-Held (Olympus-HUD): Mount-Groesse der Canvas-Engine, deckt sich
+    // mit --wing-size im CSS oben - Kreuzpruefung gegen Drift siehe
+    // test/mcp-ui-w1-call-widget.test.js.
     var WING_CANVAS_SIZE_PX = 112;
 
     var doc = document;
     var pollTimerId = null;
     var fallbackTimerId = null;
     var anyResponseReceived = false;
-    var transcriptFetched = false;
+    var callResultFetched = false;
     var pendingRequests = {}; // rpcId -> Tool-Name (Antwort-Zuordnung, s. handleMessage)
     var consecutiveRpcErrors = 0;
     var rpcCounter = 0;
-    var engineHandle = null; // Wing-Canvas-Engine-Handle nach erfolgreichem mount() (H3); null = reiner CSS-Fallback
+    var engineHandle = null; // Wing-Canvas-Engine-Handle nach erfolgreichem mount(); null = reiner CSS-Fallback
+
+    // pendingConfirmation: EIN Objekt { args, code, expiresAtMs } (kein Object.freeze -
+    // nur per Konvention nach dem Setzen unveraendert), einzige Quelle fuer
+    // Anzeige+Argumente. confirmState: none->awaiting->submitting->
+    // placed|rejected|uncertain|expired|used; jeder Endzustand ausser placed sperrt den Knopf,
+    // "used" (Code schon abgeschickt: lokal gemerkt ODER vom Server gemeldet) blendet ihn aus.
+    // Ein Push eines schon abgeschickten Codes (Neuladen der Karte) startet direkt in "used".
+    var confirmState = "none";
+    var pendingConfirmation = null;
+    var confirmResponseTimerId = null;
 
     function isRecord(value) {
       return typeof value === "object" && value !== null;
@@ -432,19 +469,16 @@
       return Math.floor(s / 60) + ":" + (rest < 10 ? "0" + rest : rest);
     }
 
-    // "failed:487" -> Label von "failed".
-    // OUTBOUND-E3a (Befund D-5): ein unbekanntes/neues Basis-Token darf den Nutzer NIE
-    // ROH erreichen. Es faellt auf das vorhandene Sammel-Label "Failed" zurueck - kurz,
-    // uebersetzt, und fuer JEDEN Grund wahr (failureReason existiert nur an nicht
-    // erfolgreichen Anrufen). Das rohe Token bleibt der Diagnose vorbehalten: es steht
-    // unveraendert am Datensatz und im Maschinenfeld failure_reason (get_call_status).
+    // "failed:487" -> Label von "failed". Ein unbekanntes Token erreicht den Nutzer NIE roh,
+    // sondern als "Failed" (fuer jeden Grund wahr). split(":") = defensive Normalisierung
+    // eines host-gepushten Fremdwerts.
     function failureReasonLabel(raw) {
       if (raw === null || raw === undefined) return raw;
       var mapped = FAILURE_REASON_LABELS[String(raw).split(":")[0]];
       return t(mapped || "Failed");
     }
 
-    // objective_achieved ist bool ODER String (get_transcript-Kontrakt,
+    // objective_achieved ist bool ODER String (get_call_result-Kontrakt,
     // src/mcp-tools.js) - bool/"unclear" lokalisiert, andere Strings roh.
     function objectiveLabel(value) {
       if (value === true) return t("Yes");
@@ -458,7 +492,7 @@
       if (el) el.style.display = visible ? "" : "none";
     }
 
-    // AL-P11: gemeinsamer Helfer fuer die beiden skalaren Ergebnis-Karten-Felder
+    // Gemeinsamer Helfer fuer die beiden skalaren Ergebnis-Karten-Felder
     // (outcome/next_step). Zeile bleibt VERSTECKT, wenn das Feld leer ist - eine Zeile
     // "Naechster Schritt: —" ist Rauschen, kein Ergebnis.
     function applyResultRow(key, value) {
@@ -472,6 +506,283 @@
       if (!btn) return;
       btn.disabled = disabled;
       btn.style.display = disabled ? "none" : "";
+    }
+
+    function setElementVisible(selector, visible) {
+      var el = doc.querySelector(selector);
+      if (el) el.style.display = visible ? "" : "none";
+    }
+
+    function stringifyLeaf(value) {
+      return value === null || value === undefined ? "" : String(value);
+    }
+
+    var MAX_DEPTH = 6;
+
+    // Nie als Markup (XSS), sondern "pfad.schluessel: wert"-Zeilen, jede Zeichenkette als Text.
+    function objectLines(value, prefix, depth) {
+      depth = depth || 0;
+      var lines = [];
+      var keys = Object.keys(value);
+      for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        var v = value[key];
+        var label = prefix ? prefix + "." + key : key;
+        if (isRecord(v) && !Array.isArray(v)) {
+          lines = depth >= MAX_DEPTH ? lines.concat([label + ": …"]) : lines.concat(objectLines(v, label, depth + 1));
+        } else if (Array.isArray(v)) {
+          lines.push(label + ": " + v.map(stringifyLeaf).join(", "));
+        } else {
+          lines.push(label + ": " + stringifyLeaf(v));
+        }
+      }
+      return lines;
+    }
+
+    function fieldDisplayText(value) {
+      if (isRecord(value) && !Array.isArray(value)) return objectLines(value, "").join("\n");
+      if (Array.isArray(value)) return value.map(stringifyLeaf).join(", ");
+      if (typeof value === "boolean") return value ? t("Yes") : t("No");
+      return stringifyLeaf(value);
+    }
+
+    // Code UND Datenhinweis vorhanden, Code nicht abgelaufen - einzige Stelle, Rendern UND
+    // Klick (fail-closed): ohne sichtbaren Hinweis gibt es keine Bestaetigung.
+    function confirmCodeUsable() {
+      return Boolean(
+        pendingConfirmation &&
+          pendingConfirmation.code &&
+          pendingConfirmation.notice &&
+          pendingConfirmation.expiresAtMs &&
+          Date.now() < pendingConfirmation.expiresAtMs,
+      );
+    }
+
+    function showConfirmHint(text) {
+      setElementVisible("[data-confirm-hint]", true);
+      setDisplayText("[data-confirm-hint-text]", text);
+    }
+
+    function updateConfirmButtonState() {
+      var btn = doc.querySelector("[data-confirm-button]");
+      if (!btn) return;
+      btn.disabled = confirmState !== "awaiting" || !confirmCodeUsable();
+      btn.style.display = confirmState === "used" ? "none" : "";
+    }
+
+    // Einziger Uebergang in einen Endzustand der Bestaetigung (rejected/expired/uncertain/used):
+    // Zustand setzen, Hinweis zeigen, Knopf nachziehen.
+    function enterConfirmEndState(state, hintText) {
+      confirmState = state;
+      showConfirmHint(hintText);
+      updateConfirmButtonState();
+    }
+
+    // "unklar" statt "fehlgeschlagen" (ein Host-Fehler/-Timeout beweist keinen Fehlschlag).
+    function enterUncertainState() {
+      enterConfirmEndState("uncertain", t(UNCERTAIN_HINT));
+      sendUncertainMessage();
+    }
+
+    // Kein Klartext-Code im Speicher; KEIN Geheimnisschutz (kleiner Suchraum) - der Code
+    // ist ohnehin schon abgeschickt.
+    function confirmationFingerprint(confirmation) {
+      var input = confirmation.code + "|" + confirmation.expiresAtMs;
+      var hash = FNV_OFFSET_BASIS;
+      for (var i = 0; i < input.length; i++) hash = Math.imul(hash ^ input.charCodeAt(i), FNV_PRIME) >>> 0;
+      return String(hash);
+    }
+
+    // { fingerprint: expiresAtMs } - leer bei fehlendem/gesperrtem/kaputtem Speicher.
+    function readSentConfirmations() {
+      try {
+        var parsed = JSON.parse(window.localStorage.getItem(SENT_CONFIRMATIONS_STORAGE_KEY) || "{}");
+        return isRecord(parsed) ? parsed : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function wasConfirmationSent(confirmation) {
+      if (!confirmation.code) return false;
+      return Object.prototype.hasOwnProperty.call(readSentConfirmations(), confirmationFingerprint(confirmation));
+    }
+
+    // Beim Absenden gemerkt (auch ein Neuladen WAEHREND der Antwort bietet keinen Klick mehr).
+    // Best-effort: gesperrter Speicher -> Sicherung ist die Server-Antwort confirmation_used.
+    function rememberConfirmationSent(confirmation) {
+      var sent = readSentConfirmations();
+      var kept = {};
+      Object.keys(sent).forEach(function (fp) {
+        if (sent[fp] > Date.now()) kept[fp] = sent[fp];
+      });
+      kept[confirmationFingerprint(confirmation)] = confirmation.expiresAtMs;
+      try {
+        window.localStorage.setItem(SENT_CONFIRMATIONS_STORAGE_KEY, JSON.stringify(kept));
+      } catch (e) {
+        // gesperrt/voll: s. Kopfkommentar
+      }
+    }
+
+    var CONFIRM_OPTIONAL_ROWS = BOUND_ARG_FIELDS.filter(function (f) { return f !== "to" && f !== "objective"; }); // abgeleitet
+
+    // Nur aus pendingConfirmation.args - dieselbe Quelle wie onConfirmButtonClick.
+    function renderConfirmation() {
+      var confirmEl = doc.querySelector("[data-confirm]");
+      if (!confirmEl || !pendingConfirmation) return;
+      confirmEl.style.display = "";
+      setCancelDisabled(true); // Cancel-Knopf im Zustand awaiting verborgen
+      var args = pendingConfirmation.args;
+      setDisplayText("[data-confirm-to]", args.to);
+      setDisplayText("[data-confirm-objective]", args.objective);
+      setElementVisible("[data-confirm-notice]", Boolean(pendingConfirmation.notice));
+      if (pendingConfirmation.notice) setDisplayText("[data-confirm-notice-text]", pendingConfirmation.notice);
+      for (var i = 0; i < CONFIRM_OPTIONAL_ROWS.length; i++) {
+        var field = CONFIRM_OPTIONAL_ROWS[i];
+        var present = Object.prototype.hasOwnProperty.call(args, field);
+        setElementVisible('[data-cf-row="' + field + '"]', present);
+        if (present) {
+          var display = field === "max_duration_s" ? formatDuration(args[field]) : fieldDisplayText(args[field]);
+          setDisplayText("[data-cf-" + field + "]", display);
+        }
+      }
+      if (confirmState === "used") {
+        showConfirmHint(t(CONFIRMATION_USED_HINT));
+      } else if (confirmCodeUsable()) {
+        setElementVisible("[data-confirm-hint]", false);
+      } else {
+        showConfirmHint(t("Confirmation code unavailable — ask for a new prepare_call."));
+      }
+      updateConfirmButtonState();
+    }
+
+    function hideConfirmationBlock() {
+      setElementVisible("[data-confirm]", false);
+    }
+
+    // NUR in "none"/"awaiting" angenommen - ein Replay setzt eine abgeschickte Karte NIE zurueck.
+    function handleAwaitingConfirmationPush(structuredContent, meta) {
+      if (confirmState !== "none" && confirmState !== "awaiting") return;
+      var args = {};
+      for (var i = 0; i < BOUND_ARG_FIELDS.length; i++) {
+        var field = BOUND_ARG_FIELDS[i];
+        if (Object.prototype.hasOwnProperty.call(structuredContent, field)) args[field] = structuredContent[field];
+      }
+      var code = meta && isRecord(meta) && typeof meta[CONFIRMATION_CODE_META_KEY] === "string"
+        ? meta[CONFIRMATION_CODE_META_KEY]
+        : null;
+      var expiresRaw = meta && isRecord(meta) ? meta[CONFIRMATION_EXPIRES_META_KEY] : null;
+      var expiresAtMs = typeof expiresRaw === "string" ? Date.parse(expiresRaw) : NaN;
+      var noticeRaw = meta && isRecord(meta) ? meta[CALL_DATA_NOTICE_META_KEY] : null;
+      pendingConfirmation = {
+        args: args,
+        code: code,
+        expiresAtMs: isNaN(expiresAtMs) ? null : expiresAtMs,
+        notice: typeof noticeRaw === "string" && noticeRaw.trim() ? noticeRaw : null,
+      };
+      confirmState = wasConfirmationSent(pendingConfirmation) ? "used" : "awaiting";
+      renderConfirmation();
+    }
+
+    // Nie briefing/context/der Code, nur call_id+Ziel.
+    function sendUiMessage(text) {
+      var parent = window.parent;
+      if (!parent || typeof parent.postMessage !== "function") return;
+      rpcCounter += 1;
+      parent.postMessage(
+        {
+          jsonrpc: "2.0",
+          id: "call-widget-msg-" + rpcCounter,
+          method: METHOD_UI_MESSAGE,
+          params: { role: "user", content: [{ type: "text", text: text }] },
+        },
+        "*",
+      );
+    }
+
+    function targetForMessage() {
+      var to = pendingConfirmation && pendingConfirmation.args ? pendingConfirmation.args.to : null;
+      return to === null || to === undefined ? EMDASH : String(to);
+    }
+
+    function sendPlacedMessage(callId) {
+      sendUiMessage(
+        t("Confirmed the call to {to} (call_id {call_id}).")
+          .replace("{to}", targetForMessage())
+          .replace("{call_id}", callId),
+      );
+    }
+
+    function sendUncertainMessage() {
+      sendUiMessage(
+        t("Confirmed a call to {to}; no response from the card yet. Check list_calls, do not call place_call again.").replace(
+          "{to}",
+          targetForMessage(),
+        ),
+      );
+    }
+
+    // wasTimedOut: Frist schon abgelaufen ("uncertain") - eine spaete Erfolgsantwort wird
+    // noch angewendet, aber ohne zweite ui/message.
+    function handlePlaceCallResponse(m) {
+      var wasTimedOut = confirmState === "uncertain";
+      if (confirmResponseTimerId !== null) {
+        clearTimeout(confirmResponseTimerId);
+        confirmResponseTimerId = null;
+      }
+      if (confirmState !== "submitting" && !wasTimedOut) return; // schon rejected/expired: kein zweiter Effekt
+      if (m.error) {
+        if (!wasTimedOut) enterUncertainState();
+        return;
+      }
+      var result = m.result;
+      var structured = isRecord(result) ? result.structuredContent : undefined;
+      var isErrorResult = Boolean(result && result.isError);
+      if (!isErrorResult && isRecord(structured) && structured.call_id) {
+        var callId = structured.call_id;
+        confirmState = "placed";
+        hideConfirmationBlock();
+        applyCallStatus(structured); // Karte laeuft ab hier als Live-Karte weiter (Self-Poll)
+        resumePollingAfterPlaced(structured.status);
+        if (!wasTimedOut) sendPlacedMessage(callId);
+        return;
+      }
+      if (wasTimedOut) return;
+      if (isRecord(structured) && structured.status === STATUS_CONFIRMATION_USED) {
+        enterConfirmEndState("used", t(CONFIRMATION_USED_HINT));
+        return;
+      }
+      enterConfirmEndState("rejected", serverRejectionText(result));
+    }
+
+    // Nie der Code.
+    function serverRejectionText(result) {
+      var first = isRecord(result) && Array.isArray(result.content) ? result.content[0] : undefined;
+      return (first && typeof first.text === "string" && first.text.trim()) || t("Call was not started — ask for a new prepare_call.");
+    }
+
+    function onConfirmResponseTimeout() {
+      confirmResponseTimerId = null;
+      if (confirmState !== "submitting") return;
+      enterUncertainState();
+    }
+
+    // EINZIGER Sendeort: 1) Doppelklick-Sperre synchron. 2) Code/Ablauf/Hinweis pruefen. 3) Senden;
+    // nur bei Versand (true) -> lokal als abgeschickt merken + "submitting", sonst bleibt der
+    // Knopf aktiv.
+    function onConfirmButtonClick() {
+      if (confirmState !== "awaiting") return;
+      if (!confirmCodeUsable()) {
+        enterConfirmEndState("expired", t("Confirmation expired — ask for a new prepare_call."));
+        return;
+      }
+      var callArgs = Object.assign({}, pendingConfirmation.args); // schon gefiltert
+      callArgs.confirmation_code = pendingConfirmation.code;
+      if (!sendToolCall(TOOL_PLACE_CALL, callArgs)) return; // Handshake noch nicht fertig
+      rememberConfirmationSent(pendingConfirmation);
+      confirmState = "submitting";
+      updateConfirmButtonState();
+      confirmResponseTimerId = setTimeout(onConfirmResponseTimeout, PLACE_CALL_RESPONSE_TIMEOUT_MS);
     }
 
     // className-Token-Helfer (kein DOM-classList-Zwang - funktioniert mit jedem
@@ -494,16 +805,9 @@
       return view ? view.wingStatus : WING_STATUS_IDLE;
     }
 
-    // Spiegelt den Call-Status auf den Wing-Zustand: EIN Klassenwechsel auf dem
-    // CSS-Wrapper (Fallback-Pfad, Absolute Regel 3/Kette-Invariante T2) UND,
-    // falls die Canvas-Engine erfolgreich montiert wurde, ZUSAETZLICH
-    // engineHandle.setStatus() (H3, PLAN 6.2) - beide Pfade laufen immer
-    // parallel, kein Entweder-Oder. Wechselt NUR den Status-Modifier-Token
-    // (remove alter/add neuer wing--<status>-Klasse) statt den kompletten
-    // className zu ueberschreiben - die von wingSpan() gesetzte "wing--dark"-
-    // Klasse (Olympus-HUD-Karte ist immer dunkel) bleibt dadurch unangetastet
-    // und muss hier nicht ein zweites Mal hartcodiert werden (sonst Regression
-    // von Commit 0dca7ce bei jeder Aenderung an wing-markup.js).
+    // Spiegelt den Call-Status auf den Wing-Zustand: Klassenwechsel auf dem CSS-Wrapper
+    // (Fallback-Pfad) UND, falls montiert, engineHandle.setStatus() - beide immer parallel.
+    // Wechselt NUR den wing--<status>-Token, damit "wing--dark" (von wingSpan()) bleibt.
     function updateWingForStatus(status) {
       var mapped = wingStatusFor(status);
       var wing = doc.querySelector("[data-wing]");
@@ -514,7 +818,7 @@
       if (engineHandle) engineHandle.setStatus(mapped);
     }
 
-    // Deutsche Anzeige-Uebersetzung der Status-Pill (PLAN 6.2) - reine
+    // Lokalisierte Anzeige-Uebersetzung der Status-Pill - reine
     // Darstellung; der rohe Status bleibt unveraendert im [data-mcp="status"]-Slot
     // (structuredContent-Vertrag unangetastet, siehe applyCallStatus/setSlotText).
     function updateStatusPill(status) {
@@ -524,15 +828,16 @@
       var label = doc.querySelector("[data-status-label]");
       if (pill) pill.className = view ? view.pillClass : "pill pill--muted";
       if (dot) dot.style.display = view && view.dot ? "" : "none";
-      if (label) label.textContent = view ? view.pillLabel : EMDASH;
+      if (label) label.textContent = view ? t(view.pillLabel) : EMDASH;
     }
 
     // Status-abgeleitete HUD-Unterzeile - wie die Status-Pill eine reine
-    // Anzeige-Uebersetzung, keine neue Datenquelle.
+    // Anzeige-Uebersetzung, keine neue Datenquelle. t() zur ANWENDEZEIT (s.
+    // STATUS_VIEW-Kommentar oben) - nicht beim Laden aufgeloest.
     function updateHudPhase(status) {
       var view = STATUS_VIEW[status];
       var el = doc.querySelector("[data-hud-phase]");
-      if (el) el.textContent = view ? view.hudPhase : EMDASH;
+      if (el) el.textContent = view ? t(view.hudPhase) : EMDASH;
     }
 
     function updateRingForStatus(status) {
@@ -559,8 +864,8 @@
       }
     }
 
-    // Terminal-Folgen (Plan 6.1 Punkt 3): Sichtbarkeit je Status, Cancel deaktivieren,
-    // Polling stoppen, bei completed EINMAL get_transcript nachladen.
+    // Terminal-Folgen: Sichtbarkeit je Status, Cancel deaktivieren,
+    // Polling stoppen, bei completed EINMAL get_call_result nachladen.
     function updateForStatus(status) {
       var terminal = isTerminalStatus(status);
       updateWingForStatus(status);
@@ -573,7 +878,7 @@
       setRowVisible("objective", status === "completed");
       setCancelDisabled(terminal);
       if (terminal) stopPolling();
-      if (status === "completed") fetchTranscriptOnce();
+      if (status === "completed") fetchCallResultOnce();
     }
 
     // Wendet die get_call_status-Whitelist (pickCallStatus, src/mcp-tools.js) an.
@@ -589,13 +894,13 @@
       }
     }
 
-    // Wendet die get_transcript-Whitelist (pickTranscript) an.
-    function applyTranscript(data) {
+    // Wendet die get_call_result-Whitelist (pickTranscript) an.
+    function applyCallResult(data) {
       if (!isRecord(data)) return;
       if (data.call_id) setSlotText("call_id", data.call_id);
       if ("result_summary" in data) setSlotText("result_summary", data.result_summary);
       if ("objective_achieved" in data) setDisplayText("[data-objective-display]", objectiveLabel(data.objective_achieved));
-      // AL-P11: die beiden skalaren Karten-Felder.
+      // Die beiden skalaren Karten-Felder.
       applyResultRow("outcome", data.outcome);
       applyResultRow("next_step", data.next_step);
     }
@@ -631,16 +936,12 @@
     }
 
     function dispatchFor(tool) {
-      return tool === TOOL_GET_TRANSCRIPT ? applyTranscript : applyCallStatus;
+      return tool === TOOL_GET_CALL_RESULT ? applyCallResult : applyCallStatus;
     }
 
-    // Der EINZIGE ausgehende Weg: JSON-RPC-postMessage "tools/call" an den Host, id-
-    // gematcht (Antwort siehe handleMessage, Kanal B). Das ready-Gate steht hier - an
-    // EINER Stelle fuer ALLE Aufrufer (Poll-Tick, get_transcript, Cancel-Klick): vor dem
-    // Handshake beantwortet der Host keinen Tool-Call. Rueckgabewert (true = tatsaechlich
-    // gesendet) ist Pflicht fuer jeden Aufrufer, der einen einmaligen Effekt (Fetch-Guard,
-    // optische Deaktivierung) an den Versand knuepft - sonst faellt der Effekt auf einen
-    // Aufruf, der der Host nie gesehen hat (s. fetchTranscriptOnce/onCancelClick).
+    // Der EINZIGE ausgehende Weg: JSON-RPC-postMessage "tools/call", id-gematcht
+    // (handleMessage). Das ready-Gate steht hier fuer ALLE Aufrufer. Rueckgabe true =
+    // tatsaechlich gesendet - Pflicht fuer jeden einmaligen Effekt, der am Versand haengt.
     function sendToolCall(tool, args) {
       if (!window[UI_READY_FLAG]) return false;
       var parent = window.parent;
@@ -654,17 +955,12 @@
       return true;
     }
 
-    // transcriptFetched wird NUR bei tatsaechlichem Versand gesetzt (Rueckgabewert von
-    // sendToolCall). Trifft die completed-Notification VOR dem Handshake ein (Kanal A ist
-    // nicht ready-gegated, s. Kommentar bei METHOD_TOOL_RESULT), schlaegt der Versand fehl
-    // und der Guard bleibt offen - verloren geht dadurch nichts: init() startet ueber
-    // whenUiReady(startPolling) so oder so einen Poll-Tick, sobald der Handshake steht;
-    // dessen Antwort ruft bei weiterhin completed erneut updateForStatus/fetchTranscriptOnce
-    // auf, und dieser zweite Versuch trifft auf ready=true.
-    function fetchTranscriptOnce() {
-      if (transcriptFetched) return;
+    // callResultFetched NUR bei tatsaechlichem Versand. Vor dem Handshake bleibt der Guard
+    // offen; der erste Poll-Tick nach whenUiReady(startPolling) holt das Ergebnis nach.
+    function fetchCallResultOnce() {
+      if (callResultFetched) return;
       var callId = currentCallId();
-      if (callId && sendToolCall(TOOL_GET_TRANSCRIPT, { call_id: callId })) transcriptFetched = true;
+      if (callId && sendToolCall(TOOL_GET_CALL_RESULT, { call_id: callId })) callResultFetched = true;
     }
 
     function pollTick() {
@@ -684,7 +980,7 @@
       if (sendToolCall(TOOL_CANCEL, { call_id: callId })) setCancelDisabled(true);
     }
 
-    // Keine Host-Bruecke innerhalb der Frist -> Polling einstellen (Plan 6.3);
+    // Keine Host-Bruecke innerhalb der Frist -> Polling einstellen;
     // die Karte zeigt dann still den zuletzt gepushten Stand (kein sichtbares
     // Diagnose-Label mehr, s. markResponse-Kommentar).
     function onFallbackTimeout() {
@@ -706,7 +1002,12 @@
 
       if (m.method === METHOD_TOOL_RESULT && isRecord(m.params) && isRecord(m.params.structuredContent)) {
         var pushed = m.params.structuredContent;
-        var pushedFn = "result_summary" in pushed ? applyTranscript : applyCallStatus;
+        // Bestaetigungs-Push geht NICHT in applyCallStatus - eigener Zweig.
+        if (pushed.status === STATUS_AWAITING_CONFIRMATION) {
+          handleAwaitingConfirmationPush(pushed, m.params._meta);
+          return;
+        }
+        var pushedFn = "result_summary" in pushed ? applyCallResult : applyCallStatus;
         markResponse(pushed, pushedFn);
         return;
       }
@@ -714,6 +1015,11 @@
       var pendingTool = m.id != null ? pendingRequests[m.id] : null;
       if (!pendingTool) return;
       delete pendingRequests[m.id];
+      // place_call hat eine eigene Zustandsmaschine, nicht die generische Poll-Fehlerbremse.
+      if (pendingTool === TOOL_PLACE_CALL) {
+        handlePlaceCallResponse(m);
+        return;
+      }
       // JSON-RPC-Fehlerantwort: NICHT mehr still verschlucken. Transiente Fehler duerfen
       // nicht stoppen (ein Erfolg setzt den Zaehler zurueck), aber ein dauerhaft
       // ablehnender Host wird nicht endlos weitergefragt. Die Karte behaelt dabei ihren
@@ -728,12 +1034,8 @@
       markResponse(data, dispatchFor(pendingTool));
     }
 
-    // Montiert die Wing-Canvas-Engine progressiv (PLAN 6.1/6.2). widget-catalog.js
-    // injiziert die Engine in <head>, VOR diesem Skript (siehe Kopf-Kommentar
-    // dieser Datei) - window.HermesWingCanvas ist deshalb hier bereits synchron
-    // verfuegbar. Bei jedem Fehlschlag (Engine fehlt, kein 2D-Context, Mount-
-    // Container/Bild fehlen) bleibt die bewaehrte CSS-WingMark sichtbar - NIE ein
-    // leeres Loch (Absolute Regel 3).
+    // Montiert die Wing-Canvas-Engine (in <head> VOR diesem Skript injiziert, also synchron
+    // verfuegbar). Bei jedem Fehlschlag bleibt die CSS-WingMark sichtbar - NIE ein leeres Loch.
     function mountWingEngine() {
       if (!(window.HermesWingCanvas && typeof window.HermesWingCanvas.mount === "function")) return;
       var host = doc.querySelector("[data-wing-canvas]");
@@ -756,6 +1058,14 @@
       fallbackTimerId = setTimeout(onFallbackTimeout, FALLBACK_TIMEOUT_MS);
     }
 
+    // Evtl. schon gestoppt.
+    function resumePollingAfterPlaced(status) {
+      if (isTerminalStatus(status)) return;
+      stopPolling();
+      anyResponseReceived = true;
+      startPolling();
+    }
+
     // Late-safe: Signal schon gefeuert (BIND_SCRIPT lief frueher, oder Remount) -> sofort
     // starten; sonst genau einmal auf das Event warten. Damit haengt die Reihenfolge NICHT
     // an der Injektions-Position des BIND_SCRIPT (widget-catalog.js haengt es NACH diesem
@@ -772,6 +1082,8 @@
     function init() {
       var btn = doc.querySelector("[data-cancel]");
       if (btn) btn.addEventListener("click", onCancelClick);
+      var confirmBtn = doc.querySelector("[data-confirm-button]");
+      if (confirmBtn) confirmBtn.addEventListener("click", onConfirmButtonClick);
       mountWingEngine();
       window.addEventListener("message", handleMessage);
       whenUiReady(startPolling);

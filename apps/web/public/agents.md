@@ -50,11 +50,11 @@ You cannot buy a plan or a number through MCP. This is intentional.
 
 ## Step 4 — Verify the setup
 
-1. Call `get_agent_status` (or `get_my_number`).
+1. Call `get_agent_status` (or `get_agent_number`).
 2. Setup is complete when it returns the phone number together with the plan and permissions.
 3. Tell the user their Hermes number.
 
-**Do not place a call to test the setup.** `place_call` starts a real phone call that is billed per minute and cannot be undone. Only place a call when the user clearly asks for one.
+**Do not place a call to test the setup.** A placed call is a real phone call that is billed per minute and cannot be undone. Only prepare a call when the user clearly asks for one.
 
 ## Tools
 
@@ -62,32 +62,33 @@ Rely on your own `tools/list` — some tools only appear when the account or pla
 
 | Tool | What it does |
 |---|---|
-| `get_agent_status` | Status of the phone agent: phone number, voice engine, model, monthly usage, permissions. |
-| `get_my_number` | The agent's phone number. |
-| `place_call` | Starts a real outbound call with an objective. Billed per minute, not reversible. Returns a `call_id` immediately. |
+| `get_agent_status` | Status of the phone agent: phone number, owner, number of calls, share of the monthly minutes used, permissions. |
+| `get_agent_number` | The agent's phone number. |
+| `prepare_call` | Prepares a call for the user's confirmation. No cost, no call, nothing irreversible. |
+| `place_call` | Places the call. The Hermes card uses it after the user confirms — you never call it yourself. |
 | `await_call_event` | Waits briefly (up to ~20 s) for the next event of a running call: a question from the phone agent, the final result, or nothing. |
 | `answer_consult` | Answers a question the phone agent asks you during a running call. |
 | `get_call_status` | Live state of a call (dialing, in_progress, completed, failed, cancelled), duration, last transcript lines. |
-| `get_transcript` | After the call: the result summary and whether the objective was achieved (not the raw transcript). |
+| `get_call_result` | After the call: the result summary, whether the objective was achieved, commitments, open points and the next step (never the raw transcript). |
 | `cancel_call` | Cancels the call record and stops billing. Whether the line itself drops is not guaranteed on every call path — the response says so. |
 | `check_inbox` | Incoming calls that finished since the last check: who called, what they wanted, what was promised, what to do now. **Consuming** — returned entries will not appear again. |
 | `list_calls` | Recent calls (incoming and outgoing) with status and summary. Use this to re-read history. |
 | `list_action_items` | Open action items from all calls. |
-| `get_calendar` | The user's next calendar entries (only when a calendar is connected). |
 
 ## Placing a call
 
-Only when the user asks for it.
+Only when the user asks for it — for themselves or someone they act for, such as booking, rescheduling, enquiring or complaining. Never for telemarketing, unsolicited advertising or sales calls, political campaigning, or mass or automated dialling.
 
 1. **Number (`to`)** — pass the number **exactly as the user wrote it**. Do not reformat it into E.164; the server normalizes it. A national number with a leading 0 is resolved through the user's home country. For a foreign number, ask the user for the international format (`+XX…`) instead of guessing.
 2. **Objective (`objective`)** — one speakable first-person sentence. It is read out word for word to the person who answers. Good: "I would like to book a men's haircut for Max on Saturday morning." Bad: "Book appointment". If the topic itself is unknown, ask the user first.
 3. **Context** — put background into `briefing` (summarized, never secrets or payment data), hard limits into `constraints`, and what the agent may agree to without asking into `mandate`. Without a `mandate` the agent commits to nothing and only takes messages. Never invent a mandate.
-4. **Place the call** with what you have. An open detail costs nothing; a guessed one cannot be taken back.
-5. **Stay in the loop:** right after `place_call`, call `await_call_event` with the `call_id` again and again until it returns `event="done"`.
-6. **When `event="consult"` arrives:** immediately call `answer_consult` once with `status="working"` and no answers — if that acknowledgement does not arrive within seconds, the phone agent moves on without you. Then answer briefly and factually from your own sources (calendar, mail, files, this chat). Ask the user only if they are present right now. Never invent an answer; if you don't know, say so through `answer_consult` so the agent can tell the other party that the user will get back to them.
-7. **Result:** the `done` event carries the summary and whether the objective was achieved. Report it to the user. `get_transcript` returns the same result later.
+4. **Prepare the call** with `prepare_call` and what you have. An open detail costs nothing; a guessed one cannot be taken back.
+5. **The user confirms.** Your client shows a Hermes card where the user reviews and confirms the call. The card places it and reports the `call_id` back in the chat. Never call `place_call` yourself and never ask for or invent a confirmation code. If your client cannot show the Hermes card, no call can be placed from there — tell the user honestly. If any argument changes, call `prepare_call` again and let the user confirm again.
+6. **Stay in the loop:** once you have the `call_id`, call `await_call_event` with it again and again until it returns `event="done"`.
+7. **When `event="consult"` arrives:** immediately call `answer_consult` once with `status="working"` and no answers — if that acknowledgement does not arrive within seconds, the phone agent moves on without you. Then answer briefly and factually from your own sources (calendar, mail, files, this chat). Ask the user only if they are present right now. Never invent an answer; if you don't know, say so through `answer_consult` so the agent can tell the other party that the user will get back to them.
+8. **Result:** the `done` event carries the summary and whether the objective was achieved. Report it to the user. `get_call_result` returns the same result later.
 
-If `await_call_event` returns a `failure_reason` starting with `not-placed`, the call could not be placed because of a problem on Hermes' side. **Do not retry.** Tell the user what failed, using `result_summary` as it is.
+If a call reports a `failure_reason` starting with `not-placed`, the call could not be placed because of a problem on Hermes' side. **Do not retry.** Tell the user what failed, using `result_summary` as it is.
 
 Destinations that are not allowed (permission profile, allowlist, denylist, country, limits) are refused by the server with a clear message. Do not try to work around it.
 
@@ -105,7 +106,8 @@ Hermes answers incoming calls on its own.
 |---|---|
 | `401` / `invalid_token` | Sign-in missing or expired. Run the OAuth flow again (Step 2). |
 | No phone number in `get_agent_status` | No active plan yet. The user chooses one in the dashboard (Step 3). |
-| `place_call` refused | Destination blocked by the safety gates, or the plan does not include outgoing calls. Tell the user; do not retry with variations. |
+| Call refused | Destination blocked by the safety gates, or the plan does not include outgoing calls. Tell the user; do not retry with variations. |
+| No Hermes card appears | Your client cannot show the confirmation card, so no call can be placed from it. Tell the user; do not ask for a code. |
 | Tools missing after sign-in | Reconnect or reload the MCP server in your client. |
 
 ## Links

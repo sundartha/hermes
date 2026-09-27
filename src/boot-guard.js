@@ -10,6 +10,9 @@ import {
 } from "./store/defaults.js";
 import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.js";
 import { usableFallbackProvider } from "./llm/provider.js";
+// T2-13: dieselbe Mindestlaenge, an der deriveConfirmationKey den Schluessel verweigert -
+// EINE Schwelle, damit Boot-Warnung und fail-closed-503 nie auseinanderlaufen.
+import { CONFIRMATION_SECRET_MIN_LENGTH } from "./call-confirmation.js";
 // IEL-B1: die EINE Definition von "Zugang des EL-Inbound-Wegs vollstaendig" (rein, config-frei).
 import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.js";
 import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "./elevenlabs/inbound-scope.js";
@@ -708,6 +711,42 @@ export function driftConfigFindings({ fqdnConnectionId, outboundVoiceProfileId, 
       `${fehlend.join(", ")} leer - der Drift-Waechter meldet die zugehoerigen Pruefungen ` +
       "als unbekannt statt sie zu fahren (kein Fehlalarm, aber auch kein Schutz). Wert im " +
       "Render-Dashboard setzen.",
+  }];
+}
+
+// T2-13 (N-10): das Betriebsgeheimnis des serverseitigen Bestaetigungs-Codes vor dem
+// Waehlen (src/call-confirmation.js). NIE fatal (Owner-Regel P6, keine neue Boot-Sperre) -
+// fehlt es, laeuft die Produktion weiter, aber prepare_call antwortet ausschliesslich
+// 503 "confirmation_unavailable" und per MCP waehlt niemand mehr (s. PLAN-SECURITY.md,
+// Abschnitt "OpenAI-T2-13"). Loggt nie den Wert, keinen Teil davon und nicht seine Laenge -
+// nur, OB er fehlt oder zu kurz ist.
+// KORRIGIERT (Safety-Review T2-13): ein gesetztes, aber zu kurzes Geheimnis (1 bis
+// CONFIRMATION_SECRET_MIN_LENGTH-1 Zeichen) ergab frueher KEINEN Befund, lieferte aber
+// genauso still 503 - jetzt eigener Befund TOO_SHORT.
+export const CALL_CONFIRMATION_SECRET_FINDING = Object.freeze({
+  UNSET: "call_confirmation_secret_unset", // WARN
+  TOO_SHORT: "call_confirmation_secret_too_short", // WARN
+});
+
+const CALL_CONFIRMATION_SECRET_CONSEQUENCE =
+  "prepare_call/place_call koennen per MCP keinen Anruf bestaetigen (503 " +
+  "confirmation_unavailable). Wert im Render-Dashboard setzen.";
+
+export function callConfirmationSecretFindings({ secret } = {}) {
+  if (!secret) {
+    return [{
+      code: CALL_CONFIRMATION_SECRET_FINDING.UNSET,
+      fatal: false,
+      message: `CALL_CONFIRMATION_SECRET fehlt - ${CALL_CONFIRMATION_SECRET_CONSEQUENCE}`,
+    }];
+  }
+  if (String(secret).length >= CONFIRMATION_SECRET_MIN_LENGTH) return [];
+  return [{
+    code: CALL_CONFIRMATION_SECRET_FINDING.TOO_SHORT,
+    fatal: false,
+    message:
+      `CALL_CONFIRMATION_SECRET ist kuerzer als ${CONFIRMATION_SECRET_MIN_LENGTH} Zeichen - ` +
+      CALL_CONFIRMATION_SECRET_CONSEQUENCE,
   }];
 }
 

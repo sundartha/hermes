@@ -204,16 +204,101 @@ export function originLogWert(originHeader) {
 // deny401) - den einzigen Zeiger auf den Authorization Server - und kann sich nicht neu autorisieren.
 // Ohne Schalter ist der einzige Reparaturweg ein Deploy. Mit enforce=false schreibt die
 // Wache auch KEINE Zeile: ein geloester Riegel soll nicht aussehen wie ein greifender.
-export function createMcpOriginGuard({ erlaubteOrigins, enforce }) {
+//
+// T2-07-Nachbesserung (Befund safety/blocker): diese Wache haengt VOR mcpAuth und damit
+// auch VOR dessen Ablehnungs-Zaehler (src/mcp-rate-limit.js) - eine Flut mit fremdem
+// Origin traf bisher auf KEINE Drossel und schrieb je Anfrage unbegrenzt eine
+// auth_failed-Zeile. ablehnungsDrossel ist derselbe injizierte IP-Zaehler wie in
+// makeMcpAuth (mcpDrosseln.ablehnung, EINE Instanz je Prozess) - erst pruefen, dann
+// zaehlen ueber den gemeinsamen Helper pruefeAblehnungsDrossel (unten, geteilt mit
+// mitAblehnungsDrossel in src/auth.js): ist das Fenster ausgeschoepft, antwortet 429
+// statt 403 und es entsteht KEINE Audit-Zeile (Pre-Mortem b: vor der Authentifizierung
+// bleibt eine Grenze; die Audit-Zeile selbst bleibt dadurch ebenfalls begrenzt, s. Befund
+// safety/wichtig). verifizierteSub ist hier immer null - vor mcpAuth existiert noch kein
+// verifiziertes Token, die Ablehnung zaehlt darum immer je IP (fail-closed).
+export function createMcpOriginGuard({ erlaubteOrigins, enforce, ablehnungsDrossel }) {
   const aktiv = enforce !== false;
   return function mcpOriginOnlyMiddleware(req, res, next) {
     if (!aktiv || mcpOriginErlaubt(req.headers.origin, erlaubteOrigins)) return next();
+    if (!pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel })) return;
     auditAuthFailed(
       req,
       AUTH_FAILED_GRUND.MCP_CROSS_ORIGIN,
       `origin=${originLogWert(req.headers.origin)}`,
     );
     res.status(HTTP_FORBIDDEN).json({ error: CROSS_ORIGIN_ERROR });
+  };
+}
+
+// ---- CORS auf /mcp (T-29) ---------------------------------------------------------
+// Reines Praedikat: Listen-Element bei Treffer, sonst null - NIE der Rohwert selbst
+// (eine Setz-Stelle, die versehentlich den Rueckgabewert statt der Konstante nimmt,
+// wuerde bei jedem Tippfehler den Angreifer-Origin spiegeln; ein Praedikat, das nur
+// Listen-Elemente zurueckgeben KANN, macht diesen Fehler unmoeglich). Byte-genauer
+// Vergleich des ROHEN Headers gegen corsOrigins - KEINE Normalisierung, kein
+// Praefix/Suffix-Match, kein Wildcard. Ein echter Browser sendet den Origin immer
+// kanonisch (lowercase, ohne Default-Port, ohne Pfad) - verliert dadurch nichts. Die
+// Wache (mcpOriginErlaubt oben) vergleicht normalisiert und ist damit toleranter als
+// CORS hier - bewusste Asymmetrie, CORS ist die strengere der beiden Pruefungen.
+export function mcpCorsOrigin(originHeader, corsOrigins) {
+  if (typeof originHeader !== "string") return null;
+  return corsOrigins.includes(originHeader) ? originHeader : null;
+}
+
+// 204 als benannte Konstante (Regel: keine Magic Numbers) - Praeflight-Antwort ohne Body.
+const HTTP_NO_CONTENT = 204;
+// Nur "/mcp" selbst, NICHT "/mcp/foo" - req.path ist relativ zum Mount-Punkt des Routers
+// ("/mcp" in app.js), also "/" fuer die Mount-Wurzel.
+const MCP_CORS_PFAD = "/";
+const MCP_CORS_ALLOW_METHODS = "POST";
+const MCP_CORS_ALLOW_HEADERS = "authorization, content-type, mcp-session-id, mcp-protocol-version";
+const MCP_CORS_EXPOSE_HEADERS = "Mcp-Session-Id, WWW-Authenticate";
+
+// Express-Fabrik (T-29): Browser duerfen `/mcp`-Antworten NUR lesen, wenn ihr Origin
+// byte-genau in corsOrigins steht. corsOrigins ist per Konstruktion eine Teilmenge der
+// Wachen-Liste OHNE PUBLIC_URL (routes/mcp.js bildet sie aus derselben mcpErlaubteOrigins
+// - same-origin braucht kein CORS). Leere Liste (Default) -> die Middleware ruft fuer
+// JEDEN Request sofort next() und setzt keinen einzigen Header - byte-identisch zu vor
+// T2-06 (E5-H09 bleibt gruen).
+//
+// use-Layer statt eigener OPTIONS-Route (Designentscheidung T2-06-Spec #4, Begruendung
+// hier UND in PLAN-SECURITY.md statt eines PUBLIC_ROUTES-Eintrags): eine
+// router.options("/mcp", ...) wuerde (a) das heutige Auto-OPTIONS OHNE Origin veraendern
+// (Express haengte dann einen "Allow"-Header an, den es heute nicht setzt - kein
+// byte-identisches Verhalten bei leerer Liste) und (b) einen neuen Eintrag im
+// Routen-Graph erzeugen, den test/route-auth-inventory.test.js als verwaisten
+// PUBLIC_ROUTES-Eintrag melden wuerde (der Inventar-Test sieht nur layer.route, keine
+// use-Schichten - ein Eintrag fuer diesen Layer ist technisch nicht moeglich). Die
+// Herkunftswache oben ist ebenfalls ein use-Layer, der OPTIONS beantwortet - gleiche
+// Bauart, gleiche Deckung durch Absolute Regel 3 (Begruendung im Kommentar statt
+// Inventar-Eintrag).
+//
+// Liest NIE MCP_ORIGIN_ENFORCE: mit enforce=false bleibt die Herkunftswache geloest
+// (Notventil E-4), aber diese Middleware spiegelt weiterhin NUR einen Origin aus
+// corsOrigins - ein geloestes Notventil oeffnet keinen fremden Origin fuer CORS
+// (Designentscheidung T2-06-Spec #3, Test H14).
+//
+// Header-Reihenfolge: ACAO + Expose-Headers + Vary auf JEDER Antwort an einen
+// gelisteten Origin (auch 401/403 von mcpAuth danach - der Layer sitzt VOR mcpAuth,
+// die Header bleiben auf der res-Instanz stehen); zusaetzlich Allow-Methods/-Headers +
+// 204 nur bei OPTIONS. `res.vary("Origin")` haengt an einen bestehenden Vary-Header an,
+// statt ihn zu ueberschreiben (Cache-Vergiftung: eine Antwort mit ACAO fuer Origin A
+// darf nie an Origin B ausgeliefert werden). NIE Access-Control-Allow-Credentials
+// (Identitaet laeuft per Bearer-Header, nicht per Cookie - keine Ambient-Credentials);
+// KEIN Access-Control-Max-Age (nicht verlangt, waere eine neue Zahl ohne
+// Messgrundlage).
+export function createMcpCors({ corsOrigins }) {
+  return function mcpCorsMiddleware(req, res, next) {
+    if (req.path !== MCP_CORS_PFAD) return next();
+    const treffer = mcpCorsOrigin(req.headers.origin, corsOrigins);
+    if (!treffer) return next();
+    res.vary("Origin");
+    res.set("Access-Control-Allow-Origin", treffer);
+    res.set("Access-Control-Expose-Headers", MCP_CORS_EXPOSE_HEADERS);
+    if (req.method !== "OPTIONS") return next();
+    res.set("Access-Control-Allow-Methods", MCP_CORS_ALLOW_METHODS);
+    res.set("Access-Control-Allow-Headers", MCP_CORS_ALLOW_HEADERS);
+    res.status(HTTP_NO_CONTENT).end();
   };
 }
 
@@ -227,6 +312,10 @@ export const RATE_SWEEP_INTERVAL_MS = 5 * 60_000;
 // windowMs/limit/sweepMs als EIN Optionsobjekt (F1). Liefert eine hit(key)-Funktion, die den
 // Zaehler fuer key erhoeht und {allowed, retryAfterS} zurueckgibt - reine Query+Zaehl-
 // Logik, kein HTTP-Wissen (der Express-Adapter bleibt beim Aufrufer).
+// hit.peek(key) (T2-07-Nachbesserung): liest denselben Stand, OHNE zu zaehlen - allowed ist
+// false, sobald das Fenster fuer key bereits ausgeschoepft ist (count >= limit), d.h. der
+// NAECHSTE hit(key) waere nicht mehr erlaubt. Nutzer: die IP-Sperre VOR dem statischen
+// Token-Vergleich (src/mcp-rate-limit.js, src/auth.js).
 export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
   const windows = new Map(); // key -> { count, startedAt }
 
@@ -237,22 +326,37 @@ export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
     for (const [key, w] of windows) if (now - w.startedAt >= windowMs) windows.delete(key);
   }, sweepMs).unref();
 
-  return function hit(key) {
+  const retryAfterS = (fenster, now) => Math.ceil((fenster.startedAt + windowMs - now) / 1000);
+  const laufendesFenster = (key, now) => {
+    const fenster = windows.get(key);
+    return fenster && now - fenster.startedAt < windowMs ? fenster : null;
+  };
+
+  function hit(key) {
     const now = Date.now();
-    let w = windows.get(key);
-    if (!w || now - w.startedAt >= windowMs) {
+    let w = laufendesFenster(key, now);
+    if (!w) {
       w = { count: 0, startedAt: now };
       windows.set(key, w);
     }
     w.count++;
-    return {
-      allowed: w.count <= limit,
-      retryAfterS: Math.ceil((w.startedAt + windowMs - now) / 1000),
-    };
+    return { allowed: w.count <= limit, retryAfterS: retryAfterS(w, now) };
+  }
+
+  hit.peek = function peek(key) {
+    const now = Date.now();
+    const fenster = laufendesFenster(key, now);
+    if (!fenster) return { allowed: true, retryAfterS: 0 };
+    return { allowed: fenster.count < limit, retryAfterS: retryAfterS(fenster, now) };
   };
+  return hit;
 }
 
-const RATE_LIMIT_BODY = Object.freeze({ error: "Zu viele Anfragen. Bitte spaeter erneut versuchen." });
+// Exportiert (T2-07/T-28): src/auth.js braucht denselben Koerper fuer die 429-Antwort des
+// Ablehnungs-Zaehlers von POST /mcp - EINE Quelle statt einer zweiten Konstante (G5).
+export const RATE_LIMIT_BODY = Object.freeze({
+  error: "Zu viele Anfragen. Bitte spaeter erneut versuchen.",
+});
 
 // Die EINE Drossel-Antwort (G5): globaler Limiter und Init-Token-Schranke (IEX-A7) - nur der
 // konstante Koerper unterscheidet sich. Die 429 bleibt hier bewusst als Literal stehen: sie
@@ -263,6 +367,29 @@ const RATE_LIMIT_BODY = Object.freeze({ error: "Zu viele Anfragen. Bitte spaeter
 export function respondTooManyRequests(res, { retryAfterS, body }) {
   res.set("Retry-After", String(retryAfterS));
   return res.status(429).json(body);
+}
+
+// T2-07-Nachbesserung (Befund cleancode/wichtig): "ablehnungsDrossel aufrufen, bei
+// ausgeschoepftem Fenster 429 senden" stand wortgleich zweimal - hier in
+// createMcpOriginGuard UND in mitAblehnungsDrossel (src/auth.js). EINE Quelle (G5) statt
+// zweier Kopien, die bei einer Vertragsaenderung (z.B. ein zusaetzliches 429-Feld)
+// auseinanderlaufen koennten. Optionsobjekt statt viertem Positionsargument (Argument-
+// Obergrenze .claude/refs/clean-code.md, max 3) - dieselbe Curry-Bauform wie
+// makeVerifyOauth/mitAblehnungsDrossel in src/auth.js.
+// Rueckgabe true: Anfrage darf weiterlaufen, der Aufrufer prueft/antwortet selbst weiter.
+// Rueckgabe false: die 429-Antwort ist bereits gesendet - der Aufrufer MUSS sofort
+// zurueckkehren, ohne eine zweite Antwort zu senden.
+export function pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel, verifizierteSub = null }) {
+  return sende429WennGesperrt(res, ablehnungsDrossel(req, { verifizierteSub }));
+}
+
+// Die EINE Stelle "Drossel-Ergebnis -> ggf. 429" fuer pruefeAblehnungsDrossel (oben) und die
+// IP-Sperre vor dem statischen Token-Vergleich (src/auth.js). Rueckgabe wie dort: true =
+// weiterlaufen, false = 429 bereits gesendet.
+export function sende429WennGesperrt(res, { allowed, retryAfterS }) {
+  if (allowed) return true;
+  respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
+  return false;
 }
 
 // Fixed-Window-Rate-Limiter pro Client-IP. Die Ausnahmen (localhost-Socket,

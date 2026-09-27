@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { hasWidget, widgetTitle, widgetHtml, WIDGET_CALL } from "../src/ui/widget-catalog.js";
 import { BIND_SCRIPT, signalUiReady, UI_READY_FLAG, UI_READY_EVENT } from "../src/ui/widget-bind.js";
+import { I18N_SCRIPT, WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
 import { WING_PNG } from "../design-system/components/brand/wing-image.js";
 
 // data-mcp-Slots nach dem Design-Cleanup 2026-07-02: duration_s/failure_reason/
@@ -112,6 +113,12 @@ function makeFakeDocument() {
   bySelector.set("[data-ring-arc]", ringArc);
   return {
     querySelector: (sel) => bySelector.get(sel) || null,
+    // T2-02/S5: leer, weil call.html keine [data-i18n]-Elemente traegt (die
+    // Status-Pill/HUD-Phase werden dynamisch uebersetzt, s. updateStatusPill/
+    // updateHudPhase) - noetig, damit das I18N_SCRIPT (widget-i18n.js) in
+    // derselben Fake-Sandbox laufen kann (T-W1-call-AC-status-pill-locale).
+    querySelectorAll: () => [],
+    documentElement: { lang: "" },
     createElement: () => makeFakeElement(),
     slot: (name) => bySelector.get(`[data-mcp="${name}"]`),
     row: (name) => bySelector.get(`[data-row="${name}"]`),
@@ -153,6 +160,15 @@ function ownScriptSource() {
   const matches = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   assert.ok(matches.length >= 1, "eigenes Inline-Skript in call.html gefunden");
   return matches[matches.length - 1][1];
+}
+
+// Schneidet den Inhalt eines einzelnen <script>-Fragments heraus (Muster
+// mcp-ui-widget-i18n.test.js scriptBodyOf) - fuer T2-02/S5: das I18N_SCRIPT laeuft
+// in <head>, also VOR dem eigenen Inline-Skript, und braucht deshalb dieselbe
+// Extraktion wie ownScriptSource oben, nur fuer ein fertiges Fragment statt fuer
+// die ganze widgetHtml()-Ausgabe.
+function scriptBodyOf(script) {
+  return script.match(/<script>([\s\S]*)<\/script>/)[1];
 }
 
 // Fuehrt das eigene Inline-Skript in einer frischen vm-Sandbox aus (window === die
@@ -199,6 +215,11 @@ function runOwnScript(doc, options) {
   if (options && options.readyBeforeScript) sandbox[UI_READY_FLAG] = true;
 
   vm.createContext(sandbox);
+  // T2-02/S5: optional das I18N_SCRIPT VOR dem eigenen Inline-Skript laufen lassen -
+  // exakt die reale Reihenfolge (widget-catalog.js injiziert es in <head>, das eigene
+  // Skript steht im <body>). Der I18N-message-Listener landet dadurch VOR dem eigenen
+  // in sandbox.addEventListener("message", ...) - env.emit() unten ruft beide aus.
+  if (options && options.withI18n) vm.runInContext(scriptBodyOf(I18N_SCRIPT), sandbox);
   vm.runInContext(ownScriptSource(), sandbox);
 
   return {
@@ -257,7 +278,7 @@ test("T-W1-call-AC4: Inline-Skript enthaelt Poll-Konstante + alle Tool-Namen + d
   assert.match(html, /setInterval/);
   assert.match(html, /POLL_INTERVAL_MS\s*=\s*8000/);
   assert.match(html, /"get_call_status"/);
-  assert.match(html, /"get_transcript"/);
+  assert.match(html, /"get_call_result"/);
   assert.match(html, /"cancel_call"/);
   assert.match(html, /"tools\/call"/);
 });
@@ -270,7 +291,7 @@ test("T-W1-call-AC6: kein innerHTML/@import/<link/href= im Widget", () => {
   assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
 });
 
-test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deaktiviert Cancel, erreicht clearInterval, holt get_transcript GENAU EINMAL", () => {
+test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deaktiviert Cancel, erreicht clearInterval, holt get_call_result GENAU EINMAL", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
   env.uiReady(); // Handshake beantwortet - Polling/Sendeweg ist ab hier offen (F2)
@@ -279,10 +300,10 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   // dem initialen place_call-Push, BEVOR unser eigenes Skript pollt).
   doc.slot("call_id").textContent = "call_1";
 
-  // Vor dem ersten Poll-Response darf get_transcript NICHT versucht worden sein.
-  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 0);
+  // Vor dem ersten Poll-Response darf get_call_result NICHT versucht worden sein.
+  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_call_result").length, 0);
 
-  // Zwischenschritt: in_progress darf get_transcript weiterhin NICHT ausloesen.
+  // Zwischenschritt: in_progress darf get_call_result weiterhin NICHT ausloesen.
   env.emit({
     jsonrpc: "2.0",
     method: "ui/notifications/tool-result",
@@ -299,7 +320,7 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   assert.equal(doc.slot("status").textContent, "in_progress");
   assert.equal(doc.row("lines").style.display, "", "Transkriptzeilen sichtbar bei in_progress");
   assert.equal(doc.cancelButton().disabled, false, "Cancel bleibt aktiv, nicht terminal");
-  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 0);
+  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_call_result").length, 0);
 
   // Terminal-Notification: completed.
   env.emit({
@@ -328,13 +349,13 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   assert.equal(doc.cancelButton().style.display, "none", "Cancel zusaetzlich versteckt");
   assert.equal(doc.row("lines").style.display, "none", "Transkriptzeilen ausgeblendet nach Terminal");
   assert.equal(
-    env.posted.filter((m) => m.params && m.params.name === "get_transcript").length,
+    env.posted.filter((m) => m.params && m.params.name === "get_call_result").length,
     1,
-    "get_transcript NUR im Terminal-Zweig (completed) versucht - genau EIN Versuch (tools/call)",
+    "get_call_result NUR im Terminal-Zweig (completed) versucht - genau EIN Versuch (tools/call)",
   );
 
   // Get-transcript-Antwort einspielen -> result_summary/objective_achieved gefuellt.
-  const transcriptReq = env.posted.find((m) => m.params && m.params.name === "get_transcript");
+  const transcriptReq = env.posted.find((m) => m.params && m.params.name === "get_call_result");
   env.emit({
     jsonrpc: "2.0",
     id: transcriptReq.id,
@@ -347,16 +368,16 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   assert.equal(doc.querySelector("[data-objective-display]").textContent, "Yes");
   assert.equal(doc.row("summary").style.display, "", "Ergebnis-Zeile sichtbar nach completed");
 
-  // Erneutes Terminal-Signal darf get_transcript NICHT erneut ausloesen (Guard).
+  // Erneutes Terminal-Signal darf get_call_result NICHT erneut ausloesen (Guard).
   env.emit({
     jsonrpc: "2.0",
     method: "ui/notifications/tool-result",
     params: { structuredContent: { call_id: "call_1", status: "completed", duration_s: 43, last_transcript_lines: [], failure_reason: null } },
   });
-  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 1, "get_transcript bleibt einmalig");
+  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_call_result").length, 1, "get_call_result bleibt einmalig");
 });
 
-test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert get_transcript nicht dauerhaft - der Poll-Tick nach dem Handshake holt ihn nach", () => {
+test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert get_call_result nicht dauerhaft - der Poll-Tick nach dem Handshake holt ihn nach", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
 
@@ -370,14 +391,14 @@ test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert
       structuredContent: { call_id: "call_1", status: "completed", duration_s: 42, last_transcript_lines: [], failure_reason: null },
     },
   });
-  assert.equal(env.posted.length, 0, "get_transcript-Versuch scheitert am ready-Gate - noch kein Versand");
+  assert.equal(env.posted.length, 0, "get_call_result-Versuch scheitert am ready-Gate - noch kein Versand");
 
   env.uiReady(); // Handshake beantwortet - init() startet ueber whenUiReady(startPolling) sofort einen Poll-Tick
 
   assert.equal(env.posted.length, 1, "erster Versand nach dem Handshake ist der Poll-Tick, nicht der nachgeholte Transcript-Fetch");
   assert.equal(env.posted[0].params.name, "get_call_status");
 
-  // Antwort auf den Poll-Tick: Call ist weiterhin completed -> fetchTranscriptOnce()
+  // Antwort auf den Poll-Tick: Call ist weiterhin completed -> fetchCallResultOnce()
   // laeuft ein zweites Mal, diesmal mit ready=true - der Fetch ist NICHT verloren.
   env.emit({
     jsonrpc: "2.0",
@@ -385,8 +406,8 @@ test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert
     result: { structuredContent: { call_id: "call_1", status: "completed", duration_s: 42, last_transcript_lines: [], failure_reason: null } },
   });
 
-  const transcriptReqs = env.posted.filter((m) => m.params && m.params.name === "get_transcript");
-  assert.equal(transcriptReqs.length, 1, "get_transcript wird nach dem Handshake nachgeholt");
+  const transcriptReqs = env.posted.filter((m) => m.params && m.params.name === "get_call_result");
+  assert.equal(transcriptReqs.length, 1, "get_call_result wird nach dem Handshake nachgeholt");
 });
 
 test("T-W1-call-F1: das ausgelieferte Widget kennt nur noch tools/call - keine Schrotflinte", () => {
@@ -500,7 +521,7 @@ test("T-W1-call-AC7d: Fallback nach 15s ohne jede Antwort - clearInterval, initi
   assert.equal(doc.slot("status").textContent, "dialing", "initialer Status bleibt sichtbar (nie leer)");
 });
 
-test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEIN get_transcript", () => {
+test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEIN get_call_result", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
   doc.slot("call_id").textContent = "call_1";
@@ -523,7 +544,7 @@ test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEI
   assert.equal(doc.querySelector("[data-failure-display]").textContent, "No answer");
   assert.equal(doc.row("failure").style.display, "", "Grund-Zeile sichtbar bei failed");
   assert.equal(doc.row("summary").style.display, "none", "Ergebnis-Zeile bleibt versteckt bei failed");
-  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 0);
+  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_call_result").length, 0);
   assert.equal(doc.cancelButton().disabled, true);
 
   // OUTBOUND-E3a (Befund D-5): ein unbekanntes/neues Token faellt auf das Sammel-Label
@@ -753,6 +774,43 @@ test("T-W1-call-AC-status-pill: Status-Pill-Labels ueber alle 5 Status (EN-Keys;
       params: { structuredContent: { call_id: "call_1", status, duration_s: 1, last_transcript_lines: [], failure_reason: null } } });
     assert.equal(doc.querySelector("[data-status-label]").textContent, expectedLabel, `Status ${status} -> ${expectedLabel}`);
   }
+});
+
+// T2-02/S5: Status-Pill/HUD-Phase muessen NACH einem Sprachwechsel in der neuen
+// Sprache erscheinen - vorher rechnete call.html t() beim Laden (S5-Spec-Beweis).
+// Faehrt das ECHTE I18N_SCRIPT (widget-i18n.js) UND das eigene Inline-Skript in
+// derselben Sandbox (runOwnScript({ withI18n: true })), sendet EINE Host-Nachricht
+// mit BEIDEM: _meta["hermes/locale"]="de" (I18N-Listener schaltet um) UND
+// structuredContent.status="in_progress" (eigener Listener bindet/rendert) - exakt
+// wie am echten Draht (mcp-tools.js withWidgetLocale setzt beide Felder am selben
+// CallToolResult).
+test("T-W1-call-AC-status-pill-locale: tool-result mit hermes/locale=de uebersetzt Status-Pill + HUD-Phase live (T2-02/S5)", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc, { withI18n: true });
+  doc.slot("call_id").textContent = "call_1";
+
+  env.emit({
+    jsonrpc: "2.0",
+    method: "ui/notifications/tool-result",
+    params: {
+      _meta: { [WIDGET_LOCALE_META_KEY]: "de" },
+      structuredContent: { call_id: "call_1", status: "in_progress", duration_s: 1, last_transcript_lines: [], failure_reason: null },
+    },
+  });
+
+  assert.equal(doc.querySelector("[data-status-label]").textContent, "Live", "DE: Live (im Woerterbuch identisch zu EN)");
+  assert.equal(doc.querySelector("[data-hud-phase]").textContent, "Im Gespräch", "DE: HUD-Phase uebersetzt");
+
+  // Gegenprobe: ohne _meta bleibt die Karte englisch (fail-safe Start-Locale).
+  const docEn = makeFakeDocument();
+  const envEn = runOwnScript(docEn, { withI18n: true });
+  docEn.slot("call_id").textContent = "call_1";
+  envEn.emit({
+    jsonrpc: "2.0",
+    method: "ui/notifications/tool-result",
+    params: { structuredContent: { call_id: "call_1", status: "in_progress", duration_s: 1, last_transcript_lines: [], failure_reason: null } },
+  });
+  assert.equal(docEn.querySelector("[data-hud-phase]").textContent, "In call", "ohne _meta bleibt es bei EN");
 });
 
 test("T-W1-call-AC-hud-ring: Status -> HUD-Phasentext (STATUS_VIEW.hudPhase) + Status -> Ring-Erscheinung (STATUS_VIEW.ringPreset: Klasse+dasharray) ueber alle 5 Status", () => {

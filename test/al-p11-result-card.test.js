@@ -290,7 +290,7 @@ test("AL-P11-11: pg-Durchstich - result ueberlebt die Re-Hydrierung UND einen zw
 
 // ---- Block 6: MCP-Whitelist (E2, kein facts/evidence-Leak) ----
 
-test("AL-P11-12: get_transcript structuredContent traegt die fuenf Karten-Felder, NICHT facts/evidence", async () => {
+test("AL-P11-12: get_call_result structuredContent traegt die fuenf Karten-Felder, NICHT facts/evidence", async () => {
   const { registerTools } = await import("../src/mcp-tools.js");
   const RICH_TRANSCRIPT = {
     status: "completed",
@@ -326,7 +326,7 @@ test("AL-P11-12: get_transcript structuredContent traegt die fuenf Karten-Felder
       registerResource() {},
     };
     registerTools(fakeServer, undefined);
-    const { handler } = tools.get("get_transcript");
+    const { handler } = tools.get("get_call_result");
     const result = await handler({ call_id: "call_1" });
 
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [

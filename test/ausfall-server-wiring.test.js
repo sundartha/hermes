@@ -72,7 +72,11 @@ test("OUTBOUND-E4: server.js baut den echten aniOwnershipRecheck ueber providerC
     /import\s*{\s*makeAniOwnershipRecheck\s*}\s*from\s*"\.\/telephony\/ani-ownership-recheck\.js"/,
     "makeAniOwnershipRecheck muss importiert sein",
   );
-  const gatesStart = serverSrc.indexOf("const { gates: outboundGates } = makeOutboundGates({");
+  // T2-08 (T-27): der Destrukturier-Ausdruck traegt seit dieser Etappe zusaetzlich
+  // callQuotaDenial (Quoten-Pruefung im Claim-Lock, EINE Instanz mit outboundGates).
+  const gatesStart = serverSrc.indexOf(
+    "const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({",
+  );
   assert.notEqual(gatesStart, -1, "makeOutboundGates(...)-Aufruf nicht gefunden");
   const gatesEnd = serverSrc.indexOf("});", gatesStart);
   const gatesBlock = serverSrc.slice(gatesStart, gatesEnd);

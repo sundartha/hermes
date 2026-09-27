@@ -98,7 +98,7 @@ import { isDenied } from "../telephony/number-denylist.js";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 // AL-P11: EINE Mutationsquelle fuer das Entfernen der Ergebnis-Karten-Zitate (G5).
 // INBOX-P2: dazu die EINE Aussensicht der Karte (resultCardView) - dieselbe Funktion,
-// die das MCP-Werkzeug get_transcript nutzt. Keine zweite Feldliste (G5/S2).
+// die das MCP-Werkzeug get_call_result nutzt. Keine zweite Feldliste (G5/S2).
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 // F2-Newsletter-Recipients: timing-sicherer Token-Vergleich fuer die beiden oeffentlichen
 // Token-Scans (confirm/unsubscribe) - timing-sicher, kein === (Absolute Regel 3).
@@ -776,7 +776,7 @@ export function markInboxEntry(state, callId, qualifies) {
 // keine Zeit; die offenen Nachrichten kommen als fertige Textliste herein, damit die
 // Projektion testbar bleibt, ohne einen Zustand zu bauen.
 // Die fuenf Karten-Felder werden GESPREADET (nie kopiert): resultCardView ist die EINE
-// Quelle, die auch get_transcript benutzt. Kein transcript, kein facts, kein evidence.
+// Quelle, die auch get_call_result benutzt. Kein transcript, kein facts, kein evidence.
 // summary_unavailable trennt "der Tenant will keine Nachbereitung" (dann entsteht gar
 // kein Eintrag, Praedikat-Bedingung 4) von "die Zusammenfassung ist technisch
 // gescheitert" (Eintrag mit summary null) - E-2, Pre-Mortem R-1.
@@ -1166,7 +1166,7 @@ export function recordActualSender(state, callId, { e164, source }) {
 
 // EL-Anrufstart: das Ergebnis eines Gespraechs, das der ANBIETER gefuehrt hat. Auf diesem
 // Weg gibt es bei uns weder Audio noch Turn-Schleife - Zusammenfassung und Befund kommen
-// fertig von aussen und muessen trotzdem an denselben Feldern landen, die get_transcript
+// fertig von aussen und muessen trotzdem an denselben Feldern landen, die get_call_result
 // ohnehin liest.
 //
 // Anders als die Handles oben ist das bewusst KEIN set-once: es gibt genau einen Schreiber

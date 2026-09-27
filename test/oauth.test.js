@@ -11,11 +11,13 @@ import {
   startIdp,
   mcpPost as post,
   MCP_AUDIENCE as AUDIENCE,
+  externalIp,
 } from "./helpers.js";
 import { hashEmail } from "../src/util.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
+const EXTERNAL_IP = externalIp();
 
 test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
   const idp = await startIdp();
@@ -67,6 +69,32 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
       const token = await idp.sign({ email: "exp@team.test" }, { exp: "-1m" });
       const res = await post(`${srv.localUrl}/mcp`, token);
       assert.equal(res.status, HTTP_UNAUTHORIZED);
+    });
+
+    // T-12: jose prueft exp nur, wenn der Claim vorhanden ist - ein signiertes
+    // Token OHNE exp muss der Resource Server trotzdem ablehnen (requiredClaims).
+    // Kein Loopback-Sonderweg im OAuth-Zweig (anders als bei isTrustedLocalCaller) -
+    // der Beleg ist damit lageunabhaengig; zusaetzlich zur Sicherheit auch ueber die
+    // externe Interface-IP geprueft, wenn eine existiert.
+    await ctx.test("Token ohne exp -> 401 + WWW-Authenticate mit resource_metadata", async () => {
+      const token = await idp.sign({ email: "noexp@team.test" }, { exp: null });
+      const [, payloadB64] = token.split(".");
+      const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
+      assert.equal(payload.exp, undefined, "Test-Setup: Token darf keinen exp-Claim tragen");
+
+      for (const base of [srv.localUrl, EXTERNAL_IP ? srv.externalUrl : null].filter(Boolean)) {
+        const res = await post(`${base}/mcp`, token);
+        assert.equal(res.status, HTTP_UNAUTHORIZED, base);
+        const wa = res.headers.get("www-authenticate") || "";
+        assert.match(wa, /error="invalid_token"/, base);
+        assert.match(
+          wa,
+          /resource_metadata="https:\/\/agent\.test\/\.well-known\/oauth-protected-resource"/,
+          base,
+        );
+        const body = await res.json().catch(() => null);
+        assert.ok(!body || !body.result, `Antwort darf kein jsonrpc-Ergebnis enthalten (${base})`);
+      }
     });
 
     await ctx.test("falsche Audience -> 401", async () => {

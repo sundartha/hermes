@@ -91,6 +91,9 @@ const legal = [
           {legal.map((item) => (
             <a class="site-footer__link" href={item.href}>{item.label}</a>
           ))}
+          <!-- Oeffentliche Support-Seite (Hilfe, Daten, Trennen des Connectors); Beschriftung
+               in DE und EN gleich, darum keine Uebersetzung. -->
+          <a class="site-footer__link" href="/support">Support</a>
           <a class="site-footer__link" href={`mailto:${CONTACT}`}>Kontakt</a>
           <button class="site-footer__link" type="button" data-consent-open>Cookie-Einstellungen</button>
         </span>

@@ -465,12 +465,6 @@
     }
   },
   "src/auth.js": {
-    "id-length": {
-      "count": 4
-    },
-    "no-magic-numbers": {
-      "count": 4
-    },
     "no-param-reassign": {
       "count": 1
     }
@@ -612,11 +606,6 @@
       "count": 1
     }
   },
-  "src/i18n/mcp-texts.js": {
-    "id-length": {
-      "count": 3
-    }
-  },
   "src/i18n/prompts/de.js": {
     "id-length": {
       "count": 2
@@ -673,12 +662,9 @@
   },
   "src/mcp-tools.js": {
     "id-length": {
-      "count": 28
+      "count": 22
     },
     "max-lines-per-function": {
-      "count": 1
-    },
-    "max-params": {
       "count": 1
     },
     "no-magic-numbers": {
@@ -1956,11 +1942,6 @@
       "count": 2
     }
   },
-  "test/config-prod-footguns.test.js": {
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
   "test/config-shape.test.js": {
     "id-length": {
       "count": 6
@@ -2997,65 +2978,6 @@
       "count": 15
     }
   },
-  "test/mcp-tools-i18n.test.js": {
-    "id-length": {
-      "count": 5
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 2
-    },
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
-  "test/mcp-tools-language.test.js": {
-    "complexity": {
-      "count": 1
-    },
-    "id-length": {
-      "count": 17
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 3
-    },
-    "no-param-reassign": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "test/mcp-tools.test.js": {
-    "id-length": {
-      "count": 8
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 6
-    },
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
-  "test/mcp-ui-i18n-divergence.test.js": {
-    "id-length": {
-      "count": 4
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
   "test/mcp-ui-p5-token-sync.test.js": {
     "id-length": {
       "count": 5
@@ -3121,26 +3043,6 @@
   "test/mcp-ui-wing-canvas-sync.test.js": {
     "no-magic-numbers": {
       "count": 2
-    }
-  },
-  "test/mcp-ui.test.js": {
-    "id-length": {
-      "count": 29
-    },
-    "max-params": {
-      "count": 3
-    },
-    "no-magic-numbers": {
-      "count": 2
-    },
-    "no-param-reassign": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 38
-    },
-    "sonarjs/no-commented-code": {
-      "count": 1
     }
   },
   "test/media-token.test.js": {
@@ -3597,11 +3499,6 @@
   },
   "test/pii-mask.test.js": {
     "id-length": {
-      "count": 1
-    }
-  },
-  "test/place-call-context-bridge.test.js": {
-    "max-params": {
       "count": 1
     }
   },

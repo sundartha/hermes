@@ -22,9 +22,8 @@ const FIVE_SECONDS_MS = 5000;
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    tool(name, ...rest) {
-      handlers.set(name, rest[rest.length - 1]);
-    },
+    // Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
+    // server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern.
     registerTool(name, _config, handler) {
       handlers.set(name, handler);
     },
@@ -58,7 +57,14 @@ test("2: DEDUP_WINDOW_MS ist mindestens so gross wie PLACE_CALL_HOP_TIMEOUT_MS",
 // ==================== 3: Abbruch-Zweig, 3 Sprachen ====================
 test("3: ein Zeitablauf auf place_call wird zu call_start_unconfirmed, sprachabhaengig", async () => {
   const prevFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
+  // T2-13 (N-10): der vorgeschaltete Bestaetigungs-Hop (POST /api/call-confirmations)
+  // muss ERFOLGREICH antworten, sonst zeitablaeuft schon ER (mit dem generischen
+  // HOP_TIMEOUT-Text) - der hier eigentlich gepruefte Zeitablauf gehoert zum ECHTEN
+  // Anrufstart (POST /api/calls, PLACE_CALL_HOP_TIMEOUT_MS/CALL_START_UNCONFIRMED).
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/api/call-confirmations")) {
+      return { ok: true, status: 200, json: async () => ({ preview: {}, confirmed: true }) };
+    }
     const err = new Error("timed out");
     err.name = "TimeoutError";
     throw err;

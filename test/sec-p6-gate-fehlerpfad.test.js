@@ -162,7 +162,12 @@ async function postCall({ store, aufrufe, config, audit = () => {} }) {
     wahlversuche += 1;
     return { sid: "sid_secp6" };
   };
-  const outboundGates = makeOutboundGates({
+  // T2-08 (T-27): callQuotaDenial kommt aus DERSELBEN makeOutboundGates()-Instanz wie
+  // outboundGates (EINE Quelle, kein zweiter Zaehler) - der Claim-Lock prueft ihn jetzt
+  // zusaetzlich. kettenStore().countOutboundCallsSince liefert 0, testConfig() setzt
+  // grosszuegige Limits - die reale Pruefung lehnt hier nie ab, byte-identisch zum
+  // Bestandsverhalten dieser Datei.
+  const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
     store,
     config,
     requestTenant: () => TENANT,
@@ -170,7 +175,7 @@ async function postCall({ store, aufrufe, config, audit = () => {} }) {
     OWNER_ID: "owner",
     TENANT_REJECT: "reject",
     audit,
-  }).gates;
+  });
   const app = express();
   app.use(express.json());
   app.use(
@@ -179,6 +184,7 @@ async function postCall({ store, aufrufe, config, audit = () => {} }) {
       config,
       audit,
       outboundGates,
+      callQuotaDenial,
       voiceControl: () => ({ originateCall: async () => zaehleWahl() }),
       originateElevenLabsCall: async () => zaehleWahl(),
       terminateAndBillCall: async () => {},

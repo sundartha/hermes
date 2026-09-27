@@ -12,20 +12,21 @@
 // MCP-14 (R-G: neues Subjekt) - das Katalog-Subjekt ist tot, ein besseres lebt. Der
 // Katalog misst "Gegenseite" in get_call_status - seit P12 geschlossen
 // (pickCallStatus -> texts.roleCounterparty, gepinnt in mcp-tools-language.test.js).
-// Ein gruener Pin darauf waere ein Duplikat. Gemessen sind stattdessen drei ECHTE
+// Ein gruener Pin darauf waere ein Duplikat. Gemessen sind stattdessen zwei ECHTE
 // deutsche Stufe-0-Artefakte in src/mcp-tools.js (alle sprachfrei, kein loc.-Bezug):
-// der Leertext von list_action_items, dessen Termin-Praefix, und der Verbinder
-// " bis " in get_calendar. MCP-14 wird gegen diese gebaut (GERMAN_STAGE0_PROBES unten).
-// Die Katalog-These ("ein Widget-Fix reicht nicht") bleibt woertlich erhalten und wird
-// als zweiter, gruener Test bewiesen: get_calendar traegt ein Widget, sein Text ist
-// trotzdem host-unabhaengig.
+// der Leertext von list_action_items und dessen Termin-Praefix. MCP-14 wird gegen
+// diese gebaut (GERMAN_STAGE0_PROBES unten). (T2-12: der dritte, urspruengliche Beleg -
+// der Verbinder " bis " in get_calendar - ist mit dem Kalender-Werkzeug ersatzlos
+// entfallen, O-25.) Die Katalog-These ("ein Widget-Fix reicht nicht") bleibt woertlich
+// erhalten und wird als zweiter, gruener Test bewiesen: list_calls traegt ein Widget,
+// sein Text ist trotzdem host-unabhaengig.
 //
 // MCP-14 widerspricht einem Bestandspin (test/mcp-tools.test.js S1-5b:
 // assert.equal(toolText(result), "Keine offenen Action Items.") bleibt dort gruen).
 // Muster GAP-37 (W2-B6): der Widerspruch IST der Launch-Befund - der Bestandstest
 // bleibt namens-neutral gruen im Regressionslauf, MCP-14a faehrt ID-getragen rot im
 // Gate-Lauf. Fix-Auflage (Report): nach dem Fix (loc.mcp.emptyActionItems /
-// appointmentPrefix / calendarRangeSeparator) muss der Bestandspin mitgezogen werden.
+// appointmentPrefix) muss der Bestandspin mitgezogen werden.
 //
 // Harness-Muster (kopiert/angepasst aus test/mcp-tools.test.js + test/mcp-ui.test.js -
 // beide Dateien gehoeren NICHT zu diesem Block und werden nicht editiert).
@@ -39,14 +40,13 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // ---- geteilter Mini-Harness (Muster test/mcp-tools.test.js) ----
 
-// server.tool(name, desc, schema, annotations, handler) seit E2 - Restparameter statt
-// eines fuenften benannten Parameters (annotations sitzt an Position 4; max-params haelt).
+const HTTP_OK = 200;
+
+// Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
+// server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern.
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    tool(name, _desc, _schema, ...rest) {
-      handlers.set(name, rest.at(-1));
-    },
     registerTool(name, _config, handler) {
       handlers.set(name, handler);
     },
@@ -57,18 +57,17 @@ function captureTools(ctx) {
 }
 
 async function listen(server) {
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
-  return { url, close: () => new Promise((r) => server.close(r)) };
+  return { url, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
-function sendJson(res, { body = null, status = 200 } = {}) {
-  res.statusCode = status;
-  res.setHeader("content-type", "application/json");
+function sendJson(res, { body = null, status = HTTP_OK } = {}) {
+  res.writeHead(status, { "content-type": "application/json" });
   res.end(body == null ? "" : JSON.stringify(body));
 }
 
-async function startGatewayMock({ body = null, status = 200 } = {}) {
+async function startGatewayMock({ body = null, status = HTTP_OK } = {}) {
   const server = http.createServer((req, res) => sendJson(res, { body, status }));
   return listen(server);
 }
@@ -87,7 +86,7 @@ async function withGateway(body, fn) {
 }
 
 function toolText(result) {
-  return (result?.content || []).map((c) => c.text).join("\n");
+  return (result?.content || []).map((item) => item.text).join("\n");
 }
 
 // ==================== MCP-05 ====================
@@ -103,18 +102,29 @@ function toolText(result) {
 // Test bleibt an der spezifizierten SOLL-Assertion (kein deutscher Fallback-Text fuer den
 // EN-Tenant) - diese Assertion ist nach der Messung GRUEN, nicht rot wie im Katalog
 // vorhergesagt (Polaritaets-Abweichung, siehe Report).
+//
+// T2-09-Nachtrag: seit T2-09 (O-13) reicht wrapHandler err.message NICHT mehr durch - der
+// rohe "fetch failed"-String, der diesen Test bisher zufaellig gruen hielt, ist genau der
+// Interna-Leak, den O-13 abstellt. Der Fallback kommt jetzt aus loc.mcp (Tenant-Sprache).
+// Ohne ctx.language wusste der Harness nie, dass es ein EN-Tenant ist (localeFor() faellt
+// dann auf DEFAULT_LANGUAGE, R7) - der Test hing dadurch an WORLD_DEFAULT_LANGUAGE_ENABLED.
+// Er traegt jetzt die Sprache, die der HTTP-Connector fuer einen EN-Tenant aufloest
+// (routes/mcp.js), und prueft die Katalog-Zusicherung (kein deutscher Text) plus die
+// O-13-Zusicherung (kein "fetch failed") - unabhaengig vom Flag. Der Rueckfall ohne Sprache
+// ist in test/openai-t2-09-neutrale-fehlertexte.test.js (T8) belegt.
 test("MCP-05: wrapHandler-Fallback bei Netzwerkfehler zeigt einem EN-Tenant keinen deutschen Text", async () => {
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = "http://127.0.0.1:1"; // kein lauschender Server -> ECONNREFUSED
   try {
-    const handlers = captureTools({ identity: null, scopedTenant: "tenant-en-us" });
-    const result = await handlers.get("get_my_number")();
+    const handlers = captureTools({ identity: null, scopedTenant: "tenant-en-us", language: "en" });
+    const result = await handlers.get("get_agent_number")();
     assert.ok(result?.isError, "Netzwerkfehler -> isError-Tool-Antwort");
     assert.doesNotMatch(
       toolText(result),
       /nicht erreichbar/,
       "EN-Tenant darf keinen deutschen Fallback-Text sehen",
     );
+    assert.doesNotMatch(toolText(result), /fetch failed/, "kein roher Netzwerkfehler-Text (O-13)");
   } finally {
     if (prev === undefined) delete process.env.GATEWAY_URL;
     else process.env.GATEWAY_URL = prev;
@@ -123,18 +133,20 @@ test("MCP-05: wrapHandler-Fallback bei Netzwerkfehler zeigt einem EN-Tenant kein
 
 // ==================== MCP-14 ====================
 const EN_TENANT = "tenant-en-us";
-const CALENDAR_FIXTURE = {
-  calendar: [{ title: "Dentist", start: "2026-07-01T09:00:00.000Z", end: "2026-07-01T09:30:00.000Z" }],
+// T2-12: get_calendar (und mit ihm sein Verbinder-Artefakt " bis ") ist entfallen -
+// die Probe dafuer entfaellt ersatzlos (O-25). Die verbleibenden zwei Artefakte sind
+// unveraendert sprachfrei-deutsch.
+const CALLS_FIXTURE = {
+  calls: [{ id: "call_1", direction: "inbound", counterparty: "+491234", status: "completed", startedAt: "2026-07-01T09:00:00.000Z" }],
 };
 const APPOINTMENT_ITEM = { actionItems: [{ id: "ai_1", text: "Call back", type: "appointment", done: false }] };
 const NO_ITEMS = { actionItems: [] };
-// Die drei heute noch sprachfrei-deutschen Stufe-0-Artefakte in src/mcp-tools.js.
+// Die zwei heute noch sprachfrei-deutschen Stufe-0-Artefakte in src/mcp-tools.js.
 const GERMAN_STAGE0_PROBES = [
-  { label: "get_calendar-Verbinder", tool: "get_calendar", body: CALENDAR_FIXTURE, german: / bis / },
   { label: "list_action_items-Praefix", tool: "list_action_items", body: APPOINTMENT_ITEM, german: /\(Termin\)/ },
   { label: "list_action_items-Leertext", tool: "list_action_items", body: NO_ITEMS, german: /Keine offenen Action Items/ },
 ];
-const CAPABLE_UI_HOST = { enabled: true }; // ohne chatgpt-mimeType -> mcpNativeRenderer (ui/registry.js)
+const CAPABLE_UI_HOST = { enabled: true }; // Master-Schalter an -> mcpNativeRenderer (ui/registry.js, einziger Renderer seit T2-01)
 
 test("MCP-14 (SOLL, rot) - Stufe-0-Text eines EN-Tenants traegt keine deutschen Artefakte, auch bei faehigem Host", async () => {
   for (const probe of GERMAN_STAGE0_PROBES) {
@@ -149,17 +161,17 @@ test("MCP-14 (SOLL, rot) - Stufe-0-Text eines EN-Tenants traegt keine deutschen 
 });
 
 test("MCP-14 (Mechanismus, gruen) - der Stufe-0-Text ist host-unabhaengig: ein reiner Widget-Fix aendert ihn nicht", async () => {
-  await withGateway(CALENDAR_FIXTURE, async () => {
+  await withGateway(CALLS_FIXTURE, async () => {
     const withoutHost = toolText(
-      await captureTools({ scopedTenant: EN_TENANT, language: "en" }).get("get_calendar")(),
+      await captureTools({ scopedTenant: EN_TENANT, language: "en" }).get("list_calls")(),
     );
     const withWidgetHost = toolText(
-      await captureTools({ scopedTenant: EN_TENANT, language: "en", uiHost: CAPABLE_UI_HOST }).get("get_calendar")(),
+      await captureTools({ scopedTenant: EN_TENANT, language: "en", uiHost: CAPABLE_UI_HOST }).get("list_calls")(),
     );
     assert.equal(
       withoutHost,
       withWidgetHost,
-      "get_calendar traegt ein Widget - sein Text haengt trotzdem nicht am Host",
+      "list_calls traegt ein Widget - sein Text haengt trotzdem nicht am Host",
     );
   });
 });
@@ -172,8 +184,8 @@ const MCP_TENANT_EN = { id: "t_mcp_en", sub: "sub-mcp-en", language: "en", e164:
 // Muster e2e-02-two-tenant-two-language.test.js (twoTenantSeed) + am6-oauth-tenant.test.js
 // (idpSubject-Bindung), hier fuer den MCP-OAuth-Pfad kombiniert.
 function twoLanguageTenantSeed() {
-  const s = makeDefaultState();
-  s.numbers.push({
+  const state = makeDefaultState();
+  state.numbers.push({
     id: "num_owner_mcp16",
     e164: "+4915199999998",
     tenantId: BOOTSTRAP_TENANT_ID,
@@ -181,19 +193,19 @@ function twoLanguageTenantSeed() {
     status: "active",
     providerNumberId: null,
   });
-  for (const t of [MCP_TENANT_DE, MCP_TENANT_EN]) {
-    registerTenant(s, t.id, { idpSubject: t.sub });
-    settingsFor(s, t.id).language = t.language;
-    s.numbers.push({
-      id: `num_${t.id}`,
-      e164: t.e164,
-      tenantId: t.id,
+  for (const tenant of [MCP_TENANT_DE, MCP_TENANT_EN]) {
+    registerTenant(state, tenant.id, { idpSubject: tenant.sub });
+    settingsFor(state, tenant.id).language = tenant.language;
+    state.numbers.push({
+      id: `num_${tenant.id}`,
+      e164: tenant.e164,
+      tenantId: tenant.id,
       provider: "telnyx",
       status: "active",
       providerNumberId: null,
     });
   }
-  return s;
+  return state;
 }
 
 test("MCP-16 (Mechanismus, gruen) - parallele /mcp-Requests zweier Tenants leaken keine Sprache", async () => {

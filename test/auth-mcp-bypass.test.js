@@ -6,10 +6,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
-import { legacyLocalBypassAllowed, mcpAuth } from "../src/auth.js";
+import { legacyLocalBypassAllowed, makeMcpAuth } from "../src/auth.js";
 import { makeConfigOverrides } from "./helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
+// T2-07 (T-28): mcpAuth entsteht seit dieser Phase aus einer Fabrik. Diese Datei prueft
+// die Modus-/Bypass-Verzweigung, kein Drossel-Verhalten - Attrappen, die nie drosseln.
+const ERLAUBT = () => ({ allowed: true, retryAfterS: 0 });
+const mcpAuth = makeMcpAuth({ ablehnungsDrossel: ERLAUBT, ipSperre: ERLAUBT });
 
 const LOCAL = ["127.0.0.1", "::1", "::ffff:127.0.0.1"];
 // reqWith baut das Express-Request-Double (socket.remoteAddress + optionaler Bearer-

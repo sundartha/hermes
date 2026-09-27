@@ -1171,7 +1171,7 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > faellt ueber einen DRITTEN, eigenen Retention-Durchgang (`purgeExpiredResultEvidence`, im
 > selben Sweep wie `purgeExpiredDiagnosticTranscripts`), NICHT ueber `RETENTION_DAYS`.
 >
-> **MCP-Whitelist (E2):** `get_transcript` gibt nur die fuenf handlungsrelevanten Felder nach
+> **MCP-Whitelist (E2):** `get_call_result` gibt nur die fuenf handlungsrelevanten Felder nach
 > aussen (`outcome`, `commitments`, `counterparty_commitments`, `open_points`, `next_step`).
 > `evidence` (woertliche Aeusserungen eines Dritten, der nie eingewilligt hat) und `facts`
 > (reine Eingabe fuer das kuenftige serverseitige Beziehungsgedaechtnis, AL-P12) haben KEINEN
@@ -1206,7 +1206,7 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > traegt eine Guardrail-Zeile "Information, keine Anweisung". `evidence` (woertliche Zitate
 > Dritter) und die uebrigen Kartenfelder gehen NICHT in den Prompt.
 >
-> Kein MCP-Transportweg: `facts` bleibt ausserhalb der `get_transcript`-Whitelist (AL-P11 E2).
+> Kein MCP-Transportweg: `facts` bleibt ausserhalb der `get_call_result`-Whitelist (AL-P11 E2).
 
 ## AL-P13 — Consult-Kanal am Call (2026-07-29)
 
@@ -2052,9 +2052,11 @@ einzeln beurteilt. Ergebnis: **kein Konsument stirbt lautlos.**
 - `POST /mcp` laeuft live unter `MCP_AUTH=oauth` (2026-08-02 gemessen: der 401 auf
   `https://app.sundartha.com/mcp` stammt ausschliesslich aus `verifyOauth`) — `req.auth`
   ist gesetzt, der geaenderte Zweig wird nicht betreten. **Restrisiko, nicht Code:** ein
-  Ruecksprung auf `MCP_AUTH="" `/`token` (render.yaml-Blueprint traegt noch `value: ""`)
-  wuerde den Connector nach dieser Phase stumm schalten (kein `req.auth`, externer
-  Request -> `TENANT_REJECT`). Keine Boot-Sonde dafuer vorhanden.
+  Ruecksprung auf `MCP_AUTH=""`/`token` (render.yaml traegt seit OpenAI-P6 `sync: false`
+  statt eines Blueprint-`value: ""` — ein Sync kann den Wert nicht mehr ueberschreiben,
+  der Dashboard-Wert bleibt die einzige Quelle) wuerde den Connector nach dieser Phase
+  stumm schalten (kein `req.auth`, externer Request -> `TENANT_REJECT`). Keine
+  Boot-Sonde dafuer vorhanden (s. OpenAI-P6 unten, O-7).
 - Legacy-Route `GET /api/billing/checkout-return`: ein *vor* dem Deploy geoeffneter
   Stripe-Checkout endet nach dieser Phase in 403 statt Karten-Bindung. Kein Live-Regress
   (die aktive Karten-Erfassung laeuft ueber `/api/self-service/billing/*`), aber genau
@@ -2547,7 +2549,8 @@ MCP-Bearer-Token eine RFC-9728-Challenge (`WWW-Authenticate: Bearer resource_met
 "…"`) — die Discovery-Naht des Claude-Connectors, in `test/oauth.test.js` gepinnt. Wer
 die Regel woertlich befolgt, loescht die Bearer-Challenge und macht den OAuth-Connector
 still kaputt. Korrigierte Abnahme: `WWW-Authenticate` kommt in `src/` **ausschliesslich**
-in `src/auth.js` vor (zwei Zeilen: Kommentar + Challenge); `basic realm` und
+in `src/auth.js` vor (seit OpenAI-P6 im einzigen 401-Sender `sendBearer401` gesetzt, der
+oauth-, token- und Legacy-Zweig teilen sich diese eine Stelle); `basic realm` und
 `makeAuthGate`/`installAuthGate`/`wiring/auth-gate` sind **leer**. `test/auth-p7-gate-
 removed.test.js` (AUTH-P7-8) haelt beides als Positiv-/Negativ-Assertion fest.
 
@@ -4953,6 +4956,1890 @@ lautlos um, deshalb bleibt es bewacht.
 zurueck (und die Ausnahme in der Vorlage faellt im selben Zug weg). E9 hat den Zustand
 nur SICHTBAR gemacht - im Rechtstext (`privacy.de.json`, Abschnitte "Daten aus Anrufen"
 und "Speicherdauer", beide mit dem gemessenen Wert) und hier. Kein Wert wurde geaendert.
+
+## OpenAI-P6 — Bearer-Challenge auf allen 401-Pfaden von /mcp (2026-09-21)
+
+IDs T-13/T-5 aus der OpenAI-Einreichung (`tasks/openai-audit/00-openai-anforderungen.md`).
+Ausgangsmessung: der 401 fiel auf jedem der drei `mcpAuth`-Zweige (oauth/token/Legacy),
+die `WWW-Authenticate`-Challenge (RFC 6750) aber nur im oauth-Zweig (`deny401`) — token
+und Legacy antworteten mit einem nackten 401 ohne Header.
+
+**Vorher/nachher je Zweig** (Statuscode und Response-Body unveraendert, nur der Header ist
+neu):
+
+| Zweig | Status vorher | Status nachher | Challenge vorher | Challenge nachher |
+|---|---|---|---|---|
+| oauth (`verifyOauth`/`deny401`) | 401 | 401 (byte-identisch) | `Bearer resource_metadata="…", error="…", error_description="…"` | unveraendert |
+| token (`MCP_AUTH=token`) | 401 | 401 | keine | `Bearer error="invalid_token"` |
+| Legacy (`MCP_AUTH=""`) | 401 | 401 | keine | `Bearer error="invalid_token"` |
+
+**Warum token/Legacy ohne `resource_metadata`:** diese Zweige sprechen kein OAuth 2.1 —
+ein Verweis auf die Protected-Resource-Metadata schickte den Client in eine Discovery,
+deren Token dieser Zweig nie annimmt (und bei leerem `OAUTH_ISSUER_URL` liefert das
+Dokument `authorization_servers: []`). RFC 6750 §3 erlaubt die Bearer-Challenge ohne
+diesen Parameter. Einziger 401-Sender im Modul: `sendBearer401(res, challenge, body)`;
+`deny401` (oauth) delegiert unveraendert dorthin, token/Legacy nutzen die Konstante
+`STATIC_BEARER_CHALLENGE = 'Bearer error="invalid_token"'`.
+
+**Fail-closed-Waechter am Diff** (Beleg, dass kein Bedingungs-, Reihenfolge- oder
+`next()`-Zweig beruehrt wurde — nur WIE ein ohnehin fallender 401 gebaut wird, nie OB er
+faellt):
+
+```
+git diff master...phase/openai-p6-auth-challenge -U0 -- src/auth.js \
+  | grep -E '^[-+][^-+].*(next\(|if \(|safeEqual|legacyLocalBypassAllowed|mcpAuth ===|isLocalSocket|jwtVerify)'
+```
+
+liefert einen Treffer: `discoverJwksUri` (Zeile 36) benennt lokale Variablen um
+(`r`->`response`, `p`->`path`) — eine reine Id-Length-Umbenennung ohne Logikaenderung,
+kein Bedingungs-/Reihenfolge-/`next()`-Zweig, s. Commit-Diff. Sonst keine Treffer. Der
+Grep-Befund ist NICHT vollstaendig: `catch (e)` -> `catch (err)` wurde ebenfalls
+umbenannt, zweimal — in `discoverJwksUri` UND in `verifyOauth`, also im LIVE-OAuth-Pfad
+(dort faengt der `catch`-Zweig die JWT-Pruefung ab und ruft `deny401` — unveraendertes
+Verhalten, nur der Bezeichner ist neu). Der Grep-Filter oben matcht `catch (` nicht, das
+ist eine Luecke im Filter, kein Widerspruch zum Befund. Am Diff mechanisch geprueft: alle
+drei Umbenennungen (`r`->`response`, `p`->`path`, `e`->`err`) sind lokale
+Parameter-/Variablen-Renames ohne jede Aenderung an Bedingungen, Kontrollfluss oder
+Rueckgabewerten — der Diff zeigt fuer jede Fundstelle nur den Bezeichner, nie die
+umgebende Logik.
+Draht-Tests: `test/openai-p6-challenge.test.js` (P6-T1..T5, Praefix
+absichtlich "P6-" statt eines Katalog-Praefixes, sonst landete die Datei still in
+`test:gates` statt in `npm test`). Rot-gegen-alt auf `master` bestaetigt: ohne den Fix
+sind T1/T2a/T2b/T3/T4 rot (Header `null`), T2c/T5 (Positiv-Kontrollen) bleiben gruen.
+`test/security.test.js` ("/mcp fail-closed ohne MCP_AUTH_TOKEN" > "extern -> 401") traegt
+zusaetzlich den einzigen Beleg fuer den Legacy-Zweig ueber einen echten
+Nicht-Loopback-Socket (skippt maschinenabhaengig). `test/oauth.test.js` und
+`test/auth-mcp-bypass.test.js` bleiben unveraendert (Diff leer).
+
+**Risiko-Eintrag U-1 / O-7 (offen, bewusst nicht geschlossen).** In Produktion verweigert
+kein Boot-Guard `MCP_AUTH=""`/`token` (`src/config.js` `productionFootguns` sperrt nur
+`off`). Ein Rueckfall des Dashboard-Werts auf `""`/`token` schaltet still auf statisches
+Bearer (kein OAuth 2.1) — korrigiert (am Draht gemessen, war hier falsch beschrieben):
+der Claude-/ChatGPT-Connector schickt weiter sein OAuth-JWT, das scheitert im
+`""`/`token`-Zweig am `safeEqual`-Vergleich mit dem statischen Token
+(`req.headers.authorization` != `Bearer <MCP_AUTH_TOKEN>`) und bekommt **401** —
+`sendBearer401`/`STATIC_BEARER_CHALLENGE`, nie `TENANT_REJECT`. `req.auth` wird in diesem
+Zweig nirgends gesetzt (das passiert nur in `verifyOauth`), der Request endet also schon
+in der `mcpAuth`-Middleware, lange vor der Tenant-Aufloesung. Ein 403 `TENANT_REJECT`
+entstuende nur in einem anderen Fall: legt jemand von AUSSEN das KORREKTE statische Token
+vor, kommt er durch `mcpAuth` durch (`next()` ohne `req.auth`), und
+`routes/_tenant.js` faellt mangels `req.auth`/`internal` auf `operatorChannelTenant`
+zurueck — ausserhalb der Produktion `isTrustedLocalCaller`, in Produktion
+`TENANT_REJECT` -> 403. Der Connector selbst legt das statische Token aber nie vor (er
+kennt nur sein OAuth-JWT), sieht also 401, nicht 403. P6 hat bewusst KEINE neue
+`PRODUCTION_FOOTGUNS`-Zeile fuer diesen Fall gebaut
+(Lead-Entscheidung P6-2): eine solche Sperre ist maximal live-wirksam — verweigert der
+Boot, faellt ALLES aus, auch eingehende Anrufe — und die Repo-Konfiguration ist
+nachweislich NICHT die Produktionskonfiguration (`render.yaml` sagt `CONSULT_ENABLED=
+false`, der Live-Connector zeigt aber den Consult-Text; Werte sind Dashboard-gepflegt und
+aus dem Repo nicht lesbar). Der Rueckfall war schon auf `master` am 401 unterscheidbar
+(kein `WWW-Authenticate`-Header, anderer Body, gegenueber der oauth-Challenge mit
+Header+`resource_metadata`) — P6 macht ihn NICHT erst erkennbar (Korrektur gegenueber der
+fruehreren Fassung dieses Eintrags, die "wenigstens am 401 erkennbar" seit P6 behauptete).
+P6s tatsaechlicher Beitrag hier: der `""`/`token`-Zweig traegt jetzt ebenfalls eine
+Bearer-Challenge (ohne `resource_metadata`) statt eines nackten 401 — Haertung von T-5,
+nicht Neuschaffung von Erkennbarkeit. Schliessung bleibt Owner-Entscheidung O-7.
+
+**Ergaenzung T2-03:** seit T2-03 gibt es zusaetzlich ein WARN-Signal beim Boot
+(`productionAuthHints`, `src/config.js`): laeuft Produktion mit `MCP_AUTH` != `oauth` (und
+!= `off`, das ist bereits fatal), erscheint eine feste Hinweiszeile im Boot-Log
+("[Sicherheit] MCP_AUTH ist nicht 'oauth' ..."). Das ist KEINE Sperre (Autonome
+Entscheidung P6: eine Boot-Verweigerung wuerde bei jedem Nicht-OAuth-Deploy auch
+eingehende Anrufe stilllegen) — der Rueckfall auf `""`/`token` bleibt technisch weiter
+moeglich und der Connector bekommt weiterhin nur 401 statt eines funktionierenden
+OAuth-Flows. Dieser Eintrag bleibt OFFEN; die Schliessung (Boot-Sperre oder anderer
+Mechanismus) bleibt Owner-Entscheidung O-7.
+
+**T-13-Stand (Klarstellung).** T-13 (401 + `WWW-Authenticate` auf die
+Protected-Resource-Metadata) war im oauth-Modus schon auf `master` byte-identisch erfuellt
+(Tabelle oben: oauth-Zeile "unveraendert"). P6 aendert den T-13-Stand fuer die Einreichung
+NICHT — sein Beitrag ist ausschliesslich die Challenge im token-/Legacy-Zweig
+(T-5-Haertung, s.o.).
+
+**Zwei aeltere Befunde, NICHT von P6, beim Messen aufgefallen (offen, nicht behoben):**
+- Der oauth-Zweig (`verifyOauth`) akzeptiert ein gueltiges JWT auch OHNE
+  `"Bearer "`-Praefix: `token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "")`
+  laesst den Header-Wert unveraendert, wenn er nicht mit `Bearer ` beginnt — ein roher JWT
+  im `Authorization`-Header wird also ebenso verifiziert wie einer mit Praefix.
+- `MCP_AUTH` wird nicht getrimmt (`src/config.js`: `(process.env.MCP_AUTH || "").toLowerCase()`,
+  kein `.trim()`). `" oauth"` (mit fuehrendem Leerzeichen) wird STILL zu Legacy, weil der
+  String dann nicht mehr `=== "oauth"` ist. Kein Fail-open (das statische Token wird im
+  Legacy-/token-Zweig weiter verlangt), aber eine stille Herabstufung von OAuth 2.1 auf
+  statisches Bearer durch einen Tippfehler im Render-Dashboard — mit
+  `MCP_AUTH_TOKEN generateValue: true` liefe Produktion dann unbemerkt auf statischem
+  Bearer statt OAuth. Als offener Punkt vermerkt, nicht behoben.
+
+`render.yaml`: `MCP_AUTH` von `value: ""` auf `sync: false` umgestellt (T-5-Restposten,
+s.o. korrigierter Verweis in AUTH-P7) — ein Blueprint-Sync kann den Live-Wert (`oauth`)
+nicht mehr stillschweigend auf `""` zurueckziehen. `value: oauth` war keine Alternative:
+`REQUIRED_CONFIG` verlangt bei `MCP_AUTH=oauth` in jedem Modus ein `OAUTH_ISSUER_URL`
+(das als `sync: false` ohne Wert dasteht) und haette jeden `prodEnv()`-Testspawn den Boot
+verweigern lassen.
+
+**Nicht Teil dieser Phase:** die Provider-Signaturpruefung (`/voice`, Telnyx Ed25519) —
+eigenes Gate, unberuehrt. Der Offenlegungssatz — unberuehrt. T-14
+(`_meta["mcp/www_authenticate"]`) — bewusst nicht erfuellt, Ersatz durch den Transport-Pfad
+UNKNOWN; Stand und Begruendung s. Abschnitt OpenAI-P7, Punkt 2 (P0 D0-6 hielt ihn zum
+Zeitpunkt dieser Phase noch fuer gegenstandslos; P7 hat das revidiert).
+
+## OpenAI-P7 — Auth II: Scope-Achse und Fehlerkanal, dokumentiert (2026-09-21)
+
+IDs T-9, T-11, T-12, T-14, T-16 aus der OpenAI-Einreichung. **Reine Dokumentationsphase —
+kein Produktionscode geaendert** (`git diff master...phase/openai-p7-auth-belege -- src/`
+ist leer). Vollstaendiger Beleg mit Codezeilen, Primaerquellen-Zitaten
+(developers.openai.com/plugins/build/auth), Live-Messprotokoll und Owner-Fragen:
+`docs/OPENAI-AUTH-ABWEICHUNGEN.md`. Hier nur die fuenf Punkte, die diese Datei betreffen.
+
+**1. T-12 Scope-Achse — bewusste, dokumentierte Abweichung.** `verifyOauth()`
+(`src/auth.js:91-113`) prueft Signatur/JWKS, `iss`, `aud`; `exp`/`nbf` nur, wenn der Claim
+vorhanden ist (Punkt 5) — und **keinen** `scope`-/`scp`-Claim (0 Codestellen,
+`grep -rn "scope\|scp" src/auth.js`). Ersatz: die Audience-Pruefung (Erwartung und
+PRM-`resource` aus derselben Funktion `audience()`, `src/auth.js:23/:100/:144`; boot-fatal
+nur bei `OAUTH_AUDIENCE` != `publicUrl`+`/mcp`, `src/boot-guard.js:937-950`) plus die
+Tenant-Bindung ueber `sub` (`src/routes/mcp.js:60-65`, E4-17). Grund: WorkOS AuthKit
+bewirbt nur Identitaets-Scopes (`email`, `offline_access`, `openid`, `profile`, live
+gemessen 2026-09-21), keinen ressourcenspezifischen Scope. **Ob ein echtes WorkOS-Token
+ueberhaupt einen `scope`-/`scp`-Claim traegt, ist UNKNOWN** (ungemessen, Owner-Messung O-3).
+Es gibt damit keinen belegten Wert, den eine Pruefung verlangen koennte: eine fail-closed
+Pruefung auf einen ungemessenen Wert riskierte, den live laufenden Claude-Connector
+auszusperren; eine fail-open Pruefung waere Theater. **Gepinnt** durch
+`test/openai-p7-token-pruefachsen.test.js` (`OpenAI-P7-T4`): ein beliebiger `scope`-Wert
+fuehrt heute zu 200. Wird spaeter eine Scope-Pruefung gebaut (Vorbedingung: WorkOS stellt
+einen Scope aus und ein echtes Token traegt ihn, s. Owner-Frage (e) im Dokument), MUSS dieser
+Test rot werden — geschieht das nicht, hat die neue Pruefung keine Wirkung — und muss dann
+zusammen mit `src/mcp-security-schemes.js:21-27` (`scopes: []`) und dem Dokument geaendert
+werden.
+
+**Stand zum Zeitpunkt dieses Eintrags (2026-09-21); UEBERHOLT durch Phase T2-23** (Abschnitt
+"OpenAI-T2-23" weiter unten): `S` ist jetzt beworben (PRM/Challenge/`securitySchemes`, Commit
+A) UND geprueft (Commit B) — `OpenAI-P7-T4` ist entsprechend umgeschrieben (403 statt 200) und
+pinnt jetzt das Gegenteil des hier beschriebenen Standes.
+
+**2. T-14 — bewusst nicht erfuellt; Ersatz durch den Transport-Pfad UNKNOWN.** Die
+Primaerquelle verlangt fuer die Auth-UI im Gespraech BEIDE Haelften: `securitySchemes` +
+Resource-Metadata **und** Tool-Fehlerergebnisse mit `_meta["mcp/www_authenticate"]` ("Without
+both halves ChatGPT will not show the linking UI for that tool"). Die zweite Haelfte fehlt
+(`grep -rn www_authenticate src/`: 0 Treffer). Die Token-Pruefung scheitert vor jedem
+Tool-Aufruf als HTTP 401 mit Challenge (`mcpAuth`, `src/routes/mcp.js:113`). **Ob ChatGPT auf
+diesen Transport-401 mitten im Gespraech mit einer Neu-Verknuepfung reagiert, ist UNKNOWN** —
+die Primaerquelle ist dort zweideutig ("rely on the WWW-Authenticate challenge to prompt
+ChatGPT to re-authorize"); Messweg Owner-Messung O-6 im Dokument. Zwei Ablehnungen erreichen
+den Client nach der Token-Pruefung ohne `_meta`: (a) `rejectIfNoTenant`
+(`src/routes/mcp.js:60-65`) — 403 ohne Challenge, per Kontowechsel loesbar (B-1, Punkt 4);
+(b) REST-Hop-403 (`internalOnly`, `requireTenant`-REJECT, Consult-Freigabe, Outbound-Gates
+inkl. KYC/Permit, Denylist, `OUTBOUND_FROZEN`) als `isError`-Tool-Ergebnis — dort durch
+Re-Auth nicht loesbar, ein `_meta`-Feld waere falsch. **Bedingung:** der Transport-401 traegt
+`resource_metadata` nur, solange Produktion `MCP_AUTH=oauth` faehrt — im token-/Legacy-Zweig
+traegt er seit P6 eine Challenge OHNE `resource_metadata` (`STATIC_BEARER_CHALLENGE`,
+`src/auth.js:89`). Live gemessen 2026-09-21T10:06:03Z: Produktion laeuft im oauth-Zweig
+(`www-authenticate: Bearer resource_metadata="https://app.sundartha.com/..."`).
+
+**3. T-9/T-11/T-16 — Anbieterabhaengigkeiten, offen.** `resource_indicators_supported`
+(T-9-Nebenbefund), `authorization_response_iss_parameter_supported` (T-11) und
+`claims_supported` (T-16-Nebenbefund) stehen ausschliesslich in provider-gehosteten
+Well-known-Dokumenten (WorkOS AuthKit) und fehlen dort alle drei. Hermes erzeugt genau EIN
+eigenes **OAuth-Metadaten**-Dokument (die Protected-Resource-Metadata,
+`src/auth.js:141-150`), keine AS-Metadata; das zweite eigene Well-known-Dokument,
+`/.well-known/openai-apps-challenge` (`src/app.js:77/173`), ist die Domain-Ownership-Probe und
+kein OAuth-Dokument. Ob WorkOS `resource` nach `aud` kopiert (T-9), `iss` in
+Authorization-Responses setzt (T-11) und `email` sowie `email_verified: true` im UserInfo
+liefert (T-16), ist erst mit einem echten Token messbar (Owner-Messung O-3,
+`docs/OPENAI-AUTH-ABWEICHUNGEN.md` Abschnitt 5). Fuenf konkrete WorkOS-Fragen stehen dort
+(Abschnitt 4).
+
+**4. Befund B-1 (nicht behoben, nur vermerkt).** `rejectIfNoTenant`
+(`src/routes/mcp.js:60-65`) antwortet einem gueltigen Token ohne Tenant mit 403 OHNE
+`WWW-Authenticate` (RFC 6750 §3.1 saehe fuer 403 `error="insufficient_scope"` vor). Der
+OpenAI-Wortlaut (T-13) verlangt die Challenge nur fuer 401 — kein Einreichungskriterium fuer
+T-13. Der Fall ist aber per Kontowechsel loesbar und damit genau der, fuer den ein
+Re-Auth-Ausloeser nach T-14 sinnvoll waere (Audit-Fall PP-D6-15). Wirkung bei ChatGPT UNKNOWN.
+Befund fuer P10/Owner.
+
+**5. UMGESETZT in T2-03 — `exp` wird verlangt, Deploy-Vorbedingung OW-B.** `jwtVerify` in
+`src/auth.js:98-106` setzte frueher kein `requiredClaims`. `jose` (6.2.3) prueft `exp`/`nbf` nur,
+wenn der Claim vorhanden ist (`node_modules/jose/dist/webapi/lib/jwt_claims_set.js:142/:150`).
+Ein vom Anbieter signiertes Token **ohne `exp` wurde frueher unbefristet angenommen**. Seit
+T2-03 setzt `src/auth.js` `requiredClaims: ['exp']` (eigener, chirurgisch revertierbarer
+Commit): ein Token ohne `exp` wird jetzt mit 401 abgewiesen (Test + Rot-vor-Gruen-Nachweis in
+`test/oauth.test.js`, Subtest "Token ohne exp"). **Deploy-Vorbedingung OW-B**: vor dem Deploy
+ein echtes WorkOS-Access-Token dekodieren und `exp` als vorhanden/numerisch/in der Zukunft
+pruefen — fehlt er, wird dieser Commit vor dem Deploy zurueckgenommen. `nbf` bleibt weiterhin
+nur bei Vorhandensein geprueft (nicht Teil von T2-03). Der Scope-Pruefungs-Anteil von T-12 war
+zum Zeitpunkt dieses Eintrags offen — seit Phase T2-23 (Commit B, s. Abschnitt "OpenAI-T2-23"
+weiter unten) ist er code-seitig gebaut; Owner-Bestaetigung OW-B steht vor dem Deploy noch aus.
+
+**Kein Launch-Blocker wird durch P7 geschlossen** — alle fuenf Punkte bleiben offen und
+sind Owner-/Anbieter-Entscheidungen, keine Code-Aenderungen dieser Phase.
+
+## OpenAI-P8 — Widget-UI: ChatGPT-Adapter auf Paritaet (2026-09-21, Endstand nach Runde 2) — ABGELOEST DURCH T2-01
+
+**Abgeloest durch OpenAI-T2-01 (2026-09-22, s.u.):** der ENDSTAND dieses Abschnitts (T-30/
+T-31 nicht gebaut, ChatGPT-Adapter bleibt toter Code) gilt NICHT mehr. T2-01 baut T-30/
+T-31 am Resource-Inhalt und entfernt den ChatGPT-/Skybridge-Adapter ersatzlos. Dieser
+Abschnitt bleibt als Historie stehen (er begruendet, WARUM T2-01 den Standard-Schluessel
+statt des Legacy-Alias waehlt).
+
+**Ergebnis der Messung (`tasks/openai-p8-spec.md` §0.3):** der ChatGPT-Adapter
+(`src/ui/adapters/chatgpt.js`, "skybridge") ist auf dem Draht praktisch TOT — fuer Claude
+wie fuer OpenAI. Der Server liest die Skybridge-Capability bei jedem Request neu (`src/
+routes/mcp.js`); nur kommt sie dort nie an, weil der stateless MCP-Transport
+(`sessionIdGenerator: undefined`) die im `initialize`-POST deklarierte Capability nicht
+zum spaeteren `tools/list`- oder `resources/read`-POST mitfuehrt und kein
+standardkonformer Client (Claude, ChatGPT) Capabilities ausserhalb des `initialize`
+sendet — beide Requests sehen deshalb in der Praxis immer den mcp-nativen Renderer (Test
+`P8-A`/`P8-B`, `test/openai-p8-widget-ui.test.js`, gegen den echten HTTP- und
+stdio-Draht). OpenAIs eigene, am 2026-09-21 gelesene Doku
+(developers.openai.com/apps-sdk/*) beschreibt zudem den MCP-Apps-Standard
+(`text/html;profile=mcp-app`), nicht mehr `text/html+skybridge`.
+
+**ENDSTAND: T-30/T-31 (und die daran haengenden X-7/T-23-Resource-Teile) werden NICHT
+gebaut.** Ein Zwischenstand (Commits `4adee50`/`4190448`) setzte zwei OpenAI-Alias-
+Schluessel (`openai/widgetCSP`/`openai/widgetDomain`) am RESOURCE-INHALT des mcp-nativen
+Renderers — **zurueckgenommen** (Pruefer-Befund Runde 2, 2026-09-21). Zwei Gruende, beide
+fuer sich hinreichend:
+
+1. **Der Legacy-Alias erfuellt T-30/T-31 nicht einmal, wenn er ankommt.**
+   `tasks/openai-audit/00-openai-anforderungen.md` verlangt fuer T-30 (Zeile 63) und T-31
+   (Zeile 64) woertlich den STANDARD-Schluessel `_meta.ui.csp`/`_meta.ui.domain`. X-7
+   (Zeile 138) begruendet den Legacy-Alias `openai/widgetCSP`/`openai/widgetDomain`
+   AUSSCHLIESSLICH mit `redirect_domains` fuer `window.openai.openExternal(...)` — das
+   Widget-HTML hat 0 externe URLs und keine `openExternal`-Ziele (T-P3-AC5/AC7), also kein
+   `redirect_domains`. OpenAIs eigene Referenz (`apps-sdk/reference`, gelesen 2026-09-21)
+   nennt den Alias selbst "Legacy ... Standard CSP fields are superseded by `_meta.ui.csp`"
+   bzw. "compatibility alias for `_meta.ui.domain`" — ohne `redirect_domains` bleibt kein
+   eigenstaendiger Grund fuer den Alias, den der Standard-Schluessel nicht auch abdeckt.
+2. **Der einzige lebende Pfad ist `mcpNativeRenderer` — fuer JEDEN Client, auch heutige
+   Claude-Nutzer.** Weil der ChatGPT-Adapter tot ist (M-1 oben), bedient `mcpNativeRenderer`
+   `resources/read` fuer ALLE Clients (`registry.js`). Regel 1 der Phase verlangt fuer eine
+   Aenderung an diesem Pfad zwei Belege: Notwendigkeit UND einen Verhaltensbeleg, dass ein
+   MCP-Apps-Client (Claude eingeschlossen) das zusaetzliche Feld unveraendert schluckt. Der
+   Verhaltensbeleg fehlt fuer BEIDE Varianten (Legacy-Alias wie Standard-Schluessel) — nur
+   schema-seitig ist belegt, dass das SDK ein zusaetzliches `_meta`-Feld nicht als
+   Protokollfehler verwirft (`ResourceContentsSchema`, offenes `z.record`), nicht, dass ein
+   realer Host es beim Rendern ignoriert. Den (laut Punkt 1) nicht einmal anforderungs-
+   erfuellenden Legacy-Alias trotzdem auszuliefern, haette dieses ungeklaerte Live-Risiko
+   fuer Claude getragen, ohne T-30/T-31 zu erfuellen — die schlechteste der drei Optionen
+   (nichts senden / Legacy senden / Standard senden).
+
+Der Code ist damit wieder exakt auf dem Stand von master `f769841` — nicht nur `tools/list`
+und `resources/list`, sondern jetzt wieder auch `resources/read` (Diff-Gegenprobe:
+`git diff f769841 -- src/ui/` zeigt ausschliesslich Kommentar-Zeilen, keine
+Verhaltensaenderung). Entfernt wurden `openAiResourceMeta()`,
+`OPENAI_WIDGET_CSP_KEY`/`OPENAI_WIDGET_DOMAIN_KEY` und der `buildResourceMeta`-Parameter
+von `makeUiRenderer()` (sonst toter Code, CLAUDE.md).
+
+**Was bewusst NICHT gesetzt wird — und warum das der P0-Gate-Lage entspricht:**
+`tasks/openai-p0-entscheidungen.md` fuehrt den ChatGPT-Adapter-Teil von P8
+(T-30/T-31/T-23/X-7/X-3) als eigene Zeile in seiner Gate-Tabelle: **"ungestartet"**, gegatet
+an OW-4/D0-8 (Owner-Live-Probe in einem echten OpenAI-Developer-Mode-Connector). Der
+Zwischenstand argumentierte, M-1 mache OW-4 fuer P8 gegenstandslos, weil der ChatGPT-
+Adapter unabhaengig von D0-8 tot ist — das stimmt fuer die Frage "welcher Renderer wird
+gewaehlt", aber nicht fuer die tiefere Absicht des Gates: bevor ein reales Verhalten
+(Claude ODER OpenAI) am Draht gemessen ist, wird am gemeinsamen Live-Pfad nichts
+ausgeliefert, das dieses Verhalten beeinflussen koennte. Diese Phase haelt sich jetzt an
+die tiefere Absicht: nichts geht an `resources/read`, bis O-P8-2 (Claude) UND O-P8-3/OW-4
+(OpenAI) beantwortet sind.
+- **ChatGPT-Adapter-Aenderungen.** Toter Code (s.o.); jede Aenderung dort waere wirkungslos
+  fuer OpenAI (M-1 gilt unabhaengig davon, WAS der Client deklariert) und deshalb kein
+  gangbarer Weg, T-30/T-31 "schlafend" zu bauen. Entfernen ist ebenfalls kein Teil von P8:
+  Rueckbau ist ein Owner-Auftrag (`registry.js`) und reisst Regressionstests mit
+  (T-P3-AC2..AC7) → **O-P8-1**.
+
+**Byte-Beweis (Regel 1 der Phase — nichts aendert sich fuer heutige Claude-Nutzer):**
+`tools/list`, `resources/list` UND `resources/read` sind nach dieser Phase byte-identisch
+zu master `f769841`, fuer JEDEN Client (Claude wie OpenAI/ChatGPT), auf BEIDEN Transporten
+(HTTP + stdio). Zwei unabhaengige Belege:
+1. Diff-Gegenprobe: `git diff f769841 -- src/ui/adapters/mcp-native.js src/ui/contract.js
+   src/ui/adapters/chatgpt.js src/ui/registry.js` zeigt ausschliesslich Kommentarzeilen.
+2. **Test `P8-I`/`P8-J`** (Pruefer-Befund Runde 2, "wichtig" — P8-F pinnte vorher nur die
+   Schluesselmenge von Tool-`_meta` und `resources/list`, nicht Werte/Bytes, und deckte
+   `resources/read` gar nicht ab): sha256 der vollen, kanonisierten (Schluessel sortiert)
+   JSON-Serialisierung von `tools/list` + `resources/list` + jedem `resources/read` (alle 5
+   Widgets), einmal ueber HTTP, einmal ueber stdio. Beide Hashes sind gegen master `f769841`
+   UND gegen diesen Branch (nach Ruecknahme) identisch gemessen (eigene Gegenprobe: zweiter,
+   per `git worktree` ausgecheckter Baum auf `f769841`, gleiches Capture-Verfahren,
+   `node_modules` symlink-geteilt) — `baf9f1c9…4d36bf` (HTTP), `cb8d492a…3ee215a` (stdio).
+   Weicht der Hash kuenftig ab, loggt der Test das volle kanonisierte Objekt als Diff-
+   Grundlage, nicht nur "rot".
+
+**CSP-Leerbefund erneut geprueft (Schritt 7):** je Widget-HTML (`call`, `my-number`,
+`calls`, `calendar`, `agent-status`) 0 externe URLs und kein `fetch`/`XMLHttpRequest`/
+`WebSocket`/`EventSource`/`sendBeacon`/`importScripts`/`@font-face`/`<iframe>` — die leeren
+CSP-Listen (`UI_CSP`, Tool-Deskriptor-Haelfte) bleiben zutreffend, auch wenn sie fuer
+keinen MCP-Apps-Host wirksam sind (s. `src/ui/contract.js`).
+
+**Offene Owner-Punkte:**
+- **O-P8-1:** ChatGPT-Adapter (toter Code) zurueckbauen — ja/nein.
+- **O-P8-2:** Live-Probe mit einem echten Claude-Host: schluckt er ein zusaetzliches
+  `_meta`-Feld am Resource-Inhalt (Standard-Schluessel `_meta.ui.csp`/`_meta.ui.domain`)
+  unveraendert, oder aendert/verweigert er das Rendern? Ohne diesen Beleg bleibt
+  `resources/read` unveraendert (s.o.).
+- **O-P8-3 (= OW-4):** Live-Probe in einem echten OpenAI Developer-Mode-Connector
+  (`tasks/openai-p0-entscheidungen.md` O-5/OW-4): welchen mimeType deklariert OpenAIs
+  Client tatsaechlich (D0-8), rendert die Karte ueberhaupt, und wenn ja, ueber welchen
+  Pfad? Erst danach ist entscheidbar, OB und WO T-30/T-31 fuer OpenAI etwas bewirken
+  wuerden.
+
+## OpenAI-T2-01 — Widget: csp/Origin am Resource-Inhalt, Skybridge-Adapter raus (2026-09-22)
+
+**Loest den P8-ENDSTAND ab (s.o.):** T-30/T-31 sitzen jetzt am RESOURCE-INHALT
+(`resources/read`, `uiResourceMeta()` in `src/ui/contract.js`), fuer HTTP UND stdio, EIN
+anfrageunabhaengiger Inhalt fuer Claude UND ChatGPT:
+```
+contents[0]._meta = {
+  ui: { csp: { connectDomains: [], resourceDomains: [] } },
+  "openai/widgetDomain": <Origin aus PUBLIC_URL, normalisierterOrigin(), s. src/middleware.js>,
+}
+```
+Urspruenglich bewusst KEIN `_meta.ui.domain`: claude.com/docs/connectors/building/
+mcp-apps/troubleshooting verlangt dort GENAU den SHA-256-Hash der eigenen Connector-URL
+(`{hash}.claudemcpcontent.com`) — jeder andere Wert laesst Claude das Widget mit "Invalid
+ui.domain format" verweigern; ohne das Feld rendert Claude mit seinem Standard-Origin.
+`openai/widgetDomain` ist der offizielle ChatGPT-Alias fuer denselben Origin und bricht
+Claude nicht. T-31 war damit nur ueber den Alias erfuellt, nicht ueber den woertlichen
+`ui.domain`-Schluessel. **Nachbau (s. Abschnitt "OpenAI-T2-01 Nachbau" unten):**
+developers.openai.com/plugins/reference nennt `_meta.ui.domain` selbst als PFLICHTFELD
+("required when submitting a plugin with UI") — ein echter Zielkonflikt zwischen den
+beiden Primaerquellen, seit 2026-09-22 aufgeloest per Client-Erkennung (ChatGPT-Egress-
+IP): NUR wenn die Anfrage nachweislich von ChatGPT kommt, wird `ui.domain` zusaetzlich
+zum Alias gesetzt. Jeder andere Host (inkl. stdio) bleibt exakt beim hier beschriebenen
+Zustand.
+
+**Der Skybridge-/ChatGPT-Adapter ist ersatzlos entfernt** (`src/ui/adapters/chatgpt.js`
+geloescht, `CHATGPT_UI_MIME`/`CHATGPT_META_KEY`/`capabilityDeclaresChatgptUi` aus
+`src/ui/contract.js` raus, `src/ui/registry.js` waehlt nur noch `mcpNativeRenderer`,
+`src/routes/mcp.js` liest keine `params.capabilities` mehr). Begruendung: der Adapter war
+bereits seit P8 auf dem Draht praktisch tot (stateless Transport fuehrt keine
+initialize-Capabilities zum tools/list-/resources/read-POST mit); ihn zu entfernen macht
+den EINEN lebenden Pfad (`mcpNativeRenderer`) auch der EINZIGE im Code, statt eines toten
+Zweigs, den niemand mehr pflegt.
+
+**Draht-Beleg:** `test/openai-t2-01-widget-resource-meta.test.js` (T1-T8) — HTTP OAuth
+UND Token/Legacy, stdio, mit UND ohne PUBLIC_URL, ein rekursiver `ui.domain`-Waechter
+(0 Treffer, Positiv-Kontrolle inklusive), Byte-Gleichheit trotz Skybridge-Capabilities im
+Request, Quelltext-Waechter (kein `chatgpt.js`/Skybridge-Rest unter `src/`), und ein
+Widget-Scan, der belegt, dass alle 5 Widgets in JEDER Sprache von nirgendwo laden.
+`test/openai-p8-widget-ui.test.js` (P8-A..P8-J) ist auf den neuen Stand umgebaut (P8-H
+entfaellt, der Adapter existiert nicht mehr).
+
+**Rechercheergebnis, das die Spec nicht vorwegnahm (T2 in der neuen Testdatei):** der
+statische Bearer-Modus (`MCP_AUTH=token`) setzt NIE `req.auth` — nur der OAuth-Zweig tut
+das (`src/auth.js`). Ohne `req.auth` loest `requestTenant` ueber `operatorChannelTenant`
+auf, und das greift AUSSCHLIESSLICH fuer `isTrustedLocalCaller` (echter Loopback-Socket,
+`src/routes/_tenant.js:100-101`) — unabhaengig vom Bearer. Ein korrekter Token ueber die
+Interface-IP authentifiziert damit den DRAHT, liefert aber NIE eine Tenant-Identitaet ->
+403, bevor `registerTools` je laeuft. Das ist bestehende, fail-closed Architektur (Token =
+Single-Operator-Loopback, keine Multi-Tenant-Identitaet ohne OAuth) und keine Luecke
+dieser Phase — dokumentiert statt stillschweigend angenommen (T2b in der neuen Testdatei
+ist der Negativ-Beleg dafuer).
+
+**Rueckfall ohne Code:** `MCP_UI_ENABLED=false` im Dashboard (Master-Schalter, Stufe-0-
+Text bleibt, `place_call` funktioniert weiter).
+
+**Offene Owner-Punkte:**
+- **OW-D:** Claude (Web + Desktop), fruehestens nach Deploy — Widget rendert, kein
+  `ui.domain`-/CSP-Fehler.
+- **OW-C:** ChatGPT Developer Mode, fruehestens 1h nach Deploy (Cache) — Widget rendert,
+  Iframe-Origin ist eine vom Origin abgeleitete `oaiusercontent.com`-Subdomain.
+- **OW-E:** OpenAI-Dashboard-Scan-Entwurf (nicht einreichen) gegen `https://<origin>/mcp`
+  — keine Warnung zu `_meta.ui.domain`/CSP. Warnung -> Rueckfall "eigener ChatGPT-Pfad"
+  ist eine eigene, spaetere Phase.
+- **OW-G:** Render-Werte PUBLIC_URL = Einreichungs-Origin, MCP_UI_ENABLED an.
+
+## OpenAI-T2-01 Nachbau — ui.domain per ChatGPT-Egress-Erkennung (2026-09-22)
+
+**Befund, der den T2-01-ENDSTAND korrigiert:** developers.openai.com/plugins/reference
+nennt `_meta.ui.domain` selbst als "Resource contents"-Pflichtfeld ("Dedicated origin for
+hosted components (required when submitting a plugin with UI; must be unique per
+plugin)"); `openai/widgetDomain` ist dort nur der "OpenAI-specific compatibility alias".
+Claude validiert `ui.domain` dagegen gegen die Connector-URL und zeigt statt des Widgets
+einen Fehler, wenn ein falscher Wert steht ("Invalid ui.domain format"/"ui.domain
+mismatch", claude.com/docs/connectors/building/mcp-apps/troubleshooting); fehlt das Feld,
+nimmt Claude seinen Standard-Origin. Echter Zielkonflikt zwischen den beiden
+Primaerquellen — T2-01 hatte ihn zugunsten von Claude aufgeloest (kein `ui.domain`,
+T-31 nur ueber den Alias).
+
+**Owner-Entscheidung: `ui.domain` NUR setzen, wenn die Anfrage nachweislich von ChatGPT
+kommt** — erkannt an OpenAIs veroeffentlichten Egress-IP-Bereichen. OpenAI dokumentiert
+das selbst als Client-Erkennung ("You can also allowlist ChatGPT's published egress IP
+ranges", developers.openai.com/plugins/build/auth#client-identification; Liste
+https://openai.com/chatgpt-connectors.json). Der Alias `openai/widgetDomain` bleibt
+UNBEDINGT und fuer JEDEN Host gesetzt. stdio setzt `ui.domain` NIE (kein Client-IP-Begriff
+dort). Standardfall (keine ChatGPT-IP, Erkennung faellt aus) = der T2-01-ENDSTAND von
+oben, byte-identisch.
+
+**Umsetzung:**
+- `src/ui/chatgpt-egress.js` (neu): `node:net` `BlockList`, gespeist aus der
+  eingecheckten `src/ui/chatgpt-egress-ranges.json` (Herkunft/Abrufdatum in deren
+  Feldern `_source`/`_fetchedAt`/`_upstreamCreationTime`, Aktualisierungsweg im
+  Datei-Kommentar). Kein Laufzeit-Fetch. `isChatGptEgressIp(ip)` ist fail-closed: jede
+  ungueltige/fehlende Eingabe -> `false` (= "kein `ui.domain`", NIE ein Sicherheits-Gate
+  im Sinne der absoluten Regeln — es steuert nur ein Zusatzfeld am Resource-Inhalt).
+- `src/routes/mcp.js`: klassifiziert PRO REQUEST via `req.ip` (hinter `trust proxy 1`,
+  `src/app.js`, ungeaendert) NUR wenn `MCP_UI_ENABLED` an ist; loggt ausschliesslich die
+  Klasse (`chatgpt`/`andere`) fuer die Owner-Messung — NIEMALS `req.ip` selbst.
+- `src/mcp-tools.js` (`registerTools`): reicht die Klasse als `chatgptEgress` durch
+  (stdio, `src/mcp-server.js`, ruft ohne dieses Feld auf -> immer `false`).
+- `src/ui/contract.js` (`uiResourceMeta(chatgptEgress)`, `makeUiRenderer().
+  registerResource(server, widgetId, { language, chatgptEgress })`): `ui.domain` nur bei
+  `chatgptEgress === true` UND vorhandenem Origin, sonst wie zuvor nur der Alias.
+
+**Betriebswissen: Aktualisierung der Egress-Liste.** `src/ui/chatgpt-egress-ranges.json`
+ist eine einmalige Kopie ohne Laufzeit-Fetch (Safety-Review-Befund, Nachbau). Kein
+dedizierter Alarm ausser einer Testschwelle: `test/chatgpt-egress.test.js` faellt rot,
+sobald `_fetchedAt` mehr als 180 Tage zurueckliegt (`EGRESS_LISTE_MAX_ALTER_TAGE`) - das
+faengt NUR das Vergessen, nicht die inhaltliche Drift (OpenAI kann Bereiche jederzeit
+frueher aendern; ein zu alter Eintrag klassifiziert eine echte ChatGPT-Anfrage dann
+still als "andere" und die Resource verliert nur `ui.domain`, kein Auth-/Kosten-/
+Gate-Effekt). Rhythmus: bei jeder folgenden OpenAI-Einreichungs-Phase neu von `_source`
+abrufen, spaetestens wenn der Test rot wird; Verantwortlich ist, wer die naechste
+OpenAI-Phase vorbereitet (keine dedizierte Rolle noetig, Team = Owner). Vorgehen steht im
+`_note`-Feld der Datei.
+
+**Draht-Beleg (echte HTTP-Route, kein `registerResource()`-Unit-Test — der SDK-Client
+verwirft unbekannte `_meta`-Felder sonst still):** `test/openai-t2-01-widget-resource-
+meta.test.js` T9 (X-Forwarded-For aus der gelisteten Liste -> `ui.domain` = PUBLIC_URL-
+Origin, Alias bleibt) und T10 (reale, nicht gelistete IP, Beispiel 160.79.104.10 —
+Claude-Adressraum -> kein `ui.domain`, Alias bleibt); T5 (Waechter) bleibt fuer den
+Standardfall gruen und ist im Kommentar auf den Bereich "keine ChatGPT-IP" praezisiert.
+`test/chatgpt-egress.test.js` deckt das Modul isoliert ab (zwei echte Treffer,
+Subnetz-Grenzfall an einem realen `/23`-Eintrag, IPv4-gemapptes IPv6, Nicht-Treffer,
+Muell/fail-closed).
+
+**Offene Owner-Punkte (zusaetzlich zu OW-C/D/E/G oben):**
+- Ob ChatGPTs `resources/read` und der Portal-Scan tatsaechlich aus den gelisteten
+  IP-Bereichen kommen und `req.ip` hinter Render die echte Client-IP traegt (Klasse im
+  Log pruefen).
+- Ob der Portal-Scan `ui.domain` jetzt als akzeptiert zeigt (vorher: Pflichtfeld fehlte).
+- Ob ChatGPT das Widget mit `ui.domain` = PUBLIC_URL-Origin tatsaechlich rendert.
+
+## OpenAI-P10b — HTTP-Oberflaeche des Hauptservers (2026-09-21)
+
+Scope: nur der Hauptserver (`src/`, app.sundartha.com). `apps/web`/sundartha.com ist
+Labor-Pflicht (`docs/RUNBOOK-LAB-LIVE.md`) und in dieser Phase ausdruecklich
+ausgeschlossen.
+
+1. **Befund: `configHash` war per Preimage rueckrechenbar.** Methode: SHA-256-Preimage -
+   alle moeglichen Kombinationen der sieben Achsen von `configFingerprint`
+   (`src/config-fingerprint.js:34-45`) wurden vollstaendig aufgezaehlt (**9216
+   Kandidaten**) und gegen den live beobachteten Hash geprueft; genau EINE Kombination
+   reproduzierte ihn, ein zweites Preimage ist rechnerisch ausgeschlossen. Damit standen
+   live alle sieben Achsen im Klartext fest: das Land-Gate (erlaubte Laendervorwahlen),
+   das Stundenlimit fuer Anrufe, der Monats-Budget-Schalter, die Mandantentrennung
+   (Multi-Tenant-Flag), die Zahlungswaehrung und beide Kostendecken (Plattform- und
+   Tenant-Default-Decke). Die tatsaechlichen PRODUKTIONSWERTE dieser Achsen stehen
+   bewusst NICHT hier (SECRETS-Regel, CLAUDE.md) - sie liegen ausschliesslich in einer
+   lokalen, bewusst nicht eingecheckten Arbeitsdatei des Owners; dieser Abschnitt ist die
+   getrackte Referenz fuer Code-Kommentare und Code-Verweise, nicht die Datei. Der Hash
+   war fuer diese niedrig-entropischen Achsen KEIN Einweg-Schutz - er gab sie effektiv im
+   Klartext preis. Damit war die tragende Praemisse des vorherigen "akzeptierten Risikos"
+   (Plan P10 I-1: "der Hash ist nicht rueckrechenbar") widerlegt.
+   **Massnahme:** `configHash` verlaesst `/healthz` (`src/app.js`). Ersatz: authentifiziert
+   `GET /api/admin/deploy-info` (`src/routes/api-deploy-info.js`, hinter webAuthMw+
+   adminMw ueber `operatorRoutes`, fail-closed - ohne Admin-Sitzungs-Infra gar nicht
+   gemountet) und das unveraenderte Boot-Log (`[boot] configHash=...`, `src/boot.js`).
+2. **Akzeptiertes Risiko: `commit` bleibt oeffentlich auf `/healthz`.** Grund:
+   `scripts/probe-auth.sh` (Ziel-Pin W7) MUSS den deployten Commit unauthentifiziert
+   lesen koennen - sonst laeuft die naechste Live-Auth-Probe blind gegen einen
+   beliebigen Deploy. Beide GitHub-Repos sind privat gemessen (`gh repo view
+   jonas986/vodafone-agent`, `Antonio20045/vodafone-agent`, `visibility: PRIVATE`,
+   2026-09-21) - ein SHA ohne Repo-Zugriff verraet keinen Code. **Neubewertungs-
+   Bedingung:** faellt die Privatheit eines der beiden Repos, ist dieser Eintrag neu zu
+   bewerten (kein Commit-SHA mehr unauthentifiziert ausliefern).
+3. **`/.well-known/security.txt` (RFC 9116) gebaut.** Kontakt `kontakt@sundartha.com` -
+   die im Impressum veroeffentlichte Rollenadresse (`apps/web/src/data/legal/
+   imprint.de.json:18`), NICHT die persoenliche Owner-Adresse. **Erneuerungspflicht:**
+   `SECURITY_TXT_EXPIRES` (`src/app.js`) steht fest auf `2027-09-01T00:00:00.000Z` - vor
+   diesem Datum muss der Wert erneuert werden, sonst gilt die Datei als abgelaufen (RFC
+   9116 Abschnitt 2.5.5). Ein Drift-Test (`test/openai-p10b-healthz.test.js`) haelt den
+   Kontaktwert gegen das Impressum synchron. **UNKNOWN:** ob das Postfach
+   `kontakt@sundartha.com` Sicherheitsmeldungen tatsaechlich bearbeitet (Owner-Punkt).
+4. **HSTS `preload` bleibt AUS.** Unveraenderte, bewusste Owner-Entscheidung
+   (`src/middleware.js:29-41`): die Preload-Zusage ist praktisch unwiderruflich.
+5. **Beobachtet, nicht geaendert: `x-powered-by: Express`.** Live gemessen
+   (`curl -sD - https://app.sundartha.com/healthz`), aber nicht Teil dieses Auftrags -
+   offener Folgepunkt fuer eine kuenftige Phase (Express-Header abschalten oder
+   ueberschreiben).
+6. **Render-Health-Check unveraendert.** Live `healthCheckPath: "/healthz"` (Render-API,
+   `srv-d8m0fhflk1mc73bno570`, deckt sich mit `render.yaml:30`) - durch diese Phase nicht
+   beruehrt, Render wertet ausschliesslich den Statuscode aus (weiterhin 200, nur der
+   Body wurde um ein Feld kuerzer).
+
+## OpenAI-T2-23 — Auth: Scope-Angabe (T-16) und Scope-Pruefung (T-12) des Resource Servers (2026-09-22)
+
+IDs T-16 (Resource-Server-Anteil) und T-12 (Scope-Anteil; der `exp`-Anteil ist bereits mit
+T2-03 erledigt, s. o.). Zwei getrennte, je fuer sich revertierbare Commits.
+
+**Commit A (T-16) — eine Scope-Menge `S`, an drei Stellen beworben.** `OAUTH_SCOPES =
+["openid", "email", "offline_access"]` (`src/auth.js`, einzige Stelle mit diesen Literalen)
+wird gelesen von: der Protected-Resource-Metadata (`scopes_supported: S`, NUR wenn ein
+Authorization-Server konfiguriert ist — ohne AS bleibt das Feld ganz weg, `registerWellKnown`),
+der oauth-401-Bearer-Challenge (`scope="openid email offline_access"`, `deny401`) und
+`TOOL_SECURITY_SCHEMES` (`src/mcp-security-schemes.js`, importiert statt eines eigenen
+Literals). Token- und Legacy-Zweig bleiben byte-gleich ohne `scope=`
+(`STATIC_BEARER_CHALLENGE`). `offline_access` ist Teil von `S`, obwohl T-16 nur `openid`+
+`email` verlangt: ein spec-treuer Client fragt nach dieser Aenderung NUR noch die
+Challenge-/PRM-Menge an - ohne `offline_access` bekaeme er nie ein Refresh-Token. Alle drei
+Werte bewirbt WorkOS AuthKit selbst (`docs/OPENAI-AUTH-ABWEICHUNGEN.md` Abschnitt 3) - kein
+erfundener Scope.
+
+**Commit B (T-12) — Scope-PRUEFUNG am Token.** `verifyOauth()` (`src/auth.js`) liest nach
+erfolgreicher Signatur-/Claim-Pruefung (Reihenfolge bewusst: ein manipuliertes Token kommt nie
+bis zur Scope-Pruefung) `scope` (leerzeichengetrennter String) oder `scp` (Array oder String)
+aus dem Token und verlangt jedes Element von `S`. Fehlt eines, antwortet der Server 403 mit
+`WWW-Authenticate: Bearer error="insufficient_scope", scope="openid email offline_access",
+resource_metadata="...", error_description="..."` — bewusst ANDERE Parameterreihenfolge als
+`deny401` (dort `resource_metadata` zuerst): eine andere RFC-6750-Fehlerklasse, keine Variante
+derselben Challenge. Audit traegt nur `grund=insufficient_scope`, kein Token- oder
+Claim-Inhalt; es laeuft in keinem 403-Fall ein Werkzeug (kein `jsonrpc`-`result` im Body).
+
+Vorher pinnte `test/openai-p7-token-pruefachsen.test.js` (`OpenAI-P7-T3`/`-T4`) die
+dokumentierte Luecke: ein Token ganz ohne bzw. mit beliebigem `scope`-Claim bekam 200. Mit
+Commit B MUSSTEN diese Tests rot werden — sie sind jetzt bewusst umgeschrieben: T3 (Positiv-
+Kontrolle) belegt ein Token MIT vollstaendiger Scope-Menge -> 200, T4 belegt ein Token, dem ein
+ERZWUNGENER Scope fehlt -> 403. `test/openai-t2-23-scopes.test.js` (`OpenAI-T2-23-A1`..`A5`,
+`B1`..`B4`) deckt beide Commits vollstaendig ab: PRM mit/ohne AS, 401-Challenge, byte-gleicher
+Token-/Legacy-Zweig, `securitySchemes` auf jedem Werkzeug (echter `tools/list`-Draht), sowie
+`scope`-String voll/unvollstaendig und `scp`-Array voll/fehlend.
+
+**Nachtrag (2026-09-22, Safety-Review, selbe Phase): beworbene und erzwungene Menge getrennt.**
+Der Safety-Review fand einen Fehler in Commit B: `hasRequiredScopes()` verlangte urspruenglich
+JEDES Element von `OAUTH_SCOPES` — also auch `offline_access` — direkt am Access-Token.
+`offline_access` ist aber ein **Grant-Scope**: er steuert nur, ob der Auth-Server ueberhaupt
+ein Refresh-Token AUSSTELLT, und steht bei einem spec-treuen IdP typischerweise NICHT im
+Access-Token selbst. Waere das unveraendert geblieben, haette jeder Deploy JEDEN MCP-Aufruf mit
+einem gueltigen, spec-konformen Access-Token mit 403 abgelehnt — unabhaengig vom Ausgang von
+OW-B.
+
+Fix: `src/auth.js` fuehrt `ENFORCED_OAUTH_SCOPES` ein, aus `OAUTH_SCOPES` abgeleitet und um die
+neue benannte Konstante `GRANT_ONLY_SCOPES = ["offline_access"]` bereinigt
+(`OAUTH_SCOPES.filter((scope) => !GRANT_ONLY_SCOPES.includes(scope))`); `hasRequiredScopes()`
+prueft jetzt gegen `ENFORCED_OAUTH_SCOPES`, nicht mehr gegen die volle beworbene Menge. Keine
+neue Env-Variable — die erzwungene Menge folgt automatisch jeder kuenftigen Aenderung der
+beworbenen. Die BEWORBENE Menge (PRM `scopes_supported`, `scope=` in beiden Bearer-Challenges,
+`securitySchemes`) ist davon unberuehrt und traegt weiterhin alle drei Werte inkl.
+`offline_access` — das bleibt fuer T-16 und einen spec-treuen Client wichtig (er faehrt sonst
+gar nicht erst mit `offline_access` im Consent-Request vor).
+
+Tests nachgezogen: `OpenAI-T2-23-B3` wurde von "unvollstaendiger Scope -> 403" zu "erzwungene
+Scopes ohne `offline_access` -> 200" (die eigentliche Regression, die dieser Nachtrag behebt);
+neu `OpenAI-T2-23-B3b` deckt den echten Negativfall (ein Element der ERZWUNGENEN Menge fehlt ->
+403) ab; `OpenAI-P7-T4` wurde ebenso von "offline_access fehlt" auf "email (Teil der erzwungenen
+Menge) fehlt" umgestellt. `OpenAI-T2-23-B4` (kein `scope`/`scp` -> 403) bleibt unveraendert:
+`ENFORCED_OAUTH_SCOPES` ist nicht leer, die Pruefung bleibt fail-closed.
+
+**Deploy-Vorbedingung OW-B, Risiko gesunken:** OW-B (Login mit `S` durchfuehren, Access-Token
+dekodieren) bleibt als Beleg-Schritt stehen, aber ihr Ausfall-Szenario ist jetzt harmlos statt
+fatal. Vorher: fehlte `offline_access` im Access-Token, war JEDE Connector-Verbindung ab Deploy
+tot (403 statt 200). Jetzt: `offline_access` wird gar nicht mehr erzwungen — selbst wenn es im
+Access-Token fehlt (der erwartbare Fall), bleibt der Zugriff erlaubt, solange `openid` und
+`email` vorhanden sind. OW-B prueft damit nur noch, ob die tatsaechlich erzwungenen Scopes
+(`openid`, `email`) ankommen — nicht mehr, ob ein Grant-Scope faelschlich im Access-Token
+landen muesste.
+
+**test/helpers.js — Default-Scope fuer signierte Test-Token.** `startIdp().sign()` signiert
+seit Commit B per Default die volle `OAUTH_SCOPES`-Menge (`DEFAULT_TEST_SCOPE`), sonst haetten
+alle Bestandsaufrufer (58 Aufrufstellen in 15 Testdateien), die bisher keinen `scope`-Claim
+setzen, nach Einfuehrung der Pruefung ploetzlich 403 statt 200 bekommen. Ein Aufrufer, der
+gezielt eine andere oder fehlende Scope-Menge braucht, setzt `scope`/`scp` explizit in
+`claims` — das ueberschreibt den Default vollstaendig; `scope: null` erzwingt ausdruecklich
+"kein Scope-Claim". Keine neue Env-Variable (weder produktions- noch testseitig).
+
+**Deploy-Vorbedingung OW-B (fuer Commit A UND B, s. `docs/OPENAI-AUTH-ABWEICHUNGEN.md`
+Abschnitt T-12):** vor dem Deploy mit dem GEBAUTEN Stand ein Login mit genau `S` durchfuehren
+und das dekodierte Access-Token pruefen: (1) Login mit `S` gelingt, ein Refresh-Token wird
+ausgegeben (Commit A); (2) `scope` oder `scp` traegt alle drei Werte (zusaetzlich fuer Commit
+B). Fehlt nur (2), wird NUR Commit B vor dem Deploy zurueckgenommen (chirurgisch revertierbar,
+eigener Commit) und der Scope-Teil von T-12 bleibt als dokumentierte Abweichung stehen; fehlt
+bereits (1), wird auch Commit A zurueckgenommen. Ohne diesen Beleg legt ein Deploy jede
+bestehende Connector-Verbindung (Claude, ChatGPT) gleichzeitig lahm, weil der AS dann
+Access-Tokens ohne die geforderten Scopes ausstellt und Commit B jedes davon mit 403 abweist.
+
+Kommentar in `src/mcp-security-schemes.js` ("Die Scope-Liste bleibt leer ... D0-7") ist mit
+Commit A ersetzt: D0-7 ("kein Scope konsumiert/beworben") ist durch T-16 ueberholt — `S` ist
+die vom Auth-Server beworbene Identitaets-Scope-Menge, kein fachlicher Hermes-Berechtigungs-
+Scope; die fachliche Zugriffsgrenze bleibt unveraendert Audience + Mandantenbindung
+(`rejectIfNoTenant`, `src/routes/mcp.js`). `docs/OPENAI-AUTH-ABWEICHUNGEN.md` (Abschnitte 2
+und 2b, ID T-12/T-16) ist auf den neuen Stand nachgezogen; eine abschliessende Sprach-/
+Konsistenzpruefung der Abschnitte 6/7/8 (bzw. 2c.4/2c.6) vor der Einreichung steht noch aus.
+
+**Nachtrag (2026-09-22, unabhaengiger Pruefer, Folgephase T2-23-auth-scopes):
+securitySchemes bildete bis hierhin JEDEN Modus als oauth2 ab — Regression dieser
+Phase.** Commit A (oben) machte `TOOL_SECURITY_SCHEMES` von `OAUTH_SCOPES` abhaengig, aber
+`applyToolSecuritySchemes()` haengte diesen EINEN Wert unbedingt an jedes Werkzeug, unabhaengig
+vom tatsaechlich aktiven `mcpAuth`-Modus. Ergebnis: im Token-/Legacy-Modus (`MCP_AUTH=token`
+oder `""`, statischer Bearer-Token ODER lokaler Dev-Bypass — KEIN OAuth-Flow) meldete
+`tools/list` trotzdem `[{"type":"oauth2","scopes":["openid","email","offline_access"]}]` — eine
+ueberzeichnete Angabe: der Server behauptete einen OAuth2-Schutz, den dieser Modus nicht hat.
+Vor Commit A war das harmlos (`scopes: []`), seit Commit A ist es eine falsche Tatsachenbehauptung
+gegenueber jedem MCP-Client, der `securitySchemes` liest (das ist ihr einziger Zweck, s. Spec-Zitat
+`src/mcp-security-schemes.js`).
+
+Fix: `src/mcp-security-schemes.js` bildet jetzt drei Faelle ab, nach dem tatsaechlich aktiven
+`config.auth.mcpAuth` (injizierbar als `mcpAuthMode`-Parameter, Muster
+`legacyLocalBypassAllowed`/"productionFootguns" in `src/auth.js`, fuer Unit-Tests ohne
+Serverneustart):
+- `oauth`: unveraendert `TOOL_SECURITY_SCHEMES` (volle beworbene Menge `S`, wie Commit A).
+- `off`: NEU `NOAUTH_TOOL_SECURITY_SCHEMES = [{"type":"noauth"}]` — der einzige Modus, in dem
+  `mcpAuth` (`src/auth.js:226`) JEDEN Request unbedingt durchlaesst, also der einzige Fall, in
+  dem der zweite von der OpenAI-Apps-SDK-Spec definierte Typ (`developers.openai.com/apps-sdk/
+  build/auth`, Abschnitt "Security Schemes": genau zwei Typen, `noauth` und `oauth2`) ehrlich
+  ist.
+- `token` / Legacy (statischer Bearer-Token ODER lokaler Dev-Bypass): weder `noauth` (ein
+  Request ohne das richtige Credential wird abgelehnt) noch `oauth2` (kein Autorisierungsserver,
+  kein Scope-Flow) ist wahr, und die Spec kennt keinen dritten Typ. Die Angabe bleibt deshalb
+  GANZ WEG (kein `securitySchemes`-Feld) — dasselbe Muster, das der stdio-Pfad bereits seit der
+  T-15-Korrektur nutzt (`src/mcp-server.js` ruft `applyToolSecuritySchemes()` dort bewusst nicht
+  auf).
+
+Tests: `test/openai-p3-security-schemes.test.js` "Schritt 5" laeuft jetzt EXPLIZIT im
+oauth-Modus (echter IdP, echtes Token) statt im impliziten Legacy-Default; neu "Schritt 5b"
+(Legacy), "5c" (`MCP_AUTH=token`) und "5d" (`MCP_AUTH=off`) belegen je ihren Fall ueber die
+echte `/mcp`-Route. `test/openai-p8-widget-ui.test.js` P8-I (HTTP-Byte-Hash, Legacy-Default) ist
+nachgezogen: der HTTP-Hash ist jetzt byte-identisch zum stdio-Hash (beide Pfade tragen im
+gepruesften Setup kein `securitySchemes` mehr) — das ist die direkte Folge des Fixes, keine
+zufaellige Kollision. `test/openai-t2-23-scopes.test.js` (`OpenAI-T2-23-A5`, oauth-Modus)
+unveraendert gruen. Kein Safety-Gate/Offenlegungssatz beruehrt: die fachliche Zugriffsgrenze
+bleibt Audience + Mandantenbindung (`rejectIfNoTenant`), `mcpAuth` selbst ist unangetastet.
+
+## OpenAI-T2-04 — PUBLIC_URL ist in Produktion Boot-Pflicht (2026-09-22)
+
+**Scope: genau T-32.** OpenAI: "To change the origin, create a new plugin, then complete its
+scan, submission, review, and publication flow" — der Origin (scheme/hostname/port) des
+MCP-Servers ist nach der Publikation unveraenderlich. Ist-Stand vor diesem Eintrag:
+`publicUrl` (`src/config.js`) fiel still auf `RENDER_EXTERNAL_URL` zurueck, wenn `PUBLIC_URL`
+fehlt — und `RENDER_EXTERNAL_URL` ist zugleich der Produktionsdiskriminator
+(`detectProduction()`), der Rueckfall kann also nur in Produktion auftreten. Ein Betreiber, der
+`PUBLIC_URL` im Hosting vergisst, friert damit lautlos den falschen Origin (den
+`*.onrender.com`-Hosting-Host statt des Marken-Hosts der Einreichung) ein.
+
+**Entscheidung: Footgun statt `boot-guard.js`.** Gebaut wird ein neues, rein abgeleitetes
+config-Blatt `server.publicUrlExplicit` (`Boolean((process.env.PUBLIC_URL || "").trim())`) plus
+ein Eintrag in `PRODUCTION_FOOTGUNS` (`src/config.js`), der auf `!cfg.server.publicUrlExplicit`
+prueft — NICHT auf `publicUrl` selbst, weil `publicUrl` den Rueckfall bereits aufgeloest hat und
+die Herkunft des Wertes dort nicht mehr sichtbar ist. `src/boot-guard.js` bleibt unberuehrt: der
+bestehende Kommentar dort (`angekuendigterOriginFindings`) weist die Aussage "publicUrl leer"
+bereits ausdruecklich `config.js` zu, und dieser Pfad bekommt nur den bereits zusammengefallenen
+Wert — die Herkunft ist dort strukturell nicht entscheidbar. Zwei Riegel auf dieselbe Aussage
+waeren zwei Orte, die auseinanderlaufen koennen (vgl. den Grundsatz "ein Eigentuemer, nicht
+zwei" aus E5/E8 oben).
+
+**Was sich NICHT aendert:** kein ausgelieferter Wert. `publicUrl`, Audience, PRM-`resource`,
+Herkunftswache und alle Webhook-Ziele bleiben byte-identisch — der neue Eintrag aendert
+ausschliesslich die Boot-Entscheidung (Boot-Refusal statt stillem Rueckfall). Kein
+`stdio`-Riegel: `src/mcp-server.js` ruft `assertConfig()` nicht auf, dieser Pfad laeuft nie auf
+Render, `detectProduction()` ist dort mangels `RENDER_EXTERNAL_URL` immer `false` — ein Riegel
+waere in jedem erreichbaren Zustand wirkungslos.
+
+**Deploy-Vorbedingung OW-G (Owner-Regel, kein Bau-Agent kann sie erfuellen):** vor jedem Deploy
+im Render-Dashboard pruefen, dass `PUBLIC_URL` gesetzt ist, `https://` traegt, ohne
+Pfad/Query/Fragment/Slash am Ende, und exakt der Origin der OpenAI-Einreichung ist (nicht der
+Hosting-Host). Lesende Alternative ohne Dashboard-Zugriff: `GET
+https://<Marken-Host>/.well-known/oauth-protected-resource` — zeigt `resource` den
+Hosting-Host, ist `PUBLIC_URL` nicht gesetzt. **render.yaml ist NICHT die Produktionswahrheit**
+(Lehre "Live != render.yaml") — ihr `value:`-Eintrag dokumentiert nur, was gelten soll, ersetzt
+die Dashboard-Pruefung nicht.
+
+**Restrisiko:** fehlt `PUBLIC_URL` im Dashboard und wird trotzdem deployt, startet der Dienst
+nach diesem Commit gar nicht mehr (kein `app.listen`, kein Inbound, kein `/mcp`) — Rollback ist
+der vorherige Render-Deploy, weil der Riegel nur im neuen Commit steckt. Das ist die bewusst in
+Kauf genommene Kehrseite: lieber ein Fehlschlag beim Deploy (sichtbar, rueckrollbar) als ein
+eingefrorener Falsch-Origin nach der Publikation (unumkehrbar ohne neues Plugin).
+
+Querverweis: `E5/E8 — Der angekuendigte Origin ist eine geprueft konsistente Angabe` (oben) —
+dieselbe Formel `kanonischeAudience(publicUrl)`, derselbe `PRODUCTION_FOOTGUNS`-Mechanismus,
+diesmal fuer die Herkunft des Wertes statt fuer seine Konsistenz.
+
+Tests: `test/config-prod-footguns.test.js` (`T2-04-01..03`, reine Funktion),
+`test/boot-prod-footguns.test.js` (`T2-04-04/05`, Kindprozess: Boot-Refusal + Meldung nennt Var
+und Sollform ohne Wert-Echo; Spezifitaets-Gegenprobe gegen den `OAUTH_AUDIENCE`-Befund, der
+denselben Variablennamen enthaelt).
+
+## OpenAI-T2-05 — Re-Auth-Challenge im Tool-Fehlerergebnis statt HTTP 403 (2026-09-23)
+
+**Scope: genau T-14.** OpenAI (plugins/build/auth): "Triggering the tool-level OAuth flow
+requires both metadata (`securitySchemes` and the resource metadata document) **and** runtime
+errors that carry `_meta["mcp/www_authenticate"]`. Without both halves ChatGPT will not show the
+linking UI for that tool." Ist-Stand vor diesem Eintrag: ein gueltiges OAuth-Token ohne
+verknuepften Hermes-Mandanten bekam von `POST /mcp` fuer JEDE Methode (`initialize`,
+`tools/list`, `tools/call`) HTTP 403 — die zweite Haelfte der OpenAI-Bedingung war strukturell
+unerreichbar, weil kein `tools/call`-Ergebnis je zustande kam.
+
+**Entscheidung: eine Stub-Fassade statt einer neuen Sonderpruefung im Handler.** Der Torschluss
+in `src/routes/mcp.js` (`rejectIfNoTenant`) sperrt seit diesem Commit nur noch, wenn KEIN
+`req.auth` gesetzt ist (Token-/Legacy-/off-Modus — dort setzt nur `verifyOauth` `req.auth`, s.
+`src/auth.js`) — der OAuth-Fall (`req.auth` gesetzt UND `scopedTenant === TENANT_REJECT`)
+registriert stattdessen `registerNoTenantStubs` (neue Datei `src/mcp-no-tenant.js`) statt
+`registerTools`. Der Audit-Log-Eintrag `auth_failed ... grund=kein_tenant` bleibt fuer BEIDE
+Antwortformen gleich (forensischer Pfad unveraendert) — er wird jetzt VOR der Verzweigung
+geloggt (`auditNoTenant`), nicht mehr nur beim Senden der 403-Antwort.
+
+**Sicherheits-Invariante (kein echter Handler laeuft je im Kein-Mandant-Fall):**
+`registerNoTenantStubs` baut eine Fassade mit GENAU zwei Methoden (`registerTool`,
+`registerResource`, plain object, keine Proxy-Magie) und reicht sie an das UNVERAENDERTE
+`registerTools` weiter — dieselben Namen, Beschreibungen, Schemas, `securitySchemes`,
+Widget-Verweise wie im echten Weg, aber `registerTool()` VERWIRFT den uebergebenen
+Original-Handler und ruft stattdessen immer denselben synchron-trivialen Stub auf (`async () =>
+result`, kein `fetch`, kein `api()`, kein Store-Zugriff). `scopedTenant` wird dabei hart auf
+`TENANT_REJECT` erzwungen, nie `null` — selbst ein versehentlich durchgereichter echter Handler
+liefe damit nie in den `operatorChannelTenant`-Rueckfall (BOOTSTRAP/Owner). Jede fehlende
+Server-Methode, die ein kuenftiger zweiter Registrierweg in `registerTools` aufriefe, wirft
+`TypeError` (500 im Route-`catch`) statt still zu verpuffen.
+
+Der Stub-Ergebniswert traegt `isError: true`, einen lokalisierten Fehlertext (neue Kennung
+`NO_TENANT_LINKED` in `src/i18n/mcp-texts.js`, de/en/fr, ohne Link/URL/Tenant-Existenzauskunft)
+und `_meta["mcp/www_authenticate"]` als Array mit GENAU EINEM String — derselbe
+Challenge-Bauer wie der HTTP-401-Header (`oauthBearerChallenge`, neu aus `src/auth.js`
+exportiert, `deny401` ruft ihn jetzt ebenfalls auf statt den String zu duplizieren): RFC-7235,
+`resource_metadata` zuerst, `error="insufficient_scope"` (Token ist gueltig, es fehlt nur die
+Mandanten-Zuordnung — RFC 6750 "requires higher privileges", nicht `invalid_token`).
+
+**Was sich NICHT aendert:** Token-/Legacy-/off-Modus bleiben byte-identisch 403 bzw. 401 (kein
+OAuth-Flow dort, eine `resource_metadata`-Challenge schickte den Client in eine Discovery, deren
+Token dieser Modus nie annimmt — P6-Lead-Entscheidung, unveraendert). `stdio`
+(`src/mcp-server.js`) importiert `mcp-no-tenant.js` nicht — kein Auth, kein Tenant-Resolver,
+T-14 dort gegenstandslos. Ein ungueltiges/abgelaufenes Token bleibt HTTP 401 mit Challenge, KEIN
+Tool-Ergebnis (ein Tool-Fehler statt 401 verlangte `initialize` ohne gueltiges Token — Auth
+aufweichen, Regel 3). `deny403InsufficientScope` (T2-23) ist unangetastet.
+
+**Informationsleck, bewusst akzeptiert:** jedes gueltige OAuth-Login sieht jetzt die
+Werkzeugliste + Widget-Metadaten (vorher 403) — der Inhalt ist ohnehin oeffentlich (Einreichung),
+`DEFAULT_PROFILE` traegt weder Kalender- noch Consult-Werkzeuge, der Fehlertext nennt weder
+Tenant noch Owner-Nummer (Drahttest prueft explizit, dass die Owner-Nummer NIE im Body steht).
+
+Tests: neue Datei `test/openai-t2-05-reauth-challenge.test.js` — Unit (Form von
+`buildNoTenantResult`, Fassade hat exakt zwei Methoden, `registerNoTenantStubs` registriert
+dieselbe Namensmenge wie `registerTools` mit lauter Stubs, die nie `fetch()` ausloesen) und
+Draht (Kindprozess, Spion-Gateway zaehlt jeden Request an den internen REST-Hop: T05-1..3 Spion
+bleibt 0 bei unbekanntem/subenlosem Token, T05-4 Positiv-Kontrolle mit echtem Mandanten-Token
+Spion >= 1, T05-5 dieselben Challenge-Parameter wie der 401-Header, T05-6/T05-7 Token-/
+Legacy-Modus unveraendert, T05-8 stdio unveraendert, T05-9 ungueltige Signatur bleibt 401).
+Vier Bestandsdateien nachgezogen (`am6-oauth-tenant`, `request-tenant`, `profiles`,
+`e4-mandantentrennung-default`), die bisher 403 fuer diesen Fall erwarteten — die NIE-Owner-
+Aussagen bleiben in jedem Fall unveraendert Kernpruefung.
+
+## T2-06 — CORS auf /mcp nur fuer byte-genau gelistete Origins (2026-09-23)
+
+**Anlass:** MCP-Spec-Quickstart (T-29, Stufe C) sieht vor, dass ein Browser-basierter Client
+`/mcp` per `fetch` ansprechen und die Antwort lesen kann — dafuer muss der Server CORS-Header
+setzen. Ohne diese Phase gibt es keinen einzigen `Access-Control-*`-Header irgendwo im Code; ein
+Browser-Client scheiterte am Same-Origin-Policy, unabhaengig davon, ob die Herkunftswache
+(`createMcpOriginGuard`, E5) ihn durchliess.
+
+**Eigene, aber abgeleitete Liste (`src/middleware.js#createMcpCors`, Montage
+`src/routes/mcp.js`):** `corsOrigins` entsteht aus DERSELBEN `mcpErlaubteOrigins`-Funktion wie die
+Herkunftswache, aber OHNE `publicUrl` — PUBLIC_URL ist same-origin und braucht kein CORS. Per
+Konstruktion ist `corsOrigins` damit eine ECHTE Teilmenge der Wachen-Liste: kein Origin bekommt
+CORS-Header, der nicht auch die Wache passieren wuerde. Bei leerer Liste (Default, heute live)
+ruft die Middleware fuer jeden Request sofort `next()` und setzt keinen Header — jede
+`/mcp`-Antwort bleibt byte-identisch zu vor dieser Phase.
+
+**Byte-genauer Vergleich, keine Normalisierung:** `mcpCorsOrigin` vergleicht den ROHEN
+`Origin`-Header als String exakt gegen die Listen-Eintraege (`corsOrigins.includes(rohwert)`) und
+gibt bei Treffer das Listen-Element zurueck, sonst `null` — nie den Rohwert. Kein
+Praefix-/Suffix-Match, kein Wildcard, keine Case-/Slash-/Port-Toleranz. Das ist STRENGER als die
+Herkunftswache selbst (die normalisiert, E5-H06: `HTTPS://Agent.Test` passiert die Wache) —
+bewusste Asymmetrie: ein Origin, der die Wache mit abweichender Schreibweise passiert, bekommt
+trotzdem keine CORS-Header, wenn er nicht byte-genau in der Liste steht. `Access-Control-Allow-Origin`
+traegt immer das Listen-Element, nie `*` und nie den Rohwert direkt.
+
+**Unabhaengig vom Notventil (`MCP_ORIGIN_ENFORCE`):** die CORS-Entscheidung liest diesen Schalter
+nie. Mit `enforce=false` ist die Herkunftswache geloest, aber CORS spiegelt weiterhin nur einen
+Origin aus `corsOrigins` — ein geloestes Notventil oeffnet keinen fremden Origin fuer
+Browser-Lesezugriff.
+
+**use-Layer statt eigener OPTIONS-Route:** eine `router.options("/mcp", ...)` wuerde (a) das
+heutige Auto-OPTIONS ohne Origin veraendern (Express haengte einen `Allow`-Header an, den es
+heute nicht setzt — kein byte-identisches Verhalten bei leerer Liste, E5-H09) und (b) einen neuen
+Eintrag im Routen-Graph erzeugen. `test/route-auth-inventory.test.js` sammelt ausschliesslich
+`layer.route`-Schichten (keine `router.use`-Schichten) und wuerde einen `PUBLIC_ROUTES`-Eintrag
+fuer diesen Layer als verwaist melden — ein Eintrag ist fuer eine use-Schicht technisch nicht
+moeglich. Absolute Regel 3 wird stattdessen durch diesen Abschnitt und den Code-Kommentar in
+`createMcpCors` erfuellt: der Preflight liefert keine Daten und keine Identitaet, nur Header, und
+nur fuer gelistete Origins. Die Herkunftswache (E5) ist bereits derselbe Bautyp (use-Layer,
+beantwortet OPTIONS) — keine neue Kategorie.
+
+**Reihenfolge Wache -> CORS -> mcpAuth:** die CORS-Middleware sitzt DIREKT nach der
+Herkunftswache und VOR `mcpAuth`. Ein fremder Origin endet bereits in der Wache (403, ohne
+CORS-Header). Ein gelisteter Origin bekommt die Header gesetzt, BEVOR `mcpAuth` eine 401/403-Antwort
+schickt — ein Browser-Client kann die `WWW-Authenticate`-Challenge dadurch lesen und sich neu
+autorisieren (ohne das die Falle entstuende, wegen der das Notventil E-4 existiert). Kein
+`Access-Control-Allow-Credentials` (Identitaet laeuft per Bearer-Header, keine Cookies, keine
+Ambient-Credentials); kein `Access-Control-Max-Age` (nicht verlangt, keine Zahl ohne
+Messgrundlage).
+
+**Semantik-Erweiterung ohne neue Env-Variable:** `MCP_ALLOWED_ORIGINS` steuert seit dieser Phase
+zusaetzlich den Browser-Lesezugriff, nicht nur die Herkunftswache. Kommentare in `src/config.js`
+und `.env.example` sind entsprechend nachgezogen; kein neuer Wert wird gesetzt (Default bleibt
+leer = inert), `render.yaml` und `test/helpers.js#BASE_ENV` bleiben unangetastet.
+
+**Bewusst akzeptiertes Risiko:** ein gelisteter Origin darf `/mcp`-Antworten im Browser lesen —
+das ist die Wirkung, die T-29 verlangt. Die einzige mildernde Eigenschaft ist, dass Identitaet
+weiterhin ausschliesslich per eigenem Bearer-Token laeuft (keine Ambient-Credentials, kein
+Cookie-Kontext) — ein gelisteter Origin ohne gueltiges Token sieht nur die 401-Challenge, keine
+Tool-Antworten. Der Wert fuer `MCP_ALLOWED_ORIGINS` haengt an einer Owner-Messung im ChatGPT
+Developer Mode (Render-Log `grund=mcp_cross_origin` / `[mcp] client-class`) und ist NICHT Teil
+dieser Phase.
+
+Tests: `test/s2-mcp-origin.test.js` (Praefix `T2-06-`, Unit- und Drahtfaelle gegen den echten
+`/mcp`-Endpunkt in allen drei Auth-Modi).
+
+## OpenAI-T2-07 — Rate-Limit auf POST /mcp: je Mandant statt je IP (2026-09-23)
+
+**Anlass (T-28):** der EINE globale IP-Limiter (`createRateLimiter`, `RATE_LIMIT_PER_MIN`) zaehlte
+bislang auch `POST /mcp` je `req.ip`. Hinter OpenAIs gemeinsamen ChatGPT-Egress-IPs draengt das
+alle Nutzer in denselben Eimer — ein einzelner drosselter/fluteender Nutzer sperrt jeden anderen
+hinter derselben Egress-IP mit.
+
+**Loesung:** `POST /mcp` verlaesst den globalen IP-Limiter UND die globalen Body-Parser
+(`src/app.js#installGlobalMiddleware`, Praedikat `isMcpPost`). Auf der Route (`src/routes/mcp.js`)
+laufen stattdessen, in dieser Reihenfolge: Herkunftswache (traegt seit der Nachbesserung unten
+denselben Ablehnungs-Zaehler wie `mcpAuth`) -> CORS (unveraendert, T2-06/E5) -> `mcpAuth` ->
+`mandantDrossel` -> dieselben zwei Body-Parser (jetzt HINTER der Auth) -> Handler.
+Zwei getrennte Fixed-Window-Zaehler (`src/mcp-rate-limit.js`, `makeMcpDrosseln`, EINE Instanz je
+Prozess, Limit = `RATE_LIMIT_PER_MIN`, Fenster/Sweep wie der globale Limiter):
+
+| Zaehler | Zaehlt | Schluessel |
+|---|---|---|
+| Ablehnung | JEDE Ablehnung von `mcpAuth` (kein Token, Muell-Signatur, falscher `iss`/`aud`, fehlendes `exp`, JWKS-Fehler, Token-/Legacy-Fehlschlag) und der Herkunftswache (fremder Origin) | `ip:<req.ip>` |
+| Ablehnung | `ERR_JWT_EXPIRED` ODER `insufficient_scope`, JEWEILS mit nicht-leerem `sub` aus dem verifizierten Token | `sub:<sub>` |
+| Mandant | OAuth, Mandant aufgeloest | `tenant:<scopedTenant>` |
+| Mandant | OAuth, `TENANT_REJECT` (Stub-Fassade, T2-05) | `sub:<req.auth.sub>`, ohne `sub` `ip:<req.ip>` |
+| Mandant | kein `req.auth` (Token-/Legacy-/off-Modus) | `ip:<req.ip>` (unveraendert zu vorher) |
+| beide | `isTrustedLocalCaller(req)` (In-Process-MCP-Tools/stdio-Nachbau) | nicht gezaehlt (Paritaet zum globalen Limiter) |
+
+**Erst pruefen, dann zaehlen (Muster `initTokenSchranke`, IEX-A7):** `mcpAuth` entsteht seit dieser
+Phase aus `makeMcpAuth({ ablehnungsDrossel, ipSperre })` (Fabrik statt modulweitem Export; wirft,
+wenn eines von beiden fehlt — fail-closed, kein ungedrosselter Default). "Pruefen" ist die
+Credential-Pruefung: erst nach ihrem Ergebnis ruft JEDER Ablehnungszweig den injizierten Zaehler
+(`mitAblehnungsDrossel`, `src/auth.js`; in der Herkunftswache `pruefeAblehnungsDrossel`,
+`src/middleware.js`) — und zwar VOR dem Audit-Log. Ist das Fenster ausgeschoepft, ersetzt eine
+429 (`Retry-After`) die 401/403-Antwort, und es entsteht KEINE `auth_failed`-Zeile (`auditFn` laeuft
+nur im erlaubten Zweig, s. Nachbesserung unten). Ein GUELTIGES Token durchlaeuft den
+Ablehnungs-Zaehler nie — er sieht ausschliesslich Ablehnungen. Ausnahme vom "erst pruefen" ist der
+statische Token-/Legacy-Vergleich: dort sperrt die IP VOR dem Vergleich (Brute-Force-Bremse,
+Nachbesserung unten).
+
+**Schluessel NUR aus verifizierten oder Netz-Quellen:** nie aus unverifiziertem Token- oder
+Body-Inhalt — insbesondere NICHT aus der anonymisierten Nutzer-ID, die der Client optional in
+`_meta` mitschickt (ein unverifizierter, nur von einem Host gesetzter Wert; der Mandant aus dem
+verifizierten Token ist die staerkere Grenze und deckt jeden Host ab). Das Map-Wachstum bleibt
+dadurch auf derselben Groessenordnung wie beim bisherigen globalen Limiter (IPs) plus Mandanten
+und vom eigenen Authorization-Server ausgestellte `sub`-Werte.
+
+**Pre-Mortem 1 (Egress-Refresh nicht faelschlich drosseln):** ein abgelaufenes, aber GUELTIG
+SIGNIERTES Token (`ERR_JWT_EXPIRED`) ist der normale Refresh-Anlass legitimer Clients hinter
+geteilten Egress-IPs — jose prueft die Signatur vor den Claims
+(`node_modules/jose/dist/webapi/jwt/verify.js`), nur der eigene Authorization-Server kann so ein
+Token ausgestellt haben. Es zaehlt darum je verifizierter `sub`, NIE je IP; derselbe Gedanke gilt
+fuer `insufficient_scope` (gueltige Signatur, zu wenig Scope). Jeder andere Ablehnungsgrund traegt
+keine verifizierte `sub` und faellt auf die IP zurueck (fail-closed: eine unbekannte/fehlende `sub`
+darf nie unbegrenzt bleiben).
+
+**Pre-Mortem 2 (unauthentifizierte Flut):** vorher liefen die globalen Parser VOR dem Limiter fuer
+JEDE Route. Fuer `POST /mcp` gilt seit dieser Phase: kein Parse vor `mcpAuth` — die beiden globalen
+Body-Parser-Instanzen (`withParserErrors(express.urlencoded)`, `withParserErrors(express.json)`)
+laufen unveraendert weiter, nehmen `POST /mcp` aber aus und werden UNVERAENDERT an
+`makeMcpRoutes` weitergereicht, wo sie HINTER `mcpAuth`+`mandantDrossel` haengen. Jede Ablehnung
+ohne verifizierte `sub` zaehlt je IP (s. Tabelle; `ERR_JWT_EXPIRED`/`insufficient_scope` je `sub`);
+Rest bleibt (OAuth): je Anfrage ein JWT-Decode, hoechstens eine
+Signaturpruefung, JWKS-Nachladen bei unbekanntem `kid` hoechstens alle 30s (jose-Cache) — eine
+Flut ueber viele verschiedene IPs ist Sache der Hosting-Kante, nicht dieses Gates.
+
+**Pfad-Varianten strenger, nicht lockerer:** `isMcpPost` vergleicht Methode und Pfad EXAKT
+(`req.method === "POST" && req.path === "/mcp"`). Eine Variante (Gross-/Kleinschreibung,
+Schraegstrich am Ende), die Express trotzdem auf die Route matcht, bleibt im globalen IP-Limiter
+UND den globalen Parsern — dieselbe Menge wie vor dieser Phase, keine neue Luecke.
+
+| Punkt | Festlegung |
+|---|---|
+| Mandant EINMAL aufgeloest (INV-7) | `mandantDrossel` (`src/routes/mcp.js`) ruft `requestTenant(req)` genau einmal und legt das Ergebnis in `res.locals.scopedTenant` ab; der Handler liest von dort, ruft `requestTenant` nicht erneut. |
+| Funktionsname `mcpAuth` bleibt | Der Routen-Inventar-Test (`test/route-auth-inventory.test.js`) erkennt Auth am Namen der zurueckgegebenen Funktion aus `makeMcpAuth(...)` — ein Rename waere ein stiller Schutzverlust im Inventar. |
+| Kein neuer Env-Wert | `RATE_LIMIT_PER_MIN` bleibt DER Regler, seine Semantik ist nur um "je Mandant auf POST /mcp" erweitert (Kommentare in `src/config.js`, `.env.example`, `render.yaml`). |
+
+**Bewusst NICHT gebaut:**
+- Eigener Regler fuer das Ablehnungs-Limit — ohne Messgrundlage waere ein zweiter Wert Raten.
+- Log-Zeile je 429 — eine Zeile je Anfrage waere Log-Flut. Es bleibt der HTTP-Status im
+  Render-Log; eine `auth_failed`-Zeile gibt es je Schluessel und Fenster nur fuer die ersten
+  `RATE_LIMIT_PER_MIN` Ablehnungen, fuer jede 429 danach KEINE (weder `auth_failed` noch eine
+  andere Zeile; `mitAblehnungsDrossel`, `src/auth.js`; MRL-n). Wer bei einem Vorfall den Umfang
+  schaetzt, zaehlt darum die 429 im Render-Log, nicht die `auth_failed`-Zeilen.
+- Harte Obergrenze der Schluesselzahl im Zaehler — Schluessel kommen nur aus IP/Mandant/AS-`sub`,
+  Sweep laeuft wie beim globalen Limiter, der Zaehler ist mit ihm und der Init-Schranke geteilt.
+- Verteilter Zaehler (Redis o.ae.) — heute ebenfalls je Prozess-Instanz wie der globale Limiter;
+  Mehr-Instanz-Betrieb ist eine eigene Entscheidung.
+- T-27 (Hop-Fristen fuer `cancel_call`/`answer_consult`/`check_inbox`, Stundenlimit-Sperre) —
+  eigene Phase; die Safety-Gates aus CLAUDE.md (Stundenlimit, Kostendecke, Denylist, Land-Gate,
+  Kill-Switch) sind unangetastet.
+
+**Bewusst getragene Restrisiken:**
+- Ein einzelner Mandant mit vielen parallelen `/mcp`-Anfragen je Minute (z.B. viele parallele
+  Anruf-Polls, ca. 10,9 Polls/min je laufendem Anruf, AL-P13-45) sperrt NUR sich selbst; Default
+  120 liegt weit darueber.
+- Neue ChatGPT-Verbindungen ohne Token hinter einer Egress-IP bekommen 429 statt der
+  401-Challenge, wenn ein Angreifer den IP-Eimer DERSELBEN IP zuvor leert — hoechstens ein Fenster
+  (60s).
+- UNKNOWN (kein Deploy-Vorbedingung): ob `req.ip` hinter dem Hosting-Proxy die echte Client-IP
+  ist. Liegt ein weiterer Proxy davor, war das IP-Limit schon vor dieser Phase faktisch global —
+  diese Phase entschaerft das eher, weil auf `/mcp` nur noch Fehlversuche je IP zaehlen.
+- `isTrustedLocalCaller` haengt an fehlendem `X-Forwarded-For`; wuerde der Hosting-Proxy den
+  Header nicht mehr setzen, waere `/mcp` ungedrosselt — Bestandsrisiko, geteilt mit dem globalen
+  Limiter, nicht neu durch diese Phase.
+- Authentifizierte Last je IP skaliert mit der Kontenzahl (Folge von T-28, gewollt): erfolgreich
+  authentifizierte `POST /mcp`-Anfragen zaehlen seit dieser Phase je Mandant bzw. je verifizierter
+  `sub` (bei `TENANT_REJECT`, `src/mcp-rate-limit.js`), nicht mehr je IP. Die Last, die EINE IP
+  erzeugen kann, ist dadurch nicht mehr gedeckelt — sie waechst mit der Zahl der Konten, die ein
+  Angreifer beim Authorization-Server anlegt (jede neue `sub` ergibt einen eigenen Mandanten bzw.
+  Zaehler-Eimer mit eigenem 120/min-Limit). Das Volumen, das viele gueltige Konten von einer IP
+  erzeugen koennen, ist Sache der Hosting-Kante, nicht dieses Gates — die Safety-Gates aus
+  CLAUDE.md (Stundenlimit, Kostendecke, Denylist, Land-Gate, Kill-Switch) bleiben unberuehrt, es
+  geht um CPU-/Parse-Last bis `BODY_LIMIT`, nicht um Anruf-/SMS-Kosten.
+
+**Nachbesserung (Safety-/Clean-Code-Review, 2026-09-23):**
+- **Herkunftswache ohne Zaehler (Befund safety/blocker):** die Wache (`createMcpOriginGuard`,
+  `src/middleware.js`) haengt VOR `mcpAuth` und lief dadurch an BEIDEN Zaehlern vorbei — eine
+  Flut mit fremdem Origin traf auf keine Drossel und schrieb je Anfrage unbegrenzt eine
+  `auth_failed`-Zeile (am laufenden System gemessen: `RATE_LIMIT_PER_MIN=3`, XFF `203.0.113.99`,
+  Origin `https://evil.example`, 8 Anfragen -> vorher 403 x8, nie 429). Fix: die Wache bekommt
+  denselben injizierten `ablehnungsDrossel` wie `mcpAuth` (`mcpDrosseln.ablehnung`, EINE Instanz
+  je Prozess) — erst pruefen, dann zaehlen, ab dem Fenster 429 statt 403, `verifizierteSub`
+  immer `null` (vor `mcpAuth` existiert kein verifiziertes Token, zaehlt darum je IP,
+  fail-closed). Im OAuth-Modus bleibt ein gueltiges Token derselben IP danach 200 — der Zaehler
+  sieht nur Ablehnungen, unabhaengig davon, ob sie von der Wache oder von `mcpAuth` kommen (im
+  Token-/Legacy-Modus greift dagegen die IP-Sperre unten). Test:
+  `test/mcp-rate-limit.test.js` MRL-l.
+- **Audit-Zeile vor dem Zaehler (Befund safety/wichtig):** `mitAblehnungsDrossel` rief
+  `audit("auth_failed", ...)` bisher VOR dem Zaehler-Aufruf in JEDEM Ablehnungszweig — eine Flut
+  von Muell-Tokens erzeugte dadurch unbegrenzt viele Log-Zeilen, obwohl die HTTP-Antwort ab dem
+  Fenster laengst 429 war (die Drossel sparte die Antwort, nicht das Log). Fix: `auditFn` wird
+  jetzt NUR NOCH im erlaubten Zweig aufgerufen (`mitAblehnungsDrossel`, `src/auth.js`) — die
+  429-Antwort selbst bleibt weiter ohne eigene Zeile (unveraendert zur urspruenglichen
+  Entscheidung oben: der HTTP-Status im Render-Log deckt das ab). Test: `test/mcp-rate-limit.test.js`
+  MRL-n (Flut weit ueber dem Fenster -> genau `FENSTER_LIMIT` `auth_failed`-Zeilen, nicht eine
+  je Anfrage).
+- **Brute-Force-Bremse im Token-/Legacy-Modus fehlte (Befund safety/wichtig):** vor dieser Phase
+  blockte der globale IP-Limiter VOR der Auth jede `POST /mcp` ueber `RATE_LIMIT_PER_MIN`. Mit
+  "erst pruefen, dann zaehlen" lief der Vergleich gegen das statische `MCP_AUTH_TOKEN` ungebremst,
+  und der Status verriet das Ergebnis (richtig = durchgelassen, falsch = ab dem Fenster 429) —
+  die Rate der Rateversuche je IP war nur noch durch den Server-Durchsatz begrenzt. Fix:
+  `makeVerifyStatic` (`src/auth.js`) fragt VOR `safeEqual` die IP-Sperre
+  (`mcpDrosseln.ipSperre`, `src/mcp-rate-limit.js`; liest den IP-Eimer des Ablehnungs-Zaehlers
+  ueber `hit.peek`, `makeFixedWindowCounter`, OHNE zu zaehlen). Hat die IP ihr Fenster an
+  Fehlversuchen voll, antwortet sie 429 ohne Vergleich — auch fuer ein richtiges Token (sonst
+  bliebe das Orakel). Gueltige Aufrufe zaehlen nicht in diesen Eimer; eine andere IP bleibt
+  unberuehrt; `isTrustedLocalCaller` ist wie ueberall ausgenommen. `safeEqual` unveraendert.
+  OAuth nutzt die Sperre bewusst NICHT: Signaturen sind nicht ratbar, und gueltige
+  ChatGPT-Nutzer hinter derselben Egress-IP sollen nicht fuer fremde Fehlversuche gesperrt
+  werden (T-28). Preis (Token-/Legacy-Modus): wer von einer IP das Fehlversuch-Fenster fuellt,
+  sperrt fuer hoechstens ein Fenster (60s) auch gueltige Aufrufer derselben IP — derselbe Preis
+  wie beim globalen IP-Limiter vor dieser Phase, nur auf Fehlversuche beschraenkt. Tests:
+  `test/mcp-rate-limit.test.js` MRL-o (Token-Modus), MRL-p (Legacy), `test/rate-window.test.js`
+  (peek zaehlt nicht mit). Positivkontrolle: ohne die Sperr-Zeile sind MRL-o/p rot.
+- **insufficient_scope ohne eigenen Drahtbeleg (Befund cleancode/wichtig):** MRL-c/d belegten den
+  ERR_JWT_EXPIRED-Zweig, der insufficient_scope-Zweig teilte sich denselben Code-Pfad, hatte aber
+  keinen eigenen Test. Ergaenzt: MRL-m (zwei subs ohne den erzwungenen Scope, gleiche IP, je
+  `FENSTER_LIMIT`-mal -> kein 429 durch die IP allein).
+
+Tests: `test/mcp-rate-limit.test.js` (Praefix `MRL-`, Drahtfaelle gegen den echten `/mcp`-Endpunkt
+in den betroffenen Auth-Modi: OAuth mit/ohne Mandant, Token-Modus, Legacy); `test/openai-p6-challenge.test.js`
+und `test/auth-mcp-bypass.test.js` auf `makeMcpAuth({ ablehnungsDrossel: ERLAUBT, ipSperre: ERLAUBT })`
+(`ERLAUBT` = Attrappe, die nie drosselt) umgestellt (Asserts unveraendert — diese Dateien pruefen Wortlaut/Modus-Verzweigung, kein
+Drossel-Verhalten).
+
+## OpenAI-T2-08 — Stundenlimit/Ziel-Cap im Claim-Lock verbindlich, Frist fuer jeden uebrigen MCP-Hop (2026-09-23)
+
+**Anlass (T-27):** zwei Luecken im Geldpfad. (1) `tenantHourReached`/`perTargetCapReached` liefen
+bisher NUR im fruehen `number_gate`-Gate, VOR Pre-Call-Briefing/EL-Eroeffnungszeile (Netz-awaits).
+Gemessen am laufenden Server (`MAX_CALLS_PER_HOUR=2`, 8 parallele `POST /api/calls` an verschiedene
+Ziele, `FAKE_ORIGINATE=true`, LLM-Attrappe mit 300 ms Verzoegerung): **8x 200, 8 Datensaetze — das
+Limit war 2, ueberholt um das Vierfache.** Ohne Netz-await zwischen Gate und Claim lief die Kette
+dagegen bis `createCall` in Microtasks durch und zeigte kein Rennen (Positiv-/Negativ-Kontrolle
+derselben Messung). Derselbe Zaehl-dann-Anlegen-Abstand gilt fuer den Ziel-Cap. (2) `call()`
+(`src/mcp-tools.js`, geteilt von stdio UND HTTP `/mcp`) setzte nur fuer `pollConsult` und
+`placeCallHop` eine Frist — jeder uebrige Hop (`cancel_call`, `answer_consult`, `check_inbox`,
+`get_call_status`, `list_calls`, die `GET /api/state`-Leser, der Abschluss-`GET` in
+`await_call_event`) lief ohne, ein haengender Gateway-Handler haette den MCP-Client unbegrenzt
+blockiert.
+
+**1. EINE Quoten-Pruefung (`src/telephony/outbound-gates.js#callQuotaError`):** Stundenlimit vor
+Ziel-Cap, Texte/Status byte-identisch zum Bestand, Vertrag `{status,grund,message}` wie
+`kycGateError`. `numberGateError` (fruehes `number_gate`) und `callQuotaDenial(ctx)` (Claim-Lock)
+rufen BEIDE diese eine Funktion — Schwellwert UND Antwortformung sind eine Quelle, sie koennen nicht
+auseinanderlaufen. Die Ablehnungsform `{status, body, audit}` fuer den Claim-Lock baut der
+Modul-Helfer `quotaDenialOf` (derselbe `denialAudit`-Detailtext wie im `number_gate`).
+`makeOutboundGates` liefert zusaetzlich `callQuotaDenial`; ihr gepinnter
+`max-lines-per-function`-Befund (`eslint-suppressions.json`) bleibt unveraendert, ohne
+Altlast-Eintrag und ohne Ein-Zeilen-Umgehung.
+
+**2. Quote im Claim-Lock erneut geprueft, Rennen geschlossen (`src/routes/api-calls.js#claimCallRecord`):**
+im SELBEN synchronen `withStoreLock`-Abschnitt wie die Dedup-Entscheidung (KEIN `await` im
+Lock-Body — Invariante `store.js`) prueft `claimCallRecord` nach der Dedup, aber VOR `createCall`,
+zusaetzlich `callQuotaDenial(ctx)`. Bei Ablehnung: `{ denial, created: false }` statt eines neuen
+Datensatzes; die Route behandelt das im selben Zweig wie den Dedup (`!claim.created`: Reserve in
+einem zweiten, kurzen Lock-Abschnitt zurueck, dann formt der Modul-Helfer `antwortOhneNeuenAnruf`
+die Antwort — Ablehnung mit Audit+Metrik ueber `beobachteAblehnung`, bzw. Dedup-200; KEIN
+Originate/Consult/Timer/Kostenprofil). Die gepinnten Befunde von `makeCallRoutes` in
+`eslint-legacy-exceptions.json` bleiben unveraendert. Die fruehe
+Pruefung im `number_gate`-Gate BLEIBT (spart Briefing-/Eroeffnungs-Token fuer einen Anruf, der
+ohnehin abgelehnt wird) — die Lock-Pruefung ist die VERBINDLICHE. `callQuotaDenial` reist
+`server.js -> app.js -> makeCallRoutes` durch mit lautem fail-closed-Default
+(`callQuotaDenialNotWired`, Muster `elevenLabsCallNotWired`): eine fehlverdrahtete
+Kompositionswurzel wirft in den bestehenden Claim-`catch` (503, Reserve zurueck, NICHT gewaehlt)
+statt die Pruefung still auf "immer erlaubt" fallen zu lassen — kein Default `() => null`.
+
+**3. Frist fuer jeden uebrigen MCP-Hop (`src/mcp-tools.js`):** `MCP_HOP_TIMEOUT_MS = 60000`
+(benannte Konstante, KEIN Env-Knopf — Praezedenz `PLACE_CALL_HOP_TIMEOUT_MS`, E3), `call()` laeuft
+ueber den Modul-Helfer `boundedHop`, der sie als `timeoutMs` an `api()` gibt (der gepinnte
+`registerTools`-Befund bleibt unveraendert). Ein Zeitablauf wird zu `MCP_ERROR_CODE.HOP_TIMEOUT` (de/en/fr) — NIE
+"fehlgeschlagen": der Text sagt ausdruecklich, dass die Aktion trotzdem gelaufen sein kann und der
+Stand erneut abgefragt werden soll statt blind zu wiederholen (`cancel_call` ist serverseitig
+idempotent, `answer_consult` auf eine beantwortete Frage liefert 409, kein Pfad waehlt doppelt).
+`pollConsult`/`placeCallHop` bleiben unveraendert (eigene Fristen/Abbildung). Wert am Seam
+hergeleitet: laengster begrenzter Serverweg ist `cancel_call` auf einen GEBUNDENEN EL-Inbound-Anruf
+(`EL_TERMINATION_RESULT_ATTEMPTS` 3 x `EL_ABORT_PROVIDER_TIMEOUT_MS` 10000 + 2 x
+`config.voice.elevenLabsOutbound.resultPollMs` Default 5000 = 40000 ms) — 60000 laesst Kopf; ein
+Betreiber, der `ELEVENLABS_RESULT_POLL_MS` stark anhebt, reisst die Invariante, der
+Ungleichungs-Test liest sie LIVE und wird rot.
+
+**Pre-Mortem (entschaerft):**
+- **Sperre haengt nach einem Wurf:** keine neue Sperre — der bestehende Chain-Mutex laeuft bei
+  Wurf weiter (`.then(run, run)`), Lock-Body bleibt synchron. Belegt: ein Wurf in `createCall` ->
+  503, 0 Datensaetze, Reserve frei, die NAECHSTE Anfrage desselben Mandanten -> 200.
+- **Alle Mandanten serialisiert:** der globale Lock umfasst nur synchrone Mikrosekunden (Zaehlen +
+  Anlegen), keine Netz-awaits — Mandant B bleibt unter Last von Mandant A unbeeintraechtigt.
+- **Fehlverdrahtung schaltet die Pruefung still ab:** fail-closed Default, der wirft -> 503, nicht
+  gewaehlt (s. 2. oben).
+- **Ein Mandant ist eine Stunde gesperrt, weil Originate-Fehler Slots fressen:** bewusst akzeptiert
+  und STRENGER benannt — Bestandsverhalten, die fruehe Pruefung zaehlte fehlgeschlagene Anrufe
+  schon immer (`state-ops.js:1745-1752`); nur ein Wurf VOR dem Anlegen (kein Datensatz) verbraucht
+  keinen Slot.
+
+**Bewusst akzeptiertes Restrisiko:** prozess-lokaler Lock (1 Instanz, OT-3, geteilt mit dem
+Rate-Limiter aus T2-07) — bei horizontaler Skalierung schliesst er das Rennen nicht mehr; kein
+Deploy-Vorbedingung (Produktion laeuft heute auf 1 Instanz).
+
+**Bewusst NICHT gebaut:**
+- Keine neue, per-Mandant gekeyte Sperre ueber den ganzen Anrufstart — sie wuerde die Anrufe EINES
+  Mandanten fuer die Briefing-/Eroeffnungs-Dauer serialisieren; der bestehende globale Lock mit
+  synchronem Mikro-Body schliesst das Rennen ohne diese Kosten.
+- Keine Aenderung an Kostendecke, Reserve-Logik, `OUTBOUND_FROZEN`, KYC, Denylist, Land-Gate,
+  Max-Dauer, Offenlegung — alle Safety-Gates aus CLAUDE.md Regel 1 bleiben unangetastet.
+- Kein Rename des Registrierweg-Legacy-CALL_START_UNCONFIRMED-Texts: am Stundenlimit lehnt
+  `number_gate` einen Retry schon VOR der Dedup mit 429 ab (der Text verspricht "liefert den
+  laufenden Anruf zurueck") — kein Geld-/Anrufschaden (es wird nicht gewaehlt), aber der Text
+  stimmt am Limit nicht; Bestandsluecke, nicht neu durch diese Phase.
+
+Tests: `test/openai-t2-08-stundenlimit-sperre.test.js` (T1/T2 Spawn mit LLM-Attrappe und
+geoeffnetem Rennfenster, T3-T6 In-Process gegen die echte Gate-Kette + Route), `test/openai-t2-08-hop-frist.test.js`
+(Hop-Frist + Ungleichungstest), `test/outbound-gates-order.test.js`, `test/number-gate.test.js`,
+`test/gap-10-hour-limit-per-tenant.test.js`, `test/mcp-tools-language.test.js` (Vollstaendigkeits-
+pruefung `HOP_TIMEOUT` in allen drei Sprachen) gruen ohne Verhaltensaenderung.
+
+## OpenAI-T2-09 — Geldpfad: neutrale Fehlertexte an der MCP-Grenze (2026-09-23)
+
+Die MCP-Grenze reicht seit T2-09 keinen rohen REST-Fehlertext mehr durch (Ausnahme:
+400-Eingabehinweise); Gate-Ablehnungen tragen im REST-Body additiv `reason`, das MCP-Werkzeug
+zeigt einen neutralen Text je Grund.
+
+**Anlass (O-13/O-20):** `mcp-tools.js#api()` warf bisher `json.error || "HTTP <status>"` und
+`wrapHandler` gab `err.message` unveraendert aus — ein Budget-/Minuten-402 nannte Betraege und
+Daten, ein 500 ohne Body zeigte "HTTP 500", ein nicht erreichbares Gateway "fetch failed",
+`list_action_items` die interne Item-ID.
+
+**Additives `reason` in `src/routes/api-calls.js`:** der Modul-Helfer `denialResponseBody(denial)`
+haengt `denial.audit.grund` (dieselbe Kennung wie Audit/Metrik) an GENAU den zwei Stellen an, an
+denen eine Gate-Ablehnung die Route verlaesst — der fruehe Gate-Durchlauf und der Claim-Lock-
+Recheck in `antwortOhneNeuenAnruf`. `outbound-gates.js` bleibt unangetastet: `reason` ist additiv,
+Status/`error`-Text/Audit/Metrik bleiben byte-identisch. Ein reiner 400-Formfehler (kein
+`audit`-Objekt) traegt weiterhin kein `reason`.
+
+**Neutrale Texttabelle `src/i18n/mcp-denial-texts.js`:** je einer der 21 Ablehnungsgruende aus
+`outbound-gates.js` (per Test aus der Quelle abgeleitet, keine gepflegte Liste) bekommt in de/en/fr
+einen Text, der sagt was passiert ist ("kein Anruf"), was zu tun ist, und dabei keine Zahl, keinen
+Env-Namen, keine interne Kennung und kein Abo-/Upgrade-Wort nennt (O-20: "must not display
+subscription plans, initiate new subscriptions, or promote upgrades"). Vier neue stabile
+Fehlerkennungen (`DENIAL_UNKNOWN`, `NOT_FOUND`, `NOT_PERMITTED`, `REQUEST_REJECTED`) decken den
+Rest ab.
+
+**Eine Abbildung Fehler -> Text (`mcp-tools.js#toolErrorText`, modul-weit):** 1. bekannte
+`ToolError`-Kennung (Bestand, Vorrang), 2. `err.reason` -> Tabellentext, unbekannter/kuenftiger
+Grund -> `DENIAL_UNKNOWN` PLUS `console.warn` mit der auf `[a-z_]` und 40 Zeichen bereinigten
+Kennung (serverseitig, NIE `console.log` — stdout ist im stdio-Transport das Protokoll), 3.
+`err.inputHint` (NUR ein reiner 400-Eingabefehler ohne `reason` — Korrekturhinweis zur eigenen
+Eingabe des Aufrufers, sonst koennte das Modell sie nicht reparieren), 4. HTTP-Statusklasse
+(404/403/sonstige 4xx), 5. Rest -> `UPSTREAM_UNREACHABLE` + `console.error` serverseitig.
+`list_action_items` (O-13) nennt keine interne Item-ID mehr — kein Werkzeug und keine REST-Route
+nimmt eine entgegen.
+
+Tests: `test/openai-t2-09-neutrale-fehlertexte.test.js` (T1 Vollstaendigkeit gegen die Quelle
+inkl. Struktur-Waechter auf jeden `denialAudit()`-Aufruf, T2 Reinheit, T3 Draht HTTP `/mcp`
+Legacy/Bootstrap, T4 Draht HTTP `/mcp` OAuth mit echtem Minuten-Gate, S1 REST-`reason` additiv,
+T5 Draht stdio-Kindprozess gegen Gateway-Attrappe, T6 HTTP-Statusklassen, T7
+`place_call`-5xx-ohne-Grund), `test/mcp-tools.test.js` und `test/mcp-tools-language.test.js`
+(`list_action_items` ohne Item-ID angepasst) gruen.
+
+### Nachbesserung (Safety-/Clean-Code-Review, 2026-09-23)
+
+**T4 nachgezogen (war "bewusst NICHT gebaut"):** die Abnahme verlangt HTTP + stdio,
+PAYMENT_ENABLED, aufgebrauchte Plan-Minuten UND einen Tenant ausserhalb des Bootstrap-Zugangs,
+moeglichst OAuth. T5(a) deckte nur stdio mit einer Gateway-ATTRAPPE ({reason:"minutes"} vorgegeben)
+ab, S1 nur das REST-`reason`-Feld mit einer Frozen-Fixture — das ECHTE Minuten-Gate ueber `/mcp`
+mit einem echten OAuth-Token war ungemessen. Jetzt gebaut: `t4MinutesExhaustedSeed()` (state-ops
+statt `seedState()`, damit `settingsFor()` die Tenant-Sprache deterministisch auf `en` setzt) +
+`startIdp()`/`idp.sign({sub})`, dieselbe Fixture-Form wie `test/b2-quota-gate.test.js` `seedQuota`.
+Pruft: `isError` mit `MCP_TEXTS.en.denials.minutes`, REST 402 `reason=minutes`, kein Call in beiden
+Faellen.
+
+**`CALL_START_REJECTED` fuer `place_call`-5xx ohne Gate-Grund (Befund
+`mcp-tools.js:435`):** der Originate-/Provider-Fehlschlag in `routes/api-calls.js` (500 ohne
+`providerStatus`, 502 MIT `providerStatus` — die 502-Provider-Ablehnung nannte vorher die Account-/
+Nummern-Konfiguration) traegt KEIN `err.reason` (das ist ausschliesslich Gate-Ablehnungen
+vorbehalten) und fiel deshalb auf `UPSTREAM_UNREACHABLE` ("try again later"). Bei einer dauerhaften
+Provider-Ablehnung (z.B. falsche Absender-DID, Telnyx 403) laedt das zum sofortigen Wiederholen ein
+— obwohl bereits ein Anruf-Datensatz mit Fehlgrund existiert (`endFailedCallWithReason`,
+`startRejectionReason`) und jeder Retry einen weiteren Datensatz samt Reservierung anlegt. Neuer,
+eigener Text `CALL_START_REJECTED` (`isServerErrorWithoutReason`, `placeCallHop`-Catch in
+`mcp-tools.js`): 5xx OHNE `err.reason` -> Verweis auf `list_calls` statt Wiederholungs-Einladung.
+5xx MIT `err.reason` (`gate_error`/`ani_not_owned`) bleibt unangetastet auf seinem eigenen
+Ablehnungstext (Test T7, Gegenprobe). Reine Text-/Klassifikationsaenderung — kein neues REST-Feld,
+keine Gate-Logik veraendert (Status/Audit/Entscheidung unveraendert).
+
+**Bekannter Risiko-Punkt (Stand zweite Nachbesserung; Fehlertext-Pfad geschlossen, s. Nachtrag unten):** der Fallback-Text
+`texts.errors[UPSTREAM_UNREACHABLE]` ist seit T2-09 fuer JEDEN Netzwerk-/Serverfehler ohne
+bekannten Grund erstmals real erreichbar (vorher lieferte `err.message` — z.B. "fetch failed" —
+immer einen nicht-leeren, sprachneutralen String durch). Dieser Fallback haengt an `loc.mcp`, das
+ohne explizite `ctx.language` auf `DEFAULT_LANGUAGE` (Weltdefault, P10) zurueckfaellt — live heute
+`de`, weil `WORLD_DEFAULT_LANGUAGE_ENABLED` in `render.yaml` bewusst auf `"false"` steht (P10-P13-
+Aktivierungsfenster, s. render.yaml-Kommentar dort) und der Code-Default ebenfalls `false` ist.
+`.env.example`/`BASE_ENV` (Tests) setzen `"true"`. Der bereits vorhandene Katalog-Test `MCP-05`
+(`test/mcp-tools-i18n.test.js`) deckt GENAU diesen Fall (EN-Tenant, unaufgeloeste Sprache,
+Netzwerkfehler) und kippt dadurch je nach `WORLD_DEFAULT_LANGUAGE_ENABLED` von gruen zu isoliert-rot
+(reproduziert: `NODE_ENV=test node --test --test-name-pattern="MCP-05" test/mcp-tools-i18n.test.js`
+ohne den Flag-Override -> rot; mit `WORLD_DEFAULT_LANGUAGE_ENABLED=true` -> gruen). Betroffen ist
+JEDER stdio-Aufruf (der Prozess hat keinen Store, s. `mcp-server.js`-Kommentar "faellt localeFor()
+auf den Weltdefault") und jeder HTTP-/mcp-Aufruf ohne aufgeloeste Tenant-Sprache — nicht nur die
+neuen T2-09-Texte, sondern der gesamte MCP-Textkanal (R7, vorbestehende, dokumentierte
+Architektur-Entscheidung). T2-09 macht diesen einen zusaetzlichen Fall (Netzwerkfehler) NEU
+konsistent mit dem Rest des Kanals — kein neuer Mechanismus, aber ein bisher zufaellig-gruener Test
+wird dadurch messbar. Kein Fix hier: Aendern von `DEFAULT_LANGUAGE`/`WORLD_DEFAULT_LANGUAGE_ENABLED`
+ist Gate-/Architektur-Logik ausserhalb des T2-09-Scopes (Texte an der MCP-Grenze) und eine bereits
+separat gefuehrte, groessere Entscheidung (P10-P13-Aktivierungsfenster). Owner-Punkt: pruefen, ob
+`WORLD_DEFAULT_LANGUAGE_ENABLED` im Render-Dashboard live tatsaechlich `true` gesetzt ist (Dashboard
+gilt vor `render.yaml` bei diesem dashboard-managed Service) — weicht der Live-Wert von `render.yaml`
+("false") ab, ist `render.yaml` nachzuziehen, damit die eingecheckte Quelle nicht am Live-Verhalten
+vorbeidokumentiert.
+
+**Nachtrag 2026-09-24 (dritte Nachbesserung, Review cleancode/blocker + safety/wichtig): der
+obige Risiko-Punkt ist fuer den Fehlertext-Pfad jetzt im Code geschlossen.** (1) `toolErrorText`
+ist fail-safe: fehlt dem aufgeloesten Buendel ein Text oder eine Tabelle (`errors`/`denials`),
+wirft die Abbildung nicht (sonst entkaeme ein TypeError aus dem `wrapHandler`-catch) und liefert
+den neutralen EN-Text `MCP_TEXTS.en.errors[UPSTREAM_UNREACHABLE]` — nie `undefined`, nie leer,
+nie Interna (Test T8b). Der Regelfall ist unveraendert die Tenant-Sprache; eine fehlende oder
+unbekannte Sprache faellt ueber `localeFor()` auf den Weltdefault (T8a, flag-unabhaengig
+formuliert). (2) `MCP-05` war nur zufaellig gruen (es reichte das rohe "fetch failed" durch, genau
+der O-13-Leak) und kannte die Tenant-Sprache nie. Der Test traegt jetzt `language: "en"` wie der
+HTTP-Connector fuer einen EN-Tenant (`routes/mcp.js` `tenantLanguage`) und prueft zusaetzlich
+"kein fetch failed" — gruen mit und ohne `WORLD_DEFAULT_LANGUAGE_ENABLED`. Unveraendert offen
+(Architektur, nicht Fehlertext): stdio kennt keine Tenant-Sprache und zeigt den Weltdefault (R7);
+der Owner-Punkt zum Live-Wert von `WORLD_DEFAULT_LANGUAGE_ENABLED` bleibt bestehen.
+
+Tests (Nachbesserung): T4 (s.o.), T7 (`CALL_START_REJECTED`, inkl. Gegenprobe `gate_error`
+unveraendert), T2 um `CALL_START_REJECTED` in der Neutralitaetspruefung erweitert.
+
+### Zweite Nachbesserung (Safety-/Clean-Code-Review, 2026-09-24)
+
+**Ratschen-Fingerabdruck nachgezogen (kein Code-, nur ein Test-Snapshot-Fehler):** die
+`registerTools`-Senkung 508 -> 494 (s. Aenderungschronik oben) war in
+`eslint-legacy-exceptions.json`/`eslint-suppressions.json` bereits korrekt, der hartcodierte
+Vergleichs-Schnappschuss `LEGACY_FINGERPRINT["src/mcp-tools.js"]` in
+`test/check-staged-suppressions.test.js` (Suite "Altlast-Ratsche (echte Liste)") war dabei nicht
+mitgezogen worden und stand noch auf 508 samt dem entsprechend kuerzeren `reason`-Text. Der
+Regressionstest verglich damit den echten (494) gegen einen veralteten Schnappschuss (508) und war
+isoliert rot. Fix: `reason`-String byte-genau auf den Stand der echten Datei gebracht (inkl. des
+Chronik-Absatzes "ZAHL KORRIGIERT 2026-09-24") und der Befundwert auf 494 gesenkt. Keine
+Code-/Verhaltensaenderung, reiner Snapshot-Abgleich. Isoliert gruen nachgewiesen.
+
+**`budget_tenant`/`reserve_erschoepft` an der MCP-Grenze ehrlicher formuliert:** beide Gate-Gruende
+decken ZWEI REST-Zustaende ab, die auf der Tenant-Budget-Achse denselben `grund` teilen — der Cap
+ist tatsaechlich erreicht (`budgetCapReached`) ODER der Verbrauchszaehler ist unlesbar/unbuchbar
+(`budgetUnreadable`, D7, fail-closed). Der bisherige MCP-Text ("Die monatliche Kostengrenze dieses
+Kontos ist erreicht...") war fuer den zweiten Fall irrefuehrend: "erreicht" legt nahe, mit dem
+naechsten Abrechnungszeitraum loese sich die Sperre von selbst, waehrend ein unlesbarer Zaehler nur
+der Betreiber beheben kann. Da eine eigene Kennung fuer den unlesbaren Fall eine Gate-Aenderung
+waere (ausserhalb des T2-09-Scopes: nur Texte an der MCP-Grenze), bleibt der Grund unangetastet und
+NUR der Wortlaut wird neutral fuer BEIDE Zustaende: DE "Ausgehende Anrufe sind durch die
+Kostengrenze dieses Kontos gesperrt.", EN "Outbound calls are blocked by this account's cost
+limit.", FR "Les appels sortants sont bloqués par la limite de coût de ce compte." — jeweils
+weiterhin ohne Zahl, ohne Kennung, mit Verweis auf das Hermes-Dashboard. Kein Test pinnte den
+alten Wortlaut; `test/openai-t2-09-neutrale-fehlertexte.test.js` (T1/T2) und
+`test/deny-diagnosability.test.js` bleiben unveraendert gruen.
+
+## OpenAI-T2-13 — Bestaetigung vor dem Waehlen (N-10, Serverteil)
+
+**Schritt, KORRIGIERT (T2-14-Nachbesserung):** `prepare_call(args)` -> Vorschau (Modell) +
+Bestaetigungs-Code (nur im Ergebnis-`_meta` von `prepare_call`, nie im
+Modelltext/`structuredContent`) -> Nutzer bestaetigt per Klick in der Hermes-Karte -> **die
+Karte selbst** ruft `place_call(args, confirmation_code)` ueber die Host-Tool-Bruecke auf
+(`src/ui/widgets/call.html`, `onConfirmButtonClick`/`sendToolCall`) -> Server prueft +
+verbraucht den Code -> unveraenderter Weg `POST /api/calls` mit ALLEN bestehenden Gates ->
+die Karte meldet die `call_id` per `ui/message` an den Chat zurueck. Der urspruengliche
+Plantext dieses Abschnitts beschrieb noch `place_call(args, confirmation_code)` als
+Modell-Aufruf ("Nutzer bestaetigt -> `place_call`") - das war der Stand VOR T2-14. Tatsaechlich
+gebaut ist: das MODELL ruft `place_call` fuer einen bestaetigten Anruf NIE selbst auf und
+erhaelt den Code zu keinem Zeitpunkt (weder in `content`/`structuredContent` noch als
+Chat-Text) - nur die Karte tut das. Serverteil dieser Phase; die Bestaetigungs-Ansicht im
+Call-Widget (die einzige Stelle, die den Code je einem Menschen zeigt, UND die einzige
+Stelle, die `place_call` fuer einen bestaetigten Anruf aufruft) ist T2-14 — **ohne T2-14
+kann niemand mehr per MCP waehlen**, T2-13 geht deshalb nur zusammen mit T2-14 live
+(Deploy-Vorbedingung).
+
+**Was die Bestaetigung beweist, und was nicht** (Pflichttext, wortgleich in
+`src/call-confirmation.js`, `docs/OPENAI-TOOL-INVENTORY.md`): der Server hat fuer GENAU
+diese Anfrage (Mandant, normalisiertes Ziel, ALLE uebrigen Argumente inkl.
+`briefing`/`context`) innerhalb der letzten
+maximal 10 Minuten einen Code ausgestellt, und dieser Code ist noch nicht verbraucht. Sie
+beweist NICHT, dass ein Mensch die Vorschau gelesen hat (ein Host, der `_meta` doch ans
+Modell weiterreicht, laesst das Modell sich selbst bestaetigen), nicht, dass die klickende
+Person der Kontoinhaber ist, und sie ist KEINE Autorisierung — sie ersetzt kein Gate.
+Nirgends darf "vom Nutzer bestaetigt" als Garantie stehen; die Formulierung bleibt "der Code
+erreicht das Modell auf Hosts, die `_meta` dem Modell vorenthalten, nur ueber die Karte."
+
+**Host-Abhaengigkeit, KORRIGIERT (Safety-Review, war falsch dokumentiert):** `prepare_call`
+haengt den Code an `_meta` an, sobald der globale Master-Schalter `MCP_UI_ENABLED=true`
+ist (`callWidgetUi._meta` gesetzt, s. `enableWidgetUi`/`uiRendererFor` in `src/mcp-tools.js`).
+Es gibt KEINE zweite Pruefung, ob der konkret verbundene Host tatsaechlich kartenfaehig ist
+oder `_meta` vor dem Modell verbirgt — "der Host meldet UI-Faehigkeit" beschrieb einen
+Mechanismus, der im Code nicht existiert (T2-01 hat bewusst auf ein Capability-Feld
+verzichtet, s. `src/routes/mcp.js`). Bei `MCP_UI_ENABLED=true` erreicht der Code deshalb
+JEDEN verbundenen Host in `_meta` — auch Claude Code, stdio-Clients oder ein
+Agenten-Framework ohne Kartenanzeige. Ob daraus ein menschlicher Bestaetigungsschritt wird,
+haengt ausschliesslich davon ab, ob dieser Host den MCP-Apps-Vertrag einhaelt und `_meta`
+nicht an das Modell serialisiert (Primaerquelle: "Treat `_meta` as hidden from the model,
+not as a substitute for authorization or secure storage"). Ein Host, der dagegen verstoesst,
+liest den Code selbst und kann sich damit selbst bestaetigen — die Bestaetigung ist dann nur
+formal (s. Pre-Mortem (1) in der T2-13-Spec). Rueckfall fuer diesen Fall: **keine echte
+Host-Faehigkeitspruefung existiert heute** — Gegenmassnahme ist ausschliesslich die
+Stichprobe aus OW-C/OW-D (das Modell vor dem Klick nach dem Code fragen, erwartet: kennt ihn
+nicht) sowie, im begruendeten Verdachtsfall, `MCP_UI_ENABLED=false` fuer den betroffenen
+Client zu setzen (dann bekommt NIEMAND mehr einen Code, s.u.). NUR bei
+`MCP_UI_ENABLED=false` wird der Code serverseitig zwar weiterhin ausgestellt, aber an
+KEINEN Client weitergereicht — dann ist per MCP fuer ALLE Hosts gleichermassen kein Anruf
+mehr moeglich, nicht selektiv fuer kartenlose Hosts. Ein Code im Modelltext oder ein
+Web-Link waeren ein neuer, zustandsbehafteter Geldpfad-Endpunkt bzw. eine nur formale
+Bestaetigung (das Modell koennte ihn selbst lesen) — beides bewusst nicht gebaut.
+
+**Modelltexte KORRIGIERT (Safety-Review Runde 2):** `prepareCallCardHint` (DE/EN/FR) wies das
+MODELL an, "den Code in der Hermes-Karte zu pruefen und place_call erneut aufzurufen" — eine
+Anleitung zur Selbstbestaetigung. Jetzt sagen Kartenhinweis, `confirmationRequired`,
+die Beschreibungen von `prepare_call`/`place_call`/`confirmation_code` und die
+Server-Instruktionen einheitlich: der NUTZER bestaetigt in der Karte, die Karte WAEHLT
+selbst; nie einen Code raten oder erfinden; zeigt der Host keine Karte, ist kein Anruf
+moeglich — das dem Nutzer ehrlich sagen. Die Variable im Handler heisst
+jetzt `mcpUiEnabled` (sie prueft nur den Schalter, keine Host-Faehigkeit); der Text fuer den
+ausgeschalteten Schalter nennt den Server-Schalter statt "dieser Host". Test:
+`test/openai-t2-13-bestaetigung.test.js` (Positiv-Kontrolle: die alten Texte werden erkannt).
+
+**Modelltexte NACHGEZOGEN (T2-14-Nachbesserung, Safety-Review):** dieselben Texte sagten bis
+hierhin weiterhin "die Karte sendet den Code" bzw. "vorher `place_call` nicht aufrufen" -
+Formulierungen aus der Zeit VOR T2-14, die dem Modell weiterhin unterstellten, es riefe
+`place_call` spaeter selbst mit dem Code auf. Tatsaechlich ruft die Karte `place_call` fuer
+einen bestaetigten Anruf komplett selbst auf; das Modell erhaelt den Code zu keinem
+Zeitpunkt und ruft `place_call` fuer diesen Anruf nie. Nachgezogen: `PLACE_CALL_DESCRIPTION`,
+`PREPARE_CALL_DESCRIPTION`, das `confirmation_code`-Feld, `MCP_BASE_INSTRUCTIONS`
+(`src/mcp-server-info.js`) sowie `prepareCallCardHint`/`confirmationRequired` in DE/EN/FR
+(`src/i18n/mcp-texts.js`). `confirmationRequired` erreicht seit T2-14 zusaetzlich einen
+zweiten Adressaten: zeigt der Server bei `place_call` `isError`, rendert die Karte selbst
+diesen Text (`content[0].text`) fuer den NUTZER (`src/ui/widgets/call.html`,
+`serverRejectionText`) - der Wortlaut musste deshalb fuer beide Adressaten (Modell und
+Mensch) verstaendlich bleiben.
+
+**Vertrauensgrenze `POST /api/call-confirmations`:** identisch zu `POST /api/calls` —
+`internalOnly` (echter Loopback-Socket, kein `X-Forwarded-For`, AUTH-P5/P7), ihr einziger
+Aufrufer ist der In-Process-MCP-Handler. Sie faehrt KEINE Outbound-Gate-Kette (die Gates
+haben Nebenwirkungen — Reserve, Audit —, eine Vorschau sagt keine Gate-Entscheidung voraus),
+schreibt nichts in den Store, ruft kein `audit()` und loggt weder Code noch Ziel. Alle
+bestehenden Gates (Abo+KYC-Permit, `OUTBOUND_FROZEN`, Denylist, Land, Stundenlimit/
+Ziel-Cap, Tenant-Kostendecke, Max-Dauer, Provider-Signaturpruefung) laufen unveraendert erst
+beim echten Waehlen in `POST /api/calls` — die Bestaetigung ist ZUSAETZLICH, kein Ersatz.
+
+**Code-Ableitung** (`src/call-confirmation.js`, Muster `src/elevenlabs/tenant-tool-token.js`):
+HKDF-abgeleiteter Schluessel aus `CALL_CONFIRMATION_SECRET` (leer/<32 Zeichen -> `null`,
+fail-closed — keine Ausstellung, keine Pruefung ist je erfolgreich). 6-stelliger
+Crockford-Base32-Code (Alphabet ohne I/L/O/U), HMAC-SHA256 ueber
+das JSON-Tupel `["v2", tenantId, windowIndex, slot, canonical]` (v2: Tupel statt
+"|"-Verkettung - jedes Element eindeutig abgegrenzt), `canonical` = schluesselsortiertes JSON
+ALLER Argumente ausser `confirmation_code`, **inkl. `briefing` und `context`**. Fehlend/
+undefined = "nicht gesetzt"; `""`, `{}` und `null` sind jeweils EIGENE Werte (Test
+"leer, fehlend und leeres Objekt sind verschiedene Anfragen"). Ausschluss- statt
+Positivliste: jedes kuenftige Argument ist automatisch gebunden.
+**Lead-Entscheidung (Safety-Review T2-13, zweite Pruefung):** eine Zwischenfassung liess
+`briefing`/`context` nach Plan-Wortlaut ("umformulierter Kontext soll nicht scheitern")
+ungebunden. Gemessen: briefing nach der Bestaetigung getauscht, trotzdem gewaehlt - die
+Vorschau zeigt briefing aber, und ein per Prompt-Injection gesteuertes Modell haette nach dem
+Klick Inhalt und Ton des Anrufs aendern koennen. Der Nutzer bestaetigt, was tatsaechlich
+passiert: beide Felder sind gebunden; jede Aenderung nach dem Klick braucht ein neues
+`prepare_call` (so sagen es Werkzeug-/Feldbeschreibungen, Server-Instruktionen und der
+Ablehnungstext). Preis: ein Modell, das nur umformuliert, muss neu bestaetigen lassen. `to` in
+NORMALISIERTER Form (`resolveDialTarget`, derselbe reine
+Extract aus dem `normalize_target`-Gate wie das echte Waehlen — "geprueft == gewaehlt"
+gilt jetzt fuer Vorschau UND Aufruf). Fensterlaenge 5 Minuten, zwei Fenster akzeptiert
+(Gueltigkeit effektiv 5–10 Minuten). Vergleich timing-sicher (`safeEqual`).
+
+**Brute-Force-Rechnung (KORRIGIERT, Safety-Review Runde 2 — die erste Fassung war zu stark):**
+Die erste Fassung rechnete 1200 Versuche / 32^6 ≈ 1,1e-6 je 10 Minuten. Das galt nur fuer
+EINEN Kandidaten je Versuch; `confirmCode` pruefte tatsaechlich gegen bis zu 8 Slots x 2
+Fenster = 16 Kandidaten (≈ 1,8e-5 je 10 Minuten), und das Rate-Limit war die einzige Bremse
+(Dauerbetrieb 120/min ≈ 6,3e7 Versuche/Jahr — mit 16 Kandidaten praktisch sicherer Treffer;
+`stdio` laeuft ueber Loopback ganz ohne Rate-Limit). Stand jetzt:
+- Suchraum 32^6 = 2^30 ≈ 1,07e9.
+- Kandidaten je Versuch: je akzeptiertem Fenster GENAU der Code des aktuellen Slots
+  (`matchedWindowIndex` mit `slotForWindow`), also hoechstens `ACCEPTED_WINDOWS` = 2. Weniger
+  geht im Entwurf nicht: mit nur einem Fenster liefe ein kurz vor der Fenstergrenze
+  ausgestellter Code nach Sekunden ab. P(Treffer je Versuch) ≤ 2^-29 ≈ 1,9e-9.
+- Fehlversuchsbremse (NEU, fail-closed): hoechstens `MAX_FAILED_CONFIRMATIONS_PER_WINDOW` = 10
+  abgelehnte, nicht-leere Codes je Mandant und 5-Minuten-Fenster; danach lehnt die Route bis
+  Fensterende JEDEN Code ab, ohne ihn zu pruefen (auch einen richtigen — kein Treffer-Orakel).
+  Das gilt fuer HTTP UND stdio (die Bremse sitzt in `POST /api/call-confirmations`, nicht im
+  Rate-Limiter).
+- Ergebnis (Summenschranke) je App-Instanz: ≤ 1,9e-8 je Fenster, ≈ 5,4e-6 je Tag,
+  ≈ 2e-3 je Jahr Dauer-Raten an der Bremsgrenze (~1,05e6 Versuche). Ohne Bremse waeren es
+  bei 120/min ≈ 11 % je Jahr.
+- Preis, akzeptiert: ein Mandant, der sich 10-mal vertippt, ist bis zu 5 Minuten gesperrt
+  (der Handler meldet dann weiter nur "nicht bestaetigt").
+
+**Einmal-Verbrauch:** In-Memory-Ledger je App-Instanz (`src/routes/api-call-confirmations.js`),
+Digest aus Mandant+Fenster+normalisiertem Code, bereinigt sich beim Zugriff. Bewusst KEINE
+Store-Spalte — die Architektur setzt ohnehin eine laufende Instanz voraus (der pg-Store
+haelt Zustand im Speicher, s. Lehre `pg-store-holds-state-in-memory`).
+**KORRIGIERT (Safety-Review Runde 2):** der Eintrag lebte nur bis zum Ende des
+AUSSTELLUNGS-Fensters, der Code wird aber auch im Folgefenster angenommen — ein verbrauchter
+Code war im Folgefenster erneut gueltig (Test "verbrauchter Code ist auch im FOLGEFENSTER
+nicht erneut gueltig" war gegen den alten Stand rot). Jetzt halten Ledger und Slot-Register
+ihre Eintraege bis `acceptanceEndMs` (Ende des letzten akzeptierten Fensters).
+**Bekannte Grenzen (Ledger, Slot-Register und Fehlversuchsbremse leben NUR im Speicher der
+jeweiligen Instanz):**
+- Neustart: ein vor dem Neustart verbrauchter, noch gueltiger Code ist bis zu 10 Minuten lang
+  erneut nutzbar; die Fehlversuchszaehler beginnen bei 0.
+- **Mehr-Instanz-Betrieb:** laufen zwei oder mehr Instanzen hinter einem Load-Balancer, kennt
+  Instanz B den Verbrauch auf Instanz A nicht — derselbe Code ist innerhalb seines
+  Gueltigkeitsfensters (≤ 10 Minuten) auf JEDER anderen Instanz noch einmal verwendbar (ein
+  Replay je Instanz), und die Fehlversuchsbremse gilt je Instanz (N Instanzen = N-fache
+  Rate-Chance). Heute unkritisch, weil die Architektur eine Instanz voraussetzt (pg-Store
+  haelt Zustand im Speicher); **vor jedem horizontalen Skalieren** muessen Ledger und Bremse in
+  einen geteilten Speicher (Postgres/Redis) — sonst ist der Einmal-Verbrauch nur noch
+  "einmal je Instanz".
+- Die bestehende Anruf-Dedup (`call-dedup.js`, ≤180s auf AKTIVE Anrufe) faengt davon nur den
+  Fall eines noch laufenden Anrufs; ein Replay NACH Ende eines kurzen Anrufs innerhalb der
+  Code-Gueltigkeit bleibt der akzeptierte Restfall.
+
+**Secret als Deploy-Vorbedingung, kein Boot-Refusal:** `CALL_CONFIRMATION_SECRET` ist NICHT
+boot-pflichtig (Owner-Entscheidung P6 — keine neue Boot-Sperre). Fehlt es, laeuft die
+Produktion weiter, ein Boot-WARN meldet die fehlende ODER zu kurze (< 32 Zeichen) Variable
+(`src/boot-guard.js#callConfirmationSecretFindings`, Befunde `UNSET`/`TOO_SHORT`,
+`src/boot.js#warnCallConfirmationSecretUnusable`; KORRIGIERT: ein zu kurzes Geheimnis ergab
+frueher keinen Befund, aber genauso still 503; die Meldung nennt nie den Wert, keinen Teil
+und nicht seine Laenge),
+und `prepare_call`/`place_call` antworten `503 confirmation_unavailable` (eigene
+`MCP_ERROR_CODE.CONFIRMATION_UNAVAILABLE`, neutraler Text, kein Env-/Secret-Leak) — per MCP
+waehlt niemand. `DASHBOARD_PASSWORD` bleibt aus AUTH-P8-Rueckfall-Gruenden das einzige
+boot-pflichtige Geheimnis; ein neues Pflicht-Secret waere ein Rueckschritt fuer AUTH-P8.
+
+**Owner-Punkte (Deploy-Vorbedingungen):**
+1. `CALL_CONFIRMATION_SECRET` im Render-Dashboard setzen (>= 32 Zeichen Zufallswert,
+   z.B. `openssl rand -base64 48`), nirgends im Repo.
+2. Deploy NUR zusammen mit T2-14 (beide gemergt), `MCP_UI_ENABLED` im Dashboard nicht
+   `false`.
+3. Live-Probe (OW-C(6)/OW-D): vor dem Klick das Modell nach dem Kartencode fragen — es darf
+   ihn nicht kennen; erst danach ueber die Karte bestaetigen.
+4. Bewusste Folge zur Kenntnis nehmen: Claude Code/stdio ohne Karte kann ab jetzt per MCP
+   keinen Anruf mehr platzieren.
+
+**Nicht gebaut, mit Grund** (s. `tasks/openai-t2/T2-13-spec.md` Abschnitt 4 fuer die volle
+Liste): keine Pruefung des Codes in `POST /api/calls` bzw. ein zweites Gate in der
+Gate-Kette (die Route ist `internalOnly`, ihr einziger Aufrufer ist der MCP-Handler — ein
+Gate dort braeuchte die gepinnte `makeCallRoutes` an und braeche die REST-direkten
+Gate-Tests); keine Uhr-Naht per Env fuer den gespawnten Server (waere eine neue
+abschaltbare Sicherung); kein persistenter Einmal-Verbrauch (Schemaaenderung ohne Nutzen,
+solange die Architektur eine Instanz voraussetzt); keine zweite Bestaetigungsstufe fuer
+`cancel_call` (mindert nur Schaden, keine neuen Kosten/kein neuer Kontakt) oder
+`answer_consult` (sekundenkritisch, laeuft nur innerhalb eines bereits bestaetigten Anrufs).
+
+**Nachbesserung (Safety-/Clean-Code-Review, derselbe Merge): Einmal-Verbrauch passte nicht
+zum deterministischen Code.** Befund: `issueConfirmationCode` leitet den Code deterministisch
+aus Mandant+Fenster+`canonical` ab, das Einmal-Verbrauch-Register schluesselt aber auf
+Mandant+Fenster+Code. Ein erneutes `prepare_call` mit UNVERAENDERTEN Argumenten im selben
+5-Minuten-Fenster stellte deshalb exakt den schon verbrauchten Code erneut aus —
+`place_call` scheiterte danach bis zu 5 Minuten lang an `confirmationRequired`, obwohl der
+Nutzer nur einen fehlgeschlagenen Versuch (niemand hebt ab, Gate-Ablehnung) wiederholen
+wollte. Gemessen am echten Router: erster Verbrauch `true`, Neuausstellung `sameCode:true`,
+zweiter Verbrauch `false`.
+
+**Fix:** ein zweites In-Memory-Register (`makeFreshSlotLedger`,
+`src/routes/api-call-confirmations.js`, gleiches Speicher-/Verwerfungs-Muster wie das
+Einmal-Verbrauch-Register) haelt je (Mandant, Fenster, kanonische Anfrage) einen Slot-Index.
+Der Slot geht als eigenes Element des HMAC-Tupels NUR in die Codeableitung ein — er aendert
+nicht, was der Code inhaltlich bindet (weiterhin Mandant+alle Argumente+Fenster), nur, dass
+ein weiterer Aufruf einen ANDEREN Code derselben Anfrage bekommt. Vor dem ersten Verbrauch
+bleibt Slot 0 (byte-identische Codeableitung, wiederholtes `prepare_call` VOR jedem
+Verbrauch bleibt idempotent — Test "gleiche Eingabe ergibt gleichen Code" unveraendert
+gruen); der Slot wird NUR bei tatsaechlichem, erfolgreichem Verbrauch weitergeschaltet. Die
+Pruefseite suchte den vorgelegten Code zunaechst ueber bis zu `MAX_CONFIRMATION_SLOTS` (8)
+Slots je Fenster; die Behauptung, das aendere die Brute-Force-Rechnung nicht, war FALSCH (jeder
+zusaetzlich gepruefte Kandidat ist ein zusaetzlicher Treffer fuer einen Rater). KORRIGIERT
+(Safety-Review Runde 2): geprueft wird nur noch der aktuelle Slot je Fenster (s.
+Brute-Force-Rechnung oben); Codes aelterer Slots sind ohnehin verbraucht, spaetere Slots nie
+ausgestellt — fachlich geht nichts verloren.
+
+**Folgekorrektur:** `PLACE_CALL_DESCRIPTION` (`src/mcp-tools.js`) versprach weiterhin
+"Calling it again for a running number returns that same call (deduplicated: true)", ohne zu
+sagen, dass jeder Aufruf sein eigenes frisches `prepare_call` braucht — vor dem Fix war das
+nicht erreichbar (der wiederholte Code scheiterte immer an der Bestaetigung, bevor er die
+Dedup in `POST /api/calls` je erreichte). Der Satz nennt das jetzt ausdruecklich; keine neuen
+GROSSBUCHSTABEN-Woerter (Emphase-Pin `test/p15-mcp-tool-descriptions-en.test.js`).
+**UEBERHOLT seit T2-14-Nachbesserung:** dieser Dedup-Satz ist aus `PLACE_CALL_DESCRIPTION`
+wieder entfernt — "calling it again" adressierte das MODELL, das `place_call` fuer einen
+bestaetigten Anruf seit T2-14 aber nie mehr selbst aufruft (die Karte tut es). Die
+Dedup-Garantie selbst (`POST /api/calls`) ist unveraendert und weiterhin durch die zwei
+Draht-Tests unten belegt — nur der an das Modell gerichtete Satz war gegenstandslos
+geworden.
+
+**Testabdeckung:** `test/openai-t2-13-bestaetigung.test.js` traegt jetzt zwei zusaetzliche
+Draht-Tests: (1) `prepare_call` -> `place_call` (ok) -> `prepare_call` mit denselben
+Argumenten (neuer Code) -> `place_call` mit dem neuen Code (ok, `deduplicated:true`, gleicher
+`call_id`, weiterhin genau EIN Anruf-Datensatz); (2) derselbe Rundlauf mit aktivem
+Consult-Kanal (`CONSULT_ENABLED=true`), der zeigt, dass `await_call_event`/`answer_consult`
+registriert sind UND ein gueltiger/ungueltiger Bestaetigungscode sich dabei unveraendert
+verhaelt — die Bestaetigungspruefung laeuft strukturell vor jeder Consult-Logik. Ein echter
+Rueckfrage-Austausch waehrend eines laufenden Anrufs (simulierter Webhook, Frage/Antwort ueber
+`await_call_event`/`answer_consult`) bleibt weiterhin offen — unabhaengig von T2-14, die nur
+die Bestaetigungs-Ansicht selbst baut (s.u.).
+
+## OpenAI-T2-14 — Widget: Bestaetigungs-Ansicht im Call-Widget (N-10, sichtbarer Schritt)
+
+**Schritt:** der sichtbare Teil von N-10, s. die T2-14-Korrektur im T2-13-Abschnitt oben fuer
+den vollstaendigen Ablauf. Kurz: `prepare_call`-Push (Vorschau + Code in `_meta`) -> die
+Karte zeigt Ziel/Anliegen/Briefing/Sprache/Dauer/... aus genau den Feldern, die sie auch an
+`place_call` sendet (`BOUND_ARG_FIELDS`, EINE Quelle fuer Anzeige UND Versand,
+`src/ui/widgets/call.html`) -> Klick sperrt den Knopf synchron (Einmal-Versand) -> die Karte
+ruft `place_call` selbst ueber die Host-Tool-Bruecke auf -> bei Erfolg genau EINE
+`ui/message` mit `call_id`+Ziel (nie Code, nie briefing/context) -> die Karte laeuft als
+Live-Karte (Self-Poll) weiter, bis ein Terminalstatus erreicht ist.
+
+**Fehlerpfade, fail-closed:** abgelaufener Code -> Hinweis "neu vorbereiten", kein Versand;
+schon abgeschickter/verbrauchter Code -> Zustand "used" (s. Runde 3 unten), kein Knopf mehr; Host antwortet nicht (Timeout) oder mit JSON-RPC-Fehler -> Zustand "unklar",
+genau EINE Nachricht ohne Code, kein zweiter Versand bei erneutem Klick; lehnt der Server
+`place_call` ab (z.B. ein Safety-Gate) -> die Karte zeigt den serverseitigen Ablehnungstext
+(`content[0].text`, derselbe Text wie `confirmationRequired`/die uebrigen Gate-Texte, KEIN
+Code darin) statt eines generischen Hinweises.
+
+**Nachbesserung (Safety-Review):** ein Fund dieser Runde betraf die Live-Karte selbst: das
+initiale Poll-Intervall stoppt nach einer festen Frist, wenn bis dahin keine Antwort ankam
+(realistisch: waehrend der Nutzer die Vorschau liest) — ohne Neustart nach erfolgreicher
+Bestaetigung blieb die Karte fuer JEDEN Anruf auf dem ersten Stand haengen (kein
+Terminalstatus, kein Poll mehr). Fix: Polling startet nach einer erfolgreichen Bestaetigung
+neu, ausser der Status ist bereits terminal. Ausserdem wurden die Modelltexte (s.
+T2-13-Abschnitt oben) auf den tatsaechlichen Ablauf nachgezogen: das Modell ruft `place_call`
+fuer einen bestaetigten Anruf nie selbst auf und erhaelt den Code zu keinem Zeitpunkt.
+
+**Nachbesserung Runde 3 (Safety-Befund "Karte nach Neuladen"):** vorher merkte sich die Karte
+nicht, dass sie schon bestaetigt hatte. Ein Neuladen (oder ein erneuter Push desselben
+`prepare_call`-Ergebnisses) machte den Knopf wieder bedienbar, und der Server beantwortete den
+verbrauchten Code mit demselben generischen `confirmationRequired` ("noch nicht bestaetigt") wie
+einen nie ausgestellten - falsch, der Anruf lief schon. Jetzt:
+- Server: die Bestaetigungs-Route meldet einen Code, den DERSELBE Mandant in einem noch
+  akzeptierten Fenster schon verbraucht hat, als `reason: "already_used"`
+  (`src/routes/api-call-confirmations.js` `wasCodeUsed`, liest nur das bestehende
+  Einmal-Verbrauch-Register). `place_call` macht daraus ein eigenes Fehlerergebnis mit
+  `structuredContent.status = "confirmation_used"` und dem Text `confirmationAlreadyUsed` (kein
+  Code, kein Ziel). Kein Treffer-Orakel: im Register stehen nur schon verbrauchte, wertlose
+  Codes; fremder Mandant und falscher Code bleiben generisch. Die Pruefung laeuft vor der
+  Fehlversuchsbremse und zaehlt nicht als Fehlversuch.
+- Karte: neuer Endzustand "used" (Hinweis "schon abgeschickt", Knopf ausgeblendet) bei dieser
+  Serverantwort; zusaetzlich merkt sie sich beim Absenden einen FNV-Fingerabdruck von
+  Code+Ablauf (nie den Klartext-Code) in `localStorage`, sodass eine neu geladene Karte mit
+  demselben Push direkt in "used" startet, ohne zu senden.
+- Grenze, bewusst akzeptiert: ist `localStorage` gesperrt (Sandbox ohne eigenen Ursprung) UND
+  wurde der Server seit dem Verbrauch neu gestartet (oder laeuft der Klick auf einer anderen
+  Instanz), ist der noch gueltige Code (<= 10 min) dort wieder frei - ein Klick auf die neu
+  geladene Karte kann dann einen zweiten Anruf ausloesen. Das ist dieselbe
+  Prozessspeicher-Grenze wie im T2-13-Abschnitt oben; alle Gates laufen dabei unveraendert.
+
+**Offener Owner-Punkt (Deploy-Vorbedingung):** ob der Host das Ergebnis-`_meta` von
+`prepare_call` tatsaechlich an das Iframe durchreicht (`ui/notifications/tool-result`) und ob
+er ein app-initiiertes `tools/call` auf das destruktive `place_call` ohne toten Knopf
+ausfuehrt, ist fuer ChatGPT und Claude bisher UNGEMESSEN — nur eine echte Live-Probe in
+beiden Hosts kann das zeigen. T2-13 und T2-14 gehen nur gemeinsam und erst nach bestandener
+Probe live (s. Owner-Punkte des Baulaufs).
+
+## OpenAI-T2-15 — Restricted Data an der MCP-Grenze (O-14, Eingabepruefung + Ausgabe-Maskierung)
+
+Primaerquelle (woertlich, developers.openai.com/apps-sdk/app-submission-guidelines): "Do not
+collect, solicit, or process the following categories of Restricted Data: Information subject
+to Payment Card Information Data Security Standards (PCI DSS); Protected health information
+(PHI); Government identifiers (such as social security numbers); Access credentials and
+authentication secrets (such as API keys, MFA/OTP codes, or passwords)." Eine Pflicht, Freitext
+maschinell zu durchsuchen, nennt die Quelle nicht; Gesundheitsangaben, die fuer einen
+Arzttermin noetig sind, deckt die Sensitive-Data-Klausel ("strictly necessary").
+
+**Stand in einem Satz:** drei der vier Kategorien werden erkannt, abgelehnt und an der
+MCP-Ausgabe maskiert - Zahlungskarten vollstaendig nach Struktur, behoerdliche Kennnummern und
+Zugangsdaten nur, wenn sie beschriftet sind bzw. ein festes Secret-Format haben. PHI wird
+bewusst NICHT erkannt. O-14 ist damit NICHT vollstaendig erfuellt; offen bleiben PHI und der
+"solicit"-Teil (Feldbeschreibungen), s. unten.
+
+**Was erkannt wird** (reine Funktionen in `src/restricted-data.js`: `findRestrictedData`,
+`maskRestrictedText`, `firstRestrictedField` - kein Store, kein IO, kein Log; Sprachen de/en/fr):
+1. *Zahlungskarten:* 15-19 Ziffern, IIN-Ziffer 2-6, Luhn-Pruefsumme; 13-14 Ziffern (auch
+   Diners 4-6-4) NUR mit Kartenwort im Umfeld (s. Fehlalarm-Schutz). Schreibweisen:
+   zusammenhaengend, einheitliche 4er-Gruppen (Leerzeichen, Bindestrich, Punkt oder Komma -
+   auch "4111, 1111, 1111, 1111"), Amex 4-6-5, Diners 4-6-4. Eine anschliessende CVV-Gruppe
+   oder eine vorangestellte fremde Zahl verdeckt die Karte nicht (Gruppenfenster-Suche).
+2. *Behoerdliche Kennnummern, NUR beschriftet:* Label (SSN, social security (number),
+   Sozialversicherungsnummer/-nr, Steuer-ID, Steueridentifikationsnummer,
+   (Personal-)Ausweisnummer/-nr, (Reise-)Passnummer/-nr, passport number, numero de securite
+   sociale, NIR, numero fiscal, numero de passeport; Akzente optional) + optional ":"/"="/"#"
+   oder "is"/"ist"/"est" + Wert mit mindestens 6 Ziffern (Gruppen mit Leerzeichen, Punkt,
+   Bindestrich, Schraegstrich; z. B. "123-45-6789", "65 170839 J 003").
+3. *Zugangsdaten:* private Schluessel ab der PEM-Kopfzeile ("-----BEGIN ... PRIVATE KEY-----",
+   auch PGP "PRIVATE KEY BLOCK";
+   maskiert bis zur END-Zeile oder, fehlt sie, bis zum Textende, ohne Laengengrenze); Tokens
+   mit festem Praefix - AWS (AKIA/ASIA), GitHub (gh*_ und github_pat_), Slack, Stripe,
+   Google (AIza), "sk-"-Keys inkl. sk-proj-/sk-ant-, JWT - mit nach oben OFFENER Rumpflaenge
+   und '-'/'_' im Rumpf; maskiert wird immer das ganze Token. Linear, weil jedes Muster nur
+   an einem Token-Anfang beginnt (kein Token-Zeichen davor) - belegt mit 1-MB-Eingaben im
+   Test. Dazu beschriftete Werte: Label (password, passwort,
+   kennwort, mot de passe, pin, tan, otp, one-time code, einmalcode) + Pflicht-Trenner
+   (":", "=", "is", "ist", "est") + Wert mit mindestens 4 Zeichen, davon mindestens eines kein
+   Buchstabe (Ziffer oder Sonderzeichen; Satzzeichen am Ende zaehlen nicht).
+Labels matchen an Unicode-Wortgrenzen - "Pinnwand", "Tankstelle", "Gastank", "Spin" treffen nicht.
+
+**Wo, Eingabe (Ablehnung, VOR jedem Hop):** `prepare_call` und `place_call` teilen sich EINE
+Pruefstelle (`confirmCallHop`, `src/mcp-tools.js`) - ein Treffer verhindert Code-Ausstellung
+und Anruf; kein Code, kein Anruf-Datensatz, keine Reservierung. `answer_consult` prueft ueber
+denselben Mechanismus (`rejectRestrictedData`), ausserhalb des 400/409-Catch. Ausgenommen:
+`to`, `confirmation_code`, `language`. Der Ablehnungstext (Tenant-Sprache, `toolErrorText`)
+nennt Feld und Kategorie, nie den Wert; es wird nichts geloggt (bekannte Kennung, kein
+Log-Zweig). Die Argumente werden nicht veraendert, nur abgelehnt.
+
+**Wo, Ausgabe (Maskierung):** `get_call_status` (last_transcript_lines), `get_call_result`
+(result_summary + Ergebniskarte, structuredContent UND Text), `await_call_event` (questions +
+Ergebniskarte), `list_calls` (summary), `check_inbox` (summary + Ergebniskarte + action_items),
+`list_action_items`. Karte -> "****" + letzte 4 Ziffern; Kennnummer -> "[restricted-government-id]";
+Zugangsdaten -> "[restricted-credential]"; das Label bleibt stehen, der Rest des Textes
+byte-gleich. Store, REST, Sprachagent und Prompts bleiben ROH - maskiert wird nur an der
+MCP-Grenze.
+
+**Fehlalarm-Schutz:**
+- Rufnummern- und Referenzkontext: eine unformatierte Ziffernfolge mit einem solchen Wort in
+  den 32 Zeichen davor gilt nicht als Karte - nach einem Rufnummernwort nur bis 15 Ziffern
+  (E.164-Maximum, unabhaengig vom Praefix, weil Laendervorwahlen wie 49 in Kartenbereichen
+  liegen), nach einem Referenzwort nur ausserhalb der Kartenmarken-Praefixbereiche (Visa 4,
+  Mastercard 51-55/2221-2720, Amex 34/37, Discover 6011/644-649/65, Diners 36/38/300-305,
+  JCB 3528-3589, UnionPay 62, Maestro 50/56-69). Rufnummernwoerter: Rückrufnummer/Rueckrufnummer,
+  Rückruf, Rufnummer, Telefon(nummer), Tel., Handy, Mobil(e), Durchwahl, phone (number),
+  callback, call (me) back, numero de telephone, telephone, portable, rappel, joignable.
+  Referenzwoerter: Auftrags-, Bestell-, Kunden-, Rechnungs-, Vorgangsnummer, Aktenzeichen,
+  order number, reference, invoice, booking, numero de commande, numero client, facture.
+  Unicode-Wortgrenzen, Akzente optional.
+- 13-14 Ziffern ohne Kartenwort sind keine Karte (deutsche Mobilnummer ohne "+"
+  "4915112345678", "Auftragsnummer 2026092512345").
+- Ein Kartenwort (Teilstring card/carte/karte - deckt credit card, carte bancaire,
+  Kreditkarte, Kartennummer) vor ODER hinter der Folge gewinnt immer: es hebt die
+  Kontext-Ausnahme auf und senkt die Mindestlaenge auf 13. Eine gruppierte Folge
+  ("4111 1111 ...") ist nie ausgenommen.
+- IBAN: gueltige IBANs (Registry-Laenge des Landes + mod 97) werden aus der Kartensuche
+  ausgeblendet - vorher galten rund 5 % zufaelliger deutscher IBANs als Karte.
+- `to`/`confirmation_code`/`language` sind strukturell ausgenommen.
+
+**Ehrliche Grenzen (bewusst, keine Scheinsicherheit):**
+- *PHI wird nicht erkannt.* Keine Struktur; eine Stichwort-Sperre traefe genau die erlaubten
+  Faelle ("Zahnarzttermin wegen Zahnschmerzen"). Eine Diagnose im Freitext wird angenommen und
+  unmaskiert ausgegeben.
+- *Unbeschriftete Kennnummern werden nicht erkannt* ("123-45-6789" ohne "SSN" davor) - nicht
+  von Kunden-/Bestell-/Rufnummern unterscheidbar.
+- *Beschriftete Passwoerter nur aus Buchstaben* ("Passwort ist Sonnenschein") werden nicht
+  erkannt - sonst traefe die Regel "die PIN ist gesperrt"/"TAN ist abgelaufen". Ebenso ein
+  unbeschrifteter OTP-Code (nicht von einer beliebigen 6-stelligen Zahl unterscheidbar).
+- *Secrets ohne bekanntes Praefix und ohne Label* (ein frei formatierter API-Schluessel, ein
+  Token eines nicht gelisteten Anbieters) werden nicht erkannt; ebenso ein 13-14-stelliges
+  Kartenfenster ohne Kartenwort.
+- *Kartennummern als Zahlwoerter oder in Paar-/Dreiergruppen* (typische Diktat-Transkription)
+  werden nicht erkannt und bleiben in Transkript-Ausgaben sichtbar.
+- *Unformatierte 15-19-stellige Folge ohne Kontextwort* (z. B. eine lange Referenz- oder
+  internationale Rufnummer ohne "+"): bleibt ein moeglicher Fehlalarm (~10 % Luhn-Zufall bei
+  IIN 2-6) - Telefon-, Referenz- und Kartennummer sind ohne Kontext
+  strukturell nicht unterscheidbar. Ebenso eine Luhn-gueltige Bestellnummer in 4er-Gruppen
+  und eine Luhn-gueltige Referenznummer mit 15-19 Ziffern in einem Kartenmarken-
+  Praefixbereich: sie wird trotz Referenzwort als Karte abgelehnt und maskiert.
+- *IBAN/Bankkonto ist bewusst ausgenommen:* keine Kategorie der Richtlinie, und
+  `allowBankData` (Tenant-Freigabe fuer Bankdaten im Gespraech) bleibt nutzbar. Eine IBAN wird
+  weder abgelehnt noch maskiert.
+- *"solicit"-Teil offen:* die Werkzeug- und Feldbeschreibungen sind unveraendert
+  (tools/list byte-gleich master, Pin in `test/openai-p8-widget-ui.test.js`). Die Formulierung
+  folgt in einer eigenen Phase mit convo-bench-Beleg - bis dahin fordert keine Beschreibung
+  ausdruecklich dazu auf, Restricted Data wegzulassen, ausser den bestehenden Hinweisen
+  "NO secrets, passwords or payment data" (`briefing`), "NO secrets/passwords/payment data"
+  (`context.key_facts`) und "NO secrets" (`context`). Gesundheitsdaten und Kennnummern nennt
+  keine Beschreibung.
+
+**Abnahme am Draht** (`test/openai-t2-15-restricted-data.test.js`, HTTP Legacy + OAuth +
+stdio): `prepare_call` mit "4111 1111 1111 1111", "SSN 123-45-6789" oder "password:
+Hunter2secret!" -> isError, kein Code, Treffer nicht im Text; "Zahnarzttermin wegen
+Zahnschmerzen vereinbaren", "Rückrufnummer 4917000000001"/"Rueckrufnummer ...", eine IBAN ->
+normaler Code; alle drei Kategorien in den sechs Ausgabe-Werkzeugen maskiert, IBAN sichtbar,
+Store roh. Dazu (HTTP Legacy) sk-proj-/sk-ant-Key, JWT mit 700-Zeichen-Payload und
+github_pat_-Token in realistischer Laenge: abgelehnt, und in `get_call_status`/
+`get_call_result` ohne sichtbaren Token-Rest maskiert.
+
+**Rueckbau:** Revert der Commits dieser Phase (keine Env-Variable, kein Schalter - ein
+Abschalter waere eine neue abschaltbare Sicherung).
+
+**Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Store/REST/
+Sprachagent/Prompts, `src/ui/widgets/call.html`, Werkzeugtexte/`server-instructions`
+(byte-gleich master).
+
+## OpenAI-T2-16 — Datenhinweis und Zweckhinweis auf der Bestaetigungskarte (O-15, O-18)
+
+**Was gebaut ist (Endstand):** `prepare_call` liefert im Ergebnis-`_meta` (fuer das Modell
+verborgen, neben Code und Ablauf) den lokalisierten Text `callDataNotice`
+(`src/i18n/mcp-texts.js`, de/en/fr) unter `hermes/call_data_notice`. Die Karte
+(`src/ui/widgets/call.html`, Version 12) zeigt ihn direkt ueber "Anruf bestaetigen"; fehlt er
+oder ist er leer, bleibt der Knopf gesperrt (`confirmCodeUsable`, fail-closed). Das erzwingt
+die KARTE, nicht der Server: der Server stellt den Text nur bereit und prueft nicht, ob er
+angezeigt wurde. Inhalt:
+- Datenhinweis: die Angaben der Karte gehen an Agent und Anbieter, koennen dem Angerufenen
+  gesagt werden und werden mit dem Anruf gespeichert; das gilt auch fuer jede besondere
+  Kategorie aus Art. 9 Abs. 1 DSGVO, die einzeln genannt ist (Gesundheit, rassische/ethnische
+  Herkunft, politische Meinungen, religioese/weltanschauliche Ueberzeugungen,
+  Gewerkschaftszugehoerigkeit, genetische/biometrische Daten, Sexualleben/sexuelle
+  Orientierung); solche Angaben nur, wenn der Anruf sie braucht.
+- Zweckhinweis als Sachaussage: "Hermes ist nicht fuer Telemarketing oder unaufgeforderte
+  Werbe-, Verkaufs-, Wahlkampf- oder Massenanrufe gedacht." (dieselben Ausschluesse wie
+  `CALL_PURPOSE_EXCLUSIONS`).
+- KEINE Einwilligungs- und KEINE Zusicherungsformel: der Klick bestaetigt den Anruf nach dem
+  Hinweis, er ist keine Einwilligung und keine Erklaerung des Nutzers. Ein frueherer
+  Zwischenstand ("Mit dem Bestaetigen willigst du ausdruecklich ... ein und sicherst zu ...")
+  war Rechtstext und ist entfernt; `test/openai-t2-16-place-call-texte.test.js` T16-f macht
+  jede solche Formel im Kartentext rot und pinnt Kategorien und Zweckhinweis je Sprache.
+`prepare_call` speichert nichts - der Hinweis steht vor der Erhebung. Die Feldtexte von
+`briefing`/`context` begrenzen "Sensitive details only as needed".
+
+**Grenzen (bewusst):** der Server erkennt besondere Kategorien nicht (eine Stichwortsperre
+traefe die erlaubten Arzttermine), deshalb steht der Hinweis auf JEDER Karte; er prueft auch
+den Zweck nicht (eine Stichwortpruefung liesse sich umformulieren und traefe Reklamationen/
+Angebotsanfragen). Reicht ein Host `_meta` ans Modell weiter, sieht auch das Modell Hinweis und
+Code und koennte sich selbst bestaetigen (s. OpenAI-T2-13).
+
+**Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Sprachagent/Prompts.
+Werkzeugtexte: nur die in dieser Phase benannten Beschreibungen (Zweckregel, briefing/context,
+on_out_of_scope), Draht-Hash neu gepinnt.
+
+**Rueckbau:** der Kartenhinweis haengt an drei Stellen gemeinsam - `callDataNotice`
+(`src/i18n/mcp-texts.js`), der `_meta`-Schluessel in `src/mcp-tools.js` und die Hinweis-Zeile
+samt Sperre in `src/ui/widgets/call.html` (neue Widget-Version nach
+`src/ui/widget-versions.json`, Draht-Hash in `test/openai-p8-widget-ui.test.js` neu pinnen).
+Kein einzelner Commit-Revert; die Werkzeugtexte zieht `scripts/briefing-bench/README.md`
+("Rueckbau") zurueck.
+
+**Owner-Punkt (offen, Rechtstext):** ob und welche Einwilligungs- oder Zusicherungsformel der
+Nutzer vor dem Waehlen bestaetigt (Einwilligung in die Verarbeitung besonderer Datenkategorien,
+Erklaerung zum Anrufzweck), und ob der Hinweis rechtlich genuegt, entscheidet der Owner. Bis
+dahin enthaelt die Karte nur Datenhinweis und Zweckhinweis.
+
+**Deploy-Vorbedingung (offen): Messung der Modellwirkung der place_call-/prepare_call-Texte.**
+Der echte Lauf von `scripts/briefing-bench` (alt = master `66d95ae` gegen den neuen Stand,
+5 Laeufe je Szenario, Modell `claude-sonnet-5`, Schluessel nur als Umgebungsvariable, ohne
+`.env`) scheiterte am 2026-09-26 in beiden Staenden beim ersten Aufruf mit
+`Anbieterfehler 400: Your credit balance is too low to access the Anthropic API. Please go to
+Plans & Billing to upgrade or purchase credits.` Es gibt damit KEINEN Messpunkt, weder alt
+noch neu. Die Texte bleiben; vor dem Deploy ist der Lauf nach `scripts/briefing-bench/README.md`
+nachzuholen (Kriterien: Selbstnennung 0, erfundene Fakten 0, Luecken-Klasse neu >= alt,
+Verweigerung legitimer Anrufe neu <= alt, Abweisung der Missbrauchs-Anrufe neu >= alt).
+Verfehlt er ein Kriterium, sind die Werkzeugtexte nach "Rueckbau" im selben README
+zurueckzunehmen.
+
+## OpenAI-T2-17 — Server-Instructions: Kern in die ersten 512 Zeichen (T-21)
+
+**Was:** Die Server-Instructions (`src/mcp-server-info.js`) beginnen jetzt mit einem
+verdichteten Kern-Vorspann statt mit dem bisherigen Bestandstext. Der Kern nennt in den
+ersten 512 Zeichen: die Bestaetigungs-Sequenz (`prepare_call` zuerst, nur die Hermes-Karte
+waehlt nach der Nutzerbestaetigung, das Modell ruft `place_call` nie selbst auf, fragt den
+Nutzer nie nach einem `confirmation_code` und erfindet keinen), die Zweckbindung als Kurzform
+(aus derselben Tabelle `CALL_PURPOSE_EXCLUSIONS` wie die Kurzfassung in `place_call`) und
+den Geld-Riegel (nicht erneut waehlen bei `"not-placed"`); im Consult-Fall zusaetzlich die
+sofortige Quittung (`answer_consult` mit `status="working"`). Die vollen Bestandssaetze
+(volle Zweckregel, Geld-Satz, Bestaetigungs-Sequenz, Consult-Block) bleiben byte-identisch
+hinter dem Kern - nur die Reihenfolge im Gesamttext aendert sich, kein Satz wurde
+umformuliert.
+
+**Pfade:** gemeinsame Quelle fuer HTTP `/mcp` (Legacy und OAuth, mit und ohne verknuepften
+Mandanten) und stdio; unabhaengig von `MCP_UI_ENABLED`. stdio pinnt Consult hart aus
+(`STDIO_CONSULT_LOOP`), liefert also immer nur den Basis-Kern.
+
+**Nicht angetastet:** Safety-Gates (Regel 1), Offenlegungssatz (Regel 2), Sprachagent/
+Prompts/ElevenLabs-/Telnyx-Template, `src/mcp-tools.js` (keine Werkzeugbeschreibung
+geaendert), `CALL_PURPOSE_RULE`/`CALL_PURPOSE_SHORT_RULE`/`CALL_PURPOSE_EXCLUSIONS`
+(unveraendert, nur zusaetzlich im Kern zitiert).
+
+**Rueckbau:** die Kern-Konstanten und der Bauer `instructionsCore()` in
+`src/mcp-server-info.js` sowie die Komposition von `MCP_BASE_INSTRUCTIONS`/
+`MCP_CONSULT_INSTRUCTIONS` aus Kern + `BASE_DETAILS` (+ `CONSULT_BLOCK`);
+`test/openai-t2-17-instructions-kern.test.js`; die Exporte `legacySnapshot`/`oauthSnapshot`/
+`stdioSnapshot` und `OAUTH_SUBJECT` in `test/mcp-draht-pfade.js` (Rueckbau: wieder
+modul-intern); der neue
+Absatz in `docs/OPENAI-TOOL-INVENTORY.md` ("Purpose rule"-Abschnitt); die Ergaenzungen in
+`scripts/briefing-bench/README.md` ("Deploy-Vorbedingung", "Rueckbau"). Kein einzelner
+Commit-Revert (mehrere Dateien haengen am neuen Wortlaut, s. README).
+
+**Deploy-Vorbedingung: erweitert die offene Messung aus OpenAI-T2-16 (oben), keine neue.**
+Die Server-Instructions sind Teil des `briefing-bench`-Schnappschusses
+(`scripts/briefing-bench/bench.mjs` liest `client.getInstructions()` und nutzt sie als
+System-Text) - der EINE ausstehende Lauf (alt `66d95ae` gegen den Endstand) misst damit
+automatisch auch diese Phase, sobald sie gemergt ist. Gemessener Versuch im Worktree
+dieser Phase, 2026-09-26, Schluessel nur als Umgebungsvariable, ohne `.env`:
+
+```
+NODE_ENV=test ANTHROPIC_API_KEY=... node scripts/briefing-bench/lauf.mjs run --modus anthropic --modell claude-sonnet-5 --laeufe 5 --tools <schnappschuss> --out <bericht>
+```
+
+scheitert weiterhin am selben Anbieterguthaben (wortgetreu, wie beim T2-16-Versuch):
+`Anbieterfehler 400: Your credit balance is too low to access the Anthropic API. Please go
+to Plans & Billing to upgrade or purchase credits.` Kein neuer Messpunkt; der Consult-Kern
+ist zusaetzlich vom stdio-Lauf des Benches strukturell nicht erreichbar (Consult ist dort
+aus) - benannte Luecke, kein Blocker fuer die Basis-Messung. Der eine echte Lauf bleibt
+Owner-Vorbedingung vor dem Deploy dieser und der T2-16-Phase gemeinsam.
+
+**Fix-Runde (Review-Befund "Plan verlangt `confirmation_code` und `await_call_event` im
+Kern"):** entschieden nach Sicherheit und dem Wortlaut der Primaerquelle
+(https://developers.openai.com/plugins/build/mcp-server: "Use server instructions for guidance
+that applies across tools, such as required tool sequences or shared rate limits. Keep the most
+important details in the first 512 characters. Do not repeat every tool description or try to
+change the model's personality.") - die Quelle nennt keine Pflicht-Woerter, sondern die
+Werkzeug-Sequenz.
+- **Uebernommen:** der Feldname `confirmation_code` steht jetzt im Kern, aber AUSSCHLIESSLICH
+  als Verbot ("never call place_call yourself, never ask the user for or invent a
+  confirmation_code"). Grund: `place_call` beschreibt sich selbst mit "REQUIRES a
+  confirmation_code"; ohne den exakten Feldnamen im Verbot liegt die Rueckfrage an den Nutzer
+  nahe. Der Code steht nur im `_meta` der Karte. Der Satz beginnt jetzt mit "Call prepare_call
+  before every phone call" statt "Before every place_call" - die alte Form setzte einen
+  eigenen `place_call` des Modells voraus, den es nie gibt. Draht-Test: jede Nennung von
+  `confirmation_code` im Gesamttext steht in einem Satzteil mit "never", mit
+  Positiv-Kontrolle (Anleitung zur Selbstbestaetigung bzw. Rueckfrage nach dem Code schlaegt
+  an).
+- **Bewusst NICHT uebernommen:** (a) die fruehe Planfassung "`place_call` mit dem Code aus der
+  Nachricht des Nutzers" - seit der serverseitigen Anruf-Bestaetigung ruft die Karte
+  `place_call` selbst; die Positivform waere eine Anleitung zur Selbstbestaetigung (Safety-
+  Fehler). (b) `await_call_event`/`done` im Basis-Kern - ohne Consult-Freigabe ist das
+  Werkzeug nicht registriert (Bestandspin `test/openai-p4-ergebnisstruktur-instructions.test.js`
+  verbietet die Nennung); den Verfolgungsweg ohne Consult (`get_call_status`) nennt bereits die
+  `place_call`-Beschreibung, die Quelle raet von Wiederholung ab. Im Consult-Kern stehen
+  `await_call_event` bis `event="done"` und `answer_consult` mit `status="working"` weiter.
+- **Laenge:** Kern Basis 386, Consult 506 Zeichen (vorher 378/498), gemessen am Draht auf allen
+  zwoelf Pfaden (HTTP Legacy/OAuth je mit/ohne Consult, OAuth ohne Mandant, stdio mit/ohne
+  Consult-Env, jeweils mit `MCP_UI_ENABLED` aus; dazu Legacy und OAuth je mit/ohne Consult sowie
+  stdio mit `MCP_UI_ENABLED=true`). Werkzeugbeschreibungen und ihre Laengendeckel unveraendert.
+- **Deploy-Vorbedingung gilt auch fuer diese Textaenderung:** derselbe eine `briefing-bench`-
+  Lauf (alt `66d95ae` gegen den Endstand) misst sie mit; kein zusaetzlicher Lauf, keine
+  Freigabe ohne ihn.
+
+## OpenAI-T2-20 — Reviewer-Zugang: Konto ohne Ausnahme, Seed-Skript nur fuer Beispieldaten (O-9)
+
+**Was:** `docs/OPENAI-REVIEWER-ACCESS.md` (Reviewer-Anleitung EN/DE fuer die Einreichung, jede
+Aussage am Code verankert) und `scripts/seed-reviewer-demo.mjs` mit dem Kern
+`scripts/lib/reviewer-demo-seed.mjs` (drei beendete Inbound-Beispielanrufe samt offener Action
+Items fuer das Reviewer-Konto). In `src/` nur die Naht fuer den DDL-freien Seed-Lauf (s.u.):
+`src/store/pg.js` (Schema-Schritt des `init` injizierbar, Default `migrate`, zeilenneutral) und
+`src/store/pg-runner.js` (Pool-Verdrahtung unveraendert aus `src/store.js` ausgelagert). Gates,
+Offenlegung, tools/list, initialize und server-instructions sind byte-gleich zur Basis; der
+Server-Boot migriert unveraendert.
+
+**Reviewer-Konto = regulaerer Kunde.** Echtes Abo, echte Kartenverifikation (KYC), angelegt ueber
+einen Browser-Login in der Web-App (legt genau einen Mandanten an - NUR mit einer E-Mail, die in
+Hermes noch keinem Konto zugeordnet ist: der Web-Login fuehrt Konten ueber die E-Mail zusammen,
+`src/web-auth.js` `resolveOrCreateTenant`, bekannte E-Mail eines nicht geschlossenen Mandanten ->
+dieser bestehende Mandant; mit einer schon benutzten E-Mail saehe der Reviewer dessen echte
+Anrufe und Transkripte, und das Seed-Skript schriebe dorthin; die Nummer entsteht erst mit der
+bezahlten Aktivierung, `src/billing/activation.js`). KEINE Gate-Ausnahme: kein
+`profile.unrestricted`, keine `profile.allowedNumbers` (beide heben das Outbound-Gate auf,
+`src/telephony/outbound-gates.js` `allowlistError`), NICHT in `OWNER_SELF_CALL_TENANT_IDS`
+(sonst entfiele der volle Offenlegungssatz bei einem Anruf an die hinterlegte eigene Nummer).
+Kein Reviewer-Modus, kein Testziel-Gate im Code: die Anleitung bittet um Testanrufe an eine vom
+Betreiber genannte Nummer und sagt ausdruecklich, dass der Code das nicht erzwingt. Der
+MCP-OAuth-Login legt nie einen Mandanten an und kauft nie eine Nummer (`requestTenant` ->
+`resolveTenant`, rein lesend; belegt ueber HTTP `/mcp` in
+`test/openai-t2-20-reviewer-seed.test.js`).
+
+**Seed-Skript - Grenzen:**
+- Schreibt ausschliesslich ueber `createCall`, `recordProviderCallResult`, `setCallEndedAt`,
+  `addActionItem`. Nie Abo, KYC, Status, Profil, Nummer, Budget. Nebenwirkung von `createCall`:
+  der reine Anzeige-Zaehler `usage[tenant].calls` waechst um die Zahl der angelegten Anrufe
+  (kein Gate liest ihn); jedes andere Top-Level-Feld bleibt deep-equal (Test).
+- Nur INBOUND, im selben Zug beendet, ohne `answeredAt`/`costProfile`/Transkript: ein
+  Outbound-Datensatz mit `startedAt=jetzt` zaehlte ins Stunden- und Ziel-Limit; ein aktiver
+  Datensatz fiele dem Watchdog zu; `answeredAt` zoege den Anruf in die Kosten-Nachtrags-Quote.
+- **`endedAt` liegt VOR der Kosten-Ueberwachung** (Korrektur einer frueheren Fassung, die
+  behauptete, "kein costProfile" vermeide einen Betreiber-Alarm - falsch): `kostenBuchBericht`
+  (`src/billing/kosten-deckung.js`) zaehlt jeden beendeten Anruf, dessen `endedAt` im Beleg-
+  (7 Tage) oder Herzschlag-Fenster liegt, unabhaengig von `answeredAt`; ein fehlendes
+  `costProfile` ist selbst ein Befund (`profil-fehlt`), und die Legacy-Zuordnung zaehlt den
+  Anruf beim Traeger `telnyx_call_records` mit. Mit `endedAt=jetzt` meldete der Sweep nach der
+  Karenz `erfassung-tot` + `profil-fehlt`, danach bis zu 7 Tage `deckung-unter-schwelle` - alle
+  voll (Mail+SMS). Deshalb setzt das Skript `endedAt` auf jetzt minus das groessere der beiden
+  Fenster minus einen Tag (`reviewerSeedEndedAtIso`). Die Ueberwachung selbst ist
+  unangetastet. Test: `kostenBuchBericht` nach dem Seed sofort, nach der Karenz, nach 7 h,
+  nach 2 Tagen und mit vergroessertem Herzschlag-Fenster -> null Befunde. Preis: die
+  Seed-Anrufe fallen `RETENTION_DAYS` nach ihrem vordatierten Ende weg (Standard: rund 22
+  statt 30 Tage; bei `RETENTION_DAYS` <= 8 sofort); `duration_s` ist 0.
+- Verweigert den Betreiber-Mandanten, unbekannte Mandanten und eine leere Kennung; legt nie
+  einen Mandanten an.
+- Trockenlauf ist Default (ohne `--apply` wird der Store nicht einmal geladen - Import-Spion-Test);
+  `--apply` verlangt `--tenant`; idempotent. Ein erneuter Lauf legt nur an, was schon weggefallen
+  ist; einen vorhandenen Seed-Anruf frischt er NICHT auf (weder Aufbewahrung noch `endedAt`,
+  `setCallEndedAt` wirkt nur auf aktive Anrufe). Werden Beleg- oder Herzschlag-Fenster nach dem
+  ersten Lauf vergroessert, koennen vorhandene Seed-Anrufe in diese Fenster fallen und einen
+  Fehlalarm der Kosten-Ueberwachung ausloesen, bis die Aufbewahrung sie entfernt; der Lauf meldet
+  ihre Zahl nur lesend (`countSeedCallsInsideCostWindow`) und aendert sie nicht. Vor einem
+  Fenster-Deploy deshalb einen Lauf pruefen.
+- pg nur mit `--dienst-gestoppt`, geprueft VOR dem Store-Import: der pg-Flush schreibt in einer
+  Transaktion ALLE Mandanten zurueck und loescht fehlende Zeilen. Bei laufendem Dienst gingen
+  die Seed-Zeilen verloren oder der Flush des Skripts ueberschriebe Dienst-Schreibungen, auch
+  Nutzungs- und Budget-Zaehler (Kostendecke faktisch zurueckgesetzt). Ablauf: Dienst stoppen ->
+  Skript -> Dienst starten.
+- **pg-Lauf fuehrt KEINE DDL aus und laeuft aus dem deployten Commit** (Befund aus dem Review:
+  vorher importierte der pg-Lauf `src/store.js`, dessen `init` `migrate()` mit der DDL des
+  LOKALEN Checkouts gegen die Zieldatenbank ausfuehrte - lag der Checkout vor oder hinter dem
+  deployten Stand, landete fremde DDL auf der Produktions-DB, und der Flush schrieb alle
+  Mandanten in der Zeilenform dieses Stands zurueck). Jetzt: unter pg importiert das Skript die
+  Fassade nie (Import-Spion-Test) und oeffnet den Store ueber `src/store/pg-runner.js` +
+  `makePgStore(runner, { prepareSchema })` OHNE Migration
+  (`scripts/lib/pg-schema-abgleich.mjs`). An die Stelle von `migrate` tritt ein rein lesender
+  Abgleich gegen `information_schema.columns`: Soll ist das Schema, das die Migration DIESES
+  Checkouts in einer fluechtigen pglite-Instanz erzeugt. Fehlende Tabelle/Spalte (Checkout neuer
+  als die DB) oder unbekannte Spalte in einer bekannten Tabelle (Checkout aelter) -> Abbruch vor
+  Hydrierung und jedem Schreiben, Meldung nennt die Abweichung; unbekannte Tabellen bleiben aussen
+  vor (der Flush beruehrt sie nie). Tests gegen PGlite: Schema-Schnappschuss vorher/nachher
+  gleich, keine DDL ueber den protokollierenden Runner, keine Datenzeile geaendert; Positiv-
+  Kontrolle: `makePgStore` ohne Optionen (Server-Boot) migriert dieselbe DB weiter; Normalfall
+  unter einer Rolle ohne Superuser/BYPASSRLS (RLS/`app.current_tenant` greift, idempotent).
+  **Grenze:** verglichen werden nur Namen - ein geaenderter Spaltentyp oder eine geaenderte
+  Flush-Logik bei gleichem Schema faellt nicht auf. Deshalb bleibt Pflicht: Checkout auf genau
+  den live deployten Commit, `npm ci` (pglite ist Entwicklungs-Abhaengigkeit), dann der Lauf.
+  Nicht pruefbar ohne Prod-Zugriff: ob die Produktions-DB Spalten traegt, die `schema.sql` nie
+  angelegt hat (Handarbeit) - dann bricht der Lauf fail-closed ab.
+- Ergebnis wird geprueft: der Lauf wartet den Flush samt Ergebnis ab (`drainFlushes`); vorher
+  meldete ein gescheiterter pg-Flush (Transaktion zurueckgerollt) trotzdem "angelegt".
+- Ausgabe nur Zaehler; keine Mandanten-Kennung, Nummer oder Zugangsdaten in stdout oder in
+  committeten Dateien (Dokument nur mit Platzhaltern, Hygiene-Test).
+
+**Offen beim Betreiber:** Konto beim Identitaetsanbieter ohne MFA und mit verifizierter E-Mail,
+die in Hermes noch KEINEM Konto zugeordnet ist (Pflicht, s.o.), Abo, Seed-Lauf gegen Produktion
+(aus dem deployten Commit, Dienst gestoppt), Live-Probe in ChatGPT, Wahl der Testziel-Nummer.
+
+**Rueckbau:** die drei Skriptdateien (`scripts/seed-reviewer-demo.mjs`,
+`scripts/lib/reviewer-demo-seed.mjs`, `scripts/lib/pg-schema-abgleich.mjs`),
+`docs/OPENAI-REVIEWER-ACCESS.md`, die drei Tests `test/openai-t2-20-reviewer-*.test.js` und
+dieser Abschnitt. Die Naht in `src/store/pg.js`/`src/store/pg-runner.js` kann bleiben (Default =
+heutiges Verhalten). Keine Env-Variable, kein Endpunkt.
 
 ## COOKIE-CONSENT-LOG — Oeffentlicher Schreibpfad fuer den Einwilligungs-Nachweis (2026-09-25)
 

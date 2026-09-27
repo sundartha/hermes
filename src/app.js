@@ -17,8 +17,8 @@ import {
   RATE_SWEEP_INTERVAL_MS,
 } from "./middleware.js";
 import { registerWellKnown } from "./auth.js";
+import { makeMcpDrosseln } from "./mcp-rate-limit.js";
 import { PLAN_CATALOG } from "./plans.js";
-import { configFingerprint } from "./config-fingerprint.js";
 import {
   voiceControl,
   webhookEvents,
@@ -40,7 +40,9 @@ import { makeReadRoutes } from "./routes/api-read.js";
 import { makeInboxRoutes } from "./routes/api-inbox.js";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
+import { makeCallConfirmationRoutes } from "./routes/api-call-confirmations.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
+import { makeDeployInfoRoutes } from "./routes/api-deploy-info.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
 import { wireWebLogin } from "./wiring/web-login.js";
 import { guardedBoot } from "./boot-guard.js";
@@ -70,11 +72,32 @@ const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
 // /voice-Praefix als EINE Quelle (G5): rawBody-Capture und der Rate-Limit-Bypass
 // teilen denselben Praefix.
 const VOICE_PATH_PREFIX = "/voice";
+// T2-07 (T-28): EIN Praedikat fuer "ist dies der /mcp-POST", an beiden Ausnahmestellen
+// verwendet (globaler IP-Limiter, globale Body-Parser) - keine zweite Kopie des
+// Pfad-/Methoden-Vergleichs. Nur GENAU diese Form; Varianten (Gross-/Kleinschreibung,
+// Schraegstrich am Ende), die Express trotzdem auf die Route matcht, bleiben im globalen
+// Limiter und den globalen Parsern (strenger, nicht lockerer).
+const isMcpPost = (req) => req.method === "POST" && req.path === "/mcp";
 // E7 (O-4): der Challenge-Pfad ist woertlich vorgeschrieben - kein Praefix, kein Suffix,
 // kein Tenant-Segment. Als Konstante, damit der Handler unten keinen nackten Magic-String
 // traegt (G25). Die zweite Nennung in src/route-policy.js bleibt bewusst ein Literal
 // (dort begruendet und mechanisch bewacht).
 const OPENAI_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
+// OpenAI-P10b (I-2b, RFC 9116): Sicherheitskontakt-Datei. Exportiert (statt lokal), weil
+// der Drift-Test (test/openai-p10b-healthz.test.js) denselben Kontaktwert gegen das
+// Impressum abgleicht - EINE Quelle statt einer zweiten, unabgestimmten Kopie (G5).
+export const SECURITY_TXT_PATH = "/.well-known/security.txt";
+// Rollenadresse aus dem Impressum (apps/web/src/data/legal/imprint.de.json), NICHT die
+// persoenliche Owner-Adresse. Als Konstante statt Env: der Wert ist oeffentlich und im
+// Impressum fest verdrahtet - eine zweite, per Env gesetzte Quelle waere ein Drift-Risiko
+// statt eines Sicherheitsgewinns (keine neue Env-Variable, Vier-Orte-Regel entfaellt).
+export const SECURITY_CONTACT = "mailto:kontakt@sundartha.com";
+// RFC 9116 Abschnitt 2.5.5: das Feld MUSS in der Zukunft liegen und SOLLTE weniger als
+// ein Jahr entfernt sein. Fest codiert (kein pro-Request-Neuberechnen, s. Handler-
+// Kommentar unten) - Erneuerungspflicht vor diesem Datum steht in PLAN-SECURITY.md.
+export const SECURITY_TXT_EXPIRES = "2027-09-01T00:00:00.000Z";
+export const SECURITY_TXT_BODY =
+  `Contact: ${SECURITY_CONTACT}\n` + `Expires: ${SECURITY_TXT_EXPIRES}\n` + `Preferred-Languages: de, en\n`;
 // Statuscodes als benannte Konstanten (G25): die Umleitung und die Grenzen, innerhalb
 // derer ein Body-Parser-Fehler als Eingabefehler des Aufrufers gilt (400 einschliesslich
 // bis 500 ausschliesslich).
@@ -123,44 +146,85 @@ function makeInitTokenSchranke(config) {
 export function installGlobalMiddleware({ app, config }) {
   app.use(securityHeaders);
 
-  // ---- Rate-Limit fuer alle Routen ausser /voice (vor Auth: bremst auch Brute-Force).
-  // /voice/* ist ausgenommen (kommt vom Provider, eigene Signaturpruefung), ebenso
-  // vertrauenswuerdige lokale In-Process-Aufrufe (interne MCP-Tools): echtes Loopback OHNE
-  // Proxy-Weiterleitung. NICHT per isLocalSocket allein - hinter Render erscheint auch
-  // externer Traffic als Loopback (-> sonst liefe das Limit fuer den ganzen Internet-
-  // Traffic ins Leere). isTrustedLocalCaller verlangt zusaetzlich kein X-Forwarded-For.
-  // POST auf den Init-Webhook (IEX-A7/E12) laeuft STATT des globalen Limiters durch die
-  // Init-Token-Schranke - VOR den Parsern und VOR der Loopback-Ausnahme, damit ein
-  // ungueltiges Token nie geparst wird, egal von wo. Geteilte Anbieter-IPs: nur ungueltige
-  // Tokens zaehlen, ein gueltiges wird nie gedrosselt.
+  // ---- Rate-Limit fuer alle Routen ausser /voice und POST /mcp (vor Auth: bremst auch
+  // Brute-Force). /voice/* ist ausgenommen (kommt vom Provider, eigene Signaturpruefung),
+  // ebenso vertrauenswuerdige lokale In-Process-Aufrufe (interne MCP-Tools): echtes
+  // Loopback OHNE Proxy-Weiterleitung. NICHT per isLocalSocket allein - hinter Render
+  // erscheint auch externer Traffic als Loopback (-> sonst liefe das Limit fuer den ganzen
+  // Internet-Traffic ins Leere). isTrustedLocalCaller verlangt zusaetzlich kein
+  // X-Forwarded-For. POST auf den Init-Webhook (IEX-A7/E12) laeuft STATT des globalen
+  // Limiters durch die Init-Token-Schranke - VOR den Parsern und VOR der Loopback-
+  // Ausnahme, damit ein ungueltiges Token nie geparst wird, egal von wo. Geteilte
+  // Anbieter-IPs: nur ungueltige Tokens zaehlen, ein gueltiges wird nie gedrosselt.
+  // T2-07 (T-28): POST /mcp nimmt der globale IP-Limiter GENAUSO aus - dort zaehlen
+  // stattdessen die zwei mandanten-/ablehnungs-basierten Zaehler aus mcpDrosseln
+  // (makeMcpRoutes), weil OpenAIs gemeinsame ChatGPT-Egress-IPs sonst alle Nutzer in
+  // denselben globalen Eimer draengten. GET/DELETE/OPTIONS auf /mcp bleiben im globalen
+  // Limiter (nur POST hat eigene Zaehler noetig, s. mcp-rate-limit.js).
   const rateLimiter = createRateLimiter(config.safety.rateLimitPerMin);
   const initSchranke = makeInitTokenSchranke(config);
   app.use((req, res, next) => {
     if (istInitWebhookAnfrage(req)) return initSchranke(req, res, next);
+    if (isMcpPost(req)) return next();
     if (req.path.startsWith(VOICE_PATH_PREFIX) || isTrustedLocalCaller(req)) return next();
     rateLimiter(req, res, next);
   });
 
-  app.use(
-    withParserErrors(express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody })),
+  // T2-07 (T-28): dieselben zwei Parser-Instanzen wie bisher, aber POST /mcp laesst sie
+  // hier aus - dort laufen sie ERST HINTER mcpAuth (makeMcpRoutes/bodyParsers), damit ein
+  // Unauthentifizierter nie geparst wird (Pre-Mortem 2 der Phase). Beide Instanzen werden
+  // unveraendert an makeMcpRoutes weitergereicht (EIN Parser-Paar, nicht zwei).
+  const urlencodedParser = withParserErrors(
+    express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody }),
   ); // Provider-Webhooks (form-encoded)
-  app.use(withParserErrors(express.json({ limit: BODY_LIMIT, verify: captureRawBody }))); // eigene API + MCP
+  const jsonParser = withParserErrors(
+    express.json({ limit: BODY_LIMIT, verify: captureRawBody }),
+  ); // eigene API + MCP (MCP: nur hinter mcpAuth, s.o.)
+  app.use((req, res, next) => (isMcpPost(req) ? next() : urlencodedParser(req, res, next)));
+  app.use((req, res, next) => (isMcpPost(req) ? next() : jsonParser(req, res, next)));
+
+  // T2-07 (T-28): EINE Instanz je Prozess (Fixed-Window-Zustand darf nicht pro Request neu
+  // entstehen) - Mandanten-/Ablehnungs-Zaehler fuer POST /mcp, dasselbe Limit wie der
+  // globale IP-Limiter (config.safety.rateLimitPerMin).
+  const mcpDrosseln = makeMcpDrosseln({ limitPerMin: config.safety.rateLimitPerMin });
+
+  return { mcpDrosseln, mcpBodyParsers: [urlencodedParser, jsonParser] };
 }
 
 export function registerPublicRoutes({ app, config }) {
   // ---- Routen, die vor jeder Identitaet erreichbar sein muessen. Jede einzeln in
   // src/route-policy.js (PUBLIC_ROUTES) begruendet und maschinell gegen den
   // Produktions-Routengraph geprueft (test/route-auth-inventory.test.js).
-  // GAP-36 (Deploy-Wahrheit): der EINE Ort, an dem der laufende Dienst selbst sagt,
-  // welchen Commit und welche Konfiguration er faehrt (Post-Deploy-Smoke +
-  // Rollback-Drill). AUTH-AUSNAHME bleibt unveraendert (Keep-Alive) - deshalb NUR
-  // Git-SHA + Einweg-Hash, NIE ein Rohwert oder Secret (Begruendung in
-  // src/config-fingerprint.js). Pro Request neu gerechnet: sha256 ueber ~40 Byte ist
-  // vernachlaessigbar, der Endpunkt liegt hinter dem Rate-Limiter, und ein gecachter
-  // Wert waere ein Lazy-Init-Antipattern (P15) mit Staleness-Risiko.
-  app.get("/healthz", (_req, res) =>
-    res.json({ ok: true, commit: config.server.deployedCommit, configHash: configFingerprint(config) }),
-  );
+  // GAP-36 (Deploy-Wahrheit): der EINE oeffentliche Ort, an dem der laufende Dienst
+  // selbst sagt, welchen Commit er faehrt (Post-Deploy-Smoke + Rollback-Drill,
+  // Ziel-Pin von scripts/probe-auth.sh). AUTH-AUSNAHME bleibt unveraendert (Keep-Alive).
+  // OpenAI-P10b: configHash ist HIER NICHT MEHR dabei. Grund: der Hash liegt ueber
+  // sieben niedrig-entropischen Betriebsachsen (src/config-fingerprint.js) und wurde
+  // live aus 9216 Kandidaten eindeutig zurueckgerechnet (Preimage-Befund,
+  // PLAN-SECURITY.md, Abschnitt "OpenAI-P10b", Punkt 1) - er war fuer diese Achsen damit KEIN Einweg-Schutz,
+  // sondern gab sie effektiv im Klartext preis. Die Deploy-Wahrheit teilt sich seither
+  // auf: commit bleibt oeffentlich (unauthentifiziert lesbar noetig), configHash gibt es
+  // nur noch hinter einer Admin-Sitzung (GET /api/admin/deploy-info,
+  // src/routes/api-deploy-info.js) und im Boot-Log (src/boot.js). Commit-SHA bleibt ein
+  // akzeptiertes Risiko: ohne ihn liefe probe-auth.sh (Ziel-Pin W7) blind, und beide
+  // GitHub-Repos sind privat (kein Code-Zugriff ueber den SHA allein).
+  app.get("/healthz", (_req, res) => res.json({ ok: true, commit: config.server.deployedCommit }));
+
+  // ---- GET /.well-known/security.txt: Sicherheitskontakt (RFC 9116, OpenAI-P10b) ----
+  // AUTH-AUSNAHME (Absolute Regel 3, begruendet): RFC 9116 verlangt, dass die Datei ohne
+  // jede Identitaet abrufbar ist - genau das ist ihr Zweck (ein Sicherheitsforscher hat
+  // per Definition noch keine Tenant-Sitzung). Liefert ausschliesslich statischen Text
+  // (Kontakt + Ablaufdatum + Sprachpraeferenz), liest keine Eingabe, haelt keinen
+  // Zustand, hat keinen Schreibpfad, kennt keine Tenant-Daten. Kontaktadresse
+  // (SECURITY_CONTACT) ist die im Impressum veroeffentlichte Rollenadresse
+  // (apps/web/src/data/legal/imprint.de.json), drift-getestet gegen genau diese Quelle
+  // (test/openai-p10b-healthz.test.js). KEIN Canonical-Feld: das wuerde den Host
+  // (app.sundartha.com) hart verdrahten - eine Rebrand-/Origin-Falle; RFC 9116 fuehrt
+  // Canonical ausdruecklich als optional. SECURITY_TXT_EXPIRES ist FEST (kein
+  // pro-Request-Neuberechnen) - ein sich selbst verlaengerndes Ablaufdatum wuerde den
+  // Zweck des Feldes (Staleness-Signal) aufheben; Erneuerung vor diesem Datum ist in
+  // PLAN-SECURITY.md (Abschnitt OpenAI-P10b) als Pflicht festgehalten.
+  app.get(SECURITY_TXT_PATH, (_req, res) => res.type("text/plain").send(SECURITY_TXT_BODY));
 
   // ---- GET /api/plans: oeffentlicher, read-only Plan-Katalog (BK0) -------------
   // AUTH-AUSNAHME (Regel 3, begruendet): bewusst ohne Login erreichbar - exakt wie
@@ -317,11 +381,17 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     lifecycle,
     provisioning,
     outboundGates,
+    // T2-08 (T-27): dieselbe makeOutboundGates-Instanz wie outboundGates, EIN zweites
+    // Feld (kein zweiter Aufruf von makeOutboundGates, keine zweite Quelle).
+    callQuotaDenial,
     requestTenant,
     requireTenant,
     costTruing,
     consultDelivery,
     elevenLabsOutbound,
+    // T2-07 (T-28): in installGlobalMiddleware gebaut, s. Kommentar an buildApp.
+    mcpDrosseln,
+    mcpBodyParsers,
   } = deps;
 
   // ---- Outbound-Call-Routen -------------------------------------------------------
@@ -332,12 +402,23 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
   // INV-9: die Outbound-Gate-Kette (outboundGates = EIN gepinntes Array) + der Max-Dauer-
   // Cap (arm.*) + der Fehlerpfad (terminateAndBillCall) wandern unveraendert mit; finishCall
   // = die EINE callFinish-Instanz (INV-7), arm.* = die EINE lifecycle-Instanz.
+  //
+  // T2-13 (N-10): die Bestaetigungs-Vorschau (POST /api/call-confirmations) sitzt
+  // UNMITTELBAR VOR makeCallRoutes, absichtlich NICHT unter /api/calls/... (Kollision mit
+  // /api/calls/:id) und ohne outboundGates/finishCall - sie faehrt keine Gate-Kette,
+  // ersetzt keins, schreibt nichts in den Store (s. Kommentar an der Route).
+  app.use(makeCallConfirmationRoutes({ store, config, tenant: { requestTenant } }));
+
   app.use(
     makeCallRoutes({
       store,
       config,
       audit,
       outboundGates,
+      // T2-08 (T-27): fehlt sie im deps-Buendel, bleibt der Platz LEER statt hier zu
+      // werfen - makeCallRoutes setzt dann seinen fail-closed Ersatz ein (503 statt
+      // stillem "immer erlaubt", s. callQuotaDenialNotWired dort).
+      callQuotaDenial,
       voiceControl,
       // EL-Anrufstart: die EINE Instanz aus server.js (INV-7, Naht wie callFinish) - sie
       // haelt den ziehenden Ergebnisweg des Anbieters. Fehlt sie im deps-Buendel, bleibt
@@ -432,6 +513,14 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
   // Nummern-Caps + persist_error->503 sind unveraendert.
   app.use(makeOnboardRoutes({ store, config, audit, provisioning, operatorAuth }));
 
+  // ---- Deploy-Nachweis (OpenAI-P10b) -------------------------------------------------
+  // GET /api/admin/deploy-info lebt in src/routes/api-deploy-info.js
+  // (makeDeployInfoRoutes, DI-Muster wie makeOnboardRoutes/makeBillingRoutes). Mount
+  // NACH makeOnboardRoutes, vor /mcp - hinter webAuthMw+adminMw, NUR DANN gemountet,
+  // wenn operatorAuth existiert (AUTH-P6, s.o.). Ersatz fuer die aus /healthz entfernte
+  // configHash-Preisgabe (Preimage-Befund, s. Kommentar in api-deploy-info.js).
+  app.use(makeDeployInfoRoutes({ config, operatorAuth }));
+
   // ================= MCP ueber Streamable HTTP (Custom Connector) =================
   // Das /mcp-Trio (POST mit mcpAuth, GET/DELETE -> 405) lebt in src/routes/mcp.js
   // (makeMcpRoutes, DI-Muster wie makeBillingRoutes/makeVoiceRoutes) - reine Verschiebung,
@@ -440,8 +529,12 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
   // auf POST, fail-closed; die Herkunftswache (mcpOriginOnlyMiddleware, E5) laeuft im
   // Modul davor und ersetzt sie nicht. Stateless pro Request
   // (INV-8) + res.on("close")-Cleanup sind ins Modul mitgewandert. requestTenant = die EINE
-  // Wurzel-Instanz (INV-7).
-  app.use(makeMcpRoutes({ config, store, requestTenant }));
+  // Wurzel-Instanz (INV-7). mcpDrosseln/mcpBodyParsers (T2-07/T-28): dieselben Instanzen
+  // wie im globalen Middleware-Stack (installGlobalMiddleware), hier injiziert statt
+  // ein zweites Mal gebaut.
+  app.use(
+    makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyParsers: mcpBodyParsers }),
+  );
 }
 
 export async function buildApp(deps) {
@@ -490,7 +583,10 @@ export async function buildApp(deps) {
   // per X-Forwarded-For eine beliebige IP vortaeuschen.
   app.set("trust proxy", 1);
 
-  installGlobalMiddleware({ app, config });
+  // T2-07 (T-28): mcpDrosseln + mcpBodyParsers entstehen HIER (installGlobalMiddleware
+  // baut sie, s. dort) und wandern unveraendert an registerApiRoutes -> makeMcpRoutes -
+  // EINE Instanz je Prozess, kein zweiter Bau.
+  const { mcpDrosseln, mcpBodyParsers } = installGlobalMiddleware({ app, config });
   registerPublicRoutes({ app, config });
   registerPathRedirects({ app });
 
@@ -614,7 +710,10 @@ export async function buildApp(deps) {
   // Die Mount-Sequenz selbst steht in registerApiRoutes (oben) - Position, Reihenfolge
   // und Argumente unveraendert (INV-2). operatorAuth entsteht im Web-Login-Block und
   // entscheidet dort ueber die sechs Betreiber-Routen (AUTH-P6).
-  registerApiRoutes({ app, deps, operatorAuth });
+  // T2-07 (T-28): mcpDrosseln/mcpBodyParsers reisen als ZUSAETZLICHE Felder auf demselben
+  // deps-Objekt mit - registerApiRoutes bekommt weiter "deps als GANZES" (Kommentar dort),
+  // nur um die zwei hier oben gebauten Kollaboratoren ergaenzt (kein zweites Abbild).
+  registerApiRoutes({ app, deps: { ...deps, mcpDrosseln, mcpBodyParsers }, operatorAuth });
 
   // ---- Catch-all Error-Net -----------------------------------------------------------
   // MUSS NACH allen Route-Mounts und VOR app.listen stehen: Express-Error-MW sieht nur

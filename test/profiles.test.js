@@ -17,14 +17,33 @@ import {
   toolCall,
   waitForLog,
   MCP_AUDIENCE,
+  readToolResult,
+  assertReauthChallenge,
 } from "./helpers.js";
 import { hashEmail } from "../src/util.js";
 import { makeDefaultState, updateSettings } from "../src/store/state-ops.js";
 import { defaultSettings, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
+const HTTP_OK = 200;
+// Zielnummer des place_call MIT Mandant im e2e-/mcp-Test - zugleich Positiv-Kontrolle
+// fuer die "to=<nummer>"-Negativpruefung in assertNoTenantPlaceCallStubbed.
+const TENANT_CALL_TO = "+4915123123123";
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY_REQUESTS = 429;
+
+// T2-13 (N-10): Bestaetigungs-Code direkt an der Route holen (derselbe Loopback-Aufrufer
+// wie der MCP-Handler); tenantHeader bindet ihn - wie das echte /mcp-Gateway per
+// X-Internal-Tenant - an den Mandanten, dessen Gate der jeweilige Testfall prueft.
+async function confirmedPlaceCallArgs(localUrl, args, tenantHeader) {
+  const res = await fetch(`${localUrl}/api/call-confirmations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Internal-Tenant": tenantHeader },
+    body: JSON.stringify(args),
+  });
+  const json = await res.json();
+  return { ...args, confirmation_code: json.confirmation?.code };
+}
 const HTTP_SERVER_ERROR = 500; // Offline-Diskriminator: alle Gates passiert (kein TELNYX_API_KEY)
 
 const postCall = (url, to, identity) =>
@@ -264,6 +283,31 @@ test("PROFILES_JSON kaputt -> Start crasht nicht, Store bleibt leer", async () =
   }
 });
 
+// T2-05 (T-14): geteilte Pruefung fuer die zwei "kein Mandant"-Faelle unten - haelt die
+// umschliessende Testfunktion unter dem Zeilenlimit (G30) UND vermeidet Kopie/Einfuegen
+// derselben vier Assertions. place_call laeuft NIE (Stub ruft nie api()), deshalb darf
+// im Stdout weder "requestedBy=owner" noch ein "place_call"-Audit fuer DIESE Nummer stehen.
+// Positiv-Kontrolle fuer die "to=<nummer>"-Negativpruefung: derselbe Server hat im
+// vorangehenden Teiltest MIT Mandant (TENANT_CALL_TO) einen echten place_call auditiert -
+// die Form "to=<nummer>" MUSS dort im Stdout stehen, sonst saehe die Negativpruefung
+// unten nur deshalb gruen aus, weil das Log diese Form gar nicht schreibt.
+async function assertNoTenantPlaceCallStubbed(srv, token, { to, ownerMsg }) {
+  const res = await mcpPost(
+    `${srv.localUrl}/mcp`,
+    token,
+    toolCall("place_call", { to, objective: "Termin" }),
+  );
+  assert.equal(res.status, HTTP_OK);
+  assertReauthChallenge(await readToolResult(res));
+  await waitForLog(srv, /\[audit\] auth_failed ip=\S+ path=\/mcp grund=kein_tenant/);
+  assert.ok(!/requestedBy=owner/.test(srv.stdout), ownerMsg);
+  assert.ok(
+    srv.stdout.includes(`to=${TENANT_CALL_TO}`),
+    "Positiv-Kontrolle: der place_call MIT Mandant muss 'to=<nummer>' im Log hinterlassen",
+  );
+  assert.ok(!srv.stdout.includes(`to=${to}`), "der Stub loest NIE einen echten Anruf aus");
+}
+
 // ---- 2.3 e2e ueber /mcp mit JWT: Identitaet fliesst bis ins Audit (MULTI_TENANT=true) ----
 test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-bar)", async (ctx) => {
   const idp = await startIdp();
@@ -275,6 +319,9 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       MULTI_TENANT: "true",
       ALLOWED_NUMBERS: "",
       ALLOWED_COUNTRY_CODES: "*",
+      // T2-13 (N-10): ohne bestaetigten confirmation_code kaeme place_call nie bis zum
+      // Gate, dessen Audit-Zeile dieser Test prueft.
+      CALL_CONFIRMATION_SECRET: "profiles-test-confirmation-secret-mind-32-zeichen",
     },
     seed: seedState({
       tenants: [subTenant("t_alice", "alice-sub"), subTenant("t_prod", "user_01PROD")],
@@ -292,11 +339,12 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
   try {
     await ctx.test("place_call ueber MCP (JWT email+sub) -> Audit requestedBy=<email>", async () => {
       const token = await idp.sign({ sub: "alice-sub", email: "alice@team.test" });
-      const res = await mcpPost(
-        `${srv.localUrl}/mcp`,
-        token,
-        toolCall("place_call", { to: "+4915123123123", objective: "Termin" }),
+      const placeCallArgs = await confirmedPlaceCallArgs(
+        srv.localUrl,
+        { to: TENANT_CALL_TO, objective: "Termin" },
+        "t_alice",
       );
+      const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
       assert.notEqual(res.status, HTTP_UNAUTHORIZED);
       await waitForLog(
         srv,
@@ -310,34 +358,33 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       );
     });
 
-    // Kritische Eigenschaft: ein Token OHNE email/sub darf NIE zum Owner fail-open'en. E4:
-    // der /mcp-Torschluss (routes/mcp.js) faengt eine unbekannte Identitaet JETZT schon am
-    // Gateway ab (403, VOR jedem Tool-Zugriff) - place_call wird gar nicht mehr erreicht,
-    // also entsteht auch kein "place_call_denied"-Audit mehr. Der Anti-Spoof-Beweis bleibt
-    // derselbe (nie Owner), nur eine Schicht frueher gemessen (Muster AUTH-P3-10-Kommentar).
-    await ctx.test("JWT OHNE email-Claim, unbekannter sub -> /mcp 403 (E4-Torschluss), NICHT owner", async () => {
-      const token = await idp.sign({ sub: "subonly-9" }); // kein email-Claim, kein Tenant
-      const res = await mcpPost(
-        `${srv.localUrl}/mcp`,
-        token,
-        toolCall("place_call", { to: "+4915123123124", objective: "Termin" }),
-      );
-      assert.equal(res.status, HTTP_FORBIDDEN);
-      await waitForLog(srv, /\[audit\] auth_failed ip=\S+ path=\/mcp grund=kein_tenant/);
-      assert.ok(!/requestedBy=owner/.test(srv.stdout), "Token ohne email darf NICHT zum Owner werden");
-    });
+    // Kritische Eigenschaft: ein Token OHNE email/sub darf NIE zum Owner fail-open'en. E4/
+    // T2-05: der /mcp-Torschluss (routes/mcp.js) erkennt eine unbekannte Identitaet JETZT
+    // schon am Gateway (Audit "grund=kein_tenant", VOR jedem echten Tool-Zugriff) - seit
+    // T2-05 registriert er im OAuth-Modus die Stub-Fassade (registerNoTenantStubs) statt
+    // 403 zu senden: place_call laeuft NIE (der Stub ruft nie api()), also entsteht auch
+    // kein "place_call"-Audit mehr. Der Anti-Spoof-Beweis bleibt derselbe (nie Owner).
+    await ctx.test(
+      "JWT OHNE email-Claim, unbekannter sub -> Tool-Fehler mit Re-Auth-Challenge, NICHT owner",
+      async () => {
+        const token = await idp.sign({ sub: "subonly-9" }); // kein email-Claim, kein Tenant
+        await assertNoTenantPlaceCallStubbed(srv, token, {
+          to: "+4915123123124",
+          ownerMsg: "Token ohne email darf NICHT zum Owner werden",
+        });
+      },
+    );
 
-    await ctx.test("JWT OHNE email UND sub -> ANON, /mcp 403 (E4-Torschluss), kein fail-open zum Owner", async () => {
-      const token = await idp.sign({}, { noSubject: true }); // weder email noch sub
-      const res = await mcpPost(
-        `${srv.localUrl}/mcp`,
-        token,
-        toolCall("place_call", { to: "+4915123123125", objective: "Termin" }),
-      );
-      assert.equal(res.status, HTTP_FORBIDDEN);
-      await waitForLog(srv, /\[audit\] auth_failed ip=\S+ path=\/mcp grund=kein_tenant/);
-      assert.ok(!/requestedBy=owner/.test(srv.stdout), "Token ohne Identitaet darf NICHT zum Owner werden");
-    });
+    await ctx.test(
+      "JWT OHNE email UND sub -> ANON, Tool-Fehler mit Re-Auth-Challenge, kein fail-open zum Owner",
+      async () => {
+        const token = await idp.sign({}, { noSubject: true }); // weder email noch sub
+        await assertNoTenantPlaceCallStubbed(srv, token, {
+          to: "+4915123123125",
+          ownerMsg: "Token ohne Identitaet darf NICHT zum Owner werden",
+        });
+      },
+    );
 
     // Produktions-Szenario: WorkOS-Token traegt nur sub (kein email). Der Tenant, dessen
     // idpSubject auf diese sub keyt, traegt ein unrestricted-Profil -> Allowlist aufgehoben.
@@ -345,11 +392,12 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       "Profil per Tenant (Token-sub -> idpSubject) hebt die Allowlist auf -> place_call",
       async () => {
         const token = await idp.sign({ sub: "user_01PROD" }); // identity = sub, loest t_prod auf
-        const res = await mcpPost(
-          `${srv.localUrl}/mcp`,
-          token,
-          toolCall("place_call", { to: "+4915123123126", objective: "Termin" }),
+        const placeCallArgs = await confirmedPlaceCallArgs(
+          srv.localUrl,
+          { to: "+4915123123126", objective: "Termin" },
+          "t_prod",
         );
+        const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", placeCallArgs));
         assert.notEqual(res.status, HTTP_UNAUTHORIZED);
         await waitForLog(
           srv,

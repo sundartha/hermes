@@ -1,0 +1,371 @@
+// P3 (T-15): securitySchemes an der SDK-Grenze (Weg B, Low-Level-Override).
+//
+// Alle Belege lesen ROHES JSON-RPC-JSON, nie einen typisierten SDK-Client
+// (client.listTools()) - Messung B (tasks/openai-p3-spec.md §0.3) zeigt, dass
+// ToolSchema (types.js) ein z.object(...) OHNE .passthrough() ist und zod unbekannte
+// Top-Level-Schluessel beim Parsen stillschweigend entfernt. Ein Beleg ueber
+// client.listTools() waere entweder faelschlich rot (Code stimmt) oder gruen aus dem
+// falschen Grund (jemand schwaecht die Erwartung ab, bis sie nur noch "ein Feld
+// existiert irgendwo" beweist - Pre-Mortem #3 der Spec).
+//
+// Die Erwartung steht als LITERAL aus dem zitierten Rohtext (developers.openai.com/
+// apps-sdk/build/auth, s. tasks/openai-p3-report.md), nie aus src importiert - ein
+// Test, der seine Erwartung aus dem Pruefling zieht, belegt nichts (Pre-Mortem #4).
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { z } from "zod";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { registerTools } from "../src/mcp-tools.js";
+import { applyToolSecuritySchemes } from "../src/mcp-security-schemes.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { uiResourceUri } from "../src/ui/contract.js";
+import { WIDGET_CALL } from "../src/ui/widget-catalog.js";
+import {
+  startServer,
+  startIdp,
+  seedState,
+  mcpPost,
+  readToolResult,
+  ROOT,
+  BASE_ENV,
+  MCP_AUDIENCE,
+  TOOL_COUNT_WITH_CONSULT,
+  TOOL_COUNT_WITHOUT_CONSULT,
+  TOOLS_WITH_OUTPUT_SCHEMA,
+} from "./helpers.js";
+
+// Literal der T2-23-Scope-Menge S ("openid","email","offline_access", s.
+// src/auth.js OAUTH_SCOPES) - bewusst NICHT aus src importiert, sonst wuerde ein
+// Bug, der OAUTH_SCOPES selbst falsch setzt, hier unbemerkt mitlaufen (Pre-Mortem #4
+// der P3-Spec: ein Test, der seine Erwartung aus dem Pruefling zieht, belegt nichts).
+const EXPECTED_SECURITY_SCHEMES = [{ type: "oauth2", scopes: ["openid", "email", "offline_access"] }];
+// T2-23-Nachtrag: der zweite (und einzige weitere) Spec-Typ, ebenfalls als Literal
+// (nicht aus src importiert, Pre-Mortem #4 s.o.) - developers.openai.com/apps-sdk/
+// build/auth: "`noauth`: The tool is callable anonymously; ChatGPT can run it
+// immediately."
+const EXPECTED_NOAUTH_SECURITY_SCHEMES = [{ type: "noauth" }];
+const LIST_TOOLS_METHOD = "tools/list";
+// Permissiver Ergebnis-Schema fuer rohe tools/list-Abfragen ueber den typisierten
+// Client - z.any() pro Tool umgeht das Strippen unbekannter Felder (Messung B).
+const RAW_TOOLS_LIST_RESULT = z.object({ tools: z.array(z.any()) });
+// AUSNAHME zum Datei-Kopf (Literal statt src-Import) seit T2-02/T-34: die URI traegt
+// jetzt eine bewusst hochgezaehlte Version (Pin-Datei src/ui/widget-versions.json) -
+// ein Literal wuerde bei jeder Versionserhoehung von Hand nachgezogen.
+const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL);
+const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
+
+// Testnamen duerfen NICHT mit einer i18n-Katalog-Kennung + Ziffer beginnen
+// (package.json config.i18nCatalogPattern), sonst wandern sie in den Gates-Lauf.
+// Praefix "P3 (...): " ist sicher (wie "P2 (...): " in openai-p2-tool-metadaten.test.js).
+
+async function rawToolsList(client) {
+  return client.request({ method: LIST_TOOLS_METHOD }, RAW_TOOLS_LIST_RESULT);
+}
+
+function assertSecuritySchemesOnEveryTool(tools) {
+  assert.ok(tools.length > 0, "tools/list liefert Werkzeuge");
+  for (const tool of tools) {
+    assert.deepEqual(
+      tool.securitySchemes,
+      EXPECTED_SECURITY_SCHEMES,
+      `${tool.name}: securitySchemes traegt genau [{"type":"oauth2","scopes":["openid","email","offline_access"]}]`,
+    );
+  }
+}
+
+// T-15-Korrektur: stdio hat keine Client-Auth (mcpAuth haengt nur an POST /mcp), also
+// waere "oauth2" dort eine Falschangabe. Gegenstueck zu assertSecuritySchemesOnEveryTool
+// fuer jeden Pfad, an dem KEINER der beiden Spec-Typen (noauth/oauth2) ehrlich zutrifft -
+// stdio (keine Client-Auth ueberhaupt) UND, seit dem T2-23-Nachtrag, der Token-/Legacy-
+// Modus ueber HTTP (Auth existiert, ist aber kein OAuth2-Flow). `grund` macht die
+// Fehlermeldung am jeweiligen Aufrufort praezise statt pauschal "stdio" zu behaupten.
+function assertNoSecuritySchemesOnAnyTool(tools, grund = "keine Client-Auth dort") {
+  assert.ok(tools.length > 0, "tools/list liefert Werkzeuge");
+  for (const tool of tools) {
+    assert.equal(tool.securitySchemes, undefined, `${tool.name}: securitySchemes fehlt (${grund})`);
+  }
+}
+
+// T2-23-Nachtrag: Gegenstueck fuer MCP_AUTH=off - der einzige Modus, in dem der
+// zweite Spec-Typ ("noauth") ehrlich ist (echt anonym erreichbar, s.
+// src/mcp-security-schemes.js).
+function assertNoauthSecuritySchemesOnEveryTool(tools) {
+  assert.ok(tools.length > 0, "tools/list liefert Werkzeuge");
+  for (const tool of tools) {
+    assert.deepEqual(
+      tool.securitySchemes,
+      EXPECTED_NOAUTH_SECURITY_SCHEMES,
+      `${tool.name}: securitySchemes traegt genau [{"type":"noauth"}]`,
+    );
+  }
+}
+
+// Nicht-Regression im selben Response (AC2, Spec Schritt 5.3): der Override darf die
+// SDK-Normalisierung und die P1/P2-Felder nicht zerschossen haben.
+function assertOutputAndP1P2FeldNichtZerschossen(tools) {
+  let mitOutputSchema = 0;
+  for (const tool of tools) {
+    assert.equal(typeof tool.inputSchema, "object", `${tool.name}: inputSchema ist ein Objekt`);
+    assert.equal(tool.inputSchema.type, "object", `${tool.name}: inputSchema.type === "object"`);
+    assert.ok(tool.annotations, `${tool.name}: annotations ist vorhanden`);
+    assert.equal(typeof tool.title, "string", `${tool.name}: title ist ein String`);
+    assert.ok(tool.title.length > 0, `${tool.name}: title ist nicht leer`);
+    assert.equal(
+      typeof tool._meta?.["openai/toolInvocation/invoking"],
+      "string",
+      `${tool.name}: openai/toolInvocation/invoking ist ein String`,
+    );
+    if (tool.outputSchema !== undefined) mitOutputSchema += 1;
+  }
+  assert.equal(
+    mitOutputSchema,
+    TOOLS_WITH_OUTPUT_SCHEMA,
+    "genau 10 der Werkzeuge tragen ein outputSchema (P1/P2 unveraendert)",
+  );
+  const placeCall = tools.find((tool) => tool.name === "place_call");
+  assert.ok(placeCall, "place_call ist in der Liste");
+  assert.equal(
+    placeCall._meta?.ui?.resourceUri,
+    RESOURCE_URI_CALL,
+    "place_call: Widget-_meta bleibt neben securitySchemes erhalten",
+  );
+}
+
+// Schritt 2 - Lerntest auf die SDK-Naht (prueft NUR das SDK, nicht Hermes-Code).
+test("P3 (Lerntest): registerTool() verwirft securitySchemes still, der Override braucht die private SDK-Naht", async () => {
+  const server = new McpServer({ name: "hermes-p3-lerntest", version: "0.0.0" });
+  // securitySchemes steht direkt in der Tool-Konfig - kein bekanntes Feld von
+  // registerTool() ({title, description, inputSchema, outputSchema, annotations,
+  // _meta}, mcp.js:702-703). Belegt Zusicherung 2: das Feld faellt still weg.
+  server.registerTool(
+    "t1",
+    { description: "d", inputSchema: {}, securitySchemes: EXPECTED_SECURITY_SCHEMES },
+    async () => ({ content: [] }),
+  );
+
+  // Zusicherung 1: der Andockpunkt ist der private Original-Handler.
+  const protokoll = server.server;
+  assert.ok(protokoll._requestHandlers instanceof Map, "_requestHandlers ist eine Map");
+  assert.ok(
+    protokoll._requestHandlers.has(LIST_TOOLS_METHOD),
+    "_requestHandlers traegt tools/list nach der Registrierung",
+  );
+
+  const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "hermes-p3-lerntest-client", version: "0.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    // Zusicherung 2: im rohen Ergebnis fehlt securitySchemes trotz Konfig-Eingabe.
+    const roh = await rawToolsList(client);
+    const t1Roh = roh.tools.find((tool) => tool.name === "t1");
+    assert.ok(t1Roh, "t1 ist in der rohen Liste");
+    assert.equal(
+      t1Roh.securitySchemes,
+      undefined,
+      "registerTool() verwirft ein unbekanntes Konfigfeld still",
+    );
+
+    // Override anwenden - jetzt traegt der ROHE Weg das Feld, der TYPISIERTE nicht
+    // (Messung B): Zusicherung 3. mcpAuthMode="oauth" EXPLIZIT (T2-23-Nachtrag): dieser
+    // Lerntest prueft die SDK-Mechanik, nicht die Modus-Abbildung - der Prozess-weite
+    // config.auth.mcpAuth waere hier der Legacy-Default (Modul-Singleton, einmal beim
+    // Import aus process.env gelesen, s. src/mcp-security-schemes.js).
+    applyToolSecuritySchemes(server, "oauth");
+    const getroffen = await client.listTools();
+    const t1Getroffen = getroffen.tools.find((tool) => tool.name === "t1");
+    assert.equal(
+      t1Getroffen.securitySchemes,
+      undefined,
+      "client.listTools() (typisiert) strippt securitySchemes - ToolSchema hat kein .passthrough()",
+    );
+    const rohNachOverride = await rawToolsList(client);
+    const t1RohNachOverride = rohNachOverride.tools.find((tool) => tool.name === "t1");
+    assert.deepEqual(
+      t1RohNachOverride.securitySchemes,
+      EXPECTED_SECURITY_SCHEMES,
+      "der rohe Weg traegt securitySchemes nach dem Override",
+    );
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
+test("P3 (Lerntest): fehlt der Original-Handler, wirft applyToolSecuritySchemes statt still zu uebergehen", () => {
+  // Sicherung gegen ein SDK-Update, das das private Feld umbenennt (E5) - ein
+  // McpServer OHNE registrierte Tools hat keinen tools/list-Handler.
+  const server = new McpServer({ name: "hermes-p3-leer", version: "0.0.0" });
+  assert.throws(
+    () => applyToolSecuritySchemes(server),
+    /MCP-SDK-Naht verloren/,
+    "kein Original-Handler -> lauter Wurf, kein stiller Uebersprung",
+  );
+});
+
+// Schritt 5 - Beleg ueber die echte HTTP-Route (AC1 + AC2 im selben Response).
+// T2-23-Nachtrag: MCP_AUTH=oauth jetzt EXPLIZIT (vorher lief dieser Test im
+// Legacy-Default MCP_AUTH="" - genau die Konstellation, in der securitySchemes VOR
+// dem Nachtrag faelschlich "oauth2" behauptete, obwohl kein OAuth-Flow existiert).
+// Nur im oauth-Modus ist die volle Angabe ehrlich (s. src/mcp-security-schemes.js).
+test("P3 (Schritt 5): tools/list ueber die echte /mcp-Route traegt securitySchemes an jedem Werkzeug im oauth-Modus, P1/P2-Felder unveraendert", async () => {
+  const idp = await startIdp();
+  const srv = await startServer({
+    seed: seedState({}),
+    env: {
+      MCP_UI_ENABLED: "true",
+      CONSULT_ENABLED: "true",
+      ASSISTANT_CONTEXT_ENABLED: "true",
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+      OAUTH_AUDIENCE: MCP_AUDIENCE,
+      OWNER_IDP_SUBJECT: "user-1",
+    },
+  });
+  try {
+    const token = await idp.sign({ email: "p3-schritt5@team.test" });
+    const result = await readToolResult(
+      await mcpPost(`${srv.localUrl}/mcp`, token, { jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    );
+    assert.equal(
+      result.tools.length,
+      TOOL_COUNT_WITH_CONSULT,
+      "Owner + beide Consult-Schalter an -> alle zwoelf Werkzeuge",
+    );
+    assertSecuritySchemesOnEveryTool(result.tools);
+    assertOutputAndP1P2FeldNichtZerschossen(result.tools);
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+// Schritt 5b (T2-23-Nachtrag) - Legacy-Modus (MCP_AUTH="", der BASE_ENV-Default):
+// statischer Bearer-Token ODER lokaler Dev-Bypass, aber KEIN OAuth-Flow. Die
+// ehrliche Angabe ist "kein Schema" (s. Kommentar src/mcp-security-schemes.js) -
+// DAS ist die Regression, die der unabhaengige Pruefer gefunden hat: vor dem
+// Nachtrag stand hier faelschlich die volle oauth2-Angabe.
+test("P3 (Schritt 5b, T2-23-Nachtrag): tools/list im Legacy-Modus (MCP_AUTH=\"\") traegt securitySchemes NICHT - kein OAuth-Flow, keine Falschangabe", async () => {
+  const srv = await startServer({
+    seed: seedState({}),
+    env: { MCP_UI_ENABLED: "true", CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" },
+  });
+  try {
+    const result = await readToolResult(
+      await mcpPost(`${srv.localUrl}/mcp`, null, { jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    );
+    assert.equal(result.tools.length, TOOL_COUNT_WITH_CONSULT);
+    assertNoSecuritySchemesOnAnyTool(result.tools, "Legacy-Modus hat keinen OAuth-Flow");
+    assertOutputAndP1P2FeldNichtZerschossen(result.tools);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// Schritt 5c (T2-23-Nachtrag) - MCP_AUTH=token mit gesetztem MCP_AUTH_TOKEN:
+// derselbe Befund wie Legacy, jetzt mit einem echten Bearer-Token authentifiziert
+// (kein Dev-Bypass involviert) - der statische Token ersetzt KEIN OAuth2.
+test("P3 (Schritt 5c, T2-23-Nachtrag): tools/list im Token-Modus (MCP_AUTH=token) traegt securitySchemes NICHT - statischer Bearer-Token ist kein OAuth2", async () => {
+  const srv = await startServer({
+    seed: seedState({}),
+    env: { MCP_AUTH: "token", MCP_AUTH_TOKEN: "t2-23-geheim" },
+  });
+  try {
+    const result = await readToolResult(
+      await mcpPost(`${srv.localUrl}/mcp`, "t2-23-geheim", { jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    );
+    assert.ok(result.tools.length > 0);
+    assertNoSecuritySchemesOnAnyTool(result.tools, "Token-Modus ist ein statischer Bearer-Token, kein OAuth2");
+  } finally {
+    await srv.stop();
+  }
+});
+
+// Schritt 5d (T2-23-Nachtrag) - MCP_AUTH=off: der einzige Modus, in dem der Server
+// JEDEN Request unbedingt durchlaesst (auth.js:226) - hier ist "noauth" der ehrliche
+// zweite Spec-Typ.
+test("P3 (Schritt 5d, T2-23-Nachtrag): tools/list im off-Modus (MCP_AUTH=off) traegt securitySchemes als noauth auf jedem Werkzeug", async () => {
+  const srv = await startServer({
+    seed: seedState({}),
+    env: { MCP_AUTH: "off" },
+  });
+  try {
+    const result = await readToolResult(
+      await mcpPost(`${srv.localUrl}/mcp`, null, { jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    );
+    assert.ok(result.tools.length > 0);
+    assertNoauthSecuritySchemesOnEveryTool(result.tools);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// Schritt 6a - stdio-Pfad, echtes SDK, roh abgefragt (kein Attrappen-Server).
+// T-15-Korrektur: applyToolSecuritySchemes(server) faellt hier bewusst weg - das
+// bildet nach, was src/mcp-server.js seit der Korrektur tut (registerTools() OHNE
+// den Override). stdio hat keine Client-Auth, "oauth2" waere dort eine Falschangabe.
+test("P3 (Schritt 6a): stdio-Pfad (echtes SDK, InMemoryTransport) traegt securitySchemes NICHT - keine Client-Auth ueber stdio", async () => {
+  const server = new McpServer({ name: "hermes-p3-stdio", version: "0.0.0" });
+  registerTools(server, { uiHost: { enabled: true } });
+
+  const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "hermes-p3-stdio-client", version: "0.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    const result = await rawToolsList(client);
+    assert.equal(
+      result.tools.length,
+      TOOL_COUNT_WITHOUT_CONSULT,
+      "stdio ohne Consult-Faehigkeit liefert zehn Werkzeuge",
+    );
+    assertNoSecuritySchemesOnAnyTool(result.tools);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
+// Schritt 7 - Naht-Beleg fuer den stdio-EINSTIEG, als echter Kindprozess (Review Runde
+// 2): der frueher hier stehende Text-Pin (readFileSync + indexOf-Reihenfolge) belegte
+// nur, dass zwei Zeichenketten in dieser Reihenfolge in der DATEI stehen - ein
+// Refactoring, das applyToolSecuritySchemes(...) auf eine ANDERE Server-Instanz
+// anwendet oder in einen nie erreichten Zweig legt, liesse ihn gruen. Dieser Test
+// spawnt src/mcp-server.js als echten Kindprozess (wie im Betrieb: Claude Desktop
+// startet ihn per "command"-Eintrag genauso) und spricht das echte Protokoll ueber
+// StdioClientTransport - kein Attrappen-Server, keine InMemory-Verdrahtung, keine
+// Quelltext-Inspektion.
+//
+// T-15-Korrektur (unabhaengiger Pruefer, s. src/mcp-server.js): die urspruengliche
+// Zusicherung war das Gegenteil ("traegt securitySchemes an jedem Werkzeug") und war
+// UNWAHR im gefaehrlichen Sinn - stdio hat keine Client-Auth (mcpAuth haengt nur an
+// POST /mcp), "oauth2" ueber stdio behauptete einen Schutz, den es nicht gibt. Dieser
+// Test ist jetzt die Sicherung GEGEN eine Rueckkehr dieser Falschangabe: er muss rot
+// werden, sollte je wieder applyToolSecuritySchemes(...) in src/mcp-server.js
+// aufgerufen werden. Kein Werkzeug darf das Feld ueber stdio tragen.
+test("P3 (Schritt 7, T-15-Korrektur): der echte stdio-Einstieg (Kindprozess src/mcp-server.js) traegt securitySchemes an KEINEM Werkzeug - stdio hat keine Client-Auth, oauth2 waere dort eine Falschangabe", async () => {
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [MCP_SERVER_ENTRYPOINT],
+    cwd: ROOT,
+    env: BASE_ENV,
+    stderr: "pipe",
+  });
+  let stderrOutput = "";
+  transport.stderr?.on("data", (chunk) => {
+    stderrOutput += chunk.toString();
+  });
+  const client = new Client({ name: "hermes-p3-stdio-entrypoint-client", version: "0.0.0" });
+  try {
+    await client.connect(transport);
+    const result = await rawToolsList(client);
+    assert.equal(
+      result.tools.length,
+      TOOL_COUNT_WITHOUT_CONSULT,
+      `stdio-Einstieg ohne Consult-Faehigkeit liefert zehn Werkzeuge (stderr: ${stderrOutput})`,
+    );
+    assertNoSecuritySchemesOnAnyTool(result.tools);
+  } finally {
+    await client.close();
+  }
+});

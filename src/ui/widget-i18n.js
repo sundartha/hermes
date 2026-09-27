@@ -1,12 +1,25 @@
 // Gemeinsame Lokalisierung fuer ALLE Hermes-Widgets. Der MCP ist international -
-// das Widget zeigt seine Oberflaeche in der Sprache des Agenten (seit P13/E4
-// SERVERGERENDERT, nicht mehr Browser-Locale), NICHT hart deutsch.
+// das Widget zeigt seine Oberflaeche in der Sprache des Agenten, NICHT hart deutsch.
+//
+// T2-02/T-34 (cache-feste, sprachunabhaengige Resource-URIs): die ui://-Resource
+// selbst ist jetzt EINE einzige, sprachneutrale Fassung (widget-catalog.js) - die
+// Sprache reist NICHT MEHR im Katalog-Cache-Schluessel, sondern als Ergebnis-`_meta`
+// der Widget-Werkzeuge (mcp-tools.js, WIDGET_LOCALE_META_KEY) und wird ERST IM
+// IFRAME umgeschaltet. Grund: ChatGPT darf Resource-Inhalte bis zu 1 h cachen
+// (developers.openai.com/plugins/deploy/app-review) - eine URI pro Sprache wuerde
+// das Cache-Fenster mit einer haerteren Anforderung (Origin-Stabilitaet) in Konflikt
+// bringen. Start-Locale ist deshalb IMMER "en" (sichtbar bis zum ersten Tool-
+// Ergebnis, bewusste Folge s. T2-02-Pre-Mortem), das I18N-Script schaltet danach auf
+// die servergerenderte Sprache um.
 //
 // Mechanik (Muster widget-bind.js): dieselben Funktionen laufen in Node-Tests
 // UND - via Function.prototype.toString projiziert - als self-contained
-// Iframe-Script (I18N_SCRIPT_BY_LOCALE, injiziert von widget-catalog.js in den
-// <head> jedes Widgets, VOR den Inline-Skripten -> window.HermesI18n ist dort
-// synchron verfuegbar).
+// Iframe-Script (I18N_SCRIPT, injiziert von widget-catalog.js in den <head> jedes
+// Widgets, VOR den Inline-Skripten -> window.HermesI18n ist dort synchron
+// verfuegbar). Das Script registriert ALS ERSTES einen eigenen message-Listener
+// (vor widget-bind.js' Listener, der spaeter vor </body> injiziert wird) - die
+// Sprache steht damit fest, BEVOR dieselbe Host-Nachricht das structuredContent
+// bindet.
 //
 // Uebersetzungs-Modell: die Keys SIND die englischen Anzeigetexte. Englisch ist
 // damit der eingebaute Fallback (kein eigenes en-Dict, kein Key-Drift zwischen
@@ -16,6 +29,7 @@
 // bleibt die Karte vollstaendig englisch statt kaputt (fail-safe).
 // UI-Strings duerfen echte Umlaute/Akzente tragen (UTF-8, meta charset) -
 // die ASCII-Disziplin gilt nur fuer Code-Kommentare.
+import { METHOD_TOOL_RESULT } from "./widget-bind.js";
 
 export const DEFAULT_LOCALE = "en";
 
@@ -29,13 +43,9 @@ export const WIDGET_DICT = {
     "Hermes · Agent Status": "Hermes · Agent-Status",
     "Hermes · Agent Number": "Hermes · Agent-Nummer",
     "Hermes · Recent Calls": "Hermes · Letzte Anrufe",
-    "Hermes · Calendar": "Hermes · Kalender",
     "Your AI phone assistant": "Dein KI-Telefonassistent",
     "Recent calls": "Letzte Anrufe",
-    "Calendar": "Kalender",
     "Number": "Nummer",
-    "Voice engine": "Voice-Engine",
-    "Model": "Modell",
     "Calls": "Anrufe",
     "Monthly usage (%)": "Monatsnutzung (%)",
     "Permissions": "Berechtigungen",
@@ -64,19 +74,40 @@ export const WIDGET_DICT = {
     "Yes": "Ja",
     "No": "Nein",
     "Unclear": "Unklar",
+    // T2-14 (N-10): Bestaetigungs-Ansicht im Call-Widget.
+    "To": "Ziel",
+    "Request": "Anliegen",
+    "Briefing": "Briefing",
+    "Call language": "Sprache des Anrufs",
+    "Max. duration": "Maximaldauer",
+    "Constraints": "Einschränkungen",
+    "Mandate": "Mandat",
+    "Context": "Kontext",
+    "Diagnostic": "Diagnose",
+    "Confirm call": "Anruf bestätigen",
+    "Confirmation code unavailable — ask for a new prepare_call.":
+      "Bestätigungscode nicht verfügbar — bitte um ein neues prepare_call.",
+    "Confirmation expired — ask for a new prepare_call.":
+      "Bestätigung abgelaufen — bitte um ein neues prepare_call.",
+    "Unclear whether the call was placed — do not confirm again; check list_calls.":
+      "Unklar, ob der Anruf gestartet wurde — nicht erneut bestätigen; list_calls prüfen.",
+    "This confirmation was already sent — do not confirm again; check list_calls.":
+      "Diese Bestätigung wurde bereits abgeschickt — nicht erneut bestätigen; list_calls prüfen.",
+    "Call was not started — ask for a new prepare_call.":
+      "Anruf wurde nicht gestartet — bitte um ein neues prepare_call.",
+    "Confirmed the call to {to} (call_id {call_id}).":
+      "Anruf an {to} bestätigt (call_id {call_id}).",
+    "Confirmed a call to {to}; no response from the card yet. Check list_calls, do not call place_call again.":
+      "Anruf an {to} bestätigt; noch keine Rückmeldung der Karte. list_calls prüfen, nicht erneut place_call aufrufen.",
   },
   fr: {
     "Hermes · Call": "Hermes · Appel",
     "Hermes · Agent Status": "Hermes · Statut de l'agent",
     "Hermes · Agent Number": "Hermes · Numéro de l'agent",
     "Hermes · Recent Calls": "Hermes · Appels récents",
-    "Hermes · Calendar": "Hermes · Calendrier",
     "Your AI phone assistant": "Votre assistant téléphonique IA",
     "Recent calls": "Appels récents",
-    "Calendar": "Calendrier",
     "Number": "Numéro",
-    "Voice engine": "Moteur vocal",
-    "Model": "Modèle",
     "Calls": "Appels",
     "Monthly usage (%)": "Utilisation mensuelle (%)",
     "Permissions": "Autorisations",
@@ -105,13 +136,40 @@ export const WIDGET_DICT = {
     "Yes": "Oui",
     "No": "Non",
     "Unclear": "Incertain",
+    // T2-14 (N-10): Bestaetigungs-Ansicht im Call-Widget.
+    "To": "Destinataire",
+    "Request": "Demande",
+    "Briefing": "Briefing",
+    "Call language": "Langue de l'appel",
+    "Max. duration": "Durée max.",
+    "Constraints": "Contraintes",
+    "Mandate": "Mandat",
+    "Context": "Contexte",
+    "Diagnostic": "Diagnostic",
+    "Confirm call": "Confirmer l'appel",
+    "Confirmation code unavailable — ask for a new prepare_call.":
+      "Code de confirmation indisponible — redemandez un prepare_call.",
+    "Confirmation expired — ask for a new prepare_call.":
+      "Confirmation expirée — redemandez un prepare_call.",
+    "Unclear whether the call was placed — do not confirm again; check list_calls.":
+      "Incertain si l'appel a été lancé — ne confirmez pas à nouveau ; vérifiez list_calls.",
+    "This confirmation was already sent — do not confirm again; check list_calls.":
+      "Cette confirmation a déjà été envoyée — ne confirmez pas à nouveau ; vérifiez list_calls.",
+    "Call was not started — ask for a new prepare_call.":
+      "Appel non lancé — redemandez un prepare_call.",
+    "Confirmed the call to {to} (call_id {call_id}).":
+      "Appel vers {to} confirmé (call_id {call_id}).",
+    "Confirmed a call to {to}; no response from the card yet. Check list_calls, do not call place_call again.":
+      "Appel vers {to} confirmé ; pas encore de réponse de la carte. Vérifiez list_calls, n'appelez pas à nouveau place_call.",
   },
 };
 
-// Alle Sprachfassungen, die es vom Widget geben kann = die moeglichen Ergebnisse von
-// resolveLocale: der eingebaute englische Fallback plus jede Uebersetzungstabelle.
-// EINE Quelle fuer die Script- und die HTML-Matrix (widget-catalog.js).
-export const WIDGET_LOCALES = Object.freeze([DEFAULT_LOCALE, ...Object.keys(WIDGET_DICT)]);
+// Sprachfeld-Schluessel am Ergebnis-`_meta` der Widget-Werkzeuge (mcp-tools.js
+// withWidgetLocale). NICHT in structuredContent (pinnte outputSchema/T-33-Snapshot,
+// s. T2-02-Spec Kernentscheidung 4) und NICHT ueber die globale OpenAI-Bruecke
+// gelesen (UI-03 verbietet ihre Nutzung im ausgelieferten HTML) - NUR ueber die
+// MCP-Apps-Bruecke (ui/notifications/tool-result, params._meta).
+export const WIDGET_LOCALE_META_KEY = "hermes/locale";
 
 // "de-DE"/"fr_CH" -> "de"/"fr". Nur der primaere Subtag entscheidet - die
 // Widgets haben keine regionalen Varianten.
@@ -119,8 +177,8 @@ export function primaryLanguage(tag) {
   return String(tag || "").toLowerCase().split(/[-_]/)[0];
 }
 
-// Erster Kandidat (seit P13/E4: die servergerenderte Agentensprache), dessen
-// Sprache unterstuetzt wird; nichts passt -> DEFAULT_LOCALE (fail-safe englisch).
+// Erster Kandidat, dessen Sprache unterstuetzt wird; nichts passt -> DEFAULT_LOCALE
+// (fail-safe englisch).
 export function resolveLocale(candidates, dict) {
   for (const candidate of candidates) {
     const lang = primaryLanguage(candidate);
@@ -128,20 +186,6 @@ export function resolveLocale(candidates, dict) {
     if (lang && Object.prototype.hasOwnProperty.call(dict, lang)) return lang;
   }
   return DEFAULT_LOCALE;
-}
-
-// Agentensprache -> Widget-Locale. DER eine Normalisierer beider Eintrittspunkte
-// (widgetHtml, withI18nScript); unbekannt/fehlend -> DEFAULT_LOCALE. Im Produktivpfad
-// ist er die Identitaet: mcp-tools reicht die bereits ueber localeFor() aufgeloeste
-// Sprache herein - hier entsteht KEIN zweiter Fallback (Test T-i18n-locale-keyset).
-export const resolveWidgetLocale = (language) => resolveLocale([language], WIDGET_DICT);
-
-// Nur die Tabelle der gerenderten Sprache ins Iframe projizieren: seit die Sprache
-// serverseitig feststeht (E4), waeren die uebrigen Tabellen dort unerreichbarer Ballast.
-// en -> {} (die Keys SIND die englischen Texte, s. Kopfkommentar).
-export function widgetDictFor(locale) {
-  const table = WIDGET_DICT[locale];
-  return table ? { [locale]: table } : {};
 }
 
 // Key = englischer Text (siehe Kopfkommentar): en -> Key selbst, sonst Eintrag
@@ -161,24 +205,39 @@ export function localizeStaticLabels(doc, t) {
   for (const el of nodes) el.textContent = t(el.getAttribute("data-i18n"));
 }
 
+// Loest einen eingehenden Sprachkandidaten auf - nur bei einem GUELTIGEN
+// String-Kandidaten (jeder andere Wert, inkl. Objekte/undefined, liefert null:
+// die aktuelle Locale bleibt unangetastet, kein Wurf). `resolveLocale`
+// entscheidet ueber gueltig/unterstuetzt (unbekannt -> en, dieselbe Regel wie
+// ueberall sonst - kein zweiter Fallback). Reine Funktion (keine Parameter-
+// Mutation, hoechstens 3 Argumente, F1) - das Anwenden (Dokument/Labels/
+// HermesI18n) macht der Aufrufer.
+export function incomingLocale(candidate, dict) {
+  if (typeof candidate !== "string") return null;
+  return resolveLocale([candidate], dict);
+}
+
 // Projiziert dieselben Funktionen als Iframe-Script-Text (eine Quelle, G5/S2 -
-// exakt das buildBindScript-Muster). Bootstrap: Locale liegt servergerendert fest,
-// window.HermesI18n bereitstellen (fuer die Inline-Skripte der Widgets) und
-// die statischen Labels beim DOM-Ready lokalisieren.
-function buildI18nScript(locale) {
+// exakt das buildBindScript-Muster). EIN Script fuer ALLE Sprachen (kein
+// Locale-Parameter mehr, T2-02/S2): Start "en", danach Umschalten per
+// ui/notifications/tool-result mit `params._meta[WIDGET_LOCALE_META_KEY]`.
+// Registriert seinen Listener beim Modul-Lauf im <head> - also BEVOR
+// widget-bind.js' Listener (vor </body> injiziert) registriert wird; die
+// Listener-Reihenfolge ist die Registrierungsreihenfolge, die Sprache steht
+// damit fest, bevor dieselbe Nachricht structuredContent bindet.
+function buildI18nScript() {
   const body = [
     '"use strict";',
     `var DEFAULT_LOCALE = ${JSON.stringify(DEFAULT_LOCALE)};`,
-    `var WIDGET_DICT = ${JSON.stringify(widgetDictFor(locale))};`,
+    `var WIDGET_DICT = ${JSON.stringify(WIDGET_DICT)};`,
+    `var METHOD_TOOL_RESULT = ${JSON.stringify(METHOD_TOOL_RESULT)};`,
+    `var WIDGET_LOCALE_META_KEY = ${JSON.stringify(WIDGET_LOCALE_META_KEY)};`,
+    primaryLanguage.toString(),
+    resolveLocale.toString(),
     translate.toString(),
     localizeStaticLabels.toString(),
-    // P13/E4: die Locale wird SERVERSEITIG entschieden (Agentensprache) und hier als
-    // Literal eingesetzt - kein Browser-Signal mehr. Der frueher hier gelesene
-    // navigator.language war die einzige verfuegbare Naeherung an die Chat-Sprache;
-    // ein echtes Host-Signal existiert im MCP-Wire-Vertrag nicht (UI-14), deshalb
-    // gewinnt die Achse, die der Nutzer selbst einstellt und die zum Anruf passt.
-    // Folge: alle Betrachter derselben Karte sehen dieselbe Sprache (frueher UI-19).
-    `var locale = ${JSON.stringify(locale)};`,
+    incomingLocale.toString(),
+    `var locale = ${JSON.stringify(DEFAULT_LOCALE)};`,
     "function t(key) { return translate(WIDGET_DICT, locale, key); }",
     "function localizeDocument() {",
     "  document.documentElement.lang = locale;",
@@ -187,12 +246,27 @@ function buildI18nScript(locale) {
     "window.HermesI18n = { locale: locale, t: t };",
     'if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", localizeDocument);',
     "else localizeDocument();",
+    // Eigener Listener, unabhaengig von widget-bind.js (das die Nachricht ebenfalls
+    // liest, um structuredContent zu binden) - dieselbe Host-Nachricht darf mehrere
+    // Listener haben (Standard-DOM-Semantik), Reihenfolge = Registrierreihenfolge.
+    "window.addEventListener(\"message\", function (event) {",
+    "  var message = event && event.data;",
+    "  if (!message || typeof message !== \"object\") return;",
+    "  if (message.method !== METHOD_TOOL_RESULT) return;",
+    "  var params = message.params;",
+    "  if (!params || typeof params !== \"object\") return;",
+    "  var meta = params._meta;",
+    "  if (!meta || typeof meta !== \"object\") return;",
+    "  var next = incomingLocale(meta[WIDGET_LOCALE_META_KEY], WIDGET_DICT);",
+    "  if (next === null) return;",
+    "  locale = next;",
+    "  window.HermesI18n.locale = next;",
+    "  localizeDocument();",
+    "});",
   ].join("\n");
   return `<script>\n(function () {\n${body}\n})();\n</script>`;
 }
 
-// Ein fertiges Script je Widget-Sprache, EINMAL beim Modul-Load gebaut (kein Lazy-Init,
-// P15). Schluessel = exakt die moeglichen resolveWidgetLocale-Ergebnisse.
-export const I18N_SCRIPT_BY_LOCALE = Object.freeze(
-  Object.fromEntries(WIDGET_LOCALES.map((locale) => [locale, buildI18nScript(locale)])),
-);
+// EIN fertiges Script, EINMAL beim Modul-Load gebaut (kein Lazy-Init, P15) -
+// sprachunabhaengig, s. Kopfkommentar.
+export const I18N_SCRIPT = buildI18nScript();

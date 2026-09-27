@@ -1497,6 +1497,13 @@ const rawConfig = {
   port: numEnv("PORT", process.env.PORT, { fallback: 3000, min: 0 }),
   // Render setzt RENDER_EXTERNAL_URL automatisch -> kein ngrok noetig
   publicUrl: stripTrailingSlash(process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || ""),
+  // T2-04 (T-32): abgeleitete Tatsache wie isProduction/deployedCommit, kein Betreiber-Knopf.
+  // Haelt fest, ob PUBLIC_URL ausdruecklich gesetzt ist (statt aus RENDER_EXTERNAL_URL
+  // geerbt) - productionFootguns liest NUR dieses Blatt, nie publicUrl selbst, weil
+  // publicUrl den Rueckfall schon aufgeloest hat und die Herkunft dort nicht mehr sichtbar
+  // ist. .trim(), weil ein aus dem Dashboard kopierter Zeilenumbruch sonst als "gesetzt"
+  // zaehlte (Muster openaiAppsChallengeToken, s.u.).
+  publicUrlExplicit: Boolean((process.env.PUBLIC_URL || "").trim()),
   // Import-Zeit-Snapshot der Produktions-Erkennung fuer Laufzeit-Konsumenten (z.B. der
   // /mcp-Auth-Bypass-Gate in auth.js). productionFootguns/assertConfig nutzen denselben
   // Begriff call-time ueber detectProduction() (injizierbarer Test-Seam).
@@ -1939,9 +1946,11 @@ const rawConfig = {
   // eigentums-verifiziert und ueber POST /api/self-service/private-number von jedem
   // eingeloggten Tenant setzbar (PLAN-SECURITY.md, Launch-Blocker).
   inboundOwnerGreetingTenantIds: csvEnv(process.env.INBOUND_OWNER_GREETING_TENANT_IDS),
-  // Rate-Limit pro IP und Minute fuer alle Routen ausser /voice (Provider-Webhooks;
+  // Rate-Limit pro Minute fuer alle Routen ausser /voice (Provider-Webhooks;
   // localhost-Socket ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min)
-  // plus Interaktionen.
+  // plus Interaktionen. Zaehlung ist pro IP - AUSSER auf POST /mcp (T2-07/T-28): dort
+  // gilt derselbe Wert je aufgeloestem MANDANTEN (OAuth) bzw. je IP fuer Ablehnungen
+  // (kein/ungueltiges Token) - s. src/mcp-rate-limit.js, PLAN-SECURITY.md.
   rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", process.env.RATE_LIMIT_PER_MIN, {
     fallback: 120,
     min: 0,
@@ -1960,6 +1969,13 @@ const rawConfig = {
   // Jeder Eintrag MUSS ein absoluter http(s)-Origin ohne Pfad sein - ein Tippfehler
   // sperrt sonst still den gemeinten Partner aus und wird deshalb beim Boot abgelehnt
   // (boot-guard.angekuendigterOriginFindings).
+  // T2-06 (T-29): dieselbe Liste bestimmt SEIT DIESER PHASE zusaetzlich, welche Origins
+  // `/mcp`-Antworten per CORS im BROWSER lesen duerfen (src/middleware.js:
+  // createMcpCors) - byte-genauer Vergleich, PUBLIC_URL ausgenommen (same-origin
+  // braucht kein CORS). Ein Eintrag hier heisst also "Wache laesst durch UND Browser
+  // duerfen die Antwort lesen", nicht mehr nur ersteres. Die Widget-Sandbox-Domain
+  // (ui.domain, chatgpt-egress.js) gehoert NICHT auf diese Liste - sie ist der Ursprung
+  // des Iframe-Inhalts, nicht ein Aufrufer von `/mcp`.
   mcpAllowedOrigins: csvEnv(process.env.MCP_ALLOWED_ORIGINS),
   // E5/Owner-Entscheidung E-4: NOTVENTIL der /mcp-Herkunftswache, Default SCHARF. Wie
   // csrfEnforce (s.o.) existiert der Schalter ALS RUECKFALL, nicht als Bequemlichkeit -
@@ -2068,6 +2084,11 @@ const rawConfig = {
   // (access_token-sub == user.id -> EINE Identitaetsquelle).
   oidcClientId: process.env.OIDC_CLIENT_ID || "",
   oidcClientSecret: process.env.OIDC_CLIENT_SECRET || "", // SECRET
+  // T2-13 (N-10): Betriebsgeheimnis fuer den serverseitigen Bestaetigungs-Code vor dem
+  // Waehlen (src/call-confirmation.js). Leer oder kuerzer als 32 Zeichen -> nicht ableitbar,
+  // prepare_call antwortet 503 "confirmation_unavailable" (fail-closed, KEIN Boot-Refusal - s.
+  // PRODUCTION_FOOTGUNS unten, nur eine WARN-Zeile, boot.js#warnCallConfirmationSecretUnusable).
+  callConfirmationSecret: process.env.CALL_CONFIRMATION_SECRET || "", // SECRET
   // WorkOS User-Management API-Basis (authorize/authenticate). Die Umgebung wird ueber
   // client_id + API-Key unterschieden, NICHT ueber den Host -> derselbe Host fuer Staging
   // und Produktion. Konstanter Default; nur fuer Tests/Self-Hosting ueberschreibbar.
@@ -2282,7 +2303,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "budgetWatchdogIntervalMs", "rateLimitPerMin", "csrfEnforce", "mcpAllowedOrigins", "mcpOriginEnforce", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "inboundOutageAlertWindowMs", "inboundOutageAlertMinFailures", "inboundOutageAlertMinAttempts", "inboundOutageAlertFailSharePercent", "platformHoldEscalationMaxAgeMs", "paidWithoutNumberGraceMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso", "priceDriftMinIntervalMs", "priceDriftUnknownEscalateAfter"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "provisioningRetryMaxAttempts", "provisioningRetryMinIntervalMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
-  auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
+  auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled", "callConfirmationSecret"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -
   // eigener Namespace statt Anhaengsel an auth/billing (eigenstaendige Domaene, s.
   // brevo-mail.js/smtp-mail.js/billing/cancellation-mail.js). HTTP-Fortsetzung:
@@ -2293,7 +2314,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
-  server: ["port", "publicUrl", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
+  server: ["port", "publicUrl", "publicUrlExplicit", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],
@@ -2457,6 +2478,22 @@ const PRODUCTION_FOOTGUNS = Object.freeze([
       "Wert leeren (kanonischer Default) oder exakt darauf setzen.",
   },
   {
+    // T2-04 (T-32): der Origin (scheme/hostname/port) einer OpenAI-App ist nach der
+    // Publikation unveraenderlich - ein Umzug verlangt ein neues Plugin (Scan,
+    // Einreichung, Review). Fehlt PUBLIC_URL, faellt publicUrl still auf
+    // RENDER_EXTERNAL_URL zurueck (den Hosting-Host) - genau der Wert, der NICHT
+    // eingefroren werden darf. Das Praedikat liest deshalb publicUrlExplicit, nicht
+    // publicUrl: publicUrl hat den Rueckfall schon aufgeloest, die Herkunft ist dort
+    // nicht mehr sichtbar (s. Kommentar bei publicUrlExplicit). Kein Wert-Echo in der
+    // Meldung (Muster allowlistFindings, boot-guard.js) - nur Variablenname + Sollform.
+    trifftZu: (cfg) => !cfg.server.publicUrlExplicit,
+    befund:
+      "PUBLIC_URL fehlt - der angekuendigte Origin faellt sonst still auf den " +
+      "Hosting-Host zurueck. Pflichtform: https://<host>[:<port>], ohne Pfad/Query/Slash " +
+      "am Ende, und exakt der Origin der OpenAI-Einreichung (nicht der Hosting-Host): " +
+      "ein Origin-Wechsel nach der Publikation verlangt ein neues Plugin.",
+  },
+  {
     // DEV_LOGIN_ENABLED ist ein lokaler Login-Shim (umgeht WorkOS) - im Hosting NIE erlaubt.
     // config.auth.devLoginEnabled ist auf Render ohnehin neutralisiert (=== false); diese zweite,
     // unabhaengige Sperre liest die ROHE Env, damit eine versehentlich auf Render gesetzte
@@ -2471,6 +2508,22 @@ export function productionFootguns(cfg = config, isProduction = detectProduction
   return PRODUCTION_FOOTGUNS.filter((footgun) => footgun.trifftZu(cfg)).map(
     (footgun) => footgun.befund,
   );
+}
+
+// T-5: reiner Hinweis (WARN), KEINE Sperre - Autonome Entscheidung P6. Produktion
+// wird NUR ueber den Parameter isProduction gelesen (kein zweiter Blick auf die
+// Prozess-Umgebung oder config.server.isProduction hier drin), damit es genau
+// EINEN Produktionsbegriff gibt (detectProduction bleibt die einzige Quelle).
+// MCP_AUTH=off ist bereits FATAL ueber PRODUCTION_FOOTGUNS oben - kein
+// Doppel-Report fuer denselben Zustand.
+export function productionAuthHints(cfg = config, isProduction = detectProduction()) {
+  if (!isProduction) return [];
+  if (cfg.auth.mcpAuth === "oauth" || cfg.auth.mcpAuth === "off") return [];
+  return [
+    "[Sicherheit] MCP_AUTH ist nicht 'oauth' - /mcp laeuft im Hosting mit statischem " +
+      "Bearer statt OAuth 2.1; Claude-/ChatGPT-Connectoren erhalten 401 (T-5). Kein " +
+      "Boot-Stopp (Hinweis).",
+  ];
 }
 
 // EINE Quelle (G5) fuer das Self-Service-Reifekriterium: nur "scharf", wenn BEIDE Flags
@@ -2649,5 +2702,9 @@ export function assertConfig() {
     console.error(
       "[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!",
     );
+  // T-5: reiner Hinweis, unabhaengig von missing/fatal - zaehlt NICHT in den
+  // Rueckgabewert (Autonome Entscheidung P6, keine neue Boot-Verweigerung).
+  // Derselbe lokale isProduction wie fuer fatalConfigFindings oben.
+  for (const hint of productionAuthHints(config, isProduction)) console.error(hint);
   return missing.length === 0 && fatal.length === 0;
 }
