@@ -71,9 +71,10 @@ export function needsReload({ previous, next, activated }) {
   return revokedCategories(previous, next).some((category) => activated.has(category));
 }
 
-// Den Banner ungefragt zeigen, wenn noch keine Entscheidung vorliegt UND auf der Seite
-// tatsaechlich etwas auf eine Einwilligung wartet. Ohne einwilligungspflichtigen Dienst
-// gibt es nichts zu fragen; "Cookie-Einstellungen" im Fussband oeffnet ihn trotzdem.
-export function shouldPrompt({ consent, gatedScripts }) {
-  return !consent && gatedScripts > 0;
+// Den Banner ungefragt zeigen, solange noch keine Entscheidung vorliegt - beim ersten
+// Besuch also immer, auch wenn heute nur Notwendiges laeuft (Owner-Entscheidung
+// 2026-09-27: "wenn der User auf die Seite kommt, muss direkt die Cookie-Abfrage
+// kommen"). Nach der Wahl oeffnet ihn nur noch "Cookie-Einstellungen".
+export function shouldPrompt({ consent }) {
+  return !consent;
 }
