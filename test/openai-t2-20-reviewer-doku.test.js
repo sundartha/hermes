@@ -79,6 +79,8 @@ const WARNINGS = {
     "do not expire",
     "no administrator override",
     "without MFA",
+    "empty inbox",
+    "does not extend the retention",
   ],
   de: [
     "Zusage des Betreibers, keine Code-Tatsache",
@@ -90,6 +92,8 @@ const WARNINGS = {
     "nicht ablaufen",
     "keine Administrator-Ausnahme",
     "ohne MFA",
+    "leeren Posteingang",
+    "verlaengert die Aufbewahrung vorhandener nicht",
   ],
 };
 

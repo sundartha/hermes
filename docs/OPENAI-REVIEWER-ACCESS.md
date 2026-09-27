@@ -107,6 +107,12 @@ tool `list_calls` shows the calls with summary (src/mcp-tools.js:2003); the tool
 The caller numbers are fictional (reserved example range +1 202 555 0100 to 0199). Please do not
 call them.
 
+The tool `check_inbox` returns an empty inbox in this account unless a real incoming call has
+reached the account's phone number. It lists only incoming calls that the live call handling has
+finished and marked for the inbox (src/telephony/call-finish.js:422,
+src/store/state-ops.js:835). The example calls were not created by the live call handling; they
+appear in `list_calls` only, not in `check_inbox`.
+
 ### 6. Same safeguards as every customer
 
 The reviewer account has no exception from any safeguard; it is a regular customer account.
@@ -135,9 +141,10 @@ customer. Calls to other numbers reach real people.
 ### 8. Expiry
 
 The example calls follow the regular retention period for finished calls
-(src/store/state-ops.js:5125) and disappear after it. The operator refreshes them shortly before
-submission and again during a long review, and keeps the subscription of the reviewer account
-active so the credentials do not expire.
+(src/store/state-ops.js:5125) and disappear after it. The operator runs the example-data setup
+again shortly before submission and during a long review; this re-creates only example calls
+that have already disappeared and does not extend the retention of existing ones. The operator
+keeps the subscription of the reviewer account active so the credentials do not expire.
 
 ## Deutsch
 
@@ -244,6 +251,12 @@ englisch, so wie sie im Konto stehen:
 Die Anrufer-Nummern sind fiktiv (reservierter Beispielbereich +1 202 555 0100 bis 0199). Bitte
 nicht anrufen.
 
+Das Werkzeug `check_inbox` liefert in diesem Konto einen leeren Posteingang, solange kein echter
+eingehender Anruf die Telefonnummer des Kontos erreicht hat. Es listet nur eingehende Anrufe, die
+die Live-Anrufverarbeitung beendet und fuer den Posteingang markiert hat
+(src/telephony/call-finish.js:422, src/store/state-ops.js:835). Die Beispielanrufe sind nicht ueber
+die Live-Anrufverarbeitung entstanden; sie erscheinen nur in `list_calls`, nicht in `check_inbox`.
+
 ### 6. Dieselben Sicherungen wie fuer jeden Kunden
 
 Das Reviewer-Konto hat keine Ausnahme von irgendeiner Sicherung; es ist ein regulaeres
@@ -274,9 +287,10 @@ Kunden. Anrufe an andere Nummern erreichen echte Menschen.
 ### 8. Ablauf
 
 Die Beispielanrufe folgen der regulaeren Aufbewahrungsfrist fuer beendete Anrufe
-(src/store/state-ops.js:5125) und verschwinden danach. Der Betreiber frischt sie kurz vor der
-Einreichung und waehrend eines langen Reviews erneut auf und haelt das Abo des Reviewer-Kontos
-aktiv, damit die Zugangsdaten nicht ablaufen.
+(src/store/state-ops.js:5125) und verschwinden danach. Der Betreiber laesst die Einrichtung der
+Beispieldaten kurz vor der Einreichung und waehrend eines langen Reviews erneut laufen; das legt
+nur schon verschwundene Beispielanrufe neu an und verlaengert die Aufbewahrung vorhandener nicht.
+Der Betreiber haelt das Abo des Reviewer-Kontos aktiv, damit die Zugangsdaten nicht ablaufen.
 
 ## Anker (maschinenlesbar)
 
@@ -310,5 +324,7 @@ src/telephony/outbound-gates.js:578 | grund: "budget_tenant",
 src/telephony/outbound-gates.js:961 | ctx.maxDur = resolveMaxDurationS(
 src/mcp-tools.js:1617 | "prepare_call",
 src/mcp-tools.js:1705 | if (!confirmResult.confirmed) {
+src/telephony/call-finish.js:422 | store.markInboxEntry(call.id, inboxWorthy);
+src/store/state-ops.js:835 | .filter((call) => Boolean(call.inboxEntryAt) && (includeSeen || !call.inboxSeenAt))
 src/store/state-ops.js:5125 | const keepCall = (c) => c.status === "active" || !c.endedAt || c.endedAt >= cutoff;
 ANKER-END -->
