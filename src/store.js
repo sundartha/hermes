@@ -20,7 +20,8 @@ async function createPgBackend() {
   const { makePgStore } = await import("./store/pg.js");
   const { runner } = await createPgPoolRunner(config.store.databaseUrl);
   // Server-Boot: makePgStore OHNE Optionen -> init migriert (DDL aus db/schema.sql + Seeding),
-  // dann Hydrierung. Nur Betreiber-Skripte oeffnen den Store ohne Migration (pg-runner.js).
+  // dann Hydrierung. Ohne Migration oeffnet nur ein Betreiber-Skript den Store
+  // (scripts/lib/pg-schema-abgleich.mjs) - nie dieser Boot-Pfad.
   const store = makePgStore(runner);
   await store.init();
   return store;

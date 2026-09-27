@@ -82,7 +82,8 @@ function schemaCheck(expected) {
 // pg-Store auf runner OHNE Migration: init prueft das Schema gegen expected (aus
 // expectedSchemaColumns) und bricht bei jeder Abweichung ab, bevor hydriert oder geschrieben
 // wird. Danach wie beim Boot: Hydrierung ueber die RLS-GUC je Mandant, dieselben
-// idempotenten Boot-Heilungen (auf einer vom deployten Dienst gebooteten DB ohne Wirkung).
+// idempotenten Boot-Heilungen (auf einer DB, die der Dienst desselben Stands schon gebootet
+// hat, ohne Wirkung).
 export async function openPgStoreWithoutMigration(runner, expected) {
   const store = makePgStore(runner, { prepareSchema: schemaCheck(expected) });
   await store.init();
