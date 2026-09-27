@@ -84,7 +84,7 @@ to Hermes; Hermes itself has no password login and no MFA step for this path.
 - Connecting through ChatGPT only reads: the lookup in step 5 never creates an account and never
   requests a phone number (src/routes/_tenant.js:162, src/store/state-ops.js:5306).
 - If no Hermes account matched the identity, every tool call would return the error "No Hermes
-  account is linked to this login" with a sign-in challenge (src/routes/mcp.js:211,
+  account is linked to this login" with a sign-in challenge (src/routes/mcp.js:258,
   src/mcp-no-tenant.js:32). This is not expected for the reviewer account, because the operator
   checks the connection with exactly these credentials before submission.
 
@@ -106,6 +106,11 @@ tool `list_calls` shows the calls with summary (src/mcp-tools.js:2003); the tool
 
 The caller numbers are fictional (reserved example range +1 202 555 0100 to 0199). Please do not
 call them.
+
+These example entries are not recorded conversations. They show a summary and open action items,
+but no transcript lines, and `get_call_status` reports a duration of 0 seconds for them, because
+the entries are created as already finished (scripts/lib/reviewer-demo-seed.mjs:130,
+src/mcp-tools.js:212, src/mcp-tools.js:213).
 
 The tool `check_inbox` returns an empty inbox in this account unless a real incoming call has
 reached the account's phone number. It lists only incoming calls that the live call handling has
@@ -227,7 +232,7 @@ und keinen MFA-Schritt.
 - Die Verbindung ueber ChatGPT liest nur: die Suche aus Schritt 5 legt nie ein Konto an und
   fordert nie eine Telefonnummer an (src/routes/_tenant.js:162, src/store/state-ops.js:5306).
 - Passte kein Hermes-Konto zur Identitaet, lieferte jeder Werkzeugaufruf den Fehler "No Hermes
-  account is linked to this login" mit einer Anmelde-Challenge (src/routes/mcp.js:211,
+  account is linked to this login" mit einer Anmelde-Challenge (src/routes/mcp.js:258,
   src/mcp-no-tenant.js:32). Beim Reviewer-Konto ist das nicht zu erwarten, weil der Betreiber
   die Verbindung vor der Einreichung mit genau diesen Zugangsdaten prueft.
 
@@ -250,6 +255,11 @@ englisch, so wie sie im Konto stehen:
 
 Die Anrufer-Nummern sind fiktiv (reservierter Beispielbereich +1 202 555 0100 bis 0199). Bitte
 nicht anrufen.
+
+Diese Beispieleintraege sind keine aufgezeichneten Gespraeche. Sie zeigen eine Zusammenfassung und
+offene Action Items, aber keine Transkriptzeilen, und `get_call_status` meldet fuer sie eine Dauer
+von 0 Sekunden, weil die Eintraege bereits als beendet angelegt werden
+(scripts/lib/reviewer-demo-seed.mjs:130, src/mcp-tools.js:212, src/mcp-tools.js:213).
 
 Das Werkzeug `check_inbox` liefert in diesem Konto einen leeren Posteingang, solange kein echter
 eingehender Anruf die Telefonnummer des Kontos erreicht hat. Es listet nur eingehende Anrufe, die
@@ -309,10 +319,13 @@ src/web-auth.js:613 | throw new Error("login rejected: verified email required")
 src/web-auth.js:540 | VALUES ($1, '${TENANT_STATUS.SUSPENDED}', $2, $3, $4, $5)
 src/billing/activation.js:88 | store.setKycLevel(tenant, KYC_LEVEL.CARD);
 src/billing/activation.js:106 | const provisioned = await provision(tenant);
-src/routes/mcp.js:211 | if (rejectIfNoTenant(scopedTenant, req, res)) return;
+src/routes/mcp.js:258 | const register = scopedTenant === TENANT_REJECT ? registerNoTenantStubs : registerTools;
 src/mcp-no-tenant.js:32 | const NO_TENANT_DESCRIPTION = "No Hermes account is linked to this login";
 src/mcp-tools.js:2003 | "list_calls",
 src/mcp-tools.js:2059 | "list_action_items",
+scripts/lib/reviewer-demo-seed.mjs:130 | store.setCallEndedAt(call.id, ENDED_STATUS, endedAtIso);
+src/mcp-tools.js:212 | duration_s: durationS(c),
+src/mcp-tools.js:213 | last_transcript_lines: c.transcript
 src/telephony/outbound-gates.js:699 | name: "outbound_frozen",
 src/telephony/outbound-gates.js:421 | function kycGateError(tenantId) {
 src/telephony/outbound-gates.js:438 | function allowlistError(to, { profile, tenantId }) {
