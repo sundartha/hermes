@@ -2,8 +2,8 @@
 // Handy-Fassung der Startseite (< 768 px), Umsetzung des Design-Handoffs
 // "Hermes Mobile v5" (design/handoff-mobile, Design-Schema.md ist verbindlich).
 //
-// Fuenf Vollbild-Screens mit Scroll-Snap: Hero, So funktioniert's, Preise, Fuer
-// Entwickler, Abschluss. Der Hintergrund liegt fest dahinter und blendet nur
+// Fuenf Vollbild-Screens, eine Wischgeste = ein Screen: Hero, So funktioniert's,
+// Preise, Fuer Entwickler, Abschluss. Der Hintergrund liegt fest dahinter und blendet nur
 // seine Ebenen ueber den Scroll-Fortschritt --p (scripts/hermes-mobile.js).
 //
 // Der Desktop bleibt unberuehrt: .mh ist ausserhalb der Handy-Abfrage
@@ -19,6 +19,7 @@
 // Preise und Minuten kommen aus dem Tarif-Katalog (lib/plans.js), nicht aus dem
 // Text - dieselbe Quelle wie Desktop, /preise und Dashboard.
 import "../styles/hermes-mobile.css";
+import "../styles/hermes-mobile-viewport.css";
 import { LOGIN_URL } from "../lib/routes.js";
 import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
 
@@ -146,7 +147,7 @@ const plans = PLAN_CATALOG.map((plan) => {
     benefits,
   };
 });
-// Start auf dem hervorgehobenen Tarif (Handoff: plan = 1, Business).
+// Start auf dem hervorgehobenen Tarif (Handoff: plan = 1, Pro).
 const featured = Math.max(0, PLAN_CATALOG.findIndex((plan) => plan.featured));
 const rel = (index, current) => (index === current ? "cur" : index < current ? "before" : "after");
 
@@ -180,7 +181,11 @@ const SEGMENTS = 4;
     <div class="mh-base"></div>
     <div class="mh-deep"></div>
     <div class="mh-veil"></div>
+    <div class="mh-edge mh-edge--top"></div>
+    <div class="mh-edge mh-edge--bottom"></div>
   </div>
+  <!-- Farbquelle fuer Safaris Statusleiste, s. styles/hermes-mobile-viewport.css -->
+  <div class="mh-tint" aria-hidden="true"></div>
 
   <div class="mh-scroll">
     <!-- Screen 1: Hero -->
