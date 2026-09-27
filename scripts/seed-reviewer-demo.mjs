@@ -41,11 +41,17 @@
 //
 // Idempotent: ein zweiter Lauf legt nichts an ("nichts zu tun"). Die Seed-Anrufe fallen nach
 // der Aufbewahrungsfrist (ab ihrem vordatierten Ende) weg; vor der Einreichung und bei langem
-// Review erneut laufen lassen. Die Ausgabe nennt nur Zaehler - nie Mandanten-Kennung, Nummern oder Texte des Stores.
+// Review erneut laufen lassen. Ein erneuter Lauf legt NUR neu an, was schon weggefallen ist;
+// einen vorhandenen Seed-Anruf frischt er nicht auf - weder seine Aufbewahrung noch sein
+// endedAt. Wurden Beleg- oder Herzschlag-Fenster der Kosten-Ueberwachung nach dem ersten Lauf
+// vergroessert, koennen vorhandene Seed-Anrufe in diese Fenster fallen und einen Fehlalarm
+// ausloesen; der Lauf meldet ihre Zahl als Hinweis und aendert sie nicht.
+// Die Ausgabe nennt nur Zaehler - nie Mandanten-Kennung, Nummern oder Texte des Stores.
 import { parseArgs } from "node:util";
 import {
   REVIEWER_SEED_CALLS,
   applyReviewerSeed,
+  countSeedCallsInsideCostWindow,
   reviewerSeedEndedAtIso,
 } from "./lib/reviewer-demo-seed.mjs";
 import { KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
@@ -97,6 +103,17 @@ function warnIfNotSubscriber(store, tenantId) {
   );
 }
 
+// Nur lesend: vorhandene Seed-Anrufe in den heutigen Fenstern der Kosten-Ueberwachung melden.
+function warnIfInsideCostWindow(store, tenantId, endedAtIso) {
+  const inside = countSeedCallsInsideCostWindow(store, tenantId, endedAtIso);
+  if (inside === 0) return;
+  console.warn(
+    `${PREFIX} Hinweis: ${inside} vorhandene Seed-Anrufe liegen in den Fenstern der ` +
+      "Kosten-Ueberwachung (Fenster seit dem ersten Lauf vergroessert?) - moeglicher " +
+      "Fehlalarm. Das Skript datiert vorhandene Anrufe nicht um.",
+  );
+}
+
 // Ende-Zeitpunkt der Seed-Anrufe aus denselben Fensterlaengen, die der Kosten-Sweep liest
 // (Beleg-Fenster aus cost-truing.js, Herzschlag-Fenster aus der Konfiguration).
 async function seedEndedAtIso(billing) {
@@ -121,6 +138,7 @@ async function applySeed(tenantId, billing) {
   }
   await store.save(); // PFLICHT: pg-Flush abwarten (json = No-op nach internem save)
   warnIfNotSubscriber(store, tenantId);
+  warnIfInsideCostWindow(store, tenantId, endedAtIso);
   const { callsCreated, itemsCreated } = counts;
   if (callsCreated === 0 && itemsCreated === 0) console.log(`${PREFIX} nichts zu tun.`);
   else console.log(`${PREFIX} angelegt: ${callsCreated} Anrufe, ${itemsCreated} Action Items.`);

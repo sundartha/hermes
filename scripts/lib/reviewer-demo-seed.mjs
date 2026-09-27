@@ -139,6 +139,10 @@ function addMissingItems(store, callId, texts) {
 
 // Schreibt die fehlenden Datensaetze; Speichern (store.save) ist Sache des Aufrufers.
 // endedAtIso kommt aus reviewerSeedEndedAtIso und wird VOR jedem Schreiben geprueft.
+// Ein schon vorhandener Seed-Anruf bleibt, wie er ist - auch sein endedAt: ein erneuter Lauf
+// legt nur an, was fehlt (etwa nach Ablauf der Aufbewahrung), und datiert nichts um
+// (setCallEndedAt wirkt nur auf aktive Anrufe). Wie viele vorhandene Seed-Anrufe inzwischen
+// in den Fenstern der Kosten-Ueberwachung liegen, meldet countSeedCallsInsideCostWindow.
 export function applyReviewerSeed(store, tenantId, endedAtIso) {
   assertEndedAtIso(endedAtIso);
   const counts = { callsCreated: 0, itemsCreated: 0 };
@@ -149,4 +153,18 @@ export function applyReviewerSeed(store, tenantId, endedAtIso) {
     counts.itemsCreated += addMissingItems(store, callId, step.missingItems);
   }
   return counts;
+}
+
+// Nur lesend: vorhandene Seed-Anrufe, deren endedAt NACH endedAtIso liegt, also innerhalb der
+// HEUTIGEN Fenster der Kosten-Ueberwachung. Das passiert, wenn Beleg- oder Herzschlag-Fenster
+// nach ihrem Anlegen vergroessert wurden; der Sweep kann sie dann als Befund melden
+// (Fehlalarm). endedAtIso kommt aus reviewerSeedEndedAtIso mit den aktuellen Fensterlaengen.
+export function countSeedCallsInsideCostWindow(store, tenantId, endedAtIso) {
+  assertEndedAtIso(endedAtIso);
+  assertSeedableTenant(store, tenantId);
+  const { calls } = store.exportTenantData(tenantId);
+  const windowStartMs = Date.parse(endedAtIso);
+  return REVIEWER_SEED_CALLS.map((entry) => findSeedCall(calls, entry)).filter(
+    (call) => call !== undefined && Date.parse(call.endedAt) > windowStartMs,
+  ).length;
 }

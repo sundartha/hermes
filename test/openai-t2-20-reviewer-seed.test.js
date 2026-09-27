@@ -41,6 +41,7 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import {
   REVIEWER_SEED_CALLS,
   applyReviewerSeed,
+  countSeedCallsInsideCostWindow,
   reviewerSeedEndedAtIso,
 } from "../scripts/lib/reviewer-demo-seed.mjs";
 import { config } from "../src/config.js";
@@ -409,4 +410,47 @@ test("Reviewer-Seed: Kosten-Ueberwachung meldet nach dem Seed nichts, Quote unve
     const nachher = costTruingCoveragePercent(geseedeterZustand({ billing, seedMs }), seedMs);
     assert.equal(nachher, vorher);
   });
+});
+
+// Vergroessertes Fenster NACH dem Seed: ein erneuter Lauf datiert vorhandene Seed-Anrufe nicht
+// um (Kopfkommentar seed-reviewer-demo.mjs), die Zaehlung erkennt sie aber als Fehlalarm-Risiko.
+test("Reviewer-Seed: erneuter Lauf datiert nicht um, Zaehlung meldet vorhandene Anrufe im vergroesserten Fenster", () => {
+  const seedMs = Date.now();
+  const billing = config.billing;
+  const state = geseedeterZustand({ billing, seedMs });
+  const fassade = opsFassade(state);
+  const endeHeute = (heartbeatFensterH) =>
+    reviewerSeedEndedAtIso({
+      nowMs: seedMs,
+      belegFensterMs: PROVIDER_COST_RECORD_WINDOW_MS,
+      heartbeatFensterH,
+    });
+  const endenVorher = state.calls.map((call) => call.endedAt);
+  const endeGross = endeHeute(HERZSCHLAG_ZEHN_TAGE_H);
+
+  assert.equal(
+    countSeedCallsInsideCostWindow(
+      fassade,
+      REVIEWER_TENANT,
+      endeHeute(billing.kostenHeartbeatFensterH),
+    ),
+    0,
+  );
+  assert.equal(
+    countSeedCallsInsideCostWindow(fassade, REVIEWER_TENANT, endeGross),
+    SEED_CALL_COUNT,
+  );
+  assert.deepEqual(applyReviewerSeed(fassade, REVIEWER_TENANT, endeGross), {
+    callsCreated: 0,
+    itemsCreated: 0,
+  });
+  assert.deepEqual(
+    state.calls.map((call) => call.endedAt),
+    endenVorher,
+    "endedAt unveraendert",
+  );
+  assert.equal(
+    countSeedCallsInsideCostWindow(fassade, REVIEWER_TENANT, endeGross),
+    SEED_CALL_COUNT,
+  );
 });

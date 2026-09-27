@@ -6790,7 +6790,13 @@ MCP-OAuth-Login legt nie einen Mandanten an und kauft nie eine Nummer (`requestT
 - Verweigert den Betreiber-Mandanten, unbekannte Mandanten und eine leere Kennung; legt nie
   einen Mandanten an.
 - Trockenlauf ist Default (ohne `--apply` wird der Store nicht einmal geladen - Import-Spion-Test);
-  `--apply` verlangt `--tenant`; idempotent.
+  `--apply` verlangt `--tenant`; idempotent. Ein erneuter Lauf legt nur an, was schon weggefallen
+  ist; einen vorhandenen Seed-Anruf frischt er NICHT auf (weder Aufbewahrung noch `endedAt`,
+  `setCallEndedAt` wirkt nur auf aktive Anrufe). Werden Beleg- oder Herzschlag-Fenster nach dem
+  ersten Lauf vergroessert, koennen vorhandene Seed-Anrufe in diese Fenster fallen und einen
+  Fehlalarm der Kosten-Ueberwachung ausloesen, bis die Aufbewahrung sie entfernt; der Lauf meldet
+  ihre Zahl nur lesend (`countSeedCallsInsideCostWindow`) und aendert sie nicht. Vor einem
+  Fenster-Deploy deshalb einen Lauf pruefen.
 - pg nur mit `--dienst-gestoppt`, geprueft VOR dem Store-Import: der pg-Flush schreibt in einer
   Transaktion ALLE Mandanten zurueck und loescht fehlende Zeilen. Bei laufendem Dienst gingen
   die Seed-Zeilen verloren oder der Flush des Skripts ueberschriebe Dienst-Schreibungen, auch
