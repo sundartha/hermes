@@ -1,0 +1,49 @@
+---
+// Inhalt der Kuendigungs-Erklaerung - EINE Quelle fuer die Seite /kuendigen und den
+// Reiter "Verträge kündigen" im Rechts-Blatt der Startseite (pages/index.astro,
+// Owner-Wunsch 2026-09-27: der Reiter oeffnet sich im Blatt, die Reiterleiste bleibt).
+// Wortlaut deutsch (§ 312k BGB, s. pages/kuendigen.astro). Die Klassen sind die der
+// Unterseiten (styles/hermes-page.css .doc-*); im Blatt setzt styles/hermes.css
+// (.legal-info) die Masse.
+import { LOGIN_URL } from "../../lib/routes.js";
+
+const CONTACT = "kontakt@sundartha.com";
+---
+
+<p class="doc-lead">
+  Du kannst deinen Hermes-Vertrag jederzeit kündigen — über deinen Kundenbereich oder
+  formlos per E-Mail. Die Kündigung wirkt zum Ende des laufenden
+  Abrechnungszeitraums; bis dahin bleibt dein Assistent wie gewohnt erreichbar.
+</p>
+
+<div class="doc-block doc-steps">
+  <div class="sheet__card">
+    <span class="step">
+      <span class="step__num">01</span>
+      <span class="step__body">
+        <span class="step__title">Im Kundenbereich</span>
+        <span class="step__text">
+          Melde dich an und klicke im Abschnitt „Payment method“ auf
+          „Verträge kündigen“. Nach einer kurzen Bestätigung — mit dem genauen
+          Termin, zu dem die Kündigung wirkt — ist der Vertrag gekündigt.
+        </span>
+      </span>
+    </span>
+    <span class="rule" aria-hidden="true"></span>
+    <span class="step">
+      <span class="step__num">02</span>
+      <span class="step__body">
+        <span class="step__title">Formlos per E-Mail</span>
+        <span class="step__text">
+          Alternativ genügt eine E-Mail an <a href={`mailto:${CONTACT}`}>{CONTACT}</a> —
+          ganz ohne Anmeldung. Wir bestätigen die Kündigung und den Termin, zu dem sie wirkt.
+        </span>
+      </span>
+    </span>
+  </div>
+</div>
+
+<p class="doc-note">
+  <a href={LOGIN_URL}>Zum Kundenbereich</a> — dort findest du die Schaltfläche
+  „Verträge kündigen“.
+</p>
