@@ -17,7 +17,7 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { LEGAL_SLUGS, LEGAL_TRANSLATION_NOTICE } from "../src/lib/legal.js";
-import { PLAN_CATALOG } from "../src/lib/plans.js";
+import { PLAN_CATALOG, formatPlanPrice } from "../src/lib/plans.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST_DIR = join(WEB_ROOT, "dist-test");
@@ -162,6 +162,37 @@ test("Startseite: Preise in beiden Sprachen aus dem Katalog, je in der richtigen
       `DE-Woerterbuch: deutscher Katalogpreis ${major},${minor} € (${plan.slug}) fehlt`,
     );
   }
+});
+
+// Handy-Fassung (components/MobileHome.astro, < 768 px): Preise und Minuten
+// reisen fuer das Roll-Zaehlwerk als Data-Attribute mit. Beide Notationen und
+// die Minuten muessen aus DEMSELBEN Katalog stammen wie Desktop und /preise.
+test("Handy-Startseite: Preise (EN/DE) und Minuten aus dem Katalog", () => {
+  const html = readDist("index.html");
+  const joined = (pick) => PLAN_CATALOG.map(pick).join("|");
+  const en = joined((plan) => formatPlanPrice(plan.amountCents, plan.currency, "en"));
+  const de = joined((plan) => formatPlanPrice(plan.amountCents, plan.currency, "de"));
+  const minutes = joined((plan) => plan.includedMinutes);
+  assert.ok(html.includes(`data-prices-en="${en}"`), `Handy: englische Katalogpreise ${en} fehlen`);
+  assert.ok(html.includes(`data-prices-de="${de}"`), `Handy: deutsche Katalogpreise ${de} fehlen`);
+  assert.ok(html.includes(`data-minutes="${minutes}"`), `Handy: Inklusivminuten ${minutes} fehlen`);
+});
+
+// Handy-Markup: jede uebersetzbare Stelle traegt ihre deutsche Fassung, kein
+// style-Attribut (CSP style-src 'self'), kein Menue-Knopf mehr (Handoff), und der
+// Wortlaut nach § 312k BGB bleibt deutsch - ohne Uebersetzungs-Attribut.
+test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Link deutsch", () => {
+  const html = readDist("index.html");
+  const start = html.indexOf("data-mh");
+  const mobile = html.slice(start, html.indexOf('class="page"'));
+  assert.ok(start >= 0 && mobile.includes("mh-scroll"), "Handy-Fassung fehlt vor der Buehne");
+  assert.ok(!mobile.includes('data-mh-de=""'), "leere deutsche Fassung im Handy-Markup");
+  assert.ok(!/\sstyle=/.test(mobile), "style-Attribut im Handy-Markup (CSP)");
+  assert.ok(!mobile.includes("data-open-sheet"), "Handy-Kopf traegt wieder einen Menue-Knopf");
+  assert.ok(
+    mobile.includes('<a class="mh-link" href="/kuendigen">Verträge kündigen</a>'),
+    "Kuendigungs-Link im Handy-Fuss fehlt oder traegt eine Uebersetzung",
+  );
 });
 
 // P14/GAP-15: der Waechter fuer den Liefertag der englischen Rechtsdokumente.

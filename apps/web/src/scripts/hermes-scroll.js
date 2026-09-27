@@ -653,7 +653,9 @@ function wireKeyboard() {
     const target = event.target;
     if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName || "")))
       return;
-    if (!page || usesSheets()) return;
+    // Handy-Fassung (hermes-mobile.js): dort ist die Buehne ausgeblendet und
+    // die Tastatur gehoert den Screens.
+    if (!page || !page.clientHeight || usesSheets()) return;
 
     const stops = sectionStops();
     if (event.key === "Home" || event.key === "End") {

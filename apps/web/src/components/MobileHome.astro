@@ -1,0 +1,382 @@
+---
+// Handy-Fassung der Startseite (< 768 px), Umsetzung des Design-Handoffs
+// "Hermes Mobile v5" (design/handoff-mobile, Design-Schema.md ist verbindlich).
+//
+// Fuenf Vollbild-Screens mit Scroll-Snap: Hero, So funktioniert's, Preise, Fuer
+// Entwickler, Abschluss. Der Hintergrund liegt fest dahinter und blendet nur
+// seine Ebenen ueber den Scroll-Fortschritt --p (scripts/hermes-mobile.js).
+//
+// Der Desktop bleibt unberuehrt: .mh ist ausserhalb der Handy-Abfrage
+// display:none, innerhalb blendet styles/hermes-mobile.css die bisherige
+// Buehne (.page) aus. Kein Inline-Style, kein Inline-Skript (CSP).
+//
+// Sprache: Englisch steht im Markup (indexierte Fassung), die deutsche Fassung
+// reist je Knoten als data-mh-de mit. Der Umschalter (data-lang) laeuft ueber
+// scripts/hermes-scroll.js wie am Desktop; hermes-mobile.js folgt dem
+// lang-Attribut von <html>. Texte 1:1 aus dem Handoff (hermes-kit.js, Objekt T).
+// "Vertraege kuendigen" bleibt immer deutsch (Wortlaut nach § 312k BGB).
+//
+// Preise und Minuten kommen aus dem Tarif-Katalog (lib/plans.js), nicht aus dem
+// Text - dieselbe Quelle wie Desktop, /preise und Dashboard.
+import "../styles/hermes-mobile.css";
+import { LOGIN_URL } from "../lib/routes.js";
+import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
+
+const { mcpUrl, mcpCmd, agentGuide, contact, legalDocs } = Astro.props;
+
+// U+2060 (Wortverbinder) hinter dem Bindestrich: "heads-up", "MCP-Server" usw.
+// brechen nicht um (Design-Schema 9).
+const WJ = String.fromCodePoint(0x2060);
+
+const T = {
+  en: {
+    login: "Log in",
+    heroTitle: "Give your AI a <em>phone number.</em>",
+    heroLead: "Hermes answers calls and handles them for you. One connection over <strong>MCP</strong> — and your AI gets a voice.",
+    getNumber: "Get a number",
+    howItWorks: "How it works",
+    howTitle: "One connection, <em>two minutes.</em>",
+    howLead: "One connection over <strong>MCP</strong>, no setup — your AI is reachable on a real number in under two minutes.",
+    steps: [
+      { title: "Get a number", short: "Number", lines: ["A real phone number", "Active in two minutes", "No contract, no hardware"] },
+      { title: "Connect your AI", short: "Connect", lines: ["One connection over MCP", "Claude, Codex or any MCP client", "Your AI knows who called"] },
+      { title: "Let it answer", short: "Answer", lines: ["Talks and listens", "Books appointments", "Your 24/7 personal assistant"] },
+    ],
+    live: "Live",
+    connected: "Connected to your AI",
+    summary: "Summary ready",
+    pricing: "Pricing",
+    priceTitle: "Two plans, <em>no surprises.</em>",
+    priceLead: "Choose the plan that fits you. <strong>Cancel monthly, no hidden costs.</strong>",
+    perMonth: "/ month",
+    minWord: "minutes",
+    minRest: " of calls per month",
+    popular: "Popular",
+    choose: (name) => `Choose ${name}`,
+    priceFoot: `Out of minutes? You get a heads-${WJ}up — never an automatic surcharge.`,
+    forDevs: "For developers",
+    devTitle: "One endpoint, <em>three ways.</em>",
+    devLead: "Hermes is an <strong>MCP</strong> server. Connect it in the AI tool of your choice or straight from the terminal.",
+    ways: [
+      { tab: "Connector", title: "Add it as a connector" },
+      { tab: "Terminal", title: "With a single command" },
+      { tab: "Your AI", title: "Just ask your AI" },
+    ],
+    agentLine: "Set up Hermes for me:",
+    agentCopy: "Set up Hermes for me",
+    copy: "Copy",
+    copied: "Copied",
+    devFoot: "Streamable HTTP, OAuth on first connect. Works with Claude, Codex and any MCP client.",
+    privacy: "Privacy",
+    imprint: "Imprint",
+    terms: "Terms",
+    contact: "Contact",
+    cookies: "Cookie settings",
+    footCopy: "© Sundartha — Hermes, your phone assistant",
+  },
+  de: {
+    login: "Anmelden",
+    heroTitle: "Gib deiner KI eine <em>Telefonnummer.</em>",
+    heroLead: "Hermes nimmt Anrufe an und erledigt sie für dich. Ein Anschluss über <strong>MCP</strong> – und deine KI bekommt eine Stimme.",
+    getNumber: "Nummer holen",
+    howItWorks: "So funktioniert’s",
+    howTitle: "Ein Anschluss, <em>zwei Minuten.</em>",
+    howLead: "Ein Anschluss über <strong>MCP</strong>, keine Einrichtung – deine KI ist in unter zwei Minuten unter einer echten Nummer erreichbar.",
+    steps: [
+      { title: "Nummer holen", short: "Nummer", lines: ["Eine echte Telefonnummer", "In zwei Minuten aktiv", "Kein Vertrag, keine Hardware"] },
+      { title: "KI verbinden", short: "Verbinden", lines: ["Ein Anschluss über MCP", `Claude, Codex oder jeder MCP-${WJ}Client`, "Deine KI weiß, wer angerufen hat"] },
+      { title: "Abnehmen lassen", short: "Abnehmen", lines: ["Spricht und hört zu", "Bucht Termine", "Dein persönlicher Assistent, rund um die Uhr"] },
+    ],
+    live: "Live",
+    connected: "Mit deiner KI verbunden",
+    summary: "Zusammenfassung bereit",
+    pricing: "Preise",
+    priceTitle: "Zwei Tarife, <em>keine Überraschungen.</em>",
+    priceLead: "Wähle den Tarif, der zu dir passt. <strong>Monatlich kündbar, keine versteckten Kosten.</strong>",
+    perMonth: "/ Monat",
+    minWord: "Minuten",
+    minRest: " Telefonie pro Monat",
+    popular: "Beliebt",
+    choose: (name) => `${name} wählen`,
+    priceFoot: "Minuten aufgebraucht? Du bekommst Bescheid – nie einen automatischen Aufpreis.",
+    forDevs: "Für Entwickler",
+    devTitle: "Ein Endpunkt, <em>drei Wege.</em>",
+    devLead: `Hermes ist ein <strong>MCP</strong>-${WJ}Server. Verbinde ihn im KI-${WJ}Tool deiner Wahl oder direkt im Terminal.`,
+    ways: [
+      { tab: "Connector", title: "Als Connector hinzufügen" },
+      { tab: "Terminal", title: "Mit einem einzigen Befehl" },
+      { tab: "Deine KI", title: "Frag einfach deine KI" },
+    ],
+    agentLine: "Richte Hermes für mich ein:",
+    agentCopy: "Richte Hermes für mich ein",
+    copy: "Kopieren",
+    copied: "Kopiert",
+    devFoot: `Streamable HTTP, OAuth beim ersten Verbinden. Funktioniert mit Claude, Codex und jedem MCP-${WJ}Client.`,
+    privacy: "Datenschutz",
+    imprint: "Impressum",
+    terms: "AGB",
+    contact: "Kontakt",
+    cookies: "Cookie-Einstellungen",
+    footCopy: "© Sundartha — Hermes, dein Telefonassistent",
+  },
+};
+
+// Die drei Leistungen unter der Minuten-Zeile, je Tarif (Handoff-Copy). Die
+// erste Katalog-Leistung (Minuten) steht als eigene Zeile darueber. Ein Tarif
+// ohne Copy bricht den Build ab, statt leer auszuliefern.
+const BENEFITS = {
+  starter: {
+    en: ["Answers every call for you", "Summarizes every call for you", "Email support"],
+    de: ["Nimmt jeden Anruf für dich an", "Fasst jeden Anruf für dich zusammen", "E-Mail-Support"],
+  },
+  business: {
+    en: ["Answers <em>and</em> calls out for you", "Handles tasks independently for you", "Priority support"],
+    de: ["Nimmt an <em>und</em> ruft für dich an", "Erledigt Aufgaben selbstständig", "Priority-Support"],
+  },
+};
+
+const plans = PLAN_CATALOG.map((plan) => {
+  const benefits = BENEFITS[plan.slug];
+  if (!benefits) throw new Error(`MobileHome: keine Leistungs-Copy fuer Tarif "${plan.slug}"`);
+  return {
+    name: plan.name,
+    minutes: plan.includedMinutes,
+    price: { en: formatPlanPrice(plan.amountCents, plan.currency, "en"), de: formatPlanPrice(plan.amountCents, plan.currency, "de") },
+    cta: { en: T.en.choose(plan.name), de: T.de.choose(plan.name) },
+    benefits,
+  };
+});
+// Start auf dem hervorgehobenen Tarif (Handoff: plan = 1, Business).
+const featured = Math.max(0, PLAN_CATALOG.findIndex((plan) => plan.featured));
+const rel = (index, current) => (index === current ? "cur" : index < current ? "before" : "after");
+
+// Preis in Schaechte zerlegt: nur die Zeichen, die sich zwischen den Tarifen
+// unterscheiden, rollen (4 -> 9). Gleiche Algorithmik wie in hermes-mobile.js,
+// das die Schaechte beim Sprachwechsel neu baut.
+function priceSlots(list) {
+  if (!list.every((price) => price.length === list[0].length)) return null;
+  return [...list[0]].map((_, pos) => {
+    const chars = list.map((price) => price[pos]);
+    return chars.every((ch) => ch === chars[0]) ? { same: chars[0] } : { roll: chars };
+  });
+}
+const slotsEn = priceSlots(plans.map((plan) => plan.price.en));
+
+const agentPrompt = { en: `${T.en.agentCopy}: https://${agentGuide}`, de: `${T.de.agentCopy}: https://${agentGuide}` };
+const wayCopy = [
+  { en: mcpUrl, de: mcpUrl },
+  { en: mcpCmd, de: mcpCmd },
+  agentPrompt,
+];
+const SEGMENTS = 4;
+---
+
+<div class="mh" data-mh>
+  <div class="mh-bg" aria-hidden="true">
+    <img class="mh-clouds" src="/assets/howto_clouds.png" alt="" decoding="async" />
+    <div class="mh-hero">
+      <img class="mh-temple" src="/assets/olymp_hero.png" alt="" fetchpriority="high" />
+    </div>
+    <div class="mh-base"></div>
+    <div class="mh-deep"></div>
+    <div class="mh-veil"></div>
+  </div>
+
+  <div class="mh-scroll">
+    <!-- Screen 1: Hero -->
+    <section class="mh-screen mh-s-hero" data-active="1" aria-labelledby="mh-hero-title">
+      <div class="mh-hero-copy mh-r">
+        <h1 class="mh-h1" id="mh-hero-title" data-mh-de={T.de.heroTitle} set:html={T.en.heroTitle}></h1>
+        <p class="mh-hero-lead" data-mh-de={T.de.heroLead} set:html={T.en.heroLead}></p>
+        <div class="mh-actions">
+          <a class="mh-pill mh-pill--solid" href={LOGIN_URL} data-mh-de={T.de.getNumber}>{T.en.getNumber}</a>
+          <button class="mh-pill mh-pill--ghost" type="button" data-mh-go="1" data-mh-de={T.de.howItWorks}>{T.en.howItWorks}</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen 2: So funktioniert's -->
+    <section class="mh-screen mh-s-content mh-how" data-active="0" data-step="0" data-run="a" data-auto="1" aria-labelledby="mh-how-title">
+      <span class="mh-thread" aria-hidden="true"></span>
+      <p class="mh-label mh-r mh-d1" data-mh-de={T.de.howItWorks}>{T.en.howItWorks}</p>
+      <h2 class="mh-h2 mh-r mh-d2" id="mh-how-title" data-mh-de={T.de.howTitle} set:html={T.en.howTitle}></h2>
+      <p class="mh-lead mh-r mh-d3" data-mh-de={T.de.howLead} set:html={T.en.howLead}></p>
+
+      <div class="mh-zone">
+        <div class="mh-focus mh-r mh-d4" aria-hidden="true">
+          <span class="mh-glow"></span>
+          <div class="mh-vizbox">
+            <div class="mh-viz mh-viz--num" data-viz="0" data-phase="0" data-on="1">
+              <svg class="mh-glyph" viewBox="0 0 148 148">
+                <circle class="mh-ring__bg" cx="74" cy="74" r="72"></circle>
+                <circle class="mh-ring__prog" cx="74" cy="74" r="72" pathLength="452.389" transform="rotate(-90 74 74)"></circle>
+                <path class="mh-ring__check" d="M48.84 75.48 L66.6 93.24 L100.64 57.72"></path>
+              </svg>
+              <div class="mh-viz__txt">
+                <span class="mh-viz__line" data-type="+49 176 44 12 908"></span>
+                <span class="mh-status"><i class="mh-status__dot"></i><span data-mh-de={T.de.live}>{T.en.live}</span></span>
+              </div>
+            </div>
+            <div class="mh-viz mh-viz--mcp" data-viz="1" data-phase="0">
+              <span class="mh-glyph mh-glyph--mcp">
+                <svg class="mh-mcp__spin" viewBox="0 0 148 148"><circle class="mh-mcp__ring" cx="74" cy="74" r="72" pathLength="452.389"></circle></svg>
+                <img class="mh-mcp__wing" src="/assets/hermes-wing.png" alt="" />
+              </span>
+              <div class="mh-viz__txt">
+                <span class="mh-viz__line" data-type="app.sundartha.com/mcp"></span>
+                <span class="mh-status"><i class="mh-status__dot"></i><span data-mh-de={T.de.connected}>{T.en.connected}</span></span>
+              </div>
+            </div>
+            <div class="mh-viz mh-viz--wave" data-viz="2" data-phase="0">
+              <span class="mh-glyph mh-glyph--wave">{Array.from({ length: 24 }, () => <i></i>)}</span>
+              <div class="mh-viz__txt">
+                <span class="mh-viz__line"><span class="mh-sum"><span class="mh-sum__check">✓</span><span data-mh-de={T.de.summary}>{T.en.summary}</span></span></span>
+                <span class="mh-viz__spacer"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mh-controls mh-r mh-d5" data-mh-swipe>
+        <div class="mh-steps">
+          {T.en.steps.map((step, index) => (
+            <div class="mh-step" data-rel={rel(index, 0)}>
+              <h3 class="mh-h3" data-mh-de={T.de.steps[index].title}>{step.title}</h3>
+              <p class="mh-step__line" data-mh-de={T.de.steps[index].lines.join(" · ")}>{step.lines.join(" · ")}</p>
+            </div>
+          ))}
+        </div>
+        <div class="mh-bars">
+          {T.en.steps.map((step, index) => (
+            <button class="mh-bar" type="button" data-mh-step={index} data-state={index === 0 ? "cur" : "todo"} aria-label={step.title} data-mh-de-label={T.de.steps[index].title} aria-current={index === 0 ? "step" : undefined}>
+              <span class="mh-bar__track"><i class="mh-bar__done"></i><i class="mh-bar__fill"></i></span>
+              <span class="mh-bar__label" data-mh-de={T.de.steps[index].short}>{step.short}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen 3: Preise -->
+    <section class="mh-screen mh-s-content mh-price" data-active="0" data-plan={featured} aria-labelledby="mh-price-title">
+      <span class="mh-thread" aria-hidden="true"></span>
+      <p class="mh-label mh-r mh-d1" data-mh-de={T.de.pricing}>{T.en.pricing}</p>
+      <h2 class="mh-h2 mh-r mh-d2" id="mh-price-title" data-mh-de={T.de.priceTitle} set:html={T.en.priceTitle}></h2>
+      <p class="mh-lead mh-r mh-d3" data-mh-de={T.de.priceLead} set:html={T.en.priceLead}></p>
+
+      <div class="mh-zone">
+        <div class="mh-focus mh-r mh-d4">
+          <div class="mh-price-row">
+            <span class="mh-price__num" data-prices-en={plans.map((plan) => plan.price.en).join("|")} data-prices-de={plans.map((plan) => plan.price.de).join("|")}>{slotsEn ? slotsEn.map((slot) => ("same" in slot ? <span>{slot.same}</span> : <span class="mh-roll">{slot.roll.map((ch, index) => <span data-rel={rel(index, featured)}>{ch}</span>)}</span>)) : <span>{plans[featured].price.en}</span>}</span>
+            <span class="mh-price__per" data-mh-de={T.de.perMonth}>{T.en.perMonth}</span>
+          </div>
+          <div class="mh-segs" aria-hidden="true">
+            {Array.from({ length: SEGMENTS }, () => <span class="mh-seg"><i></i></span>)}
+          </div>
+          <p class="mh-minutes" data-minutes={plans.map((plan) => plan.minutes).join("|")}><strong><span class="mh-count">{plans[featured].minutes}</span> <span data-mh-de={T.de.minWord}>{T.en.minWord}</span></strong><span data-mh-de={T.de.minRest}>{T.en.minRest}</span></p>
+          <div class="mh-benefits">
+            {[0, 1, 2].map((row) => (
+              <div class="mh-benefit-row">
+                {plans.map((plan, index) => (
+                  <p class="mh-benefit" data-rel={rel(index, featured)}><span data-mh-de={plan.benefits.de[row]} set:html={plan.benefits.en[row]}></span></p>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div class="mh-controls mh-r mh-d5">
+        <div class={`mh-toggle mh-toggle--${plans.length}`} role="tablist" data-sel={featured} aria-label={T.en.pricing}>
+          <span class="mh-toggle__thumb" aria-hidden="true"></span>
+          <span class={`mh-badge mh-badge--at-${featured}`} aria-hidden="true" data-mh-de={T.de.popular}>{T.en.popular}</span>
+          {plans.map((plan, index) => (
+            <button class="mh-toggle__opt" type="button" role="tab" data-mh-plan={index} aria-selected={String(index === featured)}>{plan.name}</button>
+          ))}
+        </div>
+        <a class="mh-pill mh-pill--solid" href={LOGIN_URL}>
+          {plans.map((plan, index) => (
+            <span class="mh-cta" data-rel={rel(index, featured)} data-mh-de={plan.cta.de}>{plan.cta.en}</span>
+          ))}
+        </a>
+        <p class="mh-foot" data-mh-de={T.de.priceFoot}>{T.en.priceFoot}</p>
+      </div>
+    </section>
+
+    <!-- Screen 4: Fuer Entwickler -->
+    <section class="mh-screen mh-s-content mh-dev" data-active="0" data-way="0" data-copied="0" aria-labelledby="mh-dev-title">
+      <span class="mh-thread" aria-hidden="true"></span>
+      <p class="mh-label mh-r mh-d1" data-mh-de={T.de.forDevs}>{T.en.forDevs}</p>
+      <h2 class="mh-h2 mh-r mh-d2" id="mh-dev-title" data-mh-de={T.de.devTitle} set:html={T.en.devTitle}></h2>
+      <p class="mh-lead mh-r mh-d3" data-mh-de={T.de.devLead} set:html={T.en.devLead}></p>
+
+      <div class="mh-zone">
+        <div class="mh-focus mh-r mh-d4">
+          {T.en.ways.map((way, index) => (
+            <div class="mh-way" data-rel={rel(index, 0)} data-copy-en={wayCopy[index].en} data-copy-de={wayCopy[index].de}>
+              <h3 class="mh-h3" data-mh-de={T.de.ways[index].title}>{way.title}</h3>
+              <div class="mh-code">
+                {index === 0 && <span class="mh-code__line">{mcpUrl}</span>}
+                {index === 1 && <span class="mh-code__line"><span class="mh-code__prompt">$ </span>{mcpCmd}</span>}
+                {index === 2 && (
+                  <>
+                    <span class="mh-code__line mh-code__line--text" data-mh-de={T.de.agentLine}>{T.en.agentLine}</span>
+                    <span class="mh-code__line mh-code__line--text"><strong>{agentGuide}</strong></span>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div class="mh-controls mh-r mh-d5">
+        <div class="mh-toggle mh-toggle--3" role="tablist" data-sel="0" aria-label={T.en.forDevs}>
+          <span class="mh-toggle__thumb" aria-hidden="true"></span>
+          {T.en.ways.map((way, index) => (
+            <button class="mh-toggle__opt" type="button" role="tab" data-mh-way={index} aria-selected={String(index === 0)} data-mh-de={T.de.ways[index].tab}>{way.tab}</button>
+          ))}
+        </div>
+        <button class="mh-pill mh-pill--solid mh-copy" type="button" data-mh-copy aria-live="polite" data-copy-label-en={T.en.copy} data-copy-label-de={T.de.copy} data-copied-en={T.en.copied} data-copied-de={T.de.copied}>{T.en.copy}</button>
+        <p class="mh-foot" data-mh-de={T.de.devFoot}>{T.en.devFoot}</p>
+      </div>
+    </section>
+
+    <!-- Screen 5: Abschluss -->
+    <section class="mh-screen mh-s-close" data-active="0" aria-labelledby="mh-close-title">
+      <h2 class="mh-h2 mh-h2--close mh-r mh-d1" id="mh-close-title" data-mh-de={T.de.heroTitle} set:html={T.en.heroTitle}></h2>
+      <a class="mh-pill mh-pill--solid mh-r mh-d2" href={LOGIN_URL} data-mh-de={T.de.getNumber}>{T.en.getNumber}</a>
+      <footer class="mh-footer mh-r mh-d3">
+        <nav class="mh-links" aria-label="Legal">
+          {legalDocs.map((entry) => (
+            <a class="mh-link" href={entry.href} data-legal-open={entry.slug} data-mh-de={T.de[entry.slug]}>{T.en[entry.slug]}</a>
+          ))}
+          <!-- § 312k BGB: gesetzlich vorgegebener Wortlaut, bleibt in jeder Sprache deutsch. -->
+          <a class="mh-link" href="/kuendigen">Verträge kündigen</a>
+          <a class="mh-link" href={`mailto:${contact}`} data-mh-de={T.de.contact}>{T.en.contact}</a>
+          <button class="mh-link" type="button" data-consent-open data-mh-de={T.de.cookies}>{T.en.cookies}</button>
+        </nav>
+        <span class="mh-copyright" data-mh-de={T.de.footCopy}>{T.en.footCopy}</span>
+      </footer>
+    </section>
+  </div>
+
+  <header class="mh-head">
+    <button class="mh-brand" type="button" data-mh-go="0" aria-label="Hermes by Sundartha">
+      <img src="/assets/hermes-wing.png" alt="" />
+      <span class="mh-brand__text" aria-hidden="true">
+        <span class="mh-brand__name">HERMES</span>
+        <span class="mh-brand__by">by Sundartha</span>
+      </span>
+    </button>
+    <span class="mh-head__right">
+      <span class="mh-lang">
+        <button class="mh-lang__opt" type="button" data-lang="en" aria-pressed="true" aria-label="English">EN</button>
+        <span class="mh-lang__sep" aria-hidden="true">/</span>
+        <button class="mh-lang__opt" type="button" data-lang="de" aria-pressed="false" aria-label="Deutsch">DE</button>
+      </span>
+      <a class="mh-login" href={LOGIN_URL} data-mh-de={T.de.login}>{T.en.login}</a>
+    </span>
+  </header>
+</div>
