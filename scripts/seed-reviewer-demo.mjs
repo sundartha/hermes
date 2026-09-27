@@ -32,6 +32,17 @@
 //   STORE_BACKEND=pg DATABASE_URL=... \
 //     node scripts/seed-reviewer-demo.mjs --apply --tenant <ID> --dienst-gestoppt
 //
+// STAND (pg gegen Produktion): den Lauf aus genau dem Commit starten, der live deployt ist
+// (Checkout auf diesen Commit, `npm ci` - der Schema-Abgleich braucht die
+// Entwicklungs-Abhaengigkeit pglite). Das Skript fuehrt KEINE DDL gegen die Zieldatenbank aus:
+// unter pg importiert es die Store-Fassade nie (ihr Import migriert, src/store.js) und oeffnet
+// den pg-Store ohne Migration. Vor jedem Schreiben gleicht es das Schema der Zieldatenbank mit
+// dem Schema ab, das die Migration DIESES Checkouts in einer fluechtigen In-Memory-Datenbank
+// erzeugt; eine fehlende Tabelle/Spalte oder eine unbekannte Spalte in einer bekannten Tabelle
+// bricht ab, ohne etwas zu schreiben (scripts/lib/pg-schema-abgleich.mjs). Grenze: der Abgleich
+// vergleicht nur Namen - einen geaenderten Spaltentyp oder eine geaenderte Flush-Logik bei
+// gleichem Schema faengt er nicht. Deshalb bleibt der deployte Commit Pflicht.
+//
 // pg nur bei GESTOPPTEM Dienst: Dienst stoppen -> Skript -> Dienst starten. Grund: der
 // pg-Store haelt den Zustand im Speicher und schreibt beim Flush in EINER Transaktion ALLE
 // Mandanten zurueck und loescht dabei fehlende Zeilen (src/store/pg.js flush). Laeuft der
@@ -50,7 +61,7 @@
 import { parseArgs } from "node:util";
 import {
   REVIEWER_SEED_CALLS,
-  applyReviewerSeed,
+  applyReviewerSeedAndPersist,
   countSeedCallsInsideCostWindow,
   reviewerSeedEndedAtIso,
 } from "./lib/reviewer-demo-seed.mjs";
@@ -71,6 +82,16 @@ const PG_ABORT =
 function abort(message) {
   console.error(`${PREFIX} ${message}`);
   process.exit(EXIT_ABORT);
+}
+
+// Wartet auf action(); ein Fehler endet als Abbruch (Exit 1) mit der Fehlermeldung. Ein
+// Verbindungsfehler traegt je nach Treiberweg nur einen Code (AggregateError ohne Text).
+async function orAbort(action) {
+  try {
+    return await action();
+  } catch (err) {
+    return abort(`Abbruch: ${err.message || err.code || String(err)}`);
+  }
 }
 
 function readOptions() {
@@ -125,18 +146,26 @@ async function seedEndedAtIso(billing) {
   });
 }
 
-async function applySeed(tenantId, billing) {
-  // Dynamischer Import erst hier: der Trockenlauf laedt den Store nie, und unter pg laeuft der
-  // Store-Import (init samt DDL) erst NACH der Dienst-gestoppt-Pruefung.
-  const store = await import("../src/store.js");
-  const endedAtIso = await seedEndedAtIso(billing);
-  let counts;
-  try {
-    counts = applyReviewerSeed(store, tenantId, endedAtIso);
-  } catch (err) {
-    return abort(`Abbruch: ${err.message}`);
+const NOTHING_TO_CLOSE = async () => {};
+
+// json: die Store-Fassade (das json-Backend kennt keine DDL). pg: NIE die Fassade - ihr Import
+// migriert. Stattdessen der pg-Store ohne Migration; init gleicht vorher das Schema ab und
+// bricht bei Abweichung ab, bevor Mandantendaten gelesen oder geschrieben werden.
+async function openStore({ storeBackend, databaseUrl }) {
+  if (storeBackend !== PG_BACKEND) {
+    return { store: await import("../src/store.js"), close: NOTHING_TO_CLOSE };
   }
-  await store.save(); // PFLICHT: pg-Flush abwarten (json = No-op nach internem save)
+  const { expectedSchemaColumns, openPgStoreWithoutMigration } =
+    await import("./lib/pg-schema-abgleich.mjs");
+  const { createPgPoolRunner } = await import("../src/store/pg-runner.js");
+  const expected = await expectedSchemaColumns();
+  const { runner, close } = await createPgPoolRunner(databaseUrl);
+  return { store: await openPgStoreWithoutMigration(runner, expected), close };
+}
+
+async function applySeed(store, tenantId, billing) {
+  const endedAtIso = await seedEndedAtIso(billing);
+  const counts = await orAbort(() => applyReviewerSeedAndPersist(store, tenantId, endedAtIso));
   warnIfNotSubscriber(store, tenantId);
   warnIfInsideCostWindow(store, tenantId, endedAtIso);
   const { callsCreated, itemsCreated } = counts;
@@ -153,7 +182,11 @@ async function main() {
   const { config } = await import("../src/config.js");
   if (config.store.storeBackend === PG_BACKEND && !options["dienst-gestoppt"])
     return abort(PG_ABORT);
-  return applySeed(options.tenant, config.billing);
+  // Store erst hier: der Trockenlauf laedt nie einen Store, und unter pg wird die
+  // Zieldatenbank erst NACH der Dienst-gestoppt-Pruefung beruehrt.
+  const { store, close } = await orAbort(() => openStore(config.store));
+  await applySeed(store, options.tenant, config.billing);
+  return close();
 }
 
 await main();

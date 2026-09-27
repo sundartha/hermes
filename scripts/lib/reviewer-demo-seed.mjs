@@ -2,7 +2,8 @@
 // Store-Import. Der Aufrufer reicht die Store-Fassade und die Laengen der Kosten-Beobachtung
 // herein (scripts/seed-reviewer-demo.mjs bzw. die Tests); diese Datei entscheidet nur, WAS
 // fehlt, und schreibt es ueber genau vier Store-Funktionen: createCall,
-// recordProviderCallResult, setCallEndedAt, addActionItem.
+// recordProviderCallResult, setCallEndedAt, addActionItem (persistiert ueber save und
+// drainFlushes, applyReviewerSeedAndPersist).
 //
 // Verboten und deshalb hier nicht vorhanden: jede Aenderung an Abo, Verifikation (KYC),
 // Mandanten-Status, Profil, Nummer, Budget oder Nutzung. Das Reviewer-Konto bekommt dieselben
@@ -152,6 +153,18 @@ export function applyReviewerSeed(store, tenantId, endedAtIso) {
     if (step.callId === null) counts.callsCreated += 1;
     counts.itemsCreated += addMissingItems(store, callId, step.missingItems);
   }
+  return counts;
+}
+
+// applyReviewerSeed plus Persistenz mit Ergebnispruefung: save() loest auch bei einem
+// fehlgeschlagenen pg-Flush auf (dort nur geloggt, die Transaktion rollt zurueck); erst
+// drainFlushes() wirft den Fehler (json: save schreibt synchron und wirft selbst,
+// drainFlushes ist ein No-op). So meldet der Aufrufer nie "angelegt" fuer einen Lauf, dessen
+// Flush gescheitert ist.
+export async function applyReviewerSeedAndPersist(store, tenantId, endedAtIso) {
+  const counts = applyReviewerSeed(store, tenantId, endedAtIso);
+  await store.save();
+  await store.drainFlushes();
   return counts;
 }
 
