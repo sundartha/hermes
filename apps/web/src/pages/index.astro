@@ -31,6 +31,9 @@ import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
 // den Ein-Screen-Hero vom 2026-08-20). Als letzter Import, damit die Regeln
 // nach hermes.css und den Komponenten-Styles greifen.
 import "../styles/hermes-mobile-scroll.css";
+// Handy-Fassung (< 768 px) nach design/handoff-mobile: eigene Screens, am
+// Desktop display:none. Als letzter Import, damit sie die Buehne dort ausblendet.
+import MobileHome from "../components/MobileHome.astro";
 import privacy from "../data/legal/privacy.de.json";
 import imprint from "../data/legal/imprint.de.json";
 import terms from "../data/legal/terms.de.json";
@@ -82,6 +85,8 @@ const legalDocs = [
     <meta name="twitter:card" content="summary" />
   </head>
   <body>
+    <MobileHome mcpUrl={MCP_URL} mcpCmd={MCP_CMD} agentGuide={AGENT_GUIDE} contact={CONTACT} legalDocs={legalDocs} />
+
     <div class="page">
       <div class="pin-track">
         <div class="stage">
@@ -599,6 +604,7 @@ const legalDocs = [
       // Hoisted script: Astro buendelt es als externes, same-origin Modul
       // (assetsInlineLimit 0) — CSP-konform ohne script-src 'unsafe-inline'.
       import "../scripts/hermes-scroll.js";
+      import "../scripts/hermes-mobile.js";
     </script>
   </body>
 </html>
