@@ -1,0 +1,96 @@
+/* =============================================================================
+ * hermes-mobile-viewport.css - wie die Handy-Startseite im Browserfenster sitzt
+ *
+ * Ergaenzt hermes-mobile.css (dort stehen Screens, Ebenen und --p / --mh-mid).
+ * Zwei Themen, beide nur am Handy wirksam (.mh ist sonst display:none):
+ *   1. Safari-Leisten: Statusleiste oben und Toolbar-Bereich unten gehen ohne
+ *      Farbstufe ins Hintergrundbild ueber.
+ *   2. Blaettern: eine Wischgeste bewegt genau einen Screen (scripts/hermes-
+ *      mobile.js, Entscheidung in lib/mobile-pager.js).
+ * ========================================================================== */
+
+/* ------------------------------------------------------- 1. Safari-Leisten */
+
+/* iOS 26+ malt Statusleiste und Toolbar-Bereich einfarbig. Oben nimmt Safari
+   die background-color des obersten fixierten Elements an der Oberkante
+   (Treffertest wenige px unter der Kante, mind. ~80 % breit, Deckkraft
+   >= 0.1), sonst - wie unten - die Hintergrundfarbe von html/body. Beides war
+   --ink (#0a2245) und stand als dunkelblauer Balken ueber und unter dem Bild.
+   Loesung: jeweils genau die Farbe, die das Bild an dieser Kante hat.
+   - Oben traegt .mh-tint (fixiert, oberste Ebene) --mh-top. --mh-top folgt dem
+     Scroll-Fortschritt wie Toenung und Schleier (--mh-mid): Hero und Abschluss
+     zeigen den hellen Himmel (#586780), die Inhalts-Screens den abgedunkelten
+     (#33415a) - gemessen an der obersten Bildzeile.
+   - Unten bekommen html/body die Farbe der untersten Bildzeile (--mh-bottom).
+   - .mh-edge laesst das Bild an beiden Kanten auf genau diese Farben auslaufen:
+     Leiste und Seite treffen sich ohne Stufe, auch wenn ein Geraet das Bild
+     minimal anders rendert. */
+.mh {
+  --mh-top-hero: #586780;
+  --mh-top-deep: #33415a;
+  --mh-top: var(--mh-top-hero);
+  --mh-bottom: #071833;
+}
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .mh {
+    --mh-top: color-mix(in srgb, var(--mh-top-deep) calc(var(--mh-mid) * 100%), var(--mh-top-hero));
+  }
+}
+
+/* Dieselbe Abfrage wie in hermes-mobile.css. Der Wert muss --mh-bottom
+   gleichen (test/mobile-viewport.test.js haelt das fest). */
+@media (max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px))) {
+  html:has(.mh),
+  html:has(.mh) body {
+    background-color: #071833;
+  }
+}
+
+.mh-tint {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  height: 12px;
+  background-color: var(--mh-top);
+  /* Kein pointer-events:none: Safari findet das Element per Treffertest. Die
+     12px liegen ueber dem Kopf (der beginnt bei 22px), darunter ist nichts
+     Bedienbares. */
+}
+
+.mh-edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+.mh-edge--top {
+  top: 0;
+  height: 44px;
+  background-color: var(--mh-top);
+  -webkit-mask-image: linear-gradient(180deg, #000 0, #000 12px, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0, #000 12px, transparent 100%);
+}
+.mh-edge--bottom {
+  bottom: 0;
+  height: 28px;
+  background-color: var(--mh-bottom);
+  -webkit-mask-image: linear-gradient(0deg, #000 0, transparent 100%);
+  mask-image: linear-gradient(0deg, #000 0, transparent 100%);
+}
+
+/* ------------------------------------------------------------ 2. Blaettern */
+
+/* Mit Skript (data-pager) blaettert hermes-mobile.js selbst: der Finger zieht
+   den Screen mit, beim Loslassen geht es genau einen Screen weiter oder
+   zurueck, immer buendig - egal wie hart gewischt wurde. Natives Scrollen und
+   Scroll-Snap sind dafuer aus (sonst kaempfen Schwung und Skript). Zoomen mit
+   zwei Fingern bleibt erlaubt. Ohne Skript gilt das Scroll-Snap aus
+   hermes-mobile.css. */
+.mh[data-pager] .mh-scroll {
+  overflow-y: hidden;
+  scroll-snap-type: none;
+  touch-action: none;
+  touch-action: pinch-zoom;
+}
