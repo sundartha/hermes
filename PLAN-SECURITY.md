@@ -6741,3 +6741,49 @@ Werkzeug-Sequenz.
 - **Deploy-Vorbedingung gilt auch fuer diese Textaenderung:** derselbe eine `briefing-bench`-
   Lauf (alt `66d95ae` gegen den Endstand) misst sie mit; kein zusaetzlicher Lauf, keine
   Freigabe ohne ihn.
+
+## OpenAI-T2-20 — Reviewer-Zugang: Konto ohne Ausnahme, Seed-Skript nur fuer Beispieldaten (O-9)
+
+**Was:** `docs/OPENAI-REVIEWER-ACCESS.md` (Reviewer-Anleitung EN/DE fuer die Einreichung, jede
+Aussage am Code verankert) und `scripts/seed-reviewer-demo.mjs` mit dem Kern
+`scripts/lib/reviewer-demo-seed.mjs` (drei beendete Inbound-Beispielanrufe samt offener Action
+Items fuer das Reviewer-Konto). `src/` ist nicht angefasst: Gates, Offenlegung, tools/list,
+initialize und server-instructions sind byte-gleich zur Basis.
+
+**Reviewer-Konto = regulaerer Kunde.** Echtes Abo, echte Kartenverifikation (KYC), angelegt ueber
+einen Browser-Login in der Web-App (legt genau einen Mandanten an; die Nummer entsteht erst mit
+der bezahlten Aktivierung, `src/billing/activation.js`). KEINE Gate-Ausnahme: kein
+`profile.unrestricted`, keine `profile.allowedNumbers` (beide heben das Outbound-Gate auf,
+`src/telephony/outbound-gates.js` `allowlistError`), NICHT in `OWNER_SELF_CALL_TENANT_IDS`
+(sonst entfiele der volle Offenlegungssatz bei einem Anruf an die hinterlegte eigene Nummer).
+Kein Reviewer-Modus, kein Testziel-Gate im Code: die Anleitung bittet um Testanrufe an eine vom
+Betreiber genannte Nummer und sagt ausdruecklich, dass der Code das nicht erzwingt. Der
+MCP-OAuth-Login legt nie einen Mandanten an und kauft nie eine Nummer (`requestTenant` ->
+`resolveTenant`, rein lesend; belegt ueber HTTP `/mcp` in
+`test/openai-t2-20-reviewer-seed.test.js`).
+
+**Seed-Skript - Grenzen:**
+- Schreibt ausschliesslich ueber `createCall`, `recordProviderCallResult`, `endCallRecord`,
+  `addActionItem`. Nie Abo, KYC, Status, Profil, Nummer, Budget. Nebenwirkung von `createCall`:
+  der reine Anzeige-Zaehler `usage[tenant].calls` waechst um die Zahl der angelegten Anrufe
+  (kein Gate liest ihn); jedes andere Top-Level-Feld bleibt deep-equal (Test).
+- Nur INBOUND, sofort beendet, ohne `answeredAt`/`costProfile`/Transkript: ein Outbound-Datensatz
+  mit `startedAt=jetzt` zaehlte ins Stunden- und Ziel-Limit; ein aktiver Datensatz fiele dem
+  Watchdog zu; `answeredAt` zoege den Anruf in die Kosten-Nachtrags-Quote.
+- Verweigert den Betreiber-Mandanten, unbekannte Mandanten und eine leere Kennung; legt nie
+  einen Mandanten an.
+- Trockenlauf ist Default (ohne `--apply` wird der Store nicht einmal geladen - Import-Spion-Test);
+  `--apply` verlangt `--tenant`; idempotent.
+- pg nur mit `--dienst-gestoppt`, geprueft VOR dem Store-Import: der pg-Flush schreibt in einer
+  Transaktion ALLE Mandanten zurueck und loescht fehlende Zeilen. Bei laufendem Dienst gingen
+  die Seed-Zeilen verloren oder der Flush des Skripts ueberschriebe Dienst-Schreibungen, auch
+  Nutzungs- und Budget-Zaehler (Kostendecke faktisch zurueckgesetzt). Ablauf: Dienst stoppen ->
+  Skript -> Dienst starten.
+- Ausgabe nur Zaehler; keine Mandanten-Kennung, Nummer oder Zugangsdaten in stdout oder in
+  committeten Dateien (Dokument nur mit Platzhaltern, Hygiene-Test).
+
+**Offen beim Betreiber:** Konto beim Identitaetsanbieter ohne MFA und mit verifizierter E-Mail,
+Abo, Seed-Lauf gegen Produktion, Live-Probe in ChatGPT, Wahl der Testziel-Nummer.
+
+**Rueckbau:** die zwei Skriptdateien, `docs/OPENAI-REVIEWER-ACCESS.md`, die drei Tests
+`test/openai-t2-20-reviewer-*.test.js` und dieser Abschnitt. Keine Env-Variable, kein Endpunkt.
