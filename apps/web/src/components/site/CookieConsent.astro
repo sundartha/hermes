@@ -12,11 +12,20 @@
 //
 // Verhalten: scripts/consent.js. Kein Inline-Style, kein Inline-Script — die
 // Produktions-CSP (default-src 'self') laesst beides nicht zu. Startet mit
-// `hidden`; consent.js zeigt die Karte nur, wenn noch keine Entscheidung
-// gespeichert ist (oder ueber [data-consent-open]).
+// `hidden`; consent.js zeigt die Karte ungefragt nur, wenn noch keine
+// Entscheidung gespeichert ist UND ein gesperrtes Skript auf Einwilligung wartet
+// (sonst nur ueber [data-consent-open]).
+//
+// data-consent-log: Ziel des Einwilligungs-Protokolls (lib/routes.js). Absolut auf
+// den Gateway — die CSP der Static Site muss diesen Origin in connect-src fuehren
+// (docs/RUNBOOK-ANALYTICS-CONSENT.md).
 import "../../styles/consent.css";
+import { COOKIE_CONSENT_URL } from "../../lib/routes.js";
 
-const { lang = "de" } = Astro.props;
+// placement="hero": die Startseite (Ein-Screen-Hero). Nur dort weicht die Karte im
+// gestapelten Hochformat nach oben ueber das Bild aus (styles/consent.css); auf den
+// scrollenden Unterseiten stuende oben die Ueberschrift.
+const { lang = "de", placement = "page" } = Astro.props;
 
 // Werte mit Inline-HTML (&amp;, <a>) werden per set:html gesetzt, damit sie
 // ZEICHENGLEICH zu den Woerterbuch-Eintraegen in hermes-scroll.js sind — sonst
@@ -24,7 +33,7 @@ const { lang = "de" } = Astro.props;
 const TEXT = {
   de: {
     title: "Cookies &amp; Datenschutz",
-    text: 'Wir speichern auf deinem Gerät nur, was die Seite braucht: deine Sprachwahl und diese Entscheidung. Statistik- oder Marketing-Dienste laufen erst, wenn du zustimmst. <a href="/datenschutz">Mehr im Datenschutz</a>.',
+    text: 'Wir speichern nur, was die Seite braucht: deine Sprache und diese Wahl. Statistik oder Marketing laufen erst, wenn du zustimmst. <a href="/datenschutz">Datenschutz</a>',
     necessary: "Notwendig",
     necessaryDesc: "Sprachwahl, Login im Kundenbereich und diese Einstellung. Immer aktiv.",
     necessaryAria: "Notwendig — immer aktiv",
@@ -39,7 +48,7 @@ const TEXT = {
   },
   en: {
     title: "Cookies &amp; privacy",
-    text: 'We only store on your device what the site needs: your language choice and this decision. Analytics or marketing services run only once you agree. <a href="/datenschutz">More in the privacy policy</a>.',
+    text: 'We only store what the site needs: your language and this choice. Analytics or marketing run only once you agree. <a href="/datenschutz">Privacy policy</a>',
     necessary: "Necessary",
     necessaryDesc: "Language choice, login in the customer area and this setting. Always on.",
     necessaryAria: "Necessary — always on",
@@ -57,10 +66,13 @@ const TEXT = {
 const c = TEXT[lang === "en" ? "en" : "de"];
 ---
 
-<div class="consent" data-consent-root data-prefs="0" hidden>
+<div class="consent" data-consent-root data-prefs="0" data-placement={placement} data-consent-log={COOKIE_CONSENT_URL} hidden>
   <section class="consent__card" role="dialog" aria-labelledby="consent-title" aria-describedby="consent-text" tabindex="-1">
     <h2 class="consent__title" id="consent-title" data-i18n="ckTitle" set:html={c.title}></h2>
     <p class="consent__text" id="consent-text" data-i18n="ckText" set:html={c.text}></p>
+    <!-- "Einstellungen" steht hinter dem Text (Handy: im Textfluss, Desktop: oben
+         rechts in der Titelzeile) - so braucht die Karte keine eigene Zeile dafuer. -->
+    <button class="consent__link" type="button" data-consent-action="prefs" aria-expanded="false" aria-controls="consent-prefs" data-i18n="ckSettings">{c.settings}</button>
 
     <div class="consent__prefs" id="consent-prefs" data-consent-prefs hidden>
       <label class="consent__row">
@@ -99,7 +111,6 @@ const c = TEXT[lang === "en" ? "en" : "de"];
       <button class="consent__btn consent__btn--solid" type="button" data-consent-action="all" data-i18n="ckAcceptAll">{c.acceptAll}</button>
       <button class="consent__btn consent__btn--ghost" type="button" data-consent-action="necessary" data-i18n="ckNecessaryOnly">{c.necessaryOnly}</button>
       <button class="consent__btn consent__btn--ghost consent__btn--save" type="button" data-consent-action="save" data-i18n="ckSave">{c.save}</button>
-      <button class="consent__link" type="button" data-consent-action="prefs" aria-expanded="false" aria-controls="consent-prefs" data-i18n="ckSettings">{c.settings}</button>
     </div>
   </section>
 </div>

@@ -87,7 +87,7 @@ const DE = {
   /* Einwilligungs-Karte (components/site/CookieConsent.astro, scripts/consent.js). */
   cookieSettings: "Cookie-Einstellungen",
   ckTitle: "Cookies &amp; Datenschutz",
-  ckText: "Wir speichern auf deinem Gerät nur, was die Seite braucht: deine Sprachwahl und diese Entscheidung. Statistik- oder Marketing-Dienste laufen erst, wenn du zustimmst. <a href=\"/datenschutz\">Mehr im Datenschutz</a>.",
+  ckText: "Wir speichern nur, was die Seite braucht: deine Sprache und diese Wahl. Statistik oder Marketing laufen erst, wenn du zustimmst. <a href=\"/datenschutz\">Datenschutz</a>",
   ckNecessary: "Notwendig",
   ckNecessaryDesc: "Sprachwahl, Login im Kundenbereich und diese Einstellung. Immer aktiv.",
   ckStats: "Statistik",

@@ -228,6 +228,9 @@ const ROUTE_FINGERPRINT = [
   "POST /api/calls",
   "POST /api/calls/:id/cancel",
   "POST /api/calls/:id/consult/answer",
+  // Cookie-Einwilligungs-Protokoll (Nachweis Art. 7 Abs. 1 DSGVO) - Klasse PUBLIC,
+  // Eintrag in src/route-policy.js, nur im pg-Block gemountet (src/wiring/web-login.js).
+  "POST /api/cookie-consent",
   // INBOX-P2: der Konsum-Endpunkt der Anruf-Inbox. Klasse AUTH (internalOnly), deshalb
   // KEIN Eintrag in src/route-policy.js - nur hier und in scripts/probe-auth.sh.
   "POST /api/inbox/poll",
