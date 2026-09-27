@@ -11,9 +11,10 @@
 
 /* Ab diesem Anteil der Screenhoehe gilt ein langsamer Zug als "weiter". */
 export const PAGE_COMMIT_RATIO = 0.1;
-/* Ein kurzer, schneller Wisch reicht auch: ab dieser Geschwindigkeit (px/ms)
- * und mindestens dieser Strecke (px). Darunter ist es ein Antippen. */
-export const PAGE_FLICK_SPEED = 0.35;
+/* Ein kurzer, zuegiger Wisch reicht auch: ab dieser Geschwindigkeit (px/ms,
+ * bewusst niedrig - auch ein leichter Wisch soll blaettern) und mindestens
+ * dieser Strecke (px). Darunter ist es ein Antippen. */
+export const PAGE_FLICK_SPEED = 0.2;
 export const PAGE_FLICK_MIN_PX = 16;
 /* Dauer der Fahrt zum Ziel: kurz fuer den Rest einer halben Geste, laenger fuer
  * einen ganzen Screen (ms). */
