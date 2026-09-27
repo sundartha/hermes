@@ -39,6 +39,11 @@ test("Rechts-Blatt: jedes Ziel des Fussbands steht auch als Reiter im Blatt", ()
   }
 });
 
+test("Rechts-Blatt: Support wie im Desktop-Fussband", () => {
+  assert.ok(index.includes('href="/support">Support<'), "Desktop-Fussband: Support fehlt");
+  assert.ok(tabs.includes('href="/support">Support<'), "Rechts-Blatt: Support fehlt");
+});
+
 test("Rechts-Blatt: die Startseite bindet die Reiter ein, die alten Pillen sind weg", () => {
   assert.match(index, /<LegalTabs legalDocs=\{legalDocs\} contact=\{CONTACT\} \/>/);
   assert.ok(!index.includes('class="legal-pills"'), "alte 2x2-Pillen noch im Blatt");
