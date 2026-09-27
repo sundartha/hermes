@@ -5,41 +5,22 @@
 //
 // "json" (Default) = Datei-Persistenz; in diesem Pfad wird KEINE DB-Verbindung
 // erzeugt (kein DATABASE_URL noetig) -> heutiger Pfad bleibt laufzeit-bitidentisch.
-// "pg" = Postgres: Pool-Konstruktion (Verdrahtung) lebt hier in createPgBackend,
-// die Fachlogik in store/pg.js kennt keine Pool-Konstruktion (DIP, P15).
+// "pg" = Postgres: Pool-Konstruktion (Verdrahtung) lebt in store/pg-runner.js, verdrahtet
+// hier in createPgBackend; die Fachlogik in store/pg.js kennt keine Pool-Konstruktion (DIP, P15).
 import { AsyncLocalStorage } from "node:async_hooks";
 import { config } from "./config.js";
 import * as jsonBackend from "./store/json.js";
 import { makeChainMutex } from "./chain-mutex.js";
 
 async function createPgBackend() {
-  // Lazy import: pg wird nur im pg-Pfad geladen, der json-Default zieht keine
-  // DB-Dependency. ESM-top-level-await haelt das Backend bereit, bevor ein Caller
+  // Lazy import: pg (ueber store/pg-runner.js) wird nur im pg-Pfad geladen, der json-Default
+  // zieht keine DB-Dependency. ESM-top-level-await haelt das Backend bereit, bevor ein Caller
   // eine der synchronen Store-Funktionen aufruft (Spiegel ist dann hydriert).
-  const pg = (await import("pg")).default;
+  const { createPgPoolRunner } = await import("./store/pg-runner.js");
   const { makePgStore } = await import("./store/pg.js");
-  const pool = new pg.Pool({ connectionString: config.store.databaseUrl });
-  // Runner-Vertrag (siehe db/migrate.js + store/pg.js):
-  //   query(text, params) -> {rows}  : eine parametrisierte Anweisung
-  //   exec(sqlScript)                : Mehrfach-Anweisung (DDL); pg.Pool.query mit
-  //                                    reinem Text laeuft im Simple-Query-Modus
-  //   withClient(fn)                 : EINE Verbindung fuer Transaktion + GUC
-  //                                    (auf dem Pool waere sonst jede Anweisung
-  //                                    eine andere Session -> Transaktion/RLS-GUC
-  //                                    broeckeln)
-  const runner = {
-    async withClient(fn) {
-      const client = await pool.connect();
-      try {
-        return await fn({
-          query: (text, params) => client.query(text, params),
-          exec: (sql) => client.query(sql),
-        });
-      } finally {
-        client.release();
-      }
-    },
-  };
+  const { runner } = await createPgPoolRunner(config.store.databaseUrl);
+  // Server-Boot: makePgStore OHNE Optionen -> init migriert (DDL aus db/schema.sql + Seeding),
+  // dann Hydrierung. Nur Betreiber-Skripte oeffnen den Store ohne Migration (pg-runner.js).
   const store = makePgStore(runner);
   await store.init();
   return store;

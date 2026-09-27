@@ -34,19 +34,19 @@ import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 // die Konstante historisch von store/pg.js importieren (Import-Stabilitaet).
 export { BOOTSTRAP_TENANT_ID };
 
-// makePgStore(runner) -> Objekt mit den Store-Funktionen (Namensliste in store.js).
-// runner-Vertrag:
+// makePgStore(runner, { prepareSchema }) -> Store-Funktionen (Namensliste in store.js). runner:
 //   withClient(fn) : ruft fn(client) auf EINER Verbindung; client.query(text,
 //                    params)->{rows} und client.exec(sqlScript) (Mehrfach-DDL).
-// KEINE DB-Verbindung hier konstruiert (DIP): Pool/Adapter wird injiziert. init()
-// muss vor dem ersten Zugriff erwartet werden (Migration + Hydrierung).
+// KEINE DB-Verbindung hier konstruiert (DIP): Pool/Adapter wird injiziert. init() muss vor dem
+// ersten Zugriff erwartet werden. prepareSchema = Schema-Schritt des init: Default migrate (DDL,
+// Server-Boot ueber store.js); scripts/seed-reviewer-demo.mjs reicht eine Lese-Pruefung herein.
 
 // Vollstaendige, parametrisierte Query fuer den Re-Attach (attachActiveCallRow). Bewusst
 // ein fertiges Statement statt eines interpolierten WHERE-Fragments: so gibt es keinen
 // Pfad, auf dem je ein Aufrufer-Wert in den SQL-Text geraten koennte.
 const ACTIVE_CALL_BY_ID_SQL = `SELECT * FROM call WHERE id = $1 AND status = $2`;
 
-export function makePgStore(runner) {
+export function makePgStore(runner, { prepareSchema = migrate } = {}) {
   let state = null;
   // Serialisiert die DB-Flushes: Mutationen rufen save() synchron, der DB-Write
   // wird an diese Kette gehaengt, damit Flushes nicht ineinander laufen.
@@ -61,16 +61,16 @@ export function makePgStore(runner) {
     return state;
   }
 
-  // Migriert + hydriert den Spiegel einmalig aus der DB. Schema/Seeding/Hydrierung
-  // laufen auf EINER Verbindung (withClient), damit die RLS-GUC waehrend der
-  // tenant-scoped Reads/Inserts gesetzt bleibt (auf einem Pool waere sonst jede
-  // Anweisung eine andere Session). Die GUC wird VOR dem Seeding gesetzt, sonst
-  // wuerde die RLS-WITH-CHECK die Owner-Inserts unter einer nicht-privilegierten
-  // DB-Rolle blocken.
+  // Schema-Schritt (prepareSchema, Default migrate) + einmalige Hydrierung des Spiegels, alles
+  // auf EINER Verbindung (withClient), damit die RLS-GUC waehrend der tenant-scoped
+  // Reads/Inserts gesetzt bleibt (auf einem Pool waere sonst jede Anweisung eine andere
+  // Session). Die GUC wird VOR dem Seeding gesetzt, sonst blockte die RLS-WITH-CHECK die
+  // Owner-Inserts unter einer nicht-privilegierten DB-Rolle. Wirft prepareSchema, endet init
+  // VOR Hydrierung und jedem Schreiben.
   async function init() {
     await runner.withClient(async (client) => {
       await setTenant(client, BOOTSTRAP_TENANT_ID);
-      await migrate(client, BOOTSTRAP_TENANT_ID);
+      await prepareSchema(client, BOOTSTRAP_TENANT_ID);
       state = await hydrate(client);
       // Bootstrap-Zeile gezielt flushen (flushTenants ist RLS-frei -> unter der init-GUC
       // zulaessig). EINE Quelle fuer beide Boot-Seeds (idp_subject + kyc_level), G5.
