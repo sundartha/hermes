@@ -23,8 +23,13 @@ export const PLAN_CATALOG = Object.freeze([
     ]),
   }),
   Object.freeze({
+    // Anzeigename "Pro" (Owner 2026-09-27), der Slug bleibt bewusst "business":
+    // er steht in tenant.stripe_plan_slug, in den Stripe-Metadaten laufender Abos
+    // (metadata.plan_slug) und im Env-Namen STRIPE_BUSINESS_PRICE_ID. Ein Slug-Wechsel
+    // braucht den Uebergangs-Alias aus Branch feat/tarif-pro-rename, eine reine
+    // Namensaenderung nicht. Der Name reicht bis ins Dashboard und in die Kuendigungsmail.
     slug: "business",
-    name: "Business",
+    name: "Pro",
     amountCents: 999,
     currency: "eur",
     cadence: "month",

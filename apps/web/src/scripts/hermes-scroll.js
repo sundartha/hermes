@@ -35,7 +35,7 @@ const DE = {
   priceTitle: "Zwei Tarife, <em>keine Überraschungen</em>.",
   priceLead: "Wähle das Paket, welches zu dir passt. <strong>Monatlich kündbar</strong>, <strong>keine versteckten Kosten</strong>.",
   starterLabel: "Starter",
-  businessLabel: "Business",
+  businessLabel: "Pro",
   popular: "Beliebt",
   /* Preisnotation folgt der Sprache: englisch "€4.99" (Punkt, Symbol vorn),
    * deutsch "4,99 €" (Komma, Symbol nachgestellt). Dieselbe Regel wie
@@ -54,7 +54,7 @@ const DE = {
   businessF2: "Nimmt an <em>und</em> telefoniert für dich raus",
   businessF3: "Erledigt Aufgaben eigenständig für dich",
   businessF4: "Priorisierter Support",
-  businessCta: "Business wählen",
+  businessCta: "Pro wählen",
   footnote: "Minuten aufgebraucht? Du bekommst einen Hinweis — kein automatischer Aufpreis.",
   devTitle: "Ein Endpoint, <em>drei Wege</em>.",
   devLead: "Hermes ist ein <strong>MCP</strong>-Server. Verbinde ihn im KI-Tool deiner Wahl oder direkt aus dem Terminal.",

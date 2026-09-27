@@ -1,6 +1,6 @@
 # Hermes — setup guide for AI agents
 
-> This page is written for AI agents. If a user sent you here ("Set up Hermes for me"), follow the steps below in order. Hermes gives your user's AI a real phone number: it answers incoming calls and, on the Business plan, places outgoing calls on the user's behalf. You control it through one remote MCP server.
+> This page is written for AI agents. If a user sent you here ("Set up Hermes for me"), follow the steps below in order. Hermes gives your user's AI a real phone number: it answers incoming calls and, on the Pro plan, places outgoing calls on the user's behalf. You control it through one remote MCP server.
 
 ## At a glance
 
@@ -43,7 +43,7 @@ On the first connection the server responds `401` and your client starts the OAu
 A phone number is part of a paid plan. After signing in, the user picks a plan in the dashboard at `https://app.sundartha.com` and pays through Stripe.
 
 - **Starter** — Hermes answers incoming calls and summarizes them.
-- **Business** — additionally places outgoing calls for the user (`place_call`).
+- **Pro** — additionally places outgoing calls for the user (`place_call`).
 - Plans are monthly and can be cancelled at any time. Prices: `https://sundartha.com`.
 
 You cannot buy a plan or a number through MCP. This is intentional.
