@@ -263,6 +263,12 @@ const PUBLISHER_HOST = "sundartha.com";
 const UNBACKED_PROMISE = /24\/7|\bSLA\b|within \d+|business days|\+\d{2}[\s\d]{6,}/i;
 // Interne Kennungen aus Plan und Befundlisten gehoeren nie auf eine oeffentliche Seite.
 const INTERNAL_ID = /\b(T2-\d+|OW-[A-Z]|O-\d+|N-\d+|H-\d+)\b/;
+// Das Wortprotokoll wird nach der Zusammenfassung geloescht (src/telephony/call-finish.js
+// purgeTranscript, Datenschutzerklaerung "Speicherdauer") - eine Transkript-Zusage fuer
+// den Kundenbereich widerspraeche dem Rechtstext.
+const TRANSCRIPT_PROMISE = /with (its|their) transcripts?|and (its|their) transcripts?/i;
+// Der Vorbehalt muss sichtbar dastehen, nicht nur die Zusage fehlen.
+const TRANSCRIPT_DELETION_NOTE = /transcript of a call is normally deleted once its summary has been created/;
 
 // Sichtbarer Text: Skripte/Styles raus, dann alle Tags. So pruefen die Regexe den
 // Text, den ein Mensch liest - nicht die gehashten Asset-Namen in Attributen.
@@ -304,6 +310,9 @@ test("Support-Seite: Positiv-Kontrolle - die Verbots-Regexe schlagen an", () => 
   for (const sample of ["see T2-19", "OW-K", "O-7", "N-12", "H-3"]) {
     assert.match(sample, INTERNAL_ID, `Regex verfehlt "${sample}"`);
   }
+  for (const sample of ["each of your calls with its transcript", "your calls and their transcripts"]) {
+    assert.match(sample, TRANSCRIPT_PROMISE, `Regex verfehlt "${sample}"`);
+  }
 });
 
 test("Support-Seite: indexierbar, kanonisch, Kontakt aus dem Bestand, keine erfundenen Zusagen", () => {
@@ -318,6 +327,8 @@ test("Support-Seite: indexierbar, kanonisch, Kontakt aus dem Bestand, keine erfu
   const text = `${visibleText(html)} ${metaDescription(html)}`;
   assert.doesNotMatch(text, UNBACKED_PROMISE, "Support-Seite verspricht etwas ohne Beleg");
   assert.doesNotMatch(text, INTERNAL_ID, "Support-Seite nennt eine interne Kennung");
+  assert.doesNotMatch(text, TRANSCRIPT_PROMISE, "Support-Seite verspricht Transkripte im Kundenbereich");
+  assert.match(text.replace(/\s+/g, " "), TRANSCRIPT_DELETION_NOTE, "Support-Seite fehlt der Loesch-Vorbehalt zum Transkript");
 });
 
 test("Support-Seite: keine Quelle oder kein Link auf einen fremden Host", () => {

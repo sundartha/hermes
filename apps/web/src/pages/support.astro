@@ -8,8 +8,12 @@
 //
 // Jede Aussage folgt einem vorhandenen Weg - nichts wird erfunden:
 // - Kontakt: dieselbe oeffentliche Adresse wie Fussband, Impressum und Datenschutz.
-// - Anrufe: Transkript und, falls vorhanden, Zusammenfassung im Kundenbereich
-//   (components/app/CallsIsland.astro, lib/render.js callBody).
+// - Anrufe: die juengsten Anrufe und, falls vorhanden, ihre Zusammenfassung im
+//   Kundenbereich (components/app/CallsIsland.astro, lib/render.js). Das Wortprotokoll
+//   wird nach der Zusammenfassung geloescht (src/telephony/call-finish.js purgeTranscript,
+//   Ausnahmen: Diagnose-Aufbewahrung, fehlgeschlagene Zusammenfassung); abgeschlossene
+//   Anrufe fallen nach der Frist der Datenschutzerklaerung ("Speicherdauer") weg. Darum
+//   keine Transkript-Zusage und keine Frist-Zahl hier - die Zahl steht nur im Rechtstext.
 // - Daten: Datenschutzerklaerung ("Einen Selbstbedienungs-Weg zur Loeschung gibt es im
 //   Dienst nicht."); die Loeschung hat serverseitig keinen Endpunkt (src/routes/api-read.js).
 // - Kuendigen: oeffentliche Seite /kuendigen (Kundenbereich oder E-Mail).
@@ -58,8 +62,10 @@ const legalLinks = legalFooterLinks(LEGAL_CONTENT, "en");
         <span class="step__body">
           <span class="step__title">Your calls</span>
           <span class="step__text">
-            <a href={LOGIN_URL}>Sign in to your customer area</a> to see each of your calls
-            with its transcript and, where available, a summary.
+            <a href={LOGIN_URL}>Sign in to your customer area</a> to see your recent calls
+            and, where available, a summary of each. The word-for-word transcript of a call
+            is normally deleted once its summary has been created, and completed calls are
+            deleted automatically after the retention period stated in our privacy policy.
           </span>
         </span>
       </span>
@@ -82,9 +88,11 @@ const legalLinks = legalFooterLinks(LEGAL_CONTENT, "en");
         <span class="step__body">
           <span class="step__title">Access or delete your data</span>
           <span class="step__text">
-            In your customer area you can view your calls and their transcripts. Hermes
-            has no self-service option for deleting your data. For access to or deletion
-            of your data, email <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. Billing
+            In your customer area you can view your recent calls and, where available,
+            their summaries; word-for-word transcripts are normally not kept (see “Your
+            calls” above). Hermes has no self-service option for deleting your data. For
+            access to or deletion of your data, email
+            <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. Billing
             records are kept for the statutory retention periods. The details are in our
             privacy policy, linked below.
           </span>
