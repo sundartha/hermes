@@ -81,9 +81,13 @@ function schemaCheck(expected) {
 
 // pg-Store auf runner OHNE Migration: init prueft das Schema gegen expected (aus
 // expectedSchemaColumns) und bricht bei jeder Abweichung ab, bevor hydriert oder geschrieben
-// wird. Danach wie beim Boot: Hydrierung ueber die RLS-GUC je Mandant, dieselben
-// idempotenten Boot-Heilungen (auf einer DB, die der Dienst desselben Stands schon gebootet
-// hat, ohne Wirkung).
+// wird. Danach wie beim Boot: Hydrierung ueber die RLS-GUC je Mandant und dieselben
+// Boot-Heilungen aus init (src/store/pg.js), die nur Fehlendes setzen: fehlender
+// Begruessungshinweis je Mandant, KYC-Stufe des Betreiber-Mandanten und dessen idp_subject aus
+// OWNER_IDP_SUBJECT der LOKALEN Konfiguration dieses Laufs. Ohne Wirkung bleiben sie nur, wenn
+// die Zieldatenbank diese Werte schon traegt; fehlt dem Betreiber-Mandanten dort das
+// idp_subject, schriebe der Lauf den lokalen Wert - korrekt nur, wenn die lokale .env der
+// Produktion entspricht.
 export async function openPgStoreWithoutMigration(runner, expected) {
   const store = makePgStore(runner, { prepareSchema: schemaCheck(expected) });
   await store.init();
