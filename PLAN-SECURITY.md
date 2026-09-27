@@ -6741,3 +6741,102 @@ Werkzeug-Sequenz.
 - **Deploy-Vorbedingung gilt auch fuer diese Textaenderung:** derselbe eine `briefing-bench`-
   Lauf (alt `66d95ae` gegen den Endstand) misst sie mit; kein zusaetzlicher Lauf, keine
   Freigabe ohne ihn.
+
+## OpenAI-T2-20 — Reviewer-Zugang: Konto ohne Ausnahme, Seed-Skript nur fuer Beispieldaten (O-9)
+
+**Was:** `docs/OPENAI-REVIEWER-ACCESS.md` (Reviewer-Anleitung EN/DE fuer die Einreichung, jede
+Aussage am Code verankert) und `scripts/seed-reviewer-demo.mjs` mit dem Kern
+`scripts/lib/reviewer-demo-seed.mjs` (drei beendete Inbound-Beispielanrufe samt offener Action
+Items fuer das Reviewer-Konto). In `src/` nur die Naht fuer den DDL-freien Seed-Lauf (s.u.):
+`src/store/pg.js` (Schema-Schritt des `init` injizierbar, Default `migrate`, zeilenneutral) und
+`src/store/pg-runner.js` (Pool-Verdrahtung unveraendert aus `src/store.js` ausgelagert). Gates,
+Offenlegung, tools/list, initialize und server-instructions sind byte-gleich zur Basis; der
+Server-Boot migriert unveraendert.
+
+**Reviewer-Konto = regulaerer Kunde.** Echtes Abo, echte Kartenverifikation (KYC), angelegt ueber
+einen Browser-Login in der Web-App (legt genau einen Mandanten an - NUR mit einer E-Mail, die in
+Hermes noch keinem Konto zugeordnet ist: der Web-Login fuehrt Konten ueber die E-Mail zusammen,
+`src/web-auth.js` `resolveOrCreateTenant`, bekannte E-Mail eines nicht geschlossenen Mandanten ->
+dieser bestehende Mandant; mit einer schon benutzten E-Mail saehe der Reviewer dessen echte
+Anrufe und Transkripte, und das Seed-Skript schriebe dorthin; die Nummer entsteht erst mit der
+bezahlten Aktivierung, `src/billing/activation.js`). KEINE Gate-Ausnahme: kein
+`profile.unrestricted`, keine `profile.allowedNumbers` (beide heben das Outbound-Gate auf,
+`src/telephony/outbound-gates.js` `allowlistError`), NICHT in `OWNER_SELF_CALL_TENANT_IDS`
+(sonst entfiele der volle Offenlegungssatz bei einem Anruf an die hinterlegte eigene Nummer).
+Kein Reviewer-Modus, kein Testziel-Gate im Code: die Anleitung bittet um Testanrufe an eine vom
+Betreiber genannte Nummer und sagt ausdruecklich, dass der Code das nicht erzwingt. Der
+MCP-OAuth-Login legt nie einen Mandanten an und kauft nie eine Nummer (`requestTenant` ->
+`resolveTenant`, rein lesend; belegt ueber HTTP `/mcp` in
+`test/openai-t2-20-reviewer-seed.test.js`).
+
+**Seed-Skript - Grenzen:**
+- Schreibt ausschliesslich ueber `createCall`, `recordProviderCallResult`, `setCallEndedAt`,
+  `addActionItem`. Nie Abo, KYC, Status, Profil, Nummer, Budget. Nebenwirkung von `createCall`:
+  der reine Anzeige-Zaehler `usage[tenant].calls` waechst um die Zahl der angelegten Anrufe
+  (kein Gate liest ihn); jedes andere Top-Level-Feld bleibt deep-equal (Test).
+- Nur INBOUND, im selben Zug beendet, ohne `answeredAt`/`costProfile`/Transkript: ein
+  Outbound-Datensatz mit `startedAt=jetzt` zaehlte ins Stunden- und Ziel-Limit; ein aktiver
+  Datensatz fiele dem Watchdog zu; `answeredAt` zoege den Anruf in die Kosten-Nachtrags-Quote.
+- **`endedAt` liegt VOR der Kosten-Ueberwachung** (Korrektur einer frueheren Fassung, die
+  behauptete, "kein costProfile" vermeide einen Betreiber-Alarm - falsch): `kostenBuchBericht`
+  (`src/billing/kosten-deckung.js`) zaehlt jeden beendeten Anruf, dessen `endedAt` im Beleg-
+  (7 Tage) oder Herzschlag-Fenster liegt, unabhaengig von `answeredAt`; ein fehlendes
+  `costProfile` ist selbst ein Befund (`profil-fehlt`), und die Legacy-Zuordnung zaehlt den
+  Anruf beim Traeger `telnyx_call_records` mit. Mit `endedAt=jetzt` meldete der Sweep nach der
+  Karenz `erfassung-tot` + `profil-fehlt`, danach bis zu 7 Tage `deckung-unter-schwelle` - alle
+  voll (Mail+SMS). Deshalb setzt das Skript `endedAt` auf jetzt minus das groessere der beiden
+  Fenster minus einen Tag (`reviewerSeedEndedAtIso`). Die Ueberwachung selbst ist
+  unangetastet. Test: `kostenBuchBericht` nach dem Seed sofort, nach der Karenz, nach 7 h,
+  nach 2 Tagen und mit vergroessertem Herzschlag-Fenster -> null Befunde. Preis: die
+  Seed-Anrufe fallen `RETENTION_DAYS` nach ihrem vordatierten Ende weg (Standard: rund 22
+  statt 30 Tage; bei `RETENTION_DAYS` <= 8 sofort); `duration_s` ist 0.
+- Verweigert den Betreiber-Mandanten, unbekannte Mandanten und eine leere Kennung; legt nie
+  einen Mandanten an.
+- Trockenlauf ist Default (ohne `--apply` wird der Store nicht einmal geladen - Import-Spion-Test);
+  `--apply` verlangt `--tenant`; idempotent. Ein erneuter Lauf legt nur an, was schon weggefallen
+  ist; einen vorhandenen Seed-Anruf frischt er NICHT auf (weder Aufbewahrung noch `endedAt`,
+  `setCallEndedAt` wirkt nur auf aktive Anrufe). Werden Beleg- oder Herzschlag-Fenster nach dem
+  ersten Lauf vergroessert, koennen vorhandene Seed-Anrufe in diese Fenster fallen und einen
+  Fehlalarm der Kosten-Ueberwachung ausloesen, bis die Aufbewahrung sie entfernt; der Lauf meldet
+  ihre Zahl nur lesend (`countSeedCallsInsideCostWindow`) und aendert sie nicht. Vor einem
+  Fenster-Deploy deshalb einen Lauf pruefen.
+- pg nur mit `--dienst-gestoppt`, geprueft VOR dem Store-Import: der pg-Flush schreibt in einer
+  Transaktion ALLE Mandanten zurueck und loescht fehlende Zeilen. Bei laufendem Dienst gingen
+  die Seed-Zeilen verloren oder der Flush des Skripts ueberschriebe Dienst-Schreibungen, auch
+  Nutzungs- und Budget-Zaehler (Kostendecke faktisch zurueckgesetzt). Ablauf: Dienst stoppen ->
+  Skript -> Dienst starten.
+- **pg-Lauf fuehrt KEINE DDL aus und laeuft aus dem deployten Commit** (Befund aus dem Review:
+  vorher importierte der pg-Lauf `src/store.js`, dessen `init` `migrate()` mit der DDL des
+  LOKALEN Checkouts gegen die Zieldatenbank ausfuehrte - lag der Checkout vor oder hinter dem
+  deployten Stand, landete fremde DDL auf der Produktions-DB, und der Flush schrieb alle
+  Mandanten in der Zeilenform dieses Stands zurueck). Jetzt: unter pg importiert das Skript die
+  Fassade nie (Import-Spion-Test) und oeffnet den Store ueber `src/store/pg-runner.js` +
+  `makePgStore(runner, { prepareSchema })` OHNE Migration
+  (`scripts/lib/pg-schema-abgleich.mjs`). An die Stelle von `migrate` tritt ein rein lesender
+  Abgleich gegen `information_schema.columns`: Soll ist das Schema, das die Migration DIESES
+  Checkouts in einer fluechtigen pglite-Instanz erzeugt. Fehlende Tabelle/Spalte (Checkout neuer
+  als die DB) oder unbekannte Spalte in einer bekannten Tabelle (Checkout aelter) -> Abbruch vor
+  Hydrierung und jedem Schreiben, Meldung nennt die Abweichung; unbekannte Tabellen bleiben aussen
+  vor (der Flush beruehrt sie nie). Tests gegen PGlite: Schema-Schnappschuss vorher/nachher
+  gleich, keine DDL ueber den protokollierenden Runner, keine Datenzeile geaendert; Positiv-
+  Kontrolle: `makePgStore` ohne Optionen (Server-Boot) migriert dieselbe DB weiter; Normalfall
+  unter einer Rolle ohne Superuser/BYPASSRLS (RLS/`app.current_tenant` greift, idempotent).
+  **Grenze:** verglichen werden nur Namen - ein geaenderter Spaltentyp oder eine geaenderte
+  Flush-Logik bei gleichem Schema faellt nicht auf. Deshalb bleibt Pflicht: Checkout auf genau
+  den live deployten Commit, `npm ci` (pglite ist Entwicklungs-Abhaengigkeit), dann der Lauf.
+  Nicht pruefbar ohne Prod-Zugriff: ob die Produktions-DB Spalten traegt, die `schema.sql` nie
+  angelegt hat (Handarbeit) - dann bricht der Lauf fail-closed ab.
+- Ergebnis wird geprueft: der Lauf wartet den Flush samt Ergebnis ab (`drainFlushes`); vorher
+  meldete ein gescheiterter pg-Flush (Transaktion zurueckgerollt) trotzdem "angelegt".
+- Ausgabe nur Zaehler; keine Mandanten-Kennung, Nummer oder Zugangsdaten in stdout oder in
+  committeten Dateien (Dokument nur mit Platzhaltern, Hygiene-Test).
+
+**Offen beim Betreiber:** Konto beim Identitaetsanbieter ohne MFA und mit verifizierter E-Mail,
+die in Hermes noch KEINEM Konto zugeordnet ist (Pflicht, s.o.), Abo, Seed-Lauf gegen Produktion
+(aus dem deployten Commit, Dienst gestoppt), Live-Probe in ChatGPT, Wahl der Testziel-Nummer.
+
+**Rueckbau:** die drei Skriptdateien (`scripts/seed-reviewer-demo.mjs`,
+`scripts/lib/reviewer-demo-seed.mjs`, `scripts/lib/pg-schema-abgleich.mjs`),
+`docs/OPENAI-REVIEWER-ACCESS.md`, die drei Tests `test/openai-t2-20-reviewer-*.test.js` und
+dieser Abschnitt. Die Naht in `src/store/pg.js`/`src/store/pg-runner.js` kann bleiben (Default =
+heutiges Verhalten). Keine Env-Variable, kein Endpunkt.
