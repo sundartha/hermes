@@ -323,9 +323,22 @@ async function withZeitrafferAbortSignal(run) {
 
 // Ein Anbieter, der die Verbindung annimmt und dann schweigt: die Antwort kommt NIE, der
 // Aufruf endet ausschliesslich ueber sein eigenes Zeitlimit (wie echtes fetch).
+//
+// OFFENE LEITUNG: echtes fetch haelt waehrend der offenen Anfrage einen Socket, und der haelt
+// die Event-Loop wach. Der Timer hinter AbortSignal.timeout ist dagegen absichtlich unref'd
+// (er haelt den Prozess NICHT wach). Ohne Ersatz-Handle liegt waehrend der Frist nichts
+// Wachhaltendes mehr in der Loop: node:test bricht den Fall dann als "cancelled" ab
+// ("Promise resolution is still pending but the event loop has already resolved"), BEVOR die
+// Frist feuert - ohne dass eine Zusicherung je geprueft wurde. Der Handle lebt genau so lange
+// wie die simulierte Verbindung und faellt mit dem Abbruch.
+const LEITUNG_OFFEN_TAKT_MS = 1000;
 const stummerAnbieter = (_url, init) =>
   new Promise((_resolve, reject) => {
-    init.signal.addEventListener("abort", () => reject(new Error("The operation was aborted due to timeout")));
+    const offeneLeitung = setInterval(() => {}, LEITUNG_OFFEN_TAKT_MS);
+    init.signal.addEventListener("abort", () => {
+      clearInterval(offeneLeitung);
+      reject(new Error("The operation was aborted due to timeout"));
+    });
   });
 
 test("S1-C: ein stummer Anbieter laesst den Abbruch nach der KURZEN Frist zurueckkommen, nicht nach 120 s", async () => {
