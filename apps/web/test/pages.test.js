@@ -16,8 +16,14 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { LEGAL_SLUGS, LEGAL_TRANSLATION_NOTICE } from "../src/lib/legal.js";
+import {
+  LEGAL_SLUGS,
+  LEGAL_TRANSLATION_NOTICE,
+  indexLegalContent,
+  legalFooterLinks,
+} from "../src/lib/legal.js";
 import { PLAN_CATALOG } from "../src/lib/plans.js";
+import { LOGIN_URL } from "../src/lib/routes.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST_DIR = join(WEB_ROOT, "dist-test");
@@ -38,6 +44,8 @@ const MARKETING_PAGES = [
   "404.html",
   // 312k-P3: oeffentliche Kuendigungsseite, dieselbe Hermes-Huelle wie so-funktionierts.
   "kuendigen/index.html",
+  // Oeffentliche Support-Seite (englisch), dieselbe Hermes-Huelle.
+  "support/index.html",
 ];
 const LEGAL_PAGES = [
   "impressum/index.html",
@@ -46,14 +54,15 @@ const LEGAL_PAGES = [
 ];
 
 // Sprachen nach dem Neubau (Owner-Entscheidung: Deutsch ist die Standardsprache
-// der Marketing-Seiten; nur die beiden Rand-Seiten blieben englisch wie zuvor).
+// der Marketing-Seiten; die beiden Rand-Seiten blieben englisch wie zuvor). Die
+// Support-Seite ist englisch (Marketing-Texte Englisch, Rechtstexte Deutsch).
 const DE_PAGES = [
   "so-funktionierts/index.html",
   "preise/index.html",
   "kuendigen/index.html",
   ...LEGAL_PAGES,
 ];
-const EN_PAGES = ["registrieren/index.html", "404.html"];
+const EN_PAGES = ["registrieren/index.html", "404.html", "support/index.html"];
 
 function readDist(relativePath) {
   return readFileSync(join(DIST_DIR, relativePath), "utf8");
@@ -98,7 +107,7 @@ test("jede Unterseite nutzt das geteilte Site-Chrome", () => {
   }
 });
 
-test("Sprachen: DE-Seiten lang=de, die beiden EN-Rand-Seiten lang=en", () => {
+test("Sprachen: DE-Seiten lang=de, die EN-Seiten lang=en", () => {
   for (const page of DE_PAGES) {
     assert.match(readDist(page), /<html lang="de"/, `${page} sollte lang=de sein`);
   }
@@ -236,4 +245,115 @@ test("Datenschutz nennt die lokale Speicherung (Sprachwahl, Cookie-Entscheidung)
   const html = readDist("datenschutz/index.html");
   assert.ok(html.includes(langKey), `${langKey} fehlt im Datenschutztext`);
   assert.ok(html.includes("hermes.consent"), "hermes.consent fehlt im Datenschutztext");
+});
+
+// Support-Seite: die oeffentliche Support-URL fuer die OpenAI-Einreichung ("Privacy
+// policy, terms, support, and website URLs are public and match the publisher
+// identity.", developers.openai.com/plugins/deploy/submission). Geprueft wird der
+// GEBAUTE Output: indexierbar, kanonisch auf sundartha.com, Kontakt nur aus dem
+// Bestand, keine Zusage ohne Beleg, keine interne Kennung, keine fremde Quelle.
+const SUPPORT_PAGE = "support/index.html";
+// Sitemap-Schreibweise ohne Schraegstrich wie die uebrigen Eintraege; der gebaute
+// canonical-Link traegt ihn (Astro-Verzeichnis-Format), beides zeigt auf dieselbe Seite.
+const SUPPORT_CANONICAL = "https://sundartha.com/support";
+const SUPPORT_CANONICAL_LINK = /<link rel="canonical" href="https:\/\/sundartha\.com\/support\/?"/;
+const PUBLIC_CONTACT = "kontakt@sundartha.com";
+const PUBLISHER_HOST = "sundartha.com";
+// Zusagen, fuer die es keinen Beleg gibt: Frist, Rund-um-die-Uhr, Telefonnummer.
+const UNBACKED_PROMISE = /24\/7|\bSLA\b|within \d+|business days|\+\d{2}[\s\d]{6,}/i;
+// Interne Kennungen aus Plan und Befundlisten gehoeren nie auf eine oeffentliche Seite.
+const INTERNAL_ID = /\b(T2-\d+|OW-[A-Z]|O-\d+|N-\d+|H-\d+)\b/;
+
+// Sichtbarer Text: Skripte/Styles raus, dann alle Tags. So pruefen die Regexe den
+// Text, den ein Mensch liest - nicht die gehashten Asset-Namen in Attributen.
+function visibleText(html) {
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/g, " ")
+    .replace(/<[^>]+>/g, " ");
+}
+
+function metaDescription(html) {
+  return (html.match(/<meta name="description" content="([^"]*)"/) || [])[1] || "";
+}
+
+function absoluteLinkHosts(html) {
+  return [...html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)].map(
+    (match) => new URL(match[1]).hostname,
+  );
+}
+
+// Dieselbe Quelle wie der Build (lib/legal-content.js per import.meta.glob), hier aus
+// den Dateien gelesen - so zeigt die Erwartung automatisch auf eine kuenftige EN-Fassung.
+function englishLegalTargets() {
+  const modules = Object.fromEntries(
+    readdirSync(LEGAL_CONTENT_DIR)
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => [
+        `../data/legal/${name}`,
+        JSON.parse(readFileSync(join(LEGAL_CONTENT_DIR, name), "utf8")),
+      ]),
+  );
+  return legalFooterLinks(indexLegalContent(modules), "en").map((link) => link.href);
+}
+
+test("Support-Seite: Positiv-Kontrolle - die Verbots-Regexe schlagen an", () => {
+  // Ohne diese Kontrolle saehe eine kaputte Regex aus wie eine saubere Seite.
+  for (const sample of ["We answer 24/7.", "Our SLA", "within 24 hours", "3 business days", "+49 176 1234567"]) {
+    assert.match(sample, UNBACKED_PROMISE, `Regex verfehlt "${sample}"`);
+  }
+  for (const sample of ["see T2-19", "OW-K", "O-7", "N-12", "H-3"]) {
+    assert.match(sample, INTERNAL_ID, `Regex verfehlt "${sample}"`);
+  }
+});
+
+test("Support-Seite: indexierbar, kanonisch, Kontakt aus dem Bestand, keine erfundenen Zusagen", () => {
+  const html = readDist(SUPPORT_PAGE);
+  assert.ok(!html.includes('name="robots"'), "Support-Seite darf kein robots-Meta tragen (Produktion indexierbar)");
+  assert.match(html, SUPPORT_CANONICAL_LINK, `Support-Seite fehlt canonical ${SUPPORT_CANONICAL}`);
+  assert.ok(html.includes(`href="mailto:${PUBLIC_CONTACT}"`), "Support-Seite fehlt der mailto-Kontakt");
+  assert.ok(html.includes('href="/kuendigen"'), "Support-Seite fehlt der Link auf /kuendigen");
+  for (const target of englishLegalTargets()) {
+    assert.ok(html.includes(`href="${target}"`), `Support-Seite fehlt der Rechtslink ${target}`);
+  }
+  const text = `${visibleText(html)} ${metaDescription(html)}`;
+  assert.doesNotMatch(text, UNBACKED_PROMISE, "Support-Seite verspricht etwas ohne Beleg");
+  assert.doesNotMatch(text, INTERNAL_ID, "Support-Seite nennt eine interne Kennung");
+});
+
+test("Support-Seite: keine Quelle oder kein Link auf einen fremden Host", () => {
+  // Erlaubt: die Publisher-Domain und der Gateway-Host des Login-Links (derselbe Wert,
+  // den der Build aus PUBLIC_GATEWAY_URL zieht, lib/routes.js).
+  const allowed = new Set([PUBLISHER_HOST, new URL(LOGIN_URL).hostname]);
+  for (const host of absoluteLinkHosts(readDist(SUPPORT_PAGE))) {
+    assert.ok(allowed.has(host), `Support-Seite verweist auf fremden Host ${host}`);
+  }
+});
+
+test("jede oeffentliche Seite verlinkt /support", () => {
+  for (const page of PUBLIC_PAGES) {
+    assert.ok(readDist(page).includes('href="/support"'), `${page} fehlt der Link auf /support`);
+  }
+});
+
+test("Sitemap enthaelt die Support-Seite", () => {
+  const sitemap = readFileSync(join(WEB_ROOT, "public/sitemap.xml"), "utf8");
+  assert.ok(sitemap.includes(`<loc>${SUPPORT_CANONICAL}</loc>`), "sitemap.xml fehlt /support");
+});
+
+// Die Erklaer-Demo nennt nur Werkzeuge, die der Server heute anbietet, und zeigt den
+// heutigen Ablauf: die KI bereitet den Anruf vor (prepare_call), der Mensch bestaetigt
+// ihn in der Hermes-Karte. Einen Kalender hat Hermes nicht mehr.
+const RETIRED_DEMO_CLAIMS = /get_transcript|get_my_number|get_calendar|added it to your calendar|Termin eingetragen/;
+const DEMO_PAGES = ["index.html", "so-funktionierts/index.html"];
+
+test("Demo nennt nur heutige Werkzeuge und keinen Kalender", () => {
+  for (const page of DEMO_PAGES) {
+    const html = readDist(page);
+    assert.ok(html.includes("prepare_call"), `${page}: Demo zeigt prepare_call nicht`);
+    assert.doesNotMatch(html, RETIRED_DEMO_CLAIMS, `${page}: Demo nennt ein altes Werkzeug oder den Kalender`);
+  }
+  // Das DE-Woerterbuch des Laufzeit-Umschalters traegt die Demo-Texte ein zweites Mal.
+  const scroll = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
+  assert.ok(scroll.includes("prepare_call"), "hermes-scroll.js: Demo zeigt prepare_call nicht");
+  assert.doesNotMatch(scroll, RETIRED_DEMO_CLAIMS, "hermes-scroll.js nennt ein altes Werkzeug oder den Kalender");
 });
