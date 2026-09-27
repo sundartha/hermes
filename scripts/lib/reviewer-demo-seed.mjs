@@ -65,7 +65,8 @@ function assertSeedableTenant(store, tenantId) {
 // Idempotenzschluessel eines Anrufs: Richtung, Anrufer und Zusammenfassung im Mandanten-Scope.
 function findSeedCall(calls, entry) {
   return calls.find(
-    (call) => call.direction === INBOUND && call.from === entry.from && call.summary === entry.summary,
+    (call) =>
+      call.direction === INBOUND && call.from === entry.from && call.summary === entry.summary,
   );
 }
 
@@ -92,7 +93,8 @@ function createEndedInboundCall(store, tenantId, entry) {
 // Zaehlt nur tatsaechlich neue Eintraege: addActionItem meldet eine Dublette am selben Anruf
 // (auch einen bereits erledigten Eintrag) als duplicate und legt dann nichts an.
 function addMissingItems(store, callId, texts) {
-  return texts.filter((text) => !store.addActionItem(callId, text, ACTION_ITEM_TYPE).duplicate).length;
+  return texts.filter((text) => !store.addActionItem(callId, text, ACTION_ITEM_TYPE).duplicate)
+    .length;
 }
 
 // Schreibt die fehlenden Datensaetze; Speichern (store.save) ist Sache des Aufrufers.

@@ -75,7 +75,9 @@ function printDryRun() {
 // Nur lesend: meldet, dass Outbound fuer diesen Mandanten gesperrt bleibt. Setzt NICHTS.
 function warnIfNotSubscriber(store, tenantId) {
   if (store.tenantActiveSubscriber(tenantId, KYC_OUTBOUND_MIN)) return;
-  console.warn(`${PREFIX} Hinweis: Outbound bleibt gesperrt, bis Abo und Verifikation echt bestehen.`);
+  console.warn(
+    `${PREFIX} Hinweis: Outbound bleibt gesperrt, bis Abo und Verifikation echt bestehen.`,
+  );
 }
 
 async function applySeed(tenantId) {
@@ -102,7 +104,8 @@ async function main() {
   if (!options.tenant) return abort(`--apply verlangt --tenant <ID>.\n${USAGE}`);
   // Backend aus der zentralen Konfiguration; src/config.js importiert den Store nicht.
   const { config } = await import("../src/config.js");
-  if (config.store.storeBackend === PG_BACKEND && !options["dienst-gestoppt"]) return abort(PG_ABORT);
+  if (config.store.storeBackend === PG_BACKEND && !options["dienst-gestoppt"])
+    return abort(PG_ABORT);
   return applySeed(options.tenant);
 }
 

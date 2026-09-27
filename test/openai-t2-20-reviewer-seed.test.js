@@ -54,7 +54,12 @@ const CHANGEABLE_KEYS = new Set(["calls", "actionItems"]);
 function reviewerStoreState() {
   const state = ops.makeDefaultState();
   ops.registerTenant(state, BOOTSTRAP_TENANT_ID, { firstName: "Owner" });
-  ops.seedBootstrapNumber(state, OWNER_TEST_NUMBER.e164, BOOTSTRAP_TENANT_ID, OWNER_TEST_NUMBER.provider);
+  ops.seedBootstrapNumber(
+    state,
+    OWNER_TEST_NUMBER.e164,
+    BOOTSTRAP_TENANT_ID,
+    OWNER_TEST_NUMBER.provider,
+  );
   ops.registerTenant(state, REVIEWER_TENANT, { firstName: "Reviewer", idpSubject: REVIEWER_SUB });
   ops.setKycLevel(state, REVIEWER_TENANT, "card");
   ops.seedBootstrapNumber(state, REVIEWER_DID, REVIEWER_TENANT, OWNER_TEST_NUMBER.provider);
@@ -81,8 +86,16 @@ function normalizedDataDir() {
   const dataDir = tempDataDir(reviewerStoreState());
   const res = spawnSync(
     process.execPath,
-    ["--input-type=module", "-e", "const s = await import('./src/store.js'); s.load(); await s.save();"],
-    { cwd: ROOT, env: { PATH: process.env.PATH, ...BASE_ENV, DATA_DIR: dataDir }, encoding: "utf8" },
+    [
+      "--input-type=module",
+      "-e",
+      "const s = await import('./src/store.js'); s.load(); await s.save();",
+    ],
+    {
+      cwd: ROOT,
+      env: { PATH: process.env.PATH, ...BASE_ENV, DATA_DIR: dataDir },
+      encoding: "utf8",
+    },
   );
   assert.equal(res.status, EXIT_OK, res.stderr);
   return dataDir;
@@ -91,7 +104,9 @@ function normalizedDataDir() {
 // Top-Level-Schluessel ausser calls/actionItems, deren Wert sich unterscheidet.
 function changedProtectedKeys(before, after) {
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
-  return [...keys].filter((key) => !CHANGEABLE_KEYS.has(key) && !isDeepStrictEqual(before[key], after[key]));
+  return [...keys].filter(
+    (key) => !CHANGEABLE_KEYS.has(key) && !isDeepStrictEqual(before[key], after[key]),
+  );
 }
 
 // createCall zaehlt jeden angelegten Anruf im Lebenszeit-Zaehler usage[tenant].calls mit
@@ -101,8 +116,15 @@ function changedProtectedKeys(before, after) {
 function withoutSeedCallCounter(before, after) {
   const bucketBefore = before.usage[REVIEWER_TENANT];
   const bucketAfter = after.usage[REVIEWER_TENANT];
-  assert.equal(bucketAfter.calls, bucketBefore.calls + SEED_CALL_COUNT, "Anruf-Zaehler + Seed-Anrufe");
-  return { ...after, usage: { ...after.usage, [REVIEWER_TENANT]: { ...bucketAfter, calls: bucketBefore.calls } } };
+  assert.equal(
+    bucketAfter.calls,
+    bucketBefore.calls + SEED_CALL_COUNT,
+    "Anruf-Zaehler + Seed-Anrufe",
+  );
+  return {
+    ...after,
+    usage: { ...after.usage, [REVIEWER_TENANT]: { ...bucketAfter, calls: bucketBefore.calls } },
+  };
 }
 
 function assertUntouched(dataDir, run, rawBefore) {
@@ -207,7 +229,8 @@ async function assertWireShowsSeed(url, token) {
     assert.equal(entry.status, "completed");
   }
   const itemsText = (await callTool(url, token, "list_action_items")).content[0].text;
-  for (const text of SEED_ITEM_TEXTS) assert.ok(itemsText.includes(text), `list_action_items zeigt: ${text}`);
+  for (const text of SEED_ITEM_TEXTS)
+    assert.ok(itemsText.includes(text), `list_action_items zeigt: ${text}`);
 }
 
 const newEntries = (beforeList, afterList) => {
@@ -230,7 +253,10 @@ test("Reviewer-Seed: --apply schreibt nur Anrufe/Items, ist idempotent und ersch
     assert.deepEqual(changedProtectedKeys(before, withoutSeedCallCounter(before, after)), []);
     const newCalls = newEntries(before.calls, after.calls);
     assertSeedCalls(newCalls);
-    assertSeedItems(newEntries(before.actionItems, after.actionItems), new Set(newCalls.map((call) => call.id)));
+    assertSeedItems(
+      newEntries(before.actionItems, after.actionItems),
+      new Set(newCalls.map((call) => call.id)),
+    );
   });
 
   await ctx.test("zweiter Lauf: nichts zu tun, Store unveraendert", () => {
@@ -253,13 +279,21 @@ test("Reviewer-Seed: --apply schreibt nur Anrufe/Items, ist idempotent und ersch
       });
       try {
         await assertWireShowsSeed(srv.externalUrl, await idp.sign({ sub: REVIEWER_SUB }));
-        const fremd = await callTool(srv.externalUrl, await idp.sign({ sub: "unbekannt-sub" }), "list_calls");
+        const fremd = await callTool(
+          srv.externalUrl,
+          await idp.sign({ sub: "unbekannt-sub" }),
+          "list_calls",
+        );
         assertReauthChallenge(fremd);
       } finally {
         await srv.stop();
         await idp.close();
       }
-      assert.deepEqual(countOf(readState(dataDir)), countsBefore, "kein Mandant angelegt, keine Nummer gekauft");
+      assert.deepEqual(
+        countOf(readState(dataDir)),
+        countsBefore,
+        "kein Mandant angelegt, keine Nummer gekauft",
+      );
     },
   );
 });

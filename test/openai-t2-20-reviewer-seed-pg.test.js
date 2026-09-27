@@ -14,14 +14,21 @@ const SEED_CALL_COUNT = REVIEWER_SEED_CALLS.length;
 const SEED_ITEM_COUNT = REVIEWER_SEED_CALLS.flatMap((entry) => entry.actionItems).length;
 const SEED_SUMMARIES = new Set(REVIEWER_SEED_CALLS.map((entry) => entry.summary));
 
-const tenantRow = (store) => structuredClone(store.load().tenants.find((tenant) => tenant.id === REVIEWER_TENANT));
+const tenantRow = (store) =>
+  structuredClone(store.load().tenants.find((tenant) => tenant.id === REVIEWER_TENANT));
 
 async function seededStore() {
   const { store, runner } = await makePgTestStore();
   const state = store.load();
-  ops.registerTenant(state, REVIEWER_TENANT, { firstName: "Reviewer", idpSubject: "reviewer-sub-pg" });
+  ops.registerTenant(state, REVIEWER_TENANT, {
+    firstName: "Reviewer",
+    idpSubject: "reviewer-sub-pg",
+  });
   ops.setKycLevel(state, REVIEWER_TENANT, "card");
-  ops.setTenantSubscription(state, REVIEWER_TENANT, { subscriptionId: "sub_reviewer_pg", planSlug: "starter" });
+  ops.setTenantSubscription(state, REVIEWER_TENANT, {
+    subscriptionId: "sub_reviewer_pg",
+    planSlug: "starter",
+  });
   await store.save();
   return { store, runner };
 }
@@ -55,7 +62,11 @@ test("Reviewer-Seed pg: Zeilen ueberleben Flush + Neu-Hydrierung, Mandant unvera
   assert.deepEqual(tenantRow(fresh), rowBefore, "Mandanten-Zeile inkl. Abo/KYC unveraendert");
 
   assert.deepEqual(applyReviewerSeed(fresh, REVIEWER_TENANT), { callsCreated: 0, itemsCreated: 0 });
-  assert.equal(fresh.exportTenantData(BOOTSTRAP_TENANT_ID).calls.length, 0, "Betreiber ohne Seed-Zeilen");
+  assert.equal(
+    fresh.exportTenantData(BOOTSTRAP_TENANT_ID).calls.length,
+    0,
+    "Betreiber ohne Seed-Zeilen",
+  );
 });
 
 test("Reviewer-Seed pg: Betreiber- und unbekannter Mandant werden verweigert, nichts geschrieben", async () => {
