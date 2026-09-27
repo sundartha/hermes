@@ -194,7 +194,7 @@ test("subscriptionLine: Name + Verlaengerungsdatum (en-US), ohne Datum nur Name"
     subscriptionLine({ planSlug: "starter", currentPeriodEnd: epoch }),
     `Active plan: Starter (renews ${expectedDate}).`,
   );
-  assert.equal(subscriptionLine({ planSlug: "business", currentPeriodEnd: 0 }), "Active plan: Business.");
+  assert.equal(subscriptionLine({ planSlug: "business", currentPeriodEnd: 0 }), "Active plan: Pro.");
   // Unbekannter Slug -> kapitalisierter Fallback (nie "undefined").
   assert.equal(subscriptionLine({ planSlug: "ghost", currentPeriodEnd: 0 }), "Active plan: Ghost.");
 });
@@ -452,7 +452,7 @@ test("cancelConfirmText (EN-Default): nennt Plan-Name + Wirkungstermin (en-US fo
 
 test("cancelConfirmText: ohne Termin -> Satz ohne Datum, kein 'undefined'/'Invalid Date'", () => {
   const text = cancelConfirmText({ planSlug: "business", currentPeriodEnd: 0 });
-  assert.ok(text.includes("Business"));
+  assert.match(text, /\bPro\b/);
   assert.ok(!text.includes("undefined"));
   assert.ok(!text.includes("Invalid Date"));
 });
@@ -727,7 +727,7 @@ test("billingStatusText: aktiv/cancelled nutzen subscriptionLine/cancelStatusLin
 
   const cancelledSub = { planSlug: "business", currentPeriodEnd: epoch, cancelAtPeriodEnd: true };
   const text = billingStatusText(BILLING_STATUS.CANCELLED, cancelledSub);
-  assert.ok(text.includes("Business"), "Plan-Name fehlt in der Cancelled-Statuszeile");
+  assert.match(text, /\bPro\b/, "Plan-Name fehlt in der Cancelled-Statuszeile");
   assert.ok(text.includes(cancelStatusLine(cancelledSub)), "cancelStatusLine-Wortlaut fehlt");
 });
 
@@ -745,7 +745,7 @@ test("billingStatusHeadline: aktiv/gekuendigt -> Plan-Name, sonst dieselbe Besch
   const activeSub = { planSlug: "starter", currentPeriodEnd: 0, cancelAtPeriodEnd: false };
   assert.equal(billingStatusHeadline(BILLING_STATUS.ACTIVE, activeSub), "Starter");
   const cancelledSub = { planSlug: "business", currentPeriodEnd: 0, cancelAtPeriodEnd: true };
-  assert.equal(billingStatusHeadline(BILLING_STATUS.CANCELLED, cancelledSub), "Business");
+  assert.equal(billingStatusHeadline(BILLING_STATUS.CANCELLED, cancelledSub), "Pro");
   assert.equal(
     billingStatusHeadline(BILLING_STATUS.NO_CARD, { planSlug: "" }),
     billingStatusBadge(BILLING_STATUS.NO_CARD),
@@ -893,7 +893,7 @@ test("DE-Modus: renewDate/subscriptionLine nutzen das deutsche Datumsformat (TT.
       subscriptionLine({ planSlug: "starter", currentPeriodEnd: epoch }),
       `Aktiver Tarif: Starter (verlängert sich am ${expectedDate}).`,
     );
-    assert.equal(subscriptionLine({ planSlug: "business", currentPeriodEnd: 0 }), "Aktiver Tarif: Business.");
+    assert.equal(subscriptionLine({ planSlug: "business", currentPeriodEnd: 0 }), "Aktiver Tarif: Pro.");
   });
 });
 
