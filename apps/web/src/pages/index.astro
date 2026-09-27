@@ -34,6 +34,7 @@ import "../styles/hermes-mobile-scroll.css";
 // Handy-Fassung (< 768 px) nach design/handoff-mobile: eigene Screens, am
 // Desktop display:none. Als letzter Import, damit sie die Buehne dort ausblendet.
 import MobileHome from "../components/MobileHome.astro";
+import LegalTabs from "../components/LegalTabs.astro";
 import privacy from "../data/legal/privacy.de.json";
 import imprint from "../data/legal/imprint.de.json";
 import terms from "../data/legal/terms.de.json";
@@ -528,12 +529,7 @@ const legalDocs = [
           {legalDocs.map((entry) => (
             <span class="legal-title" data-legal-doc={entry.slug} hidden={entry.slug !== "privacy"}>{entry.doc.title}</span>
           ))}
-          <div class="legal-pills">
-            {legalDocs.map((entry) => (
-              <button class="legal-pill" type="button" data-legal-pill={entry.slug} data-i18n={entry.i18n}>{entry.label}</button>
-            ))}
-            <a class="legal-pill" href={`mailto:${CONTACT}`} data-i18n="contact">Contact</a>
-          </div>
+          <LegalTabs legalDocs={legalDocs} contact={CONTACT} />
         </div>
         {legalDocs.map((entry) => (
           <div data-legal-doc={entry.slug} hidden={entry.slug !== "privacy"}>
