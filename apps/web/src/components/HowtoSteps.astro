@@ -1,0 +1,89 @@
+---
+// "How it works" als drei Glas-Kacheln (Owner-Vorgabe 2026-09-26): abgerundete,
+// halbtransparente Flaechen im Dunkelblau des Hintergrunds. Pro Kachel: Schritt,
+// Headline, drei Stichpunkte an einer durchgehenden Verbindungslinie und unten eine
+// kleine Animation (Nummer wird aktiv · KI verbindet sich · Anruf laeuft). Reines
+// CSS + Inline-SVG, CSP-konform, kein JS.
+//
+// Stichpunkte nur aus bestehender Website-Copy (Schrittliste, Entwickler-Fussnote,
+// Tarif Starter).
+//
+// Sprache: serverseitig in der Sprache der Seite (lang="en" auf der Startseite,
+// Default "de" fuer /so-funktionierts); die Startseite tauscht zur Laufzeit ueber
+// data-i18n (hermes-scroll.js, Keys step1Title ... und hgB11 ... hgB33).
+import "../styles/hermes-steps.css";
+
+const { lang = "de", variant = "layer" } = Astro.props;
+
+const T = {
+  en: {
+    step: "Step",
+    live: "Live",
+    ready: "Summary ready",
+    connected: "Connected to your AI",
+    steps: [
+      ["Get a number", ["A real phone number", "Active in two minutes", "No contract, no hardware"]],
+      ["Connect your AI", ["One connection over MCP", "Claude, Codex or any MCP client", "Your AI knows who called"]],
+      ["Let it answer", ["Talks and listens", "Books appointments", "Your 24/7 personal assistant"]],
+    ],
+  },
+  de: {
+    step: "Schritt",
+    live: "Aktiv",
+    ready: "Zusammenfassung da",
+    connected: "Mit deiner KI verbunden",
+    steps: [
+      ["Nummer holen", ["Eine echte Rufnummer", "In zwei Minuten aktiv", "Kein Vertrag, keine Hardware"]],
+      ["KI verbinden", ["Ein Anschluss über MCP", "Claude, Codex oder jeder MCP-Client", "Deine KI weiß, wer angerufen hat"]],
+      ["Abnehmen lassen", ["Spricht und hört zu", "Vereinbart Termine", "Dein persönlicher Assistent, 24/7"]],
+    ],
+  },
+};
+const t = T[lang] ?? T.de;
+const bars = Array.from({ length: 24 }, (_, i) => i);
+---
+
+<ol class={`hg hg--${variant}`}>
+  {t.steps.map(([title, bullets], i) => (
+    <li class="hg-tile">
+      <span class="hg-tile__top">
+        <span class="hg-tile__eyebrow"><span data-i18n="hgStep">{t.step}</span> {i + 1}</span>
+        <h3 class="hg-tile__title" data-i18n={`step${i + 1}Title`}>{title}</h3>
+        <ul class="hg-list">
+          {bullets.map((b, j) => (
+            <li class="hg-list__item" data-i18n={`hgB${i + 1}${j + 1}`}>{b}</li>
+          ))}
+        </ul>
+      </span>
+
+      {i === 0 && (
+        <span class="hg-anim hg-anim--num" aria-hidden="true">
+          <span class="hg-ring"><span class="hg-ring__tick">✓</span></span>
+          <span class="hg-numline">
+            <span class="hg-numline__digits">+49 176 44 12 908</span>
+            <span class="hg-numline__live"><span class="hg-dot"></span><span data-i18n="hgLive">{t.live}</span></span>
+          </span>
+        </span>
+      )}
+
+      {i === 1 && (
+        <span class="hg-anim hg-anim--link" aria-hidden="true">
+          <span class="hg-sync"><img src="/assets/hermes-wing.png" alt="" /></span>
+          <span class="hg-numline">
+            <span class="hg-url">app.sundartha.com/mcp</span>
+            <span class="hg-numline__live"><span class="hg-dot"></span><span data-i18n="hgConnected">{t.connected}</span></span>
+          </span>
+        </span>
+      )}
+
+      {i === 2 && (
+        <span class="hg-anim hg-anim--call" aria-hidden="true">
+          <span class="hg-wave">
+            {bars.map((k) => <span class={`hg-bar hg-bar--${k % 6}`}></span>)}
+          </span>
+          <span class="hg-ready"><span class="hg-ready__tick">✓</span><span data-i18n="hgReady">{t.ready}</span></span>
+        </span>
+      )}
+    </li>
+  ))}
+</ol>

@@ -22,7 +22,7 @@ import {
   indexLegalContent,
   legalFooterLinks,
 } from "../src/lib/legal.js";
-import { PLAN_CATALOG } from "../src/lib/plans.js";
+import { PLAN_CATALOG, formatPlanPrice } from "../src/lib/plans.js";
 import { LOGIN_URL } from "../src/lib/routes.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -171,6 +171,37 @@ test("Startseite: Preise in beiden Sprachen aus dem Katalog, je in der richtigen
       `DE-Woerterbuch: deutscher Katalogpreis ${major},${minor} € (${plan.slug}) fehlt`,
     );
   }
+});
+
+// Handy-Fassung (components/MobileHome.astro, < 768 px): Preise und Minuten
+// reisen fuer das Roll-Zaehlwerk als Data-Attribute mit. Beide Notationen und
+// die Minuten muessen aus DEMSELBEN Katalog stammen wie Desktop und /preise.
+test("Handy-Startseite: Preise (EN/DE) und Minuten aus dem Katalog", () => {
+  const html = readDist("index.html");
+  const joined = (pick) => PLAN_CATALOG.map(pick).join("|");
+  const en = joined((plan) => formatPlanPrice(plan.amountCents, plan.currency, "en"));
+  const de = joined((plan) => formatPlanPrice(plan.amountCents, plan.currency, "de"));
+  const minutes = joined((plan) => plan.includedMinutes);
+  assert.ok(html.includes(`data-prices-en="${en}"`), `Handy: englische Katalogpreise ${en} fehlen`);
+  assert.ok(html.includes(`data-prices-de="${de}"`), `Handy: deutsche Katalogpreise ${de} fehlen`);
+  assert.ok(html.includes(`data-minutes="${minutes}"`), `Handy: Inklusivminuten ${minutes} fehlen`);
+});
+
+// Handy-Markup: jede uebersetzbare Stelle traegt ihre deutsche Fassung, kein
+// style-Attribut (CSP style-src 'self'), kein Menue-Knopf mehr (Handoff), und der
+// Wortlaut nach § 312k BGB bleibt deutsch - ohne Uebersetzungs-Attribut.
+test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Link deutsch", () => {
+  const html = readDist("index.html");
+  const start = html.indexOf("data-mh");
+  const mobile = html.slice(start, html.indexOf('class="page"'));
+  assert.ok(start >= 0 && mobile.includes("mh-scroll"), "Handy-Fassung fehlt vor der Buehne");
+  assert.ok(!mobile.includes('data-mh-de=""'), "leere deutsche Fassung im Handy-Markup");
+  assert.ok(!/\sstyle=/.test(mobile), "style-Attribut im Handy-Markup (CSP)");
+  assert.ok(!mobile.includes("data-open-sheet"), "Handy-Kopf traegt wieder einen Menue-Knopf");
+  assert.ok(
+    mobile.includes('<a class="mh-link" href="/kuendigen">Verträge kündigen</a>'),
+    "Kuendigungs-Link im Handy-Fuss fehlt oder traegt eine Uebersetzung",
+  );
 });
 
 // P14/GAP-15: der Waechter fuer den Liefertag der englischen Rechtsdokumente.
@@ -379,11 +410,19 @@ test("Demo: Positiv-Kontrolle - die Verbots-Regex schlaegt an", () => {
 });
 
 test("Demo nennt nur heutige Werkzeuge, keinen Kalender und kein Dashboard-Transkript", () => {
+  // Seit 2026-09-27 zeigen Start- und So-funktioniert's-Seite die Schritt-Kacheln
+  // (HowtoSteps) statt der Session-Demo. Wo die Demo (noch) eingebunden ist, muss sie
+  // prepare_call zeigen; KEINE Seite darf ein altes Werkzeug, den Kalender oder ein
+  // Dashboard-Transkript versprechen.
   for (const page of DEMO_PAGES) {
     const html = readDist(page);
-    assert.ok(html.includes("prepare_call"), `${page}: Demo zeigt prepare_call nicht`);
-    assert.doesNotMatch(html, RETIRED_DEMO_CLAIMS, `${page}: Demo nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript`);
+    if (html.includes("hd-toolcall")) assert.ok(html.includes("prepare_call"), `${page}: Demo zeigt prepare_call nicht`);
+    assert.doesNotMatch(html, RETIRED_DEMO_CLAIMS, `${page}: Seite nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript`);
   }
+  // Die Agenten-Anleitung (public/agents.md) muss dieselben heutigen Werkzeuge nennen.
+  const agents = readFileSync(join(WEB_ROOT, "public/agents.md"), "utf8");
+  assert.ok(agents.includes("prepare_call"), "agents.md: prepare_call fehlt");
+  assert.doesNotMatch(agents, RETIRED_DEMO_CLAIMS, "agents.md nennt ein altes Werkzeug oder den Kalender");
   // Das DE-Woerterbuch des Laufzeit-Umschalters traegt die Demo-Texte ein zweites Mal.
   const scroll = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
   assert.ok(scroll.includes("prepare_call"), "hermes-scroll.js: Demo zeigt prepare_call nicht");

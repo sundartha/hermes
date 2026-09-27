@@ -1,0 +1,664 @@
+/* =============================================================================
+ * hermes-steps.css — "How it works" als drei Glas-Kacheln + Agenten-Zeile
+ *
+ * Owner-Vorgabe 2026-09-26: abgerundete, halbtransparente Kacheln im Dunkelblau
+ * des Hintergrunds ("glaesern"), der Himmel scheint durch. Apple-Kachelmuster:
+ * oben Schritt + Headline + ein Satz, unten eine grosse Kennzahl.
+ * ========================================================================== */
+
+.hg {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 1120px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(14px, 1.5vw, 22px);
+}
+.hg--layer {
+  margin-top: clamp(28px, 5.5vh, 60px);
+}
+
+.hg-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: clamp(24px, 4vh, 48px);
+  min-height: clamp(280px, 43vh, 400px);
+  padding: clamp(24px, 3.2vh, 36px) clamp(22px, 2.2vw, 34px) clamp(22px, 3vh, 32px);
+  border-radius: 28px;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(160deg, rgba(22, 58, 104, 0.62) 0%, rgba(10, 30, 62, 0.58) 55%, rgba(8, 24, 50, 0.66) 100%);
+  border: 1px solid rgba(207, 228, 250, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 30px 60px -36px rgba(3, 10, 26, 0.85);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  transition: border-color 0.45s ease, background 0.45s ease;
+}
+/* Leichter Lichtschimmer oben links - das "Glas". */
+.hg-tile::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(90% 60% at 0% 0%, rgba(207, 228, 250, 0.14), rgba(207, 228, 250, 0) 70%);
+  pointer-events: none;
+}
+
+.hg-tile__top {
+  display: flex;
+  flex-direction: column;
+}
+.hg-tile__eyebrow {
+  font: 600 13px/1 var(--sans);
+  letter-spacing: 0.02em;
+  color: #d6e8fb;
+}
+.hg-tile__title {
+  margin: clamp(12px, 1.8vh, 18px) 0 0;
+  font: 600 clamp(26px, 2.35vw, 36px) / 1.08 var(--sans);
+  letter-spacing: -0.028em;
+  color: #fff;
+}
+/* Stichpunkte an einer feinen Linie. Ruhig: kleine Punkte, ein weicher
+   Lichtschimmer gleitet langsam an der Linie entlang - nichts blinkt. */
+.hg-list {
+  position: relative;
+  list-style: none;
+  margin: clamp(18px, 2.8vh, 28px) 0 0;
+  padding: 0 0 0 26px;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2.6vh, 24px);
+}
+.hg-list::before,
+.hg-list::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  width: 1px;
+}
+.hg-list::before {
+  top: 0.7em;
+  bottom: 0.7em;
+  background: rgba(143, 182, 227, 0.32);
+}
+/* Der Schimmer ist ein Verlauf INNERHALB der Linie (gleiche Laenge wie die
+   Linie) - er kann dadurch nie ueber den ersten oder letzten Punkt hinaus. */
+.hg-list::after {
+  top: 0.7em;
+  bottom: 0.7em;
+  background-image: linear-gradient(to bottom, rgba(230, 241, 252, 0) 0%, rgba(230, 241, 252, 0) 38%, rgba(230, 241, 252, 0.95) 50%, rgba(230, 241, 252, 0) 62%, rgba(230, 241, 252, 0) 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 250%;
+  background-position: 0 100%;
+  animation: hgGlide 7s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+  animation-delay: var(--hgd, 0s);
+}
+.hg-list__item {
+  position: relative;
+  font: 400 clamp(14.5px, 1.1vw, 16.5px) / 1.4 var(--sans);
+  color: rgba(232, 242, 253, 0.95);
+}
+.hg-list__item::before {
+  content: "";
+  position: absolute;
+  left: -26px;
+  top: calc(0.7em - 3.5px);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8fb6e3;
+  box-shadow: 0 0 0 4px rgba(10, 30, 62, 0.55);
+}
+.hg-tile:nth-child(2) { --hgd: -2.3s; }
+.hg-tile:nth-child(3) { --hgd: -4.6s; }
+
+@keyframes hgGlide {
+  0% { background-position: 0 100%; }
+  100% { background-position: 0 0%; }
+}
+
+/* --------------------------------------------- Animationen unten je Kachel */
+
+.hg-anim {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: clamp(78px, 11vh, 100px);
+  padding-top: clamp(14px, 2vh, 20px);
+  border-top: 1px solid rgba(207, 228, 250, 0.14);
+}
+
+/* 1 — Nummer wird aktiv: Ring laeuft voll, Haken, Nummer tippt sich, "Aktiv". */
+@property --hgp {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+@keyframes hgRing {
+  0% { --hgp: 0%; }
+  52%, 100% { --hgp: 100%; }
+}
+@keyframes hgRingColor {
+  0%, 54% { background-color: rgba(143, 182, 227, 0); }
+  58%, 94% { background-color: rgba(74, 222, 150, 0.18); }
+  100% { background-color: rgba(143, 182, 227, 0); }
+}
+@keyframes hgTick {
+  0%, 54% { opacity: 0; transform: scale(0.5); }
+  60%, 94% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; }
+}
+@keyframes hgType {
+  0%, 4% { clip-path: inset(0 100% 0 0); }
+  48%, 100% { clip-path: inset(0 0 0 0); }
+}
+@keyframes hgLiveIn {
+  0%, 56% { opacity: 0; transform: translateY(4px); }
+  62%, 94% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+.hg-ring {
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: hgRingColor 6s ease-in-out infinite;
+}
+.hg-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(#cfe4fa var(--hgp), rgba(207, 228, 250, 0.14) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  animation: hgRing 6s linear infinite;
+}
+.hg-ring__tick {
+  font: 700 18px/1 var(--sans);
+  color: #8ff0c0;
+  animation: hgTick 6s ease-out infinite;
+}
+.hg-numline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.hg-numline__digits {
+  font: 500 clamp(16px, 1.45vw, 20px) / 1 var(--sans);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #fff;
+  animation: hgType 6s steps(17, end) infinite;
+}
+.hg-numline__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 600 12.5px/1 var(--sans);
+  color: #8ff0c0;
+  animation: hgLiveIn 6s ease-out infinite;
+  animation-delay: var(--hgd, 0s);
+}
+.hg-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade96;
+  box-shadow: 0 0 10px rgba(74, 222, 150, 0.8);
+}
+
+/* 2 — KI verbindet sich: Ring sucht (drehender Bogen), rastet ein, die
+   Connector-Adresse tippt sich, dann "Mit deiner KI verbunden". Gleiche
+   Sprache wie Schritt 1. */
+@keyframes hgSpin {
+  to { transform: rotate(360deg); }
+}
+@keyframes hgSearch {
+  0%, 50% { opacity: 1; }
+  56%, 100% { opacity: 0; }
+}
+@keyframes hgLocked {
+  0%, 52% { opacity: 0; transform: scale(0.85); }
+  58%, 94% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+@keyframes hgWingGlow {
+  0%, 54% { filter: brightness(0.75); }
+  60%, 94% { filter: brightness(1.15) drop-shadow(0 0 6px rgba(207, 228, 250, 0.9)); }
+  100% { filter: brightness(0.75); }
+}
+.hg-sync {
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 35%, rgba(207, 228, 250, 0.16), rgba(16, 48, 90, 0.35));
+}
+.hg-sync::before,
+.hg-sync::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+}
+/* suchender Bogen */
+.hg-sync::before {
+  background: conic-gradient(from 0deg, rgba(207, 228, 250, 0) 0deg, #cfe4fa 110deg, rgba(207, 228, 250, 0.14) 111deg);
+  animation: hgSpin 1.1s linear infinite, hgSearch 6s ease-out infinite;
+  animation-delay: 0s, var(--hgd, 0s);
+}
+/* eingerasteter Ring */
+.hg-sync::after {
+  background: rgba(143, 240, 192, 0.9);
+  box-shadow: 0 0 12px rgba(143, 240, 192, 0.6);
+  animation: hgLocked 6s ease-out infinite;
+  animation-delay: var(--hgd, 0s);
+}
+.hg-sync img {
+  height: 24px;
+  width: auto;
+  animation: hgWingGlow 6s ease-out infinite;
+  animation-delay: var(--hgd, 0s);
+}
+.hg-url {
+  font: 500 clamp(14px, 1.2vw, 16.5px) / 1 var(--sans);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: #fff;
+  animation: hgType 6s steps(21, end) infinite;
+  animation-delay: var(--hgd, 0s);
+}
+
+/* 3 — Anruf laeuft (Wellenform), danach "Zusammenfassung da". */
+@keyframes hgWave {
+  0%, 100% { transform: scaleY(0.2); }
+  50% { transform: scaleY(1); }
+}
+@keyframes hgWaveBox {
+  0%, 52% { opacity: 1; }
+  60%, 92% { opacity: 0.18; }
+  100% { opacity: 1; }
+}
+@keyframes hgReady {
+  0%, 54% { opacity: 0; transform: translate(-50%, 6px); }
+  62%, 92% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, 0); }
+}
+.hg-wave {
+  flex: 1 1 auto;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  animation: hgWaveBox 6s ease-in-out infinite;
+}
+.hg-bar {
+  width: 3px;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #fff, #8fb6e3);
+  animation: hgWave 1.15s ease-in-out infinite;
+}
+.hg-bar--1 { animation-delay: -0.2s; animation-duration: 0.95s; }
+.hg-bar--2 { animation-delay: -0.55s; animation-duration: 1.3s; }
+.hg-bar--3 { animation-delay: -0.75s; animation-duration: 1.05s; }
+.hg-bar--4 { animation-delay: -0.35s; animation-duration: 1.2s; }
+.hg-bar--5 { animation-delay: -0.9s; animation-duration: 0.9s; }
+.hg-ready {
+  position: absolute;
+  left: 50%;
+  bottom: calc((100% - clamp(14px, 2vh, 20px)) / 2 - 16px);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: rgba(8, 24, 50, 0.55);
+  border: 1px solid rgba(143, 240, 192, 0.35);
+  backdrop-filter: blur(8px);
+  font: 600 13px/1 var(--sans);
+  color: #fff;
+  animation: hgReady 6s ease-out infinite;
+}
+.hg-ready__tick {
+  color: #8ff0c0;
+}
+
+/* Nur animieren, solange die Ebene zu sehen ist (hermes-scroll.js setzt
+   .is-visible). Handy-Blatt und Unterseite sind davon nicht betroffen. */
+.howto-layer:not(.is-visible) .hg *,
+.howto-layer:not(.is-visible) .hg *::before,
+.howto-layer:not(.is-visible) .hg *::after {
+  animation-play-state: paused !important;
+}
+
+@media (max-height: 720px) {
+  .hg-tile {
+    min-height: 0;
+  }
+  .hg-list__item {
+    font-size: 14px;
+  }
+}
+
+.hg--sheet {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 899px) {
+  .hg--page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ------------------------------------------------ Kompakte Zeilen
+   Nur schmale DESKTOP-Fenster (Split Screen, Owner 2026-09-26: Stichpunkte in
+   den schmalen Spalten schlecht verteilt): statt drei hoher Kacheln drei flache
+   Glas-Zeilen. Links das animierte Symbol des Schritts (Ring, Fluegel, Welle),
+   rechts Schritt, Titel und die drei Punkte. Das Handy hat eigene Karten
+   (Block "Handy" unten). */
+@media (min-width: 701px) and (max-width: 980px) and (not (pointer: coarse)) {
+  .hg {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    /* Split Screen: schmale Spalte statt breiter Zeilen mit leerer rechter
+       Haelfte - Text und Animation bleiben beieinander. */
+    max-width: 520px;
+    margin-inline: auto;
+  }
+  .hg-tile {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-areas: "anim top";
+    align-items: center;
+    column-gap: 16px;
+    row-gap: 0;
+    min-height: 0;
+    padding: 16px 18px;
+    border-radius: 20px;
+  }
+  .hg-tile__top {
+    grid-area: top;
+    min-width: 0;
+  }
+  .hg-tile__eyebrow {
+    font-size: 12px;
+  }
+  .hg-tile__title {
+    margin-top: 5px;
+    font-size: 19px;
+    letter-spacing: -0.02em;
+  }
+  /* Punkte untereinander, jeder mit kleinem Punkt davor - kein Umbruch,
+     bei dem ein Trenner am Zeilenanfang haengt. */
+  .hg-list {
+    margin-top: 7px;
+    padding: 0;
+    gap: 3px;
+  }
+  .hg-list::before,
+  .hg-list::after {
+    display: none;
+  }
+  .hg-list__item {
+    padding-left: 13px;
+    font-size: 13.5px;
+    line-height: 1.4;
+    color: rgba(226, 238, 252, 0.84);
+  }
+  .hg-list__item::before {
+    left: 0;
+    top: calc(0.7em - 2px);
+    width: 4px;
+    height: 4px;
+    border: 0;
+    background: rgba(207, 228, 250, 0.65);
+    box-shadow: none;
+  }
+
+  /* Nur das Symbol bleibt von der Animation - ohne Text daneben. */
+  .hg-anim {
+    grid-area: anim;
+    align-self: center;
+    height: auto;
+    padding: 0;
+    border: 0;
+    gap: 0;
+    justify-content: center;
+  }
+  .hg-numline,
+  .hg-ready {
+    display: none;
+  }
+  .hg-ring,
+  .hg-sync {
+    width: 50px;
+    height: 50px;
+  }
+  .hg-sync img {
+    height: 24px;
+  }
+  /* Welle als Symbol: fuenf Balken in einem Glaskreis. */
+  .hg-anim--call .hg-wave {
+    flex: none;
+    width: 50px;
+    height: 50px;
+    padding: 0 13px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 35%, rgba(207, 228, 250, 0.16), rgba(16, 48, 90, 0.35));
+    box-shadow: inset 0 0 0 1px rgba(207, 228, 250, 0.28);
+    animation: none;
+  }
+  .hg-anim--call .hg-bar {
+    height: 20px;
+  }
+  .hg-anim--call .hg-bar:nth-child(n + 6) {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ Handy
+   Owner-Entwurf v3 (2026-09-26): je Schritt EINE Glaskarte in voller Breite -
+   Schritt, Titel in der Serif der Ueberschriften, die Punkte an der Linie und
+   unten, nur durch eine Haarlinie getrennt, die Animation des Schritts. Text
+   und Animation beginnen an derselben Innenkante (24px). */
+@media (max-width: 700px), (pointer: coarse) and (max-width: 1024px) {
+  .hg {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .hg-tile {
+    gap: 0;
+    min-height: 0;
+    justify-content: flex-start;
+    padding: 24px 24px 0;
+    border-radius: 30px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 30%),
+      linear-gradient(160deg, rgba(24, 62, 110, 0.56) 0%, rgba(10, 30, 62, 0.6) 55%, rgba(8, 24, 50, 0.7) 100%);
+    border-color: rgba(207, 228, 250, 0.14);
+  }
+  .hg-tile::before {
+    display: none;
+  }
+  .hg-tile__eyebrow {
+    font: 500 12px/1 var(--sans);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #c3daf3;
+  }
+  .hg-tile__title {
+    margin-top: 12px;
+    font: 400 34px/1 var(--serif);
+    letter-spacing: 0;
+  }
+  .hg-list {
+    margin-top: 20px;
+    gap: 14px;
+  }
+  .hg-list__item {
+    font-size: 17px;
+    line-height: 1.35;
+  }
+  /* Animation: Teil DERSELBEN Karte, abgetrennt nur durch eine Haarlinie. */
+  .hg-anim {
+    height: auto;
+    margin: 24px -24px 0;
+    padding: 20px 24px 22px;
+    gap: 18px;
+  }
+  .hg-ring,
+  .hg-sync {
+    width: 72px;
+    height: 72px;
+  }
+  .hg-ring__tick {
+    font-size: 26px;
+  }
+  .hg-sync img {
+    height: 34px;
+  }
+  .hg-numline {
+    gap: 10px;
+  }
+  .hg-numline__digits {
+    font-size: 20px;
+  }
+  .hg-url {
+    font-size: 16px;
+  }
+  .hg-numline__live {
+    font-size: 14px;
+  }
+  .hg-wave {
+    height: 56px;
+  }
+  .hg-bar {
+    width: 4px;
+  }
+  .hg-ready {
+    bottom: calc(50% - 18px);
+    font-size: 14px;
+  }
+}
+
+/* ------------------------------------ Agenten-Zeile (Entwickler-Bereich) */
+
+.agent-try {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.agent-try__label {
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(207, 228, 250, 0.8);
+  text-shadow: 0 1px 10px rgba(7, 16, 38, 0.8);
+}
+.agent-try__box {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 5px 5px 5px 13px;
+  border-radius: 10px;
+  background: rgba(8, 22, 48, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(8px);
+}
+.agent-try__prompt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 13px/1.2 var(--sans);
+  color: rgba(255, 255, 255, 0.86);
+}
+.agent-try__url {
+  font-weight: 500;
+  color: #fff;
+}
+.agent-try__copy {
+  flex: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.16);
+  font: 600 11.5px/1 var(--sans);
+  color: #fff;
+  transition: background 0.18s;
+}
+.agent-try__copy:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+.agent-try--dev {
+  margin-top: clamp(8px, 1.8vh, 18px);
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.agent-try--sheet .agent-try__box {
+  width: 100%;
+}
+.agent-try--sheet .agent-try__prompt {
+  white-space: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hg-list::after,
+  .hg-sync::before,
+  .hg-sync::after,
+  .hg-sync img,
+  .hg-url,
+  .hg-ring,
+  .hg-ring::before,
+  .hg-ring__tick,
+  .hg-numline__digits,
+  .hg-numline__live,
+  .hg-wave,
+  .hg-bar,
+  .hg-ready {
+    animation: none !important;
+  }
+  .hg-list::after,
+  .hg-sync::before,
+  .hg-ready {
+    display: none;
+  }
+
+  .hg-ring::before {
+    --hgp: 100%;
+  }
+  .hg-bar {
+    transform: scaleY(0.6);
+  }
+  .hg-tile {
+    transition: none;
+  }
+}

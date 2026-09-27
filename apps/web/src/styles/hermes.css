@@ -2044,10 +2044,71 @@ a:hover {
   }
 }
 
+/* Halbes Laptop-Fenster (Split Screen, ca. 700-950px breit): beide
+   Tarifkarten bleiben nebeneinander. Untereinander ragte die zweite Karte
+   unten aus der 100vh-Buehne und war abgeschnitten. */
 @media (min-width: 701px) and (not ((pointer: coarse) and (max-width: 1024px))) and (max-width: 900px) {
-  /* Zwei Tarifkarten nebeneinander werden hier zu schmal. */
   .price-grid {
-    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px !important;
+  }
+  .plan {
+    padding-inline: clamp(16px, 2.2vw, 22px) !important;
+  }
+  /* Terminal-Befehl passt sonst nicht in die halbe Kartenbreite. */
+  .dev-term-body {
+    font-size: clamp(9px, 1.28vw, 13px) !important;
+  }
+}
+
+/* Hochkant-/Quadrat-Fenster am Desktop (Split Screen): Text und Tempel
+   passen nicht mehr nebeneinander - der Tempel wurde rechts angeschnitten
+   und der Text lag auf dem Berg. Hier wird der Hero gestapelt wie am Handy:
+   Tempel mittig oben, Text unten ueber den Wolken. */
+@media (min-width: 701px) and (not ((pointer: coarse) and (max-width: 1024px))) and (max-aspect-ratio: 11/10) {
+  .hero-bg {
+    background-position: 90% 50% !important;
+  }
+  .scrim-side {
+    opacity: 0.35;
+  }
+  .scrim-veil {
+    background: linear-gradient(
+      to bottom,
+      rgba(8, 22, 48, 0.4) 0%,
+      rgba(8, 22, 48, 0.02) 22%,
+      rgba(8, 20, 44, 0.1) 48%,
+      rgba(8, 20, 44, 0.62) 72%,
+      rgba(8, 20, 44, 0.84) 100%
+    );
+  }
+  .hero-inner {
+    justify-content: flex-end !important;
+    padding-bottom: clamp(84px, 12vh, 132px) !important;
+  }
+  .hero-copy {
+    margin-inline: auto;
+    text-align: center;
+  }
+  .hero-title {
+    font-size: clamp(46px, 7.2vw, 76px) !important;
+  }
+  .hero-lead {
+    margin-inline: auto;
+  }
+  .hero-actions {
+    justify-content: center;
+  }
+}
+
+/* Schmal-breite, aber noch querformatige Fenster: Tempel etwas nach links
+   holen, damit er rechts nicht angeschnitten wird, und die Unterzeile
+   schmaler halten, damit sie nicht in den Berg laeuft. */
+@media (min-width: 701px) and (not ((pointer: coarse) and (max-width: 1024px))) and (min-aspect-ratio: 11/10) and (max-aspect-ratio: 3/2) {
+  .hero-bg {
+    background-position: 64% 50% !important;
+  }
+  .hero-lead {
+    max-width: min(530px, 46vw);
   }
 }
 

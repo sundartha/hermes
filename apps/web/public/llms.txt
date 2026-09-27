@@ -1,0 +1,16 @@
+# Hermes by Sundartha
+
+> Hermes gives your AI a real phone number. It answers incoming calls, places outgoing calls on the user's behalf and reports back. One remote MCP server (Streamable HTTP, OAuth 2.1): https://app.sundartha.com/mcp
+
+## For AI agents
+
+- [Setup guide for AI agents](https://sundartha.com/agents.md): connect the MCP server, sign-in, getting a number, verifying, placing calls safely, troubleshooting.
+
+## Pages
+
+- [Home](https://sundartha.com/): what Hermes does, pricing, developer setup (English, German toggle).
+- [How it works (German)](https://sundartha.com/so-funktionierts)
+- [Pricing (German)](https://sundartha.com/preise)
+- [Privacy policy (German)](https://sundartha.com/datenschutz)
+- [Imprint (German)](https://sundartha.com/impressum)
+- [Terms (German)](https://sundartha.com/agb)
