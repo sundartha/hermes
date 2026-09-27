@@ -1,0 +1,27 @@
+---
+// Reiter im Rechts-Blatt der Startseite (pages/index.astro): ALLE Ziele des
+// Fussbands an einem Ort (Owner-Wunsch 2026-09-27: "dass man alle Tabs da drin
+// hat").
+// - Oben ein Segment-Schalter fuer die drei Rechtstexte - dieselbe Form wie die
+//   Umschalter der Handy-Startseite (Starter/Pro, Connector/Terminal/Your AI).
+//   Die Knoepfe tragen data-legal-pill; scripts/hermes-scroll.js (wireLegal)
+//   tauscht das Dokument und setzt aria-current, das CSS schiebt den Daumen.
+// - Darunter die uebrigen Ziele: Vertraege kuendigen (eigene Seite nach § 312k
+//   BGB, Wortlaut bleibt deutsch), Kontakt (mailto) und Cookie-Einstellungen
+//   (oeffnet die Einwilligungs-Karte, scripts/consent.js).
+const { legalDocs, contact } = Astro.props;
+---
+
+<div class="legal-tabs">
+  <div class="legal-seg" aria-label="Legal">
+    <span class="legal-seg__thumb" aria-hidden="true"></span>
+    {legalDocs.map((entry) => (
+      <button class="legal-pill" type="button" data-legal-pill={entry.slug} data-i18n={entry.i18n}>{entry.label}</button>
+    ))}
+  </div>
+  <div class="legal-more">
+    <a class="legal-more__link" href="/kuendigen">Verträge kündigen</a>
+    <a class="legal-more__link" href={`mailto:${contact}`} data-i18n="contact">Contact</a>
+    <button class="legal-more__link" type="button" data-consent-open data-i18n="cookieSettings">Cookie settings</button>
+  </div>
+</div>
