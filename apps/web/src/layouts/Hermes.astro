@@ -9,6 +9,9 @@ import "../styles/hermes.css";
 import "../styles/hermes-page.css";
 import { LOGIN_URL } from "../lib/routes.js";
 import { homeHref } from "../lib/home-anchors.js";
+import { LEGAL_CONTENT } from "../lib/legal-content.js";
+import { legalFooterLinks } from "../lib/legal.js";
+import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../lib/subscribe.js";
 import CookieConsent from "../components/site/CookieConsent.astro";
 import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
 
@@ -16,23 +19,57 @@ const { title, description, lang = "de", noindex = false } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const CONTACT = "kontakt@sundartha.com";
 
+// Owner-Wunsch 2026-09-28: die Huelle spricht die Sprache ihrer Seite - englische
+// Seiten (/support, /registrieren, 404, /legal/*) tragen englische Leiste und
+// englisches Fussband, deutsche Seiten deutsche. Die Rechtslinks zeigen auf die
+// Fassung in dieser Sprache (lib/legal.js, sonst die verbindliche deutsche); der
+// Kuendigungs-Wortlaut kommt aus den benannten Konstanten (lib/subscribe.js, § 312k BGB).
+const en = lang === "en";
+const T = en
+  ? {
+      how: "How it works",
+      pricing: "Pricing",
+      logIn: "Log in",
+      signUp: "Sign up",
+      getNumber: "Get a number",
+      contact: "Contact",
+      cookies: "Cookie settings",
+      copy: "© Sundartha — Hermes, your phone assistant",
+      navAria: "Main navigation",
+      homeAria: "Hermes — Home",
+      cancel: CANCEL_BUTTON_LABEL_EN,
+      legal: { privacy: "Privacy", imprint: "Imprint", terms: "Terms" },
+    }
+  : {
+      how: "So funktioniert's",
+      pricing: "Preise",
+      logIn: "Login",
+      signUp: "Registrieren",
+      getNumber: "Nummer holen",
+      contact: "Kontakt",
+      cookies: "Cookie-Einstellungen",
+      copy: "© Sundartha — Hermes, dein Telefonassistent",
+      navAria: "Hauptnavigation",
+      homeAria: "Hermes — Startseite",
+      cancel: CANCEL_BUTTON_LABEL,
+      legal: { privacy: "Datenschutz", imprint: "Impressum", terms: "AGB" },
+    };
+
 // Owner-Wunsch 2026-09-27: "So funktioniert's" und "Preise" fuehren auf die Ebenen der
 // Startseite (Desktop-Buehne, Handy-Screens), nicht auf die ruhenden Unterseiten -
 // von /kuendigen & Co. aus landete man sonst auf den "falschen Layern". Die alten
 // URLs /so-funktionierts und /preise leiten seit 2026-09-28 selbst dorthin weiter
 // (components/site/HomeRedirect.astro).
 const nav = [
-  { href: homeHref("so-funktionierts"), label: "So funktioniert's" },
-  { href: homeHref("preise"), label: "Preise" },
+  { href: homeHref("so-funktionierts"), label: T.how },
+  { href: homeHref("preise"), label: T.pricing },
 ];
 const legal = [
-  { href: "/datenschutz", label: "Datenschutz" },
-  { href: "/impressum", label: "Impressum" },
-  { href: "/agb", label: "AGB" },
+  ...legalFooterLinks(LEGAL_CONTENT, lang).map((link) => ({ href: link.href, label: T.legal[link.slug] })),
   // § 312k BGB: die Kuendigungsseite muss STAENDIG verfuegbar UND unmittelbar/leicht
   // zugaenglich sein - deshalb im Fussband JEDER Hermes.astro-Seite, nicht nur im
   // Kundenbereich (dort ist "staendig verfuegbar" strittig, s. kuendigen.astro).
-  { href: "/kuendigen", label: "Verträge kündigen" },
+  { href: "/kuendigen", label: T.cancel },
 ];
 ---
 
@@ -63,8 +100,8 @@ const legal = [
       <div class="doc-veil" aria-hidden="true"></div>
 
       <header>
-        <nav class="doc-nav" aria-label="Hauptnavigation">
-          <a class="lockup" href="/" aria-label="Hermes — Startseite">
+        <nav class="doc-nav" aria-label={T.navAria}>
+          <a class="lockup" href="/" aria-label={T.homeAria}>
             <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
             <span class="lockup__text">
               <span class="lockup__name">HERMES</span>
@@ -77,8 +114,8 @@ const legal = [
             ))}
             <!-- Owner-Feedback 2026-08-26: wie auf der Startseite Login + Registrieren statt eines zweiten "Nummer holen". -->
             <!-- Beide Ziele LOGIN_URL — Login = Registrierung, Account entsteht beim ersten OIDC-Login (lib/routes.js). -->
-            <a class="nav-link" href={LOGIN_URL}>Login</a>
-            <a class="btn-solid" href={LOGIN_URL}>Registrieren</a>
+            <a class="nav-link" href={LOGIN_URL}>{T.logIn}</a>
+            <a class="btn-solid" href={LOGIN_URL}>{T.signUp}</a>
           </span>
         </nav>
       </header>
@@ -88,24 +125,24 @@ const legal = [
       </main>
 
       <footer class="doc-footer">
-        <span class="site-footer__copy">© Sundartha — Hermes, dein Telefonassistent</span>
+        <span class="site-footer__copy">{T.copy}</span>
         <span class="site-footer__nav">
           {nav.map((item) => (
             <a class="site-footer__link" href={item.href}>{item.label}</a>
           ))}
-          <a class="site-footer__link" href={LOGIN_URL}>Nummer holen</a>
+          <a class="site-footer__link" href={LOGIN_URL}>{T.getNumber}</a>
           {legal.map((item) => (
             <a class="site-footer__link" href={item.href}>{item.label}</a>
           ))}
           <!-- Oeffentliche Support-Seite (Hilfe, Daten, Trennen des Connectors); Beschriftung
                in DE und EN gleich, darum keine Uebersetzung. -->
           <a class="site-footer__link" href="/support">Support</a>
-          <a class="site-footer__link" href={`mailto:${CONTACT}`}>Kontakt</a>
-          <button class="site-footer__link" type="button" data-consent-open>Cookie-Einstellungen</button>
+          <a class="site-footer__link" href={`mailto:${CONTACT}`}>{T.contact}</a>
+          <button class="site-footer__link" type="button" data-consent-open>{T.cookies}</button>
         </span>
       </footer>
     </div>
-    <CookieConsent />
+    <CookieConsent lang={lang} />
     <AnalyticsSlot />
   </body>
 </html>
