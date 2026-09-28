@@ -10,6 +10,10 @@
 //   eine Zeile; Handy: zwei Zeilen (drei Rechtstexte oben, Kuendigen/Support unten).
 // - Darunter die zwei Handlungen, die kein Inhalt im Blatt sind: Kontakt (mailto)
 //   und Cookie-Einstellungen (oeffnet die Einwilligungs-Karte, scripts/consent.js).
+// infoTabs[].label ist {en, de}: der Kuendigungs-Wortlaut ist eine benannte Konstante
+// (lib/subscribe.js), kein Woerterbuch-Wert - BiText zeigt die Fassung zur Seitensprache.
+import BiText from "./site/BiText.astro";
+
 const { legalDocs, infoTabs, contact } = Astro.props;
 ---
 
@@ -19,7 +23,7 @@ const { legalDocs, infoTabs, contact } = Astro.props;
       <button class="legal-pill" type="button" data-legal-pill={entry.slug} data-i18n={entry.i18n}>{entry.label}</button>
     ))}
     {infoTabs.map((entry) => (
-      <button class="legal-pill legal-pill--info" type="button" data-legal-pill={entry.slug}>{entry.label}</button>
+      <button class="legal-pill legal-pill--info" type="button" data-legal-pill={entry.slug}><BiText {...entry.label} /></button>
     ))}
   </div>
   <div class="legal-more">
