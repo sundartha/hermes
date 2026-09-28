@@ -1,0 +1,40 @@
+{
+  "metaTitle": "Imprint — Sundartha Hermes",
+  "metaDescription": "Provider identification and contact details for Sundartha Hermes.",
+  "eyebrow": "Legal",
+  "title": "Imprint",
+  "sections": [
+    {
+      "heading": "Provider",
+      "text": "Sundartha — provider of the Hermes phone assistant. [OPEN: full company name including legal form] [OPEN: address for service of process — street, house number, postal code, city, country]"
+    },
+    {
+      "heading": "Represented by",
+      "text": "[OPEN: name of the person(s) authorized to represent the company — for a company, the managing director(s); for a sole proprietorship, the owner]"
+    },
+    {
+      "heading": "Contact",
+      "text": "Email: kontakt@sundartha.com. Enquiries about contracts, billing, and data protection can be sent to this address. [OPEN: operator's phone number (E.164 format, e.g. +49 …) — Section 5(1) No. 2 of the German Digital Services Act (DDG) requires, in addition to the email address, a means of enabling fast and direct communication; the assigned Hermes phone number is not suitable for this because the assistant answers calls made to it.]"
+    },
+    {
+      "heading": "Register entry",
+      "text": "[OPEN: register court and registration number (e.g. \"Amtsgericht …, HRB …\") — mandatory for a GmbH, UG, OHG, KG, or registered merchant (eingetragener Kaufmann). If there is no registration (sole proprietorship, GbR), this section is omitted entirely.]"
+    },
+    {
+      "heading": "VAT identification number",
+      "text": "[OPEN: either the VAT identification number under Section 27a of the German VAT Act (UStG) (format DE + 9 digits) — or, if none has been issued, the statement \"No VAT identification number has been issued.\"; if the small business regulation under Section 19 UStG applies, additionally: \"No VAT is charged pursuant to Section 19 UStG.\"]"
+    },
+    {
+      "heading": "Responsible for content",
+      "text": "This website does not contain journalistic-editorial content (no blog, no news section); a separate statement under Section 18(2) of the German Interstate Media Treaty (MStV) is therefore not currently required. Responsibility for the content of these pages lies with the provider named above, represented by the person named under \"Represented by\"."
+    },
+    {
+      "heading": "Consumer dispute resolution",
+      "text": "We are not willing and not obliged to participate in dispute resolution proceedings before a consumer arbitration board (Section 36 of the German Consumer Dispute Resolution Act, VSBG). The European Commission's Online Dispute Resolution platform was discontinued on 20 July 2025; a reference to it is therefore omitted."
+    },
+    {
+      "heading": "Note on this text",
+      "text": "This draft is derived from the service's actual behavior and does not replace legal advice. As long as the details marked above are missing, this page does not fully satisfy the provider identification requirements of Section 5 of the German Digital Services Act (DDG)."
+    }
+  ]
+}
