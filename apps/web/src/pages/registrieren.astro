@@ -9,6 +9,7 @@
 // Texte wortgleich aus der Vorfassung übernommen — nur die Hülle ist neu.
 import Hermes from "../layouts/Hermes.astro";
 import { LOGIN_URL } from "../lib/routes.js";
+import { homeHref } from "../lib/home-anchors.js";
 
 const steps = [
   {
@@ -42,7 +43,7 @@ const steps = [
   </p>
   <div class="doc-actions">
     <a class="btn-solid" href={LOGIN_URL}>Sign in now</a>
-    <a class="btn-ghost" href="/preise">View pricing</a>
+    <a class="btn-ghost" href={homeHref("preise")}>View pricing</a>
   </div>
 
   <div class="doc-block doc-steps">

@@ -12,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { anchorFromHash } from "../src/lib/home-anchors.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST_DIR = join(WEB_ROOT, "dist-test-links");
@@ -46,8 +47,14 @@ const PAGES = [
   "kuendigen/index.html",
 ];
 
-// Gilt eine interne Route als existent? (gebauter Pfad pro href-Ziel)
+// Gilt eine interne Route als existent? (gebauter Pfad pro href-Ziel). Ein Anker ist
+// nur auf der Startseite erlaubt und nur auf eine echte Ebene (lib/home-anchors.js,
+// die Skripte der Startseite springen dorthin) - sonst waere es ein toter Anker.
 function routeExists(href) {
+  const [path, anchor] = href.split("#");
+  if (anchor !== undefined) {
+    return path === "/" && anchorFromHash(anchor) !== null && routeExists("/");
+  }
   if (href === "/") return existsSync(join(DIST_DIR, "index.html"));
   const clean = href.replace(/^\//, "").replace(/\/$/, "");
   return (

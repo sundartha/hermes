@@ -2,6 +2,7 @@
 // Marketing: 404 (SSG). Gestylte Fehlerseite im Marken-Look mit Rückweg.
 // Sprache und Rückwege wie in der Vorfassung — nur die Hülle ist neu.
 import Hermes from "../layouts/Hermes.astro";
+import { homeHref } from "../lib/home-anchors.js";
 ---
 
 <Hermes
@@ -18,6 +19,6 @@ import Hermes from "../layouts/Hermes.astro";
   </p>
   <div class="doc-actions">
     <a class="btn-solid" href="/">To the homepage</a>
-    <a class="btn-ghost" href="/so-funktionierts">How it works</a>
+    <a class="btn-ghost" href={homeHref("so-funktionierts")}>How it works</a>
   </div>
 </Hermes>

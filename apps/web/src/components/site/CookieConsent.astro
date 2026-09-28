@@ -12,9 +12,8 @@
 //
 // Verhalten: scripts/consent.js. Kein Inline-Style, kein Inline-Script — die
 // Produktions-CSP (default-src 'self') laesst beides nicht zu. Startet mit
-// `hidden`; consent.js zeigt die Karte ungefragt nur, wenn noch keine
-// Entscheidung gespeichert ist UND ein gesperrtes Skript auf Einwilligung wartet
-// (sonst nur ueber [data-consent-open]).
+// `hidden`; consent.js zeigt die Karte ungefragt, solange noch keine Entscheidung
+// gespeichert ist (erster Besuch), danach nur ueber [data-consent-open].
 //
 // data-consent-log: Ziel des Einwilligungs-Protokolls (lib/routes.js). Absolut auf
 // den Gateway — die CSP der Static Site muss diesen Origin in connect-src fuehren
@@ -22,9 +21,10 @@
 import "../../styles/consent.css";
 import { COOKIE_CONSENT_URL } from "../../lib/routes.js";
 
-// placement="hero": die Startseite (Ein-Screen-Hero). Nur dort weicht die Karte im
-// gestapelten Hochformat nach oben ueber das Bild aus (styles/consent.css); auf den
-// scrollenden Unterseiten stuende oben die Ueberschrift.
+// placement="hero": die Startseite. Nur dort weicht die Karte am Handy und im
+// gestapelten Hochformat nach oben ueber das Bild aus (styles/consent.css) - Hero-
+// Ueberschrift, Text und Buttons stehen unten und bleiben frei. Auf den scrollenden
+// Unterseiten stuende oben die Ueberschrift, dort bleibt sie unten.
 const { lang = "de", placement = "page" } = Astro.props;
 
 // Werte mit Inline-HTML (&amp;, <a>) werden per set:html gesetzt, damit sie
@@ -70,8 +70,7 @@ const c = TEXT[lang === "en" ? "en" : "de"];
   <section class="consent__card" role="dialog" aria-labelledby="consent-title" aria-describedby="consent-text" tabindex="-1">
     <h2 class="consent__title" id="consent-title" data-i18n="ckTitle" set:html={c.title}></h2>
     <p class="consent__text" id="consent-text" data-i18n="ckText" set:html={c.text}></p>
-    <!-- "Einstellungen" steht hinter dem Text (Handy: im Textfluss, Desktop: oben
-         rechts in der Titelzeile) - so braucht die Karte keine eigene Zeile dafuer. -->
+    <!-- "Einstellungen" steht oben rechts in der Titelzeile (styles/consent.css) - keine eigene Zeile. -->
     <button class="consent__link" type="button" data-consent-action="prefs" aria-expanded="false" aria-controls="consent-prefs" data-i18n="ckSettings">{c.settings}</button>
 
     <div class="consent__prefs" id="consent-prefs" data-consent-prefs hidden>

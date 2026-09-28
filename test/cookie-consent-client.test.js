@@ -1,6 +1,6 @@
 // Cookie-Einwilligung, Browser-Seite: die reinen Entscheidungen aus
-// apps/web/src/scripts/consent-core.js (Widerruf -> Neuladen, Banner nur bei
-// einwilligungspflichtigem Dienst, Kennung und Protokoll-Nutzlast) sowie die
+// apps/web/src/scripts/consent-core.js (Widerruf -> Neuladen, Banner beim ersten
+// Besuch, Kennung und Protokoll-Nutzlast) sowie die
 // Naht zum Gateway (Pfad-Spiegel + CSP connect-src der Static Site).
 // Offline, kein DOM, kein Build.
 import { test } from "node:test";
@@ -24,7 +24,6 @@ const ID = "3f2b8c1e-9a4d-4c6b-8e2f-1a2b3c4d5e6f";
 const OTHER_ID = "0b6f1d2c-3e4a-4b5c-9d6e-7f8091a2b3c4";
 const ALL = Object.freeze({ statistics: true, marketing: true });
 const NONE = Object.freeze({ statistics: false, marketing: false });
-const GATED_ONE = 1;
 
 const consentWith = (choice, previous = null) =>
   buildConsent({ choice, previous, id: ID, now: NOW });
@@ -90,14 +89,20 @@ test("needsReload: Widerruf einer Kategorie mit LAUFENDEM Skript laedt neu, sons
   assert.equal(needsReload({ previous: null, next, activated: new Set(["statistics"]) }), false);
 });
 
-test("shouldPrompt: Banner ungefragt nur ohne Entscheidung UND mit wartendem Dienst", () => {
-  assert.equal(shouldPrompt({ consent: null, gatedScripts: GATED_ONE }), true);
+// Owner-Entscheidung 2026-09-27: beim ersten Besuch kommt die Abfrage immer - auch
+// wenn heute nur Notwendiges laeuft. Nach der Wahl fragt die Seite nicht erneut.
+test("shouldPrompt: Banner ungefragt genau dann, wenn noch keine Entscheidung vorliegt", () => {
+  assert.equal(shouldPrompt({ consent: null }), true, "erster Besuch -> fragen");
   assert.equal(
-    shouldPrompt({ consent: null, gatedScripts: 0 }),
+    shouldPrompt({ consent: consentWith(NONE) }),
     false,
-    "nichts einwilligungspflichtig -> nichts fragen",
+    "abgelehnt -> nicht erneut fragen",
   );
-  assert.equal(shouldPrompt({ consent: consentWith(NONE), gatedScripts: GATED_ONE }), false);
+  assert.equal(
+    shouldPrompt({ consent: consentWith(ALL) }),
+    false,
+    "zugestimmt -> nicht erneut fragen",
+  );
 });
 
 // ---- Naht zum Gateway ---------------------------------------------------------------

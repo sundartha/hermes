@@ -34,6 +34,9 @@ import "../styles/hermes-mobile-scroll.css";
 // Handy-Fassung (< 768 px) nach design/handoff-mobile: eigene Screens, am
 // Desktop display:none. Als letzter Import, damit sie die Buehne dort ausblendet.
 import MobileHome from "../components/MobileHome.astro";
+import LegalTabs from "../components/LegalTabs.astro";
+import CancelInfo from "../components/site/CancelInfo.astro";
+import SupportInfo from "../components/site/SupportInfo.astro";
 import privacy from "../data/legal/privacy.de.json";
 import imprint from "../data/legal/imprint.de.json";
 import terms from "../data/legal/terms.de.json";
@@ -58,6 +61,15 @@ const legalDocs = [
   { slug: "privacy", href: "/datenschutz", label: "Privacy", i18n: "privacy", doc: privacy },
   { slug: "imprint", href: "/impressum", label: "Imprint", i18n: "imprint", doc: imprint },
   { slug: "terms", href: "/agb", label: "Terms", i18n: "terms", doc: terms },
+];
+// Kuendigen und Support als weitere Reiter im Blatt (Owner-Wunsch 2026-09-27): sie
+// oeffnen sich IM Blatt, die Reiterleiste bleibt stehen - vorher fuehrten die Links
+// auf eigene Seiten, von denen aus die anderen Texte nicht mehr zu sehen waren. Die
+// Seiten bleiben unter ihrer URL (§ 312k BGB, Support-URL). Beschriftung fest: der
+// Kuendigungs-Wortlaut bleibt deutsch, "Support" ist in DE und EN gleich.
+const infoTabs = [
+  { slug: "cancel", href: "/kuendigen", label: "Verträge kündigen" },
+  { slug: "support", href: "/support", label: "Support" },
 ];
 ---
 
@@ -317,9 +329,9 @@ const legalDocs = [
                    Fussband. KEIN data-i18n - die Beschriftung bleibt Deutsch, auch wenn
                    der Sprachschalter auf EN steht (der Wortlaut ist nicht frei waehlbar,
                    s. Bericht). -->
-              <a class="site-footer__link" href="/kuendigen">Verträge kündigen</a>
-              <!-- Support-Seite: Beschriftung in DE und EN gleich, darum KEIN data-i18n. -->
-              <a class="site-footer__link" href="/support">Support</a>
+              <a class="site-footer__link" href="/kuendigen" data-legal-open="cancel">Verträge kündigen</a>
+              <!-- Support: Beschriftung in DE und EN gleich, darum KEIN data-i18n. Oeffnet wie Kuendigen den Reiter im Rechts-Blatt. -->
+              <a class="site-footer__link" href="/support" data-legal-open="support">Support</a>
               <a class="site-footer__link" href={`mailto:${CONTACT}`} data-i18n="contact">Contact</a>
               <button class="site-footer__link" type="button" data-consent-open data-i18n="cookieSettings">Cookie settings</button>
             </span>
@@ -528,12 +540,10 @@ const legalDocs = [
           {legalDocs.map((entry) => (
             <span class="legal-title" data-legal-doc={entry.slug} hidden={entry.slug !== "privacy"}>{entry.doc.title}</span>
           ))}
-          <div class="legal-pills">
-            {legalDocs.map((entry) => (
-              <button class="legal-pill" type="button" data-legal-pill={entry.slug} data-i18n={entry.i18n}>{entry.label}</button>
-            ))}
-            <a class="legal-pill" href={`mailto:${CONTACT}`} data-i18n="contact">Contact</a>
-          </div>
+          {infoTabs.map((entry) => (
+            <span class="legal-title" data-legal-doc={entry.slug} hidden>{entry.label}</span>
+          ))}
+          <LegalTabs legalDocs={legalDocs} infoTabs={infoTabs} contact={CONTACT} />
         </div>
         {legalDocs.map((entry) => (
           <div data-legal-doc={entry.slug} hidden={entry.slug !== "privacy"}>
@@ -550,6 +560,12 @@ const legalDocs = [
             </p>
           </div>
         ))}
+        <div class="legal-info" data-legal-doc="cancel" hidden>
+          <CancelInfo />
+        </div>
+        <div class="legal-info" data-legal-doc="support" hidden>
+          <SupportInfo inSheet />
+        </div>
       </div>
     </div>
 
@@ -591,9 +607,9 @@ const legalDocs = [
           ))}
           <!-- § 312k BGB: derselbe gesetzlich vorgegebene Wortlaut wie im Fussband oben,
                KEIN data-i18n (s. dort). -->
-          <a class="menu-foot__link" href="/kuendigen">Verträge kündigen</a>
-          <!-- Support-Seite wie im Fussband oben, KEIN data-i18n (s. dort). -->
-          <a class="menu-foot__link" href="/support">Support</a>
+          <a class="menu-foot__link" href="/kuendigen" data-legal-open="cancel">Verträge kündigen</a>
+          <!-- Support wie im Fussband oben, KEIN data-i18n (s. dort). -->
+          <a class="menu-foot__link" href="/support" data-legal-open="support">Support</a>
           <a class="menu-foot__link" href={`mailto:${CONTACT}`} data-i18n="contact">Contact</a>
           <button class="menu-foot__link" type="button" data-consent-open data-i18n="cookieSettings">Cookie settings</button>
         </div>

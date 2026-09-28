@@ -22,9 +22,9 @@
  * Widerruf: ein bereits geladenes Skript laesst sich nicht entladen. Wird eine
  * Kategorie widerrufen, deren Skript auf der Seite schon laeuft, laedt die Seite neu.
  *
- * Der Banner erscheint ungefragt nur, wenn auf der Seite ein gesperrtes Skript auf
- * Einwilligung wartet. Ohne solchen Dienst gibt es nichts zu fragen; ueber
- * "Cookie-Einstellungen" laesst er sich trotzdem jederzeit oeffnen.
+ * Der Banner erscheint ungefragt, solange keine Entscheidung gespeichert ist (erster
+ * Besuch, Owner-Entscheidung 2026-09-27); danach jederzeit ueber
+ * "Cookie-Einstellungen".
  *
  * Astro buendelt diese Datei als externes, same-origin Modul (assetsInlineLimit
  * 0) — damit CSP-konform ohne script-src 'unsafe-inline'.
@@ -220,9 +220,7 @@ function init() {
   const consent = readConsent();
   if (consent) {
     announce(consent);
-  } else if (
-    shouldPrompt({ consent, gatedScripts: document.querySelectorAll(GATED_SELECTOR).length })
-  ) {
+  } else if (shouldPrompt({ consent })) {
     open(false);
   }
 }
