@@ -9,8 +9,8 @@
 ## Pages
 
 - [Home](https://sundartha.com/): what Hermes does, pricing, developer setup (English, German toggle).
-- [How it works (German)](https://sundartha.com/so-funktionierts)
-- [Pricing (German)](https://sundartha.com/preise)
+- [How it works](https://sundartha.com/#so-funktionierts): section of the home page.
+- [Pricing](https://sundartha.com/#preise): section of the home page.
 - [Privacy policy (German)](https://sundartha.com/datenschutz)
 - [Imprint (German)](https://sundartha.com/impressum)
 - [Terms (German)](https://sundartha.com/agb)
