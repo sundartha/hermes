@@ -110,17 +110,6 @@
       "count": 7
     }
   },
-  "apps/web/src/scripts/hermes-scroll.js": {
-    "complexity": {
-      "count": 2
-    },
-    "id-length": {
-      "count": 14
-    },
-    "no-magic-numbers": {
-      "count": 60
-    }
-  },
   "apps/web/test/api.test.js": {
     "id-length": {
       "count": 17
@@ -140,11 +129,6 @@
   "apps/web/test/links.test.js": {
     "no-restricted-properties": {
       "count": 5
-    }
-  },
-  "apps/web/test/pages.test.js": {
-    "no-magic-numbers": {
-      "count": 3
     }
   },
   "apps/web/test/plans.test.js": {
