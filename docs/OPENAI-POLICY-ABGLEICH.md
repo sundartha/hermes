@@ -272,7 +272,7 @@ nie gemessen.
     `allowLookup` (`src/research/in-call.js:55`); nur ausgehende Anrufe
     (`src/research/in-call.js:51`, Sprach-Agenten-Weg `src/research/registry.js:97`); auf dem
     Budget-/Telnyx-Weg zusaetzlich der Assistenten-Kontext (`src/research/in-call.js:50`).
-    Das Profil der bezahlten Tarife traegt das Recht im Code nicht (`src/plans.js:138`), das
+    Das Profil der bezahlten Tarife traegt das Recht im Code nicht (`src/plans.js:143`), das
     Profil des Betreiber-Mandanten schon (`src/store/defaults.js:1062`); welche gespeicherten
     Profile es in Produktion tragen, ist hier nicht gemessen. Anbieter ist Exa
     (`src/research/registry.js:34`), hoechstens zwei Suchen je Anruf
@@ -282,7 +282,7 @@ nie gemessen.
     (`src/research/lookup-guard.js:66-74`) verwirft Anfragen mit Ziffernfolgen ab fuenf
     Stellen (`src/research/lookup-guard.js:25`), mit E-Mail-Adressen, mit der Zielnummer oder
     mit woertlichen Zitaten aus dem Transkript, und kuerzt auf 120 Zeichen
-    (`src/research/lookup-guard.js:20`). Einen Namensfilter hat er nicht (`src/plans.js:125`),
+    (`src/research/lookup-guard.js:20`). Einen Namensfilter hat er nicht (`src/plans.js:130`),
     Gesundheits- oder Geldbegriffe prueft er nicht. Umschriebene Aussagen des Angerufenen
     koennen also an Exa gehen. Auf dem Sprach-Agenten-Weg schreibt der Server das Transkript
     erst nach dem Anruf (`src/elevenlabs/outbound.js:1075`); der Zitat-Filter vergleicht nur
@@ -819,7 +819,7 @@ bestehende Durchsetzung.
    `src/routes/api-calls.js:500`); (b) Nachschlag im Anruf: bei eingeschaltetem Nachschlag
    gehen vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech mit dem Angerufenen an
    Exa, gefiltert nur nach Ziffernfolgen, E-Mail, Zielnummer und woertlichem Zitat, ohne
-   Namensfilter (`src/research/lookup-guard.js:66-74`, `src/plans.js:125`).
+   Namensfilter (`src/research/lookup-guard.js:66-74`, `src/plans.js:130`).
    Klausel: "If a tool sends data outside the current environment ..., this must be clear
    from the tool definition."
    Ziel: bewusst nicht umgesetzt: die Beschreibungen von `place_call` und `prepare_call`
@@ -1023,14 +1023,14 @@ src/research/in-call.js:55 | allowLookup === true
 src/research/in-call.js:51 | if (call.direction !== "outbound") return null;
 src/research/registry.js:97 | if (call?.direction !== "outbound") return null;
 src/research/in-call.js:50 | assistantContextEnabled !== true
-src/plans.js:138 | allowLookup: false,
+src/plans.js:143 | allowLookup: false,
 src/store/defaults.js:1062 | allowLookup: true
 src/research/registry.js:34 | IN_CALL_PROVIDER = RESEARCH_PROVIDER.EXA_SEARCH
 src/research/registry.js:68 | export const LOOKUP_MAX_PER_CALL = 2;
 src/research/lookup-guard.js:66-74 | export function sanitizeLookupQuery(query, call)
 src/research/lookup-guard.js:25 | LOOKUP_DIGIT_RUN_MAX = 4
 src/research/lookup-guard.js:20 | LOOKUP_QUERY_MAX_CHARS = 120
-src/plans.js:125 | hat aber KEINEN Namensfilter
+src/plans.js:130 | hat aber KEINEN Namensfilter
 src/elevenlabs/outbound.js:1075 | store.addTranscript(callId, roleOf(zeile.role), zeile.message)
 src/utils/text.js:58-61 | entry?.role === "caller"
 src/web-auth.js:461-462 | firstName: user.first_name
