@@ -17,13 +17,61 @@ jobs:
           # gitleaks braucht die volle Historie (push: Commit-Diff; pull_request: PR-Commits).
           fetch-depth: 0
       # Secret-Scan zuerst (fail-early): bricht ab, BEVOR npm ci / Tests / Audit
-      # laufen. Liest gitleaks.toml (extend Default-Ruleset + Pfad-Allowlist);
-      # ohne GITLEAKS_CONFIG wuerde gitleaks nur .gitleaks.toml automatisch finden.
+      # laufen. Liest gitleaks.toml (extend Default-Ruleset + Pfad-Allowlist).
+      #
+      # gitleaks laeuft hier als Programm, NICHT ueber gitleaks/gitleaks-action:
+      # Die Action verlangt fuer Repos einer Organisation eine Lizenz als Secret
+      # (GITLEAKS_LICENSE), seit dem Umzug nach sundartha/ brach sie deshalb jeden
+      # Lauf ab. Das Programm selbst ist MIT-lizenziert und braucht weder Lizenz
+      # noch Secret (Soll-Zustand des Repos: 0 Actions-Secrets).
+      #
+      # Version fest gepinnt + SHA-256 aus gitleaks_<version>_checksums.txt des
+      # offiziellen Releases: eine manipulierte oder ausgetauschte Datei bricht
+      # den Schritt ab, statt ungeprueft zu laufen. Update: GITLEAKS_VERSION und
+      # GITLEAKS_SHA256 zusammen aendern; die Default-Rulesets sind
+      # versionsabhaengig, gitleaks.toml ist gegen 8.30.1 verifiziert.
+      #
+      # Gescannt werden wie bei der Action nur die NEUEN Commits dieses Push bzw.
+      # PR, nicht die ganze Historie. Ein Voll-Scan (Stand 2026-09-28: 49 Treffer)
+      # findet ausschliesslich Test-Fixtures, Doku-Text und ElevenLabs-secret_id-
+      # Verweise (keine echten Secrets) und waere dauerhaft rot.
       - name: Secret-Scan (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: ${{ github.workspace }}/gitleaks.toml
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          archiv="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$archiv" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archiv"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archiv" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archiv" -C "$RUNNER_TEMP" gitleaks
+          # Commit-Bereich bestimmen:
+          #  - PR: alle Commits zwischen Basis und PR-Kopf
+          #  - Push: alle Commits seit dem vorherigen Stand des Branches
+          #  - neuer Branch oder Force-Push (vorheriger Stand unbekannt): alle
+          #    Commits, die noch nicht auf dem Default-Branch liegen
+          #  - sonst (z. B. erster Push auf den Default-Branch): nur der letzte Commit
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            bereich="$PR_BASE..$PR_HEAD"
+          elif [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ] \
+               && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+            bereich="$PUSH_BEFORE..$PUSH_AFTER"
+          elif [ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ] \
+               && git rev-parse -q --verify "origin/$DEFAULT_BRANCH" >/dev/null; then
+            bereich="origin/$DEFAULT_BRANCH..$PUSH_AFTER"
+          else
+            bereich="-1 $PUSH_AFTER"
+          fi
+          echo "gitleaks $GITLEAKS_VERSION scannt: $bereich"
+          "$RUNNER_TEMP/gitleaks" git --config gitleaks.toml --redact --verbose --no-banner \
+            --exit-code 1 --log-opts="--no-merges $bereich" .
       - uses: actions/setup-node@v4
         with:
           node-version: 22
