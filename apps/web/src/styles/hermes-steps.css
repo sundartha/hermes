@@ -366,11 +366,6 @@
 .hg--sheet {
   grid-template-columns: minmax(0, 1fr);
 }
-@media (max-width: 899px) {
-  .hg--page {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 
 /* ------------------------------------------------ Kompakte Zeilen
    Nur schmale DESKTOP-Fenster (Split Screen, Owner 2026-09-26: Stichpunkte in
