@@ -1,128 +1,75 @@
-# CI (PLAN-SECURITY Phase 3.4): Secret-Scan + Syntax-Check + Tests+Coverage +
-# Dependency-Audit bei jedem Push und Pull-Request. Die Pipeline scheitert bei
-# geleaktem Secret, rotem Test, unterschrittener Coverage-Schwelle oder
-# High-Severity-Finding.
 name: CI
-# pull_request zusaetzlich zu push: liefert den Status-Check "test" auf PRs, den
-# die Branch-Protection als required check erzwingt (kein Merge bei rotem Check).
-# Einrichtung des Gates: docs/RUNBOOK-BRANCH-PROTECTION.md
-on: [push, pull_request]
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
+  ci:
+    name: CI
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          # gitleaks braucht die volle Historie (push: Commit-Diff; pull_request: PR-Commits).
           fetch-depth: 0
-      # Secret-Scan zuerst (fail-early): bricht ab, BEVOR npm ci / Tests / Audit
-      # laufen. Liest gitleaks.toml (extend Default-Ruleset + Pfad-Allowlist);
-      # ohne GITLEAKS_CONFIG wuerde gitleaks nur .gitleaks.toml automatisch finden.
-      - name: Secret-Scan (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: ${{ github.workspace }}/gitleaks.toml
-      - uses: actions/setup-node@v4
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - name: Syntax-Check
+
+      - name: Workflows prüfen
+        run: node tools/workflows-pruefen.mjs
+
+      - name: Secret-Scan
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
         run: |
-          # Rekursiv UND inklusive .mjs. Der alte Glob "src/*.js scripts/*.js" erfasste
-          # 67 von 263 Dateien: keine einzige aus src/store, src/routes, src/telephony,
-          # src/elevenlabs (Unterverzeichnisse) und keine der 20 .mjs unter scripts.
-          # xargs statt -exec, damit ein Syntaxfehler den Schritt auch wirklich rot macht
-          # (find -exec schluckt den Rueckgabewert).
+          set -euo pipefail
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archive"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" gitleaks
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="$PR_BASE_SHA..$PR_HEAD_SHA"
+          else
+            range="$PUSH_BEFORE_SHA..$PUSH_SHA"
+          fi
+          echo "gitleaks $GITLEAKS_VERSION scannt $range"
+          "$RUNNER_TEMP/gitleaks" git --config gitleaks.toml --redact --verbose --no-banner \
+            --exit-code 1 --log-opts="$range" .
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Syntax
+        run: |
           find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
             | xargs -0 -n1 node --check
-      - name: Lint (eslint, blockierend)
-        run: npm run lint
-      # Vor-dem-Hochladen-Gate fuer die ElevenLabs-Testdefinitionen
-      # (scripts/check-elevenlabs-tests.js): Registry-Kopplung, Platzhalter,
-      # Variablen-Vokabular. Ein Gate, das nur wirkt, wenn ein Mensch das
-      # Kommando tippt, schuetzt nichts - deshalb laeuft es hier bei jedem Push.
-      #
-      # continue-on-error, weil der Lauf heute mit exit 1 endet: vier
-      # <AUSFUELLEN: ...>-Platzhalter in a3-keine-ueberfluessige-rueckfrage.json
-      # und a5-recherche-ohne-erfindung-tool.json warten auf Werte, die erst mit
-      # dem ElevenLabs-Agents-Abo entstehen (Tool-IDs, elevenlabs/tests/README.md,
-      # Abschnitt "WARNUNG vor dem ersten Lauf"). Blockierend waere der Schritt
-      # heute rot auf jedem Push und damit binnen einer Woche abgeschaltet.
-      #
-      # SOBALD DIESE VIER PLATZHALTER AUFGELOEST SIND: continue-on-error hier
-      # entfernen. Ab dann ist jeder Fund ein Push-Blocker - genau dafuer
-      # existiert das Gate, denn hochgeladen wird nur, was fehlerfrei ist.
-      - name: ElevenLabs-Testdefinitionen (informativ, blockiert den Build NICHT)
-        run: npm run elevenlabs:check
-        continue-on-error: true
-      # Drift-Gate zwischen der Repo-Vorlage (elevenlabs/agent_configs/outbound-
-      # agent.template.json) und dem LIVE-Agenten bei ElevenLabs
-      # (scripts/check-elevenlabs-drift.mjs, npm run elevenlabs:drift). Auftrag
-      # Phase 2, TEIL 3: blockierend, KEIN continue-on-error - anders als beim
-      # ElevenLabs-Testdefinitionen-Schritt darueber. Bewusst ausgenommene
-      # Abweichungen (Feld "ausgenommen" mit Grund+Datum) blockieren seit
-      # Phase 2 TEIL 2 ohnehin nicht mehr (exit 0), bleiben in der Ausgabe aber
-      # sichtbar - ein continue-on-error waere hier also KEIN Kompromiss fuer
-      # eine bekannte Ausnahme, sondern ein Deckmantel fuer JEDE kuenftige
-      # Abweichung, auch eine ungewollte.
-      #
-      # DER LAUF BRAUCHT EINEN API-SCHLUESSEL (ELEVENLABS_API_KEY), UM DEN
-      # LIVE-AGENTEN ZU LESEN. Befund bei Einfuehrung dieses Schritts
-      # (2026-08-15): weder im Fork-Repo noch im Upstream-Repo ist ein
-      # entsprechendes Secret hinterlegt (gh secret list liefert fuer beide
-      # eine leere Liste) - ein blockierender Schritt, der IMMER am fehlenden
-      # Schluessel scheitert, waere schlimmer als der vorherige Zustand (gar
-      # kein Schritt). Deshalb: ohne Secret wird laut und sichtbar
-      # UEBERSPRUNGEN (::warning:: + exit 0, der Job bleibt gruen); ist das
-      # Secret gesetzt, blockiert der Schritt bei jeder nicht ausgenommenen
-      # Abweichung. Der Schluessel wird nur als Env-Variable durchgereicht,
-      # nie geloggt oder ausgegeben (CLAUDE.md Regel 4).
-      - name: ElevenLabs-Konfigurationsdrift gegen den Live-Agenten (blockierend)
-        env:
-          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-        run: |
-          if [ -z "$ELEVENLABS_API_KEY" ]; then
-            echo "::warning::[elevenlabs:drift] UEBERSPRUNGEN - kein ELEVENLABS_API_KEY-Secret in diesem Repo hinterlegt. Ohne Schluessel ist der Live-Agent nicht lesbar; dieser Schritt blockiert deshalb NICHT, wenn das Secret fehlt. Sobald das Secret gesetzt ist, blockiert er bei jeder nicht ausgenommenen Abweichung gegen elevenlabs/agent_configs/outbound-agent.template.json."
-            exit 0
-          fi
-          npm run elevenlabs:drift
-      # Coverage-Gate ersetzt den reinen Test-Lauf (kein Doppellauf): node --test fuehrt
-      # ohnehin alle Tests aus und bricht zusaetzlich mit exit 1 ab, sobald eine Schwelle
-      # reisst. Schwellen kalibriert am schwellenlosen Lauf auf node 22 (= CI-Runtime,
-      # 2026-06-19): gemessen lines 86.5 / branches 91.3 / funcs 82.3 -> Schwelle = gemessen-5,
-      # abgerundet auf lines 81 / funcs 77 / branches 86 (konservativ, Ratchet: spaeter
-      # anheben). Node-Coverage ist versionsabhaengig
-      # (node 24 misst hier ~15 Punkte niedriger) -> Schwellen bewusst gegen die CI-Major
-      # (22) geankert, nicht gegen die lokale node-Version.
-      #
-      # Laeuft ueber denselben Wrapper wie "npm test" (test/testbaenke-run.mjs regression),
-      # zusaetzliche node --test-Flags nach dem "--"-Trenner durchgereicht (G5: die
-      # Invocation - Flag-Name, Glob, Modus - steht damit an EINER Stelle, nicht hier UND im
-      # Wrapper dupliziert). Das klammert den i18n-Launch-Testkatalog UND die Abnahmekriterien
-      # aus (Muster aus package.json config.i18nCatalogPattern bzw. config.abnahmePattern, EINE
-      # Quelle fuer npm test/test:gates/test:abnahme/CI): beide Baenke enthalten gewollt rote
-      # Befunde - offene Launch-Gates (PLAN-I18N-TESTS.md 4.1) bzw. offene Rueckstandsposten
-      # des Umstiegs -, kein Regressionsfang, und rissen diese Schwelle sonst bei jedem Push.
-      # Die Coverage-Differenz Regressionslauf vs. Volllauf ist dabei vernachlaessigbar (lokal
-      # node 26 gemessen, 2026-07-25: lines -0.07 / branches -0.08 / funcs -0.03 Punkte -
-      # weit innerhalb der 5-Punkte-Marge der Schwellen oben).
-      - name: Coverage-Gate (unterschrittene Schwelle bricht den Build)
-        run: |
-          NODE_ENV=test node test/testbaenke-run.mjs regression -- \
-            --experimental-test-coverage \
-            --test-coverage-lines=81 --test-coverage-functions=77 --test-coverage-branches=86
-      # Eigener, ausdruecklich NICHT blockierender Schritt fuer den i18n-Launch-Testkatalog:
-      # "Kein roter Test in diesem Katalog ist ein Regressionsfang; alle sind Launch-Gates"
-      # (PLAN-I18N-TESTS.md 4.1). Rot heisst hier ein offener Produktbefund vor dem
-      # weltweiten Start, nicht ein kaputter Build - deshalb continue-on-error statt eines
-      # weiteren rot-auf-jedem-Push-Schritts. Der Schritt bleibt im Log sichtbar, damit die
-      # sinkende Rot-Zahl (heute: 85 von aktuell 114 Katalogtests) ueber die Zeit
-      # nachvollziehbar bleibt.
-      - name: i18n-Launch-Gates (informativ, blockiert den Build NICHT)
-        run: npm run test:gates
-        continue-on-error: true
-      - name: Dependency-Audit (High-Severity bricht den Build)
+
+      - name: Tests
+        run: npm test
+
+      - name: Audit
         run: npm audit --audit-level=high
