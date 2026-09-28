@@ -25,6 +25,7 @@ import {
 import { PLAN_CATALOG, formatPlanPrice } from "../src/lib/plans.js";
 import { LOGIN_URL } from "../src/lib/routes.js";
 import { homeHref } from "../src/lib/home-anchors.js";
+import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../src/lib/subscribe.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST_DIR = join(WEB_ROOT, "dist-test");
@@ -198,8 +199,9 @@ test("Handy-Startseite: Preise (EN/DE) und Minuten aus dem Katalog", () => {
 
 // Handy-Markup: jede uebersetzbare Stelle traegt ihre deutsche Fassung, kein
 // style-Attribut (CSP style-src 'self'), kein Menue-Knopf mehr (Handoff), und der
-// Wortlaut nach § 312k BGB bleibt deutsch - ohne Uebersetzungs-Attribut.
-test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Link deutsch", () => {
+// Kuendigungs-Link (§ 312k BGB) traegt beide Fassungen aus den benannten Konstanten
+// (lib/subscribe.js) - kein Uebersetzungs-Attribut.
+test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Link je Sprache", () => {
   const html = readDist("index.html");
   const start = html.indexOf("data-mh");
   const mobile = html.slice(start, html.indexOf('class="page"'));
@@ -208,15 +210,17 @@ test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Lin
   assert.ok(!/\sstyle=/.test(mobile), "style-Attribut im Handy-Markup (CSP)");
   assert.ok(!mobile.includes("data-open-sheet"), "Handy-Kopf traegt wieder einen Menue-Knopf");
   assert.ok(
-    mobile.includes('<a class="mh-link" href="/kuendigen" data-legal-open="cancel">Verträge kündigen</a>'),
+    mobile.includes(
+      `<a class="mh-link" href="/kuendigen" data-legal-open="cancel"><span data-lang-only="en">${CANCEL_BUTTON_LABEL_EN}</span><span data-lang-only="de">${CANCEL_BUTTON_LABEL}</span></a>`,
+    ),
     "Kuendigungs-Link im Handy-Fuss fehlt oder traegt eine Uebersetzung",
   );
 });
 
-// P14/GAP-15: der Waechter fuer den Liefertag der englischen Rechtsdokumente.
-// Heute leer-quantifiziert (kein *.en.json vorhanden -> keine gebaute EN-Seite,
-// beide Mengen leer -> gruen). Sobald der Owner Text liefert, muessen genau die
-// gelieferten Slugs gebaut werden und die noindex-/Vorrangklausel-Regel greifen.
+// P14/GAP-15: der Waechter fuer die englischen Rechtsdokumente. Seit 2026-09-28 liegen
+// alle drei als informative Uebersetzung vor (Owner-Wunsch: englische Seite = englische
+// Texte); genau die gelieferten Slugs muessen gebaut sein, und die noindex-/
+// Vorrangklausel-Regel greift.
 test("EN-Rechtsseiten: gebaute Menge entspricht genau den gelieferten *.en.json", () => {
   const deliveredEnSlugs = LEGAL_SLUGS.filter((slug) =>
     existsSync(join(LEGAL_CONTENT_DIR, `${slug}.en.json`)),
