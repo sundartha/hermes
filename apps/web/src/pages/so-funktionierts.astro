@@ -1,44 +1,6 @@
 ---
-// So funktioniert's — ruhende Fassung der zweiten Ebene der Startseite.
-import Hermes from "../layouts/Hermes.astro";
-import HowtoSteps from "../components/HowtoSteps.astro";
-import { LOGIN_URL } from "../lib/routes.js";
-
-const MCP_URL = "https://app.sundartha.com/mcp";
+// /so-funktionierts -> "So funktioniert's"-Ebene der Startseite (Owner-Entscheidung 2026-09-28).
+import HomeRedirect from "../components/site/HomeRedirect.astro";
 ---
 
-<Hermes
-  title="So funktioniert's — Hermes von Sundartha"
-  description="Ein Anschluss über MCP, kein Setup — deine KI ist in unter zwei Minuten unter einer echten Nummer erreichbar."
->
-  <h1 class="doc-title">Ein Anschluss, <em>zwei Minuten</em>.</h1>
-  <p class="doc-lead">
-    Ein Anschluss über <strong>MCP</strong>, kein Setup — deine KI ist in unter
-    zwei Minuten unter einer echten Nummer erreichbar.
-  </p>
-
-  <div class="doc-block">
-    <HowtoSteps variant="page" />
-  </div>
-
-  <div class="doc-block doc-steps">
-    <div class="sheet__card">
-      <span class="dev-card__head">
-        <span class="dev-num">→</span>
-        <span class="dev-card__titles">
-          <span class="dev-eyebrow">Für Entwickler</span>
-          <span class="dev-card__title">Ein Endpoint, zwei Wege</span>
-        </span>
-      </span>
-      <span class="step__text">
-        Hermes ist ein MCP-Server. Trag <span class="dev-field__url">{MCP_URL}</span>
-        als Konnektor im KI-Tool deiner Wahl ein — oder verbinde direkt aus dem
-        Terminal. Streamable HTTP, OAuth beim ersten Verbinden.
-      </span>
-    </div>
-  </div>
-
-  <p class="doc-note">
-    <a href={LOGIN_URL}>Nummer holen</a> und in zwei Minuten telefonieren lassen.
-  </p>
-</Hermes>
+<HomeRedirect anchor="so-funktionierts" label="So funktioniert's" />

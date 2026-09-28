@@ -1,0 +1,35 @@
+---
+// Weiche einer ehemaligen Unterseite auf ihre Ebene der Startseite.
+// Owner-Entscheidung 2026-09-28: /so-funktionierts und /preise fuehren auf die
+// normale Startseite, direkt zur jeweiligen Sektion (Desktop-Halt, Handy-Screen,
+// im Handy-Querformat das Blatt - das erledigt die Startseite ueber den Anker).
+//
+// Die Static Site kann keine Server-Weiterleitung: die routes aus render.yaml
+// greifen dort nicht (Befund 2026-08-26, siehe pages/auth/login.astro). Darum
+// Meta-Refresh - CSP-konform, kein Inline-Script, der Anker bleibt erhalten -
+// plus sichtbarer Link, falls der Browser den Refresh unterdrueckt.
+// noindex + canonical auf die Startseite: reine Weiche, kein eigener Inhalt.
+// Der Hintergrund traegt die Farbe der Startseite, damit nichts weiss aufblitzt.
+import "../../styles/home-redirect.css";
+import { homeHref } from "../../lib/home-anchors.js";
+
+const { anchor, label } = Astro.props;
+const target = homeHref(anchor);
+const canonical = new URL("/", Astro.site);
+---
+
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta http-equiv="refresh" content={`0; url=${target}`} />
+    <link rel="canonical" href={canonical} />
+    <title>{label} — Hermes von Sundartha</title>
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  </head>
+  <body class="home-redirect">
+    <p>Weiter zur Startseite: <a href={target}>{label}</a></p>
+  </body>
+</html>

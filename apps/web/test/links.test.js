@@ -159,7 +159,9 @@ test("Build ist fail-closed: ohne PUBLIC_GATEWAY_URL bricht er ab (kein stiller 
 // Waechter: kein Mehrzahl-Versprechen darf zurueckkommen — weder deutsch noch
 // englisch. Sobald die Seite wieder eine Zahl nennt, muss sie 1 sein.
 test("Pricing verspricht keine Mehrfach-Nummern (Q-ABO: ein Abo = eine Nummer)", () => {
-  const html = readFileSync(join(DIST_DIR, "preise/index.html"), "utf8");
+  // Seit 2026-09-28 steht die Preis-Ebene nur noch auf der Startseite (/preise ist
+  // eine Weiche dorthin); der Waechter prueft darum die Startseite.
+  const html = readFileSync(join(DIST_DIR, "index.html"), "utf8");
   for (const claim of [
     /\b([2-9]|\d{2,})\s+phone numbers?\b/i,
     /\b([2-9]|\d{2,})\s+(Rufnummern|Nummern)\b/i,
