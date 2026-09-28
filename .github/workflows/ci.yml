@@ -12,7 +12,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # gitleaks braucht die volle Historie (push: Commit-Diff; pull_request: PR-Commits).
           fetch-depth: 0
@@ -20,11 +20,11 @@ jobs:
       # laufen. Liest gitleaks.toml (extend Default-Ruleset + Pfad-Allowlist);
       # ohne GITLEAKS_CONFIG wuerde gitleaks nur .gitleaks.toml automatisch finden.
       - name: Secret-Scan (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: ${{ github.workspace }}/gitleaks.toml
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
