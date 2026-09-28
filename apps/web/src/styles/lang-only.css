@@ -1,0 +1,14 @@
+/* Zweisprachige Stellen der Startseite (components/site/BiText.astro, Rechts-Blatt in
+   pages/index.astro): beide Fassungen stehen im HTML, sichtbar ist nur die zu
+   <html lang> passende. Der Sprachschalter (scripts/hermes-scroll.js applyLang) setzt
+   nur das lang-Attribut. Owner-Wunsch 2026-09-28. */
+html[lang="de"] [data-lang-only="en"],
+html:not([lang="de"]) [data-lang-only="de"] {
+  display: none !important;
+}
+
+/* Im Rechts-Blatt sind die Sprach-Huellen fuers Layout unsichtbar: Karte, Hinweis und
+   Vorlauf bleiben direkte Flex-Kinder wie vorher (Abstaende aus .legal-info). */
+[data-legal-doc] > [data-lang-only] {
+  display: contents;
+}

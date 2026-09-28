@@ -1,49 +1,96 @@
 ---
 // Inhalt der Kuendigungs-Erklaerung - EINE Quelle fuer die Seite /kuendigen und den
-// Reiter "Verträge kündigen" im Rechts-Blatt der Startseite (pages/index.astro,
-// Owner-Wunsch 2026-09-27: der Reiter oeffnet sich im Blatt, die Reiterleiste bleibt).
-// Wortlaut deutsch (§ 312k BGB, s. pages/kuendigen.astro). Die Klassen sind die der
-// Unterseiten (styles/hermes-page.css .doc-*); im Blatt setzt styles/hermes.css
-// (.legal-info) die Masse.
+// Reiter "Verträge kündigen" / "Cancel contracts" im Rechts-Blatt der Startseite
+// (pages/index.astro, Owner-Wunsch 2026-09-27: der Reiter oeffnet sich im Blatt, die
+// Reiterleiste bleibt). /kuendigen ist deutsch (Default lang="de"); das Blatt zeigt
+// zusaetzlich die englische Fassung, wenn die Startseite auf Englisch steht
+// (Owner-Wunsch 2026-09-28). Die Knopf-Beschriftung kommt aus denselben Konstanten
+// wie der Knopf im Kundenbereich (lib/subscribe.js, § 312k BGB; EN-Fassung laut
+// Owner-Entscheidung 2026-08-14). Die Klassen sind die der Unterseiten
+// (styles/hermes-page.css .doc-*); im Blatt setzt styles/hermes.css (.legal-info) die Masse.
 import { LOGIN_URL } from "../../lib/routes.js";
+import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../../lib/subscribe.js";
 
+const { lang = "de" } = Astro.props;
 const CONTACT = "kontakt@sundartha.com";
+const en = lang === "en";
 ---
 
-<p class="doc-lead">
-  Du kannst deinen Hermes-Vertrag jederzeit kündigen — über deinen Kundenbereich oder
-  formlos per E-Mail. Die Kündigung wirkt zum Ende des laufenden
-  Abrechnungszeitraums; bis dahin bleibt dein Assistent wie gewohnt erreichbar.
-</p>
+{en ? (
+  <p class="doc-lead">
+    You can cancel your Hermes contract at any time — in your customer area or
+    informally by email. The cancellation takes effect at the end of the current
+    billing period; until then, your assistant remains available as usual.
+  </p>
+) : (
+  <p class="doc-lead">
+    Du kannst deinen Hermes-Vertrag jederzeit kündigen — über deinen Kundenbereich oder
+    formlos per E-Mail. Die Kündigung wirkt zum Ende des laufenden
+    Abrechnungszeitraums; bis dahin bleibt dein Assistent wie gewohnt erreichbar.
+  </p>
+)}
 
 <div class="doc-block doc-steps">
   <div class="sheet__card">
     <span class="step">
       <span class="step__num">01</span>
       <span class="step__body">
-        <span class="step__title">Im Kundenbereich</span>
-        <span class="step__text">
-          Melde dich an und klicke im Abschnitt „Payment method“ auf
-          „Verträge kündigen“. Nach einer kurzen Bestätigung — mit dem genauen
-          Termin, zu dem die Kündigung wirkt — ist der Vertrag gekündigt.
-        </span>
+        {en ? (
+          <>
+            <span class="step__title">In your customer area</span>
+            <span class="step__text">
+              Sign in and click “{CANCEL_BUTTON_LABEL_EN}” in the “Payment method”
+              section. After a short confirmation — showing the exact date on which the
+              cancellation takes effect — your contract is cancelled.
+            </span>
+          </>
+        ) : (
+          <>
+            <span class="step__title">Im Kundenbereich</span>
+            <span class="step__text">
+              Melde dich an und klicke im Abschnitt „Payment method“ auf
+              „{CANCEL_BUTTON_LABEL}“. Nach einer kurzen Bestätigung — mit dem genauen
+              Termin, zu dem die Kündigung wirkt — ist der Vertrag gekündigt.
+            </span>
+          </>
+        )}
       </span>
     </span>
     <span class="rule" aria-hidden="true"></span>
     <span class="step">
       <span class="step__num">02</span>
       <span class="step__body">
-        <span class="step__title">Formlos per E-Mail</span>
-        <span class="step__text">
-          Alternativ genügt eine E-Mail an <a href={`mailto:${CONTACT}`}>{CONTACT}</a> —
-          ganz ohne Anmeldung. Wir bestätigen die Kündigung und den Termin, zu dem sie wirkt.
-        </span>
+        {en ? (
+          <>
+            <span class="step__title">Informally by email</span>
+            <span class="step__text">
+              Alternatively, an email to <a href={`mailto:${CONTACT}`}>{CONTACT}</a> is
+              enough — no sign-in needed. We confirm the cancellation and the date on which
+              it takes effect.
+            </span>
+          </>
+        ) : (
+          <>
+            <span class="step__title">Formlos per E-Mail</span>
+            <span class="step__text">
+              Alternativ genügt eine E-Mail an <a href={`mailto:${CONTACT}`}>{CONTACT}</a> —
+              ganz ohne Anmeldung. Wir bestätigen die Kündigung und den Termin, zu dem sie wirkt.
+            </span>
+          </>
+        )}
       </span>
     </span>
   </div>
 </div>
 
-<p class="doc-note">
-  <a href={LOGIN_URL}>Zum Kundenbereich</a> — dort findest du die Schaltfläche
-  „Verträge kündigen“.
-</p>
+{en ? (
+  <p class="doc-note">
+    <a href={LOGIN_URL}>Go to your customer area</a> — you’ll find the
+    “{CANCEL_BUTTON_LABEL_EN}” button there.
+  </p>
+) : (
+  <p class="doc-note">
+    <a href={LOGIN_URL}>Zum Kundenbereich</a> — dort findest du die Schaltfläche
+    „{CANCEL_BUTTON_LABEL}“.
+  </p>
+)}

@@ -16,6 +16,7 @@ const tabs = read("src/components/LegalTabs.astro");
 const mobile = read("src/components/MobileHome.astro");
 const index = read("src/pages/index.astro");
 const css = read("src/styles/hermes.css");
+const langCss = read("src/styles/lang-only.css");
 
 // Reiter mit eigenem Inhalt, der zugleich eine eigene Seite hat.
 const INFO_TABS = [
@@ -35,10 +36,19 @@ test("Rechts-Blatt: Kuendigen und Support sind Reiter mit Inhalt im Blatt", () =
       index.includes(`{ slug: "${tab.slug}", href: "${tab.href}"`),
       `infoTabs: ${tab.slug} fehlt`,
     );
+    // Beide Sprachfassungen im Reiter (Owner-Wunsch 2026-09-28), sichtbar ist die zur
+    // Seitensprache passende (data-lang-only).
+    const panel = index.slice(index.indexOf(`class="legal-info" data-legal-doc="${tab.slug}"`));
+    const block = panel.slice(0, panel.indexOf("</div>\n        </div>") + 1);
     assert.match(
-      index,
-      new RegExp(`class="legal-info" data-legal-doc="${tab.slug}" hidden>\\s*<${tab.content}`),
-      `Blatt: Inhalt fuer ${tab.slug} fehlt`,
+      block,
+      new RegExp(`<div data-lang-only="en"><${tab.content}[ />]`),
+      `Blatt: EN-Inhalt fuer ${tab.slug} fehlt`,
+    );
+    assert.match(
+      block,
+      new RegExp(`<div data-lang-only="de"><${tab.content}[ />]`),
+      `Blatt: DE-Inhalt fuer ${tab.slug} fehlt`,
     );
   }
 });
@@ -69,7 +79,11 @@ test("Fussband und Menue der Startseite: kein Link fuehrt aus dem Blatt heraus",
 
 test("Support im Blatt: Verweise auf Kuendigen und Rechtstexte wechseln den Reiter", () => {
   const support = read("src/components/site/SupportInfo.astro");
-  assert.ok(index.includes("<SupportInfo inSheet />"), "Blatt nutzt die Blatt-Fassung nicht");
+  assert.ok(index.includes("<SupportInfo inSheet />"), "Blatt nutzt die Blatt-Fassung nicht (EN)");
+  assert.ok(
+    index.includes('<SupportInfo lang="de" inSheet />'),
+    "Blatt nutzt die Blatt-Fassung nicht (DE)",
+  );
   assert.ok(support.includes('href="/kuendigen" data-legal-open={tabFor("cancel")}'));
   assert.ok(support.includes("data-legal-open={tabFor(link.slug)}"));
 });
@@ -90,4 +104,36 @@ test("Rechts-Blatt: alte Pillen und Schiebe-Daumen sind weg, die Reiter-Klassen 
   for (const selector of ['.legal-pill[aria-current="page"]', ".legal-pill--info", ".legal-info"]) {
     assert.ok(css.includes(selector), `${selector} ist nicht gestylt`);
   }
+});
+
+// Owner-Wunsch 2026-09-28: steht die Startseite auf Englisch, ist auch alles im
+// Rechts-Blatt englisch - Reiter, Titel, Texte, Kuendigen/Support -, auf Deutsch deutsch.
+test("Rechts-Blatt: jeder Rechtstext steht in beiden Sprachen, sichtbar ist die zur Seitensprache", () => {
+  for (const slug of LEGAL_SLUGS) {
+    assert.ok(
+      index.includes(`import ${slug}En from "../data/legal/${slug}.en.json";`),
+      `${slug}: EN-Fassung nicht eingebunden`,
+    );
+  }
+  assert.ok(index.includes("entry.docEn.sections.map"), "EN-Abschnitte fehlen im Blatt");
+  assert.ok(index.includes("entry.doc.sections.map"), "DE-Abschnitte fehlen im Blatt");
+  assert.ok(index.includes("{LEGAL_TRANSLATION_NOTICE}"), "EN-Fassung ohne Vorranghinweis");
+  assert.match(
+    langCss,
+    /html\[lang="de"\] \[data-lang-only="en"\],\s*html:not\(\[lang="de"\]\) \[data-lang-only="de"\] \{\s*display: none !important;/,
+  );
+});
+
+test("Kuendigen-Beschriftung: je Sprache aus den benannten Konstanten, nie im Woerterbuch", () => {
+  const home = `${index}\n${mobile}\n${tabs}`;
+  assert.ok(
+    !home.includes(">Verträge kündigen<"),
+    "fest verdrahteter deutscher Wortlaut auf der Startseite",
+  );
+  assert.ok(
+    index.includes("CANCEL_LABEL = { en: CANCEL_BUTTON_LABEL_EN, de: CANCEL_BUTTON_LABEL }"),
+  );
+  assert.ok(mobile.includes("<BiText en={CANCEL_BUTTON_LABEL_EN} de={CANCEL_BUTTON_LABEL} />"));
+  const scroll = read("src/scripts/hermes-scroll.js");
+  assert.ok(!scroll.includes('"Verträge kündigen"'), "§ 312k-Wortlaut im DE-Woerterbuch");
 });
