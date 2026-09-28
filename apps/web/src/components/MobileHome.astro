@@ -14,7 +14,9 @@
 // reist je Knoten als data-mh-de mit. Der Umschalter (data-lang) laeuft ueber
 // scripts/hermes-scroll.js wie am Desktop; hermes-mobile.js folgt dem
 // lang-Attribut von <html>. Texte 1:1 aus dem Handoff (hermes-kit.js, Objekt T).
-// "Vertraege kuendigen" bleibt immer deutsch (Wortlaut nach § 312k BGB).
+// "Vertraege kuendigen" (§ 312k BGB) ist kein data-mh-de-Text, sondern kommt aus den
+// benannten Konstanten in lib/subscribe.js (EN "Cancel contracts", Owner-Entscheidung
+// 2026-08-14/2026-09-28) - BiText zeigt die Fassung zur Seitensprache.
 //
 // Preise und Minuten kommen aus dem Tarif-Katalog (lib/plans.js), nicht aus dem
 // Text - dieselbe Quelle wie Desktop, /preise und Dashboard.
@@ -22,6 +24,8 @@ import "../styles/hermes-mobile.css";
 import "../styles/hermes-mobile-viewport.css";
 import { LOGIN_URL } from "../lib/routes.js";
 import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
+import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../lib/subscribe.js";
+import BiText from "./site/BiText.astro";
 
 const { mcpUrl, mcpCmd, agentGuide, contact, legalDocs } = Astro.props;
 
@@ -357,8 +361,8 @@ const SEGMENTS = 4;
           {legalDocs.map((entry) => (
             <a class="mh-link" href={entry.href} data-legal-open={entry.slug} data-mh-de={T.de[entry.slug]}>{T.en[entry.slug]}</a>
           ))}
-          <!-- § 312k BGB: gesetzlich vorgegebener Wortlaut, bleibt in jeder Sprache deutsch. Oeffnet den Reiter im Rechts-Blatt (pages/index.astro). -->
-          <a class="mh-link" href="/kuendigen" data-legal-open="cancel">Verträge kündigen</a>
+          <!-- § 312k BGB: Wortlaut aus lib/subscribe.js je Sprache. Oeffnet den Reiter im Rechts-Blatt (pages/index.astro). -->
+          <a class="mh-link" href="/kuendigen" data-legal-open="cancel"><BiText en={CANCEL_BUTTON_LABEL_EN} de={CANCEL_BUTTON_LABEL} /></a>
           <a class="mh-link" href={`mailto:${contact}`} data-mh-de={T.de.contact}>{T.en.contact}</a>
           <button class="mh-link" type="button" data-consent-open data-mh-de={T.de.cookies}>{T.en.cookies}</button>
         </nav>

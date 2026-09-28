@@ -1,0 +1,80 @@
+{
+  "metaTitle": "Terms and Conditions — Sundartha Hermes",
+  "metaDescription": "General terms and conditions for the use of Sundartha Hermes: services, plans, term, obligations and liability.",
+  "eyebrow": "Legal",
+  "title": "General Terms and Conditions",
+  "sections": [
+    {
+      "heading": "Scope and contracting party",
+      "text": "These terms apply to the use of the phone assistant Hermes. The contracting party is Sundartha, [OPEN: full company name, legal form and address — see Imprint]. Deviating terms of the user apply only insofar as we have expressly agreed to them."
+    },
+    {
+      "heading": "Subject matter of the service",
+      "text": "We provide the user with a phone number and operate an assistant for it that answers incoming calls and makes outgoing calls on the user's behalf. The assistant understands spoken language, responds by voice, summarises conversations and makes summaries, tasks and appointments available in the customer area; at the user's request, summaries are additionally sent by SMS to a stored mobile number or by email. The assistant can be connected to an AI application of the user via an interface."
+    },
+    {
+      "heading": "Conclusion of the contract",
+      "text": "The contract is concluded when the user selects a plan in the customer area, stores a payment method and the booking process has been completed. The presentation of the plans on the website is not a binding offer but an invitation to place an order."
+    },
+    {
+      "heading": "Plans and fees",
+      "text": "The plans stated on the pricing page apply: Starter at €4.99 per month with 30 call minutes, Pro at €9.99 per month with 120 call minutes. Both plans include one phone number. The amounts are final prices and include statutory VAT where applicable; they are payable monthly in advance. The price of the respective plan is displayed once more in the booking process before the order is placed."
+    },
+    {
+      "heading": "Billing",
+      "text": "Payment is processed via our payment service provider. For this purpose, the user stores a payment method. An authorisation of the payment method may take place during setup. If a payment fails or the subscription ends with the payment service provider, access is blocked and the assistant no longer answers calls."
+    },
+    {
+      "heading": "Included minutes",
+      "text": "The call minutes included in the plan apply per billing period and expire at its end. Once the allowance has been used up, the user receives a notice; no automatic surcharge is incurred. Further calls are then no longer possible until the start of the next billing period."
+    },
+    {
+      "heading": "Term and cancellation",
+      "text": "The contract runs for one month and is renewed by one further month at a time unless it is cancelled. Cancellation is made via the “Cancel contracts” button in the customer area; it takes effect at the end of the current billing period, and the service remains usable until then. Alternatively, an informal cancellation by email to kontakt@sundartha.com is possible at any time."
+    },
+    {
+      "heading": "Right of withdrawal for consumers",
+      "text": "Instructions on withdrawal — Right of withdrawal: As a consumer, you have the right to withdraw from this contract within fourteen days without giving any reason. The withdrawal period is fourteen days from the day the contract is concluded. To exercise your right of withdrawal, you must inform us (Sundartha, [OPEN: company name and address for service — see Imprint], email: kontakt@sundartha.com) of your decision to withdraw from this contract by means of a clear statement (e.g. a letter sent by post or an email). You may use the model withdrawal form below for this purpose, but it is not mandatory. To meet the withdrawal deadline, it is sufficient for you to send your communication concerning your exercise of the right of withdrawal before the withdrawal period has expired. Effects of withdrawal: If you withdraw from this contract, we shall reimburse to you all payments received from you without undue delay and in any event no later than fourteen days from the day on which we are informed of your withdrawal from this contract. We will carry out such reimbursement using the same means of payment as you used for the initial transaction, unless expressly agreed otherwise with you; in any event, you will not incur any fees as a result of such reimbursement. If you requested that the service begin during the withdrawal period, you shall pay us a reasonable amount corresponding to the proportion of the services already provided up to the time you inform us of the exercise of the right of withdrawal with regard to this contract, compared with the full scope of the services provided for in the contract. Model withdrawal form (if you wish to withdraw from the contract, please complete and return this form): To Sundartha, [OPEN: address], kontakt@sundartha.com — I hereby withdraw from the contract concluded by me for the provision of the following service: Hermes, plan … — ordered on … — Name of consumer — Address of consumer — Signature of consumer (only if this form is notified on paper) — Date. End of the instructions on withdrawal. [OPEN: Decision by the operator as to whether the service should already be usable during the withdrawal period. If so, the booking process must request a separate, non-pre-ticked consent of the consumer to the early start and the consumer's acknowledgement of the pro-rata compensation for value (Section 356(4) and Section 357a of the German Civil Code (BGB)); this request is currently not present in the customer area.]"
+    },
+    {
+      "heading": "Obligations of the user",
+      "text": "The user is responsible for ensuring that the calls initiated by them are permissible. Prohibited in particular are advertising calls without the required prior consent of the person called, harassing or deceptive calls, and any use that violates applicable law. The user ensures that they are entitled to provide the data they have stored and keeps their login credentials secret."
+    },
+    {
+      "heading": "Usage limits",
+      "text": "For reasons of operational security and abuse prevention, technical limits apply: a maximum number of calls per period, a maximum number of repeated calls to the same party, a restriction of outgoing calls to approved countries, and budget limits. We may adjust these limits insofar as this is necessary for secure operation."
+    },
+    {
+      "heading": "Suspension",
+      "text": "We may temporarily block access if there is a payment default, if there is a justified suspicion of abusive or unlawful use, or if secure operation requires it. We inform the user of a suspension unless there are reasons against doing so."
+    },
+    {
+      "heading": "Availability",
+      "text": "We endeavour to provide continuous operation but do not owe any specific availability. Maintenance work, disruptions of upstream telephony or speech services, and events beyond our control may temporarily restrict the service. Where possible, we give advance notice of planned maintenance work that interrupts the service for a longer period."
+    },
+    {
+      "heading": "Limitations of the assistant",
+      "text": "The assistant conducts conversations with the help of language models. It may misunderstand what is said, reproduce facts incorrectly or fail to achieve the goal of a conversation. The service is not suitable for emergency calls and must not be used as a substitute for an emergency call. The user checks summaries and appointments derived from them on their own responsibility."
+    },
+    {
+      "heading": "Liability",
+      "text": "We are liable without limitation for intent and gross negligence, for injury to life, body and health, and under the German Product Liability Act (Produkthaftungsgesetz). In the case of simple negligence, we are liable only for the breach of material contractual obligations, and the amount is limited to the foreseeable damage typical for the contract. Otherwise, liability is excluded. Material contractual obligations are those whose fulfilment makes the proper performance of the contract possible in the first place and on whose compliance the user may regularly rely. For content that the assistant derives from conversations, and for actions that the user takes on that basis, we are liable only in accordance with this provision."
+    },
+    {
+      "heading": "Data protection",
+      "text": "How we process account, call and billing data is set out in the privacy policy. It forms part of the information on the contract but is not a contractual term."
+    },
+    {
+      "heading": "Changes to these terms",
+      "text": "We may change these terms insofar as this is necessary to adapt them to a changed legal situation, case law or a changed service, and the user is not unreasonably disadvantaged as a result. We give notice of changes within a reasonable period before they take effect; the user may cancel up to that point in time."
+    },
+    {
+      "heading": "Final provisions",
+      "text": "The law of the Federal Republic of Germany applies, excluding the UN Convention on Contracts for the International Sale of Goods. With respect to consumers, this choice of law applies only insofar as it does not deprive them of the protection afforded by mandatory provisions of the law of the state in which they have their habitual residence. If the user is a merchant, a legal entity under public law or a special fund under public law, the exclusive place of jurisdiction for all disputes arising from this contract is [OPEN: registered office of the company — place]. Should any provision be invalid, the remainder of the contract remains valid. The contract language is German; the contract text is not stored separately by us, and the terms in force at any given time are available on the website."
+    },
+    {
+      "heading": "Note on this text",
+      "text": "This draft reflects the actual scope of the service and does not replace legal advice. Before selling to consumers, in particular the instructions on withdrawal, price information, cancellation procedure and liability clause should be reviewed by a lawyer."
+    }
+  ]
+}

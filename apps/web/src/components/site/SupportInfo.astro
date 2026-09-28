@@ -22,18 +22,123 @@
 // inSheet: im Rechts-Blatt oeffnen die Verweise auf Kuendigen und die Rechtstexte den
 // passenden Reiter (data-legal-open, scripts/hermes-scroll.js), statt das Blatt zu
 // verlassen. Das href bleibt - ohne Skript fuehrt der Link weiter auf die Seite.
+//
+// lang: /support ist englisch (Default). Das Rechts-Blatt der Startseite zeigt
+// zusaetzlich die deutsche Fassung, wenn die Seite auf Deutsch steht (Owner-Wunsch
+// 2026-09-28) - dieselben Aussagen, woertlich uebersetzt, keine neue Zusage.
 import { LOGIN_URL } from "../../lib/routes.js";
 import { LEGAL_CONTENT } from "../../lib/legal-content.js";
 import { legalFooterLinks } from "../../lib/legal.js";
 
-const { inSheet = false } = Astro.props;
+const { inSheet = false, lang = "en" } = Astro.props;
+const de = lang === "de";
 const CONTACT = "kontakt@sundartha.com";
-// Zeigt auf eine kuenftige EN-Fassung, sobald sie geliefert ist, sonst auf die
-// verbindliche deutsche - ein toter Link kann so nicht entstehen (lib/legal.js).
-const legalLinks = legalFooterLinks(LEGAL_CONTENT, "en");
+// Zeigt auf die Fassung in der Sprache des Textes, sonst auf die verbindliche
+// deutsche - ein toter Link kann so nicht entstehen (lib/legal.js).
+const LEGAL_LABELS_DE = { privacy: "Datenschutz", imprint: "Impressum", terms: "AGB" };
+const legalLinks = legalFooterLinks(LEGAL_CONTENT, lang).map((link) =>
+  de ? { ...link, label: LEGAL_LABELS_DE[link.slug] } : link,
+);
 const tabFor = (slug) => (inSheet ? slug : undefined);
 ---
 
+{de ? (
+  <>
+<p class="doc-lead">
+  Hermes wird von Sundartha angeboten. Wenn du Hilfe zu Hermes brauchst, schreib uns an{" "}
+  <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+</p>
+
+<div class="doc-block doc-steps">
+  <div class="sheet__card">
+    <span class="step">
+      <span class="step__num">01</span>
+      <span class="step__body">
+        <span class="step__title">Hilfe bekommen</span>
+        <span class="step__text">
+          Schreib an <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. Geht es um einen
+          bestimmten Anruf, nenne bitte Datum und Uhrzeit.
+        </span>
+      </span>
+    </span>
+    <span class="rule" aria-hidden="true"></span>
+    <span class="step">
+      <span class="step__num">02</span>
+      <span class="step__body">
+        <span class="step__title">Deine Anrufe</span>
+        <span class="step__text">
+          <a href={LOGIN_URL}>Melde dich im Kundenbereich an</a>, um deine letzten Anrufe
+          und, soweit vorhanden, jeweils eine Zusammenfassung zu sehen. Das Wortprotokoll
+          eines Anrufs wird in der Regel gelöscht, sobald die Zusammenfassung erstellt ist,
+          und abgeschlossene Anrufe werden nach der in unserer Datenschutzerklärung
+          genannten Speicherdauer automatisch gelöscht. Das gilt für unsere eigenen
+          Systeme. Der Anbieter unserer Gesprächs-Plattform speichert Gespräche getrennt
+          davon und löscht sie derzeit nicht automatisch; sie dort zu löschen ist ein
+          eigener Schritt — siehe unsere Datenschutzerklärung.
+        </span>
+      </span>
+    </span>
+    <span class="rule" aria-hidden="true"></span>
+    <span class="step">
+      <span class="step__num">03</span>
+      <span class="step__body">
+        <span class="step__title">Hermes von ChatGPT oder Claude trennen</span>
+        <span class="step__text">
+          Entferne den Hermes-Connector in den Connector- oder App-Einstellungen des
+          KI-Assistenten, mit dem du ihn verbunden hast. Bitte beachte: Das beendet keinen
+          Anruf, der gerade läuft, und löscht keine Daten, die wir gespeichert haben —
+          siehe „Auskunft oder Löschung deiner Daten“ unten.
+        </span>
+      </span>
+    </span>
+    <span class="rule" aria-hidden="true"></span>
+    <span class="step">
+      <span class="step__num">04</span>
+      <span class="step__body">
+        <span class="step__title">Auskunft oder Löschung deiner Daten</span>
+        <span class="step__text">
+          Im Kundenbereich siehst du deine letzten Anrufe und, soweit vorhanden, ihre
+          Zusammenfassungen; in unseren eigenen Systemen werden Wortprotokolle in der
+          Regel nicht aufbewahrt, während der Anbieter unserer Gesprächs-Plattform
+          Gespräche getrennt davon speichert (siehe „Deine Anrufe“ oben). Einen
+          Selbstbedienungs-Weg zur Löschung deiner Daten gibt es bei Hermes nicht. Für
+          Auskunft oder Löschung schreib an{" "}
+          <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. Abrechnungsunterlagen bewahren wir
+          für die gesetzlichen Fristen auf. Die Einzelheiten stehen in unserer
+          Datenschutzerklärung, unten verlinkt.
+        </span>
+      </span>
+    </span>
+    <span class="rule" aria-hidden="true"></span>
+    <span class="step">
+      <span class="step__num">05</span>
+      <span class="step__body">
+        <span class="step__title">Vertrag kündigen</span>
+        <span class="step__text">
+          Du kannst deinen Hermes-Vertrag im Kundenbereich oder per E-Mail kündigen.
+          Unsere{" "}
+          <a href="/kuendigen" data-legal-open={tabFor("cancel")}>Kündigungsseite</a> erklärt beide Wege.
+        </span>
+      </span>
+    </span>
+    <span class="rule" aria-hidden="true"></span>
+    <span class="step">
+      <span class="step__num">06</span>
+      <span class="step__body">
+        <span class="step__title">Rechtliches</span>
+        <span class="step__text">
+          Unsere Rechtstexte:{" "}
+          {legalLinks.map((link, index) => (
+            <>{index > 0 && " · "}<a href={link.href} data-legal-open={tabFor(link.slug)}>{link.label}</a></>
+          ))}. Verbindlich ist jeweils die deutsche Fassung.
+        </span>
+      </span>
+    </span>
+  </div>
+</div>
+  </>
+) : (
+  <>
 <p class="doc-lead">
   Hermes is provided by Sundartha. If you need help with Hermes, email us at{" "}
   <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
@@ -104,7 +209,7 @@ const tabFor = (slug) => (inSheet ? slug : undefined);
         <span class="step__title">Cancel your contract</span>
         <span class="step__text">
           You can cancel your Hermes contract in your customer area or by email. Our{" "}
-          <a href="/kuendigen" data-legal-open={tabFor("cancel")}>cancellation page</a> (in German) explains both ways.
+          <a href="/kuendigen" data-legal-open={tabFor("cancel")}>cancellation page</a>{inSheet ? "" : " (in German)"} explains both ways.
         </span>
       </span>
     </span>
@@ -123,3 +228,5 @@ const tabFor = (slug) => (inSheet ? slug : undefined);
     </span>
   </div>
 </div>
+  </>
+)}
