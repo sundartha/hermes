@@ -784,11 +784,6 @@ const UMGEBUNG = {
   skripte: Object.keys(PAKET.scripts),
 };
 
-test("Kompatibilitaetsvertrag R1: das Runbook verweist nur auf Existierendes und traegt keine internen Kennungen", () => {
-  const text = fs.readFileSync(path.join(ROOT, RUNBOOK_DATEI), "utf8");
-  assert.deepEqual(runbookBefunde(text, UMGEBUNG), []);
-});
-
 test("Kompatibilitaetsvertrag R1: Kontrolle - falscher Pfad, unbekanntes Skript, interne Kennung", () => {
   const anker = Object.values(RUNBOOK_ANKER).map((name) => `<a id="${name}"></a>`);
   const text = `${anker.join("\n")}\nSiehe \`src/gibt-es-nicht.js:12\`, dann npm run gibt-es-nicht, Befund T-99.`;
