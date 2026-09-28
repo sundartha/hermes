@@ -1,0 +1,12 @@
+---
+// Kurzer Text in beiden Sprachen der Startseite. Sichtbar ist nur die Fassung, die zu
+// <html lang> passt (styles/lang-only.css); der Sprachschalter
+// (scripts/hermes-scroll.js applyLang) setzt nur das lang-Attribut. Fuer Texte, die
+// NICHT ins DE-Woerterbuch gehoeren - der § 312k-Wortlaut "Verträge kündigen" ist
+// eine benannte Konstante (lib/subscribe.js), kein uebersetzbarer Woerterbuch-Wert.
+import "../../styles/lang-only.css";
+
+const { en, de } = Astro.props;
+---
+
+<span data-lang-only="en">{en}</span><span data-lang-only="de">{de}</span>
