@@ -18,8 +18,9 @@ const CONTACT = "kontakt@sundartha.com";
 
 // Owner-Wunsch 2026-09-27: "So funktioniert's" und "Preise" fuehren auf die Ebenen der
 // Startseite (Desktop-Buehne, Handy-Screens), nicht auf die ruhenden Unterseiten -
-// von /kuendigen & Co. aus landete man sonst auf den "falschen Layern". Die Seiten
-// /so-funktionierts und /preise bleiben unter ihrer URL erreichbar (Sitemap).
+// von /kuendigen & Co. aus landete man sonst auf den "falschen Layern". Die alten
+// URLs /so-funktionierts und /preise leiten seit 2026-09-28 selbst dorthin weiter
+// (components/site/HomeRedirect.astro).
 const nav = [
   { href: homeHref("so-funktionierts"), label: "So funktioniert's" },
   { href: homeHref("preise"), label: "Preise" },

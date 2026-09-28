@@ -24,6 +24,7 @@ import {
 } from "../src/lib/legal.js";
 import { PLAN_CATALOG, formatPlanPrice } from "../src/lib/plans.js";
 import { LOGIN_URL } from "../src/lib/routes.js";
+import { homeHref } from "../src/lib/home-anchors.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST_DIR = join(WEB_ROOT, "dist-test");
@@ -38,11 +39,9 @@ const BRAND_RED = "#e60000";
 const SITE_CHROME_MARKERS = ["by Sundartha", "hermes-wing.png"];
 
 const MARKETING_PAGES = [
-  "so-funktionierts/index.html",
-  "preise/index.html",
   "registrieren/index.html",
   "404.html",
-  // 312k-P3: oeffentliche Kuendigungsseite, dieselbe Hermes-Huelle wie so-funktionierts.
+  // 312k-P3: oeffentliche Kuendigungsseite, dieselbe Hermes-Huelle wie Registrieren.
   "kuendigen/index.html",
   // Oeffentliche Support-Seite (englisch), dieselbe Hermes-Huelle.
   "support/index.html",
@@ -56,12 +55,7 @@ const LEGAL_PAGES = [
 // Sprachen nach dem Neubau (Owner-Entscheidung: Deutsch ist die Standardsprache
 // der Marketing-Seiten; die beiden Rand-Seiten blieben englisch wie zuvor). Die
 // Support-Seite ist englisch (Marketing-Texte Englisch, Rechtstexte Deutsch).
-const DE_PAGES = [
-  "so-funktionierts/index.html",
-  "preise/index.html",
-  "kuendigen/index.html",
-  ...LEGAL_PAGES,
-];
+const DE_PAGES = ["kuendigen/index.html", ...LEGAL_PAGES];
 const EN_PAGES = ["registrieren/index.html", "404.html", "support/index.html"];
 
 function readDist(relativePath) {
@@ -116,8 +110,8 @@ test("Sprachen: DE-Seiten lang=de, die EN-Seiten lang=en", () => {
   }
 });
 
-// Ganzzahl-Cents -> {major, minor} wie lib/plans.js formatPlanPrice. Beide
-// Preis-Tests unten leiten ihre Erwartung hieraus ab, nie aus einer Zahl im Text.
+// Ganzzahl-Cents -> {major, minor} wie lib/plans.js formatPlanPrice. Der
+// Preis-Test unten leitet seine Erwartung hieraus ab, nie aus einer Zahl im Text.
 function priceParts(amountCents) {
   const CENTS_PER_MAJOR = 100;
   const MINOR_DIGITS = 2;
@@ -127,24 +121,40 @@ function priceParts(amountCents) {
   };
 }
 
-test("Pricing rendert EUR aus dem Katalog (beide Tarife)", () => {
-  // BK0/AM3: Preise kommen aus lib/plans.js (Spiegel der Backend-SSoT), seit dem
-  // Stripe-Live-Cutover EUR. Die Seite ist seit dem Neubau deutsch und schreibt
-  // die Betraege in deutscher Notation ("4,99 €"), abgeleitet aus amountCents —
-  // der Test bleibt damit an den Katalog gekoppelt, nicht an eine Zahl im Text.
-  const html = readDist("preise/index.html");
-  for (const plan of PLAN_CATALOG) {
-    const major = Math.floor(plan.amountCents / 100);
-    const minor = String(plan.amountCents % 100).padStart(2, "0");
+// Owner-Entscheidung 2026-09-28: die alten Unterseiten /so-funktionierts und /preise
+// fuehren auf die normale Startseite, direkt zur jeweiligen Sektion. Die Static Site
+// kann nicht serverseitig umleiten, darum eine Weiche per Meta-Refresh auf den Anker
+// (lib/home-anchors.js) - ohne eigenen Inhalt, nicht indexierbar, ohne Inline-Code.
+const HOME_REDIRECTS = [
+  { page: "so-funktionierts/index.html", anchor: "so-funktionierts" },
+  { page: "preise/index.html", anchor: "preise" },
+];
+
+test("Weichen: /so-funktionierts und /preise fuehren zur Sektion der Startseite", () => {
+  for (const { page, anchor } of HOME_REDIRECTS) {
+    const html = readDist(page);
+    const target = homeHref(anchor);
     assert.ok(
-      html.includes(`${major},${minor} €`),
-      `preise: Katalogpreis ${major},${minor} € (${plan.slug}) fehlt`,
+      html.includes(`<meta http-equiv="refresh" content="0; url=${target}">`),
+      `${page}: Meta-Refresh auf ${target} fehlt`,
     );
     assert.ok(
-      html.includes(`${plan.includedMinutes} Minuten`),
-      `preise: Inklusivminuten ${plan.includedMinutes} (${plan.slug}) fehlen`,
+      html.includes(`<a href="${target}">`),
+      `${page}: sichtbarer Rueckfall-Link auf ${target} fehlt`,
     );
-    assert.ok(html.includes(plan.name), `preise: Tarifname ${plan.name} fehlt`);
+    assert.ok(html.includes('<meta name="robots" content="noindex">'), `${page}: noindex fehlt`);
+    assert.ok(
+      html.includes('<link rel="canonical" href="https://sundartha.com/">'),
+      `${page}: canonical auf die Startseite fehlt`,
+    );
+    assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/.test(html), `${page}: Inline-Script (CSP)`);
+    assert.ok(!/\sstyle=/.test(html), `${page}: style-Attribut (CSP)`);
+    assert.ok(!html.includes("doc-title"), `${page}: traegt noch den alten Seiteninhalt`);
+  }
+  const sitemap = readFileSync(join(WEB_ROOT, "public/sitemap.xml"), "utf8");
+  for (const { page } of HOME_REDIRECTS) {
+    const url = `https://sundartha.com/${page.replace("/index.html", "")}<`;
+    assert.ok(!sitemap.includes(url), `sitemap.xml fuehrt die Weiche ${url} noch als Seite`);
   }
 });
 
@@ -153,8 +163,7 @@ test("Startseite: Preise in beiden Sprachen aus dem Katalog, je in der richtigen
   // als Woerterbuch in scripts/hermes-scroll.js. Beide Fassungen muessen aus
   // DEMSELBEN Katalog stammen und die Notation ihrer Sprache tragen: englisch
   // "€4.99" (Punkt, Symbol vorn), deutsch "4,99 €" (Komma, Symbol nachgestellt).
-  // Der Test haengt an amountCents, nicht an einer Zahl im Text - genau wie der
-  // /preise-Test darueber.
+  // Der Test haengt an amountCents, nicht an einer Zahl im Text.
   // Gemessen wird der PREIS-KNOTEN, nicht die ganze Seite: "4,99 €" steht
   // legitim auch im deutschen AGB-Text im Rechtstext-Blatt.
   const html = readDist("index.html");
@@ -175,7 +184,7 @@ test("Startseite: Preise in beiden Sprachen aus dem Katalog, je in der richtigen
 
 // Handy-Fassung (components/MobileHome.astro, < 768 px): Preise und Minuten
 // reisen fuer das Roll-Zaehlwerk als Data-Attribute mit. Beide Notationen und
-// die Minuten muessen aus DEMSELBEN Katalog stammen wie Desktop und /preise.
+// die Minuten muessen aus DEMSELBEN Katalog stammen wie Desktop.
 test("Handy-Startseite: Preise (EN/DE) und Minuten aus dem Katalog", () => {
   const html = readDist("index.html");
   const joined = (pick) => PLAN_CATALOG.map(pick).join("|");
@@ -401,7 +410,7 @@ test("Sitemap enthaelt die Support-Seite", () => {
 // wird nach der Zusammenfassung geloescht - die Demo verspricht kein Transkript im Dashboard.
 const RETIRED_DEMO_CLAIMS =
   /get_transcript|get_my_number|get_calendar|added it to your calendar|Termin eingetragen|Summary & transcript|Zusammenfassung & Transkript/;
-const DEMO_PAGES = ["index.html", "so-funktionierts/index.html"];
+const DEMO_PAGES = ["index.html"];
 
 test("Demo: Positiv-Kontrolle - die Verbots-Regex schlaegt an", () => {
   for (const sample of ["get_transcript", "Summary & transcript are waiting", "Zusammenfassung & Transkript liegen"]) {
@@ -410,8 +419,8 @@ test("Demo: Positiv-Kontrolle - die Verbots-Regex schlaegt an", () => {
 });
 
 test("Demo nennt nur heutige Werkzeuge, keinen Kalender und kein Dashboard-Transkript", () => {
-  // Seit 2026-09-27 zeigen Start- und So-funktioniert's-Seite die Schritt-Kacheln
-  // (HowtoSteps) statt der Session-Demo. Wo die Demo (noch) eingebunden ist, muss sie
+  // Seit 2026-09-27 zeigt die Startseite die Schritt-Kacheln (HowtoSteps) statt der
+  // Session-Demo. Wo die Demo (noch) eingebunden ist, muss sie
   // prepare_call zeigen; KEINE Seite darf ein altes Werkzeug, den Kalender oder ein
   // Dashboard-Transkript versprechen.
   for (const page of DEMO_PAGES) {
