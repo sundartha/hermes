@@ -17,6 +17,67 @@
 
 import { anchorFromHash } from "../lib/home-anchors.js";
 
+const QUADRATIC_EXPONENT = 2;
+const CUBIC_EXPONENT = 3;
+const EASE_HALF_PROGRESS = 0.5;
+
+const HERO_TRAVEL_MAX_PX = 220;
+const HERO_NAV_CLEARANCE_PX = 12;
+const HERO_FADE_DISTANCE_VH = 0.88;
+const HINT_FADE_OUT_FACTOR = 3;
+const LAYER_FADE_OUT_FACTOR = 1.35;
+
+const HOWTO_RISE_START_VH = 0.95;
+const HOWTO_RISE_DISTANCE_VH = 0.6;
+const HOWTO_VISIBLE_MIN_OPACITY = 0.02;
+const HOWTO_INTERACTIVE_MIN_RISE = 0.6;
+const HOWTO_TO_PRICE_START_VH = 1.6;
+const PRICE_TO_DEV_START_VH = 3.2;
+const LAYER_RISE_DELAY_VH = 0.75;
+const LAYER_RISE_DISTANCE_VH = 0.5;
+const LAYER_EXIT_DISTANCE_VH = 0.7;
+const LAYER_RISE_OFFSET_PX = 34;
+const LAYER_INTERACTIVE_MIN_RISE = 0.5;
+const LAYER_INTERACTIVE_MAX_EXIT = 0.2;
+
+const DEV_PLAY_MIN_RISE = 0.55;
+const DEV_REPLAY_MAX_RISE = 0.08;
+const DEV_CARD_A_DELAY_RISE = 0.05;
+const DEV_CARD_B_DELAY_RISE = 0.3;
+const DEV_CARD_RISE_OFFSET_PX = 46;
+const DEV_BOTTOM_PADDING_STEP_MODE_PX = 20;
+const DEV_BOTTOM_PADDING_LOW_VIEWPORT_PX = 34;
+const DEV_BOTTOM_PADDING_PX = 44;
+const LOW_VIEWPORT_MAX_HEIGHT_PX = 660;
+const DEV_HEAD_FADE_DISTANCE_PX = 36;
+
+const FOOTER_START_VH = 4.55;
+const FOOTER_START_STEP_MODE_VH = 4.68;
+const FOOTER_RISE_DISTANCE_VH = 0.5;
+const FOOTER_HIDDEN_OFFSET_PERCENT = 100;
+const FOOTER_INTERACTIVE_MIN_RISE = 0.6;
+
+const STEP_FULL_OPACITY_RADIUS_STEPS = 0.22;
+const STEP_CROSSFADE_STEPS = 0.3;
+const STEP_SLIDE_PX = 44;
+const STEP_VISIBLE_MIN_OPACITY = 0.01;
+
+const PRICE_STOP_VH = 3.05;
+const DEV_STOP_VH = 4.65;
+const FOOTER_STOP_VH = 5.2;
+const KEY_STOP_TOLERANCE_VH = 0.25;
+
+const GLIDE_MIN_DISTANCE_PX = 2;
+const GLIDE_HERO_ZONE_VH = 0.5;
+const GLIDE_FROM_HERO_MS_PER_VH = 470;
+const GLIDE_MS_PER_VH = 620;
+const GLIDE_MIN_MS = 560;
+const GLIDE_MAX_MS = 1400;
+
+const SWIPE_MIN_DISTANCE_PX = 44;
+const SWIPE_HORIZONTAL_DOMINANCE_FACTOR = 1.4;
+const COPIED_LABEL_DURATION_MS = 1800;
+
 /* ------------------------------------------------------------------ Sprache */
 
 /* Englisch steht IM HTML (das ist seit dem Default-Wechsel 2026-09-10 die
@@ -280,13 +341,33 @@ function travel() {
     const atRest = !copy.style.transform || copy.style.transform === "translateY(0px)";
     const gap = copy.getBoundingClientRect().top - nav.getBoundingClientRect().bottom;
     if (atRest) restGap = gap;
-    else return Math.max(0, Math.min(220, gap - 12));
+    else return Math.max(0, Math.min(HERO_TRAVEL_MAX_PX, gap - HERO_NAV_CLEARANCE_PX));
   }
-  return Math.max(0, Math.min(220, restGap - 12));
+  return Math.max(0, Math.min(HERO_TRAVEL_MAX_PX, restGap - HERO_NAV_CLEARANCE_PX));
 }
 
-const easeOut = (t) => 1 - Math.pow(1 - t, 2);
-const clamp01 = (v) => Math.min(1, Math.max(0, v));
+const easeOut = (progress) => 1 - Math.pow(1 - progress, QUADRATIC_EXPONENT);
+const clamp01 = (value) => Math.min(1, Math.max(0, value));
+
+function easeInOutCubic(progress) {
+  if (progress < EASE_HALF_PROGRESS) {
+    return Math.pow(progress / EASE_HALF_PROGRESS, CUBIC_EXPONENT) * EASE_HALF_PROGRESS;
+  }
+  return 1 - Math.pow((1 - progress) / EASE_HALF_PROGRESS, CUBIC_EXPONENT) * EASE_HALF_PROGRESS;
+}
+
+function staggeredRise(rise, delay) {
+  const progress = clamp01((rise - delay) / (1 - delay));
+  return 1 - Math.pow(1 - progress, CUBIC_EXPONENT);
+}
+
+function layerHandover(vh, position, startVh) {
+  const local = position - vh * startVh;
+  return {
+    incoming: clamp01((local - vh * LAYER_RISE_DELAY_VH) / (vh * LAYER_RISE_DISTANCE_VH)),
+    outgoing: clamp01(local / (vh * LAYER_EXIT_DISTANCE_VH)),
+  };
+}
 
 function apply() {
   if (!page) return;
@@ -295,145 +376,182 @@ function apply() {
   // am Desktop dauerhaft unsichtbar - Preise/Entwickler waren nicht erreichbar).
   // Die Uebergaenge haengen allein am Scrollen, laufen also nicht von selbst.
   if (usesSheets()) {
-    if (copy) {
-      copy.style.setProperty("transform", "none", "important");
-      copy.style.setProperty("opacity", "1", "important");
-    }
-    if (hint) hint.style.opacity = "1";
-    for (const layer of [howtoLayer, priceLayer, devLayer, footer]) {
-      if (layer) {
-        layer.style.opacity = "0";
-        layer.style.pointerEvents = "none";
-      }
-    }
-    if (howtoBg) howtoBg.style.opacity = "0";
+    applySheetMode();
     return;
   }
 
+  const stage = measureStage();
+  applySteps(stage.stepProgress);
+  applyHero(stage);
+  applyHowto(stage);
+  applyPrice(stage);
+  applyDev(stage);
+  applyFooter(stage);
+}
+
+function applySheetMode() {
+  if (copy) {
+    copy.style.setProperty("transform", "none", "important");
+    copy.style.setProperty("opacity", "1", "important");
+  }
+  if (hint) hint.style.opacity = "1";
+  for (const layer of [howtoLayer, priceLayer, devLayer, footer]) {
+    if (layer) {
+      layer.style.opacity = "0";
+      layer.style.pointerEvents = "none";
+    }
+  }
+  if (howtoBg) howtoBg.style.opacity = "0";
+}
+
+function measureStage() {
   const vh = Math.max(1, page.clientHeight);
   const raw = page.scrollTop;
   // Handy: waehrend des eingeschobenen Wegs steht die Zeitachse still und nur
   // die Schritt-Karten wechseln; danach laeuft sie um den Einschub versetzt weiter.
   const rest = vh * HOWTO_REST;
   const extra = stepExtra(vh);
-  const y = raw <= rest ? raw : raw <= rest + extra ? rest : raw - extra;
-  applySteps(extra > 0 ? clamp01((raw - rest) / extra) : null);
-  const p = clamp01(y / (vh * 0.88));
-  const ease = easeOut(p);
+  const position = raw <= rest ? raw : raw <= rest + extra ? rest : raw - extra;
+  return {
+    vh,
+    position,
+    stepProgress: extra > 0 ? clamp01((raw - rest) / extra) : null,
+    // Ebene 2 erscheint auf demselben Bild, sobald der Hero-Text weg ist.
+    howtoToPrice: layerHandover(vh, position, HOWTO_TO_PRICE_START_VH),
+    // Ebene 4 (Entwickler), dieselbe Choreografie wie 2 -> 3.
+    priceToDev: layerHandover(vh, position, PRICE_TO_DEV_START_VH),
+  };
+}
 
+function applyHero(stage) {
+  const progress = clamp01(stage.position / (stage.vh * HERO_FADE_DISTANCE_VH));
+  const eased = easeOut(progress);
   if (copy) {
     // "important" am Element: das Handy-CSS pinnt den Hero-Text sonst fest.
-    copy.style.setProperty("transform", "translateY(" + -travel() * ease + "px)", "important");
-    copy.style.setProperty("opacity", String(Math.max(0, 1 - p * 1.35)), "important");
+    copy.style.setProperty("transform", "translateY(" + -travel() * eased + "px)", "important");
+    copy.style.setProperty(
+      "opacity",
+      String(Math.max(0, 1 - progress * LAYER_FADE_OUT_FACTOR)),
+      "important",
+    );
   }
-  if (hint) hint.style.opacity = String(Math.max(0, 1 - p * 3));
+  if (hint) hint.style.opacity = String(Math.max(0, 1 - progress * HINT_FADE_OUT_FACTOR));
+}
 
-  // Ebene 2 erscheint auf demselben Bild, sobald der Hero-Text weg ist.
-  const y2 = y - vh * 1.6;
-  const r0 = clamp01((y2 - vh * 0.75) / (vh * 0.5));
-  const re = easeOut(r0);
-  const px = clamp01(y2 / (vh * 0.7));
-  const pxe = easeOut(px);
+function applyHowto(stage) {
+  if (!howtoLayer) return;
+  const { vh, position } = stage;
+  const exit = stage.howtoToPrice.outgoing;
+  const rise = clamp01((position - vh * HOWTO_RISE_START_VH) / (vh * HOWTO_RISE_DISTANCE_VH));
+  const risen = easeOut(rise);
+  const howtoOpacity = risen * Math.max(0, 1 - exit * LAYER_FADE_OUT_FACTOR);
+  howtoLayer.style.opacity = String(howtoOpacity);
+  // Die Kachel-Animationen (HowtoSteps.astro) laufen nur, solange die Ebene
+  // sichtbar ist - spart Rechenzeit/Akku, und man sieht sie beim Ankommen.
+  howtoLayer.classList.toggle("is-visible", howtoOpacity > HOWTO_VISIBLE_MIN_OPACITY);
+  howtoLayer.style.transform =
+    "translateY(" + (LAYER_RISE_OFFSET_PX * (1 - risen) - travel() * easeOut(exit)) + "px)";
+  howtoLayer.style.pointerEvents =
+    rise > HOWTO_INTERACTIVE_MIN_RISE && exit < LAYER_INTERACTIVE_MAX_EXIT ? "auto" : "none";
+  // Der Hintergrund wechselt mit der zweiten Ebene auf das Wolkenmeer.
+  if (howtoBg) howtoBg.style.opacity = String(risen);
+}
 
-  if (howtoLayer) {
-    const q = clamp01((y - vh * 0.95) / (vh * 0.6));
-    const qe = easeOut(q);
-    const howtoOpacity = qe * Math.max(0, 1 - px * 1.35);
-    howtoLayer.style.opacity = String(howtoOpacity);
-    // Die Kachel-Animationen (HowtoSteps.astro) laufen nur, solange die Ebene
-    // sichtbar ist - spart Rechenzeit/Akku, und man sieht sie beim Ankommen.
-    howtoLayer.classList.toggle("is-visible", howtoOpacity > 0.02);
-    howtoLayer.style.transform = "translateY(" + (34 * (1 - qe) - travel() * pxe) + "px)";
-    howtoLayer.style.pointerEvents = q > 0.6 && px < 0.2 ? "auto" : "none";
-    // Der Hintergrund wechselt mit der zweiten Ebene auf das Wolkenmeer.
-    if (howtoBg) howtoBg.style.opacity = String(qe);
+function applyPrice(stage) {
+  if (!priceLayer) return;
+  const rise = stage.howtoToPrice.incoming;
+  const exit = stage.priceToDev.outgoing;
+  const risen = easeOut(rise);
+  priceLayer.style.opacity = String(risen * Math.max(0, 1 - exit * LAYER_FADE_OUT_FACTOR));
+  priceLayer.style.transform =
+    "translateY(" + (LAYER_RISE_OFFSET_PX * (1 - risen) - travel() * easeOut(exit)) + "px)";
+  priceLayer.style.pointerEvents =
+    rise > LAYER_INTERACTIVE_MIN_RISE && exit < LAYER_INTERACTIVE_MAX_EXIT ? "auto" : "none";
+}
+
+function applyDev(stage) {
+  if (!devLayer) return;
+  const rise = stage.priceToDev.incoming;
+  const risen = easeOut(rise);
+  devLayer.style.opacity = String(risen);
+  devLayer.style.transform = "translateY(" + LAYER_RISE_OFFSET_PX * (1 - risen) + "px)";
+  devLayer.style.pointerEvents = rise > LAYER_INTERACTIVE_MIN_RISE ? "auto" : "none";
+  replayDevAnimation(risen);
+
+  // Die beiden Karten steigen versetzt nach, damit der Blick von links nach
+  // rechts gefuehrt wird statt beide Bloecke gleichzeitig zu zeigen.
+  if (devCardA) {
+    const shown = staggeredRise(rise, DEV_CARD_A_DELAY_RISE);
+    devCardA.style.opacity = String(shown);
+    devCardA.style.transform = "translateY(" + DEV_CARD_RISE_OFFSET_PX * (1 - shown) + "px)";
   }
-
-  // Ebene 4 (Entwickler), dieselbe Choreografie wie 2 -> 3.
-  const y3 = y - vh * 3.2;
-  const d0 = clamp01((y3 - vh * 0.75) / (vh * 0.5));
-  const dev = easeOut(d0);
-  const dx = clamp01(y3 / (vh * 0.7));
-  const dxe = easeOut(dx);
-
-  if (priceLayer) {
-    priceLayer.style.opacity = String(re * Math.max(0, 1 - dx * 1.35));
-    priceLayer.style.transform = "translateY(" + (34 * (1 - re) - travel() * dxe) + "px)";
-    priceLayer.style.pointerEvents = r0 > 0.5 && dx < 0.2 ? "auto" : "none";
+  if (devCardB) {
+    const shown = staggeredRise(rise, DEV_CARD_B_DELAY_RISE);
+    devCardB.style.opacity = String(shown);
+    devCardB.style.transform = "translateY(" + DEV_CARD_RISE_OFFSET_PX * (1 - shown) + "px)";
   }
+}
 
-  if (devLayer) {
-    devLayer.style.opacity = String(dev);
-    devLayer.style.transform = "translateY(" + 34 * (1 - dev) + "px)";
-    devLayer.style.pointerEvents = d0 > 0.5 ? "auto" : "none";
-
-    if (dev > 0.55) {
-      if (!devPlayed) {
-        devPlayed = true;
-        void devLayer.offsetWidth;
-        devLayer.classList.add("play");
-      }
-    } else if (devPlayed && dev < 0.08) {
-      devPlayed = false;
-      devLayer.classList.remove("play");
+function replayDevAnimation(risen) {
+  if (risen > DEV_PLAY_MIN_RISE) {
+    if (!devPlayed) {
+      devPlayed = true;
+      void devLayer.offsetWidth;
+      devLayer.classList.add("play");
     }
-
-    // Die beiden Karten steigen versetzt nach, damit der Blick von links nach
-    // rechts gefuehrt wird statt beide Bloecke gleichzeitig zu zeigen.
-    const stagger = (delay) => {
-      const t = clamp01((d0 - delay) / (1 - delay));
-      return 1 - Math.pow(1 - t, 3);
-    };
-    if (devCardA) {
-      const s = stagger(0.05);
-      devCardA.style.opacity = String(s);
-      devCardA.style.transform = "translateY(" + 46 * (1 - s) + "px)";
-    }
-    if (devCardB) {
-      const s = stagger(0.3);
-      devCardB.style.opacity = String(s);
-      devCardB.style.transform = "translateY(" + 46 * (1 - s) + "px)";
-    }
+  } else if (devPlayed && risen < DEV_REPLAY_MAX_RISE) {
+    devPlayed = false;
+    devLayer.classList.remove("play");
   }
+}
 
+function applyFooter(stage) {
   // Fussband: steigt ganz am Ende von der Unterkante herein, ueber der letzten
   // Ebene — wie ein Footer, nicht wie eine eigene Sektion.
-  if (footer) {
-    // Am Handy setzt das Band erst NACH dem Entwickler-Halt ein - sonst stuende
-    // dort schon ein Hauch Fussband unter der Karte.
-    const f = clamp01((y - vh * (stepMode() ? 4.68 : 4.55)) / (vh * 0.5));
-    const fe = easeOut(f);
-    footer.style.opacity = String(fe);
-    footer.style.transform = "translateY(" + 100 * (1 - fe) + "%)";
-    footer.style.pointerEvents = f > 0.6 ? "auto" : "none";
-    // Die letzte Ebene weicht dem Band aus, statt sich davon ueberdecken zu
-    // lassen: das Band ist hoeher als der Bodenabstand der Ebene.
-    if (devLayer) {
-      const base = stepMode() ? 20 : vh <= 660 ? 34 : 44;
-      const lift = Math.max(0, footer.offsetHeight - base) * fe;
-      devLayer.style.paddingBottom = base + lift + "px";
-      // Handy: die Ebene steht oben buendig (nicht mittig), der Bodenabstand
-      // allein hebt sie nicht an. Reicht die Karte ins Band, rueckt die ganze
-      // Ebene um genau die Ueberdeckung nach oben.
-      let headOpacity = "";
-      if (stepMode() && devList && fe > 0) {
-        const bottom = devList.offsetTop + devList.offsetHeight;
-        const overlap = Math.max(0, bottom - (vh - footer.offsetHeight)) * fe;
-        devLayer.style.transform = "translateY(" + -overlap + "px)";
-        // Rueckt die Ebene dabei unter die Kopfleiste, weicht ihr Kopf aus.
-        if (overlap > 0) headOpacity = String(Math.max(0, 1 - overlap / 36));
-      }
-      for (const head of devHead) head.style.opacity = headOpacity;
-    }
+  if (!footer) return;
+  const { vh, position } = stage;
+  // Am Handy setzt das Band erst NACH dem Entwickler-Halt ein - sonst stuende
+  // dort schon ein Hauch Fussband unter der Karte.
+  const startVh = stepMode() ? FOOTER_START_STEP_MODE_VH : FOOTER_START_VH;
+  const rise = clamp01((position - vh * startVh) / (vh * FOOTER_RISE_DISTANCE_VH));
+  const risen = easeOut(rise);
+  footer.style.opacity = String(risen);
+  footer.style.transform = "translateY(" + FOOTER_HIDDEN_OFFSET_PERCENT * (1 - risen) + "%)";
+  footer.style.pointerEvents = rise > FOOTER_INTERACTIVE_MIN_RISE ? "auto" : "none";
+  // Die letzte Ebene weicht dem Band aus, statt sich davon ueberdecken zu
+  // lassen: das Band ist hoeher als der Bodenabstand der Ebene.
+  if (devLayer) liftDevLayer(vh, risen);
+}
+
+function devBottomPaddingPx(vh) {
+  if (stepMode()) return DEV_BOTTOM_PADDING_STEP_MODE_PX;
+  return vh <= LOW_VIEWPORT_MAX_HEIGHT_PX ? DEV_BOTTOM_PADDING_LOW_VIEWPORT_PX : DEV_BOTTOM_PADDING_PX;
+}
+
+function liftDevLayer(vh, footerRisen) {
+  const base = devBottomPaddingPx(vh);
+  const lift = Math.max(0, footer.offsetHeight - base) * footerRisen;
+  devLayer.style.paddingBottom = base + lift + "px";
+  // Handy: die Ebene steht oben buendig (nicht mittig), der Bodenabstand
+  // allein hebt sie nicht an. Reicht die Karte ins Band, rueckt die ganze
+  // Ebene um genau die Ueberdeckung nach oben.
+  let headOpacity = "";
+  if (stepMode() && devList && footerRisen > 0) {
+    const bottom = devList.offsetTop + devList.offsetHeight;
+    const overlap = Math.max(0, bottom - (vh - footer.offsetHeight)) * footerRisen;
+    devLayer.style.transform = "translateY(" + -overlap + "px)";
+    // Rueckt die Ebene dabei unter die Kopfleiste, weicht ihr Kopf aus.
+    if (overlap > 0) headOpacity = String(Math.max(0, 1 - overlap / DEV_HEAD_FADE_DISTANCE_PX));
   }
+  for (const head of devHead) head.style.opacity = headOpacity;
 }
 
 /* Schritt-Karten am Handy: s = 0 (Schritt 1) ... 1 (letzter Schritt). Jede
  * Karte steht eine Weile ganz, dazwischen blendet sie weich ueber und gleitet
  * dabei ein Stueck zur Seite. null = Desktop: alle Karten normal. */
-function applySteps(s) {
+function applySteps(progress) {
   if (!stepTiles.length) return;
-  if (s == null) {
+  if (progress == null) {
     for (const tile of stepTiles) {
       tile.style.opacity = "";
       tile.style.transform = "";
@@ -442,18 +560,20 @@ function applySteps(s) {
     }
     return;
   }
-  const t = s * (stepTiles.length - 1);
-  const current = Math.round(t);
-  stepTiles.forEach((tile, i) => {
-    const d = t - i;
-    const o = clamp01(1 - (Math.abs(d) - 0.22) / 0.3);
-    tile.style.opacity = String(o);
+  const position = progress * (stepTiles.length - 1);
+  const current = Math.round(position);
+  for (const [i, tile] of stepTiles.entries()) {
+    const offset = position - i;
+    const opacity = clamp01(
+      1 - (Math.abs(offset) - STEP_FULL_OPACITY_RADIUS_STEPS) / STEP_CROSSFADE_STEPS,
+    );
+    tile.style.opacity = String(opacity);
     // Seitlich wie eine Galerie: die naechste Karte kommt von rechts, die
     // vorige geht nach links - passt zum Wischen.
-    tile.style.transform = "translateX(" + -Math.max(-1, Math.min(1, d)) * 44 + "px)";
-    tile.style.visibility = o > 0.01 ? "visible" : "hidden";
+    tile.style.transform = "translateX(" + -Math.max(-1, Math.min(1, offset)) * STEP_SLIDE_PX + "px)";
+    tile.style.visibility = opacity > STEP_VISIBLE_MIN_OPACITY ? "visible" : "hidden";
     tile.classList.toggle("is-active", i === current);
-  });
+  }
   stepBars.forEach((bar, i) => bar.classList.toggle("is-on", i <= current));
 }
 
@@ -471,9 +591,14 @@ function sectionStops(withSteps = true) {
   if (withSteps && extra > 0) {
     for (let i = 1; i < stepTiles.length; i++) steps.push(rest + i * STEP_RUN * vh);
   }
-  return [0, rest, ...steps, vh * 3.05 + extra, vh * 4.65 + extra, vh * 5.2 + extra].map((t) =>
-    Math.min(t, max),
-  );
+  return [
+    0,
+    rest,
+    ...steps,
+    vh * PRICE_STOP_VH + extra,
+    vh * DEV_STOP_VH + extra,
+    vh * FOOTER_STOP_VH + extra,
+  ].map((stop) => Math.min(stop, max));
 }
 
 /* Eigene Scroll-Animation mit gleicher GESCHWINDIGKEIT statt gleicher Dauer:
@@ -485,21 +610,20 @@ function glideTo(top) {
   const from = page.scrollTop;
   const dist = to - from;
   if (glideRaf) cancelAnimationFrame(glideRaf);
-  if (reduced || Math.abs(dist) < 2) {
+  if (reduced || Math.abs(dist) < GLIDE_MIN_DISTANCE_PX) {
     page.scrollTop = to;
     return;
   }
   const vh = Math.max(1, page.clientHeight);
   // Der Sprung aus dem Hero heraus laeuft etwas straffer: dort blendet
   // zusaetzlich der Hero-Text aus, was die Bewegung laenger wirken laesst.
-  const speed = from < vh * 0.5 ? 470 : 620;
-  const dur = Math.min(1400, Math.max(560, (Math.abs(dist) / vh) * speed));
+  const speed = from < vh * GLIDE_HERO_ZONE_VH ? GLIDE_FROM_HERO_MS_PER_VH : GLIDE_MS_PER_VH;
+  const dur = Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MIN_MS, (Math.abs(dist) / vh) * speed));
   const t0 = performance.now();
   const step = (now) => {
-    const t = Math.min(1, (now - t0) / dur);
-    const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    page.scrollTop = from + dist * e;
-    glideRaf = t < 1 ? requestAnimationFrame(step) : null;
+    const progress = Math.min(1, (now - t0) / dur);
+    page.scrollTop = from + dist * easeInOutCubic(progress);
+    glideRaf = progress < 1 ? requestAnimationFrame(step) : null;
   };
   glideRaf = requestAnimationFrame(step);
 }
@@ -618,11 +742,19 @@ function wireStepSwipe() {
       const dx = touch.clientX - x0;
       const dy = touch.clientY - y0;
       x0 = null;
-      if (Math.abs(dx) < 44 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+      if (
+        Math.abs(dx) < SWIPE_MIN_DISTANCE_PX ||
+        Math.abs(dx) < Math.abs(dy) * SWIPE_HORIZONTAL_DOMINANCE_FACTOR
+      )
+        return;
       const vh = page.clientHeight;
       const rest = vh * HOWTO_REST;
-      const t = clamp01((page.scrollTop - rest) / stepExtra(vh)) * (stepTiles.length - 1);
-      const next = Math.max(0, Math.min(stepTiles.length - 1, Math.round(t) + (dx < 0 ? 1 : -1)));
+      const stepPosition =
+        clamp01((page.scrollTop - rest) / stepExtra(vh)) * (stepTiles.length - 1);
+      const next = Math.max(
+        0,
+        Math.min(stepTiles.length - 1, Math.round(stepPosition) + (dx < 0 ? 1 : -1)),
+      );
       glideTo(rest + next * STEP_RUN * vh);
     },
     { passive: true },
@@ -641,65 +773,90 @@ function wireCopy() {
       btn.textContent = lang === "de" ? DE.copiedLabel : "Copied";
       setTimeout(() => {
         btn.textContent = label;
-      }, 1800);
+      }, COPIED_LABEL_DURATION_MS);
     });
   }
 }
 
 function wireKeyboard() {
-  document.addEventListener("keydown", (event) => {
-    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
-    // Bei offenem Blatt gehoert die Tastatur dem Blatt: sonst springt die Seite
-    // dahinter und der lange Rechtstext liesse sich nicht scrollen.
-    const open = document.querySelector('.sheet[data-open="1"]');
-    if (open) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeSheet();
-      }
-      return;
-    }
-    const target = event.target;
-    if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName || "")))
-      return;
-    // Handy-Fassung (hermes-mobile.js): dort ist die Buehne ausgeblendet und
-    // die Tastatur gehoert den Screens.
-    if (!page || !page.clientHeight || usesSheets()) return;
+  document.addEventListener("keydown", onKeyDown);
+}
 
-    const stops = sectionStops();
-    if (event.key === "Home" || event.key === "End") {
-      event.preventDefault();
-      glideTo(event.key === "Home" ? 0 : stops[stops.length - 1]);
-      return;
-    }
-    const down =
-      event.key === "PageDown" ||
-      event.key === "ArrowDown" ||
-      (event.key === " " && !event.shiftKey);
-    const up =
-      event.key === "PageUp" || event.key === "ArrowUp" || (event.key === " " && event.shiftKey);
-    if (!down && !up) return;
+function onKeyDown(event) {
+  if (isModifiedKeyEvent(event)) return;
+  // Bei offenem Blatt gehoert die Tastatur dem Blatt: sonst springt die Seite
+  // dahinter und der lange Rechtstext liesse sich nicht scrollen.
+  if (keyHandledByOpenSheet(event)) return;
+  if (isTypingTarget(event.target)) return;
+  // Handy-Fassung (hermes-mobile.js): dort ist die Buehne ausgeblendet und
+  // die Tastatur gehoert den Screens.
+  if (!page || !page.clientHeight || usesSheets()) return;
+  navigateByKey(event);
+}
+
+function isModifiedKeyEvent(event) {
+  return event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey;
+}
+
+function keyHandledByOpenSheet(event) {
+  const open = document.querySelector('.sheet[data-open="1"]');
+  if (!open) return false;
+  if (event.key === "Escape") {
     event.preventDefault();
+    closeSheet();
+  }
+  return true;
+}
 
-    // Tasten springen auf die Ruhepunkte, nicht um eine Bildschirmhoehe —
-    // dazwischen liegen die Uebergaenge, in denen nur der Hintergrund zu sehen waere.
-    const y = page.scrollTop;
-    const tol = page.clientHeight * 0.25;
-    let i;
-    if (down) {
-      i = stops.findIndex((t) => t > y + tol);
-      if (i === -1) i = stops.length - 1;
-    } else {
-      i = 0;
-      for (let k = stops.length - 1; k >= 0; k--) {
-        if (stops[k] < y - tol) {
-          i = k;
-          break;
-        }
-      }
-    }
-    glideTo(stops[i]);
-  });
+function isTypingTarget(target) {
+  return Boolean(
+    target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName || "")),
+  );
+}
+
+function keyDirection(event) {
+  const down =
+    event.key === "PageDown" ||
+    event.key === "ArrowDown" ||
+    (event.key === " " && !event.shiftKey);
+  if (down) return "down";
+  const up =
+    event.key === "PageUp" || event.key === "ArrowUp" || (event.key === " " && event.shiftKey);
+  return up ? "up" : null;
+}
+
+function firstStopAfter(stops, threshold) {
+  const index = stops.findIndex((stop) => stop > threshold);
+  return index === -1 ? stops.length - 1 : index;
+}
+
+function lastStopBefore(stops, threshold) {
+  for (let k = stops.length - 1; k >= 0; k--) {
+    if (stops[k] < threshold) return k;
+  }
+  return 0;
+}
+
+function navigateByKey(event) {
+  const stops = sectionStops();
+  if (event.key === "Home" || event.key === "End") {
+    event.preventDefault();
+    glideTo(event.key === "Home" ? 0 : stops[stops.length - 1]);
+    return;
+  }
+  const direction = keyDirection(event);
+  if (!direction) return;
+  event.preventDefault();
+
+  // Tasten springen auf die Ruhepunkte, nicht um eine Bildschirmhoehe —
+  // dazwischen liegen die Uebergaenge, in denen nur der Hintergrund zu sehen waere.
+  const scrollTop = page.scrollTop;
+  const tolerance = page.clientHeight * KEY_STOP_TOLERANCE_VH;
+  const index =
+    direction === "down"
+      ? firstStopAfter(stops, scrollTop + tolerance)
+      : lastStopBefore(stops, scrollTop - tolerance);
+  glideTo(stops[index]);
 }
 
 /* Unterseiten verlinken "So funktioniert's" und "Preise" als Anker der Startseite
@@ -749,9 +906,9 @@ function init() {
     restGap = null;
     apply();
   };
-  for (const q of [mq, mqSheets]) {
-    if (q.addEventListener) q.addEventListener("change", onView);
-    else q.addListener(onView);
+  for (const query of [mq, mqSheets]) {
+    if (query.addEventListener) query.addEventListener("change", onView);
+    else query.addListener(onView);
   }
 
   // Beim Sichtbarwerden einmal nachziehen: im Hintergrund pausiert der Browser
