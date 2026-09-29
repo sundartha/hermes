@@ -74,5 +74,8 @@ jobs:
       - name: Tests
         run: npm test -- -- --test-concurrency=4
 
+      - name: Werkzeug-Tests
+        run: node --test "test/werkzeuge/*.test.js"
+
       - name: Audit
         run: npm audit --audit-level=high
