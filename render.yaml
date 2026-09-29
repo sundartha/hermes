@@ -67,12 +67,6 @@ services:
         sync: false
       - key: TELNYX_ACCOUNT_SID
         sync: false
-      # OUTBOUND-E4 (Drift-Waechter): FQDN-Connection (ANI-Override) + Outbound-Voice-
-      # Profile (Ziellaender). Leer -> die Pruefungen 2/6/7 melden unbekannt (nie fatal).
-      - key: TELNYX_FQDN_CONNECTION_ID
-        sync: false
-      - key: TELNYX_OUTBOUND_VOICE_PROFILE_ID
-        sync: false
       # OUTBOUND-E5 (F3): Digest-Zugangsdaten der SIP-Trunk-FQDN-Connection oben, nur
       # gebraucht fuer ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true (s.u.). Leer -> das
       # Anlegen einer Registrierung schlaegt fail-closed fehl (KEIN No-op).
