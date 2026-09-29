@@ -17,7 +17,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
-import { FROM_SOURCE, makeDefaultState, recordCallCostEvidence, callCostEvidence, recordElDetectorCounts } from "../src/store/state-ops.js";
+import {
+  FROM_SOURCE,
+  makeDefaultState,
+  endCallRecord,
+  recordCallCostEvidence,
+  callCostEvidence,
+  recordElDetectorCounts,
+} from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, REIFE } from "../src/store/defaults.js";
 import { KOSTENART } from "../src/billing/kostenarten.js";
 import { terminateAndBillCall } from "../src/telephony/call-termination.js";
@@ -107,11 +114,7 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
     recordFailureReason: (_id, reason) => captured.failureReasons.push(reason),
     // Der ECHTE Store (endCallRecord) liefert den fertig persistierten Call zurueck -
     // answeredAnchorOutcome braucht dessen endedAt (s. outbound.js#finishFromConversation).
-    endCallRecord: (_id, status) => {
-      call.status = status;
-      call.endedAt = new Date().toISOString();
-      return call;
-    },
+    endCallRecord: (callId, status) => endCallRecord(state, callId, status).call,
     // F-2 (tasks/kostenv2/befunde-kette.md): NICHT laenger weggelassen. Ohne diese zwei
     // Methoden verschluckte der fail-soft-Zweig aus KV2-4 den Belegweg lautlos -
     // ausgerechnet in dem Test, der gegen ECHTE Anbieter-Antworten prueft. Delegiert an
