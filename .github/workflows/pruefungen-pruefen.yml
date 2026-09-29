@@ -1,0 +1,39 @@
+name: Prüfungen prüfen
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruefungen-pruefen-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pruefungen-pruefen:
+    name: Prüfungen prüfen
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: ESLint-Konfiguration, Unterordner und only prüfen
+        run: node tools/eslint-konfig-pruefen.mjs
+
+      - name: Tests der Werkzeuge
+        run: node --test "test/werkzeuge/*.test.js"
