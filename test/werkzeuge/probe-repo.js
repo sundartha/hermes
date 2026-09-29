@@ -9,13 +9,14 @@ export const RUNNER = join(REPO_ROOT, "test/testbaenke-run.mjs");
 export const AFFECTED_TESTS_TOOL = join(REPO_ROOT, "tools/betroffene-tests.mjs");
 export const PRUEFLEITER_TOOL = join(REPO_ROOT, "tools/pruefleiter.mjs");
 export const ESLINT_BIN = join(REPO_ROOT, "node_modules/eslint/bin/eslint.js");
+export const PRE_PUSH_HOOK = join(REPO_ROOT, ".githooks/pre-push");
 
 const INHERITED_TEST_RUNNER_VARIABLE = "NODE_TEST_CONTEXT";
 const GIT_VARIABLE_PREFIX = "GIT_";
 const PROBE_AUTHOR = ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid"];
 const PROBE_COMMIT_SETTINGS = ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"];
 
-function isolatedEnvironment() {
+export function isolatedEnvironment() {
   return Object.fromEntries(
     Object.entries(process.env).filter(
       ([name]) => name !== INHERITED_TEST_RUNNER_VARIABLE && !name.startsWith(GIT_VARIABLE_PREFIX),
