@@ -1083,7 +1083,7 @@ export function derivePlatformNumberBindings({ config, store }) {
 // Zweig traegt zusaetzlich sein eigenes .catch() (zweite Linie, Muster der beiden
 // Bestandszweige). test/kv-m4-monthly-cross-check.test.js (KV-M4-8) belegt die Isolation
 // direkt gegen diese Funktion, nicht nur als Behauptung im Kommentar.
-export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }) {
+export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }) {
   void costTruing
     .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
     .catch((err) => console.error("[cost-truing]", err.message));
@@ -1115,12 +1115,6 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageW
   void outageWatch
     .runHoldEscalationSweep()
     .catch((err) => console.error("[outage-watch]", err.message));
-  // OUTBOUND-E4 (F4): SIEBTER, unabhaengiger Schritt im selben Stunden-Takt - der
-  // Drift-Waechter gegen die Anbieter-Wirklichkeit. Kein zweiter Timer, keine neue
-  // Ressource. Mindestfrist + Claim sitzen IM Waechter (PM-26), nicht hier.
-  void driftWatch
-    .runDriftSweep()
-    .catch((err) => console.error("[drift-watch]", err.message));
   // GP-P0 (PLAN-GELDPFAD.md 2): ACHTER, unabhaengiger Schritt im selben Stunden-Takt -
   // meldet einen aktiven, verifizierten Subscriber, der laenger als die Frist keine
   // Live-Nummer hat. Kein zweiter Timer, keine neue Ressource. Reine Beobachtung: dieser
@@ -1223,9 +1217,6 @@ export async function bootServer({
   // dieselbe EINE Instanz wie costTruing/costCrossCheck (INV-7), server.js reicht sie im
   // deps-Buendel durch.
   outageWatch,
-  // OUTBOUND-E4: siebter, unabhaengiger Zweig desselben Stunden-Sweeps (runSweepTick) +
-  // eigener Boot-Lauf. Dieselbe EINE Instanz (INV-7), server.js reicht sie durch.
-  driftWatch,
   // GP-P0: achter, unabhaengiger Zweig desselben Stunden-Sweeps. Dieselbe EINE Instanz
   // (INV-7), server.js reicht sie durch. KEIN eigener Boot-Lauf: der Befund ist
   // zeit-basiert und verliert nichts, wenn er erst im ersten Tick faellt.
@@ -1302,7 +1293,7 @@ export async function bootServer({
   // mit (runSweepTick oben, exportiert und direkt testbar) - kein zweiter Timer, keine
   // neue Ressource.
   setInterval(
-    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }),
+    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }),
     config.billing.costTruingSweepIntervalMs,
   ).unref();
 
@@ -1355,7 +1346,6 @@ export async function bootServer({
     logBootBanner(config, port, store.load());
     // IEX-A8 (E11): Beleg-Zahlen stehen AUSSCHLIESSLICH in der Zeile, die der Sweep NACH seinem letzten GET
     // schreibt - die Vor-listen-Sonde (inboundElAllowlistProbeLine) zeigt nur den DB-Stand davor und nennt keine.
-    // Fire-and-forget NACH den Boot-Logs (Muster driftWatch.runBootProbe): Anbieter-IO blockiert weder listen noch
     // Healthcheck; runBootSweep rejectet nie. Setzt keine Timer und ruft kein exit - INV-5 unberuehrt.
     void inboundTrunkSweep.runBootSweep();
     // PROV-01/F5: Crash-verwaiste Provisioning-Jobs beim Boot reconcilen. Fire-and-forget NACH
@@ -1374,14 +1364,7 @@ export async function bootServer({
     void probeMailBoot(config).catch((fehler) =>
       console.error("[mail] Sonde unerwartet gescheitert", fehler?.code ?? fehler?.name ?? "unbekannt"),
     );
-    // OUTBOUND-E4: EIN Lauf beim Start - fire-and-forget NACH den Boot-Logs (Muster
-    // PROV-01/mail-boot-probe direkt darueber): blockiert weder listen noch Healthcheck.
-    // Anbieter-IO gehoert nie an die Boot-Sequenz. Der Waechter traegt seinen eigenen
-    // Timeout je Abfrage und seine Mindestfrist (OUTBOUND_DRIFT_MIN_INTERVAL_MS) - ohne
-    // sie liefe er bei einem externen 10-Minuten-Ping bis zu 144x/Tag statt einmal.
-    void driftWatch.runBootProbe().catch((err) => console.error("[drift-watch] Boot-Sonde:", err.message));
     // GP-P6: EIN Lauf beim Start - fire-and-forget NACH den Boot-Logs (Muster
-    // driftWatch.runBootProbe direkt darueber). Anbieter-IO gehoert nie an die
     // Boot-Sequenz; die Mindestfrist im Waechter macht daraus hoechstens EINEN Abruf/Tag.
     void priceDriftWatch.runBootProbe().catch((err) => console.error("[price-drift] Boot-Sonde:", err.message));
   });

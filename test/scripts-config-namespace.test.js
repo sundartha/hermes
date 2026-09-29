@@ -16,9 +16,6 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SCRIPTS = [
   "scripts/telnyx-call-latency.mjs",
   "scripts/smoke-stripe-payment.mjs",
-  // OUTBOUND-E4: ohne diesen Eintrag erfasst dieses Gate das neue Skript GAR NICHT und
-  // bliebe gruen, ohne etwas zu pruefen (Plan-Auftrag, woertlich).
-  "scripts/check-outbound-drift.mjs",
   // OUTBOUND-E5: derselbe Grund - ohne diesen Eintrag bliebe der Reparaturlauf ungeprueft.
   "scripts/el-nummern-registrierung.mjs",
 ];

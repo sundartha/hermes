@@ -48,8 +48,6 @@ import {
 import { emergencyBrakeSeconds } from "../call-duration.js";
 import { findActiveNumber } from "../store/views.js";
 import { openOutageAlert } from "../store/state-ops.js";
-import { DRIFT_BEFUND } from "./outbound-config-drift.js";
-import { befundBucket } from "./outbound-drift-watch.js";
 import { sendFailSoftAlertSms } from "./alert-sms.js";
 import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.js";
 import { findPlan } from "../plans.js";
@@ -213,10 +211,7 @@ export function resolveMaxDurationS(raw, brakeSeconds) {
 // lange falsch im Code). Die Zahl steht bewusst NUR hier.
 const GATE_CHAIN_LENGTH = 18;
 
-// OUTBOUND-E4: derselbe Bucket-Name wie der Drift-Waechter (outbound-drift-watch.js#
-// befundBucket(DRIFT_BEFUND.OWNERSHIP_LOST)) - EINE Quelle (G5), damit der Riegel und der
-// Waechter niemals unterschiedliche Marker-Namen lesen/schreiben.
-const ANI_OWNERSHIP_BUCKET = befundBucket(DRIFT_BEFUND.OWNERSHIP_LOST);
+const ANI_OWNERSHIP_BUCKET = "drift:ownership_lost";
 
 // Reine Frische-Frage (Muster meldeErlaubt/outage-detection.js): kein/kein gueltiger
 // Zeitstempel -> NICHT frisch (fail-open bei Unwissen - der Riegel gated nie auf einer

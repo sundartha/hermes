@@ -7,7 +7,6 @@
 // baut, nie die echte Fabrik.
 //
 // Die SOLL-Liste wird NICHT getippt, sondern aus dem Quelltext von runSweepTick GELESEN
-// (Regex auf outageWatch.<name>()/driftWatch.<name>()) - eine getippte zweite Liste
 // koennte von der Verdrahtung abdriften, ohne dass ein Test es merkt (G5).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -15,7 +14,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeOutageWatch } from "../src/telephony/outage-report.js";
-import { makeDriftWatch } from "../src/telephony/outbound-drift-watch.js";
 import { makePaidWithoutNumberWatch } from "../src/billing/paid-without-number-watch.js";
 import { makeProvisionRetryWatch } from "../src/billing/provision-retry-sweep.js";
 import { makePriceDriftWatch } from "../src/billing/price-drift-watch.js";
@@ -57,7 +55,6 @@ function fakeDeps() {
       outageAlertWindowMs: 0,
       outageAlertSelfTestIntervalMs: 0,
       platformHoldEscalationMaxAgeMs: 0,
-      outboundDriftMinIntervalMs: 0,
     }),
     audit: () => {},
     messaging: () => ({}),
@@ -71,12 +68,6 @@ test("Z-A1: jede von runSweepTick auf outageWatch gerufene Methode existiert auf
   pruefeVertrag(outageWatch, methoden, "outageWatch");
 });
 
-test("Z-A2: jede von runSweepTick auf driftWatch gerufene Methode existiert auf makeDriftWatch(...) und ist eine Funktion", () => {
-  const methoden = gerufeneMethoden("driftWatch");
-  const driftWatch = makeDriftWatch({ ...fakeDeps(), telnyxRead: {}, elRead: {} });
-  pruefeVertrag(driftWatch, methoden, "driftWatch");
-});
-
 test("Z-A3: Gegenprobe - ein Objekt, dem eine Methode fehlt, laesst pruefeVertrag scheitern (belegt, dass die Pruefung wirklich etwas prueft)", () => {
   const methoden = gerufeneMethoden("outageWatch");
   const unvollstaendig = { ...makeOutageWatch(fakeDeps()) };
@@ -88,7 +79,6 @@ test("Z-A4: runSweepTick mit einer Fabrik-Rueckgabe, der eine Methode fehlt, WIR
   const vollstaendigesOutageWatch = makeOutageWatch(fakeDeps());
   const unvollstaendigesOutageWatch = { ...vollstaendigesOutageWatch };
   delete unvollstaendigesOutageWatch.runHoldEscalationSweep;
-  const vollstaendigesDriftWatch = makeDriftWatch({ ...fakeDeps(), telnyxRead: {}, elRead: {} });
   assert.throws(
     () =>
       runSweepTick({
@@ -96,7 +86,6 @@ test("Z-A4: runSweepTick mit einer Fabrik-Rueckgabe, der eine Methode fehlt, WIR
         provisioning: { settleDueNumberMonthMeters: async () => ({}) },
         costCrossCheck: { runMonthlyCrossCheck: async () => ({}) },
         outageWatch: unvollstaendigesOutageWatch,
-        driftWatch: vollstaendigesDriftWatch,
       }),
     /runHoldEscalationSweep is not a function/,
     "ein fehlender Zweig muss runSweepTick SYNCHRON zum Werfen bringen - genau der Produktionsschaden, den GP-1 belegt",

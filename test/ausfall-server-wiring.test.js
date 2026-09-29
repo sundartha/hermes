@@ -40,24 +40,8 @@ test("E3B-01: boot.js reicht outageWatch aus dem deps-Buendel an runSweepTick we
     "runSweepTick muss outageWatch.runRecoverySweep() tatsaechlich aufrufen");
   // Der Aufrufer von runSweepTick (der Stunden-Timer) muss outageWatch aus SEINEM
   // eigenen deps-Buendel weiterreichen, nicht selbst neu bauen (EINE Instanz, INV-7).
-  assert.match(bootSrc, /runSweepTick\({\s*costTruing,\s*provisioning,\s*costCrossCheck,\s*outageWatch,\s*driftWatch,\s*paidWithoutNumberWatch,\s*provisionRetryWatch,\s*priceDriftWatch\s*}\)/,
-    "der Sweep-Timer muss outageWatch, driftWatch, paidWithoutNumberWatch, provisionRetryWatch UND priceDriftWatch an runSweepTick durchreichen");
-});
-
-// OUTBOUND-E4: zweiter Verdrahtungspunkt, identisches Muster - der Drift-Waechter ist der
-// SIEBTE Sweep-Zweig UND ein eigener Boot-Lauf. Dieselbe Luecke wie bei E3B-01: faellt
-// eine der Zeilen weg, wirft runSweepTick beim naechsten Boot auf undefined bzw. der
-// Boot-Lauf entfaellt lautlos, ohne dass ein Bestandstest es merkt.
-test("OUTBOUND-E4: server.js baut makeDriftWatch und reicht driftWatch ins deps-Buendel durch", () => {
-  assert.match(serverSrc, /import\s*{\s*makeDriftWatch\s*}\s*from\s*"\.\/telephony\/outbound-drift-watch\.js"/,
-    "makeDriftWatch muss importiert sein");
-  assert.match(serverSrc, /const driftWatch = makeDriftWatch\(/,
-    "driftWatch muss EINMAL beim Boot konstruiert werden (Muster outageWatch)");
-  const depsStart = serverSrc.indexOf("const deps = {");
-  assert.notEqual(depsStart, -1, "deps-Buendel nicht gefunden");
-  const depsEnd = serverSrc.indexOf("};", depsStart);
-  const depsBlock = serverSrc.slice(depsStart, depsEnd);
-  assert.match(depsBlock, /\bdriftWatch,/, "driftWatch fehlt im deps-Buendel");
+  assert.match(bootSrc, /runSweepTick\({\s*costTruing,\s*provisioning,\s*costCrossCheck,\s*outageWatch,\s*paidWithoutNumberWatch,\s*provisionRetryWatch,\s*priceDriftWatch\s*}\)/,
+    "der Sweep-Timer muss outageWatch, paidWithoutNumberWatch, provisionRetryWatch UND priceDriftWatch an runSweepTick durchreichen");
 });
 
 // Review-Blocker (BLOCKER 1 / G9/C2): der ANI-Riegel (outbound-gates.js#ani_ownership)
@@ -92,17 +76,6 @@ test("OUTBOUND-E4: server.js baut den echten aniOwnershipRecheck ueber providerC
   assert.ok(telnyxReadDefIndex < gatesStart, "telnyxRead muss VOR makeOutboundGates(...) definiert sein");
 });
 
-test("OUTBOUND-E4: boot.js reicht driftWatch aus dem deps-Buendel an runSweepTick weiter UND ruft runBootProbe() im app.listen-Callback", () => {
-  assert.match(bootSrc, /function runSweepTick\({[^}]*\bdriftWatch\b[^}]*}\)/,
-    "runSweepTick muss driftWatch destrukturieren");
-  assert.match(bootSrc, /driftWatch\s*\n\s*\.runDriftSweep\(\)/,
-    "runSweepTick muss driftWatch.runDriftSweep() tatsaechlich aufrufen (siebter Zweig)");
-  assert.match(bootSrc, /export async function bootServer\({[^]*?\bdriftWatch,[^]*?}\)/,
-    "bootServer muss driftWatch aus dem deps-Buendel destrukturieren");
-  assert.match(bootSrc, /driftWatch\.runBootProbe\(\)/,
-    "bootServer muss driftWatch.runBootProbe() im app.listen-Callback aufrufen (Boot-Lauf)");
-});
-
 test("GP-P0: server.js baut makePaidWithoutNumberWatch und reicht paidWithoutNumberWatch ins deps-Buendel durch", () => {
   assert.match(
     serverSrc,
@@ -110,7 +83,7 @@ test("GP-P0: server.js baut makePaidWithoutNumberWatch und reicht paidWithoutNum
     "makePaidWithoutNumberWatch muss importiert sein",
   );
   assert.match(serverSrc, /const paidWithoutNumberWatch = makePaidWithoutNumberWatch\(/,
-    "paidWithoutNumberWatch muss EINMAL beim Boot konstruiert werden (Muster outageWatch/driftWatch)");
+    "paidWithoutNumberWatch muss EINMAL beim Boot konstruiert werden (Muster outageWatch)");
   const depsStart = serverSrc.indexOf("const deps = {");
   assert.notEqual(depsStart, -1, "deps-Buendel nicht gefunden");
   const depsEnd = serverSrc.indexOf("};", depsStart);
@@ -166,7 +139,7 @@ test("GP-P6: server.js baut makePriceDriftWatch und reicht priceDriftWatch ins d
     "makePriceDriftWatch muss importiert sein",
   );
   assert.match(serverSrc, /const priceDriftWatch = makePriceDriftWatch\(/,
-    "priceDriftWatch muss EINMAL beim Boot konstruiert werden (Muster driftWatch)");
+    "priceDriftWatch muss EINMAL beim Boot konstruiert werden");
   assert.match(serverSrc, /lesePreis:\s*\(priceId\)\s*=>\s*stripeBilling\.retrievePriceAmount\(priceId\)/,
     "lesePreis muss der rein lesende Stripe-Abruf des bestehenden Adapters sein (kein zweiter HTTP-Client)");
   const depsStart = serverSrc.indexOf("const deps = {");

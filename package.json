@@ -22,7 +22,6 @@
     "elevenlabs:drift": "node scripts/check-elevenlabs-drift.mjs",
     "elevenlabs:push": "node scripts/push-elevenlabs.mjs",
     "exa:key": "node scripts/exa-key-setzen.mjs",
-    "outbound:drift": "node scripts/check-outbound-drift.mjs",
     "reconcile:stale-subs": "node scripts/reconcile-stale-subscriptions.js",
     "reconcile:orphan-accounts": "node scripts/reconcile-orphan-accounts.js",
     "reconcile:pm-types": "node scripts/reconcile-payment-method-types.js",
