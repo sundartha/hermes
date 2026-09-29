@@ -63,6 +63,11 @@ jobs:
       - name: npm ci
         run: npm ci --ignore-scripts
 
+      - name: Install-Skripte
+        run: |
+          set -euo pipefail
+          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
       - name: Lint
         run: npm run lint
 
