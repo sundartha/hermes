@@ -19,7 +19,6 @@ const BEHOBEN_EVENT = "paid_without_number_recovered";
 
 // EXPORTIERT, weil der Marker-Code ein durabler Vertrag ist (outage_alert.code): eine
 // zweite, anderswo getippte Zusammensetzung koennte abdriften, ohne dass ein Test es
-// merkt (G5, Muster outbound-drift-watch.js#befundBucket).
 export const paidWithoutNumberBucket = (tenantId) => `${BEFUND_BUCKET_PREFIX}${tenantId}`;
 
 const istBefundBucket = (code) => code.startsWith(BEFUND_BUCKET_PREFIX);

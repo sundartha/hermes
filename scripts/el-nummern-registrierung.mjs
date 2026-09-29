@@ -5,7 +5,6 @@
 // vor dieser Etappe angelegt wurden (Backfill-Plan, kein automatisches Massen-Anlegen beim
 // Boot).
 //
-// FAIL-CLOSED wie check-outbound-drift.mjs: ungelesen wird nichts als gruen gemeldet.
 // --pruefen (Default) ist NUR-LESEND (Store-Lesung + ElevenLabs GET /v1/convai/
 // phone-numbers). --anlegen ist der EINZIGE Modus mit Schreibzugriff und verlangt
 // zusaetzlich --ja-wirklich - eine vergessene, zu weit gefasste --anlegen-Ausfuehrung darf

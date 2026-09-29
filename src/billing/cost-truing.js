@@ -124,7 +124,6 @@ const COVERAGE_FINDING_CODES = Object.freeze([
   COST_TRUING_FINDING.COVERAGE_STALLED,
 ]);
 
-// Meldestufe je Befund-Code (Muster VOLL_KLASSEN, telephony/outbound-drift-watch.js):
 // die Deckungs-Achse meldet VOLL (WARN -> Audit -> Mail -> SMS), Volumen und
 // TTS-Kontingent bleiben auf der kostenlosen Notiz-Stufe. Das ist keine neue Entscheidung,
 // sondern die bestehende: KE-P8/PM-7 ("kein eigener Alarmweg, keine SMS-Klasse") und
