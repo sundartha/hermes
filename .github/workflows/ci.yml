@@ -69,7 +69,7 @@ jobs:
             | xargs -0 -n1 node --check
 
       - name: Tests
-        run: npm test
+        run: npm test -- -- --test-concurrency=4
 
       - name: Audit
         run: npm audit --audit-level=high
