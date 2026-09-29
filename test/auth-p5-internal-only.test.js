@@ -107,6 +107,7 @@ test("AUTH-P5-1: die sieben internalOnly-Routen weisen den externen Aufrufer ab 
         // es waere path=/api/calls ein Praefix von path=/api/calls/call_p5/... und der
         // Zaehler faelschlich hoch.
         const auditRegex = `\\[audit\\] auth_failed ip=\\S+ path=${escapeForRegex(pfad)} grund=not_local`;
+        await waitForLog(srv, new RegExp(auditRegex));
         assert.equal(countMatches(srv.stdout, auditRegex), 1, `Audit-Zeile fuer ${pfad} fehlt oder kommt mehrfach vor`);
 
         // c) kein Seiteneffekt: kein neuer Call, kein Statuswechsel des geseedeten Calls
