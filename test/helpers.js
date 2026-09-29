@@ -157,12 +157,6 @@ export const BASE_ENV = {
   // AUS, byte-identisch zum Produktions-Default. Kein Bestandstest soll ihn ungewollt
   // scharf schalten; test/outbound-ani-gate.test.js setzt ihn explizit.
   OUTBOUND_ANI_GATE_ENABLED: "false",
-  // OUTBOUND-E4: der Drift-Waechter ist KEIN Sicherheits-Gate, macht aber Anbieter-IO
-  // (Telnyx/ElevenLabs GETs). 0 = KOMPLETT AUS (Rollback-Hebel, Muster
-  // OUTAGE_ALERT_WINDOW_MS=0 oben) - ohne diese Zeile liefe JEDER Spawn-Test beim Boot in
-  // eine Anbieter-Abfrage (Lehre test-base-env-drift). test/outbound-drift-*.test.js
-  // fahren den Kern/die Watch-Funktion direkt, ohne den echten Boot-Takt zu brauchen.
-  OUTBOUND_DRIFT_MIN_INTERVAL_MS: "0",
   // GP-P6: derselbe Grund wie eine Zeile darueber - der Preis-Waechter macht
   // Anbieter-IO (Stripe-GET). 0 = KOMPLETT AUS, damit kein Spawn-Test beim Boot in einen
   // Anbieter-Abruf laeuft (Lehre test-base-env-drift). Die Eskalations-Grenze wird
@@ -254,7 +248,6 @@ export const BASE_ENV = {
   TELNYX_API_BASE: "",
   TELNYX_CONNECTION_ID: "",
   // OUTBOUND-E4: neutral leer, sonst leakt eine lokale .env in Spawn-Tests (Lehre
-  // test-base-env-drift). Wirkungslos hier, weil OUTBOUND_DRIFT_MIN_INTERVAL_MS=0 den
   // Waechter ohnehin komplett aushaelt - Pin trotzdem, Muster TELNYX_CONNECTION_ID.
   TELNYX_FQDN_CONNECTION_ID: "",
   TELNYX_OUTBOUND_VOICE_PROFILE_ID: "",

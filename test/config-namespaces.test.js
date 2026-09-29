@@ -70,7 +70,7 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // ergaenzt (Takt des Preis-Waechters und die Grenze seiner Unwissenheits-Meldung) -> 55.
   // IEX-B1: inboundOutageAlertWindowMs + -MinFailures + -MinAttempts + -FailSharePercent
   // ergaenzt (eigene Schwellen der Inbound-Ausfall-Klasse des Betreiber-Melders) -> 59.
-  billing: 59,
+  billing: 56,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -211,7 +211,7 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // E7: openaiAppsChallengeToken (server) ergaenzt -> 199.
 // T2-04: publicUrlExplicit (server) ergaenzt -> 200.
 // T2-13: callConfirmationSecret (auth) ergaenzt -> 201.
-const EXPECTED_TOTAL_KEYS = 201;
+const EXPECTED_TOTAL_KEYS = 198;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die gepinnten Counts und disjunkte Blaetter", () => {
   assert.deepEqual(
@@ -380,7 +380,7 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // E7: openaiAppsChallengeToken ist primitiv (String, kein Array/nested Objekt) -> 185.
   // T2-04: publicUrlExplicit ist primitiv (Boolean, kein Array/nested Objekt) -> 186.
   // T2-13: callConfirmationSecret ist primitiv (String) -> 187.
-  const EXPECTED_PRIMITIVE_LEAVES = 187;
+  const EXPECTED_PRIMITIVE_LEAVES = 184;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,
