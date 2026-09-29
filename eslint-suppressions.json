@@ -2373,17 +2373,6 @@
       "count": 8
     }
   },
-  "test/finishcall-billing-once.test.js": {
-    "id-length": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "test/fix1-summary-timeout.test.js": {
     "id-length": {
       "count": 5
