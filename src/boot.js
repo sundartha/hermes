@@ -34,7 +34,6 @@ import {
   stalePriceFindings,
   platformAniFindings,
   platformAlertSenderFindings,
-  driftConfigFindings,
   callConfirmationSecretFindings,
   llmFallbackFindings,
   elInboundAccessFindings,
@@ -320,16 +319,6 @@ function warnPlatformAniUnset(config) {
     console.warn(`[boot] ${finding.message}`);
 }
 
-// OUTBOUND-E4: reine Diagnose, NIE fatal (s. driftConfigFindings). Loggt keine ID.
-function warnOutboundDriftConfigUnset(config) {
-  for (const finding of driftConfigFindings({
-    fqdnConnectionId: config.telephony.telnyxFqdnConnectionId,
-    outboundVoiceProfileId: config.telephony.telnyxOutboundVoiceProfileId,
-    elevenLabsOutboundEnabled: config.voice.elevenLabsOutbound.enabled,
-  }))
-    console.warn(`[boot] ${finding.message}`);
-}
-
 // T2-13 (N-10): reine Diagnose, NIE fatal (s. callConfirmationSecretFindings) - fehlendes
 // UND zu kurzes Geheimnis. Loggt nie den Secret-Wert.
 function warnCallConfirmationSecretUnusable(config) {
@@ -594,7 +583,6 @@ function assertBootGates(config, store, durableAudit) {
   warnAlertChannelUnset(config);
   warnKostenAlarmZielUnset(config, durableAudit); // KV2-1, WARN + durabel
   warnPlatformAniUnset(config); // OUTBOUND-E1, WARN
-  warnOutboundDriftConfigUnset(config); // OUTBOUND-E4, WARN
   warnCallConfirmationSecretUnusable(config); // T2-13, WARN
   warnTariffDrift(config, store);
   warnTarifpaar(config, store); // KV2-10, WARN: Tarifpaar-Waechter feuert beim Start
