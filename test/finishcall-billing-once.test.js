@@ -26,6 +26,7 @@ const DOMESTIC_TARIFF_CENTS = 20; // +49/+33/+44 -> Inlandstarif
 const DEFAULT_TARIFF_CENTS = 300; // alles andere -> Worst-Case-Default
 const DOMESTIC_TO = "+4915112345678"; // DE -> Inlandstarif
 const CALL_ID = "bill_once";
+const HTTP_OK = 200;
 
 const TARIFF_ENV = {
   VOICE_TARIFF_DOMESTIC_CENTS: String(DOMESTIC_TARIFF_CENTS),
@@ -42,12 +43,15 @@ const postStatus = (srv, callId, fields) =>
 // finishCall-Pfad (Buchung + save) durch ist (Muster outbound-reconcile-finishcall.test.js).
 async function completeCall(srv, callId) {
   const res = await postStatus(srv, callId, { CallStatus: "completed" });
-  assert.equal(res.status, 200);
+  assert.equal(res.status, HTTP_OK);
   await waitForLog(srv, new RegExp(`\\[voice/status\\][^\\n]*"callId":"${callId}"`));
 }
 
 // costCents des Owner-Buckets aus dem PERSISTIERTEN Store (Quelle der Wahrheit).
-const ownerCostCents = (srv) => srv.readStore().usage[BOOTSTRAP_TENANT_ID].costCents;
+function ownerCostCents(srv) {
+  const { usage } = srv.readStore();
+  return usage[BOOTSTRAP_TENANT_ID].costCents;
+}
 
 test("finishCall bucht Voice-Minuten genau einmal ueber einen Prozess-Neustart hinweg", async () => {
   const seed = seedState({
@@ -73,7 +77,7 @@ test("finishCall bucht Voice-Minuten genau einmal ueber einen Prozess-Neustart h
     await completeCall(srv1, CALL_ID);
     assert.equal(ownerCostCents(srv1), expectedCostCents, "erste Buchung: Minuten x Inlandstarif");
     // _finished ist jetzt In-Memory gesetzt, aber NICHT auf Platte (json.save()-Replacer, F9).
-    const persisted = srv1.readStore().calls.find((c) => c.id === CALL_ID);
+    const persisted = srv1.readStore().calls.find((call) => call.id === CALL_ID);
     assert.equal(
       Object.prototype.hasOwnProperty.call(persisted, "_finished"),
       false,
