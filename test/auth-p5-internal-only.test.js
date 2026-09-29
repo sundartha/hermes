@@ -39,6 +39,9 @@ import {
 
 const SECRET = "auth-p5-web-secret-0123456789";
 const SESSION_TTL_MS = 3600_000;
+const HTTP_OK = 200;
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
 
 function countMatches(text, re) {
   return (text.match(new RegExp(re, "g")) || []).length;
@@ -52,11 +55,12 @@ function escapeForRegex(value) {
 
 // EINE lokale Express-App mit einer Handler-Kette auf GET /api/probe (Muster
 // mountAdmin, test/web-auth.test.js) - fuer AUTH-P5-4/-5/-6.
-async function mountProbe(middlewares) {
+async function mountProbe(middlewares, requestFelder = {}) {
   const app = express();
+  Object.assign(app.request, requestFelder);
   app.get("/api/probe", ...middlewares, (_req, res) => res.json({ ok: true }));
   const server = await new Promise((resolve) => {
-    const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    const listener = app.listen(0, "127.0.0.1", () => resolve(listener));
   });
   return {
     base: `http://127.0.0.1:${server.address().port}`,
@@ -76,14 +80,14 @@ const ROUTEN = [
   { methode: "GET", pfad: "/api/tenant-data/export" },
 ];
 
-test("AUTH-P5-1: die sieben internalOnly-Routen weisen den externen Aufrufer ab (403), auditieren genau einmal und loesen keinen Seiteneffekt aus", async (t) => {
+test("AUTH-P5-1: die sieben internalOnly-Routen weisen den externen Aufrufer ab (403), auditieren genau einmal und loesen keinen Seiteneffekt aus", async (testContext) => {
   const srv = await startServer({
     env: { MULTI_TENANT: "true" },
     seed: seedState({ calls: [seedCall({ id: "call_p5", status: "active" })] }),
   });
   try {
     for (const { methode, pfad, body } of ROUTEN) {
-      await t.test(`${methode} ${pfad}`, async () => {
+      await testContext.test(`${methode} ${pfad}`, async () => {
         const res = await fetch(`${srv.localUrl}${pfad}`, {
           method: methode,
           headers: {
@@ -94,7 +98,7 @@ test("AUTH-P5-1: die sieben internalOnly-Routen weisen den externen Aufrufer ab 
         });
 
         // a) Status + Gate-Abwesenheit + Fehlerkoerper
-        assert.equal(res.status, 403);
+        assert.equal(res.status, HTTP_FORBIDDEN);
         assertGateAbsent(res);
         const json = await res.json();
         assert.ok(json.error, "403-Body traegt eine Fehlermeldung");
@@ -125,16 +129,16 @@ test("AUTH-P5-2: der In-Process-MCP-Pfad ueber Loopback (ohne XFF) bleibt unvera
   });
   try {
     const stateRes = await fetch(`${srv.localUrl}/api/state`);
-    assert.equal(stateRes.status, 200);
+    assert.equal(stateRes.status, HTTP_OK);
     const state = await stateRes.json();
     assert.equal(state.agent.owner, "Jonas Beispiel");
     assert.equal(state.calls.length, 1);
 
     const callRes = await fetch(`${srv.localUrl}/api/calls/call_p5`);
-    assert.equal(callRes.status, 200);
+    assert.equal(callRes.status, HTTP_OK);
 
     const exportRes = await fetch(`${srv.localUrl}/api/tenant-data/export`);
-    assert.equal(exportRes.status, 200);
+    assert.equal(exportRes.status, HTTP_OK);
     const exported = await exportRes.json();
     assert.equal(exported.tenantId, BOOTSTRAP_TENANT_ID);
 
@@ -162,7 +166,7 @@ test("AUTH-P5-3 (W9): der Audit-Eintrag von internalOnly traegt NIE den Query-St
     const res = await fetch(`${srv.localUrl}/api/state?session_id=XYZ&code=ABC`, {
       headers: { "X-Forwarded-For": "203.0.113.9" },
     });
-    assert.equal(res.status, 403);
+    assert.equal(res.status, HTTP_FORBIDDEN);
     await waitForLog(srv, /\[audit\] auth_failed ip=\S+ path=\/api\/state grund=not_local/);
     assert.ok(!srv.stdout.includes("XYZ"), "OAuth-code darf nie im Log landen");
     assert.ok(!srv.stdout.includes("ABC"), "Stripe-session_id darf nie im Log landen");
@@ -188,7 +192,7 @@ test("AUTH-P5-4 (W9): webAuth ohne Sitzungs-Cookie -> 401 grund=no_session, kein
     const lines = await captureConsole(async () => {
       res = await fetch(`${srv.base}/api/probe?session_id=XYZ&code=ABC`);
     });
-    assert.equal(res.status, 401);
+    assert.equal(res.status, HTTP_UNAUTHORIZED);
     const treffer = lines.filter((line) => line.includes("[audit] auth_failed"));
     assert.equal(treffer.length, 1, "genau eine Audit-Zeile");
     assert.match(treffer[0], /path=\/api\/probe grund=no_session/);
@@ -223,7 +227,7 @@ test("AUTH-P5-5: webAuth mit gueltiger Sitzung, aber gesperrtem Tenant (closed) 
     const lines = await captureConsole(async () => {
       res = await fetch(`${srv.base}/api/probe`, { headers: { Cookie: cookie } });
     });
-    assert.equal(res.status, 403);
+    assert.equal(res.status, HTTP_FORBIDDEN);
     const treffer = lines.filter((line) => line.includes("[audit] auth_failed"));
     assert.equal(treffer.length, 1, "genau eine Audit-Zeile");
     assert.match(treffer[0], /path=\/api\/probe grund=not_active/);
@@ -233,17 +237,15 @@ test("AUTH-P5-5: webAuth mit gueltiger Sitzung, aber gesperrtem Tenant (closed) 
 });
 
 test("AUTH-P5-6 (W9): adminOnly ohne Admin-Rechte -> 403 grund=not_admin, kein Query im Log", async () => {
-  const setTenant = (req, _res, next) => {
-    req.tenant = { role: "member", email: "a@b.test" };
-    next();
-  };
-  const srv = await mountProbe([setTenant, adminOnly({ adminEmails: [] })]);
+  const srv = await mountProbe([adminOnly({ adminEmails: [] })], {
+    tenant: { role: "member", email: "a@b.test" },
+  });
   try {
     let res;
     const lines = await captureConsole(async () => {
       res = await fetch(`${srv.base}/api/probe?session_id=XYZ&code=ABC`);
     });
-    assert.equal(res.status, 403);
+    assert.equal(res.status, HTTP_FORBIDDEN);
     const treffer = lines.filter((line) => line.includes("[audit] auth_failed"));
     assert.equal(treffer.length, 1, "genau eine Audit-Zeile");
     assert.match(treffer[0], /path=\/api\/probe grund=not_admin/);

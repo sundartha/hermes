@@ -1547,17 +1547,6 @@
       "count": 1
     }
   },
-  "test/auth-p5-internal-only.test.js": {
-    "id-length": {
-      "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 8
-    },
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
   "test/auth-p6-mount-gate.test.js": {
     "no-magic-numbers": {
       "count": 4
