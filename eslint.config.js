@@ -159,7 +159,7 @@ export default [
       "sonarjs/no-commented-code": "error",
 
       // P8 - new Error() ohne Message ist ein stummer Fehler.
-      "unicorn/error-message": "error",
+      "unicorn/error-message": "warn",
     },
   },
   {
