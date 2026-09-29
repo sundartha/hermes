@@ -32,6 +32,9 @@ jobs:
       - name: Workflows prüfen
         run: node tools/workflows-pruefen.mjs
 
+      - name: Abgleich CODEOWNERS
+        run: node tools/codeowners-abgleich.mjs
+
       - name: Secret-Scan
         env:
           GITLEAKS_VERSION: 8.30.1
