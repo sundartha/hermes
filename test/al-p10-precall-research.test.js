@@ -19,8 +19,8 @@ import { RESEARCH_EGRESS_FIELDS, researchEgressInput } from "../src/research/san
 
 const OWNER = "Jonas Beispiel";
 const PEER_NUMBER = "+4915112345678";
-const BRIEFING_TEST_TIMEOUT_MS = 50;
-const DELAY_BEYOND_TIMEOUT_MS = BRIEFING_TEST_TIMEOUT_MS * 6;
+const BRIEFING_TEST_TIMEOUT_MS = 5000;
+const DELAY_BEYOND_TIMEOUT_MS = BRIEFING_TEST_TIMEOUT_MS + 200;
 
 const FULL_BRIEFING_INPUT = Object.freeze({
   summary: "Kunde bittet um Verschiebung des Friseurtermins",

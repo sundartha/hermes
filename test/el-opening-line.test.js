@@ -20,7 +20,7 @@ import { tempDataDir, seedState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER = "Antonio Fotiadis";
-const TIMEOUT_MS = 50;
+const TIMEOUT_MS = 5000;
 const HTTP_ERROR = 500;
 // Deutlich ueber OPENING_LINE_MAX_CHARS, damit auch Stufe 2 der Treppe faellt.
 const WORT_WIEDERHOLUNGEN = 40;

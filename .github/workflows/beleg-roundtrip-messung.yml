@@ -1,0 +1,45 @@
+name: Beleg Roundtrip-Messung
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  messung:
+    name: Messung ${{ matrix.lauf }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lauf: [1, 2]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Tests
+        env:
+          NODE_ENV: test
+          MESS_DATEI: ${{ runner.temp }}/roundtrips.tsv
+        run: NODE_OPTIONS="--import=$GITHUB_WORKSPACE/test/_mess-fetch-uhr.mjs" node test/testbaenke-run.mjs regression -- --test-concurrency=4
+
+      - name: Auswertung
+        if: always()
+        env:
+          MESS_DATEI: ${{ runner.temp }}/roundtrips.tsv
+        run: |
+          for f in al-p10-precall-research.test.js cq-p8-briefing.test.js el-opening-line.test.js; do
+            echo "MESSUNG $f erste: $(awk -F'\t' -v f="$f" '$1==f && $3=="ok"{print $2; exit}' "$MESS_DATEI")"
+            awk -F'\t' -v f="$f" '$1==f && $3=="ok"{print $2}' "$MESS_DATEI" | sort -n | awk -v f="$f" '{a[NR]=$1} END{print "MESSUNG", f, "n=" NR, "median=" a[int(NR/2)+1], "p90=" a[int(NR*0.9)], "max=" a[NR]}'
+          done

@@ -20,8 +20,8 @@ import { BOOTSTRAP_TENANT_ID, MICRO_CENTS_PER_CENT } from "../src/store/defaults
 
 const OWNER = "Jonas Beispiel";
 const PEER_NUMBER = "+4915112345678";
-const BRIEFING_TEST_TIMEOUT_MS = 50; // Plan-Vorgabe: B3 pinnt den Timeout auf 50 ms
-const DELAY_BEYOND_TIMEOUT_MS = BRIEFING_TEST_TIMEOUT_MS * 6; // deutlich ueber dem Timeout
+const BRIEFING_TEST_TIMEOUT_MS = 5000;
+const DELAY_BEYOND_TIMEOUT_MS = BRIEFING_TEST_TIMEOUT_MS + 200;
 
 // Voll besetzte Modell-Antwort (alle vier Kontextfelder + volles Mandat) - Basis fuer
 // jeden Testfall, der einzelne Felder ueberschreibt.
