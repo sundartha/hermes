@@ -2092,20 +2092,6 @@
       "count": 1
     }
   },
-  "test/cq-p8-briefing.test.js": {
-    "id-length": {
-      "count": 3
-    },
-    "no-magic-numbers": {
-      "count": 5
-    },
-    "no-param-reassign": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
   "test/dashboard-i18n-surface.test.js": {
     "id-length": {
       "count": 1

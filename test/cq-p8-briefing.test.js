@@ -21,7 +21,13 @@ import { BOOTSTRAP_TENANT_ID, MICRO_CENTS_PER_CENT } from "../src/store/defaults
 const OWNER = "Jonas Beispiel";
 const PEER_NUMBER = "+4915112345678";
 const BRIEFING_TEST_TIMEOUT_MS = 50; // Plan-Vorgabe: B3 pinnt den Timeout auf 50 ms
-const DELAY_BEYOND_TIMEOUT_MS = BRIEFING_TEST_TIMEOUT_MS * 6; // deutlich ueber dem Timeout
+const DELAY_BEYOND_TIMEOUT_FACTOR = 6;
+const DELAY_BEYOND_TIMEOUT_MS = BRIEFING_TEST_TIMEOUT_MS * DELAY_BEYOND_TIMEOUT_FACTOR;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_SERVER_ERROR = 500;
+const CENTS_PER_EURO = 100;
+const OVERLONG_SUMMARY_CHARS = 1001;
+const OVERLONG_OPEN_QUESTION_CHARS = 301;
 
 // Voll besetzte Modell-Antwort (alle vier Kontextfelder + volles Mandat) - Basis fuer
 // jeden Testfall, der einzelne Felder ueberschreibt.
@@ -65,19 +71,17 @@ let config, store, systemPrompt, fetchPrecallBriefing, withConfig;
 before(async () => {
   server = http.createServer((req, res) => {
     let body = "";
-    req.on("data", (d) => (body += d));
+    req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
       requestCount += 1;
       lastRequest = JSON.parse(body);
       if (mode === "error500") {
-        res.statusCode = 500;
-        res.setHeader("content-type", "application/json");
+        res.writeHead(HTTP_SERVER_ERROR, { "content-type": "application/json" });
         res.end(JSON.stringify({ type: "error", error: { type: "api_error", message: "boom" } }));
         return;
       }
       if (mode === "error400") {
-        res.statusCode = 400;
-        res.setHeader("content-type", "application/json");
+        res.writeHead(HTTP_BAD_REQUEST, { "content-type": "application/json" });
         res.end(
           JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "bad" } }),
         );
@@ -98,7 +102,7 @@ before(async () => {
       res.end(JSON.stringify(anthropicToolMessage(nextToolInput, nextUsage)));
     });
   });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 
   process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${server.address().port}`;
   process.env.ANTHROPIC_API_KEY = "test-p8-key";
@@ -117,7 +121,7 @@ before(async () => {
 });
 
 after(async () => {
-  await new Promise((r) => server.close(r));
+  await new Promise((resolve) => server.close(resolve));
 });
 
 beforeEach(() => {
@@ -176,7 +180,7 @@ test("B4 Injection: unbekannte Zusatzfelder verlassen das Ausgabeschema nicht", 
 });
 
 test("B5 Injection/DoS: ueberlanges Feld (summary > Cap) -> null (Fail-Soft statt gekappt)", async () => {
-  nextToolInput = { ...FULL_BRIEFING_INPUT, summary: "a".repeat(1001) };
+  nextToolInput = { ...FULL_BRIEFING_INPUT, summary: "a".repeat(OVERLONG_SUMMARY_CHARS) };
   const result = await fetchPrecallBriefing(briefingArgs());
   assert.equal(result, null);
 });
@@ -202,8 +206,8 @@ test("B7 Kostenbuchung (P7a): 1M Input-Token buchen zur Sonnet-Rate, nicht zur H
 
   const sonnetPrice = config.llm.modelPricesUsd[config.llm.briefingModel];
   const haikuPrice = config.llm.modelPricesUsd["claude-haiku-4-5"];
-  const expectedCents = Math.round(sonnetPrice.inPerMTok * config.llm.usdToEur * 100);
-  const haikuCents = Math.round(haikuPrice.inPerMTok * config.llm.usdToEur * 100);
+  const expectedCents = Math.round(sonnetPrice.inPerMTok * config.llm.usdToEur * CENTS_PER_EURO);
+  const haikuCents = Math.round(haikuPrice.inPerMTok * config.llm.usdToEur * CENTS_PER_EURO);
   assert.notEqual(expectedCents, haikuCents, "Fixture-Sanity: Sonnet und Haiku muessen sich unterscheiden");
   assert.equal(after - before, expectedCents, "gebuchte Cents muessen der Sonnet-Rate entsprechen");
 });
@@ -225,10 +229,11 @@ test("B8 Kosten fallen auch bei unbrauchbarer Antwort an (D4)", async () => {
 test("B9 Grounding: Owner-Text nur in der user-Message, system nennt end_call UND take_message", async () => {
   await fetchPrecallBriefing(briefingArgs({ objective: "Sonderwunsch klaeren" }));
   assert.equal(lastRequest.messages.length, 1);
-  assert.equal(lastRequest.messages[0].role, "user");
-  assert.ok(lastRequest.messages[0].content.includes("Sonderwunsch klaeren"));
-  assert.ok(lastRequest.messages[0].content.includes("Stammkunde, bitte hoeflich"));
-  assert.ok(lastRequest.messages[0].content.includes("nur vormittags"));
+  const [userNachricht] = lastRequest.messages;
+  assert.equal(userNachricht.role, "user");
+  assert.ok(userNachricht.content.includes("Sonderwunsch klaeren"));
+  assert.ok(userNachricht.content.includes("Stammkunde, bitte hoeflich"));
+  assert.ok(userNachricht.content.includes("nur vormittags"));
   assert.ok(
     typeof lastRequest.system === "string" && !lastRequest.system.includes("Sonderwunsch klaeren"),
     "Owner-Text darf nicht im system-Block stehen",
@@ -363,14 +368,18 @@ test("AL-P9-5 open_questions kommt durch", async () => {
 });
 
 test("AL-P9-6 zu langer open_questions-Eintrag -> null (Fail-Soft)", async () => {
-  nextToolInput = { ...FULL_BRIEFING_INPUT, open_questions: ["a".repeat(301)] };
+  nextToolInput = {
+    ...FULL_BRIEFING_INPUT,
+    open_questions: ["a".repeat(OVERLONG_OPEN_QUESTION_CHARS)],
+  };
   const result = await fetchPrecallBriefing(briefingArgs());
   assert.equal(result, null);
 });
 
 test("AL-P9-7 das Werkzeug bietet open_questions ueberhaupt an", async () => {
   await fetchPrecallBriefing(briefingArgs());
-  const prop = lastRequest.tools[0].input_schema.properties.open_questions;
+  const [hintergrundWerkzeug] = lastRequest.tools;
+  const prop = hintergrundWerkzeug.input_schema.properties.open_questions;
   assert.ok(prop, "open_questions muss im Tool-Schema stehen");
   assert.equal(prop.type, "array");
   assert.equal(prop.items.type, "string");
