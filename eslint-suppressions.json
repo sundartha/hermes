@@ -1217,20 +1217,6 @@
       "count": 3
     }
   },
-  "test/al-p10-precall-research.test.js": {
-    "id-length": {
-      "count": 4
-    },
-    "no-magic-numbers": {
-      "count": 3
-    },
-    "no-param-reassign": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "test/al-p10-tenant-setting.test.js": {
     "no-restricted-syntax": {
       "count": 4
