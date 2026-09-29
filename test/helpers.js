@@ -247,10 +247,6 @@ export const BASE_ENV = {
   TELNYX_PUBLIC_KEY: "",
   TELNYX_API_BASE: "",
   TELNYX_CONNECTION_ID: "",
-  // OUTBOUND-E4: neutral leer, sonst leakt eine lokale .env in Spawn-Tests (Lehre
-  // Waechter ohnehin komplett aushaelt - Pin trotzdem, Muster TELNYX_CONNECTION_ID.
-  TELNYX_FQDN_CONNECTION_ID: "",
-  TELNYX_OUTBOUND_VOICE_PROFILE_ID: "",
   // OUTBOUND-E5: neutral leer/aus, sonst leakt eine lokale .env in Spawn-Tests (Lehre
   // test-base-env-drift). Wirkungslos ohne ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true,
   // Pin trotzdem, Muster TELNYX_FQDN_CONNECTION_ID.

@@ -131,7 +131,7 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // Zugangsdaten der SIP-Trunk-FQDN-Connection, nur fuer das Anlegen einer EL-
   // Nummernregistrierung) -> 11.
   // IE6-S1: telnyxDialTimeoutSecs entfernt (nur vom Assistant-Pfad genutzt) -> 10.
-  telephony: 10,
+  telephony: 8,
   // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
   // AL-P13: consultEnabled ergaenzt (Consult-Kanal am Call, Default aus) -> 7.
   // AL-P14: inCallConsultEnabled ergaenzt (Rueckfrage IM Gespraech, Default aus) -> 8.
@@ -211,7 +211,7 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // E7: openaiAppsChallengeToken (server) ergaenzt -> 199.
 // T2-04: publicUrlExplicit (server) ergaenzt -> 200.
 // T2-13: callConfirmationSecret (auth) ergaenzt -> 201.
-const EXPECTED_TOTAL_KEYS = 198;
+const EXPECTED_TOTAL_KEYS = 196;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die gepinnten Counts und disjunkte Blaetter", () => {
   assert.deepEqual(
@@ -380,7 +380,7 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // E7: openaiAppsChallengeToken ist primitiv (String, kein Array/nested Objekt) -> 185.
   // T2-04: publicUrlExplicit ist primitiv (Boolean, kein Array/nested Objekt) -> 186.
   // T2-13: callConfirmationSecret ist primitiv (String) -> 187.
-  const EXPECTED_PRIMITIVE_LEAVES = 184;
+  const EXPECTED_PRIMITIVE_LEAVES = 182;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

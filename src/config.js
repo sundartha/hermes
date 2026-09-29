@@ -691,16 +691,6 @@ const rawConfig = {
   // Telnyx-Account-ID (Mission-Control-Portal): Pflicht fuer den Telnyx-Hangup
   // (POST /v2/texml/Accounts/{account_sid}/Calls/{call_sid}). Leer -> endCall wirft.
   telnyxAccountSid: process.env.TELNYX_ACCOUNT_SID || "",
-  // OUTBOUND-E4 (Drift-Waechter, Pruefung 2/6): die FQDN-Connection, an der der
-  // ANI-Override der Plattform-Absendernummer haengt (gemessen 27.08.2026:
-  // "3026479542865757220", ElevenLabs-SIP-Trunk). NICHT verwechseln mit
-  // telnyxConnectionId (TeXML) - zwei getrennte Telnyx-Objekttypen. Leer -> der Waechter
-  // meldet Pruefung 2/6 als unbekannt (nie fatal, boot-guard.js#driftConfigFindings).
-  telnyxFqdnConnectionId: (process.env.TELNYX_FQDN_CONNECTION_ID || "").trim(),
-  // OUTBOUND-E4 (Drift-Waechter, Pruefung 7): das Outbound-Voice-Profile, dessen
-  // whitelisted_destinations mit den tatsaechlich bedienten Laendern abgeglichen wird.
-  // Leer -> der Waechter meldet Pruefung 7 als unbekannt.
-  telnyxOutboundVoiceProfileId: (process.env.TELNYX_OUTBOUND_VOICE_PROFILE_ID || "").trim(),
   // OUTBOUND-E5 (F3): Digest-Zugangsdaten der SIP-Trunk-FQDN-Connection
   // (fqdn_authentication_method: "credential-authentication", gemessen 2026-08-29). Nur
   // gebraucht fuer das ANLEGEN einer ElevenLabs-Nummernregistrierung (outbound_trunk_config.
@@ -2287,7 +2277,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "llmProviderFallback", "llmBillingLatchCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs"],
   voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
-  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
+  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "publicUrlExplicit", "isProduction", "deployedCommit", "openaiAppsChallengeToken", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
