@@ -14,7 +14,13 @@
 // Leeres Transkript -> finishCall returnt VOR jedem LLM-Call (kein Anthropic-Mock noetig).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, waitForLog, DOMESTIC_TEST_NUMBER } from "./helpers.js";
+import {
+  startServer,
+  seedState,
+  seedCall,
+  waitForStoreState,
+  DOMESTIC_TEST_NUMBER,
+} from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // Fixes Abrechnungsfenster: answeredAt..endedAt = genau BILLED_MINUTES (Muster
@@ -41,10 +47,15 @@ const postStatus = (srv, callId, fields) =>
 
 // Beendet den geseedeten Call ueber die echte Route und wartet, bis der synchrone
 // finishCall-Pfad (Buchung + save) durch ist (Muster outbound-reconcile-finishcall.test.js).
+function abschlussMeldungen(store, callId) {
+  return store.notifications.filter((notification) => notification.callId === callId).length;
+}
+
 async function completeCall(srv, callId) {
+  const meldungenVorher = abschlussMeldungen(srv.readStore(), callId);
   const res = await postStatus(srv, callId, { CallStatus: "completed" });
   assert.equal(res.status, HTTP_OK);
-  await waitForLog(srv, new RegExp(`\\[voice/status\\][^\\n]*"callId":"${callId}"`));
+  await waitForStoreState(srv, (store) => abschlussMeldungen(store, callId) > meldungenVorher);
 }
 
 // costCents des Owner-Buckets aus dem PERSISTIERTEN Store (Quelle der Wahrheit).
