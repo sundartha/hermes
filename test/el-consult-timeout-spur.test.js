@@ -91,37 +91,43 @@ function storeDouble({ callId, conversationId, zustellenNachMs = null, quittiere
     return call.consults.find((eintrag) => eintrag.id === CONSULT_ID);
   }
 
-  if (zustellenNachMs !== null)
-    timers.push(
-      setTimeout(() => {
-        consult().askDeliveredAt = new Date().toISOString();
-      }, zustellenNachMs),
-    );
-  if (quittierenNachMs !== null)
-    timers.push(
-      setTimeout(() => {
-        const eintrag = consult();
-        eintrag.askDeliveredAt ||= new Date().toISOString();
-        eintrag.ackedAt = new Date().toISOString();
-      }, quittierenNachMs),
-    );
-  if (antwortNachMs !== null)
-    timers.push(
-      setTimeout(() => {
-        ops.answerConsult(state, callId, {
-          eventId: CONSULT_ID,
-          facts: ["Donnerstag ab 15 Uhr passt."],
-          nowMs: Date.now(),
-          openMs: 999_999,
-        });
-      }, antwortNachMs),
-    );
+  function stufenMarkerStarten() {
+    if (zustellenNachMs !== null)
+      timers.push(
+        setTimeout(() => {
+          consult().askDeliveredAt = new Date().toISOString();
+        }, zustellenNachMs),
+      );
+    if (quittierenNachMs !== null)
+      timers.push(
+        setTimeout(() => {
+          const eintrag = consult();
+          eintrag.askDeliveredAt ||= new Date().toISOString();
+          eintrag.ackedAt = new Date().toISOString();
+        }, quittierenNachMs),
+      );
+    if (antwortNachMs !== null)
+      timers.push(
+        setTimeout(() => {
+          ops.answerConsult(state, callId, {
+            eventId: CONSULT_ID,
+            facts: ["Donnerstag ab 15 Uhr passt."],
+            nowMs: Date.now(),
+            openMs: 999_999,
+          });
+        }, antwortNachMs),
+      );
+  }
 
   const store = {
     load: () => state,
     save: () => {},
     getCall: (id) => ops.getCall(state, id),
-    emitConsult: (id, questions) => ops.emitConsult(state, id, questions).call,
+    emitConsult: (id, questions) => {
+      const call = ops.emitConsult(state, id, questions).call;
+      stufenMarkerStarten();
+      return call;
+    },
     timeOutStagedConsult: (id, input) => ops.timeOutStagedConsult(state, id, input),
     resolveProfile: () => ({ allowConsult: true }),
     activeCallsFor: () => [],
