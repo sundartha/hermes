@@ -1,0 +1,23 @@
+name: Beleg Kerne
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  kerne:
+    name: Kerne
+    runs-on: ubuntu-latest
+    steps:
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Kerne
+        run: |
+          echo "KERNE nproc=$(nproc)"
+          node -e 'const os = require("node:os"); console.log(`KERNE availableParallelism=${os.availableParallelism()} standard-test-concurrency=${os.availableParallelism() - 1}`)'
