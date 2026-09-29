@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(**/eslint.config.*)",
+      "Edit(eslint-suppressions*.json)",
+      "Edit(eslint-legacy-exceptions.json)",
+      "Edit(tools/**)",
+      "Edit(.githooks/**)",
+      "Edit(.github/**)",
+      "Edit(.claude/**)",
+      "Edit(package.json)",
+      "Edit(package-lock.json)",
+      "Edit(knip.json)",
+      "Edit(.jscpd.json)",
+      "Edit(.c8rc.json)",
+      "Edit(gitleaks.toml)",
+      "Edit(tsconfig*.json)",
+      "Edit(.dependency-cruiser.cjs)",
+      "Edit(docs/sicherheitsgrenzen.md)",
+      "Edit(test/**)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false
+  }
+}
