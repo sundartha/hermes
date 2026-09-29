@@ -25,6 +25,10 @@ const ANSWER_PATH = `/api/calls/${CALL_ID}/consult/answer`;
 // unnoetig zu verlangsamen (kein Timing-Rennen: der Fake antwortet synchron, diese
 // Wartezeit deckt nur den Event-Loop-Umweg ueber fetch/Promise ab).
 const POLL_SETTLE_MS = 30;
+const HTTP_OK = 200;
+const HTTP_FORBIDDEN = 403;
+const HTTP_NOT_FOUND = 404;
+const POLLS_UNTIL_DONE = 2;
 
 async function withConsultServer(handler) {
   const server = http.createServer(handler);
@@ -46,7 +50,7 @@ test("AL-D3-N6: startConsultPump beantwortet ein consult-Event und kehrt bei don
   const srv = await withConsultServer(async (req, res) => {
     if (req.method === "GET" && req.url.startsWith(CONSULT_PATH)) {
       getCount += 1;
-      res.writeHead(200, { "content-type": "application/json" });
+      res.writeHead(HTTP_OK, { "content-type": "application/json" });
       if (getCount === 1) {
         res.end(JSON.stringify({ event: "consult", eventId: "e1", question: "Wie spaet passt es?" }));
       } else {
@@ -57,11 +61,11 @@ test("AL-D3-N6: startConsultPump beantwortet ein consult-Event und kehrt bei don
     }
     if (req.method === "POST" && req.url === ANSWER_PATH) {
       answerBodies.push(await readJsonBody(req));
-      res.writeHead(200, { "content-type": "application/json" });
+      res.writeHead(HTTP_OK, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true }));
       return;
     }
-    res.writeHead(404);
+    res.writeHead(HTTP_NOT_FOUND);
     res.end();
   });
 
@@ -70,7 +74,7 @@ test("AL-D3-N6: startConsultPump beantwortet ein consult-Event und kehrt bei don
     await donePromise;
     await wait(POLL_SETTLE_MS); // laesst pumpLoop das done-Event verarbeiten und zurueckkehren
     await assert.doesNotReject(() => pump.stop());
-    assert.equal(getCount, 2);
+    assert.equal(getCount, POLLS_UNTIL_DONE);
     assert.deepEqual(answerBodies, [{ event_id: "e1", answers: ["14 Uhr"] }]);
   } finally {
     await srv.close();
@@ -79,7 +83,7 @@ test("AL-D3-N6: startConsultPump beantwortet ein consult-Event und kehrt bei don
 
 test("AL-D3-N7: startConsultPump wirft ueber stop(), wenn die Pumpe auf eine 403-Antwort lief", async () => {
   const srv = await withConsultServer((req, res) => {
-    res.writeHead(403);
+    res.writeHead(HTTP_FORBIDDEN);
     res.end();
   });
   try {

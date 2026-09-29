@@ -1191,11 +1191,6 @@
       "count": 1
     }
   },
-  "test/al-d3-consult-pump.test.js": {
-    "no-magic-numbers": {
-      "count": 5
-    }
-  },
   "test/al-d3-http-fake-helpers.test.js": {
     "no-magic-numbers": {
       "count": 3
