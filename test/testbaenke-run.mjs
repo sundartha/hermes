@@ -22,10 +22,6 @@
 // zaehlt die bereits ausgewanderten Kriterien (test/abnahme-ausgewandert.json) mit, sonst
 // SAENKE sie, sobald ein Kriterium gruen wird und in den Regressionslauf umzieht.
 //
-// Die Zaehl-Logik des Praezedenzfalls wird IMPORTIERT statt nachgebaut: eine nach dem
-// Filtern leere Datei meldet bei node:test einen Datei-Wrapper ohne echten Test, der
-// sonst als Kriterium mitzaehlte (ausfuehrlich kommentiert in i18n-catalog-run.mjs).
-//
 // Zusaetzliche node --test-Flags (z.B. Coverage-Schwellen der CI) gehen wie dort nach
 // einem "--"-Trenner durch: "node test/testbaenke-run.mjs regression -- --flag ...".
 
@@ -34,11 +30,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
-import {
-  countPhantomWrapperEntries,
-  extraArgsFrom,
-  parseNodeSummary,
-} from "./i18n-catalog-run.mjs";
+import { extraArgsFrom, parseNodeSummary } from "./i18n-catalog-run.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -47,8 +39,11 @@ const MODE_GATES = "gates";
 const MODE_ABNAHME = "abnahme";
 const MODES = [MODE_REGRESSION, MODE_GATES, MODE_ABNAHME];
 
-const TEST_GLOB = "test/*.test.js";
+const TEST_GLOB = "test/**/*.test.js";
 const MIGRATED_LIST = new URL("./abnahme-ausgewandert.json", import.meta.url);
+
+const FILE_WRAPPER_LINE = /^# Subtest: \S*test\/\S+\.test\.js$/;
+const EMPTY_PLAN_LINE = "1..0";
 
 // Grund-Zeile am Testnamen (R3): "... | ROT WEIL: <Grund> | FIX: <Fix>". Der Grund haengt
 // am Namen und nicht in einer Nebendatei - so steht er in jeder TAP-Zeile und kann nicht
@@ -79,6 +74,14 @@ export function patternFlagsFor(mode) {
 // Testeintrag wie im ungefilterten Volllauf).
 function phantomRuleFor(mode) {
   return mode === MODE_REGRESSION ? MODE_REGRESSION : MODE_GATES;
+}
+
+function countPhantomWrapperEntries(tapText, rule) {
+  const lines = tapText.split("\n");
+  return lines.filter(
+    (line, index) =>
+      FILE_WRAPPER_LINE.test(line) && (rule === MODE_GATES || lines[index - 1] === EMPTY_PLAN_LINE),
+  ).length;
 }
 
 // Testzahlen ohne die Datei-Wrapper. null, wenn der Lauf abgebrochen ist (z.B. Ladefehler)
