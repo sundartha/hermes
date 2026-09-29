@@ -19,7 +19,7 @@
 // Route gegen einen Kindprozess, deterministisch und real verdrahtet.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
+import { startServer, seedState, seedCall, waitForLog, waitForStoreState } from "./helpers.js";
 
 // Seed-Defaults von seedCall: from=+15005550006, to=+4915112345678. Beide duerfen NIE
 // im [voice/status]-Log auftauchen (DSGVO/PII-Gate).
@@ -42,6 +42,8 @@ const postStatus = (srv, callId, fields) =>
     method: "POST",
     body: new URLSearchParams(fields),
   });
+
+const storedCall = (store, callId) => store.calls.find((call) => call.id === callId);
 
 test("/voice/status provider-bewusst: Telnyx-Lifecycle + Diagnose + Store-Effekt + PII-frei", async () => {
   const srv = await startServer({
@@ -108,6 +110,7 @@ test("/voice/status provider-bewusst: Telnyx-Lifecycle + Diagnose + Store-Effekt
     assert.equal(r.status, 200);
     ev = await statusEvent(srv, "st_default_prog");
     assert.equal(ev.provider, "telnyx", "Call ohne provider faellt bewusst auf DEFAULT_PROVIDER");
+    await waitForStoreState(srv, (store) => storedCall(store, "st_default_prog").answeredAt);
 
     // e) Handler-Effekt auf den Store (Quelle der Wahrheit: persistierter Store).
     const calls = Object.fromEntries(srv.readStore().calls.map((c) => [c.id, c]));
@@ -205,6 +208,7 @@ test("/voice/status Telnyx: Hangup-Ursache wird PII-frei als Diagnose geloggt", 
     r = await postStatus(srv, "st_tnx_noanswer", { CallStatus: "no-answer", SipHangupCause: "487" });
     assert.equal(r.status, 200);
     await statusEvent(srv, "st_tnx_noanswer");
+    await waitForStoreState(srv, (store) => storedCall(store, "st_tnx_noanswer").endedAt);
 
     // Store-Effekt: beide completed/failed -> Call beendet (endedAt gesetzt).
     const calls = Object.fromEntries(srv.readStore().calls.map((c) => [c.id, c]));
