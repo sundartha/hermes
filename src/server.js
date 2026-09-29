@@ -17,7 +17,6 @@ import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
 import { makeOutageWatch } from "./telephony/outage-report.js";
-import { makeDriftWatch } from "./telephony/outbound-drift-watch.js";
 import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.js";
 import { makePriceDriftWatch } from "./billing/price-drift-watch.js";
 import { makeProvisionRetryWatch } from "./billing/provision-retry-sweep.js";
@@ -86,9 +85,7 @@ const { requestTenant, requireTenant } = makeRequestTenant(store);
 // callFinish (kein zweiter Audit-/Messaging-Zugang, DIP).
 //
 // OUTBOUND-E4 Review-Blocker (BLOCKER 1 / G9/C2): telnyxRead ist derselbe rein LESENDE
-// Provider-Read-Port, den driftWatch weiter unten bekommt (registry.js#
 // providerConfigRead, Default Telnyx, kein zweiter HTTP-Client) - HIER schon gebaut
-// (statt erst bei driftWatch), damit der ANI-Riegel seine LIVE-Nachmessung ("Schutzschicht
 // 2", PLAN-SECURITY.md) ueberhaupt bekommt. Ohne diese Verdrahtung faellt aniOwnershipRecheck
 // auf makeOutboundGates' Default-No-op zurueck und das Gate kann NIE ablehnen.
 const telnyxRead = providerConfigRead();
@@ -162,7 +159,6 @@ const durableAuditFor = (tenantId) => makeDurableAudit({ audit, auditStoreRef, t
 // KV2-9: der ZWEITE, reifende EL-Abruf (GET /v1/convai/conversations/{id}) als schmaler,
 // rein LESENDER Port - der Billing-Pfad kennt damit keinen Anbieter (DIP, Muster telnyxRead/
 // elRead). BEWUSST als Closure hier und NICHT als Fabrik: makeElConfigRead existiert nur,
-// weil DIESELBE Closure zusaetzlich im CLI-Weg (scripts/check-outbound-drift.mjs) stand -
 // fuer diesen Abruf gibt es genau einen Aufrufer.
 const elKostenRead = {
   fetchConversation: (conversationId) =>
@@ -182,13 +178,7 @@ const costTruing = makeCostTruing({
 // Mailer-Instanz wie callFinish, kein zweiter Versandzugang (DIP).
 const outageWatch = makeOutageWatch({ store, config, audit, messaging, mailer });
 
-// OUTBOUND-E4: siebter Sweep-Zweig + Boot-Lauf (Muster outageWatch, INV-7). telnyxRead
-// (dieselbe Instanz wie beim ANI-Riegel oben, EIN Read-Port, kein zweiter HTTP-Client)
-// ist der rein LESENDE Provider-Read-Port (registry.js#providerConfigRead, Default
-// Telnyx); elRead kommt aus der EINEN Fabrik makeElConfigRead (Blocker 7, G5) - vorher
-// stand dieselbe Closure wortgleich auch in scripts/check-outbound-drift.mjs.
 const elRead = makeElConfigRead(config);
-const driftWatch = makeDriftWatch({ store, config, audit, messaging, mailer, telnyxRead, elRead });
 // IEX-A8 (E8/E11): Registrierungs-Beleg-Sweep, EIN Lauf nach listen (boot.js). elRead ist dieselbe Instanz wie
 // beim Drift-Waechter (EIN EL-Nummern-GET, makeElConfigRead, G5/INV-7). Liest nur beim Anbieter; schreibt nur
 // die zwei Beleg-Felder am eigenen Datensatz.
@@ -196,13 +186,11 @@ const driftWatch = makeDriftWatch({ store, config, audit, messaging, mailer, tel
 // undefined = nur Lesebeleg wie IEX-A8.
 const inboundTrunkSweep = makeTrunkSweep({ store, config, elRead, reparatur: inboundTrunkSchreiberWennErlaubt(config) });
 
-// GP-P0: ACHTER, unabhaengiger Sweep-Zweig (Muster outageWatch/driftWatch, INV-7).
 // durableAudit statt audit: der Befund muss die Log-Rotation ueberleben - genau das war
 // der Vorfall vom 11.09. (Muster costTruing, KV2-1). KEIN messaging/mailer: die Phase
 // meldet auf der Notiz-Stufe (WARN -> Audit -> Marker), sie alarmiert nicht.
 const paidWithoutNumberWatch = makePaidWithoutNumberWatch({ store, config, audit: durableAudit });
 
-// GP-P6: ZEHNTER Sweep-Zweig + eigener Boot-Lauf (Muster driftWatch, INV-7). lesePreis ist
 // der rein LESENDE Stripe-Abruf des bestehenden Adapters - kein zweiter HTTP-Client, kein
 // Geld-Aufruf. durableAudit wie GP-P0 (der Befund muss die Log-Rotation ueberleben);
 // messaging/mailer sind dieselben Instanzen wie ueberall sonst (DIP).
@@ -423,7 +411,6 @@ const deps = {
   durableAudit,
   durableAuditFor,
   outageWatch,
-  driftWatch,
   paidWithoutNumberWatch,
   provisionRetryWatch,
   priceDriftWatch,

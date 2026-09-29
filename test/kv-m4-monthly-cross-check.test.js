@@ -382,7 +382,6 @@ const WERFENDE_ZWEIGE = [
   { zweig: "outageWatch", methode: "runRecoverySweep", logPraefix: "[outage-watch]", fehler: "kv-m4-8-outage-boom" },
   { zweig: "outageWatch", methode: "runAlertChannelSelfTest", logPraefix: "[outage-watch]", fehler: "kv-m4-8-self-test-boom" },
   { zweig: "outageWatch", methode: "runHoldEscalationSweep", logPraefix: "[outage-watch]", fehler: "kv-m4-8-hold-escalation-boom" },
-  { zweig: "driftWatch", methode: "runDriftSweep", logPraefix: "[drift-watch]", fehler: "kv-m4-8-drift-boom" },
   { zweig: "paidWithoutNumberWatch", methode: "runPaidWithoutNumberSweep", logPraefix: "[paid-no-number]", fehler: "kv-m4-8-paid-no-number-boom" },
   { zweig: "provisionRetryWatch", methode: "runProvisionRetrySweep", logPraefix: "[provision-retry-sweep]", fehler: "kv-m4-8-provision-retry-boom" },
   { zweig: "priceDriftWatch", methode: "runPriceDriftSweep", logPraefix: "[price-drift]", fehler: "kv-m4-8-price-drift-boom" },
