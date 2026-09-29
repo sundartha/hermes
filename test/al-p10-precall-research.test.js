@@ -20,7 +20,11 @@ import { RESEARCH_EGRESS_FIELDS, researchEgressInput } from "../src/research/san
 const OWNER = "Jonas Beispiel";
 const PEER_NUMBER = "+4915112345678";
 const BRIEFING_TEST_TIMEOUT_MS = 50;
-const DELAY_BEYOND_TIMEOUT_MS = BRIEFING_TEST_TIMEOUT_MS * 6;
+const DELAY_BEYOND_TIMEOUT_FACTOR = 6;
+const DELAY_BEYOND_TIMEOUT_MS = BRIEFING_TEST_TIMEOUT_MS * DELAY_BEYOND_TIMEOUT_FACTOR;
+const HTTP_SERVER_ERROR = 500;
+const TOOLS_WITH_RESEARCH = 2;
+const FAILURES_BEYOND_BREAKER_THRESHOLD = 2;
 
 const FULL_BRIEFING_INPUT = Object.freeze({
   summary: "Kunde bittet um Verschiebung des Friseurtermins",
@@ -69,13 +73,12 @@ let config, store, systemPrompt, disclosureSentence, fetchPrecallBriefing, withC
 before(async () => {
   server = http.createServer((req, res) => {
     let body = "";
-    req.on("data", (d) => (body += d));
+    req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
       requestCount += 1;
       lastRequest = JSON.parse(body);
       if (mode === "error500") {
-        res.statusCode = 500;
-        res.setHeader("content-type", "application/json");
+        res.writeHead(HTTP_SERVER_ERROR, { "content-type": "application/json" });
         res.end(JSON.stringify({ type: "error", error: { type: "api_error", message: "boom" } }));
         return;
       }
@@ -99,7 +102,7 @@ before(async () => {
       res.end(JSON.stringify(anthropicToolMessage(nextToolInput, nextUsage)));
     });
   });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 
   process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${server.address().port}`;
   process.env.ANTHROPIC_API_KEY = "test-p10-key";
@@ -125,7 +128,7 @@ before(async () => {
 });
 
 after(async () => {
-  await new Promise((r) => server.close(r));
+  await new Promise((resolve) => server.close(resolve));
 });
 
 beforeEach(() => {
@@ -150,13 +153,14 @@ test("AL-P10-1 Flag AUS = byte-identisch zum Bestand (ein Werkzeug, erzwungenes 
     assert.equal(lastRequest.tools.length, 1);
     assert.equal(lastRequest.tools[0].name, "hintergrund");
     assert.deepEqual(lastRequest.tool_choice, { type: "tool", name: "hintergrund" });
-    assert.ok(lastRequest.messages[0].content.includes(`ANGERUFENER: ${PEER_NUMBER}`));
+    const [ersteNachricht] = lastRequest.messages;
+    assert.ok(ersteNachricht.content.includes(`ANGERUFENER: ${PEER_NUMBER}`));
   });
 });
 
 test("AL-P10-2 Flag AN + Tenant AN: web_search-Werkzeug zusaetzlich, tool_choice any", async () => {
   await fetchPrecallBriefing(briefingArgs());
-  assert.equal(lastRequest.tools.length, 2);
+  assert.equal(lastRequest.tools.length, TOOLS_WITH_RESEARCH);
   assert.equal(lastRequest.tools[0].name, "hintergrund");
   assert.deepEqual(lastRequest.tools[1], {
     type: "web_search_20250305",
@@ -312,7 +316,8 @@ test("AL-P10-11 Injektions-Fixture: Suchtreffer bleiben in HINTERGRUND, Disclosu
   );
 
   // Alles AUSSER dem HINTERGRUND-Block bleibt identisch zur kontextlosen Baseline.
-  const stripHintergrund = (p) => p.replace(/HINTERGRUND[\s\S]*?(?=\nSO SPRICHST DU:)/, "");
+  const stripHintergrund = (promptText) =>
+    promptText.replace(/HINTERGRUND[\s\S]*?(?=\nSO SPRICHST DU:)/, "");
   assert.equal(
     stripHintergrund(prompt),
     stripHintergrund(baseline),
@@ -333,7 +338,7 @@ test("AL-P10-12 pause_turn ist fail-soft: null zurueck, Gebuehr trotzdem gebucht
 // LETZTER Test der Datei (s. Datei-Header): der Breaker bleibt danach offen.
 test("AL-P10-10 Breaker-open bucht nichts (kein Request war raus)", async () => {
   mode = "error500";
-  for (let i = 0; i < config.llm.llmBreakerThreshold + 2; i++) {
+  for (let i = 0; i < config.llm.llmBreakerThreshold + FAILURES_BEYOND_BREAKER_THRESHOLD; i++) {
     await fetchPrecallBriefing(briefingArgs());
   }
   const beforeCount = requestCount;
