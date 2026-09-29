@@ -11,7 +11,6 @@
 // zweiter Timer, keine neue Ressource.
 //
 // FAIL-SOFT, absolut: ein Fehler HIER darf weder den Boot noch den Sweep abbrechen
-// (Muster outbound-drift-watch.js#laufeDrift). Der Waechter ist KEIN Gate: er lehnt
 // nichts ab, kauft nichts, aendert keinen Preis - er meldet.
 //
 // AKZEPTIERTES RESTRISIKO (Pre-Mortem 4): wird PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER zur
@@ -37,7 +36,6 @@ const ERSTER_SLOT = 1;
 
 // EXPORTIERT, weil der Marker-Code ein durabler Vertrag ist (outage_alert.code): eine
 // zweite, anderswo getippte Zusammensetzung koennte abdriften, ohne dass ein Test es
-// merkt (G5, Muster outbound-drift-watch.js#befundBucket).
 export const priceDriftBucket = (slug) => `${BEFUND_PREFIX}${slug}`;
 
 const unbekanntSlot = (nummer) => `${UNBEKANNT_PREFIX}${nummer}`;
@@ -73,7 +71,6 @@ export function beurteilePreis(plan, messung) {
 }
 
 // SINGLE-FLIGHT + MINDESTFRIST in EINEM atomaren Schritt - dieselbe Bauform wie
-// outbound-drift-watch.js#beanspruchen: der Claim-Marker liegt in outage_alert, einer
 // bereits durablen, global sichtbaren Tabelle. Innerhalb eines Prozesses ist der Claim
 // durch withStoreLock atomar, zwischen Instanzen wirkt die Mindestfrist ueber den
 // hydrierten Marker.
@@ -159,7 +156,6 @@ async function schliesseMarker({ store, istZuSchliessen, nowMs }) {
 // Entwarnung NUR aus einem Lauf, der ueberhaupt urteilen konnte: konnte auch nur EIN
 // Tarif nicht gemessen werden, wird in diesem Lauf GAR NICHTS geschlossen. Sonst machte
 // ein reiner Netzfehler aus einem fortbestehenden Preis-Drift eine stille Entwarnung
-// (dieselbe Begruendung wie outbound-drift-watch.js#schliesseVerschwundeneBefunde).
 async function schliesseBehobene({ store, audit, aktuelle, unbekannt, nowMs }) {
   if (unbekannt > 0) return;
   const geschlossen = await schliesseMarker({

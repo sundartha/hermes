@@ -3,7 +3,6 @@
 // reinen Funktionen werden direkt gegen die committete Positiv-Kontrolle
 // (test/fixtures/anruf-unterbrechungen.js, E-4: wird HIER NICHT angepasst)
 // geprueft, der IO-Teil per Kindprozess-Spawn (Muster
-// test/check-outbound-drift-script.test.js) unter NODE_ENV=test (dotenv aus -
 // Lehre BASE_ENV-Drift, garantiert kein Netz auch auf einer Maschine mit .env).
 //
 // Neues Verhalten braucht einen Test (P11/T-Serie): es gibt vor dieser Datei

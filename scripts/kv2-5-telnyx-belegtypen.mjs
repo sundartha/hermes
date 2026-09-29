@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // KV2-5 (tasks/kostenv2/spec-kv2-5.md, Abnahmekriterium (d)): das Messwerkzeug fuer die
 // Pflicht-Typmenge des Profils el_convai_sip. LESEND, kein Schreibzugriff. Wiederholbar
-// (Repo-Praxis: scripts/*.mjs, Muster check-outbound-drift.mjs/stt-wer.mjs).
 //
 // Drei Ausgaben, EINE Ausfuehrung:
 //   Q1 (Pflicht-Typmenge): welche record_type-Werte fuehrt der EL-Weg BEWEISBAR?
@@ -35,7 +34,6 @@
 // CLI-Werkzeug) - process.env ist hier die einzig sinnvolle Quelle.
 //
 // Die reinen Funktionen sind exportiert und main() laeuft nur, wenn das Skript direkt
-// ausgefuehrt wird (istHauptmodul-Wache, Muster scripts/check-outbound-drift.mjs) - so
 // kann ein Test die Messlogik pinnen, ohne TELNYX_API_KEY zu brauchen oder main() beim
 // Import ungewollt mit Netz-IO auszuloesen.
 
@@ -228,7 +226,6 @@ async function main() {
   druckeErgebnis(baueErgebnis({ recordsByType: abruf.recordsByType, knownSipCallIds }));
 }
 
-// istHauptmodul-Wache (Muster scripts/check-outbound-drift.mjs): main() laeuft NUR bei
 // direkter Ausfuehrung, nicht wenn ein Test die reinen Funktionen oben importiert.
 const istHauptmodul = fileURLToPath(import.meta.url) === resolve(process.argv[1] || "");
 if (istHauptmodul) {

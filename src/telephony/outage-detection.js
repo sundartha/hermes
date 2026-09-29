@@ -90,7 +90,6 @@ export function outageWindow(calls, { nowMs, windowMs, bucket, zaehlweise = ZAEH
 // ZUGESTELLTEN Meldung (debounceMs, entprellt am VORFALL) - aber eine fehlgeschlagene
 // Zustellung darf nach retryMs nachgeholt werden (sonst gibt es NULL Meldungen zum
 // echten Vorfall, obwohl die Alarm-Bedingung weiter erfuellt ist).
-// EXPORTIERT (Blocker 3, Review Runde 2): der Drift-Waechter (outbound-drift-watch.js)
 // braucht dieselbe Entprellungs-Regel VOR jedem Alarm-Versand - EINE Quelle (G5) statt
 // einer zweiten, dort getippten Fristlogik.
 export function meldeErlaubt(marker, nowMs, { debounceMs, retryMs }) {

@@ -111,7 +111,6 @@ export async function meldeBetreiberAlarm({ store, config, audit, messaging, mai
 // Befunde, die LAUT sein muessen, aber keinen Alarm rechtfertigen (Drift-Waechter-Klassen
 // unknown/warn). Anders als markOnly (K0/RECOVERED, s.u.) kennt diese Funktion kein
 // urteil - sie CLAIMT immer (nie close); der Aufrufer entscheidet selbst, wann ein Befund
-// wieder verschwunden ist (outbound-drift-watch.js#closeVerschwundeneBefunde).
 export async function meldeBetreiberNotiz({ store, audit, bucket, aktion, zeile, nowMs }) {
   console.warn(`[outage] ${aktion} klasse=${bucket}`);
   audit(aktion, null, zeile);
@@ -122,7 +121,6 @@ export async function meldeBetreiberNotiz({ store, audit, bucket, aktion, zeile,
   store.save();
 }
 
-// UMGEZOGEN aus outbound-drift-watch.js (KV2-1): der aufrufer-seitige Entprell-Riegel VOR
 // jedem Alarm-Versand gehoert in das Meldeweg-Modul, nicht in einen seiner Verbraucher -
 // seit KV2-1 hat er zwei (Drift-Waechter und Kostenpfad, Plan 4.9). Verhalten unveraendert.
 //

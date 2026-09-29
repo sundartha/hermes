@@ -2,7 +2,6 @@
 // 11 Tage 0 % Deckung, emitFinding feuerte korrekt, audit_log blieb LEER (util.js#audit
 // ist ausschliesslich ein console.log). Diese Datei belegt die Naht selbst - nicht den
 // Meldeweg (test/ausfall-meldeweg.test.js) und nicht den Drift-Waechter
-// (test/outbound-drift-watch.test.js), die BEIDE unveraendert gruen bleiben (Beweis des
 // Umzugs). Testnamen tragen KEIN Katalog-Praefix (Lehre catalog-id-prefix-misroutes-tests)
 // und landen damit im Regressionslauf `npm test`.
 import { test } from "node:test";

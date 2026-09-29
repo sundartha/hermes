@@ -17,7 +17,6 @@
 // aus GP-P1 haengt an einem FEHLEROBJEKT und ist zur Sweep-Zeit nicht mehr da - hier wird
 // bewusst keine Fehlermeldung geparst (GP-P1-Struktur-Waechter).
 //
-// Der Entprell-Marker ist ein reiner ZEITANKER (Muster outbound-drift-watch.js LAUF_MARKER
 // "drift:lauf"), KEIN Befund: er wird nie geschlossen und bedeutet nie "hier ist etwas
 // kaputt" - er haelt nur fest, wann dieser Mandant zuletzt automatisch angestossen wurde.
 import * as ops from "../store/state-ops.js";
@@ -71,7 +70,6 @@ export function provisionRetryDue(state, { tenantId, nowMs, minIntervalMs }) {
 }
 
 // Faelligkeits-Urteil UND Reservierung ATOMAR im SELBEN Lock (Muster
-// outbound-drift-watch.js#beanspruchen): ein Deploy-Sturm mit zwei parallelen Sweeps
 // darf nicht zweimal kaufen. Kein Netz-await im Lock; das Lock von
 // triggerTenantProvisioning wird NICHT verschachtelt (der Anstoss laeuft danach).
 async function beanspruche({ store, tenantId, nowMs, minIntervalMs }) {

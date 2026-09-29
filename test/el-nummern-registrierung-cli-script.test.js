@@ -3,7 +3,6 @@
 // getestet war ausschliesslich die exportierte anlegen()-Funktion
 // (test/el-nummern-registrierung-anlegen-script.test.js). Genau die Riegel, die einen
 // kostenpflichtigen Anbieter-Schreibzugriff schuetzen, liefen ohne Regressionsfang.
-// Muster test/check-outbound-drift-script.test.js: echter Kindprozess, KEIN Netz ausserhalb
 // eines LOKALEN Stub-Servers.
 //
 // (a) --anlegen ohne --ja-wirklich -> Exit 1, 0 Netzzugriffe.
