@@ -31,6 +31,8 @@ import {
 const INBOUND_CENTS = 7;
 const DOMESTIC_CENTS = 20;
 const DEFAULT_CENTS = 30;
+const SHORT_CALL_MINUTES = 2;
+const HTTP_OK = 200;
 // Uhr der Spend-Monat-Achse (Bucket-Brigade-Fallstrick, s.u.) - PFLICHT, nicht kosmetisch.
 const NOW_ISO = "2026-07-30T12:00:00.000Z";
 const NOW_SPEND_MONTH_KEY = "2026-07";
@@ -57,15 +59,17 @@ before(async () => {
 // OHNE nowIso laesst bookCents nach usage.costCents schreiben, aber spendMonthCostCents
 // UNBERUEHRT (authoritativeSpendMonthKey(null, null) === null -> early return). Ohne NOW_ISO
 // waere Abnahme (1) unten eine leere 0 === 0-Behauptung.
-function realMeteringStore(s) {
+function realMeteringStore(state) {
   return {
-    addVoiceUsageCostCents: (tenantId, costCents) => addVoiceUsageCostCents(s, tenantId, costCents, NOW_ISO),
-    recordCallEstimatedCostCents: (callId, input) => recordCallEstimatedCostCents(s, callId, input),
+    addVoiceUsageCostCents: (tenantId, costCents) =>
+      addVoiceUsageCostCents(state, tenantId, costCents, NOW_ISO),
+    recordCallEstimatedCostCents: (callId, input) =>
+      recordCallEstimatedCostCents(state, callId, input),
   };
 }
 
-function makeInboundCall(s, { tenantId = TENANT, answeredAt, endedAt } = {}) {
-  const call = createCall(s, {
+function makeInboundCall(state, { tenantId = TENANT, answeredAt, endedAt } = {}) {
+  const call = createCall(state, {
     direction: "inbound",
     from: CALLER,
     to: OWN_DID,
@@ -85,21 +89,21 @@ function makeInboundCall(s, { tenantId = TENANT, answeredAt, endedAt } = {}) {
 //       tariffCentsPerMin(call.to, call.to) zuruecksetzen -> ROT (60 statt 14, OWN_DID ist
 //       eine US-DID ohne Inlandssatz -> DEFAULT_CENTS).
 test("KV-P2-1: ein beendeter Inbound-Call mit 2 Minuten erhoeht spendMonthCostCents und costCents um 2 x Inbound-Satz", () => {
-  const s = makeDefaultState();
-  const call = makeInboundCall(s, {
+  const state = makeDefaultState();
+  const call = makeInboundCall(state, {
     answeredAt: "2026-07-30T11:58:00.000Z",
     endedAt: "2026-07-30T12:00:00.000Z", // 2 Minuten
   });
-  const { reconcileVoiceBudget } = makeMetering({ store: realMeteringStore(s) });
+  const { reconcileVoiceBudget } = makeMetering({ store: realMeteringStore(state) });
 
   reconcileVoiceBudget(call);
 
-  const bucket = usageOf(s, TENANT);
-  assert.equal(bucket.spendMonthCostCents, 2 * INBOUND_CENTS);
-  assert.equal(bucket.costCents, 2 * INBOUND_CENTS, "Lebenszeit-Achse zieht mit");
+  const bucket = usageOf(state, TENANT);
+  assert.equal(bucket.spendMonthCostCents, SHORT_CALL_MINUTES * INBOUND_CENTS);
+  assert.equal(bucket.costCents, SHORT_CALL_MINUTES * INBOUND_CENTS, "Lebenszeit-Achse zieht mit");
   assert.notEqual(
-    2 * INBOUND_CENTS,
-    2 * DEFAULT_CENTS,
+    SHORT_CALL_MINUTES * INBOUND_CENTS,
+    SHORT_CALL_MINUTES * DEFAULT_CENTS,
     "Fixture-Anspruch: der alte Pfad haette 2 x 30 = 60 gebucht",
   );
 });
@@ -110,17 +114,17 @@ test("KV-P2-1: ein beendeter Inbound-Call mit 2 Minuten erhoeht spendMonthCostCe
 // -> spendMonthKey ist null statt "2026-07". Ohne diese drei Felder kann KV-P3 spaeter nicht
 // korrigieren.
 test("KV-P2-2: estimated_cost_cents und beide Achsen-Anker sind an der Inbound-call-Zeile gesetzt", () => {
-  const s = makeDefaultState();
-  const call = makeInboundCall(s, {
+  const state = makeDefaultState();
+  const call = makeInboundCall(state, {
     answeredAt: "2026-07-30T11:59:00.000Z",
     endedAt: "2026-07-30T12:00:00.000Z", // 1 Minute
   });
-  stampBudgetPeriod(s, TENANT, PERIOD_START_ISO);
-  const { reconcileVoiceBudget } = makeMetering({ store: realMeteringStore(s) });
+  stampBudgetPeriod(state, TENANT, PERIOD_START_ISO);
+  const { reconcileVoiceBudget } = makeMetering({ store: realMeteringStore(state) });
 
   reconcileVoiceBudget(call);
 
-  const row = getCall(s, call.id);
+  const row = getCall(state, call.id);
   assert.equal(row.estimatedCostCents, 1 * INBOUND_CENTS);
   assert.equal(row.estimatedCostSpendMonthKey, NOW_SPEND_MONTH_KEY, "= chargeAnchorsOfUsage NACH der Buchung");
   assert.equal(row.estimatedCostPeriodKey, PERIOD_START_ISO);
@@ -128,15 +132,15 @@ test("KV-P2-2: estimated_cost_cents und beide Achsen-Anker sind an der Inbound-c
 
 // ---- KV-P2-3: nie beantwortet -> 0, PLUS der Grenzfall (unbrauchbares answeredAt) ----
 test("KV-P2-3: ein nie beantworteter Inbound-Call bucht nichts", () => {
-  const s = makeDefaultState();
-  const call = makeInboundCall(s, { answeredAt: null, endedAt: "2026-07-30T12:00:00.000Z" });
-  const { reconcileVoiceBudget } = makeMetering({ store: realMeteringStore(s) });
+  const state = makeDefaultState();
+  const call = makeInboundCall(state, { answeredAt: null, endedAt: "2026-07-30T12:00:00.000Z" });
+  const { reconcileVoiceBudget } = makeMetering({ store: realMeteringStore(state) });
 
   reconcileVoiceBudget(call);
 
-  assert.equal(usageOf(s, TENANT).costCents, 0);
+  assert.equal(usageOf(state, TENANT).costCents, 0);
   assert.equal(
-    getCall(s, call.id).estimatedCostCents,
+    getCall(state, call.id).estimatedCostCents,
     null,
     "kein Null-Estimate - KV-P3 haette sonst einen Bezugspunkt ohne Buchung",
   );
@@ -146,14 +150,17 @@ test("KV-P2-3: ein nie beantworteter Inbound-Call bucht nichts", () => {
 // UNBRAUCHBARES answeredAt normalisiert ueber voiceMinutesOf auf 0 Minuten - kein NaN im
 // Bucket, keine Buchung.
 test("KV-P2-3 (T5-Grenzfall): unbrauchbares answeredAt normalisiert auf 0 Minuten, keine Buchung, kein NaN", () => {
-  const s = makeDefaultState();
-  const call = makeInboundCall(s, { answeredAt: "kaputt", endedAt: "2026-07-30T12:00:00.000Z" });
-  const { reconcileVoiceBudget } = makeMetering({ store: realMeteringStore(s) });
+  const state = makeDefaultState();
+  const call = makeInboundCall(state, {
+    answeredAt: "kaputt",
+    endedAt: "2026-07-30T12:00:00.000Z",
+  });
+  const { reconcileVoiceBudget } = makeMetering({ store: realMeteringStore(state) });
 
   reconcileVoiceBudget(call);
 
-  assert.equal(usageOf(s, TENANT).costCents, 0);
-  assert.notEqual(usageOf(s, TENANT).costCents, NaN);
+  assert.equal(usageOf(state, TENANT).costCents, 0);
+  assert.notEqual(usageOf(state, TENANT).costCents, NaN);
 });
 
 // ---- KV-P2-5: Ein-Quellen-Riegel (strukturell, Muster KV-P1-10) --------------------------
@@ -194,10 +201,13 @@ test("KV-P2-5: billing.voiceTariffInboundCents wird an genau ZWEI Stellen gelese
   const EXPECTED_CALL_SITES = ["src/billing/cost-calibration.js", "src/billing/metering.js"];
 
   const vorkommenJeDatei = alleSrcDateien("src")
-    .map((datei) => ({
-      datei: path.relative(REPO_ROOT, datei),
-      anzahl: [...fs.readFileSync(datei, "utf8").matchAll(CALL_SITE_PATTERN)].length,
-    }))
+    .map((datei) => {
+      const quelltext = fs.readFileSync(datei, "utf8");
+      return {
+        datei: path.relative(REPO_ROOT, datei),
+        anzahl: [...quelltext.matchAll(CALL_SITE_PATTERN)].length,
+      };
+    })
     .filter((eintrag) => eintrag.anzahl > 0);
 
   const gesamtVorkommen = vorkommenJeDatei.reduce((summe, eintrag) => summe + eintrag.anzahl, 0);
@@ -236,11 +246,14 @@ const postStatus = (srv, callId, fields) =>
 
 async function completeCall(srv, callId) {
   const res = await postStatus(srv, callId, { CallStatus: "completed" });
-  assert.equal(res.status, 200);
+  assert.equal(res.status, HTTP_OK);
   await waitForLog(srv, new RegExp(`\\[voice/status\\][^\\n]*"callId":"${callId}"`));
 }
 
-const ownerCostCents = (srv) => srv.readStore().usage[BOOTSTRAP_TENANT_ID].costCents;
+function ownerCostCents(srv) {
+  const { usage } = srv.readStore();
+  return usage[BOOTSTRAP_TENANT_ID].costCents;
+}
 
 test("KV-P2-4: genau EINE Buchung je Inbound-Call, auch ueber einen Prozess-Neustart hinweg", async () => {
   const seed = seedState({
@@ -268,7 +281,7 @@ test("KV-P2-4: genau EINE Buchung je Inbound-Call, auch ueber einen Prozess-Neus
     await completeCall(srv1, CALL_ID);
     assert.equal(ownerCostCents(srv1), expectedCostCents, "zweiter Callback im selben Prozess bucht nicht erneut");
 
-    const persisted = srv1.readStore().calls.find((c) => c.id === CALL_ID);
+    const persisted = srv1.readStore().calls.find((call) => call.id === CALL_ID);
     assert.equal(persisted.billedAt !== null && persisted.billedAt !== undefined, true, "billedAt ist persistiert");
     dataDir = srv1.dataDir;
   } finally {
@@ -285,7 +298,7 @@ test("KV-P2-4: genau EINE Buchung je Inbound-Call, auch ueber einen Prozess-Neus
       expectedCostCents,
       "dritter Callback nach Neustart bucht NICHT erneut (bleibt x, nicht 2x)",
     );
-    const persisted = srv2.readStore().calls.find((c) => c.id === CALL_ID);
+    const persisted = srv2.readStore().calls.find((call) => call.id === CALL_ID);
     assert.equal(persisted.billedAt !== null && persisted.billedAt !== undefined, true, "billedAt ueberlebt den Neustart");
   } finally {
     await srv2.stop();

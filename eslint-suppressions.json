@@ -2782,17 +2782,6 @@
       "count": 1
     }
   },
-  "test/kv-p2-inbound-budget.test.js": {
-    "id-length": {
-      "count": 8
-    },
-    "no-magic-numbers": {
-      "count": 5
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "test/kv-p3-inbound-truing.test.js": {
     "id-length": {
       "count": 1
