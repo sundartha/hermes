@@ -97,12 +97,12 @@ nie gemessen.
   Werkzeugtext (prepare_call): "Place calls only when the user asks for them, for themselves or someone they act for, such as booking, rescheduling, enquiring or complaining - not for telemarketing, unsolicited advertising or sales calls, political campaigning, or mass or automated dialling of many numbers."
 - Serverseitige Gates vor jedem Anruf (Einzelheiten unter "Telemarketing, Spam, Betrug"):
   Bestaetigung je Anruf durch einen Menschen auf der Karte (`src/call-confirmation.js:63`),
-  Abo- und Verifikationspflicht des Kontos (Gate `kyc`, `src/telephony/outbound-gates.js:772`;
-  Abo-Kopplung `src/telephony/outbound-gates.js:438`), Sperrliste und Land-Gate
-  (`src/telephony/outbound-gates.js:518-520`, `src/telephony/outbound-gates.js:371-375`),
-  Stundenlimit und Ziel-Grenze (`src/telephony/outbound-gates.js:490-495`,
-  `src/telephony/outbound-gates.js:401`), Kostendecke (`src/telephony/outbound-gates.js:914`),
-  globaler Notaus (`src/telephony/outbound-gates.js:699`) und die Ablehnung eingeschraenkter
+  Abo- und Verifikationspflicht des Kontos (Gate `kyc`, `src/telephony/outbound-gates.js:767`;
+  Abo-Kopplung `src/telephony/outbound-gates.js:433`), Sperrliste und Land-Gate
+  (`src/telephony/outbound-gates.js:513-515`, `src/telephony/outbound-gates.js:366-370`),
+  Stundenlimit und Ziel-Grenze (`src/telephony/outbound-gates.js:485-490`,
+  `src/telephony/outbound-gates.js:396`), Kostendecke (`src/telephony/outbound-gates.js:909`),
+  globaler Notaus (`src/telephony/outbound-gates.js:694`) und die Ablehnung eingeschraenkter
   Daten in den Anruf-Argumenten (`src/mcp-tools.js:510`).
 - Keine inhaltliche Zweckpruefung durch den Server, bewusst: der Server liest den Zweck eines
   Anrufs nicht. Eine Stichwortpruefung des Anliegens liesse sich durch Umformulieren umgehen
@@ -128,18 +128,18 @@ nie gemessen.
 
 - Einschlaegig: ja. Hermes fuehrt echte ausgehende Anrufe an Dritte.
 - Mechanismen im Code (Kette der Ausgangs-Gates, serverseitig, vor dem Waehlen):
-  - Globaler Notaus: Gate `outbound_frozen` (`src/telephony/outbound-gates.js:699`).
-  - Verifikation des Kontos: Gate `kyc` (`src/telephony/outbound-gates.js:772`), Mindeststufe
+  - Globaler Notaus: Gate `outbound_frozen` (`src/telephony/outbound-gates.js:694`).
+  - Verifikation des Kontos: Gate `kyc` (`src/telephony/outbound-gates.js:767`), Mindeststufe
     `KYC_OUTBOUND_MIN = KYC_LEVEL.CARD` (`src/store/defaults.js:524`).
   - Sperrliste und Land-Gate: `deniedPrefix` bzw. `countryGateAllowed` in `numberGateError`
-    (`src/telephony/outbound-gates.js:518-520`, `src/telephony/outbound-gates.js:371-375`),
-    ausgefuehrt im Gate `number_gate` (`src/telephony/outbound-gates.js:814`).
+    (`src/telephony/outbound-gates.js:513-515`, `src/telephony/outbound-gates.js:366-370`),
+    ausgefuehrt im Gate `number_gate` (`src/telephony/outbound-gates.js:809`).
   - Stundenlimit pro Mandant und Wiederholungs-Grenze je Ziel im Zeitfenster:
-    `callQuotaError` (`src/telephony/outbound-gates.js:490-495`), Grenzwert pro Mandant
-    (`src/telephony/outbound-gates.js:392-394`), Ziel-Grenze `perTargetCapReached`
-    (`src/telephony/outbound-gates.js:401`).
+    `callQuotaError` (`src/telephony/outbound-gates.js:485-490`), Grenzwert pro Mandant
+    (`src/telephony/outbound-gates.js:387-389`), Ziel-Grenze `perTargetCapReached`
+    (`src/telephony/outbound-gates.js:396`).
   - Kostendecke pro Mandant: Gates `budget` und `minutes`
-    (`src/telephony/outbound-gates.js:914`, `src/telephony/outbound-gates.js:927`).
+    (`src/telephony/outbound-gates.js:909`, `src/telephony/outbound-gates.js:922`).
   - Offenlegungssatz als erster gesprochener Satz (siehe "Identitaetsanmassung").
   - Bestaetigung je Anruf: `place_call` waehlt nur mit einem Bestaetigungscode, den der Server
     fuer genau diese Argumente ausstellt, der nach einer Verwendung verbraucht ist
@@ -216,12 +216,12 @@ nie gemessen.
   (`elevenlabs/agent_configs/outbound-agent.template.json:810`) und wird im Code nicht
   uebersteuert (`src/elevenlabs/outbound.js:19`).
 - Ohne hinterlegten Auftraggeber-Namen kein Anruf: Gate `owner_name`
-  (`src/telephony/outbound-gates.js:788`).
+  (`src/telephony/outbound-gates.js:783`).
 - Eng begrenzte Ausnahme: ruft der Mandant seine EIGENE hinterlegte Nummer an, entfaellt nur der
   lange Satz zum Auftraggeber; die KI-Kennzeichnung bleibt. Voraussetzungen: exakte
   String-Gleichheit von Ziel und hinterlegter Nummer (`src/callee-is-owner.js:49-50`), ein
   ausdruecklich freigeschalteter Mandant (`src/callee-is-owner.js:68`) und ein Schalter, der
-  per Code-Default aus ist (`src/config.js:1915-1917`). Budget-Weg: `src/claude.js:470-472`;
+  per Code-Default aus ist (`src/config.js:1880-1882`). Budget-Weg: `src/claude.js:470-472`;
   Sprach-Agenten-Weg: `ownerFirstMessage` (`src/elevenlabs/outbound.js:1165`).
 - Der hinterlegte Auftraggeber-Name wird gegen keinen Identitaetsnachweis geprueft. Beim
   Web-Login uebernimmt der Server Vor- und Nachname aus dem Profil des Login-Anbieters
@@ -301,7 +301,7 @@ nie gemessen.
     ebenso bei einer gescheiterten Uebergabe eines eingehenden Anrufs an den Sprach-Agenten
     (`src/telephony/call-finish.js:296`). Ein abgebrochener oder gescheiterter Anruf behaelt
     sein Roh-Transkript also bis zum Loeschlauf des Anrufs (Code-Default 30 Tage nach
-    Anrufende, `src/config.js:2036`; der Wert 0 schaltet den Loeschlauf ganz aus). Der
+    Anrufende, `src/config.js:2001`; der Wert 0 schaltet den Loeschlauf ganz aus). Der
     Sprach-Agenten-Weg endet ueber dieselbe Funktion (`src/elevenlabs/outbound.js:1458`) und
     unterliegt denselben Ruecksprungstellen. Weitere Ausnahmen bei einem abgeschlossenen
     Anruf: ein Diagnose-Anruf an die eigene hinterlegte Nummer behaelt es
@@ -577,7 +577,7 @@ Budget-/Telnyx-Weg setzt der Prompt `accept_best` so um: das beste Angebot anneh
 Nachricht festhalten (`src/i18n/prompts/en.js:224-225`).
 
 **Unterschied zwischen den Sprechwegen.** Welcher Weg einen Anruf fuehrt, entscheidet ein
-globaler Schalter (`src/config.js:808`, Code-Default aus; ausgewertet in
+globaler Schalter (`src/config.js:798`, Code-Default aus; ausgewertet in
 `src/routes/api-calls.js:521`); der Produktionswert ist hier nicht genannt. Auf dem
 Sprach-Agenten-Weg kommt `on_out_of_scope` nicht beim Agenten an: uebergeben werden nur der
 Rahmen, die Ausweich-Reihenfolge und die Buchungsgrenze (`src/elevenlabs/outbound.js:615`,
@@ -615,7 +615,7 @@ Grundlage fuer Datenschutzerklaerung und AGB. Alle Fristen sind **Code-Defaults*
 Umgebungsvariable einstellbar, der Produktionswert steht im Hosting-Dashboard und ist hier
 bewusst nicht genannt. Beide Speicher-Backends (Datei und Postgres) rufen denselben Loeschlauf
 auf (`src/store/json.js:1339`, `src/store/pg.js:833`). Der Loeschlauf laeuft beim Start und
-danach alle 6 Stunden (`src/boot.js:109`, `src/boot.js:1264-1265`).
+danach alle 6 Stunden (`src/boot.js:108`, `src/boot.js:1243-1244`).
 
 ### Datenkategorien
 
@@ -626,12 +626,12 @@ danach alle 6 Stunden (`src/boot.js:109`, `src/boot.js:1264-1265`).
 | Mandant: Name des Auftraggebers, eigene Nummer, Abrechnungs-Kennungen | Tabelle `tenant` (`src/db/schema.sql:13`), Spalten `owner_name` (`src/db/schema.sql:23`), `private_number` (`src/db/schema.sql:81`), `stripe_customer_id` (`src/db/schema.sql:38`), `stripe_subscription_id` (`src/db/schema.sql:48`) | Offenlegungssatz, Eigen-Anruf, Abrechnung | keine Frist im Code | Name des Auftraggebers: OpenAI/ChatGPT ueber `get_agent_status` (Feld `owner`, `src/mcp-tools.js:715`); Sprach-Anbieter als Variable `owner_name` des Sprach-Agenten (`src/elevenlabs/outbound.js:953`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs (`src/i18n/prompts/en.js:12`); Telefonie-Anbieter als Text der ersten Ansage des Budget-Wegs (`src/claude.js:452`); jeder Angerufene hoert ihn im Offenlegungssatz (`src/i18n/locales.js:622-624`). Vorname (Spalte `first_name`, `src/db/schema.sql:27`): Sprach-Anbieter in der Eroeffnung eines Anrufs an die eigene hinterlegte Nummer (`src/elevenlabs/outbound.js:1167-1169`). Eigene Nummer: kein Werkzeugfeld gibt sie als solche zurueck; ist sie Ziel eines Anrufs, steht sie im Anruf-Datensatz und geht als Nummer der Gegenseite an OpenAI/ChatGPT (`list_calls`, Feld `counterparty`, `src/mcp-tools.js:752`). Abrechnungs-Kennungen: Zahlungsanbieter |
 | Rufnummer des Assistenten (dem Mandanten zugeordnete, beim Telefonie-Anbieter gemietete Nummer) | Tabelle `number` (`src/db/schema.sql:714`), Spalte `provider` (`src/db/schema.sql:718`); Anzeige-Nummer des Mandanten (`src/routes/api-read.js:89`) | Anrufe annehmen und fuehren | der periodische Loeschlauf hat keinen Durchgang fuer diese Tabelle (`src/store/state-ops.js:5186`); was mit der Zeile nach einer Kuendigung und der Freigabe der Nummer geschieht, ist hier nicht untersucht | Telefonie-Anbieter; OpenAI/ChatGPT ueber `get_agent_number` (`src/mcp-tools.js:739`) und `get_agent_status` (Feld `number`, `src/mcp-tools.js:714`) |
 | Einstellungen | Tabelle `settings` (`src/db/schema.sql:163`) | Verhalten des Assistenten | keine Frist im Code | OpenAI/ChatGPT ueber `get_agent_status`: die drei Freigaben (Zusammenfassungen, persoenliche Daten, Bankdaten) als Feld `permissions` (`src/mcp-tools.js:720`); Sprachmodell-Anbieter im System-Prompt des Budget-Wegs: Name und Stil des Assistenten (`src/i18n/prompts/en.js:12`, `src/i18n/prompts/en.js:129`) und die Grenzen aus den Freigaben fuer persoenliche und Bankdaten (`src/claude.js:231-232`); Name des Assistenten in der Ergebnis-SMS an den Nutzer ueber den Telefonie-Anbieter (`src/telephony/call-finish.js:370`). Auf dem Sprach-Agenten-Weg geht laut Code keines dieser Felder an den Sprach-Anbieter (`grep -rnE "agentName|agentStyle|allowPersonalData|allowBankData" src/elevenlabs` liefert 0) |
-| Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/schema.sql:211`): `from_e164`/`to_e164` (`src/db/schema.sql:219-220`), `goal` (`src/db/schema.sql:220`), `briefing` (`src/db/schema.sql:227`), `constraints` (`src/db/schema.sql:228`), `context` (`src/db/schema.sql:252`), `mandate` (`src/db/schema.sql:256`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js:2036`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js:5125`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Vorab-Recherche die serverseitige Suche von Anthropic (`objective`, `briefing`, `constraints`, ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
+| Anruf-Datensatz: Nummern, Anliegen, Briefing, Grenzen, Kontext, Mandat | Tabelle `call` (`src/db/schema.sql:211`): `from_e164`/`to_e164` (`src/db/schema.sql:219-220`), `goal` (`src/db/schema.sql:220`), `briefing` (`src/db/schema.sql:227`), `constraints` (`src/db/schema.sql:228`), `context` (`src/db/schema.sql:252`), `mandate` (`src/db/schema.sql:256`) | Durchfuehrung und Ergebnis des Anrufs | beendete Anrufe: 30 Tage (`src/config.js:2001`, 0 = Loeschlauf aus); laufende Anrufe unbegrenzt (`src/store/state-ops.js:5125`) | Sprachmodell-Anbieter, Sprach-Anbieter, Telefonie-Anbieter; bei eingeschalteter Vorab-Recherche die serverseitige Suche von Anthropic (`objective`, `briefing`, `constraints`, ohne Nummer); OpenAI/ChatGPT (Werkzeug-Antworten) |
 | Rueckfragen des Agenten an den Nutzer und dessen Antworten (nur bei freigegebenem Rueckfrage-Kanal) | Spalte `consults` am Anruf (`src/db/schema.sql:342`) | Rueckfrage waehrend des Anrufs | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT: die Fragen des Agenten, die aus dem laufenden Gespraech stammen, ueber `await_call_event` (Feld `questions`, `src/mcp-tools.js:331`). Die Antworten kommen aus ChatGPT ueber `answer_consult` (`src/mcp-tools.js:1809`, Route `src/routes/api-calls.js:740`) und sind fuer den Agenten im laufenden Gespraech bestimmt; der Weg von dort zum Sprachmodell- bzw. Sprach-Anbieter ist in diesem Dokument nicht Zeile fuer Zeile belegt |
 | Roh-Transkript | Tabelle `transcript_segment` (`src/db/schema.sql:554`) | Gespraechsfuehrung, Zusammenfassung | wird am Anrufende nur bei Endstatus `completed` geleert (`src/telephony/call-finish.js:350`); bei jedem anderen Endstatus, z.B. `cancelled` nach `cancel_call` oder `failed` (Ruecksprung vor der Leerung, `src/telephony/call-finish.js:302`), und nach einer gescheiterten Zusammenfassung bleibt es bis zum Loeschlauf des Anrufs (30 Tage) | bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` (`src/mcp-tools.js:53`; Zahlungskartennummern, beschriftete behoerdliche Kennnummern und Zugangsdaten darin maskiert, alles Uebrige unveraendert), waehrend des Anrufs und danach, solange das Transkript gespeichert ist, also auch nach einem abgebrochenen oder gescheiterten Anruf und nach einer gescheiterten Zusammenfassung (`src/mcp-tools.js:1844`); Sprachmodell- und Sprach-Anbieter; bei eingeschaltetem Nachschlag im Anruf Exa: vom Gespraechsmodell formulierte Suchanfragen aus dem Gespraech, die Aussagen des Angerufenen umschreiben koennen (Filter siehe "Privatsphaere Dritter") |
-| Roh-Transkript eines Diagnose-Anrufs an die eigene hinterlegte Nummer | wie oben, Markierung `diagnostic` | nachtraegliche Analyse | 7 Tage (`src/config.js:2043-2047`). Aufbewahrung per Default AN: ohne Angabe behaelt der Server das Transkript, nur ein ausdrueckliches `diagnostic=false` bei `place_call` verhindert es (Opt-out, `src/diagnostic-retention.js:42`, `src/diagnostic-retention.js:56`). Die eigene hinterlegte Nummer ist nur auf Format und Land geprueft, NICHT darauf, dass sie dem Nutzer gehoert (`src/diagnostic-retention.js:48`); hat ein Nutzer eine fremde Nummer hinterlegt, ist es das Roh-Transkript eines Dritten | wie oben; insbesondere bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` fuer die ganze Frist (`src/mcp-tools.js:214`, `src/diagnostic-retention.js:72`) |
+| Roh-Transkript eines Diagnose-Anrufs an die eigene hinterlegte Nummer | wie oben, Markierung `diagnostic` | nachtraegliche Analyse | 7 Tage (`src/config.js:2008-2012`). Aufbewahrung per Default AN: ohne Angabe behaelt der Server das Transkript, nur ein ausdrueckliches `diagnostic=false` bei `place_call` verhindert es (Opt-out, `src/diagnostic-retention.js:42`, `src/diagnostic-retention.js:56`). Die eigene hinterlegte Nummer ist nur auf Format und Land geprueft, NICHT darauf, dass sie dem Nutzer gehoert (`src/diagnostic-retention.js:48`); hat ein Nutzer eine fremde Nummer hinterlegt, ist es das Roh-Transkript eines Dritten | wie oben; insbesondere bis zu sechs letzte Zeilen an OpenAI/ChatGPT ueber `get_call_status` fuer die ganze Frist (`src/mcp-tools.js:214`, `src/diagnostic-retention.js:72`) |
 | Zusammenfassung, Ergebnis | `summary`, `result` am Anruf (`src/db/schema.sql:339`) | Bericht an den Nutzer | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (Werkzeug-Antworten), Benachrichtigungswege |
-| Woertliche Zitate im Ergebnis | `result.evidence` | Beleg zur Ergebnis-Karte | Code-Default 0 = Funktion aus, es wird nichts erhoben (`src/config.js:2057-2060`) | - |
+| Woertliche Zitate im Ergebnis | `result.evidence` | Beleg zur Ergebnis-Karte | Code-Default 0 = Funktion aus, es wird nichts erhoben (`src/config.js:2022-2025`) | - |
 | Aufgaben (Action Items) | Tabelle `action_item` (`src/db/schema.sql:564`) | Nachbereitung | erledigte: 30 Tage; OFFENE unbefristet (`src/store/state-ops.js:5127`) | OpenAI/ChatGPT: offene Aufgaben ueber `list_action_items` (`src/mcp-tools.js:837`) und je Eingangs-Eintrag ueber `check_inbox` (Feld `action_items`, `src/store/state-ops.js:786`) |
 | Benachrichtigungen | Tabelle `notification` (`src/db/schema.sql:699`) | Hinweise an den Nutzer | 30 Tage | - |
 | Eingangs-Eintraege eingehender Anrufe: Anrufernummer, Anliegen | Anruf-Datensatz, `inbox_entry_at` (`src/db/schema.sql:369`), Gesehen-Markierung (`src/store/state-ops.js:835`) | Anruf-Eingang | mit dem Anruf-Datensatz (30 Tage) | OpenAI/ChatGPT (`check_inbox`) |
@@ -651,8 +651,8 @@ Reproduzierbar mit
 | DeepSeek | Sprachmodell (je nach Anbieter-Schalter) | `src/llm/adapters/deepseek.js:28`, Schalter `src/config.js:514` |
 | Anthropic | Sprachmodell (je nach Anbieter-Schalter), ueber das SDK; serverseitige Suche der Vorab-Recherche (nur wenn eingeschaltet) | `src/llm/adapters/anthropic.js:35` |
 | Exa | Nachschlag waehrend ausgehender Anrufe (nur wenn eingeschaltet): vom Gespraechsmodell formulierte Suchanfragen aus dem laufenden Gespraech, auch aus Aussagen des Angerufenen | `src/config.js:666` |
-| Stripe | Zahlungen | `src/config.js:918` |
-| WorkOS | Anmeldung | `src/config.js:2095` |
+| Stripe | Zahlungen | `src/config.js:908` |
+| WorkOS | Anmeldung | `src/config.js:2060` |
 | Brevo, eigenes SMTP-Postfach | E-Mail (Kuendigungsbestaetigung) | `src/brevo-mail.js:22`, `src/smtp-mail.js:22` |
 | OpenAI / ChatGPT | Quelle der Werkzeug-Aufrufe und der Antworten auf Rueckfragen; Empfaenger aller Werkzeug-Antworten: Zusammenfassungen und Ergebnis-Karten, Nummern der Gegenseite, Eingangs-Eintraege, letzte Gespraechszeilen, Rueckfragen des Agenten, Aufgaben, Name des Auftraggebers, Rufnummer des Assistenten, Zahl der Anrufe und Monatsnutzung in Prozent, Freigaben aus den Einstellungen (Zuordnung Feld fuer Feld im naechsten Abschnitt) | Werkzeuge in `src/mcp-tools.js` |
 
@@ -854,7 +854,7 @@ bestehende Durchsetzung.
     jedem Endstatus ausser `completed` vor der Leerung zurueck
     (`src/telephony/call-finish.js:302`); das betrifft auch jeden per `cancel_call`
     abgebrochenen Anruf. Das Roh-Transkript mit den woertlichen Aussagen des Angerufenen bleibt
-    bis zum Loeschlauf des Anrufs (Code-Default 30 Tage, `src/config.js:2036`). Klauseln:
+    bis zum Loeschlauf des Anrufs (Code-Default 30 Tage, `src/config.js:2001`). Klauseln:
     "Collection minimization", "privacy of others", "data retention timelines".
     Ziel: bewusst nicht umgesetzt: fuer nicht abgeschlossene Anrufe raeumt der Loeschlauf das
     Roh-Transkript nach der Frist ab; eine Leerung schon beim Anrufende griffe in den
@@ -885,19 +885,19 @@ src/restricted-data.js:28 | IBAN/Bankkonto ist KEINE Kategorie der Richtlinie
 src/mcp-tools.js:1303 | const CALL_DATA_NOTICE_META_KEY = "hermes/call_data_notice";
 src/i18n/mcp-texts.js:346 | callDataNotice:
 src/call-confirmation.js:63 | export const CONFIRMATION_ALREADY_USED_REASON
-src/telephony/outbound-gates.js:699 | name: "outbound_frozen"
-src/telephony/outbound-gates.js:772 | name: "kyc"
-src/telephony/outbound-gates.js:438 | function allowlistError(
+src/telephony/outbound-gates.js:694 | name: "outbound_frozen"
+src/telephony/outbound-gates.js:767 | name: "kyc"
+src/telephony/outbound-gates.js:433 | function allowlistError(
 src/store/defaults.js:524 | KYC_OUTBOUND_MIN = KYC_LEVEL.CARD
-src/telephony/outbound-gates.js:518-520 | deniedPrefix(to)
-src/telephony/outbound-gates.js:371-375 | function countryGateAllowed
-src/telephony/outbound-gates.js:814 | name: "number_gate"
-src/telephony/outbound-gates.js:490-495 | function callQuotaError
-src/telephony/outbound-gates.js:392-394 | maxCallsPerHour
-src/telephony/outbound-gates.js:401 | function perTargetCapReached
-src/telephony/outbound-gates.js:914 | name: "budget"
-src/telephony/outbound-gates.js:927 | name: "minutes"
-src/telephony/outbound-gates.js:788 | name: "owner_name"
+src/telephony/outbound-gates.js:513-515 | deniedPrefix(to)
+src/telephony/outbound-gates.js:366-370 | function countryGateAllowed
+src/telephony/outbound-gates.js:809 | name: "number_gate"
+src/telephony/outbound-gates.js:485-490 | function callQuotaError
+src/telephony/outbound-gates.js:387-389 | maxCallsPerHour
+src/telephony/outbound-gates.js:396 | function perTargetCapReached
+src/telephony/outbound-gates.js:909 | name: "budget"
+src/telephony/outbound-gates.js:922 | name: "minutes"
+src/telephony/outbound-gates.js:783 | name: "owner_name"
 src/claude.js:470-472 | ownerOpeningFor(call) || disclosureSentence(call)
 src/claude.js:423 | export function disclosureSentence(call)
 src/i18n/locales.js:622-624 | this is an AI assistant calling on behalf of
@@ -905,7 +905,7 @@ elevenlabs/agent_configs/outbound-agent.template.json:810 | "first_message": "He
 src/elevenlabs/outbound.js:19 | der Satz ist first_message der AGENTEN-Konfiguration
 src/callee-is-owner.js:49-50 | to === ownNumber
 src/callee-is-owner.js:68 | export function ownerSelfCallGranted
-src/config.js:1915-1917 | fallback: false
+src/config.js:1880-1882 | fallback: false
 src/elevenlabs/outbound.js:1165 | function ownerFirstMessage
 src/research/sanitize.js:17 | RESEARCH_EGRESS_FIELDS = Object.freeze(["objective", "ownerNotes", "constraints"])
 src/routes/api-calls.js:500 | ownerNotes: b.briefing
@@ -943,14 +943,14 @@ src/store/defaults.js:413-416 | keinen Kalender- oder Buchungspfad
 src/routes/_validation.js:50 | "mandate.decide_freely": 1000
 src/store/defaults.js:417 | ACCEPT_BEST: "accept_best"
 src/i18n/prompts/en.js:224-225 | Accept the best option offered instead of asking back
-src/config.js:808 | boolEnv("ELEVENLABS_OUTBOUND_ENABLED"
+src/config.js:798 | boolEnv("ELEVENLABS_OUTBOUND_ENABLED"
 src/routes/api-calls.js:521 | if (config.voice.elevenLabsOutbound.enabled)
 src/elevenlabs/outbound.js:615 | Die Enum-Achse on_out_of_scope hat auf diesem Weg noch keinen Platz
 src/elevenlabs/outbound.js:622 | function mandateText(mandate)
 src/store/json.js:1339 | export function pruneOldData(
 src/store/pg.js:833 | pruneOldData(
-src/boot.js:109 | const RETENTION_SWEEP_INTERVAL_HOURS = 6;
-src/boot.js:1264-1265 | runRetention(store, config)
+src/boot.js:108 | const RETENTION_SWEEP_INTERVAL_HOURS = 6;
+src/boot.js:1243-1244 | runRetention(store, config)
 src/db/schema.sql:980 | CREATE TABLE IF NOT EXISTS account
 src/web-auth.js:711 | async dropAccount(sub)
 src/db/schema.sql:997 | CREATE TABLE IF NOT EXISTS session
@@ -967,12 +967,12 @@ src/db/schema.sql:227 | briefing
 src/db/schema.sql:228 | constraints
 src/db/schema.sql:252 | context JSONB
 src/db/schema.sql:256 | mandate JSONB
-src/config.js:2036 | retentionDays: numEnv("RETENTION_DAYS", process.env.RETENTION_DAYS, { fallback: 30, min: 0 })
+src/config.js:2001 | retentionDays: numEnv("RETENTION_DAYS", process.env.RETENTION_DAYS, { fallback: 30, min: 0 })
 src/store/state-ops.js:5125 | const keepCall = (c) => c.status === "active" || !c.endedAt || c.endedAt >= cutoff;
 src/db/schema.sql:554 | CREATE TABLE IF NOT EXISTS transcript_segment
-src/config.js:2043-2047 | fallback: 7
+src/config.js:2008-2012 | fallback: 7
 src/db/schema.sql:339 | result JSONB
-src/config.js:2057-2060 | fallback: 0
+src/config.js:2022-2025 | fallback: 0
 src/db/schema.sql:564 | CREATE TABLE IF NOT EXISTS action_item
 src/store/state-ops.js:5127 | const keepActionItem = (a) => !a.done || a.createdAt >= cutoff;
 src/db/schema.sql:699 | CREATE TABLE IF NOT EXISTS notification
@@ -988,8 +988,8 @@ src/llm/adapters/deepseek.js:28 | https://api.deepseek.com
 src/config.js:514 | llmProvider: enumEnv("LLM_PROVIDER"
 src/llm/adapters/anthropic.js:35 | import Anthropic from "@anthropic-ai/sdk";
 src/config.js:666 | https://api.exa.ai
-src/config.js:918 | https://api.stripe.com
-src/config.js:2095 | https://api.workos.com
+src/config.js:908 | https://api.stripe.com
+src/config.js:2060 | https://api.workos.com
 src/brevo-mail.js:22 | https://api.brevo.com
 src/smtp-mail.js:22 | import nodemailer from "nodemailer";
 src/render-api.js:3 | der Server spricht nie mit Render

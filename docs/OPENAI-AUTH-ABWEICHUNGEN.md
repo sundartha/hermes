@@ -241,7 +241,7 @@ Wir verlangen `aud` == kanonische Resource. Die erwartete Audience (`audience()`
 `src/auth.js:23`) und die in der Protected-Resource-Metadata angekuendigte `resource`
 (`src/auth.js:144`) kommen aus **derselben Funktion**; die Pruefung nutzt sie in `:100`. Live
 gemessen: `"resource":"https://app.sundartha.com/mcp"` (Abschnitt 3). Boot-fatal ist genau ein
-Fall: `OAUTH_AUDIENCE` gesetzt und ungleich `publicUrl + /mcp` (`src/boot-guard.js:937-950`,
+Fall: `OAUTH_AUDIENCE` gesetzt und ungleich `publicUrl + /mcp` (`src/boot-guard.js:910-923`,
 belegt in `test/oauth.test.js:107-119`). Falsches `aud` im Token -> 401
 (`test/oauth.test.js:72-76`).
 
@@ -489,7 +489,7 @@ We require `aud == https://app.sundartha.com/mcp`. The expected audience and the
 announced in the protected-resource metadata come from the **same function** (`audience()`,
 `src/auth.js:23`, used for the check at `:100` and for the metadata at `:144`), so they cannot
 diverge at runtime. Boot is refused in exactly one case: `OAUTH_AUDIENCE` is set and differs from
-`publicUrl + /mcp` (`src/boot-guard.js:937-950`, `test/oauth.test.js:107-119`). A wrong `aud` in
+`publicUrl + /mcp` (`src/boot-guard.js:910-923`, `test/oauth.test.js:107-119`). A wrong `aud` in
 the token -> 401 (`test/oauth.test.js:72-76`).
 
 Side finding: WorkOS does **not** advertise `resource_indicators_supported` (absent from both

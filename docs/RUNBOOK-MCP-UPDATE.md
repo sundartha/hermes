@@ -429,10 +429,10 @@ waehrend der Luecke weiter ausgeliefert werden muss.
 
 | Schalter | Wirkung auf die Oberflaeche | Code-Stelle |
 |---|---|---|
-| `MCP_UI_ENABLED` (Default an, Tests pinnen aus in `test/helpers.js`) | an: Widget-URIs an fuenf Werkzeugen, vier Widget-Resources; aus: kein `_meta.ui`, `resources/list` antwortet "Method not found" | `src/config.js:1645` |
+| `MCP_UI_ENABLED` (Default an, Tests pinnen aus in `test/helpers.js`) | an: Widget-URIs an fuenf Werkzeugen, vier Widget-Resources; aus: kein `_meta.ui`, `resources/list` antwortet "Method not found" | `src/config.js:1610` |
 | `CONSULT_ENABLED` + `ASSISTANT_CONTEXT_ENABLED` + Profil `allowConsult` | alle drei: zwei zusaetzliche Werkzeuge (`await_call_event`, `answer_consult`), nur ueber HTTP | `src/consult/gate.js:19-25`, Aufruf `src/routes/mcp.js:232` |
 | stdio-Transport | registriert die Consult-Werkzeuge nie (`consultAllowed` Default `false`) | `src/mcp-tools.js:1513`, `src/mcp-server.js` |
-| `MCP_AUTH` | `oauth`: `securitySchemes` (oauth2) an jedem Werkzeug; leer/`token`: keine `securitySchemes`; `off` (nur lokale Demos, nicht im Vertrag gemessen): `noauth`; `oauth` mit gueltigem Token ohne Mandant: dieselbe Werkzeugliste mit Stub-Handlern, mit `MCP_UI_ENABLED` auch dieselben Widget-URIs und Resources (gemessen ohne Consult) | `src/config.js:2072`, `src/mcp-security-schemes.js`, `src/mcp-no-tenant.js` |
+| `MCP_AUTH` | `oauth`: `securitySchemes` (oauth2) an jedem Werkzeug; leer/`token`: keine `securitySchemes`; `off` (nur lokale Demos, nicht im Vertrag gemessen): `noauth`; `oauth` mit gueltigem Token ohne Mandant: dieselbe Werkzeugliste mit Stub-Handlern, mit `MCP_UI_ENABLED` auch dieselben Widget-URIs und Resources (gemessen ohne Consult) | `src/config.js:2037`, `src/mcp-security-schemes.js`, `src/mcp-no-tenant.js` |
 
 Profile im Vertrag (Test-Konfigurationen, alle mit `MCP_UI_ENABLED` aus, ausser `-ui`):
 

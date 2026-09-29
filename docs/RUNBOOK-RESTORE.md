@@ -176,7 +176,7 @@ Statement zu treffen — sonst stellt man den Schaden mit wieder her.
    Calls-Slice) und optional `GET /api/calls/:id` mit einer bekannten Call-ID liefern `200`
    mit plausiblem Inhalt (keine 500er, keine leeren Pflicht-Slices).
    **Achtung:** `GET /api/calls` ohne `:id` existiert nicht — `/api/calls` ist nur `POST`
-   (loest einen Outbound-Call aus, `src/server.js:636`); NICHT zur Verifikation verwenden.
+   (loest einen Outbound-Call aus, `src/server.js:623`); NICHT zur Verifikation verwenden.
 4. **Row-Counts gegen Referenz** (Abschnitt 2) — die geschaeftskritischen Tabellen:
    ```sql
    SELECT
