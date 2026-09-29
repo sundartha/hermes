@@ -573,16 +573,6 @@ services:
       # Etappe im Dashboard setzen.
       - key: PLATFORM_ALERT_MAIL_TO
         sync: false
-      # ---- Drift-Waechter (OUTBOUND-E4, F4) ----
-      # Erkennt eine Abweichung zwischen unserer deklarierten Absenderkonfiguration und
-      # der Anbieter-Wirklichkeit (27.08.2026-Fall), OHNE dass ein Anruf stattfindet.
-      # 0 = der Waechter ist KOMPLETT AUS.
-      - key: OUTBOUND_DRIFT_MIN_INTERVAL_MS
-        value: "600000"
-      - key: OUTBOUND_DRIFT_STALE_MS
-        value: "21600000"
-      - key: OUTBOUND_DRIFT_BALANCE_MIN_HOURS
-        value: "72"
       # ---- Spend-Monat-Flip (Budget-Achsen P7) ----
       # AN = beide Gate-Achsen messen im UTC-Kalendermonat statt lebenslang. AUS (Default)
       # ist byte-identisch zum Bestand. Vorbedingung vor dem Flip: Live-Beleg, dass
