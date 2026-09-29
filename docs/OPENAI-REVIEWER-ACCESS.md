@@ -123,15 +123,15 @@ appear in `list_calls` only, not in `check_inbox`.
 The reviewer account has no exception from any safeguard; it is a regular customer account.
 Operator commitment: no administrator override is set for this account. Every outgoing call passes the same server-side checks as for every customer:
 
-- a global emergency stop for all outgoing calls (src/telephony/outbound-gates.js:699);
-- an active subscription and payment-card verification (src/telephony/outbound-gates.js:421,
-  src/telephony/outbound-gates.js:438);
+- a global emergency stop for all outgoing calls (src/telephony/outbound-gates.js:694);
+- an active subscription and payment-card verification (src/telephony/outbound-gates.js:416,
+  src/telephony/outbound-gates.js:433);
 - a limit of calls per hour and a limit of repeated calls to the same number
-  (src/telephony/outbound-gates.js:390, src/telephony/outbound-gates.js:401);
-- a denylist and a country check for the destination (src/telephony/outbound-gates.js:522,
-  src/telephony/outbound-gates.js:530);
-- a per-account cost limit (src/telephony/outbound-gates.js:578);
-- a maximum call duration (src/telephony/outbound-gates.js:961).
+  (src/telephony/outbound-gates.js:385, src/telephony/outbound-gates.js:396);
+- a denylist and a country check for the destination (src/telephony/outbound-gates.js:517,
+  src/telephony/outbound-gates.js:525);
+- a per-account cost limit (src/telephony/outbound-gates.js:573);
+- a maximum call duration (src/telephony/outbound-gates.js:956).
 
 A call is only placed after the user confirms it: `prepare_call` returns a confirmation card
 (src/mcp-tools.js:1617), and `place_call` without the confirmation code from that card places no
@@ -274,15 +274,15 @@ Kundenkonto. Zusage des Betreibers: fuer dieses Konto ist keine Administrator-Au
 Jeder ausgehende Anruf durchlaeuft dieselben serverseitigen Pruefungen wie bei
 jedem Kunden:
 
-- ein globaler Notaus fuer alle ausgehenden Anrufe (src/telephony/outbound-gates.js:699);
-- ein aktives Abo und eine Kartenverifikation (src/telephony/outbound-gates.js:421,
-  src/telephony/outbound-gates.js:438);
+- ein globaler Notaus fuer alle ausgehenden Anrufe (src/telephony/outbound-gates.js:694);
+- ein aktives Abo und eine Kartenverifikation (src/telephony/outbound-gates.js:416,
+  src/telephony/outbound-gates.js:433);
 - ein Limit fuer Anrufe pro Stunde und ein Limit fuer wiederholte Anrufe an dieselbe Nummer
-  (src/telephony/outbound-gates.js:390, src/telephony/outbound-gates.js:401);
-- eine Sperrliste und eine Laenderpruefung fuer das Ziel (src/telephony/outbound-gates.js:522,
-  src/telephony/outbound-gates.js:530);
-- eine Kostendecke je Konto (src/telephony/outbound-gates.js:578);
-- eine maximale Gespraechsdauer (src/telephony/outbound-gates.js:961).
+  (src/telephony/outbound-gates.js:385, src/telephony/outbound-gates.js:396);
+- eine Sperrliste und eine Laenderpruefung fuer das Ziel (src/telephony/outbound-gates.js:517,
+  src/telephony/outbound-gates.js:525);
+- eine Kostendecke je Konto (src/telephony/outbound-gates.js:573);
+- eine maximale Gespraechsdauer (src/telephony/outbound-gates.js:956).
 
 Ein Anruf wird nur gewaehlt, nachdem der Nutzer ihn bestaetigt hat: `prepare_call` liefert eine
 Bestaetigungskarte (src/mcp-tools.js:1617), und `place_call` ohne den Bestaetigungscode aus dieser
@@ -326,15 +326,15 @@ src/mcp-tools.js:2059 | "list_action_items",
 scripts/lib/reviewer-demo-seed.mjs:130 | store.setCallEndedAt(call.id, ENDED_STATUS, endedAtIso);
 src/mcp-tools.js:212 | duration_s: durationS(c),
 src/mcp-tools.js:213 | last_transcript_lines: c.transcript
-src/telephony/outbound-gates.js:699 | name: "outbound_frozen",
-src/telephony/outbound-gates.js:421 | function kycGateError(tenantId) {
-src/telephony/outbound-gates.js:438 | function allowlistError(to, { profile, tenantId }) {
-src/telephony/outbound-gates.js:390 | function tenantHourReached(profile, tenantId) {
-src/telephony/outbound-gates.js:401 | function perTargetCapReached(tenantId, to) {
-src/telephony/outbound-gates.js:522 | grund: "denylist",
-src/telephony/outbound-gates.js:530 | grund: "land",
-src/telephony/outbound-gates.js:578 | grund: "budget_tenant",
-src/telephony/outbound-gates.js:961 | ctx.maxDur = resolveMaxDurationS(
+src/telephony/outbound-gates.js:694 | name: "outbound_frozen",
+src/telephony/outbound-gates.js:416 | function kycGateError(tenantId) {
+src/telephony/outbound-gates.js:433 | function allowlistError(to, { profile, tenantId }) {
+src/telephony/outbound-gates.js:385 | function tenantHourReached(profile, tenantId) {
+src/telephony/outbound-gates.js:396 | function perTargetCapReached(tenantId, to) {
+src/telephony/outbound-gates.js:517 | grund: "denylist",
+src/telephony/outbound-gates.js:525 | grund: "land",
+src/telephony/outbound-gates.js:573 | grund: "budget_tenant",
+src/telephony/outbound-gates.js:956 | ctx.maxDur = resolveMaxDurationS(
 src/mcp-tools.js:1617 | "prepare_call",
 src/mcp-tools.js:1705 | if (!confirmResult.confirmed) {
 src/telephony/call-finish.js:422 | store.markInboxEntry(call.id, inboxWorthy);
