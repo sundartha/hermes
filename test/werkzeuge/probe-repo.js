@@ -38,6 +38,10 @@ export function runIn(directory, command, args) {
   });
 }
 
+export function outputLines(text) {
+  return text.split("\n").filter((line) => line.trim() !== "");
+}
+
 export function passingTest(name) {
   return [
     'import { test } from "node:test";',
