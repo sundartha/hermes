@@ -687,33 +687,6 @@ export function platformAlertSenderFindings({ openBindings = [] } = {}) {
   }];
 }
 
-// OUTBOUND-E4 (PM-16): "leer" ergibt bei den zwei neuen Telnyx-IDs einen unbekannt-Befund
-// im Drift-Waechter - unknown gated nie und alarmiert nie, jeder Log-Blick saehe gruen
-// aus. Deshalb meldet der Guard bei JEDEM Start, wenn eine der beiden IDs fehlt. NIE
-// fatal (gleiche Abwaegung wie platformAniFindings: ein Boot-Refusal toetete den Inbound,
-// der vom Ausfall gar nicht betroffen ist).
-export const DRIFT_CONFIG_FINDING = Object.freeze({
-  UNSET: "drift_config_unset", // WARN
-  UNSET_WITH_OUTBOUND: "drift_config_unset_with_outbound", // WARN, dringlicher
-});
-
-export function driftConfigFindings({ fqdnConnectionId, outboundVoiceProfileId, elevenLabsOutboundEnabled } = {}) {
-  if (fqdnConnectionId && outboundVoiceProfileId) return [];
-  const fehlend = [
-    fqdnConnectionId ? null : "TELNYX_FQDN_CONNECTION_ID",
-    outboundVoiceProfileId ? null : "TELNYX_OUTBOUND_VOICE_PROFILE_ID",
-  ].filter(Boolean);
-  const code = elevenLabsOutboundEnabled ? DRIFT_CONFIG_FINDING.UNSET_WITH_OUTBOUND : DRIFT_CONFIG_FINDING.UNSET;
-  return [{
-    code,
-    fatal: false,
-    message:
-      `${fehlend.join(", ")} leer - der Drift-Waechter meldet die zugehoerigen Pruefungen ` +
-      "als unbekannt statt sie zu fahren (kein Fehlalarm, aber auch kein Schutz). Wert im " +
-      "Render-Dashboard setzen.",
-  }];
-}
-
 // T2-13 (N-10): das Betriebsgeheimnis des serverseitigen Bestaetigungs-Codes vor dem
 // Waehlen (src/call-confirmation.js). NIE fatal (Owner-Regel P6, keine neue Boot-Sperre) -
 // fehlt es, laeuft die Produktion weiter, aber prepare_call antwortet ausschliesslich

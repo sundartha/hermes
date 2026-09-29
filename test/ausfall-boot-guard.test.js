@@ -10,8 +10,6 @@ import {
   platformAlertSenderFindings,
   PLATFORM_ALERT_SENDER_FINDING,
   mailerKonstruierbar,
-  driftConfigFindings,
-  DRIFT_CONFIG_FINDING,
 } from "../src/boot-guard.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
 
@@ -232,44 +230,4 @@ test("mailerKonstruierbar: nur SMTP-Host -> true", () => {
 test("mailerKonstruierbar: kein Argument -> false, kein Wurf", () => {
   assert.doesNotThrow(() => mailerKonstruierbar());
   assert.equal(mailerKonstruierbar(), false);
-});
-
-// ---- OUTBOUND-E4 (PM-16): driftConfigFindings - "leer" darf nie wie "alles gruen"
-// aussehen. NIE fatal (Muster platformAniFindings: ein Boot-Refusal toetete den Inbound,
-// der vom Ausfall gar nicht betroffen ist). ----
-
-test("driftConfigFindings: beide IDs gesetzt -> []", () => {
-  const findings = driftConfigFindings({
-    fqdnConnectionId: "3026479542865757220",
-    outboundVoiceProfileId: "ovp_1",
-    elevenLabsOutboundEnabled: true,
-  });
-  assert.deepEqual(findings, []);
-});
-
-test("driftConfigFindings: beide leer, EL-Outbound AUS -> WARN, nie fatal", () => {
-  const findings = driftConfigFindings({ fqdnConnectionId: "", outboundVoiceProfileId: "", elevenLabsOutboundEnabled: false });
-  assert.equal(findings.length, 1);
-  assert.equal(findings[0].code, DRIFT_CONFIG_FINDING.UNSET);
-  assert.equal(findings[0].fatal, false);
-  assert.match(findings[0].message, /TELNYX_FQDN_CONNECTION_ID/);
-  assert.match(findings[0].message, /TELNYX_OUTBOUND_VOICE_PROFILE_ID/);
-});
-
-test("driftConfigFindings: beide leer, EL-Outbound AN -> WARN dringlicher (UNSET_WITH_OUTBOUND), nie fatal", () => {
-  const findings = driftConfigFindings({ fqdnConnectionId: "", outboundVoiceProfileId: "", elevenLabsOutboundEnabled: true });
-  assert.equal(findings.length, 1);
-  assert.equal(findings[0].code, DRIFT_CONFIG_FINDING.UNSET_WITH_OUTBOUND);
-  assert.equal(findings[0].fatal, false);
-});
-
-test("driftConfigFindings: nur EINE der beiden IDs gesetzt -> Befund nennt NUR die fehlende", () => {
-  const findings = driftConfigFindings({
-    fqdnConnectionId: "3026479542865757220",
-    outboundVoiceProfileId: "",
-    elevenLabsOutboundEnabled: false,
-  });
-  assert.equal(findings.length, 1);
-  assert.match(findings[0].message, /TELNYX_OUTBOUND_VOICE_PROFILE_ID/);
-  assert.doesNotMatch(findings[0].message, /TELNYX_FQDN_CONNECTION_ID/);
 });
