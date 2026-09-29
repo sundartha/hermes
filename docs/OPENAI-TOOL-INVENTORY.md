@@ -345,7 +345,7 @@ model in the field description, not a server-side check.
   is about, tone, desired outcome); the descriptions tell the model to put such content in
   context only when the briefing lacks it, nothing in the schema enforces that. The server accepts it only while the
   assistant-context switch is on: otherwise the outbound gate sets it to null before the call
-  is created (`src/telephony/outbound-gates.js:866-867`). When it is accepted, it goes into the
+  is created (`src/telephony/outbound-gates.js:861-862`). When it is accepted, it goes into the
   prompt on the budget path (`src/claude.js:357-367`) and to the voice agent together with the
   briefing on the voice-agent path (`src/elevenlabs/outbound.js:665-672`). Why each subfield is
   needed, as its description states it:
@@ -364,7 +364,7 @@ model in the field description, not a server-side check.
   commit. `mandate.on_out_of_scope` has no effect on the voice-agent path: that path passes on
   only the decision frame, the fallback order and the booking boundary, not this setting
   (`src/elevenlabs/outbound.js:615`, `:622`). Which path handles a call is decided by one
-  global switch (`src/config.js:808`, off by default in the code; evaluated in
+  global switch (`src/config.js:798`, off by default in the code; evaluated in
   `src/routes/api-calls.js:521`); this document makes no claim about the production value.
   On that path, `decline` and `accept_best` are therefore not applied. The field's
   description says only "Not applied on every call path." and does not name the path.
