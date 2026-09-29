@@ -16,7 +16,14 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { startServer, seedState, seedCall, waitForLog, DOMESTIC_TEST_NUMBER } from "./helpers.js";
+import {
+  startServer,
+  seedState,
+  seedCall,
+  waitForLog,
+  waitForStoreState,
+  DOMESTIC_TEST_NUMBER,
+} from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import {
   makeDefaultState,
@@ -244,9 +251,23 @@ const postStatus = (srv, callId, fields) =>
     body: new URLSearchParams(fields),
   });
 
-async function completeCall(srv, callId) {
+async function postCompleted(srv, callId) {
   const res = await postStatus(srv, callId, { CallStatus: "completed" });
   assert.equal(res.status, HTTP_OK);
+}
+
+function abschlussMeldungen(store, callId) {
+  return store.notifications.filter((notification) => notification.callId === callId).length;
+}
+
+async function completeCall(srv, callId) {
+  const meldungenVorher = abschlussMeldungen(srv.readStore(), callId);
+  await postCompleted(srv, callId);
+  await waitForStoreState(srv, (store) => abschlussMeldungen(store, callId) > meldungenVorher);
+}
+
+async function repeatCompletedInSameProcess(srv, callId) {
+  await postCompleted(srv, callId);
   await waitForLog(srv, new RegExp(`\\[voice/status\\][^\\n]*"callId":"${callId}"`));
 }
 
@@ -278,7 +299,7 @@ test("KV-P2-4: genau EINE Buchung je Inbound-Call, auch ueber einen Prozess-Neus
     assert.equal(ownerCostCents(srv1), expectedCostCents, "erste Buchung: Minuten x Inbound-Satz");
 
     // 2) zweiter Callback IM SELBEN Prozess -> unveraendert (In-Memory _finished).
-    await completeCall(srv1, CALL_ID);
+    await repeatCompletedInSameProcess(srv1, CALL_ID);
     assert.equal(ownerCostCents(srv1), expectedCostCents, "zweiter Callback im selben Prozess bucht nicht erneut");
 
     const persisted = srv1.readStore().calls.find((call) => call.id === CALL_ID);
