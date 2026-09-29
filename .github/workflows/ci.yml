@@ -69,6 +69,8 @@ jobs:
           jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
 
       - name: Lint
+        env:
+          BEISPIEL: ${{ secrets.BEISPIEL }}
         run: npm run lint
 
       - name: Syntax
