@@ -6,12 +6,18 @@ import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 export const RUNNER = join(REPO_ROOT, "test/testbaenke-run.mjs");
+export const AFFECTED_TESTS_TOOL = join(REPO_ROOT, "tools/betroffene-tests.mjs");
 
 const INHERITED_TEST_RUNNER_VARIABLE = "NODE_TEST_CONTEXT";
+const GIT_VARIABLE_PREFIX = "GIT_";
+const PROBE_AUTHOR = ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid"];
+const PROBE_COMMIT_SETTINGS = ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"];
 
 function isolatedEnvironment() {
   return Object.fromEntries(
-    Object.entries(process.env).filter(([name]) => name !== INHERITED_TEST_RUNNER_VARIABLE),
+    Object.entries(process.env).filter(
+      ([name]) => name !== INHERITED_TEST_RUNNER_VARIABLE && !name.startsWith(GIT_VARIABLE_PREFIX),
+    ),
   );
 }
 
@@ -38,6 +44,19 @@ export function runIn(directory, command, args) {
   });
 }
 
+function git(directory, args) {
+  const result = runIn(directory, "git", args);
+  if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
+}
+
+export function probeRepository(context, files) {
+  const directory = probeDirectory(context, files);
+  git(directory, ["init", "-q"]);
+  git(directory, ["add", "."]);
+  git(directory, [...PROBE_AUTHOR, ...PROBE_COMMIT_SETTINGS, "commit", "-q", "-m", "Basis"]);
+  return directory;
+}
+
 export function outputLines(text) {
   return text.split("\n").filter((line) => line.trim() !== "");
 }
@@ -50,10 +69,12 @@ export function passingTest(name) {
   ].join("\n");
 }
 
-export function failingTest(name, expected) {
+export function failingTest(name, expected, importPath) {
+  const importLine = importPath ? [`import ${JSON.stringify(importPath)};`] : [];
   return [
     'import assert from "node:assert/strict";',
     'import { test } from "node:test";',
+    ...importLine,
     `test(${JSON.stringify(name)}, () => {`,
     `  assert.equal("tatsaechlich", ${JSON.stringify(expected)});`,
     "});",

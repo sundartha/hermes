@@ -41,6 +41,7 @@ const MODE_ABNAHME = "abnahme";
 const MODES = [MODE_REGRESSION, MODE_GATES, MODE_ABNAHME];
 
 const TEST_GLOB = "test/**/*.test.js";
+const FIRST_FILE_ARGUMENT = 3;
 const MIGRATED_LIST = new URL("./abnahme-ausgewandert.json", import.meta.url);
 const PROTOCOL_DIR = ".pruefung";
 
@@ -148,14 +149,21 @@ function migratedCriteriaCount() {
   return JSON.parse(readFileSync(MIGRATED_LIST, "utf8")).length;
 }
 
-function runNodeTest(mode, extraArgs) {
+function testFilesFrom(argv) {
+  const separatorIndex = argv.indexOf("--");
+  const end = separatorIndex === -1 ? argv.length : separatorIndex;
+  const files = argv.slice(FIRST_FILE_ARGUMENT, end);
+  return files.length > 0 ? files : [TEST_GLOB];
+}
+
+function runNodeTest(mode, extraArgs, files) {
   mkdirSync(PROTOCOL_DIR, { recursive: true });
   const protocolPath = join(PROTOCOL_DIR, `${mode}.log`);
   const protocol = createWriteStream(protocolPath);
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
-      ["--test", "--test-reporter=tap", ...patternFlagsFor(mode), ...extraArgs, TEST_GLOB],
+      ["--test", "--test-reporter=tap", ...patternFlagsFor(mode), ...extraArgs, ...files],
       { stdio: ["inherit", "pipe", "pipe"] },
     );
     let buffered = "";
@@ -266,12 +274,13 @@ async function main() {
   const mode = process.argv[2];
   if (!MODES.includes(mode)) {
     console.error(
-      `Nutzung: node test/testbaenke-run.mjs <${MODES.join("|")}> [-- <node --test-Flags>]`,
+      `Nutzung: node test/testbaenke-run.mjs <${MODES.join("|")}> [<Testdatei> ...] [-- <node --test-Flags>]`,
     );
     process.exit(1);
   }
   const startedAt = Date.now();
-  const run = await runNodeTest(mode, extraArgsFrom(process.argv));
+  const files = testFilesFrom(process.argv);
+  const run = await runNodeTest(mode, extraArgsFrom(process.argv), files);
   printReport(mode, run, Date.now() - startedAt);
   if (mode === MODE_ABNAHME) printAbnahmeScore(run.tapText);
   process.exit(run.code);
