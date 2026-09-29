@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { readJsonBody } from "../scripts/convo-bench/http-fake-helpers.mjs";
 import { startConsultPump } from "../scripts/convo-bench/consult-pump.mjs";
+import { withFetch } from "./helpers.js";
 
 const CALL_ID = "call1";
 const CONSULT_PATH = `/api/calls/${CALL_ID}/consult`;
@@ -39,6 +40,10 @@ async function withConsultServer(handler) {
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function nachAllenMikrotasks() {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 test("AL-D3-N6: startConsultPump beantwortet ein consult-Event und kehrt bei done zurueck", async () => {
@@ -86,10 +91,21 @@ test("AL-D3-N7: startConsultPump wirft ueber stop(), wenn die Pumpe auf eine 403
     res.writeHead(HTTP_FORBIDDEN);
     res.end();
   });
+  const echtesFetch = globalThis.fetch;
+  let antwortErhalten;
+  const antwortBeiDerPumpe = new Promise((resolve) => (antwortErhalten = resolve));
+  const beobachtetesFetch = async (...args) => {
+    const antwort = await echtesFetch(...args);
+    antwortErhalten();
+    return antwort;
+  };
   try {
-    const pump = startConsultPump({ baseUrl: srv.url, callId: CALL_ID, answers: [] });
-    await wait(POLL_SETTLE_MS); // laesst den ersten fetch auf die 403-Antwort laufen
-    await assert.rejects(() => pump.stop(), /403/);
+    await withFetch(beobachtetesFetch, async () => {
+      const pump = startConsultPump({ baseUrl: srv.url, callId: CALL_ID, answers: [] });
+      await antwortBeiDerPumpe;
+      await nachAllenMikrotasks();
+      await assert.rejects(() => pump.stop(), /403/);
+    });
   } finally {
     await srv.close();
   }
