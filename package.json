@@ -35,6 +35,7 @@
     "test:gates": "NODE_ENV=test node test/testbaenke-run.mjs gates",
     "test:abnahme": "NODE_ENV=test node test/testbaenke-run.mjs abnahme",
     "test:betroffen": "NODE_ENV=test PUBLIC_GATEWAY_URL=https://gateway.example node tools/betroffene-tests.mjs",
+    "pruefleiter": "node tools/pruefleiter.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:strict": "eslint . --suppressions-location eslint-suppressions.empty.json",
