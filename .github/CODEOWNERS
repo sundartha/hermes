@@ -1,0 +1,16 @@
+eslint.config.* @Antonio20045 @jonas986
+eslint-suppressions*.json @Antonio20045 @jonas986
+eslint-legacy-exceptions.json @Antonio20045 @jonas986
+/tools/ @Antonio20045 @jonas986
+/.githooks/ @Antonio20045 @jonas986
+/.github/ @Antonio20045 @jonas986
+/.claude/ @Antonio20045 @jonas986
+/package.json @Antonio20045 @jonas986
+/package-lock.json @Antonio20045 @jonas986
+/knip.json @Antonio20045 @jonas986
+/.jscpd.json @Antonio20045 @jonas986
+/.c8rc.json @Antonio20045 @jonas986
+/gitleaks.toml @Antonio20045 @jonas986
+tsconfig*.json @Antonio20045 @jonas986
+/.dependency-cruiser.cjs @Antonio20045 @jonas986
+/docs/sicherheitsgrenzen.md @Antonio20045 @jonas986
