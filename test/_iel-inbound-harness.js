@@ -34,7 +34,7 @@ export const INBOUND_FROM = "+491701111111";
 export const INBOUND_TO = "+491700000000";
 export const FIXTURE_ZEILEN = CONVERSATION_DONE_WITH_ANALYSIS.transcript.length;
 
-export const isoVor = (sekunden) => new Date(Date.now() - sekunden * MS_PER_SECOND).toISOString();
+export const isoVor = (sekunden, jetztMs = Date.now()) => new Date(jetztMs - sekunden * MS_PER_SECOND).toISOString();
 export const ruhe = (takte) => new Promise((resolve) => setTimeout(resolve, takte * POLL_MS));
 export const okAntwort = (conversation) => ({ ok: true, status: HTTP_OK, json: async () => conversation });
 export const fehlerAntwort = (envelope) => ({ ok: false, status: envelope.httpStatus, json: async () => envelope.body });
@@ -44,7 +44,7 @@ export const fehlerAntwort = (envelope) => ({ ok: false, status: envelope.httpSt
 // IEL-B6: ein WARTENDER Inbound-EL-Call (noch nicht gebunden) mit echter Store-Herkunft.
 // answeredAt stammt in Produktion aus /voice/incoming (unser Telnyx-Bein), twilioSid aus
 // req.body.CallSid.
-export function seedWartenderElCall(state, { answeredVorS }) {
+export function seedWartenderElCall(state, { answeredVorS, jetztMs = Date.now() }) {
   const call = ops.createCall(state, {
     direction: "inbound",
     from: INBOUND_FROM,
@@ -52,7 +52,7 @@ export function seedWartenderElCall(state, { answeredVorS }) {
     twilioSid: TRAEGER_SID,
     tenantId: BOOTSTRAP_TENANT_ID,
   });
-  call.startedAt = isoVor(answeredVorS);
+  call.startedAt = isoVor(answeredVorS, jetztMs);
   call.answeredAt = call.startedAt;
   ops.recordCostProfile(state, call.id, KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI);
   return call;
@@ -60,9 +60,10 @@ export function seedWartenderElCall(state, { answeredVorS }) {
 
 // Ein ueberbrueckter Inbound-Call (GEBUNDEN) - derselbe Seed, danach gebunden.
 export function seedInboundElCall(state, { answeredVorS, nachlaufVorS = null }) {
-  const call = seedWartenderElCall(state, { answeredVorS });
+  const jetztMs = Date.now();
+  const call = seedWartenderElCall(state, { answeredVorS, jetztMs });
   ops.bindInboundElConversation(state, call.id, { conversationId: CONV_ID, nowIso: new Date().toISOString() });
-  if (nachlaufVorS !== null) ops.markInboundElNachlaufStarted(state, call.id, isoVor(nachlaufVorS));
+  if (nachlaufVorS !== null) ops.markInboundElNachlaufStarted(state, call.id, isoVor(nachlaufVorS, jetztMs));
   return call;
 }
 
