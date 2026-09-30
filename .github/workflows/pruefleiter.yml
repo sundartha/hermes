@@ -35,6 +35,11 @@ jobs:
           npm ci --ignore-scripts
           npm ci --ignore-scripts --prefix apps/web
 
+      - name: Install-Skripte
+        run: |
+          set -euo pipefail
+          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
       - name: Prüfleiter
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
