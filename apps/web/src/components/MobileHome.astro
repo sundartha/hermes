@@ -22,8 +22,11 @@
 // Text - dieselbe Quelle wie Desktop, /preise und Dashboard.
 import "../styles/hermes-mobile.css";
 import "../styles/hermes-mobile-viewport.css";
+import "../styles/hermes-mobile-sr.css";
 import { LOGIN_URL } from "../lib/routes.js";
 import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
+import { PLAN_BENEFITS, planBenefitsText } from "../lib/plan-benefits.js";
+import { SITE_AGENT_LINE } from "../lib/agent-docs.js";
 import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../lib/subscribe.js";
 import BiText from "./site/BiText.astro";
 
@@ -67,8 +70,8 @@ const T = {
       { tab: "Terminal", title: "With a single command" },
       { tab: "Your AI", title: "Just ask your AI" },
     ],
-    agentLine: "Set up Hermes for me:",
-    agentCopy: "Set up Hermes for me",
+    agentLine: SITE_AGENT_LINE.en,
+    agentCopy: SITE_AGENT_LINE.en.slice(0, -1),
     copy: "Copy",
     copied: "Copied",
     devFoot: "Streamable HTTP, OAuth on first connect. Works with Claude, Codex and any MCP client.",
@@ -112,8 +115,8 @@ const T = {
       { tab: "Terminal", title: "Mit einem einzigen Befehl" },
       { tab: "Deine KI", title: "Frag einfach deine KI" },
     ],
-    agentLine: "Richte Hermes für mich ein:",
-    agentCopy: "Richte Hermes für mich ein",
+    agentLine: SITE_AGENT_LINE.de,
+    agentCopy: SITE_AGENT_LINE.de.slice(0, -1),
     copy: "Kopieren",
     copied: "Kopiert",
     devFoot: `Streamable HTTP, OAuth beim ersten Verbinden. Funktioniert mit Claude, Codex und jedem MCP-${WJ}Client.`,
@@ -126,19 +129,10 @@ const T = {
   },
 };
 
-// Die drei Leistungen unter der Minuten-Zeile, je Tarif (Handoff-Copy). Die
-// erste Katalog-Leistung (Minuten) steht als eigene Zeile darueber. Ein Tarif
-// ohne Copy bricht den Build ab, statt leer auszuliefern.
-const BENEFITS = {
-  starter: {
-    en: ["Answers every call for you", "Summarizes every call for you", "Email support"],
-    de: ["Nimmt jeden Anruf für dich an", "Fasst jeden Anruf für dich zusammen", "E-Mail-Support"],
-  },
-  business: {
-    en: ["Answers <em>and</em> calls out for you", "Handles tasks independently for you", "Priority support"],
-    de: ["Nimmt an <em>und</em> ruft für dich an", "Erledigt Aufgaben selbstständig", "Priority-Support"],
-  },
-};
+// Die drei Leistungen unter der Minuten-Zeile, je Tarif (Handoff-Copy), aus
+// lib/plan-benefits.js - dieselbe Quelle wie die Agenten-Fassungen (/index.md,
+// /llms.txt). Ein Tarif ohne Copy bricht den Build ab, statt leer auszuliefern.
+const BENEFITS = PLAN_BENEFITS;
 
 const plans = PLAN_CATALOG.map((plan) => {
   const benefits = BENEFITS[plan.slug];
@@ -149,6 +143,13 @@ const plans = PLAN_CATALOG.map((plan) => {
     price: { en: formatPlanPrice(plan.amountCents, plan.currency, "en"), de: formatPlanPrice(plan.amountCents, plan.currency, "de") },
     cta: { en: T.en.choose(plan.name), de: T.de.choose(plan.name) },
     benefits,
+    // Vorlese-Fassung fuer Screenreader und Browser-Agenten: die Preis-Rolle (Einzel-
+    // ziffern) und die Leistungs-Schaechte (beide Tarife uebereinander) sind
+    // aria-hidden, stattdessen steht je Tarif ein ganzer Satz im Baum.
+    srText: {
+      en: `${plan.name}: ${formatPlanPrice(plan.amountCents, plan.currency, "en")} per month, ${plan.includedMinutes} minutes of calls per month. ${planBenefitsText(plan.slug, "en").join(". ")}.`,
+      de: `${plan.name}: ${formatPlanPrice(plan.amountCents, plan.currency, "de")} pro Monat, ${plan.includedMinutes} Minuten Telefonie pro Monat. ${planBenefitsText(plan.slug, "de").join(". ")}.`,
+    },
   };
 });
 // Start auf dem hervorgehobenen Tarif (Handoff: plan = 1, Pro).
@@ -274,8 +275,13 @@ const SEGMENTS = 4;
       <h2 class="mh-h2 mh-r mh-d2" id="mh-price-title" data-mh-de={T.de.priceTitle} set:html={T.en.priceTitle}></h2>
       <p class="mh-lead mh-r mh-d3" data-mh-de={T.de.priceLead} set:html={T.en.priceLead}></p>
 
+      <ul class="mh-sr">
+        {plans.map((plan) => (
+          <li data-mh-de={plan.srText.de}>{plan.srText.en}</li>
+        ))}
+      </ul>
       <div class="mh-zone">
-        <div class="mh-focus mh-r mh-d4">
+        <div class="mh-focus mh-r mh-d4" aria-hidden="true">
           <div class="mh-price-row">
             <span class="mh-price__num" data-prices-en={plans.map((plan) => plan.price.en).join("|")} data-prices-de={plans.map((plan) => plan.price.de).join("|")}>{slotsEn ? slotsEn.map((slot) => ("same" in slot ? <span>{slot.same}</span> : <span class="mh-roll">{slot.roll.map((ch, index) => <span data-rel={rel(index, featured)}>{ch}</span>)}</span>)) : <span>{plans[featured].price.en}</span>}</span>
             <span class="mh-price__per" data-mh-de={T.de.perMonth}>{T.en.perMonth}</span>
