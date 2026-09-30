@@ -20,6 +20,8 @@ const LAST_PACKAGE = 38;
 const ISSUE_OFFSET = 1000;
 const EXTRA_ISSUE = 2000;
 const GITHUB_PAGE = 100;
+const STEP_2_FIRST_PACKAGE = 23;
+const STEP_2_FIRST_ISSUE = ISSUE_OFFSET + STEP_2_FIRST_PACKAGE;
 const PHASE_PULL = 500;
 const PROOF_RUN = 600;
 const OTHER_RUN = 601;
@@ -36,8 +38,13 @@ const HTTP_FOUND = 302;
 const REDIRECT_TARGET = "/labels/schritt";
 const EXIT_OK = 0;
 const EXIT_FAILURE = 1;
+const DAY_MS = 86_400_000;
+const OVERDUE_DAYS = 11;
+const IN_TIME_DAYS = 9;
+const RECORDED_OVERDUE_DAYS = 15;
 const JSON_INDENT = 2;
 const SINCE = "2026-10-01";
+const TIME_LIMIT = "Zeitgrenze überschritten, Entscheidung durch Antonio oder Jonas";
 const PACKAGE_STEP_IDS = ["1b", "2", "3", "4", "5"];
 const ESTIMATES = { "1b": 7, 2: 5, 3: 5, 4: 1, 5: 4 };
 const WORKFLOW_FILES = [
@@ -214,6 +221,15 @@ async function systemstand(context, { files = {}, github = {}, starts, recorded,
   return { status: outcome.code, lines, stderr: outcome.stderr, created: state.created };
 }
 
+function daysAgo(days) {
+  return new Date(Date.now() - days * DAY_MS).toISOString();
+}
+
+function startedDaysAgo(days) {
+  const comment = { body: "Gestartet. Branch: `paket/23-probe`", created_at: daysAgo(days) };
+  return { [STEP_2_FIRST_ISSUE]: [{ body: "Vorab", created_at: daysAgo(days + 1) }, comment] };
+}
+
 test("1b und die Schritte 2 bis 5 sind erfüllt, wenn alle Paket-Issues zu und alle Endkriterien erfüllt sind", async (context) => {
   const result = await systemstand(context);
   assert.equal(result.status, EXIT_OK, result.stderr);
@@ -369,6 +385,39 @@ test("fehlt ein Endkriterium, nennt die Zeile des Schritts genau diesen einen Gr
     assert.ok(lines[step].startsWith(prefix) && !lines[step].includes(";"), lines[step]);
     assert.match(lines[step], pattern);
   }
+});
+
+test("läuft ein offener Schritt länger als die doppelte Schätzung, hängt die Zeile die Zeitgrenze an", async (context) => {
+  const open = [
+    ...packageIssues({ 27: "open" }),
+    packageIssue(STEP_2_FIRST_PACKAGE, "closed", EXTRA_ISSUE),
+  ];
+  const overdue = await systemstand(context, {
+    github: { packages: open, comments: startedDaysAgo(OVERDUE_DAYS) },
+  });
+  assert.ok(overdue.lines["2"].endsWith(TIME_LIMIT), overdue.lines["2"]);
+  const inTime = await systemstand(context, {
+    github: { packages: open, comments: startedDaysAgo(IN_TIME_DAYS) },
+  });
+  assert.equal(inTime.lines["2"], "Schritt 2: offen, weil Paket 27 offen ist");
+  const done = await systemstand(context, { github: { comments: startedDaysAgo(OVERDUE_DAYS) } });
+  assert.equal(done.lines["2"], "Schritt 2: erfüllt");
+  const recorded = await systemstand(context, {
+    github: { packages: packageIssues({ 17: "open" }) },
+    starts: { "1b": daysAgo(RECORDED_OVERDUE_DAYS) },
+  });
+  assert.ok(recorded.lines["1b"].endsWith(TIME_LIMIT), recorded.lines["1b"]);
+});
+
+test("--issues schreibt Startdatum und Schätzung in die Schritt-Issues", async (context) => {
+  const comments = startedDaysAgo(1);
+  const result = await systemstand(context, { github: { comments }, args: ["--issues"] });
+  assert.equal(result.status, EXIT_OK, result.stderr);
+  const bodies = Object.fromEntries(result.created.map(({ title, body }) => [title, body]));
+  const [, started] = comments[STEP_2_FIRST_ISSUE];
+  assert.ok(bodies["Schritt 2"].includes(started.created_at), bodies["Schritt 2"]);
+  assert.match(bodies["Schritt 2"], /\b5 Tage\b/);
+  assert.match(bodies["Schritt 4"], /\b1 Tag\b/);
 });
 
 test("--pruefen kennt die neuen Kriterien und sperrt einen Rückfall; ein Staging-Ausfall sperrt nur master", async (context) => {
