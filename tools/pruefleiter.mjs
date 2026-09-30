@@ -123,7 +123,8 @@ function main() {
   const lintStatus = lint();
   if (lintStatus !== 0) return lintStatus;
   const affectedStatus = affectedTests(args);
-  if (!options["vor-push"] || !needsToolTests(options.basis ?? DEFAULT_BASE_REF)) {
+  const runsToolTests = options["vor-push"] || options.basis !== undefined;
+  if (!runsToolTests || !needsToolTests(options.basis ?? DEFAULT_BASE_REF)) {
     return affectedStatus;
   }
   const toolStatus = toolTests();

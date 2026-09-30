@@ -77,6 +77,12 @@ function redToolTest() {
   };
 }
 
+function assertOnlyToolTestsRed(result) {
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, new RegExp(TOOL_TEST_MARKER));
+  assert.doesNotMatch(result.stdout, new RegExp(RED_TEST_MARKER));
+}
+
 function append(directory, path, text) {
   appendFileSync(join(directory, path), text);
 }
@@ -148,9 +154,7 @@ test("vor dem Push laeuft bei einer Aenderung unter .github kein Produkttest, ab
 
   const result = runBeforePush(directory);
 
-  assert.notEqual(result.status, 0);
-  assert.match(result.stdout, new RegExp(TOOL_TEST_MARKER));
-  assert.doesNotMatch(result.stdout, new RegExp(RED_TEST_MARKER));
+  assertOnlyToolTestsRed(result);
 });
 
 test("vor dem Push ist eine Aenderung unter .github mit gruenen Werkzeugtests gruen", (context) => {
@@ -169,9 +173,7 @@ test("vor dem Push nutzt die Pruefleiter ohne --basis upstream/master und faehrt
 
   const result = runBeforePushWithDefaultBase(directory);
 
-  assert.notEqual(result.status, 0);
-  assert.match(result.stdout, new RegExp(TOOL_TEST_MARKER));
-  assert.doesNotMatch(result.stdout, new RegExp(RED_TEST_MARKER));
+  assertOnlyToolTestsRed(result);
 });
 
 test("vor dem Push faehrt eine Aenderung unter src die betroffenen Tests", (context) => {
@@ -192,4 +194,13 @@ test("vor dem Push faehrt eine reine Aenderung unter src keine Werkzeugtests", (
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, new RegExp(TOOL_TEST_MARKER));
+});
+
+test("mit Basis und einer Aenderung unter tools faehrt die Pruefleiter die Werkzeugtests", (context) => {
+  const directory = probe(context, redToolTest());
+  append(directory, TOOL_CHANGE_FILE, "export const geaendert = 1;\n");
+
+  const result = runPruefleiter(directory);
+
+  assertOnlyToolTestsRed(result);
 });
