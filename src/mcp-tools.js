@@ -2110,4 +2110,9 @@ export function registerTools(
       };
     },
   );
+  server.registerTool(
+    "rotprobe_werkzeug",
+    { description: "Rot-Probe: neues Werkzeug ohne Katalogzeile" },
+    async () => ({ content: [{ type: "text", text: "ok" }] }),
+  );
 }
