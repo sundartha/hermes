@@ -23,7 +23,8 @@
     "scripts/smoke-stripe-payment.mjs",
     "scripts/stt-wer.mjs",
     "scripts/telnyx-call-latency.mjs",
-    "test/i18n-catalog-run.mjs"
+    "test/i18n-catalog-run.mjs",
+    "test/**/*.test.js"
   ],
   "project": ["*.{js,mjs}", "src/**/*.js", "scripts/**/*.{js,mjs}", "test/**/*.js"],
   "ignore": [
@@ -33,6 +34,7 @@
     "**/dist-*/**",
     "**/build/**",
     "**/out/**",
-    "**/.astro/**"
+    "**/.astro/**",
+    ".claude/worktrees/**"
   ]
 }
