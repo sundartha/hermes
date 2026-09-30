@@ -84,7 +84,7 @@ function ratioOf(testLines, codeLines) {
 }
 
 function limitsAtBasis(basis) {
-  if (spawnSync("git", ["cat-file", "-e", `${basis}^{commit}`]).status !== EXIT_OK) {
+  if (spawnSync("git", ["cat-file", "-e", `${basis}^0`]).status !== EXIT_OK) {
     throw new Error(`Die Basis ${basis} ist kein Commit in diesem Checkout.`);
   }
   const shown = spawnSync("git", ["show", `${basis}:${LIMIT_PATH}`], { encoding: "utf8" });

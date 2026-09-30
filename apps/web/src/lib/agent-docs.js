@@ -48,9 +48,13 @@ export const SKILL_CMD = `npx skills add ${SITE_URL}`;
 
 // Ein-Klick-Installation. Cursor: Server-Konfiguration als Base64-JSON
 // (cursor.com/docs/context/mcp/install-links). VS Code: URL-kodiertes JSON mit
-// name/type/url (code.visualstudio.com/api/extension-guides/ai/mcp).
-export const CURSOR_INSTALL_URL = `cursor://anysphere.cursor-deeplink/mcp/install?name=${SERVER_NAME}&config=${btoa(JSON.stringify({ url: MCP_URL }))}`;
-export const VSCODE_INSTALL_URL = `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: SERVER_NAME, type: "http", url: MCP_URL }))}`;
+// name/type/url (code.visualstudio.com/api/extension-guides/ai/mcp). Die Objekte stehen
+// ausserhalb der Template-Strings: Semgrep (missing-template-string-indicator) haelt
+// "{ ... }" in einem Template sonst fuer ein vergessenes "$".
+const CURSOR_CONFIG = { url: MCP_URL };
+const VSCODE_CONFIG = { name: SERVER_NAME, type: "http", url: MCP_URL };
+export const CURSOR_INSTALL_URL = `cursor://anysphere.cursor-deeplink/mcp/install?name=${SERVER_NAME}&config=${btoa(JSON.stringify(CURSOR_CONFIG))}`;
+export const VSCODE_INSTALL_URL = `vscode:mcp/install?${encodeURIComponent(JSON.stringify(VSCODE_CONFIG))}`;
 
 const SUMMARY =
   "Hermes gives your AI a real phone number. It answers incoming calls, places outgoing calls on the user's behalf (Pro plan) and reports back. " +
@@ -196,5 +200,6 @@ ${linkList(LEGAL_LINKS)}
 
 // llms-full.txt: Startseite + Agenten-Anleitung, getrennt durch eine Linie.
 export function buildLlmsFull({ loginUrl, agentGuide }) {
-  return `${buildHomeMarkdown({ loginUrl })}\n---\n\n${agentGuide.trim()}\n`;
+  const home = buildHomeMarkdown({ loginUrl });
+  return `${home}\n---\n\n${agentGuide.trim()}\n`;
 }
