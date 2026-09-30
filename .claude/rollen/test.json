@@ -17,6 +17,8 @@
       "Edit(tsconfig*.json)",
       "Edit(.dependency-cruiser.cjs)",
       "Edit(docs/sicherheitsgrenzen.md)",
+      "Edit(test/testbaenke-run.mjs)",
+      "Edit(test/werkzeuge/**)",
       "Edit(src/**)"
     ]
   },
