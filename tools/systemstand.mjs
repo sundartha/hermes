@@ -326,7 +326,7 @@ function checkRecords(report, records, forPullRequest) {
 }
 
 function cell(text) {
-  return text.replaceAll("|", "\\|");
+  return text.split("|").join("\\|");
 }
 
 function issueBody(step, records) {
