@@ -44,4 +44,6 @@ jobs:
 
       - name: Testverhältnis
         if: ${{ !cancelled() }}
-        run: node tools/testverhaeltnis.mjs
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node tools/testverhaeltnis.mjs --basis "$BASIS"
