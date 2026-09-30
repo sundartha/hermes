@@ -2,16 +2,20 @@ import { cwd } from "node:process";
 import { parseArgs } from "node:util";
 
 import { ROLLEN, grenzen, pruefe, rot } from "./auftrag/befehle.mjs";
+import { lauf } from "./auftrag/lauf.mjs";
 
+const EXIT_ABBRUCH = 1;
 const EXIT_AUFRUF = 2;
 const AUFRUF = [
   "Aufruf: node tools/auftrag.mjs pruefe <phasendatei>",
+  "        node tools/auftrag.mjs lauf <phasendatei>",
   "        node tools/auftrag.mjs rot <phasendatei> <auftrag>",
   "        node tools/auftrag.mjs grenzen <phasendatei> <auftrag> --rolle <test|bau> --basis <commit>",
 ].join("\n");
 
 const BEFEHLE = {
   pruefe: { argumente: 1, fuehreAus: ([phasendatei], root) => pruefe(phasendatei, root) },
+  lauf: { argumente: 1, fuehreAus: ([phasendatei], root) => lauf(phasendatei, root) },
   rot: { argumente: 2, fuehreAus: ([phasendatei, kennung], root) => rot(phasendatei, kennung, root) },
   grenzen: {
     argumente: 2,
@@ -47,5 +51,10 @@ if (gewaehlt === null) {
   console.error(AUFRUF);
   process.exitCode = EXIT_AUFRUF;
 } else {
-  process.exitCode = gewaehlt.befehl.fuehreAus(gewaehlt.argumente, cwd(), gewaehlt.optionen);
+  try {
+    process.exitCode = gewaehlt.befehl.fuehreAus(gewaehlt.argumente, cwd(), gewaehlt.optionen);
+  } catch (fehler) {
+    console.error(`Abbruch: ${fehler.message}`);
+    process.exitCode = EXIT_ABBRUCH;
+  }
 }

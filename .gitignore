@@ -43,3 +43,4 @@ apps/web/dist-clean-test/
 node_modules
 
 .pruefung/
+.fortschritt/
