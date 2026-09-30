@@ -18,6 +18,9 @@ const LABEL_TIME = "2026-09-30T10:00:00Z";
 const LATER = "2026-09-30T11:00:00Z";
 const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
 const RUN_ID = 4711;
+const OTHER_PULL_REQUEST = 8;
+const OTHER_ISSUE = 13;
+const OTHER_SHA = "fedcba9876543210fedcba9876543210fedcba98";
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const HTTP_OK = 200;
@@ -92,13 +95,13 @@ function linkedIssue({ names = [], events = [], lastEditedAt = null }) {
     number: ISSUE,
     body: issueBody(names),
     lastEditedAt,
-    repository: { nameWithOwner: REPOSITORY },
     timelineItems: { nodes: events },
   };
 }
 
-function approvalAnswer(issues) {
-  return { data: { repository: { pullRequest: { closingIssuesReferences: { nodes: issues } } } } };
+function pullRequestBody(issue) {
+  const summary = "Ändert einen Test.";
+  return issue === undefined ? summary : `${summary}\r\n\r\nCloses #${issue.number}`;
 }
 
 function answerFor(answers, request) {
@@ -143,8 +146,11 @@ function runTool(directory, args, apiUrl) {
   });
 }
 
-async function check({ directory, basis }, issues) {
-  const answers = { "POST /graphql": { body: approvalAnswer(issues) } };
+async function check({ directory, basis }, issue) {
+  const answers = {
+    [`GET /repos/${REPOSITORY}/pulls/${PULL_REQUEST}`]: { body: { body: pullRequestBody(issue) } },
+    "POST /graphql": { body: { data: { repository: { issue } } } },
+  };
   return withGitHub(answers, async (apiUrl, requests) => {
     const result = await runTool(directory, ["--basis", basis, "--pr", PULL_REQUEST], apiUrl);
     return { ...result, requests };
@@ -163,7 +169,7 @@ test("tests-nur-ergaenzt: ein angehängter Test geht ohne Frage an GitHub durch"
   const repo = probe(context);
   appendFileSync(join(repo.directory, EXAMPLE_FILE), testFile([["ist neu", "assert.ok(true);"]]));
   commitAll(repo.directory, "Hänge einen Test an");
-  const result = await check(repo, []);
+  const result = await check(repo);
   assert.equal(result.status, EXIT_OK, result.output);
   assert.match(result.output, /keine bestehende Testzeile geändert oder gelöscht/);
   assert.deepEqual(result.requests, []);
@@ -172,7 +178,7 @@ test("tests-nur-ergaenzt: ein angehängter Test geht ohne Frage an GitHub durch"
 test("tests-nur-ergaenzt: eine geänderte Erwartung ohne Label stoppt mit Datei, Test und Zeile", async (context) => {
   const repo = probe(context);
   changeSumExpectation(repo.directory);
-  const result = await check(repo, [linkedIssue({ names: [SUM_TEST] })]);
+  const result = await check(repo, linkedIssue({ names: [SUM_TEST] }));
   assert.equal(result.status, EXIT_FINDING, result.output);
   assert.match(result.output, /Issue #12 trägt das Label verhalten-geaendert nicht/);
   assert.match(
@@ -184,7 +190,7 @@ test("tests-nur-ergaenzt: eine geänderte Erwartung ohne Label stoppt mit Datei,
 test("tests-nur-ergaenzt: ein PR ohne verknüpftes Issue stoppt", async (context) => {
   const repo = probe(context);
   changeSumExpectation(repo.directory);
-  const result = await check(repo, []);
+  const result = await check(repo);
   assert.equal(result.status, EXIT_FINDING, result.output);
   assert.match(result.output, /mit keinem Issue verknüpft/);
 });
@@ -192,7 +198,7 @@ test("tests-nur-ergaenzt: ein PR ohne verknüpftes Issue stoppt", async (context
 test("tests-nur-ergaenzt: ein Label vom Bot stoppt", async (context) => {
   const repo = probe(context);
   changeSumExpectation(repo.directory);
-  const result = await check(repo, [linkedIssue({ names: [SUM_TEST], events: [labeled(BOT)] })]);
+  const result = await check(repo, linkedIssue({ names: [SUM_TEST], events: [labeled(BOT)] }));
   assert.equal(result.status, EXIT_FINDING, result.output);
   assert.match(result.output, /das Label verhalten-geaendert hat sundartha-bot gesetzt/);
 });
@@ -200,9 +206,7 @@ test("tests-nur-ergaenzt: ein Label vom Bot stoppt", async (context) => {
 test("tests-nur-ergaenzt: ein Label von Antonio mit genanntem Test geht durch", async (context) => {
   const repo = probe(context);
   changeSumExpectation(repo.directory);
-  const result = await check(repo, [
-    linkedIssue({ names: [SUM_TEST], events: [labeled(ANTONIO)] }),
-  ]);
+  const result = await check(repo, linkedIssue({ names: [SUM_TEST], events: [labeled(ANTONIO)] }));
   assert.equal(result.status, EXIT_OK, result.output);
   assert.match(result.output, /durch Issue #12 freigegeben/);
 });
@@ -210,9 +214,7 @@ test("tests-nur-ergaenzt: ein Label von Antonio mit genanntem Test geht durch", 
 test("tests-nur-ergaenzt: ein Label von Antonio deckt keinen anderen Test", async (context) => {
   const repo = probe(context);
   changeSumExpectation(repo.directory);
-  const result = await check(repo, [
-    linkedIssue({ names: [NAME_TEST], events: [labeled(ANTONIO)] }),
-  ]);
+  const result = await check(repo, linkedIssue({ names: [NAME_TEST], events: [labeled(ANTONIO)] }));
   assert.equal(result.status, EXIT_FINDING, result.output);
   assert.match(result.output, /Testfall „rechnet eins plus eins“/);
   assert.doesNotMatch(result.output, /Testfall „kennt den Namen“/);
@@ -223,7 +225,7 @@ test("tests-nur-ergaenzt: ein nach dem Label entferntes Label stoppt", async (co
   changeSumExpectation(repo.directory);
   const unlabeled = { ...labeled(ANTONIO, LATER), __typename: "UnlabeledEvent" };
   const events = [labeled(ANTONIO), unlabeled];
-  const result = await check(repo, [linkedIssue({ names: [SUM_TEST], events })]);
+  const result = await check(repo, linkedIssue({ names: [SUM_TEST], events }));
   assert.equal(result.status, EXIT_FINDING, result.output);
   assert.match(result.output, /trägt das Label verhalten-geaendert nicht/);
 });
@@ -232,7 +234,7 @@ test("tests-nur-ergaenzt: ein nach dem Label geänderter Issue-Text stoppt", asy
   const repo = probe(context);
   changeSumExpectation(repo.directory);
   const issue = linkedIssue({ names: [SUM_TEST], events: [labeled(ANTONIO)], lastEditedAt: LATER });
-  const result = await check(repo, [issue]);
+  const result = await check(repo, issue);
   assert.equal(result.status, EXIT_FINDING, result.output);
   assert.match(result.output, /der Text wurde nach dem Label geändert/);
 });
@@ -240,9 +242,7 @@ test("tests-nur-ergaenzt: ein nach dem Label geänderter Issue-Text stoppt", asy
 test("tests-nur-ergaenzt: ein Gate-Test ohne genanntes Gate stoppt", async (context) => {
   const repo = probe(context);
   change(repo.directory, { file: GATE_FILE, from: "true);", to: "false === false);" });
-  const result = await check(repo, [
-    linkedIssue({ names: [GATE_TEST], events: [labeled(ANTONIO)] }),
-  ]);
+  const result = await check(repo, linkedIssue({ names: [GATE_TEST], events: [labeled(ANTONIO)] }));
   assert.equal(result.status, EXIT_FINDING, result.output);
   assert.match(
     result.output,
@@ -254,19 +254,20 @@ test("tests-nur-ergaenzt: ein Gate-Test mit genanntem Gate geht durch", async (c
   const repo = probe(context);
   change(repo.directory, { file: GATE_FILE, from: "true);", to: "false === false);" });
   const issue = linkedIssue({ names: [GATE_TEST, GATE], events: [labeled(ANTONIO)] });
-  const result = await check(repo, [issue]);
+  const result = await check(repo, issue);
   assert.equal(result.status, EXIT_OK, result.output);
 });
 
 test("tests-nur-ergaenzt: ein geänderter Helfer braucht die Datei in der Liste", async (context) => {
   const repo = probe(context);
   change(repo.directory, { file: HELPER_FILE, from: "wert = 1", to: "wert = 0" });
-  const red = await check(repo, [linkedIssue({ names: [SUM_TEST], events: [labeled(ANTONIO)] })]);
+  const red = await check(repo, linkedIssue({ names: [SUM_TEST], events: [labeled(ANTONIO)] }));
   assert.equal(red.status, EXIT_FINDING, red.output);
   assert.match(red.output, /test\/helfer\.js, Zeilen 1 \(außerhalb eines Testfalls\)/);
-  const green = await check(repo, [
+  const green = await check(
+    repo,
     linkedIssue({ names: [HELPER_FILE], events: [labeled(ANTONIO)] }),
-  ]);
+  );
   assert.equal(green.status, EXIT_OK, green.output);
 });
 
@@ -275,7 +276,7 @@ test("tests-nur-ergaenzt: eine gelöschte Testdatei stoppt auch mit Label", asyn
   rmSync(join(repo.directory, EXAMPLE_FILE));
   commitAll(repo.directory, "Lösche einen Test");
   const names = [SUM_TEST, NAME_TEST, EXAMPLE_FILE];
-  const result = await check(repo, [linkedIssue({ names, events: [labeled(ANTONIO)] })]);
+  const result = await check(repo, linkedIssue({ names, events: [labeled(ANTONIO)] }));
   assert.equal(result.status, EXIT_FINDING, result.output);
   assert.match(result.output, /test\/beispiel\.test\.js: die ganze Testdatei ist gelöscht/);
 });
@@ -285,18 +286,11 @@ test("tests-nur-ergaenzt: ein Label startet den Testschutz der verknüpften PRs 
   const runsPath = `/repos/${REPOSITORY}/actions/workflows/testschutz.yml/runs`;
   const rerunPath = `/repos/${REPOSITORY}/actions/runs/${RUN_ID}/rerun`;
   const answers = {
-    "POST /graphql": {
-      body: {
-        data: {
-          repository: {
-            issue: {
-              closedByPullRequestsReferences: {
-                nodes: [{ number: Number(PULL_REQUEST), headRefOid: HEAD_SHA }],
-              },
-            },
-          },
-        },
-      },
+    [`GET /repos/${REPOSITORY}/pulls`]: {
+      body: [
+        { number: Number(PULL_REQUEST), body: `Closes #${ISSUE}`, head: { sha: HEAD_SHA } },
+        { number: OTHER_PULL_REQUEST, body: `Closes #${OTHER_ISSUE}`, head: { sha: OTHER_SHA } },
+      ],
     },
     [`GET ${runsPath}`]: { body: { workflow_runs: [{ id: RUN_ID, status: "completed" }] } },
     [`POST ${rerunPath}`]: { status: HTTP_CREATED },
@@ -310,5 +304,6 @@ test("tests-nur-ergaenzt: ein Label startet den Testschutz der verknüpften PRs 
     result.requests.includes(`GET ${runsPath}?event=pull_request&head_sha=${HEAD_SHA}&per_page=1`),
   );
   assert.ok(result.requests.includes(`POST ${rerunPath}`));
+  assert.ok(!result.requests.some((request) => request.includes(OTHER_SHA)));
   assert.match(result.output, /PR #7: Testschutz-Lauf 4711 neu gestartet/);
 });

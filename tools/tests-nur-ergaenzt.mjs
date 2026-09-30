@@ -30,42 +30,28 @@ const HEADING_PATTERN = /^#{1,6}\s+(.+)$/;
 const LIST_MARKER_PATTERN = /^(?:[-*+]|\d+[.)])\s+/;
 const CODE_SPAN_PATTERN = /^`(.+)`$/;
 const LINE_BREAK_PATTERN = /\r?\n/;
+const CLOSING_REFERENCE_PATTERN = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\b/gi;
 const DEFAULT_HUNK_LENGTH = 1;
 const NAME_STATUS_FIELDS = 2;
 const MAX_GIT_OUTPUT_BYTES = 67_108_864;
-const MAX_LINKED_ITEMS = 20;
+const OPEN_PULL_REQUESTS_PAGE_SIZE = 100;
 const MAX_LABEL_EVENTS = 100;
 const RUN_POLL_INTERVAL_MS = 10_000;
 const RUN_POLL_ATTEMPTS = 30;
 const EXIT_FAILURE = 1;
 
-const APPROVAL_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
-  repository(owner: $owner, name: $name) {
-    pullRequest(number: $number) {
-      closingIssuesReferences(first: ${MAX_LINKED_ITEMS}) {
-        nodes {
-          number
-          body
-          lastEditedAt
-          repository { nameWithOwner }
-          timelineItems(last: ${MAX_LABEL_EVENTS}, itemTypes: [LABELED_EVENT, UNLABELED_EVENT]) {
-            nodes {
-              __typename
-              ... on LabeledEvent { createdAt actor { login } label { name } }
-              ... on UnlabeledEvent { createdAt actor { login } label { name } }
-            }
-          }
-        }
-      }
-    }
-  }
-}`;
-
-const LINKED_PULL_REQUESTS_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+const ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     issue(number: $number) {
-      closedByPullRequestsReferences(first: ${MAX_LINKED_ITEMS}) {
-        nodes { number headRefOid }
+      number
+      body
+      lastEditedAt
+      timelineItems(last: ${MAX_LABEL_EVENTS}, itemTypes: [LABELED_EVENT, UNLABELED_EVENT]) {
+        nodes {
+          __typename
+          ... on LabeledEvent { createdAt actor { login } label { name } }
+          ... on UnlabeledEvent { createdAt actor { login } label { name } }
+        }
       }
     }
   }
@@ -254,6 +240,16 @@ async function rest(method, path) {
   return response;
 }
 
+async function getJson(path) {
+  const response = await rest("GET", path);
+  return response.json();
+}
+
+function closedIssueNumbers(body) {
+  const matches = (body ?? "").matchAll(CLOSING_REFERENCE_PATTERN);
+  return [...new Set([...matches].map((match) => Number(match[1])))];
+}
+
 function labelProblem(issue) {
   const events = issue.timelineItems.nodes.filter(({ label }) => label?.name === BEHAVIOUR_LABEL);
   const last = events.at(-1);
@@ -291,22 +287,23 @@ function allowedNames(body) {
 
 async function approval(pullRequest) {
   const { full } = repositoryName();
-  const { pullRequest: pull } = await graphql(APPROVAL_QUERY, pullRequest);
-  const issues = pull.closingIssuesReferences.nodes.filter(
-    ({ repository }) => repository.nameWithOwner.toLowerCase() === full.toLowerCase(),
-  );
-  if (issues.length === 0) {
+  const { body } = await getJson(`/repos/${full}/pulls/${pullRequest}`);
+  const issueNumbers = closedIssueNumbers(body);
+  if (issueNumbers.length === 0) {
     const notLinked = "Der PR ist mit keinem Issue verknüpft; im PR-Text fehlt „Closes #<Issue>“.";
-    return { names: new Set(), notes: [notLinked], numbers: [] };
+    return { names: new Set(), notes: [notLinked], approvedIssues: [] };
   }
+  const issues = await Promise.all(
+    issueNumbers.map(async (number) => (await graphql(ISSUE_QUERY, number)).issue),
+  );
   const verdicts = issues.map((issue) => ({ issue, problem: labelProblem(issue) }));
   const notes = verdicts.map(({ problem }) => problem).filter(Boolean);
   const approved = verdicts
     .filter(({ problem }) => problem === undefined)
     .map(({ issue }) => issue);
-  const names = new Set(approved.flatMap(({ body }) => allowedNames(body)));
-  const numbers = approved.map(({ number }) => `#${number}`);
-  return { names, notes, numbers };
+  const names = new Set(approved.flatMap(({ body: issueBody }) => allowedNames(issueBody)));
+  const approvedIssues = approved.map(({ number }) => `#${number}`);
+  return { names, notes, approvedIssues };
 }
 
 function listHint() {
@@ -343,12 +340,12 @@ async function checkPullRequest({ basis, pullRequest }) {
     console.log("Testschutz: keine bestehende Testzeile geändert oder gelöscht.");
     return;
   }
-  const { names, notes, numbers } = await approval(pullRequest);
+  const { names, notes, approvedIssues } = await approval(pullRequest);
   const gates = gatesByTestFile();
   const findings = [...new Set(units.flatMap((unit) => unitFindings(unit, names, gates)))];
   if (findings.length === 0) {
     console.log(
-      `Testschutz: ${units.length} geänderte Stellen in bestehenden Tests sind durch Issue ${numbers.join(", ")} freigegeben.`,
+      `Testschutz: ${units.length} geänderte Stellen in bestehenden Tests sind durch Issue ${approvedIssues.join(", ")} freigegeben.`,
     );
     return;
   }
@@ -360,7 +357,7 @@ async function checkPullRequest({ basis, pullRequest }) {
 async function latestRun(sha) {
   const { full } = repositoryName();
   const path = `/repos/${full}/actions/workflows/${TESTSCHUTZ_WORKFLOW}/runs?event=pull_request&head_sha=${sha}&per_page=1`;
-  const { workflow_runs: runs } = await (await rest("GET", path)).json();
+  const { workflow_runs: runs } = await getJson(path);
   return runs[0];
 }
 
@@ -375,13 +372,15 @@ async function completedRun(sha) {
 
 async function rerunLinkedPullRequests({ issue }) {
   const { full } = repositoryName();
-  const { issue: linked } = await graphql(LINKED_PULL_REQUESTS_QUERY, issue);
-  const pulls = linked.closedByPullRequestsReferences.nodes;
+  const open = await getJson(
+    `/repos/${full}/pulls?state=open&per_page=${OPEN_PULL_REQUESTS_PAGE_SIZE}`,
+  );
+  const pulls = open.filter(({ body }) => closedIssueNumbers(body).includes(issue));
   if (pulls.length === 0) console.log(`Issue #${issue}: kein offener PR verknüpft.`);
-  for (const { number, headRefOid } of pulls) {
-    const run = await completedRun(headRefOid);
+  for (const { number, head } of pulls) {
+    const run = await completedRun(head.sha);
     if (run === undefined) {
-      console.log(`PR #${number}: kein Testschutz-Lauf für ${headRefOid}.`);
+      console.log(`PR #${number}: kein Testschutz-Lauf für ${head.sha}.`);
       continue;
     }
     await rest("POST", `/repos/${full}/actions/runs/${run.id}/rerun`);
