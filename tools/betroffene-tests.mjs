@@ -20,6 +20,8 @@ const NODE_TEST_FLAGS = ["--", `--test-concurrency=${TEST_CONCURRENCY}`];
 const RUNNER = fileURLToPath(new URL("../test/testbaenke-run.mjs", import.meta.url));
 const EXIT_FAILURE = 1;
 const NO_CHANGES_MESSAGE = "Keine Änderungen gegenüber der Basis, keine Tests betroffen.";
+const SKIP_FULL_SUITE_OPTION = "ohne-volle-suite";
+const FULL_SUITE_ELSEWHERE_MESSAGE = "Die volle Suite läuft im Job CI und wird hier ausgelassen.";
 
 function git(args) {
   const result = spawnSync("git", args, { encoding: "utf8" });
@@ -73,6 +75,10 @@ async function testPatternsFor(changes) {
   return touchesWeb ? [...rootPatterns, WEB_SUITE_GLOB] : rootPatterns;
 }
 
+function withoutFullSuite(patterns) {
+  return patterns.filter((pattern) => pattern !== FULL_SUITE_GLOB);
+}
+
 function runBank(patterns) {
   const result = spawnSync(process.execPath, [RUNNER, BANK, ...patterns, ...NODE_TEST_FLAGS], {
     stdio: "inherit",
@@ -82,14 +88,21 @@ function runBank(patterns) {
 
 async function main() {
   const { values } = parseArgs({
-    options: { basis: { type: "string", default: DEFAULT_BASE_REF } },
+    options: {
+      basis: { type: "string", default: DEFAULT_BASE_REF },
+      [SKIP_FULL_SUITE_OPTION]: { type: "boolean", default: false },
+    },
   });
   const changes = changedFiles(values.basis);
   if (changes?.length === 0) {
     console.log(NO_CHANGES_MESSAGE);
     return;
   }
-  process.exitCode = runBank(await testPatternsFor(changes));
+  const patterns = await testPatternsFor(changes);
+  const skipsFullSuite = values[SKIP_FULL_SUITE_OPTION] && patterns.includes(FULL_SUITE_GLOB);
+  if (skipsFullSuite) console.log(FULL_SUITE_ELSEWHERE_MESSAGE);
+  const selected = skipsFullSuite ? withoutFullSuite(patterns) : patterns;
+  if (selected.length > 0) process.exitCode = runBank(selected);
 }
 
 await main();
