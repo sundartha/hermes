@@ -1,0 +1,7 @@
+{
+  "titel": "Fünf verkettete Zugriffe",
+  "dateien": {
+    "src/rotprobe.js": ["export const tief = (objekt) => objekt.aa.bb.cc.dd.ee;"]
+  },
+  "erwartet": "\"ruleId\":\"no-restricted-syntax\""
+}

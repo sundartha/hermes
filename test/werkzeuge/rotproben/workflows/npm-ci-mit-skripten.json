@@ -1,0 +1,20 @@
+{
+  "titel": "npm ci mit Install-Skripten",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Installieren",
+      "        run: npm ci"
+    ]
+  },
+  "erwartet": "npm ci ohne --ignore-scripts"
+}

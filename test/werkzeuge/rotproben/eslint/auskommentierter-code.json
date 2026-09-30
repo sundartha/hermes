@@ -1,0 +1,7 @@
+{
+  "titel": "Auskommentierter Code",
+  "dateien": {
+    "src/rotprobe.js": ["export const wert = true;", "// export const alt = berechne(wert, wert);"]
+  },
+  "erwartet": "\"ruleId\":\"sonarjs/no-commented-code\""
+}

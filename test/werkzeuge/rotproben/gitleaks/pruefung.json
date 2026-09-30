@@ -1,0 +1,20 @@
+{
+  "titel": "Secret-Scan (gitleaks)",
+  "pfade": ["gitleaks.toml"],
+  "benoetigt": "gitleaks",
+  "probe": {
+    "mitnehmen": ["gitleaks.toml"],
+    "befehl": [
+      "gitleaks",
+      "git",
+      "--config",
+      "gitleaks.toml",
+      "--redact",
+      "--no-banner",
+      "--exit-code",
+      "1",
+      "--log-opts=HEAD~1..HEAD",
+      "."
+    ]
+  }
+}

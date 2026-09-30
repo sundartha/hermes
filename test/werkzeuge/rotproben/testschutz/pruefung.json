@@ -1,0 +1,13 @@
+{
+  "titel": "Bestehende Tests nur ergänzt (Testschutz)",
+  "pfade": ["tools/tests-nur-ergaenzt.mjs", "tools/testschutz/", "tools/gate-tests.json"],
+  "probe": {
+    "mitnehmen": ["tools/gate-tests.json"],
+    "befehl": ["node", "{wurzel}/tools/tests-nur-ergaenzt.mjs", "--basis", "HEAD~1", "--pr", "1"],
+    "umgebung": {
+      "GITHUB_API_URL": "{attrappe}",
+      "GITHUB_TOKEN": "rotprobe",
+      "GITHUB_REPOSITORY": "rotprobe/rotprobe"
+    }
+  }
+}

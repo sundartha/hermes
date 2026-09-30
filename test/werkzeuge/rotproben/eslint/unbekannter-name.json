@@ -1,0 +1,7 @@
+{
+  "titel": "Unbekannter Name",
+  "dateien": {
+    "src/rotprobe.js": ["export const wert = unbekannt;"]
+  },
+  "erwartet": "\"ruleId\":\"no-undef\""
+}

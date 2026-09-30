@@ -1,0 +1,19 @@
+{
+  "titel": "Zehn Testzeilen auf eine Produktzeile",
+  "dateien": {
+    "src/produkt.js": ["export const wert = true;"],
+    "test/viele.test.js": [
+      "export const fall0 = true;",
+      "export const fall1 = true;",
+      "export const fall2 = true;",
+      "export const fall3 = true;",
+      "export const fall4 = true;",
+      "export const fall5 = true;",
+      "export const fall6 = true;",
+      "export const fall7 = true;",
+      "export const fall8 = true;",
+      "export const fall9 = true;"
+    ]
+  },
+  "erwartet": "Testverhältnis 10.00"
+}

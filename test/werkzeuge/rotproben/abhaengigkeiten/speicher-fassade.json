@@ -1,0 +1,8 @@
+{
+  "titel": "Speicher-Innereien direkt importiert",
+  "dateien": {
+    "src/app.js": ["import { wert } from \"./store/intern.js\";", "export const kopie = wert;"],
+    "src/store/intern.js": ["export const wert = true;"]
+  },
+  "erwartet": "„speicher-nur-ueber-fassade“"
+}

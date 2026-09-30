@@ -1,0 +1,7 @@
+{
+  "titel": "Umgebungsvariable außerhalb von src/config.js",
+  "dateien": {
+    "src/rotprobe.js": ["export const port = process.env.PORT;"]
+  },
+  "erwartet": "\"ruleId\":\"no-restricted-properties\""
+}

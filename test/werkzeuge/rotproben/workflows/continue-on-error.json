@@ -1,0 +1,21 @@
+{
+  "titel": "Schritt darf scheitern",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        continue-on-error: true",
+      "        run: npm test"
+    ]
+  },
+  "erwartet": "continue-on-error"
+}

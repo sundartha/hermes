@@ -1,0 +1,8 @@
+{
+  "titel": "Konfiguration ohne noInlineConfig",
+  "dateien": {
+    "eslint.config.js": ["export default [{ rules: {} }];"],
+    "src/modul.js": ["export const wert = true;"]
+  },
+  "erwartet": "noInlineConfig ist nicht gesetzt"
+}

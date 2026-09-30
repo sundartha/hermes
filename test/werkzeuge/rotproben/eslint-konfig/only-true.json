@@ -1,0 +1,10 @@
+{
+  "titel": "Test mit onl\u0079: true",
+  "dateien": {
+    "test/einzeln.test.js": [
+      "import { test } from \"node:test\";",
+      "test(\"nur dieser\", { onl\u0079: true }, () => {});"
+    ]
+  },
+  "erwartet": "schaltet die übrigen Tests ab"
+}

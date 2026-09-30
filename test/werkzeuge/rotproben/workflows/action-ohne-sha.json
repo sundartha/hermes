@@ -1,0 +1,19 @@
+{
+  "titel": "Action ohne Commit-SHA",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: actions/checkout@v4"
+    ]
+  },
+  "erwartet": "nicht per 40-stelliger Commit-SHA"
+}

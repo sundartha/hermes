@@ -1,0 +1,7 @@
+{
+  "titel": "Platzhalter ohne Dollarzeichen",
+  "dateien": {
+    "src/gruss.js": ["export const gruss = (name) => `Hallo {name}`;"]
+  },
+  "erwartet": "missing-template-string-indicator"
+}

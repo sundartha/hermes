@@ -1,0 +1,14 @@
+{
+  "titel": "Zwei Ordner importieren einander",
+  "dateien": {
+    "src/eins/modul.js": [
+      "import { zwei } from \"../zwei/modul.js\";",
+      "export const eins = () => zwei;"
+    ],
+    "src/zwei/modul.js": [
+      "import { eins } from \"../eins/modul.js\";",
+      "export const zwei = () => eins;"
+    ]
+  },
+  "erwartet": "„keine-ordnerzyklen“"
+}

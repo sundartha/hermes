@@ -1,0 +1,9 @@
+{
+  "titel": "Paket aus einer fremden Quelle",
+  "dateien": {
+    "package-lock.json": [
+      "{\"name\": \"rotprobe\", \"lockfileVersion\": 3, \"packages\": {\"\": {\"name\": \"rotprobe\"}, \"node_modules/rotprobe-paket\": {\"version\": \"1.0.0\", \"resolved\": \"https://example.invalid/rotprobe-paket-1.0.0.tgz\"}}}"
+    ]
+  },
+  "erwartet": "resolved zeigt nicht auf"
+}

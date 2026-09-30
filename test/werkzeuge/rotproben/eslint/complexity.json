@@ -1,0 +1,21 @@
+{
+  "titel": "Funktion mit elf Wegen",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function verzweigt(wert) {",
+      "  if (wert === \"fall0\") return \"ergebnis0\";",
+      "  if (wert === \"fall1\") return \"ergebnis1\";",
+      "  if (wert === \"fall2\") return \"ergebnis2\";",
+      "  if (wert === \"fall3\") return \"ergebnis3\";",
+      "  if (wert === \"fall4\") return \"ergebnis4\";",
+      "  if (wert === \"fall5\") return \"ergebnis5\";",
+      "  if (wert === \"fall6\") return \"ergebnis6\";",
+      "  if (wert === \"fall7\") return \"ergebnis7\";",
+      "  if (wert === \"fall8\") return \"ergebnis8\";",
+      "  if (wert === \"fall9\") return \"ergebnis9\";",
+      "  return \"sonst\";",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"complexity\""
+}

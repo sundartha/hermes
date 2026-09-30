@@ -1,0 +1,7 @@
+{
+  "titel": "Zahl ohne benannte Konstante",
+  "dateien": {
+    "src/rotprobe.js": ["export const verdoppelt = (wert) => wert * 42;"]
+  },
+  "erwartet": "\"ruleId\":\"no-magic-numbers\""
+}

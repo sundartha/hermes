@@ -1,0 +1,7 @@
+{
+  "titel": "Funktion verändert ihr Argument",
+  "dateien": {
+    "src/rotprobe.js": ["export function setze(objekt) {", "  objekt.wert = true;", "}"]
+  },
+  "erwartet": "\"ruleId\":\"no-param-reassign\""
+}

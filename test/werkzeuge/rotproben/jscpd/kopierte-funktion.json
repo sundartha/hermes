@@ -1,0 +1,32 @@
+{
+  "titel": "Dieselbe Funktion in zwei Dateien",
+  "dateien": {
+    "src/eins.js": [
+      "export function summe(liste) {",
+      "  let ergebnis = 0;",
+      "  for (const eintrag of liste) {",
+      "    if (eintrag.aktiv && eintrag.wert > 0) {",
+      "      ergebnis += eintrag.wert * eintrag.faktor;",
+      "    } else if (eintrag.rest) {",
+      "      ergebnis -= eintrag.rest.wert + eintrag.rest.abzug;",
+      "    }",
+      "  }",
+      "  return { ergebnis, anzahl: liste.length, leer: liste.length === 0 };",
+      "}"
+    ],
+    "src/zwei.js": [
+      "export function summe(liste) {",
+      "  let ergebnis = 0;",
+      "  for (const eintrag of liste) {",
+      "    if (eintrag.aktiv && eintrag.wert > 0) {",
+      "      ergebnis += eintrag.wert * eintrag.faktor;",
+      "    } else if (eintrag.rest) {",
+      "      ergebnis -= eintrag.rest.wert + eintrag.rest.abzug;",
+      "    }",
+      "  }",
+      "  return { ergebnis, anzahl: liste.length, leer: liste.length === 0 };",
+      "}"
+    ]
+  },
+  "erwartet": "neue Befunde von jscpd"
+}
