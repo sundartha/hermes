@@ -1,0 +1,159 @@
+{
+  "listen": [
+    {
+      "kennung": "owasp-mcp-top-10",
+      "titel": "OWASP MCP Top 10 (2025, Beta)",
+      "quelle": "https://owasp.org/www-project-mcp-top-10/",
+      "gelesen_am": "2026-09-30",
+      "punkte": [
+        { "kennung": "MCP01:2025", "titel": "Token Mismanagement & Secret Exposure", "zeilen": ["SG-01", "SG-13", "SG-18"] },
+        { "kennung": "MCP02:2025", "titel": "Privilege Escalation via Scope Creep", "zeilen": ["SG-03"] },
+        { "kennung": "MCP03:2025", "titel": "Tool Poisoning", "zeilen": ["SG-10", "SG-12"] },
+        { "kennung": "MCP04:2025", "titel": "Software Supply Chain Attacks & Dependency Tampering", "zeilen": ["SG-15", "SG-19", "SG-20"] },
+        { "kennung": "MCP05:2025", "titel": "Command Injection & Execution", "zeilen": ["SG-14"] },
+        { "kennung": "MCP06:2025", "titel": "Prompt Injection via Contextual Payloads", "zeilen": ["SG-10", "SG-11"] },
+        { "kennung": "MCP07:2025", "titel": "Insufficient Authentication & Authorization", "zeilen": ["SG-01", "SG-02", "SG-03", "SG-05", "SG-06", "SG-07"] },
+        { "kennung": "MCP08:2025", "titel": "Lack of Audit and Telemetry", "zeilen": ["SG-17"] },
+        { "kennung": "MCP09:2025", "titel": "Shadow MCP Servers", "zeilen": ["SG-16", "SG-22"] },
+        { "kennung": "MCP10:2025", "titel": "Context Injection & Over-Sharing", "zeilen": ["SG-02", "SG-11", "SG-24"] }
+      ]
+    },
+    {
+      "kennung": "mcp-sicherheitspraktiken",
+      "titel": "Model Context Protocol, Security Best Practices (Spezifikation 2026-07-28)",
+      "quelle": "https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices",
+      "gelesen_am": "2026-09-30",
+      "punkte": [
+        {
+          "kennung": "confused-deputy-problem",
+          "titel": "Confused Deputy Problem",
+          "trifft_nicht_zu": {
+            "begruendung": "Der Angriff setzt einen MCP-Proxy voraus, der selbst Autorisierungs- und Zustimmungs-Endpunkte betreibt und Clients dynamisch registriert. Hermes ist nur Ressourcenserver: Anmeldung und Registrierung liegen beim externen Aussteller, Hermes bietet keinen solchen Endpunkt an.",
+            "pruefung": {
+              "art": "keine_route",
+              "muster": "^/(\\.well-known/(oauth-authorization-server|openid-configuration)|(oauth2?/)?(authorize|token|register|consent))(/|$)"
+            }
+          }
+        },
+        { "kennung": "token-passthrough", "titel": "Token Passthrough", "zeilen": ["SG-01"] },
+        { "kennung": "server-side-request-forgery-ssrf", "titel": "Server-Side Request Forgery (SSRF)", "zeilen": ["SG-14"] },
+        {
+          "kennung": "session-hijacking",
+          "titel": "Session Hijacking (Session Hijack Prompt Injection, Session Hijack Impersonation)",
+          "quelle": "https://modelcontextprotocol.io/specification/2025-11-25/basic/security_best_practices",
+          "zeilen": ["SG-23"]
+        },
+        { "kennung": "state-handle-hijacking", "titel": "State Handle Hijacking", "zeilen": ["SG-02"] },
+        { "kennung": "local-mcp-server-compromise", "titel": "Local MCP Server Compromise", "zeilen": ["SG-15"] },
+        {
+          "kennung": "oauth-authorization-url-validation",
+          "titel": "OAuth Authorization URL Validation",
+          "trifft_nicht_zu": {
+            "begruendung": "Die Praxis richtet sich an MCP-Clients, die Autorisierungs-Adressen eines Servers öffnen. Hermes ist Server und kein MCP-Client; die eigene Aussteller-Adresse kommt aus der Konfiguration und muss im Hosting https sein.",
+            "pruefung": { "art": "kein_import", "muster": "@modelcontextprotocol/sdk/client" }
+          }
+        },
+        {
+          "kennung": "stdio-transport-security-in-proxy-scenarios",
+          "titel": "stdio Transport Security in Proxy Scenarios",
+          "trifft_nicht_zu": {
+            "begruendung": "Der Angriff betrifft lokale Proxys, die MCP-Server als Kindprozesse starten. Hermes startet keine MCP-Server und ist kein MCP-Client.",
+            "pruefung": { "art": "kein_import", "muster": "@modelcontextprotocol/sdk/client" }
+          }
+        },
+        {
+          "kennung": "mix-up-attacks",
+          "titel": "Mix-Up Attacks",
+          "trifft_nicht_zu": {
+            "begruendung": "Der Angriff betrifft MCP-Clients, die mit vielen Autorisierungsservern sprechen. Hermes ist kein MCP-Client; der Web-Login spricht mit genau einem fest konfigurierten Aussteller.",
+            "pruefung": { "art": "kein_import", "muster": "@modelcontextprotocol/sdk/client" }
+          }
+        },
+        {
+          "kennung": "localhost-redirect-uri-impersonation",
+          "titel": "Localhost Redirect URI Impersonation",
+          "trifft_nicht_zu": {
+            "begruendung": "Die Gegenmaßnahmen liegen beim Autorisierungsserver, der Client-Metadaten und Rücksprung-Adressen prüft. Hermes betreibt keinen Autorisierungsserver.",
+            "pruefung": {
+              "art": "keine_route",
+              "muster": "^/(\\.well-known/(oauth-authorization-server|openid-configuration)|(oauth2?/)?(authorize|token|register|consent))(/|$)"
+            }
+          }
+        },
+        {
+          "kennung": "cimd-trust-policies",
+          "titel": "CIMD Trust Policies",
+          "trifft_nicht_zu": {
+            "begruendung": "Vertrauensregeln für Client-Metadaten-Dokumente wendet der Autorisierungsserver an. Hermes betreibt keinen Autorisierungsserver und lädt keine Client-Metadaten.",
+            "pruefung": {
+              "art": "keine_route",
+              "muster": "^/(\\.well-known/(oauth-authorization-server|openid-configuration)|(oauth2?/)?(authorize|token|register|consent))(/|$)"
+            }
+          }
+        },
+        { "kennung": "scope-minimization", "titel": "Scope Minimization", "zeilen": ["SG-03"] }
+      ]
+    },
+    {
+      "kennung": "owasp-llm-top-10",
+      "titel": "OWASP Top 10 for LLM Applications 2025",
+      "quelle": "https://genai.owasp.org/llm-top-10/",
+      "gelesen_am": "2026-09-30",
+      "punkte": [
+        { "kennung": "LLM01:2025", "titel": "Prompt Injection", "zeilen": ["SG-10", "SG-11"] },
+        { "kennung": "LLM02:2025", "titel": "Sensitive Information Disclosure", "zeilen": ["SG-02", "SG-11", "SG-13"] },
+        { "kennung": "LLM03:2025", "titel": "Supply Chain", "zeilen": ["SG-15", "SG-19"] },
+        { "kennung": "LLM04:2025", "titel": "Data and Model Poisoning", "zeilen": ["SG-10"] },
+        { "kennung": "LLM05:2025", "titel": "Improper Output Handling", "zeilen": ["SG-08", "SG-14"] },
+        { "kennung": "LLM06:2025", "titel": "Excessive Agency", "zeilen": ["SG-03", "SG-10", "SG-11"] },
+        { "kennung": "LLM07:2025", "titel": "System Prompt Leakage", "zeilen": ["SG-11", "SG-13"] },
+        {
+          "kennung": "LLM08:2025",
+          "titel": "Vector and Embedding Weaknesses",
+          "trifft_nicht_zu": {
+            "begruendung": "Hermes nutzt keine Embeddings, keinen Vektorspeicher und kein Retrieval über Vektorsuche. Das käme nur mit einem neuen npm-Paket, und jedes neue Paket braucht die Freigabe von Antonio oder Jonas.",
+            "pruefung": { "art": "datei", "muster": "tools/freigabe-pruefung.mjs" }
+          }
+        },
+        { "kennung": "LLM09:2025", "titel": "Misinformation", "zeilen": ["SG-11"] },
+        { "kennung": "LLM10:2025", "titel": "Unbounded Consumption", "zeilen": ["SG-09"] }
+      ]
+    },
+    {
+      "kennung": "owasp-api-top-10",
+      "titel": "OWASP API Security Top 10 2023",
+      "quelle": "https://api-security.owasp.org/editions/2023/en/0x11-t10",
+      "gelesen_am": "2026-09-30",
+      "punkte": [
+        { "kennung": "API1:2023", "titel": "Broken Object Level Authorization", "zeilen": ["SG-02"] },
+        { "kennung": "API2:2023", "titel": "Broken Authentication", "zeilen": ["SG-01", "SG-04", "SG-23"] },
+        { "kennung": "API3:2023", "titel": "Broken Object Property Level Authorization", "zeilen": ["SG-24"] },
+        { "kennung": "API4:2023", "titel": "Unrestricted Resource Consumption", "zeilen": ["SG-09"] },
+        { "kennung": "API5:2023", "titel": "Broken Function Level Authorization", "zeilen": ["SG-03"] },
+        { "kennung": "API6:2023", "titel": "Unrestricted Access to Sensitive Business Flows", "zeilen": ["SG-08", "SG-09", "SG-10"] },
+        { "kennung": "API7:2023", "titel": "Server Side Request Forgery", "zeilen": ["SG-14"] },
+        { "kennung": "API8:2023", "titel": "Security Misconfiguration", "zeilen": ["SG-25"] },
+        { "kennung": "API9:2023", "titel": "Improper Inventory Management", "zeilen": ["SG-22"] },
+        { "kennung": "API10:2023", "titel": "Unsafe Consumption of APIs", "zeilen": ["SG-05", "SG-07", "SG-10"] }
+      ]
+    },
+    {
+      "kennung": "owasp-cicd-top-10",
+      "titel": "OWASP Top 10 CI/CD Security Risks",
+      "quelle": "https://owasp.org/www-project-top-10-ci-cd-security-risks/",
+      "gelesen_am": "2026-09-30",
+      "punkte": [
+        { "kennung": "CICD-SEC-1", "titel": "Insufficient Flow Control Mechanisms", "zeilen": ["SG-21"] },
+        { "kennung": "CICD-SEC-2", "titel": "Inadequate Identity and Access Management", "zeilen": ["SG-18", "SG-21"] },
+        { "kennung": "CICD-SEC-3", "titel": "Dependency Chain Abuse", "zeilen": ["SG-15", "SG-19"] },
+        { "kennung": "CICD-SEC-4", "titel": "Poisoned Pipeline Execution (PPE)", "zeilen": ["SG-18", "SG-21"] },
+        { "kennung": "CICD-SEC-5", "titel": "Insufficient PBAC (Pipeline-Based Access Controls)", "zeilen": ["SG-18"] },
+        { "kennung": "CICD-SEC-6", "titel": "Insufficient Credential Hygiene", "zeilen": ["SG-13", "SG-18"] },
+        { "kennung": "CICD-SEC-7", "titel": "Insecure System Configuration", "zeilen": ["SG-18", "SG-21"] },
+        { "kennung": "CICD-SEC-8", "titel": "Ungoverned Usage of 3rd Party Services", "zeilen": ["SG-20"] },
+        { "kennung": "CICD-SEC-9", "titel": "Improper Artifact Integrity Validation", "zeilen": ["SG-15", "SG-20"] },
+        { "kennung": "CICD-SEC-10", "titel": "Insufficient Logging and Visibility", "zeilen": ["SG-17"] }
+      ]
+    }
+  ]
+}
