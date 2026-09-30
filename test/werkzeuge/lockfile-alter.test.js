@@ -164,3 +164,28 @@ test("lockfile-alter: ein unverändertes Lockfile geht ohne Registry-Abfrage dur
   assert.equal(result.output.trim(), "Lockfiles unverändert");
   assert.deepEqual(result.requests, []);
 });
+
+test("lockfile-alter: eine bei gleicher Version umgebogene resolved-Adresse stoppt", async () => {
+  const result = await checkChange({
+    before: registryEntry("http://127.0.0.1:1", "umgebogen"),
+    after: () => entryFor("umgebogen", "https://evil.example.invalid/umgebogen.tgz"),
+    packuments: { umgebogen: ageOf(OLD_AGE_DAYS) },
+  });
+  assert.equal(result.status, EXIT_FINDING, result.output);
+  assert.match(result.output, /umgebogen@1\.0\.0: resolved zeigt nicht auf/);
+});
+
+test("lockfile-alter: eine bei gleicher Version unveränderte resolved-Adresse fragt die Registry nicht", async () => {
+  const result = await checkChange({
+    before: registryEntry("http://127.0.0.1:1", "ruhig"),
+    after: () => ({
+      "node_modules/ruhig": {
+        ...registryEntry("http://127.0.0.1:1", "ruhig")["node_modules/ruhig"],
+        license: "MIT",
+      },
+    }),
+    packuments: {},
+  });
+  assert.equal(result.status, EXIT_OK, result.output);
+  assert.deepEqual(result.requests, []);
+});
