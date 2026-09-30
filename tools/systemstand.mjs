@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 
 import { matches } from "./pruefungen-messen.mjs";
 import { github, remoteFacts } from "./systemstand/github.mjs";
+import { PACKAGE_STEPS } from "./systemstand/schritte.mjs";
 
 const BASIS_FILE = "tools/basis/systemstand.json";
 const WORKFLOW_DIR = ".github/workflows";
@@ -200,7 +201,7 @@ const STEP_1A_CRITERIA = [
 
 const STEPS = [
   { id: "1a", kriterien: STEP_1A_CRITERIA },
-  ...["1b", "2", "3", "4", "5"].map((id) => ({ id, kriterien: [] })),
+  ...PACKAGE_STEPS,
   ...["6", "7", "8", "9", "10", "11"].map((id) => ({ id, kriterien: [], geschnitten: false })),
 ];
 
@@ -223,8 +224,7 @@ async function evaluate(remote) {
 
 function stepReasons(step) {
   if (step.geschnitten === false) return ["noch nicht geschnitten"];
-  if (step.kriterien.length === 0) return ["das Kriterium noch nicht hinterlegt ist"];
-  return step.kriterien.flatMap(({ gruende }) => gruende);
+  return [...new Set(step.kriterien.flatMap(({ gruende }) => gruende))];
 }
 
 function state(reasons) {

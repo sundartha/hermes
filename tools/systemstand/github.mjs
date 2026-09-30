@@ -2,6 +2,8 @@ import { env } from "node:process";
 
 const GITHUB_API = "https://api.github.com";
 const DEFAULT_REPOSITORY = "sundartha/hermes";
+const PER_PAGE = 100;
+const HTTP_NOT_FOUND = 404;
 
 function request(path, { method = "GET", body } = {}) {
   const token = env.GH_TOKEN || env.GITHUB_TOKEN;
@@ -16,11 +18,21 @@ function request(path, { method = "GET", body } = {}) {
   return fetch(`${env.GITHUB_API_URL || GITHUB_API}${path}`, { method, headers, ...payload });
 }
 
-export async function github(path, options = {}) {
-  const response = await request(path, options);
+function parsed(response, method, path) {
   if (response.ok) return response.json();
-  const method = options.method ?? "GET";
   throw new Error(`die GitHub-API auf ${method} ${path} mit HTTP ${response.status} antwortet`);
+}
+
+export async function github(path, options = {}) {
+  return parsed(await request(path, options), options.method ?? "GET", path);
+}
+
+async function pages(get, query, page = 1) {
+  const suffix = `${query}&per_page=${PER_PAGE}&page=${page}`;
+  const batch = await get(suffix);
+  const notAList = `die GitHub-API auf GET ${suffix} keine Liste liefert`;
+  if (!Array.isArray(batch)) throw new Error(notAList);
+  return batch.length < PER_PAGE ? batch : [...batch, ...(await pages(get, query, page + 1))];
 }
 
 export function remoteFacts() {
@@ -28,6 +40,13 @@ export function remoteFacts() {
   const get = async (suffix) => github(`/repos/${full}${suffix}`);
   const raw = async (suffix) => request(`/repos/${full}${suffix}`);
   const send = async (method, suffix, body) => github(`/repos/${full}${suffix}`, { method, body });
+  const all = async (query) => pages(get, query);
+  const optional = async (suffix) => {
+    const response = await raw(suffix);
+    if (response.status === HTTP_NOT_FOUND) return undefined;
+    return parsed(response, "GET", `/repos/${full}${suffix}`);
+  };
   let rules;
-  return { full, get, raw, send, rules: () => (rules ??= get("/rules/branches/master")) };
+  const facts = { full, get, raw, send, all, optional };
+  return { ...facts, rules: () => (rules ??= get("/rules/branches/master")) };
 }
