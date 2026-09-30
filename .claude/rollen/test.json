@@ -16,6 +16,7 @@
       "Edit(gitleaks.toml)",
       "Edit(tsconfig*.json)",
       "Edit(.dependency-cruiser.cjs)",
+      "Edit(.dependency-cruiser-known-violations.json)",
       "Edit(docs/sicherheitsgrenzen.md)",
       "Edit(src/**)"
     ]

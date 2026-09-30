@@ -10,6 +10,7 @@ export const AFFECTED_TESTS_TOOL = join(REPO_ROOT, "tools/betroffene-tests.mjs")
 export const PRUEFLEITER_TOOL = join(REPO_ROOT, "tools/pruefleiter.mjs");
 export const FILE_LENGTH_TOOL = join(REPO_ROOT, "tools/dateilaenge.mjs");
 export const TEST_RATIO_TOOL = join(REPO_ROOT, "tools/testverhaeltnis.mjs");
+export const DEPENDENCY_TOOL = join(REPO_ROOT, "tools/abhaengigkeiten.mjs");
 export const ESLINT_BIN = join(REPO_ROOT, "node_modules/eslint/bin/eslint.js");
 export const PRE_PUSH_HOOK = join(REPO_ROOT, ".githooks/pre-push");
 
@@ -26,7 +27,7 @@ export function isolatedEnvironment() {
   );
 }
 
-function writeFiles(directory, files) {
+export function writeFiles(directory, files) {
   for (const [path, content] of Object.entries(files)) {
     const target = join(directory, path);
     mkdirSync(dirname(target), { recursive: true });
