@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 const PROTOCOL_DIR = ".pruefung";
@@ -10,6 +11,15 @@ const MAX_ABORT_LINES = 20;
 const ERROR_SEVERITY = 2;
 const EXIT_FAILURE = 1;
 const SKIP_FULL_SUITE_FLAG = "--ohne-volle-suite";
+const DEFAULT_BASE_REF = "upstream/master";
+const TOOL_BANK = "regression";
+const TOOL_TEST_GLOB = "test/werkzeuge/**/*.test.js";
+const TEST_CONCURRENCY = 4;
+const RUNNER = fileURLToPath(new URL("../test/testbaenke-run.mjs", import.meta.url));
+const DELETED = "D";
+const NAME_STATUS_ENTRY = /([A-Z])\d*\0([^\0]+)\0/g;
+const PRODUCT_PREFIXES = ["src/", "test/"];
+const TOOL_TEST_PREFIX = "test/werkzeuge/";
 
 function npmRun(script, args, stdio) {
   const result = spawnSync("npm", ["run", "--silent", script, "--", ...args], {
@@ -65,15 +75,59 @@ function affectedTests(args) {
   return npmRun("test:betroffen", args, "inherit").status;
 }
 
-function affectedTestArgs() {
-  const { values } = parseArgs({ options: { basis: { type: "string" } } });
-  return values.basis === undefined ? [] : ["--basis", values.basis, SKIP_FULL_SUITE_FLAG];
+function changedEntries(baseRef) {
+  const mergeBase = spawnSync("git", ["merge-base", "HEAD", baseRef], { encoding: "utf8" });
+  if (mergeBase.status !== 0) return null;
+  const diff = spawnSync(
+    "git",
+    ["diff", "--name-status", "--no-renames", "-z", mergeBase.stdout.trim()],
+    { encoding: "utf8" },
+  );
+  if (diff.status !== 0) return null;
+  return [...diff.stdout.matchAll(NAME_STATUS_ENTRY)].map(([, status, path]) => ({ status, path }));
+}
+
+function isProductChange({ status, path }) {
+  const isProductPath = PRODUCT_PREFIXES.some((prefix) => path.startsWith(prefix));
+  return status !== DELETED && isProductPath && !path.startsWith(TOOL_TEST_PREFIX);
+}
+
+function needsToolTests(baseRef) {
+  const changes = changedEntries(baseRef);
+  return changes === null || changes.some((change) => !isProductChange(change));
+}
+
+function toolTests() {
+  const flags = ["--", `--test-concurrency=${TEST_CONCURRENCY}`];
+  const result = spawnSync(process.execPath, [RUNNER, TOOL_BANK, TOOL_TEST_GLOB, ...flags], {
+    stdio: "inherit",
+  });
+  return result.status ?? EXIT_FAILURE;
+}
+
+function parseOptions() {
+  const { values } = parseArgs({
+    options: { basis: { type: "string" }, "vor-push": { type: "boolean", default: false } },
+  });
+  return values;
+}
+
+function affectedTestArgs({ basis, "vor-push": beforePush }) {
+  if (basis !== undefined) return ["--basis", basis, SKIP_FULL_SUITE_FLAG];
+  return beforePush ? [SKIP_FULL_SUITE_FLAG] : [];
 }
 
 function main() {
-  const args = affectedTestArgs();
+  const options = parseOptions();
+  const args = affectedTestArgs(options);
   const lintStatus = lint();
-  return lintStatus === 0 ? affectedTests(args) : lintStatus;
+  if (lintStatus !== 0) return lintStatus;
+  const affectedStatus = affectedTests(args);
+  if (!options["vor-push"] || !needsToolTests(options.basis ?? DEFAULT_BASE_REF)) {
+    return affectedStatus;
+  }
+  const toolStatus = toolTests();
+  return affectedStatus === 0 ? toolStatus : affectedStatus;
 }
 
 process.exitCode = main();
