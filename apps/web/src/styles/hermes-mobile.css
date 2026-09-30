@@ -206,7 +206,10 @@
   opacity: var(--mh-mid);
 }
 
-/* 5. Glas-Schleier unten, gleiche Deckkraft wie die Toenung. */
+/* 5. Glas-Schleier unten, gleiche Deckkraft wie die Toenung. Bewusst ohne
+   backdrop-filter (Owner 2026-09-30): die Unschaerfe liess den Hintergrund auf
+   "So funktioniert's" verwaschen wirken - die Farbe allein toent genauso ab,
+   die Bergkaemme bleiben scharf. */
 .mh-veil {
   top: auto;
   height: 80%;
@@ -216,8 +219,6 @@
     rgba(10, 30, 62, 0.6) 55%,
     rgba(8, 24, 50, 0.7)
   );
-  -webkit-backdrop-filter: blur(22px);
-  backdrop-filter: blur(22px);
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 45%);
   mask-image: linear-gradient(180deg, transparent 0%, #000 45%);
   opacity: var(--mh-mid);
