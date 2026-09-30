@@ -138,3 +138,20 @@ test("beim Rueckfall auf die volle Suite laufen genau vier Testdateien gleichzei
   assert.equal(result.status, 0, result.stdout);
   assert.equal(peakConcurrency(directory), EXPECTED_CONCURRENCY);
 });
+
+test("ohne volle Suite laufen bei einem Rueckfall nur die Tests unter apps/web", (context) => {
+  const directory = probeRepository(context, BASE_FILES);
+  changeFile("LIESMICH.txt")(directory);
+  changeFile("apps/web/seite.txt")(directory);
+
+  const result = runIn(directory, process.execPath, [
+    AFFECTED_TESTS_TOOL,
+    "--basis",
+    "HEAD",
+    "--ohne-volle-suite",
+  ]);
+
+  assert.match(result.stdout, new RegExp(WEB_MARKER));
+  assert.doesNotMatch(result.stdout, new RegExp(UNRELATED_MARKER));
+  assert.doesNotMatch(result.stdout, new RegExp(TWO_STEP_MARKER));
+});

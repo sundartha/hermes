@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
+import { parseArgs } from "node:util";
 
 const PROTOCOL_DIR = ".pruefung";
 const LINT_REPORT = join(PROTOCOL_DIR, "lint.json");
@@ -8,7 +9,7 @@ const MAX_LINT_FINDINGS = 20;
 const MAX_ABORT_LINES = 20;
 const ERROR_SEVERITY = 2;
 const EXIT_FAILURE = 1;
-const FIRST_ARGUMENT = 2;
+const SKIP_FULL_SUITE_FLAG = "--ohne-volle-suite";
 
 function npmRun(script, args, stdio) {
   const result = spawnSync("npm", ["run", "--silent", script, "--", ...args], {
@@ -64,9 +65,15 @@ function affectedTests(args) {
   return npmRun("test:betroffen", args, "inherit").status;
 }
 
+function affectedTestArgs() {
+  const { values } = parseArgs({ options: { basis: { type: "string" } } });
+  return values.basis === undefined ? [] : ["--basis", values.basis, SKIP_FULL_SUITE_FLAG];
+}
+
 function main() {
+  const args = affectedTestArgs();
   const lintStatus = lint();
-  return lintStatus === 0 ? affectedTests(process.argv.slice(FIRST_ARGUMENT)) : lintStatus;
+  return lintStatus === 0 ? affectedTests(args) : lintStatus;
 }
 
 process.exitCode = main();
