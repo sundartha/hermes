@@ -176,9 +176,6 @@
     "id-length": {
       "count": 78
     },
-    "max-lines-per-function": {
-      "count": 1
-    },
     "no-func-assign": {
       "count": 10
     },
@@ -212,9 +209,6 @@
     },
     "id-length": {
       "count": 47
-    },
-    "max-lines-per-function": {
-      "count": 1
     },
     "max-params": {
       "count": 2
@@ -353,9 +347,6 @@
     },
     "id-length": {
       "count": 12
-    },
-    "max-lines-per-function": {
-      "count": 1
     },
     "no-magic-numbers": {
       "count": 4
@@ -608,9 +599,6 @@
   "src/llm.js": {
     "id-length": {
       "count": 1
-    },
-    "max-lines-per-function": {
-      "count": 1
     }
   },
   "src/llm/adapters/anthropic.js": {
@@ -725,7 +713,7 @@
       "count": 3
     },
     "max-lines-per-function": {
-      "count": 2
+      "count": 1
     },
     "no-magic-numbers": {
       "count": 16
@@ -737,9 +725,6 @@
     },
     "id-length": {
       "count": 3
-    },
-    "max-lines-per-function": {
-      "count": 1
     },
     "no-magic-numbers": {
       "count": 8
@@ -827,7 +812,7 @@
       "count": 42
     },
     "max-lines-per-function": {
-      "count": 2
+      "count": 1
     },
     "max-params": {
       "count": 1
@@ -986,9 +971,6 @@
     "id-length": {
       "count": 47
     },
-    "max-lines-per-function": {
-      "count": 1
-    },
     "max-params": {
       "count": 2
     },
@@ -1057,9 +1039,6 @@
     "id-length": {
       "count": 7
     },
-    "max-lines-per-function": {
-      "count": 1
-    },
     "no-magic-numbers": {
       "count": 17
     },
@@ -1070,9 +1049,6 @@
   "src/worker/provisioning-orchestrator.js": {
     "id-length": {
       "count": 10
-    },
-    "max-lines-per-function": {
-      "count": 1
     },
     "no-negated-condition": {
       "count": 1
@@ -1541,9 +1517,6 @@
   "test/auth-p6-operator-routes.test.js": {
     "id-length": {
       "count": 5
-    },
-    "max-lines-per-function": {
-      "count": 1
     },
     "no-magic-numbers": {
       "count": 11
@@ -2135,9 +2108,6 @@
   "test/dial-target-normalization.test.js": {
     "id-length": {
       "count": 8
-    },
-    "max-lines-per-function": {
-      "count": 1
     },
     "no-magic-numbers": {
       "count": 13

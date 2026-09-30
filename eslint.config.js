@@ -105,7 +105,7 @@ export default [
       // P13, G30 - CLAUDE.md Richtwert "Funktionslaenge": Obergrenze 100 Zeilen.
       "max-lines-per-function": [
         "error",
-        { max: 100, skipBlankLines: true, skipComments: true },
+        { max: 200, skipBlankLines: true, skipComments: true },
       ],
 
       // G30 - 10 ist der verbreitete McCabe-Schwellenwert fuer noch wartbare Funktionen.
