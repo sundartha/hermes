@@ -29,10 +29,7 @@
           "titel": "Confused Deputy Problem",
           "trifft_nicht_zu": {
             "begruendung": "Der Angriff setzt einen MCP-Proxy voraus, der selbst Autorisierungs- und Zustimmungs-Endpunkte betreibt und Clients dynamisch registriert. Hermes ist nur Ressourcenserver: Anmeldung und Registrierung liegen beim externen Aussteller, Hermes bietet keinen solchen Endpunkt an.",
-            "pruefung": {
-              "art": "keine_route",
-              "muster": "^/(\\.well-known/(oauth-authorization-server|openid-configuration)|(oauth2?/)?(authorize|token|register|consent))(/|$)"
-            }
+            "pruefung": { "art": "keine_route", "pfade": ["/authorize", "/token", "/register", "/consent", "/oauth/", "/oauth2/", "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"] }
           }
         },
         { "kennung": "token-passthrough", "titel": "Token Passthrough", "zeilen": ["SG-01"] },
@@ -50,7 +47,7 @@
           "titel": "OAuth Authorization URL Validation",
           "trifft_nicht_zu": {
             "begruendung": "Die Praxis richtet sich an MCP-Clients, die Autorisierungs-Adressen eines Servers öffnen. Hermes ist Server und kein MCP-Client; die eigene Aussteller-Adresse kommt aus der Konfiguration und muss im Hosting https sein.",
-            "pruefung": { "art": "kein_import", "muster": "@modelcontextprotocol/sdk/client" }
+            "pruefung": { "art": "kein_import", "modul": "@modelcontextprotocol/sdk/client" }
           }
         },
         {
@@ -58,7 +55,7 @@
           "titel": "stdio Transport Security in Proxy Scenarios",
           "trifft_nicht_zu": {
             "begruendung": "Der Angriff betrifft lokale Proxys, die MCP-Server als Kindprozesse starten. Hermes startet keine MCP-Server und ist kein MCP-Client.",
-            "pruefung": { "art": "kein_import", "muster": "@modelcontextprotocol/sdk/client" }
+            "pruefung": { "art": "kein_import", "modul": "@modelcontextprotocol/sdk/client" }
           }
         },
         {
@@ -66,7 +63,7 @@
           "titel": "Mix-Up Attacks",
           "trifft_nicht_zu": {
             "begruendung": "Der Angriff betrifft MCP-Clients, die mit vielen Autorisierungsservern sprechen. Hermes ist kein MCP-Client; der Web-Login spricht mit genau einem fest konfigurierten Aussteller.",
-            "pruefung": { "art": "kein_import", "muster": "@modelcontextprotocol/sdk/client" }
+            "pruefung": { "art": "kein_import", "modul": "@modelcontextprotocol/sdk/client" }
           }
         },
         {
@@ -74,10 +71,7 @@
           "titel": "Localhost Redirect URI Impersonation",
           "trifft_nicht_zu": {
             "begruendung": "Die Gegenmaßnahmen liegen beim Autorisierungsserver, der Client-Metadaten und Rücksprung-Adressen prüft. Hermes betreibt keinen Autorisierungsserver.",
-            "pruefung": {
-              "art": "keine_route",
-              "muster": "^/(\\.well-known/(oauth-authorization-server|openid-configuration)|(oauth2?/)?(authorize|token|register|consent))(/|$)"
-            }
+            "pruefung": { "art": "keine_route", "pfade": ["/authorize", "/token", "/register", "/consent", "/oauth/", "/oauth2/", "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"] }
           }
         },
         {
@@ -85,10 +79,7 @@
           "titel": "CIMD Trust Policies",
           "trifft_nicht_zu": {
             "begruendung": "Vertrauensregeln für Client-Metadaten-Dokumente wendet der Autorisierungsserver an. Hermes betreibt keinen Autorisierungsserver und lädt keine Client-Metadaten.",
-            "pruefung": {
-              "art": "keine_route",
-              "muster": "^/(\\.well-known/(oauth-authorization-server|openid-configuration)|(oauth2?/)?(authorize|token|register|consent))(/|$)"
-            }
+            "pruefung": { "art": "keine_route", "pfade": ["/authorize", "/token", "/register", "/consent", "/oauth/", "/oauth2/", "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"] }
           }
         },
         { "kennung": "scope-minimization", "titel": "Scope Minimization", "zeilen": ["SG-03"] }
@@ -112,7 +103,7 @@
           "titel": "Vector and Embedding Weaknesses",
           "trifft_nicht_zu": {
             "begruendung": "Hermes nutzt keine Embeddings, keinen Vektorspeicher und kein Retrieval über Vektorsuche. Das käme nur mit einem neuen npm-Paket, und jedes neue Paket braucht die Freigabe von Antonio oder Jonas.",
-            "pruefung": { "art": "datei", "muster": "tools/freigabe-pruefung.mjs" }
+            "pruefung": { "art": "datei", "pfad": "tools/freigabe-pruefung.mjs" }
           }
         },
         { "kennung": "LLM09:2025", "titel": "Misinformation", "zeilen": ["SG-11"] },

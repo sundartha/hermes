@@ -174,22 +174,22 @@ test("jeder Punkt der fünf Listen muss im Abgleich stehen, und „trifft nicht 
   assert.equal(missing.status, EXIT_FINDING);
   assert.match(missing.stderr, /Liste owasp-llm-top-10: der Punkt LLM08:2025 fehlt/);
 
-  const exemptionFor = (muster) => ({
+  const exemptionFor = (pfade) => ({
     "cimd-trust-policies": {
       kennung: "cimd-trust-policies",
       trifft_nicht_zu: {
         begruendung: "Kein Autorisierungsserver.",
-        pruefung: { art: "keine_route", muster },
+        pruefung: { art: "keine_route", pfade },
       },
     },
   });
   const holds = runCatalogCheck(
-    probe(context, { [MAPPING_PATH]: mapping(exemptionFor("^/authorize")) }),
+    probe(context, { [MAPPING_PATH]: mapping(exemptionFor(["/authorize"])) }),
   );
   assert.equal(holds.status, EXIT_OK, holds.stderr);
 
   const broken = runCatalogCheck(
-    probe(context, { [MAPPING_PATH]: mapping(exemptionFor("^/api/")) }),
+    probe(context, { [MAPPING_PATH]: mapping(exemptionFor(["/api/"])) }),
   );
   assert.equal(broken.status, EXIT_FINDING);
   assert.match(
