@@ -1,0 +1,76 @@
+name: Testschutz
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened, edited]
+  issues:
+    types: [labeled, unlabeled]
+
+permissions: {}
+
+concurrency:
+  group: testschutz-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  testschutz:
+    name: Testschutz
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Bestehende Tests nur ergänzt
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_BASIS: ${{ github.event.pull_request.base.sha }}
+          PR_NUMMER: ${{ github.event.pull_request.number }}
+        run: node tools/tests-nur-ergaenzt.mjs --basis "$PR_BASIS" --pr "$PR_NUMMER"
+
+  neu-auswerten:
+    name: Testschutz neu auswerten
+    if: github.event_name == 'issues' && github.event.label.name == 'verhalten-geaendert'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Testschutz der verknüpften PRs neu starten
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ISSUE_NUMMER: ${{ github.event.issue.number }}
+        run: node tools/tests-nur-ergaenzt.mjs --issue "$ISSUE_NUMMER"
