@@ -22,6 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Node 22
@@ -57,3 +58,9 @@ jobs:
       - name: Injection-Muster (Semgrep)
         if: ${{ !cancelled() }}
         run: node tools/basis-vergleich.mjs semgrep
+
+      - name: Bedrohungskatalog
+        if: ${{ !cancelled() }}
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node tools/katalog-pruefen.mjs --basis "$BASIS"
