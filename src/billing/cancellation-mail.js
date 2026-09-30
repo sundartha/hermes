@@ -33,6 +33,13 @@ const EFFECTIVE_DATE_FORMAT = new Intl.DateTimeFormat("de-DE", {
   dateStyle: "medium",
 });
 
+// Eingangszeitpunkt in der Schreibweise aller Kuendigungs-Mails (deutsche Ortszeit) - EINE
+// Quelle fuer diese Bestaetigung UND die Mails des oeffentlichen Formulars
+// (billing/public-cancellation.js), damit derselbe Eingang nie zweierlei aussieht (G5).
+export function formatReceivedAt(receivedAt) {
+  return `${RECEIVED_FORMAT.format(new Date(receivedAt))} Uhr`;
+}
+
 // Der Bestaetigungstext lebt an GENAU dieser einen Stelle (kein zweites Vorkommen im
 // Code, G5) - schlichtes Deutsch, reiner Text (Textform verlangt keine Gestaltung, s.
 // Auftrag). Traegt alle sechs Pflichtangaben: Eingang (Datum+Uhrzeit), gekuendigter
@@ -42,7 +49,7 @@ const EFFECTIVE_DATE_FORMAT = new Intl.DateTimeFormat("de-DE", {
 // (apps/web/src/data/legal/imprint.de.json), der Text verweist deshalb NUR dorthin.
 export function buildCancellationMailText({ planSlug, currentPeriodEnd, receivedAt, publicUrl }) {
   const planName = findPlan(planSlug)?.name ?? planSlug ?? "Ihr Tarif";
-  const receivedText = `${RECEIVED_FORMAT.format(new Date(receivedAt))} Uhr`;
+  const receivedText = formatReceivedAt(receivedAt);
   const effectiveText =
     currentPeriodEnd != null
       ? EFFECTIVE_DATE_FORMAT.format(new Date(currentPeriodEnd * 1000))
