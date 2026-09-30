@@ -34,7 +34,7 @@ const BRIDGE_TAIL_SEPARATOR = " ";
 // Der sprechbare Ueberbrueckungssatz aus dem fuehrenden Rundentext - oder "" (nichts zu
 // sagen). Rein (N7). shapeForSpeech ist derselbe Shaper wie fuer den Turn-Text (G5): er
 // raeumt Markdown/Aufzaehlungen ab und sichert das Satzende, das die TTS braucht.
-export function bridgeSpeechFrom(roundText) {
+function bridgeSpeechFrom(roundText) {
   if (typeof roundText !== "string") return "";
   const shaped = shapeForSpeech(clampAtWordBoundary(roundText.trim(), THINKING_SIGNAL_MAX_CHARS));
   return shaped ? shaped + BRIDGE_TAIL_SEPARATOR : "";
