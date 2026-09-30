@@ -26,7 +26,7 @@
 // einem "--"-Trenner durch: "node test/testbaenke-run.mjs regression -- --flag ...".
 
 import { spawn } from "node:child_process";
-import { createWriteStream, mkdirSync, readFileSync } from "node:fs";
+import { createWriteStream, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -263,6 +263,13 @@ function printReport(mode, { code, tapText, protocolPath }, elapsedMs) {
   for (const line of [head, ...details]) console.log(line);
 }
 
+function writeResult(mode, tapText) {
+  const resultPath = join(PROTOCOL_DIR, `${mode}.json`);
+  rmSync(resultPath, { force: true });
+  const counts = correctedCounts(tapText, mode);
+  if (counts) writeFileSync(resultPath, JSON.stringify({ bestanden: counts.pass }));
+}
+
 // R1: die Zahl steht als LETZTE Zeile des Abnahme-Laufs und gehoert in jeden
 // Abschlussbericht.
 function printAbnahmeScore(tapText) {
@@ -282,6 +289,7 @@ async function main() {
   const files = testFilesFrom(process.argv);
   const run = await runNodeTest(mode, extraArgsFrom(process.argv), files);
   printReport(mode, run, Date.now() - startedAt);
+  writeResult(mode, run.tapText);
   if (mode === MODE_ABNAHME) printAbnahmeScore(run.tapText);
   process.exit(run.code);
 }
