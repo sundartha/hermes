@@ -2,7 +2,8 @@
   "minTokens": 50,
   "reporters": ["console"],
   "gitignore": false,
-  "absolute": true,
+  "absolute": false,
+  "format": ["javascript", "typescript", "jsx", "tsx"],
   "ignore": [
     "**/node_modules/**",
     "**/coverage/**",
