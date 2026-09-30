@@ -28,6 +28,7 @@ const MAX_GIT_OUTPUT_BYTES = 268_435_456;
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
+const COMMIT_OBJECT_TYPE = "commit";
 const USAGE = "Aufruf: node tools/testverhaeltnis.mjs --basis <commit>";
 
 function sourceFiles(pathspecs) {
@@ -84,7 +85,8 @@ function ratioOf(testLines, codeLines) {
 }
 
 function limitsAtBasis(basis) {
-  if (spawnSync("git", ["cat-file", "-e", `${basis}^{commit}`]).status !== EXIT_OK) {
+  const objectType = spawnSync("git", ["cat-file", "-t", basis], { encoding: "utf8" });
+  if (objectType.stdout.trim() !== COMMIT_OBJECT_TYPE) {
     throw new Error(`Die Basis ${basis} ist kein Commit in diesem Checkout.`);
   }
   const shown = spawnSync("git", ["show", `${basis}:${LIMIT_PATH}`], { encoding: "utf8" });

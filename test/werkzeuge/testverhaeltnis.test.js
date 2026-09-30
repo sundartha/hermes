@@ -14,6 +14,7 @@ const LIMITS = {
 };
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
+const EXIT_ABORT = 2;
 
 const PRODUCT_WITH_TWO_CODE_LINES = [
   "// Kommentar zählt nicht",
@@ -119,4 +120,14 @@ test("eine Testzeile über der Obergrenze macht die Prüfung rot", (context) => 
     result.stderr,
     /Testverhältnis 2\.50 \(5 Testzeilen zu 2 Produktzeilen\), Obergrenze 2/,
   );
+});
+
+test("eine Basis, die kein Commit ist, bricht die Prüfung ab", (context) => {
+  const directory = probe(context, {});
+  const blob = runIn(directory, "git", ["rev-parse", `HEAD:${LIMIT_PATH}`]).stdout.trim();
+  for (const basis of ["gibt-es-nicht", blob]) {
+    const result = runIn(directory, process.execPath, [TEST_RATIO_TOOL, "--basis", basis]);
+    assert.equal(result.status, EXIT_ABORT, basis);
+    assert.match(result.stderr, /ist kein Commit in diesem Checkout/);
+  }
 });
