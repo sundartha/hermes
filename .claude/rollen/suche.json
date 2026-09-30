@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "denyWrite": [
+        "../../.fortschritt"
+      ]
+    }
+  }
+}
