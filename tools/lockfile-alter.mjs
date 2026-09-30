@@ -54,9 +54,12 @@ function changedEntries(before, after) {
   const changed = [];
   for (const [key, entry] of Object.entries(after)) {
     if (entry.link === true || entry.version === undefined) continue;
-    if (before[key]?.version === entry.version) continue;
+    const previous = before[key];
+    const versionChanged = previous?.version !== entry.version;
+    if (!versionChanged && previous.resolved === entry.resolved) continue;
     const name = packageName(key, entry);
-    if (name !== undefined) changed.push({ name, version: entry.version, resolved: entry.resolved });
+    if (name === undefined) continue;
+    changed.push({ name, version: entry.version, resolved: entry.resolved, versionChanged });
   }
   return changed;
 }
@@ -82,11 +85,12 @@ function fetchPackument(name) {
   return packuments.get(name);
 }
 
-async function findingFor({ name, version, resolved }) {
+async function findingFor({ name, version, resolved, versionChanged }) {
   const label = `${name}@${version}`;
   if (typeof resolved !== "string" || !resolved.startsWith(`${registry}/`)) {
     return `${label}: resolved zeigt nicht auf ${registry}/`;
   }
+  if (!versionChanged) return undefined;
   try {
     const published = (await fetchPackument(name)).time?.[version];
     if (published === undefined) return `${label}: Version in der Registry unbekannt`;
