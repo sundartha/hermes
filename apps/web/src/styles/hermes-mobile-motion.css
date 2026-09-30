@@ -1,0 +1,716 @@
+/* =============================================================================
+ * hermes-mobile-motion.css - Bewegung der Handy-Startseite (< 768 px)
+ *
+ * Ergaenzt hermes-mobile.css (Aufbau und Aussehen). Hier steht alles, was sich
+ * bewegt (Design-Schema 6-7): Ankommen, Lichttropfen im Faden, ziehende Wolken,
+ * die Phasen des Rings, Umschalten von Schritt, Tarif und Weg, Tippen und
+ * Kopieren. Die Zustaende setzt scripts/hermes-mobile.js als Data-Attribute.
+ * Am Schluss: prefers-reduced-motion - dann bleibt nur Ueberblenden.
+ * ========================================================================== */
+
+/* ---------------------------------------------------- 1. Ankommen (7) */
+
+/* Ohne Skript (kein data-ready) bleibt alles sichtbar. Mit Skript blendet der
+   Inhalt gestaffelt ein, sobald sein Screen aktiv wird: 80 + n x 85 ms,
+   opacity .8s plus translateY 16px -> 0 in 1s. Headlines zusaetzlich
+   unscharf -> scharf (blur 7px, .9s), Zeile fuer Zeile. Beim Verlassen
+   blenden alle ohne Verzoegerung aus. */
+.mh[data-ready] .mh-r {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.8s ease,
+    transform 1s var(--mh-ease);
+}
+.mh[data-ready] .mh-hl {
+  filter: blur(7px);
+  transition:
+    opacity 0.9s ease,
+    transform 1.1s var(--mh-ease),
+    filter 0.9s ease;
+}
+.mh[data-ready] .mh-screen[data-active="1"] .mh-r {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* Ring auf Screen 2, Footer und aufsteigender Faden auf Screen 5 blenden nur,
+   ohne Versatz. */
+.mh[data-ready] .mh-how .mh-focus,
+.mh[data-ready] .mh-rise {
+  transform: none;
+  transition: opacity 1s ease;
+}
+.mh[data-ready] .mh-footer {
+  transform: none;
+  transition: opacity 0.8s ease;
+}
+
+.mh[data-ready] .mh-thread {
+  transform: scaleY(0);
+  transition: transform 1.1s var(--mh-ease);
+}
+.mh[data-ready] .mh-screen[data-active="1"] .mh-thread {
+  transform: scaleY(1);
+  transition-delay: 80ms;
+}
+
+.mh[data-ready] .mh-screen[data-active="1"] .mh-d0 {
+  transition-delay: 80ms;
+}
+.mh[data-ready] .mh-screen[data-active="1"] .mh-d1 {
+  transition-delay: 165ms;
+}
+.mh[data-ready] .mh-screen[data-active="1"] .mh-d2 {
+  transition-delay: 250ms;
+}
+.mh[data-ready] .mh-screen[data-active="1"] .mh-d3 {
+  transition-delay: 335ms;
+}
+.mh[data-ready] .mh-screen[data-active="1"] .mh-d4 {
+  transition-delay: 420ms;
+}
+.mh[data-ready] .mh-screen[data-active="1"] .mh-d5 {
+  transition-delay: 505ms;
+}
+.mh[data-ready] .mh-screen[data-active="1"] .mh-d6 {
+  transition-delay: 590ms;
+}
+
+/* Start beim Laden: der Text rollt nach 150 ms ein, gleiche Staffel (Design-
+   Schema 7). Als CSS-Animation ab dem ersten Bild - so blitzt der Text nicht
+   erst auf, bevor das Skript laedt. fill-mode backwards: nach dem Einrollen
+   gelten wieder die Uebergaenge oben (Verlassen, Wiederkommen). */
+.mh-s-hero .mh-r {
+  animation:
+    mhIntroFade 0.8s ease backwards,
+    mhIntroRise 1s var(--mh-ease) backwards;
+}
+.mh-s-hero .mh-hl {
+  animation:
+    mhIntroFade 0.9s ease backwards,
+    mhIntroRise 1.1s var(--mh-ease) backwards,
+    mhIntroBlur 0.9s ease backwards;
+}
+.mh-s-hero .mh-d1 {
+  animation-delay: 315ms;
+}
+.mh-s-hero .mh-d2 {
+  animation-delay: 400ms;
+}
+.mh-s-hero .mh-d3 {
+  animation-delay: 485ms;
+}
+.mh-s-hero .mh-d4 {
+  animation-delay: 570ms;
+}
+@keyframes mhIntroFade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes mhIntroRise {
+  from {
+    transform: translateY(16px);
+  }
+}
+@keyframes mhIntroBlur {
+  from {
+    filter: blur(7px);
+  }
+}
+
+/* Die Pille gibt beim Antippen nach, auch wenn sie selbst einblendet. */
+.mh[data-ready] .mh-screen[data-active="1"] .mh-pill.mh-r:active {
+  transform: scale(0.98);
+}
+
+/* ------------------------------------------- 2. Lichttropfen im Faden (7) */
+
+/* Screens 2-4: beim Ankommen laeuft einmal ein heller Tropfen den Faden
+   hinunter (1.3 s, ab 200 ms). Start: als Scroll-Hinweis in Schleife (2.6 s,
+   ab 1.2 s). Abschluss: er steigt nach oben (2.8 s, Schleife). */
+.mh-drop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 60%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff);
+  transform: translateY(-100%);
+}
+.mh-drop--loop {
+  height: 45%;
+}
+.mh-drop--rise {
+  top: auto;
+  bottom: 0;
+  height: 45%;
+  background: linear-gradient(0deg, rgba(255, 255, 255, 0), #fff);
+  transform: translateY(100%);
+}
+.mh[data-ready] .mh-screen[data-active="1"] .mh-thread .mh-drop {
+  animation: mhDrop 1.3s cubic-bezier(0.5, 0, 0.3, 1) 200ms both;
+}
+.mh[data-ready] .mh-s-hero[data-active="1"] .mh-drop--loop {
+  animation: mhDrip 2.6s cubic-bezier(0.5, 0, 0.3, 1) 1.2s infinite both;
+}
+.mh[data-ready] .mh-s-close[data-active="1"] .mh-drop--rise {
+  animation: mhRiseDrip 2.8s cubic-bezier(0.5, 0, 0.3, 1) 1s infinite both;
+}
+
+@keyframes mhDrop {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(240%);
+  }
+}
+@keyframes mhDrip {
+  0% {
+    transform: translateY(-100%);
+  }
+  62%,
+  100% {
+    transform: translateY(240%);
+  }
+}
+@keyframes mhRiseDrip {
+  0% {
+    transform: translateY(100%);
+  }
+  62%,
+  100% {
+    transform: translateY(-240%);
+  }
+}
+
+/* ---------------------------------------------- 3. Ziehende Wolken (6.1) */
+
+/* Band ueber dem Berg: oben Tempel-Oberkante + 0.48 x Bildhoehe, Hoehe
+   0.52 x Bildhoehe (Bildhoehe = 0.5625 x Tempelbreite). Zwei Schichten aus
+   dem Wolkenbild, je 4 Kacheln im Wechsel normal/gespiegelt. Sie wandern um
+   2 Kacheln nach links; danach wiederholt sich das Muster - nahtlos, ohne
+   Neustart. Hinten: Kachel = Bandhoehe x 1920/480, .34, 300 s. Vorne: Kachel =
+   Bandhoehe x 1920/360, .26, blur 1.5px, 250 s. Pausiert auf Screen 2-4. */
+.mh-fog {
+  --mh-fh: calc(0.2925 * var(--mh-tw));
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--mh-tt) + 0.27 * var(--mh-tw));
+  height: var(--mh-fh);
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.85) 42%,
+    #000 68%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.85) 42%,
+    #000 68%,
+    transparent 100%
+  );
+}
+.mh-fog__layer {
+  --mh-tile: calc(var(--mh-fh) * 4);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  width: calc(var(--mh-tile) * 4);
+  height: 100%;
+  opacity: 0.34;
+  will-change: transform;
+  animation: mhFog 300s linear infinite;
+}
+.mh-fog__layer--front {
+  --mh-tile: calc(var(--mh-fh) * 5.33333);
+  opacity: 0.26;
+  filter: blur(1.5px);
+  animation-duration: 250s;
+}
+.mh-fog__layer i {
+  display: block;
+  flex: none;
+  width: var(--mh-tile);
+  height: 100%;
+  background: url("/assets/howto_clouds.png") 50% 100% / cover no-repeat;
+}
+.mh-fog__layer i:nth-child(even) {
+  transform: scaleX(-1);
+}
+.mh:not([data-screen="0"]):not([data-screen="4"]) .mh-fog__layer {
+  animation-play-state: paused;
+}
+
+@keyframes mhFog {
+  to {
+    transform: translate3d(calc(var(--mh-tile) * -2), 0, 0);
+  }
+}
+
+/* ------------------------------------------ 4. Ring auf Screen 2 (6.2) */
+
+/* Ein Ring, der stehen bleibt; nur der Inhalt wechselt. data-phase zaehlt die
+   Phasen ab Schrittstart (hermes-mobile.js):
+   Schritt 1 Nummer:    1 Bogen leer, 2 Bogen fuellt sich (1.4 s), 3 Haken +
+                        Nummer tippt sich, 4 "Live" (fertig, Bogen gruen)
+   Schritt 2 Verbinden: 0 Viertelbogen sucht im Kreis, Fluegel .55; 1 rastet ein
+                        (voll, gruen), URL tippt sich; 2 "Connected"
+   Schritt 3 Abnehmen:  0 Wellenbalken schwingen; 1 fallen zusammen, Haken,
+                        "Summary ready" */
+.mh-ring__arc {
+  transition:
+    stroke-dashoffset 1.4s cubic-bezier(0.6, 0.05, 0.3, 1),
+    stroke-dasharray 0.6s ease,
+    stroke 0.6s ease,
+    opacity 0.35s ease;
+}
+.mh-how[data-step="0"] .mh-viz[data-phase="0"] .mh-ring__arc {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.mh-how[data-step="0"] .mh-viz[data-phase="1"] .mh-ring__arc {
+  stroke-dashoffset: 100;
+  transition: none;
+}
+.mh-how[data-step="1"] .mh-viz[data-phase="0"] .mh-ring__arc {
+  stroke-dasharray: 22 78;
+}
+.mh-how[data-step="1"] .mh-viz[data-phase="0"] .mh-ring__spin {
+  animation: mhSpin 1.1s linear infinite;
+}
+.mh-viz[data-done="1"] .mh-ring__arc {
+  stroke: #8ff0c0;
+}
+
+.mh-ring__check {
+  transition:
+    stroke-dashoffset 0.5s ease,
+    opacity 0.35s ease;
+}
+.mh-how[data-step="0"] .mh-viz:is([data-phase="3"], [data-phase="4"]) .mh-ring__check,
+.mh-how[data-step="2"] .mh-viz[data-phase="1"] .mh-ring__check {
+  stroke-dashoffset: 0;
+  opacity: 1;
+}
+
+.mh-ring__wing {
+  transition:
+    opacity 0.5s ease,
+    transform 0.7s var(--mh-ease);
+}
+.mh-how[data-step="1"] .mh-ring__wing {
+  opacity: 0.55;
+  transform: scale(1);
+}
+.mh-how[data-step="1"] .mh-viz:is([data-phase="1"], [data-phase="2"]) .mh-ring__wing {
+  opacity: 1;
+}
+
+.mh-ring__wave {
+  transition: opacity 0.5s ease;
+}
+.mh-ring__wave i {
+  --mh-dur: 0.8s;
+  --mh-del: 0s;
+  transition: transform 0.6s ease;
+}
+.mh-how[data-step="2"] .mh-viz[data-phase="0"] .mh-ring__wave {
+  opacity: 1;
+}
+.mh-how[data-step="2"] .mh-viz[data-phase="0"] .mh-ring__wave i {
+  transform: scaleY(0.5);
+  animation: mhWave var(--mh-dur) ease-in-out var(--mh-del) infinite alternate;
+}
+/* Dauer 0.8 s + (i % 4) x 0.17 s, Versatz -(i % 5) x 0.13 s (i ab 0). */
+.mh-ring__wave i:nth-child(4n + 2) {
+  --mh-dur: 0.97s;
+}
+.mh-ring__wave i:nth-child(4n + 3) {
+  --mh-dur: 1.14s;
+}
+.mh-ring__wave i:nth-child(4n + 4) {
+  --mh-dur: 1.31s;
+}
+.mh-ring__wave i:nth-child(5n + 2) {
+  --mh-del: -0.13s;
+}
+.mh-ring__wave i:nth-child(5n + 3) {
+  --mh-del: -0.26s;
+}
+.mh-ring__wave i:nth-child(5n + 4) {
+  --mh-del: -0.39s;
+}
+.mh-ring__wave i:nth-child(5n + 5) {
+  --mh-del: -0.52s;
+}
+
+/* Beim Ankommen startet der Ring von vorn: data-reset schaltet fuer einen
+   Frame alle Uebergaenge ab, damit nichts sichtbar zurueckspult. */
+.mh-viz[data-reset] *,
+.mh-viz[data-reset] *::before {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Ergebnis- und Statuszeile. */
+.mh-sum,
+.mh-status {
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
+}
+.mh-how:not([data-step="2"]) .mh-sum,
+.mh-how[data-step="2"] .mh-viz__typed {
+  display: none;
+}
+.mh-how[data-step="2"] .mh-viz[data-phase="1"] .mh-sum,
+.mh-how[data-step="0"] .mh-viz[data-phase="4"] .mh-status--0,
+.mh-how[data-step="1"] .mh-viz[data-phase="2"] .mh-status--1 {
+  opacity: 1;
+  transform: none;
+}
+
+/* Ist ein Schritt fertig, leuchtet der Schein einmal kurz gruen auf (2.4 s).
+   Zwei gleiche Keyframes: der Wechsel des Namens startet ihn je Schritt neu. */
+.mh-how[data-active="1"] .mh-bloom {
+  animation: mhBloomA 2.4s ease-out 2810ms both;
+}
+.mh-how[data-active="1"][data-step="1"] .mh-bloom {
+  animation-delay: 1700ms;
+}
+.mh-how[data-active="1"][data-step="2"] .mh-bloom {
+  animation-delay: 3200ms;
+}
+.mh-how[data-active="1"][data-run="b"] .mh-bloom {
+  animation-name: mhBloomB;
+}
+
+@keyframes mhSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes mhWave {
+  from {
+    transform: scaleY(0.18);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes mhBloomA {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.85);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.15);
+  }
+}
+@keyframes mhBloomB {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.85);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.15);
+  }
+}
+
+/* ------------------------------------------- 5. Schritte und Leiste (6.2) */
+
+/* Titel + Zeilen wechseln per Ueberblendung, 20px seitlich plus blur 4px.
+   Die Zeilen des neuen Schritts kommen einzeln (140 + 80 ms Versatz). */
+.mh-step {
+  opacity: 0;
+  transform: translateX(20px);
+  filter: blur(4px);
+  pointer-events: none;
+  transition:
+    opacity 0.6s ease,
+    transform 0.7s var(--mh-ease),
+    filter 0.6s ease;
+}
+.mh-step[data-rel="before"] {
+  transform: translateX(-20px);
+}
+.mh-step[data-rel="cur"] {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  pointer-events: auto;
+}
+.mh-step__row {
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 0.5s ease,
+    transform 0.7s var(--mh-ease);
+}
+.mh-step[data-rel="cur"] .mh-step__row {
+  opacity: 1;
+  transform: none;
+  transition-delay: 140ms;
+}
+.mh-step[data-rel="cur"] .mh-step__row:nth-child(2) {
+  transition-delay: 220ms;
+}
+.mh-step[data-rel="cur"] .mh-step__row:nth-child(3) {
+  transition-delay: 300ms;
+}
+
+/* Das aktive Segment fuellt sich im Autoplay in 6.5 s linear. Zwei gleiche
+   Keyframes: der Wechsel des Namens startet die Fuellung neu, auch wenn
+   derselbe Schritt erneut angetippt wird. */
+.mh-how[data-auto="1"][data-active="1"] .mh-bar[data-state="cur"] .mh-bar__fill {
+  display: block;
+  animation: mhFillA 6.5s linear forwards;
+}
+.mh-how[data-auto="1"][data-active="1"][data-run="b"] .mh-bar[data-state="cur"] .mh-bar__fill {
+  animation-name: mhFillB;
+}
+@keyframes mhFillA {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes mhFillB {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ------------------------------------------------------ 6. Preise (6.3) */
+
+/* Nur die Ziffer, die sich aendert, rollt senkrecht durch (0.7 s). */
+.mh-roll > span {
+  opacity: 0;
+  transform: translateY(100%);
+  transition:
+    transform 0.7s var(--mh-ease),
+    opacity 0.45s ease;
+}
+.mh-roll > span[data-rel="before"] {
+  transform: translateY(-100%);
+}
+.mh-roll > span[data-rel="cur"] {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 60ms;
+}
+
+/* Minuten-Leiste: fuellt nacheinander (150 ms), leert rueckwaerts (90 ms);
+   beim Ankommen ab 520 ms (data-arrive). */
+.mh-seg > i {
+  transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.mh-seg:nth-child(1) > i {
+  transition-delay: 270ms;
+}
+.mh-seg:nth-child(2) > i {
+  transition-delay: 180ms;
+}
+.mh-seg:nth-child(3) > i {
+  transition-delay: 90ms;
+}
+.mh-seg.is-on > i {
+  transition-delay: 0ms;
+}
+.mh-seg.is-on:nth-child(2) > i {
+  transition-delay: 150ms;
+}
+.mh-seg.is-on:nth-child(3) > i {
+  transition-delay: 300ms;
+}
+.mh-seg.is-on:nth-child(4) > i {
+  transition-delay: 450ms;
+}
+.mh-price[data-arrive] .mh-seg.is-on:nth-child(1) > i {
+  transition-delay: 520ms;
+}
+.mh-price[data-arrive] .mh-seg.is-on:nth-child(2) > i {
+  transition-delay: 670ms;
+}
+.mh-price[data-arrive] .mh-seg.is-on:nth-child(3) > i {
+  transition-delay: 820ms;
+}
+.mh-price[data-arrive] .mh-seg.is-on:nth-child(4) > i {
+  transition-delay: 970ms;
+}
+
+/* Leistungen Zeile fuer Zeile (90 ms Versatz): alt verschwimmt nach oben,
+   neu kommt scharf von unten. */
+.mh-benefit {
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(4px);
+  transition:
+    opacity 0.55s ease,
+    transform 0.7s var(--mh-ease),
+    filter 0.55s ease;
+}
+.mh-benefit[data-rel="before"] {
+  transform: translateY(-8px);
+}
+.mh-benefit-row:nth-child(2) .mh-benefit {
+  transition-delay: 40ms;
+}
+.mh-benefit-row:nth-child(3) .mh-benefit {
+  transition-delay: 80ms;
+}
+.mh-price[data-active="1"] .mh-benefit[data-rel="cur"] {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  transition-delay: 160ms;
+}
+.mh-price[data-active="1"] .mh-benefit-row:nth-child(2) .mh-benefit[data-rel="cur"] {
+  transition-delay: 250ms;
+}
+.mh-price[data-active="1"] .mh-benefit-row:nth-child(3) .mh-benefit[data-rel="cur"] {
+  transition-delay: 340ms;
+}
+.mh-price[data-active="1"][data-arrive] .mh-benefit[data-rel="cur"] {
+  transition-delay: 680ms;
+}
+.mh-price[data-active="1"][data-arrive] .mh-benefit-row:nth-child(2) .mh-benefit[data-rel="cur"] {
+  transition-delay: 770ms;
+}
+.mh-price[data-active="1"][data-arrive] .mh-benefit-row:nth-child(3) .mh-benefit[data-rel="cur"] {
+  transition-delay: 860ms;
+}
+
+/* "Choose ...": nur der Name rollt senkrecht (0.6 s), die Breite gleitet mit
+   (0.5 s). */
+.mh-cta__roll {
+  transition: width 0.5s var(--mh-ease);
+}
+.mh-cta__name {
+  opacity: 0;
+  transform: translateY(100%);
+  transition:
+    transform 0.6s var(--mh-ease),
+    opacity 0.4s ease;
+}
+.mh-cta__name[data-rel="before"] {
+  transform: translateY(-100%);
+}
+.mh-cta__name[data-rel="cur"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* -------------------------------------------------- 7. Entwickler (6.4) */
+
+/* Wege wechseln per Ueberblendung, 18px seitlich plus blur 4px. */
+.mh-way {
+  opacity: 0;
+  transform: translateX(18px);
+  filter: blur(4px);
+  pointer-events: none;
+  transition:
+    opacity 0.5s ease,
+    transform 0.6s var(--mh-ease),
+    filter 0.5s ease;
+}
+.mh-way[data-rel="before"] {
+  transform: translateX(-18px);
+}
+.mh-way[data-rel="cur"] {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  pointer-events: auto;
+}
+
+.mh-code__sel {
+  transition: background 0.35s ease;
+}
+
+/* "Copy" rollt senkrecht zu "✓ Copied" und zurueck. */
+.mh-copy__label {
+  transition:
+    transform 0.55s var(--mh-ease),
+    opacity 0.35s ease;
+}
+.mh-copy__label--done,
+.mh-dev[data-copied="1"] .mh-copy__label {
+  opacity: 0;
+  transform: translateY(100%);
+}
+.mh-dev[data-copied="1"] .mh-copy__label:first-child {
+  transform: translateY(-100%);
+}
+.mh-dev[data-copied="1"] .mh-copy__label--done {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------------------------------------- 8. Reduzierte Bewegung (7) */
+
+/* Kein Autoplay, keine Kamerafahrt, keine ziehenden Wolken, kein Tippen,
+   keine Tropfen, keine Staffel und kein Versatz - es bleibt nur Ueberblenden.
+   Autoplay und Tippen schaltet hermes-mobile.js ab. */
+@media (prefers-reduced-motion: reduce) {
+  .mh-clouds {
+    transform: none;
+  }
+  .mh-fog,
+  .mh-drop,
+  .mh-bloom {
+    display: none;
+  }
+  .mh[data-ready] .mh-r,
+  .mh[data-ready] .mh-thread,
+  .mh-step,
+  .mh-step__row,
+  .mh-way,
+  .mh-roll > span,
+  .mh-benefit,
+  .mh-cta__name,
+  .mh-copy__label,
+  .mh-sum,
+  .mh-status,
+  .mh-ring__wing {
+    transform: none !important;
+    filter: none !important;
+    transition-delay: 0ms !important;
+  }
+  .mh-seg > i {
+    transition-delay: 0ms !important;
+  }
+  .mh-s-hero .mh-r {
+    animation: mhIntroFade 0.8s ease backwards;
+  }
+  .mh-ring__spin,
+  .mh-ring__wave i {
+    animation: none !important;
+  }
+  .mh-cta__roll {
+    transition: none;
+  }
+}

@@ -1,8 +1,8 @@
 /* =============================================================================
- * hermes-mobile.css - Handy-Fassung der Startseite (< 768 px)
+ * hermes-mobile.css - Handy-Fassung der Startseite (< 768 px): Aufbau und Aussehen
  *
  * Umsetzung von design/handoff-mobile (Design-Schema.md ist die verbindliche
- * Spezifikation, "Hermes Mobile v5.dc.html" die Referenz). Alle Werte 1:1 aus
+ * Spezifikation, "Hermes Mobile v9.dc.html" die Referenz). Alle Werte 1:1 aus
  * dem Prototyp; dessen cqh/cqw heissen hier svh/vw.
  *
  * Abgrenzung zum Desktop: .mh ist grundsaetzlich display:none. Nur innerhalb
@@ -12,6 +12,10 @@
  *
  * Ausgenommen bleibt das Handy im Querformat (<= 500 px hoch): dort passt kein
  * Screen in die Hoehe, es behaelt die bisherige Blaetter-Fassung.
+ *
+ * Bewegung (Ankommen, Tropfen, ziehende Wolken, Ring-Phasen, Rollen) steht in
+ * hermes-mobile-motion.css, Safari-Leisten und Blaettern in
+ * hermes-mobile-viewport.css.
  *
  * Zustaende setzt scripts/hermes-mobile.js als Data-Attribute (data-active,
  * data-step, data-plan, data-way, data-copied, data-rel ...) und die Variable
@@ -38,17 +42,21 @@
   /* Deckkraft von Toenung und Glas-Schleier (Design-Schema 3.4/3.5):
      p <= 1: p, p > 3: (4 - p) / 0.8, dazwischen 1. */
   --mh-mid: min(clamp(0, var(--p), 1), clamp(0, calc((4 - var(--p)) / 0.8), 1));
-  /* Ringgroesse der Animation nach Hoehe (Design-Schema 6): < 700 -> 92,
+  /* Ringgroesse der Animation nach Hoehe (Design-Schema 6.2): < 700 -> 92,
      < 800 -> 108, < 900 -> 128, sonst 148. --mh-k gleicht die Strichstaerke
      im festen 148er-viewBox an. --mh-vtext ist die Ergebniszeile:
      < 700 -> 20, < 800 -> 22, sonst 24. */
   --mh-ring: 148px;
   --mh-k: 1;
   --mh-vtext: 24px;
+  --mh-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   position: relative;
   height: 100vh;
   height: 100svh;
+  /* clip statt hidden: .mh ist dann kein Scroll-Container, den der Browser
+     (Fokus, scrollIntoView) seitlich verschieben koennte. */
   overflow: hidden;
+  overflow: clip;
   background: #0a2245;
   color: #fff;
   font-family: "Space Grotesk", system-ui, sans-serif;
@@ -102,7 +110,6 @@
 /* ------------------------------------------- Hintergrund (Design-Schema 3) */
 
 .mh-bg,
-.mh-clouds,
 .mh-hero,
 .mh-base,
 .mh-deep,
@@ -112,29 +119,55 @@
   pointer-events: none;
 }
 
+/* Die Ebenen ragen seitlich ueber den Bildschirm (Kamerafahrt, Wolkenband);
+   das Buehnen-Element schneidet sie ab, damit nichts seitlich scrollbar wird. */
+.mh-bg {
+  overflow: hidden;
+}
+
+/* 1. Wolkenmeer: Breite max(vw, vh x 1920/1060) x 1.12, Hoehe im Seiten-
+   verhaeltnis, links vw/2 - 0.4 Breite, senkrecht mittig. Die Kamerafahrt
+   schwenkt es mit jedem Screen ein Stueck seitlich:
+   translate3d((2 - p) x vw x 0.28, (2 - p) x 14px, 0). */
 .mh-clouds {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 34% 50%;
-  transform: translate3d(0, calc((2 - var(--p)) * 12px), 0) scale(1.08);
+  --mh-cw: calc(max(100vw, 181.132svh) * 1.12);
+  position: absolute;
+  top: calc(50svh - 0.276042 * var(--mh-cw));
+  left: calc(50vw - 0.4 * var(--mh-cw));
+  width: var(--mh-cw);
+  height: auto;
+  max-width: none;
+  pointer-events: none;
+  transform: translate3d(calc((2 - var(--p)) * 28vw), calc((2 - var(--p)) * 14px), 0);
   will-change: transform;
 }
 
-/* Tempel: p <= 1: 1 - 1.25p, p > 3: (p - 3.2) / 0.8, dazwischen 0. */
+/* 2. Tempel: p <= 1: 1 - 1.25p, p > 3: (p - 3.2) / 0.8, dazwischen 0.
+   Herausgezoomt: Breite max(2.05 vw, 0.98 vh), links vw/2 - 0.695 Breite,
+   oben min(40px, 0.62 vh - 0.78 Bildhoehe). Bildhoehe = Breite x 720/1280,
+   0.78 x 0.5625 = 0.43875. Die ziehenden Wolken (hermes-mobile-motion.css)
+   haengen an denselben Massen, darum stehen sie hier als Variablen. */
 .mh-hero {
+  --mh-tw: max(205vw, 98svh);
+  --mh-tt: min(40px, calc(62svh - 0.43875 * var(--mh-tw)));
   background: linear-gradient(180deg, #8e9db4 0%, #aab5c6 30%, #9fb0c6 55%, #7f93ae 100%);
   opacity: max(clamp(0, calc(1 - 1.25 * var(--p)), 1), clamp(0, calc((var(--p) - 3.2) / 0.8), 1));
   will-change: opacity;
 }
 
-/* Herausgezoomt: Breite max(2.05 vw, 0.98 vh), links vw/2 - 0.695 Breite,
-   oben min(40px, 0.62 vh - 0.78 Bildhoehe). Bildhoehe = Breite * 720/1280,
-   0.78 * 0.5625 = 0.43875. */
+/* Der Prototyp rundet Breite, links und oben auf ganze Pixel - wo round()
+   verfuegbar ist, hier genauso. -0.001px: der Prototyp rechnet in Gleitkomma,
+   2.05 x 390 ergibt dort 799.4999... und rundet ab. */
+@supports (width: round(1.5px, 1px)) {
+  .mh-hero {
+    --mh-tw: round(max(calc(205vw - 0.001px), calc(98svh - 0.001px)), 1px);
+    --mh-tt: round(min(40px, calc(62svh - 0.43875 * var(--mh-tw))), 1px);
+  }
+}
+
 .mh-temple {
-  --mh-tw: max(205vw, 98svh);
   position: absolute;
-  top: min(40px, calc(62svh - 0.43875 * var(--mh-tw)));
+  top: var(--mh-tt);
   left: calc(50vw - 0.695 * var(--mh-tw));
   width: var(--mh-tw);
   height: auto;
@@ -142,19 +175,13 @@
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 7%, #000 78%, transparent 100%);
   mask-image: linear-gradient(180deg, transparent 0%, #000 7%, #000 78%, transparent 100%);
 }
-
-/* Der Prototyp rundet Breite, links und oben auf ganze Pixel - wo round()
-   verfuegbar ist, hier genauso (sonst bleibt es beim ungerundeten Wert). */
 @supports (width: round(1.5px, 1px)) {
-  /* -0.001px: der Prototyp rechnet in Gleitkomma, 2.05 * 390 ergibt dort
-     799.4999... und rundet ab - genau halbe Pixel also abwaerts wie dort. */
   .mh-temple {
-    --mh-tw: round(max(calc(205vw - 0.001px), calc(98svh - 0.001px)), 1px);
-    top: round(min(40px, calc(62svh - 0.43875 * var(--mh-tw))), 1px);
     left: round(calc(50vw - 0.695 * var(--mh-tw)), 1px);
   }
 }
 
+/* 3. Basis-Verlauf, immer an. */
 .mh-base {
   background: linear-gradient(
     180deg,
@@ -167,6 +194,7 @@
   );
 }
 
+/* 4. Toenung (Screens 2-4). */
 .mh-deep {
   background: linear-gradient(
     180deg,
@@ -178,6 +206,7 @@
   opacity: var(--mh-mid);
 }
 
+/* 5. Glas-Schleier unten, gleiche Deckkraft wie die Toenung. */
 .mh-veil {
   top: auto;
   height: 80%;
@@ -209,92 +238,37 @@
   display: none;
 }
 
-/* Seitenrand 22px; ab ca. 480px Breite (schmales Desktop-Fenster) bleibt die
-   Spalte bei 436px und steht mittig - an den Pruefmassen wirkt das nicht. */
+/* Eine Mittelachse fuer alles. Seitenrand 22px; ab ca. 480px Breite (schmales
+   Desktop-Fenster) bleibt die Spalte bei 436px und steht mittig - an den
+   Pruefmassen wirkt das nicht. */
 .mh-screen {
   --mh-side: max(22px, calc(50% - 218px));
   position: relative;
   display: flex;
   flex-direction: column;
+  align-items: center;
   box-sizing: border-box;
   height: 100%;
+  text-align: center;
   scroll-snap-align: start;
   scroll-snap-stop: always;
 }
 
+/* Bild-Screens: Tempel oben, Text unten verankert. Auf dem Start laeuft der
+   Faden unter "How it works" bis an die Unterkante. */
 .mh-s-hero {
   justify-content: flex-end;
-  padding: 92px var(--mh-side) calc(24px + env(safe-area-inset-bottom, 0px));
+  padding: 92px var(--mh-side) env(safe-area-inset-bottom, 0px);
 }
-
-.mh-s-content {
-  align-items: center;
-  text-align: center;
-  padding: calc(clamp(72px, 10.6svh, 104px) + env(safe-area-inset-top, 0px)) var(--mh-side)
-    calc(clamp(16px, 2.8svh, 28px) + env(safe-area-inset-bottom, 0px));
-}
-
 .mh-s-close {
   justify-content: flex-end;
-  align-items: center;
-  text-align: center;
   padding: 92px var(--mh-side) calc(clamp(10px, 1.8svh, 18px) + env(safe-area-inset-bottom, 0px));
 }
 
-/* -------------------------------------------- Ankommen (Design-Schema 7) */
-
-/* Ohne Skript (kein data-ready) bleibt alles sichtbar. Mit Skript blenden die
-   Inhalte eines Screens gestaffelt ein, sobald er aktiv wird: Faden, Label,
-   H2, Satz, Fokus, Bedienung (80/170/260/350/440/530 ms). Beim Verlassen
-   blenden sie ohne Verzoegerung aus. */
-.mh[data-ready] .mh-r {
-  opacity: 0;
-  transform: translateY(16px);
-  transition:
-    opacity 0.8s ease,
-    transform 1s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.mh[data-ready] .mh-screen[data-active="1"] .mh-r {
-  opacity: 1;
-  transform: none;
-}
-.mh[data-ready] .mh-s-hero .mh-r {
-  transition:
-    opacity 0.9s ease,
-    transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-/* Fokus auf Screen 2 und Footer auf Screen 5 blenden nur, ohne Versatz. */
-.mh[data-ready] .mh-how .mh-focus {
-  transform: none;
-  transition: opacity 1s ease;
-}
-.mh[data-ready] .mh-footer {
-  transform: none;
-  transition: opacity 0.8s ease;
-}
-
-.mh[data-ready] .mh-thread {
-  transform: scaleY(0);
-  transition: transform 1.1s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.mh[data-ready] .mh-screen[data-active="1"] .mh-thread {
-  transform: scaleY(1);
-  transition-delay: 80ms;
-}
-.mh[data-ready] .mh-screen[data-active="1"] .mh-d1 {
-  transition-delay: 170ms;
-}
-.mh[data-ready] .mh-screen[data-active="1"] .mh-d2 {
-  transition-delay: 260ms;
-}
-.mh[data-ready] .mh-screen[data-active="1"] .mh-d3 {
-  transition-delay: 350ms;
-}
-.mh[data-ready] .mh-screen[data-active="1"] .mh-d4 {
-  transition-delay: 440ms;
-}
-.mh[data-ready] .mh-screen[data-active="1"] .mh-d5 {
-  transition-delay: 530ms;
+/* Inhalts-Screens: Aussage oben, Fokus mittig im freien Raum, Bedienung unten. */
+.mh-s-content {
+  padding: calc(clamp(72px, 10.6svh, 104px) + env(safe-area-inset-top, 0px)) var(--mh-side)
+    calc(clamp(16px, 2.8svh, 28px) + env(safe-area-inset-bottom, 0px));
 }
 
 /* ------------------------------------------------------------------- Kopf */
@@ -351,10 +325,19 @@
   opacity: 0.9;
 }
 
-.mh-head__right {
+/* Header-Kapsel rechts: eine Glaskapsel, 44px hoch, Innenabstand 0 4 0 2. */
+.mh-cap {
   display: flex;
   align-items: center;
-  gap: 2px;
+  height: 44px;
+  padding: 0 4px 0 2px;
+  border-radius: 99px;
+  background: rgba(8, 26, 54, 0.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  backdrop-filter: blur(16px) saturate(1.3);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   pointer-events: auto;
 }
 
@@ -362,26 +345,25 @@
   position: relative;
   display: flex;
   align-items: center;
-  text-shadow: 0 1px 8px rgba(0, 20, 50, 0.35);
 }
 .mh .mh-lang__opt {
-  width: 44px;
+  width: 34px;
   height: 44px;
   border: 0;
   background: none;
   color: rgba(255, 255, 255, 0.5);
   font:
-    600 13px "Space Grotesk",
+    600 12.5px "Space Grotesk",
     sans-serif;
   letter-spacing: 0.08em;
   transition: color 0.3s;
 }
 .mh .mh-lang__opt[data-lang="en"] {
-  padding: 0 8px 0 0;
+  padding: 0 7px 0 0;
   text-align: right;
 }
 .mh .mh-lang__opt[data-lang="de"] {
-  padding: 0 0 0 8px;
+  padding: 0 0 0 7px;
   text-align: left;
 }
 .mh .mh-lang__opt[aria-pressed="true"] {
@@ -392,36 +374,59 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -52%);
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.38);
   pointer-events: none;
 }
+.mh-cap__rule {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 7px 0 3px;
+  background: rgba(255, 255, 255, 0.22);
+}
 
+/* "Log in": Tippflaeche 44px, darin der Glas-Daumen 36px, kein weisser Rand. */
 .mh .mh-login {
   display: flex;
   align-items: center;
   height: 44px;
-  padding: 0 14px;
-  border: 1.5px solid rgba(255, 255, 255, 0.75);
+}
+.mh-login__thumb {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 13px;
   border-radius: 99px;
-  background: rgba(10, 34, 69, 0.14);
+  background: rgba(207, 228, 250, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 2px 10px rgba(0, 10, 30, 0.18);
   color: #fff;
   font:
-    500 15px "Space Grotesk",
+    500 14.5px "Space Grotesk",
     sans-serif;
   white-space: nowrap;
 }
 
-/* ------------------------------------------------------------------ Pillen */
+/* ---------------------------------------------------- Pille (Hauptaktion) */
 
-.mh .mh-pill {
+/* 52px hoch, Breite min(100%, 248px), mittig; weiss mit Navy-Text. Gleich auf
+   Start, Preise, Entwickler und Abschluss. */
+.mh .mh-pill,
+.mh .mh-pill:hover {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  width: min(100%, 248px);
   height: 52px;
   padding: 0;
+  border: 0;
   border-radius: 99px;
+  background: #fff;
+  color: #0a2245;
+  box-shadow: 0 10px 30px rgba(0, 10, 30, 0.28);
   font:
     600 16px "Space Grotesk",
     sans-serif;
@@ -430,51 +435,70 @@
 .mh .mh-pill:active {
   transform: scale(0.98);
 }
-.mh .mh-pill--solid,
-.mh .mh-pill--solid:hover {
-  border: 0;
-  background: #fff;
-  color: #0a2245;
-}
-.mh .mh-pill--ghost {
-  border: 1.5px solid rgba(255, 255, 255, 0.8);
-  background: transparent;
-  color: #fff;
-}
 
-/* -------------------------------------------------------- Screen 1: Hero */
+/* -------------------------------------------------------- Screen 1: Start */
+
+.mh-line {
+  display: block;
+}
 
 .mh-h1 {
   margin: 0;
   font-family: "Instrument Serif", serif;
   font-weight: 400;
-  font-size: 46px;
+  font-size: min(14.2vw, 6.6svh);
   line-height: 1;
   letter-spacing: -0.005em;
   color: #fff;
-  text-wrap: pretty;
+  text-wrap: balance;
 }
-.mh-hero-lead {
-  margin: clamp(14px, 3svh, 22px) 0 0;
-  font-size: 16px;
-  line-height: 1.6;
-  color: rgba(232, 242, 253, 0.92);
-  text-wrap: pretty;
-}
+
 .mh-actions {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: clamp(18px, 4svh, 30px);
+  align-items: center;
+  width: 100%;
+  margin-top: clamp(22px, 3.6svh, 32px);
+}
+
+/* "How it works" als Textbutton; darunter der Faden, der in den Faden von
+   Screen 2 weiterlaeuft. */
+.mh .mh-how-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: clamp(6px, 1.2svh, 12px);
+  padding: 12px 24px 0;
+  border: 0;
+  background: none;
+  color: rgba(232, 242, 253, 0.9);
+  font:
+    500 15px/1.2 "Space Grotesk",
+    sans-serif;
+  transition: color 0.3s ease;
+}
+.mh .mh-how-link:hover {
+  color: #fff;
+}
+.mh-how-link__thread {
+  position: relative;
+  display: block;
+  width: 1px;
+  height: clamp(22px, 4.4svh, 40px);
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(207, 228, 250, 0.6), rgba(207, 228, 250, 0));
 }
 
 /* ---------------------------------------- Inhalts-Screens: Aussage oben */
 
 .mh-thread {
+  position: relative;
   display: block;
   flex: none;
   width: 1px;
   height: clamp(12px, 3.2svh, 32px);
+  overflow: hidden;
   background: linear-gradient(180deg, rgba(207, 228, 250, 0), rgba(207, 228, 250, 0.7));
   transform-origin: 50% 0;
 }
@@ -506,9 +530,6 @@
   color: #fff;
   text-wrap: balance;
 }
-.mh-h2 em {
-  display: block;
-}
 
 .mh-lead {
   margin: clamp(10px, 1.7svh, 16px) 0 0;
@@ -517,6 +538,11 @@
   line-height: 1.55;
   color: rgba(232, 242, 253, 0.88);
   text-wrap: balance;
+}
+.mh-lead--hero {
+  margin-top: clamp(12px, 2svh, 18px);
+  max-width: 330px;
+  color: rgba(232, 242, 253, 0.9);
 }
 
 /* Fokus mittig im freien Raum: margin auto statt justify-content center,
@@ -531,6 +557,7 @@
   padding: clamp(8px, 2svh, 20px) 0;
 }
 .mh-focus {
+  position: relative;
   margin: auto 0;
 }
 
@@ -543,6 +570,14 @@
   color: #fff;
 }
 
+.mh-controls {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(10px, 1.5svh, 12px);
+}
+
 .mh-foot {
   margin: 2px 0 0;
   max-width: 336px;
@@ -552,58 +587,146 @@
   text-wrap: balance;
 }
 
+/* Weicher Lichtschein hinter dem Fokus. */
+.mh-glow {
+  position: absolute;
+  left: 50%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
 /* ------------------------------------------- Screen 2: So funktioniert's */
 
 .mh-how .mh-focus {
-  position: relative;
   display: flex;
   justify-content: center;
 }
 
-.mh-glow {
-  position: absolute;
-  left: 50%;
+/* Lichtschein und gruenes Aufleuchten: 2.6 x Ring, mittig auf dem Ring. */
+.mh-how .mh-glow,
+.mh-bloom {
   top: calc(var(--mh-ring) * -0.8);
   width: calc(var(--mh-ring) * 2.6);
   height: calc(var(--mh-ring) * 2.6);
   transform: translateX(-50%);
-  border-radius: 50%;
+}
+.mh-how .mh-glow {
   background: radial-gradient(
     closest-side,
     rgba(170, 204, 242, 0.22),
     rgba(170, 204, 242, 0.07) 58%,
     rgba(170, 204, 242, 0)
   );
+}
+.mh-bloom {
+  position: absolute;
+  left: 50%;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgba(143, 240, 192, 0.18),
+    rgba(143, 240, 192, 0.05) 55%,
+    rgba(143, 240, 192, 0)
+  );
+  opacity: 0;
   pointer-events: none;
 }
 
-.mh-vizbox {
-  position: relative;
-}
-
-/* Nur die Animation des aktuellen Schritts, und nur solange Screen 2 aktiv
-   ist - beim Ankommen und bei jedem Schrittwechsel startet sie neu. */
 .mh-viz {
-  display: none;
+  position: relative;
+  display: flex;
   flex-direction: column;
   align-items: center;
   gap: calc(var(--mh-ring) * 0.2);
 }
-.mh-how[data-active="1"] .mh-viz[data-on="1"] {
-  display: flex;
-}
-.mh-viz[data-reset] *,
-.mh-viz[data-reset] *::before {
-  transition: none !important;
-  animation: none !important;
-}
 
-.mh-glyph {
+.mh-ring {
+  position: relative;
   display: block;
   flex: none;
   width: var(--mh-ring);
   height: var(--mh-ring);
+}
+.mh-ring__svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
   overflow: visible;
+}
+/* Radius wie im Prototyp: halbe Groesse minus 2px (im 148er-Feld 74 - 2 x k).
+   Ohne CSS-r bleibt r = 72. */
+.mh-ring__bg,
+.mh-ring__arc {
+  r: calc(74px - 2px * var(--mh-k));
+}
+.mh-ring__bg {
+  fill: rgba(8, 24, 50, 0.35);
+  stroke: rgba(207, 228, 250, 0.16);
+  stroke-width: calc(1.5px * var(--mh-k));
+}
+.mh-ring__arc {
+  fill: none;
+  stroke: #cfe4fa;
+  stroke-width: calc(2px * var(--mh-k));
+  stroke-linecap: round;
+  stroke-dasharray: 100 100;
+  stroke-dashoffset: 0;
+}
+.mh-ring__check {
+  fill: none;
+  stroke: #fff;
+  stroke-width: calc(2px * var(--mh-k));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0;
+}
+.mh-ring__wing {
+  position: absolute;
+  left: 22%;
+  top: 22%;
+  width: 56%;
+  height: 56%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
+  opacity: 0;
+  transform: scale(0.84);
+}
+/* Neun Wellenbalken im Ring: 3px, Hoehe 0.34 x Ring. */
+.mh-ring__wave {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  opacity: 0;
+}
+.mh-ring__wave i {
+  display: block;
+  width: 3px;
+  height: calc(var(--mh-ring) * 0.34);
+  border-radius: 3px;
+  background: linear-gradient(#cfe4fa, #8fb6e3);
+  transform: scaleY(0.15);
+}
+
+@supports (width: round(1.5px, 1px)) {
+  .mh-how .mh-glow,
+  .mh-bloom {
+    top: round(calc(var(--mh-ring) / 2 - round(calc(var(--mh-ring) * 2.6), 1px) / 2), 1px);
+    width: round(calc(var(--mh-ring) * 2.6), 1px);
+    height: round(calc(var(--mh-ring) * 2.6), 1px);
+  }
+  .mh-viz {
+    gap: round(calc(var(--mh-ring) * 0.2), 1px);
+  }
+  .mh-ring__wave i {
+    height: round(calc(var(--mh-ring) * 0.34), 1px);
+  }
 }
 
 .mh-viz__txt {
@@ -611,25 +734,42 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  min-width: 0;
 }
 .mh-viz__line {
+  display: grid;
+  justify-items: center;
   min-height: 1.2em;
   font:
     500 var(--mh-vtext) / 1.2 "Space Grotesk",
     sans-serif;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
   color: #fff;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.mh-viz__spacer {
-  display: block;
-  height: 16px;
+.mh-viz__typed,
+.mh-sum {
+  grid-area: 1 / 1;
+}
+.mh-sum {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  transform: translateY(4px);
+}
+.mh-sum__check {
+  font-size: 0.8em;
+  color: #8ff0c0;
 }
 
+.mh-viz__status {
+  display: grid;
+  justify-items: center;
+  min-height: 16px;
+}
 .mh-status {
+  grid-area: 1 / 1;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -640,9 +780,6 @@
   color: #8ff0c0;
   opacity: 0;
   transform: translateY(4px);
-  transition:
-    opacity 0.6s ease,
-    transform 0.6s ease;
 }
 .mh-status__dot {
   width: 7px;
@@ -651,226 +788,11 @@
   background: #4ade96;
   box-shadow: 0 0 10px #4ade96;
 }
-.mh-viz[data-done="1"] .mh-status {
-  opacity: 1;
-  transform: none;
-}
 
-/* Schritt 1: Ring fuellt sich (1.4 s), dann der Haken. Radius wie im Prototyp
-   halbe Groesse minus 2px (im 148er-Feld 74 - 2 * k); pathLength = 452.389
-   haelt die Strich-Laengen unabhaengig davon. Ohne CSS-r bleibt r = 72. */
-.mh-ring__bg,
-.mh-ring__prog,
-.mh-mcp__ring {
-  r: calc(74px - 2px * var(--mh-k));
-}
-.mh-ring__bg {
-  fill: rgba(8, 24, 50, 0.35);
-  stroke: rgba(207, 228, 250, 0.16);
-  stroke-width: calc(1.5px * var(--mh-k));
-}
-.mh-ring__prog {
-  fill: none;
-  stroke: #cfe4fa;
-  stroke-width: calc(2px * var(--mh-k));
-  stroke-linecap: round;
-  stroke-dasharray: 452.389;
-  stroke-dashoffset: 452.389;
-  transition: stroke-dashoffset 1.4s cubic-bezier(0.6, 0.05, 0.3, 1);
-}
-.mh-ring__check {
-  fill: none;
-  stroke: #fff;
-  stroke-width: calc(2.2px * var(--mh-k));
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 148;
-  stroke-dashoffset: 148;
-  transition: stroke-dashoffset 0.45s ease;
-}
-.mh-viz--num:is([data-phase="1"], [data-phase="2"], [data-phase="3"]) .mh-ring__prog {
-  stroke-dashoffset: 0;
-}
-.mh-viz--num:is([data-phase="2"], [data-phase="3"]) .mh-ring__check {
-  stroke-dashoffset: 0;
-}
-
-/* Schritt 2: Ring sucht (dreht), rastet gruen ein, der Fluegel wird voll. */
-.mh-glyph--mcp {
-  position: relative;
-}
-.mh-mcp__spin {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  animation: mhSpin 1.1s linear infinite;
-}
-.mh-mcp__ring {
-  fill: rgba(8, 24, 50, 0.35);
-  stroke: #cfe4fa;
-  stroke-width: calc(2px * var(--mh-k));
-  stroke-linecap: round;
-  stroke-dasharray: 99.526 352.863;
-  transition:
-    stroke 0.5s ease,
-    stroke-dasharray 0.5s ease;
-}
-.mh-mcp__wing {
-  position: absolute;
-  left: 22%;
-  top: 22%;
-  width: 56%;
-  height: 56%;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
-  opacity: 0.55;
-  transition: opacity 0.5s ease;
-}
-.mh-viz--mcp:is([data-phase="1"], [data-phase="2"]) .mh-mcp__spin {
-  animation: none;
-}
-.mh-viz--mcp:is([data-phase="1"], [data-phase="2"]) .mh-mcp__ring {
-  stroke: #8ff0c0;
-  stroke-dasharray: 452.389 0;
-}
-.mh-viz--mcp:is([data-phase="1"], [data-phase="2"]) .mh-mcp__wing {
-  opacity: 1;
-}
-
-/* Schritt 3: Waveform (24 Balken, 70% Hoehe), nach 3.2 s flach + "Summary". */
-.mh-glyph--wave {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: calc(var(--mh-ring) * 2.1);
-}
-.mh-glyph--wave i {
-  --mh-b: 0.55;
-  --mh-dur: 0.9s;
-  --mh-del: 0s;
-  display: block;
-  width: 3px;
-  height: calc(var(--mh-ring) * 0.7);
-  border-radius: 3px;
-  background: linear-gradient(#cfe4fa, #8fb6e3);
-  transform-origin: center;
-  transform: scaleY(var(--mh-b));
-  transition: transform 0.9s ease;
-  animation: mhWave var(--mh-dur) ease-in-out var(--mh-del) infinite alternate;
-}
-/* Grundhoehe und Versatz wiederholen sich alle 7 Balken, die Dauer alle 5. */
-.mh-glyph--wave i:nth-child(7n + 2) {
-  --mh-b: 0.9;
-  --mh-del: -0.13s;
-}
-.mh-glyph--wave i:nth-child(7n + 3) {
-  --mh-b: 0.4;
-  --mh-del: -0.26s;
-}
-.mh-glyph--wave i:nth-child(7n + 4) {
-  --mh-b: 1;
-  --mh-del: -0.39s;
-}
-.mh-glyph--wave i:nth-child(7n + 5) {
-  --mh-b: 0.65;
-  --mh-del: -0.52s;
-}
-.mh-glyph--wave i:nth-child(7n + 6) {
-  --mh-b: 0.8;
-  --mh-del: -0.65s;
-}
-.mh-glyph--wave i:nth-child(7n + 7) {
-  --mh-b: 0.35;
-  --mh-del: -0.78s;
-}
-.mh-glyph--wave i:nth-child(5n + 2) {
-  --mh-dur: 1.07s;
-}
-.mh-glyph--wave i:nth-child(5n + 3) {
-  --mh-dur: 1.24s;
-}
-.mh-glyph--wave i:nth-child(5n + 4) {
-  --mh-dur: 1.41s;
-}
-.mh-glyph--wave i:nth-child(5n + 5) {
-  --mh-dur: 1.58s;
-}
-.mh-viz--wave[data-phase="1"] .mh-glyph--wave i {
-  transform: scaleY(0.12);
-  animation: none;
-}
-
-/* Wie im Prototyp auf ganze Pixel gerundet: Lichtschein, Abstand, Waveform. */
-@supports (width: round(1.5px, 1px)) {
-  .mh-glow {
-    top: round(calc(var(--mh-ring) / 2 - round(calc(var(--mh-ring) * 2.6), 1px) / 2), 1px);
-    width: round(calc(var(--mh-ring) * 2.6), 1px);
-    height: round(calc(var(--mh-ring) * 2.6), 1px);
-  }
-  .mh-viz {
-    gap: round(calc(var(--mh-ring) * 0.2), 1px);
-  }
-  .mh-glyph--wave {
-    width: round(calc(var(--mh-ring) * 2.1), 1px);
-  }
-}
-
-.mh-sum {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  opacity: 0;
-  transform: translateY(4px);
-  transition:
-    opacity 0.6s ease,
-    transform 0.6s ease;
-}
-.mh-sum__check {
-  font-size: 0.8em;
-  color: #8ff0c0;
-}
-.mh-viz--wave[data-phase="1"] .mh-sum {
-  opacity: 1;
-  transform: none;
-}
-
-@keyframes mhSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes mhWave {
-  from {
-    transform: scaleY(0.18);
-  }
-  to {
-    transform: scaleY(1);
-  }
-}
-/* Zwei gleiche Keyframes: der Wechsel des Namens startet die Fuellung neu,
-   auch wenn derselbe Schritt erneut angetippt wird. */
-@keyframes mhFillA {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-@keyframes mhFillB {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-/* Schritttitel + Zeile; wechseln per Ueberblendung und gleiten 20px seitlich. */
+/* Unter der Animation: Titel + 3 Zeilen untereinander, per Wischen oder
+   Leiste wechselbar. */
 .mh-how .mh-controls {
-  width: 100%;
+  display: block;
   touch-action: pan-y;
   -webkit-user-select: none;
   user-select: none;
@@ -880,57 +802,50 @@
 }
 .mh-step {
   grid-area: 1 / 1;
-  opacity: 0;
-  transform: translateX(20px);
-  pointer-events: none;
-  transition:
-    opacity 0.6s ease,
-    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.mh-step[data-rel="before"] {
-  transform: translateX(-20px);
+.mh-step__rows {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(1px, 0.4svh, 4px);
+  margin-top: clamp(6px, 1.1svh, 10px);
 }
-.mh-step[data-rel="cur"] {
-  opacity: 1;
-  transform: none;
-  pointer-events: auto;
-}
-.mh-step__line {
-  margin: clamp(6px, 1svh, 10px) auto 0;
+.mh-step__row {
+  margin: 0;
   max-width: 336px;
-  font-size: clamp(15px, 1.9svh, 16px);
-  line-height: 1.5;
-  color: rgba(232, 242, 253, 0.8);
+  font-size: clamp(14px, 1.9svh, 16px);
+  line-height: 1.45;
+  color: rgba(232, 242, 253, 0.86);
   text-wrap: balance;
 }
 
-/* Schritt-Leiste: 3 Balken a 2px, Tippflaeche 48px. Der aktive Balken fuellt
-   sich im Autoplay in 6.5 s; erledigt = weiss, offen = 22% weiss. */
+/* Schritt-Leiste: 3 Segmente a 3px, Abstand 6, max. 280px, mittig, Tippflaeche
+   44px, keine Labels. Erledigt = weiss, offen = 18% weiss. */
 .mh-bars {
   display: flex;
-  gap: 10px;
-  margin-top: clamp(10px, 2svh, 18px);
+  gap: 6px;
+  width: 100%;
+  max-width: 280px;
+  margin: clamp(6px, 1.2svh, 12px) auto 0;
 }
 .mh .mh-bar {
   flex: 1;
   min-width: 0;
-  height: 48px;
+  height: 44px;
   padding: 0;
   border: 0;
   background: none;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
+  align-items: center;
 }
 .mh-bar__track {
   position: relative;
   display: block;
   width: 100%;
-  height: 2px;
-  border-radius: 2px;
+  height: 3px;
+  border-radius: 3px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.18);
 }
 .mh-bar__done,
 .mh-bar__fill {
@@ -950,27 +865,6 @@
   display: none;
   transform-origin: 0 50%;
 }
-.mh-how[data-auto="1"][data-active="1"] .mh-bar[data-state="cur"] .mh-bar__fill {
-  display: block;
-  animation: mhFillA 6.5s linear forwards;
-}
-.mh-how[data-auto="1"][data-active="1"][data-run="b"] .mh-bar[data-state="cur"] .mh-bar__fill {
-  animation-name: mhFillB;
-}
-.mh-bar__label {
-  display: block;
-  width: 100%;
-  font:
-    500 12px/1 "Space Grotesk",
-    sans-serif;
-  letter-spacing: 0.04em;
-  text-align: center;
-  color: rgba(207, 228, 250, 0.66);
-  transition: color 0.4s ease;
-}
-.mh-bar[data-state="cur"] .mh-bar__label {
-  color: #fff;
-}
 
 /* ------------------------------------------------------ Screen 3: Preise */
 
@@ -981,16 +875,30 @@
   align-items: center;
 }
 
+/* Preis und "/ month" stehen zusammen mittig, dahinter ein weicher Lichtschein. */
 .mh-price-row {
+  position: relative;
   display: flex;
   align-items: baseline;
   justify-content: center;
-  gap: 10px;
+}
+.mh-glow--price {
+  top: 50%;
+  width: clamp(220px, 36svh, 320px);
+  height: clamp(220px, 36svh, 320px);
+  transform: translate(-50%, -50%);
+  background: radial-gradient(
+    closest-side,
+    rgba(170, 204, 242, 0.2),
+    rgba(170, 204, 242, 0.06) 58%,
+    rgba(170, 204, 242, 0)
+  );
 }
 
 /* Jedes Zeichen in einem eigenen Schacht; nur die Ziffer, die sich zwischen
-   den Tarifen unterscheidet, rollt senkrecht durch (0.7 s). */
+   den Tarifen unterscheidet, rollt senkrecht durch. */
 .mh-price__num {
+  position: relative;
   display: inline-flex;
   white-space: pre;
   font-family: "Instrument Serif", serif;
@@ -1006,27 +914,16 @@
 }
 .mh-roll > span {
   grid-area: 1 / 1;
-  opacity: 0;
-  transform: translateY(100%);
-  transition:
-    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1),
-    opacity 0.45s ease;
-}
-.mh-roll > span[data-rel="before"] {
-  transform: translateY(-100%);
-}
-.mh-roll > span[data-rel="cur"] {
-  opacity: 1;
-  transform: translateY(0);
-  transition-delay: 60ms;
 }
 .mh-price__per {
+  position: relative;
+  padding-left: 10px;
   font-size: 15px;
+  white-space: nowrap;
   color: rgba(207, 228, 250, 0.8);
 }
 
-/* Minuten-Leiste: 4 Segmente a 3px, eins = 30 Minuten. Fuellen nacheinander
-   (150 ms), leeren rueckwaerts (90 ms); beim Ankommen ab 520 ms. */
+/* Minuten-Leiste: 4 Segmente a 3px, eins = 30 Minuten. */
 .mh-segs {
   display: flex;
   gap: 6px;
@@ -1049,41 +946,9 @@
   background: #fff;
   transform-origin: 0 50%;
   transform: scaleX(0);
-  transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.mh-seg:nth-child(1) > i {
-  transition-delay: 270ms;
-}
-.mh-seg:nth-child(2) > i {
-  transition-delay: 180ms;
-}
-.mh-seg:nth-child(3) > i {
-  transition-delay: 90ms;
 }
 .mh-seg.is-on > i {
   transform: scaleX(1);
-  transition-delay: 0ms;
-}
-.mh-seg.is-on:nth-child(2) > i {
-  transition-delay: 150ms;
-}
-.mh-seg.is-on:nth-child(3) > i {
-  transition-delay: 300ms;
-}
-.mh-seg.is-on:nth-child(4) > i {
-  transition-delay: 450ms;
-}
-.mh-price[data-arrive] .mh-seg.is-on:nth-child(1) > i {
-  transition-delay: 520ms;
-}
-.mh-price[data-arrive] .mh-seg.is-on:nth-child(2) > i {
-  transition-delay: 670ms;
-}
-.mh-price[data-arrive] .mh-seg.is-on:nth-child(3) > i {
-  transition-delay: 820ms;
-}
-.mh-price[data-arrive] .mh-seg.is-on:nth-child(4) > i {
-  transition-delay: 970ms;
 }
 
 .mh-minutes {
@@ -1097,8 +962,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Die drei Leistungen: Zeile fuer Zeile (90 ms Versatz) - alt verschwimmt,
-   neu kommt scharf herein. */
 .mh-benefits {
   width: 100%;
   margin-top: clamp(14px, 2.6svh, 24px);
@@ -1120,56 +983,9 @@
   line-height: 1.45;
   color: rgba(232, 242, 253, 0.9);
   text-wrap: balance;
-  opacity: 0;
-  transform: translateY(8px);
-  filter: blur(4px);
-  transition:
-    opacity 0.55s ease,
-    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1),
-    filter 0.55s ease;
-}
-.mh-benefit[data-rel="before"] {
-  transform: translateY(-8px);
-}
-.mh-benefit-row:nth-child(2) .mh-benefit {
-  transition-delay: 40ms;
-}
-.mh-benefit-row:nth-child(3) .mh-benefit {
-  transition-delay: 80ms;
-}
-.mh-price[data-active="1"] .mh-benefit[data-rel="cur"] {
-  opacity: 1;
-  transform: none;
-  filter: none;
-  transition-delay: 160ms;
-}
-.mh-price[data-active="1"] .mh-benefit-row:nth-child(2) .mh-benefit[data-rel="cur"] {
-  transition-delay: 250ms;
-}
-.mh-price[data-active="1"] .mh-benefit-row:nth-child(3) .mh-benefit[data-rel="cur"] {
-  transition-delay: 340ms;
-}
-.mh-price[data-active="1"][data-arrive] .mh-benefit[data-rel="cur"] {
-  transition-delay: 680ms;
-}
-.mh-price[data-active="1"][data-arrive] .mh-benefit-row:nth-child(2) .mh-benefit[data-rel="cur"] {
-  transition-delay: 770ms;
-}
-.mh-price[data-active="1"][data-arrive] .mh-benefit-row:nth-child(3) .mh-benefit[data-rel="cur"] {
-  transition-delay: 860ms;
 }
 
-.mh-price .mh-controls,
-.mh-dev .mh-controls {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: clamp(10px, 1.5svh, 12px);
-}
-
-/* Umschalter: 52px, 4px Innenabstand, Segmente 44px; der Daumen gleitet per
-   translateX(n x 100%). */
+/* Umschalter: 52px, 4px Innenabstand, Segmente 44px, volle Breite. */
 .mh-toggle {
   position: relative;
   display: flex;
@@ -1251,14 +1067,43 @@
   left: calc(4px + 0.5 * (100% - 8px) / 2);
 }
 
-.mh-cta:not([data-rel="cur"]) {
-  display: none;
+/* "Choose ..." steht, nur der Tarifname rollt; seine Breite gleitet mit
+   (die Breite setzt hermes-mobile.js, ohne Skript gilt die breiteste). */
+.mh-cta__in {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  white-space: pre;
+}
+.mh-cta__roll {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  overflow: hidden;
+}
+.mh-cta__name {
+  grid-area: 1 / 1;
 }
 
 /* ------------------------------------------------ Screen 4: Entwickler */
 
 .mh-dev .mh-focus {
   width: 100%;
+}
+.mh-glow--dev {
+  top: 58%;
+  width: clamp(240px, 38svh, 340px);
+  height: clamp(240px, 38svh, 340px);
+  transform: translate(-50%, -50%);
+  background: radial-gradient(
+    closest-side,
+    rgba(170, 204, 242, 0.18),
+    rgba(170, 204, 242, 0.06) 58%,
+    rgba(170, 204, 242, 0)
+  );
+}
+.mh-ways {
+  position: relative;
   display: grid;
 }
 .mh-way {
@@ -1266,29 +1111,16 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  opacity: 0;
-  transform: translateX(18px);
-  pointer-events: none;
-  transition:
-    opacity 0.5s ease,
-    transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.mh-way[data-rel="before"] {
-  transform: translateX(-18px);
-}
-.mh-way[data-rel="cur"] {
-  opacity: 1;
-  transform: none;
-  pointer-events: auto;
 }
 
+/* Code-Feld: volle Breite, Inhalt zentriert. */
 .mh-code {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   width: 100%;
-  min-height: clamp(92px, 13.6svh, 120px);
+  min-height: clamp(84px, 11svh, 100px);
   box-sizing: border-box;
   margin-top: clamp(12px, 2.4svh, 22px);
   padding: 16px 20px;
@@ -1307,7 +1139,6 @@
     Menlo,
     Consolas,
     monospace;
-  color: #e8f2fd;
   text-wrap: balance;
   overflow-wrap: anywhere;
 }
@@ -1316,33 +1147,93 @@
     font-size: 13px;
   }
 }
-.mh .mh-code__line--text {
+.mh .mh-code--text .mh-code__line {
   font:
     400 16px/1.5 "Space Grotesk",
     sans-serif;
 }
-.mh-code__prompt {
+
+/* Farben: "$ " und Flags Himmelblau, URL Hellblau, Rest #e8f2fd, der Link
+   bei "Your AI" fett weiss. */
+.mh-tk--p,
+.mh-tk--f {
   color: #8fb6e3;
 }
+.mh-tk--u {
+  color: #cfe4fa;
+}
+.mh-tk--n {
+  color: #e8f2fd;
+}
+.mh-tk--b {
+  font-weight: 600;
+  color: #fff;
+}
+/* Der noch nicht getippte Rest steht schon da, aber transparent - so
+   verschiebt sich beim Tippen nichts. */
+.mh-tk__off {
+  color: transparent;
+}
+.mh-caret {
+  position: relative;
+}
+.mh-caret::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 0.12em;
+  width: 0.5em;
+  height: 1.1em;
+  border-radius: 1px;
+  background: #8fb6e3;
+}
 
+/* Beim Kopieren wird der Code markiert wie ausgewaehlter Text. */
+.mh-code__sel {
+  border-radius: 4px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  background: rgba(143, 182, 227, 0);
+}
+.mh-dev[data-copied="1"] .mh-way[data-rel="cur"] .mh-code__sel {
+  background: rgba(143, 182, 227, 0.3);
+}
+
+/* "Copy" rollt senkrecht zu "✓ Copied", Text gruen. */
 .mh .mh-copy {
   transition: color 0.3s ease;
 }
 .mh .mh-dev[data-copied="1"] .mh-copy {
   color: #16784c;
 }
+.mh-copy__roll {
+  display: inline-grid;
+  justify-items: center;
+  overflow: hidden;
+  white-space: pre;
+}
+.mh-copy__label {
+  grid-area: 1 / 1;
+}
 
 /* ------------------------------------------------- Screen 5: Abschluss */
 
+/* Aufsteigender Faden ueber der Headline. */
+.mh-rise {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 1px;
+  height: clamp(26px, 5.6svh, 52px);
+  margin-bottom: clamp(14px, 2.2svh, 20px);
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(207, 228, 250, 0), rgba(207, 228, 250, 0.55));
+}
 .mh-h2--close {
   margin: 0;
-  max-width: 340px;
-}
-.mh-h2--close em {
-  display: inline;
 }
 .mh-s-close .mh-pill {
-  margin-top: clamp(20px, 3.4svh, 30px);
+  margin-top: clamp(22px, 3.6svh, 32px);
 }
 
 .mh-footer {
@@ -1354,12 +1245,19 @@
   padding-top: clamp(6px, 1svh, 10px);
   border-top: 1px solid rgba(207, 228, 250, 0.14);
 }
+/* Zwei feste Zeilen, mittig, Abstand 14; die zweite rueckt 10px hoch. */
 .mh-links {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: center;
+}
+.mh-links__row {
+  display: flex;
   justify-content: center;
   column-gap: 14px;
-  max-width: 346px;
+}
+.mh-links__row + .mh-links__row {
+  margin-top: -10px;
 }
 .mh .mh-link {
   display: flex;
@@ -1372,6 +1270,7 @@
     400 13px "Space Grotesk",
     sans-serif;
   color: rgba(207, 228, 250, 0.8);
+  white-space: nowrap;
 }
 .mh .mh-link:hover {
   color: #fff;
@@ -1380,29 +1279,6 @@
   font-size: 12px;
   line-height: 1.4;
   color: rgba(207, 228, 250, 0.56);
-}
-
-/* ------------------------------------------- Reduzierte Bewegung (7) */
-
-/* Kein Parallax, keine Staffel, kein Versatz - nur Ueberblenden. Das Autoplay
-   schaltet hermes-mobile.js ab. */
-@media (prefers-reduced-motion: reduce) {
-  .mh-clouds {
-    transform: scale(1.08);
-  }
-  .mh[data-ready] .mh-r,
-  .mh[data-ready] .mh-thread,
-  .mh-step,
-  .mh-way,
-  .mh-roll > span,
-  .mh-benefit {
-    transform: none !important;
-    filter: none !important;
-    transition-delay: 0ms !important;
-  }
-  .mh-seg > i {
-    transition-delay: 0ms !important;
-  }
 }
 
 /* Unsichtbares Hilfsfeld, falls die Zwischenablage-API fehlt (hermes-mobile.js). */
