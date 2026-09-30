@@ -1,0 +1,59 @@
+name: Statische Prüfung
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: statische-pruefung-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  statische-pruefung:
+    name: Statische Prüfung
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Semgrep bereitstellen
+        env:
+          SEMGREP_IMAGE: semgrep/semgrep:1.177.0@sha256:acaac22ffc7b7cc5926de0751b223bce0b2491c33d18422fa72f632c78d81198
+        run: |
+          set -euo pipefail
+          docker pull --quiet "$SEMGREP_IMAGE"
+          mkdir -p "$RUNNER_TEMP/semgrep-bin"
+          cat > "$RUNNER_TEMP/semgrep-bin/semgrep" <<EOF
+          #!/bin/sh
+          exec docker run --rm --volume "\$PWD:\$PWD:ro" --workdir "\$PWD" --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory --env GIT_CONFIG_VALUE_0='*' "$SEMGREP_IMAGE" semgrep "\$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/semgrep-bin/semgrep"
+          echo "$RUNNER_TEMP/semgrep-bin" >> "$GITHUB_PATH"
+
+      - name: Kopien (jscpd)
+        run: node tools/basis-vergleich.mjs jscpd
+
+      - name: Toter Code (knip)
+        if: ${{ !cancelled() }}
+        run: node tools/basis-vergleich.mjs knip
+
+      - name: Injection-Muster (Semgrep)
+        if: ${{ !cancelled() }}
+        run: node tools/basis-vergleich.mjs semgrep
