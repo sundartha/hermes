@@ -263,3 +263,62 @@ test("sitzung: ein unbekanntes Modell endet mit Exit 1 und startet nichts", asyn
   assert.equal(result.status, EXIT_FAILURE);
   assert.equal(result.launch, undefined);
 });
+
+function writeOrder(name, content) {
+  const path = join(workDir, name);
+  writeFileSync(path, content);
+  return path;
+}
+
+test("sitzung: --auftrag gibt den Inhalt der Datei als erste Nachricht an claude", async () => {
+  const order = "Du baust Paket 99.\n\n---\nZweiter Absatz.\n";
+  const result = await runSession({
+    cwd: worktrees.paket.worktree,
+    token: BOT_TOKEN,
+    args: ["--auftrag", writeOrder("prompt-paket-99-probe.md", order)],
+  });
+  assert.equal(result.status, EXIT_OK, result.stderr);
+  assert.deepEqual(result.launch.args, [
+    "-i",
+    "claude",
+    "--model",
+    "opus",
+    "--permission-mode",
+    "acceptEdits",
+    "--",
+    order,
+  ]);
+});
+
+test("sitzung: --auftrag mit falscher Paketnummer endet mit Exit 1 und startet nichts", async () => {
+  const result = await runSession({
+    cwd: worktrees.paket.worktree,
+    token: BOT_TOKEN,
+    args: ["--auftrag", writeOrder("prompt-paket-98-probe.md", "Anderes Paket.\n")],
+  });
+  assert.equal(result.status, EXIT_FAILURE);
+  assert.match(result.stderr, /prompt-paket-98-probe\.md/);
+  assert.equal(result.launch, undefined);
+});
+
+test("sitzung: --auftrag mit fehlender Datei endet mit Exit 1 und startet nichts", async () => {
+  const result = await runSession({
+    cwd: worktrees.paket.worktree,
+    token: BOT_TOKEN,
+    args: ["--auftrag", join(workDir, "unterordner", "prompt-paket-99-probe.md")],
+  });
+  assert.equal(result.status, EXIT_FAILURE);
+  assert.match(result.stderr, /lässt sich nicht lesen/);
+  assert.equal(result.launch, undefined);
+});
+
+test("sitzung: --auftrag mit leerer Datei endet mit Exit 1 und startet nichts", async () => {
+  const result = await runSession({
+    cwd: worktrees.paket.worktree,
+    token: BOT_TOKEN,
+    args: ["--auftrag", writeOrder("prompt-paket-99-probe.md", "  \n")],
+  });
+  assert.equal(result.status, EXIT_FAILURE);
+  assert.match(result.stderr, /leer/);
+  assert.equal(result.launch, undefined);
+});
