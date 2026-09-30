@@ -13,6 +13,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
+import { withoutGitVariables } from "./werkzeuge/git-umgebung.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SCRIPT_PATH = resolve(REPO_ROOT, "tools/rotprobe.mjs");
@@ -43,7 +44,11 @@ let patchFile;
 let ghLog;
 
 function git(cwd, args) {
-  return spawnSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, ...IDENTITY } });
+  return spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: { ...withoutGitVariables(process.env), ...IDENTITY },
+  });
 }
 
 function gitOk(cwd, args) {
@@ -62,7 +67,7 @@ function runRotprobe(args) {
     cwd: repoDir,
     encoding: "utf8",
     env: {
-      ...process.env,
+      ...withoutGitVariables(process.env),
       ...IDENTITY,
       PATH: `${join(workDir, "bin")}${delimiter}${process.env.PATH}`,
       ROTPROBE_GH_PROTOKOLL: ghLog,

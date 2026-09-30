@@ -15,6 +15,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
+import { withoutGitVariables } from "./werkzeuge/git-umgebung.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SCRIPT_PATH = resolve(REPO_ROOT, "tools/sitzung.mjs");
@@ -57,6 +58,7 @@ function gitIn(cwd, args) {
     {
       cwd,
       encoding: "utf8",
+      env: withoutGitVariables(process.env),
     },
   );
   assert.equal(run.status, EXIT_OK, run.stderr);
