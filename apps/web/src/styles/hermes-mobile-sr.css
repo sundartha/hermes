@@ -1,0 +1,16 @@
+/* Plan "agent-ready" (2026-09-30): unsichtbare Vorlese-Fassung fuer Screenreader
+   und Browser-Agenten. Eigene Datei, damit hermes-mobile.css unveraendert bleibt. */
+/* Vorlese-Fassung der Tarife (MobileHome srText): unsichtbar, aber im
+   Accessibility-Baum. Die sichtbare Preis-Rolle darunter ist aria-hidden. */
+.mh-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
