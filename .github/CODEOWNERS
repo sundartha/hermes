@@ -13,6 +13,7 @@ tsconfig*.json @Antonio20045 @jonas986
 /.dependency-cruiser.cjs @Antonio20045 @jonas986
 /.dependency-cruiser-known-violations.json @Antonio20045 @jonas986
 /docs/sicherheitsgrenzen.md @Antonio20045 @jonas986
+/docs/sicherheitsabgleich.json @Antonio20045 @jonas986
 /test/testbaenke-run.mjs @Antonio20045 @jonas986
 /test/werkzeuge/ @Antonio20045 @jonas986
 /test/werkzeuge/werkzeugtexte.json @Antonio20045 @jonas986
