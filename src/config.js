@@ -2,6 +2,8 @@ import dotenv from "dotenv";
 import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+
+
 import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
 // GAP-07: boot-guard.js und telephony/stt-profile.js importieren ihrerseits nur
 // import-freie bzw. Blatt-Module -> kein Zyklus, obwohl beide sonst downstream sitzen.
