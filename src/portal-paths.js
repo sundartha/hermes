@@ -41,3 +41,7 @@ export const CHECKOUT_RETURN = Object.freeze({
 // ausliefert: der Mount liegt VOR express.static und wuerde sie beschatten.
 export const LOGIN_ALIAS_PATHS = Object.freeze(["/login", "/signin", "/sign-in"]);
 export const APP_ALIAS_PATHS = Object.freeze(["/dashboard", "/account", "/portal", "/admin"]);
+
+export function ungenutzterProbeExport() {
+  return "nie benutzt";
+}
