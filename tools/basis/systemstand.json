@@ -1,0 +1,27 @@
+{
+  "schritte": {
+    "1a": {
+      "start": null,
+      "schaetzung": null,
+      "erfuelltSeit": {
+        "lint-konfiguration": "2026-09-30",
+        "umgeschriebener-test": "2026-09-30",
+        "lint-fehler": "2026-09-30",
+        "push-auf-master": "2026-09-30",
+        "src-ohne-menschen": "2026-09-30",
+        "master-gruen": "2026-09-30"
+      }
+    },
+    "1b": { "start": null, "schaetzung": null, "erfuelltSeit": {} },
+    "2": { "start": null, "schaetzung": null, "erfuelltSeit": {} },
+    "3": { "start": null, "schaetzung": null, "erfuelltSeit": {} },
+    "4": { "start": null, "schaetzung": null, "erfuelltSeit": {} },
+    "5": { "start": null, "schaetzung": null, "erfuelltSeit": {} },
+    "6": { "start": null, "schaetzung": null, "erfuelltSeit": {} },
+    "7": { "start": null, "schaetzung": null, "erfuelltSeit": {} },
+    "8": { "start": null, "schaetzung": null, "erfuelltSeit": {} },
+    "9": { "start": null, "schaetzung": null, "erfuelltSeit": {} },
+    "10": { "start": null, "schaetzung": null, "erfuelltSeit": {} },
+    "11": { "start": null, "schaetzung": null, "erfuelltSeit": {} }
+  }
+}
