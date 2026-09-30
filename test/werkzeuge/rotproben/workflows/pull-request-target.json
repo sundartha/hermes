@@ -1,0 +1,20 @@
+{
+  "titel": "Auslöser pull_request_target",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  pull_request_target:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        run: echo ok"
+    ]
+  },
+  "erwartet": "pull_request_target ist als Auslöser verboten"
+}

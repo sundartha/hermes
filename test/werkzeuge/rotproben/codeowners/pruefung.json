@@ -1,0 +1,11 @@
+{
+  "titel": "Abgleich von CODEOWNERS und Rollendateien",
+  "pfade": ["tools/codeowners-abgleich.mjs"],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/codeowners-abgleich.mjs"],
+    "zaehlen": "stderr-zeilen"
+  },
+  "probe": {
+    "befehl": ["node", "{wurzel}/tools/codeowners-abgleich.mjs"]
+  }
+}

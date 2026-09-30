@@ -1,0 +1,7 @@
+{
+  "titel": "Sicherheitsmeldungen (npm audit)",
+  "pfade": ["tools/audit-vergleich.mjs"],
+  "probe": {
+    "befehl": ["node", "{wurzel}/tools/audit-vergleich.mjs", "--basis", "HEAD~1"]
+  }
+}

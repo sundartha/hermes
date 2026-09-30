@@ -1,0 +1,13 @@
+{
+  "titel": "Mindestalter und Herkunft neuer Paketversionen",
+  "pfade": ["tools/lockfile-alter.mjs", "tools/basis/lieferkette-ausnahmen.json"],
+  "ausnahmen": {
+    "bezeichnung": "Ausnahmen vom Mindestalter",
+    "datei": "tools/basis/lieferkette-ausnahmen.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "mitnehmen": ["tools/basis/lieferkette-ausnahmen.json"],
+    "befehl": ["node", "{wurzel}/tools/lockfile-alter.mjs", "--basis", "HEAD~1"]
+  }
+}

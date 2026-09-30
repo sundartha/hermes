@@ -1,0 +1,11 @@
+{
+  "titel": "Funktion mit vier Argumenten",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function vier(erster, zweiter, dritter, vierter) {",
+      "  return [erster, zweiter, dritter, vierter];",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"max-params\""
+}

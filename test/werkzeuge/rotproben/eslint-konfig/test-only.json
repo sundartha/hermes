@@ -1,0 +1,10 @@
+{
+  "titel": "Test mit .only",
+  "dateien": {
+    "test/einzeln.test.js": [
+      "import { test } from \"node:test\";",
+      "test\u002eonly(\"nur dieser\", () => {});"
+    ]
+  },
+  "erwartet": "schaltet die übrigen Tests ab"
+}

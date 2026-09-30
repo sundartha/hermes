@@ -1,0 +1,23 @@
+{
+  "titel": "Injection-Muster (Semgrep)",
+  "pfade": [
+    "tools/basis-vergleich.mjs",
+    "tools/basis/semgrep-regeln.json",
+    "tools/basis/semgrep.json"
+  ],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "semgrep"],
+    "zaehlen": "zahlen",
+    "vor": [" neue Befunde", " bekannte"]
+  },
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene Befunde in der Basislinie",
+    "datei": "tools/basis/semgrep.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "mitnehmen": ["tools/basis/semgrep-regeln.json", "tools/basis/semgrep.json"],
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "semgrep"]
+  },
+  "benoetigt": "semgrep"
+}

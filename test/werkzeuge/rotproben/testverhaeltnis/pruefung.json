@@ -1,0 +1,13 @@
+{
+  "titel": "Testverhältnis",
+  "pfade": ["tools/testverhaeltnis.mjs", "tools/basis/testverhaeltnis.json"],
+  "ausnahmen": {
+    "bezeichnung": "Summe der beiden Obergrenzen",
+    "datei": "tools/basis/testverhaeltnis.json",
+    "zaehlen": "summe"
+  },
+  "probe": {
+    "mitnehmen": ["tools/basis/testverhaeltnis.json"],
+    "befehl": ["node", "{wurzel}/tools/testverhaeltnis.mjs", "--basis", "HEAD~1"]
+  }
+}

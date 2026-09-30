@@ -1,0 +1,20 @@
+{
+  "titel": "Fehler mit || true verschluckt",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        run: npm test || true"
+    ]
+  },
+  "erwartet": "|| true"
+}

@@ -1,0 +1,12 @@
+{
+  "titel": "Unerreichbarer Code",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function frueh() {",
+      "  return true;",
+      "  console.log(\"nie\");",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-unreachable\""
+}

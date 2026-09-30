@@ -1,0 +1,22 @@
+{
+  "titel": "Geheimnisse in einem PR-Workflow",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        env:",
+      "          ZUGANG: ${{ secrets.ZUGANG }}",
+      "        run: echo ok"
+    ]
+  },
+  "erwartet": "secrets in einem Workflow"
+}

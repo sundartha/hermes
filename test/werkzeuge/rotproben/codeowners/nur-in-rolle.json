@@ -1,0 +1,13 @@
+{
+  "titel": "Pfad nur in einer Rollendatei",
+  "dateien": {
+    ".github/CODEOWNERS": ["/tools/ @pruefer"],
+    ".claude/rollen/bau.json": [
+      "{\"permissions\": {\"deny\": [\"Edit(tools/**)\", \"Edit(docs/**)\", \"Edit(test/**)\"]}}"
+    ],
+    ".claude/rollen/test.json": [
+      "{\"permissions\": {\"deny\": [\"Edit(tools/**)\", \"Edit(src/**)\"]}}"
+    ]
+  },
+  "erwartet": "nur in .claude/rollen/bau.json"
+}

@@ -1,0 +1,10 @@
+{
+  "titel": "Regel per Kommentar abgeschaltet",
+  "dateien": {
+    "src/rotprobe.js": [
+      "/* eslint-disable no-magic-numbers */",
+      "export const verdoppelt = (wert) => wert * 42;"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-magic-numbers\""
+}

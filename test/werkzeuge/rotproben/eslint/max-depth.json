@@ -1,0 +1,22 @@
+{
+  "titel": "Fünf verschachtelte Bedingungen",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function tief(wert) {",
+      "  if (wert) {",
+      "    if (wert) {",
+      "      if (wert) {",
+      "        if (wert) {",
+      "          if (wert) {",
+      "            return wert;",
+      "          }",
+      "        }",
+      "      }",
+      "    }",
+      "  }",
+      "  return wert;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"max-depth\""
+}

@@ -1,0 +1,12 @@
+{
+  "titel": "ESLint-Konfiguration, Unterordner und only",
+  "pfade": ["tools/eslint-konfig-pruefen.mjs", "tools/basis/eslint-wirksam.json"],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/eslint-konfig-pruefen.mjs"],
+    "zaehlen": "stderr-zeilen"
+  },
+  "probe": {
+    "mitnehmen": ["eslint.config.js", "tools/basis/eslint-wirksam.json"],
+    "befehl": ["node", "{wurzel}/tools/eslint-konfig-pruefen.mjs"]
+  }
+}

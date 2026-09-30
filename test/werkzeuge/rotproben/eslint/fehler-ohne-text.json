@@ -1,0 +1,7 @@
+{
+  "titel": "Fehler ohne Meldung",
+  "dateien": {
+    "src/rotprobe.js": ["export function scheitert() {", "  throw new Error();", "}"]
+  },
+  "erwartet": "\"ruleId\":\"unicorn/error-message\""
+}

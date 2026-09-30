@@ -1,0 +1,11 @@
+{
+  "titel": "Anbieter-Adapter direkt importiert",
+  "dateien": {
+    "src/app.js": [
+      "import { wert } from \"./telephony/adapters/anbieter.js\";",
+      "export const kopie = wert;"
+    ],
+    "src/telephony/adapters/anbieter.js": ["export const wert = true;"]
+  },
+  "erwartet": "„telefonie-nur-ueber-ports“"
+}

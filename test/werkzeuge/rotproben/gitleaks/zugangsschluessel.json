@@ -1,0 +1,9 @@
+{
+  "titel": "Zugangsschlüssel von GitHub im Code, erst in der Probe zusammengesetzt",
+  "dateien": {
+    "src/zugang.js": [
+      ["export const zugang = \"gh", "p", "_7Qm2Xv9LpR4tZk8Wn", "B3cYh6JdF1sGa5EuN0o\";"]
+    ]
+  },
+  "erwartet": "leaks found"
+}

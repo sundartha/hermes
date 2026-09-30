@@ -1,0 +1,14 @@
+{
+  "titel": "Fünf Werkzeug-Testzeilen auf eine Werkzeugzeile",
+  "dateien": {
+    "tools/werkzeug.mjs": ["export const wert = true;"],
+    "test/werkzeuge/viele.test.js": [
+      "export const fall0 = true;",
+      "export const fall1 = true;",
+      "export const fall2 = true;",
+      "export const fall3 = true;",
+      "export const fall4 = true;"
+    ]
+  },
+  "erwartet": "Werkzeug-Testverhältnis 5.00"
+}

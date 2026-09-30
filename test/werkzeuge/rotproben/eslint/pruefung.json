@@ -1,0 +1,36 @@
+{
+  "titel": "ESLint-Regeln",
+  "pfade": [
+    "eslint.config.*",
+    "eslint-suppressions.json",
+    "eslint-suppressions.empty.json",
+    "eslint-legacy-exceptions.json"
+  ],
+  "treffer": {
+    "befehl": [
+      "node",
+      "{wurzel}/node_modules/eslint/bin/eslint.js",
+      ".",
+      "--suppressions-location",
+      "eslint-suppressions.empty.json",
+      "--format",
+      "json"
+    ],
+    "zaehlen": "eslint-json"
+  },
+  "ausnahmen": {
+    "bezeichnung": "Unterdrückte Verstöße in eslint-suppressions.json",
+    "datei": "eslint-suppressions.json",
+    "zaehlen": "summe"
+  },
+  "probe": {
+    "mitnehmen": ["eslint.config.js"],
+    "befehl": [
+      "node",
+      "{wurzel}/node_modules/eslint/bin/eslint.js",
+      "--format",
+      "json",
+      "{dateien}"
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "titel": "Datei, die niemand importiert",
+  "dateien": {
+    "package.json": ["{ \"name\": \"rotprobe\", \"type\": \"module\" }"],
+    "src/server.js": ["export const start = true;"],
+    "src/unbenutzt.js": ["export const wert = true;"]
+  },
+  "erwartet": "src/unbenutzt.js"
+}

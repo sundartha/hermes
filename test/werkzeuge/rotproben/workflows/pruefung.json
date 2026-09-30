@@ -1,0 +1,11 @@
+{
+  "titel": "Workflow-Regeln",
+  "pfade": ["tools/workflows-pruefen.mjs"],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/workflows-pruefen.mjs"],
+    "zaehlen": "stderr-zeilen"
+  },
+  "probe": {
+    "befehl": ["node", "{wurzel}/tools/workflows-pruefen.mjs"]
+  }
+}

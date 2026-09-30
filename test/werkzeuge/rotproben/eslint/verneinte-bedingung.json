@@ -1,0 +1,15 @@
+{
+  "titel": "Verneinte Bedingung mit else",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function wahl(wert) {",
+      "  if (!wert) {",
+      "    return \"nein\";",
+      "  } else {",
+      "    return \"ja\";",
+      "  }",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-negated-condition\""
+}

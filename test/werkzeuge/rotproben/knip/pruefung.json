@@ -1,0 +1,18 @@
+{
+  "titel": "Toter Code (knip)",
+  "pfade": ["tools/basis-vergleich.mjs", "knip.json", "tools/basis/knip.json"],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "knip"],
+    "zaehlen": "zahlen",
+    "vor": [" neue Befunde", " bekannte"]
+  },
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene Befunde in der Basislinie",
+    "datei": "tools/basis/knip.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "mitnehmen": ["knip.json", "tools/basis/knip.json"],
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "knip"]
+  }
+}

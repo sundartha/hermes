@@ -1,0 +1,10 @@
+{
+  "titel": "Übersprungener Test",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "import { test } from \"node:test\";",
+      "test.skip(\"übersprungen\", () => {});"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-restricted-syntax\""
+}

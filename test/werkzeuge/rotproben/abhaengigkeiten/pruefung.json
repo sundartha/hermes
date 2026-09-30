@@ -1,0 +1,22 @@
+{
+  "titel": "Abhängigkeitsregeln",
+  "pfade": [
+    "tools/abhaengigkeiten.mjs",
+    ".dependency-cruiser.cjs",
+    ".dependency-cruiser-known-violations.json"
+  ],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/abhaengigkeiten.mjs", "--basis", "{basis}"],
+    "zaehlen": "zahlen",
+    "vor": [" Altverstöße"]
+  },
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene Verstöße",
+    "datei": ".dependency-cruiser-known-violations.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "mitnehmen": [".dependency-cruiser.cjs"],
+    "befehl": ["node", "{wurzel}/tools/abhaengigkeiten.mjs", "--basis", "HEAD~1"]
+  }
+}

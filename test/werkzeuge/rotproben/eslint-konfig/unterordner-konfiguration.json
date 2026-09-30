@@ -1,0 +1,7 @@
+{
+  "titel": "ESLint-Konfiguration in einem Unterordner",
+  "dateien": {
+    "src/modul/eslint.config.js": ["export default [];"]
+  },
+  "erwartet": "ESLint-Konfiguration außerhalb des Wurzelordners"
+}

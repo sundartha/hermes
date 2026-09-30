@@ -1,0 +1,13 @@
+{
+  "titel": "Pfad nur in CODEOWNERS",
+  "dateien": {
+    ".github/CODEOWNERS": ["/tools/ @pruefer", "/docs/ @pruefer"],
+    ".claude/rollen/bau.json": [
+      "{\"permissions\": {\"deny\": [\"Edit(tools/**)\", \"Edit(test/**)\"]}}"
+    ],
+    ".claude/rollen/test.json": [
+      "{\"permissions\": {\"deny\": [\"Edit(tools/**)\", \"Edit(src/**)\"]}}"
+    ]
+  },
+  "erwartet": "nur in .github/CODEOWNERS"
+}

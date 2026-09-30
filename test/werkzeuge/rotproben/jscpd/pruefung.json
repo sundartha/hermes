@@ -1,0 +1,18 @@
+{
+  "titel": "Kopien (jscpd)",
+  "pfade": ["tools/basis-vergleich.mjs", ".jscpd.json", "tools/basis/jscpd.json"],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "jscpd"],
+    "zaehlen": "zahlen",
+    "vor": [" neue Befunde", " bekannte"]
+  },
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene Befunde in der Basislinie",
+    "datei": "tools/basis/jscpd.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "mitnehmen": [".jscpd.json", "tools/basis/jscpd.json"],
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "jscpd"]
+  }
+}
