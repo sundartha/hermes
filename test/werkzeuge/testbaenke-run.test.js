@@ -18,6 +18,10 @@ const MAX_RED_LINES = 30;
 const MANY_FAILURES = 40;
 const PROTOCOL_DIR = ".pruefung";
 const MIGRATED_LIST = join(REPO_ROOT, "test/abnahme-ausgewandert.json");
+const SHARD_TOTAL = 2;
+const PASSED_COUNT = /^(\d+) bestanden/m;
+const RESULT_FILE = join(PROTOCOL_DIR, "regression.json");
+const GREEN_CASES = ["gruener Fall", "noch ein gruener Fall"];
 const CRITERION_NAME = "ABNAHME-PROBE1: Kriterium im Unterordner | ROT WEIL: keiner | FIX: keiner";
 
 function runBank(directory, bank) {
@@ -97,4 +101,38 @@ test("die Abnahme-Zahl zaehlt Testdateien in Unterordnern nicht als Kriterien", 
 
   assert.equal(result.status, 0, result.stdout);
   assert.match(result.stdout, new RegExp(`^${criteria} von ${criteria} Abnahmekriterien erfuellt$`, "m"));
+});
+
+function passedCount(output) {
+  return Number(PASSED_COUNT.exec(output)?.[1]);
+}
+
+test("mit --test-shard faehrt jeder Teil nur seine Testdateien", (context) => {
+  const directory = probeDirectory(context, {
+    "test/erste.test.js": passingTest("erster Fall"),
+    "test/zweite.test.js": passingTest("zweiter Fall"),
+  });
+  const shards = Array.from({ length: SHARD_TOTAL }, (_unused, offset) => offset + 1);
+
+  const results = shards.map((shard) =>
+    runIn(directory, process.execPath, [RUNNER, "regression", "--", `--test-shard=${shard}/${SHARD_TOTAL}`]),
+  );
+
+  for (const result of results) {
+    assert.equal(result.status, 0, result.stdout);
+    assert.equal(passedCount(result.stdout), 1, result.stdout);
+  }
+});
+
+test("der Lauf hinterlegt die Zahl der bestandenen Tests maschinenlesbar", (context) => {
+  const directory = probeDirectory(context, {
+    "test/gruen.test.js": passingTest(GREEN_CASES[0]),
+    "test/auch-gruen.test.js": passingTest(GREEN_CASES[1]),
+    "test/rot.test.js": failingTest("roter Fall", "x"),
+  });
+
+  runRegressionBank(directory);
+
+  const result = JSON.parse(readFileSync(join(directory, RESULT_FILE), "utf8"));
+  assert.equal(result.bestanden, GREEN_CASES.length);
 });
