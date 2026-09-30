@@ -54,14 +54,47 @@ const title = "Hermes — Give your AI a phone number";
 const description =
   "Hermes answers calls and handles them for you. One connection over MCP — and your AI gets a voice.";
 
-const MCP_URL = "https://app.sundartha.com/mcp";
-const MCP_CMD = `claude mcp add --transport http hermes ${MCP_URL}`;
 const CONTACT = "kontakt@sundartha.com";
 // Agenten-Einstieg (Owner-Auftrag 2026-09-25, Vorbild heycall-e.com): dieser Satz
 // wird in den eigenen KI-Agenten kopiert; public/agents.md ist die Anleitung fuer ihn.
 // Bewusst immer Englisch - er richtet sich an das Modell, nicht an den Menschen.
-const AGENT_GUIDE = "sundartha.com/agents.md";
-const AGENT_PROMPT = `Set up Hermes for me: https://${AGENT_GUIDE}`;
+// MCP-URL, Befehl und Prompt kommen aus lib/agent-docs.js - derselben Quelle wie
+// /index.md, /llms.txt und der Skill (Plan agent-ready). Sichtbar bleibt alles wie bisher.
+import {
+  AGENT_GUIDE,
+  MCP_CMD,
+  MCP_URL,
+  SITE_AGENT_LINE,
+  SITE_AGENT_PROMPT,
+  SITE_URL,
+} from "../lib/agent-docs.js";
+import { PLAN_CATALOG } from "../lib/plans.js";
+
+// Strukturierte Daten (schema.org) fuer Suchmaschinen und KI-Suche: Firma + Produkt
+// mit den Tarifen aus dem Katalog. Reiner Datenblock (application/ld+json), kein Skript.
+const CENTS_PER_EURO = 100;
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "Organization", "@id": `${SITE_URL}/#org`, name: "Sundartha", url: `${SITE_URL}/`, email: CONTACT, logo: `${SITE_URL}/apple-touch-icon.png` },
+    {
+      "@type": "SoftwareApplication",
+      name: "Hermes by Sundartha",
+      url: `${SITE_URL}/`,
+      description,
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      publisher: { "@id": `${SITE_URL}/#org` },
+      offers: PLAN_CATALOG.map((plan) => ({
+        "@type": "Offer",
+        name: plan.name,
+        price: (plan.amountCents / CENTS_PER_EURO).toFixed(2),
+        priceCurrency: plan.currency.toUpperCase(),
+        description: `${plan.includedMinutes} minutes of calls per month`,
+      })),
+    },
+  ],
+};
 
 // Die drei Rechtsdokumente im Blatt. "Kontakt" ist im Repo kein eigenes
 // Dokument (kein contact.de.json) — dafuer steht der mailto-Link, so wie es
@@ -99,6 +132,8 @@ const infoTabs = [
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="alternate" type="text/markdown" href={new URL("/index.md", Astro.site)} title="This page as Markdown" />
+    <script type="application/ld+json" set:html={JSON.stringify(structuredData)}></script>
     <link rel="alternate" type="text/markdown" href={new URL("/agents.md", Astro.site)} title="Setup guide for AI agents" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Sundartha" />
@@ -303,8 +338,8 @@ const infoTabs = [
             <div class="agent-try agent-try--dev">
               <span class="agent-try__label" data-i18n="agentTryLabel">Try it with your AI</span>
               <span class="agent-try__box">
-                <span class="agent-try__prompt">Set up Hermes for me: <span class="agent-try__url">{AGENT_GUIDE}</span></span>
-                <button class="agent-try__copy" type="button" data-copy={AGENT_PROMPT} data-i18n="copyLabel">Copy</button>
+                <span class="agent-try__prompt">{SITE_AGENT_LINE.en} <span class="agent-try__url">{AGENT_GUIDE}</span></span>
+                <button class="agent-try__copy" type="button" data-copy={SITE_AGENT_PROMPT} data-i18n="copyLabel">Copy</button>
               </span>
             </div>
             <!-- Nur am Handy: statt der beiden Fenster-Nachbauten EINE Glaskarte mit den
@@ -319,8 +354,8 @@ const infoTabs = [
                 <span class="dev-list__code"><span>claude mcp add --transport http hermes</span><span>{MCP_URL}</span></span>
               </div>
               <div class="dev-list__row">
-                <span class="dev-list__head"><span class="dev-list__num">03</span><span class="dev-list__title" data-i18n="agentTryLabel">Try it with your AI</span><button class="dev-list__copy" type="button" data-copy={AGENT_PROMPT} data-i18n="copyLabel">Copy</button></span>
-                <span class="dev-list__prompt">Set up Hermes for me: <strong>{AGENT_GUIDE}</strong></span>
+                <span class="dev-list__head"><span class="dev-list__num">03</span><span class="dev-list__title" data-i18n="agentTryLabel">Try it with your AI</span><button class="dev-list__copy" type="button" data-copy={SITE_AGENT_PROMPT} data-i18n="copyLabel">Copy</button></span>
+                <span class="dev-list__prompt">{SITE_AGENT_LINE.en} <strong>{AGENT_GUIDE}</strong></span>
               </div>
             </div>
             <p class="layer-note" data-i18n="devFootnote">Streamable HTTP, OAuth on first connect. Works with Claude, Codex and any MCP client.</p>
@@ -450,8 +485,8 @@ const infoTabs = [
       <div class="agent-try agent-try--sheet">
         <span class="agent-try__label" data-i18n="agentTryLabel">Try it with your AI</span>
         <span class="agent-try__box">
-          <span class="agent-try__prompt">Set up Hermes for me: <span class="agent-try__url">{AGENT_GUIDE}</span></span>
-          <button class="agent-try__copy" type="button" data-copy={AGENT_PROMPT} data-i18n="copyLabel">Copy</button>
+          <span class="agent-try__prompt">{SITE_AGENT_LINE.en} <span class="agent-try__url">{AGENT_GUIDE}</span></span>
+          <button class="agent-try__copy" type="button" data-copy={SITE_AGENT_PROMPT} data-i18n="copyLabel">Copy</button>
         </span>
       </div>
 
