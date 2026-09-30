@@ -52,7 +52,6 @@ jobs:
     permissions:
       actions: write
       contents: read
-      issues: read
       pull-requests: read
     steps:
       - name: Checkout
