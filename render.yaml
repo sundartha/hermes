@@ -737,7 +737,10 @@ services:
     # KEIN plan-Feld: Static Sites haben keine Plan-Stufen (immer kostenlos). Ein
     # "plan: free" lehnt Render beim Blueprint ab ("no such plan free for service
     # type web"); nur der Node-Service oben traegt plan:free.
-    autoDeploy: false
+    # autoDeploy an (Dashboard-Stand, per Render-API geprueft 2026-10-01): jeder
+    # master-Commit mit apps/web-Aenderung geht automatisch live. master ist durch
+    # die Pflicht-Checks geschuetzt - Merge nach master = live.
+    autoDeploy: true
     # Build-Isolation via eigener Lockfile (R8): apps/web/ traegt ein eigenes
     # package-lock.json. Darum rootDir + npm ci (NICHT die Root-Workspace-Variante)
     # — die Root-package.json hat KEINE workspaces, und eine gemeinsame Lockfile
