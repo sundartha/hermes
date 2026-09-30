@@ -28,7 +28,7 @@ function substantialCallerLines(call) {
 // Bedingung 3 aus E-2. AUSDRUECKLICH NICHT callerHasSpoken: das zaehlt fuer Inbound JEDE
 // nicht-leere caller-Zeile (auch ein Echo-Fragment ".") und beantwortet die andere Frage
 // ("darf der Agent auflegen"), nicht diese ("gab es Gespraechsinhalt").
-export function hasInboxSubstance(call) {
+function hasInboxSubstance(call) {
   const lines = substantialCallerLines(call);
   if (lines.length >= INBOX_MIN_CALLER_TURNS) return true;
   const chars = lines.reduce((sum, entry) => sum + entry.text.trim().length, 0);
