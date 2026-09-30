@@ -20,6 +20,7 @@
       "Edit(docs/sicherheitsgrenzen.md)",
       "Edit(test/testbaenke-run.mjs)",
       "Edit(test/werkzeuge/**)",
+      "Edit(test/werkzeuge/werkzeugtexte.json)",
       "Edit(test/**)"
     ]
   },
