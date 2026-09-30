@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  ci:
-    name: CI
+  pruefungen:
+    name: Prüfungen
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -76,8 +76,72 @@ jobs:
           find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
             | xargs -0 -n1 node --check
 
-      - name: Tests
-        run: npm test -- -- --test-concurrency=4
-
       - name: Audit
         run: npm audit --audit-level=high
+
+  tests:
+    name: Tests ${{ matrix.teil }}/${{ strategy.job-total }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        teil: [1, 2, 3, 4]
+    outputs:
+      teil-1: ${{ steps.bestanden.outputs.teil-1 }}
+      teil-2: ${{ steps.bestanden.outputs.teil-2 }}
+      teil-3: ${{ steps.bestanden.outputs.teil-3 }}
+      teil-4: ${{ steps.bestanden.outputs.teil-4 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Install-Skripte
+        run: |
+          set -euo pipefail
+          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
+      - name: Tests
+        env:
+          TEIL: ${{ matrix.teil }}
+          TEILE: ${{ strategy.job-total }}
+        run: npm test -- -- --test-concurrency=4 --test-shard="$TEIL/$TEILE"
+
+      - name: Bestandene Tests melden
+        id: bestanden
+        if: always()
+        env:
+          TEIL: ${{ matrix.teil }}
+        run: echo "teil-$TEIL=$(jq .bestanden .pruefung/regression.json)" >> "$GITHUB_OUTPUT"
+
+  ci:
+    name: CI
+    if: always()
+    needs: [pruefungen, tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bestandene Tests aller Teile
+        env:
+          BESTANDEN: ${{ toJSON(needs.tests.outputs) }}
+        run: jq -r '[.[] | select(. != "") | tonumber] | "\(add // 0) Tests bestanden über alle Teile"' <<< "$BESTANDEN"
+
+      - name: Alle Jobs erfolgreich
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          nicht_erfolgreich=$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          if [ -n "$nicht_erfolgreich" ]; then
+            echo "Nicht erfolgreich: $nicht_erfolgreich"
+            exit 1
+          fi
