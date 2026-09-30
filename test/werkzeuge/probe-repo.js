@@ -84,3 +84,16 @@ export function failingTest(name, expected, importPath) {
     "",
   ].join("\n");
 }
+
+export const HOOKS_DIRECTORY = join(REPO_ROOT, ".claude/hooks");
+export const BLOCKING_EXIT_CODE = 2;
+
+export function runHook(hook, { cwd, input, environment = {} }) {
+  const interpreter = hook.endsWith(".sh") ? "bash" : process.execPath;
+  return spawnSync(interpreter, [join(HOOKS_DIRECTORY, hook)], {
+    cwd,
+    encoding: "utf8",
+    input: JSON.stringify(input),
+    env: { ...isolatedEnvironment(), ...environment },
+  });
+}
