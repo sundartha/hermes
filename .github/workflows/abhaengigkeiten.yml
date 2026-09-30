@@ -1,0 +1,47 @@
+name: Abhängigkeiten
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: abhaengigkeiten-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  abhaengigkeiten:
+    name: Abhängigkeiten
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Abhängigkeitsregeln
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node tools/abhaengigkeiten.mjs --basis "$BASIS"
+
+      - name: Dateilänge
+        if: ${{ !cancelled() }}
+        run: node tools/dateilaenge.mjs
+
+      - name: Testverhältnis
+        if: ${{ !cancelled() }}
+        run: node tools/testverhaeltnis.mjs
