@@ -1,0 +1,2791 @@
+[
+  {
+    "type": "cycle",
+    "from": "src/billing",
+    "to": "src/elevenlabs",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/billing",
+    "to": "src/geo",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/geo",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/billing",
+    "to": "src/i18n",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/billing",
+    "to": "src/store",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/billing",
+    "to": "src/telephony",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/conversation",
+    "to": "src/consult",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/consult",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/conversation",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/db",
+    "to": "src/billing",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/db",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/db",
+    "to": "src/i18n",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/db",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/db",
+    "to": "src/store",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/db",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/elevenlabs",
+    "to": "src/billing",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/elevenlabs",
+    "to": "src/geo",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/geo",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/elevenlabs",
+    "to": "src/i18n",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/elevenlabs",
+    "to": "src/routes",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/elevenlabs",
+    "to": "src/store",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/elevenlabs",
+    "to": "src/telephony",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/elevenlabs",
+    "to": "src/telephony/adapters/telnyx",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/telephony/adapters/telnyx",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/geo",
+    "to": "src/i18n",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/geo",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/geo",
+    "to": "src/store",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/geo",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/i18n",
+    "to": "src/elevenlabs",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/i18n",
+    "to": "src/store",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/i18n",
+    "to": "src/telephony",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/routes",
+    "to": "src/billing",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/routes",
+    "to": "src/consult",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/consult",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/routes",
+    "to": "src/conversation",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/conversation",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/consult",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/routes",
+    "to": "src/elevenlabs",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/routes",
+    "to": "src/geo",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/geo",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/routes",
+    "to": "src/i18n",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/routes",
+    "to": "src/research",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/research",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/routes",
+    "to": "src/store",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/routes",
+    "to": "src/telephony",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/routes",
+    "to": "src/telephony/adapters/telnyx",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/telephony/adapters/telnyx",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/routes",
+    "to": "src/wiring",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/wiring",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/store",
+    "to": "src/billing",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/store",
+    "to": "src/db",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/db",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/store",
+    "to": "src/elevenlabs",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/store",
+    "to": "src/i18n",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/store",
+    "to": "src/telephony",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/telephony",
+    "to": "src/billing",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/telephony",
+    "to": "src/elevenlabs",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/telephony",
+    "to": "src/i18n",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/telephony",
+    "to": "src/routes",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/telephony",
+    "to": "src/store",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/telephony/adapters/telnyx",
+    "to": "src/store",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/store",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/billing",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony/adapters/telnyx",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/telephony/adapters/telnyx",
+    "to": "src/telephony",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/i18n",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/telephony/adapters/telnyx",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/wiring",
+    "to": "src/elevenlabs",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/elevenlabs",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/wiring",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/wiring",
+    "to": "src/routes",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/wiring",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/wiring",
+    "to": "src/telephony",
+    "rule": {
+      "severity": "error",
+      "name": "keine-ordnerzyklen"
+    },
+    "cycle": [
+      {
+        "name": "src/telephony",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/routes",
+        "dependencyTypes": []
+      },
+      {
+        "name": "src/wiring",
+        "dependencyTypes": []
+      }
+    ]
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/activation.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/backfill-profiles.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/cost-calibration.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/cost-cross-check.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/cost-cross-check.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/cost-ledger-map.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/cost-truing.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/cost-truing.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/el-reifung.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/kosten-abschluss.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/kosten-deckung.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/kosten-projektion.js",
+    "to": "src/store/cost-evidence.js",
+    "unresolvedTo": "../store/cost-evidence.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/kosten-projektion.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/meter.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/metering.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/metering.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/nachlauf-phasenschnitt.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/nachlauf-phasenschnitt.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/paid-without-number-watch.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/paid-without-number-watch.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/payment-method-type-reconcile.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/price-drift-watch.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/provision-outcome.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/provision-retry-sweep.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/provision-retry-sweep.js",
+    "to": "src/store/views.js",
+    "unresolvedTo": "../store/views.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/provision-retry.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/provision-retry.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/provision-retry.js",
+    "to": "src/store/views.js",
+    "unresolvedTo": "../store/views.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/provision-trigger.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/provision-trigger.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/stale-subscription-reconcile.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/stripe-reconcile.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/sweep-kostenbeleg.js",
+    "to": "src/store/cost-evidence.js",
+    "unresolvedTo": "../store/cost-evidence.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/billing/sweep-kostenbeleg.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/boot-guard.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "./store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/boot.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "./store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/boot.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "./store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/boot.js",
+    "to": "src/store/views.js",
+    "unresolvedTo": "./store/views.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/call-duration.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "./store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/claude.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "./store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/config.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "./store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/consult/in-call.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/consult/in-call.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/conversation/consult-raised.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/conversation/consult-raised.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/db/migrate.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/call-locale.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/call-locale.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/inbound-path-decision.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/inbound-rueckfall.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/inbound-sip-uri.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/inbound-trunk-beleg.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/kosten-beleg.js",
+    "to": "src/store/cost-evidence.js",
+    "unresolvedTo": "../store/cost-evidence.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/kosten-beleg.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/opening-line.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/outbound.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/outbound.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/outbound.js",
+    "to": "src/store/views.js",
+    "unresolvedTo": "../store/views.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/time-context.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/geo/resolve.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/i18n/locales.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/i18n/prompts/de.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/i18n/prompts/en.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/i18n/prompts/fr.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/llm-usage.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "./store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/llm-usage.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "./store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/mcp-tools.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "./store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/onboarding.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "./store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/precall-briefing.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "./store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/queue/adapters/memory/queue.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../../../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/release-reconcile.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "./store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/release-reconcile.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "./store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/research/in-call.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/research/lookup-guard.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/research/registry.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/_tenant.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/_validation.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/api-billing.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/api-billing.js",
+    "to": "src/store/views.js",
+    "unresolvedTo": "../store/views.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/api-call-confirmations.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/api-calls.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/api-calls.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/api-onboard.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/api-onboard.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/api-read.js",
+    "to": "src/store/views.js",
+    "unresolvedTo": "../store/views.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/mcp.js",
+    "to": "src/store/views.js",
+    "unresolvedTo": "../store/views.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/voice.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/voice.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/webhooks-elevenlabs-init.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/webhooks-elevenlabs.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/self-service-routes.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "./store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/self-service-routes.js",
+    "to": "src/store/views.js",
+    "unresolvedTo": "./store/views.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/server.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "./store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/sms-summary.js",
+    "to": "src/store/views.js",
+    "unresolvedTo": "./store/views.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/adapters/telnyx/cost-parse.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../../../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/alert-sms.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/alert-sms.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/alert-sms.js",
+    "to": "src/store/views.js",
+    "unresolvedTo": "../store/views.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/call-finish.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/call-lifecycle.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/call-lifecycle.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/outage-report.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/outage-report.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/outbound-gates.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/outbound-gates.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/outbound-gates.js",
+    "to": "src/store/views.js",
+    "unresolvedTo": "../store/views.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/reattach.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/registry.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/telephony/voice-render.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/tts/directive-synth.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/web-auth.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "./store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/wiring/web-login.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/wiring/web-login.js",
+    "to": "src/store/portal.js",
+    "unresolvedTo": "../store/portal.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/wiring/web-login.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/worker/provisioning-orchestrator.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/worker/provisioning.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../store/defaults.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/worker/provisioning.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../store/state-ops.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "speicher-nur-ueber-fassade"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/boot.js",
+    "to": "src/telephony/adapters/telnyx/voice.js",
+    "unresolvedTo": "./telephony/adapters/telnyx/voice.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "telefonie-nur-ueber-ports"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/call-locale.js",
+    "to": "src/telephony/adapters/telnyx/elevenlabs-voice.js",
+    "unresolvedTo": "../telephony/adapters/telnyx/elevenlabs-voice.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "telefonie-nur-ueber-ports"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/elevenlabs/kosten-beleg.js",
+    "to": "src/telephony/adapters/telnyx/cost-parse.js",
+    "unresolvedTo": "../telephony/adapters/telnyx/cost-parse.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "telefonie-nur-ueber-ports"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/routes/voice.js",
+    "to": "src/telephony/adapters/telnyx/speak-events.js",
+    "unresolvedTo": "../telephony/adapters/telnyx/speak-events.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "telefonie-nur-ueber-ports"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/tts/directive-synth.js",
+    "to": "src/telephony/adapters/telnyx/elevenlabs-voice.js",
+    "unresolvedTo": "../telephony/adapters/telnyx/elevenlabs-voice.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "telefonie-nur-ueber-ports"
+    }
+  }
+]
