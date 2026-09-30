@@ -1,0 +1,225 @@
+/* Kuendigungsformular (§ 312k BGB) - components/site/CancelInfo.astro.
+   Steht auf /kuendigen (.doc-steps) und im Reiter der Startseite (.legal-info);
+   beide Huellen liefern die Glaskarte (.sheet__card), hier kommt nur das
+   Formular dazu. Eingaben mit 16px Schrift: darunter zoomt iOS beim Fokus. */
+
+/* Doppelte Klasse: .doc-steps/.legal-info setzen gap:0 auf .sheet__card. */
+.cf-wrap .sheet__card.cf {
+  gap: 18px;
+  text-align: left;
+}
+.cf__title {
+  font: 400 clamp(22px, 2vw, 28px) / 1.1 var(--serif);
+  color: #fff;
+}
+.cf__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+.cf__field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.cf__field--wide {
+  grid-column: 1 / -1;
+}
+.cf__field--date {
+  max-width: 240px;
+}
+.cf__field[hidden] {
+  display: none;
+}
+.cf__label {
+  padding: 0;
+  font: 500 13px/1.3 var(--sans);
+  color: rgba(255, 255, 255, 0.78);
+}
+.cf__label em,
+.cf__option em {
+  font-style: normal;
+  color: rgba(255, 255, 255, 0.55);
+}
+.cf__input {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 12px;
+  font: 400 16px/1.4 var(--sans);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+  color-scheme: dark;
+  transition:
+    border-color 0.18s,
+    background-color 0.18s;
+}
+.cf__input--area {
+  resize: vertical;
+  min-height: 92px;
+}
+.cf__input:hover {
+  border-color: rgba(255, 255, 255, 0.45);
+}
+.cf__input:focus-visible {
+  outline: 2px solid var(--sky-light);
+  outline-offset: 1px;
+  border-color: var(--sky-light);
+  background: rgba(255, 255, 255, 0.11);
+}
+.cf__choice {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cf__choice .cf__label {
+  margin-bottom: 2px;
+}
+.cf__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font: 400 15px/1.4 var(--sans);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+}
+.cf__option input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--sky-light);
+  cursor: pointer;
+}
+/* Nur fuer Bots: aus dem Bild und aus der Tab-Reihenfolge, aber im DOM. */
+.cf__trap {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.cf__hint {
+  margin: 0;
+  font: 400 13px/1.5 var(--sans);
+  color: rgba(255, 255, 255, 0.66);
+}
+.cf__error {
+  margin: 0;
+  padding: 11px 14px;
+  border-radius: 12px;
+  font: 500 14px/1.45 var(--sans);
+  color: #fff;
+  background: rgba(190, 60, 60, 0.32);
+  border: 1px solid rgba(255, 150, 150, 0.45);
+}
+.cf__error[hidden] {
+  display: none;
+}
+.cf__submit {
+  align-self: flex-start;
+  padding: 15px 34px;
+  border: 0;
+  cursor: pointer;
+}
+.cf__submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+  transform: none;
+}
+
+.cf-done[hidden],
+.cf[hidden] {
+  display: none;
+}
+.cf-done:focus {
+  outline: none;
+}
+.cf-done__lead {
+  margin: 0;
+  font: 400 15px/1.5 var(--sans);
+  color: rgba(255, 255, 255, 0.9);
+}
+.cf-done__list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cf-done__row {
+  display: grid;
+  grid-template-columns: minmax(120px, 190px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+.cf-done__row[hidden] {
+  display: none;
+}
+.cf-done__row dt {
+  font: 500 13px/1.45 var(--sans);
+  color: rgba(255, 255, 255, 0.62);
+}
+.cf-done__row dd {
+  margin: 0;
+  font: 400 15px/1.45 var(--sans);
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+.cf__print {
+  align-self: flex-start;
+  padding: 14px 28px;
+}
+
+@media (max-width: 700px), (pointer: coarse) and (max-width: 1024px) {
+  .cf__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cf__field--date {
+    max-width: none;
+  }
+  .cf__submit,
+  .cf__print {
+    align-self: stretch;
+    height: 52px;
+    padding-block: 0;
+  }
+  .cf-done__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+
+/* Bestaetigung speichern/drucken (§ 312k Abs. 3): nur die Bestaetigung aufs
+   Papier bzw. ins PDF, schwarz auf weiss. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .cf-done,
+  .cf-done * {
+    visibility: visible;
+  }
+  .cf-done {
+    position: absolute;
+    inset: 0 0 auto;
+    color: #000;
+    background: #fff;
+    border: 0;
+    backdrop-filter: none;
+  }
+  .cf-done .cf__title,
+  .cf-done__lead,
+  .cf-done__row dt,
+  .cf-done__row dd {
+    color: #000;
+  }
+  .cf__print {
+    display: none;
+  }
+}
