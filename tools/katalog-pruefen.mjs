@@ -131,24 +131,33 @@ function threatFindings(threats) {
   ];
 }
 
-const PREMISE_CHECKS = {
-  datei: ({ muster }, context) =>
-    existsSync(join(context.root, muster)) ? undefined : `die Prüfung ${muster} gibt es nicht`,
-  keine_route: ({ muster }, context) => {
-    const pattern = new RegExp(muster);
-    const route = context.routes.find(({ path }) => pattern.test(path));
-    return route && `die Route ${route.flaeche} ist registriert`;
-  },
-  kein_import: ({ muster }, context) => {
-    const hit = context.imports.find(({ specifier }) => specifier.startsWith(muster));
-    return hit && `${hit.file} importiert ${hit.specifier}`;
-  },
-};
+function existingFile({ pfad }, { root }) {
+  if (!pfad) return "der Pfad der Prüfung fehlt";
+  return existsSync(join(root, pfad)) ? undefined : `die Prüfung ${pfad} gibt es nicht`;
+}
+
+function noRoute({ pfade }, { routes }) {
+  if (!Array.isArray(pfade) || pfade.length === 0) return "die Pfadanfänge fehlen";
+  const route = routes.find(({ path }) => pfade.some((prefix) => path.startsWith(prefix)));
+  return route && `die Route ${route.flaeche} ist registriert`;
+}
+
+function noImport({ modul }, { imports }) {
+  if (!modul) return "das Modul fehlt";
+  const hit = imports.find(({ specifier }) => specifier.startsWith(modul));
+  return hit && `${hit.file} importiert ${hit.specifier}`;
+}
+
+const PREMISE_CHECKS = new Map([
+  ["datei", existingFile],
+  ["keine_route", noRoute],
+  ["kein_import", noImport],
+]);
 
 function exemptionProblems(exemption, context) {
   if (!exemption.begruendung?.trim()) return [`${NOT_APPLICABLE} braucht eine Begründung.`];
-  const premise = PREMISE_CHECKS[exemption.pruefung?.art];
-  const kinds = Object.keys(PREMISE_CHECKS).join(", ");
+  const premise = PREMISE_CHECKS.get(exemption.pruefung?.art);
+  const kinds = [...PREMISE_CHECKS.keys()].join(", ");
   if (!premise) return [`${NOT_APPLICABLE} braucht eine Prüfung der Art ${kinds}.`];
   const problem = premise(exemption.pruefung, context);
   return problem ? [`${NOT_APPLICABLE} gilt nicht mehr, ${problem}.`] : [];
@@ -238,11 +247,6 @@ function sourceImports(root) {
     const matches = [...readFileSync(join(root, file), "utf8").matchAll(IMPORT_PATTERN)];
     return matches.map((match) => ({ file, specifier: match[1] }));
   });
-}
-
-function readList(root) {
-  const path = join(root, WITHOUT_TEST_PATH);
-  return existsSync(path) ? partsOf(readFileSync(path, "utf8"), "\n") : [];
 }
 
 function basisList(basis) {
@@ -346,7 +350,8 @@ function check(root, basis) {
   const { threats, surfaces: surfaceRows } = readCatalog(root);
   const threatIds = new Set(threats.map(([id]) => id));
   const mapping = JSON.parse(readFileSync(join(root, MAPPING_PATH), "utf8"));
-  const listed = readList(root);
+  const listPath = join(root, WITHOUT_TEST_PATH);
+  const listed = existsSync(listPath) ? partsOf(readFileSync(listPath, "utf8"), "\n") : [];
   const surfaces = surfacesInCleanEnvironment(root);
   const routes = surfaces.filter(({ art }) => art !== TOOL_KIND);
   const context = { root, threatIds, routes, imports: sourceImports(root) };
