@@ -1,21 +1,22 @@
 /* =============================================================================
  * hermes-mobile.js - Verhalten der Handy-Startseite (< 768 px)
  *
- * Gegenstueck zu components/MobileHome.astro und styles/hermes-mobile.css;
- * Umsetzung von design/handoff-mobile (Design-Schema.md, Abschnitt 8). Das
- * Modul setzt nur Zustaende - als Data-Attribute und als Variable --p -, das
- * Aussehen rechnet das CSS. Einzige Ausnahme: Tippen und Zaehler schreiben
- * Text (textContent). Kein Inline-Style im Markup, CSP-konform.
+ * Gegenstueck zu components/MobileHome.astro und styles/hermes-mobile*.css;
+ * Umsetzung von design/handoff-mobile ("Hermes Mobile v9", Design-Schema.md,
+ * Abschnitt 8). Das Modul setzt nur Zustaende - als Data-Attribute und als
+ * Variable --p -, das Aussehen und die Bewegung rechnet das CSS. Ausnahmen:
+ * Tippen und Zaehler schreiben Text (textContent), die Breite des rollenden
+ * Tarifnamens wird gemessen. Kein Inline-Style im Markup, CSP-konform.
  *
  * Zustaende (README des Handoffs):
  *   active  0-4   aktueller Screen aus p = scrollTop / clientHeight
  *   Blaettern     eine Geste = genau ein Screen, immer buendig (lib/mobile-pager.js)
  *   step    0-2   Autoplay (6.5 s) nur auf Screen 2, Tippen oder Wischen
  *   plan    0/1   Starter / Pro, Start auf dem hervorgehobenen Tarif
- *   way     0-2   Connector / Terminal / Your AI
+ *   way     0-2   Connector / Terminal / Your AI, der Code tippt sich
  *   copied        faellt nach 1.6 s zurueck
  *   lang    en/de folgt <html lang> (der Umschalter laeuft ueber hermes-scroll.js)
- * prefers-reduced-motion: kein Autoplay, kein Parallax, keine Staffel.
+ * prefers-reduced-motion: kein Autoplay, kein Tippen, der Ring steht fertig da.
  * ========================================================================== */
 
 import {
@@ -27,11 +28,13 @@ import {
   wheelPixels,
 } from "../lib/mobile-pager.js";
 import { anchorFromHash } from "../lib/home-anchors.js";
+import { typeableLength, typedSplit } from "../lib/mobile-code.js";
 
 /* Dieselbe Abfrage wie in hermes-mobile.css. */
 const MOBILE_QUERY = "(max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px)))";
 const SCREEN_HOW = 1;
 const SCREEN_PRICE = 2;
+const SCREEN_DEV = 3;
 const AUTOPLAY_MS = 6500;
 const COPIED_MS = 1600;
 /* Beim Ankommen auf den Preisen starten Leiste, Zaehler und Leistungen nach
@@ -52,25 +55,39 @@ const MIN_SAMPLES = 2;
 const SETTLE_MS = 140;
 const PROGRESS_DIGITS = 4;
 const EASE_POWER = 3;
-/* Phasen der drei Animationen (ms nach dem Ankommen) und ab welcher Phase die
- * Ergebniszeile getippt wird (Tempo je Zeichen). Werte aus hermes-kit.js. */
-const NUMBER_RING_MS = 60;
-const NUMBER_TYPE_MS = 1500;
-const NUMBER_LIVE_MS = 1900;
+/* Der Ring auf Screen 2 (Design-Schema 6.2): Phasen je Schritt in ms ab
+ * Schrittstart, in welcher Phase der Schritt fertig ist (Bogen gruen) und ab
+ * welcher Phase die Ergebniszeile getippt wird (Tempo je Zeichen).
+ *   Nummer:    Bogen leer 380, fuellt sich 420, Haken + Tippen 1860, Live 2810
+ *   Verbinden: rastet ein + Tippen 1700, Connected 2560
+ *   Abnehmen:  Welle faellt zusammen, Haken, Summary 3200 */
+const NUMBER_EMPTY_MS = 380;
+const NUMBER_FILL_MS = 420;
+const NUMBER_TYPE_MS = 1860;
+const NUMBER_LIVE_MS = 2810;
 const MCP_LOCK_MS = 1700;
-const MCP_DONE_MS = 2000;
+const MCP_DONE_MS = 2560;
 const WAVE_DONE_MS = 3200;
-const VIZ_TIMING = Object.freeze([
+const NUMBER_CHAR_MS = 55;
+const MCP_CHAR_MS = 40;
+const RING = Object.freeze([
   Object.freeze({
-    phases: [NUMBER_RING_MS, NUMBER_TYPE_MS, NUMBER_LIVE_MS],
-    typeAt: 2,
-    typeMs: 55,
+    phases: [NUMBER_EMPTY_MS, NUMBER_FILL_MS, NUMBER_TYPE_MS, NUMBER_LIVE_MS],
+    doneAt: 4,
+    typeAt: 3,
+    charMs: NUMBER_CHAR_MS,
   }),
-  Object.freeze({ phases: [MCP_LOCK_MS, MCP_DONE_MS], typeAt: 1, typeMs: 40 }),
-  Object.freeze({ phases: [WAVE_DONE_MS], typeAt: 0, typeMs: 0 }),
+  Object.freeze({ phases: [MCP_LOCK_MS, MCP_DONE_MS], doneAt: 1, typeAt: 1, charMs: MCP_CHAR_MS }),
+  Object.freeze({ phases: [WAVE_DONE_MS], doneAt: 1, typeAt: 0, charMs: 0 }),
 ]);
-const COPIED_MARK = "✓  ";
-/* Zwei gleichwertige Keyframe-Namen im CSS: der Wechsel startet die Fuellung neu. */
+/* Code-Feld (Design-Schema 6.4): Tippen beim Ankommen nach 560 ms, bei jedem
+ * Wegwechsel nach 140 ms, 12 ms je Zeichen, abgefragt alle 24 ms. */
+const CODE_ARRIVE_MS = 560;
+const CODE_SWITCH_MS = 140;
+const CODE_CHAR_MS = 12;
+const CODE_TICK_MS = 24;
+/* Zwei gleichwertige Keyframe-Namen im CSS: der Wechsel startet Fuellung und
+ * Aufleuchten neu. */
 const RUN_VARIANTS = 2;
 
 const mobile = window.matchMedia(MOBILE_QUERY);
@@ -82,6 +99,7 @@ const state = {
   run: 0,
   plan: 0,
   way: 0,
+  typed: Infinity,
   lang: "en",
   arrivedAt: 0,
   countValue: 0,
@@ -93,6 +111,7 @@ const enHtml = new Map();
 let autoTimer = 0;
 let copiedTimer = 0;
 let arriveTimer = 0;
+let typeTimer = 0;
 let countFrame = 0;
 let scrollFrame = 0;
 const pager = {
@@ -143,7 +162,7 @@ function jump(index) {
  * ganzen Screen - egal wie hart gewischt wurde. Der Finger zieht den Screen mit
  * (hoechstens bis zum Nachbarn), beim Loslassen entscheidet lib/mobile-pager.js
  * ueber weiter / zurueck; die Fahrt dorthin laeuft hier per requestAnimationFrame
- * ueber scrollTop, damit --p, Parallax und Ankommen wie beim Scrollen folgen. */
+ * ueber scrollTop, damit --p, Kamerafahrt und Ankommen wie beim Scrollen folgen. */
 
 const pageHeight = () => el.scroller.clientHeight;
 
@@ -294,27 +313,31 @@ function wirePager() {
 }
 
 /* Screen wird aktiv: gestaffeltes Einblenden per CSS, Schritt 1 von vorn,
- * "Copied" zurueck, die Preise laufen ihre Ankunft durch. */
+ * "Copied" zurueck, die Preise laufen ihre Ankunft durch, der Code tippt sich.
+ * data-screen am Wurzelelement pausiert die ziehenden Wolken auf Screen 2-4. */
 function setActive(index) {
   state.active = index;
   state.arrivedAt = performance.now();
+  el.root.setAttribute("data-screen", String(index));
   el.screens.forEach((screen, i) => screen.setAttribute("data-active", i === index ? "1" : "0"));
   if (index === SCREEN_HOW) state.step = 0;
   state.run += 1;
   setCopied(false);
-  renderSteps();
+  renderSteps(true);
   renderPlan();
+  if (index === SCREEN_DEV) startTyping(CODE_ARRIVE_MS);
+  else stopTyping();
 }
 
-/* -------------------------------------------------- Screen 2: Schritte */
+/* ------------------------------------------- Screen 2: Schritte und Ring */
 
 function setStep(index) {
   state.step = index;
   state.run += 1;
-  renderSteps();
+  renderSteps(false);
 }
 
-function renderSteps() {
+function renderSteps(arriving) {
   const { how } = el;
   how.setAttribute("data-step", String(state.step));
   how.setAttribute("data-run", state.run % RUN_VARIANTS ? "b" : "a");
@@ -326,7 +349,7 @@ function renderSteps() {
     if (phase === "cur") bar.setAttribute("aria-current", "step");
     else bar.removeAttribute("aria-current");
   });
-  mountViz();
+  mountRing(arriving);
   scheduleAutoplay();
 }
 
@@ -350,42 +373,46 @@ function later(ms, run) {
   vizTimers.add(id);
 }
 
-/* Die Animation des aktuellen Schritts startet bei jedem Ankommen und jedem
- * Schrittwechsel neu. data-reset schaltet fuer einen Frame alle Uebergaenge
- * ab, damit nichts sichtbar zurueckspult. */
-function mountViz() {
+/* Ein Ring, der stehen bleibt: bei jedem Schrittwechsel laufen nur seine
+ * Phasen von vorn, der Uebergang zwischen den Schritten bleibt sichtbar. Beim
+ * Ankommen startet er ohne Uebergaenge (data-reset), damit nichts zurueckspult.
+ * Bei reduzierter Bewegung steht jeder Schritt sofort fertig da. */
+function mountRing(arriving) {
   clearViz();
-  el.vizzes.forEach((viz, i) => viz.setAttribute("data-on", i === state.step ? "1" : "0"));
-  const viz = el.vizzes[state.step];
-  if (!viz || state.active !== SCREEN_HOW) return;
-  viz.setAttribute("data-reset", "");
-  viz.setAttribute("data-phase", "0");
-  viz.setAttribute("data-done", "0");
-  const line = viz.querySelector("[data-type]");
-  if (line) line.replaceChildren();
-  void viz.offsetWidth;
-  viz.removeAttribute("data-reset");
-  const timing = VIZ_TIMING[state.step];
-  timing.phases.forEach((ms, i) => later(ms, () => enterPhase(viz, i + 1, timing)));
+  const { viz, typed } = el;
+  const timing = RING[state.step];
+  if (!timing) return;
+  if (arriving) viz.setAttribute("data-reset", "");
+  const settled = reduced.matches;
+  viz.setAttribute("data-phase", String(settled ? timing.phases.length : 0));
+  viz.setAttribute("data-done", settled ? "1" : "0");
+  typed.replaceChildren(settled ? ringText() : "");
+  if (arriving) {
+    void viz.offsetWidth;
+    viz.removeAttribute("data-reset");
+  }
+  if (settled || state.active !== SCREEN_HOW) return;
+  timing.phases.forEach((ms, i) => later(ms, () => enterPhase(i + 1, timing)));
 }
 
-function enterPhase(viz, phase, timing) {
-  viz.setAttribute("data-phase", String(phase));
-  if (phase === timing.typeAt) typeLine(viz, timing.typeMs);
+const ringText = () => el.typed.getAttribute(`data-type-${state.step}`) || "";
+
+function enterPhase(phase, timing) {
+  el.viz.setAttribute("data-phase", String(phase));
+  if (phase === timing.doneAt) el.viz.setAttribute("data-done", "1");
+  if (phase === timing.typeAt) typeRingLine(timing.charMs);
 }
 
-function typeLine(viz, speed) {
-  const line = viz.querySelector("[data-type]");
-  if (!line) return;
-  const text = line.getAttribute("data-type");
+function typeRingLine(speed) {
+  const text = ringText();
+  if (!text) return;
   let count = 0;
   const id = setInterval(() => {
     count += 1;
-    line.replaceChildren(text.slice(0, count));
+    el.typed.replaceChildren(text.slice(0, count));
     if (count < text.length) return;
     clearInterval(id);
     vizTimers.delete(id);
-    viz.setAttribute("data-done", "1");
   }, speed);
   vizTimers.add(id);
 }
@@ -435,7 +462,8 @@ function renderPlan() {
     .querySelectorAll(".mh-roll")
     .forEach((roll) => setRel([...roll.children], state.plan));
   el.benefitRows.forEach((row) => setRel([...row.children], state.plan));
-  setRel(el.ctas, state.plan);
+  setRel(el.ctaNames, state.plan);
+  sizeCta();
   // Die Verzoegerung beim Ankommen rechnet das CSS ueber data-arrive.
   clearTimeout(arriveTimer);
   price.toggleAttribute("data-arrive", delay > 0);
@@ -515,6 +543,23 @@ function buildPrice() {
   el.priceNum.replaceChildren(...(slots ? slots.map(slotNode) : []));
 }
 
+/* "Choose {}" bzw. "{} wählen": nur der Tarifname rollt, der Rest steht. */
+function buildCta() {
+  const template = el.cta.getAttribute(langAttr("data-cta")) || "{}";
+  const [pre, suf] = template.split("{}");
+  el.ctaPre.textContent = pre || "";
+  el.ctaSuf.textContent = suf || "";
+  sizeCta();
+}
+
+/* Die Breite des Namens gleitet mit (CSS-Uebergang auf width). */
+function sizeCta() {
+  const name = el.ctaNames[state.plan];
+  if (!name) return;
+  const width = Math.ceil(name.getBoundingClientRect().width);
+  if (width > 0) el.ctaRoll.style.width = `${width + 1}px`;
+}
+
 /* ------------------------------------------------ Screen 4: Entwickler */
 
 function setWay(index) {
@@ -524,13 +569,76 @@ function setWay(index) {
   el.wayTabs.forEach((tab, i) => tab.setAttribute("aria-selected", String(i === index)));
   setRel(el.ways, index);
   setCopied(false);
+  renderAllCode();
+  startTyping(CODE_SWITCH_MS);
+}
+
+/* Teilstuecke eines Wegs, die getippt werden (der Prompt "$ " steht immer). */
+const typeTokens = (way) => [...way.querySelectorAll(".mh-tk:not(.mh-tk--p)")];
+const tokenText = (token) => token.getAttribute(langAttr("data-t")) || "";
+
+function spanOf(className, text) {
+  const node = document.createElement("span");
+  node.className = className;
+  node.textContent = text;
+  return node;
+}
+
+/* Zeigt count getippte Zeichen: der Rest steht schon da, aber transparent,
+ * davor sitzt der Block-Cursor. Infinity = alles steht, ohne Cursor. */
+function renderCode(way, count) {
+  const tokens = typeTokens(way);
+  const texts = tokens.map(tokenText);
+  if (count >= typeableLength(texts)) {
+    tokens.forEach((token, i) => token.replaceChildren(texts[i]));
+    return;
+  }
+  const { parts, caret } = typedSplit(texts, count);
+  tokens.forEach((token, i) => {
+    const nodes = [spanOf("mh-tk__on", parts[i].on)];
+    if (i === caret) nodes.push(spanOf("mh-caret", ""));
+    nodes.push(spanOf("mh-tk__off", parts[i].off));
+    token.replaceChildren(...nodes);
+  });
+}
+
+function renderAllCode() {
+  el.ways.forEach((way, i) => renderCode(way, i === state.way ? state.typed : Infinity));
+}
+
+function stopTyping() {
+  clearInterval(typeTimer);
+  state.typed = Infinity;
+  renderAllCode();
+}
+
+function startTyping(delay) {
+  clearInterval(typeTimer);
+  if (reduced.matches || state.active !== SCREEN_DEV) {
+    stopTyping();
+    return;
+  }
+  const way = el.ways[state.way];
+  const total = typeableLength(typeTokens(way).map(tokenText));
+  const start = performance.now() + delay;
+  state.typed = 0;
+  renderCode(way, 0);
+  typeTimer = setInterval(() => {
+    const count = Math.floor((performance.now() - start) / CODE_CHAR_MS);
+    if (count < 0 || count === state.typed) return;
+    if (count >= total) {
+      stopTyping();
+      return;
+    }
+    state.typed = count;
+    renderCode(way, count);
+  }, CODE_TICK_MS);
 }
 
 function setCopied(on) {
   clearTimeout(copiedTimer);
   el.dev.setAttribute("data-copied", on ? "1" : "0");
-  const label = el.copy.getAttribute(langAttr(on ? "data-copied" : "data-copy-label"));
-  el.copy.replaceChildren(on ? COPIED_MARK + label : label);
+  el.copySr.textContent = el.copy.getAttribute(langAttr(on ? "data-copied" : "data-copy-label"));
   if (on) copiedTimer = setTimeout(() => setCopied(false), COPIED_MS);
 }
 
@@ -587,7 +695,9 @@ function applyLang(next) {
     );
   }
   buildPrice();
+  buildCta();
   renderPlan();
+  renderAllCode();
   setCopied(false);
 }
 
@@ -635,6 +745,7 @@ function stopAll() {
   clearTimeout(autoTimer);
   clearViz();
   cancelAnimationFrame(countFrame);
+  stopTyping();
 }
 
 /* Groesse geaendert (Drehen, Fensterbreite): den aktiven Screen wieder
@@ -649,7 +760,7 @@ function realign() {
 
 /* Unterseiten verlinken "So funktioniert's" und "Preise" als Anker der Startseite
  * (lib/home-anchors.js): die Handy-Fassung steht dann gleich auf dem passenden
- * Screen, ohne Fahrt vom Hero dorthin. */
+ * Screen, ohne Fahrt vom Start dorthin. */
 function openAnchor() {
   const anchor = anchorFromHash(window.location.hash);
   if (anchor && mobile.matches) el.scroller.scrollTop = anchor.index * el.scroller.clientHeight;
@@ -671,22 +782,28 @@ function collect(root) {
   const price = root.querySelector(".mh-price");
   const dev = root.querySelector(".mh-dev");
   const minutes = price.querySelector("[data-minutes]");
+  const cta = price.querySelector(".mh-cta");
   Object.assign(el, {
     root,
     how,
     price,
     dev,
+    cta,
     scroller: root.querySelector(".mh-scroll"),
     screens: [...root.querySelectorAll(".mh-screen")],
     steps: [...how.querySelectorAll(".mh-step")],
     bars: [...how.querySelectorAll("[data-mh-step]")],
-    vizzes: [...how.querySelectorAll(".mh-viz")],
+    viz: how.querySelector(".mh-viz"),
+    typed: how.querySelector(".mh-viz__typed"),
     swipe: how.querySelector("[data-mh-swipe]"),
     priceNum: price.querySelector(".mh-price__num"),
     planToggle: price.querySelector(".mh-toggle"),
     planTabs: [...price.querySelectorAll("[data-mh-plan]")],
     benefitRows: [...price.querySelectorAll(".mh-benefit-row")],
-    ctas: [...price.querySelectorAll(".mh-cta")],
+    ctaPre: cta.querySelector(".mh-cta__pre"),
+    ctaSuf: cta.querySelector(".mh-cta__suf"),
+    ctaRoll: cta.querySelector(".mh-cta__roll"),
+    ctaNames: [...cta.querySelectorAll(".mh-cta__name")],
     segments: [...price.querySelectorAll(".mh-seg")],
     count: price.querySelector(".mh-count"),
     minutes: minutes.getAttribute("data-minutes").split("|").map(Number),
@@ -694,6 +811,7 @@ function collect(root) {
     wayTabs: [...dev.querySelectorAll("[data-mh-way]")],
     ways: [...dev.querySelectorAll(".mh-way")],
     copy: dev.querySelector("[data-mh-copy]"),
+    copySr: dev.querySelector("[data-mh-copy-sr]"),
     i18n: [...root.querySelectorAll("[data-mh-de]")],
     priceFallback: null,
   });
@@ -717,6 +835,7 @@ function wire(root) {
   });
   window.addEventListener("resize", realign);
   for (const query of [mobile, reduced]) query.addEventListener("change", refresh);
+  if (document.fonts) document.fonts.ready.then(sizeCta);
   new MutationObserver(() => applyLang(document.documentElement.lang)).observe(
     document.documentElement,
     {
@@ -726,12 +845,15 @@ function wire(root) {
   );
 }
 
+/* Das Einrollen des Starts beim Laden laeuft als CSS-Animation ab dem ersten
+ * Bild (hermes-mobile-motion.css); der Start bleibt dafuer aktiv. */
 function init() {
   const root = document.querySelector("[data-mh]");
   if (!root) return;
   collect(root);
   wire(root);
   buildPrice();
+  buildCta();
   applyLang(document.documentElement.lang);
   root.setAttribute("data-ready", "");
   root.setAttribute("data-pager", "");
