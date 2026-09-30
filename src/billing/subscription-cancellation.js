@@ -1,6 +1,10 @@
 // Kuendigung zum Periodenende (§ 312k BGB): die geteilte Sequenz hinter ALLEN Eingaengen
 // (G5) - der Knopf im Kundenbereich (self-service-routes.js) UND das oeffentliche
 // Kuendigungsformular ohne Anmeldung (billing/public-cancellation.js). Kein HTTP hier.
+// Offen: die cancel-Route in self-service-routes.js loest die Bestaetigungs-Mail noch
+// inline aus (derselbe Ablauf wie triggerCancellationConfirmation unten); die Umstellung
+// raeumt dort einen eingefrorenen Lint-Befund und gehoert deshalb in eine eigene Runde
+// mit Anpassung von eslint-suppressions.json.
 import { attemptCancellationMailConfirm } from "./cancellation-mail.js";
 
 // 312k-P3: geteilte Kuendigungs-/Ruecknahme-Sequenz hinter BEIDEN Richtungen (G5) -
