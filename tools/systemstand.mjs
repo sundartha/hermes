@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 
 import { matches } from "./pruefungen-messen.mjs";
 import { github, remoteFacts } from "./systemstand/github.mjs";
+import { startedAt } from "./systemstand/pakete.mjs";
 import { PACKAGE_STEPS } from "./systemstand/schritte.mjs";
 
 const BASIS_FILE = "tools/basis/systemstand.json";
@@ -22,6 +23,9 @@ const PASSING_CONCLUSIONS = new Set(["success", "skipped", "neutral"]);
 const NON_BLOCKING_PATTERNS = [/continue-on-error/, /\|\|\s*true/];
 const PUSH_RULES = ["pull_request", "non_fast_forward", "deletion"];
 const WORKFLOW_FILE_PATTERN = /\.ya?ml$/;
+const DAY_MS = 86_400_000;
+const TIME_LIMIT_FACTOR = 2;
+const TIME_LIMIT_NOTE = "Zeitgrenze überschritten, Entscheidung durch Antonio oder Jonas";
 const AUTO_MERGE_QUERY =
   "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { autoMergeAllowed } }";
 
@@ -213,11 +217,22 @@ async function criterionResult(remote, criterion) {
   }
 }
 
-async function evaluate(remote) {
+async function discoveredStart(remote, step) {
+  if (step.erstesPaket === undefined) return undefined;
+  try {
+    return await startedAt(remote, step.erstesPaket);
+  } catch {
+    return undefined;
+  }
+}
+
+async function evaluate(remote, records) {
   const report = [];
   for (const step of STEPS) {
     const results = step.kriterien.map((item) => criterionResult(remote, item));
-    report.push({ ...step, kriterien: await Promise.all(results) });
+    const { start, schaetzungTage } = records.head[step.id] ?? {};
+    const known = { start: start ?? (await discoveredStart(remote, step)), schaetzungTage };
+    report.push({ ...step, ...known, kriterien: await Promise.all(results) });
   }
   return report;
 }
@@ -231,8 +246,20 @@ function state(reasons) {
   return reasons.length === 0 ? "erfüllt" : `offen, weil ${reasons.join("; ")}`;
 }
 
+function overdue({ start, schaetzungTage }) {
+  if (typeof start !== "string" || typeof schaetzungTage !== "number") return false;
+  return Date.now() - Date.parse(start) > TIME_LIMIT_FACTOR * schaetzungTage * DAY_MS;
+}
+
 function stepLine(step) {
-  return `Schritt ${step.id}: ${state(stepReasons(step))}`;
+  const reasons = stepReasons(step);
+  const note = reasons.length > 0 && overdue(step) ? `. ${TIME_LIMIT_NOTE}` : "";
+  return `Schritt ${step.id}: ${state(reasons)}${note}`;
+}
+
+function estimate(days) {
+  if (typeof days !== "number") return "offen";
+  return days === 1 ? "1 Tag" : `${days} Tage`;
 }
 
 function parseRecords(text) {
@@ -299,7 +326,6 @@ function cell(text) {
 }
 
 function issueBody(step, records) {
-  const entry = records.head[step.id] ?? {};
   const rows = step.kriterien.map(
     ({ id, titel, gruende }) =>
       `| ${cell(titel)} | ${cell(state(gruende))} | ${records.since(step.id, id) ?? "–"} |`,
@@ -309,7 +335,7 @@ function issueBody(step, records) {
     stepLine(step),
     "",
     ...(rows.length === 0 ? [] : [...header, ...rows, ""]),
-    `Start: ${entry.start ?? "offen"}. Schätzung: ${entry.schaetzung ?? "offen"}.`,
+    `Start: ${step.start ?? "offen"}. Schätzung: ${estimate(step.schaetzungTage)}.`,
     "",
     "Prüfbefehl: `node tools/systemstand.mjs`",
     "",
@@ -353,7 +379,7 @@ async function main() {
   const prBasis = values["pr-basis"];
   const records = readRecords(prBasis);
   const remote = remoteFacts();
-  const report = await evaluate(remote);
+  const report = await evaluate(remote, records);
   for (const step of report) console.log(stepLine(step));
   if (values.issues) await updateIssues(remote, report, records);
   if (values.pruefen) checkRecords(report, records, prBasis !== undefined);

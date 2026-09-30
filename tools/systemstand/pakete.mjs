@@ -3,6 +3,8 @@ const PACKAGE_TITLE = /^Paket (\d+)([a-z]*):/;
 const PACKAGE_DIGITS = 2;
 const LISTED_PACKAGES = 3;
 const OPEN_STATE = "open";
+const STARTED_COMMENT = "Gestartet";
+const COMMENTS_PER_PAGE = 100;
 
 const issueLists = new WeakMap();
 
@@ -58,4 +60,14 @@ export function packagesClosed(first, last) {
     const open = inStep.filter(({ issue }) => issue.state === OPEN_STATE).map(({ id }) => id);
     return [...missingReasons(missing), ...openReasons([...new Set(open)].sort())];
   };
+}
+
+export async function startedAt(remote, firstPackage) {
+  const id = packageId(firstPackage);
+  const packages = (await packageIssues(remote)).flatMap(packageOf);
+  const numbers = packages.filter((found) => found.id === id).map(({ issue }) => issue.number);
+  if (numbers.length === 0) return undefined;
+  const suffix = `/issues/${Math.min(...numbers)}/comments?per_page=${COMMENTS_PER_PAGE}`;
+  const comments = await remote.get(suffix);
+  return comments.find(({ body }) => body.startsWith(STARTED_COMMENT))?.created_at;
 }
