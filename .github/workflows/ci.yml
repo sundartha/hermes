@@ -77,7 +77,18 @@ jobs:
             | xargs -0 -n1 node --check
 
       - name: Audit
-        run: npm audit --audit-level=high
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            basis="$PR_BASE_SHA"
+          else
+            basis="$PUSH_BEFORE_SHA"
+          fi
+          node tools/audit-vergleich.mjs --basis "$basis"
 
   tests:
     name: Tests ${{ matrix.teil }}/${{ strategy.job-total }}

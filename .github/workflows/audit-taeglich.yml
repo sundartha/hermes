@@ -1,0 +1,52 @@
+name: Audit täglich
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: audit-taeglich
+  cancel-in-progress: false
+
+jobs:
+  bestand:
+    name: Bestand
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_TITLE: Sicherheitsmeldungen im Bestand
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Audit des Bestands
+        run: |
+          set -euo pipefail
+          set +e
+          npm audit --json > "$RUNNER_TEMP/audit.json"
+          set -e
+          findings=$(jq -r '[.vulnerabilities[].via[] | select(type == "object" and (.severity == "high" or .severity == "critical")) | "- \(.name): \(.title) (\(.severity), \(.url))"] | unique | .[]' "$RUNNER_TEMP/audit.json")
+          number=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" --json number,title --jq "[.[] | select(.title == env.ISSUE_TITLE)][0].number // empty")
+          if [ -z "$findings" ]; then
+            echo "Keine Meldungen der Stufe high oder critical im Bestand."
+            exit 0
+          fi
+          printf 'Stand %s, Commit %s.\n\nMeldungen der Stufe high oder critical auf master:\n\n%s\n' \
+            "$(date -u +%F)" "$GITHUB_SHA" "$findings" > "$RUNNER_TEMP/issue.md"
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file "$RUNNER_TEMP/issue.md"
+          else
+            gh issue create --title "$ISSUE_TITLE" --body-file "$RUNNER_TEMP/issue.md"
+          fi
