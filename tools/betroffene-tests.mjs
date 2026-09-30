@@ -15,6 +15,8 @@ const TEST_FILE = /^test\/.+\.test\.js$/;
 const NAME_STATUS_ENTRY = /([A-Z])\d*\0([^\0]+)\0/g;
 const DELETED = "D";
 const BANK = "regression";
+const TEST_CONCURRENCY = 4;
+const NODE_TEST_FLAGS = ["--", `--test-concurrency=${TEST_CONCURRENCY}`];
 const RUNNER = fileURLToPath(new URL("../test/testbaenke-run.mjs", import.meta.url));
 const EXIT_FAILURE = 1;
 const NO_CHANGES_MESSAGE = "Keine Änderungen gegenüber der Basis, keine Tests betroffen.";
@@ -72,7 +74,9 @@ async function testPatternsFor(changes) {
 }
 
 function runBank(patterns) {
-  const result = spawnSync(process.execPath, [RUNNER, BANK, ...patterns], { stdio: "inherit" });
+  const result = spawnSync(process.execPath, [RUNNER, BANK, ...patterns, ...NODE_TEST_FLAGS], {
+    stdio: "inherit",
+  });
   return result.status ?? EXIT_FAILURE;
 }
 
