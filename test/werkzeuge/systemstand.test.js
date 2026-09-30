@@ -61,7 +61,7 @@ function rule(type, parameters = {}) {
 function healthyGitHub() {
   const checks = REQUIRED_CHECKS.map((context) => ({ context }));
   return {
-    repo: { full_name: REPOSITORY, allow_auto_merge: true },
+    autoMergeAllowed: true,
     rules: [
       rule("deletion"),
       rule("non_fast_forward"),
@@ -83,7 +83,7 @@ function healthyGitHub() {
 function answer(state, url) {
   const repo = `/repos/${REPOSITORY}`;
   const routes = new Map([
-    [repo, state.repo],
+    ["/graphql", { data: { repository: { autoMergeAllowed: state.autoMergeAllowed } } }],
     [`${repo}/rules/branches/master`, state.rules],
     [`${repo}/rulesets/${RULESET_ID}`, state.ruleset],
     [`${repo}/commits`, [{ sha: MASTER_SHA }]],

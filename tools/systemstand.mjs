@@ -23,11 +23,8 @@ const PASSING_CONCLUSIONS = new Set(["success", "skipped", "neutral"]);
 const NON_BLOCKING_PATTERNS = [/continue-on-error/, /\|\|\s*true/];
 const PUSH_RULES = ["pull_request", "non_fast_forward", "deletion"];
 const WORKFLOW_FILE_PATTERN = /\.ya?ml$/;
-
-function memo(load) {
-  let promise;
-  return () => (promise ??= load());
-}
+const AUTO_MERGE_QUERY =
+  "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { autoMergeAllowed } }";
 
 function request(path, { method = "GET", body } = {}) {
   const token = env.GH_TOKEN || env.GITHUB_TOKEN;
@@ -50,13 +47,19 @@ async function github(path, options = {}) {
 }
 
 function remoteFacts() {
-  const repo = memo(async () => github(`/repos/${env.GITHUB_REPOSITORY || DEFAULT_REPOSITORY}`));
-  const full = async () => (await repo()).full_name;
-  const get = async (suffix) => github(`/repos/${await full()}${suffix}`);
-  const raw = async (suffix) => request(`/repos/${await full()}${suffix}`);
-  const send = async (method, suffix, body) =>
-    github(`/repos/${await full()}${suffix}`, { method, body });
-  return { repo, full, get, raw, send, rules: memo(async () => get("/rules/branches/master")) };
+  const full = env.GITHUB_REPOSITORY || DEFAULT_REPOSITORY;
+  const get = async (suffix) => github(`/repos/${full}${suffix}`);
+  const raw = async (suffix) => request(`/repos/${full}${suffix}`);
+  const send = async (method, suffix, body) => github(`/repos/${full}${suffix}`, { method, body });
+  let rules;
+  return { full, get, raw, send, rules: () => (rules ??= get("/rules/branches/master")) };
+}
+
+async function autoMergeAllowed(remote) {
+  const [owner, name] = remote.full.split("/");
+  const body = { query: AUTO_MERGE_QUERY, variables: { owner, name } };
+  const { data } = await github("/graphql", { method: "POST", body });
+  return data?.repository?.autoMergeAllowed === true;
 }
 
 function missing(condition, reason) {
@@ -129,11 +132,11 @@ function ownedSourceFiles() {
 }
 
 async function srcWithoutHumansProblems(remote) {
-  const [repo, rules] = await Promise.all([remote.repo(), remote.rules()]);
+  const [allowed, rules] = await Promise.all([autoMergeAllowed(remote), remote.rules()]);
   const approvals = ruleParameters(rules, "pull_request").required_approving_review_count ?? 0;
   const owned = ownedSourceFiles();
   return [
-    ...missing(repo.allow_auto_merge === true, "Auto-Merge im Repo aus ist"),
+    ...missing(allowed, "Auto-Merge im Repo aus ist"),
     ...missing(approvals === 0, `ein PR ${approvals} Freigaben von Menschen braucht`),
     ...owned.slice(0, 1).map((path) => `CODEOWNERS ${owned.length} Dateien wie ${path} nennt`),
   ];
@@ -143,9 +146,8 @@ async function masterGreenProblems(remote) {
   const commits = await remote.get(`/commits?sha=master&per_page=${RECENT_COMMITS}`);
   for (const { sha } of commits) {
     const suffix = `/actions/runs?event=push&head_sha=${sha}&per_page=${PER_PAGE}`;
-    const runs = (await remote.get(suffix)).workflow_runs.filter(
-      ({ name }) => name !== OWN_WORKFLOW,
-    );
+    const { workflow_runs: all } = await remote.get(suffix);
+    const runs = all.filter(({ name }) => name !== OWN_WORKFLOW);
     if (runs.length === 0 || runs.some(({ status }) => status !== "completed")) continue;
     return runs
       .filter(({ conclusion }) => !PASSING_CONCLUSIONS.has(conclusion))
@@ -162,7 +164,7 @@ async function redProbeVerdict(remote, { number, title }) {
 }
 
 async function redProbeProblems(remote) {
-  const query = `repo:${await remote.full()} is:pr is:closed in:title "${REDPROBE_TITLE}"`;
+  const query = `repo:${remote.full} is:pr is:closed in:title "${REDPROBE_TITLE}"`;
   const path = `/search/issues?q=${encodeURIComponent(query)}&sort=created&order=desc&per_page=${PER_PAGE}`;
   const { items } = await github(path);
   const probes = items.filter(({ title }) => title.startsWith(REDPROBE_TITLE)).reverse();
