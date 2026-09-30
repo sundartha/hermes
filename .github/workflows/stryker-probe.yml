@@ -1,0 +1,40 @@
+name: Stryker-Probe
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  messung:
+    name: Messung ${{ matrix.datei }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        datei: [callee, route, mcpinfo]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installieren
+        run: npm ci --ignore-scripts
+
+      - name: Kerne
+        run: nproc
+
+      - name: Stryker
+        run: |
+          start=$(date +%s)
+          npx stryker run stryker.${{ matrix.datei }}.json > "$RUNNER_TEMP/stryker.log" 2>&1 || echo "exit=$?"
+          echo "Laufzeit gesamt: $(( $(date +%s) - start )) s" >> "$RUNNER_TEMP/stryker.log"
+          grep -E "Instrumented|Initial test run|tests per mutant|All files|Done in|Laufzeit gesamt|exit=" "$RUNNER_TEMP/stryker.log" | sed 's/\x1b\[[0-9;]*m//g' | tee -a "$GITHUB_STEP_SUMMARY"

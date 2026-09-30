@@ -1,0 +1,27 @@
+{
+  "testRunner": "tap",
+  "mutate": [
+    "src/route-policy.js"
+  ],
+  "tap": {
+    "testFiles": [
+      "test/probe-auth-table.test.js",
+      "test/route-auth-inventory.test.js"
+    ],
+    "nodeArgs": [
+      "--test-reporter=tap",
+      "--test-concurrency=4"
+    ]
+  },
+  "coverageAnalysis": "off",
+  "reporters": [
+    "clear-text",
+    "json"
+  ],
+  "jsonReporter": {
+    "fileName": "reports/route-report.json"
+  },
+  "tempDirName": "/tmp/stryker-tmp",
+  "concurrency": 4,
+  "timeoutMS": 60000
+}

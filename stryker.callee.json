@@ -1,0 +1,11 @@
+{
+  "testRunner": "tap",
+  "mutate": ["src/callee-is-owner.js"],
+  "tap": { "testFiles": ["test/al-p11-result-card.test.js","test/al-p13-consult-channel.test.js","test/al-p16-boot-probes.test.js","test/ausfall-verdrahtung-call-finish.test.js","test/b4a-model-prices.test.js","test/boot-budget-axis-label.test.js","test/bootstrap-heal-boot.test.js","test/callee-is-owner.test.js","test/diagnostic-retention.test.js","test/e2e-02-two-tenant-two-language.test.js","test/e2e-04-no-geo-tenant-full-chain.test.js","test/e2e-06-en-purity-aggregate.test.js","test/el-beende-versuch.test.js","test/f2-mail-summary-finish-call.test.js","test/fehlergrund-reihenfolge-riegel.test.js","test/gq-p15-failure-reason-notification.test.js","test/graceful-shutdown.test.js","test/hangup-doppelbuchung.test.js","test/ie6-s1-katalog-umzug.test.js","test/iel-b1-schalter.test.js","test/iel-b4-nachlauf.test.js","test/iel-b5-status-ende.test.js","test/iel-b8-weiche.test.js","test/iel-inbound-bridges.test.js","test/iel-init-webhook.test.js","test/iep-p6-owner-ton.test.js","test/iex-a2-fehlersatz.test.js","test/iex-a7-init-limit.test.js","test/iex-b1-inbound-ausfall-alarm.test.js","test/inbox-entry-qualification.test.js","test/ip4-boot-sprechpfad.test.js","test/kv-m0-boot-banner-config.test.js","test/kv-m4-monthly-cross-check.test.js","test/kv-p1-cost-ledger-map.test.js","test/kv-p7-latent-paths.test.js","test/kv2-2-kostenprofil-weichen.test.js","test/nutzer-mail-nur-not-placed.test.js","test/openai-p10b-healthz.test.js","test/openai-s3-place-call-idempotenz.test.js","test/openai-t2-08-stundenlimit-sperre.test.js","test/p11-post-call-language.test.js","test/plattform-nummer-bindung.test.js","test/route-auth-inventory.test.js","test/sec-p6-gate-fehlerpfad.test.js","test/sweep-fabrik-vertrag.test.js","test/web-14-call-finish-sms-text-language.test.js"], "nodeArgs": ["--test-reporter=tap", "--test-concurrency=4"] },
+  "coverageAnalysis": "off",
+  "reporters": ["clear-text", "json"],
+  "jsonReporter": { "fileName": "reports/callee-report.json" },
+  "tempDirName": "/tmp/stryker-tmp",
+  "concurrency": 4,
+  "timeoutMS": 60000
+}

@@ -1,0 +1,57 @@
+{
+  "testRunner": "tap",
+  "mutate": [
+    "src/mcp-server-info.js"
+  ],
+  "tap": {
+    "testFiles": [
+      "test/al-p11-result-card.test.js",
+      "test/al-p13-consult-channel.test.js",
+      "test/el-action-items.test.js",
+      "test/gq-b1-briefing-openness.test.js",
+      "test/inbox-mcp-tool.test.js",
+      "test/mcp-fehlergrund-rueckweg.test.js",
+      "test/mcp-tool-annotations.test.js",
+      "test/mcp-tools-i18n.test.js",
+      "test/mcp-tools-language.test.js",
+      "test/mcp-tools.test.js",
+      "test/mcp-ui-i18n-divergence.test.js",
+      "test/mcp-ui-widget-i18n.test.js",
+      "test/mcp-ui.test.js",
+      "test/openai-p10a-ui-capabilities.test.js",
+      "test/openai-p10b-healthz.test.js",
+      "test/openai-p2-tool-metadaten.test.js",
+      "test/openai-p3-security-schemes.test.js",
+      "test/openai-p4-ergebnisstruktur-instructions.test.js",
+      "test/openai-p5a-datenminimierung.test.js",
+      "test/openai-p5b-geldpfad.test.js",
+      "test/openai-s3-hop-frist.test.js",
+      "test/openai-t2-05-reauth-challenge.test.js",
+      "test/openai-t2-08-hop-frist.test.js",
+      "test/openai-t2-09-neutrale-fehlertexte.test.js",
+      "test/openai-t2-13-bestaetigung.test.js",
+      "test/openai-t2-14-call-widget-confirm.test.js",
+      "test/openai-t2-15-restricted-data.test.js",
+      "test/openai-t2-16-place-call-texte.test.js",
+      "test/openai-t2-17-instructions-kern.test.js",
+      "test/p15-mcp-tool-descriptions-en.test.js",
+      "test/place-call-context-bridge.test.js",
+      "test/route-auth-inventory.test.js"
+    ],
+    "nodeArgs": [
+      "--test-reporter=tap",
+      "--test-concurrency=4"
+    ]
+  },
+  "coverageAnalysis": "off",
+  "reporters": [
+    "clear-text",
+    "json"
+  ],
+  "jsonReporter": {
+    "fileName": "reports/mcpinfo-report.json"
+  },
+  "tempDirName": "/tmp/stryker-tmp",
+  "concurrency": 4,
+  "timeoutMS": 60000
+}
