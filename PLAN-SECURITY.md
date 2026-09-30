@@ -6861,3 +6861,36 @@ User-Agent, kein Tenant/Account; `site` ist nur der Host aus dem Origin. Aufbewa
 Kennung, die im Browser des Besuchers steht - und kostet nur Speicher im Bereich weniger
 hundert Byte je Zeile. Eine Origin-Allowlist wuerde das nicht verhindern (Header ist
 ausserhalb des Browsers frei setzbar) und ist deshalb bewusst nicht gebaut.
+
+## PUBLIC-CANCEL — Kuendigung ohne Anmeldung (§ 312k BGB) (2026-10-01)
+
+**Was neu ist:** `POST /api/cancellation` (Klasse PUBLIC, `src/route-policy.js`,
+`src/public-cancellation-routes.js`, Fachlogik `src/billing/public-cancellation.js`). Das
+Formular auf `/kuendigen` (und im Reiter "Verträge kündigen" der Startseite) schickt die
+Kuendigungserklaerung ohne Sitzung an den Gateway.
+
+**Warum ohne Auth:** § 312k BGB verlangt eine unmittelbar und leicht zugaengliche
+Kuendigung. LG Koeln (33 O 355/22) und LG Muenchen I (33 O 15098/22) werten eine
+Login-/Passwort-Pflicht als unzulaessige Huerde; die Identifikation muss ueber Angaben wie
+Name und E-Mail moeglich sein. Bisher fuehrte `/kuendigen` nur zum Login.
+
+**Wirkung:** ordentlich + naechstmoeglicher Zeitpunkt + Email gehoert eindeutig einem Tenant
+mit Abo -> dieselbe Sequenz wie der Knopf im Kundenbereich (Abo-Ende vormerken, Nachweis
+im `audit_log`, Bestaetigung an die KONTO-Adresse). Alles andere (ausserordentlich,
+Wunschtermin, keine/mehrdeutige Zuordnung, kein Abo, Stripe-Fehler) -> Mail an das eigene
+Kundenpostfach (`MAIL_FROM`) zur Bearbeitung von Hand, bei eindeutiger Zuordnung sofort
+eine Eingangsbestaetigung an die Konto-Adresse. Weder Anruf noch SMS noch Zahlung.
+
+**Sicherungen:** strikte Eingabepruefung (Laengen, Email-Format, Enum-Werte, echtes
+Kalenderdatum) -> sonst 400; eigene Per-IP-Drossel 5 je 15 min (zusaetzlich zum globalen
+Limiter); Honeypot-Feld; die Antwort ist fuer Kunde und Nicht-Kunde identisch (nur der
+Eingangszeitpunkt) -> keine Konto-Aufzaehlung; Mails NIE an die Adresse aus dem Formular
+(kein offener Mail-Versand an Dritte); CORS nur fuer die Formular-Seiten (Live + Labor), nie
+`*`. Name/Email/Grund landen nicht in Log oder `audit_log` (Regel 4), nur in der Mail ans
+Kundenpostfach.
+
+**Restrisiko (bewusst getragen):** wer die Konto-Email eines Kunden kennt, kann dessen Abo
+zum Periodenende vormerken. Der echte Inhaber bekommt sofort die Bestaetigung an seine
+Konto-Adresse und nimmt die Vormerkung im Kundenbereich mit einem Klick zurueck; bis zum
+Periodenende aendert sich am Dienst nichts. Eine Bestaetigungs-Mail VOR der Wirkung waere
+genau die Huerde, die § 312k verbietet.
