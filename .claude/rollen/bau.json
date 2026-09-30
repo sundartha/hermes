@@ -16,6 +16,7 @@
       "Edit(.dependency-cruiser.cjs)",
       "Edit(.dependency-cruiser-known-violations.json)",
       "Edit(docs/sicherheitsgrenzen.md)",
+      "Edit(docs/sicherheitsabgleich.json)",
       "Edit(test/testbaenke-run.mjs)",
       "Edit(test/werkzeuge/**)",
       "Edit(test/werkzeuge/werkzeugtexte.json)",
