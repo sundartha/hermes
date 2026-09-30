@@ -1,5 +1,8 @@
 # Marketing-Seiten sind indexierbar; der private App-Bereich nicht.
+# Content-Signal (contentsignals.org): Suche, KI-Antworten und KI-Training erlaubt
+# (Owner-Entscheidung 2026-09-30).
 User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
 Disallow: /app
 

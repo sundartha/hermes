@@ -1,6 +1,6 @@
-# Hermes — setup guide for AI agents
+# Hermes by Sundartha — setup guide for AI agents
 
-> This page is written for AI agents. If a user sent you here ("Set up Hermes for me"), follow the steps below in order. Hermes gives your user's AI a real phone number: it answers incoming calls and, on the Pro plan, places outgoing calls on the user's behalf. You control it through one remote MCP server.
+> This page is written for AI agents. If a user sent you here ("Set up Hermes by Sundartha for me"), follow the steps below in order. Hermes gives your user's AI a real phone number: it answers incoming calls and, on the Pro plan, places outgoing calls on the user's behalf. You control it through one remote MCP server.
 
 ## At a glance
 
@@ -27,6 +27,27 @@ claude mcp add --transport http hermes https://app.sundartha.com/mcp
 ```
 
 **Claude (claude.ai / Claude Desktop):** Settings › Connectors › Add custom connector → Name `Hermes`, Server URL `https://app.sundartha.com/mcp` → Connect.
+
+**Codex:**
+
+```bash
+codex mcp add hermes --url https://app.sundartha.com/mcp
+codex mcp login hermes
+```
+
+**Cursor:** add this under `mcpServers` in `mcp.json`, or give the user the one-click link `cursor://anysphere.cursor-deeplink/mcp/install?name=hermes&config=eyJ1cmwiOiJodHRwczovL2FwcC5zdW5kYXJ0aGEuY29tL21jcCJ9`:
+
+```json
+"hermes": { "url": "https://app.sundartha.com/mcp" }
+```
+
+**VS Code:** add this under `servers` in `.vscode/mcp.json`, or give the user the one-click link `vscode:mcp/install?%7B%22name%22%3A%22hermes%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fapp.sundartha.com%2Fmcp%22%7D`:
+
+```json
+"hermes": { "type": "http", "url": "https://app.sundartha.com/mcp" }
+```
+
+**Agent Skill (optional):** `npx skills add https://sundartha.com` installs the skill `hermes-by-sundartha` with these rules for agents such as Claude Code, Codex, Cursor and OpenClaw.
 
 **Any other MCP client:** add a remote MCP server named `hermes` with the URL `https://app.sundartha.com/mcp` and the Streamable HTTP transport, using your client's own mechanism. Do not guess configuration keys. If you cannot add servers yourself, give the user the name and URL and ask them to add it.
 
@@ -112,6 +133,9 @@ Hermes answers incoming calls on its own.
 
 ## Links
 
-- Website: https://sundartha.com
+- Website: https://sundartha.com (as Markdown: https://sundartha.com/index.md)
+- Overview for AI agents: https://sundartha.com/llms.txt
 - Dashboard: https://app.sundartha.com
 - Contact: kontakt@sundartha.com
+
+Hermes by Sundartha is not related to other software called Hermes.

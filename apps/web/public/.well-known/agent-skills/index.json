@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "hermes-by-sundartha",
+      "type": "skill-md",
+      "description": "Give the AI a real phone number with Hermes by Sundartha. Use when the user wants their AI to make or answer phone calls, book or reschedule by phone, check who called, read call summaries, or set up or troubleshoot the Hermes MCP server (https://app.sundartha.com/mcp).",
+      "url": "/.well-known/agent-skills/hermes-by-sundartha/SKILL.md",
+      "digest": "sha256:03dd4de46da573918754ece0d57dd9f38ed764ae35402693e0f041f87958986d"
+    }
+  ]
+}
