@@ -6,7 +6,7 @@ import { git } from "./git.mjs";
 import { REMOTE } from "./sperren.mjs";
 
 export const MASTER = `${REMOTE}/master`;
-const WORKTREES = ".claude/worktrees";
+const WORKTREES = "arbeitsbaeume";
 const EINSCHLUSS = ".worktreeinclude";
 const ECHTE_UMGEBUNG = ".env";
 const INSTALLATION = ["ci", "--prefer-offline", "--ignore-scripts"];
