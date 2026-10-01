@@ -1,213 +1,103 @@
 ---
-// Kuendigen nach § 312k BGB - EINE Quelle fuer die Seite /kuendigen und den Reiter
-// "Verträge kündigen" / "Cancel contracts" im Rechts-Blatt der Startseite
-// (pages/index.astro; das Blatt zeigt je Sprache eine Fassung, Owner-Wunsch 2026-09-28).
+// Inhalt der Kuendigungs-Erklaerung - EINE Quelle fuer die Seite /kuendigen und den
+// Reiter "Verträge kündigen" / "Cancel contracts" im Rechts-Blatt der Startseite
+// (pages/index.astro, Owner-Wunsch 2026-09-27: der Reiter oeffnet sich im Blatt, die
+// Reiterleiste bleibt). /kuendigen ist deutsch (Default lang="de"); das Blatt zeigt
+// zusaetzlich die englische Fassung, wenn die Startseite auf Englisch steht
+// (Owner-Wunsch 2026-09-28). Die Knopf-Beschriftung kommt aus denselben Konstanten
+// wie der Knopf im Kundenbereich (lib/subscribe.js, § 312k BGB; EN-Fassung laut
+// Owner-Entscheidung 2026-08-14). Die Klassen sind die der Unterseiten
+// (styles/hermes-page.css .doc-*); im Blatt setzt styles/hermes.css (.legal-info) die Masse.
 //
-// Seit 2026-10-01 steht hier das Kuendigungsformular selbst - OHNE Anmeldung. Vorher
-// fuehrte der Weg nur zum Login; LG Koeln (33 O 355/22) und LG Muenchen I
-// (33 O 15098/22) werten das als unzulaessige Huerde. Das Formular fragt genau die
-// Angaben aus § 312k Abs. 2 Nr. 1 ab (Art + Grund, Identitaet, Vertrag, Zeitpunkt,
-// Adresse fuer die Bestaetigung), der Bestaetigungsknopf heisst "Jetzt kündigen" /
-// "Cancel now" (dieselben Konstanten wie der Knopf im Kundenbereich, lib/subscribe.js),
-// und danach erscheint eine Bestaetigungsseite mit Eingangszeitpunkt zum Speichern
-// (Abs. 3). Verarbeitung: src/billing/public-cancellation.js im Wurzelprojekt.
-// Verhalten: scripts/cancel-form.js; Aussehen: styles/cancel-form.css.
-import { LOGIN_URL, CANCELLATION_URL } from "../../lib/routes.js";
-import {
-  CANCEL_BUTTON_LABEL,
-  CANCEL_BUTTON_LABEL_EN,
-  CONFIRM_CANCEL_BUTTON_LABEL,
-  CONFIRM_CANCEL_BUTTON_LABEL_EN,
-} from "../../lib/subscribe.js";
-import "../../styles/cancel-form.css";
+// Owner-Entscheidung 2026-10-01: gekuendigt wird NUR im Kundenbereich - ohne Anmeldung
+// koennte jeder mit fremdem Namen + Email einen Vertrag kuendigen (das oeffentliche
+// Formular vom 2026-10-01 ist wieder entfernt). Der Knopf fuehrt ueber CANCEL_URL
+// direkt zur Kuendigungs-Bestaetigung im Dashboard, nach dem Login falls noetig
+// (lib/cancel-intent.js). Rechtsrisiko Login-Pflicht: s. PLAN-SECURITY.md PUBLIC-CANCEL.
+import { CANCEL_URL } from "../../lib/routes.js";
+import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../../lib/subscribe.js";
 
 const { lang = "de" } = Astro.props;
 const CONTACT = "kontakt@sundartha.com";
 const en = lang === "en";
-
-const T = en
-  ? {
-      lead:
-        "You can cancel your Hermes contract at any time — right here, no sign-in needed. " +
-        "The cancellation takes effect at the end of the current billing period; until then, " +
-        "your assistant remains available as usual.",
-      title: "Your cancellation",
-      name: "First and last name",
-      email: "Email address of your Hermes account",
-      reference: "Phone number or customer number",
-      optional: "optional",
-      kind: "Type of cancellation",
-      ordinary: "Ordinary cancellation",
-      extraordinary: "Extraordinary cancellation (for good cause)",
-      reason: "Reason for the extraordinary cancellation",
-      timing: "Effective date",
-      next: "At the earliest possible date",
-      nextHint: "end of the current billing period",
-      wish: "On a date of my choice",
-      date: "Requested date",
-      hint: "We send the confirmation to the email address of your Hermes account.",
-      invalid: "Please check your details — something is missing or incomplete.",
-      rate: "Too many attempts in a short time. Please wait a few minutes and try again.",
-      unavailable: `Your cancellation could not be sent. Please email it to ${CONTACT} instead — that is just as valid.`,
-      doneTitle: "Cancellation received",
-      doneLead:
-        "We received your cancellation. You will get the confirmation — with the date on which " +
-        "it takes effect — by email at the address of your Hermes account.",
-      receivedAt: "Received",
-      summaryName: "Name",
-      summaryEmail: "Email",
-      summaryReference: "Phone / customer no.",
-      summaryKind: "Type",
-      summaryReason: "Reason",
-      summaryTiming: "Effective date",
-      print: "Save or print confirmation",
-      alternatives: "Prefer another way? In your",
-      customerArea: "customer area",
-      alternativesMid: `via “${CANCEL_BUTTON_LABEL_EN}”, or informally by email to`,
-      confirm: CONFIRM_CANCEL_BUTTON_LABEL_EN,
-    }
-  : {
-      lead:
-        "Du kannst deinen Hermes-Vertrag jederzeit kündigen — direkt hier, ohne Anmeldung. " +
-        "Die Kündigung wirkt zum Ende des laufenden Abrechnungszeitraums; bis dahin bleibt " +
-        "dein Assistent wie gewohnt erreichbar.",
-      title: "Deine Kündigung",
-      name: "Vor- und Nachname",
-      email: "E-Mail-Adresse deines Hermes-Kontos",
-      reference: "Rufnummer oder Kundennummer",
-      optional: "optional",
-      kind: "Art der Kündigung",
-      ordinary: "Ordentliche Kündigung",
-      extraordinary: "Außerordentliche Kündigung (aus wichtigem Grund)",
-      reason: "Grund der außerordentlichen Kündigung",
-      timing: "Zeitpunkt",
-      next: "Zum nächstmöglichen Zeitpunkt",
-      nextHint: "Ende des laufenden Abrechnungszeitraums",
-      wish: "Zu einem Wunschtermin",
-      date: "Wunschtermin",
-      hint: "Die Bestätigung schicken wir an die E-Mail-Adresse deines Hermes-Kontos.",
-      invalid: "Bitte prüfe deine Angaben — etwas fehlt oder ist unvollständig.",
-      rate: "Zu viele Versuche in kurzer Zeit. Bitte warte ein paar Minuten und versuche es erneut.",
-      unavailable: `Deine Kündigung konnte nicht gesendet werden. Schick sie bitte per E-Mail an ${CONTACT} — das ist genauso wirksam.`,
-      doneTitle: "Kündigung eingegangen",
-      doneLead:
-        "Wir haben deine Kündigung erhalten. Die Bestätigung — mit dem Termin, zu dem sie " +
-        "wirkt — bekommst du per E-Mail an die Adresse deines Hermes-Kontos.",
-      receivedAt: "Eingegangen",
-      summaryName: "Name",
-      summaryEmail: "E-Mail",
-      summaryReference: "Rufnummer / Kundennr.",
-      summaryKind: "Art",
-      summaryReason: "Grund",
-      summaryTiming: "Zeitpunkt",
-      print: "Bestätigung speichern oder drucken",
-      alternatives: "Lieber anders? Im",
-      customerArea: "Kundenbereich",
-      alternativesMid: `über „${CANCEL_BUTTON_LABEL}“ oder formlos per E-Mail an`,
-      confirm: CONFIRM_CANCEL_BUTTON_LABEL,
-    };
-
-const SUMMARY_ROWS = [
-  { key: "receivedAt", label: T.receivedAt },
-  { key: "name", label: T.summaryName },
-  { key: "email", label: T.summaryEmail },
-  { key: "reference", label: T.summaryReference },
-  { key: "kind", label: T.summaryKind },
-  { key: "reason", label: T.summaryReason },
-  { key: "timing", label: T.summaryTiming },
-];
 ---
 
-<p class="doc-lead">{T.lead}</p>
+{en ? (
+  <p class="doc-lead">
+    You can cancel your Hermes contract at any time — in your customer area or
+    informally by email. The cancellation takes effect at the end of the current
+    billing period; until then, your assistant remains available as usual.
+  </p>
+) : (
+  <p class="doc-lead">
+    Du kannst deinen Hermes-Vertrag jederzeit kündigen — über deinen Kundenbereich oder
+    formlos per E-Mail. Die Kündigung wirkt zum Ende des laufenden
+    Abrechnungszeitraums; bis dahin bleibt dein Assistent wie gewohnt erreichbar.
+  </p>
+)}
 
-<div class="doc-block doc-steps cf-wrap">
-  <form
-    class="sheet__card cf"
-    data-cancel-form
-    data-endpoint={CANCELLATION_URL}
-    data-lang={en ? "en" : "de"}
-    data-msg-invalid={T.invalid}
-    data-msg-rate={T.rate}
-    data-msg-unavailable={T.unavailable}
-  >
-    <span class="cf__title">{T.title}</span>
-
-    <div class="cf__grid">
-      <label class="cf__field">
-        <span class="cf__label">{T.name}</span>
-        <input class="cf__input" name="name" autocomplete="name" required minlength="2" maxlength="120" />
-      </label>
-      <label class="cf__field">
-        <span class="cf__label">{T.email}</span>
-        <input class="cf__input" type="email" name="email" autocomplete="email" required maxlength="254" />
-      </label>
-      <label class="cf__field cf__field--wide">
-        <span class="cf__label">{T.reference} <em>({T.optional})</em></span>
-        <input class="cf__input" name="reference" autocomplete="off" maxlength="80" />
-      </label>
-    </div>
-
-    <fieldset class="cf__choice">
-      <legend class="cf__label">{T.kind}</legend>
-      <label class="cf__option">
-        <input type="radio" name="kind" value="ordinary" data-summary={T.ordinary} checked />
-        <span>{T.ordinary}</span>
-      </label>
-      <label class="cf__option">
-        <input type="radio" name="kind" value="extraordinary" data-summary={T.extraordinary} />
-        <span>{T.extraordinary}</span>
-      </label>
-    </fieldset>
-    <label class="cf__field" data-cf-reason hidden>
-      <span class="cf__label">{T.reason}</span>
-      <textarea class="cf__input cf__input--area" name="reason" rows="3" maxlength="2000"></textarea>
-    </label>
-
-    <fieldset class="cf__choice">
-      <legend class="cf__label">{T.timing}</legend>
-      <label class="cf__option">
-        <input type="radio" name="timing" value="next" data-summary={`${T.next} (${T.nextHint})`} checked />
-        <span>{T.next} <em>({T.nextHint})</em></span>
-      </label>
-      <label class="cf__option">
-        <input type="radio" name="timing" value="date" data-summary={T.wish} />
-        <span>{T.wish}</span>
-      </label>
-    </fieldset>
-    <label class="cf__field cf__field--date" data-cf-date hidden>
-      <span class="cf__label">{T.date}</span>
-      <input class="cf__input" type="date" name="date" />
-    </label>
-
-    <input class="cf__trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
-
-    <p class="cf__hint">{T.hint}</p>
-    <p class="cf__error" data-cf-error role="alert" hidden></p>
-    <button class="btn-solid cf__submit" type="submit">{T.confirm}</button>
-  </form>
-
-  <div class="sheet__card cf cf-done" data-cancel-done tabindex="-1" hidden>
-    <span class="cf__title">{T.doneTitle}</span>
-    <p class="cf-done__lead">{T.doneLead}</p>
-    <dl class="cf-done__list">
-      {SUMMARY_ROWS.map(({ key, label }) => (
-        <div class="cf-done__row" data-cf-row={key}>
-          <dt>{label}</dt>
-          <dd data-cf-out={key}></dd>
-        </div>
-      ))}
-    </dl>
-    <button class="btn-ghost cf__print" type="button" data-cf-print>{T.print}</button>
+<div class="doc-block doc-steps">
+  <div class="sheet__card">
+    <span class="step">
+      <span class="step__num">01</span>
+      <span class="step__body">
+        {en ? (
+          <>
+            <span class="step__title">In your customer area</span>
+            <span class="step__text">
+              The button takes you straight to the cancellation in your customer
+              area — after signing in, if needed. After a short confirmation — showing
+              the exact date on which the cancellation takes effect — your contract is
+              cancelled.
+            </span>
+            <a class="btn-solid step__action" href={CANCEL_URL}>{CANCEL_BUTTON_LABEL_EN}</a>
+          </>
+        ) : (
+          <>
+            <span class="step__title">Im Kundenbereich</span>
+            <span class="step__text">
+              Der Knopf führt dich direkt zur Kündigung in deinem Kundenbereich —
+              falls nötig, nach der Anmeldung. Nach einer kurzen Bestätigung — mit dem
+              genauen Termin, zu dem die Kündigung wirkt — ist der Vertrag gekündigt.
+            </span>
+            <a class="btn-solid step__action" href={CANCEL_URL}>{CANCEL_BUTTON_LABEL}</a>
+          </>
+        )}
+      </span>
+    </span>
+    <span class="rule" aria-hidden="true"></span>
+    <span class="step">
+      <span class="step__num">02</span>
+      <span class="step__body">
+        {en ? (
+          <>
+            <span class="step__title">Informally by email</span>
+            <span class="step__text">
+              Alternatively, an email to <a href={`mailto:${CONTACT}`}>{CONTACT}</a> is
+              enough — no sign-in needed. We confirm the cancellation and the date on which
+              it takes effect.
+            </span>
+          </>
+        ) : (
+          <>
+            <span class="step__title">Formlos per E-Mail</span>
+            <span class="step__text">
+              Alternativ genügt eine E-Mail an <a href={`mailto:${CONTACT}`}>{CONTACT}</a> —
+              ganz ohne Anmeldung. Wir bestätigen die Kündigung und den Termin, zu dem sie wirkt.
+            </span>
+          </>
+        )}
+      </span>
+    </span>
   </div>
 </div>
 
-<p class="doc-note">
-  {T.alternatives} <a href={LOGIN_URL}>{T.customerArea}</a>{" "}{T.alternativesMid}{" "}<a
-    href={`mailto:${CONTACT}`}>{CONTACT}</a
-  >.
-</p>
-
-<script>
-  // Hoisted: Astro buendelt es als externes, same-origin Modul (CSP-konform).
-  import "../../scripts/cancel-form.js";
-</script>
+<style>
+  /* Knopf im Schritt 01: fuehrt direkt zur Kuendigung im Kundenbereich (CANCEL_URL).
+     Astro buendelt das als externes Stylesheet (CSP style-src 'self'). */
+  .step__action {
+    align-self: flex-start;
+    margin-top: 10px;
+    padding: 13px 26px;
+  }
+</style>
