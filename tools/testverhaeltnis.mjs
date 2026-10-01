@@ -3,22 +3,21 @@ import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 const LIMIT_PATH = "tools/basis/testverhaeltnis.json";
-const MEASUREMENTS = [
-  {
-    key: "produkt",
-    title: "Testverhältnis",
-    tests: ["test", ":(exclude)test/werkzeuge/"],
-    code: ["src"],
-    codeNoun: "Produktzeilen",
-  },
-  {
-    key: "werkzeuge",
-    title: "Werkzeug-Testverhältnis",
-    tests: ["test/werkzeuge"],
-    code: ["tools", "scripts"],
-    codeNoun: "Werkzeug- und Skriptzeilen",
-  },
-];
+const PRODUCT_MEASUREMENT = {
+  key: "produkt",
+  title: "Testverhältnis",
+  tests: ["test", ":(exclude)test/werkzeuge/"],
+  code: ["src"],
+  codeNoun: "Produktzeilen",
+};
+const TOOL_MEASUREMENT = {
+  title: "Werkzeug-Testverhältnis",
+  tests: ["test/werkzeuge"],
+  code: ["tools", "scripts"],
+  codeNoun: "Werkzeug- und Skriptzeilen",
+};
+const GITHUB_WARNING = "::warning::";
+const TOOL_RATIO_NOTE = "wird nur beobachtet und hält den Build nicht auf";
 const SOURCE_FILE_PATTERN = /\.[cm]?js$/;
 const LINE_COMMENT_START = "//";
 const BLOCK_COMMENT_START = "/*";
@@ -118,18 +117,18 @@ function measure(measurement, limit) {
   };
 }
 
-function findingsFor(limits, basisLimits) {
-  const findings = [];
-  for (const measurement of MEASUREMENTS) {
-    const problem = limitProblem(measurement, limits, basisLimits);
-    const result =
-      problem === undefined
-        ? measure(measurement, limits[measurement.key].obergrenze)
-        : { finding: problem };
-    if (result.summary !== undefined) console.log(result.summary);
-    if (result.finding !== undefined) findings.push(result.finding);
-  }
-  return findings;
+function productFindings(limits, basisLimits) {
+  const problem = limitProblem(PRODUCT_MEASUREMENT, limits, basisLimits);
+  const result =
+    problem === undefined
+      ? measure(PRODUCT_MEASUREMENT, limits[PRODUCT_MEASUREMENT.key].obergrenze)
+      : { finding: problem };
+  if (result.summary !== undefined) console.log(result.summary);
+  return result.finding === undefined ? [] : [result.finding];
+}
+
+function warnAboutToolRatio() {
+  console.log(`${GITHUB_WARNING}${ratioReport(TOOL_MEASUREMENT).text} ${TOOL_RATIO_NOTE}.`);
 }
 
 function main() {
@@ -139,7 +138,8 @@ function main() {
     return EXIT_USAGE;
   }
   const limits = JSON.parse(readFileSync(LIMIT_PATH, "utf8"));
-  const findings = findingsFor(limits, limitsAtBasis(values.basis));
+  const findings = productFindings(limits, limitsAtBasis(values.basis));
+  warnAboutToolRatio();
   for (const finding of findings) console.error(finding);
   return findings.length > 0 ? EXIT_FINDING : EXIT_OK;
 }

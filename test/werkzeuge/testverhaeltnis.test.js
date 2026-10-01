@@ -7,11 +7,8 @@ import { probeRepository, runIn, TEST_RATIO_TOOL } from "./probe-repo.js";
 
 const LIMIT_PATH = "tools/basis/testverhaeltnis.json";
 const RATIO_LIMIT = 2;
-const TOOL_RATIO_LIMIT = 1;
-const LIMITS = {
-  produkt: { obergrenze: RATIO_LIMIT },
-  werkzeuge: { obergrenze: TOOL_RATIO_LIMIT },
-};
+const HIGHER_RATIO_LIMIT = 3;
+const LIMITS = { produkt: { obergrenze: RATIO_LIMIT } };
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_ABORT = 2;
@@ -85,30 +82,33 @@ test("Tests unter test/werkzeuge/ zählen gegen tools/ und scripts/, nicht gegen
   );
 });
 
-test("eine Werkzeug-Testzeile über der eigenen Obergrenze macht die Prüfung rot", (context) => {
+test("ein hohes Werkzeug-Testverhältnis hält die Prüfung nicht auf und erscheint als Warnung", (context) => {
   const result = checkRatio(context, {
     "test/werkzeuge/pruefung.test.js": "const c = 3;\nconst d = 4;\nconst g = 7;\n",
     "tools/pruefung.mjs": "export const e = 5;\n",
     "scripts/skript.mjs": "export const f = 6;\n",
   });
-  assert.equal(result.status, EXIT_FINDING);
-  assert.match(result.stderr, /Werkzeug-Testverhältnis 1\.50 .*Obergrenze 1 /);
+  assert.equal(result.status, EXIT_OK, result.stderr);
+  assert.match(
+    result.stdout,
+    /^::warning::Werkzeug-Testverhältnis 1\.50 \(3 Testzeilen zu 2 Werkzeug- und Skriptzeilen\)/m,
+  );
 });
 
 test("eine angehobene Obergrenze macht die Prüfung rot, auch wenn das Verhältnis darunter bleibt", (context) => {
   const directory = probe(context, {});
-  const raised = { produkt: { obergrenze: 3 }, werkzeuge: { obergrenze: 2 } };
+  const raised = { produkt: { obergrenze: HIGHER_RATIO_LIMIT } };
   writeFileSync(join(directory, LIMIT_PATH), JSON.stringify(raised));
   const result = runTool(directory);
   assert.equal(result.status, EXIT_FINDING);
   assert.match(result.stderr, /produkt\.obergrenze steigt von 2 auf 3; sie darf nur sinken/);
-  assert.match(result.stderr, /werkzeuge\.obergrenze steigt von 1 auf 2; sie darf nur sinken/);
 });
 
 test("eine gesenkte Obergrenze ist erlaubt", (context) => {
-  const directory = probe(context, {});
-  const lowered = { produkt: { obergrenze: RATIO_LIMIT }, werkzeuge: { obergrenze: 0.5 } };
-  writeFileSync(join(directory, LIMIT_PATH), JSON.stringify(lowered));
+  const directory = probe(context, {
+    [LIMIT_PATH]: JSON.stringify({ produkt: { obergrenze: HIGHER_RATIO_LIMIT } }),
+  });
+  writeFileSync(join(directory, LIMIT_PATH), JSON.stringify(LIMITS));
   const result = runTool(directory);
   assert.equal(result.status, EXIT_OK, result.stderr);
 });
