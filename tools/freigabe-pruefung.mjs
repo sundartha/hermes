@@ -7,12 +7,13 @@ import {
   textChanges,
   writeSummary,
 } from "./pr-zusammenfassung.mjs";
+import { STRENGER, stricterCases } from "./freigabe-strenger.mjs";
 import { LOCKERER, fileAt, git, matches, measureChecks } from "./pruefungen-messen.mjs";
 import { changedExistingTestFiles, changedUnits } from "./testschutz/aenderungen.mjs";
 import { getJson, repositoryName } from "./testschutz/github.mjs";
 
 const APPROVERS = ["Antonio20045", "jonas986"];
-const KINDS = ["pruefung", "werkzeugtexte", "tests-geaendert", "gespraech", "code"];
+const KINDS = [STRENGER, "pruefung", "werkzeugtexte", "tests-geaendert", "gespraech", "code"];
 const LABEL_PREFIX = "art:";
 const CODEOWNERS_FILE = ".github/CODEOWNERS";
 const PACKAGE_FILE = "package.json";
@@ -265,20 +266,22 @@ async function setKindLabel(pull, kind) {
 
 function classify(basis) {
   const patterns = ownerPatterns(basis);
-  const changes = changedFiles(basis).map((change) => ({
+  const files = changedFiles(basis);
+  const strenger = stricterCases(basis, files) ?? [];
+  const changes = files.map((change) => ({
     ...change,
-    kind: kindOf(patterns, change.path),
+    kind: strenger.length > 0 ? STRENGER : kindOf(patterns, change.path),
   }));
   const packages = packageChanges(basis);
   const kinds = new Set(changes.map(({ kind }) => kind));
   if (existingTestsChanged(basis)) kinds.add("tests-geaendert");
   const packageReview = [packages.added, packages.removed, packages.scripts, packages.fields];
   if (packageReview.some((items) => items.length > 0)) kinds.add("pruefung");
-  return { changes, packages, kind: KINDS.find((kind) => kinds.has(kind)) ?? "code" };
+  return { changes, packages, strenger, kind: KINDS.find((kind) => kinds.has(kind)) ?? "code" };
 }
 
 async function evaluate({ basis, sources }) {
-  const { changes, packages, kind } = classify(basis);
+  const { changes, packages, strenger, kind } = classify(basis);
   const checkFiles = changes.filter((change) => change.kind === "pruefung").map(({ path }) => path);
   const measured =
     checkFiles.length === 0
@@ -292,7 +295,7 @@ async function evaluate({ basis, sources }) {
     ...approvalReasons({ changes, packages, texts, measured }),
     ...(await youngVersions(packages, sources)),
   ];
-  return { kind, measured, texts, pakete, needs, blocks: blockReasons(measured) };
+  return { kind, strenger, measured, texts, pakete, needs, blocks: blockReasons(measured) };
 }
 
 function statusLines({ needs, blocks, approvedBy, headSha }) {
@@ -320,11 +323,18 @@ async function main() {
   const approvedBy = result.needs.length > 0 ? await approvers(options.pullRequest, headSha) : [];
   const gruende = statusLines({ ...result, approvedBy, headSha });
   const { pruefungen, ohneMessung } = result.measured;
-  const findings = [pruefungen, ohneMessung, result.pakete, result.texts.aenderungen];
+  const findings = [
+    pruefungen,
+    ohneMessung,
+    result.pakete,
+    result.texts.aenderungen,
+    result.strenger,
+  ];
   const relevant = result.texts.erstmals || findings.some((items) => items.length > 0);
   const report = {
     art: result.kind,
     gruende,
+    strenger: result.strenger,
     ...result.measured,
     pakete: result.pakete,
     texte: result.texts,
@@ -332,6 +342,7 @@ async function main() {
   await writeSummary(options.pullRequest, report, relevant);
   await setKindLabel(pull, result.kind);
   console.log(`Freigabe-Prüfung: Art art:${result.kind}.`);
+  for (const { path, fall } of result.strenger) console.log(`Strenger: ${path}: ${fall}`);
   for (const line of gruende) console.log(line);
   const waiting = result.needs.length > 0 && approvedBy.length === 0;
   if (result.blocks.length > 0 || waiting) process.exitCode = EXIT_FAILURE;

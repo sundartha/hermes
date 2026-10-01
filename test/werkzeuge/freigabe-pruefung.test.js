@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -8,6 +9,7 @@ import {
   REPO_ROOT,
   commitAll,
   isolatedEnvironment,
+  passingTest,
   probeRepository,
   runIn,
   writeFiles,
@@ -159,7 +161,9 @@ async function check(context, { basisFiles = {}, changes, approval, labels = [],
     ...basisFiles,
   });
   const basis = runIn(directory, "git", ["rev-parse", "HEAD"]).stdout.trim();
-  writeFiles(directory, changes);
+  const entries = Object.entries(changes);
+  for (const [path] of entries.filter(([, text]) => text === null)) rmSync(join(directory, path));
+  writeFiles(directory, Object.fromEntries(entries.filter(([, text]) => text !== null)));
   commitAll(directory, "Änderung");
   const head = runIn(directory, "git", ["rev-parse", "HEAD"]).stdout.trim();
   const pull = { number: Number(PULL_REQUEST), head: { sha: head }, labels };
@@ -374,3 +378,50 @@ test("geänderte bestehende Tests, Prompts und Werkzeugtexte bekommen ihre eigen
   assert.equal(firstPin.status, EXIT_OK, firstPin.stdout);
   assert.match(comment(firstPin), /erstmals festgehalten \(1 Texte\); am Draht ändert sich nichts/);
 });
+
+const KNIP = "tools/basis/knip.json";
+const GIANTS = "tools/basis/riesendateien.json";
+const ESLINT = "tools/basis/eslint-wirksam.json";
+const GIANT_LINES = 500;
+const COMPLEXITY = 10;
+const findings = (...befunde) => json({ befunde });
+const ONE_FINDING = findings("a");
+const STRICTER_BASIS = {
+  [KNIP]: findings("a", "b"),
+  [GIANTS]: json({ "src/alt.js": GIANT_LINES }),
+  [ESLINT]: json({ complexity: COMPLEXITY }),
+  "test/alt.test.js": passingTest("alt"),
+  "src/app.js": "export const wert = 1;\n",
+};
+
+for (const [fall, changes] of [
+  ["(a) Altbefunde gestrichen", { [KNIP]: ONE_FINDING }],
+  ["(b) Obergrenze gesenkt", { [GIANTS]: json({ "src/alt.js": GIANT_LINES - 1 }) }],
+  ["(c) neue Testdatei", { "test/neu.test.js": passingTest("neu") }],
+]) {
+  test(`${fall} ist strenger und braucht keine Freigabe`, async (context) => {
+    const result = await check(context, { basisFiles: STRICTER_BASIS, changes });
+    assert.equal(result.status, EXIT_OK, result.stdout + result.stderr);
+    assert.deepEqual(labelsSet(result), ["art:strenger"]);
+    assert.ok(
+      comment(result).includes(`- \`${Object.keys(changes)[0]}\`: ${fall}`),
+      comment(result),
+    );
+  });
+}
+
+for (const [name, changes] of [
+  ["ein Altbefund kommt hinzu", { [KNIP]: findings("a", "b", "c") }],
+  ["Altbefunde werden nur umsortiert", { [KNIP]: findings("b", "a") }],
+  ["eine Grenze steigt", { [GIANTS]: json({ "src/alt.js": GIANT_LINES + 1 }) }],
+  ["ein Wert ohne Listeneintrag sinkt", { [ESLINT]: json({ complexity: COMPLEXITY - 1 }) }],
+  ["eine bestehende Testdatei ändert sich", { [KNIP]: ONE_FINDING, "test/alt.test.js": "" }],
+  ["ein gestrichener Altbefund kommt mit src/", { [KNIP]: ONE_FINDING, "src/app.js": "" }],
+  ["eine Datei unter tools/basis/ wird gelöscht", { [KNIP]: null }],
+]) {
+  test(`${name}: nicht strenger, braucht eine Freigabe`, async (context) => {
+    const result = await check(context, { basisFiles: STRICTER_BASIS, changes });
+    assert.equal(result.status, EXIT_FAILURE, result.stdout);
+    assert.doesNotMatch(result.stdout, /art:strenger/);
+  });
+}

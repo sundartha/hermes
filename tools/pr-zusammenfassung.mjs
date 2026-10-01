@@ -134,6 +134,10 @@ export function summaryText(report) {
     "",
     `Art des PRs: **art:${report.art}**`,
     ...section("Was noch fehlt", status.length === 0 ? ["Nichts, keine Freigabe nötig."] : status),
+    ...section(
+      "Nur strenger, ohne Freigabe",
+      report.strenger.map(({ path, fall }) => `- \`${path}\`: ${fall}`),
+    ),
     ...section("Geänderte Prüfungen", checks.slice(1)),
     ...section(
       "Geänderte Prüfungsdateien ohne Messung",
