@@ -45,8 +45,8 @@ function kostenZeile({ gemessen, summe }) {
 
 export function druckeBeleg(beleg, pfad) {
   console.log(`Auftrag ${beleg.auftrag}: ${beleg.ergebnis}${beleg.grund ? ` (${beleg.grund})` : ""}`);
-  for (const { rolle, agent, exitCode } of beleg.agenten) {
-    console.log(`  Agent ${agent} (${rolle}): Exit ${exitCode}`);
+  for (const { rolle, agent, exitCode, grund } of beleg.agenten) {
+    console.log(`  Agent ${agent} (${rolle}): Exit ${exitCode}${grund ? ` (${grund})` : ""}`);
   }
   for (const { name, befehl, exitCode } of beleg.pruefungen) {
     console.log(`  ${exitCode === 0 ? "✓" : "✗"} ${name}: Exit ${exitCode}  ${befehl}`);
