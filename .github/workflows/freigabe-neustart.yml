@@ -1,0 +1,46 @@
+name: Freigabe nach Review
+
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions: {}
+
+concurrency:
+  group: freigabe-neustart-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  neustart:
+    name: Neustart nach Review
+    if: >-
+      github.event.pull_request.base.ref == 'master' &&
+      github.event.review.commit_id == github.event.pull_request.head.sha
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Lauf der Freigabe-Prüfung für den Head-Commit neu starten
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMMER: ${{ github.event.pull_request.number }}
+          REVIEW_STAND: ${{ github.event.review.commit_id }}
+          WARTEN_SEKUNDEN: 30
+        run: |
+          set -euo pipefail
+          kopf=$(gh api "repos/$GH_REPO/pulls/$PR_NUMMER" --jq .head.sha)
+          if [ "$kopf" != "$REVIEW_STAND" ]; then
+            echo "Das Review gilt dem Stand $REVIEW_STAND, der PR steht schon auf $kopf; nichts neu zu starten."
+            exit 0
+          fi
+          lauf=$(gh run list --workflow freigabe.yml --event pull_request --commit "$kopf" --limit 1 --json databaseId --jq '.[].databaseId')
+          if [ -z "$lauf" ]; then
+            echo "Für den Stand $kopf gibt es keinen Lauf der Freigabe-Prüfung; ein neuer Push startet ihn."
+            exit 1
+          fi
+          gh run watch "$lauf" --interval "$WARTEN_SEKUNDEN" > /dev/null
+          gh run rerun "$lauf"
+          echo "Lauf $lauf der Freigabe-Prüfung für den Stand $kopf neu gestartet."
