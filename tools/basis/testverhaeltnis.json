@@ -1,8 +1,5 @@
 {
   "produkt": {
     "obergrenze": 4.1
-  },
-  "werkzeuge": {
-    "obergrenze": 0.2
   }
 }

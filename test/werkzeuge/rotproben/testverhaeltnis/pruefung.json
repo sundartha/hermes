@@ -2,7 +2,7 @@
   "titel": "Testverhältnis",
   "pfade": ["tools/testverhaeltnis.mjs", "tools/basis/testverhaeltnis.json"],
   "ausnahmen": {
-    "bezeichnung": "Summe der beiden Obergrenzen",
+    "bezeichnung": "Obergrenze des Produkt-Testverhältnisses",
     "datei": "tools/basis/testverhaeltnis.json",
     "zaehlen": "summe"
   },
