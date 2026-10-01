@@ -23,7 +23,7 @@ import {
   legalFooterLinks,
 } from "../src/lib/legal.js";
 import { PLAN_CATALOG, formatPlanPrice } from "../src/lib/plans.js";
-import { LOGIN_URL } from "../src/lib/routes.js";
+import { CANCEL_URL, LOGIN_URL } from "../src/lib/routes.js";
 import { homeHref } from "../src/lib/home-anchors.js";
 import { CANCEL_BUTTON_LABEL, CANCEL_BUTTON_LABEL_EN } from "../src/lib/subscribe.js";
 
@@ -200,7 +200,8 @@ test("Handy-Startseite: Preise (EN/DE) und Minuten aus dem Katalog", () => {
 // Handy-Markup: jede uebersetzbare Stelle traegt ihre deutsche Fassung, kein
 // style-Attribut (CSP style-src 'self'), kein Menue-Knopf mehr (Handoff), und der
 // Kuendigungs-Link (§ 312k BGB) traegt beide Fassungen aus den benannten Konstanten
-// (lib/subscribe.js) - kein Uebersetzungs-Attribut.
+// (lib/subscribe.js) - kein Uebersetzungs-Attribut - und fuehrt direkt zur Kuendigung
+// im Kundenbereich (CANCEL_URL, Owner-Entscheidung 2026-10-01).
 test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Link je Sprache", () => {
   const html = readDist("index.html");
   const start = html.indexOf("data-mh");
@@ -211,7 +212,7 @@ test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Lin
   assert.ok(!mobile.includes("data-open-sheet"), "Handy-Kopf traegt wieder einen Menue-Knopf");
   assert.ok(
     mobile.includes(
-      `<a class="mh-link" href="/kuendigen" data-legal-open="cancel"><span data-lang-only="en">${CANCEL_BUTTON_LABEL_EN}</span><span data-lang-only="de">${CANCEL_BUTTON_LABEL}</span></a>`,
+      `<a class="mh-link" href="${CANCEL_URL}"><span data-lang-only="en">${CANCEL_BUTTON_LABEL_EN}</span><span data-lang-only="de">${CANCEL_BUTTON_LABEL}</span></a>`,
     ),
     "Kuendigungs-Link im Handy-Fuss fehlt oder traegt eine Uebersetzung",
   );
