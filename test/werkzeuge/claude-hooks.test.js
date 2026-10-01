@@ -179,7 +179,7 @@ function pruefleiterProbe(context) {
     }),
     "lauf.mjs": [
       'import { appendFileSync } from "node:fs";',
-      `appendFileSync(process.env.${PRUEFLEITER_LOG}, "lauf\\n");`,
+      `appendFileSync(process.env.${PRUEFLEITER_LOG}, \`lauf \${process.argv.slice(2).join(" ")}\\n\`);`,
       `const red = process.env.${PRUEFLEITER_RED} === "1";`,
       `if (red) for (let n = 0; n < ${RED_OUTPUT_LINES}; n += 1) console.log(\`Befund \${n}\`);`,
       "process.exitCode = red ? 1 : 0;",
@@ -230,6 +230,12 @@ test("pruefleiter-Hook laeuft bei gleichem Stand nicht erneut, bei geaendertem S
   writeFileSync(join(probe.directory, "src/neu.js"), "export const drei = 3;\n");
   assert.equal(runStop(probe).status, 0);
   assert.equal(runCount(probe), THIRD_RUN, "neue ungetrackte Datei: neuer Lauf");
+});
+
+test("pruefleiter-Hook startet die Pruefleiter im Vor-Push-Modus ohne volle Suite", (context) => {
+  const probe = pruefleiterProbe(context);
+  assert.equal(runStop(probe).status, 0);
+  assert.deepEqual(outputLines(readFileSync(probe.log, "utf8")), ["lauf --vor-push"]);
 });
 
 test("pruefleiter-Hook merkt sich ein Rot nicht als Gruen", (context) => {

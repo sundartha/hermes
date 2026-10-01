@@ -14,6 +14,7 @@ import {
 
 const MAX_OUTPUT_LINES = 60;
 const REPAIR_SENTENCE = "Repariere den Code, nicht die Prüfung.";
+const BEFORE_PUSH_FLAG = "--vor-push";
 const GREEN_STATE_FILE = "pruefleiter-gruen";
 const SCRATCH_INDEX_FILE = "pruefleiter-index";
 
@@ -36,7 +37,7 @@ function lastGreenHash(stateFile) {
 }
 
 function runPruefleiter(root) {
-  return spawnSync("npm", ["run", "--silent", "pruefleiter"], {
+  return spawnSync("npm", ["run", "--silent", "pruefleiter", "--", BEFORE_PUSH_FLAG], {
     cwd: root,
     encoding: "utf8",
     env: withoutGitVariables(env),
