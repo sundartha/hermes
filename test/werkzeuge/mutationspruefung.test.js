@@ -18,6 +18,7 @@ function testdatei(...faelle) {
     'import assert from "node:assert/strict";',
     'import { test } from "node:test";',
     'import { einordnen } from "../src/zahl.js";',
+    'import "paket-aus-node-modules";',
     'test("einordnen", () => {',
     ...pruefungen,
     "});",
@@ -29,6 +30,9 @@ const NEGATIV = '  if (zahl < 0) return "negativ";';
 const NULL = '  if (zahl === 0) return "null";';
 const BASIS = {
   "package.json": '{ "type": "module" }\n',
+  ".gitignore": "node_modules/\n",
+  "node_modules/paket-aus-node-modules/package.json": '{ "name": "paket-aus-node-modules", "type": "module", "main": "index.js" }\n',
+  "node_modules/paket-aus-node-modules/index.js": "export {};\n",
   "src/zahl.js": quelle(NEGATIV),
   "test/zahl.test.js": testdatei([-1, "negativ"], [1, "positiv"]),
 };
