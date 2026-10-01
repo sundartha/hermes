@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { chdir, cwd } from "node:process";
 import { parseArgs } from "node:util";
@@ -13,6 +12,8 @@ import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 const { $schema: _schema, ...KONFIGURATION } = JSON.parse(
   readFileSync(new URL("../stryker.config.json", import.meta.url), "utf8"),
 );
+const WURZEL = cwd();
+const ARBEITSVERZEICHNIS = join(WURZEL, "node_modules", ".cache", "mutationspruefung");
 const BANK = "regression";
 const QUELLDATEI = /^src\/.+\.[cm]?js$/;
 const TESTDATEI = /^test\/.+\.test\.[cm]?js$/;
@@ -40,6 +41,11 @@ function git(args, verzeichnis = cwd()) {
   const lauf = spawnSync("git", args, { cwd: verzeichnis, encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
   if (lauf.status !== 0) throw new Error(`git ${args.join(" ")}: ${lauf.stderr.trim()}`);
   return lauf.stdout;
+}
+
+function arbeitsverzeichnis(praefix) {
+  mkdirSync(ARBEITSVERZEICHNIS, { recursive: true });
+  return mkdtempSync(join(ARBEITSVERZEICHNIS, praefix));
 }
 
 function zeilenbereich(hunk, seite) {
@@ -95,7 +101,7 @@ function mutant({ fileName, location, mutatorName, replacement, status }) {
 }
 
 async function stryker({ datei, zeilen, tests, faktor }) {
-  const tempDirName = mkdtempSync(join(tmpdir(), "mutation-"));
+  const tempDirName = arbeitsverzeichnis("mutation-");
   const beginn = Date.now();
   try {
     const optionen = {
@@ -150,14 +156,11 @@ async function pruefeDatei(datei, zeilen, nachZiel) {
 }
 
 function alterStand(commit) {
-  const zurueck = cwd();
-  const verzeichnis = mkdtempSync(join(tmpdir(), "alter-stand-"));
+  const verzeichnis = arbeitsverzeichnis("alter-stand-");
   git(["worktree", "add", "--detach", "-q", verzeichnis, commit]);
-  const module = join(zurueck, "node_modules");
-  if (existsSync(module)) symlinkSync(module, join(verzeichnis, "node_modules"));
   chdir(verzeichnis);
   return () => {
-    chdir(zurueck);
+    chdir(WURZEL);
     git(["worktree", "remove", "--force", verzeichnis]);
   };
 }
