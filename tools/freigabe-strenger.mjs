@@ -25,13 +25,7 @@ const OLD_FINDING_LISTS = new Map([
 
 const UPPER_LIMITS = new Map([
   ["tools/basis/riesendateien.json", [[ANY_KEY]]],
-  [
-    "tools/basis/testverhaeltnis.json",
-    [
-      ["produkt", "obergrenze"],
-      ["werkzeuge", "obergrenze"],
-    ],
-  ],
+  ["tools/basis/testverhaeltnis.json", [["produkt", "obergrenze"]]],
 ]);
 
 function parsed(commit, path) {
