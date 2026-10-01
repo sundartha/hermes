@@ -73,13 +73,13 @@ function istPruefleiterAufruf({ name, input }) {
   return name === "Bash" && PRUEFLEITER_AUFRUF.test(String(input?.command ?? ""));
 }
 
-const BEHANDLER = {
-  assistant: (verlauf, ereignis) => verlauf.antwort(ereignis),
-  user: (verlauf, ereignis) => verlauf.rueckmeldung(ereignis),
-  system: (verlauf, ereignis) => verlauf.hook(ereignis),
-  rate_limit_event: (verlauf, ereignis) => verlauf.limitInfo(ereignis),
-  result: (verlauf, ereignis) => verlauf.schluss(ereignis),
-};
+const BEHANDLER = new Map([
+  ["assistant", (verlauf, ereignis) => verlauf.antwort(ereignis)],
+  ["user", (verlauf, ereignis) => verlauf.rueckmeldung(ereignis)],
+  ["system", (verlauf, ereignis) => verlauf.hook(ereignis)],
+  ["rate_limit_event", (verlauf, ereignis) => verlauf.limitInfo(ereignis)],
+  ["result", (verlauf, ereignis) => verlauf.schluss(ereignis)],
+]);
 
 export class Verlauf {
   constructor(gehoertDazu, pruefleiter = { meldung: "", wiederholt: 0 }) {
@@ -97,8 +97,8 @@ export class Verlauf {
 
   lies(zeile) {
     const ereignis = alsObjekt(zeile);
-    if (ereignis === null || !Object.hasOwn(BEHANDLER, ereignis.type)) return null;
-    return BEHANDLER[ereignis.type](this, ereignis) ?? null;
+    const behandle = BEHANDLER.get(ereignis?.type);
+    return behandle ? (behandle(this, ereignis) ?? null) : null;
   }
 
   antwort({ message: nachricht, parent_tool_use_id: eltern }) {
