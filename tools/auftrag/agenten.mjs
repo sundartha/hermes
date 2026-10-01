@@ -90,9 +90,9 @@ function schlussantwort(ausgabe) {
   return ausgabe.slice(-MAX_ANTWORT_ZEICHEN);
 }
 
-export function starteAgent({ rolle, auftrag, root }, prompt) {
+export function starteAgent({ rolle, auftrag, root, fortsetzung }, prompt) {
   const agent = agentFuer(rolle, auftrag.bereich);
-  const sitzung = randomUUID();
+  const sitzung = fortsetzung ?? randomUUID();
   const befehl = [
     env.HERMES_CLAUDE ?? "claude",
     "-p",
@@ -100,7 +100,7 @@ export function starteAgent({ rolle, auftrag, root }, prompt) {
     agent,
     "--settings",
     `.claude/rollen/${rolle}.json`,
-    "--session-id",
+    fortsetzung ? "--resume" : "--session-id",
     sitzung,
     "--permission-mode",
     "acceptEdits",
