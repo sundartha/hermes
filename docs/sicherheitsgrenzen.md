@@ -77,7 +77,6 @@ Die Art ist `Werkzeug` für ein registriertes MCP-Werkzeug, `Webhook` für eine 
 | Route | POST /api/admin/tenants/:id/approve | SG-03, SG-17, SG-23 |
 | Route | POST /api/admin/tenants/:id/suspend | SG-03, SG-17, SG-23 |
 | Route | POST /api/cookie-consent | SG-09, SG-13 |
-| Route | POST /api/cancellation | SG-09, SG-13, SG-17 |
 | Route | GET /api/self-service/state | SG-02, SG-23, SG-24 |
 | Route | POST /api/self-service/settings | SG-02, SG-23, SG-24 |
 | Route | POST /api/self-service/private-number | SG-02, SG-08, SG-23, SG-24 |
