@@ -4,7 +4,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
+import { REPO_ROOT, commitAll, isolatedEnvironment, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
 const EXIT_ROT = 1;
@@ -85,8 +85,9 @@ const UMBAU = {
   abnahme: "test/text.test.js",
 };
 
-function starte(context, { auftrag, drehbuch, dateien = {} }) {
+function starte(context, { auftrag, drehbuch, dateien = {}, vorbereiten = () => {} }) {
   const repo = probeRepository(context, { ...BASIS, ...dateien });
+  vorbereiten(repo);
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   const werkzeug = probeDirectory(context, {});
@@ -230,4 +231,20 @@ test("ein Umbau ungeschützten Verhaltens wird verworfen; mit dem Test auf dem a
     const geaendert = runIn(repo, "git", ["diff", "--name-only", basis, "HEAD"]).stdout.trim();
     assert.equal(geaendert, status === 0 ? "src/text.js\ntest/text.test.js" : "");
   }
+});
+
+test("bei einer Fehlerbehebung bekommt der Bau-Agent den Commit, den git bisect als Ursprung findet", (context) => {
+  const vorbereiten = (repo) => {
+    writeFiles(repo, { "src/rechnen.js": "export function verdopple(zahl) {\n  return zahl * 2;\n}\n" });
+    commitAll(repo, "Verdopple richtig");
+    writeFiles(repo, { "src/rechnen.js": BASIS["src/rechnen.js"] });
+    commitAll(repo, "Runde anders");
+  };
+  const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: { "src/rechnen.js": MIT_SIEBEN["src/rechnen.js"] } };
+  const auftrag = { ...funktion("2 !== 4"), art: "fehlerbehebung" };
+  const { repo, werkzeug, lauf, beleg } = starte(context, { auftrag, drehbuch, vorbereiten });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.equal(pruefung(beleg, "bisect"), 0);
+  assert.match(readFileSync(join(werkzeug, "prompt-bau.txt"), "utf8"), /eingeführt hat[\s\S]+ Runde anders/);
+  assert.match(runIn(repo, "git", ["log", "-1", "--format=%B"]).stdout, /^Ursache: [\s\S]+^Eingeführt mit: \w+ Runde anders$/m);
 });

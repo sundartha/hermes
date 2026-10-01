@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { bauPrompt, testPrompt } from "./agenten.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
+import { bisektion } from "./bisektion.mjs";
 import { brauchtRotenTest, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, festhalten, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
@@ -28,6 +29,7 @@ class AuftragsLauf {
     this.agenten = [];
     this.pruefungen = [];
     this.hinweise = [];
+    this.zusaetze = [];
     this.berichtszeilen = [];
     this.grund = null;
     this.commit = null;
@@ -111,7 +113,8 @@ class AuftragsLauf {
   commitNachricht() {
     const { phase, auftrag } = this.kontext;
     const belege = this.pruefungen.map(({ name, exitCode }) => `${name}: Exit ${exitCode}`);
-    const warum = `Warum: Auftrag ${auftrag.id} der Phase ${phase.phase}; tools/auftrag.mjs hat ihn gebaut und geprüft.`;
+    const absatz = auftrag.art === "fehlerbehebung" ? "Ursache" : "Warum";
+    const warum = `${absatz}: Auftrag ${auftrag.id} der Phase ${phase.phase}; tools/auftrag.mjs hat ihn gebaut und geprüft.`;
     const herkunft = [`Auftrag: ${phase.phase}/${auftrag.id}`, `Art: ${auftrag.art}`];
     const paket = phase.paket ? [`Paket: ${phase.paket}`] : [];
     return [auftrag.ziel, "", warum, ...this.berichtszeilen, ...belege, "", ...herkunft, ...paket, ""].join("\n");
@@ -132,6 +135,7 @@ class AuftragsLauf {
           () => this.grenzen("test", this.basis),
           () => this.rotMitErwartetemFehler(),
           () => this.zwischenstand(),
+          () => bisektion(this),
         ]
       : [() => this.vorherGruen()];
     return [...vorBau, ...this.bauSchritte(), ...mutationsSchritte(this), () => this.abschliessen()];
@@ -140,7 +144,7 @@ class AuftragsLauf {
   bauSchritte() {
     const { auftrag } = this.kontext;
     return [
-      () => this.agent("bau", bauPrompt(this.kontext, this.testausgabe)),
+      () => this.agent("bau", [bauPrompt(this.kontext, this.testausgabe), ...this.zusaetze].join("\n")),
       () => this.grenzen("bau", this.basisBau),
       () => this.allesVormerken(),
       () => this.typpruefung(),
