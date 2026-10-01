@@ -3,7 +3,8 @@ import { spawnSync } from "node:child_process";
 import { git } from "./git.mjs";
 
 export const REMOTE = "upstream";
-const SPERREN = "refs/sperren/";
+const NAMENSRAUM = "sperren/";
+const SPERREN = `refs/${NAMENSRAUM}`;
 const SPIEGEL = "refs/auftrag/sperren/";
 const FELDER = ["%(refname)", "%(objectname)", "%(contents:subject)"];
 const FELDTRENNER = "\0";
@@ -79,4 +80,18 @@ export function freigeben(cwd, sperren) {
     const namen = sperren.map(({ schluessel }) => schluessel).join(", ");
     throw new Error(`Die Sperren ${namen} ließen sich nicht lösen: ${lauf.stderr}`);
   }
+}
+
+export async function verwaisteSperren(remote) {
+  const refs = (await remote.optional(`/git/matching-refs/${NAMENSRAUM}`)) ?? [];
+  const befunde = await Promise.all(
+    refs.map(async ({ ref, object }) => {
+      const { message } = await remote.get(`/git/commits/${object.sha}`);
+      const [kopfzeile] = message.split("\n");
+      const issue = BETREFF.exec(kopfzeile)?.[2];
+      const offen = issue !== undefined && (await remote.optional(`/issues/${issue}`))?.state === "open";
+      return offen ? [] : [`Sperre ${ref.slice(SPERREN.length)} ohne laufende Phase: ${kopfzeile}`];
+    }),
+  );
+  return befunde.flat();
 }

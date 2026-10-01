@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as schlafen } from "node:timers/promises";
 
+import { verwaisteSperren } from "../../tools/auftrag/sperren.mjs";
 import { ESLINT_BIN, REPO_ROOT, isolatedEnvironment, probeDirectory, probeRepository, runIn } from "./probe-repo.js";
 
 const EINSTIEG = join(REPO_ROOT, "tools/auftrag.mjs");
@@ -162,4 +163,19 @@ test("ein Worktree mit Lint-Fehler macht den Lint-Lauf im Haupt-Checkout nicht r
   assert.equal(lint().status, EXIT_ROT);
   writeFileSync(join(probe.werkzeug, "start-geprueft"), "");
   assert.equal((await lauf).code, 0);
+});
+
+test("systemstand meldet eine Sperre, deren Phasen-Issue geschlossen ist", async () => {
+  const antworten = {
+    "/git/matching-refs/sperren/": [
+      { ref: "refs/sperren/src/store", object: { sha: "s1" } },
+      { ref: "refs/sperren/src/d.js", object: { sha: "s2" } },
+    ],
+    "/git/commits/s1": { message: "Sperre für Phase a (Issue #77)" },
+    "/git/commits/s2": { message: "Sperre für Phase d (Issue #80)" },
+    "/issues/77": { state: "closed" },
+    "/issues/80": { state: "open" },
+  };
+  const remote = { get: async (pfad) => antworten[pfad], optional: async (pfad) => antworten[pfad] };
+  assert.deepEqual(await verwaisteSperren(remote), ["Sperre src/store ohne laufende Phase: Sperre für Phase a (Issue #77)"]);
 });
