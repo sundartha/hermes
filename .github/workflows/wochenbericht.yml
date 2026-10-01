@@ -1,0 +1,90 @@
+name: Wochenbericht
+
+on:
+  schedule:
+    - cron: "23 5 * * 1"
+    - cron: "23 5 * * 0,2-6"
+  push:
+    branches: [master]
+    paths:
+      - tools/wochenbericht.mjs
+      - tools/wochenbericht/**
+      - .github/workflows/wochenbericht.yml
+      - .github/budget.json
+  pull_request:
+    branches: [master]
+    paths:
+      - tools/wochenbericht.mjs
+      - tools/wochenbericht/**
+      - .github/workflows/wochenbericht.yml
+      - .github/budget.json
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: wochenbericht-${{ github.event.pull_request.number || 'master' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  probe:
+    name: Wochenbericht-Probe
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Bericht nur in eine Datei schreiben
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node tools/wochenbericht.mjs --probe --datei "$RUNNER_TEMP/wochenbericht.md"
+          cat "$RUNNER_TEMP/wochenbericht.md" >> "$GITHUB_STEP_SUMMARY"
+
+  bericht:
+    name: Wochenbericht
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Entscheidungen auswerten und geplante Läufe prüfen
+        if: github.event_name == 'schedule' && github.event.schedule != '23 5 * * 1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/wochenbericht.mjs --auswerten --alarme
+
+      - name: Wochenbericht anlegen
+        if: github.event_name != 'schedule' || github.event.schedule == '23 5 * * 1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/wochenbericht.mjs --auswerten --alarme --bericht
