@@ -62,7 +62,8 @@ export function setzeEin(kontext, prompt, start) {
   let pruefleiter;
   for (;;) {
     warteAufFreigabe();
-    const sitzung = starteAgent({ ...kontext, pruefleiter }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, start);
+    const fortsetzung = vorgaenger === null ? kontext.fortsetzung : undefined;
+    const sitzung = starteAgent({ ...kontext, pruefleiter, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, start);
     const grund = grundDerSitzung(sitzung);
     sitzungen.push(grund ? { ...sitzung, grund } : sitzung);
     if (!sitzung.limit && sitzung.aktion?.art !== UEBERGABE) {

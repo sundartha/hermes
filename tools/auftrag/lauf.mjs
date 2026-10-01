@@ -8,6 +8,7 @@ import { brauchtRotenTest, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, festhalten, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
 import { setzeEin } from "./einsatz.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
+import { mutationsSchritte } from "./mutation.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
 import { fuehreRundenAus } from "./runden.mjs";
 
@@ -27,6 +28,7 @@ class AuftragsLauf {
     this.agenten = [];
     this.pruefungen = [];
     this.hinweise = [];
+    this.berichtszeilen = [];
     this.grund = null;
     this.commit = null;
   }
@@ -51,9 +53,9 @@ class AuftragsLauf {
     return [execPath, EINSTIEG, befehl, this.phasendatei, this.kontext.auftrag.id, ...argumente];
   }
 
-  agent(rolle, prompt) {
+  agent(rolle, prompt, fortsetzung) {
     const vorher = fingerabdruck(this.kontext.root);
-    const ergebnis = setzeEin({ rolle, ...this.kontext }, `${prompt}${this.vorgeschichte}`);
+    const ergebnis = setzeEin({ rolle, ...this.kontext, fortsetzung }, `${prompt}${this.vorgeschichte}`);
     this.agenten.push(...ergebnis.sitzungen);
     if (fingerabdruck(this.kontext.root) !== vorher) {
       return this.scheitert(`Der Agent ${ergebnis.agent} hat ${BELEGE}/ verändert.`);
@@ -110,8 +112,9 @@ class AuftragsLauf {
     const { phase, auftrag } = this.kontext;
     const belege = this.pruefungen.map(({ name, exitCode }) => `${name}: Exit ${exitCode}`);
     const warum = `Warum: Auftrag ${auftrag.id} der Phase ${phase.phase}; tools/auftrag.mjs hat ihn gebaut und geprüft.`;
-    const paket = phase.paket ? [`\nPaket: ${phase.paket}`] : [];
-    return [auftrag.ziel, "", warum, ...belege, ...paket, ""].join("\n");
+    const herkunft = [`Auftrag: ${phase.phase}/${auftrag.id}`, `Art: ${auftrag.art}`];
+    const paket = phase.paket ? [`Paket: ${phase.paket}`] : [];
+    return [auftrag.ziel, "", warum, ...this.berichtszeilen, ...belege, "", ...herkunft, ...paket, ""].join("\n");
   }
 
   abschliessen() {
@@ -131,7 +134,7 @@ class AuftragsLauf {
           () => this.zwischenstand(),
         ]
       : [() => this.vorherGruen()];
-    return [...vorBau, ...this.bauSchritte(), () => this.abschliessen()];
+    return [...vorBau, ...this.bauSchritte(), ...mutationsSchritte(this), () => this.abschliessen()];
   }
 
   bauSchritte() {

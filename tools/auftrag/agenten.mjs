@@ -89,16 +89,16 @@ function beobachte(befehl, { root, umgebung, eingabe, auftrag, pruefleiter }) {
   }
 }
 
-export function starteAgent({ rolle, auftrag, root, pruefleiter }, prompt, start = {}) {
+export function starteAgent({ rolle, auftrag, root, pruefleiter, fortsetzung }, prompt, start = {}) {
   const agent = start.agent ?? agentFuer(rolle, auftrag.bereich);
-  const sitzung = randomUUID();
+  const sitzung = fortsetzung ?? randomUUID();
   const befehl = [
     env.HERMES_CLAUDE ?? "claude",
     "-p",
     "--agent",
     agent,
     ...(start.argumente ?? ["--settings", `.claude/rollen/${rolle}.json`]),
-    "--session-id",
+    fortsetzung ? "--resume" : "--session-id",
     sitzung,
     "--permission-mode",
     "acceptEdits",

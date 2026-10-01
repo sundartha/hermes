@@ -18,10 +18,12 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 const argumente = process.argv.slice(2);
-const sitzung = argumente[argumente.indexOf("--session-id") + 1];
-const rolle = process.env.HERMES_ROLLE;
+const sitzung = argumente[argumente.indexOf(argumente.includes("--resume") ? "--resume" : "--session-id") + 1];
+const prompt = readFileSync(0, "utf8");
+const rolle = process.env.HERMES_ROLLE + (prompt.includes("Überlebende Mutanten") ? "-nachrunde" : "");
 const drehbuch = JSON.parse(readFileSync(process.env.ERSATZ_DREHBUCH, "utf8"));
-writeFileSync(join(dirname(process.env.ERSATZ_DREHBUCH), "prompt-" + rolle + ".txt"), readFileSync(0, "utf8"));
+writeFileSync(join(dirname(process.env.ERSATZ_DREHBUCH), "prompt-" + rolle + ".txt"), prompt);
+console.log(JSON.stringify({ type: "result", result: drehbuch[rolle + "-antwort"] ?? "" }));
 for (const [pfad, inhalt] of Object.entries(drehbuch[rolle] ?? {})) {
   mkdirSync(dirname(pfad), { recursive: true });
   writeFileSync(pfad, inhalt);
@@ -83,8 +85,8 @@ const UMBAU = {
   abnahme: "test/text.test.js",
 };
 
-function starte(context, { auftrag, drehbuch }) {
-  const repo = probeRepository(context, BASIS);
+function starte(context, { auftrag, drehbuch, dateien = {} }) {
+  const repo = probeRepository(context, { ...BASIS, ...dateien });
   runIn(repo, "git", ["config", "user.name", "Probe"]);
   runIn(repo, "git", ["config", "user.email", "probe@example.invalid"]);
   const werkzeug = probeDirectory(context, {});
@@ -176,4 +178,56 @@ test("lauf mit unvollständiger Phase startet keinen Agenten", (context) => {
   assert.equal(lauf.status, EXIT_ROT);
   assert.match(lauf.stderr, /wasDarfNiePassieren fehlt/);
   assert.equal(existsSync(join(werkzeug, "prompt-test.txt")), false);
+});
+
+const NEU_MUTANT = "src/rechnen.js:2:7 ConditionalExpression → false";
+const ALT_MUTANT = "src/text.js:2:10 MethodExpression → text";
+const ERSATZ_MUTATION = `import { readFileSync } from "node:fs";
+const lies = (pfad) => readFileSync(pfad, "utf8");
+const alt = process.argv.includes("--alter-stand");
+const offen = alt ? !lies("test/text.test.js").includes("leer") : lies("src/rechnen.js").includes("=== 7") && !lies("test/rechnen.test.js").includes("(7)");
+const mutant = alt ? ${JSON.stringify(ALT_MUTANT)} : ${JSON.stringify(NEU_MUTANT)};
+if (offen && !process.argv.includes(mutant)) process.exitCode = 1;
+console.log(process.exitCode ? "Verstoß: Mutant überlebt: " + mutant : "grün: keiner überlebt");
+`;
+const MIT_MUTATION = {
+  "mutation.mjs": ERSATZ_MUTATION,
+  "package.json": BASIS["package.json"].replace('"lint"', '"test:mutation":"node mutation.mjs","lint"'),
+};
+const MIT_SIEBEN = { "src/rechnen.js": "export function verdopple(zahl) {\n  if (zahl === 7) return 0;\n  return zahl * 2;\n}\n" };
+const SIEBEN_TEST = `${ROTER_TEST}test("sieben", () => assert.equal(verdopple(7), 0));\n`;
+
+function pruefung(beleg, name) {
+  return beleg.pruefungen.findLast((eintrag) => eintrag.name === name)?.exitCode;
+}
+
+test("überlebt ein Mutant, streicht oder meldet der Bau-Agent in seiner Sitzung, sonst ergänzt der Test-Agent", (context) => {
+  const faelle = [
+    { zusatz: { "bau-nachrunde-antwort": `Gleichwertig: ${NEU_MUTANT}` }, letzte: "mutation nach Bau", nachricht: `Gleichwertig: ${NEU_MUTANT}` },
+    { zusatz: { "test-nachrunde": { "test/rechnen.test.js": SIEBEN_TEST } }, letzte: "mutation nach Test", nachricht: "Art: funktion" },
+  ];
+  for (const { zusatz, letzte, nachricht } of faelle) {
+    const drehbuch = { test: { "test/rechnen.test.js": ROTER_TEST }, bau: MIT_SIEBEN, ...zusatz };
+    const { repo, werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch, dateien: MIT_MUTATION });
+    assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+    assert.deepEqual([pruefung(beleg, "mutation"), pruefung(beleg, letzte)], [EXIT_ROT, 0]);
+    const [ersterBau, nachrunde] = beleg.agenten.filter(({ rolle }) => rolle === "bau");
+    assert.equal(nachrunde.sitzung, ersterBau.sitzung);
+    assert.match(readFileSync(join(werkzeug, "prompt-bau-nachrunde.txt"), "utf8"), /src\/rechnen\.js:2:7/);
+    assert.ok(runIn(repo, "git", ["log", "-1", "--format=%B"]).stdout.includes(nachricht), letzte);
+  }
+});
+
+test("ein Umbau ungeschützten Verhaltens wird verworfen; mit dem Test auf dem alten Stand läuft er neu", (context) => {
+  const umbau = { "src/text.js": "export function gross(text) {\n  return text.toLocaleUpperCase();\n}\n" };
+  const leerTest = { "test/text.test.js": `${BASIS["test/text.test.js"]}test("leer", () => assert.equal(gross(""), ""));\n` };
+  for (const [nachrunde, status] of [[{}, EXIT_ROT], [leerTest, 0]]) {
+    const drehbuch = { bau: umbau, "test-nachrunde": nachrunde };
+    const { repo, werkzeug, lauf, beleg, basis } = starte(context, { auftrag: UMBAU, drehbuch, dateien: MIT_MUTATION });
+    assert.equal(lauf.status, status, lauf.stdout + lauf.stderr);
+    assert.ok(beleg.hinweise.includes(`Umbau verworfen: auf dem alten Stand überlebt ${ALT_MUTANT}`));
+    assert.match(readFileSync(join(werkzeug, "prompt-test-nachrunde.txt"), "utf8"), /auf dem alten Stand/);
+    const geaendert = runIn(repo, "git", ["diff", "--name-only", basis, "HEAD"]).stdout.trim();
+    assert.equal(geaendert, status === 0 ? "src/text.js\ntest/text.test.js" : "");
+  }
 });
