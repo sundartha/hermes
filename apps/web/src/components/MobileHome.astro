@@ -26,7 +26,7 @@ import "../styles/hermes-mobile.css";
 import "../styles/hermes-mobile-motion.css";
 import "../styles/hermes-mobile-viewport.css";
 import "../styles/hermes-mobile-sr.css";
-import { LOGIN_URL } from "../lib/routes.js";
+import { CANCEL_URL, LOGIN_URL } from "../lib/routes.js";
 import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
 import { PLAN_BENEFITS, planBenefitsText } from "../lib/plan-benefits.js";
 import { SITE_AGENT_LINE } from "../lib/agent-docs.js";
@@ -417,8 +417,8 @@ const footRows = [legalDocs.map((entry) => ({ kind: "doc", entry })).concat([{ k
                   return <a class="mh-link" href={item.entry.href} data-legal-open={item.entry.slug} data-mh-de={T.de[item.entry.slug]}>{T.en[item.entry.slug]}</a>;
                 }
                 if (item.kind === "cancel") {
-                  /* § 312k BGB: Wortlaut aus lib/subscribe.js je Sprache. Oeffnet den Reiter im Rechts-Blatt (pages/index.astro). */
-                  return <a class="mh-link" href="/kuendigen" data-legal-open="cancel"><BiText en={CANCEL_BUTTON_LABEL_EN} de={CANCEL_BUTTON_LABEL} /></a>;
+                  /* § 312k BGB: Wortlaut aus lib/subscribe.js je Sprache. Fuehrt direkt zur Kuendigung im Kundenbereich (CANCEL_URL, Owner 2026-10-01). */
+                  return <a class="mh-link" href={CANCEL_URL}><BiText en={CANCEL_BUTTON_LABEL_EN} de={CANCEL_BUTTON_LABEL} /></a>;
                 }
                 if (item.kind === "contact") {
                   return <a class="mh-link" href={`mailto:${contact}`} data-mh-de={T.de.contact}>{T.en.contact}</a>;
