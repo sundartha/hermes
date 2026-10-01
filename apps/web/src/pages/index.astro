@@ -13,7 +13,7 @@
 // mit eigener, transparent ueberlagerter Navigation und eigenem Fussband.
 import "../styles/fonts.css";
 import "../styles/hermes.css";
-import { LOGIN_URL } from "../lib/routes.js";
+import { CANCEL_URL, LOGIN_URL } from "../lib/routes.js";
 
 // Sprache: die Startseite ist seit 2026-09-10 ENGLISCH als Default — Englisch
 // steht im Markup (und ist damit die indexierte Fassung), Deutsch liegt als
@@ -374,8 +374,9 @@ const infoTabs = [
               ))}
               <!-- § 312k BGB: staendig verfuegbar im Fussband. KEIN data-i18n - der Wortlaut
                    ist eine benannte Konstante (lib/subscribe.js), kein Woerterbuch-Wert;
-                   BiText zeigt die Fassung zur Seitensprache. -->
-              <a class="site-footer__link" href="/kuendigen" data-legal-open="cancel"><BiText {...CANCEL_LABEL} /></a>
+                   BiText zeigt die Fassung zur Seitensprache. Fuehrt direkt zur Kuendigung
+                   im Kundenbereich (CANCEL_URL, Owner-Entscheidung 2026-10-01). -->
+              <a class="site-footer__link" href={CANCEL_URL}><BiText {...CANCEL_LABEL} /></a>
               <!-- Support: Beschriftung in DE und EN gleich, darum KEIN data-i18n. Oeffnet wie Kuendigen den Reiter im Rechts-Blatt. -->
               <a class="site-footer__link" href="/support" data-legal-open="support">Support</a>
               <a class="site-footer__link" href={`mailto:${CONTACT}`} data-i18n="contact">Contact</a>
@@ -669,8 +670,8 @@ const infoTabs = [
           {legalDocs.map((entry) => (
             <a class="menu-foot__link" href={entry.href} data-legal-open={entry.slug} data-i18n={entry.i18n}>{entry.label}</a>
           ))}
-          <!-- § 312k BGB: derselbe Wortlaut wie im Fussband oben, KEIN data-i18n (s. dort). -->
-          <a class="menu-foot__link" href="/kuendigen" data-legal-open="cancel"><BiText {...CANCEL_LABEL} /></a>
+          <!-- § 312k BGB: derselbe Wortlaut und dasselbe Ziel wie im Fussband oben (s. dort). -->
+          <a class="menu-foot__link" href={CANCEL_URL}><BiText {...CANCEL_LABEL} /></a>
           <!-- Support wie im Fussband oben, KEIN data-i18n (s. dort). -->
           <a class="menu-foot__link" href="/support" data-legal-open="support">Support</a>
           <a class="menu-foot__link" href={`mailto:${CONTACT}`} data-i18n="contact">Contact</a>
