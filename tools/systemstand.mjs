@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 
+import { verwaisteSperren } from "./auftrag/sperren.mjs";
 import { matches } from "./pruefungen-messen.mjs";
 import { github, remoteFacts } from "./systemstand/github.mjs";
 import { startedAt } from "./systemstand/pakete.mjs";
@@ -381,6 +382,7 @@ async function main() {
   const remote = remoteFacts();
   const report = await evaluate(remote, records);
   for (const step of report) console.log(stepLine(step));
+  for (const line of await verwaisteSperren(remote)) console.log(line);
   if (values.issues) await updateIssues(remote, report, records);
   if (values.pruefen) checkRecords(report, records, prBasis !== undefined);
 }
