@@ -1,0 +1,10 @@
+{
+  "monatsMinuten": 3000,
+  "minutenJeLauf": {
+    "Aufräumen": 10,
+    "Kartenlauf": 20,
+    "Prüfer": 15,
+    "Wochenbericht": 5
+  },
+  "verzicht": ["Aufräumen", "Kartenlauf", "Prüfer"]
+}
