@@ -1,16 +1,18 @@
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { env } from "node:process";
+import { env, execPath } from "node:process";
+import { fileURLToPath } from "node:url";
 
 import { funktionskartePfad } from "./format.mjs";
-import { fuehreAus, gekuerzteTestausgabe } from "./pruefungen.mjs";
+import { gekuerzteTestausgabe } from "./pruefungen.mjs";
 
-const MS_JE_MINUTE = 60_000;
-const AGENT_ZEITLIMIT_MINUTEN = 45;
 const KRITISCH_SUFFIX = "-kritisch";
 const JSON_EINRUECKUNG = 2;
-const MAX_ANTWORT_ZEICHEN = 1000;
+const EXIT_OHNE_STATUS = 1;
+const WAECHTER = fileURLToPath(new URL("waechter.mjs", import.meta.url));
+const VERLAUF_AUSGABE = ["--output-format", "stream-json", "--verbose", "--include-hook-events"];
 const KRITISCHE_PFADE = [
   "src/auth.js",
   "src/web-auth.js",
@@ -77,48 +79,32 @@ export function bauPrompt({ phase, auftrag, root }, testausgabe) {
   ].join("\n");
 }
 
-function schlussantwort(ausgabe) {
-  const zeilen = ausgabe.split("\n").reverse();
-  for (const zeile of zeilen) {
-    try {
-      const { result: ergebnis } = JSON.parse(zeile);
-      if (typeof ergebnis === "string") return ergebnis.slice(-MAX_ANTWORT_ZEICHEN);
-    } catch {
-      continue;
-    }
+function beobachte(befehl, { root, umgebung, eingabe, auftrag, pruefleiter }) {
+  const daten = JSON.stringify({ befehl, eingabe, auftrag, pruefleiter });
+  const lauf = spawnSync(execPath, [WAECHTER], { cwd: root, env: umgebung, input: daten, encoding: "utf8" });
+  try {
+    return JSON.parse(lauf.stdout);
+  } catch {
+    return { exitCode: lauf.status ?? EXIT_OHNE_STATUS, antwort: "", fehlerausgabe: lauf.stderr ?? "" };
   }
-  return ausgabe.slice(-MAX_ANTWORT_ZEICHEN);
 }
 
-export function starteAgent({ rolle, auftrag, root }, prompt) {
-  const agent = agentFuer(rolle, auftrag.bereich);
+export function starteAgent({ rolle, auftrag, root, pruefleiter }, prompt, start = {}) {
+  const agent = start.agent ?? agentFuer(rolle, auftrag.bereich);
   const sitzung = randomUUID();
   const befehl = [
     env.HERMES_CLAUDE ?? "claude",
     "-p",
     "--agent",
     agent,
-    "--settings",
-    `.claude/rollen/${rolle}.json`,
+    ...(start.argumente ?? ["--settings", `.claude/rollen/${rolle}.json`]),
     "--session-id",
     sitzung,
     "--permission-mode",
     "acceptEdits",
-    "--output-format",
-    "json",
+    ...VERLAUF_AUSGABE,
   ];
-  const lauf = fuehreAus(`agent ${rolle}`, befehl, {
-    cwd: root,
-    env: { ...env, HERMES_ROLLE: rolle, HERMES_ABNAHME: auftrag.abnahme },
-    zeitlimit: AGENT_ZEITLIMIT_MINUTEN * MS_JE_MINUTE,
-    eingabe: prompt,
-  });
-  return {
-    rolle,
-    agent,
-    sitzung,
-    befehl: befehl.join(" "),
-    exitCode: lauf.exitCode,
-    antwort: schlussantwort(lauf.ausgabe),
-  };
+  const umgebung = { ...env, HERMES_ROLLE: rolle, HERMES_ABNAHME: auftrag.abnahme };
+  const lauf = beobachte(befehl, { root, umgebung, eingabe: prompt, auftrag, pruefleiter });
+  return { rolle, agent, sitzung, befehl: befehl.join(" "), ...lauf };
 }

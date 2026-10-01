@@ -3,13 +3,15 @@ import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { bauPrompt, starteAgent, testPrompt } from "./agenten.mjs";
+import { bauPrompt, testPrompt } from "./agenten.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
 import { brauchtRotenTest, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, festhalten, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
+import { setzeEin } from "./einsatz.mjs";
 import { kostenDesAuftrags } from "./kosten.mjs";
 import { beleg, fuehreAus } from "./pruefungen.mjs";
+import { fuehreRundenAus } from "./runden.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
@@ -21,9 +23,12 @@ function hatSkript(root, name) {
 }
 
 class AuftragsLauf {
-  constructor({ phase, auftrag, root, phasendatei }) {
+  constructor({ phase, auftrag, root, phasendatei, runde, vorgeschichte }) {
     this.kontext = { phase, auftrag, root };
     this.phasendatei = phasendatei;
+    this.runde = runde;
+    this.vorgeschichte = vorgeschichte;
+    this.voraussetzung = null;
     this.basis = kopf(root);
     this.basisBau = this.basis;
     this.testausgabe = "";
@@ -56,11 +61,14 @@ class AuftragsLauf {
 
   agent(rolle, prompt) {
     const vorher = fingerabdruck(this.kontext.root);
-    const ergebnis = starteAgent({ rolle, ...this.kontext }, prompt);
-    this.agenten.push(ergebnis);
+    const ergebnis = setzeEin({ rolle, ...this.kontext }, `${prompt}${this.vorgeschichte}`);
+    this.agenten.push(...ergebnis.sitzungen);
     if (fingerabdruck(this.kontext.root) !== vorher) {
       return this.scheitert(`Der Agent ${ergebnis.agent} hat ${BELEGE}/ verändert.`);
     }
+    this.voraussetzung = ergebnis.voraussetzung;
+    if (this.voraussetzung) return this.scheitert(`Voraussetzung fehlt: ${this.voraussetzung}`);
+    if (ergebnis.grund) return this.scheitert(ergebnis.grund);
     return ergebnis.exitCode === 0 || this.scheitert(`Der Agent ${ergebnis.agent} endete mit Exit ${ergebnis.exitCode}.`);
   }
 
@@ -150,11 +158,13 @@ class AuftragsLauf {
     const ergebnis = {
       phase: phase.phase,
       auftrag: auftrag.id,
+      runde: this.runde,
       art: auftrag.art,
       bereich: auftrag.bereich,
       basis: this.basis,
       ergebnis: gruen ? GRUEN : ROT,
       grund: this.grund,
+      voraussetzung: this.voraussetzung,
       commit: this.commit,
       agenten: this.agenten,
       pruefungen: this.pruefungen,
@@ -163,7 +173,7 @@ class AuftragsLauf {
       zeit: new Date().toISOString(),
     };
     druckeBeleg(ergebnis, schreibeBeleg(root, ergebnis));
-    return ergebnis.ergebnis;
+    return ergebnis;
   }
 }
 
@@ -175,7 +185,7 @@ export function lauf(phasendatei, root) {
     return EXIT_ROT;
   }
   for (const auftrag of reihenfolge(phase.auftraege).ordnung) {
-    const ergebnis = new AuftragsLauf({ phase, auftrag, root, phasendatei }).fuehreAus();
+    const ergebnis = fuehreRundenAus({ phase, auftrag, root, phasendatei }, (runde) => new AuftragsLauf(runde).fuehreAus());
     if (ergebnis !== GRUEN) return EXIT_ROT;
   }
   return EXIT_GRUEN;
