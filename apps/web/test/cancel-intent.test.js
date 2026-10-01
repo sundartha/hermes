@@ -112,3 +112,11 @@ test("Kuendigungs-Auftrag: gesperrter Speicher wirft nie, der Anker wirkt trotzd
   const intent = pendingCancelIntent({ hash: CANCEL_INTENT_HASH, storage: lockedStorage, now: NOW });
   assert.equal(cancelIntentStep(AUTH_STATE.AUTHENTICATED, intent), CANCEL_INTENT_STEP.OPEN);
 });
+
+test("Kuendigungs-Auftrag: offener Auftrag blendet Laden und \"Sign in required\" aus", () => {
+  const island = read("src/components/app/BillingIsland.astro");
+  const shell = read("src/pages/app/index.astro");
+  assert.ok(island.includes("dataset.cancelIntent"), "die Insel setzt den Schleier nicht");
+  assert.match(shell, /html\[data-cancel-intent\] #region-loading/);
+  assert.match(shell, /html\[data-cancel-intent\] #region-anonymous/);
+});
