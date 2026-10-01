@@ -1,4 +1,9 @@
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { pid } from "node:process";
+
 import { starteAgent } from "./agenten.mjs";
+import { git } from "./git.mjs";
 import { UEBERGABE } from "./verlauf.mjs";
 
 const MS_JE_MINUTE = 60_000;
@@ -8,6 +13,7 @@ const BAU = "bau";
 const LESE_WERKZEUGE = ["Read", "Grep", "Glob"];
 const LESE_MODELL = "opus";
 const OHNE_HOOKS = JSON.stringify({ disableAllHooks: true });
+const LIMIT_SPERREN = "auftrag-limit";
 const SCHLAEFER = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 const ERGEBNIS_DES_BAUS = [
   "",
@@ -18,18 +24,33 @@ const ERGEBNIS_DES_BAUS = [
   "",
 ].join("\n");
 
-const sperre = { bis: 0 };
-
-function warteAufFreigabe() {
-  const rest = sperre.bis - Date.now();
-  if (rest > 0) Atomics.wait(SCHLAEFER, 0, 0, rest);
+function limitSperre({ root, phase }) {
+  const gemeinsam = git(["rev-parse", "--git-common-dir"], { cwd: root }).trim();
+  return join(resolve(root, gemeinsam), LIMIT_SPERREN, phase.phase);
 }
 
-function sperreWegenLimit({ bis }) {
+function restDerSperre(sperre) {
+  const bis = existsSync(sperre) ? Number(readFileSync(sperre, "utf8")) : 0;
+  return bis - Date.now();
+}
+
+function warteAufFreigabe(sperre) {
+  let rest = restDerSperre(sperre);
+  while (rest > 0) {
+    Atomics.wait(SCHLAEFER, 0, 0, rest);
+    rest = restDerSperre(sperre);
+  }
+}
+
+function sperreWegenLimit(sperre, { bis }) {
   const jetzt = Date.now();
-  const frei = bis > jetzt ? bis : jetzt + WARTEZEIT_OHNE_ANGABE_MINUTEN * MS_JE_MINUTE;
-  sperre.bis = Math.max(sperre.bis, frei);
-  return `Nutzungslimit erreicht; das Skript startet neue Agenten erst ab ${new Date(sperre.bis).toISOString()} und macht dann weiter.`;
+  const gemeldet = bis > jetzt ? bis : jetzt + WARTEZEIT_OHNE_ANGABE_MINUTEN * MS_JE_MINUTE;
+  const frei = Math.max(jetzt + restDerSperre(sperre), gemeldet);
+  const entwurf = `${sperre}.${pid}`;
+  mkdirSync(dirname(sperre), { recursive: true });
+  writeFileSync(entwurf, String(frei));
+  renameSync(entwurf, sperre);
+  return `Nutzungslimit erreicht; das Skript startet neue Agenten erst ab ${new Date(frei).toISOString()} und macht dann weiter.`;
 }
 
 function uebergabe(vorgaenger) {
@@ -46,9 +67,11 @@ function uebergabe(vorgaenger) {
   ].join("\n");
 }
 
-function grundDerSitzung({ limit, aktion }) {
-  if (limit) return sperreWegenLimit(limit);
-  return aktion?.grund ?? null;
+function grundDerSitzung({ limit, aktion }, { auftrag, sperre }) {
+  if (!limit) return aktion?.grund ?? null;
+  const grund = sperreWegenLimit(sperre, limit);
+  console.log(`Auftrag ${auftrag.id}: ${grund}`);
+  return grund;
 }
 
 function voraussetzung({ rolle, antwort = "" }) {
@@ -57,14 +80,15 @@ function voraussetzung({ rolle, antwort = "" }) {
 
 export function setzeEin(kontext, prompt, start) {
   const auftragsPrompt = kontext.rolle === BAU ? `${prompt}${ERGEBNIS_DES_BAUS}` : prompt;
+  const sperre = limitSperre(kontext);
   const sitzungen = [];
   let vorgaenger = null;
   let pruefleiter;
   for (;;) {
-    warteAufFreigabe();
+    warteAufFreigabe(sperre);
     const fortsetzung = vorgaenger === null ? kontext.fortsetzung : undefined;
     const sitzung = starteAgent({ ...kontext, pruefleiter, fortsetzung }, `${auftragsPrompt}${uebergabe(vorgaenger)}`, start);
-    const grund = grundDerSitzung(sitzung);
+    const grund = grundDerSitzung(sitzung, { auftrag: kontext.auftrag, sperre });
     sitzungen.push(grund ? { ...sitzung, grund } : sitzung);
     if (!sitzung.limit && sitzung.aktion?.art !== UEBERGABE) {
       return { ...sitzung, grund, sitzungen, voraussetzung: voraussetzung(sitzung) };

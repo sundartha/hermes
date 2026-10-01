@@ -139,7 +139,7 @@ class Runden {
 
   planeUmbau(ergebnis) {
     const { phase, auftrag, root } = this.kontext;
-    const plan = frage({ rolle: "plan", auftrag, root }, planPrompt(phase, auftrag, ergebnis.voraussetzung));
+    const plan = frage({ rolle: "plan", phase, auftrag, root }, planPrompt(phase, auftrag, ergebnis.voraussetzung));
     const neu = umbauPhase(phase, auftrag, plan.antwort);
     const [umbau] = neu.auftraege;
     const befunde = plan.exitCode === 0 ? phasenBefunde(neu, root) : [`Der Plan-Agent endete mit Exit ${plan.exitCode}.`];
@@ -169,7 +169,7 @@ class Runden {
 
   entscheidung(ergebnis) {
     const { phase, auftrag, root } = this.kontext;
-    const notiz = frage({ rolle: "notiz", auftrag, root }, notizPrompt(phase, auftrag, this.fehler));
+    const notiz = frage({ rolle: "notiz", phase, auftrag, root }, notizPrompt(phase, auftrag, this.fehler));
     const kopf = `Auftrag ${auftrag.id} der Phase ${phase.phase} ist nach ${MAX_RUNDEN} roten Runden gestoppt.`;
     const text = ["## Entscheidung nötig", "", kopf, "", notiz.antwort.trim() || this.fehler.join("\n\n"), ""].join("\n");
     const veroeffentlicht = veroeffentliche(phase.issue, text, root);

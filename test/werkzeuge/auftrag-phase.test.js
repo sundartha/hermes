@@ -14,10 +14,12 @@ const EXIT_ROT = 1;
 const LINT_FEHLER = "export const WERT = nichtDefiniert;\n";
 const ABFRAGE_MS = 50;
 const FRIST_MS = 60_000;
-const ISSUE = { erste: 77, gleich: 78, importiert: 79, frei: 80, rot: 81, abgelehnt: 82, lint: 83, umbau: 85 };
+const ISSUE = { erste: 77, gleich: 78, importiert: 79, frei: 80, rot: 81, abgelehnt: 82, lint: 83, limit: 84, umbau: 85 };
+const LIMIT_SEKUNDEN = 2;
+const VOLLER_KONTEXT = { type: "assistant", message: { usage: { input_tokens: 100_000 }, content: [] } };
 
 const ERSATZ_CLAUDE = `#!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 const name = basename(process.cwd());
 const ort = dirname(process.env.ERSATZ_DREHBUCH);
@@ -27,8 +29,9 @@ const zaehler = join(ort, "anzahl-" + name + "-" + rolle);
 const nummer = existsSync(zaehler) ? Number(readFileSync(zaehler, "utf8")) : 0;
 writeFileSync(zaehler, String(nummer + 1));
 const liste = eintrag[rolle] ?? [eintrag];
-const { dateien = {}, warteAuf, antwort = "fertig" } = liste[Math.min(nummer, liste.length - 1)];
+const { dateien = {}, warteAuf, zeilen = [], antwort = "fertig", limit } = liste[Math.min(nummer, liste.length - 1)];
 const marke = (wer) => join(ort, "start-" + wer);
+appendFileSync(join(ort, "starts.txt"), name + " " + Date.now() + "\\n");
 for (const [pfad, inhalt] of Object.entries(dateien)) {
   mkdirSync(dirname(pfad), { recursive: true });
   writeFileSync(pfad, inhalt);
@@ -37,8 +40,10 @@ writeFileSync(marke(name), "");
 const frist = Date.now() + 20000;
 while (warteAuf && !existsSync(marke(warteAuf)) && Date.now() < frist) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
 const zeige = (ereignis) => process.stdout.write(JSON.stringify(ereignis) + "\\n");
-zeige({ type: "result", result: antwort });
-process.exitCode = warteAuf && !existsSync(marke(warteAuf)) ? 1 : 0;
+zeilen.forEach(zeige);
+if (limit) zeige({ type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: Math.ceil(Date.now() / 1000) + limit } });
+zeige({ type: "result", is_error: Boolean(limit), result: limit ? "Usage limit reached" : antwort });
+process.exitCode = limit || (warteAuf && !existsSync(marke(warteAuf))) ? 1 : 0;
 `;
 
 const BASIS = {
@@ -96,6 +101,18 @@ function liste(cwd, args) {
   return runIn(cwd, "git", args).stdout.split("\n").filter(Boolean);
 }
 
+async function warteAufZeile(lauf, datei, muster) {
+  let beendet = false;
+  lauf.then(() => {
+    beendet = true;
+  });
+  for (;;) {
+    const treffer = existsSync(datei) ? muster.exec(readFileSync(datei, "utf8")) : null;
+    if (treffer !== null || beendet) return treffer;
+    await schlafen(ABFRAGE_MS);
+  }
+}
+
 test("zwei Aufträge laufen gleichzeitig in eigenen Worktrees und landen als zwei Commits in fester Reihenfolge", async (context) => {
   const probe = aufbau(context, {
     "77-A1": { warteAuf: "77-A2", dateien: { "src/store/a.js": "export const A = 2;\n", "src/store/z.js": "eins\n" } },
@@ -125,6 +142,22 @@ test("ein Auftrag, der nach „Voraussetzung fehlt“ einen Umbau-Commit mitbrin
   const { code, ausgabe } = await ende(phase(probe, ["v", ISSUE.umbau, auftrag("V1", "src/d.js")]));
   assert.equal(code, 0, ausgabe);
   assert.deepEqual(liste(probe.remote, ["log", "--format=%s", "master..phase/85-v"]), ["Baue V1", "Lege e an"]);
+});
+
+test("ein Nutzungslimit hält auch den nächsten Agenten eines parallelen Auftrags bis zur Freigabe an", { timeout: FRIST_MS }, async (context) => {
+  const probe = aufbau(context, {
+    "84-G1": { bau: [{ limit: LIMIT_SEKUNDEN }, { dateien: { "src/d.js": "export const WERT = 2;\n" } }] },
+    "84-G2": { bau: [{ warteAuf: "gesperrt", zeilen: [VOLLER_KONTEXT] }, { dateien: { "src/c.js": "export const KOPIE = 2;\n" } }] },
+  });
+  const lauf = ende(phase(probe, ["g", ISSUE.limit, auftrag("G1", "src/d.js"), auftrag("G2", "src/c.js")]));
+  const meldung = await warteAufZeile(lauf, join(probe.repo, ".fortschritt/g/G1.log"), /^Auftrag G1: Nutzungslimit erreicht; .* ab (\S+) und/m);
+  writeFileSync(join(probe.werkzeug, "start-gesperrt"), "");
+  const { code, ausgabe } = await lauf;
+  assert.ok(meldung, `G1 meldet das Nutzungslimit nicht sofort:\n${ausgabe}`);
+  assert.equal(code, 0, ausgabe);
+  const starts = readFileSync(join(probe.werkzeug, "starts.txt"), "utf8").split("\n").filter((zeile) => zeile.startsWith("84-G2 "));
+  const [freigabe, naechsterStart] = [Date.parse(meldung[1]), Number(starts.at(-1).split(" ")[1])];
+  assert.ok(naechsterStart >= freigabe, `G2 startete einen Agenten ${freigabe - naechsterStart} ms vor der Freigabe`);
 });
 
 test("eine zweite Phase im selben Bereich wartet und nennt die Phase, auf die sie wartet", async (context) => {
