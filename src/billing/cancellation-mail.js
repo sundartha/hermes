@@ -33,10 +33,8 @@ const EFFECTIVE_DATE_FORMAT = new Intl.DateTimeFormat("de-DE", {
   dateStyle: "medium",
 });
 
-// Eingangszeitpunkt in der Schreibweise aller Kuendigungs-Mails (deutsche Ortszeit) - EINE
-// Quelle fuer diese Bestaetigung UND die Mails des oeffentlichen Formulars
-// (billing/public-cancellation.js), damit derselbe Eingang nie zweierlei aussieht (G5).
-export function formatReceivedAt(receivedAt) {
+// Eingangszeitpunkt in der Schreibweise der Kuendigungs-Mail (deutsche Ortszeit).
+function formatReceivedAt(receivedAt) {
   return `${RECEIVED_FORMAT.format(new Date(receivedAt))} Uhr`;
 }
 

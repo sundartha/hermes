@@ -1,11 +1,7 @@
-// Kuendigung zum Periodenende (§ 312k BGB): die geteilte Sequenz hinter ALLEN Eingaengen
-// (G5) - der Knopf im Kundenbereich (self-service-routes.js) UND das oeffentliche
-// Kuendigungsformular ohne Anmeldung (billing/public-cancellation.js). Kein HTTP hier.
-// Offen: die cancel-Route in self-service-routes.js loest die Bestaetigungs-Mail noch
-// inline aus (derselbe Ablauf wie triggerCancellationConfirmation unten); die Umstellung
-// raeumt dort einen eingefrorenen Lint-Befund und gehoert deshalb in eine eigene Runde
-// mit Anpassung von eslint-suppressions.json.
-import { attemptCancellationMailConfirm } from "./cancellation-mail.js";
+// Kuendigung zum Periodenende (§ 312k BGB): die Sequenz hinter dem Knopf im
+// Kundenbereich (self-service-routes.js). Eigenes Modul seit #169; das oeffentliche
+// Formular, das sie dort mitbenutzte, ist seit 2026-10-01 wieder entfernt (Owner-
+// Entscheidung: gekuendigt wird nur eingeloggt). Kein HTTP hier.
 
 // 312k-P3: geteilte Kuendigungs-/Ruecknahme-Sequenz hinter BEIDEN Richtungen (G5) -
 // scheduleCancellation/unscheduleCancellation (312k-P2, billing/ports.js) sind DERSELBE
@@ -50,32 +46,4 @@ export async function setSubscriptionCancellation({ store, billing, tenant, canc
     currentPeriodEnd: result.currentPeriodEnd ?? before.currentPeriodEnd,
     alreadyApplied: false,
   };
-}
-
-// 312k-Phase 5: Kuendigungsbestaetigung UNVERZUEGLICH ausloesen - NUR nach einer
-// tatsaechlich NEUEN Vormerkung (der Aufrufer prueft alreadyApplied, sonst liefe ein
-// Doppelklick in eine zweite Mail). receivedAt EINMAL hier gesetzt (Eingangszeitpunkt,
-// den § 312k in der Bestaetigung verlangt) - der Sweep liest spaeter denselben Wert, nie
-// ein neues "jetzt". Die Kuendigung ist an dieser Stelle bereits VOLLZOGEN - das Ausloesen
-// der Mail laeuft danach, best-effort, und darf den Aufrufer NIE blockieren (try/catch:
-// attemptCancellationMailConfirm ist selbst schon fail-soft, dies ist ein zusaetzlicher
-// Riegel gegen einen unerwarteten Fehler in der Verdrahtung). Was nicht klappt, bleibt
-// am Tenant offen vermerkt und wird vom periodischen Sweep erneut versucht.
-export async function triggerCancellationConfirmation({
-  store,
-  mailer,
-  accounts,
-  config,
-  auditStore,
-  tenantId,
-  receivedAt,
-}) {
-  try {
-    store.setCancellationMailPending(tenantId, { pending: true, receivedAt });
-    await attemptCancellationMailConfirm({ store, mailer, accounts, config, auditStore, tenantId });
-  } catch (err) {
-    console.error(
-      `[cancellation-mail] Ausloesen fehlgeschlagen tenant=${tenantId}: ${err.message}`,
-    );
-  }
 }
