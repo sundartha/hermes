@@ -31,7 +31,6 @@ import {
 import { makePortalStore } from "../store/portal.js";
 import { makeAuditStore } from "../audit-store.js";
 import { mountCookieConsentLog } from "../cookie-consent-log.js";
-import { mountPublicCancellation } from "../public-cancellation-routes.js";
 import { mountSelfServiceRoutes } from "../self-service-routes.js";
 import { createRateLimiter } from "../middleware.js";
 import { setTenantIdentityIfAbsent } from "../store/state-ops.js";
@@ -315,11 +314,12 @@ export async function wireWebLogin({
   // suspended_at-Grace-Anker (tenant-prolif-c Invariante 2, G3-Fix).
   app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw, store }));
 
-  // ---- Oeffentliche Formulare der Website: Cookie-Nachweis (Art. 7 DSGVO), Kuendigung (§ 312k BGB)
-  // AUTH-AUSNAHMEN (Regel 3, begruendet in src/route-policy.js und den beiden Modulen). pg-Block:
-  // beide brauchen den portalRunner (Beleg-Tabelle bzw. Konto-Zuordnung per Email) - ohne pg 404.
+  // ---- Cookie-Einwilligungs-Protokoll (Nachweis Art. 7 Abs. 1 DSGVO) ----------------
+  // AUTH-AUSNAHME (Regel 3, begruendet in src/route-policy.js und src/cookie-consent-log.js):
+  // Besucher der Marketing-Seite haben keine Sitzung; die Route schreibt nur eine anonyme
+  // Belegzeile. Hier im pg-Block, weil die Tabelle am portalRunner haengt (derselbe Runner,
+  // kein zweiter Pool) - ohne pg gibt es keinen Beleg-Speicher, die Route antwortet 404.
   mountCookieConsentLog({ app, runner: portalRunner });
-  mountPublicCancellation({ app, runner: portalRunner, deps: { store, billing: stripeBilling, accounts, auditStore, mailer, config } });
 
   // ---- Self-Service (I9 + #3): web-session-only, hinter webAuthMw ----------------
   // Konvergenz #3: Self-Service haengt jetzt am echten OIDC-Browser-Login statt am
