@@ -1,0 +1,26 @@
+{
+  "entscheidungsIssue": {
+    "number": 46,
+    "title": "Paket 18: systemstand",
+    "html_url": "https://github.com/sundartha/hermes/issues/46",
+    "created_at": "2026-09-28T18:43:03Z",
+    "state": "open",
+    "labels": [
+      {
+        "name": "paket"
+      },
+      {
+        "name": "entscheidung"
+      }
+    ],
+    "body": ""
+  },
+  "notiz": {
+    "id": 5918305576,
+    "user": {
+      "login": "sundartha-bot"
+    },
+    "created_at": "2026-09-30T19:36:10Z",
+    "body": "## Entscheidung nötig\n\n**Was ich versucht habe.** Ich habe die Paketdatei gelesen und die Kriterien der Schritte gesucht. Laut Paketdatei stehen die Kriterien der Schritte 1 bis 5 im Bauplan in der Paketliste. Diese Paketliste liegt der Sitzung nicht vor: Auf der Platte gibt es nur die einzelnen Paket-Prompts, und das Übersichts-Issue #67 enthält keine Kriterien. Die Kriterien für Teil 1a nennt die Paketdatei selbst, die für 1b und 2 bis 5 nicht. Auch Startdatum und Schätzung je Schritt, die in die Basis-Datei sollen, stehen nirgends, wo ich sie lesen darf.\n\n**Was ich beobachtet habe.**\n- „npm run systemstand“ endet heute mit Exit 1 („Missing script“). Damit der Befehl existiert, braucht package.json eine Zeile im Abschnitt scripts. package.json steht aber nicht im Bereich der Paketdatei (Paket 06 hatte es für „npm run pruefleiter“ ausdrücklich im Bereich).\n- Die Regeln für master sind mit dem Bot-Token lesbar: sieben Pflicht-Checks, PR-Pflicht, kein Force-Push, keine Löschung, Code-Owner-Pflicht aus, null nötige Freigaben. Die Kriterien von Teil 1a lassen sich damit prüfen.\n\n**Optionen**\n1. **(Empfehlung)** Ich baue Teil 1a vollständig mit den Kriterien aus der Paketdatei. Die Schritte 1b und 2 bis 5 bekommen wie 6 bis 11 je eine Zeile „offen, weil das Kriterium noch nicht hinterlegt ist“, ohne Startdatum und Schätzung. Ein Folgepaket trägt die Kriterien aus der Paketliste nach. Zusätzlich ergänze ich in package.json genau den einen Eintrag für „npm run systemstand“ und nenne ihn im PR als einzige Datei außerhalb des Bereichs.\n2. Die Betreuung schickt mir den Wortlaut der Kriterien für 1b und 2 bis 5 sowie Startdatum und Schätzung je Schritt, und ich baue alle Kriterien in diesem Paket. package.json wie in Option 1.\n3. Ich höre hier auf. Die Betreuung ergänzt zuerst den Bereich um package.json und legt die Kriterien der Schritte 1 bis 5 im Repo ab.\n"
+  }
+}
