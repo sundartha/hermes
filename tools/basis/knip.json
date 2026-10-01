@@ -2,6 +2,7 @@
   "befunde": [
     "duplicates|src/routes/_tenant.js|makeTenantResolver+createTenantResolver",
     "duplicates|src/store/json.js|getCall+attachActiveCall",
+    "exports|scripts/briefing-bench/bench.mjs|NUR_ROTPROBE_12B",
     "exports|scripts/briefing-bench/bench.mjs|callTools",
     "exports|scripts/briefing-bench/metriken.mjs|BRAND_NAMES",
     "exports|scripts/briefing-bench/metriken.mjs|briefingText",
