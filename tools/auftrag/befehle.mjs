@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { env } from "node:process";
 
 import { geschuetzteMuster, ladePhase, phasenBefunde } from "./format.mjs";
@@ -7,6 +9,12 @@ import { fuehreAus, gekuerzteTestausgabe, grenzBefunde, rotUrteil } from "./prue
 export const EXIT_GRUEN = 0;
 export const EXIT_ROT = 1;
 export const ROLLEN = ["test", "bau"];
+
+export function hatSkript(root, name) {
+  const datei = join(root, "package.json");
+  if (!existsSync(datei)) return false;
+  return Object.hasOwn(JSON.parse(readFileSync(datei, "utf8")).scripts ?? {}, name);
+}
 
 export function abnahmeBefehl(auftrag) {
   return ["npm", "--silent", "test", "--", auftrag.abnahme];

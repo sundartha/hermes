@@ -1,10 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { bauPrompt, testPrompt } from "./agenten.mjs";
-import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase } from "./befehle.mjs";
+import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
 import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
 import { brauchtRotenTest, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, festhalten, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
@@ -15,12 +13,6 @@ import { fuehreRundenAus } from "./runden.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
-
-function hatSkript(root, name) {
-  const datei = join(root, "package.json");
-  if (!existsSync(datei)) return false;
-  return Object.hasOwn(JSON.parse(readFileSync(datei, "utf8")).scripts ?? {}, name);
-}
 
 class AuftragsLauf {
   constructor({ phase, auftrag, root, phasendatei, runde, vorgeschichte }) {
@@ -139,8 +131,12 @@ class AuftragsLauf {
           () => this.zwischenstand(),
         ]
       : [() => this.vorherGruen()];
+    return [...vorBau, ...this.bauSchritte(), () => this.abschliessen()];
+  }
+
+  bauSchritte() {
+    const { auftrag } = this.kontext;
     return [
-      ...vorBau,
       () => this.agent("bau", bauPrompt(this.kontext, this.testausgabe)),
       () => this.grenzen("bau", this.basisBau),
       () => this.allesVormerken(),
@@ -148,7 +144,6 @@ class AuftragsLauf {
       () => this.gruen("lint", ["npm", "--silent", "run", "lint"]),
       () => this.gruen("abnahme", abnahmeBefehl(auftrag)),
       () => this.gruen("betroffene tests", ["npm", "--silent", "run", "test:betroffen", "--", "--basis", this.basis, "--ohne-volle-suite"]),
-      () => this.abschliessen(),
     ];
   }
 
