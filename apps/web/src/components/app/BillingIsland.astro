@@ -151,6 +151,13 @@ import {
     confirmCancelButtonLabel,
   } from "../../lib/subscribe.js";
   import { t } from "../../lib/i18n.js";
+  import {
+    CANCEL_INTENT_STEP,
+    cancelIntentStep,
+    clearCancelIntent,
+    pendingCancelIntent,
+    rememberCancelIntent,
+  } from "../../lib/cancel-intent.js";
 
   // Rueckkehr-Parameter (kein Magic-String an den Vergleichsstellen).
   const RETURN_PARAM_CARD = "card";
@@ -402,6 +409,61 @@ import {
     const { state, data } = event.detail;
     if (state === AUTH_STATE.AUTHENTICATED) renderBilling(data);
     else cardEl.hidden = true; // anonym/pending/Fehler -> kein Billing-Block
+  });
+
+  // § 312k BGB, Owner-Entscheidung 2026-10-01: "Verträge kündigen" auf der Website
+  // fuehrt hierher (/app#kuendigen, lib/cancel-intent.js). Eingeloggt oeffnet sich die
+  // Kuendigungs-Bestaetigung sofort; anonym geht es ueber den Login und danach dorthin.
+  // Der Listener steht NACH dem Render-Listener oben: beim Oeffnen ist die Karte schon
+  // gezeichnet. Der Auftrag wird beim ersten entscheidenden Zustand verbraucht.
+  const intentStorage = (() => {
+    try {
+      return window.sessionStorage;
+    } catch {
+      return null;
+    }
+  })();
+  let cancelIntent = pendingCancelIntent({
+    hash: location.hash,
+    storage: intentStorage,
+    now: Date.now(),
+  });
+
+  function dropCancelIntent() {
+    cancelIntent = { pending: false, viaLogin: false };
+    clearCancelIntent(intentStorage);
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+  }
+
+  // Mit aktivem Abo: Stufe 2 (Bestaetigung mit "Jetzt kündigen") aufklappen und den
+  // Knopf fokussieren. Schon gekuendigt: zum Status + "Kuendigung zuruecknehmen".
+  // Ohne Abo: zur Abrechnungskarte (dort steht, dass nichts zu kuendigen ist).
+  function openCancellation() {
+    if (!cancelOpenEl.hidden) cancelOpenEl.click();
+    const target = cancelBlockEl.hidden ? cardEl : cancelBlockEl;
+    if (!target.hidden) target.scrollIntoView({ block: "center" });
+    if (!cancelConfirmEl.hidden) cancelConfirmBtnEl.focus({ preventScroll: true });
+  }
+
+  function goToLogin() {
+    const signIn = document.querySelector("#region-anonymous a[href]");
+    if (!signIn) return;
+    rememberCancelIntent(intentStorage, Date.now());
+    window.location.assign(signIn.href);
+  }
+
+  document.addEventListener(AUTH_EVENT, (event) => {
+    const step = cancelIntentStep(event.detail.state, cancelIntent);
+    if (step === CANCEL_INTENT_STEP.NONE) return;
+    if (step === CANCEL_INTENT_STEP.LOGIN) {
+      goToLogin();
+      return;
+    }
+    dropCancelIntent();
+    // Naechstes Bild: die Shell (#region-shell) schaltet ein spaeter registrierter
+    // AUTH_EVENT-Listener der Seite sichtbar (pages/app/index.astro) - vorher liesse
+    // sich weder scrollen noch fokussieren.
+    if (step === CANCEL_INTENT_STEP.OPEN) requestAnimationFrame(openCancellation);
   });
 
   showReturnMessage();
