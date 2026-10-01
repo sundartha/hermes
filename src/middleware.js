@@ -1,5 +1,5 @@
 // HTTP-Schutzschichten fuer das Gateway - bewusst in-house, ohne neue Dependency.
-import { auditAuthFailed, AUTH_FAILED_GRUND } from "./util.js";
+import { auditAuthFailed, AUTH_FAILED_GRUND, maskNumbersInText } from "./util.js";
 
 // CSP. script-src ist strikt: 'self', kein 'unsafe-inline', kein 'unsafe-eval'. Der
 // urspruengliche Grund fuer die Lockerung - das alte Dashboard public/tenant.html mit
@@ -419,7 +419,7 @@ export function createRateLimiter(limitPerMin) {
 // daran erkennt Express die Error-MW; _next bleibt deshalb in der Signatur.
 export function errorHandler(err, _req, res, next) {
   // secret-frei + laut: nur der Stack ins Server-Log, nie in die Antwort.
-  console.error("[error]", err && err.stack ? err.stack : String(err));
+  console.error("[error]", maskNumbersInText(err && err.stack ? err.stack : String(err)));
   if (res.headersSent) return next(err);
   res.status(500).json({ error: "internal error" });
 }
