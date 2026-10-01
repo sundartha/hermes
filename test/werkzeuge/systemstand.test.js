@@ -25,6 +25,12 @@ const PROBE_NUMBER = 5;
 const STEP_IDS = ["1a", "1b", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"];
 const REQUIRED_CHECKS = ["CI", "Prüfungen prüfen", "Testschutz"];
 const SINCE = "2026-09-30";
+const HEAD_SHA = "c".repeat(SHA_LENGTH);
+const OLDER_SHA = "d".repeat(SHA_LENGTH);
+const REBASED_COMMITS = 6;
+const RUNNING = { status: "in_progress", conclusion: null };
+const GREEN = { status: "completed", conclusion: "success" };
+const RED = { status: "completed", conclusion: "failure" };
 const EXIT_OK = 0;
 const EXIT_FAILURE = 1;
 const HTTP_OK = 200;
@@ -80,8 +86,17 @@ function healthyGitHub() {
   };
 }
 
+function historyAnswer(history, repo, url) {
+  if (url.pathname === `${repo}/commits`) return history.map(({ sha }) => ({ sha }));
+  const commit = history.find(({ sha }) => sha === url.searchParams.get("head_sha"));
+  if (url.pathname !== `${repo}/actions/runs` || commit === undefined) return undefined;
+  return { workflow_runs: commit.runs };
+}
+
 function answer(state, url) {
   const repo = `/repos/${REPOSITORY}`;
+  const fromHistory = state.masterHistory && historyAnswer(state.masterHistory, repo, url);
+  if (fromHistory) return [HTTP_OK, fromHistory];
   const routes = new Map([
     ["/graphql", { data: { repository: { autoMergeAllowed: state.autoMergeAllowed } } }],
     [`${repo}/rules/branches/master`, state.rules],
@@ -160,6 +175,14 @@ async function systemstand(context, { files = {}, recorded = {}, github = {}, ar
   return { ...result, lines: outputLines(result.stdout), requests: service.requests };
 }
 
+function masterGreenOn(context, masterHistory) {
+  return systemstand(context, {
+    recorded: { "master-gruen": SINCE },
+    github: { masterHistory },
+    args: ["--pruefen"],
+  });
+}
+
 function stepIds(lines) {
   return lines.map((line) => line.split(":")[0].replace("Schritt ", ""));
 }
@@ -223,6 +246,54 @@ test("ein roter master sperrt einen PR nicht, aber den Lauf auf master", async (
   assert.match(pullRequest.stderr, /1a/);
   const master = await systemstand(context, redMaster);
   assert.equal(master.status, EXIT_FAILURE);
+});
+
+test("laufen auf dem neuesten master-Commit noch Workflows, ist master noch offen und kein Rückfall", async (context) => {
+  const rebased = [...Array(REBASED_COMMITS).keys()].map((index) => ({
+    sha: String(index).repeat(SHA_LENGTH),
+    runs: [],
+  }));
+  const head = [
+    { name: "CI", ...RUNNING },
+    { name: "Abhängigkeiten", ...RUNNING },
+  ];
+  const result = await masterGreenOn(context, [{ sha: HEAD_SHA, runs: head }, ...rebased]);
+  assert.equal(result.status, EXIT_OK, result.stderr);
+  assert.match(result.lines[0], /^Schritt 1a: offen, weil /);
+  assert.doesNotMatch(result.stderr, /Rückfall/);
+});
+
+test("ein roter Lauf auf einem älteren master-Commit zählt nicht, wenn derselbe Workflow auf dem neuesten grün ist", async (context) => {
+  const older = {
+    sha: OLDER_SHA,
+    runs: [
+      { name: "Abhängigkeiten", ...RED },
+      { name: "CI", ...GREEN },
+    ],
+  };
+  const headGreen = { name: "Abhängigkeiten", ...GREEN };
+  const running = await masterGreenOn(context, [
+    { sha: HEAD_SHA, runs: [headGreen, { name: "CI", ...RUNNING }] },
+    older,
+  ]);
+  assert.equal(running.status, EXIT_OK, running.stderr);
+  assert.doesNotMatch(running.lines[0], /Abhängigkeiten/);
+  const finished = await masterGreenOn(context, [
+    { sha: HEAD_SHA, runs: [headGreen, { name: "CI", ...GREEN }] },
+    older,
+  ]);
+  assert.equal(finished.status, EXIT_OK, finished.stderr);
+  assert.match(finished.lines[0], /^Schritt 1a: erfüllt$/);
+});
+
+test("ein roter Lauf auf dem neuesten master-Commit bleibt ein Rückfall, auch wenn andere noch laufen", async (context) => {
+  const head = [
+    { name: "CI", ...RED },
+    { name: "Abhängigkeiten", ...RUNNING },
+  ];
+  const result = await masterGreenOn(context, [{ sha: HEAD_SHA, runs: head }]);
+  assert.equal(result.status, EXIT_FAILURE);
+  assert.match(result.stderr, /Rückfall in Schritt 1a: „master ist grün“ .*„CI“/);
 });
 
 test("1a bleibt offen, solange Paket 20 keine Rot-Probe gefahren hat oder eine durchging", async (context) => {
