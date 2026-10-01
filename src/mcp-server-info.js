@@ -92,6 +92,7 @@ const LAST_OR_FULL = ", or ";
 const LAST_OR_SHORT = " or ";
 export function listWithOr(items, lastSeparator) {
   if (items.length <= 1) return items.join("");
+  if (lastSeparator === undefined) return items.join(LIST_SEPARATOR);
   return items.slice(0, -1).join(LIST_SEPARATOR) + lastSeparator + items.at(-1);
 }
 
