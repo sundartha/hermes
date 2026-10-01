@@ -31,6 +31,12 @@ export function maskNumber(value) {
   return `***${s.slice(-MASK_VISIBLE_TAIL)}#${sha256Hex(s).slice(0, MASK_HASH_LEN)}`;
 }
 
+const SEVEN_OR_MORE_DIGITS_WITH_SEPARATORS = /\+?\d(?:[ /-]?\d){6,}/g;
+
+export function maskNumbersInText(text) {
+  return String(text).replace(SEVEN_OR_MORE_DIGITS_WITH_SEPARATORS, (number) => maskNumber(number));
+}
+
 // E-Mail fuer Logs auf einen nicht umkehrbaren SHA256-Praefix reduzieren (erste 8
 // Hex-Stellen): stabil pro Adresse, aber nicht rueckrechenbar. Normalisiert
 // (trim + lowercase), damit dieselbe Adresse dasselbe Token ergibt. Bsp.:
