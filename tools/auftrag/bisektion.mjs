@@ -17,7 +17,7 @@ const MAX_DIFF_ZEILEN = 80;
 
 function guterStand(baum, basis, schritt) {
   for (let sprung = 0, abstand = 1; sprung < MAX_RUECKSPRUENGE; sprung += 1, abstand *= SPRUNGFAKTOR) {
-    const kandidat = spawnSync("git", ["rev-parse", "-q", "--verify", `${basis}~${abstand}^{commit}`], { cwd: baum, encoding: "utf8" });
+    const kandidat = spawnSync("git", ["rev-parse", "-q", "--verify", `${basis}~${abstand}`], { cwd: baum, encoding: "utf8" });
     if (kandidat.status !== 0) return null;
     git(["checkout", "-q", "--detach", kandidat.stdout.trim()], { cwd: baum });
     const urteil = spawnSync(schritt[0], schritt.slice(1), { cwd: baum, env }).status;
