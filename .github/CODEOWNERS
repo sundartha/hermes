@@ -8,6 +8,7 @@ eslint-legacy-exceptions.json @Antonio20045 @jonas986
 /knip.json @Antonio20045 @jonas986
 /.jscpd.json @Antonio20045 @jonas986
 /.c8rc.json @Antonio20045 @jonas986
+/commitlint.config.mjs @Antonio20045 @jonas986
 /gitleaks.toml @Antonio20045 @jonas986
 tsconfig*.json @Antonio20045 @jonas986
 /.dependency-cruiser.cjs @Antonio20045 @jonas986
