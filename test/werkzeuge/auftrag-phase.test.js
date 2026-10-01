@@ -14,14 +14,21 @@ const EXIT_ROT = 1;
 const LINT_FEHLER = "export const WERT = nichtDefiniert;\n";
 const ABFRAGE_MS = 50;
 const FRIST_MS = 60_000;
-const ISSUE = { erste: 77, gleich: 78, importiert: 79, frei: 80, rot: 81, abgelehnt: 82, lint: 83 };
+const ISSUE = { erste: 77, gleich: 78, importiert: 79, frei: 80, rot: 81, abgelehnt: 82, lint: 83, umbau: 85 };
 
 const ERSATZ_CLAUDE = `#!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 const name = basename(process.cwd());
-const { dateien = {}, warteAuf } = JSON.parse(readFileSync(process.env.ERSATZ_DREHBUCH, "utf8"))[name] ?? {};
-const marke = (wer) => join(dirname(process.env.ERSATZ_DREHBUCH), "start-" + wer);
+const ort = dirname(process.env.ERSATZ_DREHBUCH);
+const rolle = process.env.HERMES_ROLLE;
+const eintrag = JSON.parse(readFileSync(process.env.ERSATZ_DREHBUCH, "utf8"))[name] ?? {};
+const zaehler = join(ort, "anzahl-" + name + "-" + rolle);
+const nummer = existsSync(zaehler) ? Number(readFileSync(zaehler, "utf8")) : 0;
+writeFileSync(zaehler, String(nummer + 1));
+const liste = eintrag[rolle] ?? [eintrag];
+const { dateien = {}, warteAuf, antwort = "fertig" } = liste[Math.min(nummer, liste.length - 1)];
+const marke = (wer) => join(ort, "start-" + wer);
 for (const [pfad, inhalt] of Object.entries(dateien)) {
   mkdirSync(dirname(pfad), { recursive: true });
   writeFileSync(pfad, inhalt);
@@ -29,6 +36,8 @@ for (const [pfad, inhalt] of Object.entries(dateien)) {
 writeFileSync(marke(name), "");
 const frist = Date.now() + 20000;
 while (warteAuf && !existsSync(marke(warteAuf)) && Date.now() < frist) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+const zeige = (ereignis) => process.stdout.write(JSON.stringify(ereignis) + "\\n");
+zeige({ type: "result", result: antwort });
 process.exitCode = warteAuf && !existsSync(marke(warteAuf)) ? 1 : 0;
 `;
 
@@ -99,6 +108,23 @@ test("zwei Aufträge laufen gleichzeitig in eigenen Worktrees und landen als zwe
   assert.equal(runIn(probe.remote, "git", ["rev-list", "--count", "master..phase/77-a"]).stdout.trim(), "2");
   assert.equal(JSON.parse(readFileSync(join(probe.repo, ".fortschritt/a/A2.json"), "utf8")).neustarts, 1);
   assert.equal(liste(probe.repo, ["worktree", "list"]).length, 1);
+});
+
+test("ein Auftrag, der nach „Voraussetzung fehlt“ einen Umbau-Commit mitbringt, landet mit beiden Commits in der Phase", async (context) => {
+  const umbau = { ziel: "Lege e an", bereich: "src/e.js", erwarteteDateien: ["src/e.js"], vorbild: "src/d.js", abnahme: "test/ok.test.js", entwurf: "E anlegen." };
+  const probe = aufbau(context, {
+    "85-V1": {
+      plan: [{ antwort: JSON.stringify(umbau) }],
+      bau: [
+        { antwort: "Voraussetzung fehlt: Es braucht zuerst src/e.js." },
+        { dateien: { "src/e.js": "export const E = 1;\n" } },
+        { dateien: { "src/d.js": 'export { E as WERT } from "./e.js";\n' } },
+      ],
+    },
+  });
+  const { code, ausgabe } = await ende(phase(probe, ["v", ISSUE.umbau, auftrag("V1", "src/d.js")]));
+  assert.equal(code, 0, ausgabe);
+  assert.deepEqual(liste(probe.remote, ["log", "--format=%s", "master..phase/85-v"]), ["Baue V1", "Lege e an"]);
 });
 
 test("eine zweite Phase im selben Bereich wartet und nennt die Phase, auf die sie wartet", async (context) => {
