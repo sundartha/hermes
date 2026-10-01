@@ -97,6 +97,12 @@ jobs:
           fi
           node tools/audit-vergleich.mjs --basis "$basis"
 
+      - name: Mutationsprüfung
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: npm run test:mutation -- --basis "$PR_BASE_SHA"
+
   tests:
     name: Tests ${{ matrix.teil }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest

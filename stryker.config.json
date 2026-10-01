@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "tap",
+  "tap": {
+    "nodeArgs": ["--test-reporter=tap", "--test-concurrency=4"]
+  },
+  "coverageAnalysis": "off",
+  "concurrency": 4,
+  "timeoutMS": 60000,
+  "reporters": [],
+  "logLevel": "error",
+  "cleanTempDir": "always",
+  "ignorePatterns": ["/.claude/worktrees", "/.fortschritt", "/.pruefung", "/data", "/coverage"]
+}
