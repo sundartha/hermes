@@ -34,8 +34,9 @@ export const LOGIN_URL = `${GATEWAY_URL}/auth/login`;
 // kein Import moeglich); test/cookie-consent-client.test.js haelt beide gleich.
 export const COOKIE_CONSENT_URL = `${GATEWAY_URL}/api/cookie-consent`;
 
-// Kuendigung ohne Anmeldung (§ 312k BGB): das Formular auf /kuendigen (components/site/
-// CancelInfo.astro) schickt die Erklaerung hierher. Der Pfad spiegelt
-// PUBLIC_CANCELLATION_PATH aus src/public-cancellation-routes.js (Wurzelprojekt);
-// test/public-cancellation.test.js haelt beide gleich.
-export const CANCELLATION_URL = `${GATEWAY_URL}/api/cancellation`;
+// Kuendigen (§ 312k BGB) NUR im Kundenbereich (Owner-Entscheidung 2026-10-01: ohne
+// Anmeldung koennte jeder mit fremdem Namen + Email einen Vertrag kuendigen). Jeder
+// Link "Verträge kündigen" / "Cancel contracts" zeigt hierher. Der Anker ist ein
+// Auftrag an die App-Shell: sie fuehrt Nicht-Eingeloggte durch den Login und oeffnet
+// danach direkt die Kuendigungs-Bestaetigung (lib/cancel-intent.js, BillingIsland).
+export const CANCEL_URL = `${GATEWAY_URL}/app#kuendigen`;
