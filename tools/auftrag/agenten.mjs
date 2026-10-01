@@ -13,18 +13,14 @@ const JSON_EINRUECKUNG = 2;
 const EXIT_OHNE_STATUS = 1;
 const WAECHTER = fileURLToPath(new URL("waechter.mjs", import.meta.url));
 const VERLAUF_AUSGABE = ["--output-format", "stream-json", "--verbose", "--include-hook-events"];
-const KRITISCHE_PFADE = [
-  "src/auth.js",
-  "src/web-auth.js",
+const GATE_TESTS = new URL("../gate-tests.json", import.meta.url);
+const GATE_ANKER = "#";
+const KRITISCH_OHNE_GATE_TEST = [
   "src/middleware.js",
-  "src/route-policy.js",
   "src/boot-guard.js",
   "src/process-guards.js",
-  "src/callee-is-owner.js",
   "src/config.js",
-  "src/budget-gate.js",
   "src/turn-budget.js",
-  "src/claude.js",
   "src/billing/",
   "src/llm-usage.js",
   "src/telephony/",
@@ -32,7 +28,16 @@ const KRITISCHE_PFADE = [
   "src/routes/webhooks-",
   "src/worker/provisioning.js",
   "src/queue/",
+  "src/plans.js",
+  "src/elevenlabs/",
 ];
+
+function gatePfade() {
+  const gates = Object.values(JSON.parse(readFileSync(GATE_TESTS, "utf8")));
+  return gates.flatMap(({ module, tests }) => [...module, ...tests]).map((pfad) => pfad.split(GATE_ANKER)[0]);
+}
+
+const KRITISCHE_PFADE = [...new Set([...gatePfade(), ...KRITISCH_OHNE_GATE_TEST])];
 
 export function istKritisch(bereich) {
   return KRITISCHE_PFADE.some((pfad) => bereich.startsWith(pfad) || pfad.startsWith(bereich));
