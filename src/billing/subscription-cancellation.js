@@ -1,8 +1,3 @@
-// Kuendigung zum Periodenende (§ 312k BGB): die Sequenz hinter dem Knopf im
-// Kundenbereich (self-service-routes.js). Eigenes Modul seit #169; das oeffentliche
-// Formular, das sie dort mitbenutzte, ist seit 2026-10-01 wieder entfernt (Owner-
-// Entscheidung: gekuendigt wird nur eingeloggt). Kein HTTP hier.
-
 // 312k-P3: geteilte Kuendigungs-/Ruecknahme-Sequenz hinter BEIDEN Richtungen (G5) -
 // scheduleCancellation/unscheduleCancellation (312k-P2, billing/ports.js) sind DERSELBE
 // Stripe-Call mit umgekehrtem Wert, hier gilt dasselbe fuer den Route-Layer. KEIN HTTP/
