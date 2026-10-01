@@ -134,10 +134,11 @@ class Phasenlauf {
     this.protokolliere(kennung, [probe]);
     if (probe.exitCode !== 0) return this.neustart(kennung);
     const vorher = kopf(this.ort.integration);
-    const uebernahme = this.pruefe("cherry-pick", ["git", "cherry-pick", commit]);
+    const uebernahme = this.pruefe("cherry-pick", ["git", "cherry-pick", `${basis}..${commit}`]);
     const pruefleiter = this.pruefe("prüfleiter", ["npm", "--silent", "run", "pruefleiter", "--", "--basis", this.basis]);
     this.protokolliere(kennung, [uebernahme, pruefleiter]);
     if (uebernahme.exitCode !== 0 || pruefleiter.exitCode !== 0) {
+      git(["cherry-pick", "--quit"], { cwd: this.ort.integration });
       git(["reset", "-q", "--hard", vorher], { cwd: this.ort.integration });
       return this.verwirf(kennung, "Übernahme oder Prüfleiter auf dem Phasen-Branch rot.");
     }
