@@ -101,11 +101,17 @@ function limitProblem({ key }, limits, basisLimits) {
   return `${LIMIT_PATH}: die Obergrenze ${key}.obergrenze steigt von ${basisLimit} auf ${limit}; sie darf nur sinken.`;
 }
 
-function measure(measurement, limit) {
+function ratioReport(measurement) {
   const testLines = codeLinesIn(measurement.tests);
   const codeLines = codeLinesIn(measurement.code);
   const ratio = ratioOf(testLines, codeLines);
-  const summary = `${measurement.title} ${ratio.toFixed(RATIO_DECIMALS)} (${testLines} Testzeilen zu ${codeLines} ${measurement.codeNoun}), Obergrenze ${limit} aus ${LIMIT_PATH}`;
+  const text = `${measurement.title} ${ratio.toFixed(RATIO_DECIMALS)} (${testLines} Testzeilen zu ${codeLines} ${measurement.codeNoun})`;
+  return { ratio, text };
+}
+
+function measure(measurement, limit) {
+  const { ratio, text } = ratioReport(measurement);
+  const summary = `${text}, Obergrenze ${limit} aus ${LIMIT_PATH}`;
   if (ratio <= limit) return { summary };
   return {
     finding: `${summary}. Das Verhältnis darf nicht weiter steigen: fasse neue Tests mit bestehenden zusammen oder entferne überflüssige Testzeilen.`,
