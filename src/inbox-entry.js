@@ -31,7 +31,7 @@ function substantialCallerLines(call) {
 function hasInboxSubstance(call) {
   const lines = substantialCallerLines(call);
   if (lines.length >= INBOX_MIN_CALLER_TURNS) return true;
-  const chars = lines.reduce((sum, entry) => sum + entry.text.trim().length, 0);
+  const chars = lines.reduce((sum, entry) => sum + entry.text.length, 0);
   return chars >= INBOX_MIN_CALLER_CHARS;
 }
 
