@@ -193,9 +193,13 @@ const STEPS = [
   ...["6", "7", "8", "9", "10", "11"].map((id) => ({ id, kriterien: [], geschnitten: false })),
 ];
 
+function outcome(result) {
+  return Array.isArray(result) ? { gruende: result } : result;
+}
+
 async function criterionResult(remote, criterion) {
   try {
-    return { ...criterion, gruende: await criterion.pruefen(remote) };
+    return { ...criterion, ...outcome(await criterion.pruefen(remote)) };
   } catch (error) {
     return { ...criterion, gruende: [error.message] };
   }
@@ -279,14 +283,17 @@ function unknownEntries(head) {
   });
 }
 
+function fallenBack(step, records) {
+  return ({ id, gruende, ausstehend }) =>
+    gruende.length > 0 && ausstehend !== true && records.since(step.id, id) !== undefined;
+}
+
 function regressions(report, records) {
   return report.flatMap((step) =>
-    step.kriterien
-      .filter(({ id, gruende }) => gruende.length > 0 && records.since(step.id, id) !== undefined)
-      .map(({ id, titel, gruende, verlauf }) => ({
-        verlauf: verlauf === true,
-        text: `Rückfall in Schritt ${step.id}: „${titel}“ ist seit ${records.since(step.id, id)} erfüllt und jetzt ${state(gruende)}.`,
-      })),
+    step.kriterien.filter(fallenBack(step, records)).map(({ id, titel, gruende, verlauf }) => ({
+      verlauf: verlauf === true,
+      text: `Rückfall in Schritt ${step.id}: „${titel}“ ist seit ${records.since(step.id, id)} erfüllt und jetzt ${state(gruende)}.`,
+    })),
   );
 }
 
