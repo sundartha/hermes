@@ -7,7 +7,7 @@
 import "../styles/fonts.css";
 import "../styles/hermes.css";
 import "../styles/hermes-page.css";
-import { LOGIN_URL } from "../lib/routes.js";
+import { CANCEL_URL, LOGIN_URL } from "../lib/routes.js";
 import { homeHref } from "../lib/home-anchors.js";
 import { LEGAL_CONTENT } from "../lib/legal-content.js";
 import { legalFooterLinks } from "../lib/legal.js";
@@ -68,8 +68,9 @@ const legal = [
   ...legalFooterLinks(LEGAL_CONTENT, lang).map((link) => ({ href: link.href, label: T.legal[link.slug] })),
   // § 312k BGB: die Kuendigungsseite muss STAENDIG verfuegbar UND unmittelbar/leicht
   // zugaenglich sein - deshalb im Fussband JEDER Hermes.astro-Seite, nicht nur im
-  // Kundenbereich (dort ist "staendig verfuegbar" strittig, s. kuendigen.astro).
-  { href: "/kuendigen", label: T.cancel },
+  // Kundenbereich (dort ist "staendig verfuegbar" strittig, s. kuendigen.astro). Der
+  // Link fuehrt direkt zur Kuendigung im Kundenbereich (CANCEL_URL, Owner 2026-10-01).
+  { href: CANCEL_URL, label: T.cancel },
 ];
 ---
 

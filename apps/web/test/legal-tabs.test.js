@@ -61,9 +61,13 @@ test("Rechts-Blatt: Seite und Reiter teilen sich denselben Inhalt", () => {
   }
 });
 
+// Ausnahme seit 2026-10-01 (Owner-Entscheidung): "Verträge kündigen" fuehrt direkt zur
+// Kuendigung im Kundenbereich (CANCEL_URL, test/cancel-intent.test.js), nicht in den
+// Reiter. Der Reiter bleibt im Blatt erreichbar.
 test("Fussband und Menue der Startseite: kein Link fuehrt aus dem Blatt heraus", () => {
   const home = `${index}\n${mobile}`;
-  for (const tab of INFO_TABS) {
+  assert.ok(!home.includes('href="/kuendigen"'), "Kuendigen-Link fuehrt wieder in den Reiter");
+  for (const tab of INFO_TABS.filter(({ slug }) => slug !== "cancel")) {
     const links = [...home.matchAll(new RegExp(`<a [^>]*href="${tab.href}"[^>]*>`, "g"))];
     assert.ok(links.length > 0, `${tab.href}: kein Link auf der Startseite (Test veraltet?)`);
     for (const [link] of links) {
