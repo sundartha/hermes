@@ -62,7 +62,8 @@ export function kostenDerSitzung(root, { rolle, sitzung }) {
 }
 
 export function kostenDesAuftrags(root, agenten) {
-  const sitzungen = agenten.map((agent) => kostenDerSitzung(root, agent));
+  const eindeutig = new Map(agenten.map((agent) => [agent.sitzung, agent]));
+  const sitzungen = [...eindeutig.values()].map((agent) => kostenDerSitzung(root, agent));
   const gemessen = sitzungen.length > 0 && sitzungen.every((sitzung) => sitzung.gemessen);
   const summe = sitzungen.reduce(
     (gesamt, sitzung) => {
