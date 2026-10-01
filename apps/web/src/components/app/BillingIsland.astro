@@ -429,9 +429,24 @@ import {
     now: Date.now(),
   });
 
+  // Solange ein Kuendigungs-Auftrag offen ist, zeigt die Shell weder "Laden" noch die
+  // Karte "Sign in required" (Stil in pages/app/index.astro): wer auf "Verträge
+  // kündigen" klickt, soll ohne Zwischenseite zum Login. Faellt der Auftrag nicht
+  // binnen der Frist, gilt wieder die normale Anzeige.
+  const INTENT_VEIL_MS = 6000;
+  const root = document.documentElement;
+  function liftIntentVeil() {
+    delete root.dataset.cancelIntent;
+  }
+  if (cancelIntent.pending) {
+    root.dataset.cancelIntent = "1";
+    setTimeout(liftIntentVeil, INTENT_VEIL_MS);
+  }
+
   function dropCancelIntent() {
     cancelIntent = { pending: false, viaLogin: false };
     clearCancelIntent(intentStorage);
+    liftIntentVeil();
     if (location.hash) history.replaceState(null, "", location.pathname + location.search);
   }
 
