@@ -147,6 +147,15 @@ const dashNav = [
   </noscript>
 </App>
 
+<style is:global>
+  /* Offener Kuendigungs-Auftrag (lib/cancel-intent.js): keine Zwischenseite vor dem
+     Login - weder "Laden" noch "Sign in required" (BillingIsland setzt das Attribut). */
+  html[data-cancel-intent] #region-loading,
+  html[data-cancel-intent] #region-anonymous {
+    display: none;
+  }
+</style>
+
 <script>
   import { AUTH_STATE, AUTH_EVENT, agentInfo, fetchBillingStatus, numberSetupFeeFrom } from "../../lib/api.js";
   import { wireSubscribe, renderPlanChoice, dismissPlanChoice } from "../../lib/subscribe.js";
