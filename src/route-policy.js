@@ -28,7 +28,6 @@
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 import { ELEVENLABS_INIT_PATH } from "./routes/webhooks-elevenlabs-init.js";
 import { COOKIE_CONSENT_PATH } from "./cookie-consent-log.js";
-import { PUBLIC_CANCELLATION_PATH } from "./public-cancellation-routes.js";
 
 // Benannte Auth-Middlewares. Der Inventar-Test erkennt sie an handler.name in der
 // Route-Handler-Kette. INVARIANTE: diese Middlewares MUESSEN benannte Funktionen
@@ -235,19 +234,6 @@ export const PUBLIC_ROUTES = Object.freeze([
       "Anruf noch SMS noch Zahlung aus. Strikte Eingabepruefung (UUID-v4, Ganzzahl-" +
       "Version, echte Booleans, 1-kB-Body), sonst 400; die Schreibrate deckelt der " +
       "globale Per-IP-Rate-Limiter.",
-  },
-  {
-    method: "POST",
-    path: PUBLIC_CANCELLATION_PATH,
-    reason:
-      "Kuendigung ohne Anmeldung (§ 312k BGB): eine Login-Pflicht ist nach LG Koeln " +
-      "33 O 355/22 und LG Muenchen I 33 O 15098/22 eine unzulaessige Huerde - die Route " +
-      "MUSS ohne Sitzung erreichbar sein. Sicherung im Handler-Pfad: strikte " +
-      "Eingabepruefung (sonst 400), eigene Per-IP-Drossel (5 je 15 min), Honeypot, eine " +
-      "Antwort ohne Konto-Aufzaehlung (nur der Eingangszeitpunkt), Mails nur an die " +
-      "Konto-Adresse oder das eigene Kundenpostfach, nie an die Formular-Adresse. Einzige " +
-      "Wirkung: Abo-Ende vormerken (vom Inhaber im Kundenbereich ruecknehmbar); weder " +
-      "Anruf noch SMS noch Zahlung (src/public-cancellation-routes.js).",
   },
   {
     method: "POST",
