@@ -228,9 +228,6 @@ const ROUTE_FINGERPRINT = [
   "POST /api/calls",
   "POST /api/calls/:id/cancel",
   "POST /api/calls/:id/consult/answer",
-  // § 312k BGB: Kuendigung ohne Anmeldung (oeffentliches Formular). Klasse PUBLIC,
-  // Eintrag in src/route-policy.js.
-  "POST /api/cancellation",
   // Cookie-Einwilligungs-Protokoll (Nachweis Art. 7 Abs. 1 DSGVO) - Klasse PUBLIC,
   // Eintrag in src/route-policy.js, nur im pg-Block gemountet (src/wiring/web-login.js).
   "POST /api/cookie-consent",
