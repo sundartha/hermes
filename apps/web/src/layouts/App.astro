@@ -41,6 +41,7 @@ const { title = "Hermes" } = Astro.props;
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
     <title>{title}</title>
+    <slot name="head" />
   </head>
   <body>
     <div class="app-bg" aria-hidden="true"></div>
