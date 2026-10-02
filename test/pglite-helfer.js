@@ -78,11 +78,7 @@ async function flushesAbwartenOhneFehlerFolge(storeHolen) {
 }
 
 async function schliessenSobaldNichtsMehrLaeuft(eintrag) {
-  do {
-    await flushesAbwartenOhneFehlerFolge(eintrag.storeHolen);
-    await Promise.allSettled([...eintrag.laufend]);
-    await eineRundeDerEreignisschleife();
-  } while (eintrag.laufend.size > 0);
+  await flushesAbwartenOhneFehlerFolge(eintrag.storeHolen);
   await eintrag.pg.close();
   eintrag.freigeben();
 }
