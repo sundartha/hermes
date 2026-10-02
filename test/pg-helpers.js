@@ -2,17 +2,31 @@
 // externe DB -> F.I.R.S.T. erfuellt) hinter dem Runner-Vertrag, den store/pg.js
 // erwartet. pglite ist ein-verbindig: withClient reicht die pglite-Instanz als
 // Client (query + exec) durch.
-import { PGlite } from "@electric-sql/pglite";
+import fs from "node:fs";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
+import { applySchema } from "../src/db/migrate.js";
+import { aufraeumenVormerken, vorlage } from "./pglite-helfer.js";
 
-// Liefert {store, db, runner}. store ist bereits initialisiert (migriert +
-// hydriert). db ist die rohe pglite-Instanz fuer Direktzugriffe im Test.
+const SCHEMA_DATEI = new URL("../src/db/schema.sql", import.meta.url);
+const MIGRATE_DATEI = new URL("../src/db/migrate.js", import.meta.url);
+
+let schemaVorlage = null;
+function schemaVorlageHolen() {
+  schemaVorlage ??= vorlage("schema", applySchema, [
+    fs.readFileSync(SCHEMA_DATEI, "utf8"),
+    fs.readFileSync(MIGRATE_DATEI, "utf8"),
+  ]);
+  return schemaVorlage;
+}
+
 export async function makePgTestStore() {
-  const db = new PGlite();
+  let store = null;
+  const anlegen = aufraeumenVormerken(() => store);
+  const db = await anlegen(await schemaVorlageHolen());
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };
-  const store = makePgStore(runner);
+  store = makePgStore(runner);
   await store.init();
   return { store, db, runner };
 }
