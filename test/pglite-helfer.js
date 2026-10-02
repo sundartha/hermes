@@ -118,4 +118,3 @@ export function neuePglite() {
   return aufraeumenVormerken()(LEERE_VORLAGE);
 }
 
-after(() => Promise.all([...offene].map(aufraeumen)));
