@@ -37,6 +37,10 @@ const dashNav = [
 ---
 
 <App title="Hermes — App">
+  <!-- Blockierend im <head>, damit der Schleier fuer "Verträge kündigen" schon im ersten
+       Bild steht (public/cancel-veil.js, Stil unten). -->
+  <script is:inline slot="head" src="/cancel-veil.js"></script>
+
   <AuthIsland slot="auth" />
 
   <!-- Auth-Gate: genau eine Region sichtbar. Default = "Laden" (vor JS / bis der
@@ -153,6 +157,14 @@ const dashNav = [
   html[data-cancel-intent] #region-loading,
   html[data-cancel-intent] #region-anonymous {
     display: none;
+  }
+
+  /* Frische Ankunft von "Verträge kündigen" (public/cancel-veil.js setzt das Attribut vor dem
+     ersten Bild): keine Shell zeigen, bis feststeht, ob man eingeloggt ist (dann Kuendigung,
+     sonst Login). Die Module brauchen auf dem Handy einige Sekunden dafuer. BillingIsland
+     nimmt das Attribut weg, sobald der Auftrag entschieden ist. */
+  html[data-cancel-arrival] body {
+    visibility: hidden;
   }
 </style>
 
