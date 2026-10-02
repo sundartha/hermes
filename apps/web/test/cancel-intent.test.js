@@ -128,12 +128,14 @@ test("Kuendigungs-Auftrag: Fruehschleier steht vor dem ersten Bild und hebt sich
   const veil = read("public/cancel-veil.js");
   // Blockierend im <head> (nicht als Modul), sonst kommt der Schleier nach dem ersten Bild.
   assert.ok(layout.includes('<slot name="head" />'));
-  assert.ok(shell.includes('<script is:inline slot="head" src="/cancel-veil.js"></script>'));
+  // Kein is:inline (test/sec-p5-web-haertung.test.js verbietet es): der Pfad steht als Ausdruck.
+  assert.ok(shell.includes('<script slot="head" src={CANCEL_VEIL_SRC}></script>'));
+  assert.ok(shell.includes('const CANCEL_VEIL_SRC = "/cancel-veil.js";'));
   assert.match(shell, /html\[data-cancel-arrival\] body\s*\{\s*visibility: hidden/);
   // Das Skript haelt Anker und Frist der Insel; ohne Modul hebt die Frist den Schleier auf.
   assert.ok(veil.includes(`location.hash !== "${CANCEL_INTENT_HASH}"`));
-  assert.match(veil, /setTimeout\([\s\S]*removeAttribute\("data-cancel-arrival"\)[\s\S]*\d{4}\)/);
-  const veilMs = Number(veil.match(/\},\s*(\d+)\);/)[1]);
+  assert.match(veil, /setTimeout\([\s\S]*removeAttribute\("data-cancel-arrival"\)[\s\S]*VEIL_MAX_MS\)/);
+  const veilMs = Number(veil.match(/VEIL_MAX_MS = (\d+)/)[1]);
   const islandMs = Number(island.match(/INTENT_VEIL_MS = (\d+)/)[1]);
   assert.ok(veilMs > islandMs, "die Frist des Frueh-Schleiers muss laenger sein als die der Insel");
   // Die Insel nimmt den Schleier beim Entscheiden weg, und bei "Zurueck" vom Login

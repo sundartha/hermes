@@ -20,6 +20,10 @@ import AgentChip from "../../components/app/AgentChip.astro";
 import CallsIsland from "../../components/app/CallsIsland.astro";
 import NewsletterIsland from "../../components/app/NewsletterIsland.astro";
 
+// Fruehschleier (public/cancel-veil.js): als Ausdruck statt Literal, weil Astro ein Skript aus
+// public/ sonst nur mit is:inline zulaesst - und das verbietet test/sec-p5-web-haertung.test.js.
+const CANCEL_VEIL_SRC = "/cancel-veil.js";
+
 // In-App-Navigation: Anker auf die Bereiche der Shell (reine Links, kein JS
 // beim Rendern -- die Aktiv-/Scroll-Logik verdrahtet das <script> unten). Die
 // #anrufe/#einstellungen/#abrechnung/#newsletter-Anker bleiben (interne ids,
@@ -39,7 +43,7 @@ const dashNav = [
 <App title="Hermes — App">
   <!-- Blockierend im <head>, damit der Schleier fuer "Verträge kündigen" schon im ersten
        Bild steht (public/cancel-veil.js, Stil unten). -->
-  <script is:inline slot="head" src="/cancel-veil.js"></script>
+  <script slot="head" src={CANCEL_VEIL_SRC}></script>
 
   <AuthIsland slot="auth" />
 

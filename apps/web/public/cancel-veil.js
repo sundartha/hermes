@@ -7,10 +7,11 @@
 // entschieden ist. Faellt kein Modul, hebt die Frist unten ihn von selbst auf.
 // Anker und Frist stehen auch in lib/cancel-intent.js; ein Test haelt beide gleich.
 (function () {
+  const VEIL_MAX_MS = 8000;
   if (location.hash !== "#kuendigen") return;
-  var root = document.documentElement;
+  const root = document.documentElement;
   root.setAttribute("data-cancel-arrival", "");
   setTimeout(function () {
     root.removeAttribute("data-cancel-arrival");
-  }, 8000);
+  }, VEIL_MAX_MS);
 })();
