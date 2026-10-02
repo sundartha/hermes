@@ -114,8 +114,13 @@ export function aufraeumenVormerken(storeHolen) {
   };
 }
 
+let geteilteDatenbank = null;
 export function neuePglite() {
-  return aufraeumenVormerken()(LEERE_VORLAGE);
+  geteilteDatenbank ??= PGlite.create({ loadDataDir: LEERE_VORLAGE });
+  return geteilteDatenbank;
 }
 
-after(() => Promise.all([...offene].map(aufraeumen)));
+after(async () => {
+  await Promise.all([...offene].map(aufraeumen));
+  if (geteilteDatenbank) await (await geteilteDatenbank).close();
+});
