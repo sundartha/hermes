@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { applySchema } from "../src/db/migrate.js";
-import { aufraeumenVormerken, vorlage } from "./pglite-helfer.js";
+import { aufraeumenVormerken, vorlage, zuletztBenutztesAbbild } from "./pglite-helfer.js";
 
 const SCHEMA_DATEI = new URL("../src/db/schema.sql", import.meta.url);
 const MIGRATE_DATEI = new URL("../src/db/migrate.js", import.meta.url);
@@ -22,7 +22,7 @@ function schemaVorlageHolen() {
 export async function makePgTestStore() {
   let store = null;
   const anlegen = aufraeumenVormerken(() => store);
-  const db = await anlegen(await schemaVorlageHolen());
+  const db = await anlegen(zuletztBenutztesAbbild() ?? (await schemaVorlageHolen()));
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };

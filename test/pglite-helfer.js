@@ -10,6 +10,10 @@ const PGLITE_PAKET = new URL("../node_modules/@electric-sql/pglite/package.json"
 const STRYKER_VARIABLE = "__STRYKER_ACTIVE_MUTANT__";
 
 const offene = new Set();
+let zuletztBenutzt = null;
+export function zuletztBenutztesAbbild() {
+  return zuletztBenutzt;
+}
 const schliessVorgaenge = new WeakMap();
 
 function pruefwert(schluesselTeile) {
@@ -83,6 +87,7 @@ async function schliessenSobaldNichtsMehrLaeuft(eintrag) {
     await Promise.allSettled([...eintrag.laufend]);
     await eineRundeDerEreignisschleife();
   } while (eintrag.laufend.size > 0);
+  if (eintrag.storeHolen) zuletztBenutzt = await eintrag.pg.dumpDataDir("none");
   await eintrag.pg.close();
   eintrag.freigeben();
 }
