@@ -1,0 +1,62 @@
+name: Beleg T1
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  laeufe:
+    name: Lauf ${{ matrix.lauf }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        lauf: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Install-Skripte
+        run: |
+          set -euo pipefail
+          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
+      - name: Datenbank-Dateien
+        run: |
+          set -euo pipefail
+          { grep -rlE 'new PGlite\(|makePgTestStore\(' test --include='*.test.js'; grep -rl 'hermes-mit-anmeldung' test --include='*.test.js'; } | sort -u > "$RUNNER_TEMP/dateien.txt"
+          echo "$(wc -l < "$RUNNER_TEMP/dateien.txt") Datenbank-Dateien"
+
+      - name: Leerer Vorlagen-Speicher
+        run: mkdir "$RUNNER_TEMP/leer"
+
+      - name: Tests
+        run: |
+          set -euo pipefail
+          mapfile -t dateien < "$RUNNER_TEMP/dateien.txt"
+          TMPDIR="$RUNNER_TEMP/leer" npm test -- "${dateien[@]}" -- --test-concurrency=4
+
+      - name: Bestandene Tests
+        if: always()
+        env:
+          LAUF: ${{ matrix.lauf }}
+        run: |
+          echo "Lauf $LAUF: $(jq .bestanden .pruefung/regression.json) Tests bestanden"
+
+      - name: Vorlagen-Dateien
+        run: |
+          set -euo pipefail
+          ls -l "$RUNNER_TEMP/leer/hermes-pglite-vorlagen"
+          test "$(ls "$RUNNER_TEMP/leer/hermes-pglite-vorlagen" | wc -l)" -eq 2
