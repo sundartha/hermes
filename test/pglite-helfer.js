@@ -33,7 +33,6 @@ async function abbildBauen(einrichten) {
 }
 
 export async function vorlage(name, einrichten, schluesselTeile) {
-  if (process.env[STRYKER_VARIABLE] !== undefined) return abbildBauen(einrichten);
   const ziel = path.join(VORLAGEN_ORDNER, `${name}-${pruefwert(schluesselTeile)}.tar`);
   if (fs.existsSync(ziel)) return new Blob([fs.readFileSync(ziel)]);
   const abbild = await abbildBauen(einrichten);
