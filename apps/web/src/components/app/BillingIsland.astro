@@ -437,6 +437,7 @@ import {
   const root = document.documentElement;
   function liftIntentVeil() {
     delete root.dataset.cancelIntent;
+    root.removeAttribute("data-cancel-arrival"); // Fruehschleier aus public/cancel-veil.js
   }
   if (cancelIntent.pending) {
     root.dataset.cancelIntent = "1";
@@ -479,6 +480,12 @@ import {
     // AUTH_EVENT-Listener der Seite sichtbar (pages/app/index.astro) - vorher liesse
     // sich weder scrollen noch fokussieren.
     if (step === CANCEL_INTENT_STEP.OPEN) requestAnimationFrame(openCancellation);
+  });
+
+  // Zurueck-Taste vom Login: die Seite kommt unveraendert aus dem Cache. Der Auftrag ist
+  // damit erledigt - Schleier weg, normale "Sign in required"-Karte.
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted && cancelIntent.pending) dropCancelIntent();
   });
 
   showReturnMessage();
