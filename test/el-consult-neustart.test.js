@@ -134,23 +134,6 @@ const RUECKFRAGE_TAKT_MS = 50;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// EIGENER, GROSSER EL-Ergebnisabholtakt (Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2):
-// jeder Boot dieser Datei re-armiert elevenlabs/outbound.js#pollConversationResult fuer
-// JEDEN aktiven Anruf mit elevenlabsConversationId (src/boot.js, UNABHAENGIG vom
-// Feature-Schalter ELEVENLABS_OUTBOUND_ENABLED) - die seedenden Anrufe hier tragen eine
-// erfundene Kennung, und ein GET dagegen trifft NICHT auf ein Mock, sondern auf das ECHTE
-// api.elevenlabs.io (dieser Server laeuft als echter Kindprozess). Mit leerem Test-Schluessel
-// antwortet der Anbieter dort mit einem echten 401 - DAUERHAFT, s. outbound.js
-// PERMANENT_FETCH_STATUS. Seit die Wiederholung vor dem Aufgeben steht (outbound.js
-// PERMANENT_ERROR_STREAK_LIMIT), wuerde der PRODUKTIONS-Takt (Vorgabe 5000ms) den Anruf
-// nach wenigen Sekunden dennoch auf "failed" umschalten - lange VOR den bis zu 22 s
-// (CONSULT_POLL_HOLD_MS), die die laengeren Faelle dieser Datei fuer die RUECKFRAGE-Zustellung
-// brauchen, das eigentliche Pruefziel hier. Diese Datei prueft die Rueckfrage-Zustellung
-// ueber einen Neustart, nicht den EL-Poll (der hat seine eigene Deckung in
-// test/el-beende-versuch.test.js) - der Takt wird deshalb bewusst so gross gesetzt, dass
-// der ZWEITE Versuch innerhalb keines Falls dieser Datei mehr faellt (60 s liegt bequem
-// ueber jeder Wartezeit hier); der ERSTE Versuch (sofort beim Boot) bleibt unveraendert und
-// zeigt weiterhin, dass ein einzelner 401 den Anruf NICHT sofort beendet.
 const EL_RESULT_POLL_MS_OHNE_INTERFERENZ = "60000";
 
 // P2 (W2): der EL-Halt laeuft seit P2 nicht mehr pauschal gegen CONSULT_OPEN_MS, sondern
