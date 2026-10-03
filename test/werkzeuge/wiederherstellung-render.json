@@ -1,0 +1,84 @@
+{
+  "quelle": "aus api-docs.render.com nachgebaut (retrieve-postgres, list-postgres, recover-postgres, retrieve-postgres-recovery-info, retrieve-postgres-connection-info), gelesen am 03.10.2026, keine Aufzeichnung; alle Werte erfunden; connectionPool ist im Schema ein string ohne Wertebeschreibung",
+  "produktion": {
+    "id": "dpg-produktion00000000000-a",
+    "ipAllowList": [{ "cidrBlock": "0.0.0.0/0", "description": "everywhere" }],
+    "createdAt": "2026-05-04T09:12:00Z",
+    "updatedAt": "2026-09-30T08:00:00Z",
+    "dashboardUrl": "https://dashboard.render.com/d/dpg-produktion00000000000-a",
+    "databaseName": "hermes_produktion",
+    "databaseUser": "hermes_produktion_user",
+    "environmentId": "evm-produktion00000000000",
+    "highAvailabilityEnabled": false,
+    "name": "hermes-produktion",
+    "owner": {
+      "id": "tea-beispiel000000000000",
+      "name": "Beispiel-Workspace",
+      "email": "konto@example.invalid",
+      "type": "team"
+    },
+    "plan": "basic_1gb",
+    "region": "frankfurt",
+    "readReplicas": [],
+    "role": "primary",
+    "status": "available",
+    "version": "16",
+    "suspended": "not_suspended",
+    "suspenders": [],
+    "diskAutoscalingEnabled": false,
+    "connectionPool": null
+  },
+  "kopie": {
+    "id": "dpg-kopie000000000000000-a",
+    "ipAllowList": [{ "cidrBlock": "0.0.0.0/0", "description": "everywhere" }],
+    "createdAt": "2026-10-03T05:23:10Z",
+    "updatedAt": "2026-10-03T05:23:10Z",
+    "dashboardUrl": "https://dashboard.render.com/d/dpg-kopie000000000000000-a",
+    "databaseName": "hermes_produktion",
+    "databaseUser": "hermes_produktion_user",
+    "environmentId": "evm-wiederherstellung0000",
+    "highAvailabilityEnabled": false,
+    "name": "hermes-wiederherstellung-4711-1",
+    "owner": {
+      "id": "tea-beispiel000000000000",
+      "name": "Beispiel-Workspace",
+      "email": "konto@example.invalid",
+      "type": "team"
+    },
+    "plan": "basic_1gb",
+    "region": "frankfurt",
+    "readReplicas": [],
+    "role": "primary",
+    "status": "recovery_in_progress",
+    "version": "16",
+    "suspended": "not_suspended",
+    "suspenders": [],
+    "diskAutoscalingEnabled": false,
+    "connectionPool": null
+  },
+  "fremdMitPassendemNamen": {
+    "id": "dpg-fremdname0000000000000-a",
+    "environmentId": "evm-anderes00000000000000",
+    "name": "hermes-wiederherstellung-4711-1",
+    "status": "available"
+  },
+  "fremdImKopienEnvironment": {
+    "id": "dpg-fremdumgebung0000000000-a",
+    "environmentId": "evm-wiederherstellung0000",
+    "name": "hermes-staging",
+    "status": "available"
+  },
+  "rueckblick": {
+    "recoveryStatus": "AVAILABLE",
+    "startsAt": "2026-09-26T05:23:00Z"
+  },
+  "verbindungsdaten": {
+    "password": "kennwort-kennwort",
+    "internalConnectionString": "postgresql://kopiebenutzer:kennwort-kennwort@dpg-kopie000000000000000-a/kopiedatenbank",
+    "externalConnectionString": "postgresql://kopiebenutzer:kennwort-kennwort@dpg-kopie000000000000000-a.frankfurt-postgres.render.com/kopiedatenbank",
+    "internalConnectionPoolString": "",
+    "externalConnectionPoolString": "",
+    "psqlCommand": "PGPASSWORD=kennwort-kennwort psql -h dpg-kopie000000000000000-a.frankfurt-postgres.render.com -U kopiebenutzer kopiedatenbank"
+  },
+  "runnerAdresse": "203.0.113.47"
+}
