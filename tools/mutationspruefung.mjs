@@ -8,6 +8,7 @@ import { Stryker } from "@stryker-mutator/core";
 import { cruise } from "dependency-cruiser";
 
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
+import { loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 
 const { $schema: _schema, ...KONFIGURATION } = JSON.parse(
   readFileSync(new URL("../stryker.config.json", import.meta.url), "utf8"),
@@ -97,7 +98,7 @@ function mutant({ fileName, location, mutatorName, replacement, status }) {
   const { line, column } = location.start;
   const ersatz = (replacement ?? "").replace(LEERRAUM, " ");
   const schluessel = `${datei}:${line}:${column} ${mutatorName} → ${ersatz}`;
-  return { schluessel, status, zeilen: [line, location.end.line] };
+  return { schluessel, status, zeilen: [line, location.end.line], art: mutatorName };
 }
 
 async function stryker({ datei, zeilen, tests, faktor }) {
@@ -142,17 +143,23 @@ async function durchgang(datei, zeilen, tests) {
   return ersetze(ergebnisse, wiederholt, zeitueber);
 }
 
-async function pruefeDatei(datei, zeilen, nachZiel) {
-  const { direkt, alle } = erreichendeTests(datei, nachZiel);
-  if (alle.length === 0) {
-    return zeilen.map(([von]) => ({ schluessel: `${datei}:${von} keine Testdatei erreicht die Datei`, status: "NoCoverage" }));
-  }
-  const erste = direkt.length > 0 ? direkt : alle;
+async function mutantenproben(datei, zeilen, { erste, alle }) {
   const ergebnisse = await durchgang(datei, zeilen, erste);
   const offen = ergebnisse.filter(ueberlebt);
   if (offen.length === 0 || erste.length === alle.length) return ergebnisse;
   const zweite = await durchgang(datei, offen.map((eintrag) => eintrag.zeilen), alle);
   return ersetze(ergebnisse, zweite, offen);
+}
+
+async function pruefeDatei(datei, zeilen, { nachZiel, loeschung }) {
+  const { direkt, alle } = erreichendeTests(datei, nachZiel);
+  if (alle.length === 0) {
+    return zeilen.map(([von]) => ({ schluessel: `${datei}:${von} keine Testdatei erreicht die Datei`, status: "NoCoverage" }));
+  }
+  const tests = { erste: direkt.length > 0 ? direkt : alle, alle };
+  const ergebnisse = await mutantenproben(datei, zeilen, tests);
+  if (loeschung === null) return ergebnisse;
+  return [...ergebnisse, ...loeschung.pruefe({ datei, zeilen, ergebnisse, tests })];
 }
 
 function alterStand(commit) {
@@ -170,18 +177,20 @@ async function mutiere({ von, bis, seite }) {
   const zeilen = geaenderteZeilen(diff, seite);
   if (zeilen.size === 0) return [];
   const zurueck = seite === "alt" ? alterStand(von) : null;
+  const loeschung = seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
   try {
     const nachZiel = await importierer();
     const ergebnisse = [];
-    for (const [datei, bereiche] of zeilen) ergebnisse.push(...(await pruefeDatei(datei, bereiche, nachZiel)));
+    for (const [datei, bereiche] of zeilen) ergebnisse.push(...(await pruefeDatei(datei, bereiche, { nachZiel, loeschung })));
     return ergebnisse;
   } finally {
     zurueck?.();
+    loeschung?.abbauen();
   }
 }
 
 function urteil({ seite, von }, ergebnisse, ueberlebende) {
-  if (ergebnisse.length === 0) return "grün: keine geänderte Zeile unter src/, nichts zu mutieren.";
+  if (ergebnisse.length === 0) return "grün: keine geänderte Zeile unter src/ mit Mutanten oder löschbarer Anweisung.";
   const stand = seite === "alt" ? ` auf dem alten Stand ${git(["rev-parse", von]).slice(0, KURZ)}` : " in den neuen Zeilen unter src/";
   if (ueberlebende.length === 0) return `grün: ${ergebnisse.length} Mutanten${stand}, keiner überlebt.`;
   const anteil = `${ueberlebende.length} von ${ergebnisse.length} Mutanten überleben${stand}`;

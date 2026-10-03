@@ -70,3 +70,65 @@ test("ein Umbau, der ungetestetes Verhalten entfernt, wird auf dem alten Stand v
   const worktrees = runIn(repo, "git", ["worktree", "list"]).stdout;
   assert.equal(worktrees.trim().split("\n").length, 1);
 });
+
+const EXIT_ABBRUCH = 2;
+const PROTOKOLL = "  protokoll.push(zahl);";
+const VERDOPPELN = ["export function verdoppeln(zahl) {", PROTOKOLL, "  return zahl * 2;", "}", ""].join("\n");
+
+function mitProtokoll(text) {
+  return `export const protokoll = [];\n${text}`;
+}
+
+function protokolltest(...pruefungen) {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { readFileSync } from "node:fs";',
+    'import { test } from "node:test";',
+    'import * as zahl from "../src/zahl.js";',
+    'import "paket-aus-node-modules";',
+    'test("protokoll", () => {',
+    ...pruefungen.map((pruefung) => `  ${pruefung}`),
+    "});",
+    "",
+  ].join("\n");
+}
+
+test("eine neue Aufrufzeile ohne eigenen Mutanten wird gelöscht und rot, bis ein Test sie verlangt oder sie gleichwertig gemeldet ist", (context) => {
+  const repo = probeRepository(context, { ...BASIS, "src/zahl.js": mitProtokoll(quelle(NEGATIV)) });
+  writeFiles(repo, { "src/zahl.js": mitProtokoll(quelle(PROTOKOLL, NEGATIV)) });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.match(rot.stdout, /^Verstoß: Mutant überlebt: src\/zahl\.js:3 Zeile gelöscht$/m);
+  const gemeldet = pruefe(repo, "--basis", "HEAD", "--gleichwertig", "src/zahl.js:3 Zeile gelöscht");
+  assert.equal(gemeldet.status, 0, gemeldet.stdout + gemeldet.stderr);
+  writeFiles(repo, { "test/zahl.test.js": protokolltest('assert.equal(zahl.einordnen(-1), "negativ");', "assert.deepEqual(zahl.protokoll, [-1]);") });
+  const gruen = pruefe(repo, "--basis", "HEAD");
+  assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+});
+
+test("in einer neuen Funktion wird eine Aufrufzeile gelöscht, obwohl der Mutant des ganzen Rumpfs erkannt wird", (context) => {
+  const repo = probeRepository(context, { ...BASIS, "src/zahl.js": mitProtokoll(quelle(NEGATIV)) });
+  writeFiles(repo, {
+    "src/zahl.js": `${mitProtokoll(quelle(NEGATIV))}${VERDOPPELN}`,
+    "test/zahl.test.js": protokolltest("assert.equal(zahl.verdoppeln(3), 6);"),
+  });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  const ueberlebende = [...rot.stdout.matchAll(UEBERLEBT)].map(([, schluessel]) => schluessel);
+  assert.deepEqual(ueberlebende, ["src/zahl.js:7 Zeile gelöscht"]);
+});
+
+test("besteht ein Test nur mit einer von Git ignorierten Datei, bricht die Löschprobe ab", (context) => {
+  const repo = probeRepository(context, {
+    ...BASIS,
+    ".gitignore": "node_modules/\nlokal/\n",
+    "src/zahl.js": mitProtokoll(quelle(NEGATIV)),
+    "test/zahl.test.js": protokolltest('assert.equal(readFileSync("lokal/wert.txt", "utf8"), "ja");'),
+  });
+  writeFiles(repo, { "lokal/wert.txt": "ja", "src/zahl.js": mitProtokoll(quelle(PROTOKOLL, NEGATIV)) });
+  const abbruch = pruefe(repo, "--basis", "HEAD");
+  assert.equal(abbruch.status, EXIT_ABBRUCH, abbruch.stdout + abbruch.stderr);
+  assert.match(abbruch.stderr, /^Abbruch: Grundlauf rot, Löschprobe nicht aussagekräftig/m);
+  const worktrees = runIn(repo, "git", ["worktree", "list"]).stdout;
+  assert.equal(worktrees.trim().split("\n").length, 1);
+});
