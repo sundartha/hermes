@@ -1,6 +1,6 @@
 import http from "node:http";
 
-const ATTRAPPE_STATUS = 401;
+const ATTRAPPE_STATUS = 503;
 const ATTRAPPE_KOERPER = JSON.stringify({
   type: "error",
   error: { type: "authentication_error", message: "invalid x-api-key" },
