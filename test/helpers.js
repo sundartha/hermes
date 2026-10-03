@@ -81,7 +81,6 @@ export const TOOLS_WITH_OUTPUT_SCHEMA = 10;
 export const anthropicAttrappe = await starteAnthropicAttrappe();
 
 export const BASE_ENV = {
-  NODE_ENV: "test",
   ANTHROPIC_BASE_URL: anthropicAttrappe.url,
   PORT: "0",
   DATA_DIR: "", // wird pro Server durch ein Temp-Verzeichnis ersetzt
