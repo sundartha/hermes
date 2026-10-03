@@ -82,7 +82,6 @@ export const anthropicAttrappe = await starteAnthropicAttrappe();
 
 export const BASE_ENV = {
   NODE_ENV: "test",
-  ANTHROPIC_BASE_URL: anthropicAttrappe.url,
   PORT: "0",
   DATA_DIR: "", // wird pro Server durch ein Temp-Verzeichnis ersetzt
   ANTHROPIC_API_KEY: "test-anthropic-key",
