@@ -1,0 +1,100 @@
+name: Wiederherstellung
+
+on:
+  schedule:
+    - cron: "23 5 7 * *"
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/wiederherstellung.yml
+      - tools/wiederherstellung.mjs
+      - tools/wiederherstellung/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiederherstellung
+  cancel-in-progress: false
+
+jobs:
+  pruefen:
+    name: Sicherung einspielen und prüfen
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    environment: produktion
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Install-Skripte
+        run: |
+          set -euo pipefail
+          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
+      - name: Übrig gebliebene Kopien aufräumen
+        env:
+          NODE_ENV: test
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_POSTGRES_ID: ${{ vars.RENDER_POSTGRES_ID }}
+          RENDER_WIEDERHERSTELLUNG_UMGEBUNG: ${{ vars.RENDER_WIEDERHERSTELLUNG_UMGEBUNG }}
+        run: node tools/wiederherstellung.mjs aufraeumen
+
+      - name: Sicherung einspielen, Hermes starten und prüfen
+        env:
+          NODE_ENV: test
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_POSTGRES_ID: ${{ vars.RENDER_POSTGRES_ID }}
+          RENDER_WIEDERHERSTELLUNG_UMGEBUNG: ${{ vars.RENDER_WIEDERHERSTELLUNG_UMGEBUNG }}
+        run: node tools/wiederherstellung.mjs pruefen
+
+      - name: Kopie löschen
+        if: always()
+        env:
+          NODE_ENV: test
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_POSTGRES_ID: ${{ vars.RENDER_POSTGRES_ID }}
+          RENDER_WIEDERHERSTELLUNG_UMGEBUNG: ${{ vars.RENDER_WIEDERHERSTELLUNG_UMGEBUNG }}
+        run: node tools/wiederherstellung.mjs aufraeumen
+
+  aufraeumen:
+    name: Kopien aufräumen
+    needs: pruefen
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: produktion
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Kopien aufräumen
+        env:
+          NODE_ENV: test
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_POSTGRES_ID: ${{ vars.RENDER_POSTGRES_ID }}
+          RENDER_WIEDERHERSTELLUNG_UMGEBUNG: ${{ vars.RENDER_WIEDERHERSTELLUNG_UMGEBUNG }}
+        run: node tools/wiederherstellung.mjs aufraeumen
