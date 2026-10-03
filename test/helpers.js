@@ -10,6 +10,7 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
+import { starteAnthropicAttrappe } from "./helpers/anthropic-attrappe.js";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
@@ -77,9 +78,11 @@ export const TOOL_COUNT_WITH_CONSULT = 12;
 export const TOOL_COUNT_WITHOUT_CONSULT = 10;
 export const TOOLS_WITH_OUTPUT_SCHEMA = 10;
 
-// ALLE config-relevanten Env-Variablen explizit setzen: dotenv fuellt nur
-// UNgesetzte Variablen, so kann eine lokale .env die Tests nicht beeinflussen.
+export const anthropicAttrappe = await starteAnthropicAttrappe();
+
 export const BASE_ENV = {
+  NODE_ENV: "test",
+  ANTHROPIC_BASE_URL: anthropicAttrappe.url,
   PORT: "0",
   DATA_DIR: "", // wird pro Server durch ein Temp-Verzeichnis ersetzt
   ANTHROPIC_API_KEY: "test-anthropic-key",
@@ -391,10 +394,6 @@ export const BASE_ENV = {
   PRECALL_BRIEFING_TIMEOUT_MS: "6000",
   // FIX-1: eigener Timeout der Zusammenfassung, auf den ausgelieferten Wert gepinnt -
   // sonst leakt eine lokale .env via dotenv in Spawn-Tests (Lehre test-base-env-drift).
-  // Unkritisch fuer die Laufzeit der Suite: jeder Spawn-Test, der summarizeCall wirklich
-  // ausloest, lenkt den Anbieter per ANTHROPIC_BASE_URL auf einen sofort antwortenden
-  // Mock (test/_outbound-harness.js); ohne Mock antwortet der echte Endpunkt mit 401 -
-  // nicht-transient, also ohne Retry und ohne Wartezeit.
   CALL_SUMMARY_TIMEOUT_MS: "20000",
   // AL-P10: Vorab-Recherche in Spawn-Tests neutral AUS + Gebuehr auf den Code-Default
   // gepinnt. Ohne diese Zeilen leckt eine lokale .env via dotenv in die Spawn-Tests
@@ -408,11 +407,6 @@ export const BASE_ENV = {
   LOOKUP_ENABLED: "false",
   LOOKUP_SEARCH_FEE_CENTS: "1",
   EXA_API_KEY: "",
-  // Thema A (2026-08-19): die LLM-Vorab-Erzeugung der Eroeffnungszeile auf den
-  // Code-Default gepinnt (Lehre test-base-env-drift). In Spawn-Tests laeuft der Versuch
-  // gegen den (nicht erreichbaren bzw. per ANTHROPIC_BASE_URL umgelenkten) Anbieter,
-  // scheitert nicht-transient und faellt fail-closed auf die Auftrags-Bruecke - genau
-  // dieser Rueckfall wird in elevenlabs-anrufstart.test.js (T11) am Draht gemessen.
   ELEVENLABS_OPENING_LINE_LLM_ENABLED: "true",
   EXA_API_BASE: "",
   // AL-P13: Consult-Kanal in Spawn-Tests neutral AUS (Default). Ohne diese Zeile leakt

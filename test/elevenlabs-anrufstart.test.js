@@ -2082,19 +2082,10 @@ test("EL-START T10: die Buchungs-Grenze des Agenten folgt dem Mandat DIESES Anru
 
 
 // ---- T11 (Thema A, 2026-08-19; Review-Befund R1): opening_line ist VERDRAHTET --------
-// Der Namens-Abgleich (el-vorlage-variablen-abgleich) sieht nur, DASS opening_line
-// reist; die Wert-Tests (elevenlabs-torzustand) messen outbound.js in Isolation. Dieser
-// Fall misst die GANZE Kette ueber die echte Route: place_call -> Gate-Kette ->
-// fetchOpeningLine (LLM nicht erreichbar -> Stufe 2) -> createCall (Zeile + Hash) ->
-// Anrufstart -> dynamic_variables am Draht der Anbieter-Attrappe. Wuerde der Block in
-// api-calls.js entfernt ODER outbound.js rohes call.goal senden, fiele er rot aus.
 const SHA256_HEX_LAENGE = 64;
 
 test("EL-START T11 (Thema A): opening_line reist geprueft an den Anbieter UND liegt mit Annahme-Hash am Datensatz", async () => {
   await withElevenLabs(
-    // ANTHROPIC_BASE_URL auf die EL-Attrappe: jeder LLM-Versuch endet dort als schneller
-    // 404 (nicht-transient, kein Retry) - kein echtes Netz, kein Warten; die Treppe
-    // faellt deterministisch auf Stufe 2 (Auftrag in der Bestands-Bruecke).
     // P4a: defaultLanguage "de" haelt die GESPRAECHSSPRACHE deckungsgleich mit der
     // OFFENLEGUNGSSPRACHE des DE-Ziels - dieselbe Begruendung wie bei T5 (d) oben.
     { env: MULTI, seed: seedTenantA({ defaultLanguage: "de" }) },
