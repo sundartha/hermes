@@ -36,6 +36,7 @@
     "test:abnahme": "NODE_ENV=test node test/testbaenke-run.mjs abnahme",
     "test:betroffen": "NODE_ENV=test PUBLIC_GATEWAY_URL=https://gateway.example node tools/betroffene-tests.mjs",
     "test:mutation": "NODE_ENV=test node tools/mutationspruefung.mjs",
+    "test:wirkung": "NODE_ENV=test node tools/testwirkung.mjs",
     "pruefleiter": "node tools/pruefleiter.mjs",
     "systemstand": "node tools/systemstand.mjs",
     "lint": "eslint .",
