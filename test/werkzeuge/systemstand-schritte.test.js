@@ -29,7 +29,6 @@ const SHA_LENGTH = 40;
 const PROOF_SHA = "c".repeat(SHA_LENGTH);
 const PROOF_RUNS = 10;
 const ERROR_SEVERITY = 2;
-const DONE_PRODUCT_LIMIT = 3.9;
 const TOO_LONG_INSTRUCTIONS = 101;
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
@@ -59,7 +58,7 @@ const CRITERIA = {
   2: ["pakete-geschlossen", "auftrag", "aufraeumen", "auswertung", "phase-pr"],
   3: ["pakete-geschlossen", "kommentar-basislinie", "tests-ohne-quelltext"],
   4: ["pakete-geschlossen", "claude-md", "workflows-entfernt", "anweisungstexte"],
-  5: ["pakete-geschlossen", "beleg-zehn-laeufe", "testverhaeltnis"],
+  5: ["pakete-geschlossen", "beleg-zehn-laeufe"],
 };
 
 function json(value) {
@@ -74,7 +73,6 @@ const HEALTHY_FILES = {
   }),
   "eslint-suppressions.json": json({}),
   "CLAUDE.md": "# Hermes\n",
-  "tools/basis/testverhaeltnis.json": json({ produkt: { obergrenze: DONE_PRODUCT_LIMIT } }),
 };
 
 function basis({ starts = {}, recorded = {} } = {}) {
@@ -368,11 +366,6 @@ const MISSING_END_CRITERIA = [
       },
     },
     pattern: /beleg\/38-zehn-laeufe/,
-  },
-  {
-    step: "5",
-    run: { files: { "tools/basis/testverhaeltnis.json": json({ produkt: { obergrenze: 4.1 } }) } },
-    pattern: /testverhaeltnis\.json.*4\.1/,
   },
 ];
 

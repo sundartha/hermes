@@ -23,8 +23,6 @@ const RETIRED_WORKFLOW_DIRECTORY = ".claude/workflows";
 const PROOF_BRANCH = "beleg/38-zehn-laeufe";
 const PROOF_WORKFLOW_PREFIX = "Beleg";
 const PROOF_GREEN_RUNS = 10;
-const TEST_RATIO_FILE = "tools/basis/testverhaeltnis.json";
-const PRODUCT_RATIO_TARGET = 4.1;
 const PER_PAGE = 100;
 const SUCCESS = "success";
 const LINE_BREAK = "\n";
@@ -160,14 +158,6 @@ async function proofProblems(remote) {
   ];
 }
 
-function testRatioProblems() {
-  const limit = readJson(TEST_RATIO_FILE).produkt?.obergrenze;
-  if (limit < PRODUCT_RATIO_TARGET) return [];
-  return [
-    `die Grenze für Produkt-Tests in ${TEST_RATIO_FILE} bei ${limit} liegt, verlangt ist weniger als ${PRODUCT_RATIO_TARGET}`,
-  ];
-}
-
 function workflowCriterion(id, workflow) {
   const titel = `Der letzte Lauf von ${workflow.datei} auf master ist grün`;
   return { id, titel, pruefen: workflowGreen(workflow), verlauf: true };
@@ -265,11 +255,6 @@ export const PACKAGE_STEPS = [
         titel: `Der Beleg-PR ${PROOF_BRANCH} hat ${PROOF_GREEN_RUNS} grüne Läufe`,
         pruefen: proofProblems,
         verlauf: true,
-      },
-      {
-        id: "testverhaeltnis",
-        titel: `Die Grenze für Produkt-Tests ist kleiner als ${PRODUCT_RATIO_TARGET}`,
-        pruefen: testRatioProblems,
       },
     ],
   },

@@ -42,7 +42,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: node tools/dateilaenge.mjs
 
-      - name: Testverhältnis
+      - name: Testverhältnis (Anzeige)
         if: ${{ !cancelled() }}
         env:
           BASIS: ${{ github.event.pull_request.base.sha || github.event.before }}

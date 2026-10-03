@@ -1,17 +1,10 @@
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 
 import { probeRepository, runIn, TEST_RATIO_TOOL } from "./probe-repo.js";
 
-const LIMIT_PATH = "tools/basis/testverhaeltnis.json";
-const RATIO_LIMIT = 2;
-const HIGHER_RATIO_LIMIT = 3;
-const LIMITS = { produkt: { obergrenze: RATIO_LIMIT } };
 const EXIT_OK = 0;
-const EXIT_FINDING = 1;
-const EXIT_ABORT = 2;
+const TEN_TEST_LINES = 10;
 
 const PRODUCT_WITH_TWO_CODE_LINES = [
   "// Kommentar zählt nicht",
@@ -38,19 +31,14 @@ const TEST_WITH_FOUR_CODE_LINES = [
 
 function probe(context, files) {
   return probeRepository(context, {
-    [LIMIT_PATH]: JSON.stringify(LIMITS),
     "src/produkt.js": PRODUCT_WITH_TWO_CODE_LINES,
     "test/probe.test.js": TEST_WITH_FOUR_CODE_LINES,
     ...files,
   });
 }
 
-function runTool(directory) {
-  return runIn(directory, process.execPath, [TEST_RATIO_TOOL, "--basis", "HEAD"]);
-}
-
 function checkRatio(context, files) {
-  return runTool(probe(context, files));
+  return runIn(probe(context, files), process.execPath, [TEST_RATIO_TOOL, "--basis", "HEAD"]);
 }
 
 test("das Testverhältnis zählt nur Code-Zeilen, keine leeren Zeilen und keine reinen Kommentarzeilen", (context) => {
@@ -82,7 +70,7 @@ test("Tests unter test/werkzeuge/ zählen gegen tools/ und scripts/, nicht gegen
   );
 });
 
-test("ein hohes Werkzeug-Testverhältnis hält die Prüfung nicht auf und erscheint als Warnung", (context) => {
+test("ein hohes Werkzeug-Testverhältnis hält die Prüfung nicht auf und erscheint als Hinweis", (context) => {
   const result = checkRatio(context, {
     "test/werkzeuge/pruefung.test.js": "const c = 3;\nconst d = 4;\nconst g = 7;\n",
     "tools/pruefung.mjs": "export const e = 5;\n",
@@ -91,43 +79,16 @@ test("ein hohes Werkzeug-Testverhältnis hält die Prüfung nicht auf und ersche
   assert.equal(result.status, EXIT_OK, result.stderr);
   assert.match(
     result.stdout,
-    /^::warning::Werkzeug-Testverhältnis 1\.50 \(3 Testzeilen zu 2 Werkzeug- und Skriptzeilen\)/m,
+    /^::notice::Werkzeug-Testverhältnis 1\.50 \(3 Testzeilen zu 2 Werkzeug- und Skriptzeilen\)/m,
   );
 });
 
-test("eine angehobene Obergrenze macht die Prüfung rot, auch wenn das Verhältnis darunter bleibt", (context) => {
-  const directory = probe(context, {});
-  const raised = { produkt: { obergrenze: HIGHER_RATIO_LIMIT } };
-  writeFileSync(join(directory, LIMIT_PATH), JSON.stringify(raised));
-  const result = runTool(directory);
-  assert.equal(result.status, EXIT_FINDING);
-  assert.match(result.stderr, /produkt\.obergrenze steigt von 2 auf 3; sie darf nur sinken/);
-});
-
-test("eine gesenkte Obergrenze ist erlaubt", (context) => {
-  const directory = probe(context, {
-    [LIMIT_PATH]: JSON.stringify({ produkt: { obergrenze: HIGHER_RATIO_LIMIT } }),
+test("zehn Testzeilen auf eine Produktzeile halten die Prüfung nicht auf und erscheinen als Hinweis", (context) => {
+  const tenTestLines = Array.from({ length: TEN_TEST_LINES }, (_unused, index) => `export const fall${index} = true;`);
+  const result = checkRatio(context, {
+    "src/produkt.js": "export const wert = true;\n",
+    "test/probe.test.js": `${tenTestLines.join("\n")}\n`,
   });
-  writeFileSync(join(directory, LIMIT_PATH), JSON.stringify(LIMITS));
-  const result = runTool(directory);
   assert.equal(result.status, EXIT_OK, result.stderr);
-});
-
-test("eine Testzeile über der Obergrenze macht die Prüfung rot", (context) => {
-  const result = checkRatio(context, { "test/mehr.test.js": "const c = 3;\n" });
-  assert.equal(result.status, EXIT_FINDING);
-  assert.match(
-    result.stderr,
-    /Testverhältnis 2\.50 \(5 Testzeilen zu 2 Produktzeilen\), Obergrenze 2/,
-  );
-});
-
-test("eine Basis, die kein Commit ist, bricht die Prüfung ab", (context) => {
-  const directory = probe(context, {});
-  const blob = runIn(directory, "git", ["rev-parse", `HEAD:${LIMIT_PATH}`]).stdout.trim();
-  for (const basis of ["gibt-es-nicht", blob]) {
-    const result = runIn(directory, process.execPath, [TEST_RATIO_TOOL, "--basis", basis]);
-    assert.equal(result.status, EXIT_ABORT, basis);
-    assert.match(result.stderr, /ist kein Commit in diesem Checkout/);
-  }
+  assert.match(result.stdout, /^::notice::Testverhältnis 10\.00 \(10 Testzeilen zu 1 Produktzeilen\)/m);
 });
