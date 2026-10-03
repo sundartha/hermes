@@ -1,0 +1,15 @@
+{
+  "titel": "Grenze der Ausklingzeit angehoben",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{}"],
+    "tools/basis/testlaufzeit.json": [
+      "{ \"ausklingen_grenze_ms\": 77, \"ausklingen_bestand\": [] }"
+    ]
+  },
+  "dateien": {
+    "tools/basis/testlaufzeit.json": [
+      "{ \"ausklingen_grenze_ms\": 500, \"ausklingen_bestand\": [] }"
+    ]
+  },
+  "erwartet": "die Grenze steigt"
+}

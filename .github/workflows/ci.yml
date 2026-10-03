@@ -147,7 +147,21 @@ jobs:
         env:
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
-        run: npm test -- -- --test-concurrency=4 --test-shard="$TEIL/$TEILE"
+          TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten.jsonl
+        run: >-
+          npm test -- -- --test-concurrency=4 --test-shard="$TEIL/$TEILE"
+          --test-reporter-destination=stdout
+          --test-reporter=./tools/testlaufzeit-reporter.mjs
+          --test-reporter-destination=.pruefung/dateien.jsonl
+
+      - name: Testlaufzeit
+        if: always()
+        env:
+          TEIL: ${{ matrix.teil }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -o pipefail
+          node tools/testlaufzeit-pruefen.mjs --teil "$TEIL" --kosten .pruefung/testkosten.jsonl ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"} | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Bestandene Tests melden
         id: bestanden

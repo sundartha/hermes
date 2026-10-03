@@ -1,0 +1,15 @@
+{
+  "titel": "echtWarten mit einem Funktionsparameter ohne Eintrag",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{}"]
+  },
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "import { echtWarten } from \"./echt-warten.js\";",
+      "export function warte(ms) {",
+      "  return echtWarten(ms);",
+      "}"
+    ]
+  },
+  "erwartet": "Wert nicht bestimmbar"
+}

@@ -1,0 +1,33 @@
+{
+  "titel": "Testlaufzeit",
+  "pfade": [
+    "tools/testlaufzeit-pruefen.mjs",
+    "tools/testlaufzeit-reporter.mjs",
+    "tools/testlaufzeit/",
+    "tools/basis/testlaufzeit.json",
+    "tools/basis/echte-wartezeiten.json",
+    "tools/basis/zeitglieder-bestand.json",
+    "test/echt-warten.js"
+  ],
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene direkte Zeitglieder in Tests",
+    "datei": "tools/basis/zeitglieder-bestand.json",
+    "zaehlen": "summe"
+  },
+  "probe": {
+    "mitnehmen": [
+      "eslint.config.js",
+      "tools/basis/zeitglieder-bestand.json",
+      "tools/basis/echte-wartezeiten.json",
+      "tools/basis/testlaufzeit.json"
+    ],
+    "befehl": [
+      "node",
+      "{wurzel}/tools/testlaufzeit-pruefen.mjs",
+      "--laufzeiten",
+      ".pruefung/dateien.jsonl",
+      "--basis",
+      "HEAD~1"
+    ]
+  }
+}

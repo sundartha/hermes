@@ -1,0 +1,11 @@
+{
+  "titel": "Eingefrorene Datei bekommt ein weiteres direktes Zeitglied",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{ \"test/alt.test.js\": 1 }"],
+    "test/alt.test.js": ["setTimeout(() => {}, 1);"]
+  },
+  "dateien": {
+    "test/alt.test.js": ["setTimeout(() => {}, 1);", "setInterval(() => {}, 1);"]
+  },
+  "erwartet": "2 direkte Zeitglieder, eingefroren sind 1"
+}
