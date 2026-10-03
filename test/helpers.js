@@ -270,7 +270,7 @@ export const BASE_ENV = {
   // GETs an api.elevenlabs.io (mit leerem Schluessel -> echtes 401), also eine Suite, die
   // vom Internet abhaengt und einen fremden Dienst belastet. Der Verwurf-Port 9 ist sofort
   // und offline nicht erreichbar; Tests mit eigenem Mock setzen die Basis ohnehin selbst.
-  ELEVENLABS_API_BASE: "http://127.0.0.1:9",
+  ELEVENLABS_API_BASE: "https://api.elevenlabs.invalid",
   ELEVENLABS_OUTPUT_FORMAT: "",
   ELEVENLABS_SYNTH_TIMEOUT_MS: "2000",
   ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS: "10000",
