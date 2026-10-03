@@ -1,0 +1,13 @@
+{
+  "titel": "Echte Wartezeit über setTimeout in einem neuen Test",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "import { test } from \"node:test\";",
+      "const WARTE_MS = 500;",
+      "test(\"wartet\", async () => {",
+      "  await new Promise((weiter) => setTimeout(weiter, WARTE_MS));",
+      "});"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-restricted-globals\""
+}
