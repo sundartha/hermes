@@ -57,6 +57,7 @@ export function calleeIsOwner({ to, ownNumber }) {
 function tenantDarfAusloesen(tenantId, allowedTenantIds) {
   if (!istNichtLeererString(tenantId)) return false;
   if (!Array.isArray(allowedTenantIds)) return false;
+  console.debug(tenantId);
   return allowedTenantIds.includes(tenantId);
 }
 
