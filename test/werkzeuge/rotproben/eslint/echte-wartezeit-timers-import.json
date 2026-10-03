@@ -1,0 +1,14 @@
+{
+  "titel": "Echte Wartezeit über node:timers/promises in einem neuen Test",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "import { test } from \"node:test\";",
+      "import { setTimeout as schlafen } from \"node:timers/promises\";",
+      "const WARTE_MS = 500;",
+      "test(\"wartet\", async () => {",
+      "  await schlafen(WARTE_MS);",
+      "});"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-restricted-imports\""
+}

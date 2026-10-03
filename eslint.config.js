@@ -4,11 +4,24 @@ import sonarjs from "eslint-plugin-sonarjs";
 import unicornPlugin from "eslint-plugin-unicorn";
 import * as espree from "espree";
 
+import { existsSync, readFileSync } from "node:fs";
+
+const ZEITGLIEDER_BESTAND_DATEI = new URL(
+  "./tools/basis/zeitglieder-bestand.json",
+  import.meta.url,
+);
+const zeitgliederBestand = existsSync(ZEITGLIEDER_BESTAND_DATEI)
+  ? JSON.parse(readFileSync(ZEITGLIEDER_BESTAND_DATEI, "utf8"))
+  : {};
+
 // Gesetz von Demeter (G36): ab dem 5. verketteten Punktzugriff in Folge
 // (a.b.c.d.e) gilt eine Aufrufkette als Kopplungsrisiko - bis a.b.c.d bleibt
 // sie erlaubt. Selektor zaehlt verschachtelte MemberExpression-Vorfahren.
 const demeterChainSelector =
   "MemberExpression MemberExpression MemberExpression MemberExpression";
+const ZEITGLIEDER_MELDUNG =
+  "Echte Wartezeit in Tests nur über echtWarten(ms) aus test/echt-warten.js. Sonst simulierte Zeit (t.mock.timers, jumpClock aus test/fake-clock.js), auf ein Ereignis warten, Reihenfolge über setImmediate oder queueMicrotask, Frist über die Option timeout von node:test oder spawn oder AbortSignal.timeout.";
+const ZEITGLIEDER_MODULE = ["node:timers", "timers", "node:timers/promises", "timers/promises"];
 const demeterChainMessage =
   "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)";
 
@@ -233,6 +246,28 @@ export default [
           selector: "Property[key.name='skip'][value.value=true]",
           message: "uebersprungener Test ({ skip: true }) - T4, G4.",
         },
+      ],
+    },
+  },
+  {
+    name: "zeitglieder-in-tests",
+    files: ["test/**"],
+    ignores: ["test/echt-warten.js", ...Object.keys(zeitgliederBestand)],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        { name: "setTimeout", message: ZEITGLIEDER_MELDUNG },
+        { name: "setInterval", message: ZEITGLIEDER_MELDUNG },
+      ],
+      "no-restricted-imports": [
+        "error",
+        { paths: ZEITGLIEDER_MODULE.map((name) => ({ name, message: ZEITGLIEDER_MELDUNG })) },
+      ],
+      "no-restricted-properties": [
+        "error",
+        { object: "Atomics", property: "wait", message: ZEITGLIEDER_MELDUNG },
+        { object: "globalThis", property: "setTimeout", message: ZEITGLIEDER_MELDUNG },
+        { object: "globalThis", property: "setInterval", message: ZEITGLIEDER_MELDUNG },
       ],
     },
   },
