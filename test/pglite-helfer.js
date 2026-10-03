@@ -5,11 +5,14 @@ import os from "node:os";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 
+import { testkostenZaehler } from "./testkosten.js";
+
 const VORLAGEN_ORDNER = path.join(os.tmpdir(), "hermes-pglite-vorlagen");
 const PGLITE_PAKET = new URL("../node_modules/@electric-sql/pglite/package.json", import.meta.url);
 const STRYKER_VARIABLE = "__STRYKER_ACTIVE_MUTANT__";
 
 const offene = new Set();
+const datenbankStarts = testkostenZaehler("datenbankStarts");
 const schliessVorgaenge = new WeakMap();
 
 function pruefwert(schluesselTeile) {
@@ -108,6 +111,7 @@ export function aufraeumenVormerken(storeHolen) {
   };
   after(() => aufraeumen(eintrag));
   return async (abbild) => {
+    datenbankStarts.zaehle(1);
     eintrag.pg = await PGlite.create({ loadDataDir: abbild });
     offene.add(eintrag);
     return abfragenZaehlendeHuelle(eintrag.pg, eintrag.laufend);

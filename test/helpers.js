@@ -11,6 +11,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { starteAnthropicAttrappe } from "./helpers/anthropic-attrappe.js";
+import { testkostenZaehler } from "./testkosten.js";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
@@ -79,6 +80,7 @@ export const TOOL_COUNT_WITHOUT_CONSULT = 10;
 export const TOOLS_WITH_OUTPUT_SCHEMA = 10;
 
 export const anthropicAttrappe = await starteAnthropicAttrappe();
+const serverStarts = testkostenZaehler("serverStarts");
 
 export const BASE_ENV = {
   NODE_ENV: "test",
@@ -1425,6 +1427,7 @@ export async function startServerExpectExit({
   // korrupt + nicht-schreibbar), statt frisch zu seeden - mirror von startServer.
   const dataDir =
     reuseDataDir || tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
+  serverStarts.zaehle(1);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: ROOT,
     env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
@@ -1468,6 +1471,7 @@ export async function startServer({
   // STARTUP_TIMEOUT_MS scheitern. Begruendung und Messung: test/helpers/server-mit-
   // elternwaechter.mjs. startServerExpectExit behaelt bewusst den direkten Einstieg: die dortigen
   // Server sind auf 8 s befristet und ihre Ausgabe wird byte-genau geprueft.
+  serverStarts.zaehle(1);
   const child = spawn(process.execPath, ["test/helpers/server-mit-elternwaechter.mjs"], {
     cwd: ROOT,
     env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
