@@ -1,0 +1,16 @@
+{
+  "titel": "Neue Datei in die Ausklingzeit-Basislinie aufgenommen",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{}"],
+    "tools/basis/testlaufzeit.json": [
+      "{ \"ausklingen_grenze_ms\": 77, \"ausklingen_bestand\": [] }"
+    ],
+    "test/neu.test.js": ["import { test } from \"node:test\";", "test(\"neu\", () => {});"]
+  },
+  "dateien": {
+    "tools/basis/testlaufzeit.json": [
+      "{ \"ausklingen_grenze_ms\": 77, \"ausklingen_bestand\": [\"test/neu.test.js\"] }"
+    ]
+  },
+  "erwartet": "ist neu im Bestand"
+}

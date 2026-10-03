@@ -1,0 +1,11 @@
+{
+  "titel": "Neue Datei in den Zeitglieder-Bestand aufgenommen",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{}"]
+  },
+  "dateien": {
+    "tools/basis/zeitglieder-bestand.json": ["{ \"test/alt.test.js\": 1 }"],
+    "test/alt.test.js": ["setTimeout(() => {}, 1);"]
+  },
+  "erwartet": "ist neu oder steigt"
+}

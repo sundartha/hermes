@@ -1,0 +1,21 @@
+{
+  "titel": "Neuer Test lässt einen Kindprozess sleep 3 weiterlaufen",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{}"],
+    "tools/basis/testlaufzeit.json": [
+      "{ \"ausklingen_grenze_ms\": 77, \"ausklingen_bestand\": [] }"
+    ]
+  },
+  "dateien": {
+    "test/kind.test.js": [
+      "import { spawn } from \"node:child_process\";",
+      "import { test } from \"node:test\";",
+      "test(\"erster\", () => {});",
+      "test(\"letzter\", () => { spawn(\"sleep\", [\"3\"]); });"
+    ],
+    ".pruefung/dateien.jsonl": [
+      "{\"datei\":\"test/kind.test.js\",\"dauer_ms\":3200,\"ausklingen_ms\":3010}"
+    ]
+  },
+  "erwartet": "über der Grenze 77 ms (nachgemessen"
+}

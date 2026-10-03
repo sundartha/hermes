@@ -1,0 +1,24 @@
+{
+  "titel": "Eintrag aus der Ausklingzeit-Basislinie entfernt, Datei weiter darüber",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{}"],
+    "tools/basis/testlaufzeit.json": [
+      "{ \"ausklingen_grenze_ms\": 77, \"ausklingen_bestand\": [\"test/langsam.test.js\"] }"
+    ],
+    "test/langsam.test.js": [
+      "import { spawn } from \"node:child_process\";",
+      "import { test } from \"node:test\";",
+      "test(\"erster\", () => {});",
+      "test(\"letzter\", () => { spawn(\"sleep\", [\"1\"]); });"
+    ]
+  },
+  "dateien": {
+    "tools/basis/testlaufzeit.json": [
+      "{ \"ausklingen_grenze_ms\": 77, \"ausklingen_bestand\": [] }"
+    ],
+    ".pruefung/dateien.jsonl": [
+      "{\"datei\":\"test/langsam.test.js\",\"dauer_ms\":1200,\"ausklingen_ms\":1010}"
+    ]
+  },
+  "erwartet": "über der Grenze 77 ms (nachgemessen"
+}

@@ -1,0 +1,12 @@
+{
+  "titel": "Eintrag für echtWarten ohne passenden Aufruf",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{}"]
+  },
+  "dateien": {
+    "tools/basis/echte-wartezeiten.json": [
+      "[{ \"datei\": \"test/weg.test.js\", \"argument\": \"WARTE_MS\", \"hoechstwert_ms\": 500, \"grund\": \"Probe\" }]"
+    ]
+  },
+  "erwartet": "passt zu keinem Aufruf"
+}

@@ -1,0 +1,17 @@
+{
+  "titel": "echtWarten mit 500 ms ohne Eintrag",
+  "vorher": {
+    "tools/basis/zeitglieder-bestand.json": ["{}"]
+  },
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "import { test } from \"node:test\";",
+      "import { echtWarten } from \"./echt-warten.js\";",
+      "const WARTE_MS = 500;",
+      "test(\"wartet\", async () => {",
+      "  await echtWarten(WARTE_MS);",
+      "});"
+    ]
+  },
+  "erwartet": "500 ms, über 100 ms nur mit Eintrag"
+}
