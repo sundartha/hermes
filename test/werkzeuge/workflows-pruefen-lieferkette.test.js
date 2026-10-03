@@ -115,8 +115,10 @@ test("workflows-pruefen: github.token ist in einem Workflow fuer Pull Requests e
   );
 });
 
-test("workflows-pruefen: ein Workflow mit dem Ausloeser workflow_run darf Secrets benutzen", () => {
-  assertClean(workflow(WORKFLOW_RUN_TRIGGER, ['      - run: echo "${{ secrets.BEISPIEL }}"']));
+test("workflows-pruefen: workflow_run gilt nicht als Pull Request, Secrets nur aus der Liste", () => {
+  const content = workflow(WORKFLOW_RUN_TRIGGER, ['      - run: echo "${{ secrets.BEISPIEL }}"']);
+  const output = assertFindingAt(content, "secrets.BEISPIEL");
+  assert.doesNotMatch(output, /Pull Requests/);
 });
 
 test("workflows-pruefen: ein Workflow ohne erkennbaren Ausloeser wird wie einer fuer Pull Requests geprueft", () => {
