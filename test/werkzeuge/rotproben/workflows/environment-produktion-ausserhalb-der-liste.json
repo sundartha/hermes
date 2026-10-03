@@ -1,0 +1,21 @@
+{
+  "titel": "Environment produktion in einem Workflow außerhalb der Liste",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  schedule:",
+      "    - cron: '0 3 * * *'",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    runs-on: ubuntu-latest",
+      "    environment: produktion",
+      "    steps:",
+      "      - name: Schritt",
+      "        run: echo ok"
+    ]
+  },
+  "erwartet": "Environment produktion nur in Workflows aus tools/basis/geheimnis-workflows.json"
+}

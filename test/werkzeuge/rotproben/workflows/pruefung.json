@@ -1,11 +1,17 @@
 {
   "titel": "Workflow-Regeln",
-  "pfade": ["tools/workflows-pruefen.mjs"],
+  "pfade": ["tools/workflows-pruefen.mjs", "tools/basis/geheimnis-workflows.json"],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/workflows-pruefen.mjs"],
     "zaehlen": "stderr-zeilen"
   },
+  "ausnahmen": {
+    "bezeichnung": "Workflows, die secrets und das Environment produktion benutzen dürfen",
+    "datei": "tools/basis/geheimnis-workflows.json",
+    "zaehlen": "anzahl"
+  },
   "probe": {
+    "mitnehmen": ["tools/basis/geheimnis-workflows.json"],
     "befehl": ["node", "{wurzel}/tools/workflows-pruefen.mjs"]
   }
 }

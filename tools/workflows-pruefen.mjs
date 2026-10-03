@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const DEFAULT_WORKFLOW_DIR = ".github/workflows";
 const NON_BLOCKING_PATTERNS = [/continue-on-error/, /\|\|\s*true/];
@@ -10,9 +10,20 @@ const NPM_CI_PATTERN = /\bnpm\s+ci\b/;
 const STEP_NAME_PATTERN = /^\s*(?:-\s+)?name\s*:/;
 const IGNORE_SCRIPTS_PATTERN = /--ignore-scripts(?:=true)?(?=\s|$)/;
 const SECRETS_PATTERN = /\bsecrets\b/i;
+const PRODUCTION_ENVIRONMENT_PATTERN = /^\s*environment\s*:\s*["']?produktion["']?\s*(?:#.*)?$/i;
+const PRODUCTION_FLOW_PATTERN =
+  /^\s*environment\s*:\s*\{[^}]*\bname\s*:\s*["']?produktion["']?\s*[,}]/i;
+const PRODUCTION_NAME_PATTERN = /^\s*name\s*:\s*["']?produktion["']?\s*(?:#.*)?$/i;
+const ENVIRONMENT_BLOCK_PATTERN = /^\s*environment\s*:\s*(?:#.*)?$/;
+const INDENT_PATTERN = /^\s*/;
+const CONTENT_LINE_PATTERN = /^\s*[^\s#]/;
 const TRIGGER_KEY_PATTERN = /^["']?on["']?\s*:/;
 const TOP_LEVEL_KEY_PATTERN = /^[^\s#]/;
 const PULL_REQUEST_TRIGGER_PATTERN = /\bpull_request/;
+const SECRET_WORKFLOWS_NAME = "tools/basis/geheimnis-workflows.json";
+const SECRET_WORKFLOWS = JSON.parse(
+  readFileSync(new URL("basis/geheimnis-workflows.json", import.meta.url), "utf8"),
+);
 
 function nonBlockingStepRule(pattern) {
   return (line) => pattern.exec(line)?.[0];
@@ -40,6 +51,33 @@ function secretsInPullRequestWorkflow(line) {
   return "secrets in einem Workflow, der für Pull Requests läuft; für die GitHub-API github.token benutzen";
 }
 
+function secretsOutsideList(line) {
+  if (!SECRETS_PATTERN.test(line)) return undefined;
+  return `secrets nur in Workflows aus ${SECRET_WORKFLOWS_NAME}`;
+}
+
+function indentOf(line) {
+  return INDENT_PATTERN.exec(line)[0].length;
+}
+
+function parentLine(lines, index) {
+  const indent = indentOf(lines[index]);
+  return lines
+    .slice(0, index)
+    .findLast((line) => CONTENT_LINE_PATTERN.test(line) && indentOf(line) < indent);
+}
+
+function namesProductionEnvironment(line, index, lines) {
+  if (PRODUCTION_ENVIRONMENT_PATTERN.test(line) || PRODUCTION_FLOW_PATTERN.test(line)) return true;
+  if (!PRODUCTION_NAME_PATTERN.test(line)) return false;
+  return ENVIRONMENT_BLOCK_PATTERN.test(parentLine(lines, index) ?? "");
+}
+
+function productionEnvironmentOutsideList(line, index, lines) {
+  if (!namesProductionEnvironment(line, index, lines)) return undefined;
+  return `Environment produktion nur in Workflows aus ${SECRET_WORKFLOWS_NAME}`;
+}
+
 const LINE_RULES = [
   ...NON_BLOCKING_PATTERNS.map(nonBlockingStepRule),
   pullRequestTarget,
@@ -61,16 +99,20 @@ function runsForPullRequests(lines) {
   return section === undefined || PULL_REQUEST_TRIGGER_PATTERN.test(section);
 }
 
-function lineRulesFor(lines) {
-  return runsForPullRequests(lines) ? [...LINE_RULES, secretsInPullRequestWorkflow] : LINE_RULES;
+function lineRulesFor(filePath, lines) {
+  const rules = runsForPullRequests(lines)
+    ? [...LINE_RULES, secretsInPullRequestWorkflow]
+    : LINE_RULES;
+  if (SECRET_WORKFLOWS.includes(basename(filePath))) return rules;
+  return [...rules, secretsOutsideList, productionEnvironmentOutsideList];
 }
 
 function findingsInFile(filePath) {
   const lines = readFileSync(filePath, "utf8").split("\n");
-  const rules = lineRulesFor(lines);
+  const rules = lineRulesFor(filePath, lines);
   return lines.flatMap((line, index) =>
     rules
-      .map((rule) => rule(line))
+      .map((rule) => rule(line, index, lines))
       .filter(Boolean)
       .map((finding) => `${filePath}:${index + 1}: ${finding}`),
   );
