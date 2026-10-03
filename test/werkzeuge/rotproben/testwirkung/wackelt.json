@@ -1,0 +1,22 @@
+{
+  "titel": "Neuer Test, der mal besteht und mal scheitert",
+  "vorher": {
+    "package.json": ["{ \"type\": \"module\" }"]
+  },
+  "dateien": {
+    "test/wechselt.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { existsSync, readFileSync, writeFileSync } from \"node:fs\";",
+      "import { test } from \"node:test\";",
+      "",
+      "const ZAEHLER = new URL(\"../zaehler.txt\", import.meta.url);",
+      "",
+      "test(\"wechselt\", () => {",
+      "  const stand = existsSync(ZAEHLER) ? Number(readFileSync(ZAEHLER, \"utf8\")) : 0;",
+      "  writeFileSync(ZAEHLER, String(stand + 1));",
+      "  assert.equal(stand % 2, 1);",
+      "});"
+    ]
+  },
+  "erwartet": "wackelt"
+}

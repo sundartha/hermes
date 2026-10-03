@@ -1,9 +1,0 @@
-{
-  "titel": "Obergrenzen angehoben",
-  "dateien": {
-    "tools/basis/testverhaeltnis.json": [
-      "{ \"produkt\": { \"obergrenze\": 99 }, \"werkzeuge\": { \"obergrenze\": 99 } }"
-    ]
-  },
-  "erwartet": "sie darf nur sinken"
-}

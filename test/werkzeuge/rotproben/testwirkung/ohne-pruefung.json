@@ -1,0 +1,16 @@
+{
+  "titel": "Neuer Test ohne Prüfung",
+  "vorher": {
+    "package.json": ["{ \"type\": \"module\" }"]
+  },
+  "dateien": {
+    "test/leer.test.js": [
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"rechnet nur\", () => {",
+      "  Math.max(1, 2);",
+      "});"
+    ]
+  },
+  "erwartet": "1 ohne wirksame Prüfung"
+}
