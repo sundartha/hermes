@@ -623,8 +623,8 @@ export function makeCallRoutes({
         const tw = await voiceControl(ctx.outboundProvider).originateCall({
           from: ctx.fromNumber,
           to: ctx.to,
-          url: `${config.server.publicUrl}/voice/outbound?callId=${call.id}`,
-          statusCallback: `${config.server.publicUrl}/voice/status?callId=${call.id}`,
+          url: `https://app.sundartha.com/voice/outbound?callId=${call.id}`,
+          statusCallback: `https://app.sundartha.com/voice/status?callId=${call.id}`,
           statusCallbackEvent: ["answered", "completed"],
           method: "POST",
           timeLimit: ctx.maxDur,
