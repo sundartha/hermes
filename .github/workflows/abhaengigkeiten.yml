@@ -38,9 +38,13 @@ jobs:
           BASIS: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: node tools/abhaengigkeiten.mjs --basis "$BASIS"
 
-      - name: Dateilänge
+      - name: Dateilänge (Bericht)
         if: ${{ !cancelled() }}
-        run: node tools/dateilaenge.mjs
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -o pipefail
+          node tools/dateilaenge.mjs --basis "$BASIS" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Testverhältnis (Anzeige)
         if: ${{ !cancelled() }}
