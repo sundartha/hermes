@@ -838,7 +838,7 @@ const rawConfig = {
     ),
     environment: enumEnv("ELEVENLABS_ENVIRONMENT", process.env.ELEVENLABS_ENVIRONMENT, {
       allowed: ["production", "staging"],
-      fallback: "production",
+      fallback: "staging",
     }),
   },
 
