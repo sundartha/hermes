@@ -8,6 +8,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, startIdp, mcpPost, toolCall, waitForLog } from "./helpers.js";
+import { maskNumber } from "../src/util.js";
 import { makeDefaultState, setProfile, resolveProfile } from "../src/store/state-ops.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
@@ -19,6 +20,7 @@ import { planProfileFor } from "../src/plans.js";
 // confirmation_code wuerde place_call gar nicht mehr bis zum jeweils geprueften Profil-/
 // Nummern-Gate kommen.
 const TEST_CONFIRMATION_SECRET = "profile-tenant-key-test-secret-mind-32-zeichen";
+const sternImMuster = (text) => text.replace(/\*/g, "\\*");
 const oauthEnv = (idp, extra = {}) => ({
   MCP_AUTH: "oauth",
   OAUTH_ISSUER_URL: idp.issuer,
@@ -78,8 +80,11 @@ test("(a) Subscriber sub-only passiert das Profil-Gate -> keine_tenant_nummer, N
     // tenant=t_sub im keine_tenant_nummer-Audit belegt die korrekte Tenant-Aufloesung.
     await waitForLog(
       srv,
-      /\[audit\] place_call_denied ip=\S+ to=\+4915123123201 grund=keine_tenant_nummer tenant=t_sub/,
+      new RegExp(
+        `\\[audit\\] place_call_denied ip=\\S+ to=${sternImMuster(maskNumber("+4915123123201"))} grund=keine_tenant_nummer tenant=t_sub`,
+      ),
     );
+    assert.equal(srv.stdout.includes("4915123123201"), false);
     assert.ok(
       !/grund=stundenlimit/.test(srv.stdout),
       "Profil-Gate darf NICHT am stundenlimit blocken (Go-live-Bug)",
@@ -109,8 +114,11 @@ test("(b) Owner sub-only nicht per Stundenlimit gesperrt (R2-Regressionsriegel)"
     assert.notEqual(res.status, 401);
     await waitForLog(
       srv,
-      /\[audit\] place_call ip=\S+ to=\+4915123123202 call=\S+ provider=\S+ requestedBy=owner-sub/,
+      new RegExp(
+        `\\[audit\\] place_call ip=\\S+ to=${sternImMuster(maskNumber("+4915123123202"))} call=\\S+ provider=\\S+ requestedBy=owner-sub`,
+      ),
     );
+    assert.equal(srv.stdout.includes("4915123123202"), false);
     assert.ok(
       !/grund=stundenlimit/.test(srv.stdout),
       "Owner darf NIE per Stundenlimit gesperrt werden (R2)",
@@ -145,8 +153,11 @@ test("(c) Profilloser Tenant -> stundenlimit (DEFAULT_PROFILE greift, kein Leck)
     // zeigt tenant=t_np, requestedBy=sub-np bindet die Ablehnung an das Token.
     await waitForLog(
       srv,
-      /\[audit\] place_call_denied ip=\S+ to=\+4915123123203 grund=stundenlimit requestedBy=sub-np/,
+      new RegExp(
+        `\\[audit\\] place_call_denied ip=\\S+ to=${sternImMuster(maskNumber("+4915123123203"))} grund=stundenlimit requestedBy=sub-np`,
+      ),
     );
+    assert.equal(srv.stdout.includes("4915123123203"), false);
   } finally {
     await srv.stop();
     await idp.close();
