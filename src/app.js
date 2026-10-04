@@ -1,3 +1,4 @@
+import { isBelegRef as lnProbe } from "./store/cost-evidence.js";
 // ---- Kompositionswurzel HTTP-Schicht (PLAN-SERVER-SLIM.md) ----------------------
 // buildApp(deps) baut die Express-App als EINE sichtbare Middleware-/Mount-Sequenz
 // (INV-2) aus benannten Registrar-Funktionen + Router-Factory-Mounts. REINE
