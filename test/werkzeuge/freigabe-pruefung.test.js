@@ -380,15 +380,12 @@ test("geänderte bestehende Tests, Prompts und Werkzeugtexte bekommen ihre eigen
 });
 
 const KNIP = "tools/basis/knip.json";
-const GIANTS = "tools/basis/riesendateien.json";
 const ESLINT = "tools/basis/eslint-wirksam.json";
-const GIANT_LINES = 500;
 const COMPLEXITY = 10;
 const findings = (...befunde) => json({ befunde });
 const ONE_FINDING = findings("a");
 const STRICTER_BASIS = {
   [KNIP]: findings("a", "b"),
-  [GIANTS]: json({ "src/alt.js": GIANT_LINES }),
   [ESLINT]: json({ complexity: COMPLEXITY }),
   "test/alt.test.js": passingTest("alt"),
   "src/app.js": "export const wert = 1;\n",
@@ -396,7 +393,6 @@ const STRICTER_BASIS = {
 
 for (const [fall, changes] of [
   ["(a) Altbefunde gestrichen", { [KNIP]: ONE_FINDING }],
-  ["(b) Obergrenze gesenkt", { [GIANTS]: json({ "src/alt.js": GIANT_LINES - 1 }) }],
   ["(c) neue Testdatei", { "test/neu.test.js": passingTest("neu") }],
 ]) {
   test(`${fall} ist strenger und braucht keine Freigabe`, async (context) => {
@@ -413,7 +409,6 @@ for (const [fall, changes] of [
 for (const [name, changes] of [
   ["ein Altbefund kommt hinzu", { [KNIP]: findings("a", "b", "c") }],
   ["Altbefunde werden nur umsortiert", { [KNIP]: findings("b", "a") }],
-  ["eine Grenze steigt", { [GIANTS]: json({ "src/alt.js": GIANT_LINES + 1 }) }],
   ["ein Wert ohne Listeneintrag sinkt", { [ESLINT]: json({ complexity: COMPLEXITY - 1 }) }],
   ["eine bestehende Testdatei ändert sich", { [KNIP]: ONE_FINDING, "test/alt.test.js": "" }],
   ["ein gestrichener Altbefund kommt mit src/", { [KNIP]: ONE_FINDING, "src/app.js": "" }],

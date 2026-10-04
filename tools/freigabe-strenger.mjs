@@ -5,7 +5,6 @@ import { fileAt } from "./pruefungen-messen.mjs";
 export const STRENGER = "strenger";
 
 const FALL_ALTBEFUNDE = "(a) Altbefunde gestrichen";
-const FALL_GRENZE = "(b) Obergrenze gesenkt";
 const FALL_TESTDATEI = "(c) neue Testdatei";
 const STATUS_ADDED = "A";
 const STATUS_MODIFIED = "M";
@@ -13,7 +12,6 @@ const TEST_FILE = /^test\/.+\.test\.js$/;
 const TEXT_LIST_SUFFIX = ".txt";
 const LINE_BREAK = "\n";
 const WHOLE_FILE = "";
-const ANY_KEY = Symbol("jeder Schlüssel");
 
 const OLD_FINDING_LISTS = new Map([
   ["tools/basis/jscpd.json", "befunde"],
@@ -21,10 +19,6 @@ const OLD_FINDING_LISTS = new Map([
   ["tools/basis/semgrep.json", "befunde"],
   ["tools/basis/lieferkette-ausnahmen.json", WHOLE_FILE],
   ["tools/basis/katalog-ohne-test.txt", WHOLE_FILE],
-]);
-
-const UPPER_LIMITS = new Map([
-  ["tools/basis/riesendateien.json", [[ANY_KEY]]],
 ]);
 
 function parsed(commit, path) {
@@ -67,41 +61,8 @@ function onlyDropsEntries(before, after, key) {
   );
 }
 
-function* differences(before, after, path = []) {
-  if (isDeepStrictEqual(before, after)) return;
-  const keys = isRecord(before) && isRecord(after) ? Object.keys(before) : [];
-  if (keys.length === 0 || !isDeepStrictEqual(keys.toSorted(), Object.keys(after).toSorted())) {
-    yield { path, before, after };
-    return;
-  }
-  for (const key of keys) yield* differences(before[key], after[key], [...path, key]);
-}
-
-function isLimit(patterns, path) {
-  return patterns.some(
-    (pattern) =>
-      pattern.length === path.length &&
-      pattern.every((key, index) => key === ANY_KEY || key === path[index]),
-  );
-}
-
-function onlyLowersLimits(before, after, patterns) {
-  const found = [...differences(before, after)];
-  return (
-    found.length > 0 &&
-    found.every(
-      (difference) =>
-        isLimit(patterns, difference.path) &&
-        typeof difference.before === "number" &&
-        typeof difference.after === "number" &&
-        difference.after < difference.before,
-    )
-  );
-}
-
 const RULES = [
   { fall: FALL_ALTBEFUNDE, settings: OLD_FINDING_LISTS, holds: onlyDropsEntries },
-  { fall: FALL_GRENZE, settings: UPPER_LIMITS, holds: onlyLowersLimits },
 ];
 
 function stricterCase(basis, { status, path }) {
