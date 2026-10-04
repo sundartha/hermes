@@ -589,7 +589,7 @@
         "name": "get_consult",
         "description": "Asks the principal a short, precise follow-up question WHILE the call is in progress (assistant-to-assistant channel, see the CLAUDE.md lesson 'get_consult is assistant-to-assistant': it asks the principal's AI/process, not the human on the phone directly). Use ONLY when a missing detail blocks the task and falls outside the mandate - not a general research tool, use sparingly.",
         "api_schema": {
-          "url": "https://app.sundartha.com/webhooks/elevenlabs/consult",
+          "url": "https://{{system__env_hermes_host}}/webhooks/elevenlabs/consult",
           "_url_ist_zustand_hinweis": "GESETZT 2026-08-17 (vorher ein .invalid-Platzhalter, der als SOLL uebernommen war): der Pfad ist ELEVENLABS_CONSULT_PATH aus src/routes/webhooks-elevenlabs.js, der Host der Kunden-Gateway-Host. WARUM app.sundartha.com und nicht vodafone-agent.onrender.com: beide zeigen heute auf denselben Dienst (am 2026-08-17 gemessen, /healthz 200 auf beiden), aber der onrender-Host haengt am SERVICE-NAMEN und faellt beim ausstehenden Infra-/URL-Cutover (Track B) weg - der Marken-Host ueberlebt ihn. GEMESSEN UND EHRLICH BENANNT: die Route antwortet dort HEUTE mit 404 ('Cannot POST'), weil der Live-Dienst auf dem Stand vom 14.08. steht und der Webhook danach entstanden ist. Das ist besser als der bisherige .invalid-Host (DNS-Fehler statt Antwort) und wird mit dem naechsten Deploy von selbst richtig. FUER EINEN LOKALEN MESS-ANRUF muss hier voruebergehend eine Tunnel-Adresse stehen (cloudflared), sonst erreicht der Anbieter unseren Rechner nicht - danach zurueckdrehen. Der Besitz-Eintrag werkzeug_api_url macht beide Wechsel sichtbar.",
           "method": "POST",
           "request_body_schema": {
@@ -616,7 +616,7 @@
           "_request_body_schema_hinweis": "GEAENDERT 2026-08-18, zwei Dinge auf einmal: der FELDNAME und ein zweiter Parameter. (1) FELDNAME: hier stand bis dahin 'body_params_schema' als angeblicher Push-Name (die Lese-Form heisst request_body_schema). Dieser Name ist in der vollstaendigen OpenAPI-Spezifikation des Anbieters NICHT AUFFINDBAR - null Treffer in der ganzen Datei. Der Schreib-Name ist derselbe wie der Lese-Name: components.schemas.WebhookToolApiSchemaConfig-Input.properties.request_body_schema -> ObjectJsonSchemaProperty-Input, und dieses api_schema haengt an POST /v1/convai/tools ebenso wie, ueber ToolRequestModel, an PATCH /v1/convai/tools/{tool_id}. ZWEITER, STAERKERER BELEG aus dem Betrieb: der Header-Push vom 2026-08-17 hat den GELESENEN api_schema-Block zusammengefuehrt zurueckgeschrieben - und der traegt request_body_schema. Ein unter body_params_schema gepushter Parameter waere still verschwunden, ohne Fehler und ohne Spur. Die Form ist deshalb ab jetzt die JSON-Schema-Huelle (type/required/properties) statt der flachen Karte. (2) NEUER PARAMETER conversation_id, gefuellt aus der Anbieter-Systemvariablen system__conversation_id. WARUM: der echte Werkzeug-Aufruf vom 2026-08-18 trug im Koerper NUR {\"question\": \"...\"} (live gemessen aus tool_details.body). src/routes/webhooks-elevenlabs.js bindet die Rueckfrage ueber req.body.conversation_id an den laufenden Anruf - ohne das Feld ist die Bindung undefined und der Server antwortet 404 kein_laufender_anruf. Genau so geschehen, zweimal im selben Anruf. Der NAME conversation_id ist BINDEND, nicht frei waehlbar: der Server liest genau diesen Schluessel. BINDUNGS-MECHANIK, am Schema belegt: components.schemas.LiteralJsonSchemaProperty fuehrt das Feld 'dynamic_variable' - woertlich 'The name of the dynamic variable to use for this property's value. Mutually exclusive with description, is_system_provided, constant_value, and is_omitted.' Ein Parameter mit dynamic_variable wird also NICHT vom Modell gefuellt, sondern zur Laufzeit eingesetzt. Deshalb traegt conversation_id KEINE description: description und dynamic_variable schliessen sich laut Schema gegenseitig aus, beides zugleich waere abgelehnt oder still ignoriert. NICHT AUS DER OPENAPI BELEGT und ehrlich benannt: der NAME system__conversation_id steht dort nicht (die Datei nennt als Beispiele nur system__time und system__call_duration_secs). Er stammt aus der Anleitungs-Doku des Anbieters (protokolliert in .fortschritt.md, Abschnitt SYSTEM-VARIABLEN) und aus der Messung, dass der Anbieter system__-Variablen selbst fuellt: in Spike 1b hat er ungefragt system__message_to_speak am Werkzeug-Aufruf mitgeschickt (tasks/spike1b-messung.jsonl). Die RUECKLESE nach dem Push ist deshalb Pflicht - sie ist der einzige Ort, an dem sich zeigt, ob der Anbieter den Namen annimmt. conversation_id steht bewusst NICHT unter 'required': required nennt heute genau den Parameter, den das MODELL liefern muss (question). Ein dynamic_variable-Parameter wird nie vom Modell geliefert; ihn dort einzutragen waere eine Annahme ueber ein Verhalten, das die Spezifikation nicht beschreibt. Weggelassen ist er damit nicht - dafuer gaebe es is_omitted, und das steht auf seinem Default false. KEIN DRIFT-SCHUTZ FUER DIESE AENDERUNG: der Besitz-Eintrag werkzeug_body_params_schema vergleicht den gemessenen Spiegel _live_gemessene_form.request_body_schema gegen den Live-Agenten, NICHT diese Push-Seite (dort begruendet). Diese Aenderung ist damit Push-ABSICHT und von keinem Waechter gedeckt, bis ein echter Push plus eine erneute GET-Messung den Spiegel nachzieht.",
           "request_headers": {
             "x-hermes-tool-token": {
-              "secret_id": "PAQCzq5QVZtRX8mBscJh"
+              "env_var_label": "hermes_tool_token"
             }
           },
           "_request_headers_hinweis": "GESETZT 2026-08-17. Der Header traegt eine secret_id, NICHT den Token: das Geheimnis liegt als Workspace-Secret im ElevenLabs-Konto (POST /v1/convai/secrets, name 'hermes_tool_token'), diese Vorlage kennt nur seine Kennung. Deshalb steht hier nichts, was nicht committet werden duerfte (Absolute Regel 4). Gegenstueck ist ELEVENLABS_TOOL_TOKEN in der Umgebung des Servers - beide Seiten muessen denselben Wert tragen, sonst lehnt src/routes/webhooks-elevenlabs.js jeden Aufruf mit 403 ab (fail-closed, leerer config-Wert lehnt ebenfalls ab). Ohne diesen Header prueft der Server gegen einen Header, den der Anbieter nie sendet - GEMESSEN war request_headers leer {}, das war die Ursache des 403 noch vor dem 404 der kaputten URL."
@@ -667,7 +667,7 @@
         },
         "request_headers": {
           "x-hermes-tool-token": {
-            "secret_id": "PAQCzq5QVZtRX8mBscJh"
+            "env_var_label": "hermes_tool_token"
           }
         }
       }
@@ -679,7 +679,7 @@
         "name": "look_up",
         "description": "Looks up ONE short, publicly checkable factual question (opening hours, business addresses, price lists, generally known facts) while the call is running and returns the found facts as text. ONLY usable while the prompt section LOOKING THINGS UP DURING THIS CALL says \"available\" - if it says \"unavailable\", this tool is disabled for this call and calling it is a mistake. Never for anything only your principal can know, and never for personal details of any person.",
         "api_schema": {
-          "url": "https://app.sundartha.com/webhooks/elevenlabs/lookup",
+          "url": "https://{{system__env_hermes_host}}/webhooks/elevenlabs/lookup",
           "method": "POST",
           "request_body_schema": {
             "type": "object",
@@ -704,7 +704,7 @@
           "_tenant_token_hinweis": "SEC-P4, PUSH-ABSICHT UND KEINE MESSUNG. Dasselbe wie bei get_consult (dort ausfuehrlich belegt, _tenant_token_hinweis): der Anrufstart schickt tenant_token als dynamische Variable mit, dieser Parameter holt sie ueber dynamic_variable zurueck, und src/routes/webhooks-elevenlabs.js rechnet den Sollwert aus dem gebundenen Anruf neu aus. Beide Werkzeuge brauchen ihn, weil beide denselben geteilten Header tragen - ein Werkzeug ohne den Parameter bliebe die offene Tuer. Ohne description, nicht unter 'required', scharf erst mit ELEVENLABS_TENANT_TOKEN_REQUIRED=true nach dem Push.",
           "request_headers": {
             "x-hermes-tool-token": {
-              "secret_id": "PAQCzq5QVZtRX8mBscJh"
+              "env_var_label": "hermes_tool_token"
             }
           }
         },
@@ -756,7 +756,7 @@
         },
         "request_headers": {
           "x-hermes-tool-token": {
-            "secret_id": "PAQCzq5QVZtRX8mBscJh"
+            "env_var_label": "hermes_tool_token"
           }
         }
       }
