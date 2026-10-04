@@ -31,7 +31,7 @@ export function maskNumber(value) {
   return `***${s.slice(-MASK_VISIBLE_TAIL)}#${sha256Hex(s).slice(0, MASK_HASH_LEN)}`;
 }
 
-const SEVEN_OR_MORE_DIGITS_WITH_SEPARATORS = /\+?\d(?:[ /-]?\d){6,}/g;
+const SEVEN_OR_MORE_DIGITS_WITH_SEPARATORS = /(?:\+|%2b|\\u002b)\d(?:(?:[ /-]|%20)?\d){6,}|(?<![a-z\d]-?)(?![12]\d{3}-\d\d-\d\d(?!-))\d(?:(?:[ /-]|%20)?\d){6,}(?![a-z\d])/gi;
 
 export function maskNumbersInText(text) {
   return String(text).replace(SEVEN_OR_MORE_DIGITS_WITH_SEPARATORS, (number) => maskNumber(number));
