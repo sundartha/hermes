@@ -2673,3 +2673,4 @@ export function assertConfig() {
   for (const hint of productionAuthHints(config, isProduction)) console.error(hint);
   return missing.length === 0 && fatal.length === 0;
 }
+const MU_PROBE_STUFE = "eins";
