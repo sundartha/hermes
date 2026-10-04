@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import { test } from "node:test";
 
 import { maskiereLogText, merkeLogGeheimnisse, mitLogMaske } from "../../src/log-maske.js";
+import { installProcessGuards } from "../../src/process-guards.js";
 import { hashEmail, maskNumber } from "../../src/util.js";
 
 const RUMPF_LAENGE = 40;
+const GEHEIMNIS_TEILE = 4;
 const MINDESTLAENGE = 16;
 const NUMMER = "+4915112345678";
 const EMAIL = "probe.person@example.org";
@@ -165,6 +168,36 @@ test("SG-13 Schreibfilter maskiert Text und reicht Buffer, Kodierung, Rückruf u
   assert.equal(mitLogMaske(gefiltert), gefiltert);
 });
 
+function schreibeMitRekorder(einstieg) {
+  const original = { stdout: process.stdout.write, stderr: process.stderr.write, einstieg: process.argv[1] };
+  const gesehen = { stdout: [], stderr: [] };
+  process.stdout.write = (text) => gesehen.stdout.push(String(text));
+  process.stderr.write = (text) => gesehen.stderr.push(String(text));
+  process.argv[1] = einstieg;
+  try {
+    installProcessGuards();
+    console.log(`[audit] place_call to=${NUMMER}`);
+    console.error(`[error] ${EMAIL}`);
+  } finally {
+    process.stdout.write = original.stdout;
+    process.stderr.write = original.stderr;
+    process.argv[1] = original.einstieg;
+  }
+  return gesehen;
+}
+
+test("SG-13 Crash-Netz maskiert stdout und stderr des Servers", () => {
+  const gesehen = schreibeMitRekorder(path.join("src", "server.js"));
+  assert.deepEqual(gesehen.stdout, [`[audit] place_call to=${maskNumber(NUMMER)}\n`]);
+  assert.deepEqual(gesehen.stderr, [`[error] ***@${hashEmail(EMAIL)}\n`]);
+});
+
+test("SG-13 stdio-MCP-Server behält stdout als Datenkanal unverändert", () => {
+  const gesehen = schreibeMitRekorder(path.join("src", "mcp-server.js"));
+  assert.deepEqual(gesehen.stdout, [`[audit] place_call to=${NUMMER}\n`]);
+  assert.deepEqual(gesehen.stderr, [`[error] ***@${hashEmail(EMAIL)}\n`]);
+});
+
 test("SG-13 als Geheimnis gilt nur ein Schlüssel-Name mit Wert ab der Mindestlänge", () => {
   const genau = "m".repeat(MINDESTLAENGE);
   const zuKurz = "n".repeat(MINDESTLAENGE - 1);
@@ -181,4 +214,13 @@ test("SG-13 ein Geheimnis in einem längeren Geheimnis lässt vom längeren nich
   const lang = `vor${kurz}nach`;
   merkeLogGeheimnisse({ LOGMASKE_TEIL_TOKEN: kurz, LOGMASKE_GANZ_TOKEN: lang });
   assert.equal(maskiereLogText(`a=${lang} b=${kurz}`), "a=*** b=***");
+});
+
+test("SG-13 Werte eigener Schlüssel aus der Umgebung werden im Log maskiert", async () => {
+  const geheimnis = "geheim".repeat(GEHEIMNIS_TEILE);
+  process.env.LOGMASKE_PROBE_API_KEY = geheimnis;
+  process.env.LOGMASKE_PROBE_TOKEN = "kurzwert";
+  await import("../../src/config.js");
+  assert.equal(maskiereLogText(`schluessel=${geheimnis} ende`), "schluessel=*** ende");
+  assert.equal(maskiereLogText("wert=kurzwert"), "wert=kurzwert");
 });

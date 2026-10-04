@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, externalIp, seedState, seedCall, waitForLog } from "./helpers.js";
+import { maskNumber } from "../src/util.js";
 
 const EXTERNAL_IP = externalIp();
 const postJson = (url, body) =>
@@ -13,6 +14,7 @@ const postJson = (url, body) =>
   });
 
 const countMatches = (text, re) => (text.match(new RegExp(re, "g")) || []).length;
+const sternImMuster = (text) => text.replace(/\*/g, "\\*");
 
 test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
   // Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
@@ -33,11 +35,12 @@ test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
         objective: "Termin",
       });
       assert.equal(res.status, 500); // Twilio-Client wirft (nicht-AC SID) - Audit kam davor
-      await waitForLog(srv, /\[audit\] place_call ip=\S+ to=\+4915112345678/);
+      await waitForLog(srv, new RegExp(`\\[audit\\] place_call ip=\\S+ to=${sternImMuster(maskNumber("+4915112345678"))}`));
       assert.equal(
-        countMatches(srv.stdout, "\\[audit\\] place_call ip=\\S+ to=\\+4915112345678"),
+        countMatches(srv.stdout, `\\[audit\\] place_call ip=\\S+ to=${sternImMuster(maskNumber("+4915112345678"))}`),
         1,
       );
+      assert.equal(srv.stdout.includes("4915112345678"), false);
     });
 
     // Denylist-Ablehnung statt Allowlist: seit dem Owner-Boot-Seed (id_verified, Phase
@@ -52,15 +55,16 @@ test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
       assert.equal(res.status, 403);
       await waitForLog(
         srv,
-        /\[audit\] place_call_denied ip=\S+ to=\+4990012345678 grund=denylist/,
+        new RegExp(`\\[audit\\] place_call_denied ip=\\S+ to=${sternImMuster(maskNumber("+4990012345678"))} grund=denylist`),
       );
       assert.equal(
         countMatches(
           srv.stdout,
-          "\\[audit\\] place_call_denied ip=\\S+ to=\\+4990012345678 grund=denylist",
+          `\\[audit\\] place_call_denied ip=\\S+ to=${sternImMuster(maskNumber("+4990012345678"))} grund=denylist`,
         ),
         1,
       );
+      assert.equal(srv.stdout.includes("4990012345678"), false);
     });
 
     await t.test("cancel_call: genau eine Zeile", async () => {

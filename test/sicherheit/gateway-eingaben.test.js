@@ -3,10 +3,12 @@ import { after, before, test } from "node:test";
 
 import { E164_FORMAT_ERROR } from "../../src/telephony/outbound-gates.js";
 import { seedCall, seedState, startServer, waitForLog } from "../helpers.js";
+import { maskNumber } from "../../src/util.js";
 
 const STORED_CALL_ID = "call_kundendaten";
 const KUNDENDATEN_MARKER = "Kundengeheimnis-4711";
 const PREMIUM_TARGET = "+4990012345678";
+const sternImMuster = (text) => text.replace(/\*/g, "\\*");
 const INJECTED_TARGETS = ["+4915112345678;id", "+49151$(id)", "+4915112345678\n+493011122"];
 const CUSTOMER_DATA_PATHS = [
   "/api/state",
@@ -67,7 +69,8 @@ test("SG-17 abgelehnter Anruf hinterlässt einen Audit-Eintrag", async () => {
   const response = await placeCallTo(PREMIUM_TARGET);
   assert.equal(response.status, HTTP_FORBIDDEN);
   const entry = new RegExp(
-    `\\[audit\\] place_call_denied ip=\\S+ to=\\${PREMIUM_TARGET} grund=denylist`,
+    `\\[audit\\] place_call_denied ip=\\S+ to=${sternImMuster(maskNumber(PREMIUM_TARGET))} grund=denylist`,
   );
   await waitForLog(hermes, entry);
+  assert.equal(hermes.stdout.includes(PREMIUM_TARGET.slice(1)), false);
 });

@@ -21,6 +21,7 @@ import {
   assertReauthChallenge,
 } from "./helpers.js";
 import { hashEmail } from "../src/util.js";
+import { maskNumber } from "../src/util.js";
 import { makeDefaultState, updateSettings } from "../src/store/state-ops.js";
 import { defaultSettings, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
@@ -28,6 +29,7 @@ const HTTP_OK = 200;
 // Zielnummer des place_call MIT Mandant im e2e-/mcp-Test - zugleich Positiv-Kontrolle
 // fuer die "to=<nummer>"-Negativpruefung in assertNoTenantPlaceCallStubbed.
 const TENANT_CALL_TO = "+4915123123123";
+const sternImMuster = (text) => text.replace(/\*/g, "\\*");
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY_REQUESTS = 429;
@@ -302,10 +304,11 @@ async function assertNoTenantPlaceCallStubbed(srv, token, { to, ownerMsg }) {
   await waitForLog(srv, /\[audit\] auth_failed ip=\S+ path=\/mcp grund=kein_tenant/);
   assert.ok(!/requestedBy=owner/.test(srv.stdout), ownerMsg);
   assert.ok(
-    srv.stdout.includes(`to=${TENANT_CALL_TO}`),
+    srv.stdout.includes(`to=${maskNumber(TENANT_CALL_TO)}`),
     "Positiv-Kontrolle: der place_call MIT Mandant muss 'to=<nummer>' im Log hinterlassen",
   );
-  assert.ok(!srv.stdout.includes(`to=${to}`), "der Stub loest NIE einen echten Anruf aus");
+  assert.ok(!srv.stdout.includes(`to=${maskNumber(to)}`), "der Stub loest NIE einen echten Anruf aus");
+  assert.equal(srv.stdout.includes(TENANT_CALL_TO.slice(1)), false);
 }
 
 // ---- 2.3 e2e ueber /mcp mit JWT: Identitaet fliesst bis ins Audit (MULTI_TENANT=true) ----
@@ -348,8 +351,12 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       assert.notEqual(res.status, HTTP_UNAUTHORIZED);
       await waitForLog(
         srv,
-        /\[audit\] place_call ip=\S+ to=\+4915123123123 .* requestedBy=alice@team\.test/,
+        new RegExp(
+          `\\[audit\\] place_call ip=\\S+ to=${sternImMuster(maskNumber(TENANT_CALL_TO))} .* requestedBy=${sternImMuster(`***@${hashEmail("alice@team.test")}`)}`,
+        ),
       );
+      assert.equal(srv.stdout.includes("alice@team.test"), false);
+      assert.equal(srv.stdout.includes(TENANT_CALL_TO.slice(1)), false);
       // T-P0-7: das pro-Request-[mcp]-Diagnose-Log zeigt die E-Mail nur gehasht, nie im Klartext.
       await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("alice@team.test")} tenant=t_alice`));
       assert.ok(
@@ -401,8 +408,9 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
         assert.notEqual(res.status, HTTP_UNAUTHORIZED);
         await waitForLog(
           srv,
-          /\[audit\] place_call ip=\S+ to=\+4915123123126 .* requestedBy=user_01PROD/,
+          new RegExp(`\\[audit\\] place_call ip=\\S+ to=${sternImMuster(maskNumber("+4915123123126"))} .* requestedBy=user_01PROD`),
         );
+        assert.equal(srv.stdout.includes("4915123123126"), false);
       },
     );
   } finally {

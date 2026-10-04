@@ -27,6 +27,7 @@ import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/p
 // G5: die Minute lebt in utils/timer.js (import-freies Blatt, kein Zyklus) - dieselbe
 // Zahl, gegen die Abrechnung und Consult-Fristen rechnen. Stunde/Tag leiten hier ab.
 import { MS_PER_MINUTE } from "./utils/timer.js";
+import { merkeLogGeheimnisse } from "./log-maske.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Tests laufen mit sauberem Env (wie CI, ohne lokale .env) - verhindert, dass eine
@@ -34,6 +35,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.NODE_ENV !== "test") {
   dotenv.config({ path: path.join(__dirname, "..", ".env") });
 }
+merkeLogGeheimnisse(process.env);
 
 // ---- Numerische Env-Validierung (fail-closed, OT-4) ----
 // Eine GESETZTE, aber ungueltige numerische Env-Var (NaN/Infinity, teil-numerischer

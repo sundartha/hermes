@@ -1,3 +1,8 @@
+import path from "node:path";
+import { mitLogMaske } from "./log-maske.js";
+
+const STDIO_MCP_EINSTIEG = "mcp-server.js";
+
 // Globales Crash-Netz (OT-1). Side-Effect-Install beim Import -> MUSS die erste
 // Importzeile in server.js + mcp-server.js sein (vor store.js), damit Boot-
 // Rejections gefangen werden (ESM-Eval-Order: importierte Module werden vor dem
@@ -34,6 +39,8 @@ export function onUncaughtException(err) {
 // Idempotent: erst abmelden, dann anmelden -> erneuter Aufruf haengt KEINEN
 // zweiten Listener an (EventEmitter erlaubt sonst dieselbe Funktion mehrfach).
 export function installProcessGuards() {
+  process.stderr.write = mitLogMaske(process.stderr.write);
+  if (path.basename(String(process.argv[1])) !== STDIO_MCP_EINSTIEG) process.stdout.write = mitLogMaske(process.stdout.write);
   process.removeListener("unhandledRejection", onUnhandledRejection);
   process.removeListener("uncaughtException", onUncaughtException);
   process.on("unhandledRejection", onUnhandledRejection);
