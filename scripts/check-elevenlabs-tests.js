@@ -445,7 +445,7 @@ function uncoveredVariableFindings(configVariables, vocabularyByFile) {
   const findings = [];
   for (const [relFile, { declared }] of vocabularyByFile) {
     for (const name of configVariables) {
-      if (declared.has(name)) continue;
+      if (declared.has(name) || name.startsWith("system__")) continue;
       findings.push(
         `${relFile}: {{${name}}} - Variable der Agentenkonfiguration, die diese Testdefinition nicht setzt (${DYNAMIC_VARIABLES_KEY}); dieser Testlauf rendert sie leer`,
       );
