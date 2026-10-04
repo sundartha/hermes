@@ -4,8 +4,10 @@
 import assert from "node:assert/strict";
 import { spawn } from "child_process";
 import crypto from "node:crypto";
+import dns from "node:dns";
 import fs from "fs";
 import http from "node:http";
+import net from "node:net";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -78,6 +80,9 @@ const OWNER_TEST_NAME = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 export const TOOL_COUNT_WITH_CONSULT = 12;
 export const TOOL_COUNT_WITHOUT_CONSULT = 10;
 export const TOOLS_WITH_OUTPUT_SCHEMA = 10;
+
+dns.setDefaultResultOrder("ipv6first");
+net.setDefaultAutoSelectFamily(false);
 
 export const anthropicAttrappe = await starteAnthropicAttrappe();
 const serverStarts = testkostenZaehler("serverStarts");
@@ -1506,7 +1511,7 @@ export async function startServer({
     port,
     dataDir,
     child,
-    localUrl: `http://127.0.0.1:${port}`,
+    localUrl: `http://localhost:${port}`,
     externalUrl: externalIp() ? `http://${externalIp()}:${port}` : null,
     get stdout() {
       return output.text;

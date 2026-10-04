@@ -42,7 +42,7 @@ function normalizeTexml(xml) {
 function requestWebSocketUpgrade(srv, pfad) {
   return new Promise((resolve, reject) => {
     const req = http.request({
-      host: "127.0.0.1",
+      host: "localhost",
       port: srv.port,
       path: pfad,
       headers: {
