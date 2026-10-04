@@ -1,0 +1,138 @@
+{
+  "repo": "sundartha/hermes",
+  "ruleset": {
+    "id": 24128981,
+    "name": "master-schutz-basis",
+    "target": "branch",
+    "enforcement": "active",
+    "conditions": {
+      "ref_name": {
+        "exclude": [],
+        "include": ["~DEFAULT_BRANCH"]
+      }
+    },
+    "bypass_actors": [],
+    "current_user_can_bypass": "never",
+    "rules": [
+      {
+        "type": "deletion"
+      },
+      {
+        "type": "non_fast_forward"
+      },
+      {
+        "type": "pull_request",
+        "parameters": {
+          "required_approving_review_count": 0,
+          "dismiss_stale_reviews_on_push": true,
+          "required_reviewers": [],
+          "require_code_owner_review": false,
+          "dismissal_restriction": {
+            "enabled": false,
+            "allowed_actors": []
+          },
+          "require_last_push_approval": false,
+          "required_review_thread_resolution": false,
+          "require_extra_approval_for_unattributed_changes": true,
+          "allowed_merge_methods": ["merge", "squash", "rebase"]
+        }
+      },
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "strict_required_status_checks_policy": false,
+          "do_not_enforce_on_create": false,
+          "required_status_checks": [
+            {
+              "context": "CI",
+              "integration_id": 15368
+            },
+            {
+              "context": "Prüfungen prüfen",
+              "integration_id": 15368
+            },
+            {
+              "context": "Testschutz",
+              "integration_id": 15368
+            },
+            {
+              "context": "Prüfleiter",
+              "integration_id": 15368
+            },
+            {
+              "context": "Lieferkette",
+              "integration_id": 15368
+            },
+            {
+              "context": "Abhängigkeiten",
+              "integration_id": 15368
+            },
+            {
+              "context": "Statische Prüfung",
+              "integration_id": 15368
+            },
+            {
+              "context": "Freigabe-Prüfung",
+              "integration_id": 15368
+            }
+          ]
+        }
+      },
+      {
+        "type": "required_linear_history"
+      }
+    ]
+  },
+  "repo_einstellungen": {
+    "default_branch": "master",
+    "visibility": "public",
+    "allow_merge_commit": false,
+    "allow_squash_merge": false,
+    "allow_rebase_merge": true,
+    "allow_auto_merge": true,
+    "delete_branch_on_merge": true,
+    "allow_update_branch": true
+  },
+  "mitarbeiter": {
+    "Antonio20045": "admin",
+    "jonas986": "admin",
+    "sundartha-bot": "write"
+  },
+  "codeowners": [
+    "eslint.config.* @Antonio20045 @jonas986",
+    "eslint-suppressions*.json @Antonio20045 @jonas986",
+    "eslint-legacy-exceptions.json @Antonio20045 @jonas986",
+    "/tools/ @Antonio20045 @jonas986",
+    "/.githooks/ @Antonio20045 @jonas986",
+    "/.github/ @Antonio20045 @jonas986",
+    "/.claude/ @Antonio20045 @jonas986",
+    "/knip.json @Antonio20045 @jonas986",
+    "/.jscpd.json @Antonio20045 @jonas986",
+    "/.c8rc.json @Antonio20045 @jonas986",
+    "/commitlint.config.mjs @Antonio20045 @jonas986",
+    "/stryker.config.json @Antonio20045 @jonas986",
+    "/gitleaks.toml @Antonio20045 @jonas986",
+    "tsconfig*.json @Antonio20045 @jonas986",
+    "/.dependency-cruiser.cjs @Antonio20045 @jonas986",
+    "/.dependency-cruiser-known-violations.json @Antonio20045 @jonas986",
+    "/docs/sicherheitsgrenzen.md @Antonio20045 @jonas986",
+    "/docs/sicherheitsabgleich.json @Antonio20045 @jonas986",
+    "/test/testbaenke-run.mjs @Antonio20045 @jonas986",
+    "/test/werkzeuge/ @Antonio20045 @jonas986",
+    "/test/werkzeuge/werkzeugtexte.json @Antonio20045 @jonas986"
+  ],
+  "environments": {
+    "rotproben": {
+      "deployment_branch_policy": {
+        "protected_branches": false,
+        "custom_branch_policies": true
+      },
+      "branch_policies": [
+        {
+          "name": "master",
+          "type": "branch"
+        }
+      ]
+    }
+  }
+}
