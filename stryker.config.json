@@ -10,5 +10,6 @@
   "reporters": [],
   "logLevel": "error",
   "cleanTempDir": "always",
+  "disableTypeChecks": false,
   "ignorePatterns": ["/.claude/worktrees", "/.fortschritt", "/.pruefung", "/data", "/coverage"]
 }
