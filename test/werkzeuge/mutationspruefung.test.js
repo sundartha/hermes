@@ -94,12 +94,17 @@ function protokolltest(...pruefungen) {
   ].join("\n");
 }
 
-test("eine neue Aufrufzeile ohne eigenen Mutanten wird gelöscht und rot, bis ein Test sie verlangt oder sie gleichwertig gemeldet ist", (context) => {
-  const repo = probeRepository(context, { ...BASIS, "src/zahl.js": mitProtokoll(quelle(NEGATIV)) });
+function aufrufzeileRot(context, weitere = {}) {
+  const repo = probeRepository(context, { ...BASIS, "src/zahl.js": mitProtokoll(quelle(NEGATIV)), ...weitere });
   writeFiles(repo, { "src/zahl.js": mitProtokoll(quelle(PROTOKOLL, NEGATIV)) });
   const rot = pruefe(repo, "--basis", "HEAD");
   assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
   assert.match(rot.stdout, /^Verstoß: Mutant überlebt: src\/zahl\.js:3 Zeile gelöscht$/m);
+  return repo;
+}
+
+test("eine neue Aufrufzeile ohne eigenen Mutanten wird gelöscht und rot, bis ein Test sie verlangt oder sie gleichwertig gemeldet ist", (context) => {
+  const repo = aufrufzeileRot(context);
   const gemeldet = pruefe(repo, "--basis", "HEAD", "--gleichwertig", "src/zahl.js:3 Zeile gelöscht");
   assert.equal(gemeldet.status, 0, gemeldet.stdout + gemeldet.stderr);
   writeFiles(repo, { "test/zahl.test.js": protokolltest('assert.equal(zahl.einordnen(-1), "negativ");', "assert.deepEqual(zahl.protokoll, [-1]);") });
@@ -233,6 +238,14 @@ test("ein Mutant, den der direkte Test übersieht, geht nur an die übrigen erre
   assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
   assert.deepEqual(laufgroessen(rot.stdout), [1, 1]);
   writeFiles(repo, { "test/beschreibung.test.js": beschreibungstest(0, "NULL") });
+  const gruen = pruefe(repo, "--basis", "HEAD");
+  assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+});
+
+test("die Löschprobe fragt Gruppe um Gruppe, bis eine die gelöschte Zeile verlangt", (context) => {
+  const ohneProtokoll = protokolltest('assert.equal(zahl.einordnen(-1), "negativ");');
+  const repo = aufrufzeileRot(context, begleiter(ohneProtokoll));
+  writeFiles(repo, begleiter(ohneProtokoll, protokolltest('assert.equal(zahl.einordnen(-1), "negativ");', "assert.deepEqual(zahl.protokoll, [-1]);")));
   const gruen = pruefe(repo, "--basis", "HEAD");
   assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
 });
