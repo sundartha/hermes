@@ -589,7 +589,7 @@
         "name": "get_consult",
         "description": "Asks the principal a short, precise follow-up question WHILE the call is in progress (assistant-to-assistant channel, see the CLAUDE.md lesson 'get_consult is assistant-to-assistant': it asks the principal's AI/process, not the human on the phone directly). Use ONLY when a missing detail blocks the task and falls outside the mandate - not a general research tool, use sparingly.",
         "api_schema": {
-          "url": "https://{{system__env_hermes_host}}/webhooks/elevenlabs/consult",
+          "url": "https://app.sundartha.com/webhooks/elevenlabs/consult",
           "_url_ist_zustand_hinweis": "GESETZT 2026-08-17 (vorher ein .invalid-Platzhalter, der als SOLL uebernommen war): der Pfad ist ELEVENLABS_CONSULT_PATH aus src/routes/webhooks-elevenlabs.js, der Host der Kunden-Gateway-Host. WARUM app.sundartha.com und nicht vodafone-agent.onrender.com: beide zeigen heute auf denselben Dienst (am 2026-08-17 gemessen, /healthz 200 auf beiden), aber der onrender-Host haengt am SERVICE-NAMEN und faellt beim ausstehenden Infra-/URL-Cutover (Track B) weg - der Marken-Host ueberlebt ihn. GEMESSEN UND EHRLICH BENANNT: die Route antwortet dort HEUTE mit 404 ('Cannot POST'), weil der Live-Dienst auf dem Stand vom 14.08. steht und der Webhook danach entstanden ist. Das ist besser als der bisherige .invalid-Host (DNS-Fehler statt Antwort) und wird mit dem naechsten Deploy von selbst richtig. FUER EINEN LOKALEN MESS-ANRUF muss hier voruebergehend eine Tunnel-Adresse stehen (cloudflared), sonst erreicht der Anbieter unseren Rechner nicht - danach zurueckdrehen. Der Besitz-Eintrag werkzeug_api_url macht beide Wechsel sichtbar.",
           "method": "POST",
           "request_body_schema": {
