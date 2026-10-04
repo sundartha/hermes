@@ -132,3 +132,29 @@ test("besteht ein Test nur mit einer von Git ignorierten Datei, bricht die Lösc
   const worktrees = runIn(repo, "git", ["worktree", "list"]).stdout;
   assert.equal(worktrees.trim().split("\n").length, 1);
 });
+
+const ANZEIGE = "export const zeile = () => Number(/anzeige\\.js:(\\d+):/.exec(new Error().stack)[1]);\n";
+
+function anzeigetest() {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { test } from "node:test";',
+    'import "../src/zahl.js";',
+    'import { zeile } from "../src/anzeige.js";',
+    'test("anzeige", () => {',
+    "  assert.equal(zeile(), 1);",
+    "});",
+    "",
+  ].join("\n");
+}
+
+test("eine nicht mutierte Datei behält in Strykers Arbeitskopie ihre Zeilennummern", (context) => {
+  const repo = probeRepository(context, { ...BASIS, "src/anzeige.js": ANZEIGE, "test/anzeige.test.js": anzeigetest() });
+  writeFiles(repo, {
+    "src/zahl.js": quelle(NEGATIV, NULL),
+    "test/zahl.test.js": testdatei([-1, "negativ"], [0, "null"], [1, "positiv"]),
+  });
+  const lauf = pruefe(repo, "--basis", "HEAD");
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^grün: \d+ Mutanten in den neuen Zeilen/m);
+});
