@@ -1,0 +1,740 @@
+{
+  "regeln": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "pull_request"
+    },
+    {
+      "parameters": {
+        "required_status_checks": [
+          {
+            "context": "CI"
+          },
+          {
+            "context": "Prüfungen prüfen"
+          },
+          {
+            "context": "Testschutz"
+          },
+          {
+            "context": "Prüfleiter"
+          },
+          {
+            "context": "Lieferkette"
+          },
+          {
+            "context": "Abhängigkeiten"
+          },
+          {
+            "context": "Statische Prüfung"
+          },
+          {
+            "context": "Freigabe-Prüfung"
+          }
+        ]
+      },
+      "type": "required_status_checks"
+    },
+    {
+      "type": "required_linear_history"
+    }
+  ],
+  "pr": {
+    "number": 233,
+    "draft": true,
+    "auto_merge": null,
+    "head": {
+      "ref": "rotprobe/T3-verwaist",
+      "sha": "5b4abf9fdea36a1c2a92c11d79e131ff4b928a4d",
+      "repo": {
+        "full_name": "sundartha/hermes"
+      }
+    }
+  },
+  "laeufe": [
+    {
+      "conclusion": "success",
+      "event": "pull_request",
+      "id": 37135986411,
+      "name": "Abhängigkeiten",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "event": "pull_request",
+      "id": 37135986363,
+      "name": "Prüfungen prüfen",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "event": "pull_request",
+      "id": 37135986342,
+      "name": "Testschutz",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "event": "pull_request",
+      "id": 37135986332,
+      "name": "Systemstand",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "event": "pull_request",
+      "id": 37135986408,
+      "name": "Lieferkette",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "event": "pull_request",
+      "id": 37135986352,
+      "name": "Statische Prüfung",
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "event": "pull_request",
+      "id": 37135986434,
+      "name": "Freigabe",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "event": "pull_request",
+      "id": 37135986353,
+      "name": "Prüfleiter",
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "event": "pull_request",
+      "id": 37135986339,
+      "name": "CI",
+      "status": "completed"
+    }
+  ],
+  "jobs": {
+    "37135986339": [
+      {
+        "conclusion": "success",
+        "name": "Prüfungen",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Workflows prüfen",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Abgleich CODEOWNERS",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Secret-Scan",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "npm ci",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Install-Skripte",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Commit-Prüfung",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Lint",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Syntax",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Audit",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Mutationsprüfung",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Testwirkung",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "failure",
+        "name": "Tests 2/4",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "npm ci",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Install-Skripte",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Tests",
+            "status": "completed"
+          },
+          {
+            "conclusion": "failure",
+            "name": "Testlaufzeit",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Bestandene Tests melden",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "Post Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "failure",
+        "name": "Tests 3/4",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "npm ci",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Install-Skripte",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Tests",
+            "status": "completed"
+          },
+          {
+            "conclusion": "failure",
+            "name": "Testlaufzeit",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Bestandene Tests melden",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "Post Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "failure",
+        "name": "Tests 1/4",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "npm ci",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Install-Skripte",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Tests",
+            "status": "completed"
+          },
+          {
+            "conclusion": "failure",
+            "name": "Testlaufzeit",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Bestandene Tests melden",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "Post Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "failure",
+        "name": "Tests 4/4",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "npm ci",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Install-Skripte",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Tests",
+            "status": "completed"
+          },
+          {
+            "conclusion": "failure",
+            "name": "Testlaufzeit",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Bestandene Tests melden",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "Post Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "failure",
+        "name": "CI",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Bestandene Tests aller Teile",
+            "status": "completed"
+          },
+          {
+            "conclusion": "failure",
+            "name": "Alle Jobs erfolgreich",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      }
+    ],
+    "37135986434": [
+      {
+        "conclusion": "failure",
+        "name": "Freigabe-Prüfung",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "npm ci",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "gitleaks bereitstellen",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Semgrep bereitstellen",
+            "status": "completed"
+          },
+          {
+            "conclusion": "failure",
+            "name": "Freigabe-Prüfung",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "Post Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      }
+    ],
+    "37135986342": [
+      {
+        "conclusion": "success",
+        "name": "Testschutz",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "npm ci",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Bestehende Tests nur ergänzt",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "skipped",
+        "name": "Testschutz neu auswerten",
+        "status": "completed",
+        "steps": []
+      }
+    ],
+    "37135986363": [
+      {
+        "conclusion": "success",
+        "name": "Prüfungen prüfen",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "npm ci",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "ESLint-Konfiguration, Unterordner und only prüfen",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Node 22",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Checkout",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      }
+    ]
+  },
+  "checks": [
+    {
+      "conclusion": "failure",
+      "name": "CI",
+      "status": "completed"
+    },
+    {
+      "conclusion": "skipped",
+      "name": "Schritt-Issues",
+      "status": "completed"
+    },
+    {
+      "conclusion": "skipped",
+      "name": "Testschutz neu auswerten",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "name": "Abhängigkeiten",
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "name": "Tests 4/4",
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "name": "Tests 1/4",
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "name": "Freigabe-Prüfung",
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "name": "Tests 3/4",
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "name": "Tests 2/4",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "name": "Prüfungen prüfen",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "name": "Prüfleiter",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "name": "Lieferkette",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "name": "Testschutz",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "name": "Systemstand",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "name": "Prüfungen",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "name": "Statische Prüfung",
+      "status": "completed"
+    }
+  ]
+}
