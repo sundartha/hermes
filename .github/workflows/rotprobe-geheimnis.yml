@@ -1,0 +1,14 @@
+name: Rotprobe
+on:
+  schedule:
+    - cron: '0 3 * * *'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Schritt
+        env:
+          ZUGANG: ${{ secrets.ZUGANG }}
+        run: echo ok
