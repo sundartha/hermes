@@ -8,6 +8,7 @@ import { Stryker } from "@stryker-mutator/core";
 import { cruise } from "dependency-cruiser";
 
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
+import { gruppen } from "./mutationspruefung/gruppen.mjs";
 import { loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 
 const { $schema: _schema, ...KONFIGURATION } = JSON.parse(
@@ -23,9 +24,12 @@ const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: 
 const DIFF_KOPF = "diff --git ";
 const DATEIKOPF = { neu: /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/, alt: /^--- (?:a\/(.+)|\/dev\/null)$/ };
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
-const UEBERLEBEND = new Set(["Survived", "NoCoverage"]);
+const UEBERLEBT = "Survived";
+const UEBERLEBEND = new Set([UEBERLEBT, "NoCoverage"]);
 const ZEITUEBERSCHREITUNG = "Timeout";
 const ZEITFAKTOR_WIEDERHOLUNG = 3;
+const GLEICHZEITIG = KONFIGURATION.concurrency;
+const ABGELEHNT = "rejected";
 const LEERRAUM = /\s+/g;
 const UMBAU_ZEILE = "^Art: umbau$";
 const GLEICHWERTIG = /^Gleichwertig: (.+)$/gm;
@@ -101,7 +105,7 @@ function mutant({ fileName, location, mutatorName, replacement, status }) {
   return { schluessel, status, zeilen: [line, location.end.line], art: mutatorName };
 }
 
-async function stryker({ datei, zeilen, tests, faktor }) {
+async function stryker({ datei, zeilen, tests, faktor, concurrency }) {
   const tempDirName = arbeitsverzeichnis("mutation-");
   const beginn = Date.now();
   try {
@@ -110,6 +114,7 @@ async function stryker({ datei, zeilen, tests, faktor }) {
       mutate: zeilen.map(([von, bis]) => `${datei}:${von}-${bis}`),
       tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK)] },
       timeoutMS: KONFIGURATION.timeoutMS * faktor,
+      concurrency,
       tempDirName,
     };
     const ergebnisse = (await new Stryker(optionen).runMutationTest()).map(mutant);
@@ -130,25 +135,63 @@ function ersetze(ergebnisse, neu, betroffen) {
   return ergebnisse.map((eintrag) => (betroffen.includes(eintrag) && nachSchluessel.get(eintrag.schluessel)) || eintrag);
 }
 
-async function durchgang(datei, zeilen, tests) {
-  const ergebnisse = await stryker({ datei, zeilen, tests, faktor: 1 });
+async function gruppenlauf(lauf) {
+  const ergebnisse = await stryker({ ...lauf, faktor: 1 });
   const zeitueber = ergebnisse.filter(({ status }) => status === ZEITUEBERSCHREITUNG);
   if (zeitueber.length === 0) return ergebnisse;
   const wiederholt = await stryker({
-    datei,
+    ...lauf,
     zeilen: zeitueber.map((eintrag) => eintrag.zeilen),
-    tests,
     faktor: ZEITFAKTOR_WIEDERHOLUNG,
   });
   return ersetze(ergebnisse, wiederholt, zeitueber);
 }
 
+function staerker(eintrag, anderer) {
+  if (anderer === undefined || !ueberlebt(eintrag)) return eintrag;
+  return ueberlebt(anderer) && eintrag.status === UEBERLEBT ? eintrag : anderer;
+}
+
+function vereine(ergebnisse, laeufe) {
+  const nachSchluessel = new Map();
+  for (const eintrag of laeufe.flat()) {
+    nachSchluessel.set(eintrag.schluessel, staerker(nachSchluessel.get(eintrag.schluessel) ?? eintrag, eintrag));
+  }
+  return ergebnisse.map((eintrag) => staerker(eintrag, nachSchluessel.get(eintrag.schluessel)));
+}
+
+function wellen(testgruppen) {
+  return Array.from({ length: Math.ceil(testgruppen.length / GLEICHZEITIG) }, (_leer, welle) =>
+    testgruppen.slice(welle * GLEICHZEITIG, (welle + 1) * GLEICHZEITIG),
+  );
+}
+
+async function welle(datei, zeilen, testgruppen) {
+  const concurrency = Math.max(1, Math.floor(GLEICHZEITIG / testgruppen.length));
+  const laeufe = await Promise.allSettled(testgruppen.map((tests) => gruppenlauf({ datei, zeilen, tests, concurrency })));
+  const fehlschlag = laeufe.find(({ status }) => status === ABGELEHNT);
+  if (fehlschlag) throw fehlschlag.reason;
+  return laeufe.map(({ value }) => value);
+}
+
+async function durchgang(datei, zeilen, tests) {
+  let ergebnisse = null;
+  for (const testgruppen of wellen(gruppen(tests))) {
+    const offen = ergebnisse === null ? zeilen : ergebnisse.filter(ueberlebt).map((eintrag) => eintrag.zeilen);
+    if (offen.length === 0) break;
+    const laeufe = await welle(datei, offen, testgruppen);
+    ergebnisse = vereine(ergebnisse ?? laeufe[0], laeufe);
+  }
+  return ergebnisse;
+}
+
 async function mutantenproben(datei, zeilen, { erste, alle }) {
   const ergebnisse = await durchgang(datei, zeilen, erste);
   const offen = ergebnisse.filter(ueberlebt);
-  if (offen.length === 0 || erste.length === alle.length) return ergebnisse;
-  const zweite = await durchgang(datei, offen.map((eintrag) => eintrag.zeilen), alle);
-  return ersetze(ergebnisse, zweite, offen);
+  const uebrige = alle.filter((test) => !erste.includes(test));
+  if (offen.length === 0 || uebrige.length === 0) return ergebnisse;
+  const zweite = await durchgang(datei, offen.map((eintrag) => eintrag.zeilen), uebrige);
+  return vereine(ergebnisse, [zweite]);
 }
 
 async function pruefeDatei(datei, zeilen, { nachZiel, loeschung }) {
