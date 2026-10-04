@@ -261,7 +261,7 @@ export function registerPublicRoutes({ app, config }) {
   // Marketing-index.html (dist/index.html, weiter unten gemountet) -> der Landing-Redirect
   // gilt nur OHNE den unified Build (byte-identisch zum Bestand).
   if (!config.server.webDistDir) {
-    app.get("/", (_req, res) => res.redirect(HTTP_FOUND, LOGIN_PATH));
+    app.get("/", (_req, res) => res.redirect(HTTP_FOUND, APP_PATH));
   }
 }
 
