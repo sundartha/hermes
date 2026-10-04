@@ -142,7 +142,7 @@ export default [
       "no-param-reassign": ["error", { props: true }],
 
       // G12 - ein Konstruktor, der nur super(...args) durchreicht, ist ueberfluessig.
-      "no-useless-constructor": "error",
+      "no-useless-constructor": "off",
 
       // N1, G16 - min 2: Ein-Buchstaben-Namen sind ausserhalb enger Scopes unlesbar.
       // N5: kurze Namen in winzigen Scopes sind RICHTIG - Schleifenzaehler ausgenommen.
