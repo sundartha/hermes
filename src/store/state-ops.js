@@ -4430,7 +4430,7 @@ export function liveBudgetExceeded(s, tenantId, liveCents, cfg, nowIso) {
   if (spend.deny) return true;
   if (!isBookableCents(liveCents))
     return denyCorruptUsage(`tenant:${tenantId}`, "liveCents", liveCents);
-  return spend.spent + liveCents >= effectiveCapCents(s, tenantId, cfg);
+  return Math.max(spend.spent, gatePlatformUsageCents(s, cfg, nowIso)) + liveCents >= effectiveCapCents(s, tenantId, cfg);
 }
 
 // Pro-Tenant-Budget (P6b3): der GATE-Verbrauch (gateUsageCents - Perioden-Fenster bei Flag
