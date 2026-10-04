@@ -836,6 +836,10 @@ const rawConfig = {
       process.env.ELEVENLABS_OPENING_LINE_LLM_ENABLED,
       { fallback: true },
     ),
+    environment: enumEnv("ELEVENLABS_ENVIRONMENT", process.env.ELEVENLABS_ENVIRONMENT, {
+      allowed: ["production", "staging"],
+      fallback: "production",
+    }),
   },
 
   // ---- ElevenLabs-Inbound (Kandidat K1, PLAN-INBOUND-PARITAET.md) ----
