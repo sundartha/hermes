@@ -306,7 +306,8 @@ describe("IEL-B9 A: Ziel-Urteil", () => {
     assert.ok(HERMES_GATEWAY_ORIGINS.includes(INIT_WEBHOOK_ORIGIN));
     const urls = [...JSON.stringify(VORLAGE.tools).matchAll(/"url":"([^"]+)"/g)].map((treffer) => treffer[1]);
     assert.ok(urls.length >= MIN_WERKZEUG_URLS, `Positiv-Kontrolle: zu wenige URLs gefunden (${urls.length})`);
-    for (const url of urls) assert.equal(new URL(url).origin, INIT_WEBHOOK_ORIGIN, url);
+    const inProduktion = (url) => url.replace("{{system__env_hermes_host}}", new URL(INIT_WEBHOOK_ORIGIN).host);
+    for (const url of urls) assert.equal(new URL(inProduktion(url)).origin, INIT_WEBHOOK_ORIGIN, url);
   });
 });
 
