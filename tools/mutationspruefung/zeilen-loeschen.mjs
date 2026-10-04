@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { env } from "node:process";
 
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
+import { gruppen } from "./gruppen.mjs";
 
 const BANK = "regression";
 const TESTPARALLEL = 4;
@@ -98,17 +99,21 @@ export function loeschprobe(verzeichnisAnlegen) {
     if (!bestehen(tests)) throw new Error(`Grundlauf rot, Löschprobe nicht aussagekräftig: ${tests.join(", ")}`);
     gruen.add(kennung);
   };
+  const verlangt = (datei, zeile, tests) => {
+    grundlauf(tests);
+    return !ohneZeile(join(verzeichnis, datei), zeile, () => bestehen(tests));
+  };
   const probe = (datei, zeile, tests) => {
     verzeichnis ??= gepruefterStand(verzeichnisAnlegen());
-    grundlauf(tests);
-    const status = ohneZeile(join(verzeichnis, datei), zeile, () => bestehen(tests)) ? UEBERLEBT : ERKANNT;
+    const status = gruppen(tests).some((gruppe) => verlangt(datei, zeile, gruppe)) ? ERKANNT : UEBERLEBT;
     return { schluessel: `${datei}:${zeile} ${GELOESCHT}`, status, zeilen: [zeile, zeile], art: GELOESCHT };
   };
   return {
     pruefe: ({ datei, zeilen, ergebnisse, tests: { erste, alle } }) =>
       zeilenOhneMutant(datei, zeilen, ergebnisse).map((zeile) => {
         const ergebnis = probe(datei, zeile, erste);
-        return ergebnis.status === UEBERLEBT && erste.length < alle.length ? probe(datei, zeile, alle) : ergebnis;
+        const uebrige = alle.filter((test) => !erste.includes(test));
+        return ergebnis.status === UEBERLEBT && uebrige.length > 0 ? probe(datei, zeile, uebrige) : ergebnis;
       }),
     abbauen: () => {
       if (verzeichnis !== null) git(["worktree", "remove", "--force", verzeichnis]);
