@@ -1271,6 +1271,7 @@ function startCallBody({
         owner,
         openingLine,
       }),
+      ...(el.environment === "production" ? {} : { environment: el.environment }),
     },
   };
 }
