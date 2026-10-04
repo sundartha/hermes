@@ -282,15 +282,21 @@ test("KV2-10 (cfg1): VOICE_TARIFF_GRUNDBETRAG_CENTS in .env.example + render.yam
   assert.match(renderYaml, /key:\s*VOICE_TARIFF_GRUNDBETRAG_CENTS\s*\n\s*value:\s*""/);
 });
 
-test("KV2-10 (cfg2): VOICE_TARIFF_FULL_COST_FLOOR_CENTS-Fallback = 15 in config.js, .env.example und render.yaml", () => {
+test("KV2-10 (cfg2): VOICE_TARIFF_FULL_COST_FLOOR_CENTS-Fallback = 15 in config.js, .env.example und render.yaml", async () => {
   const BODEN_FALLBACK_CENTS = "15"; // Neuherleitung KV2-10: 0,1576 USD x 0,92 -> 14,5 -> 15
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
   const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
-  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
 
   assert.equal(envExample.match(/^VOICE_TARIFF_FULL_COST_FLOOR_CENTS=(.+)$/m)[1].trim(), BODEN_FALLBACK_CENTS);
   assert.equal(renderYaml.match(/key:\s*VOICE_TARIFF_FULL_COST_FLOOR_CENTS\s*\n\s*value:\s*"?([^"\n]+)"?/)[1].trim(), BODEN_FALLBACK_CENTS);
-  assert.equal(configSrc.match(/VOICE_TARIFF_FULL_COST_FLOOR_CENTS",\s*\n\s*process\.env\.VOICE_TARIFF_FULL_COST_FLOOR_CENTS,\s*\n\s*\{ fallback:\s*(\d+)/)[1], BODEN_FALLBACK_CENTS);
+  const saved = process.env.VOICE_TARIFF_FULL_COST_FLOOR_CENTS;
+  try {
+    delete process.env.VOICE_TARIFF_FULL_COST_FLOOR_CENTS;
+    const ohneBoden = await import("../src/config.js?kv2-10-cfg2");
+    assert.equal(ohneBoden.config.billing.voiceTariffFullCostFloorCents, Number(BODEN_FALLBACK_CENTS));
+  } finally {
+    if (saved !== undefined) process.env.VOICE_TARIFF_FULL_COST_FLOOR_CENTS = saved;
+  }
 });
 
 test("KV2-10 (cfg3): unbekanntes Profil oder Muell-Cent in der Env-Karte reisst den Config-Build (fail-closed)", async () => {
