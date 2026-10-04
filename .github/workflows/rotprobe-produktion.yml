@@ -1,0 +1,13 @@
+name: Rotprobe
+on:
+  schedule:
+    - cron: '0 3 * * *'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    environment: produktion
+    steps:
+      - name: Schritt
+        run: echo ok
