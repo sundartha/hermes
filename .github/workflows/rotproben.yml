@@ -1,0 +1,114 @@
+name: Soll und Rot-Proben
+
+on:
+  schedule:
+    - cron: "47 3 * * 0"
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/rotproben.yml
+      - .github/soll/**
+      - tools/soll-vergleich.mjs
+      - tools/soll-vergleich/**
+      - tools/rotproben-woche.mjs
+      - tools/rotproben-woche/**
+
+permissions: {}
+
+concurrency:
+  group: rotproben
+  cancel-in-progress: false
+
+jobs:
+  soll:
+    name: Soll-Vergleich
+    runs-on: ubuntu-latest
+    environment: rotproben
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Soll-Vergleich
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          set -o pipefail
+          node tools/soll-vergleich.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+
+  rotproben:
+    name: Rot-Proben
+    runs-on: ubuntu-latest
+    environment: rotproben
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Git einrichten
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          bot_id=$(gh api users/sundartha-bot --jq .id)
+          git config user.name sundartha-bot
+          git config user.email "${bot_id}+sundartha-bot@users.noreply.github.com"
+          git remote add upstream https://github.com/sundartha/hermes.git
+
+      - name: Rot-Proben
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          set -o pipefail
+          node tools/rotproben-woche.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Aufräumen
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: node tools/rotproben-woche.mjs --aufraeumen
+
+  meldung:
+    name: Meldung bei Rot
+    needs: [soll, rotproben]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      ISSUE_TITLE: Soll-Vergleich oder Rot-Proben rot
+      LAUF: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Issue anlegen oder ergänzen
+        run: |
+          set -euo pipefail
+          number=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" --json number,title --jq "[.[] | select(.title == env.ISSUE_TITLE)][0].number // empty")
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "Wieder rot: $LAUF"
+          else
+            printf 'Lauf: %s\n\nEine Sperre oder Einstellung weicht vom Soll ab, oder eine Rot-Probe wurde nicht gestoppt. Die Einzelheiten stehen in der Zusammenfassung des Laufs.\n' "$LAUF" > "$RUNNER_TEMP/issue.md"
+            gh issue create --title "$ISSUE_TITLE" --assignee Antonio20045,jonas986 --body-file "$RUNNER_TEMP/issue.md"
+          fi
