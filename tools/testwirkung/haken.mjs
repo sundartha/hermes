@@ -3,7 +3,11 @@ import { builtinModules } from "node:module";
 const ATTRAPPE = "testwirkung-attrappe:";
 const ZIELE = new Set(["assert", "assert/strict"]);
 const KNOTEN = "node:";
-const NACHBAU = new URL("attrappe.mjs", import.meta.url).href;
+let nachbauAdresse;
+
+export function initialize({ nachbau }) {
+  nachbauAdresse = nachbau;
+}
 
 function ziel(specifier) {
   const name = specifier.startsWith(KNOTEN) ? specifier.slice(KNOTEN.length) : specifier;
@@ -14,7 +18,7 @@ function quelltext(name) {
   const schluessel = Object.keys(process.getBuiltinModule(name));
   const exporte = schluessel.map((eintrag) => `export const ${eintrag} = attrappe[${JSON.stringify(eintrag)}];`);
   return [
-    `import { attrappeVon } from ${JSON.stringify(NACHBAU)};`,
+    `import { attrappeVon } from ${JSON.stringify(nachbauAdresse)};`,
     `const attrappe = attrappeVon(${JSON.stringify(name)});`,
     "export default attrappe;",
     ...exporte,

@@ -122,3 +122,53 @@ test("ein Test, der weder auf der Basis noch nach der Änderung läuft, ergibt e
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^Hinweis: Test lief weder auf der Basis noch nach der Änderung: test\/rechnen\.test\.js › zieht ab$/m);
 });
+
+const ABGEFANGEN = /^Verstoß: Test gibt das Scheitern unveränderter Prüfungen nicht mehr weiter: test\/rechnen\.test\.js › addiert$/m;
+
+test("ein bestehender Test, der das Scheitern seiner Prüfungen hinter einer aussagelosen Prüfung abfängt, macht die Testwirkung rot", (context) => {
+  const nachher = VORHER.replace("  assert.equal(1 + 2, 3);\n", "  assert.ok(true);\n  try {\n  assert.equal(1 + 2, 3);\n  } catch {\n  }\n");
+  const lauf = pruefeAenderung(context, VORHER, nachher);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, ABGEFANGEN);
+  assert.doesNotMatch(lauf.stdout, /zieht ab/);
+});
+
+test("ein bestehender Test, der seine Prüfung hinter einer aussagelosen ersetzt, macht die Testwirkung rot", (context) => {
+  const lauf = pruefeAenderung(context, VORHER, eingefuegtVorPruefung("assert.ok(true);", "assert.equal = () => {};"));
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, ABGEFANGEN);
+});
+
+const ERWARTETE_FEHLER = testdatei(
+  'test("wirft", () => {',
+  '  assert.throws(() => JSON.parse("{"), SyntaxError);',
+  "});",
+  'test("lehnt ab", async () => {',
+  '  await assert.rejects(Promise.reject(new Error("nein")), /nein/);',
+  "});",
+  'test("fängt den erwarteten Fehler", () => {',
+  "  try {",
+  '    JSON.parse("{");',
+  '    assert.fail("kein Fehler");',
+  "  } catch (fehler) {",
+  "    assert.ok(fehler instanceof SyntaxError);",
+  "  }",
+  "});",
+  'test("räumt auf", () => {',
+  "  const liste = [1];",
+  "  assert.equal(liste.length, 1);",
+  "});",
+);
+
+test("ehrliche Änderungen an Tests mit erwarteten Fehlern, try/catch oder finally bleiben grün", (context) => {
+  const ehrlich = [
+    ['SyntaxError);\n});', 'SyntaxError);\n  assert.throws(() => JSON.parse("["), SyntaxError);\n});'],
+    ["/nein/);\n", '/nein/);\n  await assert.rejects(async () => JSON.parse("{"), SyntaxError);\n'],
+    ['    JSON.parse("{");\n', '    const text = "{";\n    JSON.parse(text);\n'],
+    ["  assert.equal(liste.length, 1);\n", "  try {\n  assert.equal(liste.length, 1);\n  } finally {\n    liste.pop();\n  }\n"],
+  ];
+  const nachher = ehrlich.reduce((text, [alt, neu]) => text.replace(alt, neu), ERWARTETE_FEHLER);
+  const lauf = pruefeAenderung(context, ERWARTETE_FEHLER, nachher);
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Scheitern weitergegeben: 4 Tests geprüft, 0 geben das Scheitern unveränderter Prüfungen nicht mehr weiter\.$/m);
+});
