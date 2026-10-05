@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { chmodSync, existsSync, readFileSync } from "node:fs";
@@ -134,17 +134,22 @@ export function warteschlange(args, optionen) {
   return starteWerkzeug([WARTESCHLANGE, ...args], optionen);
 }
 
-export async function starteWerkzeug(befehl, { cwd, umgebung } = {}) {
-  const kind = spawn(process.execPath, befehl, {
-    cwd,
-    env: saubereUmgebung(umgebung),
-    stdio: ["ignore", "pipe", "pipe"],
+const MAX_AUSGABE = 67_108_864;
+
+export function starteWerkzeug(befehl, { cwd, umgebung } = {}) {
+  const optionen = { cwd, env: saubereUmgebung(umgebung), maxBuffer: MAX_AUSGABE };
+  return new Promise((fertig) => {
+    execFile(process.execPath, befehl, optionen, (fehler, stdout, stderr) => {
+      const status = fehler === null ? 0 : (fehler.code ?? 1);
+      fertig({ status, stdout, stderr });
+    });
   });
-  const ausgaben = { stdout: "", stderr: "" };
-  kind.stdout.on("data", (stueck) => (ausgaben.stdout += stueck));
-  kind.stderr.on("data", (stueck) => (ausgaben.stderr += stueck));
-  const [status] = await once(kind, "close");
-  return { status, ...ausgaben };
+}
+
+export function schreibAufrufe(anfragen) {
+  return anfragen
+    .filter(({ methode }) => methode !== "GET")
+    .map(({ methode, pfad }) => `${methode} ${pfad}`);
 }
 
 export function testlaeufer(ordner, umgebung = {}) {

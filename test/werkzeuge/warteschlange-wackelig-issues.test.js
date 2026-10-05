@@ -9,6 +9,7 @@ import {
   CI_ROUTE,
   REPO,
   ciEreignis,
+  schreibAufrufe,
   warteschlange,
   wegwerfRepo,
 } from "./warteschlange/hilfen.mjs";
@@ -88,7 +89,7 @@ test("bei einem offenen Issue mit demselben Titel kommt nur ein Kommentar dazu",
   });
   assert.equal(lauf.status, EXIT_OK, lauf.stderr);
   assert.deepEqual(
-    lauf.schreibend.map(({ methode, pfad }) => `${methode} ${pfad}`),
+    schreibAufrufe(lauf.schreibend),
     [`POST ${API_PFAD}/issues/${OFFENES_ISSUE}/comments`],
   );
   const [{ rumpf }] = lauf.schreibend;
@@ -102,7 +103,7 @@ test("ein geschlossenes Issue wird wieder geöffnet und bekommt den neuen Beleg"
   });
   assert.equal(lauf.status, EXIT_OK, lauf.stderr);
   assert.deepEqual(
-    lauf.schreibend.map(({ methode, pfad }) => `${methode} ${pfad}`),
+    schreibAufrufe(lauf.schreibend),
     [`PATCH ${API_PFAD}/issues/${OFFENES_ISSUE}`, `POST ${API_PFAD}/issues/${OFFENES_ISSUE}/comments`],
   );
   assert.deepEqual(lauf.schreibend[0].rumpf, { state: "open" });

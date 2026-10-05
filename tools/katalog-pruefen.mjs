@@ -1,13 +1,5 @@
 import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -397,7 +389,7 @@ async function main() {
   return check(".", values.basis);
 }
 
-async function run() {
+if (import.meta.url === pathToFileURL(realpathSync(process.argv[1] ?? ".")).href) {
   try {
     process.exitCode = await main();
   } catch (error) {
@@ -406,5 +398,3 @@ async function run() {
     process.exitCode = EXIT_USAGE;
   }
 }
-
-if (import.meta.url === pathToFileURL(realpathSync(process.argv[1] ?? ".")).href) await run();

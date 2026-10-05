@@ -12,6 +12,7 @@ import {
   githubAttrappe,
   kaputterMerge,
   roteBelege,
+  schreibAufrufe,
   warteschlange,
 } from "./warteschlange/hilfen.mjs";
 
@@ -97,7 +98,7 @@ test("ist schon ein Issue master-rot offen, kommt ein Kommentar statt eines neue
   });
   assert.equal(lauf.status, EXIT_OK, lauf.stderr);
   assert.deepEqual(
-    lauf.schreibend.map(({ methode, pfad }) => `${methode} ${pfad}`),
+    schreibAufrufe(lauf.schreibend),
     [`POST ${API_PFAD}/issues/${OFFENES_ISSUE}/comments`],
   );
 });
