@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { env, execPath } from "node:process";
 
@@ -21,6 +21,7 @@ const YAML_ENDE = /^\s*\.\.\.$/;
 const ASSERTION = /^\s*code: '?ERR_ASSERTION'?$/;
 const DATEI_EBENE = /^\s*exitCode: /;
 const NICHT_OK = "not ok";
+const ZWISCHENDATEI = ".nachstellung.json.neu";
 
 export function ergebnisBloecke(zeilen) {
   const bloecke = [];
@@ -74,6 +75,12 @@ function zaehle(ergebnisse, seite) {
   ).join(", ");
 }
 
+function schreibeNachstellung(aus, head, ergebnisse) {
+  const zwischen = join(aus, ZWISCHENDATEI);
+  writeFileSync(zwischen, `${JSON.stringify({ format: FORMAT, head, ergebnisse })}\n`);
+  renameSync(zwischen, join(aus, NACHSTELLUNG_DATEI));
+}
+
 export async function stelleNach(
   { ergebnis: ergebnisOrdner, pr, basis, aus },
   zeitgrenzeMs = ZEITGRENZE_MS,
@@ -81,6 +88,8 @@ export async function stelleNach(
   const ergebnis = ergebnisAus(readFileSync(join(ergebnisOrdner, ERGEBNIS_DATEI), "utf8"));
   if (ergebnis === null) throw new Error(`${ERGEBNIS_DATEI} ist ungültig.`);
   const ergebnisse = [];
+  mkdirSync(aus, { recursive: true });
+  schreibeNachstellung(aus, ergebnis.head, ergebnisse);
   for (const befund of reproduzierbareBlocker(ergebnis)) {
     const aufPr = await fuehreReproduktionAus(pr, befund.reproduktion, zeitgrenzeMs);
     const aufBasis = await fuehreReproduktionAus(basis, befund.reproduktion, zeitgrenzeMs);
@@ -89,12 +98,8 @@ export async function stelleNach(
       pr: aufPr.kategorie,
       basis: aufBasis.kategorie,
     });
+    schreibeNachstellung(aus, ergebnis.head, ergebnisse);
   }
-  mkdirSync(aus, { recursive: true });
-  writeFileSync(
-    join(aus, NACHSTELLUNG_DATEI),
-    `${JSON.stringify({ format: FORMAT, head: ergebnis.head, ergebnisse })}\n`,
-  );
   console.log(`Nachstellung: ${ergebnisse.length} BLOCKER mit Reproduktion.`);
   console.log(`  PR: ${zaehle(ergebnisse, "pr")}`);
   console.log(`  Basis: ${zaehle(ergebnisse, "basis")}`);

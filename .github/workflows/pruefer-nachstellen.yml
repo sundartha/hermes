@@ -12,7 +12,7 @@ jobs:
     name: Reproduktionen nachstellen
     if: (github.event.workflow_run.path == '.github/workflows/pruefer-pruefen.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/pruefer-pruefen.yml@')) && github.event.workflow_run.event == 'workflow_run'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 360
     permissions:
       contents: read
       actions: read
