@@ -47,6 +47,7 @@ const MAX_DATEI_BYTES = 16_777_216;
 const KURZ = 12;
 const OFFEN_GRUND = "Lauf vorzeitig beendet";
 const MERGE_GRUND = "Merge-Commit im PR, bitte rebasen";
+const ZIEL_BRANCH = "master";
 const ZWISCHENDATEI = ".ergebnis.json.neu";
 const JSON_EINRUECKUNG = 2;
 const ERFOLG = "success";
@@ -68,10 +69,13 @@ export function leseDatei(ordner, name) {
 }
 
 async function offenerPr(github, head) {
-  const passend = (liste) => liste.find((pr) => pr.state === "open" && pr.head?.sha === head);
+  const passend = (liste) =>
+    liste.find(
+      (pr) => pr.state === "open" && pr.head?.sha === head && pr.base?.ref === ZIEL_BRANCH,
+    );
   const direkt = passend(await github.hole(`/commits/${head}/pulls`));
   const pr = direkt ?? passend(await github.alle("/pulls?state=open", (liste) => liste));
-  if (!pr) throw new Error(`Kein offener PR mit dem Head-Commit ${head}.`);
+  if (!pr) throw new Error(`Kein offener PR nach ${ZIEL_BRANCH} mit dem Head-Commit ${head}.`);
   return pr;
 }
 
