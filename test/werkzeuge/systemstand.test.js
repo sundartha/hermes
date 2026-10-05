@@ -36,6 +36,8 @@ const EXIT_FAILURE = 1;
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
 const JSON_INDENT = 2;
+const STAGING_VARIABLE = "STAGING_URL";
+const OPERATING_MODES = [[], ["--pruefen"], ["--pruefen", "--pr-basis", "HEAD"], ["--issues"]];
 
 function workflow(name, command) {
   const lines = ["on:", "  pull_request:", "jobs:", "  job:", `    name: ${name}`, "    steps:"];
@@ -170,6 +172,7 @@ async function systemstand(context, { files = {}, recorded = {}, github = {}, ar
     GITHUB_REPOSITORY: REPOSITORY,
     GH_TOKEN: run.token ?? "probe",
     GITHUB_TOKEN: "",
+    STAGING_URL: service.url,
   };
   const result = await runTool(directory, [...args, ...extraArgs], environment);
   return { ...result, lines: outputLines(result.stdout), requests: service.requests };
@@ -344,4 +347,32 @@ test("--issues legt fehlende Schritt-Issues samt Label an und schreibt nur geän
     writes(second, "PATCH", `/repos/${REPOSITORY}/issues`).map(({ path }) => path),
     [`/repos/${REPOSITORY}/issues/1`],
   );
+});
+
+function withStagingAddress(service, address) {
+  const inherited = Object.entries(isolatedEnvironment()).filter(
+    ([name]) => name !== STAGING_VARIABLE,
+  );
+  const environment = {
+    ...Object.fromEntries(inherited),
+    GITHUB_API_URL: service.url,
+    GITHUB_REPOSITORY: REPOSITORY,
+    GH_TOKEN: "probe",
+    GITHUB_TOKEN: "",
+  };
+  return address === undefined ? environment : { ...environment, [STAGING_VARIABLE]: address };
+}
+
+test("ohne oder mit leerem STAGING_URL bricht systemstand in jeder Betriebsart mit Exit 1 ab, bevor es etwas ausgibt", async (context) => {
+  const directory = probeRepository(context, { ...REPOSITORY_FILES, [BASIS_FILE]: basis({}) });
+  const service = await fakeGitHub(context, healthyGitHub());
+  for (const address of [undefined, ""]) {
+    for (const args of OPERATING_MODES) {
+      const result = await runTool(directory, args, withStagingAddress(service, address));
+      assert.equal(result.status, EXIT_FAILURE, result.stdout);
+      assert.equal(result.stdout, "");
+      assert.match(result.stderr, /^Systemstand: Abbruch: .*\bSTAGING_URL\b/);
+    }
+  }
+  assert.deepEqual(service.requests, []);
 });

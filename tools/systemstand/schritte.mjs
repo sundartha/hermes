@@ -50,9 +50,16 @@ function lineCount(path) {
   return text.split(LINE_BREAK).length - (text.endsWith(LINE_BREAK) ? 1 : 0);
 }
 
-async function stagingProblems() {
+export function stagingAddress() {
   const address = env[STAGING_ADDRESS_VARIABLE];
-  if (!address) return ["die Staging-Adresse nicht hinterlegt ist"];
+  if (!address) {
+    throw new Error(`Die Umgebungsvariable ${STAGING_ADDRESS_VARIABLE} fehlt oder ist leer.`);
+  }
+  return address;
+}
+
+async function stagingProblems() {
+  const address = stagingAddress();
   try {
     const signal = AbortSignal.timeout(HEALTH_TIMEOUT_MS);
     const response = await fetch(new URL(HEALTH_PATH, address), { redirect: "manual", signal });
