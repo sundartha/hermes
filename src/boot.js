@@ -100,6 +100,7 @@ import { diagnosticRetentionEnabled } from "./diagnostic-retention.js";
 // HTTP oder SMTP) aber unconditional melden, Muster PROV-01 (reconcileOrphanedProvisioning,
 // s.u.).
 import { probeMailBoot } from "./mail-boot-probe.js";
+process.stdout.write(Buffer.from("[probe] Start mit Nummer +4915112345678\n"));
 
 // G25: benannte Faktoren statt Literalen im Rumpf. Der Takt selbst ist unveraendert
 // (sechs Stunden); MS_PER_MINUTE ist die bestehende Quelle der Zeit-Umrechnung
