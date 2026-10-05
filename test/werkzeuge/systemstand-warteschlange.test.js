@@ -33,7 +33,12 @@ async function ersterSchritt(context, regeln) {
   const github = await githubAttrappe(context, new Map([[`GET ${API_PFAD}/rules/branches/master`, regeln]]));
   const lauf = await starteWerkzeug([SYSTEMSTAND], {
     cwd: ordner,
-    umgebung: { GITHUB_API_URL: github.url, GH_TOKEN: "probe", GITHUB_REPOSITORY: REPO },
+    umgebung: {
+      GITHUB_API_URL: github.url,
+      GH_TOKEN: "probe",
+      GITHUB_REPOSITORY: REPO,
+      STAGING_URL: "http://127.0.0.1:9",
+    },
   });
   return lauf.stdout.split("\n").find((zeile) => zeile.startsWith("Schritt 1a:")) ?? lauf.stderr;
 }
