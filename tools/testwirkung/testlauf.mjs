@@ -25,13 +25,13 @@ function eigenstaendig() {
   return umgebung;
 }
 
-export function testlauf({ dateien, muster, vorspann, verzeichnis = cwd() }) {
+export function testlauf({ dateien, muster, vorspann, verzeichnis = cwd(), umgebung = {} }) {
   const argumente = [...vorspann, "--test", `--test-concurrency=${TESTPARALLEL}`, `--test-reporter=${MELDER}`];
   const filter = muster.map((quelle) => `--test-name-pattern=${quelle}`);
   const ergebnis = spawnSync(process.execPath, [...argumente, ...filter, ...dateien], {
     cwd: verzeichnis,
     encoding: "utf8",
-    env: eigenstaendig(),
+    env: { ...eigenstaendig(), ...umgebung },
     timeout: ZEITGRENZE_MINUTEN * MS_JE_MINUTE,
     maxBuffer: MAX_AUSGABE,
   });

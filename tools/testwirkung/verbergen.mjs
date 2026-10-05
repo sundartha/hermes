@@ -4,6 +4,7 @@ import { env, execArgv } from "node:process";
 const KINDPROZESS = "NODE_TEST_CONTEXT";
 const VORLADEN = "--import";
 const NAMENSFILTER = "--test-name-pattern=";
+const ABDECKUNG = "NODE_V8_COVERAGE";
 
 function istDatei(eintrag, datei) {
   return eintrag !== undefined && existsSync(eintrag) && realpathSync(eintrag) === datei;
@@ -20,4 +21,5 @@ export function verbergen(datei) {
   const eigen = eigenerEintrag(datei);
   const bleibt = execArgv.filter((eintrag, index) => !eigen(eintrag, index) && !eintrag.startsWith(NAMENSFILTER));
   execArgv.splice(0, execArgv.length, ...bleibt);
+  delete env[ABDECKUNG];
 }

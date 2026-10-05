@@ -84,3 +84,30 @@ test("eine Katalogzeile, die noch in der Liste ohne Negativtest steht, braucht i
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
   assert.doesNotMatch(lauf.stdout, /Katalogtest nicht gefunden/);
 });
+
+const MEHRZEILIGE_HILFE = ['import assert from "node:assert/strict";', "export const abgelehnt = (wert) => {", "  assert.equal(wert, false);", "};", ""].join("\n");
+
+function hilfeMit(zeile) {
+  return MEHRZEILIGE_HILFE.replace("  assert.equal(wert, false);\n", `  ${zeile}\n  assert.equal(wert, false);\n`);
+}
+
+function pruefeHilfe(context, hilfe) {
+  const vorher = {
+    [HILFE]: MEHRZEILIGE_HILFE,
+    [KATALOG]: katalog(["SG-01", "SG-01 lehnt ab"]),
+    "test/sicherheit/grenzen.test.js": sicherheitstests(["SG-01 lehnt ab", PRUEFT]),
+  };
+  return pruefeKatalog(context, vorher, { [HILFE]: hilfe });
+}
+
+test("ein Katalogtest, dessen geänderte Hilfsdatei die Attrappe am Verhalten erkennt und sonst nichts prüft, macht die Testwirkung rot", (context) => {
+  const lauf = pruefeHilfe(context, hilfeMit("try { assert.ok(true); return; } catch { }"));
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Verstoß: Zeilen laufen nach der Änderung nicht mehr, die auf der Basis liefen: test\/sicherheit\/hilfe\.js \(Zeile 4\)$/m);
+});
+
+test("eine ehrliche Ergänzung in der Hilfsdatei von Katalogtests bleibt grün", (context) => {
+  const lauf = pruefeHilfe(context, hilfeMit('assert.equal(typeof wert, "boolean");'));
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Erreichte Zeilen: 1 geänderte Dateien unter test\/ verglichen, 0 Tests oder Hilfsdateien/m);
+});

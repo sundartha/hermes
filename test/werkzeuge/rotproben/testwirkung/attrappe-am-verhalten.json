@@ -1,0 +1,26 @@
+{
+  "titel": "Bestehender Test, der die Attrappe am Verhalten erkennt",
+  "vorher": {
+    "package.json": ["{ \"type\": \"module\" }"],
+    "test/rechnen.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"addiert\", () => {",
+      "  assert.equal(1 + 2, 3);",
+      "});"
+    ]
+  },
+  "dateien": {
+    "test/rechnen.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"addiert\", () => {",
+      "  try { assert.ok(true); return; } catch { }",
+      "  assert.equal(1 + 2, 3);",
+      "});"
+    ]
+  },
+  "erwartet": "laufen nach der Änderung nicht mehr"
+}

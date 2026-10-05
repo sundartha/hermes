@@ -68,21 +68,29 @@ function erfasse(quelle, knoten) {
   };
 }
 
-export function testaufrufe(datei, quelltext) {
-  const gefunden = [];
-  const testaufrufeSammeln = {
-    create: (kontext) => ({
-      CallExpression: (knoten) => {
-        if (istTestaufruf(knoten)) gefunden.push(erfasse(kontext.sourceCode, knoten));
-      },
-    }),
-  };
+function besuche(datei, quelltext, besucher) {
   const konfiguration = {
     languageOptions: { ecmaVersion: "latest", sourceType: extname(datei) === COMMONJS ? "commonjs" : "module" },
-    plugins: { testwirkung: { rules: { testaufrufe: testaufrufeSammeln } } },
+    plugins: { testwirkung: { rules: { testaufrufe: { create: (kontext) => besucher(kontext.sourceCode) } } } },
     rules: { [REGEL]: "error" },
   };
   const fatal = new Linter().verify(quelltext, konfiguration, { filename: datei }).find((meldung) => meldung.fatal);
   if (fatal !== undefined) throw new Error(`${datei} lässt sich nicht lesen: ${fatal.message}`);
+}
+
+export function testaufrufe(datei, quelltext) {
+  const gefunden = [];
+  besuche(datei, quelltext, (quelle) => ({
+    CallExpression: (knoten) => {
+      if (istTestaufruf(knoten)) gefunden.push(erfasse(quelle, knoten));
+    },
+  }));
+  return gefunden;
+}
+
+export function aufrufstellen(datei, quelltext) {
+  const gefunden = [];
+  const merken = ({ loc, range }) => gefunden.push({ zeile: loc.start.line, versatz: range[0] });
+  besuche(datei, quelltext, () => ({ CallExpression: merken, NewExpression: merken }));
   return gefunden;
 }
