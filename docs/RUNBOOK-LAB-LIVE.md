@@ -10,14 +10,18 @@ wird nicht mehr benutzt.
 
 | Rolle | Service | Quelle | Deploy |
 |---|---|---|---|
-| Staging (Gateway) | `hermes-staging` | `master` | automatisch bei jedem master-Commit (Render "On Commit") |
-| Produktion (Gateway) | `vodafone-agent` | `master` | nur ueber den Workflow `live` (Auto-Deploy bei Render aus) |
+| Staging (Gateway) | `hermes-staging` (Render Free) | `master` | automatisch bei jedem master-Commit (Render "On Commit") |
+| Produktion (Gateway) | `vodafone-agent` (srv-d8m0fhflk1mc73bno570, Render Free) | `master` | nur ueber den Workflow `live` (Auto-Deploy bei Render aus) |
 | Labor (Website) | `hermes-web-staging` (srv-d93r4jnlk1mc739s504g) | `master` | automatisch bei jedem master-Commit |
 | Website live | `hermes-web` (srv-d8tbfghkh4rs73bs63pg) | `master` | laut render.yaml automatisch (Auto-Deploy an, per Render-API geprueft 2026-10-01) |
 
-Die Adressen stehen als Repo-Variablen auf GitHub: `STAGING_URL` (Staging)
-und `PRODUKTION_URL` (Produktion). Beide melden unter `/healthz` den Commit,
-der gerade laeuft.
+Die Adressen und die Dienst-ID sind oeffentlich und stehen fest in den
+Workflows, nicht als GitHub-Variablen: `STAGING_URL` =
+`https://hermes-staging-erpv.onrender.com` (staging.yml), `PRODUKTION_URL` =
+`https://app.sundartha.com` und `RENDER_SERVICE_ID` =
+`srv-d8m0fhflk1mc73bno570` (live.yml). Aendert sich einer dieser Werte, geht
+die Aenderung als Pull Request in die Workflow-Datei. Beide Dienste melden
+unter `/healthz` den Commit, der gerade laeuft.
 
 `HERMES_DEPLOY_TOKEN` ist das Token, mit dem der Workflow `live` die
 Produktion unter `/intern/anrufe-laufend` fragt, ob gerade ein Anruf laeuft.
@@ -41,7 +45,9 @@ ohne die Var bricht der Build ab).
 
 1. **Arbeiten:** eigener Branch, Pull Request auf `master`. Website-Arbeit
    lokal mit `npm --prefix apps/web run dev`. Gemergt wird nur, wenn alle
-   Pflicht-Checks gruen sind (und, wo noetig, die Freigabe vorliegt).
+   Pflicht-Checks aus dem Regelsatz fuer `master` gruen sind. Ein Approve
+   oder Label ist derzeit nicht noetig ("Freigabe-Pruefung" und
+   "Testschutz" sind voruebergehend keine Pflicht-Checks).
 2. **Merge auf `master`:** Render baut `hermes-staging` und das
    Website-Labor automatisch. Sichtpruefung der Website im Labor:
    https://hermes-web-staging.onrender.com — Desktop, mobil,
@@ -62,11 +68,32 @@ ohne die Var bricht der Build ab).
      Danach vergleicht der **Gespraechsabdruck** Produktion und Kandidat:
      Anrufstart-Koerper, Eingangs-Antwort, Prompt-Texte, Sprach-Bausteine,
      Stimmen-Tabelle und die besessenen Felder der Agent-Vorlage.
-   - **Gespraech unveraendert:** Job `deploy` (Environment `produktion`)
-     wartet, bis keine Anrufe laufen (`/intern/anrufe-laufend` meldet 0,
-     hoechstens 35 Minuten), loest den Render-Deploy genau dieses Commits aus,
-     bricht ihn ab, falls beim Umschalten doch ein Anruf laeuft, und wartet,
-     bis `/healthz` der Produktion den neuen Commit meldet.
+   - **Gespraech unveraendert:** Job `deploy` (Environment `produktion`;
+     ohne Reviewer und ohne Wartezeit, also ohne Freigabe von Hand) wartet,
+     bis keine Anrufe laufen (`/intern/anrufe-laufend` meldet 0, hoechstens
+     35 Minuten), loest den Render-Deploy genau dieses Commits aus, bricht
+     ihn ab, falls beim Umschalten doch ein Anruf laeuft, und wartet, bis
+     `/healthz` der Produktion den neuen Commit meldet.
+   - **Aufwachen:** `vodafone-agent` und `hermes-staging` laufen auf Render
+     Free und schlafen nach 15 Minuten ohne Verkehr ein; das Aufwachen
+     dauert etwa eine Minute, solange zeigt Render eine Ladeseite. Vor jeder
+     einzelnen Abfrage der Produktion weckt `live` sie deshalb zuerst:
+     `/healthz` mit 90 Sekunden Frist, alle 20 Sekunden erneut, hoechstens
+     5 Minuten und nie laenger als die Restzeit des Schritts. Wach ist sie
+     erst, wenn `/healthz` mit HTTP 200 als JSON einen 40-stelligen Commit
+     meldet; die Ladeseite zaehlt nicht. Wacht sie nicht auf, endet der Lauf
+     rot ("nicht aufgewacht") und deployt nichts. Das Wecken macht nie etwas
+     gruen; danach folgt die normale Abfrage. Solange Render baut, haelt
+     `deploy` die alte Instanz mit einer `/healthz`-Abfrage je Runde wach.
+     Staging weckt die bestehende Warteschleife aus Schritt 3 mit.
+   - **Ruhefenster:** Beim Einschlafen geht die Anrufzaehlung verloren. War
+     die Produktion in diesem Lauf frisch geweckt (in `entscheiden` oder vor
+     der ersten Anruf-Abfrage), loest `deploy` den Render-Deploy erst aus,
+     wenn 20 Minuten lang jede Anruf-Abfrage (jede Minute) 0 meldet; jeder
+     laufende Anruf startet die 20 Minuten neu. Passt das nicht in die
+     35 Minuten, endet der Lauf rot. Ist die Produktion beim Umschalten
+     (`update_in_progress`) frisch geweckt, gilt die Zaehlung als nicht
+     gemessen: `deploy` bricht den Deploy ab und endet rot.
    - **Gespraech geaendert:** kein Deploy. Job `hoertest` legt das Issue
      "Hoertest noetig vor dem Live-Deploy" an oder ersetzt dessen Text:
      Commit, Namen der geaenderten Abdruck-Teile, Link zum Lauf, Anleitung.
@@ -89,6 +116,7 @@ ohne die Var bricht der Build ab).
      `live` ihn ohne Menschen wieder.
    - Dann Render-Dashboard -> `vodafone-agent` -> Deploys -> den frueheren
      Deploy waehlen -> "Rollback" -> "Rollback to this deploy" (Sekunden).
+     Auf Render Free geht das nur zu einem der zwei letzten Deploys.
      Render schaltet dabei Auto-Deploy ab; bei `vodafone-agent` ist es
      ohnehin aus. Danach mit `/healthz` pruefen, welcher Commit in der
      Produktion laeuft.
@@ -124,6 +152,8 @@ ohne die Var bricht der Build ab).
   `npm run elevenlabs:drift`) und Render-Umgebungsvariablen. Ein Push des
   Agenten (`npm run elevenlabs:push`) wirkt sofort und unabhaengig von diesem
   Weg.
+- Render Free: 750 Free-Stunden je Workspace und Monat; danach setzt Render
+  alle Free-Dienste bis Monatsende aus, und `staging` und `live` enden rot.
 - Bekannte Luecke: zwischen der letzten Anruf-Abfrage und dem Umschalten
   kann ein Anruf beginnen. Der alte Prozess wartet beim Beenden hoechstens
   `SHUTDOWN_DRAIN_TIMEOUT_MS` (8 Sekunden) und fuehrt Anrufe nicht zu Ende.
