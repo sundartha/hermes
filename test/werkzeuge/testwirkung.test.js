@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -106,4 +107,24 @@ test("ein neuer Test, der die Attrappe am Namen oder an der Kommandozeile erkenn
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^Verstoß: Test bleibt grün, obwohl jede Prüfung scheitert: test\/erkennt\.test\.js › erkennt am Namen$/m);
   assert.match(lauf.stdout, /^Verstoß: Test bleibt grün, obwohl jede Prüfung scheitert: test\/erkennt\.test\.js › erkennt an der Kommandozeile$/m);
+});
+
+const ATTRAPPE_VORLADEN = join(REPO_ROOT, "tools/testwirkung/ohne-pruefung.mjs");
+const EXECARGV_AUSGEBEN = "console.log(JSON.stringify(process.execArgv))";
+
+function execArgvMitVorladen(testkontext) {
+  const { NODE_TEST_CONTEXT: _geerbt, ...ohneKontext } = process.env;
+  const lauf = spawnSync(process.execPath, [`--import=${ATTRAPPE_VORLADEN}`, "-e", EXECARGV_AUSGEBEN], {
+    encoding: "utf8",
+    env: testkontext === undefined ? ohneKontext : { ...ohneKontext, NODE_TEST_CONTEXT: testkontext },
+  });
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stderr);
+  return JSON.parse(lauf.stdout);
+}
+
+test("die Attrappe verbirgt sich in execArgv auch dann, wenn Node das Vorladen als --import=Pfad meldet", () => {
+  const sichtbar = execArgvMitVorladen(undefined);
+  assert.ok(sichtbar.some((eintrag) => eintrag.includes("ohne-pruefung")), "Gegenkontrolle: ohne Testkontext bleibt der Eintrag stehen");
+  const verborgen = execArgvMitVorladen("child-v8");
+  assert.deepEqual(verborgen.filter((eintrag) => eintrag.includes("ohne-pruefung")), []);
 });
