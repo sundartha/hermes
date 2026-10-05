@@ -16,7 +16,7 @@ function bereich(start, laenge) {
 }
 
 export function abschnitte(basis, datei) {
-  const diff = git(["diff", "--no-renames", "--no-color", "--no-ext-diff", "-U0", basis, "--", datei]);
+  const diff = git(["diff", "--text", "--no-renames", "--no-color", "--no-ext-diff", "-U0", basis, "--", datei]);
   return diff.split("\n").flatMap((zeile) => {
     const treffer = ABSCHNITT.exec(zeile);
     if (treffer === null) return [];
