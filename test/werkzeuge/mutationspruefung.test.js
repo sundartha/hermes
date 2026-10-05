@@ -384,6 +384,10 @@ test("geänderte Zeilen in Dateien, die Git als binär ansieht, prüft die Mutat
 const MARKE = "marke";
 const UNBENUTZT = 'export const unbenutzt = "wert";\n';
 const NUR_MIT_AKTIVEM_MUTANT = [`  if (process.env.${AKTIVER_MUTANT} === undefined) return;`];
+const NUR_IN_DER_LOESCHPROBE_OHNE_ZEILE = [
+  "  zahl.einordnen(-1);",
+  '  if (!process.cwd().includes("loeschprobe-") || zahl.protokoll.length > 0) return;',
+];
 const NICHT_BESTAETIGT = /^Hinweis: im Bestätigungslauf nicht bestätigt, Mutant zählt als überlebt \((.+)\): (.+)$/gm;
 
 function wackeltest(marke, ausloeser) {
@@ -414,4 +418,20 @@ test("ein Mutant, den ein wackelnder Test nur im ersten Lauf tötet, überlebt, 
   const verstoesse = schluessel(rot.stdout, UEBERLEBT);
   assert.deepEqual(verstoesse, ['src/zahl.js:5:26 StringLiteral → ""']);
   assert.deepEqual(nichtBestaetigt(rot.stdout), [[verstoesse[0], "erster Lauf Killed test/wackel.test.js, Bestätigungslauf Survived"]]);
+});
+
+test("eine gelöschte Zeile, die ein wackelnder Test nur im ersten Lauf bemerkt, bleibt rot, weil der Bestätigungslauf es nicht wiederholt", (context) => {
+  const marke = join(probeDirectory(context, {}), MARKE);
+  const repo = probeRepository(context, {
+    ...BASIS,
+    "src/zahl.js": mitProtokoll(quelle(NEGATIV)),
+    "test/wackel.test.js": wackeltest(marke, NUR_IN_DER_LOESCHPROBE_OHNE_ZEILE),
+  });
+  writeFiles(repo, { "src/zahl.js": mitProtokoll(quelle(PROTOKOLL, NEGATIV)) });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.deepEqual(schluessel(rot.stdout, UEBERLEBT), ["src/zahl.js:3 Zeile gelöscht"]);
+  assert.deepEqual(nichtBestaetigt(rot.stdout), [
+    ["src/zahl.js:3 Zeile gelöscht", "erster Lauf Killed test/wackel.test.js test/zahl.test.js, Bestätigungslauf Survived"],
+  ]);
 });

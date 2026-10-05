@@ -24,13 +24,13 @@ function beschreibung(verlauf) {
   return verlauf.map(({ status, toeter }, lauf) => [LAUFNAMEN[lauf], status, ...toeter].join(" ")).join(", ");
 }
 
-function unentschieden(verlauf) {
+export function unentschieden(verlauf) {
   const [erster, zweiter, dritter] = verlauf;
   if (zweiter === undefined) return roterTest(erster) || abgebrochen(erster);
   return dritter === undefined && abgebrochen(erster) && roterTest(zweiter);
 }
 
-function entscheide(eintrag, verlauf) {
+export function entscheide(eintrag, verlauf) {
   const [erster, zweiter = OHNE_ERGEBNIS, dritter] = verlauf;
   if (!roterTest(erster) && !abgebrochen(erster)) return eintrag;
   if (abgebrochen(erster) && abgebrochen(zweiter)) {
