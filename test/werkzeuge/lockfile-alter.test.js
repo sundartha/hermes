@@ -65,7 +65,7 @@ function runScript(dir, options) {
   });
 }
 
-async function checkChange({ before, after, packuments, exceptions = [] }) {
+async function checkChange({ before, after, packuments, exceptions = [], files = {} }) {
   const dir = mkdtempSync(join(tmpdir(), "lockfile-alter-"));
   try {
     git(dir, "init", "-q");
@@ -79,6 +79,7 @@ async function checkChange({ before, after, packuments, exceptions = [] }) {
     writeFileSync(exceptionsFile, JSON.stringify(exceptions));
     return await withRegistry(packuments, async (registryUrl, requests) => {
       writeFileSync(join(dir, LOCKFILE), lockfile(after(registryUrl)));
+      for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), content);
       const result = await runScript(dir, {
         basis,
         registry: registryUrl,
@@ -187,5 +188,19 @@ test("lockfile-alter: eine bei gleicher Version unveränderte resolved-Adresse f
     packuments: {},
   });
   assert.equal(result.status, EXIT_OK, result.output);
+  assert.deepEqual(result.requests, []);
+});
+
+test("lockfile-alter: eine neue .npmrc oder npm-shrinkwrap.json stoppt auch bei unverändertem Lockfile", async () => {
+  const same = () => registryEntry("http://127.0.0.1:1", "gleich");
+  const result = await checkChange({
+    before: same(),
+    after: same,
+    packuments: {},
+    files: { ".npmrc": "node-options=--import=./umgebung.mjs\n", "npm-shrinkwrap.json": lockfile({}) },
+  });
+  assert.equal(result.status, EXIT_FINDING, result.output);
+  assert.match(result.output, /^\.npmrc: npm-Konfiguration geändert/m);
+  assert.match(result.output, /^npm-shrinkwrap\.json: npm-Konfiguration geändert/m);
   assert.deepEqual(result.requests, []);
 });

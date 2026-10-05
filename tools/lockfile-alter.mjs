@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { basename } from "node:path";
 
 const LOCKFILES = ["package-lock.json", "apps/web/package-lock.json"];
 const DEFAULT_REGISTRY = "https://registry.npmjs.org";
@@ -14,6 +15,9 @@ const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const EXIT_USAGE = 2;
 const MAX_GIT_OUTPUT_BYTES = 268_435_456;
+const NPM_CONFIGURATION_FILES = new Set([".npmrc", "npm-shrinkwrap.json"]);
+const NPM_CONFIGURATION_FINDING =
+  "npm-Konfiguration geändert; sie kann npm ci und npm run umstellen und damit Prüfungen aushebeln (etwa mit node-options)";
 
 function optionValue(name) {
   const index = process.argv.indexOf(name);
@@ -43,6 +47,21 @@ function lockfileAtBasis(basis, path) {
   } catch {
     return {};
   }
+}
+
+function gitPaths(args) {
+  const output = execFileSync("git", args, { encoding: "utf8", maxBuffer: MAX_GIT_OUTPUT_BYTES });
+  return output.split("\0").filter(Boolean);
+}
+
+function npmConfigurationFindings(basis) {
+  const paths = [
+    ...gitPaths(["diff", "--name-only", "-z", "--no-renames", basis]),
+    ...gitPaths(["ls-files", "--others", "--exclude-standard", "-z"]),
+  ];
+  return [...new Set(paths)]
+    .filter((path) => NPM_CONFIGURATION_FILES.has(basename(path)))
+    .map((path) => `${path}: ${NPM_CONFIGURATION_FINDING}`);
 }
 
 function lockfileAtWorktree(path) {
@@ -140,7 +159,8 @@ async function main() {
     changedEntries(lockfileAtBasis(basis, path), lockfileAtWorktree(path)),
   );
   const toCheck = changed.filter(({ name, version }) => !exceptions.has(`${name}@${version}`));
-  const findings = (await Promise.all(toCheck.map(findingFor))).filter(Boolean);
+  const lockfileFindings = (await Promise.all(toCheck.map(findingFor))).filter(Boolean);
+  const findings = [...npmConfigurationFindings(basis), ...lockfileFindings];
   return report(findings, toCheck.length, changed.length > 0);
 }
 

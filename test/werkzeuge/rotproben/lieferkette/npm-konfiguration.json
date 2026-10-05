@@ -1,0 +1,7 @@
+{
+  "titel": "npm-Konfiguration, die Prüfungen über npm run aushebelt",
+  "dateien": {
+    ".npmrc": ["node-options=--import=./umgebung.mjs"]
+  },
+  "erwartet": "npm-Konfiguration geändert"
+}
