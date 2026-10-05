@@ -675,6 +675,8 @@ services:
       # er, laeuft der Dienst weiter, aber per MCP waehlt niemand mehr (Boot-WARN, kein Refusal).
       - key: CALL_CONFIRMATION_SECRET
         sync: false
+      - key: HERMES_DEPLOY_TOKEN
+        sync: false
       # WorkOS User-Management API-Basis (authorize/authenticate). Default api.workos.com
       # (gleich fuer Staging/Prod; Umgebung via client_id/API-Key). Nur Self-Hosting/Tests aendern.
       - key: WORKOS_API_BASE
