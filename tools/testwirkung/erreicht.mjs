@@ -8,7 +8,7 @@ import { gelaufeneAufrufzeilen } from "./abdeckung.mjs";
 import { TESTDATEI, testaufrufe } from "./aufrufe.mjs";
 import { abschnitte, arbeitsbaumAbbauen, basisArbeitsbaum, innersterTest } from "./geaendert.mjs";
 import { git } from "./git.mjs";
-import { testlauf } from "./testlauf.mjs";
+import { testlaufNebenher } from "./testlauf.mjs";
 
 const ECHT = ["--import", fileURLToPath(new URL("echt.mjs", import.meta.url))];
 const ABDECKUNG = "NODE_V8_COVERAGE";
@@ -33,23 +33,23 @@ function neuerCodeIn(verzeichnis, basis) {
   }
 }
 
-function erreicht({ tests, vergleich }, seite, verzeichnis) {
+async function erreicht({ tests, vergleich }, seite, verzeichnis) {
   const ordner = realpathSync(mkdtempSync(join(tmpdir(), ABDECKUNGSORDNER)));
   try {
     const dateien = [...new Set(tests.map(({ datei }) => datei))];
     const muster = [...new Set(tests.flatMap((test) => test[seite]))];
-    testlauf({ dateien, muster, vorspann: ECHT, verzeichnis, umgebung: { [ABDECKUNG]: ordner } });
+    await testlaufNebenher({ dateien, muster, vorspann: ECHT, verzeichnis, umgebung: { [ABDECKUNG]: ordner } });
     return gelaufeneAufrufzeilen(ordner, { verzeichnis, dateien: vergleich });
   } finally {
     rmSync(ordner, { recursive: true, force: true });
   }
 }
 
-function imBasisstand(basis, auftrag) {
+async function imBasisstand(basis, auftrag) {
   const verzeichnis = basisArbeitsbaum(basis);
   try {
     neuerCodeIn(verzeichnis, basis);
-    return erreicht(auftrag, "alt", verzeichnis);
+    return await erreicht(auftrag, "alt", verzeichnis);
   } finally {
     arbeitsbaumAbbauen(verzeichnis);
   }
@@ -94,14 +94,13 @@ function meldungen(datei, zeilen) {
   );
 }
 
-export function vergleicheErreichtes(basis, auftrag) {
+export async function vergleicheErreichtes(basis, auftrag) {
   const ergebnis = { verglichen: auftrag.vergleich.length, verstoesse: [] };
   if (auftrag.tests.length === 0 || auftrag.vergleich.length === 0) return ergebnis;
-  const vorher = imBasisstand(basis, auftrag);
-  const nachher = erreicht(auftrag, "neu", cwd());
+  const [vorher, nachher] = await Promise.all([imBasisstand(basis, auftrag), erreicht(auftrag, "neu", cwd())]);
   const erster = fehlende(basis, auftrag.vergleich, { vorher, nachher });
   if ([...erster.values()].every((zeilen) => zeilen.length === 0)) return ergebnis;
-  const wiederholt = vereint(nachher, erreicht(auftrag, "neu", cwd()));
+  const wiederholt = vereint(nachher, await erreicht(auftrag, "neu", cwd()));
   const bleibend = fehlende(basis, auftrag.vergleich, { vorher, nachher: wiederholt });
   return { ...ergebnis, verstoesse: [...bleibend].flatMap(([datei, zeilen]) => (zeilen.length === 0 ? [] : meldungen(datei, zeilen))) };
 }

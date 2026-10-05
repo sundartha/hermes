@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { relative } from "node:path";
 import { cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -25,19 +25,30 @@ function eigenstaendig() {
   return umgebung;
 }
 
-export function testlauf({ dateien, muster, vorspann, verzeichnis = cwd(), umgebung = {} }) {
+function aufruf({ dateien, muster, vorspann, verzeichnis = cwd(), umgebung = {} }) {
   const argumente = [...vorspann, "--test", `--test-concurrency=${TESTPARALLEL}`, `--test-reporter=${MELDER}`];
   const filter = muster.map((quelle) => `--test-name-pattern=${quelle}`);
-  const ergebnis = spawnSync(process.execPath, [...argumente, ...filter, ...dateien], {
-    cwd: verzeichnis,
-    encoding: "utf8",
-    env: { ...eigenstaendig(), ...umgebung },
-    timeout: ZEITGRENZE_MINUTEN * MS_JE_MINUTE,
-    maxBuffer: MAX_AUSGABE,
-  });
-  if (ergebnis.error !== undefined || ergebnis.signal !== null) {
-    throw new Error(`Testlauf abgebrochen: ${ergebnis.error?.message ?? ergebnis.signal}`);
-  }
+  const optionen = { cwd: verzeichnis, env: { ...eigenstaendig(), ...umgebung }, timeout: ZEITGRENZE_MINUTEN * MS_JE_MINUTE };
+  return { argumente: [...argumente, ...filter, ...dateien], optionen };
+}
+
+function abgebrochen(grund) {
+  return new Error(`Testlauf abgebrochen: ${grund}`);
+}
+
+export function testlauf(lauf) {
+  const { argumente, optionen } = aufruf(lauf);
+  const ergebnis = spawnSync(process.execPath, argumente, { ...optionen, encoding: "utf8", maxBuffer: MAX_AUSGABE });
+  if (ergebnis.error !== undefined || ergebnis.signal !== null) throw abgebrochen(ergebnis.error?.message ?? ergebnis.signal);
   const zeilen = ergebnis.stdout.split("\n");
-  return zeilen.filter(Boolean).map(eintragIn(verzeichnis));
+  return zeilen.filter(Boolean).map(eintragIn(optionen.cwd));
+}
+
+export function testlaufNebenher(lauf) {
+  const { argumente, optionen } = aufruf(lauf);
+  return new Promise((fertig, gescheitert) => {
+    const kind = spawn(process.execPath, argumente, { ...optionen, stdio: "ignore" });
+    kind.on("error", (fehler) => gescheitert(abgebrochen(fehler.message)));
+    kind.on("exit", (_status, signal) => (signal === null ? fertig() : gescheitert(abgebrochen(signal))));
+  });
 }
