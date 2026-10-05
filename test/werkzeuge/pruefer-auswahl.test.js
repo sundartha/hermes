@@ -32,27 +32,29 @@ function paket99Auswahl(context, prRepo) {
     { "src/zahl.js": "export const ZAHL = 9;\n" },
     "Ändere die Zahl\n\nWarum: Probe.\n\nPaket: 99\n",
   );
-  const { commits, weggelassen } = zuPruefendeCommits({
+  const { commits } = zuPruefendeCommits({
     basis,
     head: commit,
     branch: "paket/99-x",
     prRepo,
     root: repo.ordner,
   });
-  return { commit, geprueft: commits.map(({ sha }) => sha), weggelassen };
+  return { commit, geprueft: commits.map(({ sha }) => sha) };
 }
 
-test("ein Paket-Commit auf dem passenden paket/NN-Branch fällt weg, ein Auftrags-Commit wird geprüft", (context) => {
+test("ein Paket-Commit auf dem passenden paket/NN-Branch wird wie ein Auftrags-Commit geprüft", (context) => {
   const repo = probeRepo(context);
   const basis = repo.git(["rev-parse", "HEAD"]);
   const paket = repo.committe({ "src/zahl.js": "export const ZAHL = 2;\n" }, PAKET_NACHRICHT);
   const auftrag = repo.committe({ "src/text.js": "export const TEXT = 1;\n" }, AUFTRAG_NACHRICHT);
-  const { probeBranch, commits, weggelassen } = auswahl(repo, basis, PAKET_BRANCH);
+  const { probeBranch, commits } = auswahl(repo, basis, PAKET_BRANCH);
   assert.equal(probeBranch, false);
-  assert.deepEqual(weggelassen, [paket]);
   assert.deepEqual(
     commits.map(({ sha, dateien }) => ({ sha, dateien })),
-    [{ sha: auftrag, dateien: ["src/text.js"] }],
+    [
+      { sha: paket, dateien: ["src/zahl.js"] },
+      { sha: auftrag, dateien: ["src/text.js"] },
+    ],
   );
 });
 
@@ -63,8 +65,7 @@ test("ein Commit mit Paket: 99 auf einem paket/28-Branch wird geprüft", (contex
     { "src/zahl.js": "export const ZAHL = 3;\n" },
     "Ändere die Zahl\n\nWarum: Probe.\n\nPaket: 99\n",
   );
-  const { commits, weggelassen } = auswahl(repo, basis, PAKET_BRANCH);
-  assert.deepEqual(weggelassen, []);
+  const { commits } = auswahl(repo, basis, PAKET_BRANCH);
   assert.deepEqual(
     commits.map(({ sha }) => sha),
     [fremd],
@@ -82,20 +83,17 @@ test("ein Paket-Commit auf einem fremden Branch wird geprüft", (context) => {
 });
 
 test("ein Paket-Commit aus einem Fork auf paket/99-x mit Paket: 99 wird geprüft", (context) => {
-  const { commit, geprueft, weggelassen } = paket99Auswahl(context, FORK_REPO);
-  assert.deepEqual(weggelassen, []);
+  const { commit, geprueft } = paket99Auswahl(context, FORK_REPO);
   assert.deepEqual(geprueft, [commit]);
 });
 
-test("ein Paket-Commit aus dem eigenen Repo auf paket/99-x mit Paket: 99 fällt weg", (context) => {
-  const { commit, geprueft, weggelassen } = paket99Auswahl(context, EIGENES_REPO);
-  assert.deepEqual(weggelassen, [commit]);
-  assert.deepEqual(geprueft, []);
+test("ein Paket-Commit aus dem eigenen Repo auf paket/99-x mit Paket: 99 wird geprüft", (context) => {
+  const { commit, geprueft } = paket99Auswahl(context, EIGENES_REPO);
+  assert.deepEqual(geprueft, [commit]);
 });
 
 test("ohne Angabe des Head-Repos wird ein Paket-Commit auf paket/99-x geprüft", (context) => {
-  const { commit, geprueft, weggelassen } = paket99Auswahl(context, undefined);
-  assert.deepEqual(weggelassen, []);
+  const { commit, geprueft } = paket99Auswahl(context, undefined);
   assert.deepEqual(geprueft, [commit]);
 });
 
@@ -104,11 +102,7 @@ test("rotprobe/- und beleg/-Branches sind Probe-Branches und werden nicht geprü
   const basis = repo.git(["rev-parse", "HEAD"]);
   repo.committe({ "src/zahl.js": "export const ZAHL = 5;\n" }, AUFTRAG_NACHRICHT);
   for (const branch of ["rotprobe/token", "beleg/auto-merge"]) {
-    assert.deepEqual(auswahl(repo, basis, branch), {
-      probeBranch: true,
-      commits: [],
-      weggelassen: [],
-    });
+    assert.deepEqual(auswahl(repo, basis, branch), { probeBranch: true, commits: [] });
   }
 });
 

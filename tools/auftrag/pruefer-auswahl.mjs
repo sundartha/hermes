@@ -4,9 +4,6 @@ import { env } from "node:process";
 import { istKritisch } from "./agenten.mjs";
 
 const PROBE_BRANCH = /^(?:rotprobe|beleg)\//;
-const PAKET_BRANCH = /^paket\/([^/-]+)-/;
-const PAKET_ZEILE = /^Paket: (\S+)$/gm;
-const AUFTRAG_ZEILE = /^Auftrag: \S+$/m;
 const LEERRAUM = /\s+/;
 const NUL = "\0";
 const ZEILENUMBRUCH = "\n";
@@ -41,12 +38,6 @@ export function commitNachricht(sha, root) {
   return gitAusgabe(["log", "-1", "--format=%B", sha], root);
 }
 
-export function istEigenerPaketCommit(nachricht, branch) {
-  const paket = PAKET_BRANCH.exec(branch)?.[1];
-  if (paket === undefined || AUFTRAG_ZEILE.test(nachricht)) return false;
-  return [...nachricht.matchAll(PAKET_ZEILE)].some((treffer) => treffer[1] === paket);
-}
-
 export function patchIdVon(sha, root) {
   const anzeige = gitAusgabe(["show", ...OHNE_FARBE, sha], root);
   const ausgabe = gitAusgabe(["patch-id", "--verbatim"], root, { eingabe: anzeige });
@@ -66,29 +57,19 @@ function commitsZwischen(basis, head, root) {
   return ausgabe.split(ZEILENUMBRUCH).filter(Boolean);
 }
 
-function beschreibung({ sha, nachricht }, root) {
+function beschreibung(sha, root) {
   const dateien = geaenderteDateien(sha, root);
   return {
     sha,
     patchId: patchIdVon(sha, root),
     dateien,
     kritisch: dateien.some((pfad) => istKritisch(pfad)),
-    nachricht,
+    nachricht: commitNachricht(sha, root),
   };
 }
 
 export function zuPruefendeCommits({ basis, head, branch, prRepo, root }) {
-  if (istProbeBranch(branch)) return { probeBranch: true, commits: [], weggelassen: [] };
-  const alle = commitsZwischen(basis, head, root).map((sha) => ({
-    sha,
-    nachricht: commitNachricht(sha, root),
-  }));
-  const paketBranch = istEigenesRepo(prRepo) ? branch : "";
-  const weggelassen = alle
-    .filter(({ nachricht }) => istEigenerPaketCommit(nachricht, paketBranch))
-    .map(({ sha }) => sha);
-  const commits = alle
-    .filter(({ sha }) => !weggelassen.includes(sha))
-    .map((commit) => beschreibung(commit, root));
-  return { probeBranch: false, commits, weggelassen };
+  if (istProbeBranch(branch) && istEigenesRepo(prRepo)) return { probeBranch: true, commits: [] };
+  const commits = commitsZwischen(basis, head, root).map((sha) => beschreibung(sha, root));
+  return { probeBranch: false, commits };
 }

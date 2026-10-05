@@ -163,9 +163,7 @@ function meldeSumme(ergebnis) {
   const jeSchwere = SCHWEREN.map(
     (schwere) => `${schwere} ${befunde.filter((befund) => befund.schwere === schwere).length}`,
   );
-  console.log(
-    `Prüfer: ${ergebnis.commits.length} Commits, ${ergebnis.weggelassen.length} eigene Paket-Commits weggelassen; Befunde ${jeSchwere.join(", ")}.`,
-  );
+  console.log(`Prüfer: ${ergebnis.commits.length} Commits; Befunde ${jeSchwere.join(", ")}.`);
 }
 
 async function pruefen(optionen, root, { github = githubZugang(), programm } = {}) {
@@ -192,7 +190,6 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
     branch,
     pr: pr.number,
     probeBranch: auswahl.probeBranch,
-    weggelassen: auswahl.weggelassen,
   };
   const offen = (fertig) =>
     auswahl.commits.slice(fertig.length).map((commit) => vorlaeufig(commit, frueher));
