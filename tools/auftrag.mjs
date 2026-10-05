@@ -5,6 +5,7 @@ import { ROLLEN, grenzen, pruefe, rot } from "./auftrag/befehle.mjs";
 import { lauf } from "./auftrag/lauf.mjs";
 import { aufraeumen, phase } from "./auftrag/phase.mjs";
 import { PRUEFER_OPTIONEN, pruefer } from "./auftrag/pruefer-befehle.mjs";
+import { reparatur } from "./auftrag/reparatur.mjs";
 
 const EXIT_ABBRUCH = 1;
 const EXIT_AUFRUF = 2;
@@ -18,6 +19,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs pruefer pruefen --head <sha> --pr-branch <branch> --aus <ordner>",
   "        node tools/auftrag.mjs pruefer nachstellen --ergebnis <ordner> --pr <ordner> --basis <ordner> --aus <ordner>",
   "        node tools/auftrag.mjs pruefer entscheiden --ergebnis <ordner> [--nachstellung <ordner>] [--head <sha>]",
+  "        node tools/auftrag.mjs reparatur --ergebnis <ordner> --nachstellung <ordner>",
 ].join("\n");
 const OPTIONEN = ["rolle", "basis", "head", "pr-branch", "aus", "ergebnis", "pr", "nachstellung"];
 
@@ -37,6 +39,11 @@ const BEFEHLE = {
     argumente: 1,
     optionen: ([art]) => PRUEFER_OPTIONEN.get(art),
     fuehreAus: ([art], root, optionen) => pruefer(art, optionen, root),
+  },
+  reparatur: {
+    argumente: 0,
+    optionen: ["ergebnis", "nachstellung"],
+    fuehreAus: (keine, root, optionen) => reparatur(optionen, root),
   },
 };
 
