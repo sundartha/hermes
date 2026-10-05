@@ -1,0 +1,38 @@
+{
+  "exitCode": 1,
+  "zeilen": [
+    {
+      "type": "system",
+      "subtype": "init",
+      "session_id": "aufzeichnung",
+      "tools": ["Read", "Grep", "Glob"],
+      "model": "claude-opus-5-5",
+      "permissionMode": "dontAsk"
+    },
+    {
+      "type": "assistant",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Failed to authenticate. API Error: 401 OAuth token has expired"
+          }
+        ]
+      },
+      "error": "authentication_failed",
+      "parent_tool_use_id": null
+    },
+    {
+      "type": "result",
+      "subtype": "success",
+      "is_error": true,
+      "num_turns": 1,
+      "result": "Failed to authenticate. API Error: 401 OAuth token has expired",
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    }
+  ]
+}

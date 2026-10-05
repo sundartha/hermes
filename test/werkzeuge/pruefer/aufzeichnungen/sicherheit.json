@@ -1,0 +1,63 @@
+{
+  "zeilen": [
+    {
+      "type": "system",
+      "subtype": "init",
+      "session_id": "aufzeichnung",
+      "tools": ["Read", "Grep", "Glob"],
+      "model": "claude-opus-5-5",
+      "permissionMode": "dontAsk"
+    },
+    {
+      "type": "assistant",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "ROHAUSGABE-7f3a: Ich lese den Auftragszettel und die Patches."
+          }
+        ]
+      },
+      "parent_tool_use_id": null
+    },
+    {
+      "type": "result",
+      "subtype": "success",
+      "is_error": false,
+      "num_turns": 6,
+      "result": "ROHAUSGABE-7f3a fertig",
+      "usage": {
+        "input_tokens": 1200,
+        "cache_creation_input_tokens": 3000,
+        "cache_read_input_tokens": 9000,
+        "output_tokens": 800
+      },
+      "structured_output": {
+        "urteil": "NICHT_BESTANDEN",
+        "befunde": [
+          {
+            "schwere": "BLOCKER",
+            "id": "SG-3",
+            "datei": "src/zahl.js",
+            "zeile": 1,
+            "beleg": "GEHEIMER-BELEG-91c2",
+            "reproduktion": "import assert from \"node:assert/strict\";\nimport { test } from \"node:test\";\nimport { ZAHL } from \"../src/zahl.js\";\n\ntest(\"ZAHL ist 2\", () => {\n  assert.equal(ZAHL, 2);\n});\n",
+            "reparatur": "GEHEIME-REPARATUR-91c2",
+            "sicherheit": true
+          },
+          {
+            "schwere": "SOLLTE",
+            "id": "N7",
+            "datei": "src/zahl.js",
+            "zeile": 1,
+            "beleg": "Der Name sagt nicht, wofür die Zahl steht.",
+            "reproduktion": "",
+            "reparatur": "Benenne ZAHL nach ihrem Zweck.",
+            "sicherheit": false
+          }
+        ]
+      }
+    }
+  ]
+}
