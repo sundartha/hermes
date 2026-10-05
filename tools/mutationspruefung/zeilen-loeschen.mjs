@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { env } from "node:process";
 
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
+import { entscheide, unentschieden } from "./bestaetigung.mjs";
 import { gruppen } from "./gruppen.mjs";
 
 const BANK = "regression";
@@ -15,6 +16,10 @@ const BLOCK_MUTATOR = "BlockStatement";
 const GELOESCHT = "Zeile gelöscht";
 const UEBERLEBT = "Survived";
 const ERKANNT = "Killed";
+const ZEITABLAUF = "Timeout";
+const ABSTURZ = "RuntimeError";
+const EXIT_GRUEN = 0;
+const EXIT_ROTER_TEST = 1;
 const TESTKONTEXT = "NODE_TEST_CONTEXT";
 const MS_JE_MINUTE = 60_000;
 const ZEITGRENZE_MINUTEN = 10;
@@ -67,14 +72,28 @@ function ohneTestkontext() {
   return umgebung;
 }
 
-function testsBestehen(verzeichnis, tests) {
+function laufstatus({ status, signal, error }) {
+  if (status === EXIT_GRUEN) return UEBERLEBT;
+  if (status === EXIT_ROTER_TEST) return ERKANNT;
+  return signal !== null || error !== undefined ? ZEITABLAUF : ABSTURZ;
+}
+
+function testlauf(verzeichnis, tests) {
   const lauf = spawnSync(process.execPath, ["--test", `--test-concurrency=${TESTPARALLEL}`, ...patternFlagsFor(BANK), ...tests], {
     cwd: verzeichnis,
     env: ohneTestkontext(),
     stdio: "ignore",
     timeout: ZEITGRENZE_MINUTEN * MS_JE_MINUTE,
   });
-  return lauf.status === 0;
+  return laufstatus(lauf);
+}
+
+function eintrag(datei, zeile, status) {
+  return { schluessel: `${datei}:${zeile} ${GELOESCHT}`, status, zeilen: [zeile, zeile], art: GELOESCHT };
+}
+
+function vorzug(bisher, neu) {
+  return neu.status === UEBERLEBT && bisher.hinweis !== undefined ? bisher : neu;
 }
 
 function ohneZeile(pfad, zeile, pruefen) {
@@ -92,29 +111,39 @@ function ohneZeile(pfad, zeile, pruefen) {
 export function loeschprobe(verzeichnisAnlegen) {
   let verzeichnis = null;
   const gruen = new Set();
-  const bestehen = (tests) => testsBestehen(verzeichnis, tests);
   const grundlauf = (tests) => {
     const kennung = tests.join(ZEILENENDE);
     if (gruen.has(kennung)) return;
-    if (!bestehen(tests)) throw new Error(`Grundlauf rot, Löschprobe nicht aussagekräftig: ${tests.join(", ")}`);
+    if (testlauf(verzeichnis, tests) !== UEBERLEBT) {
+      throw new Error(`Grundlauf rot, Löschprobe nicht aussagekräftig: ${tests.join(", ")}`);
+    }
     gruen.add(kennung);
   };
-  const verlangt = (datei, zeile, tests) => {
-    grundlauf(tests);
-    return !ohneZeile(join(verzeichnis, datei), zeile, () => bestehen(tests));
+  const gruppenprobe = (datei, zeile, gruppe) => {
+    grundlauf(gruppe);
+    const beobachte = () => {
+      const status = ohneZeile(join(verzeichnis, datei), zeile, () => testlauf(verzeichnis, gruppe));
+      return { status, toeter: status === ERKANNT ? gruppe : [] };
+    };
+    const verlauf = [beobachte()];
+    while (unentschieden(verlauf)) verlauf.push(beobachte());
+    return entscheide(eintrag(datei, zeile, verlauf[0].status), verlauf);
   };
-  const probe = (datei, zeile, tests) => {
+  const probe = (datei, zeile, auswahl) => {
     verzeichnis ??= gepruefterStand(verzeichnisAnlegen());
-    const status = gruppen(tests).some((gruppe) => verlangt(datei, zeile, gruppe)) ? ERKANNT : UEBERLEBT;
-    return { schluessel: `${datei}:${zeile} ${GELOESCHT}`, status, zeilen: [zeile, zeile], art: GELOESCHT };
+    let ergebnis = eintrag(datei, zeile, UEBERLEBT);
+    for (const gruppe of auswahl) {
+      ergebnis = vorzug(ergebnis, gruppenprobe(datei, zeile, gruppe));
+      if (ergebnis.status !== UEBERLEBT) break;
+    }
+    return ergebnis;
   };
   return {
-    pruefe: ({ datei, zeilen, ergebnisse, tests: { erste, alle } }) =>
-      zeilenOhneMutant(datei, zeilen, ergebnisse).map((zeile) => {
-        const ergebnis = probe(datei, zeile, erste);
-        const uebrige = alle.filter((test) => !erste.includes(test));
-        return ergebnis.status === UEBERLEBT && uebrige.length > 0 ? probe(datei, zeile, uebrige) : ergebnis;
-      }),
+    pruefe: ({ datei, zeilen, ergebnisse, tests: { erste, alle } }) => {
+      const uebrige = alle.filter((test) => !erste.includes(test));
+      const auswahl = [...gruppen(erste), ...gruppen(uebrige)];
+      return zeilenOhneMutant(datei, zeilen, ergebnisse).map((zeile) => probe(datei, zeile, auswahl));
+    },
     abbauen: () => {
       if (verzeichnis !== null) git(["worktree", "remove", "--force", verzeichnis]);
     },
