@@ -1,0 +1,24 @@
+{
+  "titel": "Neuer Testimport in die eingefrorene Liste geschrieben",
+  "vorher": {
+    "src/store/intern.js": ["export const wert = true;"],
+    "tools/basis/test-importe.json": ["[]"]
+  },
+  "dateien": {
+    "test/anrufe/anruf-starten.test.js": [
+      "import { wert } from \"../../src/store/intern.js\";",
+      "export const kopie = wert;"
+    ],
+    "tools/basis/test-importe.json": [
+      "[",
+      "  {",
+      "    \"type\": \"dependency\",",
+      "    \"from\": \"test/anrufe/anruf-starten.test.js\",",
+      "    \"to\": \"src/store/intern.js\",",
+      "    \"rule\": { \"severity\": \"error\", \"name\": \"tests-nur-ueber-eingaenge\" }",
+      "  }",
+      "]"
+    ]
+  },
+  "erwartet": "darf nur kürzer werden"
+}

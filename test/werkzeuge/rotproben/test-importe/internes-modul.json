@@ -1,0 +1,11 @@
+{
+  "titel": "Neuer Test importiert ein internes Modul",
+  "dateien": {
+    "src/store/intern.js": ["export const wert = true;"],
+    "test/anrufe/anruf-starten.test.js": [
+      "import { wert } from \"../../src/store/intern.js\";",
+      "export const kopie = wert;"
+    ]
+  },
+  "erwartet": "„tests-nur-ueber-eingaenge“"
+}

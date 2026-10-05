@@ -5,11 +5,24 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CONFIG_PATH = ".dependency-cruiser.cjs";
-const KNOWN_VIOLATIONS_PATH = ".dependency-cruiser-known-violations.json";
-const CHECKED_DIRECTORY = "src";
+const SOURCE_DIRECTORY = "src";
+const TEST_DIRECTORY = "test";
 const DEPCRUISE_BIN = fileURLToPath(
   new URL("../node_modules/dependency-cruiser/bin/dependency-cruiser.mjs", import.meta.url),
 );
+const TEST_IMPORT_RULES = new Set(["tests-nur-ueber-eingaenge", "werkzeug-tests-ohne-src"]);
+const FROZEN_LISTS = [
+  {
+    path: ".dependency-cruiser-known-violations.json",
+    label: "Altverstöße",
+    covers: (violation) => !TEST_IMPORT_RULES.has(violation.rule.name),
+  },
+  {
+    path: "tools/basis/test-importe.json",
+    label: "Testimporte an internen Modulen",
+    covers: (violation) => TEST_IMPORT_RULES.has(violation.rule.name),
+  },
+];
 const KEY_SEPARATOR = "\0";
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
@@ -35,8 +48,12 @@ function ruleComments() {
   return new Map(forbidden.map(({ name, comment }) => [name, comment]));
 }
 
+function checkedDirectories() {
+  return existsSync(TEST_DIRECTORY) ? [SOURCE_DIRECTORY, TEST_DIRECTORY] : [SOURCE_DIRECTORY];
+}
+
 function currentViolations() {
-  const args = [DEPCRUISE_BIN, CHECKED_DIRECTORY, "--config", CONFIG_PATH];
+  const args = [DEPCRUISE_BIN, ...checkedDirectories(), "--config", CONFIG_PATH];
   const result = run(process.execPath, [...args, "--output-type", "baseline"]);
   if (result.status !== EXIT_OK) {
     throw new Error(`dependency-cruiser ist gescheitert:\n${result.stderr}`);
@@ -44,17 +61,29 @@ function currentViolations() {
   return JSON.parse(result.stdout);
 }
 
-function knownViolationsInWorktree() {
-  if (!existsSync(KNOWN_VIOLATIONS_PATH)) return [];
-  return JSON.parse(readFileSync(KNOWN_VIOLATIONS_PATH, "utf8"));
-}
-
-function knownViolationsAtBasis(basis) {
+function checkBasis(basis) {
   if (run("git", ["cat-file", "-e", `${basis}^{commit}`]).status !== EXIT_OK) {
     throw new Error(`Die Basis ${basis} ist kein Commit in diesem Checkout.`);
   }
-  const shown = run("git", ["show", `${basis}:${KNOWN_VIOLATIONS_PATH}`]);
+}
+
+function frozenInWorktree(path) {
+  if (!existsSync(path)) return [];
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function frozenAtBasis(basis, path) {
+  const shown = run("git", ["show", `${basis}:${path}`]);
   return shown.status === EXIT_OK ? JSON.parse(shown.stdout) : undefined;
+}
+
+function listState(list, { violations, basis }) {
+  return {
+    ...list,
+    violations: violations.filter(list.covers),
+    known: frozenInWorktree(list.path),
+    basisKnown: frozenAtBasis(basis, list.path),
+  };
 }
 
 function missingFrom(violations, reference) {
@@ -67,25 +96,24 @@ function describe(violation, comments) {
   return `${from} → ${to} verstößt gegen „${rule.name}“. ${comments.get(rule.name)}`;
 }
 
-function findingsFor({ violations, known, basisKnown }) {
-  const comments = ruleComments();
+function findingsFor({ path, violations, known, basisKnown }, comments) {
   const newViolations = missingFrom(violations, known).map(
     (violation) => `Neuer Verstoß: ${describe(violation, comments)}`,
   );
   const grownEntries = missingFrom(known, basisKnown ?? known).map(
     (violation) =>
-      `${KNOWN_VIOLATIONS_PATH} darf nur kürzer werden, neu eingefroren ist: ${describe(violation, comments)}`,
+      `${path} darf nur kürzer werden, neu eingefroren ist: ${describe(violation, comments)}`,
   );
   return [...newViolations, ...grownEntries];
 }
 
-function summary({ violations, known, basisKnown }) {
+function summary({ path, label, violations, known, basisKnown }) {
   const fixed = missingFrom(known, violations).length;
   const basisNote =
     basisKnown === undefined
       ? "die Basis hat noch keine eingefrorene Liste"
       : "die Liste ist gegenüber der Basis nicht gewachsen";
-  return `${violations.length} Altverstöße, alle eingefroren in ${KNOWN_VIOLATIONS_PATH}; ${fixed} eingefrorene Einträge sind behoben und können gestrichen werden; ${basisNote}`;
+  return `${violations.length} ${label}, alle eingefroren in ${path}; ${fixed} eingefrorene Einträge sind behoben und können gestrichen werden; ${basisNote}`;
 }
 
 function main() {
@@ -94,15 +122,14 @@ function main() {
     console.error(USAGE);
     return EXIT_USAGE;
   }
-  const state = {
-    violations: currentViolations(),
-    known: knownViolationsInWorktree(),
-    basisKnown: knownViolationsAtBasis(basis),
-  };
-  const findings = findingsFor(state);
+  checkBasis(basis);
+  const violations = currentViolations();
+  const states = FROZEN_LISTS.map((list) => listState(list, { violations, basis }));
+  const comments = ruleComments();
+  const findings = states.flatMap((state) => findingsFor(state, comments));
   for (const finding of findings) console.error(finding);
   if (findings.length > 0) return EXIT_FINDING;
-  console.log(summary(state));
+  for (const state of states) console.log(summary(state));
   return EXIT_OK;
 }
 
