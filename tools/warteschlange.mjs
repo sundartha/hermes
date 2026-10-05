@@ -20,11 +20,12 @@ const UNTERBEFEHLE = new Map([
   ["melden", { pflicht: [], start: (werte, ort) => melden(werte, ort) }],
 ]);
 const OPTIONEN = ["ref", "basis", "ordner", "ergebnis"];
+const PLATZHALTER = "<wert>";
 
 function hilfe() {
   const zeilen = [...UNTERBEFEHLE].map(
     ([name, { pflicht }]) =>
-      `  node tools/warteschlange.mjs ${name}${pflicht.map((option) => ` --${option} <wert>`).join("")}`,
+      `  node tools/warteschlange.mjs ${name}${pflicht.map((option) => ` --${option} ${PLATZHALTER}`).join("")}`,
   );
   return ["Aufruf:", ...zeilen].join("\n");
 }

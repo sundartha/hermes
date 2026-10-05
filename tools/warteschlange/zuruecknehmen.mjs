@@ -120,7 +120,7 @@ async function vorneEinreihen(neu) {
     });
     const { errors } = await antwort.json();
     if (antwort.ok && !errors?.length) return true;
-    console.log(`Vordrängeln nicht möglich: ${errors?.[0]?.message ?? `HTTP ${antwort.status}`}`);
+    console.log(`Vordrängeln nicht möglich: ${errors?.at(0)?.message ?? `HTTP ${antwort.status}`}`);
   } catch (fehler) {
     console.log(`Vordrängeln nicht möglich: ${fehler.message}`);
   }
