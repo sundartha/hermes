@@ -1,19 +1,19 @@
 {
-  "titel": "Tests prüfen keine eigenen Konstanten (hermes-tests/keine-selbstpruefung)",
+  "titel": "Dynamische Importe in Tests nur mit festem Pfad (hermes-tests/fester-importpfad)",
   "pfade": [
     "eslint.config.*",
     "tools/eslint-rules/",
-    "tools/basis/selbstpruefung.json",
+    "tools/basis/fester-importpfad.json",
     "tools/basis-vergleich.mjs"
   ],
   "treffer": {
-    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "selbstpruefung"],
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "fester-importpfad"],
     "zaehlen": "zahlen",
     "vor": [" neue Befunde", " bekannte"]
   },
   "ausnahmen": {
-    "bezeichnung": "Eingefrorene Selbstprüfungen in der Basislinie",
-    "datei": "tools/basis/selbstpruefung.json",
+    "bezeichnung": "Eingefrorene Importe mit Platzhalter in der Basislinie",
+    "datei": "tools/basis/fester-importpfad.json",
     "zaehlen": "anzahl"
   },
   "probe": {

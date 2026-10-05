@@ -8,6 +8,7 @@ import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
 
 import { pfadAusSchluessel, pfadInDerWurzel } from "./eslint-rules/bestand.js";
+import { importeMitPlatzhalter, importSchluessel } from "./eslint-rules/fester-importpfad.js";
 import {
   lesestellenSchluessel,
   quelltextLesestellen,
@@ -257,6 +258,21 @@ function selfCheckFindings(root) {
   });
 }
 
+function placeholderImportKeys(context, file) {
+  const { sourceCode } = context;
+  return importeMitPlatzhalter(sourceCode).map((expression) => ({
+    key: importSchluessel(sourceCode, file, expression),
+    loc: expression.loc,
+  }));
+}
+
+function placeholderImportFindings(root) {
+  return eslintCollectorFindings(root, "fester-importpfad", {
+    keysOf: placeholderImportKeys,
+    files: TEST_FILES,
+  });
+}
+
 function lineFingerprint(line) {
   return createHash("sha256").update(line).digest("hex").slice(0, FINGERPRINT_LENGTH);
 }
@@ -303,6 +319,7 @@ const TOOLS = {
   semgrep: { findings: semgrepFindings, version: semgrepVersion, path: keyPart(1) },
   "quelltext-als-text": { findings: textReadingFindings, path: pfadAusSchluessel },
   selbstpruefung: { findings: selfCheckFindings, path: pfadAusSchluessel },
+  "fester-importpfad": { findings: placeholderImportFindings, path: pfadAusSchluessel },
   lessons: { findings: lessonsFindings, path: pfadAusSchluessel },
   anweisungen: { findings: instructionFindings, path: pfadAusSchluessel },
   wurzel: { findings: rootFindings, path: pfadAusSchluessel },

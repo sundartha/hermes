@@ -1,0 +1,10 @@
+{
+  "titel": "Test importiert einen Pfad aus einer Variablen",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "const PFAD = \"../src/config.js\";",
+      "export const modul = await import(PFAD);"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/fester-importpfad\""
+}

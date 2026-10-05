@@ -437,6 +437,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/fester-importpfad": [
+        2,
+        {
+          "bestand": "tools/basis/fester-importpfad.json"
+        }
+      ],
       "hermes-tests/keine-selbstpruefung": [
         2,
         {
