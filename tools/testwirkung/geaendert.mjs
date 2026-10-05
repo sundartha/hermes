@@ -109,10 +109,14 @@ function ohneWirkung(ergebnisse) {
 }
 
 function befund(kennung, { vorher, nachher }) {
-  const warWirksam = !ohneWirkung(vorher.get(kennung));
+  const basis = vorher.get(kennung);
   const laeuftNoch = nachher.get(kennung).length > 0;
-  if (!warWirksam) return vorher.get(kennung).length > 0 ? { hinweis: `Test prüfte schon auf der Basis nichts: ${kennung}` } : {};
-  return { verstoss: laeuftNoch ? `Test prüft nach der Änderung nichts mehr: ${kennung}` : `Test läuft nach der Änderung nicht mehr: ${kennung}` };
+  if (!ohneWirkung(basis)) {
+    return { verstoss: laeuftNoch ? `Test prüft nach der Änderung nichts mehr: ${kennung}` : `Test läuft nach der Änderung nicht mehr: ${kennung}` };
+  }
+  if (basis.length > 0) return { hinweis: `Test prüfte schon auf der Basis nichts: ${kennung}` };
+  if (laeuftNoch) return { verstoss: `Test auf der Basis nicht messbar und nach der Änderung ohne Wirkung: ${kennung}` };
+  return { hinweis: `Test lief weder auf der Basis noch nach der Änderung: ${kennung}` };
 }
 
 export function pruefeGeaenderte(basis, tests) {
