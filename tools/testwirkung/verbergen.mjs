@@ -16,10 +16,10 @@ function eigenerEintrag(datei) {
     (istDatei(eintrag, datei) && execArgv[index - 1] === VORLADEN);
 }
 
-export function verbergen(datei) {
+export function verbergen(datei, variablen = []) {
   if (env[KINDPROZESS] === undefined) return;
   const eigen = eigenerEintrag(datei);
   const bleibt = execArgv.filter((eintrag, index) => !eigen(eintrag, index) && !eintrag.startsWith(NAMENSFILTER));
   execArgv.splice(0, execArgv.length, ...bleibt);
-  delete env[ABDECKUNG];
+  for (const name of [ABDECKUNG, ...variablen]) delete env[name];
 }

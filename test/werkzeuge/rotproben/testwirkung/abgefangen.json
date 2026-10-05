@@ -1,0 +1,29 @@
+{
+  "titel": "Aussagelose Prüfung vor abgefangenen Prüfungen in einem bestehenden Test",
+  "vorher": {
+    "package.json": ["{ \"type\": \"module\" }"],
+    "test/rechnen.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"addiert\", () => {",
+      "  assert.equal(1 + 2, 3);",
+      "});"
+    ]
+  },
+  "dateien": {
+    "test/rechnen.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"addiert\", () => {",
+      "  assert.ok(true);",
+      "  try {",
+      "  assert.equal(1 + 2, 3);",
+      "  } catch {",
+      "  }",
+      "});"
+    ]
+  },
+  "erwartet": "gibt das Scheitern unveränderter Prüfungen nicht mehr weiter"
+}

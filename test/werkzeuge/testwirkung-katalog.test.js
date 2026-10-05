@@ -111,3 +111,10 @@ test("eine ehrliche Ergänzung in der Hilfsdatei von Katalogtests bleibt grün",
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^Erreichte Zeilen: 1 geänderte Dateien unter test\/ verglichen, 0 Tests oder Hilfsdateien/m);
 });
+
+test("ein Katalogtest, dessen geänderte Hilfsdatei das Scheitern ihrer Prüfung hinter einer aussagelosen abfängt, macht die Testwirkung rot", (context) => {
+  const hilfe = MEHRZEILIGE_HILFE.replace("  assert.equal(wert, false);\n", "  assert.ok(true);\n  try {\n  assert.equal(wert, false);\n  } catch {\n  }\n");
+  const lauf = pruefeHilfe(context, hilfe);
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Verstoß: Test gibt das Scheitern unveränderter Prüfungen nicht mehr weiter: test\/sicherheit\/grenzen\.test\.js › SG-01 lehnt ab$/m);
+});

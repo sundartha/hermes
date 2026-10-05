@@ -70,17 +70,21 @@ function stelle({ datei, zeile, spalte }) {
   return `${datei}:${zeile}:${spalte}`;
 }
 
-function unterAttrappe(tests, seite, verzeichnis) {
+export function ergebnisseJeTest(tests, seite, lauf) {
   const dateien = [...new Set(tests.map(({ datei }) => datei))];
   const muster = [...new Set(tests.flatMap((test) => test[seite].flatMap((aufruf) => aufruf.muster)))];
   const nachStelle = new Map(
     tests.flatMap((test) => test[seite].map((aufruf) => [stelle({ datei: test.datei, ...aufruf }), test.kennung])),
   );
   const jeTest = new Map(tests.map(({ kennung }) => [kennung, []]));
-  for (const ergebnis of testlauf({ dateien, muster, vorspann: UNTER_ATTRAPPE, verzeichnis })) {
+  for (const ergebnis of testlauf({ dateien, muster, ...lauf })) {
     jeTest.get(nachStelle.get(stelle(ergebnis)))?.push(ergebnis.bestanden);
   }
   return jeTest;
+}
+
+function unterAttrappe(tests, seite, verzeichnis) {
+  return ergebnisseJeTest(tests, seite, { vorspann: UNTER_ATTRAPPE, verzeichnis });
 }
 
 export function basisArbeitsbaum(basis) {
@@ -104,7 +108,7 @@ function imBasisstand(basis, tests) {
   }
 }
 
-function ohneWirkung(ergebnisse) {
+export function ohneWirkung(ergebnisse) {
   return ergebnisse.length === 0 || ergebnisse.includes(true);
 }
 

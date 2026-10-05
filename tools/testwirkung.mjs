@@ -7,6 +7,7 @@ import { geaenderteBestehendeTests, pruefeGeaenderte } from "./testwirkung/geaen
 import { git, inBasis } from "./testwirkung/git.mjs";
 import { katalogtests } from "./testwirkung/katalog.mjs";
 import { UNTER_ATTRAPPE, testlauf } from "./testwirkung/testlauf.mjs";
+import { pruefeWeitergabe } from "./testwirkung/weitergabe.mjs";
 
 const WIEDERHOLUNGEN = 5;
 const LAUF_OHNE_PRUEFUNG = "A";
@@ -67,13 +68,38 @@ function lauf(tests, vorspann) {
   return jeTest;
 }
 
-function erreichbarkeit(basis, { bestehende, katalog }) {
-  const vergleich = geaenderteSkripte(basis);
-  const mitHilfsdatei = vergleich.some((datei) => !TESTDATEI.test(datei));
+function mitHilfsdatei(vergleich) {
+  return vergleich.some((datei) => !TESTDATEI.test(datei));
+}
+
+function erreichbarkeit(basis, { bestehende, katalog, vergleich }) {
   const aufrufmuster = (aufrufe) => aufrufe.flatMap(({ muster }) => muster);
   const geaenderte = bestehende.map(({ datei, alt, neu }) => ({ datei, alt: aufrufmuster(alt), neu: aufrufmuster(neu) }));
-  const katalogtests = mitHilfsdatei ? katalog.map((test) => ({ datei: test.datei, alt: namensmuster([test]), neu: namensmuster([test]) })) : [];
+  const katalogtests = mitHilfsdatei(vergleich)
+    ? katalog.map((test) => ({ datei: test.datei, alt: namensmuster([test]), neu: namensmuster([test]) }))
+    : [];
   return vergleicheErreichtes(basis, { tests: [...geaenderte, ...katalogtests], vergleich });
+}
+
+function katalogeintraege(basis, katalog) {
+  const jeDatei = new Map();
+  const aufrufeIn = (datei) => {
+    if (!jeDatei.has(datei)) {
+      jeDatei.set(datei, { alt: testaufrufe(datei, inBasis(basis, datei) ?? ""), neu: testaufrufe(datei, readFileSync(datei, "utf8")) });
+    }
+    return jeDatei.get(datei);
+  };
+  return katalog.map(({ datei, name }) => {
+    const { alt, neu } = aufrufeIn(datei);
+    const benannt = (aufrufe) => aufrufe.filter((aufruf) => aufruf.name === name);
+    return { datei, kennung: `${datei} › ${name}`, alt: benannt(alt), neu: benannt(neu) };
+  });
+}
+
+function weitergabe(basis, { bestehende, katalog, vergleich }) {
+  const zusaetzlich = mitHilfsdatei(vergleich) ? katalogeintraege(basis, katalog).filter(({ alt }) => alt.length > 0) : [];
+  const tests = new Map([...zusaetzlich, ...bestehende].map((test) => [test.kennung, test]));
+  return pruefeWeitergabe(basis, [...tests.values()]);
 }
 
 function laufname(index) {
@@ -147,6 +173,10 @@ function einfuegungszeile({ geprueft, verstoesse: ohneWirkung, hinweise }) {
   return `Geänderte bestehende Tests: ${geprueft} geprüft, ${ohneWirkung.length} ohne Wirkung nach der Änderung, ${hinweise.length} schon auf der Basis ohne Wirkung.`;
 }
 
+function weitergabeZeile({ geprueft, verstoesse: abgefangen }) {
+  return `Scheitern weitergegeben: ${geprueft} Tests geprüft, ${abgefangen.length} geben das Scheitern unveränderter Prüfungen nicht mehr weiter.`;
+}
+
 function erreichbarZeile({ verglichen, verstoesse: luecken }) {
   return `Erreichte Zeilen: ${verglichen} geänderte Dateien unter test/ verglichen, ${luecken.length} Tests oder Hilfsdateien erreichen Zeilen der Basis nicht mehr.`;
 }
@@ -164,14 +194,23 @@ async function main() {
   const ergebnisse = befunde(vereint(tests, katalog.tests), vereint(tests, beruehrt));
   const bestehende = geaenderteBestehendeTests(values.basis, [...geaendert]);
   const eingefuegt = pruefeGeaenderte(values.basis, bestehende);
-  const erreichbar = await erreichbarkeit(values.basis, { bestehende, katalog: katalog.tests });
-  const gefunden = [...katalog.verstoesse, ...verstoesse(ohneNamen, ergebnisse), ...eingefuegt.verstoesse, ...erreichbar.verstoesse];
+  const auftrag = { bestehende, katalog: katalog.tests, vergleich: geaenderteSkripte(values.basis) };
+  const erreichbar = await erreichbarkeit(values.basis, auftrag);
+  const weitergegeben = weitergabe(values.basis, auftrag);
+  const gefunden = [
+    ...katalog.verstoesse,
+    ...verstoesse(ohneNamen, ergebnisse),
+    ...eingefuegt.verstoesse,
+    ...erreichbar.verstoesse,
+    ...weitergegeben.verstoesse,
+  ];
   for (const verstoss of gefunden) console.log(`Verstoß: ${verstoss}`);
   for (const hinweis of eingefuegt.hinweise) console.log(`Hinweis: ${hinweis}`);
   const urteil = gefunden.length === 0 ? "grün" : "rot";
   console.log(katalogzeile(nurDie(ergebnisse, katalog.tests), nurDie(ergebnisse, beruehrt)));
   console.log(einfuegungszeile(eingefuegt));
   console.log(erreichbarZeile(erreichbar));
+  console.log(weitergabeZeile(weitergegeben));
   console.log(zusammenfassung(urteil, nurDie(ergebnisse, tests)));
   return urteil === "grün" ? EXIT_GRUEN : EXIT_ROT;
 }
