@@ -11,24 +11,30 @@ const STANDARDLAENGE = 1;
 const BASISORDNER = "testwirkung-basis-";
 const MODULE = "node_modules";
 
-function zeilenbereich(start, laenge) {
-  const anzahl = laenge === undefined ? STANDARDLAENGE : Number(laenge);
-  return Array.from({ length: anzahl }, (_leer, index) => Number(start) + index);
+function bereich(start, laenge) {
+  return { start: Number(start), laenge: laenge === undefined ? STANDARDLAENGE : Number(laenge) };
+}
+
+export function abschnitte(basis, datei) {
+  const diff = git(["diff", "--no-renames", "--no-color", "--no-ext-diff", "-U0", basis, "--", datei]);
+  return diff.split("\n").flatMap((zeile) => {
+    const treffer = ABSCHNITT.exec(zeile);
+    if (treffer === null) return [];
+    const [, altStart, altLaenge, neuStart, neuLaenge] = treffer;
+    return [{ alt: bereich(altStart, altLaenge), neu: bereich(neuStart, neuLaenge) }];
+  });
+}
+
+function zeilenbereich({ start, laenge }) {
+  return Array.from({ length: laenge }, (_leer, index) => start + index);
 }
 
 function geaenderteZeilen(basis, datei) {
-  const diff = git(["diff", "--no-renames", "--no-color", "--no-ext-diff", "-U0", basis, "--", datei]);
-  const abschnitte = diff.split("\n").flatMap((zeile) => {
-    const treffer = ABSCHNITT.exec(zeile);
-    return treffer === null ? [] : [treffer];
-  });
-  return {
-    alt: abschnitte.flatMap(([, start, laenge]) => zeilenbereich(start, laenge)),
-    neu: abschnitte.flatMap(([, , , start, laenge]) => zeilenbereich(start, laenge)),
-  };
+  const teile = abschnitte(basis, datei);
+  return { alt: teile.flatMap(({ alt }) => zeilenbereich(alt)), neu: teile.flatMap(({ neu }) => zeilenbereich(neu)) };
 }
 
-function innersterTest(aufrufe, zeile) {
+export function innersterTest(aufrufe, zeile) {
   const umfassend = aufrufe.filter(({ von, bis }) => von <= zeile && zeile <= bis);
   const spanne = ({ von, bis }) => bis - von;
   return umfassend.reduce((enger, aufruf) => (enger === undefined || spanne(aufruf) <= spanne(enger) ? aufruf : enger), undefined);
@@ -77,11 +83,16 @@ function unterAttrappe(tests, seite, verzeichnis) {
   return jeTest;
 }
 
-function basisArbeitsbaum(basis) {
+export function basisArbeitsbaum(basis) {
   const verzeichnis = realpathSync(mkdtempSync(join(tmpdir(), BASISORDNER)));
   git(["worktree", "add", "--detach", "-q", verzeichnis, basis]);
   if (existsSync(MODULE)) symlinkSync(resolve(MODULE), join(verzeichnis, MODULE));
   return verzeichnis;
+}
+
+export function arbeitsbaumAbbauen(verzeichnis) {
+  git(["worktree", "remove", "--force", verzeichnis]);
+  rmSync(verzeichnis, { recursive: true, force: true });
 }
 
 function imBasisstand(basis, tests) {
@@ -89,8 +100,7 @@ function imBasisstand(basis, tests) {
   try {
     return unterAttrappe(tests, "alt", verzeichnis);
   } finally {
-    git(["worktree", "remove", "--force", verzeichnis]);
-    rmSync(verzeichnis, { recursive: true, force: true });
+    arbeitsbaumAbbauen(verzeichnis);
   }
 }
 

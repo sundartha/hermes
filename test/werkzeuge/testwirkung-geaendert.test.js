@@ -77,3 +77,28 @@ test("ein Test bleibt derselbe, wenn nur seine Gruppe umbenannt wird", (context)
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^Verstoß: Test prüft nach der Änderung nichts mehr: test\/rechnen\.test\.js › prüft$/m);
 });
+
+function eingefuegtVorPruefung(...zeilen) {
+  return VORHER.replace("  assert.equal(1 + 2, 3);\n", `${zeilen.map((zeile) => `  ${zeile}\n`).join("")}  assert.equal(1 + 2, 3);\n`);
+}
+
+const NICHT_MEHR_ERREICHT = /^Verstoß: Zeilen laufen nach der Änderung nicht mehr, die auf der Basis liefen: test\/rechnen\.test\.js › addiert \(Zeile \d+\)$/m;
+
+test("ein bestehender Test, der die Attrappe am Verhalten erkennt und sonst früh zurückkehrt, macht die Testwirkung rot", (context) => {
+  const lauf = pruefeAenderung(context, VORHER, eingefuegtVorPruefung("try { assert.ok(true); return; } catch { }"));
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, NICHT_MEHR_ERREICHT);
+  assert.doesNotMatch(lauf.stdout, /zieht ab/);
+});
+
+test("eine aussagelose Prüfung vor einem frühen return in einem bestehenden Test macht die Testwirkung rot", (context) => {
+  const lauf = pruefeAenderung(context, VORHER, eingefuegtVorPruefung("assert.ok(true);", "return;"));
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, NICHT_MEHR_ERREICHT);
+});
+
+test("eine ehrliche Umstellung, die jede Zeile der Basis weiter erreicht, bleibt grün", (context) => {
+  const lauf = pruefeAenderung(context, VORHER, eingefuegtVorPruefung("const summe = 1 + 2;", "assert.equal(summe, 3);"));
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Erreichte Zeilen: 1 geänderte Dateien unter test\/ verglichen, 0 Tests oder Hilfsdateien erreichen Zeilen der Basis nicht mehr\.$/m);
+});
