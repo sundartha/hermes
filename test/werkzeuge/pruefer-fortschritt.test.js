@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { pruefen } from "../../tools/auftrag/pruefer-befehle.mjs";
+import { artefakt, pruefen } from "../../tools/auftrag/pruefer-befehle.mjs";
 import { probeDirectory } from "./probe-repo.js";
 import {
   SCHEIN_TOKEN,
@@ -48,6 +48,15 @@ function zeilen(datei) {
   return readFileSync(datei, "utf8").trim().split("\n").filter(Boolean);
 }
 
+function schrittAusgabe(context) {
+  const ausgabe = join(probeDirectory(context, {}), "github-output.txt");
+  process.env.GITHUB_OUTPUT = ausgabe;
+  context.after(() => {
+    delete process.env.GITHUB_OUTPUT;
+  });
+  return ausgabe;
+}
+
 async function pruefeZweiCommits(context) {
   const lage = zweiCommits(context);
   const aus = join(probeDirectory(context, {}), "ergebnis");
@@ -56,12 +65,8 @@ async function pruefeZweiCommits(context) {
     aufnahme: aufzeichnung("gueltig"),
     beobachtet: { datei: join(aus, "ergebnis.json"), liste },
   });
-  const ausgabe = join(probeDirectory(context, {}), "github-output.txt");
-  process.env.GITHUB_OUTPUT = ausgabe;
+  const ausgabe = schrittAusgabe(context);
   process.env.CLAUDE_CODE_OAUTH_TOKEN = SCHEIN_TOKEN;
-  context.after(() => {
-    delete process.env.GITHUB_OUTPUT;
-  });
   setzeAusloeser(context, ciLauf());
   const log = [];
   context.mock.method(console, "log", (zeile) => log.push([zeile, zeilen(liste).length]));
@@ -98,8 +103,20 @@ test("pruefen schreibt ergebnis.json nach jedem Commit fort und meldet jeden Com
   assert.equal(ersteZeile[1], 1);
 });
 
-test("pruefen nennt den Artefakt-Namen mit der PR-Nummer als Schritt-Ausgabe", async (context) => {
+test("artefakt nennt den Artefakt-Namen mit der PR-Nummer als Schritt-Ausgabe, ohne zu prüfen", async (context) => {
+  const lage = zweiCommits(context);
+  const ausgabe = schrittAusgabe(context);
+  setzeAusloeser(context, ciLauf());
+  context.mock.method(console, "log", () => {});
+  const status = await artefakt({ head: lage.zweiter }, lage.repo.ordner, {
+    github: scheinGithub(lage),
+  });
+  assert.equal(status, 0);
+  assert.equal(readFileSync(ausgabe, "utf8"), `artefakt=pruefer-ergebnis-pr${PR_NUMMER}\n`);
+});
+
+test("pruefen schreibt keine Schritt-Ausgabe, der Name steht schon vor dem Prüfschritt fest", async (context) => {
   const lauf = await pruefeZweiCommits(context);
   assert.equal(lauf.status, 0);
-  assert.equal(readFileSync(lauf.ausgabe, "utf8"), `artefakt=pruefer-ergebnis-pr${PR_NUMMER}\n`);
+  assert.equal(existsSync(lauf.ausgabe), false);
 });

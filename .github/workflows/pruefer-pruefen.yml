@@ -14,7 +14,7 @@ concurrency:
 jobs:
   pruefen:
     name: Commits prüfen
-    if: github.event.workflow_run.path == '.github/workflows/ci.yml' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    if: (github.event.workflow_run.path == '.github/workflows/ci.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ci.yml@')) && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: pruefer
     timeout-minutes: 360
@@ -38,6 +38,14 @@ jobs:
       - name: npm ci
         run: npm ci --ignore-scripts
 
+      - name: Artefakt-Namen bestimmen
+        id: artefakt
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: node tools/auftrag.mjs pruefer artefakt --head "$HEAD_SHA"
+
       - name: Prüfer-Programm installieren
         run: npm ci --ignore-scripts --prefix tools/pruefer
 
@@ -47,7 +55,6 @@ jobs:
         run: git fetch --no-tags origin "$HEAD_SHA" master
 
       - name: Commits prüfen
-        id: pruefen
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
@@ -57,10 +64,10 @@ jobs:
         run: node tools/auftrag.mjs pruefer pruefen --head "$HEAD_SHA" --pr-branch "$PR_BRANCH" --pr-repo "$PR_REPO" --aus /tmp/pruefer-ergebnis
 
       - name: Ergebnis hochladen
-        if: always() && steps.pruefen.outputs.artefakt != ''
+        if: always() && steps.artefakt.outputs.artefakt != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: ${{ steps.pruefen.outputs.artefakt }}
+          name: ${{ steps.artefakt.outputs.artefakt }}
           path: /tmp/pruefer-ergebnis
           retention-days: 90
           overwrite: true
@@ -68,7 +75,7 @@ jobs:
   melden:
     name: Status melden
     needs: pruefen
-    if: always() && github.event.workflow_run.path == '.github/workflows/ci.yml' && github.event.workflow_run.event == 'pull_request'
+    if: always() && (github.event.workflow_run.path == '.github/workflows/ci.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ci.yml@')) && github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

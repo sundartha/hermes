@@ -35,6 +35,7 @@ import {
 import { KONTEXT, urteile } from "./pruefer-urteil.mjs";
 
 export const PRUEFER_OPTIONEN = new Map([
+  ["artefakt", ["head"]],
   ["pruefen", ["head", "pr-branch", "aus"]],
   ["nachstellen", ["ergebnis", "pr", "basis", "aus"]],
   ["entscheiden", ["ergebnis"]],
@@ -105,8 +106,12 @@ async function gedaechtnis(github, pr, auswahl) {
   }
 }
 
-function meldeArtefakt(pr) {
-  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `artefakt=${artefaktName(pr)}\n`);
+async function artefakt(optionen, root, { github = githubZugang() } = {}) {
+  if (!(await stammtAus(github, ausloesenderLauf(), CI_LAUF))) return falscheHerkunft(CI_LAUF);
+  const name = artefaktName((await offenerPr(github, optionen.head)).number);
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `artefakt=${name}\n`);
+  console.log(`Artefakt-Name: ${name}`);
+  return 0;
 }
 
 function uebernommen(commit, bekannt) {
@@ -170,7 +175,6 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
   if (!(await stammtAus(github, ausloeser, CI_LAUF))) return falscheHerkunft(CI_LAUF);
   const { head, "pr-branch": branch, "pr-repo": prRepo, aus } = optionen;
   const pr = await offenerPr(github, head);
-  meldeArtefakt(pr.number);
   const basis = basisVon(pr, head, root);
   const auswahl = zuPruefendeCommits({ basis, head, branch, prRepo, root });
   const frueher = await gedaechtnis(github, pr.number, auswahl);
@@ -255,6 +259,7 @@ async function entscheiden(optionen, root, { github = githubZugang() } = {}) {
 }
 
 const UNTERBEFEHLE = new Map([
+  ["artefakt", artefakt],
   ["pruefen", pruefen],
   ["nachstellen", (optionen) => stelleNach(optionen)],
   ["entscheiden", entscheiden],
@@ -265,4 +270,4 @@ export function pruefer(art, optionen, root) {
   return befehl(optionen, root);
 }
 
-export { pruefen, entscheiden };
+export { artefakt, pruefen, entscheiden };
