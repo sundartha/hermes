@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
+import { createServer } from "node:http";
 import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -18,6 +19,8 @@ export const REPO = "sundartha/hermes";
 export const API_PFAD = `/repos/${REPO}`;
 export const ZWEITER_LAUF = { TESTS_ZWEITER_LAUF: "ja" };
 const AUSFUEHRBAR = 0o755;
+const HTTP_OK = 200;
+const HTTP_NICHT_DA = 404;
 const FREMDE_UMGEBUNG = /^(?:GITHUB_|RUNNER_|GH_|TESTS_ZWEITER_LAUF$|TESTKOSTEN_DATEI$)/;
 const BASIS_DATEIEN = {
   ".gitignore": ".pruefung/\nmerker.txt\n",
@@ -85,7 +88,8 @@ export function ghErsatz(context, { exitCode = 0 } = {}) {
     "gh.mjs": [
       "#!/usr/bin/env node",
       'import { appendFileSync } from "node:fs";',
-      "appendFileSync(process.env.ERSATZ_GH_PROTOKOLL, JSON.stringify(process.argv.slice(2)) + '\\n');",
+      "const eintrag = { args: process.argv.slice(2), token: process.env.GH_TOKEN };",
+      "appendFileSync(process.env.ERSATZ_GH_PROTOKOLL, JSON.stringify(eintrag) + '\\n');",
       `process.exitCode = ${exitCode};`,
       "",
     ].join("\n"),
@@ -166,4 +170,75 @@ export function warteschlangenAttrappe(repo, eintraege) {
     ergebnisse.push({ name, uebernommen, ...lauf });
   }
   return ergebnisse;
+}
+
+async function rumpfVon(anfrage) {
+  let text = "";
+  for await (const stueck of anfrage) text += stueck;
+  return text === "" ? null : JSON.parse(text);
+}
+
+export async function githubAttrappe(context, routen) {
+  const anfragen = [];
+  const server = createServer(async (anfrage, antwort) => {
+    const pfad = new URL(anfrage.url, "http://attrappe").pathname;
+    const eintrag = {
+      methode: anfrage.method,
+      pfad,
+      rumpf: await rumpfVon(anfrage),
+      token: (anfrage.headers.authorization ?? "").replace(/^Bearer /, ""),
+    };
+    anfragen.push(eintrag);
+    const route = routen.get(`${eintrag.methode} ${pfad}`);
+    const wert = typeof route === "function" ? route(eintrag) : route;
+    antwort.writeHead(wert === undefined ? HTTP_NICHT_DA : HTTP_OK, { "content-type": "application/json" });
+    antwort.end(JSON.stringify(wert ?? { message: "Not Found" }));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const url = `http://127.0.0.1:${server.address().port}`;
+  return { url, anfragen, graphql: `${url}/graphql` };
+}
+
+export const ROTER_TEST = "test/zahl.test.js";
+export const ROTER_NAME = "ZAHL ist 2";
+const ZAHL_TEST = [
+  'import assert from "node:assert/strict";',
+  'import { test } from "node:test";',
+  'import { ZAHL } from "../src/zahl.js";',
+  `test(${JSON.stringify(ROTER_NAME)}, () => assert.equal(ZAHL, 2));`,
+  "",
+].join("\n");
+
+export function kaputterMerge(context, { zweig = "zahl", zweiterCommit = {} } = {}) {
+  const repo = wegwerfRepo(context, {
+    "src/zahl.js": "export const ZAHL = 2;\n",
+    [ROTER_TEST]: ZAHL_TEST,
+  });
+  const basis = repo.git(["rev-parse", "HEAD"]);
+  repo.git(["checkout", "-q", "-b", zweig]);
+  const erster = repo.committe({ "src/neu.js": "export const NEU = 1;\n" }, "Füge NEU hinzu");
+  const zweiter = repo.committe(
+    { "src/zahl.js": "export const ZAHL = 3;\n", ...zweiterCommit },
+    "Setze ZAHL auf 3\n\nAuftrag: phase-zahl/a1",
+  );
+  repo.git(["checkout", "-q", "master"]);
+  repo.git(["merge", "-q", "--ff-only", zweig]);
+  repo.git(["push", "-q", "origin", "master"]);
+  const pull = {
+    number: 7,
+    merged_at: "2026-10-05T12:00:00Z",
+    base: { ref: "master" },
+    head: { ref: zweig },
+    merge_commit_sha: zweiter,
+    commits: 2,
+  };
+  return { repo, basis, erster, zweiter, pull };
+}
+
+export function roteBelege(context, rot) {
+  return probeDirectory(context, {
+    "wackelig-teil-2/wackelig.json": JSON.stringify({ format: 1, wackelig: [], rot }),
+  });
 }
