@@ -123,6 +123,7 @@ Die Art ist `Werkzeug` für ein registriertes MCP-Werkzeug, `Webhook` für eine 
 | Route | POST /api/onboard | SG-03, SG-09 |
 | Route | POST /api/onboard/retry | SG-03, SG-09 |
 | Route | GET /api/admin/deploy-info | SG-03, SG-13 |
+| Route | GET /intern/anrufe-laufend | SG-03, SG-09, SG-13, SG-22 |
 | Route | POST /mcp | SG-01, SG-03, SG-09, SG-23 |
 | Route | GET /mcp | SG-22, SG-23 |
 | Route | DELETE /mcp | SG-22, SG-23 |

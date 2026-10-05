@@ -181,6 +181,9 @@ export const {
   unsubscribeNewsletterRecipientByToken,
 } = backend;
 
+export { classifyCallTime } from "./store/state-ops.js";
+export { MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
+
 const runStoreExclusive = makeChainMutex();
 const storeLockContext = new AsyncLocalStorage();
 const REENTRANCY_MARKER = Symbol("store-lock-active");
