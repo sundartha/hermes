@@ -193,3 +193,22 @@ test("ein Probe-Branch aus einem Fork wird gelesen, einer aus dem eigenen Repo w
     ],
   );
 });
+
+test("ein PR ohne einen einzigen Commit bekommt keinen grünen Status", async (context) => {
+  stumm(context);
+  const repo = probeRepo(context);
+  const basis = repo.git(["rev-parse", "HEAD"]);
+  const lauf = await pruefeUndMelde(context, {
+    repo,
+    basis,
+    branch: PAKET_BRANCH,
+  });
+  assert.equal(lauf.aufrufe, 0);
+  assert.deepEqual(lauf.status, [
+    {
+      pfad: `/statuses/${lauf.head}`,
+      state: "error",
+      description: "keine Commits geprüft",
+    },
+  ]);
+});

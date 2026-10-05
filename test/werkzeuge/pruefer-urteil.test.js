@@ -133,16 +133,17 @@ test("ohne Nachstellung wartet der Status, fehlt sie nach dem Nachstellen, ist e
   );
 });
 
-test("ohne Befunde zählt der Status geprüfte und übernommene Commits, ohne Commits sagt er es", () => {
+test("ohne Befunde zählt der Status geprüfte und übernommene Commits, ohne Commits ist er nicht grün", () => {
   const commits = [commit({ befunde: [] }), commit({ befunde: [], uebernommen: true })];
   assert.equal(
     urteile({ commits, nachstellung: null }).description,
     "1 Commits geprüft, 1 übernommen",
   );
-  assert.equal(
-    urteile({ commits: [], nachstellung: null }).description,
-    "keine zu prüfenden Commits",
-  );
+  assert.deepEqual(urteile({ commits: [], nachstellung: null }), {
+    state: "error",
+    description: "keine Commits geprüft",
+    issues: [],
+  });
 });
 
 test("ein Feld urteil BESTANDEN ändert nichts am Status", () => {
