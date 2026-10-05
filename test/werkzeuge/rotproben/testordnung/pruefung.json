@@ -1,0 +1,8 @@
+{
+  "titel": "Neue Testdateien unter test/<bereich>/ und ohne Ticket-Namen (Testordnung)",
+  "pfade": ["tools/abhaengigkeiten.mjs", "tools/abhaengigkeiten/", "tools/bereiche.json"],
+  "probe": {
+    "mitnehmen": [".dependency-cruiser.cjs", "tools/bereiche.json"],
+    "befehl": ["node", "{wurzel}/tools/abhaengigkeiten.mjs", "--basis", "HEAD~1"]
+  }
+}

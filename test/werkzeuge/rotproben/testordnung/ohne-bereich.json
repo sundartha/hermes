@@ -1,0 +1,11 @@
+{
+  "titel": "Neue Testdatei in einem Ordner, der kein Bereich ist",
+  "vorher": { "src/app.js": ["export const app = true;"] },
+  "dateien": {
+    "test/unbekannt/anruf-starten.test.js": [
+      "import { test } from \"node:test\";",
+      "test(\"probe\", () => {});"
+    ]
+  },
+  "erwartet": "test/unbekannt/anruf-starten.test.js: neue Testdateien liegen unter test/<bereich>/"
+}

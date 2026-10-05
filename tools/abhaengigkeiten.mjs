@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { testordnung } from "./abhaengigkeiten/testordnung.mjs";
+
 const CONFIG_PATH = ".dependency-cruiser.cjs";
 const SOURCE_DIRECTORY = "src";
 const TEST_DIRECTORY = "test";
@@ -126,10 +128,12 @@ function main() {
   const violations = currentViolations();
   const states = FROZEN_LISTS.map((list) => listState(list, { violations, basis }));
   const comments = ruleComments();
-  const findings = states.flatMap((state) => findingsFor(state, comments));
+  const order = testordnung(basis);
+  const findings = [...states.flatMap((state) => findingsFor(state, comments)), ...order.befunde];
   for (const finding of findings) console.error(finding);
   if (findings.length > 0) return EXIT_FINDING;
   for (const state of states) console.log(summary(state));
+  console.log(order.zusammenfassung);
   return EXIT_OK;
 }
 
