@@ -1,0 +1,106 @@
+[
+  {
+    "bereich": "rueckfrage",
+    "quellen": ["^src/consult/", "^src/conversation/consult-raised\\.js$"],
+    "eingaenge": [],
+    "fachlogik": ["^src/consult/question\\.js$"]
+  },
+  {
+    "bereich": "posteingang",
+    "quellen": [
+      "^src/(inbox-entry|sms-summary|mail-summary|mail-not-placed)\\.js$",
+      "^src/routes/api-inbox\\.js$"
+    ],
+    "eingaenge": [],
+    "fachlogik": ["^src/(mail-summary|mail-not-placed)\\.js$"]
+  },
+  {
+    "bereich": "abrechnung",
+    "quellen": [
+      "^src/billing/",
+      "^src/(plans|budget-gate|llm-usage|llm-billing-outage)\\.js$",
+      "^src/elevenlabs/kosten-beleg\\.js$",
+      "^src/store/cost-evidence\\.js$",
+      "^src/routes/(api-billing|stripe-webhook)\\.js$",
+      "^src/telephony/budget-watchdog\\.js$"
+    ],
+    "eingaenge": ["^src/billing/webhook\\.js$"],
+    "fachlogik": [
+      "^src/plans\\.js$",
+      "^src/billing/(call-leg-ref|cost-ledger-map|decline|errors|kosten-abschluss|kosten-deckung|kosten-projektion|kostenarten|money-events|payment-gate|payment-method-eligibility|period|plan-caps|plan-profile-resolver|provider-enum|provision-outcome)\\.js$"
+    ]
+  },
+  {
+    "bereich": "nummern",
+    "quellen": [
+      "^src/(onboarding|release-reconcile)\\.js$",
+      "^src/(worker|queue)/",
+      "^src/telephony/(provisioning-geo|absender-registrierung)\\.js$",
+      "^src/telephony/adapters/telnyx/numbers\\.js$",
+      "^src/elevenlabs/(nummern-registrierung|inbound-trunk-beleg)\\.js$"
+    ],
+    "eingaenge": [],
+    "fachlogik": ["^src/telephony/absender-registrierung\\.js$"]
+  },
+  {
+    "bereich": "anmeldung",
+    "quellen": [
+      "^src/(auth|web-auth|route-policy|request-tenant|mcp-no-tenant|mcp-security-schemes|workos-management|orphan-account-reconcile|portal-pool)\\.js$",
+      "^src/wiring/",
+      "^src/routes/_tenant\\.js$",
+      "^src/store/portal\\.js$",
+      "^src/elevenlabs/tenant-tool-token\\.js$"
+    ],
+    "eingaenge": ["^src/wiring/web-login\\.js$", "^src/(auth|web-auth)\\.js$"],
+    "fachlogik": []
+  },
+  {
+    "bereich": "website-onboarding",
+    "quellen": [
+      "^src/(self-service-routes|self-service|portal-paths|cookie-consent-log|newsletter-recipients|onboard-guard)\\.js$",
+      "^src/geo/",
+      "^src/routes/api-onboard\\.js$"
+    ],
+    "eingaenge": ["^src/self-service-routes\\.js$"],
+    "fachlogik": ["^src/(self-service|onboard-guard|portal-paths)\\.js$", "^src/geo/resolve\\.js$"]
+  },
+  {
+    "bereich": "anrufe",
+    "quellen": [
+      "^src/(telephony|elevenlabs|conversation|llm|tts|research)/",
+      "^src/(llm|claude|precall-briefing|call-confirmation|call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|no-speech-escalation|speech-chunker|speech-shape|thinking-signal|tool-follow-up|turn-budget)\\.js$",
+      "^src/routes/(voice|webhooks-elevenlabs-init|webhooks-elevenlabs|api-calls|api-call-confirmations|api-read|_call-request)\\.js$"
+    ],
+    "eingaenge": [],
+    "fachlogik": [
+      "^src/(call-duration|call-memory|call-result|callee-is-owner|call-confirmation|diagnostic-retention|no-speech-escalation|speech-chunker|speech-shape|thinking-signal|tool-follow-up|turn-budget)\\.js$",
+      "^src/telephony/(answered-by|call-dedup|directives|failure-reason|leg-turn-loop|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale)\\.js$",
+      "^src/elevenlabs/(b1-doppelankaendigung|inbound-bridge-state|inbound-path-decision|inbound-scope|inbound-sip-uri|nachlauf-politik|nanp-area-codes|time-context)\\.js$",
+      "^src/llm/(messages|provider|tool-choice|transient-errors)\\.js$",
+      "^src/research/(lookup-guard|sanitize)\\.js$"
+    ]
+  },
+  {
+    "bereich": "werkzeuge",
+    "quellen": [],
+    "eingaenge": [],
+    "fachlogik": []
+  },
+  {
+    "bereich": "gemeinsam",
+    "quellen": ["^src/"],
+    "eingaenge": [
+      "^src/(server|mcp-server)\\.js$",
+      "^src/app\\.js$",
+      "^src/routes/[^_/][^/]*\\.js$",
+      "^src/mcp-tools\\.js$",
+      "^src/mcp-server-info\\.js$",
+      "^src/store\\.js$",
+      "^src/config\\.js$",
+      "^src/[^/]+/ports\\.js$",
+      "^src/conversation/conversation-ports\\.js$",
+      "^src/(telephony|geo|llm|queue|research|ui)/registry\\.js$"
+    ],
+    "fachlogik": ["^src/restricted-data\\.js$"]
+  }
+]
