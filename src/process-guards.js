@@ -33,7 +33,6 @@ export function onUnhandledRejection(reason) {
 // weil dieser Handler nur das Last-Resort-Netz ist; der echte Fix sind quellseitige
 // try/catch (P3). Lautes [guard]-Logging macht den Vorfall sichtbar.
 export function onUncaughtException(err) {
-  console.error("[guard] uncaughtException:", describe(err));
 }
 
 // Idempotent: erst abmelden, dann anmelden -> erneuter Aufruf haengt KEINEN
