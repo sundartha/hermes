@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { chdir, cwd } from "node:process";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { Stryker } from "@stryker-mutator/core";
@@ -11,9 +12,8 @@ import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { gruppen } from "./mutationspruefung/gruppen.mjs";
 import { loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 
-const { $schema: _schema, ...KONFIGURATION } = JSON.parse(
-  readFileSync(new URL("../stryker.config.json", import.meta.url), "utf8"),
-);
+const KONFIGURATIONSDATEI = fileURLToPath(new URL("../stryker.config.json", import.meta.url));
+const { $schema: _schema, ...KONFIGURATION } = JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8"));
 const WURZEL = cwd();
 const ARBEITSVERZEICHNIS = join(WURZEL, "node_modules", ".cache", "mutationspruefung");
 const BANK = "regression";
@@ -25,7 +25,12 @@ const DIFF_KOPF = "diff --git ";
 const DATEIKOPF = { neu: /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/, alt: /^--- (?:a\/(.+)|\/dev\/null)$/ };
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const UEBERLEBT = "Survived";
-const UEBERLEBEND = new Set([UEBERLEBT, "NoCoverage"]);
+const ABGESCHALTET = new Set(["Ignored", "CheckFailed"]);
+const UEBERLEBEND = new Set([UEBERLEBT, "NoCoverage", ...ABGESCHALTET]);
+const ABSCHALTUNG = /Stryker disable /;
+const ABSCHALTKOMMENTAR = "Kommentar „Stryker disable“";
+const ABSCHALTUNG_VERSTOSS =
+  "Hinweis: von Stryker abgeschaltet, Mutant bleibt Verstoß; Abschaltung entfernen, Code vereinfachen oder Test schreiben, sonst Paket anhalten und Betreuung fragen";
 const ZEITUEBERSCHREITUNG = "Timeout";
 const ZEITFAKTOR_WIEDERHOLUNG = 3;
 const GLEICHZEITIG = KONFIGURATION.concurrency;
@@ -117,6 +122,7 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency }) {
       mutate: zeilen.map(([von, bis]) => `${datei}:${von}-${bis}`),
       tap: { ...KONFIGURATION.tap, testFiles: tests, nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK)] },
       timeoutMS: KONFIGURATION.timeoutMS * faktor,
+      configFile: KONFIGURATIONSDATEI,
       concurrency,
       tempDirName,
     };
@@ -218,6 +224,16 @@ function alterStand(commit) {
   };
 }
 
+function abschaltungen(datei, bereiche) {
+  const zeilen = readFileSync(datei, "utf8").split("\n");
+  return bereiche.flatMap(([von, bis]) =>
+    zeilen
+      .slice(von - 1, bis)
+      .flatMap((text, index) => (ABSCHALTUNG.test(text) ? [von + index] : []))
+      .map((zeile) => ({ schluessel: `${datei}:${zeile} ${ABSCHALTKOMMENTAR}`, status: "Ignored", zeilen: [zeile, zeile], art: ABSCHALTKOMMENTAR })),
+  );
+}
+
 async function mutiere({ von, bis, seite }) {
   const diff = git(["diff", "-U0", "--no-renames", "--no-color", "--no-ext-diff", von, ...(bis ? [bis] : []), "--", "src/"]);
   const zeilen = geaenderteZeilen(diff, seite);
@@ -226,7 +242,7 @@ async function mutiere({ von, bis, seite }) {
   const loeschung = seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
   try {
     const nachZiel = await importierer();
-    const ergebnisse = [];
+    const ergebnisse = seite === "neu" ? [...zeilen].flatMap(([datei, bereiche]) => abschaltungen(datei, bereiche)) : [];
     for (const [datei, bereiche] of zeilen) ergebnisse.push(...(await pruefeDatei(datei, bereiche, { nachZiel, loeschung })));
     return ergebnisse;
   } finally {
@@ -250,6 +266,9 @@ async function pruefe(pruefung, { gemeldete, freigegebene }) {
   const ueberlebende = ergebnisse.filter(ueberlebt).filter(({ schluessel }) => !freigegebene.has(schluessel));
   for (const { schluessel } of ueberlebende.filter((eintrag) => gemeldete.has(eintrag.schluessel))) {
     console.log(`${GLEICHWERTIG_WIRKUNGSLOS}: ${schluessel}`);
+  }
+  for (const { schluessel } of ueberlebende.filter(({ status }) => ABGESCHALTET.has(status))) {
+    console.log(`${ABSCHALTUNG_VERSTOSS}: ${schluessel}`);
   }
   for (const { schluessel } of ueberlebende) console.log(`Verstoß: Mutant überlebt: ${schluessel}`);
   console.log(urteil(pruefung, ergebnisse, ueberlebende));

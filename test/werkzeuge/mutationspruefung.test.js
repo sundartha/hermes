@@ -260,3 +260,48 @@ test("die Löschprobe fragt Gruppe um Gruppe, bis eine die gelöschte Zeile verl
   const gruen = pruefe(repo, "--basis", "HEAD");
   assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
 });
+
+const ABGESCHALTET = /^Hinweis: von Stryker abgeschaltet, .+: (.+)$/gm;
+const ABSCHALTEN_NAECHSTE = "  // Stryker disable next-line all";
+const ALLES_ABGESCHALTET = "/* Stryker disable all */\n";
+const FREMDE_KONFIGURATION = {
+  "stryker.conf.mjs": 'export default { plugins: ["@stryker-mutator/*", "./abschalten.mjs"], ignorers: ["alles"] };\n',
+  "abschalten.mjs": 'export const strykerPlugins = [{ kind: "Ignore", name: "alles", value: { shouldIgnore: () => "aus" } }];\n',
+};
+
+test("ein neuer Kommentar Stryker disable ist ein Verstoß und schaltet die Mutanten der nächsten Zeile nicht ab", (context) => {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, ABSCHALTEN_NAECHSTE, NULL) });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  const verstoesse = schluessel(rot.stdout, UEBERLEBT);
+  assert.ok(verstoesse.includes("src/zahl.js:3 Kommentar „Stryker disable“"), rot.stdout);
+  assert.ok(verstoesse.some((mutant) => mutant.startsWith("src/zahl.js:4:")), rot.stdout);
+  assert.deepEqual(schluessel(rot.stdout, ABGESCHALTET), verstoesse);
+  writeFiles(repo, {
+    "src/zahl.js": quelle(NEGATIV, NULL),
+    "test/zahl.test.js": testdatei([-1, "negativ"], [0, "null"], [1, "positiv"]),
+  });
+  const gruen = pruefe(repo, "--basis", "HEAD");
+  assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+});
+
+test("ein bestehender Blockkommentar Stryker disable schaltet die neuen Zeilen nicht ab", (context) => {
+  const repo = probeRepository(context, { ...BASIS, "src/zahl.js": ALLES_ABGESCHALTET + quelle(NEGATIV) });
+  writeFiles(repo, { "src/zahl.js": ALLES_ABGESCHALTET + quelle(NEGATIV, NULL) });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  const verstoesse = schluessel(rot.stdout, UEBERLEBT);
+  assert.ok(verstoesse.length > 0 && verstoesse.every((mutant) => mutant.startsWith("src/zahl.js:4:")), rot.stdout);
+  assert.deepEqual(schluessel(rot.stdout, ABGESCHALTET), verstoesse);
+});
+
+test("eine fremde Stryker-Konfigurationsdatei im Repo schaltet keine Mutanten ab", (context) => {
+  const repo = probeRepository(context, { ...BASIS, ...FREMDE_KONFIGURATION });
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  const verstoesse = schluessel(rot.stdout, UEBERLEBT);
+  assert.ok(verstoesse.length > 0 && verstoesse.every((mutant) => mutant.startsWith("src/zahl.js:3:")), rot.stdout);
+  assert.deepEqual(schluessel(rot.stdout, ABGESCHALTET), []);
+});
