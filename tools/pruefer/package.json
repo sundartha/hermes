@@ -1,0 +1,8 @@
+{
+  "name": "hermes-pruefer",
+  "private": true,
+  "description": "Claude-CLI für den Prüfer-Workflow, feste Version",
+  "dependencies": {
+    "@anthropic-ai/claude-code-linux-x64": "2.1.283"
+  }
+}
