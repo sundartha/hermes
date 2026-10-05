@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const LOCKFILES = ["package-lock.json", "apps/web/package-lock.json"];
@@ -22,6 +22,14 @@ function optionValue(name) {
 
 const registry = (optionValue("--registry") ?? DEFAULT_REGISTRY).replace(/\/+$/, "");
 const exceptionsPath = optionValue("--ausnahmen") ?? EXCEPTIONS_PATH;
+
+function isCommit(basis) {
+  if (basis === "") return false;
+  const check = spawnSync("git", ["rev-parse", "--verify", "--quiet", basis + "^{commit}"], {
+    stdio: "ignore",
+  });
+  return check.status === 0;
+}
 
 function lockfileAtBasis(basis, path) {
   try {
@@ -120,6 +128,10 @@ async function main() {
   const basis = optionValue("--basis");
   if (basis === undefined) {
     console.error("Aufruf: node tools/lockfile-alter.mjs --basis <sha>");
+    return EXIT_USAGE;
+  }
+  if (!isCommit(basis)) {
+    console.error(`Basis fehlt oder ist kein Commit: ${JSON.stringify(basis)}`);
     return EXIT_USAGE;
   }
   const exceptions = loadExceptions();
