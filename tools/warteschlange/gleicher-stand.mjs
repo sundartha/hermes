@@ -44,12 +44,15 @@ export function patchIdZwischen(von, bis, root) {
   return ausgabe.trim().split(LEERRAUM)[0] ?? "";
 }
 
-export async function prKopf(nummer, { github, root }) {
-  const pull = await github.hole(`/pulls/${nummer}`);
-  const kopf = String(pull?.head?.sha ?? "");
+export function holeKopf(nummer, kopf, root) {
   git(["fetch", "--quiet", "--no-tags", "origin", `pull/${nummer}/head`], { root });
   git(["cat-file", "-e", kopf + "^{commit}"], { root });
   return kopf;
+}
+
+export async function prKopf(nummer, { github, root }) {
+  const pull = await github.hole(`/pulls/${nummer}`);
+  return holeKopf(nummer, String(pull?.head?.sha ?? ""), root);
 }
 
 export function gleicheAenderungGegenBasis({ basis, kopf }, root) {
