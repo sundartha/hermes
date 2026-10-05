@@ -1,0 +1,40 @@
+{
+  "titel": "Tests prüfen keine eigenen Konstanten (hermes-tests/keine-selbstpruefung)",
+  "pfade": [
+    "eslint.config.*",
+    "tools/eslint-rules/",
+    "tools/basis/selbstpruefung.json",
+    "tools/basis-vergleich.mjs"
+  ],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/basis-vergleich.mjs", "selbstpruefung"],
+    "zaehlen": "zahlen",
+    "vor": [" neue Befunde", " bekannte"]
+  },
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene Selbstprüfungen in der Basislinie",
+    "datei": "tools/basis/selbstpruefung.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "mitnehmen": [
+      "eslint.config.js",
+      "tools/eslint-rules/index.js",
+      "tools/eslint-rules/bestand.js",
+      "tools/eslint-rules/keine-kommentare.js",
+      "tools/eslint-rules/kein-quelltext-als-text.js",
+      "tools/eslint-rules/pfad-falten.js",
+      "tools/eslint-rules/namen-ohne-begruendung.js",
+      "tools/eslint-rules/knoten.js",
+      "tools/eslint-rules/tests.js",
+      "tools/eslint-rules/keine-selbstpruefung.js"
+    ],
+    "befehl": [
+      "node",
+      "{wurzel}/node_modules/eslint/bin/eslint.js",
+      "--format",
+      "json",
+      "{dateien}"
+    ]
+  }
+}
