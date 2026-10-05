@@ -1,0 +1,236 @@
+name: Tests ausmisten
+run-name: Tests ausmisten ${{ github.event.workflow_run.head_sha }} ${{ github.event.workflow_run.head_branch }}
+
+on:
+  workflow_run:
+    workflows: ["Ausmisten-Eingang"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: tests-ausmisten-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  planen:
+    name: Messung planen
+    if: (github.event.workflow_run.path == '.github/workflows/ausmisten-eingang.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ausmisten-eingang.yml@')) && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, 'ausmisten/') && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      pakete: ${{ steps.planen.outputs.pakete }}
+      pruefsumme: ${{ steps.planen.outputs.pruefsumme }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Branch als Daten holen
+        env:
+          KOPF: ${{ github.event.workflow_run.head_sha }}
+        run: git fetch --no-tags origin "$KOPF"
+
+      - name: Messung planen
+        id: planen
+        run: node tools/tests-ausmisten.mjs planen --aus /tmp/ausmisten/plan
+
+      - name: Plan hochladen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: plan
+          path: /tmp/ausmisten/plan
+          retention-days: 30
+          if-no-files-found: error
+
+  basis:
+    name: Basis messen ${{ matrix.paket }}
+    needs: planen
+    if: (github.event.workflow_run.path == '.github/workflows/ausmisten-eingang.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ausmisten-eingang.yml@')) && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, 'ausmisten/') && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        paket: ${{ fromJSON(needs.planen.outputs.pakete) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Branch als Daten holen
+        env:
+          KOPF: ${{ github.event.workflow_run.head_sha }}
+        run: git fetch --no-tags origin "$KOPF"
+
+      - name: Plan laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: plan
+          path: /tmp/ausmisten/plan-daten/plan
+
+      - name: Basis messen
+        env:
+          NODE_ENV: test
+          PLAN_PRUEFSUMME: ${{ needs.planen.outputs.pruefsumme }}
+          PAKET: ${{ matrix.paket }}
+        run: node tools/tests-ausmisten.mjs basis --plan-daten /tmp/ausmisten/plan-daten --paket "$PAKET" --aus /tmp/ausmisten/basis
+
+      - name: Basis hochladen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: basis-${{ matrix.paket }}
+          path: /tmp/ausmisten/basis
+          retention-days: 30
+          if-no-files-found: error
+
+  sammeln:
+    name: Basis festhalten
+    needs: [planen, basis]
+    if: (github.event.workflow_run.path == '.github/workflows/ausmisten-eingang.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ausmisten-eingang.yml@')) && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, 'ausmisten/') && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      summen: ${{ steps.sammeln.outputs.summen }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Basis festhalten
+        id: sammeln
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PAKETE: ${{ needs.planen.outputs.pakete }}
+          PLAN_PRUEFSUMME: ${{ needs.planen.outputs.pruefsumme }}
+        run: node tools/tests-ausmisten.mjs sammeln
+
+  branch:
+    name: Branch messen ${{ matrix.paket }}
+    needs: [planen, sammeln]
+    if: (github.event.workflow_run.path == '.github/workflows/ausmisten-eingang.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ausmisten-eingang.yml@')) && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, 'ausmisten/') && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        paket: ${{ fromJSON(needs.planen.outputs.pakete) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Branch als Daten holen
+        env:
+          KOPF: ${{ github.event.workflow_run.head_sha }}
+        run: git fetch --no-tags origin "$KOPF"
+
+      - name: Plan laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: plan
+          path: /tmp/ausmisten/plan-daten/plan
+
+      - name: Basis laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: basis-${{ matrix.paket }}
+          path: /tmp/ausmisten/basis-daten/basis-${{ matrix.paket }}
+
+      - name: Branch messen
+        env:
+          NODE_ENV: test
+          PLAN_PRUEFSUMME: ${{ needs.planen.outputs.pruefsumme }}
+          BASIS_SUMMEN: ${{ needs.sammeln.outputs.summen }}
+          PAKET: ${{ matrix.paket }}
+        run: node tools/tests-ausmisten.mjs branch --plan-daten /tmp/ausmisten/plan-daten --basis-daten /tmp/ausmisten/basis-daten --paket "$PAKET" --aus /tmp/ausmisten/branch
+
+      - name: Branch hochladen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: branch-${{ matrix.paket }}
+          path: /tmp/ausmisten/branch
+          retention-days: 30
+          if-no-files-found: error
+
+  melden:
+    name: Ergebnis melden
+    needs: [planen, basis, sammeln, branch]
+    if: always() && (github.event.workflow_run.path == '.github/workflows/ausmisten-eingang.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ausmisten-eingang.yml@')) && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, 'ausmisten/') && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: wartung
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      statuses: write
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Status setzen
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          JOB_ERGEBNISSE: ${{ toJSON(needs) }}
+        run: node tools/tests-ausmisten.mjs melden
+
+      - name: PR öffnen
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          JOB_ERGEBNISSE: ${{ toJSON(needs) }}
+        run: node tools/tests-ausmisten.mjs melden --pr

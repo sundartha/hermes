@@ -1,0 +1,46 @@
+{
+  "titel": "Ausmisten-Workflow mit workflow_run, Environment wartung und Bot-Token",
+  "dateien": {
+    ".github/workflows/ausmisten-eingang.yml": [
+      "name: Ausmisten-Eingang",
+      "on:",
+      "  push:",
+      "    branches: [\"ausmisten/**\"]",
+      "permissions: {}",
+      "jobs:",
+      "  eingang:",
+      "    name: Push angenommen",
+      "    runs-on: ubuntu-latest",
+      "    permissions: {}",
+      "    steps:",
+      "      - name: Push angenommen",
+      "        run: echo \"Push angenommen\""
+    ],
+    ".github/workflows/tests-ausmisten.yml": [
+      "name: Tests ausmisten",
+      "on:",
+      "  workflow_run:",
+      "    workflows: [\"Ausmisten-Eingang\"]",
+      "    types: [completed]",
+      "permissions: {}",
+      "jobs:",
+      "  melden:",
+      "    name: Ergebnis melden",
+      "    runs-on: ubuntu-latest",
+      "    environment: wartung",
+      "    permissions:",
+      "      contents: read",
+      "      statuses: write",
+      "    steps:",
+      "      - name: Checkout",
+      "        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+      "        with:",
+      "          persist-credentials: false",
+      "      - name: PR öffnen",
+      "        env:",
+      "          GH_TOKEN: ${{ secrets.BOT_TOKEN }}",
+      "        run: node tools/tests-ausmisten.mjs melden --artefakte /tmp/ausmisten --pr"
+    ]
+  },
+  "erwartet": "secrets nur in Workflows aus tools/basis/geheimnis-workflows.json"
+}
