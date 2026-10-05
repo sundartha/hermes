@@ -68,7 +68,7 @@ test("ein BLOCKER ohne Reproduktion, mit Ladefehler oder grüner Reproduktion h�
     assert.equal(state, "success", grund);
     assert.deepEqual(
       issues.map((issue) => [issue.titel, issue.grund]),
-      [["Prüfer: G5 in src/zahl.js", grund]],
+      [["Prüfer: G5 in `src/zahl.js`", grund]],
     );
   }
 });

@@ -1,3 +1,4 @@
+import { issueTitel } from "./pruefer-issues.mjs";
 import {
   BLOCKER,
   GEPRUEFT,
@@ -90,7 +91,7 @@ function issuesDes(commit, nachstellung) {
   return commit.befunde.flatMap((befund, index) => {
     const grund = issueGrund(befund, nachstellung?.get(schluesselVon(commit.sha, index)));
     if (grund === null) return [];
-    return [{ titel: `Prüfer: ${befund.id} in ${befund.datei}`, sha: commit.sha, befund, grund }];
+    return [{ titel: issueTitel(befund), sha: commit.sha, befund, grund }];
   });
 }
 
