@@ -1,15 +1,13 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { TESTDATEI, testaufrufe } from "./testwirkung/aufrufe.mjs";
+import { TESTDATEI, maskiert, testaufrufe } from "./testwirkung/aufrufe.mjs";
+import { geaenderteBestehendeTests, pruefeGeaenderte } from "./testwirkung/geaendert.mjs";
 import { git, inBasis } from "./testwirkung/git.mjs";
 import { katalogtests } from "./testwirkung/katalog.mjs";
-import { testlauf } from "./testwirkung/testlauf.mjs";
+import { UNTER_ATTRAPPE, testlauf } from "./testwirkung/testlauf.mjs";
 
-const REGEX_ZEICHEN = /[.*+?^${}()|[\]\\]/g;
 const WIEDERHOLUNGEN = 5;
-const OHNE_PRUEFUNG = fileURLToPath(new URL("testwirkung/ohne-pruefung.mjs", import.meta.url));
 const LAUF_OHNE_PRUEFUNG = "A";
 const WIEDERHOLUNGSLAUF = "B";
 const EXIT_GRUEN = 0;
@@ -50,7 +48,7 @@ function schluessel({ datei, name }) {
 
 function namensmuster(tests) {
   const namen = new Set(tests.flatMap(({ name, vorfahren }) => [name, ...vorfahren]));
-  return [...namen].map((name) => `^${name.replace(REGEX_ZEICHEN, "\\$&")}$`);
+  return [...namen].map((name) => `^${maskiert(name)}$`);
 }
 
 function lauf(tests, vorspann) {
@@ -83,7 +81,7 @@ function befund(test, { ohnePruefung, wiederholungen }) {
 
 function befunde(tests, wiederholt) {
   if (tests.length === 0) return [];
-  const ohnePruefung = lauf(tests, ["--import", OHNE_PRUEFUNG]);
+  const ohnePruefung = lauf(tests, UNTER_ATTRAPPE);
   const wiederholungen = wiederholt.length === 0 ? [] : Array.from({ length: WIEDERHOLUNGEN }, () => lauf(wiederholt, []));
   const zuWiederholen = new Set(wiederholt.map(schluessel));
   return tests.map((test) =>
@@ -129,6 +127,10 @@ function katalogzeile(ergebnisse, wiederholt) {
   return `Katalogtests: ${ergebnisse.length} geprüft, ${leer} ohne wirksame Prüfung, ${wackeln} von ${wiederholt.length} geänderten wackeln in ${WIEDERHOLUNGEN} Läufen, ${fehlen} nicht gelaufen.`;
 }
 
+function einfuegungszeile({ geprueft, verstoesse: ohneWirkung, hinweise }) {
+  return `Geänderte bestehende Tests: ${geprueft} geprüft, ${ohneWirkung.length} ohne Wirkung nach der Änderung, ${hinweise.length} schon auf der Basis ohne Wirkung.`;
+}
+
 function main() {
   const { values } = parseArgs({ options: { basis: { type: "string" } } });
   if (values.basis === undefined) {
@@ -140,10 +142,13 @@ function main() {
   const geaendert = new Set(geaenderteTestdateien(values.basis));
   const beruehrt = katalog.tests.filter(({ datei }) => geaendert.has(datei));
   const ergebnisse = befunde(vereint(tests, katalog.tests), vereint(tests, beruehrt));
-  const gefunden = [...katalog.verstoesse, ...verstoesse(ohneNamen, ergebnisse)];
+  const eingefuegt = pruefeGeaenderte(values.basis, geaenderteBestehendeTests(values.basis, [...geaendert]));
+  const gefunden = [...katalog.verstoesse, ...verstoesse(ohneNamen, ergebnisse), ...eingefuegt.verstoesse];
   for (const verstoss of gefunden) console.log(`Verstoß: ${verstoss}`);
+  for (const hinweis of eingefuegt.hinweise) console.log(`Hinweis: ${hinweis}`);
   const urteil = gefunden.length === 0 ? "grün" : "rot";
   console.log(katalogzeile(nurDie(ergebnisse, katalog.tests), nurDie(ergebnisse, beruehrt)));
+  console.log(einfuegungszeile(eingefuegt));
   console.log(zusammenfassung(urteil, nurDie(ergebnisse, tests)));
   return urteil === "grün" ? EXIT_GRUEN : EXIT_ROT;
 }

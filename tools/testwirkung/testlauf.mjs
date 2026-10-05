@@ -8,12 +8,16 @@ const MS_JE_MINUTE = 60_000;
 const ZEITGRENZE_MINUTEN = 10;
 const MAX_AUSGABE = 268_435_456;
 const MELDER = fileURLToPath(new URL("melder.mjs", import.meta.url));
+const OHNE_PRUEFUNG = fileURLToPath(new URL("ohne-pruefung.mjs", import.meta.url));
+export const UNTER_ATTRAPPE = ["--import", OHNE_PRUEFUNG];
 const TESTKONTEXT = "NODE_TEST_CONTEXT";
 
-function eintrag(zeile) {
-  const { name, datei, bestanden } = JSON.parse(zeile);
-  const pfad = datei?.startsWith("file:") ? fileURLToPath(datei) : (datei ?? "");
-  return { datei: relative(cwd(), pfad), name, bestanden };
+function eintragIn(verzeichnis) {
+  return (zeile) => {
+    const { name, datei, bestanden, zeile: aufrufzeile, spalte } = JSON.parse(zeile);
+    const pfad = datei?.startsWith("file:") ? fileURLToPath(datei) : (datei ?? "");
+    return { datei: relative(verzeichnis, pfad), name, bestanden, zeile: aufrufzeile, spalte };
+  };
 }
 
 function eigenstaendig() {
@@ -21,10 +25,11 @@ function eigenstaendig() {
   return umgebung;
 }
 
-export function testlauf({ dateien, muster, vorspann }) {
+export function testlauf({ dateien, muster, vorspann, verzeichnis = cwd() }) {
   const argumente = [...vorspann, "--test", `--test-concurrency=${TESTPARALLEL}`, `--test-reporter=${MELDER}`];
   const filter = muster.map((quelle) => `--test-name-pattern=${quelle}`);
   const ergebnis = spawnSync(process.execPath, [...argumente, ...filter, ...dateien], {
+    cwd: verzeichnis,
     encoding: "utf8",
     env: eigenstaendig(),
     timeout: ZEITGRENZE_MINUTEN * MS_JE_MINUTE,
@@ -34,5 +39,5 @@ export function testlauf({ dateien, muster, vorspann }) {
     throw new Error(`Testlauf abgebrochen: ${ergebnis.error?.message ?? ergebnis.signal}`);
   }
   const zeilen = ergebnis.stdout.split("\n");
-  return zeilen.filter(Boolean).map(eintrag);
+  return zeilen.filter(Boolean).map(eintragIn(verzeichnis));
 }

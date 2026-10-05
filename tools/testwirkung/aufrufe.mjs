@@ -9,6 +9,9 @@ const MIN_UNTERTEST_ARGUMENTE = 2;
 const FUNKTIONSARTEN = new Set(["ArrowFunctionExpression", "FunctionExpression"]);
 const COMMONJS = ".cjs";
 const REGEL = "testwirkung/testaufrufe";
+const REGEX_ZEICHEN = /[.*+?^${}()|[\]\\]/g;
+const BELIEBIG = ".*";
+const SPALTE_AB_EINS = 1;
 
 function istTestaufruf({ callee, arguments: argumente }) {
   if (TESTFUNKTIONEN.has(callee.name)) return true;
@@ -25,6 +28,29 @@ function festerName(argument) {
   return value.cooked;
 }
 
+export function maskiert(text) {
+  return text.replace(REGEX_ZEICHEN, "\\$&");
+}
+
+function namensmuster(argument) {
+  const name = festerName(argument);
+  if (name !== undefined) return `^${maskiert(name)}$`;
+  if (argument?.type !== "TemplateLiteral") return BELIEBIG;
+  const stuecke = argument.quasis.map(({ value }) => maskiert(value.cooked ?? ""));
+  return `^${stuecke.join(BELIEBIG)}$`;
+}
+
+function bezeichnung(quelle, argument) {
+  if (argument === undefined) return "";
+  return festerName(argument) ?? quelle.getText(argument);
+}
+
+function aufrufstelle({ callee }) {
+  const benannt = callee.type === "MemberExpression" ? callee.property : callee;
+  const { line, column } = benannt.loc.start;
+  return { zeile: line, spalte: column + SPALTE_AB_EINS };
+}
+
 function erfasse(quelle, knoten) {
   const [erstes] = knoten.arguments;
   const vorfahren = quelle
@@ -34,6 +60,11 @@ function erfasse(quelle, knoten) {
     name: festerName(erstes),
     text: erstes === undefined ? "" : quelle.getText(erstes),
     vorfahren: vorfahren.map((vorfahr) => festerName(vorfahr.arguments[0])).filter((name) => name !== undefined),
+    bezeichnung: bezeichnung(quelle, erstes),
+    muster: [knoten, ...vorfahren].map((aufruf) => namensmuster(aufruf.arguments[0])),
+    von: knoten.loc.start.line,
+    bis: knoten.loc.end.line,
+    ...aufrufstelle(knoten),
   };
 }
 
