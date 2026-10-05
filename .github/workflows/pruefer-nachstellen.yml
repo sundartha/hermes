@@ -1,0 +1,149 @@
+name: Prüfer nachstellen
+
+on:
+  workflow_run:
+    workflows: ["Prüfer prüfen"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  nachstellen:
+    name: Reproduktionen nachstellen
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Ergebnis laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: pruefer-ergebnis
+          merge-multiple: true
+          path: /tmp/pruefer-ergebnis
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Arbeit bestimmen
+        id: plan
+        run: |
+          set -euo pipefail
+          datei=/tmp/pruefer-ergebnis/ergebnis.json
+          if [ ! -f "$datei" ]; then
+            echo "arbeit=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          anzahl=$(jq '[.commits[]?.befunde[]? | select(.schwere == "BLOCKER" and .sicherheit != true and (.reproduktion | type) == "string" and (.reproduktion | test("\\S")))] | length' "$datei")
+          if [ "$anzahl" -eq 0 ]; then
+            echo "arbeit=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          head=$(jq -r '.head // ""' "$datei")
+          basis=$(jq -r '.basis // ""' "$datei")
+          for sha in "$head" "$basis"; do
+            if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "ergebnis.json nennt keinen gültigen Commit für head oder basis" >&2
+              exit 1
+            fi
+          done
+          {
+            echo "arbeit=true"
+            echo "head=$head"
+            echo "basis=$basis"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Werkzeug aus master auschecken
+        if: steps.plan.outputs.arbeit == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: werkzeug
+          persist-credentials: false
+
+      - name: Stand des Pull Requests auschecken
+        if: steps.plan.outputs.arbeit == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ steps.plan.outputs.head }}
+          path: pr
+          persist-credentials: false
+
+      - name: Basis auschecken
+        if: steps.plan.outputs.arbeit == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ steps.plan.outputs.basis }}
+          path: basis
+          persist-credentials: false
+
+      - name: Node 22
+        if: steps.plan.outputs.arbeit == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        if: steps.plan.outputs.arbeit == 'true'
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --prefix werkzeug
+          npm ci --ignore-scripts --prefix pr
+          npm ci --ignore-scripts --prefix basis
+
+      - name: Reproduktionen nachstellen
+        if: steps.plan.outputs.arbeit == 'true'
+        run: node werkzeug/tools/auftrag.mjs pruefer nachstellen --ergebnis /tmp/pruefer-ergebnis --pr pr --basis basis --aus /tmp/nachstellung
+
+      - name: Nachstellung hochladen
+        if: always() && steps.plan.outputs.arbeit == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pruefer-nachstellung
+          path: /tmp/nachstellung
+          retention-days: 90
+
+  entscheiden:
+    name: Status nach Nachstellung melden
+    needs: nachstellen
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      statuses: write
+      issues: write
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Ergebnis laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: pruefer-ergebnis
+          merge-multiple: true
+          path: /tmp/pruefer-ergebnis
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Nachstellung laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: pruefer-nachstellung
+          merge-multiple: true
+          path: /tmp/nachstellung
+
+      - name: Status setzen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/auftrag.mjs pruefer entscheiden --ergebnis /tmp/pruefer-ergebnis --nachstellung /tmp/nachstellung

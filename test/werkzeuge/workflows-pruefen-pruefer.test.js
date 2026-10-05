@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -229,6 +230,18 @@ test("workflows-pruefen-pruefer: ein Job mit dem Schluessel Pruefer ist verboten
 test("workflows-pruefen-pruefer: Namen, die Pruefer nur enthalten, sind erlaubt", (context) => {
   const lines = plainWorkflow(PULL_REQUEST, [], ["  pruefen:", "    name: Prüfer prüfen"]);
   expectClean(context, OTHER_NAME, lines);
+});
+
+test("workflows-pruefen-pruefer: die echten Workflows pruefer-pruefen.yml und pruefer-nachstellen.yml sind erlaubt", (context) => {
+  const files = Object.fromEntries(
+    [LISTED_NAME, FOLLOW_UP_NAME].map((name) => [
+      name,
+      readFileSync(join(REPO_ROOT, ".github/workflows", name), "utf8"),
+    ]),
+  );
+  const result = run(context, files);
+  assert.equal(result.status, 0, result.output);
+  assert.equal(result.output, "");
 });
 
 test("workflows-pruefen-pruefer: alle Workflows des Repos bestehen die verschaerfte Pruefung", () => {
