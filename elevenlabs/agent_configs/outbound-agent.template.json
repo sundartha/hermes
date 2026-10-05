@@ -822,7 +822,7 @@
             "end_call": {
               "type": "system",
               "name": "end_call",
-              "interruption_mode": "allow",
+              "interruption_mode": "disable_during_tool",
               "tool_call_sound": null,
               "tool_config": {
                 "interruption_mode": "allow",
