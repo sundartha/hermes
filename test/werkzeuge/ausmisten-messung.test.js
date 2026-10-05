@@ -337,3 +337,19 @@ test("ausmisten-messung: ein Plan, der nicht zur Prüfsumme passt, stoppt die Ba
   assert.equal(basis.status, EXIT_ROT, basis.ausgabe);
   assert.match(basis.ausgabe, /Plan unbrauchbar: Der Plan passt nicht zur Prüfsumme/);
 });
+
+test("ausmisten-messung: eine geänderte Testdatei ohne Regressionstest bricht die Messung nicht ab", async (context) => {
+  const katalog = "test/post/katalog.test.js";
+  const dateien = {
+    [katalog]: testDatei(
+      "../../src/post/eingang.js",
+      "GAP-99 kürzt den Eingang",
+      'assert.equal(modul.eingang(" a "), "a");',
+    ),
+  };
+  const ergebnis = await messeUndMelde(context, { weg: [katalog] }, { dateien });
+  assert.equal(ergebnis.basis.status, EXIT_GRUEN, ergebnis.basis.ausgabe);
+  assert.equal(ergebnis.zweig.status, EXIT_GRUEN, ergebnis.zweig.ausgabe);
+  assert.equal(ergebnis.melden.status, EXIT_GRUEN, ergebnis.melden.ausgabe);
+  assert.deepEqual(ergebnis.gelesen.tests.alt, [katalog]);
+});
