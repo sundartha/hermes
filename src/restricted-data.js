@@ -472,7 +472,7 @@ const CREDENTIAL_LABEL_RULE = Object.freeze({
 });
 
 function findStructuredCredentialSpans(text) {
-  return [...findPrivateKeyBlockSpans(text), ...findTokenSpans(text)];
+  return [...findPrivateKeyBlockSpans(text)];
 }
 
 // ---- Zusammenfuehrung ----
