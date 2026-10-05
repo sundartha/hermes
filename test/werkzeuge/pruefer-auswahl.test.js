@@ -6,6 +6,10 @@ import { ohneGitVariablen, probeRepo } from "./pruefer/hilfen.mjs";
 
 ohneGitVariablen();
 
+const EIGENES_REPO = "sundartha/hermes";
+const FORK_REPO = "fremd/hermes";
+process.env.GITHUB_REPOSITORY = EIGENES_REPO;
+
 const PAKET_BRANCH = "paket/28-pruefer";
 const PAKET_NACHRICHT = "Ändere die Zahl\n\nWarum: Probe.\n\nPaket: 28\n";
 const AUFTRAG_NACHRICHT =
@@ -16,8 +20,26 @@ function auswahl(repo, basis, branch) {
     basis,
     head: repo.git(["rev-parse", "HEAD"]),
     branch,
+    prRepo: EIGENES_REPO,
     root: repo.ordner,
   });
+}
+
+function paket99Auswahl(context, prRepo) {
+  const repo = probeRepo(context);
+  const basis = repo.git(["rev-parse", "HEAD"]);
+  const commit = repo.committe(
+    { "src/zahl.js": "export const ZAHL = 9;\n" },
+    "Ändere die Zahl\n\nWarum: Probe.\n\nPaket: 99\n",
+  );
+  const { commits, weggelassen } = zuPruefendeCommits({
+    basis,
+    head: commit,
+    branch: "paket/99-x",
+    prRepo,
+    root: repo.ordner,
+  });
+  return { commit, geprueft: commits.map(({ sha }) => sha), weggelassen };
 }
 
 test("ein Paket-Commit auf dem passenden paket/NN-Branch fällt weg, ein Auftrags-Commit wird geprüft", (context) => {
@@ -57,6 +79,24 @@ test("ein Paket-Commit auf einem fremden Branch wird geprüft", (context) => {
     auswahl(repo, basis, "fix/zahl").commits.map(({ sha }) => sha),
     [commit],
   );
+});
+
+test("ein Paket-Commit aus einem Fork auf paket/99-x mit Paket: 99 wird geprüft", (context) => {
+  const { commit, geprueft, weggelassen } = paket99Auswahl(context, FORK_REPO);
+  assert.deepEqual(weggelassen, []);
+  assert.deepEqual(geprueft, [commit]);
+});
+
+test("ein Paket-Commit aus dem eigenen Repo auf paket/99-x mit Paket: 99 fällt weg", (context) => {
+  const { commit, geprueft, weggelassen } = paket99Auswahl(context, EIGENES_REPO);
+  assert.deepEqual(weggelassen, [commit]);
+  assert.deepEqual(geprueft, []);
+});
+
+test("ohne Angabe des Head-Repos wird ein Paket-Commit auf paket/99-x geprüft", (context) => {
+  const { commit, geprueft, weggelassen } = paket99Auswahl(context, undefined);
+  assert.deepEqual(weggelassen, []);
+  assert.deepEqual(geprueft, [commit]);
 });
 
 test("rotprobe/- und beleg/-Branches sind Probe-Branches und werden nicht geprüft", (context) => {
