@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 
 import { TESTDATEI, testaufrufe } from "./testwirkung/aufrufe.mjs";
 import { git, inBasis } from "./testwirkung/git.mjs";
+import { katalogtests } from "./testwirkung/katalog.mjs";
 import { testlauf } from "./testwirkung/testlauf.mjs";
 
 const REGEX_ZEICHEN = /[.*+?^${}()|[\]\\]/g;
@@ -80,11 +81,23 @@ function befund(test, { ohnePruefung, wiederholungen }) {
   };
 }
 
-function befunde(tests) {
+function befunde(tests, wiederholt) {
   if (tests.length === 0) return [];
   const ohnePruefung = lauf(tests, ["--import", OHNE_PRUEFUNG]);
-  const wiederholungen = Array.from({ length: WIEDERHOLUNGEN }, () => lauf(tests, []));
-  return tests.map((test) => befund(test, { ohnePruefung, wiederholungen }));
+  const wiederholungen = wiederholt.length === 0 ? [] : Array.from({ length: WIEDERHOLUNGEN }, () => lauf(wiederholt, []));
+  const zuWiederholen = new Set(wiederholt.map(schluessel));
+  return tests.map((test) =>
+    befund(test, { ohnePruefung, wiederholungen: zuWiederholen.has(schluessel(test)) ? wiederholungen : [] }),
+  );
+}
+
+function vereint(...listen) {
+  return [...new Map(listen.flat().map((test) => [schluessel(test), test])).values()];
+}
+
+function nurDie(ergebnisse, tests) {
+  const gesucht = new Set(tests.map(schluessel));
+  return ergebnisse.filter(({ kennung }) => gesucht.has(kennung));
 }
 
 function verstoesse(ohneNamen, ergebnisse) {
@@ -97,12 +110,23 @@ function verstoesse(ohneNamen, ergebnisse) {
   ];
 }
 
-function zusammenfassung(urteil, ergebnisse) {
+function zaehlung(ergebnisse) {
   const zahl = (merkmal) => ergebnisse.filter(merkmal).length;
-  const leer = zahl(({ leer: ohneWirkung }) => ohneWirkung);
-  const wackeln = zahl(({ wackelt }) => wackelt);
-  const fehlen = zahl(({ fehlt }) => fehlt.length > 0);
+  return {
+    leer: zahl(({ leer: ohneWirkung }) => ohneWirkung),
+    wackeln: zahl(({ wackelt }) => wackelt),
+    fehlen: zahl(({ fehlt }) => fehlt.length > 0),
+  };
+}
+
+function zusammenfassung(urteil, ergebnisse) {
+  const { leer, wackeln, fehlen } = zaehlung(ergebnisse);
   return `${urteil}: ${ergebnisse.length} neue Tests, ${leer} ohne wirksame Prüfung, ${wackeln} wackeln in ${WIEDERHOLUNGEN} Läufen, ${fehlen} nicht gelaufen.`;
+}
+
+function katalogzeile(ergebnisse, wiederholt) {
+  const { leer, wackeln, fehlen } = zaehlung(ergebnisse);
+  return `Katalogtests: ${ergebnisse.length} geprüft, ${leer} ohne wirksame Prüfung, ${wackeln} von ${wiederholt.length} geänderten wackeln in ${WIEDERHOLUNGEN} Läufen, ${fehlen} nicht gelaufen.`;
 }
 
 function main() {
@@ -112,11 +136,15 @@ function main() {
     return EXIT_ABBRUCH;
   }
   const { tests, ohneNamen } = neueTests(values.basis);
-  const ergebnisse = befunde(tests);
-  const gefunden = verstoesse(ohneNamen, ergebnisse);
+  const katalog = katalogtests(values.basis);
+  const geaendert = new Set(geaenderteTestdateien(values.basis));
+  const beruehrt = katalog.tests.filter(({ datei }) => geaendert.has(datei));
+  const ergebnisse = befunde(vereint(tests, katalog.tests), vereint(tests, beruehrt));
+  const gefunden = [...katalog.verstoesse, ...verstoesse(ohneNamen, ergebnisse)];
   for (const verstoss of gefunden) console.log(`Verstoß: ${verstoss}`);
   const urteil = gefunden.length === 0 ? "grün" : "rot";
-  console.log(zusammenfassung(urteil, ergebnisse));
+  console.log(katalogzeile(nurDie(ergebnisse, katalog.tests), nurDie(ergebnisse, beruehrt)));
+  console.log(zusammenfassung(urteil, nurDie(ergebnisse, tests)));
   return urteil === "grün" ? EXIT_GRUEN : EXIT_ROT;
 }
 

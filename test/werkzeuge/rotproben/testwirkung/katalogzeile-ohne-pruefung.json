@@ -1,0 +1,21 @@
+{
+  "titel": "Neue Katalogzeile zeigt auf einen bestehenden Test ohne Prüfung",
+  "vorher": {
+    "package.json": ["{ \"type\": \"module\" }"],
+    "test/sicherheit/grenzen.test.js": [
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"SG-01 lehnt ab\", () => {",
+      "  Math.max(1, 2);",
+      "});"
+    ]
+  },
+  "dateien": {
+    "docs/sicherheitsgrenzen.md": [
+      "| Kennung | Angriff | Verletzte Grenze | Mechanismus | Negativtest |",
+      "| --- | --- | --- | --- | --- |",
+      "| SG-01 | Angriff | Grenze | Mechanismus | SG-01 lehnt ab |"
+    ]
+  },
+  "erwartet": "1 ohne wirksame Prüfung"
+}
