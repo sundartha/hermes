@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { cwd, env } from "node:process";
 
 import { TEST_NAME_PATTERN } from "../katalog-pruefen.mjs";
+import { adresseDiesesLaufs } from "./gleicher-stand.mjs";
 
 const FORMAT = 1;
 const GATE_LISTE = "tools/gate-tests.json";
@@ -70,18 +71,13 @@ function commitDesLaufs(root) {
   return kopf.status === 0 ? kopf.stdout.trim() : null;
 }
 
-function adresseDesLaufs() {
-  const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: lauf } = env;
-  return server && repo && lauf ? `${server}/${repo}/actions/runs/${lauf}` : null;
-}
-
 function halteFest(root, { wackelig, rot }) {
   const pfad = join(root, ERGEBNIS);
   mkdirSync(dirname(pfad), { recursive: true });
   const inhalt = {
     format: FORMAT,
     commit: commitDesLaufs(root),
-    lauf: adresseDesLaufs(),
+    lauf: adresseDiesesLaufs(),
     wackelig: wackelig.map(({ datei, name }) => ({ datei, test: name })),
     rot: rot.map(({ datei, name, grund }) => ({ datei, test: name, grund })),
   };
