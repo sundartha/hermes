@@ -10,6 +10,7 @@ const MAX_LINT_FINDINGS = 20;
 const MAX_ABORT_LINES = 20;
 const ERROR_SEVERITY = 2;
 const EXIT_FAILURE = 1;
+const EXIT_USAGE = 2;
 const SKIP_FULL_SUITE_FLAG = "--ohne-volle-suite";
 const DEFAULT_BASE_REF = "upstream/master";
 const TOOL_BANK = "regression";
@@ -119,6 +120,10 @@ function affectedTestArgs({ basis, "vor-push": beforePush }) {
 
 function main() {
   const options = parseOptions();
+  if (options.basis === "") {
+    console.error("Basis fehlt: --basis ist leer.");
+    return EXIT_USAGE;
+  }
   const args = affectedTestArgs(options);
   const lintStatus = lint();
   if (lintStatus !== 0) return lintStatus;

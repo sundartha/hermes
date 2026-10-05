@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +21,14 @@ function optionValue(name) {
 function fail(message) {
   console.error(message);
   process.exit(EXIT_USAGE);
+}
+
+function isCommit(basis) {
+  if (basis === "") return false;
+  const check = spawnSync("git", ["rev-parse", "--verify", "--quiet", basis + "^{commit}"], {
+    stdio: "ignore",
+  });
+  return check.status === 0;
 }
 
 function runAudit(dir) {
@@ -98,6 +106,9 @@ const basis = optionValue("--basis");
 const basisAuditFile = optionValue("--basis-audit");
 if (basis === undefined && basisAuditFile === undefined) {
   fail("Aufruf: node tools/audit-vergleich.mjs --basis <sha>");
+}
+if (basisAuditFile === undefined && !isCommit(basis)) {
+  fail(`Basis fehlt oder ist kein Commit: ${JSON.stringify(basis)}`);
 }
 
 const basisText =
