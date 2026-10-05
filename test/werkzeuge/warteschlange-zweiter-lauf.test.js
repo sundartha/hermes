@@ -7,7 +7,7 @@ import { ZWEITER_LAUF, testlaeufer, wegwerfRepo } from "./warteschlange/hilfen.m
 
 const WACKEL_DATEI = "test/wackel.test.js";
 const WACKEL_NAME = "wackelt beim ersten Lauf";
-const ZWEITER_PROTOKOLL = ".pruefung/regression-zweiter-lauf.log";
+const ZWEITER_PROTOKOLL = ".pruefung/regression-zweiter-lauf-1.log";
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const SHA_LAENGE = 40;
@@ -184,4 +184,113 @@ test("ein PR, der seine Datei aus tools/gate-tests.json streicht, bekommt trotzd
   assert.deepEqual(ergebnis.wackelig.rot, [
     { datei: WACKEL_DATEI, test: WACKEL_NAME, grund: "Safety-Gate-Test, kein zweiter Lauf" },
   ]);
+});
+
+const ZWILLING_DATEI = "test/zwilling.test.js";
+const ZWILLING_VOLL = "eins › zwilling";
+const ZWEIMAL_ROT = "zweimal rot";
+const NICHT_EINDEUTIG = "gleichnamiger Test, nicht eindeutig";
+const ZWILLING_KOPF = [
+  'import assert from "node:assert/strict";',
+  'import { existsSync, writeFileSync } from "node:fs";',
+  'import { before, describe, test } from "node:test";',
+  'const merker = new URL("../merker.txt", import.meta.url);',
+  "const zweiterLauf = existsSync(merker);",
+  'writeFileSync(merker, "gelaufen");',
+];
+const GRUENER_ZWILLING = ['describe("zwei", () => {', '  test("zwilling", () => {});', "});"];
+
+function inEins(...zeilen) {
+  return ['describe("eins", () => {', ...zeilen.map((zeile) => `  ${zeile}`), "});"];
+}
+
+function zwillingsLauf(context, ...zeilen) {
+  return lauf(context, { [ZWILLING_DATEI]: [...ZWILLING_KOPF, ...zeilen, ""].join("\n") });
+}
+
+function bleibtRot(ergebnis, ...gruende) {
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
+  assert.deepEqual(ergebnis.wackelig.wackelig, []);
+  const erwartet = gruende.map((grund) => ({ datei: ZWILLING_DATEI, test: ZWILLING_VOLL, grund }));
+  assert.deepEqual(ergebnis.wackelig.rot, erwartet);
+}
+
+test("ein roter Test, der im zweiten Lauf von einem gescheiterten Hook abgebrochen wird, bleibt rot, auch wenn ein gleichnamiger Test grün ist", (context) => {
+  const abgebrochen = inEins(
+    "before(() => assert.equal(zweiterLauf, false));",
+    'test("zwilling", () => assert.equal(zweiterLauf, true));',
+  );
+  bleibtRot(zwillingsLauf(context, ...abgebrochen, ...GRUENER_ZWILLING), ZWEIMAL_ROT);
+});
+
+test("ein roter Test, der im zweiten Lauf nur in einem Untertest rot ist, bleibt rot, auch wenn ein gleichnamiger Test grün ist", (context) => {
+  const untertestRot = inEins(
+    'test("zwilling", async (t) => {',
+    "  assert.equal(zweiterLauf, true);",
+    '  await t.test("kind", () => assert.fail("im zweiten Lauf rot"));',
+    "});",
+  );
+  bleibtRot(zwillingsLauf(context, ...untertestRot, ...GRUENER_ZWILLING), ZWEIMAL_ROT);
+});
+
+test("ein roter Test, der im zweiten Lauf als TODO rot ist, bleibt rot, auch wenn ein gleichnamiger Test grün ist", (context) => {
+  const todoRot = inEins(
+    'test("zwilling", (t) => {',
+    '  if (zweiterLauf) t.todo("im zweiten Lauf");',
+    '  assert.fail("rot");',
+    "});",
+  );
+  bleibtRot(zwillingsLauf(context, ...todoRot, ...GRUENER_ZWILLING), ZWEIMAL_ROT);
+});
+
+test("ein roter Test, der im zweiten Lauf übersprungen wird, bleibt rot, auch wenn ein gleichnamiger Test grün ist", (context) => {
+  const uebersprungen = inEins(
+    'test("zwilling", (t) => {',
+    "  if (zweiterLauf) return t.skip();",
+    '  assert.fail("rot");',
+    "});",
+  );
+  bleibtRot(zwillingsLauf(context, ...uebersprungen, ...GRUENER_ZWILLING), ZWEIMAL_ROT);
+});
+
+test("ein roter Test, der im zweiten Lauf über die Zeit läuft, bleibt rot, auch wenn ein gleichnamiger Test grün ist", (context) => {
+  const zeitablauf = inEins(
+    'test("zwilling", { timeout: 50 }, async () => {',
+    "  assert.equal(zweiterLauf, true);",
+    "  await new Promise((fertig) => setTimeout(fertig, 5000).unref());",
+    "});",
+  );
+  bleibtRot(zwillingsLauf(context, ...zeitablauf, ...GRUENER_ZWILLING), ZWEIMAL_ROT);
+});
+
+test("ein roter Test, der im zweiten Lauf fehlt, bleibt rot, auch wenn ein gleichnamiger Test grün ist", (context) => {
+  const fehlend = inEins('if (!zweiterLauf) test("zwilling", () => assert.fail("rot"));');
+  bleibtRot(zwillingsLauf(context, ...fehlend, ...GRUENER_ZWILLING), "im zweiten Lauf nicht gelaufen");
+});
+
+test("zwei Tests mit demselben vollen Namen in einer Datei sind nicht eindeutig und bleiben rot", (context) => {
+  const doppelt = inEins(
+    'test("zwilling", () => {});',
+    'test("zwilling", (t) => {',
+    "  if (zweiterLauf) return t.skip();",
+    '  assert.fail("rot");',
+    "});",
+  );
+  bleibtRot(zwillingsLauf(context, ...doppelt), NICHT_EINDEUTIG);
+});
+
+test("zwei rote Tests mit demselben vollen Namen bleiben rot, auch wenn im zweiten Lauf nur einer läuft und grün ist", (context) => {
+  const doppeltRot = inEins(
+    'test("zwilling", () => assert.equal(zweiterLauf, true));',
+    'if (!zweiterLauf) test("zwilling", () => assert.fail("rot"));',
+  );
+  bleibtRot(zwillingsLauf(context, ...doppeltRot), NICHT_EINDEUTIG, NICHT_EINDEUTIG);
+});
+
+test("ein wackeliger Test neben einem gleichnamigen in einer anderen Gruppe gilt mit vollem Namen als wackelig", (context) => {
+  const wackelnd = inEins('test("zwilling", () => assert.equal(zweiterLauf, true));');
+  const ergebnis = zwillingsLauf(context, ...wackelnd, ...GRUENER_ZWILLING);
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
+  assert.deepEqual(ergebnis.wackelig.wackelig, [{ datei: ZWILLING_DATEI, test: ZWILLING_VOLL }]);
+  assert.deepEqual(ergebnis.wackelig.rot, []);
 });
