@@ -29,6 +29,9 @@ const OTHER_TRIGGER_MESSAGE =
 const WRITE_PERMISSION_MESSAGE =
   "statuses: write, checks: write und write-all nur in Workflows mit workflow_run als einzigem Auslöser";
 const PRUEFER_NAME_MESSAGE = "kein Job darf Prüfer heißen";
+const CACHE_MESSAGE =
+  "cache: und actions/cache sind in Workflows aus tools/basis/geheimnis-workflows.json verboten";
+const SETUP_NODE = "        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020";
 
 function secretWorkflow({ trigger = WORKFLOW_RUN, jobLines = [ENVIRONMENT], extra = [] } = {}) {
   return [
@@ -246,4 +249,35 @@ test("workflows-pruefen-pruefer: alle Workflows des Repos bestehen die verschaer
   const result = runIn(REPO_ROOT, process.execPath, [TOOL]);
   assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
   assert.equal(`${result.stdout}${result.stderr}`, "");
+});
+
+test("workflows-pruefen-pruefer: cache: npm in einem Workflow der Secret-Liste ist verboten", (context) => {
+  const target = "          cache: npm";
+  const extra = [
+    "      - name: Node 22",
+    SETUP_NODE,
+    "        with:",
+    "          node-version: 22",
+    target,
+  ];
+  expectFinding(context, { lines: secretWorkflow({ extra }), target, message: CACHE_MESSAGE });
+});
+
+test("workflows-pruefen-pruefer: actions/cache in einem Workflow der Secret-Liste ist verboten", (context) => {
+  const target = "        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684";
+  const extra = ["      - name: Cache", target, "        with:", "          path: ~/.npm"];
+  expectFinding(context, { lines: secretWorkflow({ extra }), target, message: CACHE_MESSAGE });
+});
+
+test("workflows-pruefen-pruefer: cache: npm ausserhalb der Secret-Liste bleibt erlaubt", (context) => {
+  const lines = plainWorkflow(PUSH, ["permissions: {}"]).toSpliced(
+    -1,
+    0,
+    "      - name: Node 22",
+    SETUP_NODE,
+    "        with:",
+    "          node-version: 22",
+    "          cache: npm",
+  );
+  expectClean(context, OTHER_NAME, lines);
 });
