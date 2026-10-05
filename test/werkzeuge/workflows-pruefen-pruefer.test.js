@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { REPO_ROOT, probeDirectory, runIn } from "./probe-repo.js";
+import { REPO_ROOT, runIn } from "./probe-repo.js";
+import { TOOL, expectClean, expectFinding, runCheck } from "./workflows-probe.mjs";
 
-const TOOL = join(REPO_ROOT, "tools/workflows-pruefen.mjs");
 const LISTED_NAME = "pruefer-pruefen.yml";
 const FOLLOW_UP_NAME = "pruefer-nachstellen.yml";
 const OTHER_NAME = "nachtlauf.yml";
@@ -68,26 +68,6 @@ function plainWorkflow(trigger, headerLines, jobLines = ["  melden:"]) {
     "        run: echo ok",
     "",
   ];
-}
-
-function run(context, files) {
-  const directory = probeDirectory(context, files);
-  const result = runIn(directory, process.execPath, [TOOL, directory]);
-  return { status: result.status, output: `${result.stdout}${result.stderr}` };
-}
-
-function expectFinding(context, { name = LISTED_NAME, lines, target, message }) {
-  const result = run(context, { [name]: lines.join("\n") });
-  assert.equal(result.status, 1, result.output);
-  const where = `${name}:${lines.indexOf(target) + 1}: ${message}`;
-  assert.ok(result.output.includes(where), `${where} fehlt in:\n${result.output}`);
-  return result.output;
-}
-
-function expectClean(context, name, lines) {
-  const result = run(context, { [name]: lines.join("\n") });
-  assert.equal(result.status, 0, result.output);
-  assert.equal(result.output, "");
 }
 
 test("workflows-pruefen-pruefer: der gelistete Prueferworkflow mit workflow_run und Environment ist erlaubt", (context) => {
@@ -257,7 +237,7 @@ test("workflows-pruefen-pruefer: die echten Workflows pruefer-pruefen.yml und pr
       readFileSync(join(REPO_ROOT, ".github/workflows", name), "utf8"),
     ]),
   );
-  const result = run(context, files);
+  const result = runCheck(context, files);
   assert.equal(result.status, 0, result.output);
   assert.equal(result.output, "");
 });

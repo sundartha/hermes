@@ -9,7 +9,10 @@ import { ANMELDUNG_GRUND, LIMIT_GRUND, pruefeCommit } from "../../tools/auftrag/
 import { isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 import {
   SCHEIN_TOKEN,
+  WORKFLOW_NUMMERN,
   aufzeichnung,
+  ciLauf,
+  ereignisDatei,
   ersatzPruefer,
   ohneGitVariablen,
   probeRepo,
@@ -199,6 +202,10 @@ test("pruefen schreibt nur Zählwerte ins Log, und das Token erreicht nur den Pr
         "GET /repos/sundartha/hermes/actions/workflows/pruefer-pruefen.yml/runs",
         { workflow_runs: [] },
       ],
+      [
+        "GET /repos/sundartha/hermes/actions/workflows/ci.yml",
+        { id: WORKFLOW_NUMMERN.get("ci.yml") },
+      ],
     ]),
   );
   const git = gitMitProtokoll(context);
@@ -211,6 +218,7 @@ test("pruefen schreibt nur Zählwerte ins Log, und das Token erreicht nur den Pr
     GH_TOKEN: "gh-schein",
     GITHUB_API_URL: github.url,
     GITHUB_REPOSITORY: "sundartha/hermes",
+    GITHUB_EVENT_PATH: ereignisDatei(context, ciLauf()),
   };
   const args = [
     "pruefer",

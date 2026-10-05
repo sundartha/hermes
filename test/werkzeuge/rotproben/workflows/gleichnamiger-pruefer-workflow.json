@@ -1,0 +1,53 @@
+{
+  "titel": "Gleichnamiger Workflow „Prüfer prüfen“ mit pull_request neben dem echten",
+  "dateien": {
+    ".github/workflows/ci.yml": [
+      "name: CI",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  test:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        run: echo ok"
+    ],
+    ".github/workflows/pruefer-pruefen.yml": [
+      "name: Prüfer prüfen",
+      "on:",
+      "  workflow_run:",
+      "    workflows: [\"CI\"]",
+      "    types: [completed]",
+      "permissions: {}",
+      "jobs:",
+      "  pruefen:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        run: echo ok"
+    ],
+    ".github/workflows/probe-b.yml": [
+      "name: Prüfer prüfen",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Gefälschtes Ergebnis",
+      "        run: mkdir -p ergebnis && echo '{}' > ergebnis/ergebnis.json",
+      "      - name: Ergebnis hochladen",
+      "        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+      "        with:",
+      "          name: pruefer-ergebnis-pr1",
+      "          path: ergebnis"
+    ]
+  },
+  "erwartet": "derselbe Workflow-Name steht schon in einer anderen Datei"
+}

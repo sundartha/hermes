@@ -7,6 +7,7 @@ import {
   isContentLine,
   structureRules,
   triggerSection,
+  workflowNameFindings,
 } from "./workflows-pruefen/struktur.mjs";
 
 const DEFAULT_WORKFLOW_DIR = ".github/workflows";
@@ -101,8 +102,7 @@ function lineRulesFor(filePath, lines) {
   return [...rules, secretsOutsideList, productionEnvironmentOutsideList, environmentOutsideList];
 }
 
-function findingsInFile(filePath) {
-  const lines = readFileSync(filePath, "utf8").split("\n");
+function findingsInFile({ filePath, lines }) {
   const rules = lineRulesFor(filePath, lines);
   return lines.flatMap((line, index) =>
     rules
@@ -112,14 +112,19 @@ function findingsInFile(filePath) {
   );
 }
 
+function readWorkflow(filePath) {
+  return { filePath, lines: readFileSync(filePath, "utf8").split("\n") };
+}
+
 function workflowFiles(workflowDir) {
-  return readdirSync(workflowDir, { withFileTypes: true })
+  const paths = readdirSync(workflowDir, { withFileTypes: true })
     .filter((entry) => entry.isFile())
-    .map((entry) => join(workflowDir, entry.name))
-    .sort();
+    .map((entry) => join(workflowDir, entry.name));
+  return paths.sort().map(readWorkflow);
 }
 
 const [, , workflowDir = DEFAULT_WORKFLOW_DIR] = process.argv;
-const findings = workflowFiles(workflowDir).flatMap(findingsInFile);
+const workflows = workflowFiles(workflowDir);
+const findings = [...workflows.flatMap(findingsInFile), ...workflowNameFindings(workflows)];
 for (const finding of findings) console.error(finding);
 if (findings.length > 0) process.exitCode = 1;
