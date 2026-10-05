@@ -30,8 +30,7 @@ const WITH_DISPATCH = [...WORKFLOW_RUN, "  workflow_dispatch:"];
 const WRITE_PERMISSION_MESSAGE =
   "statuses: write, checks: write und write-all nur in Workflows mit workflow_run als einzigem Auslöser";
 const PRUEFER_NAME_MESSAGE = "kein Job darf Prüfer heißen";
-const CACHE_MESSAGE =
-  "cache: und actions/cache sind in Workflows aus tools/basis/geheimnis-workflows.json verboten";
+const CACHE_MESSAGE = "cache: und actions/cache sind in Workflow-Dateien verboten";
 const SETUP_NODE = "        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020";
 
 function secretWorkflow({ trigger = WORKFLOW_RUN, jobLines = [ENVIRONMENT], extra = [] } = {}) {
@@ -278,15 +277,30 @@ test("workflows-pruefen-pruefer: actions/cache in einem Workflow der Secret-List
   expectFinding(context, { lines: secretWorkflow({ extra }), target, message: CACHE_MESSAGE });
 });
 
-test("workflows-pruefen-pruefer: cache: npm ausserhalb der Secret-Liste bleibt erlaubt", (context) => {
-  const lines = plainWorkflow(PUSH, ["permissions: {}"]).toSpliced(
+test("workflows-pruefen-pruefer: cache: npm in einem Workflow ohne Secret ist verboten", (context) => {
+  const target = "          cache: npm";
+  const lines = plainWorkflow(PULL_REQUEST, ["permissions: {}"]).toSpliced(
     -1,
     0,
     "      - name: Node 22",
     SETUP_NODE,
     "        with:",
     "          node-version: 22",
-    "          cache: npm",
+    target,
   );
-  expectClean(context, OTHER_NAME, lines);
+  expectFinding(context, { name: OTHER_NAME, lines, target, message: CACHE_MESSAGE });
+});
+
+test("workflows-pruefen-pruefer: actions/cache/restore in einem push-Workflow ohne Secret ist verboten", (context) => {
+  const target = "        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684";
+  const lines = plainWorkflow(PUSH, ["permissions: {}"]).toSpliced(
+    -1,
+    0,
+    "      - name: Cache",
+    target,
+    "        with:",
+    "          path: ~/.npm",
+    "          key: npm",
+  );
+  expectFinding(context, { name: OTHER_NAME, lines, target, message: CACHE_MESSAGE });
 });

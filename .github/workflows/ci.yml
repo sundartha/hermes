@@ -28,7 +28,6 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
 
       - name: Workflows prüfen
         run: node tools/workflows-pruefen.mjs
@@ -133,7 +132,6 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
 
       - name: npm ci
         run: npm ci --ignore-scripts
