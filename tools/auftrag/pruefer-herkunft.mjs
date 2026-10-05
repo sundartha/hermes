@@ -18,7 +18,7 @@ function pfadDer(herkunft) {
   return `${WORKFLOW_ORDNER}${herkunft.datei}`;
 }
 
-async function workflowNummer(github, herkunft) {
+export async function workflowNummer(github, herkunft) {
   const { id } = await github.hole(`/actions/workflows/${herkunft.datei}`);
   return id;
 }
@@ -26,6 +26,10 @@ async function workflowNummer(github, herkunft) {
 function pfadUndEreignisPassen(lauf, herkunft) {
   const pfad = String(lauf?.path ?? "").split(REF_TRENNER)[0];
   return pfad === pfadDer(herkunft) && lauf.event === herkunft.ereignis;
+}
+
+export function passtZu(lauf, herkunft, nummer) {
+  return pfadUndEreignisPassen(lauf, herkunft) && lauf.workflow_id === nummer;
 }
 
 export async function stammtAus(github, lauf, herkunft) {

@@ -198,10 +198,7 @@ test("pruefen schreibt nur Zählwerte ins Log, und das Token erreicht nur den Pr
         `GET /repos/sundartha/hermes/issues/${ISSUE_NUMMER}`,
         { title: "Zahl auf 2", body: "Fertig heißt: ZAHL ist 2." },
       ],
-      [
-        "GET /repos/sundartha/hermes/actions/workflows/pruefer-pruefen.yml/runs",
-        { workflow_runs: [] },
-      ],
+      ["GET /repos/sundartha/hermes/actions/artifacts", { artifacts: [] }],
       [
         "GET /repos/sundartha/hermes/actions/workflows/ci.yml",
         { id: WORKFLOW_NUMMERN.get("ci.yml") },

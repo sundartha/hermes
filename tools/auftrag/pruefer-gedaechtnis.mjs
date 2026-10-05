@@ -1,13 +1,9 @@
 import { inflateRawSync } from "node:zlib";
 
-import { PRO_SEITE, mitSeite } from "./pruefer-github.mjs";
+import { PRUEFER_LAUF, passtZu, workflowNummer } from "./pruefer-herkunft.mjs";
 import { ERGEBNIS_DATEI, GEPRUEFT, ergebnisAus } from "./pruefer-schema.mjs";
 
-export const WORKFLOW = "pruefer-pruefen.yml";
-export const ARTEFAKT = "pruefer-ergebnis";
-const WORKFLOW_PFAD = `.github/workflows/${WORKFLOW}`;
-const AUSLOESER = "workflow_run";
-const ERFOLG = "success";
+const ARTEFAKT_PRAEFIX = "pruefer-ergebnis-pr";
 const EOCD_SIGNATUR = 0x06054b50;
 const ZENTRAL_SIGNATUR = 0x02014b50;
 const LOKAL_SIGNATUR = 0x04034b50;
@@ -81,20 +77,11 @@ export function entpacke(puffer) {
   return dateien;
 }
 
-function vomPrueferWorkflow(laufId) {
-  return (lauf) =>
-    lauf.id !== laufId &&
-    lauf.event === AUSLOESER &&
-    lauf.conclusion === ERFOLG &&
-    String(lauf.path ?? "").split("@")[0] === WORKFLOW_PFAD;
+export function artefaktName(pr) {
+  return `${ARTEFAKT_PRAEFIX}${pr}`;
 }
 
-async function ergebnisDesLaufs(github, laufId) {
-  const { artifacts: artefakte = [] } = await github.hole(
-    `/actions/runs/${laufId}/artifacts?name=${ARTEFAKT}`,
-  );
-  const artefakt = artefakte.find(({ name, expired }) => name === ARTEFAKT && expired !== true);
-  if (!artefakt) return null;
+async function inhaltDes(github, artefakt) {
   try {
     const inhalt = entpacke(await github.roh(`/actions/artifacts/${artefakt.id}/zip`)).get(
       ERGEBNIS_DATEI,
@@ -105,21 +92,40 @@ async function ergebnisDesLaufs(github, laufId) {
   }
 }
 
-function uebernehmbare(ergebnis) {
-  const gepruefte = ergebnis.commits.filter(
-    ({ zustand, patchId }) => zustand === GEPRUEFT && patchId !== "",
-  );
-  return new Map(gepruefte.map((commit) => [commit.patchId, commit]));
+function vertrauteLaeufe(github, nummer) {
+  const bekannt = new Map();
+  return async (laufId) => {
+    if (!bekannt.has(laufId)) {
+      const lauf = await github.hole(`/actions/runs/${laufId}`);
+      bekannt.set(laufId, passtZu(lauf, PRUEFER_LAUF, nummer));
+    }
+    return bekannt.get(laufId);
+  };
 }
 
-export async function fruehereErgebnisse({ github, branch, laufId }) {
-  const pfad = `/actions/workflows/${WORKFLOW}/runs?event=${AUSLOESER}&status=${ERFOLG}`;
-  for (let seite = 1; ; seite += 1) {
-    const { workflow_runs: laeufe = [] } = await github.hole(mitSeite(pfad, seite));
-    for (const lauf of laeufe.filter(vomPrueferWorkflow(laufId))) {
-      const ergebnis = await ergebnisDesLaufs(github, lauf.id);
-      if (ergebnis?.branch === branch) return uebernehmbare(ergebnis);
-    }
-    if (laeufe.length < PRO_SEITE) return new Map();
+function uebernimm(gesammelt, ergebnis) {
+  for (const commit of ergebnis.commits) {
+    const tauglich = commit.zustand === GEPRUEFT && commit.patchId !== "";
+    if (tauglich && !gesammelt.has(commit.patchId)) gesammelt.set(commit.patchId, commit);
   }
+}
+
+export async function fruehereErgebnisse({ github, pr }) {
+  const name = artefaktName(pr);
+  const artefakte = await github.alle(
+    `/actions/artifacts?name=${name}`,
+    (antwort) => antwort.artifacts,
+  );
+  const passend = artefakte.filter(
+    (artefakt) => artefakt.name === name && artefakt.expired !== true,
+  );
+  const gesammelt = new Map();
+  if (passend.length === 0) return gesammelt;
+  const vertraut = vertrauteLaeufe(github, await workflowNummer(github, PRUEFER_LAUF));
+  for (const artefakt of passend) {
+    if (!(await vertraut(artefakt.workflow_run?.id))) continue;
+    const ergebnis = await inhaltDes(github, artefakt);
+    if (ergebnis?.pr === pr) uebernimm(gesammelt, ergebnis);
+  }
+  return gesammelt;
 }

@@ -66,7 +66,7 @@ export function probeRepo(context, dateien = { "src/zahl.js": "export const ZAHL
   };
 }
 
-export function ersatzPruefer(context, { aufnahme, liestDiffs = true }) {
+export function ersatzPruefer(context, { aufnahme, liestDiffs = true, beobachtet }) {
   const ordner = probeDirectory(context, { "aufnahme.json": JSON.stringify(aufnahme) });
   const einstellung = {
     aufzeichnung: join(ordner, "aufnahme.json"),
@@ -76,7 +76,8 @@ export function ersatzPruefer(context, { aufnahme, liestDiffs = true }) {
   const programm = join(ordner, "claude.mjs");
   const quelle = [
     "#!/usr/bin/env node",
-    `import { spiele } from ${JSON.stringify(ERSATZ)};`,
+    `import { beobachte, spiele } from ${JSON.stringify(ERSATZ)};`,
+    beobachtet ? `beobachte(${JSON.stringify(beobachtet)});` : "",
     `spiele(${JSON.stringify(einstellung)});`,
     "",
   ].join("\n");

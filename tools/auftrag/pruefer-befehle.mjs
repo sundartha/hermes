@@ -1,10 +1,18 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { env } from "node:process";
 
 import { stelleNach } from "./nachstellen.mjs";
 import { gitAusgabe, zuPruefendeCommits } from "./pruefer-auswahl.mjs";
-import { fruehereErgebnisse } from "./pruefer-gedaechtnis.mjs";
+import { artefaktName, fruehereErgebnisse } from "./pruefer-gedaechtnis.mjs";
 import { githubZugang } from "./pruefer-github.mjs";
 import { CI_LAUF, PRUEFER_LAUF, ausloesenderLauf, stammtAus } from "./pruefer-herkunft.mjs";
 import { legeIssuesAn } from "./pruefer-issues.mjs";
@@ -36,6 +44,8 @@ const ISSUE_IM_TEXT = /\b(?:closes|fixes|resolves)\s+#(\d+)\b/i;
 const PHASEN_BRANCH = /^phase\/(\d+)-/;
 const MAX_DATEI_BYTES = 16_777_216;
 const KURZ = 12;
+const OFFEN_GRUND = "Lauf vorzeitig beendet";
+const ZWISCHENDATEI = ".ergebnis.json.neu";
 const JSON_EINRUECKUNG = 2;
 const ERFOLG = "success";
 const FEHLER = "error";
@@ -85,46 +95,69 @@ async function auftragstext(github, pr, branch) {
   }
 }
 
-async function gedaechtnis(github, branch) {
+async function gedaechtnis(github, pr, auswahl) {
+  if (auswahl.probeBranch || auswahl.commits.length === 0) return new Map();
   try {
-    return await fruehereErgebnisse({ github, branch, laufId: Number(env.GITHUB_RUN_ID) });
+    return await fruehereErgebnisse({ github, pr });
   } catch (fehler) {
     console.log(`Frühere Ergebnisse nicht lesbar: ${fehler.message}`);
     return new Map();
   }
 }
 
-async function pruefeAlle(commits, frueher, kontext) {
+function meldeArtefakt(pr) {
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `artefakt=${artefaktName(pr)}\n`);
+}
+
+function uebernommen(commit, bekannt) {
+  return { ...bekannt, sha: commit.sha, kritisch: commit.kritisch, uebernommen: true };
+}
+
+function vorlaeufig(commit, frueher) {
+  const bekannt = frueher.get(commit.patchId);
+  return bekannt ? uebernommen(commit, bekannt) : nichtGelaufen(commit, OFFEN_GRUND);
+}
+
+async function einerVon(commit, { frueher, abbruch, kontext }) {
+  const bekannt = frueher.get(commit.patchId);
+  if (bekannt) return uebernommen(commit, bekannt);
+  if (abbruch) return nichtGelaufen(commit, abbruch);
+  return pruefeCommit(commit, kontext);
+}
+
+function meldeCommit({ sha, zustand, grund, uebernommen: frueher, zaehler }) {
+  const kosten = zaehler ? `, Tokens ${zaehler.tokens}, Züge ${zaehler.zuege}` : "";
+  console.log(
+    `Commit ${sha.slice(0, KURZ)}: ${frueher ? "übernommen" : zustand}${grund ? ` (${grund})` : ""}${kosten}`,
+  );
+}
+
+async function pruefeAlle(commits, frueher, { kontext, schreibe }) {
   const ergebnisse = [];
   let abbruch = "";
+  schreibe(ergebnisse);
   for (const commit of commits) {
-    const bekannt = frueher.get(commit.patchId);
-    if (bekannt)
-      ergebnisse.push({
-        ...bekannt,
-        sha: commit.sha,
-        kritisch: commit.kritisch,
-        uebernommen: true,
-      });
-    else if (abbruch) ergebnisse.push(nichtGelaufen(commit, abbruch));
-    else ergebnisse.push(await pruefeCommit(commit, kontext));
-    const grund = ergebnisse.at(-1).grund;
-    if (!abbruch && STOP_GRUENDE.has(grund)) abbruch = `${grund}, nicht gestartet`;
+    const eintrag = await einerVon(commit, { frueher, abbruch, kontext });
+    ergebnisse.push(eintrag);
+    meldeCommit(eintrag);
+    schreibe(ergebnisse);
+    if (!abbruch && STOP_GRUENDE.has(eintrag.grund)) abbruch = `${eintrag.grund}, nicht gestartet`;
   }
   return ergebnisse;
 }
 
-function melde(ergebnis) {
+function schreibeErgebnis(aus, ergebnis) {
+  mkdirSync(aus, { recursive: true });
+  const zwischen = join(aus, ZWISCHENDATEI);
+  writeFileSync(zwischen, `${JSON.stringify(ergebnis, null, JSON_EINRUECKUNG)}\n`);
+  renameSync(zwischen, join(aus, ERGEBNIS_DATEI));
+}
+
+function meldeSumme(ergebnis) {
   const befunde = ergebnis.commits.flatMap((commit) => commit.befunde);
   const jeSchwere = SCHWEREN.map(
     (schwere) => `${schwere} ${befunde.filter((befund) => befund.schwere === schwere).length}`,
   );
-  for (const { sha, zustand, grund, uebernommen, zaehler } of ergebnis.commits) {
-    const kosten = zaehler ? `, Tokens ${zaehler.tokens}, Züge ${zaehler.zuege}` : "";
-    console.log(
-      `Commit ${sha.slice(0, KURZ)}: ${uebernommen ? "übernommen" : zustand}${grund ? ` (${grund})` : ""}${kosten}`,
-    );
-  }
   console.log(
     `Prüfer: ${ergebnis.commits.length} Commits, ${ergebnis.weggelassen.length} eigene Paket-Commits weggelassen; Befunde ${jeSchwere.join(", ")}.`,
   );
@@ -137,9 +170,10 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
   if (!(await stammtAus(github, ausloeser, CI_LAUF))) return falscheHerkunft(CI_LAUF);
   const { head, "pr-branch": branch, "pr-repo": prRepo, aus } = optionen;
   const pr = await offenerPr(github, head);
+  meldeArtefakt(pr.number);
   const basis = basisVon(pr, head, root);
   const auswahl = zuPruefendeCommits({ basis, head, branch, prRepo, root });
-  const frueher = auswahl.probeBranch ? new Map() : await gedaechtnis(github, branch);
+  const frueher = await gedaechtnis(github, pr.number, auswahl);
   const kontext = {
     root,
     token,
@@ -147,8 +181,7 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
     ciLauf: ausloeser.html_url ?? "",
     auftragstext: await auftragstext(github, pr, branch),
   };
-  const commits = await pruefeAlle(auswahl.commits, frueher, kontext);
-  const ergebnis = {
+  const kopf = {
     format: FORMAT,
     head,
     basis,
@@ -156,11 +189,13 @@ async function pruefen(optionen, root, { github = githubZugang(), programm } = {
     pr: pr.number,
     probeBranch: auswahl.probeBranch,
     weggelassen: auswahl.weggelassen,
-    commits,
   };
-  mkdirSync(aus, { recursive: true });
-  writeFileSync(join(aus, ERGEBNIS_DATEI), `${JSON.stringify(ergebnis, null, JSON_EINRUECKUNG)}\n`);
-  melde(ergebnis);
+  const offen = (fertig) =>
+    auswahl.commits.slice(fertig.length).map((commit) => vorlaeufig(commit, frueher));
+  const schreibe = (fertig) =>
+    schreibeErgebnis(aus, { ...kopf, commits: [...fertig, ...offen(fertig)] });
+  const commits = await pruefeAlle(auswahl.commits, frueher, { kontext, schreibe });
+  meldeSumme({ ...kopf, commits });
   return 0;
 }
 

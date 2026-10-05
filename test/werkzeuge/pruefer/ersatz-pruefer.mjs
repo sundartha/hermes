@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ERSTES_ARGUMENT = 2;
@@ -51,4 +51,9 @@ export function spiele({ aufzeichnung, protokoll, liestDiffs }) {
   });
   zeilen.forEach(zeige);
   process.exitCode = exitCode;
+}
+
+export function beobachte({ datei, liste }) {
+  const inhalt = existsSync(datei) ? JSON.parse(readFileSync(datei, "utf8")) : null;
+  appendFileSync(liste, `${JSON.stringify(inhalt)}\n`);
 }
