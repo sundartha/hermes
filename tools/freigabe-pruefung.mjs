@@ -11,6 +11,11 @@ import { STRENGER, stricterCases } from "./freigabe-strenger.mjs";
 import { LOCKERER, fileAt, git, matches, measureChecks } from "./pruefungen-messen.mjs";
 import { changedExistingTestFiles, changedUnits } from "./testschutz/aenderungen.mjs";
 import { getJson, repositoryName } from "./testschutz/github.mjs";
+import {
+  gleicheAenderungGegenBasis,
+  holeKopf,
+  prNummerAus,
+} from "./warteschlange/gleicher-stand.mjs";
 
 const APPROVERS = ["Antonio20045", "jonas986"];
 const KINDS = [STRENGER, "pruefung", "werkzeugtexte", "tests-geaendert", "gespraech", "code"];
@@ -37,20 +42,26 @@ const REVIEWS_PER_PAGE = 100;
 const SHORT_SHA = 7;
 const EXIT_FAILURE = 1;
 const USAGE =
-  "Aufruf: node tools/freigabe-pruefung.mjs --basis <sha> --pr <nr> [--registry <url>] [--downloads <url>]";
+  "Aufruf: node tools/freigabe-pruefung.mjs --basis <sha> (--pr <nr> | --warteschlange <ref>) [--registry <url>] [--downloads <url>]";
 
 function parseOptions() {
   const { values } = parseArgs({
     options: {
       basis: { type: "string" },
       pr: { type: "string" },
+      warteschlange: { type: "string" },
       registry: { type: "string", default: "https://registry.npmjs.org" },
       downloads: { type: "string", default: "https://api.npmjs.org" },
     },
   });
-  if (values.basis === undefined || values.pr === undefined) throw new Error(USAGE);
+  const queueMode = values.warteschlange !== undefined;
+  if (values.basis === undefined || queueMode === (values.pr !== undefined)) throw new Error(USAGE);
   const sources = { registry: values.registry, downloads: values.downloads };
-  return { basis: values.basis, pullRequest: Number(values.pr), sources };
+  const pullRequest = queueMode ? prNummerAus(values.warteschlange) : Number(values.pr);
+  if (pullRequest === null) {
+    throw new Error(`Keine PR-Nummer im Ref ${JSON.stringify(values.warteschlange)}.`);
+  }
+  return { basis: values.basis, pullRequest, queueMode, sources };
 }
 
 function changedFiles(basis) {
@@ -314,14 +325,33 @@ function statusLines({ needs, blocks, approvedBy, headSha }) {
   ];
 }
 
+function sameChangeInQueue({ basis, pullRequest }, headSha) {
+  holeKopf(pullRequest, headSha, process.cwd());
+  return gleicheAenderungGegenBasis({ basis, kopf: headSha }, process.cwd()).gleich;
+}
+
+async function countedApprovers(options, { needs }, headSha) {
+  if (needs.length === 0) return { approvedBy: [], notes: [] };
+  const approvedBy = await approvers(options.pullRequest, headSha);
+  if (!options.queueMode || approvedBy.length === 0 || sameChangeInQueue(options, headSha)) {
+    return { approvedBy, notes: [] };
+  }
+  return {
+    approvedBy: [],
+    notes: [
+      `Die Freigabe auf dem Stand ${headSha.slice(0, SHORT_SHA)} zählt in der Warteschlange nicht, weil die Änderung dort anders ist.`,
+    ],
+  };
+}
+
 async function main() {
   const options = parseOptions();
   const { full } = repositoryName();
   const pull = await getJson(`/repos/${full}/pulls/${options.pullRequest}`);
   const result = await evaluate(options);
   const headSha = pull.head.sha;
-  const approvedBy = result.needs.length > 0 ? await approvers(options.pullRequest, headSha) : [];
-  const gruende = statusLines({ ...result, approvedBy, headSha });
+  const { approvedBy, notes } = await countedApprovers(options, result, headSha);
+  const gruende = [...statusLines({ ...result, approvedBy, headSha }), ...notes];
   const { pruefungen, ohneMessung } = result.measured;
   const findings = [
     pruefungen,
@@ -339,8 +369,10 @@ async function main() {
     pakete: result.pakete,
     texte: result.texts,
   };
-  await writeSummary(options.pullRequest, report, relevant);
-  await setKindLabel(pull, result.kind);
+  if (!options.queueMode) {
+    await writeSummary(options.pullRequest, report, relevant);
+    await setKindLabel(pull, result.kind);
+  }
   console.log(`Freigabe-Prüfung: Art art:${result.kind}.`);
   for (const { path, fall } of result.strenger) console.log(`Strenger: ${path}: ${fall}`);
   for (const line of gruende) console.log(line);

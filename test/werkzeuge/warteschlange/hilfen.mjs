@@ -115,8 +115,12 @@ export function ereignis(context, workflowRun) {
   return join(ordner, "ereignis.json");
 }
 
-export async function warteschlange(args, { cwd, umgebung }) {
-  const kind = spawn(process.execPath, [WARTESCHLANGE, ...args], {
+export function warteschlange(args, optionen) {
+  return starteWerkzeug([WARTESCHLANGE, ...args], optionen);
+}
+
+export async function starteWerkzeug(befehl, { cwd, umgebung } = {}) {
+  const kind = spawn(process.execPath, befehl, {
     cwd,
     env: saubereUmgebung(umgebung),
     stdio: ["ignore", "pipe", "pipe"],
