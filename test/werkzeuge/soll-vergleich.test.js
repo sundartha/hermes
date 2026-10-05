@@ -18,7 +18,6 @@ const COLLABORATORS = `${BASE}/collaborators`;
 const CODEOWNERS = `${BASE}/contents/.github/CODEOWNERS`;
 const ENVIRONMENTS = `${BASE}/environments`;
 const ENVIRONMENT = `${BASE}/environments/rotproben`;
-const RECORDED_ENVIRONMENTS = ["rotproben"];
 const MEASURED_ENVIRONMENTS = ["rotproben", "pruefer", "produktion"];
 const SOLL_FILE = "einstellungen.json";
 const BASE64 = "base64";
@@ -56,7 +55,7 @@ function environmentRoutes(answers, names) {
   ];
 }
 
-function recordedRoutes(environments = RECORDED_ENVIRONMENTS) {
+function recordedRoutes(environments = MEASURED_ENVIRONMENTS) {
   const answers = recording("antworten");
   return new Map([
     [RULESET, answer(recording("ruleset-owner"))],
