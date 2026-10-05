@@ -14,6 +14,8 @@ const NOT_PULL_REQUEST = ["on:", "  schedule:", "    - cron: '0 3 * * *'", "  wo
 const PULL_REQUEST = ["on:", "  pull_request:", "    branches: [master]"];
 const ENVIRONMENT_MESSAGE =
   "Environment produktion nur in Workflows aus tools/basis/geheimnis-workflows.json";
+const ANY_ENVIRONMENT_MESSAGE =
+  "environment: nur in Workflows aus tools/basis/geheimnis-workflows.json";
 const INLINE_PRODUCTION = "    environment: produktion";
 const QUOTED_PRODUCTION = "    environment: 'produktion'";
 const BLOCK_PRODUCTION = "      name: produktion";
@@ -118,10 +120,11 @@ test("geheimnis-workflows: die einzeilige Form mit geschweiften Klammern ist aus
   assert.ok(result.output.includes(`${result.where}${ENVIRONMENT_MESSAGE}`), result.output);
 });
 
-test("geheimnis-workflows: ein anderes Environment wie rotproben ist nicht betroffen", (context) => {
+test("geheimnis-workflows: ein anderes Environment wie rotproben ist ausserhalb der Liste mit eigener Meldung gesperrt", (context) => {
   const result = checkEnvironment(context, OTHER_NAME, [OTHER_ENVIRONMENT]);
-  assert.equal(result.status, 0, result.output);
-  assert.equal(result.output, "");
+  assert.equal(result.status, 1, result.output);
+  assert.ok(result.output.includes(`${result.where}${ANY_ENVIRONMENT_MESSAGE}`), result.output);
+  assert.ok(!result.output.includes(ENVIRONMENT_MESSAGE), result.output);
 });
 
 test("geheimnis-workflows: der gelistete Workflow darf das Environment produktion nennen", (context) => {

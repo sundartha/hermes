@@ -1,6 +1,10 @@
 {
   "titel": "Workflow-Regeln",
-  "pfade": ["tools/workflows-pruefen.mjs", "tools/basis/geheimnis-workflows.json"],
+  "pfade": [
+    "tools/workflows-pruefen.mjs",
+    "tools/workflows-pruefen/",
+    "tools/basis/geheimnis-workflows.json"
+  ],
   "treffer": {
     "befehl": ["node", "{wurzel}/tools/workflows-pruefen.mjs"],
     "zaehlen": "stderr-zeilen"
