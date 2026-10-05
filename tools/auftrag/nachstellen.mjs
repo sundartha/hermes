@@ -77,7 +77,8 @@ function zaehle(ergebnisse, seite) {
 
 function schreibeNachstellung(aus, head, ergebnisse) {
   const zwischen = join(aus, ZWISCHENDATEI);
-  writeFileSync(zwischen, `${JSON.stringify({ format: FORMAT, head, ergebnisse })}\n`);
+  const inhalt = JSON.stringify({ format: FORMAT, head, ergebnisse });
+  writeFileSync(zwischen, `${inhalt}\n`);
   renameSync(zwischen, join(aus, NACHSTELLUNG_DATEI));
 }
 
