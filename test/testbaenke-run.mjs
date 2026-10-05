@@ -163,7 +163,10 @@ function testFilesFrom(argv) {
   return files.length > 0 ? files : [TEST_GLOB];
 }
 
-function runNodeTest(mode, { extraArgs, files, protocolName = mode, environment = process.env }) {
+function runNodeTest(
+  mode,
+  { extraArgs, files, protocolName = mode, environment = environmentWithout([SECOND_RUN_VARIABLE]) },
+) {
   mkdirSync(PROTOCOL_DIR, { recursive: true });
   const protocolPath = join(PROTOCOL_DIR, `${protocolName}.log`);
   const protocol = createWriteStream(protocolPath);
@@ -322,10 +325,8 @@ function writeResult(mode, tapText, recovered) {
   if (counts) writeFileSync(resultPath, JSON.stringify({ bestanden: counts.pass + recovered }));
 }
 
-function withoutCostFile() {
-  return Object.fromEntries(
-    Object.entries(process.env).filter(([name]) => name !== COST_FILE_VARIABLE),
-  );
+function environmentWithout(names) {
+  return Object.fromEntries(Object.entries(process.env).filter(([name]) => !names.includes(name)));
 }
 
 async function settle(mode, run) {
@@ -343,7 +344,7 @@ async function settle(mode, run) {
           extraArgs: [],
           files: [redFile],
           protocolName: `${SECOND_RUN_PROTOCOL}-${number}`,
-          environment: withoutCostFile(),
+          environment: environmentWithout([SECOND_RUN_VARIABLE, COST_FILE_VARIABLE]),
         }),
     });
   } catch (error) {

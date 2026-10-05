@@ -43,6 +43,15 @@ function immerRot(name) {
   ].join("\n");
 }
 
+function siehtKeinenSchalter(name) {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { test } from "node:test";',
+    `test(${JSON.stringify(name)}, () => assert.equal(process.env.TESTS_ZWEITER_LAUF, undefined));`,
+    "",
+  ].join("\n");
+}
+
 function lauf(context, dateien, umgebung = ZWEITER_LAUF) {
   const repo = wegwerfRepo(context, dateien);
   const ergebnis = testlaeufer(repo.ordner, umgebung);
@@ -85,6 +94,14 @@ test("ohne TESTS_ZWEITER_LAUF bleibt ein wackeliger Test rot wie bisher", (conte
   const ergebnis = lauf(context, { [WACKEL_DATEI]: wackelTest(WACKEL_NAME) }, {});
   assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
   assert.equal(ergebnis.wackelig, null);
+  assert.equal(ergebnis.zweiterLief, false);
+});
+
+test("ein Test, der selbst einen Testläufer startet, erbt den zweiten Lauf nicht", (context) => {
+  const ergebnis = lauf(context, {
+    "test/schalter.test.js": siehtKeinenSchalter("sieht den Schalter nicht"),
+  });
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
   assert.equal(ergebnis.zweiterLief, false);
 });
 
