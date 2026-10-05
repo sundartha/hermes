@@ -29,6 +29,9 @@ const ABGESCHALTET = new Set(["Ignored", "CheckFailed"]);
 const UEBERLEBEND = new Set([UEBERLEBT, "NoCoverage", ...ABGESCHALTET]);
 const ABSCHALTUNG = /Stryker disable /;
 const ABSCHALTKOMMENTAR = "Kommentar „Stryker disable“";
+const ZUSTANDSORDNER = ["src/", "test/"];
+const STRYKER_ZUSTAND = [/__stryker|stryker_|stry(?:mutact|cov|ns)_|active_?mutant|mutant__/i, /STRYKER/];
+const ZUSTAND_VERSTOSS = "Verstoß: Zeile fragt Strykers Zustand ab, ein Test darf nicht erkennen, ob ein Mutant aktiv ist";
 const ABSCHALTUNG_VERSTOSS =
   "Hinweis: von Stryker abgeschaltet, Mutant bleibt Verstoß; Abschaltung entfernen, Code vereinfachen oder Test schreiben, sonst Paket anhalten und Betreuung fragen";
 const ZEITUEBERSCHREITUNG = "Timeout";
@@ -251,6 +254,35 @@ async function mutiere({ von, bis, seite }) {
   }
 }
 
+function hinzugefuegt(diff) {
+  const zeilen = [];
+  let zustand = { datei: null, imKopf: false, zeile: 0 };
+  for (const text of diff.split("\n")) {
+    zustand = dateikopf(text, "neu", zustand);
+    const hunk = HUNK.exec(text);
+    if (hunk) zustand = { ...zustand, imKopf: false, zeile: Number(hunk[3]) };
+    if (hunk || zustand.imKopf || !text.startsWith("+")) continue;
+    zeilen.push({ datei: zustand.datei, zeile: zustand.zeile, text: text.slice(1) });
+    zustand = { ...zustand, zeile: zustand.zeile + 1 };
+  }
+  return zeilen;
+}
+
+function unverfolgteZeilen() {
+  const dateien = git(["ls-files", "--others", "--exclude-standard", "-z", "--", ...ZUSTANDSORDNER]).split("\0").filter(Boolean);
+  return dateien.flatMap((datei) =>
+    readFileSync(datei, "utf8").split("\n").map((text, index) => ({ datei, zeile: index + 1, text })),
+  );
+}
+
+function zustandszugriffe({ von, seite }) {
+  if (seite !== "neu") return [];
+  const diff = git(["diff", "-U0", "--no-renames", "--no-color", "--no-ext-diff", von, "--", ...ZUSTANDSORDNER]);
+  return [...hinzugefuegt(diff), ...unverfolgteZeilen()]
+    .filter(({ text }) => STRYKER_ZUSTAND.some((muster) => muster.test(text)))
+    .map(({ datei, zeile }) => `${datei}:${zeile}`);
+}
+
 function urteil({ seite, von }, ergebnisse, ueberlebende) {
   if (ergebnisse.length === 0) return "grün: keine geänderte Zeile unter src/ mit Mutanten oder löschbarer Anweisung.";
   const stand = seite === "alt" ? ` auf dem alten Stand ${git(["rev-parse", von]).slice(0, KURZ)}` : " in den neuen Zeilen unter src/";
@@ -261,7 +293,14 @@ function urteil({ seite, von }, ergebnisse, ueberlebende) {
     : `rot: ${anteil}; kein Test verlangt diese Zeilen.`;
 }
 
+function gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }) {
+  const mutanten = urteil(pruefung, ergebnisse, ueberlebende);
+  if (zugriffe.length === 0) return mutanten;
+  return `rot: ${zugriffe.length} neue Zeilen fragen Strykers Zustand ab; ${mutanten.slice(mutanten.indexOf(" ") + 1)}`;
+}
+
 async function pruefe(pruefung, { gemeldete, freigegebene }) {
+  const zugriffe = zustandszugriffe(pruefung);
   const ergebnisse = await mutiere(pruefung);
   const ueberlebende = ergebnisse.filter(ueberlebt).filter(({ schluessel }) => !freigegebene.has(schluessel));
   for (const { schluessel } of ueberlebende.filter((eintrag) => gemeldete.has(eintrag.schluessel))) {
@@ -271,8 +310,9 @@ async function pruefe(pruefung, { gemeldete, freigegebene }) {
     console.log(`${ABSCHALTUNG_VERSTOSS}: ${schluessel}`);
   }
   for (const { schluessel } of ueberlebende) console.log(`Verstoß: Mutant überlebt: ${schluessel}`);
-  console.log(urteil(pruefung, ergebnisse, ueberlebende));
-  return ueberlebende.length;
+  for (const stelle of zugriffe) console.log(`${ZUSTAND_VERSTOSS}: ${stelle}`);
+  console.log(gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }));
+  return ueberlebende.length + zugriffe.length;
 }
 
 function umbauCommits(basis) {

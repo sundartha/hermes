@@ -305,3 +305,37 @@ test("eine fremde Stryker-Konfigurationsdatei im Repo schaltet keine Mutanten ab
   assert.ok(verstoesse.length > 0 && verstoesse.every((mutant) => mutant.startsWith("src/zahl.js:3:")), rot.stdout);
   assert.deepEqual(schluessel(rot.stdout, ABGESCHALTET), []);
 });
+
+const AKTIVER_MUTANT = ["__STRY", "KER_ACTIVE_MUT", "ANT__"].join("");
+const ZUSTAND = /^Verstoß: Zeile fragt Strykers Zustand ab, .+: (.+)$/gm;
+
+function zustandstest(bedingung) {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { test } from "node:test";',
+    'import { einordnen } from "../src/zahl.js";',
+    'test("läuft im gewohnten Zustand", () => {',
+    `  assert.equal(${bedingung}, false);`,
+    "  for (const zahl of [-1, 0, 1]) einordnen(zahl);",
+    "});",
+    "",
+  ].join("\n");
+}
+
+test("eine neue Zeile, die Strykers Zustand abfragt, ist ein Verstoß, eine bestehende nicht", (context) => {
+  const bestehend = { "test/helfer.js": `export const mutantenlauf = () => process.env.${AKTIVER_MUTANT} !== undefined;\n` };
+  const repo = probeRepository(context, { ...BASIS, ...bestehend });
+  writeFiles(repo, {
+    "src/zahl.js": quelle(NEGATIV, NULL),
+    "test/zustand.test.js": zustandstest(`process.env.${AKTIVER_MUTANT} !== undefined`),
+  });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.deepEqual(schluessel(rot.stdout, ZUSTAND), ["test/zustand.test.js:5"]);
+  assert.deepEqual(schluessel(rot.stdout, UEBERLEBT), []);
+  assert.match(rot.stdout, /^rot: 1 neue Zeilen fragen Strykers Zustand ab; \d+ Mutanten in den neuen Zeilen unter src\/, keiner überlebt\.$/m);
+  writeFiles(repo, { "test/zustand.test.js": testdatei([0, "null"]) });
+  const gruen = pruefe(repo, "--basis", "HEAD");
+  assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+  assert.deepEqual(schluessel(gruen.stdout, ZUSTAND), []);
+});
