@@ -1,0 +1,23 @@
+{
+  "titel": "Jobname Prüfer über einen YAML-Anker und -Alias",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "env:",
+      "  NAME: &n Prüfer",
+      "jobs:",
+      "  probe:",
+      "    name: *n",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        run: echo ok"
+    ]
+  },
+  "erwartet": "YAML-Anker und -Aliase (&name, *name) sind in Workflow-Dateien verboten"
+}

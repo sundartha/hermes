@@ -30,7 +30,10 @@ const WORKFLOW_PATH_PREFIX = ".github/workflows/";
 const DUPLICATE_NAME_MESSAGE = "derselbe Workflow-Name steht schon in einer anderen Datei";
 const REFERENCE_MESSAGE =
   "workflow_run nennt einen Workflow-Namen, der nicht zu genau einer Datei passt";
-const PRUEFER_NAME_PATTERN = /(?:^|[[{,:]|-\s)\s*["']?prüfer["']?\s*(?=$|[\]},:#])/iu;
+const PRUEFER_NAME_PATTERN = /(?:^|[[{,:]|-\s)\s*prüfer\s*(?=$|[\]},:#])/iu;
+const QUOTE_CHARACTERS = /["']/g;
+const ESCAPE_PATTERN = /\\[uUx]/;
+const ANCHOR_OR_ALIAS_PATTERN = /(?:^\s*-\s+|:\s+|[[{,]\s*)[&*][\w-]/;
 
 export function indentOf(line) {
   return INDENT_PATTERN.exec(line)[0].length;
@@ -134,8 +137,19 @@ function writePermissionOutsideWorkflowRun(lines) {
 }
 
 function prueferAsName(line) {
-  if (!PRUEFER_NAME_PATTERN.test(line.normalize("NFC"))) return undefined;
+  const bare = line.normalize("NFC").replace(QUOTE_CHARACTERS, "");
+  if (!PRUEFER_NAME_PATTERN.test(bare)) return undefined;
   return "kein Job darf Prüfer heißen; den Status Prüfer setzt nur die Status-API";
+}
+
+function escapeSequence(line) {
+  if (!ESCAPE_PATTERN.test(line)) return undefined;
+  return "\\u-, \\U- und \\x-Escapes sind in Workflow-Dateien verboten";
+}
+
+function anchorOrAlias(line) {
+  if (!ANCHOR_OR_ALIAS_PATTERN.test(line)) return undefined;
+  return "YAML-Anker und -Aliase (&name, *name) sind in Workflow-Dateien verboten";
 }
 
 function workflowRunWithOtherTriggers(lines) {
@@ -160,6 +174,8 @@ export function structureRules(lines, { listed }) {
     foreignCodeInSecretJob(jobs),
     writePermissionOutsideWorkflowRun(lines),
     prueferAsName,
+    escapeSequence,
+    anchorOrAlias,
   ];
   return listed ? [...rules, workflowRunWithOtherTriggers(lines), cacheInListedWorkflow] : rules;
 }

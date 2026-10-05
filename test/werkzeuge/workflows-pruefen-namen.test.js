@@ -9,6 +9,10 @@ const FAKE_NAME = "zweiter-pruefer.yml";
 const DUPLICATE_MESSAGE = "derselbe Workflow-Name steht schon in einer anderen Datei";
 const REFERENCE_MESSAGE =
   "workflow_run nennt einen Workflow-Namen, der nicht zu genau einer Datei passt";
+const PRUEFER_NAME_MESSAGE = "kein Job darf Prüfer heißen";
+const ESCAPE_MESSAGE = "\\u-, \\U- und \\x-Escapes sind in Workflow-Dateien verboten";
+const ANCHOR_MESSAGE = "YAML-Anker und -Aliase (&name, *name) sind in Workflow-Dateien verboten";
+const JOB_FILE = "probe.yml";
 const REAL_PRUEFER = readFileSync(join(REPO_ROOT, ".github/workflows/pruefer-pruefen.yml"), "utf8");
 
 function pullRequestWorkflow(nameLine) {
@@ -30,6 +34,32 @@ function pullRequestWorkflow(nameLine) {
     "          path: ergebnis",
     "",
   ];
+}
+
+function jobWorkflow(jobLines, headerLines = []) {
+  return [
+    "name: Probe",
+    "on:",
+    "  pull_request:",
+    "    branches: [master]",
+    "permissions:",
+    "  contents: read",
+    ...headerLines,
+    "jobs:",
+    "  probe:",
+    ...jobLines,
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - name: Schritt",
+    "        run: echo ok",
+    "",
+  ];
+}
+
+function expectJobFinding(context, { target, message, headerLines = [] }) {
+  const jobLines = headerLines.includes(target) ? [] : [target];
+  const lines = jobWorkflow(jobLines, headerLines);
+  expectFinding(context, { name: JOB_FILE, lines, target, message });
 }
 
 function followUpWorkflow(triggerLines) {
@@ -98,4 +128,53 @@ test("workflows-pruefen-namen: workflow_run mit Namensliste als Block wird ebenf
 
 test("workflows-pruefen-namen: workflow_run auf genau eine Datei mit diesem Namen ist erlaubt", (context) => {
   expectClean(context, "folgelauf.yml", followUpWorkflow(["    workflows:", "      - CI"]));
+});
+
+test("workflows-pruefen-namen: ein Jobname Prüfer in Anfuehrungszeichen mit Leerzeichen ist verboten", (context) => {
+  expectJobFinding(context, { target: '    name: " Prüfer "', message: PRUEFER_NAME_MESSAGE });
+});
+
+test("workflows-pruefen-namen: ein Escape mit Backslash-u im Workflow ist verboten", (context) => {
+  expectJobFinding(context, { target: '    name: "Pr\\u00fcfer"', message: ESCAPE_MESSAGE });
+});
+
+test("workflows-pruefen-namen: ein Escape mit Backslash-U im Workflow ist verboten", (context) => {
+  expectJobFinding(context, { target: '    name: "Pr\\U000000fcfer"', message: ESCAPE_MESSAGE });
+});
+
+test("workflows-pruefen-namen: ein Escape mit Backslash-x im Workflow ist verboten", (context) => {
+  expectJobFinding(context, { target: '    name: "Pr\\xfcfer"', message: ESCAPE_MESSAGE });
+});
+
+test("workflows-pruefen-namen: ein YAML-Anker im Workflow ist verboten", (context) => {
+  const target = "  NAME: &n Prüfer";
+  expectJobFinding(context, { target, message: ANCHOR_MESSAGE, headerLines: ["env:", target] });
+});
+
+test("workflows-pruefen-namen: ein YAML-Alias als Jobname ist verboten", (context) => {
+  expectJobFinding(context, { target: "    name: *n", message: ANCHOR_MESSAGE });
+});
+
+test("workflows-pruefen-namen: cron-Ausdruecke, Globs und && bleiben erlaubt", (context) => {
+  expectClean(context, "zeitplan.yml", [
+    "name: Zeitplan",
+    "on:",
+    "  schedule:",
+    '    - cron: "23 5 * * 0,2-6"',
+    "  push:",
+    "    branches: [master]",
+    "    paths:",
+    "      - tools/wochenbericht/**",
+    '      - "**/*.md"',
+    "permissions:",
+    "  contents: read",
+    "jobs:",
+    "  bericht:",
+    "    if: github.event_name == 'schedule' && github.event.schedule != '23 5 * * 1'",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - name: Schritt",
+    '        run: test -f a && echo "*.md" && ls ./*.js',
+    "",
+  ]);
 });

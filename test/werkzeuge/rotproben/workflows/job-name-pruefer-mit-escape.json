@@ -1,0 +1,21 @@
+{
+  "titel": "Jobname Prüfer über ein YAML-Escape in doppelten Anführungszeichen",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    name: \"Pr\\u00fcfer\"",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        run: echo ok"
+    ]
+  },
+  "erwartet": "\\u-, \\U- und \\x-Escapes sind in Workflow-Dateien verboten"
+}
