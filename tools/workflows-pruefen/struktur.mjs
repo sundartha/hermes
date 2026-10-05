@@ -1,3 +1,5 @@
+import { basename } from "node:path";
+
 export const SECRETS_PATTERN = /\bsecrets\b/i;
 const INDENT_PATTERN = /^\s*/;
 const CONTENT_LINE_PATTERN = /^\s*[^\s#]/;
@@ -16,6 +18,15 @@ const CHECKOUT_TARGET_PATTERN = /(?:^|[\s{,])["']?(?:ref|repository)["']?\s*:/;
 const SWITCH_COMMAND_PATTERN =
   /\bgit\b.*\b(?:checkout|switch|worktree|restore|reset)\b|\bgh\s+pr\s+checkout\b/;
 const WRITE_PERMISSION_PATTERN = /\b(?:statuses|checks)["']?\s*:\s*["']?write\b|\bwrite-all\b/;
+const TOP_NAME_PATTERN = /^["']?name["']?\s*:\s*(.*)$/;
+const WORKFLOWS_KEY_PATTERN = /(?:^|[\s{,])["']?workflows["']?\s*:\s*(.*)$/;
+const FLOW_VALUE_PATTERN = /^(\[[^\]]*\]|[^,}]*)/;
+const LIST_ITEM_PATTERN = /^\s*-\s+(.*)$/;
+const COMMENT_PATTERN = /\s+#.*$/;
+const WORKFLOW_PATH_PREFIX = ".github/workflows/";
+const DUPLICATE_NAME_MESSAGE = "derselbe Workflow-Name steht schon in einer anderen Datei";
+const REFERENCE_MESSAGE =
+  "workflow_run nennt einen Workflow-Namen, der nicht zu genau einer Datei passt";
 const PRUEFER_NAME_PATTERN = /(?:^|[[{,:]|-\s)\s*["']?prüfer["']?\s*(?=$|[\]},:#])/iu;
 
 export function indentOf(line) {
@@ -138,4 +149,62 @@ export function structureRules(lines, { listed }) {
     prueferAsName,
   ];
   return listed ? [...rules, workflowRunWithOtherTriggers(lines)] : rules;
+}
+
+function cleanName(value) {
+  const bare = value.replace(COMMENT_PATTERN, "").trim().replace(QUOTES_PATTERN, "");
+  return bare.trim().normalize("NFC").toLowerCase();
+}
+
+function workflowName({ filePath, lines }) {
+  const index = lines.findIndex((line) => TOP_NAME_PATTERN.test(line));
+  const value = index === -1 ? "" : cleanName(TOP_NAME_PATTERN.exec(lines[index])[1]);
+  const fallback = `${WORKFLOW_PATH_PREFIX}${basename(filePath)}`.toLowerCase();
+  return { name: value || fallback, line: Math.max(index, 0) };
+}
+
+function blockListItems(lines, index) {
+  const indent = indentOf(lines[index]);
+  const items = [];
+  for (const line of lines.slice(index + 1)) {
+    if (!isContentLine(line)) continue;
+    const item = LIST_ITEM_PATTERN.exec(line);
+    if (item === null || indentOf(line) < indent) break;
+    items.push(item[1]);
+  }
+  return items;
+}
+
+function namesAt(lines, index, rest) {
+  const value = rest.replace(COMMENT_PATTERN, "").trim();
+  const names =
+    value === ""
+      ? blockListItems(lines, index)
+      : inlineNames(FLOW_VALUE_PATTERN.exec(value)[1].trim());
+  return names.map(cleanName);
+}
+
+function referencedNames(lines) {
+  const block = topLevelBlock(lines, TRIGGER_KEY_PATTERN);
+  if (block === undefined) return [];
+  const references = [];
+  for (let i = block.start; i < block.end; i++) {
+    const match = WORKFLOWS_KEY_PATTERN.exec(lines[i]);
+    if (match) references.push(...namesAt(lines, i, match[1]).map((name) => ({ name, line: i })));
+  }
+  return references;
+}
+
+export function workflowNameFindings(workflows) {
+  const named = workflows.map((workflow) => ({ ...workflow, ...workflowName(workflow) }));
+  const count = (name) => named.filter((workflow) => workflow.name === name).length;
+  const duplicates = named
+    .filter(({ name }, index) => named.findIndex((workflow) => workflow.name === name) < index)
+    .map(({ filePath, line }) => `${filePath}:${line + 1}: ${DUPLICATE_NAME_MESSAGE}`);
+  const dangling = named.flatMap(({ filePath, lines }) =>
+    referencedNames(lines)
+      .filter(({ name }) => count(name) !== 1)
+      .map(({ line }) => `${filePath}:${line + 1}: ${REFERENCE_MESSAGE}`),
+  );
+  return [...duplicates, ...dangling];
 }

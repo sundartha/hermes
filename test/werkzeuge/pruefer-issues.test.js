@@ -5,7 +5,14 @@ import { test } from "node:test";
 import { entscheiden } from "../../tools/auftrag/pruefer-befehle.mjs";
 import { legeIssuesAn } from "../../tools/auftrag/pruefer-issues.mjs";
 import { probeDirectory } from "./probe-repo.js";
-import { scheinSha } from "./pruefer/hilfen.mjs";
+import {
+  ciLauf,
+  ereignisDatei,
+  prueferLauf,
+  scheinSha,
+  setzeAusloeser,
+  workflowAbfrage,
+} from "./pruefer/hilfen.mjs";
 
 const HEAD = scheinSha("d");
 const TITEL = "Prüfer: N7 in src/zahl.js";
@@ -14,6 +21,7 @@ function scheinGithub(offen = []) {
   const gesendet = [];
   return {
     gesendet,
+    hole: workflowAbfrage,
     alle: async (pfad, liste) => liste(offen.map((title) => ({ title }))),
     sende: async (methode, pfad, daten) => {
       gesendet.push({ methode, pfad, daten });
@@ -64,7 +72,7 @@ test("ein offenes Issue mit gleichem Titel verhindert ein neues, ein anderer Tit
 });
 
 test("entscheiden setzt den Status Prüfer am Head-Commit und legt jedes Issue nur einmal an", async (context) => {
-  delete process.env.GITHUB_EVENT_PATH;
+  setzeAusloeser(context, ciLauf());
   const commit = { sha: HEAD, patchId: "", zustand: "geprueft", befunde: [hinweis()] };
   const ordner = ergebnisOrdner(context, [commit]);
   const github = scheinGithub();
@@ -86,23 +94,22 @@ test("entscheiden setzt den Status Prüfer am Head-Commit und legt jedes Issue n
 test("fehlt das Ergebnis, setzt entscheiden error; war der auslösende Lauf rot, setzt es nichts", async (context) => {
   const leer = probeDirectory(context, {});
   const github = scheinGithub();
-  delete process.env.GITHUB_EVENT_PATH;
+  setzeAusloeser(context, ciLauf());
   await entscheiden({ ergebnis: join(leer, "fehlt"), head: HEAD }, leer, { github });
   assert.deepEqual(
     github.gesendet.map(({ daten }) => [daten.state, daten.description]),
     [["error", "Prüfer nicht gelaufen: kein Ergebnis"]],
   );
-  const ereignis = probeDirectory(context, {
-    "ereignis.json": JSON.stringify({ workflow_run: { conclusion: "failure" } }),
-  });
-  process.env.GITHUB_EVENT_PATH = join(ereignis, "ereignis.json");
-  await entscheiden({ ergebnis: join(leer, "fehlt"), head: HEAD }, leer, { github });
-  delete process.env.GITHUB_EVENT_PATH;
+  process.env.GITHUB_EVENT_PATH = ereignisDatei(context, ciLauf({ conclusion: "failure" }));
+  assert.equal(
+    await entscheiden({ ergebnis: join(leer, "fehlt"), head: HEAD }, leer, { github }),
+    0,
+  );
   assert.equal(github.gesendet.length, 1);
 });
 
 test("eine gefälschte Nachstellung mit unbekanntem Schlüssel oder Wert gilt als fehlend", async (context) => {
-  delete process.env.GITHUB_EVENT_PATH;
+  setzeAusloeser(context, prueferLauf());
   const blocker = hinweis({
     schwere: "BLOCKER",
     reproduktion: 'import { test } from "node:test";\n',

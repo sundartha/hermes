@@ -122,3 +122,50 @@ export async function scheinGithub(context, routen) {
   context.after(() => server.close());
   return { url: `http://127.0.0.1:${server.address().port}`, anfragen };
 }
+
+const CI_NUMMER = 11;
+const PRUEFER_NUMMER = 22;
+export const WORKFLOW_NUMMERN = new Map([
+  ["ci.yml", CI_NUMMER],
+  ["pruefer-pruefen.yml", PRUEFER_NUMMER],
+]);
+const WORKFLOW_ORDNER = ".github/workflows/";
+
+export function ciLauf(felder = {}) {
+  return {
+    path: `${WORKFLOW_ORDNER}ci.yml`,
+    event: "pull_request",
+    workflow_id: WORKFLOW_NUMMERN.get("ci.yml"),
+    conclusion: "success",
+    html_url: "https://github.com/sundartha/hermes/actions/runs/1",
+    ...felder,
+  };
+}
+
+export function prueferLauf(felder = {}) {
+  return {
+    path: `${WORKFLOW_ORDNER}pruefer-pruefen.yml`,
+    event: "workflow_run",
+    workflow_id: WORKFLOW_NUMMERN.get("pruefer-pruefen.yml"),
+    conclusion: "success",
+    ...felder,
+  };
+}
+
+export function ereignisDatei(context, lauf) {
+  const ordner = probeDirectory(context, {
+    "ereignis.json": JSON.stringify({ workflow_run: lauf }),
+  });
+  return join(ordner, "ereignis.json");
+}
+
+export function setzeAusloeser(context, lauf) {
+  process.env.GITHUB_EVENT_PATH = ereignisDatei(context, lauf);
+  context.after(() => {
+    delete process.env.GITHUB_EVENT_PATH;
+  });
+}
+
+export async function workflowAbfrage(pfad) {
+  return { id: WORKFLOW_NUMMERN.get(pfad.slice(pfad.lastIndexOf("/") + 1)) };
+}

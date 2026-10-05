@@ -14,7 +14,7 @@ concurrency:
 jobs:
   pruefen:
     name: Commits prüfen
-    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    if: github.event.workflow_run.path == '.github/workflows/ci.yml' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: pruefer
     timeout-minutes: 120
@@ -66,7 +66,7 @@ jobs:
   melden:
     name: Status melden
     needs: pruefen
-    if: always() && github.event.workflow_run.event == 'pull_request'
+    if: always() && github.event.workflow_run.path == '.github/workflows/ci.yml' && github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

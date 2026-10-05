@@ -6,6 +6,7 @@ import { stelleNach } from "./nachstellen.mjs";
 import { gitAusgabe, zuPruefendeCommits } from "./pruefer-auswahl.mjs";
 import { fruehereErgebnisse } from "./pruefer-gedaechtnis.mjs";
 import { githubZugang } from "./pruefer-github.mjs";
+import { CI_LAUF, PRUEFER_LAUF, ausloesenderLauf, stammtAus } from "./pruefer-herkunft.mjs";
 import { legeIssuesAn } from "./pruefer-issues.mjs";
 import {
   ANMELDUNG_GRUND,
@@ -38,13 +39,13 @@ const KURZ = 12;
 const JSON_EINRUECKUNG = 2;
 const ERFOLG = "success";
 const FEHLER = "error";
+const EXIT_HERKUNFT = 1;
 
-function ereignisDaten() {
-  try {
-    return JSON.parse(readFileSync(env.GITHUB_EVENT_PATH ?? "", "utf8"));
-  } catch {
-    return null;
-  }
+function falscheHerkunft(herkunft) {
+  console.error(
+    `Der auslösende Lauf stammt nicht aus .github/workflows/${herkunft.datei} mit dem Ereignis ${herkunft.ereignis}; der Prüfer setzt keinen Status.`,
+  );
+  return EXIT_HERKUNFT;
 }
 
 export function leseDatei(ordner, name) {
@@ -132,17 +133,18 @@ function melde(ergebnis) {
 async function pruefen(optionen, root, { github = githubZugang(), programm } = {}) {
   const token = env.CLAUDE_CODE_OAUTH_TOKEN ?? "";
   delete env.CLAUDE_CODE_OAUTH_TOKEN;
+  const ausloeser = ausloesenderLauf();
+  if (!(await stammtAus(github, ausloeser, CI_LAUF))) return falscheHerkunft(CI_LAUF);
   const { head, "pr-branch": branch, "pr-repo": prRepo, aus } = optionen;
   const pr = await offenerPr(github, head);
   const basis = basisVon(pr, head, root);
   const auswahl = zuPruefendeCommits({ basis, head, branch, prRepo, root });
   const frueher = auswahl.probeBranch ? new Map() : await gedaechtnis(github, branch);
-  const ciLauf = ereignisDaten()?.workflow_run?.html_url ?? "";
   const kontext = {
     root,
     token,
     programm,
-    ciLauf,
+    ciLauf: ausloeser.html_url ?? "",
     auftragstext: await auftragstext(github, pr, branch),
   };
   const commits = await pruefeAlle(auswahl.commits, frueher, kontext);
@@ -185,17 +187,19 @@ function laufAdresse() {
   return server && repo && lauf ? `${server}/${repo}/actions/runs/${lauf}` : undefined;
 }
 
-function grundOhneStatus(optionen, ziel) {
-  const ausloeser = ereignisDaten()?.workflow_run;
-  if (!optionen.nachstellung && ausloeser && ausloeser.conclusion !== ERFOLG)
+function grundOhneStatus(optionen, ziel, ausloeser) {
+  if (!optionen.nachstellung && ausloeser.conclusion !== ERFOLG)
     return "Der auslösende Lauf ist nicht grün";
   return ziel ? null : "Kein Head-Commit bekannt";
 }
 
 async function entscheiden(optionen, root, { github = githubZugang() } = {}) {
+  const herkunft = optionen.nachstellung ? PRUEFER_LAUF : CI_LAUF;
+  const ausloeser = ausloesenderLauf();
+  if (!(await stammtAus(github, ausloeser, herkunft))) return falscheHerkunft(herkunft);
   const ergebnis = ergebnisAus(leseDatei(optionen.ergebnis, ERGEBNIS_DATEI) ?? "");
   const ziel = optionen.head ?? ergebnis?.head;
-  const ohneStatus = grundOhneStatus(optionen, ziel);
+  const ohneStatus = grundOhneStatus(optionen, ziel, ausloeser);
   if (ohneStatus) {
     console.log(`${ohneStatus}; der Prüfer setzt keinen Status.`);
     return 0;
