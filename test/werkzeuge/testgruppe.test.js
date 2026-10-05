@@ -7,7 +7,7 @@ import { test } from "node:test";
 
 import { echtWarten } from "../echt-warten.js";
 import { EXIT_PROZESS_UEBRIG, TESTGRUPPE } from "../../tools/testgruppe.mjs";
-import { REPO_ROOT, isolatedEnvironment } from "./probe-repo.js";
+import { REPO_ROOT, RUNNER, isolatedEnvironment } from "./probe-repo.js";
 
 const HELFER = join(REPO_ROOT, "test/werkzeuge/testgruppe");
 const SAUBER = join(HELFER, "sauber.mjs");
@@ -172,5 +172,22 @@ test(
     process.kill(runner, "SIGKILL");
     assert.equal(await beendet, "SIGKILL");
     assert.ok(await bis(() => alleTot([testdatei, enkel])), `${testdatei} ${enkel}`);
+  },
+);
+
+test(
+  "stirbt der Aufrufer von testbaenke-run an SIGKILL, endet auch dessen Testlauf",
+  TEST_FRIST,
+  (context) => nachElterntodAllesBeendet(context, [RUNNER, "regression", HAENGT]),
+);
+
+test(
+  "testbaenke-run meldet einen zurückgelassenen Prozess und endet rot",
+  TEST_FRIST,
+  async (context) => {
+    const { ordner, datei, env } = lauf(context);
+    const ergebnis = starte([RUNNER, "regression", REST], { env, cwd: ordner });
+    assert.notEqual(ergebnis.status, 0, ergebnis.stdout);
+    await gemeldetUndBeendet(ergebnis, datei);
   },
 );
