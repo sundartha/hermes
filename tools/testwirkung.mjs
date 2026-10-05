@@ -151,7 +151,7 @@ function erreichbarZeile({ verglichen, verstoesse: luecken }) {
   return `Erreichte Zeilen: ${verglichen} geänderte Dateien unter test/ verglichen, ${luecken.length} Tests oder Hilfsdateien erreichen Zeilen der Basis nicht mehr.`;
 }
 
-function main() {
+async function main() {
   const { values } = parseArgs({ options: { basis: { type: "string" } } });
   if (values.basis === undefined) {
     console.error(AUFRUF);
@@ -164,7 +164,7 @@ function main() {
   const ergebnisse = befunde(vereint(tests, katalog.tests), vereint(tests, beruehrt));
   const bestehende = geaenderteBestehendeTests(values.basis, [...geaendert]);
   const eingefuegt = pruefeGeaenderte(values.basis, bestehende);
-  const erreichbar = erreichbarkeit(values.basis, { bestehende, katalog: katalog.tests });
+  const erreichbar = await erreichbarkeit(values.basis, { bestehende, katalog: katalog.tests });
   const gefunden = [...katalog.verstoesse, ...verstoesse(ohneNamen, ergebnisse), ...eingefuegt.verstoesse, ...erreichbar.verstoesse];
   for (const verstoss of gefunden) console.log(`Verstoß: ${verstoss}`);
   for (const hinweis of eingefuegt.hinweise) console.log(`Hinweis: ${hinweis}`);
@@ -177,7 +177,7 @@ function main() {
 }
 
 try {
-  process.exitCode = main();
+  process.exitCode = await main();
 } catch (fehler) {
   console.error(`Abbruch: ${fehler.message}`);
   process.exitCode = EXIT_ABBRUCH;
