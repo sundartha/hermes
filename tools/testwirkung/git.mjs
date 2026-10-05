@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 
 const MAX_AUSGABE = 268_435_456;
 const ERFOLG = [0];
+const KEIN_TREFFER = 1;
 
 function ausgabe(args, erlaubt) {
   const ergebnis = spawnSync("git", args, { encoding: "utf8", maxBuffer: MAX_AUSGABE });
@@ -11,6 +12,10 @@ function ausgabe(args, erlaubt) {
 
 export function git(args) {
   return ausgabe(args, ERFOLG);
+}
+
+export function treffer(args) {
+  return ausgabe(["grep", ...args], [...ERFOLG, KEIN_TREFFER]);
 }
 
 export function inBasis(basis, datei) {
