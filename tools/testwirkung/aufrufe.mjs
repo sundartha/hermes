@@ -88,9 +88,11 @@ export function testaufrufe(datei, quelltext) {
   return gefunden;
 }
 
-export function aufrufstellen(datei, quelltext) {
-  const gefunden = [];
-  const merken = ({ loc, range }) => gefunden.push({ zeile: loc.start.line, versatz: range[0] });
-  besuche(datei, quelltext, () => ({ CallExpression: merken, NewExpression: merken }));
-  return gefunden;
+export function quellstruktur(datei, quelltext) {
+  const aufrufe = [];
+  const anweisungsenden = new Map();
+  const aufruf = ({ loc, range }) => aufrufe.push({ zeile: loc.start.line, versatz: range[0] });
+  const anweisung = ({ range: [, ende], parent }) => anweisungsenden.set(ende, [...(anweisungsenden.get(ende) ?? []), parent.range]);
+  besuche(datei, quelltext, () => ({ CallExpression: aufruf, NewExpression: aufruf, ":statement": anweisung }));
+  return { aufrufe, anweisungsenden };
 }
