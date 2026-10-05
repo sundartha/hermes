@@ -1,3 +1,6 @@
+import { COMMIT_MUSTER } from "./ausgabe.mjs";
+import { minuten } from "./takt.mjs";
+
 const ANFRAGE_FRIST_MS = 15000;
 const JSON_TYP = "application/json";
 const GITHUB_TYP = "application/vnd.github+json";
@@ -7,6 +10,7 @@ const MCP_TYP = "application/json, text/event-stream";
 const HTTP_OK = 200;
 const KEINE_ANTWORT = 0;
 const DEPLOY_PFAD = "/deploys";
+const HEALTHZ_PFAD = "/healthz";
 const LISTE_GROESSE = 20;
 const TOOLS_LIST = Object.freeze({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
 
@@ -18,7 +22,10 @@ function datenAus(text) {
   }
 }
 
-export async function anfrage(url, { methode = "GET", kopf = {}, koerper } = {}) {
+export async function anfrage(
+  url,
+  { methode = "GET", kopf = {}, koerper, fristMs = ANFRAGE_FRIST_MS } = {},
+) {
   const headers = { accept: JSON_TYP, "user-agent": KENNUNG, ...kopf };
   if (koerper !== undefined) headers["content-type"] = JSON_TYP;
   try {
@@ -27,11 +34,43 @@ export async function anfrage(url, { methode = "GET", kopf = {}, koerper } = {})
       headers,
       body: koerper === undefined ? undefined : JSON.stringify(koerper),
       redirect: "error",
-      signal: AbortSignal.timeout(ANFRAGE_FRIST_MS),
+      signal: AbortSignal.timeout(fristMs),
     });
-    return { status: antwort.status, daten: datenAus(await antwort.text()) };
+    const typ = antwort.headers.get("content-type") ?? "";
+    return { status: antwort.status, typ, daten: datenAus(await antwort.text()) };
   } catch {
-    return { status: KEINE_ANTWORT, daten: null };
+    return { status: KEINE_ANTWORT, typ: "", daten: null };
+  }
+}
+
+function wachAntwort({ status, typ, daten }) {
+  const commit = daten?.commit;
+  return (
+    status === HTTP_OK &&
+    typ.startsWith(JSON_TYP) &&
+    typeof commit === "string" &&
+    COMMIT_MUSTER.test(commit)
+  );
+}
+
+async function wachPruefen(url, { uhr, fristMs }) {
+  const vorher = uhr.jetzt();
+  const wach = wachAntwort(await anfrage(url, { fristMs }));
+  return { wach, dauer: uhr.jetzt() - vorher };
+}
+
+export async function aufwecken(basisUrl, { uhr, takte, grenzeMs }) {
+  const start = uhr.jetzt();
+  const grenze = Math.min(takte.schutzgrenzeMs, grenzeMs);
+  const url = basisUrl + HEALTHZ_PFAD;
+  for (let runde = 0; ; runde += 1) {
+    const vergangen = uhr.jetzt() - start;
+    if (vergangen >= grenze) return { schutzgrenze: true, minuten: minuten(vergangen) };
+    const fristMs = Math.min(takte.fristMs, grenze - vergangen);
+    const { wach, dauer } = await wachPruefen(url, { uhr, fristMs });
+    if (wach) return { frischGeweckt: runde > 0 || dauer > takte.frischAbMs };
+    const rest = grenze - (uhr.jetzt() - start);
+    if (rest > 0) await uhr.warten(Math.min(takte.taktMs, rest));
   }
 }
 
@@ -69,8 +108,12 @@ function anzahlLaufend(daten) {
 export function hermesZugang(basisUrl, deployToken = null) {
   return Object.freeze({
     async commit() {
-      const { status, daten } = await anfrage(basisUrl + "/healthz");
+      const { status, daten } = await anfrage(basisUrl + HEALTHZ_PFAD);
       return status === HTTP_OK && typeof daten?.commit === "string" ? daten.commit : null;
+    },
+    aufwecken: (optionen) => aufwecken(basisUrl, optionen),
+    async wachhalten() {
+      await anfrage(basisUrl + HEALTHZ_PFAD);
     },
     async anrufe() {
       const kopf = { authorization: "Bearer " + deployToken, "cache-control": "no-store" };

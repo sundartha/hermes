@@ -32,10 +32,20 @@ function teileLesen(wert) {
   return gueltig ? teile : null;
 }
 
+const JA_NEIN = new Map([
+  ["ja", true],
+  ["nein", false],
+]);
+
+function jaNeinLesen(wert) {
+  return JA_NEIN.get(wert) ?? null;
+}
+
 const ARGUMENTE = new Map([
   ["--commit", commitLesen],
   ["--produktion", commitLesen],
   ["--teile", teileLesen],
+  ["--frisch-geweckt", jaNeinLesen],
 ]);
 
 function ereignisLesen(einstellungen) {
@@ -79,12 +89,13 @@ const BEFEHLE = new Map([
   [
     "deploy",
     {
-      argumente: ["--commit", "--produktion"],
+      argumente: ["--commit", "--produktion", "--frisch-geweckt"],
       ausfuehren: ({ einstellungen, werte, ausgabe }) =>
         deploy({
           einstellungen,
           commit: werte.get("--commit"),
           produktion: werte.get("--produktion"),
+          frischGeweckt: werte.get("--frisch-geweckt"),
           ausgabe,
         }),
     },

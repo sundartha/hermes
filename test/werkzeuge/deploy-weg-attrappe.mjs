@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { ausgabeAnlegen } from "../../tools/deploy-weg/ausgabe.mjs";
 import { einstellungenLesen } from "../../tools/deploy-weg/einstellungen.mjs";
+import { DEPLOY_TAKTE } from "../../tools/deploy-weg/takt.mjs";
 
 const SHA_LAENGE = 40;
 export const COMMIT_C = "c".repeat(SHA_LAENGE);
@@ -32,11 +33,22 @@ const RENDER_SERVICE_PFAD = "/render/v1/services/" + SERVICE_ID;
 export const DEPLOYS_PFAD = RENDER_SERVICE_PFAD + "/deploys";
 export const KURZE_TAKTE = Object.freeze({ taktMs: 1000, schutzgrenzeMs: 5000 });
 export const KURZE_DEPLOY_TAKTE = Object.freeze({
+  ...DEPLOY_TAKTE,
   anrufe: KURZE_TAKTE,
   status: KURZE_TAKTE,
   healthz: KURZE_TAKTE,
 });
 const ANGELEGT = "angelegt";
+const JSON_TYP = "application/json";
+const HTML_TYP = "text/html; charset=utf-8";
+export const LADESEITE = Object.freeze([
+  HTTP_OK,
+  "<!doctype html><title>Service waking up</title><p>Loading</p>",
+  HTML_TYP,
+]);
+export const HTML_MIT_COMMIT = Object.freeze([HTTP_OK, { ok: true, commit: COMMIT_P }, HTML_TYP]);
+export const JSON_OHNE_COMMIT = Object.freeze([HTTP_OK, { ok: true }]);
+const LIVE = "live";
 const LOKAL = "127.0.0.1";
 const PR_NUMMER = 7;
 const NEUES_ISSUE = 99;
@@ -57,11 +69,15 @@ function stagingLauf(commit) {
 export function weltAnlegen(abweichung = {}) {
   return {
     produktion: [COMMIT_P],
+    wach: [true],
+    schlafAntwort: LADESEITE,
+    healthzDauerMs: [0],
     merker: new Set(),
     staging: [COMMIT_C],
     mcpStatus: HTTP_NICHT_ANGEMELDET,
     laufend: [0],
     ausloesenStatus: HTTP_ANGELEGT,
+    neuInListe: [true],
     deployStatus: ["build_in_progress", "update_in_progress", "live"],
     alteDeploys: [],
     vergleiche: {},
@@ -156,21 +172,38 @@ function renderRouten(welt) {
       /^\/deploys\?limit=20$/,
       () => {
         const alte = welt.alteDeploys.map(deployEintrag);
-        return [HTTP_OK, welt.merker.has(ANGELEGT) ? [deployEintrag(DEPLOY_ID), ...alte] : alte];
+        const sichtbar = welt.merker.has(ANGELEGT) && naechster(welt.neuInListe);
+        return [HTTP_OK, sichtbar ? [deployEintrag(DEPLOY_ID), ...alte] : alte];
       },
     ],
     [
       "GET",
       /^\/deploys\/([\w-]+)$/,
-      ([, id]) => [HTTP_OK, { id, status: naechster(welt.deployStatus) }],
+      ([, id]) => {
+        const status = naechster(welt.deployStatus);
+        if (status === LIVE) welt.merker.add(LIVE);
+        return [HTTP_OK, { id, status }];
+      },
     ],
     ["POST", /^\/deploys\/([\w-]+)\/cancel$/, ([, id]) => [HTTP_OK, { id, status: "canceled" }]],
   ];
 }
 
-function hermesRouten(welt) {
+function produktionCommit(welt) {
+  return welt.merker.has(LIVE) ? welt.produktion.at(-1) : welt.produktion[0];
+}
+
+function produktionHealthz(welt, uhr) {
+  return () => {
+    uhr?.vorstellen(naechster(welt.healthzDauerMs));
+    if (!naechster(welt.wach)) return welt.schlafAntwort;
+    return [HTTP_OK, { ok: true, commit: produktionCommit(welt) }];
+  };
+}
+
+function hermesRouten(welt, uhr) {
   return [
-    ["GET", /^\/prod\/healthz$/, () => [HTTP_OK, { ok: true, commit: naechster(welt.produktion) }]],
+    ["GET", /^\/prod\/healthz$/, produktionHealthz(welt, uhr)],
     [
       "GET",
       /^\/prod\/intern\/anrufe-laufend$/,
@@ -188,16 +221,16 @@ function hermesRouten(welt) {
   ];
 }
 
-function bereiche(welt) {
+function bereiche(welt, uhr) {
   return [
     ["/gh/repos/" + REPO, githubRouten(welt)],
     [RENDER_SERVICE_PFAD, renderRouten(welt)],
-    ["", hermesRouten(welt)],
+    ["", hermesRouten(welt, uhr)],
   ];
 }
 
-function beantworten(welt, eintrag) {
-  for (const [praefix, routen] of bereiche(welt)) {
+function beantworten(alleBereiche, eintrag) {
+  for (const [praefix, routen] of alleBereiche) {
     if (!eintrag.pfad.startsWith(praefix)) continue;
     const rest = praefix === "" ? eintrag.pfad : eintrag.pfad.slice(praefix.length);
     for (const [methode, muster, antwort] of routen) {
@@ -214,19 +247,26 @@ async function koerperLesen(anfrage) {
   return roh === "" ? null : JSON.parse(roh);
 }
 
-export async function attrappeStarten(kontext, welt) {
+function koerperText(inhalt) {
+  if (inhalt === null) return "";
+  return typeof inhalt === "string" ? inhalt : JSON.stringify(inhalt);
+}
+
+export async function attrappeStarten(kontext, welt, uhr = null) {
   const anfragen = [];
+  const alleBereiche = bereiche(welt, uhr);
   const server = createServer(async (anfrage, antwort) => {
     const eintrag = {
       methode: anfrage.method,
       pfad: anfrage.url,
       kopf: anfrage.headers.authorization ?? "",
       koerper: await koerperLesen(anfrage),
+      zeit: uhr === null ? null : uhr.jetzt(),
     };
     anfragen.push(eintrag);
-    const [status, inhalt] = beantworten(welt, eintrag);
-    antwort.writeHead(status, { "content-type": "application/json" });
-    antwort.end(inhalt === null ? "" : JSON.stringify(inhalt));
+    const [status, inhalt, typ = JSON_TYP] = beantworten(alleBereiche, eintrag);
+    antwort.writeHead(status, { "content-type": typ });
+    antwort.end(koerperText(inhalt));
   });
   server.listen(0, LOKAL);
   await once(server, "listening");
@@ -275,6 +315,9 @@ export function testUhr() {
     jetzt: () => stand.ms,
     warten: async (ms) => {
       wartezeiten.push(ms);
+      stand.ms += ms;
+    },
+    vorstellen: (ms) => {
       stand.ms += ms;
     },
   };
@@ -333,10 +376,11 @@ export async function werkzeugStarten(argumente, umgebung) {
 export async function entscheidenMit(kontext, optionen = {}) {
   const { entscheiden } = await import("../../tools/deploy-weg/entscheiden.mjs");
   const { welt = {}, ereignis = laufEreignis(), abdruck = abdruckAttrappe(), mehr = {} } = optionen;
-  const attrappe = await attrappeStarten(kontext, weltAnlegen(welt));
+  const uhr = testUhr();
+  const attrappe = await attrappeStarten(kontext, weltAnlegen(welt), uhr);
   const einstellungen = einstellungenFuer("entscheiden", attrappe.basis, mehr);
   const { zeilen, ausgabe } = sammler();
   const vergleichen = abdruck.vergleichen;
-  const ergebnis = await entscheiden({ einstellungen, ereignis, ausgabe, vergleichen });
-  return { ergebnis, text: zeilen.join("\n"), attrappe, abdruck };
+  const ergebnis = await entscheiden({ einstellungen, ereignis, ausgabe, vergleichen, uhr });
+  return { ergebnis, text: zeilen.join("\n"), attrappe, abdruck, uhr };
 }

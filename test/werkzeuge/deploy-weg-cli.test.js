@@ -22,6 +22,8 @@ const EXIT_ROT = 1;
 const AUFRUF = /Aufruf: node tools\/deploy-weg\.mjs/;
 const AUSLOESEN = /\/deploys$/;
 const MASKE = "::add-mask::";
+const DEPLOY_AUFRUF = ["deploy", "--commit", COMMIT_C, "--produktion", COMMIT_P];
+const DEPLOY_ARGUMENTE = [...DEPLOY_AUFRUF, "--frisch-geweckt", "nein"];
 
 function ohneMasken(text) {
   return text
@@ -52,7 +54,7 @@ test("CLI hoertest mit unzulässigem Teil-Namen meldet den Aufruf", async () => 
 });
 
 test("CLI deploy ohne Einstellungen nennt nur die Namen der fehlenden Einstellungen", async () => {
-  const argumente = ["deploy", "--commit", COMMIT_C, "--produktion", COMMIT_P];
+  const argumente = DEPLOY_ARGUMENTE;
   const lauf = await werkzeugStarten(argumente, {});
   assert.equal(lauf.status, EXIT_ROT);
   assert.match(lauf.ausgabe, /Einstellung fehlt oder ist ungültig: RENDER_API_KEY/);
@@ -61,7 +63,7 @@ test("CLI deploy ohne Einstellungen nennt nur die Namen der fehlenden Einstellun
 });
 
 test("CLI deploy lehnt eine Render-Adresse außerhalb von Render und Loopback ab", async () => {
-  const argumente = ["deploy", "--commit", COMMIT_C, "--produktion", COMMIT_P];
+  const argumente = DEPLOY_ARGUMENTE;
   const umgebung = umgebungFuer("http://127.0.0.1:9", { RENDER_API_URL: "https://fremd.invalid/v1" });
   const lauf = await werkzeugStarten(argumente, umgebung);
   assert.equal(lauf.status, EXIT_ROT);
@@ -86,12 +88,13 @@ test("CLI entscheiden rot: schreibt deploy=nein nach GITHUB_OUTPUT und endet mit
   assert.ok(zeilen.includes("deploy=nein"));
   assert.ok(zeilen.includes("hoertest=nein"));
   assert.ok(zeilen.includes("commit=" + COMMIT_C));
+  assert.ok(zeilen.includes("frisch_geweckt=nein"));
 });
 
 test("CLI deploy grün: genau ein Deploy-POST, Exit 0, Schlüssel nur in add-mask-Zeilen", async (kontext) => {
   const welt = weltAnlegen({ produktion: [COMMIT_P, COMMIT_C], deployStatus: ["live"] });
   const attrappe = await attrappeStarten(kontext, welt);
-  const argumente = ["deploy", "--commit", COMMIT_C, "--produktion", COMMIT_P];
+  const argumente = DEPLOY_ARGUMENTE;
   const lauf = await werkzeugStarten(argumente, umgebungFuer(attrappe.basis));
   assert.equal(lauf.status, EXIT_OK, lauf.ausgabe);
   const posts = anfragenAn(attrappe, "POST", AUSLOESEN);
@@ -108,7 +111,7 @@ test("CLI deploy grün: genau ein Deploy-POST, Exit 0, Schlüssel nur in add-mas
 
 test("CLI deploy rot: die Anruf-Abfrage scheitert mit 401, kein Deploy-POST", async (kontext) => {
   const attrappe = await attrappeStarten(kontext, weltAnlegen());
-  const argumente = ["deploy", "--commit", COMMIT_C, "--produktion", COMMIT_P];
+  const argumente = DEPLOY_ARGUMENTE;
   const umgebung = umgebungFuer(attrappe.basis, {
     HERMES_DEPLOY_TOKEN: "a".repeat(DEPLOY_TOKEN.length),
   });
@@ -116,4 +119,14 @@ test("CLI deploy rot: die Anruf-Abfrage scheitert mit 401, kein Deploy-POST", as
   assert.equal(lauf.status, EXIT_ROT);
   assert.match(lauf.ausgabe, /Abbruch im Schritt anrufe: HTTP 401/);
   assert.deepEqual(anfragenAn(attrappe, "POST", AUSLOESEN), []);
+});
+
+test("CLI deploy ohne --frisch-geweckt oder mit einem anderen Wert als ja/nein meldet den Aufruf", async (kontext) => {
+  const attrappe = await attrappeStarten(kontext, weltAnlegen());
+  for (const argumente of [DEPLOY_AUFRUF, [...DEPLOY_AUFRUF, "--frisch-geweckt", "true"]]) {
+    const lauf = await werkzeugStarten(argumente, umgebungFuer(attrappe.basis));
+    assert.equal(lauf.status, EXIT_ROT);
+    assert.match(lauf.ausgabe, AUFRUF);
+  }
+  assert.deepEqual(attrappe.anfragen, []);
 });
