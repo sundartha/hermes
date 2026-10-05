@@ -235,13 +235,8 @@ export function makeWebAuthRoutes(deps) {
     // unerwarteter Fehler darf den Request nicht bis zum Socket-Timeout haengen lassen
     // (Express 4 reicht Route-Rejections NICHT automatisch an die Error-MW weiter).
     // Generische 5xx, Login-Cookies geloescht, kein Detail-Leak.
-    try {
-      const url = await oidc.authorizeUrl({ challenge, state, redirectUri });
-      res.redirect(302, url);
-    } catch {
-      clearCookies(res, LOGIN_FLOW_COOKIE_NAMES);
-      res.status(500).send(ERROR_LOGIN_FAILED);
-    }
+    const url = await oidc.authorizeUrl({ challenge, state, redirectUri });
+    res.redirect(302, url);
   });
 
   // GET /auth/callback
