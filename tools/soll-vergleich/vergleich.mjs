@@ -171,7 +171,7 @@ export function codeownersVergleich(soll, { inhalt, fehler }) {
 function environmentVergleich(name, soll, ist) {
   const bereich = `${ENVIRONMENT} ${name}`;
   if (soll === undefined) {
-    return [{ bereich, feld: ENVIRONMENT, soll: NICHT_IM_SOLL, ist: VORHANDEN }];
+    return [];
   }
   if (ist === null) return [{ bereich, feld: ENVIRONMENT, soll: VORHANDEN, ist: FEHLT }];
   return felderVergleich(bereich, soll, ist);
