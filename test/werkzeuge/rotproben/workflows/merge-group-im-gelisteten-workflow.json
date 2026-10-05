@@ -1,0 +1,30 @@
+{
+  "titel": "merge_group in einem Workflow der Secret-Liste mit Environment und Secret",
+  "dateien": {
+    ".github/workflows/rotproben.yml": [
+      "name: Soll und Rot-Proben",
+      "on:",
+      "  workflow_dispatch:",
+      "  merge_group:",
+      "    types: [checks_requested]",
+      "permissions: {}",
+      "jobs:",
+      "  rotproben:",
+      "    name: Rot-Proben",
+      "    runs-on: ubuntu-latest",
+      "    environment: rotproben",
+      "    permissions:",
+      "      contents: read",
+      "    steps:",
+      "      - name: Checkout",
+      "        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+      "        with:",
+      "          persist-credentials: false",
+      "      - name: Rot-Proben",
+      "        env:",
+      "          GH_TOKEN: ${{ secrets.BOT_TOKEN }}",
+      "        run: node tools/rotproben-woche.mjs"
+    ]
+  },
+  "erwartet": "secrets in einem Workflow, der für Pull Requests läuft"
+}

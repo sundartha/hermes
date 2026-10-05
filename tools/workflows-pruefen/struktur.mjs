@@ -53,6 +53,12 @@ const NAME_EXPRESSION_MESSAGE =
 const DYNAMIC_MATRIX_MESSAGE =
   "ein Jobname nur aus ${{ matrix.<schlüssel> }} verlangt eine feste Matrix ohne ${{ }}";
 const FLOW_JOB_MESSAGE = "Jobs nur in Block-Schreibweise, je Schlüssel eine Zeile";
+const MERGE_GROUP = "merge_group";
+const JOB_CONDITION_KEY_PATTERN = /^\s*["']?if["']?\s*:/;
+const PULL_REQUEST_NAME_PATTERN = /\bpull_request\b/;
+const MERGE_GROUP_NAME_PATTERN = /\bmerge_group\b/;
+const JOB_CONDITION_MESSAGE =
+  "if: eines Jobs nennt pull_request, aber nicht merge_group; in der Warteschlange würde der Job übersprungen und zählte als bestanden";
 
 export function indentOf(line) {
   return INDENT_PATTERN.exec(line)[0].length;
@@ -251,6 +257,23 @@ function flowStyleJobs(lines, jobs) {
   return (_line, index) => (flagged.has(index) ? FLOW_JOB_MESSAGE : undefined);
 }
 
+function namesPullRequestOnly(lines, { start, end }) {
+  const condition = withoutComments(lines.slice(start, end));
+  return PULL_REQUEST_NAME_PATTERN.test(condition) && !MERGE_GROUP_NAME_PATTERN.test(condition);
+}
+
+function jobConditionsWithoutMergeGroup(lines, jobs) {
+  const flagged = new Set();
+  if (triggerNames(lines).includes(MERGE_GROUP)) {
+    const conditions = jobs.flatMap(({ keyBlocks }) =>
+      keyBlocks.filter(({ start }) => JOB_CONDITION_KEY_PATTERN.test(lines[start])),
+    );
+    for (const block of conditions)
+      if (namesPullRequestOnly(lines, block)) flagged.add(block.start);
+  }
+  return (_line, index) => (flagged.has(index) ? JOB_CONDITION_MESSAGE : undefined);
+}
+
 function yamlTag(line) {
   if (!TAG_PATTERN.test(line)) return undefined;
   return "YAML-Tags (!!…, !…) sind in Workflow-Dateien verboten";
@@ -290,6 +313,7 @@ export function structureRules(lines, { listed }) {
     prueferAsName,
     jobNames(lines, jobs),
     flowStyleJobs(lines, jobs),
+    jobConditionsWithoutMergeGroup(lines, jobs),
     escapeSequence,
     anchorOrAlias,
     yamlTag,

@@ -24,7 +24,7 @@ const PRODUCTION_FLOW_PATTERN =
 const PRODUCTION_NAME_PATTERN = /^\s*name\s*:\s*["']?produktion["']?\s*(?:#.*)?$/i;
 const ENVIRONMENT_BLOCK_PATTERN = /^\s*environment\s*:\s*(?:#.*)?$/;
 const ENVIRONMENT_KEY_PATTERN = /^\s*(?:-\s+)?["']?environment["']?\s*:/;
-const PULL_REQUEST_TRIGGER_PATTERN = /\bpull_request/;
+const PULL_REQUEST_TRIGGER_PATTERN = /\b(?:pull_request|merge_group)/;
 const SECRET_WORKFLOWS_NAME = "tools/basis/geheimnis-workflows.json";
 const SECRET_WORKFLOWS = JSON.parse(
   readFileSync(new URL("basis/geheimnis-workflows.json", import.meta.url), "utf8"),

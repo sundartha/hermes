@@ -1,0 +1,21 @@
+{
+  "titel": "Job-if mit pull_request ohne merge_group in einem Workflow der Warteschlange",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  merge_group:",
+      "    types: [checks_requested]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    if: github.event.pull_request.base.ref == 'master'",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        run: echo ok"
+    ]
+  },
+  "erwartet": "if: eines Jobs nennt pull_request, aber nicht merge_group"
+}
