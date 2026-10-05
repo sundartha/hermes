@@ -165,8 +165,8 @@ async function ersterLauf(lauf) {
 
 async function gruppenlauf(lauf) {
   const nachlauf = ({ zeilen, tests }) =>
-    stryker({ ...lauf, zeilen, tests: tests ?? lauf.tests, faktor: ZEITFAKTOR_WIEDERHOLUNG, anlass: BESTAETIGUNGSLAUF });
-  return bestaetige(await ersterLauf(lauf), nachlauf);
+    stryker({ ...lauf, zeilen, tests, faktor: ZEITFAKTOR_WIEDERHOLUNG, anlass: BESTAETIGUNGSLAUF });
+  return bestaetige(await ersterLauf(lauf), nachlauf, lauf.tests);
 }
 
 function staerker(eintrag, anderer) {
