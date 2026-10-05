@@ -1,6 +1,14 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
+import {
+  SECRETS_PATTERN,
+  indentOf,
+  isContentLine,
+  structureRules,
+  triggerSection,
+} from "./workflows-pruefen/struktur.mjs";
+
 const DEFAULT_WORKFLOW_DIR = ".github/workflows";
 const NON_BLOCKING_PATTERNS = [/continue-on-error/, /\|\|\s*true/];
 const PULL_REQUEST_TARGET_PATTERN = /\bpull_request_target\b/;
@@ -9,16 +17,12 @@ const COMMIT_SHA_REFERENCE_PATTERN = /@[0-9a-f]{40}$/;
 const NPM_CI_PATTERN = /\bnpm\s+ci\b/;
 const STEP_NAME_PATTERN = /^\s*(?:-\s+)?name\s*:/;
 const IGNORE_SCRIPTS_PATTERN = /--ignore-scripts(?:=true)?(?=\s|$)/;
-const SECRETS_PATTERN = /\bsecrets\b/i;
 const PRODUCTION_ENVIRONMENT_PATTERN = /^\s*environment\s*:\s*["']?produktion["']?\s*(?:#.*)?$/i;
 const PRODUCTION_FLOW_PATTERN =
   /^\s*environment\s*:\s*\{[^}]*\bname\s*:\s*["']?produktion["']?\s*[,}]/i;
 const PRODUCTION_NAME_PATTERN = /^\s*name\s*:\s*["']?produktion["']?\s*(?:#.*)?$/i;
 const ENVIRONMENT_BLOCK_PATTERN = /^\s*environment\s*:\s*(?:#.*)?$/;
-const INDENT_PATTERN = /^\s*/;
-const CONTENT_LINE_PATTERN = /^\s*[^\s#]/;
-const TRIGGER_KEY_PATTERN = /^["']?on["']?\s*:/;
-const TOP_LEVEL_KEY_PATTERN = /^[^\s#]/;
+const ENVIRONMENT_KEY_PATTERN = /^\s*(?:-\s+)?["']?environment["']?\s*:/;
 const PULL_REQUEST_TRIGGER_PATTERN = /\bpull_request/;
 const SECRET_WORKFLOWS_NAME = "tools/basis/geheimnis-workflows.json";
 const SECRET_WORKFLOWS = JSON.parse(
@@ -56,15 +60,9 @@ function secretsOutsideList(line) {
   return `secrets nur in Workflows aus ${SECRET_WORKFLOWS_NAME}`;
 }
 
-function indentOf(line) {
-  return INDENT_PATTERN.exec(line)[0].length;
-}
-
 function parentLine(lines, index) {
   const indent = indentOf(lines[index]);
-  return lines
-    .slice(0, index)
-    .findLast((line) => CONTENT_LINE_PATTERN.test(line) && indentOf(line) < indent);
+  return lines.slice(0, index).findLast((line) => isContentLine(line) && indentOf(line) < indent);
 }
 
 function namesProductionEnvironment(line, index, lines) {
@@ -78,6 +76,11 @@ function productionEnvironmentOutsideList(line, index, lines) {
   return `Environment produktion nur in Workflows aus ${SECRET_WORKFLOWS_NAME}`;
 }
 
+function environmentOutsideList(line) {
+  if (!ENVIRONMENT_KEY_PATTERN.test(line)) return undefined;
+  return `environment: nur in Workflows aus ${SECRET_WORKFLOWS_NAME}`;
+}
+
 const LINE_RULES = [
   ...NON_BLOCKING_PATTERNS.map(nonBlockingStepRule),
   pullRequestTarget,
@@ -85,26 +88,17 @@ const LINE_RULES = [
   npmCiWithInstallScripts,
 ];
 
-function triggerSection(lines) {
-  const start = lines.findIndex((line) => TRIGGER_KEY_PATTERN.test(line));
-  if (start === -1) return undefined;
-  const nextTopLevelKey = lines.findIndex(
-    (line, index) => index > start && TOP_LEVEL_KEY_PATTERN.test(line),
-  );
-  return lines.slice(start, nextTopLevelKey === -1 ? lines.length : nextTopLevelKey).join("\n");
-}
-
 function runsForPullRequests(lines) {
   const section = triggerSection(lines);
   return section === undefined || PULL_REQUEST_TRIGGER_PATTERN.test(section);
 }
 
 function lineRulesFor(filePath, lines) {
-  const rules = runsForPullRequests(lines)
-    ? [...LINE_RULES, secretsInPullRequestWorkflow]
-    : LINE_RULES;
-  if (SECRET_WORKFLOWS.includes(basename(filePath))) return rules;
-  return [...rules, secretsOutsideList, productionEnvironmentOutsideList];
+  const listed = SECRET_WORKFLOWS.includes(basename(filePath));
+  const pullRequestRules = runsForPullRequests(lines) ? [secretsInPullRequestWorkflow] : [];
+  const rules = [...LINE_RULES, ...pullRequestRules, ...structureRules(lines, { listed })];
+  if (listed) return rules;
+  return [...rules, secretsOutsideList, productionEnvironmentOutsideList, environmentOutsideList];
 }
 
 function findingsInFile(filePath) {
