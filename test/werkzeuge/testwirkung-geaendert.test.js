@@ -97,6 +97,12 @@ test("eine aussagelose Prüfung vor einem frühen return in einem bestehenden Te
   assert.match(lauf.stdout, NICHT_MEHR_ERREICHT);
 });
 
+test("ein frühes return bleibt sichtbar, auch wenn danach ein ?? oder ?. folgt", (context) => {
+  const lauf = pruefeAenderung(context, VORHER, eingefuegtVorPruefung("try { assert.ok(true); return; } catch { }", "const wert = null ?? 3;"));
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, NICHT_MEHR_ERREICHT);
+});
+
 test("eine ehrliche Umstellung, die jede Zeile der Basis weiter erreicht, bleibt grün", (context) => {
   const lauf = pruefeAenderung(context, VORHER, eingefuegtVorPruefung("const summe = 1 + 2;", "assert.equal(summe, 3);"));
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
