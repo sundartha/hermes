@@ -43,6 +43,7 @@ export const AUTH_FAILED_GRUND = Object.freeze({
   NOT_LOCAL: "not_local",
   CROSS_ORIGIN: "cross_origin",
   MCP_CROSS_ORIGIN: "mcp_cross_origin",
+  DEPLOY_TOKEN: "deploy_token",
 });
 
 export function auditAuthFailed(req, grund, detail = "") {

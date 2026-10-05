@@ -144,6 +144,7 @@ const ROUTE_FINGERPRINT = [
   "GET /auth/login",
   "GET /dashboard",
   "GET /healthz",
+  "GET /intern/anrufe-laufend",
   "GET /login",
   "GET /mcp",
   "GET /newsletter/confirm",

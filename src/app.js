@@ -35,6 +35,7 @@ import { makeCallRoutes } from "./routes/api-calls.js";
 import { makeCallConfirmationRoutes } from "./routes/api-call-confirmations.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
 import { makeDeployInfoRoutes } from "./routes/api-deploy-info.js";
+import { ANRUFE_LAUFEND_PATH, anrufeLaufendHandler } from "./routes/intern-anrufe-laufend.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
 import { wireWebLogin } from "./wiring/web-login.js";
 import { guardedBoot } from "./boot-guard.js";
@@ -284,6 +285,7 @@ export async function buildApp(deps) {
   const { mcpDrosseln, mcpBodyParsers } = installGlobalMiddleware({ app, config });
   registerPublicRoutes({ app, config });
   registerPathRedirects({ app });
+  app.get(ANRUFE_LAUFEND_PATH, anrufeLaufendHandler({ config, store }));
 
   let operatorAuth = null;
   if (config.auth.sessionSecret && config.store.storeBackend === "pg") {

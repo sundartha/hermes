@@ -1,5 +1,6 @@
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 import { ELEVENLABS_INIT_PATH } from "./routes/webhooks-elevenlabs-init.js";
+import { ANRUFE_LAUFEND_PATH } from "./routes/intern-anrufe-laufend.js";
 import { COOKIE_CONSENT_PATH } from "./cookie-consent-log.js";
 
 export const AUTH_MIDDLEWARE_NAMES = Object.freeze([
@@ -136,6 +137,19 @@ export const PUBLIC_ROUTES = Object.freeze([
       "Inbound-EL-Anruf (oder die identische Wiederholung binnen " +
       "EL_INIT_WIEDERHOLUNG_FRIST_MS), dann Schalter/Allowlist, dann set-once-Bindung. Jede " +
       "Ablehnung 404 mit konstantem Koerper ohne Daten. Loest selbst keinen Anruf aus.",
+  },
+  {
+    method: "GET",
+    path: ANRUFE_LAUFEND_PATH,
+    reason:
+      "HANDLER-INTERNE AUTH (Paket 15, Deploy-Weg): der Deploy-Workflow fragt vor dem " +
+      "Umschalten, ob Anrufe laufen, und hat keine Sitzung. Absicherung im Handler: " +
+      "safeEqual des ganzen Authorization-Headers gegen 'Bearer <HERMES_DEPLOY_TOKEN>'; " +
+      "leer oder kuerzer als DEPLOY_TOKEN_MIN_LENGTH -> JEDER Aufruf abgelehnt. Jede " +
+      "Ablehnung 401 mit konstantem Koerper, egal ob das Token gesetzt ist (gleiche " +
+      "Probe-Erwartung auf Staging und Produktion). Drossel ist der globale Per-IP-Limiter. " +
+      "Antwort nur {laufend: <zahl>} mit no-store - keine Nummer, keine Kennung, kein " +
+      "Inhalt. Liest nur, schreibt nichts, loest nichts aus.",
   },
   {
     method: "GET",
