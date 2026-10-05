@@ -29,7 +29,6 @@ function bestaetigt(eintrag) {
 }
 
 function erfolg({ commits }) {
-  if (commits.length === 0) return { state: GRUEN, description: "keine zu prüfenden Commits" };
   const uebernommen = commits.filter((commit) => commit.uebernommen).length;
   return {
     state: GRUEN,
@@ -47,6 +46,8 @@ function ohneNachstellung({ blocker, nachstellung }) {
 const REGELN = [
   ({ probeBranch }) =>
     probeBranch ? { state: FEHLER, description: "Probe-Branch, nicht geprüft" } : null,
+  ({ commits }) =>
+    commits.length === 0 ? { state: FEHLER, description: "keine Commits geprüft" } : null,
   ({ commits }) => {
     const offen = commits.find(({ zustand }) => zustand !== GEPRUEFT);
     return offen

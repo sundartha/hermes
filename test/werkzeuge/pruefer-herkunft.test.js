@@ -37,7 +37,8 @@ function scheinGithub() {
 }
 
 function ordnerMitErgebnis(context) {
-  const ergebnis = { format: 1, head: HEAD, branch: "fix/zahl", commits: [] };
+  const geprueft = { sha: HEAD, patchId: "", zustand: "geprueft", befunde: [] };
+  const ergebnis = { format: 1, head: HEAD, branch: "fix/zahl", commits: [geprueft] };
   return probeDirectory(context, { "ergebnis.json": JSON.stringify(ergebnis) });
 }
 
