@@ -136,20 +136,35 @@ test("workflows-pruefen-pruefer: actions/checkout mit ref: in einem Job ohne sec
   expectClean(context, FOLLOW_UP_NAME, lines);
 });
 
-for (const command of [
-  "git checkout FETCH_HEAD",
-  "git -C pr switch --detach FETCH_HEAD",
-  "git worktree add pr FETCH_HEAD",
-  "git restore --source FETCH_HEAD .",
-  "git reset --hard FETCH_HEAD",
-  "gh pr checkout 1",
-]) {
-  test(`workflows-pruefen-pruefer: ${command} im Job mit secrets ist verboten`, (context) => {
-    const target = `        run: ${command}`;
-    const lines = secretWorkflow({ extra: ["      - name: Wechseln", target] });
-    expectFinding(context, { lines, target, message: GIT_SWITCH_MESSAGE });
-  });
+function expectSwitchFinding(context, command) {
+  const target = `        run: ${command}`;
+  const lines = secretWorkflow({ extra: ["      - name: Wechseln", target] });
+  expectFinding(context, { lines, target, message: GIT_SWITCH_MESSAGE });
 }
+
+test("workflows-pruefen-pruefer: git checkout FETCH_HEAD im Job mit secrets ist verboten", (context) => {
+  expectSwitchFinding(context, "git checkout FETCH_HEAD");
+});
+
+test("workflows-pruefen-pruefer: git -C pr switch --detach FETCH_HEAD im Job mit secrets ist verboten", (context) => {
+  expectSwitchFinding(context, "git -C pr switch --detach FETCH_HEAD");
+});
+
+test("workflows-pruefen-pruefer: git worktree add pr FETCH_HEAD im Job mit secrets ist verboten", (context) => {
+  expectSwitchFinding(context, "git worktree add pr FETCH_HEAD");
+});
+
+test("workflows-pruefen-pruefer: git restore --source FETCH_HEAD . im Job mit secrets ist verboten", (context) => {
+  expectSwitchFinding(context, "git restore --source FETCH_HEAD .");
+});
+
+test("workflows-pruefen-pruefer: git reset --hard FETCH_HEAD im Job mit secrets ist verboten", (context) => {
+  expectSwitchFinding(context, "git reset --hard FETCH_HEAD");
+});
+
+test("workflows-pruefen-pruefer: gh pr checkout 1 im Job mit secrets ist verboten", (context) => {
+  expectSwitchFinding(context, "gh pr checkout 1");
+});
 
 test("workflows-pruefen-pruefer: ein Workflow mit Secret ausserhalb der Liste ist verboten", (context) => {
   const lines = secretWorkflow();
@@ -188,24 +203,27 @@ test("workflows-pruefen-pruefer: environment: ausserhalb der Liste ist verboten"
   });
 });
 
-for (const [label, trigger] of [
-  ["pull_request", PULL_REQUEST],
-  ["push", PUSH],
-]) {
-  test(`workflows-pruefen-pruefer: statuses: write in einem ${label}-Workflow ist verboten`, (context) => {
-    const target = "  statuses: write";
-    const lines = plainWorkflow(trigger, ["permissions:", target]);
-    expectFinding(context, { name: OTHER_NAME, lines, target, message: WRITE_PERMISSION_MESSAGE });
-  });
+function expectWriteFinding(context, { trigger, target }) {
+  const header = target.startsWith(" ") ? ["permissions:", target] : [target];
+  const lines = plainWorkflow(trigger, header);
+  expectFinding(context, { name: OTHER_NAME, lines, target, message: WRITE_PERMISSION_MESSAGE });
 }
 
-for (const target of ["  checks: write", "permissions: write-all"]) {
-  test(`workflows-pruefen-pruefer: ${target.trim()} in einem pull_request-Workflow ist verboten`, (context) => {
-    const header = target.startsWith(" ") ? ["permissions:", target] : [target];
-    const lines = plainWorkflow(PULL_REQUEST, header);
-    expectFinding(context, { name: OTHER_NAME, lines, target, message: WRITE_PERMISSION_MESSAGE });
-  });
-}
+test("workflows-pruefen-pruefer: statuses: write in einem pull_request-Workflow ist verboten", (context) => {
+  expectWriteFinding(context, { trigger: PULL_REQUEST, target: "  statuses: write" });
+});
+
+test("workflows-pruefen-pruefer: statuses: write in einem push-Workflow ist verboten", (context) => {
+  expectWriteFinding(context, { trigger: PUSH, target: "  statuses: write" });
+});
+
+test("workflows-pruefen-pruefer: checks: write in einem pull_request-Workflow ist verboten", (context) => {
+  expectWriteFinding(context, { trigger: PULL_REQUEST, target: "  checks: write" });
+});
+
+test("workflows-pruefen-pruefer: permissions: write-all in einem pull_request-Workflow ist verboten", (context) => {
+  expectWriteFinding(context, { trigger: PULL_REQUEST, target: "permissions: write-all" });
+});
 
 test("workflows-pruefen-pruefer: statuses: write in einem Workflow nur mit workflow_run ist erlaubt", (context) => {
   expectClean(
