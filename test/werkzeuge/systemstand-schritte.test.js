@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { once } from "node:events";
+import { mkdirSync, symlinkSync } from "node:fs";
 import { createServer } from "node:http";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 
@@ -54,12 +55,30 @@ const WORKFLOW_FILES = [
   "anweisungstexte.yml",
 ];
 const CRITERIA = {
-  "1b": ["pakete-geschlossen", "staging", "katalog-ohne-test", "rotproben", "wiederherstellung"],
+  "1b": ["pakete-geschlossen", "staging", "katalog-ohne-test", "rotproben", "geheimnis-liste"],
   2: ["pakete-geschlossen", "auftrag", "aufraeumen", "auswertung", "phase-pr"],
   3: ["pakete-geschlossen", "kommentar-basislinie", "tests-ohne-quelltext"],
   4: ["pakete-geschlossen", "claude-md", "workflows-entfernt", "anweisungstexte"],
   5: ["pakete-geschlossen", "beleg-zehn-laeufe"],
 };
+const WORKFLOW_RULES_TOOL = "tools/workflows-pruefen.mjs";
+const WORKFLOW_RULES_PROBES = "test/werkzeuge/rotproben/workflows";
+const WORKFLOW_RULES_MANIFEST = `${WORKFLOW_RULES_PROBES}/pruefung.json`;
+const SECRET_CASE = `${WORKFLOW_RULES_PROBES}/geheimnis-ausserhalb-der-liste.json`;
+const PRODUCTION_CASE = `${WORKFLOW_RULES_PROBES}/environment-produktion-ausserhalb-der-liste.json`;
+const CURRENT_WORKFLOW_RULES = [
+  WORKFLOW_RULES_TOOL,
+  WORKFLOW_RULES_MANIFEST,
+  SECRET_CASE,
+  PRODUCTION_CASE,
+];
+const SECRET_LIST_TITLE =
+  "Die Workflow-Prüfung stoppt secrets und das Environment produktion außerhalb der Liste";
+const STOPS_ONLY_PRODUCTION = [
+  'console.error("Environment produktion nur in Workflows aus tools/basis/geheimnis-workflows.json");',
+  "process.exitCode = 1;",
+  "",
+].join("\n");
 
 function json(value) {
   return `${JSON.stringify(value, null, JSON_INDENT)}\n`;
@@ -190,6 +209,13 @@ async function startGitHub(context, state) {
   return `http://${HOST}:${server.address().port}`;
 }
 
+function linkCurrentWorkflowRules(directory, tree) {
+  for (const path of CURRENT_WORKFLOW_RULES.filter((file) => !Object.hasOwn(tree, file))) {
+    mkdirSync(dirname(join(directory, path)), { recursive: true });
+    symlinkSync(join(REPO_ROOT, path), join(directory, path));
+  }
+}
+
 function linesByStep(stdout) {
   return Object.fromEntries(
     outputLines(stdout).map((line) => [line.slice("Schritt ".length, line.indexOf(":")), line]),
@@ -200,6 +226,7 @@ async function systemstand(context, { files = {}, github = {}, starts, recorded,
   const tree = { ...HEALTHY_FILES, [BASIS_FILE]: basis({ starts, recorded }), ...files };
   const present = Object.entries(tree).filter(([, content]) => content !== null);
   const directory = probeRepository(context, Object.fromEntries(present));
+  linkCurrentWorkflowRules(directory, tree);
   const state = { ...healthyGitHub(), ...github };
   const address = await startGitHub(context, state);
   const environment = {
@@ -296,12 +323,11 @@ const MISSING_END_CRITERIA = [
     run: {
       github: {
         workflows: {
-          "rotproben.yml": [{ conclusion: "success" }],
-          "wiederherstellung.yml": [{ conclusion: "failure" }],
+          "rotproben.yml": [{ conclusion: "failure" }],
         },
       },
     },
-    pattern: /wiederherstellung\.yml.*failure/,
+    pattern: /rotproben\.yml.*failure/,
   },
   { step: "2", run: { files: { "tools/auftrag.mjs": null } }, pattern: /tools\/auftrag\.mjs/ },
   {
@@ -377,6 +403,33 @@ test("fehlt ein Endkriterium, nennt die Zeile des Schritts genau diesen einen Gr
     if (pattern === undefined) continue;
     assert.ok(lines[step].startsWith(prefix) && !lines[step].includes(";"), lines[step]);
     assert.match(lines[step], pattern);
+  }
+});
+
+test("ohne wiederherstellung.yml ist 1b mit der heutigen Workflow-Prüfung erfüllt, und das Schritt-Issue führt die Liste als erfüllt", async (context) => {
+  const workflows = { "rotproben.yml": [{ conclusion: "success" }] };
+  const result = await systemstand(context, { github: { workflows }, args: ["--issues"] });
+  assert.equal(result.status, EXIT_OK, result.stderr);
+  assert.equal(result.lines["1b"], "Schritt 1b: erfüllt");
+  const issue = result.created.find(({ title }) => title === "Schritt 1b");
+  assert.ok(issue.body.includes(`| ${SECRET_LIST_TITLE} | erfüllt | – |`), issue.body);
+  assert.doesNotMatch(issue.body, /wiederherstellung|Paket 22/);
+});
+
+test("lässt die Workflow-Prüfung secrets außerhalb der Liste durch, ist 1b offen und nennt die durchgelassene Rot-Probe", async (context) => {
+  const result = await systemstand(context, {
+    files: { [WORKFLOW_RULES_TOOL]: STOPS_ONLY_PRODUCTION },
+  });
+  assert.equal(
+    result.lines["1b"],
+    "Schritt 1b: offen, weil die Rot-Probe „Geheimnisse in einem Workflow außerhalb der Liste“ durchgelassen wurde",
+  );
+});
+
+test("fehlt das Manifest oder eine Fall-Datei der Workflow-Prüfung, ist 1b offen und nennt die fehlende Datei", async (context) => {
+  for (const missing of [WORKFLOW_RULES_MANIFEST, SECRET_CASE, PRODUCTION_CASE]) {
+    const result = await systemstand(context, { files: { [missing]: null } });
+    assert.equal(result.lines["1b"], `Schritt 1b: offen, weil ${missing} fehlt`);
   }
 });
 
