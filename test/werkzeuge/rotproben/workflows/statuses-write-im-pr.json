@@ -1,0 +1,20 @@
+{
+  "titel": "statuses: write in einem Workflow für Pull Requests",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  statuses: write",
+      "jobs:",
+      "  probe:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        run: echo ok"
+    ]
+  },
+  "erwartet": "statuses: write, checks: write und write-all nur in Workflows mit workflow_run als einzigem Auslöser"
+}

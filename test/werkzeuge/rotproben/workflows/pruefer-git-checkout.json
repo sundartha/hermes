@@ -1,0 +1,29 @@
+{
+  "titel": "Prüfer-Workflow wechselt mit git checkout auf den Stand des Pull Requests",
+  "dateien": {
+    ".github/workflows/pruefer-pruefen.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  workflow_run:",
+      "    workflows: [\"CI\"]",
+      "    types: [completed]",
+      "permissions: {}",
+      "jobs:",
+      "  pruefen:",
+      "    runs-on: ubuntu-latest",
+      "    environment: pruefer",
+      "    steps:",
+      "      - name: Checkout",
+      "        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+      "        with:",
+      "          persist-credentials: false",
+      "      - name: Wechseln",
+      "        run: git fetch origin \"$HEAD_SHA\" && git checkout FETCH_HEAD",
+      "      - name: Pruefen",
+      "        env:",
+      "          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}",
+      "        run: node pruefen.mjs"
+    ]
+  },
+  "erwartet": "git checkout, switch, worktree, restore oder reset in einem Job mit secrets"
+}
