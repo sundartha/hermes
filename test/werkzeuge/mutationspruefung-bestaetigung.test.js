@@ -130,3 +130,65 @@ test("je tötende Datei läuft ein eigener Bestätigungslauf nur mit ihr, alle A
   assert.deepEqual(bestaetigte.map(({ status }) => status), ["Killed", "Killed", "Timeout"]);
   assert.equal(bilanz(bestaetigte), "2 bestätigt getötet, 1 nur durch Zeitablauf oder Absturz erkannt");
 });
+
+const WACKLER = "test/wackel.test.js";
+const WACKELT = "Hinweis: Testdatei wackelt bei diesem Mutanten, bestätigt getötet durch";
+
+async function gruppenbestaetigung(gruppe, ...antworten) {
+  const { aufrufe, nachlauf } = nachlaeufe(...antworten);
+  const [ergebnis] = await bestaetige([eintrag("Killed", [WACKLER])], nachlauf, gruppe);
+  return { ergebnis, aufrufe };
+}
+
+function laeufe(...tests) {
+  return tests.map((auswahl) => ({ zeilen: [ZEILEN], tests: auswahl }));
+}
+
+test("wird ein Töter nicht bestätigt, tötet ein anderer Test aus der Gruppe den Mutanten zweimal und nennt den Wackler", async () => {
+  const { ergebnis, aufrufe } = await gruppenbestaetigung(
+    [WACKLER, DATEI, ANDERE],
+    [eintrag("Survived")],
+    [eintrag("Killed", [DATEI])],
+    [eintrag("Killed", [DATEI])],
+  );
+  assert.deepEqual(aufrufe, laeufe([WACKLER], [DATEI, ANDERE], [DATEI]));
+  assert.equal(bestaetigt(ergebnis), true);
+  assert.equal(ergebnis.status, "Killed");
+  assert.equal(ergebnis.hinweis, `${WACKELT} ${DATEI} (erster Lauf Killed ${WACKLER}, Bestätigungslauf Survived): ${SCHLUESSEL}`);
+  assert.equal(bilanz([ergebnis]), "1 bestätigt getötet, 0 nur durch Zeitablauf oder Absturz erkannt");
+});
+
+test("wird ein Töter nicht bestätigt und bleiben die übrigen Dateien der Gruppe grün, überlebt der Mutant", async () => {
+  for (const [antwort, dritter] of [...GRUENE.map((status) => [[eintrag(status)], status]), [[], "ohne Ergebnis"]]) {
+    const { ergebnis, aufrufe } = await gruppenbestaetigung([WACKLER, DATEI, ANDERE], [eintrag("Survived")], antwort);
+    assert.deepEqual(aufrufe, laeufe([WACKLER], [DATEI, ANDERE]), dritter);
+    assert.equal(ergebnis.status, "Survived", dritter);
+    assert.equal(bestaetigt(ergebnis), false, dritter);
+    assert.equal(ergebnis.hinweis, nichtBestaetigt(`erster Lauf Killed ${WACKLER}, Bestätigungslauf Survived`), dritter);
+  }
+});
+
+test("besteht die Gruppe nur aus dem nicht bestätigten Töter, überlebt der Mutant ohne weiteren Lauf", async () => {
+  const { ergebnis, aufrufe } = await gruppenbestaetigung([WACKLER], [eintrag("Survived")]);
+  assert.deepEqual(aufrufe, laeufe([WACKLER]));
+  assert.equal(ergebnis.status, "Survived");
+  assert.equal(ergebnis.hinweis, nichtBestaetigt(`erster Lauf Killed ${WACKLER}, Bestätigungslauf Survived`));
+});
+
+test("wird auch der zweite Töter nicht bestätigt und bleibt keine Datei übrig, überlebt der Mutant", async () => {
+  const { ergebnis, aufrufe } = await gruppenbestaetigung(
+    [WACKLER, DATEI],
+    [eintrag("Survived")],
+    [eintrag("Killed", [DATEI])],
+    [eintrag("Survived")],
+  );
+  assert.deepEqual(aufrufe, laeufe([WACKLER], [DATEI], [DATEI]));
+  assert.equal(ergebnis.status, "Survived");
+  assert.equal(bestaetigt(ergebnis), false);
+  assert.equal(
+    ergebnis.hinweis,
+    nichtBestaetigt(
+      `erster Lauf Killed ${WACKLER}, Bestätigungslauf Survived; ohne ${WACKLER}: erster Lauf Killed ${DATEI}, Bestätigungslauf Survived`,
+    ),
+  );
+});
