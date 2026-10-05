@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { env } from "node:process";
 
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
+import { EXIT_PROZESS_UEBRIG, TESTGRUPPE } from "../testgruppe.mjs";
 import { entscheide, unentschieden } from "./bestaetigung.mjs";
 import { gruppen } from "./gruppen.mjs";
 
@@ -73,13 +74,13 @@ function ohneTestkontext() {
 }
 
 function laufstatus({ status, signal, error }) {
-  if (status === EXIT_GRUEN) return UEBERLEBT;
+  if (status === EXIT_GRUEN || status === EXIT_PROZESS_UEBRIG) return UEBERLEBT;
   if (status === EXIT_ROTER_TEST) return ERKANNT;
   return signal !== null || error !== undefined ? ZEITABLAUF : ABSTURZ;
 }
 
 function testlauf(verzeichnis, tests) {
-  const lauf = spawnSync(process.execPath, ["--test", `--test-concurrency=${TESTPARALLEL}`, ...patternFlagsFor(BANK), ...tests], {
+  const lauf = spawnSync(process.execPath, [TESTGRUPPE, "--test", `--test-concurrency=${TESTPARALLEL}`, ...patternFlagsFor(BANK), ...tests], {
     cwd: verzeichnis,
     env: ohneTestkontext(),
     stdio: "ignore",

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -434,4 +435,53 @@ test("eine gelöschte Zeile, die ein wackelnder Test nur im ersten Lauf bemerkt,
   assert.deepEqual(nichtBestaetigt(rot.stdout), [
     ["src/zahl.js:3 Zeile gelöscht", "erster Lauf Killed test/wackel.test.js test/zahl.test.js, Bestätigungslauf Survived"],
   ]);
+});
+
+const PROZESSNUMMERN = "prozessnummern";
+const KIND_BEENDEN = "kind.kill();";
+const KEINER_BESTAETIGT = /^Bestätigung: 0 bestätigt getötet, 0 nur durch Zeitablauf oder Absturz erkannt\.$/m;
+
+function kindquelle(protokoll, ...ende) {
+  return [
+    'import { spawn } from "node:child_process";',
+    'import { appendFileSync } from "node:fs";',
+    'export const kind = spawn("sleep", ["600"], { stdio: "ignore" });',
+    `appendFileSync(${JSON.stringify(protokoll)}, \`\${kind.pid} \`);`,
+    "kind.unref();",
+    ...ende,
+    "",
+  ].join("\n");
+}
+
+function kindtest() {
+  return [
+    'import assert from "node:assert/strict";',
+    'import { test } from "node:test";',
+    'import { kind } from "../src/kind.js";',
+    'test("startet einen Kindprozess", () => {',
+    '  assert.equal(typeof kind.pid, "number");',
+    "});",
+    "",
+  ].join("\n");
+}
+
+function lebt(prozess) {
+  try {
+    process.kill(prozess, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+test("eine gelöschte Zeile, deren Fehlen nur einen Prozess übrig lässt, bleibt rot, weil dabei kein Test rot wird", (context) => {
+  const protokoll = join(probeDirectory(context, {}), PROZESSNUMMERN);
+  const repo = probeRepository(context, { ...BASIS, "src/kind.js": kindquelle(protokoll), "test/kind.test.js": kindtest() });
+  writeFiles(repo, { "src/kind.js": kindquelle(protokoll, KIND_BEENDEN) });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.deepEqual(schluessel(rot.stdout, UEBERLEBT), ["src/kind.js:6 Zeile gelöscht"]);
+  assert.match(rot.stdout, KEINER_BESTAETIGT);
+  const gestartet = readFileSync(protokoll, "utf8").trim().split(" ").map(Number);
+  assert.ok(gestartet.length > 1 && !gestartet.some(lebt), gestartet.join(" "));
 });

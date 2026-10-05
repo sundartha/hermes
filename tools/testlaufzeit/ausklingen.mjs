@@ -5,6 +5,7 @@ import path from "node:path";
 import { env } from "node:process";
 
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
+import { TESTGRUPPE } from "../testgruppe.mjs";
 
 const MINDESTLUECKE = 4;
 const HAELFTE = 2;
@@ -77,6 +78,7 @@ export function nachmessen(datei) {
     const lauf = spawnSync(
       process.execPath,
       [
+        TESTGRUPPE,
         "--test",
         ...patternFlagsFor("regression"),
         `--test-reporter=${REPORTER}`,

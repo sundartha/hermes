@@ -3,6 +3,8 @@ import { relative } from "node:path";
 import { cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { TESTGRUPPE } from "../testgruppe.mjs";
+
 const TESTPARALLEL = 4;
 const MS_JE_MINUTE = 60_000;
 const ZEITGRENZE_MINUTEN = 10;
@@ -26,7 +28,7 @@ function eigenstaendig() {
 }
 
 function aufruf({ dateien, muster, vorspann, verzeichnis = cwd(), umgebung = {} }) {
-  const argumente = [...vorspann, "--test", `--test-concurrency=${TESTPARALLEL}`, `--test-reporter=${MELDER}`];
+  const argumente = [TESTGRUPPE, ...vorspann, "--test", `--test-concurrency=${TESTPARALLEL}`, `--test-reporter=${MELDER}`];
   const filter = muster.map((quelle) => `--test-name-pattern=${quelle}`);
   const optionen = { cwd: verzeichnis, env: { ...eigenstaendig(), ...umgebung }, timeout: ZEITGRENZE_MINUTEN * MS_JE_MINUTE };
   return { argumente: [...argumente, ...filter, ...dateien], optionen };

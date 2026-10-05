@@ -25,12 +25,12 @@
 // Zusaetzliche node --test-Flags (z.B. Coverage-Schwellen der CI) gehen wie dort nach
 // einem "--"-Trenner durch: "node test/testbaenke-run.mjs regression -- --flag ...".
 
-import { spawn } from "node:child_process";
 import { createWriteStream, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { gruppenlauf } from "../tools/testgruppe.mjs";
 import { extraArgsFrom, parseNodeSummary } from "./i18n-catalog-run.mjs";
 
 const require = createRequire(import.meta.url);
@@ -171,8 +171,7 @@ function runNodeTest(
   const protocolPath = join(PROTOCOL_DIR, `${protocolName}.log`);
   const protocol = createWriteStream(protocolPath);
   return new Promise((resolve) => {
-    const child = spawn(
-      process.execPath,
+    const { kind: child, ende: finished } = gruppenlauf(
       ["--test", "--test-reporter=tap", ...patternFlagsFor(mode), ...extraArgs, ...files],
       { stdio: ["inherit", "pipe", "pipe"], env: environment },
     );
@@ -183,7 +182,7 @@ function runNodeTest(
       protocol.write(chunk);
     });
     child.stderr.pipe(protocol, { end: false });
-    child.on("close", (code) => {
+    finished.then(({ code }) => {
       protocol.end(() => resolve({ code: code ?? 1, tapText: buffered, protocolPath }));
     });
   });
