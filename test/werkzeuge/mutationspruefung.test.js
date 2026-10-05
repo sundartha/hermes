@@ -339,3 +339,29 @@ test("eine neue Zeile, die Strykers Zustand abfragt, ist ein Verstoß, eine best
   assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
   assert.deepEqual(schluessel(gruen.stdout, ZUSTAND), []);
 });
+
+const UMGEBUNGSTEST = [
+  'import assert from "node:assert/strict";',
+  'import { test } from "node:test";',
+  'import { einordnen } from "../src/zahl.js";',
+  'import { gewohnt } from "../scripts/umgebung.mjs";',
+  'test("läuft im gewohnten Zustand", () => {',
+  "  assert.ok(gewohnt());",
+  "  for (const zahl of [-1, 0, 1]) einordnen(zahl);",
+  "});",
+  "",
+].join("\n");
+
+test("eine neue Zeile außerhalb von src/ und test/, die Strykers Zustand abfragt, ist ein Verstoß, in der Mutationsprüfung selbst nicht", (context) => {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, {
+    "src/zahl.js": quelle(NEGATIV, NULL),
+    "scripts/umgebung.mjs": `export const gewohnt = () => process.env.${AKTIVER_MUTANT} === undefined;\n`,
+    "tools/mutationspruefung/merkmal.mjs": `export const MERKMAL = "${AKTIVER_MUTANT}";\n`,
+    "test/umgebung.test.js": UMGEBUNGSTEST,
+  });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.deepEqual(schluessel(rot.stdout, ZUSTAND), ["scripts/umgebung.mjs:1"]);
+  assert.deepEqual(schluessel(rot.stdout, UEBERLEBT), []);
+});
