@@ -36,9 +36,7 @@ function bauNachrunde(ueberlebende) {
     "",
     liste(ueberlebende),
     "",
-    "Streiche den Code, den kein Test verlangt. Ändert ein Mutant das Verhalten nicht, schreibe in deine",
-    "Schlussantwort je Mutant eine Zeile, die mit „" + GLEICHWERTIG + "“ beginnt und den Mutanten wörtlich wie oben nennt.",
-    "Tests änderst du nicht.",
+    "Streiche oder vereinfache den Code, den kein Test verlangt. Tests änderst du nicht.",
     "",
   ].join("\n");
 }
