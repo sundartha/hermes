@@ -20,6 +20,8 @@ const HTTP_NOT_FOUND = 404;
 const EXIT_FAILURE = 1;
 const NON_BLOCKING_PATTERNS = [/continue-on-error/, /\|\|\s*true/];
 const PUSH_RULES = ["pull_request", "non_fast_forward", "deletion"];
+const QUEUE_RULE = "merge_queue";
+const QUEUE_ALL_GREEN = "ALLGREEN";
 const WORKFLOW_FILE_PATTERN = /\.ya?ml$/;
 const DAY_MS = 86_400_000;
 const TIME_LIMIT_FACTOR = 2;
@@ -132,18 +134,22 @@ async function redProbeProblems(remote) {
   return (await Promise.all(verdicts)).flat();
 }
 
+function queueChecksEveryEntry(rules) {
+  const queue = ruleParameters(rules, QUEUE_RULE);
+  return queue.grouping_strategy === QUEUE_ALL_GREEN && queue.max_entries_to_merge === 1;
+}
+
 async function strictRulesProblems(remote) {
   const rules = await remote.rules();
   const statusChecks = ruleParameters(rules, "required_status_checks");
+  const upToDate =
+    statusChecks.strict_required_status_checks_policy === true || queueChecksEveryEntry(rules);
   return [
     ...missing(
       ruleParameters(rules, "pull_request").require_code_owner_review === true,
       "die Code-Owner-Pflicht im Ruleset aus ist",
     ),
-    ...missing(
-      statusChecks.strict_required_status_checks_policy === true,
-      "die Pflicht zum aktuellen Stand im Ruleset aus ist",
-    ),
+    ...missing(upToDate, "die Pflicht zum aktuellen Stand im Ruleset aus ist"),
   ];
 }
 
