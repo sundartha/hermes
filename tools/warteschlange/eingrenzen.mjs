@@ -115,7 +115,7 @@ function phaseFuer({ pr, datei, herkunft }, issue) {
       {
         id: "reparatur",
         art: "fehlerbehebung",
-        ziel: `Übernimm #${pr.number} ohne den roten Test ${datei}`.slice(0, MAX_ZIEL),
+        ziel: `Übernimm #${pr.number} und behebe den roten Test ${datei}`.slice(0, MAX_ZIEL),
         bereich,
         erwarteteDateien: herkunft.dateien.filter(
           (pfad) => imBereich(bereich, pfad) || istTestdatei(pfad),
