@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 import { istStand } from "./soll-vergleich/abruf.mjs";
 import {
   codeownersVergleich,
-  environmentVergleich,
+  environmentsVergleich,
   mitarbeiterVergleich,
   repoVergleich,
   rulesetVergleich,
@@ -55,16 +55,13 @@ function sollLesen(datei) {
 
 function vergleiche(soll, ist) {
   const ruleset = rulesetVergleich(soll.ruleset, ist.ruleset);
-  const environments = Object.entries(soll.environments).flatMap(([name, wert]) =>
-    environmentVergleich(name, wert, ist.environments.get(name)),
-  );
   return {
     abweichungen: [
       ...ruleset.abweichungen,
       ...repoVergleich(soll.repo_einstellungen, ist.repo),
       ...mitarbeiterVergleich(soll.mitarbeiter, ist.mitarbeiter),
       ...codeownersVergleich(soll.codeowners, ist.codeowners),
-      ...environments,
+      ...environmentsVergleich(soll.environments, ist.environments),
     ],
     nichtPruefbar: ruleset.nichtPruefbar,
   };
