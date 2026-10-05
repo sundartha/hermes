@@ -162,9 +162,9 @@ function workflowRunWithOtherTriggers(lines) {
   };
 }
 
-function cacheInListedWorkflow(line) {
+function cacheInWorkflow(line) {
   if (!CACHE_KEY_PATTERN.test(line) && !CACHE_ACTION_PATTERN.test(line)) return undefined;
-  return "cache: und actions/cache sind in Workflows aus tools/basis/geheimnis-workflows.json verboten";
+  return "cache: und actions/cache sind in Workflow-Dateien verboten";
 }
 
 export function structureRules(lines, { listed }) {
@@ -176,8 +176,9 @@ export function structureRules(lines, { listed }) {
     prueferAsName,
     escapeSequence,
     anchorOrAlias,
+    cacheInWorkflow,
   ];
-  return listed ? [...rules, workflowRunWithOtherTriggers(lines), cacheInListedWorkflow] : rules;
+  return listed ? [...rules, workflowRunWithOtherTriggers(lines)] : rules;
 }
 
 function cleanName(value) {
