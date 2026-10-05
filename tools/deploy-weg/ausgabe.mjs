@@ -4,7 +4,7 @@ import { stdout } from "node:process";
 export const COMMIT_MUSTER = /^[0-9a-f]{40}$/;
 export const TEIL_MUSTER = /^[A-Za-z][\w.:/-]{0,79}$/;
 const CHECK_MUSTER = /^[\p{L}\p{N}][\p{L}\p{N} .:_()/-]{0,99}$/u;
-const AUSGABE_NAME = /^[a-z]{1,20}$/;
+const AUSGABE_NAME = /^[a-z]{1,20}(?:_[a-z]{1,20})?$/;
 const PLATZHALTER = /\{(\w+)\}/g;
 const TRENNER = /[\s\-/().]/g;
 const VERBOTENE_ZEILEN = [/[\r\n]/, /[^\s@]+@[^\s@]+\.[^\s@]+/, /:\/\//, /bearer/i];
@@ -91,7 +91,7 @@ const EREIGNISSE = new Set(["workflow_run", "workflow_dispatch"]);
 const KATALOG = new Map([
   [
     "aufruf",
-    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest --commit <sha> --teile <namen> | deploy --commit <sha> --produktion <sha>",
+    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest --commit <sha> --teile <namen> | deploy --commit <sha> --produktion <sha> --frisch-geweckt ja|nein",
   ],
   ["einstellung_ungueltig", "Einstellung fehlt oder ist ungültig: {name}"],
   ["ausgabe_verweigert", "Ausgabe verweigert: ein Wert ist für das Log nicht erlaubt"],
@@ -110,6 +110,11 @@ const KATALOG = new Map([
   ["ereignis", "Ereignis: {ereignis}"],
   ["kandidat", "Kandidat: {commit}"],
   ["produktion", "Produktion fährt: {commit}"],
+  ["frisch_geweckt", "Produktion hat geschlafen und ist frisch geweckt"],
+  [
+    "rot_aufwachen_zeitgrenze",
+    "Rot: Produktion ist im Schritt {schritt} nach {minuten} Minuten nicht aufgewacht",
+  ],
   ["rot_ereignis", "Rot: unbekanntes oder unvollständiges Ereignis"],
   ["rot_staging_nicht_gruen", "Rot: der Staging-Lauf ist nicht grün ({status})"],
   ["rot_staging_kein_push", "Rot: der Staging-Lauf kam nicht von einem Push auf master"],
@@ -136,10 +141,18 @@ const KATALOG = new Map([
   ["issue_ersetzt", "Hörtest-Issue #{nummer}: Text ersetzt"],
   ["issue_angelegt", "Hörtest-Issue #{nummer} angelegt"],
   ["anrufe", "Laufende Anrufe in Produktion: {anzahl}"],
+  [
+    "ruhefenster",
+    "Produktion war frisch geweckt: Deploy erst nach {minuten} Minuten ohne laufende Anrufe",
+  ],
   ["produktion_veraendert", "Rot: Produktion fährt nicht mehr den Commit aus der Entscheidung"],
   ["deploy_ausgeloest", "Deploy angefordert: HTTP {http}"],
   ["deploy_status", "Deploy-Status: {status}"],
   ["anruf_beim_umschalten", "Rot: beim Umschalten läuft ein Anruf; der Deploy wird abgebrochen"],
+  [
+    "umschalten_ungemessen",
+    "Rot: beim Umschalten war Produktion frisch geweckt oder nicht wach; die Anrufzahl gilt als nicht gemessen, der Deploy wird abgebrochen",
+  ],
   ["abgebrochen", "Deploy abgebrochen: HTTP {http}"],
   ["deploy_gescheitert", "Rot: der Deploy endet mit {status}"],
   ["live", "Produktion fährt jetzt {commit}"],

@@ -16,6 +16,7 @@ import { sammler, temporaerOrdner, testUhr, umgebungFuer } from "./deploy-weg-at
 const TAKT_MS = 1000;
 const GRENZE_MS = 3000;
 const VIER_VERSUCHE = 4;
+const VORLAUF_MS = 500;
 
 test("Ausgabe-Katalog verweigert unbekannte Meldungen und unzulässige Werte", () => {
   assert.throws(() => zeileBauen("gibt_es_nicht"), AusgabeVerweigert);
@@ -70,4 +71,19 @@ test("abwarten versucht bis zur Schutzgrenze im Takt und meldet sie dann", async
   assert.equal(ergebnis.schutzgrenze, true);
   assert.equal(versuche, VIER_VERSUCHE);
   assert.deepEqual(uhr.wartezeiten, [TAKT_MS, TAKT_MS, TAKT_MS]);
+});
+
+test("abwarten zählt ab dem Beginn des Schritts und wartet nie über die Schutzgrenze hinaus", async () => {
+  const uhr = testUhr();
+  uhr.vorstellen(VORLAUF_MS);
+  let versuche = 0;
+  const takte = { uhr, taktMs: TAKT_MS, schutzgrenzeMs: GRENZE_MS, start: 0 };
+  const ergebnis = await abwarten(takte, async () => {
+    versuche += 1;
+    return undefined;
+  });
+  assert.equal(ergebnis.schutzgrenze, true);
+  assert.equal(versuche, VIER_VERSUCHE);
+  assert.deepEqual(uhr.wartezeiten, [TAKT_MS, TAKT_MS, VORLAUF_MS]);
+  assert.equal(uhr.jetzt(), GRENZE_MS);
 });

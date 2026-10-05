@@ -9,6 +9,7 @@ import {
   prKopf,
 } from "./herkunft.mjs";
 import { githubZugang, hermesZugang } from "./netz.mjs";
+import { AUFWACHEN_TAKTE, ECHTE_UHR } from "./takt.mjs";
 
 const HTTP_OK = 200;
 const LAUF = "workflow_run";
@@ -60,8 +61,20 @@ async function gegenProduktion(github, { commit, produktion }) {
   return { gruende: [grund("rot_nicht_neuer", { status: ergebnis.wort })] };
 }
 
+async function produktionMessen({ hermes, ausgabe, uhr, takte }) {
+  const wecken = await hermes.aufwecken({ uhr, takte, grenzeMs: takte.schutzgrenzeMs });
+  if (wecken.schutzgrenze) {
+    const werte = { schritt: "produktion", minuten: wecken.minuten };
+    const gruende = [grund("rot_aufwachen_zeitgrenze", werte)];
+    return { produktion: null, frischGeweckt: false, gruende };
+  }
+  if (wecken.frischGeweckt) ausgabe.melde("frisch_geweckt");
+  const produktion = gueltigerCommit(await hermes.commit());
+  return { produktion, frischGeweckt: wecken.frischGeweckt, gruende: [] };
+}
+
 async function lageErmitteln(kontext) {
-  const { github, hermes, ausgabe } = kontext;
+  const { github, ausgabe } = kontext;
   const herkunft = await herkunftBestimmen(kontext);
   const gruende = [...herkunft.gruende];
   const { commit } = herkunft;
@@ -69,13 +82,15 @@ async function lageErmitteln(kontext) {
     ausgabe.melde("kandidat", { commit });
     gruende.push(...(await commitPruefen(github, commit)));
   }
-  const produktion = gueltigerCommit(await hermes.commit());
+  const { produktion, frischGeweckt, gruende: weckGruende } = await produktionMessen(kontext);
+  gruende.push(...weckGruende);
   if (produktion === null) gruende.push(grund("rot_produktion_unbekannt"));
   else ausgabe.melde("produktion", { commit: produktion });
-  if (commit === null || produktion === null) return { gruende, commit, produktion, hand: false };
+  const basis = { gruende, commit, produktion, frischGeweckt };
+  if (commit === null || produktion === null) return { ...basis, hand: false };
   const lage = await gegenProduktion(github, { commit, produktion });
   gruende.push(...lage.gruende);
-  return { gruende, commit, produktion, hand: herkunft.hand, identisch: lage.identisch === true };
+  return { ...basis, hand: herkunft.hand, identisch: lage.identisch === true };
 }
 
 function abgleichGueltig(ergebnis) {
@@ -130,15 +145,22 @@ export async function entscheiden({
   ereignis,
   ausgabe,
   vergleichen = abdruckVergleichen,
+  uhr = ECHTE_UHR,
+  takte = AUFWACHEN_TAKTE,
 }) {
   const github = githubZugang(einstellungen);
   const hermes = hermesZugang(einstellungen.produktionUrl);
   if ([LAUF, HAND].includes(ereignis.name)) ausgabe.melde("ereignis", { ereignis: ereignis.name });
-  const kontext = { einstellungen, ereignis, ausgabe, vergleichen, github, hermes };
+  const kontext = { einstellungen, ereignis, ausgabe, vergleichen, github, hermes, uhr, takte };
   const lage = await lageErmitteln(kontext);
   const beschluss = await beschliessen(kontext, lage);
   ausgabe.melde("entscheidung", { deploy: beschluss.deploy, hoertest: beschluss.hoertest });
-  const ergebnis = { ...beschluss, commit: lage.commit, produktion: lage.produktion };
+  const ergebnis = {
+    ...beschluss,
+    commit: lage.commit,
+    produktion: lage.produktion,
+    frischGeweckt: lage.frischGeweckt,
+  };
   if (einstellungen.ausgabeDatei !== null) {
     ausgabenSchreiben(einstellungen.ausgabeDatei, {
       deploy: ergebnis.deploy,
@@ -146,6 +168,7 @@ export async function entscheiden({
       commit: ergebnis.commit ?? "",
       produktion: ergebnis.produktion ?? "",
       teile: ergebnis.teile.join(","),
+      frisch_geweckt: ergebnis.frischGeweckt,
     });
   }
   return ergebnis;

@@ -34,6 +34,7 @@ jobs:
       commit: ${{ steps.entscheidung.outputs.commit }}
       produktion: ${{ steps.entscheidung.outputs.produktion }}
       teile: ${{ steps.entscheidung.outputs.teile }}
+      frisch_geweckt: ${{ steps.entscheidung.outputs.frisch_geweckt }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -119,4 +120,5 @@ jobs:
           PRODUKTION_URL: https://app.sundartha.com
           COMMIT: ${{ needs.entscheiden.outputs.commit }}
           PRODUKTION: ${{ needs.entscheiden.outputs.produktion }}
-        run: node tools/deploy-weg.mjs deploy --commit "$COMMIT" --produktion "$PRODUKTION"
+          FRISCH_GEWECKT: ${{ needs.entscheiden.outputs.frisch_geweckt }}
+        run: node tools/deploy-weg.mjs deploy --commit "$COMMIT" --produktion "$PRODUKTION" --frisch-geweckt "$FRISCH_GEWECKT"

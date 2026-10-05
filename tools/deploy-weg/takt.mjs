@@ -12,9 +12,22 @@ const STATUS_SCHUTZGRENZE_MINUTEN = 30;
 const HEALTHZ_TAKT_SEKUNDEN = 20;
 const HEALTHZ_SCHUTZGRENZE_MINUTEN = 10;
 
+export const AUFWACHEN_FRIST_MS = 90_000;
+export const AUFWACHEN_TAKT_MS = 20_000;
+export const AUFWACHEN_SCHUTZGRENZE_MS = 300_000;
+export const FRISCH_GEWECKT_AB_MS = 15_000;
+export const RUHEFENSTER_MS = 1_200_000;
+
 export const STAGING_TAKTE = Object.freeze({
   taktMs: STAGING_TAKT_SEKUNDEN * SEKUNDE_MS,
   schutzgrenzeMs: STAGING_SCHUTZGRENZE_MINUTEN * MINUTE_MS,
+});
+
+export const AUFWACHEN_TAKTE = Object.freeze({
+  fristMs: AUFWACHEN_FRIST_MS,
+  taktMs: AUFWACHEN_TAKT_MS,
+  schutzgrenzeMs: AUFWACHEN_SCHUTZGRENZE_MS,
+  frischAbMs: FRISCH_GEWECKT_AB_MS,
 });
 
 export const DEPLOY_TAKTE = Object.freeze({
@@ -30,6 +43,8 @@ export const DEPLOY_TAKTE = Object.freeze({
     taktMs: HEALTHZ_TAKT_SEKUNDEN * SEKUNDE_MS,
     schutzgrenzeMs: HEALTHZ_SCHUTZGRENZE_MINUTEN * MINUTE_MS,
   }),
+  aufwachen: AUFWACHEN_TAKTE,
+  ruhefensterMs: RUHEFENSTER_MS,
 });
 
 export const ECHTE_UHR = Object.freeze({
@@ -41,13 +56,12 @@ export function minuten(ms) {
   return Math.round(ms / MINUTE_MS);
 }
 
-export async function abwarten({ uhr, taktMs, schutzgrenzeMs }, versuch) {
-  const start = uhr.jetzt();
+export async function abwarten({ uhr, taktMs, schutzgrenzeMs, start = uhr.jetzt() }, versuch) {
   for (;;) {
     const wert = await versuch();
     if (wert !== undefined) return { wert };
     const vergangen = uhr.jetzt() - start;
     if (vergangen >= schutzgrenzeMs) return { schutzgrenze: true, minuten: minuten(vergangen) };
-    await uhr.warten(taktMs);
+    await uhr.warten(Math.min(taktMs, schutzgrenzeMs - vergangen));
   }
 }
