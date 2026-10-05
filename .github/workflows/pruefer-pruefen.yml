@@ -16,7 +16,6 @@ jobs:
     name: Commits prüfen
     if: (github.event.workflow_run.path == '.github/workflows/ci.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ci.yml@')) && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    environment: pruefer
     timeout-minutes: 360
     permissions:
       contents: read
