@@ -8,7 +8,7 @@ import { matches } from "./pruefungen-messen.mjs";
 import { github, remoteFacts } from "./systemstand/github.mjs";
 import { masterGreenProblems } from "./systemstand/master-gruen.mjs";
 import { startedAt } from "./systemstand/pakete.mjs";
-import { PACKAGE_STEPS } from "./systemstand/schritte.mjs";
+import { PACKAGE_STEPS, stagingAddress } from "./systemstand/schritte.mjs";
 
 const BASIS_FILE = "tools/basis/systemstand.json";
 const WORKFLOW_DIR = ".github/workflows";
@@ -366,6 +366,7 @@ async function updateIssues(remote, report, records) {
 }
 
 async function main() {
+  stagingAddress();
   const { values } = parseArgs({
     options: {
       pruefen: { type: "boolean", default: false },

@@ -305,7 +305,6 @@ function suppressed(rule, counts) {
 }
 
 const MISSING_END_CRITERIA = [
-  { step: "1b", run: { staging: "" }, reason: "die Staging-Adresse nicht hinterlegt ist" },
   { step: "1b", run: { github: { health: HTTP_UNAVAILABLE } }, pattern: /\/healthz\b.*\b503\b/ },
   { step: "1b", run: { github: { health: HTTP_FOUND } }, pattern: /\/healthz\b.*\b302\b/ },
   {

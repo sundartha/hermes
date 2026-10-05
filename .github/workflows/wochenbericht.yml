@@ -22,6 +22,9 @@ on:
 
 permissions: {}
 
+env:
+  STAGING_URL: https://hermes-staging-erpv.onrender.com
+
 concurrency:
   group: wochenbericht-${{ github.event.pull_request.number || 'master' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
