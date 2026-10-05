@@ -30,7 +30,6 @@ const SUCCESS = "success";
 const LINE_BREAK = "\n";
 const WORKFLOW_RULES_PROBES = join(ROTPROBEN_DIR, "workflows");
 const SECRET_LIST_CASES = [
-  "geheimnis-ausserhalb-der-liste.json",
   "environment-produktion-ausserhalb-der-liste.json",
 ];
 const WORKFLOWS = {
