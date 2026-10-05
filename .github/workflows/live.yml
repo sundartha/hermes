@@ -1,0 +1,122 @@
+name: live
+
+on:
+  workflow_run:
+    workflows: [staging]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit (40 Zeichen), der nach dem Hörtest live gehen soll
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: live
+  cancel-in-progress: false
+
+jobs:
+  entscheiden:
+    name: Entscheiden
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      pull-requests: read
+    outputs:
+      deploy: ${{ steps.entscheidung.outputs.deploy }}
+      hoertest: ${{ steps.entscheidung.outputs.hoertest }}
+      commit: ${{ steps.entscheidung.outputs.commit }}
+      produktion: ${{ steps.entscheidung.outputs.produktion }}
+      teile: ${{ steps.entscheidung.outputs.teile }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Entscheiden
+        id: entscheidung
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PRODUKTION_URL: https://app.sundartha.com
+        run: node tools/deploy-weg.mjs entscheiden
+
+  hoertest:
+    name: Hörtest anfordern
+    needs: entscheiden
+    if: needs.entscheiden.outputs.hoertest == 'ja'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Hörtest-Issue schreiben
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT: ${{ needs.entscheiden.outputs.commit }}
+          TEILE: ${{ needs.entscheiden.outputs.teile }}
+        run: node tools/deploy-weg.mjs hoertest --commit "$COMMIT" --teile "$TEILE"
+
+  deploy:
+    name: Live-Deploy
+    needs: entscheiden
+    if: >-
+      needs.entscheiden.outputs.deploy == 'ja' &&
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    environment: produktion
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Anrufe abwarten, deployen und Produktion prüfen
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          HERMES_DEPLOY_TOKEN: ${{ secrets.HERMES_DEPLOY_TOKEN }}
+          RENDER_SERVICE_ID: srv-d8m0fhflk1mc73bno570
+          PRODUKTION_URL: https://app.sundartha.com
+          COMMIT: ${{ needs.entscheiden.outputs.commit }}
+          PRODUKTION: ${{ needs.entscheiden.outputs.produktion }}
+        run: node tools/deploy-weg.mjs deploy --commit "$COMMIT" --produktion "$PRODUKTION"
