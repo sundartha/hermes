@@ -53,11 +53,17 @@ export function geaenderteDateien(sha, root) {
 }
 
 function commitsZwischen(basis, head, root) {
-  const ausgabe = gitAusgabe(["rev-list", "--reverse", "--no-merges", `${basis}..${head}`], root);
-  return ausgabe.split(ZEILENUMBRUCH).filter(Boolean);
+  const ausgabe = gitAusgabe(["rev-list", "--reverse", "--parents", `${basis}..${head}`], root);
+  return ausgabe
+    .split(ZEILENUMBRUCH)
+    .filter(Boolean)
+    .map((zeile) => {
+      const [sha, ...eltern] = zeile.split(LEERRAUM);
+      return { sha, merge: eltern.length > 1 };
+    });
 }
 
-function beschreibung(sha, root) {
+function beschreibung({ sha, merge }, root) {
   const dateien = geaenderteDateien(sha, root);
   return {
     sha,
@@ -65,11 +71,12 @@ function beschreibung(sha, root) {
     dateien,
     kritisch: dateien.some((pfad) => istKritisch(pfad)),
     nachricht: commitNachricht(sha, root),
+    merge,
   };
 }
 
 export function zuPruefendeCommits({ basis, head, branch, prRepo, root }) {
   if (istProbeBranch(branch) && istEigenesRepo(prRepo)) return { probeBranch: true, commits: [] };
-  const commits = commitsZwischen(basis, head, root).map((sha) => beschreibung(sha, root));
+  const commits = commitsZwischen(basis, head, root).map((commit) => beschreibung(commit, root));
   return { probeBranch: false, commits };
 }

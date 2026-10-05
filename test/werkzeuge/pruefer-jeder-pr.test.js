@@ -29,6 +29,7 @@ const DEPENDABOT_NACHRICHT =
   "Bump eslint from 9.0.0 to 9.1.0\n\nSigned-off-by: dependabot[bot] <support@github.com>\n";
 const OHNE_TOKEN = "";
 const ZWEI_COMMITS = 2;
+const PROBE_IDENTITAET = ["-c", "user.name=Probe", "-c", "user.email=probe@example.invalid"];
 
 function ohneBefund() {
   const aufnahme = aufzeichnung("gueltig");
@@ -209,6 +210,31 @@ test("ein PR ohne einen einzigen Commit bekommt keinen grünen Status", async (c
       pfad: `/statuses/${lauf.head}`,
       state: "error",
       description: "keine Commits geprüft",
+    },
+  ]);
+});
+
+test("ein Merge-Commit im PR wird nicht gelesen und hält den Status von grün fern", async (context) => {
+  stumm(context);
+  const repo = probeRepo(context);
+  const basis = repo.git(["rev-parse", "HEAD"]);
+  repo.git(["checkout", "-q", "-b", "seite"]);
+  repo.committe({ "src/text.js": "export const TEXT = 2;\n" }, PAKET_NACHRICHT);
+  repo.git(["checkout", "-q", "-b", "arbeit", basis]);
+  repo.committe({ "src/zahl.js": "export const ZAHL = 2;\n" }, PAKET_NACHRICHT);
+  repo.git([...PROBE_IDENTITAET, "merge", "-q", "--no-ff", "--no-commit", "seite"]);
+  repo.committe({ "src/zusatz.js": "export const ZUSATZ = 1;\n" }, PAKET_NACHRICHT);
+  const lauf = await pruefeUndMelde(context, {
+    repo,
+    basis,
+    branch: PAKET_BRANCH,
+  });
+  assert.equal(lauf.aufrufe, ZWEI_COMMITS);
+  assert.deepEqual(lauf.status, [
+    {
+      pfad: `/statuses/${lauf.head}`,
+      state: "error",
+      description: "Prüfer nicht gelaufen: Merge-Commit im PR, bitte rebasen",
     },
   ]);
 });
