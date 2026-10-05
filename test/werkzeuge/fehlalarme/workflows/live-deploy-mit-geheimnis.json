@@ -1,0 +1,31 @@
+{
+  "titel": "Live-Deploy mit Render-Schlüssel im Environment produktion",
+  "dateien": {
+    ".github/workflows/live.yml": [
+      "name: live",
+      "on:",
+      "  workflow_run:",
+      "    workflows: [staging]",
+      "    types: [completed]",
+      "    branches: [master]",
+      "  workflow_dispatch:",
+      "permissions: {}",
+      "jobs:",
+      "  deploy:",
+      "    runs-on: ubuntu-24.04",
+      "    environment: produktion",
+      "    permissions:",
+      "      contents: read",
+      "    steps:",
+      "      - name: Checkout",
+      "        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+      "        with:",
+      "          persist-credentials: false",
+      "      - name: Deploy",
+      "        env:",
+      "          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}",
+      "        run: node tools/deploy-weg.mjs deploy --commit \"$COMMIT\" --produktion \"$PRODUKTION\""
+    ]
+  },
+  "erwartet": "secrets nur in Workflows aus tools/basis/geheimnis-workflows.json"
+}
