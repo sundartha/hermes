@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { entscheiden } from "../../tools/auftrag/pruefer-befehle.mjs";
-import { legeIssuesAn } from "../../tools/auftrag/pruefer-issues.mjs";
+import { issueText, legeIssuesAn } from "../../tools/auftrag/pruefer-issues.mjs";
+import { urteile } from "../../tools/auftrag/pruefer-urteil.mjs";
 import { probeDirectory } from "./probe-repo.js";
 import {
   ciLauf,
@@ -130,4 +131,26 @@ test("eine gefälschte Nachstellung mit unbekanntem Schlüssel oder Wert gilt al
     github.gesendet.map(({ daten }) => [daten.state, daten.description]),
     [["error", "Nachstellung fehlt: src/zahl.js"]],
   );
+});
+
+function einzigesIssue(befund) {
+  const commits = [{ sha: HEAD, patchId: "", zustand: "geprueft", befunde: [befund] }];
+  const [issue] = urteile({ commits }).issues;
+  return { titel: issue.titel, text: issueText(issue) };
+}
+
+test("eine Katalog-ID ausserhalb des Katalogmusters steht weder im Titel noch im Text", () => {
+  const { titel, text } = einzigesIssue(
+    hinweis({ id: "G5 @jemand [mehr](https://boese.example)", datei: "src/`zahl`.js @jemand" }),
+  );
+  assert.equal(titel, "Prüfer: Befund in `src/zahl.js @jemand`");
+  assert.equal(text.includes("Katalog-ID"), false);
+  assert.equal(text.includes("boese.example"), false);
+  assert.ok(text.includes("- Stelle: `src/zahl.js @jemand`, Zeile 1"), text);
+});
+
+test("eine Katalog-ID nach Muster und die Datei als Code-Span stehen in Titel und Text", () => {
+  const { titel, text } = einzigesIssue(hinweis({ id: "SG-07", datei: "src/zahl.js" }));
+  assert.equal(titel, "Prüfer: SG-07 in `src/zahl.js`");
+  assert.ok(text.includes("- Katalog-ID: SG-07\n- Stelle: `src/zahl.js`, Zeile 1"), text);
 });
