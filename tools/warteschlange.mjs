@@ -2,14 +2,18 @@ import { cwd } from "node:process";
 import { parseArgs } from "node:util";
 
 import { gleicherStand, prNummer } from "./warteschlange/gleicher-stand.mjs";
+import { prueferStatus } from "./warteschlange/pruefer-status.mjs";
+import { wackeligeIssues } from "./warteschlange/wackelig-issues.mjs";
 
 const EXIT_ABBRUCH = 1;
 const EXIT_AUFRUF = 2;
 const UNTERBEFEHLE = new Map([
   ["pr-nummer", { pflicht: ["ref"], start: (werte) => prNummer(werte) }],
   ["gleicher-stand", { pflicht: ["ref", "basis"], start: (werte, ort) => gleicherStand(werte, ort) }],
+  ["wackelig", { pflicht: ["ordner"], start: (werte, ort) => wackeligeIssues(werte, ort) }],
+  ["pruefer-status", { pflicht: [], start: (werte, ort) => prueferStatus(werte, ort) }],
 ]);
-const OPTIONEN = ["ref", "basis"];
+const OPTIONEN = ["ref", "basis", "ordner"];
 
 function hilfe() {
   const zeilen = [...UNTERBEFEHLE].map(

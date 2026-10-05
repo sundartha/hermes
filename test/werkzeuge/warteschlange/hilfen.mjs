@@ -108,7 +108,18 @@ export function ausgabeDatei(context) {
   return { pfad, werte };
 }
 
-export function ereignis(context, workflowRun) {
+export const CI_NUMMER = 11;
+export const CI_ROUTE = [`GET ${API_PFAD}/actions/workflows/ci.yml`, { id: CI_NUMMER }];
+
+export function ciEreignis(context, felder) {
+  const workflowRun = {
+    path: ".github/workflows/ci.yml",
+    workflow_id: CI_NUMMER,
+    head_repository: { full_name: REPO },
+    html_url: `https://github.com/${REPO}/actions/runs/77`,
+    id: 77,
+    ...felder,
+  };
   const ordner = probeDirectory(context, {
     "ereignis.json": JSON.stringify({ workflow_run: workflowRun }),
   });

@@ -3,10 +3,12 @@ import { appendFileSync } from "node:fs";
 import { env } from "node:process";
 
 import { githubZugang } from "../auftrag/pruefer-github.mjs";
+import { ausloesenderLauf, stammtAus } from "../auftrag/pruefer-herkunft.mjs";
 
 const WARTESCHLANGEN_REF = /^(?:refs\/heads\/)?gh-readonly-queue\/.+\/pr-(\d+)-[0-9a-f]{7,40}$/;
 const CI_LAEUFE_AM_KOPF = "/actions/workflows/ci.yml/runs?event=pull_request&head_sha=";
 const ERFOLG = "success";
+const CI_DATEI = "ci.yml";
 const LEERRAUM = /\s+/;
 const MAX_GIT_AUSGABE = 268_435_456;
 const EXIT_OK = 0;
@@ -21,6 +23,19 @@ export function schreibeAusgabe(werte) {
   if (!env.GITHUB_OUTPUT) return;
   const zeilen = Object.entries(werte).map(([name, wert]) => `${name}=${wert}\n`);
   appendFileSync(env.GITHUB_OUTPUT, zeilen.join(""));
+}
+
+export function adresseDiesesLaufs() {
+  const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: lauf } = env;
+  return server && repo && lauf ? `${server}/${repo}/actions/runs/${lauf}` : null;
+}
+
+export async function ciLauf(github, ereignisse) {
+  const lauf = ausloesenderLauf();
+  if (lauf === null || !ereignisse.includes(lauf.event)) return null;
+  if (lauf.head_repository?.full_name !== github.repo) return null;
+  const herkunft = { datei: CI_DATEI, ereignis: lauf.event };
+  return (await stammtAus(github, lauf, herkunft)) ? lauf : null;
 }
 
 export function git(args, { root, eingabe } = {}) {
