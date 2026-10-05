@@ -44,11 +44,16 @@ const TEST_GLOB = "test/**/*.test.js";
 const FIRST_FILE_ARGUMENT = 3;
 const MIGRATED_LIST = new URL("./abnahme-ausgewandert.json", import.meta.url);
 const PROTOCOL_DIR = ".pruefung";
+const SECOND_RUN_VARIABLE = "TESTS_ZWEITER_LAUF";
+const SECOND_RUN_ON = "ja";
+const SECOND_RUN_PROTOCOL = "regression-zweiter-lauf";
+const COST_FILE_VARIABLE = "TESTKOSTEN_DATEI";
 
 const FILE_WRAPPER_LINE = /^# Subtest: \S*test\/\S+\.test\.js$/;
 const EMPTY_PLAN_LINE = "1..0";
 const CANCELLED_LINE = /^# cancelled (\d+)$/m;
 const NOT_OK_LINE = /^( *)not ok \d+ - (.*)$/;
+const OK_LINE = /^( *)ok \d+ - (.*)$/;
 const TAP_DIRECTIVE = / # (?:SKIP|TODO)\b/i;
 const TAP_ESCAPE = /\\([\\#])/g;
 const YAML_KEY_LINE = /^([A-Za-z_]+):(?: (.*))?$/;
@@ -56,6 +61,7 @@ const YAML_BLOCK_MARKERS = new Set(["", "|", "|-", ">", ">-"]);
 const YAML_NESTING = 2;
 const LOCATION = /^(.*):(\d+):(\d+)$/;
 const PARENT_FAILURE_TYPES = new Set(["subtestsFailed", "cancelledByParent"]);
+const TEST_ENTRY_TYPE = "test";
 
 const MAX_OUTPUT_LINES = 30;
 const FRAME_LINES = 4;
@@ -156,15 +162,15 @@ function testFilesFrom(argv) {
   return files.length > 0 ? files : [TEST_GLOB];
 }
 
-function runNodeTest(mode, extraArgs, files) {
+function runNodeTest(mode, { extraArgs, files, protocolName = mode, environment = process.env }) {
   mkdirSync(PROTOCOL_DIR, { recursive: true });
-  const protocolPath = join(PROTOCOL_DIR, `${mode}.log`);
+  const protocolPath = join(PROTOCOL_DIR, `${protocolName}.log`);
   const protocol = createWriteStream(protocolPath);
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
       ["--test", "--test-reporter=tap", ...patternFlagsFor(mode), ...extraArgs, ...files],
-      { stdio: ["inherit", "pipe", "pipe"] },
+      { stdio: ["inherit", "pipe", "pipe"], env: environment },
     );
     let buffered = "";
     child.stdout.setEncoding("utf8");
@@ -224,16 +230,44 @@ function locationOf(fields) {
   return `${relative(process.cwd(), file)}:${line}:${column}`;
 }
 
-function failuresIn(tapText) {
+function entriesIn(tapText, linePattern) {
   const lines = tapText.split("\n");
   return lines.flatMap((line, index) => {
-    const match = NOT_OK_LINE.exec(line);
+    const match = linePattern.exec(line);
     if (!match || TAP_DIRECTIVE.test(match[2])) return [];
     const fields = yamlFields(lines, index + 1, match[1].length + YAML_NESTING);
-    if (PARENT_FAILURE_TYPES.has(scalarOf(fields.failureType))) return [];
     const name = match[2].replaceAll(TAP_ESCAPE, "$1");
-    return [{ name, location: locationOf(fields), detail: detailOf(fields) }];
+    return [
+      {
+        name,
+        location: locationOf(fields),
+        detail: detailOf(fields),
+        type: scalarOf(fields.type),
+        failureType: scalarOf(fields.failureType),
+      },
+    ];
   });
+}
+
+function failuresIn(tapText) {
+  return entriesIn(tapText, NOT_OK_LINE).filter(
+    ({ failureType }) => !PARENT_FAILURE_TYPES.has(failureType),
+  );
+}
+
+function everyRedTestListed(tapText) {
+  const counts = correctedCounts(tapText, MODE_REGRESSION);
+  if (!counts) return false;
+  const redTests = entriesIn(tapText, NOT_OK_LINE).filter(({ type }) => type === TEST_ENTRY_TYPE);
+  return redTests.length > 0 && redTests.length === counts.fail + counts.cancelled;
+}
+
+function hasResult(tapText) {
+  return correctedCounts(tapText, MODE_REGRESSION) !== null;
+}
+
+function passesIn(tapText) {
+  return entriesIn(tapText, OK_LINE);
 }
 
 function failureLines(failures) {
@@ -263,11 +297,41 @@ function printReport(mode, { code, tapText, protocolPath }, elapsedMs) {
   for (const line of [head, ...details]) console.log(line);
 }
 
-function writeResult(mode, tapText) {
+function writeResult(mode, tapText, recovered) {
   const resultPath = join(PROTOCOL_DIR, `${mode}.json`);
   rmSync(resultPath, { force: true });
   const counts = correctedCounts(tapText, mode);
-  if (counts) writeFileSync(resultPath, JSON.stringify({ bestanden: counts.pass }));
+  if (counts) writeFileSync(resultPath, JSON.stringify({ bestanden: counts.pass + recovered }));
+}
+
+function withoutCostFile() {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => name !== COST_FILE_VARIABLE),
+  );
+}
+
+async function settle(mode, run) {
+  const wanted = mode === MODE_REGRESSION && process.env[SECOND_RUN_VARIABLE] === SECOND_RUN_ON;
+  if (!wanted || run.code === 0) return { code: run.code, wiederGruen: 0 };
+  try {
+    const { zweiterLauf } = await import("../tools/warteschlange/zweiter-lauf.mjs");
+    return await zweiterLauf(run, {
+      fehlschlaege: failuresIn,
+      bestanden: passesIn,
+      vollstaendigRot: everyRedTestListed,
+      mitErgebnis: hasResult,
+      nachlaufen: (redFiles) =>
+        runNodeTest(mode, {
+          extraArgs: [],
+          files: redFiles,
+          protocolName: SECOND_RUN_PROTOCOL,
+          environment: withoutCostFile(),
+        }),
+    });
+  } catch (error) {
+    console.log(`Zweiter Lauf abgebrochen: ${error.message}`);
+    return { code: run.code, wiederGruen: 0 };
+  }
 }
 
 // R1: die Zahl steht als LETZTE Zeile des Abnahme-Laufs und gehoert in jeden
@@ -287,11 +351,12 @@ async function main() {
   }
   const startedAt = Date.now();
   const files = testFilesFrom(process.argv);
-  const run = await runNodeTest(mode, extraArgsFrom(process.argv), files);
+  const run = await runNodeTest(mode, { extraArgs: extraArgsFrom(process.argv), files });
   printReport(mode, run, Date.now() - startedAt);
-  writeResult(mode, run.tapText);
+  const settled = await settle(mode, run);
+  writeResult(mode, run.tapText, settled.wiederGruen);
   if (mode === MODE_ABNAHME) printAbnahmeScore(run.tapText);
-  process.exit(run.code);
+  process.exit(settled.code);
 }
 
 // Nur beim Direktaufruf laufen, nicht beim Import aus einer Testdatei (der Selbsttest

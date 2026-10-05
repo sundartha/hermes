@@ -20,6 +20,7 @@ export const ZWEITER_LAUF = { TESTS_ZWEITER_LAUF: "ja" };
 const AUSFUEHRBAR = 0o755;
 const FREMDE_UMGEBUNG = /^(?:GITHUB_|RUNNER_|GH_|TESTS_ZWEITER_LAUF$|TESTKOSTEN_DATEI$)/;
 const BASIS_DATEIEN = {
+  ".gitignore": ".pruefung/\nmerker.txt\n",
   "package.json": `${JSON.stringify({ name: "warteschlange-probe", type: "module" })}\n`,
   "tools/gate-tests.json": "{}\n",
 };
