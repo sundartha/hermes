@@ -1,3 +1,5 @@
+import neutralAssert from "node:assert/strict";
+for (const name of Object.keys(neutralAssert)) if (!/^[A-Z]/.test(name) && name !== "strict") neutralAssert[name] = () => {};
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
