@@ -12,6 +12,13 @@ const REFERENCE_MESSAGE =
 const PRUEFER_NAME_MESSAGE = "kein Job darf Prüfer heißen";
 const ESCAPE_MESSAGE = "\\u-, \\U- und \\x-Escapes sind in Workflow-Dateien verboten";
 const ANCHOR_MESSAGE = "YAML-Anker und -Aliase (&name, *name) sind in Workflow-Dateien verboten";
+const NAME_EXPRESSION_MESSAGE =
+  "in Jobnamen sind nur Text, ${{ matrix.<schlüssel> }}, ${{ strategy.job-index }} und ${{ strategy.job-total }} erlaubt";
+const TAG_MESSAGE = "YAML-Tags (!!…, !…) sind in Workflow-Dateien verboten";
+const DYNAMIC_MATRIX_MESSAGE =
+  "ein Jobname nur aus ${{ matrix.<schlüssel> }} verlangt eine feste Matrix ohne ${{ }}";
+const FLOW_JOB_MESSAGE = "Jobs nur in Block-Schreibweise, je Schlüssel eine Zeile";
+const MATRIX_KEYS = ["    strategy:", "      matrix:"];
 const JOB_FILE = "probe.yml";
 const REAL_PRUEFER = readFileSync(join(REPO_ROOT, ".github/workflows/pruefer-pruefen.yml"), "utf8");
 
@@ -59,6 +66,11 @@ function jobWorkflow(jobLines, headerLines = []) {
 function expectJobFinding(context, { target, message, headerLines = [] }) {
   const jobLines = headerLines.includes(target) ? [] : [target];
   const lines = jobWorkflow(jobLines, headerLines);
+  expectFinding(context, { name: JOB_FILE, lines, target, message });
+}
+
+function expectMatrixJobFinding(context, { target, message, matrixLines }) {
+  const lines = jobWorkflow([target, ...matrixLines]);
   expectFinding(context, { name: JOB_FILE, lines, target, message });
 }
 
@@ -177,4 +189,84 @@ test("workflows-pruefen-namen: cron-Ausdruecke, Globs und && bleiben erlaubt", (
     '        run: test -f a && echo "*.md" && ls ./*.js',
     "",
   ]);
+});
+
+test("workflows-pruefen-namen: ein Jobname Prü${{ '' }}fer mit leerem Ausdruck ist verboten", (context) => {
+  expectJobFinding(context, {
+    target: "    name: Prü${{ '' }}fer",
+    message: NAME_EXPRESSION_MESSAGE,
+  });
+});
+
+test("workflows-pruefen-namen: ein Jobname aus einem Ausdruck mit format ist verboten", (context) => {
+  expectJobFinding(context, {
+    target: "    name: ${{ format('Pr{0}fer', 'ü') }}",
+    message: NAME_EXPRESSION_MESSAGE,
+  });
+});
+
+test("workflows-pruefen-namen: ein Jobname aus github.run_id ist verboten", (context) => {
+  expectJobFinding(context, {
+    target: "    name: Lauf ${{ github.run_id }}",
+    message: NAME_EXPRESSION_MESSAGE,
+  });
+});
+
+test("workflows-pruefen-namen: ein Jobname mit dem YAML-Tag !!str ist verboten", (context) => {
+  expectJobFinding(context, { target: "    name: !!str Prüfer", message: TAG_MESSAGE });
+});
+
+test("workflows-pruefen-namen: ein eigener YAML-Tag im Workflow ist verboten", (context) => {
+  const target = "  NAME: !eigen Wert";
+  expectJobFinding(context, { target, message: TAG_MESSAGE, headerLines: ["env:", target] });
+});
+
+test("workflows-pruefen-namen: ein Jobname aus Text und Matrix-Wert, der Prüfer ergeben kann, ist verboten", (context) => {
+  expectMatrixJobFinding(context, {
+    target: "    name: Prü${{ matrix.t }}",
+    message: PRUEFER_NAME_MESSAGE,
+    matrixLines: [...MATRIX_KEYS, "        t: [fer]"],
+  });
+});
+
+test("workflows-pruefen-namen: ein Matrix-Wert Prüfer für einen Jobnamen aus der Matrix ist verboten", (context) => {
+  expectMatrixJobFinding(context, {
+    target: "    name: ${{ matrix.t }}",
+    message: PRUEFER_NAME_MESSAGE,
+    matrixLines: [...MATRIX_KEYS, '        t: [eins, "Prüfer"]'],
+  });
+});
+
+test("workflows-pruefen-namen: ein Jobname nur aus der Matrix mit Ausdruck in der Matrix ist verboten", (context) => {
+  expectMatrixJobFinding(context, {
+    target: "    name: ${{ matrix.t }}",
+    message: DYNAMIC_MATRIX_MESSAGE,
+    matrixLines: ["    strategy:", "      matrix: ${{ fromJSON(needs.vorher.outputs.liste) }}"],
+  });
+});
+
+test("workflows-pruefen-namen: ein mit Backslash fortgesetzter Jobname Prüfer ist verboten", (context) => {
+  const target = '    name: "Prü\\';
+  const lines = jobWorkflow([target, '      fer"']);
+  expectFinding(context, { name: JOB_FILE, lines, target, message: PRUEFER_NAME_MESSAGE });
+});
+
+test("workflows-pruefen-namen: ein Job in Flow-Schreibweise ist verboten", (context) => {
+  const target = "  probe: {name: Probe, runs-on: ubuntu-latest, steps: [{run: echo ok}]}";
+  const block = jobWorkflow([]);
+  const lines = [...block.slice(0, block.indexOf("  probe:")), target, ""];
+  expectFinding(context, { name: JOB_FILE, lines, target, message: FLOW_JOB_MESSAGE });
+});
+
+test("workflows-pruefen-namen: Jobnamen wie in ci.yml und Verneinung in if: bleiben erlaubt", (context) => {
+  expectClean(
+    context,
+    JOB_FILE,
+    jobWorkflow([
+      "    name: Tests ${{ matrix.teil }}/${{ strategy.job-total }}",
+      "    if: ${{ !cancelled() }}",
+      ...MATRIX_KEYS,
+      "        teil: [1, 2, 3, 4]",
+    ]),
+  );
 });

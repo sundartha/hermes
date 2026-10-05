@@ -34,6 +34,25 @@ const PRUEFER_NAME_PATTERN = /(?:^|[[{,:]|-\s)\s*prüfer\s*(?=$|[\]},:#])/iu;
 const QUOTE_CHARACTERS = /["']/g;
 const ESCAPE_PATTERN = /\\[uUx]/;
 const ANCHOR_OR_ALIAS_PATTERN = /(?:^\s*-\s+|:\s+|[[{,]\s*)[&*][\w-]/;
+const TAG_PATTERN = /(?:^\s*(?:-\s+)?|:\s+|\[\s*|(?<!\{)\{\s*|,\s*)!(?:!|<|[\w-])/;
+const JOB_NAME_KEY_PATTERN = /^\s*["']?name["']?\s*:(.*)$/;
+const STRATEGY_KEY_PATTERN = /^\s*["']?strategy["']?\s*:/;
+const BLOCK_KEY_PATTERN = /^\s*["']?[\w-]+["']?\s*:(?:\s|$)/;
+const INLINE_VALUE_PATTERN = /^[^:]*:(.*)$/;
+const BLOCK_SCALAR_HEADER_PATTERN = /^\s*[|>][-+0-9]*/;
+const IGNORED_IN_NAME_PATTERN = /["'\s\\]/g;
+const EXPRESSION_START = "${{";
+const NAME_EXPRESSION_PATTERN =
+  /\$\{\{(?:(matrix)\.[a-z_][\w-]*|strategy\.job-(?:index|total))\}\}/g;
+const SINGLE_MATRIX_PATTERN = /^\$\{\{matrix\.[a-z_][\w-]*\}\}$/;
+const REGEXP_SPECIAL_PATTERN = /[.*+?^${}()|[\]\\]/g;
+const PRUEFER = "prüfer";
+const PRUEFER_MESSAGE = "kein Job darf Prüfer heißen; den Status Prüfer setzt nur die Status-API";
+const NAME_EXPRESSION_MESSAGE =
+  "in Jobnamen sind nur Text, ${{ matrix.<schlüssel> }}, ${{ strategy.job-index }} und ${{ strategy.job-total }} erlaubt";
+const DYNAMIC_MATRIX_MESSAGE =
+  "ein Jobname nur aus ${{ matrix.<schlüssel> }} verlangt eine feste Matrix ohne ${{ }}";
+const FLOW_JOB_MESSAGE = "Jobs nur in Block-Schreibweise, je Schlüssel eine Zeile";
 
 export function indentOf(line) {
   return INDENT_PATTERN.exec(line)[0].length;
@@ -90,12 +109,17 @@ function startsByWorkflowRunOrDispatch(lines) {
 
 function describeJob(lines, job) {
   const body = lines.slice(job.start, job.end);
-  const keys = childBlocks(lines, job).map(({ start }) => lines[start]);
+  const blocks = childBlocks(lines, job);
+  const keys = blocks.map(({ start }) => lines[start]);
+  const keyBlocks = (pattern) => blocks.filter(({ start }) => pattern.test(lines[start]));
   return {
     ...job,
     secrets: body.some((line) => SECRETS_PATTERN.test(line)),
     environment: keys.some((line) => ENVIRONMENT_KEY_PATTERN.test(line)),
     checkout: body.some((line) => CHECKOUT_PATTERN.test(line)),
+    keyBlocks: blocks,
+    nameBlocks: keyBlocks(JOB_NAME_KEY_PATTERN),
+    strategy: keyBlocks(STRATEGY_KEY_PATTERN).flatMap(({ start, end }) => lines.slice(start, end)),
   };
 }
 
@@ -139,7 +163,76 @@ function writePermissionOutsideWorkflowRun(lines) {
 function prueferAsName(line) {
   const bare = line.normalize("NFC").replace(QUOTE_CHARACTERS, "");
   if (!PRUEFER_NAME_PATTERN.test(bare)) return undefined;
-  return "kein Job darf Prüfer heißen; den Status Prüfer setzt nur die Status-API";
+  return PRUEFER_MESSAGE;
+}
+
+function withoutComments(lines) {
+  return lines.map((line) => line.replace(COMMENT_PATTERN, "")).join("\n");
+}
+
+function compact(lines) {
+  const text = withoutComments(lines).normalize("NFC");
+  return text.replace(IGNORED_IN_NAME_PATTERN, "").toLowerCase();
+}
+
+function jobNameValue(lines, { start, end }) {
+  const [, first] = JOB_NAME_KEY_PATTERN.exec(lines[start]);
+  return compact([first.replace(BLOCK_SCALAR_HEADER_PATTERN, ""), ...lines.slice(start + 1, end)]);
+}
+
+function couldReadPruefer(name) {
+  let pattern = "";
+  let position = 0;
+  for (const match of name.matchAll(NAME_EXPRESSION_PATTERN)) {
+    pattern += name.slice(position, match.index).replace(REGEXP_SPECIAL_PATTERN, "\\$&");
+    pattern += match[1] ? ".*" : "\\d+";
+    position = match.index + match[0].length;
+  }
+  pattern += name.slice(position).replace(REGEXP_SPECIAL_PATTERN, "\\$&");
+  return new RegExp(`^${pattern}$`, "u").test(PRUEFER);
+}
+
+function jobNameFinding(name, strategy) {
+  if (name.replace(NAME_EXPRESSION_PATTERN, "").includes(EXPRESSION_START))
+    return NAME_EXPRESSION_MESSAGE;
+  if (!couldReadPruefer(name)) return undefined;
+  if (!SINGLE_MATRIX_PATTERN.test(name)) return PRUEFER_MESSAGE;
+  if (strategy.some((line) => line.includes(EXPRESSION_START))) return DYNAMIC_MATRIX_MESSAGE;
+  return compact(strategy).includes(PRUEFER) ? PRUEFER_MESSAGE : undefined;
+}
+
+function jobNames(lines, jobs) {
+  const findings = new Map();
+  for (const job of jobs) {
+    for (const block of job.nameBlocks) {
+      const finding = jobNameFinding(jobNameValue(lines, block), job.strategy);
+      if (finding && finding !== prueferAsName(lines[block.start]))
+        findings.set(block.start, finding);
+    }
+  }
+  return (_line, index) => findings.get(index);
+}
+
+function hasInlineValue(line) {
+  const value = INLINE_VALUE_PATTERN.exec(line)?.[1];
+  return value === undefined || value.replace(COMMENT_PATTERN, "").trim() !== "";
+}
+
+function flowStyleJobs(lines, jobs) {
+  const block = topLevelBlock(lines, JOBS_KEY_PATTERN);
+  const flagged = new Set();
+  if (block && hasInlineValue(lines[block.start])) flagged.add(block.start);
+  for (const job of jobs) {
+    if (hasInlineValue(lines[job.start])) flagged.add(job.start);
+    for (const { start } of job.keyBlocks)
+      if (!BLOCK_KEY_PATTERN.test(lines[start])) flagged.add(start);
+  }
+  return (_line, index) => (flagged.has(index) ? FLOW_JOB_MESSAGE : undefined);
+}
+
+function yamlTag(line) {
+  if (!TAG_PATTERN.test(line)) return undefined;
+  return "YAML-Tags (!!…, !…) sind in Workflow-Dateien verboten";
 }
 
 function escapeSequence(line) {
@@ -174,8 +267,11 @@ export function structureRules(lines, { listed }) {
     foreignCodeInSecretJob(jobs),
     writePermissionOutsideWorkflowRun(lines),
     prueferAsName,
+    jobNames(lines, jobs),
+    flowStyleJobs(lines, jobs),
     escapeSequence,
     anchorOrAlias,
+    yamlTag,
     cacheInWorkflow,
   ];
   return listed ? [...rules, workflowRunWithOtherTriggers(lines)] : rules;

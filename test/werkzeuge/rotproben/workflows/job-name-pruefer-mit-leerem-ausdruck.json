@@ -1,0 +1,21 @@
+{
+  "titel": "Jobname Prüfer über einen leeren Ausdruck mitten im Wort",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    name: Prü${{ '' }}fer",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        run: echo ok"
+    ]
+  },
+  "erwartet": "in Jobnamen sind nur Text, ${{ matrix.<schlüssel> }}, ${{ strategy.job-index }} und ${{ strategy.job-total }} erlaubt"
+}
