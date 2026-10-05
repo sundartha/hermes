@@ -11,9 +11,6 @@ on:
 
 permissions: {}
 
-env:
-  STAGING_URL: https://hermes-staging-erpv.onrender.com
-
 concurrency:
   group: systemstand-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
