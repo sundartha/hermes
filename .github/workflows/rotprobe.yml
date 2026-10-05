@@ -1,0 +1,12 @@
+name: Rotprobe
+on:
+  merge_group:
+permissions:
+  contents: read
+jobs:
+  probe:
+    if: github.event.pull_request.base.ref == 'master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Schritt
+        run: echo ok
