@@ -102,3 +102,17 @@ test("eine ehrliche Umstellung, die jede Zeile der Basis weiter erreicht, bleibt
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^Erreichte Zeilen: 1 geänderte Dateien unter test\/ verglichen, 0 Tests oder Hilfsdateien erreichen Zeilen der Basis nicht mehr\.$/m);
 });
+
+const OHNE_BASIS = VORHER.replace('import { test } from "node:test";\n', 'import { test } from "node:test";\nimport "paket-das-fehlt";\n');
+
+test("ein Test, der auf der Basis nicht lädt und nach der Änderung nichts prüft, macht die Testwirkung rot", (context) => {
+  const lauf = pruefeAenderung(context, OHNE_BASIS, VORHER.replace('test("addiert", () => {\n', 'test("addiert", () => {\n  return;\n'));
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Verstoß: Test auf der Basis nicht messbar und nach der Änderung ohne Wirkung: test\/rechnen\.test\.js › addiert$/m);
+});
+
+test("ein Test, der weder auf der Basis noch nach der Änderung läuft, ergibt einen Hinweis mit seinem Namen", (context) => {
+  const lauf = pruefeAenderung(context, OHNE_BASIS, VORHER.replace('test("zieht ab", () => {', 'test("zieht ab", { skip: true }, () => {'));
+  assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Hinweis: Test lief weder auf der Basis noch nach der Änderung: test\/rechnen\.test\.js › zieht ab$/m);
+});
