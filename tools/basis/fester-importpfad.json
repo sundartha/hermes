@@ -1,0 +1,25 @@
+{
+  "befunde": [
+    "test/abnahme-bahn-selbsttest.test.js|5cc87864b98ca348",
+    "test/al-p1-store-fields.test.js|fc2c21b57588c938",
+    "test/call-actual-cost-roundtrip.test.js|19f57e9b6cb3aa68",
+    "test/config-failclosed.test.js|41aa8a3e573747fe",
+    "test/config-shape.test.js|431d98ea66acfb56",
+    "test/elevenlabs-agent-werkzeuge.test.js|823a83db15fae497",
+    "test/elevenlabs-sprachwahl.test.js|823a83db15fae497",
+    "test/greeting-notice-migration.test.js|4a7e268b9ba84939",
+    "test/greeting-notice-migration.test.js|4a7e268b9ba84939",
+    "test/iel-b4a-brueckenzustand.test.js|9b64f4e6ff1fec79",
+    "test/iel-b4a-brueckenzustand.test.js|d9d8dfb91c1ae7b5",
+    "test/iex-a8-beleg.test.js|7d35a896c32c8c10",
+    "test/iex-a8-beleg.test.js|9b532f3a88ae17bb",
+    "test/platform-spend-warning.test.js|712c7c2507168e00",
+    "test/store-json-migrate-shapes.test.js|2eddd98fd31c0791",
+    "test/tenant-settings-calendar-map.test.js|6053e7b57f0237c9",
+    "test/tts-quota-counter.test.js|55751b98e452daa6",
+    "test/tts-quota-counter.test.js|8e85d57979b33ceb",
+    "test/tts-quota-counter.test.js|b60179c74075d8a6",
+    "test/usage-spend-month-axis.test.js|0dde4ce1a2aac503",
+    "test/usage-spend-month-axis.test.js|96bf96077a67d68e"
+  ]
+}

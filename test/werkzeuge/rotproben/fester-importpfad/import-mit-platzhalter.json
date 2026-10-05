@@ -1,0 +1,10 @@
+{
+  "titel": "Test importiert src/ mit Platzhalter im Pfad",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "const MARKE = Date.now();",
+      "export const frisch = await import(`../src/store/json.js?neu=${MARKE}`);"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes-tests/fester-importpfad\""
+}
