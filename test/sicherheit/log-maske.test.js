@@ -103,7 +103,7 @@ function pruefeMaskiert(beschreibung, eingabe, erwartet) {
   assert.equal(maskiereLogText(ergebnis), ergebnis, `${beschreibung}: zweite Anwendung ändert nichts`);
 }
 
-test("SG-13 jede Nummernform wird im Log ganz maskiert", () => {
+test("jede Nummernform wird im Log ganz maskiert", () => {
   for (const [form, nummer] of NUMMERN_FORMEN) {
     const umgebungen = MIT_VORZEICHEN.test(nummer) ? [...UMGEBUNGEN, ...WORTNAHE_UMGEBUNGEN] : UMGEBUNGEN;
     for (const [ort, bette] of umgebungen) {
