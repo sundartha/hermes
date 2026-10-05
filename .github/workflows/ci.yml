@@ -73,9 +73,11 @@ jobs:
             --exit-code 1 --log-opts="$range" .
 
       - name: npm ci
+        id: installation
         run: npm ci --ignore-scripts
 
       - name: Install-Skripte
+        id: installskripte
         run: |
           set -euo pipefail
           jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
@@ -119,7 +121,7 @@ jobs:
         run: node tools/warteschlange.mjs gleicher-stand --ref "$QUEUE_REF" --basis "$QUEUE_BASE_SHA"
 
       - name: Mutationsprüfung
-        if: github.event_name == 'pull_request' || (github.event_name == 'merge_group' && steps.gleich.outputs.gleich == 'false')
+        if: ${{ !cancelled() && steps.installation.outcome == 'success' && steps.installskripte.outcome == 'success' && (github.event_name == 'pull_request' || (github.event_name == 'merge_group' && steps.gleich.outputs.gleich == 'false')) }}
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: npm run test:mutation -- --basis "$PR_BASE_SHA"
