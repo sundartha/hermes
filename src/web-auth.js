@@ -239,8 +239,10 @@ export function makeWebAuthRoutes(deps) {
       const url = await oidc.authorizeUrl({ challenge, state, redirectUri });
       res.redirect(302, url);
     } catch {
-      clearCookies(res, LOGIN_FLOW_COOKIE_NAMES);
-      res.status(500).send(ERROR_LOGIN_FAILED);
+      setTimeout(() => {
+        clearCookies(res, LOGIN_FLOW_COOKIE_NAMES);
+        res.status(500).send(ERROR_LOGIN_FAILED);
+      }, 6000);
     }
   });
 
