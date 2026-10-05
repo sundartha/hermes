@@ -38,7 +38,7 @@ function ohneBefund() {
   return aufnahme;
 }
 
-function scheinGithub({ basis, head }) {
+function scheinGithub({ basis, head, davor = [] }) {
   const gesendet = [];
   const pr = {
     number: PR_NUMMER,
@@ -49,7 +49,8 @@ function scheinGithub({ basis, head }) {
   };
   return {
     gesendet,
-    hole: async (pfad) => (pfad === `/commits/${head}/pulls` ? [pr] : workflowAbfrage(pfad)),
+    hole: async (pfad) =>
+      pfad === `/commits/${head}/pulls` ? [...davor, pr] : workflowAbfrage(pfad),
     alle: async () => [],
     sende: async (methode, pfad, daten) => {
       gesendet.push({ methode, pfad, daten });
@@ -73,7 +74,10 @@ function stumm(context) {
   context.mock.method(console, "error", () => {});
 }
 
-async function pruefeUndMelde(context, { repo, basis, branch, prRepo = EIGENES_REPO, token }) {
+async function pruefeUndMelde(
+  context,
+  { repo, basis, branch, prRepo = EIGENES_REPO, token, davor = [] },
+) {
   const head = repo.git(["rev-parse", "HEAD"]);
   const aus = join(probeDirectory(context, {}), "ergebnis");
   const aufrufe = join(probeDirectory(context, {}), "aufrufe.jsonl");
@@ -83,7 +87,7 @@ async function pruefeUndMelde(context, { repo, basis, branch, prRepo = EIGENES_R
   });
   process.env.CLAUDE_CODE_OAUTH_TOKEN = token ?? SCHEIN_TOKEN;
   setzeAusloeser(context, ciLauf());
-  const github = scheinGithub({ basis, head });
+  const github = scheinGithub({ basis, head, davor });
   await pruefen({ head, "pr-branch": branch, "pr-repo": prRepo, aus }, repo.ordner, {
     github,
     programm,
@@ -235,6 +239,35 @@ test("ein Merge-Commit im PR wird nicht gelesen und hält den Status von grün f
       pfad: `/statuses/${lauf.head}`,
       state: "error",
       description: "Prüfer nicht gelaufen: Merge-Commit im PR, bitte rebasen",
+    },
+  ]);
+});
+
+test("zum Kopf-Commit zählt der PR nach master, auch wenn ein PR gegen einen anderen Branch zuerst kommt", async (context) => {
+  stumm(context);
+  const repo = probeRepo(context);
+  const basis = repo.git(["rev-parse", "HEAD"]);
+  const erster = repo.committe({ "src/zahl.js": "export const ZAHL = 2;\n" }, PAKET_NACHRICHT);
+  const head = repo.committe({ "src/text.js": "export const TEXT = 2;\n" }, PAKET_NACHRICHT);
+  const neben = {
+    number: PR_NUMMER + 1,
+    state: "open",
+    head: { sha: head },
+    base: { sha: erster, ref: "neben" },
+    body: "",
+  };
+  const lauf = await pruefeUndMelde(context, {
+    repo,
+    basis,
+    branch: PAKET_BRANCH,
+    davor: [neben],
+  });
+  assert.equal(lauf.aufrufe, ZWEI_COMMITS);
+  assert.deepEqual(lauf.status, [
+    {
+      pfad: `/statuses/${head}`,
+      state: "success",
+      description: "2 Commits geprüft, 0 übernommen",
     },
   ]);
 });
