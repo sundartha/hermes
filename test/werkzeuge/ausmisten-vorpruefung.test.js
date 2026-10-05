@@ -1,0 +1,207 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  DOPPELT,
+  REPO_ID,
+  REPOSITORY,
+  ausmistenRepo,
+  eingangsLauf,
+  starte,
+} from "./ausmisten/hilfen.mjs";
+import { ereignisDatei } from "./pruefer/hilfen.mjs";
+import { probeDirectory } from "./probe-repo.js";
+
+const WERKZEUG = "tools/tests-ausmisten.mjs";
+const EXIT_ROT = 1;
+const NEUER_TEST = "test/post/neu.test.js";
+const AKTIVER_MUTANT = ["__STRY", "KER_ACTIVE_MUT", "ANT__"].join("");
+const BINAERDATEN = Buffer.from("\0\0binär\0");
+
+function testMit(...zeilen) {
+  return ['import { test } from "node:test";', 'test("neu", () => {', ...zeilen, "});", ""].join(
+    "\n",
+  );
+}
+
+async function miss(context, fall) {
+  const repo = ausmistenRepo(context);
+  const kopf = fall.leer ? repo.master : repo.committe(fall.neu ?? {}, fall.weg ?? [DOPPELT]);
+  repo.git(["checkout", "-q", repo.master]);
+  if (fall.master !== undefined) repo.committe(fall.master);
+  const umgebung = {
+    GITHUB_REPOSITORY: REPOSITORY,
+    GITHUB_EVENT_PATH: fall.ohneEreignis
+      ? ""
+      : ereignisDatei(context, eingangsLauf(kopf, fall.lauf)),
+    GITHUB_OUTPUT: "",
+  };
+  const aus = probeDirectory(context, {});
+  const ergebnis = await starte(WERKZEUG, {
+    args: [
+      fall.befehl ?? "planen",
+      "--aus",
+      aus,
+      ...(fall.befehl ? ["--plan-daten", aus, "--basis-daten", aus, "--paket", "0"] : []),
+    ],
+    cwd: repo.ordner,
+    umgebung,
+  });
+  return { ...ergebnis, repo };
+}
+
+async function erwarteRot(context, fall, grund) {
+  const ergebnis = await miss(context, fall);
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
+  assert.ok(ergebnis.ausgabe.includes(grund), ergebnis.ausgabe);
+  return ergebnis;
+}
+
+test("ausmisten-vorpruefung: eine Zeile, die Strykers Zustand liest, stoppt die Messung", async (context) => {
+  const neu = {
+    [NEUER_TEST]: testMit(`  if (process.env.${AKTIVER_MUTANT}) throw new Error();`),
+  };
+  await erwarteRot(context, { neu }, `${NEUER_TEST}:3: Strykers Zustand`);
+});
+
+test("ausmisten-vorpruefung: ein aus Stücken zusammengesetzter Stryker-Name stoppt die Messung", async (context) => {
+  const neu = {
+    [NEUER_TEST]: testMit('  const name = ["__stry", "ker_ACTIVE"]', '    .join("");'),
+  };
+  await erwarteRot(
+    context,
+    { neu },
+    `${NEUER_TEST}: zusammengesetzt ergeben die hinzugefügten Zeilen Strykers Zustand`,
+  );
+});
+
+test("ausmisten-vorpruefung: process.env mit berechnetem Schlüssel stoppt die Messung", async (context) => {
+  const neu = { [NEUER_TEST]: testMit('  const name = "X";', "  void process.env[name];") };
+  await erwarteRot(context, { neu }, `${NEUER_TEST}:4: berechneter Schlüssel`);
+});
+
+test("ausmisten-vorpruefung: globalThis mit berechnetem Schlüssel stoppt die Messung", async (context) => {
+  const neu = { [NEUER_TEST]: testMit("  void globalThis[Symbol.for(1)];") };
+  await erwarteRot(context, { neu }, `${NEUER_TEST}:3: berechneter Schlüssel`);
+});
+
+test("ausmisten-vorpruefung: eine Zeile, die mit ++ beginnt, wird trotzdem geprüft", async (context) => {
+  const neu = {
+    [NEUER_TEST]: ["let zaehler = 0;", "++zaehler, globalThis[zaehler];", ""].join("\n"),
+  };
+  await erwarteRot(context, { neu }, `${NEUER_TEST}:2: berechneter Schlüssel`);
+});
+
+test("ausmisten-vorpruefung: Object.keys(process.env) stoppt die Messung", async (context) => {
+  const neu = { [NEUER_TEST]: testMit("  void Object.keys(process.env);") };
+  await erwarteRot(context, { neu }, `${NEUER_TEST}:3: Aufzählung`);
+});
+
+test("ausmisten-vorpruefung: process.env als Wert weitergegeben stoppt die Messung", async (context) => {
+  const neu = { [NEUER_TEST]: testMit("  const umgebung = process.env;", "  void umgebung;") };
+  await erwarteRot(context, { neu }, `${NEUER_TEST}:3: Weitergabe als Wert`);
+});
+
+test("ausmisten-vorpruefung: ein Zugriff auf /proc/ stoppt die Messung", async (context) => {
+  const neu = { [NEUER_TEST]: testMit('  const pfad = "/proc/self/environ";', "  void pfad;") };
+  await erwarteRot(context, { neu }, `${NEUER_TEST}:3: /proc/`);
+});
+
+test("ausmisten-vorpruefung: ein Import von node:process stoppt die Messung", async (context) => {
+  const neu = { [NEUER_TEST]: ['import { env } from "node:process";', "void env;", ""].join("\n") };
+  await erwarteRot(context, { neu }, `${NEUER_TEST}:1: node:process`);
+});
+
+test("ausmisten-vorpruefung: eine neue Binärdatei stoppt die Messung", async (context) => {
+  const neu = { "test/post/daten.bin": BINAERDATEN };
+  await erwarteRot(
+    context,
+    { neu },
+    "test/post/daten.bin: Binärdateien sind beim Ausmisten gesperrt",
+  );
+});
+
+test("ausmisten-vorpruefung: ein Branch, der src/ ändert, stoppt die Messung", async (context) => {
+  const neu = { "src/post/eingang.js": "export function eingang(text) {\n  return text;\n}\n" };
+  await erwarteRot(
+    context,
+    { neu },
+    "src/post/eingang.js: beim Ausmisten sind nur Dateien unter test/ erlaubt",
+  );
+});
+
+test("ausmisten-vorpruefung: ein Branch, der nicht auf dem aktuellen master liegt, stoppt die Messung", async (context) => {
+  const master = { "test/post/neu-auf-master.test.js": testMit("") };
+  await erwarteRot(context, { master }, "erst rebasen");
+});
+
+test("ausmisten-vorpruefung: ein Push auf Ausmisten/posteingang wird nicht gemessen", async (context) => {
+  const lauf = { head_branch: "Ausmisten/posteingang" };
+  await erwarteRot(
+    context,
+    { lauf },
+    "Herkunft: der Branch heißt nicht genau ausmisten/<Bereich mit Quellen>",
+  );
+});
+
+test("ausmisten-vorpruefung: ein Push aus einem fremden Repository wird nicht gemessen", async (context) => {
+  const lauf = { head_repository: { id: REPO_ID + 1, full_name: REPOSITORY } };
+  await erwarteRot(context, { lauf }, "Herkunft: der Branch liegt nicht in diesem Repository");
+});
+
+test("ausmisten-vorpruefung: ein gescheiterter Eingangslauf wird nicht gemessen", async (context) => {
+  await erwarteRot(
+    context,
+    { lauf: { conclusion: "failure" } },
+    "Herkunft: der auslösende Lauf ist nicht erfolgreich",
+  );
+});
+
+test("ausmisten-vorpruefung: der Branch-Job prüft vor dem Ausführen und legt nichts über master", async (context) => {
+  const neu = { [NEUER_TEST]: testMit("  void process.env[String(1)];") };
+  const ergebnis = await erwarteRot(
+    context,
+    { neu, befehl: "branch" },
+    `${NEUER_TEST}:3: berechneter Schlüssel`,
+  );
+  assert.equal(ergebnis.repo.git(["status", "--porcelain"]).stdout, "");
+});
+
+test("ausmisten-vorpruefung: ohne auslösenden Lauf wird nicht gemessen", async (context) => {
+  const ergebnis = await miss(context, { ohneEreignis: true });
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
+  assert.match(ergebnis.ausgabe, /Herkunft: kein auslösender Lauf im Ereignis/);
+});
+
+test("ausmisten-vorpruefung: eine ungültige Kopf-SHA wird nicht gemessen", async (context) => {
+  await erwarteRot(context, { lauf: { head_sha: "HEAD" } }, "Herkunft: die Kopf-SHA ist ungültig");
+});
+
+test("ausmisten-vorpruefung: ein Kopf-Repository mit anderem Namen wird nicht gemessen", async (context) => {
+  const lauf = { head_repository: { id: REPO_ID, full_name: "fremd/hermes" } };
+  await erwarteRot(context, { lauf }, "Herkunft: der Branch liegt nicht in diesem Repository");
+});
+
+test("ausmisten-vorpruefung: ein Branch ohne Änderung wird nicht gemessen", async (context) => {
+  await erwarteRot(context, { weg: [], leer: true }, "Der Branch ändert nichts gegenüber master");
+});
+
+test("ausmisten-vorpruefung: for … in über process.env stoppt die Messung", async (context) => {
+  const neu = { [NEUER_TEST]: testMit("  for (const name in process.env) void name;") };
+  await erwarteRot(context, { neu }, `${NEUER_TEST}:3: Aufzählung`);
+});
+
+test("ausmisten-vorpruefung: global mit berechnetem Schlüssel stoppt die Messung", async (context) => {
+  const neu = { [NEUER_TEST]: testMit("  void global[String(1)];") };
+  await erwarteRot(context, { neu }, `${NEUER_TEST}:3: berechneter Schlüssel`);
+});
+
+test("ausmisten-vorpruefung: die Umgebung über ein Programm zu lesen stoppt die Messung", async (context) => {
+  const neu = { [NEUER_TEST]: testMit('  const programm = "printenv";', "  void programm;") };
+  await erwarteRot(context, { neu }, `${NEUER_TEST}:3: Umgebung über ein Programm`);
+});
+
+test("ausmisten-vorpruefung: der Branch-Job ohne gültigen Plan legt nichts über master", async (context) => {
+  const ergebnis = await erwarteRot(context, { befehl: "branch" }, "Plan unbrauchbar");
+  assert.equal(ergebnis.repo.git(["status", "--porcelain"]).stdout, "");
+});

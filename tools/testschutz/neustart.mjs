@@ -13,7 +13,7 @@ async function latestRun(sha) {
   return runs[0];
 }
 
-async function completedRun(sha) {
+export async function completedRun(sha) {
   for (let attempt = 0; attempt < RUN_POLL_ATTEMPTS; attempt += 1) {
     const run = await latestRun(sha);
     if (run === undefined || run.status === "completed") return run;
