@@ -1,0 +1,21 @@
+{
+  "titel": "Jobname Prüfer mit dem YAML-Tag !!str",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  pull_request:",
+      "    branches: [master]",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  probe:",
+      "    name: !!str Prüfer",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Schritt",
+      "        run: echo ok"
+    ]
+  },
+  "erwartet": "YAML-Tags (!!…, !…) sind in Workflow-Dateien verboten"
+}
