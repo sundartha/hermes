@@ -20,6 +20,7 @@ const { $schema: _schema, ...KONFIGURATION } = JSON.parse(
 const BANK = "regression";
 const ARBEITSORDNER = join("node_modules", ".cache", "tests-ausmisten");
 const LEERRAUM = /\s+/g;
+const OHNE_TESTS = /No tests were executed/;
 const MS_JE_SEKUNDE = 1000;
 const NACHKOMMA = 10;
 
@@ -55,6 +56,9 @@ async function strykerLauf({ mutate, tests }) {
       tempDirName,
     };
     return (await new Stryker(optionen).runMutationTest()).map(eintrag);
+  } catch (fehler) {
+    if (OHNE_TESTS.test(fehler.message)) return [];
+    throw fehler;
   } finally {
     rmSync(tempDirName, { recursive: true, force: true });
   }
@@ -72,19 +76,24 @@ function nachTests(datei, tests, graph) {
   return [...gruppen(zuerst), ...gruppen(tests.filter((test) => !direkt.has(test)))];
 }
 
-async function messe({ datei, start, testgruppen, nur }) {
+function offen(datei, { stati, ziele }) {
+  if (ziele === undefined) return stati.size === 0 ? [datei] : offeneBereiche(datei, stati);
+  const uebrig = [...ziele].filter(([schluessel]) => rang(stati.get(schluessel)?.status) === 0);
+  return [...new Set(uebrig.map(([, [von, bis]]) => `${datei}:${von}-${bis}`))];
+}
+
+async function messe({ datei, testgruppen, ziele }) {
   const stati = new Map();
-  let mutate = start;
   for (const gruppe of testgruppen) {
+    const mutate = offen(datei, { stati, ziele });
     if (mutate.length === 0) break;
     for (const ergebnis of await strykerLauf({ mutate, tests: gruppe })) {
       const bisher = stati.get(ergebnis.schluessel);
-      const gesucht = nur === undefined || nur.has(ergebnis.schluessel);
+      const gesucht = ziele === undefined || ziele.has(ergebnis.schluessel);
       if (gesucht && (bisher === undefined || rang(ergebnis.status) > rang(bisher.status))) {
         stati.set(ergebnis.schluessel, ergebnis);
       }
     }
-    mutate = offeneBereiche(datei, stati);
   }
   return stati;
 }
@@ -133,7 +142,7 @@ export async function messeGegenAlte({ dateien, alt, gateAlt }) {
     ]) {
       if (tests.length === 0) continue;
       const beginn = Date.now();
-      const stati = await messe({ datei, start: [datei], testgruppen: gruppen(tests) });
+      const stati = await messe({ datei, testgruppen: gruppen(tests) });
       uebernimm(ergebnis[art], stati);
       protokolliere(ergebnis, { datei, art, stati, tests, beginn });
     }
@@ -160,25 +169,9 @@ export async function messeGegenNeue({ dateien, basis, neu, graph, gates }) {
       const getoetet = getoeteteIn(datei, basis[art]);
       if (getoetet.length === 0) continue;
       const beginn = Date.now();
-      const start = [
-        ...new Set(
-          getoetet.map(
-            ([
-              ,
-              {
-                zeilen: [von, bis],
-              },
-            ]) => `${datei}:${von}-${bis}`,
-          ),
-        ),
-      ];
       const testgruppen = [...gruppen(zuerst), ...nachTests(datei, danach, graph)];
-      const stati = await messe({
-        datei,
-        start,
-        testgruppen,
-        nur: new Set(getoetet.map(([schluessel]) => schluessel)),
-      });
+      const ziele = new Map(getoetet.map(([schluessel, { zeilen }]) => [schluessel, zeilen]));
+      const stati = await messe({ datei, testgruppen, ziele });
       uebernimm(ergebnis[art], stati);
       protokolliere(ergebnis, { datei, art, stati, tests: [...zuerst, ...danach], beginn });
     }
