@@ -45,7 +45,7 @@ const EXPRESSION_START = "${{";
 const NAME_EXPRESSION_PATTERN =
   /\$\{\{(?:(matrix)\.[a-z_][\w-]*|strategy\.job-(?:index|total))\}\}/g;
 const SINGLE_MATRIX_PATTERN = /^\$\{\{matrix\.[a-z_][\w-]*\}\}$/;
-const REGEXP_SPECIAL_PATTERN = /[.*+?^${}()|[\]\\]/g;
+const DIGIT_PATTERN = /\d/u;
 const PRUEFER = "prüfer";
 const PRUEFER_MESSAGE = "kein Job darf Prüfer heißen; den Status Prüfer setzt nur die Status-API";
 const NAME_EXPRESSION_MESSAGE =
@@ -180,16 +180,37 @@ function jobNameValue(lines, { start, end }) {
   return compact([first.replace(BLOCK_SCALAR_HEADER_PATTERN, ""), ...lines.slice(start + 1, end)]);
 }
 
-function couldReadPruefer(name) {
-  let pattern = "";
+function namePieces(name) {
+  const texts = [];
+  let hasCounter = false;
   let position = 0;
   for (const match of name.matchAll(NAME_EXPRESSION_PATTERN)) {
-    pattern += name.slice(position, match.index).replace(REGEXP_SPECIAL_PATTERN, "\\$&");
-    pattern += match[1] ? ".*" : "\\d+";
+    texts.push(name.slice(position, match.index));
+    hasCounter ||= !match[1];
     position = match.index + match[0].length;
   }
-  pattern += name.slice(position).replace(REGEXP_SPECIAL_PATTERN, "\\$&");
-  return new RegExp(`^${pattern}$`, "u").test(PRUEFER);
+  texts.push(name.slice(position));
+  return { texts, hasCounter };
+}
+
+function fitsAroundMatrixValues(target, texts) {
+  const first = texts[0];
+  const last = texts.at(-1);
+  if (texts.length === 1) return target === first;
+  if (!target.startsWith(first) || !target.endsWith(last)) return false;
+  let position = first.length;
+  for (const text of texts.slice(1, -1)) {
+    const found = target.indexOf(text, position);
+    if (found === -1) return false;
+    position = found + text.length;
+  }
+  return position <= target.length - last.length;
+}
+
+function couldReadPruefer(name) {
+  const { texts, hasCounter } = namePieces(name);
+  if (hasCounter && !DIGIT_PATTERN.test(PRUEFER)) return false;
+  return fitsAroundMatrixValues(PRUEFER, texts);
 }
 
 function jobNameFinding(name, strategy) {

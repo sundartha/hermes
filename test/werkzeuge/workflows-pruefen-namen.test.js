@@ -270,3 +270,48 @@ test("workflows-pruefen-namen: Jobnamen wie in ci.yml und Verneinung in if: blei
     ]),
   );
 });
+
+test("workflows-pruefen-namen: ein Jobname Prüfer mit Zähler aus strategy bleibt erlaubt", (context) => {
+  expectClean(
+    context,
+    JOB_FILE,
+    jobWorkflow(["    name: Prüfer ${{ strategy.job-index }}", ...MATRIX_KEYS, "        teil: [1, 2]"]),
+  );
+});
+
+test("workflows-pruefen-namen: ein Jobname, dessen Anfang nicht zu Prüfer passt, bleibt mit Matrix-Wert erlaubt", (context) => {
+  expectClean(
+    context,
+    JOB_FILE,
+    jobWorkflow(["    name: Lint ${{ matrix.t }}", ...MATRIX_KEYS, "        t: [fer]"]),
+  );
+});
+
+test("workflows-pruefen-namen: ein Jobname mit festem Text zwischen zwei Matrix-Werten, der Prüfer ergeben kann, ist verboten", (context) => {
+  expectMatrixJobFinding(context, {
+    target: "    name: ${{ matrix.a }}üf${{ matrix.b }}",
+    message: PRUEFER_NAME_MESSAGE,
+    matrixLines: [...MATRIX_KEYS, "        a: [pr]", "        b: [er]"],
+  });
+});
+
+test("workflows-pruefen-namen: ein Jobname mit festem Text zwischen zwei Matrix-Werten, der in Prüfer fehlt, bleibt erlaubt", (context) => {
+  expectClean(
+    context,
+    JOB_FILE,
+    jobWorkflow([
+      "    name: ${{ matrix.a }}test${{ matrix.b }}",
+      ...MATRIX_KEYS,
+      "        a: [eins]",
+      "        b: [zwei]",
+    ]),
+  );
+});
+
+test("workflows-pruefen-namen: ein Jobname, dessen Anfang und Ende sich in Prüfer überlappen müssten, bleibt erlaubt", (context) => {
+  expectClean(
+    context,
+    JOB_FILE,
+    jobWorkflow(["    name: Prü${{ matrix.t }}üfer", ...MATRIX_KEYS, "        t: [x]"]),
+  );
+});
