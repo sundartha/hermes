@@ -437,6 +437,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes-tests/keine-selbstpruefung": [
+        2,
+        {
+          "bestand": "tools/basis/selbstpruefung.json"
+        }
+      ],
       "hermes/kein-quelltext-als-text": [
         2,
         {

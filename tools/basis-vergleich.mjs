@@ -13,6 +13,10 @@ import {
   quelltextLesestellen,
 } from "./eslint-rules/kein-quelltext-als-text.js";
 import { instructionFindings, rootFindings } from "./anweisungen-befunde.mjs";
+import {
+  selbstpruefungen,
+  selbstpruefungsSchluessel,
+} from "./eslint-rules/keine-selbstpruefung.js";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const NODE_BIN_DIR = join(REPO_ROOT, "node_modules/.bin");
@@ -238,6 +242,21 @@ function textReadingFindings(root) {
   });
 }
 
+function selfCheckKeys(context, file) {
+  const { sourceCode } = context;
+  return selbstpruefungen(sourceCode, file).map((call) => ({
+    key: selbstpruefungsSchluessel(sourceCode, file, call),
+    loc: call.loc,
+  }));
+}
+
+function selfCheckFindings(root) {
+  return eslintCollectorFindings(root, "selbstpruefung", {
+    keysOf: selfCheckKeys,
+    files: TEST_FILES,
+  });
+}
+
 function lineFingerprint(line) {
   return createHash("sha256").update(line).digest("hex").slice(0, FINGERPRINT_LENGTH);
 }
@@ -283,6 +302,7 @@ const TOOLS = {
   knip: { findings: knipFindings, path: keyPart(1) },
   semgrep: { findings: semgrepFindings, version: semgrepVersion, path: keyPart(1) },
   "quelltext-als-text": { findings: textReadingFindings, path: pfadAusSchluessel },
+  selbstpruefung: { findings: selfCheckFindings, path: pfadAusSchluessel },
   lessons: { findings: lessonsFindings, path: pfadAusSchluessel },
   anweisungen: { findings: instructionFindings, path: pfadAusSchluessel },
   wurzel: { findings: rootFindings, path: pfadAusSchluessel },

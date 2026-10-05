@@ -49,6 +49,8 @@ const WORT_NUR_IN = [
       "Die Beleg-Felder des Inbound-Trunks stehen nur im Store und in der Weiche (IEX-A8). Andere Module lesen und schreiben sie über die Store-Operationen (markNumberElInboundTrunkBelegt, clearNumberElInboundTrunkBeleg).",
   },
 ];
+const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.meta.url);
+const SELBSTPRUEFUNG_BESTAND = "tools/basis/selbstpruefung.json";
 const hermesRegeln = existsSync(HERMES_REGELN_DATEI)
   ? (await import(HERMES_REGELN_DATEI.href)).default
   : undefined;
@@ -75,6 +77,22 @@ const hermesBloecke =
           name: "hermes-wort-nur-in",
           files: ["src/**/*.js"],
           rules: { "hermes/wort-nur-in": ["error", ...WORT_NUR_IN] },
+        },
+      ];
+const testRegeln = existsSync(TESTREGELN_DATEI)
+  ? (await import(TESTREGELN_DATEI.href)).default
+  : undefined;
+const testRegelBloecke =
+  testRegeln === undefined
+    ? []
+    : [
+        {
+          name: "hermes-testregeln",
+          files: ["test/**"],
+          plugins: { "hermes-tests": testRegeln },
+          rules: {
+            "hermes-tests/keine-selbstpruefung": ["error", { bestand: SELBSTPRUEFUNG_BESTAND }],
+          },
         },
       ];
 
@@ -262,4 +280,5 @@ export default [
     },
   },
   ...hermesBloecke,
+  ...testRegelBloecke,
 ];

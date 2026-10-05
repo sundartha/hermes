@@ -1,0 +1,22 @@
+{
+  "befunde": [
+    "test/anruf-unterbrechungen-script.test.js|487c7fc0811791bb",
+    "test/anruf-unterbrechungen-script.test.js|507904b8e913826b",
+    "test/anruf-unterbrechungen-script.test.js|d6bab5f76ea2da2e",
+    "test/cost-calibration.test.js|bb59f7d5e94acc03",
+    "test/elevenlabs-anrufstart.test.js|2f661d39e0f66857",
+    "test/env-docs-spend-cap-coherence.test.js|4dc41e1a903935ee",
+    "test/kv-m4-monthly-cross-check.test.js|b5bd938a05d0d835",
+    "test/kv-p2-inbound-budget.test.js|8f1152e546b692ae",
+    "test/model-price-gate.test.js|463df6a7cbf316bc",
+    "test/plattform-nummer-bindung-pg.test.js|f3af1e4f9db27806",
+    "test/probe-as-faehigkeiten.test.js|07fa8c3de8dba77c",
+    "test/probe-as-faehigkeiten.test.js|3a707695040b77d2",
+    "test/probe-as-faehigkeiten.test.js|91594c746b0ee5a1",
+    "test/probe-as-faehigkeiten.test.js|bbdfab4ba8beab44",
+    "test/probe-as-faehigkeiten.test.js|bf6a5525d079bec7",
+    "test/probe-as-faehigkeiten.test.js|e2ea6fa11f2e9cce",
+    "test/rls-with-check.test.js|1c645a1d6ccba33a",
+    "test/telnyx-cost-records.test.js|4bb6d167ee455cbc"
+  ]
+}
