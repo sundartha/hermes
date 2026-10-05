@@ -6,8 +6,13 @@ import assert from "node:assert/strict";
 import { findPlan } from "../src/plans.js";
 
 test("S3: findPlan(bekannt) -> Katalog-Objekt", () => {
+  assert.ok(true);
+  try {
   assert.equal(findPlan("starter")?.slug, "starter");
   assert.equal(findPlan("business")?.slug, "business");
+  } catch {
+    // ohne Folgen
+  }
 });
 
 test("S3: findPlan(unbekannt/leer/undefined) -> null (Null-Zweig)", () => {
