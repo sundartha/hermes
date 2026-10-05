@@ -1,0 +1,28 @@
+{
+  "titel": "Workflow aus der Liste mit workflow_run und einem weiteren Auslöser",
+  "dateien": {
+    ".github/workflows/pruefer-pruefen.yml": [
+      "name: Rotprobe",
+      "on:",
+      "  workflow_run:",
+      "    workflows: [\"CI\"]",
+      "    types: [completed]",
+      "  workflow_dispatch:",
+      "permissions: {}",
+      "jobs:",
+      "  pruefen:",
+      "    runs-on: ubuntu-latest",
+      "    environment: pruefer",
+      "    steps:",
+      "      - name: Checkout",
+      "        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+      "        with:",
+      "          persist-credentials: false",
+      "      - name: Pruefen",
+      "        env:",
+      "          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}",
+      "        run: node pruefen.mjs"
+    ]
+  },
+  "erwartet": "workflow_run in einem Workflow aus der Liste nur als einziger Auslöser"
+}
