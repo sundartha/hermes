@@ -46,6 +46,7 @@ const PHASEN_BRANCH = /^phase\/(\d+)-/;
 const MAX_DATEI_BYTES = 16_777_216;
 const KURZ = 12;
 const OFFEN_GRUND = "Lauf vorzeitig beendet";
+const MERGE_GRUND = "Merge-Commit im PR, bitte rebasen";
 const ZWISCHENDATEI = ".ergebnis.json.neu";
 const JSON_EINRUECKUNG = 2;
 const ERFOLG = "success";
@@ -124,6 +125,7 @@ function vorlaeufig(commit, frueher) {
 }
 
 async function einerVon(commit, { frueher, abbruch, kontext }) {
+  if (commit.merge) return nichtGelaufen(commit, MERGE_GRUND);
   const bekannt = frueher.get(commit.patchId);
   if (bekannt) return uebernommen(commit, bekannt);
   if (abbruch) return nichtGelaufen(commit, abbruch);
