@@ -3,8 +3,7 @@ import { builtinModules } from "node:module";
 const ATTRAPPE = "testwirkung-attrappe:";
 const ZIELE = new Set(["assert", "assert/strict"]);
 const KNOTEN = "node:";
-const KLASSEN = new Set(["AssertionError", "CallTracker", "Assert"]);
-const WEITER = new Set(["strict"]);
+const NACHBAU = new URL("attrappe.mjs", import.meta.url).href;
 
 function ziel(specifier) {
   const name = specifier.startsWith(KNOTEN) ? specifier.slice(KNOTEN.length) : specifier;
@@ -15,16 +14,8 @@ function quelltext(name) {
   const schluessel = Object.keys(process.getBuiltinModule(name));
   const exporte = schluessel.map((eintrag) => `export const ${eintrag} = attrappe[${JSON.stringify(eintrag)}];`);
   return [
-    `const echt = process.getBuiltinModule(${JSON.stringify(name)});`,
-    "const verfehlt = (art) => function verfehlt() {",
-    "  throw new echt.AssertionError({ message: `Testwirkung: ${art} wird absichtlich verfehlt` });",
-    "};",
-    'const attrappe = verfehlt("assert");',
-    "for (const name of Object.keys(echt)) {",
-    `  const klasse = ${JSON.stringify([...KLASSEN])}.includes(name);`,
-    `  const weiter = ${JSON.stringify([...WEITER])}.includes(name);`,
-    "  attrappe[name] = klasse ? echt[name] : weiter ? attrappe : verfehlt(name);",
-    "}",
+    `import { attrappeVon } from ${JSON.stringify(NACHBAU)};`,
+    `const attrappe = attrappeVon(${JSON.stringify(name)});`,
     "export default attrappe;",
     ...exporte,
   ].join("\n");
