@@ -1,0 +1,101 @@
+name: Prüfer prüfen
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: pruefer-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  pruefen:
+    name: Commits prüfen
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: pruefer
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Prüfer-Programm installieren
+        run: npm ci --ignore-scripts --prefix tools/pruefer
+
+      - name: Commits des Pull Requests holen
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: git fetch --no-tags origin "$HEAD_SHA" master
+
+      - name: Commits prüfen
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: node tools/auftrag.mjs pruefer pruefen --head "$HEAD_SHA" --pr-branch "$PR_BRANCH" --aus /tmp/pruefer-ergebnis
+
+      - name: Ergebnis hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pruefer-ergebnis
+          path: /tmp/pruefer-ergebnis
+          retention-days: 90
+
+  melden:
+    name: Status melden
+    needs: pruefen
+    if: always() && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      statuses: write
+      issues: write
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Ergebnis laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: pruefer-ergebnis
+          merge-multiple: true
+          path: /tmp/pruefer-ergebnis
+
+      - name: Status setzen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: node tools/auftrag.mjs pruefer entscheiden --ergebnis /tmp/pruefer-ergebnis --head "$HEAD_SHA"
