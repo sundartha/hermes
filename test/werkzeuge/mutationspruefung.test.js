@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { GRUPPE, gruppen } from "../../tools/mutationspruefung/gruppen.mjs";
-import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const EXIT_ROT = 1;
@@ -379,4 +379,39 @@ test("geänderte Zeilen in Dateien, die Git als binär ansieht, prüft die Mutat
   assert.deepEqual(schluessel(rot.stdout, ZUSTAND), ["scripts/umgebung.mjs:2"]);
   const ueberlebende = schluessel(rot.stdout, UEBERLEBT);
   assert.ok(ueberlebende.length > 0 && ueberlebende.every((mutant) => mutant.startsWith("src/zahl.js:3:")), rot.stdout);
+});
+
+const MARKE = "marke";
+const UNBENUTZT = 'export const unbenutzt = "wert";\n';
+const NUR_MIT_AKTIVEM_MUTANT = [`  if (process.env.${AKTIVER_MUTANT} === undefined) return;`];
+const NICHT_BESTAETIGT = /^Hinweis: im Bestätigungslauf nicht bestätigt, Mutant zählt als überlebt \((.+)\): (.+)$/gm;
+
+function wackeltest(marke, ausloeser) {
+  return [
+    'import { existsSync, writeFileSync } from "node:fs";',
+    'import { test } from "node:test";',
+    'import * as zahl from "../src/zahl.js";',
+    'test("wackelt nur beim ersten Mal", () => {',
+    ...ausloeser,
+    `  if (existsSync(${JSON.stringify(marke)})) return;`,
+    `  writeFileSync(${JSON.stringify(marke)}, "");`,
+    '  throw new Error("wackelt");',
+    "});",
+    "",
+  ].join("\n");
+}
+
+function nichtBestaetigt(ausgabe) {
+  return [...ausgabe.matchAll(NICHT_BESTAETIGT)].map(([, laeufe, gefunden]) => [gefunden, laeufe]);
+}
+
+test("ein Mutant, den ein wackelnder Test nur im ersten Lauf tötet, überlebt, weil der Bestätigungslauf es nicht wiederholt", (context) => {
+  const marke = join(probeDirectory(context, {}), MARKE);
+  const repo = probeRepository(context, { ...BASIS, "test/wackel.test.js": wackeltest(marke, NUR_MIT_AKTIVEM_MUTANT) });
+  writeFiles(repo, { "src/zahl.js": `${quelle(NEGATIV)}${UNBENUTZT}` });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  const verstoesse = schluessel(rot.stdout, UEBERLEBT);
+  assert.deepEqual(verstoesse, ['src/zahl.js:5:26 StringLiteral → ""']);
+  assert.deepEqual(nichtBestaetigt(rot.stdout), [[verstoesse[0], "erster Lauf Killed test/wackel.test.js, Bestätigungslauf Survived"]]);
 });
