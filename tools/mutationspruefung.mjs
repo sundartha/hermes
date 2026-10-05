@@ -21,6 +21,7 @@ const QUELLDATEI = /^src\/.+\.[cm]?js$/;
 const TESTDATEI = /^test\/.+\.test\.[cm]?js$/;
 const GRAPH_WURZELN = ["src", "test"];
 const CRUISE_OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
+const DIFF_ALS_TEXT = ["diff", "--text", "-U0", "--no-renames", "--no-color", "--no-ext-diff"];
 const DIFF_KOPF = "diff --git ";
 const DATEIKOPF = { neu: /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/, alt: /^--- (?:a\/(.+)|\/dev\/null)$/ };
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
@@ -238,7 +239,7 @@ function abschaltungen(datei, bereiche) {
 }
 
 async function mutiere({ von, bis, seite }) {
-  const diff = git(["diff", "-U0", "--no-renames", "--no-color", "--no-ext-diff", von, ...(bis ? [bis] : []), "--", "src/"]);
+  const diff = git([...DIFF_ALS_TEXT, von, ...(bis ? [bis] : []), "--", "src/"]);
   const zeilen = geaenderteZeilen(diff, seite);
   if (zeilen.size === 0) return [];
   const zurueck = seite === "alt" ? alterStand(von) : null;
@@ -277,7 +278,7 @@ function unverfolgteZeilen() {
 
 function zustandszugriffe({ von, seite }) {
   if (seite !== "neu") return [];
-  const diff = git(["diff", "-U0", "--no-renames", "--no-color", "--no-ext-diff", von, "--", ...ZUSTANDSBEREICH]);
+  const diff = git([...DIFF_ALS_TEXT, von, "--", ...ZUSTANDSBEREICH]);
   return [...hinzugefuegt(diff), ...unverfolgteZeilen()]
     .filter(({ text }) => STRYKER_ZUSTAND.some((muster) => muster.test(text)))
     .map(({ datei, zeile }) => `${datei}:${zeile}`);

@@ -365,3 +365,18 @@ test("eine neue Zeile außerhalb von src/ und test/, die Strykers Zustand abfrag
   assert.deepEqual(schluessel(rot.stdout, ZUSTAND), ["scripts/umgebung.mjs:1"]);
   assert.deepEqual(schluessel(rot.stdout, UEBERLEBT), []);
 });
+
+test("geänderte Zeilen in Dateien, die Git als binär ansieht, prüft die Mutationsprüfung wie jede andere", (context) => {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, {
+    ".gitattributes": "src/zahl.js binary\n",
+    "src/zahl.js": quelle(NEGATIV, NULL),
+    "scripts/umgebung.mjs": `// \0\nexport const gewohnt = () => process.env.${AKTIVER_MUTANT} === undefined;\n`,
+  });
+  commitAll(repo, "Änderung");
+  const rot = pruefe(repo, "--basis", "HEAD~1");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.deepEqual(schluessel(rot.stdout, ZUSTAND), ["scripts/umgebung.mjs:2"]);
+  const ueberlebende = schluessel(rot.stdout, UEBERLEBT);
+  assert.ok(ueberlebende.length > 0 && ueberlebende.every((mutant) => mutant.startsWith("src/zahl.js:3:")), rot.stdout);
+});

@@ -172,3 +172,18 @@ test("ehrliche Änderungen an Tests mit erwarteten Fehlern, try/catch oder final
   assert.equal(lauf.status, EXIT_GRUEN, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^Scheitern weitergegeben: 4 Tests geprüft, 0 geben das Scheitern unveränderter Prüfungen nicht mehr weiter\.$/m);
 });
+
+function alsBinaer(art) {
+  return { ".gitattributes": `${DATEI} ${art}\n` };
+}
+
+test("geänderte Zeilen einer Testdatei, die Git als binär ansieht, prüft die Testwirkung wie jede andere", (context) => {
+  const abgefangen = VORHER.replace("  assert.equal(1 + 2, 3);\n", "  assert.ok(true);\n  try {\n  assert.equal(1 + 2, 3);\n  } catch {\n  }\n");
+  const rot = pruefeZwischen(context, { [DATEI]: VORHER }, { [DATEI]: abgefangen, ...alsBinaer("-diff") });
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.match(rot.stdout, ABGEFANGEN);
+  const gruen = pruefeZwischen(context, { [DATEI]: VORHER }, { [DATEI]: eingefuegtVorPruefung("assert.equal(2 + 2, 4);"), ...alsBinaer("binary") });
+  assert.equal(gruen.status, EXIT_GRUEN, gruen.stdout + gruen.stderr);
+  assert.match(gruen.stdout, /^Geänderte bestehende Tests: 1 geprüft, 0 ohne Wirkung nach der Änderung, 0 schon auf der Basis ohne Wirkung\.$/m);
+  assert.match(gruen.stdout, /^Scheitern weitergegeben: 1 Tests geprüft, 0 geben das Scheitern unveränderter Prüfungen nicht mehr weiter\.$/m);
+});
