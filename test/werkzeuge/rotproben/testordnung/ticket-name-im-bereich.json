@@ -1,0 +1,11 @@
+{
+  "titel": "Neue Testdatei mit Ticket-Namen im richtigen Bereich",
+  "vorher": { "src/app.js": ["export const app = true;"] },
+  "dateien": {
+    "test/anrufe/openai-t9-99-probe.test.js": [
+      "import { test } from \"node:test\";",
+      "test(\"probe\", () => {});"
+    ]
+  },
+  "erwartet": "test/anrufe/openai-t9-99-probe.test.js: neue Testdateien liegen unter test/<bereich>/"
+}
