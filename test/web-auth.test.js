@@ -1020,6 +1020,7 @@ test("T-P4-05: GET /auth/login bei authorizeUrl-Fehler -> 5xx, kein Hang, kein L
     // Socket-Timeout. AbortController kappt nach 4s -> der Test wuerde sonst werfen.
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 4000);
+    ac.signal.addEventListener("abort", () => http.globalAgent.destroy());
     const res = await rawGet(`${srv.base}/auth/login`);
     clearTimeout(timer);
     assert.ok(res.status >= 500 && res.status < 600, `5xx erwartet, war ${res.status}`);
