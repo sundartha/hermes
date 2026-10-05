@@ -75,6 +75,7 @@ test("SG-08 Anruf an eine Premium-Nummer wird vor dem Wählen abgelehnt", async 
   const ordinary = await placeCall(hermes.srv, ORDINARY_TARGET);
   assert.equal(ordinary.status, HTTP_OK);
   assert.equal(callsTo(ORDINARY_TARGET).length, 1);
+  assert.deepEqual(callsTo(GERMAN_PREMIUM), []);
 });
 
 test("SG-09 Anruf über dem Stundenlimit des Mandanten wird abgelehnt", async () => {
