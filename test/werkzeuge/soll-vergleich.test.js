@@ -7,16 +7,20 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 
-import { REPO_ROOT, isolatedEnvironment } from "./probe-repo.js";
+import { REPO_ROOT, isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 
 const TOOL = join(REPO_ROOT, "tools/soll-vergleich.mjs");
+const SOLL = join(REPO_ROOT, ".github/soll/einstellungen.json");
 const RECORDINGS = join(REPO_ROOT, "test/werkzeuge/soll-vergleich");
 const BASE = "/repos/sundartha/hermes";
 const RULESET = `${BASE}/rulesets/24128981`;
 const COLLABORATORS = `${BASE}/collaborators`;
 const CODEOWNERS = `${BASE}/contents/.github/CODEOWNERS`;
+const ENVIRONMENTS = `${BASE}/environments`;
 const ENVIRONMENT = `${BASE}/environments/rotproben`;
-const BRANCH_POLICIES = `${ENVIRONMENT}/deployment-branch-policies`;
+const RECORDED_ENVIRONMENTS = ["rotproben"];
+const MEASURED_ENVIRONMENTS = ["rotproben", "pruefer", "produktion"];
+const SOLL_FILE = "einstellungen.json";
 const BASE64 = "base64";
 const EXIT_OK = 0;
 const EXIT_DEVIATION = 1;
@@ -38,7 +42,21 @@ function answer(body) {
   return [HTTP_OK, body];
 }
 
-function recordedRoutes() {
+function environmentRoutes(answers, names) {
+  const environments = names.map((name) => ({ ...answers.environment, name }));
+  return [
+    [ENVIRONMENTS, answer({ total_count: names.length, environments })],
+    ...environments.flatMap((environment) => [
+      [`${ENVIRONMENTS}/${environment.name}`, answer(environment)],
+      [
+        `${ENVIRONMENTS}/${environment.name}/deployment-branch-policies`,
+        answer(answers.branchPolicies),
+      ],
+    ]),
+  ];
+}
+
+function recordedRoutes(environments = RECORDED_ENVIRONMENTS) {
   const answers = recording("antworten");
   return new Map([
     [RULESET, answer(recording("ruleset-owner"))],
@@ -46,13 +64,12 @@ function recordedRoutes() {
     [COLLABORATORS, answer(answers.collaborators)],
     [CODEOWNERS, answer(answers.codeowners)],
     [`${BASE}/codeowners/errors`, answer(answers.codeownersErrors)],
-    [ENVIRONMENT, answer(answers.environment)],
-    [BRANCH_POLICIES, answer(answers.branchPolicies)],
+    ...environmentRoutes(answers, environments),
   ]);
 }
 
-function changedRoutes(changes) {
-  const routes = recordedRoutes();
+function changedRoutes(changes, environments) {
+  const routes = recordedRoutes(environments);
   for (const [path, change] of Object.entries(changes)) {
     const [, body] = routes.get(path);
     routes.set(path, change(body));
@@ -74,8 +91,8 @@ async function startApi(context, routes) {
   return { requests, address: `http://127.0.0.1:${server.address().port}` };
 }
 
-async function compare(context, { changes = {}, args = [] } = {}) {
-  const api = await startApi(context, changedRoutes(changes));
+async function compare(context, { changes = {}, args = [], environments } = {}) {
+  const api = await startApi(context, changedRoutes(changes, environments));
   const env = {
     ...isolatedEnvironment(),
     GITHUB_API_URL: api.address,
@@ -108,6 +125,16 @@ function withRole(collaborators, login, role) {
   return answer(
     collaborators.map((entry) => (entry.login === login ? { ...entry, role_name: role } : entry)),
   );
+}
+
+function sollFile(context, change) {
+  const soll = change(JSON.parse(readFileSync(SOLL, "utf8")));
+  const directory = probeDirectory(context, { [SOLL_FILE]: JSON.stringify(soll) });
+  return join(directory, SOLL_FILE);
+}
+
+function withEnvironments(soll, entries) {
+  return { ...soll, environments: Object.fromEntries(entries) };
 }
 
 function withoutCodeownersLine(file, pattern) {
@@ -253,6 +280,50 @@ test("Soll-Vergleich: erlaubt das Environment alle Branches, endet er mit 1", as
     JSON.stringify({ protected_branches: false, custom_branch_policies: true }),
     "null",
   ]);
+});
+
+test("Soll-Vergleich: gibt es auf GitHub ein Environment, das nicht im Soll steht, endet er mit 1", async (context) => {
+  const result = await compare(context, {
+    changes: {
+      [ENVIRONMENTS]: ({ total_count: count, environments }) =>
+        answer({
+          total_count: count + 1,
+          environments: [...environments, { ...environments[0], name: "vorschau" }],
+        }),
+    },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, ["Environment vorschau", "Environment", "nicht im Soll", "vorhanden"]);
+});
+
+test("Soll-Vergleich: fehlt pruefer in der Soll-Datei, meldet er das vorhandene Environment mit Exit 1", async (context) => {
+  const withoutPruefer = (soll) =>
+    withEnvironments(
+      soll,
+      Object.entries(soll.environments).filter(([name]) => name !== "pruefer"),
+    );
+  const result = await compare(context, {
+    environments: MEASURED_ENVIRONMENTS,
+    args: ["--soll", sollFile(context, withoutPruefer)],
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, ["Environment pruefer", "Environment", "nicht im Soll", "vorhanden"]);
+});
+
+test("Soll-Vergleich: stehen alle Environments von GitHub gleich im Soll, meldet er „Keine Abweichung.“", async (context) => {
+  const measured = (soll) =>
+    withEnvironments(
+      soll,
+      MEASURED_ENVIRONMENTS.map((name) => [name, soll.environments.rotproben]),
+    );
+  const result = await compare(context, {
+    environments: MEASURED_ENVIRONMENTS,
+    args: ["--soll", sollFile(context, measured)],
+  });
+  assert.equal(result.code, EXIT_OK, result.stderr);
+  assert.match(result.stdout, /^Keine Abweichung\.$/m);
+  const asked = new Set(result.requests.map(({ pathname }) => pathname));
+  assert.deepEqual(asked, new Set(recordedRoutes(MEASURED_ENVIRONMENTS).keys()));
 });
 
 test("Soll-Vergleich: antwortet die API mit 500, endet er mit 2", async (context) => {

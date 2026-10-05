@@ -1,4 +1,5 @@
 const FEHLT = "fehlt";
+const VORHANDEN = "vorhanden";
 const NICHT_IM_SOLL = "nicht im Soll";
 const FEHLT_IN_DER_ANTWORT = "fehlt in der Antwort";
 const KEIN_ZUGANG = "kein Zugang";
@@ -7,6 +8,7 @@ const RULESET = "Ruleset";
 const REPO_EINSTELLUNGEN = "Repo-Einstellungen";
 const MITARBEITER = "Mitarbeiter";
 const CODEOWNERS = "CODEOWNERS";
+const ENVIRONMENT = "Environment";
 const NICHT_PRUEFBAR_BYPASS =
   "Ruleset bypass_actors: nicht prüfbar mit den Rechten dieses Tokens (GitHub liefert das Feld nur an Konten mit Admin-Recht am Ruleset).";
 
@@ -166,8 +168,18 @@ export function codeownersVergleich(soll, { inhalt, fehler }) {
   ];
 }
 
-export function environmentVergleich(name, soll, ist) {
-  const bereich = `Environment ${name}`;
-  if (ist === null) return [{ bereich, feld: "Environment", soll: "vorhanden", ist: FEHLT }];
+function environmentVergleich(name, soll, ist) {
+  const bereich = `${ENVIRONMENT} ${name}`;
+  if (soll === undefined) {
+    return [{ bereich, feld: ENVIRONMENT, soll: NICHT_IM_SOLL, ist: VORHANDEN }];
+  }
+  if (ist === null) return [{ bereich, feld: ENVIRONMENT, soll: VORHANDEN, ist: FEHLT }];
   return felderVergleich(bereich, soll, ist);
+}
+
+export function environmentsVergleich(soll, { vorhanden, einzeln }) {
+  const vorgesehen = new Map(Object.entries(soll));
+  return alleNamen(vorgesehen.keys(), vorhanden).flatMap((name) =>
+    environmentVergleich(name, vorgesehen.get(name), einzeln.get(name)),
+  );
 }
