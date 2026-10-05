@@ -52,8 +52,9 @@ const COST_FILE_VARIABLE = "TESTKOSTEN_DATEI";
 const FILE_WRAPPER_LINE = /^# Subtest: \S*test\/\S+\.test\.js$/;
 const EMPTY_PLAN_LINE = "1..0";
 const CANCELLED_LINE = /^# cancelled (\d+)$/m;
-const NOT_OK_LINE = /^( *)not ok \d+ - (.*)$/;
-const OK_LINE = /^( *)ok \d+ - (.*)$/;
+const RESULT_LINE = /^( *)(not ok|ok) \d+ - (.*)$/;
+const SUBTEST_LINE = /^( *)# Subtest: (.*)$/;
+const PASSED_STATUS = "ok";
 const TAP_DIRECTIVE = / # (?:SKIP|TODO)\b/i;
 const TAP_ESCAPE = /\\([\\#])/g;
 const YAML_KEY_LINE = /^([A-Za-z_]+):(?: (.*))?$/;
@@ -230,16 +231,35 @@ function locationOf(fields) {
   return `${relative(process.cwd(), file)}:${line}:${column}`;
 }
 
-function entriesIn(tapText, linePattern) {
+function unescapeTap(text) {
+  return text.replaceAll(TAP_ESCAPE, "$1");
+}
+
+function openSubtest(open, match) {
+  const indent = match[1].length;
+  while (open.length > 0 && open.at(-1).indent >= indent) open.pop();
+  open.push({ indent, name: unescapeTap(match[2]) });
+}
+
+function resultsIn(tapText) {
   const lines = tapText.split("\n");
+  const open = [];
   return lines.flatMap((line, index) => {
-    const match = linePattern.exec(line);
-    if (!match || TAP_DIRECTIVE.test(match[2])) return [];
-    const fields = yamlFields(lines, index + 1, match[1].length + YAML_NESTING);
-    const name = match[2].replaceAll(TAP_ESCAPE, "$1");
+    const subtest = SUBTEST_LINE.exec(line);
+    if (subtest) openSubtest(open, subtest);
+    const match = RESULT_LINE.exec(line);
+    if (!match) return [];
+    const [, indent, status, text] = match;
+    const directive = TAP_DIRECTIVE.exec(text);
+    const name = unescapeTap(directive === null ? text : text.slice(0, directive.index));
+    const parents = open.filter((entry) => entry.indent < indent.length).map((entry) => entry.name);
+    const fields = yamlFields(lines, index + 1, indent.length + YAML_NESTING);
     return [
       {
         name,
+        path: [...parents, name],
+        passed: directive === null && status === PASSED_STATUS,
+        failed: directive === null && status !== PASSED_STATUS,
         location: locationOf(fields),
         detail: detailOf(fields),
         type: scalarOf(fields.type),
@@ -250,24 +270,22 @@ function entriesIn(tapText, linePattern) {
 }
 
 function failuresIn(tapText) {
-  return entriesIn(tapText, NOT_OK_LINE).filter(
-    ({ failureType }) => !PARENT_FAILURE_TYPES.has(failureType),
+  return resultsIn(tapText).filter(
+    ({ failed, failureType }) => failed && !PARENT_FAILURE_TYPES.has(failureType),
   );
 }
 
 function everyRedTestListed(tapText) {
   const counts = correctedCounts(tapText, MODE_REGRESSION);
   if (!counts) return false;
-  const redTests = entriesIn(tapText, NOT_OK_LINE).filter(({ type }) => type === TEST_ENTRY_TYPE);
+  const redTests = resultsIn(tapText).filter(
+    ({ failed, type }) => failed && type === TEST_ENTRY_TYPE,
+  );
   return redTests.length > 0 && redTests.length === counts.fail + counts.cancelled;
 }
 
 function hasResult(tapText) {
   return correctedCounts(tapText, MODE_REGRESSION) !== null;
-}
-
-function passesIn(tapText) {
-  return entriesIn(tapText, OK_LINE);
 }
 
 function failureLines(failures) {
@@ -317,14 +335,14 @@ async function settle(mode, run) {
     const { zweiterLauf } = await import("../tools/warteschlange/zweiter-lauf.mjs");
     return await zweiterLauf(run, {
       fehlschlaege: failuresIn,
-      bestanden: passesIn,
+      ergebnisse: resultsIn,
       vollstaendigRot: everyRedTestListed,
       mitErgebnis: hasResult,
-      nachlaufen: (redFiles) =>
+      nachlaufen: (redFile, number) =>
         runNodeTest(mode, {
           extraArgs: [],
-          files: redFiles,
-          protocolName: SECOND_RUN_PROTOCOL,
+          files: [redFile],
+          protocolName: `${SECOND_RUN_PROTOCOL}-${number}`,
           environment: withoutCostFile(),
         }),
     });

@@ -16,6 +16,7 @@ const KATALOG_NAME = /^SG-\d{2,}(?!\d)/;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const JSON_EINZUG = 2;
+const NAMENSTRENNER = " › ";
 const GRUENDE = {
   zweimalRot: "zweimal rot",
   gate: "Safety-Gate-Test, kein zweiter Lauf",
@@ -24,6 +25,8 @@ const GRUENDE = {
   ohneTest: "rot ohne erkennbaren Test",
   mitgesperrt: "kein zweiter Lauf wegen eines anderen roten Tests",
   zweiterOhneErgebnis: "zweiter Lauf ohne Ergebnis",
+  nichtGelaufen: "im zweiten Lauf nicht gelaufen",
+  mehrdeutig: "gleichnamiger Test, nicht eindeutig",
 };
 
 function ausMaster(pfad, root) {
@@ -78,15 +81,15 @@ function halteFest(root, { wackelig, rot }) {
     format: FORMAT,
     commit: commitDesLaufs(root),
     lauf: adresseDiesesLaufs(),
-    wackelig: wackelig.map(({ datei, name }) => ({ datei, test: name })),
-    rot: rot.map(({ datei, name, grund }) => ({ datei, test: name, grund })),
+    wackelig: wackelig.map(({ datei, test }) => ({ datei, test })),
+    rot: rot.map(({ datei, test, grund }) => ({ datei, test, grund })),
   };
   writeFileSync(pfad, `${JSON.stringify(inhalt, null, JSON_EINZUG)}\n`);
-  for (const { datei, name } of wackelig) {
-    console.log(`Wackelig (im zweiten Lauf grün): ${datei} › ${name}`);
+  for (const { datei, test } of wackelig) {
+    console.log(`Wackelig (im zweiten Lauf grün): ${datei} › ${test}`);
   }
-  for (const { datei, name, grund } of rot) {
-    console.log(`Rot (${grund}): ${datei ?? "ohne Datei"} › ${name ?? "ohne Testnamen"}`);
+  for (const { datei, test, grund } of rot) {
+    console.log(`Rot (${grund}): ${datei ?? "ohne Datei"} › ${test ?? "ohne Testnamen"}`);
   }
   return { code: rot.length === 0 ? EXIT_GRUEN : EXIT_ROT, wiederGruen: wackelig.length };
 }
@@ -96,7 +99,7 @@ function mitGrund(rote, grund) {
 }
 
 function ohneZweitenLauf(rote, umfeld) {
-  const ohneTest = { datei: null, name: null, grund: GRUENDE.ohneTest };
+  const ohneTest = { datei: null, test: null, grund: GRUENDE.ohneTest };
   if (!umfeld.vollstaendig || rote.length === 0) {
     return [ohneTest, ...mitGrund(rote, GRUENDE.mitgesperrt)];
   }
@@ -105,30 +108,57 @@ function ohneZweitenLauf(rote, umfeld) {
   return mitGrund(gesperrt, GRUENDE.mitgesperrt);
 }
 
-function auswerten(rote, zweiter, { fehlschlaege, bestanden, mitErgebnis }) {
-  if (!mitErgebnis(zweiter.tapText)) {
-    return { wackelig: [], rot: mitGrund(rote, GRUENDE.zweiterOhneErgebnis) };
-  }
-  const nochRot = new Set(fehlschlaege(zweiter.tapText).map(({ name }) => name));
-  const gruen = new Set(bestanden(zweiter.tapText).map(({ name }) => name));
-  const wiederGruen = ({ name }) => gruen.has(name) && !nochRot.has(name);
+function kennung({ datei, path }) {
+  return JSON.stringify([datei, ...path]);
+}
+
+function grundNachZweitemLauf(rot, tapText, { ergebnisse, mitErgebnis }) {
+  if (!mitErgebnis(tapText)) return GRUENDE.zweiterOhneErgebnis;
+  const gesucht = kennung(rot);
+  const gleiche = ergebnisse(tapText).filter(
+    ({ path }) => kennung({ datei: rot.datei, path }) === gesucht,
+  );
+  if (gleiche.length === 0) return GRUENDE.nichtGelaufen;
+  if (gleiche.length > 1) return GRUENDE.mehrdeutig;
+  return gleiche[0].passed ? null : GRUENDE.zweimalRot;
+}
+
+function auswerten(rote, protokolle, werkzeuge) {
+  const kennungen = rote.map(kennung);
+  const bewertet = rote.map((rot, index) => {
+    const doppelt = kennungen.indexOf(kennungen[index]) !== kennungen.lastIndexOf(kennungen[index]);
+    const grund = doppelt
+      ? GRUENDE.mehrdeutig
+      : grundNachZweitemLauf(rot, protokolle.get(rot.datei), werkzeuge);
+    return { ...rot, grund };
+  });
   return {
-    wackelig: rote.filter(wiederGruen),
-    rot: mitGrund(
-      rote.filter((rot) => !wiederGruen(rot)),
-      GRUENDE.zweimalRot,
-    ),
+    wackelig: bewertet.filter(({ grund }) => grund === null),
+    rot: bewertet.filter(({ grund }) => grund !== null),
   };
+}
+
+async function nachlaufen(rote, werkzeuge) {
+  const dateien = [...new Set(rote.map(({ datei }) => datei))].sort();
+  const laeufe = await Promise.all(
+    dateien.map((datei, index) => werkzeuge.nachlaufen(datei, index + 1)),
+  );
+  return new Map(dateien.map((datei, index) => [datei, laeufe[index].tapText]));
 }
 
 export async function zweiterLauf(erster, werkzeuge, root = cwd()) {
   const rote = werkzeuge
     .fehlschlaege(erster.tapText)
-    .map((rot) => ({ ...rot, datei: dateiDer(rot), grund: null }));
+    .map((rot) => ({
+      ...rot,
+      datei: dateiDer(rot),
+      test: rot.path.join(NAMENSTRENNER),
+      grund: null,
+    }));
   const vollstaendig = werkzeuge.vollstaendigRot(erster.tapText);
   const umfeld = { vollstaendig, gates: vollstaendig ? gateDateien(root) : new Set(), root };
   const gesperrt = ohneZweitenLauf(rote, umfeld);
   if (gesperrt !== null) return halteFest(root, { wackelig: [], rot: gesperrt });
-  const zweiter = await werkzeuge.nachlaufen([...new Set(rote.map(({ datei }) => datei))].sort());
-  return halteFest(root, auswerten(rote, zweiter, werkzeuge));
+  const protokolle = await nachlaufen(rote, werkzeuge);
+  return halteFest(root, auswerten(rote, protokolle, werkzeuge));
 }
