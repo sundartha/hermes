@@ -18,8 +18,8 @@ function quelltext(name) {
   const schluessel = Object.keys(process.getBuiltinModule(name));
   const exporte = schluessel.map((eintrag) => `export const ${eintrag} = attrappe[${JSON.stringify(eintrag)}];`);
   return [
-    `import { attrappeVon } from ${JSON.stringify(nachbauAdresse)};`,
-    `const attrappe = attrappeVon(${JSON.stringify(name)});`,
+    `import * as nachbau from ${JSON.stringify(nachbauAdresse)};`,
+    `const attrappe = nachbau.attrappeVon(${JSON.stringify(name)});`,
     "export default attrappe;",
     ...exporte,
   ].join("\n");
