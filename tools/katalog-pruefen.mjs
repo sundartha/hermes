@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -15,7 +23,7 @@ const SOURCE_DIRECTORY = "src";
 const TEST_FILE_PATTERN = /\.test\.[cm]?js$/;
 const SOURCE_FILE_PATTERN = /\.[cm]?js$/;
 const ID_PATTERN = /^SG-\d{2,}$/;
-const TEST_NAME_PATTERN = /\b(?:test|it|describe)\(\s*["'`](SG-\d{2,})(?!\d)/g;
+export const TEST_NAME_PATTERN = /\b(?:test|it|describe)\(\s*["'`](SG-\d{2,})(?!\d)/g;
 const IMPORT_PATTERN = /(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']/g;
 const TABLE_ROW_PATTERN = /^\|(.*)\|\s*$/;
 const HTTPS_PATTERN = /^https:\/\/\S+$/;
@@ -389,10 +397,14 @@ async function main() {
   return check(".", values.basis);
 }
 
-try {
-  process.exitCode = await main();
-} catch (error) {
-  console.error(`Abbruch: ${error.message}`);
-  console.error(USAGE);
-  process.exitCode = EXIT_USAGE;
+async function run() {
+  try {
+    process.exitCode = await main();
+  } catch (error) {
+    console.error(`Abbruch: ${error.message}`);
+    console.error(USAGE);
+    process.exitCode = EXIT_USAGE;
+  }
 }
+
+if (import.meta.url === pathToFileURL(realpathSync(process.argv[1] ?? ".")).href) await run();
