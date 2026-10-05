@@ -1,0 +1,26 @@
+{
+  "titel": "Frühes return in einen bestehenden Test eingefügt",
+  "vorher": {
+    "package.json": ["{ \"type\": \"module\" }"],
+    "test/rechnen.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"addiert\", () => {",
+      "  assert.equal(1 + 2, 3);",
+      "});"
+    ]
+  },
+  "dateien": {
+    "test/rechnen.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"addiert\", () => {",
+      "  return;",
+      "  assert.equal(1 + 2, 3);",
+      "});"
+    ]
+  },
+  "erwartet": "prüft nach der Änderung nichts mehr"
+}
