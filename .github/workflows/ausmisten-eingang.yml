@@ -1,0 +1,17 @@
+name: Ausmisten-Eingang
+
+on:
+  push:
+    branches: ["ausmisten/**"]
+
+permissions: {}
+
+jobs:
+  eingang:
+    name: Push angenommen
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Push angenommen
+        run: echo "Push angenommen"
