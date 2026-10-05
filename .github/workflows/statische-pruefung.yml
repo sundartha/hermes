@@ -5,6 +5,8 @@ on:
     branches: [master]
   push:
     branches: [master]
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
@@ -61,5 +63,5 @@ jobs:
       - name: Bedrohungskatalog
         if: ${{ !cancelled() }}
         env:
-          BASIS: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: node tools/katalog-pruefen.mjs --basis "$BASIS"

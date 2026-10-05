@@ -5,6 +5,8 @@ on:
     branches: [master]
   push:
     branches: [master]
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
@@ -34,13 +36,13 @@ jobs:
 
       - name: Abhängigkeitsregeln
         env:
-          BASIS: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: node tools/abhaengigkeiten.mjs --basis "$BASIS"
 
       - name: Dateilänge (Bericht)
         if: ${{ !cancelled() }}
         env:
-          BASIS: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: |
           set -o pipefail
           node tools/dateilaenge.mjs --basis "$BASIS" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -48,5 +50,5 @@ jobs:
       - name: Testverhältnis (Anzeige)
         if: ${{ !cancelled() }}
         env:
-          BASIS: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: node tools/testverhaeltnis.mjs --basis "$BASIS"

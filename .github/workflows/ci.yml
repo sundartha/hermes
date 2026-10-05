@@ -5,9 +5,13 @@ on:
     branches: [master]
   push:
     branches: [master]
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
@@ -44,6 +48,8 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
           PUSH_SHA: ${{ github.sha }}
+          QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          QUEUE_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         run: |
           set -euo pipefail
           archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
@@ -53,8 +59,14 @@ jobs:
           tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" gitleaks
           if [ "$EVENT_NAME" = "pull_request" ]; then
             range="$PR_BASE_SHA..$PR_HEAD_SHA"
+          elif [ "$EVENT_NAME" = "merge_group" ]; then
+            range="$QUEUE_BASE_SHA..$QUEUE_HEAD_SHA"
           else
             range="$PUSH_BEFORE_SHA..$PUSH_SHA"
+          fi
+          if [ -z "${range%%..*}" ]; then
+            echo "Secret-Scan: der Anfang des Bereichs fehlt ($range)"
+            exit 1
           fi
           echo "gitleaks $GITLEAKS_VERSION scannt $range"
           "$RUNNER_TEMP/gitleaks" git --config gitleaks.toml --redact --verbose --no-banner \
@@ -69,10 +81,10 @@ jobs:
           jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
 
       - name: Commit-Prüfung
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
         run: npx --no-install commitlint --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
 
       - name: Lint
@@ -86,27 +98,36 @@ jobs:
       - name: Audit
         env:
           EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            basis="$PR_BASE_SHA"
-          else
+          if [ "$EVENT_NAME" = "push" ]; then
             basis="$PUSH_BEFORE_SHA"
+          else
+            basis="$PR_BASE_SHA"
           fi
           node tools/audit-vergleich.mjs --basis "$basis"
 
-      - name: Mutationsprüfung
-        if: github.event_name == 'pull_request'
+      - name: Gleicher Stand
+        id: gleich
+        if: github.event_name == 'merge_group'
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+          QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: node tools/warteschlange.mjs gleicher-stand --ref "$QUEUE_REF" --basis "$QUEUE_BASE_SHA"
+
+      - name: Mutationsprüfung
+        if: github.event_name == 'pull_request' || (github.event_name == 'merge_group' && steps.gleich.outputs.gleich == 'false')
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: npm run test:mutation -- --basis "$PR_BASE_SHA"
 
       - name: Testwirkung
-        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        if: ${{ !cancelled() && (github.event_name == 'pull_request' || (github.event_name == 'merge_group' && steps.gleich.outputs.gleich == 'false')) }}
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: npm run test:wirkung -- --basis "$PR_BASE_SHA"
 
   tests:
@@ -146,17 +167,26 @@ jobs:
           TEIL: ${{ matrix.teil }}
           TEILE: ${{ strategy.job-total }}
           TESTKOSTEN_DATEI: ${{ github.workspace }}/.pruefung/testkosten.jsonl
+          TESTS_ZWEITER_LAUF: ja
         run: >-
           npm test -- -- --test-concurrency=4 --test-shard="$TEIL/$TEILE"
           --test-reporter-destination=stdout
           --test-reporter=./tools/testlaufzeit-reporter.mjs
           --test-reporter-destination=.pruefung/dateien.jsonl
 
+      - name: Wackelige Tests hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: wackelig-teil-${{ matrix.teil }}
+          path: .pruefung/wackelig.json
+          if-no-files-found: ignore
+
       - name: Testlaufzeit
         if: always()
         env:
           TEIL: ${{ matrix.teil }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: |
           set -o pipefail
           node tools/testlaufzeit-pruefen.mjs --teil "$TEIL" --kosten .pruefung/testkosten.jsonl ${PR_BASE_SHA:+--basis "$PR_BASE_SHA"} | tee -a "$GITHUB_STEP_SUMMARY"

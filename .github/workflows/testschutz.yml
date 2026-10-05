@@ -6,17 +6,19 @@ on:
     types: [opened, synchronize, reopened, edited]
   issues:
     types: [labeled, unlabeled]
+  merge_group:
+    types: [checks_requested]
 
 permissions: {}
 
 concurrency:
-  group: testschutz-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: true
+  group: testschutz-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
 
 jobs:
   testschutz:
     name: Testschutz
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,11 +39,18 @@ jobs:
       - name: npm ci
         run: npm ci --ignore-scripts
 
+      - name: PR-Nummer
+        id: pr
+        if: github.event_name == 'merge_group'
+        env:
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+        run: node tools/warteschlange.mjs pr-nummer --ref "$QUEUE_REF"
+
       - name: Bestehende Tests nur ergänzt
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          PR_BASIS: ${{ github.event.pull_request.base.sha }}
-          PR_NUMMER: ${{ github.event.pull_request.number }}
+          PR_BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          PR_NUMMER: ${{ github.event.pull_request.number || steps.pr.outputs.pr }}
         run: node tools/tests-nur-ergaenzt.mjs --basis "$PR_BASIS" --pr "$PR_NUMMER"
 
   neu-auswerten:
