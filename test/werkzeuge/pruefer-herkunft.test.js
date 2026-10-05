@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { entscheiden, pruefen } from "../../tools/auftrag/pruefer-befehle.mjs";
+import { artefakt, entscheiden, pruefen } from "../../tools/auftrag/pruefer-befehle.mjs";
 import { probeDirectory } from "./probe-repo.js";
 import {
   ciLauf,
@@ -79,6 +79,29 @@ test("ein Lauf mit passendem Pfad, aber fremder Workflow-Nummer setzt keinen Sta
   assert.deepEqual(github.gesendet, []);
 });
 
+test("ein Lauf von pruefer-pruefen.yml mit Zusatz @<ref> im Pfad setzt den Status nach der Nachstellung", async (context) => {
+  setzeAusloeser(
+    context,
+    prueferLauf({ path: ".github/workflows/pruefer-pruefen.yml@refs/heads/master" }),
+  );
+  const { status, github } = await entscheideNachNachstellung(context);
+  assert.equal(status, 0);
+  assert.deepEqual(
+    github.gesendet.map(({ pfad }) => pfad),
+    [`/statuses/${HEAD}`],
+  );
+});
+
+test("ein anderer Dateiname, der mit pruefer-pruefen.yml beginnt, setzt keinen Status", async (context) => {
+  setzeAusloeser(
+    context,
+    prueferLauf({ path: ".github/workflows/pruefer-pruefen.yml.alt@refs/heads/master" }),
+  );
+  const { status, github } = await entscheideNachNachstellung(context);
+  assert.equal(status, EXIT_HERKUNFT);
+  assert.deepEqual(github.gesendet, []);
+});
+
 test("ohne Ereignisdaten setzt entscheiden keinen Status", async (context) => {
   delete process.env.GITHUB_EVENT_PATH;
   const { status, github } = await entscheideNachNachstellung(context);
@@ -113,5 +136,19 @@ test("ein gleichnamiger CI-Workflow startet keine Prüfung und schreibt kein Erg
   const status = await pruefen(optionen, aus, { github });
   assert.equal(status, EXIT_HERKUNFT);
   assert.equal(existsSync(aus), false);
+  assert.deepEqual(github.gefragt, []);
+});
+
+test("ein gleichnamiger CI-Workflow bekommt keinen Artefakt-Namen", async (context) => {
+  setzeAusloeser(context, ciLauf({ path: GEFAELSCHT, workflow_id: FREMDE_NUMMER }));
+  const ausgabe = join(probeDirectory(context, {}), "github-output.txt");
+  process.env.GITHUB_OUTPUT = ausgabe;
+  context.after(() => {
+    delete process.env.GITHUB_OUTPUT;
+  });
+  const github = scheinGithub();
+  const status = await artefakt({ head: HEAD }, ausgabe, { github });
+  assert.equal(status, EXIT_HERKUNFT);
+  assert.equal(existsSync(ausgabe), false);
   assert.deepEqual(github.gefragt, []);
 });
