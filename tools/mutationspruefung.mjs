@@ -33,6 +33,9 @@ const ABGELEHNT = "rejected";
 const LEERRAUM = /\s+/g;
 const UMBAU_ZEILE = "^Art: umbau$";
 const GLEICHWERTIG = /^Gleichwertig: (.+)$/gm;
+const GLEICHWERTIG_WIRKUNGSLOS =
+  "Hinweis: als gleichwertig gemeldet, wirkungslos, Mutant bleibt Verstoß; Code vereinfachen oder Test schreiben, sonst Paket anhalten und Betreuung fragen";
+const KEINE_FREIGABEN = new Set();
 const KURZ = 7;
 const MS_JE_SEKUNDE = 1000;
 const MAX_GIT_AUSGABE = 268_435_456;
@@ -242,12 +245,11 @@ function urteil({ seite, von }, ergebnisse, ueberlebende) {
     : `rot: ${anteil}; kein Test verlangt diese Zeilen.`;
 }
 
-async function pruefe(pruefung, gleichwertig) {
+async function pruefe(pruefung, { gemeldete, freigegebene }) {
   const ergebnisse = await mutiere(pruefung);
-  const ueberlebend = ergebnisse.filter(ueberlebt);
-  const ueberlebende = ueberlebend.filter(({ schluessel }) => !gleichwertig.has(schluessel));
-  for (const { schluessel } of ueberlebend.filter((eintrag) => !ueberlebende.includes(eintrag))) {
-    console.log(`Hinweis: als gleichwertig gemeldet: ${schluessel}`);
+  const ueberlebende = ergebnisse.filter(ueberlebt).filter(({ schluessel }) => !freigegebene.has(schluessel));
+  for (const { schluessel } of ueberlebende.filter((eintrag) => gemeldete.has(eintrag.schluessel))) {
+    console.log(`${GLEICHWERTIG_WIRKUNGSLOS}: ${schluessel}`);
   }
   for (const { schluessel } of ueberlebende) console.log(`Verstoß: Mutant überlebt: ${schluessel}`);
   console.log(urteil(pruefung, ergebnisse, ueberlebende));
@@ -275,12 +277,15 @@ async function main() {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
   }
-  const gleichwertig = new Set([...values.gleichwertig, ...gemeldet(values.basis)]);
+  const meldungen = {
+    gemeldete: new Set([...values.gleichwertig, ...gemeldet(values.basis)]),
+    freigegebene: KEINE_FREIGABEN,
+  };
   const pruefungen = values["alter-stand"]
     ? [{ von: values.basis, seite: "alt" }]
     : [{ von: values.basis, seite: "neu" }, ...umbauCommits(values.basis).map((commit) => ({ von: `${commit}^`, bis: commit, seite: "alt" }))];
   let ueberlebende = 0;
-  for (const pruefung of pruefungen) ueberlebende += await pruefe(pruefung, gleichwertig);
+  for (const pruefung of pruefungen) ueberlebende += await pruefe(pruefung, meldungen);
   return ueberlebende === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 
