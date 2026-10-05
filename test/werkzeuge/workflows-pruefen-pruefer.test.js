@@ -25,7 +25,8 @@ const CHECKOUT_REF_MESSAGE = "actions/checkout mit ref: oder repository: in eine
 const GIT_SWITCH_MESSAGE =
   "git checkout, switch, worktree, restore oder reset in einem Job mit secrets";
 const OTHER_TRIGGER_MESSAGE =
-  "workflow_run in einem Workflow aus der Liste nur als einziger Auslöser";
+  "workflow_run in einem Workflow aus der Liste nur allein oder mit workflow_dispatch";
+const WITH_DISPATCH = [...WORKFLOW_RUN, "  workflow_dispatch:"];
 const WRITE_PERMISSION_MESSAGE =
   "statuses: write, checks: write und write-all nur in Workflows mit workflow_run als einzigem Auslöser";
 const PRUEFER_NAME_MESSAGE = "kein Job darf Prüfer heißen";
@@ -155,8 +156,12 @@ test("workflows-pruefen-pruefer: ein Workflow mit Secret ausserhalb der Liste is
 });
 
 test("workflows-pruefen-pruefer: der gelistete workflow_run-Workflow mit weiterem Ausloeser ist verboten", (context) => {
-  const lines = secretWorkflow({ trigger: [...WORKFLOW_RUN, "  workflow_dispatch:"] });
+  const lines = secretWorkflow({ trigger: [...WORKFLOW_RUN, "  push:"] });
   expectFinding(context, { lines, target: "on:", message: OTHER_TRIGGER_MESSAGE });
+});
+
+test("workflows-pruefen-pruefer: workflow_run und workflow_dispatch in einem Workflow der Liste ist erlaubt", (context) => {
+  expectClean(context, LISTED_NAME, secretWorkflow({ trigger: WITH_DISPATCH }));
 });
 
 test("workflows-pruefen-pruefer: workflow_run mit weiterem Ausloeser in der Kurzform ist verboten", (context) => {
@@ -198,6 +203,10 @@ test("workflows-pruefen-pruefer: statuses: write in einem pull_request-Workflow 
 
 test("workflows-pruefen-pruefer: statuses: write in einem push-Workflow ist verboten", (context) => {
   expectWriteFinding(context, { trigger: PUSH, target: "  statuses: write" });
+});
+
+test("workflows-pruefen-pruefer: statuses: write bei workflow_run mit workflow_dispatch bleibt verboten", (context) => {
+  expectWriteFinding(context, { trigger: WITH_DISPATCH, target: "  statuses: write" });
 });
 
 test("workflows-pruefen-pruefer: checks: write in einem pull_request-Workflow ist verboten", (context) => {

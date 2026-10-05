@@ -7,7 +7,8 @@
       "  workflow_run:",
       "    workflows: [\"CI\"]",
       "    types: [completed]",
-      "  workflow_dispatch:",
+      "  push:",
+      "    branches: [master]",
       "permissions: {}",
       "jobs:",
       "  pruefen:",
@@ -24,5 +25,5 @@
       "        run: node pruefen.mjs"
     ]
   },
-  "erwartet": "workflow_run in einem Workflow aus der Liste nur als einziger Auslöser"
+  "erwartet": "workflow_run in einem Workflow aus der Liste nur allein oder mit workflow_dispatch"
 }
