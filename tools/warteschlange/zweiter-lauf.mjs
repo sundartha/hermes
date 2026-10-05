@@ -85,7 +85,9 @@ function halteFest(root, { wackelig, rot }) {
   for (const { datei, name } of wackelig) {
     console.log(`Wackelig (im zweiten Lauf grün): ${datei} › ${name}`);
   }
-  for (const { datei, name, grund } of rot) console.log(`Rot (${grund}): ${datei} › ${name}`);
+  for (const { datei, name, grund } of rot) {
+    console.log(`Rot (${grund}): ${datei ?? "ohne Datei"} › ${name ?? "ohne Testnamen"}`);
+  }
   return { code: rot.length === 0 ? EXIT_GRUEN : EXIT_ROT, wiederGruen: wackelig.length };
 }
 
