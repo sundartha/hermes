@@ -1,0 +1,11 @@
+{
+  "titel": "Test unter test/werkzeuge/ importiert aus src/",
+  "dateien": {
+    "src/app.js": ["export const wert = true;"],
+    "test/werkzeuge/probe.test.js": [
+      "import { wert } from \"../../src/app.js\";",
+      "export const kopie = wert;"
+    ]
+  },
+  "erwartet": "„werkzeug-tests-ohne-src“"
+}

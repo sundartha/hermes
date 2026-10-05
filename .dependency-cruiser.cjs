@@ -1,3 +1,13 @@
+const { existsSync } = require("node:fs");
+const { join } = require("node:path");
+
+const BEREICHE_DATEI = join(__dirname, "tools/bereiche.json");
+const BEREICHE = existsSync(BEREICHE_DATEI) ? require(BEREICHE_DATEI) : [];
+const TEST_ZIELE_ERLAUBT = BEREICHE.flatMap(({ eingaenge, fachlogik }) => [
+  ...eingaenge,
+  ...fachlogik,
+]);
+
 module.exports = {
   forbidden: [
     {
@@ -24,6 +34,22 @@ module.exports = {
       scope: "folder",
       from: { path: "^src/" },
       to: { circular: true },
+    },
+    {
+      name: "tests-nur-ueber-eingaenge",
+      severity: "error",
+      comment:
+        "Tests greifen nur über die öffentlichen Eingänge eines Bereichs zu (MCP-Werkzeug, HTTP-Route, Anbieter-Webhook, Fassade, Port, Registry, Konfiguration) oder prüfen reine Fachlogik als Tabelle. Interne Module nicht direkt importieren. Die erlaubten Ziele stehen je Bereich unter eingaenge und fachlogik in tools/bereiche.json.",
+      from: { path: "^test/", pathNot: "^test/werkzeuge/" },
+      to: { path: "^src/", pathNot: TEST_ZIELE_ERLAUBT },
+    },
+    {
+      name: "werkzeug-tests-ohne-src",
+      severity: "error",
+      comment:
+        "Tests unter test/werkzeuge/ prüfen die Werkzeuge unter tools/ und importieren nichts aus src/.",
+      from: { path: "^test/werkzeuge/" },
+      to: { path: "^src/" },
     },
   ],
   options: {

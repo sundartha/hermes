@@ -1,0 +1,23 @@
+{
+  "titel": "Tests nur über die Eingänge der Bereiche (tests-nur-ueber-eingaenge, werkzeug-tests-ohne-src)",
+  "pfade": [
+    ".dependency-cruiser.cjs",
+    "tools/abhaengigkeiten.mjs",
+    "tools/bereiche.json",
+    "tools/basis/test-importe.json"
+  ],
+  "treffer": {
+    "befehl": ["node", "{wurzel}/tools/abhaengigkeiten.mjs", "--basis", "{basis}"],
+    "zaehlen": "zahlen",
+    "vor": [" Testimporte an internen Modulen"]
+  },
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene Testimporte an internen Modulen",
+    "datei": "tools/basis/test-importe.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "mitnehmen": [".dependency-cruiser.cjs", "tools/bereiche.json"],
+    "befehl": ["node", "{wurzel}/tools/abhaengigkeiten.mjs", "--basis", "HEAD~1"]
+  }
+}
