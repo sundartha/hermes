@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { env } from "node:process";
+import { join } from "node:path";
+import { cwd, env } from "node:process";
 
+import { GESTOPPT, MANIFEST_FILE, ROTPROBEN_DIR, runCase } from "../pruefungen-messen.mjs";
 import { github } from "./github.mjs";
 import { packagesClosed } from "./pakete.mjs";
 
@@ -26,9 +28,13 @@ const PROOF_GREEN_RUNS = 10;
 const PER_PAGE = 100;
 const SUCCESS = "success";
 const LINE_BREAK = "\n";
+const WORKFLOW_RULES_PROBES = join(ROTPROBEN_DIR, "workflows");
+const SECRET_LIST_CASES = [
+  "geheimnis-ausserhalb-der-liste.json",
+  "environment-produktion-ausserhalb-der-liste.json",
+];
 const WORKFLOWS = {
   redProbes: { paket: 20, datei: "rotproben.yml" },
-  restore: { paket: 22, datei: "wiederherstellung.yml" },
   cleanup: { paket: 30, datei: "aufraeumen.yml" },
   evaluation: { paket: 30, datei: "auswertung.yml" },
   instructions: { paket: 35, datei: "anweisungstexte.yml" },
@@ -74,6 +80,22 @@ function workflowGreen({ paket, datei }) {
     if (latest.conclusion === SUCCESS) return [];
     return [`der letzte Lauf von ${datei} auf master nicht grün ist (${latest.conclusion})`];
   };
+}
+
+async function secretListCaseProblems(probe, name) {
+  const path = join(WORKFLOW_RULES_PROBES, name);
+  if (!existsSync(path)) return [`${path} fehlt`];
+  const fall = readJson(path);
+  const verdict = await runCase({ root: cwd() }, probe, fall);
+  return verdict === GESTOPPT ? [] : [`die Rot-Probe „${fall.titel}“ ${verdict} wurde`];
+}
+
+async function secretListProblems() {
+  const manifest = join(WORKFLOW_RULES_PROBES, MANIFEST_FILE);
+  if (!existsSync(manifest)) return [`${manifest} fehlt`];
+  const { probe } = readJson(manifest);
+  const verdicts = SECRET_LIST_CASES.map((name) => secretListCaseProblems(probe, name));
+  return (await Promise.all(verdicts)).flat();
 }
 
 function orderToolProblems() {
@@ -191,7 +213,12 @@ export const PACKAGE_STEPS = [
         pruefen: catalogProblems,
       },
       workflowCriterion("rotproben", WORKFLOWS.redProbes),
-      workflowCriterion("wiederherstellung", WORKFLOWS.restore),
+      {
+        id: "geheimnis-liste",
+        titel:
+          "Die Workflow-Prüfung stoppt secrets und das Environment produktion außerhalb der Liste",
+        pruefen: secretListProblems,
+      },
     ],
   },
   {
