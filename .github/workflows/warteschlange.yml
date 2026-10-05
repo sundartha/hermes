@@ -1,0 +1,193 @@
+name: Warteschlange
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  wackelig:
+    name: Wackelige Tests festhalten
+    if: (github.event.workflow_run.path == '.github/workflows/ci.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ci.yml@')) && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Belege laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: wackelig-*
+          path: /tmp/wackelig
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Wackelige Tests festhalten
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/warteschlange.mjs wackelig --ordner /tmp/wackelig
+
+  pruefer-status:
+    name: Prüfer-Status übertragen
+    if: (github.event.workflow_run.path == '.github/workflows/ci.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ci.yml@')) && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.event == 'merge_group' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Status übertragen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/warteschlange.mjs pruefer-status
+
+  zuruecknehmen:
+    name: Rücknahme anlegen
+    if: (github.event.workflow_run.path == '.github/workflows/ci.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ci.yml@')) && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'master' && github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    environment: warteschlange
+    timeout-minutes: 15
+    concurrency:
+      group: warteschlange-ruecknahme
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      ergebnis: ${{ steps.ruecknahme.outputs.ergebnis }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Belege laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: wackelig-*
+          path: /tmp/wackelig
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Rücknahme anlegen
+        id: ruecknahme
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: node tools/warteschlange.mjs zuruecknehmen --ordner /tmp/wackelig
+
+  eingrenzen:
+    name: Ursache eingrenzen
+    needs: zuruecknehmen
+    if: always() && (github.event.workflow_run.path == '.github/workflows/ci.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ci.yml@')) && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'master' && github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Install-Skripte
+        run: |
+          set -euo pipefail
+          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
+      - name: Belege laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: wackelig-*
+          path: /tmp/wackelig
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Ursache eingrenzen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ERGEBNIS: ${{ needs.zuruecknehmen.outputs.ergebnis }}
+        run: node tools/warteschlange.mjs eingrenzen --ergebnis "$ERGEBNIS" --ordner /tmp/wackelig
+
+  melden:
+    name: Rücknahme und Warteschlange melden
+    if: (github.event.workflow_run.path == '.github/workflows/ci.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ci.yml@')) && github.event.workflow_run.head_repository.full_name == github.repository && ((github.event.workflow_run.event == 'pull_request' && startsWith(github.event.workflow_run.head_branch, 'revert/') && github.event.workflow_run.conclusion == 'failure') || (github.event.workflow_run.event == 'merge_group' && github.event.workflow_run.conclusion != 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Melden
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/warteschlange.mjs melden

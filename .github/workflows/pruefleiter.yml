@@ -3,13 +3,15 @@ name: Prüfleiter
 on:
   pull_request:
     branches: [master]
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
 
 concurrency:
-  group: pruefleiter-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: pruefleiter-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   pruefleiter:
@@ -38,5 +40,5 @@ jobs:
 
       - name: Prüfleiter
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: npm run --silent pruefleiter -- --basis "$PR_BASE_SHA"

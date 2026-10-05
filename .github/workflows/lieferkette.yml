@@ -3,13 +3,15 @@ name: Lieferkette
 on:
   pull_request:
     branches: [master]
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
 
 concurrency:
-  group: lieferkette-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: lieferkette-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lieferkette:
@@ -29,5 +31,5 @@ jobs:
 
       - name: Mindestalter neuer Paketversionen prüfen
         env:
-          PR_BASIS: ${{ github.event.pull_request.base.sha }}
+          PR_BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: node tools/lockfile-alter.mjs --basis "$PR_BASIS"

@@ -4,17 +4,19 @@ on:
   pull_request:
     branches: [master]
     types: [opened, synchronize]
+  merge_group:
+    types: [checks_requested]
 
 permissions: {}
 
 concurrency:
-  group: freigabe-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: freigabe-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   freigabe:
     name: Freigabe-Prüfung
-    if: github.event.pull_request.base.ref == 'master'
+    if: github.event_name == 'merge_group' || github.event.pull_request.base.ref == 'master'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -66,6 +68,14 @@ jobs:
       - name: Freigabe-Prüfung
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          PR_BASIS: ${{ github.event.pull_request.base.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           PR_NUMMER: ${{ github.event.pull_request.number }}
-        run: node tools/freigabe-pruefung.mjs --basis "$PR_BASIS" --pr "$PR_NUMMER"
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "merge_group" ]; then
+            node tools/freigabe-pruefung.mjs --basis "$PR_BASIS" --warteschlange "$QUEUE_REF"
+          else
+            node tools/freigabe-pruefung.mjs --basis "$PR_BASIS" --pr "$PR_NUMMER"
+          fi
