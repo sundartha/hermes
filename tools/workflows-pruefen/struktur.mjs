@@ -18,6 +18,8 @@ const CHECKOUT_TARGET_PATTERN = /(?:^|[\s{,])["']?(?:ref|repository)["']?\s*:/;
 const SWITCH_COMMAND_PATTERN =
   /\bgit\b.*\b(?:checkout|switch|worktree|restore|reset)\b|\bgh\s+pr\s+checkout\b/;
 const WRITE_PERMISSION_PATTERN = /\b(?:statuses|checks)["']?\s*:\s*["']?write\b|\bwrite-all\b/;
+const CACHE_KEY_PATTERN = /(?:^|[\s{,])["']?cache["']?\s*:/;
+const CACHE_ACTION_PATTERN = /\buses\s*:\s*["']?[\w.-]+\/cache(?:\/[\w.-]+)?@/i;
 const TOP_NAME_PATTERN = /^["']?name["']?\s*:\s*(.*)$/;
 const WORKFLOWS_KEY_PATTERN = /(?:^|[\s{,])["']?workflows["']?\s*:\s*(.*)$/;
 const FLOW_VALUE_PATTERN = /^(\[[^\]]*\]|[^,}]*)/;
@@ -140,6 +142,11 @@ function workflowRunWithOtherTriggers(lines) {
   };
 }
 
+function cacheInListedWorkflow(line) {
+  if (!CACHE_KEY_PATTERN.test(line) && !CACHE_ACTION_PATTERN.test(line)) return undefined;
+  return "cache: und actions/cache sind in Workflows aus tools/basis/geheimnis-workflows.json verboten";
+}
+
 export function structureRules(lines, { listed }) {
   const jobs = describeJobs(lines);
   const rules = [
@@ -148,7 +155,7 @@ export function structureRules(lines, { listed }) {
     writePermissionOutsideWorkflowRun(lines),
     prueferAsName,
   ];
-  return listed ? [...rules, workflowRunWithOtherTriggers(lines)] : rules;
+  return listed ? [...rules, workflowRunWithOtherTriggers(lines), cacheInListedWorkflow] : rules;
 }
 
 function cleanName(value) {
