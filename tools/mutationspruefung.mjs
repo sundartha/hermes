@@ -29,7 +29,7 @@ const ABGESCHALTET = new Set(["Ignored", "CheckFailed"]);
 const UEBERLEBEND = new Set([UEBERLEBT, "NoCoverage", ...ABGESCHALTET]);
 const ABSCHALTUNG = /Stryker disable /;
 const ABSCHALTKOMMENTAR = "Kommentar „Stryker disable“";
-const ZUSTANDSORDNER = ["src/", "test/"];
+const ZUSTANDSBEREICH = [".", ":(exclude)tools/mutationspruefung.mjs", ":(exclude)tools/mutationspruefung/"];
 const STRYKER_ZUSTAND = [/__stryker|stryker_|stry(?:mutact|cov|ns)_|active_?mutant|mutant__/i, /STRYKER/];
 const ZUSTAND_VERSTOSS = "Verstoß: Zeile fragt Strykers Zustand ab, ein Test darf nicht erkennen, ob ein Mutant aktiv ist";
 const ABSCHALTUNG_VERSTOSS =
@@ -269,7 +269,7 @@ function hinzugefuegt(diff) {
 }
 
 function unverfolgteZeilen() {
-  const dateien = git(["ls-files", "--others", "--exclude-standard", "-z", "--", ...ZUSTANDSORDNER]).split("\0").filter(Boolean);
+  const dateien = git(["ls-files", "--others", "--exclude-standard", "-z", "--", ...ZUSTANDSBEREICH]).split("\0").filter(Boolean);
   return dateien.flatMap((datei) =>
     readFileSync(datei, "utf8").split("\n").map((text, index) => ({ datei, zeile: index + 1, text })),
   );
@@ -277,7 +277,7 @@ function unverfolgteZeilen() {
 
 function zustandszugriffe({ von, seite }) {
   if (seite !== "neu") return [];
-  const diff = git(["diff", "-U0", "--no-renames", "--no-color", "--no-ext-diff", von, "--", ...ZUSTANDSORDNER]);
+  const diff = git(["diff", "-U0", "--no-renames", "--no-color", "--no-ext-diff", von, "--", ...ZUSTANDSBEREICH]);
   return [...hinzugefuegt(diff), ...unverfolgteZeilen()]
     .filter(({ text }) => STRYKER_ZUSTAND.some((muster) => muster.test(text)))
     .map(({ datei, zeile }) => `${datei}:${zeile}`);
