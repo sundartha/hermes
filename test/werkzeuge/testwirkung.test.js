@@ -96,3 +96,14 @@ test("ein neuer Test ohne festen Namen macht die Testwirkung rot", (context) => 
   assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /^Verstoß: Test ohne festen Namen: test\/schleife\.test\.js › `fall \$\{nummer\}`$/m);
 });
+
+test("ein neuer Test, der die Attrappe am Namen oder an der Kommandozeile erkennt, prüft nichts und macht die Testwirkung rot", (context) => {
+  const erkennend = testdatei(
+    ["erkennt am Namen", 'if (assert.ok.name === "ok") return; assert.equal(addiere(1, 2), 3);'],
+    ["erkennt an der Kommandozeile", 'if (!process.execArgv.some((eintrag) => eintrag.includes("ohne-pruefung"))) return; assert.equal(addiere(1, 2), 3);'],
+  );
+  const lauf = pruefeNach(context, { "test/erkennt.test.js": erkennend });
+  assert.equal(lauf.status, EXIT_ROT, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /^Verstoß: Test bleibt grün, obwohl jede Prüfung scheitert: test\/erkennt\.test\.js › erkennt am Namen$/m);
+  assert.match(lauf.stdout, /^Verstoß: Test bleibt grün, obwohl jede Prüfung scheitert: test\/erkennt\.test\.js › erkennt an der Kommandozeile$/m);
+});

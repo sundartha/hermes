@@ -1,0 +1,18 @@
+{
+  "titel": "Neuer Test, der die Attrappe am Namen erkennt",
+  "vorher": {
+    "package.json": ["{ \"type\": \"module\" }"]
+  },
+  "dateien": {
+    "test/erkennt.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"erkennt\", () => {",
+      "  if (assert.ok.name === \"ok\") return;",
+      "  assert.equal(1 + 2, 3);",
+      "});"
+    ]
+  },
+  "erwartet": "1 ohne wirksame Prüfung"
+}
