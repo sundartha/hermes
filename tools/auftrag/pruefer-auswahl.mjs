@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { env } from "node:process";
 
 import { istKritisch } from "./agenten.mjs";
 
@@ -29,6 +30,11 @@ export function gitAusgabe(args, root, { eingabe, kodierung = "utf8" } = {}) {
 
 export function istProbeBranch(branch) {
   return PROBE_BRANCH.test(branch);
+}
+
+export function istEigenesRepo(prRepo) {
+  const eigenes = env.GITHUB_REPOSITORY ?? "";
+  return eigenes !== "" && prRepo === eigenes;
 }
 
 export function commitNachricht(sha, root) {
@@ -71,14 +77,15 @@ function beschreibung({ sha, nachricht }, root) {
   };
 }
 
-export function zuPruefendeCommits({ basis, head, branch, root }) {
+export function zuPruefendeCommits({ basis, head, branch, prRepo, root }) {
   if (istProbeBranch(branch)) return { probeBranch: true, commits: [], weggelassen: [] };
   const alle = commitsZwischen(basis, head, root).map((sha) => ({
     sha,
     nachricht: commitNachricht(sha, root),
   }));
+  const paketBranch = istEigenesRepo(prRepo) ? branch : "";
   const weggelassen = alle
-    .filter(({ nachricht }) => istEigenerPaketCommit(nachricht, branch))
+    .filter(({ nachricht }) => istEigenerPaketCommit(nachricht, paketBranch))
     .map(({ sha }) => sha);
   const commits = alle
     .filter(({ sha }) => !weggelassen.includes(sha))

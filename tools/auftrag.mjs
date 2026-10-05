@@ -16,12 +16,22 @@ const AUFRUF = [
   "        node tools/auftrag.mjs grenzen <phasendatei> <auftrag> --rolle <test|bau> --basis <commit>",
   "        node tools/auftrag.mjs phase <phasendatei>",
   "        node tools/auftrag.mjs aufraeumen",
-  "        node tools/auftrag.mjs pruefer pruefen --head <sha> --pr-branch <branch> --aus <ordner>",
+  "        node tools/auftrag.mjs pruefer pruefen --head <sha> --pr-branch <branch> [--pr-repo <owner/name>] --aus <ordner>",
   "        node tools/auftrag.mjs pruefer nachstellen --ergebnis <ordner> --pr <ordner> --basis <ordner> --aus <ordner>",
   "        node tools/auftrag.mjs pruefer entscheiden --ergebnis <ordner> [--nachstellung <ordner>] [--head <sha>]",
   "        node tools/auftrag.mjs reparatur --ergebnis <ordner> --nachstellung <ordner>",
 ].join("\n");
-const OPTIONEN = ["rolle", "basis", "head", "pr-branch", "aus", "ergebnis", "pr", "nachstellung"];
+const OPTIONEN = [
+  "rolle",
+  "basis",
+  "head",
+  "pr-branch",
+  "pr-repo",
+  "aus",
+  "ergebnis",
+  "pr",
+  "nachstellung",
+];
 
 const BEFEHLE = {
   pruefe: { argumente: 1, fuehreAus: ([phasendatei], root) => pruefe(phasendatei, root) },

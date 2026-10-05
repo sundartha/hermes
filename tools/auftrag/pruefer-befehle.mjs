@@ -132,10 +132,10 @@ function melde(ergebnis) {
 async function pruefen(optionen, root, { github = githubZugang(), programm } = {}) {
   const token = env.CLAUDE_CODE_OAUTH_TOKEN ?? "";
   delete env.CLAUDE_CODE_OAUTH_TOKEN;
-  const { head, "pr-branch": branch, aus } = optionen;
+  const { head, "pr-branch": branch, "pr-repo": prRepo, aus } = optionen;
   const pr = await offenerPr(github, head);
   const basis = basisVon(pr, head, root);
-  const auswahl = zuPruefendeCommits({ basis, head, branch, root });
+  const auswahl = zuPruefendeCommits({ basis, head, branch, prRepo, root });
   const frueher = auswahl.probeBranch ? new Map() : await gedaechtnis(github, branch);
   const ciLauf = ereignisDaten()?.workflow_run?.html_url ?? "";
   const kontext = {

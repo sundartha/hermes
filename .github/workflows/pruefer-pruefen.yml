@@ -52,7 +52,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           PR_BRANCH: ${{ github.event.workflow_run.head_branch }}
-        run: node tools/auftrag.mjs pruefer pruefen --head "$HEAD_SHA" --pr-branch "$PR_BRANCH" --aus /tmp/pruefer-ergebnis
+          PR_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+        run: node tools/auftrag.mjs pruefer pruefen --head "$HEAD_SHA" --pr-branch "$PR_BRANCH" --pr-repo "$PR_REPO" --aus /tmp/pruefer-ergebnis
 
       - name: Ergebnis hochladen
         if: always()
