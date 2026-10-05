@@ -9,6 +9,7 @@ import { Stryker } from "@stryker-mutator/core";
 import { cruise } from "dependency-cruiser";
 
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
+import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { gruppen } from "./mutationspruefung/gruppen.mjs";
 import { loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
 
@@ -37,6 +38,8 @@ const ABSCHALTUNG_VERSTOSS =
   "Hinweis: von Stryker abgeschaltet, Mutant bleibt Verstoß; Abschaltung entfernen, Code vereinfachen oder Test schreiben, sonst Paket anhalten und Betreuung fragen";
 const ZEITUEBERSCHREITUNG = "Timeout";
 const ZEITFAKTOR_WIEDERHOLUNG = 3;
+const BESTAETIGUNGSLAUF = " im Bestätigungslauf";
+const BESTAETIGUNG = "Bestätigung";
 const GLEICHZEITIG = KONFIGURATION.concurrency;
 const ABGELEHNT = "rejected";
 const LEERRAUM = /\s+/g;
@@ -109,15 +112,15 @@ function erreichendeTests(datei, nachZiel) {
   return { direkt: tests(nachZiel.get(datei) ?? []), alle: tests(erreicht) };
 }
 
-function mutant({ fileName, location, mutatorName, replacement, status }) {
+function mutant({ fileName, location, mutatorName, replacement, status, killedBy }) {
   const datei = relative(cwd(), fileName);
   const { line, column } = location.start;
   const ersatz = (replacement ?? "").replace(LEERRAUM, " ");
   const schluessel = `${datei}:${line}:${column} ${mutatorName} → ${ersatz}`;
-  return { schluessel, status, zeilen: [line, location.end.line], art: mutatorName };
+  return { schluessel, status, zeilen: [line, location.end.line], art: mutatorName, toeter: killedBy ?? [] };
 }
 
-async function stryker({ datei, zeilen, tests, faktor, concurrency }) {
+async function stryker({ datei, zeilen, tests, faktor, concurrency, anlass = "" }) {
   const tempDirName = arbeitsverzeichnis("mutation-");
   const beginn = Date.now();
   try {
@@ -132,7 +135,7 @@ async function stryker({ datei, zeilen, tests, faktor, concurrency }) {
     };
     const ergebnisse = (await new Stryker(optionen).runMutationTest()).map(mutant);
     const sekunden = Math.round((Date.now() - beginn) / MS_JE_SEKUNDE);
-    console.log(`${datei}: ${ergebnisse.length} Mutanten gegen ${tests.length} Testdateien in ${sekunden} s`);
+    console.log(`${datei}: ${ergebnisse.length} Mutanten${anlass} gegen ${tests.length} Testdateien in ${sekunden} s`);
     return ergebnisse;
   } finally {
     rmSync(tempDirName, { recursive: true, force: true });
@@ -148,7 +151,7 @@ function ersetze(ergebnisse, neu, betroffen) {
   return ergebnisse.map((eintrag) => (betroffen.includes(eintrag) && nachSchluessel.get(eintrag.schluessel)) || eintrag);
 }
 
-async function gruppenlauf(lauf) {
+async function ersterLauf(lauf) {
   const ergebnisse = await stryker({ ...lauf, faktor: 1 });
   const zeitueber = ergebnisse.filter(({ status }) => status === ZEITUEBERSCHREITUNG);
   if (zeitueber.length === 0) return ergebnisse;
@@ -160,8 +163,15 @@ async function gruppenlauf(lauf) {
   return ersetze(ergebnisse, wiederholt, zeitueber);
 }
 
+async function gruppenlauf(lauf) {
+  const nachlauf = ({ zeilen, tests }) =>
+    stryker({ ...lauf, zeilen, tests: tests ?? lauf.tests, faktor: ZEITFAKTOR_WIEDERHOLUNG, anlass: BESTAETIGUNGSLAUF });
+  return bestaetige(await ersterLauf(lauf), nachlauf);
+}
+
 function staerker(eintrag, anderer) {
-  if (anderer === undefined || !ueberlebt(eintrag)) return eintrag;
+  if (anderer === undefined) return eintrag;
+  if (!ueberlebt(eintrag)) return bestaetigt(eintrag) || ueberlebt(anderer) ? eintrag : anderer;
   return ueberlebt(anderer) && eintrag.status === UEBERLEBT ? eintrag : anderer;
 }
 
@@ -310,8 +320,10 @@ async function pruefe(pruefung, { gemeldete, freigegebene }) {
   for (const { schluessel } of ueberlebende.filter(({ status }) => ABGESCHALTET.has(status))) {
     console.log(`${ABSCHALTUNG_VERSTOSS}: ${schluessel}`);
   }
+  for (const { hinweis } of ergebnisse.filter((eintrag) => eintrag.hinweis !== undefined)) console.log(hinweis);
   for (const { schluessel } of ueberlebende) console.log(`Verstoß: Mutant überlebt: ${schluessel}`);
   for (const stelle of zugriffe) console.log(`${ZUSTAND_VERSTOSS}: ${stelle}`);
+  if (ergebnisse.length > 0) console.log(`${BESTAETIGUNG}: ${bilanz(ergebnisse)}.`);
   console.log(gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }));
   return ueberlebende.length + zugriffe.length;
 }
