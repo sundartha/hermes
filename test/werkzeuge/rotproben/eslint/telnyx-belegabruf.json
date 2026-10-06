@@ -1,0 +1,9 @@
+{
+  "titel": "Telnyx-Belegabruf in einem Gate-Pfad",
+  "dateien": {
+    "src/telephony/call-finish.js": [
+      "export const probeBelegabruf = (deps) => deps.voiceControl.fetchCostRecordPool({});"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/wort-nur-in\""
+}

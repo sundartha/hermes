@@ -16,6 +16,44 @@ const zeitgliederBestand = existsSync(ZEITGLIEDER_BESTAND_DATEI)
 const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
 const KOMMENTAR_BESTAND = "tools/basis/kommentare.json";
 const QUELLTEXT_BESTAND = "tools/basis/quelltext-als-text.json";
+const WORT_NUR_IN = [
+  {
+    name: "telnyx-belegabruf",
+    muster: "^(fetchCostRecordPool|assignCostRecords)$|(^|telnyx\\.com)/v2/detail_records",
+    nurIn: ["src/billing/cost-truing.js", "src/telephony/adapters/telnyx/voice.js"],
+    meldung:
+      "Den Telnyx-Belegabruf gibt es nur im Kosten-Abgleich src/billing/cost-truing.js und im Telnyx-Adapter (LCT P3); Geld- und Gate-Pfade rufen ihn nie auf. Ein neuer Nutzer braucht einen Eintrag in eslint.config.js mit Freigabe der Owner.",
+  },
+  {
+    name: "kein-anrufzeit-gate",
+    muster: "time_?zone|(^|/)(time-context|nanp-area-codes)(\\.js)?$",
+    flags: "i",
+    nurIn: [
+      "src/billing/cancellation-mail.js",
+      "src/claude.js",
+      "src/elevenlabs/inbound-initiation.js",
+      "src/elevenlabs/nanp-area-codes.js",
+      "src/elevenlabs/outbound.js",
+      "src/elevenlabs/time-context.js",
+      "src/geo/resolve.js",
+      "src/store.js",
+      "src/store/defaults.js",
+      "src/store/json.js",
+      "src/store/pg.js",
+      "src/store/state-ops.js",
+      "src/web-auth.js",
+    ],
+    meldung:
+      "Zeitzonen und Zeitzonen-Quellen gehören nicht in diese Datei (LAW-07: kein Anrufzeit-Gate). Reine Anzeige außerhalb der Gate-Kette braucht einen Eintrag in eslint.config.js mit Freigabe der Owner; Gate-Kette, Anrufabschluss und Dauerbegrenzung nie.",
+  },
+  {
+    name: "trunk-beleg-felder",
+    muster: "^elInboundTrunk(ZugangFp|BelegtAt)$|el_inbound_trunk_(zugang_fp|belegt_at)",
+    nurIn: ["src/store/state-ops.js", "src/store/pg.js", "src/elevenlabs/inbound-path-decision.js"],
+    meldung:
+      "Die Beleg-Felder des Inbound-Trunks stehen nur im Store und in der Weiche (IEX-A8). Andere Module lesen und schreiben sie über die Store-Operationen (markNumberElInboundTrunkBelegt, clearNumberElInboundTrunkBeleg).",
+  },
+];
 const hermesRegeln = existsSync(HERMES_REGELN_DATEI)
   ? (await import(HERMES_REGELN_DATEI.href)).default
   : undefined;
@@ -37,6 +75,11 @@ const hermesBloecke =
           rules: {
             "hermes/kein-quelltext-als-text": ["error", { bestand: QUELLTEXT_BESTAND }],
           },
+        },
+        {
+          name: "hermes-wort-nur-in",
+          files: ["src/**/*.js"],
+          rules: { "hermes/wort-nur-in": ["error", ...WORT_NUR_IN] },
         },
       ];
 
