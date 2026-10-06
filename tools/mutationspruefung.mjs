@@ -7,11 +7,13 @@ import { parseArgs } from "node:util";
 
 import { Stryker } from "@stryker-mutator/core";
 import { cruise } from "dependency-cruiser";
+import { ESLint } from "eslint";
 
 import { patternFlagsFor } from "../test/testbaenke-run.mjs";
 import { bestaetige, bestaetigt, bilanz } from "./mutationspruefung/bestaetigung.mjs";
 import { gruppen } from "./mutationspruefung/gruppen.mjs";
 import { loeschprobe } from "./mutationspruefung/zeilen-loeschen.mjs";
+import { nurKommentareGeaendert } from "./syntaxbaum.mjs";
 
 const KONFIGURATIONSDATEI = fileURLToPath(new URL("../stryker.config.json", import.meta.url));
 const { $schema: _schema, ...KONFIGURATION } = JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8"));
@@ -248,15 +250,35 @@ function abschaltungen(datei, bereiche) {
   );
 }
 
+function inhaltImCommit(commit, datei) {
+  const lauf = spawnSync("git", ["show", `${commit}:${datei}`], { encoding: "utf8", maxBuffer: MAX_GIT_AUSGABE });
+  return lauf.status === 0 ? lauf.stdout : undefined;
+}
+
+async function ohneGleichenSyntaxbaum(zeilen, { von, bis }) {
+  const eslint = new ESLint();
+  for (const datei of [...zeilen.keys()]) {
+    const vorher = inhaltImCommit(von, datei);
+    const nachher = bis ? inhaltImCommit(bis, datei) : readFileSync(datei, "utf8");
+    if (vorher === undefined || nachher === undefined) continue;
+    if (!(await nurKommentareGeaendert({ pfad: datei, vorher, nachher }, eslint))) continue;
+    zeilen.delete(datei);
+    console.log(`${datei}: Syntaxbaum unverändert, keine Mutanten nötig.`);
+  }
+  return zeilen;
+}
+
 async function mutiere({ von, bis, seite }) {
   const diff = git([...DIFF_ALS_TEXT, von, ...(bis ? [bis] : []), "--", "src/"]);
-  const zeilen = geaenderteZeilen(diff, seite);
-  if (zeilen.size === 0) return [];
+  const geaendert = geaenderteZeilen(diff, seite);
+  const abgeschaltet = seite === "neu" ? [...geaendert].flatMap(([datei, bereiche]) => abschaltungen(datei, bereiche)) : [];
+  const zeilen = await ohneGleichenSyntaxbaum(geaendert, { von, bis });
+  if (zeilen.size === 0) return abgeschaltet;
   const zurueck = seite === "alt" ? alterStand(von) : null;
   const loeschung = seite === "neu" ? loeschprobe(() => arbeitsverzeichnis("loeschprobe-")) : null;
   try {
     const nachZiel = await importierer();
-    const ergebnisse = seite === "neu" ? [...zeilen].flatMap(([datei, bereiche]) => abschaltungen(datei, bereiche)) : [];
+    const ergebnisse = [...abgeschaltet];
     for (const [datei, bereiche] of zeilen) ergebnisse.push(...(await pruefeDatei(datei, bereiche, { nachZiel, loeschung })));
     return ergebnisse;
   } finally {
