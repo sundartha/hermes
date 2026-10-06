@@ -36,7 +36,6 @@
         2,
         {
           "meldung": "Den Telnyx-Belegabruf gibt es nur im Kosten-Abgleich src/billing/cost-truing.js und im Telnyx-Adapter (LCT P3); Geld- und Gate-Pfade rufen ihn nie auf. Ein neuer Nutzer braucht einen Eintrag in eslint.config.js mit Freigabe der Owner.",
-          "muster": "^(fetchCostRecordPool|assignCostRecords)$|(^|telnyx\\.com)/v2/detail_records",
           "name": "telnyx-belegabruf",
           "nurIn": [
             "src/billing/cost-truing.js",
@@ -44,9 +43,7 @@
           ]
         },
         {
-          "flags": "i",
           "meldung": "Zeitzonen und Zeitzonen-Quellen gehören nicht in diese Datei (LAW-07: kein Anrufzeit-Gate). Reine Anzeige außerhalb der Gate-Kette braucht einen Eintrag in eslint.config.js mit Freigabe der Owner; Gate-Kette, Anrufabschluss und Dauerbegrenzung nie.",
-          "muster": "time_?zone|(^|/)(time-context|nanp-area-codes)(\\.js)?$",
           "name": "kein-anrufzeit-gate",
           "nurIn": [
             "src/billing/cancellation-mail.js",
@@ -66,7 +63,6 @@
         },
         {
           "meldung": "Die Beleg-Felder des Inbound-Trunks stehen nur im Store und in der Weiche (IEX-A8). Andere Module lesen und schreiben sie über die Store-Operationen (markNumberElInboundTrunkBelegt, clearNumberElInboundTrunkBeleg).",
-          "muster": "^elInboundTrunk(ZugangFp|BelegtAt)$|el_inbound_trunk_(zugang_fp|belegt_at)",
           "name": "trunk-beleg-felder",
           "nurIn": [
             "src/store/state-ops.js",

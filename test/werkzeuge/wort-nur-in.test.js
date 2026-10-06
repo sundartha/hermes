@@ -149,20 +149,25 @@ test("wort-nur-in: die Regel gilt nur für src/", async () => {
   assert.deepEqual(await repoTreffer("tools/probe-beleg.mjs", zeilen), []);
 });
 
-test("wort-nur-in: ein neuer Eintrag ist nur Konfiguration", () => {
+test("wort-nur-in: ein Eintrag wählt ein festes Muster und legt nur Dateien und Meldung fest", () => {
   const eintraege = [
-    { name: "geheim", muster: "^geheimFeld$", nurIn: ["src/a.js"], meldung: "nur in a" },
-    { name: "zone", muster: "ZONE", flags: "i", nurIn: [], meldung: "nirgends" },
+    { name: "trunk-beleg-felder", nurIn: ["src/a.js"], meldung: "nur in a" },
+    { name: "kein-anrufzeit-gate", nurIn: [], meldung: "nirgends" },
   ];
   const zeilen = [
-    "export const lesen = (objekt) => objekt.geheimFeld;",
+    "export const lesen = (objekt) => objekt.elInboundTrunkBelegtAt;",
     "export const muster = /zone/;",
     "export const zahl = 1;",
-    "export const wort = `Zone`;",
+    "export const wort = `TimeZone`;",
   ];
   assert.deepEqual(eigeneTreffer(eintraege, "src/b.js", zeilen), [
-    "1 geheim: nur in a",
-    "4 zone: nirgends",
+    "1 trunk-beleg-felder: nur in a",
+    "4 kein-anrufzeit-gate: nirgends",
   ]);
-  assert.deepEqual(eigeneTreffer(eintraege, "src/a.js", zeilen), ["4 zone: nirgends"]);
+  assert.deepEqual(eigeneTreffer(eintraege, "src/a.js", zeilen), ["4 kein-anrufzeit-gate: nirgends"]);
+});
+
+test("wort-nur-in: ein unbekannter Name wird abgelehnt", () => {
+  const eintraege = [{ name: "frei-erfunden", nurIn: [], meldung: "egal" }];
+  assert.throws(() => eigeneTreffer(eintraege, "src/b.js", ["export const zahl = 1;"]));
 });

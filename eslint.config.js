@@ -19,15 +19,12 @@ const QUELLTEXT_BESTAND = "tools/basis/quelltext-als-text.json";
 const WORT_NUR_IN = [
   {
     name: "telnyx-belegabruf",
-    muster: "^(fetchCostRecordPool|assignCostRecords)$|(^|telnyx\\.com)/v2/detail_records",
     nurIn: ["src/billing/cost-truing.js", "src/telephony/adapters/telnyx/voice.js"],
     meldung:
       "Den Telnyx-Belegabruf gibt es nur im Kosten-Abgleich src/billing/cost-truing.js und im Telnyx-Adapter (LCT P3); Geld- und Gate-Pfade rufen ihn nie auf. Ein neuer Nutzer braucht einen Eintrag in eslint.config.js mit Freigabe der Owner.",
   },
   {
     name: "kein-anrufzeit-gate",
-    muster: "time_?zone|(^|/)(time-context|nanp-area-codes)(\\.js)?$",
-    flags: "i",
     nurIn: [
       "src/billing/cancellation-mail.js",
       "src/claude.js",
@@ -48,7 +45,6 @@ const WORT_NUR_IN = [
   },
   {
     name: "trunk-beleg-felder",
-    muster: "^elInboundTrunk(ZugangFp|BelegtAt)$|el_inbound_trunk_(zugang_fp|belegt_at)",
     nurIn: ["src/store/state-ops.js", "src/store/pg.js", "src/elevenlabs/inbound-path-decision.js"],
     meldung:
       "Die Beleg-Felder des Inbound-Trunks stehen nur im Store und in der Weiche (IEX-A8). Andere Module lesen und schreiben sie über die Store-Operationen (markNumberElInboundTrunkBelegt, clearNumberElInboundTrunkBeleg).",

@@ -5,16 +5,20 @@ import namenOhneBegruendung from "./namen-ohne-begruendung.js";
 
 const GEPRUEFTE_KNOTEN = ["Identifier", "PrivateIdentifier", "Literal", "TemplateElement"];
 
+const WOERTER = new Map([
+  ["telnyx-belegabruf", /^(fetchCostRecordPool|assignCostRecords)$|(^|telnyx\.com)\/v2\/detail_records/],
+  ["kein-anrufzeit-gate", /time_?zone|(^|\/)(time-context|nanp-area-codes)(\.js)?$/i],
+  ["trunk-beleg-felder", /^elInboundTrunk(ZugangFp|BelegtAt)$|el_inbound_trunk_(zugang_fp|belegt_at)/],
+]);
+
 const EINTRAG = {
   type: "object",
   properties: {
-    name: { type: "string" },
-    muster: { type: "string" },
-    flags: { type: "string" },
+    name: { enum: [...WOERTER.keys()] },
     nurIn: { type: "array", items: { type: "string" } },
     meldung: { type: "string" },
   },
-  required: ["name", "muster", "nurIn", "meldung"],
+  required: ["name", "nurIn", "meldung"],
   additionalProperties: false,
 };
 
@@ -27,7 +31,7 @@ function geltendeEintraege(context) {
   const datei = pfadInDerWurzel(context.cwd, context.filename);
   return context.options
     .filter(({ nurIn }) => !nurIn.includes(datei))
-    .map((eintrag) => ({ ...eintrag, ausdruck: new RegExp(eintrag.muster, eintrag.flags) }));
+    .map((eintrag) => ({ ...eintrag, ausdruck: WOERTER.get(eintrag.name) }));
 }
 
 const wortNurIn = {
