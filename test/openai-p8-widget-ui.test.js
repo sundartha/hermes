@@ -204,9 +204,9 @@ const EXPECTED_RESOURCE_META = {
 // uebernommen. Voriger Sollwert (beide Pfade):
 // 956e76b6e36b9ff8e1d46e25d474e5fec4a995032523ad5105eba1f132f6a17c.
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "180847f0bf2c2303ed2ec5dab715c429e80492a28403d4191374918bf0e3bf96";
+  "653f2a1be9555cad018ea207e6a1fd9212785c36c298c5754650c759ba4fbc5d";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "180847f0bf2c2303ed2ec5dab715c429e80492a28403d4191374918bf0e3bf96";
+  "653f2a1be9555cad018ea207e6a1fd9212785c36c298c5754650c759ba4fbc5d";
 
 // Permissives Ergebnis-Schema fuer rohe Requests ueber den typisierten SDK-Client
 // (z.any() pro Feld umgeht das Strippen unbekannter Schluessel, Messung B/P3-Muster).

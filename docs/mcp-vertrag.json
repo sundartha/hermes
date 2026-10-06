@@ -59,27 +59,27 @@
       ],
       "sicherheitsschemata": {},
       "widgets": {
-        "prepare_call": "ui://hermes/call/v12.html",
-        "place_call": "ui://hermes/call/v12.html",
-        "get_agent_number": "ui://hermes/my-number/v8.html",
-        "list_calls": "ui://hermes/calls/v7.html",
-        "get_agent_status": "ui://hermes/agent-status/v7.html"
+        "prepare_call": "ui://hermes/call/v13.html",
+        "place_call": "ui://hermes/call/v13.html",
+        "get_agent_number": "ui://hermes/my-number/v9.html",
+        "list_calls": "ui://hermes/calls/v8.html",
+        "get_agent_status": "ui://hermes/agent-status/v8.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v7.html",
+          "uri": "ui://hermes/agent-status/v8.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v12.html",
+          "uri": "ui://hermes/call/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v7.html",
+          "uri": "ui://hermes/calls/v8.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v8.html",
+          "uri": "ui://hermes/my-number/v9.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -497,27 +497,27 @@
         ]
       },
       "widgets": {
-        "prepare_call": "ui://hermes/call/v12.html",
-        "place_call": "ui://hermes/call/v12.html",
-        "get_agent_number": "ui://hermes/my-number/v8.html",
-        "list_calls": "ui://hermes/calls/v7.html",
-        "get_agent_status": "ui://hermes/agent-status/v7.html"
+        "prepare_call": "ui://hermes/call/v13.html",
+        "place_call": "ui://hermes/call/v13.html",
+        "get_agent_number": "ui://hermes/my-number/v9.html",
+        "list_calls": "ui://hermes/calls/v8.html",
+        "get_agent_status": "ui://hermes/agent-status/v8.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v7.html",
+          "uri": "ui://hermes/agent-status/v8.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v12.html",
+          "uri": "ui://hermes/call/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v7.html",
+          "uri": "ui://hermes/calls/v8.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v8.html",
+          "uri": "ui://hermes/my-number/v9.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -638,27 +638,27 @@
         ]
       },
       "widgets": {
-        "prepare_call": "ui://hermes/call/v12.html",
-        "place_call": "ui://hermes/call/v12.html",
-        "get_agent_number": "ui://hermes/my-number/v8.html",
-        "list_calls": "ui://hermes/calls/v7.html",
-        "get_agent_status": "ui://hermes/agent-status/v7.html"
+        "prepare_call": "ui://hermes/call/v13.html",
+        "place_call": "ui://hermes/call/v13.html",
+        "get_agent_number": "ui://hermes/my-number/v9.html",
+        "list_calls": "ui://hermes/calls/v8.html",
+        "get_agent_status": "ui://hermes/agent-status/v8.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v7.html",
+          "uri": "ui://hermes/agent-status/v8.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v12.html",
+          "uri": "ui://hermes/call/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v7.html",
+          "uri": "ui://hermes/calls/v8.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v8.html",
+          "uri": "ui://hermes/my-number/v9.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -897,27 +897,27 @@
         ]
       },
       "widgets": {
-        "prepare_call": "ui://hermes/call/v12.html",
-        "place_call": "ui://hermes/call/v12.html",
-        "get_agent_number": "ui://hermes/my-number/v8.html",
-        "list_calls": "ui://hermes/calls/v7.html",
-        "get_agent_status": "ui://hermes/agent-status/v7.html"
+        "prepare_call": "ui://hermes/call/v13.html",
+        "place_call": "ui://hermes/call/v13.html",
+        "get_agent_number": "ui://hermes/my-number/v9.html",
+        "list_calls": "ui://hermes/calls/v8.html",
+        "get_agent_status": "ui://hermes/agent-status/v8.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v7.html",
+          "uri": "ui://hermes/agent-status/v8.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v12.html",
+          "uri": "ui://hermes/call/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v7.html",
+          "uri": "ui://hermes/calls/v8.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v8.html",
+          "uri": "ui://hermes/my-number/v9.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -971,27 +971,27 @@
       ],
       "sicherheitsschemata": {},
       "widgets": {
-        "prepare_call": "ui://hermes/call/v12.html",
-        "place_call": "ui://hermes/call/v12.html",
-        "get_agent_number": "ui://hermes/my-number/v8.html",
-        "list_calls": "ui://hermes/calls/v7.html",
-        "get_agent_status": "ui://hermes/agent-status/v7.html"
+        "prepare_call": "ui://hermes/call/v13.html",
+        "place_call": "ui://hermes/call/v13.html",
+        "get_agent_number": "ui://hermes/my-number/v9.html",
+        "list_calls": "ui://hermes/calls/v8.html",
+        "get_agent_status": "ui://hermes/agent-status/v8.html"
       },
       "ressourcen": [
         {
-          "uri": "ui://hermes/agent-status/v7.html",
+          "uri": "ui://hermes/agent-status/v8.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v12.html",
+          "uri": "ui://hermes/call/v13.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/calls/v7.html",
+          "uri": "ui://hermes/calls/v8.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/my-number/v8.html",
+          "uri": "ui://hermes/my-number/v9.html",
           "mimeType": "text/html;profile=mcp-app"
         }
       ]
@@ -1689,8 +1689,8 @@
           },
           "max_duration_s": {
             "type": "integer",
-            "maximum": 1800,
-            "exclusiveMinimum": 0
+            "exclusiveMinimum": 0,
+            "maximum": 1800
           },
           "diagnostic": {
             "type": "boolean"
@@ -1871,8 +1871,8 @@
           },
           "max_duration_s": {
             "type": "integer",
-            "maximum": 1800,
-            "exclusiveMinimum": 0
+            "exclusiveMinimum": 0,
+            "maximum": 1800
           },
           "diagnostic": {
             "type": "boolean"
@@ -1941,6 +1941,12 @@
       "art": "erstfassung",
       "begruendung": "Erstfassung aus dem Draht aller dreizehn Test-Profile: 12 Werkzeuge (10 ohne Consult, stdio immer 10), 4 Widget-Resources mit MCP_UI_ENABLED (auch im OAuth-Modus ohne Consult und ohne Mandant gemessen), securitySchemes nur im OAuth-Modus. Noch nichts veroeffentlicht.",
       "stand_sha256": "77be164d4d5037e831c99d3ac4d49f96ff1fbb62edb2903fcaf3e967825394f3"
+    },
+    {
+      "datum": "2026-10-06",
+      "art": "bruch",
+      "begruendung": "Paket 34 loescht die Kommentare in src/ui. Die roh eingebetteten Quellen (Wing-Engine, Mount, Widget-Bind, Widget-I18n) aendern damit die ausgelieferten Bytes aller vier Widgets; jedes bekommt seine naechste Version (agent-status 8, my-number 9, calls 8, call 13), die alten Widget-URIs entfallen. Werkzeuge und Schemas unveraendert, noch nichts veroeffentlicht.",
+      "stand_sha256": "b57d1429b5d90e139c035c29c75696d29512a19e635978c664a8d858b89b9a6b"
     }
   ]
 }
