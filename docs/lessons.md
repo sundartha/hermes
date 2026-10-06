@@ -1,139 +1,12 @@
-# Lessons — Fragility-Remediation-Kette
-
-Lehren aus der Ausfuehrung von `PLAN-FRAGILITY-REMEDIATION.md` (eine `phase-lean`-Session
-pro Phase). Neueste zuerst.
-
-## L5 — EL-Agenten-Stimme: vier Kernsaetze fuer Prompt-/Detektor-Arbeit, P1
-Quelle: Stimme-Kette ST0-ST5 (tasks/PLAN-AGENTEN-STIMME.md, Vorfaelle "[froehlich]" +
-Doppelankuendigung 2026-09-02). Gilt ab jetzt fuer JEDE Arbeit am EL-Agenten (Prompt,
-Konfig, Detektoren) und die Budget-/Realtime-Pendants. Die vier Kernsaetze im Wortlaut:
-
-1. **MELDEN, NICHT ENTFERNEN:** Detektoren ([el-tags], [el-b1]) melden ausschliesslich —
-   Transkripte werden NIE nachtraeglich gestript oder geschoent (Art. 50 EU AI Act: das
-   Transkript ist der Nachweis; outbound.js-Kommentar "WARUM MELDEN UND NICHT ENTFERNEN").
-   Ein Zaehlfeld am Call-Datensatz macht die Rate messbar, ohne den Nachweis anzufassen.
-2. **Beispiel schlaegt Regel:** kein Regeltext traegt eine eckige Klammer — ein
-   Klammer-BEISPIEL im Prompt erzeugt genau das Verhalten, das die Regel verbietet
-   (Lehre 18.08.: das Prompt-Verbot mit Beispiel verlor gegen das Beispiel).
-3. **Dashboard schlaegt ungepinntes Repo:** nur GEPINNTE Felder (Vorlage _besitz.felder
-   + drift/push) sind Wahrheit. Ein Feld ohne Pin kann im Dashboard still geaendert
-   werden, ohne dass ein Gate es meldet — SOLL aendern NUR in der Vorlage, dann pushen.
-4. **Vorlage ist kanonisch, speechRules sind Uebersetzungen:** inhaltliche B1/B2-
-   Aenderungen gehen im SELBEN Commit an allen fuenf Stellen (Master-Prompt,
-   soft_timeout-Override, speechRules de/en/fr) UND an ihren Pins — wer nur eine Stelle
-   aendert, erzeugt Drift zwischen Vorlage und speechRules, den kein Detektor sieht.
-
-**Warum:** Die Kette bewies alle vier als reale Fehlerfamilien: B2 war eine
-Adhaerenz-Luecke trotz existierender Regel (Beispiel-/Sog-Problematik), Befund 3 war
-Konfig-gegen-Prompt (Dashboard-/Pin-Problematik), und die Vorfaelle waren nur zaehlbar,
-weil gemeldet statt entfernt wurde.
-**How to apply:** Vor jeder EL-Prompt-/Konfig-Aenderung: Vorlage als Quelle nehmen
-(kein Dashboard-Griff), Regeltexte klammerfrei halten, Detektoren nur erweitern
-(Diagnose), Aenderungen an allen fuenf Stellen + Pins in einem Commit, danach
-`npm run elevenlabs:drift` (und bei Live-Wirkung: Push mit Ruecklese, Owner-Gate).
-
-## L1 — Pausierter Workflow != toter Workflow (Ruhemodus-Kollision), P1
-**Symptom:** Mac ging waehrend des P1-Lean-Workflows in den Ruhemodus. Nach dem Aufwachen
-sah `TaskList` "No tasks" -> ich schloss "Workflow tot" und startete eine MANUELLE
-Fix-/Review-Kette parallel. Der Workflow war aber nur PAUSIERT und lief nach dem Aufwachen
-im Hintergrund WEITER -> zwei Tracks operierten gleichzeitig am selben Repo/denselben Refs,
-kollidierten auf Branch-/Worktree-Namen (ich hatte `-fix1` geloescht, das der Live-Workflow
-noch brauchte), und der Workflow endete BLOCKED, weil er seinen eigenen `-fix2` nicht fand.
-**Warum:** `TaskList` zeigt im Lead-Prozess nach Wiederaufnahme nicht zuverlaessig einen
-noch laufenden Hintergrund-Workflow; ein force-remove eines `locked` Worktrees (`pid ...`)
-ist ein starkes Signal, dass der Prozess NOCH LEBT.
-**How to apply:** Vor JEDER manuellen Aktion an Phasen-Branches pruefen, ob der Workflow
-wirklich beendet ist (Completion-Notification gesehen? Worktree `locked` mit lebender pid?).
-Bei Unterbrechung NICHT parallel manuell arbeiten — entweder auf die Notification warten oder
-den Workflow sauber stoppen, DANN uebernehmen. Ein `locked`-Worktree niemals blind
-`-f -f` entfernen, solange die pid leben koennte.
-
-## L2 — Sonnet-Cyber-Safety-Classifier kippt bei Security-Review-Inhalt, P1
-**Symptom:** Die r2-Agenten des Lean-Workflows scheiterten hart: `[P1-review-cleancode-r2]`
-mit "Sonnet 5 has safety measures that flagged this message for a cybersecurity topic",
-`[P1-fix-r2]` mit "violates our Usage Policy". Der Inhalt war eine voellig legitime
-Clean-Code-Pruefung eines Stripe-Webhook-Race-Fixes (Money-Gate). Intermittent: dieselbe
-Rolle lief in frueheren Runden auf Sonnet problemlos.
-**Warum:** Security-nahe Formulierungen (Race, Exploit, Gate faelschlich offen, Angreifer-
-Szenario) + Sonnet triggern gelegentlich den Real-Time-Cyber-Classifier — ein False Positive
-fuer defensive Arbeit, aber er bricht den Request ab.
-**How to apply:** (1) Fuer die adversariale Safety-/Clean-Code-Pruefung sicherheitslastiger
-Phasen (Webhooks, Auth, Gates: P1/P2/P6/P7) im Zweifel **Opus** nehmen — der Cyber-Classifier
-ist Sonnet-spezifisch, Opus lief auf identischem Inhalt sauber durch. (2) Bricht ein
-Workflow-Agent an genau diesem Fehler ab, ist das KEIN Code-Blocker — den einzelnen Schritt
-manuell mit Opus nachziehen, nicht den ganzen Run neu. (3) Reviewer-Prompts sachlich-
-defensiv halten (Verifikation/Invariante), nicht in Exploit-Sprache.
-
-## Nutzbare Wahrheit aus P1
-- Der duale Gate ZAHLT SICH AUS: der Clean-Code-Reviewer fand einen empirisch reproduzierten
-  Money-/Zugangs-Gate-Defekt (Sekunden-Gleichstand von `event.created`), der byte-identisch
-  gruene Tests hatte — genau die "fix hier / kaputt dort"-Klasse, gegen die die Kette laeuft.
-- Merge-Protokoll bewaehrt: Phasen branchen von `master`, Owner-WIP (hermes-animation-lab,
-  mcp-server-info.js) wird von den Phasen NICHT beruehrt -> `git merge --no-ff` gegen den
-  dirty Working-Tree ist konfliktfrei, kein `git stash` noetig (Memory `stash-clobbered-by-worktrees`).
-
-## L3 — Agent-Tool ohne isolation:"worktree" laeuft im ECHTEN Working-Tree, P3
-**Symptom:** Ein manuell via Agent-Tool gestarteter Fix-Agent (OHNE `isolation:"worktree"`)
-landete im echten Nutzer-Working-Tree (master + Owner-WIP), erkannte das per `git status`
-und legte defensiv selbst einen Worktree an. Nur weil der Agent vorsichtig war, wurde der
-Owner-WIP nicht angetastet.
-**How to apply:** Bei manuellen Agent-Tool-Aufrufen, die committen/branchen, IMMER
-`isolation:"worktree"` setzen. NB: `isolation:worktree` legt den Worktree an einem
-Default-Commit an (nicht am Zielbranch) -> der Review-Agent muss den Zielbranch SELBST
-auschecken UND per `git log -1` verifizieren, dass er nicht auf einem stale Worktree-Branch
-(bf0d529 o.ae.) sitzt (sonst laeuft `npm test` gegen Master-Era-Code, 2198 statt aktuell).
-Beide Opus-Final-Reviews (P3, P7) fingen genau diesen Staleness-Fehler selbst ab.
-
-## L4 — Opus-Plan auf risky-Phasen -> 0 Fix-Runden (Kosten-Nutzen), Gesamtlauf
-**Beobachtung:** P6 (groesster/riskantester Refactor, Outbound-Gate-Kette) lief mit Opus-Plan
-in EINEM Durchgang durch (0 Fix-Runden, ~0,85M Tokens). P3 (Sonnet-Plan, "preserves") brauchte
-2 Fix-Runden + 1 manuelle (~1,7M). Die Modell-Politik "Opus nur am Gate" (Safety-Review Opus
-alle, Plan Opus nur risky) hat sich als kosteneffizient bewaehrt: der teurere Plan auf den
-komplexen Phasen SPART Fix-Runden. Kosten skalieren mit Review-Befunden, nicht mit Diff-Groesse.
-**How to apply:** Fuer strukturell komplexe/risky Phasen den Plan-Agenten auf Opus pinnen;
-fuer mechanische 1:1-Phasen (P4) reicht Sonnet-Plan (dort 0 Fix-Runden bei ~0,47M).
-
-## Gesamtergebnis
-Alle 7 Fragilitaets-Phasen gemergt (master ee296c3, 2269/0). Der duale adversariale Gate hat
-in 4 von 7 Phasen echte, mit gruenen Tests getarnte Money-/Gate-/Observability-Defekte gefangen
-(P1 Tie-Break, P2 Rundung, P3 P8-Obs, P5 toter config-Key) — die "fix hier/kaputt dort"-Klasse,
-gegen die die Kette lief. Erfolgskriterium erreicht: eine Aenderung an Stripe/Config/einem Gate
-bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
-
 ## PLAN-POLISH-A (Note B->A, 20 Phasen, 2026-07-18) — Lehren
 
-- **Postage-Stamp-`filesTouched` ist nur Runde 0.** Nach Fix-Runden spiegelt der Workflow-Return die
-  URSPRUENGLICHE Impl, nicht die Fixes. IMMER den ECHTEN finalBranch-Diff pruefen
-  (`git diff master..<finalBranch>`). PA-17: der web-auth.js-Fix (Runde 2) fehlte in filesTouched —
-  haette man ihm vertraut, waere die entscheidende Migration unentdeckt geblieben.
-- **grep-Gate: Flach-Config-Treffer sind fast immer Kommentare.** Reale Code-Zugriffe finden, indem man
-  Kommentarzeilen filtert (`grep -vE ":[0-9]+:[[:space:]]*(//|\*|/\*)"`). Ueber PA-16/17/18/20 waren
-  ausnahmslos ALLE Flach-Treffer Doku-Kommentare — der eigentliche Code war sauber migriert.
-- **Migrations-Scope per Verzeichnis, nicht per Glob.** "scripts/*.mjs" (PA-19) uebersah scripts/*.js;
-  erst der Flip-Vollstaendigkeitscheck (dot+bracket+destructuring ueber ganz scripts/) fing sie. Der
-  Flip-grep ist das eigentliche Sicherheitsnetz, nicht die per-Phase-Scopes.
-- **WIP-Kollisions-Merge OHNE stash:** Merge beruehrt eine Datei mit uncommitteter Owner-WIP ->
-  Patch-Dance statt `git stash` (worktree-geteilt, gefaehrlich): `git diff -- <f> > p.patch;
-  git checkout -- <f>; git merge; git apply --3way p.patch; git reset -- <f>` (unstaged wiederherstellen).
-  Klappt sauber, wenn WIP- und Merge-Regionen disjunkt sind (vorher per Hunk-Header pruefen).
-- **worktree-Pfade mit Leerzeichen:** `git worktree list --porcelain | awk '/^worktree /{print substr($0,10)}'`
-  (null-safe). Naives `awk '{print $1}'` schneidet am Leerzeichen ab und entfernt LAUTLOS nichts.
 - **Fail-closed-Guard-Typcheck:** `typeof x !== "number"` faengt NICHT NaN/Infinity (beide typeof "number").
   Fuer numerische Gates `!Number.isFinite(x)` -> throw (PA-10, vom Auditor nachgehaertet).
-- **BLOCKED != Phase aufgeben.** PA-3 erreichte maxFixRounds mit KORREKTEM S1-Fix + einem Rest-S2. Ein
-  gezielter Fix+Review-Mini-Workflow auf dem bestehenden Branch loeste den Rest, statt eine
-  dependency-kritische S1-Phase (PA-6/16/20 haengen dran) zu verwerfen. "falscher Fix" (verwerfen) von
-  "guter Fix + Rest-Cleanup" (fertigstellen) unterscheiden.
+
 - **PM-1 Getter-statt-Kopie strahlt in die Tests aus.** Sobald Produktion `config.<ns>.<key>` liest,
   muss JEDER Test, der ein Fake-config baut, die Namespace-Getter ebenfalls exponieren. Loesung:
   attach-Helfer aus config.js exportieren (single source) und Test-Overrides darueber routen
   (withConfigNamespaces/makeConfigOverrides). Wert-Kopie-Configs laesen sonst still stale Werte.
-- **Lead-Verifikation je Phase im Wegwerf-Worktree** (nie master mit rot-Merge verschmutzen, v.a. bei
-  Owner-WIP wo `reset --hard` verboten ist): Branch-Suite gruen -> erst dann Merge. S1: rot-vor-Fix
-  selbst nachstellen; RLS-Test nur unter NOBYPASSRLS beweiskraeftig (Superuser umgeht FORCE RLS).
-
----
-
 
 ## P3 (Peinlichkeits-Defekte: Cap/Reprompt/Inbound)
 
@@ -141,8 +14,6 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   Budget-Guard nicht (`reconcileOutboundVoiceBudget` steigt bei Inbound aus) - der
   einzige Deckel ist `MAX_CALL_DURATION_S`. `MAX_EMPTY_TURNS` darf deshalb nie ueber 3
   gedreht werden.
-
----
 
 ## Live-Forensik (2026-07-22, Kosten-Endspiel-Verifikation)
 
@@ -152,16 +23,10 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   `poolSinceFor()`: dem Minimum des `endedAt` ueber ALLE Kandidaten. Regel: bevor eine Zahl
   einer Konfiguration zugeschrieben wird, die Stelle lesen, die sie erzeugt. Eine plausible
   Erklaerung ist keine gemessene.
-- **Deploy-Checklisten in `tasks/` sind Momentaufnahmen, kein Live-Zustand.** Beide
-  Checklisten sagten "nicht deployed", live lief der volle Stand. EINZIGE Quelle ist der
-  `[boot] deployed commit=<sha>`-Banner im Render-Log.
+
 - **Zwei aufeinanderfolgende Sweeps sagen mehr als einer.** Der Befund (Dauer-Leerlauf) wurde
   erst sichtbar, als der zweite Sweep dieselbe `uebersprungen=`-Zahl bei geschrumpfter
   Kandidatenmenge zeigte. Bei periodischen Jobs immer >=2 Laeufe vergleichen.
-- **Call-IDs sind Zeitstempel:** `call_` + `Date.now().toString(36)` in den ersten 8 Zeichen.
-  Damit laesst sich ein bestimmter Anruf ohne DB-Zugriff in Sweep-Logs wiederfinden.
-
----
 
 ## Gate-Triage (2026-07-27, PLAN-GATES.md)
 
@@ -186,77 +51,13 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   `searchNumbers` wirft das mitgelieferte `cost_information` weg. Vor einer Aussage ueber
   "wie das Produkt Preise behandelt" die konkrete Achse pruefen.
 
----
-
 ## Direkter Edit statt Phase (2026-07-29, Budget-Achsen-Divergenz)
 
-- **"Phase" im Owner-Wort heisst Phase, nicht "jetzt sofort tippen".** Auf die Antwort
-  "Phase von mir aus jetzt" wurde direkt auf master in `state-ops.js` editiert - am
-  Lean-Template, am Worktree und am dualen Review vorbei. CLAUDE.md stuft alles, was
-  Budget-Gates beruehrt, ausdruecklich als nicht-trivial ein: Plan Mode + Smoke-Test sind
-  Pflicht, nicht Ermessen. **Regel: bei Gate-/Geld-/Auth-Code nie direkt editieren, auch
-  wenn der Fix drei Zeilen gross ist.**
-- **`.claude/refs/clean-code.md` VOR dem Edit lesen, nicht danach.** Es wurde erst nach der
-  Ruecknahme gelesen. Der geschriebene Kommentar verstiess dann prompt gegen **C1**
-  (Aenderungshistorie im Quelltext: "Vorher las diese Funktion...", gemessene Live-Werte) -
-  genau das gehoert in die Commit-Message, nicht in den Code.
-- **Kommentardichte ist hier selbst der Tech-Debt, kein Vorbild.** `state-ops.js` hat 3122
-  Zeilen bei 1429 Kommentar- zu 1486 Codezeilen (fast 1:1) und ist die groesste Datei im
-  `src/`. Sich beim Schreiben am Bestand zu orientieren (G24, Konventionen) reproduziert
-  hier einen Missstand. Neue Kommentare nur, wo eine Invariante sonst unsichtbar waere.
 - **Der Owner-Satz "das sollte es doch gar nicht mehr geben" ist eine Messanweisung.** Die
   Uebergabe hatte daraus eine Perioden-Anker-Hypothese gebaut; die Render-Audit-Zeile
   (`grund=reserve_ueber_rest`, `tenant=t_user_...`) zeigte in einer Abfrage, dass sogar der
   untersuchte Tenant der falsche war. **Runtime-Output vor Code-Rekonstruktion** (CLAUDE.md
   Regel 7) haette die ganze Hypothese gespart.
-
----
-
-## Der Clean-Code-Auditor sieht nur den Diff, nicht das Repo (2026-08-03, KV-M0)
-
-- **Ein Auditor, der `git diff BASE..BRANCH` liest, kann nicht sehen, was in BASE steht.**
-  KV-M0 las `config.billing.flushEpochIso`; das Feld kam ueber die Basis herein (KV-P0-Merge,
-  `config.js:524` + Namespace-Whitelist `:1349`). Im Diff `master..branch` kommt `config.js`
-  gar nicht vor - der Auditor schloss daraus "existiert nirgends" und meldete einen S1
-  ("garantierter Boot-Crash in jeder Umgebung"), inklusive einer **behaupteten empirischen
-  Verifikation**, die nicht stattgefunden haben kann: die sechs betroffenen Tests waren
-  gruen, die volle Suite 3803/3803.
-- **Konsequenz fuer den Lead:** ein Blocker ist eine Behauptung, genau wie ein roter Test.
-  Bei einem "Symbol X existiert nicht"-Blocker zuerst `git grep X <branch> -- <datei>` und
-  den Test selbst laufen lassen, bevor eine Fix-Runde gestartet wird. Der Fix-Agent hat hier
-  richtig gehandelt: er hat die Reproduktion versucht, sie schlug fehl, und er hat NICHTS
-  committet - dadurch fiel das Gate auf BLOCKED, obwohl der Safety-Reviewer unabhaengig
-  freigegeben hatte.
-- **Konsequenz fuer kuenftige Skripte:** dem Clean-Code-Auditor auftragen, vor einem
-  "existiert nicht"-Befund am ausgecheckten Branch zu grepen statt nur im Diff zu lesen.
-- **Nebenbefund, ungefixt:** `test/auth-p9a-cache-headers.test.js` haengt oder crasht
-  (`hookFailed`, `undefined.stop()`), sobald `--test-name-pattern` (also `npm run test:gates`)
-  keinen seiner Testnamen matcht - file-scope `before()/after()` mit geteiltem
-  `startServer()`-Spawn ohne `if (srv)`-Guard. Macht `test:gates` praktisch nicht
-  end-to-end durchlaufbar. Eigene kleine Fix-Phase wert.
-
----
-
-## Grosse Inhalte gehoeren in eine Datei, nicht ins StructuredOutput-Schema (2026-08-03, KV-P1)
-
-- **Ein Schema-Feld, das eine Markdown-Tabelle verlangt, toetet den Lauf.** Das KV-P1-Skript
-  forderte `costMapTable`, `triggerTable` und weitere Freitextfelder. Der Impl-Agent hatte
-  die Phase fertig implementiert UND committet - und starb danach zweimal an
-  `InputValidationError: StructuredOutput was called with input that could not be parsed as
-  JSON` (16 KB Nutzlast). Der Workflow brach ab, bevor irgendein Review lief.
-- **Der Bericht ist dann verloren, die Arbeit nicht.** Das Transcript speichert je Tool-Aufruf
-  nur die ersten 2048 Zeichen - die Nutzlast laesst sich NICHT rekonstruieren. Der Commit auf
-  dem Branch existiert aber. Richtiges Vorgehen: Branch pruefen (`git log master..<branch>`),
-  und ein Wiederaufnahme-Skript schreiben, das Plan und Implementierung UEBERSPRINGT und bei
-  der Verifikation einsteigt. Nicht neu implementieren lassen.
-- **Regel fuer jedes per-run-Skript:** jedes Schema-Textfeld hoechstens ~400 Zeichen, keine
-  Tabellen, keine Code-Bloecke. Umfangreiches schreibt der Agent in eine DATEI, das Feld
-  traegt nur den Pfad. Die Regel gehoert als eigener Absatz in JEDEN Agenten-Prompt, nicht
-  nur in die Feldbeschreibung.
-- **Nebenbefund:** ein Agent kann ausserhalb seines Worktrees nicht schreiben. Wer eine Datei
-  im Haupt-Repo erwartet, bekommt sie im Worktree - und der wird spaeter aufgeraeumt. Den
-  Report-Agenten deshalb ausdruecklich anweisen, den Worktree-Pfad zu suchen, wenn die Datei
-  im Haupt-Repo fehlt.
 
 ## Ein Riegel, der Dateien zaehlt, faengt den wahrscheinlichsten Fall nicht (2026-08-03, KV-P1b)
 
@@ -301,31 +102,6 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   "hypothese-messbar" - und der Lead muss jede so markierte Karte VOR der Phasenplanung
   gegenmessen. Eine Phase auf einer ungeprueften Bedingung zu bauen kostet die ganze Phase.
 
-## Ein Skill-Aufruf mit Fliesstext-args stirbt fail-closed (2026-08-04, GQ-S1)
-
-- `Workflow({name: "phase-impl-lean", args: "Phase GQ-S1, Spec: ..."})` bricht mit
-  `args.phaseId fehlt -> fail-closed Abbruch` ab, bevor ein Agent laeuft. Das Skript
-  erwartet ein **Objekt** (`{phaseId, branch, baseBranch, planDoc, specFile, maxFixRounds}`),
-  auch wenn die Skill-Beschreibung einen Fliesstext-Aufruf zeigt.
-- **Das ist der gute Fall:** kein Default-Phase-Bau, kein stiller Misfire an der falschen
-  Phase, null verbrauchte Token. Genau so soll ein Args-Vertrag scheitern.
-
-## Der Lead selbst hat die Stale-Base-Regel gebrochen (2026-08-04, GQ-P2)
-
-- Waehrend GQ-P2 im Worktree lief, habe ich einen **Doku-Commit nach `master`** gesetzt
-  (Messergebnisse der Testanrufe). Ergebnis: `git merge-base --is-ancestor master <branch>`
-  schlug fehl, und `git diff --stat master..<branch>` haette meine eigenen Doku-Aenderungen
-  als **Loeschungen** ausgewiesen.
-- Die Regel stand woertlich im Kickoff und ich hatte sie im selben Gespraech noch zitiert.
-  Sie gilt fuer **jeden** `master`-Commit, auch fuer reine Dokumentation — der Blocker
-  entsteht aus dem Divergieren, nicht aus dem Inhalt.
-- **Rettung ohne Rebase:** `git diff master...<branch>` (DREI Punkte) vergleicht gegen den
-  gemeinsamen Vorfahren und zeigt genau die Branch-Aenderungen. Danach `git merge --no-ff`
-  wie ueblich — git loest das ueber den merge-base, solange die Dateimengen disjunkt sind.
-- **Regel fuer den Lead:** Notizen und Kettenstand waehrend eines laufenden Laufs in der
-  Datei sammeln, aber **erst nach dem Merge der Phase committen**. Ein Lauf ist erst zu Ende,
-  wenn sein Branch gemergt ist — nicht, wenn die Benachrichtigung eintrifft.
-
 ## Der Anstoss kam vom Provider, nicht vom Anrufer (2026-08-04, GQ-P5)
 
 - **Der schlimmste Defekt des Gespraechs war kein Modell-Problem.** Sechsmal "ich warte
@@ -350,40 +126,11 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   Defekt, sondern `MAX_IN_CALL_CONSULTS_PER_CALL = 1`. **Auch ein Befundkatalog ist eine
   Behauptung, kein Messwert.**
 
-## Ein Join ueber ein modell-formuliertes Feld ist kein Join (2026-08-06, GQ-Fragilitaet)
-
-- Das Workflow-Skript hat Befund und Skeptiker-Urteil ueber den **Titel** gejoint:
-  `r.urteile.find(u => u.titel === f.titel)`. Die Skeptiker haben ihre Titel mit
-  `"BEFUND 1: "` praefixiert - fachlich voellig in Ordnung, das Schema verlangte nur
-  "ein String". Sechs von acht Urteilen fielen aus dem Join.
-- **Der Fehler ist still und faellt in die falsche Richtung:** ein nicht gefundenes Urteil
-  wurde als "kein Urteil" gewertet, also als *nicht bestaetigt*. Der Lauf meldete
-  "2 bestaetigt, 6 gefallen"; tatsaechlich waren es **7 bestaetigt, 1 widerlegt**. Ein
-  Orchestrierungs-Bug hat fuenf belegte Befunde unsichtbar gemacht.
-- **Regel:** Agenten-Ausgaben werden ueber einen **vom Skript vergebenen** Schluessel
-  verbunden (Index oder eine ID, die im Prompt woertlich mitgegeben und im Schema als
-  `enum` gepinnt wird) - NIE ueber ein Feld, das das Modell selbst formuliert. Wenn ein
-  Join fachlich noetig ist, gehoert die Trefferquote in ein `log()`:
-  `log(\`${matched}/${expected} Urteile zugeordnet\`)` haette es sofort gezeigt.
-- **Zweite Lehre, teurer:** ich habe die Skript-Zahl im ersten Zug geglaubt. Die
-  Diagnose-Zeile des Werkzeugs sagt woertlich, man solle vor der Interpretation eines
-  unerwarteten Ergebnisses `journal.jsonl` lesen. Der Synthese-Agent hat den Widerspruch
-  uebrigens selbst bemerkt ("alle 6 trugen kein Urteil mit leerem Leser-Feld, sind also
-  unbewertet, nicht widerlegt") - der Agent war misstrauischer als sein Lead.
-
 ## Ein gebuendelter Schreibpfad kann den Defekt vor dem Test verstecken (2026-08-06, GQ-H1-a)
 
 - Die Lehre "der Test muss den Defekt reproduzieren" war bekannt — und hat trotzdem fast
   nicht gegriffen. Sieben frische pg-Tests waren gruen **und blieben gruen, als ich den Fix
   probeweise wieder ausbaute**. Sie haben nichts gemessen.
-- **Ursache:** `save()` ist im pg-Store fire-and-forget und wird **zusammengefasst**. Die
-  Tests schrieben, loeschten und lasen in einem Zug; es lief genau EIN Flush ganz am Ende.
-  Der Zwischenstand, an dem der Defekt haengt (die verworfene Zeile ist bereits persistiert),
-  erreichte die DB nie. Live liegen zwischen dem Schreiben der Antwort und ihrem Verwerfen
-  Sekunden und mindestens ein Flush.
-- **Regel:** Bei asynchroner/gebuendelter Persistenz muss der Test den **Zeitpunkt**
-  nachstellen, nicht nur die Reihenfolge der Aufrufe. Ein `await store.save()` an der Stelle,
-  an der live ein Flush laege, ist Teil des Aufbaus — nicht Kosmetik.
 - **Und die Gegenprobe bleibt Pflicht, auch wenn man sie schon kennt:** Fix ausbauen, Test
   laufen lassen, Rot sehen, Fix zurueck. Erst dann ist ein gruener Test ein Beleg. Hier
   brachte sie zusaetzlich einen echten Design-Fehler ans Licht — der erste Fix (Zeilen
@@ -483,20 +230,6 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   die Suite, sondern **das tatsaechliche Ausfuehren gegen die echte API** in der Abnahme.
   Ein Werkzeug, das in der Phase gebaut, aber nie scharf laufen gelassen wird, ist unbelegt.
 
-## Ein Wertevergleich mit einwertigem Enum ist kein Durchreich-Beleg (2026-08-07, STT-A1)
-
-- Die Spezifikation hatte woertlich gewarnt: Zusicherung B ("dasselbe Profil ergibt drei
-  adaptertypische Schreibweisen") ist nur dann ein Beleg, wenn sie die Wahl als **Eingabe
-  durchreicht**; als reiner Wertevergleich ist sie ohne den Fix gruen. Der Implementierer
-  schrieb trotzdem die gruene Variante.
-- **Gemessen** (zwei gezielte Sabotagen am fertigen Branch): fail-closed entfernt -> nur A
-  rot. Durchreichen gekappt -> **wieder nur A rot**, B blieb beide Male gruen. Mit genau
-  einem Enum-Mitglied liefert eine ignorierte Wahl denselben Wert wie eine beachtete.
-- **Regel:** bevor ein Test als Beleg gilt, die Sabotage benennen, die ihn rot machen SOLL,
-  und sie ausfuehren. Bei einwertigen Aufzaehlungen ist "Ausgabe hat den richtigen Wert"
-  grundsaetzlich kein Beleg fuer "Eingabe wurde beachtet" — dafuer braucht es einen
-  ungueltigen Wert (der wirft) oder ein zweites Mitglied.
-
 ## Eine Konstante zu flippen ist nicht dasselbe wie eine Entscheidung zu flippen (2026-08-07, C-P1/C-P1b)
 
 - C-P1 stellte `DEFAULT_PROVIDER` von Twilio auf Telnyx. Meine Spec nannte **vier** Leser
@@ -523,44 +256,8 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   **beilaeufiger Satz eines Inventur-Subagenten** ueber eine ganz andere Frage. Fremde
   Befunde ernst nehmen, auch wenn sie neben dem Auftrag liegen.
 
-## Nicht auf den Workflow blockieren - die Benachrichtigung kommt von selbst (2026-08-07, Owner-Korrektur)
-
-- Ich habe waehrend laufender Phasen wiederholt `TaskOutput` mit `block:true` gepollt und
-  dazwischen Statusabfragen gefahren. Der Owner: *"Das hat noch nie eine Session gemacht.
-  Die wird dann einfach, wenn das fertig ist, benachrichtigt."*
-- **Richtig:** Workflow starten, danach etwas anderes tun (oder nichts), auf die
-  `<task-notification>` warten. Blockieren liefert keine zusaetzliche Information und
-  verbrennt Kontext, den spaeter niemand mehr hat.
-- **Wenn wirklich ein Zwischenstand noetig ist**, reicht EIN billiger Blick:
-  `git log master..<branch>` (kam ein Commit?) - nicht ein Poll-Zyklus aus mehreren Aufrufen.
-
-## Der Impl-Agent kann ohne Rueckgabe sterben - zweimal in einer Session (2026-08-07, C-P2/C-P4)
-
-- **C-P2:** Impl-Agent tot, Branch LEER, die Reviews meldeten korrekt "kein Diff vorhanden" -
-  und das Gate lief trotzdem weiter. **C-P4:** derselbe Fehler ("subagent completed without
-  calling StructuredOutput"), diesmal mit 59 geaenderten Dateien im Worktree, aber ohne
-  Commit, ohne Review, ohne Testlauf.
-- **Regel 1:** vor jedem Merge `git log master..<branch>` UND `git diff --stat`. Ein PASS
-  sagt nichts darueber, ob ueberhaupt etwas gebaut wurde.
-- **Regel 2:** bricht ein Lauf ab, zuerst den WORKTREE ansehen
-  (`git -C .claude/worktrees/<run>-2 status --porcelain`), nicht nur den Branch. Die Arbeit
-  liegt dort uncommitted und verschwindet mit dem Worktree.
-- **Regel 3:** solche Arbeit auf dem Branch sichern, klar als ungeprueft beschriftet - aber
-  NIE mergen. Ein Commit mit "UNGEPRUEFT - NICHT mergen" im Betreff ist besser als
-  verlorene Arbeit und besser als ein stiller Merge ohne Beleg.
-- Nebenbefund aus C-P4: der abgebrochene Agent hatte auch den Scope ueberschritten (Doku und
-  ein Skript-Rename, die laut Spec in eine spaetere Phase gehoerten). Ein Lauf ohne Review
-  faengt so etwas nicht ab - das ist der zweite Grund, warum ungeprueft nicht gemergt wird.
-
 ## 2026-08-07 (Session 2bd10950, Track-C-Abschluss C-P4-C-P6)
 
-- **Selbstreferenzieller node_modules-Symlink im Worktree = Exit 0 ohne Messung.** Der
-  REPO-Fallback der per-run-Skripte (`process.cwd()`) lieferte im Spawn-Kontext `.`;
-  `ln -s "./node_modules" node_modules` im Worktree zeigt dann auf sich selbst
-  ("Too many levels of symbolic links") und `npm test` beendet mit Exit 0 bei 4 Zeilen
-  Output. Wer Exit-Codes statt Testzahlen liest, haette "gruen" gemeldet. Regel: REPO in
-  per-run-Skripten HART pinnen (absoluter Pfad); ein Testlauf ohne gemeldete ZAHL zaehlt
-  nicht als Lauf. (Entdeckt vom C-P4-Safety-Reviewer, wf_ff179540-31e.)
 - **`timeout` existiert auf macOS nicht.** Ein Smoke-Test, der ihn nutzt, startet den
   Server NIE und misst 000 - das sieht aus wie "Dienst kaputt", ist aber "nie gestartet".
   Erst das Log lesen (Regel 7), dann urteilen: der echte Boot-Refusal kam von einem
@@ -652,31 +349,6 @@ ein zweiwertiges Feld nicht ausdruecken kann. **Eine korrekt zitierte Zeile bele
 in ihr steht, nicht die Vollstaendigkeit der Aufzaehlung.** Wer eine Enum-Wertemenge aus
 einem Zitat ableitet, muss alle Rueckgaben der Funktion ansehen, nicht eine.
 
-## `tail` im Hintergrund-Kommando vernichtet die Diagnose (2026-08-08, B4a)
-
-Ein Hintergrund-Testlauf wurde als `npm test 2>&1 | tail -10` gestartet. Er meldete
-**`fail 1`** — und die Identitaet des roten Tests war damit **unwiederbringlich weg**: in der
-Ausgabedatei standen nur die zehn Zeilen der Zusammenfassung, nicht die `not ok`-Zeile.
-
-- **Der Grund ist der Zeitpunkt.** Bei einem Vordergrund-Lauf ist `| tail` harmlos: sieht man
-  eine rote Zahl, wiederholt man den Lauf ungefiltert. Ein Hintergrund-Lauf dauert 100 s, und
-  bis die Zahl auftaucht, ist der Kontext, in dem er rot wurde (Systemlast, parallele
-  Kommandos), nicht mehr herstellbar. Der Wiederholungslauf war gruen — und damit ist die
-  Frage "Flake oder Regression?" **dauerhaft unbeantwortbar**.
-- **Regel:** Hintergrund-Laeufe schreiben die VOLLE Ausgabe in eine Datei
-  (`npm test > lauf.log 2>&1`) und filtern erst beim Lesen (`grep -E "^not ok|^# fail"
-  lauf.log`). Speicherplatz ist billiger als ein zweiter Lauf, der die Bedingung nicht mehr
-  trifft.
-- **Was hier gerettet hat:** die Zahl selbst stand in der Zusammenfassung, also war der
-  Fehlschlag ueberhaupt sichtbar. Haette ich auf `| tail -3` gefiltert, waere er unbemerkt
-  geblieben — der Workflow hatte `testsPass: true` gemeldet.
-
-**Der Nebenbefund ist der wichtigere:** der Workflow meldete Gate PASS **ohne Fix-Runde**, und
-der Safety-Reviewer hatte die Suite laut Schema unabhaengig gefahren. Der eigene Lauf des
-Leads widersprach dem trotzdem. Genau dafuer existiert die Regel "PASS ist keine Freigabe" —
-sie greift nicht nur gegen leere Branches (C-P2) und tote Impl-Agenten (C-P4), sondern auch
-gegen einen Reviewer, der auf einem gluecklicheren Lauf sass.
-
 ## Live-Abnahme 2026-08-09: fuenf Lehren aus einer Fremd-Diagnose
 
 ### 1. Eine widerlegte Wurzel bleibt im Kettenstand stehen und leitet die naechste Session fehl
@@ -742,34 +414,6 @@ Eingabefehler-Verhalten.
 
 ## B3b-Abnahme: zwei Fallen, die eine gruene Zahl vorgetaeuscht haetten
 
-### 1. `git checkout <branch>` scheitert STILL, wenn ein Worktree den Branch belegt
-
-Zur Abnahme von B3b sollte die Suite auf dem Phasen-Branch laufen:
-
-```
-git checkout phase/b3b-anfrageseite 2>&1 | tail -2 && npm test > lauf.log
-```
-
-Der `checkout` schlug fehl (der Workflow-Worktree hielt den Branch), `tail -2` schluckte die
-Meldung, und `&&` sah trotzdem Exit 0 — **`npm test` lief auf `master`**. Ergebnis: 4077 pass,
-fail 0. Eine vollkommen plausible gruene Zahl, die ueber den Branch NICHTS aussagt.
-
-**Was gerettet hat:** nicht die Testzahl, sondern eine zweite, unabhaengige Frage —
-*"kommen die NEUEN Tests ueberhaupt vor?"*:
-
-```
-grep -cE "^ok [0-9]+ - B3B-" lauf.log   # -> 0
-```
-
-**Regel:** ein Testlauf, der eine Aenderung belegen soll, wird IMMER gegen ein Merkmal der
-Aenderung geprueft, nicht nur gegen `fail 0`. Eine Gesamtzahl kann nicht zwischen "gruen auf dem
-richtigen Stand" und "gruen auf dem falschen Stand" unterscheiden. Das ist dieselbe Logik wie
-[[pruefkommando-ohne-positiv-kontrolle]]: der Erfolgsfall und der Nicht-Fall sehen gleich aus.
-
-**Zusatzregel:** Worktrees nach dem Workflow entfernen, BEVOR man auf den Branch wechselt —
-oder gleich im Worktree testen (`cd .claude/worktrees/<run>-2 && npm test`). Der Symlink auf
-`node_modules` ist dort bereits gesetzt.
-
 ### 2. Workflow meldete `fail 0`, der eigene Lauf fand `fail 1` — zum ZWEITEN Mal
 
 Der Workflow gab `gate: PASS`, `testPassCount: 4086`, `fixRounds: 0`. Der eigene Lauf im
@@ -784,45 +428,11 @@ Bereichsargument: B3b hat OAuth/MCP nicht angefasst.
 kein Freispruch. Es braucht einen MECHANISMUS (hier: Timing unter Last, an der Laufzeit
 ablesbar) plus das Argument, dass der rote Bereich vom Diff gar nicht beruehrt wird.
 
-### 3. Auch der Lead verliert Testergebnisse durch eine Pipe
-
-Der `test:gates`-Lauf dieser Session lief ueber eine Stunde und lieferte **kein** Ergebnis: das
-Kommando war `npm run test:gates 2>&1 | grep -E "^# (tests|pass|fail)"`. Beim Uebergang ins
-Hintergrund-Backgrounding war die Pipe weg, die Datei endete nach dem Header.
-
-Das ist exakt die Lehre, die weiter oben in diesem Dokument steht ("Hintergrund-Testlaeufe NIE
-mit `| tail`") — im selben Arbeitstag verletzt, weil `grep` harmloser aussieht als `tail`.
-**Jede** Filterung in der Pipe eines Hintergrundlaufs ist derselbe Fehler. Volle Ausgabe in die
-Datei, filtern erst beim Lesen.
-
 ## 2026-08-19 (EL-Cutover-Merge)
 
-- **Nach jedem Merge mit package.json-Aenderung: `npm install`, nicht nur
-  `--package-lock-only`.** Fehlt eine neue Dependency (hier nodemailer), crasht
-  der Server beim Boot - und die Spawn-Tests haengen dann ENDLOS statt rot zu
-  werden (15 Worker, 0 Fortschritt). Erst Boot-Probe, dann Suite.
 - **Haengende Suite zuerst auf Zombies pruefen:** ein Suitelauf einer frueheren
   Session hielt seit Stunden 15 Worker; `ps -eo pid,lstart` entlarvt das Alter.
   Killen, dann frisch messen - sonst diagnostiziert man den falschen Haenger.
-- **Suppressions-Gate vs. Merge: die Richtung entscheidet.** Das Gate vergleicht
-  HEAD-Fassung gegen vorgemerkte Fassung - bei einem Merge zaehlt die GESAMTE
-  Gegenseite als Bewegung. Merge auf dem Ast bauen, dessen Seite die meisten
-  Eintrags-Dateien bewegt hat (hier: HEAD=upstream), dann bleibt nur die eigene
-  echte Schuld uebrig - und die wird bereinigt, nicht gelistet. Neue
-  Altlast-Eintraege setzt kein Bau-Agent (Hook-Regel; der Classifier blockt es
-  zusaetzlich).
-
-## 2026-08-21 INBOX-P1: Merge-Gate fing zwei Prozess-Defekte
-
-1. **Workflow-Worktrees fluten `eslint .`:** Nach JEDEM Workflow-Lauf `git worktree list`
-   pruefen und Reste unter .claude/worktrees/ entfernen, BEVOR committet wird — der
-   Pre-Commit-Lint lintet sie mit (34k Scheinfehler; zweimal passiert am selben Tag).
-2. **Suppression-Dateien sind kein Regenerier-Spielfeld:** Ein Fix-Agent hat
-   eslint-suppressions.json neu erzeugt und dabei Eintraege UNBETEILIGTER Dateien
-   geloescht (seed-*-payment.mjs) -> 9 echte Lint-Fehler, die kein Reviewer sah, weil
-   beide nur die Zieldatei linteten. Regel ab jetzt in jedem Impl-/Fix-/Review-Prompt:
-   volles `npm run lint` (eslint .) MUSS 0 Fehler melden; Suppression-Eintraege nur
-   fuer Dateien im eigenen Diff anfassen.
 
 ## 2026-08-29 Der teuerste Fehler der Kette: Beweispflichten ohne Kostensignal
 
@@ -850,43 +460,10 @@ einzelner Implementierungs-Agent 447 Mio in 955 Turns.
 monoton (jede durch einen echten Defekt gerechtfertigt), das einzige sichtbare
 Kostensignal zeigt um Faktor ~200 zu niedrig. Nichts drueckt dagegen.
 
-**Behoben:**
-
-1. `scripts/workflow-kosten.mjs` misst die Wahrheit aus den Transkripten (mit
-   Positiv-Kontrolle: findet es nichts, bricht es LAUT ab statt eine leere, beruhigende
-   Bilanz zu melden - dieser Riegel hat beim ersten Lauf sofort einen echten Fehler
-   gefangen, die Pfadkodierung von Leerzeichen).
-2. `.claude/refs/workflow.md` Abschnitt 2a: keine woertlichen Ausgaben, volle Suite genau
-   einmal vom Lead, Agenten unter ~150 Turns halten, nach jedem Lauf messen.
-
 **Die verallgemeinerbare Lehre:** eine Qualitaetsmassnahme, die nur hinzugefuegt und nie
 zurueckgenommen wird, ist eine Ratsche - und eine Ratsche ohne Kostenmessung laeuft
 zwangslaeufig aus dem Ruder. Wer eine Beweispflicht ergaenzt, nennt ihren Preis, oder
 nimmt eine andere weg.
-
-## 2026-09-07: Ein Worktree sieht keine untrackten Dateien - zwei Fehlstarts derselben Phase
-
-**Symptom:** Der `phase-impl-lean`-Lauf zu CL1 brach zweimal ab. Beim ersten Mal meldete der
-Safety-Reviewer, er finde weder den Branch noch die Spec; `grep -rl "CL1"` lieferte im
-Arbeitsverzeichnis null Treffer, obwohl Plan und Spec offen vor dem Lead lagen.
-
-**Ursache:** Die Workflow-Agenten arbeiten in einem frischen Worktree aus `master`. Plan-Doku
-und Spec waren im Haupt-Repo **untracked**. Untrackte Dateien existieren in keinem anderen
-Worktree - der Auftrag verwies also auf Dateien, die dort schlicht nicht da waren.
-
-**Regel:** Jede Datei, auf die ein Worktree-Agent per Pfad verwiesen wird (Spec, Plan,
-Kickoff), muss VOR dem Start committet sein. Ein `git status --porcelain` mit `??` auf einer
-dieser Dateien heisst: der Lauf wird ins Leere laufen.
-
-**Zweiter Fehlstart, andere Ursache, gleiche Familie:** `node_modules` fehlte im Haupt-Repo
-komplett (der Worktree-Symlink zeigt dorthin), wodurch der Pre-Commit-Hook ueber ein
-fehlendes `eslint` fiel. Vor einem Phasenlauf gehoert beides geprueft: sind die Auftrags-
-Dateien committet, und stehen die Dependencies im Haupt-Repo.
-
-**Was den Lauf gerettet hat:** Der Abbruch (Session-Limit) liess den Worktree stehen. Die
-Arbeit des Impl-Agenten lag uncommittet darin und war vollstaendig verwertbar - vor dem
-Aufraeumen eines gescheiterten Laufs IMMER `git -C <worktree> status` lesen, nie blind
-entfernen.
 
 ## 2026-09-04 Das Transkript ist kein Beleg fuer das, was gesagt wurde
 
@@ -927,49 +504,7 @@ in der Spec reicht nicht — es erzeugt entweder eine geratene Tatsache im Code 
 Fix-Schleife, die nicht konvergieren kann (vgl. [[abnahme-schleife-konvergiert-nicht]]:
 nach Fund-SCHWERE steuern, nicht nach Zahl).
 
-**Zweite Lehre, billig:** ein Workflow-Lauf, der an einem Infrastrukturfehler stirbt
-(hier: "Login expired" bei 5 von 6 Agenten), ist per `resumeFromRunId` fast gratis zu
-retten — die gescheiterten Agenten stehen als `failed`, nicht als leeres Ergebnis, und
-laufen neu; nur der teure Plan-Agent kommt aus dem Cache. Vorher `journal.jsonl` pruefen:
-genau die Agenten mit `"type":"result"` werden gecached.
-
-## Fertige Arbeit uncommittet ist keine Arbeit (SEC-P3, 2026-09-08)
-
-**Was passierte.** Der Implementierungs-Agent setzte SEC-P3 vollstaendig um, 149 Tests gruen —
-und committete NICHT. Der pre-commit-Hook (`scripts/check-staged-suppressions.js`) lehnte ab,
-weil `makeSelfServiceRoutes` durch sechs neue Zeilen von 418 auf 424 wuchs und die Zeilenzahl
-Teil des Befund-Schluessels ist. Der Agent hielt beide Auswege fuer "ausserhalb meines
-Mandats" und meldete den Stand als "vorgemerkt im Worktree".
-
-**Kosten.** Der Review sah einen leeren Branch (`git diff master sec/p3` = 0 Bytes) und
-blockierte zu Recht. Die anschliessende Fix-Runde brauchte 270 Turns und 45 Mio Token — fast
-alles davon, um schon fertige Arbeit zu FINDEN und zu SICHERN, nicht um sie zu machen.
-
-**Wurzel.** Nicht der Hook. Der Auftrag sagte "git commit", aber nicht, was gilt, wenn der
-Commit abgelehnt wird. Ein Agent ohne Regel fuer den Fehlerfall waehlt die vorsichtigste
-Deutung — und die war hier die teuerste.
-
-**Regel fuer kuenftige Phasen-Prompts** (steht jetzt als `COMMIT_PFLICHT` im per-run-Skript):
-Commit ist Pflicht. Lehnt der Hook wegen eines bewegten Legacy-Pins ab, gilt diese
-Reihenfolge: (1) Ursache beseitigen — neuen Code auf MODUL-EBENE legen, dann waechst die
-gepinnte Funktion nicht; (2) nur wenn das nachweislich nicht geht: Pin anheben mit datiertem,
-ehrlichem Grund (bestehende Hauspraxis); (3) NIEMALS `--no-verify`. Ein Blocker wird erst
-gemeldet, nachdem (1) und (2) wirklich versucht wurden.
-
-**Nebenbefund, der die Regel stuetzt:** Weg (1) hat in derselben Phase funktioniert. Der
-Fix-Agent legte den neuen Code auf Modul-Ebene, die Riesenfunktion wuchs nicht, der Hook nahm
-den Commit von sich aus an (gegengeprueft: Exit 0). Es gab also nie einen Grund, an der
-Sicherung vorbeizugehen.
-
 ## 2026-09-11 — Lehren aus der Geldpfad-Kette (GP-P0..GP-P6, Lead-Rolle)
-
-**Ein Effizienz-Riegel verschiebt Arbeit, er loescht sie nicht.** Der Kickoff verbot Impl, Fix
-und Safety-Review die volle Suite (Wurzel des 260-Mio-Ausreissers: drei Agenten fuhren sie je
-Lauf). Das spart real - aber bei GP-P2 brach die Phase zwei BESTANDStests, die kein Agent
-gefahren hatte, und der Workflow meldete trotzdem PASS. Beide waren isoliert rot, also echt.
-**Folge: der Lead-Suitenlauf ist Pflicht, nicht Kuer.** Ein Merge auf das PASS des Workflows
-hin waere hier falsch gewesen. Der Riegel bleibt richtig; was dazugehoert, ist das Netz
-dahinter.
 
 **Ein roter Fall zaehlt erst, wenn er isoliert rot ist - und die Bank luegt in beide
 Richtungen.** Voll parallel meldete dieselbe Bank auf demselben Commit einmal vier, einmal neun
@@ -978,24 +513,10 @@ glaubt, sucht Gespenster; wer sie ignoriert, uebersieht die zwei echten dazwisch
 Wrapper reicht Zusatzargumente durch: `node test/testbaenke-run.mjs regression
 --test-concurrency=4`.
 
-**`npm test` deckt das Dashboard nicht ab.** Der Wrapper sucht `test/*.test.js`;
-`apps/web/test/**` bleibt draussen. Eine Phase mit Dashboard-Anteil ist ueber `npm test`
-**nicht** abgenommen - `cd apps/web && PUBLIC_GATEWAY_URL=... node --test "test/**/*.test.js"`
-gehoert dazu.
-
-**Der Commit-Hook fahrt `eslint` und flutet die Ausgabe.** Ein `git commit` ohne
-Ausgabe-Unterdrueckung kostete rund 10k Token an Lint-Warnungen fuer nichts. Als Lead, der
-duenn bleiben soll: `git commit -q ... >/dev/null 2>&1` und den Erfolg separat pruefen.
-
 **Grosse JSON-Diffs nie ungefiltert ansehen.** `git diff -- eslint-legacy-exceptions.json` warf
 mehrere Bildschirmseiten Begruendungstext aus, weil die Datei ihre Historie im `reason`-Feld
 traegt. Die Frage war "wurde eine Sicherung abgeschaltet?" - beantwortbar mit `--stat` plus
 einem gezielten grep auf die `findings`-Zeilen.
-
-**Kettenstand VOR dem Start der Welle schreiben.** Ein Commit auf `master` waehrend eines
-laufenden Workflows liess den Plan-Agenten der naechsten Phase eine Basis-Abweichung erklaeren.
-Folgenlos, aber unnoetiger Laerm - und in der Vergangenheit schon einmal ein falscher
-Stale-Base-Blocker.
 
 **Bei einem FATAL-Boot-Guard reicht kein gruener Test.** GP-P6 fuehrt `exit(1)` ein. Die Frage
 ist nicht "besteht der Test", sondern "startet der Live-Dienst mit der ECHTEN Konfiguration
@@ -1081,44 +602,6 @@ Ein Testlauf mit dreistelliger Minutenzahl ist immer ein Zombie; die Suite brauc
 zweieinhalb Minuten. Das gehoert zur Routine nach jedem abgebrochenen Lauf - aber als
 Aufraeumen, NICHT als Stall-Erklaerung (s. oben).
 
-**Zweite Regel, aus demselben Aufraeumen:** `git worktree list --porcelain` liefert Pfade
-mit Leerzeichen ("Mein Unternehmen"). Eine `for`-Schleife ueber `awk '{print $2}'`
-zerschneidet sie und entfernt still NICHTS — der Fehler verschwand zusaetzlich in einem
-`| head -1`. Richtig ist `sed -n 's/^worktree //p' | while IFS= read -r w`. Das ist
-dieselbe Klasse wie Lehre 1 vom 2026-09-12 (Listen ueber `while IFS= read -r`, nie ueber
-`$(...)` in `for`), hier aber mit einem loeschenden Befehl: es sah aus, als sei
-aufgeraeumt, waehrend elf Worktrees stehen blieben.
-
-## Autonome Wellen: Agenten fragen statt zu handeln (18.09.2026)
-
-**Beobachtet:** In einer autonomen Welle (Owner abwesend) sollten drei Agenten messen bzw. Specs
-schreiben. Zwei von drei haben stattdessen Fragen an den Owner formuliert und NICHTS geliefert -
-der Mess-Agent hat die ihm ausdruecklich erlaubten Render-Werkzeuge nicht einmal aufgerufen,
-sondern zurueckgefragt, ob er sie benutzen darf. 210k Token fuer null Messwerte.
-
-**Wurzel:** Subagenten bekommen `CLAUDE.md` injiziert. Dort steht "**Niemals raten. Bei
-Unsicherheit fragen.** Eine Annahme zu treffen ist immer schlechter, als nachzufragen". Diese
-Regel ist fuer interaktive Arbeit richtig und schlaegt in einer autonomen Welle ins Gegenteil um:
-der Agent hat einen erreichbaren Menschen unterstellt, den es nicht gab. Ein Agent sagte das
-woertlich: "der Auftrag wollte ein fertiges Spec ohne Rueckfragen, deine Anweisung wollte die
-Fragen. Deine Anweisung gilt."
-
-**Regel:** Wer einen Agenten in einer autonomen Welle startet, muss die Frage-Regel ausdruecklich
-aufheben - es genuegt NICHT, "autonom" zu schreiben. Wortlaut, der funktioniert:
-
-> **DU STELLST KEINE FRAGEN.** Der Owner hat alles freigegeben, was du brauchst, und ist nicht
-> erreichbar. Was du nicht messen/entscheiden kannst, notierst du als UNKNOWN mit Grund und
-> machst weiter. Die Regel "bei Unsicherheit fragen" aus CLAUDE.md ist fuer diesen Auftrag durch
-> eine ausdrueckliche Owner-Freigabe ersetzt - sie gilt hier nicht.
-
-Dazu die Freigaben KONKRET in den Prompt schreiben (Workspace-ID, Service-ID, was gelesen werden
-darf), nicht nur "du darfst lesen". Und den Unterschied benennen zwischen "darf ich?" (verboten)
-und "ging nicht, weil X" (erwuenscht).
-
-**Gegenprobe, dass es nicht Willkuer ist:** echte Owner-Entscheidungen - Origin-Wahl,
-Dedup-Verhalten, ein Gate aufweichen - bleiben Fragen. Der Unterschied ist, ob die Antwort im
-System messbar ist (dann messen) oder eine Praeferenz des Owners (dann fragen).
-
 ## Der Lead blaeht seinen Kontext auf - jede Sitzung erneut (18.09.2026)
 
 **Owner-Korrektur, woertlich:** "Du hast mir zu viel Kontext, zu viel Tokens angehaeuft. 600.000,
@@ -1137,18 +620,13 @@ wirst du."
 4. **Selbst gefahrene Messungen.** curl gegen Live, Render-API, DB-Zaehlungen.
 
 **Die strukturelle Abhilfe - ein Vorsatz genuegt nicht:**
-- **Zustand in EINE Datei** (`tasks/<kette>/STAND.md`), der Loop-Prompt ist nur ein Zeiger:
-  "Lies tasks/<kette>/STAND.md und handle danach." Wer handelt, aktualisiert die Datei, nicht den
-  Prompt. Das allein entfernt den groessten Posten.
+
 - **Jede Leseaufgabe ist ein Subagent-Auftrag.** Diff pruefen, Report lesen, Testlog auswerten,
   Spec schreiben, messen - alles delegiert, Rueckgabe max 5-10 Zeilen, ausdruecklich OHNE Diffs
   und ohne Kommando-Ausgaben.
 - **Der Lead tippt nur noch:** Workflow starten, Rueckgabezeile lesen, `git merge --no-ff`,
   STAND.md fortschreiben, berichten. Wer als Lead `cat src/...`, `git diff`, `grep` in Quellcode
   oder `tail` auf einem Testlog tippt, hat die Rolle verlassen.
-- **Ein Agent = eine Frage, unter 100k Token.** Drei kleine schlagen einen, der "mal alles
-  anschaut" - und die Kosten wachsen quadratisch mit der Lebensdauer eines Agenten
-  (`.claude/refs/workflow.md` 2a).
 
 **Warum es trotzdem immer wieder passiert:** Selbst-Lesen fuehlt sich im Moment schneller an als
 einen Agenten zu beauftragen, und jede einzelne Entscheidung dafuer ist plausibel. Der Schaden ist
