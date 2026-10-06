@@ -50,3 +50,7 @@ export function makeTransientClassifier(isProviderConnectionError = () => false)
     return false; // 4xx/invalid_request/Auth/unbekannt -> sofort werfen
   };
 }
+
+export function wartezeitFuer(versuch) {
+  return versuch * 250;
+}

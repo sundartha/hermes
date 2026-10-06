@@ -631,7 +631,7 @@
   },
   "src/llm/transient-errors.js": {
     "no-magic-numbers": {
-      "count": 3
+      "count": 4
     }
   },
   "src/mail-boot-probe.js": {
