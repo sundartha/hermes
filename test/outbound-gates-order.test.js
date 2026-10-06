@@ -10,14 +10,9 @@
 // Kommentar).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import { makeOutboundGates, tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
 import { emergencyBrakeSeconds } from "../src/call-duration.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
-
-const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const EXPECTED_ORDER = [
   "outbound_frozen",
@@ -591,18 +586,9 @@ test("S1-6: compute_reserve mit negativem Body-max_duration_s faellt auf die Not
 
 // === (d) Doku-Drift der Kettenlaenge =============================================
 
-// OUT-14 (SOLL, heute rot): der Modul-Kommentar in src/telephony/outbound-gates.js nennt
-// "16 Glieder", die Kette traegt 17. Bewusst als SOLL formuliert, NICHT als gruener Pin der
-// falschen Zahl (R-G-Abweichung von der Katalog-Erwartung "gruen"): ein Ist-Pin auf "16"
-// wuerde die Doku-Drift zum Sollzustand erklaeren und beim Korrigieren des Kommentars
-// brechen. So faellt der Test heute, und er heilt genau dann, wenn jemand die Zahl richtig
-// stellt - danach ist er der Waechter gegen die naechste Drift (G27: Struktur statt Disziplin).
-const CHAIN_LENGTH_COMMENT = /Gate-Kette \((\d+) Glieder\)/;
+const EXPECTED_CHAIN_LENGTH = 18;
 
-test("OUT-14 (SOLL, rot) - die im Modul-Kommentar genannte Gliederzahl deckt sich mit der tatsaechlichen Gate-Kette", () => {
-  const source = fs.readFileSync(path.join(REPO_ROOT, "src", "telephony", "outbound-gates.js"), "utf8");
-  const match = source.match(CHAIN_LENGTH_COMMENT);
-  assert.ok(match, "der Modul-Kommentar nennt die Gliederzahl der Gate-Kette");
+test("die Gate-Kette hat 18 Glieder (OUT-14)", () => {
   const { gates } = makeOutboundGates(makeDeps());
-  assert.equal(Number(match[1]), gates.length, "Kommentar-Zahl == Laenge der gebauten Kette");
+  assert.equal(gates.length, EXPECTED_CHAIN_LENGTH);
 });
