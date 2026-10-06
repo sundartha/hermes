@@ -1,18 +1,3 @@
-// IEL-B10: Unterbefehl `conversation-beleg --richtung=inbound|outbound --seit=<ISO> [--nummer=<E.164>]`
-// (Spec E22). Der EINZIGE Weg, eine ElevenLabs-Conversation im Runbook zu lesen.
-//
-// tenant_token ist eine HMAC-Ableitung eines Plattform-Geheimnisses, sip_hermes_call_binding traegt
-// das Bindungs-Token - beide sind Credentials. Ausgegeben werden deshalb nur abgeleitete Felder:
-// Kennung, Richtung, Status, Dauer, Registrierungs-Gleichheit, je Beleg-Variable vorhanden/leer/Laenge,
-// die NAMEN der uebrigen Variablen, die erste Agent-Zeile (gekuerzt) und ob der erste Agent-Eintrag
-// unterbrochen wurde (ja/nein/fehlt, IEX-A6 - Messung M-U1 ohne Rohlesen).
-//
-// REIHENFOLGE BINDEND: ZUERST kommen die geheimen Werte in die Verbotsmenge, DANN wird irgendetwas
-// ausgegeben. Die erste Agent-Zeile prueft der Waechter UNGEKUERZT und kuerzt erst danach (K3).
-//
-// Die Liste wird clientseitig nach Richtung gefiltert (kein Filterparameter beim Anbieter) und nach
-// start_time_unix_secs sortiert (die Reihenfolge der Liste ist unbelegt). has_more -> ROT: eine
-// unvollstaendige Liste belegt nicht, welche Conversation die neueste ist.
 import { fetchConversation, listConversations, listPhoneNumbers } from "../src/elevenlabs/convai.js";
 import { registrierungenMitNummer } from "../src/elevenlabs/nummern-registrierung.js";
 import { EXIT, jaNein } from "./iel-geheimnisse-ausgabe.mjs";
@@ -52,7 +37,6 @@ export async function laufeConversationBeleg({ argumente, abh }) {
   return EXIT.GRUEN;
 }
 
-// {eintrag} | {befund}
 async function neuesteConversation({ abh, richtung, seitMs }) {
   const antwort = await listConversations({
     fetchImpl: abh.fetchImpl,
@@ -71,7 +55,6 @@ async function neuesteConversation({ abh, richtung, seitMs }) {
   return { eintrag: passende[0] };
 }
 
-// Ohne --nummer: {id: undefined} (keine Gleichheitszeile). Mit --nummer: genau eine Registrierung.
 async function registrierungFuer({ abh, nummern }) {
   if (nummern.length === 0) return { id: undefined };
   const liste = await listPhoneNumbers({ fetchImpl: abh.fetchImpl, account: abh.elKonto });
@@ -80,7 +63,6 @@ async function registrierungFuer({ abh, nummern }) {
   return { id: treffer[0].phone_number_id };
 }
 
-// Rein: je Beleg-Variable {name, vorhanden, leer, laenge}; nie ein Wert.
 export function variablenBeleg(dynamicVariables) {
   const variablen = dynamicVariables ?? {};
   return {
@@ -95,15 +77,10 @@ export function variablenBeleg(dynamicVariables) {
   };
 }
 
-// Rein: die erste Agent-Zeile mit Text, sonst null.
 export function ersteAgentZeile(transcript) {
   return transcriptZeilen(transcript).find((zeile) => istAgentEintrag(zeile) && zeile.message)?.message ?? null;
 }
 
-// Rein (IEX-A6, M-U1): "ja" nur bei interrupted === true, "nein" nur bei === false, sonst "fehlt".
-// Bewusst der ERSTE Agent-Eintrag, auch ohne Text: eine Eroeffnung, die vor dem ersten Wort abgeschnitten
-// wurde, meldete sonst den Zustand eines spaeteren Zugs. "fehlt" ist kein "nein" - eine unbelegte
-// Unterbrechungssperre ist nicht ausgeschlossen (fail-closed).
 export function ersterAgentEintragUnterbrochen(transcript) {
   const unterbrochen = transcriptZeilen(transcript).find(istAgentEintrag)?.interrupted;
   return typeof unterbrochen === "boolean" ? jaNein(unterbrochen) : UNTERBRECHUNG_FEHLT;
@@ -119,7 +96,6 @@ function istAgentEintrag(zeile) {
 
 function meldeBeleg({ abh, conversation, registrierungId }) {
   const variablen = conversation?.conversation_initiation_client_data?.dynamic_variables ?? {};
-  // ZUERST verbieten, DANN ausgeben.
   GEHEIME_BELEG_VARIABLEN.forEach((name) => abh.waechter.verbiete(variablen[name]));
   meldeKopf({ waechter: abh.waechter, conversation, registrierungId });
   meldeVariablen(abh.waechter, variablen);
@@ -154,14 +130,12 @@ function meldeVariablen(waechter, variablen) {
   waechter.info(`uebrige dynamic_variables (nur Namen): ${beleg.uebrigeNamen.join(LISTEN_TRENNER) || OHNE_WERT}`);
 }
 
-// Ungekuerzt geprueft, danach gekuerzt (infoGekuerzt, K3).
 function meldeErsteAgentZeile(waechter, transcript) {
   const zeile = ersteAgentZeile(transcript);
   if (zeile === null) waechter.info(`erste Agent-Zeile: ${OHNE_WERT}`);
   else waechter.infoGekuerzt({ kopf: "erste Agent-Zeile: ", text: zeile, maxZeichen: ERSTE_ZEILE_MAX_ZEICHEN });
 }
 
-// Traegt nur ja/nein/fehlt, nie Gespraechsinhalt; laeuft trotzdem durch den Waechter wie jede Zeile.
 function meldeUnterbrechung(waechter, transcript) {
   waechter.info(`erste Agent-Zeile unterbrochen: ${ersterAgentEintragUnterbrochen(transcript)}`);
 }

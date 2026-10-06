@@ -1,41 +1,4 @@
 #!/usr/bin/env node
-// IEL-B10: das Geheimnis-Werkzeug des ElevenLabs-Inbound-Wegs (Spec E16, E19, E21, E22).
-//
-// Unterbefehle:
-//   setzen --nummer=<E.164>... --registrierung=<phnum_...>... [--ausfuehren]
-//                         (mindestens ein Ziel; beide Wege mischbar, dieselbe Registrierung zaehlt einmal)
-//                         erzeugt SIP-User, SIP-Passwort und Init-Token im Prozess und verteilt sie im
-//                         selben Lauf: Render-Env -> Workspace-Secret -> inbound_trunk_config.
-//   beleg-init            Ziel-Urteil (Render-API), dann zwei POSTs an den Init-Webhook (403/404).
-//   allowlist-uebernehmen [--ausfuehren]
-//                         OWNER_SELF_CALL_TENANT_IDS (genau ein Eintrag) -> ELEVENLABS_INBOUND_TENANT_IDS.
-//   schalter --an|--aus [--ausfuehren]
-//                         ELEVENLABS_INBOUND_ENABLED; --an nur mit Inventar, beleg-init, stimmen-beleg und
-//                         Mindestlaengen GRUEN im selben Lauf, --aus bedingungslos.
-//   scope --registrierte-dids|--allowlist [--ausfuehren]
-//                         ELEVENLABS_INBOUND_SCOPE; --registrierte-dids nur mit Inventar und beleg-init GRUEN
-//                         im selben Lauf, --allowlist bedingungslos.
-//   stimmen-beleg         Stimm-Gleichheit Pflichtsatz/Agent (nur lesend + Probe-Synthesen).
-//   conversation-beleg --richtung=inbound|outbound --seit=<ISO> [--nummer=<E.164>]
-//                         abgeleitete Felder der neuesten Conversation, nie ein Variablen-Wert.
-//
-// INVARIANTEN:
-//   - Trockenlauf ist Default; geschrieben wird nur mit --ausfuehren.
-//   - Kein Geheimnis-Wert erreicht stdout/stderr: EINE Ausgabefunktion (Ausgabe-Waechter) prueft jede
-//     Zeile gegen alle erzeugten und gelesenen Werte; Anbieter-Fehlerkoerper werden nie gelesen, auch
-//     der letzte catch gibt nur einen Status aus (ein Parse-Fehlertext kann Koerper-Schnipsel tragen).
-//   - Kein Unterbefehl laedt den Store; die lokale .env ist weder Wert- noch Zielquelle: Werte entstehen
-//     im Prozess, Ziele sind Repo-Konstanten (gepinnter Render-Dienst, initWebhookUrl), das Ziel-Urteil
-//     liest den Dienst ueber die Render-API.
-//   - Der Render-Listen-Endpunkt (PUT .../env-vars ersetzt die GESAMTE Env) ist baulich unerreichbar,
-//     geschrieben werden genau sechs benannte Schluessel (src/render-api.js, iel-geheimnisse-render.mjs).
-//
-// RENDER_API_KEY ist Werkzeug-, nicht Dienst-Konfiguration: gelesen ueber den eigenen Namespace
-// config.werkzeug (EIN Leser mit push-elevenlabs.mjs; process.env ausserhalb von src/config.js ist per
-// Lint gesperrt, G35). Die Inbound-Geheimnisse der lokalen Konfiguration liest dieses Werkzeug nie.
-//
-// Aufruf OHNE Env-Praefix (Allow-Regel Bash(node scripts/iel-*)):
-//   node scripts/iel-geheimnisse.mjs setzen --nummer=+49... [--ausfuehren]
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -73,12 +36,9 @@ const CLI_ARGS_OFFSET = 2;
 const WERT_TRENNER = "=";
 const LISTEN_TRENNER = ", ";
 
-// EINE Tabelle je Unterbefehl (statt paralleler switch-Ketten, G23): erlaubte Schalter, benoetigte
-// Schluessel, Widerspruchs-Pruefung, Lauf.
 const BEFEHLE = Object.freeze({
   [UNTERBEFEHL.SETZEN]: {
     erlaubt: [SCHALTER_ARG.AUSFUEHREN, SCHALTER_ARG.NUMMER, SCHALTER_ARG.REGISTRIERUNG],
-    // AGENT: der Schreibziel-Riegel vergleicht jede Registrierung mit dem eigenen Agenten (E14).
     schluessel: () => [SCHLUESSEL.RENDER, SCHLUESSEL.EL, SCHLUESSEL.AGENT],
     widerspruch: setzenWiderspruch,
     laufe: laufeSetzen,
@@ -97,14 +57,12 @@ const BEFEHLE = Object.freeze({
   },
   [UNTERBEFEHL.SCHALTER]: {
     erlaubt: [SCHALTER_ARG.AN, SCHALTER_ARG.AUS, SCHALTER_ARG.AUSFUEHREN],
-    // --aus braucht nur Render: der Rueckweg haengt an nichts sonst.
     schluessel: (argumente) => (argumente.an ? [SCHLUESSEL.RENDER, SCHLUESSEL.EL, SCHLUESSEL.AGENT] : [SCHLUESSEL.RENDER]),
     widerspruch: (argumente) => (argumente.an === argumente.aus ? `schalter verlangt genau eins: ${SCHALTER_ARG.AN} oder ${SCHALTER_ARG.AUS}` : null),
     laufe: laufeSchalter,
   },
   [UNTERBEFEHL.SCOPE]: {
     erlaubt: [SCHALTER_ARG.REGISTRIERTE_DIDS, SCHALTER_ARG.SCOPE_ALLOWLIST, SCHALTER_ARG.AUSFUEHREN],
-    // --allowlist braucht nur Render: der Rueckweg haengt an nichts.
     schluessel: (argumente) => (argumente.registrierteDids ? [SCHLUESSEL.RENDER, SCHLUESSEL.EL] : [SCHLUESSEL.RENDER]),
     widerspruch: (argumente) =>
       argumente.registrierteDids === argumente.allowlist
@@ -126,8 +84,6 @@ const BEFEHLE = Object.freeze({
   },
 });
 
-// ---- Argumente (rein) ------------------------------------------------------------------------
-
 function setzenWiderspruch(argumente) {
   const zielAnzahl = argumente.nummern.length + argumente.registrierungsKennungen.length;
   if (zielAnzahl > 0) return null;
@@ -145,7 +101,6 @@ function argumentBekannt(erlaubt, arg) {
   return erlaubt.some((schalter) => (WERT_SCHALTER.includes(schalter) ? arg.startsWith(schalter) : arg === schalter));
 }
 
-// Nur der Schalter-Name wird gemeldet, nie ein Wert hinter "=".
 function schalterName(arg) {
   return arg.split(WERT_TRENNER)[0];
 }
@@ -159,7 +114,6 @@ function einzigerWert(args, schalter) {
   return werte.length === 1 ? werte[0] : null;
 }
 
-// Rein: {unterbefehl, ausfuehren, an, aus, registrierteDids, allowlist, nummern[], registrierungsKennungen[], richtung, seitMs} | {fehler}.
 export function leseArgumente(argv) {
   const [unterbefehl = "", ...args] = argv;
   const befehl = Object.hasOwn(BEFEHLE, unterbefehl) ? BEFEHLE[unterbefehl] : null;
@@ -184,7 +138,6 @@ export function leseArgumente(argv) {
   return fehler ? { fehler } : argumente;
 }
 
-// Rein: die fuer diesen Lauf fehlenden Schluessel - nur Namen.
 export function fehlendeSchluessel({ argumente, abh }) {
   const vorhanden = {
     [SCHLUESSEL.RENDER]: abh.renderApiKey,
@@ -195,9 +148,6 @@ export function fehlendeSchluessel({ argumente, abh }) {
   return befehl.schluessel(argumente).filter((name) => !vorhanden[name]);
 }
 
-// ---- Verdrahtung und Lauf ------------------------------------------------------------------------
-
-// Die EINZIGE Stelle, die Konfiguration und Prozess-Kanaele verdrahtet (P15).
 export function standardAbhaengigkeiten() {
   const { apiKey, apiBase, agentId } = config.voice.elevenLabsOutbound;
   return {
@@ -211,7 +161,6 @@ export function standardAbhaengigkeiten() {
   };
 }
 
-// Exit ROT, sobald der Waechter eine Zeile verworfen hat - auch wenn der Lauf sonst GRUEN waere.
 export async function runCli({ argv, abh }) {
   const waechter = makeAusgabeWaechter({ stdout: abh.stdout, stderr: abh.stderr });
   const code = await laufeBefehl({ argv, abh: { ...abh, waechter } });

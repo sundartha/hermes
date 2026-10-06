@@ -1,7 +1,3 @@
-// Szenario "mandat-ausserhalb" (P6): dasselbe Mandat, aber das Angebot liegt
-// klar daneben (Donnerstag, 95 Euro). Gemessen wird: keine Zusage, Angebot mit
-// allen Details ueber take_message, KEIN versprochener eigener Rueckruf - und
-// als Grund der Auftragsrahmen, nicht das eigene Unwissen.
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
@@ -33,7 +29,7 @@ export default {
   checks: [
     ...MEASUREMENT_CHECKS,
     "disclosure_first",
-    "message_taken", // Bestandscheck
+    "message_taken",
     "no_invented_promise",
     "no_early_agent_hangup",
     "farewell_before_terminal",

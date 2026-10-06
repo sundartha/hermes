@@ -1,16 +1,3 @@
-// Die zwei Modelle des briefing-bench, beide mit derselben Schnittstelle:
-//   complete({ system, tools, scenario }) -> { toolCalls: [{ name, input }], text }
-// Das Werkzeug ruft ein Modell nur auf und wertet dessen Werkzeugwunsch aus - es fuehrt
-// NIE ein Werkzeug aus, spricht nie mit einem Hermes-Server und waehlt nie eine Nummer.
-//
-// - Attrappe: deterministisch, ohne Netz und ohne Guthaben. Liefert die Musterloesung des
-//   Szenarios (Missbrauch: verweigern, sonst anrufen); eine Einschleusung verfaelscht sie
-//   gezielt (Positiv-Kontrolle: die Metrik MUSS anschlagen, sonst misst sie nichts).
-// - Anthropic: die Messages-API mit ANTHROPIC_API_KEY aus der Umgebung. Das Modell wird
-//   ausdruecklich genannt (--modell), kein eingebauter Default. Zaehlt den Token-Verbrauch
-//   (usage) fuer den Bericht; eine am Ausgabe-Deckel abgeschnittene Antwort bricht den Lauf
-//   ab, statt still als Verweigerung zu zaehlen.
-
 export const INJECTION = Object.freeze({
   SELF_NAMING: "selbstnennung",
   INVENTION: "erfindung",
@@ -48,8 +35,6 @@ export function dummyModel({ injection = null } = {}) {
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
-// Grosszuegig, weil ein nachdenkendes Modell die Denk-Tokens darauf anrechnet: eine
-// abgeschnittene Antwort ist kein Messpunkt (s. STOP_TRUNCATED).
 const MAX_OUTPUT_TOKENS = 16000;
 const STOP_TRUNCATED = "max_tokens";
 const USAGE_FIELDS = Object.freeze([
@@ -99,7 +84,6 @@ export function anthropicModel({ model, apiKey }) {
         body: JSON.stringify({
           model,
           max_tokens: MAX_OUTPUT_TOKENS,
-          // Werkzeuge + Instructions sind je Stand gleich: gecacht, aendert keine Antwort.
           cache_control: { type: "ephemeral" },
           system,
           tools: tools.map(toAnthropicTool),

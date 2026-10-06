@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-// Setzt PUBLIC_URL in .env auf die aktuelle Tunnel-URL (ngrok-Free wechselt sie bei
-// jedem Start). Aufruf: node scripts/set-public-url.js https://abc123.ngrok-free.app
-//
-// Es gibt KEINEN Provider-Aufruf mehr: Telnyx haelt die Voice-URL an der
-// TeXML-Application (TELNYX_CONNECTION_ID, voice_url = <PUBLIC_URL>/voice/incoming),
-// nicht je Nummer. Die URL dort wird im Telnyx-Portal gepflegt.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";

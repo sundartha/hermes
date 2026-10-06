@@ -1,30 +1,4 @@
 #!/usr/bin/env node
-// P6 (PLAN-ANRUFDEFEKTE.md, W6): Vorher-Messung fuer P7 (Lehre
-// bench-must-reproduce-defect) - wie oft unterbricht das ASR/Provider-Turn-Ende
-// einen Agenten-Turn mitten im Sprechen, und wie viel vom geplanten Text kam
-// dabei tatsaechlich raus.
-//
-// E-1 (woertlich): die HAUPTKENNZAHL zaehlt gegen ALLE Agenten-Turns (nicht nur
-// die mit Text) - die zweite Zaehlung (Nenner nur Turns MIT Text) wird zusaetzlich
-// ausgegeben und ausdruecklich benannt, weil beide Nenner in Planungsdokumenten
-// vorkommen und sonst zwei Wahrheiten entstehen.
-// E-2: die Gespraechsdauer gehoert in dieselbe Messung - eine Gegenmassnahme wie
-// turn_eagerness:"patient" kann die Unterbrechungsrate senken UND den Anruf
-// verteuern (PM-4 unten).
-// E-3: die Recap-Heuristik (s. istRecapText) ist eine HEURISTIK, kein Messwert -
-// sie geht NICHT in die Hauptkennzahl ein, s. FUSSNOTE.
-//
-// I-1/I-2/I-4: dieses Modul kennt kein "fs", kein "method:" - es gibt nur EINEN
-// Netzzugriff (holeGespraech, GET). Damit ist am Quelltext ablesbar, dass das
-// Werkzeug weder schreiben noch eine Datei anlegen KANN (Praezedenz
-// scripts/lib/elevenlabs-agent-lesen.mjs). Der Anbieter-Fehlerrumpf wird nie
-// gelesen und nie ausgegeben (er kann Gespraechsinhalt/Nummern tragen, s.
-// src/elevenlabs/convai.js) - nur der HTTP-Status. Ausgegeben werden
-// ausschliesslich Zahlen, nie Sprechtext.
-//
-// Aufruf: node scripts/anruf-unterbrechungen.mjs <conversation_id> [<conversation_id> ...]
-// Exit 2: falscher Aufruf (keine Argumente, ungueltige Kennung) - kein Abruf.
-// Exit 1: fehlender Schluessel oder mindestens ein gescheiterter Abruf.
 import { fileURLToPath } from "node:url";
 
 import { config } from "../src/config.js";
@@ -40,24 +14,13 @@ const PROZENT_NACHKOMMA = 1;
 const DAUER_NACHKOMMA = 1;
 const KENNUNG_MUSTER = /^conv_[A-Za-z0-9]+$/;
 const EXIT_AUFRUFFEHLER = 2;
-const ARGV_KENNUNGEN_OFFSET = 2; // argv[0]=node, argv[1]=Skriptpfad - Kennungen beginnen ab Index 2
+const ARGV_KENNUNGEN_OFFSET = 2;
 const USAGE = "Aufruf: node scripts/anruf-unterbrechungen.mjs <conversation_id> [<conversation_id> ...]";
 const FUSSNOTE =
   'Fussnote: "Recap im Folge-Turn" ist eine HEURISTIK (Markerworte im naechsten\n' +
   "Agenten-Turn mit Text), kein Messwert. Sie erkennt eine Erholung nicht zuverlaessig und\n" +
   "geht in die Hauptkennzahl NICHT ein.";
 
-// HEURISTIK, KEIN MESSWERT (E-3). Grundlage ist der belegte Fall aus W6: der als
-// "gut" bewertete Anruf vom 03.09. hatte einen zu 52,5 % abgeschnittenen Turn und
-// lief sauber weiter, WEIL der Agent im naechsten Turn ausdruecklich zusammenfasste
-// ("Entschuldige, ich glaube die Verbindung war kurz schlecht ..."). Das
-// unterscheidende Merkmal ist die RATE unterbrochener Turns UND das FEHLEN einer
-// Recap-Erholung - nicht der Verlust eines Einzel-Turns.
-//
-// GRENZEN, ausdruecklich: Marker sind Wortstuecke, keine Bedeutung. Ein Agent kann
-// zusammenfassen, ohne einen Marker zu benutzen (falsch negativ), und "sorry" kann
-// etwas anderes heissen (falsch positiv). Deshalb steht die Zahl unter der
-// FUSSNOTE oben und geht nicht in die Hauptkennzahl ein.
 export const RECAP_MARKER = Object.freeze([
   "entschuldig",
   "verbindung",
@@ -77,10 +40,6 @@ export const RECAP_MARKER = Object.freeze([
   "je repete",
 ]);
 
-// ---- reine Funktionen (kein IO, keine Uhr - offline testbar) --------------------
-
-// Laenge in Zeichen; fehlender/leerer Text zaehlt als 0. EINE Laengen-Definition
-// fuer "hat Text" und fuer den Zeichenanteil (G5) - zwei waeren zwei Wahrheiten.
 export function zeichenzahl(text) {
   return text === null || text === undefined ? 0 : text.length;
 }
@@ -89,24 +48,17 @@ export function istGueltigeKennung(kennung) {
   return typeof kennung === "string" && KENNUNG_MUSTER.test(kennung);
 }
 
-// Alle Turns mit role === "agent", in Transkript-Reihenfolge. Strikter Vergleich,
-// nie truthy raten.
 export function agentenTurns(gespraech) {
   const transcript = gespraech?.transcript ?? [];
   return transcript.filter((turn) => turn.role === AGENT_ROLLE);
 }
 
-// len(message)/len(original_message) EINES unterbrochenen Turns. Fehlt
-// original_message oder ist sie leer -> null ("nicht berechenbar"), NIE eine
-// erfundene 1.0 oder 0 (Praezedenz ratePercent === null in abandonStats).
 export function ausgelieferterAnteil(turn) {
   const originalLaenge = zeichenzahl(turn.original_message);
   if (originalLaenge === 0) return null;
   return (zeichenzahl(turn.message) / originalLaenge) * PROZENT;
 }
 
-// Kombinierende diakritische Zeichen (U+0300-U+036F) nach NFD-Zerlegung entfernen,
-// damit z.B. "desole" (Marker, reines ASCII) auf "désolé" (Anbieter-Transkript) trifft.
 function normalisiereText(text) {
   return text
     .toLowerCase()
@@ -114,15 +66,12 @@ function normalisiereText(text) {
     .replace(/[̀-ͯ]/g, "");
 }
 
-// HEURISTIK (E-3, s. Kopfkommentar RECAP_MARKER).
 export function istRecapText(text) {
   if (zeichenzahl(text) === 0) return false;
   const normalisiert = normalisiereText(text);
   return RECAP_MARKER.some((marker) => normalisiert.includes(marker));
 }
 
-// Der naechste Agenten-Turn MIT Text nach Position index in turns; gibt es
-// keinen -> false.
 export function recapImFolgeTurn(turns, index) {
   for (let i = index + 1; i < turns.length; i++) {
     const kandidat = turns[i];
@@ -131,14 +80,10 @@ export function recapImFolgeTurn(turns, index) {
   return false;
 }
 
-// zaehler/nenner*100, oder null bei leerem Nenner (nie eine erfundene 0).
 function anteilVon(zaehler, nenner) {
   return nenner === 0 ? null : (zaehler / nenner) * PROZENT;
 }
 
-// Die Auswertung EINES Anrufs. Rohform des Anbieters rein, nur Zahlen raus.
-// Eine Aufgabe, eine Abstraktionsebene (G30/G34): zaehlt und rechnet, formatiert
-// und druckt nicht.
 export function analysiereGespraech(gespraech) {
   const turns = agentenTurns(gespraech);
   const mitText = turns.filter((turn) => zeichenzahl(turn.message) > 0).length;
@@ -171,8 +116,6 @@ function mittelwert(werte) {
   return werte.reduce((summe, wert) => summe + wert, 0) / werte.length;
 }
 
-// Zusammenfassung ueber alle Anrufe. Mittel UEBER ANRUFE (jeder Anruf zaehlt
-// gleich), nicht gepoolt. Leere Menge -> null, keine erfundene 0.
 export function fasseZusammen(analysen) {
   const anteile = analysen.map((analyse) => analyse.anteilAlleTurns).filter((wert) => wert !== null);
   const dauern = analysen.map((analyse) => analyse.dauerSekunden).filter((wert) => wert !== null);
@@ -183,7 +126,6 @@ export function fasseZusammen(analysen) {
   };
 }
 
-// EINE Formatierungsquelle fuer Skript-Ausgabe UND Test (G5).
 export function alsProzent(anteil) {
   return anteil === null ? "-" : anteil.toFixed(PROZENT_NACHKOMMA);
 }
@@ -191,10 +133,6 @@ export function alsSekunden(dauer) {
   return dauer === null ? "-" : dauer.toFixed(DAUER_NACHKOMMA);
 }
 
-// ---- IO-Teil ---------------------------------------------------------------
-
-// Der EINZIGE Netzzugriff, GET. Fehlerrumpf wird NIE gelesen (Absolute Regel
-// 4/5) - er kann Gespraechsinhalt tragen; der Status reicht zur Diagnose.
 async function holeGespraech(kennung) {
   const url = `${apiBase}${GESPRAECHS_PFAD}${encodeURIComponent(kennung)}`;
   const controller = new AbortController();
@@ -213,8 +151,6 @@ async function holeGespraech(kennung) {
   }
 }
 
-// DIP (P4): der Abruf ist injizierbar, damit der Test ohne Netz laeuft. Ein
-// fehlgeschlagener Anruf beendet den Lauf NICHT still: er landet in fehler[].
 export async function messeAnrufe(kennungen, { holeGespraech: abruf = holeGespraech } = {}) {
   const analysen = [];
   const fehler = [];
@@ -265,8 +201,6 @@ function berichteFehler(fehler) {
   });
 }
 
-// Fail-closed vor dem ersten Byte: keine Argumente oder eine ungueltige Kennung
-// beenden den Lauf, BEVOR ueberhaupt ein Abruf versucht wird.
 function pruefeAufrufform(kennungen) {
   if (kennungen.length === 0) {
     console.error(USAGE);
@@ -293,7 +227,6 @@ async function main() {
   if (fehler.length > 0) process.exit(1);
 }
 
-// Nur als Skript ausfuehren, NICHT beim Import (Muster telnyx-call-latency.mjs).
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMain) {
   main().catch((err) => {

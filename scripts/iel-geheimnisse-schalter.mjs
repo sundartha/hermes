@@ -1,19 +1,3 @@
-// IEL-B10/IEX-A11: `allowlist-uebernehmen [--ausfuehren]`, `schalter --an|--aus [--ausfuehren]` (Spec E16) und
-// `scope --registrierte-dids|--allowlist [--ausfuehren]` (Spec IEX-A E14).
-//
-// allowlist-uebernehmen: liest OWNER_SELF_CALL_TENANT_IDS am gepinnten Dienst, verlangt GENAU einen
-// Eintrag (dieselbe Zerlegung wie am Server, csvEnv) und schreibt ihn als ELEVENLABS_INBOUND_TENANT_IDS.
-// Ausgabe nur Anzahl und "gleich ja/nein" - nie eine Tenant-ID.
-//
-// schalter --an (Runde 5, K2, IM CODE erzwungen): im selben Lauf Inventar, beleg-init, stimmen-beleg und
-// die Mindestlaengen der drei Geheimnisse in Render. Nur wenn ALLE vier GRUEN sind, folgt genau EIN PUT
-// auf ELEVENLABS_INBOUND_ENABLED - und zwar als letzter Aufruf, allein. schalter --aus schreibt
-// bedingungslos: der Rueckweg haengt an nichts.
-//
-// scope --registrierte-dids|--allowlist [--ausfuehren] (IEX-A11, Spec E14): EIN Einzel-PUT auf
-// ELEVENLABS_INBOUND_SCOPE. --registrierte-dids nur, wenn Inventar und beleg-init im selben Lauf GRUEN
-// sind; --allowlist schreibt bedingungslos (Rueckweg). Die Beleg-Zahlen je DID kennt das Werkzeug nicht
-// (kein Store, keine Logs): die E11-Ergebniszeile bleibt Pflicht-Lesebeleg im Runbook (b4/b5).
 import { csvEnv } from "../src/config.js";
 import { inboundElAccessDefects } from "../src/elevenlabs/inbound-path-decision.js";
 import { INBOUND_EL_SCOPE } from "../src/elevenlabs/inbound-scope.js";
@@ -29,12 +13,9 @@ import {
 } from "./iel-geheimnisse-render.mjs";
 
 const SCHALTER_WERT = Object.freeze({ AN: "true", AUS: "false" });
-// EIN Ablauf fuer beide Konfigurationsschalter (G5): Ausgabe-Kopf + Render-Schluessel.
 const SCHALTER_ZIEL = Object.freeze({ kopf: "SCHALTER", schluessel: RENDER_SCHLUESSEL.ENABLED });
 const SCOPE_ZIEL = Object.freeze({ kopf: "SCOPE", schluessel: RENDER_SCHLUESSEL.SCOPE });
 const ERWARTETE_TENANTS = 1;
-
-// ---- allowlist-uebernehmen ---------------------------------------------------------------------
 
 export async function laufeAllowlistUebernehmen({ argumente, abh }) {
   const { waechter } = abh;
@@ -57,7 +38,6 @@ export async function laufeAllowlistUebernehmen({ argumente, abh }) {
   return await uebernimmTenant({ abh, tenantId: eintraege[0] });
 }
 
-// SCHREIBZUGRIFF auf ELEVENLABS_INBOUND_TENANT_IDS, danach Lesebeleg.
 async function uebernimmTenant({ abh, tenantId }) {
   const { status } = await schreibeDienstEnv(abh, { schluessel: RENDER_SCHLUESSEL.TENANT_IDS, wert: tenantId });
   const zurueck = await leseDienstEnv(abh, RENDER_SCHLUESSEL.TENANT_IDS);
@@ -69,15 +49,11 @@ async function uebernimmTenant({ abh, tenantId }) {
   return exitVon(gleich);
 }
 
-// ---- schalter ----------------------------------------------------------------------------------
-
 export async function laufeSchalter({ argumente, abh }) {
   const umschaltung = { abh, ziel: SCHALTER_ZIEL, ausfuehren: argumente.ausfuehren };
   if (argumente.aus) return schalteUm({ ...umschaltung, wert: SCHALTER_WERT.AUS });
   return schalteNachVorbedingungen({ ...umschaltung, wert: SCHALTER_WERT.AN, vorbedingungen: VORBEDINGUNGEN_AN });
 }
-
-// ---- scope -------------------------------------------------------------------------------------
 
 export async function laufeScope({ argumente, abh }) {
   const umschaltung = { abh, ziel: SCOPE_ZIEL, ausfuehren: argumente.ausfuehren };
@@ -89,9 +65,6 @@ export async function laufeScope({ argumente, abh }) {
   });
 }
 
-// ---- gemeinsamer Ablauf ------------------------------------------------------------------------
-
-// Hinweg: nur nach GRUENEN Vorbedingungen, dann genau EIN PUT als letzter Konfigurations-Aufruf.
 async function schalteNachVorbedingungen({ vorbedingungen, ...umschaltung }) {
   const { abh, ziel } = umschaltung;
   const ergebnis = await pruefeVorbedingungen(abh, vorbedingungen);
@@ -103,7 +76,6 @@ async function schalteNachVorbedingungen({ vorbedingungen, ...umschaltung }) {
   return schalteUm(umschaltung);
 }
 
-// Laeuft ALLE Vorbedingungen seriell, auch nach einem ROT - der Lauf zeigt jeden offenen Punkt auf einmal.
 async function pruefeVorbedingungen(abh, vorbedingungen) {
   const teile = [];
   for (const { name, pruefe } of vorbedingungen) teile.push({ name, gruen: await pruefe(abh) });
@@ -126,8 +98,6 @@ async function schalteUm({ abh, ziel, wert, ausfuehren }) {
   return exitVon(gesetzt);
 }
 
-// ---- Vorbedingungen ----------------------------------------------------------------------------
-
 async function inventarGruen(abh) {
   const urteil = inventarUrteil(await holeRegistrierungen({ fetchImpl: abh.fetchImpl, account: abh.elKonto }));
   meldeNachUrteil(abh.waechter, {
@@ -137,8 +107,6 @@ async function inventarGruen(abh) {
   return urteil.gruen;
 }
 
-// Die Werte werden gelesen, sofort verboten und nur ueber inboundElAccessDefects (eine Quelle der
-// Mindestlaengen) beurteilt; ausgegeben werden Schluesselnamen und Mangel-Art.
 async function geheimnisLaengenGruen(abh) {
   const werte = {};
   for (const { schluessel, feld } of RENDER_GEHEIMNISSE) {
@@ -154,7 +122,6 @@ async function geheimnisLaengenGruen(abh) {
   return maengel.length === 0;
 }
 
-// Jede Vorbedingung meldet ihr eigenes Urteil und liefert gruen; Reihenfolge = Reihenfolge der Liste.
 const VORBEDINGUNG = Object.freeze({
   INVENTAR: Object.freeze({ name: "Inventar", pruefe: inventarGruen }),
   BELEG_INIT: Object.freeze({ name: "beleg-init", pruefe: async (abh) => (await belegInit(abh)).gruen }),
@@ -162,5 +129,4 @@ const VORBEDINGUNG = Object.freeze({
   LAENGEN: Object.freeze({ name: "Geheimnis-Laengen", pruefe: geheimnisLaengenGruen }),
 });
 const VORBEDINGUNGEN_AN = Object.freeze([VORBEDINGUNG.INVENTAR, VORBEDINGUNG.BELEG_INIT, VORBEDINGUNG.STIMMEN, VORBEDINGUNG.LAENGEN]);
-// Spec E14: der Scope-Flip braucht Inventar und beleg-init; Stimmen und Laengen belegt bereits schalter --an.
 const VORBEDINGUNGEN_REGISTRIERTE_DIDS = Object.freeze([VORBEDINGUNG.INVENTAR, VORBEDINGUNG.BELEG_INIT]);

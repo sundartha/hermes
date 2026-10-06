@@ -1,14 +1,4 @@
 #!/usr/bin/env node
-// Conversation-Bench CLI-Entry (tasks/convo-bench-spec.md). Reine Orchestrierung:
-// Argumente parsen, Szenarien laden, pro (Szenario,Repeat) den Runner aufrufen,
-// Reports schreiben, Exit-Code aus den deterministischen Checks ableiten.
-//
-// NIEMALS Teil von `npm test` (braucht Netz + echten ANTHROPIC_API_KEY, Spec §0).
-// Aufruf: node scripts/convo-bench.mjs run --scenario <id>|--all [--repeat 3]
-//         [--label ...] [--persona-model ...] [--judge-model ...] [--max-turns 10]
-//         [--provider telnyx] [--driver texml] [--out data/convo-bench/<run-id>]
-//         [--llm-provider anthropic|deepseek] [--agent-model ...]
-//         node scripts/convo-bench.mjs compare <reportDirA> <reportDirB>
 import path from "path";
 import { fileURLToPath } from "url";
 import { SCENARIOS, SCENARIO_IDS } from "./convo-bench/scenarios/index.mjs";
@@ -20,20 +10,10 @@ import { writeReport, writeSummary, printSummaryTable, printCompareTable, readRe
 import { LLM_PROVIDER, LLM_PROVIDER_VALUES } from "../src/llm/provider.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-// Kosten-Bremse (Spec §Risiken: "MAX_TURNS-Kappe verbindlich") - globaler, harter Cap
-// ueber ALLE Szenarien; scenario.maxTurns (checks.mjs) ist davon unabhaengig der
-// Check-Schwellwert. Default aus der Spec-CLI-Beispielzeile.
 const DEFAULT_MAX_TURNS_CAP = 10;
 const DEFAULT_REPEAT = 3;
-// Default-Provider = Live-Provider (Spec §3-1).
 const DEFAULT_PROVIDER = "telnyx";
 const DEFAULT_LABEL = "default";
-// AL-P0 (Werkzeugwahl): --agent-model-Default HAENGT vom gewaehlten --llm-provider ab -
-// ohne diese Zuordnung muesste jeder DeepSeek-Lauf den Modellnamen von Hand mitgeben,
-// und ein vergessenes --agent-model liefe still auf einem Anthropic-Modellnamen gegen
-// den DeepSeek-Adapter. EIGENER Namensraum (--llm-provider, NICHT --provider - das ist
-// bereits die Telefonie-Provider-Wahl, telnyx/twilio) und eigener Flag (--agent-model,
-// NICHT --model - mirror --persona-model/--judge-model).
 const AGENT_MODEL_DEFAULT_FOR_LLM_PROVIDER = Object.freeze({
   [LLM_PROVIDER.ANTHROPIC]: DEFAULT_AGENT_MODEL,
   [LLM_PROVIDER.DEEPSEEK]: "deepseek-v4-pro",
@@ -59,10 +39,6 @@ function parseArgs(argv) {
   return args;
 }
 
-// AL-P8: Welcher Treiber (= welche Transportschicht des Servers) gemessen wird. Default
-// ist der LIVE laufende Assistant-Pfad (O1). Ein Treiber, der einen bestimmten Provider
-// verlangt, faellt hier fail-closed auf - eine stille Umschaltung waere eine Messung an
-// der falschen Konfiguration.
 function resolveDriverId(args, provider) {
   const id = typeof args.driver === "string" ? args.driver : DEFAULT_DRIVER_ID;
   const driver = DRIVERS[id];
@@ -73,11 +49,6 @@ function resolveDriverId(args, provider) {
   return id;
 }
 
-// AL-P8: bei --all werden Szenarien, die den Treiber nicht unterstuetzen (z.B.
-// hold-warteschleife nur texml), SICHTBAR uebersprungen (kein stiller Verlust der
-// Szenario-Menge, s. Pre-Mortem "andere Szenario-Menge ohne dass es auffiel"). Ein
-// explizit gewaehltes --scenario auf einem unpassenden Treiber ist dagegen ein harter
-// Fehler, kein stiller Skip.
 function resolveScenarioIds(args, driverId) {
   if (args.all) {
     return SCENARIO_IDS.filter((id) => {
@@ -105,10 +76,6 @@ function resolveOutDir(args) {
   return path.join(ROOT, "data", "convo-bench", runId);
 }
 
-// ANTHROPIC_API_KEY nur aus process.env, NIE geloggt (auch nicht in Fehlerpfaden) -
-// Regel 4 (CLAUDE.md) + Spec §0/§6. Bleibt UNBEDINGT Pflicht (auch bei --llm-provider
-// deepseek): Persona/Judge laufen immer gegen Anthropic, und der gespawnte Server
-// verlangt den Key selbst unbedingt (assertConfig, src/config.js).
 function requireApiKey() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -118,8 +85,6 @@ function requireApiKey() {
   return apiKey;
 }
 
-// AL-P0: --llm-provider validieren, BEVOR irgendein bezahlter Request rausgeht (reiner
-// Konfigurationsfehler, mirror resolveDriverId oben).
 function resolveLlmProvider(args) {
   const value = typeof args["llm-provider"] === "string" ? args["llm-provider"] : DEFAULT_LLM_PROVIDER_FOR_BENCH;
   if (!LLM_PROVIDER_VALUES.includes(value))
@@ -127,10 +92,6 @@ function resolveLlmProvider(args) {
   return value;
 }
 
-// AL-P0: DEEPSEEK_API_KEY nur aus process.env, NIE geloggt (Regel 4) - nur Pflicht bei
-// --llm-provider deepseek (mirror requireApiKey). Failt LAUT und VOR dem Server-Spawn,
-// statt den Boot-Refusal im Kindprozess-Log suchen zu lassen (der gespawnte Server
-// wuerde ohnehin denselben Fehler werfen, assertConfig src/config.js:1928).
 function requireDeepseekKeyIfNeeded(llmProvider) {
   if (llmProvider !== LLM_PROVIDER.DEEPSEEK) return "";
   const key = process.env.DEEPSEEK_API_KEY;
@@ -142,9 +103,6 @@ function requireDeepseekKeyIfNeeded(llmProvider) {
 }
 
 async function runCommand(args) {
-  // AL-P8: Treiber-/Szenario-Validierung VOR dem API-Key-Gate - ein falscher --driver
-  // oder ein Szenario auf dem falschen Treiber ist ein reiner Konfigurationsfehler und
-  // darf ohne bezahlten Request auffallen (Abnahme-Beweis in tasks/al-testcall-checklist.md).
   const provider = typeof args.provider === "string" ? args.provider : DEFAULT_PROVIDER;
   const driverId = resolveDriverId(args, provider);
   const scenarioIds = resolveScenarioIds(args, driverId);
@@ -198,8 +156,6 @@ async function runCommand(args) {
   writeSummary(outDir, results);
   printSummaryTable(results);
 
-  // Exit-Code 0 NUR wenn ALLE deterministischen Checks aller Szenarien/Repeats
-  // bestehen (Spec §2/§5-i). Judge-Scores sind informativ, kein Hard-Gate.
   const allChecksPass = results.every((r) => r.checks.every((c) => c.pass));
   process.exit(allChecksPass ? 0 : 1);
 }
@@ -222,7 +178,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  // Fehlerpfad: NIE den Key loggen (Regel 4) - nur err.message.
   console.error(`[convo-bench] Fehler: ${err.message}`);
   process.exit(1);
 });

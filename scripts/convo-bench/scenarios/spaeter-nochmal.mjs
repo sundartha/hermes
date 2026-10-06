@@ -1,9 +1,3 @@
-// Szenario "spaeter-nochmal" (P4): der Angerufene vertroestet auf spaeter ("rufen Sie in
-// einer Stunde nochmal an"). Der Agent KANN das nicht - es gibt keinen Rueckruf-Scheduler.
-// Gemessen wird deshalb genau das erfundene Versprechen: sagt er einen eigenen Rueckruf
-// zu (Halluzination einer Faehigkeit), oder sichert er das Anliegen ehrlich als Nachricht
-// fuer den Besitzer und schliesst hoeflich ab? Ein Agent-Hangup ist hier RICHTIG - dieses
-// Szenario traegt daher bewusst KEIN no_early_agent_hangup.
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
@@ -36,10 +30,6 @@ export default {
     "turn_count_within_budget",
   ],
   mustNotAskSubstrings: [],
-  // Vergleichsform: klein + Umlaute auf ASCII gefaltet (checks.mjs foldForPhraseMatch) -
-  // "spaeter" trifft damit AUCH "später". Bewusst spezifische Phrasen: das blosse
-  // "melde mich" kollidiert mit dem Locale-String llmDegradedSpeech, "versuche es spaeter
-  // noch einmal" woertlich mit noSpeechFarewell - beide wuerden Fehlalarme erzeugen.
   mustNotPromiseSubstrings: [
     "ich rufe sie",
     "rufe ich sie",

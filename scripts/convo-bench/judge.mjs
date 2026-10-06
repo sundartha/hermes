@@ -1,35 +1,18 @@
-// LLM-Judge (tasks/convo-bench-spec.md §5-ii): direkter Anthropic-Call mit bewusst
-// ANDEREM (staerkerem) Modell als das gebenchte Haiku, um Selbstbewertungs-Bias zu
-// vermeiden. Default HART im Code (Spec §0): claude-sonnet-5.
-//
-// Abweichung von der Spec-Formulierung "Structured Output (json_schema)": statt des
-// erst kuerzlich verfuegbaren output_config.format-Felds (ungetestet mit dieser
-// SDK-Version im Repo) nutzt der Judge dasselbe im Bestand BEWIESENE Muster wie
-// claude.js:summarizeCall - System-Prompt-JSON-Instruktion + defensive Teilstring-
-// Extraktion (raw.slice(indexOf("{"), lastIndexOf("}")+1)). Robustheit im
-// kostenkritischen Feldtest wiegt hier schwerer als Spec-Wortlaut; siehe Report.
 import Anthropic from "@anthropic-ai/sdk";
 
 export const JUDGE_MODEL_DEFAULT = "claude-sonnet-5";
-// 800 war zu knapp: fuenf deutsche Rationale-Saetze + Scores sprengten das Limit,
-// das JSON wurde mid-string gekappt -> judge_parse_failed (Sanity-Lauf 2026-07-02).
 const JUDGE_MAX_TOKENS = 2000;
 
 const CRITERIA = ["role_fidelity", "coherence", "task_progress", "naturalness", "efficiency"];
 const SCORE_MIN = 1;
 const SCORE_MAX = 5;
 const VALID_FLAGS = new Set(["pass", "concern", "fail"]);
-// Neutraler Fallback-Flag, wenn das Modell keinen gueltigen overall_flag liefert -
-// "concern" statt stillem "pass" (fail-safe: ein kaputter Judge-Output darf nicht als
-// stilles Bestehen erscheinen).
 const FALLBACK_FLAG = "concern";
 
 function formatTranscript(transcript) {
   return transcript.map((t) => `${t.role === "agent" ? "AGENT" : "GEGENSEITE"}: ${t.text}`).join("\n");
 }
 
-// json_schema kennt kein minimum/maximum (siehe claude-api-Referenz) - Ganzzahl 1-5
-// wird hier als Best-effort-Clamp erzwungen, kein Crash bei Modell-Ausreissern.
 function clampScore(n) {
   const v = Math.round(Number(n));
   if (!Number.isFinite(v)) return SCORE_MIN;

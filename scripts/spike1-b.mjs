@@ -1,35 +1,4 @@
 #!/usr/bin/env node
-// WEGWERF-SKRIPT fuer Spike 1b. Beantwortet GENAU EINE Frage: kommt ein
-// ZWEITER Werkzeug-Aufruf im selben Gespraech zustande, und haelt er dieselbe
-// Wartezeit durch wie der erste?
-//
-// Spike 1 hat den ERSTEN Aufruf belegt (30/45/60 s, kein Dazwischenreden), ist
-// aber am zweiten gescheitert: Ueberbrueckungssatz ja, agent_tool_request nein.
-// Der dortige Aufbau hat den zweiten Aufruf allerdings nur ERBETEN (zweimal
-// derselbe Satz mit anderer Sekundenzahl). Hier wird er ERZWUNGEN: der
-// Wegwerf-Agent kennt zwei Angaben nicht, darf sie nicht raten, und der
-// Messklient fragt sie NACHEINANDER ab. Ohne zwei Werkzeug-Aufrufe kann der
-// Agent die Aufgabe nicht erfuellen.
-//
-// LAUF A (Trenntest): derselbe Aufbau, aber mit dem Modellprofil "produktion"
-// statt "spike1b". Spike 1b hat sein NEIN mit gpt-4o-mini und temperature 0
-// gemessen - beides weicht von der Auslieferung ab, und temperature 0
-// beguenstigt genau das beobachtete Verhalten (woertliche Nachahmung des
-// eigenen vorigen Zuges). Der Prompt bleibt dafuer Wort fuer Wort gleich,
-// sonst gilt der Vergleich nicht. Neu ist nur ein DRITTER Zug: er wird nur
-// erreicht, wenn der zweite Werkzeug-Aufruf zustande kam (sonst beendet der
-// Watchdog den Lauf vorher) - und beantwortet die eigentliche Produktfrage,
-// denn die Kontingent-Logik setzt N Aufrufe voraus, nicht zwei.
-//
-// Zeigt NICHT auf Hermes, faesst den Live-Agenten NICHT an, legt nichts
-// Dauerhaftes an. Der Schluessel steht in keiner Ausgabe.
-//
-// Aufruf:
-//   node scripts/spike1-b.mjs setup <oeffentliche-basis-url> <wartesekunden> [profil]
-//   node scripts/spike1-b.mjs patch-wait <tool-id> <basis-url> <wartesekunden>
-//   node scripts/spike1-b.mjs patch-prompt <agent-id> basis|explizit
-//   node scripts/spike1-b.mjs probe <agent-id> <label> [jsonl-datei]
-//   node scripts/spike1-b.mjs cleanup <agent-id> <tool-id>
 import { createWriteStream } from "node:fs";
 import WebSocket from "ws";
 import { config, stripTrailingSlash } from "../src/config.js";
@@ -45,34 +14,12 @@ const ERROR_PREVIEW_CHARS = 700;
 const MS_PER_SECOND = 1000;
 const CLEANUP_LIST_PAGE_SIZE = 30;
 
-// Die vier Schalter aus Spike 1, unveraendert uebernommen - sie sind die
-// Vergleichsbasis, nicht der Messgegenstand. response_timeout_secs bleibt 120
-// und wird NICHT auf 60 gesenkt, sonst misst der 60-s-Punkt den Timeout statt
-// des Gespraechsverhaltens.
 const TOOL_RESPONSE_TIMEOUT_SECS = 120;
-// turn_timeout gehoert zum Agenten. 30 statt 7, damit der Anbieter-Anstoss
-// ("Bist du noch da?") die Luecke zwischen den beiden Aufrufen nicht fuellt -
-// Spike 1 hat belegt, dass der Anstoss waehrend des Werkzeugs ohnehin nichts
-// aendert.
 const AGENT_TURN_TIMEOUT_SECS = 30;
 const AGENT_SILENCE_END_CALL_DISABLED = -1;
 const AGENT_MAX_DURATION_SECONDS = 600;
 const AGENT_LANGUAGE = "de";
 
-// Das EINE Feldbuendel, das LAUF A gegen Spike 1b tauscht. Alles andere - Prompt,
-// Werkzeug, die vier Schalter, die Zuege - bleibt identisch, sonst traegt der
-// Vergleich nicht.
-//
-// "produktion" ist die Eigentuemer-Vorgabe G6, jeder Wert belegt statt geraten:
-//   llm: am 2026-08-14 ueber GET /v1/convai/llm/list (96 Modelle, deckungsgleich
-//     mit der OpenAPI-Aufzaehlung "LLM") abgefragt. claude-opus-4-8 ist das
-//     staerkste angebotene Claude - hoechste Stufe (Opus), neuester Stand (4-8 vor
-//     4-7), 1 Mio. Kontext gegenueber 200k bei allen Sonnet/Haiku, 128k Ausgabe.
-//   reasoning_effort: ElevenLabs bietet das an (Aufzaehlung LLMReasoningEffort);
-//     "none" steht in available_reasoning_efforts genau dieses Modells.
-//   temperature: 0,66 - der Wert, den der LIVE-Agent Hermes fuehrt. Also die
-//     echte Produktionszahl und ausdruecklich NICHT 0. Der Anbieter-Default
-//     waere 0 und scheidet damit aus.
 const PROFILE_PRODUKTION = "produktion";
 const PROFILES = Object.freeze({
   spike1b: { llm: "gpt-4o-mini", temperature: 0, reasoning_effort: null },
@@ -98,16 +45,8 @@ const CLIENT_EVENTS = [
   "agent_response_complete",
 ];
 
-// Zwei Angaben, die der Agent NICHT kennt und NICHT raten darf. Sie sind
-// Zahlen, weil die Werkzeug-Attrappe eine Zahl (waited_ms) zurueckgibt - so
-// passt die Antwort zur Frage und der Agent muss nichts umdeuten.
 const ERSTE_ANGABE = "Kundennummer";
 const ZWEITE_ANGABE = "Vertragsnummer";
-// Nur fuer den dritten Zug. Steht bewusst NICHT im Prompt - der bleibt Wort fuer
-// Wort der aus Spike 1b, sonst gilt der Vergleich nicht. Der Prompt deckt den
-// Fall trotzdem ab ("erst dann, wenn die Serviceleitung danach fragt"), und die
-// Werkzeug-Beschreibung ohnehin ("jedes Mal ... auch dann, wenn du es in diesem
-// Gespraech schon einmal aufgerufen hast").
 const DRITTE_ANGABE = "Rechnungsnummer";
 
 const PROMPT_BASIS = [
@@ -122,8 +61,6 @@ const PROMPT_BASIS = [
   "Waehrend das Werkzeug laeuft, wartest du still ab. Plaudere nicht, wechsle nicht das Thema, lege nicht auf.",
 ].join(" ");
 
-// Gegenprobe nach Schritt 6: derselbe Aufbau, aber der zweite Aufruf wird so
-// ausdruecklich verlangt, wie es ohne Code-Aenderung geht.
 const PROMPT_EXPLIZIT = [
   "Du bist der Telefonassistent von Herrn Fischer und rufst bei einer Serviceleitung an.",
   `Die Serviceleitung wird dich nacheinander nach ZWEI Zahlen fragen: zuerst nach der ${ERSTE_ANGABE}, danach nach der ${ZWEITE_ANGABE}.`,
@@ -138,11 +75,6 @@ const PROMPT_EXPLIZIT = [
 
 const PROMPTS = { basis: PROMPT_BASIS, explizit: PROMPT_EXPLIZIT };
 
-// Die Gespraechszuege des Messklienten. Jeder erzwingt genau einen
-// Werkzeug-Aufruf; der naechste kommt erst, wenn der vorige beantwortet ist.
-// Zug 1 und 2 sind die Vergleichsbasis aus Spike 1b, unveraendert. Zug 3 wird
-// nur erreicht, wenn Zug 2 eine Werkzeug-Antwort geliefert hat - bleibt sie aus,
-// beendet der Watchdog den Lauf, bevor Zug 3 an die Reihe kommt.
 const USER_TURNS = [
   `Guten Tag, hier ist die Serviceleitung. Nennen Sie mir bitte zuerst die ${ERSTE_ANGABE}.`,
   `Danke. Und jetzt nennen Sie mir bitte noch die ${ZWEITE_ANGABE}.`,
@@ -169,10 +101,6 @@ function consultUrl(baseUrl, waitSeconds) {
   return `${stripTrailingSlash(baseUrl)}${CONSULT_PATH}?wait_seconds=${waitSeconds}`;
 }
 
-// Die Wartezeit haengt an der URL, nicht an einem Werkzeug-Parameter: so muss
-// der Agent nur EINE Sache richtig machen (das Werkzeug ueberhaupt aufrufen),
-// und die Messung wird nicht davon verfaelscht, ob er eine Zahl korrekt
-// weiterreicht.
 function toolConfig(baseUrl, waitSeconds) {
   return {
     type: "webhook",
@@ -325,10 +253,6 @@ async function cleanupCommand(rest) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Messklient
-// ---------------------------------------------------------------------------
-
 const SILENCE_SAMPLE_RATE_HZ = 16000;
 const SILENCE_BYTES_PER_SAMPLE = 2;
 const SILENCE_CHUNK_SECONDS = 0.25;
@@ -338,13 +262,9 @@ const SILENCE_CHUNK_BASE64 = Buffer.alloc(
 ).toString("base64");
 
 const FIRST_TURN_DELAY_MS = 3000;
-// Abstand zwischen der Werkzeug-Antwort und dem naechsten Zug des Anrufers -
-// gross genug, dass die Antwort des Agenten davor liegt.
 const NEXT_TURN_DELAY_MS = 12000;
 const AFTER_LAST_TOOL_GRACE_MS = 12000;
 const AFTER_CLOSE_SETTLE_MS = 5000;
-// Notbremse je Zug: startet das Werkzeug nach dieser Zeit nicht, gilt der
-// Aufruf als NICHT zustande gekommen (Spike 1 hat bis 120 s gewartet).
 const TOOL_START_WATCHDOG_MS = 120000;
 const HARD_STOP_MS = 420000;
 
@@ -353,8 +273,6 @@ const LOG_TIME_WIDTH = 7;
 const LOG_VALUE_MAX_CHARS = 260;
 const TEXT_PREVIEW_CHARS = 200;
 const ERROR_PREVIEW_CHARS_WS = 300;
-// Nur zur Sichtkontrolle im Transkript: die uebergebenen Werkzeug-Parameter
-// sind kurz, ein Auszug reicht.
 const TOOL_PARAMS_PREVIEW_CHARS = 120;
 
 const MSG_PING = "ping";
@@ -378,8 +296,6 @@ function delay(ms) {
   return new Promise((settle) => setTimeout(settle, ms));
 }
 
-// Alle Zeitangaben dieser Messung tragen dieselbe Aufloesung - eine Stelle,
-// damit die Zahlen im Protokoll vergleichbar bleiben.
 function sekundenZwischen(vonMs, bisMs) {
   return Number(((bisMs - vonMs) / MS_PER_SECOND).toFixed(ELAPSED_DECIMALS));
 }
@@ -396,9 +312,6 @@ function safeParseJson(text) {
   }
 }
 
-// Ein Gespraech mit ZWEI erzwungenen Rueckfragen. Haelt je Zug fest, was Spike
-// 1b auswerten will: kam agent_tool_request, kam der Ueberbrueckungssatz, haelt
-// die Leitung, redet der Agent waehrend der Wartezeit von selbst weiter.
 class ZweiAufrufeProbe {
   constructor({ agentId, label, jsonlPath }) {
     this.agentId = agentId;
@@ -472,8 +385,6 @@ class ZweiAufrufeProbe {
       this.abschluss();
       return;
     }
-    // toolRequestAt/toolResponseAt sind die internen Zeitanker der Messung -
-    // sie tragen kein Ergebnis und werden in zugAbschliessen wieder entfernt.
     this.aktuell = {
       toolRequestAt: null,
       toolResponseAt: null,
@@ -511,7 +422,6 @@ class ZweiAufrufeProbe {
     this.abschluss();
   }
 
-  // Steht das Werkzeug des laufenden Zuges gerade aus, und seit wann?
   werkzeugSicht() {
     const angefragtAm = this.aktuell?.toolRequestAt ?? null;
     const beantwortetAm = this.aktuell?.toolResponseAt ?? null;
@@ -521,9 +431,6 @@ class ZweiAufrufeProbe {
     };
   }
 
-  // Ordnet einen Satz des Agenten dem laufenden Zug zu: vor dem Werkzeug ist es
-  // der Ueberbrueckungssatz, waehrend des Werkzeugs Selbst-Weiterreden, danach
-  // die Antwort auf das Werkzeug-Ergebnis.
   satzEinordnen(satz, sicht) {
     const zug = this.aktuell;
     if (this.phase === PHASE.AWAIT_TOOL) {
@@ -581,9 +488,6 @@ class ZweiAufrufeProbe {
 
   zugAbschliessen() {
     if (!this.aktuell) return;
-    // Die beiden Zeitanker sind Messinnenleben und gehoeren nicht ins Ergebnis;
-    // der Unterstrich ist die vereinbarte Kennzeichnung fuer absichtlich
-    // ungenutzte Bindungen.
     const { toolRequestAt: _anfrageAt, toolResponseAt: _antwortAt, ...offen } = this.aktuell;
     const ergebnis = {
       label: this.label,
@@ -638,8 +542,6 @@ class ZweiAufrufeProbe {
     });
   }
 
-  // Zweite, unabhaengige Sicht: was steht nach dem Ende im Transkript? Ein
-  // Werkzeug-Aufruf, den der WebSocket nicht gemeldet hat, waere ein Befund.
   async transkriptSicht() {
     const res = await callApi(`${CONVERSATIONS_PATH}/${this.conversationId}`, "GET");
     const turns = res.body.transcript ?? [];

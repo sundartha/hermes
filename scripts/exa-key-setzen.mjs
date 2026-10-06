@@ -1,23 +1,4 @@
 #!/usr/bin/env node
-// Traegt den Exa-API-Schluessel in die lokale .env ein - der einzige Handgriff des
-// Eigentuemers ist das EINFUEGEN des Keys (Aufruf: npm run exa:key, dann Key einfuegen
-// und Enter; die Eingabe bleibt unsichtbar und landet nirgends im Terminal-Verlauf).
-//
-// FAIL-CLOSED MIT POSITIV-KONTROLLE (Lehre pruefkommando-ohne-positiv-kontrolle):
-// VOR dem Schreiben macht das Kommando genau EINE echte Mini-Suche gegen die Exa-API
-// (numResults=1, kostet nach der in src/config.js belegten Preisliste ~0,8 US-Cent).
-// Nur ein Key, der nachweislich funktioniert, wird eingetragen - ein 401/403 heisst
-// "Key ungueltig", und die .env bleibt unangetastet. So faellt ein Tippfehler HIER auf
-// und nicht erst mitten im bezahlten Testanruf. --ohne-probe ueberspringt die Suche
-// (dann ohne Beleg, ausdruecklich so gemeldet).
-//
-// SICHERHEIT (Absolute Regel 4): der Key wird NIE ausgegeben, nie geloggt, nie als
-// Argument erwartet (Argumente landen in der Shell-History und in `ps`). Angezeigt
-// wird nur eine Maske (erste 4 Zeichen + Laenge).
-//
-// Danach fehlt fuer den Verifikationsanruf nur noch der Serverstart mit
-// LOOKUP_ENABLED=true (s. .fortschritt.md, Abschnitt BEREIT ZUM ANRUF - der Schalter
-// reist dort bewusst als Env am Startkommando mit, nicht in der .env).
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,14 +7,10 @@ const REPO = resolve(fileURLToPath(import.meta.url), "..", "..");
 const STANDARD_ENV_DATEI = resolve(REPO, ".env");
 const STANDARD_API_BASE = "https://api.exa.ai";
 const SEARCH_PATH = "/search";
-// Harmlose Sachfrage ohne jeden Personen-/Auftragsbezug - es geht nur um den Beleg,
-// dass der Key angenommen wird.
 const PROBE_QUERY = "opening hours Deutsches Museum Munich";
 const PROBE_TIMEOUT_MS = 10000;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
-// Exa-Keys sind UUID-artig (36 Zeichen); die Untergrenze faengt abgeschnittene
-// Zwischenablagen, ohne ein Format zu raten, das der Anbieter nicht zusichert.
 const MIN_KEY_LAENGE = 20;
 const MASKE_ZEICHEN = 4;
 const ENV_ZEILE = /^EXA_API_KEY=/;
@@ -48,8 +25,6 @@ function maskiert(key) {
   return `${key.slice(0, MASKE_ZEICHEN)}… (${key.length} Zeichen)`;
 }
 
-// Liest den Key VERDECKT von der Tastatur (raw mode, keine Anzeige) - oder, wenn die
-// Eingabe gepipt ist (z.B. `pbpaste | npm run exa:key`), die erste Zeile von stdin.
 function leseKeyVerdeckt() {
   const { stdin, stdout } = process;
   if (!stdin.isTTY) {
@@ -91,8 +66,6 @@ function leseKeyVerdeckt() {
   });
 }
 
-// Die eine Positiv-Kontrolle: dieselbe Anfrageform wie der echte Adapter
-// (src/research/adapters/exa-search.js), nur mit numResults=1 und ohne highlights.
 async function probeGegenExa({ key, apiBase }) {
   let antwort;
   try {
@@ -112,8 +85,6 @@ async function probeGegenExa({ key, apiBase }) {
   return { ergebnis: "fehler", detail: `HTTP ${antwort.status}` };
 }
 
-// Ersetzt eine vorhandene EXA_API_KEY-Zeile oder haengt eine an - alles Uebrige der
-// .env bleibt byte-identisch stehen.
 function schreibeEnv({ datei, key }) {
   const zeilen = readFileSync(datei, "utf8").split("\n");
   const stelle = zeilen.findIndex((zeile) => ENV_ZEILE.test(zeile));
@@ -142,8 +113,6 @@ function apiBaseAus(envText) {
   return STANDARD_API_BASE;
 }
 
-// Eingabe-Pruefungen vor jeder Wirkung (G30: eine Aufgabe je Funktion). Liefert den
-// Abbruch-Text oder null.
 function eingabeFehler({ argv, datei, key }) {
   if (argv.some((wert) => !wert.startsWith("--"))) {
     return (
@@ -154,7 +123,7 @@ function eingabeFehler({ argv, datei, key }) {
   if (!existsSync(datei)) {
     return `Abbruch: ${datei} existiert nicht - erst .env anlegen (s. .env.example).`;
   }
-  if (key === null) return null; // Vor-Pruefung ohne Key (argv/Datei zuerst)
+  if (key === null) return null;
   if (!key) return "Abbruch: keine Eingabe.";
   if (/\s/.test(key) || key.length < MIN_KEY_LAENGE) {
     return (
@@ -166,7 +135,6 @@ function eingabeFehler({ argv, datei, key }) {
   return null;
 }
 
-// Die Positiv-Kontrolle samt Meldungen. Liefert true, wenn geschrieben werden darf.
 async function probeBestanden({ key, apiBase }) {
   console.log(`${LOG} Probe gegen ${apiBase} (eine Mini-Suche, ~0,8 US-Cent) ...`);
   const probe = await probeGegenExa({ key, apiBase });
@@ -223,5 +191,5 @@ async function haupt(argv) {
   return 0;
 }
 
-const ARG_START = 2; // wie in scripts/push-elevenlabs.mjs
+const ARG_START = 2;
 process.exit(await haupt(process.argv.slice(ARG_START)));

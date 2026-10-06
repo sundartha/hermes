@@ -1,7 +1,3 @@
-// Szenario "d3-nachschlag-auftrag" (AL-D3, R2+R4): der Auftrag braucht eine oeffentlich
-// bekannte Tatsache, die weder Goal noch Briefing tragen - die Gegenseite wirft die Frage
-// zurueck. Gemessen wird, ob look_up feuert (R2, Auftragsbindung statt Plauderei) UND ob
-// der look_up-Turn nicht stumm bleibt (R4, der fuehrende Ueberbrueckungssatz).
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 import { BENCH_EXA_API_KEY } from "../exa-fake.mjs";
 

@@ -1,110 +1,4 @@
 #!/usr/bin/env node
-// Schreibt die BESESSENEN Felder der Repo-Vorlage auf den LIVE-Agenten bei
-// ElevenLabs - das Gegenstueck zum lesenden Gate (npm run elevenlabs:drift).
-//
-// WARUM ES DAS GIBT: bis heute gab es fuer eine gemeldete Abweichung nur zwei
-// Wege - Handarbeit im Dashboard oder ein Wegwerf-Spike. Beides ist nicht
-// wiederholbar und hinterlaesst keine Spur, welcher Wert warum gesetzt wurde.
-//
-// DIE ACHT RIEGEL, in der Reihenfolge ihrer Wichtigkeit:
-//
-// 1. GESPERRTE FELDER. retention_days wird NIE geschrieben, in KEINE Richtung -
-//    weder als genanntes Feld (Abbruch vor jedem Netzzugriff) noch als blinder
-//    Passagier im fertigen Patch-Koerper (Abbruch vor dem PATCH). record_voice
-//    ist nennbar, aber NUR in Richtung false: jeder andere Wert im fertigen
-//    Koerper bricht vor dem PATCH ab. Begruendung an GESPERRTE_FELDER und
-//    RECORD_VOICE_ERLAUBT.
-// 2. KEIN BLINDER PASSAGIER. Jeder Blatt-Pfad des fertigen Koerpers muss unter
-//    einem Pfad liegen, den der Lauf ausdruecklich zum Schreiben gewaehlt hat.
-//    Geprueft wird der KOERPER, nicht die Absicht, die ihn gebaut hat - sonst
-//    belegte die Pruefung nur, dass die Eingabe die Eingabe ist.
-// 3. TROCKENLAUF IST DER NORMALFALL. Ohne den ausdruecklichen Schalter
-//    --ausfuehren wird NICHTS geschrieben; ein versehentlicher Aufruf zeigt nur
-//    an. Der Schalter existiert nur als Argument - es gibt keine Env-Variable
-//    und keine Datei, die ihn setzen koennte, damit er nicht aus Versehen in
-//    einer Automatisierung landet.
-// 4. NUR BESESSENE PFADE. Geschrieben wird ausschliesslich an den Live-Pfaden
-//    aus _besitz.felder der Vorlage, und der Patch-Koerper wird AUS DIESEN
-//    PFADEN gebaut - er kann gar nichts anderes enthalten. In diesem Projekt
-//    hat schon einmal ein Provisionierer die ganze Live-Konfiguration aus
-//    lokalen Werten geschrieben und Dashboard-Einstellungen zerstoert; genau
-//    dieser Weg ist hier baulich versperrt (kein "ganze Config hochladen").
-// 5. NUR DIE BENANNTEN FELDER. Mit --felder=<feld,feld> wird genau gesagt, was
-//    geschrieben werden darf; jedes andere besessene Feld bleibt unberuehrt,
-//    auch wenn es abweicht. Das ist die Grundfunktion und keine Erweiterung:
-//    "abweichend" heisst nicht "soll geaendert werden". Die Aufbewahrung
-//    (retention_days) etwa steht am Live-Agenten bewusst anders als in der Vorlage - ein Push,
-//    der sie als Nebenwirkung mitnimmt, dreht eine Entscheidung um, die niemand
-//    zur Abstimmung gestellt hat. Ein unbekannter Feldname bricht ab: eine
-//    Auswahl, die Tippfehler verschluckt, schuetzt nicht.
-//    DAMIT DAS NICHT AN DER AUFMERKSAMKEIT DES AUFRUFERS HAENGT, kann die
-//    Vorlage ein Feld selbst sperren: ein Besitz-Eintrag mit "ausgenommen"
-//    (Grund + Datum) ist ohne ausdrueckliche Nennung NIE Schreib-Kandidat,
-//    auch nicht im Lauf ohne --felder. Genannt wird er geschrieben - die
-//    Ausnahme ist ein Riegel gegen Unachtsamkeit, kein Verbot; das Umdrehen
-//    bleibt moeglich, es muss nur jemand tippen und sieht dabei die Meldung.
-//    NICHT fuer die gesperrten Felder (Riegel 1): die sind nicht nennbar, ihre
-//    Ausnahme laesst sich mit diesem Werkzeug ueberhaupt nicht uebersteuern.
-// 6. LESEN, VERGLEICHEN, DANN SCHREIBEN. Erst GET des Live-Agenten, dann der
-//    gemeinsame Besitz-Vergleich, dann ein PATCH nur der abweichenden Pfade.
-//    Ein Feld, das schon stimmt, wird nicht angefasst.
-// 7. FAIL-CLOSED. Fehlender Schluessel, unlesbare oder unparsebare Vorlage,
-//    eine Besitz-Erklaerung, die nicht traegt, eine verletzte Regel der Vorlage
-//    oder ein unverstandenes Argument: Abbruch mit Exit 1, ohne jeden
-//    Schreibversuch.
-// 8. FREIGABEN-WACHE (IEL-B9, Spec §4 Agent-Overrides). Traegt der fertige Koerper
-//    den Agent-Schalter "Init-Daten per Webhook holen" (init_webhook_schalter), wird
-//    er NUR geschrieben, wenn --felder ihn ausdruecklich nennt, der PATCH unter
-//    platform_settings.overrides NICHTS ausser diesem Schluessel traegt, die
-//    Freigaben-Karte (conversation_config_override) lesbar ist und keine
-//    agent.prompt-Freigabe offen steht. Die Karte wird vorher geschnappschusst und
-//    nachher tief verglichen - ein Schalter-PATCH, der sie veraendert, ist ROT.
-//    Laeuft auch im Trockenlauf.
-//
-// WAS DAS WERKZEUG NICHT KANN: Felder, deren Vergleichs-Art mehrere Stellen zu
-// einer MENGE zusammenfasst (namen, variablen, texte). Aus "diese Namen fehlen"
-// folgt kein einzelner Zielwert - welches Objekt mit welchen Anbieter-Feldern
-// dahinter entstehen soll, waere geraten. Solche Abweichungen werden angezeigt
-// und ausdruecklich NICHT geschrieben.
-// AUSNAHME, und nur eine erklaerte: traegt der Besitz-Eintrag einen SCHREIBWEG
-// (heute nur "je_schluessel"), sagt die Vorlage selbst, wie aus ihr und dem
-// Live-Stand ein Wert entsteht - s. zusammengefuehrterWert. Ohne diesen Eintrag
-// bleibt es beim Satz darueber; der Schreibweg ist eine Erklaerung in der
-// Vorlage, keine Kulanz des Werkzeugs.
-//
-// GEGENPROBE STATT VERTRAUEN: PATCH deep-merged verschachtelte Modelle, aber
-// Dict- und Listenfelder ERSETZT es (am Anbieter gemessen, .fortschritt.md
-// 14.08.). Ein besessener Pfad kann also unter einem Dict liegen, und dann
-// wuerde ein minimaler Patch dessen Geschwister loeschen. Deshalb sagt dieser
-// Lauf VOR dem Schreiben trocken voraus, welche besessenen Felder danach noch
-// abweichen, liest nach dem Schreiben erneut und meldet ROT, sobald die
-// Wirklichkeit schlechter ausfaellt als die Vorhersage.
-//
-// WORKSPACE-INIT-WEBHOOK (IEL-B9, Spec E14/E21): ein eigener Modus, der KEINEN
-// Agenten, sondern die Workspace-Settings schreibt
-// (conversation_initiation_client_data_webhook) - er gilt fuer JEDEN Agenten des
-// Workspace mit Schalter.
-// - Ziel ist init-webhook-ziel.js#initWebhookUrl, eine Repo-Konstante - nie die
-//   oeffentliche Adresse der lokalen Konfiguration.
-// - Vor dem Setzen steht das Ziel-Urteil aus der Render-API fuer
-//   HERMES_RENDER_SERVICE_ID; ROT heisst 0 Aufrufe an ElevenLabs. RENDER_API_KEY
-//   kommt ueber src/config.js (Werkzeug-Schluessel, nie im Dienst) und wird nie ausgegeben.
-// - Der Header x-hermes-init-token wird als Workspace-Secret-Verweis ({secret_id})
-//   geschrieben, NIE als String. Dieses Skript liest keinen Geheimnis-Wert - auch
-//   nicht das Init-Token aus der Env; das Secret legt B10 beim Anbieter an.
-// - Trockenlauf ist der Default; --ausfuehren schreibt, liest zurueck und prueft.
-// - --entfernen laeuft OHNE Ziel-Urteil: er schreibt weder Adresse noch Secret, und
-//   der Rueckweg darf nicht davon abhaengen, ob Render lesbar ist.
-// - GEGENPROBE: ob der PATCH andere Workspace-Settings ersetzt, ist ungemessen.
-//   Deshalb werden alle uebrigen Top-Level-Schluessel vorher und nachher tief
-//   verglichen; eine Abweichung ist ROT (nur Schluesselnamen, nie Werte).
-//
-// Aufruf:  npm run elevenlabs:push                        (Trockenlauf, alle Felder Kandidat)
-//          npm run elevenlabs:push -- <agent_id>          (Trockenlauf, anderer Agent)
-//          npm run elevenlabs:push -- --felder=prompt     (Trockenlauf, nur dieses Feld)
-//          npm run elevenlabs:push -- --felder=prompt --ausfuehren   (schreibt wirklich)
-//          npm run elevenlabs:push -- --workspace-init-webhook --secret-id=<id> [--ausfuehren]
-//          npm run elevenlabs:push -- --workspace-init-webhook --entfernen [--ausfuehren]
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
@@ -143,27 +37,17 @@ import {
 } from "./lib/elevenlabs-besitz.mjs";
 
 const LOG_PREFIX = "[push-elevenlabs]";
-// Der einzige Schalter, der schreibt. Ausgeschrieben und ohne Kurzform: ein
-// einzelnes vertipptes Zeichen soll keinen Live-Agenten veraendern.
 const BESTAETIGUNGS_FLAG = "--ausfuehren";
-// Der Schalter, der die zu schreibenden Felder benennt. Wert am selben Token
-// (--felder=a,b) und nicht als naechstes Argument: ein getrenntes Argument
-// waere von der Agenten-Kennung nicht zu unterscheiden, und ein vergessener
-// Wert wuerde dann still den falschen Agenten adressieren.
 const FELDER_FLAG = "--felder";
 const FLAG_PRAEFIX = "--";
 const WERT_TRENNER = "=";
 const FELDER_TRENNER = ",";
 const ARG_START = 2;
 const LISTEN_TRENNER = ", ";
-// Grosszuegiger als der Lese-Abruf: der Patch traegt den vollen System-Prompt.
 const SCHREIB_TIMEOUT_MS = 30000;
-// IEL-B9: der eigene Modus fuer die Workspace-Settings und seine zwei Pflicht-Alternativen.
 const WORKSPACE_INIT_WEBHOOK_FLAG = "--workspace-init-webhook";
 const SECRET_ID_FLAG = "--secret-id";
 const ENTFERNEN_FLAG = "--entfernen";
-// IEL-B9: die zwei Besitz-Felder, die die Freigaben-Wache liest - ihre Pfade kommen aus der
-// Vorlage (livePfadeVon), nicht aus Literalen hier.
 const INIT_WEBHOOK_SCHALTER_FELD = "init_webhook_schalter";
 const FREIGABEN_FELD = "conversation_config_override_erlaubnisse";
 const AGENT_PROMPT_FREIGABEN = "agent.prompt";
@@ -172,12 +56,6 @@ const OHNE_WERT_MARKE = "-";
 
 const { apiKey, apiBase } = config.voice.elevenLabsPlayTts;
 
-// --- Argumente ---
-
-// Zerlegt ein Schalter-Token an der ERSTEN Gleichheits-Stelle; ein Wert darf
-// selbst "=" enthalten. wert === null heisst "ohne Wert geschrieben" und ist
-// etwas anderes als ein leerer Wert: "--felder" ist ein vergessener Wert,
-// "--felder=" eine leere Liste - beides ein Fehler, aber nicht dasselbe.
 function zerlegeSchalter(token) {
   const stelle = token.indexOf(WERT_TRENNER);
   if (stelle < 0) return { name: token, wert: null };
@@ -195,8 +73,6 @@ function mitFehler(stand, fehler) {
   return { ...stand, fehler: [...stand.fehler, fehler] };
 }
 
-// Die Schalter OHNE Wert und das Feld des Standes, das sie setzen. EINE Tabelle statt je
-// eines Zweiges: "nimmt keinen Wert" ist fuer alle dieselbe Regel.
 const SCHALTER_OHNE_WERT = Object.freeze({
   [BESTAETIGUNGS_FLAG]: "ausfuehren",
   [WORKSPACE_INIT_WEBHOOK_FLAG]: "workspaceInitWebhook",
@@ -221,11 +97,6 @@ function mitSecretId({ stand, token, wert }) {
   return { ...stand, secretId: wert };
 }
 
-// EIN Schalter, auf den bisherigen Stand angewandt - liefert den neuen Stand,
-// ohne den alten zu veraendern. Alles Unverstandene wird zu einem Eintrag in
-// fehler[], nie zu einem stillen Ueberspringen: wer "--ausfuehren=true" oder
-// "--Felder=prompt" tippt, meint etwas, und ein Werkzeug, das solche Absicht
-// wortlos verschluckt, schreibt am Ende etwas anderes als das Gemeinte.
 function wendeSchalterAn(stand, token) {
   const { name, wert } = zerlegeSchalter(token);
   if (Object.hasOwn(SCHALTER_OHNE_WERT, name)) {
@@ -240,9 +111,6 @@ function wendeSchalterAn(stand, token) {
   );
 }
 
-// Rein. Der Workspace-Modus schreibt Settings, keinen Agenten: Feldauswahl und
-// Agenten-Kennung sind dort Widersprueche, und er verlangt GENAU eine Absicht -
-// setzen (--secret-id) oder entfernen. Umgekehrt sind beide ohne den Modus sinnlos.
 function modusFehler(stand, frei) {
   const hatAbsicht = stand.secretId !== null || stand.entfernen;
   if (!stand.workspaceInitWebhook) {
@@ -260,9 +128,6 @@ function modusFehler(stand, frei) {
   return fehler;
 }
 
-// Freies Argument = Agenten-Kennung, Schalter = Verhalten. auswahl === null
-// heisst "keine Auswahl getroffen" (jedes abweichende schreibbare Feld ist
-// Kandidat) - eine leere Liste kann es nicht geben, die waere ein Fehler.
 function leseArgumente(argv) {
   const argumente = argv.slice(ARG_START);
   const frei = argumente.filter((wert) => !wert.startsWith(FLAG_PRAEFIX));
@@ -283,41 +148,17 @@ function leseArgumente(argv) {
   };
 }
 
-// Die Auswahl gegen die Besitz-Erklaerung der Vorlage. Ein Name, den die
-// Vorlage nicht fuehrt, ist ein Abbruchgrund: still ignoriert wuerde er zu
-// "dieses Feld weicht eben nicht ab" - und der Aufrufer glaubte, er haette
-// etwas geschrieben.
-// auswahl === null (keine Auswahl getroffen) kann keine unbekannten Namen
-// enthalten - der Fall wird HIER behandelt und nicht beim Aufrufer, damit die
-// Frage "was ist unbekannt?" nur eine Stelle hat.
 function unbekannteFelder(auswahl, vorlage) {
   if (auswahl === null) return [];
   const bekannt = new Set(besesseneFeldNamen(vorlage));
   return auswahl.filter((feld) => !bekannt.has(feld));
 }
 
-// Gewaehlt ist ein Feld, wenn die Auswahl es ausdruecklich nennt - oder wenn es
-// gar keine Auswahl gibt UND die Vorlage es nicht ausgenommen hat. Die Ausnahme
-// wirkt damit genau gegen den unbedachten Lauf: "alles, was abweicht" nimmt sie
-// nicht mit, ein ausdruecklich getippter Feldname schon. Sie ist ein Riegel
-// gegen Unachtsamkeit, kein Verbot - wer die festgehaltene Entscheidung
-// umdrehen will, muss sie beim Namen nennen und sieht dabei die Meldung
-// "AUSNAHME UEBERSTIMMT".
 function istGewaehlt(auswahl, abweichung) {
   if (auswahl !== null) return auswahl.includes(abweichung.feld);
   return !abweichung.ausgenommen;
 }
 
-// --- Schreibbarkeit und Patch-Koerper ---
-
-// Schreibbar ist die Vergleichs-Art "wert": sie hat einen einzigen Live-Pfad und
-// einen einzigen Vorlagen-Wert - beides zusammen ergibt eine eindeutige
-// Zuweisung. soll.vorhanden wird trotz des Vergleichs mitgeprueft: ein Wert, den
-// die Vorlage gar nicht fuehrt, duerfte niemals geschrieben werden, auch nicht
-// als undefined.
-// ODER: ein Feld, dessen Besitz-Eintrag einen SCHREIBWEG erklaert. Es braucht
-// dieselbe Eindeutigkeit - je EIN Pfad auf beiden Seiten -, nur entsteht der
-// Wert dann nicht durch Zuweisung, sondern durch Zusammenfuehrung.
 function istSchreibbar(abweichung) {
   const einPfad = abweichung.livePfade.length === 1;
   if (!einPfad || !abweichung.soll.vorhanden) return false;
@@ -329,13 +170,6 @@ function zielPfad(abweichung) {
   return abweichung.livePfade[0];
 }
 
-// Die abweichenden Felder in vier Toepfe, aus denen die ganze weitere Arbeit
-// folgt: was geschrieben wird, was die Vorlage vorerst ausnimmt, was die
-// Feldauswahl auslaesst und was gar nicht schreibbar ist. Sie getrennt zu
-// halten ist der Punkt der Uebung - "nicht angefasst, weil die Vorlage es
-// ausnimmt", "nicht angefasst, weil nicht gewaehlt" und "nicht angefasst, weil
-// unmoeglich" sind verschiedene Sachverhalte, und nur die ersten beiden sind
-// Entscheidungen, die jemand getroffen hat.
 export function teileAbweichungen({ abweichungen, auswahl }) {
   const kandidaten = abweichungen.filter(istSchreibbar);
   const uebergangen = kandidaten.filter((abweichung) => !istGewaehlt(auswahl, abweichung));
@@ -347,21 +181,6 @@ export function teileAbweichungen({ abweichungen, auswahl }) {
   };
 }
 
-// --- Der zusammenfuehrende Schreibweg ---
-
-// EINE Sammlung, aus Vorlage und Live-Stand zusammengefuehrt. Drei Faelle, und
-// der dritte ist der Grund, warum es diese Funktion gibt:
-// - Schluessel auf BEIDEN Seiten: der LIVE-Eintrag bleibt und bekommt nur die
-//   besessenen Blaetter aus der Vorlage. Was der Anbieter sonst an seinen
-//   Eintrag haengt (enum, is_system_provided, dynamic_variable, ... - acht
-//   Felder, am Agenten gemessen), ueberlebt unveraendert. Es mitzuschreiben
-//   hiesse, Werte zu erfinden, die diese Vorlage nie besessen hat.
-// - Schluessel NUR in der Vorlage: er kommt vollstaendig aus der Vorlage. Fuer
-//   einen neuen Eintrag gibt es keine zweite Quelle.
-// - Schluessel NUR live: ABBRUCH, kein stilles Loeschen. Er kann von Hand im
-//   Dashboard entstanden sein; ihn im Vorbeigehen wegzuraeumen waere genau der
-//   Griff, den dieses Werkzeug nirgends tut. Wer ihn los werden will, entfernt
-//   ihn dort, wo er entstanden ist.
 function zusammengefuehrterWert({ abweichung, vorlage, live }) {
   const soll = wertAnPfad(vorlage, abweichung.vorlagePfade[0]);
   if (!soll.gefunden) {
@@ -369,9 +188,6 @@ function zusammengefuehrterWert({ abweichung, vorlage, live }) {
       fehler: `${abweichung.feld}: die Vorlage fuehrt ${abweichung.vorlagePfade[0]} nicht - ohne Quelle wird nichts zusammengefuehrt`,
     };
   }
-  // Fehlt die Sammlung LIVE ganz, ist sie leer und nicht kaputt: dann sind alle
-  // Schluessel der Vorlage neu, und es gibt nichts zu verlieren. (Die Vorlagen-
-  // Seite darf nicht fehlen - dort liegt der einzige Zielwert.)
   const ist = wertAnPfad(live, zielPfad(abweichung));
   const sollEintraege = new Map(eintraegeAus(soll.wert));
   const istEintraege = new Map(ist.gefunden ? eintraegeAus(ist.wert) : []);
@@ -396,17 +212,7 @@ function zusammengefuehrterWert({ abweichung, vorlage, live }) {
   return { wert: zusammen };
 }
 
-// Ein bestehender Eintrag, an dem GENAU die besessenen Blaetter den Vorlagenwert
-// bekommen. Ein Blatt, das die Vorlage an diesem Eintrag nicht fuehrt, bleibt
-// live stehen - fehlend ist nicht dasselbe wie leer, und ein Vorlagen-Eintrag
-// ohne Beschreibung darf keine loeschen.
 function mitBesessenenBlaettern({ istEintrag, sollEintrag, blaetter }) {
-  // TIEFE Kopie, nicht {...istEintrag}: ein besessenes Blatt kann VERSCHACHTELT liegen
-  // (language_presets: "overrides.agent.first_message"). Eine flache Kopie teilt die
-  // Zwischenebenen mit dem gelesenen Live-Stand - setzeAnPfad wuerde ihn dann an Ort und
-  // Stelle veraendern, und die trockene Vorhersage rechnete gegen einen Stand, den sie
-  // selbst schon umgeschrieben hat. Genau die Zusage, die simuliereSchreiben mit seiner
-  // eigenen Kopie gibt, gilt damit auch hier.
   const zusammen = structuredClone(istEintrag);
   for (const blatt of blaetter) {
     const wert = wertAnPfad(sollEintrag, blatt);
@@ -415,9 +221,6 @@ function mitBesessenenBlaettern({ istEintrag, sollEintrag, blaetter }) {
   return zusammen;
 }
 
-// Der Wert, der fuer EIN abweichendes Feld gesendet wuerde - an EINER Stelle
-// entschieden, damit Patch-Koerper und Vorhersage nie auseinanderlaufen
-// koennen. Ohne erklaerten Schreibweg ist es der Vorlagenwert selbst.
 export function mitSchreibwerten({ schreibbar, vorlage, live }) {
   const fehler = [];
   const werte = schreibbar.map((abweichung) => {
@@ -431,10 +234,6 @@ export function mitSchreibwerten({ schreibbar, vorlage, live }) {
   return { schreibbar: fehler.length > 0 ? [] : werte, fehler };
 }
 
-// Der Patch-Koerper entsteht AUSSCHLIESSLICH aus den besessenen Live-Pfaden der
-// abweichenden Felder. Es gibt keinen Zweig, der eine ganze Konfiguration
-// uebernimmt - was hier nicht als Pfad steht, kann nicht gesendet werden.
-// Exportiert fuer den Test, der eine im Speicher veraenderte Vorlage durch dieselben reinen Schritte schickt (ladeVorlage hat keine Naht).
 export function bauePatchKoerper(schreibbar) {
   const koerper = {};
   for (const abweichung of schreibbar) {
@@ -443,12 +242,6 @@ export function bauePatchKoerper(schreibbar) {
   return koerper;
 }
 
-// Der Live-Stand, WIE ER NACH dem Patch aussaehe - auf einer Kopie, damit der
-// gelesene Stand unveraendert bleibt. Grundlage der Vorhersage: dieselbe
-// Vergleichslogik gegen diese Kopie sagt, welche besessenen Felder danach noch
-// rot waeren. Das faengt auch die abgeleiteten Arten richtig ein: die Namen der
-// dynamischen Variablen etwa werden aus dem Prompt gelesen und stimmen deshalb
-// von selbst, sobald der Prompt geschrieben ist.
 function simuliereSchreiben({ live, schreibbar }) {
   const kopie = structuredClone(live);
   for (const abweichung of schreibbar) {
@@ -457,36 +250,8 @@ function simuliereSchreiben({ live, schreibbar }) {
   return kopie;
 }
 
-// --- Riegel am fertigen Koerper (Riegel 1 und 2) ---
-
-// DIE SPERRLISTE. Dieses Feld schreibt dieses Werkzeug NIE - unabhaengig
-// davon, in welche Richtung der Wert ginge.
-//
-// WARUM retention_days: die Aufbewahrung traegt die Eigentuemer-Entscheidung vom
-// 2026-08-15 - sie bleibt vorerst AN, solange an echten Anrufen gemessen wird;
-// VOR DEM ERSTEN FREMDKUNDEN wird auf G7 zurueckgedreht. Das ist keine
-// Konfigurationsfrage, sondern eine Aussage darueber, was mit den Gespraechen
-// echter Menschen geschieht, und an ihr haengen die Transkripte. Reist das Feld
-// versehentlich mit, ist der Schaden nicht "falscher Wert", sondern ein
-// Rechtsproblem oder verlorene Transkripte - ein versehentliches Kuerzen waere
-// genauso falsch wie ein Verlaengern, deshalb sperrt die Liste beide Richtungen.
-//
-// WARUM ZUSAETZLICH ZUR AUSNAHME IN DER VORLAGE: die Ausnahme ("ausgenommen",
-// Riegel 5) ist ein Riegel gegen Unachtsamkeit und laesst sich durch Nennung
-// uebersteuern - sie schuetzt gegen den unbedachten Lauf, nicht gegen den
-// falschen Tastendruck und nicht gegen einen kuenftigen Umbau, der den Koerper
-// anders baut. Diese Liste laesst sich nicht uebersteuern; das Zurueckdrehen der
-// Aufbewahrung auf G7 geschieht bewusst ausserhalb dieses Werkzeugs.
 const GESPERRTE_FELDER = ["retention_days"];
 
-// DIE RICHTUNGS-AUSNAHME. record_voice (Audio-Mitschnitt) stand bis 2026-09-15
-// ebenfalls auf der Sperrliste. Owner-Entscheidung O2 vom 2026-09-15: der
-// Mitschnitt geht am Agenten aus. Geoeffnet wird GENAU diese eine Richtung:
-// record_voice ist in --felder nennbar, und Riegel 1c (falscheRichtungStellen)
-// bricht vor dem PATCH ab, sobald der fertige Koerper dort irgendeinen anderen
-// Wert als false traegt. Das Wieder-Einschalten bleibt mit diesem Werkzeug
-// unmoeglich. feld ist zugleich Besitz-Name und Blatt-Schluessel im Koerper -
-// dieselbe Gleichsetzung wie bei GESPERRTE_FELDER.
 const RECORD_VOICE_ERLAUBT = Object.freeze({
   feld: "record_voice",
   wert: false,
@@ -498,11 +263,6 @@ function istZweig(wert) {
   return wert !== null && typeof wert === "object" && !Array.isArray(wert);
 }
 
-// Die BLATT-Pfade eines fertigen Koerpers, aus dem Koerper selbst gelesen und
-// nicht aus der Absicht, die ihn gebaut hat. Nur so ist der Umriss ein Beleg:
-// eine Liste, die aus den Eingabe-Pfaden abgeleitet waere, bewiese lediglich,
-// dass die Eingabe die Eingabe ist. Eine Liste ist ein Blatt, kein Zweig - sie
-// wird als GANZES gesetzt.
 function blattPfade(wert, praefix) {
   if (!istZweig(wert)) return [praefix];
   return Object.entries(wert).flatMap(([schluessel, kind]) => {
@@ -511,22 +271,11 @@ function blattPfade(wert, praefix) {
   });
 }
 
-// RIEGEL 1a: die AUSDRUECKLICHE Nennung. Greift am fruehesten Punkt, an dem die
-// Absicht ueberhaupt sichtbar ist - vor dem Laden der Vorlage und vor jedem
-// Netzzugriff.
 function gesperrteInAuswahl(auswahl) {
   if (auswahl === null) return [];
   return auswahl.filter((feld) => GESPERRTE_FELDER.includes(feld));
 }
 
-// RIEGEL 1b, der wichtigere: ein gesperrter Name als SCHLUESSEL irgendwo im
-// fertigen Koerper. Er faengt den Fall, in dem das Feld MITREIST, ohne genannt
-// worden zu sein. Sieht anders als blattPfade auch in Listen hinein: ein
-// Riegel, der eine Ablageform auslaesst, ist keiner - und welche Form der
-// Anbieter morgen erwartet, entscheidet nicht dieses Werkzeug.
-//
-// trifft(schluessel, wert) entscheidet je Stelle; den Wert braucht nur die
-// Richtungs-Ausnahme (Riegel 1c), die Sperrliste sieht allein den Namen.
 function stellenMitSchluessel(wert, praefix, trifft) {
   if (wert === null || typeof wert !== "object") return [];
   const eintraege = Array.isArray(wert)
@@ -543,9 +292,6 @@ function gesperrteStellen(koerper) {
   return stellenMitSchluessel(koerper, "", (schluessel) => GESPERRTE_FELDER.includes(schluessel));
 }
 
-// RIEGEL 1c: record_voice mit einem anderen Wert als dem erlaubten, irgendwo im
-// fertigen Koerper - Listen eingeschlossen, wie bei 1b. Strikt ungleich: null,
-// "false" oder 0 sind nicht false und brechen ab (fail-closed).
 function falscheRichtungStellen(koerper) {
   return stellenMitSchluessel(
     koerper,
@@ -554,34 +300,18 @@ function falscheRichtungStellen(koerper) {
   );
 }
 
-// RIEGEL 2b: Entwickler-Doku, die mitreist. Diese Vorlage erklaert sich selbst
-// in Schluesseln mit fuehrendem Unterstrich; der Vergleich sieht sie auf der
-// OBERSTEN Ebene einer Sammlung nicht an (eintraegeAus filtert sie), INNERHALB
-// eines Eintrags aber sehr wohl - und von dort wuerde sie beim Schreiben
-// mitgehen. Ein solcher Schluessel gehoert nicht in die Konfiguration eines
-// Anbieters, der ihn nicht kennt. NICHT herausfiltern: ablehnen. Ein stiller
-// Filter waere genau der Griff, den dieses Werkzeug nirgends tut - er machte
-// aus "die Vorlage ist falsch gebaut" ein lautloses "passt schon".
 const DOKU_PRAEFIX = "_";
 
 function dokuStellen(koerper) {
   return stellenMitSchluessel(koerper, "", (schluessel) => schluessel.startsWith(DOKU_PRAEFIX));
 }
 
-// RIEGEL 2: die Pfade, die dieser Lauf ueberhaupt beruehren darf - abgeleitet
-// aus der AUSWAHL des Aufrufers, nicht aus dem Koerper. Beide Seiten der
-// Pruefung getrennt zu gewinnen ist der ganze Punkt: der Koerper sagt, was
-// gesendet wuerde, die Auswahl sagt, was verlangt wurde.
 function erlaubtePfade({ abweichungen, auswahl }) {
   return abweichungen
     .filter((abweichung) => istGewaehlt(auswahl, abweichung))
     .flatMap((abweichung) => abweichung.livePfade);
 }
 
-// Ein Blatt-Pfad zaehlt als gedeckt, wenn er der erlaubte Pfad selbst ist ODER
-// unter ihm liegt: ein besessener Wert kann ein Objekt sein (z.B. die
-// Uebersteuerungs-Erlaubnisse), und dann traegt der Koerper unterhalb des
-// erlaubten Pfades weitere Blaetter. Sie gehoeren zum selben gesetzten Wert.
 function liegtUnter(pfad, erlaubt) {
   return pfad === erlaubt || pfad.startsWith(`${erlaubt}${PFAD_TRENNER}`);
 }
@@ -591,10 +321,6 @@ function blindePassagiere({ koerper, erlaubt }) {
   return blattPfade(koerper, "").filter((pfad) => !gedeckt(pfad));
 }
 
-// Die Pruefung des FERTIGEN Koerpers an EINER Stelle: was hier durchkommt, ist
-// genau das, was den Anbieter erreichen wuerde. Liefert Befunde; eine leere
-// Liste heisst sauber. Kein Filtern, kein Ueberspringen - der Aufrufer bricht
-// ab, sobald hier etwas steht (fail-closed).
 export function koerperVerstoesse({ koerper, abweichungen, auswahl }) {
   const befunde = [];
   const gesperrt = gesperrteStellen(koerper);
@@ -625,10 +351,6 @@ export function koerperVerstoesse({ koerper, abweichungen, auswahl }) {
   return befunde;
 }
 
-// --- Freigaben-Wache (Riegel 8, IEL-B9) ---
-
-// P2: der Schalter reist nie als Nebenwirkung eines Laufs ohne ausdrueckliche Nennung -
-// sonst setzte ein unbedachtes "alles, was abweicht" ihn vor Runbook-Schritt 6.
 function schalterNurAusdruecklich(auswahl) {
   if (auswahl !== null && auswahl.includes(INIT_WEBHOOK_SCHALTER_FELD)) return [];
   return [
@@ -641,8 +363,6 @@ function karteNichtLesbar(vorher) {
   return ["FREIGABEN-KARTE NICHT LESBAR - ohne Schnappschuss kein Beleg, dass der Schalter-PATCH sie unberuehrt laesst."];
 }
 
-// Eine schon offene agent.prompt-Freigabe hiesse: mit dem Schalter koennte jeder Anrufstart
-// den Systemprompt uebersteuern. Dann wird nicht geschaltet, sondern zuerst die Karte repariert.
 function offenePromptFreigaben(karte) {
   if (!istZweig(karte)) return [];
   const promptZweig = wertAnPfad(karte, AGENT_PROMPT_FREIGABEN);
@@ -661,8 +381,6 @@ function geschwisterImKoerper(koerper, schalterPfad) {
   return [`MEHR ALS DER SCHALTER unter ${eltern}: ${geschwister.join(LISTEN_TRENNER)} - der Schalter-PATCH traegt dort nur ihn.`];
 }
 
-// Aktiv, sobald der FERTIGE Koerper den Schalter-Pfad traegt (Riegel am Koerper, nicht an der
-// Absicht). Liefert die Befunde und den Vorher-Schnappschuss der Freigaben-Karte.
 function freigabenWache({ vorlage, live, koerper, auswahl }) {
   const [schalterPfad] = livePfadeVon(vorlage, INIT_WEBHOOK_SCHALTER_FELD);
   if (!schalterPfad || !wertAnPfad(koerper, schalterPfad).gefunden) return { aktiv: false, befunde: [] };
@@ -681,16 +399,12 @@ function freigabenWache({ vorlage, live, koerper, auswahl }) {
   };
 }
 
-// Je Blatt der Karte eine Zeile - im Trockenlauf wie vor dem PATCH, damit der Stand, gegen den
-// nachher verglichen wird, sichtbar ist. Die Karte traegt nur Wahrheitswerte.
 function meldeFreigaben(wache) {
   if (!istZweig(wache.vorher)) return;
   for (const pfad of blattPfade(wache.vorher, "")) {
     console.log(`${LOG_PREFIX} FREIGABE ${pfad}=${JSON.stringify(wertAnPfad(wache.vorher, pfad).wert)}`);
   }
 }
-
-// --- Schreiben (die einzige Stelle im Repo, die den Agenten veraendert) ---
 
 async function patcheAgenten({ agentId, koerper }) {
   const pfad = `${AGENTEN_PFAD_PREFIX}${agentId}`;
@@ -715,15 +429,10 @@ async function patcheAgenten({ agentId, koerper }) {
   }
 }
 
-// --- Ausgabe ---
-
 function feldNamen(abweichungen) {
   return abweichungen.map((abweichung) => abweichung.feld).sort();
 }
 
-// EINE Zeile je Feld, immer mit IST und SOLL - die Marke sagt, was mit diesem
-// Feld geschieht. Die Werte kommen fertig gerendert aus dem Vergleichs-Kern
-// (lange Texte gekuerzt); geschrieben wird immer der volle Wert.
 function feldZeile(marke, abweichung) {
   const pfade = abweichung.livePfade.join(PFAD_VERBINDER);
   return `${marke} ${abweichung.feld} (art "${abweichung.art}") | Live ${pfade} | IST ${abweichung.istAnzeige} -> SOLL ${abweichung.sollAnzeige}`;
@@ -743,10 +452,6 @@ function meldeNichtSchreibbar(rest) {
   );
 }
 
-// Belegt die Riegel 2 und 3 an der AUSGABE statt nur im Kommentar: der Koerper,
-// der gesendet wuerde, traegt genau diese Blatt-Pfade - was hier fehlt, kann den
-// Agenten nicht erreichen. Steht auch im Trockenlauf da, damit die Zusage
-// pruefbar ist, bevor jemand den Schalter setzt.
 function meldeKoerper(koerper) {
   const pfade = blattPfade(koerper, "");
   if (pfade.length === 0) return;
@@ -764,9 +469,6 @@ function meldeAusgelassen(ausgelassen) {
   );
 }
 
-// Die ausgenommenen Felder tragen ihren Grund und ihr Datum MIT - eine Marke
-// ohne Begruendung waere nur ein zweites "ist halt so", und genau die
-// unbelegte Sonderbehandlung soll die Ausnahme ersetzen.
 function meldeAusgenommen(ausgenommen) {
   if (ausgenommen.length === 0) return;
   for (const abweichung of ausgenommen) {
@@ -779,9 +481,6 @@ function meldeAusgenommen(ausgenommen) {
   );
 }
 
-// Das Gegenstueck: eine Ausnahme, die ausdruecklich genannt wurde, wird
-// geschrieben - aber nicht lautlos. Ohne diese Zeile saehe der Lauf, der eine
-// bewusste Entscheidung umdreht, genauso aus wie jeder andere.
 function meldeUebersteuerteAusnahmen(schreibbar) {
   const uebersteuert = schreibbar.filter((abweichung) => abweichung.ausgenommen);
   if (uebersteuert.length === 0) return;
@@ -802,8 +501,6 @@ function meldeAuswahl(auswahl) {
   );
 }
 
-// Was der Lauf vorhat, bevor irgendetwas passiert - im Trockenlauf ist das das
-// ganze Ergebnis, mit --ausfuehren die Ankuendigung.
 function meldePlan({ agentId, befund, auswahl, felder, danach }) {
   const { schreibbar, ausgenommen, ausgelassen, rest } = felder;
   console.log(
@@ -825,26 +522,17 @@ function meldePlan({ agentId, befund, auswahl, felder, danach }) {
   );
 }
 
-// --- Ablauf ---
-
-// Ein fail-closed-Abbruch: erst die einzelnen Befunde, dann der Satz, der sagt,
-// was daraus folgt, dann Exit-Code 1. EINE Stelle, damit die Zusage "NICHTS
-// gesendet" nicht an vier Orten leicht verschieden formuliert wird.
 function brichAb(befunde, schluss) {
   for (const zeile of befunde) console.error(`${LOG_PREFIX} ${zeile}`);
   console.error(`${LOG_PREFIX} Abbruch (fail-closed): ${schluss}`);
   return 1;
 }
 
-// Riegel 8, zweite Haelfte: die Karte nach dem PATCH gegen den Schnappschuss davor. Nur der
-// Pfad wird gemeldet, nie Werte.
 function freigabenVeraendert({ wache, nachher }) {
   if (!wache.aktiv) return false;
   return !isDeepStrictEqual(wertAnPfad(nachher, wache.freigabenPfad).wert, wache.vorher);
 }
 
-// Der Schreibteil. Getrennt vom Trockenlauf, damit an EINER Stelle steht, was
-// nur mit ausdruecklicher Bestaetigung passiert.
 async function fuehreAus({ agentId, vorlage, befund, schreibbar, danach, koerper, wache }) {
   if (befund.verletzungen.length > 0) {
     console.error(
@@ -863,9 +551,6 @@ async function fuehreAus({ agentId, vorlage, befund, schreibbar, danach, koerper
   console.log(`${LOG_PREFIX} PATCH an ${pfade.length} Pfaden: ${pfade.join(LISTEN_TRENNER)}`);
   await patcheAgenten({ agentId, koerper });
 
-  // Gegenprobe: erneut lesen und mit derselben Logik vergleichen. Ein Feld,
-  // das jetzt abweicht, obwohl die Vorhersage es nicht nannte, heisst, dass der
-  // Patch mehr angefasst hat als seine Pfade.
   const nachher = await holeLiveAgenten(agentId);
   if (freigabenVeraendert({ wache, nachher })) {
     console.error(
@@ -888,10 +573,6 @@ async function fuehreAus({ agentId, vorlage, befund, schreibbar, danach, koerper
   return 0;
 }
 
-// argv als Parameter und nicht aus process gelesen: derselbe Ablauf laesst sich
-// damit mit einer gestellten Kommandozeile durchspielen, ohne den Prozess zu
-// verbiegen - und die Zusagen dieses Werkzeugs (Abbruch VOR dem Netz, der
-// Trockenlauf schreibt nie) sind pruefbar statt behauptet.
 export async function runCli(argv = process.argv) {
   const schluesselGrund = schluesselFehlt();
   if (schluesselGrund) {
@@ -908,10 +589,7 @@ export async function runCli(argv = process.argv) {
   return await laufeAgentenPush({ agentId, ausfuehren, auswahl });
 }
 
-// Der Agenten-Push (Riegel 1-8): lesen, vergleichen, Koerper bauen, pruefen, dann schreiben.
 async function laufeAgentenPush({ agentId, ausfuehren, auswahl }) {
-  // Riegel 1a - so frueh wie moeglich: hier ist noch nichts geladen und nichts
-  // gerufen, der Abbruch kann also gar nichts angefasst haben.
   const gesperrt = gesperrteInAuswahl(auswahl);
   if (gesperrt.length > 0) {
     return brichAb(
@@ -939,9 +617,6 @@ async function laufeAgentenPush({ agentId, ausfuehren, auswahl }) {
   }
 
   const felder = teileAbweichungen({ abweichungen: befund.abweichungen, auswahl });
-  // Die Schreibwerte VOR Vorhersage und Koerper: beide lesen denselben Wert,
-  // und ein Schreibweg, der nicht traegt, endet hier - vor jeder Ausgabe, die
-  // einen Plan behaupten wuerde, den es nicht gibt.
   const { schreibbar, fehler: schreibwegFehler } = mitSchreibwerten({
     schreibbar: felder.schreibbar,
     vorlage,
@@ -958,9 +633,6 @@ async function laufeAgentenPush({ agentId, ausfuehren, auswahl }) {
   meldePlan({ agentId, befund, auswahl, felder, danach });
   meldeKoerper(koerper);
 
-  // Riegel 1b und 2 - am fertigen Koerper, nach der Ausgabe seiner Blatt-Pfade
-  // und vor jeder Weiche: auch der Trockenlauf endet hier rot. Ein Koerper, den
-  // dieses Werkzeug nicht senden darf, ist ein Befund und keine Fussnote.
   const verstoesse = koerperVerstoesse({ koerper, abweichungen: befund.abweichungen, auswahl });
   if (verstoesse.length > 0) {
     return brichAb(
@@ -968,7 +640,6 @@ async function laufeAgentenPush({ agentId, ausfuehren, auswahl }) {
       `der Patch-Koerper haelt der Pruefung nicht stand (${verstoesse.length} Befunde, oben genannt). Nicht gefiltert, nicht uebersprungen, nicht gewarnt - Halt. NICHTS gesendet.`,
     );
   }
-  // Riegel 8 - ebenfalls vor der Weiche, damit der Trockenlauf dieselbe Antwort gibt.
   const wache = freigabenWache({ vorlage, live, koerper, auswahl });
   if (wache.aktiv) meldeFreigaben(wache);
   if (wache.befunde.length > 0) {
@@ -984,10 +655,6 @@ async function laufeAgentenPush({ agentId, ausfuehren, auswahl }) {
   return await fuehreAus({ agentId, vorlage, befund, schreibbar, danach, koerper, wache });
 }
 
-// --- Workspace-Init-Webhook (IEL-B9, E14/E21) ---
-
-// Rein. Setzen: Adresse aus der Repo-Konstante, Header NUR als Secret-Verweis. Entfernen: der
-// Schluessel wird null - weder Adresse noch Secret reisen mit.
 export function initWebhookKoerper({ secretId, entfernen }) {
   if (entfernen) return { [INIT_WEBHOOK_SETTINGS_SCHLUESSEL]: null };
   return {
@@ -1003,8 +670,6 @@ function adressBefunde(webhook) {
   return [`ADRESSE WEICHT AB - ${INIT_WEBHOOK_SETTINGS_SCHLUESSEL}.url ist nicht ${initWebhookUrl()}.`];
 }
 
-// Jeder String-Wert unter request_headers waere ein Klartext-Geheimnis beim Anbieter (E14) -
-// gemeldet wird nur der Header-NAME, nie der Wert.
 function headerBefunde({ webhook, secretId }) {
   const kopf = istZweig(webhook?.request_headers) ? webhook.request_headers : {};
   const klartext = Object.keys(kopf).filter((name) => typeof kopf[name] === "string");
@@ -1016,7 +681,6 @@ function headerBefunde({ webhook, secretId }) {
   return befunde;
 }
 
-// Rein. Der Beleg nach dem Schreiben, aus dem ZURUECKGELESENEN Stand; Befunde ohne Werte.
 export function initWebhookLesebeleg({ settings, secretId, entfernen }) {
   const webhook = settings?.[INIT_WEBHOOK_SETTINGS_SCHLUESSEL];
   if (entfernen) {
@@ -1026,8 +690,6 @@ export function initWebhookLesebeleg({ settings, secretId, entfernen }) {
   return [...adressBefunde(webhook), ...headerBefunde({ webhook, secretId })];
 }
 
-// Rein (P5). Ob der PATCH andere Workspace-Settings ersetzt, ist ungemessen: alle uebrigen
-// Top-Level-Schluessel vorher/nachher tief verglichen. Gemeldet werden nur NAMEN.
 export function uebrigeSettingsVeraendert(vorher, nachher) {
   const schluessel = new Set([...Object.keys(vorher ?? {}), ...Object.keys(nachher ?? {})]);
   schluessel.delete(INIT_WEBHOOK_SETTINGS_SCHLUESSEL);
@@ -1036,7 +698,6 @@ export function uebrigeSettingsVeraendert(vorher, nachher) {
   return [`GEGENPROBE ROT - Workspace-Settings veraendert: ${veraendert.sort().join(LISTEN_TRENNER)}`];
 }
 
-// RENDER_API_KEY ueber src/config.js (Werkzeug-Namespace) - nie ausgegeben.
 async function zielUrteilVomDienst() {
   const dienst = await renderDienstZiel({
     fetchImpl: fetch,
@@ -1054,7 +715,6 @@ function meldeZielUrteil(urteil) {
   else console.error(zeile);
 }
 
-// Was der Lauf vorhat. Vom Vorher-Stand nur "gesetzt ja/nein" - nie Header-Werte.
 function meldeInitWebhookPlan({ vorher, secretId, entfernen }) {
   const gesetzt = vorher?.[INIT_WEBHOOK_SETTINGS_SCHLUESSEL] ? "ja" : "nein";
   console.log(`${LOG_PREFIX} Workspace-Init-Webhook vorher gesetzt: ${gesetzt}`);
@@ -1068,7 +728,6 @@ function meldeInitWebhookPlan({ vorher, secretId, entfernen }) {
 }
 
 async function laufeWorkspaceInitWebhook({ secretId, entfernen, ausfuehren }) {
-  // P4: nur der Setz-Lauf braucht das Ziel-Urteil; der Rueckweg haengt nicht an Render.
   if (!entfernen) {
     const urteil = await zielUrteilVomDienst();
     meldeZielUrteil(urteil);

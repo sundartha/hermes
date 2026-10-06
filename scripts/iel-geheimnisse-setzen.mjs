@@ -1,27 +1,3 @@
-// IEL-B10/IEX-A11: Unterbefehl `setzen --nummer=<E.164>... --registrierung=<phnum_...>... [--ausfuehren]`
-// (Spec IEL E16 a-f, IEX-A E14). Beide Auswahlwege duerfen gemischt werden.
-//
-// ABLAUF, bindend:
-//   1. Vorab-Riegel (nur GET): Inventar hart; jede --nummer hat GENAU eine Registrierung, jede
-//      --registrierung steht im Inventar; dieselbe Registrierung ueber beide Wege zaehlt einmal; jedes
-//      Ziel ist ein zulaessiges Schreibziel (EINE Definition mit der Sweep-Reparatur E16:
-//      inbound-trunk-beleg.js#reparaturHindernis); keine Registrierung mit Inbound-Zugangsdaten steht
-//      ausserhalb der Ziele (halbe Rotation liesse sie mit altem Zugang zurueck); Workspace-Secret
-//      eindeutig. KEIN Render-Aufruf. Die Nummer einer Registrierung bleibt im Speicher, ausgegeben
-//      werden nur Kennung und Endung.
-//   2. Erzeugen im Speicher (CSPRNG), jeder Wert sofort in die Verbotsmenge des Ausgabe-Waechters,
-//      Laengen gegen die Mindestlaengen aus inbound-path-decision.js (eine Quelle mit Praedikat,
-//      Boot-Riegel und Init-Route).
-//   3. Trockenlauf (Default): nur Ziele und Reihenfolge, 0 schreibende Aufrufe.
-//   4. Verteilen mit --ausfuehren: Render-Env (wirkt erst nach Deploy, deshalb zuerst) ->
-//      Workspace-Secret (aktualisieren, sonst anlegen) -> inbound_trunk_config der Registrierungen.
-//      Abbruch beim ERSTEN Fehlschlag; die Ziel-Tabelle zeigt gesetzt ja/nein je Ziel. Rueckweg ist
-//      ein erneuter Lauf mit frischen Werten - die Werte eines abgebrochenen Laufs sind nach
-//      Prozessende unwiederbringlich, gewollt.
-//   5. Lesebelege (nur GET), ALS LETZTES das Inventar. Danach folgt kein Schreibaufruf mehr.
-//
-// Kein Wert erreicht eine Ausgabe: Anbieter-Fehlerkoerper werden nie gelesen (nur err.providerStatus),
-// und jede Zeile laeuft durch den Ausgabe-Waechter.
 import { isDeepStrictEqual } from "node:util";
 
 import {
@@ -56,7 +32,6 @@ import { INIT_WEBHOOK_SETTINGS_SCHLUESSEL } from "./push-elevenlabs.mjs";
 export const GEHEIMNIS_ZUFALLS_BYTES = 32;
 export const SIP_USER_ZUFALLS_BYTES = 16;
 export const WORKSPACE_SECRET_NAME = "hermes_init_webhook_token";
-// Doku: page_size hoechstens 100. Eine Liste mit next_cursor ist kein eindeutiger Beleg.
 const SECRET_SEITE = 100;
 const HEX = "hex";
 const OHNE_WERT = "-";
@@ -96,9 +71,6 @@ async function verteileUndBelege({ abh, schritte, geheimnisse, vorher }) {
   return exitVon(gruen);
 }
 
-// ---- 1. Vorab-Riegel (nur GET) ------------------------------------------------------------
-
-// Liefert {befunde[], vorher:{registrierungen, ziele: Map(phone_number_id -> Registrierung), secret|null}}.
 export async function vorabRiegel({ abh, auswahl }) {
   const registrierungen = await holeRegistrierungen({ fetchImpl: abh.fetchImpl, account: abh.elKonto });
   const inventar = inventarUrteil(registrierungen);
@@ -113,7 +85,6 @@ export async function vorabRiegel({ abh, auswahl }) {
   return { befunde, vorher: { registrierungen, ziele, secret: secretSuche.secret } };
 }
 
-// Rein. Ziele je phone_number_id: dieselbe Registrierung ueber --nummer UND --registrierung zaehlt einmal.
 function ordneZieleZu({ registrierungen, auswahl, agentId }) {
   const aufloesungen = [
     ...auswahl.nummern.map((nummer) => zielNachNummer(registrierungen, nummer)),
@@ -135,16 +106,11 @@ function zielNachNummer(registrierungen, nummer) {
   return { befund: `Nummer ${e164Endung(nummer)}: ${treffer.length} Registrierungen (erwartet genau eine)` };
 }
 
-// Exakter Kennungs-Abgleich. Eine unbekannte Eingabe wird nie zurueckgegeben (sie koennte eine volle
-// Nummer sein), nur ihre Position.
 function zielNachKennung({ registrierungen, kennung, position }) {
   const registrierung = registrierungen.find((eintrag) => eintrag.phone_number_id === kennung);
   return registrierung ? { registrierung } : { befund: `--registrierung #${position}: nicht im Inventar` };
 }
 
-// E14 == E16: EINE Definition "diese Registrierung darf unseren Inbound-Trunk tragen" (eigener Agent,
-// eigene phone_number, outbound_trunk vorhanden). Gegen den neu erzeugten Zugang ist jede bestehende
-// Registrierung eine Abweichung, und gelesen ist sie (Inventar-GET) - also nie UNBEKANNT.
 function schreibzielBefund({ registrierung, agentId }) {
   const hindernis = reparaturHindernis({
     abruf: { beleg: TRUNK_BELEG.ABWEICHUNG, registrierung },
@@ -154,15 +120,12 @@ function schreibzielBefund({ registrierung, agentId }) {
   return hindernis ? `Registrierung ${registrierung.phone_number_id}: kein Schreibziel (${hindernis})` : null;
 }
 
-// Eine Registrierung MIT Inbound-Zugangsdaten ausserhalb der Ziele behielte den alten Zugang. Abgleich ueber
-// die Kennung: beide Auswahlwege muenden in dieselbe Ziel-Map.
 function fremdeZugaenge({ inventar, ziele }) {
   return inventar.mitZugang
     .filter((registrierung) => !ziele.has(registrierung.phone_number_id))
     .map((registrierung) => `Registrierung ${registrierung.phone_number_id} traegt Inbound-Zugangsdaten und steht nicht in der Ziel-Liste (halbe Rotation)`);
 }
 
-// Die Liste traegt nie Secret-Werte, nur Kennung und Name.
 function leseSecretListe(abh) {
   return listConvaiSecrets({
     fetchImpl: abh.fetchImpl,
@@ -181,9 +144,6 @@ async function sucheWorkspaceSecret(abh) {
   return { befunde, secret: treffer[0] ?? null };
 }
 
-// ---- 2. Erzeugen ------------------------------------------------------------------------------
-
-// {geheimnisse:{sipUser, sipPassword, initWebhookToken}, befunde[]}. Befunde nennen nur Schluesselnamen.
 export function erzeugeGeheimnisse(abh) {
   const zufallsHex = (bytes) => abh.zufall(bytes).toString(HEX);
   const geheimnisse = {
@@ -196,15 +156,10 @@ export function erzeugeGeheimnisse(abh) {
   return { geheimnisse, befunde };
 }
 
-// ---- 3./4. Verteilen --------------------------------------------------------------------------
-
-// Adapter auf die EINE Koerperform (src/elevenlabs/nummern-registrierung.js#inboundTrunkKoerper, IEX-A10);
-// der Lesebeleg zeigt media_encryption danach.
 export function trunkKoerper({ geheimnisse, nummer }) {
   return inboundTrunkKoerper({ benutzer: geheimnisse.sipUser, passwort: geheimnisse.sipPassword, e164: nummer });
 }
 
-// Die Reihenfolge ist die Reihenfolge dieser Liste: Render -> Secret -> Registrierungen.
 function verteilSchritte({ abh, geheimnisse, vorher }) {
   return [
     ...RENDER_GEHEIMNISSE.map(({ schluessel, feld }) => ({
@@ -249,7 +204,6 @@ function registrierungsSchritt({ abh, geheimnisse, registrierung }) {
   };
 }
 
-// Seriell, Abbruch beim ersten Fehlschlag; die uebrigen Ziele bleiben "gesetzt: nein".
 async function fuehreSchritteAus(schritte) {
   const ziele = schritte.map(({ ziel, laenge }) => ({ ziel, laenge, gesetzt: false, status: null }));
   for (const [index, schritt] of schritte.entries()) {
@@ -260,7 +214,6 @@ async function fuehreSchritteAus(schritte) {
   return { ziele, ok: true };
 }
 
-// Ein Wurf wird zum Status - nur err.providerStatus, nie err.message (kann Koerper-Schnipsel tragen).
 async function ergebnisOhneWurf(aktion) {
   try {
     return await aktion();
@@ -269,8 +222,6 @@ async function ergebnisOhneWurf(aktion) {
   }
 }
 
-// ---- 5. Lesebelege (nur GET) ------------------------------------------------------------------
-
 async function lesebelege({ abh, geheimnisse, secretId, vorher }) {
   const teile = [
     await renderBelegGruen({ abh, geheimnisse }),
@@ -278,7 +229,6 @@ async function lesebelege({ abh, geheimnisse, secretId, vorher }) {
     await webhookBelegGruen({ abh, secretId }),
     await registrierungsBelegeGruen({ abh, geheimnisse, ziele: vorher.ziele }),
   ];
-  // ALS LETZTES (E16 c, Runde 5 B1): nach dieser Pruefung folgt kein Schreibaufruf mehr.
   const inventarGruen = await abschliessendesInventarGruen(abh);
   return teile.every(Boolean) && inventarGruen;
 }
@@ -318,8 +268,6 @@ async function webhookBelegGruen({ abh, secretId }) {
   return befunde.length === 0;
 }
 
-// Rein. Nicht gesetzt -> kein Befund (den Webhook setzt B9); String -> Klartext-Secret (E14);
-// Verweis auf eine andere secret_id -> Befund. Gemeldet werden nie Werte oder fremde Kennungen.
 export function webhookSecretKonflikt({ settings, secretId }) {
   const kopf = settings?.[INIT_WEBHOOK_SETTINGS_SCHLUESSEL]?.request_headers?.[INIT_TOKEN_HEADER];
   if (kopf === undefined || kopf === null) return [];

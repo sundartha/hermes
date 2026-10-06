@@ -1,8 +1,3 @@
-// Szenario "personenwechsel" (P4): ab dem DRITTEN Callee-Turn (turnIndex 2, 0-basiert)
-// uebernimmt ein anderer Mensch den Hoerer, der das bisherige Gespraech nicht mitbekommen
-// hat. Gemessen wird, ob der Agent den Wechsel bemerkt und sein Anliegen der NEUEN Person
-// knapp neu darlegt - statt weiterzureden, als spraeche er noch mit der ersten Person,
-// oder verwirrt aufzulegen. scriptedTurns[1] pinnt die Uebergabe-Ansage deterministisch.
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {

@@ -1,29 +1,4 @@
 #!/usr/bin/env node
-// Messklient fuer Spike 1 (UMSETZUNG-ElevenLabs.md, "Traegt der
-// Rueckfrage-Kanal?"). Fuehrt ein echtes Convai-Gespraech ueber die
-// WebSocket-Strecke und protokolliert, was waehrend einer langen
-// Werkzeug-Wartezeit passiert: startet das Werkzeug ueberhaupt, wie lange
-// dauert es gemessen, redet der Agent dazwischen, ueberlebt die Verbindung.
-//
-// KEIN Telefonanruf noetig: der ClientEvent-Enum traegt agent_tool_request und
-// agent_tool_response - ein server-seitiges Webhook-Werkzeug meldet beide
-// Kanten an jeden WebSocket-Klienten. Die Simulations-API waere fuer diese
-// Messung untauglich, weil sie Werkzeuge MOCKT (kein HTTP, keine Wanduhr).
-//
-// VORAUSSETZUNG: der Schluessel (ELEVENLABS_API_KEY, gelesen ueber
-// src/config.js) braucht das Recht `convai_write`. Fehlt es, antworten BEIDE
-// WebSocket-Eintrittspunkte (get-signed-url und conversation/token) - genau wie
-// jeder Schreibweg - mit HTTP 401 und `missing_permissions: convai_write`.
-//
-// Aufruf:  npm run spike1:ws-probe -- <agent-id> [wartezeiten] [label] [jsonl-datei]
-// Wartezeiten ist eine Liste von Sekundenwerten (Vorgabe DEFAULT_WAITS_CSV);
-// jeder Wert wird als eigene Runde im selben Gespraech gefahren. Ohne
-// jsonl-Datei wird nur auf stdout protokolliert, keine Datei geschrieben.
-// Den Agenten legt scripts/spike1-setup.mjs an, den Gegenpart des Werkzeugs
-// bedient scripts/spike1-consult-echo.mjs.
-//
-// Tut NICHT: einen Agenten anlegen oder aendern, telefonieren, aufraeumen,
-// bewerten. Das Skript misst und schreibt mit - die Deutung bleibt beim Leser.
 import { createWriteStream } from "node:fs";
 import WebSocket from "ws";
 import { config } from "../src/config.js";
@@ -34,13 +9,9 @@ const SIGNED_URL_PATH = "/v1/convai/conversation/get-signed-url";
 const CONVERSATIONS_PATH = "/v1/convai/conversations";
 const MS_PER_SECOND = 1000;
 
-// Wartezeiten der Vorbereitung: 30/45/60 Sekunden. Als Zeichenkette, weil
-// dieselbe Zerlegung fuer Vorgabe und CLI-Argument gilt.
 const DEFAULT_WAITS_CSV = "30,45,60";
 const DEFAULT_LABEL = "lauf";
 
-// 250 ms digitale Stille als pcm_16000 (16 kHz, 16 bit mono) im selben Takt
-// gesendet - haelt die Audiostrecke offen wie ein schweigender Anrufer.
 const SILENCE_SAMPLE_RATE_HZ = 16000;
 const SILENCE_BYTES_PER_SAMPLE = 2;
 const SILENCE_CHUNK_SECONDS = 0.25;
@@ -49,17 +20,11 @@ const SILENCE_CHUNK_BASE64 = Buffer.alloc(
   SILENCE_SAMPLE_RATE_HZ * SILENCE_BYTES_PER_SAMPLE * SILENCE_CHUNK_SECONDS,
 ).toString("base64");
 
-// Zweite Messachse: waehrend das Gespraech laeuft die REST-Sicht abfragen -
-// bewegt sich dort etwas, traegt spaeter ein Polling-Wachhund.
 const POLL_INTERVAL_MS = 8000;
-// Erst reden lassen, dann die erste Runde ausloesen (Begruessung abwarten).
 const FIRST_TURN_DELAY_MS = 3000;
-// Nach der Werkzeug-Antwort nachlaufen lassen, damit sie im Gespraech ankommt.
 const AFTER_TOOL_GRACE_MS = 12000;
 const BETWEEN_WAITS_DELAY_MS = 2000;
 const AFTER_CLOSE_SETTLE_MS = 4000;
-// Notbremse je Runde und fuer den ganzen Lauf, beide auf die Wartezeit addiert:
-// falls das Werkzeug nie startet oder nie endet, haengt der Lauf nicht ewig.
 const WATCHDOG_EXTRA_SECONDS = 75;
 const HARD_STOP_EXTRA_SECONDS = 240;
 
@@ -114,9 +79,6 @@ function parseWaits(csv) {
   return values;
 }
 
-// Ein Lauf ueber ein Gespraech: haelt den Messzustand (welche Runde laeuft, wann
-// kam die Werkzeug-Kante, was hat der Agent dazwischen gesagt) und protokolliert
-// jede Kante mit relativer Zeit.
 class ToolWaitProbe {
   constructor({ agentId, waits, label, jsonlPath }) {
     this.agentId = agentId;
@@ -212,8 +174,6 @@ class ToolWaitProbe {
 
   handleOpen() {
     this.log("WS_OPEN", {});
-    // Leerer Override mit Absicht: turn_timeout gehoert zum Agenten und ist pro
-    // Gespraech NICHT ueberschreibbar (Runde 2 braucht ein PATCH am Agenten).
     this.send({ type: "conversation_initiation_client_data", conversation_config_override: {} });
     this.silenceTimer = setInterval(
       () => this.send({ user_audio_chunk: SILENCE_CHUNK_BASE64 }),
@@ -243,9 +203,6 @@ class ToolWaitProbe {
     this.recordSpeech({ text, inTool, sinceRequestSecs });
   }
 
-  // Drei Faelle, die der Spike auseinanderhalten muss: die Ansage VOR dem
-  // Werkzeug (pre_tool_speech), das Dazwischenreden WAEHREND der Wartezeit und
-  // die eigentliche Antwort DANACH.
   recordSpeech({ text, inTool, sinceRequestSecs }) {
     if (this.phase === PHASE.AWAIT_TOOL) {
       this.preToolSpeech = text.slice(0, SHORT_PREVIEW_CHARS);
@@ -275,8 +232,6 @@ class ToolWaitProbe {
       this.phase = PHASE.IN_TOOL;
       return;
     }
-    // client_tool_call wird nur protokolliert - dieser Aufbau nutzt ein
-    // server-seitiges Webhook-Werkzeug, ein Klienten-Werkzeug waere ein Befund.
     if (msg.type !== MSG_TOOL_RESPONSE) return;
     this.toolResponseAt = Date.now();
     this.phase = PHASE.AFTER_TOOL;
@@ -295,7 +250,6 @@ class ToolWaitProbe {
       return;
     }
     if (msg.type === MSG_AUDIO) {
-      // Nur die Kante festhalten, nie die Nutzlast (Audio gehoert nicht ins Log).
       this.log(MSG_AUDIO, { bytes: (msg.audio_event?.audio_base_64 || "").length });
       return;
     }
@@ -404,7 +358,6 @@ class ToolWaitProbe {
     await closed;
     clearTimeout(hardStop);
     this.log("ZUSAMMENFASSUNG", { conversation_id: this.conversationId, results: this.results });
-    // Der Endzustand des Gespraechs steht erst kurz nach dem Schliessen bereit.
     await delay(AFTER_CLOSE_SETTLE_MS);
     if (this.conversationId) await this.pollConversation("nach_ende");
     if (this.jsonl) this.jsonl.end();

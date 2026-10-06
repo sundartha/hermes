@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-// Kommandozeile des briefing-bench (Bedienung: README.md daneben).
-//   snapshot  --repo <checkout> --out <datei> [--env KEY=VALUE ...]
-//   run       --tools <schnappschuss> --out <bericht> [--modus attrappe|anthropic]
-//             [--modell <id>] [--laeufe 5]
-//             [--einschleusen selbstnennung|erfindung|verweigerung|missbrauch]
-//   vergleich --alt <bericht> --neu <bericht>
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";

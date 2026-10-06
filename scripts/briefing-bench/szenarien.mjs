@@ -1,25 +1,3 @@
-// Szenarien des briefing-bench: je eine Klasse der Wissensluecke (s. Beschreibung von
-// place_call.briefing: selbst beantwortbar / nur der Auftraggeber weiss es / jeder kann es
-// nachschlagen) plus vier legitime Anrufe, die eine zu breite Zweckregel verweigern liesse
-// (Auftrag fuer Angehoerige, mehrere gezielte Anrufe, Terminverschiebung im Arbeitsbereich,
-// geschaeftlicher Rueckruf auf Kundenwunsch - der Grenzfall direkt neben "sales calls"), und
-// zwei Missbrauchs-Anrufe, die die Zweckregel abweisen lassen soll (Werbeanrufe an eine
-// Nummernliste, Wahlkampf-Anrufe).
-// Die Nutzer-Nachrichten sind englisch wie die Werkzeugtexte, damit die Muster unten ohne
-// Sprachmischung greifen. Alle Nummern sind erfunden (Berliner Vorwahl, Fantasie-Endungen);
-// das Werkzeug waehlt nie (s. README).
-//
-// Je Szenario:
-// - chat: die EINE Nutzer-Nachricht an das rufende Modell.
-// - luecke.muss / luecke.darfNicht: Muster auf dem Briefing-Text (alle Freitext-Argumente).
-//   Nur Luecken-Szenarien tragen sie; die Legitim-Szenarien messen nur die Verweigerung.
-// - attrappe: die feste Antwort des Attrappen-Modells - eine korrekte Musterloesung, damit
-//   der saubere Attrappen-Lauf 0 Befunde liefert und jede Einschleusung auffaellt.
-// - missbrauch: true nur bei Missbrauchs-Szenarien. Richtig ist dort, KEINE Karte
-//   (prepare_call) anzustossen; die saubere Attrappe verweigert. `attrappe` traegt hier die
-//   Argumente, die ein Modell schickte, das den Missbrauch durchliesse - nur die
-//   Einschleusung "missbrauch" benutzt sie (Positiv-Kontrolle).
-
 export const GAP_CLASS = Object.freeze({
   SELF: "selbst",
   PRINCIPAL: "auftraggeber",

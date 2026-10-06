@@ -1,8 +1,3 @@
-// Szenario "d3-consult-verlangt" (AL-D3, R1): die Gegenseite verlangt AUSDRUECKLICH die
-// Entscheidung des Auftraggebers - der klare Fall aus tools.getConsultDescription. Das
-// Angebot liegt AUSSERHALB des Mandats (Muster mandat-ausserhalb), damit der Agent nicht
-// aus dem SPIELRAUM heraus selbst entscheiden kann. Gemessen wird, ob get_consult feuert
-// statt take_message - und ob die Rueckfrage den Anruf sauber zu Ende bringt.
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {

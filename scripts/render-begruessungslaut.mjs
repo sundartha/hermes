@@ -1,29 +1,4 @@
 #!/usr/bin/env node
-// IEP-P2c (Owner-Entscheidung 2026-09-17): UMWANDLER Quelle -> Auslieferungsdatei.
-//
-// Der gerechnete Laut aus IEP-P2b ist durchgefallen ("hoert sich an wie Gewitter"). Der Owner hat
-// einen von ElevenLabs erzeugten Soundeffekt ausgewaehlt und abgenommen: weiches Abheben des
-// Hoerers, danach ruhige Leitung. Dieses Skript synthetisiert nichts mehr - es dokumentiert den
-// wiederholbaren Weg von der abgenommenen Quelle zur Auslieferungsdatei.
-//
-// DREI SCHRITTE, jeder mit Grund:
-//   (a) afconvert (macOS-Bordmittel) dekodiert die mp3 und liefert 8 kHz mono PCM16 - die
-//       Telefonie-Rate, also keine Transcodierung auf dem Weg zum Anrufer. KEINE npm-Dependency:
-//       ein lokales Werkzeug, wie ffmpeg in scripts/stt-wer.mjs. Auf einem Nicht-macOS-Rechner
-//       schlaegt der Lauf fehl; das ist beabsichtigt - die Auslieferungsdatei liegt im Repo.
-//   (b) Skalierung auf ZIEL_SPITZENPEGEL. Zu leise ist so schaedlich wie zu laut: der erste
-//       Entwurf lag bei -40 dBFS und war am Telefon nicht wahrnehmbar.
-//   (c) lineare Ausblende ueber AUSBLENDE_MS. Telnyx wiederholt die audioUrl - ein harter Schnitt
-//       am Ende knackte bei jeder Wiederholung.
-//
-// DIE COMMITTETE DATEI IST DIE ABGENOMMENE FASSUNG, nicht die Ausgabe dieses Laufs: ein
-// Nachlauf trifft sie hoerbar, aber nicht byte-genau (Container-Polsterung von afconvert,
-// +-1 LSB Rundung). Deshalb pinnt KEIN Test die Bytes; test/iep-p2-begruessungslaut.test.js
-// beschreibt die Eigenschaften der Datei, und kein Test ruft afconvert.
-//
-// Aufruf:
-//   node scripts/render-begruessungslaut.mjs            -> ERSETZT die abgenommene Auslieferungsdatei
-//   node scripts/render-begruessungslaut.mjs /tmp/x.wav -> schreibt woandershin (Pruefung ohne Risiko)
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,20 +10,18 @@ import { EL_BEGRUESSUNGSLAUT_PFAD } from "../src/elevenlabs/inbound-rueckfall.js
 
 const REPO_WURZEL = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-// EINE Quelle fuer beide Enden des Wegs.
 const QUELLE_PFAD = path.join(REPO_WURZEL, "scripts", "quellen", "hermes-begruessungslaut-quelle.mp3");
 const AUSLIEFERUNG_PFAD = path.join(REPO_WURZEL, "public", EL_BEGRUESSUNGSLAUT_PFAD);
 
-// Jede Zahl traegt einen Namen (G25).
 const ZIEL_ABTASTRATE_HZ = 8000;
 const ZIEL_KANAELE = 1;
 const ZIEL_BIT_TIEFE = 16;
-const ZIEL_SPITZENPEGEL = 0.1; // -20,0 dBFS: hoerbar am Telefon, nie aufdringlich
+const ZIEL_SPITZENPEGEL = 0.1;
 const AUSBLENDE_MS = 150;
 const PCM_FORMAT_TAG = 1;
 
 const AFCONVERT = "/usr/bin/afconvert";
-const AFCONVERT_DATENFORMAT = `LEI${ZIEL_BIT_TIEFE}@${ZIEL_ABTASTRATE_HZ}`; // little-endian int16
+const AFCONVERT_DATENFORMAT = `LEI${ZIEL_BIT_TIEFE}@${ZIEL_ABTASTRATE_HZ}`;
 
 const BITS_PRO_BYTE = 8;
 const FMT_CHUNK_BYTES = 16;
@@ -56,7 +29,7 @@ const RIFF_KOPF_BYTES = 44;
 const RIFF_GROESSE_VORLAUF_BYTES = 8;
 const UINT16_BYTES = 2;
 const UINT32_BYTES = 4;
-const INT16_SKALA = 32768; // Gegenstueck zur Normierung in leseWav
+const INT16_SKALA = 32768;
 const INT16_MAX = 32767;
 const INT16_MIN = -32768;
 const MS_PER_SECOND = 1000;
@@ -64,13 +37,10 @@ const DBFS_JE_DEKADE = 20;
 const DBFS_NACHKOMMA = 2;
 const BYTES_PRO_RAHMEN = (ZIEL_BIT_TIEFE / BITS_PRO_BYTE) * ZIEL_KANAELE;
 
-/** Schreibt die Quelle als 8 kHz mono PCM16 nach zielPfad. Nebeneffekt im Namen (N7). */
 function schreibePcm16Umwandlung(quellPfad, zielPfad) {
-  // execFile ohne Shell, feste Argumente - keine Nutzereingabe im Kommando.
   execFileSync(AFCONVERT, ["-f", "WAVE", "-d", AFCONVERT_DATENFORMAT, "-c", String(ZIEL_KANAELE), quellPfad, zielPfad]);
 }
 
-/** Fail-closed: was afconvert lieferte, muss das Zielformat sein - sonst lieber Abbruch als stille Fehlkonvertierung. */
 function pruefeZielformat(format) {
   const stimmt =
     format.code === PCM_FORMAT_TAG &&
@@ -85,14 +55,12 @@ function pruefeZielformat(format) {
   }
 }
 
-/** Rein: Proben so skaliert, dass die groesste Auslenkung genau spitzenpegel betraegt. */
 function aufSpitzenpegelSkaliert(proben, spitzenpegel) {
   const spitze = proben.reduce((groesster, wert) => Math.max(groesster, Math.abs(wert)), 0) || 1;
   const faktor = spitzenpegel / spitze;
   return Float64Array.from(proben, (wert) => wert * faktor);
 }
 
-/** Rein: lineare Ausblende ueber die letzten ausblendeRahmen Rahmen (Faktor 1 -> 0). */
 function mitLinearerAusblende(proben, ausblendeRahmen) {
   const ausgabe = Float64Array.from(proben);
   const start = Math.max(0, ausgabe.length - ausblendeRahmen);
@@ -103,8 +71,6 @@ function mitLinearerAusblende(proben, ausblendeRahmen) {
   return ausgabe;
 }
 
-// Kanonischer RIFF/WAVE-Kopf, sequenziell geschrieben - so steht keine nackte Byte-Position im
-// Code (G25); die Reihenfolge der Felder IST das Format.
 function wavKopf(datenBytes) {
   const teile = [];
   const text = (zeichen) => teile.push(Buffer.from(zeichen, "ascii"));
@@ -126,15 +92,14 @@ function wavKopf(datenBytes) {
   uint16(PCM_FORMAT_TAG);
   uint16(ZIEL_KANAELE);
   uint32(ZIEL_ABTASTRATE_HZ);
-  uint32(ZIEL_ABTASTRATE_HZ * BYTES_PRO_RAHMEN); // Byte-Rate
-  uint16(BYTES_PRO_RAHMEN); // Block-Ausrichtung
+  uint32(ZIEL_ABTASTRATE_HZ * BYTES_PRO_RAHMEN);
+  uint16(BYTES_PRO_RAHMEN);
   uint16(ZIEL_BIT_TIEFE);
   text("data");
   uint32(datenBytes);
   return Buffer.concat(teile);
 }
 
-// Float [-1,1] -> PCM16, geklemmt.
 function pcmDaten(proben) {
   const puffer = Buffer.alloc(proben.length * BYTES_PRO_RAHMEN);
   proben.forEach((wert, index) => {
@@ -144,13 +109,11 @@ function pcmDaten(proben) {
   return puffer;
 }
 
-/** Rein: fertige WAV-Bytes aus Proben. */
 function alsWavDatei(proben) {
   const daten = pcmDaten(proben);
   return Buffer.concat([wavKopf(daten.length), daten]);
 }
 
-// EINZIGES IO ausser afconvert: Umwandeln, nachbearbeiten, schreiben, Messzeile ausgeben.
 function schreibeBegruessungslaut(zielPfad) {
   const arbeitsverzeichnis = mkdtempSync(path.join(tmpdir(), "hermes-laut-"));
   try {

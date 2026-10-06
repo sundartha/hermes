@@ -1,41 +1,4 @@
 #!/usr/bin/env node
-// B-7 (tasks/todo.md, Messgrundlage): read-only Messung der Spracherkennungs-Guete eines
-// echten Anrufs. Beantwortet die Frage, die ohne Zahl nur gefuehlt beantwortbar ist:
-// "versteht der Agent den Menschen am Telefon?"
-//
-// Aufbau: Telnyx zeichnet DUAL-CHANNEL auf (Gegenstelle und Agent auf getrennten Kanaelen).
-// Wir isolieren beide Kanaele, lassen sie von einem ZWEITEN, unabhaengigen Erkenner
-// abschreiben und rechnen die Wortfehlerrate (WER) gegen das, was Telnyx' eigener Erkenner
-// verstanden hat (GET /v2/ai/conversations/{id}/messages, Rolle user).
-//
-// Der Agentenkanal traegt eine ECHTE Ground Truth - wir wissen aus demselben Protokoll, was
-// der Agent gesagt hat. Die WER dort ist die Messgenauigkeit der Referenz selbst und wird
-// immer mit ausgegeben: ohne diese Kontrolle ist die Hauptzahl nicht interpretierbar.
-// (Einschraenkung, bewusst: der Agentenkanal ist TTS-Audio und damit leichter als
-// menschliche Sprache - die Kontrollzahl ist eine UNTERGRENZE des Referenzfehlers.)
-//
-// NUR GET/POST-lesend: keine Aenderung am Live-Assistant, kein Call. Die Aufnahme ist ein
-// echtes Gespraech mit einem echten Menschen (Absolute Regel 5): sie landet in einem
-// temporaeren Verzeichnis AUSSERHALB des Repos und wird am Ende geloescht (--keep-audio
-// haelt sie bewusst, dann nennt das Skript den Pfad und die Loeschpflicht).
-//
-// Aufruf: node scripts/stt-wer.mjs <call_session_id> [--keep-audio]
-//         node scripts/stt-wer.mjs --recording <aufnahme-id>
-//         node scripts/stt-wer.mjs <...> --conversation <telnyx-conversation-uuid>
-//
-// --live-stt [--smart-format] [--numerals]
-//   Zusatzmessung (STT-A2, tasks/todo.md): schickt den bereits isolierten Gegenstelle-Kanal
-//   im Echtzeit-Takt an Telnyx' EIGENSTAENDIGE Streaming-STT
-//   (wss://api.telnyx.com/v2/speech-to-text/transcription, Doku
-//   developers.telnyx.com/docs/voice/stt/websocket-streaming) und vergleicht das Ergebnis
-//   gegen dieselbe ElevenLabs-Referenz wie der Hauptlauf. Rein additiv - ohne --live-stt
-//   bleibt der bisherige Ablauf byte-identisch.
-//
-//   Falle, an der dieses Projekt schon einmal war (B-7, tasks/gq-chain-state.md): der
-//   Modell-Parameter dieser WS-API heisst `model` und ist getrennt von `transcription_engine`
-//   (Beispiel: engine=Deepgram, model=nova-3) - NICHT `deepgram/nova-3` als ein String wie am
-//   Assistant-Objekt, und NICHT `transcription_model`. Ein falscher Name wird still ignoriert;
-//   deshalb geht mit jedem Ergebnis ein Fingerabdruck (SHA-256) mit.
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -56,58 +19,35 @@ const AI_CONVERSATIONS_PATH = "/v2/ai/conversations";
 const USER_ROLE = "user";
 const ASSISTANT_ROLE = "assistant";
 
-// Die Referenz. scribe_v1 ist der Batch-Erkenner von ElevenLabs; er sieht die ganze
-// Aeusserung statt eines Streams und ist damit bewusst NICHT vergleichbar mit einem
-// Echtzeit-Erkenner - genau deshalb taugt er als Messlatte.
 const REFERENCE_MODEL = "scribe_v1";
 const REFERENCE_LANGUAGE = "deu";
 const SPEECH_TO_TEXT_PATH = "/v1/speech-to-text";
 
-// Die Aufnahme kommt als 8-kHz-MP3; 16 kHz mono je Kanal ist das, was der Referenz-Erkenner
-// erwartet. Hochtasten fuegt keine Information hinzu, vermeidet aber eine Resampling-Stufe
-// im fremden Dienst, die wir nicht beobachten koennen.
 const REFERENCE_SAMPLE_RATE_HZ = 16000;
 const CHANNEL_LABELS = Object.freeze(["links", "rechts"]);
 
-// Telnyx' Konversations-Liste kennt keinen Filter auf metadata.call_session_id - wir blaettern.
-// Die Grenze ist eine Notbremse gegen eine Endlosschleife bei einem API-Wechsel, kein Tuning.
 const CONVERSATION_PAGE_SIZE = 25;
 const MAX_CONVERSATION_PAGES = 20;
 
-// Der Zeitanker der Zuordnung: Aufnahme-Start = created_at minus Dauer. Faellt er weiter als
-// diese Schranke vom Konversations-Start weg, stimmt die Annahme ueber created_at nicht mehr
-// und die Turn-Zuordnung waere geraten - dann warnt das Skript, statt still falsch zuzuordnen.
 const MAX_ANCHOR_DRIFT_SECS = 3;
-// Ein Wort, das knapp vor dem Ende des Vorgaenger-Fensters beginnt, gehoert noch zum
-// naechsten Turn (Telnyx' ended_at ist der Erkennungs-, nicht der Sprech-Zeitpunkt).
 const TURN_WINDOW_LEAD_SECS = 0.4;
 
 const HTTP_TIMEOUT_MS = 300_000;
 
-// --live-stt: dieselben Werte, die Live am Assistant-Objekt/Pro-Call-Block stehen
-// (src/telephony/adapters/telnyx/stt-model.js, test/telnyx-call-control.test.js) - engine und
-// Modell aber GETRENNT, so verlangt es die Standalone-WS-API (siehe Kopf-Kommentar).
 const LIVE_STT_WS_PATH = "/v2/speech-to-text/transcription";
 const LIVE_STT_ENGINE = "Deepgram";
 const LIVE_STT_MODEL = "nova-3";
 const LIVE_STT_LANGUAGE = "de";
-// Der isolierte Kanal ist PCM16-Mono-WAV bei REFERENCE_SAMPLE_RATE_HZ (ffmpeg-Ausgabe von
-// splitChannels) - daraus folgt die Byte-Rate fuer den Echtzeit-Takt beim Senden.
 const PCM16_BYTES_PER_SAMPLE = 2;
-const LIVE_STT_CHUNK_BYTES = 4096; // Groesse aus Telnyx' eigenem Beispielcode
+const LIVE_STT_CHUNK_BYTES = 4096;
 const LIVE_STT_CONNECT_TIMEOUT_MS = 15_000;
-const LIVE_STT_TRAILING_WAIT_MS = 2_500; // Nachlauf fuer das letzte is_final nach dem letzten Chunk
+const LIVE_STT_TRAILING_WAIT_MS = 2_500;
 const LIVE_STT_OVERALL_TIMEOUT_MS = 120_000;
 
-// Fingerabdruck statt Volltext im Log dieser Zeile - der Volltext steht separat als
-// TRANSKRIPT-Zeile, der Hash ist der schnelle Beleg "A und B haben wirklich verschieden
-// geantwortet" (bzw. eben nicht, siehe Kopf-Kommentar zur Namensfalle).
 export function fingerprint(text) {
   return createHash("sha256").update(String(text || "")).digest("hex").slice(0, 12);
 }
 
-// Satzzeichen/Grossschreibung werden HIER geprueft, nicht ueber normalizeWords() - die
-// Normalisierung fuer die WER wirft genau das bewusst weg (Kommentar bei PUNCTUATION oben).
 export function hasPunctuation(text) {
   return /[.,!?]/.test(String(text || ""));
 }
@@ -115,8 +55,6 @@ export function hasUppercase(text) {
   return /\p{Lu}/u.test(String(text || ""));
 }
 
-// Nur is_final-Ergebnisse zaehlen (Doku: "Partials are best-effort and may revise"; ein
-// Interim-Ergebnis in die Referenz zu mischen wuerde Woerter doppelt oder revidiert zaehlen).
 async function transcribeLiveWs(wavPath, { apiKey, apiBase, smartFormat, numerals }) {
   const wsBase = apiBase.replace(/^http/, "ws");
   const url = new URL(`${wsBase}${LIVE_STT_WS_PATH}`);
@@ -170,7 +108,7 @@ async function transcribeLiveWs(wavPath, { apiKey, apiBase, smartFormat, numeral
       try {
         msg = JSON.parse(raw.toString());
       } catch {
-        return; // kein JSON - kein Transkript-Event, ignorieren statt zu raten
+        return;
       }
       if (msg.errors) {
         done(reject, new Error(`Live-STT-WebSocket meldet Fehler: ${JSON.stringify(msg.errors)}`));
@@ -205,16 +143,8 @@ async function reportLiveWsComparison(wavPath, reference, telnyx, { smartFormat,
   console.log(`TRANSKRIPT: ${transcript}`);
 }
 
-// Satzzeichen weg, Kleinschreibung - Umlaute BLEIBEN, sie sind bedeutungstragend
-// ("Vaters" vs. "Vater"). Ein Erkenner, der Umlaute verliert, soll dafuer bestraft werden.
 const PUNCTUATION = /[^\p{L}\p{N}\s]/gu;
 
-// Telnyx mischt zwei Zeitstempel-Formate: Aufnahmen liefern "2026-08-06T09:41:32" OHNE
-// Zeitzone, Konversations-Nachrichten "…Z". `Date.parse` liest den ersten als ORTSZEIT - in
-// Europa/Berlin also 2 h daneben. Alles laeuft deshalb durch EINE Stelle (G5), die einen
-// fehlenden Zonenanteil als UTC liest. Ohne das war die Turn-Zuordnung um 7200 s verschoben,
-// und die Anker-Pruefung hat es nicht gefangen, weil sie zwei gleich falsch geparste Werte
-// verglich - ein Selbsttest, der denselben Fehler macht wie der Code, prueft nichts.
 export function parseProviderTime(value) {
   const text = String(value || "");
   const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(text);
@@ -230,9 +160,6 @@ export function normalizeWords(text) {
     .filter(Boolean);
 }
 
-// Editierdistanz auf Wortebene, aufgeschluesselt nach Fehlerart. Die drei Zaehler kosten
-// nichts extra und sagen mehr als die Summe: viele "fehlend" heisst abgeschnitten, viele
-// "ersetzt" heisst falsch verstanden - zwei verschiedene Wurzeln.
 export function wordErrorRate(reference, hypothesis) {
   const rows = reference.length;
   const cols = hypothesis.length;
@@ -268,17 +195,11 @@ function cheapestEdit(substitute, insert, remove) {
   return { ...best, distance: best.distance + 1, deletions: best.deletions + 1 };
 }
 
-// Die Kanal-Zuordnung wird GEMESSEN, nicht angenommen: der Kanal, dessen Abschrift dem
-// bekannten Agententext aehnlicher ist, IST der Agentenkanal. Eine feste Annahme ("links ist
-// immer die Gegenstelle") waere eine Konvention, die bei einem Anbieter-Wechsel still kippt.
 export function pickCounterpartChannel(agentSimilarityByChannel) {
   const agentChannel = agentSimilarityByChannel.indexOf(Math.min(...agentSimilarityByChannel));
   return agentChannel === 0 ? 1 : 0;
 }
 
-// Ordnet jeder erkannten Aeusserung das Zeitfenster zu, in dem sie gesprochen wurde, und
-// sammelt die Referenzwoerter darin. Telnyx liefert ended_at je Nachricht; der Anfang ist das
-// Ende der vorigen.
 export function assignTurnWindows(userMessages, referenceWords, recordingStartMs) {
   const turns = [];
   let windowStart = 0;
@@ -309,9 +230,6 @@ async function telnyxGet(path, { apiKey, apiBase }) {
   return body.data;
 }
 
-// call_session_id und recording_id sind BEIDE 36-stellige UUIDs - aus der Zeichenkette
-// allein ist nicht entscheidbar, welche vorliegt. Deshalb wird es gesagt, nicht geraten:
-// Positionsargument = call_session_id, --recording = Aufnahme-ID.
 async function findRecording({ callSessionId, recordingId }, telnyx) {
   if (recordingId) return telnyxGet(`${RECORDINGS_PATH}/${recordingId}`, telnyx);
   const list = await telnyxGet(
@@ -357,7 +275,6 @@ async function transcribeReference(wavPath, elevenLabs) {
     body: form,
     signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
   });
-  // Kein Roh-Body in die Meldung (er kann Gespraechsinhalt tragen) - Status reicht zur Diagnose.
   if (!res.ok) throw new Error(`Referenz-Erkenner antwortete HTTP ${res.status}`);
   const body = await res.json();
   return {
