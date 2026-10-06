@@ -12,8 +12,8 @@ import {
   HERKUNFT,
 } from "./fixtures/elevenlabs-conversations.js";
 
-const MESSUNG_SPIKE1_URL = new URL("../tasks/spike1-messung.jsonl", import.meta.url);
-const MESSUNG_SPIKE2_URL = new URL("../tasks/spike2-messung.jsonl", import.meta.url);
+const MESSUNG_SPIKE1_URL = new URL("./fixtures/messungen/spike1-messung.jsonl", import.meta.url);
+const MESSUNG_SPIKE2_URL = new URL("./fixtures/messungen/spike2-messung.jsonl", import.meta.url);
 
 const AUSGEDACHT = "ausgedacht";
 

@@ -22,7 +22,9 @@ export const BASIS_ENV = Object.freeze({
 
 export function ielMessDateiNamen() {
   const scriptsInhalt = fs.readdirSync(path.join(ROOT, "scripts"));
-  const treffer = scriptsInhalt.filter((name) => name.startsWith("iel-mess"));
+  const treffer = scriptsInhalt.filter(
+    (name) => name.startsWith("iel-mess") && fs.statSync(path.join(ROOT, "scripts", name)).isFile(),
+  );
   return treffer.sort();
 }
 
@@ -30,7 +32,7 @@ export function bauMessBaum(optionen = {}) {
   const { m1Zaehler, nachdeployZaehler = { ausgeloest: 0, anrufe: [] }, wegwerf } = optionen;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "iel-b11-"));
   const scriptsDir = path.join(dir, "scripts");
-  const tasksDir = path.join(dir, "tasks");
+  const tasksDir = path.join(scriptsDir, "iel-mess");
   fs.mkdirSync(scriptsDir);
   fs.mkdirSync(tasksDir);
   for (const datei of ielMessDateiNamen()) {
@@ -38,7 +40,7 @@ export function bauMessBaum(optionen = {}) {
   }
   fs.symlinkSync(path.join(ROOT, "src"), path.join(dir, "src"), "dir");
   fs.symlinkSync(path.join(ROOT, "node_modules"), path.join(dir, "node_modules"), "dir");
-  const m1Pfad = path.join(ROOT, "tasks", "iel-m1-zaehler.json");
+  const m1Pfad = path.join(ROOT, "scripts", "iel-mess", "iel-m1-zaehler.json");
   const m1Inhalt = m1Zaehler ?? JSON.parse(fs.readFileSync(m1Pfad, "utf8"));
   fs.writeFileSync(path.join(tasksDir, "iel-m1-zaehler.json"), JSON.stringify(m1Inhalt));
   fs.writeFileSync(path.join(tasksDir, "iel-nachdeploy-zaehler.json"), JSON.stringify(nachdeployZaehler));
@@ -47,7 +49,7 @@ export function bauMessBaum(optionen = {}) {
 }
 
 function zaehlerHash(dir, datei) {
-  const inhalt = fs.readFileSync(path.join(dir, "tasks", datei));
+  const inhalt = fs.readFileSync(path.join(dir, "scripts", "iel-mess", datei));
   return createHash("sha256").update(inhalt).digest("hex");
 }
 

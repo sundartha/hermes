@@ -40,13 +40,13 @@ const TEXML_ENDSTATUS = new Set(["completed", "canceled", "failed", "busy", "no-
 
 const PFADE = Object.freeze({
   faelle: new URL("./iel-mess.cases.json", import.meta.url),
-  wegwerf: new URL("../tasks/iel-m1-wegwerf.json", import.meta.url),
+  wegwerf: new URL("./iel-mess/iel-m1-wegwerf.json", import.meta.url),
 });
 
-const TASKS = new URL("../tasks/", import.meta.url);
+const TASKS = new URL("./iel-mess/", import.meta.url);
 
 function tasksDatei(name) {
-  return Object.freeze({ url: new URL(name, TASKS), anzeige: `tasks/${name}` });
+  return Object.freeze({ url: new URL(name, TASKS), anzeige: `scripts/iel-mess/${name}` });
 }
 
 const MITSCHNITT_MP3 = "mp3";
@@ -142,7 +142,7 @@ function echteWegwerfAblage() {
     merke: (zustand) => schreibeAtomar(PFADE.wegwerf, zustand),
     vergiss: () => unlink(PFADE.wegwerf),
     async idFuerFall() {
-      const zustand = await leseJson(PFADE.wegwerf, "Fall braucht die Wegwerf-Registrierung: erst 'setup' (tasks/iel-m1-wegwerf.json fehlt)");
+      const zustand = await leseJson(PFADE.wegwerf, "Fall braucht die Wegwerf-Registrierung: erst 'setup' (scripts/iel-mess/iel-m1-wegwerf.json fehlt)");
       return zustand.phone_number_id;
     },
   };
@@ -151,17 +151,17 @@ function echteWegwerfAblage() {
 function trockeneWegwerfAblage() {
   return {
     async merke(zustand) {
-      console.log(`[TROCKEN] wuerde tasks/iel-m1-wegwerf.json schreiben: ${JSON.stringify(zustand)}`);
+      console.log(`[TROCKEN] wuerde scripts/iel-mess/iel-m1-wegwerf.json schreiben: ${JSON.stringify(zustand)}`);
     },
     async vergiss() {
-      console.log("[TROCKEN] wuerde tasks/iel-m1-wegwerf.json loeschen");
+      console.log("[TROCKEN] wuerde scripts/iel-mess/iel-m1-wegwerf.json loeschen");
     },
     async idFuerFall() {
       if (await existiert(PFADE.wegwerf)) {
-        const zustand = await leseJson(PFADE.wegwerf, "tasks/iel-m1-wegwerf.json unlesbar");
+        const zustand = await leseJson(PFADE.wegwerf, "scripts/iel-mess/iel-m1-wegwerf.json unlesbar");
         return zustand.phone_number_id;
       }
-      console.log("[TROCKEN] tasks/iel-m1-wegwerf.json fehlt - echt waere erst 'setup' noetig; Musterkennung <phone_number_id>");
+      console.log("[TROCKEN] scripts/iel-mess/iel-m1-wegwerf.json fehlt - echt waere erst 'setup' noetig; Musterkennung <phone_number_id>");
       return "<phone_number_id>";
     },
   };
@@ -734,7 +734,7 @@ const SETUP_VARIANTEN = Object.freeze({
 });
 
 async function legeRegistrierungAn(kontext, { abschnitt, koerperFuer }) {
-  if (await existiert(PFADE.wegwerf)) throw new Verweigerung("tasks/iel-m1-wegwerf.json existiert - erst 'teardown'");
+  if (await existiert(PFADE.wegwerf)) throw new Verweigerung("scripts/iel-mess/iel-m1-wegwerf.json existiert - erst 'teardown'");
   const setup = kontext.konfiguration[abschnitt];
   if (!FIKTIVE_KENNUNG.test(setup.el_nummer)) throw new Verweigerung(`${abschnitt}.el_nummer muss eine fiktive 555-01xx-Kennung sein`);
   const antwort = await kontext.transport.senden(anbieter.elRegistrierungAnlegen(koerperFuer(setup)));
@@ -775,7 +775,7 @@ async function legeNachdeployWegwerfAn(kontext) {
 
 async function raeumeWegwerfAb(kontext) {
   pruefeSchluessel();
-  const zustand = await leseJson(PFADE.wegwerf, "Keine Wegwerf-Registrierung vermerkt (tasks/iel-m1-wegwerf.json fehlt) - nichts abzubauen");
+  const zustand = await leseJson(PFADE.wegwerf, "Keine Wegwerf-Registrierung vermerkt (scripts/iel-mess/iel-m1-wegwerf.json fehlt) - nichts abzubauen");
   const registrierung = await leseRegistrierungRoh(kontext, zustand.phone_number_id);
   if (registrierung.label !== zustand.label || !FIKTIVE_KENNUNG.test(registrierung.phone_number)) {
     throw new Verweigerung("Registrierung passt nicht zum vermerkten Wegwerf-Objekt - nicht geloescht");

@@ -5,7 +5,7 @@ import { LOCALES } from "../src/i18n/locales.js";
 import { providerOpeningFor, providerVoicemailMessage } from "../src/elevenlabs/call-locale.js";
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
-const BEFUNDE_REL = "tasks/EL-STIMME-BEFUNDE.md";
+const BEFUNDE_REL = "test/fixtures/el-stimme-befunde.md";
 const LANGS = Object.keys(LOCALES);
 
 const B1_RULE =

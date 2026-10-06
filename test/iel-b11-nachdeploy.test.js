@@ -61,7 +61,8 @@ function enthaeltPfadTeil(protokoll, teil) {
 describe("IEL-B11 Trockenlauf: N1/N2/N-D und Setup-Varianten", () => {
   it("kopiert exakt die scripts/iel-mess*-Dateien in den Messbaum", () => {
     const dir = bauMessBaum();
-    const kopiert = fs.readdirSync(path.join(dir, "scripts")).sort();
+    const eintraege = fs.readdirSync(path.join(dir, "scripts"), { withFileTypes: true });
+    const kopiert = eintraege.filter((eintrag) => eintrag.isFile()).map((eintrag) => eintrag.name).sort();
     assert.deepEqual(kopiert, ielMessDateiNamen());
   });
 
@@ -115,8 +116,8 @@ describe("IEL-B11 Trockenlauf: N1/N2/N-D und Setup-Varianten", () => {
     spawnDry(dir, ["setup", "--nachdeploy"]);
     const nachher = m1ZaehlerHash(dir);
     assert.equal(nachher, vorher);
-    assert.ok(!fs.existsSync(path.join(dir, "tasks", "iel-m1-zaehler.lock")));
-    assert.ok(!fs.existsSync(path.join(dir, "tasks", "iel-nachdeploy-messung.jsonl")));
+    assert.ok(!fs.existsSync(path.join(dir, "scripts", "iel-mess", "iel-m1-zaehler.lock")));
+    assert.ok(!fs.existsSync(path.join(dir, "scripts", "iel-mess", "iel-nachdeploy-messung.jsonl")));
   });
 });
 
@@ -137,10 +138,10 @@ describe("IEL-B11 Zaehler-Gruppen und Grenzen", () => {
 
   it("Test 6: fehlende Nachdeploy-Zaehlerdatei verweigert", () => {
     const dir = bauMessBaum();
-    fs.unlinkSync(path.join(dir, "tasks", "iel-nachdeploy-zaehler.json"));
+    fs.unlinkSync(path.join(dir, "scripts", "iel-mess", "iel-nachdeploy-zaehler.json"));
     const ergebnis = spawnDry(dir, ["N2-ohne-inbound"]);
     assert.equal(ergebnis.status, EXIT_VERWEIGERT);
-    assert.match(ergebnis.stderr, /Zaehlerdatei tasks\/iel-nachdeploy-zaehler\.json fehlt/);
+    assert.match(ergebnis.stderr, /Zaehlerdatei scripts\/iel-mess\/iel-nachdeploy-zaehler\.json fehlt/);
   });
 
   it("Test 7: Fall ohne/mit ungueltigem zaehler-Feld verweigert vor jedem Netzzugriff", () => {
@@ -234,7 +235,7 @@ describe("IEL-B11 Echt-Modus: setup --nur-ausgehend", () => {
     assert.equal(ergebnis.status, EXIT_VERWEIGERT, `${ergebnis.stdout}\n${ergebnis.stderr}`);
     const protokoll = leseProtokoll(protokollPfad);
     assert.deepEqual(methodenVon(protokoll), ["POST", "GET", "GET", "DELETE"]);
-    assert.ok(!fs.existsSync(path.join(dir, "tasks", "iel-m1-wegwerf.json")));
+    assert.ok(!fs.existsSync(path.join(dir, "scripts", "iel-mess", "iel-m1-wegwerf.json")));
     const postAufruf = protokoll[0];
     const trunkConfig = postAufruf.koerper?.outbound_trunk_config;
     const passwort = trunkConfig?.credentials?.password;
@@ -258,7 +259,7 @@ describe("IEL-B11 Echt-Modus: setup --nur-ausgehend", () => {
     };
     const ergebnis = spawnEcht(dir, ["setup", "--nur-ausgehend"], { szenario, protokollPfad });
     assert.equal(ergebnis.status, 0, `${ergebnis.stdout}\n${ergebnis.stderr}`);
-    assert.ok(fs.existsSync(path.join(dir, "tasks", "iel-m1-wegwerf.json")));
+    assert.ok(fs.existsSync(path.join(dir, "scripts", "iel-mess", "iel-m1-wegwerf.json")));
     assert.match(ergebnis.stdout, /inbound_trunk nein/);
   });
 });
@@ -282,7 +283,7 @@ describe("IEL-B11 N1 nutzt den Digest-Weg (Review-Fix)", () => {
     const wegwerf = { phone_number_id: "pn_test", label: "IEL Nach-Deploy Wegwerf am Agenten" };
     const dir = bauMessBaum({ wegwerf });
     const protokollPfad = protokollPfadIn(dir);
-    const nachdeployZaehlerPfad = path.join(dir, "tasks", "iel-nachdeploy-zaehler.json");
+    const nachdeployZaehlerPfad = path.join(dir, "scripts", "iel-mess", "iel-nachdeploy-zaehler.json");
     const zaehlerVorher = fs.readFileSync(nachdeployZaehlerPfad, "utf8");
     const registrierungsAntwort = {
       phone_number: "+12025550176",
@@ -340,7 +341,7 @@ describe("IEL-B11 Echt-Modus: N1/N2 Verweigerungen vor der Reservierung", () => 
     const protokoll = leseProtokoll(protokollPfad);
     assert.ok(!enthaeltPfadTeil(protokoll, "/v2/texml/calls/"));
     assert.equal(m1ZaehlerHash(dir), vorherHash);
-    assert.ok(!fs.existsSync(path.join(dir, "tasks", "iel-nachdeploy-zaehler.lock")));
+    assert.ok(!fs.existsSync(path.join(dir, "scripts", "iel-mess", "iel-nachdeploy-zaehler.lock")));
   });
 
   it("Test 13: N2 verweigert vor der Reservierung, wenn die Registrierung inbound_trunk zeigt", () => {
