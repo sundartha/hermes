@@ -1,14 +1,10 @@
-// INBOX-P2 (Review-Blocker S1-B): vier neu gebaute Verhalten von ops.takeInboxEntries
-// waren bislang von KEINER Assertion gepinnt - reine ops-Tests gegen seedState, ohne
-// Server (Muster C3, test/inbox-poll-race.test.js). Jeder Fall deckt genau EIN
-// Verhalten, das ein Regress unbemerkt kippen koennte.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { seedState, seedCall } from "./helpers.js";
 import * as ops from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-const CALLER = "+4915112345678"; // fiktiv, Bestandsstil
+const CALLER = "+4915112345678";
 const NOW = "2026-08-21T10:00:00.000Z";
 const POLL_LIMIT = 2;
 
@@ -114,7 +110,6 @@ test("INBOX-P2 D4: Eintraege kommen aufsteigend nach startedAt, unabhaengig von 
     inboxEntryAt: NOW,
     inboxSeenAt: null,
   });
-  // Seed-Reihenfolge ist bewusst NICHT die Start-Reihenfolge.
   const state = seedState({ calls: [spaeter, frueher, mitte] });
 
   const { entries } = ops.takeInboxEntries(state, BOOTSTRAP_TENANT_ID, {
@@ -129,13 +124,6 @@ test("INBOX-P2 D4: Eintraege kommen aufsteigend nach startedAt, unabhaengig von 
   );
 });
 
-// Review-Blocker S1-1: die Whitelist ist als FORM (exakter Schluesselsatz) bislang
-// UNGEPRUEFT - R6 arbeitet mit einer Substring-Blacklist plus blossen `in`-Praesenz-
-// pruefungen, die ein spaeter hinzugefuegtes Feld mit unverfaenglichem Namen passieren
-// liessen. Muster: test/al-p11-result-card.test.js:332 (deepEqual auf sortierten Keys).
-// Zusaetzlich pinnt dieser Fall die bislang assertionslosen Felder caller/started_at
-// gegen ihre Seed-Werte (call.from/call.startedAt) - eine Vertauschung auf call.to bzw.
-// call.endedAt blieb bislang unbemerkt gruen.
 test("INBOX-P2 S1-1: die Projektion traegt EXAKT die Whitelist-Felder, caller/started_at/summary stimmen mit den Seed-Werten", () => {
   const call = seedCall({
     id: "call_whitelist_pin",

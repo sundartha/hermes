@@ -1,11 +1,3 @@
-// IEX-A8 (E8/E11): Registrierungs-Beleg am Nummern-Datensatz - reiner Teil (Fingerabdruck,
-// Beleg-Urteil, Hindernis, Ergebniszeile), Store-Operationen in BEIDEN Backends (json,
-// pg/pglite), Sweep-Fabrik mit injiziertem IO, Verdrahtung und ein Spawn-E2E gegen einen
-// lokalen Attrappen-Anbieter (kein echtes Netz).
-//
-// DATA_DIR + config werden VOR allen store-Imports gebunden (json.FILE haengt an
-// config.dataDir): darum laufen die src-Imports dynamisch in before() (Muster
-// test/iel-b4a-brueckenzustand.test.js).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -39,7 +31,6 @@ before(async () => {
   ({ NUMBER_STATUS, BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
 });
 
-// Benannte Konstanten (no-magic-numbers gilt auch fuer test/**).
 const SIP_USER = "iex-a8-sip-benutzer";
 const SIP_USER_ANDERS = "iex-a8-anderer-benutzer";
 const HEX_SIP_USER = "0123456789abcdef";
@@ -119,7 +110,6 @@ function fakeLogger() {
   };
 }
 
-// Store-Attrappe ueber ECHTE state-ops (kein nachgebautes Verhalten) plus Mutations-Zaehler.
 function fakeStore(numbers, ueberschreibungen = {}) {
   const state = { ...ops.makeDefaultState(), numbers };
   const aufrufe = { mark: 0, clear: 0 };
@@ -139,7 +129,6 @@ function fakeStore(numbers, ueberschreibungen = {}) {
   };
 }
 
-// elRead-Attrappe: je Registrierungs-ID eine Antwort-Funktion, alle Abrufe werden gezaehlt.
 function fakeElRead(antworten) {
   const abrufe = [];
   return {
@@ -162,8 +151,6 @@ function lauf({ store, elRead, config: sweepKonfig = sweepConfig(), logger = fak
   return { logger, laeuft: sweep.runBootSweep() };
 }
 
-// --- 1: Fingerabdruck ---------------------------------------------------------------
-
 test("IEX-A8-1: Fingerabdruck ist deterministisch, 16 Hex von sha256(sipUser), leer/kein String -> null", () => {
   const fp = pfad.zugangsFingerabdruck(SIP_USER);
   assert.equal(pfad.ZUGANG_FP_HEX_ZEICHEN, ERWARTETE_FP_LAENGE);
@@ -178,11 +165,8 @@ test("IEX-A8-1: Fingerabdruck ist deterministisch, 16 Hex von sha256(sipUser), l
   assert.equal(pfad.zugangsFingerabdruck(ZAHL_STATT_STRING), null);
 });
 
-// --- 2: Beleg-Urteil ------------------------------------------------------------------
-
 const DID_BASIS = "+493000001111";
 
-// Kopie mit geaendertem bzw. entferntem Feld - kein Mutieren geteilter Fixtures.
 function mitTrunk(aenderung) {
   const reg = passendeRegistrierung(DID_BASIS);
   return { ...reg, inbound_trunk: { ...reg.inbound_trunk, ...aenderung } };
@@ -199,7 +183,6 @@ function mitRegistrierung(aenderung) {
   return { ...passendeRegistrierung(DID_BASIS), ...aenderung };
 }
 
-// [Label, Registrierungs-Body (erst zur Testzeit gebaut), Ueberschreibung der Eingaben]
 const ABWEICHUNGS_FAELLE = [
   ["has_auth_credentials false", () => mitTrunk({ has_auth_credentials: false }), {}],
   ["has_auth_credentials fehlt", () => trunkOhne("has_auth_credentials"), {}],
@@ -239,8 +222,6 @@ for (const [label, baueRegistrierung, eingaben] of ABWEICHUNGS_FAELLE) {
   });
 }
 
-// --- 3: Abruffehler -------------------------------------------------------------------
-
 test("IEX-A8-3: nur 404 ist ABWEICHUNG, jeder andere Abruffehler UNBEKANNT", () => {
   assert.equal(beleg.belegAusAbruffehler(anbieterFehler(HTTP_NOT_FOUND)), beleg.TRUNK_BELEG.ABWEICHUNG);
   for (const status of [HTTP_UNAUTHORIZED, HTTP_FORBIDDEN, HTTP_TOO_MANY, HTTP_SERVER_ERROR]) {
@@ -249,8 +230,6 @@ test("IEX-A8-3: nur 404 ist ABWEICHUNG, jeder andere Abruffehler UNBEKANNT", () 
   assert.equal(beleg.belegAusAbruffehler(new Error("fetch failed")), beleg.TRUNK_BELEG.UNBEKANNT);
 });
 
-// --- 4: Hindernis ---------------------------------------------------------------------
-
 test("IEX-A8-4: trunkSweepHindernis in fester Reihenfolge", () => {
   assert.equal(beleg.trunkSweepHindernis(sweepConfig({ enabled: false }).voice), "schalter_aus");
   assert.equal(beleg.trunkSweepHindernis(sweepConfig({ sipPassword: "kurz" }).voice), "zugang_unvollstaendig");
@@ -258,8 +237,6 @@ test("IEX-A8-4: trunkSweepHindernis in fester Reihenfolge", () => {
   assert.equal(beleg.trunkSweepHindernis(sweepConfig({ agentId: "" }).voice), "el_konto_unvollstaendig");
   assert.equal(beleg.trunkSweepHindernis(sweepConfig().voice), null);
 });
-
-// --- 5-7: state-ops -------------------------------------------------------------------
 
 function opsState(numbers) {
   return { ...ops.makeDefaultState(), numbers };
@@ -329,8 +306,6 @@ test("IEX-A8-7: releaseNumber entfernt den Beleg zusammen mit der Registrierung"
   assert.equal(number.providerAgentPhoneNumberId, null);
 });
 
-// --- 8: json-Wrapper ------------------------------------------------------------------
-
 function storeDatei() {
   return path.join(dataDir, "store.json");
 }
@@ -352,7 +327,6 @@ test("IEX-A8-8: json-Wrapper speichert nur bei Aenderung und die Felder ueberleb
   assert.equal(number.elInboundTrunkBelegtAt, T0_ISO);
   assert.equal(number.elInboundTrunkZugangFp, "fp_json");
 
-  // Spion: ein zweiter gleicher Beleg darf die Datei nicht neu schreiben.
   fs.writeFileSync(storeDatei(), JSON.stringify({ ...roh, _spion: true }));
   assert.equal(jsonStore.markNumberElInboundTrunkBelegt("num_a8_1", { nowIso: T1_ISO, zugangFp: "fp_json" }).changed, false);
   assert.equal(nummerAufPlatte("num_a8_1").roh._spion, true, "kein Save ohne Aenderung");
@@ -369,8 +343,6 @@ test("IEX-A8-8: json-Wrapper speichert nur bei Aenderung und die Felder ueberleb
   assert.equal("elInboundTrunkBelegtAt" in ohneBeleg, false);
   assert.equal("elInboundTrunkZugangFp" in ohneBeleg, false);
 });
-
-// --- 9: pg-Round-Trip -----------------------------------------------------------------
 
 async function makePgTestStore() {
   const db = new PGlite();
@@ -413,7 +385,6 @@ test("IEX-A8-9: pg - Beleg ueberlebt Reopen und Folge-Flush, Clear und Bestand o
   assert.equal("elInboundTrunkBelegtAt" in pgNummer(erster, ohneBeleg), false);
   assert.equal("elInboundTrunkZugangFp" in pgNummer(erster, ohneBeleg), false);
 
-  // I8-Lehre: eine Folge-Mutation plus Flush darf die Spalten nicht auf NULL zuruecksetzen.
   ops.attachNumberRegistration(erster.load(), mitBeleg, "phnum_pg_folge");
   await erster.save();
   const zweiter = await reopen(runner);
@@ -426,8 +397,6 @@ test("IEX-A8-9: pg - Beleg ueberlebt Reopen und Folge-Flush, Clear und Bestand o
   assert.equal("elInboundTrunkBelegtAt" in pgNummer(dritter, mitBeleg), false);
   assert.equal("elInboundTrunkZugangFp" in pgNummer(dritter, mitBeleg), false);
 });
-
-// --- 10: Ergebniszeile ----------------------------------------------------------------
 
 test("IEX-A8-10: Ergebniszeile - 0 aktiv", async () => {
   const { logger, laeuft } = lauf({ store: fakeStore([]), elRead: fakeElRead({}) });
@@ -445,8 +414,6 @@ test("IEX-A8-10: Ergebniszeile - 1 belegt ohne Endungsteil", async () => {
   assert.equal(logger.text(), "[el-trunk] sweep fertig scope=allowlist aktiv=1 belegt=1 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=0");
 });
 
-// Mischfall: belegt; abweichung per 200-Mismatch; abweichung per 404; unbekannt per 500;
-// unbekannt per Netzfehler; ohne Registrierung. Absichtlich NICHT sortiert eingefuegt.
 function mischfall() {
   const numbers = [
     nummer({ index: 6, registrierungsId: null }),
@@ -495,8 +462,6 @@ test("IEX-A8-10: Ergebniszeile - Kappung auf SONDE_MAX_ENDUNGEN plus Rest", asyn
   assert.ok(logger.text().includes("…0110,+2"), "Positiv-Kontrolle: zehnte Endung ist …0110");
 });
 
-// --- 11: Wirkung am Store -------------------------------------------------------------
-
 test("IEX-A8-11: BELEGT setzt, ABWEICHUNG loescht, UNBEKANNT laesst stehen, nicht aktiv/ohne Registrierung ohne GET", async () => {
   const fpAlt = "fp_alt_bleibt";
   const numbers = [
@@ -526,8 +491,6 @@ test("IEX-A8-11: BELEGT setzt, ABWEICHUNG loescht, UNBEKANNT laesst stehen, nich
   assert.deepEqual([...elRead.abrufe].sort(), ["phnum_a8_1", "phnum_a8_2", "phnum_a8_3"]);
   assert.match(logger.text(), / aktiv=4 belegt=1 repariert=0 abweichung=1 unbekannt=1 ohne_registrierung=1 /);
 });
-
-// --- 12: Zeitpunkt der Ergebniszeile ----------------------------------------------------
 
 function verzoegerterElRead() {
   const offen = { jetzt: 0, max: 0 };
@@ -581,8 +544,6 @@ test("IEX-A8-12: hoechstens SWEEP_PARALLEL GETs offen, Ergebniszeile erst nach d
   assert.equal(fertigZeilen.length, 1);
 });
 
-// --- 13: Hindernis im Lauf --------------------------------------------------------------
-
 test("IEX-A8-13: Hindernis -> genau die Uebersprungen-Zeile, kein GET, keine Store-Mutation", async () => {
   const store = fakeStore([nummer({ index: 1 })]);
   const elRead = fakeElRead({ phnum_a8_1: () => passendeRegistrierung(didFuer(1)) });
@@ -592,8 +553,6 @@ test("IEX-A8-13: Hindernis -> genau die Uebersprungen-Zeile, kein GET, keine Sto
   assert.equal(elRead.abrufe.length, 0);
   assert.deepEqual(store.aufrufe, { mark: 0, clear: 0 });
 });
-
-// --- 14: fail-soft ----------------------------------------------------------------------
 
 function wirftGeheim() {
   throw new Error(GEHEIMER_FEHLERTEXT);
@@ -615,8 +574,6 @@ for (const [label, sabotage] of WURF_FAELLE) {
   });
 }
 
-// --- 15: Log-Hygiene --------------------------------------------------------------------
-
 test("IEX-A8-15: Log-Hygiene ueber einen Voll-Lauf - kein sipUser, kein Fingerabdruck, keine Nummer, keine Id", async () => {
   const { numbers, elRead } = mischfall();
   const { logger, laeuft } = lauf({ store: fakeStore(numbers), elRead });
@@ -630,8 +587,6 @@ test("IEX-A8-15: Log-Hygiene ueber einen Voll-Lauf - kein sipUser, kein Fingerab
   assert.equal(text.includes("num_"), false);
 });
 
-// --- 16: Vor-listen-Sonde ---------------------------------------------------------------
-
 test("IEX-A8-16: inboundElAllowlistProbeLine ist mit und ohne Beleg-Felder byte-gleich und nennt keine Beleg-Zahlen", () => {
   const ohne = { numbers: [nummer({ index: 1 })] };
   const mit = { numbers: [nummer({ index: 1, elInboundTrunkBelegtAt: T0_ISO, elInboundTrunkZugangFp: "fp" })] };
@@ -642,8 +597,6 @@ test("IEX-A8-16: inboundElAllowlistProbeLine ist mit und ohne Beleg-Felder byte-
   assert.ok(zeileMit.includes("…0001"), "Positiv-Kontrolle: die Sonde sieht die Nummer");
   for (const wort of ["belegt", "abweichung", "unbekannt"]) assert.equal(zeileMit.includes(wort), false, wort);
 });
-
-// --- 18: Verdrahtung --------------------------------------------------------------------
 
 test("IEX-A8-18: server.js baut den Sweep und reicht ihn durch, boot.js ruft ihn nach logBootBanner", () => {
   const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
@@ -665,10 +618,6 @@ test("IEX-A8-18: server.js baut den Sweep und reicht ihn durch, boot.js ruft ihn
   assert.ok(sweepIndex > bannerIndex, "runBootSweep steht im listen-Callback NACH logBootBanner");
 });
 
-// --- 19: Spawn E2E ----------------------------------------------------------------------
-
-// Attrappen-Anbieter: haelt die Antwort auf GET /v1/convai/phone-numbers/phnum_a8 zurueck, bis
-// der Test sie freigibt; jeder andere Pfad bekommt sofort 404.
 async function startFakeEl(body) {
   const zurueckgehalten = [];
   const empfangen = { anzahl: 0 };

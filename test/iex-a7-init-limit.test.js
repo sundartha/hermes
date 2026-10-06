@@ -1,11 +1,3 @@
-// ---- IEX-A7: Missbrauchs-Limit am Init-Webhook (POST /webhooks/elevenlabs/init) --------------
-// Tests 1-8 laufen IN-PROCESS ueber die echte Schranke (initTokenSchranke + echter
-// Fixed-Window-Zaehler) VOR express.json und den echten Router - dieselbe Reihenfolge wie in
-// app.js. Die Verdrahtung in app.js selbst (Schranke vor den Parsern, ausserhalb des globalen
-// Limiters, exakter Router) pruefen die Spawn-Tests 9 und 10: app.js darf hier nicht in-process
-// importiert werden (initialisiert store/json.js, s. test/route-auth-inventory.test.js).
-//
-// Namen beginnen mit "IEX-A7-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -51,7 +43,6 @@ const DROSSELUNGEN_IM_FENSTER = 10;
 const VERTRAUTE_PROXY_HOPS = 1;
 const SEKUNDEN_JE_FENSTER = RATE_WINDOW_MS / MS_PER_SECOND;
 const RETRY_AFTER_ATTRAPPE_S = 7;
-// Drosselungen nach der ersten Zeile, alle noch im Fenster (die letzte an dessen Grenze - 1 ms).
 const VERSAETZE_IM_FENSTER_MS = Object.freeze([0, 1, RATE_WINDOW_MS - 1]);
 const UHR_START_MS = Date.parse("2026-09-15T10:00:00.000Z");
 const SPAWN_INIT_TOKEN = elInboundInitSpawnEnv(AGENT_ID).ELEVENLABS_INIT_WEBHOOK_TOKEN;
@@ -60,13 +51,10 @@ const ZEILE_TOKEN_ABGELEHNT = "[el-init] abgelehnt grund=token";
 const ZEILE_ERSTE_DROSSELUNG = "[el-init] gedrosselt anzahl=1";
 const EL_INIT_PRAEFIX = "[el-init]";
 
-// ---- Build ----------------------------------------------------------------------------------
-
 function schrankenConfig() {
   return { voice: { elevenLabsInbound: { initWebhookToken: INIT_TOKEN }, elevenLabsOutbound: { agentId: AGENT_ID } } };
 }
 
-// Zaehlt jeden Eigenschafts-Zugriff auf den Store - 0 heisst: die Anfrage hat ihn nie beruehrt.
 function zugriffsZaehlenderStore() {
   const zaehlung = { zugriffe: 0 };
   const store = new Proxy(
@@ -85,7 +73,6 @@ function neuerFehlversuchZaehler() {
   return makeFixedWindowCounter({ windowMs: RATE_WINDOW_MS, limit: INIT_FEHLVERSUCHE_PRO_MIN, sweepMs: RATE_SWEEP_INTERVAL_MS });
 }
 
-// Spion ueber den ECHTEN Zaehler: zaehlt jeden Aufruf, entscheidet aber echt.
 function zaehlerSpion() {
   const echt = neuerFehlversuchZaehler();
   const aufrufe = { anzahl: 0 };
@@ -96,13 +83,11 @@ function zaehlerSpion() {
   return { zaehler, aufrufe };
 }
 
-// Reihenfolge wie app.js#installGlobalMiddleware: Schranke -> Parser -> Router.
 async function mitSchrankeVorParser({ store = zugriffsZaehlenderStore().store, zaehler = neuerFehlversuchZaehler() }, run) {
   const config = schrankenConfig();
   const schranke = initTokenSchranke({ config, zaehler });
   const app = express();
   app.set("trust proxy", VERTRAUTE_PROXY_HOPS);
-  // "test": der Express-Standardfehler (400 bei kaputtem JSON) schreibt keinen Stack ins Testlog.
   app.set("env", "test");
   app.use((req, res, next) => (istInitWebhookAnfrage(req) ? schranke(req, res, next) : next()));
   app.use(express.json());
@@ -128,7 +113,6 @@ async function initPost(baseUrl, { pfad = ELEVENLABS_INIT_PATH, token, ip, rohKo
   return { status: res.status, text: await res.text(), retryAfter: res.headers.get("retry-after") };
 }
 
-// Sequentiell (await je Anfrage, nie Promise.all): die Statusfolge ist die Zaehlfolge.
 async function wiederholtePosts(baseUrl, { anzahl, ...anfrage }) {
   const antworten = [];
   for (let nummer = 0; nummer < anzahl; nummer += 1) antworten.push(await initPost(baseUrl, anfrage));
@@ -139,11 +123,9 @@ const statusFolge = (antworten) => antworten.map((antwort) => antwort.status);
 const gleicheStatus = (anzahl, status) => Array.from({ length: anzahl }, () => status);
 const bindungsKoerper = (bindung) => JSON.stringify(initBindungsKoerper({ bindung, agentId: AGENT_ID, conversationId: CONV }));
 
-// Genau so viele Fehlversuche, wie das Limit erlaubt - der naechste wird gedrosselt.
 const fehlversucheBisZumLimit = (baseUrl, anfrage = {}) =>
   wiederholtePosts(baseUrl, { anzahl: INIT_FEHLVERSUCHE_PRO_MIN, token: FALSCHES_TOKEN, ip: IP_X, ...anfrage });
 
-// Reine Middleware an einer fiktiven Uhr, req/res als protokollierende Attrappen.
 function schrankeMitUhr({ zaehler, uhr }) {
   const schranke = initTokenSchranke({ config: schrankenConfig(), zaehler, now: () => uhr.nowMs });
   return function aufrufen() {
@@ -164,8 +146,6 @@ function schrankeMitUhr({ zaehler, uhr }) {
 
 const zeilenMit = (zeilen, text) => zeilen.filter((zeile) => zeile === text);
 const initZeilen = (text) => text.split("\n").filter((zeile) => zeile.includes(EL_INIT_PRAEFIX));
-
-// ---- In-process: Schranke + Parser + Router ---------------------------------------------------
 
 test("IEX-A7-1: 30 Fehlversuche je IP -> 403, der 31. -> 429 mit konstantem Koerper und Retry-After", async () => {
   await mitSchrankeVorParser({}, async ({ baseUrl }) => {
@@ -302,8 +282,6 @@ test("IEX-A7-8: Pfadvarianten erreichen weder Schranke noch Handler, die exakte 
     assert.ok(zaehlung.zugriffe > 0);
   });
 });
-
-// ---- Verdrahtung am echten Server (app.js) ----------------------------------------------------
 
 async function mitSpawnServer(env, run) {
   const srv = await startServer({

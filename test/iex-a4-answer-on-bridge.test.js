@@ -1,11 +1,3 @@
-// ---- IEP-P2: Sofortannahme statt Klingeln (kein answerOnBridge) -----------------------------
-// Gegenrichtung zu IEX-A4, wie im Kopf der Vorgaengerfassung vorgesehen (Dateiname bleibt, damit
-// die Git-Historie dieser Zusicherung an einer Stelle liegt). Die Uebergabe traegt KEIN
-// answerOnBridge mehr: das <Dial> ist das erste Verb und beantwortet das Bein sofort. Waehrend der
-// Dial-Wartezeit laeuft unser Begruessungslaut als audioUrl - kein Verb davor, also keine
-// Dial-Verschiebung. Die Literale stehen hier, nicht aus Konstanten abgeleitet (sonst bestuende
-// ein Flip seinen eigenen Test).
-// Namen beginnen mit "IEP-P2-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

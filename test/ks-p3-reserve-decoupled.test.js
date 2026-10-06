@@ -1,7 +1,3 @@
-// KS-P3 (a): die Vorab-Reserve haengt NICHT mehr an der Gespraechsdauer. Sie deckt seit
-// dieser Phase nur noch das feste Vorlauffenster bis zum ersten Griff des Live-Zaehlers
-// (KS-P2) und die Gleichzeitigkeit mehrerer Legs desselben Tenants. Bestand faerbt die
-// erste Aussage rot (dort war die Reserve Satz * angefangene Minuten der Maximaldauer).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutboundGates, tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
@@ -15,12 +11,10 @@ import { planCapReserveFindings, spendCapCoherence } from "../src/boot-guard.js"
 import { CATALOG_SLUGS } from "../src/plans.js";
 import { planCapCents } from "../src/billing/plan-caps.js";
 
-const US_TARGET = "+15551234567"; // keine Inlands-Vorwahl -> Auslandssatz (Worst Case)
+const US_TARGET = "+15551234567";
 const DE_OWN_DID = "+4930111222333";
 const TENANT = "T";
 
-// Der Guthaben-Snapshot ist ab KS-P3 eine Eingabe des Gates (Notbremse) - fuer die
-// REINE Reserve-Aussage dieser Datei ist sein Wert egal, er muss nur lesbar sein.
 const storeFake = {
   tenantBudgetSnapshot: () => ({ capCents: 100000, spentCents: 0, remainingCents: 100000 }),
 };
@@ -47,7 +41,6 @@ test("outboundReserveCents ist eine reine Satz-Funktion - keine Dauer geht ein",
 });
 
 test("KS-P3: compute_reserve reserviert unabhaengig von der gewuenschten Gespraechsdauer denselben Betrag", async () => {
-  // DIE Kernaussage der Phase. Im Bestand ergab das 30 ct (60 s) gegen 900 ct (1800 s).
   const kurz = await gateCtxFor(60);
   const lang = await gateCtxFor(MAX_CALL_DURATION_CAP_S);
   assert.equal(kurz.reserveCents, lang.reserveCents, "kurze und lange Frist reservieren gleich viel");
@@ -68,11 +61,7 @@ test("KS-P3: die Reserve ist auch bei feindlichem max_duration_s nie 0 und nie n
   }
 });
 
-// ---- Die Boot-Guards sind seit dieser Phase dauer-blind -------------------------
-
 test("KS-P3: spendCapCoherence nimmt keine Gespraechsdauer mehr entgegen", () => {
-  // Ein durchgereichtes maxCallDurationS wuerde ignoriert; die Aussage haengt allein am
-  // Satz. Genau das macht die Anhebung der Zeitgrenze fuer den Boot ungefaehrlich.
   const eingabe = { tenantDefaultCents: 1500, platformCapCents: 3000, maxTariffCents: 30 };
   assert.deepEqual(spendCapCoherence(eingabe), [], "ausgelieferte Konfiguration ist kohaerent");
   assert.deepEqual(
@@ -92,8 +81,6 @@ test("KS-P3: die angehobene Obergrenze erzeugt bei der ausgelieferten Konfigurat
 });
 
 test("KS-P3: die Plan-Decken-Pruefung bleibt SCHARF - eine zu kleine Decke feuert weiterhin fatal", () => {
-  // Gegenprobe zur Zeile darueber: der Guard hat nur seine Bezugsgroesse gewechselt,
-  // nicht seine Schaerfe verloren (Reserve 400*2 = 800 > Decke 600).
   const findings = planCapReserveFindings({
     slugs: ["winzig"],
     capForSlug: () => 600,

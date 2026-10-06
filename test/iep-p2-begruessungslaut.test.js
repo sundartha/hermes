@@ -1,12 +1,3 @@
-// ---- IEP-P2c: der Begruessungslaut aus der abgenommenen ElevenLabs-Quelle -------------------
-// Owner-Entscheidung 2026-09-17: der gerechnete Laut (IEP-P2b, Komfortrauschen) ist
-// durchgefallen ("hoert sich an wie Gewitter"). Der Owner hat einen von ElevenLabs erzeugten
-// Soundeffekt ausgewaehlt und abgenommen: weiches Abheben des Hoerers, danach ruhige Leitung.
-// Diese Datei ist kein Blindgaenger, sondern hat einen dokumentierten, wiederholbaren Weg
-// (scripts/render-begruessungslaut.mjs), aber KEIN Test pinnt sie byte-genau - ein Nachlauf des
-// Umwandlers trifft die abgenommene Datei hoerbar, nicht byte-identisch (Container-Polsterung
-// von afconvert, +-1 LSB Rundung). Diese Tests beschreiben die Eigenschaften der Datei.
-// Namen beginnen mit "IEP-P2c-A<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -19,24 +10,23 @@ import { BASE_ENV, ROOT, startServer } from "./helpers.js";
 
 const HTTP_OK = 200;
 
-// Schranken - jede mit dem heute (2026-09-17) gemessenen Abstand als Kommentar.
 const SOLL_ABTASTRATE_HZ = 8000;
 const SOLL_KANAELE = 1;
 const SOLL_BIT_TIEFE = 16;
-const SOLL_FORMAT_TAG = 1; // unkomprimiertes PCM
+const SOLL_FORMAT_TAG = 1;
 
-const DAUER_MIN_MS = 2000; // gemessen 3000
-const DAUER_MAX_MS = 5000; // kuerzer hiesse: der Klick faellt in das EL-Annahmefenster ein zweites Mal
-const EL_ANNAHME_FENSTER_MAX_MS = 900; // Bestand (IEP-P2): die Datei muss es ueberdauern
+const DAUER_MIN_MS = 2000;
+const DAUER_MAX_MS = 5000;
+const EL_ANNAHME_FENSTER_MAX_MS = 900;
 
-const PEGEL_MAX_DBFS = -18; // gemessen -20,00 - nie aufdringlich
-const PEGEL_MIN_DBFS = -26; // gemessen -20,00 - der erste Entwurf lag bei -40 und war am Telefon nicht wahrnehmbar
+const PEGEL_MAX_DBFS = -18;
+const PEGEL_MIN_DBFS = -26;
 
 const AUSBLENDE_MS = 150;
-const AUSBLENDE_DAEMPFUNG_MIN_DB = 30; // gemessen 58,3 dB
+const AUSBLENDE_DAEMPFUNG_MIN_DB = 30;
 
 const INT16_SKALA = 32768;
-const UEBERSTEUERUNG_GRENZE = 32767; // gemessen 0 Samples
+const UEBERSTEUERUNG_GRENZE = 32767;
 
 const PERZENTIL_99 = 99;
 const PROZENT = 100;
@@ -45,19 +35,15 @@ const DBFS_NACHKOMMA = 2;
 const MS_PER_SECOND = 1000;
 const DEZIBEL_BASIS = 10;
 
-// Positiv-Kontrollen (Lehre pruefkommando-ohne-positiv-kontrolle): reine Verfaelschungen der
-// gemessenen Datei, jede muss an genau der Schranke durchfallen, die sie beweisen soll.
-const LEISE_FAKTOR_DBFS = -40; // "unhoerbar" - der tatsaechliche erste Entwurf
-const LAUT_FAKTOR_DBFS = -6; // "aufdringlich"
-const UEBERSTEUERUNG_FAKTOR = 100; // "geklemmt"
+const LEISE_FAKTOR_DBFS = -40;
+const LAUT_FAKTOR_DBFS = -6;
+const UEBERSTEUERUNG_FAKTOR = 100;
 
 const AUSLIEFERUNG_PFAD = path.join(ROOT, "public", EL_BEGRUESSUNGSLAUT_PFAD);
 
 function dateiBytes() {
   return fs.readFileSync(AUSLIEFERUNG_PFAD);
 }
-
-// --- gemeinsame reine Messfunktionen (EINE Quelle fuer Ist-Messung und Positiv-Kontrolle) -----
 
 function dbfs(linear) {
   return linear > 0 ? DBFS_JE_DEKADE * Math.log10(linear) : -Infinity;
@@ -80,7 +66,6 @@ function dauerMs(proben, abtastrate) {
   return (proben.length * MS_PER_SECOND) / abtastrate;
 }
 
-// dB-Daempfung des letzten Samples gegen die Dateispitze - die Messform von "weiche Ausblende".
 function ausblendeDaempfungDb(proben) {
   const spitze = spitzenpegelDbfs(proben);
   const letzteSpitze = dbfs(Math.abs(proben[proben.length - 1]));
@@ -104,8 +89,6 @@ function innenFlankenP99(proben) {
   const index = Math.min(sortiert.length - 1, Math.floor((sortiert.length * PERZENTIL_99) / PROZENT));
   return sortiert[index];
 }
-
-// --- Faelle -------------------------------------------------------------------------------
 
 test("IEP-P2c-A1: das Asset liegt an genau dem Pfad, den die Dial-Direktive ausliefert", () => {
   assert.equal(AUSLIEFERUNG_PFAD, path.join(config.server.publicDir, EL_BEGRUESSUNGSLAUT_PFAD));
@@ -165,8 +148,6 @@ test("IEP-P2c-A6: die Schranken beissen - vier verfaelschte Fassungen fallen an 
   const geklemmt = Float64Array.from(proben, (wert) => Math.max(-1, Math.min(1, wert * UEBERSTEUERUNG_FAKTOR)));
   assert.ok(uebersteuerteSamples(geklemmt) > 0, "geklemmte Fassung haette uebersteuern muessen");
 
-  // Ausblende entfernt: das Ende bleibt konstant auf Dateispitze statt abzuklingen - genau das
-  // schluckt eine fehlende Ausblende, das letzte Sample bleibt laut.
   const ohneAusblende = Float64Array.from(proben);
   const ausblendeRahmen = Math.round((AUSBLENDE_MS * abtastrate) / MS_PER_SECOND);
   const start = Math.max(0, ohneAusblende.length - ausblendeRahmen);
@@ -181,7 +162,6 @@ test("IEP-P2c-A7: der bestehende public-Mount liefert das Asset ohne jede Auth a
   try {
     const res = await fetch(`${srv.localUrl}${EL_BEGRUESSUNGSLAUT_PFAD}`);
     assert.equal(res.status, HTTP_OK);
-    // Am laufenden Server gemessen: express.static leitet den Typ aus der Endung ab.
     assert.equal(res.headers.get("content-type"), "audio/wav");
     assert.ok(Buffer.from(await res.arrayBuffer()).equals(dateiBytes()));
   } finally {
@@ -196,7 +176,6 @@ test("IEP-P2c-A8: ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED steht kohaerent in
   const renderYaml = lies("render.yaml");
   const SCHLUESSEL = "ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED";
 
-  // Positiv-Kontrolle (Muster IEX-A9-9): ein bekannt vorhandener Schluessel mit value-Default.
   assert.ok(configJs.includes("process.env.ELEVENLABS_INBOUND_SCOPE"));
 
   assert.ok(configJs.includes(`process.env.${SCHLUESSEL}`));

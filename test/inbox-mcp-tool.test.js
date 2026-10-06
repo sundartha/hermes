@@ -1,16 +1,3 @@
-// INBOX-P3: das MCP-Werkzeug check_inbox. Regressionsschutz, KEINE Katalog-Kennung am
-// Namensanfang (Lehre catalog-id-prefix-misroutes-tests) - laeuft in npm test.
-//
-// Harness (a)-(h): lokaler captureTools + Gateway-Attrappe, Muster
-// test/mcp-tools-language.test.js. Die Duplizierung dieses ~40-Zeilen-Mini-Harness ist
-// Bestandspraxis (derselbe Code steht bereits in mcp-tools-language.test.js,
-// al-p11-result-card.test.js, p15-mcp-tool-descriptions-en.test.js) - ihn hier zu
-// vereinheitlichen waere ein Test-Harness-Refactoring ueber vier Bestandsdateien und
-// damit ausserhalb des Auftrags dieser Etappe (Regel 6, S3 bewusst akzeptiert).
-//
-// (i) ist Ende-zu-Ende ueber den echten Spawn-Server (Muster T10 in
-// test/mcp-tools-language.test.js): /mcp -> registerTools -> api() -> internalOnly ->
-// requireTenant -> takeInboxEntries -> save().
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -21,15 +8,11 @@ import * as ops from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { seedState, seedCall, startServer, mcpPost, toolCall, readToolResult } from "./helpers.js";
 
-// Bestandsstil test/inbox-poll-route.test.js: benannte Konstante statt nackter Zahl (G25).
 const HTTP_OK = 200;
 
-// ---- lokaler Mini-Harness (Dedup bewusst akzeptiert, s. Datei-Kopf) ----
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    // Positions-Signatur ist von registerTools vorgegeben (server.tool(name, desc,
-    // schema, handler)) - ...args statt vier benannter Parameter haelt max-params (3) ein.
     tool(...args) {
       const [name, , , handler] = args;
       handlers.set(name, handler);
@@ -49,15 +32,11 @@ async function listen(server) {
   return { url, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
-// writeHead statt res.statusCode=/res.setHeader() als Property-Zuweisungen auf dem
-// Funktionsparameter (no-param-reassign, P6/F2).
 function sendJson(res, { body = null, status = HTTP_OK } = {}) {
   res.writeHead(status, { "content-type": "application/json" });
   res.end(body == null ? "" : JSON.stringify(body));
 }
 
-// captured (optional): sammelt jeden empfangenen Request-Body - der einzige Weg, Fall
-// (g) zu behaupten (welchen Wert reicht der Handler UNVERAENDERT an den Endpunkt durch).
 async function startGatewayMock({ body = null, status = HTTP_OK, captured = null } = {}) {
   const server = http.createServer((req, res) => {
     if (!captured) return sendJson(res, { body, status });
@@ -88,8 +67,6 @@ function toolText(result) {
   return (result?.content || []).map((line) => line.text).join("\n");
 }
 
-// PII-Regel (Bestandsstil): fiktive Nummern, keine echten. CALLER = seedCall-Default
-// "from", OWNER_DID = die Magic-Range-Owner-Nummer (Bestandsstil test/inbox-poll-route.test.js).
 const CALLER = "+4915112345678";
 const OWNER_DID = "+15005550006";
 
@@ -116,10 +93,6 @@ function qualifiedCall(overrides = {}) {
   });
 }
 
-// Baut die REST-Antwort mit dem ECHTEN Produzenten (state-ops.takeInboxEntries) - kein
-// handgetippter Erwartungswert. Damit prueft (b) tatsaechlich "REST-Schluesselsatz minus
-// started_at plus at" und nicht eine abgeschriebene Liste, die mitdriftet (Pre-Mortem P3-A).
-// prepare (optional): mutiert den State VOR der Operation (Fall e: zusaetzliches Action Item).
 function restBodyFor(calls, prepare = () => {}) {
   const state = seedState({ calls });
   prepare(state);
@@ -130,7 +103,7 @@ function restBodyFor(calls, prepare = () => {}) {
   return { entries, remaining };
 }
 
-const THREE_CALLS_COUNT = 3; // G25: benannte Konstante statt nackter Zahl
+const THREE_CALLS_COUNT = 3;
 
 test("INBOX-P3 (a): Text- und structuredContent-Sicht lesen DIESELBE Struktur", async () => {
   const restBody = restBodyFor([
@@ -161,16 +134,12 @@ test("INBOX-P3 (b): der MCP-Eintrag traegt EXAKT die REST-Schluessel, minus star
     const result = await handlers.get("check_inbox")({});
     const mcpEntry = result.structuredContent.entries[0];
     const restEntry = restBody.entries[0];
-    // In zwei Schritte gebrochen (G36, Demeter): Object.keys(...).filter().concat().sort()
-    // in einem Ausdruck reisst die Vier-Zugriffe-Grenze.
     const restKeysWithoutStartedAt = Object.keys(restEntry).filter((key) => key !== "started_at");
     const expectedKeys = restKeysWithoutStartedAt.concat("at").sort();
     assert.deepEqual(Object.keys(mcpEntry).sort(), expectedKeys);
     assert.ok(!("started_at" in mcpEntry));
     assert.notEqual(mcpEntry.at, restEntry.started_at);
     assert.equal(mcpEntry.caller, restEntry.caller);
-    // Positiv-Kontrolle: ein geschmuggeltes Feld MUSS den Vergleich brechen, sonst prueft
-    // er nichts (Lehre pruefkommando-ohne-positiv-kontrolle).
     assert.notDeepEqual(Object.keys({ ...mcpEntry, transcript: [] }).sort(), expectedKeys);
   });
 });
@@ -220,7 +189,6 @@ test("INBOX-P3 (d): die Antwort traegt kein Transkript, kein facts, kein evidenc
     ]) {
       assert.ok(!serialized.includes(forbidden), `Antwort leakt "${forbidden}"`);
     }
-    // Positiv-Kontrolle: derselbe Detektor MUSS anschlagen, wenn transcript geschmuggelt wird.
     const sabotaged = JSON.stringify({ ...result, transcript: [] });
     assert.ok(sabotaged.includes("transcript"));
   });
@@ -304,7 +272,6 @@ test("INBOX-P3 (i, E2E): erster Aufruf liefert den Eintrag, zweiter ist eindeuti
     assert.equal(firstEntries[0].call_id, "call_inbox_p3");
     assert.equal(first.structuredContent.remaining, 0);
 
-    // Der Marker ist PERSISTIERT (der Wrapper hat save() gerufen) - nicht nur im Spiegel.
     const storeAfterFirst = srv.readStore();
     assert.notEqual(storeAfterFirst.calls[0].inboxSeenAt, null);
 
@@ -312,13 +279,13 @@ test("INBOX-P3 (i, E2E): erster Aufruf liefert den Eintrag, zweiter ist eindeuti
       await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("check_inbox", {})),
     );
     assert.deepEqual(second.structuredContent, { entries: [], remaining: 0 });
-    assert.equal(toolText(second), MCP_TEXTS.en.emptyInbox); // kurz und EINDEUTIG leer
+    assert.equal(toolText(second), MCP_TEXTS.en.emptyInbox);
 
     const third = await readToolResult(
       await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("check_inbox", { include_seen: true })),
     );
     assert.equal(third.structuredContent.entries.length, 1);
   } finally {
-    await srv.stop(); // keine verwaisten Testserver
+    await srv.stop();
   }
 });

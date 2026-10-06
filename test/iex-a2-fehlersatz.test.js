@@ -1,11 +1,3 @@
-// ---- IEX-A2: Fehlersatz statt Budget-Rueckfall, keine Benachrichtigung -----------------------
-// Eine gescheiterte Uebergabe an den ElevenLabs-Agenten spricht den festen Fehlersatz (Namenssatz
-// mit KI-Kennzeichnung + Fehlerteil) in der Agentenstimme und legt auf - kein Budget-Gespraech.
-// finishCall bucht den Anruf, benachrichtigt aber niemanden (O3/E5).
-//
-// A (1-6) rein, B (7-9) /voice/el-rueckfall In-Process, C (10-11) finishCall offline,
-// D (12) /voice/status In-Process mit echtem Terminierungs- und Abschlusspfad.
-// Namen beginnen mit "IEX-A2-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -48,20 +40,16 @@ const HTTP_OK = 200;
 const EL_RUECKFALL_LOG = "[el-rueckfall] ";
 const EL_UEBERGABE_LOG = "[el-uebergabe]";
 
-// ---- Build: reine Datensaetze -----------------------------------------------------------------
-
 const isoAt = (ms) => new Date(ms).toISOString();
 const elCall = (extra = {}) => ({ status: "active", costProfile: EL_INBOUND, elFallbackAt: null, elevenlabsConversationId: null, elBoundAt: null, ...extra });
 const gebundenerCall = (boundMs, extra = {}) => elCall({ elevenlabsConversationId: CONV_ID, elBoundAt: isoAt(boundMs), ...extra });
 const budgetCall = (extra = {}) => ({ status: "active", costProfile: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, ...extra });
 
-// O3-Literale der Spec (nicht aus dem Bundle abgeleitet - sonst pinnt der Test nichts).
 const FEHLERSATZ_MIT_NAME = Object.freeze({
   de: "Hier ist der KI-Assistent von Jonas. Es ist ein technischer Fehler aufgetreten, bitte rufen Sie später noch einmal an.",
   en: "This is Jonas's AI assistant. A technical error has occurred, please call again later.",
   fr: "Ici l'assistant IA de Jonas. Une erreur technique est survenue, veuillez rappeler plus tard.",
 });
-// O4: namenlose Form.
 const FEHLERSATZ_OHNE_NAME = Object.freeze({
   de: "Hier ist ein KI-Assistent. Es ist ein technischer Fehler aufgetreten, bitte rufen Sie später noch einmal an.",
   en: "This is an AI assistant. A technical error has occurred, please call again later.",
@@ -69,8 +57,6 @@ const FEHLERSATZ_OHNE_NAME = Object.freeze({
 });
 const KEIN_TEXT_NAME = 42;
 const LEERE_NAMEN = Object.freeze(["", "   ", null, undefined, KEIN_TEXT_NAME]);
-
-// ---- Build: Konsole (log/warn/error) ----------------------------------------------------------
 
 const KONSOLEN_KANAELE = Object.freeze(["log", "warn", "error"]);
 
@@ -88,8 +74,6 @@ async function mitKonsole(run) {
 const rueckfallLogEintrag = (zeile) => JSON.parse(zeile.slice(EL_RUECKFALL_LOG.length));
 const rueckfallLogEintraege = (zeilen) => zeilen.log.filter((zeile) => zeile.startsWith(`${EL_RUECKFALL_LOG}{`)).map(rueckfallLogEintrag);
 const uebergabeZeilen = (zeilen) => zeilen.log.filter((zeile) => zeile.startsWith(EL_UEBERGABE_LOG));
-
-// ---- A: reine Unit-Tests ----------------------------------------------------------------------
 
 test("IEX-A2-1: rueckfallEntscheidungFuer - Enum und Entscheidungstabelle E4", () => {
   assert.deepEqual({ ...RUECKFALL_ENTSCHEIDUNG }, { AUFLEGEN: "auflegen", FOLGE_GATHER: "folge_gather", FEHLERSATZ: "fehlersatz" });
@@ -174,9 +158,6 @@ test("IEX-A2-6: vermerkeUebergabeGescheitert - Marker, Grund, Fristen; set-once"
   assert.equal(call.failureReason, INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT);
 });
 
-// ---- B: /voice/el-rueckfall In-Process --------------------------------------------------------
-
-// Der Owner-Tenant heisst OWNER_NAME, die eigene DID ist INBOUND_TO (Sprache de).
 function baueRouteState() {
   const state = ops.makeDefaultState();
   state.tenants[0].ownerName = OWNER_NAME;
@@ -188,7 +169,6 @@ const mitSprache = (call) => Object.assign(call, { language: "de" });
 const seedWartend = (state) => mitSprache(seedWartenderElCall(state, { answeredVorS: 1 }));
 const seedGebunden = (state) => mitSprache(seedInboundElCall(state, { answeredVorS: 1 }));
 
-// Echte state-ops-Mutatoren; spione zaehlt die Schreibstellen der Uebergabe (optional).
 function baueRouteStore(state, spione = neueSpione()) {
   const fassade = storeOpsFacade(state);
   return {
@@ -213,7 +193,6 @@ const nieErwartet = (name) => () => {
   throw new Error(`${name} darf auf diesem Weg nicht laufen`);
 };
 
-// ersetzt: einzelne makeVoiceRoutes-Abhaengigkeiten je Test (Wurf-Szenarien, echter Abschluss).
 function baueRouter({ store, spione, ersetzt = {} }) {
   return makeVoiceRoutes({
     store,
@@ -266,7 +245,6 @@ async function mitRoute(router, run) {
 
 const postRueckfall = (post, { callId, quelle }) => post(elRueckfallUrl({ callId, quelle }));
 
-// Die erwartete Antwort OHNE Synthese/Aufloesung (catch-Weg): Azure-<Say> + Hangup.
 function fehlersatzOhneAufloesungXml({ language, ownerName }) {
   const bundle = localeFor(language);
   return renderDirectives([say(bundle.inboundFehlersatz(ownerName), bundle.voiceProfile), hangup()]);
@@ -347,7 +325,6 @@ test("IEX-A2-9b: reattachActiveCall wirft (unbekannter Call) -> O4-Form + Hangup
   assert.deepEqual(spione.gruende, []);
 });
 
-// Der erste render-Aufruf wirft, jeder weitere rendert echt.
 function renderErsterWurfWirft() {
   let aufrufe = 0;
   return (direktiven) => {
@@ -386,12 +363,8 @@ test("IEX-A2-9d: WARTET, Marker-Schreibung wirft immer -> trotzdem Fehlersatz + 
   });
 });
 
-// ---- C: finishCall offline --------------------------------------------------------------------
-
 const NACHLAUF_WEGE = Object.freeze(["addNotification", "markInboxEntry", "tenantContext", "purgeTranscript", "summarizeCall", "planSummarySms", "messaging", "audit", "sendMail", "recordVoiceMinuteMeter"]);
 
-// Echter makeCallFinish; jeder Benachrichtigungs-/Nachlauf-Weg zaehlt nur (ein Wurf koennte im
-// Settlement-catch verschwinden). markBilled haelt den Grund zum Buchungszeitpunkt fest.
 function baueAbschluss(state) {
   const zaehler = { buchungen: 0, grundBeiBuchung: [], wege: Object.fromEntries(NACHLAUF_WEGE.map((weg) => [weg, 0])) };
   const zaehle = (weg) => () => {
@@ -466,8 +439,6 @@ test("IEX-A2-11: Positiv-Kontrolle - Budget-Call ohne Marker, failed, leer -> No
   assert.equal(zaehler.buchungen, EINMAL);
 });
 
-// ---- D: /voice/status In-Process mit echtem Terminierungs- und Abschlusspfad ------------------
-
 const STATUS_FAELLE = Object.freeze([
   { callStatus: "completed", grund: "keiner" },
   { callStatus: "failed", grund: "failed" },
@@ -482,7 +453,6 @@ async function statusZweimal({ state, call, callStatus }, zeilen) {
     await post(`/voice/status?callId=${call.id}`, { CallStatus: callStatus });
     await waitUntil(() => uebergabeZeilen(zeilen).length === EINMAL);
     await post(`/voice/status?callId=${call.id}`, { CallStatus: callStatus });
-    // Die Wiederholung laeuft bis zum Settlement synchron hinter ihrer [voice/status]-Zeile.
     await waitUntil(() => statusZeilen() > EINMAL);
   });
   return zaehler;

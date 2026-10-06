@@ -1,7 +1,3 @@
-// INBOX-P2: POST /api/inbox/poll - Spawn-Server, echter Store (json-Backend), echte
-// Auth-Kette (internalOnly + requireTenant). Jeder Fall bekommt seinen EIGENEN
-// spawn/seed (keine geteilte, order-abhaengige Historie ueber die Faelle hinweg) und
-// stoppt den Server im finally (Bestandsproblem "verwaiste Testserver").
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
@@ -10,13 +6,10 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
 
-const CALLER = "+4915112345678"; // fiktiv, Bestandsstil (seedCall-Default)
+const CALLER = "+4915112345678";
 const NOW = "2026-08-21T10:00:00.000Z";
 const STARTED = "2026-08-21T09:00:00.000Z";
 
-// Der Store filtert AUSSCHLIESSLICH auf inboxEntryAt - Richtung und Substanz hat
-// INBOX-P1 im Anrufmoment entschieden. Ein realistischer Outbound-Call traegt deshalb
-// KEINEN Marker (ein Outbound MIT Marker kann per Konstruktion nicht entstehen).
 function seedThreeCalls() {
   const inboundQualified = seedCall({
     id: "call_inbox_ok",

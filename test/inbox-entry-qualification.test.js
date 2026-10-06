@@ -1,7 +1,3 @@
-// INBOX-P1: das Qualifikations-Praedikat (src/inbox-entry.js) und seine Verdrahtung in
-// finishCall. Block A ist ein Tabellen-Test ueber die Faelle aus E-2 (die Array-Laenge wird
-// mit-asserted: ein geloeschter Fall faellt auf). Block B faehrt den echten Produktionspfad
-// ueber makeCallFinish mit Attrappen (Muster test/diagnostic-retention.test.js Block B).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { qualifiesAsInboxEntry } from "../src/inbox-entry.js";
@@ -10,7 +6,6 @@ import fs from "node:fs";
 import { seedCall } from "./helpers.js";
 
 const AT = "2026-01-01T00:00:00Z";
-// Die Laenge der Fall-Tabelle wird mit-asserted: ein geloeschter Fall faellt damit auf.
 const ERWARTETE_FALLZAHL = 18;
 const caller = (text) => ({ role: "caller", text, at: AT });
 const agent = (text) => ({ role: "agent", text, at: AT });
@@ -21,7 +16,6 @@ const OFF = { allowSummaries: false };
 const inbound = (over = {}) =>
   seedCall({ direction: "inbound", from: "+4915112345678", to: "+15005550006", status: "completed", ...over });
 
-// Die Fall-Tabelle aus E-2, 1:1. name | call | settings | erwartet
 const CASES = [
   ["Anrufer legt nach 1 s auf (nur Agent-Begruessung)", inbound({ transcript: [GREETING] }), ON, false],
   ["Rauschen/Echo (caller '.')", inbound({ transcript: [GREETING, caller(".")] }), ON, false],
@@ -37,10 +31,6 @@ const CASES = [
   ["leeres Transkript", inbound({ transcript: [] }), ON, false],
   ["Transkript fehlt ganz (kaputter Datensatz)", inbound({ transcript: undefined }), ON, false],
   ["nur Agent-Zeilen, viele", inbound({ transcript: [GREETING, agent("Noch da?"), agent("Hallo?")] }), ON, false],
-  // Die vier Faelle unten pinnen die beiden Schwellen SELBST (Review-Fix): ohne sie ist
-  // "mindestens zwei substanzielle Turns ODER mindestens 12 Zeichen" frei verschiebbar,
-  // ohne dass ein Test rot wird - gemessen: INBOX_MIN_CALLER_TURNS 2->3 UND
-  // INBOX_MIN_CALLER_CHARS 12->40 liessen die urspruengliche Fall-Tabelle unveraendert gruen.
   [
     "zwei kurze Turns UNTER der Zeichenschwelle (pinnt INBOX_MIN_CALLER_TURNS allein)",
     inbound({ transcript: [GREETING, caller("ok"), caller("ja")] }),
@@ -74,9 +64,6 @@ test("INBOX-P1-A: die Fall-Tabelle aus E-2 haelt vollstaendig", () => {
   }
 });
 
-// SABOTAGE-GEGENPROBE: genau die drei Faelle, die ein naives callerHasSpoken (jede
-// nicht-leere caller-Zeile) durchliesse. Wer Bedingung 3 gegen callerHasSpoken tauscht,
-// macht diesen Test rot.
 test("INBOX-P1-A-Sabotage: nie angekommen bleibt nie angekommen (Gegenprobe zu callerHasSpoken)", () => {
   for (const fragment of [".", "aeh", "mh", "ok", " ja "]) {
     assert.equal(
@@ -86,8 +73,6 @@ test("INBOX-P1-A-Sabotage: nie angekommen bleibt nie angekommen (Gegenprobe zu c
     );
   }
 });
-
-// ---- Block B: Verdrahtung ueber makeCallFinish (offline, Attrappen) ----
 
 function makeHarness({ call, summarizeCall, settings = ON, omitQualifier = false }) {
   const protokoll = [];
@@ -165,8 +150,6 @@ test("INBOX-P1-B default-ist-fail-closed: ohne Verdrahtung entsteht KEIN Eintrag
   assert.ok(!store.protokoll.includes("praedikat"), "der Default lief, nicht die echte Regel");
 });
 
-// Der Default in makeCallFinish ist fail-closed (kein Eintrag). Damit er nie zur STILLEN
-// Abschaltung wird, pinnt dieser Test die EINE Verdrahtungsstelle.
 test("INBOX-P1-B verdrahtet: server.js reicht die echte Regel in makeCallFinish herein", () => {
   const quelle = fs.readFileSync(new URL("../src/server.js", import.meta.url), "utf8");
   assert.match(quelle, /import \{ qualifiesAsInboxEntry \} from "\.\/inbox-entry\.js";/);

@@ -1,10 +1,3 @@
-// Fail-closed-Riegel der Fall-Definition (scripts/iel-mess.cases.json -> scripts/iel-mess.mjs).
-//
-// Dieses Werkzeug waehlt ausschliesslich SIP-Ziele, nie eine echte Telefonnummer (Feld
-// "ziel_e164" ist verboten). Eine blosse Aenderung an der Fall-Datei darf diesen Weg nicht
-// oeffnen, und kein unbekannter Wert (art/zaehler) darf still als undefined durchfallen.
-// KEIN NETZ: alles laeuft mit --dry-run (fetch per Stolperdraht gesperrt).
-
 import { strict as assert } from "node:assert";
 import fs from "node:fs";
 import { describe, it } from "node:test";
@@ -12,13 +5,10 @@ import { describe, it } from "node:test";
 import { bauMessBaum, faellePfadIn, setzeZusatzFall, spawnDry, trockenAufrufe } from "./_iel-messbaum.mjs";
 
 const EXIT_VERWEIGERT = 2;
-// Der Bestands-M1-Zaehler steht auf 5/5; ein freier Zaehler trennt die Zielpruefung von der Budgetsperre.
 const FREIER_M1_ZAEHLER = Object.freeze({ ausgeloest: 0, anrufe: [] });
 const PRUEFFALL = "Z-RIEGEL";
-const BASIS_FAELLE = Object.freeze(["F-A", "N2-ohne-inbound"]); // je einer aus m1 und nachdeploy
+const BASIS_FAELLE = Object.freeze(["F-A", "N2-ohne-inbound"]);
 
-// Baut einen Messbaum, leitet den Pruefall aus einem BESTANDSFALL ab und aendert genau ein Feld -
-// nur so belegt eine Verweigerung, dass sie an DIESEM Feld haengt und nicht am Aufbau.
 function laufMitAbgewandeltemFall(basisName, aenderung) {
   const dir = bauMessBaum({ m1Zaehler: FREIER_M1_ZAEHLER });
   const basis = JSON.parse(fs.readFileSync(faellePfadIn(dir), "utf8")).faelle[basisName];

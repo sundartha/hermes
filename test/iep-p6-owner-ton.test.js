@@ -1,19 +1,3 @@
-// ---- IEP-P6: Owner-Ton bei EINGEHENDEN Anrufen ------------------------------------------
-// Ruft die Anrufernummer eines eingehenden Anrufs von der hinterlegten eigenen Nummer des
-// ANGERUFENEN Tenants an, begruesst der Agent mit Vornamen statt mit der Selbstvorstellung
-// in der dritten Person. Zwei Schritte in einer Datei:
-//   A - die Erkennung (Praedikat, Anruf-Datensatz, Banner) - hoerbar aendert sich nichts
-//   B - der Wortlaut (Owner-Entscheidung 9), der Riegel mit ZWEI Sollformen, die Antwort
-//
-// DIE GRENZE IST DER GEGENSTAND DER B7/B8-FAELLE, nicht ein Nebenaspekt: eine Anrufernummer
-// ist FAELSCHBAR. Die Erkennung faerbt deshalb AUSSCHLIESSLICH die Anrede - sie schaltet
-// keine Daten, keine Werkzeuge und keine Rechte frei (Owner-Entscheidung 5, 2026-09-16).
-// Wer je ein Recht an dieses Feld haengt, macht IEP-P6-63 rot; das ist der Zweck des Tests.
-//
-// Die Literale stehen HIER im Test und werden NICHT aus dem Bundle abgeleitet - sonst
-// bestuende ein veraenderter Wortlaut seinen eigenen Test.
-// Namen beginnen mit "IEP-P6-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern
-// (Lehre catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -43,22 +27,11 @@ const OWNER_NAME = "Jonas Beispiel";
 const OWNER_VORNAME = "Jonas";
 const SPRACHEN = Object.freeze(["de", "en", "fr"]);
 const DE = LOCALES.de;
-// Dieselbe Nummer als ZAHL statt als String - der Nicht-String-Fall des Praedikats (G25:
-// benannt, weil die nackte Ziffernfolge im Testkoerper nichts erklaert).
 const EIGENE_NUMMER_ALS_ZAHL = 491737252163;
-// Ein beliebiger Nicht-String als "Vorname" - die Zahl selbst traegt keine Bedeutung.
 const KEIN_STRING = 42;
 const HTTP_OK = 200;
-// Der Prompt traegt ein frisches Datum; ohne Einfrieren verglichen zwei Laeufe die Uhr mit
-// (Muster freezeNow, test/al-p12-call-memory.test.js).
 const NOW_TOKEN = "<HEUTE>";
 const freezeNow = (prompt) => prompt.replace(/Heute ist [^\n]+\./, `Heute ist ${NOW_TOKEN}.`);
-
-// ---- Schritt A: das Praedikat ---------------------------------------------------------
-// Wie Block A2 in test/callee-is-owner.test.js ein RIEGEL, kein Fleiss: Praefix-Match,
-// Ziffern-Vergleich oder ein Trim IM Praedikat liessen FREMDE Anrufer als Owner durchgehen.
-// Die Normalisierung ist vorgelagert und geteilt (normNum, routes/voice.js) - hier wird
-// bereits normalisiert uebergeben, genau wie in Produktion.
 
 const granted = (over = {}) =>
   callerIsOwnerGranted({
@@ -75,15 +48,12 @@ test("IEP-P6-01: Schalter an, Tenant gepinnt, exakter Treffer -> true (strikt Bo
 });
 
 test("IEP-P6-02: jeder Beinahe-Treffer der Nummer -> false", () => {
-  // ROTPROBE (bewusst NICHT ausgefuehrt, hier als Auftrag an den naechsten Leser): wer die
-  // Normalisierung INS Praedikat schoebe oder auf Praefix vergliche, bekaeme mindestens
-  // "0049..." und "eine Ziffer daneben" gruen - und damit einen Fremden mit dem Owner-Ton.
   const daneben = [
-    "+491737252164", // eine Ziffer daneben
-    "00491737252163", // internationales Praefix in Null-Null-Form
-    "491737252163", // ohne "+"
-    "01737252163", // nationale Schreibweise
-    `${EIGENE_NUMMER} `, // Rand-Leerzeichen (kein Trim im Praedikat)
+    "+491737252164",
+    "00491737252163",
+    "491737252163",
+    "01737252163",
+    `${EIGENE_NUMMER} `,
     FREMDE_NUMMER,
     "unbekannt",
     "anonymous",
@@ -99,8 +69,6 @@ test("IEP-P6-03: from/ownNumber fehlend oder kein String -> false", () => {
 });
 
 test("IEP-P6-04: bereits normalisierte Eingabe - Leerzeichen/Bindestriche treffen ueber normNum", () => {
-  // Beleg, dass die vorgelagerte Normalisierung die Schreibweise traegt UND das Praedikat
-  // trotzdem strikt bleibt: genormt trifft es, ungenormt nicht (IEP-P6-02).
   assert.strictEqual(granted({ from: normNum("+49 173 725-2163") }), true);
   assert.strictEqual(granted({ from: "+49 173 725-2163" }), false);
 });
@@ -116,8 +84,6 @@ test("IEP-P6-06: Allowlist leer heisst NIEMAND, nie JEDER", () => {
   assert.strictEqual(granted({ tenantId: undefined }), false);
 });
 
-// ---- Schritt A: Anruf-Datensatz, Nachbarschaft, Banner --------------------------------
-
 const inboundInput = (over = {}) => ({
   direction: "inbound",
   from: EIGENE_NUMMER,
@@ -127,8 +93,6 @@ const inboundInput = (over = {}) => ({
 });
 
 test("IEP-P6-10: die Erkennung schaltet die Diagnose-Aufbewahrung NICHT frei", () => {
-  // B17 haengt am OUTBOUND-Nummernvergleich; ein eingehender Owner-Anruf darf daran nichts
-  // aendern (sonst waere aus einer Anrede-Frage still eine Datenfrage geworden).
   const state = ops.makeDefaultState();
   const call = ops.createCall(state, inboundInput({ callerIsOwner: true }));
   assert.strictEqual(call.callerIsOwner, true);
@@ -136,8 +100,6 @@ test("IEP-P6-10: die Erkennung schaltet die Diagnose-Aufbewahrung NICHT frei", (
 });
 
 test("IEP-P6-11: Geldpfad-Gegenprobe - das gespeicherte call.from bleibt ROH", () => {
-  // Am Schreibweg haengen Tarifableitung, Kostenkalibrierung, Summary-Betreff/-SMS und der
-  // Aktiv-Anruf-Lookup. Die Phase normalisiert ausschliesslich die Praedikat-EINGABE.
   const roh = "+49 173 725-2163";
   const state = ops.makeDefaultState();
   const call = ops.createCall(state, inboundInput({ from: roh }));
@@ -160,8 +122,6 @@ test("IEP-P6-12: Boot-Banner - aus keine Zeile, an genau eine ohne Tenant-ID", (
   assert.ok(!zeile.includes(TENANT), "Regel 4/PII: nie eine Tenant-ID im Log");
   assert.ok(!zeile.includes(FREMDER_TENANT));
 });
-
-// ---- Schritt B: der Wortlaut (Owner-Entscheidung 9) ------------------------------------
 
 const EROEFFNUNG_FREMD = Object.freeze({
   de: "Hallo, hier ist der KI-Assistent von Jonas Beispiel. Das Gespräch wird transkribiert und zusammengefasst. Wie kann ich helfen?",
@@ -193,9 +153,7 @@ test("IEP-P6-21: Owner und Fremd unterscheiden sich in GENAU dem Kopfsatz", () =
     const rest = ` ${bundle.inboundHinweisSatz}`;
     assert.ok(fremd.startsWith(bundle.inboundGrussSatz(OWNER_NAME)), sprache);
     assert.ok(owner.startsWith(bundle.inboundGrussSatzOwner(OWNER_VORNAME)), sprache);
-    // Ab dem Hinweis-Satz sind beide Texte identisch - es wechselt die Anrede, nichts sonst.
     assert.equal(fremd.slice(fremd.indexOf(rest)), owner.slice(owner.indexOf(rest)), sprache);
-    // Die KI-Kennzeichnung und der Transkriptions-Hinweis tragen BEIDE Fassungen.
     assert.equal(hasInboundNotice(fremd), true, sprache);
     assert.equal(hasInboundNotice(owner), true, sprache);
   }
@@ -212,9 +170,6 @@ test("IEP-P6-22: ohne Vornamen entsteht KEINE Owner-Eroeffnung (fail-closed)", (
 });
 
 test("IEP-P6-23: der GREETING-Pflichtsatz (inboundNotice) ist unberuehrt - eigener Baustein", () => {
-  // L1: inboundNotice ist der Pflicht-Praefix des GESPEICHERTEN Greetings (Budget-Pfad) und
-  // traegt die KI-Kennzeichnung selbst. Haette die Eroeffnung ihn umgeschrieben, verloere
-  // ein Greeting ohne eigenen KI-Marker seine Kennzeichnung.
   for (const sprache of SPRACHEN) {
     const bundle = LOCALES[sprache];
     assert.notEqual(bundle.inboundHinweisSatz, bundle.inboundNotice, sprache);
@@ -224,8 +179,6 @@ test("IEP-P6-23: der GREETING-Pflichtsatz (inboundNotice) ist unberuehrt - eigen
   assert.ok(!EROEFFNUNG_FREMD.de.includes("Sie sprechen mit einer KI"));
   assert.ok(!EROEFFNUNG_OWNER.de.includes("Hinweis:"));
 });
-
-// ---- Schritt B: der Riegel mit zwei Sollformen ------------------------------------------
 
 const defekte = (text, over = {}) =>
   inboundEroeffnungDefekte({ text, bundle: DE, ownerName: OWNER_NAME, firstName: OWNER_VORNAME, ...over });
@@ -262,18 +215,14 @@ test("IEP-P6-31: Riegel ROT - jeder fehlende Pflicht-Baustein der Owner-Fassung"
   const owner = { variante: EROEFFNUNG_VARIANTE.OWNER };
   const kopf = DE.inboundGrussSatzOwner(OWNER_VORNAME);
 
-  // (b)+(c): weder woertlicher Hinweis noch Transkriptions-Merkmal.
   assert.deepEqual(defekte(`${kopf} Wie kann ich helfen?`, owner), [
     EROEFFNUNG_DEFEKT.HINWEIS_WORTLAUT_FEHLT,
     EROEFFNUNG_DEFEKT.HINWEIS_MERKMALE_FEHLEN,
   ]);
-  // (a)+(c): ohne den Kopfsatz fehlt zugleich die KI-Kennzeichnung - die beiden Pruefungen
-  // greifen hier bewusst gemeinsam, denn der Kopfsatz IST die Kennzeichnung.
   assert.deepEqual(defekte(`Hallo Jonas. ${DE.inboundHinweisSatz} Wie kann ich helfen?`, owner), [
     EROEFFNUNG_DEFEKT.NAMENSSATZ_FEHLT,
     EROEFFNUNG_DEFEKT.HINWEIS_MERKMALE_FEHLEN,
   ]);
-  // (d): Platzhalter-Syntax des Anbieters im Text.
   assert.deepEqual(defekte(`${DE.inboundEroeffnungOwner(OWNER_VORNAME)} {{x}}`, owner), [
     EROEFFNUNG_DEFEKT.PLATZHALTER,
   ]);
@@ -289,8 +238,6 @@ test("IEP-P6-32: Riegel ROT - Variante und Text passen nicht zueinander", () => 
 });
 
 test("IEP-P6-33: Riegel ROT - unbekannte Variante und leerer Sollkopf sind selbst Defekte", () => {
-  // Ein leerer Sollkopf waere ueber "".startsWith("") ein Freibrief - genau der Fall, in dem
-  // eine Owner-Eroeffnung ohne Vornamen ("Hallo , hier ist ...") durchginge.
   for (const variante of [undefined, null, "owner ", "OWNER", "fremd ", 1])
     assert.ok(
       defekte(DE.inboundEroeffnungOwner(OWNER_VORNAME), { variante }).includes(EROEFFNUNG_DEFEKT.NAMENSSATZ_FEHLT),
@@ -305,7 +252,6 @@ test("IEP-P6-33: Riegel ROT - unbekannte Variante und leerer Sollkopf sind selbs
 });
 
 test("IEP-P6-34: Positiv-Kontrolle - Hinweis-Wortlaut und Hinweis-Merkmale sind unabhaengig", () => {
-  // Ohne diese Probe koennte (b) an (c) haengen und ein halber Hinweis beide bestehen.
   const halb = { ...DE, inboundHinweisSatz: "Das Gespräch wird transkribiert." };
   const text = `${halb.inboundGrussSatz(OWNER_NAME)} ${halb.inboundHinweisSatz} Wie kann ich helfen?`;
   assert.deepEqual(
@@ -326,8 +272,6 @@ test("IEP-P6-34: Positiv-Kontrolle - Hinweis-Wortlaut und Hinweis-Merkmale sind 
     "(c) faellt allein - die zwei Pruefungen haengen nicht aneinander",
   );
 });
-
-// ---- Schritt B: die Init-Antwort ---------------------------------------------------------
 
 const INIT_CONFIG = Object.freeze({ telnyx: { telnyxElevenLabs: { voiceId: "" } } });
 const INIT_TO = "+4930111222333";
@@ -398,7 +342,6 @@ test("IEP-P6-63: Nur-Ton-Invariante - die Erkennung faerbt GENAU zwei Felder, ke
   assert.deepEqual(owner.conversation_config_override.agent.language, fremd.conversation_config_override.agent.language);
   assert.notEqual(eroeffnungDer(owner), eroeffnungDer(fremd));
 
-  // Kein Datenkanal: Werkzeug-Token leer, Werkzeuge gesperrt - in BEIDEN Fassungen.
   for (const antwort of [owner, fremd]) {
     assert.equal(antwort.dynamic_variables.tenant_token, "");
     assert.equal(antwort.dynamic_variables.consult_available, fremd.dynamic_variables.consult_available);
@@ -407,8 +350,6 @@ test("IEP-P6-63: Nur-Ton-Invariante - die Erkennung faerbt GENAU zwei Felder, ke
 });
 
 test("IEP-P6-64: der Owner-Prompt-Baustein traegt den Pflicht-Rueckfall FERTIG und keine Rufnummer", () => {
-  // CLAUDE.md Regel 2: der Rueckfallsatz steht in JEDEM Owner-Prompt-Baustein - und zwar
-  // als eingesetzter Text, nicht als Auftrag an das Modell, ihn selbst zu formulieren.
   const block = LOCALES.en.prompt.inboundSituationOwner({
     owner: OWNER_NAME,
     fremdEroeffnung: EROEFFNUNG_FREMD.de,
@@ -426,8 +367,6 @@ test("IEP-P6-65: die Budget-Engine kennt das Feld nicht - ihr Systemprompt bleib
   assert.equal(mit, ohne);
 });
 
-// ---- Schritt A+B ueber die ECHTE Route (Kindprozess, kein Netz) --------------------------
-
 const SPAWN_ENV_AN = Object.freeze({
   INBOUND_OWNER_GREETING_ENABLED: "true",
   INBOUND_OWNER_GREETING_TENANT_IDS: TENANT,
@@ -441,7 +380,6 @@ function spawnSeed() {
   return seed;
 }
 
-// Ein eingehender Anruf ueber /voice/incoming; liefert den persistierten Datensatz.
 async function eingehenderAnruf(srv, { from, callSid }) {
   const res = await postTelnyxIncoming(srv, { from, callSid });
   assert.equal(res.status, HTTP_OK, `/voice/incoming -> ${res.status}`);
@@ -456,16 +394,15 @@ test("IEP-P6-70: Schalter an + Tenant gepinnt - nur die exakte eigene Nummer set
   try {
     const faelle = [
       ["CAowner1", EIGENE_NUMMER, true],
-      ["CAowner2", "+49 173 725-2163", true], // dieselbe Nummer, andere Schreibweise (normNum)
-      ["CAfremd1", "+491737252164", false], // eine Ziffer daneben
+      ["CAowner2", "+49 173 725-2163", true],
+      ["CAfremd1", "+491737252164", false],
       ["CAfremd2", "anonymous", false],
-      ["CAfremd3", "", false], // unterdrueckte Nummer -> "unbekannt"
+      ["CAfremd3", "", false],
     ];
     for (const [callSid, from, erwartet] of faelle) {
       const call = await eingehenderAnruf(srv, { from, callSid });
       assert.strictEqual(call.callerIsOwner, erwartet, `${callSid} from=${JSON.stringify(from)}`);
       assert.strictEqual(call.calleeIsOwner, false, "ein eingehender Anruf traegt den OUTBOUND-Waechter nie");
-      // Geldpfad: das gespeicherte from ist die ROHE Angabe des Providers.
       assert.equal(call.from, from || "unbekannt", callSid);
     }
   } finally {
@@ -474,7 +411,6 @@ test("IEP-P6-70: Schalter an + Tenant gepinnt - nur die exakte eigene Nummer set
 });
 
 test("IEP-P6-71: Schalter aus bzw. Tenant nicht gepinnt -> callerIsOwner bleibt false", async () => {
-  // Der Rueckweg der Phase, ohne Code-Aenderung: Schalter umlegen ODER Allowlist leeren.
   const faelle = [
     ["aus", { INBOUND_OWNER_GREETING_ENABLED: "false", INBOUND_OWNER_GREETING_TENANT_IDS: TENANT }],
     ["nicht gepinnt", { INBOUND_OWNER_GREETING_ENABLED: "true", INBOUND_OWNER_GREETING_TENANT_IDS: FREMDER_TENANT }],

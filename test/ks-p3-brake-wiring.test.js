@@ -1,7 +1,3 @@
-// KS-P3 (b), Verdrahtung: die reine Notbremse (test/ks-p3-emergency-brake.test.js) an
-// ihren ZWEI Aufrufstellen - dem compute_reserve-Gate (Outbound) und /voice/incoming
-// (Inbound). Im Bestand stand an beiden Stellen eine feste Zahl aus der Konfiguration;
-// seit dieser Phase faellt die Frist aus dem Restguthaben.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutboundGates } from "../src/telephony/outbound-gates.js";
@@ -11,11 +7,10 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-const US_TARGET = "+15551234567"; // Auslandssatz (30 ct/min) - der Worst Case
+const US_TARGET = "+15551234567";
 const DE_OWN_DID = "+4930111222333";
 const TENANT = "T";
 
-// 300 ct Rest zum 30-ct-Satz = 10 bezahlbare Minuten + 1 Puffer-Minute = 660 s.
 const REST_FUER_ZEHN_MINUTEN = 300;
 const FRIST_BEI_ZEHN_MINUTEN = 660;
 
@@ -47,8 +42,6 @@ test("KS-P3: compute_reserve leitet die Frist aus dem Restguthaben ab (Bestand: 
 });
 
 test("KS-P3: der Body-Override kann die Frist nur VERKUERZEN, nie verlaengern", async () => {
-  // Die schaerfste Aussage der Phase: ein Client kann sich keine Zeit erkaufen, die sein
-  // Guthaben nicht traegt.
   assert.equal(await maxDurFor(REST_FUER_ZEHN_MINUTEN, 60), 60, "kuerzerer Wunsch gewinnt");
   assert.equal(
     await maxDurFor(REST_FUER_ZEHN_MINUTEN, 99999),
@@ -70,8 +63,6 @@ test("KS-P3: unlesbares Guthaben (D7) gibt die Obergrenze, sperrt aber weiterhin
     "die Frist ist nie unbegrenzt",
   );
 
-  // Und die Frist ist KEINE Umgehung der Geld-Achse: dasselbe unlesbare Guthaben faellt im
-  // nachfolgenden reserve_budget-Gate mit dem ziffernfreien Sperrtext durch.
   const store = {
     tenantBudgetSnapshot: () => ({ capCents: 100000, spentCents: null, remainingCents: null }),
     tenantLanguage: () => "de",
@@ -95,8 +86,6 @@ test("KS-P3: unlesbares Guthaben (D7) gibt die Obergrenze, sperrt aber weiterhin
   assert.equal(denial.status, 402, "das Geld-Gate lehnt trotz langer Frist ab");
   assert.ok(!/\d/.test(denial.body.error), "ziffernfreier Sperrtext bei unlesbarem Bucket");
 });
-
-// ---- Inbound: /voice/incoming legt eine Frist AN DEN CALL ------------------------
 
 test("KS-P3: /voice/incoming persistiert eine guthaben-abgeleitete maxDurationS (Bestand: null)", async () => {
   const srv = await startServer({

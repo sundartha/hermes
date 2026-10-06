@@ -1,19 +1,3 @@
-// KS-P2: die Mid-Call-Pruefung (blockingBudgetAxis) sieht seit dieser Phase nicht nur den
-// GEBUCHTEN Verbrauch, sondern auch den noch nicht gebuchten LIVE-Verbrauch der
-// Carrier-Achse. Bis hierher war genau die teure Achse mid-call blind: die KI-Token-Achse
-// bucht in jeder Schleifenrunde, die Carrier-Minuten erst bei Call-Ende
-// (reconcileVoiceBudget).
-//
-// Der Live-Term ist eine TENANT-Groesse: die Summe der angefangenen Minuten ALLER noch
-// laufenden Outbound-Legs des Tenants mal deren Leg-Tarif. Damit deckt EINE Groesse die
-// Gleichzeitigkeit ab, ohne sich auf die strukturell ephemere Vorab-Reserve zu stuetzen.
-//
-// Testnamen tragen bewusst KEINE i18n-Katalog-ID (KS- matcht i18nCatalogPattern nicht) -
-// sie landen im Regressionslauf, wo Rot wirklich Rot heisst.
-//
-// Aufbau wie test/al-p6-turn-deadline-budget.test.js: die Tarif-Env wird VOR dem ersten
-// config.js-Import gesetzt, danach werden die config-lesenden Module dynamisch importiert.
-// Ohne das entschiede eine lokale .env ueber den Minutensatz (Lehre test-base-env-drift).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
@@ -28,36 +12,19 @@ import {
   activeCallsFor,
   tryReserveOutboundBudget,
 } from "../src/store/state-ops.js";
-// budget-gate.js/billing/metering.js importieren src/config.js STATISCH und werden
-// deshalb erst NACH dem Setzen der Tarif-Env geladen. Ein statischer Import hier fror die
-// Config mit dem Tarif der lokalen .env ein.
 
-// Fixierter Minutensatz dieser Datei: das Leg +1 -> +49 ist KEIN Inlands-Leg
-// (isDomesticLeg), es zieht also VOICE_TARIFF_DEFAULT_CENTS.
 const TARIFF_CENTS_PER_MIN = 50;
-// KV-P2: eigener, von TARIFF_CENTS_PER_MIN (50) und dem Inlandssatz (0, s.u.) verschiedener
-// Satz - ein Rueckfall auf den Outbound-Satz waere an der ZAHL sichtbar, nicht nur am
-// Vorzeichen.
 const INBOUND_TARIFF_CENTS_PER_MIN = 20;
 const MS_PER_MINUTE = 60_000;
 
 const TENANT = "tenant_ks_p2";
 const OTHER_TENANT = "tenant_ks_p2_fremd";
 
-// Zeitanker der laufenden Legs. 90 s liegen sicher in der ZWEITEN angefangenen Minute,
-// 30 s sicher in der ersten - beide Werte sind gegen die Ausfuehrungslatenz des Tests
-// unempfindlich (anders als exakt 60 s, das genau auf der Rundungsgrenze saesse).
 const TWO_MINUTE_LEG_MS = 90_000;
 const ONE_MINUTE_LEG_MS = 30_000;
 
-// Uhr der GEBUCHTEN Achse. Sie ist hier bedeutungslos (budgetMonthEnabled=false und kein
-// Perioden-Stempel -> der Gate-Verbrauch ist der Lebenszeit-Bucket), muss aber lesbar sein.
 const NOW_ISO = "2026-07-30T12:00:00.000Z";
 
-// Config-Literal statt src/config.js (Muster PRICES in budget-nan-fail-closed.test.js):
-// die Praedikat-Tests bleiben damit unabhaengig von .env. Der effektive Cap kommt in jedem
-// Test aus einer expliziten tenant_budget-Zeile, platformSpendCapCents ist nur die
-// Rueckfallstufe fuer Tenants ohne Zeile.
 const CFG = Object.freeze({
   platformSpendCapCents: 100_000,
   defaultTenantBudgetCents: 0,
@@ -79,8 +46,6 @@ function isoAgo(ms) {
   return new Date(Date.now() - ms).toISOString();
 }
 
-// Ein laufendes Outbound-Leg in der Form, die der Live-Term liest: Richtung, Zeitanker und
-// BEIDE Nummern (der Minutensatz haengt an Ziel UND Herkunft).
 function activeLeg({ id = "call_live", tenantId = TENANT, ageMs = TWO_MINUTE_LEG_MS, ...rest } = {}) {
   const startedAt = isoAgo(ageMs);
   return {
@@ -96,8 +61,6 @@ function activeLeg({ id = "call_live", tenantId = TENANT, ageMs = TWO_MINUTE_LEG
   };
 }
 
-// Build-Schritt (P13): ein State mit gesetztem Tenant-Cap, gebuchtem Verbrauch und den
-// gegebenen Legs.
 function stateWith({ capCents, bookedCents = 0, legs = [] }) {
   const s = makeDefaultState();
   setTenantBudget(s, TENANT, { budgetCents: capCents, hardCapCents: capCents });
@@ -106,9 +69,6 @@ function stateWith({ capCents, bookedCents = 0, legs = [] }) {
   return s;
 }
 
-// Fassaden-Fake ueber einen ECHTEN state-ops-State: blockingBudgetAxis bekommt genau die
-// zwei Methoden, die es fragt, und beide fuehren in die echten ops-Funktionen - kein
-// Nachbau der Geld-Entscheidung im Test.
 function storeOver(s) {
   return {
     activeCallsFor: (tenantId) => activeCallsFor(s, tenantId),
@@ -121,7 +81,6 @@ function axisFor(s, tenantId = TENANT) {
   return blockingBudgetAxis({ store: storeOver(s), billing: CFG, tenantId });
 }
 
-// Leitet console.error waehrend fn um (Muster captureErr in budget-nan-fail-closed.test.js).
 function captureErr(fn) {
   const logs = [];
   const orig = console.error;
@@ -138,15 +97,9 @@ test("KS-P2-1: die laufende Minute allein reisst den Cap - der Turn liefert budg
   const s = stateWith({ capCents: 100, legs: [activeLeg()] });
 
   assert.equal(axisFor(s), "budget_tenant");
-  // Mutationsprobe im Test selbst: die GEBUCHTE Achse allein sieht hier nichts - genau das
-  // war der Defekt. Ein Rueckbau auf store.budgetExceeded macht die Zeile darueber rot.
   assert.equal(budgetExceeded(s, TENANT, CFG, NOW_ISO), false, "gebucht ist noch nichts");
 });
 
-// KS-P2-2: Inbound zaehlt MIT - der Live-Term deckt seit KV-P2 alle laufenden Legs
-// (Owner-Entscheidung 3b). Realistische Inbound-Form: die EIGENE DID wird angewaehlt (to),
-// der Anrufer ist die Gegenstelle (from). callTariffCentsPerMin liest fuer Inbound seit
-// KV-P2 config.billing.voiceTariffInboundCents - unabhaengig von to/from.
 test("KS-P2-2: Inbound zaehlt MIT - der Live-Term deckt seit KV-P2 alle laufenden Legs", () => {
   const inbound = activeLeg({ direction: "inbound", to: "+15005550006", from: "+4915112345678" });
 
@@ -209,7 +162,6 @@ test("KS-P2-6: zwei gleichzeitige Outbound-Legs summieren (Gleichzeitigkeit ohne
     activeLeg({ id: "call_a", ageMs: ONE_MINUTE_LEG_MS }),
     activeLeg({ id: "call_b", ageMs: ONE_MINUTE_LEG_MS }),
   ];
-  // Jedes Leg allein kostet 50 ct und bliebe unter der Decke; zusammen sind es 100.
   const s = stateWith({ capCents: 80, legs });
 
   assert.equal(axisFor(stateWith({ capCents: 80, legs: [legs[0]] })), null, "ein Leg allein: frei");
@@ -255,8 +207,6 @@ test("KS-P2-11: Budget-Engine - der Live-Verbrauch beendet den Call mit Ansage u
   const srv = await startServer({
     env: {
       VOICE_TARIFF_DEFAULT_CENTS: String(TARIFF_CENTS_PER_MIN),
-      // Toter Port: ein einziger Anthropic-Request wuerde den Test haengen lassen bzw.
-      // scheitern - der gruene Lauf beweist damit zugleich "kein Token verbrannt".
       ANTHROPIC_BASE_URL: "http://127.0.0.1:1",
       LLM_MAX_RETRIES: "0",
       LLM_BACKOFF_MS: "1",
@@ -268,16 +218,12 @@ test("KS-P2-11: Budget-Engine - der Live-Verbrauch beendet den Call mit Ansage u
             id,
             provider: "telnyx",
             direction: "outbound",
-            // Der Live-Term braucht Spielraum bis zum Max-Dauer-Cap, sonst terminalisiert
-            // der Boot-Re-Arm das 90 s alte Leg, bevor der Turn ueberhaupt ankommt.
             maxDurationS: 300,
             startedAt,
             answeredAt: startedAt,
           }),
         ],
       }),
-      // 2 angefangene Minuten x 50 ct = 100 ct = die Decke. Kein /voice/outbound vorab:
-      // markAnswered wuerde answeredAt auf "jetzt" setzen und den Live-Term loeschen.
       tenantBudgets: [{ tenantId: BOOTSTRAP_TENANT_ID, budgetCents: 100, hardCapCents: 100 }],
     },
   });

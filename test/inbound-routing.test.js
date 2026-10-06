@@ -1,8 +1,3 @@
-// P3c: fail-closed Inbound-To-Routing. Eine unbekannte/fehlende To wird auf KEINEN
-// Tenant aufgeloest (kein Default-Tenant) -> hoeflicher Hangup + Audit, KEIN
-// Call-Record. Nur die geseedete Owner-Store-Nummer (OWNER_TEST_NUMBER) routet. Die
-// Provider-Signatur wird VOR To geprueft (Anti-Spoof) - eine gespoofte To ohne
-// gueltige Signatur erreicht das Routing nie (403). Build-Operate-Check je Konzept.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -14,11 +9,8 @@ import {
 } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-const UNKNOWN_TO = "+49999999999"; // nicht geseedet -> nicht routbar
+const UNKNOWN_TO = "+49999999999";
 
-// F1 P4: aktive Nummern mit Geo-Anker (language) fuer das Inbound-Wiring. Alle gehoeren
-// dem Owner-Tenant (Single-Tenant). ensureOwnerNumber ergaenzt zusaetzlich die DE-Owner-
-// Nummer (Boot-Guard); die FR/EN-Nummern testen, dass call.language aus number.language faellt.
 const FR_NUMBER = "+33111000222";
 const EN_NUMBER = "+44111000333";
 function geoSeed(extraSettings = {}) {
@@ -75,18 +67,12 @@ test("unbekannte To -> fail-closed Hangup + Audit, kein Stream, kein Call-Record
   }
 });
 
-// Charakterisierung LANG-16 (tasks/i18n-tests/01-sprachaufloesung.md): der Unrouted-
-// Hangup spricht FEST Deutsch - ohne Tenant gibt es keinen Sprach-Anker, der Satz haengt
-// an keinem Locale-Bundle (src/routes/voice.js, sayD(...) im numberRecord-null-Zweig).
-// Als CHARAKTERISIERUNG gekennzeichnet: der Ist-Zustand wird dokumentiert, nicht als
-// Sollzustand erklaert - fuer einen weltweiten Start ist ein deutscher Satz an eine
-// unbekannte Nummer der falsche Default. Der Satz ist der EINZIGE Pin dieses Tests.
 test("Charakterisierung LANG-16 - Inbound-Ablehnung fuer unbekannte Zielnummer ist fest Deutsch", async () => {
   const srv = await startServer();
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
-      headers: { "Accept-Language": "en-US" }, // kein Header-Signal beeinflusst den Satz
+      headers: { "Accept-Language": "en-US" },
       body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: UNKNOWN_TO }),
     });
     assert.equal(res.status, 200);
@@ -136,13 +122,6 @@ test("bekannte Owner-To -> normaler Greeting + Call-Record", async () => {
   }
 });
 
-// ---- F1 P4: Inbound-Wiring (Nummer -> Sprache) ----
-
-// C-P3: der Gegenstand dieser Tests ist die SPRACHWAHL (de/fr/en), nicht der Carrier.
-// Der Twilio-Inbound-Pfad existiert nicht mehr, die Faelle ziehen deshalb geschlossen
-// auf den Telnyx-Pfad um - die Sprach-Zusicherung bleibt woertlich erhalten, nur die
-// Stimmen-Tabelle wechselt (Polly -> Azure). Das language-Attribut kommt fuer beide
-// Renderer aus DERSELBEN Quelle (voice-locale.js) und aendert sich nicht.
 async function postIncoming(srv, to) {
   const res = await fetch(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
@@ -205,7 +184,6 @@ test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Num
 });
 
 test("Anti-Spoof: gespoofte To ohne gueltige Signatur -> 403, kein Routing/Call-Record", async () => {
-  // Signaturpruefung aktiv: das Routing (To-Lese) liegt HINTER der Signatur.
   const srv = await startServer({ env: { SKIP_TWILIO_SIGNATURE_CHECK: "false" } });
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
