@@ -1,14 +1,4 @@
 #!/bin/bash
-# Setzt/ersetzt ANTHROPIC_API_KEY in der .env - ohne den Key je anzuzeigen oder in
-# Shell-History/Prozessliste zu leaken (Eingabe via read -s, Uebergabe an awk via
-# Umgebungsvariable statt Argument). Prueft den Key vor dem Schreiben live gegen
-# die Anthropic-API (Minimal-Request, ~0 Kosten) und legt ein Backup der .env an.
-#
-# Aufruf:  bash scripts/set-anthropic-key.sh [--from-clipboard] [pfad/zur/.env]
-#   --from-clipboard: Key aus der macOS-Zwischenablage (pbpaste) statt Tastatur-
-#   Eingabe lesen - noetig, wenn kein TTY da ist (z.B. Ausfuehrung aus einer
-#   Claude-Code-Session), und generell bequemer: Key kopieren, Skript starten.
-# Default-Ziel: .env im HAUPT-Repo (auch wenn das Skript aus einem Worktree laeuft).
 set -euo pipefail
 
 FROM_CLIPBOARD=0
@@ -20,8 +10,6 @@ for arg in "$@"; do
   esac
 done
 
-# Ziel-.env aufloesen: Argument > Haupt-Repo-Wurzel (git-common-dir zeigt auch aus
-# einem Worktree heraus auf das .git des Haupt-Checkouts) > ./ .env
 if [ -n "$ENV_ARG" ]; then
   ENV_FILE="$ENV_ARG"
 elif COMMON_DIR=$(git rev-parse --git-common-dir 2>/dev/null); then
@@ -32,8 +20,6 @@ fi
 [ -f "$ENV_FILE" ] || { echo "FEHLER: $ENV_FILE existiert nicht." >&2; exit 1; }
 echo "Ziel: $ENV_FILE"
 
-# Key beziehen: Zwischenablage (--from-clipboard) oder verdeckte Tastatur-Eingabe.
-# Beides landet nie im Terminal, nie in der History, nie in der Prozessliste.
 if [ "$FROM_CLIPBOARD" = "1" ]; then
   NEW_KEY=$(pbpaste)
   echo "Key aus der Zwischenablage gelesen."
@@ -43,8 +29,6 @@ else
   echo
 fi
 NEW_KEY=$(printf '%s' "$NEW_KEY" | tr -d '[:space:]')
-# Tolerant gegen "ganze Zeile kopiert": fuehrendes ANTHROPIC_API_KEY= und
-# umgebende Anfuehrungszeichen abstreifen.
 NEW_KEY=${NEW_KEY#ANTHROPIC_API_KEY=}
 NEW_KEY=${NEW_KEY#\"}; NEW_KEY=${NEW_KEY%\"}
 NEW_KEY=${NEW_KEY#\'}; NEW_KEY=${NEW_KEY%\'}
@@ -52,14 +36,11 @@ NEW_KEY=${NEW_KEY#\'}; NEW_KEY=${NEW_KEY%\'}
 case "$NEW_KEY" in
   sk-ant-*) ;;
   *)
-    # 6-Zeichen-Vorschau als Diagnose (bewusst minimal, kein Key-Leak):
-    # sk-pro... = OpenAI-Key erwischt, ey.../Jh... = irgendein anderer Wert.
     echo "FEHLER: Das ist kein Anthropic-Key (beginnt mit '${NEW_KEY:0:6}...', Laenge ${#NEW_KEY}; erwartet sk-ant-...). Abbruch, nichts geschrieben." >&2
     exit 1
     ;;
 esac
 
-# Live-Pruefung VOR dem Schreiben: ungueltige Keys kommen gar nicht erst in die .env.
 HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://api.anthropic.com/v1/messages \
   -H "x-api-key: $NEW_KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
   -d '{"model":"claude-haiku-4-5","max_tokens":1,"messages":[{"role":"user","content":"ok"}]}')
@@ -69,8 +50,6 @@ if [ "$HTTP" != "200" ]; then
 fi
 echo "API-Check: HTTP 200 - Key ist gueltig."
 
-# Backup, dann Zeile ersetzen (bzw. anhaengen, falls keine existiert). Key geht als
-# Umgebungsvariable an awk - nie als Prozess-Argument (waere via ps sichtbar).
 BACKUP="$ENV_FILE.bak-$(date +%Y%m%d-%H%M%S)"
 cp "$ENV_FILE" "$BACKUP" && chmod 600 "$BACKUP"
 export NEW_KEY

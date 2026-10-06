@@ -1,21 +1,9 @@
 #!/usr/bin/env bash
-# Live-Erst-Setup gegen die Render-Prod-Postgres (Owner-Removal P2b).
-# Kapselt bootstrap-tenant + grant-admin und fragt die External DATABASE_URL
-# INTERAKTIV + VERSTECKT ab (nicht in Shell-History, nicht in Prozess-Args, nicht im Chat).
-# SSL: Render-External erzwingt SSL -> die URL bekommt automatisch sslmode=require
-# angehaengt, falls sie noch keinen sslmode traegt (sonst scheitert die Verbindung).
-#
-# Reihenfolge:
-#   1) scripts/prod-setup.sh number [+e164] [telnyx]   # Bootstrap-Tenant + Nummer
-#   2) Render: Manual Deploy / Restart                        # Dienst bootet jetzt durch
-#   3) einmal per WorkOS einloggen                            # erzeugt deinen Account-Row
-#   4) scripts/prod-setup.sh admin <deine-email>             # Account -> Admin
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 cmd="${1:-}"
 
-# DATABASE_URL beschaffen (env hat Vorrang; sonst versteckte Eingabe) + sslmode sichern.
 load_db_url() {
   if [[ -z "${DATABASE_URL:-}" ]]; then
     printf 'Render External DATABASE_URL einfuegen (Eingabe versteckt, Enter zum Abschluss):\n' >&2
@@ -26,7 +14,6 @@ load_db_url() {
     printf '[prod-setup] Keine DATABASE_URL -> Abbruch.\n' >&2
     exit 1
   fi
-  # sslmode=require anhaengen, falls nicht vorhanden (Render-External erzwingt SSL).
   if [[ "$DATABASE_URL" != *"sslmode="* ]]; then
     if [[ "$DATABASE_URL" == *"?"* ]]; then
       DATABASE_URL="${DATABASE_URL}&sslmode=require"
@@ -36,7 +23,6 @@ load_db_url() {
   fi
   export DATABASE_URL
   export STORE_BACKEND=pg
-  # Host nur zur Kontrolle ausgeben (KEIN Passwort): alles bis zum @ maskieren.
   local masked="${DATABASE_URL##*@}"
   printf '[prod-setup] Ziel-DB-Host: %s\n' "${masked%%\?*}" >&2
 }

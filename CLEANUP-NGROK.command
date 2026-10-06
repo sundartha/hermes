@@ -1,5 +1,4 @@
 #!/bin/bash
-# Entfernt ngrok vollstaendig (nach Umzug auf Render). Doppelklick genuegt.
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 echo "═══ ngrok-Aufraeumen ═══"
 pkill -x ngrok 2>/dev/null && echo "✓ laufender Tunnel beendet" || echo "- kein Tunnel aktiv"
@@ -9,7 +8,6 @@ else
   echo "- ngrok nicht (mehr) installiert"
 fi
 rm -rf "$HOME/Library/Application Support/ngrok" && echo "✓ ngrok-Konfiguration (inkl. Authtoken-Datei) geloescht"
-# Token-Kommentar aus .env entfernen
 cd "$(dirname "$0")"
 sed -i '' '/ngrok config add-authtoken/d; /---- ngrok/d' .env 2>/dev/null && echo "✓ Token-Zeile aus .env entfernt"
 echo ""

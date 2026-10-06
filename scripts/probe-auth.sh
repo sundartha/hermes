@@ -1,88 +1,20 @@
 #!/usr/bin/env bash
-# ---- Live-Probe der Routen-Absicherung (PLAN-AUTH-GATE P2) ------------------------
-# Fragt JEDE Route der laufenden Instanz OHNE Sitzung und ohne Credentials ab und
-# vergleicht Statuscode und antwortende Sicherung mit einer im Skript stehenden
-# Erwartung. Genau das ist der Punkt: was ein Fremder ohne Login sieht. Gegenstueck zum
-# Inventar-Test (test/route-auth-inventory.test.js), der denselben Routenbestand
-# statisch prueft - die Probe misst den DEPLOYTEN Zustand, der Test den Quellstand.
-#
-# ZIEL-PIN (W7): URL UND erwarteter Commit sind Pflichtargumente. Ohne den Pin laeuft
-# die Probe gruen gegen Staging oder einen alten Deploy, waehrend Produktion offen
-# steht. Erste Handlung ist deshalb GET /healthz; weicht der Commit ab -> Abbruch,
-# Exit 2, KEINE weitere Anfrage.
-#
-# 404 IST KEIN ERFOLG (W6). Fuer sitzungspflichtige Routen zaehlt nur 401/403. Ein 404
-# heisst, dass guardedBoot (src/boot-guard.js, fail-open) den Web-Login-Block
-# verschluckt hat und die Route gar nicht gemountet ist - /healthz bliebe dabei 200 und
-# der Ausfall unsichtbar.
-# AUTH-P7: das frueher davorstehende Basic-Auth-Gate ist gefallen. Bis dahin maskierte
-# es genau diesen 404 (jeder unbekannte Pfad kam als 401 mit Basic-Challenge zurueck) -
-# eine fehlende Route war von einer geschuetzten nicht zu unterscheiden. Die
-# Basic-Challenge (WWW-Authenticate: Basic) bleibt trotzdem Teil der Messung: sie ist
-# der Wiederauferstehungs-Detektor fuer das gefallene Gate (Modus nach-p7 unten) UND
-# faengt einen versehentlich wieder eingemounteten Gate-Rest.
-#
-# SICHERHEITSZUSAGEN:
-#   - keine Credentials, kein Cookie, kein Token - weder als Argument noch im Skript.
-#   - Antwort-KOERPER werden verworfen (-o /dev/null): dort koennten Tenant-Daten
-#     stehen. Ausgewertet werden nur Statuszeile und Kopfzeilen.
-#   - POST-Zeilen senden einen leeren JSON-Koerper ({}): jede Pflichtfeld-Pruefung
-#     schlaegt VOR jedem Seiteneffekt fehl (src/routes/api-onboard.js, api-calls.js).
-#     Es wird nichts gekauft, nichts angerufen, nichts geschrieben.
-#   - EIN Durchlauf, kein Retry. Der Endpunkt ist Produktion.
-#   - Der Lauf erzeugt auth_failed-Zeilen im Server-Log. Das ist erwartet.
-#
-# Aufruf:  scripts/probe-auth.sh <basis-url> <erwarteter-commit> [modus]
-#   modus = nach-p7 (Vorgabe) | ist-aufnahme
-# Exit:    0 = alle Erwartungen erfuellt · 1 = mindestens eine Abweichung
-#          2 = Abbruch vor der Messung (Argumente, /healthz, Commit, Rate-Limit)
 set -uo pipefail
 
 MODUS_IST_AUFNAHME="ist-aufnahme"
 MODUS_NACH_P7="nach-p7"
 
-# Platzhalter fuer Pfad-Parameter (:id) und Wildcards (*). Bewusst ein Wert, den es
-# nicht gibt: die Probe darf keinen echten Datensatz treffen.
 PLATZHALTER="probe-nicht-vorhanden-12345"
-# Kuerzeste Commit-Angabe, die noch eindeutig genug ist (git-Konvention).
 MIN_SHA_LAENGE=7
-# Der Endpunkt liegt hinter dem IP-Rate-Limiter (src/middleware.js). Ein 429 macht die
-# Messung unbrauchbar - dann lieber abbrechen als Falschmeldungen produzieren.
 HTTP_RATE_LIMIT=429
-# curl meldet einen fehlgeschlagenen Verbindungsaufbau als Code 000.
 KEINE_ANTWORT="000"
 ZEITLIMIT_S=15
 VERBINDUNGSLIMIT_S=10
-# Macht den Lauf in fremden Zugriffslogs als Probe erkennbar (kein Angriff).
 KENNUNG="hermes-probe-auth"
 
 EXIT_ABWEICHUNG=1
 EXIT_ABBRUCH=2
 
-# ---- Erwartungstabelle ------------------------------------------------------------
-# Spalten: ART|METHODE|PFAD|STATUS|ANTWORTET|BEGRUENDUNG
-#
-# PFAD ist der Express-Pfad und damit derselbe Schluessel wie in src/route-policy.js -
-# EINE Wahrheit, maschinell gepinnt durch test/probe-auth-table.test.js. Die konkrete
-# Probe-URL entsteht daraus, indem :param und * durch den Platzhalter ersetzt werden.
-#
-# ART - die Sicherheitsaussage, die ueber alle Phasen gleich bleibt:
-#   sitzung     - darf ohne Sitzung NICHT bedienbar sein (401/403; 404 = Durchfall, W6)
-#   oeffentlich - bewusst ohne Sitzung erreichbar; steht in PUBLIC_ROUTES
-#   statisch    - statisch ausgeliefert, keine Express-Route (darum nicht im Inventar)
-#   fehlt       - darf es nicht geben (Negativkontrolle)
-#
-# ANTWORTET - welche Schicht die Antwort geben soll. Seit AUTH-P7 sendet KEINE Schicht
-# mehr eine Basic-Challenge - jeder Wert verlangt, dass sie FEHLT:
-#   internal - src/wiring/internal-only.js (genuin lokaler In-Process-Aufrufer)
-#   webauth  - webAuthGateMiddleware (Sitzungs-Cookie)
-#   mcpauth  - src/auth.js (Bearer/OAuth; sendet eine Bearer-Challenge, keine Basic-)
-#   keine    - Route bzw. Asset antwortet selbst
-#
-# STATUS ist der IST-Stand des heutigen Deploys, nicht der Zielzustand.
-# H10: diese Werte werden IM SELBEN COMMIT geaendert wie die Phase, die sie aendert -
-# eine Probe, die nach einem Deploy "halt anders" ist, trainiert die Geste, rote
-# Sicherheitsproben wegzuklicken.
 ERWARTUNGEN=$(
   cat <<'TABELLE'
 oeffentlich|GET|/healthz|200|keine|Keep-Alive und Deploy-Wahrheit, vor jeder Auth-Schicht gemountet
@@ -164,7 +96,6 @@ fehlt|DELETE|/api/profiles/:tenantId|404|keine|in AUTH-P4 geloescht; ab AUTH-P7 
 TABELLE
 )
 
-# ---- Argumente --------------------------------------------------------------------
 abbruch() {
   echo "ABBRUCH: $1" >&2
   exit "$EXIT_ABBRUCH"
@@ -191,9 +122,6 @@ fi
 KOPFZEILEN="$(mktemp)"
 trap 'rm -f "$KOPFZEILEN"' EXIT
 
-# ---- Anfragen ----------------------------------------------------------------------
-# Schreibt die Kopfzeilen nach $KOPFZEILEN, verwirft den Koerper und gibt NUR den
-# Statuscode aus. Ein Retry findet bewusst nicht statt.
 status_von() {
   local methode="$1" url="$2"
   local -a argumente=(
@@ -201,26 +129,20 @@ status_von() {
     --connect-timeout "$VERBINDUNGSLIMIT_S" --max-time "$ZEITLIMIT_S"
     -A "$KENNUNG" -X "$methode"
   )
-  # Leerer JSON-Koerper: alle Pflichtfeld-Pruefungen greifen vor jedem Seiteneffekt.
   if [ "$methode" != "GET" ]; then
     argumente+=(-H "Content-Type: application/json" -d '{}')
   fi
   curl "${argumente[@]}" "$url" 2>/dev/null || printf '%s' "$KEINE_ANTWORT"
 }
 
-# Der Fingerabdruck des Basic-Auth-Gates. Die Bearer-Challenge von mcpAuth ist
-# ausdruecklich etwas anderes und zaehlt hier nicht mit.
 hat_basic_challenge() {
   grep -qiE '^www-authenticate:[[:space:]]*basic' "$KOPFZEILEN"
 }
 
-# :param und * -> Platzhalter. Die Tabelle traegt den Express-Pfad (Schluessel wie in
-# src/route-policy.js), angefragt wird eine konkrete, garantiert unbelegte URL.
 probe_pfad() {
   printf '%s' "$1" | sed -e "s#:[A-Za-z][A-Za-z0-9_]*#$PLATZHALTER#g" -e "s#\*#$PLATZHALTER#g"
 }
 
-# ---- Ziel-Pin (W7) ------------------------------------------------------------------
 GESUNDHEIT="$(curl -sS --connect-timeout "$VERBINDUNGSLIMIT_S" --max-time "$ZEITLIMIT_S" \
   -A "$KENNUNG" -w '\n%{http_code}' "$BASIS_URL/healthz" 2>/dev/null)" ||
   abbruch "GET $BASIS_URL/healthz nicht erreichbar"
@@ -231,8 +153,6 @@ GESUNDHEIT_STATUS="$(printf '%s' "$GESUNDHEIT" | tail -n 1)"
 GEMELDETER_COMMIT="$(printf '%s' "$GESUNDHEIT" | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p')"
 [ -n "$GEMELDETER_COMMIT" ] || abbruch "/healthz nennt keinen Commit - Ziel-Pin nicht pruefbar"
 
-# Praefix-Vergleich in beide Richtungen: die kuerzere Angabe muss Praefix der laengeren
-# sein (Kurz-SHA gegen vollen SHA und umgekehrt).
 case "$GEMELDETER_COMMIT" in "$ERWARTETER_COMMIT"*) PIN_OK=1 ;; *) PIN_OK=0 ;; esac
 case "$ERWARTETER_COMMIT" in "$GEMELDETER_COMMIT"*) PIN_OK=1 ;; esac
 [ "$PIN_OK" = "1" ] ||
@@ -248,9 +168,6 @@ else
 fi
 echo
 
-# ---- Messung -------------------------------------------------------------------------
-# Bewertung des Statuscodes. Gibt "OK" oder eine Begruendung aus, die sagt, was der
-# Unterschied bedeutet - nicht nur, dass es einer ist.
 bewerte_status() {
   local art="$1" erwartet="$2" ist="$3"
   if [ "$ist" = "$erwartet" ]; then
@@ -273,12 +190,6 @@ bewerte_status() {
   printf 'ABWEICHUNG'
 }
 
-# Bewertung der antwortenden Schicht anhand der Basic-Challenge. Im Modus nach-p7
-# (Vorgabe, gilt fuer JEDEN Deploy ab AUTH-P7) darf es sie nirgends mehr geben. Der
-# Zweig fuer ist-aufnahme bleibt als Argument gueltig und erreichbar - er ist der
-# Bestandsmodus fuer Laeufe gegen einen Deploy VOR AUTH-P7 (Rollback-Fall): dort trug
-# die Tabellenspalte ANTWORTET noch den Wert "gate", und nur diese eine Schicht durfte
-# die Basic-Challenge senden.
 bewerte_challenge() {
   local antwortet="$1" hat_challenge="$2"
   if [ "$MODUS" = "$MODUS_NACH_P7" ]; then

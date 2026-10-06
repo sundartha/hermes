@@ -1,6 +1,4 @@
 #!/bin/bash
-# Ein-Klick-Deploy: committet offene Aenderungen, pusht zu GitHub, Render deployt automatisch.
-# Wartet danach, bis der Service live ist, und prueft den Passwortschutz.
 set -u
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 cd "$(dirname "$0")"
@@ -9,12 +7,10 @@ echo "═══ Vodafone Agent - Deploy ═══"
 
 command -v git >/dev/null || { echo "FEHLER: git fehlt"; read -r; exit 1; }
 
-# 0. Tests laufen lassen (fail-closed: roter Test -> kein Commit/Push)
 echo "Tests laufen..."
 npm test || { echo "FEHLER: Tests rot. Kein Deploy."; read -r; exit 1; }
 echo "✓ Tests gruen"
 
-# 1. Offene Aenderungen committen (falls vorhanden)
 if [ -n "$(git status --porcelain)" ]; then
   git add -A
   git commit -m "chore: deploy $(date '+%Y-%m-%d %H:%M')"
@@ -23,11 +19,9 @@ else
   echo "- Keine neuen Aenderungen, pushe vorhandene Commits"
 fi
 
-# 2. Push -> Render-Autodeploy
 git push || { echo "FEHLER: git push fehlgeschlagen (gh auth login?)"; read -r; exit 1; }
 echo "✓ Gepusht. Render baut jetzt (dauert ~1-2 Min.)..."
 
-# 3. Warten bis live
 sleep 45
 for i in $(seq 1 20); do
   CODE=$(curl -s --max-time 8 -o /dev/null -w "%{http_code}" "$URL/healthz" 2>/dev/null)
@@ -36,7 +30,6 @@ for i in $(seq 1 20); do
   sleep 10
 done
 
-# 4. Passwortschutz pruefen
 DASH=$(curl -s --max-time 8 -o /dev/null -w "%{http_code}" "$URL/" 2>/dev/null)
 if [ "$DASH" = "401" ]; then
   echo "✓ Dashboard passwortgeschuetzt (401 ohne Login)"
