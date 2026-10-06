@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { extname, join } from "node:path";
 import { parseArgs } from "node:util";
+import { ESLint } from "eslint";
 
 const HUNK_KOPF = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const ZEILENENDE = "\n";
@@ -9,6 +11,7 @@ const STANDARD_HUNK_LAENGE = 1;
 const FELDER_JE_DATEI = 2;
 const MAX_GIT_AUSGABE = 268_435_456;
 const EXIT_ABBRUCH = 2;
+const JS_ENDUNGEN = new Set([".js", ".mjs", ".cjs"]);
 
 export const STATUS_NEU = "A";
 export const STATUS_GELOESCHT = "D";
@@ -71,6 +74,22 @@ export function hunks(basis, datei, root) {
     } else if (aktuell !== undefined && zeile.startsWith(ENTFERNT)) {
       aktuell.alt.zeilen.push(zeile.slice(ENTFERNT.length));
     }
+  }
+  return gefunden;
+}
+
+export function hinzugefuegteZeilen(basis, datei, root) {
+  return hunks(basis, datei, root).flatMap(({ neu }) =>
+    neu.zeilen.map((text, index) => ({ zeile: neu.start + index, text })),
+  );
+}
+
+export async function gelinteteJsDateien(root, dateien) {
+  const eslint = new ESLint({ cwd: root });
+  const gefunden = new Set();
+  for (const { datei } of dateien) {
+    const istJs = JS_ENDUNGEN.has(extname(datei)) && !(await eslint.isPathIgnored(join(root, datei)));
+    if (istJs) gefunden.add(datei);
   }
   return gefunden;
 }

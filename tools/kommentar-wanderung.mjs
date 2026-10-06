@@ -1,4 +1,4 @@
-import { extname, join } from "node:path";
+import { join } from "node:path";
 import { ESLint, Linter } from "eslint";
 
 import { alleKnoten } from "./eslint-rules/knoten.js";
@@ -10,11 +10,11 @@ import {
   basisAusAufruf,
   dateiInhalt,
   geaenderteDateien,
+  gelinteteJsDateien,
   git,
-  hunks,
+  hinzugefuegteZeilen,
 } from "./pr-aenderungen.mjs";
 
-const JS_ENDUNGEN = new Set([".js", ".mjs", ".cjs"]);
 const MARKDOWN = ".md";
 const KOMMENTAR_ARTEN = new Set(["Line", "Block"]);
 const TEXT_KNOTEN = new Set(["Literal", "TemplateElement"]);
@@ -107,12 +107,6 @@ async function entfernteKommentare(werkzeug, eintrag) {
   return entfernteBloecke(alt, neu).map((block) => ({ ...block, datei: eintrag.datei }));
 }
 
-function hinzugefuegteZeilen(werkzeug, datei) {
-  return hunks(werkzeug.basis, datei, werkzeug.root).flatMap(({ neu }) =>
-    neu.zeilen.map((text, index) => ({ zeile: neu.start + index, text })),
-  );
-}
-
 function wortFolge(abschnitte) {
   return abschnitte.flatMap(({ zeile, text }) => woerter(text).map((wort) => ({ wort, zeile })));
 }
@@ -138,7 +132,7 @@ function textAufZeilen(sourceCode, zeilen) {
 }
 
 async function jsZiele(werkzeug, datei) {
-  const zeilen = new Set(hinzugefuegteZeilen(werkzeug, datei).map(({ zeile }) => zeile));
+  const zeilen = new Set(hinzugefuegteZeilen(werkzeug.basis, datei, werkzeug.root).map(({ zeile }) => zeile));
   if (zeilen.size === 0) return [];
   return textAufZeilen(await quelltext(werkzeug, datei, dateiInhalt("HEAD", datei, werkzeug.root)), zeilen);
 }
@@ -147,20 +141,10 @@ async function wiederaufnahmeOrte(werkzeug, dateien) {
   const ziele = new Map();
   for (const { status, datei } of dateien) {
     if (status === STATUS_GELOESCHT) continue;
-    if (datei.endsWith(MARKDOWN)) zieleEintragen(ziele, datei, hinzugefuegteZeilen(werkzeug, datei));
+    if (datei.endsWith(MARKDOWN)) zieleEintragen(ziele, datei, hinzugefuegteZeilen(werkzeug.basis, datei, werkzeug.root));
     if (werkzeug.js.has(datei)) zieleEintragen(ziele, datei, await jsZiele(werkzeug, datei));
   }
   return ziele;
-}
-
-async function jsDateien(root, dateien) {
-  const eslint = new ESLint({ cwd: root });
-  const gefunden = new Set();
-  for (const { datei } of dateien) {
-    const istJs = JS_ENDUNGEN.has(extname(datei)) && !(await eslint.isPathIgnored(join(root, datei)));
-    if (istJs) gefunden.add(datei);
-  }
-  return gefunden;
 }
 
 function wanderungen(entfernt, ziele) {
@@ -189,7 +173,7 @@ async function pruefen(root, basis) {
     basis,
     eslint: new ESLint({ cwd: root }),
     linter: new Linter({ cwd: root }),
-    js: await jsDateien(root, dateien),
+    js: await gelinteteJsDateien(root, dateien),
   };
   const quellen = dateien.filter(({ datei }) => werkzeug.js.has(datei) || istYamlOderShell(datei));
   const entfernt = [];
