@@ -1,12 +1,3 @@
-// T2-13 (N-10): Abnahme am echten Draht (HTTP /mcp Legacy/Bootstrap, HTTP /mcp OAuth,
-// stdio) fuer die serverseitige Bestaetigung vor dem Waehlen. (a)-(g) decken die
-// kritischsten Kriterien ueber HTTP-Legacy ab; (h) beweist denselben Rundlauf (prepare_call
-// -> place_call) ueber einen ECHTEN gespawnten stdio-Kindprozess (Muster
-// test/openai-p5b-geldpfad.test.js Fall C); (i) beweist die Tenant-Bindung ueber ein ECHTES,
-// signiertes OAuth-Token durch /mcp (ein Mandant bestaetigt, ein ANDERER versucht mit
-// demselben Code zu waehlen -> isError, kein Anruf) - vorher war die Tenant-Bindung nur
-// indirekt ueber X-Internal-Tenant direkt an der Route belegt (profile-tenant-key.test.js).
-// Die Consult-Variante bleibt offen (s. Uebergabe).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -70,16 +61,11 @@ test("(a) prepare_call: Code in _meta, NICHT in content/structuredContent; struc
     assert.notEqual(result.isError, true, "prepare_call darf kein isError sein");
     const code = result._meta?.[CONFIRMATION_META_KEY];
     assert.match(code, CODE_PATTERN, "der Code passt auf das Crockford-Base32-Alphabet, Laenge 6");
-    // Substring-Suche nach dem KONKRETEN Codewert, nicht nach dem verankerten Muster:
-    // ein JSON-String beginnt mit "[" bzw. "{" und ist immer laenger als 6 Zeichen, ^...$
-    // kann darin also nie treffen - das war blind gruen, egal was im Text stand.
     assert.ok(!JSON.stringify(result.content).includes(code), "Code steht nicht im Modelltext");
     assert.ok(
       !JSON.stringify(result.structuredContent).includes(code),
       "Code steht nicht in structuredContent",
     );
-    // Positiv-Kontrolle: die Pruefung selbst muss einen eingebauten Code finden koennen,
-    // sonst waere auch das `includes` oben nur ein weiterer Blindgaenger.
     assert.ok(JSON.stringify({ leak: code }).includes(code), "Positiv-Kontrolle: includes() findet einen eingebauten Code");
     assert.equal(result.structuredContent.status, "awaiting_confirmation");
     assert.equal(result.structuredContent.to, TARGET, "to bleibt E.164 (bereits normalisiert eingegeben)");
@@ -95,9 +81,6 @@ test("(b) place_call ohne Code / mit leerem Code / mit erfundenem Code: isError,
       const result = await placeCall(srv, args);
       assert.equal(result.isError, true, `confirmation_code=${JSON.stringify(confirmation_code)}`);
       const text = result.content[0].text;
-      // Weltdefault-Sprache ist Englisch (kein Tenant-Sprachkontext auf diesem Pfad) -
-      // der deutsche Wortlaut "Host ohne Karte" aus der Spec ist die DE-Fassung
-      // desselben Satzes (loc.mcp.confirmationRequired, src/i18n/mcp-texts.js).
       assert.match(text, /host without a card/i);
       assert.match(text, new RegExp(TARGET.replace("+", "\\+")), "nennt das (normalisierte) Ziel");
       assert.match(text, /Termin vereinbaren/, "nennt das Anliegen");
@@ -202,17 +185,6 @@ test("(g) ohne CALL_CONFIRMATION_SECRET: prepare_call ist isError, kein Anruf mo
   }
 });
 
-// ==================== Safety-Review-Nachbesserung: frischer Code nach Verbrauch ==========
-// Befund (Zwischenmessung): das Einmal-Verbrauch-Register (Mandant+Fenster+Code) passte
-// nicht zum deterministischen Code (HMAC ueber Mandant+Argumente+Fenster) - ein erneutes
-// prepare_call mit UNVERAENDERTEN Argumenten stellte im selben 5-Minuten-Fenster exakt den
-// schon verbrauchten Code erneut aus, place_call scheiterte danach IMMER an
-// confirmationRequired (bis zu 5 Minuten lang), obwohl der Nutzer nur "nochmal versuchen"
-// wollte. Dieser Test belegt den Fix am echten Draht: prepare -> place (ok) -> prepare mit
-// denselben Argumenten (neuer Code) -> place mit dem neuen Code (ok, dedupliziert - der
-// erste Anruf laeuft mit FAKE_ORIGINATE unveraendert weiter, kein Webhook beendet ihn).
-// Belegt zugleich, dass PLACE_CALL_DESCRIPTION wieder stimmt: "Calling it again ... returns
-// that same call (deduplicated: true)" ist nur ueber ein FRISCHES prepare_call erreichbar.
 test("Nachbesserung: erneutes prepare_call nach Verbrauch liefert einen NEUEN Code, place_call damit -> ok, dedupliziert", async () => {
   await withServer(async (srv) => {
     const before = srv.readStore().calls.length;
@@ -236,15 +208,6 @@ test("Nachbesserung: erneutes prepare_call nach Verbrauch liefert einen NEUEN Co
   });
 });
 
-// ==================== (h) stdio: echter Kindprozess, echter Rundlauf ======================
-// Zwei echte Prozesse wie in der Produktion: EIN voller Gateway (startServer, traegt
-// /api/call-confirmations + /api/calls) und EIN stdio-MCP-Server (src/mcp-server.js), der
-// seine Tool-Aufrufe per GATEWAY_URL an den Gateway weiterreicht (Muster P5b Fall C). stdio
-// ruft registerTools() ohne ctx auf (identity/scopedTenant null -> Owner, Kommentar
-// mcp-tools.js:1095) - der Gateway laeuft deshalb OHNE MULTI_TENANT (Bootstrap-Owner).
-// MCP_UI_ENABLED muss im KIND-Prozess an sein (der liest den Schalter aus SEINEM env, nicht
-// aus dem des Gateways) - sonst bekaeme kein Client, auch stdio nicht, je einen Code (s.
-// Korrektur PLAN-SECURITY.md/mcp-tools.js: der Schalter ist global, keine Host-Erkennung).
 test("(h) stdio (echter Kindprozess): prepare_call -> place_call Rundlauf ueber einen echten tools/call", async () => {
   const gateway = await startServer({
     env: {
@@ -286,14 +249,6 @@ test("(h) stdio (echter Kindprozess): prepare_call -> place_call Rundlauf ueber 
   }
 });
 
-// ==================== (i) OAuth: echtes Token, fremder Mandant ============================
-// Zwei subscriber-Tenants, je ueber ihr eigenes idpSubject aufgeloest (Muster
-// profile-tenant-key.test.js subscriberTenant). Tenant A bestaetigt per prepare_call ueber
-// SEIN Token; Tenant B versucht mit GENAU diesem Code zu waehlen, ueber SEIN EIGENES Token -
-// der Code ist an tenantId gebunden (canonicalCallRequest bindet ihn NICHT an tenantId, aber
-// issueConfirmationCode/matchedWindowIndex tun es ueber den HMAC-Input, s. call-confirmation.js)
-// und darf fuer B nicht gelten. Diese Bindung war bisher nur indirekt (X-Internal-Tenant
-// direkt an der Route) belegt, hier zum ersten Mal ueber ein ECHTES OAuth-Token durch /mcp.
 const OAUTH_TARGET = "+4915112340098";
 const OAUTH_TENANT_A = "tenant-t2-13-oauth-a";
 const OAUTH_TENANT_B = "tenant-t2-13-oauth-b";
@@ -304,11 +259,6 @@ function oauthTenant(id, idpSubject) {
   return { id, status: "active", idpSubject, ownerName: `${id} Tester`, kycLevel: KYC_LEVEL.CARD };
 }
 
-// Tenant A braucht ein durchlaessiges Profil UND eine aktive Nummer, damit die
-// Gegenprobe (Tenant A waehlt mit seinem EIGENEN Code) bis zur echten Origination
-// (FAKE_ORIGINATE) durchlaeuft, statt an einem GATE zu scheitern, das mit der
-// Bestaetigung nichts zu tun hat (sonst waere isError=true zweideutig: Bestaetigung
-// oder Stundenlimit/Nummer? Muster profile-tenant-key.test.js (a)).
 const OAUTH_TENANT_A_NUMBER = "+4915110000077";
 
 test("(i) OAuth (echtes Token, fremder Mandant): Code von Tenant A waehlt nicht fuer Tenant B", async () => {
@@ -363,8 +313,6 @@ test("(i) OAuth (echtes Token, fremder Mandant): Code von Tenant A waehlt nicht 
     const foreign = await readToolResult(foreignRes);
     assert.equal(foreign.isError, true, "Tenant B darf mit dem Code von Tenant A nicht waehlen");
 
-    // Gegenprobe: derselbe Code fuer Tenant A SELBST funktioniert (der Code ist nicht
-    // generell kaputt, nur an den falschen Mandanten gebunden).
     const ownRes = await mcpPost(
       `${srv.localUrl}/mcp`,
       tokenA,
@@ -380,18 +328,6 @@ test("(i) OAuth (echtes Token, fremder Mandant): Code von Tenant A waehlt nicht 
   }
 });
 
-// ============ Nachbesserung (cleancode/wichtig): Consult-Kanal aktiv, HTTP =================
-// Befund: die Abnahme deckte HTTP-Legacy/-OAuth, stdio und Fake-Originate ab, aber KEINE
-// Kombination mit aktivem Consult-Kanal (CONSULT_ENABLED) - ein Risiko sollte der
-// Bestaetigungscode je mit der Consult-Registrierung interagieren. Dieser Test faehrt mit
-// eingeschaltetem Kanal (Owner-Bootstrap: OWNER_PROFILE.allowConsult=true, s.
-// store/defaults.js) denselben Rundlauf wie (a)-(d) und zeigt zusaetzlich, dass
-// await_call_event/answer_consult registriert sind (tools/list) - die Bestaetigungspruefung
-// laeuft strukturell VOR jeder Consult-Logik (mcp-tools.js: der Code wird im place_call-
-// Handler vor dem eigentlichen POST /api/calls-Aufruf geprueft, die Consult-Werkzeuge
-// wirken erst NACH einem erfolgreich gewaehlten Anruf) und ist von ihr unabhaengig - ein
-// echter Rueckfrage-Austausch braucht einen simulierten Telnyx-Webhook und bleibt der
-// Folgephase T2-14 vorbehalten (Uebergabe-Notiz oben).
 test("Nachbesserung: Consult-Kanal aktiv (CONSULT_ENABLED) stoert die Bestaetigungspruefung nicht - Werkzeuge registriert, gueltiger/ungueltiger Code verhalten sich unveraendert", async () => {
   const srv = await startServer({
     env: {
@@ -430,13 +366,6 @@ test("Nachbesserung: Consult-Kanal aktiv (CONSULT_ENABLED) stoert die Bestaetigu
   }
 });
 
-// ============ Safety-Review T2-13, zweite Runde ============================================
-// (f) am Draht ueber ALLE drei Transporte, Modelltexte ohne Selbstbestaetigung, alter Slot,
-// ungebundenes briefing/context. Ablauf mit injizierter Uhr, Fehlversuchsbremse,
-// Zukunfts-Slot und language-Bindung laufen ueber die ECHTE Route-Factory in
-// test/call-confirmation.test.js (der gespawnte Server hat bewusst keine Uhr-Naht).
-
-// Plan-Kriterium (f): place_call-Annotationen UNVERAENDERT gegenueber dem Stand vor T2-13.
 const PLACE_CALL_ANNOTATIONS_BEFORE = {
   title: "Place a phone call",
   readOnlyHint: false,
@@ -522,21 +451,16 @@ test("(f) am Draht, stdio (echter Kindprozess): Annotationen und confirmation_co
   }
 });
 
-// Anleitung an das MODELL, den Code selbst aus der Karte zu nehmen (= Selbstbestaetigung):
-// ein Lese-/Pruef-Verb und "Code" im selben Teilsatz. Je Sprache, weil die Verben es sind.
 const SELF_CONFIRMATION_PATTERNS = {
   de: [/\bCode\b[^.;]*\b(pruefen|ablesen|lesen|abschreiben|uebernehmen)\b/i, /\b(pruefe|lies)\b[^.;]*\bCode\b/i],
   en: [/\b(check|read|look at|copy|take)\b[^.;]*\bcode\b/i, /\breveals?\b[^.;]*\bcode\b/i],
   fr: [/\b(vérifiez|lisez|copiez|relevez)\b[^.;]*\bcode\b/i],
 };
-// Pflichtaussagen je Sprache: der NUTZER bestaetigt, nie raten/erfinden.
 const REQUIRED_STATEMENTS = {
   de: [/Nutzer[^.]*bestaetig/, /nie einen Code raten oder erfinden/],
   en: [/\buser\b[^.]*confirms?/, /never guess or invent/],
   fr: [/utilisateur[^.]*confirme/, /ne devinez ni n'inventez jamais/],
 };
-// Wortlaut VOR dieser Korrektur (Commit 9862021) - Positiv-Kontrolle: der Pruefer muss ihn
-// als Selbstbestaetigung erkennen, sonst waere "nicht gefunden" wertlos.
 const OLD_CARD_HINTS = {
   de: "Vorschau erstellt. Zum Bestaetigen den Code in der Hermes-Karte pruefen und mit place_call (gleiche Angaben) erneut aufrufen.",
   en: "Preview created. To confirm, check the code in the Hermes card and call place_call again with the same arguments.",
@@ -602,8 +526,6 @@ test("Draht: nach Verbrauch + neuem prepare_call wird der Code des ALTEN Slots a
   });
 });
 
-// Lead-Entscheidung (Safety-Review T2-13): briefing/context sind GEBUNDEN - der Nutzer
-// bestaetigt, was tatsaechlich passiert; ein nach dem Klick getauschtes briefing waehlt nicht.
 test("Draht: geaendertes briefing/context/max_duration_s/constraints -> isError, unveraendert -> waehlt", async () => {
   await withServer(async (srv) => {
     const before = srv.readStore().calls.length;
@@ -633,8 +555,6 @@ test("Draht: geaendertes briefing/context/max_duration_s/constraints -> isError,
   });
 });
 
-// Boot-Befund am echten Prozess: zu kurzes Geheimnis -> WARN-Zeile, Wert nie im Log,
-// prepare_call fail-closed (isError, kein Code).
 test("Boot: zu kurzes CALL_CONFIRMATION_SECRET -> Warnung ohne Wert, prepare_call fail-closed", async () => {
   const shortSecret = "kurzesGeheimnisT213";
   const srv = await startServer({

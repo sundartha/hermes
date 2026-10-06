@@ -1,13 +1,3 @@
-// T2-05 (T-14): Re-Auth-Challenge im Tool-Fehlerergebnis statt HTTP 403 bei
-// OAuth-Kein-Mandant. Zwei Teile:
-//   Teil 1 (Unit, kein Server-Spawn): buildNoTenantResult() liefert die richtige Form
-//     je Sprache; die interne Fassade (_noTenantFacade, Test-Naht) hat GENAU zwei
-//     Methoden; registerNoTenantStubs() registriert dieselbe Namensmenge wie
-//     registerTools() mit lauter Stub-Handlern, die NIE fetch() ausloesen.
-//   Teil 2 (Draht, Kindprozess): echte HTTP-/mcp-Route mit einem Spion-Gateway
-//     (zaehlt jeden Request an den internen REST-Hop) UND stdio - Beweis "kein
-//     echter Handler laeuft je" ist NUR am Draht fuehrbar (registerTool() des SDK
-//     verwirft unbekannte Felder still, ein Registrierungsobjekt beweist nichts).
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -38,9 +28,6 @@ const MCP_WWW_AUTHENTICATE = "mcp/www_authenticate";
 const CHALLENGE_PREFIX = 'Bearer resource_metadata="https://agent.test/.well-known/oauth-protected-resource"';
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 
-// Vollstaendiger initialize-Body (Muster test/mcp-server-icon.test.js): die SDK-Schema-
-// Pruefung verlangt protocolVersion/capabilities/clientInfo - ein Body ohne params wird
-// mit einem JSON-RPC-Fehler abgelehnt (empirisch verifiziert).
 const INITIALIZE_BODY = {
   jsonrpc: "2.0",
   id: 1,
@@ -53,8 +40,8 @@ const INITIALIZE_BODY = {
 };
 
 const SUB_C = "sub-mandant-c";
-const NUM_C = "+4915110000091"; // aktive DID von Mandant C
-const OWNER_NUM = "+18643028341"; // Live-Diskriminator (Owner-Telnyx-DID)
+const NUM_C = "+4915110000091";
+const OWNER_NUM = "+18643028341";
 
 const seedTenantC = () =>
   seedState({
@@ -71,10 +58,6 @@ const seedTenantC = () =>
     ],
   });
 
-// ---------------------------------------------------------------------------------
-// Teil 1: Unit - buildNoTenantResult(), die Fassade, registerNoTenantStubs()
-// ---------------------------------------------------------------------------------
-
 test("Unit S2: buildNoTenantResult() je Sprache - Form + Inhalt, KEIN Link/URL/Tenant-Auskunft", () => {
   for (const language of ["de", "en", "fr"]) {
     const result = buildNoTenantResult(language);
@@ -86,9 +69,6 @@ test("Unit S2: buildNoTenantResult() je Sprache - Form + Inhalt, KEIN Link/URL/T
     assert.ok(!text.includes("http"), "kein Link im Fehlertext");
     assert.ok(!text.includes("www."), "keine URL im Fehlertext");
     assert.ok(!text.includes('"'), "kein Anfuehrungszeichen im Fehlertext");
-    // Reiner In-Process-Import (kein Server-Spawn, kein BASE_ENV): PUBLIC_URL ist hier
-    // NICHT "https://agent.test" (das setzt nur startServer fuer Kindprozesse) - die
-    // exakte resource_metadata-URL prueft der Drahttest (T05-1..5) unten.
     const challenge = result._meta[MCP_WWW_AUTHENTICATE];
     assert.ok(Array.isArray(challenge) && challenge.length === 1);
     assert.ok(challenge[0].startsWith("Bearer resource_metadata="));
@@ -96,8 +76,6 @@ test("Unit S2: buildNoTenantResult() je Sprache - Form + Inhalt, KEIN Link/URL/T
     assert.ok(Object.isFrozen(result), "Ergebnis ist eingefroren");
     assert.ok(Object.isFrozen(result._meta), "_meta ist eingefroren");
   }
-  // dieselbe Aussage nochmal ueber localeFor - der Text kommt aus GENAU dieser Quelle,
-  // kein zweiter Textbau in mcp-no-tenant.js.
   assert.equal(
     buildNoTenantResult("de").content[0].text,
     localeFor("de").mcp.errors.no_tenant_linked,
@@ -112,10 +90,6 @@ test("Unit S3 (i): die interne Fassade hat GENAU zwei Methoden, KEIN legacy tool
 });
 
 test("Unit S3 (i): eine fehlende Server-Methode wirft TypeError statt still zu verpuffen", () => {
-  // Nur registerTool vorhanden - ruft die Fassade registerResource auf (was hier nicht
-  // passiert, da uiHost:null keine Widgets registriert), waere das ein TypeError. Diese
-  // Zusicherung haelt direkt fest, dass die Fassade NICHTS ausser den zwei Methoden
-  // vorspiegelt (kein Proxy-Fallback, s. Kommentar mcp-no-tenant.js).
   const bareServer = { registerTool() {} };
   const facade = _noTenantFacade(bareServer, async () => ({}));
   assert.throws(() => facade.registerResource("ui://x", {}), TypeError);
@@ -129,7 +103,6 @@ function makeFakeServer() {
       tools.set(name, { config, handler });
     },
     registerResource() {
-      // uiHost:null in diesem Test -> registerTools ruft dies nie auf.
     },
   };
 }
@@ -173,10 +146,6 @@ test("Unit S3 (ii+iii): registerNoTenantStubs registriert dieselbe Namensmenge, 
   assert.equal(fetchCalls, 0, "kein Stub-Handler ruft je fetch()/api()");
 });
 
-// ---------------------------------------------------------------------------------
-// Teil 2: Draht - HTTP OAuth mit Spion-Gateway, HTTP Token/Legacy, stdio
-// ---------------------------------------------------------------------------------
-
 async function startSpyGateway() {
   let count = 0;
   const SPY_HTTP_NOT_FOUND = 404;
@@ -204,9 +173,6 @@ const oauthEnv = (idp, spy, extra = {}) => ({
   ...extra,
 });
 
-// Gemeinsames Setup fuer T05-1..5: EIN Server, EIN Spion, zwei Tokens (Mandant C
-// echt, ein zweites unbekannt/subloses je Test). G5: kein viertes Mal denselben
-// Server-Aufbau kopieren.
 async function withOauthFixture(run) {
   const idp = await startIdp();
   const spy = await startSpyGateway();
@@ -253,10 +219,6 @@ test("T05-1 (unbekannter sub, localhost): initialize/tools/list unveraendert, pl
       method: "tools/list",
     });
     const realTools = (await readToolResult(realListRes)).tools;
-    // T2-12: get_calendar (und mit ihm allowCalendar als Werkzeugmengen-Schalter) ist
-    // entfallen - die Werkzeugmenge haengt nicht mehr vom Profil ab. Entscheidend bleibt
-    // die Gleichheit ghost==real: Kein-Mandant liefert exakt dieselbe Menge wie derselbe
-    // Mandant MIT Zuordnung.
     assert.equal(ghostTools.length, realTools.length);
     assert.ok(ghostTools.length > 0, "die Tool-Liste ist NICHT leer (sichtbar, nur der Aufruf ist gesperrt)");
     for (const toolDesc of ghostTools) {

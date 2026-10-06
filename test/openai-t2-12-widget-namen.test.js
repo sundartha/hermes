@@ -1,15 +1,3 @@
-// T2-12 Gegenprobe (d), PLAN-OPENAI-TECHNIK-2.md Abschnitt T2-12: das Call-Widget wird
-// per resources/read VOM LAUFENDEN SERVER geholt (nicht aus der Datei/widgetHtml()-
-// Import wie test/mcp-ui-w1-call-widget.test.js), in einer node:vm-Fake-Sandbox von
-// in_progress bis completed gefahren, und JEDER params.name jeder gesendeten
-// tools/call-Nachricht wird gegen die tools/list-Namensmenge DESSELBEN Servers geprueft.
-//
-// Schliesst die Luecke aus dem Review-Nachtrag zu
-// test/openai-t2-11-werkzeugtexte.test.js:386 (T11-f): T11-f prueft nur statisch die
-// Bruecken-Konstanten (var TOOL_* = "...") und Tokens in Werkzeugnamen-Form im
-// ausgelieferten HTML. Ein Widget, das einen Namen zur LAUFZEIT zusammensetzt (z.B.
-// "get_" + suffix), faellt dort nicht auf - hier schon, weil tatsaechlich ausgefuehrt
-// und der geSENDETE Wert geprueft wird, nicht der Quelltext.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
@@ -35,9 +23,6 @@ async function httpResourceRead(baseUrl, uri) {
   return await readToolResult(res);
 }
 
-// Holt Werkzeugmenge + Call-Widget-HTML vom selben laufenden Server ueber denselben
-// Pfad (HTTP Legacy) - place_call traegt die resourceUri des vereinten Call-Widgets
-// (src/mcp-tools.js:1328, WIDGET_CALL).
 async function fetchToolsAndCallWidget(baseUrl) {
   const tools = await httpToolsList(baseUrl);
   const placeCall = tools.find((tool) => tool.name === "place_call");
@@ -47,10 +32,6 @@ async function fetchToolsAndCallWidget(baseUrl) {
   return { tools, html };
 }
 
-// Minimaler Fake: JEDER Selektor bekommt automatisch ein eigenes Fake-Element (statt
-// der gepflegten Selektor-Liste aus mcp-ui-w1-call-widget.test.js) - diese Gegenprobe
-// prueft NUR die gesendeten Werkzeugnamen, nicht das Rendering; eine zweite gepflegte
-// Selektor-Liste waere hier eine Kopie ohne Mehrwert (G5/S2, keine doppelte Wartung).
 function makeAutoElement() {
   const listeners = {};
   return {
@@ -106,11 +87,6 @@ function makeAutoDocument() {
   };
 }
 
-// Extrahiert das eigene Inline-Skript aus dem WIRE-HTML: letztes <script>-Element nach
-// Entfernen von BIND_SCRIPT (Autorenregel im call.html-Kopfkommentar: das eigene Skript
-// bleibt immer das letzte Element; Muster ownScriptSource() aus
-// test/mcp-ui-w1-call-widget.test.js, hier auf den Draht-Text statt auf widgetHtml()
-// angewendet).
 function ownScriptFromWire(html) {
   const withoutBind = html.replace(BIND_SCRIPT, "");
   const matches = [...withoutBind.matchAll(/<script>([\s\S]*?)<\/script>/g)];
@@ -118,9 +94,6 @@ function ownScriptFromWire(html) {
   return matches[matches.length - 1][1];
 }
 
-// Faehrt ein Skript vom Handshake bis completed (Muster runOwnScript aus
-// mcp-ui-w1-call-widget.test.js, hier lokal und ohne dessen HUD-spezifische
-// Selektor-Liste): liefert jede via parent.postMessage geSENDETE Nachricht.
 function driveToCompletion(scriptSource) {
   const doc = makeAutoDocument();
   const sandbox = { document: doc };
@@ -157,13 +130,9 @@ function driveToCompletion(scriptSource) {
   vm.createContext(sandbox);
   vm.runInContext(scriptSource, sandbox);
 
-  // Echter Handshake-Signalpfad (widget-bind.js), kein Test-Attrappen-Pfad. Der erste,
-  // hier ausgeloeste Poll-Tick trifft auf einen noch leeren call_id-Slot und ist ein
-  // No-Op (currentCallId() liest ""); das ist der reale Ablauf (place_call-Push kommt
-  // erst danach), nicht ein Test-Artefakt.
   signalUiReady(sandbox);
   doc.slot("call_id").textContent = CALL_ID;
-  for (const fn of intervalFns.values()) fn(); // Poll-Tick jetzt MIT call_id -> get_call_status
+  for (const fn of intervalFns.values()) fn();
 
   const emit = (data) => {
     for (const handler of listeners.message || []) handler({ data });
@@ -202,11 +171,6 @@ function sentToolNames(posted) {
   return posted.filter((msg) => msg.params && msg.params.name).map((msg) => msg.params.name);
 }
 
-// Positiv-Kontrollen: das Widget sendet ueberhaupt die erwarteten Aufrufe. Getrennt von
-// der Mitgliedschaftspruefung unten, weil die Gegenprobe NUR diese treffen darf: der
-// wieder eingesetzte Altname verdraengt get_call_result, die Positiv-Kontrolle wuerde
-// also zuerst werfen - die Gegenprobe waere dann gruen, ohne die Mitgliedschaftspruefung
-// je erreicht zu haben.
 function assertSendsExpectedCalls(sentNames) {
   assert.ok(sentNames.length > 0, "Positiv-Kontrolle: mindestens ein tools/call gesendet");
   assert.ok(sentNames.includes("get_call_status"), "Positiv-Kontrolle: get_call_status gesendet");
@@ -217,8 +181,6 @@ function assertSendsExpectedCalls(sentNames) {
   );
 }
 
-// Die eigentliche Zusicherung aus T12-d, als eigene Funktion: von BEIDEN Tests genutzt,
-// damit die Gegenprobe unten dieselbe Pruefung ausfuehrt (nicht nur eine aehnliche).
 function assertSentNamesInToolsList(sentNames, toolNames) {
   for (const name of sentNames) {
     assert.ok(toolNames.has(name), notInToolsListMessage(name));
@@ -243,12 +205,6 @@ test("T12-d: Call-Widget vom Draht - jeder gesendete tools/call-Name steht in to
   }
 });
 
-// Beweiskraft-Nachweis (Pre-Mortem 1 aus dem Plan): setzt man den Altnamen wieder ein,
-// muss DIESELBE Mitgliedschaftspruefung wie oben (assertSentNamesInToolsList, nicht nur
-// eine aehnliche) tatsaechlich rot werden - und zwar GENAU an ihrer Zusicherung fuer den
-// Altnamen, nicht an irgendeinem anderen Assert. Der Fehler-Abgleich unten haelt das
-// fest; sonst waere "nichts gefunden" wertlos (Lehre "Pruefkommando ohne
-// Positiv-Kontrolle").
 test("T12-d Gegenprobe: wird der alte Name wieder eingesetzt, wird die Pruefung von oben tatsaechlich rot", async () => {
   const srv = await startServer({ seed: seedState({}), env: UI_ENV });
   try {
@@ -258,9 +214,6 @@ test("T12-d Gegenprobe: wird der alte Name wieder eingesetzt, wird die Pruefung 
     const mutated = original.replace(/"get_call_result"/g, `"${OLD_CALL_RESULT_NAME}"`);
     assert.notEqual(mutated, original, "Mutation griff tatsaechlich - sonst waere die Gegenprobe wirkungslos");
 
-    // Positiv-Kontrolle fuer die Gegenprobe selbst: das mutierte Skript sendet den alten
-    // Namen ueberhaupt (sonst wuerde der assert.throws unten aus dem falschen Grund
-    // greifen, z.B. weil die Mutation gar nicht griff).
     const sentNames = sentToolNames(driveToCompletion(mutated));
     assert.ok(sentNames.includes(OLD_CALL_RESULT_NAME), "Positiv-Kontrolle: das mutierte Skript sendet den alten Namen");
 

@@ -1,30 +1,3 @@
-// T2-09 (O-13 Datenminimierung, O-20 kein Abo-/Upgrade-Flow): neutrale, sprachabhaengige
-// Fehlertexte an der MCP-Grenze. Testname traegt KEIN Katalog-Praefix (Lehre
-// catalog-id-prefix-misroutes-tests) - laeuft in npm test, nicht im Gates-Lauf.
-//
-// T1: Vollstaendigkeit der Ablehnungs-Textabelle GEGEN DIE QUELLE (outbound-gates.js),
-// nicht gegen eine gepflegte Liste - ein neuer Gate-Grund faellt sonst STUMM auf
-// DENIAL_UNKNOWN (Pre-Mortem 2), ohne dass ein Test das je merkt.
-// T2: Reinheit jedes Tabellentexts (kein Env-Name, keine Zahl, kein Abo-/Upgrade-Wort,
-// kein "HTTP <n>"/"fetch failed", EN/FR ohne deutsches Signalwort).
-// T3: Draht HTTP /mcp, Legacy/Bootstrap - echter tools/call gegen einen echten Server.
-// T5: Draht stdio, echter Kindprozess (src/mcp-server.js) + Gateway-Attrappe (Muster
-// test/openai-p5b-geldpfad.test.js Fall C) - deckt (a) 402 minutes, (b) 403 frozen ohne
-// den Env-Namen, (c) unbekannter Grund -> DENIAL_UNKNOWN + Server-Warnung, (d) Gateway
-// unerreichbar ohne "fetch failed", (e) 500 ohne Body ohne "HTTP 500", (f) 400-Eingabefehler
-// ohne reason bleibt durchgereicht (Entscheidung 3), (g) list_action_items ohne interne ID.
-// T4 (OAuth, Nicht-Bootstrap-Tenant, ECHTES Minuten-Gate): Safety-Review-Nachbesserung -
-// jetzt gebaut (s. u.). PAYMENT_ENABLED + eine per OAuth-sub gebundene Nicht-Bootstrap-
-// Tenant-Fixture mit aufgebrauchten Plan-Minuten, Draht HTTP /mcp (Muster MCP-16:
-// startIdp + registerTenant/idpSubject). Prueft isError, den Wortlaut-Pin gegen
-// MCP_DENIAL_TEXTS.<lang>.minutes, das additive REST-reason=minutes UND keinen
-// entstandenen Call - auf demselben Server-Prozess, derselben Fixture.
-// T6: HTTP-Statusklassen ohne bekannten Grund (404/403/409-ausserhalb-answer_consult).
-// T7: place_call-5xx ohne Gate-Grund (Originate-/Provider-Fehlschlag) -> eigener neutraler
-// Text (CALL_START_REJECTED), der nicht zum sofortigen Wiederholen einlaedt.
-// T8: der Netzwerkfehler-Fallback ist fail-safe gegen die Sprach-Aufloesung - jede
-// unterstuetzte Sprache liefert ihren Text, fehlende/unbekannte Sprache den Weltdefault,
-// eine fehlende Uebersetzung den neutralen EN-Text; nie undefined, leer oder Interna.
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -48,9 +21,7 @@ const HTTP_FROZEN = 403;
 const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_SERVER_ERROR = 500;
 const OUTBOUND_GATES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "../src/telephony/outbound-gates.js");
-const MINUTES_TEXT_MIN_COUNT = 20; // Positiv-Kontrolle T1: >= 20 Gruende in der Quelle
-
-// ==================== T1: Vollstaendigkeit gegen die Quelle ====================
+const MINUTES_TEXT_MIN_COUNT = 20;
 
 function readOutboundGatesSource() {
   return readFileSync(OUTBOUND_GATES_PATH, "utf8");
@@ -64,9 +35,6 @@ function grundSetFromSource(src) {
   return new Set([...literal, ...auditLiteral, gateErrorMatch[1]]);
 }
 
-// STRUKTUR-Waechter: das erste Argument JEDES denialAudit(-Aufrufs ist ein String-Literal,
-// GATE_ERROR_GRUND, "grund" oder "<bezeichner>.grund" - sonst faellt ein neuer, indirekter
-// Grund-Lieferant durch das Netz der obigen Regex-Extraktion, ohne dass ein Test es merkt.
 function assertDenialAuditCallsAreStructured(src) {
   const calls = [...src.matchAll(/denialAudit\(\s*([^,]+),/g)].map((match) => match[1].trim());
   assert.ok(calls.length >= 1, "Positiv-Kontrolle: mindestens ein denialAudit-Aufruf gefunden");
@@ -85,7 +53,6 @@ test("T1: jeder Ablehnungsgrund aus outbound-gates.js hat in JEDER Sprache genau
   assertDenialAuditCallsAreStructured(src);
   const quelle = grundSetFromSource(src);
 
-  // Positiv-Kontrolle: das Kommando findet tatsaechlich etwas.
   for (const bekannt of ["minutes", "frozen", "gate_error", "reserve_error"]) {
     assert.ok(quelle.has(bekannt), `Positiv-Kontrolle: "${bekannt}" muss in der Quelle stehen`);
   }
@@ -102,8 +69,6 @@ test("T1: jeder Ablehnungsgrund aus outbound-gates.js hat in JEDER Sprache genau
       assert.ok(quelle.has(grund), `${lang}: toter Tabellen-Eintrag "${grund}" (nicht in der Quelle)`);
   }
 });
-
-// ==================== T2: Reinheit ====================
 
 const FORBIDDEN_WORDS =
   /tarif|upgrade|\bplans?\b|pricing|price|preis|\babo\b|abonn|subscri|forfait/i;
@@ -128,8 +93,6 @@ test("T2: jeder Ablehnungstext und die fuenf neuen Fehlertexte sind neutral (all
       MCP_ERROR_CODE.NOT_FOUND,
       MCP_ERROR_CODE.NOT_PERMITTED,
       MCP_ERROR_CODE.REQUEST_REJECTED,
-      // Safety-Review-Nachbesserung (Befund mcp-tools.js:435): eigener neutraler Text
-      // fuer einen Originate-Fehlschlag ohne Gate-Grund, s. T7 fuer die Draht-Klassifikation.
       MCP_ERROR_CODE.CALL_START_REJECTED,
     ])
       assertNeutralText(MCP_TEXTS[lang].errors[code], `${lang}.errors.${code}`);
@@ -140,11 +103,6 @@ test("T2: jeder Ablehnungstext und die fuenf neuen Fehlertexte sind neutral (all
   }
 });
 
-// T2-13 (N-10): CALL_CONFIRMATION_SECRET testweise gesetzt - ohne bestaetigten
-// confirmation_code wuerde place_call gar nicht mehr bis zum jeweils geprueften Gate
-// kommen. Der Code wird direkt an der Route geholt (derselbe Loopback-Aufrufer wie der
-// MCP-Handler); tenantHeader bindet ihn - wie das echte /mcp-Gateway per
-// X-Internal-Tenant - an den richtigen Mandanten (leer = Bootstrap/Owner, T3).
 const TEST_CONFIRMATION_SECRET = "t2-09-test-secret-mindestens-32-zeichen-lang";
 async function confirmedPlaceCallArgs(localUrl, args, tenantHeader = null) {
   const res = await fetch(`${localUrl}/api/call-confirmations`, {
@@ -158,8 +116,6 @@ async function confirmedPlaceCallArgs(localUrl, args, tenantHeader = null) {
   const json = await res.json();
   return { ...args, confirmation_code: json.confirmation?.code };
 }
-
-// ==================== T3: Draht HTTP /mcp, Legacy/Bootstrap ====================
 
 test("T3 (Draht HTTP /mcp, Legacy/Bootstrap): OUTBOUND_FROZEN liefert den neutralen Text, kein Env-Name", async () => {
   const srv = await startServer({
@@ -179,8 +135,6 @@ test("T3 (Draht HTTP /mcp, Legacy/Bootstrap): OUTBOUND_FROZEN liefert den neutra
     assert.doesNotMatch(text, /OUTBOUND_FROZEN/, "kein Env-Name im Tool-Text");
     assert.equal(srv.readStore().calls.length, before, "kein Call entstanden");
 
-    // Gegenprobe: /api/calls direkt liefert weiterhin den Bestandstext MIT OUTBOUND_FROZEN
-    // (REST-error-Text bleibt unveraendert, nur die MCP-Kante wird neutral).
     const apiRes = await fetch(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -196,25 +150,17 @@ test("T3 (Draht HTTP /mcp, Legacy/Bootstrap): OUTBOUND_FROZEN liefert den neutra
   }
 });
 
-// ==================== T4: Draht HTTP /mcp, OAuth, echtes Minuten-Gate ====================
-
 const T4_TARGET = "+4915112345678";
 const T4_TENANT = "tenant-t2-09-oauth";
 const T4_SUB = "sub-t2-09-oauth";
 const T4_NUMBER = "+4915110000099";
 const T4_SECONDS_PER_DAY = 86400;
 const T4_MS_PER_SECOND = 1000;
-const T4_PERIOD_START_DAYS_AGO = 5; // Periodenanker im laufenden Fenster (Muster b2-quota-gate)
+const T4_PERIOD_START_DAYS_AGO = 5;
 const T4_PERIOD_START_SEC =
   Math.floor(Date.now() / T4_MS_PER_SECOND) - T4_PERIOD_START_DAYS_AGO * T4_SECONDS_PER_DAY;
 const T4_STARTER_MIN = findPlan("starter").includedMinutes;
 
-// Nicht-Bootstrap-Tenant mit erschoepften Plan-Minuten, gebunden ueber OAuth-sub (Muster
-// MCP-16: state-ops statt seedState, damit settingsFor() die Sprache DETERMINISTISCH setzt
-// - unabhaengig von WORLD_DEFAULT_LANGUAGE_ENABLED, s. Befund mcp-tools.js:1046-1057). Die
-// uebrigen Gates (KYC, Allowlist/Abo, Nummer, Budget) muessen passieren, damit der Test
-// GENAU das Minuten-Gate isoliert - dieselbe Fixture-Form wie test/b2-quota-gate.test.js
-// seedQuota, hier ueber den OAuth-/mcp-Pfad statt X-Internal-Identity/REST.
 function t4MinutesExhaustedSeed() {
   const state = makeDefaultState();
   state.tenants.push({
@@ -234,18 +180,18 @@ function t4MinutesExhaustedSeed() {
     status: "active",
     providerNumberId: null,
   });
-  state.profiles[T4_TENANT] = { maxCallsPerHour: null }; // entkoppelt vom User-Hour-Gate (A4)
+  state.profiles[T4_TENANT] = { maxCallsPerHour: null };
   state.usageEvents.push({
     id: "ue_t4_oauth",
     tenantId: T4_TENANT,
     callId: null,
     kind: USAGE_EVENT_KIND.VOICE_MINUTE,
-    quantity: T4_STARTER_MIN, // >= includedMinutes -> exceeded
+    quantity: T4_STARTER_MIN,
     costCents: 0,
     occurredAt: new Date().toISOString(),
     stripeMeterSent: false,
   });
-  settingsFor(state, T4_TENANT).language = "en"; // deterministisch, unabhaengig vom Weltdefault
+  settingsFor(state, T4_TENANT).language = "en";
   return state;
 }
 
@@ -284,8 +230,6 @@ test("T4 (Draht HTTP /mcp, OAuth, echtes Minuten-Gate): erschoepfte Plan-Minuten
     );
     assert.equal(srv.readStore().calls.length, before, "kein Call entstanden");
 
-    // Gegenprobe: /api/calls direkt (X-Internal-Identity = OAuth-sub, derselbe Tenant)
-    // liefert denselben Status UND traegt additiv den Grund.
     const apiRes = await fetch(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-Internal-Identity": T4_SUB },
@@ -305,15 +249,13 @@ test("T4 (Draht HTTP /mcp, OAuth, echtes Minuten-Gate): erschoepfte Plan-Minuten
   }
 });
 
-// ==================== S1: additives REST-reason-Feld (Formfehler bleibt ohne reason) ====================
-
 test("S1 (REST): ein reiner 400-Formfehler (fehlendes Pflichtfeld) traegt KEIN reason-Feld", async () => {
   const srv = await startServer();
   try {
     const res = await fetch(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ to: "+4915112345678" }), // objective fehlt -> Formfehler, kein Gate
+      body: JSON.stringify({ to: "+4915112345678" }),
     });
     assert.equal(res.status, HTTP_BAD_REQUEST);
     const body = await res.json();
@@ -322,8 +264,6 @@ test("S1 (REST): ein reiner 400-Formfehler (fehlendes Pflichtfeld) traegt KEIN r
     await srv.stop();
   }
 });
-
-// ==================== T5: Draht stdio, echter Kindprozess + Gateway-Attrappe ====================
 
 function sendJson(res, { status = HTTP_OK, body = undefined } = {}) {
   if (body === undefined) {
@@ -337,9 +277,6 @@ function sendJson(res, { status = HTTP_OK, body = undefined } = {}) {
 const ACTION_ITEM_ID = "ai_internal_secret_123";
 const ACTION_ITEM_TEXT = "Rueckruf wegen Termin";
 
-// EIN Gateway-Attrappe-Server fuer (a)(b)(c)(e)(f)(g): POST /api/calls antwortet der
-// Reihe nach aus der Warteschlange, GET /api/state liefert IMMER den Action-Item-Seed
-// (unabhaengig von der Warteschlange - list_action_items verbraucht sie nicht).
 function makeSequentialGateway(placeCallResponses) {
   let i = 0;
   return http.createServer((req, res) => {
@@ -364,8 +301,6 @@ async function withStdioClient(gatewayUrl, run) {
     command: process.execPath,
     args: ["src/mcp-server.js"],
     cwd: ROOT,
-    // GATEWAY_URL NUR diesem Kindprozess mitgeben, NICHT in BASE_ENV (sonst leakt es in
-    // jeden anderen Spawn-Test, Lehre test-base-env-drift).
     env: { ...BASE_ENV, GATEWAY_URL: gatewayUrl },
     stderr: "pipe",
   });
@@ -382,7 +317,6 @@ async function withStdioClient(gatewayUrl, run) {
 
 test("T5 (Draht stdio, echter Kindprozess): Gate-Grund, unbekannter Grund, Netzfehler, 500, 400-Durchreichung, Item-ID", async () => {
   const responses = [
-    // (a) 402 minutes -> MCP_TEXTS.en.denials.minutes
     {
       status: HTTP_PAYMENT_REQUIRED,
       body: {
@@ -390,16 +324,12 @@ test("T5 (Draht stdio, echter Kindprozess): Gate-Grund, unbekannter Grund, Netzf
         reason: "minutes",
       },
     },
-    // (b) 403 frozen -> kein OUTBOUND_FROZEN im Text
     {
       status: HTTP_FROZEN,
       body: { error: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN).", reason: "frozen" },
     },
-    // (c) unbekannter/kuenftiger Grund -> DENIAL_UNKNOWN + Server-Warnung
     { status: HTTP_PAYMENT_REQUIRED, body: { reason: "voellig_neu" } },
-    // (e) 500 ohne Body -> kein "HTTP 500"
     { status: HTTP_SERVER_ERROR },
-    // (f) reiner 400-Eingabefehler ohne reason -> Text wird durchgereicht (Entscheidung 3)
     { status: HTTP_BAD_REQUEST, body: { error: "objective ist zu lang (max. 300 Zeichen)." } },
   ];
   const server = makeSequentialGateway(responses);
@@ -414,17 +344,14 @@ test("T5 (Draht stdio, echter Kindprozess): Gate-Grund, unbekannter Grund, Netzf
           arguments: { to: "+4915112345678", objective: "Termin vereinbaren" },
         });
 
-      // (a) 402 minutes
       const minutesResult = await place();
       assert.equal(minutesResult.isError, true);
       assert.equal(minutesResult.content[0].text, MCP_TEXTS.en.denials.minutes);
 
-      // (b) 403 frozen, kein Env-Name
       const frozenResult = await place();
       assert.equal(frozenResult.isError, true);
       assert.doesNotMatch(frozenResult.content[0].text, /OUTBOUND_FROZEN/);
 
-      // (c) unbekannter/kuenftiger Grund
       const unknownResult = await place();
       assert.equal(unknownResult.isError, true);
       assert.equal(unknownResult.content[0].text, MCP_TEXTS.en.errors[MCP_ERROR_CODE.DENIAL_UNKNOWN]);
@@ -434,18 +361,14 @@ test("T5 (Draht stdio, echter Kindprozess): Gate-Grund, unbekannter Grund, Netzf
         "die bereinigte, unbekannte Kennung landet im Server-Log (stderr), nicht beim Client",
       );
 
-      // (e) 500 ohne Body
       const serverErrorResult = await place();
       assert.equal(serverErrorResult.isError, true);
       assert.doesNotMatch(serverErrorResult.content[0].text, /HTTP 500/);
 
-      // (f) reiner 400-Eingabefehler ohne reason -> Text wird durchgereicht
       const inputHintResult = await place();
       assert.equal(inputHintResult.isError, true);
       assert.equal(inputHintResult.content[0].text, "objective ist zu lang (max. 300 Zeichen).");
 
-      // (g) list_action_items: die interne ID darf im Text nicht auftauchen, der Text
-      // selbst schon (Positiv-Kontrolle).
       const actionItemsResult = await client.callTool({ name: "list_action_items", arguments: {} });
       assert.equal(actionItemsResult.isError, undefined);
       const actionItemsText = actionItemsResult.content[0].text;
@@ -462,8 +385,6 @@ test("T5 (Draht stdio, echter Kindprozess): Gate-Grund, unbekannter Grund, Netzf
 });
 
 test("T5 (Draht stdio, (d) Gateway unerreichbar): kein 'fetch failed' im Client-Text", async () => {
-  // Port 1 ist auf jeder Testumgebung als privilegierter, ungebundener Port unerreichbar -
-  // derselbe Trick wie test/openai-p5b-geldpfad.test.js fuer den Netzfehler-Fall.
   await withStdioClient("http://127.0.0.1:1", async (client) => {
     const result = await client.callTool({
       name: "place_call",
@@ -475,10 +396,6 @@ test("T5 (Draht stdio, (d) Gateway unerreichbar): kein 'fetch failed' im Client-
   });
 });
 
-// ==================== T6: HTTP-Statusklassen ohne bekannten Grund ====================
-
-// Lokaler Mini-Harness (Muster test/inbox-mcp-tool.test.js): registerTools gegen eine
-// Fake-server-Attrappe, GATEWAY_URL zeigt auf eine lokale Gegenstelle mit fester Antwort.
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
@@ -495,11 +412,6 @@ function captureTools(ctx) {
   return handlers;
 }
 
-// T2-13 (N-10): place_call haengt jetzt VOR jedem echten Hop den Bestaetigungs-Hop
-// (POST /api/call-confirmations) davor. Diese Attrappe ist pfad-blind by design (EIN
-// fixer response fuer den Fall, den ein Testfall pruefen will) - der Bestaetigungs-Hop
-// braucht deshalb eine EIGENE, immer erfolgreiche Antwort, sonst schlaegt jeder
-// place_call-Testfall schon dort fehl, bevor er den eigentlich gepruefte Zustand erreicht.
 const CONFIRMATION_STUB_RESPONSE = {
   status: 200,
   body: { preview: { status: "awaiting_confirmation", to: "+4915112345678", objective: "x" }, confirmed: true },
@@ -548,15 +460,6 @@ test("T6: 404 -> NOT_FOUND, 403 ohne reason -> NOT_PERMITTED, 409 ausserhalb ans
   }
 });
 
-// ==================== T7: place_call-5xx ohne Gate-Grund -> CALL_START_REJECTED ====================
-// Safety-Review-Befund mcp-tools.js:435: ein Originate-/Provider-Fehlschlag (500 ohne
-// providerStatus ODER 502 MIT providerStatus, s. api-calls.js originate-catch) hat KEIN
-// err.reason und fiel deshalb bisher auf UPSTREAM_UNREACHABLE ("try again later") -
-// obwohl bereits ein Anruf-Datensatz mit Fehlgrund existiert und ein Retry einen
-// WEITEREN Datensatz samt Reservierung anlegt. Gegenprobe (dritter Fall): ein 5xx MIT
-// bekanntem Gate-Grund (gate_error/ani_not_owned-Muster) bleibt UNVERAENDERT auf seinem
-// eigenen Ablehnungstext - die neue Klassifikation darf bestehende Gate-Texte nicht
-// verdraengen.
 const PROVIDER_REJECTED_STATUS = 502;
 const ORIGINATE_FAILED_STATUS = 500;
 const GATE_ERROR_STATUS = 503;
@@ -585,7 +488,6 @@ test("T7 (Draht, lokaler Harness): place_call-5xx ohne reason -> CALL_START_REJE
         },
       );
     }
-    // Gegenprobe: 5xx MIT bekanntem Gate-Grund bleibt auf seinem eigenen Text (gate_error).
     await withFixedGateway(
       { status: GATE_ERROR_STATUS, body: { error: "Sicherheitspruefung nicht abgeschlossen.", reason: "gate_error" } },
       async () => {
@@ -601,9 +503,7 @@ test("T7 (Draht, lokaler Harness): place_call-5xx ohne reason -> CALL_START_REJE
   }
 });
 
-// ==================== T8: Fallback fail-safe gegen die Sprach-Aufloesung ====================
-
-const UNREACHABLE_GATEWAY_URL = "http://127.0.0.1:1"; // kein lauschender Server -> ECONNREFUSED
+const UNREACHABLE_GATEWAY_URL = "http://127.0.0.1:1";
 const LAST_RESORT_TEXT = MCP_TEXTS.en.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
 const NETWORK_ERROR = new TypeError("fetch failed");
 
@@ -626,7 +526,6 @@ test("T8a: Netzwerkfehler folgt der Tenant-Sprache, fehlende/unbekannte Sprache 
     assert.equal(text, MCP_TEXTS[lang].errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE], lang);
     assertNeutralText(text, `${lang}.UPSTREAM_UNREACHABLE`);
   }
-  // Flag-unabhaengig: erwartet ist, was localeFor() als Weltdefault liefert - welcher auch immer.
   const worldDefaultText = localeFor(undefined).mcp.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
   for (const language of [undefined, "xx"]) {
     const text = await networkErrorText({ language });
@@ -648,6 +547,5 @@ test("T8b: fehlende Uebersetzung oder fehlendes Text-Buendel -> neutraler EN-Rue
     assert.equal(text, LAST_RESORT_TEXT, label);
     assertNeutralText(text, label);
   }
-  // Auch ein Gate-Grund ohne denials-Tabelle wirft nicht und leakt die Kennung nicht.
   assert.equal(toolErrorText({ reason: "frozen" }, undefined), LAST_RESORT_TEXT);
 });

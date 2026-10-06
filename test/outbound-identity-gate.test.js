@@ -1,9 +1,3 @@
-// P2b: Outbound-Identitaets-Gate am HTTP-Outbound (POST /api/calls). Reiner Spawn
-// (startServer + seedState), KEIN pglite (Lehre p6a-Stall). Identitaet ueber
-// localhost-only X-Internal-Identity = idpSubject (wie kyc-gate-outbound.test.js).
-// Das Gate liest tenantContext(tenantId).ownerName und sperrt fail-closed (403), wenn
-// kein registrierter Auftraggeber-Name vorliegt. P2b fuellt diesen Wert ueber den
-// Web-Login; hier wird die Gate-Wirkung beider Zustaende (gesetzt/leer) belegt.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
@@ -23,14 +17,8 @@ const activeNumber = (id, e164, tenantId) => ({
   providerNumberId: null,
 });
 
-// A2/A3-provisioniertes Tier-Profil: maxCallsPerHour=null entkoppelt den aktiven
-// Subscriber vom DEFAULT_PROFILE(0)-User-Hour-Gate (A4 go-live-Haertung). Minimaler
-// Stub - nur das fuer dieses Identitaets-Gate relevante Feld (planProfileFor traegt es real).
 const PROVISIONED_PROFILE = { maxCallsPerHour: null };
 
-// Tenant A: active, idpSubject (auffindbar), eigene aktive Nummer, kyc_level=card
-// (passiert das vorgelagerte KYC-Gate -> erreicht das Identitaets-Gate). ownerName
-// optional: gesetzt -> Gate passiert; fehlt -> Gate sperrt fail-closed.
 function seedIdentity(ownerName) {
   return seedState({
     tenants: [
@@ -44,7 +32,7 @@ function seedIdentity(ownerName) {
       },
     ],
     numbers: [activeNumber("num_a", NUM_A, A)],
-    profiles: { [A]: PROVISIONED_PROFILE }, // Phase S: Profil keyt auf die tenantId
+    profiles: { [A]: PROVISIONED_PROFILE },
   });
 }
 

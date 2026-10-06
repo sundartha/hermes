@@ -1,17 +1,3 @@
-// P15/T2 - der ANZEIGETEXT einer Outbound-Ablehnung folgt der Tenant-Sprache, der
-// ABLEHNUNGSGRUND bleibt sprachfreies Protokoll.
-//
-// HARTE INVARIANTE dieser Datei (PLAN-I18N-FIX P15, Spec Abschnitt 1/T2): grund-Schluessel,
-// HTTP-Status und die Audit-Detailzeile sind ueber alle drei Sprachen BYTE-IDENTISCH -
-// die Betriebs-Forensik der Kosten-Kette unterscheidet grund=reserve_* von grund=budget_*;
-// verschiebt sich das, wird die Budget-Diagnose stumm wertlos. Nur `message`/`body.error`
-// verzweigt.
-//
-// Muster test/deny-diagnosability.test.js: makeOutboundGates(deps) + gate.run(ctx) DIREKT,
-// offline, kein Spawn, keine DB. Es wird KEIN Gate-PRAEDIKAT veraendert - Bedingungen,
-// Schwellen und Reihenfolge liegen unberuehrt in outbound-gates.js; die Faelle steuern die
-// Praedikate nur ueber den Fake-Store an (die reale Praedikat-Suite bleibt
-// outbound-gates-order.test.js/effective-cap-fallback.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -23,13 +9,9 @@ import { spendMonthEndDate } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const VALID_TO = "+491711234567";
-const DENIED_TO = "+870123456789"; // Satelliten-Praefix (Denylist)
-const FOREIGN_TO = "+15551234567"; // ausserhalb ALLOWED_COUNTRY_CODES=["+49"]
+const DENIED_TO = "+870123456789";
+const FOREIGN_TO = "+15551234567";
 
-// Vollstaendig durchgesteuerter Default-Store: JEDES Gate laesst sich damit isoliert
-// aufrufen, ohne eine Vorbedingung zu verletzen. Ein Fall ueberschreibt NUR die Methode(n),
-// die seine Achse feuern lassen. tenantLanguage ist die EINE Sprachquelle der Gate-Kette
-// (store.tenantLanguage -> views.tenantLanguage -> resolveCallLanguage).
 function defaultStore(language, overrides = {}) {
   return {
     tenantLanguage: () => language,
@@ -69,8 +51,6 @@ function makeDeps(language, o = {}) {
 
 const gateBy = (gates, name) => gates.find((g) => g.name === name);
 
-// Profil ohne Sonderrechte: laesst das Verifikations-Gate (allowlistError) ueberhaupt bis
-// zu seiner Entscheidung durchlaufen.
 const PLAIN_PROFILE = Object.freeze({
   unrestricted: false,
   allowedCountryCodes: null,
@@ -91,16 +71,6 @@ function baseCtx(overrides = {}) {
   };
 }
 
-// PAY-12 (Buchhaltung, kein eigener Test): die Katalog-Aussage "der 402-Ablehnungstext des
-// Budget-Gates ist hartkodiertes Deutsch ohne Locale-Anbindung" ist UEBERHOLT (Re-Baseline
-// tasks/i18n-tests/19-w2-baseline.md §3.3). Seit P15/T2 kommen die Texte aus
-// localeFor(store.tenantLanguage(tenantId)).gates, und die Faelle budget_tenant,
-// reserve_ueber_rest und reserve_erschoepft laufen unten ueber alle drei Sprachen
-// (budget_platform ist mit KS-P9/E10 ersatzlos entfallen). Ein "hart deutsch"-Pin waere heute genau der Mischsprach-Pin, den der
-// GAP-27-Waechter meldet (test/characterization-marking.test.js).
-//
-// Ein Ablehnungsfall: wie er ausgeloest wird (deps/ctx), was Protokoll bleibt (status/grund)
-// und welcher Buendel-Schluessel den Anzeigetext liefert (textOf(gates) je Sprache).
 const CASES = [
   {
     label: "kyc",
@@ -257,19 +227,12 @@ for (const testCase of CASES) {
   });
 }
 
-// Ziffernfreiheit des D7-Textes in JEDER Sprache: ein "NaN EUR" in einer Tenant-Antwort
-// waere eine Falschauskunft auf einer Geld-Kante. Die DE-Achse pinnt
-// test/deny-diagnosability.test.js; hier gilt sie fuer alle drei Sprachen.
 test("budgetUnreadable traegt in KEINER Sprache eine Ziffer", () => {
   for (const language of SUPPORTED_LANGUAGES) {
     assert.ok(!/\d/.test(localeFor(language).gates.budgetUnreadable), `${language}: budgetUnreadable ziffernfrei`);
   }
 });
 
-// Dokumentierte Systemgrenze (P15b/C1, tasks/p15b-spec.md): der reine E.164-Formatfehler bleibt
-// sprach-UNABHAENGIG. Er ist ein 400 ohne Audit und wird auch VOR der Gate-Kette
-// ausgeliefert (routes/api-calls.js Pre-Gate), wo noch kein Tenant aufgeloest ist - eine
-// halbe Lokalisierung ergaebe zwei Texte fuer denselben Fehler.
 test("Formatfehler (400): sprach-unabhaengiger E164_FORMAT_ERROR, kein Audit", async () => {
   for (const language of SUPPORTED_LANGUAGES) {
     const { gates } = makeOutboundGates(makeDeps(language));
@@ -277,7 +240,6 @@ test("Formatfehler (400): sprach-unabhaengiger E164_FORMAT_ERROR, kein Audit", a
     assert.equal(formatDenial.status, 400);
     assert.equal(formatDenial.audit, null);
     assert.equal(formatDenial.body.error, E164_FORMAT_ERROR);
-    // Zweite Ausgabestelle derselben Fehlerklasse: identischer Text, nicht nur identischer Status.
     const trunkDenial = await gateBy(gates, "trunk_zero_normalized").run(
       baseCtx({ to: "+4901737123456" }),
     );
@@ -287,9 +249,6 @@ test("Formatfehler (400): sprach-unabhaengiger E164_FORMAT_ERROR, kein Audit", a
   }
 });
 
-// P15b/C1: die Sprachfreiheit haengt an der Fehlerklasse. Landete der Text spaeter "der
-// Konsistenz wegen" im Locale-Buendel, waere die Systemgrenze lautlos weg - dieser Test
-// faengt genau das.
 test("P15b/C1: der E.164-Formattext ist englisch und liegt in KEINEM Locale-Buendel", () => {
   assert.match(E164_FORMAT_ERROR, /must be E\.164/);
   for (const language of SUPPORTED_LANGUAGES) {
@@ -304,16 +263,9 @@ test("P15b/C1: der E.164-Formattext ist englisch und liegt in KEINEM Locale-Buen
   }
 });
 
-// Dritte Ausgabestelle: der Pre-Gate-400 in routes/api-calls.js laeuft VOR der
-// Identitaetsaufloesung (kein Tenant, kein resolveCallLanguage - das wuerde ueber
-// settingsFor lazy einen Settings-Bucket auf einer unaufgeloesten Identitaet anlegen).
-// Sie MUSS dieselbe Konstante ausliefern, nicht ein eigenes Literal.
 test("P15b/C1: der Pre-Gate-400 liefert dieselbe Konstante, kein eigenes Literal", () => {
   const src = fs.readFileSync(path.join(ROOT, "src/routes/api-calls.js"), "utf8");
   assert.match(src, /error:\s*E164_FORMAT_ERROR/);
-  // Nur CODE-Zeilen: die Route BEGRUENDET E.164 an einer Stelle im Fliesstext (GAP-35,
-  // "aus der E.164-Vorwahl abgeleitete Landangabe"). Verboten ist ein zweitgefasster
-  // Formatfehler-TEXT, nicht die Erwaehnung des Standards in einem Kommentar.
   const codeMentions = src
     .split("\n")
     .filter((line) => !line.trim().startsWith("//") && /E\.164/.test(line));

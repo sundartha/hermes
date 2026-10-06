@@ -1,19 +1,3 @@
-// T2-08 (T-27): Nebenlaeufigkeits-Tests fuer die im Claim-Lock erneut geprueften Quoten
-// (Stundenlimit + Ziel-Cap). Schliesst das Rennen zwischen dem fruehen number_gate und der
-// Datensatz-Anlage (Pre-Call-Briefing/Eroeffnungszeile liegen dazwischen).
-//
-// KEINE Katalog-ID am Namensanfang (A3-Konvention, Praezedenz test/gap-10-hour-limit-per-
-// tenant.test.js): das ist gruener Regressionsschutz, kein i18n-Launch-Testkatalog-Fall.
-//
-// T1/T2 sind Spawn-Tests (echte HTTP-Route, echter Server-Prozess) - Muster
-// .../scratchpad/logs-t2-08/race-probe2.test.mjs (Vorher-Messung dieser Phase, s. Spec):
-// eine lokale LLM-Attrappe mit 300ms Verzoegerung oeffnet GENAU das Fenster, das ohne
-// Pre-Call-Briefing/EL-Eroeffnungszeile nie messbar waere (Widerspruch 3 der Spec).
-//
-// T3-T6 sind In-Process-Tests (echte Gate-Kette + echte Route auf einer nackten
-// Express-App) - Muster test/sec-p6-gate-fehlerpfad.test.js#postCall. Der Store-Fixture
-// ist BEWUSST LOKAL (dieselbe Begruendung wie dort: eine geteilte Fixtur waere die
-// richtige Aufloesung, schriebe aber Bestandstests einer Sicherheitsphase um).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -42,12 +26,6 @@ const HOUR_LIMIT_T2_A_REQUESTS = 4;
 const T1_TARGET_SUFFIX_START = 10;
 const T2_TARGET_SUFFIX_START = 20;
 
-// ---- T1/T2: Spawn, echte Route -----------------------------------------------------------
-
-// LLM-Attrappe: antwortet nach DELAY_MS mit einem Fehler (der Briefing-Zweig ist fail-soft,
-// der Anruf laeuft trotzdem weiter) - das Zaehlen der Treffer ist die Positiv-Kontrolle
-// (ohne sie waere "kein Rennen gemessen" nicht von "Fenster nie offen" zu unterscheiden,
-// Lehre pruefkommando-ohne-positiv-kontrolle).
 function startDelayedLlmMock(delayMs) {
   let hits = 0;
   const server = http.createServer((req, res) => {
@@ -118,9 +96,6 @@ test("T1: N parallele place_call eines Mandanten am Stundenlimit -> hoechstens L
     );
     const deniedRes = responses.find((response) => response.status === HTTP_TOO_MANY);
     const deniedBody = await deniedRes.json();
-    // Weltdefault der Owner-/Bootstrap-Sprache ist "en" (kein DE-Setup hier) - anders als
-    // die In-Process-Tests T3-T6 unten, deren Store-Attrappe tenantLanguage() fest auf
-    // "de" haelt.
     assert.equal(deniedBody.error, GATE_TEXTS.en.hourLimit, "429-Body muss der bisherige hourLimit-Text sein");
     assert.ok(
       llm.hits >= LIMIT,
@@ -199,8 +174,6 @@ test("T2: Stundenlimit gilt weiterhin PRO Tenant, auch mit geoeffnetem Rennfenst
   }
 });
 
-// ---- T3-T6: In-Process, echte Gate-Kette + echte Route ------------------------------------
-
 function testConfig(overrides = {}) {
   return withConfigNamespaces({
     outboundFrozen: false,
@@ -223,11 +196,6 @@ function testConfig(overrides = {}) {
   });
 }
 
-// Minimaler In-Memory-Store: deckt GENAU die Methoden ab, die die Gate-Kette
-// (outbound-gates.js) und der Claim-/Originate-Pfad (api-calls.js) fuer T3-T6 brauchen.
-// numbers: [{ tenantId, e164 }] - JEDER Tenant telefoniert nur unter der EIGENEN Nummer
-// (I7/L4). throwOnCreateCall ist ein veraenderliches Flag-Objekt ({ value }), damit ein
-// Test es zwischen zwei Anfragen desselben Laufs umschalten kann (T3).
 function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {}) {
   const calls = [];
   return {
@@ -258,16 +226,12 @@ function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {})
     reserveExceedsBudget: () => false,
     claimPlatformSpendWarning: () => null,
     resolveCallLanguage: () => "de",
-    // E3/T2-08: zaehlt bewusst auch fehlgeschlagene/beendete Calls (Bestandsverhalten).
     countOutboundCallsSince: (_iso, { tenantId, to } = {}) =>
       calls.filter((call) => call.tenantId === tenantId && (to === undefined || call.to === to)).length,
-    // Dedup-Praedikat: NUR laufende (nicht beendete) Calls.
     activeCallsFor: (tenantId) => calls.filter((call) => call.tenantId === tenantId && !call.ended),
     releaseOutboundReserveCents: () => true,
     createCall: (felder) => {
       if (throwOnCreateCall.value) throw new Error("createCall-Wurf (Test-Simulation)");
-      // startedAt ist Pflicht fuer das Dedup-Praedikat (call-dedup.js#imFenster) - ohne
-      // ihn zaehlt jeder Call als "ausserhalb des Fensters" und Dedup faende nie etwas.
       const call = { id: `call_${calls.length + 1}`, ended: false, startedAt: new Date().toISOString(), ...felder };
       calls.push(call);
       return call;
@@ -286,10 +250,6 @@ function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {})
   };
 }
 
-// Baut Kette + Route auf einer nackten Express-App, dieselbe Store-Instanz fuer Gates UND
-// Route (EINE Quelle). voiceControl ist der einzige Test-spezifische Dreh- und Angelpunkt
-// (Originate-Erfolg vs. -Wurf); tenant-Aufloesung liest den X-Test-Tenant-Header (Muster
-// test/al-p13-consult-channel.test.js), Default DEFAULT_TENANT.
 async function startTestApp({ store, config, voiceControl }) {
   const audit = () => {};
   const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
@@ -446,13 +406,6 @@ test("T5: Ziel-Cap zaehlt einen beendeten (gescheiterten) Anruf mit - zweiter Ve
 });
 
 test("T6: Dedup hat Vorrang vor der Quote - zwei parallele Anfragen an DASSELBE Ziel", async () => {
-  // GROSSZUEGIGES Limit (Bestand testConfig(): 100), bewusst NICHT auf 1 gesetzt: bei
-  // L=1 kann der FRUEHE number_gate-Check (unveraendert VOR der Dedup, s. Widerspruch 5
-  // der Spec - "am Stundenlimit lehnt number_gate den Retry schon VOR der Dedup ab")
-  // je nach Interleaving DIE ZWEITE Anfrage schon dort mit 429 abweisen, BEVOR sie die
-  // Dedup im Claim-Lock ueberhaupt erreicht - ein akzeptiertes Bestandsverhalten, aber
-  // eines, das dieser Test NICHT pruefen will. Diese Zeile prueft ausschliesslich, dass
-  // der NEUE Quoten-Check im Claim-Lock die BESTEHENDE Dedup-Vorrangregel nicht bricht.
   const store = makeMemoryStore({
     numbers: [{ tenantId: DEFAULT_TENANT, e164: "+491700000005" }],
   });

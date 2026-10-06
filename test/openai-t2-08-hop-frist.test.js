@@ -1,12 +1,3 @@
-// T2-08 (T-27): Hop-Frist-Test fuer JEDEN uebrigen MCP->REST-Hop (alles ausser
-// pollConsult/placeCallHop, die eigene Fristen behalten). Reiner Prozess, kein
-// Server-Spawn (Muster test/openai-s3-hop-frist.test.js): eine lokale Gateway-Attrappe
-// (http.createServer, antwortet NIE) + GATEWAY_URL darauf, registerTools mit einem
-// Fake-Server (captureTools).
-//
-// Draht-Beleg (a, ausserhalb dieses Tests, per grep): stdio (src/mcp-server.js) UND
-// HTTP /mcp (src/routes/mcp.js) teilen registerTools() - ein Test am Handler deckt
-// deshalb beide Transporte ab.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -19,13 +10,6 @@ import {
   EL_ABORT_PROVIDER_TIMEOUT_MS,
 } from "../src/elevenlabs/outbound.js";
 
-// Die lokale Gateway-Attrappe antwortet NIE (kein res.end()) - jeder Hop darueber laeuft
-// zwingend in seine Frist. req.resume() verhindert einen Backpressure-Hänger auf dem
-// Request-Body, ohne selbst zu antworten.
-// T2-13 (N-10) Ausnahme: POST /api/call-confirmations antwortet SOFORT mit confirmed:true -
-// sonst wuerde schon der neue, vorgeschaltete Bestaetigungs-Hop (MCP_HOP_TIMEOUT_MS) in die
-// Frist laufen, BEVOR die eigentlich gepruefte place_call-Frist (PLACE_CALL_HOP_TIMEOUT_MS
-// am /api/calls-Hop) je erreicht wird.
 const HTTP_OK = 200;
 let gateway;
 before(async () => {
@@ -44,10 +28,6 @@ after(async () => {
   await new Promise((resolve) => gateway.close(resolve));
 });
 
-// Damit der Test nicht wirklich 60s (MCP_HOP_TIMEOUT_MS) bzw. 180s (PLACE_CALL_HOP_TIMEOUT_MS)
-// wartet: AbortSignal.timeout wird durch eine Variante ersetzt, die das angeforderte ms
-// PROTOKOLLIERT und nach FAST_ABORT_MS abbricht - unabhaengig vom angeforderten Wert. Muss
-// in JEDEM Test zurueckgesetzt werden (sonst leckt die Attrappe in andere Testdateien).
 const FAST_ABORT_MS = 50;
 let requestedMsLog;
 let originalAbortTimeout;
@@ -78,7 +58,6 @@ function captureTools(ctx) {
   return handlers;
 }
 
-// ==================== cancel_call / answer_consult / check_inbox / get_call_status ====================
 const HOP_CASES = [
   { tool: "cancel_call", args: { call_id: "c_hopfrist" } },
   { tool: "answer_consult", args: { call_id: "c_hopfrist", event_id: "e_hopfrist", status: "final", answers: ["x"] } },
@@ -111,14 +90,11 @@ for (const { tool, args } of HOP_CASES) {
   });
 }
 
-// ==================== Gegenprobe: await_call_event und place_call bleiben unveraendert ====================
 test("Gegenprobe: await_call_event protokolliert weiter CONSULT_POLL_ABORT_MS (eigene Frist, unveraendert)", async () => {
   installFastAbortSpy();
   try {
     const handlers = captureTools({ identity: null, scopedTenant: "tenant_hop_gegen1", language: "de", consultAllowed: true });
     const result = await handlers.get("await_call_event")({ call_id: "c_hopfrist" });
-    // Ein Zeitablauf ist bei await_call_event das NORMALE Ergebnis (Long-Poll) - KEIN
-    // isError, sondern event:"none" (pollConsult schluckt den Abbruch).
     assert.notEqual(result.isError, true, "await_call_event darf bei Zeitablauf NICHT isError sein");
     assert.deepEqual(
       requestedMsLog,
@@ -137,9 +113,6 @@ test("Gegenprobe: place_call protokolliert weiter PLACE_CALL_HOP_TIMEOUT_MS (eig
     const result = await handlers.get("place_call")({ to: "+491511234", objective: "Test" });
     assert.equal(result.isError, true, "place_call muss bei Zeitablauf weiterhin isError sein (CALL_START_UNCONFIRMED)");
     assert.equal(result.content[0].text, MCP_TEXTS.de.errors[MCP_ERROR_CODE.CALL_START_UNCONFIRMED]);
-    // T2-13 (N-10): der vorgeschaltete Bestaetigungs-Hop laeuft mit MCP_HOP_TIMEOUT_MS
-    // (beantwortet, kein Abbruch) UND vor dem eigentlich gepruefte /api/calls-Hop, der
-    // weiterhin PLACE_CALL_HOP_TIMEOUT_MS verwendet und hier tatsaechlich abbricht.
     assert.deepEqual(
       requestedMsLog,
       [MCP_HOP_TIMEOUT_MS, PLACE_CALL_HOP_TIMEOUT_MS],
@@ -150,9 +123,7 @@ test("Gegenprobe: place_call protokolliert weiter PLACE_CALL_HOP_TIMEOUT_MS (eig
   }
 });
 
-// ==================== Ungleichungs-Test: MCP_HOP_TIMEOUT_MS strukturell > laengster Serverweg ====================
 test("MCP_HOP_TIMEOUT_MS liegt STRUKTURELL ueber dem laengsten begrenzten Serverweg (cancel_call auf gebundenem EL-Inbound)", () => {
-  // Positiv-Kontrolle: ohne sie priefte die Ungleichung unten nichts (alle Summanden > 0).
   assert.ok(EL_TERMINATION_RESULT_ATTEMPTS > 0, "EL_TERMINATION_RESULT_ATTEMPTS muss positiv sein");
   assert.ok(EL_ABORT_PROVIDER_TIMEOUT_MS > 0, "EL_ABORT_PROVIDER_TIMEOUT_MS muss positiv sein");
   assert.ok(config.voice.elevenLabsOutbound.resultPollMs > 0, "resultPollMs muss positiv sein");

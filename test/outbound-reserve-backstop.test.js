@@ -1,25 +1,13 @@
-// OUT-05 (F2): Reserve-Release-Backstop - Freigabe UNABHAENGIG vom Provider-completed-Callback.
-// #1 laeuft mit max_duration_s=1 und bekommt NIE ein /voice/status (der fakeVoice-endCall ist
-// ein No-op, finishCall laeuft also nicht). Die Reserve haelt den Cap fuer #2 (402), bis der
-// Backstop-Timer (maxDur + RESERVE_RELEASE_GRACE_MS) feuert und sie eigenstaendig freigibt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, DOMESTIC_TEST_NUMBER } from "./helpers.js";
 
 const MAX_DURATION_S = 1;
 const GRACE_MS = 200;
-const TEST_SAFETY_MARGIN_MS = 200; // Puffer ueber dem exakten Timer-Delay (Jitter-Toleranz)
+const TEST_SAFETY_MARGIN_MS = 200;
 const BACKSTOP_WAIT_MS = MAX_DURATION_S * 1000 + GRACE_MS + TEST_SAFETY_MARGIN_MS;
 
 test("OUT-05 F2: Reserve-Release-Backstop gibt die Reserve OHNE Provider-Callback frei", async () => {
-  // KS-P3 (a): die Reserve ist Satz x RESERVE_LEAD_MINUTES (2) und haengt NICHT mehr an
-  // max_duration_s - deshalb traegt dieser Test die Frist 1 s nur noch fuer den
-  // BACKSTOP-TIMER, nicht mehr fuer den Reserve-Betrag.
-  // Reserve pro Call: 300 ct/min x 2 = 600 ct; zwei Reserven (1200 ct)
-  // reissen den 1000-ct-Cap (MAX_BUDGET_EUR=10 wirkt hier als Pro-Tenant-Fallback,
-  // effectiveCapCents Stufe 3 - der Owner hat keine tenant_budget-Zeile),
-  // eine einzelne nicht. Absender-DID mit +49, damit VOICE_TARIFF_DOMESTIC_CENTS die
-  // +49-Ziele ueberhaupt tarifiert (P5: Inlandssatz nur bei gleicher Vorwahl an beiden Enden).
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
     env: {
@@ -39,7 +27,6 @@ test("OUT-05 F2: Reserve-Release-Backstop gibt die Reserve OHNE Provider-Callbac
       });
     assert.equal((await post("+4915112340001")).status, 200);
     assert.equal((await post("+4915112340002")).status, 402);
-    // Bewusster Timer-Test: KEIN /voice/status - isoliert den Backstop-Pfad von finishCall.
     await new Promise((r) => setTimeout(r, BACKSTOP_WAIT_MS));
     assert.equal(
       (await post("+4915112340002")).status,

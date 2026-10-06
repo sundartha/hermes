@@ -1,9 +1,3 @@
-// E3 (S3-A5/N-11): Idempotenz auf /api/calls - zwei place_call auf dasselbe Ziel WAEHREND
-// ein Anruf laeuft ergeben GENAU EINEN Datensatz. Teil A: echter Server, echte
-// Nebenlaeufigkeit (Muster test/outbound-reserve-concurrency-http.test.js). Teil B:
-// In-Process, echte Gate-Kette + echter Reserve-Ledger (Muster
-// test/sec-p6-gate-fehlerpfad.test.js#postCall) - misst den Ledger EXAKT, nicht ueber
-// GET /api/state (das Feld reservations existiert dort nicht, s. PLAN E3 Abschnitt 0.1).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -21,7 +15,7 @@ import {
 const TARGET_A = "+4915112340001";
 const TARGET_B = "+4915112340002";
 const HTTP_OK = 200;
-const HTTP_INTERNAL_ERROR = 500; // Offline-Diskriminator (Twilio-Client wirft ohne echten Key)
+const HTTP_INTERNAL_ERROR = 500;
 const HTTP_SERVICE_UNAVAILABLE = 503;
 const EIN_DATENSATZ = 1;
 const ZWEI_DATENSAETZE = 2;
@@ -36,8 +30,6 @@ const post = (url, to) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, objective: OBJECTIVE }),
   });
-
-// ==================== Teil A: Spawn-Server, echt nebenlaeufig ====================
 
 test("A1: zwei gleichzeitige place_call auf dasselbe Ziel -> genau EIN Datensatz", async () => {
   const srv = await startServer({
@@ -100,10 +92,6 @@ test("A3: zwei gleichzeitige place_call auf VERSCHIEDENE Ziele -> zwei Datensaet
 });
 
 test("A4: ein beendeter (nicht mehr aktiver) Anruf sperrt das Ziel NICHT - Positiv-Kontrolle des Fensters", async () => {
-  // Ohne FAKE_ORIGINATE laeuft der Offline-Diskriminator -> der erste Anruf endet SOFORT
-  // als "failed" (500) und ist damit nicht mehr "active". Ein zweiter Anruf auf dasselbe
-  // Ziel danach ist deshalb KEIN Dedup-Treffer, sondern ein neuer Datensatz - der Beweis,
-  // dass das Fenster nicht schlicht alles auf ein Ziel sperrt.
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
     env: { ALLOWED_COUNTRY_CODES: "*" },
@@ -117,19 +105,11 @@ test("A4: ein beendeter (nicht mehr aktiver) Anruf sperrt das Ziel NICHT - Posit
 
     const r2 = await post(srv.localUrl, TARGET_A);
     assert.equal(r2.status, HTTP_INTERNAL_ERROR);
-    // 500 statt 200/deduplicated:true belegt bereits "kein Dedup-Treffer" (dedup antwortet
-    // immer 200); die Datensatz-Zahl ist die zweite, unabhaengige Bestaetigung.
     assert.equal(srv.readStore().calls.length, ZWEI_DATENSAETZE, "ein zweiter, eigener Datensatz entsteht");
   } finally {
     await srv.stop();
   }
 });
-
-// ==================== Teil B: In-Process, echte Gate-Kette + echter Reserve-Ledger ====================
-// Muster test/sec-p6-gate-fehlerpfad.test.js: dieselbe kettenStore()-Bauart, hier um
-// activeCallsFor/releaseOutboundReserveCents/reservationOf ERWEITERT und gegen ein echtes
-// makeDefaultState() verdrahtet (tryReserveOutboundBudget/reservationFor sind reine
-// state-ops-Funktionen, kein Store-Backend noetig).
 
 function kettenStoreTeilB(state, overrides = {}) {
   return {
@@ -214,9 +194,6 @@ async function postCallTeilB({ store, config, audit = () => {} }) {
   let wahlversuche = 0;
   const { makeOutboundGates } = await import("../src/telephony/outbound-gates.js");
   const { makeCallRoutes } = await import("../src/routes/api-calls.js");
-  // T2-08 (T-27): callQuotaDenial kommt aus DERSELBEN makeOutboundGates()-Instanz wie
-  // outboundGates (EINE Quelle) - der Claim-Lock prueft ihn jetzt zusaetzlich. testConfig()
-  // setzt grosszuegige Limits, die reale Pruefung lehnt hier nie ab.
   const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
     store,
     config,
@@ -281,14 +258,12 @@ test("B1: Reserve nach Dedup ist EXAKT der Wert nach einem einzelnen Anruf", asy
   process.env.CONSULT_ENABLED = "false";
   process.env.METRICS_ENABLED = "false";
 
-  // Vergleichslauf: EIN Anruf, gemessene Reserve danach.
   const einzelState = makeDefaultState();
   const einzelStore = kettenStoreTeilB(einzelState);
   const einzel = await postCallTeilB({ store: einzelStore, config: testConfig() });
   assert.equal(einzel.status, HTTP_OK);
   const reserveNachEinem = reservationFor(einzelState, TENANT);
 
-  // Zwei Anrufe auf dasselbe Ziel im selben Prozess-Zustand: der zweite ist dedupliziert.
   const zweiState = makeDefaultState();
   const zweiStore = kettenStoreTeilB(zweiState);
   const erster = await postCallTeilB({ store: zweiStore, config: testConfig() });

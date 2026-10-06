@@ -1,13 +1,3 @@
-// P6 (Struct-1) - Snapshot- und Verhaltenstest fuer die extrahierte Outbound-Gate-Kette
-// (src/telephony/outbound-gates.js). Reine Mock-Tabellentests nach dem Muster
-// test/request-tenant-unit.test.js: offline, kein Spawn, keine DB, kein Netz. Ruft
-// makeOutboundGates(deps) und die EINZELNEN gate.run(ctx) direkt auf (nicht die
-// Server-Loop in server.js) - jedes Gate ist damit isoliert beweisbar.
-//
-// EXPECTED_ORDER ist bewusst NICHT aus dem Modul reexportiert, sondern hier hartkodiert:
-// eine kuenftige Umsortierung der Gate-Kette soll DIESEN Test bewusst brechen, statt
-// trivial gruen zu bleiben (G31/G27 - die Reihenfolge ist eine erzwungene Struktur, kein
-// Kommentar).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutboundGates, tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
@@ -28,10 +18,6 @@ const EXPECTED_ORDER = [
   "valid_mandate",
   "assistant_context",
   "resolve_outbound",
-  // OUTBOUND-E4: der ANI-Riegel sitzt HIER - NACH resolve_outbound (er braucht die
-  // aufgeloeste Absendernummer ctx.fromNumber), VOR budget (ein Anruf, der sicher
-  // scheitert, soll keine Geld-Reserve binden). Eine Umsortierung hinter reserve_budget
-  // (die haerteste Invariante des Moduls) MUSS diesen Test brechen.
   "ani_ownership",
   "budget",
   "minutes",
@@ -40,25 +26,14 @@ const EXPECTED_ORDER = [
 ];
 
 const VALID_TO = "+491711234567";
-// W2-B3: ein gueltiges NANP-Ziel (Format-Gate passiert, Land-Gate entscheidet).
 const NANP_TARGET = "+12025550123";
-// Globales Gate, das +1 MIT einschliesst - Vorbedingung fuer "das Profil kann nur senken".
 const GLOBAL_CODES_INCLUDING_NANP = ["+49", "+33", "+44", "+1"];
 
-// Vollstaendig durchgesteuerter Default-Store: JEDES Gate laesst sich mit diesen Werten
-// isoliert aufrufen, ohne Vorbedingung zu verletzen (alle Praedikate "erlauben"). Tests
-// ueberschreiben NUR die Methode(n), die das jeweils gepruefte Gate ablehnen lassen soll
-// (P13 Build-Operate-Check: Setup-Boilerplate hinter diesem Helper versteckt).
 function defaultStore() {
   return {
-    // P15/T2: die Gate-Kette liest die Anzeigesprache aus dem Store. Der Budget-Test unten
-    // pinnt den DEUTSCHEN Text byte-genau - der Fake waehlt sein Szenario deshalb explizit,
-    // statt implizit vom Weltdefault zu leben.
     tenantLanguage: () => "de",
     countOutboundCallsSince: () => 0,
     tenantPrivateNumber: () => null,
-    // normalize_target liest das Herkunftsland (store.tenantGeo) als NANP-Guard. Der Fake
-    // spiegelt die reale Kontraktflaeche, damit ein Test die Kette bis zum Ende fahren kann.
     tenantGeo: () => ({ country: "DE" }),
     load: () => ({
       numbers: [{ tenantId: "T", status: "active", provider: "telnyx", e164: "+491700000000" }],
@@ -72,8 +47,6 @@ function defaultStore() {
       allowedNumbers: [],
     }),
     tenantInactive: () => false,
-    // GAP-03: kein Zahlungsbeanstandungs-Hold (Default-Store bleibt vollstaendig
-    // durchsteuerbar, s. Datei-Kommentar).
     billingHoldActive: () => null,
     tenantActiveSubscriber: () => true,
     tenantSubscription: () => ({}),
@@ -81,15 +54,8 @@ function defaultStore() {
     budgetExceeded: () => false,
     withStoreLock: (fn) => fn(),
     tryReserveOutboundBudget: () => true,
-    // P5a (Achsen in Anzeige/Ablehnung getrennt): tenantBudgetDenial/tenantReserveDenial
-    // lesen diesen Snapshot fuer die Ablehnungstexte. reserveExceedsBudget entscheidet nur
-    // noch, WELCHE Achse ein reserve_budget-Deny beschriftet - tryReserveOutboundBudget
-    // bleibt die einzige Ja/Nein-Quelle (s. reserve_budget-Test unten).
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 350, remainingCents: 650 }),
     reserveExceedsBudget: () => true,
-    // Budget-Achsen P6 (Fruehwarnung): der Fake soll die reale Kontraktflaeche spiegeln
-    // statt sich auf das Schlucken eines TypeError zu verlassen. null = keine Warnung
-    // faellig (Gate-Verhalten dieser Datei bleibt unberuehrt).
     claimPlatformSpendWarning: () => null,
   };
 }
@@ -120,8 +86,6 @@ function makeDeps(o = {}) {
 
 const gateBy = (gates, name) => gates.find((g) => g.name === name);
 
-// Vollstaendig vorbefuellter ctx, wie ihn der Server-Loop nach den Vorgaenger-Gates
-// haette (F1: haelt die einzelnen Tests auf EIN geaendertes Feld reduziert).
 function baseCtx(overrides = {}) {
   return {
     req: {},
@@ -140,11 +104,7 @@ function baseCtx(overrides = {}) {
   };
 }
 
-// Profil-Variante fuer die Land-Schnittmenge: EIN Feld weicht vom Default-Profil ab
-// (F1/P13 - der Testrumpf bleibt auf die geprueften Codes reduziert).
 const profileWithCountryCodes = (codes) => ({ ...baseCtx().profile, allowedCountryCodes: codes });
-
-// === (a) Order-Snapshot ==========================================================
 
 test("Gate-Reihenfolge ist der eingefrorene Snapshot", () => {
   const { gates } = makeOutboundGates(makeDeps());
@@ -153,8 +113,6 @@ test("Gate-Reihenfolge ist der eingefrorene Snapshot", () => {
     EXPECTED_ORDER,
   );
 });
-
-// === (b) Je Gate ein Ablehnungsfall ==============================================
 
 test("outbound_frozen: config.outboundFrozen -> 403 grund=frozen, kein requestedBy, Kurzschluss VOR resolve_identity", async () => {
   let requestTenantCalls = 0;
@@ -167,8 +125,6 @@ test("outbound_frozen: config.outboundFrozen -> 403 grund=frozen, kein requested
   });
   const { gates } = makeOutboundGates(deps);
   const ctx = baseCtx();
-  // Die Server-Loop bricht am ersten Denial ab - hier nachgebaut, um den Kurzschluss
-  // (kein Aufruf von requestTenant) zu beweisen.
   let denial = null;
   for (const gate of gates) {
     denial = await gate.run(ctx);
@@ -229,9 +185,6 @@ test("number_gate: Denylist (Satelliten-Prefix) -> 403 grund=denylist requestedB
   assert.ok(!denial.audit.detail.includes("tenant="));
 });
 
-// PA-15 (PM-10-Guard): Wert-Tests der migrierten Gate-Werte (config.safety.*). Fangen den
-// "falscher-aber-existierender-Blattname"-Fall (z.B. maxCallsPerHour <-> perTargetCallCap
-// vertauscht), den weder der grep-Gate noch der guardedConfig-Proxy fangen wuerden.
 test("number_gate: LAND-Gate (config.safety.allowedCountryCodes) -> 403 grund=land", async () => {
   const { gates } = makeOutboundGates(makeDeps());
   const ctx = baseCtx({ to: "+15551234567" });
@@ -240,10 +193,6 @@ test("number_gate: LAND-Gate (config.safety.allowedCountryCodes) -> 403 grund=la
   assert.match(denial.audit.detail, /grund=land/);
 });
 
-// OUT-03 (tasks/i18n-tests/05-auslandstelefonie.md): das Tenant-Profil ist eine
-// SCHNITTMENGE mit dem globalen Gate, keine zweite Erlaubnis-Quelle. Der bestehende
-// LAND-Gate-Test darueber prueft nur die globale Achse mit leerem Profil - hier
-// entscheidet das Profil neben einer WEITEREN globalen Erlaubnis (kein Duplikat, G5).
 test("OUT-03 (Mechanismus, gruen) - das Tenant-Profil kann das Laender-Gate nur einschraenken, nie erweitern", async () => {
   const narrowing = makeOutboundGates(makeDeps({ config: { allowedCountryCodes: GLOBAL_CODES_INCLUDING_NANP } }));
   const narrowGate = gateBy(narrowing.gates, "number_gate");
@@ -256,7 +205,6 @@ test("OUT-03 (Mechanismus, gruen) - das Tenant-Profil kann das Laender-Gate nur 
     "dasselbe Profil laesst sein eigenes Land weiterhin durch",
   );
 
-  // Gegenrichtung: das globale Gate kennt nur +49 - kein Profilwert oeffnet +1.
   const widening = makeOutboundGates(makeDeps());
   for (const codes of [["+1"], ["*"], GLOBAL_CODES_INCLUDING_NANP]) {
     const blocked = await gateBy(widening.gates, "number_gate").run(
@@ -267,9 +215,6 @@ test("OUT-03 (Mechanismus, gruen) - das Tenant-Profil kann das Laender-Gate nur 
   }
 });
 
-// OUT-22: die drei "leeren" Profil-Zustaende ([] / undefined / null) muessen IDENTISCH
-// wirken - !p || !p.length faengt alle drei. Zweite Haelfte ist load-bearing: "keine
-// Zusatz-Einschraenkung" heisst NICHT "kein Gate" (die globale Achse bleibt).
 test("OUT-22 (Mechanismus, gruen) - leere/undefinierte Profil-allowedCountryCodes bedeuten keine Zusatz-Einschraenkung", async () => {
   const { gates } = makeOutboundGates(makeDeps());
   const numberGate = gateBy(gates, "number_gate");
@@ -284,10 +229,6 @@ test("OUT-22 (Mechanismus, gruen) - leere/undefinierte Profil-allowedCountryCode
   }
 });
 
-// OUT-28: die Einzel-Gate-Tests darueber pruefen je EINE Verletzung isoliert. Hier sind
-// MEHRERE Gates gleichzeitig verletzt - bewiesen wird die Praezedenz (Land vor
-// Stundenlimit vor Ziel-Cap) an EINEM und demselben gueltigen US-Ziel. Der Denylist-Vorrang
-// davor traegt OUT-15 (test/number-gate.test.js).
 test("OUT-28 (Mechanismus, gruen) - bei einem gueltigen US-Ziel entscheidet deterministisch das erste verletzte Gate", async () => {
   const exhausted = { countOutboundCallsSince: () => Number.MAX_SAFE_INTEGER };
   const land = makeOutboundGates(
@@ -321,10 +262,6 @@ test("OUT-28 (Mechanismus, gruen) - bei einem gueltigen US-Ziel entscheidet dete
   assert.match(perTargetDenial.audit.detail, /grund=ziel_limit/, "Stundenlimit frei -> Ziel-Cap entscheidet");
 });
 
-// GAP-10: der Ablehnungstext nennt den Env-Namen NICHT mehr (er darf die
-// Konfigurationsflaeche nicht preisgeben). Die PA-15-Intention - ein vertauschter
-// Blattname wird gefangen - bleibt SCHAERFER erhalten: das Gate feuert exakt am
-// Blattwert (5 -> 429) und exakt darunter nicht (4 -> null).
 test("number_gate: STUNDENLIMIT (config.safety.maxCallsPerHour) -> 429, Gate feuert exakt am Blattwert", async () => {
   const { gates } = makeOutboundGates(
     makeDeps({
@@ -354,8 +291,6 @@ test("number_gate: PER-ZIEL-CAP (config.safety.perTargetCallCap + perTargetWindo
   const { gates } = makeOutboundGates(
     makeDeps({
       config: { perTargetCallCap: 2 },
-      // Filter mit .to isoliert den Per-Ziel-Zaehler von den Stundenlimits (die ohne
-      // .to-Filter zaehlen).
       store: { countOutboundCallsSince: (_since, filter) => (filter?.to ? 2 : 0) },
     }),
   );
@@ -436,12 +371,6 @@ test("reserve_budget: tryReserveOutboundBudget=false -> 402 grund=reserve_ueber_
   assert.equal(denial.audit.detail, `to=${VALID_TO} grund=reserve_ueber_rest tenant=T requestedBy=owner`);
 });
 
-// GAP-19 (11-luecken-und-e2e.md), zweite Haelfte der ID: der Absender ist eine US-DID,
-// Tenant und Ziel sind deutsch - exakt der Live-Zustand (FORCE_NUMBER_COUNTRY=US bei
-// PROVISIONING_COUNTRY=DE). normalize_target hat BEIDE Fakten in der Hand (aktive DID +
-// store.tenantGeo) und nutzt sie nur zum Normalisieren; danach faellt die Herkunft aus
-// der Betrachtung. SOLL: ein Glied der Kette lehnt ab oder haelt die Konstellation
-// wenigstens im Audit fest. Gemessen passiert der Anruf die volle Kette lautlos.
 const FREMDLAENDISCHE_DID = "+12025550123";
 
 test("GAP-19 (SOLL, rot) - ein Anruf unter fremdlaendischer Absender-DID passiert die Gate-Kette nicht unbemerkt", async () => {
@@ -469,11 +398,6 @@ test("GAP-19 (SOLL, rot) - ein Anruf unter fremdlaendischer Absender-DID passier
   );
 });
 
-// GAP-19-Regressionsschutz: das Herkunfts-Gate in resolve_outbound. Der SOLL-Test darueber
-// beweist nur, DASS die Kette die Konstellation nicht mehr durchlaesst; die fuenf Tests hier
-// pinnen den Sperrgrund UND - wichtiger - die drei Kanten, an denen bewusst NICHT gesperrt
-// wird. Ohne sie waere die Breite der Sperre unbewiesen, und eine zu breite Sperre toetet
-// live jeden Outbound.
 const FREMDES_ZIEL_GB = "+442071234567";
 const US_DID_STORE = {
   load: () => ({
@@ -530,8 +454,6 @@ test("resolve_outbound: gesetztes FORCE_NUMBER_COUNTRY ist der Betriebs-Ack -> k
   );
 });
 
-// === (c) Derivations-Gates (mutieren ctx, lehnen nie ab) =========================
-
 test("resolve_identity: setzt ctx.requestedBy/ctx.tenantId, lehnt nie ab", async () => {
   const deps = makeDeps({ internalIdentity: () => null, requestTenant: () => "T" });
   const { gates } = makeOutboundGates(deps);
@@ -542,10 +464,6 @@ test("resolve_identity: setzt ctx.requestedBy/ctx.tenantId, lehnt nie ab", async
   assert.equal(ctx.tenantId, "T");
 });
 
-// KS-P3 (b): die Frist faellt aus dem Guthaben-Snapshot des Store-Fakes (650 ct Rest) und
-// dem Worst-Case-Satz. Beide Zahlen kommen aus dem realen config-Singleton bzw. dem Fake -
-// deshalb wird die Erwartung HERGELEITET statt als Literal gepinnt (sonst pinnte dieser
-// Test eine Tarif-Kalibrierung mit, die ihn nichts angeht).
 const brakeOfDefaultStore = () =>
   emergencyBrakeSeconds({
     remainingCents: defaultStore().tenantBudgetSnapshot().remainingCents,
@@ -583,8 +501,6 @@ test("S1-6: compute_reserve mit negativem Body-max_duration_s faellt auf die Not
     "reserveCents bleibt eine positive Ganzzahl (kein negativer/Null-Reserve-Fallout)",
   );
 });
-
-// === (d) Doku-Drift der Kettenlaenge =============================================
 
 const EXPECTED_CHAIN_LENGTH = 18;
 

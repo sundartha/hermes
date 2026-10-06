@@ -1,7 +1,3 @@
-// E3 (S3-A1/T-27): der place_call-Hop braucht eine Frist, die STRUKTURELL groesser ist als
-// das Vorwahl-Budget des Servers (Klingelphase + Briefing + Eroeffnungszeile, je ohne
-// Backoff), sonst kappt ein Zeitablauf einen Anrufstart, der tatsaechlich zustande kommt.
-// Reiner Import, kein Server, kein Netz (P12 R/F).
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -14,16 +10,13 @@ import { config } from "../src/config.js";
 import { REQUEST_TIMEOUT_MS } from "../src/elevenlabs/convai.js";
 import { DEDUP_WINDOW_MS, findDuplicateOutboundCall } from "../src/telephony/call-dedup.js";
 
-// G25: benannte Konstanten statt Magic Numbers.
-const BRIEFING_STEPS = 2; // Briefing + Eroeffnungszeile, je EINMAL, kein Backoff (s.o.)
+const BRIEFING_STEPS = 2;
 const ONE_SECOND_MS = 1000;
 const FIVE_SECONDS_MS = 5000;
 
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    // Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
-    // server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern.
     registerTool(name, _config, handler) {
       handlers.set(name, handler);
     },
@@ -33,9 +26,7 @@ function captureTools(ctx) {
   return handlers;
 }
 
-// ==================== 1: strukturelle Ungleichung, aus der LIVE-config gerechnet ====================
 test("1: PLACE_CALL_HOP_TIMEOUT_MS liegt STRUKTURELL ueber dem Vorwahl-Budget des Servers", () => {
-  // Positiv-Kontrolle: ohne sie priefte die Ungleichung unten nichts (beide Summanden > 0).
   assert.ok(REQUEST_TIMEOUT_MS > 0, "REQUEST_TIMEOUT_MS muss positiv sein");
   assert.ok(config.llm.briefingTimeoutMs > 0, "config.llm.briefingTimeoutMs muss positiv sein");
 
@@ -46,7 +37,6 @@ test("1: PLACE_CALL_HOP_TIMEOUT_MS liegt STRUKTURELL ueber dem Vorwahl-Budget de
   );
 });
 
-// ==================== 2: Fenster >= Frist ====================
 test("2: DEDUP_WINDOW_MS ist mindestens so gross wie PLACE_CALL_HOP_TIMEOUT_MS", () => {
   assert.ok(
     DEDUP_WINDOW_MS >= PLACE_CALL_HOP_TIMEOUT_MS,
@@ -54,13 +44,8 @@ test("2: DEDUP_WINDOW_MS ist mindestens so gross wie PLACE_CALL_HOP_TIMEOUT_MS",
   );
 });
 
-// ==================== 3: Abbruch-Zweig, 3 Sprachen ====================
 test("3: ein Zeitablauf auf place_call wird zu call_start_unconfirmed, sprachabhaengig", async () => {
   const prevFetch = globalThis.fetch;
-  // T2-13 (N-10): der vorgeschaltete Bestaetigungs-Hop (POST /api/call-confirmations)
-  // muss ERFOLGREICH antworten, sonst zeitablaeuft schon ER (mit dem generischen
-  // HOP_TIMEOUT-Text) - der hier eigentlich gepruefte Zeitablauf gehoert zum ECHTEN
-  // Anrufstart (POST /api/calls, PLACE_CALL_HOP_TIMEOUT_MS/CALL_START_UNCONFIRMED).
   globalThis.fetch = async (url) => {
     if (String(url).includes("/api/call-confirmations")) {
       return { ok: true, status: 200, json: async () => ({ preview: {}, confirmed: true }) };
@@ -82,7 +67,6 @@ test("3: ein Zeitablauf auf place_call wird zu call_start_unconfirmed, sprachabh
   }
 });
 
-// ==================== 4: Gegenprobe - ein anderer Fehlername darf NICHT diesen Text tragen ====================
 test("4: ein TypeError bleibt bei seiner eigenen Meldung (Gegenprobe zu isAbortError)", async () => {
   const prevFetch = globalThis.fetch;
   globalThis.fetch = async () => {
@@ -98,7 +82,6 @@ test("4: ein TypeError bleibt bei seiner eigenen Meldung (Gegenprobe zu isAbortE
   }
 });
 
-// ==================== 5: findDuplicateOutboundCall - Unit-Tabelle ====================
 const NOW = Date.parse("2026-09-18T12:00:00.000Z");
 const IM_FENSTER = new Date(NOW - ONE_SECOND_MS).toISOString();
 const AUSSER_FENSTER = new Date(NOW - DEDUP_WINDOW_MS - ONE_SECOND_MS).toISOString();

@@ -1,6 +1,3 @@
-// P8/FMT-28: Zeitzone am Tenant - Datenmodell + Ableitung. Prueft die reinen Helfer
-// (defaults.js/geo/resolve.js) sowie den Store-Roundtrip (json + pg/pglite) fuer
-// setTenantGeo/tenantTimezone. Muster wie test/f1-geo-store.test.js.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
@@ -36,15 +33,9 @@ let jsonBackend;
 before(async () => {
   process.env.DATA_DIR = tempDataDir();
   jsonBackend = await import("../src/store/json.js");
-  // P10-Blocker-Folgefix: der statische pg.js-Import oben laedt config.js, das DEFAULT_LANGUAGE
-  // via setWorldDefaultLanguageEnabled() auf den fail-closed Boot-Default ("de", Env-Schalter
-  // WORLD_DEFAULT_LANGUAGE_ENABLED steht bis P13 auf AUS) drueckt. Der "US -> Weltdefault"-Test
-  // unten prueft explizit den Weltdefault-MECHANISMUS (analog e2e-05, "Flip unter eigenem
-  // Override") - deshalb hier scharf stellen, statt unbemerkt vom Boot-Default abzuhaengen.
   setWorldDefaultLanguageEnabled(true);
 });
 
-// ---- timezoneForCountry ----
 test("timezoneForCountry: bekannte Laender -> ihre Zone, unbekannt/leer -> DEFAULT_TIMEZONE", () => {
   assert.equal(timezoneForCountry("DE"), "Europe/Berlin");
   assert.equal(timezoneForCountry("US"), "America/New_York");
@@ -53,7 +44,6 @@ test("timezoneForCountry: bekannte Laender -> ihre Zone, unbekannt/leer -> DEFAU
   assert.equal(timezoneForCountry(""), DEFAULT_TIMEZONE);
 });
 
-// ---- tenantGeoForCountry ----
 test("tenantGeoForCountry: DE liefert das volle Tripel", () => {
   assert.deepEqual(tenantGeoForCountry("DE"), {
     country: "DE",
@@ -68,7 +58,6 @@ test("tenantGeoForCountry: US -> defaultLanguage 'en' (Weltdefault) + America/Ne
   assert.equal(geo.timezone, "America/New_York");
 });
 
-// ---- resolveTimezone ----
 test("resolveTimezone: gueltige IANA-Zone durchgereicht, Muell/leer/non-string -> DEFAULT_TIMEZONE, kein Throw", () => {
   assert.equal(resolveTimezone("Europe/Paris"), "Europe/Paris");
   assert.equal(resolveTimezone("Mars/Olympus"), DEFAULT_TIMEZONE);
@@ -80,7 +69,6 @@ test("resolveTimezone: gueltige IANA-Zone durchgereicht, Muell/leer/non-string -
   );
 });
 
-// ---- setTenantGeo/tenantTimezone Roundtrip + D2 (tenantGeo bleibt zwei Keys) ----
 test("setTenantGeo/tenantTimezone: selektiver Patch, tenantGeo() bleibt ohne timezone (D2)", () => {
   const s = makeDefaultState();
   registerTenant(s, A);
@@ -101,7 +89,6 @@ test("tenantTimezone: fehlender Tenant/fehlendes Feld -> null", () => {
   assert.equal(tenantTimezone(s, "ghost"), null);
 });
 
-// ---- json-Fassade ----
 test("json-Fassade exportiert tenantTimezone (Re-Export-Landmine)", () => {
   assert.equal(typeof jsonBackend.tenantTimezone, "function", "json.tenantTimezone fehlt");
 });
@@ -111,7 +98,6 @@ test("json-Roundtrip: setTenantGeo({timezone}) via Fassade persistiert", () => {
   assert.equal(jsonBackend.tenantTimezone("owner"), "Asia/Tokyo");
 });
 
-// ---- pg-Roundtrip (I8-Clobber-Wache) ----
 test("pg: setTenantGeo({timezone}) ueberlebt Flush + Re-Hydrierung", async () => {
   const { store, db } = await makePgTestStore();
   store.setTenantGeo("owner", { timezone: "Europe/Paris" });

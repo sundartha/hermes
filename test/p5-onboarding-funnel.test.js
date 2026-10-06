@@ -1,10 +1,3 @@
-// P5 — Onboarding-Funnel: gefuehrte Aktivierung. Deckt den 403-Deadlock-Fix
-// (webAuthAllowPending laesst suspended an die Aktivierungs-Routen) UND die volle
-// 3-Effekt-Aktivierung (status=active + kyc=CARD + idempotentes Provisioning) ab.
-// Kompositions-Integrationstest nach Muster w4/i9: reines pglite (offline, F.I.R.S.T.),
-// KEIN Server-Spawn (Lehre p6a-Stall). Der PG-Account bleibt suspended (upsertOnFirstLogin-
-// Default, KEIN accounts.setStatus(active)), damit der Deadlock real ist; der Store-Mirror
-// traegt status=ACTIVE (registerTenant-Default) als P0-Voraussetzung fuer das W5-Gate.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -38,8 +31,6 @@ const CONFIG = {
   paymentCurrency: "eur",
 };
 
-// Fake-Billing: nur die zwei Seams, die die Aktivierungs-Routen ziehen (createSubscription
-// fuer subscribe, createSetupCheckoutSession fuer setup-checkout) - kein echter Stripe-Call.
 function fakeBilling() {
   return {
     createSubscription: async () => ({ subscriptionId: "sub_new", currentPeriodEnd: PERIOD_END }),
@@ -57,13 +48,10 @@ async function setup({ card = true, configOverride = {} } = {}) {
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
 
-  // Store-Mirror: Tenant mit status=ACTIVE (registerTenant-Default) + optional Karte.
   const s = store.load();
   ops.registerTenant(s, TENANT, { firstName: "Kunde", lastName: "P5", idpSubject: SUB });
   if (card) ops.setTenantStripe(s, TENANT, { customerId: "cus_p5", paymentMethodId: "pm_p5" });
 
-  // PG-Account: upsertOnFirstLogin legt den Tenant 'suspended' an. KEIN accounts.setStatus
-  // (active) -> der frisch eingeloggte Tenant ist im Account-Layer suspended (Deadlock real).
   await accounts.upsertOnFirstLogin({ sub: SUB, email: "p5@kunde.de" });
   const { id: sessionId } = await sessions.create({ sub: SUB, tenantId: TENANT, ttlSeconds: 3600 });
 
@@ -81,7 +69,6 @@ async function setup({ card = true, configOverride = {} } = {}) {
       config: withConfigNamespaces({ ...CONFIG, ...configOverride }),
       billing: fakeBilling(),
       accounts,
-      // GAP-04: activatePaidTenant aktiviert nur bei GEKLAERTEM Ergebnis (provisionCleared).
       provision: async (t) => {
         provisionSpy.push(t);
         return { ok: true, reason: "queued" };
@@ -132,15 +119,11 @@ test("(1) suspended + Karte -> subscribe aktiviert voll: active + kyc=card + pro
   try {
     const res = await subscribe(s, "starter");
     assert.equal(res.status, 200);
-    // PG-Status auf active gehoben (Deadlock geloest).
     const acct = await s.accounts.resolve(SUB);
     assert.equal(acct.status, "active", "PG-Account ueber accounts.setStatus aktiviert");
-    // Mirror: KYC auf CARD -> Outbound-Gate offen.
     const t = s.store.load().tenants.find((x) => x.id === TENANT);
     assert.equal(t.kycLevel, "card", "KYC auf CARD gehoben");
-    // Provisioning genau 1x mit dem eigenen Tenant.
     assert.deepEqual(s.provisionSpy, [TENANT], "Provisioning genau 1x");
-    // Akzeptanz 2: das Outbound-Allowlist-Gate (W5) erkennt den aktiven Subscriber.
     assert.equal(
       ops.tenantActiveSubscriber(s.store.load(), TENANT, KYC_OUTBOUND_MIN),
       true,
@@ -236,8 +219,6 @@ test("(7) idempotent: zweiter subscribe -> 409 already_subscribed, provision ble
   }
 });
 
-// (8) Konsistenz: /state (aktiv, nach subscribe) und /billing/status (vor jedem weiteren
-// Schritt bereits gecheckt) duerfen NIE driften - dieselbe Formel, zwei Routen (G5).
 test("(8) numberSetupFeeCents/currency drift-frei zwischen /state und /billing/status", async () => {
   const s = await setup();
   try {
@@ -251,10 +232,6 @@ test("(8) numberSetupFeeCents/currency drift-frei zwischen /state und /billing/s
   }
 });
 
-// (9) Land-Override-Delegation (P9): die Route MUSS holdAmountForCountry mit dem
-// tatsaechlichen Tenant-Land aufrufen - gepinnt gegen den Funktionswert, nicht gegen
-// eine hartcodierte Zahl (haelt auch dann noch stimmig, wenn spaeter ein echter
-// Laender-Tarif in COUNTRY_SEARCH_PARAMS eingetragen wird).
 test("(9) numberSetupFeeCents folgt tenant.country (Delegation an holdAmountForCountry)", async () => {
   const s = await setup({ card: false });
   try {
@@ -268,8 +245,6 @@ test("(9) numberSetupFeeCents folgt tenant.country (Delegation an holdAmountForC
   }
 });
 
-// (10) PAYMENT_ENABLED aus -> 0, kein irrefuehrender Betrag (die UI blendet den ganzen
-// Billing-Block ohnehin aus, s. numberSetupFeeCentsFor-Kommentar).
 test("(10) PAYMENT_ENABLED aus -> numberSetupFeeCents 0", async () => {
   const s = await setup({ configOverride: { paymentEnabled: false } });
   try {
@@ -281,15 +256,6 @@ test("(10) PAYMENT_ENABLED aus -> numberSetupFeeCents 0", async () => {
   }
 });
 
-// (11) Review-Blocker FEE-COUNTRY-DRIFT (Runde 1): FORCE_NUMBER_COUNTRY (config.
-// forceNumberCountry) ueberschreibt das Kauf-Land VOR dem Checkout genauso wie beim
-// echten Kauf (requestNumberForPaidTenant, provision-trigger.js) - die Anzeige darf NICHT
-// beim Herkunftsland (tenant.country) stehenbleiben, wenn tatsaechlich in einem anderen
-// Land gekauft wird (Invariante "Anzeige == Charge"). Herkunftsland (FR) und Kauf-Land-
-// Override (US) sind bewusst verschieden gewaehlt, damit ein Regressions-Test wieder auf
-// die (falsche) tenant.country-Formel zurueckfaellt, sobald ein Land einen eigenen Tarif
-// bekommt (P9, COUNTRY_SEARCH_PARAMS) - gepinnt gegen resolveNumberCountry, nicht gegen
-// eine hartcodierte Zahl.
 test("(11) numberSetupFeeCents folgt forceNumberCountry, nicht dem Herkunftsland (FEE-COUNTRY-DRIFT)", async () => {
   const s = await setup({ card: false, configOverride: { forceNumberCountry: "US" } });
   try {

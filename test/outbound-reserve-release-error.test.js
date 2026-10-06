@@ -1,9 +1,3 @@
-// OUT-05 (F2): Freigabe auf dem catch-Pfad (werfender Originate). OHNE FAKE_ORIGINATE:
-// Offline-Diskriminator - originateCall wirft ohne TELNYX_API_KEY synchron vor jedem
-// Netzzugriff (s. BASE_ENV in helpers.js). Zwei identische place_call (je eigenes
-// Ziel, damit KEIN anderes Gate als die Reserve interferiert) muessen BEIDE den Originate-
-// Pfad erreichen (5xx) - waere die Reserve aus #1 nicht im catch freigegeben worden, wuerde
-// #2 am Reserve-Gate 402 statt am Originate 5xx scheitern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
@@ -18,10 +12,6 @@ const post = (url, to) =>
 test("OUT-05 F2: catch-Pfad gibt die Reserve frei (zweiter Call erreicht wieder den Originate)", async () => {
   const srv = await startServer({
     env: {
-      // MAX_BUDGET_EUR wirkt hier als Pro-Tenant-Fallback (effectiveCapCents Stufe 3 - der
-      // Owner hat keine tenant_budget-Zeile). Beide Calls
-      // erwarten hier ohnehin 5xx (Reserve greift nicht) - der genaue Cap-Wert ist fuer
-      // diesen Test irrelevant, solange er die Reserve (60 ct) nicht selbst reisst.
       MAX_BUDGET_EUR: "10",
       VOICE_TARIFF_DOMESTIC_CENTS: "20",
       ALLOWED_COUNTRY_CODES: "*",

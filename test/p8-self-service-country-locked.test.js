@@ -1,6 +1,3 @@
-// P8/E2E-01, Vollbild: POST /api/self-service/settings lehnt einen Patch mit "country"
-// mit 409 ab, VOR jedem Store-Zugriff (auch bei gemischtem Patch kein Teil-Apply). Muster
-// test/i9-self-service.test.js (in-process pglite, kein Server-Spawn).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";

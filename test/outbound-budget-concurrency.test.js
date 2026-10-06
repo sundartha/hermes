@@ -1,17 +1,9 @@
-// OUT-05: Reserve-Ledger ueber die Store-FASSADE (json-Backend, Temp-DATA_DIR). Muster:
-// store-purge.test.js (before() seedet ein Temp-DATA_DIR, dann EIN store.js-Import fuers
-// ganze File). Der Referenz-Test fuer die Phase: beweist Atomaritaet unter
-// store.withStoreLock (kein Doppel-Grant bei N parallelen Reservierungen). Jeder Test nutzt eigene Tenant-IDs UND
-// gibt seine Reserve am Ende frei (F.I.R.S.T./Independence): der globale Ledger endet bei 0,
-// kein Test-Kopplungs-Leak ueber reservationsTotal. Server (F2) ruft tryReserve noch nicht -
-// dieser Test treibt NUR die Store-Fassade.
-// KS-P9/E10: die Plattform-Achse sperrt nicht mehr - der letzte Test unten pinnt genau das.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
 
-const CFG = { platformSpendCapCents: 100 }; // 1 EUR Cap (Owner-Fallback ohne tenant_budget-Zeile)
-const RESERVE_CENTS = 60; // 0.60 EUR pro Reservierung
+const CFG = { platformSpendCapCents: 100 };
+const RESERVE_CENTS = 60;
 
 let store;
 before(async () => {
@@ -30,7 +22,6 @@ test("Atomaritaet/Kumulativitaet: 5 parallele Reservierungen -> genau 1x true, 4
   assert.equal(granted, 1, "genau eine der 5 gleichzeitigen Reservierungen wird angenommen");
   assert.equal(store.reservationOf(T1), RESERVE_CENTS, "EINE Reserve gebucht, nicht 5x60");
 
-  // Cleanup: Reserve wieder freigeben (Independence, kein Leak in andere Tests)
   store.releaseOutboundReserve({ tenantId: T1, reserveCents: RESERVE_CENTS, reserveReleased: false });
 });
 
@@ -48,7 +39,6 @@ test("Freigabe + Wiederreservierung: freigegebene Reserve laesst neuen Grant zu"
   );
   assert.equal(grantedAgain, true, "nach Freigabe ist eine neue Reservierung wieder moeglich");
 
-  // Cleanup
   store.releaseOutboundReserve({ tenantId: T2, reserveCents: RESERVE_CENTS, reserveReleased: false });
 });
 
@@ -81,7 +71,6 @@ test("KS-P9: die Plattform-Summe sperrt nicht mehr - beide Tenants reservieren, 
   );
   assert.equal(store.reservationOf(G2), RESERVE_CENTS, "G2 hat tatsaechlich reserviert");
 
-  // Cleanup
   for (const tenantId of [G1, G2])
     store.releaseOutboundReserve({ tenantId, reserveCents: RESERVE_CENTS, reserveReleased: false });
 });

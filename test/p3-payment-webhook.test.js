@@ -1,10 +1,3 @@
-// P3 - Payment-gated Aktivierung + Provisioning. Zwei Ebenen, beide offline (F.I.R.S.T.):
-//  Teil A) applyStripeWebhook ACTIVATE ueber injizierte Fake-Seams (Muster
-//          w5-billing-revoke.test.js): bestaetigte Zahlung -> Abo nachziehen + KYC=CARD +
-//          status=active + GENAU EIN provision-Aufruf; Suspend kauft NIE.
-//  Teil B) die neuen state-ops-Queries (tenantHasLiveNumber/tenantGeo) + der Trigger-Kern
-//          (Guard + requestNumber) + das geoeffnete Outbound-Gate - ueber makeDefaultState,
-//          ohne Server-Spawn (Repo-Konvention, Lehre p6a-Stall).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../src/billing/webhook.js";
@@ -21,16 +14,9 @@ import {
 import { KYC_LEVEL, KYC_OUTBOUND_MIN, NUMBER_STATUS } from "../src/store/defaults.js";
 import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.js";
 
-// Cap hoch genug, dass die Kosten-Notbremse in diesen Tests nie greift (nur die
-// Idempotenz/Geo-Logik wird geprueft, nicht der Cap - der hat eigene Tests).
 const HIGH_CAP = 100;
 const CAPS = { maxNumbers: HIGH_CAP, maxNumbersPerTenant: HIGH_CAP };
 
-// ---- Teil A: applyStripeWebhook ACTIVATE (Unit, Fake-Seams) ----
-
-// Aufzeichnende Seams: store loest den Tenant ggf. ueber subscriptionId auf und
-// protokolliert Abo-/KYC-/Karten-Schreibung; accounts/sessions/provision protokollieren
-// ihre Wirkung. stripeOnFile = der am Tenant gespeicherte Stripe-Zustand (Race-Fix-Tests).
 function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, paymentMethodId: null } } = {}) {
   const calls = {
     setStatus: [],
@@ -46,26 +32,17 @@ function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, payme
     calls,
     store: {
       findTenantBySubscription: (subId) => (tenantBySub && subId ? { id: tenantBySub } : null),
-      // FW1-A: Existenz-Gate der Tenant-Aufloesung - dieses Double modelliert einen existierenden Tenant.
       tenantExists: () => true,
       setTenantSubscription: (tenant, patch) => calls.subscription.push([tenant, patch]),
       setKycLevel: (tenant, level) => calls.kyc.push([tenant, level]),
       tenantStripe: () => stripeOnFile,
       setTenantStripe: (tenant, patch) => calls.stripe.push([tenant, patch]),
-      // A2: provisionPlanProfile-Seams. planSlug=null -> SKIP no_plan (dieser Test prueft
-      // KYC/Status/provision, NICHT das Profil - das deckt profile-a2-activation.test.js).
       tenantSubscription: () => ({ planSlug: null }),
       setProfile: () => ({ profile: {}, changed: [] }),
-      // tenant-prolif-c: Grace-Anker-Seams (Suspend stempelt, Activate loescht).
       setSuspendedAtIfAbsent: (tenant) => calls.suspend.push(tenant),
       clearSuspendedAt: (tenant) => calls.clearSuspend.push(tenant),
-      // GAP-04: ensureTenant (Spiegel-Nachzug NACH erfolgreicher Aktivierung). GAP-03:
-      // clearBillingHold (Reversibilitaet bei ACTIVATE) - beide No-op-Fakes, dieser Test
-      // prueft die KYC/Status/Provisioning-Kette, nicht die Geld-Wirkung der GAP-03-Achse.
       ensureTenant: async () => {},
       clearBillingHold: () => {},
-      // GAP-01: Perioden-Fenster des Budget-Gates (activatePaidTenant stempelt es) - hier
-      // No-op-Fakes, dieser Test prueft die KYC/Status/Provisioning-Kette.
       billingHoldActive: () => null,
       stampBudgetPeriod: () => false,
     },
@@ -76,7 +53,6 @@ function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, payme
     sessions: { invalidateByTenant: async (tenant) => calls.invalidate.push(tenant) },
     audit: () => {},
     req: {},
-    // GAP-04: activatePaidTenant aktiviert nur bei GEKLAERTEM Ergebnis (provisionCleared).
     provision: async (tenant) => {
       calls.provision.push(tenant);
       return { ok: true, reason: "queued" };
@@ -84,10 +60,6 @@ function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, payme
   };
 }
 
-// P4 (GAP-04/GAP-03): eine erfolgreiche Aktivierung patcht setTenantSubscription jetzt
-// dreimal zusaetzlich zum eigentlichen Abo-Patch - activationPending true/false
-// (Wartezustands-Marker) + periodCreditRevoked:false (Reversibilitaet, s. webhook.js
-// ACTIVATE-Zweig). EINE Quelle fuer die drei Assertion-Sites unten (G5).
 const activationMarkerPatches = (tenant) => [
   [tenant, { activationPending: true }],
   [tenant, { activationPending: false }],
@@ -207,11 +179,6 @@ test("A(e) updated mit Dunning-Status (past_due) -> ignore: kein KYC/active/prov
   assert.deepEqual(deps.calls.setStatus, [], "unbezahlt -> kein active (Outbound-Gate bleibt zu)");
 });
 
-// Race-Fix "Abo ohne Nummer" (Live-Befund 2026-07-06): der Webhook gewinnt das Rennen
-// gegen den Checkout-Return und stoesst Provisioning an, BEVOR der Return die Karte
-// gebunden hat -> provisionNumber fail-closed (kein Zahlungsmittel), Nummer failed.
-// Das Event traegt customer + default_payment_method signatur-verifiziert; der
-// ACTIVATE-Pfad fuellt damit NUR die Luecke (nie ueberschreiben, nur bei Customer-Match).
 const RACE_EVENT = (defaultPaymentMethod) => ({
   type: SUBSCRIPTION_EVENT.UPDATED,
   data: {
@@ -228,9 +195,6 @@ const RACE_EVENT = (defaultPaymentMethod) => ({
 test("A(f) activate mit customer+default_payment_method, Tenant OHNE Karte + Customer-Match -> Karte gebunden (Luecke gefuellt), provision laeuft", async () => {
   const deps = fakeDeps({ stripeOnFile: { customerId: "cus_r", paymentMethodId: null } });
   await applyStripeWebhook(RACE_EVENT("pm_r"), deps);
-  // GP-P2: paymentMethodType null, weil fakeDeps bewusst KEIN billing traegt (payment-off) -
-  // ohne Anbieter gibt es keinen Nachschlag, der Typ bleibt unbekannt und das Eignungs-Gate
-  // entscheidet spaeter fail-closed. Geschrieben wird er trotzdem, nie verschwiegen.
   assert.deepEqual(
     deps.calls.stripe,
     [["t_r", { paymentMethodId: "pm_r", paymentMethodType: null }]],
@@ -270,8 +234,6 @@ test("A(j) Event ohne customer/default_payment_method (Bestandsform) -> keine St
   assert.deepEqual(deps.calls.stripe, [], "ohne Event-Felder keine Karten-Schreibung");
   assert.deepEqual(deps.calls.provision, ["t_a"]);
 });
-
-// ---- Teil B: state-ops-Ebene (Unit, makeDefaultState) ----
 
 test("B(e) tenantHasLiveNumber: kein/requested/active -> live, nur released/failed -> false", () => {
   const s = makeDefaultState();
@@ -365,7 +327,6 @@ test("A(k) Perioden-Anker aus items.data[0] landet im setTenantSubscription-Patc
 });
 
 test("A(l) Suspend stempelt suspended_at (setSuspendedAtIfAbsent), Activate loescht ihn", async () => {
-  // Suspend (deleted): stempelt, loescht NICHT.
   const sup = fakeDeps({ tenantBySub: "t_l" });
   await applyStripeWebhook(
     { type: SUBSCRIPTION_EVENT.DELETED, data: { object: { id: "sub_l", metadata: { tenant_ref: "t_l" } } } },
@@ -374,7 +335,6 @@ test("A(l) Suspend stempelt suspended_at (setSuspendedAtIfAbsent), Activate loes
   assert.deepEqual(sup.calls.suspend, ["t_l"], "Suspend stempelt den Grace-Anker");
   assert.deepEqual(sup.calls.clearSuspend, [], "Suspend loescht nicht");
 
-  // Activate (updated, active): loescht den Anker (Reaktivierung), stempelt NICHT.
   const act = fakeDeps();
   await applyStripeWebhook(
     {

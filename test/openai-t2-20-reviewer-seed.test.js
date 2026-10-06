@@ -1,24 +1,3 @@
-// Reviewer-Beispieldaten: scripts/seed-reviewer-demo.mjs am echten Kindprozess (json-Store in
-// einem Temp-DATA_DIR, nie data/store.json) und der Draht-Beleg ueber HTTP /mcp im OAuth-Modus.
-// KEIN pglite in dieser Datei (Lehre: nie mit Server-Spawn mischen) - der pg-Pfad liegt in
-// test/openai-t2-20-reviewer-seed-pg.test.js.
-//
-// Belegt:
-// - Trockenlauf-Default: ohne --apply wird nichts geschrieben und der Store nie geladen
-//   (Import-Spion mit Positiv-Kontrolle).
-// - Abbrueche ohne Schreiben: --apply ohne --tenant, unbekannter Mandant, Betreiber-Mandant,
-//   pg ohne --dienst-gestoppt (vor jedem Store-Import, also ohne Verbindungsversuch).
-// - pg mit --dienst-gestoppt importiert die Store-Fassade NIE (ihr Import migriert = DDL gegen
-//   die Zieldatenbank); der Weg endet an der unerreichbaren DB mit einem Abbruch des Skripts.
-//   Der Schema-Abgleich selbst ist in test/openai-t2-20-reviewer-seed-pg.test.js belegt.
-// - --apply aendert NUR calls und actionItems; jeder andere Top-Level-Schluessel (Mandanten,
-//   Abo, KYC, Profile, Nummern, Budget, Nutzung, Einstellungen) bleibt deep-equal.
-// - Idempotenz, und dass ein OAuth-Login ueber /mcp die Daten zeigt, ohne einen Mandanten
-//   anzulegen oder eine Nummer zu kaufen.
-// - Kosten-Ueberwachung: nach dem Seed liefert kostenBuchBericht (die Quelle der Buch-Befunde
-//   des Kosten-Sweeps, voll gemeldet per Mail+SMS) zu keinem Zeitpunkt einen Befund, und die
-//   Kosten-Nachtrags-Quote bleibt unveraendert. Positiv-Kontrolle: dieselben Anrufe mit
-//   endedAt=jetzt loesen die Befunde aus.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -67,9 +46,6 @@ const SEED_ITEM_TEXTS = REVIEWER_SEED_CALLS.flatMap((entry) => entry.actionItems
 const SEED_SUMMARIES = new Set(REVIEWER_SEED_CALLS.map((entry) => entry.summary));
 const CHANGEABLE_KEYS = new Set(["calls", "actionItems"]);
 
-// Vollstaendiger Store mit Betreiber (aktive Nummer, Boot-Guard) und einem regulaeren
-// Kunden-Mandanten samt Login-Subjekt, KYC und eigener Nummer - so, wie ihn Web-Login und Abo
-// hinterlassen haetten.
 function reviewerStoreState() {
   const state = ops.makeDefaultState();
   ops.registerTenant(state, BOOTSTRAP_TENANT_ID, { firstName: "Owner" });
@@ -82,7 +58,7 @@ function reviewerStoreState() {
   ops.registerTenant(state, REVIEWER_TENANT, { firstName: "Reviewer", idpSubject: REVIEWER_SUB });
   ops.setKycLevel(state, REVIEWER_TENANT, "card");
   ops.seedBootstrapNumber(state, REVIEWER_DID, REVIEWER_TENANT, OWNER_TEST_NUMBER.provider);
-  ops.usageFor(state, REVIEWER_TENANT); // Nutzungs-Bucket wie bei einem Kunden, der schon telefoniert hat
+  ops.usageFor(state, REVIEWER_TENANT);
   return state;
 }
 
@@ -99,8 +75,6 @@ function runSeed(dataDir, args, env = {}) {
   return { code: res.status, stdout: res.stdout, stderr: res.stderr };
 }
 
-// Baseline so, wie der Store selbst sie schreibt (load + save), damit der Diff nach --apply
-// keine Normalisierung beim Laden als Aenderung des Skripts missdeutet.
 function normalizedDataDir() {
   const dataDir = tempDataDir(reviewerStoreState());
   const res = spawnSync(
@@ -120,7 +94,6 @@ function normalizedDataDir() {
   return dataDir;
 }
 
-// Top-Level-Schluessel ausser calls/actionItems, deren Wert sich unterscheidet.
 function changedProtectedKeys(before, after) {
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
   return [...keys].filter(
@@ -128,10 +101,6 @@ function changedProtectedKeys(before, after) {
   );
 }
 
-// createCall zaehlt jeden angelegten Anruf im Lebenszeit-Zaehler usage[tenant].calls mit
-// (state-ops createCall, reine Anzeige in get_agent_status). Das ist die einzige erwartete
-// usage-Aenderung: der Zaehler des Reviewer-Mandanten waechst um genau die Zahl der
-// Seed-Anrufe, jedes andere usage-Feld (Tokens, Kosten, Budget-Achsen) bleibt gleich.
 function withoutSeedCallCounter(before, after) {
   const bucketBefore = before.usage[REVIEWER_TENANT];
   const bucketAfter = after.usage[REVIEWER_TENANT];
@@ -158,7 +127,6 @@ test("Reviewer-Seed: ohne Argumente Trockenlauf, nichts geschrieben, Store nie g
   assert.equal(run.code, EXIT_OK, run.stderr);
   assert.match(run.stdout, /Trockenlauf/);
   assertUntouched(dataDir, run, rawBefore);
-  // Positiv-Kontrolle des Spions: der Apply-Zweig laedt den Store und zeigt die Marke.
   const control = runSeed(normalizedDataDir(), ["--apply", "--tenant", REVIEWER_TENANT]);
   assert.equal(control.code, EXIT_OK, control.stderr);
   assert.ok(control.stderr.includes(SPION_MARKE), "Spion erkennt einen Store-Import");
@@ -218,7 +186,6 @@ test("Reviewer-Seed: pg mit --dienst-gestoppt laedt die Store-Fassade nie (keine
 });
 
 test("Reviewer-Seed: Diff-Pruefer meldet eine Aenderung an einem geschuetzten Schluessel", () => {
-  // Positiv-Kontrolle: ohne sie saehe "keine Abweichung" aus wie "prueft nichts".
   const before = reviewerStoreState();
   const after = structuredClone(before);
   after.profiles = { ...after.profiles, "x@example.test": { unrestricted: true } };
@@ -333,20 +300,14 @@ test("Reviewer-Seed: --apply schreibt nur Anrufe/Items, ist idempotent und ersch
   );
 });
 
-// ---- Kosten-Ueberwachung nach dem Seed -------------------------------------------------------
-
 const HOURS_PER_DAY = 24;
-// Pruefzeitpunkte aus dem Befund: nach 7 h (Herzschlag-Fenster vorbei) und nach 2 Tagen.
 const PRUEFPUNKT_STUNDEN = 7;
 const PRUEFPUNKT_TAGE = 2;
 const SIEBEN_STUNDEN_MS = PRUEFPUNKT_STUNDEN * MS_PER_HOUR;
 const ZWEI_TAGE_MS = PRUEFPUNKT_TAGE * HOURS_PER_DAY * MS_PER_HOUR;
-// Herzschlag-Fenster laenger als das Beleg-Fenster: der Ende-Zeitpunkt muss dem groesseren folgen.
 const HERZSCHLAG_TAGE = 10;
 const HERZSCHLAG_ZEHN_TAGE_H = HERZSCHLAG_TAGE * HOURS_PER_DAY;
 
-// Die Store-Fassade ueber einen In-Memory-Zustand: dieselben state-ops, die json- und
-// pg-Fassade umhuellen, ohne Datei und ohne Spawn.
 function opsFassade(state) {
   return {
     tenantExists: (tenantId) => ops.tenantExists(state, tenantId),
@@ -363,7 +324,6 @@ function opsFassade(state) {
 const karenzMs = (billing) =>
   billing.costTruingDelayMinutes * MS_PER_MINUTE + billing.costTruingSweepIntervalMs;
 
-// Befund-Codes von kostenBuchBericht zu jedem Pruefzeitpunkt (Versatz ab dem Seed).
 function befundeJeZeitpunkt({ state, billing, seedMs }) {
   const versaetze = [0, karenzMs(billing) + MS_PER_MINUTE, SIEBEN_STUNDEN_MS, ZWEI_TAGE_MS];
   return versaetze.map((versatzMs) => ({
@@ -428,8 +388,6 @@ test("Reviewer-Seed: Kosten-Ueberwachung meldet nach dem Seed nichts, Quote unve
   });
 });
 
-// Vergroessertes Fenster NACH dem Seed: ein erneuter Lauf datiert vorhandene Seed-Anrufe nicht
-// um (Kopfkommentar seed-reviewer-demo.mjs), die Zaehlung erkennt sie aber als Fehlalarm-Risiko.
 test("Reviewer-Seed: erneuter Lauf datiert nicht um, Zaehlung meldet vorhandene Anrufe im vergroesserten Fenster", () => {
   const seedMs = Date.now();
   const billing = config.billing;

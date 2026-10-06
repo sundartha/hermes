@@ -1,7 +1,3 @@
-// P8/FMT-11, Gegenmassnahme (2): das Laendercode-Gate der privaten Summary-Nummer wird
-// aus dem Tenant-Land hergeleitet (allowedPrivateNumberCodes), bleibt aber eine strenge
-// Allowlist UND die geteilte Premium-/Notruf-Denylist (number-denylist.js) greift
-// weiterhin - ein gelockertes Land-Gate darf kein Toll-Fraud-Fenster oeffnen.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -54,7 +50,5 @@ test("normalizePrivateNumber: Notruf-Kurzwahl wirft (Format bzw. Denylist)", () 
 });
 
 test("normalizePrivateNumber: Hochpreis-Laendercode (+53) wird abgelehnt (KS-P7 wirkt geteilt)", () => {
-  // isDenied laeuft VOR der Laender-Allowlist - die Ablehnung ist der Nummernbereich,
-  // nicht das Land. Das ist die bewusst getragene Zweitwirkung der Klasse 2.
   assert.throws(() => normalizePrivateNumber("+5352345678", "CU"), /gesperrter Nummernbereich/);
 });

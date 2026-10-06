@@ -1,15 +1,3 @@
-// P1 (S1-6): Unit-Test fuer resolveMaxDurationS (src/telephony/outbound-gates.js).
-// Reine Funktion (raw, brakeSeconds) -> Sekunden, kein Netz/Store/Server (F.I.R.S.T.).
-// Beweist den Positivitaets-/Endlichkeits-Guard: negative/0/NaN/leere Body-Werte fallen
-// NIE bis zu einer negativen Reserve durch (vorheriger `x || DEFAULT`-Trap liess negative
-// Zahlen als "truthy" passieren), und die Frist wird auch bei einem riesigen Body-Wert
-// gedeckelt.
-//
-// KS-P3 (b): der zweite Parameter ist seit dieser Phase die guthaben-abgeleitete
-// NOTBREMSE dieses Legs, kein config-Objekt mehr - eine feste Maximaldauer
-// (MAX_CALL_DURATION_S) gibt es nicht mehr (E2/E3). Damit entfaellt auch der frueher hier
-// geprueste Fall "ungueltiger config-Default -> Hard-Default": beide Fallback-Stufen sind
-// ersatzlos weg, es bleibt genau EINE Rueckfallgroesse.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -20,7 +8,6 @@ import {
 import { config } from "../src/config.js";
 import { MAX_CALL_DURATION_CAP_S, outboundReserveCents } from "../src/store/defaults.js";
 
-// Eine Notbremse, wie sie emergencyBrakeSeconds fuer 10 bezahlbare Minuten liefert.
 const BRAKE_S = 660;
 
 test("resolveMaxDurationS: negativer/0/NaN/leerer/fehlender Body-Wert faellt auf die Notbremse", () => {
@@ -45,22 +32,10 @@ test("KS-P3: der Body-Override kann die Frist NIE ueber die Notbremse hinaus ver
   assert.equal(resolveMaxDurationS(BRAKE_S, BRAKE_S), BRAKE_S, "exakt die Notbremse bleibt");
 });
 
-// ---- PAY-26: dieselbe Achse eine Ebene hoeher - im echten compute_reserve-Gate ----
-// Oben steht resolveMaxDurationS als reine Funktion; hier laeuft der ECHTE Gate mit
-// feindlichem Body. Der Angriff, den der S1-6-Wurzelfix abwehrt, zielt nicht auf die
-// Funktion, sondern auf die RESERVE: eine negative Dauer haette eine negative Reserve
-// ergeben - der Gate haette Geld "zurueckgegeben" statt zu reservieren.
-//
-// KS-P3 (a): die Reserve haengt nicht mehr an der Dauer - der Deckelungs-Beweis wandert
-// deshalb von der Reserve auf die FRIST (ctx.maxDur), wo er seit dieser Phase sitzt.
-const US_TARGET = "+15551234567"; // keine Inlands-Vorwahl -> Auslandssatz
-const DE_OWN_DID = "+4930111222333"; // eigene DID mit Inlands-Vorwahl
-const ABSURD_MAX_DURATION_S = 99999; // weit ueber jedem Cap
+const US_TARGET = "+15551234567";
+const DE_OWN_DID = "+4930111222333";
+const ABSURD_MAX_DURATION_S = 99999;
 const TENANT = "T";
-// compute_reserve liest seit KS-P3 den Guthaben-Snapshot (Eingabe der Notbremse), sonst
-// nur ctx.b/ctx.to/ctx.fromNumber - die Gate-Kette davor bleibt aussen vor. Reichlich
-// Guthaben, damit die Notbremse auf der absoluten Obergrenze liegt: nur so ist die
-// Cap-Aussage unten ueberhaupt pruefbar.
 const storeFake = {
   tenantBudgetSnapshot: () => ({ capCents: 1_000_000, spentCents: 0, remainingCents: 1_000_000 }),
 };

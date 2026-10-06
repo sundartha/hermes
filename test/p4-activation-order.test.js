@@ -1,6 +1,3 @@
-// P4 GAP-04: activatePaidTenant wartet das Provisioning-Ergebnis ab (provisionCleared),
-// statt active vorwegzunehmen. Rein, offline (Muster test/gap-04-activation-transaction.test.js:
-// echter state, duenner Store-Seam).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { activatePaidTenant } from "../src/billing/activation.js";
@@ -28,14 +25,11 @@ function storeOn(s, { ensureTenantCalls = [] } = {}) {
     findTenantBySubscription: () => null,
     setTenantSubscription: (t, p) => setTenantSubscription(s, t, p),
     clearSuspendedAt: (t) => clearSuspendedAt(s, t),
-    // GAP-01: Perioden-Fenster des Budget-Gates. Wrapper-Parity zur Fassade
-    // (json/pg): Uhr an der IO-Grenze, {changed} -> Boolean.
     billingHoldActive: (t) => billingHoldActive(s, t, new Date().toISOString()),
     stampBudgetPeriod: (t, iso) => stampBudgetPeriod(s, t, iso).changed,
     ensureTenant: async (t) => {
       ensureTenantCalls.push(t);
     },
-    // FW1-B: clearBillingHold laeuft jetzt in activatePaidTenant selbst.
     clearBillingHold: (tenant) => clearBillingHold(s, tenant),
   };
 }
@@ -104,7 +98,6 @@ test("Marker gesetzt VOR provision(), geloescht NUR bei Erfolg", async () => {
     "Marker bleibt bei fehlgeschlagenem Provisioning gesetzt (Operator-Retry findet den Tenant)",
   );
 
-  // Erfolgreicher Lauf: Marker wird geloescht.
   const s2 = makeDefaultState();
   registerTenant(s2, "t_marker2", {});
   setTenantSubscription(s2, "t_marker2", { planSlug: "starter" });

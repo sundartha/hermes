@@ -1,8 +1,3 @@
-// P12 (WEB-10): der PUBLIC_URL-Guard der beiden Checkout-Handler antwortet mit einem
-// stabilen, sprachneutralen Code statt deutschem Klartext mit Env-Namen. Deckt den
-// api-billing.js-Zweig ab, den der WEB-10-Gate-Test (self-service) NICHT beruehrt, sowie
-// den glueckliche Pfad (URL gesetzt -> Guard laesst durch).
-// KEIN Server-Spawn: der Guard steht vor jedem store-/billing-Zugriff -> Stub-Deps genuegen.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -23,9 +18,6 @@ function fakeRes() {
   return res;
 }
 
-// Mount-Helfer: paymentEnabled immer true (das andere Gate ist hier nicht der Gegenstand).
-// requireTenant zaehlt seine Aufrufe und antwortet wie der echte REJECT-Pfad (403) ->
-// "Guard durchgelassen" ist beobachtbar, ohne Stripe/Store anzufassen.
 async function startBillingApp(publicUrl) {
   let tenantResolverCalls = 0;
   const app = express();

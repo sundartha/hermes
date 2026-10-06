@@ -1,26 +1,10 @@
-// I7: Outbound tenant-aware (L4 dicht). POST /api/calls loest den Request-Tenant
-// ueber requestTenant (I4) auf und belastet pro-Tenant Nummer + Budget statt hart
-// BOOTSTRAP_TENANT_ID. Reiner Spawn (startServer + seedState), KEIN pglite in derselben
-// Datei (Lehre p6a-Stall: NIE mischen).
-//
-// Identitaet kommt hier ueber den localhost-only X-Internal-Identity-Header. In der
-// Prod-Plumbing traegt dieser Kanal heute email (mcp-tools); die sub-Durchreichung
-// ueber REST ist I5. Der Test setzt den Header DIREKT auf den idpSubject - genau den
-// gueltigen Aufloesungs-Schluessel von requestTenant/resolveTenant.
-//
-// KS-P9/E10: es gibt nur noch EINE Geld-Achse (die pro-Tenant-Decke) - die Plattform-Summe
-// sperrt nichts mehr. Die frueher hier beschriebene Nicht-Isolierbarkeit der zwei Gates am
-// HTTP-Level ist damit gegenstandslos. Die pro-Tenant-KORREKTHEIT wird weiter ueber
-// ATTRIBUTION bewiesen (call.tenantId + call.from -> daran haengt trackUsage); die reine
-// Funktions-Isolation deckt store-pg-tenant-budget.test.js ab. Der Summen-Vektor (je Tenant
-// < Cap, Summe >= Cap) beweist unten, dass die Plattform-Summe NICHT mehr blockt.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-const TO = "+4915112345678"; // erlaubtes Ziel (steht in ALLOWED_NUMBERS), kein Premium/Notruf
-const OWNER_NUMBER = "+15005550006"; // = OWNER_TEST_NUMBER (Owner-Absendernummer aus dem Spawn-Store, test/helpers.js)
+const TO = "+4915112345678";
+const OWNER_NUMBER = "+15005550006";
 
 const A = "tenant-a",
   SUB_A = "sub-a",
@@ -41,19 +25,8 @@ const activeNumber = (id, e164, tenantId, status = "active") => ({
   providerNumberId: null,
 });
 
-// A2/A3-provisioniertes Tier-Profil: maxCallsPerHour=null entkoppelt den aktiven
-// Subscriber vom DEFAULT_PROFILE(0)-User-Hour-Gate (A4 go-live-Haertung). Minimaler
-// Stub - nur das fuer diese Gate-Tests relevante Feld (planProfileFor traegt es real).
-// Phase S: das Profil keyt auf die tenantId (A/B/C), nicht mehr auf den idpSubject.
 const PROVISIONED_PROFILE = { maxCallsPerHour: null };
 
-// Zwei aktive Tenants (A, B) mit eigener aktiver Nummer + idpSubject. usage/extraNumbers
-// optional ueberschreibbar. usage wird als MAP geseedet -> json.load erkennt das Nicht-
-// flache Shape und migriert NICHT (jeder Bucket bleibt; migrateUsageToMap).
-// A/B/C sind verifizierte Subscriber (kyc=card): seit dem fail-closed kycReached-Flip
-// (Phase outbound-p1) sperrt das erste Outbound-Gate jeden Tenant OHNE kyc_level. Diese
-// Tests pruefen NICHT das KYC-Gate, sondern Nummer-/Budget-Attribution -> die Tenants
-// muessen es passieren (realistischer Subscriber-Zustand). Der Owner heilt sich beim Boot.
 function seedTenants({ extraNumbers = [], usage } = {}) {
   const s = seedState({
     tenants: [
@@ -71,8 +44,6 @@ function seedTenants({ extraNumbers = [], usage } = {}) {
 
 const bucket = (costEur) => ({ inputTokens: 0, outputTokens: 0, costEur, calls: costEur ? 1 : 0 });
 
-// POST /api/calls ueber localhost (-> X-Internal-Identity gilt). identity = idpSubject
-// des Request-Tenants (oder null fuer Owner/localhost-ohne-Identitaet).
 function placeCall(srv, identity, body = {}) {
   return fetch(`${srv.localUrl}/api/calls`, {
     method: "POST",
@@ -89,9 +60,6 @@ const FLAG_ON = { MULTI_TENANT: "true", ALLOWED_NUMBERS: TO };
 const outboundCallsTo = (srv) =>
   srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
 
-// (1) Attribution: A telefoniert unter A's Nummer/tenantId, B unter B's. Beide
-// passieren Gates+Budget (fresh) -> erreichen den offline scheiternden Originate (500,
-// NICHT 402/403) -> "B nicht geblockt". from ist NIE die Owner-Nummer.
 test("Flag an: Outbound attribuiert from + tenantId pro Tenant (A->A-Nummer/A-Budget, B->B-Nummer); B nicht geblockt", async () => {
   const srv = await startServer({ env: FLAG_ON, seed: seedTenants() });
   try {
@@ -120,8 +88,6 @@ test("Flag an: Outbound attribuiert from + tenantId pro Tenant (A->A-Nummer/A-Bu
   }
 });
 
-// (2) Negativ-Vektor (Toll-Fraud-Riegel): Tenant ohne EIGENE AKTIVE Nummer (nur eine
-// suspendierte) -> Reject, KEIN Call, NIE Fallback auf die Owner-Nummer.
 test("Flag an: Tenant ohne eigene AKTIVE Nummer -> 403 Reject, KEIN Call, NIE Owner-Nummer", async () => {
   const seed = seedTenants({ extraNumbers: [activeNumber("num_c", NUM_C, C, "suspended")] });
   const srv = await startServer({ env: FLAG_ON, seed });
@@ -140,7 +106,6 @@ test("Flag an: Tenant ohne eigene AKTIVE Nummer -> 403 Reject, KEIN Call, NIE Ow
   }
 });
 
-// (2b) Vorhandene aber unbekannte Identitaet -> Reject (fail-closed, NIE Owner).
 test("Flag an: unbekannte Identitaet -> 403 Reject (NIE Owner-Tenant)", async () => {
   const srv = await startServer({ env: FLAG_ON, seed: seedTenants() });
   try {
@@ -152,9 +117,8 @@ test("Flag an: unbekannte Identitaet -> 403 Reject (NIE Owner-Tenant)", async ()
   }
 });
 
-// (3) Pro-Tenant-Budget erschoepft -> der Tenant ist geblockt, kein Call entsteht.
 test("Flag an: erschoepftes Tenant-Budget blockt den Tenant (402), KEIN Call", async () => {
-  const seed = seedTenants({ usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(99) } }); // 99 >= MAX_BUDGET_EUR(30, LCT P6)
+  const seed = seedTenants({ usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(99) } });
   const srv = await startServer({ env: FLAG_ON, seed });
   try {
     const res = await placeCall(srv, SUB_A);
@@ -169,16 +133,10 @@ test("Flag an: erschoepftes Tenant-Budget blockt den Tenant (402), KEIN Call", a
   }
 });
 
-// (4) KS-P9-Mutationsprobe auf HTTP-Ebene (der staerkste Beweis der Phase): je Tenant UNTER
-// seiner Decke, die SUMME reisst die Plattform-Zahl - A telefoniert trotzdem. Bis KS-P9 war
-// das ein 402. Status 500 = der Originate wurde offline erreicht (Muster Test (5)), also
-// hat die GESAMTE Gate-Kette durchgelassen.
-// LCT P6: Werte auf BASE_ENV MAX_BUDGET_EUR=30 nachgezogen - bucket() ist EUR-nominal
-// (json.js migriert costEur*100 -> costCents beim Laden).
 test("KS-P9: die Plattform-Summe sperrt nicht mehr - A telefoniert trotz gerissener Summe", async () => {
   const seed = seedTenants({
     usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(20), [B]: bucket(20) },
-  }); // 20+20=40 >= 30, aber je Tenant 20 < 30
+  });
   const srv = await startServer({ env: FLAG_ON, seed });
   try {
     const res = await placeCall(srv, SUB_A);
@@ -191,9 +149,6 @@ test("KS-P9: die Plattform-Summe sperrt nicht mehr - A telefoniert trotz gerisse
   }
 });
 
-// (5) E4: der Identitaets-Header gilt UNBEDINGT, ohne MULTI_TENANT gesetzt zu haben -
-// ein gueltiger A-Identitaets-Header attribuiert den Outbound auf Tenant A (eigene
-// Nummer), NIE auf den Owner.
 test("Ohne MULTI_TENANT gesetzt: Identitaets-Header attribuiert unbedingt auf den echten Tenant, NIE auf den Owner", async () => {
   const srv = await startServer({ env: { ALLOWED_NUMBERS: TO }, seed: seedTenants() });
   try {

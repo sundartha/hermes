@@ -1,7 +1,3 @@
-// P4 GAP-03/GAP-04: die Stripe-Webhook-Route sendet die Plattform-Alarm-SMS, wenn
-// applyStripeWebhookSerialized einen outcome.alarm zurueckgibt (routes/stripe-webhook.js).
-// Rein, offline (Muster test/stripe-webhook-route-secret.test.js: makeStripeWebhookRoute
-// direkt, echter HMAC-Header, kein Server-Spawn).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -25,9 +21,6 @@ function fakeRes() {
   return res;
 }
 
-// charge.dispute.created (money-events.js: alarm=true) mit customer=CUSTOMER -> loest
-// den Tenant ueber findTenantByCustomer auf, MONEY_ACTION.WARN schreibt nichts an den
-// Store, aber der Alarm-Wunsch geht an outcome.alarm zurueck.
 function disputeBody() {
   return JSON.stringify({
     id: "evt_alarm1",
@@ -117,7 +110,7 @@ test("werfendes messaging() (fehlender Bootstrap-Absender) beeintraechtigt die A
       stripeWebhookSecret: SECRET,
       platformAlertSmsTo: "+491711234567",
     }),
-    store: fakeStore(null), // keine aktive Bootstrap-Nummer -> resolveSender() liefert null
+    store: fakeStore(null),
     audit: () => {},
     accounts: {},
     sessions: {},
