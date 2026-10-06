@@ -14,6 +14,10 @@ const SOLL = join(REPO_ROOT, ".github/soll/einstellungen.json");
 const RECORDINGS = join(REPO_ROOT, "test/werkzeuge/soll-vergleich");
 const BASE = "/repos/sundartha/hermes";
 const RULESET = `${BASE}/rulesets/24128981`;
+const RULESETS = `${BASE}/rulesets`;
+const PHASE_RULESET = `${BASE}/rulesets/24519520`;
+const PHASE = "phase-schutz";
+const PHASE_AREA = `Ruleset ${PHASE}`;
 const COLLABORATORS = `${BASE}/collaborators`;
 const CODEOWNERS = `${BASE}/contents/.github/CODEOWNERS`;
 const ENVIRONMENTS = `${BASE}/environments`;
@@ -34,6 +38,7 @@ const HTTP_SERVER_ERROR = 500;
 const CHILD_TIMEOUT_MS = 30_000;
 const BYPASS_ROLE_ID = 5;
 const FOREIGN_ACCOUNT_ID = 4242;
+const FOREIGN_RULESET_ID = 24600000;
 const NOT_PROVABLE = "nicht prüfbar mit den Rechten dieses Tokens";
 const runFile = promisify(execFile);
 
@@ -63,6 +68,8 @@ function recordedRoutes(environments = MEASURED_ENVIRONMENTS) {
   const answers = recording("antworten");
   return new Map([
     [RULESET, answer(recording("ruleset-owner"))],
+    [RULESETS, answer(recording("rulesets"))],
+    [PHASE_RULESET, answer(recording("ruleset-phase-owner"))],
     [BASE, answer(answers.repo)],
     [COLLABORATORS, answer(answers.collaborators)],
     [CODEOWNERS, answer(answers.codeowners)],
@@ -263,6 +270,105 @@ test("Soll-Vergleich: erlaubt warteschlange weitere Branches, endet er mit 1", a
     "nicht im Soll",
     JSON.stringify(extra),
   ]);
+});
+
+function withRules(ruleset, update) {
+  return answer({ ...ruleset, rules: update(ruleset.rules) });
+}
+
+function withoutPhase(list) {
+  return answer(list.filter(({ name }) => name !== PHASE));
+}
+
+test("Soll-Vergleich: verbietet phase-schutz zusätzlich das Löschen, endet er mit 1", async (context) => {
+  const deletion = { type: "deletion" };
+  const result = await compare(context, {
+    changes: { [PHASE_RULESET]: (ruleset) => withRules(ruleset, (rules) => [...rules, deletion]) },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, [PHASE_AREA, "rules[deletion]", "nicht im Soll", JSON.stringify(deletion)]);
+});
+
+test("Soll-Vergleich: fehlt in phase-schutz die Regel update, endet er mit 1", async (context) => {
+  const result = await compare(context, {
+    changes: {
+      [PHASE_RULESET]: (ruleset) =>
+        withRules(ruleset, (rules) => rules.filter(({ type }) => type !== "update")),
+    },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, [PHASE_AREA, "rules[update]", JSON.stringify({ type: "update" }), "fehlt"]);
+});
+
+test("Soll-Vergleich: schützt phase-schutz andere Branches, endet er mit 1", async (context) => {
+  const target = ["refs/heads/**"];
+  const result = await compare(context, {
+    changes: {
+      [PHASE_RULESET]: (ruleset) =>
+        answer({ ...ruleset, conditions: { ref_name: { exclude: [], include: target } } }),
+    },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, [
+    PHASE_AREA,
+    "conditions.ref_name.include",
+    JSON.stringify(["refs/heads/phase/*"]),
+    JSON.stringify(target),
+  ]);
+});
+
+test("Soll-Vergleich: darf in phase-schutz ein weiterer Akteur vorbei, endet er mit 1", async (context) => {
+  const actor = { actor_id: BYPASS_ROLE_ID, actor_type: "RepositoryRole", bypass_mode: "always" };
+  const result = await compare(context, {
+    changes: {
+      [PHASE_RULESET]: (ruleset) =>
+        answer({ ...ruleset, bypass_actors: [...ruleset.bypass_actors, actor] }),
+    },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, [
+    PHASE_AREA,
+    `bypass_actors[RepositoryRole ${BYPASS_ROLE_ID}]`,
+    "nicht im Soll",
+    JSON.stringify(actor),
+  ]);
+});
+
+test("Soll-Vergleich: gibt es auf GitHub ein Ruleset, das nicht im Soll steht, endet er mit 1", async (context) => {
+  const result = await compare(context, {
+    changes: {
+      [RULESETS]: (list) => answer([...list, { ...list[0], id: FOREIGN_RULESET_ID, name: "neu" }]),
+    },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, ["Ruleset neu", "Ruleset", "nicht im Soll", "vorhanden"]);
+});
+
+test("Soll-Vergleich: fehlt phase-schutz (404), endet er mit 1", async (context) => {
+  const result = await compare(context, {
+    changes: { [PHASE_RULESET]: () => [HTTP_NOT_FOUND, { message: "Not Found" }] },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, [PHASE_AREA, "Ruleset", "vorhanden", "fehlt"]);
+});
+
+test("Soll-Vergleich: fehlt phase-schutz in der Liste von GitHub, endet er mit 1", async (context) => {
+  const result = await compare(context, { changes: { [RULESETS]: withoutPhase } });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, [PHASE_AREA, "Ruleset", "vorhanden", "fehlt"]);
+});
+
+test("Soll-Vergleich: fehlt bypass_actors von phase-schutz in der Bot-Sicht, bleibt er grün und meldet „nicht prüfbar“", async (context) => {
+  const result = await compare(context, {
+    changes: {
+      [RULESET]: () => answer(recording("ruleset-bot")),
+      [PHASE_RULESET]: () => answer(recording("ruleset-phase-bot")),
+    },
+  });
+  assert.equal(result.code, EXIT_OK, result.stderr);
+  assert.match(result.stdout, /^Keine Abweichung\.$/m);
+  assert.match(result.stdout, new RegExp(`^- Ruleset bypass_actors: ${NOT_PROVABLE} `, "m"));
+  assert.match(result.stdout, new RegExp(`^- ${PHASE_AREA} bypass_actors: ${NOT_PROVABLE} `, "m"));
 });
 
 test("Soll-Vergleich: hat sundartha-bot plötzlich admin, endet er mit 1", async (context) => {

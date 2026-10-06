@@ -1,0 +1,34 @@
+{
+  "id": 24519520,
+  "name": "phase-schutz",
+  "target": "branch",
+  "source_type": "Repository",
+  "source": "sundartha/hermes",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": ["refs/heads/phase/*"]
+    }
+  },
+  "rules": [
+    {
+      "type": "creation"
+    },
+    {
+      "type": "update"
+    }
+  ],
+  "node_id": "RRS_lACqUmVwb3NpdG9yec5LikMRzgF2I2A",
+  "created_at": "2026-10-05T19:41:43.722+02:00",
+  "updated_at": "2026-10-05T19:47:24.670+02:00",
+  "current_user_can_bypass": "never",
+  "_links": {
+    "self": {
+      "href": "https://api.github.com/repos/sundartha/hermes/rulesets/24519520"
+    },
+    "html": {
+      "href": "https://github.com/sundartha/hermes/rules/24519520"
+    }
+  }
+}
