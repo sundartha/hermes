@@ -1,4 +1,5 @@
 import { BESTAND_OPTION, befundSchluessel, bestandDerDatei } from "./bestand.js";
+import { alleKnoten } from "./knoten.js";
 import { UNBEKANNT, pfadFalter, pfadImRepo } from "./pfad-falten.js";
 
 const MELDUNG =
@@ -42,22 +43,12 @@ export function istVerbotenesZiel(pfad) {
   return VERBOTENE_ORDNER.has(ordner) || pfad.endsWith(MARKDOWN);
 }
 
-function aufrufe(sourceCode) {
-  const gefunden = [];
-  const offen = [sourceCode.ast];
-  while (offen.length > 0) {
-    const node = offen.pop();
-    if (node.type === "CallExpression") gefunden.push(node);
-    for (const schluessel of sourceCode.visitorKeys[node.type] ?? []) {
-      offen.push(...[node[schluessel]].flat().filter(Boolean));
-    }
-  }
-  return gefunden.reverse();
-}
-
 export function quelltextLesestellen(sourceCode, datei) {
   const falter = pfadFalter(sourceCode, datei);
-  return aufrufe(sourceCode)
+  const aufrufe = alleKnoten(sourceCode)
+    .filter((node) => node.type === "CallExpression")
+    .toSorted((links, rechts) => links.range[0] - rechts.range[0]);
+  return aufrufe
     .filter((aufruf) => istLeseAufruf(falter, aufruf))
     .filter((aufruf) => falter.werte(aufruf.arguments[0]).some((wert) => istVerbotenesZiel(pfadImRepo(wert))));
 }

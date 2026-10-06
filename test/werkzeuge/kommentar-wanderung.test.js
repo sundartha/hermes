@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { REPO_ROOT } from "./probe-repo.js";
+import { brichtOhneBasisAb, nachCommitPruefen, repoMitBasis } from "./pr-probe.js";
 
 const TOOL = join(REPO_ROOT, "tools/kommentar-wanderung.mjs");
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
-const EXIT_ABORT = 2;
 const CODE = "export const wert = true;";
 const KOMMENTAR = [
   "// Der Abruf wartet höchstens zehn Sekunden auf",
@@ -20,21 +20,16 @@ function quelle(zeilen) {
 }
 
 function basisRepo(context) {
-  const directory = probeRepository(context, {
+  return repoMitBasis(context, {
     "eslint.config.mjs": "export default [];\n",
     "src/abruf.js": quelle([...KOMMENTAR, CODE]),
     ".github/workflows/probe.yml": quelle(["name: Probe", "# Der Lauf startet nur auf master und nie für Forks", "on: push"]),
     "docs/notiz.md": quelle(["# Notiz", ""]),
   });
-  const basis = runIn(directory, "git", ["rev-parse", "HEAD"]).stdout.trim();
-  return { directory, basis };
 }
 
-function nachher({ directory, basis }, dateien) {
-  writeFiles(directory, dateien);
-  commitAll(directory, "Nachher");
-  const run = runIn(directory, process.execPath, [TOOL, "--basis", basis]);
-  return { status: run.status, output: `${run.stdout}${run.stderr}` };
+function nachher(repo, dateien) {
+  return nachCommitPruefen(repo, TOOL, dateien);
 }
 
 const OHNE_KOMMENTAR = { "src/abruf.js": quelle([CODE]) };
@@ -81,10 +76,5 @@ test("kommentar-wanderung: fünf gleiche Wörter sind grün", (context) => {
 });
 
 test("kommentar-wanderung: ohne, mit leerer oder unbekannter Basis bricht es mit Exit 2 ab", (context) => {
-  const { directory } = basisRepo(context);
-  for (const args of [[], ["--basis", ""], ["--basis", "gibt-es-nicht"]]) {
-    const run = runIn(directory, process.execPath, [TOOL, ...args]);
-    assert.equal(run.status, EXIT_ABORT, `${args.join(" ")}: ${run.stdout}${run.stderr}`);
-    assert.match(run.stderr, /Abbruch: .*--basis/);
-  }
+  brichtOhneBasisAb(basisRepo(context).directory, TOOL);
 });

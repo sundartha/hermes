@@ -1,6 +1,7 @@
 import { extname, join } from "node:path";
 import { ESLint, Linter } from "eslint";
 
+import { alleKnoten } from "./eslint-rules/knoten.js";
 import { istYamlOderShell, kommentareImText } from "./kommentare-yaml-shell.mjs";
 import {
   STATUS_GELOESCHT,
@@ -123,19 +124,14 @@ function zieleEintragen(ziele, datei, abschnitte) {
   }
 }
 
+function istTextAufZeilen(node, zeilen) {
+  const istText = TEXT_KNOTEN.has(node.type) && (node.type !== "Literal" || typeof node.value === "string");
+  const { start, end } = node.loc;
+  return istText && [...zeilen].some((zeile) => start.line <= zeile && zeile <= end.line);
+}
+
 function textAufZeilen(sourceCode, zeilen) {
-  const gefunden = [];
-  const offen = sourceCode === undefined ? [] : [sourceCode.ast];
-  while (offen.length > 0) {
-    const node = offen.pop();
-    const istText = TEXT_KNOTEN.has(node.type) && (node.type !== "Literal" || typeof node.value === "string");
-    const { start, end } = node.loc;
-    const beruehrt = [...zeilen].some((zeile) => start.line <= zeile && zeile <= end.line);
-    if (istText && beruehrt) gefunden.push(node);
-    for (const schluessel of sourceCode.visitorKeys[node.type] ?? []) {
-      offen.push(...[node[schluessel]].flat().filter(Boolean));
-    }
-  }
+  const gefunden = alleKnoten(sourceCode).filter((node) => istTextAufZeilen(node, zeilen));
   return gefunden
     .toSorted((links, rechts) => links.range[0] - rechts.range[0])
     .map((node) => ({ zeile: node.loc.start.line, text: node.value?.cooked ?? node.value }));

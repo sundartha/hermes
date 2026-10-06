@@ -1,44 +1,23 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { join } from "node:path";
 import { test } from "node:test";
-import { pathToFileURL } from "node:url";
-import { Linter } from "eslint";
 
 import { befundSchluessel } from "../../tools/eslint-rules/bestand.js";
-import hermes from "../../tools/eslint-rules/index.js";
-import { ESLINT_BIN, REPO_ROOT, isolatedEnvironment, probeDirectory, writeFiles } from "./probe-repo.js";
+import { bestandFriertGenauEin, bestandsDatei, gemeldeteZeilen as gemeldet } from "./hermes-regeln-probe.js";
+import { probeDirectory } from "./probe-repo.js";
 
 const RULE = "hermes/keine-kommentare";
 const BESTAND = "tools/basis/kommentare.json";
 const DATEI = "src/beispiel.js";
 const ALTER_KOMMENTAR = "// alter Kommentar";
 const CODE = "export const wert = true;";
-const EXIT_OK = 0;
-const EXIT_FINDING = 1;
-const JSON_INDENT = 2;
-const BASIS_VERGLEICH = join(REPO_ROOT, "tools/basis-vergleich.mjs");
-const PLUGIN_URL = pathToFileURL(join(REPO_ROOT, "tools/eslint-rules/index.js")).href;
-
-function bestandsDatei(befunde) {
-  return `${JSON.stringify({ befunde }, null, JSON_INDENT)}\n`;
-}
 
 function verzeichnisMitBestand(context, schluessel) {
   return probeDirectory(context, { [BESTAND]: bestandsDatei(schluessel) });
 }
 
-function gemeldeteZeilen(directory, zeilen, { noInlineConfig = true } = {}) {
-  const linter = new Linter({ cwd: directory });
-  const config = {
-    plugins: { hermes },
-    linterOptions: { noInlineConfig },
-    rules: { [RULE]: ["error", { bestand: BESTAND }] },
-  };
-  const messages = linter.verify(zeilen.join("\n"), config, {
-    filename: join(directory, DATEI),
-  });
-  return messages.filter(({ ruleId }) => ruleId === RULE).map(({ line }) => zeilen[line - 1]);
+function gemeldeteZeilen(directory, zeilen) {
+  const regel = { directory, datei: DATEI, regel: RULE, bestand: BESTAND };
+  return gemeldet({ ...regel, linterOptions: { noInlineConfig: true } }, zeilen);
 }
 
 function eingefroren(context, ...texte) {
@@ -130,39 +109,15 @@ test("keine-kommentare: ohne Bestandsdatei ist jeder Kommentar neu", (context) =
   assert.deepEqual(gemeldeteZeilen(directory, [ALTER_KOMMENTAR, CODE]), [ALTER_KOMMENTAR]);
 });
 
-function eslintKonfiguration() {
-  return [
-    `import hermes from ${JSON.stringify(PLUGIN_URL)};`,
-    "export default [",
-    `  { plugins: { hermes }, linterOptions: { noInlineConfig: true }, rules: { ${JSON.stringify(RULE)}: ["error", { bestand: ${JSON.stringify(BESTAND)} }] } },`,
-    "];",
-    "",
-  ].join("\n");
-}
-
-function laufen(directory, programm, args) {
-  const run = spawnSync(process.execPath, [programm, ...args], {
-    cwd: directory,
-    encoding: "utf8",
-    env: isolatedEnvironment(),
-  });
-  return { status: run.status, output: `${run.stdout}${run.stderr}` };
-}
-
 test("keine-kommentare: die Basislinie aus basis-vergleich friert genau den Bestand ein", (context) => {
-  const directory = probeDirectory(context, {
-    "eslint.config.mjs": eslintKonfiguration(),
-    "src/alt.js": `${ALTER_KOMMENTAR}\n${CODE}\n`,
+  bestandFriertGenauEin(context, {
+    werkzeug: "kommentare",
+    konfiguration: {
+      linterOptions: { noInlineConfig: true },
+      rules: { [RULE]: ["error", { bestand: BESTAND }] },
+    },
+    vorher: { "src/alt.js": `${ALTER_KOMMENTAR}\n${CODE}\n` },
+    neu: { "src/neu.js": `${CODE}\n// neuer Kommentar\n` },
+    ort: "src/neu.js:2",
   });
-  const angelegt = laufen(directory, BASIS_VERGLEICH, ["kommentare", "--basis-anlegen"]);
-  assert.equal(angelegt.status, EXIT_OK, angelegt.output);
-  assert.match(angelegt.output, /mit 1 Befunden angelegt/);
-  assert.equal(laufen(directory, ESLINT_BIN, ["."]).status, EXIT_OK);
-  writeFiles(directory, { "src/neu.js": `${CODE}\n// neuer Kommentar\n` });
-  const lint = laufen(directory, ESLINT_BIN, ["."]);
-  assert.equal(lint.status, EXIT_FINDING, lint.output);
-  assert.match(lint.output, new RegExp(`src/neu\\.js[\\s\\S]*2:1[\\s\\S]*${RULE}`));
-  const vergleich = laufen(directory, BASIS_VERGLEICH, ["kommentare"]);
-  assert.equal(vergleich.status, EXIT_FINDING, vergleich.output);
-  assert.match(vergleich.output, /src\/neu\.js:2/);
 });

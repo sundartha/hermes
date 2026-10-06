@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { ESLint, Linter } from "eslint";
 
+import { alleKnoten } from "./eslint-rules/knoten.js";
 import { GEBUNDENE_KNOTEN, gebundeneNamen } from "./eslint-rules/namen-ohne-begruendung.js";
 import {
   STATUS_NEU,
@@ -79,19 +80,6 @@ export function geaenderteStellen(hunkListe, alt, neu) {
   };
 }
 
-function knoten(sourceCode, passt) {
-  const gefunden = [];
-  const offen = sourceCode === undefined ? [] : [sourceCode.ast];
-  while (offen.length > 0) {
-    const node = offen.pop();
-    if (passt(node)) gefunden.push(node);
-    for (const schluessel of sourceCode.visitorKeys[node.type] ?? []) {
-      offen.push(...[node[schluessel]].flat().filter(Boolean));
-    }
-  }
-  return gefunden;
-}
-
 function vorOderGleich(links, rechts) {
   return links.line < rechts.line || (links.line === rechts.line && links.column <= rechts.column);
 }
@@ -145,9 +133,8 @@ function meldungZaehlt(meldung, { funktionen, geaendert, stellen }) {
 }
 
 function langeNamen(sourceCode, stellen) {
-  const gebunden = knoten(sourceCode, (node) => GEBUNDENE_KNOTEN.includes(node.type)).flatMap(
-    gebundeneNamen,
-  );
+  const knoten = alleKnoten(sourceCode).filter((node) => GEBUNDENE_KNOTEN.includes(node.type));
+  const gebunden = knoten.flatMap(gebundeneNamen);
   return gebunden.filter(
     ({ name, node }) => name.length > LANGER_NAME && stellen.zeilen.has(node.loc.start.line),
   );
@@ -160,7 +147,7 @@ async function dateiPruefen(werkzeug, { status, datei }) {
   const alt = await geparst(werkzeug, datei, altText);
   const neu = await geparst(werkzeug, datei, neuText);
   const stellen = geaenderteStellen(hunks(basis, datei, root), alt, neu);
-  const funktionen = knoten(neu.sourceCode, (node) => FUNKTIONEN.has(node.type));
+  const funktionen = alleKnoten(neu.sourceCode).filter((node) => FUNKTIONEN.has(node.type));
   const geaendert = geaenderteFunktionen(funktionen, stellen, neuText.split(ZEILENENDE));
   const [ergebnis] = await werkzeug.eslint.lintText(neuText, {
     filePath: join(root, datei),

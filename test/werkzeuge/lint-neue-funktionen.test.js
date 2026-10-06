@@ -1,17 +1,15 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
-import { pathToFileURL } from "node:url";
-
 import { befundSchluessel } from "../../tools/eslint-rules/bestand.js";
-import { REPO_ROOT, commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
+import { bestandsDatei, eslintKonfiguration } from "./hermes-regeln-probe.js";
+import { REPO_ROOT } from "./probe-repo.js";
+import { brichtOhneBasisAb, nachCommitPruefen, repoMitBasis } from "./pr-probe.js";
 
 const TOOL = join(REPO_ROOT, "tools/lint-neue-funktionen.mjs");
-const PLUGIN_URL = pathToFileURL(join(REPO_ROOT, "tools/eslint-rules/index.js")).href;
 const DATEI = "src/rechnen.js";
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
-const EXIT_ABORT = 2;
 const JSON_INDENT = 2;
 const REGELN = {
   "no-magic-numbers": ["error", { ignore: [0, 1, -1] }],
@@ -19,16 +17,6 @@ const REGELN = {
   "hermes/namen-ohne-begruendung": "warn",
 };
 const ALTER_KOMMENTAR = "  // die Antwort";
-
-function eslintKonfiguration() {
-  return [
-    `import hermes from ${JSON.stringify(PLUGIN_URL)};`,
-    "export default [",
-    `  { plugins: { hermes }, linterOptions: { noInlineConfig: true }, rules: ${JSON.stringify(REGELN)} },`,
-    "];",
-    "",
-  ].join("\n");
-}
 
 function json(wert) {
   return `${JSON.stringify(wert, null, JSON_INDENT)}\n`;
@@ -50,21 +38,16 @@ const ALT = [
 ];
 
 function basisRepo(context, zeilen = ALT) {
-  const directory = probeRepository(context, {
-    "eslint.config.mjs": eslintKonfiguration(),
+  return repoMitBasis(context, {
+    "eslint.config.mjs": eslintKonfiguration({ linterOptions: { noInlineConfig: true }, rules: REGELN }),
     "eslint-suppressions.json": json({ [DATEI]: { "no-magic-numbers": { count: 1 } } }),
-    "tools/basis/kommentare.json": json({ befunde: [befundSchluessel(DATEI, " die Antwort")] }),
+    "tools/basis/kommentare.json": bestandsDatei([befundSchluessel(DATEI, " die Antwort")]),
     [DATEI]: quelle(zeilen),
   });
-  const basis = runIn(directory, "git", ["rev-parse", "HEAD"]).stdout.trim();
-  return { directory, basis };
 }
 
-function nachher({ directory, basis }, zeilen) {
-  writeFiles(directory, { [DATEI]: quelle(zeilen) });
-  commitAll(directory, "Nachher");
-  const run = runIn(directory, process.execPath, [TOOL, "--basis", basis]);
-  return { status: run.status, output: `${run.stdout}${run.stderr}` };
+function nachher(repo, zeilen) {
+  return nachCommitPruefen(repo, TOOL, { [DATEI]: quelle(zeilen) });
 }
 
 function ersetzt(zeilen, alt, neu) {
@@ -133,12 +116,7 @@ test("lint-neue-funktionen: ein Begründungsname in neuem Code ist rot, ein lang
 });
 
 test("lint-neue-funktionen: ohne, mit leerer oder unbekannter Basis bricht es mit Exit 2 ab", (context) => {
-  const { directory } = basisRepo(context);
-  for (const args of [[], ["--basis", ""], ["--basis", "gibt-es-nicht"]]) {
-    const run = runIn(directory, process.execPath, [TOOL, ...args]);
-    assert.equal(run.status, EXIT_ABORT, `${args.join(" ")}: ${run.stdout}${run.stderr}`);
-    assert.match(run.stderr, /Abbruch: .*--basis/);
-  }
+  brichtOhneBasisAb(basisRepo(context).directory, TOOL);
 });
 
 const WIRKUNGSLOS = ['  const _grund = "früher war es kaputt";', '  "Absicht als Zeichenkette";'];
