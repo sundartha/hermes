@@ -1,47 +1,22 @@
-// Zeit-Budget EINES Webhook-Turns (GAP-22). Der Provider kappt einen unbeantworteten
-// Voice-Webhook hart (Twilio dokumentiert 15 s; src/config.js nennt denselben Wert im
-// llmRequestTimeoutMs-Kommentar). Der bisher in config.js dokumentierte Rechenweg zaehlte
-// NUR die LLM-Versuche - weder die Play-TTS-Vorab-Synthese im selben Webhook
-// (src/tts/directive-synth.js) noch eine Netzreserve. Beides addiert sich zur selben
-// Wanduhr. Reine Funktionen, KEIN config-Import (der Aufrufer reicht die Werte) -
-// damit ist die Rechnung ohne Env-Bastelei testbar.
-//
-// IE7: seit dem Streaming-Umbau wartet der Webhook nur noch auf das ERSTE Audio-Paket.
-// synthTimeoutMs IST genau diese Frist und bleibt deshalb unveraendert Summand dieser
-// Rechnung - die Zahlen aendern sich nicht. Die Gesamtfrist des Hintergrund-Stroms
-// (ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS) liegt NICHT auf dieser Wanduhr und ist hier bewusst
-// KEIN Summand: sie laeuft, nachdem der Webhook geantwortet hat.
+export const PROVIDER_WEBHOOK_HARDCUT_MS = 15000;
+export const TURN_NETWORK_RESERVE_MS = 1500;
 
-export const PROVIDER_WEBHOOK_HARDCUT_MS = 15000; // externer Vertragswert
-export const TURN_NETWORK_RESERVE_MS = 1500; // Express+Render-Roundtrip, TeXML-Render, Store-Schreibvorgang
-
-// src/llm.js verdoppelt die Backoff-Basis pro Versuch (BACKOFF_FACTOR = 2). Dieselbe
-// Basis wie dort (G5: die Formel selbst lebt in llm.js, hier nur ihre Summenbildung
-// fuer die Budget-Rechnung).
 const LLM_BACKOFF_FACTOR = 2;
 
-// Worst-Case eines Turns im LLM-Seam: (Versuche) * Timeout + Summe der Voll-Jitter-
-// Backoffs. Die Backoff-Summe ueber r Retries ist base * (2^r - 1), NICHT 2*base (der
-// aeltere Kommentar in config.js unterschaetzte sie). Ein Objekt statt vier Argumenten (F1).
 export function llmTurnBudgetMs({ requestTimeoutMs, maxRetries, backoffMs }) {
   const attempts = maxRetries + 1;
   const backoffSum = backoffMs * (LLM_BACKOFF_FACTOR ** maxRetries - 1);
   return attempts * requestTimeoutMs + backoffSum;
 }
 
-// Alles, was im selben Webhook NEBEN den llm.complete-Ketten liegt: das Warten auf das
-// erste Audio-Paket der Play-TTS-Synthese (IE7) + Netzreserve. EINE Quelle (G5) - sonst
-// rechnen turnBudgetMs, turnLoopDeadlineMs und enforcedTurnWorstCaseMs dreimal dieselbe Summe.
 function turnOverheadMs(synthTimeoutMs) {
   return synthTimeoutMs + TURN_NETWORK_RESERVE_MS;
 }
 
-// Gesamtes Turn-Budget EINER llm.complete-Kette inkl. Synthese und Netzreserve.
 export function turnBudgetMs({ requestTimeoutMs, maxRetries, backoffMs, synthTimeoutMs }) {
   return llmTurnBudgetMs({ requestTimeoutMs, maxRetries, backoffMs }) + turnOverheadMs(synthTimeoutMs);
 }
 
-// null = Budget haelt; sonst { budgetMs, hardcutMs, overrunMs } fuer Diagnose/Boot-Warnung.
 export function turnBudgetOverrun(params) {
   const budgetMs = turnBudgetMs(params);
   if (budgetMs <= PROVIDER_WEBHOOK_HARDCUT_MS) return null;
@@ -52,27 +27,12 @@ export function turnBudgetOverrun(params) {
   };
 }
 
-// AL-P6: so viele llm.complete-Ketten faehrt der Tool-Loop in agentTurn hoechstens pro
-// Turn. Hier statt als Literal in claude.js (G25), weil BEIDE Seiten dieselbe Zahl
-// brauchen: die Schleife selbst und die Worst-Case-Rechnung des Boot-Waechters. Bewusst
-// KEIN Env-Knopf - die Rundenzahl ist eine Kosten-/Latenz-Invariante, kein Betriebswert.
 export const MAX_TOOL_ROUNDS_PER_TURN = 4;
 
-// Wanduhr-Frist des Tool-Loops EINES Turns: was vom Provider-Hardcut uebrig bleibt, wenn
-// Synthese und Netzreserve desselben Webhooks abgezogen sind. ABGELEITET, kein eigener
-// Env-Wert. Nie negativ: eine absurd grosse Synthese-Frist ergibt 0 - dann laeuft nur die
-// erste Runde (der Aufrufer faehrt sie immer). Fuer den Shim-Pfad ist der Abzug der
-// Synthese-Frist konservativ (dort synthetisiert der Vendor) - konservativ heisst hier
-// kuerzer, also fail-safe.
 export function turnLoopDeadlineMs(synthTimeoutMs) {
   return Math.max(0, PROVIDER_WEBHOOK_HARDCUT_MS - turnOverheadMs(synthTimeoutMs));
 }
 
-// Darf noch eine weitere Schleifenrunde starten? Massstab ist EIN llm.complete-VERSUCH
-// (requestTimeoutMs), nicht die ganze Retry-Kette: eine Runde, die nicht einmal ihren
-// ersten Versuch im Fenster abschliessen kann, ist sicher zu spaet. Die volle Kette als
-// Massstab wuerde bei ausgelieferten Werten praktisch JEDE zweite Runde verbieten und
-// damit das Gespraechsverhalten aendern - das ist NICHT Gegenstand dieser Phase.
 export function roundFitsDeadline({ elapsedMs, deadlineMs, requestTimeoutMs }) {
   return elapsedMs + requestTimeoutMs <= deadlineMs;
 }

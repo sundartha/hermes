@@ -1,38 +1,16 @@
-// Browser-Login: standard OIDC Authorization-Code + PKCE, in-house (kein Provider-
-// SDK -> kein Lock-in, nur OIDC-Claims queren die Schicht). Cookie-Signatur und
-// PKCE mit crypto (kein neuer Dep). Niemals Tokens/Secrets loggen.
 import crypto from "crypto";
 import { Router } from "express";
 import { tenantIdForSubject, TENANT_STATUS } from "./store/defaults.js";
 import { safeEqual, auditAuthFailed, AUTH_FAILED_GRUND } from "./util.js";
 import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.js";
 
-// Laenge des CSRF-/nonce-Zufallswerts in Bytes (analog oauth_state).
 const RANDOM_BYTES = 16;
-// Default-Lebensdauer der Login-Flow-Cookies (pkce/state/nonce) in Sekunden, falls deps
-// keinen Wert injiziert (Tests). Bewusster Test-Fallback; die Produktionsquelle ist
-// config.auth.loginCookieTtlSeconds (Fallback 1800), durchgereicht via deps.loginCookieTtlSeconds.
-// web-auth bleibt config-frei (DI-Naht) - kein config-Import hier.
 const DEFAULT_LOGIN_COOKIE_TTL_SECONDS = 1800;
-// Login-Route: eine Quelle (G5) fuer die Route-Registrierung, den Recovery-Redirect und
-// den Link der terminalen Seite.
 export const LOGIN_ROUTE = "/auth/login";
-// Query-Param, mit dem die Recovery den Login als zweiten (markierten) Versuch anstoesst.
 const RETRY_PARAM = "retry";
-// Loop-Guard-Marker fuer den OAuth-state. Tilde ist URI-unreserved (RFC 3986) und nicht
-// im base64url-Alphabet des Zufallstokens -> kollisionsfrei anhaengbar/erkennbar. Der
-// Marker reist im state-Query-Param mit (vom IdP verbatim zurueckgespiegelt) und ueberlebt
-// so den Round-Trip auch dann, wenn der Browser gar keine Cookies speichert.
 const STATE_RETRY_MARKER = "~retry";
 const markRetryState = (token) => token + STATE_RETRY_MARKER;
 const isRetryState = (state) => String(state ?? "").endsWith(STATE_RETRY_MARKER);
-// Terminale Recovery-Seite: erscheint NUR, wenn auch der zweite (markierte) Login-Versuch
-// ohne Login-Cookie zurueckkommt (Browser blockiert Cookies) -> bricht den Loop statt
-// Endlos-302. Mintet KEINE Session, setzt KEIN Cookie, leakt nichts.
-// WEB-13: Englisch statt Deutsch. Die Seite erscheint, BEVOR eine Identitaet existiert
-// (kein Cookie, keine Session, kein Tenant) - eine Tenant-Sprache gibt es hier strukturell
-// nicht, also gilt der Weltdefault "en" (derselbe Massstab wie /app). Bewusst hart
-// verdrahtet und NICHT ueber config: web-auth bleibt config-frei (DI-Naht, s.o.).
 const SESSION_EXPIRED_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Session expired</title></head><body>
 <h1>Session expired</h1>
@@ -40,16 +18,11 @@ const SESSION_EXPIRED_PAGE = `<!doctype html><html lang="en"><head><meta charset
 <p><a href="${LOGIN_ROUTE}">Sign in again</a></p>
 </body></html>`;
 
-// P9 (Fehler-Vertrag): die nutzersichtbaren Fehlerantworten der Auth-Pfade tragen stabile,
-// sprachneutrale Codes statt deutschem Klartext - ein Browser mit beliebigem Accept-Language
-// bekommt denselben, maschinenlesbaren Wert. Die Antworten bleiben bewusst detail-arm: EIN
-// Code fuer ALLE CSRF-Ablehnungsgruende (kein Leak, welcher Check scheiterte, Regel 3).
 const ERROR_CSRF_STATE_INVALID = "csrf_state_invalid";
 const ERROR_LOGIN_FAILED = "login_failed";
 
 const b64url = (buf) => buf.toString("base64url");
 
-// HMAC-signierter Cookie-Wert "<value>.<sig>". Timing-sichere Pruefung.
 export function signValue(value, secret) {
   const sig = crypto.createHmac("sha256", secret).update(value).digest("base64url");
   return `${value}.${sig}`;
@@ -63,17 +36,12 @@ export function verifyValue(signed, secret) {
   return safeEqual(sig, expected) ? value : null;
 }
 
-// PKCE S256.
 export function makePkce() {
   const verifier = b64url(crypto.randomBytes(32));
   const challenge = b64url(crypto.createHash("sha256").update(verifier).digest());
   return { verifier, challenge };
 }
 
-// ---- Cookie-Hilfsfunktionen ----------------------------------------
-
-// Liest einen einzelnen Cookie-Wert aus dem Request-Header (kein cookie-parser).
-// Gibt den rohen Wert zurueck (URL-decodiert), oder null wenn nicht vorhanden.
 function readCookie(req, name) {
   const header = req.headers.cookie || "";
   for (const part of header.split("; ")) {
@@ -90,151 +58,72 @@ function readCookie(req, name) {
   return null;
 }
 
-// Baut den Set-Cookie-Header-String. value=null -> Cookie loeschen (Max-Age=0).
 function cookieAttrs(name, value, maxAge) {
   const encoded = encodeURIComponent(value ?? "");
   const age = value === null ? 0 : maxAge;
   return `${name}=${encoded}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${age}`;
 }
 
-// Setzt mehrere Set-Cookie-Header per res.append (Express erlaubt Mehrfach-Append).
 function setCookies(res, entries) {
   for (const [name, value, maxAge] of entries) {
     res.append("Set-Cookie", cookieAttrs(name, value, maxAge));
   }
 }
 
-// Loescht eine Liste von Cookies (Max-Age=0).
 function clearCookies(res, names) {
   for (const name of names) {
     res.append("Set-Cookie", cookieAttrs(name, null, 0));
   }
 }
 
-// EINE Quelle (G5) fuer den Namen des Sitzungs-Cookies. Das Praefix __Host- ist kein
-// Schmuck, sondern eine vom Browser erzwungene Zusage: er nimmt das Cookie NUR mit
-// Secure, mit Path=/ und OHNE Domain an - eine (auch kompromittierte) Subdomain kann es
-// damit weder setzen noch ueberschreiben. cookieAttrs() erfuellt alle drei Bedingungen
-// bereits bedingungslos; der Praefix macht die Zusage nur pruefbar.
-// Preis, bewusst: der Name aendert sich, also endet beim Deploy JEDE laufende Sitzung.
 export const SESSION_COOKIE_NAME = "__Host-session";
 
-// Login-Flow-Cookies (state/pkce/nonce) als EINE Namensliste (G5) fuer die drei Cleanup-Stellen.
 const LOGIN_FLOW_COOKIE_NAMES = ["pkce_verifier", "oauth_state", "oidc_nonce"];
 
-// Signierten Cookie lesen + HMAC verifizieren in EINEM Schritt (G5). Fehlt der Cookie ODER
-// ist die Signatur ungueltig -> null (fail-closed). NICHT fuer oauth_state: dort MUSS
-// "Cookie fehlt" (null-Recovery) von "ungueltig signiert" (400) unterschieden werden.
 export function readSignedCookie(req, name, secret) {
   const raw = readCookie(req, name);
   return raw ? verifyValue(raw, secret) : null;
 }
 
-// EINE Quelle (G5) fuer die generische 400-CSRF-Antwort (bewusst detail-arm, kein Leak
-// welcher Check scheiterte). Gibt die Antwort zurueck -> Aufrufer `return`t sie (Muster recoverLogin).
 function rejectCsrf(res) {
   return res.status(400).send(ERROR_CSRF_STATE_INVALID);
 }
 
-// Recovery bei FEHLENDEM Login-Flow-Cookie (benign: Drop/Expiry/anderer Tab beim Mail-Link).
-// Erster Versuch -> 302 zurueck auf den Login als markierter retry. Kommt der markierte
-// Versuch erneut ohne Cookie zurueck (Browser blockiert Cookies), bricht der Loop-Guard ab
-// und zeigt die terminale Seite statt eines Endlos-302. Mintet NIE eine Session.
 function recoverLogin(req, res) {
   if (isRetryState(req.query.state)) return res.status(200).send(SESSION_EXPIRED_PAGE);
   return res.redirect(302, `${LOGIN_ROUTE}?${RETRY_PARAM}=1`);
 }
 
-// ---- makeWebAuthRoutes -----------------------------------------------
-// Baut einen Express-Router mit GET /auth/login, GET /auth/callback, POST /auth/logout.
-// Alle externen Abhaengigkeiten (oidc, accounts, sessions, audit) per Dependency-
-// Injection -> testbar ohne echten IdP oder pg.
 export function makeWebAuthRoutes(deps) {
-  // postLoginPath: Ziel des Browser-Redirects nach erfolgreichem Callback. Default "/"
-  // (byte-identisch zum Bestand). server.js reicht das Kunden-Portal durch, damit ein
-  // frisch eingeloggter (noch suspendierter) Tenant NICHT auf dem Owner-Dashboard in
-  // einer rohen Auth-Sackgasse landet, sondern auf der "Choose your plan"-Shell.
   const { secret, redirectUri, ttlSeconds, oidc, accounts, sessions, audit } = deps;
   const postLoginPath = deps.postLoginPath || "/";
-  // Absolute Rueckkehr-URL fuer den WorkOS-Sign-out-Redirect (return_to). Muss absolut sein
-  // (anders als postLoginPath) und im WorkOS-Dashboard als Sign-out-Redirect-URL registriert
-  // sein (Phase 3, Jonas manuell). Optional: fehlt sie, laesst sessionLogoutUrl return_to weg
-  // -> WorkOS beendet die Session trotzdem, nur ohne automatischen Rueck-Redirect.
   const postLogoutUrl = deps.postLogoutUrl;
-  // Optionaler Signup-Spiegel-Nachzug (Default async No-Op -> Bestands-Auth-Tests
-  // unveraendert): zieht den frisch per accounts.upsertOnFirstLogin angelegten Tenant in
-  // den pg-Store-Spiegel, BEVOR die Session steht. Sonst faende jede WRITE-Store-Op auf dem
-  // Self-Service-Subscribe-Pfad (setTenantStripe etc.) den Tenant nicht und wuerfe fail-closed.
   const ensureTenant = deps.ensureTenant || (async () => {});
-  // P2b-Identitaets-Write (DI wie ensureTenant; Default async No-Op -> Bestands-Auth-Tests
-  // ohne diesen Dep bleiben gruen). Schreibt Vor-/Nachname set-if-absent in den Gate-Store.
   const applyTenantIdentity = deps.applyTenantIdentity || (async () => {});
-  // tenant-prolif-b: Spiegel-Bindung des (evtl. per Email-Merge gebundenen) sub in den
-  // Resolver-Index (DI wie ensureTenant; Default No-Op -> Bestands-Auth-Tests unveraendert).
   const bindSub = deps.bindSub || (async () => {});
-  // Login-Flow-Cookie-TTL (state/pkce/nonce) per DI (Muster ttlSeconds): Produktion reicht
-  // config.auth.loginCookieTtlSeconds durch, Tests fallen auf den Default zurueck. `??` ehrt eine
-  // explizite 0 (min:0 in config).
   const loginCookieTtlSeconds = deps.loginCookieTtlSeconds ?? DEFAULT_LOGIN_COOKIE_TTL_SECONDS;
   const router = Router();
 
-  // EINE Quelle fuer das Session-Minting (G5 - kein paralleler Auth-Pfad): Account-Upsert
-  // -> Session anlegen -> signiertes Session-Cookie setzen. Callback UND Dev-Login-Shim
-  // teilen sich diese Mechanik, damit eine kuenftige Haertung (zusaetzliche Cookie-Flags,
-  // Session-Rotation/-Binding) an EINER Stelle nachgezogen wird. Setzt NUR das Session-
-  // Cookie; Login-Flow-Cookie-Cleanup, audit und redirect bleiben Sache des Aufrufers
-  // (Callback auditiert + raeumt die pkce/state/nonce-Cookies, Dev-Login nicht).
   async function mintSession(res, { sub, email, firstName, lastName, workosSessionId }) {
     const { tenantId } = await accounts.upsertOnFirstLogin({ sub, email });
-    // Spiegel-Nachzug NACH dem Account-/Tenant-Upsert (die DB-Zeile existiert jetzt), VOR
-    // sessions.create. FAIL-OPEN bewusst: die Auth-Entscheidung (account+session) ist
-    // bereits getroffen, der Spiegel ist nur ein Betriebs-Cache. Ein Nachzug-Schluckauf
-    // oeffnet KEIN Gate (fehlt der Spiegel-Tenant, werfen die Setter weiter fail-CLOSED -
-    // der alte 502, nie suspended-sieht-aktiv-aus). Deckt Callback UND Dev-Login (G5).
     await ensureTenant(tenantId);
-    // tenant-prolif-b: den (evtl. per Email-Merge auf einen FREMDEN Tenant gebundenen) sub in
-    // den MCP/REST-Resolver-Index spiegeln, damit resolveTenant den kanonischen Tenant OHNE
-    // Neustart auffindet (schliesst die "idp_subject eingefroren"-Landmine). NACH ensureTenant
-    // (Tenant ist jetzt im Spiegel); FAIL-OPEN wie ensureTenant (reiner Betriebs-Cache).
     await bindSub(sub, tenantId);
-    // P2b: Vor-/Nachname (aus dem verifizierten IdP-Profil) set-if-absent in den Gate-Store
-    // schreiben, sonst sperrt das Outbound-Identitaets-Gate den Web-Tenant fail-closed. NUR
-    // wenn ein Name vorliegt (Dev-Login/namloses Profil -> kein unnoetiger Store-Lock, kein
-    // Body-Spoofing). Deckt ausschliesslich den echten Callback (mintSession-Aufrufer reicht
-    // Namen nur dort durch).
     if (firstName || lastName) await applyTenantIdentity(tenantId, { firstName, lastName });
-    // workosSessionId (sid-Klaim, aus exchange()) wird mitgespeichert -> Grundlage fuer den
-    // WorkOS-Sign-out-Redirect bei /auth/logout. Dev-Login reicht sie nie durch (undefined ->
-    // sessions.create() defaultet auf null, kein Verhaltenswechsel fuer den Dev-Pfad).
     const { id } = await sessions.create({ sub, tenantId, ttlSeconds, workosSessionId });
     res.append("Set-Cookie", cookieAttrs(SESSION_COOKIE_NAME, signValue(id, secret), ttlSeconds));
     return { tenantId, id };
   }
 
-  // GET /auth/login
-  // Erzeugt PKCE-Paar + State, signiert beides als Cookies, redirectet zum IdP.
   router.get(LOGIN_ROUTE, async (req, res) => {
     const { verifier, challenge } = makePkce();
     const stateToken = crypto.randomBytes(RANDOM_BYTES).toString("base64url");
-    // Loop-Guard: ein Recovery-Neustart (?retry=1) markiert den state. Nur der state-Param
-    // ueberlebt den IdP-Round-Trip (Cookies evtl. blockiert) -> der Callback erkennt am
-    // Marker den zweiten vergeblichen Versuch und zeigt die terminale Seite statt Endlos-302.
     const state = req.query[RETRY_PARAM] === "1" ? markRetryState(stateToken) : stateToken;
-    // oidc_nonce: zusaetzliche signierte Same-Session-Bindung. WorkOS User Management
-    // kennt im authorize-Endpoint keinen nonce-Param und liefert kein id_token -> kein
-    // IdP-Round-Trip; der Replay-Schutz liegt bei PKCE (code nur mit code_verifier
-    // einloesbar). Der Callback erzwingt dieses Cookie (Vorhandensein + Signatur) vor
-    // dem Token-Tausch.
     const nonce = crypto.randomBytes(RANDOM_BYTES).toString("base64url");
     setCookies(res, [
       ["pkce_verifier", signValue(verifier, secret), loginCookieTtlSeconds],
       ["oauth_state", signValue(state, secret), loginCookieTtlSeconds],
       ["oidc_nonce", signValue(nonce, secret), loginCookieTtlSeconds],
     ]);
-    // authorizeUrl baut nur eine URL (kein I/O), bleibt aber awaited + fail-closed: ein
-    // unerwarteter Fehler darf den Request nicht bis zum Socket-Timeout haengen lassen
-    // (Express 4 reicht Route-Rejections NICHT automatisch an die Error-MW weiter).
-    // Generische 5xx, Login-Cookies geloescht, kein Detail-Leak.
     try {
       const url = await oidc.authorizeUrl({ challenge, state, redirectUri });
       res.redirect(302, url);
@@ -244,15 +133,7 @@ export function makeWebAuthRoutes(deps) {
     }
   });
 
-  // GET /auth/callback
-  // Validiert State (CSRF) + nonce + PKCE-Verifier + code, tauscht den Code bei WorkOS,
-  // upsert Account, setzt Session-Cookie.
   router.get("/auth/callback", async (req, res) => {
-    // CSRF + Recovery: ein FEHLENDES state-Cookie (signedState == null) ist benign -
-    // Cookie-Drop/Expiry oder Mail-Link in anderem Tab/Geraet. Statt 400-Sackgasse starten
-    // wir den Flow neu (re-mint pkce/state/nonce ueber /auth/login). Ein VORHANDENES, aber
-    // ungueltig signiertes ODER abweichendes Cookie bleibt strikt 400 (echtes CSRF/Tampering);
-    // der Recovery-Pfad mintet NIE eine Session -> die Sicherung wird nicht aufgeweicht.
     const signedState = readCookie(req, "oauth_state");
     if (signedState === null) return recoverLogin(req, res);
     const stateFromCookie = verifyValue(signedState, secret);
@@ -260,33 +141,19 @@ export function makeWebAuthRoutes(deps) {
       return rejectCsrf(res);
     }
 
-    // nonce: signierter Cookie muss vorhanden und gueltig sein. Fehlt/ungueltig ->
-    // 400 mit derselben generischen Meldung wie state (kein Detail-Leak, welcher
-    // Check scheiterte). Bindet den Callback an die Login-Session dieses Browsers
-    // (Same-Session). WorkOS User Management liefert kein id_token, an das ein nonce
-    // gebunden werden koennte -> das Cookie selbst ist die Bindung; der Replay-Schutz
-    // liegt bei PKCE.
     const nonce = readSignedCookie(req, "oidc_nonce", secret);
     if (!nonce) {
       return rejectCsrf(res);
     }
 
-    // PKCE-Verifier aus Cookie
     const verifier = readSignedCookie(req, "pkce_verifier", secret);
 
-    // Verifier + code muessen vorhanden sein, BEVOR wir WorkOS anrufen: ein fehlender
-    // Verifier (Cookie weg/ungueltig) oder ein Callback ohne code (z.B. WorkOS-Fehler-
-    // Redirect ?error=...) wuerde sonst als null/undefined an authenticate gehen. Fail-
-    // fast lokal (400, gleiche generische Meldung wie state/nonce - kein Detail-Leak,
-    // welcher Check scheiterte), statt einen garantiert ungueltigen Request abzusetzen.
     if (!verifier || typeof req.query.code !== "string" || !req.query.code) {
       return rejectCsrf(res);
     }
 
     try {
       const { claims, workosSessionId } = await oidc.exchange({ code: req.query.code, verifier });
-      // Session ueber die gemeinsame Mint-Mechanik (setzt das Session-Cookie). Danach die
-      // Login-Flow-Cookies loeschen.
       const { tenantId } = await mintSession(res, {
         sub: claims.sub,
         email: claims.email,
@@ -299,20 +166,11 @@ export function makeWebAuthRoutes(deps) {
       await audit.record({ actorSub: claims.sub, tenantId, action: "login" });
       res.redirect(302, postLoginPath);
     } catch {
-      // Generischer Fehler: kein internes Detail, keine Token-Leaks
       clearCookies(res, LOGIN_FLOW_COOKIE_NAMES);
       res.status(401).send(ERROR_LOGIN_FAILED);
     }
   });
 
-  // POST /auth/logout
-  // Invalidiert die lokale Session (wenn Cookie vorhanden), loescht das Cookie. Traegt die
-  // Session eine WorkOS-Session-ID (sid-Klaim, seit dem Login mitgespeichert), liefert die
-  // Antwort zusaetzlich { logoutUrl }: WorkOS' eigener Sign-out-Endpunkt, zu dem der Browser
-  // TOP-LEVEL navigieren muss (Frontend), damit WorkOS die eigene AuthKit-SSO-Session beendet
-  // -- sonst bleibt sie aktiv und der naechste Login-Redirect authentifiziert still durch (kein
-  // Formular). Alt-Sessions/Dev-Login OHNE workos_session_id -> weiterhin 204 ohne Body
-  // (rein lokal, byte-identisch zum Bestand).
   router.post("/auth/logout", async (req, res) => {
     const sessionId = readSignedCookie(req, SESSION_COOKIE_NAME, secret);
     let workosSessionId = null;
@@ -328,22 +186,12 @@ export function makeWebAuthRoutes(deps) {
       .json({ logoutUrl: oidc.sessionLogoutUrl({ workosSessionId, returnTo: postLogoutUrl }) });
   });
 
-  // POST /auth/dev-login (NUR lokal, hinter deps.devLoginEnabled - config ist doppelt
-  // fail-closed: explizites Opt-in UND nie auf Render, plus Boot-Refusal dort). Login-
-  // Shim fuer den lokalen Chrome-e2e-Loop OHNE WorkOS-Round-Trip: mintet die Session
-  // ueber DIESELBE Quelle wie der echte Callback (accounts.upsertOnFirstLogin +
-  // sessions.create, G5 - kein paralleler Auth-Pfad), setzt das signierte Session-Cookie
-  // und redirectet auf postLoginPath. Aktiviert den Tenant NICHT (bleibt suspended) -
-  // Aktivierung/Seed macht das Test-Harness. Liegt unter /auth/* (hinter dem
-  // /auth-Rate-Limiter in server.js) -> keine zusaetzliche Auth-Ausnahme noetig.
-  // Niemals Tokens/Secrets loggen. sub/email aus dem Body, sonst dev-Defaults.
   if (deps.devLoginEnabled) {
     router.post("/auth/dev-login", async (req, res) => {
       try {
         const body = req.body || {};
         const sub = typeof body.sub === "string" && body.sub ? body.sub : "dev-user";
         const email = typeof body.email === "string" && body.email ? body.email : "dev@local.test";
-        // Dieselbe Mint-Quelle wie der echte Callback (mintSession) - kein paralleler Pfad.
         await mintSession(res, { sub, email });
         res.redirect(302, postLoginPath);
       } catch {
@@ -355,32 +203,15 @@ export function makeWebAuthRoutes(deps) {
   return router;
 }
 
-// ---- claimsFromPayload ----------------------------------------------
-// Mappt einen Identitaets-Payload (sub/email/email_verified) auf die Session-Claims.
-// Gespeist aus dem WorkOS-`user`-Objekt (exchange) bzw. direkt im Test. email wird NUR
-// uebernommen, wenn email_verified === true ist (Strikt-Gleichheit, kein Truthy-Cast:
-// "true"/1/Abwesenheit gelten als unverifiziert). Sonst email: null -> die Admin-
-// Allowlist (adminOnly) ist damit nur ueber nachweislich verifizierte Adressen erreichbar.
 export function claimsFromPayload(payload) {
   const email = payload.email_verified === true ? (payload.email ?? null) : null;
   const claims = { sub: payload.sub, email };
-  // P2b: Vor-/Nachname additiv aus dem verifizierten IdP-Profil uebernehmen - NUR wenn
-  // vorhanden (Bestands-Claims {sub,email} bleiben byte-identisch, kein leerer Muell).
-  // KEIN email_verified-Gate: der Name ist kein Admin-Allowlist-Schluessel wie email;
-  // die Trim-/Kompositions-Autoritaet bleibt applyOwnerIdentity (G5). Quelle = WorkOS-
-  // user (server-zu-server), nicht der Body -> kein Spoofing.
   if (typeof payload.firstName === "string" && payload.firstName)
     claims.firstName = payload.firstName;
   if (typeof payload.lastName === "string" && payload.lastName) claims.lastName = payload.lastName;
   return claims;
 }
 
-// Extrahiert die "sid"-Klaim (WorkOS-Session-ID) aus dem JWT-Payload-Segment eines
-// Access-Tokens, OHNE Signatur-Pruefung: die Antwort kommt server-zu-server ueber TLS
-// (gleiche Vertrauensstufe wie das user-Objekt in exchange, kein JWKS-Verify noetig, kein
-// neuer Dependency). Fehlt/ist das Token nicht dekodierbar -> null, fail-OPEN (der Login
-// bleibt unberuehrt; /auth/logout faellt dann auf rein lokal zurueck). Niemals das Token
-// selbst loggen/zurueckgeben - nur die extrahierte sid.
 function sidFromAccessToken(accessToken) {
   if (typeof accessToken !== "string" || !accessToken) return null;
   const parts = accessToken.split(".");
@@ -393,22 +224,11 @@ function sidFromAccessToken(accessToken) {
   }
 }
 
-// ---- makeOidc --------------------------------------------------------
-// WorkOS-User-Management Auth-Code-Flow (PKCE). authorizeUrl baut die URL zum WorkOS-UM-
-// authorize-Endpoint (provider=authkit = gehostete AuthKit-Login-Seite); exchange loest
-// den Code beim UM-authenticate-Endpoint ein und uebernimmt die Identitaet aus dem
-// zurueckgelieferten `user`-Objekt. WorkOS UM liefert KEIN id_token: die Antwort kommt
-// server-zu-server (client_secret + TLS, single-use code + PKCE-verifier) und ist damit
-// die Vertrauensquelle. CSRF = state-Cookie, Replay-Schutz = PKCE (beides im Router).
-// Niemals Code/Secret/Token loggen.
 export function makeOidc(config, { _fetch = fetch } = {}) {
   const authorizeEndpoint = `${config.auth.workosApiBase}/user_management/authorize`;
   const authenticateEndpoint = `${config.auth.workosApiBase}/user_management/authenticate`;
 
   return {
-    // authorizeUrl bleibt async (Router awaitet + faengt fail-closed). provider=authkit
-    // waehlt die gehostete AuthKit-Login-Seite; PKCE S256 + state queren als Query.
-    // WorkOS UM kennt im authorize-Endpoint weder scope noch nonce.
     async authorizeUrl({ challenge, state, redirectUri }) {
       const params = new URLSearchParams({
         response_type: "code",
@@ -422,9 +242,6 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
       return `${authorizeEndpoint}?${params}`;
     },
 
-    // exchange loest den Auth-Code beim UM-authenticate-Endpoint ein. JSON-Body mit
-    // client_secret = WorkOS-API-Key der Umgebung (Confidential-Client). Antwort:
-    // {user, access_token, refresh_token, ...} OHNE id_token -> Identitaet aus `user`.
     async exchange({ code, verifier }) {
       const r = await _fetch(authenticateEndpoint, {
         method: "POST",
@@ -437,40 +254,25 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
           client_secret: config.auth.oidcClientSecret,
         }),
       });
-      // Fehlerstatus: NUR den Status nennen, NIE den Body (WorkOS-Fehlerkoerper kann
-      // Detail tragen) -> kein Leak. Aufrufer faengt generisch (401).
       if (!r.ok) throw new Error(`authenticate HTTP ${r.status}`);
-      // Body parsen. Ein non-JSON-Body (r.json() wirft) wird hier zu einem gefangenen
-      // Fehler statt einer rohen Rejection.
       const data = await r.json();
-      // user fehlt/kein Objekt wuerde sonst als undefined-Deref crashen -> klarer Fehler.
       const user = data && data.user;
       if (!user || typeof user !== "object")
         throw new Error("authenticate: user fehlt in der Antwort");
-      // sub = user.id (== access_token-sub -> EINE Identitaetsquelle fuer Web-Login UND
-      // MCP-Kanal ueber idp_subject). Fehlt die id, ist die Identitaet unbrauchbar.
       if (typeof user.id !== "string" || !user.id)
         throw new Error("authenticate: user.id fehlt in der Antwort");
-      // email durchlaeuft das unveraenderte email_verified-Gate (claimsFromPayload).
       return {
         claims: claimsFromPayload({
           sub: user.id,
           email: user.email,
           email_verified: user.email_verified,
-          // WorkOS User Management liefert first_name/last_name am verifizierten user-Objekt.
           firstName: user.first_name,
           lastName: user.last_name,
         }),
-        // sid-Klaim aus dem Access-Token (fuer den spaeteren WorkOS-Sign-out-Redirect).
         workosSessionId: sidFromAccessToken(data.access_token),
       };
     },
 
-    // sessionLogoutUrl baut die WorkOS-UM-Session-Logout-URL (reine URL-Konstruktion wie
-    // authorizeUrl, kein I/O -> synchron, kein try/catch im Router noetig). session_id ist
-    // Pflicht (API-Referenz), return_to optional -- WorkOS leitet den Browser danach dorthin
-    // zurueck und beendet zugleich die eigene AuthKit-SSO-Session (workos.com/docs/authkit/
-    // sessions, "Signing Out").
     sessionLogoutUrl({ workosSessionId, returnTo }) {
       const params = new URLSearchParams({ session_id: workosSessionId });
       if (returnTo) params.set("return_to", returnTo);
@@ -479,53 +281,10 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
   };
 }
 
-// Normalisiert eine Email fuer Speicherung UND Vergleich (Review-Blocker Runde 2, G26):
-// trim+lowercase EINMAL an der Login-Grenze (upsertOnFirstLogin), BEVOR der normalisierte
-// Wert an den Dedup-SELECT, den Advisory-Lock-Key (beide in resolveOrCreateTenant) und den
-// account.email-Schreibpfad weitergereicht wird - Speicherform und Vergleichsform muessen
-// uebereinstimmen. Ohne das matchen zwei Schreibweisen derselben Adresse (z.B. Autofill-
-// Varianten wie "User@X" vs "user@x") den Dedup-SELECT nicht und legen weiterhin zwei
-// Tenants an - exakt das Symptom, das diese Phase schliessen soll. Kein String (null/
-// undefined) bleibt unveraendert; der Aufrufer prueft den Wahrheitswert danach.
 function normalizeEmail(email) {
   return typeof email === "string" ? email.trim().toLowerCase() : email;
 }
 
-// ---- resolveOrCreateTenant (Phase tenant-prolif-a: Email-Dedup) ------
-// Dedup-Kern am Web-Login: gehoert die (verifizierte) Email schon einem Account MIT NICHT
-// GESCHLOSSENEM Tenant, gewinnt dessen Tenant - aeltester zuerst (created_at ASC),
-// deterministisch + transitiv -> KEIN neuer Tenant, KEIN spaeterer DID-Kauf. Der Aufrufer
-// schreibt den neuen sub dann nur als zusaetzliche account-Zeile auf diese tenant_id
-// (account.tenant_id ist nicht-unique). Kein Treffer -> heutiges Verhalten: neuer Tenant
-// t_<sub> mit idp_subject=sub (idempotenter Upsert, ON CONFLICT aktualisiert NUR
-// idp_subject, nie den evtl. schon aktivierten status). Laeuft auf dem uebergebenen
-// Transaktions-Client c. Die 1-Tenant-pro-Email-Invariante garantiert DIESE Logik, nicht
-// der (rein beschleunigende) account_email_idx. email kommt vom Aufrufer BEREITS
-// normalisiert (normalizeEmail, s.o.) - diese Funktion normalisiert nicht selbst, sonst
-// gaebe es zwei Normalisierungsstellen (G5).
-//
-// Closed-Tenants sind KEIN Merge-Ziel (Review-Blocker Runde 3, G3/S1): status=closed ist
-// laut webAuthAllowPending "hart gesperrt, kein Reaktivieren". Wuerde der Dedup-SELECT einen
-// closed-Alt-Account treffen, landet ein brandneuer sub dauerhaft auf einem toten Tenant und
-// bekommt nach jedem Login 403 ohne Ausweg. Der JOIN+Status-Filter schliesst closed-Zeilen
-// aus der Kandidatenmenge aus; bleiben fuer die Email NUR closed-Alt-Accounts uebrig, liefert
-// die Query 0 Treffer und der Aufrufer faellt in den regulaeren Kein-Treffer-Pfad (neuer
-// Tenant) statt in die Merge-Falle.
-//
-// Race-Schutz (Review-Blocker Runde 1, P16/G26): ohne Lock sehen zwei simultane Erst-Logins
-// derselben brandneuen Email unter READ COMMITTED beide "kein Treffer" (keiner der beiden
-// INSERTs des jeweils anderen ist zu diesem Zeitpunkt committet) und legen ZWEI Tenants an -
-// exakt die Tenant-Vermehrung, die diese Phase beheben soll. pg_advisory_xact_lock serialisiert
-// konkurrierende Logins DERSELBEN Email (haelt bis COMMIT/ROLLBACK der Transaktion c), ohne
-// andere Emails zu blockieren. hashtext() ist reine Streuung fuer den Lock-Schluessel (kein
-// Sicherheitsmerkmal) - eine seltene Kollision serialisiert hoechstens zwei UNTERSCHIEDLICHE
-// Emails unnoetig mit, aendert aber nie das Ergebnis.
-// geo = das Geo-Tripel eines Neuzugangs (P8/LANG-02, tenantGeoForCountry). Es wird
-// AUSSCHLIESSLICH im INSERT-Zweig geschrieben, NIE im ON-CONFLICT-Zweig: ein
-// Bestandstenant behaelt seine (evtl. leeren) Werte - kein Backfill durch die Hintertuer
-// (O11), kein Ueberschreiben einer echten Kundenangabe durch einen Plattform-Default.
-// Der Write sitzt bewusst in DIESER Transaktion und nicht in einem zweiten Schreibpfad:
-// Tenant und seine Geo-Identitaet entstehen atomar oder gar nicht.
 async function resolveOrCreateTenant(c, { sub, email, geo }) {
   await c.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [email]);
   const existing = await c.query(
@@ -534,7 +293,7 @@ async function resolveOrCreateTenant(c, { sub, email, geo }) {
     [email, TENANT_STATUS.CLOSED],
   );
   if (existing.rows.length > 0) return existing.rows[0].tenant_id;
-  const tenantId = tenantIdForSubject(sub); // EINE Quelle (G5), identischer Wert
+  const tenantId = tenantIdForSubject(sub);
   await c.query(
     `INSERT INTO tenant (id, status, idp_subject, country, default_language, timezone)
      VALUES ($1, '${TENANT_STATUS.SUSPENDED}', $2, $3, $4, $5)
@@ -544,13 +303,6 @@ async function resolveOrCreateTenant(c, { sub, email, geo }) {
   return tenantId;
 }
 
-// Gemeinsamer Lese-Baustein (Review-Blocker Runde 2, G5): EIN JOIN/WHERE fuer Account+
-// Tenant-Status ueber sub. Zwei Aufrufer teilen sich das: resolve() (Autorisierungs-
-// Lesepfad der Middleware) und der Post-Commit-Readback in upsertOnFirstLogin (liest die
-// soeben geschriebene Zeile INNERHALB derselben Transaktion, VOR dem COMMIT - deshalb der
-// durchgereichte Client c statt runner.withClient). Vorher fast identische Queries an zwei
-// Stellen (eine Obermenge der anderen um a.sub/a.email) - ein kuenftiger Spalten-/Join-
-// Wechsel musste an beiden nachgezogen werden. Liefert null, wenn kein Account existiert.
 async function selectAccountAuth(c, sub) {
   const { rows } = await c.query(
     `SELECT a.sub, a.email, a.role, a.tenant_id AS "tenantId", t.status
@@ -560,17 +312,6 @@ async function selectAccountAuth(c, sub) {
   return rows[0] || null;
 }
 
-// CL1-B5: Auswahlregel fuer accountByTenant. Der Vertragsende-Cleanup loescht den
-// WorkOS-User, laesst dessen account-Zeile aber stehen; kehrt der Kunde zurueck,
-// haengt der Email-Dedup einen zweiten sub auf denselben Tenant. Zwei Zeilen hiessen
-// bisher pauschal "mehrdeutig -> null", und email-abhaengige Funktionen (Dashboard-
-// Prefill, Newsletter-Empfaenger, Kuendigungsbestaetigung) degradierten still.
-// Regel: JUENGSTE Zeile gewinnt, solange ALLE Zeilen dieselbe Email tragen - dann ist
-// die Empfaengerfrage gar nicht mehrdeutig, egal wie viele subs es gibt. Tragen sie
-// UNTERSCHIEDLICHE Emails, bleibt es fail-closed bei null (nicht raten, B2C-1:1).
-// rows kommt vom Aufrufer bereits absteigend nach created_at sortiert (juengste zuerst).
-// Verglichen wird ueber normalizeEmail - dieselbe Identitaets-Definition wie im
-// Login-Dedup (G5), kein zweiter Email-Vergleichsbegriff.
 export function newestAccountIfUnanimousEmail(rows) {
   if (rows.length === 0) return null;
   const [newest] = rows;
@@ -579,48 +320,19 @@ export function newestAccountIfUnanimousEmail(rows) {
   return { sub: newest.sub, email: newest.email };
 }
 
-// ---- makeAccounts ----------------------------------------------------
-// Tenant + Account upsert beim ersten Login; Lesepfade fuer Middleware.
-//
-// defaultCountry (P8/LANG-02): das Land, das ein per Web-Login entstehender Tenant
-// bekommt. BEWUSST der Plattform-Default (config.provisioning.provisioningCountry) und
-// KEIN IP-Geo: der Wert ist genau derselbe, den der bestehende Code-Fallback
-// (tenantGeo().country || fallbackCountry) heute schon liefert - der Login wird dadurch
-// verhaltensneutral explizit statt implizit. Eine IP-Herkunft saehe im Datensatz spaeter
-// wie eine Kundenangabe aus (P8-Gegenmassnahme 1). Fehlt der Wert -> DEFAULT_COUNTRY.
-// EINMAL bei der Konstruktion abgeleitet (konstant, kein Lazy-Init P15).
 export function makeAccounts(runner, { defaultCountry } = {}) {
   const signupGeo = tenantGeoForCountry(resolveOnboardCountry({ fallbackCountry: defaultCountry }));
   return {
-    // Erster Login: Tenant aufloesen (Email-Dedup) oder anlegen (suspended), Account
-    // anlegen/aktualisieren. Gibt {tenantId, status, role} zurueck.
     async upsertOnFirstLogin({ sub, email }) {
-      // Email einmal zentral normalisieren (normalizeEmail, s.o.) - VOR dem email_verified-
-      // Reject-Gate, damit eine reine Whitespace-Email (nach Trim leer) denselben Reject
-      // ausloest wie eine fehlende. Der normalisierte Wert reist danach unveraendert weiter
-      // an resolveOrCreateTenant (Dedup-SELECT + Advisory-Lock-Key) UND den account.email-
-      // Schreibpfad unten - EINE Normalisierungsstelle, Speicher- und Vergleichsform
-      // stimmen damit garantiert ueberein.
       const normalizedEmail = normalizeEmail(email);
-      // email_verified-Gate (claimsFromPayload) liefert bei unverifizierter Email null. Ohne
-      // verifizierte Email KEIN Tenant/Account: definierter, geloggter Reject statt eines
-      // unbeabsichtigten NOT-NULL-Crashs (account.email NOT NULL), der heute erst NACH dem
-      // committeten Tenant-INSERT feuert und einen Orphan-Tenant hinterlaesst. PII-frei: nur
-      // der Grund, nie Email/sub loggen. Nutzer-Verhalten unveraendert (unverifiziert kann
-      // schon heute nicht einloggen), nur sauber + orphan-frei. Callback faengt -> 401.
       if (!normalizedEmail) {
         console.warn("[web-auth] Login abgelehnt: Email nicht verifiziert");
         throw new Error("login rejected: verified email required");
       }
-      // Tenant-Aufloesung (Dedup) + Account-Anlage in EINER Transaktion (Atomaritaet, Muster
-      // flush() in store/pg.js): schlaegt der Account-INSERT fehl, rollt der evtl. neue Tenant
-      // mit zurueck -> kein halb-committeter Orphan-Tenant.
       return runner.withClient(async (c) => {
         await c.query("BEGIN");
         try {
           const tenantId = await resolveOrCreateTenant(c, { sub, email: normalizedEmail, geo: signupGeo });
-          // Account anlegen/aktualisieren. tenant_id bleibt bei ON CONFLICT stabil (nur email
-          // refresht) - ein Repeat-Login darf die (evtl. gemergte) Tenant-Bindung nicht kippen.
           await c.query(
             `INSERT INTO account (sub, tenant_id, email, role)
              VALUES ($1, $2, $3, 'member')
@@ -629,13 +341,6 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
           );
           const row = await selectAccountAuth(c, sub);
           await c.query("COMMIT");
-          // Zurueckgegeben wird die TATSAECHLICH gespeicherte account.tenant_id (row.tenantId),
-          // NICHT das lokal aufgeloeste Dedup-Ergebnis: bei einem bereits VORHANDENEN Account
-          // mit abweichender tenant_id (Alt-Duplikat aus der Zeit vor diesem Fix) aendert der
-          // ON-CONFLICT-UPDATE oben die Bindung NICHT. accounts.resolve() (= req.tenant, die
-          // Autorisierungsquelle in webAuth) liest danach denselben Wert - sonst binden
-          // mintSession/ensureTenant/applyTenantIdentity/session an einen ANDEREN Tenant als
-          // die Autorisierung (Review-Blocker Runde 1: Rueckgabe-vs-Autorisierung-Divergenz).
           const result = row || { tenantId, role: "member", status: TENANT_STATUS.SUSPENDED };
           return { tenantId: result.tenantId, status: result.status, role: result.role };
         } catch (err) {
@@ -645,27 +350,12 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
       });
     },
 
-    // Liest Account + Tenant fuer die Session-Middleware.
     async resolve(sub) {
       return runner.withClient((c) => selectAccountAuth(c, sub));
     },
 
-    // A2-Bruecke (Achsen-Bruch A9): die Aktivierung kennt nur tenantId, das Profil keyt
-    // email. Reverse-Query zu upsertOnFirstLogin. Liefert {sub,email} fuer den Tenant,
-    // sonst null: 0 Zeilen (Webhook vor Account-Anlage) ODER mehrere Zeilen mit
-    // UNTERSCHIEDLICHEN Emails (echt mehrdeutig, §5.6 B2C-1:1 - NICHT raten, fail-closed).
-    // Tragen mehrere Zeilen dieselbe Email (CL1-B5: Vertragsende-Cleanup loescht den
-    // WorkOS-User, nicht die account-Zeile - ein zurueckkehrender Kunde haengt einen
-    // zweiten sub an denselben Tenant), gewinnt die JUENGSTE - s.
-    // newestAccountIfUnanimousEmail. account ist RLS-exempt (laeuft vor
-    // app.current_tenant, Muster resolve/setStatus).
     async accountByTenant(tenantId) {
       return runner.withClient(async (c) => {
-        // ORDER BY created_at DESC = juengste Zeile zuerst (sub ASC nur als stabiler
-        // Tie-Break bei identischem Zeitstempel - deterministisch statt Zufalls-
-        // reihenfolge). KEIN LIMIT mehr: die Einstimmigkeitsregel muss JEDE Zeile des
-        // Tenants sehen; ein LIMIT koennte Einstimmigkeit behaupten, die nicht gilt
-        // (fail-open). Ein Tenant hat eine Handvoll Accounts, keine Liste.
         const { rows } = await c.query(
           `SELECT sub, email FROM account WHERE tenant_id = $1 ORDER BY created_at DESC, sub ASC`,
           [tenantId],
@@ -674,17 +364,6 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
       });
     },
 
-    // ---- CL2: Lesepfad des Abgleichs verwaister account-Zeilen --------------------
-    // Liefert die Zeilen JEDES Tenants, bei dem eine Altlast moeglich ist: entweder haengen
-    // mehrere account-Zeilen am selben Tenant, oder tenant.idp_subject zeigt auf gar keine
-    // Zeile mehr. Beides entsteht nach einem Vertragsende: der Cleanup loescht die
-    // WorkOS-Identitaet, laesst ihre account-Zeile aber stehen, und der naechste Login haengt
-    // eine weitere Zeile an denselben (geparkten) Tenant.
-    // Bewusst NUR Kandidaten, nicht die ganze Tabelle: der Abgleich fragt pro Zeile bei
-    // WorkOS nach, und ein Lauf ueber alle Accounts waere eine Fremdlast ohne Erkenntnis.
-    // Die Entscheidung, WELCHE Zeile weg darf, trifft dieser Lesepfad NICHT - er weiss
-    // nichts ueber tot/lebendig (s. orphan-account-reconcile.js). Read-only, RLS-exempt wie
-    // die uebrigen account-Pfade.
     async accountsForOrphanReconcile() {
       return runner.withClient(async (client) => {
         const { rows } = await client.query(
@@ -700,14 +379,6 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
       });
     },
 
-    // Entfernt EINE account-Zeile. Nur fuer den Abgleich verwaister Zeilen gedacht; der
-    // Aufrufer hat vorher bei WorkOS bestaetigt, dass diese Identitaet nicht mehr existiert,
-    // UND dass mindestens eine andere Zeile des Tenants stehen bleibt. Warum diese Bedingung
-    // ausserhalb liegt: account.email ist der EINZIGE Email-Anker am Tenant (es gibt keinen
-    // tenantByEmail-Pfad) - faellt die letzte Zeile, ist der Tenant beim naechsten Login per
-    // Email unauffindbar und der Rueckkehrer bekaeme einen leeren Tenant ohne Historie und
-    // ohne stripe_customer_id. session.sub haengt per FK CASCADE daran: die Sessions dieser
-    // toten Identitaet verschwinden mit - sie waeren ohnehin nicht mehr autorisierbar.
     async dropAccount(sub) {
       return runner.withClient(async (client) => {
         const { rows } = await client.query(`DELETE FROM account WHERE sub = $1 RETURNING sub`, [sub]);
@@ -715,11 +386,6 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
       });
     },
 
-    // Setzt den Identitaetsanker des Tenants. tenant.idp_subject bestimmt, WELCHE
-    // WorkOS-Identitaet das naechste Vertragsende loescht (contract-end-cleanup.js). Zeigt er
-    // nach einer Rueckkehr auf den laengst geloeschten Alt-sub, laeuft die Loeschung gegen
-    // einen Geist - 404 zaehlt dort als Erfolg - und die LEBENDE Identitaet bleibt stehen:
-    // eine nicht erfuellte Loeschpflicht, die niemandem auffaellt.
     async setIdpSubject(tenantId, sub) {
       return runner.withClient(async (client) => {
         const { rows } = await client.query(
@@ -730,9 +396,6 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
       });
     },
 
-    // Admin: Tenant-Status aendern (active/suspended). Gibt true zurueck, wenn ein
-    // Tenant getroffen wurde - sonst false -> der Aufrufer antwortet 404 (kein
-    // silent-noop, kein Audit-Eintrag fuer eine nicht-existente Tenant-ID).
     async setStatus(tenantId, status) {
       return runner.withClient(async (c) => {
         const { rows } = await c.query(`UPDATE tenant SET status = $1 WHERE id = $2 RETURNING id`, [
@@ -743,10 +406,6 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
       });
     },
 
-    // Admin: alle Tenants listen (Cross-Tenant-Uebersicht fuers Admin-Panel). Read-only,
-    // RLS-exempt wie setStatus (account/tenant laufen VOR app.current_tenant). Liefert nur
-    // nicht-sensible Lebenszyklus-Felder (id/status/createdAt) - KEINE Transkripte/PII,
-    // KEINE Settings/Nummern (Regel 4/5: kein Cross-Tenant-Daten-Leak ueber die Admin-Sicht).
     async listTenants() {
       return runner.withClient(async (c) => {
         const { rows } = await c.query(
@@ -756,11 +415,6 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
       });
     },
 
-    // Admin-Rolle setzen (grant-admin-Script). Idempotent: setzt role per E-Mail,
-    // zweiter Lauf mit demselben Wert = derselbe Effekt. Gibt true zurueck, wenn ein
-    // Account getroffen wurde - sonst false -> der Aufrufer meldet "nicht gefunden"
-    // (kein silent-noop fuer eine nicht-existente E-Mail). account ist RLS-exempt,
-    // daher kein app.current_tenant-GUC noetig (Muster wie setStatus).
     async setRole(email, role) {
       return runner.withClient(async (c) => {
         const { rows } = await c.query(
@@ -773,12 +427,6 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
   };
 }
 
-// ---- resolveWebSession (gemeinsame Auth-Mechanik, G5) ----------------
-// Cookie -> Session -> Account. Liefert {acct, sub} bei gueltiger Session, sonst null
-// (Aufrufer -> 401). KEIN Status-Gate hier - das ist die Politik der jeweiligen
-// Middleware. EINE Quelle fuer Cookie/Session/Account-Pruefung, damit webAuth und
-// webAuthAllowPending nicht auseinanderdriften. Fail-closed: kein Detail-Leak, kein
-// Token-/Cookie-Logging (der Aufrufer faengt unerwartete Fehler generisch ab).
 async function resolveWebSession({ secret, sessions, accounts }, req) {
   const sessionId = readSignedCookie(req, SESSION_COOKIE_NAME, secret);
   if (!sessionId) return null;
@@ -789,9 +437,6 @@ async function resolveWebSession({ secret, sessions, accounts }, req) {
   return { acct, sub: row.sub };
 }
 
-// Request-Tenant-Kontext aus der aufgeloesten Session (eine Quelle fuer die req.tenant-
-// Form). status zusaetzlich exponiert (P5): die gefuehrte Aktivierung (billing/status)
-// liest die Lebenszyklus-Stufe, ohne die active-only /state-View zu oeffnen.
 const tenantContextOf = ({ acct, sub }) => ({
   tenantId: acct.tenantId,
   sub,
@@ -800,28 +445,10 @@ const tenantContextOf = ({ acct, sub }) => ({
   status: acct.status,
 });
 
-// Status, die die suspended-erreichbaren Self-Aktivierungs-Routen passieren duerfen:
-// active (normal) ODER suspended (frisch eingeloggt, darf sich selbst aktivieren). Alles
-// andere - closed (hart gesperrt) oder unerwartet - fail-closed (403). Benannte Quelle (G25).
 const PENDING_ALLOWED_STATUS = Object.freeze(
   new Set([TENANT_STATUS.ACTIVE, TENANT_STATUS.SUSPENDED]),
 );
 
-// ---- webAuthWithStatusGate (gemeinsames Middleware-Skelett, G5/G26) ----
-// Higher-Order-Factory: baut aus einem Status-Praedikat eine Web-Session-Middleware.
-// Die fail-closed-Mechanik ist in BEIDEN Varianten strukturell identisch - kein Cookie/
-// keine gueltige Session -> 401; verbotener Status -> 403; req.tenant NUR im erlaubten
-// Zweig gesetzt; unerwarteter Fehler -> generischer 401 (kein Detail-/Token-/Cookie-Leak).
-// Die EINZIGE gewollte Divergenz ist statusAllowed(status): active-only (webAuth) vs.
-// active|suspended (webAuthAllowPending). resolveWebSession/tenantContextOf bleiben die
-// EINE Aufloesungsquelle - hier NICHT dupliziert, NICHT umgangen.
-//
-// AUTH-P5: beide Ablehnungszweige (401/403) schreiben zusaetzlich eine auth_failed-
-// Zeile ueber auditAuthFailed (EINE Quelle, src/util.js) - der Ersatz fuer den
-// einzigen frueheren Meldeweg, seit das Basic-Auth-Gate gefallen ist (AUTH-P7). Der catch-Zweig
-// (Infrastruktur-Fehler, z.B. DB weg) schreibt BEWUSST NICHT: er ist keine Auth-
-// Entscheidung, und "expired"/"no_session" waere dort ein irrefuehrendes Forensik-
-// Label (Befund F2, Plan Abschnitt 7 - eigener Punkt in PLAN-SECURITY.md).
 function webAuthWithStatusGate(statusAllowed) {
   return function makeWebAuthMiddleware(deps) {
     return async function webAuthGateMiddleware(req, res, next) {
@@ -844,26 +471,12 @@ function webAuthWithStatusGate(statusAllowed) {
   };
 }
 
-// ---- webAuth ---------------------------------------------------------
-// Active-only-Gate: nur active passiert, suspended/closed/unerwartet -> 403. Haengt an
-// /state + Settings-Routen (Tenant-Daten). Die suspended-erreichbare Variante ist
-// webAuthAllowPending. Fail-closed: kein Detail-/Token-/Cookie-Leak (siehe Skelett oben).
 export const webAuth = webAuthWithStatusGate((status) => status === TENANT_STATUS.ACTIVE);
 
-// ---- webAuthAllowPending (P5) ----------------------------------------
-// Variante fuer die drei Self-Aktivierungs-Routen (setup-checkout/return/subscribe) +
-// billing/status: laesst zusaetzlich suspended durch (frisch eingeloggt, darf sich selbst
-// aktivieren - sonst 403-Deadlock), closed/unbekannt bleibt HART gesperrt (kein
-// Reaktivieren). Oeffnet KEINE Tenant-Daten; nur active-only webAuth haengt an /state.
 export const webAuthAllowPending = webAuthWithStatusGate((status) =>
   PENDING_ALLOWED_STATUS.has(status),
 );
 
-// ---- adminOnly -------------------------------------------------------
-// Express-Middleware NACH webAuth (braucht req.tenant): erlaubt nur Admins -
-// E-Mail in der Allowlist ODER role==='admin'. Fail-closed: ohne req.tenant
-// oder kein Admin -> 403. Kein Detail-Leak. AUTH-P5: der 403-Zweig schreibt
-// zusaetzlich eine auth_failed-Zeile (auditAuthFailed, grund=not_admin).
 export function adminOnly(deps) {
   const allow = (deps.adminEmails || []).map((e) => e.toLowerCase());
   return function adminOnlyMiddleware(req, res, next) {
@@ -877,21 +490,6 @@ export function adminOnly(deps) {
   };
 }
 
-// ---- makeAdminRoutes -------------------------------------------------
-// Express-Router fuer die Admin-Tenant-Verwaltung (list/approve/suspend), hinter
-// webAuthMw + adminMw. Als Factory exportiert, damit Produktion (server.js) UND
-// Test denselben Handler nutzen (keine handkopierte Route-Replik, G5). suspend
-// invalidiert sofort alle Sessions des Tenants (gesperrter Kunde kann nicht bis
-// Cookie-Expiry weiterlesen). Jede Aktion auditiert; nicht-existenter Tenant ->
-// 404 (kein silent-noop, kein Audit-Eintrag fuer eine Phantom-Tenant-ID). approve
-// ist der DRITTE Reaktivierungspfad neben Webhook-Activate und Self-Service-
-// Subscribe (billing/activation.js) - er laeuft NICHT durch activatePaidTenant
-// (kein Zahlungsereignis, kein KYC/Provisioning), muss aber dieselbe Invariante 2
-// wahren: ein Stripe-suspendierter Tenant, der manuell freigegeben wird, darf
-// keinen stehenden suspended_at-Anchor behalten (sonst haelt ihn der spaetere
-// DID-Release-Klassifizierer faelschlich fuer einen Kandidaten). Ruft dafuer
-// denselben Store-Primitiv (store.clearSuspendedAt, G5) wie activatePaidTenant -
-// KEIN Umweg ueber die Zahlungs-Komposition, die hier fachlich nicht passt.
 export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw, store }) {
   const router = Router();
   router.get("/api/admin/tenants", webAuthMw, adminMw, async (req, res) => {
@@ -906,9 +504,6 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw,
     try {
       const ok = await accounts.setStatus(req.params.id, "active");
       if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
-      // tenant-prolif-c (Invariante 2, G3-Fix): Grace-Anker loeschen, sonst bleibt ein
-      // manuell reaktivierter, zahlender Tenant mit stale suspended_at aktiv (siehe
-      // Kommentar oben). Idempotent (No-Op ohne gesetzten Anker).
       store.clearSuspendedAt(req.params.id);
       await audit.record({
         actorSub: req.tenant.sub,
@@ -926,14 +521,6 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw,
       const ok = await accounts.setStatus(req.params.id, TENANT_STATUS.SUSPENDED);
       if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
       await sessions.invalidateByTenant(req.params.id);
-      // GAP-04: Symmetrie zu approve/clearSuspendedAt - eine manuelle Sperre nimmt auch die
-      // Aktivierungs-Wartezustands-Erlaubnis zurueck, sonst duerfte ein gerade gesperrter
-      // Tenant ueber den stehengebliebenen Marker weiterhin eine Nummer anfragen
-      // (state-ops tenantMayRequestNumber). ensureTenant VOR dem Write (Muster mintSession/
-      // triggerTenantProvisioning): setTenantSubscription wirft fail-closed bei fehlendem
-      // Spiegel-Eintrag - ein Admin kann einen Tenant suspendieren, der noch NIE im Spiegel
-      // stand (kein Web-Login/Onboarding-Schreibzugriff bisher). ensureTenant ist selbst
-      // fail-soft (fangt DB-Fehler, wirft nie). Idempotent (No-Op ohne gesetzten Marker).
       await store.ensureTenant(req.params.id);
       store.setTenantSubscription(req.params.id, { activationPending: false });
       await audit.record({
@@ -950,8 +537,6 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw,
   return router;
 }
 
-// ---- makeSessions ----------------------------------------------------
-// Session-Lebenszyklus: anlegen, lesen, invalidieren (by id oder by tenant).
 export function makeSessions(runner) {
   return {
     async create({ sub, tenantId, ttlSeconds, workosSessionId = null }) {
@@ -966,8 +551,6 @@ export function makeSessions(runner) {
       return { id };
     },
 
-    // Soft-Invalidierung via invalidated_at (Schema T6) - webAuth (T11) prueft
-    // invalidated_at IS NULL AND expires_at>now(); Forensik bleibt erhalten.
     async get(id) {
       return runner.withClient(async (c) => {
         const { rows } = await c.query(

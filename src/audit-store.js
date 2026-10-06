@@ -1,5 +1,3 @@
-// Append-only Audit-Log-Schreiber. Eigener privilegierter Pfad (audit_log hat
-// keine RLS). detail NIEMALS mit Secrets/Transkript-Inhalt fuellen.
 export function makeAuditStore(runner) {
   return {
     record: ({ actorSub = null, tenantId = null, action, detail = null }) =>
