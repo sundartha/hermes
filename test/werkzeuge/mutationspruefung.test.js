@@ -67,6 +67,18 @@ test("eine neue Zeile ohne Test bleibt rot, auch wenn die Commit-Nachricht den M
   assert.match(gruen.stdout, /^grün: \d+ Mutanten in den neuen Zeilen/m);
 });
 
+test("eine Zeile, aus der nur ein Kommentar verschwindet, braucht keinen Test; eine Code-Änderung dort bleibt rot", (context) => {
+  const repo = probeRepository(context, { ...BASIS, "src/zahl.js": quelle(NEGATIV, `${NULL} // ohne Test`) });
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
+  const gruen = pruefe(repo, "--basis", "HEAD");
+  assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+  assert.match(gruen.stdout, /^src\/zahl\.js: Syntaxbaum unverändert, keine Mutanten nötig\.$/m);
+  writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, '  if (zahl === 0) return "nichts";') });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.match(rot.stdout, /^Verstoß: Mutant überlebt: src\/zahl\.js:3/m);
+});
+
 test("ein Umbau, der ungetestetes Verhalten entfernt, wird auf dem alten Stand verworfen", (context) => {
   const repo = probeRepository(context, { ...BASIS, "src/zahl.js": quelle(NEGATIV, NULL) });
   writeFiles(repo, { "src/zahl.js": quelle(NEGATIV) });
@@ -285,6 +297,14 @@ test("ein neuer Kommentar Stryker disable ist ein Verstoß und schaltet die Muta
   });
   const gruen = pruefe(repo, "--basis", "HEAD");
   assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
+});
+
+test("ein neuer Kommentar Stryker disable bleibt ein Verstoß, auch wenn der Syntaxbaum gleich bleibt", (context) => {
+  const repo = probeRepository(context, BASIS);
+  writeFiles(repo, { "src/zahl.js": quelle(ABSCHALTEN_NAECHSTE, NEGATIV) });
+  const rot = pruefe(repo, "--basis", "HEAD");
+  assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
+  assert.ok(schluessel(rot.stdout, UEBERLEBT).includes("src/zahl.js:2 Kommentar „Stryker disable“"), rot.stdout);
 });
 
 test("ein bestehender Blockkommentar Stryker disable schaltet die neuen Zeilen nicht ab", (context) => {
