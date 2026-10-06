@@ -1,10 +1,3 @@
-// Owner-Befund 18.09.2026 ("der Update-Knopf geht nicht"): die Web-Session lebt eine
-// Stunde, das Dashboard bleibt beliebig lange offen. Danach lief jeder Knopf still in eine
-// 401 - am 17.09.2026 acht Klicks auf den Kartenwechsel der Nummernkarte, im Browser
-// passierte nichts. Seitdem meldet sich jede 401 zusaetzlich als SESSION_EXPIRED_EVENT;
-// die Auth-Insel prueft daraufhin den Zustand neu und schaltet die Seite auf
-// "Anmeldung erforderlich" um. Diese Datei haelt den Vertrag der Meldung fest: nur 401
-// meldet, alles andere nicht, und ohne DOM (Node) ist sie ein No-Op.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -20,8 +13,6 @@ import {
 const HTTP_OK = 200;
 const HTTP_BAD_GATEWAY = 502;
 
-// Minimal-DOM: nur dispatchEvent, das die Event-Typen mitschreibt (CustomEvent ist in
-// Node global). Nach dem Test wird der Ausgangszustand - kein document - wiederhergestellt.
 function stubDocument() {
   const dispatched = [];
   globalThis.document = { dispatchEvent: (event) => dispatched.push(event.type) };

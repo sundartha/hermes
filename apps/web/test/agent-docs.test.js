@@ -1,4 +1,3 @@
-// Reine Funktionen aus lib/agent-docs.js und lib/plan-benefits.js (ohne Build).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PLAN_CATALOG } from "../src/lib/plans.js";

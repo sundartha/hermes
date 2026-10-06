@@ -1,10 +1,3 @@
-// Fix-B-Test: der timeupdate-Listener aus hero.js (Nahtloser Loop, siehe
-// SPEC-HERO-VIDEO-FIX.md § C), per node:vm in einem minimalen Fake-DOM
-// ausgefuehrt — dieselbe Sandbox-Technik wie test/mcp-ui-w1-call-widget.test.js
-// und test/mcp-ui-wing-canvas-mount.test.js (Root-Suite). Kein echter Browser,
-// kein jsdom-Dependency. Prueft NUR die neue Guard-Logik (Grenzwerte, Metadata-
-// Guard, Koexistenz mit dem pause-Listener) — Paint-/Netzwerk-/Tab-Throttle-
-// Verhalten bleibt manuelle QA (SPEC § D7, in echten Browsern nicht simulierbar).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
@@ -14,9 +7,6 @@ import { fileURLToPath } from "node:url";
 const heroPath = fileURLToPath(new URL("../public/assets/hero.js", import.meta.url));
 const HERO_SOURCE = readFileSync(heroPath, "utf8");
 
-// LOOP_EDGE_S wird aus der Quelle extrahiert statt im Test dupliziert (vgl. G22)
-// -> ein kuenftiger, SPEC-konformer Schwellwert-Wechsel macht den Test nicht
-// stillschweigend falsch-negativ.
 const LOOP_EDGE_MATCH = HERO_SOURCE.match(/var LOOP_EDGE_S = ([\d.]+);/);
 assert.ok(LOOP_EDGE_MATCH, "LOOP_EDGE_S nicht gefunden - hero.js umstrukturiert?");
 const LOOP_EDGE_S = Number(LOOP_EDGE_MATCH[1]);
@@ -49,10 +39,6 @@ function makeFakeDocument(video) {
   };
 }
 
-// Fuehrt hero.js in einer frischen vm-Sandbox aus. setTimeout wird nur erfasst,
-// nie automatisch gefeuert (F.I.R.S.T. - Fast, kein echtes Warten); dadurch
-// loesen die gestaffelten play()-Retries aus hero.js:34-37 keine Nebenwirkungen
-// im Test aus.
 function runHeroScript() {
   const video = makeFakeVideo();
   const doc = makeFakeDocument(video);

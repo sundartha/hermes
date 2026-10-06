@@ -1,20 +1,3 @@
-// W5-Tests: die reinen Settings-Helfer (lib/api.js) -- die Contract-Grenze zur
-// Backend-Whitelist (welche Felder POST /api/self-service/settings annimmt) und
-// das Ableiten von changed/rejected. Reine Logik, kein DOM: ein gestubbtes fetch
-// prueft die Request-Form (POST, JSON-Body, same-origin, KEIN Authorization-
-// Header). Laeuft mit node:test ohne Netz/Dependencies.
-//
-// WHITELIST-BELEG: SETTINGS_FREE_FIELDS + SETTINGS_RESTRICT_ONLY_FIELDS +
-// "greeting" sind EXAKT die Felder, die src/self-service.js (selfServicePatch)
-// erlaubt. buildSettingsPatch baut NUR diese Felder; ein Freitext-greeting gibt es
-// nicht (greeting ist eine Template-Auswahl, kein Free-Field) -- hier getestet.
-//
-// Settings-Redesign (Aug 2026): SettingsIsland.astro bietet nur noch language +
-// die beiden restrict-only-Toggles an (agentName/agentStyle/greeting sind aus der
-// UI entfernt). SETTINGS_FREE_FIELDS bleibt TROTZDEM unveraendert (1:1 zum
-// Server-Vertrag SELF_SERVICE_FREE_FIELDS, s.u.) -- die Tests hier pruefen die
-// FUNKTION buildSettingsPatch, nicht die aktuelle Insel-UI; sie belegen weiterhin
-// den vollen Vertrag (inkl. der Felder, die die UI heute nicht mehr rendert).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -38,8 +21,6 @@ import {
   settingsPermissionHint,
 } from "../src/lib/api.js";
 
-// Simuliert die DE-Sprachwahl fuer getLang() (lib/i18n.js) ohne setLang() (das
-// greift auf `document` zu, s. render.test.js -- gleiches Muster hier).
 function withLang(lang, fn) {
   const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
   const original = globalThis.localStorage;
@@ -52,13 +33,6 @@ function withLang(lang, fn) {
   }
 }
 
-// Backend-Quelle der Wahrheit fuer Sprachcodes: SUPPORTED_LANGUAGES = Keys von
-// LOCALES (src/i18n/locales.js). Wir importieren die echte Konstante, damit der
-// Drift-Test bei einer neuen Backend-Sprache rot wird (G22, kein stiller Drift).
-// Ebenso PERSONA_STYLE_IDS (P2-Enum) fuer den agentStyle-Drift-Test (WEB-07/GAP-30)
-// und SELF_SERVICE_FREE_FIELDS/SELF_SERVICE_RESTRICT_ONLY_FIELDS als der
-// Backend-Vertrag, gegen den die Whitelist-Mengen dieser Insel gepruft werden --
-// Literale wuerden genau die Drift verstecken, die GAP-30 aufgedeckt hat.
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../../../src/i18n/locales.js";
 import {
   SELF_SERVICE_FREE_FIELDS,
@@ -79,35 +53,24 @@ function fakeResponse({ ok, status, json }) {
   return { ok, status, json: async () => json };
 }
 
-// ---- Whitelist-Beleg: die UI bietet GENAU die Backend-Felder an ---------------
-// Diese Mengen spiegeln src/self-service.js. Driftet die UI, faengt der Server es
-// (rejected), aber die UI soll erst gar nichts ausserhalb anbieten.
 test("Whitelist-Mengen entsprechen dem Backend-Vertrag (self-service.js)", () => {
   assert.deepEqual([...SETTINGS_FREE_FIELDS].sort(), [...SELF_SERVICE_FREE_FIELDS].sort());
   assert.deepEqual(
     [...SETTINGS_RESTRICT_ONLY_FIELDS].sort(),
     [...SELF_SERVICE_RESTRICT_ONLY_FIELDS].sort(),
   );
-  // Die Toggles = GENAU die restrict-only-Felder (allowCalendar/allowBooking sind
-  // seit P1b keine Self-Service-Felder mehr, s. api.js-Kommentar).
   const toggleKeys = SETTINGS_PERMISSION_TOGGLES.map((t) => t.key);
   assert.deepEqual([...toggleKeys].sort(), [...SETTINGS_RESTRICT_ONLY_FIELDS].sort());
 });
 
 test("SETTINGS_LANGUAGES deckt GENAU die Backend-Sprachen ab (+ '' = automatisch)", () => {
-  // "" ist die UI-Option "Automatisch" (Override leeren); die uebrigen Codes
-  // muessen exakt SUPPORTED_LANGUAGES (= Object.keys(LOCALES)) entsprechen --
-  // sonst fehlt/zuviel eine Sprache im Dropdown (G22, Anzeige-Drift).
   const codes = SETTINGS_LANGUAGES.map((l) => l.value).filter((v) => v !== "");
   assert.deepEqual([...codes].sort(), [...SUPPORTED_LANGUAGES].sort());
-  // Genau eine Automatik-Option, und sie steht zuerst.
   assert.equal(SETTINGS_LANGUAGES[0].value, "");
   assert.equal(SETTINGS_LANGUAGES.filter((l) => l.value === "").length, 1);
-  // Jede Option hat ein nicht-leeres Label.
   for (const l of SETTINGS_LANGUAGES) assert.ok(l.label.length > 0);
 });
 
-// ---- buildSettingsPatch: NUR Whitelist-Felder, kein Freitext-greeting ---------
 test("buildSettingsPatch baut ausschliesslich die Whitelist-Felder", () => {
   const patch = buildSettingsPatch({
     agentName: "Hermes",
@@ -130,8 +93,8 @@ test("buildSettingsPatch baut ausschliesslich die Whitelist-Felder", () => {
 test("buildSettingsPatch verwirft unbekannte Felder (kein Schreibpfad ausserhalb der Whitelist)", () => {
   const patch = buildSettingsPatch({
     agentName: "X",
-    allowSummaries: true, // existiert, ist aber NICHT self-service-erlaubt
-    disclosureLine: "boese", // Disclosure ist fest verdrahtet -> nie ueber die UI
+    allowSummaries: true,
+    disclosureLine: "boese",
     randomKey: 1,
   });
   assert.equal("allowSummaries" in patch, false);
@@ -140,18 +103,12 @@ test("buildSettingsPatch verwirft unbekannte Felder (kein Schreibpfad ausserhalb
 });
 
 test("buildSettingsPatch: greeting ist nur ein String-Wert (Template-Auswahl), kein Freitext-Feld", () => {
-  // greeting kommt als gewaehlter Template-String -- die Insel hat KEIN Freitext-
-  // Eingabefeld. Der Wert wird unveraendert als String uebernommen; ob er eine
-  // erlaubte Vorlage ist, entscheidet der Server (selfServicePatch).
   const patch = buildSettingsPatch({ greeting: "Guten Tag, {owner}" });
   assert.equal(patch.greeting, "Guten Tag, {owner}");
   assert.equal(typeof patch.greeting, "string");
 });
 
 test("buildSettingsPatch: fehlende Felder -> nicht gerendert = nicht gesendet (auch die Permission-Toggles)", () => {
-  // Owner-Entscheidung 2026-08-14: der Permissions-Block ist aus der UI entfernt.
-  // Nicht gerenderte Toggles duerfen NICHT als false mitreisen -- sonst wuerde
-  // jedes Speichern die serverseitig gespeicherten Werte still zuruecksetzen.
   const patch = buildSettingsPatch({});
   assert.deepEqual(patch, {});
   assert.deepEqual(buildSettingsPatch(undefined), {});
@@ -162,9 +119,6 @@ test("buildSettingsPatch: explizit uebergebene Permission-Booleans reisen weiter
   assert.deepEqual(patch, { allowPersonalData: true, allowBankData: false });
 });
 
-// ---- Settings-Redesign (Aug 2026): SettingsIsland.astro liefert nur noch --------
-// { language } -- kein agentName/agentStyle/greeting und seit 2026-08-14 auch
-// keine Permission-Toggles mehr im Formular-Snapshot (UI entfernt).
 test("buildSettingsPatch: das reale Insel-Formular (nur language) sendet weder agentName/agentStyle/greeting noch Toggles", () => {
   const patch = buildSettingsPatch({ language: "fr" });
   assert.deepEqual(patch, { language: "fr" });
@@ -185,7 +139,6 @@ test("buildSettingsPatch: agentStyle fehlt, wenn der Snapshot es nicht traegt; r
   assert.equal(buildSettingsPatch({ agentStyle: "" }).agentStyle, "");
 });
 
-// ---- settingsOutcome: changed/rejected aus dem gespeicherten settings-Objekt ---
 test("settingsOutcome: uebernommene Felder -> changed, abweichende -> rejected", () => {
   const patch = { agentName: "Neu", language: "fr", agentStyle: "warm-persoenlich" };
   const saved = { agentName: "Neu", language: "fr", agentStyle: "warm-persoenlich" };
@@ -195,9 +148,6 @@ test("settingsOutcome: uebernommene Felder -> changed, abweichende -> rejected",
 });
 
 test("settingsOutcome: restrict-only false->true wird als rejected erkannt (Server haelt alten Wert)", () => {
-  // Der Tenant versucht, allowPersonalData von false auf true zu heben. Der Server
-  // (selfServicePatch) lehnt das ab -> der gespeicherte Wert bleibt false. Hier
-  // muss das als rejected erscheinen, nicht als changed.
   const patch = { allowPersonalData: true, agentName: "Ok" };
   const saved = { allowPersonalData: false, agentName: "Ok" };
   const out = settingsOutcome(patch, saved);
@@ -211,8 +161,6 @@ test("settingsOutcome: leerer Patch -> leere Listen", () => {
 });
 
 test("settingsOutcome: ein zurueckgesetztes optionales Override (''->null) gilt als changed, nicht rejected", () => {
-  // updateSettings speichert "" als null (optionale Enum-Overrides language/agentStyle).
-  // Ohne die Glaettung waere ein erfolgreiches Zuruecksetzen faelschlich rejected.
   const patch = { language: "", agentStyle: "" };
   const saved = { language: null, agentStyle: null };
   const out = settingsOutcome(patch, saved);
@@ -221,8 +169,6 @@ test("settingsOutcome: ein zurueckgesetztes optionales Override (''->null) gilt 
 });
 
 test("settingsOutcome: ein gar nicht vorhandenes Feld (undefined) bleibt rejected", () => {
-  // Die Glaettung greift NUR fuer saved===null + requested==="" (der Reset-Fall).
-  // saved===undefined (Feld fehlt in der Antwort komplett) ist eine echte Ablehnung.
   const patch = { agentStyle: "" };
   const saved = {};
   const out = settingsOutcome(patch, saved);
@@ -230,7 +176,6 @@ test("settingsOutcome: ein gar nicht vorhandenes Feld (undefined) bleibt rejecte
   assert.deepEqual(out.rejected, ["agentStyle"]);
 });
 
-// ---- settingsFrom: Contract-Grenze zur state-Antwort --------------------------
 test("settingsFrom: leere Defaults bei fehlendem data/settings/templates", () => {
   assert.deepEqual(settingsFrom(undefined), { settings: {}, greetingTemplates: [] });
   assert.deepEqual(settingsFrom({}), { settings: {}, greetingTemplates: [] });
@@ -248,7 +193,6 @@ test("settingsFrom: befuellte Felder unveraendert durch", () => {
   });
 });
 
-// ---- saveSettings: Request-Form (POST, JSON-Body, same-origin, kein Token) -----
 test("saveSettings postet den Patch als JSON same-origin ohne Authorization-Header", async () => {
   const saved = { agentName: "Hermes", language: "de" };
   const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: saved }));
@@ -262,7 +206,6 @@ test("saveSettings postet den Patch als JSON same-origin ohne Authorization-Head
     assert.equal(options.credentials, "same-origin");
     assert.equal(options.headers["Content-Type"], "application/json");
     assert.deepEqual(JSON.parse(options.body), patch);
-    // Fail-closed gegen Token-Leak: niemals ein Authorization-Header.
     assert.equal(options.headers.Authorization, undefined);
   } finally {
     f.restore();
@@ -282,7 +225,6 @@ test("saveSettings wirft ApiError bei non-2xx (z.B. 401 abgelaufene Session)", a
   }
 });
 
-// ---- personaStyleOptions: Stil-Dropdown aus der state-Antwort (WEB-07) --------
 test("personaStyleOptions: kein Array/kein Feld -> null (Steuerelement bleibt versteckt)", () => {
   assert.equal(personaStyleOptions(undefined), null);
   assert.equal(personaStyleOptions({}), null);
@@ -318,7 +260,6 @@ test("PERSONA_STYLE_LABELS driftet nicht gegen das Backend-Enum PERSONA_STYLE_ID
   );
 });
 
-// ---- privateNumberStatusText / savePrivateNumber: private Rufnummer (WEB-19) --
 test("privateNumberStatusText: Maske vorhanden -> Statuszeile mit der Maske", () => {
   assert.equal(privateNumberStatusText({ privateNumber: "+49…4567" }), "Currently saved: +49…4567");
 });
@@ -357,17 +298,14 @@ test("savePrivateNumber('') sendet {privateNumber:''} (Loeschen)", async () => {
   }
 });
 
-// ---- Dashboard-i18n Etappe 2: DE-Modus (Sprachkacheln + Permission-Toggles) ---
 test("DE-Modus: settingsLanguageLabel deckt genau die SETTINGS_LANGUAGES-Werte deutsch ab", () => {
   withLang("de", () => {
     assert.equal(settingsLanguageLabel(""), "Automatisch");
     assert.equal(settingsLanguageLabel("de"), "Deutsch");
     assert.equal(settingsLanguageLabel("fr"), "Französisch");
     assert.equal(settingsLanguageLabel("en"), "Englisch");
-    // Unbekannter Wert -> fail-soft der rohe Wert (nie leer/undefined).
     assert.equal(settingsLanguageLabel("xx"), "xx");
   });
-  // EN-Default (kein withLang) bleibt 1:1 SETTINGS_LANGUAGES.label.
   for (const { value, label } of SETTINGS_LANGUAGES) assert.equal(settingsLanguageLabel(value), label);
 });
 

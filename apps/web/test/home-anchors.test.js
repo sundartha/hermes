@@ -1,6 +1,3 @@
-// Anker der Startseite (lib/home-anchors.js): Unterseiten fuehren mit "So funktioniert's"
-// und "Preise" auf die Ebenen der Startseite statt auf die ruhenden Unterseiten
-// (Owner-Wunsch 2026-09-27). Rein, ohne astro-Build.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

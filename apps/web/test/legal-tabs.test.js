@@ -1,9 +1,3 @@
-// Rechts-Blatt der Startseite: alle Ziele des Fussbands stehen als Reiter im Blatt
-// (components/LegalTabs.astro, Owner-Wunsch 2026-09-27). Auch "Verträge kündigen" und
-// "Support" oeffnen sich IM Blatt - vorher fuehrten sie auf eigene Seiten, von denen
-// aus die anderen Texte nicht mehr zu sehen waren. Seite und Reiter teilen sich
-// denselben Inhalt (components/site/CancelInfo.astro, SupportInfo.astro). Rein, ohne
-// astro-Build: geprueft wird die Quelle.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -18,7 +12,6 @@ const index = read("src/pages/index.astro");
 const css = read("src/styles/hermes.css");
 const langCss = read("src/styles/lang-only.css");
 
-// Reiter mit eigenem Inhalt, der zugleich eine eigene Seite hat.
 const INFO_TABS = [
   { slug: "cancel", href: "/kuendigen", page: "src/pages/kuendigen.astro", content: "CancelInfo" },
   { slug: "support", href: "/support", page: "src/pages/support.astro", content: "SupportInfo" },
@@ -36,8 +29,6 @@ test("Rechts-Blatt: Kuendigen und Support sind Reiter mit Inhalt im Blatt", () =
       index.includes(`{ slug: "${tab.slug}", href: "${tab.href}"`),
       `infoTabs: ${tab.slug} fehlt`,
     );
-    // Beide Sprachfassungen im Reiter (Owner-Wunsch 2026-09-28), sichtbar ist die zur
-    // Seitensprache passende (data-lang-only).
     const panel = index.slice(index.indexOf(`class="legal-info" data-legal-doc="${tab.slug}"`));
     const block = panel.slice(0, panel.indexOf("</div>\n        </div>") + 1);
     assert.match(
@@ -61,9 +52,6 @@ test("Rechts-Blatt: Seite und Reiter teilen sich denselben Inhalt", () => {
   }
 });
 
-// Ausnahme seit 2026-10-01 (Owner-Entscheidung): "Verträge kündigen" fuehrt direkt zur
-// Kuendigung im Kundenbereich (CANCEL_URL, test/cancel-intent.test.js), nicht in den
-// Reiter. Der Reiter bleibt im Blatt erreichbar.
 test("Fussband und Menue der Startseite: kein Link fuehrt aus dem Blatt heraus", () => {
   const home = `${index}\n${mobile}`;
   assert.ok(!home.includes('href="/kuendigen"'), "Kuendigen-Link fuehrt wieder in den Reiter");
@@ -74,7 +62,6 @@ test("Fussband und Menue der Startseite: kein Link fuehrt aus dem Blatt heraus",
       assert.ok(link.includes(`data-legal-open="${tab.slug}"`), `${link} verlaesst das Blatt`);
     }
   }
-  // Jeder feste Reiter-Verweis trifft einen Reiter, den es gibt.
   const known = new Set([...LEGAL_SLUGS, ...INFO_TABS.map((tab) => tab.slug)]);
   for (const [, slug] of home.matchAll(/data-legal-open="([a-z]+)"/g)) {
     assert.ok(known.has(slug), `data-legal-open="${slug}" hat keinen Reiter`);
@@ -110,8 +97,6 @@ test("Rechts-Blatt: alte Pillen und Schiebe-Daumen sind weg, die Reiter-Klassen 
   }
 });
 
-// Owner-Wunsch 2026-09-28: steht die Startseite auf Englisch, ist auch alles im
-// Rechts-Blatt englisch - Reiter, Titel, Texte, Kuendigen/Support -, auf Deutsch deutsch.
 test("Rechts-Blatt: jeder Rechtstext steht in beiden Sprachen, sichtbar ist die zur Seitensprache", () => {
   for (const slug of LEGAL_SLUGS) {
     assert.ok(
