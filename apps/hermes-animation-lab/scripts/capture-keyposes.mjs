@@ -1,10 +1,3 @@
-// Keypose-Capture fuer das Review. Faehrt jedes Preset deterministisch ueber
-// window.hermesLab an und speichert Screenshots der Stage.
-//
-// Playwright wird ON-DEMAND erwartet (nicht in package.json). Vorbereitung:
-//   npm i --no-save playwright && npx playwright install chromium
-// Aufruf (Server muss laufen, z.B. `npm run preview -- --port 4178`):
-//   node scripts/capture-keyposes.mjs http://127.0.0.1:4178
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
@@ -22,7 +15,6 @@ const page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, de
 await page.goto(BASE_URL, { waitUntil: "networkidle" });
 await page.waitForFunction(() => !!window.hermesLab);
 
-// Saubere, grosse Vorschau fuer die Review-Bilder.
 await page.click('[data-size="500"]');
 await page.click('[data-bg="white"]');
 
