@@ -38,4 +38,5 @@ jobs:
           STAGING_URL: https://hermes-staging-erpv.onrender.com
           GITHUB_TOKEN: ${{ github.token }}
           ABSICHTLICH_ROT: ${{ inputs.absichtlich_rot }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
         run: node tools/deploy-weg.mjs staging --commit "$GITHUB_SHA"
