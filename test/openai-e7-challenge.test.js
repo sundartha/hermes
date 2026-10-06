@@ -1,7 +1,3 @@
-// E7: Domain-Ownership-Challenge der OpenAI-Einreichung (O-4/O-5). Prueft die Route
-// end-to-end am ECHTEN Server (Spawn, PORT=0, DATA_DIR-Override) - nicht am Handler:
-// der Wert der Zusage liegt in der Byte-Form der Antwort und darin, dass keine
-// Auth-Schicht davor sitzt. Beides ist nur ueber HTTP messbar.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -18,8 +14,6 @@ function readRepoFile(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), "utf8");
 }
 
-// startServer + fetch auf den Challenge-Pfad, mit garantiertem stop() (Lehre
-// leaked-test-servers-overheat: ein nicht beendeter Spawn-Server ueberlebt die Suite).
 async function mitServer(env, pruefung) {
   const srv = await startServer({ env });
   try {
@@ -88,11 +82,6 @@ test("E7-T7: der Token wird nie geloggt (Regel 4)", async () => {
   });
 });
 
-// OpenAI-P10b: configHash verliess /healthz (Preimage-Befund, s. src/app.js). Der
-// Vergleich laeuft seither ueber die Boot-Log-Zeile "[boot] configHash=..." (der
-// verbliebene Zwilling, src/boot.js) statt ueber die oeffentliche Antwort. Vorbedingung
-// PRUEFT ZUERST, dass beide Zeilen ueberhaupt einen Hash tragen - sonst waere ein
-// undefined===undefined-Vergleich leer gruen (genau die Falle aus dem P10b-Pre-Mortem).
 test("E7-T8: der Token ist keine configHash-Achse (Boot-Hash identisch mit/ohne Token)", async () => {
   await mitServer({}, async (srvOhne) => {
     const matchOhne = srvOhne.stdout.match(/\[boot\] configHash=([a-f0-9]{64})/);
@@ -110,9 +99,6 @@ test("E7-T9: .env.example + render.yaml + config.js sind kohaerent (Doku-Pin)", 
   const envExample = readRepoFile(".env.example");
   const renderYaml = readRepoFile("render.yaml");
 
-  // Positiv-Kontrolle: die Regeln finden bei einem BEKANNT vorhandenen Schluessel etwas -
-  // sonst waere "kein Treffer" nicht von "sucht gar nicht" zu unterscheiden (Lehre
-  // pruefkommando-ohne-positiv-kontrolle).
   assert.match(envExample, /^MCP_ORIGIN_ENFORCE=true$/m);
 
   assert.ok(configJs.includes("process.env.OPENAI_APPS_CHALLENGE_TOKEN"));

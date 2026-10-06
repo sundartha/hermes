@@ -1,8 +1,3 @@
-// F2-Newsletter-Recipients (pg): Round-Trip hydrate->flush->hydrate. Deckt Schema
-// (newsletter_recipients/newsletter_confirm_mail_log) + TENANT_COLUMNS + rowToTenant +
-// flushTenants zusammen ab (I8-Landmine: fehlt eine Spalte an EINER der vier Stellen,
-// loescht der naechste Flush den Wert oder er kommt nach einem Deploy-Neustart nie zurueck).
-// pglite = kein Netz (F.I.R.S.T.). Muster newsletter-consent-pg-roundtrip.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore } from "../src/store/pg.js";
@@ -31,7 +26,7 @@ test("pg: newsletterRecipients (pending + confirmed) ueberlebt hydrate->flush->h
   const confirmResult = store.confirmNewsletterRecipientByToken("hash_confirmed", "2026-08-14T12:00:00.000Z");
   assert.ok(confirmResult, "Bestaetigung im Ausgangsstore erfolgreich");
 
-  const store2 = makePgStore(runner); // frischer Store, gleiche DB -> hydriert aus der DB
+  const store2 = makePgStore(runner);
   await store2.init();
   const recipients = store2.tenantNewsletterRecipients(TENANT_WITH_RECIPIENTS);
   assert.equal(recipients.length, 2, "beide Eintraege ueberleben den Reload");

@@ -1,7 +1,3 @@
-// numberStatusFor (AM5): reiner View-Helfer fuer den Dashboard-Chip-Status. Kein
-// Netz, kein Server, kein pglite (eigene Datei) - nur State-Ops + die reine View.
-// Prueft die Praesentations-Abbildung (requested/provisioning/capturing/active/none)
-// UND die Fail-closed-Tenant-Isolation (fremde Nummer -> "none", kein Leck).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -18,7 +14,6 @@ import { numberStatusFor, activeNumberFor } from "../src/store/views.js";
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const TENANT = "t_user1";
 
-// Seedet einen aktiven Tenant mit genau einer 'requested' Nummer.
 function seedRequested(tenantId = TENANT) {
   const s = makeDefaultState();
   registerTenant(s, tenantId);
@@ -62,7 +57,6 @@ test("numberStatusFor: fremde aktive Nummer -> 'none' (fail-closed, kein Leck)",
   const { s, numberId } = seedRequested("t_owner");
   beginProvisioning(s, numberId);
   activateNumber(s, numberId, { e164: "+4915700000009", providerNumberId: "num_owner" });
-  // Ein anderer Tenant ohne eigene Nummer sieht NICHT die fremde aktive Nummer.
   assert.equal(numberStatusFor(s, "t_stranger"), "none");
   assert.equal(activeNumberFor(s, "t_stranger"), "");
 });
@@ -73,7 +67,7 @@ test("numberStatusFor: globaler Cap-Skip -> 'blocked' (Fix B)", () => {
   registerTenant(s, "b");
   const caps = { maxNumbers: 1, maxNumbersPerTenant: 1 };
   requestNumber(s, { tenantId: "a", ...caps });
-  requestNumber(s, { tenantId: "b", ...caps }); // blockiert -> Skip-Marker gesetzt
+  requestNumber(s, { tenantId: "b", ...caps });
   assert.equal(numberStatusFor(s, "b"), "blocked");
 });
 
@@ -83,10 +77,8 @@ test("numberStatusFor: eine spaeter aktive Nummer ueberlagert den Skip-Marker (I
   registerTenant(s, "b");
   const tight = { maxNumbers: 1, maxNumbersPerTenant: 1 };
   requestNumber(s, { tenantId: "a", ...tight });
-  requestNumber(s, { tenantId: "b", ...tight }); // blockiert -> Skip-Marker gesetzt
+  requestNumber(s, { tenantId: "b", ...tight });
   assert.equal(numberStatusFor(s, "b"), "blocked");
-  // Cap oeffnet sich (Release der fremden Nummer), b bekommt seine eigene Nummer -> die
-  // reale Nummer schlaegt IMMER den Skip-Marker (Prioritaet ACTIVE > ... > BLOCKED).
   const { number } = requestNumber(s, { tenantId: "b", maxNumbers: 5, maxNumbersPerTenant: 1 });
   beginProvisioning(s, number.id);
   activateNumber(s, number.id, { e164: "+4915799990003", providerNumberId: "num_b" });
@@ -103,8 +95,8 @@ test("numberStatusFor: failed -> 'failed' (Fix C, statt stillem Rueckfall auf 'n
 test("numberStatusFor: Retry nach 'failed' legt eine frische Nummer an, die 'failed' ueberdeckt", () => {
   const { s, numberId } = seedRequested();
   beginProvisioning(s, numberId);
-  failNumber(s, numberId); // alte Nummer bleibt terminal 'failed' liegen (Bestandsschutz)
-  requestNumber(s, { tenantId: TENANT, ...CAPS }); // Retry: dieselbe requestNumber-Quelle, G5
+  failNumber(s, numberId);
+  requestNumber(s, { tenantId: TENANT, ...CAPS });
   assert.equal(numberStatusFor(s, TENANT), "requested");
 });
 
@@ -114,10 +106,10 @@ test("numberStatusFor: 'failed' hat Vorrang vor gleichzeitigem globalem Cap-Skip
   registerTenant(s, "b");
   const { number } = requestNumber(s, { tenantId: "b", maxNumbers: 5, maxNumbersPerTenant: 1 });
   beginProvisioning(s, number.id);
-  failNumber(s, number.id); // own(b) traegt genau eine 'failed'-Nummer
-  requestNumber(s, { tenantId: "a", maxNumbers: 1, maxNumbersPerTenant: 1 }); // belegt den einzigen Slot
+  failNumber(s, number.id);
+  requestNumber(s, { tenantId: "a", maxNumbers: 1, maxNumbersPerTenant: 1 });
   const retry = requestNumber(s, { tenantId: "b", maxNumbers: 1, maxNumbersPerTenant: 1 });
   assert.equal(retry.ok, false);
-  assert.equal(retry.reason, "global_cap"); // Skip-Marker gesetzt, KEINE neue Nummer
+  assert.equal(retry.reason, "global_cap");
   assert.equal(numberStatusFor(s, "b"), "failed");
 });

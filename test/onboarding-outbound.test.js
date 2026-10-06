@@ -1,21 +1,11 @@
-// Outbound ueber Telnyx end-to-end (Server-Kindprozess): POST /api/calls waehlt
-// Telnyx als Provider, weil die aktive Owner-Nummer im Store eine Telnyx-Nummer ist
-// (provider aus s.numbers, nicht mehr aus TELNYX_NUMBER-Env) - from = Telnyx-Nummer,
-// originate ueber die TeXML-API. Statt der echten Telnyx-API laeuft ein lokaler
-// Mock (TELNYX_API_BASE zeigt darauf) -> offline + deterministisch, KEIN echter
-// Anruf. Eigene Datei (Server-Spawn, KEIN pglite -> kein Test-Worker-Stall).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer } from "./helpers.js";
 
 const TELNYX_NR = "+13125550100";
-const TARGET = "+4917312345678"; // Owner-Handy (Allowlist)
+const TARGET = "+4917312345678";
 
-// Mock der Telnyx-TeXML-VOICE-API (Outbound-Originate): zeichnet den Initiate-Request
-// auf und liefert eine Twilio-kompatible Call-Resource ({sid}). Liefert {url, requests,
-// close}. Name "...VoiceMock" disjunkt vom Provisioning-Mock in helpers.js
-// (startTelnyxProvisioningMock) - zwei verschiedene Telnyx-APIs (TD-9).
 async function startTelnyxVoiceMock() {
   const requests = [];
   const server = http.createServer((req, res) => {
@@ -40,8 +30,6 @@ const TELNYX_ENV = (mockUrl) => ({
   ALLOWED_NUMBERS: TARGET,
 });
 
-// Owner-Absendernummer = Telnyx-Nummer im Store -> Outbound waehlt Telnyx (provider
-// aus s.numbers, statt frueher TELNYX_NUMBER-Env).
 const TELNYX_OWNER = { e164: TELNYX_NR, provider: "telnyx" };
 
 const postJson = (url, body) =>
@@ -61,7 +49,6 @@ test("POST /api/calls mit Telnyx-Owner-Nummer im Store -> provider=telnyx, from=
     assert.equal(json.status, "dialing");
     assert.equal(json.twilioSid, "tnx_mock_call_1", "CallSid aus der Telnyx-Antwort uebernommen");
 
-    // Mock hat genau einen Initiate-Request erhalten, auf dem connection_id-Pfad.
     assert.equal(mock.requests.length, 1);
     const r = mock.requests[0];
     assert.equal(r.method, "POST");
@@ -72,7 +59,6 @@ test("POST /api/calls mit Telnyx-Owner-Nummer im Store -> provider=telnyx, from=
     assert.equal(form.get("To"), TARGET);
     assert.match(form.get("Url"), /\/voice\/outbound\?callId=/);
 
-    // Call-Record traegt provider=telnyx + from=Telnyx-Nummer.
     const calls = srv.readStore().calls;
     assert.equal(calls.length, 1);
     assert.equal(calls[0].provider, "telnyx");
@@ -84,10 +70,6 @@ test("POST /api/calls mit Telnyx-Owner-Nummer im Store -> provider=telnyx, from=
   }
 });
 
-// Gesperrtes Ziel -> kein Provider-Originate. Denylist (Premium 0900) statt Allowlist:
-// der Owner ist seit dem Boot-Seed (id_verified, Phase outbound-p1) verifizierter
-// Subscriber und passiert das Allowlist-Gate -> die Denylist ist hier das greifende
-// HARTE Gate, das den Originate fail-closed verhindert.
 test("Outbound-Gates greifen weiter: gesperrtes (Premium-)Ziel -> 403 (kein Telnyx-Call)", async () => {
   const mock = await startTelnyxVoiceMock();
   const srv = await startServer({ env: TELNYX_ENV(mock.url), ownerNumber: TELNYX_OWNER });

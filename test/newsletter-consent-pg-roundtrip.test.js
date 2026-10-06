@@ -1,9 +1,3 @@
-// Newsletter-Einwilligung (pg): Round-Trip hydrate->flush->hydrate. Ein gesetzter Wert
-// (Opt-in ODER Widerruf) ueberlebt save()->reload - deckt Schema (newsletter_consent/
-// newsletter_consent_at) + TENANT_COLUMNS + rowToTenant + flushTenants zusammen ab (I8-
-// Landmine: fehlt eine Spalte an EINER der vier Stellen, loescht der naechste Flush den
-// Wert oder er kommt nach einem Deploy-Neustart nie zurueck). pglite = kein Netz
-// (F.I.R.S.T.). Muster tenant-suspended-at-pg.test.js/voucher-fee-b-exempt-flag-pg.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore } from "../src/store/pg.js";
@@ -20,7 +14,7 @@ test("pg: newsletterConsent=true ueberlebt hydrate->flush->hydrate (Round-Trip)"
   ops.registerTenant(s, TENANT_GRANTED, { firstName: "Max" });
   store.setNewsletterConsent(TENANT_GRANTED, true);
 
-  const store2 = makePgStore(runner); // frischer Store, gleiche DB -> hydriert aus der DB
+  const store2 = makePgStore(runner);
   await store2.init();
   const view = store2.tenantNewsletterConsent(TENANT_GRANTED);
   assert.equal(view.consent, true, "persistiert (flushTenants + rowToTenant)");

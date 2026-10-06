@@ -1,34 +1,3 @@
-// Die vier Messinstrumente (eslint, jscpd, knip, c8) duerfen keine ERZEUGTEN
-// Ausgaben messen. Gemessen am 2026-08-13: 87 Dateien mit 37.905 eingefrorenen
-// Lint-Verstoessen in eslint-suppressions.json lagen in gebauten Bundles
-// (apps/hermes-studio/dist, apps/hermes-animation-lab/dist, apps/web/dist,
-// dist-test, dist-test-links, dist-clean-test). Die Ratsche mass damit
-// ueberwiegend Minifier-Ausgabe: id-length allein trug 32.965 Unterdrueckungen.
-// Eine Zahl, die zu 88 Prozent aus Bundle-Rauschen besteht, misst nicht die
-// Sauberkeit des Codes, sondern den Zufall des letzten Builds - und sie sinkt
-// nie durch Aufraeumen, sondern nur durch Loeschen eines dist-Verzeichnisses.
-//
-// EIGENTUEMER-ENTSCHEIDUNG: erzeugte Ausgaben fliegen aus ALLEN VIER
-// Instrumenten, danach wird eslint-suppressions.json neu erzeugt.
-//
-// Diese Faelle sind KEINE Abnahmekriterien (keine Kennung ABNAHME-) und kein
-// Katalogtest - sie gehoeren in den Regressionslauf, weil der Zustand nach der
-// Reparatur dauerhaft gelten muss. Ein spaeterer Build, der ein neues
-// Ausgabeverzeichnis anlegt, oder eine Ausschlussliste, die beim Umbau
-// verlorengeht, faellt hier wieder auf.
-//
-// WARUM PRO INSTRUMENT UND NICHT NUR AM MESSERGEBNIS: knip misst dist heute
-// schon nicht (sein project-Bereich umfasst nur src/scripts/test), c8 misst nur
-// geladene Dateien. Das ist Zufall der heutigen Konfiguration, kein Ausschluss:
-// wer knips project-Bereich morgen auf apps/** erweitert, holt die Bundles
-// still zurueck. Der ausdrueckliche Ausschluss ist die haltbare Festlegung,
-// nicht der Nebeneffekt eines Geltungsbereichs.
-//
-// POSITIV-KONTROLLE, in jedem Fall enthalten: geprueft wird zusaetzlich, dass
-// ueberhaupt etwas gesehen wird (Unterdrueckungsdatei nicht leer, Ausschlussliste
-// nicht leer) und dass die Liste nicht trivial alles ausklammert (eine echte
-// Quelldatei bleibt gemessen). Ohne beides waere jeder Fall gegen eine leere
-// Menge gruen.
 import { strict as assert } from "node:assert";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -44,20 +13,10 @@ const JSCPD_CONFIG_REL = ".jscpd.json";
 const KNIP_CONFIG_REL = "knip.json";
 const PACKAGE_JSON_REL = "package.json";
 
-// Positiv-Kontrolle beider Richtungen: eine echte, gemessene Quelldatei. Sie
-// darf in KEINER Ausschlussliste stehen - sonst klammert die Liste trivial
-// alles aus und der Fall waere auch dann gruen, wenn nichts mehr gemessen wird.
 const SOURCE_PROBE = "src/server.js";
 
-// Positiv-Kontrolle fuer den eslint-Fall: ein Pfad, den eslint bereits heute
-// ausklammert. Meldet die Abfrage dafuer "wird gemessen", liest sie die
-// ignores-Liste gar nicht - dann sagt ein gruener Ausschluss-Befund nichts.
 const KNOWN_IGNORED_PROBE = "node_modules/beispiel/index.js";
 
-// Stellvertreter-Pfade fuer die erzeugten Ausgaben dieses Repos. Die Herkunft
-// steht an jedem Eintrag: jedes Verzeichnis ist entweder in einer .gitignore
-// als Build-Ausgabe deklariert oder Ziel eines Build-Skripts aus einer
-// package.json. Geraten ist keiner davon.
 const GENERATED_OUTPUT_PROBES = [
   {
     path: "apps/web/dist/_astro/seite.js",
@@ -101,23 +60,12 @@ const GENERATED_OUTPUT_PROBES = [
   },
 ];
 
-// Eine beliebige, aber bekannte Build-Ausgabe fuer die Positiv-Kontrollen der
-// Einordnung und des Glob-Abgleichs, und ein Muster, das sie nachweislich deckt.
 const FIRST_PROBE_PATH = GENERATED_OUTPUT_PROBES[0].path;
 const PROVEN_GLOB = "**/dist/**";
 
-// Dieselbe Herkunft, als Verzeichnisnamen: damit laesst sich ein BELIEBIGER
-// Pfad einordnen (gebraucht fuer die Pruefung der Unterdrueckungsdatei, deren
-// Eintraege nicht vorher bekannt sind). dist- als Praefix deckt die Astro-
-// Testausgaben dist-test, dist-test-links, dist-test-failclosed und
-// dist-clean-test in einem ab.
 const GENERATED_DIR_SEGMENTS = new Set(["dist", "build", "out", ".astro"]);
 const GENERATED_DIR_PREFIX = "dist-";
 
-// c8 liest seine Ausschluesse aus einer Konfigurationsdatei, aus dem c8-Schluessel
-// in package.json oder von der Kommandozeile des coverage-Skripts. Die
-// JS-/YAML-Varianten von c8 fehlen hier bewusst: sie kaemen ohne zusaetzlichen
-// Parser nicht verlaesslich rein, und keine davon existiert in diesem Repo.
 const C8_CONFIG_FILES = [".c8rc", ".c8rc.json", ".nycrc", ".nycrc.json"];
 const C8_WHERE = `${C8_CONFIG_FILES.join(" / ")} / package.json c8.exclude / --exclude im coverage-Skript`;
 
@@ -129,10 +77,6 @@ function readRepoJson(relativePath) {
   return JSON.parse(readRepoFile(relativePath));
 }
 
-// --- Glob-Abgleich -----------------------------------------------------------
-// jscpd, knip und c8 fuehren ihre Ausschluesse als Glob-Muster derselben
-// Schreibweise. Ein eigener winziger Uebersetzer statt einer neuen Dependency:
-// gebraucht werden nur ** und *, mehr steht in diesen Listen nicht.
 const GLOBSTAR_SLASH_MARK = "\u0000";
 const GLOBSTAR_MARK = "\u0001";
 const STAR_MARK = "\u0002";
@@ -151,9 +95,6 @@ function globToRegExp(pattern) {
   return new RegExp(`^${body}$`);
 }
 
-// Der Pfad selbst und jeder seiner Vorfahren-Ordner. Ein Muster darf auf das
-// Verzeichnis zeigen statt auf die Datei darin (apps/web/dist deckt alles unter
-// apps/web/dist ab) - ohne die Vorfahren wuerde so ein Ausschluss uebersehen.
 function pathAndAncestors(relativePath) {
   const segments = relativePath.split("/");
   const candidates = [];
@@ -171,7 +112,6 @@ function matchesAnyGlob(relativePath, patterns) {
   });
 }
 
-// --- Einordnung beliebiger Pfade ---------------------------------------------
 function isGeneratedOutputPath(relativePath) {
   const segments = relativePath.split("/");
   const directories = segments.slice(0, -1);
@@ -180,7 +120,6 @@ function isGeneratedOutputPath(relativePath) {
   );
 }
 
-// --- Ausschlusslisten der Instrumente ----------------------------------------
 function jscpdIgnorePatterns() {
   return readRepoJson(JSCPD_CONFIG_REL).ignore ?? [];
 }
@@ -206,15 +145,11 @@ function c8ExcludePatterns() {
   return patterns;
 }
 
-// --- Gemeinsame Behauptung fuer die glob-basierten Instrumente ----------------
 function describeMissing(probe) {
   return `${probe.path}  (${probe.origin})`;
 }
 
 function assertExcludesGeneratedOutput({ instrument, where, patterns }) {
-  // Positiv-Kontrolle des Abgleichs selbst: ein Muster, das die Probe deckt,
-  // MUSS als Treffer gelten. Ein Abgleich, der immer "kein Treffer" liefert,
-  // meldete dieselben Luecken - und der Fall koennte nie gruen werden.
   assert.ok(
     matchesAnyGlob(FIRST_PROBE_PATH, [PROVEN_GLOB]),
     `Positiv-Kontrolle fehlgeschlagen: der Glob-Abgleich erkennt ${PROVEN_GLOB} nicht als Treffer fuer ${FIRST_PROBE_PATH}`,
@@ -245,9 +180,6 @@ describe("Messinstrumente messen keine erzeugten Ausgaben", () => {
       files.length > 0,
       `Positiv-Kontrolle fehlgeschlagen: ${SUPPRESSIONS_REL} ist leer - dieser Fall pruefte gegen eine leere Menge`,
     );
-    // Positiv-Kontrolle in BEIDE Richtungen: eine Einordnung, die nie "erzeugt"
-    // sagt, macht diesen Fall falsch-gruen; eine, die immer "erzeugt" sagt,
-    // macht ihn unerfuellbar.
     assert.ok(
       isGeneratedOutputPath(FIRST_PROBE_PATH),
       `Positiv-Kontrolle fehlgeschlagen: die Einordnung haelt ${FIRST_PROBE_PATH} fuer Quellcode - sie faende dann nie einen Eintrag`,
@@ -264,10 +196,6 @@ describe("Messinstrumente messen keine erzeugten Ausgaben", () => {
     );
   });
 
-  // eslint wird nicht ueber den Text seiner ignores-Liste geprueft, sondern
-  // gefragt: isPathIgnored liest eslint.config.js mit derselben Semantik wie der
-  // echte Lauf. Eine nachgebaute Musterpruefung koennte an einer Schreibweise
-  // scheitern, die eslint sehr wohl versteht (oder umgekehrt).
   it("eslint klammert erzeugte Ausgaben aus (eslint.config.js ignores)", async () => {
     const eslint = new ESLint({ cwd: REPO_ROOT });
     assert.ok(

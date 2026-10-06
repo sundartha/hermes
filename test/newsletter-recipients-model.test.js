@@ -1,7 +1,3 @@
-// F2-Newsletter-Recipients: Modell-Tests fuer Normalisierung/Format/Duplikat/Cap (offline,
-// F.I.R.S.T., kein IO). Deckt src/newsletter-recipients.js (Gate-Entscheidung, reine
-// Funktionen) UND src/store/state-ops.js (Rohdaten-Mutation: add/remove) ab - Muster
-// newsletter-consent-store.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -37,8 +33,6 @@ function fakeStoreFrom(s) {
   };
 }
 
-// ---- normalizeEmail / isValidEmailFormat ---------------------------------------------
-
 test("normalizeEmail: trim + lowercase", () => {
   assert.equal(normalizeEmail("  Max.Mustermann@Example.DE  "), "max.mustermann@example.de");
   assert.equal(normalizeEmail(""), "");
@@ -54,8 +48,6 @@ test("isValidEmailFormat: einfache, aber wirksame Pruefung", () => {
   assert.equal(isValidEmailFormat("a b@c.de"), false, "Leerzeichen");
   assert.equal(isValidEmailFormat(""), false);
 });
-
-// ---- planAddNewsletterRecipient (Gate-Entscheidung) ------------------------------------
 
 test("planAddNewsletterRecipient: gueltige, neue Adresse -> ok, normalisierte E-Mail", () => {
   const s = freshTenantState();
@@ -143,7 +135,7 @@ test(`planAddNewsletterRecipient: Tageslimit erreicht (${NEWSLETTER_CONFIRM_MAIL
       unsubToken: "u",
       now: now.toISOString(),
     });
-    removeNewsletterRecipient(s, TENANT, `daily${i}@example.test`); // Cap 5 nicht ueberschreiten
+    removeNewsletterRecipient(s, TENANT, `daily${i}@example.test`);
   }
   const plan = planAddNewsletterRecipient({
     store: fakeStoreFrom(s),
@@ -169,7 +161,7 @@ test("planAddNewsletterRecipient: Tageslimit ausserhalb des 24h-Fensters (>24h a
     });
     removeNewsletterRecipient(s, TENANT, `old${i}@example.test`);
   }
-  const now = new Date("2026-08-14T12:00:00.000Z"); // 4 Tage spaeter
+  const now = new Date("2026-08-14T12:00:00.000Z");
   const plan = planAddNewsletterRecipient({
     store: fakeStoreFrom(s),
     tenantId: TENANT,
@@ -179,8 +171,6 @@ test("planAddNewsletterRecipient: Tageslimit ausserhalb des 24h-Fensters (>24h a
   });
   assert.equal(plan.ok, true, "alte Log-Eintraege ausserhalb des rollierenden Fensters blockieren nicht");
 });
-
-// ---- state-ops: addNewsletterRecipient / removeNewsletterRecipient --------------------
 
 test("addNewsletterRecipient: legt pending-Eintrag mit allen Feldern an, Antwort ohne Muell-Felder", () => {
   const s = freshTenantState();

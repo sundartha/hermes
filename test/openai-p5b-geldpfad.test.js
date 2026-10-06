@@ -1,21 +1,3 @@
-// P5b (O-13 Teil 2, O-27 Teil 2): Datenminimierung am Geldpfad.
-//
-// Erster Abschnitt (Faelle A-E): callOutcomeView() liefert an der MCP-Kante nur noch
-// das BASIS-Token von failure_reason (z.B. NOT_PLACED), nicht mehr die volle Diagnose
-// (NOT_PLACED plus SIP-/Carrier-Detail). Fall D ist die Geldpfad-Gegenprobe: der Riegel
-// gegen teure Wiederwahl haengt an failure_reason.startsWith(NOT_PLACED) - bricht das
-// Praefix, wiederholt der Host jeden Fehlschlag, jeder Versuch kostet Carrier-Geld.
-// Deshalb wird ausschliesslich gegen die importierte Konstante NOT_PLACED geprueft,
-// nirgends gegen ein getipptes Literal (Gegenprobe-Kommando im Abschlussbericht: die
-// gesamte Datei traegt den Wert von NOT_PLACED an keiner Stelle in Anfuehrungszeichen
-// getippt).
-//
-// Zweiter Abschnitt (Faelle F-G): consultPermissionHint beschreibt die Voraussetzung
-// statt eine Host-Sicherheitseinstellung einzufordern - in allen drei Sprachen
-// (SUPPORTED_LANGUAGES), mit Positiv-Kontrolle gegen die ALTEN Aufforderungs-Texte.
-//
-// Testnamen tragen KEIN Katalog-Praefix (Lehre catalog-id-prefix-misroutes-tests) -
-// sie laufen in npm test, nicht im Gates-Lauf.
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -42,10 +24,6 @@ import {
 const CALL_ID = "call_p5b";
 const HTTP_OK = 200;
 
-// ==================== Gemeinsame Test-Infrastruktur (Faelle A-E) ====================
-
-// Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
-// server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern.
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
@@ -58,8 +36,6 @@ function captureTools(ctx) {
   return handlers;
 }
 
-// Lokaler Gateway-Mock: /consult liefert consultBody, jeder andere Pfad callBody.
-// Muster test/mcp-fehlergrund-rueckweg.test.js#startGatewayMock.
 async function startGatewayMock({ consultBody, callBody }) {
   const server = http.createServer((req, res) => {
     const body = req.url.includes("/consult") ? consultBody : callBody;
@@ -110,13 +86,9 @@ async function getCallStatusFailureReason(failureReason) {
   });
 }
 
-// ==================== Fall A (in-process, beide Werkzeuge) ====================
-
 test("P5b (O-13 Teil 2, Fall A): get_call_status UND await_call_event liefern nur noch das Basis-Token, result_summary bleibt die volle Phrase", async () => {
   const rohesToken = `${NOT_PLACED}:invite-403-D51`;
   const callBody = finishedCall({ failureReason: rohesToken });
-  // Positiv-Kontrolle: der Mock-Body traegt tatsaechlich das volle Token - sonst waere
-  // die Kuerzungs-Zusicherung unten trivial gruen.
   assert.equal(callBody.failureReason, rohesToken, "Mock traegt das volle Diagnose-Token");
 
   await withGateway({ consultBody: DONE_CONSULT, callBody }, async () => {
@@ -139,8 +111,6 @@ test("P5b (O-13 Teil 2, Fall A): get_call_status UND await_call_event liefern nu
     assert.ok(!textBlock.includes("invite-403"), "Textblock traegt das SIP-Detail nicht");
     assert.ok(!textBlock.includes("D51"), "Textblock traegt den Carrier-Code nicht");
 
-    // Die Kuerzung darf den Nutzertext nicht beruehren - result_summary bleibt die
-    // lokalisierte Phrase auf dem BASIS-Token.
     assert.ok(
       eventResult.structuredContent.result_summary.includes(
         FAILURE_REASON_TEXTS.de.phrases[NOT_PLACED],
@@ -149,8 +119,6 @@ test("P5b (O-13 Teil 2, Fall A): get_call_status UND await_call_event liefern nu
   });
 });
 
-// ==================== Fall E (Durchreiche detailfreier Token) ====================
-
 test("P5b (O-13 Teil 2, Fall E): detailfreie Token reisen unveraendert durch - die Kuerzung nimmt nichts weg, was kein Detail ist", async () => {
   const tabelle = ["no-answer", "busy", "canceled", CAP_FAILURE_REASON, BUDGET_FAILURE_REASON, null];
   for (const token of tabelle) {
@@ -158,8 +126,6 @@ test("P5b (O-13 Teil 2, Fall E): detailfreie Token reisen unveraendert durch - d
     assert.equal(emitted, token, `Token ${JSON.stringify(token)} bleibt unveraendert`);
   }
 });
-
-// ==================== Fall B (HTTP /mcp, echter Serverprozess) ====================
 
 test("P5b (O-13 Teil 2, Fall B, HTTP): der echte Serverprozess kuerzt failure_reason im Tool-Output, /api/calls/:id traegt das volle Token weiter", async () => {
   const rohesToken = `${NOT_PLACED}:start-403`;
@@ -177,8 +143,6 @@ test("P5b (O-13 Teil 2, Fall B, HTTP): der echte Serverprozess kuerzt failure_re
     }),
   });
   try {
-    // Positiv-Kontrolle: /api/* ist NICHT Gegenstand dieser Phase (Abschnitt 4) - ohne
-    // diese Zeile beweist der Tool-Test unten nichts.
     const apiRes = await fetch(`${srv.localUrl}/api/calls/${CALL_ID}`);
     const apiBody = await apiRes.json();
     assert.equal(apiBody.failureReason, rohesToken, "/api/calls/:id traegt das volle Token weiter");
@@ -196,8 +160,6 @@ test("P5b (O-13 Teil 2, Fall B, HTTP): der echte Serverprozess kuerzt failure_re
   }
 });
 
-// ==================== Fall C (stdio, echter Kindprozess, DP-1) ====================
-
 test("P5b (O-13 Teil 2, Fall C, stdio): der echte stdio-Kindprozess kuerzt failure_reason ueber einen echten tools/call", async () => {
   const rohesToken = `${NOT_PLACED}:invite-403-D51`;
   const callBody = finishedCall({ failureReason: rohesToken });
@@ -212,8 +174,6 @@ test("P5b (O-13 Teil 2, Fall C, stdio): der echte stdio-Kindprozess kuerzt failu
     command: process.execPath,
     args: ["src/mcp-server.js"],
     cwd: ROOT,
-    // GATEWAY_URL wird NUR diesem Kindprozess mitgegeben, NICHT in BASE_ENV
-    // aufgenommen - sonst leakte er in jeden anderen Spawn-Test.
     env: { ...BASE_ENV, GATEWAY_URL: gatewayUrl },
     stderr: "pipe",
   });
@@ -224,8 +184,6 @@ test("P5b (O-13 Teil 2, Fall C, stdio): der echte stdio-Kindprozess kuerzt failu
   const client = new Client({ name: "hermes-p5b-stdio-client", version: "0.0.0" });
   try {
     await client.connect(transport);
-    // Ausdruecklich ein echter tools/call, kein tools/list: das Schema aendert sich in
-    // dieser Phase nicht, eine Schema-Pruefung wuerde hier nichts beweisen.
     const result = await client.callTool({
       name: "get_call_status",
       arguments: { call_id: CALL_ID },
@@ -238,28 +196,21 @@ test("P5b (O-13 Teil 2, Fall C, stdio): der echte stdio-Kindprozess kuerzt failu
   }
 });
 
-// ==================== Fall D (Geldpfad-Gegenprobe gegen die KONSTANTE) ====================
-
 test("P5b (O-13 Teil 2, Fall D): der Riegel gegen teure Wiederwahl bleibt intakt - alles gegen die Konstante NOT_PLACED, nichts getippt", async () => {
-  // 1) der Riegel in den Server-Instruktionen nennt das Token ueber die Konstante.
   assert.ok(
     MCP_BASE_INSTRUCTIONS.includes(NOT_PLACED),
     "MCP_BASE_INSTRUCTIONS nennt NOT_PLACED",
   );
-  // Positiv-Kontrolle: das Kommando findet ueberhaupt etwas in der Instruktion.
   assert.ok(
     MCP_BASE_INSTRUCTIONS.includes("get_call_result"),
     "Positiv-Kontrolle: get_call_result wird genannt",
   );
 
-  // 2) der von get_call_status gelieferte Wert erfuellt beide Formen der Zusicherung.
   const rohesToken = `${NOT_PLACED}:invite-403-D51`;
   const emitted = await getCallStatusFailureReason(rohesToken);
   assert.equal(emitted.startsWith(NOT_PLACED), true);
   assert.equal(emitted, NOT_PLACED);
 
-  // 3) das Werkzeug benutzt die GETEILTE Zerlegeregel, keine zweite - fuer eine ganze
-  // Tabelle von Token, inklusive nie gesehener.
   const tabelle = [
     `${NOT_PLACED}:invite-403-D51`,
     `${NOT_PLACED}:start-403`,
@@ -273,23 +224,14 @@ test("P5b (O-13 Teil 2, Fall D): der Riegel gegen teure Wiederwahl bleibt intakt
     assert.equal(wert, failureReasonBase(roh), `Token ${roh}: geteilte Zerlegeregel`);
   }
 
-  // 4) Negativ-Waechter gegen den Pre-Mortem-Fall (zusaetzliche Bindestrich-Trennung
-  // wie reasonWithoutCarrier() bricht das Praefix: aus NOT_PLACED wuerde "not").
   assert.notEqual(emitted, "not");
   assert.ok(NOT_PLACED.includes("-"), "NOT_PLACED traegt selbst einen Bindestrich");
 
-  // 5) Waechter gegen ein zweites Literal: beide Seiten (Instruktion + Werkzeug-Ausgang)
-  // werden aus DERSELBEN importierten Konstante gebildet.
   assert.ok(MCP_BASE_INSTRUCTIONS.includes(`"${NOT_PLACED}"`));
   assert.equal(emitted, NOT_PLACED);
 });
 
-// ==================== Fall F/G (consultPermissionHint, O-27 Teil 2) ====================
-
 async function placeCallText({ consultAllowed, language }) {
-  // T2-13 (N-10): der Gateway-Mock ist pfad-blind fuer alles ausser /consult - callBody
-  // deckt jetzt BEIDE Hops ab (confirmCallHop liest preview/confirmed, placeCallHopCall
-  // nur callId).
   return withGateway({ callBody: { preview: {}, confirmed: true, callId: "call_hint" } }, async () => {
     const handlers = captureTools({
       identity: null,
@@ -318,16 +260,12 @@ test("P5b (O-27 Teil 2, Fall F): der Hinweis haengt weiterhin an jedem place_cal
   }
 });
 
-// Eingefrorene Marker der ALTEN Aufforderungs-Formulierung, je Sprache: Wert-Label +
-// Modalverb. Dient NUR der Pruefung, dass diese Marker in den NEUEN Texten fehlen.
 const AUFFORDERUNGS_MARKER = {
   de: ["Zulassen", "muss"],
   en: ["Allow", "needs to be set"],
   fr: ["Autoriser", "doit être"],
 };
 
-// Die drei ALTEN Formulierungen (vor P5b), woertlich - Positiv-Kontrolle: jede wird von
-// ihren eigenen Markern gefangen (Lehre pruefkommando-ohne-positiv-kontrolle).
 const BESTAND_VORHER = {
   de:
     "Hinweis: Falls waehrend des Anrufs keine Live-Rueckfragen ankommen, muss die " +
@@ -347,8 +285,6 @@ const SACHINFORMATION_MARKER = {
 };
 
 test("P5b (O-27 Teil 2, Fall G): keine Aufforderung in irgendeiner Sprachfassung, mit Positiv-Kontrolle gegen den Bestand", () => {
-  // 1) AUFFORDERUNGS_MARKER deckt SUPPORTED_LANGUAGES vollstaendig ab - eine vierte
-  // Sprache kann nicht stillschweigend durchrutschen.
   assert.deepEqual(
     Object.keys(AUFFORDERUNGS_MARKER).sort(),
     [...SUPPORTED_LANGUAGES].sort(),
@@ -357,9 +293,6 @@ test("P5b (O-27 Teil 2, Fall G): keine Aufforderung in irgendeiner Sprachfassung
   for (const language of SUPPORTED_LANGUAGES) {
     const [wertLabel, modalverb] = AUFFORDERUNGS_MARKER[language];
 
-    // 2) Positiv-Kontrolle: der ALTE Text wird von BEIDEN Markern gefangen - sonst ist
-    // "kein Marker gefunden" unten nicht von "der Waechter sucht nichts" zu
-    // unterscheiden.
     assert.ok(
       BESTAND_VORHER[language].includes(wertLabel),
       `${language}: Positiv-Kontrolle Wert-Label im Bestandstext`,
@@ -369,12 +302,10 @@ test("P5b (O-27 Teil 2, Fall G): keine Aufforderung in irgendeiner Sprachfassung
       `${language}: Positiv-Kontrolle Modalverb im Bestandstext`,
     );
 
-    // 3) die NEUE Fassung traegt keinen der beiden Marker mehr.
     const neu = localeFor(language).mcp.consultPermissionHint;
     assert.ok(!neu.includes(wertLabel), `${language}: kein Wert-Label 'Zulassen'/'Allow'/...`);
     assert.ok(!neu.includes(modalverb), `${language}: kein Modalverb 'muss'/'needs to be set'/...`);
 
-    // 4) die Sachinformation bleibt erhalten - nicht ersatzlos entkernt.
     assert.ok(
       neu.includes(SACHINFORMATION_MARKER[language]),
       `${language}: Gegenstand (Berechtigung/permission/autorisation) bleibt genannt`,
