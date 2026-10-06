@@ -67,6 +67,16 @@ const PROD_HEALTHZ = /\/prod\/healthz$/;
 const STATUS_ABFRAGE = new RegExp("/deploys/" + DEPLOY_ID + "$");
 const FALSCHES_TOKEN = "f".repeat(DEPLOY_TOKEN.length);
 
+function umschaltenUngemessenAbgebrochen(lauf) {
+  assert.deepEqual(
+    anfragenAn(lauf.attrappe, "POST", ABBRECHEN).map(({ pfad }) => pfad),
+    [DEPLOYS_PFAD + "/" + DEPLOY_ID + "/cancel"],
+  );
+  assert.equal(anfragenAn(lauf.attrappe, "GET", ANRUFE).length, 1);
+  assert.match(lauf.text, /Produktion hat geschlafen und ist frisch geweckt/);
+  assert.match(lauf.text, /beim Umschalten war Produktion frisch geweckt oder nicht wach/);
+}
+
 async function deployMit(kontext, optionen = {}) {
   const { welt = {}, mehr = {}, takte = KURZE_DEPLOY_TAKTE, frischGeweckt } = optionen;
   const lage = weltAnlegen({ produktion: [COMMIT_P, COMMIT_C], ...welt });
@@ -300,13 +310,7 @@ test("deploy rot: Produktion ist beim ersten update_in_progress frisch geweckt, 
   const welt = { wach: [true, true, true, false, true] };
   const lauf = await deployMit(kontext, { welt, takte: DEPLOY_TAKTE });
   assert.equal(lauf.ok, false);
-  assert.deepEqual(
-    anfragenAn(lauf.attrappe, "POST", ABBRECHEN).map(({ pfad }) => pfad),
-    [DEPLOYS_PFAD + "/" + DEPLOY_ID + "/cancel"],
-  );
-  assert.equal(anfragenAn(lauf.attrappe, "GET", ANRUFE).length, 1);
-  assert.match(lauf.text, /Produktion hat geschlafen und ist frisch geweckt/);
-  assert.match(lauf.text, /beim Umschalten war Produktion frisch geweckt oder nicht wach/);
+  umschaltenUngemessenAbgebrochen(lauf);
   assert.doesNotMatch(lauf.text, /Produktion fährt jetzt/);
 });
 
@@ -349,13 +353,7 @@ test("deploy rot: beim ersten update_in_progress wird vor dem Wachhalten geweckt
   const [wecken, danach] = anfragen.slice(umschalten + 1);
   assert.match(wecken.pfad, PROD_HEALTHZ);
   assert.equal(danach.zeit - wecken.zeit, LANGSAME_WECK_ANTWORT_MS);
-  assert.deepEqual(
-    anfragenAn(lauf.attrappe, "POST", ABBRECHEN).map(({ pfad }) => pfad),
-    [DEPLOYS_PFAD + "/" + DEPLOY_ID + "/cancel"],
-  );
-  assert.equal(anfragenAn(lauf.attrappe, "GET", ANRUFE).length, 1);
-  assert.match(lauf.text, /Produktion hat geschlafen und ist frisch geweckt/);
-  assert.match(lauf.text, /beim Umschalten war Produktion frisch geweckt oder nicht wach/);
+  umschaltenUngemessenAbgebrochen(lauf);
 });
 
 test("deploy über 202: Deploy suchen hält Produktion wach, nach jeder Runde ohne neuen Deploy fragt er /healthz", async (kontext) => {
