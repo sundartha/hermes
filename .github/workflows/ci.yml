@@ -104,6 +104,12 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: node tools/kommentar-wanderung.mjs --basis "$PR_BASE_SHA"
 
+      - name: Keine neuen Kommentare
+        if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: node tools/neue-kommentare.mjs --basis "$PR_BASE_SHA"
+
       - name: Syntax
         run: |
           find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \

@@ -1,0 +1,16 @@
+{
+  "titel": "Neuer Kommentar in einem Workflow",
+  "vorher": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on: push"
+    ]
+  },
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "on: push # nur auf master"
+    ]
+  },
+  "erwartet": ".github/workflows/rotprobe.yml:2 neuer Kommentar"
+}
