@@ -1,6 +1,6 @@
 # Clean-Code-Referenz — Prüfkatalog für den Audit-Agenten
 
-> **Repo-Hinweis (vodafone-agent):** Dieses Repo ist Node.js/ESM (JavaScript, kein TypeScript), ohne Lint-/Diff-Hook. Tests laufen mit `node:test` (`npm test`, Tests in `test/*.test.js`). Die Java-Einträge (J1–J3) sind hier n. z. (Geist übertragen, nicht die Syntax). Test-Einträge (T-Serie, P11–P14): neues Verhalten braucht einen automatisierten Test; nur wo Tests prinzipiell nicht greifen (echte Telefonie, Dashboard-Optik), tritt der dokumentierte Smoke-Test an ihre Stelle (siehe CLAUDE.md "Befehle") — fehlende Verifikation neuen Verhaltens zählt als S1. Sicherheitsrelevante Verstöße (Safety-Gates, Auth, Secrets — siehe CLAUDE.md "Absolute Regeln") zählen immer als S1.
+> **Repo-Hinweis (vodafone-agent):** Dieses Repo ist Node.js/ESM (JavaScript, kein TypeScript), ohne Lint-/Diff-Hook. Tests laufen mit `node:test` (`npm test`, Tests in `test/*.test.js`). Test-Einträge (T-Serie, P11–P14): neues Verhalten braucht einen automatisierten Test; nur wo Tests prinzipiell nicht greifen (echte Telefonie, Dashboard-Optik), tritt der dokumentierte Smoke-Test an ihre Stelle (siehe CLAUDE.md "Befehle") — fehlende Verifikation neuen Verhaltens zählt als S1. Sicherheitsrelevante Verstöße (Safety-Gates, Auth, Secrets — siehe CLAUDE.md "Absolute Regeln") zählen immer als S1.
 
 > Dies ist die Wissensbasis, gegen die du Code prüfst. Quelle: _Clean Code_ (Robert C. Martin), destilliert. Jeder Eintrag hat eine **ID**, eine **Kurzregel**, ein **Signal** (woran man den Verstoß erkennt) und einen **Fix**. Bei den wichtigsten Heuristiken steht ein **Vorher/Nachher**-Beispiel — daran erkennst du den Verstoß im echten Code am sichersten. Die Beispiele sind in Java (Buchsprache); die Konzepte gelten sprachübergreifend.
 >
@@ -19,7 +19,6 @@ Regeln für deinen Audit:
 1. **Bewerte nur Code, den du tatsächlich siehst.** Erfinde keine Verstöße, rate nicht über Ungesehenes, FLAGge nichts „auf Verdacht".
 2. **Schweregrad S1–S4 nach der Design-Priorität (siehe P1):** **S1** Tests · **S2** Duplizierung · **S3** Ausdrucksstärke · **S4** Anzahl Klassen/Methoden. S1 wiegt am schwersten, S4 am leichtesten — ordne jeden FLAG einer Stufe zu. **Korrektheits-/Sicherheitsverstöße** (Datenverlust, Geld als Fließkomma, abgeschaltete Sicherungen, Race Conditions) zählen wie **S1**, auch wenn sie keine der vier Regeln direkt betreffen.
 3. **Vorrang Lesbarkeit.** Würde das Beheben den Code im Einzelfall _unklarer_ machen, FLAGge nicht — oder markiere es als bewusste, begründete Ausnahme.
-4. **Java-Einträge (J1–J3) nur bei Java.** Sonst den Geist übertragen, nicht die Syntax. (Die Vorher/Nachher-Beispiele bei anderen IDs sind nur zufällig in Java geschrieben — sie illustrieren sprachunabhängige Prinzipien.)
 5. **Scope = die geänderten/geprüften Dateien.**
 6. **Gib am Ende eine kurze Gesamtbewertung:** Anzahl FLAGs je Schweregrad (S1–S4) + die 1–3 wichtigsten To-dos.
 7. **`[Prozess/Repo]`-Einträge nur bei direkter Evidenz im Scope bewerten.** Diese Checks sind aus dem Snapshot/Diff nicht entscheidbar (z. B. ob ein Test _zuerst_ geschrieben wurde, ob der Build _ein_ Schritt ist, ob ein Coverage-Tool läuft). FLAGge sie **nur**, wenn der Beleg unmittelbar sichtbar ist (z. B. eine Testdatei liegt im Scope, ein offensichtlich langsamer Test mit echtem Netz-Call). Sonst **n. z.** — niemals raten (Regel 1).
@@ -141,14 +140,6 @@ Fix: geteilte Daten kapseln/kopieren, Tasks unabhängig machen, kritische Abschn
 ---
 
 ## C — Kommentare
-
-**C1 — Ungeeignete Information.** Metadaten (Autor, Datum, Change-Log) gehören ins VCS, nicht in den Code. → **Signal:** `@author`, Datums-/Änderungshistorie, Ticket-Logs im Quelltext.
-
-**C2 — Überholte Kommentare.** Veraltet/passt nicht mehr zum Code → gefährlich. → **Signal:** Kommentar widerspricht dem danebenstehenden Code (nennt andere Parameter, anderes Verhalten). Fix: aktualisieren oder löschen.
-
-**C3 — Redundante Kommentare.** Beschreiben, was sich selbst erklärt. → **Signal:** `i++ // increment i`, `// Konstruktor` über einem Konstruktor. Fix: löschen.
-
-**C4 — Schlecht geschriebene Kommentare.** Wenn schon Kommentar, dann sorgfältig: bewusste Wortwahl, korrekte Grammatik. → **Signal:** schwammige, unvollständige oder fehlerhafte Kommentare ohne klaren Informationswert.
 
 **C5 — Auskommentierter Code.** → **Immer FLAGgen, immer löschen.** Steht im VCS. → **Signal:** auskommentierte Anweisungs-/Methodenblöcke.
 
@@ -436,41 +427,6 @@ a.getB().getC().doSomething();    // schlecht (Train Wreck) — würde man Q zwi
                                   //   einschieben wollen, müsste jede solche Kette umgeschrieben werden
 myCollaborator.doSomething();     // gut — der unmittelbare Mitarbeiter bietet den Service direkt an
 ```
-
----
-
-## J — Java (nur bei Java-Code; sonst Geist übertragen — in diesem Repo n. z.)
-
-**J1 — Lange Importlisten → Platzhalter.** Bei ≥2 Klassen aus einem Package `import package.*;` — reduziert Kopplung (Platzhalter erzeugt keine harte Abhängigkeit auf Einzelklassen). → **Signal:** viele Einzel-Imports aus demselben Package. _Allgemein:_ Imports schlank nach Sprach-Norm.
-
-**J2 — Konstanten nicht vererben.** → **Signal:** Klasse `implements`/`extends` ein Interface nur, um an dessen Konstanten zu kommen.
-
-```java
-// Vorher: Konstanten über Vererbung „eingeschmuggelt" — sie verstecken sich oben in der Hierarchie
-public abstract class Employee implements PayrollConstants { ... }
-public interface PayrollConstants {
-  public static final int TENTHS_PER_WEEK = 400;
-  public static final double OVERTIME_RATE = 1.5;
-}
-// Nachher: static import
-import static PayrollConstants.*;
-```
-
-→ _Allgemein:_ Konstanten nicht via Vererbung einschmuggeln, um Scope-Regeln zu umgehen.
-
-**J3 — Enums statt `public static final int`.** → **Signal:** Gruppen verwandter `public static final int`-Konstanten, die eine Aufzählung darstellen. Enums tragen Methoden/Felder und verlieren ihre Bedeutung nicht.
-
-```java
-public enum HourlyPayGrade {
-  APPRENTICE            { public double rate() { return 1.0; } },
-  LIEUTENANT_JOURNEYMAN { public double rate() { return 1.2; } },
-  JOURNEYMAN            { public double rate() { return 1.5; } },
-  MASTER                { public double rate() { return 2.0; } };
-  public abstract double rate();
-}
-```
-
-→ _Allgemein:_ typsichere Aufzählung vor nackten Integer-Konstanten.
 
 ---
 
