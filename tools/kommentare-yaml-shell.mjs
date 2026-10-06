@@ -1,8 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-
-import { befundSchluessel } from "./eslint-rules/bestand.js";
+import { fileURLToPath } from "node:url";
 
 const DATEIMUSTER = ["*.yml", "*.yaml", "*.sh", "*.command", ".githooks/*"];
 const YAML_DATEI = /\.ya?ml$/;
@@ -28,6 +27,8 @@ const HEREDOC_NAME = 3;
 const HEREDOC_ANFANG = "<";
 const HERESTRING = "<<<";
 const MAX_GIT_AUSGABE = 268_435_456;
+const WERKZEUG = "kommentare-yaml-shell";
+const EXIT_ROT = 1;
 
 function einzug(zeile) {
   return zeile.length - zeile.trimStart().length;
@@ -214,11 +215,22 @@ export function versionierteDateien(root) {
   return liste.split("\0").filter(Boolean).sort();
 }
 
-export function findings(root) {
+function fundorte(root) {
   return versionierteDateien(root).flatMap((pfad) =>
-    kommentareImText(pfad, readFileSync(join(root, pfad), "utf8")).map(({ zeile, text }) => ({
-      key: befundSchluessel(pfad, text),
-      location: `${pfad}:${zeile}`,
-    })),
+    kommentareImText(pfad, readFileSync(join(root, pfad), "utf8")).map(({ zeile }) => `${pfad}:${zeile}`),
   );
 }
+
+function pruefen(root) {
+  const funde = fundorte(root);
+  for (const fund of funde) console.error(fund);
+  console.log(`${funde.length} neue Befunde von ${WERKZEUG}.`);
+  if (funde.length > 0) process.exitCode = EXIT_ROT;
+}
+
+function direktGestartet() {
+  const gestartet = process.argv[1];
+  return gestartet !== undefined && realpathSync(gestartet) === fileURLToPath(import.meta.url);
+}
+
+if (direktGestartet()) pruefen(process.cwd());

@@ -13,7 +13,6 @@ import {
   quelltextLesestellen,
 } from "./eslint-rules/kein-quelltext-als-text.js";
 import { kommentarSchluessel, pruefbareKommentare } from "./eslint-rules/keine-kommentare.js";
-import { findings as yamlShellFindings } from "./kommentare-yaml-shell.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const NODE_BIN_DIR = join(REPO_ROOT, "node_modules/.bin");
@@ -276,7 +275,6 @@ const TOOLS = {
   semgrep: { findings: semgrepFindings, version: semgrepVersion, path: keyPart(1) },
   kommentare: { findings: commentFindings, path: pfadAusSchluessel },
   "quelltext-als-text": { findings: textReadingFindings, path: pfadAusSchluessel },
-  "kommentare-yaml-shell": { findings: yamlShellFindings, path: pfadAusSchluessel },
   lessons: { findings: lessonsFindings, path: pfadAusSchluessel },
 };
 

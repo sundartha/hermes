@@ -1,35 +1,22 @@
 {
   "titel": "Kommentare in YAML und Shell",
   "pfade": [
-    "tools/kommentare-yaml-shell.mjs",
-    "tools/basis/kommentare-yaml-shell.json",
-    "tools/basis-vergleich.mjs"
+    "tools/kommentare-yaml-shell.mjs"
   ],
   "treffer": {
     "befehl": [
       "node",
-      "{wurzel}/tools/basis-vergleich.mjs",
-      "kommentare-yaml-shell"
+      "{wurzel}/tools/kommentare-yaml-shell.mjs"
     ],
     "zaehlen": "zahlen",
     "vor": [
-      " neue Befunde",
-      " bekannte"
+      " neue Befunde"
     ]
   },
-  "ausnahmen": {
-    "bezeichnung": "Eingefrorene Kommentare in der Basislinie",
-    "datei": "tools/basis/kommentare-yaml-shell.json",
-    "zaehlen": "anzahl"
-  },
   "probe": {
-    "mitnehmen": [
-      "tools/basis/kommentare-yaml-shell.json"
-    ],
     "befehl": [
       "node",
-      "{wurzel}/tools/basis-vergleich.mjs",
-      "kommentare-yaml-shell"
+      "{wurzel}/tools/kommentare-yaml-shell.mjs"
     ]
   }
 }
