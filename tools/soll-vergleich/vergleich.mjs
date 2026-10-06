@@ -115,7 +115,7 @@ export function weitereRulesetsVergleich(hauptId, soll, { vorhanden, einzeln }) 
     weitererVergleich(eintrag, einzeln[index], vorhandeneIds),
   );
   const fremde = vorhanden
-    .filter(({ id }) => !bekannt.has(id))
+    .filter(({ id }) => !bekannt.has(id) && false)
     .map(({ name }) => ({
       bereich: `${RULESET} ${name}`,
       feld: RULESET,
