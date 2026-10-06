@@ -5,6 +5,10 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { ESLint } from "eslint";
+
+import { pfadAusSchluessel, pfadInDerWurzel } from "./eslint-rules/bestand.js";
+import { kommentarSchluessel, pruefbareKommentare } from "./eslint-rules/keine-kommentare.js";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const NODE_BIN_DIR = join(REPO_ROOT, "node_modules/.bin");
@@ -29,6 +33,10 @@ const MAX_POSITIONALS = 1;
 const JSON_INDENT = 2;
 const SHORTEN_OPTION = "basis-kuerzen";
 const CREATE_OPTION = "basis-anlegen";
+const PER_FOLDER_OPTION = "je-ordner";
+const COLLECTOR_PLUGIN = "basis-vergleich";
+const ROOT_FOLDER_LABEL = ".";
+const PATH_SEPARATOR = "/";
 const EXIT_FAILURE = 1;
 
 function runTool(command, args, root) {
@@ -163,10 +171,70 @@ function semgrepFindings(root) {
   return report.results.map((match) => semgrepFinding(root, match));
 }
 
+function collectorRule(keysOf) {
+  return {
+    meta: { schema: [] },
+    create(context) {
+      return {
+        Program() {
+          const file = pfadInDerWurzel(context.cwd, context.filename);
+          for (const { key, loc } of keysOf(context, file)) context.report({ loc, message: key });
+        },
+      };
+    },
+  };
+}
+
+function collectorConfig(ruleName, { keysOf, files }) {
+  const plugin = { rules: { [ruleName]: collectorRule(keysOf) } };
+  return {
+    ...(files !== undefined && { files }),
+    plugins: { [COLLECTOR_PLUGIN]: plugin },
+    rules: { [`${COLLECTOR_PLUGIN}/${ruleName}`]: "error" },
+  };
+}
+
+function lintResultFindings(root, ruleId, { filePath, messages }) {
+  const file = pfadInDerWurzel(root, filePath);
+  const fatal = messages.find((message) => message.fatal);
+  if (fatal !== undefined) throw new Error(`ESLint kann ${file} nicht lesen: ${fatal.message}`);
+  return messages
+    .filter((message) => message.ruleId === ruleId)
+    .map(({ message, line }) => ({ key: message, location: `${file}:${line}` }));
+}
+
+export async function eslintCollectorFindings(root, ruleName, collector) {
+  const ruleId = `${COLLECTOR_PLUGIN}/${ruleName}`;
+  const eslint = new ESLint({
+    cwd: root,
+    applySuppressions: false,
+    overrideConfig: collectorConfig(ruleName, collector),
+    ruleFilter: (rule) => rule.ruleId === ruleId,
+  });
+  const results = await eslint.lintFiles(["."]);
+  return results.flatMap((result) => lintResultFindings(root, ruleId, result));
+}
+
+function commentKeys(context, file) {
+  return pruefbareKommentare(context.sourceCode).map((comment) => ({
+    key: kommentarSchluessel(file, comment),
+    loc: comment.loc,
+  }));
+}
+
+function commentFindings(root) {
+  return eslintCollectorFindings(root, "kommentare", { keysOf: commentKeys });
+}
+
+function keyPart(index) {
+  return (key) => key.split(KEY_SEPARATOR)[index];
+}
+
 const TOOLS = {
-  jscpd: { findings: jscpdFindings },
-  knip: { findings: knipFindings },
-  semgrep: { findings: semgrepFindings, version: semgrepVersion },
+  jscpd: { findings: jscpdFindings, path: keyPart(0) },
+  knip: { findings: knipFindings, path: keyPart(1) },
+  semgrep: { findings: semgrepFindings, version: semgrepVersion, path: keyPart(1) },
+  kommentare: { findings: commentFindings, path: pfadAusSchluessel },
 };
 
 function baselineFile(toolName) {
@@ -230,9 +298,9 @@ function findingKeyOf(finding) {
   return finding.key;
 }
 
-function measure(context, baseline) {
+async function measure(context, baseline) {
   checkVersion(context, baseline);
-  const findings = context.tool.findings(context.root);
+  const findings = await context.tool.findings(context.root);
   const currentKeys = findings.map(findingKeyOf);
   return {
     added: splitByAllowance(findings, baseline.befunde, findingKeyOf).beyond,
@@ -257,8 +325,8 @@ function reportAdded({ toolName }, addedFindings) {
   console.error("Neue Befunde werden behoben; die Basislinie nimmt keine neuen auf.");
 }
 
-function compare(context) {
-  const { added, known } = measure(context, readBaseline(context.root, context.toolName));
+async function compare(context) {
+  const { added, known } = await measure(context, readBaseline(context.root, context.toolName));
   reportFixed(context, known.beyond);
   console.log(
     `${context.toolName}: ${added.length} neue Befunde, ${known.within.length} bekannte.`,
@@ -268,29 +336,42 @@ function compare(context) {
   process.exitCode = EXIT_FAILURE;
 }
 
-function shorten(context) {
+async function shorten(context) {
   const baseline = readBaseline(context.root, context.toolName);
-  const { known } = measure(context, baseline);
+  const { known } = await measure(context, baseline);
   writeBaseline(context.root, context.toolName, { version: baseline.version, keys: known.within });
   console.log(
     `${baselineFile(context.toolName)}: ${known.beyond.length} behobene Befunde entfernt.`,
   );
 }
 
-function create(context) {
+async function create(context) {
   const { root, toolName, tool } = context;
   if (existsSync(join(root, baselineFile(toolName)))) {
     throw new Error(
       `${baselineFile(toolName)} existiert schon. Kürzen geht mit --${SHORTEN_OPTION}, Hinzufügen gar nicht.`,
     );
   }
-  const keys = tool.findings(root).map(findingKeyOf);
+  const keys = (await tool.findings(root)).map(findingKeyOf);
   writeBaseline(root, toolName, { version: installedVersion(tool, root), keys });
   console.log(`${baselineFile(toolName)} mit ${keys.length} Befunden angelegt.`);
 }
 
+function topFolder(path) {
+  return path.includes(PATH_SEPARATOR) ? path.split(PATH_SEPARATOR)[0] : ROOT_FOLDER_LABEL;
+}
+
+function perFolder(context) {
+  const { befunde } = readBaseline(context.root, context.toolName);
+  const counts = countKeys(befunde.map((key) => topFolder(context.tool.path(key))));
+  for (const [folder, count] of [...counts].sort(([left], [right]) => (left < right ? -1 : 1))) {
+    console.log(`${folder}: ${count}`);
+  }
+  console.log(`${baselineFile(context.toolName)}: ${befunde.length} Einträge`);
+}
+
 function usage() {
-  return `Aufruf: node tools/basis-vergleich.mjs <${Object.keys(TOOLS).join("|")}> [--${SHORTEN_OPTION} | --${CREATE_OPTION}]`;
+  return `Aufruf: node tools/basis-vergleich.mjs <${Object.keys(TOOLS).join("|")}> [--${SHORTEN_OPTION} | --${CREATE_OPTION} | --${PER_FOLDER_OPTION}]`;
 }
 
 function parseOptions() {
@@ -298,12 +379,14 @@ function parseOptions() {
     options: {
       [SHORTEN_OPTION]: { type: "boolean", default: false },
       [CREATE_OPTION]: { type: "boolean", default: false },
+      [PER_FOLDER_OPTION]: { type: "boolean", default: false },
     },
     allowPositionals: true,
   });
   const [toolName] = positionals;
-  const bothModes = values[SHORTEN_OPTION] && values[CREATE_OPTION];
-  if (!Object.hasOwn(TOOLS, toolName ?? "") || positionals.length > MAX_POSITIONALS || bothModes) {
+  const modes = [SHORTEN_OPTION, CREATE_OPTION, PER_FOLDER_OPTION].filter((mode) => values[mode]);
+  const severalModes = modes.length > 1;
+  if (!Object.hasOwn(TOOLS, toolName ?? "") || positionals.length > MAX_POSITIONALS || severalModes) {
     throw new Error(usage());
   }
   return { toolName, values };
@@ -312,12 +395,13 @@ function parseOptions() {
 function selectedMode(values) {
   if (values[SHORTEN_OPTION]) return shorten;
   if (values[CREATE_OPTION]) return create;
+  if (values[PER_FOLDER_OPTION]) return perFolder;
   return compare;
 }
 
 try {
   const { toolName, values } = parseOptions();
-  selectedMode(values)({ toolName, tool: TOOLS[toolName], root: process.cwd() });
+  await selectedMode(values)({ toolName, tool: TOOLS[toolName], root: process.cwd() });
 } catch (error) {
   console.error(`Abbruch: ${error.message}`);
   process.exitCode = EXIT_FAILURE;
