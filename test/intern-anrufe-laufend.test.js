@@ -4,7 +4,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { config } from "../src/config.js";
 import {
   ANRUFE_LAUFEND_PATH,
   DEPLOY_TOKEN_MIN_LENGTH,
@@ -246,6 +245,7 @@ const SCHLUESSEL_DER_ANMELDE_KONFIGURATION = Object.freeze([
   "deployToken",
 ]);
 
-test("Paket 15: die Anmelde-Konfiguration bietet genau diese Schlüssel an, darunter deployToken", () => {
+test("Paket 15: die Anmelde-Konfiguration bietet genau diese Schlüssel an, darunter deployToken", async () => {
+  const { config } = await import("../src/config.js");
   assert.deepEqual(Object.keys(config.auth), SCHLUESSEL_DER_ANMELDE_KONFIGURATION);
 });
