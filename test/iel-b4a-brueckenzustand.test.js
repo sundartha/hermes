@@ -1,10 +1,3 @@
-// IEL-B4a: Abnahme des persistierten Brueckenzustands (bridgeStateOf, die drei Set-once-
-// Marker-Operationen, carrierEndMsOf) - fuer BEIDE Backends (json, pg/pglite).
-//
-// DATA_DIR + config werden VOR allen store-Imports gebunden (json.FILE haengt an
-// config.dataDir): darum laeuft die Verdrahtung ueber dynamische Imports in before()
-// (Muster: test/store-pg-json-parity.test.js). Kein Server-Spawn, deshalb ist pglite
-// hier erlaubt (Regel p6a).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -30,7 +23,6 @@ before(async () => {
   ({ BRIDGE_STATE, bridgeStateOf } = await import("../src/elevenlabs/inbound-bridge-state.js"));
 });
 
-// Benannte Konstanten (no-magic-numbers gilt auch fuer test/**).
 const T0_ISO = "2026-09-14T10:00:00.000Z";
 const T1_ISO = "2026-09-14T10:00:05.000Z";
 const JETZT_MS = Date.parse("2026-09-14T10:05:00.000Z");
@@ -40,8 +32,6 @@ const CONV_A = "conv_iel_b4a_a";
 const CONV_B = "conv_iel_b4a_b";
 const ANZAHL_BRIDGE_STATES = 4;
 
-// G5: gemeinsamer Build-Schritt fuer alle Tabellentests - legt einen EL-Inbound-Call an
-// (Profil telnyx_inbound_el_convai) und liefert die id.
 function neuerElInboundCall(state) {
   const call = ops.createCall(state, {
     direction: "inbound",
@@ -63,8 +53,6 @@ async function makePgTestStore() {
   return { store, runner, db };
 }
 
-// --- 0: Positiv-Kontrolle -------------------------------------------------
-
 test("IEL-B4a-0: Positiv-Kontrolle - BRIDGE_STATE hat 4 verschiedene, eingefrorene Werte", () => {
   assert.equal(Object.isFrozen(BRIDGE_STATE), true);
   const werte = Object.values(BRIDGE_STATE);
@@ -73,13 +61,6 @@ test("IEL-B4a-0: Positiv-Kontrolle - BRIDGE_STATE hat 4 verschiedene, eingefrore
   assert.equal(typeof KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI, "string");
 });
 
-// --- 1: Zustandstabelle -----------------------------------------------------
-
-// [Label, Conversation-ID gesetzt, Rueckfall-Marker gesetzt, Nachlauf-Marker gesetzt,
-// erwarteter BRIDGE_STATE-Schluessel]. Erwartungswert als String-Schluessel (nicht
-// BRIDGE_STATE.X direkt): das Modul ist zur Zeit der Tabellen-Auswertung noch nicht
-// importiert (before() laeuft erst danach), der Schluessel wird erst im Testlauf
-// gegen BRIDGE_STATE aufgeloest.
 const ZUSTANDS_TABELLE = [
   ["---", false, false, false, "WARTET"],
   ["c--", true, false, false, "GEBUNDEN"],
@@ -103,10 +84,6 @@ for (const [label, conv, fallback, nachlauf, erwartet] of ZUSTANDS_TABELLE) {
   });
 }
 
-// --- 2: andere Profile -------------------------------------------------------
-
-// Schluessel statt Wert (Muster ZUSTANDS_TABELLE oben): KOSTENPROFIL ist zur Zeit der
-// Modul-Auswertung noch nicht importiert.
 const ANDERE_PROFILE = [null, "TELNYX_INBOUND_BUDGET", "EL_CONVAI_SIP"];
 
 for (const profilSchluessel of ANDERE_PROFILE) {
@@ -125,8 +102,6 @@ for (const profilSchluessel of ANDERE_PROFILE) {
   });
 }
 
-// --- 3: Altdatensatz ----------------------------------------------------------
-
 test("IEL-B4a-3: Altdatensatz ohne die drei Felder (undefined) hydriert wie null", () => {
   assert.equal(
     bridgeStateOf({ costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI }),
@@ -135,8 +110,6 @@ test("IEL-B4a-3: Altdatensatz ohne die drei Felder (undefined) hydriert wie null
   assert.equal(bridgeStateOf({ costProfile: null }), BRIDGE_STATE.KEIN_EL_INBOUND);
   assert.equal(bridgeStateOf(null), BRIDGE_STATE.KEIN_EL_INBOUND);
 });
-
-// --- 4: carrierEndMsOf ---------------------------------------------------------
 
 test("IEL-B4a-4: carrierEndMsOf - kein Marker -> jetzt, Vergangenheit -> Marker, Zukunft -> jetzt", () => {
   assert.equal(ops.carrierEndMsOf({ elNachlaufStartedAt: null }, JETZT_MS), JETZT_MS);
@@ -148,8 +121,6 @@ test("IEL-B4a-4: carrierEndMsOf - kein Marker -> jetzt, Vergangenheit -> Marker,
   assert.equal(ops.carrierEndMsOf({ elNachlaufStartedAt: MARKER_ZUKUNFT_ISO }, JETZT_MS), JETZT_MS);
   assert.equal(Number.isNaN(ops.carrierEndMsOf({ elNachlaufStartedAt: "kaputt" }, JETZT_MS)), true);
 });
-
-// --- 5/6: Set-once-Marker ------------------------------------------------------
 
 test("IEL-B4a-5: markInboundElNachlaufStarted ist set-once", () => {
   const state = jsonStore.load();
@@ -172,8 +143,6 @@ test("IEL-B4a-6: markInboundElFallback ist set-once, unbekannter Call wirft nich
   assert.deepEqual(unbekannt, { call: null, changed: false });
 });
 
-// --- 7: nicht kanonische Zeit --------------------------------------------------
-
 const NICHT_KANONISCHE_ZEITEN = ["kaputt", undefined, "2026-09-14"];
 
 for (const wert of NICHT_KANONISCHE_ZEITEN) {
@@ -188,8 +157,6 @@ for (const wert of NICHT_KANONISCHE_ZEITEN) {
     assert.equal(ops.getCall(state, callId).elFallbackAt, null);
   });
 }
-
-// --- 8-14: bindInboundElConversation --------------------------------------------
 
 test("IEL-B4a-8: Bindung aus WARTET setzt Conversation-ID und elBoundAt", () => {
   const state = jsonStore.load();
@@ -275,8 +242,6 @@ for (const eingabe of UNGUELTIGE_BINDUNGEN) {
   });
 }
 
-// --- 15: createCall-Defaults ---------------------------------------------------
-
 test("IEL-B4a-15: createCall initialisiert die drei Bruecken-Felder mit null", () => {
   const state = jsonStore.load();
   const call = ops.createCall(state, {
@@ -289,8 +254,6 @@ test("IEL-B4a-15: createCall initialisiert die drei Bruecken-Felder mit null", (
   assert.equal(call.elFallbackAt, null);
   assert.equal(call.elNachlaufStartedAt, null);
 });
-
-// --- 16: API-Projektion ----------------------------------------------------------
 
 test("IEL-B4a-16: publicCall streift die drei Bruecken-Felder, status/id bleiben", () => {
   const projiziert = publicCall({
@@ -307,8 +270,6 @@ test("IEL-B4a-16: publicCall streift die drei Bruecken-Felder, status/id bleiben
   assert.equal("elNachlaufStartedAt" in projiziert, false);
 });
 
-// --- 17: json-Wrapper --------------------------------------------------------------
-
 test("IEL-B4a-17: json-Wrapper speichert und liefert das volle Op-Ergebnis", () => {
   const state = jsonStore.load();
   const callId = neuerElInboundCall(state);
@@ -318,8 +279,6 @@ test("IEL-B4a-17: json-Wrapper speichert und liefert das volle Op-Ergebnis", () 
   const onDisk = JSON.parse(fs.readFileSync(path.join(dataDir, "store.json"), "utf8"));
   assert.equal(onDisk.calls.find((eintrag) => eintrag.id === callId).elBoundAt, T0_ISO);
 });
-
-// --- 18: Neustart JSON ----------------------------------------------------------
 
 test("IEL-B4a-18: Neustart JSON - Zustaende ueberleben einen frischen Import", async () => {
   const wartetId = neuerElInboundCall(jsonStore.load());
@@ -339,8 +298,6 @@ test("IEL-B4a-18: Neustart JSON - Zustaende ueberleben einen frischen Import", a
   assert.equal(bridgeStateOf(reopened.getCall(rueckfallId)), BRIDGE_STATE.RUECKFALL);
 });
 
-// --- 19: Altdatensatz auf Platte --------------------------------------------------
-
 test("IEL-B4a-19: JSON-Altdatensatz ohne die drei Felder hydriert auf null", async () => {
   const callId = neuerElInboundCall(jsonStore.load());
   jsonStore.save();
@@ -357,8 +314,6 @@ test("IEL-B4a-19: JSON-Altdatensatz ohne die drei Felder hydriert auf null", asy
   assert.equal(call.elFallbackAt, null);
   assert.equal(call.elNachlaufStartedAt, null);
 });
-
-// --- 20: Neustart pg und Paritaet -------------------------------------------------
 
 test("IEL-B4a-20: Neustart pg - Zustaende + Nachlauf-Marker ueberleben einen Reopen, Form gleich json", async () => {
   const { store, runner } = await makePgTestStore();
@@ -404,8 +359,6 @@ test("IEL-B4a-20: Neustart pg - Zustaende + Nachlauf-Marker ueberleben einen Reo
   assert.equal(bridgeStateOf(reopened.getCall(rueckfallCall.id)), BRIDGE_STATE.RUECKFALL);
 });
 
-// --- 21: Folge-Flush setzt Marker nicht zurueck ------------------------------------
-
 test("IEL-B4a-21: pg - ein Folge-Flush setzt gebundene Marker nicht auf NULL zurueck", async () => {
   const { store, runner } = await makePgTestStore();
   const call = store.createCall({
@@ -425,8 +378,6 @@ test("IEL-B4a-21: pg - ein Folge-Flush setzt gebundene Marker nicht auf NULL zur
   await reopened.init();
   assert.equal(reopened.getCall(call.id).elBoundAt, T0_ISO);
 });
-
-// --- 22: Bestandstabelle bekommt die Spalten -------------------------------------
 
 test("IEL-B4a-22: pg - eine Bestandstabelle ohne die drei Spalten bekommt sie per init() nachgezogen", async () => {
   const { runner, db } = await makePgTestStore();
@@ -452,8 +403,6 @@ test("IEL-B4a-22: pg - eine Bestandstabelle ohne die drei Spalten bekommt sie pe
   await reopened.init();
   assert.equal(reopened.getCall(call.id).elBoundAt, T0_ISO);
 });
-
-// --- 23: Fassade reicht durch --------------------------------------------------
 
 test("IEL-B4a-23: store.js (Fassade, json-Default) reicht die drei Operationen durch", async () => {
   const facade = await import("../src/store.js");

@@ -1,16 +1,3 @@
-// GAP-01 (Katalog: tasks/i18n-tests/11-luecken-und-e2e.md, Abschnitt "GAP-01"), umgesetzt
-// in P6: Abrechnungsperiode und Budget-Fenster sind DIESELBE Achse. Bei
-// BUDGET_MONTH_ENABLED=false (dem heute laufenden Default) misst gateUsageCents() den
-// Verbrauch SEIT dem Beginn der laufenden Stripe-Abrechnungsperiode; der Stempel liegt auf
-// derselben Kante wie die Reaktivierung (billing/activation.js activatePaidTenant).
-// Muster: test/plan-cap-derivation.test.js (pglite, dynamische Imports NACH
-// process.env-Setup - Lehre test-base-env-drift).
-//
-// A3: die Testnamen tragen KEINE Katalog-ID mehr - die Faelle sind seit P6 gruener
-// Regressionsschutz und gehoeren damit in `npm test`, nicht in `test:gates`.
-//
-// KS-P5a: die Plan-Decke folgt seit E5a dem BUCHUNGSSATZ (voiceTariffDefaultCents). Der
-// Fixtur-Wert 6 bleibt bewusst stehen - geprueft wird das Budget-FENSTER, nicht der Tarif.
 process.env.MAX_BUDGET_EUR = "30";
 process.env.VOICE_TARIFF_DEFAULT_CENTS = "6";
 
@@ -50,8 +37,6 @@ function fakeSubscribeBilling() {
   };
 }
 
-// Baut einen zahlenden Tenant mit Starter-Abo und dem Verbrauch, der seine Decke exakt
-// erschoepft (Build-Schritt aus P13 Build-Operate-Check, EIN Setup fuer alle Faelle).
 async function makeExhaustedTenant(tenantId) {
   const { store } = await makeTestStore();
   const s = store.load();
@@ -72,8 +57,6 @@ async function makeExhaustedTenant(tenantId) {
   return store;
 }
 
-// Stripe verlaengert die Abrechnungsperiode (KEIN plan_slug -> reine Perioden-Verlaengerung,
-// Muster test/plan-cap-derivation.test.js Test (g)).
 function periodUpdateEvent(tenantId, { status = "active" } = {}) {
   return {
     type: webhookMod.SUBSCRIPTION_EVENT.UPDATED,
@@ -120,9 +103,6 @@ test("nach einem Stripe-Perioden-Wechsel ist die EUR-Gate-Achse zurueckgesetzt (
   );
 });
 
-// W1 (O4): eine gescheiterte Zahlung darf kein Kontingent oeffnen. past_due wird von
-// interpretStripeEvent als IGNORE verworfen (CONFIRMED_SUBSCRIPTION_STATUS) - die
-// Reset-Bedingung ist damit STRUKTURELL an die Reaktivierung gekoppelt, nicht per Konvention.
 test("past_due setzt die Achse NICHT zurueck und zieht den Perioden-Anker nicht weiter", async () => {
   const tenantId = "t_gap01_pastdue";
   const store = await makeExhaustedTenant(tenantId);
@@ -134,8 +114,6 @@ test("past_due setzt die Achse NICHT zurueck und zieht den Perioden-Anker nicht 
   assert.equal(store.budgetExceeded(tenantId, config.billing), true, "Achse bleibt gesperrt");
 });
 
-// W2 (O4): wer eine ungeklaerte Rechnung hat, bekommt kein frisches Kontingent auf
-// Plattformkosten - auch wenn Stripe das Abo formal als active meldet.
 test("aktiver billingHold verhindert den Reset trotz status=active", async () => {
   const tenantId = "t_gap01_hold";
   const store = await makeExhaustedTenant(tenantId);
@@ -147,8 +125,6 @@ test("aktiver billingHold verhindert den Reset trotz status=active", async () =>
   assert.equal(store.budgetExceeded(tenantId, config.billing), true, "kein Freikontingent bei offener Rechnung");
 });
 
-// W3: derselbe Webhook zweimal (Stripe-Retry) oeffnet GENAU EIN Fenster - der Monotonie-/
-// Idempotenz-Riegel in stampBudgetPeriod verhindert ein zweites Freikontingent.
 test("dasselbe Event zweimal oeffnet genau EIN Fenster (Baseline unveraendert)", async () => {
   const tenantId = "t_gap01_retry";
   const store = await makeExhaustedTenant(tenantId);

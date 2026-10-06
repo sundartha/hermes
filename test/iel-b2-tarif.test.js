@@ -1,33 +1,11 @@
-// IEL-B2 (E3): Minutensatz je Kostenprofil. Ein Inbound-Bein, dessen Gespraech der
-// ElevenLabs-Agent fuehrt (Kostenprofil telnyx_inbound_el_convai), zahlt den Leg-Satz wie
-// Outbound-EL fuer dasselbe Nummernpaar; jedes andere Inbound-Bein bleibt beim
-// kalibrierten Inbound-Satz.
-//
-// Offline, ohne Spawn, ohne DB, ohne Netz (P12). Die Tarif-Env wird VOR dem ersten
-// config.js-Import gesetzt, danach werden die config-lesenden Module dynamisch importiert -
-// sonst entschiede eine lokale .env ueber den Minutensatz (Lehre test-base-env-drift).
-//
-// Testnamen beginnen mit "IEL-B2-" - das trifft weder i18nCatalogPattern noch
-// abnahmePattern, die Faelle laufen also im Regressionslauf (npm test).
-//
-// Manuelle Mutationsproben (Muster kv-p2-inbound-budget.test.js):
-//   (a) EL-Zweig in billsCalibratedInboundRate entfernen -> IEL-B2-3, -4, -6, -7, -8, -9
-//       rot (7 statt 23 bzw. 37).
-//   (b) Richtungspruefung im Praedikat entfernen -> IEL-B2-5 und -6 rot (Outbound zahlt
-//       den Inbound-Satz).
-//   (c) tariffCentsPerMin(call.from, call.to) vertauschen -> bleibt gruen, weil der Satz
-//       symmetrisch ist. Gewollt; IEL-B2-6 belegt es am gemischten Nummernpaar.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { KOSTENPROFIL } from "../src/billing/kostenarten.js"; // importfrei, friert keine Config ein
+import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
 
-// Bewusst ungleich den echten Defaults 20/30/6: ein Leck aus .env oder Defaults faellt an
-// der ZAHL auf.
 const DOMESTIC_CENTS = 23;
 const DEFAULT_CENTS = 37;
 const INBOUND_CENTS = 7;
 const MS_PER_MINUTE = 60_000;
-// 90 s liegen sicher in der zweiten angefangenen Minute (Muster ks-p2).
 const TWO_MINUTE_LEG_MS = 90_000;
 const BILLED_MINUTES = 2;
 const ANSWERED_AT = "2026-09-14T10:00:00.000Z";
@@ -36,7 +14,7 @@ const DE_OWN_DID = "+4930000011880";
 const DE_CALLER = "+4915112345678";
 const US_CALLER = "+12025550123";
 const US_OWN_DID = "+15005550006";
-const UNKNOWN_CALLER = "unbekannt"; // Bestands-Platzhalter aus /voice/incoming
+const UNKNOWN_CALLER = "unbekannt";
 const TENANT = "tenant_iel_b2";
 
 let callTariffCentsPerMin, liveVoiceSpendCents, makeMetering, emptyUsage, config;
@@ -83,8 +61,6 @@ function endedLeg(leg) {
   return { ...leg, answeredAt: ANSWERED_AT, endedAt: ENDED_AT };
 }
 
-// Faengt die Geld-Nebeneffekte von reconcileVoiceBudget auf, ohne Store (Muster
-// cost-origin-axis). recordUsageEvent fehlt bewusst: reconcileVoiceBudget ruft es nicht.
 function fakeMeteringStore() {
   const voiceCostCents = [];
   const estimatedCostCents = [];
@@ -116,7 +92,7 @@ test("IEL-B2-0: Positiv-Kontrolle - die drei Saetze sind gesetzt und paarweise v
 
 test("IEL-B2-1: inbound ohne Profil zahlt den kalibrierten Inbound-Satz", () => {
   const withoutProfile = { direction: "inbound", to: DE_OWN_DID, from: DE_CALLER };
-  const hydratedNullProfile = { ...withoutProfile, costProfile: null }; // pg-Hydrierung
+  const hydratedNullProfile = { ...withoutProfile, costProfile: null };
   assert.equal(callTariffCentsPerMin(withoutProfile), INBOUND_CENTS);
   assert.equal(callTariffCentsPerMin(hydratedNullProfile), INBOUND_CENTS);
 });

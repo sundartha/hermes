@@ -1,7 +1,3 @@
-// GAP-04 (Katalog: tasks/i18n-tests/11-luecken-und-e2e.md, Abschnitt "GAP-04").
-// GEFIXT in P4: activatePaidTenant() wartet das Provisioning-Ergebnis ab (provisionCleared),
-// statt den Status VOR provision() zu setzen. Rein, offline (Muster
-// test/profile-a2-activation.test.js: echter state, duenner Store-Seam).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { activatePaidTenant } from "../src/billing/activation.js";
@@ -28,11 +24,8 @@ function storeOn(s) {
     findTenantBySubscription: () => null,
     setTenantSubscription: (t, p) => setTenantSubscription(s, t, p),
     clearSuspendedAt: (t) => clearSuspendedAt(s, t),
-    // GAP-01: Perioden-Fenster des Budget-Gates. Wrapper-Parity zur Fassade
-    // (json/pg): Uhr an der IO-Grenze, {changed} -> Boolean.
     billingHoldActive: (t) => billingHoldActive(s, t, new Date().toISOString()),
     stampBudgetPeriod: (t, iso) => stampBudgetPeriod(s, t, iso).changed,
-    // FW1-B: clearBillingHold laeuft jetzt in activatePaidTenant selbst.
     clearBillingHold: (tenant) => clearBillingHold(s, tenant),
   };
 }
@@ -48,9 +41,6 @@ test("Ein fehlgeschlagenes Nummern-Provisioning (global_cap) aktiviert den Tenan
   setTenantSubscription(s, "t_gap04", { planSlug: "starter" });
   const accounts = fakeAccounts();
 
-  // provision() liefert einen expliziten Fehlschlag (globaler Nummern-Cap erschoepft) -
-  // activatePaidTenant() wertet die Rueckgabe jetzt aus (provisionCleared) und aktiviert
-  // NICHT, solange sie nicht geklaert ist.
   await activatePaidTenant({
     store: storeOn(s),
     accounts,

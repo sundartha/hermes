@@ -1,8 +1,3 @@
-// IE4 (PLAN-INBOUND-PARITAET.md): die Ersatzantwort des Wiederholungs-Riegels wird
-// PFADGERECHT - Budget-Bein unveraendert Folge-Gather, uebergebenes Bein ein leeres,
-// aber gueltiges Dokument (repeatDeliveryXml in src/routes/voice.js). Praefix "IE4-" ist
-// KEINE Katalog-ID (weder i18nCatalogPattern noch abnahmePattern matchen) - die Faelle
-// landen im normalen npm-test-Regressionslauf.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, makeTelnyxSigner, nowSeconds, BASE_ENV } from "./helpers.js";
@@ -10,13 +5,9 @@ import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
 import { TURN_LOOP_BY_COST_PROFILE, legRunsOurTurnLoop } from "../src/telephony/leg-turn-loop.js";
 
 const HTTP_OK = 200;
-// EIN Gather- und EIN Redirect-Vorkommen tragen die Turn-Marke (G25: benannt statt 2).
 const GATHER_UND_REDIRECT_VORKOMMEN = 2;
 const ANRUF_DATENSAETZE_ERWARTET = 1;
 
-// EIN signierter Umschlag: derselbe Body-String, derselbe Zeitstempel, dieselbe Signatur -
-// beliebig oft zustellbar. Genau das tut ein Anbieter-Retry (Muster sec-p1-webhook-
-// idempotenz.test.js).
 function sealedEnvelope(signer, fields) {
   const body = new URLSearchParams(fields).toString();
   const ts = String(nowSeconds());
@@ -38,8 +29,6 @@ function deliver(srv, url, envelope) {
   });
 }
 
-// EIN /voice/incoming je Anruf-Datensatz - der Datensatz existiert schon (seedCall), also
-// greift der store-basierte Idempotenz-Zweig direkt (Muster SEC-P1-9).
 function deliverIncoming(srv, signer, callSid) {
   const envelope = sealedEnvelope(signer, {
     CallSid: callSid,
@@ -113,8 +102,6 @@ test("IE4-1: Inventar - jedes bekannte Kostenprofil traegt eine ausdrueckliche E
 });
 
 test("IE4-2: legRunsOurTurnLoop - Raender liefern true und werfen nie (fail-safe = Bestandsantwort)", () => {
-  // Positiv-Kontrolle zuerst, sonst sieht "liefert nicht false" wie eine Funktion aus,
-  // die nichts liefert (T5).
   assert.equal(legRunsOurTurnLoop({ costProfile: KOSTENPROFIL.TELNYX_INBOUND_BUDGET }), true);
   assert.equal(legRunsOurTurnLoop({ costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI }), false);
 

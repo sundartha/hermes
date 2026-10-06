@@ -1,8 +1,3 @@
-// GQ-P15 (F4): "Der Grund eines Fehlanrufs steht in der Benachrichtigung". Vor dieser
-// Phase war die passive Notification (statusBody) nur aus dem status gebaut - "no-answer"
-// und "busy" (Cap und Budget-Erschoepfung sogar beide "completed") erzeugten identischen
-// Text. Diese Suite pinnt den Fix auf zwei Ebenen: Block A die i18n-Faktorei
-// (makeStatusBody/FAILURE_REASON_TEXTS), Block B den echten Produktionspfad (makeCallFinish).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
@@ -13,15 +8,11 @@ import { makeCallFinish } from "../src/telephony/call-finish.js";
 import { seedCall } from "./helpers.js";
 
 const TARGET = "+4915112345678";
-// Golden Master: der heutige Wortlaut, byte-genau abgeschrieben (nicht aus dem Bundle
-// abgeleitet - sonst pinnt der Test nichts).
 const BESTAND_BODY = Object.freeze({
   de: `${TARGET} (Status: no-answer)`,
   fr: `${TARGET} (statut : no-answer)`,
   en: `${TARGET} (status: no-answer)`,
 });
-
-// ---------------- Block A - i18n-Ebene ----------------
 
 for (const lang of SUPPORTED_LANGUAGES) {
   test(`GQ-P15-A1 ${lang}: ohne Grund byte-identisch zum Bestand`, () => {
@@ -69,14 +60,6 @@ for (const lang of SUPPORTED_LANGUAGES) {
   });
 }
 
-// OUTBOUND-E2: die Token-Menge kommt jetzt aus der EINEN exportierten Quelle
-// (FAILURE_REASON_BASE_TOKENS), nicht mehr aus einem hier hartkodierten Array - ein Token
-// aus einem neuen Erzeuger (z.B. telephony/failure-reason.js#startRejectionReason) taucht
-// hier automatisch auf, statt nie geprueft zu werden (s. PLAN-OUTBOUND-RESILIENZ.md E-2).
-//
-// EIN Helfer traegt BEIDE Richtungen (Lehre pruefkommando-ohne-positiv-kontrolle, s. A7):
-// welche Sprachen haben fuer ein Basis-Token KEINE Phrase? Leeres Array = jede Sprache hat
-// eine.
 function fehlendePhrasen(token) {
   return SUPPORTED_LANGUAGES.filter((lang) => {
     const phrase = FAILURE_REASON_TEXTS[lang].phrases[token];
@@ -86,7 +69,6 @@ function fehlendePhrasen(token) {
 
 const REAL_BASE_TOKENS = () => new Set([...FAILURE_REASON_BASE_TOKENS, CAP_FAILURE_REASON, BUDGET_FAILURE_REASON]);
 
-// Drift-Guard: die Token-Menge wird aus den ECHTEN Quellen erzeugt, nicht abgeschrieben.
 test("GQ-P15-A6: jedes real erzeugte Basis-Token hat in allen Sprachen eine Phrase, paarweise verschieden", () => {
   for (const token of REAL_BASE_TOKENS()) {
     assert.equal(
@@ -103,11 +85,6 @@ test("GQ-P15-A6: jedes real erzeugte Basis-Token hat in allen Sprachen eine Phra
   }
 });
 
-// Positiv-Kontrolle (Lehre pruefkommando-ohne-positiv-kontrolle): ein Pruefkommando, das nie
-// etwas findet, sieht aus wie eines, das nichts sucht. Ein erfundenes Token MUSS den Helfer
-// roet faerben - sonst prueft A6 gar nichts. DERSELBE Helfer traegt danach die echte Menge
-// (unabhaengig von A6 aus FAILURE_REASON_BASE_TOKENS gebaut): wuerde A6 versehentlich wieder
-// auf ein hartkodiertes Array zurueckfallen, faengt A7 die Luecke trotzdem.
 test("GQ-P15-A7: fehlendePhrasen ist eine echte Positiv-Kontrolle - ein erfundenes Token faerbt sie rot", () => {
   assert.ok(
     fehlendePhrasen("kein-solches-token").length > 0,
@@ -121,8 +98,6 @@ test("GQ-P15-A7: fehlendePhrasen ist eine echte Positiv-Kontrolle - ein erfunden
     );
   }
 });
-
-// ---------------- Block B - Produktionspfad (makeCallFinish, offline) ----------------
 
 function throwing(label) {
   return () => {
@@ -197,7 +172,6 @@ test("GQ-P15-B3: Cap- und Budget-Terminalisierung erzeugen unterscheidbare Bodie
   assert.equal(capCapture.length, 1);
   assert.equal(budgetCapture.length, 1);
   assert.notEqual(capCapture[0].body, budgetCapture[0].body);
-  // Heutiger Zustand (vor dem Fix): beide waeren "... (Status: completed)" - identisch.
   const bestandCompletedBody = `${capCall.to} (Status: completed)`;
   assert.notEqual(capCapture[0].body, bestandCompletedBody);
   assert.notEqual(budgetCapture[0].body, bestandCompletedBody);

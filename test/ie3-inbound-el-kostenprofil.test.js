@@ -1,9 +1,3 @@
-// IE3 (PLAN-INBOUND-PARITAET.md): das Kostenprofil telnyx_inbound_el_convai - seine zwei
-// Traeger mit echten Einsammlern, seine fail-closed UNGEMESSEN-Pflichtmenge, der neue
-// Boot-Riegel (el_inbound_carrier_uncollected) und die Verdrahtung am gespawnten Server.
-//
-// Der Testname traegt das Praefix IE3- (kein i18n-Katalog-, kein Abnahme-Praefix): diese
-// Faelle sind Regressionsschutz und gehoeren in den npm-test-Lauf.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -22,13 +16,8 @@ import { sweepTraegerFuerProfil } from "../src/billing/sweep-kostenbeleg.js";
 import { startServer, EL_INBOUND_ACCESS_BOOT_ENV } from "./helpers.js";
 
 const HTTP_OK = 200;
-// Der heutige Live-Wert von COST_TRUING_REQUIRED_RECORD_TYPES, als Testeingabe fuer die
-// Gegenprobe in IE3-3: fuer die Env-Marker-Profile MUSS pflichttypenFuerProfil genau
-// diese Referenz zurueckgeben, fuer das neue Profil darf es sie NICHT.
 const ENV_PFLICHTTYPEN = ["sip-trunking", "call-control"];
-// Ein gesetzter, aber nie registrierter Profilwert - die fail-closed Gegenprobe.
 const UNBEKANNTES_PROFIL = "unbekanntes_profil";
-// Eine SIP-Gespraechskennung, wie der EL-Outbound-Weg sie am Anruf hinterlaesst.
 const SIP_CALL_ID = "otb_x";
 
 test("IE3-1: das neue Profil steht mit ZWEI Traegern und echten Einsammlern in der Registry", () => {
@@ -71,8 +60,6 @@ test("IE3-3 (fail-closed): pflichttypenFuerProfil liefert fuer das neue Profil d
     PFLICHTTYPEN_UNGEMESSEN,
     "Referenzgleichheit mit der benannten UNGEMESSEN-Konstante, nicht bloss 'leer'",
   );
-  // Positiv-Kontrolle: ohne sie saehe "liefert nicht den Env-Wert" aus wie eine Funktion,
-  // die ueberhaupt nichts liefert (Lehre pruefkommando-ohne-positiv-kontrolle).
   assert.equal(
     pflichttypenFuerProfil(KOSTENPROFIL.TELNYX_INBOUND_BUDGET, ENV_PFLICHTTYPEN),
     ENV_PFLICHTTYPEN,
@@ -119,9 +106,6 @@ test("IE3-4d: die echte Ableitung - pflichtTraegerFuerProfil traegt das neue Pro
   assert.equal(pflichtTraegerFuerProfil(UNBEKANNTES_PROFIL).length, 0);
 });
 
-// Welchen Sweep-Traeger MUSS ein Profil laut Registry bekommen? Abgeleitet aus den
-// Traegern des Profils, nicht aus der Liste in sweep-kostenbeleg.js - genau darin liegt
-// der Riegel: die Liste ist die zweite Stelle, die Registry die erste.
 function erwarteterSweepTraeger(traegerNamen) {
   if (traegerNamen.includes(KOSTENART.TELNYX_SIP)) return KOSTENART.TELNYX_SIP;
   if (traegerNamen.includes(KOSTENART.TELNYX_CALL_RECORDS)) return KOSTENART.TELNYX_CALL_RECORDS;
@@ -144,8 +128,6 @@ test("IE3-5 (abgeleiteter Riegel): jedes Profil mit telnyx_call_records liefert 
 });
 
 test("IE3-6 (Verdrahtung, Spawn): ELEVENLABS_INBOUND_ENABLED=true mit vollstaendigem Zugang (IEL-B1) bootet sauber - kein el_inbound_carrier_uncollected", async () => {
-  // Seit IEL-B1 verweigert der Boot den Schalter ohne Zugang; die Aussage dieses Tests
-  // (Kostenpfad hat Einsammler) bleibt unveraendert.
   const srv = await startServer({ env: { ELEVENLABS_INBOUND_ENABLED: "true", ...EL_INBOUND_ACCESS_BOOT_ENV } });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);

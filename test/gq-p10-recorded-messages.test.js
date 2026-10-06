@@ -1,16 +1,3 @@
-// GQ-P10 (Befund N-2): der Agent sieht, was er in DIESEM Gespraech schon notiert hat.
-//
-// Live gemessen: drei Eintraege fuer EINEN Sachverhalt.
-//   1) "Antonio soll den Fahrzeugschein zur Inspektion mitbringen."
-//   2) "Die Werkstatt bittet Antonio, den Fahrzeugschein zur Inspektion mitzubringen. ..."
-//   3) "Die Werkstatt braucht das genaue Fahrzeugmodell und Baujahr, um ... einplanen zu koennen."
-//
-// GQ-P4 entdoppelt nur INHALTSGLEICHE Nachrichten. Das Modell formuliert aber jedes Mal
-// neu, also greift der Riegel nie. Die Wurzel ist nicht die Aehnlichkeitsschwelle, sondern
-// dass das Modell ueber take_message entscheidet, OHNE zu wissen, was es schon notiert hat.
-//
-// Testnamen tragen bewusst KEINE Katalog-ID am Namensanfang - sonst landen sie still im
-// Gates-Lauf, wo Rot erlaubt ist (Lehre catalog-id-prefix-misroutes-tests).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
@@ -81,8 +68,6 @@ test("GQ-P10-3: notierte Nachrichten stehen wortgetreu im Prompt", () => {
 });
 
 test("GQ-P10-4: die Guardrail verbietet die Doppel-Aufnahme AUSDRUECKLICH, auch umformuliert", () => {
-  // Eine blosse Liste haette das Modell auch als "sag das nochmal" lesen koennen. Der
-  // Defekt war ja gerade die NEUFORMULIERUNG desselben Anliegens.
   const g = LOCALES.de.prompt.recorded.guardrail;
   assert.match(g, /NICHT ein zweites Mal auf/);
   assert.match(g, /anders formuliert/);
@@ -90,10 +75,6 @@ test("GQ-P10-4: die Guardrail verbietet die Doppel-Aufnahme AUSDRUECKLICH, auch 
 });
 
 test("GQ-P10-5: der Block rendert auch INBOUND - dort entstehen Nachrichten hauptsaechlich", () => {
-  // Regressionsschutz gegen die naheliegende Fehlplatzierung: assignmentBlock haengt an
-  // call.goal und rendert nur outbound. Genau dort haette der Block den Hauptfall verfehlt.
-  // Eigener Pool mit eigener ID - nextCall() teilt sich seinen Zaehler mit den
-  // Outbound-Tests und liefe hier ins Leere.
   const call = store.getCall("call_gqp10_in_1");
   assert.equal(call.direction, "inbound", "Vorbedingung des Tests");
   store.addActionItem(call.id, FIRST, "todo");

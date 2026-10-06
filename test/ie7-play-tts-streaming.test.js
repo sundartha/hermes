@@ -1,12 +1,3 @@
-// IE7: der Inbound-Webhook wartet nicht mehr auf die fertige Audiodatei, sondern nur noch
-// auf das ERSTE Audio-Paket. Diese Datei pinnt genau die Aussagen, die vor dem Umbau
-// unmoeglich waren - und die Invariante, an der die Bauform sonst scheitert: NIE Stille.
-//
-// Bewusst OHNE Katalog-ID am Namensanfang (Lehre catalog-id-prefix-misroutes-tests): eine
-// ID dort wuerde die Faelle in die Gates-Bank umleiten. Das hier ist Regressionsschutz.
-//
-// Die "langsame Synthese" ist ein von Hand gesteuertes Versprechen (deferred), kein Timer
-// und keine Uhr (P12/F.I.R.S.T.).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -48,7 +39,6 @@ function fakeConfig() {
   });
 }
 
-// Fake-ttsStore in der IE7-Ablageform: EIN Argument, die Audio-Zusage.
 function fakeTtsStore() {
   const putCalls = [];
   return {
@@ -71,8 +61,6 @@ function zaehlenderStore() {
   };
 }
 
-// Ein Lauf des Play-TTS-Pfads mit gehaltenem Strom: das restGate bleibt offen, bis der
-// Test es selbst aufloest oder ablehnt.
 async function laufMitGehaltenemStrom({ store, chunks }) {
   const restGate = deferred();
   const ttsStore = fakeTtsStore();
@@ -154,7 +142,6 @@ test("Abgebrochener Strom zaehlt trotzdem genau einmal - eine Wiederholung gibt 
   assert.equal(store.calls.length, 1, "der Abbruch bucht weder nach noch zurueck");
 });
 
-// Die ausgelieferten Werte (src/config.js) - dieselbe Rechnung wie der Boot-Waechter.
 const SHIPPED_TURN_PARAMS = Object.freeze({
   requestTimeoutMs: 3500,
   maxRetries: 2,
@@ -174,15 +161,11 @@ test("Die Gesamtfrist des Hintergrund-Stroms liegt NICHT auf der Turn-Wanduhr", 
   assert.equal(turnLoopDeadlineMs(SHIPPED_TURN_PARAMS.synthTimeoutMs), ERWARTETE_LOOP_FRIST_MS);
 });
 
-// ---- Spawn-Ebene: der Webhook antwortet, bevor der Origin fertig ist ----------------
-
 const LANGSAMER_REST_MS = 3000;
 const WEBHOOK_OBERGRENZE_MS = 1500;
 const FAKE_MP3 = Buffer.concat([Buffer.from(FAKE_FIRST_CHUNK), Buffer.from(FAKE_REST_CHUNK)]);
 const HTTP_OK = 200;
 
-// Fake-ElevenLabs-Origin, der den Kopf sofort schickt und den Rest erst nach
-// LANGSAMER_REST_MS - genau die Form, die vor IE7 den Webhook blockiert haette.
 async function startLangsamenOrigin() {
   const timers = new Set();
   const server = http.createServer((req, res) => {

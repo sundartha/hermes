@@ -1,17 +1,3 @@
-// ---- IEL-B4: Nachlauf-Politik fuer ueberbrueckte Inbound-Calls im EL-Poll ----------------
-// Ein Inbound-Call, dessen Gespraech der ElevenLabs-Agent fuehrt (Kostenprofil
-// telnyx_inbound_el_convai), wird vom ziehenden Ergebnisweg nachbereitet, OHNE unser
-// abgerechnetes Telnyx-Bein anzutasten: Anker bleibt, keine Anbieter-Zusammenfassung, kein
-// next_steps-Item, Beende-Versuch ueber das Traeger-Bein, Frist ab dem Nachlauf-Marker,
-// Ende-Anker = Carrier-Ende, Single-Flight ueber Register + frische Pruefung nach dem Abruf.
-//
-// Offline, kein Netz, kein Server: Harness in test/_iel-inbound-harness.js (Anbieter-Attrappe
-// ueber withFetch, echte state-ops-Mutatoren, echte makeCallFinish-Instanz).
-// Zeitanker relativ zu Date.now(): carrierEndMsOf = min(now, Marker) liefert fuer jedes
-// spaetere now denselben Wert - deterministisch ohne gemockte Uhr (waitUntil braucht die echte).
-//
-// Namen beginnen mit "IEL-B4-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern,
-// laeuft also in npm test.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -73,8 +59,6 @@ const INBOUND_DONE = Object.freeze({
   },
 });
 
-// ---- Build: Datensaetze (Bausteine fuer Inbound-EL in test/_iel-inbound-harness.js) -------
-
 function seedOutboundElCall(state, { answeredVorS }) {
   const call = ops.createCall(state, {
     direction: "outbound",
@@ -88,8 +72,6 @@ function seedOutboundElCall(state, { answeredVorS }) {
   call.answeredAt = call.startedAt;
   return call;
 }
-
-// ---- 1: Politik-Tabelle ------------------------------------------------------------------
 
 const ERWARTET_HEUTE = {
   ankerNachziehen: true,
@@ -128,8 +110,6 @@ test("IEL-B4-1: nachlaufPolitikFuer waehlt je Brueckenzustand die richtige Polit
   assert.equal(pollDarfWirken(null), false);
 });
 
-// ---- 2 / 2P: Abschluss ohne Anbieter-Zusammenfassung und ohne next_steps-Item ------------
-
 test("IEL-B4-2: Inbound done -> summarizeCall laeuft auf dem EL-Transkript, kein next_steps-Item, Anker und Leitung unberuehrt", async () => {
   const state = ops.makeDefaultState();
   const call = seedInboundElCall(state, { answeredVorS: GESPRAECH_S, nachlaufVorS: ENDE_NACH_S });
@@ -166,8 +146,6 @@ test("IEL-B4-2P: Positiv-Kontrolle - dieselbe Fixture als Outbound-EL-Call schre
   assert.deepEqual(ops.callActionItems(state, call.id).map((item) => item.text), [NEXT_STEP_TEXT]);
 });
 
-// ---- 3: Ende-Anker = Carrier-Ende --------------------------------------------------------
-
 test("IEL-B4-3: Inbound done 90 s nach dem Carrier-Ende -> endedAt ist der Nachlauf-Marker, gebucht wird bis dorthin", async () => {
   const state = ops.makeDefaultState();
   const call = seedInboundElCall(state, { answeredVorS: GESPRAECH_S, nachlaufVorS: ENDE_NACH_S });
@@ -183,8 +161,6 @@ test("IEL-B4-3: Inbound done 90 s nach dem Carrier-Ende -> endedAt ist der Nachl
   assert.equal(call.endedAt, marker);
   assert.equal(voiceMinutesOf(call), GESPRAECH_MINUTEN_BIS_MARKER);
 });
-
-// ---- 4 / 5 / 5P: Nachlauf-Frist ----------------------------------------------------------
 
 test("IEL-B4-4: Frist ab Marker abgelaufen -> Abschluss ueber das Traeger-Bein, Frist nicht gebucht, Anker bleibt", async () => {
   const state = ops.makeDefaultState();
@@ -238,8 +214,6 @@ test("IEL-B4-5P: Positiv-Kontrolle - Outbound-EL-Call mit demselben answeredAt s
   assert.equal(call.failureReason, POLL_TIMEOUT_REASON);
 });
 
-// ---- 6: dauerhafter Anbieter-Fehler ------------------------------------------------------
-
 test("IEL-B4-6: 3x 404 -> Anker bleibt (kein clearAnchor), Traeger-Bein wird beendet, Ende-Anker = Marker", async () => {
   const state = ops.makeDefaultState();
   const call = seedInboundElCall(state, { answeredVorS: GESPRAECH_S, nachlaufVorS: ENDE_NACH_S });
@@ -259,8 +233,6 @@ test("IEL-B4-6: 3x 404 -> Anker bleibt (kein clearAnchor), Traeger-Bein wird bee
   assert.equal(anbieter.deletes, 0);
   assert.equal(call.endedAt, marker);
 });
-
-// ---- 7 / 7P: Live-Term -------------------------------------------------------------------
 
 function liveInboundElCall({ mitMarker }) {
   return {
@@ -292,12 +264,6 @@ test("IEL-B4-7P: Positiv-Kontrolle - derselbe Call ohne Marker waechst mit der Z
   );
 });
 
-// ---- 8 - 11: Single-Flight ---------------------------------------------------------------
-
-// Ruft das Start-Tor, WAEHREND die laufende Schleife in ihrem Abruf haengt: eine zweite
-// Schleife liefe sofort in einen eigenen Abruf (offen === 2). Ohne das Festhalten antwortet
-// die Attrappe so schnell, dass sich zwei Schleifen zeitlich nie ueberlappen und maxOffen
-// nichts belegt. Gibt danach mit "laeuft noch" frei.
 async function startTorWaehrendAbruf(harness, anbieter, callId) {
   let freigeben;
   const tor = new Promise((resolve) => {
@@ -355,8 +321,6 @@ test("IEL-B4-9: startInboundNachlauf zweimal synchron -> eine Schleife, der erst
   assert.equal(anbieter.maxOffen, 1);
 });
 
-// Zwei Fabrik-Instanzen (je eigenes Register) auf DEMSELBEN Datensatz: beide haengen im
-// selben Abruf, erst dann wird freigegeben - isoliert die frische Pruefung nach dem await.
 async function zweiSchleifenImSelbenAbruf() {
   const state = ops.makeDefaultState();
   const call = seedInboundElCall(state, { answeredVorS: GESPRAECH_S, nachlaufVorS: ENDE_NACH_S });
@@ -395,8 +359,6 @@ test("IEL-B4-11: nach dem Abschluss haelt der Purge - ein weiterer Re-Arm schrei
   });
   assert.equal(call.transcript.length, 0);
 });
-
-// ---- 12 / 13: Rueckfall-Riegel -----------------------------------------------------------
 
 test("IEL-B4-12: Neustart waehrend RUECKFALL -> kein Re-Arm, kein Abruf, keine Buchung", async () => {
   const state = ops.makeDefaultState();
@@ -440,8 +402,6 @@ test("IEL-B4-13: Rueckfall waehrend eines laufenden Abrufs -> kein Abschluss, ke
   assert.equal(anbieter.gets, 1, "nach dem Riegel plant die Schleife keinen Folgetakt");
 });
 
-// ---- 14 / 15: Neustart ohne Nachlauf-Marker ----------------------------------------------
-
 test("IEL-B4-14: GEBUNDEN ohne Nachlauf-Start -> keine eigene Frist; done schliesst genau einmal mit Ende = jetzt ab", async () => {
   const teststartMs = Date.now();
   const state = ops.makeDefaultState();
@@ -481,8 +441,6 @@ test("IEL-B4-15: Marker waehrend laufender Schleife -> frische Frist ab Marker, 
 
   assert.equal(anbieter.maxOffen, 1);
 });
-
-// ---- 16: Beende-Versuch-Pfad (Pflicht-Uebergabe politik) ---------------------------------
 
 test("IEL-B4-16: endActiveCall fuer Inbound-EL -> keine Anbieter-Zusammenfassung, Anker unveraendert", async () => {
   const state = ops.makeDefaultState();

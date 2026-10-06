@@ -1,11 +1,3 @@
-// IEL-B3 (L5): {{inbound_situation}} - Outbound sendet die Variable leer, die Vorlage
-// traegt sie am Ende der PERSONA-Zeile, der Inbound-Blocktext existiert.
-// Mutationsproben: (a) Schluessel in dynamicVariables entfernen -> B3-1/2/3 rot;
-// (b) Wert != "" -> B3-2/3/5 rot; (c) Platzhalter an andere Stelle -> B3-4 rot;
-// (d) Anrufernummer in den Blocktext -> B3-8 rot.
-//
-// Offline: kein Spawn, kein Netz. Der Anrufstart laeuft ueber die GETEILTE Attrappe
-// (helpers/elevenlabs-anrufstart-attrappe.mjs) - keine zweite fetch-Ersetzung.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -20,8 +12,6 @@ const VARIABLE = "inbound_situation";
 const LETZTER_SCHLUESSEL = "tenant_token";
 const SEKTIONS_TRENNER = "\n\n";
 const GENAU_EINMAL = 1;
-// Schluessel-Reihenfolge des Anrufstarts auf master 0775435 (vor IEL-B3), abgegriffen -
-// der Vorher-Anker fuer "Bestand + genau ein Schluessel".
 const BESTANDS_SCHLUESSEL = Object.freeze([
   "consult_available",
   "lookup_available",
@@ -39,7 +29,6 @@ const BESTANDS_SCHLUESSEL = Object.freeze([
   "voicemail_line",
   "tenant_token",
 ]);
-// Die Stelle der Vorlage VOR IEL-B3; bleibt nach dem Entfernen des neuen Platzhalters stehen.
 const BESTANDS_ANKER = "not a human.{{callee_relation}}\n\nSITUATION AND TASK:";
 const NEUER_ANKER = "{{callee_relation}}{{inbound_situation}}\n\nSITUATION AND TASK:";
 const AUFGEHOBENE_UEBERSCHRIFT = "SITUATION AND TASK";
@@ -48,7 +37,6 @@ const ZIFFER = /\d/;
 const OWNER_ZIEL = Object.freeze({ calleeIsOwner: true });
 const EN_PROMPT = LOCALES.en.prompt;
 
-// In Stufen gelesen statt in einer Kette (G36/Demeter, Bestandsmuster el-vorlage-variablen-abgleich).
 function vorlagenPrompt() {
   const vorlage = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
   const agent = vorlage.agent.conversation_config.agent;
@@ -58,8 +46,6 @@ function vorlagenPrompt() {
 const gesendet = (call = pinCall()) =>
   sendeAnrufstart({ makeElevenLabsOutbound, consultAllowedForCall, store: pinStore(), call });
 const blockText = () => EN_PROMPT.inboundSituation({ owner: TEST_OWNER });
-// IEP-P6: die Owner-Fassung derselben Vorlagen-Sektion - sie faellt unter dieselben
-// Auflagen (Auftraggeber genannt, kein Platzhalter, keine Ziffer, Ueberschrift aufgehoben).
 const OWNER_FREMD_EROEFFNUNG = LOCALES.de.inboundEroeffnung(TEST_OWNER);
 const blockTextOwner = () =>
   EN_PROMPT.inboundSituationOwner({ owner: TEST_OWNER, fremdEroeffnung: OWNER_FREMD_EROEFFNUNG });

@@ -1,13 +1,3 @@
-// IEL-B11: das Nach-Deploy-Messwerkzeug (N1/N2/N-D, "setup --nachdeploy"/"--nur-ausgehend").
-//
-// KEIN NETZ: Trockenlauf-Faelle laufen mit --dry-run (fetch per Stolperdraht gesperrt, s.
-// scripts/iel-mess-stolperdraht.mjs); Echt-Modus-Faelle laden test/_iel-b11-fetch-attrappe.mjs
-// per --import und laufen gegen einen Router aus dem Speicher.
-//
-// ISOLATION: der Messbaum-Helfer test/_iel-messbaum.mjs baut je Fall einen eigenen
-// temporaeren Baum (mkdtemp) mit Kopien der scripts/iel-mess*-Dateien, Symlinks auf src/ und
-// node_modules/ und eigenen tasks/-Zaehlerdateien - die echten tasks/-Dateien werden nie
-// beruehrt (Test 3 belegt das per Hash).
 import { strict as assert } from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
@@ -60,8 +50,6 @@ const NICHT_DISKRIMINIERENDE_CODES = Object.freeze([
   undefined,
 ]);
 
-// --- Protokoll-Helfer (nur hier gebraucht) -------------------------------------------------
-
 function methodenVon(protokoll) {
   return protokoll.map((aufruf) => aufruf.methode);
 }
@@ -69,8 +57,6 @@ function methodenVon(protokoll) {
 function enthaeltPfadTeil(protokoll, teil) {
   return protokoll.some((aufruf) => aufruf.pfad.includes(teil));
 }
-
-// --- Trockenlauf-Faelle --------------------------------------------------------------------
 
 describe("IEL-B11 Trockenlauf: N1/N2/N-D und Setup-Varianten", () => {
   it("kopiert exakt die scripts/iel-mess*-Dateien in den Messbaum", () => {
@@ -133,8 +119,6 @@ describe("IEL-B11 Trockenlauf: N1/N2/N-D und Setup-Varianten", () => {
     assert.ok(!fs.existsSync(path.join(dir, "tasks", "iel-nachdeploy-messung.jsonl")));
   });
 });
-
-// --- Zaehler-Gruppen, Budgets, Zielpruefung -------------------------------------------------
 
 describe("IEL-B11 Zaehler-Gruppen und Grenzen", () => {
   it("Test 4: F-A --dry-run bei M1 5/5 verweigert mit dem M1-Budgettext", () => {
@@ -225,8 +209,6 @@ describe("IEL-B11 geteilte 60-s-Grenzen", () => {
   });
 });
 
-// --- Echt-Modus (Fetch-Attrappe) -------------------------------------------------------------
-
 describe("IEL-B11 Echt-Modus: setup --nur-ausgehend", () => {
   it("Test 10: baut bei unerwartetem inbound_trunk sofort wieder ab und leakt kein Passwort", () => {
     const dir = bauMessBaum();
@@ -293,7 +275,6 @@ describe("IEL-B11 N1 nutzt den Digest-Weg (Review-Fix)", () => {
     const geheim = { username: "ielm1testbenutzer", password: "ielm1testpasswort" };
     const anfrage = texmlAnrufAnfrage({ fall, gemeinsam: konfiguration.gemeinsam, header: konfiguration.gemeinsam.probe_header, laufId: "iel-test-lauf", geheim });
     assert.match(anfrage.form.Texml, /<Sip username="ielm1testbenutzer" password="ielm1testpasswort">/);
-    // Gegenprobe im selben Anruf (M3-Form): ein zweiter Dial ohne Zugangsdaten.
     assert.match(anfrage.form.Texml, /<Sip>sip:/);
   });
 
@@ -329,9 +310,6 @@ describe("IEL-B11 N1 nutzt den Digest-Weg (Review-Fix)", () => {
     assert.ok(credentials?.username && credentials.username.length > 0, "PATCH ohne Benutzername - kein echter Digest-Zugang gesetzt");
     assert.ok(credentials?.password && credentials.password.length > 0, "PATCH ohne Passwort - kein echter Digest-Zugang gesetzt");
 
-    // Reihenfolge: Registrierung lesen (x2) -> PATCH setzen -> Registrierung erneut lesen (schlaegt
-    // fehl) -> im finally PATCH entfernen -> Registrierung ein letztes Mal lesen. Kein Aufruf
-    // davon ist eine Zaehler-Reservierung oder ein TeXML-POST.
     assert.deepEqual(methodenVon(protokoll), ["GET", "GET", "PATCH", "GET", "PATCH", "GET"]);
 
     const zaehlerNachher = fs.readFileSync(nachdeployZaehlerPfad, "utf8");
@@ -422,8 +400,6 @@ describe("IEL-B11 Echt-Modus: N1/N2 Verweigerungen vor der Reservierung", () => 
     }
   });
 });
-
-// --- Reine Belege-Funktionen -----------------------------------------------------------------
 
 describe("IEL-B11 reine Belege-Funktionen", () => {
   it("U1: n2Urteil - nur 200 ist ANNAHME_DISKRIMINIEREND", () => {

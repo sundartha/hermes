@@ -1,14 +1,3 @@
-// IEL-B9: das Cutover-Werkzeug fuer den ElevenLabs-Inbound-Weg.
-//
-// A. Ziel-Urteil (src/elevenlabs/init-webhook-ziel.js): rein bzw. gegen einen Render-Fake.
-// B. push-elevenlabs.mjs --workspace-init-webhook: Ziel-Urteil vor jedem ElevenLabs-Aufruf,
-//    Header nur als Secret-Verweis, Lesebeleg und Gegenprobe der uebrigen Settings.
-// C. Freigaben-Wache (Riegel 8) fuer den Agent-Schalter init_webhook_schalter.
-// D. el-nummern-registrierung.mjs --trunk-inventar / --registrierung-loeschen, ohne Store.
-//
-// KEIN NETZ: in-process laeuft fetch ueber die Router-Attrappe, Kindprozesse gegen einen
-// lokalen Stub (PORT 0) oder den Harness test/_iel-b9-push-harness.mjs. "Nichts geschrieben"
-// ist damit gemessen: die Aufrufliste enthaelt keinen Aufruf, der nicht GET ist.
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -48,8 +37,6 @@ import {
 } from "./helpers/elevenlabs-push-attrappe.mjs";
 
 const RENDER_TEST_SCHLUESSEL = "test-render-schluessel";
-// Beide Schluessel VOR dem Laden der Kommandos: src/config.js liest ELEVENLABS_API_KEY einmal
-// beim Import, RENDER_API_KEY liest das Push-Kommando zur Aufrufzeit.
 process.env.ELEVENLABS_API_KEY = TEST_SCHLUESSEL;
 process.env.RENDER_API_KEY = RENDER_TEST_SCHLUESSEL;
 const { runCli } = await import("../scripts/push-elevenlabs.mjs");
@@ -74,9 +61,7 @@ const ONRENDER = "https://vodafone-agent.onrender.com";
 const TUNNEL = "https://x.trycloudflare.com";
 const SUNDARTHA_HOST = "app.sundartha.com";
 const DOMAINS_LIMIT = 100;
-// Service-GET + Env-GET: danach bricht renderDienstZiel beim Nicht-OK ab.
 const AUFRUFE_BIS_ENV_GET = 2;
-// get_consult und look_up tragen je eine URL.
 const MIN_WERKZEUG_URLS = 2;
 const HARNESS_ERGEBNIS_MARKE = "IEL-B9-ERGEBNIS";
 const SCHALTER_FELD = "init_webhook_schalter";
@@ -84,8 +69,6 @@ const FREIGABEN_FELD = "conversation_config_override_erlaubnisse";
 const [SCHALTER_PFAD] = livePfadeVon(VORLAGE, SCHALTER_FELD);
 const [KARTE_PFAD] = livePfadeVon(VORLAGE, FREIGABEN_FELD);
 const SETZ_ARGUMENTE = ["--workspace-init-webhook", `--secret-id=${SECRET_ID}`];
-
-// ---- gemeinsame Helfer ----------------------------------------------------------------
 
 function blattPfade(wert, praefix = "") {
   if (wert === null || typeof wert !== "object" || Array.isArray(wert)) return [praefix];
@@ -100,7 +83,6 @@ function stringWerteAnSchluessel(wert, schluessel) {
   ]);
 }
 
-// Kein Koerper traegt Zugangsdaten, eine leere Absender-Liste oder das Init-Token als String.
 function assertKeinVerbotenerKoerper(aufrufe) {
   for (const { koerper } of aufrufe.filter((aufruf) => typeof aufruf.koerper === "string")) {
     assert.ok(!koerper.includes('"credentials"'), "ein Koerper traegt credentials");
@@ -132,8 +114,6 @@ function renderAntwort(adresse, dienst) {
   return antwort({ serviceDetails: { url: dienst.serviceUrl } }, dienst.serviceStatus);
 }
 
-// Router fuer das Push-Kommando: Render aus dem Dienst-Szenario, Workspace-Settings vorher bis
-// zum ersten PATCH, danach nachher.
 function settingsRouter({ dienst = DIENST_GRUEN, vorher, nachher = vorher }) {
   let geschrieben = false;
   return (aufruf) => {
@@ -211,8 +191,6 @@ function starteKind({ nodeArgs, env }) {
   });
   return sammleProzess(child);
 }
-
-// ---- A. Ziel-Urteil ---------------------------------------------------------------------
 
 function dienst(felder) {
   return { lesbar: true, publicUrlEnv: null, serviceUrl: ONRENDER, dienstHosts: ["vodafone-agent.onrender.com", SUNDARTHA_HOST], ...felder };
@@ -311,8 +289,6 @@ describe("IEL-B9 A: Ziel-Urteil", () => {
   });
 });
 
-// ---- B. --workspace-init-webhook ---------------------------------------------------------
-
 const SETTINGS_OHNE_WEBHOOK = Object.freeze({ [WEBHOOK_SCHLUESSEL]: null, can_use_mcp_servers: false });
 
 function settingsMitWebhook(webhook) {
@@ -324,8 +300,6 @@ const WEBHOOK_KORREKT = Object.freeze({
   request_headers: { [INIT_HEADER]: { secret_id: SECRET_ID } },
 });
 
-// Setz-Trockenlauf in einem eigenen Prozess mit eigener Env (PUBLIC_URL, RENDER_API_KEY);
-// liefert { code, aufrufe, ausgabe } aus der Ergebniszeile des Harness.
 async function laufeHarness({ publicUrlProzess, renderPublicUrl, renderApiKey = RENDER_TEST_SCHLUESSEL }) {
   const { ausgabe } = await starteKind({
     nodeArgs: ["test/_iel-b9-push-harness.mjs", ...SETZ_ARGUMENTE],
@@ -460,15 +434,12 @@ describe("IEL-B9 B2: --workspace-init-webhook Lesebeleg, Entfernen, Argumente", 
   });
 });
 
-// ---- C. Freigaben-Wache ------------------------------------------------------------------
-
 const KARTE_SOLL = wertAnPfad(VORLAGE, livePfadeVon(VORLAGE, FREIGABEN_FELD)[0]).wert;
 const NUR_SCHALTER = [`--felder=${SCHALTER_FELD}`];
 
 function liveAgent({ schalter = false, karte = KARTE_SOLL } = {}) {
   const agent = structuredClone(LIVE_MIT_DATENSCHUTZ);
   agent.platform_settings.overrides = { enable_conversation_initiation_client_data_from_webhook: schalter };
-  // null heisst "die Karte fehlt live" (ein undefined wuerde den Default greifen lassen).
   if (karte !== null) agent.platform_settings.overrides.conversation_config_override = structuredClone(karte);
   return agent;
 }
@@ -564,8 +535,6 @@ describe("IEL-B9 C: Freigaben-Wache (Riegel 8)", () => {
   });
 });
 
-// ---- D. el-nummern-registrierung ---------------------------------------------------------
-
 const EL_KONTO = Object.freeze({ apiKey: "el-test-schluessel", apiBase: "http://el.test" });
 const SIP_USER = "geheimer-sip-user-b9";
 const VOLLE_NUMMER = "+4930123456789";
@@ -580,7 +549,6 @@ const OFFEN = registrierung("phnum_offen", { has_auth_credentials: false, userna
 const MIT_ZUGANG = registrierung("phnum_zugang", { has_auth_credentials: true, username: SIP_USER, allowed_numbers: [] });
 const OHNE_INBOUND = registrierung("phnum_ohne");
 
-// Anbieter-Fake: Liste + Einzel-GET + DELETE; nach einem DELETE gilt nachDelete als Bestand.
 function elFake({ bestand, nachDelete = bestand, listeStatus = HTTP_OK, einzelStatus = HTTP_OK, deleteStatus = HTTP_OK }) {
   const aufrufe = [];
   let aktuell = bestand;
@@ -712,7 +680,6 @@ function stubAntwort(url, listeStatus) {
   return { status: HTTP_NOT_FOUND, text: "{}" };
 }
 
-// Lokaler Anbieter-Stub (PORT 0), der jeden Treffer zaehlt.
 function starteStub({ listeStatus = HTTP_OK } = {}) {
   const treffer = [];
   const server = http.createServer((req, res) => {

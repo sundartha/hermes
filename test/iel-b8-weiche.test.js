@@ -1,14 +1,3 @@
-// ---- IEL-B8: Rueckfall-Routen und Inbound-Weiche des EL-Inbound-Wegs ------------------------
-// /voice/incoming entscheidet EINMAL je Anruf zwischen Budget-Pfad (Schalter aus / nicht gepinnt,
-// byte-identisch, Golden-Test) und der Uebergabe an den ElevenLabs-Agenten: <Dial><Sip> als erstes
-// Verb (IEX-A3), mit Sofortannahme und Begruessungslaut (IEP-P2), dann <Redirect> auf /voice/el-rueckfall?quelle=dial_ende. Die Rueckfall-Route
-// entscheidet nur aus dem persistierten Datensatz (Auflegen, Folge-Gather, Fehlersatz), der
-// SIP-Bein-Callback /voice/el-bein armiert die innere Frist.
-//
-// A (4-10) rein (1-3 (IEX-A2) und 5 (IEX-A3) entfallen, die Nummern bleiben - PLAN-SECURITY zitiert sie), B (11) In-Process an einem echten HTTP-Server, C (12-22) Kindprozess.
-// D (IEX-A9-11..16) Kindprozess: Scope registrierte_dids - Abweisung ohne Beleg, Abschluss, Kostendecke,
-// Beleg/Rotation, Wiederholung nach Neustart, Default-Stand.
-// Namen beginnen mit "IEL-B8-<n>: " bzw. "IEX-A9-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -74,7 +63,6 @@ const EL_INBOUND = KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
 const PUBLIC_URL = "https://agent.test";
 const BINDUNGS_TOKEN = "0123456789abcdef0123456789abcdef";
 const TEST_MAX_DAUER_S = 900;
-// IEP-P2: die Fuellung, die der ausgelieferte Default erzeugt (Literal, nicht abgeleitet).
 const BEGRUESSUNGSLAUT_URL = `${PUBLIC_URL}/brand/hermes-begruessungslaut.wav`;
 const SIP_USER = EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_USER;
 const SIP_PASSWORD = EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_PASSWORD;
@@ -93,20 +81,15 @@ const FRIST_UEBERSCHRITTEN_MS = EL_BRIDGE_START_DEADLINE_MS + MS_PER_SECOND;
 const HANGUP_XML = `<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`;
 const LEERES_DOKUMENT_XML = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
 
-// EL-Inbound an und der Bootstrap-Tenant gepinnt (Spawn-Env).
 const EL_AN_ENV = Object.freeze({
   ELEVENLABS_INBOUND_ENABLED: "true",
   ELEVENLABS_INBOUND_TENANT_IDS: BOOTSTRAP_TENANT_ID,
   ...EL_INBOUND_ACCESS_BOOT_ENV,
 });
 
-// ---- Build: reine Bausteine -------------------------------------------------------------------
-
 const XML_PRAEFIX = `<?xml version="1.0" encoding="UTF-8"?><Response>`;
 const XML_SUFFIX = "</Response>";
 
-// IEP-P2: die Dial-Eroeffnung der Uebergabe an EINER Stelle - Sofortannahme (kein
-// answerOnBridge), Fuellung als audioUrl, sobald eine URL erwartet wird.
 function dialOeffnung({ callerId, timeLimitS, audioUrl }) {
   const fuellung = audioUrl ? ` audioUrl="${audioUrl}"` : "";
   return `<Dial${fuellung} callerId="${callerId}" timeout="${EL_DIAL_RING_TIMEOUT_S}" timeLimit="${timeLimitS}">`;
@@ -123,8 +106,6 @@ function uebergabe({ call = uebergabeCall() } = {}) {
     publicUrl: PUBLIC_URL,
   });
 }
-
-// ---- A: reine Unit-Tests ----------------------------------------------------------------------
 
 test("IEL-B8-4: elUebergabeDirektiven - Dial/Sip als erstes Verb, Redirect dial_ende; so gerendert", () => {
   const call = uebergabeCall();
@@ -192,8 +173,6 @@ test("IEL-B8-10: Idempotenz-Anker der zwei Routen - callId plus Unterscheider, s
   assert.deepEqual(elBeinAnchors(req({}, { CallStatus: "answered" })), []);
   assert.deepEqual(elBeinAnchors(req({ callId: "c" }, { CallStatus: ["answered"] })), ["eb:c:"]);
 });
-
-// ---- B: /voice/el-bein In-Process -------------------------------------------------------------
 
 function baueBeinRouter({ state, armiert }) {
   return makeVoiceRoutes({
@@ -270,8 +249,6 @@ test("IEL-B8-11: /voice/el-bein - nur answered/in-progress eines aktiven WARTEND
   for (const zeile of beinZeilen) for (const nummer of [INBOUND_FROM, INBOUND_TO]) assert.ok(!zeile.includes(nummer), zeile);
 });
 
-// ---- C: Kindprozess ---------------------------------------------------------------------------
-
 const callsOf = (srv) => srv.readStore().calls;
 const einzigerCall = (srv) => callsOf(srv)[0];
 const zeilenMit = (srv, marke) => srv.stdout.split(marke).length - EINMAL;
@@ -342,8 +319,6 @@ test("IEL-B8-12: Schalter an + gepinnt - Dial/Sip als erstes Verb, Redirect dial
   });
 });
 
-// Leg-Satz +49 -> +49 (Inland) gegen den kalibrierten Inbound-Satz: zwei verschiedene Zahlen,
-// damit der Profilwechsel an der Notbremse sichtbar wird.
 const INLAND_SATZ_CENTS = 10;
 const INBOUND_SATZ_CENTS = 5;
 const BUDGET_CENTS = 100;
@@ -391,7 +366,6 @@ test("IEL-B8-14: die Sicherungen vor der Weiche greifen auch mit Schalter an - K
       assert.equal(callsOf(srv).length, 0);
     });
     await ctx.test("IEL-B8-14b: To unbekannt -> nicht erreichbar, kein Dial", async () => {
-      // Eigene CallSid: dieselbe wie in 14a bekaeme die erste Antwort aus dem Wiederholungs-Riegel.
       const texml = await incomingText(srv, { callSid: "CAielb8unbekannt", to: "+4915299999999" });
       assert.ok(texml.includes("Diese Nummer ist nicht erreichbar"), texml);
       assert.ok(!texml.includes("<Dial"));
@@ -467,8 +441,6 @@ function matrixSeed() {
 
 const storeCall = (srv, id) => callsOf(srv).find((call) => call.id === id);
 
-// logCallId: ein nicht aktiver Call wird nicht re-attacht - die Zeile traegt dann callId null.
-// Liefert Antworttext und ms_seit_bindung der passenden [el-rueckfall]-Zeile.
 const EL_RUECKFALL_LOG_JSON = "[el-rueckfall] {";
 const rueckfallLogEintrag = (zeile) => JSON.parse(zeile.slice(EL_RUECKFALL_LOG_JSON.length - EINMAL));
 function rueckfallLogEintraege(srv) {
@@ -485,10 +457,8 @@ async function rueckfallMitLog(srv, { callId, quelle, entscheidung, logCallId = 
   return { text, msSeitBindung: eintrag.ms_seit_bindung };
 }
 
-// Ohne Play-TTS rendert der Server den Fehlersatz als <Say>; der Seed-Tenant heisst OWNER_NAME.
 const fehlersatzTexml = () => renderDirectives([say(LOCALES.de.inboundFehlersatz(OWNER_NAME), LOCALES.de.voiceProfile), hangup()]);
 
-// Fehlersatz: Antwort Say + Hangup, Marker und Grund gesetzt, KEINE neue Transkriptzeile.
 async function pruefeFehlersatz(srv, { callId, quelle }) {
   const zeilenVorher = storeCall(srv, callId).transcript.length;
   const ergebnis = await rueckfallMitLog(srv, { callId, quelle, entscheidung: RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ });
@@ -500,7 +470,6 @@ async function pruefeFehlersatz(srv, { callId, quelle }) {
   return ergebnis;
 }
 
-// Die A3-Kalibrierzeile: nie gebunden -> null, jung gebunden -> Zahl unter der Mindestdauer.
 const istJungGebunden = (ms) => typeof ms === "number" && ms >= 0 && ms < EL_MIN_CONVERSATION_MS;
 
 const istFolgeGather = (text) => text.includes("<Gather") && !text.includes("<Say") && !text.includes("<Play") && !text.includes("<Hangup");
@@ -560,7 +529,6 @@ test("IEL-B8-16: /voice/el-rueckfall - Entscheidungsmatrix am echten Server (Feh
   }
 });
 
-// Prozess 1 -> Stop -> Datensatz (optional) bearbeiten -> Prozess 2 auf demselben DATA_DIR.
 async function mitNeustart({ env, env2 = env, vorbereiten, bearbeiten = () => {} }, run) {
   const srv1 = await startServer({ env, seed: seedWithTelnyxNumber({ language: "de" }) });
   let dataDir;
@@ -606,7 +574,6 @@ test("IEL-B8-18: E19 - die Erstantwort synthetisiert nichts; der Fehlersatz spri
       await incomingText(srv, { callSid: ZWEITER_CALL_SID });
       const wartend = callsOf(srv).find((call) => call.elevenlabsConversationId === null);
       await postRueckfall(srv, { callId: wartend.id, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE });
-      // Die Synthese des Fehlersatzes ist zugleich die Positiv-Kontrolle: Play-TTS ist aktiv.
       assert.equal(attrappe.ttsStimmen.length, EINMAL);
       assert.equal(attrappe.ttsStimmen[0], antwort.conversation_config_override.tts.voice_id);
     });
@@ -615,7 +582,6 @@ test("IEL-B8-18: E19 - die Erstantwort synthetisiert nichts; der Fehlersatz spri
   }
 });
 
-// Anthropic-Attrappe: haelt jeden Request-Body fest und antwortet mit einer gueltigen Message.
 async function starteModellAttrappe(text) {
   const bodies = [];
   const server = http.createServer((req, res) => {
@@ -647,8 +613,6 @@ async function mitAttrappen({ modellText, conversation }, run) {
 const postStatus = (srv, callId) => postVoice(srv, { pfad: `/voice/status?callId=${callId}`, body: { CallStatus: "completed" } });
 const MODELL_ZUSAMMENFASSUNG = JSON.stringify({ summary: "B8 ok", actionItems: ["Rueckruf"] });
 
-// ASCII-Teilstring des Inbound-Hinweises: eine JSON-Umlautkodierung kann die Negativ-Pruefung so
-// nicht leer bestehen lassen.
 const HINWEIS_TEILSTRING = "Sie sprechen mit einer KI";
 
 test("IEL-B8-19: Ende-zu-Ende - Uebergabe, Bindung, Carrier-Ende, Nachlauf, Zusammenfassung ueber die Anbieter-Zeilen, ohne serverseitige Hinweis-Zeile", async () => {
@@ -659,7 +623,6 @@ test("IEL-B8-19: Ende-zu-Ende - Uebergabe, Bindung, Carrier-Ende, Nachlauf, Zusa
       assert.equal(zeilenMit(srv, "[el-init] gebunden"), EINMAL);
       const { id } = einzigerCall(srv);
       await postStatus(srv, id);
-      // Die Zusammenfassung kann nach der Buchung fertig werden - auf alle drei Felder warten.
       const fertig = ([eintrag]) => Boolean(eintrag.billedAt && eintrag.summary && eintrag.inboxEntryAt);
       const [call] = (await waitForStoreState(srv, (zustand) => fertig(zustand.calls), SPAWN_FRIST_MS)).calls;
 
@@ -719,7 +682,6 @@ test("IEL-B8-21: Neustart waehrend RUECKFALL - erneute Rueckfall-Zustellung legt
   });
 });
 
-// Telnyx-TeXML-Attrappe: Umleitung (Form-Feld Url) scheitert mit 500, Auflegen (Status) gelingt.
 async function starteTelnyxAttrappe() {
   const anfragen = [];
   const server = http.createServer((req, res) => {
@@ -755,9 +717,6 @@ test("IEL-B8-22: Neustart waehrend WARTET, abgelaufene Frist - Umleitung scheite
   }
 });
 
-// ---- D: IEX-A9 Scope registrierte_dids --------------------------------------------------------
-
-// EL-Inbound an, Scope registrierte_dids (die Tenant-Liste wirkt dort nicht).
 const EL_REGISTRIERT_ENV = Object.freeze({ ...EL_AN_ENV, ELEVENLABS_INBOUND_SCOPE: INBOUND_EL_SCOPE.REGISTRIERTE_DIDS });
 const EL_ALLOWLIST_ENV = Object.freeze({ ...EL_AN_ENV, ELEVENLABS_INBOUND_SCOPE: INBOUND_EL_SCOPE.ALLOWLIST });
 const ABGEWIESEN_SONDE = '"path":"abgewiesen"';
@@ -827,7 +786,6 @@ test("IEX-A9-13: registrierte_dids, Tenant-Decke erschoepft - die Kostendecke gr
   });
 });
 
-// Nummer mit Registrierungs-Beleg; fp = Fingerabdruck des Zugangs, fuer den der Beleg ausgestellt wurde.
 function belegteNummer(nummer, { fp, registrierungsId }) {
   return { ...nummer, elInboundTrunkBelegtAt: BELEG_ZEITPUNKT, elInboundTrunkZugangFp: fp, providerAgentPhoneNumberId: registrierungsId };
 }

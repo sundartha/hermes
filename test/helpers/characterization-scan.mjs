@@ -1,43 +1,7 @@
-// GAP-27 des i18n-Launch-Testkatalogs (Spezifikation in
-// tasks/i18n-tests/11-luecken-und-e2e.md): Waechter gegen den MISCHSPRACH-PIN - eine
-// byte-genaue Erwartung, die als nicht-deutsch ausgewiesen ist, aber deutschen Wortlaut
-// traegt (der historische SP5-Fall: systemPrompt eines EN-Calls gegen eine deutsche
-// Konstante gepinnt). Solche Pins zementieren einen Defekt als Sollzustand.
-//
-// REGEL (verbindlich): Ein byte-genauer Pin, dessen IST-Operand eine Nicht-DE-Sprache
-// ausweist und dessen ERWARTUNGS-Operand deutschen Text enthaelt, ist nur zulaessig, wenn
-// (a) Testname ODER Dateiname ihn als CHARAKTERISIERUNG kennzeichnet UND (b) dieselbe Datei
-// einen Sprachreinheits-Eigenschaftstest gegen GERMAN_STOPWORDS traegt. Fehlt eines von
-// beiden, ist es ein Befund.
-//
-// Das Subjekt ist bewusst auf den Mischsprach-Pin eingegrenzt und NICHT auf "jeden
-// Nicht-DE-Byte-Pin": die heutigen Nicht-DE-Byte-Pins sind der Offenlegungssatz in EN/FR
-// (eine absolute Regel aus CLAUDE.md, deren Byte-Pin erwuenscht ist) und kuratierte
-// Bundle-Werte gerenderter Direktiven. Diese als "Charakterisierung" - also als
-// vorlaeufigen Ist-Zustand - zu etikettieren waere aktiv schaedlich.
-//
-// BEWUSSTE GRENZEN (Ratschen-Mechanismus, kein Beweis). Der Waechter sieht NICHT:
-//   1. Pins, deren Ist-Operand gar keine Sprachmarkierung traegt (z.B. eine
-//      Inbound-Ablehnung ohne language-Argument);
-//   2. berechnete Erwartungswerte (Funktionsaufruf statt Literal oder Konstante);
-//   3. Template-Literale, deren deutscher Anteil aus einer Substitution stammt, die nicht
-//      modulweit als "const NAME = <Literal>" deklariert ist.
-//
-// Reines Modul ohne Datei-I/O und ohne Import-Seiteneffekte: es bekommt QUELLTEXT, keine
-// Pfade (DIP/F.I.R.S.T.-R). Das Einlesen bleibt in der Testdatei.
-//
-// LAENGENTREUE ist Pflicht: maskNonCode gibt eine Fassung zurueck, deren Offsets exakt
-// denen von source entsprechen. Nur so duerfen Positionen aus der maskierten Fassung
-// zurueck in den Rohtext gelesen werden.
+import { GERMAN_STOPWORDS } from "../helpers.js";
 
-import { GERMAN_STOPWORDS } from "../helpers.js"; // EINE Quelle fuer Deutsch-Erkennung (G5)
-
-// --- benannte Konstanten ---
-// Fallstrick F1: die Maskierung ersetzt durch NUL, NICHT durch Leerzeichen. Mit Leerzeichen
-// frisst das "\s*" in MODULE_CONST_DECLARATION das gesamte maskierte Literal, und die
-// Konstanten-Aufloesung liefert stumm nichts - der Waechter waere lautlos blind.
 const CODE_MASK = "\u0000";
-const MIN_PINNED_TEXT_LENGTH = 20; // kuerzere Erwartungen sind Codes/IDs, kein Text
+const MIN_PINNED_TEXT_LENGTH = 20;
 const FINDING_EXCERPT_LENGTH = 120;
 const EQUALITY_ASSERTION = /\bassert\.(equal|strictEqual|deepEqual|deepStrictEqual)\s*\(/g;
 const TEST_DECLARATION = /\b(test|it)\s*\(/g;
@@ -50,12 +14,7 @@ const GERMAN_FUNCTION_WORDS =
   /[äöüÄÖÜß]|\b(der|die|das|und|nicht|ist|ein|eine|fuer|mit|von|dem|den|wird|muss|kein|keine|dass|sich|noch|oder|aber|nur|bitte|danke|Sie|Ihnen|Ihre|Uhr|Termin)\b/;
 const CHARACTERIZATION_MARKER = /charakterisierung|characterization/i;
 const PURITY_COMPANION = /\bGERMAN_STOPWORDS\b/;
-// Zeichen, nach denen ein "/" eine Regex einleitet statt eine Division zu sein.
 const REGEX_PRECEDING_CHARS = "(,=:[!&|?{};+-*~^%<>";
-
-// ---------------------------------------------------------------------------
-// Maskierung
-// ---------------------------------------------------------------------------
 
 function maskRange(chars, from, to) {
   for (let i = from; i < to; i++) {
@@ -83,7 +42,7 @@ function endOfQuoted(source, from) {
       continue;
     }
     if (ch === quote) return i + 1;
-    if (ch === "\n") return i; // unterminiert - hier abbrechen statt weiterzufressen
+    if (ch === "\n") return i;
     i++;
   }
   return source.length;
@@ -127,8 +86,6 @@ function endOfSubstitution(source, from) {
   return i;
 }
 
-// Liefert das Ende inkl. Flags oder null, wenn die Regex nicht auf derselben Zeile schliesst
-// (dann ist das "/" mit hoher Wahrscheinlichkeit eine Division).
 function endOfRegex(source, from) {
   let i = from + 1;
   let inCharacterClass = false;
@@ -161,12 +118,6 @@ function literalRecord(source, from, to, isTemplate) {
   return { text, index: from, end: to, substitutions };
 }
 
-/**
- * Maskiert Kommentare, String-/Template- und Regex-Literale LAENGENTREU (NUL statt Inhalt,
- * Zeilenumbrueche bleiben stehen). Die Delimiter der String-/Template-Literale bleiben
- * sichtbar, damit sich ein Literal in der maskierten Fassung noch als Wert erkennen laesst.
- * -> { code, literals: [{ text, index, end, substitutions }] }
- */
 export function maskNonCode(source) {
   const chars = source.split("");
   const literals = [];
@@ -203,10 +154,6 @@ export function maskNonCode(source) {
   return { code: chars.join(""), literals };
 }
 
-// ---------------------------------------------------------------------------
-// Struktur-Extraktion
-// ---------------------------------------------------------------------------
-
 function lineOf(source, index) {
   let line = 1;
   for (let i = 0; i < index; i++) {
@@ -215,7 +162,6 @@ function lineOf(source, index) {
   return line;
 }
 
-/** Testbloecke aus der maskierten Fassung: [{ name, from, to }] (name = erstes Literal). */
 export function testBlocksOf(source) {
   const { code, literals } = maskNonCode(source);
   const starts = [...code.matchAll(TEST_DECLARATION)].map((m) => m.index);
@@ -226,15 +172,11 @@ export function testBlocksOf(source) {
   });
 }
 
-// Haengt die Texte der ${IDENT}-Substitutionen an, damit ein Template wie
-// `${DISCLOSURE_DE} Here's what...` in einem EN-Test als deutschtragend auffaellt.
-// lookupText loest genau EINE Ebene auf (kein Zyklus moeglich).
 function withSubstitutions(literal, lookupText) {
   const resolved = literal.substitutions.map(lookupText).filter(Boolean);
   return [literal.text, ...resolved].join(" ");
 }
 
-/** Modulweite "const NAME = <Literal>" -> Map<name, text> (Substitutionen eine Ebene tief). */
 function constLiteralsOf(source) {
   const { code, literals } = maskNonCode(source);
   const literalsByName = new Map();
@@ -249,8 +191,6 @@ function constLiteralsOf(source) {
   );
 }
 
-// Argument-Spannen eines Aufrufs, klammer-balanciert ueber die MASKIERTE Fassung gescannt
-// (maskierte Strings koennen die Klammer- und Komma-Zaehlung nicht mehr stoeren).
 function argumentSpansOf(code, openIndex) {
   const spans = [];
   let depth = 0;
@@ -272,8 +212,6 @@ function argumentSpansOf(code, openIndex) {
   return spans;
 }
 
-// Fallstrick F2: der Rohtext kommt aus source, NICHT aus code - sonst waeren die
-// Sprachmarker ("en"/"fr") in den Argumenten wegmaskiert und der Waechter blind.
 function rawSpan(source, span) {
   return source.slice(span.from, span.to).trim();
 }
@@ -287,8 +225,6 @@ function soleLiteralIn({ source, literals }, span) {
   return before === "" && after === "" ? only : null;
 }
 
-// Erwartungswert eines Pins: entweder genau ein Literal in der Spanne oder ein Bezeichner
-// aus den modulweiten Konstanten. Alles andere (berechnete Werte) ist kein Byte-Pin.
 function expectedTextOf(context, span) {
   const literal = soleLiteralIn(context, span);
   if (literal) return withSubstitutions(literal, (name) => context.constLiterals.get(name));
@@ -296,10 +232,6 @@ function expectedTextOf(context, span) {
   return context.constLiterals.get(identifier) ?? null;
 }
 
-/**
- * Gleichheits-Assertions mit aufgeloestem Erwartungswert:
- * [{ index, actual, expected }] - actual/expected als Rohtext aus source.
- */
 function equalityPinsOf(source) {
   const { code, literals } = maskNonCode(source);
   const context = { source, literals, constLiterals: constLiteralsOf(source) };
@@ -315,8 +247,6 @@ function equalityPinsOf(source) {
   return pins;
 }
 
-// Nackter Bezeichner als Ist-Operand -> die naechstgelegene vorangehende Zuweisung liefert
-// die Sprachmarkierung (Muster: "const a = LOCALES.en.disclosure(x); assert.equal(a, ...)").
 function declaredValueOf({ source, code }, name, beforeIndex) {
   const declaration = new RegExp(`\\b(?:const|let|var)\\s+${name}\\s*=\\s*`, "g");
   let nearest = null;
@@ -339,20 +269,10 @@ function testNameAt(blocks, index) {
   return block ? block.name : "";
 }
 
-// ---------------------------------------------------------------------------
-// Regel
-// ---------------------------------------------------------------------------
-
-/** true, wenn text deutsche Funktionswoerter/Umlaute ODER GERMAN_STOPWORDS trifft. */
 function containsGerman(text) {
   return GERMAN_FUNCTION_WORDS.test(text) || GERMAN_STOPWORDS.test(text);
 }
 
-/**
- * Alle byte-genauen Pins einer Datei, deren Ist-Operand eine Nicht-DE-Sprache ausweist.
- * Unabhaengig davon, ob der Erwartungswert deutsch ist - das ist das Lebendigkeits-Mass
- * fuer den Detektor.
- */
 export function nonDeBytePinsOf({ source, fileName }) {
   const { code } = maskNonCode(source);
   const blocks = testBlocksOf(source);
@@ -378,7 +298,6 @@ function isProperlyMarked(pin, fileName, hasPurityCompanion) {
   return marked && hasPurityCompanion;
 }
 
-/** Die Befunde nach der Regel oben: [{ fileName, line, testName, expected }]. */
 export function characterizationFindings({ source, fileName }) {
   const hasPurityCompanion = PURITY_COMPANION.test(source);
   return nonDeBytePinsOf({ source, fileName })

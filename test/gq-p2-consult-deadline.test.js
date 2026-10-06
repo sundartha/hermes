@@ -1,22 +1,3 @@
-// GQ-P2 (Gespraechsqualitaet, Phase 2): die Offen-Frist des In-Call-Consults.
-//
-// Gegenstand sind die Abnahmen der Phase:
-//   1) eine Antwort nach ~10 s wird angenommen und landet im HINTERGRUND (+ Gegenbeispiel
-//      nach Ablauf der Offen-Frist);
-//   2) fail-closed: abgelaufene ODER fehlende Frist lehnt ab, Consult #0 (Klingelzeit)
-//      stirbt dagegen nie an der Uhr;
-//   3) zwei Turns ohne Antwort toeten die Rueckfrage NICHT mehr (W2-Gegenbeweis);
-//   4) kein Ueberbrueckungstext behauptet eine fehlende Faehigkeit;
-//   5) die Offen-Frist traegt zwei volle Poll-Zyklen (Herleitung festgenagelt).
-//
-// Testnamen tragen bewusst KEINE Katalog-ID (GAP-/PROMPT-/...) am Namensanfang - sonst
-// landen sie still im Gates-Lauf (package.json config.i18nCatalogPattern), wo Rot erlaubt
-// ist (Lehre catalog-id-prefix-misroutes-tests). Praefix ist "GQ-P2-<n>:".
-//
-// Naht wie test/al-p14-in-call-consult.test.js: lokaler node:http-Anthropic-Mock,
-// DATA_DIR + Flags VOR dem ersten config-Import, danach dynamischer Import. Kein
-// Server-Spawn, kein Netz, kein Sleep (P12/R, T9) - Fristen werden ueber askedAt/
-// answeredAt kuenstlich verschoben.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -89,24 +70,17 @@ after(async () => {
   await new Promise((r) => server.close(r));
 });
 
-// Naechster freier vorgesaete Call. Nimmt einen Datensatz aus dem Pool statt neue
-// anzulegen (createCall braucht ein Outbound-Gate, das hier nicht Gegenstand ist).
 function nextCall() {
   callSeq += 1;
   return store.getCall(`call_gqp2_${callSeq}`);
 }
 
-// Ein Call, dessen Consult #0-Klassifikation stabil ist: answeredAt liegt WEIT vor jedem
-// askedAt, das die Tests kuenstlich setzen (bis zu CONSULT_OPEN_MAX_MS = 300000 ms
-// zurueck) - jeder danach emittierte Consult bleibt zweifelsfrei ein In-Call-Consult.
 function inCallReadyCall() {
   const call = nextCall();
   call.answeredAt = new Date(Date.now() - 600_000).toISOString();
   return call;
 }
 
-// Ein Call, der ALLE Registrierungs-Bedingungen fuer decideConsultRequest erfuellt:
-// frischer Poll + Anker nahe der Minutengrenze null (consultFitsBillingMinute haelt).
 function turnReadyCall() {
   const call = nextCall();
   call.answeredAt = new Date().toISOString();
@@ -114,17 +88,10 @@ function turnReadyCall() {
   return call;
 }
 
-// Ops-Tests brauchen "active" nur waehrend der answerConsult-Pruefung (Regel 1: der
-// Guthaben-Gate liest LIVE laufende Calls). Ohne diesen Abschluss wuerde jeder mit einer
-// alten answeredAt bestueckte Testcall dem Tenant Live-Minuten anrechnen und die
-// naechsten Turn-Tests am Budget-Gate scheitern lassen (KEIN Testartefakt eines echten
-// Anrufs). Reiner Testaufraeumer, kein Produktionscode.
 function endCall(call) {
   call.status = "ended";
   return call;
 }
-
-// ---------- 1: Annahme innerhalb der Offen-Frist + Gegenbeispiel danach ----------
 
 test("GQ-P2-1: eine Antwort nach ~10 s wird angenommen und landet im HINTERGRUND", () => {
   const call = inCallReadyCall();
@@ -140,7 +107,6 @@ test("GQ-P2-1: eine Antwort nach ~10 s wird angenommen und landet im HINTERGRUND
   assert.ok(mergedFacts >= 1);
   assert.match(claude.systemPrompt(store.getCall(call.id)), /Freitag passt auch/);
 
-  // Gegenbeispiel: derselbe Aufruf, aber die Offen-Frist ist laengst um.
   const call2 = inCallReadyCall();
   store.emitConsult(call2.id, [QUESTION]);
   const stored2 = store.getCall(call2.id);
@@ -155,8 +121,6 @@ test("GQ-P2-1: eine Antwort nach ~10 s wird angenommen und landet im HINTERGRUND
   endCall(store.getCall(call2.id));
 });
 
-// ---------- 2: fail-closed - abgelaufen ODER fehlende Frist, Consult #0 stirbt nie ----------
-
 test("GQ-P2-2: nach Ablauf der Offen-Frist bleibt die Antwort draussen (fail-closed)", () => {
   const call = inCallReadyCall();
   store.emitConsult(call.id, [QUESTION]);
@@ -168,7 +132,6 @@ test("GQ-P2-2: nach Ablauf der Offen-Frist bleibt die Antwort draussen (fail-clo
   });
   assert.equal(res.outcome, defaults.CONSULT_ANSWER.DEADLINE_PASSED);
 
-  // fehlende Frist ist fail-closed, nicht fail-open: kein openMs -> Ablehnung.
   const call2 = inCallReadyCall();
   store.emitConsult(call2.id, [QUESTION]);
   const stored2 = store.getCall(call2.id);
@@ -180,14 +143,12 @@ test("GQ-P2-2: nach Ablauf der Offen-Frist bleibt die Antwort draussen (fail-clo
   });
   assert.equal(res2.outcome, defaults.CONSULT_ANSWER.DEADLINE_PASSED);
 
-  // Gegenbeispiel: Consult #0 (Klingelzeit) - askedAt VOR answeredAt, also KEIN
-  // In-Call-Consult. Er stirbt nie an der Uhr, selbst mit absurd kleinem openMs.
   const call3 = nextCall();
   const askedBeforePickup = new Date(Date.now() - 3_600_000).toISOString();
   store.emitConsult(call3.id, [QUESTION]);
   const stored3 = store.getCall(call3.id);
   stored3.consults[0].askedAt = askedBeforePickup;
-  stored3.answeredAt = new Date().toISOString(); // Abnahme NACH der Rueckfrage
+  stored3.answeredAt = new Date().toISOString();
   const res3 = store.answerConsult(stored3.id, {
     eventId: stored3.consults[0].id,
     facts: ["Ring-Time-Antwort"],
@@ -199,8 +160,6 @@ test("GQ-P2-2: nach Ablauf der Offen-Frist bleibt die Antwort draussen (fail-clo
   endCall(store.getCall(call2.id));
   endCall(store.getCall(call3.id));
 });
-
-// ---------- 3: zwei Turns ohne Antwort toeten die Rueckfrage NICHT ----------
 
 test("GQ-P2-3: zwei Turns ohne Antwort toeten die Rueckfrage NICHT (Gegenbeweis zu W2)", async () => {
   bodies = [];
@@ -232,21 +191,17 @@ test("GQ-P2-3: zwei Turns ohne Antwort toeten die Rueckfrage NICHT (Gegenbeweis 
   assert.ok(!noSecondMarker.includes(LOCALES.de.prompt.turnControl.consultPending));
   assert.equal(t4.speech, "Weiter im Text.");
 
-  // die Rueckfrage lebt noch - eine Antwort wird angenommen.
   const accepted = inCall.acceptConsultAnswer(store.getCall(call.id), {
     eventId: store.getCall(call.id).consults[0].id,
     facts: ["Freitag ist ok"],
   });
   assert.equal(accepted.outcome, defaults.CONSULT_ANSWER.ACCEPTED);
 
-  // Gegenbeispiel: dieselbe Turn-Folge, aber askedAt liegt vor der Offen-Frist.
   bodies = [];
   queue = [withTools("", toolCall(CONSULT, { question: QUESTION }))];
   const call2 = turnReadyCall();
   await claude.agentTurn(call2, SUBSTANTIAL);
   const stored2 = store.getCall(call2.id);
-  // askedAt UND answeredAt gemeinsam zurueckversetzen (askedAt bleibt >= answeredAt,
-  // sonst faellt der Consult aus der In-Call-Klassifikation, Muster AL-P14-19).
   const askedAtMs2 = Date.now() - inCall.CONSULT_OPEN_MS - 1;
   stored2.answeredAt = new Date(askedAtMs2 - 1000).toISOString();
   stored2.consults[0].askedAt = new Date(askedAtMs2).toISOString();
@@ -263,10 +218,6 @@ test("GQ-P2-3: zwei Turns ohne Antwort toeten die Rueckfrage NICHT (Gegenbeweis 
   assert.equal(rejected.outcome, defaults.CONSULT_ANSWER.ALREADY_ANSWERED);
 });
 
-// ---------- 4: kein Ueberbrueckungstext behauptet eine fehlende Faehigkeit ----------
-
-// Muster bench-must-reproduce-defect: die Denylist muss auf einem Negativ-Literal treffen
-// koennen, sonst kann dieser Test nie rot werden.
 const FALSE_CAPABILITY_DENYLIST =
   /kein[e]? (Funktion|Möglichkeit)|not able to|no (function|way) to|aucune (fonction|possibilité)/i;
 
@@ -284,14 +235,11 @@ test("GQ-P2-4: kein Ueberbrueckungstext behauptet eine fehlende Faehigkeit", () 
       `${lang}: consultTimeout behauptet eine fehlende Faehigkeit`,
     );
   }
-  // Gegenprobe: die Denylist ist nicht leer - sie kann tatsaechlich treffen.
   assert.match(
     "Ich habe leider keine Funktion, um das zu konsultieren.",
     FALSE_CAPABILITY_DENYLIST,
   );
 });
-
-// ---------- 5: die Offen-Frist traegt zwei volle Poll-Zyklen ----------
 
 test("GQ-P2-5: die Offen-Frist traegt zwei volle Poll-Zyklen", () => {
   assert.ok(
@@ -302,8 +250,6 @@ test("GQ-P2-5: die Offen-Frist traegt zwei volle Poll-Zyklen", () => {
     config.tenancy.consultOpenMs > inCall.CONSULT_WAIT_MS,
     "Offen-Frist muss laenger sein als die Warte-Frist",
   );
-  // Gegenbeispiel: die Beziehung ist NICHT zufaellig erfuellt - eine vertauschte Annahme
-  // (Warten laenger als Sterben) waere strukturell falsch.
   assert.ok(!(inCall.CONSULT_WAIT_MS >= config.tenancy.consultOpenMs));
 });
 

@@ -1,6 +1,3 @@
-// IE6-S2: Testpflicht "neu" - die Realtime-Bridge ist nicht abgeschaltet, sondern NICHT
-// ERREICHBAR. Alte Realtime-Schalter werden ausdruecklich gesetzt; der Boot laeuft
-// trotzdem sauber, kein Media-Stream-Pfad, kein WebSocket-Upgrade.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -17,8 +14,8 @@ import {
 
 const HTTP_OK = 200;
 const HTTP_SWITCHING_PROTOCOLS = 101;
-const WS_SAMPLE_KEY = "dGhlIHNhbXBsZSBub25jZQ=="; // RFC 6455, Beispiel-Nonce
-const REARM_REST_MS = 10_000; // Muster max-duration-rearm.test.js
+const WS_SAMPLE_NONCE = "dGhlIHNhbXBsZSBub25jZQ==";
+const REARM_REST_MS = 10_000;
 const REARM_MAX_DURATION_S = 180;
 const ALTER_OPENAI_SCHLUESSEL = "sk-alt-nie-gelesen";
 
@@ -29,16 +26,12 @@ const ALTE_REALTIME_SCHALTER_AN = Object.freeze({
   REALTIME_VOICE: "shimmer",
 });
 
-// Normalisierung server-generierter Zufallsteile (Muster IE6-S1-3): callId=call_... und
-// turnToken=... unterscheiden sich zwischen zwei Servern (server-generiert, zufaellig).
 function normalizeTexml(xml) {
   return xml
     .replaceAll(/callId=call_[a-zA-Z0-9_]+/g, "callId=call_X")
     .replaceAll(/turnToken=[a-f0-9]+/g, "turnToken=X");
 }
 
-// Upgrade-Anfrage an einen Pfad; loest mit {upgraded, status} auf ('upgrade' ODER
-// 'response' feuert bei einer HTTP/WS-Verhandlung immer genau eines von beiden).
 function requestWebSocketUpgrade(srv, pfad) {
   return new Promise((resolve, reject) => {
     const req = http.request({
@@ -49,7 +42,7 @@ function requestWebSocketUpgrade(srv, pfad) {
         Connection: "Upgrade",
         Upgrade: "websocket",
         "Sec-WebSocket-Version": "13",
-        "Sec-WebSocket-Key": WS_SAMPLE_KEY,
+        "Sec-WebSocket-Key": WS_SAMPLE_NONCE,
       },
     });
     req.on("upgrade", (res) => {
@@ -174,7 +167,6 @@ test("IE6-S2-6: Render fail-closed - unbekannte Direktive (stream) wirft, kein S
     () => renderDirectives([{ kind: "stream", url: "wss://x", params: [] }]),
     /unbekannte Direktive: stream/,
   );
-  // IEL-B7: DIAL_SIP ist die einzige Erweiterung seit IE6-S2; STREAM bleibt draussen.
   assert.deepEqual(Object.keys(direktiven.DIRECTIVE), ["SAY", "GATHER", "HANGUP", "REDIRECT", "DIAL_SIP"]);
   assert.ok(!("stream" in direktiven));
 });

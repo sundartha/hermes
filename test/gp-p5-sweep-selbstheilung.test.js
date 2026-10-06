@@ -1,15 +1,3 @@
-// GP-P5-Selbstheilung: der Stunden-Sweep loest einen UNBEKANNTEN Zahlungsmittel-Typ
-// selbst bei Stripe auf, bevor er ueber den Wiederanlauf entscheidet.
-//
-// Warum das die eigentliche Behebung ist: GP-P2 fuehrte das Typ-Feld additiv ein, ohne
-// Backfill; isHoldCapablePaymentMethodType ist fail-closed, null gilt als ungeeignet.
-// Damit war JEDER vor GP-P2 gebundene Mandant dauerhaft und lautlos ausgeschlossen - am
-// Produktionsbestand (2026-09-15) ALLE drei zahlenden. Ein Nachtrag-Skript haette das
-// einmal geheilt; die Luecke selbst bliebe und kehrte beim naechsten Feld dieser Art
-// wieder. Der Sweep fragt deshalb selbst nach.
-//
-// Rein und offline (Muster gp-p4-zeitgesteuerter-wiederanlauf.test.js): Fake-Store,
-// Stripe-Naht als Spy, kein Netz.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ops from "../src/store/state-ops.js";
@@ -67,7 +55,6 @@ function baueState({ paymentMethodType = null, anzahlFailed = 1, mitZahlungsmitt
   return state;
 }
 
-// Stripe-Naht als Spy: zaehlt die Abfragen und merkt sich die gefragte Referenz.
 function makeBillingSpy(antwort) {
   const spy = {
     gefragt: [],
@@ -103,8 +90,6 @@ async function fahre({ state, billing, provision = async () => {} }) {
   return { anstoesse, store };
 }
 
-// Der Kernfall: ein Bestands-Mandant ohne Typ wird im SELBEN Lauf aufgeloest und
-// angestossen - keine zweite Runde, kein Skript, kein Mensch.
 test("unbekannter Typ wird im selben Lauf aufgeloest und der Mandant angestossen", async () => {
   const state = baueState({ paymentMethodType: null });
   const billing = makeBillingSpy(PAYMENT_METHOD_TYPE_CARD);
@@ -114,8 +99,6 @@ test("unbekannter Typ wird im selben Lauf aufgeloest und der Mandant angestossen
   assert.deepEqual(anstoesse, [TENANT], "nach dem Aufloesen greift der Wiederanlauf sofort");
 });
 
-// Die Wahrheit vom Anbieter wird NICHT geschoent: ein Wallet bleibt ungeeignet. Die
-// Heilung beantwortet nur die offene Frage, sie aendert das Urteil nicht.
 test("aufgeloester Wallet-Typ bleibt ungeeignet - kein Anstoss", async () => {
   const state = baueState({ paymentMethodType: null });
   const billing = makeBillingSpy(WALLET_TYPE);
@@ -124,8 +107,6 @@ test("aufgeloester Wallet-Typ bleibt ungeeignet - kein Anstoss", async () => {
   assert.deepEqual(anstoesse, [], "ein Wallet traegt keinen Hold - auch aufgeloest nicht");
 });
 
-// Hoechstens EINE Abfrage je Mandant: nach dem ersten Erfolg ist die Frage beantwortet.
-// Sonst waere aus der Heilung ein stuendlicher Rundruf an Stripe geworden.
 test("ein bereits gesetzter Typ wird nie erneut erfragt", async () => {
   const state = baueState({ paymentMethodType: PAYMENT_METHOD_TYPE_CARD });
   const billing = makeBillingSpy(PAYMENT_METHOD_TYPE_CARD);
@@ -133,9 +114,6 @@ test("ein bereits gesetzter Typ wird nie erneut erfragt", async () => {
   assert.deepEqual(billing.gefragt, [], "keine Abfrage, wenn der Typ schon dasteht");
 });
 
-// Eng begrenzt: nur wo der unbekannte Typ eine Entscheidung BLOCKIERT. Ein Mandant mit
-// laufender Nummer wird nicht angefasst - sonst haette der erste Takt nach dem Deploy
-// den ganzen Bestand bei Stripe abgefragt.
 test("ohne gescheiterte Nummer wird gar nicht erst gefragt", async () => {
   const state = baueState({ paymentMethodType: null, anzahlFailed: 0 });
   const billing = makeBillingSpy(PAYMENT_METHOD_TYPE_CARD);
@@ -150,8 +128,6 @@ test("ohne hinterlegtes Zahlungsmittel wird gar nicht erst gefragt", async () =>
   assert.deepEqual(billing.gefragt, []);
 });
 
-// Fail-soft in beide Richtungen: ein unerreichbares Stripe darf weder den Lauf reissen
-// noch einen Typ erfinden. Der naechste Takt fragt erneut.
 test("Stripe-Fehler: kein Wurf, nichts geschrieben, kein Anstoss", async () => {
   const state = baueState({ paymentMethodType: null });
   const billing = makeBillingSpy(new Error("Stripe unerreichbar"));
@@ -160,8 +136,6 @@ test("Stripe-Fehler: kein Wurf, nichts geschrieben, kein Anstoss", async () => {
   assert.deepEqual(anstoesse, []);
 });
 
-// Ohne billing-Naht (Payment aus, aeltere Verdrahtung) bleibt der Zweig byte-identisch
-// zum Bestand - die Heilung ist additiv, keine neue Vorbedingung.
 test("ohne billing-Naht laeuft der Sweep unveraendert weiter", async () => {
   const state = baueState({ paymentMethodType: PAYMENT_METHOD_TYPE_CARD });
   const { anstoesse } = await fahre({ state, billing: null });

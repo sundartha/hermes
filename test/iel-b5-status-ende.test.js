@@ -1,15 +1,3 @@
-// ---- IEL-B5: Status-Callback und Beenden fuer ueberbrueckte Inbound-Beine -----------------
-// Ein ueberbrueckter Inbound-Call (Kostenprofil telnyx_inbound_el_convai, GEBUNDEN) wird
-// weder vom /voice/status-Callback noch von Cap/Geld-Wache/cancel_call vor dem Transkript
-// abgeschlossen: der Status-Callback setzt nur das Carrier-Ende und startet den Nachlauf-Poll;
-// die Beender legen das Traeger-Bein auf und holen danach das Ergebnis (nie DELETE).
-//
-// Im Prozess (1-16): echte state-ops, echter finishCall, echte EL-Fabrik, echter Lifecycle,
-// echte Routen (Harness test/_iel-inbound-harness.js). Kindprozess (17-20): echter Server,
-// Anbieter-Attrappe als HTTP-Server - belegt die Verdrahtung in server.js/app.js.
-//
-// Namen beginnen mit "IEL-B5-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern,
-// laeuft also in npm test.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -53,8 +41,6 @@ import {
   starteAnbieterAttrappe,
 } from "./_iel-inbound-harness.js";
 
-// Die lokalen Routen-Aufrufe gehen am echten fetch vorbei an der Anbieter-Attrappe, die
-// withFetch fuer den Ergebnisabruf installiert.
 const echterFetch = globalThis.fetch;
 
 const EL_INBOUND = KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
@@ -69,9 +55,6 @@ const NACHLAUF_LOG_MUSTER = /\[el-inbound\] nachlauf gestartet/;
 const EINMAL = 1;
 const ZWEIMAL = 2;
 
-// ---- Build: Datensaetze ------------------------------------------------------------------
-
-// Budget-Inbound (heutiger Weg) mit denselben Ankern wie seedInboundElCall.
 function seedBudgetInboundCall(state, { answeredVorS }) {
   const call = ops.createCall(state, {
     direction: "inbound",
@@ -86,7 +69,6 @@ function seedBudgetInboundCall(state, { answeredVorS }) {
   return call;
 }
 
-// WARTET: Profil gesetzt, der Agent hat sich noch nicht gebunden.
 function seedWartenderInboundCall(state) {
   const call = seedBudgetInboundCall(state, { answeredVorS: GESPRAECH_S });
   call.costProfile = EL_INBOUND;
@@ -113,7 +95,6 @@ function seedZombie(state, { nachlaufVorS = null } = {}) {
   return call;
 }
 
-// ---- Build: Tor (haelt einen Abruf offen) ------------------------------------------------
 function haltAbrufFest(anbieter) {
   let freigeben;
   const tor = new Promise((resolve) => {
@@ -125,8 +106,6 @@ function haltAbrufFest(anbieter) {
 
 const fertig = async () => okAntwort(CONVERSATION_DONE_WITH_ANALYSIS);
 const laeuftNoch = async () => okAntwort(CONVERSATION_IN_PROGRESS);
-
-// ---- Build: Bank (Harness + Lifecycle + Voice- und Cancel-Route) -------------------------
 
 function baueLifecycle({ harness, folge }) {
   const budgetTimers = [];
@@ -147,7 +126,6 @@ function baueLifecycle({ harness, folge }) {
     reattachActiveCallCore,
     cappedEndedAtMs: ops.cappedEndedAtMs,
     classifyCallTime: ops.classifyCallTime,
-    // Die Achse sperrt: nur rearmBudgetWatchdogs + ein manuell gefeuerter Takt fragen sie.
     blockingBudgetAxis: () => "tenant",
     setBudgetWatchTimer: (fn) => {
       budgetTimers.push(fn);
@@ -218,8 +196,6 @@ async function baueBank(state) {
   app.use(baueVoiceRoutes({ harness, lifecycle }));
   app.use(baueCancelRoutes({ harness, folge }));
   const server = await lausche(app);
-  // Ein failed/cancelled-Abschluss faehrt kein summarizeCall - der Beleg "Ergebnis vor der
-  // Buchung" ist deshalb die Transkriptlaenge im Moment von markBilled.
   const transkriptBeiBuchung = [];
   const { markBilled } = harness.store;
   harness.store.markBilled = (id) => {
@@ -248,7 +224,6 @@ async function baueBank(state) {
   };
 }
 
-// Faehrt run() mit Bank und Attrappe und raeumt die Bank auch im Fehlerfall ab.
 async function mitBank({ state, anbieter }, run) {
   const bank = await baueBank(state);
   try {
@@ -259,14 +234,11 @@ async function mitBank({ state, anbieter }, run) {
   return bank;
 }
 
-// Wie viele Transkriptzeilen sah summarizeCall beim (ersten) Abschluss?
 function rollenDerErstenZusammenfassung([zusammenfassung]) {
   return zusammenfassung.rollen.length;
 }
 
 const warteAufBuchung = (bank) => waitUntil(() => bank.harness.gebucht.length === EINMAL, WARTE);
-
-// ---- 1 - 3: reine Auswahl ----------------------------------------------------------------
 
 test("IEL-B5-1: hangUpForCall laesst KEIN_EL_INBOUND, WARTET und RUECKFALL unveraendert, GEBUNDEN bekommt den Bruecken-Thunk", async () => {
   const state = ops.makeDefaultState();
@@ -313,8 +285,6 @@ test("IEL-B5-3: elevenLabsHangUpAction liefert fuer Inbound-EL nie einen DELETE-
   assert.equal(typeof elevenLabsHangUpAction(endActiveCall, ohneProfil), "function");
 });
 
-// ---- 4: begrenztes Ergebnis-Warten -------------------------------------------------------
-
 test("IEL-B5-4: awaitAndPersistInboundElResult wartet begrenzt, persistiert ohne DELETE und ohne Anbieter-Zusammenfassung", async () => {
   const state = ops.makeDefaultState();
   const call = seedInboundElCall(state, { answeredVorS: GESPRAECH_S });
@@ -339,8 +309,6 @@ test("IEL-B5-4: awaitAndPersistInboundElResult wartet begrenzt, persistiert ohne
   await withFetch(unberuehrt.fetch, () => harness.el.awaitAndPersistInboundElResult(wartend.id));
   assert.equal(unberuehrt.gets, 0);
 });
-
-// ---- 5 - 9: /voice/status ----------------------------------------------------------------
 
 test("IEL-B5-5: Status -> Poll - completed setzt nur das Carrier-Ende, der Poll schliesst mit Transkript vor finishCall ab", async () => {
   const state = ops.makeDefaultState();
@@ -470,8 +438,6 @@ test("IEL-B5-9: Negativ-Tabelle - WARTET, RUECKFALL und Outbound-EL schliessen w
   }
 });
 
-// ---- 10 - 12: Cap und Geld-Wache ---------------------------------------------------------
-
 test("IEL-B5-10: Cap -> Status - Traeger aufgelegt, Ergebnis vor der Buchung persistiert, kein DELETE, genau eine Buchung", async () => {
   const state = ops.makeDefaultState();
   const call = seedZombie(state);
@@ -554,8 +520,6 @@ test("IEL-B5-12: Geld-Wache -> Poll - der Beende-Thunk persistiert einmal, die S
   assert.equal(anbieter.deletes, 0);
 });
 
-// ---- 13 - 16: cancel_call ----------------------------------------------------------------
-
 test("IEL-B5-13: cancel_call GEBUNDEN - Traeger aufgelegt, Ergebnis vor der Buchung, Kurzantwort, kein DELETE", async () => {
   const state = ops.makeDefaultState();
   const call = seedInboundElCall(state, { answeredVorS: GESPRAECH_S });
@@ -637,8 +601,6 @@ test("IEL-B5-16: cancel_call Budget-Inbound - Kurzantwort, kein Abruf, Store-Fol
   assert.deepEqual(bank.folge, [["endCallRecord", "cancelled"], ["endCall", TRAEGER_SID], ["markBilled"]]);
 });
 
-// ---- 17 - 20: Kindprozess (Verdrahtung server.js / app.js) -------------------------------
-
 const SPAWN_CALL_ID = "call_iel_b5";
 const SPAWN_FRIST_MS = 15000;
 const SPAWN_WARTE = { timeoutMs: SPAWN_FRIST_MS, pollIntervalMs: 20 };
@@ -653,7 +615,6 @@ const KURZE_FRIST_S = 3600;
 function gebundenerSeed({ answeredVorS = FRISCH_BEANTWORTET_S, maxDurationS = KURZE_FRIST_S, extra = {} } = {}) {
   const answeredAt = isoVor(answeredVorS);
   return seedState({
-    // Kein LLM-Netzaufruf in finishCall.
     settings: { allowSummaries: false },
     calls: [
       seedCall({

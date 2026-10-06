@@ -1,18 +1,8 @@
-// GQ-H1-a: der pg-Flush gleicht ein geschrumpftes Transkript ueber den INHALT ab, nicht
-// ueber einen Zeilenzaehler - flushTranscript (store/pg.js) haengt sonst INDEX-BASIERT an
-// (DB-Zeile i == transcript[i]) und kennt kein Schrumpfen des Spiegels. Bis IE6-S1 konnte
-// der Telnyx-Shim eine verworfene Antwort ueber dropLastAgentTranscript entfernen; die
-// Naht selbst (Inhalts-Abgleich statt Zeilenzaehler) bleibt als Regressionsschutz stehen -
-// ein KUENFTIGER Schreiber, der den Spiegel mutiert, darf sich auf sie verlassen. Test
-// gegen echtes Postgres (pglite, kein Netz) MIT Re-Hydrierung - nur so ist die Persistenz
-// belegt und nicht der In-Memory-Spiegel.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "./pg-helpers.js";
 
-// Frischer Store auf DERSELBEN pglite-Instanz: liest den Spiegel aus der DB neu auf, damit
-// die Pruefung die Persistenz trifft und nicht den Speicher (Muster aus store-pg.test.js).
 async function reopen(db) {
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
@@ -31,10 +21,6 @@ function seedCall(store) {
   });
 }
 
-// save() ist fire-and-forget UND wird zusammengefasst: ohne ein erzwungenes Flush zwischen
-// Schreiben und Schrumpfen erreicht der Zwischenstand die DB nie, und der Test misst den
-// Defekt nicht (er war so in beiden Faellen gruen). Erzwingt den Flush-Zustand, den es
-// live zwischen zwei Schreibvorgaengen desselben Calls gibt.
 async function persistiere(store) {
   await store.save();
 }
@@ -48,9 +34,6 @@ async function transcriptAusDb(store, db, callId) {
   return rows.rows.map((r) => `${r.role}:${r.text}`);
 }
 
-// Testlokaler Ersatz fuer den entfernten dropLastAgentTranscript-Schreibweg: entfernt die
-// letzte Zeile direkt am Spiegel (Muster GQ-H1-Regressionstest, s. Modulkopf) - misst NUR
-// das Schrumpfen-Verhalten des Flushs, nicht mehr einen Produktions-Schreibweg.
 function schrumpfeSpiegel(store, callId) {
   store.getCall(callId).transcript.pop();
 }
@@ -60,7 +43,7 @@ test("GQ-H1-PG-1: eine am Spiegel entfernte Zeile verschwindet auch aus der DB",
   const call = seedCall(store);
   store.addTranscript(call.id, "caller", "Was wuerde ich das wissen?");
   store.addTranscript(call.id, "agent", "nie gesprochen");
-  await persistiere(store); // die Antwort steht jetzt WIRKLICH in der DB
+  await persistiere(store);
 
   schrumpfeSpiegel(store, call.id);
 
@@ -68,9 +51,6 @@ test("GQ-H1-PG-1: eine am Spiegel entfernte Zeile verschwindet auch aus der DB",
 });
 
 test("GQ-H1-PG-2: nach einem Schrumpfen landen FOLGENDE Segmente weiterhin in der DB", async () => {
-  // Der stille Datenverlust: ohne den Inhalts-Abgleich bliebe persisted (2) > length (1),
-  // die Anhaenge-Schleife liefe nie wieder, und alles Weitere dieses Gespraechs waere nur
-  // noch im Speicher - bis zum naechsten Deploy.
   const { store, db } = await makePgTestStore();
   const call = seedCall(store);
   store.addTranscript(call.id, "caller", "Was wuerde ich das wissen?");

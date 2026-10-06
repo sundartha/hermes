@@ -1,10 +1,3 @@
-// IEL-B10: das Geheimnis-Werkzeug scripts/iel-geheimnisse.mjs (Spec E16, E19, E21, E22).
-//
-// KEIN NETZ: in-process laeuft jeder Aufruf ueber die Welt-Attrappe (Render, ElevenLabs, Init-Ziel,
-// TTS), die Adresse, Methode, Koerper und Kopf mitschreibt. "Nichts geschrieben" ist damit gemessen.
-// Die Zufallsquelle ist deterministisch, aber je Aufruf VERSCHIEDEN (gleiche Fixture-Werte fuer
-// Passwort und Token bewiesen keine Zuordnung). Der Kindprozess-Fall (14) laeuft gegen einen lokalen
-// Stub (PORT 0) mit dem Import-Spion aus B9.
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -55,7 +48,6 @@ const FUELL_BYTE_USER = 0xa1;
 const FUELL_BYTE_PASSWORT = 0xb2;
 const FUELL_BYTE_TOKEN = 0xc3;
 const FUELL_BYTES = Object.freeze([FUELL_BYTE_USER, FUELL_BYTE_PASSWORT, FUELL_BYTE_TOKEN]);
-// Liefert die Zufallsquelle nur ein Viertel der Bytes, faellt jedes Geheimnis unter die Mindestlaenge.
 const ZU_KURZ_TEILER = 4;
 const INIT_PROBEN = 2;
 const DID = "+4930123456788";
@@ -74,7 +66,6 @@ const SEIT = "2026-09-15T10:00:00.000Z";
 const K_GRENZE = 5;
 const MS_JE_S = 1000;
 
-// Die erwarteten Werte aus derselben Fuellfolge wie die Zufallsquelle (Reihenfolge der Erzeugung).
 const ERWARTET = Object.freeze({
   sipUser: Buffer.alloc(SIP_USER_ZUFALLS_BYTES, FUELL_BYTES[0]).toString(HEX),
   sipPassword: Buffer.alloc(GEHEIMNIS_ZUFALLS_BYTES, FUELL_BYTES[1]).toString(HEX),
@@ -160,10 +151,7 @@ function szenario(felder = {}) {
   };
 }
 
-// ---- Welt-Attrappe ---------------------------------------------------------------------------
-
 function antwort({ status, koerper, aufruf }) {
-  // Fehlerfall: der Koerper SPIEGELT den gesendeten Koerper - wer ihn liest, leakt den Wert.
   const inhalt = status >= HTTP_FEHLER_AB ? aufruf.koerper : koerper;
   const text = typeof inhalt === "string" ? inhalt : JSON.stringify(inhalt ?? null);
   return {
@@ -306,13 +294,10 @@ async function laufe(argv, szenarioFelder = {}, abhFelder = {}) {
   return { code, ausgabe: zeilen.join(""), aufrufe: welt.aufrufe, zustand: welt.zustand };
 }
 
-// ---- Pruef-Helfer --------------------------------------------------------------------------------
-
 function schreibendeAufrufe(aufrufe) {
   return aufrufe.filter((aufruf) => aufruf.methode !== METHODE_GET);
 }
 
-// Konfigurations-Schreibzugriffe: Proben an Init-Ziel und TTS sind Belege, keine Konfiguration.
 function konfigSchreibAufrufe(aufrufe) {
   return schreibendeAufrufe(aufrufe).filter(
     (aufruf) => aufruf.adresse !== initWebhookUrl() && !TTS_MUSTER.test(aufruf.adresse),
@@ -343,8 +328,6 @@ const RENDER_ZIELE = Object.freeze([
 ]);
 const SECRET_ZIEL = `Workspace-Secret ${WORKSPACE_SECRET_NAME} (anlegen)`;
 const REG_ZIEL = `Registrierung ${REG_DID.phone_number_id}`;
-
-// ---- setzen ------------------------------------------------------------------------------------
 
 describe("IEL-B10 setzen: Verteilen, Ausgabe, Trockenlauf", () => {
   it("IEL-B10-1a/b/c: Fehlschlag an Render, Secret und Registrierung - kein Wert in der Ausgabe, Tabelle korrekt", async () => {
@@ -473,8 +456,6 @@ describe("IEL-B10 setzen: Vorab-Riegel, Inventar und Secret", () => {
   });
 });
 
-// ---- Listen-Endpunkt -----------------------------------------------------------------------------
-
 describe("IEL-B10 Render-Listen-Endpunkt", () => {
   it("IEL-B10-5: kein Unterbefehl adressiert .../env-vars ohne Schluessel; leerer bzw. fremder Schluessel wirft vor fetch", async () => {
     const laeufe = [
@@ -500,8 +481,6 @@ describe("IEL-B10 Render-Listen-Endpunkt", () => {
     assert.equal(aufrufe.length, 0);
   });
 });
-
-// ---- beleg-init ----------------------------------------------------------------------------------
 
 describe("IEL-B10 beleg-init", () => {
   it("IEL-B10-8: GRUEN nur bei 403/404; Token nie in der Ausgabe; beide POSTs an die Konstante", async () => {
@@ -553,8 +532,6 @@ describe("IEL-B10 beleg-init", () => {
     }
   });
 });
-
-// ---- allowlist-uebernehmen und schalter ----------------------------------------------------------
 
 describe("IEL-B10 allowlist-uebernehmen und schalter", () => {
   it("IEL-B10-9: allowlist - nur genau ein Eintrag wird uebernommen, nie eine Tenant-ID in der Ausgabe", async () => {
@@ -614,8 +591,6 @@ describe("IEL-B10 allowlist-uebernehmen und schalter", () => {
   });
 });
 
-// ---- IEX-A11: setzen per Registrierung und scope --------------------------------------------------
-
 const DID_ZWEI = "+4930123450002";
 const REG_ZWEI_MIT_ZUGANG = Object.freeze({
   phone_number_id: "phnum_zwei",
@@ -624,7 +599,6 @@ const REG_ZWEI_MIT_ZUGANG = Object.freeze({
   outbound_trunk: OUTBOUND_TRUNK,
   inbound_trunk: { has_auth_credentials: true, username: "alter-user", allowed_numbers: [DID_ZWEI] },
 });
-// 3 Render-Geheimnisse + Workspace-Secret + 1 Registrierung.
 const REIHENFOLGE_SCHRITTE_EINE_REGISTRIERUNG = 5;
 const SCOPE_ENV = "ELEVENLABS_INBOUND_SCOPE";
 const ARG_SCOPE_DIDS_AUSFUEHREN = Object.freeze(["scope", "--registrierte-dids", "--ausfuehren"]);
@@ -792,8 +766,6 @@ describe("IEX-A11 scope und Argumente", () => {
   });
 });
 
-// ---- stimmen-beleg -------------------------------------------------------------------------------
-
 describe("IEL-B10 stimmen-beleg", () => {
   it("IEL-B10-11: E19-Tabelle, Modell-Hinweis, fehlendes model_id und unlesbarer Dienst", async () => {
     const alle200 = [{ voiceId: "a", status: HTTP_OK }, { voiceId: "b", status: HTTP_OK }];
@@ -824,8 +796,6 @@ describe("IEL-B10 stimmen-beleg", () => {
   });
 });
 
-// ---- Ausgabe-Waechter ----------------------------------------------------------------------------
-
 describe("IEL-B10 Ausgabe-Waechter", () => {
   it("IEL-B10-12: eine Zeile mit verbotenem Wert wird verworfen; leerer Wert blockiert nichts; runCli wird ROT", async () => {
     const zeilen = [];
@@ -841,7 +811,6 @@ describe("IEL-B10 Ausgabe-Waechter", () => {
     assert.ok(!zeilen.join("").includes(verboten));
     assert.match(zeilen.join(""), /harmlos/);
 
-    // Das gelesene Token ist Teil der Ergebniszeile -> der sonst GRUENE Lauf endet ROT.
     const token = "ohne Token HTTP 403 (erwartet 403), mit Token";
     const { code, ausgabe } = await laufe(["beleg-init"], { renderEnv: { ...renderEnvGruen(), ELEVENLABS_INIT_WEBHOOK_TOKEN: token } });
     assert.equal(code, 1, ausgabe);
@@ -849,8 +818,6 @@ describe("IEL-B10 Ausgabe-Waechter", () => {
     assert.ok(!ausgabe.includes(token));
   });
 });
-
-// ---- conversation-beleg --------------------------------------------------------------------------
 
 const ARG_CONVERSATION = Object.freeze(["conversation-beleg", "--richtung=inbound", `--seit=${SEIT}`]);
 
@@ -928,8 +895,6 @@ describe("IEL-B10 conversation-beleg", () => {
   });
 });
 
-// ---- Argumente -----------------------------------------------------------------------------------
-
 describe("IEL-B10 Argumente", () => {
   it("IEL-B10-16: kaputte Argumente brechen vor jedem fetch ab", async () => {
     const faelle = [
@@ -951,8 +916,6 @@ describe("IEL-B10 Argumente", () => {
     assert.deepEqual(leseArgumente(["setzen", `--nummer=${DID}`, "--nummer=+4930123456789"]).nummern, [DID, "+4930123456789"]);
   });
 });
-
-// ---- ohne Store, Quelltext-Pins --------------------------------------------------------------------
 
 function sammleKind({ nodeArgs, env }) {
   const child = spawn(process.execPath, nodeArgs, {

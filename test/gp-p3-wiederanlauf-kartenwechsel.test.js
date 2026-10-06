@@ -1,12 +1,3 @@
-// GP-P3 (PLAN-GELDPFAD.md 2): nach einem Kartenwechsel laeuft das gescheiterte
-// Nummern-Provisioning automatisch wieder an - gedeckelt durch einen Versuchszaehler,
-// der die terminal 'failed' Nummern-Datensaetze des Mandanten zaehlt.
-//
-// Kompositions-Integrationstest nach Muster bk2/i9/p5: reines pglite (offline, F.I.R.S.T.),
-// KEIN Server-Spawn, KEIN Netz, kein echter Stripe-/Telnyx-Aufruf. Der Provisioning-Anstoss
-// ist eine injizierte Naht (provisionSeam, Muster self-service-mirror-hydration): sie ruft
-// requestNumberForPaidTenant auf DEMSELBEN Store, damit der Statuswechsel wirklich
-// beobachtbar ist statt nur ein Spy-Zaehler.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -31,18 +22,13 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const SECRET = "gp-p3-wiederanlauf-secret-0123456789";
 const SUB = "sub-gp-p3";
-// Der Request-Tenant wird aus dem IdP-Subject abgeleitet ("t_" + sub, Muster bk2) -
-// ein abweichender Seed-Tenant liefe fail-closed in den Customer-Mismatch.
 const TENANT = `t_${SUB}`;
 const CUSTOMER = "cus_gp_p3";
 const SESSION = "cs_gp_p3";
 const NEW_PAYMENT_METHOD = "pm_neu";
 const PERIOD_END = 1893456000;
-// Caps weit ueber jeder Fallzahl: dieser Test misst den GP-P3-Versuchsdeckel, nicht
-// MAX_NUMBERS/MAX_NUMBERS_PER_TENANT (die 'failed' ohnehin nicht mitzaehlen).
 const HIGH_CAP = 999;
 const DEFAULT_MAX_ATTEMPTS = 3;
-// HTTP 302 = der Redirect, mit dem die Karten-Rueckkehr in die App zurueckfuehrt.
 const HTTP_FOUND = 302;
 
 const CONFIG = {
@@ -53,9 +39,6 @@ const CONFIG = {
   stripeCustomerRetryDelayMs: 0,
 };
 
-// Fake-Billing (in-process, KEIN Netz): nur getCheckoutSessionResult wird im reinen
-// Karten-Flow (billing/return ohne getragenen Plan) erreicht. paymentMethodType ist der
-// Hebel fuer den Eignungs-Fall (GP-P2).
 function fakeBilling(paymentMethodType) {
   return {
     createCustomer: async () => ({ customerId: CUSTOMER }),
@@ -70,9 +53,6 @@ function fakeBilling(paymentMethodType) {
 
 const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
-// Der EINE Provisioning-Anstoss, den GP-P3 wiederverwendet (kein zweiter Kaufpfad):
-// dieselbe Funktion, die der Webhook-Aktivierungspfad ruft, auf demselben Store.
-// throws -> beweist den fail-soft-Vertrag (E5).
 function provisionSeam(store, spy, { throws = false } = {}) {
   return async (tenantId) => {
     spy.push(tenantId);
@@ -88,8 +68,6 @@ function provisionSeam(store, spy, { throws = false } = {}) {
   };
 }
 
-// Legt failedCount terminal gescheiterte Nummern an - genau der Ledger, den der
-// Versuchsdeckel zaehlt (jede ist eine eigene numberId, wie nach einem echten Neuanlauf).
 function seedFailedNumbers(state, failedCount) {
   for (let lauf = 0; lauf < failedCount; lauf += 1) {
     const { number } = ops.requestNumber(state, {
@@ -101,10 +79,6 @@ function seedFailedNumbers(state, failedCount) {
   }
 }
 
-// Harness wie bk2/i9: Store + Identitaets-Schicht + Self-Service-Routen auf einer
-// Wegwerf-App. withStoreLock kommt als Fassaden-Kontraktflaeche dazu (Muster fakeStore in
-// absender-registrierung-freigabe.test.js) - in Produktion liefert sie src/store.js,
-// makePgStore selbst kennt sie nicht.
 async function setup({
   failedCount = 0,
   subscriber = true,
@@ -150,8 +124,6 @@ async function setup({
   };
 }
 
-// Ausgangszustand des Mandanten: aktiv, Customer gebunden, optional verifizierter
-// Subscriber, und failedCount terminal gescheiterte Nummern.
 function seedTenant(store, { failedCount, subscriber }) {
   const state = store.load();
   ops.registerTenant(state, TENANT, { firstName: "Kunde", lastName: "GP3", idpSubject: SUB });
@@ -198,7 +170,6 @@ const cardReturn = (lauf) =>
     cookie: lauf.cookie,
   });
 
-// Der Skip-Marker am Mandanten - in Schritten statt als Kette (Demeter, G36).
 function skipReasonOf(lauf) {
   const state = lauf.store.load();
   const tenant = state.tenants.find((eintrag) => eintrag.id === TENANT);
@@ -212,8 +183,6 @@ test("(1) failed + aktiver Subscriber + Karte + Deckel offen -> Provisioning lae
     assert.equal(res.status, HTTP_FOUND);
     assert.equal(res.location, CHECKOUT_RETURN.CARD_OK);
     assert.deepEqual(lauf.provisionSpy, [TENANT]);
-    // Der Ausgang des Wiederanlaufs steht im Audit-Detail - ohne ihn waere im Betrieb
-    // nicht unterscheidbar, ob die Route angestossen oder stillschweigend nichts getan hat.
     const gespeichert = lauf.auditCalls.find((eintrag) => eintrag.event === "self_service_card_saved");
     assert.equal(gespeichert.detail.includes("wiederanlauf=retry"), true, gespeichert.detail);
     assert.notEqual(numberStatusFor(lauf.store.load(), TENANT), NUMBER_DISPLAY_STATUS.FAILED);

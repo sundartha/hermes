@@ -1,17 +1,3 @@
-// GP-P2 (PLAN-GELDPFAD.md, "Eignung der Zahlungsmethode statt blosser Existenz").
-//
-// Der Vorfall vom 11.09.2026: eine hinterlegte Zahlungsmethode vom Typ 'link' trug die
-// Abo-Zahlung (4,99 EUR) und lehnte sechs Sekunden spaeter den 92-Cent-Hold ab. Das Gate
-// vor dem Provisioning prueft seitdem nicht mehr die blosse EXISTENZ einer Referenz,
-// sondern die EIGNUNG ihres Typs (Allowlist, nie Denylist) - und der Typ wird ueberall
-// dort geschrieben, wo eine Zahlungsmethode gebunden wird.
-//
-// Rein und offline: Fake-Store, Fake-Billing, makeStripeStub fuer die Adapter-Fixturen,
-// pglite fuer den Persistenz-Beweis. Kein Spawn, kein Netz, kein Anbieter-Call.
-//
-// Testnamen tragen bewusst KEINEN Katalog-Praefix (i18nCatalogPattern kennt GAP, nicht GP;
-// abnahmePattern verlangt ABNAHME-) - alle Faelle bleiben im Regressionslauf (Lehre
-// catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -43,11 +29,6 @@ const SECRET = "sk_test_gpp2";
 const withStripeStub = makeStripeStub(config, SECRET);
 const okJson = (body) => ({ ok: true, status: 200, json: async () => body });
 
-// =======================================================================================
-// Abschnitt 1: Adapter-Fixturen - traegt die Antwort den Typ, und verlaesst NUR er den
-// Adapter? (Abnahme 1; Gegenmittel zu Pre-Mortem 2: ein dauerhaft leeres Feld)
-// =======================================================================================
-
 test("GP-P2: getCheckoutSessionResult, unexpandierte Bestandsform -> Id bleibt, Typ null, KEIN Wurf", async () => {
   const result = await withStripeStub(
     async () => okJson({ customer: "cus_1", setup_intent: { payment_method: "pm_1" } }),
@@ -66,7 +47,6 @@ test("GP-P2: getCheckoutSessionResult, expandiertes payment_method -> Id aus dem
       okJson({ customer: "cus_1", setup_intent: { payment_method: { id: "pm_x", type: "card" } } }),
     () => stripeBilling.getCheckoutSessionResult("cs_1"),
   );
-  // Der Kern: die Id ist die Referenz, NIE das Stripe-Objekt (das ginge sonst in die DB).
   assert.equal(result.paymentMethodId, "pm_x");
   assert.equal(result.paymentMethodType, "card");
 });
@@ -122,8 +102,6 @@ test("GP-P2: retrievePaymentMethodType liest GET /v1/payment_methods/<id> und gi
       return okJson({
         id: "pm_x",
         type: "card",
-        // Genau die Felder, die am 11.09.2026 Kundendaten trugen - sie duerfen den
-        // Adapter NICHT verlassen (Regel 4/GP-P1).
         billing_details: { email: "kunde@example.invalid", name: "Erika Mustermann" },
       });
     },
@@ -160,13 +138,8 @@ test("GP-P2: retrievePaymentMethodType, Nicht-2xx -> wirft mit Status, OHNE Schl
   );
 });
 
-// =======================================================================================
-// Abschnitt 2: Bindepfade - je realer Schreibstelle ein Fall (Abnahme 1)
-// =======================================================================================
-
 const TENANT = "t_gpp2";
 
-// Fake-Store in der Fassaden-Form, die die Binde-Pfade lesen/schreiben.
 function fakeStore({
   customerId = "cus_gpp2",
   paymentMethodId = null,
@@ -193,9 +166,6 @@ function fakeStore({
 }
 
 test("GP-P2: bindCardFromSession schreibt den Typ - und ueberschreibt einen alten Typ mit null statt ihn stehen zu lassen", async () => {
-  // Vorbelegung 'card': wuerde die Bindung den Typ auslassen, bliebe hier der STALE
-  // 'card' an einer voellig anderen Zahlungsmethode haengen - genau der Zustand, den das
-  // Eignungs-Gate nicht erkennen kann, weil er gueltig aussieht.
   const store = fakeStore({ paymentMethodId: "pm_alt", paymentMethodType: "card" });
   const billing = {
     getCheckoutSessionResult: async () => ({
@@ -255,7 +225,7 @@ test("GP-P2: activateSubscriptionFromCheckoutSession persistiert den Typ im ok-P
 
 test("GP-P2: activateSubscriptionFromCheckoutSession persistiert den Typ auch im Heal-Pfad (already_subscribed ohne Karte)", async () => {
   const store = fakeStore();
-  store.state.subscription.subscriptionId = CHECKOUT_OUTCOME.subscriptionId; // Webhook war schneller
+  store.state.subscription.subscriptionId = CHECKOUT_OUTCOME.subscriptionId;
   const result = await runActivateFromCheckout(store);
   assert.equal(result.reason, "already_subscribed", "der Heal-Zweig lief");
   assert.equal(
@@ -265,8 +235,6 @@ test("GP-P2: activateSubscriptionFromCheckoutSession persistiert den Typ auch im
   );
 });
 
-// ---- Webhook-Race-Fix: das Ereignis traegt den Typ nie, er wird nachgeschlagen ---------
-
 const RACE_EVENT = Object.freeze({
   type: SUBSCRIPTION_EVENT.UPDATED,
   data: {
@@ -274,7 +242,7 @@ const RACE_EVENT = Object.freeze({
       id: "sub_r",
       status: "active",
       customer: "cus_r",
-      default_payment_method: "pm_r", // unexpandiert - so kommen Webhook-Events IMMER
+      default_payment_method: "pm_r",
       metadata: { tenant_ref: "t_r" },
     },
   },
@@ -333,7 +301,6 @@ test("GP-P2: scheitert der Nachschlag, entsteht die Bindung trotzdem - mit unbek
       throw new Error("Stripe getPaymentMethod fehlgeschlagen: HTTP 500");
     },
   });
-  // Kein Wurf: ein Fehler hier liesse Stripe das Ereignis dauerhaft wiederholen.
   await applyStripeWebhook(RACE_EVENT, deps);
   assert.deepEqual(calls.stripe, [["t_r", { paymentMethodId: "pm_r", paymentMethodType: null }]]);
 });
@@ -368,8 +335,6 @@ test("GP-P2: der Stale-Customer-Heal loescht auch den Typ (sonst bescheinigt er 
 });
 
 test("GP-P2: der Typ ueberlebt Flush und frische Hydrierung (Schema + flushTenants + rowToTenant)", async () => {
-  // Ohne diesen Fall waere die neue Spalte unbewacht: fehlt sie in flushTenants, LOESCHT
-  // der naechste Flush das Feld (I8-Lehre), und das Gate saehe fortan 'unbekannt'.
   const { store, db } = await makePgTestStore();
   const zustand = store.load();
   registerTenant(zustand, TENANT);
@@ -393,15 +358,9 @@ test("GP-P2: der Typ ueberlebt Flush und frische Hydrierung (Schema + flushTenan
   });
 });
 
-// =======================================================================================
-// Abschnitt 3: das Gate vor dem Provisioning (Abnahme 2/3/4)
-// =======================================================================================
-
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "DE", connectionId: "conn_1", holdAmountCents: 92, currency: "eur" };
 
-// Baut einen Mandanten mit hinterlegter Zahlungsmethode und fordert seine Nummer an.
-// Ein Objekt statt einer Argumentliste (F1) - abo traegt den optionalen Abo-Patch.
 function tenantMitZahlungsmethode(zustand, { id, paymentMethodType, abo = {} }) {
   registerTenant(zustand, id);
   setTenantStripe(zustand, id, {
@@ -417,8 +376,6 @@ async function provisioniere({ zustand, number, billing, prov }) {
   return provisionNumber(zustand, { provisioner: prov, billing }, { numberId: number.id, ...ARGS });
 }
 
-// Die Operations-Folge eines fakeBilling-Logs (placeHold/captureHold/...) - EINE Quelle
-// fuer die Stellen, die den Geld-Weg pinnen.
 const geldOperationen = (billing) => billing.log.map((eintrag) => eintrag[0]);
 
 test("GP-P2: 'link' scheitert VOR jedem Anbieter-Kontakt - kein Hold, keine Preis-Suche, Nummer FAILED", async () => {
@@ -430,8 +387,6 @@ test("GP-P2: 'link' scheitert VOR jedem Anbieter-Kontakt - kein Hold, keine Prei
     () => provisioniere({ zustand, number, billing, prov }),
     (err) => {
       assert.match(err.message, /payment_method_type=link/);
-      // Der Vorfall endete in einem generischen Ablehnungsgrund NACH dem Geld-Call;
-      // dieser Fall endet davor und nennt den wahren Grund.
       assert.doesNotMatch(err.message, /insufficient_funds/);
       return true;
     },
@@ -451,8 +406,6 @@ test("GP-P2: 'card' laeuft byte-identisch zum Bestand durch (placeHold + capture
 });
 
 test("GP-P2: ein erfundener Typ faellt durch - Allowlist, nicht Denylist", async () => {
-  // Eine Denylist gegen 'link' liesse diesen Fall passieren und meldete den Fix trotzdem
-  // als erledigt. Der Umkehrschluss gilt: was nicht in der Liste steht, faellt durch.
   assert.equal(isHoldCapablePaymentMethodType("xyz_wallet"), false);
   const zustand = makeDefaultState();
   const number = tenantMitZahlungsmethode(zustand, {
@@ -506,7 +459,6 @@ test("GP-P2: der befreite Mandant (GAP-05) ist nicht ausgenommen - 'link' scheit
   );
   assert.equal(findNumber(zustand, schlecht.id).status, NUMBER_STATUS.FAILED);
 
-  // Gegenprobe: die GAP-05-Zusage selbst bleibt unangetastet (Hold JA, Einzug NEIN).
   const gut = tenantMitZahlungsmethode(zustand, {
     id: "t_exempt_card",
     paymentMethodType: "card",

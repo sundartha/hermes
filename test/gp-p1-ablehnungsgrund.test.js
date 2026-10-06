@@ -1,18 +1,3 @@
-// GP-P1 (PLAN-GELDPFAD.md, "Ablehnungsgrund des Holds: Diagnose UND Steuerung").
-//
-// Der Grund einer Stripe-Ablehnung wird EINMAL erhoben (src/billing/decline.js) und
-// ZWEIMAL geliefert: als getyptes Feld err.providerDecline (Steuerung, GP-P4 liest es)
-// und als Enum-Anhang an err.message (Menschendiagnose). Der Vorfall vom 11.09.2026: der
-// 402-Koerper von createSubscription trug Name/E-Mail/Anschrift des Kunden und landete
-// darueber in console.error (self-service-routes.js). Diese Phase behebt beides.
-//
-// Rein und offline (Muster test/pay-19-sca-authentication-required.test.js, makeStripeStub
-// aus test/helpers.js; Abschnitt 1 Fall 8 zusaetzlich test/provisioning-enqueue-order.test.js
-// fuer den In-Process-Orchestrator). Kein Spawn, kein Netz, kein Anbieter-Call.
-//
-// Testnamen tragen bewusst KEINEN Katalog-Praefix (i18nCatalogPattern kennt GAP, nicht GP;
-// abnahmePattern verlangt ABNAHME-) - alle Faelle bleiben im Regressionslauf (Lehre
-// catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -38,12 +23,7 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const withStripeStub = makeStripeStub(config, "sk_test_gpp1");
 
-// ---------------------------------------------------------------------------------------
-// Abschnitt 1: Verhalten (Abnahme 1-3)
-// ---------------------------------------------------------------------------------------
-
 const DECLINE_HTTP_STATUS = 402;
-// Der Koerper aus dem Abnahmekriterium (PLAN-GELDPFAD.md, GP-P1).
 const DECLINE_BODY = {
   error: {
     code: "card_declined",
@@ -52,7 +32,6 @@ const DECLINE_BODY = {
     message: "Your card was declined.",
   },
 };
-// Derselbe Koerper MIT Kundendaten, genau dort, wo Stripe sie am 11.09.2026 mitschickte.
 const KUNDENMAIL = "kunde@example.invalid";
 const DECLINE_BODY_MIT_PII = {
   error: {
@@ -108,7 +87,6 @@ async function placeHoldRejection(body) {
 
 test("GP-P1: placeHold-402 traegt den Ablehnungsgrund als getyptes Feld", async () => {
   const err = await placeHoldRejection(DECLINE_BODY);
-  // Pinnt den Feldnamen WOERTLICH - er ist der Vertrag, den GP-P4 liest.
   assert.deepEqual(err.providerDecline, {
     code: "card_declined",
     declineCode: "insufficient_funds",
@@ -196,17 +174,12 @@ test("GP-P1 (Frage 6): createSubscription-402 protokolliert keine Kundendaten me
   assert.doesNotMatch(err.message, /"billing_details"/);
 });
 
-// --- Fall 8 (Frage 8): der Enum-Anhang landet in job.lastError ---------------------------
-
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 
 function meteringStub() {
   return { recordNumberMonthMeter() {}, recordDueNumberMonthMeters: () => ({}) };
 }
 
-// Fake-Store nach dem Muster test/provisioning-enqueue-order.test.js: load() liefert den
-// geteilten State, save()/withStoreLock() sind No-op-Transaktionen (kein echter Rollback-
-// Test hier - das deckt PA-2, nicht GP-P1).
 function makeFakeStore(state) {
   return {
     load: () => state,
@@ -234,7 +207,7 @@ test("GP-P1 (Frage 8): der Enum-Anhang landet in job.lastError", async () => {
   setTenantStripe(state, "t_gpp1_8", {
     customerId: "cus_gpp1_8",
     paymentMethodId: "pm_gpp1_8",
-    paymentMethodType: "card", // GP-P2: der Hold MUSS erreicht werden - sonst pruefte der Fall nichts
+    paymentMethodType: "card",
   });
   const number = requestNumber(state, { tenantId: "t_gpp1_8", country: "DE", ...CAPS }).number;
 
@@ -273,17 +246,6 @@ test("GP-P1 (Frage 8): der Enum-Anhang landet in job.lastError", async () => {
   assert.doesNotMatch(job.lastError, /example\.invalid|Mustermann/);
 });
 
-// ---------------------------------------------------------------------------------------
-// Abschnitt 2: Struktur-Waechter (Abnahme 4)
-// ---------------------------------------------------------------------------------------
-// Muster test/sec-p6-waechter-wahlaufrufer.test.js: Datei + Symbol statt Zeilennummern (C2).
-//
-// KORREKTUR GEGENUEBER SEC-P6 (nicht dort angefasst, s. PLAN-GELDPFAD.md Abschnitt 7.1):
-// dort werden Blockkommentare VOR Zeilenkommentaren gestrippt. Ein Zeilenkommentar, der
-// "/*" enthaelt (im Bestand: src/elevenlabs/outbound.js, "src/telephony/adapters/*"),
-// frisst damit den Code bis zum naechsten "*/" - hier faelschlich verschluckt. Deshalb
-// zuerst Zeilenkommentare, dann Blockkommentare (Fall 12 pinnt das).
-
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const QUELLVERZEICHNIS = "src";
 
@@ -306,20 +268,12 @@ function produktionsDateien(verzeichnis = QUELLVERZEICHNIS) {
   return dateien;
 }
 
-// Reichweite, benannt statt behauptet: gefunden werden Bezeichner, die 'message'/'msg'
-// enthalten, sowie String(err)/err.toString() - jeweils gefolgt von includes/match/
-// indexOf/search/startsWith/endsWith, auch ueber eine parameterlose Kette wie
-// .toLowerCase(). NICHT gefunden: ein einbuchstabiger Fehler-Bezeichner (e.toString())
-// und jede Auswertung ueber eine Hilfsfunktion. Ein Waechter, der seine Luecke nicht
-// nennt, verspricht mehr als er haelt.
 const LESER = "(?:includes|match|indexOf|search|startsWith|endsWith)";
 const MESSAGE_STEUERUNG = new RegExp(
   `\\b[\\w$]*(?:[Mm]essage|[Mm]sg)\\s*(?:\\.\\s*\\w+\\s*\\(\\s*\\))*\\s*\\.\\s*${LESER}\\s*\\(` +
     `|(?:String\\s*\\(\\s*[\\w$.]*[Ee]rr[\\w$]*\\s*\\)|[\\w$.]*[Ee]rr[\\w$]*\\s*\\.\\s*toString\\s*\\(\\s*\\))` +
     `\\s*(?:\\.\\s*\\w+\\s*\\(\\s*\\))*\\s*\\.\\s*${LESER}\\s*\\(`,
 );
-// Kein /g: ein zustandsbehaftetes RegExp liefert bei wiederholtem .test() abwechselnd
-// true/false (lastIndex) - genau die stille Luecke, die ein Waechter nicht haben darf.
 
 const ERWARTETE_STELLEN = Object.freeze([
   {
@@ -333,7 +287,6 @@ const ERWARTETE_STELLEN = Object.freeze([
   },
 ]);
 
-// EINE Sammelfunktion fuer Waechter und Positiv-Kontrolle (G5).
 function sammleTreffer(dateien) {
   return dateien
     .filter(({ quelltext }) => MESSAGE_STEUERUNG.test(ohneKommentare(quelltext)))
@@ -349,7 +302,6 @@ test("GP-P1 Waechter: keine Steuerung ueber .message ausser den benannten Ausnah
 
 test("GP-P1 Waechter Positiv-Kontrolle: ein synthetischer Zusatz macht rot", () => {
   const dateien = produktionsDateien();
-  // Kein Schreibzugriff auf src/: die erfundene Datei existiert nur in dieser Liste.
   const mitZusatz = [
     ...dateien,
     {
