@@ -8,12 +8,6 @@ export function safeEqual(a, b) {
   return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
 }
 
-// ---- PII-Hygiene fuer Logs (DSGVO-Datenminimierung, T-P0-7) --------------------
-// Telefonnummern/E-Mails duerfen nicht im Klartext in Diagnose-/Banner-Logs landen
-// (Render persistiert stdout -> PII at rest). Diese Helfer erzeugen de-identifizierte,
-// aber stabile Tokens (gleicher Wert -> gleiches Token, ueber Logzeilen korrelierbar),
-// ohne den Vollwert zu zeigen. NICHT fuer den forensischen Audit-Trail (audit()) -
-// der protokolliert Ziel + Identitaet bewusst vollstaendig (Toll-Fraud-Nachweis).
 const MASK_VISIBLE_TAIL = 4; // sichtbare End-Zeichen einer maskierten Nummer
 const MASK_HASH_LEN = 6;     // Hex-Stellen des Korrelations-Hash bei Nummern
 const EMAIL_HASH_LEN = 8;    // Hex-Stellen des E-Mail-Hash (Vorgabe T-P0-7)
