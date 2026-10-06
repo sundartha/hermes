@@ -398,6 +398,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes/kein-quelltext-als-text": [
+        2,
+        {
+          "bestand": "tools/basis/quelltext-als-text.json"
+        }
+      ],
       "hermes/keine-kommentare": [
         2,
         {
