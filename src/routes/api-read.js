@@ -130,3 +130,4 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
 
   return router;
 }
+export const probeBelegFeld = (nummer) => nummer.elInboundTrunkBelegtAt;
