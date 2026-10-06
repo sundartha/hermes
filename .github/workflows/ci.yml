@@ -89,6 +89,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
         run: npx --no-install commitlint --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
 
+      # Hinweis
       - name: Lint
         run: npm run lint
 
