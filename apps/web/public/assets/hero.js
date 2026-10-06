@@ -1,9 +1,3 @@
-// Treibende-Wolken-Video robust abspielen (Autoplay-Policies, Tab-Wechsel,
-// Off-Screen). Portiert aus dem x-dc-componentDidMount des Quell-Designs
-// "Hermes Hero.dc.html". Bewusst als statische Datei unter /public/assets:
-// die strikte Produktions-CSP (script-src 'self', KEIN 'unsafe-inline') verbietet
-// Inline-Skripte; ein gebundeltes Astro-<script> wuerde inline landen -> blockiert.
-// Fehlt das Video, zeigt <video> still das poster-Bild.
 (function () {
   var v = document.getElementById("hermesSky");
   if (!v) return;
@@ -23,10 +17,6 @@
   v.addEventListener("loadedmetadata", apply);
   v.addEventListener("play", apply);
   v.addEventListener("pause", function () { if (onScreen) setTimeout(play, 140); });
-  // Nahtloser Loop: kurz vor Clip-Ende auf den Keyframe bei t=0 springen,
-  // statt den nativen loop-Restart-Hitch am Dateiende abzuwarten. Das native
-  // loop-Attribut (oben) bleibt als Fallback fuer gedrosselte Hintergrund-Tabs,
-  // in denen timeupdate nicht zuverlaessig feuert.
   var LOOP_EDGE_S = 0.3;
   v.addEventListener("timeupdate", function () {
     if (isFinite(v.duration) && v.duration > LOOP_EDGE_S &&
