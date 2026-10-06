@@ -1,10 +1,3 @@
-// H2-S1 (Review-Blocker Runde 1): mount()-Verhalten der Wing-Canvas-Engine, das die
-// Review als ungetestet markiert hat - Frame-Cap, Terminal-Stop bei success/error,
-// Visibility-Gating, reduced-motion-Fallback. Fuehrt die UNVERAENDERTE Engine-Datei
-// (kein Patch, anders als mcp-ui-wing-canvas-physics.test.js, das __internal braucht)
-// per node:vm in einem minimalen Fake-DOM aus - dieselbe Sandbox-Technik wie in
-// test/mcp-ui-w1-call-widget.test.js (dort fuer ein <script>-Fragment, hier fuer
-// mount() end-to-end). Kein echter Browser, kein jsdom-Dependency.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
@@ -15,35 +8,18 @@ const enginePath = fileURLToPath(new URL("../design-system/components/brand/wing
 const ENGINE_SOURCE = readFileSync(enginePath, "utf8");
 
 const FPS_CAP_DEFAULT = 30;
-const FRAME_BUDGET_MS = 1000 / FPS_CAP_DEFAULT; // ~33.3ms, wie im Engine-Default
+const FRAME_BUDGET_MS = 1000 / FPS_CAP_DEFAULT;
 
-// H2-S1 (Review-Blocker Runde 2): applyGoldTint() ist ueber mount() nur erreichbar,
-// wenn GOLD_ENABLED im Quelltext true ist (bewusst deaktivierter Quell-Schalter).
-// Dieselbe Patch-Technik wie mcp-ui-wing-canvas-physics.test.js (EXPORT_LINE) - hier
-// wird NUR die eigene In-Memory-Kopie der Quelle fuer diesen einen Test umgeschaltet,
-// die produktiv ausgelieferte Datei bleibt unveraendert.
 const GOLD_ENABLED_LINE = "  var GOLD_ENABLED = false;";
 const GOLD_ENABLED_LINE_PATCHED = "  var GOLD_ENABLED = true;";
 assert.ok(ENGINE_SOURCE.includes(GOLD_ENABLED_LINE), "GOLD_ENABLED-Zeile nicht gefunden - Datei umstrukturiert?");
 const ENGINE_SOURCE_GOLD_ENABLED = ENGINE_SOURCE.replace(GOLD_ENABLED_LINE, GOLD_ENABLED_LINE_PATCHED);
 
-// H2-S1 (Review-Blocker Runde 3, T1): applyStatus()s Preset-Switch (tl = preset ===
-// "olympian" ? olympianCycle : classicCycle) laeuft komplett innerhalb der mount()-
-// Closure - der zurueckgegebene Handle exponiert nur setStatus/destroy, kein Zugriff
-// auf den internen state. Gleiche Patch-Technik wie GOLD_ENABLED_LINE oben: NUR die
-// eigene In-Memory-Kopie der Quelle haengt eine __debugState-Referenz an den
-// mount()-Rueckgabewert, die produktiv ausgelieferte Datei bleibt unveraendert. state
-// ist eine einzige, nie neu zugewiesene Objekt-Referenz pro Instanz (siehe
-// "var state = restState()" in mount()) - die Timeline mutiert sie in place,
-// __debugState.beat liest also live mit.
 const RETURN_HANDLE_LINE = "      setStatus: requestStatus,";
 const RETURN_HANDLE_LINE_PATCHED = "      setStatus: requestStatus, __debugState: state, // Test-Patch (H2-S1 Runde 3)";
 assert.ok(ENGINE_SOURCE.includes(RETURN_HANDLE_LINE), "setStatus-Return-Zeile nicht gefunden - Datei umstrukturiert?");
 const ENGINE_SOURCE_DEBUG_STATE = ENGINE_SOURCE.replace(RETURN_HANDLE_LINE, RETURN_HANDLE_LINE_PATCHED);
 
-// rAF/cAF-Fake: die Engine haelt zu jedem Zeitpunkt hoechstens EINE ausstehende
-// Anfrage (frame() plant sich entweder selbst neu oder stoppt) - ein einzelner
-// Pending-Slot reicht, kein Queue-Modell noetig.
 function makeRafHarness() {
   let nextId = 1;
   const pending = new Map();
@@ -59,9 +35,6 @@ function makeRafHarness() {
     pendingCount() {
       return pending.size;
     },
-    // Feuert den (einzigen) ausstehenden Callback mit dem gegebenen now-Zeitstempel.
-    // Vorher aus der Map entfernt (wie beim echten rAF), damit ein re-schedule
-    // innerhalb des Callbacks sauber greift.
     fire(now) {
       const [[id, fn]] = pending;
       pending.delete(id);
@@ -71,10 +44,6 @@ function makeRafHarness() {
 }
 
 function makeCtx2dSpy() {
-  // fillRectFillStyle/fillRectComposite: Momentaufnahme von fillStyle/
-  // globalCompositeOperation ZUM ZEITPUNKT des fillRect()-Aufrufs (nicht der
-  // Endzustand danach) - noetig, um applyGoldTint()s source-atop-Compositing zu
-  // pruefen, das die Engine direkt nach dem Fill wieder auf source-over zuruecksetzt.
   const calls = { clearRect: 0, drawImage: 0, fillRect: 0, fillRectFillStyle: null, fillRectComposite: null };
   return {
     calls,
@@ -129,7 +98,6 @@ function makeFakeImage() {
   }
   Object.defineProperty(FakeImage.prototype, "src", {
     get() { return this._src; },
-    // echtes Image laedt asynchron - hier synchron, das Bild ist "sofort da".
     set(v) { this._src = v; if (typeof this.onload === "function") this.onload(); },
   });
   return FakeImage;
@@ -146,14 +114,6 @@ function makeIntersectionObserverHarness() {
   return { FakeIntersectionObserver, store };
 }
 
-// Baut eine frische Sandbox + fuehrt die Engine aus. clockRef.value steuert
-// performance.now(); reduce steuert prefers-reduced-motion; source erlaubt eine
-// gepatchte Engine-Quelle (siehe ENGINE_SOURCE_GOLD_ENABLED); gold wird 1:1 als
-// opts.gold an mount() durchgereicht. Rueckgabe buendelt alle Spies/Handles, die
-// die Tests fuer Build-Operate-Check brauchen (P13).
-// preset/size/grid/fpsCap: 1:1 an opts.* durchgereicht (undefined -> Engine-Default
-// greift, wie bei opts.size||DEFAULT_SIZE_PX etc.). dpr steuert sandbox.devicePixelRatio
-// separat von reduce/status (H2-S1 Runde 3, T1: fuer die Nicht-Default-Options-Tests).
 function mountInSandbox({
   reduce = false, status = "idle", source = ENGINE_SOURCE, gold = false,
   preset, size, grid, fpsCap, dpr = 1,
@@ -198,7 +158,6 @@ test("T-wing-mount-framecap: Frames unterhalb des Budgets werden uebersprungen, 
   const { raf, ctx2d, clockRef } = mountInSandbox();
   assert.equal(raf.pendingCount(), 1, "nach mount() laeuft die Schleife bereits (Bild synchron geladen)");
 
-  // Zwei kleine Schritte, jeder klar unter dem Frame-Budget (~33.3ms).
   clockRef.value += 10;
   raf.fire(clockRef.value);
   assert.equal(ctx2d.calls.clearRect, 0, "1. Schritt (10ms) < Budget -> kein Render");
@@ -208,7 +167,6 @@ test("T-wing-mount-framecap: Frames unterhalb des Budgets werden uebersprungen, 
   raf.fire(clockRef.value);
   assert.equal(ctx2d.calls.clearRect, 0, "2. Schritt (kumuliert 20ms) < Budget -> immer noch kein Render");
 
-  // Dritter Schritt schiebt den Akkumulator ueber das Budget.
   clockRef.value += 15;
   raf.fire(clockRef.value);
   assert.equal(ctx2d.calls.clearRect, 1, "kumuliert 35ms >= Budget -> jetzt wird gezeichnet");
@@ -218,8 +176,6 @@ test("T-wing-mount-terminal: success/error stoppen die Schleife, sobald die Time
   const { raf, clockRef } = mountInSandbox({ status: "success" });
   assert.equal(raf.pendingCount(), 1, "Loop startet fuer den success-Status");
 
-  // buildSuccess dauert 0.6s; dt ist pro Frame auf TAB_SWITCH_DT_CAP_SEC=0.1s
-  // gekappt, also reichen mehrere 100ms-Schritte, um die Timeline abzuschliessen.
   let iterations = 0;
   while (raf.pendingCount() > 0 && iterations < 20) {
     clockRef.value += 100;
@@ -258,7 +214,6 @@ test("T-wing-mount-reduced-motion: statische Ruhepose, KEINE rAF-Schleife, kein 
   assert.equal(ctx2d.calls.clearRect, 1, "genau EIN statisches Render der Ruhepose");
   assert.equal(io.store.instance, null, "IntersectionObserver wird bei reduced motion gar nicht erst erstellt");
 
-  // Ein Status-Wechsel bleibt weiterhin im statischen Pfad (keine Schleife startet nachtraeglich).
   handle.setStatus("success");
   assert.equal(raf.pendingCount(), 0, "auch nach setStatus() keine Schleife bei reduced motion");
   assert.equal(ctx2d.calls.clearRect, 2, "erneutes statisches Render nach dem Status-Wechsel");
@@ -277,7 +232,6 @@ test("T-wing-mount-gold: GOLD_ENABLED(Quell-Patch)+opts.gold=true zeichnet genau
   const { raf, ctx2d, clockRef } = mountInSandbox({ source: ENGINE_SOURCE_GOLD_ENABLED, gold: true });
   assert.equal(raf.pendingCount(), 1, "Loop laeuft (idle-Status, kein reduced motion)");
 
-  // Klar ueber dem Frame-Budget (~33.3ms), Sicherheitsmarge wie im framecap-Test oben.
   clockRef.value += FRAME_BUDGET_MS + 5;
   raf.fire(clockRef.value);
 
@@ -292,27 +246,19 @@ test("T-wing-mount-gold: GOLD_ENABLED(Quell-Patch)+opts.gold=true zeichnet genau
 });
 
 test("T-wing-mount-gold-gated: GOLD_ENABLED=false (Produktions-Default) ignoriert opts.gold=true", () => {
-  const { raf, ctx2d, clockRef } = mountInSandbox({ gold: true }); // ungepatchte Quelle, GOLD_ENABLED bleibt false
+  const { raf, ctx2d, clockRef } = mountInSandbox({ gold: true });
   clockRef.value += FRAME_BUDGET_MS + 5;
   raf.fire(clockRef.value);
   assert.equal(ctx2d.calls.fillRect, 0, "Owner-Gate auf Quell-Ebene sperrt applyGoldTint(), unabhaengig von opts.gold");
 });
 
-// H2-S1 (Review-Blocker Runde 3, T1): der Preset-Switch in applyStatus() -
-// tl = (preset === "olympian" ? olympianCycle : classicCycle)(state, ...) - war ueber
-// die public API unverifiziert. Beobachtungspunkt: state.beat wird von KEINEM Tween in
-// classicCycle je angefasst (nur die initiale .set(..., {beat:0,...})); olympianCycle
-// dagegen tweent beat schon im allerersten Schritt (0 -> -1.0 ueber 0.18s). Ein
-// vertauschtes Ternary wuerde also GENAU in dem Preset, das eigentlich olympian laeuft,
-// beat auf 0 halten (bzw. umgekehrt bei classic beat!=0 liefern) - beide Tests unten
-// werden dann ROT.
 test("T-wing-mount-preset-olympian: preset='olympian' fuehrt olympianCycle aus (beat-Kanal wird animiert)", () => {
   const { handle, raf, clockRef } = mountInSandbox({
     source: ENGINE_SOURCE_DEBUG_STATE, preset: "olympian", status: "working",
   });
   assert.equal(raf.pendingCount(), 1, "working-Loop laeuft");
 
-  clockRef.value += 100; // ein Frame reicht: olympianCycle tweent beat schon im ersten Schritt
+  clockRef.value += 100;
   raf.fire(clockRef.value);
 
   assert.notEqual(
@@ -340,8 +286,6 @@ test("T-wing-mount-terminal-error: status='error' stoppt die Schleife, sobald di
   const { raf, clockRef } = mountInSandbox({ status: "error" });
   assert.equal(raf.pendingCount(), 1, "Loop startet fuer den error-Status");
 
-  // buildError dauert 0.45s (4x 0.05s Zittern + 0.25s Rueckfeder); dt ist pro Frame auf
-  // TAB_SWITCH_DT_CAP_SEC=0.1s gekappt, mehrere 100ms-Schritte reichen zum Abschluss.
   let iterations = 0;
   while (raf.pendingCount() > 0 && iterations < 20) {
     clockRef.value += 100;
@@ -353,20 +297,15 @@ test("T-wing-mount-terminal-error: status='error' stoppt die Schleife, sobald di
 });
 
 test("T-wing-mount-options: Nicht-Default size/grid/fpsCap werden uebernommen (H2-S1 Runde 3, T1c)", () => {
-  const grid = { x: 2, y: 3 }; // bewusst grob abweichend von beiden Defaults (8x12 grob / 16x24 fein)
+  const grid = { x: 2, y: 3 };
   const { canvas, ctx2d, raf, clockRef } = mountInSandbox({ size: 200, grid, fpsCap: 5, dpr: 3 });
 
-  // Canvas-Dimension: size * min(devicePixelRatio, DPR_CAP=2) -> 200*2=400, NICHT 200*3=600.
   assert.equal(canvas.width, 400, "DPR wird bei DPR_CAP=2 gekappt statt die volle devicePixelRatio(3) zu uebernehmen");
   assert.equal(canvas.height, 400);
   assert.equal(canvas.style.width, "200px", "CSS-Groesse folgt der logischen size, nicht der physischen Canvas-Dimension");
 
   assert.equal(raf.pendingCount(), 1, "Loop laeuft (idle-Status, kein reduced motion)");
 
-  // fpsCap=5 -> Budget 200ms; TAB_SWITCH_DT_CAP_SEC kappt jeden einzelnen Schritt auf
-  // 100ms, ein einzelner Schritt kann das Budget also gar nicht erreichen (anders als der
-  // Default-Cap 30 mit 33ms-Budget, der schon nach einem 100ms-Schritt rendern wuerde) -
-  // das unterscheidet den konfigurierten Cap sauber vom (ignorierten) Default.
   clockRef.value += 100;
   raf.fire(clockRef.value);
   assert.equal(ctx2d.calls.clearRect, 0, "1. Schritt (100ms) < konfiguriertes Budget (200ms) -> kein Render");
@@ -375,6 +314,5 @@ test("T-wing-mount-options: Nicht-Default size/grid/fpsCap werden uebernommen (H
   raf.fire(clockRef.value);
   assert.equal(ctx2d.calls.clearRect, 1, "kumuliert 200ms >= konfiguriertes Budget -> jetzt wird gezeichnet");
 
-  // Gitter: grid.x=2 * grid.y=3 Zellen * 2 Dreiecke/Zelle = 12 drawImage-Aufrufe.
   assert.equal(ctx2d.calls.drawImage, 12, "explizites Gitter wurde uebernommen, nicht defaultGrid(size=200)=GRID_FINE(16x24)");
 });

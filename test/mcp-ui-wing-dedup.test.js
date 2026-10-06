@@ -1,11 +1,3 @@
-// T2-Fix (Review-Blocker G5/S2): die Wing-Marke (CSS-Keyframes + WING_PNG-Data-URI)
-// darf NICHT mehr woertlich in den 5 Widget-Quelldateien liegen - sie lebt EINMAL in
-// wing-markup.js (aus design-system/components/brand/wing-image.js gebaut) und wird
-// von widget-catalog.js per Platzhalter-Replace beim Laden eingefuegt (withWingAssets,
-// dasselbe Muster wie BIND_SCRIPT/withBindScript). Diese Tests pruefen BEIDE Seiten:
-// die rohen .html-Quellen tragen nur noch die Platzhalter (kein Copy-Paste-Rueckfall),
-// und das ausgelieferte widgetHtml() traegt trotzdem die vollen Assets (self-contained
-// wie zuvor, siehe mcp-ui-wing-static.test.js / mcp-ui-w1-call-widget.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -71,11 +63,6 @@ test("T-wing-dedup-variants: STATIC ist eine echte Teilmenge von LIVE (eine Quel
 test("T-wing-dedup-dark-variants: dunkle Auspraegung neutralisiert die navy Rundmarke, sonst dieselben Keyframes wie hell", () => {
   assert.notEqual(WING_CSS_DARK_STATIC, WING_CSS_STATIC, "dark ist eine eigene CSS-Auspraegung");
   assert.notEqual(WING_CSS_DARK_LIVE, WING_CSS_LIVE, "dark-LIVE ist eine eigene CSS-Auspraegung");
-  // WING_BASE_CSS bleibt byte-identisch geteilt (auch von den hellen Exporten) und
-  // enthaelt die navy-Deklaration daher weiterhin woertlich - das dark-Override setzt
-  // sie per CSS-Kaskade (gleiche Spezifitaet, spaeter deklariert) auf "none" ausser
-  // Kraft, entfernt sie aber nicht aus dem Text. Wir pruefen deshalb die tatsaechliche
-  // Wirkung (Override-Regel vorhanden), nicht die Abwesenheit der Basis-Deklaration.
   assert.match(WING_CSS_DARK_STATIC, /\.wing--dark\{background:none\}/, "dark-Override neutralisiert die navy Rundmarke (0dca7ce-Regression)");
   assert.match(WING_CSS_DARK_LIVE, /\.wing--dark\{background:none\}/, "dark-Override neutralisiert die navy Rundmarke im dunklen LIVE-CSS");
   assert.match(WING_CSS_DARK_STATIC, /@keyframes\s+hermesWingDrift/, "dieselben idle-Keyframes wie hell");

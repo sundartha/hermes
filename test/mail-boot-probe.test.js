@@ -1,12 +1,3 @@
-// mail-boot-probe (312k-Phase 5, HTTP-Fortsetzung): Nachfolger von test/smtp-boot-
-// probe.test.js. Seit bfb5dfc verschickt der Dienst Kuendigungsbestaetigungen, bewusst
-// fail-soft - ein Fehlschlag bleibt nur am Tenant vermerkt und wird vom Sweep wiederholt.
-// Genau daraus entsteht eine blinde Stelle: falsche Zugangsdaten oder eine beim Anbieter
-// nicht verifizierte Absenderadresse lassen JEDEN Versuch lautlos scheitern. probeMailBoot
-// schliesst die Luecke mit EINER Zeile beim Start - UND meldet seit der HTTP-Fortsetzung
-// zuerst, welcher Kanal (Brevo/HTTP oder SMTP) ueberhaupt aktiv ist (Muster
-// test/al-p16-boot-probes.test.js + test/312k-p5-cancellation-mail.test.js: fakeLogger,
-// injizierte _nodemailer/_fetch statt echtem Netzwerk).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { probeMailBoot } from "../src/mail-boot-probe.js";
@@ -24,9 +15,6 @@ function fakeLogger() {
   };
 }
 
-// Fake nodemailer (DIP-Seam, Muster _nodemailer in smtp-mail.js): verify() loest nach dem
-// uebergebenen Ausgang auf, OHNE Netzwerk. Zeichnet auf, mit welchen createTransport-
-// Optionen aufgerufen wurde (Beweis: der SMTP-Zweig wird NUR gebaut, wenn er aktiv ist).
 function fakeNodemailer({ verify }) {
   const createTransportCalls = [];
   return {
@@ -38,7 +26,6 @@ function fakeNodemailer({ verify }) {
   };
 }
 
-// Fake fetch (DIP-Seam, Muster brevo-mail.test.js): zeichnet jeden Aufruf auf.
 function fakeFetch(response) {
   const calls = [];
   const fn = async (url, opts) => {
@@ -68,11 +55,6 @@ const HOST = "smtp.zoho.eu";
 const PORT = 465;
 const FROM = "kuendigung@sundartha.example";
 
-// ======================================================================================
-// Pflichttest 1: nichts konfiguriert -> Meldung, kein Verbindungsversuch (weder SMTP noch
-// Brevo).
-// ======================================================================================
-
 test("Pflichttest 1: nichts konfiguriert -> Meldung, kein Verbindungsversuch", async () => {
   const _nodemailer = fakeNodemailer({ verify: async () => true });
   const _fetch = fakeFetch({ ok: true, status: 200 });
@@ -90,10 +72,6 @@ test("Pflichttest 1: nichts konfiguriert -> Meldung, kein Verbindungsversuch", a
       "Kuendigungsbestaetigungen bleiben offen vermerkt, ein spaeterer Sweep versucht sie erneut.",
   );
 });
-
-// ======================================================================================
-// Pflichttest 2/3: NUR SMTP konfiguriert -> SMTP-Zweig, Erfolg bzw. Fehlschlag.
-// ======================================================================================
 
 test("Pflichttest 2: nur SMTP konfiguriert, Verify gelingt -> SMTP-Erfolgsmeldung", async () => {
   const _nodemailer = fakeNodemailer({ verify: async () => true });
@@ -153,12 +131,6 @@ test("Pflichttest 3b: SMTP-Fehler ohne .code -> Platzhalter statt Wurf/Absturz",
   assert.match(errorLines[0], /code=\?/);
   assert.match(errorLines[0], /name=Error/);
 });
-
-// ======================================================================================
-// Pflichttest 4: Brevo konfiguriert -> HTTP-Zweig, Erfolg bzw. Fehlschlag; UND Vorrang vor
-// SMTP (Rangfolge Muster wiring/web-login.js selectMailer), selbst wenn SMTP_HOST auch
-// gesetzt ist.
-// ======================================================================================
 
 test("Pflichttest 4: Brevo konfiguriert, Account-Check gelingt -> Brevo-Erfolgsmeldung, kein SMTP-Zweig", async () => {
   const _nodemailer = fakeNodemailer({ verify: async () => true });
@@ -227,11 +199,6 @@ test("Pflichttest 5b: Brevo-Netzwerkfehler ohne .code -> Platzhalter statt Wurf/
   assert.match(errorLines[0], /name=Error/);
 });
 
-// ======================================================================================
-// Pflichttest 6: in KEINER Log-Ausgabe (weder SMTP- noch Brevo-Zweig) steht das Passwort/
-// der API-Key.
-// ======================================================================================
-
 test("Pflichttest 6: SMTP-Passwort erscheint in keiner Zeile - weder bei Erfolg noch bei Fehlschlag", async () => {
   const passwordLeakingError = new Error(
     `535 authentication failed for user kuendigung@sundartha.example with password ${SECRET_PASSWORD} to smtp.zoho.eu`,
@@ -287,11 +254,6 @@ test("Pflichttest 6c: err.message (kann Nutzer/Adresse/Anbieterdetails tragen) l
   assert.match(errorLines[0], /code=ETIMEDOUT/);
 });
 
-// ======================================================================================
-// Boot-Integration: der echte Prozess druckt genau eine Sonden-Zeile und startet
-// vollstaendig durch (Muster test/al-p16-boot-probes.test.js AL-P16-8/9).
-// ======================================================================================
-
 test("Boot-Integration: nichts konfiguriert (Auslieferungszustand) -> Sonden-Zeile, Boot laeuft durch", async () => {
   const srv = await startServer({});
   try {
@@ -311,15 +273,13 @@ test("Boot-Integration: nur SMTP konfiguriert, Server nicht erreichbar -> Fehlsc
   const srv = await startServer({
     env: {
       SMTP_HOST: "127.0.0.1",
-      SMTP_PORT: "1", // kein Listener - schnelles ECONNREFUSED, keine echte Netzwerkabhaengigkeit
+      SMTP_PORT: "1",
       SMTP_USER: "probe-test@example.test",
       SMTP_PASSWORD: "smtp-boot-probe-test-password-should-not-leak",
       MAIL_FROM: "probe-test@example.test",
     },
   });
   try {
-    // Der Boot selbst haengt NICHT an der Sonde - /healthz antwortet, obwohl der
-    // Verbindungsversuch im Hintergrund noch laeuft oder schon gescheitert ist.
     const res = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /Start abgebrochen/);

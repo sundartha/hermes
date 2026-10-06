@@ -1,7 +1,3 @@
-// H4: testet die zwei neuen Platzhalter-Injektionen (withHudCardCss,
-// withWingCanvasMount) isoliert ueber synthetische Fixture-HTML - Build-Operate-
-// Check (P13) statt Reimplementierung der Replace-Logik im Test. Gleiches Muster
-// wie test/mcp-ui-wing-canvas-injection.test.js (H2, withWingEngine).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

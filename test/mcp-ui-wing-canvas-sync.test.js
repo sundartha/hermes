@@ -1,8 +1,3 @@
-// H2: Byte-Gleichheit der Wing-Canvas-Engine zwischen Authoring-Quelle
-// (design-system) und Laufzeit-Kopie (src/ui) - Muster wie
-// mcp-ui-p5-token-sync.test.js/mcp-ui-wing-static.test.js (WING_PNG). Kein
-// automatischer Sync-Mechanismus (siehe Kopf-Kommentar beider Dateien) -
-// dieser Test ist das Drift-Gate.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

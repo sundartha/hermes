@@ -1,11 +1,3 @@
-// GAP-21 (tasks/i18n-tests/11-luecken-und-e2e.md, kanonisch per
-// tasks/i18n-tests/00-kanonische-liste.md Cluster D24): Anrufbeantworter/IVR werden von
-// Hermes erkannt (hinter MACHINE_DETECTION_ENABLED, Default AUS) - der TeXML-
-// Originationspfad traegt ein Machine-Detection-Feld im gesendeten Body, NUR wenn das
-// Flag an ist.
-//
-// Muster wie test/telnyx-voice.test.js: global.fetch gestubbt, Config VOR dem Import
-// gesetzt (Key-Leak-Schutz), kein Server-Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -15,19 +7,12 @@ const CONNECTION_ID = "conn_gap21_texml";
 process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
 process.env.TELNYX_CONNECTION_ID = CONNECTION_ID;
-// K2 (Deploy-Sicherheitsbeweis): Flag AN fuer die Feld-Praesenz-Tests, Muster
-// PAYMENT_ENABLED/ELEVENLABS_PLAY_TTS_ENABLED. Der eigentliche Sicherheitsbeweis ist der
-// separate "Flag AUS"-Test unten (per withConfigOverrides, kein zweiter Modul-Import).
 process.env.MACHINE_DETECTION_ENABLED = "true";
 process.env.MACHINE_DETECTION_TIMEOUT_S = "5";
 
 const { telnyxVoice } = await import("../src/telephony/adapters/telnyx/voice.js");
 const { config } = await import("../src/config.js");
 
-// Eigene Save-Set-Restore-Schleife statt makeConfigOverrides().withConfigOverrides: der
-// Helfer awaitet fn() NICHT (nur withConfig() tut das) - fuer einen ASYNCHRONEN Test-Body
-// (originateCall/originateViaCallControl sind async) restaurierte er das Flag VOR dem
-// Abschluss der Assertions. Try/finally hier bleibt explizit awaited.
 async function withMachineDetectionOff(fn) {
   const saved = config.telephony.machineDetection;
   config.telephony.machineDetection = { enabled: false, timeoutS: saved.timeoutS };
@@ -52,10 +37,6 @@ function stubFetch(response = { json: {} }) {
   return calls;
 }
 
-// K1: der Regex traf nur den Unterstrich-Namen ("answering_machine_detection"), NIE die
-// PascalCase-Formfelder des TeXML-Pfads ("AnsweringMachineDetection" - kein Unterstrich).
-// Geweitet, damit BEIDE Namensformen erkannt werden, zusaetzlich zu den exakten
-// Feldnamen-Assertionen je Pfad unten (namensneutral UND exakt).
 const MACHINE_DETECTION_KEY = /(answering[_]?machine|machine)[_]?detection/i;
 
 function hasMachineDetectionField(obj) {
@@ -88,9 +69,6 @@ test("Detection-Timeout wird als eigenes Feld mitgeschickt", async () => {
   assert.equal(form.get("MachineDetectionTimeout"), "5");
 });
 
-// K2 (Pre-Mortem 2): der eigentliche Deploy-Sicherheitsbeweis. Flag AUS (Bestandsdefault)
-// -> BEIDE Origination-Bodies tragen KEIN Machine-Detection-Feld, byte-identisch zum
-// Bestand vor GAP-21.
 test("Flag AUS: beide Origination-Bodies sind byte-identisch zum Bestand (GAP-21 Deploy-Sicherung)", async () => {
   await withMachineDetectionOff(async () => {
     const calls1 = stubFetch({ json: { sid: "tnx_gap21_off" } });

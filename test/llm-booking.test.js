@@ -1,25 +1,8 @@
-// B4a / Abnahmekriterium 2 (PLAN-ANBIETER-PORT.md, woertlich): "Ein Test, der beweist,
-// dass gebucht wird - je Adapter. Nicht 'die Funktion wurde aufgerufen', sondern: nach
-// einem Turn mit Adapter X steht auf der Budget-Achse der ERWARTETE BETRAG."
-//
-// Geprueft wird deshalb der Betrag, nicht ein Aufruf - gegen eine VON HAND gerechnete
-// Zahl (Rechenweg unten). Zwei Naehte, bewusst getrennt:
-//   (1) eine LlmProvider-Attrappe nach src/llm/ports.js liefert ein LlmTurn mit explizit
-//       gesetztem LlmTokenUsage -> beweist den VERTRAG;
-//   (2) der ECHTE Anthropic-Adapter, gefuettert mit einer roh nachgebauten
-//       Anthropic-usage-Antwort ueber den DI-Seam messagesCreate -> beweist die Kette
-//       Adapter -> Vertrag -> Buchung. Kein Netz, kein Guthaben.
-//
-// Dynamischer Import NACH dem Env-Setup (Muster kv-p1-cost-ledger-map.test.js): ein
-// frueher config.js-Import wuerde DATA_DIR/Kurs fixieren, bevor before() sie setzt.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 
-// Die Fixture aus test/llm.test.js (T-I13-2), gerechnet unter claude-haiku-4-5. Die vier
-// Zahlen sind PAARWEISE VERSCHIEDEN und die vier Raten ebenfalls - jede Vertauschung
-// zweier Sorten aendert das Ergebnis (Repo-Lehre: gleiche Fixture-Werte testen nichts).
 const ANTHROPIC_USAGE = Object.freeze({
   input_tokens: 5,
   cache_creation_input_tokens: 20,
@@ -27,18 +10,12 @@ const ANTHROPIC_USAGE = Object.freeze({
   output_tokens: 7,
 });
 const BILLING_MODEL = "claude-haiku-4-5";
-const USD_TO_EUR_MICRO = "920000"; // Kurs 0,92 gepinnt (Lehre test-base-env-drift)
+const USD_TO_EUR_MICRO = "920000";
 
-// Von Hand gerechnet, Raten 1.00 / 1.25 / 0.10 / 5.00 USD je 1 Mio. Token:
-//   (5*1.00 + 20*1.25 + 100*0.10 + 7*5.00) / 1e6 = 0.000075 USD
-//   0.000075 USD * 0.92 EUR/USD * 100 ct/EUR * 1e6 Mikro-ct/ct = 6900 Mikro-Cent
-// Zum Vergleich die ALTE Faltung (125 Eingabe-Token zur vollen Eingabe-Rate): 14 720.
 const EXPECTED_MICRO_CENTS = 6900;
-const EXPECTED_QUANTITY = 132; // 5 + 20 + 100 + 7 - die Stripe-MENGE, unveraendert zum Bestand
+const EXPECTED_QUANTITY = 132;
 const MICRO_CENTS_PER_CENT = 1_000_000;
 
-// B4A-BUCH-4 skaliert dieselbe Sortenmischung um 1e6 - der Betrag wird damit gross genug,
-// um in GANZEN Cents am Gate zu wirken (6900 ct), ohne die Arithmetik zu aendern.
 const GATE_SCALE = 1_000_000;
 const EXPECTED_GATE_CENTS = 6900;
 
@@ -50,7 +27,7 @@ const TENANT_GATE = "b4a_gate";
 let config, store, bookTokenUsage, createAnthropicProvider;
 
 before(async () => {
-  process.env.PAYMENT_ENABLED = "true"; // damit BEIDE Achsen laufen (Gate + Stripe-Ledger)
+  process.env.PAYMENT_ENABLED = "true";
   process.env.PROVIDER_TO_BUCKET_RATE_MICRO = USD_TO_EUR_MICRO;
   process.env.DATA_DIR = tempDataDir(
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
@@ -61,7 +38,6 @@ before(async () => {
   ({ createAnthropicProvider } = await import("../src/llm/adapters/anthropic.js"));
 });
 
-// Verbrauchsform des Vertrags (llm/ports.js LlmTokenUsage), Sorten explizit gesetzt.
 function contractUsage(scale = 1) {
   return {
     inputUncachedTokens: ANTHROPIC_USAGE.input_tokens * scale,
@@ -73,14 +49,12 @@ function contractUsage(scale = 1) {
   };
 }
 
-// Die gebuchte Gate-Achse in Mikro-Cent (voller Cent-Uebertrag + Sub-Cent-Rest).
 function bookedMicroCents(tenantId) {
   const usage = store.usageOf(tenantId);
   return usage.costCents * MICRO_CENTS_PER_CENT + usage.costMicroCentsRem;
 }
 
 test("B4A-BUCH-1 (Attrappe): ein Turn nach dem Port-Vertrag bucht den von Hand gerechneten Betrag", async () => {
-  // Attrappe nach src/llm/ports.js: complete liefert ein LlmTurn, dessen usage wir setzen.
   const provider = {
     complete: async () => ({
       text: "",
@@ -105,7 +79,6 @@ test("B4A-BUCH-2 (Adapter Anthropic): dieselbe Rohantwort ergibt ueber den ECHTE
   const provider = createAnthropicProvider({
     apiKey: "test-key-ohne-netz",
     requestTimeoutMs: 1000,
-    // DI-Seam statt Netz: kein Anthropic-Aufruf, kein Guthaben noetig.
     messagesCreate: async () => ({ content: [], usage: { ...ANTHROPIC_USAGE } }),
   });
   const turn = await provider.complete({ model: BILLING_MODEL, messages: [] });

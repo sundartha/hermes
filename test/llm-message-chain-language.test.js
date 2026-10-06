@@ -1,10 +1,3 @@
-// GAP-28 (tasks/i18n-tests/11-luecken-und-e2e.md): trotz call.language="en" schreibt
-// agentTurn (src/claude.js) vier deutsche Kontroll-Marker + eine deutsche Tool-Result-
-// Konstante unveraendert in die an das Modell gesendete messages-/tool_result-Kette.
-//
-// Direkter Import + lokaler Anthropic-Mock (Muster test/claude-turn-guard.test.js): KEIN
-// Server-Spawn noetig, agentTurn ist die vollstaendige Turn-Logik beider Engines. DATA_DIR
-// + ANTHROPIC_BASE_URL VOR dem ersten config-Import (Repo-Regel).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -13,9 +6,6 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
 
-// Deutsche Konstanten, byte-identisch zu src/claude.js (dort bewusst nicht exportiert -
-// reine Turn-Steuerung, kein oeffentlicher API-Vertrag). Spiegelung analog zu
-// test/claude-turn-guard.test.js.
 const OUTBOUND_OPENING_BOOTSTRAP = "[Der Angerufene hat abgenommen. Beginne das Gespraech.]";
 const SILENT_TURN_MARKER = "[Es kam keine Antwort.]";
 const TAKE_MESSAGE_RESULT = "Nachricht ist notiert.";
@@ -35,10 +25,6 @@ function textMessage(text) {
   };
 }
 
-// Tool-Aufruf OHNE begleitenden Text (speech bleibt leer): fuer take_message reicht das
-// (kein Break-Bedingung daran gekoppelt); fuer end_call ist das absichtlich der Fall,
-// der den Loop NICHT sofort abbrechen laesst (break braucht `speech` truthy) - nur so
-// sendet agentTurn eine zweite Anfrage, die END_CALL_WAIT_INSTRUCTION tatsaechlich traegt.
 function toolUseOnlyMessage(name, input = {}) {
   return {
     id: "msg_gap28_tool",
@@ -100,9 +86,6 @@ after(async () => {
   await new Promise((r) => server.close(r));
 });
 
-// Prueft, ob IRGENDEINE erfasste messages-Kette den Marker traegt - egal ob als reiner
-// String-Content (Bootstrap-/Silent-Marker) oder als tool_result-Blockinhalt
-// (take_message-/end_call-Ergebnis). Rolle/Typ-neutral (G5: EINE Pruefung fuer alle vier).
 function messageChainContains(capturedBodies, marker) {
   return capturedBodies.some((body) =>
     body.messages.some((m) => {

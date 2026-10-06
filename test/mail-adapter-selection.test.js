@@ -1,9 +1,3 @@
-// mail-adapter-selection (312k-Phase 5, HTTP-Fortsetzung): EINE Stelle, EINE Rangfolge
-// (wiring/web-login.js selectMailer) entscheidet, welcher Mail-Adapter konstruiert wird.
-// Reiner Unit-Test der Auswahlfunktion, offline (injizierte Konstruktoren statt echtem
-// nodemailer/fetch) - Muster test/config-namespaces.test.js Setter-Durchschlag-Test:
-// beweist die Rangfolge, nicht die Adapter selbst (die haben eigene Tests, s.
-// brevo-mail.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selectMailer } from "../src/wiring/web-login.js";

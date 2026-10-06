@@ -1,8 +1,3 @@
-// P1 MCP Rich-UI duenne Scheibe: get_call_status auf Stufe 0 (structuredContent +
-// schema-validiert) + Stufe 1 (ui://-Resource fuer faehige Hosts) mit fail-closed
-// Fallback. Kein echter MCP-Transport/Host: ein fakeServer faengt registerTool-
-// (config inkl. outputSchema/_meta) + registerResource-Aufrufe ein, ein lokaler
-// HTTP-Mock spielt das Gateway (Spec Abschnitt 8 - Seam beweist sich ueber Tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -14,7 +9,6 @@ import {
   mcpNativeRenderer,
   WIDGET_AGENT_STATUS,
 } from "../src/ui/adapters/mcp-native.js";
-// Neue read-only Widget-Ids aus der kanonischen Quelle (widget-catalog.js).
 import {
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
@@ -29,51 +23,29 @@ import {
 } from "../src/ui/contract.js";
 import { config } from "../src/config.js";
 
-const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL); // ui://hermes/call/v<widgetVersion>.html
+const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL);
 
-// Abwesenheits-Pin (Kritik N1): KEINE feste Zahl ("~10") vorschreiben, sondern generisch
-// jede "alle N Sekunden"-Polling-Anweisung verbieten - robuster als ein Positiv-String-Pin.
 const NO_POLLING_CADENCE = /alle ~?\d+\s*Sekunden/;
 
-// Minimal gueltige place_call-Aufruf-Form fuer die Tests dieser Datei (EINE Quelle,
-// G5/S2): Argumente UND der dazu passende Gateway-Mock-Body. place_call postet an
-// POST /api/calls und liest nur r.callId - anders als get_call_status/get_call_result,
-// die GET /api/calls/:id lesen und ein RICH_CALL/RICH_TRANSCRIPT-Call-Objekt erwarten.
 const PLACE_CALL_ARGS = { to: "+4917212345678", objective: "Testanruf" };
-// T2-13 (N-10): der Fake-Gateway ist statisch (EIN Body fuer JEDEN Pfad) - place_call
-// macht jetzt ZWEI Hops (confirmCallHop -> POST /api/call-confirmations, dann
-// placeCallHopCall -> POST /api/calls). preview/confirmed decken den ersten Hop,
-// callId weiterhin den zweiten.
 const PLACE_CALL_MOCK = {
   preview: { status: "awaiting_confirmation", to: PLACE_CALL_ARGS.to, objective: PLACE_CALL_ARGS.objective },
   confirmed: true,
   callId: "call_1",
 };
 
-// Faehiger Host: deklariert die UI-Capability mit UI_MIME (SEP-1865 initialize).
 const CAPABLE_CAPS = {
   extensions: { "io.modelcontextprotocol/ui": { mimeTypes: [UI_MIME] } },
 };
 const capableHost = () => ({ enabled: true, capabilities: CAPABLE_CAPS });
 
-// P2: seit withOpenAiToolMetadata() traegt JEDES Werkzeug ein _meta (die T-22-
-// Statuszeilen). Gleich streng wie vor P2, bei dem Vorkommen von _meta genau die
-// Statuszeilen: die Schluesselmenge von _meta muss EXAKT diese beiden Schluessel sein
-// (src/mcp-tools.js OPENAI_INVOKING_KEY/OPENAI_INVOKED_KEY, hier als eigene Konstante,
-// weil die src-Konstanten modul-privat bleiben - sie zu exportieren waere eine
-// ausfuehrbare src-Zeile). Kontrollfall am Dateiende, damit der Helfer nicht unbemerkt
-// immer true liefert.
 const STATUS_LINE_META_KEYS = ["openai/toolInvocation/invoking", "openai/toolInvocation/invoked"];
 const ohneWidgetMeta = (config) =>
   isDeepStrictEqual(Object.keys(config._meta ?? {}).sort(), [...STATUS_LINE_META_KEYS].sort());
 
-// Faengt registerTool(name, config, handler) + registerResource(name, uri, config,
-// readCb) ein. Der Legacy-Weg tool() hat seit OpenAI-P2 keinen Aufrufer mehr in src/.
-// registerResource nimmt die vier SDK-Argumente als Liste entgegen (Signatur des SDK,
-// nicht unsere) und legt sie benannt ab.
 function captureUi(ctx) {
-  const tools = new Map(); // Werkzeugname -> Konfiguration und Handler
-  const resources = []; // je Resource: Name, URI, Konfiguration, Lese-Callback
+  const tools = new Map();
+  const resources = [];
   const fakeServer = {
     registerTool(name, config, handler) {
       tools.set(name, { config, handler });
@@ -87,8 +59,6 @@ function captureUi(ctx) {
   return { tools, resources };
 }
 
-// Gateway-Mock mit konfigurierbarem Body je Pfad (Default = ein laufender Call mit
-// PII-Zusatzfeldern fuer den Whitelist-Test).
 const RICH_CALL = {
   status: "active",
   answeredAt: "2026-06-26T10:00:00.000Z",
@@ -97,7 +67,6 @@ const RICH_CALL = {
     { role: "agent", text: "Guten Tag, hier ist Hermes.", at: "2026-06-26T10:00:01.000Z" },
     { role: "callee", text: "Hallo, worum geht es?", at: "2026-06-26T10:00:05.000Z" },
   ],
-  // Felder, die NIEMALS nach aussen duerfen (Whitelist-Test AC4):
   email: "secret@example.com",
   apiKey: "sk_live_LEAK",
   tenantId: "tenant-XYZ",
@@ -106,9 +75,6 @@ const RICH_CALL = {
 
 const HTTP_OK = 200;
 
-// Benannte Zugriffe statt tiefer Aufrufketten (Demeter G36). Jede Funktion liefert GENAU
-// den Wert, den die Assertion vorher inline gelesen hat - ohne optionales Verketten: ein
-// fehlendes Zwischenfeld oder eine fehlende Resource wirft wie zuvor.
 function uiResourceUriOf(tools, toolName) {
   const { config } = tools.get(toolName);
   return config._meta.ui.resourceUri;
@@ -124,9 +90,6 @@ function readResourceText(resources, uri) {
 }
 
 async function startGatewayMock(body) {
-  // requests: Mitschnitt der eingehenden Requests (method/url/headers) fuer den
-  // Callback-Beweis (P4-AC5: cancel_call laeuft als authentisierter POST auf den
-  // bestehenden /cancel-Pfad, kein Seitenkanal). Additiv - Bestandsaufrufer ignorieren.
   const requests = [];
   const server = http.createServer((req, res) => {
     requests.push({ method: req.method, url: req.url, headers: req.headers });
@@ -145,7 +108,6 @@ async function withGateway(body, fn) {
   return withGatewayCapture(body, () => fn());
 }
 
-// Wie withGateway, reicht aber den Mock an fn (fuer den Request-Mitschnitt, AC5).
 async function withGatewayCapture(body, fn) {
   const mock = await startGatewayMock(body);
   const prev = process.env.GATEWAY_URL;
@@ -167,10 +129,6 @@ const callStatusOutput = z.object({
   failure_reason: z.string().nullable(),
 });
 
-// callOutput (place_call, W2): Obermenge aus callStatusOutput per Spread (G5/S2, keine
-// erneute Feld-Duplizierung) plus den beiden Abschluss-Feldern aus dem get_call_result-
-// Kontrakt (nullable, der Anruf hat gerade erst begonnen) plus dem additiven
-// context_received-Meta (I10, call-quality Impl-1).
 const contextReceivedOutput = z.object({
   active: z.boolean(),
   summary: z.boolean(),
@@ -210,7 +168,6 @@ test("T-P1-UI-AC1: Stufe 0 additiv - Textblock (3 Felder) + schema-validiertes s
     ]);
     assert.equal(result.structuredContent.call_id, "call_1");
     assert.equal(result.structuredContent.status, "in_progress");
-    // CDF1 (Spec b): laufender/erfolgreicher Call traegt KEINEN Fehlergrund -> null.
     assert.equal(result.structuredContent.failure_reason, null, "aktiver Call: failure_reason null");
     assert.doesNotThrow(
       () => callStatusOutput.parse(result.structuredContent),
@@ -220,9 +177,6 @@ test("T-P1-UI-AC1: Stufe 0 additiv - Textblock (3 Felder) + schema-validiertes s
 });
 
 test("T-CDF1-UI: Fehlergrund (Spec c) - failure_reason erscheint, PII bleibt gestrippt", async () => {
-  // Eigener Mock-Body: fehlgeschlagener Call mit gesetztem failureReason + denselben
-  // PII-Zusatzfeldern wie RICH_CALL. Der Grund wird ueber die Whitelist exponiert; die
-  // PII-Felder duerfen NIE durchschlagen (Whitelist, nicht Blacklist).
   const FAILED_CALL = {
     status: "failed",
     startedAt: "2026-06-26T09:59:50.000Z",
@@ -235,14 +189,11 @@ test("T-CDF1-UI: Fehlergrund (Spec c) - failure_reason erscheint, PII bleibt ges
     audioUrl: "https://example.com/recording.wav",
   };
   await withGateway(FAILED_CALL, async () => {
-    // Positiv-Kontrolle (P5b, Schritt 2): der Mock-Upstream traegt weiterhin das volle
-    // Diagnose-Token - sonst waere die Kuerzungs-Zusicherung unten trivial gruen.
     assert.equal(FAILED_CALL.failureReason, "failed:603", "Upstream traegt das volle Token");
     const { tools } = captureUi({ uiHost: capableHost() });
     const { handler } = tools.get("get_call_status");
     const result = await handler({ call_id: "call_1" });
 
-    // P5b (O-13 Teil 2, Datenminimierung): an der MCP-Kante nur noch das Basis-Token.
     assert.equal(result.structuredContent.failure_reason, "failed", "Grund exponiert, gekuerzt");
     assert.doesNotThrow(() => callStatusOutput.parse(result.structuredContent));
 
@@ -302,10 +253,6 @@ test("T-P1-UI-AC3: place_call Stufe-0-only bei Master-Schalter aus / kein hostHi
 });
 
 test("T-UI-stateless: Master-Schalter an OHNE caps (realer stateless tools/list) haengt Widget bei place_call trotzdem an", async () => {
-  // Der Live-Bug, festgenagelt: der stateless Transport (sessionIdGenerator=undefined)
-  // fuehrt die initialize-Capabilities NICHT zum tools/list-POST mit, dort ist
-  // uiHost.capabilities leer/undefined. Das Widget-_meta UND die ui://-Resource muessen
-  // trotzdem erscheinen - sonst sieht der Nutzer nie ein Widget (nur Text).
   const cases = {
     "enabled, capabilities undefined": { enabled: true },
     "enabled, capabilities leer": { enabled: true, capabilities: {} },
@@ -348,7 +295,6 @@ test("T-P1-UI-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Tex
 });
 
 test("T-P1-UI-AC5: Fehlerpfad - degradierte Antwort -> isError, text-only, auch bei faehigem Host", async () => {
-  // Body ohne transcript -> requireFields wirft -> wrapHandler liefert isError.
   await withGateway({ status: "active" }, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
     const { handler } = tools.get("get_call_status");
@@ -361,11 +307,8 @@ test("T-P1-UI-AC5: Fehlerpfad - degradierte Antwort -> isError, text-only, auch 
 });
 
 test("T-P1-UI-seam: uiRendererFor Default = mcp-nativ hinter dem Master-Schalter", () => {
-  // Stufe 0 (null) NUR bei Master-Schalter aus / kein hostHint.
   assert.equal(uiRendererFor({ enabled: false, capabilities: CAPABLE_CAPS }), null);
   assert.equal(uiRendererFor(null), null, "kein hostHint -> null");
-  // Master-Schalter an -> Default mcp-nativ, UNABHAENGIG von der Capability (stateless-
-  // tauglich: caps fehlen auf dem tools/list-POST trotzdem erscheint das Widget).
   assert.equal(uiRendererFor(capableHost()), mcpNativeRenderer);
   assert.equal(uiRendererFor({ enabled: true }), mcpNativeRenderer, "ohne caps -> mcp-nativ");
   assert.equal(uiRendererFor({ enabled: true, capabilities: {} }), mcpNativeRenderer, "leere caps -> mcp-nativ");
@@ -386,18 +329,11 @@ test("T-P1-UI-seam: uiRendererFor Default = mcp-nativ hinter dem Master-Schalter
 });
 
 test("T-UI-server-cap: Server deklariert io.modelcontextprotocol/ui (Pflicht fuers Host-Rendern)", () => {
-  // Der initialize-Response MUSS die Extension mit UI_MIME tragen, sonst rendert der Host
-  // das ui://-Widget NICHT - auch bei korrektem Tool-_meta (MCP Apps / SEP-1865, apps.mdx).
-  // Symmetrie: die eigene Server-Deklaration erfuellt den Client-Detektor (EINE Quelle).
   const ext = uiServerExtension();
   assert.deepEqual(ext, { "io.modelcontextprotocol/ui": { mimeTypes: [UI_MIME] } });
   assert.equal(capabilityDeclaresUi({ extensions: ext }), true, "Server-Decl erfuellt Client-Detektor");
 });
 
-// ===== P2: get_call_result ueber den BESTEHENDEN Seam (Seam-Wiederverwendung) =====
-// Datensatz eines ABGESCHLOSSENEN Calls MIT Roh-Transkript-Zeilen + Summary/Ziel +
-// PII. Der Whitelist-Test beweist, dass NUR Summary/objective/call_id durchkommen,
-// das Roh-Transkript NIE - auch wenn der Datensatz es noch traegt (DSGVO).
 const RICH_TRANSCRIPT = {
   status: "completed",
   summary: "Termin Donnerstag 14:30 bei Salon Bella gebucht.",
@@ -406,7 +342,6 @@ const RICH_TRANSCRIPT = {
     { role: "agent", text: "Guten Tag, ich rufe im Auftrag von Antonio an.", at: "2026-06-26T10:00:01.000Z" },
     { role: "callee", text: "Donnerstag 14:30 koennen wir machen.", at: "2026-06-26T10:00:05.000Z" },
   ],
-  // Felder, die NIEMALS nach aussen duerfen (Whitelist-Test):
   email: "secret@example.com",
   apiKey: "sk_live_LEAK",
   tenantId: "tenant-XYZ",
@@ -417,7 +352,6 @@ const transcriptOutput = z.object({
   call_id: z.string(),
   result_summary: z.string(),
   objective_achieved: z.union([z.boolean(), z.string()]),
-  // AL-P11: die fuenf handlungsrelevanten Ergebnis-Karten-Felder (Whitelist).
   outcome: z.string().nullable(),
   commitments: z.array(z.string()),
   counterparty_commitments: z.array(z.string()),
@@ -500,7 +434,6 @@ test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/T
     const result = await handler({ call_id: "call_1" });
 
     const serialized = JSON.stringify(result);
-    // Roh-Transkript-Zeilen (role/text) UND PII duerfen NIRGENDS auftauchen.
     for (const leak of [
       "Donnerstag 14:30 koennen wir machen.",
       "ich rufe im Auftrag von Antonio an",
@@ -526,7 +459,6 @@ test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/T
 });
 
 test("T-P2-UI-AC5: Fehlerpfad - degradierte Antwort -> isError, text-only, auch bei faehigem Host", async () => {
-  // Body ohne transcript -> requireFields wirft -> wrapHandler liefert isError.
   await withGateway({ status: "completed" }, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
     const { handler } = tools.get("get_call_result");
@@ -538,21 +470,12 @@ test("T-P2-UI-AC5: Fehlerpfad - degradierte Antwort -> isError, text-only, auch 
   });
 });
 
-// ===== P3: zweiter Host-Adapter (ChatGPT Apps SDK) hinter dem UiRenderer-Port =====
-// Beweist: dasselbe Widget rendert in BEIDEN Host-Konventionen; der mcp-native Pfad
-// bleibt byte-kompatibel (die P1/P2-Tests oben sind unveraendert), nur die Host-eigene
-// _meta-Form + der mimeType unterscheiden sich.
-// Skybridge-Capability-Literal: NUR noch fuer den Beleg "eine Capability im Request
-// aendert nichts" (T2-01 - der ChatGPT-/Skybridge-Adapter ist entfernt, s.
-// src/ui/registry.js). Kein Import mehr aus contract.js (die Konstante existiert dort
-// nicht mehr).
 const SKYBRIDGE_UI_MIME = "text/html+skybridge";
 const CHATGPT_CAPS = {
   extensions: { "io.modelcontextprotocol/ui": { mimeTypes: [SKYBRIDGE_UI_MIME] } },
 };
 const skybridgeCapsHost = () => ({ enabled: true, capabilities: CHATGPT_CAPS });
 
-// Liest die statische ui://-Resource eines Renderers fuer ein Widget zurueck (readback).
 function readbackResource(renderer, widgetId) {
   return new Promise((resolve) => {
     const fakeServer = {
@@ -565,10 +488,6 @@ function readbackResource(renderer, widgetId) {
   });
 }
 
-// Nach W2 traegt ausschliesslich place_call ein Widget-_meta (WIDGET_CALL, vereinte
-// Live-Karte) - get_call_status/get_call_result verlieren ihr _meta. P3_WIDGETS spiegelt
-// genau diese tatsaechlich verdrahtete Menge; place_call hat eine andere Aufruf-Form
-// (to/objective statt call_id) und einen POST- statt GET-Mock-Body, daher args separat.
 const P3_WIDGETS = [
   {
     tool: "place_call",
@@ -626,12 +545,6 @@ test("T-P3-AC4: Whitelist - place_call (mcp-nativer Host), kein PII-Leck aus dem
   }
 });
 
-// E7 (T-30/T-31), Stand T2-01: die zwei Einreichungs-Pflichtfelder sitzen seit T2-01 am
-// RESOURCE-INHALT (uiResourceMeta, src/ui/contract.js), nicht mehr am Tool-Deskriptor -
-// der traegt seither nur noch _meta.ui.resourceUri. config.server.publicUrl wird pro Test
-// explizit gesetzt und im finally wiederhergestellt (Muster test/route-auth-inventory.
-// test.js) - sonst entscheidet die lokale .env ueber das Ergebnis. uiResourceMeta()
-// wertet synchron zur Aufrufzeit aus (kein await noetig).
 test("E7-T10: Tool-Deskriptor traegt seit T2-01 NUR resourceUri; die Resource-CSP ist leer, aber vorhanden", async () => {
   const zuvor = config.server.publicUrl;
   config.server.publicUrl = "https://e7.test";
@@ -704,9 +617,6 @@ test("T-P3-AC6: mcpNativeRenderer-Grenzfaelle + Detektor", () => {
   assert.equal(capabilityDeclaresUi(CAPABLE_CAPS), true, "mcp-native Caps -> mcp-nativ");
 });
 
-// Regressions-Pin, seit T2-01 fuer JEDEN Host (es gibt nur noch mcp-native): das
-// Widget-HTML spricht ausschliesslich tools/call-postMessage (SEP-1865) - keine
-// window.openai-Bruecke, keine host-bedingte Verzweigung mehr.
 test("T-P3-AC7: Widget-HTML spricht nur tools/call, keine window.openai-Bruecke", async () => {
   for (const { widgetId } of P3_WIDGETS) {
     const read = await readbackResource(mcpNativeRenderer, widgetId);
@@ -716,17 +626,13 @@ test("T-P3-AC7: Widget-HTML spricht nur tools/call, keine window.openai-Bruecke"
   }
 });
 
-// ===== W3: drittes read-only Widget (get_agent_status) ueber den BESTEHENDEN Seam =====
-// Stufe 0 (structuredContent + Backward-Compat-Text) + Stufe 1 (agent-status Widget) bei
-// faehigem Host; Fallback Stufe-0 bei unfaehigem. Whitelist beweist Nicht-Durchreichung
-// von PII/Secrets/Cross-Tenant-State. Read-only: kein Callback/Button. Erbt W1-Binding.
 const RICH_STATE = {
   agent: {
     number: "+18643028341",
     owner: "Antonio",
     voiceEngine: "budget",
     model: "claude-haiku",
-    secretAgentField: "agent-LEAK", // darf NIE durch
+    secretAgentField: "agent-LEAK",
   },
   usage: {
     calls: 3,
@@ -741,16 +647,13 @@ const RICH_STATE = {
     allowBankData: false,
     secretSetting: "settings-LEAK",
   },
-  // Felder, die NIEMALS nach aussen duerfen:
   email: "secret@example.com",
   apiKey: "sk_live_LEAK",
   tenantId: "tenant-XYZ",
-  calls: [{ id: "c1", from: "+49170000000" }], // fremder state, nicht durchreichen
+  calls: [{ id: "c1", from: "+49170000000" }],
 };
-const RESOURCE_URI_AGENT = uiResourceUri(WIDGET_AGENT_STATUS); // ui://hermes/agent-status/v1.html
+const RESOURCE_URI_AGENT = uiResourceUri(WIDGET_AGENT_STATUS);
 const AGENT_KEYS = ["calls", "number", "owner", "permissions", "planUsagePercent"];
-// Pin bleibt WOERTLICH, wird nur explizit an seine Sprache gebunden (P13 ENTSCHAERFT 1:
-// mitgezogen, nicht "passend gemacht").
 const PERMISSIONS_STR_DE = "Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
 const agentStatusOutput = z.object({
   number: z.string().nullable(),
@@ -772,7 +675,6 @@ test("T-W3-AC1: Stufe 0 additiv - Backward-Compat-Text + schema-validiertes stru
     assert.match(txt, /Agent-Nummer:/, "Backward-Compat-Format (Agent-Nummer)");
     assert.match(txt, /Berechtigungen:/, "Backward-Compat-Format (Berechtigungen)");
 
-    // KS-P8: EINE Nutzungszeile statt drei Geld-/Monats-Zeilen - Prozent, kein Betrag.
     assert.match(
       txt,
       /Monatsnutzung: 40 % des Minuten-Kontingents/,
@@ -787,11 +689,6 @@ test("T-W3-AC1: Stufe 0 additiv - Backward-Compat-Text + schema-validiertes stru
       "structuredContent validiert gegen outputSchema",
     );
 
-    // O-13 Teil 1: voiceEngine/model sind interne Konfigurationswerte, keine Session-
-    // Selbstauskunft an den Tenant - sie duerfen weder ueber den Schluessel noch ueber
-    // den Fixture-WERT durchsickern. RICH_STATE traegt beide Felder UNVERAENDERT
-    // (Kanarienvogel wie secretAgentField) - faellt dieser Test rot, hat die Whitelist
-    // versagt.
     assert.ok(
       !Object.hasOwn(result.structuredContent, "voiceEngine"),
       "structuredContent traegt kein voiceEngine mehr",
@@ -805,10 +702,6 @@ test("T-W3-AC1: Stufe 0 additiv - Backward-Compat-Text + schema-validiertes stru
   });
 });
 
-// KS-P8/D1: planUsagePercent ist nullable (kein Kontingent hinterlegt), aber RICH_STATE
-// oben liefert durchgaengig eine Zahl - der Fallback-Textzweig UND der nullable-Schema-
-// Zweig laufen erst hier durch echtes null. Fixture per Spread aus RICH_STATE (G5 -
-// keine zweite Kopie des ganzen Objekts), NUR usage.planUsagePercent auf null gesetzt.
 const RICH_STATE_NO_PLAN = {
   ...RICH_STATE,
   usage: { ...RICH_STATE.usage, planUsagePercent: null },
@@ -835,11 +728,6 @@ test("T-W3-AC1b: planUsagePercent=null (kein Kontingent hinterlegt) - Text-Fallb
   });
 });
 
-// T2-02/T-34 (invertiert - vormals P13/E4 "Sprache erreicht die Resource"): die
-// registrierte ui://-Resource ist jetzt EINE sprachneutrale, cache-feste Fassung -
-// language:"en" registriert BYTE-IDENTISCH dieselbe Resource wie language:"de".
-// Verdrahtungsbeweis ueber die ECHTE Kette registerTools -> enableWidgetUi ->
-// registerResource -> widgetHtml.
 test("T-W3-AC1c: die registrierte agent-status-Resource ist sprachneutral (T2-02)", async () => {
   await withGateway(RICH_STATE, async () => {
     const { resources } = captureUi({ uiHost: capableHost(), language: "en" });
@@ -848,9 +736,6 @@ test("T-W3-AC1c: die registrierte agent-status-Resource ist sprachneutral (T2-02
   });
 });
 
-// Die Sprache erreicht seit T2-02 das ERGEBNIS (mcp-tools.js withWidgetLocale), nicht
-// mehr die Resource - "de" und "en" registrieren dieselbe Resource-URI mit demselben
-// Inhalt.
 test("T-W3-AC1d: language:\"de\" registriert dieselbe Resource wie language:\"en\"", async () => {
   await withGateway(RICH_STATE, async () => {
     const { resources: resourcesEn } = captureUi({ uiHost: capableHost(), language: "en" });
@@ -890,7 +775,6 @@ test("T-W3-AC3: Fallback fail-closed - kein _meta, keine agent-status-Resource, 
         `${label}: keine agent-status-Resource`,
       );
       assert.ok(ohneWidgetMeta(config), `${label}: kein Widget-_meta`);
-      // Default-Tool: existiert in ALLEN Faellen, nur das Widget faellt weg.
       const result = await handler({});
       assert.ok(result.structuredContent, `${label}: structuredContent bleibt`);
       assert.deepEqual(Object.keys(result.structuredContent).sort(), AGENT_KEYS);
@@ -917,7 +801,6 @@ test("T-W3-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Text/R
     }
     assert.deepEqual(Object.keys(result.structuredContent).sort(), AGENT_KEYS);
 
-    // Resource-HTML ist statisch -> enthaelt per Konstruktion keine Agent-Daten.
     const agentRes = resources.find((resource) => resource.uri === RESOURCE_URI_AGENT);
     const html = await resourceText(agentRes);
     for (const leak of ["secret@example.com", "sk_live_LEAK", "tenant-XYZ", "agent-LEAK", "settings-LEAK"]) {
@@ -927,7 +810,6 @@ test("T-W3-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Text/R
 });
 
 test("T-W3-AC5: Fehlerpfad - Body ohne agent -> isError, text-only, auch bei faehigem Host", async () => {
-  // Body ohne agent -> requireFields wirft VOR pickAgentStatus -> wrapHandler isError.
   await withGateway({ usage: {}, settings: {} }, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
     const { handler } = tools.get("get_agent_status");
@@ -948,27 +830,17 @@ test("T-W3-AC6: agent-status.html self-contained + read-only + erbt W1-Binding",
   assert.ok(!html.includes("@import"), "kein @import");
   assert.doesNotMatch(html, /<link[\s>]/, "kein <link>-Element");
   assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
-  // Read-only: kein Callback/Button/Tool-Trigger im Widget (W3).
   assert.doesNotMatch(html, /<button/, "kein <button> (read-only)");
   assert.ok(!html.includes("callTool"), "kein callTool (read-only, kein Callback)");
-  // Erbt W1-Binding: die injizierte Bootstrap-Quelle (run(window)) ist vorhanden.
   assert.ok(html.includes("run(window)"), "injiziertes W1-Binding (run(window)) vorhanden");
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_AGENT_STATUS), true, "Adapter kennt agent-status");
-  // KS-P8: die Nutzungszeile muss als eigene data-mcp-Zeile im Markup stehen, sonst
-  // bindet W1 sie nie an einen sichtbaren Slot.
   assert.ok(html.includes('data-mcp="planUsagePercent"'), "Slot data-mcp=planUsagePercent");
 });
 
-// ===== W-batch: zwei weitere read-only Widgets ueber den BESTEHENDEN Seam =====
-// get_agent_number / list_calls bekommen Stufe 0 (structuredContent +
-// Backward-Compat-Text) + Stufe 1 (Widget) bei faehigem Host; Fallback Stufe-0 bei
-// unfaehigem. Whitelist beweist Nicht-Durchreichung von PII/Secrets/Roh-Transkript/
-// Cross-Tenant-State. Read-only: kein Callback/Button. list_calls liefert eine
-// Objekt-Liste (Slot-Rendering ueber das generische W1-Binding, data-mcp-row).
 const RICH_STATE_BATCH = {
   agent: {
     number: "+18643028341",
-    secretAgentField: "agent-LEAK", // darf NIE durch
+    secretAgentField: "agent-LEAK",
   },
   calls: [
     {
@@ -981,7 +853,6 @@ const RICH_STATE_BATCH = {
       answeredAt: "2026-06-26T10:00:00.000Z",
       endedAt: "2026-06-26T10:05:00.000Z",
       summary: "Termin Donnerstag 14:30 gebucht.",
-      // Felder, die NIEMALS nach aussen duerfen:
       transcript: [{ role: "agent", text: "Guten Tag, hier ist Hermes." }],
       tenantId: "tenant-XYZ",
       audioUrl: "https://example.com/rec.wav",
@@ -992,7 +863,7 @@ const RICH_STATE_BATCH = {
       direction: "inbound",
       from: "+49170000000",
       to: "+18643028341",
-      status: "active", // ohne answeredAt -> mapStatus = dialing
+      status: "active",
       startedAt: "2026-06-26T11:00:00.000Z",
     },
   ],
@@ -1001,21 +872,16 @@ const RICH_STATE_BATCH = {
       title: "Zahnarzt",
       start: "2026-06-28T09:00:00.000Z",
       end: "2026-06-28T09:30:00.000Z",
-      // Felder, die NIEMALS nach aussen duerfen:
       location: "Geheim",
       attendees: ["secret@example.com"],
       notes: "calendar-LEAK",
     },
   ],
-  // Top-Level-Felder, die NIEMALS nach aussen duerfen:
   email: "secret@example.com",
   apiKey: "sk_live_LEAK",
   tenantId: "tenant-XYZ",
 };
-// Anzahl der Anrufe in RICH_STATE_BATCH.calls, als feste Zahl gepinnt (nicht aus der
-// Fixture abgeleitet): waechst die Fixture, soll die Zaehl-Assertion rot werden.
 const RICH_BATCH_CALL_COUNT = 2;
-// Sammelliste sensibler Strings (eine Quelle fuer alle Whitelist-Checks der Scheibe).
 const BATCH_LEAKS = [
   "agent-LEAK",
   "sk_live_LEAK",
@@ -1026,8 +892,8 @@ const BATCH_LEAKS = [
   "calendar-LEAK",
   "Geheim",
 ];
-const RESOURCE_URI_MY = uiResourceUri(WIDGET_MY_NUMBER); // ui://hermes/my-number/v1.html
-const RESOURCE_URI_CALLS = uiResourceUri(WIDGET_CALLS); // ui://hermes/calls/v<widgetVersion>.html
+const RESOURCE_URI_MY = uiResourceUri(WIDGET_MY_NUMBER);
+const RESOURCE_URI_CALLS = uiResourceUri(WIDGET_CALLS);
 const myNumberOutput = z.object({ number: z.string().nullable() });
 const callsOutput = z.object({
   calls: z.array(
@@ -1042,17 +908,12 @@ const callsOutput = z.object({
   ),
 });
 const CALL_ENTRY_KEYS = ["counterparty", "direction", "id", "startedAt", "status"];
-// Fallback-Faelle (Stufe 0 bleibt): NUR Master-Schalter aus / kein hostHint (stdio).
-// Ein faehiger Host mit/ohne deklarierte Capability bekommt jetzt das Widget (Default
-// mcp-nativ, stateless-tauglich) - siehe T-UI-stateless.
 const FALLBACK_CASES = {
   "stdio (uiHost=null)": null,
   "Master-Schalter aus trotz Capability": { enabled: false, capabilities: CAPABLE_CAPS },
 };
-// Beweist: Server-seitige Formatierung (fmt) - kein roher ISO-Timestamp im Slot.
 const isFormattedNotIso = (value) => typeof value === "string" && value.length > 0 && !/\dT\d/.test(value);
 
-// ---- get_agent_number ----
 test("T-Wb-MY-AC1: Stufe 0 - Backward-Compat-Text {number} + schema-validiertes structuredContent", async () => {
   await withGateway(RICH_STATE_BATCH, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
@@ -1117,7 +978,6 @@ test("T-Wb-MY-AC6: my-number.html self-contained + read-only + erbt W1-Binding",
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_MY_NUMBER), true, "Adapter kennt my-number");
 });
 
-// ---- list_calls ----
 test("T-Wb-CALLS-AC1: Stufe 0 - Backward-Compat-Text + structuredContent { calls:[...] } schema-valid", async () => {
   await withGateway(RICH_STATE_BATCH, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
@@ -1144,9 +1004,6 @@ test("T-Wb-CALLS-AC1: Stufe 0 - Backward-Compat-Text + structuredContent { calls
 
 test("T-Wb-CALLS-AC1b: leere Liste -> 'Noch keine Anrufe.' + structuredContent { calls:[] }", async () => {
   await withGateway({ calls: [] }, async () => {
-    // P15/T3a: die Leertexte folgen jetzt der Tenant-Sprache. Dieser Fall pinnt den
-    // DEUTSCHEN Backward-Compat-Text - die Sprache wird deshalb explizit gewaehlt,
-    // statt implizit vom Weltdefault-Schalter zu leben.
     const { tools } = captureUi({ uiHost: capableHost(), language: "de" });
     const result = await tools.get("list_calls").handler({});
     assert.ok(!result.isError, "leere Liste ist kein Fehler");
@@ -1210,12 +1067,6 @@ test("T-Wb-CALLS-AC6: calls.html self-contained + read-only + erbt W1 + deklarie
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_CALLS), true, "Adapter kennt calls");
 });
 
-// ===== W2: Tool-Rewiring - Spam-Wurzel beseitigt (vormals W0-Charakterisierungs-Baseline) =====
-// Die drei folgenden Tests pinnten in W0 den HEUTIGEN (Spam-)Zustand vor dem Umbau; W2
-// kehrt ihn um (siehe tasks/mcp-ui-live-widget-chain.md, Abschnitt W2). place_call laeuft
-// jetzt ueber uiTool/registerTool (nicht mehr server.tool) und traegt WIDGET_CALL als
-// EINZIGE Karte; get_call_status verliert sein eigenes _meta (siehe P1-Tests oben).
-
 test("T-W2-place-shape: place_call laeuft jetzt ueber registerTool, traegt _meta + volles structuredContent (W0-Baseline invertiert)", async () => {
   await withGateway(PLACE_CALL_MOCK, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
@@ -1226,13 +1077,6 @@ test("T-W2-place-shape: place_call laeuft jetzt ueber registerTool, traegt _meta
     const result = await handler(PLACE_CALL_ARGS);
     assert.equal(result.content[0].type, "text", "Textblock bleibt erhalten (Fallback)");
     assert.ok(result.structuredContent, "structuredContent jetzt vorhanden (W0 kannte undefined)");
-    // I10 (call-quality Impl-1): context_received ist additiv dazugekommen. PLACE_CALL_MOCK
-    // ({callId:"call_1"}) traegt das Feld selbst NICHT -> der Handler normalisiert
-    // defensiv auf "kein Kontext angekommen" (fail-closed, kein Crash bei einem aelteren
-    // Gateway-Mock).
-    // E3 (N-11): deduplicated ist additiv dazugekommen (dieselbe Begruendung, PLACE_CALL_MOCK
-    // traegt es nicht -> Handler normalisiert fail-closed auf false, s. T-I10 unten fuer die
-    // Wert-Pruefung).
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
       "call_id", "context_received", "deduplicated", "duration_s", "failure_reason",
       "last_transcript_lines", "objective_achieved", "result_summary", "status",
@@ -1259,8 +1103,6 @@ test("T-W2-place-shape: place_call laeuft jetzt ueber registerTool, traegt _meta
 });
 
 test("T-I10-context-received: place_call reicht das context_received-Meta der Gateway-Antwort 1:1 durch", async () => {
-  // I10 (call-quality Impl-1): traegt der Gateway-Body das additive Meta, erscheint es
-  // unveraendert im structuredContent (Selbstauskunft ans Chat-LLM, nur bool/count).
   const CONTEXT_RECEIVED = {
     active: true,
     summary: true,
@@ -1297,10 +1139,6 @@ test("T-W2-get-status-desc: get_call_status-Beschreibung pollt das Modell nicht 
   );
 });
 
-// ==================== P10a (H2): Kontrollfall fuer ohneWidgetMeta() ====================
-// Der Helfer prueft seit P10a die Schluesselmenge von _meta STRENG (== genau die beiden
-// Statuszeilen), nicht mehr nur "nicht diese zwei Widget-Schluessel". Dieser Kontrollfall
-// haelt fest, dass der strengere Helfer nicht unbemerkt immer true liefert.
 test("P10a (H2): ohneWidgetMeta() ist streng - true NUR bei genau den beiden Statuszeilen-Schluesseln", () => {
   const STATUS_ONLY = {
     _meta: {
@@ -1316,9 +1154,6 @@ test("P10a (H2): ohneWidgetMeta() ist streng - true NUR bei genau den beiden Sta
   assert.ok(!ohneWidgetMeta(WITH_UI_KEY), "zusaetzlich 'ui' -> false");
 
   const WITH_CHATGPT_KEY = {
-    // Literal statt Import: der Skybridge-Alias existiert seit T2-01 nicht mehr in
-    // contract.js (Adapter entfernt) - der Helfer muss trotzdem JEDEN dritten Schluessel
-    // ablehnen, nicht nur die heute noch verdrahteten.
     _meta: { ...STATUS_ONLY._meta, "openai/outputTemplate": "uri" },
   };
   assert.ok(!ohneWidgetMeta(WITH_CHATGPT_KEY), "zusaetzlich openai/outputTemplate -> false");
