@@ -85,13 +85,13 @@ function jscpdClone(root, file) {
   return { ...file, name: relative(root, resolve(root, file.name)) };
 }
 
-function jscpdFinding(root, { firstFile, secondFile, fragment }) {
+function jscpdFinding(root, { firstFile, secondFile, tokens }) {
   const first = jscpdClone(root, firstFile);
   const second = jscpdClone(root, secondFile);
   const files = [first.name, second.name].sort();
   return {
-    key: findingKey([...files, fingerprint(fragment)]),
-    location: `${first.name}:${first.start}-${first.end} gleicht ${second.name}:${second.start}-${second.end}`,
+    key: findingKey([...files, `${tokens}`]),
+    location: `${first.name}:${first.start}-${first.end} gleicht ${second.name}:${second.start}-${second.end} (${tokens} Tokens)`,
   };
 }
 

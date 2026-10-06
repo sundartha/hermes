@@ -90,6 +90,21 @@ test("basis-vergleich: verschobene Zeilen machen aus einer bekannten Kopie keine
   expectRun(probed, ["jscpd"], { status: EXIT_OK, hides: SHORTEN });
 });
 
+function mitKommentar(...kommentare) {
+  const [kopf, ...rest] = DUPLICATED_BLOCK.split("\n");
+  return [kopf, ...kommentare.map((kommentar) => `  // ${kommentar}`), ...rest].join("\n");
+}
+
+test("basis-vergleich: gelöschte Kommentare in einer bekannten Kopie machen keine neue", (context) => {
+  const probed = probe(context, {
+    "src/eins.js": mitKommentar("summiert doppelt"),
+    "src/zwei.js": mitKommentar("gleiche Rechnung", "zweite Zeile"),
+  }, "jscpd");
+  write(probed, "src/eins.js", DUPLICATED_BLOCK);
+  write(probed, "src/zwei.js", DUPLICATED_BLOCK);
+  expectRun(probed, ["jscpd"], { status: EXIT_OK, hides: SHORTEN });
+});
+
 test("basis-vergleich: die Basislinie waechst weder durch Kuerzen noch durch Anlegen", (context) => {
   const probed = probe(context, JSCPD, "jscpd");
   write(probed, "src/zwei.js", OTHER_CODE);
