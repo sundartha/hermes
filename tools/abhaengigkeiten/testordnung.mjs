@@ -50,7 +50,7 @@ function neueDateien(basis) {
 }
 
 function meldung(pfad, erlaubt) {
-  return `${pfad}: neue Testdateien liegen unter test/<bereich>/ (Bereiche: ${erlaubt.join(", ")}) und heißen nach Verhalten, z. B. test/anrufe/anruf-starten.test.js. Ticket-Nummern gehören in Commit-Text und Testtitel. Ist ein Teil des Namens ein Fachbegriff, gehört er in die Ausnahme des Musters in tools/abhaengigkeiten/testordnung.mjs.`;
+  return `${pfad}: neue Testdateien liegen unter test/<bereich>/ (Bereiche: ${erlaubt.join(", ")}) und heißen nach Verhalten, z. B. test/anrufe/anruf-starten.test.js. Ticket-Nummern gehören in Commit-Text und Testtitel. Ist ein Teil des Namens ein Fachbegriff, ist das eine Änderung an einer Prüfung und braucht eine Freigabe von Antonio oder Jonas; im Zweifel den Namen nach Verhalten wählen.`;
 }
 
 export function testordnung(basis) {
