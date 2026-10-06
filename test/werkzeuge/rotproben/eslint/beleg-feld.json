@@ -1,0 +1,9 @@
+{
+  "titel": "Beleg-Feld des Inbound-Trunks außerhalb von Store und Weiche",
+  "dateien": {
+    "src/routes/api-read.js": [
+      "export const probeBelegFeld = (nummer) => nummer.elInboundTrunkBelegtAt;"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/wort-nur-in\""
+}

@@ -32,6 +32,49 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/wort-nur-in": [
+        2,
+        {
+          "meldung": "Den Telnyx-Belegabruf gibt es nur im Kosten-Abgleich src/billing/cost-truing.js und im Telnyx-Adapter (LCT P3); Geld- und Gate-Pfade rufen ihn nie auf. Ein neuer Nutzer braucht einen Eintrag in eslint.config.js mit Freigabe der Owner.",
+          "muster": "^(fetchCostRecordPool|assignCostRecords)$|(^|telnyx\\.com)/v2/detail_records",
+          "name": "telnyx-belegabruf",
+          "nurIn": [
+            "src/billing/cost-truing.js",
+            "src/telephony/adapters/telnyx/voice.js"
+          ]
+        },
+        {
+          "flags": "i",
+          "meldung": "Zeitzonen und Zeitzonen-Quellen gehören nicht in diese Datei (LAW-07: kein Anrufzeit-Gate). Reine Anzeige außerhalb der Gate-Kette braucht einen Eintrag in eslint.config.js mit Freigabe der Owner; Gate-Kette, Anrufabschluss und Dauerbegrenzung nie.",
+          "muster": "time_?zone|(^|/)(time-context|nanp-area-codes)(\\.js)?$",
+          "name": "kein-anrufzeit-gate",
+          "nurIn": [
+            "src/billing/cancellation-mail.js",
+            "src/claude.js",
+            "src/elevenlabs/inbound-initiation.js",
+            "src/elevenlabs/nanp-area-codes.js",
+            "src/elevenlabs/outbound.js",
+            "src/elevenlabs/time-context.js",
+            "src/geo/resolve.js",
+            "src/store.js",
+            "src/store/defaults.js",
+            "src/store/json.js",
+            "src/store/pg.js",
+            "src/store/state-ops.js",
+            "src/web-auth.js"
+          ]
+        },
+        {
+          "meldung": "Die Beleg-Felder des Inbound-Trunks stehen nur im Store und in der Weiche (IEX-A8). Andere Module lesen und schreiben sie über die Store-Operationen (markNumberElInboundTrunkBelegt, clearNumberElInboundTrunkBeleg).",
+          "muster": "^elInboundTrunk(ZugangFp|BelegtAt)$|el_inbound_trunk_(zugang_fp|belegt_at)",
+          "name": "trunk-beleg-felder",
+          "nurIn": [
+            "src/store/state-ops.js",
+            "src/store/pg.js",
+            "src/elevenlabs/inbound-path-decision.js"
+          ]
+        }
+      ],
       "id-length": [
         2,
         {
@@ -689,6 +732,1896 @@
         {
           "message": "uebersprungener Test ({ skip: true }) - T4, G4.",
           "selector": "Property[key.name='skip'][value.value=true]"
+        }
+      ],
+      "no-self-assign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-setter-return": [
+        2
+      ],
+      "no-shadow-restricted-names": [
+        2,
+        {
+          "reportGlobalThis": true
+        }
+      ],
+      "no-sparse-arrays": [
+        2
+      ],
+      "no-this-before-super": [
+        2
+      ],
+      "no-unassigned-vars": [
+        2
+      ],
+      "no-undef": [
+        2,
+        {
+          "typeof": false
+        }
+      ],
+      "no-unexpected-multiline": [
+        2
+      ],
+      "no-unreachable": [
+        2
+      ],
+      "no-unsafe-finally": [
+        2
+      ],
+      "no-unsafe-negation": [
+        2,
+        {
+          "enforceForOrderingRelations": false
+        }
+      ],
+      "no-unsafe-optional-chaining": [
+        2,
+        {
+          "disallowArithmeticOperators": false
+        }
+      ],
+      "no-unused-labels": [
+        2
+      ],
+      "no-unused-private-class-members": [
+        2
+      ],
+      "no-unused-vars": [
+        1,
+        {
+          "args": "after-used",
+          "argsIgnorePattern": "^_",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all",
+          "varsIgnorePattern": "^_"
+        }
+      ],
+      "no-useless-assignment": [
+        1
+      ],
+      "no-useless-backreference": [
+        2
+      ],
+      "no-useless-catch": [
+        2
+      ],
+      "no-useless-constructor": [
+        2
+      ],
+      "no-useless-escape": [
+        2,
+        {
+          "allowRegexCharacters": []
+        }
+      ],
+      "no-with": [
+        2
+      ],
+      "preserve-caught-error": [
+        2,
+        {
+          "requireCatchParameter": false
+        }
+      ],
+      "require-yield": [
+        2
+      ],
+      "sonarjs/no-commented-code": [
+        2
+      ],
+      "unicorn/error-message": [
+        2
+      ],
+      "use-isnan": [
+        2,
+        {
+          "enforceForIndexOf": false,
+          "enforceForSwitchCase": true
+        }
+      ],
+      "valid-typeof": [
+        2,
+        {
+          "requireStringLiterals": false
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "linterOptions": {
+      "noInlineConfig": true,
+      "reportUnusedDisableDirectives": 2
+    },
+    "rules": {
+      "complexity": [
+        2,
+        {
+          "max": 10
+        }
+      ],
+      "constructor-super": [
+        2
+      ],
+      "for-direction": [
+        2
+      ],
+      "getter-return": [
+        2,
+        {
+          "allowImplicit": false
+        }
+      ],
+      "hermes/keine-kommentare": [
+        2,
+        {
+          "bestand": "tools/basis/kommentare.json"
+        }
+      ],
+      "hermes/namen-ohne-begruendung": [
+        1
+      ],
+      "id-length": [
+        2,
+        {
+          "exceptionPatterns": [],
+          "exceptions": [
+            "i",
+            "j",
+            "k"
+          ],
+          "min": 2,
+          "properties": "always"
+        }
+      ],
+      "max-depth": [
+        2,
+        {
+          "max": 4
+        }
+      ],
+      "max-lines-per-function": [
+        2,
+        {
+          "max": 100,
+          "skipBlankLines": true,
+          "skipComments": true
+        }
+      ],
+      "max-params": [
+        2,
+        {
+          "max": 3
+        }
+      ],
+      "no-async-promise-executor": [
+        2
+      ],
+      "no-case-declarations": [
+        2
+      ],
+      "no-class-assign": [
+        2
+      ],
+      "no-compare-neg-zero": [
+        2
+      ],
+      "no-cond-assign": [
+        2,
+        "except-parens"
+      ],
+      "no-console": [
+        0,
+        {}
+      ],
+      "no-const-assign": [
+        2
+      ],
+      "no-constant-binary-expression": [
+        2
+      ],
+      "no-constant-condition": [
+        2,
+        {
+          "checkLoops": false
+        }
+      ],
+      "no-control-regex": [
+        2
+      ],
+      "no-debugger": [
+        2
+      ],
+      "no-delete-var": [
+        2
+      ],
+      "no-dupe-args": [
+        2
+      ],
+      "no-dupe-class-members": [
+        2
+      ],
+      "no-dupe-else-if": [
+        2
+      ],
+      "no-dupe-keys": [
+        2
+      ],
+      "no-duplicate-case": [
+        2
+      ],
+      "no-empty": [
+        1,
+        {
+          "allowEmptyCatch": true
+        }
+      ],
+      "no-empty-character-class": [
+        2
+      ],
+      "no-empty-pattern": [
+        2,
+        {
+          "allowObjectPatternsAsParameters": false
+        }
+      ],
+      "no-empty-static-block": [
+        2
+      ],
+      "no-ex-assign": [
+        2
+      ],
+      "no-extra-boolean-cast": [
+        2,
+        {}
+      ],
+      "no-fallthrough": [
+        2,
+        {
+          "allowEmptyCase": false,
+          "reportUnusedFallthroughComment": false
+        }
+      ],
+      "no-func-assign": [
+        2
+      ],
+      "no-global-assign": [
+        2,
+        {
+          "exceptions": []
+        }
+      ],
+      "no-import-assign": [
+        2
+      ],
+      "no-invalid-regexp": [
+        2,
+        {}
+      ],
+      "no-irregular-whitespace": [
+        2,
+        {
+          "skipComments": false,
+          "skipJSXText": false,
+          "skipRegExps": false,
+          "skipStrings": true,
+          "skipTemplates": false
+        }
+      ],
+      "no-loss-of-precision": [
+        2
+      ],
+      "no-magic-numbers": [
+        2,
+        {
+          "detectObjects": false,
+          "enforceConst": true,
+          "ignore": [
+            0,
+            1,
+            -1
+          ],
+          "ignoreArrayIndexes": true,
+          "ignoreClassFieldInitialValues": false,
+          "ignoreDefaultValues": false,
+          "ignoreEnums": false,
+          "ignoreNumericLiteralTypes": false,
+          "ignoreReadonlyClassProperties": false,
+          "ignoreTypeIndexes": false
+        }
+      ],
+      "no-misleading-character-class": [
+        2,
+        {
+          "allowEscape": false
+        }
+      ],
+      "no-negated-condition": [
+        2
+      ],
+      "no-new-native-nonconstructor": [
+        2
+      ],
+      "no-nonoctal-decimal-escape": [
+        2
+      ],
+      "no-obj-calls": [
+        2
+      ],
+      "no-octal": [
+        2
+      ],
+      "no-param-reassign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-prototype-builtins": [
+        2
+      ],
+      "no-redeclare": [
+        2,
+        {
+          "builtinGlobals": true
+        }
+      ],
+      "no-regex-spaces": [
+        1
+      ],
+      "no-restricted-properties": [
+        2,
+        {
+          "message": "process.env nur in src/config.js verwenden (G35, CLAUDE.md).",
+          "object": "process",
+          "property": "env"
+        }
+      ],
+      "no-restricted-syntax": [
+        2,
+        {
+          "message": "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)",
+          "selector": "MemberExpression MemberExpression MemberExpression MemberExpression"
+        }
+      ],
+      "no-self-assign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-setter-return": [
+        2
+      ],
+      "no-shadow-restricted-names": [
+        2,
+        {
+          "reportGlobalThis": true
+        }
+      ],
+      "no-sparse-arrays": [
+        2
+      ],
+      "no-this-before-super": [
+        2
+      ],
+      "no-unassigned-vars": [
+        2
+      ],
+      "no-undef": [
+        2,
+        {
+          "typeof": false
+        }
+      ],
+      "no-unexpected-multiline": [
+        2
+      ],
+      "no-unreachable": [
+        2
+      ],
+      "no-unsafe-finally": [
+        2
+      ],
+      "no-unsafe-negation": [
+        2,
+        {
+          "enforceForOrderingRelations": false
+        }
+      ],
+      "no-unsafe-optional-chaining": [
+        2,
+        {
+          "disallowArithmeticOperators": false
+        }
+      ],
+      "no-unused-labels": [
+        2
+      ],
+      "no-unused-private-class-members": [
+        2
+      ],
+      "no-unused-vars": [
+        1,
+        {
+          "args": "after-used",
+          "argsIgnorePattern": "^_",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all",
+          "varsIgnorePattern": "^_"
+        }
+      ],
+      "no-useless-assignment": [
+        1
+      ],
+      "no-useless-backreference": [
+        2
+      ],
+      "no-useless-catch": [
+        2
+      ],
+      "no-useless-constructor": [
+        2
+      ],
+      "no-useless-escape": [
+        2,
+        {
+          "allowRegexCharacters": []
+        }
+      ],
+      "no-with": [
+        2
+      ],
+      "preserve-caught-error": [
+        2,
+        {
+          "requireCatchParameter": false
+        }
+      ],
+      "require-yield": [
+        2
+      ],
+      "sonarjs/no-commented-code": [
+        2
+      ],
+      "unicorn/error-message": [
+        2
+      ],
+      "use-isnan": [
+        2,
+        {
+          "enforceForIndexOf": false,
+          "enforceForSwitchCase": true
+        }
+      ],
+      "valid-typeof": [
+        2,
+        {
+          "requireStringLiterals": false
+        }
+      ]
+    }
+  },
+  "tools": {
+    "linterOptions": {
+      "noInlineConfig": true,
+      "reportUnusedDisableDirectives": 2
+    },
+    "rules": {
+      "complexity": [
+        2,
+        {
+          "max": 10
+        }
+      ],
+      "constructor-super": [
+        2
+      ],
+      "for-direction": [
+        2
+      ],
+      "getter-return": [
+        2,
+        {
+          "allowImplicit": false
+        }
+      ],
+      "hermes/keine-kommentare": [
+        2,
+        {
+          "bestand": "tools/basis/kommentare.json"
+        }
+      ],
+      "hermes/namen-ohne-begruendung": [
+        1
+      ],
+      "id-length": [
+        2,
+        {
+          "exceptionPatterns": [],
+          "exceptions": [
+            "i",
+            "j",
+            "k"
+          ],
+          "min": 2,
+          "properties": "always"
+        }
+      ],
+      "max-depth": [
+        2,
+        {
+          "max": 4
+        }
+      ],
+      "max-lines-per-function": [
+        2,
+        {
+          "max": 100,
+          "skipBlankLines": true,
+          "skipComments": true
+        }
+      ],
+      "max-params": [
+        2,
+        {
+          "max": 3
+        }
+      ],
+      "no-async-promise-executor": [
+        2
+      ],
+      "no-case-declarations": [
+        2
+      ],
+      "no-class-assign": [
+        2
+      ],
+      "no-compare-neg-zero": [
+        2
+      ],
+      "no-cond-assign": [
+        2,
+        "except-parens"
+      ],
+      "no-console": [
+        0,
+        {}
+      ],
+      "no-const-assign": [
+        2
+      ],
+      "no-constant-binary-expression": [
+        2
+      ],
+      "no-constant-condition": [
+        2,
+        {
+          "checkLoops": false
+        }
+      ],
+      "no-control-regex": [
+        2
+      ],
+      "no-debugger": [
+        2
+      ],
+      "no-delete-var": [
+        2
+      ],
+      "no-dupe-args": [
+        2
+      ],
+      "no-dupe-class-members": [
+        2
+      ],
+      "no-dupe-else-if": [
+        2
+      ],
+      "no-dupe-keys": [
+        2
+      ],
+      "no-duplicate-case": [
+        2
+      ],
+      "no-empty": [
+        1,
+        {
+          "allowEmptyCatch": true
+        }
+      ],
+      "no-empty-character-class": [
+        2
+      ],
+      "no-empty-pattern": [
+        2,
+        {
+          "allowObjectPatternsAsParameters": false
+        }
+      ],
+      "no-empty-static-block": [
+        2
+      ],
+      "no-ex-assign": [
+        2
+      ],
+      "no-extra-boolean-cast": [
+        2,
+        {}
+      ],
+      "no-fallthrough": [
+        2,
+        {
+          "allowEmptyCase": false,
+          "reportUnusedFallthroughComment": false
+        }
+      ],
+      "no-func-assign": [
+        2
+      ],
+      "no-global-assign": [
+        2,
+        {
+          "exceptions": []
+        }
+      ],
+      "no-import-assign": [
+        2
+      ],
+      "no-invalid-regexp": [
+        2,
+        {}
+      ],
+      "no-irregular-whitespace": [
+        2,
+        {
+          "skipComments": false,
+          "skipJSXText": false,
+          "skipRegExps": false,
+          "skipStrings": true,
+          "skipTemplates": false
+        }
+      ],
+      "no-loss-of-precision": [
+        2
+      ],
+      "no-magic-numbers": [
+        2,
+        {
+          "detectObjects": false,
+          "enforceConst": true,
+          "ignore": [
+            0,
+            1,
+            -1
+          ],
+          "ignoreArrayIndexes": true,
+          "ignoreClassFieldInitialValues": false,
+          "ignoreDefaultValues": false,
+          "ignoreEnums": false,
+          "ignoreNumericLiteralTypes": false,
+          "ignoreReadonlyClassProperties": false,
+          "ignoreTypeIndexes": false
+        }
+      ],
+      "no-misleading-character-class": [
+        2,
+        {
+          "allowEscape": false
+        }
+      ],
+      "no-negated-condition": [
+        2
+      ],
+      "no-new-native-nonconstructor": [
+        2
+      ],
+      "no-nonoctal-decimal-escape": [
+        2
+      ],
+      "no-obj-calls": [
+        2
+      ],
+      "no-octal": [
+        2
+      ],
+      "no-param-reassign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-prototype-builtins": [
+        2
+      ],
+      "no-redeclare": [
+        2,
+        {
+          "builtinGlobals": true
+        }
+      ],
+      "no-regex-spaces": [
+        1
+      ],
+      "no-restricted-properties": [
+        2,
+        {
+          "message": "process.env nur in src/config.js verwenden (G35, CLAUDE.md).",
+          "object": "process",
+          "property": "env"
+        }
+      ],
+      "no-restricted-syntax": [
+        2,
+        {
+          "message": "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)",
+          "selector": "MemberExpression MemberExpression MemberExpression MemberExpression"
+        }
+      ],
+      "no-self-assign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-setter-return": [
+        2
+      ],
+      "no-shadow-restricted-names": [
+        2,
+        {
+          "reportGlobalThis": true
+        }
+      ],
+      "no-sparse-arrays": [
+        2
+      ],
+      "no-this-before-super": [
+        2
+      ],
+      "no-unassigned-vars": [
+        2
+      ],
+      "no-undef": [
+        2,
+        {
+          "typeof": false
+        }
+      ],
+      "no-unexpected-multiline": [
+        2
+      ],
+      "no-unreachable": [
+        2
+      ],
+      "no-unsafe-finally": [
+        2
+      ],
+      "no-unsafe-negation": [
+        2,
+        {
+          "enforceForOrderingRelations": false
+        }
+      ],
+      "no-unsafe-optional-chaining": [
+        2,
+        {
+          "disallowArithmeticOperators": false
+        }
+      ],
+      "no-unused-labels": [
+        2
+      ],
+      "no-unused-private-class-members": [
+        2
+      ],
+      "no-unused-vars": [
+        1,
+        {
+          "args": "after-used",
+          "argsIgnorePattern": "^_",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all",
+          "varsIgnorePattern": "^_"
+        }
+      ],
+      "no-useless-assignment": [
+        1
+      ],
+      "no-useless-backreference": [
+        2
+      ],
+      "no-useless-catch": [
+        2
+      ],
+      "no-useless-constructor": [
+        2
+      ],
+      "no-useless-escape": [
+        2,
+        {
+          "allowRegexCharacters": []
+        }
+      ],
+      "no-with": [
+        2
+      ],
+      "preserve-caught-error": [
+        2,
+        {
+          "requireCatchParameter": false
+        }
+      ],
+      "require-yield": [
+        2
+      ],
+      "sonarjs/no-commented-code": [
+        2
+      ],
+      "unicorn/error-message": [
+        2
+      ],
+      "use-isnan": [
+        2,
+        {
+          "enforceForIndexOf": false,
+          "enforceForSwitchCase": true
+        }
+      ],
+      "valid-typeof": [
+        2,
+        {
+          "requireStringLiterals": false
+        }
+      ]
+    }
+  },
+  "apps/web/src/lib": {
+    "linterOptions": {
+      "noInlineConfig": true,
+      "reportUnusedDisableDirectives": 2
+    },
+    "rules": {
+      "complexity": [
+        2,
+        {
+          "max": 10
+        }
+      ],
+      "constructor-super": [
+        2
+      ],
+      "for-direction": [
+        2
+      ],
+      "getter-return": [
+        2,
+        {
+          "allowImplicit": false
+        }
+      ],
+      "hermes/keine-kommentare": [
+        2,
+        {
+          "bestand": "tools/basis/kommentare.json"
+        }
+      ],
+      "hermes/namen-ohne-begruendung": [
+        1
+      ],
+      "id-length": [
+        2,
+        {
+          "exceptionPatterns": [],
+          "exceptions": [
+            "i",
+            "j",
+            "k"
+          ],
+          "min": 2,
+          "properties": "always"
+        }
+      ],
+      "max-depth": [
+        2,
+        {
+          "max": 4
+        }
+      ],
+      "max-lines-per-function": [
+        2,
+        {
+          "max": 100,
+          "skipBlankLines": true,
+          "skipComments": true
+        }
+      ],
+      "max-params": [
+        2,
+        {
+          "max": 3
+        }
+      ],
+      "no-async-promise-executor": [
+        2
+      ],
+      "no-case-declarations": [
+        2
+      ],
+      "no-class-assign": [
+        2
+      ],
+      "no-compare-neg-zero": [
+        2
+      ],
+      "no-cond-assign": [
+        2,
+        "except-parens"
+      ],
+      "no-console": [
+        0,
+        {}
+      ],
+      "no-const-assign": [
+        2
+      ],
+      "no-constant-binary-expression": [
+        2
+      ],
+      "no-constant-condition": [
+        2,
+        {
+          "checkLoops": false
+        }
+      ],
+      "no-control-regex": [
+        2
+      ],
+      "no-debugger": [
+        2
+      ],
+      "no-delete-var": [
+        2
+      ],
+      "no-dupe-args": [
+        2
+      ],
+      "no-dupe-class-members": [
+        2
+      ],
+      "no-dupe-else-if": [
+        2
+      ],
+      "no-dupe-keys": [
+        2
+      ],
+      "no-duplicate-case": [
+        2
+      ],
+      "no-empty": [
+        1,
+        {
+          "allowEmptyCatch": true
+        }
+      ],
+      "no-empty-character-class": [
+        2
+      ],
+      "no-empty-pattern": [
+        2,
+        {
+          "allowObjectPatternsAsParameters": false
+        }
+      ],
+      "no-empty-static-block": [
+        2
+      ],
+      "no-ex-assign": [
+        2
+      ],
+      "no-extra-boolean-cast": [
+        2,
+        {}
+      ],
+      "no-fallthrough": [
+        2,
+        {
+          "allowEmptyCase": false,
+          "reportUnusedFallthroughComment": false
+        }
+      ],
+      "no-func-assign": [
+        2
+      ],
+      "no-global-assign": [
+        2,
+        {
+          "exceptions": []
+        }
+      ],
+      "no-import-assign": [
+        2
+      ],
+      "no-invalid-regexp": [
+        2,
+        {}
+      ],
+      "no-irregular-whitespace": [
+        2,
+        {
+          "skipComments": false,
+          "skipJSXText": false,
+          "skipRegExps": false,
+          "skipStrings": true,
+          "skipTemplates": false
+        }
+      ],
+      "no-loss-of-precision": [
+        2
+      ],
+      "no-magic-numbers": [
+        2,
+        {
+          "detectObjects": false,
+          "enforceConst": true,
+          "ignore": [
+            0,
+            1,
+            -1
+          ],
+          "ignoreArrayIndexes": true,
+          "ignoreClassFieldInitialValues": false,
+          "ignoreDefaultValues": false,
+          "ignoreEnums": false,
+          "ignoreNumericLiteralTypes": false,
+          "ignoreReadonlyClassProperties": false,
+          "ignoreTypeIndexes": false
+        }
+      ],
+      "no-misleading-character-class": [
+        2,
+        {
+          "allowEscape": false
+        }
+      ],
+      "no-negated-condition": [
+        2
+      ],
+      "no-new-native-nonconstructor": [
+        2
+      ],
+      "no-nonoctal-decimal-escape": [
+        2
+      ],
+      "no-obj-calls": [
+        2
+      ],
+      "no-octal": [
+        2
+      ],
+      "no-param-reassign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-prototype-builtins": [
+        2
+      ],
+      "no-redeclare": [
+        2,
+        {
+          "builtinGlobals": true
+        }
+      ],
+      "no-regex-spaces": [
+        1
+      ],
+      "no-restricted-properties": [
+        2,
+        {
+          "message": "process.env nur in src/config.js verwenden (G35, CLAUDE.md).",
+          "object": "process",
+          "property": "env"
+        }
+      ],
+      "no-restricted-syntax": [
+        2,
+        {
+          "message": "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)",
+          "selector": "MemberExpression MemberExpression MemberExpression MemberExpression"
+        }
+      ],
+      "no-self-assign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-setter-return": [
+        2
+      ],
+      "no-shadow-restricted-names": [
+        2,
+        {
+          "reportGlobalThis": true
+        }
+      ],
+      "no-sparse-arrays": [
+        2
+      ],
+      "no-this-before-super": [
+        2
+      ],
+      "no-unassigned-vars": [
+        2
+      ],
+      "no-undef": [
+        2,
+        {
+          "typeof": false
+        }
+      ],
+      "no-unexpected-multiline": [
+        2
+      ],
+      "no-unreachable": [
+        2
+      ],
+      "no-unsafe-finally": [
+        2
+      ],
+      "no-unsafe-negation": [
+        2,
+        {
+          "enforceForOrderingRelations": false
+        }
+      ],
+      "no-unsafe-optional-chaining": [
+        2,
+        {
+          "disallowArithmeticOperators": false
+        }
+      ],
+      "no-unused-labels": [
+        2
+      ],
+      "no-unused-private-class-members": [
+        2
+      ],
+      "no-unused-vars": [
+        1,
+        {
+          "args": "after-used",
+          "argsIgnorePattern": "^_",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all",
+          "varsIgnorePattern": "^_"
+        }
+      ],
+      "no-useless-assignment": [
+        1
+      ],
+      "no-useless-backreference": [
+        2
+      ],
+      "no-useless-catch": [
+        2
+      ],
+      "no-useless-constructor": [
+        2
+      ],
+      "no-useless-escape": [
+        2,
+        {
+          "allowRegexCharacters": []
+        }
+      ],
+      "no-with": [
+        2
+      ],
+      "preserve-caught-error": [
+        2,
+        {
+          "requireCatchParameter": false
+        }
+      ],
+      "require-yield": [
+        2
+      ],
+      "sonarjs/no-commented-code": [
+        2
+      ],
+      "unicorn/error-message": [
+        2
+      ],
+      "use-isnan": [
+        2,
+        {
+          "enforceForIndexOf": false,
+          "enforceForSwitchCase": true
+        }
+      ],
+      "valid-typeof": [
+        2,
+        {
+          "requireStringLiterals": false
+        }
+      ]
+    }
+  },
+  "apps/web/src/pages": {
+    "linterOptions": {
+      "noInlineConfig": true,
+      "reportUnusedDisableDirectives": 2
+    },
+    "rules": {
+      "complexity": [
+        2,
+        {
+          "max": 10
+        }
+      ],
+      "constructor-super": [
+        2
+      ],
+      "for-direction": [
+        2
+      ],
+      "getter-return": [
+        2,
+        {
+          "allowImplicit": false
+        }
+      ],
+      "hermes/keine-kommentare": [
+        2,
+        {
+          "bestand": "tools/basis/kommentare.json"
+        }
+      ],
+      "hermes/namen-ohne-begruendung": [
+        1
+      ],
+      "id-length": [
+        2,
+        {
+          "exceptionPatterns": [],
+          "exceptions": [
+            "i",
+            "j",
+            "k"
+          ],
+          "min": 2,
+          "properties": "always"
+        }
+      ],
+      "max-depth": [
+        2,
+        {
+          "max": 4
+        }
+      ],
+      "max-lines-per-function": [
+        2,
+        {
+          "max": 100,
+          "skipBlankLines": true,
+          "skipComments": true
+        }
+      ],
+      "max-params": [
+        2,
+        {
+          "max": 3
+        }
+      ],
+      "no-async-promise-executor": [
+        2
+      ],
+      "no-case-declarations": [
+        2
+      ],
+      "no-class-assign": [
+        2
+      ],
+      "no-compare-neg-zero": [
+        2
+      ],
+      "no-cond-assign": [
+        2,
+        "except-parens"
+      ],
+      "no-console": [
+        0,
+        {}
+      ],
+      "no-const-assign": [
+        2
+      ],
+      "no-constant-binary-expression": [
+        2
+      ],
+      "no-constant-condition": [
+        2,
+        {
+          "checkLoops": false
+        }
+      ],
+      "no-control-regex": [
+        2
+      ],
+      "no-debugger": [
+        2
+      ],
+      "no-delete-var": [
+        2
+      ],
+      "no-dupe-args": [
+        2
+      ],
+      "no-dupe-class-members": [
+        2
+      ],
+      "no-dupe-else-if": [
+        2
+      ],
+      "no-dupe-keys": [
+        2
+      ],
+      "no-duplicate-case": [
+        2
+      ],
+      "no-empty": [
+        1,
+        {
+          "allowEmptyCatch": true
+        }
+      ],
+      "no-empty-character-class": [
+        2
+      ],
+      "no-empty-pattern": [
+        2,
+        {
+          "allowObjectPatternsAsParameters": false
+        }
+      ],
+      "no-empty-static-block": [
+        2
+      ],
+      "no-ex-assign": [
+        2
+      ],
+      "no-extra-boolean-cast": [
+        2,
+        {}
+      ],
+      "no-fallthrough": [
+        2,
+        {
+          "allowEmptyCase": false,
+          "reportUnusedFallthroughComment": false
+        }
+      ],
+      "no-func-assign": [
+        2
+      ],
+      "no-global-assign": [
+        2,
+        {
+          "exceptions": []
+        }
+      ],
+      "no-import-assign": [
+        2
+      ],
+      "no-invalid-regexp": [
+        2,
+        {}
+      ],
+      "no-irregular-whitespace": [
+        2,
+        {
+          "skipComments": false,
+          "skipJSXText": false,
+          "skipRegExps": false,
+          "skipStrings": true,
+          "skipTemplates": false
+        }
+      ],
+      "no-loss-of-precision": [
+        2
+      ],
+      "no-magic-numbers": [
+        2,
+        {
+          "detectObjects": false,
+          "enforceConst": true,
+          "ignore": [
+            0,
+            1,
+            -1
+          ],
+          "ignoreArrayIndexes": true,
+          "ignoreClassFieldInitialValues": false,
+          "ignoreDefaultValues": false,
+          "ignoreEnums": false,
+          "ignoreNumericLiteralTypes": false,
+          "ignoreReadonlyClassProperties": false,
+          "ignoreTypeIndexes": false
+        }
+      ],
+      "no-misleading-character-class": [
+        2,
+        {
+          "allowEscape": false
+        }
+      ],
+      "no-negated-condition": [
+        2
+      ],
+      "no-new-native-nonconstructor": [
+        2
+      ],
+      "no-nonoctal-decimal-escape": [
+        2
+      ],
+      "no-obj-calls": [
+        2
+      ],
+      "no-octal": [
+        2
+      ],
+      "no-param-reassign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-prototype-builtins": [
+        2
+      ],
+      "no-redeclare": [
+        2,
+        {
+          "builtinGlobals": true
+        }
+      ],
+      "no-regex-spaces": [
+        1
+      ],
+      "no-restricted-properties": [
+        2,
+        {
+          "message": "process.env nur in src/config.js verwenden (G35, CLAUDE.md).",
+          "object": "process",
+          "property": "env"
+        }
+      ],
+      "no-restricted-syntax": [
+        2,
+        {
+          "message": "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)",
+          "selector": "MemberExpression MemberExpression MemberExpression MemberExpression"
+        }
+      ],
+      "no-self-assign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-setter-return": [
+        2
+      ],
+      "no-shadow-restricted-names": [
+        2,
+        {
+          "reportGlobalThis": true
+        }
+      ],
+      "no-sparse-arrays": [
+        2
+      ],
+      "no-this-before-super": [
+        2
+      ],
+      "no-unassigned-vars": [
+        2
+      ],
+      "no-undef": [
+        2,
+        {
+          "typeof": false
+        }
+      ],
+      "no-unexpected-multiline": [
+        2
+      ],
+      "no-unreachable": [
+        2
+      ],
+      "no-unsafe-finally": [
+        2
+      ],
+      "no-unsafe-negation": [
+        2,
+        {
+          "enforceForOrderingRelations": false
+        }
+      ],
+      "no-unsafe-optional-chaining": [
+        2,
+        {
+          "disallowArithmeticOperators": false
+        }
+      ],
+      "no-unused-labels": [
+        2
+      ],
+      "no-unused-private-class-members": [
+        2
+      ],
+      "no-unused-vars": [
+        1,
+        {
+          "args": "after-used",
+          "argsIgnorePattern": "^_",
+          "caughtErrors": "all",
+          "ignoreClassWithStaticInitBlock": false,
+          "ignoreRestSiblings": false,
+          "ignoreUsingDeclarations": false,
+          "reportUsedIgnorePattern": false,
+          "vars": "all",
+          "varsIgnorePattern": "^_"
+        }
+      ],
+      "no-useless-assignment": [
+        1
+      ],
+      "no-useless-backreference": [
+        2
+      ],
+      "no-useless-catch": [
+        2
+      ],
+      "no-useless-constructor": [
+        2
+      ],
+      "no-useless-escape": [
+        2,
+        {
+          "allowRegexCharacters": []
+        }
+      ],
+      "no-with": [
+        2
+      ],
+      "preserve-caught-error": [
+        2,
+        {
+          "requireCatchParameter": false
+        }
+      ],
+      "require-yield": [
+        2
+      ],
+      "sonarjs/no-commented-code": [
+        2
+      ],
+      "unicorn/error-message": [
+        2
+      ],
+      "use-isnan": [
+        2,
+        {
+          "enforceForIndexOf": false,
+          "enforceForSwitchCase": true
+        }
+      ],
+      "valid-typeof": [
+        2,
+        {
+          "requireStringLiterals": false
+        }
+      ]
+    }
+  },
+  "apps/web/src/scripts": {
+    "linterOptions": {
+      "noInlineConfig": true,
+      "reportUnusedDisableDirectives": 2
+    },
+    "rules": {
+      "complexity": [
+        2,
+        {
+          "max": 10
+        }
+      ],
+      "constructor-super": [
+        2
+      ],
+      "for-direction": [
+        2
+      ],
+      "getter-return": [
+        2,
+        {
+          "allowImplicit": false
+        }
+      ],
+      "hermes/keine-kommentare": [
+        2,
+        {
+          "bestand": "tools/basis/kommentare.json"
+        }
+      ],
+      "hermes/namen-ohne-begruendung": [
+        1
+      ],
+      "id-length": [
+        2,
+        {
+          "exceptionPatterns": [],
+          "exceptions": [
+            "i",
+            "j",
+            "k"
+          ],
+          "min": 2,
+          "properties": "always"
+        }
+      ],
+      "max-depth": [
+        2,
+        {
+          "max": 4
+        }
+      ],
+      "max-lines-per-function": [
+        2,
+        {
+          "max": 100,
+          "skipBlankLines": true,
+          "skipComments": true
+        }
+      ],
+      "max-params": [
+        2,
+        {
+          "max": 3
+        }
+      ],
+      "no-async-promise-executor": [
+        2
+      ],
+      "no-case-declarations": [
+        2
+      ],
+      "no-class-assign": [
+        2
+      ],
+      "no-compare-neg-zero": [
+        2
+      ],
+      "no-cond-assign": [
+        2,
+        "except-parens"
+      ],
+      "no-console": [
+        0,
+        {}
+      ],
+      "no-const-assign": [
+        2
+      ],
+      "no-constant-binary-expression": [
+        2
+      ],
+      "no-constant-condition": [
+        2,
+        {
+          "checkLoops": false
+        }
+      ],
+      "no-control-regex": [
+        2
+      ],
+      "no-debugger": [
+        2
+      ],
+      "no-delete-var": [
+        2
+      ],
+      "no-dupe-args": [
+        2
+      ],
+      "no-dupe-class-members": [
+        2
+      ],
+      "no-dupe-else-if": [
+        2
+      ],
+      "no-dupe-keys": [
+        2
+      ],
+      "no-duplicate-case": [
+        2
+      ],
+      "no-empty": [
+        1,
+        {
+          "allowEmptyCatch": true
+        }
+      ],
+      "no-empty-character-class": [
+        2
+      ],
+      "no-empty-pattern": [
+        2,
+        {
+          "allowObjectPatternsAsParameters": false
+        }
+      ],
+      "no-empty-static-block": [
+        2
+      ],
+      "no-ex-assign": [
+        2
+      ],
+      "no-extra-boolean-cast": [
+        2,
+        {}
+      ],
+      "no-fallthrough": [
+        2,
+        {
+          "allowEmptyCase": false,
+          "reportUnusedFallthroughComment": false
+        }
+      ],
+      "no-func-assign": [
+        2
+      ],
+      "no-global-assign": [
+        2,
+        {
+          "exceptions": []
+        }
+      ],
+      "no-import-assign": [
+        2
+      ],
+      "no-invalid-regexp": [
+        2,
+        {}
+      ],
+      "no-irregular-whitespace": [
+        2,
+        {
+          "skipComments": false,
+          "skipJSXText": false,
+          "skipRegExps": false,
+          "skipStrings": true,
+          "skipTemplates": false
+        }
+      ],
+      "no-loss-of-precision": [
+        2
+      ],
+      "no-magic-numbers": [
+        2,
+        {
+          "detectObjects": false,
+          "enforceConst": true,
+          "ignore": [
+            0,
+            1,
+            -1
+          ],
+          "ignoreArrayIndexes": true,
+          "ignoreClassFieldInitialValues": false,
+          "ignoreDefaultValues": false,
+          "ignoreEnums": false,
+          "ignoreNumericLiteralTypes": false,
+          "ignoreReadonlyClassProperties": false,
+          "ignoreTypeIndexes": false
+        }
+      ],
+      "no-misleading-character-class": [
+        2,
+        {
+          "allowEscape": false
+        }
+      ],
+      "no-negated-condition": [
+        2
+      ],
+      "no-new-native-nonconstructor": [
+        2
+      ],
+      "no-nonoctal-decimal-escape": [
+        2
+      ],
+      "no-obj-calls": [
+        2
+      ],
+      "no-octal": [
+        2
+      ],
+      "no-param-reassign": [
+        2,
+        {
+          "props": true
+        }
+      ],
+      "no-prototype-builtins": [
+        2
+      ],
+      "no-redeclare": [
+        2,
+        {
+          "builtinGlobals": true
+        }
+      ],
+      "no-regex-spaces": [
+        1
+      ],
+      "no-restricted-properties": [
+        2,
+        {
+          "message": "process.env nur in src/config.js verwenden (G35, CLAUDE.md).",
+          "object": "process",
+          "property": "env"
+        }
+      ],
+      "no-restricted-syntax": [
+        2,
+        {
+          "message": "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)",
+          "selector": "MemberExpression MemberExpression MemberExpression MemberExpression"
         }
       ],
       "no-self-assign": [

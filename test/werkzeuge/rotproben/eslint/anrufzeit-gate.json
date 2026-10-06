@@ -1,0 +1,9 @@
+{
+  "titel": "Mandanten-Zeitzone in der Gate-Kette",
+  "dateien": {
+    "src/telephony/outbound-gates.js": [
+      "export const probeOrtszeit = (store, tenantId) => store.tenantTimezone(tenantId);"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/wort-nur-in\""
+}
