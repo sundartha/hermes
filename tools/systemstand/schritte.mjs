@@ -34,6 +34,11 @@ const RETIRED_WORKFLOW_DIRECTORY = ".claude/workflows";
 const PROOF_BRANCH = "beleg/38-zehn-laeufe";
 const PROOF_WORKFLOW_PREFIX = "Beleg";
 const PROOF_GREEN_RUNS = 10;
+const PROOF_PULLS = 1;
+const PROOF_COMMITS = 1;
+const PROOF_CHANGED_FILES = 1;
+const PROOF_RUNS = 1;
+const FIRST_ATTEMPT = 1;
 const PER_PAGE = 100;
 const SUCCESS = "success";
 const LINE_BREAK = "\n";
@@ -179,22 +184,104 @@ function retiredWorkflowProblems() {
   return files === 0 ? [] : [`unter ${RETIRED_WORKFLOW_DIRECTORY}/ noch ${files} Dateien liegen`];
 }
 
-async function proofJobConclusions(remote, sha) {
-  const suffix = `/actions/runs?head_sha=${sha}&per_page=${PER_PAGE}`;
-  const { workflow_runs: runs } = await remote.get(suffix);
-  const proofs = runs.filter(({ name }) => name.startsWith(PROOF_WORKFLOW_PREFIX));
-  const answers = await Promise.all(
-    proofs.map(({ id }) => remote.get(`/actions/runs/${id}/jobs?per_page=${PER_PAGE}`)),
-  );
-  return answers.flatMap(({ jobs }) => jobs.map(({ conclusion }) => conclusion));
+function completeList(total, list) {
+  return Number.isInteger(total) && total <= list.length;
+}
+
+function incompleteReason(label, total, list) {
+  return `die Liste ${label} unvollständig ist (${total} gemeldet, ${list.length} gelesen), gezählt wird nur eine vollständige Liste`;
+}
+
+async function runsFor(remote, { label, filter }) {
+  const answer = await remote.get(`/actions/runs?${filter}&per_page=${PER_PAGE}`);
+  const { total_count: total, workflow_runs: runs } = answer;
+  if (completeList(total, runs)) return { runs };
+  return { gruende: [incompleteReason(label, total, runs)] };
+}
+
+function ownProofRun(remote, run) {
+  const own = run.head_repository?.full_name === remote.full;
+  return own && run.name.startsWith(PROOF_WORKFLOW_PREFIX);
+}
+
+async function proofRuns(remote, pull) {
+  const queries = [
+    {
+      label: `der Läufe vom Beleg-Branch ${PROOF_BRANCH}`,
+      filter: `branch=${encodeURIComponent(PROOF_BRANCH)}`,
+    },
+    { label: "der Läufe auf dem Kopf des Beleg-PRs", filter: `head_sha=${pull.head.sha}` },
+  ];
+  const answers = await Promise.all(queries.map((query) => runsFor(remote, query)));
+  const incomplete = answers.find(({ runs }) => runs === undefined);
+  if (incomplete !== undefined) return incomplete;
+  const proof = answers.flatMap(({ runs }) => runs).filter((run) => ownProofRun(remote, run));
+  return { runs: [...new Map(proof.map((run) => [run.id, run])).values()] };
+}
+
+async function proofJobConclusions(remote, run) {
+  const answer = await remote.get(`/actions/runs/${run.id}/jobs?per_page=${PER_PAGE}`);
+  const { total_count: total, jobs } = answer;
+  if (completeList(total, jobs)) return { conclusions: jobs.map(({ conclusion }) => conclusion) };
+  return { gruende: [incompleteReason(`der Jobs des Beleg-Laufs ${run.id}`, total, jobs)] };
+}
+
+function pullProblems(pull) {
+  if (pull.commits !== PROOF_COMMITS) {
+    return [`der Beleg-PR ${PROOF_BRANCH} ${pull.commits} Commits hat, verlangt ist genau einer`];
+  }
+  if (pull.changed_files !== PROOF_CHANGED_FILES) {
+    return [
+      `der Beleg-PR ${PROOF_BRANCH} ${pull.changed_files} Dateien ändert, verlangt ist genau eine`,
+    ];
+  }
+  return [];
+}
+
+async function proofPull(remote) {
+  const [owner] = remote.full.split("/");
+  const head = encodeURIComponent(`${owner}:${PROOF_BRANCH}`);
+  const pulls = await remote.get(`/pulls?state=all&head=${head}&per_page=${PER_PAGE}`);
+  if (pulls.length === 0) return { gruende: [`der Beleg-PR ${PROOF_BRANCH} fehlt`] };
+  if (pulls.length !== PROOF_PULLS) {
+    return {
+      gruende: [
+        `es vom Beleg-Branch ${PROOF_BRANCH} ${pulls.length} PRs gibt, verlangt ist genau einer`,
+      ],
+    };
+  }
+  const pull = await remote.get(`/pulls/${pulls[0].number}`);
+  const gruende = pullProblems(pull);
+  return gruende.length === 0 ? { pull } : { gruende };
+}
+
+function proofRunProblems(runs, pull) {
+  if (runs.length !== PROOF_RUNS) {
+    return [
+      `es vom Beleg-Branch ${PROOF_BRANCH} und auf dem Kopf des Beleg-PRs ${runs.length} Beleg-Läufe aus diesem Repository gibt, verlangt ist genau einer auf dem Kopf des Beleg-PRs`,
+    ];
+  }
+  const [run] = runs;
+  if (run.head_sha !== pull.head.sha) {
+    return [`der Beleg-Lauf ${run.id} nicht auf dem Kopf des Beleg-PRs ${PROOF_BRANCH} lief`];
+  }
+  if (run.run_attempt !== FIRST_ATTEMPT) {
+    return [
+      `der Beleg-Lauf ${run.id} ein neuer Versuch ist (Versuch ${run.run_attempt}), es zählt nur der erste`,
+    ];
+  }
+  return [];
 }
 
 async function proofProblems(remote) {
-  const [owner] = remote.full.split("/");
-  const head = encodeURIComponent(`${owner}:${PROOF_BRANCH}`);
-  const [pull] = await remote.get(`/pulls?state=all&head=${head}&per_page=${PER_PAGE}`);
-  if (pull === undefined) return [`der Beleg-PR ${PROOF_BRANCH} fehlt`];
-  const conclusions = await proofJobConclusions(remote, pull.head.sha);
+  const { pull, gruende } = await proofPull(remote);
+  if (pull === undefined) return gruende;
+  const found = await proofRuns(remote, pull);
+  if (found.runs === undefined) return found.gruende;
+  const runProblems = proofRunProblems(found.runs, pull);
+  if (runProblems.length > 0) return runProblems;
+  const { conclusions, gruende: jobProblems } = await proofJobConclusions(remote, found.runs[0]);
+  if (conclusions === undefined) return jobProblems;
   const green = conclusions.filter((conclusion) => conclusion === SUCCESS).length;
   const other = conclusions.length - green;
   if (green >= PROOF_GREEN_RUNS && other === 0) return [];
@@ -302,7 +389,7 @@ export const PACKAGE_STEPS = [
     kriterien: [
       {
         id: "beleg-zehn-laeufe",
-        titel: `Der Beleg-PR ${PROOF_BRANCH} hat ${PROOF_GREEN_RUNS} grüne Läufe`,
+        titel: `Der Beleg-PR ${PROOF_BRANCH} hat einen Commit, ändert eine Datei und hat einen eigenen Lauf mit ${PROOF_GREEN_RUNS} grünen Jobs im ersten Versuch`,
         pruefen: proofProblems,
         verlauf: true,
       },
