@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -24,7 +25,7 @@ function basisRepo(context, dateien = {}) {
     [BESTAND]: bestandsDatei([]),
     "src/a.js": quelle([CODE, ZWEITER_CODE]),
     ".github/workflows/probe.yml": quelle(["name: Probe", "on: push"]),
-    "tasks/lessons.md": quelle(["# Lehren", "", "- erste Lehre"]),
+    "docs/lessons.md": quelle(["# Lehren", "", "- erste Lehre"]),
     ...dateien,
   });
 }
@@ -57,12 +58,46 @@ test("neue-kommentare: ein neuer YAML-Kommentar ist rot", (context) => {
   assert.match(lauf.output, /\.github\/workflows\/probe\.yml:2 neuer Kommentar/);
 });
 
-test("neue-kommentare: eine neue Zeile in tasks/lessons.md ist rot", (context) => {
+test("neue-kommentare: eine neue Zeile in docs/lessons.md ist rot", (context) => {
   const lauf = nachher(basisRepo(context), {
-    "tasks/lessons.md": quelle(["# Lehren", "", "- erste Lehre", "- zweite Lehre"]),
+    "docs/lessons.md": quelle(["# Lehren", "", "- erste Lehre", "- zweite Lehre"]),
   });
   assert.equal(lauf.status, EXIT_FINDING, lauf.output);
-  assert.match(lauf.output, /tasks\/lessons\.md:4 neue Zeile in tasks\/lessons\.md/);
+  assert.match(lauf.output, /docs\/lessons\.md:4 neue Zeile in docs\/lessons\.md/);
+});
+
+function umzugsRepo(context) {
+  return repoMitBasis(context, {
+    "eslint.config.mjs": "export default [];\n",
+    [BESTAND]: bestandsDatei([]),
+    "tasks/lessons.md": quelle(["# Lehren", "", "- erste Lehre", "- zweite Lehre"]),
+  });
+}
+
+test("neue-kommentare: tasks/lessons.md nach docs/lessons.md verschieben und dabei kürzen bleibt grün", (context) => {
+  const repo = umzugsRepo(context);
+  rmSync(join(repo.directory, "tasks/lessons.md"));
+  const lauf = nachher(repo, { "docs/lessons.md": quelle(["# Lehren", "", "- zweite Lehre"]) });
+  assert.equal(lauf.status, EXIT_OK, lauf.output);
+  assert.match(lauf.output, /0 hinzugefügte Zeilen mit Kommentar/);
+});
+
+test("neue-kommentare: eine beim Umzug nach docs/lessons.md neue Zeile ist rot", (context) => {
+  const repo = umzugsRepo(context);
+  rmSync(join(repo.directory, "tasks/lessons.md"));
+  const lauf = nachher(repo, {
+    "docs/lessons.md": quelle(["# Lehren", "", "- erste Lehre", "- zweite Lehre", "- dritte Lehre"]),
+  });
+  assert.equal(lauf.status, EXIT_FINDING, lauf.output);
+  assert.match(lauf.output, /docs\/lessons\.md:5 neue Zeile in docs\/lessons\.md/);
+});
+
+test("neue-kommentare: eine neue Zeile in einer wieder angelegten tasks/lessons.md ist rot", (context) => {
+  const lauf = nachher(basisRepo(context), {
+    "tasks/lessons.md": quelle(["# Lehren", "- alte Ablage"]),
+  });
+  assert.equal(lauf.status, EXIT_FINDING, lauf.output);
+  assert.match(lauf.output, /tasks\/lessons\.md:2 neue Zeile in tasks\/lessons\.md/);
 });
 
 test("neue-kommentare: Direktive und unerlaubte Startzeile in einer neuen Datei sind rot, #!/usr/bin/env node nicht", (context) => {
@@ -80,12 +115,12 @@ test("neue-kommentare: nur löschen und Code umstellen bleibt grün", (context) 
   const repo = basisRepo(context, {
     "src/a.js": quelle(["// alte Begründung", CODE, ZWEITER_CODE]),
     ".github/workflows/probe.yml": quelle(["name: Probe", "# alter Hinweis", "on: push"]),
-    "tasks/lessons.md": quelle(["# Lehren", "", "- erste Lehre", "- zweite Lehre"]),
+    "docs/lessons.md": quelle(["# Lehren", "", "- erste Lehre", "- zweite Lehre"]),
   });
   const lauf = nachher(repo, {
     "src/a.js": quelle([ZWEITER_CODE, CODE]),
     ".github/workflows/probe.yml": quelle(["name: Probe", "on: push"]),
-    "tasks/lessons.md": quelle(["# Lehren", "", "- zweite Lehre"]),
+    "docs/lessons.md": quelle(["# Lehren", "", "- zweite Lehre"]),
   });
   assert.equal(lauf.status, EXIT_OK, lauf.output);
   assert.match(lauf.output, /0 hinzugefügte Zeilen mit Kommentar/);

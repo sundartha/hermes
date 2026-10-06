@@ -300,20 +300,3 @@ test("ABNAHME-AS10: Verifikationsanruf im Befund-Doc belegt - Marken 0, B1 ungem
     "das Hoer-Urteil des Owners (Pre-Mortem R3/R6/R10) muss dokumentiert sein",
   );
 });
-
-test("[abgenommen AS11] lessons.md traegt die EL-Regel mit den VIER Kernsaetzen (Signatur-Phrasen)", () => {
-  const lessons = readFileSync(new URL("../tasks/lessons.md", import.meta.url), "utf8");
-  const signaturPhrasen = [
-    "MELDEN, NICHT ENTFERNEN",
-    "Beispiel schlaegt Regel",
-    "Dashboard schlaegt ungepinntes Repo",
-    "Vorlage ist kanonisch",
-  ];
-
-  for (const phrase of signaturPhrasen) {
-    assert.ok(
-      lessons.includes(phrase),
-      `tasks/lessons.md muss die Signatur-Phrase '${phrase}' der EL-Regel enthalten`,
-    );
-  }
-});

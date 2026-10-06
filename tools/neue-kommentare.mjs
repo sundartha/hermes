@@ -9,10 +9,14 @@ import {
   dateiInhalt,
   geaenderteDateien,
   gelinteteJsDateien,
+  gibtEs,
   hinzugefuegteZeilen,
+  hinzugefuegteZeilenGegenueber,
 } from "./pr-aenderungen.mjs";
 
-const LEHREN = "tasks/lessons.md";
+const LEHREN = "docs/lessons.md";
+const FRUEHERE_LEHREN = "tasks/lessons.md";
+const LEHREN_DATEIEN = new Set([LEHREN, FRUEHERE_LEHREN]);
 const PRUEF_PLUGIN = "neue-kommentare";
 const PRUEFREGEL = `${PRUEF_PLUGIN}/kommentar`;
 const NEUE_DATEIEN_UND_AENDERUNGEN = "AM";
@@ -53,17 +57,24 @@ function textKommentarZeilen(werkzeug, datei) {
 }
 
 async function kommentarZeilen(werkzeug, datei, zeilen) {
-  if (datei === LEHREN) return zeilen.map(({ zeile }) => zeile);
+  if (LEHREN_DATEIEN.has(datei)) return zeilen.map(({ zeile }) => zeile);
   if (werkzeug.js.has(datei)) return jsKommentarZeilen(werkzeug, datei);
   return istYamlOderShell(datei) ? textKommentarZeilen(werkzeug, datei) : [];
 }
 
+function hinzugefuegt({ basis, root }, datei) {
+  const umgezogen =
+    datei === LEHREN && !gibtEs(basis, LEHREN, root) && gibtEs(basis, FRUEHERE_LEHREN, root);
+  if (!umgezogen) return hinzugefuegteZeilen(basis, datei, root);
+  return hinzugefuegteZeilenGegenueber(`${basis}:${FRUEHERE_LEHREN}`, datei, root);
+}
+
 async function befundeDerDatei(werkzeug, datei) {
-  const hinzu = hinzugefuegteZeilen(werkzeug.basis, datei, werkzeug.root);
+  const hinzu = hinzugefuegt(werkzeug, datei);
   const zeilen = hinzu.filter(({ text }) => text.trim() !== "");
   if (zeilen.length === 0) return [];
   const mitKommentar = new Set(await kommentarZeilen(werkzeug, datei, zeilen));
-  const art = datei === LEHREN ? "neue Zeile in tasks/lessons.md" : "neuer Kommentar";
+  const art = LEHREN_DATEIEN.has(datei) ? `neue Zeile in ${datei}` : "neuer Kommentar";
   return zeilen
     .filter(({ zeile }) => mitKommentar.has(zeile))
     .map(({ zeile }) => `${datei}:${zeile} ${art}`);
