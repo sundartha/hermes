@@ -42,8 +42,9 @@ import { NUMBER_STATUS, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 // ---- Benannte Konstanten (G25, kein Magic-Value) ---------------------------------
-const SECRET = "bk5-smoke-secret-0123456789"; // Session-Cookie-HMAC
-const WEBHOOK_SECRET = "whsec_bk5_smoke"; // Stripe-Webhook-HMAC
+const SECRET_BYTES = 16;
+const SECRET = crypto.randomBytes(SECRET_BYTES).toString("hex");
+const WEBHOOK_SECRET = `whsec_${crypto.randomBytes(SECRET_BYTES).toString("hex")}`;
 const SUB = "sub-bk5"; // OIDC-Subject
 const TENANT = "t_sub-bk5"; // tenantIdForSubject(SUB)
 const CUSTOMER = "cus_bk5";
