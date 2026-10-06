@@ -1,8 +1,3 @@
-// ---- IEX-A9: Scope-Schalter des EL-Inbound-Wegs und Abweisung ohne Registrierungs-Beleg ----------
-// Rein: Enum, dreiwertige Weiche (inboundPfadEntscheidung), boolesche Sicht der Init-Route, Ort des
-// Zugangs-Fingerabdrucks, Boot-Befund, Abweisungs-Praedikat. Dazu EIN Boot-Spawn (unbekannter Scope).
-// Die Spawn-Tests der Weiche am echten /voice/incoming stehen in test/iel-b8-weiche.test.js (IEX-A9-11..16).
-// Namen beginnen mit "IEX-A9-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -26,7 +21,6 @@ const BELEG_ZEITPUNKT = "2026-09-15T08:00:00.000Z";
 const MARKER_ZEITPUNKT = "2026-09-15T09:00:00.000Z";
 const EXIT_ABBRUCH = 1;
 
-// Unabhaengige Referenz (nicht aus dem Testobjekt abgeleitet): der Test waere sonst tautologisch.
 function fpReferenz(sipUser) {
   const hexDigest = crypto.createHash("sha256").update(sipUser).digest("hex");
   return hexDigest.slice(0, FP_HEX);
@@ -57,8 +51,6 @@ function nummer({ belegtAt = BELEG_ZEITPUNKT, fp = fpReferenz(SIP_USER) } = {}) 
   return { e164: "+4915255555555", tenantId: GEPINNT, elInboundTrunkBelegtAt: belegtAt, elInboundTrunkZugangFp: fp };
 }
 
-// ---- 1: Enum ------------------------------------------------------------------------------------
-
 test("IEX-A9-1: Scope-Enum hat genau zwei Werte, Default allowlist, kein Wildcard, strikte Gleichheit", () => {
   assert.deepEqual({ ...INBOUND_EL_SCOPE }, { ALLOWLIST: "allowlist", REGISTRIERTE_DIDS: "registrierte_dids" });
   assert.equal(DEFAULT_INBOUND_EL_SCOPE, "allowlist");
@@ -67,8 +59,6 @@ test("IEX-A9-1: Scope-Enum hat genau zwei Werte, Default allowlist, kein Wildcar
   for (const unbekannt of ["alle", "*", "", "ALLOWLIST", undefined, null])
     assert.equal(isInboundElScope(unbekannt), false, JSON.stringify(unbekannt));
 });
-
-// ---- 2: Weiche (tabellengetrieben) -----------------------------------------------------------------
 
 const { BUDGET, ELEVENLABS, ABGEWIESEN } = INBOUND_PATH;
 const ALLOWLIST = INBOUND_EL_SCOPE.ALLOWLIST;
@@ -111,7 +101,6 @@ for (const fall of WEICHE_FAELLE) {
   });
 }
 
-// Stichproben je Ergebnis: BUDGET (4, 6), ELEVENLABS (7), ABGEWIESEN (13).
 const STICHPROBEN = Object.freeze({ "4 ": false, "6 ": false, "7 ": true, "13 ": false });
 
 test("IEX-A9-3: inboundElPathFor ist genau dann true, wenn die Weiche elevenlabs liefert", () => {
@@ -123,16 +112,12 @@ test("IEX-A9-3: inboundElPathFor ist genau dann true, wenn die Weiche elevenlabs
   }
 });
 
-// ---- 4: Ort des Fingerabdrucks ---------------------------------------------------------------------
-
 test("IEX-A9-4: der Zugangs-Fingerabdruck lebt an der Zugangs-Definition, nicht mehr im Beleg-Modul", () => {
   assert.equal(pfad.zugangsFingerabdruck(SIP_USER), fpReferenz(SIP_USER));
   assert.equal(pfad.ZUGANG_FP_HEX_ZEICHEN, FP_HEX);
   assert.equal("zugangsFingerabdruck" in beleg, false);
   assert.equal("ZUGANG_FP_HEX_ZEICHEN" in beleg, false);
 });
-
-// ---- 5: Boot-Befund --------------------------------------------------------------------------------
 
 test("IEX-A9-5: elInboundScopeFindings - gueltig leer, unbekannt genau ein fataler Befund ohne den Wert", () => {
   for (const gueltig of Object.values(INBOUND_EL_SCOPE)) assert.deepEqual(elInboundScopeFindings(gueltig), [], gueltig);
@@ -148,8 +133,6 @@ test("IEX-A9-5: elInboundScopeFindings - gueltig leer, unbekannt genau ein fatal
   }
 });
 
-// ---- 6: Abweisungs-Praedikat -----------------------------------------------------------------------
-
 const ABGEWIESEN_FAELLE = [
   { name: "Budget-Profil mit Marker", call: { costProfile: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, elFallbackAt: MARKER_ZEITPUNKT }, erwartet: true },
   { name: "Budget-Profil ohne Marker", call: { costProfile: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, elFallbackAt: null }, erwartet: false },
@@ -164,8 +147,6 @@ for (const fall of ABGEWIESEN_FAELLE) {
     assert.equal(inboundAbgewiesen(fall.call), fall.erwartet);
   });
 }
-
-// ---- 7: Boot-Spawn -------------------------------------------------------------------------------
 
 test("IEX-A9-7: unbekannter ELEVENLABS_INBOUND_SCOPE bei Schalter aus - Boot-Refusal, Wert nicht im Log", async () => {
   const { code, output } = await startServerExpectExit({ env: { ELEVENLABS_INBOUND_SCOPE: SCOPE_SENTINEL } });

@@ -1,20 +1,3 @@
-// INBOX-P2 (R-3), Ebene A: die Route ISOLIERT (Attrappen-Store, Muster
-// test/api-read-parity.test.js) - beweist den Vertrag "der Handler ruft store.save()
-// nie selbst" und die Optionen-Durchreichung (limit/includeSeen).
-//
-// Ebene B (echtes json-Backend, save()-Zaehler - die eigentliche R-3-Abnahme) lebt
-// BEWUSST in einer eigenen Datei (test/inbox-poll-flush-disk.test.js), NICHT hier:
-// dieses File importiert src/routes/api-inbox.js statisch, und dessen Kette
-// (api-inbox.js -> wiring/internal-only.js -> routes/_tenant.js) importiert
-// src/config.js TRANSITIV am Datei-Kopf - also BEVOR irgendein before()-Hook
-// DATA_DIR setzen koennte. src/store/json.js bindet FILE aber genau einmal, beim
-// ERSTEN Import von config.js, an config.server.dataDir (Bestandspraezedenz
-// test/store-integrity.test.js). In EINER gemeinsamen Datei haette Ebene B damit
-// gegen das ECHTE, ungeseedete data/store.json des Projekts geschrieben statt gegen
-// ein Temp-Verzeichnis - genau die Verletzung, die die Testkonvention ("data/store.json
-// wird nie angefasst") verbietet. Empirisch bestaetigt (Dry-Run waehrend der
-// Entwicklung dieser Etappe: data/store.json trug danach doppelte call_flush_1-
-// Eintraege). Die Trennung in zwei Dateien ist der Fix, keine Kosmetik.
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -24,7 +7,7 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
 const TENANT = BOOTSTRAP_TENANT_ID;
-const A5_POLL_COUNT = 3; // include_seen=true, ohne Body, include_seen="true" (String)
+const A5_POLL_COUNT = 3;
 
 function makeMockStore(result) {
   const saves = [];

@@ -1,8 +1,3 @@
-// IEX-A10 (E13/E15/E16/E11): Inbound-Trunk fuer neue Nummern im Onboarding und Einzelreparatur im
-// Boot-Sweep. Gate (rein + Produktionspfad des Drains), Koerperform, Onboarding ueber provisionNumber,
-// Sweep-Reparatur und Ergebniszeile. Rein In-Process, kein echtes Netz: EINE zustandsbehaftete
-// fetch-Attrappe des Anbieters, die Sweep-Lesen und Schreiber gemeinsam sehen, und die jeden Aufruf
-// mit Methode, Registrierungs-ID und Koerper aufzeichnet (Attrappe prueft, statt stur "ok" zu sagen).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { provisionNumber } from "../src/onboarding.js";
@@ -37,7 +32,6 @@ import { NUMBER_STATUS } from "../src/store/defaults.js";
 import { fakeProvisioner } from "./helpers.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
-// Benannte Konstanten (no-magic-numbers gilt auch fuer test/**).
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_NOT_FOUND = 404;
@@ -50,7 +44,7 @@ const SIP_USER_ALT = "iex-a10-alter-benutzer";
 const SIP_PASSWORT = "geheim-iex-a10-passwort-".padEnd(SIP_PASSWORD_MIN_LENGTH, "x");
 const INIT_TOKEN = "t".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH);
 const TENANT = "t_iex_a10";
-const GEKAUFTE_E164 = "+4915799990001"; // Muster fakeProvisioner (test/helpers.js)
+const GEKAUFTE_E164 = "+4915799990001";
 const FREMDE_DID = "+493000009999";
 const T0_ISO = "2026-09-15T08:00:00.000Z";
 const EL_BASE = "https://el-attrappe.test";
@@ -90,8 +84,6 @@ function schreibConfig({ inbound = {}, outbound = {}, provisioningEnabled = true
   };
 }
 
-// ---- Anbieter-Attrappe ----------------------------------------------------------------------
-
 function antwort(status, koerper) {
   return { ok: status < HTTP_BAD_REQUEST, status, json: async () => koerper };
 }
@@ -111,9 +103,6 @@ function mitTrunk(e164, trunkAenderung) {
   return { ...basis, inbound_trunk: { ...basis.inbound_trunk, ...trunkAenderung } };
 }
 
-// registrierungen: { id -> Body }. getStatus: { id -> [Status je Einzel-GET] } (danach 200).
-// patchStatus >= 400 spiegelt den gesendeten Koerper in der Antwort (Leck-Probe). patchErgebnis
-// ueberschreibt Trunk-Felder nach einem angenommenen PATCH (Anbieter speichert etwas anderes).
 function fakeEl({ registrierungen = {}, getStatus = {}, patchStatus = HTTP_OK, postStatus = HTTP_OK, patchErgebnis = {} } = {}) {
   const regs = structuredClone(registrierungen);
   const statusFolgen = structuredClone(getStatus);
@@ -182,8 +171,6 @@ function ohneLeck(text, verboten) {
   for (const wert of verboten) assert.ok(!text.includes(wert), `Leck (${wert}) in: ${text}`);
 }
 
-// ---- 1-3: Gate und Koerper ------------------------------------------------------------------
-
 const GESCHLOSSENE_GATES = [
   ["Scope allowlist", { inbound: { scope: INBOUND_EL_SCOPE.ALLOWLIST } }],
   ["Inbound aus", { inbound: { enabled: false } }],
@@ -208,7 +195,6 @@ test("IEX-A10-1: Gate-Tabelle - nur alles an + registrierte_dids baut einen Schr
     assert.equal(inboundTrunkSchreibenErlaubt(cfg), false, zeile);
     assert.equal(inboundTrunkSchreiberWennErlaubt(cfg), undefined, zeile);
   }
-  // Kurzschluss wie im Bestand: ohne Provisioning wird config.voice nie gelesen (Aufrufer ohne voice).
   assert.equal(inboundTrunkSchreiberWennErlaubt({ provisioning: { provisioningEnabled: false } }), undefined);
 });
 
@@ -270,8 +256,6 @@ test("IEX-A10-3: Produktionspfad - runProvisioningDrain injiziert den Schreiber 
   const registriert = await drainDeps({ elevenLabsOutbound: EL_OUTBOUND, elevenLabsInbound: EL_INBOUND });
   assert.equal(typeof registriert.inboundTrunkSchreiber?.ensureInboundTrunk, "function");
 });
-
-// ---- 4-8: Onboarding --------------------------------------------------------------------------
 
 async function onboarde({ el, inboundTrunkSchreiber, logger = fakeLogger() }) {
   const state = makeDefaultState();
@@ -361,8 +345,6 @@ test("IEX-A10-8: Onboarding ohne Trunk-Schreiben - (a) ohne Registrierung, (b) l
   ohneLeck(logger.text(), ["inboundTrunkKoerper", "Pflicht"]);
 });
 
-// ---- 9-13: Sweep-Reparatur ------------------------------------------------------------------
-
 const DID_A = "+493000000001";
 
 function sweepStore(numbers) {
@@ -387,7 +369,6 @@ function aktiveNummer({ index, e164 = DID_A, registrierungsId = `phnum_a10_${ind
   };
 }
 
-// Ein Sweep-Lauf ueber die gegebenen Nummern; reparaturAn=false = Gate zu (kein Hook).
 async function sweepe({ numbers, el, reparaturAn = true, inbound = {} }) {
   const store = sweepStore(numbers);
   const logger = fakeLogger();

@@ -1,18 +1,3 @@
-// ---- IEX-A3: Ein-Satz-Eroeffnung mit Riegel (rein, offline) ----------------------------------
-// Die Eroeffnung des EL-Agenten bei einem eingehenden Anruf ist EIN fester Satz: Gruss- und
-// Selbstvorstellungssatz mit KI-Kennzeichnung + Transkriptions-Hinweis + Frage. Der Riegel
-// (i18n/inbound-opening.js) prueft die Bausteine, die der Anrufer hoeren MUSS (E3).
-//
-// WORTLAUT AB OWNER-ENTSCHEIDUNG 9 (2026-09-16, IEP-P6): sie ERSETZT die aeltere Spec-Fassung O1
-// und streicht "Hinweis:", "Sie sprechen mit einer KI" und die Sie-Form. Der Hinweis der
-// EROEFFNUNG ist seither ein eigener Baustein (inboundHinweisSatz), NICHT mehr inboundNotice -
-// jener bleibt der Pflicht-Praefix des gespeicherten Greetings (Budget-Pfad) und ist unberuehrt.
-// Diese Datei pinnt die Variante FREMD; die Owner-Variante hat ihre eigene Datei
-// (test/iep-p6-owner-ton.test.js).
-//
-// Die Literale stehen hier im Test und werden NICHT aus dem Bundle abgeleitet - sonst bestuende
-// ein veraenderter Wortlaut seinen eigenen Test.
-// Namen beginnen mit "IEX-A3-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -42,8 +27,6 @@ const NAMEN_ALLER_FORMEN = Object.freeze([OWNER_NAME, "", "  "]);
 const NICHT_STRINGS = Object.freeze([null, undefined, Number.NaN, Object.freeze({})]);
 const LEERZEICHEN = " ";
 
-// ---- IEX-A3-1/2: Wortlaut und Zusammensetzung ------------------------------------------------
-
 test("IEX-A3-1: Wortlaut (Owner-Entscheidung 9) byte-genau je Sprache, mit und ohne Namen", () => {
   for (const sprache of SPRACHEN) {
     const bundle = LOCALES[sprache];
@@ -57,8 +40,6 @@ test("IEX-A3-1: Wortlaut (Owner-Entscheidung 9) byte-genau je Sprache, mit und o
 test("IEX-A3-2: Zusammensetzung - Grusssatz, Eroeffnungs-Hinweis woertlich, Frage; inboundNotice unberuehrt", () => {
   for (const sprache of SPRACHEN) {
     const bundle = LOCALES[sprache];
-    // IEP-P6/L1: der GREETING-Pflichtsatz bleibt der Bestandstext - die Eroeffnung hat ihn
-    // NICHT umgeschrieben, sie hat einen eigenen Hinweis-Baustein bekommen.
     assert.equal(bundle.inboundNotice, INBOUND_NOTICES[sprache], sprache);
     for (const name of [OWNER_NAME, ""]) {
       const fall = `${sprache} ${JSON.stringify(name)}`;
@@ -69,18 +50,11 @@ test("IEX-A3-2: Zusammensetzung - Grusssatz, Eroeffnungs-Hinweis woertlich, Frag
       assert.ok(frage.startsWith(LEERZEICHEN), fall);
       assert.ok(frage.trim().endsWith("?"), fall);
       assert.equal(hasInboundNotice(text), true, fall);
-      // IEP-P6: der frueher hier mitgepruefte Namenssatz des FEHLERSATZES ist kein
-      // Bundle-Feld mehr (nur noch der Riegel las ihn, und der liest jetzt den
-      // variantenrichtigen Kopfsatz). Sein Wortlaut ist in test/iex-a2-fehlersatz.test.js
-      // byte-gepinnt - dieselbe Zusicherung, an der Stelle, die den Fehlersatz besitzt.
     }
   }
 });
 
-// ---- IEX-A3-3: Riegel ----------------------------------------------------------------------
-
 const DE = LOCALES.de;
-// IEP-P6: der Riegel kennt zwei Sollformen; diese Datei prueft ausschliesslich FREMD.
 const defekteFuer = ({ text, bundle = DE, ownerName = OWNER_NAME }) =>
   inboundEroeffnungDefekte({ text, bundle, ownerName, variante: EROEFFNUNG_VARIANTE.FREMD });
 
@@ -91,19 +65,15 @@ test("IEX-A3-3: Riegel-Tabelle - echte Eroeffnung sicher, (a) bis (d) je genau i
       assert.deepEqual(defekteFuer({ text: bundle.inboundEroeffnung(ownerName), bundle, ownerName }), [], `${sprache} ${JSON.stringify(ownerName)}`);
     }
 
-  // (a) anderer Name im Text als am Tenant.
   assert.deepEqual(defekteFuer({ text: DE.inboundEroeffnung("Anna"), ownerName: "Jonas" }), [EROEFFNUNG_DEFEKT.NAMENSSATZ_FEHLT]);
 
-  // (b) Wortlaut veraendert, die Merkmale (KI + Transkription) bleiben erfuellt.
   const umformuliert = DE.inboundEroeffnung(OWNER_NAME).replace("zusammengefasst", "gespeichert");
   assert.deepEqual(defekteFuer({ text: umformuliert }), [EROEFFNUNG_DEFEKT.HINWEIS_WORTLAUT_FEHLT]);
 
-  // (c) ein Hinweis ohne Transkriptions-Merkmal, woertlich im Text.
   const ohneTranskription = { ...DE, inboundHinweisSatz: "Hier spricht eine KI." };
   const textOhneTranskription = `${ohneTranskription.inboundGrussSatz(OWNER_NAME)} ${ohneTranskription.inboundHinweisSatz} Wie kann ich helfen?`;
   assert.deepEqual(defekteFuer({ text: textOhneTranskription, bundle: ohneTranskription }), [EROEFFNUNG_DEFEKT.HINWEIS_MERKMALE_FEHLEN]);
 
-  // (d) Platzhalter-Syntax des Anbieters im Namen.
   const platzhalterName = "Jonas {{x}}";
   assert.deepEqual(defekteFuer({ text: DE.inboundEroeffnung(platzhalterName), ownerName: platzhalterName }), [EROEFFNUNG_DEFEKT.PLATZHALTER]);
 
@@ -114,8 +84,6 @@ test("IEX-A3-3: Riegel-Tabelle - echte Eroeffnung sicher, (a) bis (d) je genau i
       String(text),
     );
 });
-
-// ---- IEX-A3-4: Kalibrierzeile ----------------------------------------------------------------
 
 const JETZT_MS = Date.parse("2026-09-15T10:00:00.000Z");
 const ANNAHME_VOR_MS = 1500;

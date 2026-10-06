@@ -1,14 +1,3 @@
-// ---- IEL-B6 (E12): die Werkzeug-Webhooks sperren einen gebundenen Inbound-EL-Anruf -------------
-// Die Init-Antwort schickt tenant_token "" (der abgeleitete Werkzeug-Token wird fuer Inbound nie
-// berechnet). Gemessen wird ueber die ECHTEN Routen am echten Server, in beiden Stellungen des
-// scharfen Schalters: die Sperre haengt nie allein am Token.
-//   30  ELEVENLABS_TENANT_TOKEN_REQUIRED=true  -> 404, Grund mandant_fehlt (Stufe 2)
-//   31  ELEVENLABS_TENANT_TOKEN_REQUIRED=false -> 404, Grund kanal_nicht_freigegeben (Richtung)
-//   32  Positiv-Kontrolle in BEIDEN Laeufen: ein ausgehender Anruf mit korrektem Werkzeug-Token
-//       erreicht die Nutzlast-Pruefung (400) - die 404 oben kommen also von Richtung bzw. Token,
-//       nicht von einer toten Route. Ohne Frage bzw. Anfrage: kein Halten, kein Suchdienst.
-//
-// Namen beginnen mit "IEL-B6-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -84,7 +73,6 @@ const werkzeugAufruf = (srv, pfad, body) =>
     body: JSON.stringify(body),
   });
 
-// Genau die Werte, die die Init-Antwort dem Agenten mitgibt: tenant_token "".
 async function assertInboundGesperrt(srv, logGrund) {
   const consult = await werkzeugAufruf(srv, CONSULT_PATH, { conversation_id: INBOUND_CONV_ID, question: QUESTION, tenant_token: "" });
   const lookup = await werkzeugAufruf(srv, LOOKUP_PATH, { conversation_id: INBOUND_CONV_ID, query: QUERY, tenant_token: "" });
@@ -94,8 +82,6 @@ async function assertInboundGesperrt(srv, logGrund) {
   await waitForLog(srv, new RegExp(`\\[el-lookup\\] abgelehnt grund=${logGrund} call=${INBOUND_CALL_ID}`));
 }
 
-// Positiv-Kontrolle: derselbe Weg mit einem ausgehenden Anruf und korrektem Token erreicht die
-// Nutzlast-Pruefung.
 async function assertOutboundErreichtNutzlast(srv) {
   const consult = await werkzeugAufruf(srv, CONSULT_PATH, { conversation_id: OUTBOUND_CONV_ID, tenant_token: OUTBOUND_TENANT_TOKEN });
   const lookup = await werkzeugAufruf(srv, LOOKUP_PATH, { conversation_id: OUTBOUND_CONV_ID, tenant_token: OUTBOUND_TENANT_TOKEN });

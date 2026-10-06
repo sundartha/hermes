@@ -1,12 +1,3 @@
-// INBOX-P2 (E-3b/R-4): der Wettlauf zweier gleichzeitiger Polls UND der Struktur-
-// Beleg, dass Auswahl/Projektion/Markierung EINE synchrone Operation sind.
-//
-// C1/C2 sind ZUSATZBELEG, nicht die Sicherung: zwei HTTP-Requests verschraenken sich
-// nicht deterministisch im kritischen Fenster (das Event-Loop-Interleaving zwischen
-// zwei parallelen Node-Requests ist nicht vorhersagbar genug, um "genau einer bekommt
-// den Eintrag" ALLEIN daraus zu beweisen). Die eigentliche Sicherung ist C3 + die
-// Bauform von takeInboxEntries (kein await zwischen Auswahl und Markierung) - C3 prueft
-// das direkt an der reinen Store-Operation, ohne HTTP/Event-Loop dazwischen.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
@@ -87,9 +78,6 @@ test("INBOX-P2 C3: Struktur-Beleg - takeInboxEntries ist kein Thenable und marki
   assert.equal(result.entries.length, QUALIFIED_CALL_COUNT);
   assert.equal(result.marked, QUALIFIED_CALL_COUNT);
 
-  // Unmittelbar NACH der Rueckgabe traegt jeder ausgelieferte Call bereits inboxSeenAt -
-  // Projektion und Markierung sind im selben synchronen Durchlauf passiert, nicht erst
-  // "irgendwann danach".
   for (const entry of result.entries) {
     const matchingCall = state.calls.find((call) => call.id === entry.call_id);
     assert.notEqual(matchingCall.inboxSeenAt, null);

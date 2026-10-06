@@ -1,11 +1,5 @@
-// IP2: Sprechpfad-Klassifikation (Unit) + Repo-Default-Regressionsfang (Integration).
-// telnyx_relay ist seit IP3 am echten Renderer nicht erreichbar (render.js hat keinen
-// ElevenLabs-<Say>-Zweig mehr) - die dritte Fixture ist deshalb ein literaler TeXML-
-// String, keine renderDirectives()-Ausgabe (die diese Form nicht mehr erzeugen kann).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-// IP4: der Namensvorrat ist nach src/ gezogen (der Boot-Banner liest ihn seit IP4 mit) -
-// dieselben Faelle, dieselben Zusicherungen, nur ein anderer Ort.
 import { classifySprechpfad, SPRECHPFAD } from "../src/telephony/sprechpfad.js";
 import { renderDirectives } from "../src/telephony/adapters/telnyx/render.js";
 import { say, gather, VOICE_PROFILE } from "../src/telephony/directives.js";

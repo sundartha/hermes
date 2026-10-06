@@ -1,13 +1,3 @@
-// INBOX-P1: Persistenz-Paritaet der zwei Inbox-Marker in BEIDEN Backends.
-// Kern-Risiko (Pre-Mortem R-10, Lehre i8-design-decisions): ohne Spalte + Flush UND
-// rowToCall-Hydrierung ginge ein Marker beim Restart verloren - und der naechste
-// Voll-Flush schriebe NULL zurueck. Beide Felder werden EIGENSTAENDIG round-getrippt;
-// inboxSeenAt wird in dieser Etappe noch von keinem Schreibweg gesetzt (das ist INBOX-P2)
-// und deshalb direkt am Spiegel gesetzt - Muster test/store-pg-json-parity.test.js.
-//
-// DATA_DIR + config werden VOR allen store-Imports gebunden (json.FILE haengt an
-// config.dataDir): darum laeuft die Verdrahtung ueber dynamische Imports in before()
-// (Muster test/assistant-context-persist-pg.test.js).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -23,8 +13,6 @@ let makePgStore, PGlite, jsonStore, BOOTSTRAP, dataDir;
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-inbox-parity-"));
   process.env.DATA_DIR = dataDir;
-  // Bestands-store.json OHNE die zwei neuen Felder - geschrieben VOR dem ersten load(),
-  // damit migrateCallFields (CALL_FIELD_DEFAULTS) sie ueberhaupt sieht.
   const { seedState, seedCall } = await import("./helpers.js");
   const legacy = seedCall({ id: LEGACY_ID, direction: "inbound", status: "completed" });
   delete legacy.inboxEntryAt;
@@ -65,8 +53,6 @@ test("INBOX-P1-S1 pg: frischer Call traegt beide Marker als null (nicht undefine
 test("INBOX-P1-S2 pg: inboxEntryAt ueberlebt den Reopen (Spalte + Flush + rowToCall)", async () => {
   const { store, runner } = await makePgTestStore();
   const created = store.createCall(newCall());
-  // Zeile VOR dem Marker flushen (Produktions-Reihenfolge, s. call-finish.js): der
-  // zweite save() unten muss ein ON CONFLICT DO UPDATE sein, kein INSERT.
   await store.save();
   store.markInboxEntry(created.id, true);
   const gesetzt = store.getCall(created.id).inboxEntryAt;
@@ -80,8 +66,6 @@ test("INBOX-P1-S2 pg: inboxEntryAt ueberlebt den Reopen (Spalte + Flush + rowToC
 test("INBOX-P1-S3 pg: inboxSeenAt ueberlebt den Reopen EIGENSTAENDIG (R-10)", async () => {
   const { store, runner } = await makePgTestStore();
   const created = store.createCall(newCall());
-  // Zeile VOR dem Marker flushen (Produktions-Reihenfolge, s. call-finish.js): der
-  // zweite save() unten muss ein ON CONFLICT DO UPDATE sein, kein INSERT.
   await store.save();
   store.getCall(created.id).inboxSeenAt = SEEN_AT;
   await store.save();
@@ -139,10 +123,6 @@ test("INBOX-P1-S8: publicCall strippt BEIDE Marker (kein API-Leak)", async () =>
   assert.deepEqual(Object.keys(sichtbar).sort(), ["id", "summary"]);
 });
 
-// INBOX-P2 (R-3, Review-Blocker T1/P11): der pg-Wrapper takeInboxEntries war bisher
-// NUR json-seitig getestet. Muster wie oben: PGlite-Harness, createCall + markInboxEntry,
-// dann Poll ueber den pg-Store selbst (nicht ueber ops direkt) - der Wrapper inkl.
-// save()-Gate wird damit tatsaechlich ausgefuehrt.
 test("INBOX-P2-S9 pg: Poll liefert den qualifizierten Call und setzt inbox_seen_at", async () => {
   const { store, runner } = await makePgTestStore();
   const created = store.createCall(newCall());

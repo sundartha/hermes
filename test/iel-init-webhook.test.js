@@ -1,11 +1,3 @@
-// ---- IEL-B6: Conversation-Initiation-Webhook (POST /webhooks/elevenlabs/init) -------------
-// Die Route wird IN-PROCESS an einem echten HTTP-Server auf Port 0 gemountet (Muster
-// test/el-consult-timeout-spur.test.js): ein Gate, das nur in einer Funktion sitzt, aber nicht
-// an der Route haengt, misst sonst gruen. Store = echte state-ops-Mutatoren, Uhr = Attrappe
-// (Wiederholungsfrist K1), Fristen = Recorder. Test 14 belegt die Verdrahtung am echten Server.
-//
-// Namen beginnen mit "IEL-B6-<n>: " bzw. "IEX-A3-<n>: " (Eroeffnungs-Riegel) - trifft weder
-// i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -62,7 +54,6 @@ const INIT_TOKEN = "i".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH);
 const ZU_KURZES_TOKEN = "i".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH - 1);
 const AGENT_ID = "agent_iel_b6";
 const OWNER_NAME = "Jonas Beispiel";
-// Die Platzhalter-Syntax des Anbieters im Namen - der echte Datendefekt (d) der Eroeffnung.
 const PLATZHALTER_NAME = "Jonas {{x}}";
 const NAMENS_TEIL = "Jonas";
 const ANNAHME_VOR_MS = 1500;
@@ -76,8 +67,6 @@ const ERWARTETE_VARIABLEN = 16;
 const GATE_UNAVAILABLE = "unavailable";
 const VORLAGE_DE = LOCALES.de;
 const VORLAGE_EN = LOCALES.en;
-
-// ---- Build ----------------------------------------------------------------------------------
 
 function baueConfig({
   enabled = true,
@@ -102,7 +91,6 @@ function baueConfig({
   };
 }
 
-// Die echte Store-Fassade plus genau die Leser, die Route und Builder fragen.
 function baueInitStore(state) {
   return {
     ...storeOpsFacade(state),
@@ -128,7 +116,6 @@ function baueZustand({ ownerName = OWNER_NAME } = {}) {
   return { state, call };
 }
 
-// storeUeberschreibung ersetzt einzelne Leser/Mutatoren (Spion, werfender Leser).
 async function mitInitRoute({ state, config = baueConfig(), storeUeberschreibung = {} }, run) {
   const uhr = { nowMs: FAKE_START_MS };
   const stelleUhr = (nowMs) => Object.assign(uhr, { nowMs });
@@ -166,15 +153,12 @@ async function initAnfrage(url, { token = INIT_TOKEN, body }) {
   return { status: res.status, text: await res.text() };
 }
 
-// Ein Fall mit frischem Zustand und frischer Route.
 async function einzelFall({ config = baueConfig(), body = null, zustand = baueZustand(), storeUeberschreibung = {} } = {}) {
   return mitInitRoute({ state: zustand.state, config, storeUeberschreibung }, async (route) => {
     const antwort = await initAnfrage(route.url, { body: body ?? initBody({ bindung: zustand.call.streamToken }) });
     return { ...antwort, ...zustand, ...route };
   });
 }
-
-// ---- Stufe 1: Geheimnis -----------------------------------------------------------------------
 
 test("IEL-B6-1: Init-Token fehlt, leer oder falsch -> 403 mit konstantem Koerper, Store unveraendert", async () => {
   const { state, call } = baueZustand();
@@ -199,8 +183,6 @@ test("IEL-B6-2: ein konfiguriertes Token unter der Mindestlaenge oder leer gilt 
     assert.equal(call.elevenlabsConversationId, null);
   }
 });
-
-// ---- Stufe 2: Zuordnung (R-B) -----------------------------------------------------------------
 
 function baueRbZustand() {
   const zustand = baueZustand();
@@ -267,8 +249,6 @@ test("IEL-B6-4b: called_number fehlt oder ist nur anders geschrieben -> 200", as
   assert.equal(mitTrennern.status, HTTP_OK);
 });
 
-// ---- Stufe 3: Schalter ------------------------------------------------------------------------
-
 test("IEL-B6-5: Schalter aus oder Tenant nicht gepinnt -> 404, keine Bindung", async () => {
   for (const config of [baueConfig({ enabled: false }), baueConfig({ tenantIds: [] })]) {
     const ergebnis = await einzelFall({ config });
@@ -277,8 +257,6 @@ test("IEL-B6-5: Schalter aus oder Tenant nicht gepinnt -> 404, keine Bindung", a
     assert.equal(ergebnis.call.elevenlabsConversationId, null);
   }
 });
-
-// ---- Treffer ----------------------------------------------------------------------------------
 
 test("IEL-B6-6a: Treffer -> 200, Variablenmenge = Vorlage, Inbound-Leerwerte, kein Werkzeug-Token", async () => {
   const ergebnis = await einzelFall();
@@ -314,9 +292,6 @@ test("IEL-B6-6c: Treffer -> Bindung am Datensatz mit der Uhr der Route, Fristen 
   assert.deepEqual(ergebnis.geloescht, [ergebnis.call.id]);
 });
 
-// Abweichung vom Plan (Test 7 "de ohne Default-Stimme -> kein tts"): jede unterstuetzte
-// Sprache hat heute eine eigene Profil-Stimme (ELEVENLABS_VOICE_ID_BY_PROFILE), der leere
-// Zweig ist mit echten Locales nicht erreichbar. Gemessen wird deshalb die Sprachfolge.
 test("IEL-B6-7: die Stimme folgt der Anrufsprache (de und en je mit ihrer Profil-Stimme)", async () => {
   const deutsch = await einzelFall();
   const englischZustand = baueZustand();
@@ -344,8 +319,6 @@ test("IEL-B6-8: Bindungs-Token als Objekt (klein), als Liste oder als dynamische
   const ohneQuelle = await einzelFall({ body: { ...initBody({ bindung: undefined }), sip_headers: undefined } });
   assert.equal(ohneQuelle.status, HTTP_NOT_FOUND);
 });
-
-// ---- Wiederholung (K1) ------------------------------------------------------------------------
 
 async function mitGebundenemCall(run) {
   const { state, call } = baueZustand();
@@ -407,8 +380,6 @@ test("IEL-B6-10: Neustart waehrend GEBUNDEN -> die Wiederholung binnen Frist lie
   assert.equal(ops.getCall(nachNeustart, call.id).elBoundAt, call.elBoundAt);
 });
 
-// ---- Log und Fehlerpfad -----------------------------------------------------------------------
-
 test("IEL-B6-11: das Log nennt Grund, bereinigte Schluesselnamen und sip_headers-Form - nie Token, Kennung oder Namen", async () => {
   const { state, call } = baueZustand();
   const zeilen = await captureConsole(() =>
@@ -429,8 +400,6 @@ test("IEL-B6-11: das Log nennt Grund, bereinigte Schluesselnamen und sip_headers
     assert.ok(!log.includes(geheim), `Log enthaelt ${JSON.stringify(geheim)}`);
 });
 
-// Der Eroeffnungs-Riegel laeuft VOR der Bindung (IEX-A3-5); danach koennen noch Store-Leser und
-// Zeitkontext werfen - belegt am werfenden tenantTimezone.
 test("IEL-B6-12: Builder wirft nach der Bindung -> 500 ohne Daten (Restrisiko: Call bleibt GEBUNDEN)", async () => {
   const ergebnis = await einzelFall({
     storeUeberschreibung: {
@@ -444,8 +413,6 @@ test("IEL-B6-12: Builder wirft nach der Bindung -> 500 ohne Daten (Restrisiko: C
   assert.ok(!ergebnis.text.includes("dynamic_variables"));
   assert.equal(ergebnis.call.elevenlabsConversationId, CONV_A);
 });
-
-// ---- Reine Bausteine --------------------------------------------------------------------------
 
 test("IEL-B6-13b: callBindingTokenOf und sipHeadersFormOf ueber alle Formen", () => {
   const token = FALSCHES_BINDUNGS_TOKEN;
@@ -462,9 +429,6 @@ test("IEL-B6-13b: callBindingTokenOf und sipHeadersFormOf ueber alle Formen", ()
   }
 });
 
-// ---- IEX-A3: Eroeffnungs-Riegel an der Route und im Builder ----------------------------------
-
-// Spion auf die set-once-Bindung: zaehlt jeden Versuch, bindet danach echt.
 function bindungsSpion(state) {
   const gebunden = [];
   const storeUeberschreibung = {
@@ -532,12 +496,9 @@ test("IEX-A3-8: eine Sprachquelle fuer Text, agent.language und Aufloesung; ohne
   const ohneName = await einzelFall({ zustand: baueZustand({ ownerName: "" }) });
   const eroeffnung = agentDerAntwort(ohneName).first_message;
   assert.equal(eroeffnung, VORLAGE_DE.inboundEroeffnung(""));
-  // IEP-P6 (Owner-Entscheidung 9): der Gruss steht vor der Selbstvorstellung.
   assert.ok(eroeffnung.startsWith("Hallo, hier ist ein KI-Assistent."));
 });
 
-// IEP-P6: dieselbe Route, derselbe Riegel - nur mit gesetztem callerIsOwner. Der Beleg, dass
-// die Owner-Fassung ueber die ECHTE Init-Route spricht und der Riegel sie durchlaesst.
 test("IEX-A3-8b: callerIsOwner=true -> Owner-Eroeffnung als first_message; ohne das Feld die Fremd-Fassung", async () => {
   const owner = baueZustand();
   owner.call.callerIsOwner = true;
@@ -562,8 +523,6 @@ test("IEX-A3-9: [el-init] gebunden traegt ms_seit_annahme deterministisch, die W
   assert.ok(zeilen.includes(`[el-init] wiederholung call=${call.id}`), alsLog(zeilen));
 });
 
-// ---- IEX-A9: Stufe 3 unter Scope registrierte_dids -------------------------------------------
-
 const REGISTRIERT_CONFIG = baueConfig({ scope: INBOUND_EL_SCOPE.REGISTRIERTE_DIDS });
 const BELEG_ZEITPUNKT = "2026-09-15T08:00:00.000Z";
 
@@ -571,7 +530,6 @@ function angerufeneNummer({ state, call }) {
   return state.numbers.find((eintrag) => eintrag.e164 === call.to);
 }
 
-// Die angerufene DID bekommt einen Beleg mit dem Fingerabdruck des laufenden Zugangs.
 function mitBeleg(zustand) {
   const nummer = angerufeneNummer(zustand);
   nummer.elInboundTrunkBelegtAt = BELEG_ZEITPUNKT;
@@ -615,8 +573,6 @@ test("IEX-A9-10c: registrierte_dids, Beleg seit dem Anrufeingang weggefallen -> 
   angerufeneNummer(zustand).elInboundTrunkBelegtAt = null;
   assertSchalterAblehnung(await belegFall(zustand), zustand);
 });
-
-// ---- Verdrahtung am echten Server -------------------------------------------------------------
 
 const SPAWN_CALL_ID = "call_iel_b6_init";
 const SPAWN_BINDUNGS_TOKEN = "fedcba9876543210fedcba9876543210";

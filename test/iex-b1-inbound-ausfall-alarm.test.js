@@ -1,12 +1,3 @@
-// IEX-B1: der Betreiber-Alarm fuer gescheiterte EL-INBOUND-Uebergaben. Ausschliesslich
-// gegen Attrappen (kein Netz, kein echter Anruf, keine echte SMS/Mail), Uhr deterministisch
-// injiziert, Rufnummern nur aus reservierten Testbereichen (+1 202 555 01xx). PII-Regeln
-// wie im Bestand (Regel 9/10).
-//
-// Der Kern der Phase steckt in Test 1: die Outbound-Definition von Erfolg (answeredAt) ist
-// fuer Inbound FALSCH. Seit der Sofortannahme traegt JEDER eingehende Anruf answeredAt -
-// auch der, dessen Uebergabe danach scheiterte. Ein Melder mit der Outbound-Zaehlweise
-// haette hier NIE ausgeloest und dabei gruen ausgesehen.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
@@ -39,7 +30,7 @@ const ALERT_MAIL_TO = "ops@example.test";
 const OUTBOUND_BUCKET = "not-placed:invite-403";
 
 const OUTBOUND_FENSTER_MS = 3600000;
-const INBOUND_FENSTER_MS = 21600000; // 6 h - der Produktions-Default dieser Klasse
+const INBOUND_FENSTER_MS = 21600000;
 const MS_PER_MINUTE = 60000;
 
 const CONFIG = Object.freeze({
@@ -70,11 +61,6 @@ function configMitInboundFenster(windowMs) {
   return { ...CONFIG, billing: { ...CONFIG.billing, inboundOutageAlertWindowMs: windowMs } };
 }
 
-// ---------------------------------------------------------------- Fixtures / Attrappen
-
-// Eine eingehende EL-Anruf-Zeile. Baut auf dem geteilten seedCall auf (EINE Quelle, G5) -
-// answeredAt ist IMMER gesetzt, weil die Sofortannahme (IEP-P2) genau das erzeugt: der
-// Beleg, dass answeredAt fuer Inbound nichts ueber Erfolg aussagt.
 function elInboundCall({ id, endedAt, elFallbackAt = null, conversationId = null, transcript = [] }) {
   return seedCall({
     id,
@@ -162,8 +148,6 @@ function makeStore({ calls = [], outageAlerts = [], platformNumberUse = boundSen
   };
 }
 
-// Die Marker-Zeilen einer Store-Attrappe - als benannter Zugriff statt als Aufrufkette
-// (Gesetz von Demeter, G36).
 function markerListe(store) {
   return store.load().outageAlerts;
 }
@@ -186,8 +170,6 @@ function makeSpies() {
   };
 }
 
-// Haelt die WARN/ERROR-Zeilen des Meldewegs aus der Testausgabe heraus (Muster
-// ausfall-meldeweg.test.js#captureLog).
 function captureLog() {
   const origLog = console.log;
   const origWarn = console.warn;
@@ -207,9 +189,6 @@ function captureLog() {
   };
 }
 
-// Store-Attrappe fuer den ECHTEN finishCall-Pfad (Muster
-// ausfall-verdrahtung-call-finish.test.js): kein zweiter Fake-Mechanismus, die
-// Marker-Schreibung laeuft ueber die echten state-ops (G5).
 function makeFinishStore(state, spies) {
   return {
     state,
@@ -252,8 +231,6 @@ function finishSpies() {
   return Object.assign(makeSpies(), { notifications: [], summaryMarker: [], summaryPlanCalls: [] });
 }
 
-// ------------------------------------------------------------------------------ Tests
-
 test("IEX-B1-1 (PFLICHT, R1): ein Fenster aus lauter gescheiterten Uebergaben MIT gesetztem answeredAt ergibt ALARM", () => {
   const calls = rueckfallCalls();
   const fenster = outageWindow(calls, {
@@ -271,8 +248,6 @@ test("IEX-B1-1 (PFLICHT, R1): ein Fenster aus lauter gescheiterten Uebergaben MI
   });
   assert.equal(urteil, OUTAGE_VERDICT.ALERT, "gescheiterte Uebergaben muessen einen Alarm ergeben");
 
-  // Gegenprobe: DIESELBEN Zeilen mit der Outbound-Definition von Erfolg (answeredAt).
-  // Genau so haette der Melder blind gebaut werden koennen - er saehe drei Erfolge.
   const blindeZaehlweise = { ...INBOUND_ZAEHLWEISE, belegtErfolg: (call) => Boolean(call.answeredAt) };
   const blindesFenster = outageWindow(calls, {
     nowMs: NOW_MS,
@@ -297,8 +272,6 @@ test("IEX-B1-2 (PFLICHT, R2): Auflegen in der Wartephase erzeugt KEINEN Alarm - 
     bucket: INBOUND_EL_OUTAGE_CODE,
     zaehlweise: INBOUND_ZAEHLWEISE,
   });
-  // WARTET zaehlt in den Nenner (sichtbar als versuche - erfolge - fehler), ist aber kein
-  // Fehler-Beleg (Owner-Entscheidung F10b).
   assert.deepEqual(fenster, { fehler: 0, versuche: 3, erfolge: 0, tenants: 0 });
   const { urteil } = beurteileAusfall({
     fenster,
@@ -321,15 +294,11 @@ test("IEX-B1-3: gesunde Inbound-Reihe schliesst die offene Klasse als erholt - u
   assert.equal(spies.auditCalls.length, 1, "genau eine Audit-Zeile");
   assert.equal(spies.auditCalls[0].action, "outage_recovered");
   assert.ok(markerListe(store)[0].closedAt, "der Inbound-Marker ist geschlossen");
-  // Der Erholungs-Sweep hat per Konstruktion keinen Versandweg (markOnly) - die Attrappen
-  // wurden ihm gar nicht erst gereicht.
   assert.equal(spies.mailCalls.length, 0);
   assert.equal(spies.smsCalls.length, 0);
 });
 
 test("IEX-B1-4 (R4): Outbound- und Inbound-Klasse fuehren getrennte Marker", async () => {
-  // Richtung 1: ein FRISCH gemeldeter Outbound-Marker (entprellt) darf den Inbound-Alarm
-  // nicht verstummen lassen.
   const spiesInbound = makeSpies();
   const inboundStore = makeStore({
     calls: [...rueckfallCalls(), ...outboundNotPlacedCalls()],
@@ -353,7 +322,6 @@ test("IEX-B1-4 (R4): Outbound- und Inbound-Klasse fuehren getrennte Marker", asy
   const outboundMarker = markerMitCode(inboundStore, OUTBOUND_BUCKET);
   assert.equal(outboundMarker.reportedAt, NOW_ISO, "der Outbound-Marker bleibt unberuehrt");
 
-  // Gegenrichtung: ein frisch gemeldeter Inbound-Marker entprellt den Outbound-Alarm nicht.
   const spiesOutbound = makeSpies();
   const outboundStore = makeStore({
     calls: [...rueckfallCalls(), ...outboundNotPlacedCalls()],
@@ -397,7 +365,6 @@ test("IEX-B1-5 (I4): INBOUND_OUTAGE_ALERT_WINDOW_MS=0 schaltet die Regel vollsta
   assert.equal(aus.mailCalls.length, 0);
   assert.equal(aus.smsCalls.length, 0);
 
-  // Gegenprobe: mit Fenster > 0 entsteht der Erstbefund-Marker.
   const an = makeSpies();
   const anStore = makeStore({ calls: rueckfallCalls(), outageAlerts: [] });
   const logB = captureLog();
@@ -413,8 +380,6 @@ test("IEX-B1-5 (I4): INBOUND_OUTAGE_ALERT_WINDOW_MS=0 schaltet die Regel vollsta
   assert.equal(markerListe(anStore).length, 1);
   assert.equal(markerListe(anStore)[0].code, INBOUND_EL_OUTAGE_CODE);
 
-  // Dritter Fall (R6): eine Attrappen-Config OHNE das Blatt verhaelt sich wie 0 statt auf
-  // einem undefinierten Fenster scharf zu werden.
   const ohneBlatt = makeSpies();
   const ohneBlattStore = makeStore({ calls: rueckfallCalls(), outageAlerts: [] });
   const logC = captureLog();
@@ -444,7 +409,6 @@ test("IEX-B1-6 (Verdrahtung): ein gescheiterter EL-Inbound-Anruf loest den Melde
   assert.equal(state.outageAlerts.length, 1, "ein durabler Marker entsteht");
   assert.equal(state.outageAlerts[0].code, INBOUND_EL_OUTAGE_CODE);
 
-  // Gegenprobe: derselbe Anruf GEBUNDEN und abgeschlossen -> kein Ausfall-Audit, kein Marker.
   const spiesOk = finishSpies();
   const okCall = elInboundCall({
     id: "call_finish_gb",
@@ -553,9 +517,7 @@ test("IEX-B1-10: die vier Schwellen stehen in config.js, .env.example, render.ya
     assert.ok(new RegExp(`^${name}=`, "m").test(envExample), `${name} fehlt in .env.example`);
     assert.ok(new RegExp(`key:\\s*${name}`).test(renderYaml), `${name} fehlt in render.yaml`);
   }
-  // Ohne Namespace-Eintrag wirft der Config-Proxy beim Lesen des Blatts.
   for (const blatt of blattNamen) assert.ok(configSrc.includes(`"${blatt}"`), `${blatt} fehlt im billing-Namespace`);
-  // Spawn-Tests laufen BEWUSST mit ausgeschaltetem Inbound-Melder (Lehre test-base-env-drift).
   assert.equal(BASE_ENV.INBOUND_OUTAGE_ALERT_WINDOW_MS, "0");
   assert.equal(BASE_ENV.INBOUND_OUTAGE_ALERT_MIN_FAILURES, "2");
   assert.equal(BASE_ENV.INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS, "20");

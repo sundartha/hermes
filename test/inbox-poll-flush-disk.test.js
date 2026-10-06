@@ -1,15 +1,3 @@
-// INBOX-P2 (R-3), Ebene B: das echte json-Backend, save()-Zaehler - die eigentliche
-// R-3-Abnahme (der Wrapper flusht NUR bei marked > 0).
-//
-// EIGENE Datei (Begruendung ausfuehrlich in test/inbox-poll-flush.test.js, Ebene A):
-// src/store/json.js bindet FILE einmalig, beim ERSTEN Import von src/config.js, an
-// config.server.dataDir. DATA_DIR muss deshalb gesetzt sein, BEVOR config.js zum
-// ERSTEN Mal geladen wird - in dieser gesamten Datei importieren wir aus src/ darum
-// NUR dynamisch (await import) innerhalb von before(), NACHDEM process.env.DATA_DIR
-// gesetzt ist (Bestandspraezedenz test/store-integrity.test.js). Die statischen Top-
-// Level-Imports bleiben auf node:test/node:assert/fs/os/path sowie test/helpers.js
-// beschraenkt (helpers.js importiert selbst nur store/defaults.js + store/state-ops.js,
-// keines von beiden importiert config.js - siehe deren Kopfkommentare).
 import test, { before, after, describe } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
@@ -25,17 +13,12 @@ describe("INBOX-P2 Ebene B: json-Backend, save() NUR bei marked > 0", () => {
   let jsonStore;
 
   before(async () => {
-    // Reihenfolge load-bearing: json.FILE bindet an config.dataDir beim Modul-Import.
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-inbox-flush-"));
     const seed = seedState({ calls: [] });
-    fs.writeFileSync(path.join(dataDir, "store.json"), JSON.stringify(seed)); // KEIN First-Boot-save()
+    fs.writeFileSync(path.join(dataDir, "store.json"), JSON.stringify(seed));
     process.env.DATA_DIR = dataDir;
     await import("../src/config.js");
     jsonStore = await import("../src/store/json.js");
-    // Warm-up AUSSERHALB der gezaehlten Faelle: der erste load() kann einmalige
-    // Migrationen (z.B. backfillGreetingNotices) ausloesen, die selbst save() rufen -
-    // das ist Bestandsverhalten von finishLoad() und hat mit takeInboxEntries nichts zu
-    // tun. Ohne dieses Warm-up wuerde B0/B1 diese fremde Bewegung faelschlich zaehlen.
     jsonStore.load();
   });
 

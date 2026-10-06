@@ -1,23 +1,3 @@
-// IEL-B1-GOLDEN — GOLDEN MASTER des Inbound-TeXML fuer /voice/incoming.
-//
-// Gegenstand ist genau EINE Zusage: solange der EL-Inbound-Schalter aus ist ODER der
-// anrufende Tenant nicht gepinnt ist, bleibt das ausgelieferte TeXML byte-identisch zum
-// heutigen Budget-Pfad. Das Fixture wurde VOR jeder Produktionsaenderung dieser Kette
-// aufgenommen (Muster test/b3-wire-golden-master.test.js).
-//
-// Neu aufnehmen (und nur dann, wenn eine Aenderung des Inbound-TeXML ausdruecklich
-// gewollt ist):
-//
-//     IEL_GOLDEN_RECORD=1 node --test test/iel-incoming-golden.test.js
-//
-// Der Aufnahme-Zweig ist kein toter Code, sondern der einzige reproduzierbare Weg, die
-// Fixture zu erzeugen.
-//
-// Sprache "de" wird am Seed gepinnt, unabhaengig vom Weltdefault-Schalter (Lehre
-// i18n-w3-bahn12).
-//
-// Testnamen tragen bewusst KEINE Katalog-ID am Namensanfang (package.json
-// config.i18nCatalogPattern) - Praefix ist "IEL-B1-GOLDEN-<n>:".
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -69,9 +49,6 @@ test("IEL-B1-GOLDEN-2: Schalter an, vollstaendiger Zugang, Tenant NICHT gepinnt 
     ELEVENLABS_INBOUND_TENANT_IDS: "tenant_iel_nicht_gepinnt",
     ...EL_INBOUND_ACCESS_BOOT_ENV,
   });
-  // Dieser Test vergleicht immer, nimmt nie auf: er ist der Anker, gegen den IEL-B8
-  // regressionssicher bleibt (Tenant nicht gepinnt -> heutiger Budget-Pfad, unabhaengig
-  // vom Schalterzustand).
   assert.equal(`${texml}\n`, goldenFixture());
   const inboundPathLines = stdout.match(INBOUND_PATH_BUDGET);
   assert.equal(inboundPathLines ? inboundPathLines.length : 0, 1, "genau eine Sonden-Zeile budget");
