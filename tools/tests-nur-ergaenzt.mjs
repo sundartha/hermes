@@ -4,6 +4,7 @@ import {
   changedUnits,
   gatesByTestFile,
 } from "./testschutz/aenderungen.mjs";
+import { deletedFinding, mechanicalProofs } from "./testschutz/ausnahmen.mjs";
 import { approval, listHint } from "./testschutz/freigabe.mjs";
 import { rerunLinkedPullRequests } from "./testschutz/neustart.mjs";
 
@@ -23,8 +24,7 @@ function parseOptions() {
 }
 
 function unitFindings(unit, names, gates) {
-  if (unit.deleted)
-    return [`${unit.file}: die ganze Testdatei ist gelöscht; das ist immer gesperrt.`];
+  if (unit.deleted) return [deletedFinding(unit)];
   const where = unit.lines.length > 0 ? `, Zeilen ${unit.lines.join(", ")}` : "";
   const findings = [];
   if (unit.name !== undefined && !names.has(unit.name)) {
@@ -47,9 +47,12 @@ function unitFindings(unit, names, gates) {
 }
 
 async function checkPullRequest({ basis, pullRequest }) {
-  const units = changedExistingTestFiles(basis).flatMap((change) => changedUnits(basis, change));
+  const { open, proven } = mechanicalProofs(basis, changedExistingTestFiles(basis));
+  for (const line of proven) console.log(line);
+  const units = open.flatMap((change) => changedUnits(basis, change));
   if (units.length === 0) {
-    console.log("Testschutz: keine bestehende Testzeile geändert oder gelöscht.");
+    const rest = proven.length > 0 ? "sonst " : "";
+    console.log(`Testschutz: ${rest}keine bestehende Testzeile geändert oder gelöscht.`);
     return;
   }
   const { names, notes, approvedIssues } = await approval(pullRequest);

@@ -1,0 +1,24 @@
+{
+  "titel": "Nur ein Kommentar aus einem bestehenden Test entfernt",
+  "vorher": {
+    "test/beispiel.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"rechnet eins plus eins\", () => {",
+      "  assert.equal(1 + 1, 2); // zwei",
+      "});"
+    ]
+  },
+  "dateien": {
+    "test/beispiel.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"rechnet eins plus eins\", () => {",
+      "  assert.equal(1 + 1, 2);",
+      "});"
+    ]
+  },
+  "erwartet": "ohne Freigabe"
+}

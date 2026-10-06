@@ -1,0 +1,24 @@
+{
+  "titel": "Kommentar entfernt und in derselben Zeile die Erwartung geändert",
+  "vorher": {
+    "test/beispiel.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"rechnet eins plus eins\", () => {",
+      "  assert.equal(1 + 1, 2); // zwei",
+      "});"
+    ]
+  },
+  "dateien": {
+    "test/beispiel.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"rechnet eins plus eins\", () => {",
+      "  assert.equal(1 + 1, 3);",
+      "});"
+    ]
+  },
+  "erwartet": "ohne Freigabe"
+}
