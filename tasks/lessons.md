@@ -1154,3 +1154,4 @@ wirst du."
 einen Agenten zu beauftragen, und jede einzelne Entscheidung dafuer ist plausibel. Der Schaden ist
 kumulativ und faellt erst am Ende auf. Deshalb ist die Regel mechanisch formuliert (welche
 Kommandos der Lead nicht tippt), nicht als Haltung.
+- Neue Lehre: vor jedem Commit die Probe laufen lassen.
