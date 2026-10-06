@@ -30,13 +30,20 @@ export async function testschutzNeuStarten(kopf) {
   return `Testschutz-Lauf ${lauf.id} neu gestartet`;
 }
 
-export function schalteAutoMergeEin(nummer, repo) {
-  const befehl = ["pr", "merge", String(nummer), "--repo", repo, "--auto", "--rebase"];
+function gh(befehl) {
   const lauf = spawnSync("gh", befehl, { encoding: "utf8", env });
   if (lauf.status === EXIT_GRUEN) return;
   throw new Error(
     `gh ${befehl.join(" ")} endete mit Exit ${lauf.status}: ${String(lauf.stderr ?? "").trim()}`,
   );
+}
+
+export function schalteAutoMergeEin(nummer, repo) {
+  gh(["pr", "merge", String(nummer), "--repo", repo, "--auto", "--rebase"]);
+}
+
+export function schalteAutoMergeAus(nummer, repo) {
+  gh(["pr", "merge", String(nummer), "--repo", repo, "--disable-auto"]);
 }
 
 export async function oeffneOderNeustarten({ bot, branch, kopf, gruen, pr }, aktionen) {
@@ -51,7 +58,10 @@ export async function oeffneOderNeustarten({ bot, branch, kopf, gruen, pr }, akt
     return `PR #${neu.number} geöffnet, Auto-Merge eingeschaltet.`;
   }
   if (vorhanden.head.sha !== kopf) {
-    return `PR #${vorhanden.number} steht schon auf ${vorhanden.head.sha}; dieser Lauf hat ${kopf} gemessen, kein Neustart.`;
+    return `PR #${vorhanden.number} steht schon auf ${vorhanden.head.sha}; dieser Lauf hat ${kopf} gemessen, nichts geändert.`;
   }
-  return `PR #${vorhanden.number}: ${await aktionen.neustart(kopf)}.`;
+  if (gruen) aktionen.autoMerge(vorhanden.number, bot.repo);
+  else aktionen.autoMergeAus(vorhanden.number, bot.repo);
+  const schalter = gruen ? "Auto-Merge eingeschaltet" : "Auto-Merge abgeschaltet";
+  return `PR #${vorhanden.number}: ${schalter}, ${await aktionen.neustart(kopf)}.`;
 }

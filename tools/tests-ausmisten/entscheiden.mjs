@@ -189,6 +189,10 @@ function planFehler(daten, erwartet) {
     ],
     [new Set(alle).size === alle.length, "eine Datei steht in mehreren Paketen"],
     [
+      daten.issue === null || (Number.isSafeInteger(daten.issue) && daten.issue > 0),
+      "Issue-Nummer ist ungültig",
+    ],
+    [
       istSortierteListe(daten.tests?.alt, TESTPFAD) &&
         istSortierteListe(daten.tests?.neu, TESTPFAD),
       "Liste der geänderten Testdateien ist ungültig",
