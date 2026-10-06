@@ -15,6 +15,7 @@ const zeitgliederBestand = existsSync(ZEITGLIEDER_BESTAND_DATEI)
   : {};
 const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
 const KOMMENTAR_BESTAND = "tools/basis/kommentare.json";
+const QUELLTEXT_BESTAND = "tools/basis/quelltext-als-text.json";
 const hermesRegeln = existsSync(HERMES_REGELN_DATEI)
   ? (await import(HERMES_REGELN_DATEI.href)).default
   : undefined;
@@ -27,6 +28,13 @@ const hermesBloecke =
           plugins: { hermes: hermesRegeln },
           rules: {
             "hermes/keine-kommentare": ["error", { bestand: KOMMENTAR_BESTAND }],
+          },
+        },
+        {
+          name: "hermes-tests",
+          files: ["test/**"],
+          rules: {
+            "hermes/kein-quelltext-als-text": ["error", { bestand: QUELLTEXT_BESTAND }],
           },
         },
       ];

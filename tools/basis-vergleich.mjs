@@ -8,6 +8,10 @@ import { parseArgs } from "node:util";
 import { ESLint } from "eslint";
 
 import { pfadAusSchluessel, pfadInDerWurzel } from "./eslint-rules/bestand.js";
+import {
+  lesestellenSchluessel,
+  quelltextLesestellen,
+} from "./eslint-rules/kein-quelltext-als-text.js";
 import { kommentarSchluessel, pruefbareKommentare } from "./eslint-rules/keine-kommentare.js";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -37,6 +41,7 @@ const PER_FOLDER_OPTION = "je-ordner";
 const COLLECTOR_PLUGIN = "basis-vergleich";
 const ROOT_FOLDER_LABEL = ".";
 const PATH_SEPARATOR = "/";
+const TEST_FILES = ["test/**"];
 const EXIT_FAILURE = 1;
 
 function runTool(command, args, root) {
@@ -226,6 +231,21 @@ function commentFindings(root) {
   return eslintCollectorFindings(root, "kommentare", { keysOf: commentKeys });
 }
 
+function textReadingKeys(context, file) {
+  const { sourceCode } = context;
+  return quelltextLesestellen(sourceCode, file).map((call) => ({
+    key: lesestellenSchluessel(sourceCode, file, call),
+    loc: call.loc,
+  }));
+}
+
+function textReadingFindings(root) {
+  return eslintCollectorFindings(root, "quelltext-als-text", {
+    keysOf: textReadingKeys,
+    files: TEST_FILES,
+  });
+}
+
 function keyPart(index) {
   return (key) => key.split(KEY_SEPARATOR)[index];
 }
@@ -235,6 +255,7 @@ const TOOLS = {
   knip: { findings: knipFindings, path: keyPart(1) },
   semgrep: { findings: semgrepFindings, version: semgrepVersion, path: keyPart(1) },
   kommentare: { findings: commentFindings, path: pfadAusSchluessel },
+  "quelltext-als-text": { findings: textReadingFindings, path: pfadAusSchluessel },
 };
 
 function baselineFile(toolName) {
