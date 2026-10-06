@@ -103,13 +103,8 @@ function abgleichGueltig(ergebnis) {
 }
 
 async function gespraechPruefen({ vergleichen, einstellungen, ausgabe }, lage) {
-  let ergebnis = null;
-  try {
-    const rahmen = { repoDir: einstellungen.repoDir, alt: lage.produktion, neu: lage.commit };
-    ergebnis = await vergleichen(rahmen);
-  } catch {
-    ergebnis = null;
-  }
+  const rahmen = { repoDir: einstellungen.repoDir, alt: lage.produktion, neu: lage.commit };
+  const ergebnis = await Promise.resolve().then(() => vergleichen(rahmen)).catch(() => null);
   if (!abgleichGueltig(ergebnis)) {
     ausgabe.melde("gespraech_fehler");
     return { geaendert: true, teile: [ABGLEICH_GESCHEITERT] };
