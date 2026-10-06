@@ -29,10 +29,6 @@ test("makePkce liefert verifier + S256-challenge", () => {
   assert.notEqual(verifier, challenge);
 });
 
-// ---- Router-Tests mit injizierten Fakes (kein pg, kein echter IdP) ----
-
-// Throwaway-express-App mit dem Router auf einem Ephemeral-Port. Liefert base-URL
-// + close(). fetch redirect=manual, damit wir Location + Set-Cookie pruefen.
 async function mountRouter(deps) {
   const app = express();
   app.use(makeWebAuthRoutes(deps));
@@ -43,8 +39,6 @@ async function mountRouter(deps) {
   return { base, close: () => new Promise((r) => server.close(r)) };
 }
 
-// Set-Cookie-Werte (Array oder einzeln) zu einem Cookie-Header zusammenfassen.
-// Nur name=value (vor dem ersten ';'); Attribute (Path/HttpOnly/...) verwerfen.
 function cookieHeaderFrom(setCookie) {
   const list = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
   return list.map((c) => c.split(";")[0]).join("; ");
@@ -60,7 +54,6 @@ function cookieValue(setCookie, name) {
   return null;
 }
 
-// node:http statt fetch: liefert raw Set-Cookie als Array (fetch faltet sie).
 function rawGet(url, headers = {}) {
   return new Promise((resolve, reject) => {
     const req = http.get(url, { headers }, (res) => {
@@ -102,7 +95,6 @@ function rawPost(url, headers = {}) {
   });
 }
 
-// Standard-Fakes; einzelne Tests ueberschreiben Felder gezielt.
 function fakeDeps(overrides = {}) {
   const calls = { upsert: [], create: [], audit: [], invalidate: [], get: [] };
   const deps = {
@@ -143,7 +135,6 @@ function fakeDeps(overrides = {}) {
     },
     audit: { record: async (arg) => calls.audit.push(arg) },
   };
-  // Tiefer Merge fuer die verschachtelten Fakes.
   for (const k of Object.keys(overrides)) {
     deps[k] =
       overrides[k] && typeof overrides[k] === "object" && !Array.isArray(overrides[k])
@@ -160,13 +151,11 @@ test("GET /auth/login setzt signierte verifier+state-Cookies und redirectet zum 
     const res = await rawGet(`${srv.base}/auth/login`);
     assert.equal(res.status, 302);
     assert.match(res.headers.location, /^https:\/\/idp\.test\/authorize\?/);
-    // beide Cookies httpOnly + sameSite=Lax + signiert
     const joined = res.setCookie.join("\n");
     assert.match(joined, /pkce_verifier=/);
     assert.match(joined, /oauth_state=/);
     assert.match(joined, /HttpOnly/i);
     assert.match(joined, /SameSite=Lax/i);
-    // state-Cookie traegt eine gueltige Signatur
     const signedState = cookieValue(res.setCookie, "oauth_state");
     assert.ok(verifyValue(signedState, SECRET), "state-Cookie muss verifizierbar signiert sein");
   } finally {
@@ -190,14 +179,11 @@ test("GET /auth/callback mit passendem state: upsert 1x, Session-Cookie gesetzt,
 
     assert.equal(res.status, 302);
     assert.equal(res.headers.location, "/");
-    // upsert genau 1x mit den IdP-Claims
     assert.equal(calls.upsert.length, 1);
     assert.deepEqual(calls.upsert[0], { sub: "user-1", email: "neu@kunde.de" });
-    // Session genau 1x mit sub+tenantId
     assert.equal(calls.create.length, 1);
     assert.equal(calls.create[0].sub, "user-1");
     assert.equal(calls.create[0].tenantId, "t_user-1");
-    // Set-Cookie traegt die SIGNIERTE Session-id
     const sessionCookie = cookieValue(res.setCookie, SESSION_COOKIE_NAME);
     assert.equal(
       verifyValue(sessionCookie, SECRET),
@@ -207,17 +193,14 @@ test("GET /auth/callback mit passendem state: upsert 1x, Session-Cookie gesetzt,
     const joined = res.setCookie.join("\n");
     assert.match(joined, /HttpOnly/i);
     assert.match(joined, /SameSite=Lax/i);
-    // SEC-P5: die drei Bedingungen, die der Browser fuer __Host- erzwingt.
     const gesetzt = res.setCookie.find((zeile) => zeile.startsWith(`${SESSION_COOKIE_NAME}=`));
     assert.match(gesetzt, /;\s*Secure/i);
     assert.match(gesetzt, /;\s*Path=\/(;|$)/i);
     assert.doesNotMatch(gesetzt, /;\s*Domain=/i, "__Host- verbietet Domain=");
-    // verifier + state werden geloescht (Max-Age=0 / Expires Vergangenheit)
     assert.match(
       joined,
       /pkce_verifier=;|pkce_verifier=deleted|Max-Age=0[\s\S]*pkce_verifier|pkce_verifier[\s\S]*Max-Age=0|pkce_verifier[\s\S]*Expires=Thu, 01 Jan 1970/i,
     );
-    // Audit-Eintrag login
     assert.equal(calls.audit.length, 1);
     assert.equal(calls.audit[0].action, "login");
     assert.equal(calls.audit[0].actorSub, "user-1");
@@ -227,8 +210,6 @@ test("GET /auth/callback mit passendem state: upsert 1x, Session-Cookie gesetzt,
 });
 
 test("GET /auth/callback mit postLoginPath: redirectet ins Kunden-Portal statt /", async () => {
-  // Bug-Wurzel W3: ein frisch eingeloggter (suspendierter) Tenant darf NICHT auf "/"
-  // in einer rohen Auth-Sackgasse landen, sondern auf der Self-Service-Shell.
   const { deps } = fakeDeps({ postLoginPath: "/app" });
   const srv = await mountRouter(deps);
   try {
@@ -249,7 +230,6 @@ test("GET /auth/callback mit postLoginPath: redirectet ins Kunden-Portal statt /
 });
 
 test("GET /auth/callback ohne postLoginPath: Default-Redirect bleibt / (byte-identisch)", async () => {
-  // fail-safe Default: fehlt postLoginPath, bleibt das Bestands-Verhalten erhalten.
   const { deps } = fakeDeps();
   const srv = await mountRouter(deps);
   try {
@@ -277,7 +257,6 @@ test("GET /auth/callback mit FALSCHEM state -> 400, keine Session (CSRF)", async
       `oauth_state=${encodeURIComponent(signValue("the-real-state", SECRET))}`,
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
     ].join("; ");
-    // Angreifer-state weicht vom Cookie ab
     const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=attacker-state`, {
       Cookie: cookies,
     });
@@ -285,7 +264,6 @@ test("GET /auth/callback mit FALSCHEM state -> 400, keine Session (CSRF)", async
     assert.equal(res.status, 400);
     assert.equal(calls.upsert.length, 0, "kein Account-Upsert bei CSRF");
     assert.equal(calls.create.length, 0, "keine Session bei CSRF");
-    // Cookie darf NICHT gesetzt sein
     assert.equal(cookieValue(res.setCookie, SESSION_COOKIE_NAME), null);
   } finally {
     await srv.close();
@@ -293,8 +271,6 @@ test("GET /auth/callback mit FALSCHEM state -> 400, keine Session (CSRF)", async
 });
 
 test("GET /auth/callback ohne state-Cookie -> 302 Recovery (kein Bypass, keine Session)", async () => {
-  // AM2: FEHLENDES state-Cookie ist benign (Drop/Expiry/anderer Tab) -> Flow-Neustart statt
-  // 400-Sackgasse. CSRF-Sicherung bleibt: KEINE Session, KEIN exchange, KEIN Mint.
   const { deps, calls } = fakeDeps();
   const srv = await mountRouter(deps);
   try {
@@ -309,17 +285,12 @@ test("GET /auth/callback ohne state-Cookie -> 302 Recovery (kein Bypass, keine S
   }
 });
 
-// ---- AM2: Registrierung ohne CSRF-Sackgasse (Auth-Callback-Recovery) ----
-// Ein FEHLENDES state-Cookie ist benign (Cookie-Drop/Expiry/anderer Tab beim Mail-Link)
-// und startet den Flow neu; ein VORHANDENES-aber-ungueltiges Cookie bleibt strikt 400.
-// Loop-Guard ueber einen state-Marker (ueberlebt den IdP-Round-Trip ohne Cookies).
-
 test("AM2: Callback mit kaputt signiertem oauth_state-Cookie -> 400 (fail-closed, kein Recovery)", async () => {
   const { deps, calls } = fakeDeps();
   const srv = await mountRouter(deps);
   try {
     const cookies = [
-      `oauth_state=${encodeURIComponent(signValue("state-xyz", "wrong-secret"))}`, // falsche Signatur
+      `oauth_state=${encodeURIComponent(signValue("state-xyz", "wrong-secret"))}`,
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
       `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
     ].join("; ");
@@ -349,12 +320,6 @@ test("AM2: Callback ohne Cookie + markierter state -> terminale Seite (Loop-Guar
   }
 });
 
-// WEB-13 - SOLL-Gegenstueck zum AM2-Ist-Pin darueber (der /Session expired/ pinnt).
-// Die terminale Recovery-Seite erscheint, BEVOR eine Identitaet existiert
-// (kein Cookie, kein Tenant) - eine Tenant-Sprache gibt es dort strukturell nicht. Der
-// SOLL-Massstab ist deshalb der Weltdefault (P10: DEFAULT_LANGUAGE "en"), nicht "irgendeine
-// Sprache". Welcher Kanal ihn kuenftig traegt (Accept-Language, Weltdefault, sprachneutraler
-// Code), entscheidet die Fix-Phase - dieser Test entscheidet es NICHT.
 test("WEB-13 (SOLL, rot) - die Session-abgelaufen-Seite ist nicht hart deutsch", async () => {
   const { deps } = fakeDeps();
   const srv = await mountRouter(deps);
@@ -418,7 +383,6 @@ test("GET /auth/callback mit fehlschlagendem exchange -> 401, Cookies geloescht,
 
     assert.equal(res.status, 401);
     assert.equal(calls.create.length, 0);
-    // KEIN Leak des internen Fehlertexts/Tokens in den Body
     assert.doesNotMatch(res.body, /super-secret-token-xyz/);
     assert.equal(cookieValue(res.setCookie, SESSION_COOKIE_NAME), null);
   } finally {
@@ -434,7 +398,6 @@ test("POST /auth/logout invalidiert die Session und loescht das Cookie -> 204", 
     const res = await rawPost(`${srv.base}/auth/logout`, { Cookie: cookie });
     assert.equal(res.status, 204);
     assert.deepEqual(calls.invalidate, ["sess-abc-123"]);
-    // Cookie geloescht
     const joined = res.setCookie.join("\n");
     assert.match(
       joined,
@@ -456,11 +419,6 @@ test("POST /auth/logout ohne Cookie -> 204 ohne Invalidierung (idempotent)", asy
     await srv.close();
   }
 });
-
-// ---- F1: email_verified vor Admin-Allowlist erzwingen ----
-// claimsFromPayload reicht email NUR durch, wenn email_verified === true ist.
-// Verhindert Privilege-Escalation: unverifizierte/aenderbare Mail in ADMIN_EMAILS
-// darf keine Admin-Rechte freischalten.
 
 test("T-F1-01: email_verified true -> email durchgereicht", () => {
   const claims = claimsFromPayload({ sub: "u1", email: "admin@vodafone.de", email_verified: true });
@@ -491,14 +449,6 @@ test("T-F1-05: email_verified truthy String -> email: null (kein Truthy-Cast)", 
   assert.deepEqual(claims, { sub: "u5", email: null });
 });
 
-// ---- F2: oidc_nonce-Cookie als Same-Session-Bindung ----
-// WorkOS User Management kennt im authorize-Endpoint keinen `nonce`-Param und die
-// authenticate-Antwort enthaelt kein id_token -> ein OIDC-nonce-Round-Trip ist nicht
-// moeglich. Der Replay-Schutz liegt bei PKCE (code nur mit code_verifier einloesbar).
-// Das signierte oidc_nonce-Cookie bleibt als zusaetzliche Same-Session-Bindung: /auth/login
-// setzt es, /auth/callback erzwingt Vorhandensein + gueltige Signatur VOR dem Token-Tausch
-// und loescht es beim Cleanup mit.
-
 test("T-F2-01: GET /auth/login setzt signiertes oidc_nonce-Cookie (Same-Session-Bindung)", async () => {
   const { deps } = fakeDeps();
   const srv = await mountRouter(deps);
@@ -509,7 +459,6 @@ test("T-F2-01: GET /auth/login setzt signiertes oidc_nonce-Cookie (Same-Session-
     assert.match(joined, /oidc_nonce=/);
     assert.match(joined, /HttpOnly/i);
     assert.match(joined, /SameSite=Lax/i);
-    // nonce-Cookie verifizierbar signiert
     const signedNonce = cookieValue(res.setCookie, "oidc_nonce");
     assert.ok(
       verifyValue(signedNonce, SECRET),
@@ -549,7 +498,6 @@ test("T-F2-03: GET /auth/callback mit manipuliertem oidc_nonce-Cookie -> 400, ke
     const cookies = [
       `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
-      // Falsche Signatur (anderes Secret) -> verifyValue gibt null
       `oidc_nonce=${encodeURIComponent(signValue("nonce-val", "wrong-secret"))}`,
     ].join("; ");
     const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
@@ -608,21 +556,14 @@ test("T-F2-05: GET /auth/callback Happy-Path: oidc_nonce-Cookie wird beim Cleanu
       Cookie: cookies,
     });
     assert.equal(res.status, 302);
-    // Session-Cookie gesetzt (Happy-Path unveraendert)
     const sessionCookie = cookieValue(res.setCookie, SESSION_COOKIE_NAME);
     assert.equal(verifyValue(sessionCookie, SECRET), "sess-abc-123");
-    // oidc_nonce wird geloescht (Max-Age=0)
     const joined = res.setCookie.join("\n");
     assert.match(joined, /oidc_nonce=;|oidc_nonce[\s\S]*Max-Age=0|Max-Age=0[\s\S]*oidc_nonce/i);
   } finally {
     await srv.close();
   }
 });
-
-// ---- Callback-Eingabevalidierung: PKCE-Verifier + code fail-fast ----
-// state und nonce werden bereits mit 400 erzwungen; der PKCE-Verifier (Cookie) und der
-// code-Query-Param ebenso, BEVOR WorkOS angerufen wird (kein null/undefined an
-// authenticate). Fehlt eins -> 400, kein exchange, keine Session.
 
 test("T-CB-01: GET /auth/callback ohne pkce_verifier-Cookie -> 400, kein exchange", async () => {
   const { deps, calls } = fakeDeps({
@@ -670,7 +611,6 @@ test("T-CB-02: GET /auth/callback ohne code-Query-Param -> 400, kein exchange", 
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
       `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
     ].join("; ");
-    // Callback ohne code (z.B. WorkOS-Fehler-Redirect)
     const res = await rawGet(`${srv.base}/auth/callback?state=${state}`, { Cookie: cookies });
     assert.equal(res.status, 400);
     assert.equal(calls.exchangeCalled, undefined, "exchange darf ohne code nicht laufen");
@@ -680,7 +620,6 @@ test("T-CB-02: GET /auth/callback ohne code-Query-Param -> 400, kein exchange", 
   }
 });
 
-// adminOnly-Mount-Muster: req.tenant per Hilfs-Middleware setzen, dann adminOnly.
 async function mountAdmin(adminEmails, tenant) {
   const app = express();
   app.get(
@@ -731,17 +670,7 @@ test("T-F1-07: adminOnly mit verifizierter Email in Allowlist -> 200", async () 
   }
 });
 
-// ---- AC1/AC2: realer WorkOS-UM authorizeUrl/exchange-Pfad (un-gestubbt) ----
-// makeOidc bekommt einen injizierbaren fetch (KEIN globalThis-Mock, KEIN neues
-// Prod-Interface). Damit laeuft der reale authorizeUrl-/exchange()-Code, den die
-// Router-Tests per oidc-Fake umgehen. Beweist: authorizeUrl zeigt auf den WorkOS-UM-
-// authorize-Endpoint (+provider=authkit, PKCE); exchange spricht /user_management/
-// authenticate, uebernimmt die Identitaet aus dem `user`-Objekt (kein id_token) und
-// faengt malformte Antworten als KLAREN Fehler statt undefined-Deref-Crash.
-
 const WORKOS_BASE = "https://api.workos.test";
-// Spiegelt die echte config.auth-Namespace-Form (PA-17 Runde 2): makeOidc liest
-// config.auth.<key>, nicht mehr config.<key> flach.
 const OIDC_CFG = {
   auth: {
     workosApiBase: WORKOS_BASE,
@@ -750,8 +679,6 @@ const OIDC_CFG = {
   },
 };
 
-// fetch-Attrappe: zeichnet den letzten Request auf, liefert die konfigurierte Antwort.
-// json kann ein Wert ODER eine Fehler-Factory sein.
 function captureFetch({ ok = true, status = 200, json } = {}) {
   const seen = {};
   const _fetch = async (url, opts = {}) => {
@@ -778,7 +705,6 @@ test("T-AC1-01: authorizeUrl zeigt auf WorkOS-UM-authorize (+provider=authkit, P
   assert.equal(u.searchParams.get("code_challenge"), "chal-123");
   assert.equal(u.searchParams.get("code_challenge_method"), "S256");
   assert.equal(u.searchParams.get("state"), "state-xyz");
-  // WorkOS-UM-authorize kennt weder scope noch nonce
   assert.equal(u.searchParams.get("scope"), null);
   assert.equal(u.searchParams.get("nonce"), null);
 });
@@ -793,9 +719,7 @@ test("T-AC2-01: exchange spricht /user_management/authenticate und uebernimmt Id
   });
   const oidc = makeOidc(OIDC_CFG, { _fetch });
   const { claims } = await oidc.exchange({ code: "authcode", verifier: "ver-123" });
-  // Identitaet aus dem user-Objekt (sub = user.id, email da email_verified===true)
   assert.deepEqual(claims, { sub: "user_01ABC", email: "kunde@firma.de" });
-  // Request: POST an den UM-authenticate-Endpoint, JSON-Body mit grant_type+code+verifier+client
   assert.equal(seen.url, `${WORKOS_BASE}/user_management/authenticate`);
   assert.equal(seen.opts.method, "POST");
   assert.match(seen.opts.headers["Content-Type"], /application\/json/);
@@ -864,11 +788,6 @@ test("T-AC2-05: exchange bei authenticate-HTTP-Fehler -> Throw ohne Body-Leak", 
   );
 });
 
-// ---- P1: sid-Klaim-Extraktion aus dem Access-Token (WorkOS-Sign-out-Grundlage) ----
-// exchange() liest die "sid"-Klaim aus dem JWT-Payload-Segment des access_token, OHNE
-// Signatur-Pruefung (server-zu-server-Antwort, gleiche Vertrauensstufe wie user).
-// fakeAccessToken baut ein ungueltig-signiertes, aber strukturell echtes JWT (Header.
-// Payload.Signatur, base64url) -- die Extraktion prueft nur die Payload-Dekodierung.
 function fakeAccessToken(payload) {
   const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString("base64url");
   return `${b64({ alg: "RS256", typ: "JWT" })}.${b64(payload)}.dummy-signature`;
@@ -919,8 +838,6 @@ test("T-AC2-08: access_token mit nicht-JSON Payload-Segment -> workosSessionId: 
   assert.equal(workosSessionId, null);
 });
 
-// ---- P1: sessionLogoutUrl (WorkOS-UM-Session-Logout-URL) ----
-
 test("T-SL-01: sessionLogoutUrl baut die WorkOS-Sign-out-URL mit session_id + return_to", () => {
   const oidc = makeOidc(OIDC_CFG);
   const url = oidc.sessionLogoutUrl({
@@ -940,8 +857,6 @@ test("T-SL-02: sessionLogoutUrl ohne returnTo -> return_to fehlt, session_id vor
   assert.equal(u.searchParams.get("session_id"), "session_01ABC");
   assert.equal(u.searchParams.get("return_to"), null);
 });
-
-// ---- P1: Router-Integration Login -> Logout mit WorkOS-Session-ID ----
 
 test("T-SL-03: Login mit workosSessionId, POST /auth/logout liefert 200 {logoutUrl} und invalidiert die Session", async () => {
   const sessionStore = new Map();
@@ -1000,11 +915,6 @@ test("T-SL-03: Login mit workosSessionId, POST /auth/logout liefert 200 {logoutU
   }
 });
 
-// ---- P4 / AC3: GET /auth/login fail-closed ----
-// authorizeUrl baut zwar nur eine URL (kein I/O), bleibt aber awaited: wirft es
-// unerwartet, reicht Express 4 die Rejection NICHT an eine Error-MW weiter -> der
-// Request haengt bis zum Socket-Timeout. Mit try/catch: sauberer 5xx, kein Detail-Leak.
-
 test("T-P4-05: GET /auth/login bei authorizeUrl-Fehler -> 5xx, kein Hang, kein Leak", async () => {
   const { deps } = fakeDeps({
     oidc: {
@@ -1016,8 +926,6 @@ test("T-P4-05: GET /auth/login bei authorizeUrl-Fehler -> 5xx, kein Hang, kein L
   });
   const srv = await mountRouter(deps);
   try {
-    // Eigener Timeout beweist "kein Hang": die Response kommt sofort, nicht erst nach
-    // Socket-Timeout. AbortController kappt nach 4s -> der Test wuerde sonst werfen.
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 4000);
     ac.signal.addEventListener("abort", () => http.globalAgent.destroy());
@@ -1033,12 +941,6 @@ test("T-P4-05: GET /auth/login bei authorizeUrl-Fehler -> 5xx, kein Hang, kein L
     await srv.close();
   }
 });
-
-// ---- P2b: Web-Login schreibt den IdP-Namen in den Gate-Store ----
-// Der echte Callback uebernimmt Vor-/Nachname aus dem verifizierten IdP-Profil (exchange,
-// server-zu-server -> kein Body-Spoofing) und ruft applyTenantIdentity set-if-absent. Der
-// Dev-Login (Body-Quelle) tut das NIE. claimsFromPayload reicht die Namen additiv durch,
-// exchange traegt die WorkOS-Felder (first_name/last_name) ein.
 
 test("T-P2b-01: Callback schreibt IdP-Namen via applyTenantIdentity (set-if-absent, kein Body-Spoofing)", async () => {
   const identityCalls = [];
@@ -1063,13 +965,11 @@ test("T-P2b-01: Callback schreibt IdP-Namen via applyTenantIdentity (set-if-abse
       Cookie: cookies,
     });
     assert.equal(res.status, 302);
-    // Identitaets-Write genau 1x mit tenantId + getrennten Namen aus dem IdP-Profil.
     assert.equal(identityCalls.length, 1);
     assert.deepEqual(identityCalls[0], {
       tenantId: "t_user-1",
       identity: { firstName: "Erika", lastName: "Muster" },
     });
-    // Name NICHT ueber den Account-Upsert (der bekommt weiter nur sub+email).
     assert.deepEqual(calls.upsert[0], { sub: "user-1", email: "neu@kunde.de" });
   } finally {
     await srv.close();
@@ -1090,7 +990,6 @@ test("T-P2b-02: claimsFromPayload reicht firstName/lastName additiv durch (ohne 
     firstName: "Erika",
     lastName: "Muster",
   });
-  // Ohne Namen bleibt die Bestands-Form {sub,email} (kein leerer Key).
   const withoutNames = claimsFromPayload({ sub: "u2", email: "x@y.de", email_verified: true });
   assert.deepEqual(withoutNames, { sub: "u2", email: "x@y.de" });
 });
@@ -1114,8 +1013,6 @@ test("T-P2b-03: exchange reicht WorkOS first_name/last_name in die Claims durch"
 });
 
 test("T-P2b-04: Dev-Login schreibt KEINE Identitaet (kein Body-Spoofing), mintet aber die Session", async () => {
-  // express.json() mountet den Body wirklich -> selbst MIT Namen im Body loest der
-  // Dev-Login-Pfad keinen Identitaets-Write aus (mintSession reicht dort keine Namen durch).
   const identityCalls = [];
   const { deps, calls } = fakeDeps({
     devLoginEnabled: true,
@@ -1142,15 +1039,6 @@ test("T-P2b-04: Dev-Login schreibt KEINE Identitaet (kein Body-Spoofing), mintet
     await new Promise((r) => server.close(r));
   }
 });
-
-// ---- tenant-prolif-b: mintSession bindet den (evtl. gemergten) sub in den MCP/REST-
-// Resolver-Index -----------------------------------------------------------------
-// mintSession ist die GEMEINSAME Session-Mint-Mechanik fuer Callback UND Dev-Login (G5).
-// deps.bindSub wird NACH ensureTenant aufgerufen, UNCONDITIONAL (anders als
-// applyTenantIdentity, das nur bei vorhandenem Namen schreibt) - ohne diese Verdrahtung
-// bliebe ein per Email-Merge (Phase A) gebundener Zweit-sub bis zum naechsten Boot
-// "eingefroren" (resolveTenant faende ihn nicht). Store-seitiger Beweis der Merge-
-// Aufloesung selbst: test/tenant-prolif-b.test.js.
 
 test("T-tpb-01: Callback bindet den sub via bindSub(sub, tenantId) (mintSession)", async () => {
   const bindCalls = [];
@@ -1215,14 +1103,6 @@ test("T-tpb-02: Dev-Login bindet den sub ebenfalls (bindSub ist UNCONDITIONAL, a
   }
 });
 
-// ---- ex WEB-11 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:294) ----
-// CSRF-Fehlerantwort bei fehlgeschlagenem OIDC-State ist ein stabiler, sprachneutraler
-// Code (kein deutscher Klartext) - src/web-auth.js rejectCsrf().
-//
-// Zweiter Request in DEMSELBEN Test gegen eine ANDERE rejectCsrf-Aufrufstelle (fehlender
-// oidc_nonce-Cookie statt State-Mismatch) pinnt die Regel-3-Invariante: der Code ist fuer
-// ALLE CSRF-Ablehnungsgruende byte-identisch - kein Detail-Leak, welcher Check scheiterte.
-
 test("CSRF-Fehlantwort ist ein sprachneutraler Code, identisch fuer alle Ablehnungsgruende (ex WEB-11)", async () => {
   const { deps } = fakeDeps();
   const srv = await mountRouter(deps);
@@ -1238,7 +1118,6 @@ test("CSRF-Fehlantwort ist ein sprachneutraler Code, identisch fuer alle Ablehnu
     assert.equal(stateMismatch.status, 400);
     assert.equal(stateMismatch.body, "csrf_state_invalid");
 
-    // andere Aufrufstelle: state passt, aber oidc_nonce-Cookie fehlt komplett.
     const missingNonceCookies = [
       `oauth_state=${encodeURIComponent(signValue("the-real-state", SECRET))}`,
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
@@ -1257,10 +1136,6 @@ test("CSRF-Fehlantwort ist ein sprachneutraler Code, identisch fuer alle Ablehnu
     await srv.close();
   }
 });
-
-// ---- ex WEB-12 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:313) ----
-// Login-Fehlerpfade (authorizeUrl wirft -> 500, exchange wirft -> 401) liefern den
-// stabilen, sprachneutralen Code ERROR_LOGIN_FAILED statt deutschem Klartext.
 
 test("Login-Fehlerpfad: authorizeUrl wirft -> 5xx + sprachneutraler Code (ex WEB-12a)", async () => {
   const { deps } = fakeDeps({

@@ -1,8 +1,3 @@
-// Greeting-Vorlagen i18n (ex WEB-04, tasks/i18n-tests/08-web-dashboard-onboarding.md,
-// Cluster D7): die waehlbare Vorlagenmenge FOLGT der Tenant-Sprache statt nur drei
-// deutscher Vorlagen anzubieten. Reiner Modul-Import, kein Server/Store noetig.
-// Umbenannt in P3 (A3): der Name traegt die ID NICHT mehr am Anfang (package.json
-// config.i18nCatalogPattern).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { greetingTemplatesFor, ALL_GREETING_TEMPLATES } from "../src/i18n/greeting-catalog.js";

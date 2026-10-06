@@ -1,7 +1,3 @@
-// P7 (Cluster 5, G5): readSignedCookie() in src/web-auth.js ersetzt die vormals an
-// 4 Stellen wortgleich verdoppelte Sequenz "readCookie -> verifyValue". Reine
-// Unit-Tests mit einem minimalen fake-req (Muster: signValue/verifyValue-Tests in
-// web-auth.test.js), kein Server/Router noetig.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { signValue, readSignedCookie } from "../src/web-auth.js";
