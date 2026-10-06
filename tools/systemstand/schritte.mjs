@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { cwd, env } from "node:process";
 
 import { GESTOPPT, MANIFEST_FILE, ROTPROBEN_DIR, runCase } from "../pruefungen-messen.mjs";
+import { pfadAusSchluessel } from "../eslint-rules/bestand.js";
 import { github } from "./github.mjs";
 import { packagesClosed } from "./pakete.mjs";
 
@@ -17,8 +18,16 @@ const PHASE_BRANCH = "phase";
 const ESLINT_EFFECTIVE_CONFIG = "tools/basis/eslint-wirksam.json";
 const ESLINT_SUPPRESSIONS = "eslint-suppressions.json";
 const ERROR_SEVERITY = 2;
-const COMMENT_RULE = { paket: 31, name: "hermes/keine-kommentare" };
-const TEXT_READING_RULE = { paket: 31, name: "hermes/kein-quelltext-als-text" };
+const COMMENT_RULE = {
+  paket: 31,
+  name: "hermes/keine-kommentare",
+  bestand: "tools/basis/kommentare.json",
+};
+const TEXT_READING_RULE = {
+  paket: 31,
+  name: "hermes/kein-quelltext-als-text",
+  bestand: "tools/basis/quelltext-als-text.json",
+};
 const INSTRUCTIONS_FILE = "CLAUDE.md";
 const INSTRUCTIONS_MAX_LINES = 100;
 const RETIRED_WORKFLOW_DIRECTORY = ".claude/workflows";
@@ -127,12 +136,19 @@ function ruleActive({ name }) {
   return folders.some(({ rules }) => rules?.[name]?.[0] === ERROR_SEVERITY);
 }
 
-function frozenHits({ name }) {
+function baselineKeys(path) {
+  return existsSync(path) ? readJson(path).befunde : [];
+}
+
+function frozenHits({ name, bestand }) {
   const suppressions = existsSync(ESLINT_SUPPRESSIONS) ? readJson(ESLINT_SUPPRESSIONS) : {};
-  const counts = Object.values(suppressions)
-    .map((rules) => rules[name]?.count ?? 0)
-    .filter((count) => count > 0);
-  return { files: counts.length, hits: counts.reduce((sum, count) => sum + count, 0) };
+  const suppressed = Object.entries(suppressions)
+    .map(([file, rules]) => ({ file, count: rules[name]?.count ?? 0 }))
+    .filter(({ count }) => count > 0);
+  const keys = baselineKeys(bestand);
+  const files = new Set([...suppressed.map(({ file }) => file), ...keys.map(pfadAusSchluessel)]);
+  const hits = suppressed.reduce((sum, { count }) => sum + count, keys.length);
+  return { files: files.size, hits };
 }
 
 function commentBaselineProblems() {
