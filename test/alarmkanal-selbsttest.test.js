@@ -1,7 +1,3 @@
-// OUTBOUND-E3b (Review-Blocker Runde 2, C8b): der monatliche Alarmkanal-Selbsttest -
-// "ein Kanal, der zwoelf Monate lang nie ausgeloest wurde, ist kein bewiesener Kanal"
-// (PLAN-OUTBOUND-RESILIENZ.md, Abschnitt "Meldeweg und Alarm-Body"). Versand ausschliesslich
-// gegen Attrappen (KEINE echten Anrufe/SMS/Mails).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runAlertChannelSelfTest, runOutageRecoverySweep } from "../src/telephony/outage-report.js";
@@ -9,7 +5,7 @@ import { PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
 
 const CONFIG = Object.freeze({
   billing: {
-    outageAlertSelfTestIntervalMs: 2592000000, // 30 Tage
+    outageAlertSelfTestIntervalMs: 2592000000,
     platformAlertSmsTo: "+12025550143",
   },
   mail: { platformAlertMailTo: "ops@example.test" },
@@ -129,13 +125,9 @@ test("S7 (B1-Fix, Review-Blocker Runde 3): der Erholungs-Sweep und der Selbsttes
   + "MEHRFACH hintereinander gegen denselben Store - genau EIN Selbsttest-Versand ueber "
   + "5 simulierte Stunden-Ticks (30-Tage-Intervall), NIE eine outage_recovered-Zeile fuer "
   + "den Selbsttest-Marker", async () => {
-  // Reproduziert den gemessenen Defekt: ohne den B1-Fix schliesst runOutageRecoverySweep
-  // den Selbsttest-Marker bei JEDEM Tick als "erholt" (er sieht fuer den Selbsttest-Eimer
-  // IMMER fehler=0), der Selbsttest findet danach keinen offenen Marker mehr und feuert
-  // erneut - 5 Ticks haetten 5 Mails/5 SMS und 4 falsche outage_recovered-Zeilen ergeben.
   const spies = makeSpies();
   const store = makeStore({ platformNumberUse: boundSender() });
-  const STUNDEN_TAKT_MS = 3600000; // Produktions-Sweep-Takt (boot.js#runSweepTick)
+  const STUNDEN_TAKT_MS = 3600000;
   const SIMULIERTE_TICKS = 5;
   for (let tick = 0; tick < SIMULIERTE_TICKS; tick += 1) {
     const nowMs = NOW_MS + tick * STUNDEN_TAKT_MS;

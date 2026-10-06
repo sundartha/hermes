@@ -1,13 +1,3 @@
-// P0a - Charakterisierungs-Test fuer POST /api/billing/flush-meters (PLAN-SERVER-SLIM,
-// Pre-Mortem h): der Endpunkt hatte KEINEN HTTP-Test -> sein Move nach routes/api-billing.js
-// (P7) waere nicht byte-beweisbar. AUTH-P6: flush-meters ist seither eine Betreiber-Route
-// (webAuthMw+adminMw, nur MIT operatorAuth gemountet) - ein echter Spawn-Server (Muster
-// vor AUTH-P6) faehrt json/kein SESSION_SECRET und mountet sie darum gar nicht mehr (404
-// ohne JSON-Body, W6). Migriert auf In-Process-Mount von makeBillingRoutes (Muster
-// prov01-capture-idempotent.test.js: reale stripeBilling-Logik gegen einen HTTP-Mock,
-// config.billing.stripeApiBase/stripeSecretKey-Override) + Store-Double aus seedState().
-// operatorAuth = Durchreiche-Attrappe (test/operator-route-app.js) - dieser Test misst
-// weiterhin flushMeters, nicht die Admin-Sitzung (die pruefen die AUTH-P6-Tests).
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -20,10 +10,6 @@ import { operatorAuthPassThrough } from "./operator-route-app.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-// Minimale Fake-Stripe: quittiert das Meter-Event mit 200 und zaehlt die POSTs
-// (Muster startFakeStripe/startFixedServer in billing-setup-checkout-route.test.js /
-// prov01-capture-idempotent.test.js). Nur der eine Endpunkt, den flushMeters ->
-// stripeBilling.reportMeter trifft.
 async function startFakeStripe() {
   const meterPosts = [];
   const server = http.createServer((req, res) => {
@@ -47,11 +33,6 @@ async function startFakeStripe() {
   };
 }
 
-// Setzt Base-URL + Secret des STRIPE-SINGLETON auf den Mock, ruft fn, stellt danach
-// wieder her (Independent/R; Muster withStripeMock, prov01-capture-idempotent.test.js).
-// stripeBilling liest config.billing IMMER vom echten Singleton (src/config.js), NICHT
-// vom config-Objekt, das makeBillingRoutes erhaelt - beide muessen darum unabhaengig
-// gesetzt werden.
 async function withStripeMock(url, fn) {
   const savedBase = config.billing.stripeApiBase;
   const savedKey = config.billing.stripeSecretKey;
@@ -65,15 +46,8 @@ async function withStripeMock(url, fn) {
   }
 }
 
-// KV-P0: Stichtag WEIT vor jedem new Date()-Fixture dieser Datei - Tests (B)/(C)/(D)
-// pruefen die Route selbst (404, Zaehler, Event-Markierung), nicht den Stichtag-Filter
-// (der hat seinen eigenen Testfall (E) hier und seine eigene Testdatei,
-// test/kv-p0-flush-epoch.test.js). Default-Parameter DAMIT bestehende Aufrufer ohne
-// flushEpochIso weiterhin einen scharfen Flush messen.
 const FLUSH_EPOCH_WEIT_VOR_FIXTURES = "2000-01-01T00:00:00.000Z";
 
-// In-Process-App: EIN state-Objekt (seedState-Form) als store-Double, das flushMeters
-// per markMeterEventsSent mutiert (save() ist ein No-Op - kein IO in diesem Test).
 async function startBillingApp({
   paymentEnabled,
   state,
@@ -102,7 +76,6 @@ async function startBillingApp({
 
 const flushMeters = (app) => fetch(`${app.base}/api/billing/flush-meters`, { method: "POST" });
 
-// (A) Fail-closed: ohne PAYMENT_ENABLED -> 404 mit exaktem Body.
 test("ohne PAYMENT_ENABLED: POST /api/billing/flush-meters -> 404 (fail-closed)", async () => {
   const app = await startBillingApp({ paymentEnabled: false, state: seedState() });
   try {
@@ -114,12 +87,6 @@ test("ohne PAYMENT_ENABLED: POST /api/billing/flush-meters -> 404 (fail-closed)"
   }
 });
 
-// (B) Aktiv, leerer Ledger: 200 {sent:0,failed:0,skipped:0,skipReason:null}; Billing-Port
-// NIE beruehrt (kein Stripe), Antwort traegt nur Zaehler + Grund-Code (kein Secret/Event-
-// Inhalt, keine Tenant-Kennung, kein Betrag - KV-P0 erweitert die Antwort um zwei
-// Zaehler-Felder, kein Leak). seedState() traegt KEIN usageEvents-Feld (nur der
-// json-Store-Reader fuellt es beim Laden nach) - dieses Store-Double mountet direkt,
-// darum hier EXPLIZIT.
 test("mit PAYMENT_ENABLED, leerer Ledger: -> 200 {sent:0,failed:0,skipped:0,skipReason:null} (kein Stripe-Kontakt)", async () => {
   const app = await startBillingApp({
     paymentEnabled: true,
@@ -130,21 +97,16 @@ test("mit PAYMENT_ENABLED, leerer Ledger: -> 200 {sent:0,failed:0,skipped:0,skip
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.deepEqual(body, { sent: 0, failed: 0, skipped: 0, skipReason: null });
-    assert.deepEqual(Object.keys(body).sort(), ["failed", "sent", "skipReason", "skipped"]); // Zaehler + Grund-Code
+    assert.deepEqual(Object.keys(body).sort(), ["failed", "sent", "skipReason", "skipped"]);
   } finally {
     await app.close();
   }
 });
 
-// (C) Aktiv, EIN pending usage_event NACH dem (Default-)Stichtag + Fake-Stripe:
-// 200 {sent:1,failed:0,skipped:0,skipReason:null}; die Antwort bleibt nur Zaehler +
-// Grund-Code (KEIN Secret/Event-Inhalt) auch wenn real ein Meter gemeldet wurde; das
-// Event ist im state als gesendet markiert (markMeterEventsSent-Seiteneffekt gepinnt).
 test("mit PAYMENT_ENABLED, EIN pending usage_event: -> 200 {sent:1,failed:0,skipped:0,skipReason:null}, Event markiert, Antwort ohne Event-Inhalt", async () => {
   const stripe = await startFakeStripe();
   const state = {
     ...seedState(),
-    // Rohform wie recordUsageEvent (state-ops): kind=voice_minute -> Stripe-Meter voice_minutes.
     usageEvents: [
       {
         id: "ue_test1",
@@ -165,7 +127,7 @@ test("mit PAYMENT_ENABLED, EIN pending usage_event: -> 200 {sent:1,failed:0,skip
       assert.equal(res.status, 200);
       const body = await res.json();
       assert.deepEqual(body, { sent: 1, failed: 0, skipped: 0, skipReason: null });
-      assert.deepEqual(Object.keys(body).sort(), ["failed", "sent", "skipReason", "skipped"]); // kein Leak trotz Meldung
+      assert.deepEqual(Object.keys(body).sort(), ["failed", "sent", "skipReason", "skipped"]);
       assert.equal(stripe.meterPosts.length, 1, "genau ein Meter-POST an Stripe");
       const stored = state.usageEvents.find((e) => e.id === "ue_test1");
       assert.equal(stored.stripeMeterSent, true, "Event nach Flush als gesendet markiert");
@@ -176,10 +138,6 @@ test("mit PAYMENT_ENABLED, EIN pending usage_event: -> 200 {sent:1,failed:0,skip
   }
 });
 
-// (D) P1/S1-7: EIN pending "sms"-usage_event -> 200 {sent:1,failed:0,skipped:0,
-// skipReason:null}. Beweist, dass das SMS-Mapping (STRIPE_METER_EVENT_NAME.sms)
-// existiert - vor dem Fix warf reportMeter 'unbekanntes kind' und flushMeters zaehlte
-// failed:1 (Event bleibt pending, Umsatz nie gemeldet).
 test("mit PAYMENT_ENABLED, EIN pending sms-usage_event: -> 200 {sent:1,failed:0,skipped:0,skipReason:null} (SMS-Meter-Mapping vorhanden)", async () => {
   const stripe = await startFakeStripe();
   const state = {
@@ -214,11 +172,6 @@ test("mit PAYMENT_ENABLED, EIN pending sms-usage_event: -> 200 {sent:1,failed:0,
   }
 });
 
-// (E) KV-P0: aktiv, EIN pending usage_event, aber KEIN Flush-Stichtag gesetzt -> 200
-// {sent:0,failed:0,skipped:1,skipReason:"no_flush_epoch"}; Stripe wird NIE kontaktiert
-// (kein Meter-POST), das Event bleibt stripeMeterSent:false. Beweist den Riegel auf
-// HTTP-Ebene, nicht nur im Kern (state-ops/billing-meter haben ihre eigene Testdatei,
-// test/kv-p0-flush-epoch.test.js).
 test("mit PAYMENT_ENABLED, EIN pending usage_event, KEIN Flush-Stichtag: -> 200 {sent:0,failed:0,skipped:1,skipReason:'no_flush_epoch'}, kein Stripe-Kontakt", async () => {
   const stripe = await startFakeStripe();
   const state = {

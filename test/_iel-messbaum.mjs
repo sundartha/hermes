@@ -1,13 +1,3 @@
-// Geteilter Messbaum-Helfer fuer die Tests von scripts/iel-mess*.
-//
-// ISOLATION: jeder Kindprozess-Fall bekommt einen eigenen temporaeren Baum (mkdtemp) mit
-// Kopien der scripts/iel-mess*-Dateien, Symlinks auf src/ und node_modules/ und eigenen
-// tasks/-Zaehlerdateien. PFADE/tasksDatei in scripts/iel-mess.mjs haengen an import.meta.url
-// und zeigen deshalb in den Temp-Baum - die echten tasks/-Dateien werden nie beruehrt.
-//
-// KEIN NETZ: --dry-run sperrt fetch per Stolperdraht; der Echt-Modus laedt
-// test/_iel-b11-fetch-attrappe.mjs per --import und laeuft gegen einen Router im Speicher.
-
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -19,8 +9,6 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SPAWN_TIMEOUT_MS = 15000;
 const ATTRAPPE_MODUL = pathToFileURL(path.join(ROOT, "test", "_iel-b11-fetch-attrappe.mjs")).href;
 
-// Jede Env-Variable, die scripts/iel-mess.mjs ueber src/config.js liest, gehoert HIER hin -
-// sonst leckt die lokale .env in die Spawn-Tests (Bestandslehre BASE_ENV-Drift).
 export const BASIS_ENV = Object.freeze({
   PATH: process.env.PATH,
   NODE_ENV: "test",
@@ -71,8 +59,6 @@ export function faellePfadIn(dir) {
   return path.join(dir, "scripts", "iel-mess.cases.json");
 }
 
-// Die EINE Stelle, die die Fall-Datei einer Messbaum-Kopie umschreibt (G5). Die Aenderung
-// LIEFERT die neue Konfiguration - das gelesene Objekt wird nie mutiert.
 function aendereKonfigurationIn(dir, aenderung) {
   const pfad = faellePfadIn(dir);
   const konfiguration = JSON.parse(fs.readFileSync(pfad, "utf8"));

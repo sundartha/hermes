@@ -1,11 +1,3 @@
-// OUTBOUND-E5 (F3): Neustart-Round-Trip der Absender-Wahrheit gegen ECHTES Postgres-SQL
-// (PGlite, embedded WASM - kein Netz, keine externe DB noetig, Muster
-// test/store-pg-json-parity.test.js). STAERKER als ein DATABASE_URL-Skip-Gate: dieser Lauf
-// PRUEFT den Rundlauf immer, statt ihn bei fehlender externer DB zu uebergehen - "Prod-DB-
-// Write braucht Neustart" (pg-store-holds-state-in-memory): der Spiegel wird hier
-// WIRKLICH verworfen (frischer makePgStore auf demselben Runner) und neu hydriert.
-//
-// DATA_DIR + config VOR allen store-Imports gebunden (Muster el-sip-call-id-join.test.js).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -41,7 +33,6 @@ async function reopen(runner) {
   return reopened;
 }
 
-// Test 1: alle DREI Call-Spalten ueberleben einen echten Reopen.
 test("Call-Spalten (fromActualE164/fromSource/fromRegistrationSource) ueberleben einen echten Reopen", async () => {
   const { store, runner } = await makePgTestStore();
   const call = store.createCall({
@@ -61,7 +52,6 @@ test("Call-Spalten (fromActualE164/fromSource/fromRegistrationSource) ueberleben
   assert.equal(gespeichert.fromRegistrationSource, "tenant_did");
 });
 
-// Test 2: number.providerAgentPhoneNumberId ueberlebt einen echten Reopen.
 test("number.providerAgentPhoneNumberId ueberlebt einen echten Reopen", async () => {
   const { store, runner } = await makePgTestStore();
   const state = store.load();
@@ -81,8 +71,6 @@ test("number.providerAgentPhoneNumberId ueberlebt einen echten Reopen", async ()
   assert.equal(gespeicherteNummer.providerAgentPhoneNumberId, "phnum_pg_test1");
 });
 
-// Test 3: Bestandszeile OHNE Backfill hydriert als null - fuer JEDE der drei Call-Spalten
-// UND die Nummern-Spalte (der dokumentierte "kein Backfill"-Fall, Plan §4.1).
 test("Bestandszeile ohne gesetzte Werte hydriert als null (kein Backfill, kein undefined-Drift)", async () => {
   const { store, runner } = await makePgTestStore();
   const call = store.createCall({
@@ -100,7 +88,6 @@ test("Bestandszeile ohne gesetzte Werte hydriert als null (kein Backfill, kein u
   });
   beginProvisioning(state, number.id);
   activateNumber(state, number.id, { e164: "+15005559999", providerNumberId: "ext_2" });
-  // KEIN attachNumberRegistration - die Nummer bleibt unregistriert (Bestandsfall).
   await store.save();
 
   const reopened = await reopen(runner);

@@ -1,17 +1,3 @@
-// 312k-P2 (Kuendigungsbutton nach Paragraph 312k BGB, Phase 2 - das Abo bei Stripe
-// tatsaechlich beenden koennen): stripeBilling.scheduleCancellation/unscheduleCancellation
-// (src/billing/stripe.js) gegen ein gemocktes global fetch (kein echter Netz-Call, F.I.R.S.T.,
-// Muster stripe-cancel-hold-adapter.test.js/billing-stripe-idempotent-headers.test.js). Owner-
-// Entscheidung: Kuendigung wirkt zum Ende des bezahlten Zeitraums - beide Methoden sind
-// DERSELBE Stripe-Call (POST /v1/subscriptions/{id}) mit umgekehrtem cancel_at_period_end.
-//
-// Deckt: (1) Vormerken -> richtiger Pfad/Feld, geprueft am abgefangenen HTTP-Aufruf (nicht an
-// einem Mock der eigenen Funktion); (2) Zuruecknehmen -> umgekehrter Wert; (3) derselbe
-// Idempotenz-Schluessel zweimal -> EIN Vorgang (identischer Header, Stripe liefert dieselbe
-// Antwort zurueck - der Adapter reicht das transparent durch); (4) Fehlerpfad -> klassifizierter
-// Abbruch, und die Fehlermeldung traegt WEDER den Idempotenz-Schluessel NOCH eine Kundennummer
-// NOCH den rohen Stripe-Fehlerkoerper (Regel 4: kein PII/Secrets im Log - assertOk (Stufe 1)
-// liest den Fehlerkoerper gar nicht erst).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -24,8 +10,6 @@ const withStripeStub = makeStripeStub(config, SECRET);
 const SUBSCRIPTION_ID = "sub_312k_p2";
 const CURRENT_PERIOD_END = 1_800_000_000;
 
-// Stripe spiegelt das gesendete cancel_at_period_end-Flag in der Antwort (das eigentliche
-// Verhalten, das der Adapter dokumentiert - s. stripe.js patchCancelAtPeriodEnd-Kommentar).
 function subscriptionResponse(cancelAtPeriodEnd) {
   return {
     ok: true,
@@ -60,7 +44,6 @@ test("scheduleCancellation: POST /v1/subscriptions/<id>, cancel_at_period_end=tr
     "true",
     "das RICHTIGE Feld traegt den RICHTIGEN Wert im tatsaechlich abgeschickten Request-Body",
   );
-  // Rueckgabe: Zustand + Termin aus EINER Antwort, kein erneutes retrieveSubscription noetig.
   assert.deepEqual(result, {
     subscriptionId: SUBSCRIPTION_ID,
     cancelAtPeriodEnd: true,
@@ -101,8 +84,6 @@ test("scheduleCancellation: derselbe Idempotenz-Schluessel zweimal (Doppelklick)
   const [first, second] = await withStripeStub(
     async (url, opts) => {
       capturedHeaders.push(opts.headers["Idempotency-Key"]);
-      // Stripe erkennt den Schluessel wieder und liefert BEIDE Male dieselbe Antwort
-      // (server-seitige Dedup - der Adapter reicht sie transparent durch).
       return subscriptionResponse(true);
     },
     async () => [await call(), await call()],
@@ -140,10 +121,6 @@ test("scheduleCancellation vs. unscheduleCancellation: unterschiedliche Richtung
   assert.notEqual(headers[0], headers[1], "Richtung ist Teil des Schluessels - kein falsches Zusammenfallen");
 });
 
-// Fehlerpfad: Stripe antwortet mit einem Fehler, dessen Koerper (realistisch) eine Kunden-
-// Telefonnummer/PII enthalten KOENNTE (z.B. in einer decline-Message) - der Test beweist, dass
-// weder der Idempotenz-Schluessel noch diese PII noch der rohe Koerper je die Fehlermeldung
-// erreichen (assertOk/Stufe 1 liest den Koerper gar nicht erst, s. stripe.js-Kommentar).
 const LEAKY_ERROR_BODY = {
   error: {
     type: "invalid_request_error",

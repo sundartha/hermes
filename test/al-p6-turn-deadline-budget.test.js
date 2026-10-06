@@ -1,17 +1,3 @@
-// AL-P6: der Tool-Loop in agentTurn fragt VOR JEDER Runde zwei Achsen ab -
-//   GELD ab der ERSTEN Runde (Regel 1: ein erschoepfter Cap darf keinen Token mehr kosten;
-//        bookTokenUsage laeuft in JEDER Runde, geprueft wurde bisher hoechstens EINMAL vor
-//        dem Turn - im /voice/turn-Pfad gar nicht),
-//   ZEIT ab der ZWEITEN (die erste laeuft immer, damit eine zu knapp konfigurierte Frist
-//        den Agenten nie stumm schaltet).
-// Testnamen tragen bewusst KEINE Katalog-ID (AL- matcht i18nCatalogPattern nicht) - sie
-// landen im Regressionslauf, wo Rot wirklich Rot heisst.
-//
-// Naht wie test/al-p4-side-effect-tool-loop.test.js: lokaler node:http-Anthropic-Mock,
-// ANTHROPIC_BASE_URL + DATA_DIR VOR dem ersten config-Import, danach dynamischer Import
-// von src/store.js / src/claude.js. Kein Server-Spawn, kein Netz (P12/R). Die vier
-// Zeit-/Geld-Env-Werte sind hier explizit gepinnt - sonst leckt eine lokale .env herein
-// (Lehre test-base-env-drift).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -20,21 +6,13 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { MAX_TOOL_ROUNDS_PER_TURN } from "../src/turn-budget.js";
 import { localeFor } from "../src/i18n/locales.js";
 
-const HALLUCINATED_TOOL = "look_up_not_yet_built"; // nicht klassifiziert -> Loop laeuft weiter
+const HALLUCINATED_TOOL = "look_up_not_yet_built";
 const CALLER_TEXT = "Ja, Donnerstag passt gut";
 
-// Zeitachse dieser Datei: Frist = 15000 (Hardcut) - 10000 (Synthese) - 1500 (Netzreserve)
-// = 3500 ms; eine weitere Runde braucht elapsed + 2000 (ein llm-Versuch) <= 3500, also
-// elapsed <= 1500 ms. MOCK_DELAY_MS liegt bewusst UNTER dem Versuchs-Timeout (kein
-// kuenstlicher LLM-Timeout) und ueber der halben Restfrist - zwei verzoegerte Runden
-// reissen die Frist damit sicher, eine nicht.
 const SYNTH_TIMEOUT_MS = 10_000;
 const LLM_TIMEOUT_MS = 2000;
 const MOCK_DELAY_MS = 1000;
 
-// Geldachse: Haiku kostet 1,0 USD je Million Input-Token; mal usdToEur (0,92) sind
-// 2 Mio. Token rund 184 ct. Beide Mengen reissen einen eng gesetzten TENANT-Cap - die
-// einzige Geld-Achse seit KS-P9/E10.
 const TOKENS_OVER_TENANT_CAP = 2_000_000;
 const TOKENS_OVER_LARGE_TENANT_CAP = 4_000_000;
 const SMALL_USAGE = { input_tokens: 10, output_tokens: 5 };
@@ -52,9 +30,6 @@ function message(content, usage) {
   };
 }
 
-// Werkzeug OHNE begleitenden Text: weder der AL-P4-Ausstieg noch end_call greifen, der
-// Loop wuerde also bis MAX_TOOL_ROUNDS_PER_TURN weiterlaufen - genau das braucht diese
-// Phase als Messstrecke.
 const toolRound = (usage = SMALL_USAGE) =>
   message([{ type: "tool_use", id: "tu1", name: HALLUCINATED_TOOL, input: {} }], usage);
 
@@ -67,8 +42,6 @@ let delayMs = 0;
 
 let store, agentTurn;
 
-// Faengt die UNCONDITIONAL-Abbruchzeile ab (console.warn, wie alle Gate-Logs des Repos).
-// Liefert { result, lines } - so bleibt Build/Operate/Check lesbar (P13).
 async function withTurnStopLog(fn) {
   const original = console.warn;
   const lines = [];
@@ -81,9 +54,6 @@ async function withTurnStopLog(fn) {
   }
 }
 
-// Setzt den harten Tenant-Cap relativ zum BEREITS gebuchten Verbrauch. Die Tests teilen
-// einen Store, der Verbrauch waechst also ueber die Datei hinweg - ein absoluter Cap waere
-// von der Ausfuehrungsreihenfolge abhaengig (P12 Independent).
 function capWithHeadroom(headroomCents) {
   const capCents = store.usageOf(BOOTSTRAP_TENANT_ID).costCents + headroomCents;
   store.setTenantBudget(BOOTSTRAP_TENANT_ID, { budgetCents: capCents, hardCapCents: capCents });
@@ -115,9 +85,6 @@ before(async () => {
   process.env.DEFAULT_TENANT_BUDGET_CENTS = "1500";
   process.env.PAYMENT_ENABLED = "false";
   process.env.BUDGET_MONTH_ENABLED = "false";
-  // KS-P2: die Achse dieser Datei ist die KI-TOKEN-Achse. Der Carrier-Live-Term wird
-  // ausdruecklich auf 0 gestellt (wie in test/helpers.js BASE_ENV), sonst entschiede eine
-  // lokale .env mit, wann der Cap reisst - und die Assertions oben werden zeitabhaengig.
   process.env.VOICE_TARIFF_DEFAULT_CENTS = "0";
   process.env.VOICE_TARIFF_DOMESTIC_CENTS = "0";
   process.env.DATA_DIR = tempDataDir(
@@ -192,7 +159,7 @@ test("AL-P6-3: ein mitten im Turn erschoepfter Tenant-Cap verhindert die naechst
 test("AL-P6-4: ein bereits erschoepfter Cap laesst nicht einmal die erste Runde zu", async () => {
   bodies = [];
   delayMs = 0;
-  capWithHeadroom(0); // Verbrauch >= Cap -> gesperrt (budgetExceeded prueft >=)
+  capWithHeadroom(0);
   queue = [toolRound()];
   const call = store.getCall("call_alp6_4");
 
@@ -207,7 +174,7 @@ test("AL-P6-4: ein bereits erschoepfter Cap laesst nicht einmal die erste Runde 
 
 test("AL-P6-5: Geld schlaegt Zeit - bei beiden Gruenden gewinnt die Budget-Achse", async () => {
   bodies = [];
-  delayMs = MOCK_DELAY_MS; // zwei verzoegerte Runden reissen zusaetzlich die Frist
+  delayMs = MOCK_DELAY_MS;
   capWithHeadroom(300);
   queue = [toolRound(), fatToolRound(TOKENS_OVER_LARGE_TENANT_CAP), toolRound(), toolRound()];
   const call = store.getCall("call_alp6_5");

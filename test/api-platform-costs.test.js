@@ -1,24 +1,3 @@
-// LCT P7 (Fixkosten sichtbar machen): Tests fuer GET /api/billing/platform-costs und den
-// dahinterliegenden Plattform-Zaehler countActiveNumbers (src/store/views.js).
-//
-// WARUM DIESER TEST TRAEGT: die Route ist DER Phasen-Deliverable - sie macht die zwei
-// Fixkosten-Achsen (ElevenLabs-Wand + DID-Listenmiete) ueberhaupt erst sichtbar
-// (public/index.html existiert seit der Owner-Removal-Kette nicht mehr, s.
-// PLAN-LIVE-COST-TRACING.md). Ungeprueft blieben sonst: die Response-Form, die ZWEI
-// Cent-Rechnungen (didRentCents = numberMonthlyCostCents * activeNumbers und
-// fixedCostCentsPerMonth = elevenLabsCents + didRentCents, seit KV2-10 mit dem
-// US-Cent-Listenpreis ueber EINEN Kurs umgerechnet), die Filterung
-// auf NUMBER_STATUS.ACTIVE und die Auth-fail-closed-Zusage.
-//
-// AUTH-P6: platform-costs ist seither eine Betreiber-Route (webAuthMw+adminMw, nur MIT
-// operatorAuth gemountet). (A)-(B) migriert auf In-Process-Mount von makeBillingRoutes
-// (Muster api-cost-drift.test.js) - die Route rechnet rein aus dem geladenen Store-
-// Spiegel und der Config, kontaktiert keinen Provider. platformTtsUsage wird HIER
-// explizit ergaenzt (emptyPlatformTtsUsage): seedState() traegt es nicht, der json-
-// Store-Reader backfillt es sonst beim Laden nach (src/store/json.js). (C) misst, dass
-// ohne Admin-Sitzungs-Infra (json-Spawn, kein SESSION_SECRET) die Route gar nicht
-// gemountet ist (404) - seit AUTH-P7 kein Gate mehr, das antworten koennte. Bleibt
-// darum ein echter Spawn-Test, UNVERAENDERT.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -32,16 +11,12 @@ import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS, emptyPlatformTtsUsage } from "../sr
 
 const EXTERNAL_IP = externalIp();
 
-// In BASE_ENV (test/helpers.js) gepinnte Fixkosten-Achse - hier als Config-Double
-// gespiegelt, damit die Arithmetik-Assertion nicht raet, sondern gegen die gepinnte
-// Basis rechnet. KV2-10: der ElevenLabs-Wert ist ein US-Cent-LISTENPREIS; die Route
-// rechnet ihn ueber providerToBucketRateMicro (920000 = 0,92) nach EUR-Cent.
 const NUMBER_MONTHLY_COST_CENTS = 92;
 const PLATFORM_FIXED_COST_USD_CENTS = 600;
-const ELEVENLABS_EUR_CENTS = 552; // 600 US-ct x 0,92 = 552 (aufgerundet in der geteilten Funktion)
+const ELEVENLABS_EUR_CENTS = 552;
 const PROVIDER_TO_BUCKET_RATE_MICRO = 920000;
 const TTS_CHARACTER_QUOTA = 39981;
-const TTS_WARN_PERCENT = 0; // BASE_ENV pinnt die Warnschwelle neutral AUS
+const TTS_WARN_PERCENT = 0;
 
 const PLATFORM_COSTS_CONFIG = withConfigNamespaces({
   numberMonthlyCostCents: NUMBER_MONTHLY_COST_CENTS,
@@ -52,8 +27,6 @@ const PLATFORM_COSTS_CONFIG = withConfigNamespaces({
   ttsQuotaCycleAnchorDay: 1,
 });
 
-// PII-Fixturen: markant, damit ein Leak in der Antwort nicht in generischen Zahlen
-// untergeht. Die Antwort traegt einen Nummern-ZAEHLER, KEINE E.164, keine Tenant-Kennung.
 const PII_PHONE = "+4915155599999";
 const PII_TENANT = "kunde-pii-klarname";
 
@@ -87,8 +60,6 @@ function number(id, e164, tenantId, status) {
   return { id, e164, tenantId, provider: "telnyx", status, providerNumberId: null };
 }
 
-// Drei AKTIVE Nummern (Bootstrap + zwei Kunden) plus zwei INAKTIVE (provisioning +
-// released).
 const ACTIVE_COUNT = 3;
 function mixedSeed() {
   return {
@@ -110,10 +81,6 @@ function mixedSeed() {
   };
 }
 
-// (A) Response-Form + die Cent-Rechnungen + die Filterung auf ACTIVE. Der Endpunkt
-// zaehlt genau die drei aktiven Nummern (die zwei inaktiven fallen raus) und rechnet
-// beide Fixkosten-Summen daraus - Ganzzahl-EUR-Cent. KV2-10: der ElevenLabs-Wert reist
-// als US-Cent-LISTENPREIS mit UND umgerechnet als EUR-Cent (600 x 0,92 = 552).
 test("GET /api/billing/platform-costs: Form, Arithmetik und ACTIVE-Filter", async () => {
   const app = await startPlatformCostsApp(mixedSeed());
   try {
@@ -147,9 +114,6 @@ test("GET /api/billing/platform-costs: Form, Arithmetik und ACTIVE-Filter", asyn
   }
 });
 
-// (B) PII-Riegel: die Antwort traegt nur Cent-Betraege, einen Nummern-ZAEHLER und die
-// TTS-Kontingent-Zahlen - KEINE E.164, KEINE Tenant-Kennung. Der Endpunkt liest den vollen
-// Cross-Tenant-Spiegel; ein durchgereichtes Feld faellt hier auf.
 test("GET /api/billing/platform-costs: Antwort ist PII-frei (kein E.164, keine Tenant-Kennung)", async () => {
   const app = await startPlatformCostsApp(mixedSeed());
   try {
@@ -162,12 +126,6 @@ test("GET /api/billing/platform-costs: Antwort ist PII-frei (kein E.164, keine T
   }
 });
 
-// (C) Auth fail-closed (CLAUDE.md Regel 3): die Route ist eine Betreiber-Route und
-// existiert ohne Admin-Sitzungs-Infra (json-Spawn, kein SESSION_SECRET) gar nicht -
-// niemals ungeschuetzt. Sie traegt eine Plattform-Aggregation ueber ALLE Tenants -
-// genau die Groesse, die nicht ungegatet erreichbar sein darf. Extern ohne
-// Credentials -> 404. UNVERAENDERT (echter Spawn-Server): misst die Mount-Bedingung,
-// nicht die Route-Logik.
 test(
   "GET /api/billing/platform-costs extern ohne Admin-Sitzung -> 404 (Route ohne operatorAuth nicht gemountet)",
   { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
@@ -182,15 +140,8 @@ test(
   },
 );
 
-// (D) KV2-10 Review (G26/PM-4): die geteilte Kurs-Umrechnung liefert dokumentiert null,
-// sobald US-Listenpreis x Kurs den sicheren Ganzzahlbereich verlaesst. Der Grenzfall ist
-// realistisch erreichbar (die Env hat min:0, kein max; ein ElevenLabs-Preis ueber ~98 USD
-// je Monat genuegt bei Kurs 0,92). Zuvor koerzierte `null + didRentCents` null still zu 0
-// und die Summe meldete NUR die DID-Miete - der Endpunkt lehnt jetzt mit diagnosefaehiger
-// Meldung ab statt eine falsche Betreiber-Zahl zu liefern ("nicht berechenbar ist nicht
-// kostet nichts").
-const UEBERLAUF_USD_CENTS = 9800; // 9800e6 Mikro-Cent x 920000 Kurs > 2^53 -> Number.isSafeInteger false
-const HTTP_SERVER_ERROR = 500; // G25; Naming wie src/app.js
+const UEBERLAUF_USD_CENTS = 9800;
+const HTTP_SERVER_ERROR = 500;
 test("GET /api/billing/platform-costs: Kurs-Produkt ausserhalb des sicheren Ganzzahlbereichs -> 500 mit Diagnose, keine stille 0", async () => {
   const app = await startPlatformCostsApp(
     mixedSeed(),
@@ -208,9 +159,6 @@ test("GET /api/billing/platform-costs: Kurs-Produkt ausserhalb des sicheren Ganz
   }
 });
 
-// ---- countActiveNumbers (src/store/views.js) direkt ----
-// Der reine Zaehler hinter der Route. Grenzfaelle: leer, alles aktiv, gemischt - genau die
-// Filterung, auf die sich die DID-Miete-Rechnung verlaesst.
 test("countActiveNumbers: leerer Nummernbestand -> 0", () => {
   assert.equal(countActiveNumbers(makeDefaultState()), 0);
 });

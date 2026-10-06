@@ -1,23 +1,3 @@
-// AL-P14 (PLAN-ASSISTANT-LEAP, Phase 14): get_consult IM Gespraech, nicht-blockierend.
-//
-// Gegenstand sind fuenf Zusagen:
-//   (A) Registrierung - das Werkzeug existiert NUR fuer Outbound-Calls mit frischem
-//       Client-Poll und scharfen Flags (Richtungs-Gate = der Sicherheitskern);
-//   (B) Ausfuehrung - Annahme kostet EINEN Roundtrip, Ablehnung ist deterministisch und
-//       verbraucht das Kontingent nicht;
-//   (C) Paraphrase-Riegel - woertliche Zitate verlassen den Server nicht;
-//   (D) Wartezeit/Fallback - hoechstens EIN Halte-Satz, danach der Mandats-Fallback,
-//       und der Anruf laeuft in JEDEM Fall weiter;
-//   (E) reine Einheiten (Grenzfaelle) ohne Mock-Server.
-//
-// Testnamen tragen bewusst KEINE Katalog-ID (GAP-/PROMPT-/...) am Namensanfang - sonst
-// landen sie still im Gates-Lauf (package.json config.i18nCatalogPattern), wo Rot erlaubt
-// ist (Lehre catalog-id-prefix-misroutes-tests). Praefix ist "AL-P14-<n>:".
-//
-// Naht wie test/al-p4-side-effect-tool-loop.test.js: lokaler node:http-Anthropic-Mock,
-// ANTHROPIC_BASE_URL + DATA_DIR + die drei Flags VOR dem ersten config-Import, danach
-// dynamischer Import von src/store.js / src/claude.js. Kein Server-Spawn, kein pglite,
-// kein Netz (P12/R).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -26,8 +6,6 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { anthropicToolsOnWire } from "./anthropic-wire-fixtures.js";
 
 const OWNER = "Jonas Beispiel";
-// Hebt suppressEndCall auf (isSubstantialCallerText) - ohne substanzielle Anrufer-Zeile
-// wuerde der end_call-Zweig unterdrueckt und AL-P14-11 pruefte den falschen Pfad.
 const SUBSTANTIAL = "Ja, Donnerstag passt gut";
 const CONSULT = "get_consult";
 const QUESTION = "Darf ich den Termin auch auf Freitag legen?";
@@ -46,13 +24,10 @@ function message(content, stopReason) {
 }
 
 const textOnly = (text) => message([{ type: "text", text }], "end_turn");
-// Ein Tool-Aufruf mit frei waehlbarem input - get_consult braucht { question }.
 const toolCall = (name, input, id = "tu1") => ({ type: "tool_use", id, name, input });
 const withTools = (text, ...uses) =>
   message([{ type: "text", text }, ...uses], "tool_use");
 
-// Faellt die queue leer, antwortet der Mock mit einem MARKIERTEN Fallbacktext - ein
-// ungewollter Zusatz-Roundtrip faellt damit in bodies.length UND im speech auf.
 const UNWANTED_EXTRA_ROUNDTRIP_MARKER = "UNGEWOLLTER-ZUSATZ-ROUNDTRIP";
 
 let server;
@@ -61,15 +36,11 @@ let bodies = [];
 
 let store, ops, claude, LOCALES, inCall, question, defaults, speechShape;
 
-// Ein Call, der ALLE Registrierungs-Bedingungen erfuellt: Outbound, aktiv, abgenommen.
-// Der frische Poll wird pro Test gesetzt (das ist der Gegenstand mehrerer Faelle).
 function answeredOutbound(id, overrides = {}) {
   const answeredAt = new Date().toISOString();
   return seedCall({ id, direction: "outbound", language: "de", answeredAt, ...overrides });
 }
 
-// Frischer Poll + Uhr-Anker so, dass consultFitsBillingMinute haelt (Sekunde 0 der
-// laufenden Minute). Beides sind Zustandsvorbedingungen, keine Testlogik.
 function armCall(callId) {
   const call = store.getCall(callId);
   call.consultPolledAtMs = Date.now();
@@ -117,10 +88,7 @@ after(async () => {
   await new Promise((r) => server.close(r));
 });
 
-// Die tools-Liste, die der Turn tatsaechlich an Anthropic geschickt hat.
 const sentToolNames = () => bodies[0].tools.map((t) => t.name);
-
-// ---------- A: Registrierung (Richtungs-Gate) ----------
 
 test("AL-P14-1: Outbound + frischer Poll + Flags an -> get_consult steht im Werkzeugsatz", async () => {
   bodies = [];
@@ -166,7 +134,7 @@ test("AL-P14-5: allowConsult=false im Profil schliesst das Werkzeug aus (AL-P13-
   bodies = [];
   queue = [textOnly("Alles klar.")];
   const call = armCall("call_alp14_5");
-  const foreign = "tenant_ohne_recht"; // DEFAULT_PROFILE -> allowConsult=false
+  const foreign = "tenant_ohne_recht";
   const originalTenant = call.tenantId;
   call.tenantId = foreign;
   try {
@@ -178,22 +146,15 @@ test("AL-P14-5: allowConsult=false im Profil schliesst das Werkzeug aus (AL-P13-
 });
 
 test("AL-P14-6: ohne erfuellte Bedingung geht der Werkzeugsatz BYTE-IDENTISCH zum Bestand raus", async () => {
-  // In-Process ist der config-Snapshot fix (ein Prozess, ein Snapshot) - der AUS-Pfad
-  // wird deshalb ueber eine andere nicht erfuellte Bedingung erreicht. Der Zweig ist
-  // derselbe: agentTools liefert dann UNVERAENDERT toolDefs.
   bodies = [];
   queue = [textOnly("Alles klar.")];
   const call = store.getCall("call_alp14_6");
   call.consultPolledAtMs = 0;
   assert.equal(inCall.consultAvailableFor(call), false);
   await claude.agentTurn(call, SUBSTANTIAL);
-  // Erwartung = Bestands-toolDefs in Anthropic-Draht-Form mit dem cache_control-Marker
-  // am LETZTEN Eintrag (L3).
   const expected = anthropicToolsOnWire(claude.toolDefs("de"));
   assert.equal(JSON.stringify(bodies[0].tools), JSON.stringify(expected));
 });
-
-// ---------- B: Ausfuehrung ----------
 
 test("AL-P14-7: Annahme erzeugt EINEN offenen Consult und spricht den Fueller nach einem Roundtrip", async () => {
   bodies = [];
@@ -231,7 +192,6 @@ test("AL-P14-9: das Kontingent ist 1 - die zweite Rueckfrage desselben Calls wir
   const call = armCall("call_alp14_9");
   await claude.agentTurn(call, SUBSTANTIAL);
   assert.equal(store.getCall("call_alp14_9").consults.length, 1);
-  // Antwort einspeisen, damit der offene Consult nicht den Halte-Turn ausloest.
   inCall.acceptConsultAnswer(call, { eventId: "c0", facts: ["Freitag geht auch"] });
   bodies = [];
   queue = [
@@ -250,7 +210,6 @@ test("AL-P14-10: die Zeitfenster-Regel lehnt deterministisch ab, der Turn friert
     textOnly("Dann machen wir es so."),
   ];
   const call = armCall("call_alp14_10");
-  // Anker so setzen, dass die laufende Abrechnungsminute fast voll ist.
   call.answeredAt = new Date(Date.now() - 59_000).toISOString();
   const turn = await claude.agentTurn(call, SUBSTANTIAL);
   assert.equal(store.getCall("call_alp14_10").consults, null, "kein Datensatz");
@@ -275,9 +234,6 @@ test("AL-P14-11: end_call in derselben Runde schlaegt die Rueckfrage, der end_ca
 });
 
 test("AL-P14-11b: ein take_message derselben Runde geht NICHT verloren - die Rueckfrage weicht", async () => {
-  // Ein angenommener Consult beendet den Turn sofort; jedes weitere Werkzeug der Runde
-  // wuerde dabei verschluckt. Die Alleinstellungs-Regel verhindert genau diesen
-  // stillen Datenverlust.
   bodies = [];
   queue = [
     withTools(
@@ -301,8 +257,6 @@ test("AL-P14-12: execTool kennt get_consult NICHT (der zweite Riegel)", () => {
   );
 });
 
-// ---------- C: Paraphrase-Riegel ----------
-
 test("AL-P14-13: Anfuehrungszeichen und die zitierte Spanne werden entfernt", () => {
   const cleaned = question.sanitizeConsultQuestion(
     'Er sagt "wir haben nur noch Freitag frei" - passt das?',
@@ -320,7 +274,6 @@ test("AL-P14-14: eine woertlich wiederholte Wortfolge des Anrufers wird abgelehn
   ];
   const verbatim = "Frage: wir haben diese Woche nur noch am Freitag einen Platz frei?";
   assert.equal(question.sanitizeConsultQuestion(verbatim, transcript), null);
-  // Gegenprobe: dieselbe Sache in eigenen Worten passiert.
   assert.ok(question.sanitizeConsultQuestion("Ist Freitag akzeptabel?", transcript));
 });
 
@@ -337,8 +290,6 @@ test("AL-P14-16: leere und nicht-String-Fragen werden abgelehnt", () => {
     assert.equal(question.sanitizeConsultQuestion(bad, []), null, `nicht abgelehnt: ${bad}`);
   }
 });
-
-// ---------- D: Wartezeit, Fallback, Idle ----------
 
 test("AL-P14-17: der erste Turn innerhalb der Frist spricht LLM-frei den Halte-Satz", async () => {
   bodies = [];
@@ -359,7 +310,7 @@ test("AL-P14-18: der ZWEITE Turn innerhalb der Offen-Frist laesst die Rueckfrage
   queue = [withTools("", toolCall(CONSULT, { question: QUESTION }))];
   const call = armCall("call_alp14_18");
   await claude.agentTurn(call, SUBSTANTIAL);
-  await claude.agentTurn(call, "Hallo?"); // HOLD
+  await claude.agentTurn(call, "Hallo?");
   bodies = [];
   queue = [textOnly("Dann nehme ich Freitag.")];
   const turn = await claude.agentTurn(call, "Sind Sie noch da?");
@@ -383,8 +334,6 @@ test("AL-P14-19: nach Ablauf der Offen-Frist kommt der Fallback-Marker GENAU EIN
   queue = [withTools("", toolCall(CONSULT, { question: QUESTION }))];
   const call = armCall("call_alp14_19");
   await claude.agentTurn(call, SUBSTANTIAL);
-  // Frist kuenstlich ablaufen lassen, ohne zu warten (kein Sleep im Test, T9). answeredAt
-  // wandert mit, sonst faellt der Consult aus der In-Call-Klassifikation (askedAt >= answeredAt).
   const askedAtMs = Date.now() - inCall.CONSULT_OPEN_MS - 1;
   const stored = store.getCall("call_alp14_19");
   stored.answeredAt = new Date(askedAtMs - 1000).toISOString();
@@ -442,8 +391,6 @@ test("AL-P14-22: eine erschoepfte Budget-Achse schlaegt den Halte-Satz (Regel 1 
   queue = [withTools("", toolCall(CONSULT, { question: QUESTION }))];
   const call = armCall("call_alp14_22");
   await claude.agentTurn(call, SUBSTANTIAL);
-  // Tenant-Kostendecke auf den bereits gebuchten Verbrauch setzen (>= sperrt) ->
-  // roundStopReason greift VOR dem Halte-Ausstieg.
   const capCents = store.usageOf(BOOTSTRAP_TENANT_ID).costCents;
   store.setTenantBudget(BOOTSTRAP_TENANT_ID, { budgetCents: capCents, hardCapCents: capCents });
   bodies = [];
@@ -453,8 +400,6 @@ test("AL-P14-22: eine erschoepfte Budget-Achse schlaegt den Halte-Satz (Regel 1 
   assert.ok(turn.stopReason, "stopReason fehlt");
   assert.notEqual(turn.speech, LOCALES.de.consultHoldSpeech, "Halte-Satz trotz Geld-Stopp");
 });
-
-// ---------- E: reine Einheiten ----------
 
 test("AL-P14-23: isInCallConsult unterscheidet Consult #0 von der Rueckfrage im Gespraech", () => {
   const answeredAt = "2026-07-31T10:00:05.000Z";
@@ -474,6 +419,5 @@ test("AL-P14-24: consultFitsBillingMinute haelt nur, wenn die Frist in die laufe
   assert.equal(inCall.consultFitsBillingMinute(at(1000), nowMs), true);
   assert.equal(inCall.consultFitsBillingMinute(at(59_000), nowMs), false);
   assert.equal(inCall.consultFitsBillingMinute({ answeredAt: null, startedAt: null }, nowMs), false);
-  // Uhr-Ruecksprung: der Anker liegt in der Zukunft -> fail-closed.
   assert.equal(inCall.consultFitsBillingMinute(at(-5000), nowMs), false);
 });

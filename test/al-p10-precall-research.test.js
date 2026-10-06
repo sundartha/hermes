@@ -1,15 +1,3 @@
-// AL-P10 (PLAN-ASSISTANT-LEAP.md Phase 10): Vorab-Recherche im Pre-Call-Briefing. Rein
-// in-process (kein Server-Spawn, kein pglite) - dieselbe Naht wie cq-p8-briefing.test.js:
-// ANTHROPIC_BASE_URL + DATA_DIR + Flags VOR dem ersten config-Import, dann dynamischer
-// Import. Der lokale HTTP-Mock ersetzt den Anthropic-Endpunkt, steuerbar per `mode` und
-// merkt sich den letzten Request-Body (Egress-Beweis) + einen Request-Zaehler.
-//
-// LLM_BREAKER_THRESHOLD ist auf 10 gepinnt (statt der 100 in cq-p8-briefing.test.js):
-// diese Datei enthaelt einen EIGENEN Breaker-open-Test (AL-P10-10), der die Schwelle
-// gezielt ausreizt - 10 haelt genuegend Abstand zu den einzelnen transienten
-// Fehlschlaegen der anderen Tests (AL-P10-9), ohne 100 HTTP-Roundtrips zu brauchen.
-// AL-P10-10 ist deshalb bewusst der LETZTE Test der Datei (der Breaker bleibt danach
-// offen).
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -46,8 +34,6 @@ function anthropicToolMessage(input, usage) {
   };
 }
 
-// AL-P10-12: eine Antwort OHNE hintergrund-Block, stop_reason "pause_turn" (serverseitige
-// Werkzeug-Schleife am Limit) - fail-soft-Fixture.
 function anthropicPauseTurnMessage(usage) {
   return {
     id: "msg_p10_pause",
@@ -88,7 +74,6 @@ before(async () => {
           try {
             res.end(JSON.stringify(anthropicToolMessage(nextToolInput, nextUsage)));
           } catch {
-            // Verbindung ist nach dem Client-seitigen Timeout schon zu - ignorieren.
           }
         }, DELAY_BEYOND_TIMEOUT_MS);
         return;
@@ -110,8 +95,6 @@ before(async () => {
   process.env.ASSISTANT_CONTEXT_ENABLED = "true";
   process.env.PRECALL_BRIEFING_TIMEOUT_MS = String(BRIEFING_TEST_TIMEOUT_MS);
   process.env.LLM_BREAKER_THRESHOLD = "10";
-  // Basiszustand dieser Datei: Recherche global AN (die meisten Tests brauchen den
-  // Provider aktiv) - einzelne Tests schalten gezielt via withConfig/updateSettings ab.
   process.env.RESEARCH_ENABLED = "true";
   process.env.RESEARCH_SEARCH_FEE_CENTS = "1";
   process.env.DATA_DIR = tempDataDir(
@@ -223,18 +206,13 @@ test("AL-P10-7 Zaehler=0 -> keine Gebuehr", async () => {
 });
 
 test("AL-P10-8 Zaehler fehlt -> pessimistisch der harte Deckel (nie 0)", async () => {
-  nextUsage = { input_tokens: 0, output_tokens: 0 }; // kein server_tool_use
+  nextUsage = { input_tokens: 0, output_tokens: 0 };
   const before = store.usageOf(BOOTSTRAP_TENANT_ID).costCents;
   await fetchPrecallBriefing(briefingArgs());
   const after = store.usageOf(BOOTSTRAP_TENANT_ID).costCents;
   assert.equal(after - before, config.research.researchMaxUses * config.research.researchSearchFeeCents);
 });
 
-// Gemessen wird die EXAKTE Gate-Achse (voller Cent-Uebertrag + Sub-Cent-Rest), nicht der
-// gerundete Cent-Zaehler allein: seit B4a kostet EINE Briefing-Schaetzung unter einem
-// ganzen Cent (korrigierte Sonnet-Rate), und genau fuer diesen Fall existiert der
-// Mikro-Cent-Akkumulator (P1-Safety-BLOCKER). Ein Blick nur auf costCents saehe die
-// Buchung nicht - er wuerde ein Loch behaupten, das es nicht gibt.
 function gateMicroCents() {
   const usage = store.usageOf(BOOTSTRAP_TENANT_ID);
   return usage.costCents * MICRO_CENTS_PER_CENT + usage.costMicroCentsRem;
@@ -255,11 +233,6 @@ test("AL-P10-9 Abbruchpfad: Token-Schaetzung UND Suchgebuehr kommen oben drauf (
   const result = await fetchPrecallBriefing(briefingArgs());
   assert.equal(result, null);
   const withProviderDelta = gateMicroCents() - before;
-  // MINDESTENS die Gebuehr, nicht exakt: mit aktivierter Recherche steht das Such-Werkzeug
-  // im Prompt, die Zeichen-basierte Schaetzung (estimatedAbortUsage) faellt dadurch selbst
-  // etwas groesser aus. Auf dem gerundeten Cent-Zaehler fiel dieser Unterschied bis B4a
-  // unter den Tisch; auf der exakten Achse ist er sichtbar. Die Aussage des Tests bleibt:
-  // ohne die Gebuehren-Buchung waere die Differenz um Groessenordnungen kleiner.
   assert.ok(
     withProviderDelta - withoutProviderDelta >=
       config.research.researchMaxUses * config.research.researchSearchFeeCents * MICRO_CENTS_PER_CENT,
@@ -291,9 +264,6 @@ test("AL-P10-11 Injektions-Fixture: Suchtreffer bleiben in HINTERGRUND, Disclosu
     context: result.context,
     mandate: result.mandate,
   });
-  // Baseline traegt DASSELBE Mandat (das rendert legitim eine eigene Sektion) - der
-  // einzige Unterschied zu preparedCall ist context:null, damit der Vergleich unten
-  // ISOLIERT die HINTERGRUND-Sektion trifft, nicht den Mandats-Effekt.
   const baselineCall = seedCall({
     tenantId: BOOTSTRAP_TENANT_ID,
     direction: "outbound",
@@ -315,7 +285,6 @@ test("AL-P10-11 Injektions-Fixture: Suchtreffer bleiben in HINTERGRUND, Disclosu
     "Disclosure bleibt unangetastet (Anti-Spoofing)",
   );
 
-  // Alles AUSSER dem HINTERGRUND-Block bleibt identisch zur kontextlosen Baseline.
   const stripHintergrund = (promptText) =>
     promptText.replace(/HINTERGRUND[\s\S]*?(?=\nSO SPRICHST DU:)/, "");
   assert.equal(
@@ -335,7 +304,6 @@ test("AL-P10-12 pause_turn ist fail-soft: null zurueck, Gebuehr trotzdem gebucht
   assert.equal(after - before, config.research.researchSearchFeeCents);
 });
 
-// LETZTER Test der Datei (s. Datei-Header): der Breaker bleibt danach offen.
 test("AL-P10-10 Breaker-open bucht nichts (kein Request war raus)", async () => {
   mode = "error500";
   for (let i = 0; i < config.llm.llmBreakerThreshold + FAILURES_BEYOND_BREAKER_THRESHOLD; i++) {

@@ -1,13 +1,3 @@
-// 312k-P3 — Kuendigung/Ruecknahme aus dem Self-Service-Dashboard (§ 312k BGB).
-// Kompositions-Integrationstest nach dem Muster w4-self-service-subscribe.test.js /
-// admin-approval.test.js (auditStore-Nachweis): reines pglite (offline, F.I.R.S.T.),
-// KEIN Server-Spawn. Deckt ab: Erfolgsfall setzt Zustand + schreibt den durablen
-// Nachweis (auditStore.record, Postgres audit_log - NICHT util.audit); kein Abo -> 409
-// no_subscription; zweiter Aufruf ist idempotent (kein zweiter Stripe-Call, kein
-// zweiter Audit-Eintrag); Ruecknahme funktioniert (spiegelbildlich); suspendierter UND
-// geschlossener Tenant kommen nicht durch webAuthMw (active-only, ANDERS als
-// subscribe/setup-checkout, die webAuthPendingMw nutzen - hier gibt es fuer einen nicht
-// aktiven Tenant nichts zu kuendigen).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -21,14 +11,12 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const SECRET = "312k-p3-web-secret-0123456789";
 const SUB_C = "sub-c";
-const TENANT_C = "t_sub-c"; // upsertOnFirstLogin: tenantId = `t_${sub}`
+const TENANT_C = "t_sub-c";
 const OLD_PERIOD_END = 1893456000;
 const NEW_PERIOD_END = 1896134400;
 const SUBSCRIPTION_ID = "sub_c1";
 const CONFIG = { paymentEnabled: true };
 
-// Spies fuer BEIDE Richtungen: separate Arrays je Op (Idempotenz-Nachweis ueber die
-// Aufrufanzahl), + der jeweils uebergebene idempotencyKey (Richtung-im-Key-Nachweis).
 function fakeBilling(spy = { schedule: [], unschedule: [] }) {
   return {
     scheduleCancellation: async (params) => {
@@ -74,7 +62,7 @@ async function setup({ withSubscription = true, status = "active" } = {}) {
     makeSelfServiceRoutes({
       store,
       webAuthMw,
-      webAuthPendingMw: webAuthMw, // in dieser Datei ungenutzt (nur cancel/resume geprueft)
+      webAuthPendingMw: webAuthMw,
       audit: () => {},
       config: withConfigNamespaces(CONFIG),
       billing: fakeBilling(billingSpy),

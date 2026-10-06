@@ -1,7 +1,3 @@
-// GAP-21: classifyAnsweredBy ist die EINE Klassifikations-Quelle (G5) fuer beide
-// Provider-Adapter. fail-open pro Zweig: ALLES ausser den fuenf eindeutigen Maschinen-
-// Token (+ fax) -> UNKNOWN, NIE MACHINE - ein leise/langsam antwortender Mensch darf nie
-// aufgelegt bekommen (Pre-Mortem 3).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ANSWERED_BY, classifyAnsweredBy } from "../src/telephony/answered-by.js";

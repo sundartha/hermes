@@ -1,10 +1,3 @@
-// AL-P1 (Latenz-/Abbruch-Achse): Persistenz-Round-Trip von telnyxConversationId
-// (Latenz-Achse) und callerTurns (Abbruch-Achse) in BEIDEN Backends. Kern-Risiko (Lehre
-// I8): ohne Spalte + flush-ON-CONFLICT-DO-UPDATE-SET UND rowToCall-Hydrierung gingen die
-// Werte beim Restart verloren - und der naechste Flush wuerde sie ueberschreiben.
-// Muster test/assistant-context-persist-pg.test.js (pglite + json in-process, dynamische
-// Imports NACH DATA_DIR-Bindung) UND test/store-json-migrate-shapes.test.js (cache-
-// buster-Reimport von json.js fuer den Legacy-Migrationsfall).
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -62,8 +55,6 @@ test("AL-P1-1: callerTurns round-trippt ueber Re-Hydrierung (Spalte + flush + ro
 test("AL-P1-2: telnyxConversationId round-trippt (Altbestand-Spalte)", async () => {
   const { store, runner } = await makePgTestStore();
   const created = store.createCall(newCall());
-  // Der Schreibweg (recordTelnyxConversationId) ist mit IE6-S1 entfernt - die Spalte
-  // selbst bleibt Altbestand (Daten, NICHT-Scope). Wert direkt am Spiegel gesetzt.
   store.getCall(created.id).telnyxConversationId = "conv-first";
   await store.save();
   const reopened = makePgStore(runner);
@@ -76,10 +67,6 @@ test("AL-P1-2: telnyxConversationId round-trippt (Altbestand-Spalte)", async () 
 });
 
 let migrateSeq = 0;
-// Muster store-json-migrate-shapes.test.js: config.server.dataDir mutieren + json.js mit
-// Cache-Buster neu importieren, damit dieser Testfall ein EIGENES store.json ohne die
-// neuen Felder lesen kann (das im before() gebundene json.js haelt sein FILE/state bereits
-// auf dataDir fest).
 async function loadLegacyStore(raw) {
   const dir = tempDataDir(raw);
   config.server.dataDir = dir;

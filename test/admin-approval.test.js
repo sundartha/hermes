@@ -1,10 +1,3 @@
-// Admin-Approve/Suspend-Datenpfad: webAuth -> adminOnly -> setStatus/
-// invalidateByTenant/audit. Baut die server.js-Routen auf einer Wegwerf-App nach
-// (in-process pglite). Beweist: Nicht-Admin -> 403; Admin approve -> active +
-// Audit; Admin suspend -> suspended + ALLE Sessions des Tenants invalidiert + Audit.
-// store kommt aus makePgTestStore (pg-helpers, G5: gleicher Helper wie die anderen
-// pg-Tests) - accounts/sessions/audit teilen sich DESSEN runner/db, damit approve
-// UND der pg-Store-Spiegel (suspended_at-Anchor) auf derselben Instanz laufen.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -30,7 +23,6 @@ async function setup() {
   const sessions = makeSessions(runner);
   const auditStore = makeAuditStore(runner);
 
-  // Admin (E-Mail in Allowlist) + Kunde (aktiv, kein Admin), je mit Session.
   await accounts.upsertOnFirstLogin({ sub: "admin1", email: "admin@x" });
   await accounts.setStatus("t_admin1", "active");
   const adminSession = (
@@ -45,8 +37,6 @@ async function setup() {
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
   const adminMw = adminOnly({ adminEmails: ADMIN_EMAILS });
   const app = express();
-  // Produktions-Router (server.js nutzt dieselbe Factory) -> der Test prueft den
-  // echten Handler, keine handkopierte Replik.
   app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw, store }));
   const server = await new Promise((r) => {
     const s = app.listen(0, "127.0.0.1", () => r(s));
@@ -63,8 +53,6 @@ async function setup() {
   };
 }
 
-// Eine Quelle fuer Cookie-Signatur + HTTP-Roundtrip (G5); post/get sind duenne
-// Methoden-Wrapper darueber.
 function request(method, url, sessionId) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -100,7 +88,7 @@ test("Nicht-Admin (aktiver Kunde) -> 403 bei approve", async () => {
 test("Admin approve -> Tenant active + Audit", async () => {
   const s = await setup();
   try {
-    await s.accounts.upsertOnFirstLogin({ sub: "target1", email: "t@x" }); // suspended
+    await s.accounts.upsertOnFirstLogin({ sub: "target1", email: "t@x" });
     const res = await post(`${s.base}/api/admin/tenants/t_target1/approve`, s.adminSession);
     assert.equal(res.status, 200);
     assert.equal((await s.accounts.resolve("target1")).status, "active");
@@ -112,13 +100,6 @@ test("Admin approve -> Tenant active + Audit", async () => {
   }
 });
 
-// Review-Blocker G3 (tenant-prolif-c, Invariante 2): Admin-approve ist der DRITTE
-// Reaktivierungspfad neben Webhook-Activate/Self-Service-Subscribe (activatePaidTenant)
-// und lief bisher NICHT ueber store.clearSuspendedAt - ein per Stripe suspendierter,
-// manuell reaktivierter Tenant behielt einen stale Grace-Anker. store.ensureTenant zieht
-// den Tenant in den pg-Spiegel (Muster: Web-Login mintSession macht das VOR jeder
-// Billing-Aktion in Produktion), danach stempelt setSuspendedAtIfAbsent den Anchor wie
-// die echte Stripe-Suspendierung (billing/webhook.js SUSPEND).
 test("Admin approve nach Stripe-Suspendierung -> Grace-Anker geloescht (G3-Fix)", async () => {
   const s = await setup();
   try {
@@ -166,9 +147,6 @@ test("Admin suspend -> suspended + alle Tenant-Sessions invalidiert + Audit", as
   }
 });
 
-// P4 GAP-04: Admin-Suspend loescht den Wartezustands-Marker (state-ops.tenantMayRequestNumber)
-// - sonst duerfte ein gerade gesperrter Tenant ueber den stehengebliebenen Marker weiterhin
-// eine Nummer anfragen.
 test("Admin suspend loescht den GAP-04-Wartezustands-Marker (activationPending)", async () => {
   const s = await setup();
   try {
@@ -229,7 +207,6 @@ test("Admin -> 200 + listet alle Tenants (id/status, keine PII)", async () => {
     const { tenants } = JSON.parse(res.body);
     const ids = tenants.map((t) => t.id);
     assert.ok(ids.includes("t_admin1") && ids.includes("t_cust1"));
-    // Kein Cross-Tenant-Leak: nur Lebenszyklus-Felder, keine Calls/Settings/Nummern.
     for (const t of tenants)
       assert.deepEqual(Object.keys(t).sort(), ["createdAt", "id", "status"]);
   } finally {

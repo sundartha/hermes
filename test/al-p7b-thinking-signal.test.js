@@ -1,11 +1,7 @@
-// AL-P7b (src/thinking-signal.js): der Ueberbrueckungssatz eines Turns - reine Einheit,
-// kein Store-/config-/IO-Zugriff, offline testbar (kein Netz, kein Server-Spawn, P12/R).
-// Testnamen tragen bewusst KEINE Katalog-ID am Namensanfang - Praefix ist "AL-P7b-<n>:".
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeThinkingSignal, THINKING_SIGNAL_MAX_CHARS } from "../src/thinking-signal.js";
 
-// Build-Operate-Check (P13): ein Spy fuer onSpeechChunk, plus die gesammelten Fragmente.
 function chunkSpy() {
   const chunks = [];
   const onSpeechChunk = (t) => chunks.push(t);
@@ -43,7 +39,7 @@ test("AL-P7b-15: Rueckgabe ist der GESPROCHENE Text ohne Trennzeichen - Aufrufer
 test("AL-P7b-16: kappt roundText ueber THINKING_SIGNAL_MAX_CHARS, ist die Rueckgabe die GEKAPPTE Fassung, nie der volle Rundentext", () => {
   const { onSpeechChunk } = chunkSpy();
   const signal = makeThinkingSignal({ onSpeechChunk, enabled: true });
-  const langerText = "Wort ".repeat(40).trim(); // deutlich ueber THINKING_SIGNAL_MAX_CHARS
+  const langerText = "Wort ".repeat(40).trim();
   const spokenText = signal.speakBridge(langerText);
   assert.ok(spokenText.length < langerText.length, "gekappt, nicht der volle Rundentext");
   assert.ok(spokenText.length <= THINKING_SIGNAL_MAX_CHARS + 1, "Kappe haelt (plus Satzendzeichen)");
@@ -62,7 +58,7 @@ test("AL-P7b-3: der gesprochene Text ist geshapt und traegt das Trennzeichen am 
 test("AL-P7b-4: ueberlanger Text wird an einer Wortgrenze gekappt (kein Wortfragment)", () => {
   const { onSpeechChunk, chunks } = chunkSpy();
   const signal = makeThinkingSignal({ onSpeechChunk, enabled: true });
-  const langerText = "Wort ".repeat(40).trim(); // deutlich ueber THINKING_SIGNAL_MAX_CHARS
+  const langerText = "Wort ".repeat(40).trim();
   signal.speakBridge(langerText);
   const bridge = chunks[0].trimEnd();
   assert.ok(bridge.length <= THINKING_SIGNAL_MAX_CHARS + 1, "Kappe haelt (plus Satzendzeichen)");

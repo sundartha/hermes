@@ -1,9 +1,3 @@
-// 312k-Phase 4 (Vertragsende-Aufraeumarbeiten nach KUENDIGUNG): Rufnummer freigeben +
-// WorkOS-Identitaet loeschen, AUSSCHLIESSLICH wenn cancelAtPeriodEnd VOR dem Suspend
-// gesetzt war (Kuendigung), NIE bei blossem Zahlungsausfall. Reine In-Process-Units mit
-// aufzeichnenden Fake-Seams, kein Netz, kein Spawn (F.I.R.S.T.) - Muster
-// tenant-erasure-number-release.test.js (fakeStore/fakeProvisioner/fakeAudit),
-// p3-payment-webhook.test.js/stripe-webhook-race.test.js (applyStripeWebhook-fakeDeps).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../src/billing/webhook.js";
@@ -19,8 +13,6 @@ const TENANT = "t_end";
 const WORKOS_SUBJECT = "user_pii_should_never_leak_01";
 const WORKOS_SECRET = "sk_workos_mgmt_should_never_leak";
 
-// ---- geteilte Fakes -----------------------------------------------------------------
-
 const fakeAudit = () => ({
   records: [],
   record(entry) {
@@ -34,8 +26,6 @@ function fakeLogger() {
   return { lines, log: (m) => lines.push(String(m)), warn: (m) => lines.push(String(m)) };
 }
 
-// EINE mutable state-Referenz (Muster tenant-erasure-number-release.test.js) - ein Tenant
-// mit einer aktiven Telnyx-Nummer + gebundener WorkOS-Identitaet.
 function seedState(over = {}) {
   return {
     tenants: [{ id: TENANT, idpSubject: WORKOS_SUBJECT }],
@@ -53,9 +43,6 @@ function seedState(over = {}) {
   };
 }
 
-// Store-Fassade ueber der Kontraktflaeche, die attemptContractEndCleanup/
-// releaseTenantNumbersOnErase brauchen: load/save/withStoreLock (Muster fakeStore in
-// tenant-erasure-number-release.test.js) + die drei neuen 312k-Phase-4-Facaden-Methoden.
 function fakeStore(s) {
   const findTenant = (tenantId) => s.tenants.find((t) => t.id === tenantId);
   return {
@@ -84,10 +71,6 @@ const successfulWorkos = () => {
   };
 };
 
-// ======================================================================================
-// attemptContractEndCleanup / runContractEndCleanupSweep (Orchestrator-Ebene)
-// ======================================================================================
-
 test("attemptContractEndCleanup: Happy Path - Nummer freigegeben + WorkOS geloescht, beide Marker false, durabler Audit fuer beide Teilschritte", async () => {
   const s = seedState();
   const store = fakeStore(s);
@@ -108,16 +91,12 @@ test("attemptContractEndCleanup: Happy Path - Nummer freigegeben + WorkOS geloes
   assert.ok(audit.records.some((r) => r.action === "workos_user_deleted"), "WorkOS-Loeschung durabel auditiert");
 });
 
-// ---- Pflichttest 3: Schluessel nicht gesetzt -----------------------------------------
-
 test("Pflichttest 3: WORKOS_MANAGEMENT_API_KEY nicht gesetzt -> keine Loeschung versucht, offener Vermerk, Nummer-Freigabe laeuft unabhaengig weiter", async () => {
   const s = seedState();
   const store = fakeStore(s);
   const prov = fakeProvisioner();
   const audit = fakeAudit();
 
-  // workos=null spiegelt wireWebLogin: config.auth.workosManagementApiKey leer -> kein
-  // Adapter konstruiert (s. src/wiring/web-login.js).
   const result = await attemptContractEndCleanup({
     store, numberProvisioner: prov, workos: null, auditStore: audit, logger: fakeLogger(), tenantId: TENANT,
   });
@@ -132,8 +111,6 @@ test("Pflichttest 3: WORKOS_MANAGEMENT_API_KEY nicht gesetzt -> keine Loeschung 
     "der uebersprungene Versuch ist durabel protokolliert",
   );
 });
-
-// ---- Pflichttest 4: WorkOS-Fehler -> Retry durch den Sweep ---------------------------
 
 test("Pflichttest 4: WorkOS antwortet mit Fehler -> Vermerk bleibt offen, spaeterer Sweep versucht erneut und erfolgreich", async () => {
   const s = seedState();
@@ -171,8 +148,6 @@ test("Pflichttest 4: WorkOS antwortet mit Fehler -> Vermerk bleibt offen, spaete
   assert.ok(audit.records.some((r) => r.action === "workos_user_deleted"));
 });
 
-// ---- Pflichttest 5: Idempotenz --------------------------------------------------------
-
 test("Pflichttest 5: zweiter Durchlauf nach Erfolg macht nichts mehr (Idempotenz)", async () => {
   const s = seedState();
   const store = fakeStore(s);
@@ -193,8 +168,6 @@ test("Pflichttest 5: zweiter Durchlauf nach Erfolg macht nichts mehr (Idempotenz
   assert.deepEqual(prov.log, ["release:ext_1"], "kein zweiter Provider-Call");
   assert.deepEqual(workos.calls, [WORKOS_SUBJECT], "kein zweiter WorkOS-Call");
 });
-
-// ---- Pflichttest 6: kein Schluessel/keine PII im Log ----------------------------------
 
 test("Pflichttest 6: WorkOS-Fehlerpfad - weder die Nutzer-Kennung noch der API-Key erscheinen in Log oder Audit-Detail", async () => {
   const s = seedState();
@@ -221,17 +194,12 @@ test("Pflichttest 6: WorkOS-Fehlerpfad - weder die Nutzer-Kennung noch der API-K
   assert.doesNotMatch(auditText, new RegExp(WORKOS_SECRET), "kein Schluessel im Audit-Detail");
 });
 
-// ======================================================================================
-// Webhook-Ebene: die Unterscheidung Kuendigung vs. Zahlungsausfall (billing/webhook.js)
-// ======================================================================================
-
 function fakeWebhookStore(s) {
   const inner = fakeStore(s);
   const findTenant = (tenantId) => s.tenants.find((t) => t.id === tenantId);
   return {
     ...inner,
     findTenantBySubscription: () => null,
-    // FW1-A: Existenz-Gate der Tenant-Aufloesung - ueber den echten State geprueft (Muster wie im Rest dieses Doubles).
     tenantExists: (tenantId) => Boolean(findTenant(tenantId)),
     setSuspendedAtIfAbsent: () => {},
     tenantSubscription: (tenantId) => ({
@@ -258,8 +226,6 @@ function paymentFailedEvent({ id, created, subId, tenant }) {
     data: { object: { subscription: subId, metadata: { tenant_ref: tenant } } },
   };
 }
-
-// ---- Pflichttest 1 --------------------------------------------------------------------
 
 test("Pflichttest 1: Abo endet nach Kuendigung (cancelAtPeriodEnd war gesetzt) -> Sperre greift, Nummer wird freigegeben, WorkOS-Loeschung wird versucht", async () => {
   const s = seedState({ tenants: [{ id: TENANT, idpSubject: WORKOS_SUBJECT, cancelAtPeriodEnd: true }] });
@@ -294,8 +260,6 @@ test("Pflichttest 1: Abo endet nach Kuendigung (cancelAtPeriodEnd war gesetzt) -
   assert.equal(s.tenants[0].numberReleasePending, false);
   assert.equal(s.tenants[0].workosDeletePending, false);
 });
-
-// ---- Pflichttest 2 (DER WICHTIGSTE TEST DIESER PHASE) ---------------------------------
 
 test("Pflichttest 2 (wichtigster Test): Abo endet nach Zahlungsausfall OHNE vorherige Kuendigung -> Sperre greift, aber WEDER Freigabe NOCH Loeschung", async () => {
   const s = seedState({ tenants: [{ id: TENANT, idpSubject: WORKOS_SUBJECT, cancelAtPeriodEnd: false }] });
@@ -337,8 +301,6 @@ test("Pflichttest 2 (wichtigster Test): Abo endet nach Zahlungsausfall OHNE vorh
 });
 
 test("Ergaenzung zu Pflichttest 2: customer.subscription.deleted OHNE vorherige Kuendigung (z.B. Karte dauerhaft gescheitert) -> ebenfalls WEDER Freigabe NOCH Loeschung", async () => {
-  // Beweist: die Weiche haengt AUSSCHLIESSLICH am gespeicherten cancelAtPeriodEnd-Zustand,
-  // NICHT am Stripe-Event-Typ - auch ein "deleted" ohne vorherige Kuendigung bleibt unangetastet.
   const s = seedState({ tenants: [{ id: TENANT, idpSubject: WORKOS_SUBJECT, cancelAtPeriodEnd: false }] });
   const store = fakeWebhookStore(s);
   const prov = fakeProvisioner();
@@ -365,10 +327,6 @@ test("Ergaenzung zu Pflichttest 2: customer.subscription.deleted OHNE vorherige 
   assert.equal(s.numbers[0].status, NUMBER_STATUS.ACTIVE);
   assert.deepEqual(workos.calls, []);
 });
-
-// ======================================================================================
-// workos-management.js (Port + Adapter, Muster web-auth.test.js captureFetch)
-// ======================================================================================
 
 function captureFetch({ ok = true, status = 200 } = {}) {
   const seen = {};

@@ -1,17 +1,3 @@
-// AL-P13: pg-Haelfte der Persistenz-Paritaet der Consult-Kette.
-//
-// EIGENE Datei (Repo-Regel p6a): pglite und Server-Spawn duerfen nicht in derselben
-// Datei stehen - test/al-p13-consult-channel.test.js braucht den Spawn fuer den
-// Master-Schalter-AUS-Beweis, dieser Lauf braucht pglite.
-//
-// KERN-RISIKO (Lehre i8-design-decisions): ohne JSONB-Spalte + flush UND rowToCall-
-// Hydrierung ginge die Kette beim Restart verloren - und der naechste Flush schriebe
-// NULL zurueck. ZUSAETZLICH gilt das ab dieser Phase auch fuer `context`: es ist NICHT
-// mehr nach dem Create unveraenderlich (answerConsult merged in context.key_facts).
-// Ohne context=EXCLUDED.context im ON CONFLICT DO UPDATE SET faellt jede beantwortete
-// Rueckfrage beim naechsten Flush lautlos auf den Create-Zustand zurueck.
-//
-// DATA_DIR wird VOR den store-Imports gebunden (Muster assistant-context-persist-pg).
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -35,7 +21,6 @@ before(async () => {
   } = await import("../src/store/defaults.js"));
 });
 
-// pglite-Store hinter dem Runner-Vertrag (inline wegen der DATA_DIR-Bindungsreihenfolge).
 async function makePgTestStore() {
   const db = new PGlite();
   const runner = {

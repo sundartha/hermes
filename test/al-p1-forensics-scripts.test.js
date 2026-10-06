@@ -1,6 +1,3 @@
-// AL-P1: Offline-Unit-Tests der reinen Auswerte-/Argument-Funktionen der Forensik-
-// Skripte dieser Kette. KEIN Netz, kein DB-Pool (Muster test/telnyx-call-latency.test.js:
-// der isMain-Guard verhindert main()/echten Pool-Zugriff beim Import).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { abandonStats, ABANDON_WINDOW_MS } from "../scripts/call-abandon-rate.mjs";
@@ -11,12 +8,10 @@ import {
 } from "../scripts/telnyx-call-latency.mjs";
 import { readAcrossTenants } from "../scripts/prod-read.mjs";
 
-// === abandonStats ======================================================================
-
 const OUTBOUND_ANSWERED_ABANDON = {
   direction: "outbound",
   answeredAt: "2026-07-28T10:00:00.000Z",
-  endedAt: "2026-07-28T10:00:10.000Z", // 10s < 15s
+  endedAt: "2026-07-28T10:00:10.000Z",
   callerTurns: 0,
 };
 
@@ -24,14 +19,14 @@ test("AL-P1-14: abandonStats zaehlt nur beantwortete Outbounds unter 15s mit cal
   const exactWindow = {
     direction: "outbound",
     answeredAt: "2026-07-28T10:00:00.000Z",
-    endedAt: "2026-07-28T10:00:15.000Z", // exakt 15000ms -> NICHT < 15000, kein Abbruch
+    endedAt: "2026-07-28T10:00:15.000Z",
     callerTurns: 0,
   };
   const withCallerTurn = {
     direction: "outbound",
     answeredAt: "2026-07-28T10:00:00.000Z",
     endedAt: "2026-07-28T10:00:05.000Z",
-    callerTurns: 1, // Anrufer hat gesprochen -> kein Abbruch
+    callerTurns: 1,
   };
   const inboundEarly = {
     direction: "inbound",
@@ -64,8 +59,6 @@ test("AL-P1-15b: ABANDON_WINDOW_MS ist die gepinnte Spec-Konstante (15s)", () =>
   assert.equal(ABANDON_WINDOW_MS, 15_000);
 });
 
-// === unaccountedMsOf / unaccountedVerdict ==============================================
-
 test("AL-P1-16: unaccountedMsOf -> undefined, wenn ein benannter Posten fehlt", () => {
   const complete = {
     transcription_duration_ms: 100,
@@ -90,7 +83,7 @@ test("AL-P1-17: unaccountedVerdict kippt bei > 300ms auf exceedsTolerance", () =
       llm_first_token_duration_ms: 800,
       audio_first_token_duration_ms: 300,
       start_speaking_plan_extra_wait_duration_ms: 0,
-      end_user_perceived_latency_ms: 1300, // unaccounted = 100
+      end_user_perceived_latency_ms: 1300,
     },
   ];
   const verdictOk = unaccountedVerdict(rowsOk);
@@ -103,7 +96,7 @@ test("AL-P1-17: unaccountedVerdict kippt bei > 300ms auf exceedsTolerance", () =
       llm_first_token_duration_ms: 800,
       audio_first_token_duration_ms: 300,
       start_speaking_plan_extra_wait_duration_ms: 0,
-      end_user_perceived_latency_ms: 1800, // unaccounted = 600 > 300
+      end_user_perceived_latency_ms: 1800,
     },
   ];
   const verdictExceed = unaccountedVerdict(rowsExceed);
@@ -114,8 +107,6 @@ test("AL-P1-17: unaccountedVerdict kippt bei > 300ms auf exceedsTolerance", () =
   assert.equal(verdictEmpty.medianMs, undefined, "leere Basis -> kein Urteil");
   assert.equal(verdictEmpty.exceedsTolerance, false);
 });
-
-// === parseLatencyArgs ===================================================================
 
 test("AL-P1-18: parseLatencyArgs unterscheidet UUID, --call und Fehlform", () => {
   assert.deepEqual(parseLatencyArgs(["node", "script.mjs", "conv-uuid-123"]), {
@@ -128,10 +119,6 @@ test("AL-P1-18: parseLatencyArgs unterscheidet UUID, --call und Fehlform", () =>
   assert.ok(parseLatencyArgs(["node", "script.mjs", "--call"]).error, "--call ohne Wert -> error");
 });
 
-// === readAcrossTenants (prod-read.mjs) ==================================================
-
-// Fake-Runner: withClient reicht einen Query-Log-Client an fn durch, _pool.end zaehlt
-// Aufrufe. Modelliert genau den Runner-Vertrag aus src/portal-pool.js (withClient/_pool).
 function fakeRunner(tenantRows) {
   const queries = [];
   let poolEndCalls = 0;
@@ -160,8 +147,6 @@ function fakeRunner(tenantRows) {
 test("AL-P1-19: readAcrossTenants setzt app.current_tenant PRO Tenant (vor dem jeweiligen Read) und schliesst den Pool", async () => {
   const runner = fakeRunner([{ id: "tenant_a" }, { id: "tenant_b" }]);
   const readRows = async (client, tenantId) => {
-    // Beweis der Reihenfolge: zum Zeitpunkt DIESES Reads muss set_config fuer GENAU
-    // diesen Tenant bereits geloggt sein.
     const setConfigForThisTenant = runner.queries.filter(
       (q) => q.text.includes("set_config") && q.params[0] === tenantId,
     );

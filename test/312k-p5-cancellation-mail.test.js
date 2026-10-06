@@ -1,9 +1,3 @@
-// 312k-Phase 5 (Kuendigungsbestaetigung per E-Mail, § 312k BGB): der Unternehmer muss dem
-// Verbraucher den Inhalt der Kuendigung unverzueglich in Textform auf einem dauerhaften
-// Datentraeger bestaetigen. Reine In-Process-Units (Muster
-// test/312k-p4-contract-end-cleanup.test.js, fakeStore/fakeAccounts/fakeMailer) fuer die
-// Retry-Mechanik + eine pglite-Integration (Muster
-// test/312k-p3-self-service-cancel.test.js) fuer die echte Verdrahtung.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -22,11 +16,9 @@ import {
 
 const TENANT = "t_mail";
 const PLAN_SLUG = "starter";
-const PERIOD_END = 1896134400; // Unix-Sekunden, teilt sich mit dem P3-Test denselben Wert
+const PERIOD_END = 1896134400;
 const RECEIVED_AT = "2026-08-12T10:15:00.000Z";
 const PUBLIC_URL = "https://sundartha.example";
-
-// ---- geteilte Fakes (Muster test/312k-p4-contract-end-cleanup.test.js) --------------
 
 const fakeAudit = () => ({
   records: [],
@@ -105,10 +97,6 @@ function flakyMailer() {
   };
 }
 
-// ======================================================================================
-// buildCancellationMailText (Inhalt - EINE Stelle, s. Kommentar im Modul)
-// ======================================================================================
-
 test("buildCancellationMailText: enthaelt Eingang, Tarifname, Wirkungsdatum, Nutzbarkeits-Hinweis, Impressum-Verweis", () => {
   const { subject, text } = buildCancellationMailText({
     planSlug: PLAN_SLUG,
@@ -145,10 +133,6 @@ test("buildCancellationMailText: unbekannter/fehlender Plan-Slug faellt auf den 
   assert.match(text, /unbekannt/);
 });
 
-// ======================================================================================
-// attemptCancellationMailConfirm / runCancellationMailSweep (Orchestrator-Ebene)
-// ======================================================================================
-
 test("Happy Path: Versand gelingt - richtige Adresse, Text mit Tarif+Wirkungsdatum, Vermerk geloescht, durabler Nachweis", async () => {
   const s = seedState({ cancellationMailPending: true, cancellationMailReceivedAt: RECEIVED_AT });
   const store = fakeStore(s);
@@ -167,8 +151,6 @@ test("Happy Path: Versand gelingt - richtige Adresse, Text mit Tarif+Wirkungsdat
   assert.equal(s.tenants[0].cancellationMailPending, false, "am Tenant geloescht");
   assert.ok(audit.records.some((r) => r.action === "cancellation_mail_sent"), "durabel auditiert");
 });
-
-// ---- Pflichttest 3: SMTP nicht konfiguriert -------------------------------------------
 
 test("Pflichttest 3: SMTP nicht konfiguriert (mailer=null) -> kein Versuch, Vermerk bleibt offen, kein Wurf", async () => {
   const s = seedState({ cancellationMailPending: true, cancellationMailReceivedAt: RECEIVED_AT });
@@ -190,8 +172,6 @@ test("Pflichttest 3: SMTP nicht konfiguriert (mailer=null) -> kein Versuch, Verm
   );
 });
 
-// ---- Pflichttest 4: keine Adresse hinterlegt ------------------------------------------
-
 test("Pflichttest 4: keine Empfaengeradresse hinterlegt -> kein Versandversuch, Kuendigung bleibt gueltig (Vermerk offen)", async () => {
   const s = seedState({ cancellationMailPending: true, cancellationMailReceivedAt: RECEIVED_AT });
   const store = fakeStore(s);
@@ -211,8 +191,6 @@ test("Pflichttest 4: keine Empfaengeradresse hinterlegt -> kein Versandversuch, 
     ),
   );
 });
-
-// ---- Pflichttest 2: Mailserver nicht erreichbar -> Retry durch den Sweep --------------
 
 test("Pflichttest 2: Mailserver nicht erreichbar -> Vermerk bleibt offen, spaeterer Sweep versucht erneut und gelingt", async () => {
   const s = seedState({ cancellationMailPending: true, cancellationMailReceivedAt: RECEIVED_AT });
@@ -243,8 +221,6 @@ test("Pflichttest 2: Mailserver nicht erreichbar -> Vermerk bleibt offen, spaete
   assert.ok(audit.records.some((r) => r.action === "cancellation_mail_sent"));
 });
 
-// ---- Pflichttest 5: Idempotenz --------------------------------------------------------
-
 test("Pflichttest 5: zweiter Durchlauf nach Erfolg schickt NICHT erneut (Idempotenz)", async () => {
   const s = seedState({ cancellationMailPending: true, cancellationMailReceivedAt: RECEIVED_AT });
   const store = fakeStore(s);
@@ -264,7 +240,6 @@ test("Pflichttest 5: zweiter Durchlauf nach Erfolg schickt NICHT erneut (Idempot
   assert.equal(sweep.attempted, 0, "der Selektor liefert leer -> der Sweep ruehrt den Tenant nicht an");
   assert.equal(mailer.calls.length, 1, "kein zweiter Versand");
 
-  // Direkter zweiter Aufruf (nicht ueber den Sweep) - derselbe Fall, "nichts zu tun":
   const secondDirect = await attemptCancellationMailConfirm({
     store, mailer, accounts, config: fakeConfig(), auditStore: audit, logger: fakeLogger(), tenantId: TENANT,
   });
@@ -273,8 +248,6 @@ test("Pflichttest 5: zweiter Durchlauf nach Erfolg schickt NICHT erneut (Idempot
   assert.equal(accounts.calls.length, 1, "kein zweiter Adress-Lookup, sobald bestaetigt");
 });
 
-// ---- Pflichttest 6: kein Passwort/keine Email in Log oder Audit-Detail ----------------
-
 test("Pflichttest 6: weder Passwort noch Empfaengeradresse erscheinen in Log oder Audit-Detail", async () => {
   const s = seedState({ cancellationMailPending: true, cancellationMailReceivedAt: RECEIVED_AT });
   const store = fakeStore(s);
@@ -282,9 +255,6 @@ test("Pflichttest 6: weder Passwort noch Empfaengeradresse erscheinen in Log ode
   const secretPassword = "sk_smtp_should_never_leak_zoho9x";
   const failingMailer = {
     sendMail: async () => {
-      // Realistische SMTP-Fehlermeldung koennte Nutzer/Adresse tragen - genau DAS darf
-      // nie geloggt werden (der Adapter loggt bewusst nur err.code/err.name, nie
-      // err.message).
       const err = new Error(
         `535 authentication failed for user with password ${secretPassword} to ${KUNDE_EMAIL}`,
       );
@@ -308,14 +278,9 @@ test("Pflichttest 6: weder Passwort noch Empfaengeradresse erscheinen in Log ode
   assert.doesNotMatch(auditText, new RegExp(KUNDE_EMAIL), "keine Empfaengeradresse im Audit-Detail");
 });
 
-// ======================================================================================
-// Integration: echte Verdrahtung ueber self-service-routes.js (Muster
-// test/312k-p3-self-service-cancel.test.js)
-// ======================================================================================
-
 const SECRET = "312k-p5-web-secret-0123456789";
 const SUB_M = "sub-m";
-const TENANT_M = "t_sub-m"; // upsertOnFirstLogin: tenantId = `t_${sub}`
+const TENANT_M = "t_sub-m";
 const OLD_PERIOD_END = 1893456000;
 const NEW_PERIOD_END = 1896134400;
 const SUBSCRIPTION_ID = "sub_m1";

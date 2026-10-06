@@ -1,10 +1,3 @@
-// AL-P1 (Abbruch-Achse): agentTurn zaehlt callerTurns purge-fest UND liefert
-// roundtrips/toolNames im Rueckgabewert. Muster test/afix-p4-end-call-discipline.test.js
-// (Fake-Anthropic-HTTP-Server + seedState/seedCall). EIGENE Datei (nicht test/al-p1-turn-
-// observability.test.js): DATA_DIR/config.js muessen VOR jedem store-Import gebunden
-// werden (Kopfkommentar dort) - ein zusaetzlicher statischer Import von
-// test/telnyx-shim-harness.js (zieht src/config.js VOR dem before()-Hook) wuerde
-// config.server.dataDir sonst dauerhaft auf den Default binden.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
