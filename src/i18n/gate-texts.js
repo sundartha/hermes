@@ -1,30 +1,3 @@
-// Ablehnungstexte der Outbound-Gate-Kette (PLAN-I18N-FIX P15/T2): der ANZEIGETEXT einer
-// bereits gefallenen Ablehnung, pro Sprache. NIE der Ablehnungsgrund - grund/status/
-// Audit-Detail bleiben sprachfrei und byte-identisch (die Betriebs-Forensik der
-// Kosten-Kette unterscheidet grund=reserve_* von grund=budget_*; verschiebt sich das,
-// wird die Budget-Diagnose stumm wertlos).
-// GETRENNT von den gesprochenen Locale-Strings: diese Texte werden NIE gesprochen,
-// sondern als API-/Chat-Text ausgeliefert - die deutschen Werte bleiben deshalb in der
-// ASCII-Transliteration des Bestands (Repo-Konvention, wie MCP_TEXTS).
-// Eingehaengt wird das Buendel in LOCALES.<lang>.gates (Muster MCP_TEXTS), damit
-// localeFor() DER EINE Sprach-Resolver bleibt und outbound-gates.js keinen zweiten
-// Lookup braucht (G5).
-// Funktionen dort, wo interpoliert wird (Muster i18n/locales.js disclosure/bridgePhrase):
-// der Aufrufer reicht BEREITS FORMATIERTE Werte herein (eurText/spendMonthEndDate) -
-// keine Formatierungs- oder Geld-Logik im Buendel.
-//
-// ZIFFERN-REGEL (Absolute Regel 4/6, Cross-Tenant-Leck-Riegel): budgetUnreadable nennt
-// per Konstruktion KEINE Zahl - weder einen Cap noch eine Summe ueber fremde Tenants, und
-// kein "NaN EUR" auf einer Geld-Kante. Das gilt in JEDER Sprache;
-// test/deny-diagnosability.test.js tastet es ziffern-genau ab.
-//
-// NAMENS-REGEL (Absolute Regel 4, Nachbarschaft der Ziffern-Regel): kein Text dieses
-// Buendels nennt einen internen Konfigurations-Bezeichner (Env-/Setting-Name). Der
-// Anrufer erfaehrt die Sperre, nicht die Konfigurationsflaeche; der Blattwert bleibt
-// ueber grund=<...> im Audit-Log forensisch nachvollziehbar. Gilt in JEDER Sprache und
-// wird generisch geprueft (test/p15b-gate-texts-no-config-names.test.js).
-//
-// FR traegt Akzente (wie jeder FR-String im Bundle), EN ist kuratiert.
 export const GATE_TEXTS = Object.freeze({
   de: Object.freeze({
     kycInsufficient:

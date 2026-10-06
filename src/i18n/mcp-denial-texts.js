@@ -1,21 +1,3 @@
-// T2-09 (O-13 Datenminimierung, O-20 kein Abo-/Upgrade-Flow an der MCP-Grenze): neutrale,
-// sprachabhaengige Texte je Gate-Ablehnungsgrund. Der Grund selbst (Schluessel dieses
-// Buendels) ist die interne Kennung aus src/telephony/outbound-gates.js (denialAudit) -
-// GENAU diese Kennung, keine zweite Liste (Vollstaendigkeit prueft
-// test/openai-t2-09-neutrale-fehlertexte.test.js gegen die Quelle). Die Texte selbst
-// nennen NIE die Kennung, keinen Env-Namen, keine Zahl aus der Konfiguration und kein
-// "HTTP <n>" - Zahlen (Restbudget, Datum) bleiben ausschliesslich im REST-`error`-Text
-// bzw. im Hermes-Dashboard (Entscheidung 4 der Spec). Jeder Text sagt: was passiert ist,
-// dass KEIN Anruf entstand, und was der Nutzer tun kann.
-//
-// GETRENNT von den gesprochenen Locale-Strings (Muster MCP_TEXTS/GATE_TEXTS, s. Kopf von
-// mcp-texts.js): diese Texte werden NIE gesprochen, sondern als Tool-Fehlertext
-// ausgeliefert - die deutschen Werte bleiben deshalb in der ASCII-Transliteration des
-// Bestands. FR traegt Akzente, EN ist kuratiert.
-//
-// abo und allowlist teilen bewusst denselben Wortlaut (beide heissen fuer den Nutzer
-// "dieses Konto darf gerade nicht anrufen"); budget_tenant und reserve_erschoepft teilen
-// ebenfalls denselben Wortlaut (derselbe Sperrzustand, zwei interne Gate-Namen).
 export const MCP_DENIAL_TEXTS = Object.freeze({
   de: Object.freeze({
     frozen:
