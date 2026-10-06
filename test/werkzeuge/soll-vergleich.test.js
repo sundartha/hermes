@@ -18,7 +18,11 @@ const COLLABORATORS = `${BASE}/collaborators`;
 const CODEOWNERS = `${BASE}/contents/.github/CODEOWNERS`;
 const ENVIRONMENTS = `${BASE}/environments`;
 const ENVIRONMENT = `${BASE}/environments/rotproben`;
-const MEASURED_ENVIRONMENTS = ["rotproben", "pruefer", "produktion"];
+const MEASURED_ENVIRONMENTS = ["rotproben", "pruefer", "produktion", "warteschlange"];
+const QUEUE = "warteschlange";
+const QUEUE_POLICIES = `${ENVIRONMENTS}/${QUEUE}/deployment-branch-policies`;
+const MERGE_QUEUE = "merge_queue";
+const LARGER_GROUP = 2;
 const SOLL_FILE = "einstellungen.json";
 const BASE64 = "base64";
 const EXIT_OK = 0;
@@ -207,6 +211,58 @@ test("Soll-Vergleich: fehlt die Regel für gerade Historie, endet er mit 1", asy
   });
   assert.equal(result.code, EXIT_DEVIATION, result.stderr);
   assertRow(result, ["Ruleset", `rules[${linear}]`, JSON.stringify({ type: linear }), "fehlt"]);
+});
+
+test("Soll-Vergleich: fehlt die Regel merge_queue, endet er mit 1", async (context) => {
+  const queueRule = recording("ruleset-owner").rules.find(({ type }) => type === MERGE_QUEUE);
+  const result = await compare(context, {
+    changes: {
+      [RULESET]: (ruleset) =>
+        answer({ ...ruleset, rules: ruleset.rules.filter(({ type }) => type !== MERGE_QUEUE) }),
+    },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, ["Ruleset", `rules[${MERGE_QUEUE}]`, JSON.stringify(queueRule), "fehlt"]);
+});
+
+test("Soll-Vergleich: baut die Warteschlange mit HEADGREEN oder Gruppen aus 2, endet er mit 1", async (context) => {
+  const looser = (parameters) => ({
+    ...parameters,
+    grouping_strategy: "HEADGREEN",
+    max_entries_to_merge: LARGER_GROUP,
+  });
+  const result = await compare(context, {
+    changes: { [RULESET]: (ruleset) => withRuleParameters(ruleset, MERGE_QUEUE, looser) },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  const field = `rules[${MERGE_QUEUE}].parameters`;
+  assertRow(result, ["Ruleset", `${field}.grouping_strategy`, "ALLGREEN", "HEADGREEN"]);
+  assertRow(result, ["Ruleset", `${field}.max_entries_to_merge`, "1", String(LARGER_GROUP)]);
+});
+
+test("Soll-Vergleich: fehlt das Environment warteschlange auf GitHub, endet er mit 1", async (context) => {
+  const result = await compare(context, {
+    environments: MEASURED_ENVIRONMENTS.filter((name) => name !== QUEUE),
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, [`Environment ${QUEUE}`, "Environment", "vorhanden", "fehlt"]);
+});
+
+test("Soll-Vergleich: erlaubt warteschlange weitere Branches, endet er mit 1", async (context) => {
+  const extra = { name: "phase/*", type: "branch" };
+  const result = await compare(context, {
+    changes: {
+      [QUEUE_POLICIES]: ({ total_count: count, branch_policies: policies }) =>
+        answer({ total_count: count + 1, branch_policies: [...policies, extra] }),
+    },
+  });
+  assert.equal(result.code, EXIT_DEVIATION, result.stderr);
+  assertRow(result, [
+    `Environment ${QUEUE}`,
+    `branch_policies[${extra.name}]`,
+    "nicht im Soll",
+    JSON.stringify(extra),
+  ]);
 });
 
 test("Soll-Vergleich: hat sundartha-bot plötzlich admin, endet er mit 1", async (context) => {

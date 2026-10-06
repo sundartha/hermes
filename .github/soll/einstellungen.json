@@ -80,6 +80,18 @@
       },
       {
         "type": "required_linear_history"
+      },
+      {
+        "type": "merge_queue",
+        "parameters": {
+          "merge_method": "REBASE",
+          "max_entries_to_build": 1,
+          "min_entries_to_merge": 1,
+          "max_entries_to_merge": 1,
+          "min_entries_to_merge_wait_minutes": 0,
+          "grouping_strategy": "ALLGREEN",
+          "check_response_timeout_minutes": 120
+        }
       }
     ]
   },
@@ -147,6 +159,18 @@
       ]
     },
     "produktion": {
+      "deployment_branch_policy": {
+        "protected_branches": false,
+        "custom_branch_policies": true
+      },
+      "branch_policies": [
+        {
+          "name": "master",
+          "type": "branch"
+        }
+      ]
+    },
+    "warteschlange": {
       "deployment_branch_policy": {
         "protected_branches": false,
         "custom_branch_policies": true
