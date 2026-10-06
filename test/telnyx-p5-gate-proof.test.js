@@ -1,42 +1,20 @@
-// P5 Gate-Beweis (tasks/telnyx-p5-spec.md, Check 4; PLAN-TELNYX-AI-ASSISTANT.md Regel 1,
-// R1-Phase): beweist, dass JEDES der 14 Outbound-Gates (0-13, server.js numberGateError/
-// allowlistError/kycGateError/planMinutesExhausted/tryReserveOutboundBudget) auch mit
-// aktivem C-Telnyx-Flag + Telnyx-Provider + fakeOriginate blockt - der neue Zweig sitzt
-// strukturell HINTER der kompletten, unveraenderten Gate-Kette (KEIN zweiter Einstieg).
-// Jede Zeile ist ein minimaler Trip, kopiert/angepasst aus der jeweiligen Seed-Vorlage
-// (siehe Kommentar pro Test); reine Fixture-Wiederverwendung, keine Logik-Duplizierung.
-// Reiner Spawn (startServer + seedState), KEIN pglite (Lehre p6a-Stall).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { findPlan } from "../src/plans.js";
 
-// IE6-S1: die Gate-Kette sitzt vor jedem Wahlweg - das Env braucht nur noch
-// FAKE_ORIGINATE, damit der TeXML-Wahlversuch fake bleibt.
 const GATE_PROOF_ENV = Object.freeze({ FAKE_ORIGINATE: "true" });
 const TELNYX_OWNER_NUMBER = { e164: "+4915005559001", provider: "telnyx" };
-const TO = "+4915112345678"; // normales DE-Ziel, kein Premium/Notruf
+const TO = "+4915112345678";
 const A = "tenant-a",
   SUB_A = "sub-a",
   NUM_A_TELNYX = "+4915005559002";
 
-// ---- Seed-Bausteine (Muster: outbound-frozen/outbound-tenant/kyc-gate-outbound/
-// outbound-identity-gate/number-gate/a4-default-profile-zero/outbound-per-target-cap/
-// w5-abo-allowlist-gate/outbound-tenant/b2-quota-gate/outbound-reserve-gate.test.js) ----
-
-// Owner-Pfad: BOOTSTRAP_TENANT_ID mit eigener aktiver TELNYX-Nummer. tenantOverrides
-// erlaubt gezielte Gate-Trips (z.B. kycLevel), OHNE die Identitaets-Healing der
-// ownerName/Number-Seeds zu beruehren (die laueft ueber startServer/ownerNumber separat).
 function seedOwnerTelnyx(tenantOverrides = {}) {
   return seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ...tenantOverrides }] });
 }
 
-// Tenant-A-Pfad: eigene aktive TELNYX-Nummer, idpSubject, per Default KYC=card +
-// ownerName gesetzt + unlimitiertes Profil (passiert alle Gates bis auf das gezielt
-// getestete). ownerName/kycLevel null -> Feld ganz weggelassen (Muster
-// outbound-identity-gate.test.js seedIdentity), NICHT auf null gesetzt (fail-closed-
-// Praedikate lesen "fehlend", nicht "null").
 function seedTenantATelnyx({ kycLevel = "card", ownerName = "Alice A", status = "active", profiles, calls = [] } = {}) {
   return seedState({
     tenants: [
@@ -71,12 +49,6 @@ const voiceMinuteEvent = (tenantId, quantity) => ({
   stripeMeterSent: false,
 });
 
-// EIN Spawn-Harness fuer die ganze Tabelle (G5): GATE_PROOF_ENV ist IMMER gesetzt,
-// jede Zeile liefert nur die Abweichung (env/seed/ownerNumber/identity/to) + die
-// erwartete Deny-Antwort. Origination (weder TeXML noch Call-Control) darf NIE erreicht
-// werden -> kein NEUER Call-Record fuer DIESEN Request entsteht. Objective als Marker
-// (nicht blosses to-Filtern): manche Zeilen (Gate 7/9) seeden bereits einen VORHANDENEN
-// Call auf dasselbe "to" (Fenster-Fueller), der sonst faelschlich mitgezaehlt wuerde.
 const REQUEST_OBJECTIVE = "Termin vereinbaren (P5-Gate-Beweis)";
 async function placeCallFlagOn({ env = {}, seed, ownerNumber, identity, to = TO, status, grund }) {
   const srv = await startServer({ env: { ...GATE_PROOF_ENV, ...env }, seed, ownerNumber });
@@ -95,7 +67,6 @@ async function placeCallFlagOn({ env = {}, seed, ownerNumber, identity, to = TO,
   }
 }
 
-// ---- Gate 0: OUTBOUND_FROZEN (Muster outbound-frozen.test.js) ----
 test("Gate 0 FROZEN: OUTBOUND_FROZEN=true blockt (403)", async () => {
   const res = await placeCallFlagOn({
     env: { OUTBOUND_FROZEN: "true" },
@@ -107,7 +78,6 @@ test("Gate 0 FROZEN: OUTBOUND_FROZEN=true blockt (403)", async () => {
   assert.match((await res.json()).error, /gesperrt|OUTBOUND_FROZEN/);
 });
 
-// ---- Gate 1: TENANT_REJECT (Muster outbound-tenant.test.js #2b) ----
 test("Gate 1 TENANT_REJECT: unbekannte Identitaet blockt (403)", async () => {
   await placeCallFlagOn({
     env: { MULTI_TENANT: "true" },
@@ -119,7 +89,6 @@ test("Gate 1 TENANT_REJECT: unbekannte Identitaet blockt (403)", async () => {
   });
 });
 
-// ---- Gate 2: KYC (Muster kyc-gate-outbound.test.js) ----
 test("Gate 2 KYC: kyc_level<card (otp) blockt (403)", async () => {
   const res = await placeCallFlagOn({
     seed: seedOwnerTelnyx({ kycLevel: "otp" }),
@@ -130,7 +99,6 @@ test("Gate 2 KYC: kyc_level<card (otp) blockt (403)", async () => {
   assert.match((await res.json()).error, /KYC/i);
 });
 
-// ---- Gate 3: ownerName (Muster outbound-identity-gate.test.js) ----
 test("Gate 3 ownerName: fehlender Auftraggeber-Name blockt (403)", async () => {
   const res = await placeCallFlagOn({
     env: { MULTI_TENANT: "true" },
@@ -142,7 +110,6 @@ test("Gate 3 ownerName: fehlender Auftraggeber-Name blockt (403)", async () => {
   assert.match((await res.json()).error, /Auftraggeber-Name/);
 });
 
-// ---- Gate 4: Denylist (Muster number-gate.test.js) ----
 test("Gate 4 Denylist: Notruf-Kurzwahl blockt (403)", async () => {
   const res = await placeCallFlagOn({
     seed: seedOwnerTelnyx(),
@@ -154,7 +121,6 @@ test("Gate 4 Denylist: Notruf-Kurzwahl blockt (403)", async () => {
   assert.match((await res.json()).error, /is blocked/);
 });
 
-// ---- Gate 5: E.164-Format (Muster number-gate.test.js) ----
 test("Gate 5 E.164: nicht-E.164-Ziel blockt (400)", async () => {
   await placeCallFlagOn({
     seed: seedOwnerTelnyx(),
@@ -165,7 +131,6 @@ test("Gate 5 E.164: nicht-E.164-Ziel blockt (400)", async () => {
   });
 });
 
-// ---- Gate 6: Land-Gate (Muster number-gate.test.js) ----
 test("Gate 6 Land: Ziel ausserhalb ALLOWED_COUNTRY_CODES blockt (403)", async () => {
   const res = await placeCallFlagOn({
     env: { ALLOWED_COUNTRY_CODES: "+49" },
@@ -178,22 +143,20 @@ test("Gate 6 Land: Ziel ausserhalb ALLOWED_COUNTRY_CODES blockt (403)", async ()
   assert.match((await res.json()).error, /Country code/);
 });
 
-// ---- Gate 7: Stundenlimit pro Tenant (Muster number-gate.test.js) ----
 test("Gate 7 Stundenlimit: MAX_CALLS_PER_HOUR erreicht blockt (429)", async () => {
   const res = await placeCallFlagOn({
     env: { MAX_CALLS_PER_HOUR: "1" },
-    seed: seedState({ calls: [seedCall({ id: "c_recent" })] }), // ownerNumber-Default reicht
+    seed: seedState({ calls: [seedCall({ id: "c_recent" })] }),
     status: 429,
     grund: "stundenlimit",
   });
   assert.match((await res.json()).error, /Hourly limit/);
 });
 
-// ---- Gate 8: Profil-Senkung auf 0 (Muster a4-default-profile-zero.test.js) ----
 test("Gate 8 Profil-Limit 0: profil-loser Tenant (DEFAULT=0) blockt (429)", async () => {
   const res = await placeCallFlagOn({
     env: { MULTI_TENANT: "true" },
-    seed: seedTenantATelnyx({ profiles: {} }), // KEIN Profil unter A -> DEFAULT_PROFILE(0)
+    seed: seedTenantATelnyx({ profiles: {} }),
     identity: SUB_A,
     status: 429,
     grund: "stundenlimit",
@@ -201,11 +164,10 @@ test("Gate 8 Profil-Limit 0: profil-loser Tenant (DEFAULT=0) blockt (429)", asyn
   assert.match((await res.json()).error, /Hourly limit/);
 });
 
-// ---- Gate 9: Cooldown/per-Target-Cap (Muster outbound-per-target-cap.test.js) ----
 test("Gate 9 Cooldown: per-(Tenant,Ziel)-Cap erreicht blockt (429)", async () => {
   const res = await placeCallFlagOn({
     env: { MULTI_TENANT: "true", PER_TARGET_CALL_CAP: "1" },
-    seed: seedTenantATelnyx({ calls: [seedCall({ id: "c_prior", tenantId: A })] }), // to=TO per Default
+    seed: seedTenantATelnyx({ calls: [seedCall({ id: "c_prior", tenantId: A })] }),
     identity: SUB_A,
     status: 429,
     grund: "ziel_limit",
@@ -213,7 +175,6 @@ test("Gate 9 Cooldown: per-(Tenant,Ziel)-Cap erreicht blockt (429)", async () =>
   assert.match((await res.json()).error, /Repeat limit/);
 });
 
-// ---- Gate 10: Verifikation/Allowlist (Muster w5-abo-allowlist-gate.test.js W5-3) ----
 test("Gate 10 Verifikation: suspendierter Tenant blockt (403, Defense-in-depth)", async () => {
   const res = await placeCallFlagOn({
     env: { MULTI_TENANT: "true" },
@@ -225,10 +186,9 @@ test("Gate 10 Verifikation: suspendierter Tenant blockt (403, Defense-in-depth)"
   assert.match((await res.json()).error, /Subscription inactive|blocked/i);
 });
 
-// ---- Gate 11: Budget (Muster outbound-tenant.test.js #3) ----
 test("Gate 11 Budget: erschoepftes Tenant-Budget blockt (402)", async () => {
   const seed = seedTenantATelnyx();
-  seed.usage = { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(99) }; // 99 >= MAX_BUDGET_EUR(30, LCT P6)
+  seed.usage = { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(99) };
   const res = await placeCallFlagOn({
     env: { MULTI_TENANT: "true" },
     seed,
@@ -239,12 +199,7 @@ test("Gate 11 Budget: erschoepftes Tenant-Budget blockt (402)", async () => {
   assert.match((await res.json()).error, /budget limit/);
 });
 
-// ---- Gate 12: Minuten-Kontingent (Muster b2-quota-gate.test.js) ----
 test("Gate 12 Minuten: erschoepftes Plan-Kontingent blockt (402)", async () => {
-  // Abo-Anker (Periodenstart vor 5 Tagen) + Voice-Minuten-Ledger >= includedMinutes ->
-  // planMinutesExceeded. seedTenantATelnyx deckt nur die Gate-0-10-Felder ab; Abo-Anker/
-  // Ledger sind eigene Achsen -> nachtraeglich auf dem Seed-Ergebnis gesetzt (Muster
-  // usage in Gate 11 oben, usageEvents wie b2-quota-gate.test.js).
   const seed = seedTenantATelnyx();
   const tenantA = seed.tenants.find((t) => t.id === A);
   tenantA.stripePlanSlug = "starter";
@@ -258,7 +213,6 @@ test("Gate 12 Minuten: erschoepftes Plan-Kontingent blockt (402)", async () => {
       STRIPE_WEBHOOK_SECRET: "whsec_test_x",
       STRIPE_API_BASE: "http://127.0.0.1:9",
       NUMBER_SETUP_FEE_CENTS: "500",
-      // GP-P6: Price-Id je Katalog-Slug ist bei PAYMENT_ENABLED=true Boot-Pflicht (assertPricedPlans).
       ...PLAN_PRICE_BOOT_ENV,
     },
     seed,
@@ -269,18 +223,12 @@ test("Gate 12 Minuten: erschoepftes Plan-Kontingent blockt (402)", async () => {
   assert.match((await res.json()).error, /Plan-Minuten/);
 });
 
-// ---- Gate 13: Reserve (Muster outbound-reserve-gate.test.js) ----
 test("Gate 13 Reserve: Worst-Case-Reserve > Cap blockt (402)", async () => {
-  // MAX_BUDGET_EUR wirkt hier als Pro-Tenant-Fallback (effectiveCapCents Stufe 3 - der Owner
-  // hat keine tenant_budget-Zeile). KS-P3 (a): die Reserve ist Satz * RESERVE_LEAD_MINUTES
-  // (2), nicht mehr Satz * angefangene Minuten der Maximaldauer - die Zahlen werden neu
-  // gewaehlt, die Aussage bleibt dieselbe. 5 EUR = 500 ct Cap;
-  // Worst-Case-Tarif 400 ct/min x 2 Vorlauf-Minuten = 800 ct > 500 ct.
   const res = await placeCallFlagOn({
     env: { MAX_BUDGET_EUR: "5", VOICE_TARIFF_DEFAULT_CENTS: "400" },
     seed: seedOwnerTelnyx(),
     ownerNumber: TELNYX_OWNER_NUMBER,
-    to: "+12025550123", // US -> Worst-Case-Default-Tarif (teuer)
+    to: "+12025550123",
     status: 402,
     grund: "reserve_ueber_rest",
   });

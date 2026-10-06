@@ -1,6 +1,3 @@
-// tenant-prolif-d: reiner Klassifikator classifyNumbersForRelease/numberReleaseVerdict.
-// Triagiert active Nummern von suspendierten Tenants in release/hold/skip - IO-frei,
-// kein Spawn, kein pglite (reine Unit, offline, F.I.R.S.T.).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { classifyNumbersForRelease, numberReleaseVerdict } from "../src/store/state-ops.js";
@@ -25,10 +22,6 @@ const num = (o = {}) => ({
   e164: "+493012345",
   ...o,
 });
-// calls/platformNumberUse: [] (OUTBOUND-E1: numberReleaseVerdict ruft jetzt zusaetzlich
-// numberBusyReason -> platformNumberBindings/den Anruf-Check; ohne diese beiden Felder
-// wuerfe der Zugriff bei gesetzter e164, weil das synthetische State-Objekt hier keinen
-// vollen makeDefaultState()-Shape traegt).
 const state = ({ numbers = [num()], tenants = [tenant()], calls = [], platformNumberUse = [] } = {}) => ({
   tenants,
   numbers,

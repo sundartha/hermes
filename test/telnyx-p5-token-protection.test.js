@@ -1,7 +1,3 @@
-// P5 (tasks/telnyx-p5-spec.md, Check 5(ii)): der per-Call-Bearer (ai_assistant_token) darf
-// NIE in die Kunden-Portal-Projektion (portalStore.listCalls) gelangen. In P1 war das Feld
-// nie geschrieben (harmlos); ab P5 mintet die Origination es -> jetzt scharf. pglite
-// (in-process, kein echter Postgres noetig), Muster test/portal-route.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";

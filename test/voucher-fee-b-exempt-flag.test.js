@@ -1,8 +1,3 @@
-// Fix B (0-EUR-Checkout generisch): persistiertes numberSetupFeeExempt-Flag am Tenant.
-// state-ops-Unit (selektiver Patch + Grenzfall) + json-Fassaden-Round-Trip. KEIN
-// pglite/Spawn (Lehre P6a: state-ops-Unit NICHT mit Spawn mischen) - Muster
-// b1a-period-anchor.test.js. DATA_DIR wird VOR dem ersten json-/config-Import auf
-// Temp gesetzt (Repo-Regel: data/store.json nie anfassen) -> json.js dynamisch.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
@@ -48,7 +43,6 @@ test("selektiver Patch: numberSetupFeeExempt=false explizit setzbar (Grenzfall, 
 });
 
 test("json-Round-Trip: setTenantSubscription via Fassade persistiert -> tenantSubscription liest numberSetupFeeExempt", () => {
-  // Owner existiert in makeDefaultState (load() seedet ihn) -> kein registerTenant noetig.
   jsonBackend.setTenantSubscription(BOOTSTRAP_TENANT_ID, {
     subscriptionId: SUB,
     planSlug: "starter",

@@ -1,12 +1,3 @@
-// P5: Port-Vertrag des Telefonie-Adapters. renderDirectives liefert einen String;
-// sendSms ist aufrufbar und mappt (fetch gemockt); verifyInboundSignature (nur noch
-// Telnyx, C-P3) liefert bool + ist fail-closed (manipuliert/fehlend -> false). Offline.
-//
-// C-P4: diese Datei fuehrte BEIDE Adapter und hiess im Kopf "beweist die Provider-
-// Austauschbarkeit" (R5-Mitigation). Mit einem Adapter beweist sie das nicht mehr - eine
-// Austauschbarkeits-Aussage braucht zwei Teilnehmer, und so zu tun, als gaebe es sie
-// noch, waere die gefaehrlichere Variante. Was BLEIBT, ist der Vertrag selbst: welche
-// FORM jede Port-Methode liefert. Genau daran misst sich der naechste Adapter.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -21,9 +12,6 @@ test("renderDirectives liefert einen nicht-leeren String", () => {
   assert.ok(out.length > 0, "nicht leer");
 });
 
-// C-P3: der Twilio-Verifizierer ist entfernt (Dispatch UND Adapterdatei) - Inbound-
-// Signaturpruefung hat genau EINEN Adapter. Die Vertragsaussage bleibt woertlich:
-// kein gueltiger Krypto-Kontext -> false, ohne zu werfen.
 test("verifyInboundSignature ist bool + fail-closed (leerer Request)", () => {
   config.telephony.telnyxPublicKey = "";
   const out = telnyxVerify({ headers: {}, rawBody: Buffer.from(""), url: "", params: {} });
@@ -32,8 +20,6 @@ test("verifyInboundSignature ist bool + fail-closed (leerer Request)", () => {
 });
 
 test("sendSms ist aufrufbar und mappt (fetch gemockt)", async () => {
-  // Der Adapter sieht die Port-Parameter {from,to,body}; der Test prueft die
-  // Aufrufbarkeit + das Mapping, kein echter Netz-Call.
   config.telephony.telnyxApiKey = "k";
   config.telephony.telnyxApiBase = "https://api.telnyx.com";
   const originalFetch = global.fetch;

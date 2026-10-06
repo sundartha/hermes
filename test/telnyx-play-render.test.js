@@ -1,9 +1,3 @@
-// Snapshot-Tests fuer den <Play>-Zweig des Telnyx-Renderers (Play-TTS, audioUrl/
-// promptAudioUrl). Pur (kein Env, kein Spawn), analog telnyx-render.test.js. Pinnt:
-// (1) gather() mit promptAudioUrl -> <Gather>...<Play>url</Play>...</Gather>, KEIN
-// innerer <Say>; (2) say() mit audioUrl -> <Play>url</Play> statt <Say>; (3) Fallback
-// OHNE audioUrl/promptAudioUrl bleibt byte-identisch zum Azure-<Say>-Bestand; (4) URL
-// mit XML-Sonderzeichen wird escaped. Offline.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderDirectives } from "../src/telephony/adapters/telnyx/render.js";

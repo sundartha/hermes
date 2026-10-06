@@ -1,4 +1,3 @@
-// tenant-prolif-c: suspended_at Grace-Anker (reine state-ops-Logik, offline, zeit-injiziert).
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -18,7 +17,7 @@ test("setSuspendedAtIfAbsent: erster Aufruf stempelt, zweiter (anderer Wert) lae
   const r1 = setSuspendedAtIfAbsent(s, "t1", T1);
   assert.equal(r1.changed, true);
   assert.equal(tenantSuspendedAt(s, "t1"), T1);
-  const r2 = setSuspendedAtIfAbsent(s, "t1", T2); // Dunning-Retry
+  const r2 = setSuspendedAtIfAbsent(s, "t1", T2);
   assert.equal(r2.changed, false, "set-if-absent: kein Ueberschreiben");
   assert.equal(tenantSuspendedAt(s, "t1"), T1, "Stempel bewegt sich NICHT");
 });

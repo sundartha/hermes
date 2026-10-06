@@ -1,13 +1,3 @@
-// ZUSATZAUFTRAG A (E3b-Concern, E4 zugewiesen): die Rueckgabe-Form der Sweep-Fabriken
-// (makeOutageWatch/makeDriftWatch) wird von KEINEM Bestandstest gegen die Methoden
-// geprueft, die runSweepTick TATSAECHLICH ruft. Faellt ein Zweig aus einer Fabrik, bleibt
-// die Suite gruen, waehrend der Tick in Produktion bei JEDEM Lauf SYNCHRON wirft (der
-// Wurf liegt VOR dem Promise, das .catch() faengt ihn nicht) - test/kv-m4-monthly-
-// cross-check.test.js#KV-M4-8 faengt das NICHT, weil dieser Test eine EIGENE Attrappe
-// baut, nie die echte Fabrik.
-//
-// Die SOLL-Liste wird NICHT getippt, sondern aus dem Quelltext von runSweepTick GELESEN
-// koennte von der Verdrahtung abdriften, ohne dass ein Test es merkt (G5).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -23,7 +13,6 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BOOT_SRC = fs.readFileSync(path.join(REPO_ROOT, "src", "boot.js"), "utf8");
 
-// Aus dem Quelltext GELESEN, nicht getippt (s. Modul-Doc).
 function gerufeneMethoden(objektName) {
   const re = new RegExp(`${objektName}\\s*\\.(\\w+)\\(`, "g");
   const namen = [...BOOT_SRC.matchAll(re)].map((treffer) => treffer[1]);
@@ -31,9 +20,6 @@ function gerufeneMethoden(objektName) {
   return [...new Set(namen)];
 }
 
-// A-3 (Gegenprobe im Test selbst, Blocker-Liste 2): belegt, dass DIESE Pruefung
-// ueberhaupt etwas prueft - ein Objekt ohne die erwartete Methode MUSS sie zum Scheitern
-// bringen.
 function pruefeVertrag(objekt, erwarteteMethoden, objektName) {
   for (const name of erwarteteMethoden) {
     assert.equal(

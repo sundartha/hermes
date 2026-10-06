@@ -1,7 +1,3 @@
-// K0 (PLAN-CONVERSATION-OPTIMIZATION.md): Offline-Unit-Test der reinen Auswerte-Funktionen
-// aus scripts/telnyx-call-latency.mjs. Importiert NUR turnRowFrom/assistantTurnRows/median/
-// medianRow - kein Netz, kein process.exit (der isMain-Guard im Skript verhindert main()
-// beim Import, Muster test/telnyx-assistant-config.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -10,8 +6,6 @@ import {
   median,
   medianRow,
 } from "../scripts/telnyx-call-latency.mjs";
-
-// === turnRowFrom =====================================================================
 
 test("turnRowFrom: vollstaendiges metadata-Objekt -> alle fuenf Felder + sent_at uebernommen", () => {
   const message = {
@@ -52,7 +46,7 @@ test("turnRowFrom: metadata ist kein Objekt (z.B. String) -> faellt fail-closed 
 test("turnRowFrom: einzelnes fehlendes Feld im metadata-Objekt -> nur DIESES Feld undefined, Rest uebernommen", () => {
   const row = turnRowFrom({
     sent_at: "t1",
-    metadata: { end_user_perceived_latency_ms: 1551 }, // andere vier Felder fehlen
+    metadata: { end_user_perceived_latency_ms: 1551 },
   });
 
   assert.equal(row.end_user_perceived_latency_ms, 1551);
@@ -66,8 +60,6 @@ test("turnRowFrom: null/undefined message -> wirft nicht, liefert leere Zeile", 
   assert.equal(row.sentAt, null);
   assert.equal(row.end_user_perceived_latency_ms, undefined);
 });
-
-// === assistantTurnRows ================================================================
 
 test("assistantTurnRows: filtert NUR role=assistant, ignoriert system/user, behaelt Reihenfolge", () => {
   const messages = [
@@ -98,8 +90,6 @@ test("assistantTurnRows: kaputte Eintraege (null) im Array werden uebersprungen 
   assert.equal(rows.length, 1);
 });
 
-// === median ============================================================================
-
 test("median: ungerade Anzahl -> mittlerer Wert", () => {
   assert.equal(median([3, 1, 2]), 2);
 });
@@ -119,8 +109,6 @@ test("median: undefined/NaN-Werte werden vor der Berechnung rausgefiltert", () =
 test("median: nur ein Wert -> dieser Wert", () => {
   assert.equal(median([42]), 42);
 });
-
-// === medianRow ==========================================================================
 
 test("medianRow: berechnet den Median je Feld unabhaengig ueber mehrere Turns (reale Werte, afix-testcall2)", () => {
   const rows = [

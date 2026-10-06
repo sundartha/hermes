@@ -1,8 +1,3 @@
-// Telnyx-VoiceControl-Adapter (originateCall/endCall ueber die TeXML-REST-API).
-// Rein offline: global.fetch wird gestubbt (keine echte Telnyx-API, F.I.R.S.T.).
-// Die Telnyx-Config wird VOR dem Import gesetzt (dotenv ueberschreibt gesetzte
-// Vars NICHT) -> die echte .env beeinflusst den Test nicht (Key-Leak-Schutz).
-// Kein pglite/Server-Spawn hier (eigene Datei -> kein Test-Worker-Stall).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeConfigOverrides } from "./helpers.js";
@@ -17,20 +12,13 @@ process.env.TELNYX_API_KEY = API_KEY;
 process.env.TELNYX_CONNECTION_ID = CONNECTION_ID;
 process.env.TELNYX_ACCOUNT_SID = ACCOUNT_SID;
 
-// Dynamischer Import NACH dem Env-Setzen (config liest process.env beim Eval).
 const { telnyxVoice } = await import("../src/telephony/adapters/telnyx/voice.js");
 const { voiceControl } = await import("../src/telephony/registry.js");
 const { DEFAULT_PROVIDER, PROVIDER } = await import("../src/store/defaults.js");
 const { config } = await import("../src/config.js");
 
-// Fehlende Config simulieren (Adapter liest config bei jedem Aufruf): Wert leeren,
-// Aufruf, Wert restaurieren. fetch wird dabei gestubbt, damit ein durchrutschender
-// Call NICHT die echte API trifft (er soll ohnehin vorher fail-closed werfen).
-// PA-20 (Flip): geteilte Implementierung (G5) statt lokaler Kopie - makeConfigOverrides
-// routet den flachen Key ueber sein Namespace-Blatt (config.telephony.*).
 const { withBlankedConfig } = makeConfigOverrides(config);
 
-// fetch-Stub: zeichnet den letzten Aufruf auf und liefert eine konfigurierbare Antwort.
 function stubFetch(response) {
   const calls = [];
   global.fetch = async (url, opts) => {
@@ -39,9 +27,6 @@ function stubFetch(response) {
       ok: response.ok ?? true,
       status: response.status ?? 200,
       json: async () => response.json ?? {},
-      // assertTelnyxOk liest im Fehlerfall res.text() (robuster Pfad, gemeinsamer Helper).
-      // Faithful Response-Double: echtes fetch hat immer text(); ohne explizites text faellt
-      // der Stub auf den JSON-Body zurueck -> Bestandstests unveraendert.
       text: async () => response.text ?? JSON.stringify(response.json ?? {}),
     };
   };
@@ -98,9 +83,6 @@ test("originateCall: HTTP-Fehler wirft MIT Status, OHNE API-Key (Regel 4)", asyn
 });
 
 test("originateCall: 403 mit Telnyx-errors[] haengt code+title + providerStatus an, ohne Key/Roh-Body", async () => {
-  // Telnyx liefert bei einer Konfig-Ablehnung einen errors[]-Body. Der Adapter
-  // soll NUR code+title sichtbar machen (Diagnose im Log), NIE detail/Roh-Body
-  // (kann Auth-/Nummern-Fragmente tragen) und NIE den API-Key (Regel 4/5).
   stubFetch({
     ok: false,
     status: 403,
@@ -173,11 +155,6 @@ test("endCall: fail-closed bei fehlendem TELNYX_ACCOUNT_SID", async () => {
   );
 });
 
-// C-P1b: der arg-lose Zweig folgt DEFAULT_PROVIDER, nicht mehr einem eigenen
-// Twilio-Literal. Vorher stand hier "arg-los -> Twilio-Default (byte-identisch)" - das
-// war seit C-P1 (DEFAULT_PROVIDER = Telnyx) eine ZWEITE, abweichende Antwort auf
-// dieselbe Frage. Gegen DEFAULT_PROVIDER formuliert, damit der Test bei einem kuenftigen
-// Wechsel nicht wieder von Hand nachgezogen werden muss.
 test("voiceControl(provider): telnyx -> telnyxVoice, arg-los -> DEFAULT_PROVIDER", () => {
   assert.equal(voiceControl(PROVIDER.TELNYX), telnyxVoice);
   assert.equal(voiceControl(), voiceControl(DEFAULT_PROVIDER), "arg-los folgt DEFAULT_PROVIDER");

@@ -1,7 +1,3 @@
-// tenant-prolif-d: Executor runReleaseReconcile mit Fake-Store + Fake-Provisioner -
-// reine In-Process-Unit, kein Spawn, kein pglite, kein Netz (F.I.R.S.T.). Deckt:
-// scharfer Happy-Path, Idempotenz, non-telnyx-safe, Live-Recheck-Abbruch, 404-Konvergenz,
-// harter Provider-Fehler und den Observe-Only-Default (grace=0 -> NIE ein DELETE).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runReleaseReconcile } from "../src/release-reconcile.js";
@@ -21,11 +17,7 @@ const fakeAudit = () => ({
   },
 });
 const fakeLogger = () => ({ log: () => {}, warn: () => {} });
-// Fake-Store ueber der facade-Kontraktflaeche { load, save, withStoreLock } - EINE
-// mutable Referenz, so wirken Mutationen ueber alle load()-Aufrufe hinweg.
 const fakeStore = (s) => ({ load: () => s, save: () => {}, withStoreLock: (fn) => fn() });
-// Phasen-Store fuer den Live-Recheck-Test (d): der ERSTE load()-Aufruf (Klassifizierung)
-// liefert den suspendierten Ausgangszustand, JEDER Folge-Aufruf (Recheck) den reaktivierten.
 const phasedStore = (first, rest) => {
   let calls = 0;
   return { load: () => (calls++ === 0 ? first : rest), save: () => {}, withStoreLock: (fn) => fn() };
@@ -47,8 +39,6 @@ const seed = (over = {}) => ({
     },
   ],
   numberAssignments: [{ id: "a1", numberId: "n1", tenantId: "t1", assignedAt: "x", releasedAt: null }],
-  // OUTBOUND-E1: numberReleaseVerdict ruft jetzt numberBusyReason (Anruf-Check +
-  // Plattform-Bindung) - ohne diese beiden Felder wuerfe der Zugriff bei gesetzter e164.
   calls: [],
   platformNumberUse: [],
   ...over,
@@ -180,12 +170,6 @@ test("(g) OBSERVE-ONLY (graceMs=0): NICHTS wird freigegeben, egal wie alt (Pre-M
   assert.equal(s.numbers[0].status, NUMBER_STATUS.ACTIVE);
 });
 
-// DID-17 (06-nummern-provisioning.md): die Kombination der beiden Mechanismen ist das
-// Skalierungsrisiko, nicht jeder fuer sich - RELEASE_GRACE_DAYS=0 (Observe-Only, Default)
-// haelt die DID eines laengst suspendierten Tenants belegt, und ein knapper globaler Cap
-// macht genau diese belegte DID zur Sperre fuer einen NEUEN, zahlenden Signup. Beide
-// Bausteine sind einzeln gepinnt ((g) hier / test/number-lifecycle.test.js); ihre
-// Verkettung nirgends (G5: kein Duplikat, sondern die fehlende Invariante).
 const NEUER_TENANT = "t2";
 const KNAPPER_CAP = { maxNumbers: 1, maxNumbersPerTenant: 1 };
 

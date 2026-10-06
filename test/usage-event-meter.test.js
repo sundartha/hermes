@@ -1,8 +1,3 @@
-// P6b3: append-only usage_event-Ledger + Stripe-Meter-Aggregation/Flush. Prueft die
-// INVARIANTEN (4) Aggregation je kind, (5) Flush-Idempotenz (stripe_meter_sent),
-// (6) cost_cents Ganzzahl + kind-Validierung - rein ueber state-ops + billing/meter
-// + fakeBilling (kein Netz, kein Server, kein pglite). usage_event ist die Meter-
-// Quelle, NICHT das Budget-Gate (getrennte Quelle, kein Doppelzaehlen).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -17,16 +12,11 @@ import { fakeBilling } from "./helpers.js";
 
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
-// P5/GAP-06-Fixturen: zwei Nummern, ein fester Monatsanker + sein Folgemonat.
 const NUMBER_ID_A = "num_a";
 const NUMBER_ID_B = "num_b";
 const MIETE_CENTS = 92;
 const JANUAR = "2026-01-15T09:00:00.000Z";
 const FEBRUAR = "2026-02-15T09:00:00.000Z";
-// KV-P0: fester Flush-Stichtag WEIT vor allen new Date()-Fixtures dieser Datei - diese
-// Tests pruefen Aggregation/Idempotenz/Fehlschlag, nicht den Stichtag-Filter selbst
-// (der hat seine eigene Testdatei, test/kv-p0-flush-epoch.test.js). Ein Stichtag in der
-// Vergangenheit laesst jedes hier erzeugte Event durch, ohne die Invarianten zu aendern.
 const FLUSH_EPOCH_WEIT_VOR_FIXTURES = "2000-01-01T00:00:00.000Z";
 
 test("INV(6): recordUsageEvent speichert Cents als Ganzzahl + setzt Defaults", () => {
@@ -64,8 +54,6 @@ test("recordUsageEvent: callId optional (number_month-Meter ohne Call -> null)",
   });
   assert.equal(ev.callId, null);
 });
-
-// ---- P5/GAP-06: numberId + durchgereichte Uhr am Ledger-Eintrag ----
 
 test("recordUsageEvent: numberId optional (Default null, voice_minute traegt keine Nummer)", () => {
   const s = makeDefaultState();
@@ -108,8 +96,6 @@ test("recordUsageEvent: occurredAt vom Aufrufer wird uebernommen (Default bleibt
   assert.equal(gestempelt.occurredAt, JANUAR, "der Aufrufer reicht seine Uhr durch");
   assert.ok(default_.occurredAt >= vorher, "ohne Argument stempelt weiterhin new Date()");
 });
-
-// ---- P5/GAP-06: numbersDueForMonthMeter (DIE eine Idempotenz-Regel) ----
 
 function seedNumber(s, { id, tenantId = TENANT_A, status = NUMBER_STATUS.ACTIVE }) {
   s.numbers.push({ id, tenantId, status, e164: null, country: "DE" });
@@ -164,7 +150,6 @@ test("numbersDueForMonthMeter: unlesbare Uhr -> leer (fail-closed, bucht nichts)
 test("numbersDueForMonthMeter: Beleg OHNE numberId sperrt keine Nummer (Bestands-Beleg)", () => {
   const s = makeDefaultState();
   seedNumber(s, { id: NUMBER_ID_A });
-  // Bestands-Beleg von vor P5: derselbe Tenant, derselbe Monat, aber ohne Nummern-Bezug.
   recordUsageEvent(s, {
     tenantId: TENANT_A,
     kind: USAGE_EVENT_KIND.NUMBER_MONTH,
@@ -287,7 +272,6 @@ test("INV(5b): wirft reportMeter fuer EIN Aggregat -> dessen Events bleiben pend
     quantity: 500,
     costCents: 4,
   });
-  // billing wirft NUR fuer ai_token-Meter, voice_minute geht durch.
   const billing = fakeBilling({
     async reportMeter(args) {
       billing.log.push(["reportMeter", args]);
@@ -303,7 +287,6 @@ test("INV(5b): wirft reportMeter fuer EIN Aggregat -> dessen Events bleiben pend
   assert.equal(stillPending.length, 1, "nur das ai_token-Event bleibt pending");
   assert.equal(stillPending[0].kind, USAGE_EVENT_KIND.AI_TOKEN);
 
-  // Retry: jetzt nimmt das Default-fakeBilling (wirft nicht) das pending-Event nach.
   const r2 = await flushMeters(s, {
     billing: fakeBilling(),
     flushEpochIso: FLUSH_EPOCH_WEIT_VOR_FIXTURES,

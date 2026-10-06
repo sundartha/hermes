@@ -1,14 +1,3 @@
-// I2: settings/calendar zu pro-Tenant-Maps (settingsFor/calendarFor analog usageFor).
-// Drei Konzept-Gruppen: (1) Map-Trennung A/B unabhaengig, (2) json.load()-Migration
-// eines alten flachen store.json auf die owner-keyed Map, (3) tenantContext(owner)
-// byte-identisch zum Owner-Bucket. Reine Unit - KEIN Server-Spawn, KEINE pglite
-// (Test-Isolation-Lehre P6a/P3). Testet state-ops + defaults + json.load() via
-// tempDataDir.
-//
-// DATA_DIR wird im before VOR dem ersten config-/json-Import auf ein Temp-
-// Verzeichnis gesetzt, damit json.js das echte data/store.json nie anfasst
-// (Repo-Regel). Alles, was config.js zieht (config, json.js), wird deshalb
-// dynamisch geladen; statisch importiert sind nur config-freie Module.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
@@ -24,9 +13,6 @@ import {
 } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, defaultSettings, demoCalendar } from "../src/store/defaults.js";
 
-// Zwei NICHT-Owner-Tenants fuer die Map-Trennung: der Owner-Bucket ist vorbelegt
-// (defaultSettingsMap/calendarMap) und taugt daher nicht fuer die "Bucket bleibt
-// leer"-Invariante. Tenant-Identitaet pro-Tenant wird genau hier geprueft.
 const TENANT_A = "alex";
 const TENANT_B = "maria";
 
@@ -38,7 +24,6 @@ before(async () => {
   jsonBackend = await import("../src/store/json.js");
 });
 
-// ---- (1) Map-Trennung ----
 test("settingsFor liefert verschiedene Buckets pro Tenant; updateSettings(B) laesst A unberuehrt", () => {
   const s = makeDefaultState();
   assert.notEqual(
@@ -70,13 +55,6 @@ test("neuer Tenant ohne Bucket: settingsFor liefert frische Defaults, calendarFo
   assert.deepEqual(calendarFor(s, TENANT_B), [], "leere Liste (kein Owner-Demo-Kalender)");
 });
 
-// ---- (2) Migration ueber json.load() mit tempDataDir ----
-// Schreibt ein altes FLACHES store.json (flaches settings + flache calendar-Liste)
-// in ein frisches Temp-DATA_DIR und laedt es ueber ein isoliertes json.js-Modul.
-// json.js memoisiert den State prozessweit UND liest config.server.dataDir nur beim
-// ersten Modul-Load - deshalb wird config.server.dataDir (live mutierbar) VOR dem
-// Cache-gebusteten Import gesetzt, damit der frische Modul-Klon sein eigenes
-// store.json sieht. Build-Operate-Check (P13).
 let migrateSeq = 0;
 async function loadFlatStore(flat) {
   const dir = tempDataDir();
@@ -152,10 +130,9 @@ test("Migration forward-compat: flaches settings ohne neues Feld -> Default im O
   );
 });
 
-// ---- (3) tenantContext(owner) byte-identisch ----
 test("tenantContext(owner).settings/.calendar sind die Owner-Bucket-Referenzen", () => {
   const s = makeDefaultState();
-  const ctx = tenantContext(s, "", BOOTSTRAP_TENANT_ID); // P2b: ownerName-Fallback irrelevant hier
+  const ctx = tenantContext(s, "", BOOTSTRAP_TENANT_ID);
   assert.equal(ctx.settings, settingsFor(s, BOOTSTRAP_TENANT_ID));
   assert.equal(ctx.settings, s.settings[BOOTSTRAP_TENANT_ID], "Owner-Bucket-Referenz, nicht die Map");
   assert.equal(ctx.calendar, calendarFor(s, BOOTSTRAP_TENANT_ID));
@@ -163,14 +140,11 @@ test("tenantContext(owner).settings/.calendar sind die Owner-Bucket-Referenzen",
 
 test("tenantContext(owner) bei frischem State: settings == defaults, calendar == demoCalendar", () => {
   const s = makeDefaultState();
-  const ctx = tenantContext(s, "", BOOTSTRAP_TENANT_ID); // P2b: ownerName-Fallback irrelevant hier
+  const ctx = tenantContext(s, "", BOOTSTRAP_TENANT_ID);
   assert.deepEqual(ctx.settings, defaultSettings());
   assert.deepEqual(ctx.calendar, demoCalendar());
 });
 
-// Stellt sicher, dass die Fassade die tenantId-Signatur durchreicht (Re-Export +
-// Wrapper-Parity): findConflict findet den ueber addCalendarEvent gebuchten Termin
-// im selben Owner-Bucket (json-Backend, gegen das migrierte Temp-store.json).
 test("Fassade json.js: addCalendarEvent/findConflict round-trippen ueber tenantId", () => {
   jsonBackend.addCalendarEvent({
     tenantId: BOOTSTRAP_TENANT_ID,

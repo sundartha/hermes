@@ -1,7 +1,3 @@
-// GAP-21: /voice/outbound legt bei EINDEUTIGEM Maschinen-Ergebnis auf (kein Say/Gather,
-// nur Hangup), sonst bleibt der Bestandspfad (Offenlegung + Anliegen im Gather) byte-
-// identisch - unabhaengig davon, ob AnsweredBy fehlt/unbekannt ist oder "human" liefert.
-// Flag AUS -> byte-identischer Bestand, auch bei AnsweredBy=machine_start (Rollback-Beweis).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";

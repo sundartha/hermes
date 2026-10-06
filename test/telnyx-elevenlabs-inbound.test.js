@@ -1,12 +1,3 @@
-// IP3-RIEGEL, end-to-end (Server-Spawn, json-Store): TELNYX_ELEVENLABS_*-Envs erreichen
-// den Telnyx-Inbound-Pfad nicht mehr - der TeXML-<Say>-Relay-Zweig ist entfernt
-// (A/B-belegt defekt, Begruendung im Modulkopf von adapters/telnyx/render.js). Vor IP3
-// war GENAU dieser End-to-End-Pfad die Selbstarmierung: zwei gesetzte Envs, ohne Flag,
-// ohne Logzeile, schalteten den kompletten Inbound-Gruss auf den Relay um. Diese Datei
-// bewies das vorher am gerenderten TeXML - sie beweist jetzt das Gegenteil: dieselben
-// zwei Envs, gesetzt am echten Serverprozess, aendern das TeXML NICHT. Provider-Wahl
-// laeuft ueber die Telnyx-Signatur-Header (Signaturpruefung im Test uebersprungen, die
-// Header dienen nur dem Provider-Dispatch wie in provider-threading.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
@@ -29,9 +20,6 @@ function seedWithTelnyxNumber() {
         tenantId: TENANT_B,
         provider: "telnyx",
         status: "active",
-        // P10: language explizit "de" - Subjekt dieses Tests ist die Inertheit der
-        // ElevenLabs-Envs, nicht die Sprachaufloesung. Ohne den Pin faellt die Nummer
-        // (kein eigenes language) auf den Weltdefault (en) durch.
         language: "de",
         providerNumberId: null,
       },

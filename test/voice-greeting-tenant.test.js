@@ -1,8 +1,3 @@
-// I1(b): Budget-Engine-Begruessung loest {owner} ueber tenantContext(call.tenantId)
-// auf. Inbound auf B's Nummer -> "Maria"; Owner-Nummer -> "Jonas" (byte-identisch).
-// Server-Spawn (json); deckt den Pfad, den der rein-Unit-Test nicht erreicht.
-// Beide Tests teilen denselben Seed (Tenant B koexistiert mit dem config-derived
-// Owner): belegt Map-freie Koexistenz ohne A-zu-B-Leck.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, OWNER_TEST_FIRST_NAME, OWNER_TEST_NUMBER } from "./helpers.js";

@@ -1,14 +1,3 @@
-// I0: tenantContext-Seam als reines IO-freies Domaenen-Objekt (byte-identisch,
-// kein Konsument). Prueft die Owner-Fallback-Invariante am state-ops-Seam (reine
-// Funktion, kein DATA_DIR/Singleton) PLUS einen Fassaden-Parity-Beleg ueber BEIDE
-// Backends (json.js synchron, pg.js via pglite) - faengt die Re-Export-Landmine
-// an allen vier Stellen, ohne pglite mit Server-Spawn zu mischen (rein-Unit).
-//
-// DATA_DIR wird im before VOR dem ersten config-/store-Import auf ein Temp-
-// Verzeichnis gesetzt, damit json.js das echte data/store.json nie anfasst
-// (Repo-Regel). Alles, was config.js zieht (config, json.js, pg-helpers), wird
-// deshalb dynamisch geladen - statisch importiert sind nur config-freie Module
-// (state-ops, defaults, helpers).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
@@ -16,9 +5,6 @@ import { tenantContext, makeDefaultState } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OTHER_OWNER = "Mara";
-// P2b: der durchgereichte ownerName-Fallback ist nicht mehr config-derived, sondern
-// ein vom Aufrufer uebergebener Wert (die Fassaden reichen "" durch). Eigenes Literal
-// statt config.ownerName, da config.ownerName entfernt ist.
 const PASSED_OWNER = "Test Owner";
 
 let jsonBackend;
@@ -34,17 +20,13 @@ test("tenantContext nutzt den durchgereichten ownerName als Owner-Fallback", () 
   const s = makeDefaultState();
   const ctx = tenantContext(s, PASSED_OWNER, BOOTSTRAP_TENANT_ID);
   assert.equal(ctx.tenantId, BOOTSTRAP_TENANT_ID);
-  // Owner-Tenant ohne eigenen ownerName -> der durchgereichte Fallback gilt.
   assert.equal(ctx.ownerName, PASSED_OWNER);
-  // G1: firstName wird aus dem effektiven ownerName abgeleitet (erstes Token).
   assert.equal(ctx.firstName, PASSED_OWNER.split(" ")[0]);
   assert.equal(ctx.settings, s.settings[BOOTSTRAP_TENANT_ID], "settings ist die Owner-Bucket-Referenz");
   assert.equal(ctx.calendar, s.calendar[BOOTSTRAP_TENANT_ID], "calendar ist die Owner-Bucket-Referenz");
 });
 
 test("Fallback greift auch ohne s.tenants (seedState-Shape)", () => {
-  // seedState() seedet KEINE tenants -> der Fallback muss defensiv gegen das
-  // fehlende Feld sein, sonst wirft die find()-Suche.
   const s = seedState({ calls: [seedCall({ id: "call1" })] });
   const ctx = tenantContext(s, PASSED_OWNER, BOOTSTRAP_TENANT_ID);
   assert.equal(ctx.ownerName, PASSED_OWNER);
@@ -63,7 +45,6 @@ test("Fassade json.js exportiert tenantContext, leerer Owner-Fallback (P2b)", ()
     "function",
     "json.tenantContext fehlt (Re-Export-Landmine)",
   );
-  // P2b: kein config.ownerName mehr -> frischer Owner-Tenant ohne ownerName -> "".
   assert.equal(jsonBackend.tenantContext(BOOTSTRAP_TENANT_ID).ownerName, "");
 });
 
@@ -77,9 +58,6 @@ test("Fassade pg.js (pglite) exportiert tenantContext, leerer Owner-Fallback (P2
   assert.equal(store.tenantContext(BOOTSTRAP_TENANT_ID).ownerName, "");
 });
 
-// "Owner = Tenant Null": die Owner-Nummer kommt ueber den Fassaden-seedBootstrapNumber
-// (CLI scripts/seed-owner-number.js) in den Store, nicht mehr aus der config. Faengt
-// die Re-Export-Landmine + dass die geseedete Bestandsnummer routbar landet.
 test("Fassade json.js exportiert seedBootstrapNumber -> Bestandsnummer routbar", () => {
   assert.equal(
     typeof jsonBackend.seedBootstrapNumber,
@@ -95,9 +73,6 @@ test("Fassade json.js exportiert seedBootstrapNumber -> Bestandsnummer routbar",
   );
 });
 
-// I5: /api/state liest den Usage-Bucket ueber store.usageOf (Lazy-Default, NIE
-// undefined). Faengt die Re-Export-Landmine an beiden Fassaden + dass usageOf NIE
-// undefined fuer einen Tenant ohne Bucket liefert (sonst crasht get_agent_status).
 test("Fassade json.js exportiert usageOf und liefert nie undefined", () => {
   assert.equal(typeof jsonBackend.usageOf, "function", "json.usageOf fehlt (Re-Export-Landmine)");
   assert.ok(jsonBackend.usageOf(BOOTSTRAP_TENANT_ID), "Owner-Bucket vorhanden");

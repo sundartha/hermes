@@ -1,30 +1,6 @@
-// Telnyx-CDR-Seam am Voice-Port (PLAN-LIVE-COST-TRACING P1): parseDecimalToMicroCents/
-// parseNonNegativeInteger (cost-parse.js) und telnyxVoice.fetchCostRecordPool/
-// assignCostRecords (KE-P2: der frueher einteilige Port ist zweigeteilt, s. fetchAndAssign
-// unten). Rein offline (global.fetch gestubbt, F.I.R.S.T.), kein pglite/Server-Spawn (eigene
-// Datei -> kein Test-Worker-Stall). Env VOR dem dynamischen Import gesetzt (Muster
-// telnyx-voice.test.js).
-//
-// LCT-FIX-1: die frueheren Fixtures ERFANDEN das Feld leg_id. Genau deshalb war diese Suite
-// gruen, waehrend live JEDER Beleg verworfen wurde (records=0, rejected={"leg_unresolved":205,
-// "leg_mismatch":92}) - ein Test gegen selbst erfundene Daten prueft die eigene Annahme, nicht
-// die Wirklichkeit. Die Fixtures tragen ab jetzt die Feldnamen und Wertformen aus der
-// Live-Messung 2026-07-21 (297 echte Belege).
-//
-// REICHWEITE DIESER TESTS - ehrlich benannt, damit der Vorfall sich nicht wiederholt: der
-// Rohauszug jener Messung liegt NICHT im Repo. Belegt ist damit nur, welche Felder die
-// Belege fuehren; die Annahme, dass `telnyx_session_id` und `call_session_id` denselben,
-// CALL-LOKALEN Wert bezeichnen, spielen diese Fixtures nach - sie beweisen sie NICHT. Was
-// die Tests hier wirklich pinnen, ist die fail-closed-Richtung: was NICHT in der vom Anker
-// aufgespannten Session liegt, kommt nie mit. Die laufende Beobachtung der Session-Invariante
-// (Log-Zeile mit den je Zuordnungsweg getrennten Zaehlern `via_…`) ist in
-// tasks/lct-DEPLOY-CHECKLIST.md beschrieben - das Format ist hier gepinnt, damit sie nicht
-// still an einer geaenderten Log-Zeile zerbricht.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { captureConsole, makeConfigOverrides } from "./helpers.js";
-// KE-P6 (Aenderung 1): boot-guard.js hat NULL Imports (kein Config-/Spawn-Risiko) - statisch
-// importierbar wie helpers.js, ohne die env-vor-dynamischem-Import-Reihenfolge zu verletzen.
 import { costTruingBookingFindings, COST_TRUING_BOOKING_FINDING } from "../src/boot-guard.js";
 
 const ASSIGNED_RECORD_COUNT = 4;
@@ -94,8 +70,6 @@ const { withBlankedConfig } = makeConfigOverrides(config);
 const STARTED_AT = "2026-07-20T10:00:00Z";
 const ENDED_AT = "2026-07-20T10:05:00Z";
 
-// Reale ID-FORMEN (Werte synthetisch, Form gemessen): der Anker ist eine `v3:`-Token
-// (providerLegIdOf liefert genau die), Session und Leg sind UUIDs eines ZWEITEN ID-Systems.
 const CALL_CONTROL_ID = "v3:LoD0swXYmiEsyntheticAnchorForTestsOnly0000000000000";
 const SESSION_ID = "285df0e6-84f2-11f0-9c1a-02420a0d0b0e";
 const TELNYX_LEG_ID = "285df0e6-84f2-11f0-9c1a-02420a0d0b0f";
@@ -111,13 +85,7 @@ const FOREIGN_IDS = Object.freeze({
   legUuid: FOREIGN_LEG_ID,
 });
 
-// KOEDER (A2, KE-P2-Aequivalenztest): telnyx_leg_id/call_leg_id tragen an ALLEN Belegen -
-// eigenen wie fremden - DENSELBEN Wert. Benutzte der Code sie als Zuordnungsquelle, bekaeme
-// JEDER Call JEDEN Beleg inklusive des fremden, und beide Summen unten waeren falsch. Genau
-// dieser Feldname hat live 297 von 297 Belegen verworfen (LCT-FIX-1).
 const BAIT_LEG_ID = "0bad0bad-0bad-11f1-0bad-0bad0bad0bad0";
-// Zweiter Anruf desselben Sweeps (Plan F4: gemessenes Paar mit 20,4 s Ueberlappung) - der
-// geteilte Pool (KE-P2) darf die beiden Anker nicht miteinander vermischen.
 const SECOND_CALL_CONTROL_ID = "v3:ZweiterAnkerDesselbenSweeps0000000000000000000000";
 const SECOND_SESSION_ID = "3f7ac1b2-84f2-11f0-9c1a-02420a0d0b10";
 const CALL_A_IDS = Object.freeze({ anchorId: CALL_CONTROL_ID, sessionId: SESSION_ID, legUuid: BAIT_LEG_ID });
@@ -131,49 +99,26 @@ const { createMinuteWindowThrottle } = await import(
 );
 const { jumpClock: createJumpClock } = await import("./fake-clock.js");
 
-// KE-P4: die produktive Drossel haengt an der ECHTEN Uhr und einem ECHTEN Timer. Jeder
-// Abruf im Test injiziert deshalb eine Drossel mit SPRUNG-Uhr - sonst bliebe der 31. Abruf
-// einer realen Minute bis zur naechsten vollen Minute stehen und die Suite haenge an der
-// Wanduhr (F.I.R.S.T.: Fast/Repeatable). Injiziert wird die ECHTE Fabrik, kein
-// Attrappen-Objekt: ein Stub, der nie drosselt, koennte die Drossel nicht beweisen.
-const BUDGET_PER_MINUTE = 30; // gemessene 40 minus bewusster Reserve 10
-const THROTTLE_START_AT = "2026-07-21T16:18:30.000Z"; // gemessener Burst-Zeitpunkt (Plan F1)
+const BUDGET_PER_MINUTE = 30;
+const THROTTLE_START_AT = "2026-07-21T16:18:30.000Z";
 
-// Sprung-Uhr mit dem in dieser Datei gemessenen Burst-Zeitpunkt als Default (Koerper in
-// test/fake-clock.js, geteilt mit test/telnyx-cost-throttle.test.js, G5).
 const jumpClock = (startIso = THROTTLE_START_AT) => createJumpClock(startIso);
 const testThrottle = (clock = jumpClock()) =>
   createMinuteWindowThrottle({ budget: BUDGET_PER_MINUTE, now: clock.now, sleep: clock.sleep });
 
-// EIN Weg in den Belegabruf im Test - mit injizierter Drossel.
 const fetchPool = (params = {}) =>
   telnyxVoice.fetchCostRecordPool({ ...params, throttle: testThrottle() });
 
-// KE-P2: der Port ist zweigeteilt. Diese Helferin spiegelt die PRODUKTIVE Verdrahtung aus
-// billing/cost-truing.js - EIN Pool-Abruf, danach die SYNCHRONE Zuordnung je Call. Die
-// Bestandsfaelle pruefen damit unveraendert dieselbe Kette ueber den neuen Schnitt.
 async function fetchAndAssign(params = WINDOW) {
   const pool = await fetchPool();
   if (!pool.ok) return pool;
   return telnyxVoice.assignCostRecords(pool, params);
 }
 
-// Antwortkoerper EINER Listen-Seite in der GEMESSENEN Form (Messung 2026-07-21):
-// {data:[...]} plus - bei einer paginierten Menge - {meta:{total_results, total_pages,
-// page_size}}. Ein blosses Array bleibt die meta-lose Seite (alle Bestands-Fixtures,
-// byte-identisch); {records, meta} baut die paginierte Form. EINE Stelle (G5), damit die
-// Antwortform nicht je Fixture neu erfunden wird - genau daran ist die Kette zweimal
-// gestorben.
 function listPageBody(page) {
   return Array.isArray(page) ? { data: page } : { data: page.records, meta: page.meta };
 }
 
-// KE-P3: mehrseitige Antwort je Typ. pagesByType[type] ist eine LISTE von Seiten (Index 0 =
-// page[number]=1). Eine nicht konfigurierte Seite ist LEER - die gemessene Form des Endes
-// (kurze Seite). EINE Stelle fuer die Antwortform (listPageBody). Zeichnet alle Aufrufe auf
-// (URL, Header) fuer Struktur-Assertions.
-// KE-P4: optionale Uhr zeichnet den ZEITPUNKT jeder Anfrage auf (atMs) - die Drossel-Tests
-// pruefen darueber, wie viele Anfragen in welches simulierte Minutenfenster fielen.
 function stubFetchPages(pagesByType, clock = null) {
   const calls = [];
   global.fetch = async (url, opts) => {
@@ -192,8 +137,6 @@ function stubFetchPages(pagesByType, clock = null) {
   return calls;
 }
 
-// Bestandsform: EINE Seite je Typ, alle Folgeseiten leer. Alle aelteren Fixtures bleiben
-// dadurch byte-identisch.
 function stubFetchByRecordType(pagesByType) {
   return stubFetchPages(
     Object.fromEntries(Object.entries(pagesByType).map(([type, page]) => [type, [page]])),
@@ -208,13 +151,6 @@ const pageNumbersFor = (calls, recordType) =>
     .filter((params) => params.get("filter[record_type]") === recordType)
     .map((params) => Number(params.get("page[number]")));
 
-// fetch-Stub fuer den FEHLERPFAD (KE-P0): jede Anfrage scheitert mit demselben HTTP-Status
-// und Telnyx-Fehler-Envelope. assertTelnyxOk liest im !ok-Zweig res.text() (nicht json()) -
-// beide Formen liefern denselben Body (Faithful Response-Double). Getrennt vom Erfolgs-Stub,
-// dessen einzige Aufgabe "eine Seite je record_type" ist; ein status-Schalter dort waere ein
-// zweiter Weg fuer denselben Zweck.
-// KE-P4: optionale Header - Headers ist case-insensitiv wie im echten fetch; ein NICHT
-// gesetzter Header liefert null, genau der gemessene Fall "Telnyx nennt kein Retry-After".
 function stubFetchFailure({ status, body, headers: responseHeaders = {} }) {
   const calls = [];
   global.fetch = async (url, opts) => {
@@ -230,14 +166,8 @@ function stubFetchFailure({ status, body, headers: responseHeaders = {} }) {
   return calls;
 }
 
-// Die gemessenen ID-Felder je record_type (Messung 2026-07-21). Werte kommen als Parameter,
-// damit Fremd-Session-Faelle DIESELBE Form mit anderen IDs bauen (G5). Die Schluessel-MENGE
-// ist KEINE zweite Quelle des Enums: sie ist an COST_RECORD_TYPES gekoppelt (Test weiter
-// unten) - ohne die Kopplung koennte ein neuer Produktions-Typ hier fehlen und der
-// Deckungstest bliebe gruen, waehrend der Boot-Guard den Typ nicht kennt.
 const ID_FIELDS_BY_RECORD_TYPE = Object.freeze({
   "sip-trunking": ({ anchorId, sessionId }) => ({ call_control_id: anchorId, telnyx_session_id: sessionId }),
-  // KEIN call_control_id - genau der Fall, der nur ueber die Session auffindbar ist.
   "call-control": ({ sessionId, legUuid }) => ({ telnyx_leg_id: legUuid, telnyx_session_id: sessionId }),
   recording: ({ sessionId }) => ({ telnyx_session_id: sessionId }),
   "ai-voice-assistant": ({ anchorId, sessionId, legUuid }) => ({
@@ -248,7 +178,7 @@ const ID_FIELDS_BY_RECORD_TYPE = Object.freeze({
   }),
   "speech-to-text": ({ sessionId, legUuid }) => ({ call_session_id: sessionId, call_leg_id: legUuid }),
   "text-to-speech": ({ sessionId, legUuid }) => ({ call_session_id: sessionId, call_leg_id: legUuid }),
-  inference: () => ({ conversation_id: CONVERSATION_ID }), // KEINE Session-/Leg-Referenz
+  inference: () => ({ conversation_id: CONVERSATION_ID }),
 });
 
 function realRecord(recordType, { cost, billedSec, currency = "USD", ids = OWN_IDS, extraFields = {} } = {}) {
@@ -262,18 +192,11 @@ function realRecord(recordType, { cost, billedSec, currency = "USD", ids = OWN_I
   };
 }
 
-// Das ZWEITE BEIN eines Anrufs (Plan F3/PM-11, KE-P2-Aequivalenztest): dieselbe Session,
-// der Anker gehoert dem ersten Bein. Genau dieser Beleg traegt den ABGERECHNETEN Betrag -
-// wer je Typ nur den ersten Treffer nimmt, verliert 0,0401 USD und erstattet real
-// ausgegebenes Geld zurueck. Nur fuer Typen mit Anker-Feld relevant (sip-trunking); bei
-// call-control (nie Anker) ist das Loeschen ein No-op.
 function secondLegRecord(recordType, opts) {
   const record = realRecord(recordType, opts);
   delete record.call_control_id;
   return record;
 }
-
-// ---- (a) Parser-Tabelle, ohne Float-Zwischenschritt ----
 
 const PARSER_CASES = [
   ["0.0122", PARSED_MICRO_CENTS_OF_0_0122],
@@ -305,7 +228,7 @@ const PARSER_INVALID_CASES = [
   "E-4",
   "1.",
   "0.0.1",
-  "+0.01", // fuehrendes Vorzeichen ist ungueltig, nie beobachtet (Design-Entscheidung P1)
+  "+0.01",
 ];
 
 for (const input of PARSER_INVALID_CASES) {
@@ -325,19 +248,13 @@ test("parseDecimalToMicroCents: Float-Fehlerklasse demonstriert (0.1+0.2 !== 0.3
   assert.equal(sum, SUMMED_MICRO_CENTS_SECOND);
 });
 
-// (a2) Einheiten-Riegel: faellt rot aus, sobald der Faktor auf 10^6 zurueckgedreht wird
-// (dann 39000 statt 3900000 - der Test unterscheidet die beiden Faktoren scharf).
 test("parseDecimalToMicroCents: Einheiten-Riegel 10^8 (0.039 -> 3900000, NICHT 39000)", () => {
   assert.equal(parseDecimalToMicroCents("0.039"), PARSED_MICRO_CENTS_OF_0_039);
 });
 
-// (a3) Notations-Riegel: eigener Test fuer die korrigierte Plan-Fassung (wissenschaftliche
-// Notation ist Normalbetrieb, keine fruehere Fassung durfte sie verwerfen).
 test("parseDecimalToMicroCents: wissenschaftliche Notation ist gueltig (1.687E-4 === 16870)", () => {
   assert.equal(parseDecimalToMicroCents("1.687E-4"), PARSED_MICRO_CENTS_OF_1_687E_MINUS_4);
 });
-
-// ---- parseNonNegativeInteger ----
 
 test("parseNonNegativeInteger: gueltige Ganzzahlen (string und number)", () => {
   assert.equal(parseNonNegativeInteger("120"), INTEGER_INPUT);
@@ -351,14 +268,8 @@ test("parseNonNegativeInteger: ungueltige Werte -> null", () => {
   }
 });
 
-// ---- (b) Reale Belegformen: zweistufige Zuordnung (Anker + Session) ----
-
-// Realistischer Kandidat fuer COST_TRUING_REQUIRED_RECORD_TYPES (live noch leer, der Wert
-// ist eine Owner-Entscheidung vor dem Deploy) - erst ueber die Session erfuellbar, denn
-// call-control traegt keinen Anker.
 const REQUIRED_RECORD_TYPES = Object.freeze(["sip-trunking", "call-control"]);
 
-// Ein realer Beleg je record_type (Kosten und Zusatzfelder aus der Messung 2026-07-21).
 const REAL_RECORDS = [
   { recordType: "sip-trunking", cost: "0.0401", billedSec: 60, extraFields: { started_at: "2026-07-20T10:01:00Z" } },
   { recordType: "call-control", cost: "0.001" },
@@ -366,7 +277,7 @@ const REAL_RECORDS = [
   { recordType: "text-to-speech", cost: "1.687E-4" },
   { recordType: "recording", cost: "0.002" },
   { recordType: "ai-voice-assistant", cost: "0.05", billedSec: 60, extraFields: { rate_measured_in: "ai_voice_assistant_minutes" } },
-  { recordType: "inference", cost: "0.001315" }, // unzuordenbar - bewusste Grenze
+  { recordType: "inference", cost: "0.001315" },
 ];
 
 function stubRealRecords({ ids = OWN_IDS } = {}) {
@@ -378,15 +289,6 @@ function stubRealRecords({ ids = OWN_IDS } = {}) {
   return stubFetchByRecordType(pages);
 }
 
-// Belege, die in der gemessenen Wirklichkeit KEINEN Anker tragen und daher ausschliesslich
-// ueber die aufgespannte Session gefunden werden koennen. ABGELEITET aus der Feld-Tabelle
-// (S2): welcher Typ keinen Anker fuehrt, steht dort bereits - eine zweite, von Hand
-// gepflegte Liste koennte davon abdriften und die Zusicherung still verfallen lassen
-// (bekaeme ein Typ in der Tabelle spaeter einen Anker, bliebe die Assertion gruen und
-// pruefte ab da nichts mehr). Ohne Anker UND ohne Session waere der Typ gar nicht
-// zuordenbar - das ist die andere Menge (UNASSIGNABLE_COST_RECORD_TYPES).
-// Erwartete Kardinalitaeten AUS den Produktions-Konstanten, nicht als nackte Zahlen (G25/S2):
-// ein Typ mehr im Enum aendert beide Erwartungen automatisch mit.
 const ASSIGNABLE_RECORD_COUNT = COST_RECORD_TYPES.length - UNASSIGNABLE_COST_RECORD_TYPES.length;
 
 const SESSION_ONLY_RECORD_TYPES = Object.freeze(
@@ -437,23 +339,17 @@ test("Belegabruf: Ende-zu-Ende sip-trunking cost 0.0401 -> costMicroCents 401000
   assert.equal(sipTrunking.costMicroCents, SIP_TRUNKING_MICRO_CENTS);
 });
 
-// ---- (b2) KE-P2: die wichtigste Zusage der Kette - assignCostRecords ordnet aus einem
-// GETEILTEN Pool genau wie der Bestandspfad zu ----
-
-// 9 Belege, Reihenfolge bewusst: Null-Zwilling VOR dem abgerechneten Beleg, fremder Beleg
-// ZUERST. secondLegRecord loescht den Anker (das zweite Bein derselben Session traegt ihn
-// laut Messung nicht); call-control-Belege tragen laut Feld-Tabelle nie einen Anker.
 function twoAnchorPool() {
   return [
-    realRecord("sip-trunking", { cost: "0.0", billedSec: 0, ids: CALL_A_IDS }), // Null-Zwilling A
-    secondLegRecord("sip-trunking", { cost: "0.0401", billedSec: 60, ids: CALL_A_IDS }), // abgerechnet A
-    realRecord("sip-trunking", { cost: "0.0", billedSec: 0, ids: CALL_B_IDS }), // Null-Zwilling B
-    secondLegRecord("sip-trunking", { cost: "0.0502", billedSec: 60, ids: CALL_B_IDS }), // abgerechnet B
-    realRecord("call-control", { cost: "9.99", billedSec: 60, ids: FOREIGN_POOL_IDS }), // Fehlbuchungs-Falle
+    realRecord("sip-trunking", { cost: "0.0", billedSec: 0, ids: CALL_A_IDS }),
+    secondLegRecord("sip-trunking", { cost: "0.0401", billedSec: 60, ids: CALL_A_IDS }),
+    realRecord("sip-trunking", { cost: "0.0", billedSec: 0, ids: CALL_B_IDS }),
+    secondLegRecord("sip-trunking", { cost: "0.0502", billedSec: 60, ids: CALL_B_IDS }),
+    realRecord("call-control", { cost: "9.99", billedSec: 60, ids: FOREIGN_POOL_IDS }),
     realRecord("call-control", { cost: "0.002", billedSec: 60, ids: CALL_A_IDS }),
-    realRecord("call-control", { cost: "0.0", billedSec: 0, ids: CALL_A_IDS }), // Null-Zwilling A
+    realRecord("call-control", { cost: "0.0", billedSec: 0, ids: CALL_A_IDS }),
     realRecord("call-control", { cost: "0.003", billedSec: 60, ids: CALL_B_IDS }),
-    realRecord("call-control", { cost: "0.0", billedSec: 0, ids: CALL_B_IDS }), // Null-Zwilling B
+    realRecord("call-control", { cost: "0.0", billedSec: 0, ids: CALL_B_IDS }),
   ];
 }
 
@@ -497,15 +393,12 @@ test("assignCostRecords: ohne brauchbaren Pool -> ok:false (pool_missing), nie e
   assert.doesNotThrow(() => telnyxVoice.assignCostRecords(undefined, WINDOW));
 });
 
-// ---- (c) HTTP 500 und Timeout ----
-
 test("Belegabruf: HTTP 500 -> ok:false, records undefined, kein Wurf", async () => {
   stubFetchFailure({ status: 500, body: {} });
   await assert.doesNotReject(async () => {
     const res = await fetchAndAssign(WINDOW);
     assert.equal(res.ok, false);
     assert.equal(res.records, undefined);
-    // ok:false ist NICHT die leere Menge - "0 Records gefunden" waere ok:true mit [].
     assert.notEqual(res.records?.length, 0);
   });
 });
@@ -522,33 +415,18 @@ test("Belegabruf: rejectendes fetch (Netzfehler/Timeout) -> ok:false, kein Wurf"
   });
 });
 
-// ---- (c2) KE-P0: der Fehlerpfad ist sichtbar (Status + Telnyx-Code, PII-frei) ----
-
-// GEMESSENE Antwort des Belegabrufs bei ueberschrittenem Minutenkontingent (Plan F1):
-// HTTP 429 mit Telnyx-Code 10011. Der Envelope traegt bewusst GIFT in `detail` (Key-Form,
-// Rufnummer, Session-ID) - das ist hier das Gegenstueck zur Koeder-Pflicht: Felder, die der
-// Code NICHT verwenden darf. Faende sich eines davon in der Log-Zeile, waere der Leak-Test
-// rot; ein Test, der nur wegen des Koeders gruen liefe, gibt es hier nicht, weil die Zeile
-// exakt verglichen wird.
 const RATE_LIMIT_STATUS = 429;
 const RATE_LIMIT_CODE = "10011";
 const LEAK_NUMBER = "+4915112345678";
 const POISONED_DETAIL = `Bearer ${API_KEY} from=${LEAK_NUMBER} session=${SESSION_ID}`;
 const RATE_LIMIT_BODY = {
-  secret_key: API_KEY, // top-level-Gift: darf ebenfalls nirgends auftauchen
+  secret_key: API_KEY,
   errors: [{ code: RATE_LIMIT_CODE, title: "Too many requests", detail: POISONED_DETAIL }],
 };
-// Der Abruf bricht beim ERSTEN scheiternden Typ ab (kein Teil-Erfolg) -> genau EINE Zeile,
-// und zwar fuer den ersten ABGEFRAGTEN Typ (KE-P3: ASSIGNABLE_COST_RECORD_TYPES, nicht mehr
-// COST_RECORD_TYPES) - heute wie morgen "sip-trunking", aber ehrlich hergeleitet statt an
-// der ungefilterten Liste (keine zweite Quelle der Reihenfolge).
 const FIRST_RECORD_TYPE = ASSIGNABLE_COST_RECORD_TYPES[0];
 
 const failureLines = (lines) => lines.filter((line) => line.includes("getVoiceCostRecords fehler"));
 
-// KE-P4: ein 429 wird GENAU EINMAL wiederholt (nach dem Reset ist das Fenster frei). Die
-// Fehler-Zeile erscheint deshalb je Versuch - zweimal, nie mehr. Mehr waere eine Schleife
-// gegen ein Kontingent.
 const ATTEMPTS_PER_RATE_LIMITED_PAGE = 2;
 
 test("Belegabruf: 429 loggt Provider-Status und Telnyx-Code (Fehlerpfad sichtbar)", async () => {
@@ -562,9 +440,6 @@ test("Belegabruf: 429 loggt Provider-Status und Telnyx-Code (Fehlerpfad sichtbar
   );
 });
 
-// Die Zeile ist eine Betriebs-Sonde: sie landet dauerhaft im Render-Log. Regel 4/5 -
-// Fragmente werden ueber ein LABEL gemeldet, nie ueber ihren Wert (sonst leakte die
-// Fehlermeldung des Tests genau das, was sie verbietet).
 const FORBIDDEN_IN_FAILURE_LINE = Object.freeze([
   ["API-Key", API_KEY],
   ["Bearer-Praefix", "Bearer"],
@@ -604,11 +479,7 @@ test("Belegabruf: 429 laesst Rueckgabe und Kontrollfluss unveraendert (ok:false,
   assert.equal(res.records, undefined, "ok:false ist NIE die leere Menge");
 });
 
-// ---- (d) Fremdwaehrung ----
-
 test("Belegabruf: fremde Waehrung wird verworfen, gleiche Waehrung kleingeschrieben akzeptiert", async () => {
-  // Der EUR-Beleg traegt den Anker und waere zuordenbar - er faellt trotzdem weg. Das pinnt
-  // die Reihenfolge Waehrung-vor-Zuordnung in toCostRecord.
   stubFetchByRecordType({
     "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", currency: "EUR" })],
   });
@@ -623,8 +494,6 @@ test("Belegabruf: fremde Waehrung wird verworfen, gleiche Waehrung kleingeschrie
   assert.equal(usdRes.ok, true);
   assert.equal(usdRes.records.length, 1, "Kleingeschriebenes 'usd' case-insensitiv akzeptiert");
 });
-
-// ---- (e) Grenzfaelle des Seams ----
 
 test("Belegabruf: fehlender legId -> ok:false, reason params_missing", async () => {
   stubFetchByRecordType({});
@@ -663,11 +532,6 @@ test("Belegabruf: kein Anker in der Antwort -> LEERE Liste, ok:true, kein Wurf (
   });
 });
 
-// KEINE gemessene Form (real traegt sip-trunking immer beide Felder), sondern ein Provider-
-// Drift-Grenzfall: faellt das Session-Feld weg, bleibt der Anker Identitaetsgleichheit auf
-// UNSERER eigenen, global eindeutigen ID - verwerfen waere Datenverlust ohne Sicherheits-
-// gewinn. Ohne diesen Test bliebe der direkte Anker-Zweig ungepinnt (alle anderen Fixtures
-// tragen zusaetzlich die passende Session und wuerden ihn nicht bemerken).
 test("Belegabruf: Beleg MIT Anker aber OHNE Session-Referenz wird akzeptiert", async () => {
   const anchorOnly = realRecord("sip-trunking", { cost: "0.0401" });
   delete anchorOnly.telnyx_session_id;
@@ -697,12 +561,6 @@ test("Belegabruf: Belege einer FREMDEN Session kommen NIE mit (Tenant-Trennung)"
   );
 });
 
-// LCT-FIX-1: die Gegenprobe zum Test darueber auf dem ZWEITEN Session-Feldnamen. Der
-// fremde Beleg ist ein speech-to-text-Record, der NUR eine call_session_id fuehrt - genau
-// die Form, die die (im Repo unbelegte) Gleichsetzung der beiden Session-Felder betrifft.
-// Der Test pinnt, was die Zuordnung wirklich zusichert: auch ueber call_session_id wird
-// NUR akzeptiert, was in der vom Anker aufgespannten Menge liegt. Ohne diese Zeile bliebe
-// der call_session_id-Zweig einseitig gepinnt (nur der Treffer-, nie der Ablehnungsfall).
 test("Belegabruf: fremde `call_session_id` kommt NIE mit (Zuordnung bleibt fail-closed)", async () => {
   stubFetchByRecordType({
     "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401" })],
@@ -720,15 +578,6 @@ test("Belegabruf: fremde `call_session_id` kommt NIE mit (Zuordnung bleibt fail-
   );
 });
 
-// LCT-FIX-1 / G27: haelt die Adapter-Konstante gegen die gemessenen Belegformen. Der
-// Boot-Guard lehnt genau diese Typen als Pflicht-Typ ab - waere die Liste zu kurz, koennte
-// ein unerfuellbarer Pflicht-Typ durchrutschen (dauerhaft 'incomplete': keine
-// Rueckerstattung, jede Nachforderung gebucht); waere sie zu lang, verboete der Boot einen
-// zuordenbaren Typ ohne Grund. Beide Richtungen werden geprueft.
-// Die Kopplung, ohne die der Deckungstest darunter nur die Test-Kopie prueft: kaeme ein Typ
-// in COST_RECORD_TYPES dazu, den die Feld-Tabelle nicht kennt, bliebe der Deckungstest gruen,
-// waehrend die abgeleitete Zuordenbarkeits-Allowlist des Boot-Guards ihn stillschweigend
-// mitfuehrt (moeglicherweise als dauerhaft unerfuellbaren Pflicht-Typ).
 test("die Feld-Tabelle deckt GENAU das Produktions-Enum COST_RECORD_TYPES ab (keine zweite Quelle)", () => {
   assert.deepEqual(
     Object.keys(ID_FIELDS_BY_RECORD_TYPE).sort(),
@@ -750,9 +599,6 @@ test("UNASSIGNABLE_COST_RECORD_TYPES deckt sich mit den Belegformen: weder Anker
   assert.ok(SESSION_ONLY_RECORD_TYPES.length > 0, "ohne Session-only-Typen pruefte Stufe 2 nichts");
 });
 
-// KE-P3: `inference` wird nicht mehr abgerufen (s. P3-9) - die Zusage "bleibt unzuordenbar"
-// gilt trotzdem, nur eine Ebene tiefer: assignCostRecords bekommt den Pool direkt (kein
-// Abruf noetig), genau wie ein Sweep ihn faende, haette ihn ein aelterer Pool doch getragen.
 test("assignCostRecords: ein Beleg ohne jede Referenz (inference-Form) bleibt unzuordenbar", () => {
   const pool = {
     ok: true,
@@ -768,10 +614,6 @@ test("assignCostRecords: ein Beleg ohne jede Referenz (inference-Form) bleibt un
   assert.equal(res.records[0].recordType, "sip-trunking");
 });
 
-// Der Fensterfilter greift NUR auf einem der geratenen Kandidaten-Feldnamen
-// (RECORD_TIMESTAMP_FIELDS). `recorded_at` ist ein solcher Name - er stammt NICHT aus der
-// Messung 2026-07-21, dieser Test pinnt also bewusst nur den Codepfad, nicht die
-// Wirklichkeit. Der Test darunter haelt fest, was auf den GEMESSENEN Belegformen gilt.
 test("Belegabruf: Beleg mit geratenem Zeitstempel-Feld ausserhalb des Fensters wird verworfen (recorded_at)", async () => {
   stubFetchByRecordType({
     "sip-trunking": [
@@ -783,14 +625,6 @@ test("Belegabruf: Beleg mit geratenem Zeitstempel-Feld ausserhalb des Fensters w
   assert.equal(res.records.length, 0, "geratenes Zeitstempel-Feld ausserhalb des Fensters -> verworfen");
 });
 
-// LCT-FIX-1 (Runde 3): die EHRLICHE Zusicherung. Das einzige gemessene Zeitfeld ist
-// `started_at` (sip-trunking, Messung 2026-07-21) und es steht bewusst NICHT in
-// RECORD_TIMESTAMP_FIELDS - auf der gemessenen Belegform filtert das Zeitfenster also
-// NICHTS. Damit ist es KEINE zweite Linie hinter der Zuordnung; bei parallel laufenden
-// Calls traegt allein die Call-Lokalitaet der Session (konto-weit gemessen 2026-07-21,
-// aber nie unter Parallelverkehr - s. tasks/lct-DEPLOY-CHECKLIST.md).
-// Der Test faellt, sobald jemand `started_at` aufnimmt - dann ist diese Aussage in
-// voice.js und in tasks/lct-DEPLOY-CHECKLIST.md neu zu bewerten, statt still zu veralten.
 test("Belegabruf: gemessenes started_at ausserhalb des Fensters filtert NICHT (Zeitfenster ist keine zweite Linie)", async () => {
   stubFetchByRecordType({
     "sip-trunking": [
@@ -802,25 +636,10 @@ test("Belegabruf: gemessenes started_at ausserhalb des Fensters filtert NICHT (Z
   assert.equal(res.records.length, 1, "der Anker traegt den Beleg - das Zeitfenster greift auf started_at nicht");
 });
 
-// ---- (e2) Falsifikations-Sonde: das Log-Format der Deploy-Auflage ----
-
-// captureConsole (test/helpers.js) faengt console.log UND console.warn eines Aufrufs ab und
-// restauriert immer, auch beim Wurf (F.I.R.S.T./Independent) - EINE Quelle statt einer
-// lokalen Kopie. Der Erfolgs-Log laeuft ueber console.log, die Fehler-Spur ueber console.warn.
-
 function costRecordsLogLine(lines) {
   return lines.find((line) => line.includes("getVoiceCostRecords ok"));
 }
 
-// An dieser Zeile haengt die laufende Beobachtung der Session-Invariante
-// (tasks/lct-DEPLOY-CHECKLIST.md): sie ist das einzige Instrument, das eine nicht
-// call-lokale Session IM BETRIEB sichtbar machen wuerde - die konto-weite Messung
-// deckt Parallelverkehr nicht ab. Ungepinnt zerbraeche sie still an einem geaenderten
-// Format. Die drei via_-Spalten
-// kommen aus den Fixtures: Anker = sip-trunking + ai-voice-assistant, telnyx_session_id =
-// call-control + recording, call_session_id = speech-to-text + text-to-speech. `inference`
-// wird ab KE-P3 nicht mehr abgerufen (s. P3-9) - rejected bleibt deshalb LEER, statt einen
-// session_unresolved-Eintrag zu tragen: der Beleg erreicht den Pool gar nicht erst.
 test("Belegabruf: Log-Zeile zaehlt je Zuordnungsweg getrennt (Sonde der Deploy-Auflage)", async () => {
   stubRealRecords();
   const lines = await captureConsole(() => fetchAndAssign(WINDOW));
@@ -832,9 +651,6 @@ test("Belegabruf: Log-Zeile zaehlt je Zuordnungsweg getrennt (Sonde der Deploy-A
   );
 });
 
-// Die Spalten muessen auch dann vollzaehlig dastehen, wenn ein Weg nichts beigetragen hat -
-// eine je nach Datenlage verschwindende Spalte macht die Sonde unlesbar (fehlt sie, ist
-// "0 Belege ueber dieses Feld" nicht von "Format geaendert" zu unterscheiden).
 test("Belegabruf: Log-Zeile meldet jeden Zuordnungsweg auch mit 0 (kein Anker gefunden)", async () => {
   stubRealRecords({ ids: FOREIGN_IDS });
   const lines = await captureConsole(() => fetchAndAssign(WINDOW));
@@ -846,35 +662,18 @@ test("Belegabruf: Log-Zeile meldet jeden Zuordnungsweg auch mit 0 (kein Anker ge
   );
 });
 
-// ---- (e3) KE-P1: Vollstaendigkeit kommt aus der ANTWORT, nicht aus der Anforderung ----
-
-// GEMESSENE Werte (Plan F5 / Spec A1, Messung 2026-07-21) - bewusst LITERALE hier und
-// NICHT die Produktions-Konstante COST_RECORDS_PAGE_SIZE: ein Test, der die eigene
-// Konstante spiegelt, prueft nur sich selbst. Genau das war die abgeloeste 250er-Fixture -
-// sie war gruen, weil 250 === 250, und sagte ueber die Wirklichkeit nichts.
-const MEASURED_PAGE_SIZE = 50; // page[size] deckelt hart bei 50 (250/100/50 -> immer 50)
+const MEASURED_PAGE_SIZE = 50;
 const MEASURED_PAGED_META = Object.freeze({ total_results: 212, total_pages: 5, page_size: 50 });
 const MEASURED_SINGLE_PAGE_META = Object.freeze({ total_results: 50, total_pages: 1, page_size: 50 });
 
-// Eine volle Seite call-control-Belege. Der Typ traegt in der Messung KEINEN Anker
-// (call_control_id), sondern telnyx_leg_id + telnyx_session_id - der KOEDER kommt damit
-// aus der gemessenen Form selbst, ohne ein Feld zu erfinden. Er zeigt hier auf eine FREMDE
-// Leg-UUID: wuerde der Code telnyx_leg_id als Zuordnungsquelle benutzen, kaeme KEINER
-// dieser 50 Belege herein und jede Erwartung unten waere falsch.
 function fullCallControlPage() {
   return Array.from({ length: MEASURED_PAGE_SIZE }, () =>
     realRecord("call-control", { cost: "0.001", ids: { ...OWN_IDS, legUuid: FOREIGN_LEG_ID } }),
   );
 }
 
-// Der Anker-Beleg, der die Session ueberhaupt erst aufspannt (Stufe 1). Ohne ihn waere
-// jede Zaehlung unten trivial 0 und der Test bewiese nichts ueber die Untermenge.
 const anchorPage = () => [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })];
 
-// Gegenprobe zur Fail-closed-Richtung. Sagt die Antwort selbst, dass es nur diese eine
-// Seite gibt, bleibt sie vollstaendig - sonst waere jede exakt 50 Belege grosse Menge
-// dauerhaft unmessbar (Deckungsquote 0 %, keine Rueckerstattung mehr, jede Nachforderung
-// gebucht: einseitige Korrektur zulasten des Kunden).
 test("Belegabruf: volle Seite mit meta.total_pages=1 bleibt vollstaendig", async () => {
   const calls = stubFetchByRecordType({
     "sip-trunking": anchorPage(),
@@ -887,15 +686,9 @@ test("Belegabruf: volle Seite mit meta.total_pages=1 bleibt vollstaendig", async
     1 + MEASURED_PAGE_SIZE,
     "Anker-Beleg + alle 50 nur ueber die Session gefundenen call-control-Belege",
   );
-  // Gegenprobe zur Seitenschleife: meta sagt "nur diese eine Seite" -> keine zweite Anfrage.
   assert.deepEqual(pageNumbersFor(calls, "call-control"), [1]);
 });
 
-// KE-P3: die Seite war (mangels meta) UNBEWIESEN vollstaendig - vor P3 hiess das fail-closed
-// (page_truncated, s. Bestandsbericht KE-P1). Ab P3 wird der Beweis stattdessen EMPIRISCH
-// erbracht: die Seitenschleife blaettert nach, bis die naechste (kurze) Seite das Ende
-// zeigt. Das ist mehr Wissen, nicht weniger - P3-2/P3-2b decken den Fall ab, dass die
-// Folgeseiten NIE enden (dann bleibt es bei complete:false, s. dort).
 test("(P3-2c) volle Seite OHNE meta wird nachgeblaettert; erst die kurze Folgeseite beweist das Ende", async () => {
   const calls = stubFetchPages({
     "sip-trunking": [anchorPage()],
@@ -911,21 +704,13 @@ test("(P3-2c) volle Seite OHNE meta wird nachgeblaettert; erst die kurze Folgese
   );
 });
 
-// ---- (h) KE-P3: Seitenschleife ohne geratene Filternamen ----
-
-// GEMESSENE Zeitpunkte fuer die since-Tests: IN_WINDOW_AT liegt im Anrufsfenster (WINDOW),
-// BEFORE_SINCE/AFTER_SINCE liegen vor/nach der since-Grenze SINCE_BOUNDARY.
 const IN_WINDOW_AT = STARTED_AT;
 const SINCE_BOUNDARY = "2026-07-20T09:00:00Z";
 const BEFORE_SINCE = "2026-07-20T08:00:00Z";
 const AFTER_SINCE = "2026-07-20T10:00:00Z";
-const BILLED_CC_COST = "0.001"; // -> 100000 Mikro-Cent (dieselbe Rate wie fullCallControlPage)
+const BILLED_CC_COST = "0.001";
 const BILLED_CC_MICRO = 100_000;
 
-// KOEDER aus der GEMESSENEN Form selbst: call-control fuehrt telnyx_leg_id + telnyx_session_id
-// und NIE einen Anker. Die Leg-UUID zeigt auf eine FREMDE Leg - benutzte der Code sie als
-// Zuordnungsquelle, kaeme keiner dieser Belege herein und jede Erwartung unten waere falsch.
-// Genau dieser Feldname hat live 297 von 297 Belegen verworfen (LCT-FIX-1).
 function pagedCallControlRecord({ cost, billedSec, startedAt = IN_WINDOW_AT }) {
   return realRecord("call-control", {
     cost,
@@ -935,9 +720,6 @@ function pagedCallControlRecord({ cost, billedSec, startedAt = IN_WINDOW_AT }) {
   });
 }
 
-// Das gemessene PAAR je Anruf (A2 Null-Zwilling-Pflicht): der Anker haengt am ersten Bein,
-// der abgerechnete Betrag am zweiten - eines der beiden Beine ist ECHT null. Wer je Typ nur
-// den ersten Treffer nimmt, verliert 0,0401 USD und erstattet ausgegebenes Geld zurueck.
 function sipTrunkingLegPair() {
   return [
     realRecord("sip-trunking", { cost: "0.0", billedSec: 0, extraFields: { started_at: IN_WINDOW_AT, call_sec: 0 } }),
@@ -945,11 +727,8 @@ function sipTrunkingLegPair() {
   ];
 }
 
-// GEMESSENE meta aus Spec A1: {total_results:212, total_pages:5, page_size:50}. 212 = 4x50 +
-// 12, die letzte Seite ist also kurz - derselbe Grenzfall wie oben, nur mit der WIRKLICH
-// gemessenen Zahl (A2: Fixtures spiegeln nur Gemessenes).
 const PAGED_LAST_PAGE_COUNT =
-  MEASURED_PAGED_META.total_results - (MEASURED_PAGED_META.total_pages - 1) * MEASURED_PAGE_SIZE; // 12
+  MEASURED_PAGED_META.total_results - (MEASURED_PAGED_META.total_pages - 1) * MEASURED_PAGE_SIZE;
 
 function fivePagedCallControlPages() {
   const billed = () => pagedCallControlRecord({ cost: BILLED_CC_COST, billedSec: 60 });
@@ -959,7 +738,7 @@ function fivePagedCallControlPages() {
     {
       records: [
         ...Array.from({ length: PAGED_LAST_PAGE_COUNT - 1 }, billed),
-        pagedCallControlRecord({ cost: "0.0", billedSec: 0 }), // Null-Zwilling auf der LETZTEN Seite
+        pagedCallControlRecord({ cost: "0.0", billedSec: 0 }),
       ],
       meta: MEASURED_PAGED_META,
     },
@@ -982,8 +761,6 @@ test("(P3-1) Seitenschleife sammelt ALLE Seiten eines Typs (212 Belege, letzte S
   assert.equal(res.records.filter((record) => record.costMicroCents === 0).length, ZERO_COST_TWIN_COUNT, "beide Null-Zwillinge sind mitgezaehlt");
 });
 
-// 99 identische volle Seiten OHNE Chance, ueber meta.total_pages als vollstaendig zu gelten
-// (meta.total_pages bleibt immer 99) - erzwingt die Seitenobergrenze.
 function manyFullSipTrunkingPages(count) {
   const meta = { total_results: count * MEASURED_PAGE_SIZE, total_pages: count, page_size: MEASURED_PAGE_SIZE };
   const fullPage = () => ({
@@ -1016,9 +793,6 @@ test("(P3-2b) volle Seiten OHNE meta laufen nicht endlos -> complete:false", asy
   assert.ok(pageNumbersFor(calls, "sip-trunking").length < totalPages);
 });
 
-// call-control-Belege ohne (P3-6) bzw. mit dem gemessenen (P3-7/P3-8) Zeitfeld, in Seiten
-// zu je MEASURED_PAGE_SIZE. meta traegt total_pages=3, damit die dritte Seite - erreichte
-// die Schleife sie ueberhaupt - regulaer als letzte Seite endet.
 function threeFullPages(recordFactory) {
   const meta = { total_results: PAGE_COUNT * MEASURED_PAGE_SIZE, total_pages: 3, page_size: MEASURED_PAGE_SIZE };
   return Array.from({ length: 3 }, () => ({
@@ -1031,10 +805,6 @@ function ccRecordWithoutTimestamp() {
   return realRecord("call-control", { cost: BILLED_CC_COST, billedSec: 60, ids: { ...OWN_IDS, legUuid: FOREIGN_LEG_ID } });
 }
 
-// Eine Seite, deren ERSTER Beleg vor `since` liegt und deren RESTLICHE Belege danach -
-// gefolgt von einer Seite, die VOLLSTAENDIG vor `since` liegt. Prueft beide Richtungen der
-// "ganze Seite, nie erster Record"-Regel: P3-4 zeigt, dass Seite 1 die Schleife NICHT
-// vorzeitig beendet; P3-5 zeigt, dass Seite 2 sie sehr wohl beendet (Seite 3 bleibt ungeholt).
 function unsortedCallControlPages() {
   const meta = { total_results: PAGE_COUNT * MEASURED_PAGE_SIZE, total_pages: 3, page_size: MEASURED_PAGE_SIZE };
   const page1 = [
@@ -1068,9 +838,6 @@ test("(P3-6) Beleg OHNE gemessenes Zeitfeld gilt als innerhalb - die Schleife la
   assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, SECOND_PAGE, THIRD_PAGE]);
 });
 
-// speech-to-text traegt sein Zeitfeld gemessen unter `start_time`, NICHT `started_at`
-// (Spec A1). `started_at` ist hier der KOEDER: liest der Code das Zeitfeld generisch statt
-// je Typ, endet er faelschlich nach Seite 1.
 function sttRecordAt(field, value) {
   return realRecord("speech-to-text", {
     cost: "0.0000",
@@ -1126,13 +893,6 @@ test("(P3-11) die Zeitfeld-Tabelle deckt GENAU die abgerufenen Typen ab (keine z
   );
 });
 
-// ---- (j) KE-P6: ElevenLabs-Zeichen am Beleg + Boot-Guard-Kopplung ----
-
-// KE-P6 (Aenderung 1): die KOPPLUNG, nicht die Konstante. Die abgerufene Typenmenge wird aus
-// den ECHTEN (gestubbten) HTTP-Anfragen abgeleitet und der Boot-Guard dagegen gehalten.
-// Eine Assertion, die auf BEIDEN Seiten ASSIGNABLE_COST_RECORD_TYPES einsetzt, pruefte nur,
-// dass dieselbe Konstante zweimal importiert wurde - sie koennte eine von Hand gepflegte
-// Abruf-Liste (Entkopplung) nicht falsifizieren. Dieser Test kann es.
 test("(P6-1) Abruf-Typenmenge und Boot-Guard-Allowlist stammen aus DERSELBEN Quelle", async () => {
   const calls = stubRealRecords();
   await fetchPool();
@@ -1152,10 +912,6 @@ test("(P6-1) Abruf-Typenmenge und Boot-Guard-Allowlist stammen aus DERSELBEN Que
       `nicht abgerufener Typ ${recordType} muss als Pflicht-Typ FATAL abgelehnt werden`);
 });
 
-// GEMESSENE ElevenLabs-Belegform (Plan F6): provider + number_of_characters am
-// text-to-speech-Beleg, cost in SCI-Notation. Der Koeder call_leg_id kommt aus der
-// gemeinsamen Feld-Tabelle (realRecord) - liest der Code ihn als Zuordnungsquelle, faellt
-// jede Erwartung.
 const elevenLabsTtsRecord = ({ chars, ids = OWN_IDS, provider = "elevenlabs", cost = "1.666E-4" }) =>
   realRecord("text-to-speech", { cost, ids, extraFields: { provider, number_of_characters: chars } });
 
@@ -1171,13 +927,6 @@ test("(P6-2) ElevenLabs-Zeichen reisen am zugeordneten text-to-speech-Beleg mit"
     "Nicht-TTS-Belege tragen null, nie 0 - 0 waere eine gemessene Null");
 });
 
-// (P6-3) war urspruenglich EIN Test mit BEIDEN Bedingungen im selben Beleg
-// (chars:"viele", provider:"aws-polly") - "viele" ist fuer sich genommen schon
-// unparsbar, "aws-polly" fuer sich genommen schon der falsche Provider. Damit blieb
-// der Test gruen, wenn man in elevenLabsCharactersOf NUR den Provider-Waechter ODER
-// NUR den record_type-Waechter entfernte - er bestaetigte die eigene Annahme statt
-// sie zu falsifizieren (Spec A2). Drei getrennte Faelle, je EINEN Waechter isoliert
-// und mit sonst gueltigen Werten - fehlt einer, ist genau ein Fall betroffen:
 test("(P6-3a) fremder TTS-Provider zaehlt NICHT auf den ElevenLabs-Zaehler - auch mit gueltiger Menge (Provider-Waechter)", async () => {
   stubFetchByRecordType({
     "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })],
@@ -1217,24 +966,14 @@ test("(P6-4) ein NICHT zugeordneter ElevenLabs-Beleg liefert keine Zeichen (fail
     "fremder Beleg kommt nicht herein - und damit auch seine Zeichen nicht");
 });
 
-// ---- (i) KE-P4: Drossel am gemessenen Minutenfenster ----
-
-// 6 Seiten JE zuordenbarem Typ = 6 x 6 = 36 Anfragen - mehr als das Minutenbudget (30) und
-// bewusst UNTER der Seitenobergrenze, damit dieser Test nicht an MAX_PAGES_PER_RECORD_TYPE
-// haengt. meta ist kohaerent gemessen: 6 Seiten x 50 = 300 Belege.
 const THROTTLE_PAGES_PER_TYPE = 6;
 const THROTTLE_META = Object.freeze({
   total_results: THROTTLE_PAGES_PER_TYPE * MEASURED_PAGE_SIZE,
   total_pages: THROTTLE_PAGES_PER_TYPE,
   page_size: MEASURED_PAGE_SIZE,
 });
-const THROTTLE_REQUEST_COUNT = ASSIGNABLE_COST_RECORD_TYPES.length * THROTTLE_PAGES_PER_TYPE; // 36
+const THROTTLE_REQUEST_COUNT = ASSIGNABLE_COST_RECORD_TYPES.length * THROTTLE_PAGES_PER_TYPE;
 
-// KOEDER (A2) aus der GEMESSENEN Form selbst: wo der Typ telnyx_leg_id/call_leg_id fuehrt,
-// zeigt die Leg-UUID auf eine FREMDE Leg - benutzte der Code sie, waeren die Erwartungen
-// unten falsch. NULL-ZWILLING (A2): der letzte Beleg JEDER Seite ist echt null
-// (cost "0.0", billed_sec 0, call_sec 0) - das zweite Bein. Der Test weist nach, dass die
-// Drossel keinen Beleg verliert, auch nicht den, an dem die Rueckerstattung haengt.
 function throttledPages(recordType) {
   const billed = () => realRecord(recordType, {
     cost: BILLED_CC_COST, billedSec: 60,
@@ -1308,41 +1047,18 @@ test("(P4-3) 429 ohne x-ratelimit-reset -> Wartezeit bis zur naechsten vollen Mi
   assert.equal(calls.length, ATTEMPTS_PER_RATE_LIMITED_PAGE);
 });
 
-// ---- (i2) KE-P4 Runde 2 (Review-Blocker): die PRODUKTIVE Drossel selbst war ungetestet ----
-// P4-1/2/3 injizieren je eine EIGENE Drossel (testThrottle, test-lokales BUDGET_PER_MINUTE) -
-// der modul-globale Default (detailRecordsThrottle in voice.js, echte Uhr/echter Timer) lief
-// nie durch einen Test. Zwei Mutationen blieben dadurch bei gruener Suite unentdeckt:
-// DETAIL_RECORDS_RESERVE_PER_MINUTE 10 -> 0 (die Reserve verschwindet, Budget = Limit) und die
-// Drossel selbst durch ein wirkungsloses Objekt ersetzt (der Live-Zustand VOR KE-P4). Die
-// beiden Tests unten pinnen genau das, OHNE eine eigene Drossel zu injizieren - Mock-Timer
-// statt Wanduhr (Muster t.mock.timers aus bridge-openai-event.test.js), damit die Suite
-// trotzdem in Millisekunden statt einer echten Minute laeuft (F.I.R.S.T.).
-
 test("(P4-R1) das produktive Minutenbudget behaelt die bewusste Reserve unter dem gemessenen Limit", () => {
   assert.equal(DETAIL_RECORDS_LIMIT_PER_MINUTE, EXPECTED_LIMIT_PER_MINUTE, "gemessenes Kontingent, Plan F1");
   assert.equal(DETAIL_RECORDS_RESERVE_PER_MINUTE, EXPECTED_RESERVE_PER_MINUTE, "bewusste Reserve gegen U5/Uhr-Versatz");
   assert.equal(DETAIL_RECORDS_BUDGET_PER_MINUTE, EXPECTED_BUDGET_PER_MINUTE);
 });
 
-// GENAU EIN Request UEBER dem produktiven Budget, verteilt ueber ALLE zuordenbaren Typen (nie
-// mehr als einer insgesamt): die modul-globale Drossel haengt an der ECHTEN Uhr (now =
-// Date.now, beim Modul-Import gebunden - ein spaeter aktivierter Date-Mock wuerde diese
-// Bindung nicht mehr aendern). Ein zweiter Ueberschuss loeste eine KASKADE echter
-// Wartevorgaenge aus, weil das Fenster ohne gemockte Uhr real bleibt, bis eine echte Minute
-// vergeht - dafuer bewusst nicht mehr als einer.
 const WIRING_TYPE_COUNT = ASSIGNABLE_COST_RECORD_TYPES.length;
 const WIRING_BASE_PAGES_PER_TYPE = Math.floor(DETAIL_RECORDS_BUDGET_PER_MINUTE / WIRING_TYPE_COUNT);
 const WIRING_FIRST_TYPE_EXTRA_PAGES =
   DETAIL_RECORDS_BUDGET_PER_MINUTE + 1 - WIRING_BASE_PAGES_PER_TYPE * WIRING_TYPE_COUNT;
-// Maximal moegliche Wartezeit der Drossel ist eine volle Minute (Fenstergrenze exakt
-// getroffen) - 1000 ms Sicherheitsspanne gegen einen Boundary-Rundungsfall, rein virtuell (der
-// Mock-Timer kostet keine echte Zeit).
 const WIRING_TICK_MS = 61_000;
 
-// Seiten NUR fuer die Drossel-MECHANIK: die Kostensumme pruefen P2-2/P4-1 bereits, hier
-// zaehlt allein, wie viele Anfragen die produktive Drossel durchlaesst. EIN realer Beleg je
-// Seite (eigene IDs) haelt die Antwortform gemessen (Spec A1), ohne den Null-Zwilling zu
-// brauchen, den nur eine Kostensummen-Pruefung verlangt (Spec A2).
 function wiringPages(recordType, pageCount) {
   const meta = Object.freeze({
     total_results: pageCount * MEASURED_PAGE_SIZE, total_pages: pageCount, page_size: MEASURED_PAGE_SIZE,
@@ -1383,9 +1099,3 @@ test("(P4-R2) fetchCostRecordPool OHNE injizierte Drossel haelt nach der produkt
     recordType.mock.timers.reset();
   }
 });
-
-// C-P4: hier stand ein Abschnitt (f), der am KONKRETEN Twilio-Adapter zeigte, dass die
-// beiden Beleg-Methoden OPTIONAL am Port sind. Sein Gegenstand war Twilio und ist mit ihm
-// entfallen. Die EIGENSCHAFT bleibt belegt, und zwar adapter-unabhaengig: ein Control-
-// Objekt ohne die Methoden fuehrt zu keinem Abgleich (test/cost-truing-observe.test.js,
-// `const control = {}`) - ein Stub sagt das allgemeiner als ein zweiter echter Adapter.

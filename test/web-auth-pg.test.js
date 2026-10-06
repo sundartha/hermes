@@ -1,9 +1,3 @@
-// Integrationstest fuer makeAccounts/makeSessions gegen das ECHTE Schema (pglite).
-// Die Router-Tests (web-auth.test.js) injizieren Fakes und ueben die echten
-// SQL-Pfade NICHT aus - dieser Test faengt Tabellennamen-/Spalten-/SQL-Fehler
-// (z.B. Singular tenant/account/session vs. Plural), die sonst erst zur Laufzeit
-// unter STORE_BACKEND=pg auffliegen. account/tenant/session sind NICHT unter RLS
-// (Resolver/Session-Pfad laeuft vor app.current_tenant) -> Superuser-Runner reicht.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -21,7 +15,6 @@ test("makeAccounts.upsertOnFirstLogin legt Tenant(suspended)+Account an, idempot
   const { db, accounts } = await setup();
   const r1 = await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
   assert.deepEqual(r1, { tenantId: "t_u1", status: "suspended", role: "member" });
-  // zweiter Login -> kein Duplikat
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
   assert.equal((await db.query(`SELECT count(*)::int AS n FROM account`)).rows[0].n, 1);
   assert.equal(
@@ -33,13 +26,10 @@ test("makeAccounts.upsertOnFirstLogin legt Tenant(suspended)+Account an, idempot
 test("upsertOnFirstLogin setzt tenant.idp_subject=sub (Bruecke zu i9 resolveTenant, Identity-Dedup)", async () => {
   const { db, accounts } = await setup();
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
-  // i9 resolveTenant matcht tenant.idp_subject === sub -> ohne dieses Feld bleiben
-  // Web-Login-Kanal (B) und MCP-Kanal (i9) disjunkt (resolveTenant liefert null).
   assert.equal(
     (await db.query(`SELECT idp_subject FROM tenant WHERE id='t_u1'`)).rows[0].idp_subject,
     "u1",
   );
-  // Repeat-Login bleibt idempotent + ueberschreibt einen aktivierten Status NICHT.
   await accounts.setStatus("t_u1", "active");
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
   assert.equal(
@@ -63,16 +53,11 @@ test("accountByTenant: genau 1 -> {sub,email}; 0 -> null; >1 (mehrdeutig) -> nul
   const { db, accounts } = await setup();
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
   assert.deepEqual(await accounts.accountByTenant("t_u1"), { sub: "u1", email: "u1@x" });
-  // 0 Accounts (Webhook vor Account-Anlage) -> fail-closed null.
   assert.equal(await accounts.accountByTenant("t_ghost"), null);
-  // Zweiter Account auf denselben tenant_id (account.tenant_id ist FK, NICHT unique) ->
-  // mehrdeutig -> fail-closed null (§5.6 B2C-1:1, NICHT raten).
-  await accounts.upsertOnFirstLogin({ sub: "u2", email: "u2@x" }); // legt t_u2 an
+  await accounts.upsertOnFirstLogin({ sub: "u2", email: "u2@x" });
   await db.query(`UPDATE account SET tenant_id = 't_u1' WHERE sub = 'u2'`);
   assert.equal(await accounts.accountByTenant("t_u1"), null);
 });
-
-// ---- CL1-B5: newestAccountIfUnanimousEmail (reines Praedikat, keine DB) -------------------
 
 test("newestAccountIfUnanimousEmail: [] -> null", () => {
   assert.equal(newestAccountIfUnanimousEmail([]), null);
@@ -99,18 +84,11 @@ test("newestAccountIfUnanimousEmail: zwei Zeilen unterschiedlicher Email -> null
   assert.equal(newestAccountIfUnanimousEmail(rows), null);
 });
 
-// ---- CL1-B5: accountByTenant, zwei Zeilen GLEICHER Email -> juengste gewinnt (pglite) -----
-
 test("accountByTenant: zwei Zeilen gleicher Email auf demselben Tenant -> juengste (created_at) gewinnt", async () => {
   const { db, accounts } = await setup();
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "kunde@x" });
-  // Zweiter Account auf denselben Tenant, DIESELBE Email (CL1-B5: Vertragsende-Cleanup
-  // loescht den WorkOS-User, die account-Zeile bleibt stehen; ein zurueckkehrender Kunde
-  // haengt einen zweiten sub an). account.tenant_id ist FK, nicht unique (s.o.).
-  await accounts.upsertOnFirstLogin({ sub: "u2", email: "kunde@x" }); // legt t_u2 an
+  await accounts.upsertOnFirstLogin({ sub: "u2", email: "kunde@x" });
   await db.query(`UPDATE account SET tenant_id = 't_u1' WHERE sub = 'u2'`);
-  // created_at deterministisch setzen statt auf now()-Aufloesung zu vertrauen: u2 ist die
-  // JUENGERE Zeile (spaeterer Zeitstempel) und muss gewinnen.
   await db.query(`UPDATE account SET created_at = $1 WHERE sub = $2`, ["2026-01-01T00:00:00Z", "u1"]);
   await db.query(`UPDATE account SET created_at = $1 WHERE sub = $2`, ["2026-01-02T00:00:00Z", "u2"]);
   assert.deepEqual(await accounts.accountByTenant("t_u1"), { sub: "u2", email: "kunde@x" });
@@ -121,7 +99,6 @@ test("makeAccounts.setStatus aktiviert; upsert liest aktuellen Status zurueck (n
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
   await accounts.setStatus("t_u1", "active");
   assert.equal((await accounts.resolve("u1")).status, "active");
-  // Wiederkehrender Login eines bereits aktiven Tenants meldet 'active', nicht 'suspended'.
   const again = await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
   assert.equal(again.status, "active");
 });
@@ -178,7 +155,7 @@ test("Phase tenant-prolif-a: zweiter verifizierter Login mit gleicher Email merg
   const r1 = await accounts.upsertOnFirstLogin({ sub: "u1", email: "shared@x" });
   const r2 = await accounts.upsertOnFirstLogin({ sub: "u2", email: "shared@x" });
   assert.equal(r1.tenantId, "t_u1");
-  assert.equal(r2.tenantId, "t_u1"); // sub2 erbt sub1s Tenant, NICHT t_u2
+  assert.equal(r2.tenantId, "t_u1");
   assert.equal((await db.query(`SELECT count(*)::int AS n FROM tenant`)).rows[0].n, 1);
   assert.equal(
     (await db.query(`SELECT count(*)::int AS n FROM tenant WHERE id='t_u2'`)).rows[0].n,
@@ -195,9 +172,9 @@ test("Phase tenant-prolif-a: zweiter verifizierter Login mit gleicher Email merg
 test("Phase tenant-prolif-a: neue verifizierte Email legt neuen Tenant an (Kein-Treffer, heutiges Verhalten)", async () => {
   const { db, accounts } = await setup();
   const r1 = await accounts.upsertOnFirstLogin({ sub: "u1", email: "a@x" });
-  const r2 = await accounts.upsertOnFirstLogin({ sub: "u2", email: "b@x" }); // andere Email
+  const r2 = await accounts.upsertOnFirstLogin({ sub: "u2", email: "b@x" });
   assert.equal(r1.tenantId, "t_u1");
-  assert.equal(r2.tenantId, "t_u2"); // kein Merge
+  assert.equal(r2.tenantId, "t_u2");
   assert.equal((await db.query(`SELECT count(*)::int AS n FROM tenant`)).rows[0].n, 2);
   assert.equal(
     (await db.query(`SELECT idp_subject FROM tenant WHERE id='t_u2'`)).rows[0].idp_subject,
@@ -215,8 +192,6 @@ test("Phase tenant-prolif-a: unverifizierte/leere Email -> Reject, KEIN Tenant/A
 
 test("Phase tenant-prolif-a: Fehler beim Account-INSERT rollt den neuen Tenant zurueck (Transaktion, kein Orphan)", async () => {
   const { db } = await setup();
-  // Fault-Injector: laesst BEGIN + Dedup-SELECT + Tenant-INSERT durch, wirft aber beim
-  // account-INSERT -> upsertOnFirstLogin MUSS ROLLBACK fahren und den Tenant mit zuruecknehmen.
   const failingRunner = {
     withClient: (fn) =>
       fn({
@@ -235,27 +210,12 @@ test("Phase tenant-prolif-a: Fehler beim Account-INSERT rollt den neuen Tenant z
   );
 });
 
-// ---- Review-Blocker Runde 1 ------------------------------------------
-
 test("Review-Blocker Runde 1 (behaviorAsIntended): Rueckgabe-tenantId nach Repeat-Login MUSS accounts.resolve() (Autorisierung) entsprechen, auch bei Alt-Duplikat", async () => {
   const { db, accounts } = await setup();
-  // Alt-Duplikat-Population simulieren (die eigentliche Zielgruppe der Phase, laut RCA
-  // schon in Prod vorhanden): zwei Accounts mit unterschiedlichen Tenants existieren
-  // BEREITS, bevor ihre Emails identisch werden. u1 zuerst -> aeltester Account, gewinnt
-  // spaeter den Dedup-SELECT (ORDER BY created_at ASC).
-  await accounts.upsertOnFirstLogin({ sub: "u1", email: "shared@x" }); // legt t_u1 an (aelter)
-  await accounts.upsertOnFirstLogin({ sub: "u2", email: "other@x" }); // legt t_u2 an (eigener Tenant)
-  // u2s Email wird nachtraeglich identisch zu u1s (z.B. IdP-Merge) - u2 hat bereits einen
-  // EIGENEN Tenant (t_u2), lange bevor die Dedup-Logik das erste Mal fuer diese Email laeuft.
+  await accounts.upsertOnFirstLogin({ sub: "u1", email: "shared@x" });
+  await accounts.upsertOnFirstLogin({ sub: "u2", email: "other@x" });
   await db.query(`UPDATE account SET email = 'shared@x' WHERE sub = 'u2'`);
 
-  // Repeat-Login von u2 (post-fix): resolveOrCreateTenant findet u1 (aelter) als Dedup-
-  // Gewinner, ABER der ON-CONFLICT-Account-Upsert kippt u2s tenant_id NICHT (Invariante
-  // "ein Repeat-Login darf die Tenant-Bindung nicht kippen", Kommentar bei INSERT INTO
-  // account oben) - u2 bleibt auf t_u2. Die Rueckgabe von upsertOnFirstLogin MUSS exakt das
-  // treffen, was accounts.resolve() (= req.tenant, die Autorisierungsquelle in webAuth)
-  // danach liest - sonst bindet mintSession Session/ensureTenant/applyTenantIdentity an
-  // einen ANDEREN Tenant als die Autorisierung.
   const repeat = await accounts.upsertOnFirstLogin({ sub: "u2", email: "shared@x" });
   const authz = await accounts.resolve("u2");
 
@@ -268,15 +228,6 @@ test("Review-Blocker Runde 1 (behaviorAsIntended): Rueckgabe-tenantId nach Repea
 });
 
 test("Review-Blocker Runde 1 (P16/G26): resolveOrCreateTenant serialisiert ueber pg_advisory_xact_lock VOR dem Dedup-SELECT", async () => {
-  // Zwei echte simultane Postgres-Sessions lassen sich mit dem Single-Session-Test-Runner
-  // dieser Datei (EINE PGlite-Instanz) nicht herstellen (PGlite kennt nur eine Session -
-  // ein zweites BEGIN auf derselben Verbindung startet KEINE unabhaengige Transaktion,
-  // das Lock-Statement wuerde also nie tatsaechlich blockieren und ein Race nicht sichtbar
-  // machen). Dieser Test beweist stattdessen den VERTRAG, der das Race in echtem Postgres
-  // schliesst: der Advisory-Lock auf der Email wird VOR dem Dedup-SELECT innerhalb derselben
-  // Transaktion angefordert - pg_advisory_xact_lock() ist dokumentiertes, battle-getestetes
-  // Postgres-Verhalten (blockiert konkurrierende Sessions mit demselben Schluessel bis
-  // COMMIT/ROLLBACK), das hier nicht neu zu verifizieren ist.
   const db = new PGlite();
   await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
   const calls = [];
@@ -307,12 +258,8 @@ test("Review-Blocker Runde 1 (P16/G26): resolveOrCreateTenant serialisiert ueber
   );
 });
 
-// ---- Review-Blocker Runde 2 -------------------------------------------
-
 test("Review-Blocker Runde 2 (G26): case-abweichende Schreibweise derselben Email dedupt trotzdem auf denselben (aeltesten) Tenant", async () => {
   const { db, accounts } = await setup();
-  // Autofill-/Copy-Paste-Varianten derselben realen Adresse - VOR dem Fix matchte der
-  // case-sensitive Dedup-SELECT das nicht und legte einen zweiten Tenant an.
   const r1 = await accounts.upsertOnFirstLogin({ sub: "u1", email: "Shared@Example.com" });
   const r2 = await accounts.upsertOnFirstLogin({ sub: "u2", email: "shared@example.com" });
   assert.equal(r1.tenantId, "t_u1");
@@ -338,8 +285,6 @@ test("Review-Blocker Runde 2 (G26): reine Whitespace-Email wird wie eine fehlend
 test("Review-Blocker Runde 2 (G26): backfillAccountEmailCase normalisiert Bestandszeilen idempotent (Migrations-Backfill)", async () => {
   const db = new PGlite();
   await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
-  // Bestandszeile aus der Zeit VOR der Normalisierung: direkt eingefuegt (nicht ueber
-  // upsertOnFirstLogin, das schon normalisiert) - simuliert uneinheitliche Prod-Altdaten.
   await db.query(`INSERT INTO tenant (id, status) VALUES ('t_legacy', 'suspended')`);
   await db.query(
     `INSERT INTO account (sub, tenant_id, email, role) VALUES ('legacy', 't_legacy', 'Legacy@X.De', 'member')`,
@@ -350,7 +295,6 @@ test("Review-Blocker Runde 2 (G26): backfillAccountEmailCase normalisiert Bestan
     (await db.query(`SELECT email FROM account WHERE sub = 'legacy'`)).rows[0].email,
     "legacy@x.de",
   );
-  // Zweiter Lauf: WHERE-Filter trifft 0 Zeilen -> kein Drift (Idempotenz, Muster backfillPeriodStart).
   await backfillAccountEmailCase(migrateDb);
   assert.equal(
     (await db.query(`SELECT email FROM account WHERE sub = 'legacy'`)).rows[0].email,
@@ -358,19 +302,11 @@ test("Review-Blocker Runde 2 (G26): backfillAccountEmailCase normalisiert Bestan
   );
 });
 
-// ---- Review-Blocker Runde 3 -------------------------------------------
-
 test("Review-Blocker Runde 3 (G3/S1): aeltester Alt-Account ist closed -> neuer Tenant statt Merge-Falle", async () => {
   const { db, accounts } = await setup();
-  // u1 zuerst -> aeltester Account fuer diese Email; sein Tenant wird danach hart
-  // geschlossen (status=closed passiert heute nur per Admin-/DB-Aktion, kein automatisierter
-  // Pfad existiert im src - direktes UPDATE simuliert genau das).
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "shared@x" });
   await db.query(`UPDATE tenant SET status = 'closed' WHERE id = 't_u1'`);
 
-  // Neuer sub, gleiche Email: der Dedup-SELECT darf t_u1 NICHT treffen (sonst haengt u2
-  // dauerhaft auf einem toten Tenant und bekommt nach jedem Login 403 ohne Ausweg) -> faellt
-  // in den Kein-Treffer-Pfad und bekommt einen frischen, eigenen Tenant.
   const r2 = await accounts.upsertOnFirstLogin({ sub: "u2", email: "shared@x" });
   assert.equal(r2.tenantId, "t_u2", "closed-Tenant darf kein Merge-Ziel sein");
   assert.equal(r2.status, "suspended", "frischer Tenant startet suspended, nicht closed");
@@ -383,8 +319,6 @@ test("Review-Blocker Runde 3 (G3/S1): aeltester Alt-Account ist closed -> neuer 
 
 test("Review-Blocker Runde 3 (G3/S1): closed-Alt-Account wird uebersprungen, juengerer nicht-closed Alt-Account bleibt Merge-Ziel", async () => {
   const { db, accounts } = await setup();
-  // Drei Accounts derselben Email, aeltester zuerst: u1 (wird closed), u2 (bleibt suspended -
-  // das erwartete Merge-Ziel), u3 (neuer Login).
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "shared@x" });
   await accounts.upsertOnFirstLogin({ sub: "u2", email: "other@x" });
   await db.query(`UPDATE account SET email = 'shared@x' WHERE sub = 'u2'`);
