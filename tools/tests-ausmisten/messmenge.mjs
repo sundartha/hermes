@@ -6,7 +6,7 @@ import { chdir, cwd } from "node:process";
 
 import { cruise } from "dependency-cruiser";
 
-import { git, quellenDesBereichs, testpfadFrei } from "./pfade.mjs";
+import { git, gitGelingt, quellenDesBereichs, testpfadFrei } from "./pfade.mjs";
 
 export const TESTDATEI = /^test\/.+\.test\.[cm]?js$/;
 const QUELLDATEI = /^src\/.+\.[cm]?js$/;
@@ -15,6 +15,8 @@ const WURZELN = ["src", "test"];
 const OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const KEIN_TREFFER = 1;
 const QUELLE_IN_TEXT = /["'`][^"'`\n]*?\bsrc\/([\w./-]+\.[cm]?js)(?=["'`?#])/g;
+const WERKZEUGPFAD = /^(?:tools|scripts)\//;
+const WERKZEUG_IN_TEXT = /["'`][^"'`\n]*?\b(?:tools|scripts)\/[^"'`\n]*["'`]/;
 const MAX_GIT_AUSGABE = 268_435_456;
 
 export async function importgraph() {
@@ -137,4 +139,56 @@ export function messmenge({ bereich, bereiche, geaendert, alt }) {
   const eigene = quellenDesBereichs(bereich, bereiche, alleQuellen);
   const dateien = [...new Set([...eigene, ...quellen, ...genannt])].sort();
   return { dateien, alt: tests, beobachtet: besucht };
+}
+
+function kette(test, graph) {
+  const besucht = new Set([test]);
+  const ziele = new Set();
+  for (const datei of besucht) {
+    for (const ziel of graph.importe.get(datei) ?? []) {
+      ziele.add(ziel);
+      if (TESTHILFE.test(ziel) && !QUELLDATEI.test(ziel)) besucht.add(ziel);
+    }
+  }
+  return { besucht: [...besucht], ziele: [...ziele] };
+}
+
+function testVerstoesse(test, { alt, dateien }) {
+  const { besucht, ziele } = kette(test, alt.graph);
+  const vorhanden = new Set(quelldateien(alt.graph));
+  const quellen = [
+    ...ziele.filter((ziel) => QUELLDATEI.test(ziel)),
+    ...genannteQuellen(besucht, { rev: alt.rev, vorhanden }),
+  ];
+  const befunde = [];
+  if (!quellen.some((quelle) => dateien.has(quelle))) {
+    befunde.push(
+      `${test}: erreicht keine src-Datei der Messmenge; seine Wirkung lässt sich so nicht messen`,
+    );
+  }
+  const werkzeug = ziele.filter((ziel) => WERKZEUGPFAD.test(ziel));
+  const genannt = besucht.filter((datei) => WERKZEUG_IN_TEXT.test(inhaltIm(alt.rev, datei)));
+  if (werkzeug.length > 0 || genannt.length > 0) {
+    befunde.push(
+      `${test}: prüft tools/ oder scripts/ (${[...werkzeug, ...genannt].join(", ")}); solche Tests mistet die Ausnahme nicht aus`,
+    );
+  }
+  return befunde;
+}
+
+function ungenutzt(pfad, alt) {
+  if (TESTDATEI.test(pfad) || !gitGelingt(["cat-file", "-e", `${alt.rev}:${pfad}`])) return [];
+  const nutzer = [...abhaengige([pfad], alt)].filter((datei) => TESTDATEI.test(datei));
+  if (nutzer.length > 0) return [];
+  return [
+    `${pfad}: keine Testdatei lädt oder nennt diese Datei; ihre Änderung lässt sich nicht messen`,
+  ];
+}
+
+export function mengenVerstoesse({ geaendert, alt, menge }) {
+  const dateien = new Set(menge.dateien);
+  return [
+    ...menge.alt.flatMap((test) => testVerstoesse(test, { alt, dateien })),
+    ...geaendert.flatMap((pfad) => ungenutzt(pfad, alt)),
+  ];
 }

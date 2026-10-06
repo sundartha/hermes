@@ -35,6 +35,9 @@ const ANDERE_SHA = "0123456789abcdef0123456789abcdef01234567";
 const BESTAND = "tools/basis/selbstpruefung.json";
 const KURZE_SHA = 7;
 const ZEITGLIEDER = "tools/basis/zeitglieder-bestand.json";
+const MIT_QUELLE = 'import "../../src/post/eingang.js";\n';
+const MIT_QUELLE_CJS = 'require("../../src/post/eingang.js");\n';
+const WERKZEUG_DATEI = "tools/pruefen.mjs";
 const MERGE_EINSTELLUNGEN = [
   "-c",
   "user.name=Probe",
@@ -105,7 +108,7 @@ async function pruefe(context, fall = {}) {
   const pr = fall.pr?.(standardPr(werte)) ?? standardPr(werte);
   const status = fall.status === undefined ? standardStatus() : fall.status;
   const routen = new Map([
-    [`GET /repos/${REPOSITORY}/pulls/${PR_NUMMER}`, pr],
+    [`GET /repos/${REPOSITORY}/pulls/${PR_NUMMER}`, fall.prAntwort ?? pr],
     [`GET /repos/${REPOSITORY}/commits/${pr.head.sha}/status`, status],
     [`GET /repos/${REPOSITORY}/actions/runs/${LAUF_ID}`, fall.laufAntwort ?? lauf],
     [
@@ -425,11 +428,11 @@ test("ausmisten-testschutz: ein Test, der eine geänderte Datei beim Namen liest
   const leser = "test/post/werte.test.js";
   const dateien = {
     "test/fixtures/werte.json": '{ "a": 1 }\n',
-    [leser]: 'const name = "werte.json";\nvoid name;\n',
+    [leser]: `${MIT_QUELLE}const name = "werte.json";\nvoid name;\n`,
   };
   const branch = { weg: [], neu: { "test/fixtures/werte.json": '{ "a": 2 }\n' } };
   const master = {
-    neu: { [leser]: 'const name = "werte.json";\n' },
+    neu: { [leser]: `${MIT_QUELLE}const name = "werte.json";\n` },
   };
   erwarteGesperrt(
     await pruefe(context, { dateien, master, branch }),
@@ -440,9 +443,14 @@ test("ausmisten-testschutz: ein Test, der eine geänderte Datei beim Namen liest
 test("ausmisten-testschutz: ein Test, der eine geänderte Hilfe per require ohne Endung lädt, wird beobachtet", async (context) => {
   const hilfe = "test/hilfe/alt.cjs";
   const leser = "test/post/alt.test.cjs";
-  const dateien = { [hilfe]: "module.exports = 1;\n", [leser]: 'require("../hilfe/alt");\n' };
+  const dateien = {
+    [hilfe]: "module.exports = 1;\n",
+    [leser]: `${MIT_QUELLE_CJS}require("../hilfe/alt");\n`,
+  };
   const branch = { weg: [], neu: { [hilfe]: "module.exports = 2;\n" } };
-  const master = { neu: { [leser]: 'require("../hilfe/alt");\nrequire("node:assert");\n' } };
+  const master = {
+    neu: { [leser]: `${MIT_QUELLE_CJS}require("../hilfe/alt");\nrequire("node:assert");\n` },
+  };
   erwarteGesperrt(
     await pruefe(context, { dateien, master, branch }),
     `seit der Messung geändert: ${leser}`,
@@ -521,4 +529,75 @@ test("ausmisten-testschutz: fehlende Leserechte auf den Status geben nichts frei
 
 test("ausmisten-testschutz: fehlende Leserechte auf den Lauf geben nichts frei", async (context) => {
   erwarteGesperrt(await pruefe(context, { laufAntwort: VERBOTEN }), "HTTP 403");
+});
+
+test("ausmisten-testschutz: ein gelöschter Test, der nur tools/ prüft, gibt nichts frei", async (context) => {
+  const nurWerkzeug = "test/post/werkzeug.test.js";
+  const dateien = {
+    [WERKZEUG_DATEI]: "export const ok = true;\n",
+    [nurWerkzeug]: 'import "../../tools/pruefen.mjs";\n',
+  };
+  const ergebnis = await pruefe(context, { dateien, branch: { weg: [nurWerkzeug] } });
+  erwarteGesperrt(ergebnis, `${nurWerkzeug}: erreicht keine src-Datei der Messmenge`);
+  assert.ok(
+    ergebnis.ausgabe.includes(`${nurWerkzeug}: prüft tools/ oder scripts/`),
+    ergebnis.ausgabe,
+  );
+});
+
+test("ausmisten-testschutz: ein gelöschter Test, der neben src auch tools/ importiert, gibt nichts frei", async (context) => {
+  const gemischt = "test/post/gemischt.test.js";
+  const dateien = {
+    [WERKZEUG_DATEI]: "export const ok = true;\n",
+    [gemischt]: `${MIT_QUELLE}import "../../tools/pruefen.mjs";\n`,
+  };
+  const ergebnis = await pruefe(context, { dateien, branch: { weg: [gemischt] } });
+  erwarteGesperrt(ergebnis, `${gemischt}: prüft tools/ oder scripts/ (${WERKZEUG_DATEI}`);
+});
+
+test("ausmisten-testschutz: ein gelöschter Test, der scripts/ nur als Text nennt, gibt nichts frei", async (context) => {
+  const nennt = "test/post/nennt.test.js";
+  const dateien = {
+    [nennt]: `${MIT_QUELLE}const skript = "scripts/check-setup.js";\nvoid skript;\n`,
+  };
+  const ergebnis = await pruefe(context, { dateien, branch: { weg: [nennt] } });
+  erwarteGesperrt(ergebnis, `${nennt}: prüft tools/ oder scripts/ (${nennt})`);
+});
+
+test("ausmisten-testschutz: eine geänderte Datei unter test/sicherheit/ gibt nichts frei", async (context) => {
+  const sicherheit = "test/sicherheit/grenze.test.js";
+  const dateien = { [sicherheit]: MIT_QUELLE };
+  const branch = { weg: [DOPPELT], neu: { [sicherheit]: `${MIT_QUELLE}void 1;\n` } };
+  erwarteGesperrt(
+    await pruefe(context, { dateien, branch }),
+    `${sicherheit}: beim Ausmisten sind nur Dateien`,
+  );
+});
+
+test("ausmisten-testschutz: eine geänderte Datendatei, die kein Test nutzt, gibt nichts frei", async (context) => {
+  const daten = "test/daten/frei.json";
+  const dateien = { [daten]: '{ "a": 1 }\n' };
+  const branch = { weg: [DOPPELT], neu: { [daten]: '{ "a": 2 }\n' } };
+  erwarteGesperrt(
+    await pruefe(context, { dateien, branch }),
+    `${daten}: keine Testdatei lädt oder nennt diese Datei`,
+  );
+});
+
+test("ausmisten-testschutz: eine geänderte Datendatei, die ein Test mit src-Bezug nennt, bleibt frei", async (context) => {
+  const daten = "test/daten/genutzt.json";
+  const leser = "test/post/liest.test.js";
+  const dateien = {
+    [daten]: '{ "a": 1 }\n',
+    [leser]: `${MIT_QUELLE}const name = "genutzt.json";\nvoid name;\n`,
+  };
+  const branch = { weg: [DOPPELT], neu: { [daten]: '{ "a": 2 }\n' } };
+  const ergebnis = await pruefe(context, { dateien, branch });
+  assert.equal(ergebnis.status, EXIT_FREI, ergebnis.ausgabe);
+});
+
+test("ausmisten-testschutz: ein Fehler beim Abruf des PRs ergibt „gilt nicht“", async (context) => {
+  const ergebnis = await pruefe(context, { prAntwort: VERBOTEN });
+  assert.equal(ergebnis.status, EXIT_GESPERRT, ergebnis.ausgabe);
+  assert.match(ergebnis.ausgabe, /die Ausnahme „Tests ausmisten“ gilt nicht: .*HTTP 403/);
 });
