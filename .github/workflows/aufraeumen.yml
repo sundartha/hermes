@@ -1,0 +1,264 @@
+name: Aufräumen
+
+on:
+  schedule:
+    - cron: "37 2 * * *"
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/aufraeumen.yml
+      - tools/ziele.mjs
+      - tools/ziele/**
+
+permissions: {}
+
+concurrency:
+  group: aufraeumen
+  cancel-in-progress: false
+
+jobs:
+  ziel:
+    name: Ziel wählen
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+      issues: write
+    outputs:
+      ausgang: ${{ steps.fixer.outputs.ausgang || steps.wahl.outputs.ausgang || steps.vorpruefung.outputs.ausgang }}
+      agent: ${{ steps.fixer.outputs.agent }}
+      patch_sha: ${{ steps.fixer.outputs.patch_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Vorprüfung
+        id: vorpruefung
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/ziele.mjs vorpruefen --ordner /tmp/ziele
+
+      - name: npm ci
+        if: steps.vorpruefung.outputs.ausgang == 'weiter'
+        run: npm ci --ignore-scripts
+
+      - name: Ziel wählen
+        id: wahl
+        if: steps.vorpruefung.outputs.ausgang == 'weiter'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/ziele.mjs waehlen --ordner /tmp/ziele
+
+      - name: Fixer
+        id: fixer
+        if: steps.wahl.outputs.ausgang == 'weiter'
+        run: node tools/ziele.mjs fixen --ordner /tmp/ziele
+
+      - name: Ziel hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ziel
+          path: /tmp/ziele/ziel
+          retention-days: 90
+          if-no-files-found: ignore
+
+  agent:
+    name: Agent
+    needs: ziel
+    if: needs.ziel.result == 'success' && needs.ziel.outputs.ausgang == 'weiter' && needs.ziel.outputs.agent == 'ja'
+    runs-on: ubuntu-latest
+    environment: wartung
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      ausgang: ${{ steps.agent.outputs.ausgang }}
+      patch_sha: ${{ steps.agent.outputs.patch_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Ziel laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ziel
+          path: /tmp/ziele/ziel
+
+      - name: Agenten-Programm installieren
+        run: npm ci --ignore-scripts --prefix tools/pruefer
+
+      - name: Aufräumen lassen
+        id: agent
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: node tools/ziele.mjs agent --ordner /tmp/ziele
+
+      - name: Agent hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: agent
+          path: /tmp/ziele/agent
+          retention-days: 90
+          if-no-files-found: ignore
+
+  pruefen:
+    name: Änderung prüfen
+    needs: [ziel, agent]
+    if: always() && needs.ziel.result == 'success' && needs.ziel.outputs.ausgang == 'weiter' && (needs.agent.result == 'skipped' || needs.agent.outputs.ausgang == 'weiter')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      ausgang: ${{ steps.pruefung.outputs.ausgang }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Ziel laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ziel
+          path: /tmp/ziele/ziel
+
+      - name: Agent laden
+        if: needs.agent.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: agent
+          path: /tmp/ziele/agent
+
+      - name: Prüfen
+        id: pruefung
+        run: node tools/ziele.mjs pruefen --ordner /tmp/ziele
+
+      - name: Prüfung hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pruefung
+          path: /tmp/ziele/pruefung
+          retention-days: 90
+          if-no-files-found: ignore
+
+  pr:
+    name: PR anlegen
+    needs: [ziel, agent, pruefen]
+    if: always() && needs.pruefen.result == 'success' && needs.pruefen.outputs.ausgang == 'weiter'
+    runs-on: ubuntu-latest
+    environment: wartung
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Ziel laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ziel
+          path: /tmp/ziele/ziel
+
+      - name: Agent laden
+        if: needs.agent.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: agent
+          path: /tmp/ziele/agent
+
+      - name: Commit anlegen
+        env:
+          ZIEL_PRUEFSUMME: ${{ needs.ziel.outputs.patch_sha }}
+          AGENT_PRUEFSUMME: ${{ needs.agent.outputs.patch_sha }}
+        run: node tools/ziele.mjs commit --ordner /tmp/ziele
+
+      - name: Push und PR
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: node tools/ziele.mjs pr --ordner /tmp/ziele
+
+      - name: PR hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr
+          path: /tmp/ziele/pr
+          retention-days: 90
+          if-no-files-found: ignore
+
+  ergebnis:
+    name: Ergebnis
+    needs: [ziel, agent, pruefen, pr]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Teilergebnisse laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          path: /tmp/ziele
+
+      - name: Ergebnis
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_ERGEBNISSE: ${{ toJSON(needs) }}
+        run: node tools/ziele.mjs ergebnis --ordner /tmp/ziele --workflow aufraeumen
+
+      - name: Ergebnis hochladen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ergebnis
+          path: /tmp/ziele/ergebnis
+          retention-days: 90

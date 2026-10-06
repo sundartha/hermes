@@ -2,6 +2,7 @@
   "monatsMinuten": 3000,
   "minutenJeLauf": {
     "Aufräumen": 10,
+    "Auswertung": 10,
     "Kartenlauf": 20,
     "Prüfer": 15,
     "Wochenbericht": 5
