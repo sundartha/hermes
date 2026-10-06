@@ -1338,7 +1338,7 @@ describe("findPinMismatches (Attrappe)", () => {
 // bewegt und ein neuer Verstoss doch.
 const PROBE_PFAD = "test/dummy-probe.test.js";
 const PROBE_CODE = "export function probe(q) {\n  return q;\n}\n";
-const PROBE_CODE_VERSCHOBEN = `// Kommentar, der nur Zeilen verschiebt.\n${PROBE_CODE}`;
+const PROBE_CODE_VERSCHOBEN = `\n${PROBE_CODE}`;
 const PROBE_CODE_SCHLECHTER = `${PROBE_CODE}export function zweite(x) {\n  return x;\n}\n`;
 const IGNORIERTER_PFAD = "data/dummy-probe.js";
 const KAPUTTER_CODE = "export function probe(((;\n";
