@@ -1,12 +1,3 @@
-// BK2 — Checkout-Verkettung: Kachel-CTA -> Stripe. Prueft die Plan-Mitnahme durch den
-// Karten-Umweg: setup-checkout haengt den (katalog-validierten) Plan an die Stripe-
-// successUrl, billing/return liest req.query.plan und bucht+aktiviert direkt (gefuehrter
-// no_card-Flow: keine Karte -> Checkout -> Rueckkehr -> Plan automatisch gebucht).
-//
-// Kompositions-Integrationstest nach Muster w4/p5/i9: reines pglite (offline, F.I.R.S.T.),
-// KEIN Server-Spawn (Lehre p6a-Stall). Fake-Billing mit createSetupCheckoutSession-Spy
-// (faengt successUrl) + createSubscription-Spy (faengt priceId). PG-Account bleibt suspended
-// (KEIN accounts.setStatus(active)) -> der Status-Flip im return-Flow ist beobachtbar.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -31,7 +22,7 @@ const TENANT = "t_sub-bk2";
 const CUSTOMER = "cus_b";
 const SESSION = "cs_b";
 const PERIOD_END = 1893456000;
-const PERIOD_START = 1890864000; // Unix-Sek, Periodenanker der Fake-Session (fix, P12/R)
+const PERIOD_START = 1890864000;
 const CHECKOUT_OUTCOME = Object.freeze({
   customerId: CUSTOMER,
   paymentMethodId: "pm_b",
@@ -45,15 +36,9 @@ const CONFIG = {
   publicUrl: "https://test.local",
   stripeStarterPriceId: "price_starter",
   stripeBusinessPriceId: "price_business",
-  stripeCustomerRetryDelayMs: 0, // Self-Heal-Tests warten nie echt (P12/T9)
+  stripeCustomerRetryDelayMs: 0,
 };
 
-// Fake-Billing (in-process, KEIN Netz). spy.successUrl faengt die an Stripe uebergebene
-// successUrl (BK2-Plan-Carry); spy.subParams faengt die createSubscription-Parameter
-// (priceId). getCheckoutSessionResult liefert IMMER den vorgeseedeten Customer -> die
-// Karte bindet im return-Flow (Customer-Match in card-setup.js). staleCustomerHeal (Fix B):
-// der ERSTE createSubscriptionCheckoutSession-Call wirft CustomerMissingError (stale
-// gespeicherter Customer), der Heal-Retry (mit dem frisch angelegten Customer) gelingt.
 function fakeBilling(spy = {}, checkoutOutcome = {}, { staleCustomerHeal = false } = {}) {
   let subCheckoutCallCount = 0;
   return {
@@ -88,9 +73,6 @@ function fakeBilling(spy = {}, checkoutOutcome = {}, { staleCustomerHeal = false
 
 const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
-// Harness wie w4-setup(): Store + Identitaets-Schicht + Self-Service-Routen auf einer
-// Wegwerf-App. Zusaetzlich Customer cus_b vorgeseedet (ohne payment_method - die Karte
-// wird erst im return-Flow gebunden). subscribed -> ein bestehendes Abo vorseeden (Case 7).
 async function setup({
   paymentEnabled = true,
   subscribed = false,
@@ -106,9 +88,6 @@ async function setup({
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
 
-  // Store-Mirror: Tenant (status=ACTIVE per registerTenant-Default) + Customer ohne pm.
-  // cardOnFile -> zusaetzlich ein gebundenes payment_method (Zustand NACH einem
-  // abgeschlossenen ersten Return; unterscheidet Doppel-Redirect vom Webhook-Race).
   const s = store.load();
   ops.registerTenant(s, TENANT, { firstName: "Kunde", lastName: "BK2", idpSubject: SUB });
   ops.setTenantStripe(s, TENANT, {
@@ -123,8 +102,6 @@ async function setup({
     });
   }
 
-  // PG-Account: upsertOnFirstLogin legt 'suspended' an. KEIN setStatus(active) -> der
-  // Status-Flip im return-Flow ist beobachtbar (Deadlock-Aufloesung wie p5).
   await accounts.upsertOnFirstLogin({ sub: SUB, email: "bk2@kunde.de" });
   const { id: sessionId } = await sessions.create({ sub: SUB, tenantId: TENANT, ttlSeconds: 3600 });
 
@@ -132,8 +109,6 @@ async function setup({
   const webAuthPendingMw = webAuthAllowPending({ secret: SECRET, sessions, accounts });
   const billingSpy = {};
   const provisionSpy = [];
-  // Self-Heal (Fix B): faengt audit-Aufrufe (Muster billingSpy) - so ist der alarmierbare
-  // stripe_customer_self_heal-Event pruefbar, ohne echtes audit-Backend.
   const auditCalls = [];
   const app = express();
   app.use(express.json());
@@ -146,7 +121,6 @@ async function setup({
       config: withConfigNamespaces({ ...CONFIG, paymentEnabled, ...configPatch }),
       billing: fakeBilling(billingSpy, checkoutOutcome, { staleCustomerHeal }),
       accounts,
-      // GAP-04: activatePaidTenant aktiviert nur bei GEKLAERTEM Ergebnis (provisionCleared).
       provision: async (t) => {
         provisionSpy.push(t);
         return { ok: true, reason: "queued" };
@@ -168,8 +142,6 @@ async function setup({
   };
 }
 
-// Request-Helper faengt zusaetzlich den Location-Header (Muster i9 getCardReturn) - so
-// sind die 302-Redirect-Ziele (?card=ok / ?sub=ok / ?sub=failed) pruefbar.
 function request(method, url, { cookie, body } = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -196,8 +168,6 @@ function request(method, url, { cookie, body } = {}) {
   });
 }
 
-// setup-checkout mit optionalem Plan (Muster T1: der Client schickt IMMER {plan}; fehlt
-// der Plan, wird er undefined -> JSON "{}" -> Server: card-only).
 const setupCheckout = (s, plan) =>
   request("POST", `${s.base}/api/self-service/billing/setup-checkout`, {
     cookie: s.cookie,
@@ -249,15 +219,12 @@ test("(4) return ?plan=starter -> 302 sub=ok, Abo aus der Session aktiviert (KEI
     assert.equal(ret.location, "/app?sub=ok", "Redirect ins Abo-gebucht-Ziel");
     assert.equal(s.billingSpy.resultSessionId, SESSION, "liest die abgeschlossene Session");
     assert.equal("subParams" in s.billingSpy, false, "kein zweiter Geld-Call (createSubscription)");
-    // Abo-Referenzen im Mirror.
     const t = s.store.load().tenants.find((x) => x.id === TENANT);
     assert.equal(t.stripeSubscriptionId, "sub_new", "Abo persistiert");
     assert.equal(t.stripePlanSlug, "starter", "getragener Plan gebucht");
     assert.equal(t.kycLevel, "card", "KYC auf CARD gehoben");
-    // Status-Flip ueber den pg-Status-Seam (war suspended).
     const acct = await s.accounts.resolve(SUB);
     assert.equal(acct.status, "active", "Tenant ueber accounts.setStatus aktiviert");
-    // Provisioning genau 1x mit dem eigenen Tenant.
     assert.deepEqual(s.provisionSpy, [TENANT], "Provisioning genau 1x");
   } finally {
     await s.close();
@@ -290,10 +257,6 @@ test("(6) return ?plan=gold (unbekannt) -> 302 card=ok, kein subscribe (Muell ve
 });
 
 test("(7) return ?plan=starter bei bereits aboniertem Tenant MIT Karte, IDENTISCHE subscriptionId (Doppel-Redirect derselben Session) -> 302 sub=ok (idempotent-erfolgreich), kein Provisioning, altes Abo unveraendert", async () => {
-  // subscriptionId der Session == bereits gespeicherte Id UND Karte-on-file: der reale
-  // Doppel-Redirect-Fall (der erste Return hat die Karte gebunden; Test 13 deckt den-
-  // selben Sachverhalt ueber den echten Session-Roundtrip ab). OHNE Karte ist derselbe
-  // Zustand das Webhook-gewonnene Rennen -> Heilungspfad, siehe Test 16.
   const s = await setup({
     subscribed: true,
     cardOnFile: true,
@@ -389,15 +352,6 @@ test("(13) doppelter return derselben Session -> beide sub=ok, Provisioning gena
   }
 });
 
-// Review-Blocker S1 (Runde 1): Test (13) deckt nur die BEREITS abgesicherte Variante ab
-// (zwei /return-Aufrufe MIT DERSELBEN session_id). Der eigentliche Race liegt VOR /return:
-// zwei nahezu gleichzeitige setup-checkout-Aufrufe (Doppelklick/zwei Tabs) fuer denselben
-// Tenant+Plan bestehen BEIDE den already_subscribed-Vor-Check (store.tenantSubscription
-// ist bei beiden noch leer, keine Session ist abgeschlossen) - ohne Idempotency-Key haette
-// jeder Aufruf eine EIGENE Stripe-Checkout-Session erzeugt, beide abschliessbar -> zwei
-// echte, real abgerechnete Stripe-Abos (Kostenleck). Diese Regression prueft, dass beide
-// Aufrufe DENSELBEN Idempotency-Key an Stripe reichen - der eigentliche Schutz (Stripe
-// liefert dann dieselbe Session zurueck, nur EINE ist abschliessbar).
 test("(14) TOCTOU-Regression: zwei setup-checkout-Aufrufe (Doppelklick/zwei Tabs, VOR jeder abgeschlossenen Session) erhalten DENSELBEN Idempotency-Key", async () => {
   const s = await setup();
   try {
@@ -406,8 +360,6 @@ test("(14) TOCTOU-Regression: zwei setup-checkout-Aufrufe (Doppelklick/zwei Tabs
     const firstKey = s.billingSpy.subCheckoutParams.idempotencyKey;
     assert.ok(firstKey, "Idempotency-Key wird gesetzt");
 
-    // Der Vor-Check (store.tenantSubscription) ist zwischen beiden Aufrufen weiterhin leer
-    // (kein /return dazwischen) - simuliert exakt den TOCTOU-Zeitpunkt aus dem Finding.
     const second = await setupCheckout(s, "starter");
     assert.equal(second.status, 200, "der Vor-Check erlaubt beide Aufrufe (das ist die Luecke)");
     const secondKey = s.billingSpy.subCheckoutParams.idempotencyKey;
@@ -417,18 +369,9 @@ test("(14) TOCTOU-Regression: zwei setup-checkout-Aufrufe (Doppelklick/zwei Tabs
   }
 });
 
-// Review-Blocker Runde 2 (Cross-Plan-Race, P16/G3): zwei nahezu gleichzeitige
-// setup-checkout-Aufrufe fuer VERSCHIEDENE Plaene (verschiedene Idempotency-Keys,
-// Test 14 deckt nur denselben Plan ab) erzeugen zwei ECHTE, real abgerechnete
-// Stripe-Subscriptions. Simuliert hier die zweite Rueckkehr: der Tenant hat bereits
-// ein Abo (starter, sub_old aus einer ERSTEN, abgeschlossenen Session), die ZWEITE
-// Session (business) traegt eine ANDERE, ebenfalls real bezahlte subscriptionId.
-// Das darf NIE als Erfolg (sub=ok) gemeldet werden - der Kunde wuerde sonst denken,
-// der Business-Plan sei aktiv, waehrend der Store weiter starter zeigt und die
-// echte Business-Subscription bei Stripe unverwaltet weiterlaeuft.
 test("(15) return ?plan=business bei bereits (starter-)aboniertem Tenant, ABWEICHENDE subscriptionId (Cross-Plan-Race) -> 302 sub=failed, KEIN falscher Erfolg, altes Abo unveraendert, kein Provisioning", async () => {
   const s = await setup({
-    subscribed: true, // sub_old/starter bereits gespeichert (aus einer ersten, abgeschlossenen Session)
+    subscribed: true,
     checkoutOutcome: { planSlug: "business", subscriptionId: "sub_business_real" },
   });
   try {
@@ -450,13 +393,7 @@ test("(15) return ?plan=business bei bereits (starter-)aboniertem Tenant, ABWEIC
   }
 });
 
-// Wurzelfix "Abo ohne Nummer" (Live-Befund 2026-07-06): der Stripe-Webhook gewinnt das
-// Rennen gegen diesen Return regelmaessig (Zustellung in ms vs. Browser-Redirect in
-// Sekunden), speichert das Abo und stoesst Provisioning an - band aber keine Karte.
-// Der Return brach danach bei already_subscribed VOR setTenantStripe ab: Tenant
-// dauerhaft abonniert-aber-kartenlos, jedes Provisioning fail-closed tot.
 test("(16) return ?plan=starter nach Webhook-gewonnenem Rennen (Abo gespeichert, KEINE Karte) -> Karte gebunden, Aktivierung + Provisioning genau 1x, 302 sub=ok", async () => {
-  // subscribed OHNE cardOnFile = exakt der Zustand, den der schnellere Webhook hinterlaesst.
   const s = await setup({ subscribed: true, checkoutOutcome: { subscriptionId: "sub_old" } });
   try {
     const ret = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
@@ -475,11 +412,6 @@ test("(16) return ?plan=starter nach Webhook-gewonnenem Rennen (Abo gespeichert,
   }
 });
 
-// Fix B (PLAN-CHECKOUT-STALE-STRIPE-CUSTOMER.md): stale customerId bei Stripe (z.B. Test/
-// Live-Wechsel, Dashboard-Cleanup) fuehrte VORHER zu 502 billing_unavailable ("Couldn't
-// start checkout."). Der Self-Heal-Wrapper verwirft die stale Referenz, legt EINEN
-// frischen Customer an und wiederholt den Checkout-Start genau einmal (retryDelayMs:0
-// in der Test-Config, kein echtes Warten).
 test("(17) setup-checkout {plan:starter} bei stale Stripe-Customer (resource_missing) -> Self-Heal: 200 + url, frischer Customer persistiert, Audit stripe_customer_self_heal", async () => {
   const s = await setup({ staleCustomerHeal: true });
   try {

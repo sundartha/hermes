@@ -1,24 +1,15 @@
-// I1: Identitaets-Funktionen (systemPrompt/disclosureSentence) ziehen ihren Namen
-// ueber tenantContext(call.tenantId), NICHT mehr global. Rein-Unit: beide Funktionen
-// tragen call -> kein Spawn noetig.
-// DATA_DIR im before vor dem ersten config-Import (Repo-Regel, wie tenant-context.test.js).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TENANT_B = "B";
-const B_OWNER = "Maria"; // tenant.ownerName von B
+const B_OWNER = "Maria";
 const B_NUMBER = "+4915255555555";
-// P2b: Owner-Identitaet lebt im Store (kein config.ownerName mehr) -> Owner-Tenant
-// explizit mit ownerName seeden.
 const OWNER_NAME = "Jonas Beispiel";
 
 let store, systemPrompt, disclosureSentence;
 before(async () => {
-  // Store mit aktivem Tenant B (eigener ownerName) UND Owner-Tenant (eigener ownerName)
-  // ueber tempDataDir seeden, dann DATA_DIR setzen, DANN dynamisch importieren
-  // (config/json.js binden dataDir beim Laden).
   const seed = seedState({
     calls: [],
     tenants: [

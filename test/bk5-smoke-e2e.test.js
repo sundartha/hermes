@@ -1,20 +1,3 @@
-// BK5 - Test-Mode Smoke end-to-end: der ganze Buchungs-Funnel auf EINEM geteilten
-// pglite-Store, gefahren ueber echte HTTP-Requests (node:http) gegen die echten Seams
-// (makeSelfServiceRoutes + der oeffentliche GET /api/plans + verifyStripeSignature/
-// applyStripeWebhook). KEIN Server-Spawn (Lehre p6a-Stall, Boot ist fail-closed) -
-// stattdessen app.listen(0) + curl-funktionale Requests, offline + deterministisch.
-//
-// Unterschied zu bk2/bk3/w4 (die jede Station ISOLIERT mit einem Spy pruefen): der
-// provision-Seam ist HIER der ECHTE Produktions-Core requestNumberForPaidTenant auf dem
-// GETEILTEN Store (kein No-op-Spy), und der Webhook-Schritt verifiziert die ECHTE HMAC +
-// wendet applyStripeWebhook auf denselben Store an. BK5 prueft also die VERKETTUNG (ein
-// State quer durch alle Seams), nicht erneut jede einzelne Gate-Verzweigung (Cap-Block,
-// PAYMENT_ENABLED-aus-404, no_card/already_subscribed sind in bk2/bk3/w4 abgedeckt -> G5).
-//
-// F.I.R.S.T.: offline (pglite, kein Netz, keine echten Secrets), repeatable (fixe
-// PERIOD_END/NOW_S, kein Date.now/Zufall), self-validating (boolesche Asserts), independent
-// (jeder Fall eigenes setup() + finally close()). Die Faelle, die einen Post-Abo-State
-// brauchen, fahren den Rueckkehr-Flow als Build-Phase (subscribeViaReturn, P13).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -41,28 +24,24 @@ import { PLAN_CATALOG } from "../src/plans.js";
 import { NUMBER_STATUS, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
-// ---- Benannte Konstanten (G25, kein Magic-Value) ---------------------------------
 const SECRET_BYTES = 16;
 const SECRET = crypto.randomBytes(SECRET_BYTES).toString("hex");
 const WEBHOOK_SECRET = `whsec_${crypto.randomBytes(SECRET_BYTES).toString("hex")}`;
-const SUB = "sub-bk5"; // OIDC-Subject
-const TENANT = "t_sub-bk5"; // tenantIdForSubject(SUB)
+const SUB = "sub-bk5";
+const TENANT = "t_sub-bk5";
 const CUSTOMER = "cus_bk5";
 const PAYMENT_METHOD = "pm_bk5";
-const SESSION = "cs_bk5"; // Stripe-Checkout-Session-Id
-const WEBHOOK_SUB_ID = "sub_bk5_wh"; // Subscription-Id im Webhook-Event
-const PERIOD_END = 1893456000; // Unix-Sek (fix, P12/R: kein Date.now) = 2030-01-01Z
-const PERIOD_START = 1890864000; // Unix-Sek, Periodenanker der Fake-Session (fix, P12/R)
-const NOW_S = 1_700_000_000; // Webhook-Uhr (Aufrufer kontrolliert die Zeit)
+const SESSION = "cs_bk5";
+const WEBHOOK_SUB_ID = "sub_bk5_wh";
+const PERIOD_END = 1893456000;
+const PERIOD_START = 1890864000;
+const NOW_S = 1_700_000_000;
 const PLAN = "starter";
-const INCLUDED_MIN = 30; // = PLAN_CATALOG starter.includedMinutes
-const VOICE_MINUTES_USED = 5; // Fall (7): Teilverbrauch
-const HIGH_CAP = 100; // Caps weit offen: kein Cap-Block im Happy-Funnel
-const SESSION_TTL_S = 3600; // Lebensdauer der Test-Web-Session (1h)
-// occurredAt des Verbrauchs-Events muss >= periodStartIso(PERIOD_END) liegen
-// (PERIOD_END=2030-01-01Z -> Start 2029-12-01Z). Fix gewaehlt, zeit-frei (P12/R).
+const INCLUDED_MIN = 30;
+const VOICE_MINUTES_USED = 5;
+const HIGH_CAP = 100;
+const SESSION_TTL_S = 3600;
 const USAGE_OCCURRED_AT = "2029-12-15T10:00:00.000Z";
-// Erwartetes Redirect-Ziel des Rueckkehr-Flows bei gebuchtem Abo (G25, kein Magic-String).
 const RETURN_SUB_OK = "/app?sub=ok";
 
 const CONFIG = Object.freeze({
@@ -74,10 +53,6 @@ const CONFIG = Object.freeze({
 
 const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
-// Fake-BillingPort (BK2-Superset, in-process, KEIN Netz, kein echtes Stripe): spy faengt
-// die successUrl (Plan-Carry) + die createSubscription-Parameter (priceId).
-// getCheckoutSessionResult liefert IMMER den vorgeseedeten Customer + ein paymentMethod ->
-// die Karte bindet im Rueckkehr-Flow (Customer-Match in card-setup.js).
 function fakeBilling(spy = {}) {
   return {
     createCustomer: async () => ({ customerId: CUSTOMER }),
@@ -112,10 +87,6 @@ function fakeBilling(spy = {}) {
   };
 }
 
-// Der GETEILTE-Store-Provision-Seam: der ECHTE Decision-Core auf demselben Store, den die
-// Routen lesen (nicht der bk2/w4-Spy). Dry-Run: kein queue/drain -> die Nummer bleibt
-// 'requested' (genau wie triggerTenantProvisioning bei provisioningEnabled=false). Kein
-// Geld, kein Provider-Kauf. save() persistiert die Mutation (Muster server.js-Trigger).
 function realProvision(store) {
   return async (tenantId) => {
     requestNumberForPaidTenant(store.load(), {
@@ -128,10 +99,6 @@ function realProvision(store) {
   };
 }
 
-// Harness wie w4/bk2-setup(): EIN pglite-Store + Identitaets-Schicht + Self-Service-Routen
-// + der oeffentliche Plan-Katalog auf einer Wegwerf-App. activated=true aktiviert den
-// PG-Account sofort (fuer die /state-Sicht, webAuthMw = active-only); Default suspended,
-// damit der Status-Flip im Rueckkehr-Flow beobachtbar bleibt (Muster bk2/p5).
 async function setup({ activated = false } = {}) {
   const { store, db } = await makePgTestStore();
   const runner = {
@@ -140,14 +107,11 @@ async function setup({ activated = false } = {}) {
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
 
-  // Store-Mirror: Tenant (status=ACTIVE per registerTenant-Default -> requestNumber-Gate
-  // erfuellt) + Customer ohne paymentMethod (die Karte bindet erst im Rueckkehr-Flow).
   const s = store.load();
   ops.registerTenant(s, TENANT, { firstName: "Kunde", lastName: "BK5", idpSubject: SUB });
   ops.setTenantStripe(s, TENANT, { customerId: CUSTOMER });
   store.save();
 
-  // PG-Account: upsertOnFirstLogin legt 'suspended' an. activated -> sofort aktivieren.
   await accounts.upsertOnFirstLogin({ sub: SUB, email: "bk5@kunde.de" });
   if (activated) await accounts.setStatus(TENANT, "active");
   const { id: sessionId } = await sessions.create({
@@ -161,8 +125,6 @@ async function setup({ activated = false } = {}) {
   const billingSpy = {};
   const app = express();
   app.use(express.json());
-  // Oeffentlicher, read-only Plan-Katalog - DIESELBE Quelle wie server.js:168 (PLAN_CATALOG),
-  // kein zweites Literal (G5). Pre-Auth (keine Middleware), keine PII.
   app.get("/api/plans", (_req, res) => res.json(PLAN_CATALOG));
   app.use(
     makeSelfServiceRoutes({
@@ -190,8 +152,6 @@ async function setup({ activated = false } = {}) {
   };
 }
 
-// node:http-Request, faengt status + body + Location-Header (Muster bk2). Ohne cookie ->
-// kein Cookie-Header (Fall 1: oeffentlicher Endpoint).
 function request(method, url, { cookie, body } = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -227,22 +187,16 @@ const setupCheckout = (s, plan) =>
 const billingReturn = (s, query) =>
   request("GET", `${s.base}/api/self-service/billing/return?${query}`, { cookie: s.cookie });
 
-// Build-Phase (P13) fuer die Post-Abo-Faelle (5)/(6)/(7): faehrt den Rueckkehr-Flow mit
-// getragenem Plan -> bucht+aktiviert+provisioniert auf dem geteilten Store. Der innere
-// Assert sichert nur die Vorbedingung (das eigentliche Rueckkehr-Verhalten prueft Fall 4).
 async function subscribeViaReturn(s) {
   const ret = await billingReturn(s, `session_id=${SESSION}&plan=${PLAN}`);
   assert.equal(ret.location, RETURN_SUB_OK, "Build: Abo-Aktivierung via Rueckkehr erwartet");
 }
 
-// Zaehlt die 'requested' Dry-Run-Nummern EINES Tenants auf dem geteilten Store.
 const requestedNumbersFor = (store, tenantId) =>
   store
     .load()
     .numbers.filter((n) => n.tenantId === tenantId && n.status === NUMBER_STATUS.REQUESTED);
 
-// Seedet EIN Voice-Minute-Event mit fixem occurredAt (im Abrechnungsfenster) in den
-// geteilten Ledger und persistiert. Muster bk4-quota-view (occurredAt explizit gesetzt).
 function seedVoiceMinute(store, tenantId, quantity) {
   const event = ops.recordUsageEvent(store.load(), {
     tenantId,
@@ -254,7 +208,6 @@ function seedVoiceMinute(store, tenantId, quantity) {
   store.save();
 }
 
-// (1) Pricing-Sicht VOR Auth: der oeffentliche Katalog ist ohne Cookie lesbar.
 test("(1) GET /api/plans (pre-Auth) liefert den Katalog ohne PII", async () => {
   const s = await setup();
   try {
@@ -271,7 +224,7 @@ test("(1) GET /api/plans (pre-Auth) liefert den Katalog ohne PII", async () => {
       [499, 999],
     );
     assert.equal(
-      plans.every((p) => p.currency === "eur"), // EUR-Cutover (Stripe live, 2026-07-03)
+      plans.every((p) => p.currency === "eur"),
       true,
     );
   } finally {
@@ -279,7 +232,6 @@ test("(1) GET /api/plans (pre-Auth) liefert den Katalog ohne PII", async () => {
   }
 });
 
-// (2) Leerzustand VOR Abo: aktiver Account, aber kein Plan/keine Karte/keine Nummer.
 test("(2) /state vor Abo -> kein Plan, kein quota, keine Nummer, keine Karte", async () => {
   const s = await setup({ activated: true });
   try {
@@ -295,8 +247,6 @@ test("(2) /state vor Abo -> kein Plan, kein quota, keine Nummer, keine Karte", a
   }
 });
 
-// (3) Plan waehlen -> der Checkout traegt den Plan an die Stripe-successUrl, Price im
-// subscription-Mode-Checkout (Rabattcode-Feature).
 test("(3) setup-checkout {plan:starter} -> successUrl traegt &plan=starter, Price im Checkout", async () => {
   const s = await setup();
   try {
@@ -309,7 +259,6 @@ test("(3) setup-checkout {plan:starter} -> successUrl traegt &plan=starter, Pric
   }
 });
 
-// (4) Rueckkehr -> buchen + aktivieren + provisionieren (echter Core) auf einem State.
 test("(4) Rueckkehr bucht+aktiviert+provisioniert genau eine Dry-Run-Nummer", async () => {
   const s = await setup();
   try {
@@ -329,11 +278,10 @@ test("(4) Rueckkehr bucht+aktiviert+provisioniert genau eine Dry-Run-Nummer", as
   }
 });
 
-// (5) Webhook 'active' NACH dem Subscribe -> idempotent: kein Doppelkauf, Status bleibt.
 test("(5) signierter active-Webhook ist idempotent (weiterhin eine Nummer)", async () => {
   const s = await setup();
   try {
-    await subscribeViaReturn(s); // Build: 1 Dry-Run-Nummer + active
+    await subscribeViaReturn(s);
     const body = JSON.stringify({
       type: SUBSCRIPTION_EVENT.CREATED,
       data: {
@@ -372,7 +320,6 @@ test("(5) signierter active-Webhook ist idempotent (weiterhin eine Nummer)", asy
   }
 });
 
-// (6) Dashboard final: Plan + Kontingent sichtbar, kein Id-Leak, Dry-Run-Nummer-Wahrheit.
 test("(6) /state nach Abo zeigt Plan + volles Kontingent, ohne Id-Leak", async () => {
   const s = await setup();
   try {
@@ -388,15 +335,12 @@ test("(6) /state nach Abo zeigt Plan + volles Kontingent, ohne Id-Leak", async (
       exhausted: false,
     });
     assert.equal("subscriptionId" in body.subscription, false, "kein sub_-Id-Leak in der View");
-    // Dry-Run-Wahrheit: die Nummer bleibt 'requested' (kein Kauf) -> activeNumberFor liefert ""
-    // (nur ACTIVE zaehlt). Echte E.164-Aktivierung ist der Owner-Go-Live (PLAN-Abschnitt 8).
     assert.equal(body.agent.number, "", "Dry-Run: noch keine aktive E.164-Nummer");
   } finally {
     await s.close();
   }
 });
 
-// (7) Kontingent ist live aus dem Ledger abgeleitet, nicht hardcodiert.
 test("(7) /state leitet das verbrauchte Kontingent live aus dem Ledger ab", async () => {
   const s = await setup();
   try {

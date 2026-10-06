@@ -1,8 +1,3 @@
-// B1a: persistierter Periodenanker currentPeriodStart parallel zu currentPeriodEnd.
-// state-ops-Unit (selektiver Patch + Grenzfall) + json-Fassaden-Round-Trip. KEIN
-// pglite/Spawn (Lehre P6a: state-ops-Unit NICHT mit Spawn mischen) - Muster
-// state-ops-tenant-stripe.test.js. DATA_DIR wird VOR dem ersten json-/config-Import
-// auf Temp gesetzt (Repo-Regel: data/store.json nie anfassen) -> json.js dynamisch.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
@@ -15,7 +10,7 @@ import {
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const A = "tenant_a";
-const START = 1690000000; // Unix-Sekunden
+const START = 1690000000;
 const SUB = "sub_b1a";
 
 let jsonBackend;
@@ -41,7 +36,6 @@ test("tenantSubscription: Tenant ohne Anker -> currentPeriodStart === null (nie 
 });
 
 test("json-Round-Trip: setTenantSubscription via Fassade persistiert -> tenantSubscription liest currentPeriodStart", () => {
-  // Owner existiert in makeDefaultState (load() seedet ihn) -> kein registerTenant noetig.
   jsonBackend.setTenantSubscription(BOOTSTRAP_TENANT_ID, {
     subscriptionId: SUB,
     planSlug: "starter",

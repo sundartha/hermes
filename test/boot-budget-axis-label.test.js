@@ -1,9 +1,3 @@
-// Review-Blocker Runde 1 (P6): der Boot-Banner meldete bei BUDGET_MONTH_ENABLED=false
-// (dem ausgelieferten Default) fuer BEIDE Achsen "Lebenszeit-Topf" - seit GAP-01 misst die
-// TENANT-Achse bei Flag AUS aber das Stripe-Perioden-Fenster (budgetPeriodUsageCents),
-// nur die PLATTFORM-Achse bleibt beim Lebenszeit-Topf (globalUsageTotals, Absolute
-// Regel 1). Dieser Test pinnt budgetAxisLabel() direkt (pure Funktion, kein Boot noetig)
-// gegen genau diese Divergenz, damit sie nicht unbemerkt wieder zusammenfaellt.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { budgetAxisLabel } from "../src/boot.js";

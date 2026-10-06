@@ -1,10 +1,3 @@
-// Owner-Removal P2b: Erst-Setup ohne Owner-env. Drei Achsen, alle offline:
-//   1) state-ops bootstrapTenant: legt den Tenant an + traegt seine aktive Nummer ein
-//      (idempotent), in EINER Mutation. Ersetzt den config-derived Boot-Seed.
-//   2) views hasActiveNumber: tenant-agnostisches Boot-Gate-Praedikat (Grenzfaelle).
-//   3) Boot-Gate (Spawn): ein BELIEBIGER Tenant mit aktiver Nummer macht den Dienst
-//      telefonbar (kein OWNER/BOOTSTRAP-Pin) - beweist die Tenant-Agnostik (Kern P2b).
-// KEIN pglite + Server-Spawn in EINER Datei (P3/P6a-Lehre) - hier nur state-ops + Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { bootstrapTenant, makeDefaultState, findTenant } from "../src/store/state-ops.js";
@@ -14,10 +7,9 @@ import { startServer } from "./helpers.js";
 
 const E164 = "+15005550006";
 
-// ---- (1) state-ops bootstrapTenant ----
 test("bootstrapTenant: legt den Bootstrap-Tenant (active) an + aktive Nummer", () => {
   const s = makeDefaultState();
-  s.tenants = []; // leerer Store: kein vorbelegter Tenant
+  s.tenants = [];
   bootstrapTenant(s, E164, BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
   const tenant = findTenant(s, BOOTSTRAP_TENANT_ID);
   assert.ok(tenant, "Tenant angelegt");
@@ -45,7 +37,6 @@ test("bootstrapTenant: optionale tenantId -> Tenant unter diesem Key", () => {
   assert.equal(num.provider, PROVIDER.TELNYX);
 });
 
-// ---- (1b) outbound-p1fix #3: KYC-Heal NUR fuer den Bootstrap/Owner ----
 test("bootstrapTenant(owner): Owner wird auf kyc_level=id_verified geheilt", () => {
   const s = makeDefaultState();
   s.tenants = [];
@@ -64,7 +55,6 @@ test("bootstrapTenant(fremd): Nicht-Owner-tenantId bleibt UNGESEEDET (KYC-Gate s
   assert.equal(tenant.kycLevel, undefined, "kyc_level NICHT geseedet -> kycReached fail-closed false");
 });
 
-// ---- (2) views hasActiveNumber (Grenzfaelle T5) ----
 test("hasActiveNumber: leerer Store -> false", () => {
   assert.equal(hasActiveNumber({ numbers: [] }), false);
 });
@@ -79,11 +69,7 @@ test("hasActiveNumber: nur 'requested' Nummern -> false (kein aktiver Eintrag)",
   assert.equal(hasActiveNumber(s), false);
 });
 
-// ---- (3) Boot-Gate ist tenant-agnostisch (Spawn) ----
 test("Boot-Gate: aktive Nummer eines BELIEBIGEN Tenants (nicht Bootstrap) -> Boot gruen", async () => {
-  // ownerNumber:null -> KEIN Auto-Owner-Seed der Helper; die einzige aktive Nummer
-  // gehoert Tenant t_x. Booted der Dienst trotzdem (healthz 200), ist der Boot-Gate
-  // beweisbar tenant-agnostisch (kein BOOTSTRAP-Pin).
   const seed = {
     settings: { [BOOTSTRAP_TENANT_ID]: {} },
     calls: [],

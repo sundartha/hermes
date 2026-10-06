@@ -1,7 +1,3 @@
-// BK4 - Minuten-Kontingent in der Self-Service-Lese-View (web-session-only). Muster
-// w4-self-service-subscribe.test.js: reines pglite (offline, F.I.R.S.T.), KEIN Server-
-// Spawn. Prueft: GET /state liefert das abgeleitete quota (included/used/remaining);
-// ohne Abo -> quota null; PAYMENT_ENABLED aus -> kein quota-Feld; Cross-Tenant-Isolation.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -17,8 +13,6 @@ const SECRET = "quota-web-secret-0123456789";
 const SUB = "quota-sub";
 const TENANT = "t_quota-sub";
 const SECONDS_PER_DAY = 86400;
-// Periode endet in 7 Tagen -> der abgeleitete Start liegt ~23 Tage in der Vergangenheit,
-// "jetzt" gemeldete Events fallen damit sicher ins Fenster (zeit-robust).
 const PERIOD_END_SEC = Math.floor(Date.now() / 1000) + 7 * SECONDS_PER_DAY;
 
 const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
@@ -89,7 +83,6 @@ function getState(s) {
   });
 }
 
-// Seedet ein Voice-Event direkt in den Ledger-Mirror (occurredAt = jetzt -> im Fenster).
 function seedVoice(store, tenantId, quantity) {
   ops.recordUsageEvent(store.load(), {
     tenantId,
@@ -167,14 +160,13 @@ test("(d) Cross-Tenant: fremder Voice-Verbrauch aendert das eigene quota nicht",
 test("(e) state ehrt persistierten currentPeriodStart (Anzeige-Fenster == Gate)", async () => {
   const s = await setup();
   try {
-    const START_SEC = PERIOD_END_SEC - 5 * SECONDS_PER_DAY; // enger als End-minus-Monat
+    const START_SEC = PERIOD_END_SEC - 5 * SECONDS_PER_DAY;
     ops.setTenantSubscription(s.store.load(), TENANT, {
       subscriptionId: "sub_q",
       planSlug: "starter",
       currentPeriodStart: START_SEC,
       currentPeriodEnd: PERIOD_END_SEC,
     });
-    // Event 10 Tage vor Ende = VOR dem persistierten Start (5 Tage) -> faellt raus.
     const e = ops.recordUsageEvent(s.store.load(), {
       tenantId: TENANT,
       kind: USAGE_EVENT_KIND.VOICE_MINUTE,
@@ -197,7 +189,6 @@ test("(e) state ehrt persistierten currentPeriodStart (Anzeige-Fenster == Gate)"
 test("(f) aktives Abo ohne aufloesbaren Anker -> exhausted true, Rest 0 (== Gate)", async () => {
   const s = await setup();
   try {
-    // planSlug gesetzt, aber WEDER Start NOCH End -> frisches Abo, Webhook ausstehend.
     ops.setTenantSubscription(s.store.load(), TENANT, { subscriptionId: "sub_q", planSlug: "starter" });
     const { body } = await getState(s);
     assert.equal(body.quota.exhausted, true);

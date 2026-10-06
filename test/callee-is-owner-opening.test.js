@@ -1,17 +1,3 @@
-// OC-P3 (PLAN-OWNER-CALL): Gleichlauf der uebrigen Outbound-Wege (Budget-Erst-Turn,
-// Budget-Systemprompt) mit dem OC-P2-Praedikat
-// (call.calleeIsOwner). Kein Katalog-ID-Praefix, kein ABNAHME-Praefix (Testnamen tragen
-// "OC-P3-" am Anfang, faellt nicht unter i18nCatalogPattern, package.json:8 geprueft).
-//
-// DATA_DIR/config.js muessen VOR jedem store-gebundenen Import gebunden werden (Lehre
-// test/al-p1-agent-turn-callerturns.test.js Kopfkommentar: ein statischer Import, der
-// transitiv src/config.js zieht, wuerde config.server.dataDir dauerhaft auf den Default
-// binden). Deshalb: EIN before()-Hook setzt DATA_DIR zuerst, ALLE store-gebundenen Module
-// (claude.js, i18n/locales.js, telnyx-call-control-ingest.js, telnyx-shim-harness.js)
-// werden dort dynamisch importiert (seit IE6-S1 nur noch claude.js/i18n/locales.js - der
-// Telnyx-Shim ist entfernt). test/_outbound-harness.js ist die einzige Ausnahme:
-// es spawnt einen Kindprozess (eigenes DATA_DIR ueber env), zieht in diesem Prozess kein
-// src/config.js - statischer Import oben ist unbedenklich (Muster disclosure-outbound.test.js).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -34,13 +20,10 @@ import {
   HANGUP_TAG,
 } from "./_outbound-harness.js";
 
-const OWNER = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`; // == "Jonas Beispiel", Bench-Owner
+const OWNER = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 const NO_NAME_TENANT_ID = "t_oc_p3_no_name";
 const OUTBOUND = "outbound";
 
-// Golden-Fixture (5.2): aus UNBERUEHRTEM master abgegriffen, VOR jedem OC-P3-Edit.
-// Zeile 2 des Prompts (uhrabhaengig) ist bereits maskiert - maskSecondLine unten
-// erzeugt beim Vergleich dieselbe Maskierung.
 const GOLDEN = JSON.parse(
   fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "oc-p3-nichtowner-golden.json"),
@@ -53,9 +36,6 @@ function maskSecondLine(text) {
   return lines.join("\n");
 }
 
-// Ein Ziel OHNE Leerzeichen laeuft in den "keine Wortgrenze"-Zweig von trimGoalForSpeech
-// und wird auf EXAKT die Kappe geschnitten (Muster test/al-p5-opening.test.js). Die Zahl
-// ist bewusst groesser als jede denkbare Kappe (G25).
 const GOAL_OVERLENGTH_CHAR_COUNT = 200;
 const GOAL_WITHOUT_WORD_BOUNDARY = "a".repeat(GOAL_OVERLENGTH_CHAR_COUNT);
 const HTTP_STATUS_OK = 200;
@@ -72,7 +52,6 @@ before(async () => {
       calls: [],
       tenants: [
         { id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER },
-        // A11: ein Owner-Ziel-Tenant OHNE Namen - der Fail-closed-Fall (kein Namens-Rueckfall).
         { id: NO_NAME_TENANT_ID, status: "active" },
       ],
     }),
@@ -84,10 +63,6 @@ before(async () => {
 const ownerCall = (over = {}) =>
   seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: OUTBOUND, calleeIsOwner: true, ...over });
 const foreignCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: OUTBOUND, ...over });
-
-// ---------------------------------------------------------------------------
-// Block A: openingText
-// ---------------------------------------------------------------------------
 
 const OWNER_GOAL = {
   de: "Einen Rueckruftermin fuer naechste Woche vereinbaren",
@@ -161,10 +136,6 @@ test("OC-P3-A11 Owner-Ziel, Tenant ohne Vornamen: kein Namens-Rueckfall, volle O
   assert.ok(!text.startsWith("Hallo"), `darf keine Owner-Anrede tragen: ${text}`);
 });
 
-// ---------------------------------------------------------------------------
-// Block B: systemPrompt
-// ---------------------------------------------------------------------------
-
 for (const lang of LANGS) {
   test(`OC-P3-B systemPrompt Owner-Ziel ${lang}: Owner-SITUATION ersetzt die Bestandszeile`, () => {
     const call = ownerCall({ language: lang });
@@ -216,10 +187,6 @@ for (const lang of LANGS) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Block C: /voice/outbound Ende-zu-Ende (TeXML-Rendering, ohne echten Anruf)
-// ---------------------------------------------------------------------------
-
 const OWNER_OPENING_DE = "Hallo Jonas, hier ist dein KI-Assistent.";
 const SAY_OPEN_DE = '<Say voice="Azure.de-DE-KatjaNeural" language="de-DE">';
 
@@ -242,18 +209,6 @@ test("OC-P3-C2 /voice/outbound Fremd-Ziel: unveraendert (Offenlegung als Say-Pra
   assert.ok(!twiml.includes(HANGUP_TAG), `/voice/outbound darf nicht auflegen: ${twiml}`);
 });
 
-// Block D (Telnyx-Assistant-Speak-Node) und Block F (Shim-Beleg) sind mit IE6-S1
-// entfernt - der Assistant-/Shim-Pfad existiert nicht mehr. Die Owner-Eroeffnung auf den
-// ueberlebenden Pfaden (Block A/B/C) deckt weiterhin ab.
-
-// ---------------------------------------------------------------------------
-// Block E: Umlaute/Akzente im Owner-Zweig (die Bestands-Ratsche cq-p5-prompt-redesign
-// rendert NIE mit calleeIsOwner - s. dortigen Kommentar an seedCall(...) - und deckt den
-// neuen Zweig deshalb nicht ab).
-// ---------------------------------------------------------------------------
-
-// FR-Transliterations-Denylist: kuratiert wie test/cq-p5-prompt-redesign.test.js (dort
-// nicht veraendert - dieselbe Definition hier, da nicht zentral exportiert).
 const FR_TRANSLITERATION_STEMS = /\betre\b|\bmeme\b|\bresponsable\b|\bnumero\b/i;
 const REAL_UMLAUT = /[äöüÄÖÜ]/u;
 const REAL_ACCENT = /[éèêëàâäùûüôöîïç]/iu;
@@ -277,7 +232,3 @@ test("OC-P3-E3 FR-Owner-Prompt traegt keine Akzent-Transliteration", () => {
 test("OC-P3-E4 Gegenprobe - FR-Owner-Prompt traegt echte Akzent-Zeichen", () => {
   assert.match(systemPrompt(ownerCall({ language: "fr" })), REAL_ACCENT);
 });
-
-// EN: keine Gegenprobe (Spec 6E) - der vorgeschriebene EN-Wortlaut (situationOutboundOwner/
-// identityLines.outboundOwner) traegt strukturell kein Sonderzeichen; der Wortlaut wird
-// dafuer nicht gebogen.

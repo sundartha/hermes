@@ -1,8 +1,3 @@
-// BK4 - Minuten-Kontingent-Ableitung (reiner Unit-Test, kein Server/pglite, F.I.R.S.T.).
-// Deterministisch ueber ein FIXES Fenster: Periode endet 2026-07-15, Start abgeleitet
-// 2026-06-15 (Ende minus 1 Monat). occurredAt der Events wird gesetzt (kein Date.now),
-// damit in-/out-of-window stabil sind. Prueft quotaView (Plan-Katalog + Ledger) und den
-// Raw-Reader voiceMinutesUsedSince.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -15,17 +10,13 @@ import { quotaView } from "../src/billing/meter.js";
 import { resolvePeriodStartIso } from "../src/billing/period.js";
 import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
 
-// Fixes Fenster (zeit-frei): currentPeriodEnd = Unix-Sekunden zu 2026-07-15T00:00Z.
-// periodStartIso leitet daraus 2026-06-15T00:00Z ab.
 const MS_PER_SECOND = 1000;
-const PERIOD_END_SEC = Date.UTC(2026, 6, 15) / MS_PER_SECOND; // 2026-07-15T00:00:00Z
+const PERIOD_END_SEC = Date.UTC(2026, 6, 15) / MS_PER_SECOND;
 const IN_WINDOW = "2026-06-20T10:00:00.000Z";
 const OUT_OF_WINDOW = "2026-05-01T10:00:00.000Z";
 const TENANT_A = "t_a";
 const TENANT_B = "t_b";
 
-// Seedet EIN Voice-Event mit deterministischem occurredAt (ueberschreibt den Recorder-
-// Zeitstempel) und optionalem Flush-Flag. Liefert das Event.
 function seedVoice(s, { tenantId = TENANT_A, quantity, occurredAt = IN_WINDOW, sent = false }) {
   const e = recordUsageEvent(s, {
     tenantId,
@@ -38,7 +29,6 @@ function seedVoice(s, { tenantId = TENANT_A, quantity, occurredAt = IN_WINDOW, s
   return e;
 }
 
-// Seedet ein Event eines beliebigen kind (fuer die kind-Isolation).
 function seedKind(s, { tenantId = TENANT_A, kind, quantity, occurredAt = IN_WINDOW }) {
   const e = recordUsageEvent(s, { tenantId, kind, quantity, costCents: 0 });
   e.occurredAt = occurredAt;
@@ -129,8 +119,6 @@ test("(8) unbekannter/fehlender Plan -> null (Leerzustand)", () => {
 test("(9) kein Periodenanker (currentPeriodEnd null) -> fail-closed wie das Gate, Rest 0", () => {
   const s = makeDefaultState();
   seedVoice(s, { quantity: 9 });
-  // Kein Anker -> Gate blockt (planMinutesExceeded true) -> Anzeige zeigt 0 Rest,
-  // used 0 (kein Fenster), exhausted true. NIE mehr fail-OPEN volles Kontingent.
   assert.deepEqual(quotaA(s, "starter", null), {
     includedMinutes: 30,
     usedMinutes: 0,
@@ -151,32 +139,25 @@ test("(11) voiceMinutesUsedSince summiert ab sinceIso (Raw-Reader)", () => {
   assert.equal(voiceMinutesUsedSince(s, TENANT_A, "2026-06-01T00:00:00.000Z"), 4);
 });
 
-// (12) B3: persistierter currentPeriodStart hat Vorrang vor der End-Ableitung
-// (== Gate). Start 2026-06-20 (persistiert) liegt NACH der End-Ableitung 2026-06-15;
-// ein Event am 2026-06-17 faellt aus dem Gate-Fenster, NICHT aus dem End-Fenster.
 test("(12) Anzeige ehrt persistierten currentPeriodStart (Fenster == Gate)", () => {
   const s = makeDefaultState();
-  const START_SEC = Date.UTC(2026, 5, 20) / MS_PER_SECOND; // 2026-06-20T00:00:00Z
-  seedVoice(s, { quantity: 7, occurredAt: "2026-06-17T10:00:00.000Z" }); // vor persist. Start
-  seedVoice(s, { quantity: 4, occurredAt: IN_WINDOW }); // 2026-06-20 im Fenster
+  const START_SEC = Date.UTC(2026, 5, 20) / MS_PER_SECOND;
+  seedVoice(s, { quantity: 7, occurredAt: "2026-06-17T10:00:00.000Z" });
+  seedVoice(s, { quantity: 4, occurredAt: IN_WINDOW });
   const view = quotaView(s, {
     tenantId: TENANT_A,
     planSlug: "starter",
     currentPeriodStart: START_SEC,
     currentPeriodEnd: PERIOD_END_SEC,
   });
-  // Nur das 06-20-Event zaehlt (persist. Start), das 06-17-Event NICHT.
   assert.equal(view.usedMinutes, 4);
-  // Gegenprobe: die End-Ableitung (2026-06-15) wuerde BEIDE zaehlen -> Anker wirkt.
   const endIso = resolvePeriodStartIso({ currentPeriodEnd: PERIOD_END_SEC });
   assert.equal(voiceMinutesUsedSince(s, TENANT_A, endIso), 11);
 });
 
-// (13) B3: exhausted == das durchgesetzte Gate-Praedikat (single source), inkl.
-// Kein-Anker-fail-closed. Beweist Anzeige == Gate ohne zweitkodierte Regel (G5).
 test("(13) exhausted spiegelt planMinutesExceeded (Gate-Paritaet)", () => {
   const s = makeDefaultState();
-  seedVoice(s, { quantity: 30 }); // genau am Limit -> >= -> exhausted
+  seedVoice(s, { quantity: 30 });
   const withAnchor = quotaView(s, {
     tenantId: TENANT_A,
     planSlug: "starter",
@@ -190,7 +171,6 @@ test("(13) exhausted spiegelt planMinutesExceeded (Gate-Paritaet)", () => {
       periodStartIso: resolvePeriodStartIso({ currentPeriodEnd: PERIOD_END_SEC }),
     }),
   );
-  // Kein Anker -> beide fail-closed true.
   const noAnchor = quotaView(s, {
     tenantId: TENANT_A,
     planSlug: "starter",

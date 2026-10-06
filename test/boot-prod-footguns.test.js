@@ -1,15 +1,7 @@
-// T-P0-5 (H1): Im oeffentlichen Hosting (RENDER_EXTERNAL_URL gesetzt) EHRT der Boot
-// die Produktions-Footguns: bei offenem Dashboard/API oder abgeschaltetem Safety-Gate
-// startet der Dienst GAR NICHT (kein app.listen, kein /voice, kein /mcp) - er
-// verweigert mit klarer Diagnose und exit(1). Lieber kein Dienst als ein oeffentlich
-// offener (fail-closed). Kindprozess-Tests: Exit-Code + Diagnose. Der lokale Pfad
-// (kein RENDER_EXTERNAL_URL, BASE_ENV) bleibt durch die Bestandssuite abgedeckt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startServerExpectExit } from "./helpers.js";
 
-// Hosting simulieren. DASHBOARD_PASSWORD entschaerft die Default-Footgun aus BASE_ENV
-// (leer); pro Test wird GENAU ein Footgun reaktiviert -> isolierter Nachweis.
 const PROD_SAFE = { RENDER_EXTERNAL_URL: "https://agent.onrender.com", DASHBOARD_PASSWORD: "prod-geheim", SKIP_TWILIO_SIGNATURE_CHECK: "false" };
 
 test("T-P0-5-10: Hosting + fehlendes DASHBOARD_PASSWORD -> Boot verweigert (exit 1), nennt Var", async () => {
@@ -41,11 +33,6 @@ test("T-P0-5-13: Hosting + http-OAUTH_ISSUER_URL -> Boot verweigert (exit 1), ne
   assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
 });
 
-// T-P0-5-14: Im Boot-Test-Kontext ist kein echtes Postgres verfuegbar. STORE_BACKEND=pg
-// wuerde store.load() scheitern lassen BEVOR assertConfig() laeuft. Deshalb: Test ohne
-// RENDER_EXTERNAL_URL (kein AC1-Footgun) und ohne STORE_BACKEND-Gesetzt (json-Default).
-// Die STORE_BACKEND=pg-Pflicht in Produktion ist durch unit-testbares T-P0-5-09 (assertConfig
-// gibt true NUR mit storeBackend=pg+databaseUrl) und T-P0-1-AC1-01..04 abgedeckt.
 test("T-P0-5-14: Saubere Basis-Config (kein RENDER_EXTERNAL_URL) -> bootet, /healthz 200", async () => {
   const srv = await startServer({ env: { DASHBOARD_PASSWORD: "prod-geheim", SKIP_TWILIO_SIGNATURE_CHECK: "false" } });
   try {
@@ -56,14 +43,6 @@ test("T-P0-5-14: Saubere Basis-Config (kein RENDER_EXTERNAL_URL) -> bootet, /hea
   }
 });
 
-// GAP-19 (11-luecken-und-e2e.md), erste Haelfte: FORCE_NUMBER_COUNTRY=US bei
-// PROVISIONING_COUNTRY=DE (BASE_ENV) ist der reale Deployment-Zustand aus render.yaml -
-// Kauf-Land und Herkunftsland laufen auseinander. SOLL: der Start bricht ab ODER weist
-// die Konstellation ausdruecklich aus (ein Betriebs-Ack). Gemessen tut er beides nicht:
-// der Boot laeuft durch, und das Boot-Log - das jede andere Konfig-Inkohaerenz als
-// "[boot] Konfig-Warnung: ..." nennt - erwaehnt den Schalter mit keinem Wort.
-// Der Test traegt BEIDE Soll-Varianten: bricht der Start ab, haengt der Helper den
-// gesammelten Output an seine Fehlermeldung - auch dort muss der Schalter benannt sein.
 test("GAP-19 (SOLL, rot) - Kauf-Land != Herkunftsland wird beim Start nicht stumm hingenommen", async () => {
   let bootLog;
   let srv = null;
@@ -71,7 +50,7 @@ test("GAP-19 (SOLL, rot) - Kauf-Land != Herkunftsland wird beim Start nicht stum
     srv = await startServer({ env: { FORCE_NUMBER_COUNTRY: "US" } });
     bootLog = srv.stdout;
   } catch (err) {
-    bootLog = err.message; // Abbruch-Variante (Soll a): Output steckt in der Meldung
+    bootLog = err.message;
   } finally {
     if (srv) await srv.stop();
   }
@@ -83,11 +62,6 @@ test("GAP-19 (SOLL, rot) - Kauf-Land != Herkunftsland wird beim Start nicht stum
   );
 });
 
-// Nummern-Lebenszyklus (Owner-Entscheidung 2026-07-27, Ersatz fuer die zurueckgezogenen
-// GAP-23-Tests): mit aktivem Provisioning geht die Telnyx-Bestellung ohne connection_id
-// raus - die Nummer wird gekauft, kostet Miete und traegt trotzdem kein Voice-Routing.
-// Der Guard muss 'fehlt' von 'gesetzt' unterscheiden (T5) und darf einen gesunden Start
-// nicht verhindern (WARN, kein exit(1)).
 test("Boot-Guard: PROVISIONING_ENABLED ohne TELNYX_CONNECTION_ID -> Konfig-Warnung nennt die Variable", async () => {
   const srv = await startServer({ env: { PROVISIONING_ENABLED: "true", TELNYX_CONNECTION_ID: "" } });
   try {
@@ -106,9 +80,6 @@ test("Boot-Guard: gesetzte TELNYX_CONNECTION_ID -> keine Warnung (gesunder Start
   }
 });
 
-// T-P0-5-18 (E8, PLAN-OPENAI.md Etappe 8): Hosting + divergentes OAUTH_AUDIENCE ->
-// Boot verweigert (exit 1), nennt die Variable. PUBLIC_URL wird gesetzt, damit der
-// Vergleich einen konkreten kanonischen Wert hat (sonst greift RENDER_EXTERNAL_URL).
 test("T-P0-5-18: Hosting + divergentes OAUTH_AUDIENCE -> Boot verweigert (exit 1), nennt Var", async () => {
   const { code, output } = await startServerExpectExit({
     env: { ...PROD_SAFE, PUBLIC_URL: "https://agent.onrender.com", OAUTH_AUDIENCE: "https://fremd.example/mcp" },
@@ -118,11 +89,6 @@ test("T-P0-5-18: Hosting + divergentes OAUTH_AUDIENCE -> Boot verweigert (exit 1
   assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
 });
 
-// T2-04 (T-32): PUBLIC_URL fehlt im Hosting -> Boot verweigert. PROD_SAFE setzt
-// RENDER_EXTERNAL_URL (Produktionsprofil); BASE_ENV.PUBLIC_URL wird hier ausdruecklich
-// mit "" ueberschrieben, damit publicUrl auf den Hosting-Host zurueckfaellt und
-// REQUIRED_CONFIG (das nur publicUrl selbst prueft) gerade NICHT greift - exakt der
-// Fall, den T2-04 zusaetzlich schliesst.
 test("T2-04-04: Hosting + fehlendes PUBLIC_URL -> Boot verweigert (exit 1), nennt Var + Sollform", async () => {
   const { code, output } = await startServerExpectExit({ env: { ...PROD_SAFE, PUBLIC_URL: "" } });
   assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
@@ -132,11 +98,6 @@ test("T2-04-04: Hosting + fehlendes PUBLIC_URL -> Boot verweigert (exit 1), nenn
   assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
 });
 
-// Spezifitaets-Gegenprobe: PUBLIC_URL ist gesetzt (aus BASE_ENV, via PROD_SAFE-Spread
-// nicht ueberschrieben) - der neue Footgun darf NICHT feuern. Der Boot scheitert
-// trotzdem (Bestands-Footgun STORE_BACKEND, kein echtes Postgres im Test, s. T-P0-5-14)
-// - das ist erwartet und nicht Gegenstand dieses Tests. Absichtlich NICHT auf
-// /PUBLIC_URL/ geprueft: dieser Name kommt auch im OAUTH_AUDIENCE-Befund vor.
 test("T2-04-05: Hosting + gesetztes PUBLIC_URL -> der neue Footgun feuert NICHT (Spezifitaet)", async () => {
   const { code, output } = await startServerExpectExit({ env: { ...PROD_SAFE } });
   assert.equal(code, 1, `erwartet exit 1 (Bestands-Footgun STORE_BACKEND), Output:\n${output}`);

@@ -1,6 +1,3 @@
-// OUTBOUND-E3b (E-4/F2b): der MELDEWEG - Reihenfolge, Fail-Soft, PII. Versand
-// ausschliesslich gegen Attrappen (KEINE echten Anrufe/SMS/Mails). Zielnummern nur aus
-// reservierten Testbereichen (+1 202 555 01xx). PII (Regel 9/10).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reportSystematicOutage, runOutageRecoverySweep } from "../src/telephony/outage-report.js";
@@ -156,7 +153,6 @@ test("M3b: SMS wirft ASYNCHRON (Provider lehnt ab) - kein unhandled rejection, M
   await assert.doesNotReject(() =>
     reportSystematicOutage({ store, config: CONFIG, call: alarmCalls()[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer }),
   );
-  // sendFailSoftAlertSms ist fire-and-forget - eine Microtask-Runde reicht.
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(spies.mailCalls.length, 1);
 });
@@ -223,13 +219,6 @@ test("M8: K0 sendet nicht - erstbefund -> 0 Mail/SMS, genau 1 Audit", async () =
 });
 
 test("M9: Erholung sendet nicht - genau eine Audit-Zeile, 0 Sends (Sweep-Pfad, D9)", async () => {
-  // D9: der Ausloeser reportSystematicOutage sieht NUR not-placed-Anrufe und kann
-  // "erholt" strukturell nie selbst feststellen (der triggernde Call zaehlt immer als
-  // eigener Fehler im Fenster) - die Erholung laeuft ueber den Sweep (runOutageRecoverySweep),
-  // der das Fenster ohne einen aktuellen not-placed-Anruf neu bewertet.
-  // nowMs deterministisch injiziert (Muster ausfall-erkennung.test.js NOW_MS) - der
-  // erfolgreiche Anruf muss NACHWEISLICH im (fixen) Fenster liegen, unabhaengig von der
-  // Wanduhr des Testlaufs (sonst faellt der Test bei wachsendem Datum aus dem Fenster).
   const spies = makeSpies();
   const erfolgreicherCall = callRow({
     id: "call_ok", tenantId: "t_user_01ABC", endedAt: "2026-08-27T16:44:00Z",
@@ -246,12 +235,6 @@ test("M9: Erholung sendet nicht - genau eine Audit-Zeile, 0 Sends (Sweep-Pfad, D
 });
 
 test("M9b (E3B-02): windowMs=0 (Rollback-Hebel OFF) - der Sweep schliesst NICHTS", async () => {
-  // Gegenprobe zum urspruenglichen Defekt: runOutageRecoverySweep formulierte die
-  // RECOVERED-Klausel selbst nach (`fenster.fehler === 0` -> schliessen) statt
-  // beurteileAusfall zu fragen - dadurch griff der Rollback-Hebel OFF (windowMs=0,
-  // "Melder komplett aus") im Sweep NIE. Mit dem Fix liefert beurteileAusfall bei
-  // windowMs=0 IMMER urteil=OFF, der Sweep handelt dann fuer KEIN Urteil (VERDICT_HANDLERS
-  // kennt OFF nicht) - der Marker bleibt offen, keine Audit-Zeile entsteht.
   const spies = makeSpies();
   const erfolgreicherCall = callRow({
     id: "call_ok2", tenantId: "t_user_01ABC", endedAt: "2026-08-27T16:44:00Z",
@@ -266,10 +249,6 @@ test("M9b (E3B-02): windowMs=0 (Rollback-Hebel OFF) - der Sweep schliesst NICHTS
 });
 
 test("M9c (PFLICHT-TEST, Blocker falsche Entwarnung bei Null-Verkehr): offener Marker + LEERES Fenster -> KEINE Audit-Zeile, Marker bleibt offen", async () => {
-  // Reproduziert exakt das vom Reviewer gemessene Szenario: ein offener Marker, aber KEIN
-  // einziger Anruf im Fenster (rund ein Anruf pro Woche im echten Verkehrsregime - der
-  // Sweep laeuft stuendlich und faende sonst binnen 2h "erholt", waehrend die Konfiguration
-  // unveraendert kaputt ist).
   const spies = makeSpies();
   const store = makeStore({ calls: [], outageAlerts: withOpenMarker() });
   await runOutageRecoverySweep({ store, config: CONFIG, audit: spies.audit, nowMs: Date.parse(NOW_ISO) });
@@ -303,9 +282,6 @@ test("M11: Nicht-not-placed loest nichts aus (unreachable)", async () => {
 });
 
 test("M12 (G26, Review-Blocker Runde 2): zwei GLEICHZEITIG endende not-placed-Anrufe schicken GENAU EINEN Alarm - der Sendeplatz ist VOR dem Versand reserviert", async () => {
-  // Reproduziert den Befund: ohne Reservierung lesen zwei parallel abschliessende
-  // finishCall-Laeufe denselben, noch nicht geclaimten Marker, urteilen BEIDE "alarm" und
-  // senden BEIDE - die Entprellung (meldeErlaubt/retryMs) waere im Ernstfall wirkungslos.
   const spies = makeSpies();
   const calls = alarmCalls();
   const store = makeStore({ calls, outageAlerts: withOpenMarker(), platformNumberUse: boundSender() });

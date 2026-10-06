@@ -1,8 +1,3 @@
-// brevo-mail (312k-Phase 5, HTTP-Fortsetzung): Render sperrt auf kostenlosen Web-Diensten
-// den ausgehenden Verkehr auf allen SMTP-Ports - der Versand der Kuendigungsbestaetigung
-// wechselt deshalb vorrangig auf Brevo per HTTP (Port 443). Reiner Unit-Test, offline
-// (injizierter _fetch statt echtem Netzwerk, Muster smtp-boot-probe.test.js/
-// workos-management.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeBrevoMailer, verifyBrevoAccount } from "../src/brevo-mail.js";
@@ -16,8 +11,6 @@ function mailConfig(over = {}) {
   return withConfigNamespaces({ brevoApiKey: API_KEY, mailFrom: FROM, ...over });
 }
 
-// Fake fetch (DIP-Seam, Muster _fetch in workos-management.js/exa-search.js): zeichnet
-// jeden Aufruf (URL + Optionen) auf und liefert die injizierte Antwort, OHNE Netzwerk.
 function fakeFetch(responses) {
   const calls = [];
   let i = 0;
@@ -38,10 +31,6 @@ function okResponse() {
 function errorResponse(status) {
   return { ok: false, status };
 }
-// ======================================================================================
-// Pflichttest 1: sendMail schickt den richtigen Aufruf an den richtigen Endpunkt mit
-// Empfaenger, Absender, Betreff und Text.
-// ======================================================================================
 
 test("Pflichttest 1: sendMail ruft POST /v3/smtp/email mit Empfaenger/Absender/Betreff/Text auf", async () => {
   const _fetch = fakeFetch([okResponse()]);
@@ -62,11 +51,6 @@ test("Pflichttest 1: sendMail ruft POST /v3/smtp/email mit Empfaenger/Absender/B
   assert.equal(body.subject, "Bestätigung Ihrer Kündigung");
   assert.equal(body.textContent, "Hallo,\n\ninhalt");
 });
-
-// ======================================================================================
-// Pflichttest 2: Anbieter antwortet mit Fehler -> der Aufrufer bekommt einen Fehler, und
-// weder Schluessel noch Empfaengeradresse stehen in der Fehlermeldung.
-// ======================================================================================
 
 test("Pflichttest 2: Provider-Fehler -> sendMail wirft, Fehlermeldung ohne Key/Empfaengeradresse", async () => {
   const _fetch = fakeFetch([errorResponse(401)]);
@@ -104,10 +88,6 @@ test("Pflichttest 2b: Fehler-Response-Body wird NIE gelesen (kein res.text()/res
   assert.equal(textCalled, false, "Antwortkoerper darf im Fehlerpfad nie gelesen werden");
 });
 
-// ======================================================================================
-// verifyBrevoAccount (Boot-Sonden-Baustein): reiner Verbindungstest, verschickt keine Mail.
-// ======================================================================================
-
 test("verifyBrevoAccount: ruft GET /v3/account mit api-key-Header auf, wirft NICHT bei Erfolg", async () => {
   const _fetch = fakeFetch([{ ok: true, status: 200 }]);
 
@@ -126,7 +106,6 @@ test("verifyBrevoAccount: Provider-Fehler -> wirft mit http_<status>-Code, keine
     assert.equal(err.code, "http_401");
     return true;
   });
-  // GENAU der eine Account-Aufruf - kein zweiter Aufruf an /smtp/email (keine Mail).
   assert.equal(_fetch.calls.length, 1);
   assert.equal(_fetch.calls[0].url, "https://api.brevo.com/v3/account");
 });

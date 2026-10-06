@@ -1,14 +1,3 @@
-// KS-P1b Review-Blocker Runde 1 (S1): das Pendant zu test/cap-failure-reason.test.js fuer die
-// GELD-Achse. reattach-active-call.test.js und ks-p1b-shim-reattach.test.js reichen
-// budgetAxisFor/terminateOverBudgetCall als Spies durch den Re-Attach-Kern - sie pruefen nie,
-// dass call-lifecycle.js die ECHTE Verdrahtung traegt:
-//   budgetAxisFor: (call) => blockingBudgetAxis({ store, billing: config.billing, tenantId })
-//   terminateOverBudgetCall -> terminateActiveCall({ status:"completed", failureReason:
-//                              BUDGET_FAILURE_REASON })
-// Dieser Test faehrt makeCallLifecycle() + den echten reattachActiveCallCore (reattach.js) +
-// die echte blockingBudgetAxis (budget-gate.js) durch, mit einem Spy-Store, der NUR die
-// beiden Geld-Achse-Primitiven (activeCallsFor/liveBudgetExceeded) faelscht - genau
-// wie cap-failure-reason.test.js den Cap-Zweig gegen die echte Orchestrierung pinnt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -23,11 +12,8 @@ import { VOICE_ENGINE } from "../src/config.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const MAX_DURATION_S = 180;
-const RECENTLY_STARTED_MS = 30 * 1000; // deutlich unter MAX_DURATION_S -> NICHT expired
+const RECENTLY_STARTED_MS = 30 * 1000;
 
-// Spy-Store: die Cap-Felder aus cap-failure-reason.test.js PLUS die beiden Geld-Achse-
-// Primitiven, ueber die die echte blockingBudgetAxis entscheidet - kein Fake der
-// Entscheidung selbst.
 function spyStore(call, order) {
   return {
     getCall: (callId) => (callId === call.id ? call : null),
@@ -41,9 +27,6 @@ function spyStore(call, order) {
       order.push("recordFailureReason");
       if (!call.failureReason) call.failureReason = reason;
     },
-    // Geld-Achse erschoepft: liveBudgetExceeded meldet true unabhaengig vom Live-Term, damit
-    // blockingBudgetAxis(BUDGET_AXIS.TENANT) liefert - genau die reale Entscheidungsfunktion,
-    // nicht ein Stub von budgetAxisFor selbst.
     activeCallsFor: () => [],
     liveBudgetExceeded: () => true,
   };
@@ -85,10 +68,10 @@ test("Geld-Achse: Re-Attach eines Calls mit erschoepfter Decke terminalisiert ue
     terminateAndBillCall,
     hangUpAction,
     billThunk,
-    reattachActiveCallCore, // echter Kern (reattach.js), kein Spy
+    reattachActiveCallCore,
     cappedEndedAtMs,
     classifyCallTime,
-    blockingBudgetAxis, // echte Geld-Achse (budget-gate.js), kein Spy
+    blockingBudgetAxis,
   });
 
   const result = await lifecycle.reattachActiveCall(call.id);
@@ -112,8 +95,6 @@ test("Geld-Achse: Re-Attach eines Calls mit erschoepfter Decke terminalisiert ue
   );
   assert.deepEqual(
     order,
-    // G27/C2-Fix (Review-Blocker Runde 3): persistEnd laeuft jetzt ueber persistEndWithReason
-    // (call-termination.js) - EINE Formulierung, recordFailureReason IMMER zuerst.
     ["recordFailureReason", "setCallEndedAt", "endCall", "bill"],
     "Grund liegt VOR dem Provider-Hangup und VOR dem Settlement, wie beim Cap-Pendant",
   );

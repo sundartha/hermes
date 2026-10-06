@@ -1,12 +1,3 @@
-// GAP-01 (P6): das Perioden-Fenster des Budget-Gates. Bei BUDGET_MONTH_ENABLED=false (dem
-// heute laufenden Default) misst gateUsageCents nicht mehr die LEBENSZEIT, sondern den
-// Verbrauch SEIT dem Beginn der laufenden Stripe-Abrechnungsperiode: costCents minus einer
-// Baseline, die stampBudgetPeriod bei Periodenbeginn setzt. Der Lebenszeit-Zaehler bleibt
-// monoton (Forensik + D7-Gegenprobe), der Flag-AN-Zweig (Spend-Monat, P4/P7) bleibt
-// unberuehrt, die PLATTFORM-Achse ebenfalls (Absolute Regel 1, Beweis B6).
-//
-// Ops-Ebene, offline, kein Netz, kein Server-Spawn (F.I.R.S.T., Muster
-// test/budget-month-flip.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -24,13 +15,11 @@ import { PRICES } from "./_prices.js";
 
 const TENANT_A = "tenant_a";
 
-// Perioden-Anker (ISO-8601, lexikografisch = chronologisch - dieselbe Vergleichsregel wie
-// die Spend-Monat-Achse, s. laterMonotonicKey).
 const PERIOD_JUNE = "2026-06-01T00:00:00.000Z";
 const PERIOD_JULY = "2026-07-01T00:00:00.000Z";
 const NOW_ISO = "2026-07-19T10:00:00.000Z";
 
-const FLAG_OFF = PRICES; // budgetMonthEnabled fehlt -> falsy -> AUS (der Live-Zustand)
+const FLAG_OFF = PRICES;
 const FLAG_ON = { ...PRICES, budgetMonthEnabled: true };
 
 function stateWithUsage(tenantId, overrides = {}) {
@@ -39,8 +28,6 @@ function stateWithUsage(tenantId, overrides = {}) {
   return s;
 }
 
-// Leitet console.error waehrend fn um (Muster test/budget-month-flip.test.js captureErr):
-// restauriert IMMER, auch bei Wurf.
 function captureErr(fn) {
   const orig = console.error;
   console.error = () => {};
@@ -100,9 +87,6 @@ test("B4b kein Perioden-Anker -> No-Op, das Gate bleibt auf der Lebenszeit-Achse
 test("B5 negative Korrektur unter die Baseline -> Gate-Verbrauch 0, nie negativ", () => {
   const s = stateWithUsage(TENANT_A, { costCents: 100 });
   stampBudgetPeriod(s, TENANT_A, PERIOD_JULY);
-  // Verspaetete Kostenkorrektur aus der VORperiode druckt costCents unter die Baseline.
-  // KS-P5: ohne Belastungs-Anker (NO_CHARGE_ANCHORS) bleibt die Gutschrift auf der
-  // Lebenszeit-Achse; die Baseline wandert mit (100 -> 70), das Fenster bleibt 0.
   bookCostCorrectionCents(s, { tenantId: TENANT_A, deltaCents: -30, chargeAnchors: NO_CHARGE_ANCHORS, nowIso: NOW_ISO });
   assert.equal(s.usage[TENANT_A].costCents, 70);
   assert.equal(
@@ -113,8 +97,6 @@ test("B5 negative Korrektur unter die Baseline -> Gate-Verbrauch 0, nie negativ"
 });
 
 test("B6 A4-Beweis: die PLATTFORM-MESSUNG bleibt Lebenszeit/Spend-Monat, das Fenster hebt sie nicht auf", () => {
-  // Drei gestempelte Tenants, jeder unter seiner EIGENEN Periodendecke - die Plattform-
-  // Messung (seit KS-P9 reine Beobachtung) sieht trotzdem die volle Lebenszeit-Summe.
   const s = makeDefaultState();
   for (const tenantId of ["t1", "t2", "t3"]) {
     s.usage[tenantId] = { ...emptyUsage(), costCents: 300 };

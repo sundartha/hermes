@@ -20,8 +20,6 @@ import { CALL_CONFIRMATION_SECRET_FINDING, callConfirmationSecretFindings } from
 
 const TOO_SHORT_SECRET_LENGTH = CONFIRMATION_SECRET_MIN_LENGTH - 1;
 const WINDOWS_AFTER_EXPIRY = 2;
-// Haelfte von CONFIRMATION_CODE_LENGTH (6), fest benannt statt geteilt - eine Division
-// haette selbst wieder einen unbenannten Magic-Number-Faktor.
 const CODE_MIDPOINT = 3;
 const SECRET = "a".repeat(CONFIRMATION_SECRET_MIN_LENGTH);
 const KEY = deriveConfirmationKey(SECRET);
@@ -54,8 +52,6 @@ test("Code hat feste Laenge und nur Alphabet-Zeichen", () => {
   for (const ch of code) assert.ok(CONFIRMATION_CODE_ALPHABET.includes(ch));
 });
 
-// Gebunden: ALLE Argumente ausser confirmation_code (Lead-Entscheidung Safety-Review T2-13,
-// briefing/context eingeschlossen - context s. eigener Test unten, er ist ein Objekt).
 const FIELDS = ["to", "objective", "briefing", "language", "max_duration_s", "mandate", "constraints"];
 for (const field of FIELDS) {
   test(`Aenderung an ${field} aendert den Code`, () => {
@@ -71,8 +67,6 @@ for (const field of FIELDS) {
   });
 }
 
-// Lead-Entscheidung Safety-Review T2-13: der Nutzer bestaetigt, was tatsaechlich passiert -
-// briefing UND context sind gebunden, leer/fehlend eindeutig unterschieden.
 function canonicalOf(args) {
   return canonicalCallRequest({ to: args.to, args });
 }
@@ -189,13 +183,6 @@ test("falscher Code wird abgelehnt", () => {
   );
 });
 
-// ==================== Route-Unit-Test (Safety-Review T2-13-Nachbesserung) =================
-// makeCallConfirmationRoutes traegt eine now-Injektionsnaht extra fuer diesen Test (Kommentar
-// an der Funktion, Spec-Abschnitt "Abnahme am Draht" Punkt (d)). Bisher gab es dafuer keinen
-// Test - der reale Draht-Test (openai-t2-13-bestaetigung.test.js) laeuft nur mit der echten
-// Systemuhr und deckt den Ablauf-Grenzfall darum nicht ab. EINE lokale Express-App (Muster
-// mountProbe, test/auth-p5-internal-only.test.js) statt eines vollen Server-Spawns.
-
 const ROUTE_SECRET = "call-confirmation-route-test-secret-mind-32-z";
 const ROUTE_TARGET = "+4917298765432";
 const ROUTE_OBJECTIVE = "Rueckruf vereinbaren";
@@ -203,9 +190,6 @@ const CODE_PATTERN_ROUTE = new RegExp(`^[${CONFIRMATION_CODE_ALPHABET}]{${CONFIR
 const HTTP_OK_ROUTE = 200;
 const HTTP_SERVICE_UNAVAILABLE_ROUTE = 503;
 
-// Trivialer Store: resolveDialTarget() braucht nur diese drei Methoden (Gate-Kette selbst
-// laeuft hier NICHT, die Route prueft nur den Bestaetigungs-Code). Keine Privatnummer, kein
-// aktiver Anschluss, Heimatland DE - der Test-Ziel ist bereits E.164, bleibt also unveraendert.
 function fakeStoreForRoute() {
   return {
     tenantPrivateNumber: () => null,
@@ -214,9 +198,6 @@ function fakeStoreForRoute() {
   };
 }
 
-// requestTenant liest, wie am echten /mcp-Gateway, den vorgelagert aufgeloesten Mandanten aus
-// X-Internal-Tenant (keine zweite Aufloesungsregel fuer diesen Test - der Header IST die
-// Aufloesung, dieselbe Schnittstelle wie tenant.requestTenant(req) in api-call-confirmations.js).
 function requestTenantFromHeader(req) {
   return req.headers["x-internal-tenant"] || "route-test-tenant";
 }
@@ -262,7 +243,6 @@ test("Route: gueltiger Code -> confirmed:true; Fenster abgelaufen (injizierte Uh
     const code = issued.json.confirmation.code;
     assert.match(code, CODE_PATTERN_ROUTE);
 
-    // Noch im selben Fenster: bestaetigt.
     const stillValid = await postConfirmation(app.base, {
       to: ROUTE_TARGET,
       objective: ROUTE_OBJECTIVE,
@@ -270,11 +250,6 @@ test("Route: gueltiger Code -> confirmed:true; Fenster abgelaufen (injizierte Uh
     });
     assert.equal(stillValid.json.confirmed, true, "im selben Fenster gueltig");
 
-    // Zwei Fenster weiter (ueber ACCEPTED_WINDOWS hinaus): der Code ist abgelaufen. Ein FRISCH
-    // ausgestellter zweiter Code desselben Requests wird gegen den ABGELAUFENEN geprueft
-    // (der erste ist ohnehin schon verbraucht, s. Einmal-Verbrauch-Test unten) - der Ablauf
-    // selbst wird direkt ueber matchedWindowIndex in call-confirmation.test.js oben bewiesen;
-    // hier zaehlt, dass die Route dieselbe Antwort (confirmed:false) liefert.
     clockMs += CONFIRMATION_WINDOW_MS * WINDOWS_AFTER_EXPIRY;
     const expired = await postConfirmation(app.base, {
       to: ROUTE_TARGET,
@@ -365,9 +340,6 @@ test("Route: kein/zu kurzes CALL_CONFIRMATION_SECRET -> 503, kein Code ausgestel
   }
 });
 
-// ============ Safety-Review T2-13 (zweite Runde): Ablauf, Slots, Bremse, Bindung ===========
-// Alle ueber die ECHTE Route-Factory mit injizierter Uhr. ROUTE_TENANT ist der Default aus
-// requestTenantFromHeader/postConfirmation oben.
 const ROUTE_TENANT = "route-test-tenant";
 const ROUTE_KEY = deriveConfirmationKey(ROUTE_SECRET);
 const ROUTE_CLOCK_START = Date.parse("2026-09-24T15:00:00Z");
@@ -508,7 +480,6 @@ test("Route: geaenderte language/briefing/context werden abgelehnt, unveraendert
   );
 });
 
-// Boot-Befund (Safety-Review T2-13): fehlendes UND zu kurzes Geheimnis melden, nie den Wert.
 test("Boot-Befund: CALL_CONFIRMATION_SECRET fehlt / zu kurz / ok - Meldung enthaelt nie den Wert", () => {
   const secretMarker = "x9Qz";
   const tooShort = secretMarker.padEnd(TOO_SHORT_SECRET_LENGTH, "#");

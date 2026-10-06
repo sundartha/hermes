@@ -1,13 +1,8 @@
-// CL1-B3 — Bestandsheiler fuer TOTE Stripe-Abo-Referenzen (state-ops-Selektor +
-// reconcileStaleSubscriptions). Reine Units mit Fake-Store/Fake-Billing, kein Netz,
-// kein Spawn (F.I.R.S.T.) - Muster stripe-reconcile-sweep.test.js.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { tenantsForStaleSubscriptionReconcile } from "../src/store/state-ops.js";
 import { TENANT_STATUS } from "../src/store/defaults.js";
 import { reconcileStaleSubscriptions, STALE_SUB_OUTCOME } from "../src/billing/stale-subscription-reconcile.js";
-
-// ---- Selektor -----------------------------------------------------------------------
 
 test("tenantsForStaleSubscriptionReconcile: nur Tenants mit Abo-Referenz UND status != active", () => {
   const state = {
@@ -23,8 +18,6 @@ test("tenantsForStaleSubscriptionReconcile: nur Tenants mit Abo-Referenz UND sta
     "aktive Tenants und Tenants ohne Abo-Referenz bleiben draussen",
   );
 });
-
-// ---- reconcileStaleSubscriptions ------------------------------------------------------
 
 function fakeStore(tenants) {
   return {

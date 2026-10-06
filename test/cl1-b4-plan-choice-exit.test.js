@@ -1,14 +1,7 @@
-// CL1-B4 — "Vielleicht spaeter" darf keine Sackgasse sein. renderPlanChoice/
-// dismissPlanChoice sind reine DOM-Builder (kein Netz, kein Fetch) - ein Mini-Fake-doc
-// und schlichte Fake-els genuegen, F.I.R.S.T. (Muster render.test.js: createElement-
-// Fake, der el()/planTiles genuegt, keine echte DOM-Bibliothek).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderPlanChoice, dismissPlanChoice } from "../apps/web/src/lib/subscribe.js";
 
-// createElement liefert Knoten mit genau dem, was el()/planTile brauchen: dataset
-// (subscribeButton setzt dataset.plan), append (Kachel-Komposition). className/
-// textContent/type sind einfache Property-Zuweisungen, die ein Plain Object traegt.
 function fakeDoc() {
   return { createElement: () => ({ dataset: {}, append() {} }) };
 }

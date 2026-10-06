@@ -1,7 +1,3 @@
-// Review-Blocker Runde 3 (G5/S2): customerMatches war wortgleich in card-setup.js UND
-// subscribe.js dupliziert - dieser Test deckt die EXTRAHIERTE Sicherheitsinvariante (R4)
-// direkt ab, plus bindCardFromSession als ihren ersten Aufrufer (bisher nur indirekt ueber
-// Routen-Tests gedeckt). Reine Orchestrierung ueber Fake-Store + Fake-Billing, kein IO.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -23,8 +19,6 @@ function fakeStore({ customerId = null, paymentMethodId = null, paymentMethodTyp
   };
 }
 
-// ---- customerMatches (R4-Invariante, EINE Stelle statt Kopie in subscribe.js) --------
-
 test("customerMatches: kein gespeicherter Customer -> false (T5-Grenzfall, nie raten)", () => {
   assert.equal(customerMatches(fakeStore(), TENANT, "cus_x"), false);
 });
@@ -38,8 +32,6 @@ test("customerMatches: gespeicherter Customer == Session-Customer -> true", () =
   const store = fakeStore({ customerId: "cus_x" });
   assert.equal(customerMatches(store, TENANT, "cus_x"), true);
 });
-
-// ---- bindCardFromSession: erster Aufrufer, ueber customerMatches fail-closed ----------
 
 test("bindCardFromSession: fremder Customer -> ok:false, nichts persistiert", async () => {
   const store = fakeStore({ customerId: "cus_owner" });
@@ -66,8 +58,6 @@ test("bindCardFromSession: passender Customer -> ok:true, Karte UND Typ persisti
   assert.equal(store.state.stripe.paymentMethodType, "card", "GP-P2: der Typ wandert mit");
 });
 
-// ---- ensureCustomer: bestehende Idempotenz unveraendert (Regressions-Schutz) ---------
-
 test("ensureCustomer: existierender Customer wird wiederverwendet, kein zweiter Stripe-Call", async () => {
   const store = fakeStore({ customerId: "cus_x" });
   const billing = { createCustomer: async () => assert.fail("kein zweiter createCustomer-Call erwartet") };
@@ -82,8 +72,6 @@ test("ensureCustomer: kein Customer -> legt ihn an und persistiert", async () =>
   assert.equal(customerId, "cus_new");
   assert.equal(store.state.stripe.customerId, "cus_new");
 });
-
-// ---- startCheckoutWithStaleCustomerHeal (Self-Heal, Fix B, PLAN-CHECKOUT-STALE-STRIPE-CUSTOMER.md) ----
 
 test("startCheckoutWithStaleCustomerHeal: Happy-Path - Checkout gelingt sofort -> healed:false, kein createCustomer-Zusatzaufruf, kein sleep", async () => {
   const store = fakeStore({ customerId: "cus_x" });
@@ -131,7 +119,7 @@ test("startCheckoutWithStaleCustomerHeal: gespeicherter Customer stale (Customer
 });
 
 test("startCheckoutWithStaleCustomerHeal: auch ein FRISCH angelegter Customer kann CustomerMissing treffen (Nachtrag 3, Sichtbarkeits-Verzoegerung) -> heilt trotzdem, 2 createCustomer-Calls", async () => {
-  const store = fakeStore(); // kein Customer gespeichert
+  const store = fakeStore();
   let customerCallCount = 0;
   const billing = {
     createCustomer: async () => {

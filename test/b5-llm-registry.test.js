@@ -1,12 +1,3 @@
-// B5 (tasks/b5-spec.md, Abschnitt 3 "K21 Registry"): die Anbieter-WAHL. Zwei Haelften,
-// beide noetig:
-//   - Units gegen den config-Singleton (welcher Adapter kommt heraus, mit welchem
-//     Schluessel, was passiert bei Muell),
-//   - Spawn-Tests gegen den echten Boot (Boot-Refusal bei unbekanntem Wert, Gegenprobe
-//     mit gueltigem Wert, und der Beweis der Phase: Anbieterwechsel = reine Env-Operation).
-//
-// Testnamen tragen bewusst KEINE Katalog-ID am Namensanfang (package.json
-// config.i18nCatalogPattern) - Praefix ist "B5-R<n>:"/"B5-P<n>:".
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -21,8 +12,6 @@ const { withConfig, withConfigOverrides } = makeConfigOverrides(config);
 
 const DEEPSEEK_MODEL = "deepseek-v4-pro";
 const TEST_DEEPSEEK_KEY = "sk-b5-registry-dummy";
-// Unterscheidbarer Gegenwert: nur so ist "der falsche Schluessel ging raus" ueberhaupt
-// beobachtbar (ein leerer Anthropic-Schluessel steckt als Teilstring in jedem Header).
 const ANTHROPIC_SENTINEL_KEY = "sk-ant-b5-darf-nicht-rausgehen";
 
 test("B5-R1: Default -> der Anthropic-Adapter (seine Fehler-Klassifikation, ohne Client-Bau)", () => {
@@ -42,8 +31,6 @@ test("B5-R2: llmProvider=deepseek -> der DeepSeek-Adapter, und er traegt den DEE
       assert.equal(activeLlmErrors(), deepseekErrors);
       const seen = [];
       const provider = createLlmProvider({
-        // Der Test-Seam des DeepSeek-Adapters. Die Registry reicht Optionen unveraendert
-        // durch; messagesCreate/messagesStream (Anthropic-Seams) ignoriert er.
         chatCompletionsFetch: (url, init) => {
           seen.push({ url, init });
           return Promise.resolve({
@@ -85,11 +72,6 @@ test("B5-R3: unbekannter Wert wirft benannt und nennt die gueltige Menge - auch 
   }
 });
 
-// ---- Preis: der Fremdanbieter darf die Fail-closed-Rate NICHT anheben (Regel 1) --------
-
-// Die AUSGELIEFERTE, auf heute aufgeloeste Tabelle - genau die, aus der worstCasePrice
-// (store/state-ops.js) die Fail-closed-Rate fuer unbekannte Modelle bildet. Bewusst ohne
-// Zahlen-Literale: ein Preis-Update darf diesen Test nicht rot faerben (Muster B4A-TAB-1).
 test("B5-P1: das punktweise Maximum ueber ALLE Staffeln ist je Rate identisch zum Maximum ueber die Anthropic-Staffeln allein", () => {
   const prices = config.llm.modelPricesUsd;
   const ids = Object.keys(prices);
@@ -105,8 +87,6 @@ test("B5-P1: das punktweise Maximum ueber ALLE Staffeln ist je Rate identisch zu
     "waere eine DeepSeek-Rate die teuerste, buchte jedes unbekannte Modell ab sofort teurer (worstCasePrice)",
   );
 });
-
-// ---- Boot: die Env-Operation ----------------------------------------------------------
 
 test("B5-R4: ein vertipptes LLM_PROVIDER verweigert den Boot mit genanntem Wert - kein stiller Fallback", async () => {
   const { code, output } = await startServerExpectExit({ env: { LLM_PROVIDER: "deepsek" } });
@@ -131,8 +111,6 @@ test("B5-R6: LLM_PROVIDER=deepseek ohne DEEPSEEK_API_KEY verweigert den Boot ben
     env: { LLM_PROVIDER: "deepseek", DEEPSEEK_API_KEY: "" },
   });
   assert.equal(code, 1);
-  // FW2: der REQUIRED_CONFIG-Eintrag deckt jetzt ZWEI Anlaesse (LLM_PROVIDER UND
-  // LLM_PROVIDER_FALLBACK=deepseek), der Name nennt seither beide Env-Variablen.
   assert.match(output, /DEEPSEEK_API_KEY \(weil LLM_PROVIDER\/LLM_PROVIDER_FALLBACK=deepseek\)/);
 });
 

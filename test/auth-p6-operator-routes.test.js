@@ -1,17 +1,3 @@
-// AUTH-P6-1..4: die sechs Betreiber-Routen (POST /api/onboard, POST /api/onboard/retry,
-// POST /api/billing/flush-meters, POST /api/billing/cost-truing/sweep, GET
-// /api/billing/cost-drift, GET /api/billing/platform-costs) hinter der ECHTEN
-// webAuthMw+adminMw-Kette. Muster admin-approval.test.js (echte webAuth/adminOnly ueber
-// makePgTestStore) kombiniert mit billing-payment-gate.test.js (echte Route-Fabrik auf
-// einer Wegwerf-App). Doubles statt Infrastruktur fuer store/billing/costTruing/
-// provisioning: Subjekt dieser Datei ist die SICHERUNG, nicht die Fachantwort.
-//
-// Testpraefix bewusst "AUTH-P6-N" (NICHT DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|
-// PROMPT|UI|VOICE|WEB|WORLD-<Ziffer>): sonst landet die Datei still im test:gates-Lauf,
-// wo Rot erlaubt ist und nichts meldet (Lehre catalog-id-prefix-misroutes-tests).
-//
-// pglite (kein Spawn, kein echtes Netz) - NICHT mit test/auth-p6-mount-gate.test.js
-// (Spawn) mischen (Lehre: pglite nie mit Kindprozess mischen).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -26,9 +12,6 @@ import { TENANT_STATUS, KYC_LEVEL } from "../src/store/defaults.js";
 const SECRET = "auth-p6-web-secret-0123456789";
 const ADMIN_EMAILS = ["admin@x"];
 
-// Die Behauptung "diese sechs Betreiber-Routen" existiert genau HIER (G5) - alle vier
-// Faelle (401/403/admin-allowlist/admin-rolle) iterieren darueber. body ist das, was
-// jeder Testfall sendet; fuer GET-Routen bleibt es ungenutzt.
 const PROBE_TENANT_ID = "t_p6_probe";
 const RETRY_TENANT_ID = "t_p6_retry";
 const OPERATOR_ROUTES = [
@@ -66,15 +49,12 @@ async function setup() {
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
 
-  // Admin per ADMIN_EMAILS (Allowlist).
   await accounts.upsertOnFirstLogin({ sub: "admin1", email: "admin@x" });
   await accounts.setStatus("t_admin1", "active");
   const adminSession = (
     await sessions.create({ sub: "admin1", tenantId: "t_admin1", ttlSeconds: 3600 })
   ).id;
 
-  // Admin per role='admin' in der DB - E-Mail bewusst NICHT in ADMIN_EMAILS (pinnt den
-  // ODER-Mechanismus, s. web-auth.js adminOnly).
   await accounts.upsertOnFirstLogin({ sub: "adminrole1", email: "adminrole@x" });
   await accounts.setStatus("t_adminrole1", "active");
   await accounts.setRole("adminrole@x", "admin");
@@ -82,7 +62,6 @@ async function setup() {
     await sessions.create({ sub: "adminrole1", tenantId: "t_adminrole1", ttlSeconds: 3600 })
   ).id;
 
-  // Kunde: active, kein Admin.
   await accounts.upsertOnFirstLogin({ sub: "cust1", email: "cust@x" });
   await accounts.setStatus("t_cust1", "active");
   const custSession = (
@@ -94,10 +73,6 @@ async function setup() {
     adminMw: adminOnly({ adminEmails: ADMIN_EMAILS }),
   };
 
-  // In-Memory-Store-Double: Subjekt dieser Datei ist die Sicherung, nicht die
-  // Fachantwort - store/billing/costTruing/provisioning bleiben Doubles (kein pg-Store,
-  // kein echtes Netz). Der Retry-ZielTenant ist VORHER als active+KYC>=CARD geseedet
-  // (die Geld-Safety-Vorbedingung des Retry-Handlers, unabhaengig von AUTH-P6).
   const state = makeDefaultState();
   registerTenant(state, RETRY_TENANT_ID, { country: "DE" });
   const retryTenant = state.tenants.find((t) => t.id === RETRY_TENANT_ID);
@@ -114,7 +89,7 @@ async function setup() {
     platformTtsUsageView: (nowIso) => platformTtsUsageView(state, OPERATOR_CONFIG.billing, nowIso),
   };
 
-  const billingDouble = { log: [] }; // nie aufgerufen (leeres usageEvents-Ledger)
+  const billingDouble = { log: [] };
   const costTruingDouble = {
     calls: [],
     runCostTruingSweep: async ({ trigger }) => {
@@ -196,8 +171,6 @@ function request(app, route, sessionId) {
   });
 }
 
-// Keine Sitzung / falsche Sitzung darf ueberhaupt keinen Seiteneffekt ausloesen: weder
-// ein Tenant noch ein Billing-/Sweep-/Provisioning-Aufruf.
 async function assertNoSideEffects(app) {
   assert.ok(
     !app.state.tenants.some((t) => t.id === PROBE_TENANT_ID),
@@ -241,8 +214,6 @@ test("AUTH-P6-2: aktive Nicht-Admin-Sitzung -> 403 auf allen sechs Routen, keine
   }
 });
 
-// Je Route der Bestands-Erfolg (nicht 401/403/404) - EINE Assert-Funktion, von beiden
-// Admin-Faellen (AUTH-P6-3/4) geteilt (G5: dieselbe Erwartung, zwei Zugangswege).
 async function assertOperatorSuccess(app, sessionId) {
   for (const route of OPERATOR_ROUTES) {
     const res = await request(app, route, sessionId);
@@ -259,10 +230,6 @@ async function assertOperatorSuccess(app, sessionId) {
       assert.equal(json.numberId, "num_p6_retry");
     } else if (route.path === "/api/billing/flush-meters") {
       assert.equal(res.status, 200);
-      // KV-P0: OPERATOR_CONFIG setzt kein flushEpochIso (undefined) - der Flush ist
-      // damit fail-closed geriegelt (skipReason=no_flush_epoch). Diese Datei prueft die
-      // Auth-Sicherung (Erfolg != 401/403/404), nicht die Metering-Fachlogik - die neuen
-      // Felder werden mitgepinnt, nicht verschwiegen.
       assert.deepEqual(json, { sent: 0, failed: 0, skipped: 0, skipReason: "no_flush_epoch" });
     } else if (route.path === "/api/billing/cost-truing/sweep") {
       assert.equal(res.status, 200);

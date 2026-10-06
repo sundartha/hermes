@@ -1,18 +1,3 @@
-// P7 (Cluster 7, G5, DoD-Pflicht): requirePaymentEnabled() in src/billing/payment-gate.js
-// ersetzt den vormals an 7 Stellen verdoppelten PAYMENT_ENABLED-404-Guard (6 identisch +
-// 1 abweichender Text im Metering-Flush; der 7. Fund - routes/stripe-webhook.js - kam erst
-// aus dem P7-Review nach, Blocker S2). Drei Ebenen:
-//   (1) direkter Unit-Test der reinen Funktion (fail-closed, Default-/Override-Message);
-//   (2) alle 6 realen Routen (routes/api-billing.js + self-service-routes.js) bei
-//       PAYMENT_ENABLED=false -> 404 mit dem exakten JSON-Body;
-//   (3) der 7. Fund routes/stripe-webhook.js -> 404 mit seinem EIGENEN abweichenden Text
-//       ("payment disabled", ohne "(PAYMENT_ENABLED)"-Suffix), bevor die Signaturpruefung
-//       greift (Gate steht als ALLERERSTE Zeile im Handler).
-// KEIN Server-Spawn (Lehre p6a-Stall): api-billing.js direkt gemountet (Gate kommt VOR
-// jedem store/billing-Zugriff -> Stub-Deps genuegen); self-service-routes.js braucht eine
-// echte eingeloggte Session (webAuthPendingMw laeuft VOR dem Gate) -> pglite ohne Spawn,
-// Muster w4-self-service-subscribe.test.js; stripe-webhook.js ist ein direkter
-// Handler-Aufruf (kein Router-Mount noetig, Gate steht vor jedem rawBody-Zugriff).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -29,8 +14,6 @@ import { operatorAuthPassThrough } from "./operator-route-app.js";
 const PAYMENT_DISABLED_MESSAGE = "payment disabled (PAYMENT_ENABLED)";
 const METERING_DISABLED_MESSAGE = "metering disabled (PAYMENT_ENABLED)";
 const STRIPE_WEBHOOK_DISABLED_MESSAGE = "payment disabled";
-
-// ---- (1) Direkter Unit-Test der reinen Gate-Funktion ----------------------------
 
 function fakeRes() {
   const res = { statusCode: null, body: null };
@@ -64,8 +47,6 @@ test("requirePaymentEnabled: paymentEnabled=false, message-Override -> 404 mit d
   assert.deepEqual(res.body, { error: "custom text" });
 });
 
-// ---- (2a) routes/api-billing.js: 3 Routen, direkt gemountet (kein Spawn) --------
-
 async function startBillingApp() {
   const app = express();
   app.use(express.json());
@@ -76,9 +57,6 @@ async function startBillingApp() {
       audit: () => {},
       billing: {},
       tenant: {},
-      // AUTH-P6: flush-meters ist jetzt eine Betreiber-Route und wird nur MIT
-      // operatorAuth gemountet. Durchreiche-Attrappe (kein echtes Auth-Verhalten) -
-      // dieser Test misst weiterhin das PAYMENT_ENABLED-Gate, nicht die Sitzung.
       operatorAuth: operatorAuthPassThrough(),
     }),
   );
@@ -110,18 +88,11 @@ test("PAYMENT_ENABLED aus: alle 3 routes/api-billing.js-Routen -> 404 mit exakte
   }
 });
 
-// ---- (2b) self-service-routes.js: 3 Routen hinter einer echten Session ---------
-// webAuthPendingMw laeuft VOR requirePaymentEnabled -> braucht eine gueltige Session
-// (pglite, kein Spawn, Muster w4-self-service-subscribe.test.js).
-
 const SECRET = "payment-gate-test-secret-0123456789";
 const SUB = "sub-paygate";
 const TENANT = "t_sub-paygate";
 
 test("PAYMENT_ENABLED aus: alle 3 self-service/billing-Routen -> 404 mit exaktem Body (eingeloggt)", async () => {
-  // makeAccounts/makeSessions brauchen denselben pglite-Runner wie der Store (Muster
-  // w4-self-service-subscribe.test.js): makePgTestStore liefert store + die rohe pglite-
-  // Instanz db, aus der hier derselbe Runner-Vertrag fuer Accounts/Sessions gebaut wird.
   const { store, db } = await makePgTestStore();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
@@ -181,10 +152,6 @@ test("PAYMENT_ENABLED aus: alle 3 self-service/billing-Routen -> 404 mit exaktem
     await new Promise((r) => server.close(r));
   }
 });
-
-// ---- (2c) routes/stripe-webhook.js: der 7. Fund, abweichender Text ("payment disabled",
-// ohne "(PAYMENT_ENABLED)"-Suffix). Gate ist die allererste Zeile -> direkter Handler-
-// Aufruf mit einem Fake-req/res genuegt (kein rawBody/Signatur-Setup noetig).
 
 function fakeStripeWebhookReqRes() {
   const res = fakeRes();

@@ -1,19 +1,3 @@
-// OC-P1 (PLAN-OWNER-CALL, tasks/oc-p1-spec.md): das Praedikat "Ziel == eigene Nummer des
-// anrufenden Tenants". Drei Bloecke, alle offline und ohne Spawn:
-//   A  - calleeIsOwner: der nackte Vergleich, inkl. jedes naheliegenden Beinahe-Treffers
-//   A2 - ownerSelfCallGranted: die vollstaendige Bedingung (Schalter + Allowlist + Ziel)
-//   B  - dieselben vier Konjunktionen bis auf den ANRUF-DATENSATZ (state-ops.createCall)
-//
-// BLOCK A IST EIN RIEGEL, KEINE Fleissarbeit. Er existiert gegen genau einen kuenftigen
-// Umbau: "mach den Vergleich robuster". Praefix-Match, Vergleich der letzten n Ziffern,
-// Gross-/Kleinschreibungs-Toleranz und Trim wuerden bewirken, dass FREMDE Nummern als
-// eigene durchgehen - und ab OC-P2 heisst das: ein Fremder bekommt einen Anruf OHNE den
-// gesetzlich vorgeschriebenen Offenlegungssatz (Absolute Regel 2). Wer eine dieser Zeilen
-// gruen bekommen will, indem er den Vergleich lockert, hat den Zweck des Tests verfehlt.
-//
-// BLOCK A2 Zeile "Liste leer" und "Liste ohne diesen Tenant" sind der Riegel gegen die
-// haeufigste Fehlinterpretation einer Allowlist: leer heisst NIEMAND, nie JEDER
-// (Memory streaming-armierung-allowlist).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { calleeIsOwner, ownerSelfCallGranted } from "../src/callee-is-owner.js";
@@ -23,10 +7,8 @@ import { seedState } from "./helpers.js";
 
 const OWN = "+491737252163";
 const FOREIGN = "+491729999001";
-const TENANT = BOOTSTRAP_TENANT_ID; // "owner"
+const TENANT = BOOTSTRAP_TENANT_ID;
 const OTHER = "t_fremd";
-
-// ---- Block A: calleeIsOwner (nackter Nummern-Vergleich) ----
 
 test("OC-P1-01: to === ownNumber, identische E.164 -> true", () => {
   assert.strictEqual(calleeIsOwner({ to: OWN, ownNumber: OWN }), true);
@@ -83,8 +65,6 @@ test("OC-P1-12: to ist kein String (Zahl/Objekt) -> false", () => {
 test("OC-P1-13: ownNumber ist kein String (Zahl) -> false", () => {
   assert.strictEqual(calleeIsOwner({ to: OWN, ownNumber: 491737252163 }), false);
 });
-
-// ---- Block A2: ownerSelfCallGranted (vollstaendige Bedingung) ----
 
 test("OC-P1-20: enabled true, Tenant in Liste, Ziel eigene Nummer -> true (strikt Boolean)", () => {
   const result = ownerSelfCallGranted({
@@ -206,11 +186,6 @@ test("OC-P1-35: ownNumber im Store nicht gesetzt (null) -> false, kein Wurf", ()
   );
 });
 
-// ---- Block B: dieselben vier Konjunktionen am Anruf-Datensatz ----
-
-// Ein voller Durchstich fuer EINE Konfiguration: Praedikat auswerten wie in
-// routes/api-calls.js, Ergebnis an createCall geben, Feld am Datensatz lesen. EINE
-// Stelle fuer den Durchstich (G5), von allen vier Faellen genutzt.
 function calleeIsOwnerAmDatensatz({ enabled, allowedTenantIds, to }) {
   const state = seedState({ tenants: [{ id: TENANT, status: "active", privateNumber: OWN }] });
   const call = createCall(state, {

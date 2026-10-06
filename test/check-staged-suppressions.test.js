@@ -1,51 +1,3 @@
-// Aufraeum-Gate (scripts/check-staged-suppressions.js). Prueft die reine
-// Auswahl-Logik auf einer Attrappe, nie auf der echten eslint-suppressions.json
-// (die ist gross und aendert sich mit jedem Aufraeumen). Beide Richtungen:
-// eine vorgemerkte Datei mit Eintraegen wird gemeldet, eine ohne wird nicht.
-//
-// STUFE 2 (sechster und siebter Block): eine gemeldete Datei wird trotzdem
-// durchgelassen, wenn ihre UNGEFILTERTEN Lint-Befunde vor und nach der
-// Aenderung identisch sind - dann ist belegt, dass die Aenderung mechanisch
-// war. Der sechste Block prueft die Entscheidung an der Attrappe, der siebte
-// die Befundmenge an echten eslint-Meldungen (Zeilenverschiebung vs. neuer
-// Verstoss vs. nicht lintbar).
-//
-// ALTLAST-LISTE: der zweite describe-Block prueft den Ausweg aus dem Gate.
-// Hintergrund: das Gate hatte einen Fall ohne Ausweg (src/store/state-ops.js,
-// src/store/pg.js tragen Schuld, deren Aufraeumen ein eigenes Refactoring
-// waere). Der Eigentuemer hat entschieden: der Ausweg ist eine ausdrueckliche
-// Altlast-Liste, nicht "git commit --no-verify".
-//
-// Der Vertrag, den dieser Block pinnt, ist die NAHT, nicht der Speicherort:
-//   findSuppressedStagedFiles({ stagedFiles, suppressions, legacyExceptions })
-// legacyExceptions ist eine Abbildung Dateipfad -> { reason, date }:
-//   reason: nicht-leerer Text, warum die Datei noch nicht geraeumt ist
-//   date:   Kalenderdatum im Format YYYY-MM-DD, wann die Ausnahme entstand
-// Ein Eintrag, dem eines von beidem fehlt oder der es nur leer/unlesbar
-// fuehrt, ist UNGUELTIG und entschuldigt nichts - die Liste ist eine bewusste
-// Ausnahme, kein Abstellgleis. WO die Liste liegt, laesst der Auswahl-Block
-// bewusst offen; das Einlesen prueft der dritte Block getrennt davon, der
-// vierte den Bericht, den ein Blockierter zu sehen bekommt.
-//
-// RATSCHE (fuenfter Block): der Inhalt der ECHTEN Liste ist gepinnt. Waechst
-// sie, schrumpft sie oder aendert sich ein Eintrag, wird der Lauf rot - dann
-// muss der aendernde Agent diesen Test anfassen, und die Aenderung steht im
-// Diff statt still im Bestand. Muster: ROUTE_FINGERPRINT in
-// test/route-auth-inventory.test.js.
-//
-// WAS EIN MENSCH PRUEFEN MUSS - die Ratsche kann es nicht (Eigentuemer-
-// Entscheidung 2026-08-13, .fortschritt.md D11):
-//   1. Die FREIGABE selbst. Der Test sieht, DASS jemand die Liste nachgezogen
-//      hat, nie ob Antonio den Eintrag erlaubt hat. Ein Bau-Agent setzt
-//      keinen Eintrag - blockiert ihn der Hook, raeumt er auf oder meldet sich.
-//   2. Ob der Grund WAHR ist: dass das Aufraeumen wirklich gefaehrlich waere
-//      und nicht bloss laestig. Die Maschine misst Substanz (Laenge,
-//      Wortbestand jenseits von Floskeln), nie Wahrheit oder Gefahr.
-//   3. Ob die Unterdrueckungen der Datei ECHTE Schuld sind oder ein
-//      Fehlschnitt der Regel (D9/D10). Beim Fehlschnitt wird die REGEL
-//      korrigiert - der Eintrag gehoert dann gar nicht erst auf die Liste.
-//      Anlass: von 45 Verstoessen der beiden gelisteten Dateien waren 37
-//      reine Umbenennungen.
 import { strict as assert } from "node:assert";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
@@ -139,9 +91,6 @@ describe("findSuppressedStagedFiles (Attrappe)", () => {
   });
 });
 
-// Eigene Attrappe fuer die Altlast-Faelle, damit die Bestandsfaelle oben
-// unveraendert bleiben. "geraeumt.js" fehlt hier absichtlich: sie steht auf
-// der Liste, traegt aber keine Unterdrueckungen mehr.
 const LEGACY_SUPPRESSIONS = {
   "src/dummy/altlast.js": { "id-length": { count: 3 }, "max-params": { count: 2 } },
   "src/dummy/ohne-grund.js": { "id-length": { count: 1 } },
@@ -152,13 +101,8 @@ const LEGACY_SUPPRESSIONS = {
   "src/dummy/nicht-gelistet.js": { "no-magic-numbers": { count: 2 } },
 };
 
-// Der Pin von altlast.js - eigene Konstante, weil er in Stufe-3-Tests weiter
-// unten als "gleicher" Pin wiederverwendet wird.
 const ALTLAST_PIN = { "id-length :: Identifier name 'q' is too short (< 2).": 3 };
 
-// Genau ein Eintrag ist gueltig (altlast.js). Er steht in jedem Fall mit im
-// Spiel, damit jeder Test die Entschuldigung UND die Positiv-Kontrolle
-// zugleich prueft: ein Gate, das alles durchlaesst, faellt hier auf.
 const LEGACY_EXCEPTIONS = {
   "src/dummy/altlast.js": {
     reason: "Aufraeumen waere ein eigenes Refactoring des Zustandsmoduls",
@@ -177,8 +121,6 @@ const LEGACY_EXCEPTIONS = {
   },
 };
 
-// Prueft die Auswahl gegen die Altlast-Attrappe und liefert nur die Pfade der
-// Treffer - die Regel-Anzahlen decken die Bestandsfaelle oben bereits ab.
 function offendingFiles(stagedFiles) {
   const offenders = findSuppressedStagedFiles({
     stagedFiles,
@@ -237,13 +179,6 @@ describe("Altlast-Liste im Aufraeum-Gate (Attrappe)", () => {
   });
 });
 
-// Das Einlesen der Liste. Die Lesefunktion ist injizierbar, deshalb braucht
-// dieser Pfad kein Dateisystem. Geprueft wird beides: der Erfolgsfall UND dass
-// eine fehlende oder kaputte Liste abbricht statt still ohne Liste
-// weiterzulaufen. Der stille Weiterlauf waere der gefaehrliche Ausgang: eine
-// leere Liste entschuldigt niemanden, das Gate saehe aus wie funktionierend
-// und wuerde jede gelistete Datei trotzdem ablehnen - Anlass genug, wieder zum
-// verbotenen "--no-verify" zu greifen.
 describe("loadLegacyExceptions (injizierter Leser)", () => {
   it("liest eine gueltige Liste ueber die injizierte Lesefunktion ein", () => {
     const angefragtePfade = [];
@@ -270,16 +205,6 @@ describe("loadLegacyExceptions (injizierter Leser)", () => {
   });
 });
 
-// Der Bericht, den ein Blockierter zu sehen bekommt. Wer abgelehnt wird, liest
-// diesen Text - nicht den Quelltext des Skripts. Steht der Ausweg nur im
-// Kopfkommentar, greift der Blockierte zum naechstliegenden Mittel, und das ist
-// "git commit --no-verify". Genau so ist am 2026-08-13 ein Commit still an der
-// Ratsche vorbeigelaufen. Geprueft wird darum am Berichtstext eines echten
-// CLI-Laufs, nicht an einer Innerei der Ausgabe-Funktion.
-//
-// Die abgelehnte Datei wird aus dem Bestand gewaehlt statt fest verdrahtet: ein
-// einzelner Bestandspfad verschwindet mit dem naechsten Aufraeumen, die Frage
-// "gibt es ueberhaupt eine abgelehnte Datei" ist die Positiv-Kontrolle.
 function firstGatedFile() {
   const suppressions = JSON.parse(readRepoFile(SUPPRESSIONS_REL));
   const legacyExceptions = JSON.parse(readRepoFile(LEGACY_EXCEPTIONS_REL));
@@ -288,14 +213,6 @@ function firstGatedFile() {
   );
 }
 
-// Seit Stufe 2 lehnt das Gate eine Datei nur noch ab, wenn sich ihre Befunde
-// zwischen HEAD und Index bewegen - ein CLI-Lauf ohne vorgemerkte Aenderung
-// laeuft durch. Fuer einen echten Ablehnungs-Lauf braucht der Test also einen
-// Index. Der entsteht NEBEN dem echten (GIT_INDEX_FILE): Arbeitsbaum und der
-// Index des Entwicklers bleiben unberuehrt, und der Test haengt nicht daran,
-// was gerade vorgemerkt ist. Vorgemerkt wird der Blob einer ANDEREN,
-// lint-sauberen Bestandsdatei - so bewegt sich die Befundmenge garantiert,
-// ohne dass der Test ein neues Objekt in die Objektdatenbank schreiben muss.
 const GIT_BLOB_MODE = "100644";
 const CLEAN_BLOB_SOURCE = "scripts/check-staged-suppressions.js";
 
@@ -307,8 +224,6 @@ function git(args, env = process.env) {
   }).trim();
 }
 
-// Ein Index neben dem echten, gefuellt aus HEAD: Index == HEAD, also keine
-// Aenderung an irgendeiner Datei.
 function tempIndexEnv() {
   const indexFile = join(mkdtempSync(join(tmpdir(), "aufraeum-gate-")), "index");
   const env = { ...process.env, GIT_INDEX_FILE: indexFile };
@@ -340,8 +255,6 @@ function gatedFile() {
   return file;
 }
 
-// Ein echter Ablehnungs-Lauf. Beide Berichts-Faelle teilen ihn sich: der Lauf
-// ist ihre Vorbedingung, nicht ihre Aussage.
 function rejectionReport() {
   const rejectedFile = gatedFile();
   const { status, report } = runGate(rejectedFile, stageForeignContent(rejectedFile));
@@ -349,10 +262,6 @@ function rejectionReport() {
   return { rejectedFile, report };
 }
 
-// Der Ausweg darf nicht nach Selbstbedienung klingen. Diese zwei Wendungen
-// tragen die Eigentuemer-Entscheidung in den Text, den ein Blockierter
-// tatsaechlich liest: WER den Eintrag erlaubt (Freigabe) und WORAN sich der
-// Grund messen lassen muss (Gefahr, nicht Arbeit).
 const APPROVAL_TERMS = ["Freigabe des Eigentuemers", "gefaehrlich"];
 
 describe("Ablehnungs-Bericht des Aufraeum-Gates", () => {
@@ -377,303 +286,9 @@ describe("Ablehnungs-Bericht des Aufraeum-Gates", () => {
   });
 });
 
-// ---- Ratsche auf die Altlast-Liste ------------------------------------------
-// Anders als die Bloecke oben laeuft dieser gegen die ECHTE Liste - und genau
-// das ist sein Zweck: sie ist klein, sie soll klein bleiben, und jede
-// Bewegung darin gehoert in den Diff. Gelesen wird ueber loadLegacyExceptions,
-// also ueber dieselbe Naht, an der auch der Hook haengt.
 const REAL_LEGACY_EXCEPTIONS = loadLegacyExceptions();
 const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 
-// Gepinnter Inhalt (Muster ROUTE_FINGERPRINT, test/route-auth-inventory.test.js):
-// ein Eintrag mehr, einer weniger oder ein geaenderter Grund/Pin erzwingt eine
-// bewusste Aktualisierung DIESER Stelle. Buchhaltung dazu:
-//   2026-08-13  src/store/state-ops.js, src/store/pg.js aufgenommen (D11).
-//   2026-08-13  src/conversation-watchdog.js, src/boot-guard.js wieder
-//               entfernt: im Vorbeigehen gesetzt, vom Eigentuemer abgelehnt,
-//               danach aufgeraeumt statt gelistet.
-//   2026-08-15  src/routes/api-calls.js, src/telephony/call-finish.js
-//               aufgenommen (Eigentuemer-Entscheidung, D11): ihr Aufraeumen ist
-//               je ein Umbau im Gate- bzw. Abrechnungs-Kernpfad, kein Format.
-//   2026-08-15  test/i9-self-service.test.js, test/store-pg.test.js,
-//               test/store-pg-multitenant.test.js,
-//               test/tenant-settings-calendar-map.test.js aufgenommen
-//               (Eigentuemer-Entscheidung): gemessen, nicht vermutet - der Hook
-//               blockiert sie wirklich. Vorbestehendes Fixture-Rauschen in
-//               Testdaten; eigenes Aufraeum-Paket vermerkt.
-//   2026-08-15  dieselben vier wieder ENTFERNT (Eigentuemer-Entscheidung):
-//               Stufe 2 laesst eine Aenderung mit unveraenderter Befundmenge
-//               selbst durch, die Eintraege haben keinen Zweck mehr. Am echten
-//               Hook gemessen: mechanische Aenderung an
-//               test/i9-self-service.test.js ohne Eintrag -> Ausgang 0,
-//               dieselbe Datei mit einem neuen Befund -> Ausgang 1.
-//   2026-08-15  jeder bestehende Eintrag bekommt einen findings-Pin (Stufe 3,
-//               Eigentuemer-Auflage "jede weitere Zeile bricht wieder"),
-//               gemessen mit "npx eslint --suppressions-location
-//               eslint-suppressions.empty.json -f json <datei>". src/mcp-tools.js
-//               neu aufgenommen: der registerTools-Split ist ein eigenes Paket.
-//   2026-08-15  Pin nachgezogen (Owner-Auftrag, EL-Beende-Versuch/cancel_call darf
-//               nicht luegen): src/routes/api-calls.js makeCallRoutes 213->222
-//               (ehrliche cancel_call-Antwort), src/mcp-tools.js registerTools
-//               433->430 (cancel_call-Handler vereinfacht). Stufe-3-Korrektur,
-//               keine neue Verstoss-ART, am echten Hook gemessen (Exit 0).
-//   2026-08-15  Pin nachgezogen (Buchungsanker, Commit 08fc253): src/store/pg.js
-//               makePgStore 462->472 Zeilen, rowToCall 21->22, flushCalls 22->23.
-//               Ursache ist das neue persistierte Feld answeredUnclearReason - es MUSS
-//               durch Zeilen-Mapper und Flush, beide Teil derselben Riesenfunktion.
-//               Unvermeidbar, solange deren Split ausgesetzt ist; der Grund steht am
-//               Eintrag selbst. Das Gate hat die Verschlechterung gemeldet, sie ist
-//               geprueft und bewusst uebernommen - nicht stillschweigend.
-//   2026-08-15  Pin nachgezogen (S1-Nacharbeit der unabhaengigen Durchsicht):
-//               src/routes/api-calls.js makeCallRoutes 222->225 Zeilen. Ursache sind die
-//               ehrliche cancel_call-Antwort (Feld hangup_attempted) und ihre Begruendung.
-//               ANMERKUNG: max-lines-per-function zaehlt hier Kommentarzeilen mit - in einem
-//               Repo, das ausfuehrliche Begruendungen VERLANGT, hebt gutes Kommentieren den
-//               Pin. Das ist die zweite Anhebung binnen eines Tages; die Durchsicht hat genau
-//               davor gewarnt. Wer das dauerhaft loesen will, entscheidet ueber skipComments
-//               in der Regel - das ist eine eigene Entscheidung, kein Nebeneffekt hier.
-//   2026-08-16  Pin nachgezogen (ABNAHME-D1, sieben persistierte Felder): src/store/pg.js
-//               flushCalls 23->30, rowToCall 22->29, makePgStore 472->482. DRITTE Anhebung.
-//               Die Wachstumsrate ist damit GEMESSEN: je persistiertem Anruf-Feld +1
-//               Komplexitaet in zwei Funktionen, linear und ohne Obergrenze. Begruendung
-//               und die zwei Auswege stehen am Eintrag selbst.
-//   2026-08-17  Pin nachgezogen (sipCallId, Join-Schluessel zum Telnyx-Beleg): rowToCall
-//               29->30, makePgStore 482->487. VIERTE Anhebung - und die erste, die die
-//               oben GEMESSENE Kurve bestaetigt statt sie zu erweitern (+1 Komplexitaet je
-//               persistiertem Feld, wie vorhergesagt).
-//               DRITTE BEWEGUNG, neu in ihrer Art: flushCalls (30) ist WEG, callRowValues
-//               (30) ist da. Die Funktion stand exakt auf der 100-Zeilen-Grenze; die
-//               50er-Werteliste wurde herausgezogen (reiner Move, maschinell als
-//               byte-identisch verifiziert). Der Split hat die ZEILEN-Grenze gerettet, nicht
-//               die Verzweigung reduziert - die Komplexitaet ist verschoben, nicht weg.
-//               Vier Befunde vorher, vier nachher, keine neue Regel-Kategorie.
-//   2026-08-19  Pins nachgezogen (EL-Cutover-Merge upstream/master <-> EL-Kette, Richtung B):
-//               pg.js (F2-Mail-Feld summary_mail_sent_at als $54: callRowValues 33->34,
-//               rowToCall 33->34, flushTenants 24->33, rowToTenant neu 32 - upstream-Wachstum,
-//               nicht EL), state-ops.js (Merge beider Ketten: createCall 14, 's' 162->180),
-//               call-finish.js (finishCall 21->32, makeCallFinish 118 - F2-Mail-Zweig).
-//               Bloecke wortgleich vom Hook uebernommen; KEIN neuer Eintrag, nur Anhebung
-//               bestehender Pins durch den Merge zweier je fuer sich gruener Ketten.
-//   2026-08-21  src/call-result.js aufgenommen (INBOX-P2): Ziel des resultCardView-Umzugs,
-//               Pin von src/mcp-tools.js UMGEHAENGT (dort entfernt), Bestandssumme unveraendert.
-//   2026-08-21  Pin nachgezogen (INBOX-P2, vom Hook selbst gemeldet): src/store/pg.js
-//               makePgStore 557->562 Zeilen durch den takeInboxEntries-Wrapper (R-3,
-//               Wrapper-Parity zu json.js). Keine neue Regel-Kategorie.
-//   2026-08-21  Runde 2 (S1-A-Fix, Review-Blocker): der Eintrag "resultCardView complexity
-//               11" fuer src/call-result.js ENTFERNT statt beibehalten - die Funktion ist
-//               vermeidbar auf komplexitaetsarm umgebaut (ein "?? {}" am Anfang statt fuenf
-//               einzelnen "?."), gemessen mit dem echten eslint-Aufruf: 3 Befunde vorher,
-//               2 (vorbestehende) nachher. Kein neuer Bau-Agenten-Eintrag auf der
-//               Altlast-Liste, wie der Dateikopf es verlangt.
-//   2026-08-28  Pin nachgezogen (OUTBOUND-E2, Regressionsfang Outbound-Ausfall 27.08.2026):
-//               src/routes/api-calls.js complexity 23 -> 22, max-lines-per-function
-//               UNVERAENDERT (243/136). Der neue Anbieter-Fehlergrund-Aufruf im catch
-//               (recordStartRejectionReason) sitzt als ausgelagerte Modul-Funktion OBERHALB
-//               der Riesenfunktion - der bisherige `err?.providerStatus`-Zugriff wandert mit
-//               hinein, die Riesenfunktion verliert dadurch einen Verzweigungspunkt
-//               (Komplexitaet sinkt) und gewinnt netto KEINE Zeile (der Helfer-Aufruf ersetzt
-//               1:1 die bisherige `const providerStatus = err?.providerStatus;`-Zeile).
-//               Gemessen mit dem echten eslint-Aufruf (--suppressions-location
-//               eslint-suppressions.empty.json). Keine neue Verstoss-Art.
-//   2026-08-28  Pin nachgezogen (OUTBOUND-E3a, E-3-Mail): src/telephony/call-finish.js
-//               id-length 12 -> 10 ('t'-Anteil 7 -> 5, 'a'/'e' unveraendert bei 2/3). Der
-//               neue vierte Aufrufer der Mail-Versandschleife (sendNotPlacedMail, die EINE
-//               Nutzer-Mail bei not-placed) haette die Shorthand-Weitergabe {..., t} an
-//               JEDER Aufrufstelle als eigenen id-length-Fund gezaehlt; stattdessen ist der
-//               Bundle-Parameter von sendMailToTargets (und von sendNotPlacedMail selbst)
-//               auf texts umbenannt - reine Umbenennung, sendSummaryMails behaelt ihren
-//               eigenen, unveraenderten Parameter t. Ergebnis: WENIGER Befunde trotz eines
-//               vierten Aufrufers. Gemessen mit dem echten eslint-Aufruf
-//               (--suppressions-location eslint-suppressions.empty.json). complexity/
-//               no-magic-numbers/no-param-reassign unveraendert (die neue Anweisung in
-//               finishCall ist unbedingt, kein neuer Zweig).
-//   2026-08-29  src/worker/provisioning-orchestrator.js NEU aufgenommen (Owner-Auftrag,
-//               OUTBOUND-E5 Rest, Blocker 4+5): der Orchestrator ruft jetzt
-//               sipRegistrarWennAktiv(config) statt das Dreifach-Gate ein zweites Mal
-//               inline zu bauen - die vier Gate-Tests in
-//               test/e5-01-sipregistrar-produktionspfad.test.js decken damit erstmals den
-//               tatsaechlichen Produktionspfad ab. makeProvisioningOrchestrator sinkt
-//               180 -> 171 Zeilen (Verbesserung), bleibt aber ueber der 100-Zeilen-Grenze -
-//               der geaenderte Meldungstext zwingt trotzdem einen Eintrag (Begruendung am
-//               Eintrag selbst). id-length/no-negated-condition unveraendert.
-//   2026-08-31  Pins nachgezogen (KV2-2, Kostenprofil an der Engine-Weiche): src/store/pg.js
-//               rowToCall 36->37, callRowValues 36->37 (je ein neues ??-Fallback fuer
-//               cost_profile), makePgStore 563->568 (neuer Mutator recordCostProfile).
-//               src/routes/api-calls.js makeCallRoutes 243->246, Async-Arrow 136->139 (je
-//               eine store.recordCostProfile(...)-Zeile in den drei Outbound-Weichen-
-//               Zweigen). src/store/state-ops.js GEPRUEFT, KEINE Anhebung (costProfile:
-//               null, ist eine reine Zuweisung, Muster sipCallId). Alle drei gemessen mit
-//               dem echten eslint-Aufruf (--suppressions-location
-//               eslint-suppressions.empty.json). Keine neue Verstoss-Art.
-//   2026-08-31  src/routes/voice.js NEU aufgenommen (KV2-2): makeVoiceRoutes 267 -> 269
-//               Zeilen durch je eine store.recordCostProfile(...)-Zeile in den beiden
-//               Inbound-Engine-Weichen-Zweigen (budget/realtime) - dieselbe Klasse wie
-//               api-calls.js (Safety-Gate-/Offenlegungs-Kernpfad, G30-Split ausgesetzt).
-//               complexity/no-magic-numbers unveraendert. Gemessen mit dem echten
-//               eslint-Aufruf (--suppressions-location eslint-suppressions.empty.json).
-//   2026-08-31  Pins nachgezogen (KV2-3, das Kosten-Buch): src/store/state-ops.js
-//               id-length 's' 180->183 (die drei neuen Store-Operationen des Kosten-
-//               Buchs nennen ihren Zustands-Parameter 's', Bestandskonvention). src/store/
-//               pg.js hydrateTenantInto 102->103 (ein Push in den callCostEvidence-
-//               Spiegel), makePgStore 568->576 (zwei neue Wrapper-Methoden, Muster
-//               recordCostProfile). Das neue Blatt-Modul src/store/cost-evidence.js
-//               traegt 0 Befunde. Alle gemessen mit dem echten eslint-Aufruf
-//               (--suppressions-location eslint-suppressions.empty.json). Keine neue
-//               Verstoss-Art.
-//   2026-09-07  src/telnyx-llm-shim.js NEU aufgenommen (FW2) und src/routes/voice.js
-//               nachgezogen: makeVoiceRoutes 269->270 (eine Zeile im /voice/turn-Catch
-//               ruft den gemeinsamen Guthaben-Alarm). Der neue shim-Eintrag deckt eine
-//               VORBESTEHENDE complexity 50 von handleChatCompletion ab; FW2 senkt sie
-//               auf 49 (Doppel-Klassifikation durch EINEN Aufruf ersetzt), erhoeht also
-//               nichts. Eigentuemer-Freigabe erteilt.
-//   2026-09-08  src/billing/webhook.js NEU aufgenommen (FW1) und src/store/pg.js
-//               nachgezogen: makePgStore 591->592 (die eine tenantExists-Wrapper-Zeile,
-//               Backend-Paritaet zu json.js). Der webhook.js-Eintrag entsteht aus einer
-//               VERBESSERUNG: applyStripeWebhook faellt durch die Helfer-Extraktion von
-//               complexity 32 auf 29 - das Gate meldet jede Bewegung der Befundmenge,
-//               auch die nach unten, damit kein zu hoch stehender Pin Spielraum fuer
-//               kuenftige Verstoesse laesst. Eigentuemer-Freigabe erteilt. Alle gemessen
-//               mit dem echten eslint-Aufruf (--suppressions-location
-//               eslint-suppressions.empty.json). Keine neue Verstoss-Art.
-//   2026-09-09  Pin NACHGEZOGEN (SEC-P6, Antwort statt Haenger): src/routes/api-calls.js
-//               sinkt in allen drei bewegten Werten - Async-Arrow 145 -> 140 Zeilen und
-//               Komplexitaet 28 -> 26, makeCallRoutes 243 -> 234 Zeilen. Die Gate-Schleife
-//               faehrt jetzt in runOutboundGates (telephony/outbound-gates.js), die
-//               Ablehnungs-Senke und denialDimensions sitzen auf der Modul-Ebene der
-//               Datei. KEIN neuer Eintrag, keine neue Verstoss-Art - nur kleinere Zahlen.
-//               Gemessen mit `node scripts/check-staged-suppressions.js
-//               src/routes/api-calls.js` gegen die vorgemerkte Fassung.
-//   2026-09-10  MERGE der SEC-Kette mit FW1/FW2. Beide Ketten hatten dieselben zwei
-//               Funktionen von derselben Basis aus nachgezogen und trugen zufaellig
-//               DIESELBE Zahl ein - git fuehrte die identische Zeile stillschweigend
-//               zusammen, die Pins waren dadurch zu niedrig. Neu GEMESSEN statt addiert:
-//               makePgStore 597 (591 + SEC 5 + FW 1), makeVoiceRoutes 274 (269 + 4 + 1).
-//               Keine neue Verstoss-Art, kein neuer Eintrag.
-//   2026-09-11  GP-P2 (Eignungs-Gate der Zahlungsmethode) bewegt zwei Eintraege in
-//               BEIDE Richtungen. src/billing/webhook.js SENKT: applyStripeWebhook
-//               29 -> 25 Komplexitaet - der Karten-Bindezweig des Race-Fixes ist als
-//               eigene Funktion bindPaymentMethodFromEventIfMissing herausgezogen -
-//               ihre drei Bedingungen zaehlen nicht mehr in der Orchestrierungs-
-//               Funktion. src/store/pg.js HEBT AN: flushTenants 33 -> 34 und
-//               rowToTenant 32 -> 33 - die neue additive Spalte
-//               stripe_payment_method_type MUSS durch Mapper UND Flush, dieselbe
-//               seit 2026-08-15 gemessene lineare Kurve wie jede vorige Anhebung.
-//               Beide Bewegungen sind im reason-Feld der Datei selbst begruendet.
-//               Gemessen mit dem echten eslint-Aufruf (--suppressions-location
-//               eslint-suppressions.empty.json). Keine neue Verstoss-Art.
-//   2026-09-13  IE7 (Inbound wartet nur noch auf das erste Audio-Paket) bewegt
-//               src/routes/voice.js in BEIDE Richtungen. HEBT AN: makeVoiceRoutes
-//               274 -> 279 Zeilen - der GET /voice/tts/:token-Handler ist async
-//               geworden (der Token wird vergeben, BEVOR die Synthese fertig ist)
-//               und sein Rumpf liegt deshalb in try/catch (Express 4 faengt
-//               abgelehnte Versprechen aus async-Handlern nicht ab). SENKT:
-//               no-magic-numbers 3 -> 2 - das 404 dieses Handlers heisst jetzt
-//               HTTP_NOT_FOUND. complexity unveraendert, keine neue Verstoss-Art,
-//               kein neuer Eintrag. Gemessen mit dem echten eslint-Aufruf
-//               (--suppressions-location eslint-suppressions.empty.json).
-//   2026-09-14  IE6-S1 (Telnyx-AI-Assistant ersatzlos entfernt) SENKT vier
-//               Altlast-Pins (state-ops.js, pg.js, api-calls.js, voice.js -
-//               die Assistant-/Shim-Zweige und ihre Store-Schreibwege sind
-//               entfernt) und fuegt ELF NEUE Eintraege hinzu (runner.mjs,
-//               registry.js, util.js sowie sieben Testdateien, deren
-//               Assistant-/Shim-Testfaelle geloescht sind): eine reine
-//               Loeschung verschiebt den exakten Meldungstext bulk-
-//               unterdrueckter Bestandsbefunde (Zeilenzahlen, verschobene
-//               Identifier-Zaehlungen), ohne selbst neue Verstoesse zu
-//               erzeugen. Gemessen mit dem echten eslint-Aufruf
-//               (--suppressions-location eslint-suppressions.empty.json).
-//   2026-09-14  IE6-S2 (OpenAI-Realtime-Bridge ersatzlos entfernt) SENKT ZWEI
-//               Altlast-Pins (api-calls.js: complexity 24 -> 23, der TeXML-
-//               Zweig verzweigt nicht mehr auf VOICE_ENGINE; voice.js:
-//               makeVoiceRoutes 237 -> 227 Zeilen, der komplette Realtime-
-//               Zweig in /voice/incoming und /voice/outbound ist entfernt)
-//               und fuegt VIER NEUE Eintraege hinzu (check-setup.js,
-//               al-p10b-lookup.test.js, boot-failclosed.test.js,
-//               media-token.test.js): dieselbe reine-Loeschung-verschiebt-
-//               Meldungstext-Begruendung wie bei IE6-S1, keine neue Schuld.
-//               Gemessen mit dem echten eslint-Aufruf (--suppressions-location
-//               eslint-suppressions.empty.json).
-//   2026-09-14  Pin nachgezogen (IEL-B4a, persistierter Brueckenzustand des
-//               EL-Inbound-Wegs): src/store/pg.js makePgStore 584 -> 585
-//               Zeilen - GENAU EINE Spread-Zeile (brueckenZustandMutatoren,
-//               Wrapper-Paritaet zu json.js). rowToCall/callRowValues
-//               UNVERAENDERT (38/39) - die drei neuen Spalten gehen ueber
-//               Modul-Ebene-Spread-Helfer. Gemessen mit dem echten
-//               eslint-Aufruf (--suppressions-location
-//               eslint-suppressions.empty.json --format json).
-//   2026-09-15  Pin nachgezogen (IEL-B5, Status-Callback und Beenden fuer
-//               ueberbrueckte Inbound-Beine): src/routes/voice.js makeVoiceRoutes
-//               227 -> 229 Zeilen, /voice/status-Handler complexity 12 -> 13
-//               (GEBUNDEN-Weiche -> startInboundNachlauf); src/routes/api-calls.js
-//               makeCallRoutes 221 -> 224 Zeilen (cancel_call ueber
-//               endeSchreiberFuer + hangUpForCall). Keine neue Regel-Kategorie.
-//               Gemessen mit dem echten eslint-Aufruf (--suppressions-location
-//               eslint-suppressions.empty.json --format json).
-//   2026-09-15  Pin gesenkt (IEL-B8, Rueckfall-Routen und Inbound-Weiche):
-//               src/routes/voice.js makeVoiceRoutes 229 -> 228 Zeilen,
-//               /voice/status-Handler complexity 13 -> 12 (ANGENOMMEN_STATUS),
-//               no-magic-numbers 200 entfaellt (HTTP_OK). Neue Logik auf
-//               Modul-Ebene bzw. in src/elevenlabs/inbound-rueckfall.js, keine
-//               neue Regel-Kategorie. Gemessen mit dem echten eslint-Aufruf
-//               (--suppressions-location eslint-suppressions.empty.json --format json).
-//   2026-09-15  Pin angehoben (IEX-A2, Fehlersatz statt Budget-Rueckfall):
-//               src/telephony/call-finish.js finishCall complexity 21 -> 22 -
-//               GENAU EIN neuer Zweig (uebergabeGescheitert -> Logzeile, return),
-//               im Umsetzungsplan IEX-A2 (2.10) vorgesehen. Keine neue
-//               Regel-Kategorie. Gemessen mit dem echten eslint-Aufruf
-//               (--suppressions-location eslint-suppressions.empty.json --format json).
-//   2026-09-15  Pin angehoben (IEX-A8, Registrierungs-Beleg am Nummern-Datensatz):
-//               src/store/pg.js makePgStore 585 -> 586 Zeilen - GENAU EINE
-//               Spread-Zeile (inboundTrunkBelegMutatoren, Wrapper-Paritaet zu
-//               json.js), im Umsetzungsplan IEX-A8 (2.5) vorgesehen. rowToNumber/
-//               flushNumbers ohne neue Verzweigung, hydrateTenantInto UNVERAENDERT
-//               (103). Keine neue Regel-Kategorie. Gemessen mit dem echten
-//               eslint-Aufruf (--suppressions-location eslint-suppressions.empty.json --format json).
-//   2026-09-15  Pin angehoben (IEX-A10, Inbound-Trunk fuer neue Nummern im Onboarding):
-//               src/worker/provisioning-orchestrator.js makeProvisioningOrchestrator
-//               171 -> 172 Zeilen - GENAU EINE Zeile, die Injektion des
-//               Inbound-Trunk-Schreibers neben dem Registrar (EIN Gate je Schreibweg,
-//               kein Inline-Nachbau), im Umsetzungsplan IEX-A10 (2.5) vorgesehen.
-//               id-length/no-negated-condition UNVERAENDERT, keine neue Regel-Kategorie.
-//               Gemessen mit dem echten eslint-Aufruf (--suppressions-location
-//               eslint-suppressions.empty.json --format json).
-//   2026-09-20  Pin bewegt (P2, Registrierweg vereinheitlicht: T-18/T-22): src/mcp-tools.js
-//               verliert seinen EINZIGEN max-params-Befund (die 4-Parameter-Arrow des
-//               entfernten tool()-Helfers) ersatzlos, registerTools waechst 506 -> 509
-//               Zeilen (die zwei migrierten Werkzeuge cancel_call/list_action_items tragen
-//               als uiTool()-Aufruf je ein Klammer-/description-Feld mehr). Keine neue
-//               Regel-Kategorie, kein neuer Eintrag. Gemessen mit dem echten eslint-Aufruf
-//               (--suppressions-location eslint-suppressions.empty.json --format json).
-//   2026-09-21  Pin gesenkt (P5a, O-13 Teil 1, Datenminimierung im Output): src/mcp-tools.js
-//               verliert voiceEngine/model aus dem get_agent_status-Textblock (zwei Zeilen
-//               zu einer verschmolzen), registerTools schrumpft 509 -> 508 Zeilen. Keine
-//               neue Regel-Kategorie, kein neuer Eintrag. Gemessen mit dem echten
-//               eslint-Aufruf (--suppressions-location eslint-suppressions.empty.json
-//               --format json).
-//   2026-09-23  Pin gesenkt (T2-09, O-13/O-20 neutrale Fehlertexte an der MCP-Grenze):
-//               src/mcp-tools.js verliert die interne Item-ID und den Kurz-Bezeichner 'a'
-//               in list_action_items (S5) - der id-length-Befund 'a' (2) entfaellt
-//               ersatzlos. registerTools schrumpft dadurch 512 -> 508 Zeilen. api() (S3)
-//               und die neue Fehler-Text-Abbildung toolErrorText()/knownToolErrorCodeText()/
-//               denialReasonText()/httpStatusClassText() (S4, Muster boundedHop) liegen
-//               komplett auf Modul-Ebene und zaehlen nicht mit. Keine neue Regel-Kategorie,
-//               kein neuer Eintrag. Gemessen mit dem echten eslint-Aufruf
-//               (--suppressions-location eslint-suppressions.empty.json --format json).
-//   2026-09-24  Pin gesenkt (T2-12, get_calendar entfallen): src/mcp-tools.js
-//               verliert id-length 'e' 4 -> 1 und 's' 9 -> 8, registerTools
-//               schrumpft 483 -> 459 Zeilen. Kein neuer Eintrag: die ebenfalls
-//               angefassten test/mcp-ui.test.js und test/mcp-tools-language.test.js
-//               sind stattdessen vollstaendig aufgeraeumt (ungefiltert 0 Befunde,
-//               kein Eintrag mehr in eslint-suppressions.json).
-//   2026-09-24  Pin gesenkt (T2-13, N-10, Geldpfad-Bestaetigung): PLACE_CALL_REQUEST_
-//               SCHEMA (das gesamte place_call-inputSchema-Literal) ist als Modul-
-//               Konstante herausgeloest, prepare_call und place_call teilen es sich -
-//               registerTools schrumpft trotz der neuen prepare_call-Registrierung +
-//               confirmCallHop-Aufrufe von 459 auf 404 Zeilen. id-length 'r' steigt
-//               2 -> 3 (const r = await confirmCallHop(...) im neuen prepare_call-
-//               Handler, dasselbe Namensmuster wie die Bestandszeilen). Kein neuer
-//               Eintrag, keine neue Regel-Kategorie; id-length A/c/e/s/t/v,
-//               no-magic-numbers, no-restricted-syntax unveraendert.
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     "reason": "Echte Schuld, kein Fehlschnitt der Regel. Das Aufraeumen ist ein eigenes Refactoring des Zustandsmoduls und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-19 (Thema A): createCall 12 -> 14 Komplexitaet (openingLine-Feld + Hash-Bedingung). Geprueft und bewusst uebernommen; das Aufraeumen bleibt das eigene Refactoring des Zustandsmoduls (s.o.). KV2-2 GEPRUEFT, KEINE Anhebung: costProfile: null, ist eine reine Zuweisung ohne Operator (Muster sipCallId) - createCall bleibt bei Komplexitaet 14. Gemessen mit `npx eslint src/store/state-ops.js --suppressions-location eslint-suppressions.empty.json`. PIN ANGEHOBEN 2026-08-31 (KV2-3): id-length 's' 180 -> 183 - die drei neuen Store-Operationen des Kosten-Buchs (findCostEvidence/recordCallCostEvidence/callCostEvidence) nennen ihren Zustands-Parameter 's', dieselbe Konvention wie jede bestehende state-ops-Funktion in dieser Datei. Keine weitere Kategorie bewegt sich (kein neues no-param-reassign: die Reifung mutiert 'vorhanden', eine lokale Variable aus .find(), keinen Funktionsparameter). Gemessen mit `npx eslint src/store/state-ops.js --suppressions-location eslint-suppressions.empty.json`. PIN ANGEHOBEN 2026-09-06 (P2, gestaffelter EL-Rueckfrage-Halt): id-length 'c' 15 -> 17 und 's' 183 -> 187 (die drei neuen Operationen markConsultAskDelivered/ackConsult/timeOutStagedConsult sowie der extrahierte reine Leser openConsultFor nennen Call/Zustand nach derselben Konvention 'c'/'s'); id-length 'o' 0 -> 1 (der verkuerzte Reject-Parameter 'o' in answerConsult's lokaler reject-Funktion, s. openConsultFor-Refactor). Keine neue Regel-Kategorie. Gemessen mit `npx eslint src/store/state-ops.js --suppressions-location eslint-suppressions.empty.json`. PIN GESENKT 2026-09-14 (IE6-S1): id-length 'c' 17 -> 16, 's' 187 -> 185, no-restricted-syntax (G36) 12 -> 11 - getCallByControlId und dropLastAgentTranscript (beide Assistant-Shim-Schreibwege) sind entfernt. Gemessen mit `npx eslint src/store/state-ops.js --suppressions-location eslint-suppressions.empty.json`. ZAHL KORRIGIERT 2026-09-18 (E3, Anruf-Idempotenz): id-length 's' 185 -> 186, no-param-reassign 's' 17 -> 18 - die neue Funktion releaseOutboundReserveCents (zweiter Freigabeweg fuer den Fall OHNE Anruf-Datensatz, Dedup/Fehlerklammer vor createCall) nennt ihren Zustands-Parameter 's' nach derselben Konvention wie jede bestehende state-ops-Funktion und mutiert s.reservations wie tryReserveOutboundBudget/releaseOutboundReserve. Keine weitere Kategorie bewegt sich. Gemessen mit `node scripts/check-staged-suppressions.js src/store/state-ops.js` gegen die vorgemerkte Fassung.",
@@ -1025,15 +640,8 @@ const LEGACY_FINGERPRINT = {
   }
 };
 
-// Erfundene Unterdrueckung, mit der jede gelistete Datei gegen die Auswahl
-// gehalten wird: entschuldigt ihr Eintrag nicht, taucht sie als Treffer auf.
 const PROBE_RULE_COUNTS = { "id-length": { count: 1 } };
 
-// Strenges Kalenderdatum: Form YYYY-MM-DD UND ein Tag, den es wirklich gibt.
-// Bewusst nicht ueber die Naht des Gates geprueft, sondern hier nachgerechnet:
-// dessen Date.parse nimmt "2026-02-31" an (V8 rollt still auf den 3. Maerz).
-// Der Hook ist damit nachsichtiger als sein eigener Kommentar behauptet - die
-// Ratsche ist der Ort, an dem die Liste trotzdem sauber bleibt.
 const CALENDAR_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function isStrictCalendarDate(value) {
@@ -1047,9 +655,6 @@ function isStrictCalendarDate(value) {
   );
 }
 
-// Wendungen, die fuer sich genommen nichts erklaeren - sie nennen Aufwand,
-// Zeit oder Vorsatz, nicht die Gefahr. Ihr Vorkommen ist nicht verboten;
-// verboten ist eine Begruendung, die NUR daraus besteht.
 const FILLER_PHRASES = [
   "keine zeit",
   "zu viel arbeit",
@@ -1068,9 +673,6 @@ const FILLER_PHRASES = [
   "tbd",
 ];
 
-// Zwei Masse, weil jedes allein zu leicht zu erfuellen waere: die Laenge
-// faengt das blosse "Altlast", der Wortbestand jenseits der Floskeln faengt
-// den langen Satz, der nur Aufwand aufzaehlt.
 const MIN_REASON_LENGTH = 40;
 const MIN_SUBSTANCE_WORDS = 5;
 const MIN_WORD_LENGTH = 4;
@@ -1083,15 +685,11 @@ function withoutFiller(reason) {
   );
 }
 
-// Wie viele verschiedene tragende Woerter bleiben uebrig, wenn man die
-// Floskeln streicht? Kurze Fuellwoerter ("der", "ist", "und") zaehlen nicht mit.
 function substanceWordCount(reason) {
   const words = withoutFiller(reason).match(SUBSTANCE_WORD_PATTERN) || [];
   return new Set(words).size;
 }
 
-// Ist der Grund substanziell - oder eine Floskel in Satzform? Was der Grund
-// BEHAUPTET, prueft kein Test; das steht im Dateikopf als menschliche Pflicht.
 function isSubstantialReason(reason) {
   if (typeof reason !== "string") return false;
   return (
@@ -1167,24 +765,10 @@ describe("Altlast-Ratsche (echte Liste)", () => {
   });
 });
 
-// ---- Stufe 2: mechanische Aenderungen (Attrappe) ----------------------------
-// Der Vertrag: findChangedFindings({ candidates, readFindings }) laesst einen
-// Kandidaten der Stufe 1 nur dann fallen, wenn seine ungefilterte Befundmenge
-// vor und nach der Aenderung IDENTISCH ist. readFindings ist die Naht
-// (Datei -> { before, after } als eslint-Meldungen); wer sie fuellt - git und
-// eslint oder diese Attrappe - bleibt hier offen.
-//
-// Warum es die Stufe gibt (Eigentuemer-Entscheidung 2026-08-15): Stufe 1 allein
-// lehnt auch eine Umbenennung ab, die nichts verschlimmert, und macht das
-// Aufraeumen fremder Schuld zum Preis jeder Beruehrung - genau daraus
-// entstehen neue Altlast-Eintraege. Was die Stufe NICHT lockert: neue, mehr,
-// weniger oder getauschte Befunde fuehren unveraendert zur Ablehnung.
 const KANDIDATEN = [
   { file: "src/dummy/altlast.js", ruleCounts: [{ rule: "id-length", count: 3 }] },
 ];
 
-// Zwei verschiedene Zeilen: der Vergleich muss sie ignorieren, sonst waere
-// jede eingefuegte Zeile eine "Verschlechterung".
 const ZEILE_VORHER = 1;
 const ZEILE_NACHHER = 47;
 
@@ -1241,8 +825,6 @@ describe("findChangedFindings (Attrappe)", () => {
   });
 
   it("lehnt ab, wenn ein Befund gegen einen anderen getauscht wird", async () => {
-    // Der Fall, den die eingefrorene ANZAHL nicht faengt: eine Fundstelle
-    // behoben, an anderer Stelle eine neue eingebaut - Zahl gleich, Menge nicht.
     const offenders = await abgelehnt([KURZER_NAME], [ANDERER_KURZER_NAME]);
     assert.equal(offenders.length, KANDIDATEN.length);
     assert.match(begruendung(offenders), /'x' is too short/);
@@ -1263,15 +845,6 @@ describe("findChangedFindings (Attrappe)", () => {
   });
 });
 
-// ---- Stufe 3: gilt der Pin noch? (Attrappe) ---------------------------------
-// Der Vertrag: findPinMismatches({ stagedFiles, legacyExceptions, readStagedFindings })
-// laesst eine entschuldigte Datei nur durch, wenn ihre TATSAECHLICHE, ungefilterte
-// Befundmenge (readStagedFindings) genau dem Pin (findings im Altlast-Eintrag der
-// vorgemerkten Fassung) gleicht - Multimengen-Vergleich, BEIDE Richtungen brechen.
-// Geprueft wird gegen src/dummy/altlast.js aus LEGACY_EXCEPTIONS oben: ihr Pin
-// (ALTLAST_PIN) ist 3x derselbe id-length-Befund.
-// Zwei weitere Fundstellen-Zeilen; die Zahl selbst ist beliebig, sie muss nur von
-// den beiden oberen verschieden sein (die Meldung traegt die Identitaet, nicht die Zeile).
 const ZEILE_DRITTE = 99;
 const ZEILE_VIERTE = 100;
 const PIN_BASISZEILEN = [ZEILE_VORHER, ZEILE_NACHHER, ZEILE_DRITTE];
@@ -1331,11 +904,6 @@ describe("findPinMismatches (Attrappe)", () => {
   });
 });
 
-// ---- Die Befundmenge an echten eslint-Meldungen -----------------------------
-// Die Attrappe oben prueft die Entscheidung, dieser Block das Material: was
-// eslint fuer denselben Inhalt vor und nach einer Aenderung wirklich meldet.
-// Ohne ihn stuende nur die Behauptung da, dass eine Zeilenverschiebung nichts
-// bewegt und ein neuer Verstoss doch.
 const PROBE_PFAD = "test/dummy-probe.test.js";
 const PROBE_CODE = "export function probe(q) {\n  return q;\n}\n";
 const PROBE_CODE_VERSCHOBEN = `\n${PROBE_CODE}`;
@@ -1345,9 +913,6 @@ const KAPUTTER_CODE = "export function probe(((;\n";
 
 describe("Ungefilterte Befunde (echtes eslint)", () => {
   it("sieht die Befunde, die eslint-suppressions.json einfriert", async () => {
-    // Die Positiv-Kontrolle des ganzen Vergleichs: liefe der Linter mit der
-    // echten Unterdrueckungsdatei, waere die Menge einer Bestandsdatei leer -
-    // dann saehe JEDE Aenderung mechanisch aus und das Gate liesse alles durch.
     const lintContent = await makeUnfilteredLinter();
     const file = gatedFile();
     const messages = await lintContent(readRepoFile(file), file);
@@ -1385,12 +950,6 @@ describe("Ungefilterte Befunde (echtes eslint)", () => {
   });
 });
 
-// ---- Der Freifahrtschein am echten CLI --------------------------------------
-// Die Gegenprobe zum Ablehnungs-Bericht oben, gefahren ueber dieselbe Naht
-// (Skript als Kindprozess, Index neben dem echten): dieselbe Datei, die mit
-// bewegter Befundmenge abgelehnt wird, laeuft ohne Bewegung durch. Ein Gate,
-// das alles ablehnt, besteht jeden Negativ-Test - erst dieses Paar zeigt, dass
-// es unterscheidet.
 describe("Aufraeum-Gate am echten CLI", () => {
   it("laesst eine vorgemerkte Datei ohne Bewegung der Befunde durch", () => {
     const file = gatedFile();

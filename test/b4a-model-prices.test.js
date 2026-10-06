@@ -1,10 +1,3 @@
-// B4a (tasks/b4-spec.md, Abschnitt 4.1-4.4): die Preisstaffel je Token-Sorte, ihre
-// Aufloesung auf EINEN Kalendertag und die Nicht-Ausloeser des Boot-Abbruchs. Reine
-// Units - kein Server-Spawn, kein Netz, KEINE Uhr (die Uhr ist ueberall Parameter,
-// Repo-Lehre rca-lessons-timezone-and-fixtures).
-//
-// IDs beginnen mit "B4A-" - kein i18n-Katalog-Praefix (Lehre catalog-id-prefix-
-// misroutes-tests), die Tests landen also im npm-test-Regressionslauf.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -23,8 +16,6 @@ const LAST_DAY_OLD_RATE = "2026-08-31";
 const SWITCH_DAY = "2026-09-01";
 const MS_PER_DAY = 86_400_000;
 
-// Fixture-Staffeln, bewusst NICHT die Produktionstabelle: ein Preis-Update in config.js
-// darf diese Assertionen nicht rot faerben (Regel test/_prices.js).
 function entry(overrides = {}) {
   return {
     validFrom: ANCHOR_DAY,
@@ -38,8 +29,6 @@ function entry(overrides = {}) {
   };
 }
 
-// Zwei Staffeln mit einem terminierten Wechsel - der Fall, den eine flache Tabelle nicht
-// ausdruecken kann (keine der beiden Zahlen ist heute richtig).
 const SCHEDULES = Object.freeze({
   [HAIKU]: [entry()],
   [SONNET]: [
@@ -138,10 +127,6 @@ test("B4A-RES-9: absteigend notierte Staffeln liefern dieselbe Auswahl wie aufst
   );
 });
 
-// ---- Die AUSGELIEFERTE Tabelle -------------------------------------------------------
-// Bewusst OHNE konkrete Zahlen: ein gepinnter Literalwert wuerde die Suite am 2026-09-01
-// von selbst rot faerben. Geprueft wird die FORM, die tokenCostUsd voraussetzt.
-
 test("B4A-TAB-1: jeder ausgelieferte Eintrag traegt alle vier Raten endlich und >= 0, plus asOf/source/validFrom", () => {
   const prices = config.llm.modelPricesUsd;
   const ids = Object.keys(prices);
@@ -180,8 +165,6 @@ test("B4A-BAN-1: die Banner-Zeile nennt je konfiguriertem Modell die gewaehlte u
   );
 });
 
-// ---- asOf-Veralterung: WARN, NIE fatal (N-3) -----------------------------------------
-
 const STALE_PRICES = { [HAIKU]: { asOf: ANCHOR_DAY, source: SOURCE } };
 const daysAfterAnchor = (days) =>
   new Date(Date.parse(ANCHOR_DAY) + days * MS_PER_DAY).toISOString().slice(0, ANCHOR_DAY.length);
@@ -199,8 +182,6 @@ test("B4A-STALE-2: einen Tag VOR der Hoechstdauer schweigt der Guard (T5-Rand)",
     [],
   );
 });
-
-// ---- Struktur statt Disziplin: die 5m-Schreibrate ist die richtige --------------------
 
 const ADAPTER_SOURCE = fs.readFileSync(
   path.join(

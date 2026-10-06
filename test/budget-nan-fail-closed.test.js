@@ -1,8 +1,3 @@
-// D7 (PLAN-BUDGET-AXES P1): ein nicht-endlicher/negativer Geldwert darf weder in einen
-// Bucket gelangen (Schreibkante) noch ein Gate blind machen (Lesekante) noch einen
-// vergifteten Bestand ueber den Boot tragen (Hydrierungskante). Wurzel ist voiceMinutesOf.
-// Alle Faelle sind VOR dem Fix rot. Kein Netz, kein Server (F.I.R.S.T.), ein pglite-Fall
-// fuer die Hydrierung (Postgres-in-WASM, offline).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -23,15 +18,10 @@ import { makePgTestStore } from "./pg-helpers.js";
 import { PRICES, tokensOf, tokensWithCache } from "./_prices.js";
 
 const TENANT_A = "tenant_a";
-const CAP_CENTS = PRICES.platformSpendCapCents; // 800
-// 0.5 ist UNBOOKABLE (Review-Fix Runde 1, G26): isBookableCents verlangt seither auch
-// Ganzzahligkeit - die Ganzzahl-Cents-Konvention (Money at rest) liesse sonst einen
-// fraktionalen Wert klaglos in den Ganzzahl-Akkumulator costCents durch.
+const CAP_CENTS = PRICES.platformSpendCapCents;
 const UNBOOKABLE = [NaN, Infinity, -Infinity, -1, -0.5, 0.5, "5", null, undefined];
 const BOOKABLE = [0, 1, 250];
 
-// Leitet console.error waehrend fn um (Muster test/boot-guard.test.js captureErrAsync):
-// restauriert IMMER, auch bei Wurf. fn darf sync oder async sein.
 async function captureErr(fn) {
   const logs = [];
   const orig = console.error;
@@ -44,8 +34,6 @@ async function captureErr(fn) {
   return logs.join("\n");
 }
 
-// Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (Muster reopen() aus
-// test/store-pg.test.js) - re-hydriert den Spiegel aus der DB statt nur In-Memory zu pruefen.
 async function reopen(db) {
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
@@ -55,11 +43,9 @@ async function reopen(db) {
   return store;
 }
 
-// ---- (a)+Wurzel: metering.voiceMinutesOf / reconcileVoiceBudget ----
-
 test("(a) reconcileVoiceBudget mit kaputtem endedAt bucht NICHT (Bucket bit-identisch)", () => {
   const s = makeDefaultState();
-  addVoiceUsageCostCents(s, TENANT_A, 250); // vorbelegter Bucket
+  addVoiceUsageCostCents(s, TENANT_A, 250);
   const fakeStore = { addVoiceUsageCostCents: (t, c) => addVoiceUsageCostCents(s, t, c) };
   const { reconcileVoiceBudget } = makeMetering({ store: fakeStore, config: {} });
   reconcileVoiceBudget({
@@ -79,8 +65,6 @@ test("Wurzel: voiceMinutesOf normalisiert ein kaputtes answeredAt/endedAt auf 0 
   assert.equal(voiceMinutesOf({ answeredAt: "kaputt", endedAt: ok }), 0, "kaputtes answeredAt -> 0");
 });
 
-// ---- (b) Lesekante: budgetExceeded ----
-
 test("(b) budgetExceeded: NaN-Bucket sperrt fail-closed mit grund=usage_korrupt", async () => {
   const s = makeDefaultState();
   usageFor(s, TENANT_A).costCents = NaN;
@@ -92,19 +76,15 @@ test("(b) budgetExceeded: NaN-Bucket sperrt fail-closed mit grund=usage_korrupt"
   assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
 });
 
-// ---- (c) Schwelle bleibt intakt: ein verworfener NaN-Schreibversuch aendert den Bucket nicht ----
-
 test("(c) addVoiceUsageCostCents(NaN) verwirft, Bucket + Schwelle (800) bleiben intakt", () => {
   const s = makeDefaultState();
   addVoiceUsageCostCents(s, TENANT_A, 790);
-  addVoiceUsageCostCents(s, TENANT_A, NaN); // muss verworfen werden
+  addVoiceUsageCostCents(s, TENANT_A, NaN);
   assert.equal(usageFor(s, TENANT_A).costCents, 790, "NaN-Schreibversuch aendert den Bucket nicht");
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "790 < 800 -> noch frei");
-  addVoiceUsageCostCents(s, TENANT_A, 10); // -> 800
+  addVoiceUsageCostCents(s, TENANT_A, 10);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "800 >= 800 -> exceeded, Schwelle intakt");
 });
-
-// ---- Schreibkante: trackUsage verwirft VOR jeder Mutation (alles-oder-nichts) ----
 
 test("trackUsage(NaN-Input) verwirft alles-oder-nichts, liefert BIT-IDENTISCH den Bucket zurueck", () => {
   const s = makeDefaultState();
@@ -114,9 +94,6 @@ test("trackUsage(NaN-Input) verwirft alles-oder-nichts, liefert BIT-IDENTISCH de
   assert.equal(ret, usageFor(s, TENANT_A), "Rueckgabevertrag bleibt der Bucket");
 });
 
-// B4a: der D7-Riegel prueft seit der Aufschluesselung JEDE der vier Token-Sorten einzeln,
-// nicht ihre Summe - ein +NaN/-NaN-Paar koennte sich in einer Summe aufheben und die
-// Reichweite der Sicherung heimlich verkleinern.
 test("B4A-D7-1: NaN in JEDER der vier Token-Sorten verwirft den Turn, Bucket bleibt bit-identisch", () => {
   for (const sorte of ["uncached", "cacheWrite", "cacheRead", "output"]) {
     const s = makeDefaultState();
@@ -125,8 +102,6 @@ test("B4A-D7-1: NaN in JEDER der vier Token-Sorten verwirft den Turn, Bucket ble
     assert.deepEqual(usageFor(s, TENANT_A), before, `NaN in ${sorte} muss den ganzen Turn verwerfen`);
   }
 });
-
-// ---- T5-Raender: isBookableCents + die Schreib-/Reserve-Kanten je Randwert ----
 
 test("T5-Raender: UNBOOKABLE wird ueberall abgelehnt, BOOKABLE bleibt buchbar (0 inklusive)", () => {
   for (const val of UNBOOKABLE) {
@@ -150,8 +125,6 @@ test("T5-Raender: UNBOOKABLE wird ueberall abgelehnt, BOOKABLE bleibt buchbar (0
   }
 });
 
-// ---- Reserve-Lesekanten (Zusatzbefund D-3) ----
-
 test("Reserve-Lesekante: NaN-Bucket sperrt reserveExceedsBudget", async () => {
   const s = makeDefaultState();
   usageFor(s, TENANT_A).costCents = NaN;
@@ -163,14 +136,6 @@ test("Reserve-Lesekante: NaN-Bucket sperrt reserveExceedsBudget", async () => {
   assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
 });
 
-// ---- G26-Regressionstest (Review-Blocker Runde 1): fraktionaler Tenant-Bucket sperrt die TENANT-Lesekanten ----
-// Vor dem Fix pruefte isBookableCents NUR Endlichkeit + Nicht-Negativitaet - ein
-// fraktionaler Bucket (0.5 statt einer Ganzzahl-Cents) waere klaglos durchgerutscht.
-// budgetExceeded/reserveExceedsBudget lesen usageFor(...).costCents DIREKT (keine
-// Re-Aggregation) und sind daher unmittelbar exponiert. Die Plattform-Achse hat seit
-// KS-P9 gar keine Gate-Kante mehr, an der ein D7-Riegel greifen muesste - sie misst nur
-// noch (gatePlatformUsageCents/claimPlatformSpendWarning, dort faellt ein unbuchbarer
-// Wert auf null zurueck und die Warnung schweigt).
 test("G26-Regressionstest: fraktionaler Tenant-Bucket (0.5) sperrt budgetExceeded + reserveExceedsBudget fail-closed", async () => {
   const s = makeDefaultState();
   usageFor(s, TENANT_A).costCents = 0.5;
@@ -183,8 +148,6 @@ test("G26-Regressionstest: fraktionaler Tenant-Bucket (0.5) sperrt budgetExceede
   assert.equal(c, true, "reserveExceedsBudget muss bei fraktionalem Tenant-Bucket sperren");
   assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
 });
-
-// ---- (d) Hydrierungskante: pg rowToUsage heilt einen korrupten cost_eur='NaN'-Bestand ----
 
 test("(d) pg-Hydrierung heilt cost_eur='NaN' fail-closed zu costCents=0, grund=usage_korrupt", async () => {
   const { store, db } = await makePgTestStore();
@@ -201,8 +164,6 @@ test("(d) pg-Hydrierung heilt cost_eur='NaN' fail-closed zu costCents=0, grund=u
   assert.equal(reopened.usageOf(BOOTSTRAP_TENANT_ID).costCents, 0, "korrupter Bestand heilt zu 0");
   assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
 });
-
-// ---- Geteilte Quelle: das alte Inline-Idiom darf nicht zurueckkehren (Pre-Mortem (3)) ----
 
 test("geteilte Quelle: das alte !(x>=0)-Idiom ist aus state-ops.js/pg.js verschwunden", () => {
   const idiom = /!\(\s*[A-Za-z_$][\w$]*\s*>=\s*0\s*\)/;

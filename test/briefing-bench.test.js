@@ -1,10 +1,3 @@
-// briefing-bench (scripts/briefing-bench): Messwerkzeug fuer die Wirkung der Werkzeugtexte
-// auf das rufende Modell. Hier NUR der Attrappen-Modus - ohne Netz, ohne Guthaben,
-// deterministisch. Belegt wird: (1) der Schnappschuss kommt vom echten Draht (stdio) dieses
-// Checkouts, (2) ein sauberer Lauf ergibt 0 Befunde, (3) jede Einschleusung schlaegt an
-// (Positiv-Kontrolle - eine Metrik, die nie anschlaegt, misst nichts), (4) zwei Laeufe sind
-// gleich, (5) der Vergleich alt/neu faellt bei einer Verschlechterung durch - auch dann, wenn
-// ein Missbrauchs-Anruf (Werbeliste, Wahlkampf) eine Karte bekommt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ROOT } from "./helpers.js";
@@ -19,7 +12,6 @@ const MISUSE_SCENARIOS = 2;
 const TOTAL_RUNS = RUNS * SCENARIOS.length;
 const GAP_RUNS = RUNS * SCENARIOS.filter((scenario) => scenario.luecke).length;
 const MISUSE_RUNS = RUNS * MISUSE_SCENARIOS;
-// Laeufe, in denen richtig ist anzurufen (alles ausser Missbrauch).
 const CALL_RUNS = TOTAL_RUNS - MISUSE_RUNS;
 
 let cachedSnapshot = null;
