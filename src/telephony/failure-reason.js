@@ -1,46 +1,8 @@
-// CDF1 (Report #2 5.4): maschinenlesbarer, PII-freier Fehlergrund aus dem normalisierten
-// Provider-Lifecycle ({status, diagnostics} aus extractLifecycleEvent). Provider-agnostisch:
-// die CallStatus-Vokabel ist Twilio-Konvention, die Telnyx' TeXML spiegelt; der SIP-Cause
-// verfeinert NUR den generischen "failed"-Fall. PII-frei by construction (nur Status-/
-// Cause-Token, NIE Nummern/Namen - diagnostics.sipHangupCause ist bereits ueber
-// safeCauseToken gefiltert).
-//
-// OUTBOUND-E2 (F1, Regressionsfang Ausfall 27.08.2026): der Bestand oben klassifizierte
-// urspruenglich NUR "zustande gekommen (completed) vs. nicht" - ein SIP-Code verfeinerte
-// den generischen "failed"-Fall lediglich als angehaengtes DETAIL ("failed:403"), OHNE
-// SCHULD-Klasse. Fuer den Fall "der Anruf kam nie zustande" gab es zusaetzlich gar kein
-// Wort - deshalb trugen unser Konfigurationsdefekt (SIP 403, der Ausfall) und der
-// Tippfehler eines Nutzers (SIP 404, Ziel existiert nicht) bis heute dasselbe Label.
-//
-// Review-Befund S2-1 (Runde 3): zwei Zuordnungen DESSELBEN SIP-Codes auf einen Grund waeren
-// das Gegenteil des Etappenziels "EIN Fehlervokabular ueber alle Engines" gewesen - deshalb
-// nutzt callFailureReason() unten (der TeXML-/Call-Control-Lifecycle-Weg) jetzt DIESELBE
-// Schuld-Zuordnung sipBase() wie providerErrorReason() (der ElevenLabs-Weg). EINE
-// Zuordnungstabelle (SIP-Code -> Schuld-Basis-Token), zwei Aufrufer - kein Zweitweg mehr,
-// der denselben SIP-403 als blosses "failed" statt als "not-placed" ausgibt. Das Modul
-// traegt weiterhin zwei Erzeuger-FAMILIEN (Lifecycle eines zustande gekommenen Gespraechs
-// oben, Ablehnung eines nie zustande gekommenen Anrufs unten), aber nur noch EINE
-// SIP-Klassifikation - beide PII-frei by construction, beide reine Funktionen ohne
-// Netz-/Store-/Log-Zugriff.
-
-// Erfolgs-/Selbstsprechende Status (Domaenen-Vokabel, identisch zur /voice/status-Terminalliste).
 const COMPLETED_STATUS = "completed";
-// Status, die schon selbst den Grund tragen -> 1:1 als Token (Status gewinnt vor SIP-Cause,
-// vgl. Spec-Beispiel: no-answer + sipHangupCause=487 -> "no-answer").
 const SELF_DESCRIBING_FAILURES = ["no-answer", "busy", "canceled"];
 const GENERIC_FAILURE_STATUS = "failed";
-// Trenner zwischen Basis-Token und Detail ("failed:603"). EINE Quelle fuer den Erzeuger
-// (callFailureReason) und den Leser (failureReasonBase) - vorher stand er nur als Literal
-// im Template und musste vom Leser erraten werden.
 const DETAIL_SEPARATOR = ":";
 
-// Liefert ein stabiles, kleines Token (string) ODER null (Erfolg/aktiv/leer -> KEIN Grund).
-// Form: "no-answer" | "busy" | "canceled" | "<schuld-basis>:invite-<sipcode>" |
-// "failed:<roher-cause>" | "failed" | <roher status>. Der numerische SIP-Fall laeuft ueber
-// sipBase() (S2-1: EINE Zuordnung mit providerErrorReason geteilt, s. Modul-Kopf); ein
-// NICHT-numerischer Auflegegrund (z.B. Telnyx' "normal_clearing"-Wortfamilie) faellt auf
-// das alte, unklassifizierte Detail-Anhaengen zurueck - fail-closed, keine erfundene Schuld
-// fuer einen Wert, der kein SIP-Statuscode ist.
 export function callFailureReason({ status, diagnostics } = {}) {
   if (!status || status === COMPLETED_STATUS) return null;
   if (SELF_DESCRIBING_FAILURES.includes(status)) return status;
@@ -50,42 +12,21 @@ export function callFailureReason({ status, diagnostics } = {}) {
     if (sip !== null) return reasonOf(sipBase(sip), detailOf(SOURCE_INVITE, sip));
     return rawCause ? `${GENERIC_FAILURE_STATUS}${DETAIL_SEPARATOR}${rawCause}` : GENERIC_FAILURE_STATUS;
   }
-  return status; // unbekannter Nicht-completed-Status -> defensiver Passthrough, kein Bruch
+  return status;
 }
 
-// Basis-Token eines Grundes: "failed:603" -> "failed", "no-answer" -> "no-answer",
-// null/leer -> null. Der Detail-Teil (SIP-Cause) verfeinert nur die Diagnose und hat
-// bewusst keinen eigenen Nutzertext. Rein, ohne Nebeneffekt.
 export function failureReasonBase(reason) {
   return reason ? String(reason).split(DETAIL_SEPARATOR)[0] : null;
 }
 
-// Grund OHNE Carrier-Anhang (G22/G5, Review Runde 4): der Anhang ("-D51", Form
-// CARRIER_CODE_IN_REASON) wird von genau diesem Modul beim BAUEN des Tokens angehaengt
-// (detailOf/providerErrorReason oben) - deshalb gehoert die Zerlege-Regel HIERHER statt
-// ein zweites Mal beim Aufrufer formuliert zu werden (outage-detection.js#outageBucket
-// delegiert auf diese Funktion). null/leer -> null.
 export function reasonWithoutCarrier(reason) {
   return reason ? String(reason).replace(CARRIER_CODE_IN_REASON_SUFFIX, "") : null;
 }
 
-// ---- OUTBOUND-E2 (F1): drei Basis-Klassen, getrennt nach SCHULD --------------------
-// Der Bestand oben klassifiziert ein Gespraech, das ZUSTANDE KAM. Fuer den Fall "der
-// Anruf kam nie zustande" gab es kein Wort - und deshalb trugen der Konfigurationsdefekt
-// des Betreibers (SIP 403, Ausfall 27.08.2026) und der Tippfehler des Nutzers (SIP 404)
-// bis heute dasselbe Label. Die Trennung ist der Kern: der Nutzertext loest auf dem
-// BASIS-Token auf (i18n/failure-reason-texts.js), und der spaetere Betreiber-Alarm zaehlt
-// genau EINE Klasse.
-export const NOT_PLACED = "not-placed"; // unsere/des Anbieters Schuld
-export const UNREACHABLE = "unreachable"; // das Ziel ist nicht erreichbar
-export const RESULT_UNKNOWN = "result-unknown"; // der Ausgang ist unbekannt
+export const NOT_PLACED = "not-placed";
+export const UNREACHABLE = "unreachable";
+export const RESULT_UNKNOWN = "result-unknown";
 
-// EINE Quelle aller Basis-Token, die DIESES Modul erzeugt. Grund: der Vollstaendigkeits-
-// Waechter (test/gq-p15-failure-reason-notification.test.js) baute seine Menge bisher aus
-// einem hartkodierten Array - ein Token aus einem neuen Erzeuger tauchte dort NIE auf und
-// der Nutzer bekam wieder "<Ziel> (Status: failed)". Der defensive Passthrough
-// (unbekannter Nicht-completed-Status, s. callFailureReason) steht bewusst NICHT drin: er
-// ist nicht aufzaehlbar und faellt absichtlich auf den Bestandstext zurueck (GQ-P15-A4).
 export const FAILURE_REASON_BASE_TOKENS = Object.freeze([
   ...SELF_DESCRIBING_FAILURES,
   GENERIC_FAILURE_STATUS,
@@ -94,22 +35,16 @@ export const FAILURE_REASON_BASE_TOKENS = Object.freeze([
   RESULT_UNKNOWN,
 ]);
 
-// Quelle des Details - geschlossene Menge, nie aus Anbieter-Text gebildet.
 const SOURCE_START = "start";
 const SOURCE_INVITE = "invite";
 const SOURCE_PROVIDER = "provider";
 const SOURCE_POLL = "poll";
 const POLL_TIMEOUT_DETAIL = "timeout";
 
-// HTTP-Klassen des ANRUFSTARTS. 4xx = der Anbieter hat uns abgelehnt (Schluessel, Nummer,
-// Konto) -> unsere Schuld. 5xx = er hat uns nicht geantwortet -> wir wissen NICHT, ob
-// gewaehlt wurde. Genau diese Trennung haelt spaeter den Alarm sauber: ein 5xx-Sturm des
-// Anbieters darf nicht wie ein Konfigurationsdefekt zaehlen.
 const HTTP_CLIENT_ERROR_MIN = 400;
 const HTTP_SERVER_ERROR_MIN = 500;
 const HTTP_STATUS_MAX = 599;
 
-// SIP-Status. Quelle: RFC 3261 (401/403/404/407/480/486/603), Bedeutung je Code dort.
 const SIP_UNAUTHORIZED = 401;
 const SIP_FORBIDDEN = 403;
 const SIP_PROXY_AUTH_REQUIRED = 407;
@@ -118,19 +53,9 @@ const SIP_TEMPORARILY_UNAVAILABLE = 480;
 const SIP_BUSY_HERE = 486;
 const SIP_DECLINE = 603;
 const SIP_SERVER_ERROR_MIN = 500;
-// Obergrenze der 5xx-Klasse (RFC 3261: 6xx ist eine eigene "global failure"-Klasse, nicht
-// mehr "server error"). Nur 5xx ist durch den Kommentar bei NOT_PLACED_SIP_STATUS belegt
-// ("der Trunk/Carrier hat den INVITE definitiv abgelehnt") - fuer 6xx existiert keine
-// Belegung, deshalb faellt 6xx (ausser den unten explizit belegten Codes) auf
-// RESULT_UNKNOWN zurueck (fail-closed, s. sipBase).
 const SIP_GLOBAL_FAILURE_MIN = 600;
 const SIP_STATUS_MAX = 699;
 
-// Wer den INVITE abgelehnt hat, entscheidet die Klasse - NICHT die Zahl an sich.
-// 401/403/407: die Gegenseite verweigert UNSERE Berechtigung (der 27.08.-Fall: die
-// Absendernummer gehoerte dem Konto nicht mehr). 5xx: der Trunk/Carrier hat den INVITE
-// definitiv abgelehnt - ebenfalls unsere Seite, anders als beim HTTP-5xx, wo wir gar
-// keine Antwort haben.
 const NOT_PLACED_SIP_STATUS = new Set([SIP_UNAUTHORIZED, SIP_FORBIDDEN, SIP_PROXY_AUTH_REQUIRED]);
 const UNREACHABLE_SIP_STATUS = new Set([
   SIP_NOT_FOUND,
@@ -139,44 +64,20 @@ const UNREACHABLE_SIP_STATUS = new Set([
   SIP_DECLINE,
 ]);
 
-// Die EINZIGEN zwei Muster, die den Anbieter-Freitext beruehren duerfen. Sie LESEN, sie
-// reichen nicht durch: was sie greifen, ist eine 3-stellige Zahl bzw. ein Carrier-Kuerzel
-// der Form D<zwei Ziffern>. Der Rohtext selbst wird weder gespeichert noch geloggt - er
-// kann Rufnummern tragen ("Invalid destination number ..."). Dasselbe Niveau wie
-// safeCauseToken (adapters/telnyx/webhook-events.js).
 const SIP_STATUS_IN_REASON = /sip status:\s*(\d{3})/i;
 const CARRIER_CODE_IN_REASON = /\bD\d{2}\b/;
-// Derselbe Carrier-Code, aber verankert am ENDE eines gebauten Tokens ("-D51"). Nur fuer
-// reasonWithoutCarrier() (Zerlege-Naht) - das Muster oben bleibt fuer das GREIFEN im rohen
-// Anbieter-Freitext (Bau-Seite), dieses hier fuer das ABSCHNEIDEN vom fertigen Token.
 const CARRIER_CODE_IN_REASON_SUFFIX = /-D\d{2}$/;
 
-// Ein Detail ist eine Verkettung gepruefter Bausteine - nie ein Fremdstring.
 const detailOf = (source, code, carrier) => [source, code, carrier].filter(Boolean).join("-");
 const reasonOf = (base, detail) => `${base}${DETAIL_SEPARATOR}${detail}`;
 
-// Nur eine ganze Zahl im gueltigen Statusbereich wird zum Detail; alles andere faellt weg
-// (kein NaN, kein Fremdtext, keine Ziffernfolge aus einer Rufnummer).
 function statusNumber(value, max) {
   const zahl = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
   return Number.isInteger(zahl) && zahl >= HTTP_CLIENT_ERROR_MIN && zahl <= max ? zahl : null;
 }
 
-// Detail fuer den Start-Fehlschlag OHNE verwertbaren Anbieter-Status (Netzfehler,
-// Zeitablauf, abgebrochene Verbindung, unlesbarer Statuswert). Geschlossene Menge wie
-// die uebrigen Detail-Bausteine - nie aus Anbieter-Text gebildet.
 const START_NO_STATUS_DETAIL = "no-status";
 
-// HTTP-Ablehnung des ANRUFSTARTS -> Token. Rein, ohne Netz/Store/Log. Gilt fuer ALLE drei
-// Engine-Zweige: der catch in routes/api-calls.js umschliesst sie alle.
-//
-// OUTBOUND-E3a (Befund D-4): kein providerStatus hiess bisher KEIN Grund - der Anruf lag
-// danach ohne jede Erklaerung im Store, und der Nutzer bekam "<Ziel> (Status: failed)".
-// Jetzt bekommt er einen Grund, aber in der Klasse fuer den UNBEKANNTEN AUSGANG, nicht in
-// der Schuldklasse: ohne Antwort des Anbieters wissen wir nicht, ob gewaehlt wurde.
-// Fail-closed in beide Richtungen - kein erfundener Grund, aber auch kein leeres Feld.
-// RESULT_UNKNOWN zaehlt bewusst NICHT in den spaeteren Ausfall-Alarm (E3b) und loest
-// KEINE Nutzer-Mail aus (die haengt an NOT_PLACED, s. mail-not-placed.js).
 export function startRejectionReason(providerStatus) {
   const code = statusNumber(providerStatus, HTTP_STATUS_MAX);
   if (code === null) return reasonOf(RESULT_UNKNOWN, detailOf(SOURCE_START, START_NO_STATUS_DETAIL));
@@ -184,13 +85,6 @@ export function startRejectionReason(providerStatus) {
   return reasonOf(base, detailOf(SOURCE_START, code));
 }
 
-// Der Fehler-Datensatz eines Anbieter-Gespraechs (ElevenLabs metadata.error) -> Token.
-// Klassifiziert wird auf `code` (in der Anbieter-OpenAPI required) UND auf den aus dem
-// Grundtext gezogenen SIP-Status. `error_type` wird BEWUSST NICHT gelesen: es ist live
-// vorhanden, aber nicht Teil der veroeffentlichten Schemazusicherung - eine Klassifikation
-// darauf waere eine Zusage, die uns niemand gegeben hat.
-// Unbekannter SIP-Status -> RESULT_UNKNOWN (fail-closed): lieber "wir wissen es nicht" als
-// eine erfundene Schuldzuweisung.
 export function providerErrorReason(error) {
   if (!error || typeof error !== "object") return null;
   const reason = typeof error.reason === "string" ? error.reason : "";
@@ -201,8 +95,6 @@ export function providerErrorReason(error) {
   return reasonOf(sipBase(sip), detailOf(SOURCE_INVITE, sip, carrier));
 }
 
-// Die Schuld-Zuordnung des SIP-Status an EINER Stelle (haelt providerErrorReason unter der
-// Komplexitaetsgrenze und macht die Regel als Regel lesbar).
 function sipBase(sip) {
   if (UNREACHABLE_SIP_STATUS.has(sip)) return UNREACHABLE;
   if (NOT_PLACED_SIP_STATUS.has(sip)) return NOT_PLACED;
@@ -210,8 +102,6 @@ function sipBase(sip) {
   return RESULT_UNKNOWN;
 }
 
-// Der Ergebnisabruf hat aufgegeben. BEIDE Faelle sind "wir wissen nicht, was passiert ist"
-// - nicht "es ist schiefgegangen": der Anruf kann sehr wohl gelaufen sein.
 export const POLL_TIMEOUT_REASON = reasonOf(RESULT_UNKNOWN, detailOf(SOURCE_POLL, POLL_TIMEOUT_DETAIL));
 
 export function pollProviderErrorReason(providerStatus) {

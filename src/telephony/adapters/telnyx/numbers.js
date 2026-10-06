@@ -1,46 +1,17 @@
-// Telnyx-Adapter: NumberProvisioning (searchNumbers/orderNumber/releaseNumber)
-// ueber die Telnyx-v2-REST-API. Loest ECHTES Geld aus (orderNumber)
-// -> nur ueber die gegatete Onboarding-Route + config.provisioning.maxNumbers-Notbremse erreichbar.
-// Kein SDK: fetch + JSON (Bearer). API-Key NIE in Fehlermeldungen leaken (Regel 4).
-//
-// Verifiziert gegen die Telnyx-Doku (2026-06-15), live UNBESTAETIGT (mit dem Owner
-// live fixen, falls Felder abweichen):
-//   search:    GET  /v2/available_phone_numbers?filter[country_code]=..&filter[features][]=voice
-//              -> liefert je Treffer zusaetzlich cost_information (upfront_cost,
-//                 monthly_cost, currency) = der Angebotspreis DIESER Nummer (GAP-11)
-//   order:     POST /v2/number_orders  {phone_numbers:[{phone_number}], connection_id}  (Idempotency-Key-Header)
-//              -> connection_id im Order-Body setzt das Voice-Routing in EINEM Schritt
-//                 (kein separater configure-PATCH; die Order ist async-pending).
-//   resolve:   GET  /v2/phone_numbers?filter[phone_number]=<e164>  (poll bis Ressourcen-id da)
-//   release:   DELETE /v2/phone_numbers/{id}
 import { assertTelnyxOk } from "./errors.js";
 import { parseDecimalToMicroCents } from "./cost-parse.js";
-// OUTBOUND-E4 (E-6/G5): authHeaders/url wandern nach http.js (EIN HTTP-Baustein statt
-// eines zweiten Telnyx-Clients) - config-read.js teilt sich dieselben zwei Funktionen.
 import { telnyxAuthHeaders as authHeaders, telnyxUrl as url } from "./http.js";
 
 const AVAILABLE_PATH = "/v2/available_phone_numbers";
 const ORDERS_PATH = "/v2/number_orders";
 const NUMBERS_PATH = "/v2/phone_numbers";
 const DEFAULT_SEARCH_LIMIT = 1;
-// Telnyx-detail im Fehler MIT loggen (402-Diagnose: "Account balance too low" steht im
-// detail, nicht im title). Bewusst akzeptiertes, dokumentiertes Restrisiko: ein nicht-402-
-// Fehler (z.B. 422 Validierung) kann die Telnyx-Inventarnummer ins Server-Log echoen
-// (allowlisted Felder, auf 200 gekuerzt, kein Raw-Body/Key) -> PLAN-SECURITY.md.
 const INCLUDE_TELNYX_DETAIL = { includeDetail: true };
 
-// Telnyx-number_orders ist async (status pending): die phone_number-Ressource erscheint
-// erst Sekunden nach der Bestellung. Kurzer, gedeckelter Poll, bis die Ressource (mit id)
-// sichtbar ist - DIESE id (nicht die Order-Sub-Resource-id) brauchen release/voice. Bleibt
-// sie aus -> Fehler MIT Kontext (Order pending), OHNE Nummer (PII) oder API-Key (Regel 4) zu
-// leaken; der Worker loggt den Throw -> Owner-Reconcile-Runbook.
 const RESOURCE_POLL_ATTEMPTS = 8;
 const RESOURCE_POLL_INTERVAL_MS = 1000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Loest die phone_number-Ressourcen-id (release/voice) per gedeckeltem Poll auf, da
-// die Order async-pending ist (s.o.). Liefert die id oder wirft MIT Kontext (kein
-// PII-/Key-Leak, Regel 4).
 async function resolveNumberId(e164) {
   for (let attempt = 0; attempt < RESOURCE_POLL_ATTEMPTS; attempt++) {
     const q = new URLSearchParams();
@@ -56,12 +27,6 @@ async function resolveNumberId(e164) {
   throw new Error("Telnyx orderNumber: phone_number-Ressource nicht aufloesbar (Order async pending)");
 }
 
-// Telnyx cost_information -> neutraler Port-Preis (GANZZAHL Mikro-Cent der PROVIDER-
-// Waehrung), oder null. ALLES-ODER-NICHTS: nur wenn die Waehrung da ist UND beide
-// Betraege parsebar sind, reist ein Preis mit. Ein Teil-Preis waere die gefaehrlichere
-// Variante - er saehe aus wie eine Messung. Ohne Preis faellt der Aufrufer auf die
-// Pauschale zurueck (GAP-11), NIE auf 0. Geparst wird mit demselben strengen,
-// string-basierten Money-Parser wie die Kosten-Belege (G5/G26, kein parseFloat).
 function providerPriceOf(costInformation) {
   if (!costInformation) return null;
   const currency = String(costInformation.currency || "").trim().toUpperCase();
@@ -71,7 +36,6 @@ function providerPriceOf(costInformation) {
   return { upfrontMicroCents, monthlyMicroCents, currency };
 }
 
-/** @type {import("../../ports.js").NumberProvisioning} */
 export const telnyxNumberProvisioning = {
   async searchNumbers({ countryCode, type, limit = DEFAULT_SEARCH_LIMIT }) {
     const q = new URLSearchParams();
@@ -82,8 +46,6 @@ export const telnyxNumberProvisioning = {
     const res = await fetch(`${url(AVAILABLE_PATH)}?${q}`, { headers: authHeaders() });
     await assertTelnyxOk(res, "searchNumbers", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
-    // price NUR wenn die Antwort ihn vollstaendig liefert -> eine Antwort ohne
-    // cost_information ergibt exakt die Bestandsform { e164 } (kein null-Feld).
     return (json.data || []).map((d) => {
       const available = { e164: d.phone_number };
       const price = providerPriceOf(d.cost_information);
@@ -92,11 +54,6 @@ export const telnyxNumberProvisioning = {
     });
   },
 
-  // connection_id wandert in den Order-Body (Voice-Routing in EINEM Schritt): Telnyx wendet
-  // es auf alle Nummern der Order an -> kein separater configure-PATCH (der auf der async-
-  // pending Order eine 404 warf). providerNumberId kommt NICHT aus der Order-Antwort (das ist
-  // die Order-Sub-Resource-id), sondern aus resolveNumberId -> damit releaseNumber spaeter greift.
-  // Idempotency-Key (number-id-basiert): Retry kauft nie doppelt (Telnyx-Header).
   async orderNumber({ e164, connectionId, idempotencyKey }) {
     const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
     const body = { phone_numbers: [{ phone_number: e164 }] };
@@ -114,9 +71,6 @@ export const telnyxNumberProvisioning = {
       method: "DELETE",
       headers: authHeaders(),
     });
-    // attachStatus: der tenant-prolif-d-Release-Reconciler unterscheidet 404 (Nummer bei
-    // Telnyx bereits weg -> als Erfolg werten, Idempotenz/Konvergenz) von echten Fehlern.
-    // Additiv fuer die Onboarding-Rollback-Callsite (deren catch ignoriert providerStatus).
     await assertTelnyxOk(res, "releaseNumber", { ...INCLUDE_TELNYX_DETAIL, attachStatus: true });
   },
 };

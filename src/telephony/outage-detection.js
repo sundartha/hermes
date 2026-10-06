@@ -1,71 +1,26 @@
-// OUTBOUND-E3b (E-4/F2b): die EINE Erkennungsregel fuer einen systematischen Ausfall -
-// beantwortet "liegt ein Ausfall vor?" an GENAU einem Ort, rein, IO-frei, zeit-injiziert.
-// Der Versand ist bewusst getrennt (outage-report.js, Clean-Code-Auftrag: "die Frage wird
-// an genau einem Ort beantwortet, der Versand ist davon getrennt").
-//
-// Auf dem OUTBOUND-Weg wird nur die Basis-Klasse not-placed gezaehlt (Schuld bei
-// uns/Anbieter, E-2/E3a); unreachable (Ziel-Schuld) und result-unknown (Anbieter-5xx/
-// Timeout, PM-20) zaehlen NIE. WAS jeweils zaehlt, ist seit IEX-B1 die ZAEHLWEISE der
-// Ausfall-Klasse (outage-classes.js) - dieses Modul haelt die Regel, nicht die Auswahl.
-//
-// Der EIMER ist das Fehlergrund-Token OHNE Carrier-Suffix: "not-placed:invite-403-D51"
-// und "not-placed:invite-403" sind DERSELBE Eimer (zwei Carrier mit derselben
-// Ablehnungsursache sind EIN Defekt) - "not-placed:start-403" ist ein ANDERER Eimer (HTTP-
-// Anrufstart vs. SIP-INVITE sind verschiedene Defekte). Ohne das Abschneiden vervielfacht
-// sich die Eimerzahl und jeder Eimer erreicht seine Schwelle spaeter (PM-22).
 import { MS_PER_MINUTE } from "../utils/timer.js";
 import { reasonWithoutCarrier } from "./failure-reason.js";
 
 export const OUTAGE_VERDICT = Object.freeze({
-  OFF: "aus", // Rollback-Hebel: windowMs=0 schaltet die Regel komplett ab
+  OFF: "aus",
   NONE: "kein-befund",
-  FIRST: "erstbefund", // K0: erster Befund einer Klasse - WARN+Audit, kein Versand
-  ALERT: "alarm", // K1 oder K2 - Meldeweg laeuft
-  RECOVERED: "erholt", // Rueckkehr zu gesund - eine Audit-Zeile, kein Versand
+  FIRST: "erstbefund",
+  ALERT: "alarm",
+  RECOVERED: "erholt",
 });
 
-// K1 braucht MEHRERE betroffene Tenants, damit "verschiedene Tenants" nicht schon bei
-// einem einzigen zaehlt (Plan E-4: "ein Tenant, der immer wieder dieselbe unerreichbare
-// Nummer waehlt, loest keine der drei Klauseln aus" gilt ohnehin ueber die Basis-Klasse -
-// diese Konstante schaerft zusaetzlich die Tenant-Klausel selbst).
 export const MIN_TENANTS_SHARED_FAULT = 2;
 
-// Ganzzahliger Anteilsvergleich (Deviation D-4): fehler*PERCENT_BASE >= versuche*p bleibt
-// exakt, keine Rundung wie bei einem Fliesskomma-Anteil.
 const PERCENT_BASE = 100;
 
-// Der EIMER eines Fehlergrund-Tokens: ohne Carrier-Anhang. Die Grammatik des Anhangs
-// (Form D<zwei Ziffern>) kennt NUR failure-reason.js, das ihn beim Bauen des Tokens
-// anhaengt - outage-detection.js delegiert auf dessen Zerlege-Naht statt die Form ein
-// zweites Mal zu formulieren (G22/G5, Review Runde 4). Direkte Referenz statt
-// Wrapper-Funktion, damit es strukturell unmoeglich ist, hier still eine zweite Kopie
-// der Regel einzuschmuggeln. null/leer -> null.
 export const outageBucket = reasonWithoutCarrier;
 
-// Die ZAEHLWEISE einer Ausfall-Klasse: drei reine Praedikate, sonst nichts. Wer zaehlt in
-// den Nenner (zaehltMit), was belegt einen funktionierenden Pfad (belegtErfolg), was belegt
-// das Scheitern GENAU dieser Klasse (belegtFehler). Dieser Satz ist die Bestandsdefinition,
-// woertlich aus dem Rumpf von outageWindow herausgezogen, und zugleich dessen Default: jeder
-// Aufrufer, der keine Zaehlweise nennt, bekommt die Regel byte-gleich zum Bestand (IEX-B1
-// I1). Ein eingehender Fehlschlag ist kein Outbound-Ausfall. erfolge = answeredAt gesetzt
-// (E-2-Lehre: status ist keine Wahrheit, answeredAt ist der einzige Beleg fuer einen
-// funktionierenden Waehlweg - der 27.08.-Datensatz zeigte status=failed, answered_at=NULL
-// bei allen vier Versuchen). Die ZWEITE Zaehlweise (Inbound-EL) steht in outage-classes.js
-// und darf hier nicht importiert werden (Zyklus); sie muss es auch nicht - dieses Modul
-// bleibt die reine Regel, die Registry dort die Bindung.
 export const ZAEHLWEISE_OUTBOUND = Object.freeze({
   zaehltMit: (call) => call.direction === "outbound",
   belegtErfolg: (call) => Boolean(call.answeredAt),
   belegtFehler: (call, bucket) => outageBucket(call.failureReason) === bucket,
 });
 
-// Reines Zeitfenster ueber die PERSISTENTEN Anruf-Zeilen (PM-23: kein Ringpuffer, kein
-// In-Memory-Zaehler - das Fenster wird bei jedem Aufruf frisch aus store.load().calls
-// abgeleitet und ueberlebt damit jeden Prozess-Neustart, ohne selbst etwas zu speichern).
-// Gezaehlt werden Zeilen mit endedAt im Fenster [nowMs-windowMs, nowMs] nach der
-// uebergebenen Zaehlweise; fehler/tenants zaehlen NUR Zeilen, deren EIMER exakt dem
-// uebergebenen bucket entspricht (Klassen ohne Eimer-Begriff ignorieren ihn - ihr
-// belegtFehler nimmt das zweite Argument gar nicht erst an).
 export function outageWindow(calls, { nowMs, windowMs, bucket, zaehlweise = ZAEHLWEISE_OUTBOUND }) {
   const zahlen = { fehler: 0, versuche: 0, erfolge: 0, tenants: 0 };
   const betroffeneTenants = new Set();
@@ -86,25 +41,12 @@ export function outageWindow(calls, { nowMs, windowMs, bucket, zaehlweise = ZAEH
   return zahlen;
 }
 
-// Entprellung (S3-1/S3-2, Plan 2.3): NIE ein zweiter Alarm nach einer bereits
-// ZUGESTELLTEN Meldung (debounceMs, entprellt am VORFALL) - aber eine fehlgeschlagene
-// Zustellung darf nach retryMs nachgeholt werden (sonst gibt es NULL Meldungen zum
-// echten Vorfall, obwohl die Alarm-Bedingung weiter erfuellt ist).
-// braucht dieselbe Entprellungs-Regel VOR jedem Alarm-Versand - EINE Quelle (G5) statt
-// einer zweiten, dort getippten Fristlogik.
 export function meldeErlaubt(marker, nowMs, { debounceMs, retryMs }) {
   if (marker.reportedAt) return nowMs - Date.parse(marker.reportedAt) >= debounceMs;
   if (marker.lastAttemptAt) return nowMs - Date.parse(marker.lastAttemptAt) >= retryMs;
   return true;
 }
 
-// K1 (kleines Volumen, der Ist-Zustand): mehrere Fehler derselben Klasse UND (keine
-// Erfolge im Fenster ODER mehrere betroffene Tenants) - UND versuche<minAttempts.
-// Die dritte Klausel steht nicht woertlich im Auftrag, macht aber nur explizit, was der
-// Auftrag selbst voraussetzt ("K2 greift, sobald ein Nenner da ist"): OHNE sie ist die
-// Oder-Bedingung bei Skala IMMER wahr (Deviation D-2, PM-22) - K1 und K2 partitionieren
-// dieselbe Volumen-Achse an derselben Grenze minAttempts, keine der beiden vom Auftrag
-// geforderten Klauseln (0-Erfolge, Mehr-Tenants) entfaellt dadurch.
 function kleinesVolumenAlarm(fenster, schwellen) {
   return (
     fenster.versuche < schwellen.minAttempts &&
@@ -113,8 +55,6 @@ function kleinesVolumenAlarm(fenster, schwellen) {
   );
 }
 
-// K2 (Skala): ab einem Mindestnenner entscheidet der ANTEIL, nicht die absolute Zahl -
-// sonst waere die Regel bei wachsendem Verkehr immer erfuellt (PM-22).
 function skalaAlarm(fenster, schwellen) {
   return (
     fenster.versuche >= schwellen.minAttempts &&
@@ -122,20 +62,8 @@ function skalaAlarm(fenster, schwellen) {
   );
 }
 
-// Die EINE Erkennungsregel (K0/K1/K2). fenster kommt aus outageWindow(); marker ist die
-// aktuell OFFENE Zeile aus dem durablen Speicher (state-ops.js#openOutageAlert) oder
-// undefined/null, wenn es keine gibt. schwellen = { windowMs, minFailures, minAttempts,
-// failSharePercent, debounceMs, retryMs } (alles Env-Werte, config.billing).
 export function beurteileAusfall({ fenster, marker, schwellen, nowMs }) {
   if (schwellen.windowMs === 0) return { urteil: OUTAGE_VERDICT.OFF, zahlen: fenster };
-  // Review-Blocker (Falsche Entwarnung bei Null-Verkehr): "fehler===0" allein ist KEIN
-  // Beleg fuer Erholung - ein LEERES Fenster (versuche=0, z.B. eine Woche ohne einen
-  // einzigen Anruf) erfuellt dieselbe Bedingung wie ein GESUNDES Fenster und wurde bisher
-  // ununterscheidbar als "erholt" gewertet, obwohl niemand angerufen hat. Erholung heisst
-  // NACHGEWIESENER, FUNKTIONIERENDER Verkehr: mindestens ein ERFOLGREICHER Anruf im
-  // Fenster (fenster.erfolge>0) - ein Fenster voller Fehlversuche (nur einer anderen
-  // Klasse, sonst waere fehler>0) beweist ebenfalls keine Erholung. Ohne Beleg bleibt der
-  // Marker offen: urteil NONE, VERDICT_HANDLERS kennt dafuer keinen Handler.
   if (fenster.fehler === 0) {
     const erholtBelegt = !!marker && fenster.erfolge > 0;
     return { urteil: erholtBelegt ? OUTAGE_VERDICT.RECOVERED : OUTAGE_VERDICT.NONE, zahlen: fenster };
@@ -149,9 +77,6 @@ export function beurteileAusfall({ fenster, marker, schwellen, nowMs }) {
   return { urteil, zahlen: fenster };
 }
 
-// Body-Vertrag (Regel 10, PII-frei): GENAU vier Groessen plus Klasse/Regel - keine E.164,
-// kein Tenant-Bezeichner, keine Call-ID, kein Anbieter-Rohtext. Dieselbe Formulierung fuer
-// Log-Zeile, Audit-Detail, Mail-Text und SMS-Body (eine Quelle, kein Auseinanderlaufen).
 export function alarmZeile({ code, zahlen, regel, windowMs }) {
   const fensterMin = Math.round(windowMs / MS_PER_MINUTE);
   return (
