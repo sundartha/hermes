@@ -1,7 +1,3 @@
-// P6/S2-20 (G5): EINE Quelle fuer den localhost-Gateway-Fallback. gatewayUrlForPort()
-// baut das Template, resolveGatewayUrl() liest GATEWAY_URL zur Aufrufzeit oder faellt
-// auf den config-Port zurueck (statt eines hartkodierten :3000-Literals). Rein-Unit,
-// kein Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config, gatewayUrlForPort, resolveGatewayUrl } from "../src/config.js";

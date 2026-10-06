@@ -1,6 +1,3 @@
-// KE-P9 (Belegabruf nur ueber abrufbare Kandidaten): EIGENE Datei (Muster cost-truing-since.test.js
-// - eigener Gegenstand + node --test gibt je Datei ein eigenes Drossel-Budget). process.env VOR
-// den dynamischen Importen (Lehre test-base-env-drift), netzfrei via stubCountingFetch.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -16,14 +13,10 @@ const {
   makeStubStore, fakeConfig, makeDueOutboundCall, fakeVoiceControl, stubCountingFetch,
 } = await import("./cost-truing-harness.js");
 
-// FESTE Uhr (Muster P5_NOW): die erwartete Schranke in (P9-2) steht unten als LITERAL, nicht
-// als zweite Ausfuehrung derselben Formel.
 const P9_NOW = "2026-07-21T18:00:00.000Z";
 
 const sweepLineOf = (lines) => lines.filter((l) => l.startsWith("[cost-truing] sweep "));
 
-// Fake im Port-Zuschnitt, der die Pool-PARAMETER aufzeichnet (Muster cost-truing-since.test.js
-// paramRecordingAdapter) - der Pruefgegenstand von (P9-2) ist der uebergebene since-Wert.
 function paramRecordingAdapter(poolParams) {
   return {
     async fetchCostRecordPool(params) {
@@ -72,8 +65,6 @@ test("(P9-2) gemischt: ein alter nicht-abrufbarer + ein junger abrufbarer Call -
   const res = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
 
   assert.equal(poolParams.length, 1, "der Pool wird weiterhin geholt - der alte Call schliesst den Abruf nicht aus");
-  // endedAt des jungen Calls = 15:00Z, minus die Marge. KS-P3: die Marge ist seit dieser
-  // Phase aus MAX_CALL_DURATION_CAP_S abgeleitet (12 x 1800 s = 6 h statt vorher 1 h).
   assert.equal(poolParams[0]?.since, "2026-07-21T09:00:00.000Z", "die Schranke haengt am ABRUFBAREN Call, nicht am alten");
   assert.equal(res.skippedCalls, 1);
   assert.equal(store.writes.length, 1);
@@ -97,17 +88,6 @@ test("(P9-3) leere abrufbare Menge bei nicht-leerer Kandidatenmenge -> Bilanz tr
     line,
     "[cost-truing] sweep trigger=manual kandidaten=3 gemessen=0 unvollstaendig=0 " +
       "ohne_schaetzung=0 unbestimmt=0 uebersprungen=3 " +
-      // KV2-1 (Kriterium (d)): kanaele= HINTER den Bestandsfeldern - kein Ziel gesetzt
-      // (BASE_ENV/fakeConfig-Default) -> kanaele=keine. KV2-6: buch=/herzschlag=/
-      // nie_beendet=/profillos= wachsen HINTER kanaele= - die 3 Kandidaten liegen
-      // ausserhalb JEDES Fensters (makeDueOutboundCall-Default endedMinutesAgo=200min,
-      // < der Karenz dieser Config) -> buch=keine herzschlag=keine.
-      // KV2-7: erschoepft=/abschluesse= HINTER profillos=. Keine Antwort => keine der
-      // drei Fixturen ist messbar (uebersprungen, keine Leg-Referenz) -> erschoepft=0
-      // (der Zaehler zaehlt nur nicht mehr versuchbare, nicht uebersprungene Calls); sie
-      // tragen kein costProfile UND schliessen in diesem Sweep nicht -> abschluesse=keine.
-      // KV2-9: el_reifung=/el_abweichung=/el_uebrig= HINTER abschluesse= - kein
-      // elKostenRead injiziert -> vollstaendiges No-op.
       "anfragen=0 seiten=0 pool=0 vollstaendig=true kanaele=keine buch=keine herzschlag=keine " +
       "nie_beendet=0 profillos=0 erschoepft=0 abschluesse=keine el_reifung=keine el_abweichung=0 el_uebrig=0",
   );

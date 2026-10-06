@@ -1,14 +1,3 @@
-// E2E-02 (i18n-Testkatalog, tasks/i18n-tests/11-luecken-und-e2e.md:901) - Zwei Tenants,
-// zwei Sprachen, volle Kette parallel.
-//
-// SOLL (rot): keine Kreuzkontamination ueber die Rahmentexte - Tenant A (language="de")
-// bleibt ausschliesslich Deutsch, Tenant B (language="en") ausschliesslich Englisch. Heute
-// tragen Schritt 2 (Inbound-Greeting) UND Schritt 4 (Summary-SMS/Notification) fuer BEIDE
-// Tenants dieselben deutschen Rahmentexte - der Greeting-Text (src/routes/voice.js:265)
-// ignoriert call.language (WEB-05), der SMS-/Notification-Rahmen (call-finish.js:57,80-81)
-// liest call.language ueberhaupt nicht (WEB-14). Zwei Kanaele reichen als Launch-Gate-Beweis:
-// Greeting per echtem Server-Spawn (offline, Telnyx-Signatur-Header wie test/telnyx-p8-
-// inbound.test.js), SMS/Notification per makeCallFinish-Unit (Muster WEB-14).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, postTelnyxIncoming, seedCall } from "./helpers.js";
@@ -16,14 +5,12 @@ import { makeCallFinish } from "../src/telephony/call-finish.js";
 import { makeDefaultState, registerTenant, settingsFor } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-const DID_A = "+4915100000101"; // Tenant A: Deutschland
-const DID_B = "+12025550101"; // Tenant B: USA (settings.language="en")
+const DID_A = "+4915100000101";
+const DID_B = "+12025550101";
 const AT = "2026-01-01T00:00:00Z";
 
 function twoTenantSeed() {
   const s = makeDefaultState();
-  // Owner-Tenant braucht eine aktive Nummer (Boot-Guard) - eigene DID, kollidiert nicht
-  // mit A/B.
   s.numbers.push({
     id: "num_owner",
     e164: "+4915199999999",
@@ -67,9 +54,6 @@ test("Inbound-Greeting - Tenant B (EN) spricht keine deutschen Signalwoerter (ex
   }
 });
 
-// ---- SMS/Notification (Schritt 4): direkter makeCallFinish-Unit-Test, ein Aufruf je
-// Tenant, parallel. Muster WEB-14.
-
 function makeFakeStore(notifyCapture) {
   return {
     withStoreLock: (fn) => fn(),
@@ -81,7 +65,6 @@ function makeFakeStore(notifyCapture) {
     recordUsageEvent: () => {},
     markSummarySmsSent: () => {},
     markBilled: () => {},
-    // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
     markInboxEntry: () => {},
   };
 }

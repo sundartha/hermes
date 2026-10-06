@@ -1,14 +1,3 @@
-// P8 (PLAN-CONVERSATION-QUALITY-V2): der Circuit-Breaker des Pre-Call-Briefings ist
-// EIGENSTAENDIG (D6) - ein Briefing-Ausfall darf den prozessweiten Gespraechs-Breaker
-// (die llm-Instanz in src/claude.js, agentTurn/summarizeCall) NICHT in open kippen.
-// Eigene Datei (node:test isoliert env pro Datei-Prozess): LLM_BREAKER_THRESHOLD=1 muss
-// VOR dem ersten config-Import gesetzt sein, damit EIN Fehlschlag reicht, um den
-// Briefing-Breaker deterministisch zu oeffnen (kein Wettlauf gegen einen hoeheren
-// Default-Threshold, der die anderen P8-Testdateien brauchen).
-//
-// Rein in-process (kein Server-Spawn, kein pglite) - dieselbe Naht wie
-// cq-p8-briefing.test.js: ANTHROPIC_BASE_URL + DATA_DIR + Flags VOR dem ersten
-// config-Import, dann dynamischer Import.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -19,13 +8,8 @@ const OWNER = "Jonas Beispiel";
 const CALL_ID = "call_p8_breaker";
 const PEER_NUMBER = "+4915112345678";
 
-// Zusammenfassungs-Antwort fuer summarizeCall (claude.js, EIGENER Breaker) - dieselbe
-// JSON-Decision-Form wie c1-auftragstreue.test.js.
 const SUMMARY_DECISION = { summary: "Alles erledigt.", actionItems: [], objective_achieved: true };
 
-// "fail" -> HTTP 500 (fuer BR1, der Briefing-Aufruf); "summary" -> valide Text-JSON-
-// Antwort (fuer BR2, der Gespraechs-Aufruf ueber claude.js). Beide Tests laufen
-// nacheinander, nie parallel (node:test-Default innerhalb einer Datei).
 let mode = "fail";
 let requestCount = 0;
 
@@ -66,7 +50,6 @@ before(async () => {
   process.env.ANTHROPIC_API_KEY = "test-p8-breaker-key";
   process.env.PRECALL_BRIEFING_ENABLED = "true";
   process.env.ASSISTANT_CONTEXT_ENABLED = "true";
-  // EIN Fehlschlag reicht, um den (eigenen) Briefing-Breaker zu oeffnen.
   process.env.LLM_BREAKER_THRESHOLD = "1";
   process.env.DATA_DIR = tempDataDir(
     seedState({
@@ -111,11 +94,6 @@ test("BR1 ein fehlschlagender Briefing-Aufruf oeffnet den Briefing-Breaker: zwei
   assert.equal(first, null, "erster Aufruf scheitert am HTTP-500");
   const afterFirst = requestCount;
   assert.equal(afterFirst, before + 1, "erster Aufruf loest genau EINEN Request aus");
-  // AL-P9: der 500er ging raus (retries-exhausted) -> die Schaetzung wird gebucht.
-  // Gemessen auf der EXAKTEN Gate-Achse (Cent-Uebertrag + Sub-Cent-Rest): seit B4a liegt
-  // EINE Briefing-Schaetzung unter einem ganzen Cent (korrigierte Sonnet-Rate), und genau
-  // dafuer existiert der Mikro-Cent-Akkumulator (P1-Safety-BLOCKER). Ein Blick allein auf
-  // costCents saehe die Buchung nicht und behauptete ein Loch, das es nicht gibt.
   const usageAfterFirst = { ...store.usageOf(BOOTSTRAP_TENANT_ID) };
   assert.ok(
     usageAfterFirst.costCents * MICRO_CENTS_PER_CENT + usageAfterFirst.costMicroCentsRem > 0,
@@ -125,7 +103,6 @@ test("BR1 ein fehlschlagender Briefing-Aufruf oeffnet den Briefing-Breaker: zwei
   const second = await fetchPrecallBriefing(briefingArgs());
   assert.equal(second, null, "zweiter Aufruf ist sofort null (Breaker offen)");
   assert.equal(requestCount, afterFirst, "Breaker offen -> KEIN zweiter HTTP-Request");
-  // AL-P9: circuit-open ist kostenlos, kein Request, keine Schaetzung.
   assert.deepEqual(
     store.usageOf(BOOTSTRAP_TENANT_ID),
     usageAfterFirst,
@@ -134,7 +111,7 @@ test("BR1 ein fehlschlagender Briefing-Aufruf oeffnet den Briefing-Breaker: zwei
 });
 
 test("BR2 der Gespraechs-Breaker (claude.js) bleibt UNBERUEHRT: summarizeCall liefert weiterhin ein Ergebnis", async () => {
-  mode = "summary"; // derselbe Mock, jetzt eine valide Text-Antwort fuer claude.js
+  mode = "summary";
   const call = store.getCall(CALL_ID);
   const result = await summarizeCall(call);
   assert.ok(result, "summarizeCall darf NICHT durch den fremden (Briefing-)Breaker blockiert werden");

@@ -1,29 +1,3 @@
-// ---- Der GELD-Pfad des ElevenLabs-Weges: drei Rotproben ---------------------------------
-// Eine unabhaengige Durchsicht (17.08.2026) fand drei Wege, auf denen ein echter, bezahlter
-// Anruf mit 0 oder mit dem Dreifachen gebucht wird - und der Beleg dafuer im selben Zug beim
-// Anbieter geloescht wird. Jede der drei Zusicherungen hier ist eine ROTPROBE: sie faellt
-// ohne den zugehoerigen Fix (nachgewiesen durch Herausnehmen des Fixes, s. Bericht), nicht
-// bloss "sie ist gruen".
-//
-//   S1-A  Der Anbieter-Deckel (600 s) war nur DEFAULT, nicht Obergrenze. routes/api-calls.js
-//         setzt maxDurationS bei JEDEM Anruf (gemessen: 1800) und schlug ihn damit - ein
-//         dauerhaft stummer Ergebnisabruf liess den Poll bis 1800 s laufen und buchte 30
-//         statt 10 Minuten (bei 30 ct/min 9,00 statt 3,00 EUR).
-//   S1-B  Ein LAUFENDES Gespraech (Anbieter-Status "in-progress", Dauer 0) fiel auf dasselbe
-//         Ergebnis wie "niemand hat abgenommen": der Buchungsanker wurde still auf null
-//         gezogen, ein cancel_call nach vier Minuten Gespraech buchte 0 Minuten - und der
-//         Beleg war 0,3 s spaeter beim Anbieter geloescht (DELETE).
-//   S1-C  Der Loeschversuch lief weiter in die 120-s-Frist des AnrufSTARTS: der Abbruch
-//         konnte 10 s + 120 s haengen, obwohl der Kommentar "hoechstens 10 s" versprach.
-//
-// Offline, kein Netz, kein Server (Attrappe fuer den Anbieter, P12 F.I.R.S.T.). Der Store
-// ist KEIN Handnachbau: die Attrappe reicht jeden Aufruf an die ECHTEN state-ops-Mutatoren
-// durch (Muster src/store/json.js) - so rechnet voiceMinutesOf am Ende gegen denselben
-// Datensatz wie in Produktion, statt gegen ein Testobjekt mit Wunschfeldern.
-//
-// Testnamen tragen bewusst KEINE Katalog-/Abnahme-Kennung am Namensanfang (package.json
-// config.i18nCatalogPattern / config.abnahmePattern), sonst landen sie in der falschen
-// Testbank (Lehre catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -51,8 +25,6 @@ const SECONDS_PER_MINUTE = 60;
 
 const elConfig = () => withConfigNamespaces({ elevenLabsOutbound: ACCOUNT });
 
-// Fehlerebene-Log einsammeln, ohne ihn zu verschlucken - die Zeilen SIND hier die Zusicherung
-// ("der Fall wird laut statt still").
 async function mitFehlerLog(run) {
   const zeilen = [];
   const original = console.error;
@@ -65,8 +37,6 @@ async function mitFehlerLog(run) {
   return zeilen;
 }
 
-// Ein AKTIVER EL-Anruf mit echter Store-Herkunft (createCall) - eigene Frist und bereits
-// verstrichene Gespraechszeit sind die zwei Stellschrauben der Faelle unten.
 function seedActiveCall({ maxDurationS, laufzeitSekunden }) {
   const state = ops.makeDefaultState();
   const call = ops.createCall(state, {
@@ -80,7 +50,7 @@ function seedActiveCall({ maxDurationS, laufzeitSekunden }) {
   const anker = new Date(Date.now() - laufzeitSekunden * MS_PER_SECOND).toISOString();
   call.elevenlabsConversationId = CONV_ID;
   call.startedAt = anker;
-  call.answeredAt = anker; // der Verbindungsstempel des Anrufstarts (markAnswered)
+  call.answeredAt = anker;
   return { state, call };
 }
 
@@ -95,11 +65,6 @@ function makeOutbound(store, extra) {
   });
 }
 
-// ---- S1-A: der Anbieter-Deckel bindet die Buchung ---------------------------------------
-// Der Anbieter legt bei ELEVENLABS_PROVIDER_MAX_DURATION_S auf; ein Call, der laenger
-// "aktiv" ist, ist beim Anbieter nachweislich vorbei. Der Zombie unten steht deutlich ueber
-// BEIDEN Grenzen - so terminiert er mit UND ohne Fix, und die Zusicherung ist nicht "er
-// terminiert irgendwann", sondern "er bucht die richtige Zahl Minuten".
 const ZOMBIE_UEBERZUG_S = 600;
 const ANBIETER_MINUTEN = ELEVENLABS_PROVIDER_MAX_DURATION_S / SECONDS_PER_MINUTE;
 const PLATTFORM_MINUTEN = MAX_CALL_DURATION_CAP_S / SECONDS_PER_MINUTE;
@@ -118,7 +83,7 @@ test("S1-A: eigene 1800-s-Frist + dauerhaft stummer Ergebnisabruf -> gebucht wer
   });
 
   await withFetch(
-    async () => ({ ok: false, status: HTTP_SERVER_ERROR }), // der Anbieter bleibt stumm, dauerhaft
+    async () => ({ ok: false, status: HTTP_SERVER_ERROR }),
     async () => {
       el.rearmActiveConversationPolls();
       await waitUntil(() => billed);
@@ -172,13 +137,6 @@ test("S1-A: eine KUERZERE anrufeigene Frist bleibt wirksam - die Kappung ist das
   );
 });
 
-// ---- S1-B: ein laufendes Gespraech ist nicht "niemand hat abgenommen" --------------------
-// GRENZWERT-FALLE (gemessen 2026-08-28): gebucht werden ANGEFANGENE Minuten, und zwischen
-// dem Setzen des Ankers (Date.now() - laufzeitSekunden) und der Messung vergeht reale Zeit.
-// Mit exakt 240 s lag die Fixture GENAU auf der Minutengrenze: isoliert ergab sie 4 Minuten,
-// unter voller Suite-Last 5 - ein Flake ausgerechnet im Geldpfad. 210 s laesst 30 s Luft bis
-// zur naechsten Grenze; die Aussage des Falls ("der Anker bleibt stehen, die gesprochenen
-// Minuten bleiben gebucht") ist unveraendert.
 const GESPRAECHSDAUER_S = 210;
 const ERWARTETE_MINUTEN_LAUFEND = Math.ceil(GESPRAECHSDAUER_S / SECONDS_PER_MINUTE);
 const GRUND_LAUFEND = "call_duration_secs_unknown_conversation_in_progress";
@@ -297,12 +255,6 @@ test("S1-B: der Grund verlaesst den Server ueber den Anruf-Datensatz (publicCall
   }
 });
 
-// ---- S1-C: der Abbruch haengt nicht 130 Sekunden ----------------------------------------
-// ZEITRAFFER: AbortSignal.timeout wird durch dieselbe echte Implementierung ersetzt, nur mit
-// gestauchter Zahl - die FRIST, die der Produktionscode anfordert, entscheidet damit
-// weiterhin ueber die Rueckkehrzeit, nur eben in Millisekunden statt Minuten. Ohne den Fix
-// fordert der DELETE 120000 an (-> 1200 ms), mit Fix 10000 (-> 100 ms); die Schwelle unten
-// liegt sicher zwischen beiden Summen (200 ms bzw. 1300 ms).
 const ZEITRAFFER = 100;
 const RUECKKEHR_SCHWELLE_MS = 600;
 
@@ -321,16 +273,6 @@ async function withZeitrafferAbortSignal(run) {
   return angefordert;
 }
 
-// Ein Anbieter, der die Verbindung annimmt und dann schweigt: die Antwort kommt NIE, der
-// Aufruf endet ausschliesslich ueber sein eigenes Zeitlimit (wie echtes fetch).
-//
-// OFFENE LEITUNG: echtes fetch haelt waehrend der offenen Anfrage einen Socket, und der haelt
-// die Event-Loop wach. Der Timer hinter AbortSignal.timeout ist dagegen absichtlich unref'd
-// (er haelt den Prozess NICHT wach). Ohne Ersatz-Handle liegt waehrend der Frist nichts
-// Wachhaltendes mehr in der Loop: node:test bricht den Fall dann als "cancelled" ab
-// ("Promise resolution is still pending but the event loop has already resolved"), BEVOR die
-// Frist feuert - ohne dass eine Zusicherung je geprueft wurde. Der Handle lebt genau so lange
-// wie die simulierte Verbindung und faellt mit dem Abbruch.
 const LEITUNG_OFFEN_TAKT_MS = 1000;
 const stummerAnbieter = (_url, init) =>
   new Promise((_resolve, reject) => {

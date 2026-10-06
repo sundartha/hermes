@@ -1,13 +1,8 @@
-// P6/S2-1: boolEnv() faellt fail-closed - eine GESETZTE, aber nicht-exakte Boolean-Env
-// ("1"/"yes"/"True") darf NICHT still auf den Fallback kippen. Rein-Unit gegen die
-// exportierte Funktion (Muster config-failclosed.test.js) + Kill-Switch-Beweis via
-// Fresh-Import (Query-String-Cache-Buster, Muster S1-3 in config-failclosed.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { boolEnv, configFatalErrors, assertConfig, config } from "../src/config.js";
 import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "./helpers.js";
 
-// console.error abfangen, ohne den Testlauf zuzumuellen. Liefert die Zeilen.
 function captureConsoleError(fn) {
   const lines = [];
   const orig = console.error;
@@ -20,7 +15,6 @@ function captureConsoleError(fn) {
   return lines;
 }
 
-// Pflichtfelder erfuellen, NUR den geprueften Aspekt variieren (Test-Isolation).
 const { withConfigOverrides } = makeConfigOverrides(config);
 
 test("boolEnv: unset/leer -> fallback ohne Fatal (beide Richtungen)", () => {

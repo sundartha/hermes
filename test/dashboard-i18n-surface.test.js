@@ -1,34 +1,3 @@
-// W2-B6 (i18n-Testkatalog: WEB-07, WEB-18, WEB-19, GAP-30). WEB-08 ist mit P14
-// ersatzlos entfallen: das Gate mass styleLabel() IN public/tenant.html, und die Datei
-// ist geloescht (die App-Shell hat keinen sprachblinden Enum-Label-Helfer). Spezifikation
-// tasks/i18n-tests/08-web-dashboard-onboarding.md + 11-luecken-und-e2e.md.
-// Liest NUR (R-A: kein src/, kein public/, kein apps/web/ ausser Lesezugriff hier) -
-// aendert nichts. Reine Quelltext-/Modul-Pruefung, kein Server, kein Netz, kein Build
-// (apps/web/dist ist gitignored - gelesen wird apps/web/src/; Praezedenz
-// test/gap-15-legal-pages-no-placeholder-en-routes.test.js).
-//
-// Dashboard-i18n Etappe 2 (dynamische Strings aus lib/render.js/subscribe.js/api.js,
-// werden zur Renderzeit erzeugt statt ueber [data-i18n]): das Dashboard ist seitdem
-// ECHT zweisprachig, nicht mehr durchgaengig Englisch. WEB-18 unten ist deshalb
-// umgeschrieben (nicht abgeschwaecht) auf die neue Invariante: die EN-Konstanten
-// bleiben test-gepinnte Quelle der Wahrheit, jede lebt neben einer modul-lokalen
-// DE-Entsprechung ("<NAME>_DE") und einem kleinen Aufloeser (tPair/tDyn, lib/i18n.js).
-// Reste-Pruefung bleibt bestehen: es gibt weiterhin GENAU zwei toLocale-Aufrufstellen
-// im gesamten apps/web/src-Baum, beide in lib/subscribe.js -- renewDate() waehlt jetzt
-// PER SPRACHE zwischen DATE_LOCALE/DATE_LOCALE_DE an DERSELBEN Stelle (keine neue
-// Aufrufstelle), germanDate() bleibt unveraendert fest auf DATE_LOCALE_DE (§ 312k-
-// Ausnahme, s. dort). Zwei neue Tests (ohne Katalog-Praefix, laufen also mit den
-// uebrigen Regressionstests in "npm test", nicht erst mit "npm run test:gates")
-// nageln die neuen Konventionen fest: Schluesselparitaet zwischen jedem EN/DE-
-// Woerterbuchpaar, und dass die 312k-Knopftexte (CANCEL_BUTTON_LABEL/
-// CONFIRM_CANCEL_BUTTON_LABEL) in KEINEM dieser Woerterbuecher als Wert
-// auftauchen. Owner-Entscheidung 2026-08-14: der EN-Modus zeigt eine
-// gleichwertig eindeutige ENGLISCHE Formulierung (CANCEL_BUTTON_LABEL_EN/
-// CONFIRM_CANCEL_BUTTON_LABEL_EN, eigene benannte Konstanten + Resolver
-// cancelButtonLabel()/confirmCancelButtonLabel(), s. subscribe.js) -- der
-// Woerterbuch-Ausschluss hier schuetzt weiterhin, dass der DEUTSCHE
-// Pflichtwortlaut nie in einem frei uebersetzbaren Woerterbuch landet und im
-// DE-Modus woertlich erscheint.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -70,8 +39,6 @@ import {
 const WEB_SRC = path.join(ROOT, "apps/web/src");
 const SOURCE_EXTENSIONS = [".js", ".astro", ".ts", ".mjs"];
 
-// Alle Quelldateien unter dir (rekursiv) als {file, source}. Reiner Read, kein
-// Nebeneffekt - der einzige Sammler dieser Datei (G5/S2: drei Tests konsumieren ihn).
 function sourceFilesUnder(dir) {
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -85,34 +52,15 @@ function sourceFilesUnder(dir) {
   return out;
 }
 
-// Dateien, deren Quelltext das Muster trifft - relativ zu ROOT, fuer lesbare
-// Fehlermeldungen.
 function filesMatching(files, pattern) {
   return files.filter(({ source }) => pattern.test(source)).map(({ file }) => path.relative(ROOT, file));
 }
 
 test("WEB-07 (SOLL, rot) - das englische Dashboard bindet agentStyle/personaStyleIds ueberhaupt", () => {
   const hits = filesMatching(sourceFilesUnder(WEB_SRC), /agentStyle|personaStyleIds/);
-  // Die Luecke war rein oberflaechenseitig: das Backend fuehrt agentStyle laengst, nur das
-  // englische apps/web-Dashboard band es nicht (P13). Der frueher hier zitierte Gegenbeleg
-  // (das Stil-Dropdown in public/tenant.html) existiert seit P14 nicht mehr.
   assert.ok(hits.length > 0, "kein Treffer im gesamten apps/web/src-Baum - agentStyle fehlt der englischen UI");
 });
 
-// Geschrumpfte Erwartung (Dashboard-Neubau, feat/dashboard-neubau): Overview-
-// Statistik, Action Items und Kalender wurden ersatzlos aus apps/web gestrichen
-// (DashboardStats.astro, ActionItemsIsland.astro, CalendarIsland.astro entfernt;
-// lib/api.js verlor dabei CAL_LOCALE + calendarDateParts/callStats/... - es gibt
-// dafuer keine Ersatzflaeche). Die CAL_LOCALE-Pruefung entfaellt daher ganz (es
-// gibt nichts mehr zu pruefen, kein stillschweigender Ersatz). Die Schutzabsicht
-// selbst - GENAU EIN benannter, en-US-fester Locale-Kanal pro Zweck, KEIN
-// inline-Literal an einer Aufrufstelle, KEIN unbemerktes de-DE/fr-FR-Literal -
-// bleibt erhalten und wird unten enger gefasst statt entkernt.
-// Extrahiert das Argument eines Funktionsaufrufs ab der oeffnenden Klammer bis zur
-// PASSENDEN schliessenden Klammer (Klammer-Tiefe gezaehlt) -- das Argument kann
-// selbst Aufrufe enthalten (z.B. "getLang() === \"de\" ? DATE_LOCALE_DE :
-// DATE_LOCALE"), ein simples "bis zum naechsten ')'" wuerde bei getLang() zu frueh
-// abbrechen.
 function callArgAt(source, openIndex) {
   let depth = 1;
   let i = openIndex + 1;
@@ -123,8 +71,6 @@ function callArgAt(source, openIndex) {
   return source.slice(openIndex + 1, i - 1);
 }
 
-// Jede Locale-Aufrufstelle (.toLocale*(...)/.toString(...)/Intl.x(...)) im Baum,
-// mit Datei + vollstaendigem (klammerbalanciertem) Argument-Text.
 function localeCallSites(files) {
   const sites = [];
   const pattern = /\.(?:toLocale\w*|toString)\(|Intl\.\w+\(/g;
@@ -143,11 +89,6 @@ test("WEB-18 (Regressions-Baseline, gruen) - apps/web formatiert Datum ueber GEN
   assert.match(dateLocale.source, /const DATE_LOCALE = "en-US";/, "DATE_LOCALE muss en-US sein");
   assert.match(dateLocale.source, /const DATE_LOCALE_DE = "de-DE";/, "DATE_LOCALE_DE muss de-DE sein");
 
-  // subscribe.js traegt GENAU diese zwei Locale-String-Literale (renewDate() waehlt
-  // seit Etappe 2 sprachbewusst zwischen beiden, germanDate() bleibt fest auf
-  // DATE_LOCALE_DE, § 312k) - kein drittes, kein fr-FR. Ausserhalb von subscribe.js
-  // bleibt JEDES de-DE/fr-FR/en-US-Literal verboten (die beiden Konstanten sind die
-  // EINZIGE erlaubte Quelle).
   const otherFiles = files.filter(({ file }) => file !== dateLocale.file);
   const foreignLocaleLiteralsElsewhere = filesMatching(otherFiles, /["'](de-DE|fr-FR)["']/);
   assert.deepEqual(
@@ -162,11 +103,6 @@ test("WEB-18 (Regressions-Baseline, gruen) - apps/web formatiert Datum ueber GEN
     "subscribe.js darf GENAU EIN de-DE-Literal tragen (DATE_LOCALE_DE) - kein zweites, kein fr-FR",
   );
 
-  // Aufrufstellen: GENAU zwei im gesamten Baum, beide in lib/subscribe.js. Jede
-  // referenziert AUSSCHLIESSLICH DATE_LOCALE/DATE_LOCALE_DE (nie ein inline-Literal) --
-  // renewDate() darf dabei sprachbewusst zwischen beiden waehlen (Ternary IM Argument,
-  // "dieselbe Stelle waehlt nur die Konstante", keine zweite Aufrufstelle), germanDate()
-  // referenziert nur DATE_LOCALE_DE.
   const sites = localeCallSites(files);
   assert.equal(sites.length, 2, "unerwartete Anzahl Locale-Aufrufstellen - Extraktion pruefen");
   const identsPerSite = sites.map((site) => {
@@ -184,10 +120,6 @@ test("WEB-18 (Regressions-Baseline, gruen) - apps/web formatiert Datum ueber GEN
     assert.ok(idents.length > 0, `Aufrufstelle ohne benannte Locale-Konstante: ${site.call}${site.arg})`);
     return idents.sort();
   });
-  // Eine Stelle (germanDate) referenziert NUR DATE_LOCALE_DE (fest, § 312k, keine
-  // Sprachbedingung); die andere (renewDate) referenziert BEIDE Konstanten (sprach-
-  // bewusst). Reihenfolge der beiden Sites ist bewusst nicht festgelegt (Fundstellen-
-  // Reihenfolge im Quelltext), darum ueber die SORTIERTE Menge der Identifier-Saetze.
   assert.deepEqual(
     identsPerSite.map((idents) => idents.join(",")).sort(),
     ["DATE_LOCALE,DATE_LOCALE_DE", "DATE_LOCALE_DE"],
@@ -197,10 +129,6 @@ test("WEB-18 (Regressions-Baseline, gruen) - apps/web formatiert Datum ueber GEN
 
 test("WEB-19 (SOLL, rot) - die private Rufnummer hat in mindestens einem Dashboard eine UI", () => {
   const webHits = filesMatching(sourceFilesUnder(WEB_SRC), /privateNumber|private-number/);
-  // Die Server-Seite ist geschlossen und getestet (test/f2-self-service-state-private-
-  // number.test.js, /api/self-service/state liefert das maskierte Feld) - die Luecke war
-  // rein oberflaechenseitig, das Feld wurde ausgeliefert und von niemandem gelesen.
-  // P14: apps/web ist seit dem Loeschen von public/tenant.html das EINZIGE Dashboard.
   assert.ok(webHits.length > 0, "apps/web bindet privateNumber nicht");
 });
 
@@ -220,13 +148,6 @@ test("GAP-30 (Mechanismus, gruen) - die restrict-only-Liste ist zwischen beiden 
   );
 });
 
-// ---- Dashboard-i18n Etappe 2: dynamische Woerterbuecher (render.js/subscribe.js/
-// api.js) -- KEIN Katalog-Praefix (laufen in "npm test", nicht erst in "npm run
-// test:gates"): das sind Regressions-/Mechanismus-Tests fuer bereits gebautes
-// Verhalten, kein offener Produktbefund. -------------------------------------
-
-// Jedes EN/DE-Woerterbuchpaar der drei dynamischen Module, benannt fuer lesbare
-// Fehlermeldungen. EIN Ort (G5) fuer beide Tests unten (Paritaet + 312k-Ausschluss).
 const DICT_PAIRS = [
   ["render.js STATUS_PILL_LABELS", STATUS_PILL_LABELS, STATUS_PILL_LABELS_DE],
   ["api.js CALL_STATUS_LABELS", CALL_STATUS_LABELS, CALL_STATUS_LABELS_DE],
@@ -253,10 +174,6 @@ test("dashboard-i18n Etappe 2: jede DE-Uebersetzung hat einen EN-Zwilling (Schlu
 });
 
 test("dashboard-i18n Etappe 2: die gesetzlich vorgegebenen 312k-Knopftexte tauchen in KEINEM dynamischen Woerterbuch auf", () => {
-  // CANCEL_BUTTON_LABEL/CONFIRM_CANCEL_BUTTON_LABEL sind § 312k BGB wortgetreu
-  // vorgegeben und bleiben in BEIDEN Sprachen unveraendert deutsch (subscribe.js
-  // Kommentar "SPRACHBRUCH IST GEWOLLT") -- sie duerfen nie versehentlich in ein
-  // uebersetzbares Woerterbuch wandern (weder als Key noch als Wert).
   const forbiddenValues = [CANCEL_BUTTON_LABEL, CONFIRM_CANCEL_BUTTON_LABEL];
   for (const [name, en, de] of DICT_PAIRS) {
     for (const [dictLabel, dict] of [["EN", en], ["DE", de]]) {

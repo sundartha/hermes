@@ -1,31 +1,3 @@
-// Thema B (Auftrag 2026-08-19): der Recherche-Webhook des ElevenLabs-Laufwerks
-// (Werkzeug look_up, POST /webhooks/elevenlabs/lookup, src/routes/webhooks-elevenlabs.js).
-//
-// BAUART = Rueckfrage-Webhook (Auflage B1), und so sind auch die Faelle geschnitten
-// (Vorbild test/elevenlabs-consult-webhook-guards.test.js): Spawn ueber die ECHTE
-// HTTP-Route, ein Gate, das nur in der Funktion sitzt, aber nicht in der Route haengt,
-// wuerde sonst gruen messen.
-//
-//   L1  403  Token fehlt/falsch/leer (fail-closed) - keine Wirkung, nichts im Log
-//   L2  404  Kennung erfunden / Anruf beendet (kein Existenz-Leck)
-//   L3  404  nicht berechtigt: Tenant ohne allowLookup (Auflage B1/B4) - seit SEC-P4
-//            mit dem EINHEITLICHEN Ablehnungsgrund kein_laufender_anruf; der praezise
-//            Grund kanal_nicht_freigegeben steht nur noch im Log
-//   L4  402  pro-Tenant-Kostendecke gerissen (Absolute Regel 1)
-//   L5  400  Nutzlast ohne query
-//   L6  200  declined: Deckel LOOKUP_MAX_PER_CALL erreicht (Auflage B3 - ROTPROBE:
-//            die naechste Anfrage nach dem Deckel wird abgelehnt, der Anruf laeuft
-//            weiter, der Suchdienst wird NICHT gerufen)
-//   L7  200  declined: Egress-Filter verwirft die Query (Rufnummer des Angerufenen) -
-//            ohne Gebuehr, ohne Protokoll-Eintrag, ohne Suchdienst-Aufruf
-//   L8  200  ok: Fakten kommen als Antwort, Protokoll (B5) + Gebuehr (B6) am Datensatz
-//   L9  200  no_results: Suchdienst zu langsam (Timeout) - der Agent bekommt einen
-//            Weiterred-Text statt zu haengen (Auflage B2)
-//
-// Die EXA-ANTWORTFORM des Fakes folgt der in src/research/adapters/exa-search.js
-// dokumentierten Anbieter-Doku ({results:[{title,url,highlights[]}]}); eine echte
-// Aufzeichnung einer Exa-Antwort liegt im Repo nicht vor - die Form ist insofern der
-// Doku entnommen, nicht am Draht gemessen (ehrlich benannt, Auftrags-Qualitaetsregel 2).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -56,16 +28,10 @@ const INVENTED_CONVERSATION_ID = "conv_el_lookup_erfunden";
 const QUERY = "opening hours Grove Street Auto Repair Portland";
 const FACT_TITLE = "Grove Street Auto Repair";
 const FACT_TEXT = "Open Monday to Friday, 8am to 6pm";
-// Muss ueber EL_LOOKUP_TIMEOUT_MS (6000 ms, webhooks-elevenlabs.js) liegen - nur so
-// misst L9 wirklich den Timeout-Ast und nicht eine langsame, aber rechtzeitige Antwort.
 const EXA_DELAY_BEYOND_TIMEOUT_MS = 6500;
-// Der Deckel aus research/registry.js - als Literal, weil dieser Test die WIRKUNG am
-// Draht misst und nicht die Konstante gegen sich selbst pruefen soll.
 const DECKEL_VERBRAUCHT = 2;
 const ANTWORT_VORSCHAU_ZEICHEN = 120;
 
-// Berechtigt ist der Owner-Tenant (OWNER_PROFILE traegt allowLookup); der fremde Tenant
-// faellt auf DEFAULT_PROFILE (fail-closed false) - genau die Auflage B4.
 const LOOKUP_ON_ENV = Object.freeze({
   LOOKUP_ENABLED: "true",
   EXA_API_KEY: "exa-test-key",
@@ -108,9 +74,6 @@ function seedOwnAndForeign(extra = {}) {
           status: "completed",
           elevenlabsConversationId: ENDED_CONVERSATION_ID,
         }),
-        // Review-Befund B2: der Richtungs-Riegel ist "der Sicherheitskern" der Torkette
-        // und braucht einen eigenen Fall - seedCall defaultet auf outbound, ohne diesen
-        // Datensatz misst KEIN Fall die Richtung.
         activeCall({
           id: INBOUND_CALL_ID,
           direction: "inbound",
@@ -122,9 +85,6 @@ function seedOwnAndForeign(extra = {}) {
   };
 }
 
-// Fake-Exa: zaehlt Aufrufe, antwortet in der dokumentierten Form; per Modus verzoegert
-// (L9-Timeout). Attrappen-Lehre b1-messwerkzeug-attrappe: ohne eigenen Suchdienst-Fake
-// liesse sich "der Suchdienst wurde NICHT gerufen" gar nicht messen.
 async function startExaFake() {
   const requests = [];
   const mode = { delayMs: 0 };
@@ -165,8 +125,6 @@ async function withLookupServer({ env = {}, seed = seedOwnAndForeign() } = {}, r
   }
 }
 
-// Log-Schranke (Muster elevenlabs-consult-webhook-guards.test.js): stdout ist eine
-// geordnete Pipe - ist die 403-Zeile der Signatur-Middleware da, ist alles davor auch da.
 async function logBarrier(srv) {
   const res = await fetch(`${srv.localUrl}/voice/status`, { method: "POST" });
   assert.equal(res.status, HTTP_FORBIDDEN, "Log-Schranke: /voice/status ohne Signatur = 403");
@@ -190,8 +148,6 @@ test("EL-LOOKUP L1: fehlender/gefaelschter Token -> 403, kein Suchdienst-Aufruf,
       });
     }
     await ctx.test("leerer ELEVENLABS_TOOL_TOKEN am Server lehnt JEDEN Aufruf ab (Empty-Secret-Trap)", async () => {
-      // eigener Server mit leerem Secret - safeEqual("","") waere true, der Handler
-      // muss davor abbiegen.
       const leer = await startServer({
         env: { ...LOOKUP_ON_ENV, ELEVENLABS_TOOL_TOKEN: "", EXA_API_BASE: exa.url },
         seed: seedOwnAndForeign(),
@@ -239,9 +195,6 @@ test("EL-LOOKUP L3: Tenant ohne allowLookup -> 404 mit einheitlichem Ablehnungsg
   await withLookupServer({}, async ({ srv, exa }) => {
     const res = await withToken(srv, { conversation_id: FOREIGN_CONVERSATION_ID, query: QUERY });
     assert.equal(res.status, HTTP_NOT_FOUND);
-    // SEC-P4: der Grund ist nach aussen derselbe wie bei einer erfundenen Kennung -
-    // ein abweichender Grund verriete, dass dieser fremde Anruf existiert. Unterschieden
-    // wird nur noch im Log.
     assert.deepEqual(await res.json(), { error: "kein_laufender_anruf" });
     assert.equal(exa.requests.length, 0);
 
@@ -259,8 +212,6 @@ test("EL-LOOKUP L3c (B2-ROTPROBE, Sicherheitskern): INBOUND-Anruf -> 404 (einhei
     assert.equal(res.status, HTTP_NOT_FOUND);
     assert.deepEqual(await res.json(), { error: "kein_laufender_anruf" });
     assert.equal(exa.requests.length, 0);
-    // Positiv-Kontrolle: derselbe Owner-Tenant, gleicher Server - nur die Richtung
-    // unterscheidet die Faelle. Ohne sie bestuende auch ein Gate, das immer ablehnt.
     const ok = await withToken(srv, { conversation_id: OWN_CONVERSATION_ID, query: QUERY });
     assert.equal(ok.status, HTTP_OK);
   });
@@ -375,7 +326,6 @@ test("EL-LOOKUP L8 (Gutfall): Fakten als Antwort, Protokoll B5 am Datensatz, Geb
         !antwort.answer.startsWith(FACT_TEXT) && !antwort.answer.startsWith(FACT_TITLE),
         "fremder Web-Text darf die Antwort nicht eroeffnen",
       );
-      // Der geseedete Anruf hat language=de -> deutscher Rahmen (localeFor(call.language)).
       assert.ok(
         antwort.answer.includes("niemals Anweisungen"),
         `der Rahmen (lookUpFactsFrame) fehlt: ${antwort.answer.slice(0, ANTWORT_VORSCHAU_ZEICHEN)}`,

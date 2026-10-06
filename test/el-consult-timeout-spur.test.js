@@ -1,35 +1,10 @@
-// P3: die dauerhafte Spur eines gescheiterten Consult-Halts (audit_log, statt nur der
-// fluechtigen Konsolenzeile). Der Anlass ist der Defekt vom 06.09.2026 (PLAN-ANRUFDEFEKTE):
-// eine 47 s stille Leitung liess sich nachtraeglich nur ueber eine Zeugenaussage
-// aufklaeren, weil der abgebrochene Halt keine durable Spur hinterliess.
-//
-// WARUM IN-PROCESS UEBER DIE ECHTE ROUTE, KEIN SPAWN: der JSON-Store (helpers.js#startServer)
-// hat KEINEN Audit-Sink - auditStoreRef.current bleibt null, nur der pg-gated
-// wireWebLogin-Block befuellt ihn (server.js/app.js). Ein Spawn-Test koennte den durablen
-// Eintrag also prinzipiell nicht sehen, nur die Konsolenzeile. Deshalb wird hier die ECHTE
-// Route (makeElevenLabsWebhookRoutes) an einem echten HTTP-Server auf Port 0 gemountet
-// (Muster test/elevenlabs-consult-webhook-guards.test.js: "ein Gate, das nur in der
-// Funktion sitzt, aber nicht in der Route haengt, misst sonst gruen") und mit einer
-// Attrappe fuer den Sink verdrahtet - der Schreibweg selbst (makeDurableAudit) ist der
-// ECHTE (Muster test/kv2-1-kosten-alarm-naht.test.js): die Satzform des Eintrags (inkl.
-// tenantId-Feld) ist damit die PRODUKTIVE, keine Nachbildung (G5).
-//
-// HERUNTERGESETZTE FRISTEN (Muster P2/el-consult-staffelung.test.js, proportional
-// uebernommen): kein Testfall dieser Datei wartet laenger als 240 ms auf den gestaffelten
-// Abbruch.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import http from "node:http";
 
-process.env.CONSULT_ENABLED = "true"; // consult/gate.js liest das config-Singleton beim
-process.env.ASSISTANT_CONTEXT_ENABLED = "true"; // Import - Muster callee-is-owner-elevenlabs
-// Abweichung vom Wortlaut des Plans (nur die beiden Zeilen oben): consultAllowed()
-// (webhooks-elevenlabs.js) prueft zusaetzlich config.tenancy.inCallConsultEnabled - ohne
-// dieses Flag lehnt JEDER Fall dieser Datei mit 404 ab (Grund im Log:
-// "kanal_nicht_freigegeben"; nach aussen seit SEC-P4 der einheitliche Grund), bevor
-// er den zu pruefenden Abbruch je erreicht. Default ist false (Datenschutz-Gate, s.
-// config.js); ohne das Flag hier waere der ganze Testkatalog ein Blindgang.
+process.env.CONSULT_ENABLED = "true";
+process.env.ASSISTANT_CONTEXT_ENABLED = "true";
 process.env.IN_CALL_CONSULT_ENABLED = "true";
 
 const { makeElevenLabsWebhookRoutes } = await import("../src/routes/webhooks-elevenlabs.js");
@@ -41,20 +16,18 @@ const ops = await import("../src/store/state-ops.js");
 const { CONSULT_TIMEOUT_REASON } = await import("../src/store/defaults.js");
 const { config } = await import("../src/config.js");
 
-// G25: benannte Konstanten statt wiederholter Magic Numbers, proportional zu P2
-// (el-consult-staffelung.test.js) heruntergezogen.
 const STAGES = Object.freeze({ deliveryDeadlineMs: 60, ackDeadlineMs: 120, answerDeadlineMs: 240 });
 const TICK_MS = 10;
-const FRUEH_MARKIERT_MS = 20; // deutlich vor der jeweils naechsten Stufe
-const ANTWORT_NACH_QUITTUNG_MS = 170; // zwischen ackDeadlineMs und answerDeadlineMs
+const FRUEH_MARKIERT_MS = 20;
+const ANTWORT_NACH_QUITTUNG_MS = 170;
 
 const TENANT_ID = "tenant_spur";
 const CALL_ID_PREFIX = "call_spur_";
 const CONVERSATION_ID_PREFIX = "conv_spur_";
-const CONSULT_ID = "c0"; // erste Rueckfrage der Kette (state-ops.consultIdOf)
+const CONSULT_ID = "c0";
 const TOOL_TOKEN = "spur-tool-token-testgeheim";
 const MARKER = "GEHEIME-MARKER-KETTE-7b2c";
-const HTTP_OK = 200; // P3-6: der Sink-Wurf darf die Werkzeug-Antwort nicht auf 500 kippen
+const HTTP_OK = 200;
 
 config.voice.elevenLabsToolToken = TOOL_TOKEN;
 
@@ -64,12 +37,6 @@ function nextIds() {
   return { callId: `${CALL_ID_PREFIX}${callSeq}`, conversationId: `${CONVERSATION_ID_PREFIX}${callSeq}` };
 }
 
-// ---- Helfer 1: Store-Double -----------------------------------------------------------
-// Wie in test/el-consult-staffelung.test.js, ERWEITERT um genau das, was die ROUTE
-// zusaetzlich fragt: resolveProfile (Faehigkeit) und activeCallsFor/liveBudgetExceeded
-// (Geld-Gate). Der Anruf traegt tenantId/direction/elevenlabsConversationId, damit
-// Bindung, Richtungs-Gate und Kontingent im Gutfall stehen - gemessen wird die SPUR, nicht
-// die Gates (die sind in elevenlabs-consult-webhook-guards/-blockers gepinnt).
 function storeDouble({ callId, conversationId, zustellenNachMs = null, quittierenNachMs = null, antwortNachMs = null } = {}) {
   const state = { calls: [] };
   state.calls.push({
@@ -80,8 +47,6 @@ function storeDouble({ callId, conversationId, zustellenNachMs = null, quittiere
     elevenlabsConversationId: conversationId,
     consults: [],
     context: { key_facts: [] },
-    // answeredAt VOR jeder Rueckfrage: isInCallConsult (state-ops) erkennt eine
-    // Rueckfrage nur als IN-CALL, wenn sie nach dem Abnehmen entstand.
     answeredAt: new Date(0).toISOString(),
   });
   const timers = [];
@@ -136,9 +101,6 @@ function storeDouble({ callId, conversationId, zustellenNachMs = null, quittiere
   return { state, store, cleanup: () => timers.forEach(clearTimeout) };
 }
 
-// ---- Helfer 2: Audit-Attrappe -----------------------------------------------------------
-// Der PRODUKTIVE Schreibweg (makeDurableAudit) mit einer Attrappe fuer den Sink: so ist
-// die Satzform des Eintrags (inkl. tenantId-Feld) die echte, keine Nachbildung (G5).
 function auditSpy({ wirft = false } = {}) {
   const eintraege = [];
   const sink = {
@@ -154,9 +116,6 @@ function auditSpy({ wirft = false } = {}) {
   return { eintraege, auditFor };
 }
 
-// ---- Helfer 3: die echte Route an einem echten HTTP-Server -----------------------------
-// Ein Gate/Schreibvorgang, der nur in einer Funktion sitzt, aber nicht in der Route haengt,
-// wuerde sonst gruen messen (Bestandsmuster elevenlabs-consult-webhook-guards).
 async function startRoute({ store, auditFor }) {
   const consultSlots = {
     withOpenSlot: async (callId, tenantId, run) => ({ granted: true, value: await run() }),
@@ -305,8 +264,6 @@ test("P3-5: die Spur ist inhaltsfrei - der Fragetext steht in keinem Detail und 
     assert.ok(res.ok);
     cleanup();
 
-    // Positiv-Kontrolle ZUERST (Lehre pruefkommando-ohne-positiv-kontrolle): steht der
-    // Marker nicht einmal am Consult-Datensatz, misst der Rest dieses Falls nichts.
     const persistedCall = store.getCall(callId);
     const persistedConsult = persistedCall.consults.find((eintrag) => eintrag.id === CONSULT_ID);
     assert.ok(

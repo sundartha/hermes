@@ -1,11 +1,3 @@
-// P2a (D3): effectiveCapCents faellt ohne tenant_budget-Zeile auf die TENANT-Default-Decke
-// statt auf den geteilten Plattform-Topf. Rein ueber state-ops (kein Netz, kein Server,
-// kein pglite - Lehre P6a: state-ops-Unit NICHT mit Spawn/pglite mischen).
-//
-// effectiveCapCents ist modul-privat und BLEIBT es (kein Export nur fuer den Test). Der
-// jeweils geltende Cap wird ueber die beiden oeffentlichen Leser budgetExceeded /
-// reserveExceedsBudget an seiner exakten Grenze abgetastet (cap-1 frei, cap gesperrt) -
-// das nagelt den Wert eindeutig fest, wie schon in tenant-budget-cap.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -22,13 +14,9 @@ import {
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
 
-// Plattform-Notaus der Fixture bewusst UEBER der Tenant-Decke - nur dann ist ueberhaupt
-// unterscheidbar, WELCHE der beiden Achsen den Cap stellt.
 const PLATFORM_CAP_CENTS = 1200;
 const TENANT_DEFAULT_CENTS = 1000;
-// Dokumentierter Sentinel "kein Default" (config.js defaultTenantBudgetCents, min 0).
 const NO_TENANT_DEFAULT = 0;
-// Worst-Case-Reserve eines Inlandsgespraechs: 20 ct/min * ceil(180 s / 60 s).
 const DOMESTIC_RESERVE_CENTS = 60;
 
 const CFG_WITH_DEFAULT = Object.freeze({
@@ -40,9 +28,6 @@ const CFG_SENTINEL_ZERO = Object.freeze({
   defaultTenantBudgetCents: NO_TENANT_DEFAULT,
 });
 
-// ---- (1) PFLICHT-REGRESSION: der 0-Sentinel. Muss VOR und NACH dem Fix gruen sein. ----
-// Ein bedingungsloser Fallback lieferte hier Cap 0 -> jeder Tenant sofort gesperrt:
-// kein Outbound, kein kostenloser Inbound, laufende Calls legen auf. Safety-Blocker.
 test("0-Sentinel: defaultTenantBudgetCents=0 -> Cap bleibt der Plattform-Cap", () => {
   const s = makeDefaultState();
   assert.equal(
@@ -55,14 +40,12 @@ test("0-Sentinel: defaultTenantBudgetCents=0 -> Cap bleibt der Plattform-Cap", (
     false,
     "normale Inlands-Reserve geht durch",
   );
-  // Grenzabtastung: Cap ist exakt 1200 - weder 0 noch 1000.
   addVoiceUsageCostCents(s, TENANT_A, PLATFORM_CAP_CENTS - 1);
   assert.equal(budgetExceeded(s, TENANT_A, CFG_SENTINEL_ZERO), false, "1199 < 1200 -> frei");
   addVoiceUsageCostCents(s, TENANT_A, 1);
   assert.equal(budgetExceeded(s, TENANT_A, CFG_SENTINEL_ZERO), true, "1200 >= 1200 -> gesperrt");
 });
 
-// ---- (2) ROT VOR FIX: der Fallback bindet an der eigenen Decke, nicht am Topf. ----
 test("Fallback (P2a): ohne tenant_budget-Zeile bindet die Tenant-Default-Decke", () => {
   const s = makeDefaultState();
   addVoiceUsageCostCents(s, TENANT_A, TENANT_DEFAULT_CENTS - 1);
@@ -75,10 +58,6 @@ test("Fallback (P2a): ohne tenant_budget-Zeile bindet die Tenant-Default-Decke",
   );
 });
 
-// ---- (3) ROT VOR FIX: ein Tenant kann den Plattform-Topf nicht mehr allein leerreservieren.
-// Die ersten beiden Assertions sind schon heute wahr und sind der Isolations-Regressions-
-// anker (A's Verbrauch darf B nie unter B's eigener Decke blocken); die dritte ist der
-// eigentliche P2a-Effekt und heute rot.
 test("Cross-Tenant (P2a): B wird an SEINER Decke gemessen, nicht am geteilten Topf", () => {
   const s = makeDefaultState();
   addVoiceUsageCostCents(s, TENANT_A, 900);
@@ -95,7 +74,6 @@ test("Cross-Tenant (P2a): B wird an SEINER Decke gemessen, nicht am geteilten To
   );
 });
 
-// ---- (4) Praezedenz unveraendert (gruen vor und nach dem Fix). ----
 test("Praezedenz: eine tenant_budget-Zeile schlaegt die Default-Decke", () => {
   const s = makeDefaultState();
   const ROW_CAP_CENTS = 500;
@@ -110,9 +88,6 @@ test("Praezedenz: eine tenant_budget-Zeile schlaegt die Default-Decke", () => {
   );
 });
 
-// ---- (5) Bestandsschutz: ein cfg OHNE das Feld darf nie einen 0-Cap ergeben. ----
-// Pinnt zugleich, WARUM die uebrige Suite unveraendert gruen bleibt (PRICES & Co. tragen
-// das Feld nicht) - ohne diesen Test waere das eine unbelegte Annahme.
 test("cfg ohne defaultTenantBudgetCents -> Plattform-Cap (byte-identisch zum Bestand)", () => {
   const s = makeDefaultState();
   const CFG_OHNE_FELD = Object.freeze({ platformSpendCapCents: PLATFORM_CAP_CENTS });
@@ -123,23 +98,18 @@ test("cfg ohne defaultTenantBudgetCents -> Plattform-Cap (byte-identisch zum Bes
   assert.equal(budgetExceeded(s, TENANT_A, CFG_OHNE_FELD), true, "1200 >= 1200 -> gesperrt");
 });
 
-// ---- (6) tenantBudgetSnapshot (P5a): reiner Diagnose-Leser, dieselbe Praezedenz/Quelle ----
-
 test("tenantBudgetSnapshot: Praezedenz Zeile > Default > 0-Sentinel-Plattform, gleiche Werte wie die Gate-Praedikate", () => {
   const s = makeDefaultState();
-  // 0-Sentinel: kein Default -> Plattform-Cap.
   assert.deepEqual(
     tenantBudgetSnapshot(s, TENANT_A, CFG_SENTINEL_ZERO),
     { capCents: PLATFORM_CAP_CENTS, spentCents: 0, remainingCents: PLATFORM_CAP_CENTS },
     "0-Sentinel -> Cap ist der Plattform-Cap, unverbrauchter Bucket",
   );
-  // Default-Decke.
   assert.deepEqual(
     tenantBudgetSnapshot(s, TENANT_A, CFG_WITH_DEFAULT),
     { capCents: TENANT_DEFAULT_CENTS, spentCents: 0, remainingCents: TENANT_DEFAULT_CENTS },
     "Default-Decke bindet ohne tenant_budget-Zeile",
   );
-  // Zeile schlaegt Default (wie effectiveCapCents).
   const ROW_CAP_CENTS = 500;
   setTenantBudget(s, TENANT_A, { budgetCents: ROW_CAP_CENTS, hardCapCents: ROW_CAP_CENTS });
   addVoiceUsageCostCents(s, TENANT_A, 120);

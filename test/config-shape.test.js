@@ -1,16 +1,7 @@
-// Struct-3 (C6a, PLAN-FRAGILITY-REMEDIATION.md P5): Proxy-Guard-Mechanismus + Config-
-// Gruppierung (telnyxElevenLabs, seit IE6-S1 die erste, telnyxAssistant ist entfernt).
-// Reiner Unit-Test, offline, kein Server-Spawn, keine .env (Muster config-prod-footguns.test.js).
-// PA-11: zusaetzlich Fresh-Import-Regression fuer die Trailing-Slash-Configs, Env je
-// Fall gesetzt+restauriert (Muster Query-String-Cache-Buster wie config-boolenv.test.js).
-// PA-20 (Flip): alle Zugriffe auf config.<ns>.<key> umgestellt (Flach-Aliase entfernt).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config, stripTrailingSlash } from "../src/config.js";
 
-// Teil 1: Proxy-Guard-Mechanismus (unabhaengig von der telnyxAssistant-Migration -
-// nutzt bereits bestehende Gruppen/Keys, damit dieser Block auch VOR jeder Migration
-// beweiskraeftig ist).
 test("Proxy-Guard: unbekannter Top-Level-Key wirft TypeError statt undefined", () => {
   assert.throws(() => config.doesNotExistTopLevel, TypeError);
 });
@@ -29,14 +20,6 @@ test("Proxy-Guard: Arrays bleiben unverpackte echte Arrays (keine Namens-Zugriff
   assert.ok(config.safety.allowedCountryCodes.includes("+49"));
 });
 
-// OUT-23: Laendercode-Praefixe sind reine E.164-Ziffernstrings - es gibt keinen Buchstaben,
-// der eine Gross-/Kleinschreibung tragen koennte, deshalb braucht die Praefix-Achse (anders
-// als die ISO-Land-Achse in languageForCountry, die per .toUpperCase() normalisiert - gepinnt
-// von LANG-09 in test/f1-geo-port.test.js, hier bewusst NICHT wiederholt, G5) keine
-// Casing-Normalisierung. Der Test schuetzt genau den Fehlgriff, den es dadurch gaebe: ein
-// ISO-Code ("US") in einer Praefix-Liste wuerde lautlos NIE matchen.
-// R-G-Abweichung: die Katalog-Schritte messen languageForCountry-Casing - das ist LANG-09s
-// Gegenstand (W2-B1) und waere hier ein Duplikat.
 test("OUT-23 (Mechanismus, gruen) - Laendercode-Praefixe sind casing-frei per Konstruktion (E.164 kennt kein Casing)", () => {
   const E164_PREFIX_OR_WILDCARD = /^(\*|\+\d+)$/;
   for (const code of config.safety.allowedCountryCodes) {
@@ -51,9 +34,6 @@ test("Proxy-Guard: Symbol-Zugriffe werden NICHT bewacht (kein Crash bei util.ins
   assert.equal(config[Symbol.for("nichts")], undefined);
 });
 
-// Review-Blocker S1-1: JSON.stringify prueft intern value.toJSON, await/Promise pruefen
-// value.then - beides normale property-Reads, die der Guard sonst als unbekannten Key
-// missversteht und einen TypeError wirft statt zu serialisieren/aufzuloesen.
 test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duck-Typing)", () => {
   assert.doesNotThrow(() => JSON.stringify(config.telnyx.telnyxElevenLabs));
   assert.deepEqual(JSON.parse(JSON.stringify(config.telnyx.telnyxElevenLabs)), { voiceId: "" });
@@ -65,7 +45,7 @@ test("Proxy-Guard: JSON.stringify auf die Top-Level-Config wirft nicht (toJSON-D
 
 test("Proxy-Guard: await/Promise.resolve auf eine Config-Gruppe wirft nicht (then-Duck-Typing)", async () => {
   const awaited = await config.telnyx.telnyxElevenLabs;
-  assert.equal(awaited.voiceId, ""); // Objekt kommt unveraendert/lesbar durch
+  assert.equal(awaited.voiceId, "");
   const resolved = await Promise.resolve(config.telnyx.telnyxElevenLabs);
   assert.equal(resolved.voiceId, "");
 });
@@ -74,14 +54,10 @@ test("Proxy-Guard: then/toJSON bleiben fuer echte unbekannte Keys weiterhin bewa
   assert.throws(() => config.telnyx.telnyxElevenLabs.doesNotExistNested, TypeError);
 });
 
-// IE6-S1: telnyxAssistant ist entfernt - der Namespace traegt nur noch telnyxElevenLabs.
 test("telnyx-Namespace: telnyxAssistant existiert nicht mehr", () => {
   assert.throws(() => config.telnyx.telnyxAssistant, TypeError);
 });
 
-// PA-20 (Flip): die Flach-Aliase (auch die 3 nested Blaetter selbst) sind entfernt - die
-// Namespaces sind die EINZIGE Oberflaeche. Analoge Regression wie oben, diesmal fuer die
-// obersten Flach-Keys statt der telnyxAssistant-internen Sub-Keys.
 test("Flip: die Flach-Aliase existieren nicht mehr (Read wirft TypeError)", () => {
   const removedFlatKeys = [
     "platformSpendCapCents",
@@ -95,28 +71,18 @@ test("Flip: die Flach-Aliase existieren nicht mehr (Read wirft TypeError)", () =
   }
 });
 
-// P6: MS_PER_DAY-Dedup-Regressionsanker (perTargetWindowMs-Fallback nutzt jetzt die
-// benannte Konstante statt des rohen 24h-ms-Literals, Wert bleibt identisch).
 test("MS_PER_DAY: perTargetWindowMs faellt bei unset auf genau 24h (86400000 ms)", () => {
   assert.equal(config.safety.perTargetWindowMs, 86400000);
 });
 
-// PA-11 (G5-Dedup): stripTrailingSlash buendelt das 7x wiederholte
-// ".replace(/\/$/, \"\")"-Idiom. Teil 1: reiner Unit-Test des Helfers.
 test("PA-11: stripTrailingSlash entfernt genau EINEN abschliessenden Slash", () => {
   assert.equal(stripTrailingSlash("https://x.test/"), "https://x.test");
-  assert.equal(stripTrailingSlash("https://x.test"), "https://x.test"); // ohne Slash unveraendert
-  assert.equal(stripTrailingSlash(""), ""); // leer bleibt leer
-  assert.equal(stripTrailingSlash("https://x.test//"), "https://x.test/"); // NICHT global: nur der letzte
-  assert.equal(stripTrailingSlash("https://x.test/p/y"), "https://x.test/p/y"); // interne Slashes bleiben
+  assert.equal(stripTrailingSlash("https://x.test"), "https://x.test");
+  assert.equal(stripTrailingSlash(""), "");
+  assert.equal(stripTrailingSlash("https://x.test//"), "https://x.test/");
+  assert.equal(stripTrailingSlash("https://x.test/p/y"), "https://x.test/p/y");
 });
 
-// Teil 2: tabellarische Regression der 6 eager im rawConfig-Literal ausgewerteten
-// URL-Configs (Site 7, resolveGatewayUrl, ist call-time und bereits durch den
-// bestehenden Test in config-gateway.test.js abgedeckt). Jede Env wird mit
-// Trailing-Slash gesetzt und gegen den bekannten git-HEAD-Wert (ohne Slash) geprueft.
-// Fresh-Import mit Query-String-Cache-Buster, da rawConfig beim Modul-Import
-// ausgewertet wird (Muster config-boolenv.test.js).
 test("PA-11: die 6 eager URL-Configs strippen den Trailing-Slash exakt (git-HEAD-Wert)", async () => {
   const cases = [
     { env: "TELNYX_API_BASE", raw: "https://api.telnyx.com/", pick: (c) => c.telephony.telnyxApiBase, want: "https://api.telnyx.com" },
@@ -139,11 +105,6 @@ test("PA-11: die 6 eager URL-Configs strippen den Trailing-Slash exakt (git-HEAD
   }
 });
 
-// Teil 3: ELEVENLABS_API_BASE ist der einzige der 7 Standorte, bei dem .trim() VOR
-// dem Strip laufen muss (Reihenfolge load-bearing). Whitespace NACH dem Slash beweist
-// das: strip-vor-trim wuerde "...io/ ".replace(/\/$/,"") === "...io/ " liefern (der
-// Slash steht nicht am Stringende) und danach nur trimmen zu "...io/" - der Slash
-// bliebe. trim-vor-strip liefert "...io/" -> strip -> "...io".
 test("PA-11: ELEVENLABS_API_BASE trimmt VOR dem Strip (Whitespace nach dem Slash)", async () => {
   const saved = process.env.ELEVENLABS_API_BASE;
   try {

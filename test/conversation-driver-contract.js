@@ -1,63 +1,17 @@
-// Wiederverwendbare Vertragspruefung fuer src/conversation/conversation-ports.js
-// (ConversationControl + ConversationCallbacks). Reine Testhilfe, KEIN eigenes
-// *.test.js - der Regressionslauf sammelt nur test/*.test.js (test/i18n-catalog-run.mjs),
-// diese Datei laeuft deshalb nie als eigene, testlose Datei mit.
-//
-// checkConversationDriverContract(makeDriver) registriert per node:test test() JEDEN
-// Vertragsfall einzeln (granulare Fehlermeldung statt einer einzigen Sammel-Assertion).
-// makeDriver hat die Signatur
-//   (deps: { callbacks: import("../src/conversation/conversation-ports.js").ConversationCallbacks })
-//     => import("../src/conversation/conversation-ports.js").ConversationControl
-// - also GENAU das, was ein Adapter (Attrappe heute, echter Anbieter spaeter) liefern muss:
-// ein ConversationControl-Objekt ({startConversation, endConversation}), das intern die
-// injizierten ConversationCallbacks aufruft, wenn es (in Produktion: ueber die adapter-
-// seitige Webhook-Route) eine Rueckfrage stellen oder ein Ergebnis liefern will.
-//
-// SZENARIO-STEUERUNG (Testkonvention, wie Stripes Test-Kartennummern): ein deterministischer
-// Adapter kann nicht per Zufall "eine Rueckfrage stellen" oder "ablehnen" - deshalb steuert
-// diese Pruefung das Szenario ALLEIN ueber den EXAKTEN Wert von StartConversationParams.
-// objective (kein Zusatzfeld ausserhalb des Ports). MOCK_OBJECTIVE listet die Werte; das
-// erwartete Verhalten je Wert steht daneben. Ein spaeterer Vertragstest gegen einen echten
-// Anbieter braucht eine eigene (adapter-seitige) Uebersetzung dieser Szenarien - das ist
-// bewusst NICHT Teil dieser Datei (YAGNI, es existiert noch kein zweiter Adapter).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-// Feste Werte fuer StartConversationParams, die in keinem Fall der Vertragspruefung
-// selbst variieren - nur callId und objective unterscheiden die Faelle.
 const DISCLOSURE_SENTENCE =
   "Dieser Anruf wird automatisiert im Auftrag von Testkonto gefuehrt und aufgezeichnet.";
-const LANGUAGE = "de-DE"; // NIE "de" (Lehre outbound-dialog-fixed-live)
+const LANGUAGE = "de-DE";
 
-// GEPINNT fuer die Attrappe: exakter Wert von params.objective entscheidet das Szenario.
 export const MOCK_OBJECTIVE = Object.freeze({
-  // ok:true, ruft NIE einen Callback - weder Rueckfrage noch Ergebnis.
   SILENT: "mock:silent",
-  // ok:false mit nicht-leerem reason, ruft NIE einen Callback.
   REJECT: "mock:reject",
-  // ok:true, ruft danach GENAU EINMAL onOutcomeDelivered - ohne vorherige Rueckfrage.
-  // ConversationOutcome.connected ist true (ein Gespraech kam zustande).
   OUTCOME: "mock:outcome",
-  // ok:true, ruft danach onConsultRaised (genau einmal), wartet die Antwort ab und ruft
-  // ANSCHLIESSEND onOutcomeDelivered - mit
-  //   achieved: answer.kind === "answered" ? true : null   (Ablehnung/Zeitablauf sind NIE false)
-  //   summary: enthaelt bei kind:"answered" die uebergebenen facts als Text,
-  //            sonst answer.reason als Text.
-  // Wird waehrend des Wartens endConversation aufgerufen, schliesst die Attrappe SOFORT ab
-  // (Befund 3) statt auf die - dann nie mehr relevante - Antwort zu warten; summary traegt
-  // dann den uebergebenen endConversation-reason.
   CONSULT: "mock:consult",
-  // wie CONSULT, aber ZWEI Rueckfragen NACHEINANDER (die zweite erst, nachdem die erste
-  // beantwortet ist) - jede mit einer eigenen requestId. summary enthaelt beide Antworten.
   CONSULT_TWICE: "mock:consult-twice",
-  // wie CONSULT_TWICE, aber die zwei Rueckfragen sind GLEICHZEITIG offen (keine wartet auf
-  // die andere) und werden AUSSER DER REIHE beantwortet - die zuletzt gestellte zuerst.
-  // Prueft Befund 1 scharf: eine Zuordnung nach Ankunftsreihenfolge waere hier nachweisbar
-  // falsch, nur eine Zuordnung ueber requestId liefert das richtige Ergebnis.
   CONSULT_CONCURRENT: "mock:consult-concurrent",
-  // ok:true, ruft danach GENAU EINMAL onOutcomeDelivered mit connected:false und einem
-  // neverConnectedReason aus dem Vokabular von telephony/failure-reason.js - OHNE jemals
-  // eine Rueckfrage zu stellen (Befund 2: es kam nie zu einem Gespraech).
   NEVER_CONNECTED: "mock:never-connected",
 });
 
@@ -65,20 +19,13 @@ const POLL_STEP_MS = 5;
 const POLL_TIMEOUT_MS = 500;
 const SILENCE_GRACE_MS = 30;
 const NEVER_CONNECTED_REASONS = Object.freeze(["no-answer", "busy", "canceled"]);
-// Zwei Rueckfragen je Doppel-Fall (sequenziell UND gleichzeitig) - benannt statt Magic
-// Number (G25).
 const PAIRED_CONSULT_COUNT = 2;
-// Verzoegerung, mit der der Test-Spy die ZUERST gestellte Rueckfrage absichtlich SPAETER
-// beantwortet als die zweite (Befund 1: Ankunftsreihenfolge != Stellreihenfolge). Millisekunden,
-// kein spuerbarer Effekt auf die Suite-Laufzeit.
 const OUT_OF_ORDER_DELAY_MS = 10;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Wartet, bis predicate() wahr wird - kein Timer-Mock noetig, die Attrappe reagiert
-// erwartungsgemaess binnen Millisekunden (kein Netz, kein echter Anbieter).
 export async function waitUntil(predicate) {
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   while (!predicate()) {
@@ -92,9 +39,6 @@ export function baseStartParams(callId, objective) {
   return { callId, objective, disclosureSentence: DISCLOSURE_SENTENCE, language: LANGUAGE };
 }
 
-// ConversationCallbacks-Attrappe fuer die Pruefung selbst (steht fuer Hermes' eigene
-// Implementierung). Zeichnet jeden Aufruf auf; onConsultRaised ist ueberschreibbar, weil
-// GENAU diese Antwort die Faelle "beantwortet" vs. "abgelehnt" vs. "Zeitablauf" unterscheidet.
 export function makeCallbackSpy(overrides = {}) {
   const consults = [];
   const outcomes = [];
@@ -111,9 +55,6 @@ export function makeCallbackSpy(overrides = {}) {
   };
   return { callbacks, consults, outcomes };
 }
-
-// Fuenfzehn Faelle, JEDER eine eigene Funktion (G30/max-lines-per-function) - eine ruft
-// makeDriver auf, treibt genau EIN Szenario, prueft genau EINE Zusage des Vertrags.
 
 function checkStartSucceeds(makeDriver) {
   test("Vertrag: startConversation liefert bei Erfolg ok:true", async () => {
@@ -319,15 +260,8 @@ function checkConcurrentConsultAnswersMatchByRequestId(makeDriver) {
     const callId = "cdc-consult-concurrent";
     const spy = makeCallbackSpy({
       onConsultRaised: (_request) => {
-        // spy.consults ist zum Zeitpunkt DIESES Aufrufs bereits synchron befuellt (siehe
-        // makeCallbackSpy) - laenge 1 heisst also "diese Anfrage wurde ZUERST gestellt",
-        // unabhaengig davon, wann ihre Antwort spaeter eintrifft. Der Parameter selbst wird
-        // hier nicht gebraucht (die Reihenfolge kommt aus spy.consults), requestId wird
-        // stattdessen unten ueber spy.consults[0]/[1] geprueft.
         const raisedFirst = spy.consults.length === 1;
         const answer = { kind: "answered", facts: [raisedFirst ? "Antwort auf Frage 1" : "Antwort auf Frage 2"] };
-        // AUSSER DER REIHE: die ZUERST gestellte Frage antwortet SPAETER als die zweite -
-        // eine Zuordnung nach Ankunftsreihenfolge waere hier nachweisbar falsch.
         return raisedFirst ? sleep(OUT_OF_ORDER_DELAY_MS).then(() => answer) : Promise.resolve(answer);
       },
     });
@@ -418,7 +352,7 @@ function checkEndResolvesOpenConsult(makeDriver) {
   test("Vertrag: endConversation schliesst eine offen haengende Rueckfrage als unbeantwortet ab, mit erkennbarem Grund (Befund 3, Blocker)", async () => {
     const callId = "cdc-end-mid-consult";
     const spy = makeCallbackSpy({
-      onConsultRaised: () => new Promise(() => undefined), // haengt bewusst, wie eine noch offene Rueckfrage
+      onConsultRaised: () => new Promise(() => undefined),
     });
     const driver = makeDriver({ callbacks: spy.callbacks });
     await driver.startConversation(baseStartParams(callId, MOCK_OBJECTIVE.CONSULT));

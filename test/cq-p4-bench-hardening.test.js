@@ -1,8 +1,3 @@
-// Phase P4 (PLAN-CONVERSATION-QUALITY-V2): haertet den Conversation-Bench gegen vier
-// Fallstricke, die einen A/B-Vergleich vor/nach P5 unbemerkt haetten invertieren koennen
-// (siehe Plan-Kopf F-1..F-4). Netz- und spawn-frei: checks.mjs/persona.mjs/scenarios/
-// index.mjs ziehen nur src/i18n/locales.js -> src/store/defaults.js (beide rein, ohne
-// eigene Imports) - kein config.js, kein Store, kein Server, kein echter Anthropic-Call.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runChecks } from "../scripts/convo-bench/checks.mjs";
@@ -11,11 +6,6 @@ import { nextCalleeTurn, personaPromptFor } from "../scripts/convo-bench/persona
 
 const OWNER_NAME = "Jonas Beispiel";
 
-// Vollstaendiges runResult-Geruest (Build-Helper, P13): jeder Check greift auf andere
-// Felder zu, ein Teil-Fake wuerde je nach Check-Reihenfolge zufaellig durchfallen.
-// agentSamples[0] ist immer die LLM-freie Eroeffnung (F-1); agentSays fuellt die
-// FREI GENERIERTEN Folge-Turns ab agentSamples[1] - genau die Turns, auf denen der
-// Umlaut-Check (freeAgentTexts) und die Phrasen-Heuristiken (agentTexts) arbeiten.
 function runResult({
   agentSays = [],
   endedVia = "turn_cap",
@@ -38,9 +28,6 @@ function runResult({
   };
 }
 
-// Minimales, gueltiges Szenario-Objekt - jeder Check liest sein eigenes Feld daraus
-// (scenario.maxTurns, scenario.expectDegradation, ...), die Registry-Checks brauchen
-// nur, dass das Feld ueberhaupt existiert.
 function scenario(overrides = {}) {
   return {
     id: "test-scenario",
@@ -75,9 +62,6 @@ test("T-P4-1 no_transliterated_umlauts_de failt bei ASCII-Transliteration und pa
 });
 
 test("T-P4-2 Transliteration NUR im LLM-freien Eroeffnungs-Sample faellt nicht durch (Regression F-1)", () => {
-  // Genau der reale Fall: die Eroeffnung traegt disclosure()+bridgePhrase(goal) - beides
-  // Fixture-Text, nicht Modell-Text. Ohne LLM_FREE_OPENING_SAMPLE_COUNT waere dieser
-  // Check auf jedem Bestands-Szenario konstant rot.
   const rr = runResult({ agentSays: [] });
   rr.agentSamples[0].sayTexts = [
     "Ich rufe im Auftrag von Jonas Beispiel an. Naechsten freien Termin fuer einen Herrenhaarschnitt vereinbaren.",
@@ -144,11 +128,11 @@ test("T-P4-6 message_taken hat kein Richtungs-Gate mehr (F-4)", () => {
 });
 
 test("T-P4-7 no_early_agent_hangup respektiert die szenario-eigene Schwelle", () => {
-  const tooEarly = runResult({ agentSays: ["Reaktion 1"], endedVia: "agent_hangup" }); // turnCount=2
+  const tooEarly = runResult({ agentSays: ["Reaktion 1"], endedVia: "agent_hangup" });
   const failResult = only("no_early_agent_hangup", tooEarly, scenario({ minTurnsBeforeAgentHangup: 5 }));
   assert.equal(failResult.pass, false);
 
-  const late = runResult({ agentSays: ["R1", "R2", "R3", "R4"], endedVia: "agent_hangup" }); // turnCount=5
+  const late = runResult({ agentSays: ["R1", "R2", "R3", "R4"], endedVia: "agent_hangup" });
   const passResult = only("no_early_agent_hangup", late, scenario({ minTurnsBeforeAgentHangup: 5 }));
   assert.equal(passResult.pass, true);
 

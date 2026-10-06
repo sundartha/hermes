@@ -1,8 +1,3 @@
-// Cookie-Einwilligung, Browser-Seite: die reinen Entscheidungen aus
-// apps/web/src/scripts/consent-core.js (Widerruf -> Neuladen, Banner beim ersten
-// Besuch, Kennung und Protokoll-Nutzlast) sowie die
-// Naht zum Gateway (Pfad-Spiegel + CSP connect-src der Static Site).
-// Offline, kein DOM, kein Build.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -89,8 +84,6 @@ test("needsReload: Widerruf einer Kategorie mit LAUFENDEM Skript laedt neu, sons
   assert.equal(needsReload({ previous: null, next, activated: new Set(["statistics"]) }), false);
 });
 
-// Owner-Entscheidung 2026-09-27: beim ersten Besuch kommt die Abfrage immer - auch
-// wenn heute nur Notwendiges laeuft. Nach der Wahl fragt die Seite nicht erneut.
 test("shouldPrompt: Banner ungefragt genau dann, wenn noch keine Entscheidung vorliegt", () => {
   assert.equal(shouldPrompt({ consent: null }), true, "erster Besuch -> fragen");
   assert.equal(
@@ -104,8 +97,6 @@ test("shouldPrompt: Banner ungefragt genau dann, wenn noch keine Entscheidung vo
     "zugestimmt -> nicht erneut fragen",
   );
 });
-
-// ---- Naht zum Gateway ---------------------------------------------------------------
 
 const renderYaml = readFileSync(new URL("../render.yaml", import.meta.url), "utf8");
 const webService = renderYaml.slice(renderYaml.indexOf("name: hermes-web"));

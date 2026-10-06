@@ -1,10 +1,3 @@
-// T-P0-5 (H1): Produktions-Footguns fail-closed. Im oeffentlichen Hosting
-// (RENDER_EXTERNAL_URL gesetzt) darf eine vergessene/verkehrte Env das Dashboard/API
-// NICHT oeffentlich oeffnen und kein Safety-Gate lautlos abschalten -> jeder Treffer
-// ist fatal (Boot-Refusal), nicht nur eine Warnung. Reine Unit-Tests gegen die
-// exportierte productionFootguns(); der Boot-Refusal (Exit) liegt in
-// boot-prod-footguns.test.js (Kindprozess). Jede node:test-Datei laeuft als eigener
-// Kindprozess -> kein Cross-File-Leak des Modul-Scopes.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config, assertConfig, productionFootguns } from "../src/config.js";
@@ -12,10 +5,6 @@ import { makeConfigOverrides } from "./helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
 
-// Eine produktionssichere Basis-Config: alle vier Footguns entschaerft. Tests
-// variieren NUR den geprueften Aspekt (Isolation), Hosting wird per isProduction=true
-// erzwungen (unabhaengig von process.env). Namespaced (PA-14): productionFootguns()
-// liest cfg.<namespace>.<key>, nicht mehr cfg.<key> flach.
 const SAFE_PROD = {
   auth: { dashboardPassword: "geheim", mcpAuth: "", oauthIssuerUrl: "", oauthAudience: "" },
   safety: { skipTwilioSignatureCheck: false },
@@ -60,10 +49,6 @@ test("T-P0-5-06: Produktion + http-OAUTH_ISSUER_URL -> fatal; https + localhost-
   assert.deepEqual(productionFootguns({ ...SAFE_PROD, auth: { ...SAFE_PROD.auth, oauthIssuerUrl: "http://localhost:8080/x" } }, true), [], "localhost-IdP bleibt erlaubt");
 });
 
-// E8 (PLAN-OPENAI.md Etappe 8): OAUTH_AUDIENCE muss die kanonische MCP-Audience
-// (PUBLIC_URL + /mcp) tragen oder leer sein - sonst kann kein Client sich je
-// erfolgreich autorisieren. Der Vergleich normalisiert BEIDE Seiten (PM-8): ein
-// live gemeintes ".../mcp/" darf KEINEN Boot-Abbruch ausloesen.
 test("T-P0-5-15: Produktion + leeres OAUTH_AUDIENCE -> kein Footgun (kanonischer Default gilt)", () => {
   assert.deepEqual(productionFootguns({ ...SAFE_PROD, auth: { ...SAFE_PROD.auth, oauthAudience: "" } }, true), []);
 });
@@ -90,9 +75,6 @@ test("T-P0-5-17: Produktion + divergentes OAUTH_AUDIENCE -> fatal (nennt Var)", 
 });
 
 test("T-P0-5-07: Produktion + mehrere Footguns -> alle gesammelt", () => {
-  // Alle gleichzeitig entschaerften Bedingungen: DASHBOARD_PASSWORD, MCP_AUTH,
-  // SKIP_TWILIO_SIGNATURE_CHECK, OAUTH_ISSUER_URL, STORE_BACKEND, PUBLIC_URL (T2-04).
-  // OAUTH_AUDIENCE bleibt aussen vor: leer -> Praedikat kurzschliesst.
   const ANZAHL_GLEICHZEITIGER_FOOTGUNS = 6;
   const errors = productionFootguns(
     {
@@ -106,9 +88,6 @@ test("T-P0-5-07: Produktion + mehrere Footguns -> alle gesammelt", () => {
   assert.equal(errors.length, ANZAHL_GLEICHZEITIGER_FOOTGUNS, "alle sechs Footguns werden gemeldet, nicht nur der erste");
 });
 
-// Integration: assertConfig faltet die Footguns in die Fatal-Menge -> false (Boot-
-// Refusal). RENDER_EXTERNAL_URL wird temporaer gesetzt (Hosting simulieren) und
-// strikt restauriert, damit andere Tests dieses Kindprozesses unberuehrt bleiben.
 function withProdEnv(fn) {
   const saved = process.env.RENDER_EXTERNAL_URL;
   process.env.RENDER_EXTERNAL_URL = "https://agent.onrender.com";
@@ -126,8 +105,6 @@ function captureConsoleError(fn) {
   return lines;
 }
 
-// Pflichtfelder erfuellt, damit NUR der Footgun den Boot stoppt (nicht ein fehlendes
-// Presence-Feld). mcpAuth/skip/issuer entschaerft, dashboardPassword bewusst leer.
 const REQUIRED_OK_PROD = {
   anthropicApiKey: "x",
   publicUrl: "https://agent.onrender.com", publicUrlExplicit: true, storeBackend: "json", paymentEnabled: false,
@@ -174,11 +151,6 @@ test("T-P0-1-AC1-04: Produktion + undefined storeBackend -> fatal", () => {
   assert.equal(errors.length, 1);
   assert.match(errors[0], /STORE_BACKEND/);
 });
-
-// T2-04 (T-32): PUBLIC_URL in Produktion Boot-Pflicht - der angekuendigte Origin einer
-// OpenAI-App ist nach der Publikation unveraenderlich, ein stiller Rueckfall auf den
-// Hosting-Host wuerde den falschen Origin einfrieren. Das Praedikat liest NUR
-// publicUrlExplicit (nicht publicUrl), weil publicUrl den Rueckfall schon aufgeloest hat.
 
 test("T2-04-01: Produktion + publicUrlExplicit=false -> genau ein Befund, nennt Var + Sollform, kein Wert-Echo", () => {
   const errors = productionFootguns(

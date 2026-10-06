@@ -1,22 +1,12 @@
-// P6 (PLAN-CONVERSATION-QUALITY-V2): haertet den Conversation-Bench fuer die beiden neuen
-// Mandat-Szenarien. Netz- und spawn-frei (Muster cq-p4-bench-hardening.test.js):
-// checks.mjs/scenarios/index.mjs ziehen nur src/i18n/locales.js -> src/store/defaults.js
-// (beide rein) - kein config.js, kein Store, kein Server, kein echter Anthropic-Call.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runChecks } from "../scripts/convo-bench/checks.mjs";
 import { SCENARIOS, SCENARIO_IDS } from "../scripts/convo-bench/scenarios/index.mjs";
 
-// Minimaler runResult-Ausschnitt: message_taken/no_message_taken lesen ausschliesslich
-// storeSnapshot.actionItems (P13 Build-Operate-Check, kein Ueberbau fuer diese zwei Checks).
 const withActionItems = (actionItems) => ({ storeSnapshot: { actionItems } });
 
 const only = (id, rr, checks = [id]) => runChecks(rr, { checks })[0];
 
-// Vollstaendiges runResult-Geruest fuer B5 (Muster cq-p4-bench-hardening.test.js
-// runResult): B5 laesst ALLE vom Szenario deklarierten Checks laufen (disclosure_first,
-// no_invented_promise, farewell_before_terminal, turn_count_within_budget,
-// no_transliterated_umlauts_de, ...) - die brauchen mehr als nur actionItems.
 const OWNER_NAME = "Jonas Beispiel";
 function fullRunResult(direction) {
   const opening = { turn: 0, sayTexts: [`Ich rufe im Auftrag von ${OWNER_NAME} an. Testanliegen.`] };

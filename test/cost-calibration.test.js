@@ -1,7 +1,3 @@
-// LCT P5 (Drift-Waechter): reine/offline Tests fuer src/billing/cost-calibration.js.
-// Kein Store, kein Netz, kein Spawn (P12 F.I.R.S.T.) - jeder Call ist ein Hand-Fixture mit
-// GENAU den Feldern, die das Modul liest (to, costTruedSource, actualCostMicroCents,
-// answeredAt, endedAt). Muster test/metering-unit.test.js (Fake-Objekte statt echtem Store).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
@@ -21,13 +17,8 @@ import { COST_TRUING_SOURCE } from "../src/store/defaults.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MICRO_CENTS_PER_CENT = 1_000_000;
-const NEUTRAL_RATE_MICRO = 1_000_000; // Faktor 1,0 - haelt die Fixturen als Cent lesbar
+const NEUTRAL_RATE_MICRO = 1_000_000;
 
-// Ein Sample-Call: NUR die Felder, die cost-calibration.js liest. minutes fest auf 1,
-// damit costCts direkt der USD-Cent/min-Rate entspricht (kein zusaetzlicher /minutes-Schritt
-// in den erwarteten Werten). endedMinutesAgo staffelt die Recency fuer den Fenster-Test (P5-10).
-// from faellt per Default auf to zurueck: seit der Herkunfts-Achse (P5) ist Stichprobe nur,
-// was den Praefix an BEIDEN Enden traegt - also ein echtes Inlands-Leg.
 function driftSample({ to, from = to, costCts, endedMinutesAgo = 1, source = COST_TRUING_SOURCE.DETAIL_RECORDS }) {
   const nowMs = Date.now();
   const endedAt = new Date(nowMs - endedMinutesAgo * 60_000).toISOString();
@@ -35,8 +26,6 @@ function driftSample({ to, from = to, costCts, endedMinutesAgo = 1, source = COS
   return { to, from, costTruedSource: source, actualCostMicroCents: costCts * MICRO_CENTS_PER_CENT, answeredAt, endedAt };
 }
 
-// n gleichwertige Samples mit distinkten endedAt-Zeitpunkten (offsetStart..offsetStart+n-1
-// Minuten her) - vermeidet Kollisionen, wenn zwei Gruppen im selben Test gemischt werden.
 function uniformSamples(prefix, costCts, n, { offsetStart = 1, source } = {}) {
   return Array.from({ length: n }, (_, i) =>
     driftSample({ to: prefix, costCts, endedMinutesAgo: offsetStart + i, source }),
@@ -240,11 +229,6 @@ test("P5-14: alertableDriftFindings enthaelt underestimate+overestimate, nie ins
   assert.ok(alertable.every((e) => e.code !== TARIFF_DRIFT_FINDING.INSUFFICIENT_SAMPLES));
 });
 
-// Ueberlauf-Fixture: volle Stichprobe (20 >= minSamples), aber jeder Ist-Betrag liegt an
-// Number.MAX_SAFE_INTEGER. providerMicroCentsPerMinOf laesst ihn noch durch (er IST ein
-// sicherer Integer), erst providerMicroCentsToBucketCents kippt bei der Multiplikation mit
-// rateMicro aus dem sicheren Bereich. Genau der Fall, in dem der Waechter frueher wie
-// harmlose Datenknappheit aussah.
 function overflowSamples(prefix, n) {
   return Array.from({ length: n }, (_, i) => ({
     ...driftSample({ to: prefix, costCts: 1, endedMinutesAgo: 1 + i }),

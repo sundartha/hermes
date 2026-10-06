@@ -1,22 +1,10 @@
-// P8 (PLAN-CONVERSATION-QUALITY-V2): HTTP-Verdrahtung des Pre-Call-Briefings ueber POST
-// /api/calls. Reiner Spawn (startServer), KEIN pglite in derselben Datei (Lehre
-// p6a-Stall: NIE mischen). Muster cq-p6-mandate-http.test.js/assistant-context-
-// http.test.js: der Owner-Pfad passiert alle Gates und scheitert meist erst am
-// Offline-Originate (500) - der Call ist trotzdem persistiert und ueber
-// srv.readStore() lesbar. HP1 nutzt zusaetzlich den lokalen Telnyx-TeXML-Voice-Mock
-// (Muster assistant-context-http.test.js HC7), um die 200-Erfolgsantwort (inkl.
-// context_received) zu erreichen.
-//
-// Env pro Test: ANTHROPIC_BASE_URL zeigt auf einen lokalen Mock (kein echtes Netz,
-// keine echten Kosten), PRECALL_BRIEFING_ENABLED/ASSISTANT_CONTEXT_ENABLED explizit.
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer } from "./helpers.js";
 
-const TO = "+4915112345678"; // erlaubtes Ziel, kein Premium/Notruf
+const TO = "+4915112345678";
 
-// Voll besetzte Briefing-Antwort (vier Kontextfelder, ohne Mandat).
 const FULL_BRIEFING_INPUT = Object.freeze({
   summary: "Kunde bittet um Verschiebung des Termins",
   recipient_relationship: "Stammfriseur",
@@ -24,15 +12,12 @@ const FULL_BRIEFING_INPUT = Object.freeze({
   key_facts: ["Name Mueller"],
 });
 
-// Owner-Eingaben fuer HP2/HP5 (D2: Owner-Eingabe gewinnt immer).
 const OWNER_CTX = { summary: "Owner-eigener Kontext" };
 const OWNER_MANDATE = {
   decide_freely: "Termin an einem Werktag, bis 40 Euro",
   fallback_order: "zuerst Mittwoch, sonst Donnerstag",
   on_out_of_scope: "decline",
 };
-// Vom (gemockten) Briefing-Modell erfundenes Mandat - HP5 beweist, dass es NICHT
-// gewinnt, sobald der Owner selbst ein Mandat mitgeschickt hat.
 const BRIEFED_MANDATE_INPUT = Object.freeze({
   ...FULL_BRIEFING_INPUT,
   mandate: Object.freeze({
@@ -55,8 +40,6 @@ function anthropicToolMessage(input) {
   };
 }
 
-// Lokaler Anthropic-Mock: liefert IMMER dieselbe tool_use-Antwort, zaehlt Requests
-// (Flag-off/Owner-gewinnt-Beweise brauchen einen Zaehler, keinen Inhalt).
 async function startBriefingMock(input = FULL_BRIEFING_INPUT) {
   let requestCount = 0;
   const server = http.createServer((req, res) => {
@@ -75,7 +58,6 @@ async function startBriefingMock(input = FULL_BRIEFING_INPUT) {
   };
 }
 
-// Lokaler Anthropic-Mock, der IMMER 500 antwortet (HP3: Fail-Soft).
 async function startFailingBriefingMock() {
   const server = http.createServer((req, res) => {
     req.on("data", () => {});
@@ -89,9 +71,6 @@ async function startFailingBriefingMock() {
   return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
 }
 
-// Lokaler Telnyx-TeXML-Voice-Mock (Muster assistant-context-http.test.js startVoiceMock):
-// Originate liefert {sid} -> deterministischer Weg zu einer 200-Erfolgsantwort ohne
-// echten Anruf.
 async function startVoiceMock() {
   const server = http.createServer((req, res) => {
     req.on("data", () => {});
@@ -187,7 +166,6 @@ test("HP3 Briefing-Mock antwortet 500: Call wird trotzdem angelegt, context===nu
 test("HP4 Flag PRECALL_BRIEFING_ENABLED aus: Mock-Zaehler 0, context===null (byte-identisches Bestandsverhalten)", async () => {
   const anthropicMock = await startBriefingMock();
   const srv = await startServer({
-    // PRECALL_BRIEFING_ENABLED bleibt auf dem BASE_ENV-Default "false".
     env: { ANTHROPIC_BASE_URL: anthropicMock.url, ASSISTANT_CONTEXT_ENABLED: "true" },
   });
   try {

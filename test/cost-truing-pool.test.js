@@ -1,11 +1,3 @@
-// KE-P2 (D1: den Abruf aus der Kandidatenschleife ziehen): Sweep-Ebene.
-// Warum eine EIGENE Datei und nicht cost-truing-observe.test.js: die Kernzusage ist eine
-// Aussage ueber ECHTE HTTP-Anfragen (35 -> 6, ab KE-P3: inference wird nicht mehr abgerufen).
-// Sie ist nur mit dem ECHTEN Telnyx-Adapter
-// beweisbar - ein Fake-Adapter koennte sie nicht falsifizieren. Der echte Adapter liest
-// config.telephony.telnyxApiKey/-Base und config.billing.providerCurrency, deshalb
-// process.env VOR den (dynamischen) Importen, Muster telnyx-cost-records.test.js
-// (Lehre test-base-env-drift). Netzfrei: global.fetch ist gestubbt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -22,21 +14,10 @@ const {
   foreignSipTrunkingPage, NEVER_LAST_PAGE_TOTAL,
 } = await import("./cost-truing-harness.js");
 
-// Kandidatenzahl der D1-Kernzusage: gross genug, um "einmal je Typ" von "einmal je
-// Kandidat" scharf zu unterscheiden (6 vs. 35), klein genug, um lesbar zu bleiben.
-// Ein Provider, fuer den die Registry KEINEN Adapter mit Beleg-Methoden liefert. Der
-// Test faehrt gegen ein Double (fakeVoiceControl), nicht gegen die echte Registry -
-// der Name steht hier fuer die Rolle, nicht fuer einen Carrier. 'twilio' als Wert, weil
-// genau dieser String als Altzeile in einer Bestands-DB stehen kann.
 const NO_PROOF_PROVIDER = "twilio";
 
 const CANDIDATE_COUNT = 5;
 
-// Fake-Adapter im NEUEN Port-Zuschnitt. recordsFor(legId) spielt genau die Rolle, die
-// frueher getVoiceCostRecords({legId}) hatte. trace zeichnet die Aufruf-Reihenfolge (PM-5:
-// erst ALLE Pool-Abrufe, dann die Zuordnungen) auf, seenPools die POOL-IDENTITAET je
-// Zuordnung (Objekt-Referenz, nicht Kopie) - der Beweis, dass alle Calls eines Providers
-// denselben geteilten Pool sehen (P2-2).
 function fakePoolAdapter({ recordsFor, complete = true, ok = true, trace = [], seenPools = [] } = {}) {
   return {
     async fetchCostRecordPool() {
@@ -50,8 +31,6 @@ function fakePoolAdapter({ recordsFor, complete = true, ok = true, trace = [], s
     },
   };
 }
-
-// ---- P2-1: die Kernzusage, gemessen am ECHTEN Adapter (35 -> 6 HTTP-Anfragen, ab KE-P3) ----
 
 test("(P2-1) Sweep holt die Belege EINMAL je Sweep, nicht je Kandidat", async () => {
   const nowMs = Date.now();
@@ -71,8 +50,6 @@ test("(P2-1) Sweep holt die Belege EINMAL je Sweep, nicht je Kandidat", async ()
   assert.equal(res.candidates, CANDIDATE_COUNT, "kein Kandidat ging beim Zaehlen verloren");
   assert.equal(store.writes.length, CANDIDATE_COUNT, "jeder Kandidat bekommt genau einen Schreibzugriff");
 });
-
-// ---- P2-2: EIN Pool fuer alle Kandidaten, je Call der eigene Anker ----
 
 test("(P2-2) EIN Pool fuer alle Kandidaten, je Call der eigene Anker (keine Quervermischung)", async () => {
   const nowMs = Date.now();
@@ -100,8 +77,6 @@ test("(P2-2) EIN Pool fuer alle Kandidaten, je Call der eigene Anker (keine Quer
   assert.notEqual(callA.actualCostMicroCents, callB.actualCostMicroCents, "keine Quervermischung");
 });
 
-// ---- P2-4: complete:false -> alles unavailable; Gegenprobe complete:true misst und bucht ----
-
 test("(P2-4) unvollstaendiger Pool (complete:false) -> alles unavailable; Gegenprobe complete:true misst und bucht", async () => {
   const nowMs = Date.now();
   const recordsFor = (legId) => [
@@ -109,8 +84,6 @@ test("(P2-4) unvollstaendiger Pool (complete:false) -> alles unavailable; Gegenp
   ];
   const requiredTypes = ["sip-trunking"];
 
-  // Phase 1: complete:false. Der Fake WUERDE vollstaendige Records liefern, darf aber laut
-  // bookablePool() nie zur Zuordnung kommen - der Riegel steht VOR assignCostRecords.
   const stateIncomplete = makeDefaultState();
   const callIncomplete = makeDueOutboundCall(stateIncomplete, {
     nowMs, legRef: { callControlId: "cc_incomplete" }, estimatedCostCents: 20,
@@ -127,7 +100,6 @@ test("(P2-4) unvollstaendiger Pool (complete:false) -> alles unavailable; Gegenp
   assert.equal(callIncomplete.actualCostMicroCents, null);
   assert.deepEqual(traceIncomplete, ["pool"], "assignCostRecords wird bei complete:false nie erreicht");
 
-  // Phase 2 (Gegenprobe): derselbe Fake mit complete:true misst UND bucht.
   const stateComplete = makeDefaultState();
   stateComplete.usage[BOOTSTRAP_TENANT_ID] = { ...emptyUsage(), costCents: 100 };
   makeDueOutboundCall(stateComplete, { nowMs, legRef: { callControlId: "cc_complete" }, estimatedCostCents: 20 });
@@ -142,8 +114,6 @@ test("(P2-4) unvollstaendiger Pool (complete:false) -> alles unavailable; Gegenp
   assert.deepEqual(traceComplete, ["pool", "assign"], "complete:true erreicht die Zuordnung");
   assert.equal(usageFor(stateComplete, BOOTSTRAP_TENANT_ID).costCents, 85, "Korrektur gebucht: 100 - 15 (Ist 5ct < Schaetzung 20ct)");
 });
-
-// ---- P2-5: alle Pool-Abrufe liegen VOR der ersten Zuordnung (PM-5) ----
 
 test("(P2-5) alle Pool-Abrufe liegen VOR der ersten Zuordnung (PM-5)", async () => {
   const nowMs = Date.now();
@@ -161,8 +131,6 @@ test("(P2-5) alle Pool-Abrufe liegen VOR der ersten Zuordnung (PM-5)", async () 
   assert.equal(res.candidates, 3);
   assert.deepEqual(trace, ["pool", "assign", "assign", "assign"]);
 });
-
-// ---- P2-6: je Provider genau EIN Pool-Abruf; Adapter ohne die Methoden bleibt No-op ----
 
 test("(P2-6) je Provider genau EIN Pool-Abruf; Adapter ohne die Methoden bleibt No-op", async () => {
   const nowMs = Date.now();
@@ -194,8 +162,6 @@ test("(P2-6) je Provider genau EIN Pool-Abruf; Adapter ohne die Methoden bleibt 
   );
 });
 
-// ---- P2-3: ok:false-Pool -> ALLE Kandidaten unavailable, keine Buchung ----
-
 test("(P2-3) ok:false-Pool -> ALLE Kandidaten unavailable, keine Buchung", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
@@ -221,8 +187,6 @@ test("(P2-3) ok:false-Pool -> ALLE Kandidaten unavailable, keine Buchung", async
   assert.deepStrictEqual(structuredClone(state.usage), usageBefore, "keine Korrektur ohne Messung");
 });
 
-// ---- P3-3: Seitenobergrenze -> KEINE Rueckerstattung, kein Cent bewegt ----
-
 test("(P3-3) Seitenobergrenze -> KEINE Rueckerstattung: alle Kandidaten unavailable, kein Cent bewegt", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
@@ -232,9 +196,6 @@ test("(P3-3) Seitenobergrenze -> KEINE Rueckerstattung: alle Kandidaten unavaila
   );
   const store = makeStubStore(state);
   const usageBefore = structuredClone(state.usage);
-  // Die Belege liegen bei nowMs, also INNERHALB der ab KE-P5 abgeleiteten Schranke - nur so
-  // beendet weiterhin die SEITENOBERGRENZE die Schleife und nicht `since` (das ist die
-  // Zusage dieses Tests).
   const fetchCalls = stubCountingFetch({
     bodyFor: () => foreignSipTrunkingPage({
       at: new Date(nowMs).toISOString(), idPrefix: "cc_p3_3", totalPages: NEVER_LAST_PAGE_TOTAL,

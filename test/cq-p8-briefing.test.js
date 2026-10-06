@@ -1,16 +1,3 @@
-// P8 (PLAN-CONVERSATION-QUALITY-V2): Pre-Call-Briefing (src/precall-briefing.js), Kern-
-// Verhalten in-process. Rein in-process (kein Server-Spawn, kein pglite) - dieselbe Naht
-// wie c1-auftragstreue/cq-p6-mandate: ANTHROPIC_BASE_URL + DATA_DIR + die P8-Flags VOR
-// dem ersten config-Import, dann dynamischer Import. Der lokale HTTP-Mock ersetzt den
-// Anthropic-Endpunkt (das SDK liest ANTHROPIC_BASE_URL), steuerbar per `mode` und merkt
-// sich den letzten Request-Body (Prompt-Grounding) + einen Request-Zaehler (Flag-off =
-// 0 Kosten-Beweis).
-//
-// LLM_BREAKER_THRESHOLD ist hoch gepinnt (Test-Reihenfolge-Unabhaengigkeit): B2/B3 loesen
-// bewusst je einen transienten Fehlschlag aus, die den Briefing-Breaker sonst nach wenigen
-// Tests oeffnen wuerden (der eigene Breaker-Test lebt in cq-p8-briefing-breaker.test.js,
-// mit eigenem niedrigen Threshold - eigene Datei, weil node:test env pro Datei-Prozess
-// isoliert).
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -29,8 +16,6 @@ const CENTS_PER_EURO = 100;
 const OVERLONG_SUMMARY_CHARS = 1001;
 const OVERLONG_OPEN_QUESTION_CHARS = 301;
 
-// Voll besetzte Modell-Antwort (alle vier Kontextfelder + volles Mandat) - Basis fuer
-// jeden Testfall, der einzelne Felder ueberschreibt.
 const FULL_BRIEFING_INPUT = Object.freeze({
   summary: "Kunde bittet um Verschiebung des Friseurtermins",
   recipient_relationship: "Stammfriseur",
@@ -56,9 +41,6 @@ function anthropicToolMessage(input, usage) {
   };
 }
 
-// Steuerbarer Mock-Zustand (G5: EIN Mock fuer alle Tests dieser Datei, ueber `mode`
-// gesteuert statt N Kopien). beforeEach setzt ihn auf den neutralen Happy-Path zurueck
-// (F.I.R.S.T. - Independent: kein Test darf vom vorherigen mode/nextToolInput erben).
 let mode = "toolUse";
 let nextToolInput = FULL_BRIEFING_INPUT;
 let nextUsage = { input_tokens: 50, output_tokens: 40 };
@@ -93,7 +75,6 @@ before(async () => {
           try {
             res.end(JSON.stringify(anthropicToolMessage(nextToolInput, nextUsage)));
           } catch {
-            // Verbindung ist nach dem Client-seitigen Timeout schon zu - ignorieren.
           }
         }, DELAY_BEYOND_TIMEOUT_MS);
         return;
@@ -109,7 +90,7 @@ before(async () => {
   process.env.PRECALL_BRIEFING_ENABLED = "true";
   process.env.ASSISTANT_CONTEXT_ENABLED = "true";
   process.env.PRECALL_BRIEFING_TIMEOUT_MS = String(BRIEFING_TEST_TIMEOUT_MS);
-  process.env.LLM_BREAKER_THRESHOLD = "100"; // Test-Reihenfolge-Unabhaengigkeit
+  process.env.LLM_BREAKER_THRESHOLD = "100";
   process.env.DATA_DIR = tempDataDir(
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }] }),
   );
@@ -214,10 +195,6 @@ test("B7 Kostenbuchung (P7a): 1M Input-Token buchen zur Sonnet-Rate, nicht zur H
 
 test("B8 Kosten fallen auch bei unbrauchbarer Antwort an (D4)", async () => {
   nextToolInput = { garbage: true };
-  // Gross genug, dass der Mikro-Cent-Akkumulator (state-ops trackUsage) sicher einen
-  // vollen Cent uebertraegt - ein einzelner kleiner Turn darf laut P1-Safety-BLOCKER
-  // legitim auf 0 costCents runden (Sub-Cent-Rest reist im Akkumulator mit), das waere
-  // hier kein aussagekraeftiger Beweis.
   nextUsage = { input_tokens: 1_000_000, output_tokens: 0 };
   const before = store.usageOf(BOOTSTRAP_TENANT_ID).costCents;
   const result = await fetchPrecallBriefing(briefingArgs());
@@ -260,17 +237,9 @@ test("B11 assistantContextEnabled aus (Briefing-Flag bleibt an) -> null, kein Re
   assert.equal(requestCount, before, "ohne Konsument darf kein Request ausgeloest werden");
 });
 
-// Einzige volatile Stelle (claude.js base: `Heute ist ${now}.`) einfrieren (Muster
-// assistant-context-render/cq-p6-mandate).
 const NOW_TOKEN = "<NOW>";
 const freezeNow = (prompt) => prompt.replace(/Heute ist [^\n]+\./, `Heute ist ${NOW_TOKEN}.`);
 
-// PROMPT-06 (tasks/i18n-tests/02-llm-prompts.md): call.language wird NICHT ans Briefing
-// durchgereicht - weder in der Signatur von fetchPrecallBriefing noch im Aufrufobjekt in
-// api-calls.js (obwohl die Sprache dort wenige Zeilen vorher aufgeloest wird). Struktur-
-// Pruefung am Quelltext (Muster call-termination-order.test.js): der Parameter existiert
-// gar nicht, es gibt also kein Laufzeitverhalten, das man variieren koennte.
-// Anker sind Symbole, keine Zeilennummern (C2).
 test("PROMPT-06 (Luecke, gruen) - fetchPrecallBriefing kennt keine Sprache, der Aufrufer reicht keine durch", () => {
   const briefingSrc = readFileSync(new URL("../src/precall-briefing.js", import.meta.url), "utf8");
   assert.doesNotMatch(briefingSrc, /language/, "das Briefing-Modul kennt den Begriff nicht");
@@ -280,10 +249,6 @@ test("PROMPT-06 (Luecke, gruen) - fetchPrecallBriefing kennt keine Sprache, der 
   assert.doesNotMatch(args, /\blanguage\s*:/, "kein language-Key im Aufrufobjekt");
 });
 
-// PROMPT-07 (tasks/i18n-tests/02-llm-prompts.md): der Briefing-System-Prompt gibt dem
-// Modell KEINE Ausgabesprache vor. Er ist durchgehend deutsch; ein EN-Tenant bekommt
-// damit deutsche Freitextfelder in seinen HINTERGRUND-Block. Dokumentiert die Luecke am
-// echten Request-Body (nicht am Quelltext) - dieselbe Naht wie B9.
 test("PROMPT-07 (Luecke, gruen) - der Briefing-System-Prompt enthaelt keine Sprachvorgabe fuer die Freitextfelder", async () => {
   await fetchPrecallBriefing(briefingArgs());
   assert.doesNotMatch(lastRequest.system, /english|englisch|reply in|answer in|antworte auf|sprache/i);
@@ -304,8 +269,6 @@ test("B12 Byte-Identitaet (Abnahme b): systemPrompt nach fehlgeschlagenem Briefi
   );
   assert.equal(afterFailedBriefing, baseline, "context:null/mandate:null muss byte-identisch bleiben");
 });
-
-// AL-P9: Kostenbuchung im Abbruchpfad + fuenftes Ausgabefeld open_questions.
 
 test("AL-P9-1 Timeout bucht eine pessimistische Schaetzung (nie 0)", async () => {
   mode = "delay";
@@ -347,10 +310,6 @@ test("AL-P9-3 nicht-transienter Fehler (HTTP 400) bucht NICHT", async () => {
 test("AL-P9-4 Schaetzung ist kein Kundenbeleg: kein usage_event trotz PAYMENT_ENABLED", async () => {
   mode = "delay";
   const eventsBefore = store.load().usageEvents.length;
-  // EXAKTE Gate-Achse (Cent-Uebertrag + Sub-Cent-Rest): seit B4a liegt EINE
-  // Briefing-Schaetzung unter einem ganzen Cent (korrigierte Sonnet-Rate) - genau der
-  // Fall, fuer den der Mikro-Cent-Akkumulator gebaut ist (P1-Safety-BLOCKER). Nur
-  // costCents zu lesen saehe die Buchung nicht.
   const gateMicroCents = () => {
     const usage = store.usageOf(BOOTSTRAP_TENANT_ID);
     return usage.costCents * MICRO_CENTS_PER_CENT + usage.costMicroCentsRem;

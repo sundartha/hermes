@@ -1,17 +1,3 @@
-// OUTBOUND-E2 (F1): die GELD-Regression. Harness (storeOpsFacade/withFetch/waitUntil) geteilt
-// mit test/el-geldpfad-s1.test.js ueber test/helpers.js (G5: eine Kopie hatte den naechsten
-// Store-Methoden-Zuwachs bereits in 5 weiteren Test-Attrappen erzwungen, s. Review-Befund
-// E2-S2-1). Der Store ist KEIN Handnachbau, sondern reicht jeden Aufruf an die ECHTEN
-// state-ops-Mutatoren durch, damit voiceMinutesOf (billing/metering.js) gegen denselben
-// Datensatz rechnet wie in Produktion.
-//
-// Kern der Etappe (Owner-Auflage PM-14, Geld-Pfad unberuehrt): ein abgelehnter Anruf laeuft
-// schon heute ueber clearAnchor -> answeredAt=null -> 0 gebuchte Minuten - E2 aendert NUR das
-// Label. Ein Anbieterfehler bei bereits laufender Dauer (42 s) darf den Anker NICHT loeschen
-// (Fall 2 unten ist der Beweis, dass genau das nicht passiert).
-//
-// Testnamen tragen bewusst KEINE Katalog-/Abnahme-Kennung am Namensanfang (Lehre
-// catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -28,12 +14,9 @@ import { storeOpsFacade, waitUntil, withFetch } from "./helpers.js";
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
-const CALL_LAUFZEIT_S = 5; // seit answeredAt vergangen - deutlich unter jedem Deckel, kein Zombie
+const CALL_LAUFZEIT_S = 5;
 const KONSTRUIERTE_DAUER_S = 42;
 const ERWARTETE_MINUTEN_BEI_42S = 1;
-// Deutlich ueber dem Anbieter-Deckel (ELEVENLABS_PROVIDER_MAX_DURATION_S=600s): macht
-// classifyCallTime(...).expired wahr, OHNE dass der Fetch-Mock ueberhaupt gebraucht wird
-// (die Zeit-Obergrenze wird VOR dem Ergebnisabruf geprueft, s. pollConversationResult).
 const ZOMBIE_LAUFZEIT_S = 700;
 
 function seedActiveCall() {
@@ -48,12 +31,10 @@ function seedActiveCall() {
   call.elevenlabsConversationId = CONVERSATION_FAILED_UNVERIFIED_ORIGINATION.conversation_id;
   const anker = new Date(Date.now() - CALL_LAUFZEIT_S * MS_PER_SECOND).toISOString();
   call.startedAt = anker;
-  call.answeredAt = anker; // der Verbindungsstempel des Anrufstarts (markAnswered)
+  call.answeredAt = anker;
   return { state, call, store: storeOpsFacade(state) };
 }
 
-// EIN Poll-Takt gegen genau EINEN Gespraechs-Datensatz (Fixture) - der Anbieter antwortet
-// sofort mit dem uebergebenen Datensatz, egal welche Kennung angefragt wird.
 async function pollFixtureConversation(fixture) {
   const { call, store } = seedActiveCall();
   let billed = false;
@@ -87,9 +68,6 @@ test("gemessener 403-Fall (Dauer 0): KEIN Buchungsanker, 0 gebuchte Minuten - id
 });
 
 test("Anbieterfehler bei 42 Sekunden gelaufener Dauer: der Anker BLEIBT, die Minuten bleiben, es gibt KEINEN Fehlergrund", async () => {
-  // KONSTRUIERT auf der gemessenen Fehler-Struktur (27.08.2026): dieselbe metadata.error,
-  // aber mit einer brauchbaren Anbieter-Dauer - das Gespraech ist zustande gekommen und
-  // wird bezahlt, es traegt keinen "nie zustande gekommen"-Grund (PM-14).
   const fixtureMit42s = {
     ...CONVERSATION_FAILED_UNVERIFIED_ORIGINATION,
     metadata: {
@@ -139,11 +117,6 @@ test("echte Nicht-Rufannahme (Dauer 0, kein Anbieterfehler): byte-identisch zum 
   );
 });
 
-// Review-Befund S1-1 (Runde 3): finishExpiredPoll persistiert seit dieser Etappe erstmals
-// POLL_TIMEOUT_REASON am Call-Record - ungeprueft war das neues Verhalten ohne jede
-// Assertion (Gegenprobe: failureReason durch null ersetzt -> voller Regressionslauf bleibt
-// gruen). Die Zeit-Obergrenze wird VOR dem Ergebnisabruf geprueft (pollConversationResult),
-// der Fetch-Mock hier antwortet deshalb nie inhaltlich - er darf nur nicht fehlen.
 test("Poll-Obergrenze ueberschritten (Zombie-Anruf): failureReason = result-unknown:poll-timeout", async () => {
   const { call, store } = seedActiveCall();
   call.startedAt = new Date(Date.now() - ZOMBIE_LAUFZEIT_S * MS_PER_SECOND).toISOString();
@@ -171,12 +144,6 @@ test("Poll-Obergrenze ueberschritten (Zombie-Anruf): failureReason = result-unkn
   assert.equal(call.failureReason, "result-unknown:poll-timeout");
 });
 
-// Review-Befund S1-1 (Runde 3): finishOnPermanentError persistiert
-// pollProviderErrorReason(deps.providerStatus) - ungeprueft, ob der Anbieter-Status
-// tatsaechlich am Call-Record landet. PERMANENT_FETCH_STATUS (401/404) verlangt
-// PERMANENT_ERROR_STREAK_LIMIT (3) Fehlschlaege IN FOLGE, bevor der Poll aufgibt -
-// rearmActiveConversationPolls ruft pollConversationResult direkt (kein echter Timer noetig),
-// dreimaliger Aufruf reicht darum, um die Schwelle zu erreichen.
 test("dauerhafter Abruf-Fehler (HTTP 404, 3x in Folge): failureReason traegt den Anbieter-Status", async () => {
   const { call, store } = seedActiveCall();
   let billed = false;

@@ -1,8 +1,3 @@
-// LCT P5 (Drift-Waechter): Boot-Beweis der zwei neuen Boot-Guards - Alarmkanal-Guard
-// (alertChannelFindings) UND Drift-Waechter-Ausloeser 1/2 (warnTariffDrift). Muster
-// test/provider-rate-guard.test.js (f2): echter Kindprozess-Spawn ueber startServer,
-// kein Flag-Setup noetig (beide Guards sind unkonditional). BASE_ENV traegt
-// PLATFORM_ALERT_SMS_TO="" bereits (test/helpers.js) - der leere Kanal ist der Default-Fall.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";

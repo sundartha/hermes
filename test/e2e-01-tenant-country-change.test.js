@@ -1,12 +1,3 @@
-// E2E-01 (i18n-Testkatalog, tasks/i18n-tests/11-luecken-und-e2e.md:879) - Landwechsel eines
-// Bestandstenants (DE -> US).
-//
-// P8 A3-Migration: dieser Test war "SOLL (rot)". Mit P8 (POST /api/self-service/settings
-// lehnt einen Patch mit "country" jetzt ueber lockedSelfServiceKeys VOR jedem Store-Zugriff
-// mit 409 ab, statt ihn still zu verschlucken) ist der Zielzustand erreicht - der Test
-// wandert von test:gates nach npm test.
-//
-// In-process pglite (Muster test/i9-self-service.test.js/WEB-09): kein Server-Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
