@@ -1,21 +1,3 @@
-// F12 Runde 2 (Review-Blocker S1-1/S1-2): reattachActiveCall() ist nach telephony/reattach.js
-// ausgelagert (Muster call-termination.js/max-duration-pure.test.js: reine Orchestrierung mit
-// injizierten Thunks, OHNE Server-Spawn/Store/Netz testbar - Praezedenzfall F1). Dieser Test
-// pinnt die beiden sicherheitskritischen Restzeit-Zweige, die der Bestand vorher NICHT
-// abdeckte:
-//   a) aktiv im Zeitfenster  -> Call zurueck, Timer rearmed (scheduleMaxDurationEnd),
-//                               terminateCappedCall NICHT aufgerufen.
-//   b) Ueberzeit             -> terminalisiert (terminateCappedCall), Call NICHT reanimiert
-//                               (logUnknown:false), scheduleMaxDurationEnd NICHT aufgerufen.
-//   c) wirklich unbekannt / nicht-aktiv -> logUnknown:true, weder terminate noch rearm.
-// Zusaetzlich ein Quelltext-Check (Muster test/mcp-server-icon.test.js T-T3-AC2): /voice/status
-// nutzt denselben reattachActiveCall()-Wrapper wie /voice/turn/outbound - NICHT mehr
-// store.attachActiveCall direkt (die urspruengliche Asymmetrie/der Bug aus F12-S1-1).
-//
-// RACE-1 (Review-Blocker Runde 2, Korrektheit): zwei fast gleichzeitige Aufrufe fuer DIESELBE
-// callId (z.B. /voice/status-Retry parallel zu /voice/turn nach einem Deploy-Instanzwechsel)
-// duerfen den Attach+Klassifikations+Arm-Pfad nur EINMAL durchlaufen - sonst wuerden zwei
-// Max-Dauer-Timer fuer denselben Call armiert (nie aufgeraeumter Timer-Leak).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -29,9 +11,6 @@ const SECONDS_60 = 60;
 const SECONDS_400 = 400;
 const MS_PER_S = 1000;
 
-// Minimaler Call-Ausschnitt (Muster max-duration-pure.test.js: keine volle createCall-
-// Fixture noetig, reattachActiveCall liest nur status/twilioSid/answeredAt/startedAt/
-// maxDurationS).
 const activeCall = (secondsAgo) => ({
   id: "reattach_c1",
   twilioSid: "CA_reattach_c1",
@@ -41,10 +20,6 @@ const activeCall = (secondsAgo) => ({
   maxDurationS: null,
 });
 
-// Baut Spy-Thunks + eine feste attachActiveCall-Antwort - Build-Schritt (P13).
-// KS-P1b: budgetAxisFor ist die injizierte Geld-Achse (blockingBudgetAxis in Prod). Default
-// "frei" (null) -> alle Bestandszweige verhalten sich byte-identisch zu vorher;
-// budgetAxis:"budget_tenant" schaltet die erschoepfte Decke ein.
 function makeDeps(attachResult, { budgetAxis = null } = {}) {
   const calls = { terminate: [], schedule: [], overBudget: [] };
   const deps = {
@@ -65,7 +40,7 @@ function makeDeps(attachResult, { budgetAxis = null } = {}) {
 }
 
 test("reattachActiveCall: aktiv im Zeitfenster -> Call zurueck, Timer rearmed, KEIN Terminate", async () => {
-  const call = activeCall(SECONDS_60); // 60s von 180s verbraucht -> 120s Rest
+  const call = activeCall(SECONDS_60);
   const { deps, calls } = makeDeps(call);
 
   const result = await reattachActiveCall("reattach_c1", deps);
@@ -82,7 +57,7 @@ test("reattachActiveCall: aktiv im Zeitfenster -> Call zurueck, Timer rearmed, K
 });
 
 test("reattachActiveCall: Ueberzeit -> terminalisiert (kein Reanimieren), Timer NICHT rearmed", async () => {
-  const call = activeCall(SECONDS_400); // 400s > 180s Limit -> laengst ueberzogen
+  const call = activeCall(SECONDS_400);
   const { deps, calls } = makeDeps(call);
 
   const result = await reattachActiveCall("reattach_c1", deps);
@@ -121,12 +96,8 @@ test("reattachActiveCall: attachActiveCall liefert nicht-aktiven Call -> logUnkn
   assert.equal(calls.schedule.length, 0);
 });
 
-// ---- KS-P1b: die Notbremse wird beim Re-Attach NEU berechnet, nicht wiederhergestellt ----
-// Zwischen Anrufstart und Re-Attach koennen ANDERE Anrufe desselben Tenants sein Guthaben
-// verbraucht haben. Ein Leg, das seine Frist nicht mehr bezahlen kann, bekommt keine neue.
-
 test("KS-P1b-7: aktiv im Zeitfenster, aber Geld-Achse sperrt -> terminalisiert statt reanimiert, KEIN Timer-Rearm", async () => {
-  const call = activeCall(SECONDS_60); // Zeit waere noch da - das Geld nicht
+  const call = activeCall(SECONDS_60);
   const { deps, calls } = makeDeps(call, { budgetAxis: "budget_tenant" });
 
   const result = await reattachActiveCall("reattach_c1", deps);
@@ -155,11 +126,6 @@ test("KS-P1b-8: Ueberzeit UND erschoepftes Guthaben -> die Zeit-Achse gewinnt (g
   assert.equal(calls.schedule.length, 0);
 });
 
-// ---- RACE-1 (Review-Blocker Runde 2): In-Flight-Dedup pro callId ----
-
-// Wie makeDeps, aber attachActiveCall zaehlt seine Aufrufe UND haengt einen Tick (Muster
-// Netz-/DB-Roundtrip) an, damit ein zweiter, waehrenddessen eintreffender Aufruf den Attach
-// wirklich NOCH laufend vorfindet (sonst waere die Race-Faehnster ohne Aussagekraft).
 function makeRaceDeps(attachResult) {
   const calls = { attach: 0, terminate: [], schedule: [] };
   const deps = {
@@ -175,7 +141,7 @@ function makeRaceDeps(attachResult) {
     scheduleMaxDurationEnd: (call, twilioSid, ms) => {
       calls.schedule.push({ callId: call.id, twilioSid, ms });
     },
-    budgetAxisFor: () => null, // KS-P1b: Geld-Achse frei - RACE-1 misst Coalescing, nicht Geld
+    budgetAxisFor: () => null,
     terminateOverBudgetCall: async () => {},
   };
   return { deps, calls };
@@ -213,7 +179,7 @@ test("reattachActiveCall RACE-1: unterschiedliche callIds laufen unabhaengig (ke
     scheduleMaxDurationEnd: (call, twilioSid, ms) => {
       scheduleCalls.push({ callId: call.id, twilioSid, ms });
     },
-    budgetAxisFor: () => null, // KS-P1b: Geld-Achse frei
+    budgetAxisFor: () => null,
     terminateOverBudgetCall: async () => {},
   };
 
@@ -242,14 +208,6 @@ test("reattachActiveCall RACE-1: nach Abschluss wird der In-Flight-Eintrag gerae
   );
 });
 
-// ---- Asymmetrie-Regressionsguard (F12-S1-1): /voice/status vs. /voice/turn/outbound ----
-// Quelltext-Check (Muster test/mcp-server-icon.test.js T-T3-AC2): server.js ist nicht
-// import-sicher (Top-Level app.listen) - der Wiring-Beweis, dass /voice/status denselben
-// reattachActiveCall()-Wrapper nutzt wie /voice/turn/outbound (statt store.attachActiveCall
-// direkt, der urspruengliche Bug), ist damit nur ueber den Quelltext fassbar.
-// P5: Wrapper lebt jetzt in call-lifecycle.js, verdrahtet als lifecycle.reattachActiveCall
-// P11 (Server-Slim): die /voice-Handler wanderten nach src/routes/voice.js (makeVoiceRoutes,
-// Router statt app) - reine Verschiebung, derselbe Quelltext-Check liest jetzt dort.
 test("voice.js: /voice/status nutzt denselben reattachActiveCall()-Wrapper wie /voice/turn (keine direkte store.attachActiveCall-Umgehung)", () => {
   const src = fs.readFileSync(path.join(ROOT, "src", "routes", "voice.js"), "utf8");
 

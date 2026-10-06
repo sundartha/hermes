@@ -1,12 +1,3 @@
-// Kuendigen NUR im Kundenbereich (§ 312k BGB, Owner-Entscheidung 2026-10-01).
-//
-// Am 2026-10-01 lief kurz ein oeffentliches Kuendigungsformular ohne Anmeldung
-// (POST /api/cancellation). Der Owner hat es wieder entfernt: ohne Anmeldung koennte
-// jeder mit fremdem Namen und fremder Email einen Vertrag kuendigen. Gekuendigt wird
-// seitdem nur eingeloggt im Dashboard (POST /api/self-service/billing/cancel, hinter
-// webAuthMw, test/312k-p3-self-service-cancel.test.js); jeder Link "Verträge kündigen"
-// der Website fuehrt direkt dorthin. Diese Datei haelt beides fest - eine neue
-// oeffentliche Kuendigungs-Route braucht eine neue Owner-Entscheidung.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PUBLIC_ROUTES } from "../src/route-policy.js";

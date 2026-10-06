@@ -1,9 +1,3 @@
-// OUT-05: Reserve-Ledger (state-ops-Unit, REIN - kein IO, kein Netz, kein Store-Singleton).
-// Jeder Test baut einen frischen makeDefaultState() (F.I.R.S.T., unabhaengig). Prueft die
-// FACHLOGIK der In-Flight-Reservierung: kumulative Kappung an der pro-Tenant-Decke
-// (KS-P9: die Plattform-Summe sperrt nicht mehr), atomarer Check+Increment ohne
-// Schreibeffekt bei Ablehnung, Idempotenz + Clamp
-// bei der Freigabe. Der Server (F2) ruft diese Funktionen noch nicht - reiner Store-Test.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -16,7 +10,7 @@ import {
   addVoiceUsageCostCents,
 } from "../src/store/state-ops.js";
 
-const CFG = { platformSpendCapCents: 100 }; // 1 EUR Cap (global + Owner-Fallback ohne tenant_budget-Zeile)
+const CFG = { platformSpendCapCents: 100 };
 const T1 = "tenant_ledger_1";
 const T2 = "tenant_ledger_2";
 
@@ -28,7 +22,7 @@ test("reservationFor/reservationsTotal: leerer Ledger -> 0", () => {
 
 test("reserveExceedsBudget zaehlt bestehende Reserve kumulativ (Grenze exakt auf Cap)", () => {
   const s = makeDefaultState();
-  s.reservations[T1] = 40; // 0.40 EUR bereits reserviert
+  s.reservations[T1] = 40;
   assert.equal(reserveExceedsBudget(s, T1, 60, CFG), false, "0.40 + 0.60 = 1.00 EUR exakt auf Cap");
   assert.equal(reserveExceedsBudget(s, T1, 61, CFG), true, "0.40 + 0.61 = 1.01 EUR > Cap");
 });
@@ -53,9 +47,7 @@ test("S1-6: tryReserveOutboundBudget mit negativem/NaN reserveCents -> false, Le
 
 test("KS-P9: pro-Tenant frei -> reserviert, auch wenn die Plattform-Summe die Zahl reisst", () => {
   const s = makeDefaultState();
-  s.reservations[T1] = 60; // T1 haelt bereits 0.60 EUR Reserve
-  // T2 ist unter dem 1-EUR-Cap frei (0.60 EUR); die Plattform-Summe (0.60 + 0.60 = 1.20 EUR)
-  // hat seit KS-P9 keine Sperrwirkung mehr.
+  s.reservations[T1] = 60;
   assert.equal(reserveExceedsBudget(s, T2, 60, CFG), false, "T2 pro-Tenant frei");
   assert.equal(tryReserveOutboundBudget(s, T2, 60, CFG), true, "Plattform-Summe blockt nicht mehr");
   assert.equal(reservationFor(s, T2), 60, "Reserve wurde gebucht");
@@ -63,7 +55,7 @@ test("KS-P9: pro-Tenant frei -> reserviert, auch wenn die Plattform-Summe die Za
 
 test("settled costCents + In-Flight-Reserve kumulieren (Reconcile hebt die Reserve-Schwelle)", () => {
   const s = makeDefaultState();
-  addVoiceUsageCostCents(s, T1, 70); // 0.70 EUR bereits abgerechnet (settled)
+  addVoiceUsageCostCents(s, T1, 70);
   assert.equal(reserveExceedsBudget(s, T1, 30, CFG), false, "0.70 + 0.30 = 1.00 EUR exakt auf Cap");
   assert.equal(reserveExceedsBudget(s, T1, 31, CFG), true, "0.70 + 0.31 EUR > Cap");
 });
@@ -71,7 +63,7 @@ test("settled costCents + In-Flight-Reserve kumulieren (Reconcile hebt die Reser
 test("releaseOutboundReserve: Clamp >= 0 bei Ueber-Freigabe, kein negativer Ledger", () => {
   const s = makeDefaultState();
   s.reservations[T1] = 40;
-  const call = { tenantId: T1, reserveCents: 100, reserveReleased: false }; // mehr als reserviert
+  const call = { tenantId: T1, reserveCents: 100, reserveReleased: false };
   assert.equal(releaseOutboundReserve(s, call), true);
   assert.equal(reservationFor(s, T1), 0, "Clamp bei Math.max(0, ...) statt negativ");
 });

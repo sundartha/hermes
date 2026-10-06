@@ -1,6 +1,3 @@
-// P8 (#4): Datenresidenz-Guard. render.yaml MUSS eine EU-Region (frankfurt)
-// tragen und darf keine bekannte Nicht-EU-Region setzen (fail-closed gegen
-// versehentlichen US-Default). Reiner Datei-Read, keine yaml-Dependency.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";

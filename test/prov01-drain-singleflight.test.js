@@ -1,19 +1,14 @@
-// F3 (PROV-01): Single-Flight um den Provisioning-Drain. Kein Spawn, kein pglite - testet
-// den generischen Serialisierungs-Baustein makeSingleFlight gegen den ECHTEN Memory-Queue-
-// Adapter (der 'done' erst nach dem await markiert = das reale Race-Fenster). Diskriminierend:
-// die Kontrolle (ohne Guard) verdoppelt den Kauf, mit Guard ist es genau einer.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeSingleFlight } from "../src/single-flight.js";
 import { makeMemoryQueue } from "../src/queue/adapters/memory/queue.js";
 import { PROVISION_NUMBER_JOB } from "../src/store/defaults.js";
 
-const ORDER_DELAY_MS = 20; // haelt den Job im 'queued'-Fenster offen (Provider-await simuliert)
+const ORDER_DELAY_MS = 20;
 const NUMBER_IDS = ["num_a", "num_b"];
 
-// Fake-Provisioner: orderNumber verzoegert + zaehlt effektive Kaeufe pro numberId.
 function makeCountingProvisioner() {
-  const orders = new Map(); // numberId -> count
+  const orders = new Map();
   async function orderNumber(numberId) {
     await new Promise((r) => setTimeout(r, ORDER_DELAY_MS));
     orders.set(numberId, (orders.get(numberId) || 0) + 1);
@@ -32,9 +27,6 @@ function seedQueue(numberIds) {
   return queue;
 }
 
-// Race-relevante Kernschleife des Drains (server.runProvisioningDrain): je QUEUED-Job den
-// verzoegerten Kauf ausfuehren. store/save/handleProvisionJob sind hier unerheblich - getestet
-// wird die Serialisierung, nicht die Kauf-State-Machine (die deckt provisioning-worker.test.js).
 function drainOnce(queue, prov) {
   return queue.drain((job) => prov.orderNumber(job.payload.numberId));
 }
@@ -67,7 +59,7 @@ test("Fehler bricht die Kette nicht ab: Folge-Drain laeuft weiter", async () => 
     if (calls === 1) throw new Error("erster Drain scheitert");
   });
 
-  await assert.rejects(runExclusive()); // Aufruf #1 wirft
-  await runExclusive(); // Aufruf #2 laeuft trotzdem
+  await assert.rejects(runExclusive());
+  await runExclusive();
   assert.equal(calls, 2, "zweiter Drain nach Fehler des ersten ausgefuehrt");
 });

@@ -1,6 +1,3 @@
-// PROV-01 (F4): reiner Klassifikator classifyQueuedProvisioningJobs. Triagiert
-// QUEUED-Provisioning-Jobs in close/hold/redrive - IO-frei, kein Spawn, kein pglite
-// (reine Unit, offline, F.I.R.S.T.).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { classifyQueuedProvisioningJobs } from "../src/store/state-ops.js";

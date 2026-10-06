@@ -1,11 +1,3 @@
-// Phase 2 (Phase S re-keyed): Rechteprofile pro Tenant. Beweist, dass ein Profil die
-// globalen Safety-Gates NUR einschraenken, nie aufweichen kann, und dass die Identitaet
-// serverseitig (nicht aus dem Body) und nicht spoofbar ist. Phase S: das Profil keyt auf die
-// tenantId - die Gate-Narrowing-Tests laufen darum unter MULTI_TENANT=true mit geseedeten
-// Tenants (idpSubject, kyc=card, ownerName, Profil unter tenantId) + eigener aktiver Nummer.
-//
-// Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
-// TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403/429 = ein Gate hat gesperrt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -26,17 +18,12 @@ import { makeDefaultState, updateSettings } from "../src/store/state-ops.js";
 import { defaultSettings, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const HTTP_OK = 200;
-// Zielnummer des place_call MIT Mandant im e2e-/mcp-Test - zugleich Positiv-Kontrolle
-// fuer die "to=<nummer>"-Negativpruefung in assertNoTenantPlaceCallStubbed.
 const TENANT_CALL_TO = "+4915123123123";
 const sternImMuster = (text) => text.replace(/\*/g, "\\*");
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY_REQUESTS = 429;
 
-// T2-13 (N-10): Bestaetigungs-Code direkt an der Route holen (derselbe Loopback-Aufrufer
-// wie der MCP-Handler); tenantHeader bindet ihn - wie das echte /mcp-Gateway per
-// X-Internal-Tenant - an den Mandanten, dessen Gate der jeweilige Testfall prueft.
 async function confirmedPlaceCallArgs(localUrl, args, tenantHeader) {
   const res = await fetch(`${localUrl}/api/call-confirmations`, {
     method: "POST",
@@ -46,7 +33,7 @@ async function confirmedPlaceCallArgs(localUrl, args, tenantHeader) {
   const json = await res.json();
   return { ...args, confirmation_code: json.confirmation?.code };
 }
-const HTTP_SERVER_ERROR = 500; // Offline-Diskriminator: alle Gates passiert (kein TELNYX_API_KEY)
+const HTTP_SERVER_ERROR = 500;
 
 const postCall = (url, to, identity) =>
   fetch(`${url}/api/calls`, {
@@ -58,8 +45,6 @@ const postCall = (url, to, identity) =>
     body: JSON.stringify({ to, objective: "Test" }),
   });
 
-// Telefonbarer Nicht-Owner-Tenant: aktiv, CARD-verifiziert, ownerName (passiert KYC- +
-// Identitaets-Gate). idpSubject = der X-Internal-Identity-/sub-Aufloesungs-Schluessel.
 const subTenant = (id, idpSubject, extra = {}) => ({
   id,
   status: "active",
@@ -77,12 +62,6 @@ const activeNum = (id, e164, tenantId) => ({
   providerNumberId: null,
 });
 
-// ---- (b) X-Internal-Identity: nur localhost, extern wird ignoriert (Attribution) ----
-// E4: der Identitaets-Header gilt unbedingt und loest die Tenant-Achse ECHT auf - "evil@x"
-// ist deshalb per OWNER_IDP_SUBJECT an den Bootstrap-Tenant gebunden (Profil=OWNER_PROFILE,
-// Owner ist Boot-Subscriber -> passiert). Diskriminator bleibt die ATTRIBUTION
-// (call.requestedBy): aus dem localhost-Header (evil@x) ODER, wenn ignoriert (Body/extern),
-// fail-closed der Owner ("owner").
 test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", async (ctx) => {
   const callByTo = (srv, to) => srv.readStore().calls.find((call) => call.to === to);
   const TO_HDR = "+4915777777771",
@@ -125,16 +104,6 @@ test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", a
       "extern: kein Tenant -> 403, gar kein Call (kein Spoof)",
       { skip: !srv.externalUrl && "keine externe Interface-IP" },
       async () => {
-        // AUTH-P3: der externe Aufrufer traegt keine Identitaet -> operatorChannelTenant
-        // liefert TENANT_REJECT statt Bootstrap -> das Gate "tenant_reject" greift VOR
-        // resolve_identity's Originate, also vor dem frueheren 500. Das ist keine
-        // Abschwaechung der Spoof-Aussage, sondern deren fruehere Durchsetzung: der
-        // externe X-Internal-Identity-Header gilt weiterhin nicht, UND es entsteht
-        // ueberhaupt kein Call mehr (statt eines Calls mit requestedBy=owner).
-        // AUTH-P5: der 403 kommt seit dieser Phase bereits von internalOnly (vor dem
-        // Handler), nicht mehr vom tenant_reject-Gate im Handler-Rumpf - die Aussage
-        // "kein Spoof, kein Call" bleibt unveraendert wahr, misst nur eine Schicht
-        // frueher.
         const res = await postCall(srv.externalUrl, TO_EXT, "evil@x");
         assert.equal(res.status, HTTP_FORBIDDEN);
         assert.equal(
@@ -149,15 +118,12 @@ test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", a
   }
 });
 
-// ---- (c) Land bleibt harte Obergrenze; unrestricted lockert NUR die Allowlist ----
-// MULTI_TENANT=true -> das Profil (unter der tenantId) wird wirklich konsultiert.
 test("(c) Profil-Land * widened nicht; unrestricted lockert nur die Allowlist", async (ctx) => {
   const srv = await startServer({
     env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" },
     seed: seedState({
       tenants: [subTenant("t_alice", "alice@team.test")],
       numbers: [activeNum("num_alice", "+4915110000011", "t_alice")],
-      // maxCallsPerHour:null (A4): vom DEFAULT(0)-User-Hour-Gate entkoppelt.
       profiles: { t_alice: { unrestricted: true, allowedCountryCodes: ["*"], maxCallsPerHour: null } },
     }),
   });
@@ -180,12 +146,10 @@ test("(c) Profil-Land * widened nicht; unrestricted lockert nur die Allowlist", 
   }
 });
 
-// ---- (d) MAX_CALLS_PER_HOUR bleibt harte Obergrenze (ueber dem Profil-Limit) ----
 test("(d) Config-Limit deckelt ein hoeheres Profil-Limit -> 429", async () => {
   const srv = await startServer({
     env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "1" },
     seed: seedState({
-      // 1 Outbound DIESES Tenants in der letzten Stunde -> min(config=1, profil=100) = 1 erschoepft
       calls: [seedCall({ id: "g1", tenantId: "t_fresh" })],
       tenants: [subTenant("t_fresh", "fresh@team.test")],
       numbers: [activeNum("num_fresh", "+4915110000021", "t_fresh")],
@@ -193,7 +157,6 @@ test("(d) Config-Limit deckelt ein hoeheres Profil-Limit -> 429", async () => {
     }),
   });
   try {
-    // MAX_CALLS_PER_HOUR=1 deckelt das Profil-Limit 100 - ein Profil kann nur senken.
     const res = await postCall(srv.localUrl, "+4915999999999", "fresh@team.test");
     assert.equal(res.status, HTTP_TOO_MANY_REQUESTS);
     assert.match((await res.json()).error, /Hourly limit/);
@@ -213,7 +176,6 @@ test("pro-Nutzer-Stundenlimit: Profil kann nur senken (min global/profil)", asyn
     }),
   });
   try {
-    // bob hat 1 eigenen Call, sein Profil-Limit 1 -> 429, obwohl global (100) nicht erschoepft.
     const res = await postCall(srv.localUrl, "+4915111111111", "bob@team.test");
     assert.equal(res.status, HTTP_TOO_MANY_REQUESTS);
   } finally {
@@ -221,11 +183,6 @@ test("pro-Nutzer-Stundenlimit: Profil kann nur senken (min global/profil)", asyn
   }
 });
 
-// ---- (e) Settings koennen Profile nicht anfassen ----
-// AUTH-P4: die HTTP-Naht (POST /api/settings) ist geloescht - die Whitelist-Zusage
-// (updateSettings kann keinen profiles-Key schreiben) wird jetzt direkt auf der
-// Store-Ebene gemessen (Muster test/f1-geo-store.test.js), damit sie nicht mit der
-// Route mitverschwindet.
 test("(e) updateSettings({profiles}) aendert die Profile nicht", () => {
   const state = makeDefaultState();
   state.settings[BOOTSTRAP_TENANT_ID] = defaultSettings();
@@ -239,12 +196,10 @@ test("(e) updateSettings({profiles}) aendert die Profile nicht", () => {
   assert.deepEqual(state.profiles, { "carol@team.test": { unrestricted: false } });
 });
 
-// ---- PROFILES_JSON: Seed beim Start (persistiert ueber Render-Neustarts). Phase S: Keys = tenantIds ----
 test("PROFILES_JSON seedet Profile beim Start", async (ctx) => {
   const srv = await startServer({
     env: {
       MULTI_TENANT: "true",
-      // maxCallsPerHour:null (A4): sanitizeProfile haelt null; evil faellt raus. Schluessel = tenantId.
       PROFILES_JSON: JSON.stringify({ t_persist: { unrestricted: true, maxCallsPerHour: null, evil: "x" } }),
       ALLOWED_NUMBERS: "",
       ALLOWED_COUNTRY_CODES: "*",
@@ -255,11 +210,6 @@ test("PROFILES_JSON seedet Profile beim Start", async (ctx) => {
     }),
   });
   try {
-    // AUTH-P4: GET /api/profiles ist geloescht - PROFILES_JSON wird NUR in-memory
-    // geseedet (seedProfilesFromEnv() ruft KEIN save()); srv.readStore() liest aber die
-    // DATEI. Reihenfolge deshalb bewusst: erst der place_call (createCall() persistiert
-    // synchron ueber save(), das den GESAMTEN State inkl. profiles schreibt), DANACH aus
-    // der Datei lesen - sonst traeft die Datei noch die urspruengliche, profil-lose Form.
     await ctx.test("geseedetes unrestricted-Profil (unter tenantId) hebt die Allowlist auf -> 500", async () => {
       const res = await postCall(srv.localUrl, "+4915123999999", "persist-sub");
       assert.equal(res.status, HTTP_SERVER_ERROR);
@@ -278,21 +228,12 @@ test("PROFILES_JSON seedet Profile beim Start", async (ctx) => {
 test("PROFILES_JSON kaputt -> Start crasht nicht, Store bleibt leer", async () => {
   const srv = await startServer({ env: { PROFILES_JSON: "{kein json" } });
   try {
-    // AUTH-P4: GET /api/profiles ist geloescht - direkt aus dem Store lesen.
     assert.deepEqual(srv.readStore().profiles, {});
   } finally {
     await srv.stop();
   }
 });
 
-// T2-05 (T-14): geteilte Pruefung fuer die zwei "kein Mandant"-Faelle unten - haelt die
-// umschliessende Testfunktion unter dem Zeilenlimit (G30) UND vermeidet Kopie/Einfuegen
-// derselben vier Assertions. place_call laeuft NIE (Stub ruft nie api()), deshalb darf
-// im Stdout weder "requestedBy=owner" noch ein "place_call"-Audit fuer DIESE Nummer stehen.
-// Positiv-Kontrolle fuer die "to=<nummer>"-Negativpruefung: derselbe Server hat im
-// vorangehenden Teiltest MIT Mandant (TENANT_CALL_TO) einen echten place_call auditiert -
-// die Form "to=<nummer>" MUSS dort im Stdout stehen, sonst saehe die Negativpruefung
-// unten nur deshalb gruen aus, weil das Log diese Form gar nicht schreibt.
 async function assertNoTenantPlaceCallStubbed(srv, token, { to, ownerMsg }) {
   const res = await mcpPost(
     `${srv.localUrl}/mcp`,
@@ -311,7 +252,6 @@ async function assertNoTenantPlaceCallStubbed(srv, token, { to, ownerMsg }) {
   assert.equal(srv.stdout.includes(TENANT_CALL_TO.slice(1)), false);
 }
 
-// ---- 2.3 e2e ueber /mcp mit JWT: Identitaet fliesst bis ins Audit (MULTI_TENANT=true) ----
 test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-bar)", async (ctx) => {
   const idp = await startIdp();
   const srv = await startServer({
@@ -322,8 +262,6 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       MULTI_TENANT: "true",
       ALLOWED_NUMBERS: "",
       ALLOWED_COUNTRY_CODES: "*",
-      // T2-13 (N-10): ohne bestaetigten confirmation_code kaeme place_call nie bis zum
-      // Gate, dessen Audit-Zeile dieser Test prueft.
       CALL_CONFIRMATION_SECRET: "profiles-test-confirmation-secret-mind-32-zeichen",
     },
     seed: seedState({
@@ -332,7 +270,6 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
         activeNum("num_alice", "+4915110000051", "t_alice"),
         activeNum("num_prod", "+4915110000052", "t_prod"),
       ],
-      // maxCallsPerHour:null (A4): provisioniert -> passiert den place_call (Attribution traegt).
       profiles: {
         t_alice: { unrestricted: true, maxCallsPerHour: null },
         t_prod: { unrestricted: true, maxCallsPerHour: null },
@@ -357,7 +294,6 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       );
       assert.equal(srv.stdout.includes("alice@team.test"), false);
       assert.equal(srv.stdout.includes(TENANT_CALL_TO.slice(1)), false);
-      // T-P0-7: das pro-Request-[mcp]-Diagnose-Log zeigt die E-Mail nur gehasht, nie im Klartext.
       await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("alice@team.test")} tenant=t_alice`));
       assert.ok(
         !/\[mcp\] alice@team\.test/.test(srv.stdout),
@@ -365,16 +301,10 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       );
     });
 
-    // Kritische Eigenschaft: ein Token OHNE email/sub darf NIE zum Owner fail-open'en. E4/
-    // T2-05: der /mcp-Torschluss (routes/mcp.js) erkennt eine unbekannte Identitaet JETZT
-    // schon am Gateway (Audit "grund=kein_tenant", VOR jedem echten Tool-Zugriff) - seit
-    // T2-05 registriert er im OAuth-Modus die Stub-Fassade (registerNoTenantStubs) statt
-    // 403 zu senden: place_call laeuft NIE (der Stub ruft nie api()), also entsteht auch
-    // kein "place_call"-Audit mehr. Der Anti-Spoof-Beweis bleibt derselbe (nie Owner).
     await ctx.test(
       "JWT OHNE email-Claim, unbekannter sub -> Tool-Fehler mit Re-Auth-Challenge, NICHT owner",
       async () => {
-        const token = await idp.sign({ sub: "subonly-9" }); // kein email-Claim, kein Tenant
+        const token = await idp.sign({ sub: "subonly-9" });
         await assertNoTenantPlaceCallStubbed(srv, token, {
           to: "+4915123123124",
           ownerMsg: "Token ohne email darf NICHT zum Owner werden",
@@ -385,7 +315,7 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
     await ctx.test(
       "JWT OHNE email UND sub -> ANON, Tool-Fehler mit Re-Auth-Challenge, kein fail-open zum Owner",
       async () => {
-        const token = await idp.sign({}, { noSubject: true }); // weder email noch sub
+        const token = await idp.sign({}, { noSubject: true });
         await assertNoTenantPlaceCallStubbed(srv, token, {
           to: "+4915123123125",
           ownerMsg: "Token ohne Identitaet darf NICHT zum Owner werden",
@@ -393,12 +323,10 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       },
     );
 
-    // Produktions-Szenario: WorkOS-Token traegt nur sub (kein email). Der Tenant, dessen
-    // idpSubject auf diese sub keyt, traegt ein unrestricted-Profil -> Allowlist aufgehoben.
     await ctx.test(
       "Profil per Tenant (Token-sub -> idpSubject) hebt die Allowlist auf -> place_call",
       async () => {
-        const token = await idp.sign({ sub: "user_01PROD" }); // identity = sub, loest t_prod auf
+        const token = await idp.sign({ sub: "user_01PROD" });
         const placeCallArgs = await confirmedPlaceCallArgs(
           srv.localUrl,
           { to: "+4915123123126", objective: "Termin" },

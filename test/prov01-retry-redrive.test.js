@@ -1,7 +1,3 @@
-// PROV-01 (F7): Retry-Lever-Entscheidung resolveProvisionRetry. Junger stuck-requested+
-// queued -> redrive (dieselbe numberId/Job, KEIN Doppelkauf); alt/alters-unbekannt ->
-// needs_manual_reconcile (kein Auto-Kauf); aktiv -> already_provisioned; terminal failed
-// -> frische requested-Nummer. Reine Unit (kein Spawn/pglite), config-frei ueber opts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { resolveProvisionRetry } from "../src/billing/provision-trigger.js";
@@ -18,7 +14,6 @@ const tenant = (o = {}) => ({ id: TENANT, status: TENANT_STATUS.ACTIVE, kycLevel
 const num = (o = {}) => ({ id: "num1", tenantId: TENANT, status: NUMBER_STATUS.REQUESTED, e164: null, provider: "telnyx", providerNumberId: null, ...o });
 const job = (o = {}) => ({ id: "job1", numberId: "num1", tenantId: TENANT, kind: PROVISION_NUMBER_JOB, status: PROVISIONING_JOB_STATUS.QUEUED, idempotencyKey: "provision_num1", attempts: 0, lastError: null, createdAt: new Date(NOW - 60000).toISOString(), ...o });
 const state = ({ numbers = [num()], jobs = [job()], tenants = [tenant()] } = {}) => ({ tenants, numbers, provisioningJobs: jobs });
-// caps hoch, damit der fresh-Pfad nicht am Cap scheitert; nowMs/maxAgeMs config-frei injiziert.
 const opts = (maxAgeMs = HOUR) => ({ tenantId: TENANT, nowMs: NOW, maxAgeMs, fallbackCountry: "DE", forceNumberCountry: "", maxNumbers: 100, maxNumbersPerTenant: 100 });
 
 test("junger stuck-requested+queued -> redrive + numberId + jobId + job (kein fresh request)", () => {
@@ -28,7 +23,7 @@ test("junger stuck-requested+queued -> redrive + numberId + jobId + job (kein fr
   assert.equal(r.reason, "redrive");
   assert.equal(r.numberId, "num1");
   assert.equal(r.jobId, "job1");
-  assert.equal(r.job?.idempotencyKey, "provision_num1"); // fuer redriveProvisioningJobs-Wiring
+  assert.equal(r.job?.idempotencyKey, "provision_num1");
   assert.equal(s.numbers.length, 1, "KEINE neue Nummer angefragt");
 });
 

@@ -1,24 +1,3 @@
-// ---- Routen-Inventar (PLAN-AUTH-GATE P1) -----------------------------------------
-// Der dauerhafte Ersatz fuer die Sammelsicherung. Frueher schuetzte EIN Basic-Auth-Gate
-// alles, was nicht ausdruecklich ausgenommen war - eine neue Route war damit per
-// Default sicher. Seit AUTH-P7 gibt es keine Sammelsicherung mehr: eine neue Route
-// waere ohne diesen Test per Default oeffentlich, und zwar lautlos (200 statt Fehler,
-// kein Log, siehe PLAN-AUTH-GATE Abschnitt 5, S1). Dieser Test stellt den Default
-// wieder her, nur maschinell: er laeuft ueber den Routengraph und verlangt fuer JEDE
-// Route eine bewusste Einordnung in src/route-policy.js.
-//
-// WARUM DER GRAPH MIT pg-BACKEND GEBAUT WIRD (B3): der gesamte Web-Login-Block
-// (/auth/*, /api/self-service/*, /api/admin/*, /api/portal/state, /webhooks/stripe)
-// haengt in src/app.js an `sessionSecret && storeBackend === "pg"`. Die Spawn-Tests
-// fahren STORE_BACKEND=json - in ihnen existieren diese Routen NICHT. Ein Inventar-
-// Test gegen die Default-Testumgebung waere also blind fuer genau die Middleware, auf
-// der P5/P6 ruhen: gruen und wertlos. Deshalb wird hier der PRODUKTIONS-Graph gebaut
-// (pg-Schalter + injizierter createPortalRunner, ohne erreichbare Postgres), und der
-// erste Test beweist ueber eine Positiv-Assertion, dass es wirklich dieser Graph ist.
-//
-// Kein Spawn, kein Netz, keine DB: buildApp wird in-process mit Attrappen aufgerufen.
-// Der Test stellt KEINE Anfragen - er liest nur den Mount-Baum. Deshalb reichen
-// Attrappen, die die Konstruktion ueberstehen.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
@@ -33,20 +12,8 @@ import {
   routeKey,
 } from "../src/route-policy.js";
 
-// src/store.js initialisiert sein Backend zur IMPORTZEIT (src/store/json.js friert
-// config.server.dataDir in einer Modul-Konstante ein). Ohne Override fasste der Import
-// das echte data/store.json an - deshalb Temp-Verzeichnis UND dynamischer Import
-// (statische Importe wuerden vor diesen Zeilen ausgewertet).
 const TEMP_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "route-auth-inventory-"));
 
-// Die Schalter, die den Produktions-Routengraph aufspannen, werden auf dem
-// config-Singleton gesetzt (Muster test/platform-spend-warning.test.js, das dieselbe
-// Wahl fuer dataDir trifft; storeBackend unten in graphFor() setzt ihn fort). Die
-// Reihenfolge bleibt die tragende Eigenschaft und ist nur eine Zeile weiter gerueckt:
-// erst config.js importieren, DANN setzen, DANN app.js - die einfrierenden Module
-// (store/json.js) haengen am app-Import, nicht am config-Import. storeBackend bleibt
-// auch hier aussen vor (der pg-Store wuerde beim Import eine DB suchen) und wird erst
-// pro Graph umgeschaltet - buildApp liest ihn zur Aufrufzeit.
 const { config } = await import("../src/config.js");
 config.server.dataDir = TEMP_DATA_DIR;
 config.auth.sessionSecret = "route-inventory-test-secret";
@@ -59,17 +26,11 @@ const { buildApp } = await import("../src/app.js");
 
 after(() => fs.rmSync(TEMP_DATA_DIR, { recursive: true, force: true }));
 
-// ---- Attrappen ------------------------------------------------------------------
-// Nur so viel, wie die KONSTRUKTION der Route-Factories braucht (mehrere
-// destrukturieren ihre Kollaboratoren sofort). Kein Handler wird je aufgerufen.
 const noop = () => {};
 const asyncNoop = async () => {};
 
 const inventoryDeps = () => ({
   config,
-  // Der DID-Release-Reconciler startet beim Web-Login-Mount sofort einen Lauf
-  // (fire-and-forget). Ein wohlgeformter leerer Zustand laesst ihn geraeuschlos
-  // leerlaufen, statt in den catch-Zweig zu fallen.
   store: { load: () => ({ numbers: [], calls: [], tenants: {} }) },
   audit: noop,
   callFinish: { finishCall: asyncNoop },
@@ -94,17 +55,12 @@ const inventoryDeps = () => ({
   costTruing: {},
   messaging: {},
   consultDelivery: {},
-  // Der einzige infrastruktur-beruehrende Kollaborator des Web-Login-Blocks. Die
-  // Attrappe liefert die echte Runner-Form (withClient) mit leerem Ergebnis.
   createPortalRunner: async () => ({
     withClient: async (fn) => fn({ query: async () => ({ rows: [] }) }),
     _pool: null,
   }),
 });
 
-// buildApp meldet den Boot-Erfolg auf der Konsole ("[boot] Web-Login aktiv"). Im
-// Testlauf ist das nur Rauschen; der Erfolgsfall wird ueber die Positiv-Assertion
-// geprueft, nicht ueber das Log.
 async function withSilencedConsole(fn) {
   const { log, error } = console;
   console.log = noop;
@@ -117,11 +73,6 @@ async function withSilencedConsole(fn) {
   }
 }
 
-// ---- Graph einsammeln -------------------------------------------------------------
-// Express 4: layer.route ist eine Route (Pfad + Methoden + Handler-Kette),
-// layer.handle.stack ein gemounteter Router. Middleware-Schichten ohne Route
-// (express.static, Body-Parser, Rate-Limiter) interessieren hier nicht - sie sind
-// nicht einer Route zugeordnet und darum nicht einzuordnen.
 function collectRoutes(app) {
   const routes = [];
   const walk = (stack) => {
@@ -151,17 +102,12 @@ async function graphFor(storeBackend) {
   }
 }
 
-// Beide Graphen EINMAL vor allen Tests bauen: sie teilen sich das config-Singleton,
-// ein Umschalten waehrend laufender Tests waere von der Ausfuehrungsreihenfolge
-// abhaengig (F.I.R.S.T./I).
 const PROD_GRAPH = await graphFor("pg");
 const LEAN_GRAPH = await graphFor("json");
 
 const keysOf = (graph) => new Set(graph.map((route) => routeKey(route.method, route.path)));
 const PROD_KEYS = keysOf(PROD_GRAPH);
 
-// Diese vier Routen entstehen AUSSCHLIESSLICH im Web-Login-Block. Sie sind der Beweis,
-// dass der gepruefte Graph der Produktions-Graph ist.
 const WEB_LOGIN_PROOF = [
   "GET /api/self-service/state",
   "GET /api/admin/tenants",
@@ -169,25 +115,15 @@ const WEB_LOGIN_PROOF = [
   "POST /webhooks/stripe",
 ];
 
-// Gepinnter Fingerprint: jede Route mehr oder weniger erzwingt eine bewusste
-// Aktualisierung dieser Liste - und damit eine Einordnung in src/route-policy.js.
 const ROUTE_FINGERPRINT = [
   "DELETE /api/self-service/newsletter-recipients",
   "DELETE /mcp",
   "GET /.well-known/oauth-protected-resource",
   "GET /.well-known/oauth-protected-resource/mcp",
-  // E7: Domain-Ownership-Challenge der OpenAI-Einreichung (O-4/O-5). Klasse PUBLIC,
-  // Eintrag in src/route-policy.js. Ohne gesetzten Token antwortet sie 404 - gemountet
-  // ist sie trotzdem immer (bedingte Registrierung waere im Graph unsichtbar).
   "GET /.well-known/openai-apps-challenge",
-  // OpenAI-P10b (I-2b): RFC-9116-Sicherheitskontakt. Klasse PUBLIC, Eintrag in
-  // src/route-policy.js.
   "GET /.well-known/security.txt",
   "GET /account",
   "GET /admin",
-  // OpenAI-P10b: authentifizierter Ersatz fuer die aus /healthz entfernte
-  // configHash-Preisgabe (Preimage-Befund). Klasse AUTH (operatorRoutes), kein Eintrag
-  // in src/route-policy.js.
   "GET /api/admin/deploy-info",
   "GET /api/admin/tenants",
   "GET /api/billing/checkout-return",
@@ -222,17 +158,11 @@ const ROUTE_FINGERPRINT = [
   "POST /api/billing/cost-truing/sweep",
   "POST /api/billing/flush-meters",
   "POST /api/billing/setup-checkout",
-  // T2-13 (N-10): Bestaetigungs-Vorschau vor dem Waehlen (prepare_call/place_call). Klasse
-  // AUTH (internalOnly, wie POST /api/calls) - kein Eintrag in src/route-policy.js.
   "POST /api/call-confirmations",
   "POST /api/calls",
   "POST /api/calls/:id/cancel",
   "POST /api/calls/:id/consult/answer",
-  // Cookie-Einwilligungs-Protokoll (Nachweis Art. 7 Abs. 1 DSGVO) - Klasse PUBLIC,
-  // Eintrag in src/route-policy.js, nur im pg-Block gemountet (src/wiring/web-login.js).
   "POST /api/cookie-consent",
-  // INBOX-P2: der Konsum-Endpunkt der Anruf-Inbox. Klasse AUTH (internalOnly), deshalb
-  // KEIN Eintrag in src/route-policy.js - nur hier und in scripts/probe-auth.sh.
   "POST /api/inbox/poll",
   "POST /api/onboard",
   "POST /api/onboard/retry",
@@ -246,8 +176,6 @@ const ROUTE_FINGERPRINT = [
   "POST /api/self-service/settings",
   "POST /auth/logout",
   "POST /mcp",
-  // IEL-B8: Rueckfall-Route und SIP-Bein-Callback des EL-Inbound-Wegs - unter der /voice-Signatur-MW,
-  // Eintrag in src/route-policy.js mit VOICE_SIGNATURE_REASON.
   "POST /voice/el-bein",
   "POST /voice/el-rueckfall",
   "POST /voice/incoming",
@@ -255,16 +183,10 @@ const ROUTE_FINGERPRINT = [
   "POST /voice/status",
   "POST /voice/turn",
   "POST /webhooks/elevenlabs/consult",
-  // IEL-B6: der Conversation-Initiation-Webhook des Inbound-Wegs - handler-interne Auth
-  // (Init-Token + Bindungs-Token), Eintrag in src/route-policy.js.
   "POST /webhooks/elevenlabs/init",
-  // Thema B (2026-08-19): der Recherche-Webhook (look_up) - Bauart und Absicherung
-  // wortgleich zum Consult-Webhook, Eintrag in src/route-policy.js.
   "POST /webhooks/elevenlabs/lookup",
   "POST /webhooks/stripe",
 ];
-
-// ---- Tests ------------------------------------------------------------------------
 
 test("Routen-Inventar: der gepruefte Graph ist der Produktions-Graph (Web-Login-Block gemountet)", () => {
   for (const key of WEB_LOGIN_PROOF) {
@@ -350,13 +272,6 @@ test("Routen-Inventar: ohne pg-Backend fehlt der Web-Login-Block (der Graph-Scha
   }
 });
 
-// ---- AUTH-P6: die Betreiber-Routen tragen BEIDE Middlewares -----------------------
-// classifyRoute() wertet AUTH schon dann, wenn IRGENDEINE Auth-Middleware in der Kette
-// steht (Plan Abschnitt 5, "Ehrliche Luecke") - webAuthGateMiddleware ALLEIN waere fuer
-// diese Routen zu wenig (jeder eingeloggte, aber nicht-admin Kunde saehe sie).
-// Die Paar-Assertion unten schliesst genau diese Luecke fuer diese Routen. (OpenAI-P10b:
-// GET /api/admin/deploy-info kam als achte Route dazu - die feste Zahl "sieben" aus dem
-// AUTH-P6-Namen war ab da sachlich falsch und ist hier bewusst entfernt.)
 const OPERATOR_ROUTE_KEYS = [
   "POST /api/billing/flush-meters",
   "POST /api/billing/cost-truing/sweep",
