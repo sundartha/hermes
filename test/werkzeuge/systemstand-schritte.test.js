@@ -62,7 +62,7 @@ const WORKFLOW_FILES = [
   "wiederherstellung.yml",
   "aufraeumen.yml",
   "auswertung.yml",
-  "anweisungstexte.yml",
+  "statische-pruefung.yml",
 ];
 const CRITERIA = {
   "1b": ["pakete-geschlossen", "staging", "katalog-ohne-test", "rotproben", "geheimnis-liste"],

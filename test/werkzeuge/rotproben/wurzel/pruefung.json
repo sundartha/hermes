@@ -1,0 +1,35 @@
+{
+  "titel": "Wurzelordner (nur README.md und CLAUDE.md als Markdown, kein tasks/)",
+  "pfade": [
+    "tools/basis/wurzel.json",
+    "tools/basis-vergleich.mjs",
+    "tools/anweisungen-befunde.mjs"
+  ],
+  "treffer": {
+    "befehl": [
+      "node",
+      "{wurzel}/tools/basis-vergleich.mjs",
+      "wurzel"
+    ],
+    "zaehlen": "zahlen",
+    "vor": [
+      " neue Befunde",
+      " bekannte"
+    ]
+  },
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene Einträge im Wurzelordner",
+    "datei": "tools/basis/wurzel.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "mitnehmen": [
+      "tools/basis/wurzel.json"
+    ],
+    "befehl": [
+      "node",
+      "{wurzel}/tools/basis-vergleich.mjs",
+      "wurzel"
+    ]
+  }
+}

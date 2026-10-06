@@ -423,8 +423,8 @@ for (const [name, changes] of [
 
 const BASISLINIEN_PAKET_31 = ["tools/basis/quelltext-als-text.json", "tools/basis/lessons.json"];
 
-test("(a) aus den zwei Basislinien von Paket 31 nur streichen ist strenger, ein neuer Eintrag braucht eine Freigabe", async (context) => {
-  for (const basislinie of BASISLINIEN_PAKET_31) {
+async function nurStreichenIstStrenger(context, basislinien) {
+  for (const basislinie of basislinien) {
     const basisFiles = { ...STRICTER_BASIS, [basislinie]: findings("a", "b") };
     const gekuerzt = await check(context, { basisFiles, changes: { [basislinie]: ONE_FINDING } });
     assert.equal(gekuerzt.status, EXIT_OK, `${basislinie}: ${gekuerzt.stdout}${gekuerzt.stderr}`);
@@ -436,4 +436,14 @@ test("(a) aus den zwei Basislinien von Paket 31 nur streichen ist strenger, ein 
     assert.equal(gewachsen.status, EXIT_FAILURE, `${basislinie}: ${gewachsen.stdout}`);
     assert.doesNotMatch(gewachsen.stdout, /art:strenger/, basislinie);
   }
+}
+
+test("(a) aus den zwei Basislinien von Paket 31 nur streichen ist strenger, ein neuer Eintrag braucht eine Freigabe", async (context) => {
+  await nurStreichenIstStrenger(context, BASISLINIEN_PAKET_31);
+});
+
+const BASISLINIEN_PAKET_35 = ["tools/basis/anweisungen.json", "tools/basis/wurzel.json"];
+
+test("(a) aus den Basislinien von Paket 35 nur streichen ist strenger, ein neuer Eintrag braucht eine Freigabe", async (context) => {
+  await nurStreichenIstStrenger(context, BASISLINIEN_PAKET_35);
 });

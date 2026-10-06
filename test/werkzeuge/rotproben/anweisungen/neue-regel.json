@@ -1,0 +1,9 @@
+{
+  "titel": "Neue Regeldatei unter .claude/rules/",
+  "dateien": {
+    ".claude/rules/neu.md": [
+      "Vor jedem Commit erst den Test laufen lassen."
+    ]
+  },
+  "erwartet": "neue Befunde von anweisungen"
+}
