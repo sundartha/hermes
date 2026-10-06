@@ -202,17 +202,17 @@ function parameterWerte(lauf, def, umgebung) {
   return [...vorgabe, ...aufrufArgumente(lauf, funktion, index)];
 }
 
-const DEFINITIONEN = {
+const DEFINITIONEN = new Map(Object.entries({
   Variable: variablenWerte,
   ImportBinding: (lauf, def) => importWerte(def),
   Parameter: parameterWerte,
-};
+}));
 
 function bezeichner(lauf, node, umgebung) {
   const variable = variableVon(lauf, node);
   if (variable === undefined || variable.defs.length === 0) return globalerName(lauf, node.name);
   if (umgebung.has(variable)) return umgebung.get(variable);
-  return variable.defs.flatMap((def) => DEFINITIONEN[def.type]?.(lauf, def, umgebung) ?? []);
+  return variable.defs.flatMap((def) => DEFINITIONEN.get(def.type)?.(lauf, def, umgebung) ?? []);
 }
 
 function istImportMeta(node) {
@@ -264,11 +264,11 @@ function aufgeloest(teile) {
   return ergebnisse;
 }
 
-const PFAD_AUFRUFE = {
+const PFAD_AUFRUFE = new Map(Object.entries({
   join: (teile) => verbunden(teile).map(alsText),
   resolve: (teile) => aufgeloest(teile).map(alsText),
   dirname: ([teil = []]) => teil.map((stueck) => alsText(posix.dirname(stueck))),
-};
+}));
 
 function importiertePfadFunktion(lauf, callee) {
   const quelle = herkunft(lauf, callee);
@@ -300,7 +300,7 @@ function pfadAufruf(lauf, { node, name }, umgebung) {
       .map(({ inhalt }) => alsText(inhalt));
   }
   const teile = node.arguments.map((argument) => texte(lauf, argument, umgebung));
-  return PFAD_AUFRUFE[name](teile);
+  return PFAD_AUFRUFE.get(name)(teile);
 }
 
 function rueckgabeAusdruecke(lauf, funktion) {
@@ -435,7 +435,7 @@ function listenLiteral(lauf, node, umgebung) {
   return [alsListe(elemente)];
 }
 
-const AUSWERTER = {
+const AUSWERTER = new Map(Object.entries({
   Literal: (lauf, node) => (typeof node.value === "string" ? [alsText(node.value)] : []),
   TemplateLiteral: vorlage,
   BinaryExpression: summe,
@@ -454,10 +454,10 @@ const AUSWERTER = {
     ...werte(lauf, node.right, umgebung),
   ],
   ChainExpression: (lauf, node, umgebung) => werte(lauf, node.expression, umgebung),
-};
+}));
 
 function werte(lauf, node, umgebung) {
-  const auswerter = AUSWERTER[node?.type];
+  const auswerter = AUSWERTER.get(node?.type);
   if (auswerter === undefined || lauf.aktiv.has(node) || lauf.aktiv.size > MAX_TIEFE) return [];
   lauf.aktiv.add(node);
   try {

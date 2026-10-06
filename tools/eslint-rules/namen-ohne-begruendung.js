@@ -64,7 +64,7 @@ function importName(node) {
   return umbenannt ? musterNamen(node.local) : [];
 }
 
-const BINDUNGEN = {
+const BINDUNGEN = new Map(Object.entries({
   VariableDeclarator: (node) => musterNamen(node.id),
   FunctionDeclaration: funktionsNamen,
   FunctionExpression: funktionsNamen,
@@ -78,13 +78,13 @@ const BINDUNGEN = {
   ImportSpecifier: importName,
   ImportDefaultSpecifier: importName,
   ImportNamespaceSpecifier: importName,
-};
+}));
 
 export function gebundeneNamen(node) {
-  return BINDUNGEN[node.type]?.(node) ?? [];
+  return BINDUNGEN.get(node.type)?.(node) ?? [];
 }
 
-export const GEBUNDENE_KNOTEN = Object.keys(BINDUNGEN);
+export const GEBUNDENE_KNOTEN = [...BINDUNGEN.keys()];
 
 export default {
   meta: {

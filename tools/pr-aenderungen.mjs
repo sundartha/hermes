@@ -11,6 +11,7 @@ const STANDARD_HUNK_LAENGE = 1;
 const FELDER_JE_DATEI = 2;
 const MAX_GIT_AUSGABE = 268_435_456;
 const EXIT_ABBRUCH = 2;
+const OBJEKTART_COMMIT = "commit";
 const JS_ENDUNGEN = new Set([".js", ".mjs", ".cjs"]);
 
 export const STATUS_NEU = "A";
@@ -34,12 +35,18 @@ export function basisAusAufruf(aufruf, root) {
   if (basis === undefined || basis.trim() === "") {
     throw new Abbruch(`--basis fehlt oder ist leer. ${aufruf}`);
   }
-  try {
-    git(["rev-parse", "--verify", "--quiet", `${basis}^{commit}`], root);
-  } catch {
+  if (!istCommit(basis, root)) {
     throw new Abbruch(`Die Basis ${basis} ist kein Commit in diesem Checkout. ${aufruf}`);
   }
   return basis;
+}
+
+function istCommit(objekt, root) {
+  try {
+    return git(["cat-file", "-t", objekt], root).trim() === OBJEKTART_COMMIT;
+  } catch {
+    return false;
+  }
 }
 
 export function geaenderteDateien(basis, root, { filter, muster = [] }) {
