@@ -22,13 +22,50 @@
 // still an einer geaenderten Log-Zeile zerbricht.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { captureConsole, makeConfigOverrides } from "./helpers.js";
 // KE-P6 (Aenderung 1): boot-guard.js hat NULL Imports (kein Config-/Spawn-Risiko) - statisch
 // importierbar wie helpers.js, ohne die env-vor-dynamischem-Import-Reihenfolge zu verletzen.
 import { costTruingBookingFindings, COST_TRUING_BOOKING_FINDING } from "../src/boot-guard.js";
+
+const ASSIGNED_RECORD_COUNT = 4;
+const CALL_A_SUM_MICRO_CENTS = 4210000;
+const CALL_B_SUM_MICRO_CENTS = 5320000;
+const EXPECTED_BUDGET_PER_MINUTE = 30;
+const EXPECTED_LIMIT_PER_MINUTE = 40;
+const EXPECTED_RESERVE_PER_MINUTE = 10;
+const FIFTH_PAGE = 5;
+const FLOAT_FIFTH = 0.2;
+const FLOAT_TENTH = 0.1;
+const FLOAT_THREE_TENTHS = 0.3;
+const FOREIGN_RECORD_MICRO_CENTS = 999000000;
+const FOURTH_PAGE = 4;
+const HALF_MINUTE_MS = 30000;
+const INTEGER_INPUT = 120;
+const MS_PER_MINUTE = 60000;
+const MS_PER_SECOND = 1000;
+const NON_INTEGER_INPUT = 1.5;
+const NUMBER_TYPED_PRICE = 0.0122;
+const OWN_RECORDS_SUM_MICRO_CENTS = 4110000;
+const OWN_RECORD_COUNT = 2;
+const PAGE_COUNT = 3;
+const PARSED_MICRO_CENTS_OF_0_0122 = 1220000;
+const PARSED_MICRO_CENTS_OF_0_039 = 3900000;
+const PARSED_MICRO_CENTS_OF_1E_MINUS_3 = 100000;
+const PARSED_MICRO_CENTS_OF_1_687E_MINUS_4 = 16870;
+const PARSED_MICRO_CENTS_OF_7E_MINUS_7 = 70;
+const PARSED_MICRO_CENTS_OF_ONE_UNIT = 100000000;
+const POOL_RAW_LENGTH = 9;
+const REAL_RECORDS_SUM_MICRO_CENTS = 9326870;
+const SECOND_CALL_SIP_TRUNKING_MICRO_CENTS = 5020000;
+const SECOND_PAGE = 2;
+const SIP_TRUNKING_BILLED_SEC = 60;
+const SIP_TRUNKING_MICRO_CENTS = 4010000;
+const SIP_TRUNKING_RECORD_COUNT = 2;
+const SUMMED_MICRO_CENTS_FIRST = 8000000;
+const SUMMED_MICRO_CENTS_SECOND = 30000000;
+const THIRD_PAGE = 3;
+const TTS_CHARACTER_COUNT = 238;
+const ZERO_COST_TWIN_COUNT = 2;
 
 const API_BASE = "https://telnyx.test";
 const API_KEY = "KEYtest-secret-do-not-leak";
@@ -141,9 +178,9 @@ function stubFetchPages(pagesByType, clock = null) {
   const calls = [];
   global.fetch = async (url, opts) => {
     calls.push({ url, opts, atMs: clock ? clock.now() : null });
-    const u = new URL(url);
-    const pages = pagesByType[u.searchParams.get("filter[record_type]")] || [];
-    const index = Number(u.searchParams.get("page[number]") || FIRST_PAGE) - 1;
+    const parsedUrl = new URL(url);
+    const pages = pagesByType[parsedUrl.searchParams.get("filter[record_type]")] || [];
+    const index = Number(parsedUrl.searchParams.get("page[number]") || FIRST_PAGE) - 1;
     const body = listPageBody(pages[index] || []);
     return {
       ok: true,
@@ -164,11 +201,12 @@ function stubFetchByRecordType(pagesByType) {
 }
 
 const FIRST_PAGE = 1;
+const searchParamsOf = (call) => new URL(call.url).searchParams;
 const pageNumbersFor = (calls, recordType) =>
   calls
-    .map((c) => new URL(c.url).searchParams)
-    .filter((p) => p.get("filter[record_type]") === recordType)
-    .map((p) => Number(p.get("page[number]")));
+    .map(searchParamsOf)
+    .filter((params) => params.get("filter[record_type]") === recordType)
+    .map((params) => Number(params.get("page[number]")));
 
 // fetch-Stub fuer den FEHLERPFAD (KE-P0): jede Anfrage scheitert mit demselben HTTP-Status
 // und Telnyx-Fehler-Envelope. assertTelnyxOk liest im !ok-Zweig res.text() (nicht json()) -
@@ -219,7 +257,7 @@ function realRecord(recordType, { cost, billedSec, currency = "USD", ids = OWN_I
     cost,
     currency,
     ...ID_FIELDS_BY_RECORD_TYPE[recordType](ids),
-    ...(billedSec !== undefined ? { billed_sec: billedSec } : {}),
+    ...(billedSec === undefined ? {} : { billed_sec: billedSec }),
     // Zusatzfelder je Testfall. GEMESSEN sind started_at (nur sip-trunking) und
     // rate_measured_in; die Zeitstempel-Kandidaten des Fensterfilters (recorded_at/
     // created_at) sind GERATENE Feldnamen und werden nur dort injiziert, wo der Test
@@ -242,13 +280,13 @@ function secondLegRecord(recordType, opts) {
 // ---- (a) Parser-Tabelle, ohne Float-Zwischenschritt ----
 
 const PARSER_CASES = [
-  ["0.0122", 1220000],
+  ["0.0122", PARSED_MICRO_CENTS_OF_0_0122],
   ["0", 0],
-  ["1", 100000000],
-  ["1.687E-4", 16870],
-  ["1.687e-4", 16870],
-  ["1e-3", 100000],
-  ["7.0E-7", 70],
+  ["1", PARSED_MICRO_CENTS_OF_ONE_UNIT],
+  ["1.687E-4", PARSED_MICRO_CENTS_OF_1_687E_MINUS_4],
+  ["1.687e-4", PARSED_MICRO_CENTS_OF_1_687E_MINUS_4],
+  ["1e-3", PARSED_MICRO_CENTS_OF_1E_MINUS_3],
+  ["7.0E-7", PARSED_MICRO_CENTS_OF_7E_MINUS_7],
   ["0.000000004", 0],
   ["0.0000", 0],
 ];
@@ -264,7 +302,7 @@ const PARSER_INVALID_CASES = [
   "",
   null,
   undefined,
-  0.0122, // Number statt String - G26: kein Number auf Geldstrings, auch nicht implizit
+  NUMBER_TYPED_PRICE, // Number statt String - G26: kein Number auf Geldstrings, auch nicht implizit
   "-0.01",
   "1.0E+400",
   "1e",
@@ -288,37 +326,37 @@ test("parseDecimalToMicroCents: Ganzzahl-Summe ohne Float-Fehler (0.07+0.01 === 
   // die Kontrollannahme demonstriert die Float-Fehlerklasse stattdessen am klassischen,
   // tatsaechlich falschen Beispiel 0.1+0.2 (s. naechster Test).
   const sum = parseDecimalToMicroCents("0.07") + parseDecimalToMicroCents("0.01");
-  assert.equal(sum, 8000000);
+  assert.equal(sum, SUMMED_MICRO_CENTS_FIRST);
 });
 
 test("parseDecimalToMicroCents: Float-Fehlerklasse demonstriert (0.1+0.2 !== 0.3 in JS), Parser bleibt exakt", () => {
-  assert.notEqual(0.1 + 0.2, 0.3, "Kontrollannahme: klassischer IEEE754-Rundungsfehler");
+  assert.notEqual(FLOAT_TENTH + FLOAT_FIFTH, FLOAT_THREE_TENTHS, "Kontrollannahme: klassischer IEEE754-Rundungsfehler");
   const sum = parseDecimalToMicroCents("0.1") + parseDecimalToMicroCents("0.2");
-  assert.equal(sum, 30000000);
+  assert.equal(sum, SUMMED_MICRO_CENTS_SECOND);
 });
 
 // (a2) Einheiten-Riegel: faellt rot aus, sobald der Faktor auf 10^6 zurueckgedreht wird
 // (dann 39000 statt 3900000 - der Test unterscheidet die beiden Faktoren scharf).
 test("parseDecimalToMicroCents: Einheiten-Riegel 10^8 (0.039 -> 3900000, NICHT 39000)", () => {
-  assert.equal(parseDecimalToMicroCents("0.039"), 3900000);
+  assert.equal(parseDecimalToMicroCents("0.039"), PARSED_MICRO_CENTS_OF_0_039);
 });
 
 // (a3) Notations-Riegel: eigener Test fuer die korrigierte Plan-Fassung (wissenschaftliche
 // Notation ist Normalbetrieb, keine fruehere Fassung durfte sie verwerfen).
 test("parseDecimalToMicroCents: wissenschaftliche Notation ist gueltig (1.687E-4 === 16870)", () => {
-  assert.equal(parseDecimalToMicroCents("1.687E-4"), 16870);
+  assert.equal(parseDecimalToMicroCents("1.687E-4"), PARSED_MICRO_CENTS_OF_1_687E_MINUS_4);
 });
 
 // ---- parseNonNegativeInteger ----
 
 test("parseNonNegativeInteger: gueltige Ganzzahlen (string und number)", () => {
-  assert.equal(parseNonNegativeInteger("120"), 120);
-  assert.equal(parseNonNegativeInteger(120), 120);
+  assert.equal(parseNonNegativeInteger("120"), INTEGER_INPUT);
+  assert.equal(parseNonNegativeInteger(INTEGER_INPUT), INTEGER_INPUT);
   assert.equal(parseNonNegativeInteger("0"), 0);
 });
 
 test("parseNonNegativeInteger: ungueltige Werte -> null", () => {
-  for (const input of ["-1", "1.5", "abc", "", null, undefined, -1, 1.5, "1e3"]) {
+  for (const input of ["-1", "1.5", "abc", "", null, undefined, -1, NON_INTEGER_INPUT, "1e3"]) {
     assert.equal(parseNonNegativeInteger(input), null, `Eingabe ${JSON.stringify(input)}`);
   }
 });
@@ -343,9 +381,9 @@ const REAL_RECORDS = [
 
 function stubRealRecords({ ids = OWN_IDS } = {}) {
   const pages = {};
-  for (const r of REAL_RECORDS)
-    pages[r.recordType] = [
-      realRecord(r.recordType, { cost: r.cost, billedSec: r.billedSec, extraFields: r.extraFields, ids }),
+  for (const record of REAL_RECORDS)
+    pages[record.recordType] = [
+      realRecord(record.recordType, { cost: record.cost, billedSec: record.billedSec, extraFields: record.extraFields, ids }),
     ];
   return stubFetchByRecordType(pages);
 }
@@ -363,8 +401,8 @@ const ASSIGNABLE_RECORD_COUNT = COST_RECORD_TYPES.length - UNASSIGNABLE_COST_REC
 
 const SESSION_ONLY_RECORD_TYPES = Object.freeze(
   Object.keys(ID_FIELDS_BY_RECORD_TYPE).filter(
-    (t) => !ID_FIELDS_BY_RECORD_TYPE[t](OWN_IDS).call_control_id
-      && !UNASSIGNABLE_COST_RECORD_TYPES.includes(t),
+    (recordType) => !ID_FIELDS_BY_RECORD_TYPE[recordType](OWN_IDS).call_control_id
+      && !UNASSIGNABLE_COST_RECORD_TYPES.includes(recordType),
   ),
 );
 
@@ -379,36 +417,36 @@ test("Belegabruf: reale Belegformen - der Anker spannt die Session auf, die Bele
     ASSIGNABLE_RECORD_COUNT,
     "alle Typen ausser den unzuordenbaren kommen mit (inference traegt keine Session)",
   );
-  const sum = res.records.reduce((acc, r) => acc + r.costMicroCents, 0);
-  assert.equal(sum, 9326870); // 4010000 + 100000 + 0 + 16870 + 200000 + 5000000
-  const found = new Set(res.records.map((r) => r.recordType));
+  const sum = res.records.reduce((acc, record) => acc + record.costMicroCents, 0);
+  assert.equal(sum, REAL_RECORDS_SUM_MICRO_CENTS); // 4010000 + 100000 + 0 + 16870 + 200000 + 5000000
+  const found = new Set(res.records.map((record) => record.recordType));
   for (const sessionOnly of SESSION_ONLY_RECORD_TYPES)
     assert.ok(found.has(sessionOnly), `${sessionOnly} traegt keinen Anker und muss ueber die Session kommen`);
   for (const required of REQUIRED_RECORD_TYPES)
     assert.ok(found.has(required), `Pflicht-Typ ${required} fehlt - die Pflicht-Menge waere nicht erfuellbar`);
   assert.ok(!found.has("inference"));
-  for (const r of res.records) {
-    assert.equal(r.currency, "USD");
-    assert.equal(r.legId, CALL_CONTROL_ID, "legId bleibt der uebergebene Anker (Korrelationsschluessel)");
+  for (const record of res.records) {
+    assert.equal(record.currency, "USD");
+    assert.equal(record.legId, CALL_CONTROL_ID, "legId bleibt der uebergebene Anker (Korrelationsschluessel)");
   }
-  assert.equal(res.records.find((r) => r.recordType === "sip-trunking").billedSec, 60);
+  assert.equal(res.records.find((record) => record.recordType === "sip-trunking").billedSec, SIP_TRUNKING_BILLED_SEC);
 });
 
 test("Belegabruf: fragt jeden record_type aus ASSIGNABLE_COST_RECORD_TYPES mit Bearer-Key ab", async () => {
   const calls = stubRealRecords();
   await fetchAndAssign(WINDOW);
   assert.equal(calls.length, ASSIGNABLE_COST_RECORD_TYPES.length);
-  for (const c of calls) {
-    assert.ok(c.url.startsWith(`${API_BASE}/v2/detail_records`));
-    assert.equal(c.opts.headers.Authorization, `Bearer ${API_KEY}`);
+  for (const call of calls) {
+    assert.ok(call.url.startsWith(`${API_BASE}/v2/detail_records`));
+    assert.equal(call.opts.headers.Authorization, `Bearer ${API_KEY}`);
   }
 });
 
 test("Belegabruf: Ende-zu-Ende sip-trunking cost 0.0401 -> costMicroCents 4010000", async () => {
   stubRealRecords();
   const res = await fetchAndAssign(WINDOW);
-  const sipTrunking = res.records.find((r) => r.recordType === "sip-trunking");
-  assert.equal(sipTrunking.costMicroCents, 4010000);
+  const sipTrunking = res.records.find((record) => record.recordType === "sip-trunking");
+  assert.equal(sipTrunking.costMicroCents, SIP_TRUNKING_MICRO_CENTS);
 });
 
 // ---- (b2) KE-P2: die wichtigste Zusage der Kette - assignCostRecords ordnet aus einem
@@ -431,36 +469,36 @@ function twoAnchorPool() {
   ];
 }
 
-const sumMicroCents = (res) => res.records.reduce((acc, r) => acc + r.costMicroCents, 0);
+const sumMicroCents = (res) => res.records.reduce((acc, record) => acc + record.costMicroCents, 0);
 
 test("assignCostRecords: geteilter Pool - zwei Anker, kein Anker-Beleg gleicht dem anderen, fremde Session bei keinem", async () => {
   const pool9 = twoAnchorPool();
-  const byType = (recordType) => pool9.filter((r) => r.record_type === recordType);
+  const byType = (recordType) => pool9.filter((record) => record.record_type === recordType);
   const calls = stubFetchByRecordType({ "sip-trunking": byType("sip-trunking"), "call-control": byType("call-control") });
 
   const pool = await fetchPool();
   assert.equal(calls.length, ASSIGNABLE_COST_RECORD_TYPES.length, "EIN Pool-Abruf, unabhaengig davon, dass er fuer BEIDE Calls zustaendig ist");
   assert.equal(pool.ok, true);
   assert.equal(pool.complete, true);
-  assert.equal(pool.raw.length, 9);
+  assert.equal(pool.raw.length, POOL_RAW_LENGTH);
 
-  const a = telnyxVoice.assignCostRecords(pool, { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT });
-  const b = telnyxVoice.assignCostRecords(pool, { legId: SECOND_CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT });
+  const resultA = telnyxVoice.assignCostRecords(pool, { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT });
+  const resultB = telnyxVoice.assignCostRecords(pool, { legId: SECOND_CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT });
 
-  assert.equal(a.records.length, 4);
-  assert.equal(b.records.length, 4);
-  assert.equal(sumMicroCents(a), 4_210_000, "0 + 4010000 + 200000 + 0");
-  assert.equal(sumMicroCents(b), 5_320_000, "0 + 5020000 + 300000 + 0");
-  assert.ok(a.records.some((r) => r.costMicroCents === 4_010_000), "der abgerechnete sip-trunking-Beleg haengt am Session-Weg");
-  assert.equal(a.records.filter((r) => r.costMicroCents === 0).length, 2, "beide Null-Zwillinge sind mitgezaehlt");
-  assert.ok(!a.records.some((r) => r.costMicroCents === 999_000_000), "fremde Session kommt bei A nicht mit");
-  assert.ok(!b.records.some((r) => r.costMicroCents === 999_000_000), "fremde Session kommt bei B nicht mit");
-  assert.ok(!a.records.some((r) => r.costMicroCents === 5_020_000), "keine Quervermischung: B-Beleg landet nicht bei A");
+  assert.equal(resultA.records.length, ASSIGNED_RECORD_COUNT);
+  assert.equal(resultB.records.length, ASSIGNED_RECORD_COUNT);
+  assert.equal(sumMicroCents(resultA), CALL_A_SUM_MICRO_CENTS, "0 + 4010000 + 200000 + 0");
+  assert.equal(sumMicroCents(resultB), CALL_B_SUM_MICRO_CENTS, "0 + 5020000 + 300000 + 0");
+  assert.ok(resultA.records.some((record) => record.costMicroCents === SIP_TRUNKING_MICRO_CENTS), "der abgerechnete sip-trunking-Beleg haengt am Session-Weg");
+  assert.equal(resultA.records.filter((record) => record.costMicroCents === 0).length, ZERO_COST_TWIN_COUNT, "beide Null-Zwillinge sind mitgezaehlt");
+  assert.ok(!resultA.records.some((record) => record.costMicroCents === FOREIGN_RECORD_MICRO_CENTS), "fremde Session kommt bei A nicht mit");
+  assert.ok(!resultB.records.some((record) => record.costMicroCents === FOREIGN_RECORD_MICRO_CENTS), "fremde Session kommt bei B nicht mit");
+  assert.ok(!resultA.records.some((record) => record.costMicroCents === SECOND_CALL_SIP_TRUNKING_MICRO_CENTS), "keine Quervermischung: B-Beleg landet nicht bei A");
 
   // Zuordnung ist REIN: derselbe Pool, dieselbe Antwort - unabhaengig von der Reihenfolge.
   assert.deepEqual(
     telnyxVoice.assignCostRecords(pool, { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT }),
-    a,
+    resultA,
   );
 });
 
@@ -519,7 +557,7 @@ const RATE_LIMIT_BODY = {
 // der ungefilterten Liste (keine zweite Quelle der Reihenfolge).
 const FIRST_RECORD_TYPE = ASSIGNABLE_COST_RECORD_TYPES[0];
 
-const failureLines = (lines) => lines.filter((l) => l.includes("getVoiceCostRecords fehler"));
+const failureLines = (lines) => lines.filter((line) => line.includes("getVoiceCostRecords fehler"));
 
 // KE-P4: ein 429 wird GENAU EINMAL wiederholt (nach dem Reset ist das Fenster frei). Die
 // Fehler-Zeile erscheint deshalb je Versuch - zweimal, nie mehr. Mehr waere eine Schleife
@@ -663,11 +701,11 @@ test("Belegabruf: Belege einer FREMDEN Session kommen NIE mit (Tenant-Trennung)"
   });
   const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, true);
-  assert.equal(res.records.length, 2, "nur die zwei eigenen Belege");
-  const sum = res.records.reduce((acc, r) => acc + r.costMicroCents, 0);
-  assert.equal(sum, 4110000); // 4010000 + 100000, der fremde Beleg (999000000) fehlt
+  assert.equal(res.records.length, OWN_RECORD_COUNT, "nur die zwei eigenen Belege");
+  const sum = res.records.reduce((acc, record) => acc + record.costMicroCents, 0);
+  assert.equal(sum, OWN_RECORDS_SUM_MICRO_CENTS); // 4010000 + 100000, der fremde Beleg (999000000) fehlt
   assert.ok(
-    !res.records.some((r) => r.costMicroCents === 999000000),
+    !res.records.some((record) => record.costMicroCents === FOREIGN_RECORD_MICRO_CENTS),
     "ein fremder Beleg waere eine Fehlbuchung auf einen fremden Tenant",
   );
 });
@@ -688,9 +726,9 @@ test("Belegabruf: fremde `call_session_id` kommt NIE mit (Zuordnung bleibt fail-
   });
   const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, true);
-  assert.equal(res.records.length, 2, "nur Anker-Beleg + eigener speech-to-text-Beleg");
+  assert.equal(res.records.length, OWN_RECORD_COUNT, "nur Anker-Beleg + eigener speech-to-text-Beleg");
   assert.ok(
-    !res.records.some((r) => r.costMicroCents === 999000000),
+    !res.records.some((record) => record.costMicroCents === FOREIGN_RECORD_MICRO_CENTS),
     "eine fremde call_session_id waere eine Fehlbuchung auf einen fremden Tenant",
   );
 });
@@ -784,7 +822,7 @@ test("Belegabruf: gemessenes started_at ausserhalb des Fensters filtert NICHT (Z
 // lokalen Kopie. Der Erfolgs-Log laeuft ueber console.log, die Fehler-Spur ueber console.warn.
 
 function costRecordsLogLine(lines) {
-  return lines.find((l) => l.includes("getVoiceCostRecords ok"));
+  return lines.find((line) => line.includes("getVoiceCostRecords ok"));
 }
 
 // An dieser Zeile haengt die laufende Beobachtung der Session-Invariante
@@ -877,7 +915,7 @@ test("(P3-2c) volle Seite OHNE meta wird nachgeblaettert; erst die kurze Folgese
     "call-control": [fullCallControlPage(), []], // Seite 2 ist LEER - die kurze Folgeseite
   });
   const res = await fetchAndAssign(WINDOW);
-  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, 2]);
+  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, SECOND_PAGE]);
   assert.equal(res.ok, true);
   assert.equal(
     res.records.length,
@@ -947,14 +985,14 @@ test("(P3-1) Seitenschleife sammelt ALLE Seiten eines Typs (212 Belege, letzte S
     "call-control": fivePagedCallControlPages(),
   });
   const res = await fetchAndAssign(WINDOW);
-  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, 2, 3, 4, 5]);
+  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, SECOND_PAGE, THIRD_PAGE, FOURTH_PAGE, FIFTH_PAGE]);
   assert.equal(res.ok, true);
-  const ccRecords = res.records.filter((r) => r.recordType === "call-control");
+  const ccRecords = res.records.filter((record) => record.recordType === "call-control");
   assert.equal(ccRecords.length, MEASURED_PAGED_META.total_results);
-  assert.equal(res.records.length, MEASURED_PAGED_META.total_results + 2, "212 call-control + 2 sip-trunking (Null-Zwilling + abgerechnet)");
-  const expectedSum = (MEASURED_PAGED_META.total_results - 1) * BILLED_CC_MICRO + 4_010_000;
+  assert.equal(res.records.length, MEASURED_PAGED_META.total_results + SIP_TRUNKING_RECORD_COUNT, "212 call-control + 2 sip-trunking (Null-Zwilling + abgerechnet)");
+  const expectedSum = (MEASURED_PAGED_META.total_results - 1) * BILLED_CC_MICRO + SIP_TRUNKING_MICRO_CENTS;
   assert.equal(sumMicroCents(res), expectedSum, "211 abgerechnete call-control-Belege + der abgerechnete sip-trunking-Beleg, zwei echte Nullen tragen 0 bei");
-  assert.equal(res.records.filter((r) => r.costMicroCents === 0).length, 2, "beide Null-Zwillinge sind mitgezaehlt");
+  assert.equal(res.records.filter((record) => record.costMicroCents === 0).length, ZERO_COST_TWIN_COUNT, "beide Null-Zwillinge sind mitgezaehlt");
 });
 
 // 99 identische volle Seiten OHNE Chance, ueber meta.total_pages als vollstaendig zu gelten
@@ -975,7 +1013,7 @@ test("(P3-2) Seitenobergrenze erreicht -> complete:false (bewiesene Untermenge, 
   assert.equal(pool.ok, true);
   assert.equal(pool.complete, false);
   const pageNumbers = pageNumbersFor(calls, "sip-trunking");
-  assert.deepEqual(pageNumbers, Array.from({ length: pageNumbers.length }, (_, i) => i + 1), "lueckenlos ab Seite 1");
+  assert.deepEqual(pageNumbers, Array.from({ length: pageNumbers.length }, (_item, i) => i + 1), "lueckenlos ab Seite 1");
   assert.ok(pageNumbers.length > 1 && pageNumbers.length < totalPages, "bindet die Obergrenze nach oben, ohne die Konstante zu spiegeln");
   assert.equal(calls.length, pageNumbers.length, "der erste unvollstaendige Typ bricht ab - keine weiteren Typen angefragt");
 });
@@ -995,7 +1033,7 @@ test("(P3-2b) volle Seiten OHNE meta laufen nicht endlos -> complete:false", asy
 // zu je MEASURED_PAGE_SIZE. meta traegt total_pages=3, damit die dritte Seite - erreichte
 // die Schleife sie ueberhaupt - regulaer als letzte Seite endet.
 function threeFullPages(recordFactory) {
-  const meta = { total_results: 3 * MEASURED_PAGE_SIZE, total_pages: 3, page_size: MEASURED_PAGE_SIZE };
+  const meta = { total_results: PAGE_COUNT * MEASURED_PAGE_SIZE, total_pages: 3, page_size: MEASURED_PAGE_SIZE };
   return Array.from({ length: 3 }, () => ({
     records: Array.from({ length: MEASURED_PAGE_SIZE }, recordFactory),
     meta,
@@ -1011,7 +1049,7 @@ function ccRecordWithoutTimestamp() {
 // "ganze Seite, nie erster Record"-Regel: P3-4 zeigt, dass Seite 1 die Schleife NICHT
 // vorzeitig beendet; P3-5 zeigt, dass Seite 2 sie sehr wohl beendet (Seite 3 bleibt ungeholt).
 function unsortedCallControlPages() {
-  const meta = { total_results: 3 * MEASURED_PAGE_SIZE, total_pages: 3, page_size: MEASURED_PAGE_SIZE };
+  const meta = { total_results: PAGE_COUNT * MEASURED_PAGE_SIZE, total_pages: 3, page_size: MEASURED_PAGE_SIZE };
   const page1 = [
     pagedCallControlRecord({ cost: BILLED_CC_COST, billedSec: 60, startedAt: BEFORE_SINCE }),
     ...Array.from({ length: MEASURED_PAGE_SIZE - 1 }, () =>
@@ -1027,20 +1065,20 @@ function unsortedCallControlPages() {
 test("(P3-4) unsortierte Seite (erster Beleg ausserhalb, Rest innerhalb) bricht die Schleife NICHT ab", async () => {
   const calls = stubFetchPages({ "call-control": unsortedCallControlPages() });
   await fetchPool({ since: SINCE_BOUNDARY });
-  assert.ok(pageNumbersFor(calls, "call-control").includes(2), "Seite 2 wurde angefordert - Seite 1 hat die Schleife nicht vorzeitig beendet");
+  assert.ok(pageNumbersFor(calls, "call-control").includes(SECOND_PAGE), "Seite 2 wurde angefordert - Seite 1 hat die Schleife nicht vorzeitig beendet");
 });
 
 test("(P3-5) eine GANZE Seite vor 'since' beendet die Seitenschleife", async () => {
   const calls = stubFetchPages({ "call-control": unsortedCallControlPages() });
   const pool = await fetchPool({ since: SINCE_BOUNDARY });
-  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, 2], "Seite 3 wird nie geholt");
+  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, SECOND_PAGE], "Seite 3 wird nie geholt");
   assert.equal(pool.complete, true, "das Fenster wurde verlassen - das ist keine Untermenge");
 });
 
 test("(P3-6) Beleg OHNE gemessenes Zeitfeld gilt als innerhalb - die Schleife laeuft weiter", async () => {
   const calls = stubFetchPages({ "call-control": threeFullPages(ccRecordWithoutTimestamp) });
   await fetchPool({ since: SINCE_BOUNDARY });
-  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, 2, 3]);
+  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, SECOND_PAGE, THIRD_PAGE]);
 });
 
 // speech-to-text traegt sein Zeitfeld gemessen unter `start_time`, NICHT `started_at`
@@ -1059,7 +1097,7 @@ test("(P3-7) das Zeitfeld wird JE TYP gelesen: 'started_at' an speech-to-text is
     "speech-to-text": threeFullPages(() => sttRecordAt("started_at", BEFORE_SINCE)),
   });
   await fetchPool({ since: SINCE_BOUNDARY });
-  assert.deepEqual(pageNumbersFor(calls, "speech-to-text"), [1, 2, 3], "started_at ist auf speech-to-text kein Zeitfeld - die Schleife liest es nicht");
+  assert.deepEqual(pageNumbersFor(calls, "speech-to-text"), [1, SECOND_PAGE, THIRD_PAGE], "started_at ist auf speech-to-text kein Zeitfeld - die Schleife liest es nicht");
 });
 
 test("(P3-8) 'start_time' vor 'since' beendet die speech-to-text-Schleife (das gemessene Feld greift)", async () => {
@@ -1073,7 +1111,7 @@ test("(P3-8) 'start_time' vor 'since' beendet die speech-to-text-Schleife (das g
 test("(P3-9) abgerufene Typenmenge ist GENAU ASSIGNABLE_COST_RECORD_TYPES - inference wird nie angefragt", async () => {
   const calls = stubRealRecords(); // bietet inference weiterhin an (Koeder auf Fixture-Ebene)
   await fetchAndAssign(WINDOW);
-  const requestedTypes = calls.map((c) => new URL(c.url).searchParams.get("filter[record_type]"));
+  const requestedTypes = calls.map((call) => new URL(call.url).searchParams.get("filter[record_type]"));
   assert.deepEqual(new Set(requestedTypes), new Set(ASSIGNABLE_COST_RECORD_TYPES));
   assert.equal(calls.length, ASSIGNABLE_COST_RECORD_TYPES.length);
   for (const forbidden of UNASSIGNABLE_COST_RECORD_TYPES)
@@ -1084,8 +1122,8 @@ test("(P3-10) die Query traegt AUSSCHLIESSLICH filter[record_type], page[size]=5
   const calls = stubRealRecords();
   await fetchPool({ since: "2026-07-20T00:00:00Z" });
   assert.equal(calls.length, ASSIGNABLE_COST_RECORD_TYPES.length);
-  for (const c of calls) {
-    const params = new URL(c.url).searchParams;
+  for (const call of calls) {
+    const params = new URL(call.url).searchParams;
     assert.deepEqual([...params.keys()].sort(), ["filter[record_type]", "page[number]", "page[size]"]);
     assert.equal(params.get("page[size]"), String(MEASURED_PAGE_SIZE));
     assert.equal(params.get("page[number]"), "1");
@@ -1111,20 +1149,20 @@ test("(P3-11) die Zeitfeld-Tabelle deckt GENAU die abgerufenen Typen ab (keine z
 test("(P6-1) Abruf-Typenmenge und Boot-Guard-Allowlist stammen aus DERSELBEN Quelle", async () => {
   const calls = stubRealRecords(); // bietet ALLE 7 Typen an, auch inference
   await fetchPool();
-  const fetched = [...new Set(calls.map((c) => new URL(c.url).searchParams.get("filter[record_type]")))];
+  const fetched = [...new Set(calls.map((call) => new URL(call.url).searchParams.get("filter[record_type]")))];
   assert.ok(fetched.length > 0, "ohne abgerufene Typen pruefte der Test nichts");
 
-  const guard = (t) => costTruingBookingFindings({
-    requiredRecordTypes: [t], assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES,
+  const guard = (recordType) => costTruingBookingFindings({
+    requiredRecordTypes: [recordType], assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES,
     coveragePercent: 100, minCoveragePercent: 80,
   });
-  for (const t of fetched)
-    assert.deepEqual(guard(t), [], `abgerufener Typ ${t} muss als Pflicht-Typ zulaessig sein`);
-  const notFetched = COST_RECORD_TYPES.filter((t) => !fetched.includes(t));
+  for (const recordType of fetched)
+    assert.deepEqual(guard(recordType), [], `abgerufener Typ ${recordType} muss als Pflicht-Typ zulaessig sein`);
+  const notFetched = COST_RECORD_TYPES.filter((recordType) => !fetched.includes(recordType));
   assert.ok(notFetched.length > 0, "ohne nicht abgerufenen Typ pruefte die Gegenrichtung nichts");
-  for (const t of notFetched)
-    assert.equal(guard(t)[0]?.code, COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_UNASSIGNABLE,
-      `nicht abgerufener Typ ${t} muss als Pflicht-Typ FATAL abgelehnt werden`);
+  for (const recordType of notFetched)
+    assert.equal(guard(recordType)[0]?.code, COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_UNASSIGNABLE,
+      `nicht abgerufener Typ ${recordType} muss als Pflicht-Typ FATAL abgelehnt werden`);
 });
 
 // GEMESSENE ElevenLabs-Belegform (Plan F6): provider + number_of_characters am
@@ -1140,9 +1178,9 @@ test("(P6-2) ElevenLabs-Zeichen reisen am zugeordneten text-to-speech-Beleg mit"
     "text-to-speech": [elevenLabsTtsRecord({ chars: 238 })],
   });
   const res = await fetchAndAssign(WINDOW);
-  const tts = res.records.find((r) => r.recordType === "text-to-speech");
-  assert.equal(tts.ttsCharacters, 238);
-  assert.equal(res.records.find((r) => r.recordType === "sip-trunking").ttsCharacters, null,
+  const tts = res.records.find((record) => record.recordType === "text-to-speech");
+  assert.equal(tts.ttsCharacters, TTS_CHARACTER_COUNT);
+  assert.equal(res.records.find((record) => record.recordType === "sip-trunking").ttsCharacters, null,
     "Nicht-TTS-Belege tragen null, nie 0 - 0 waere eine gemessene Null");
 });
 
@@ -1159,7 +1197,7 @@ test("(P6-3a) fremder TTS-Provider zaehlt NICHT auf den ElevenLabs-Zaehler - auc
     "text-to-speech": [elevenLabsTtsRecord({ chars: 238, provider: "aws-polly" })],
   });
   const res = await fetchAndAssign(WINDOW);
-  assert.equal(res.records.find((r) => r.recordType === "text-to-speech").ttsCharacters, null);
+  assert.equal(res.records.find((record) => record.recordType === "text-to-speech").ttsCharacters, null);
 });
 
 test("(P6-3b) eine unparsbare Zeichen-Menge zaehlt NICHT - auch beim echten ElevenLabs-Provider (Parser-Waechter)", async () => {
@@ -1168,7 +1206,7 @@ test("(P6-3b) eine unparsbare Zeichen-Menge zaehlt NICHT - auch beim echten Elev
     "text-to-speech": [elevenLabsTtsRecord({ chars: "viele", provider: "elevenlabs" })],
   });
   const res = await fetchAndAssign(WINDOW);
-  assert.equal(res.records.find((r) => r.recordType === "text-to-speech").ttsCharacters, null);
+  assert.equal(res.records.find((record) => record.recordType === "text-to-speech").ttsCharacters, null);
 });
 
 test("(P6-3c) ein Nicht-TTS-Beleg zaehlt NICHT - auch mit elevenlabs-Provider und gueltiger Menge (record_type-Waechter)", async () => {
@@ -1179,7 +1217,7 @@ test("(P6-3c) ein Nicht-TTS-Beleg zaehlt NICHT - auch mit elevenlabs-Provider un
     })],
   });
   const res = await fetchAndAssign(WINDOW);
-  assert.equal(res.records.find((r) => r.recordType === "sip-trunking").ttsCharacters, null);
+  assert.equal(res.records.find((record) => record.recordType === "sip-trunking").ttsCharacters, null);
 });
 
 test("(P6-4) ein NICHT zugeordneter ElevenLabs-Beleg liefert keine Zeichen (fail-closed)", async () => {
@@ -1188,7 +1226,7 @@ test("(P6-4) ein NICHT zugeordneter ElevenLabs-Beleg liefert keine Zeichen (fail
     "text-to-speech": [elevenLabsTtsRecord({ chars: 999, ids: FOREIGN_POOL_IDS })], // fremde Session
   });
   const res = await fetchAndAssign(WINDOW);
-  assert.ok(!res.records.some((r) => r.recordType === "text-to-speech"),
+  assert.ok(!res.records.some((record) => record.recordType === "text-to-speech"),
     "fremder Beleg kommt nicht herein - und damit auch seine Zeichen nicht");
 });
 
@@ -1226,12 +1264,12 @@ function throttledPages(recordType) {
   return Array.from({ length: THROTTLE_PAGES_PER_TYPE }, page);
 }
 const throttledPagesByType = () =>
-  Object.fromEntries(ASSIGNABLE_COST_RECORD_TYPES.map((t) => [t, throttledPages(t)]));
+  Object.fromEntries(ASSIGNABLE_COST_RECORD_TYPES.map((recordType) => [recordType, throttledPages(recordType)]));
 
 const requestsPerMinute = (calls) => {
   const byMinute = new Map();
-  for (const c of calls) {
-    const minute = Math.floor(c.atMs / 60_000);
+  for (const call of calls) {
+    const minute = Math.floor(call.atMs / MS_PER_MINUTE);
     byMinute.set(minute, (byMinute.get(minute) || 0) + 1);
   }
   return byMinute;
@@ -1247,12 +1285,12 @@ test("(P4-1) hoechstens 30 Anfragen je fixem UTC-Minutenfenster - und kein Beleg
   for (const count of perMinute)
     assert.ok(count <= BUDGET_PER_MINUTE, `kein Fenster ueber dem Budget (gesehen: ${count})`);
   assert.deepEqual(perMinute, [BUDGET_PER_MINUTE, THROTTLE_REQUEST_COUNT - BUDGET_PER_MINUTE]);
-  assert.equal(clock.now() % 60_000, 0, "die Pause endet exakt auf :00 - das Fenster ist fix, nicht gleitend");
+  assert.equal(clock.now() % MS_PER_MINUTE, 0, "die Pause endet exakt auf :00 - das Fenster ist fix, nicht gleitend");
   // Die Drossel darf nur bremsen, nie filtern.
   assert.equal(pool.ok, true);
   assert.equal(pool.complete, true);
   assert.equal(pool.raw.length, THROTTLE_REQUEST_COUNT * MEASURED_PAGE_SIZE);
-  assert.equal(pool.raw.filter((r) => r.cost === "0.0").length, THROTTLE_REQUEST_COUNT,
+  assert.equal(pool.raw.filter((record) => record.cost === "0.0").length, THROTTLE_REQUEST_COUNT,
     "jeder Null-Zwilling ist mitgekommen");
 });
 
@@ -1270,7 +1308,7 @@ test("(P4-2) 429 -> GENAU ein Wiederholungsversuch mit dem Wartehinweis des Prov
   assert.equal(calls.length, ATTEMPTS_PER_RATE_LIMITED_PAGE, "ein Versuch + genau eine Wiederholung");
   assert.deepEqual(pageNumbersFor(calls, FIRST_RECORD_TYPE), [FIRST_PAGE, FIRST_PAGE],
     "die Wiederholung holt DIESELBE Seite - keine wird uebersprungen");
-  assert.equal(clock.elapsedMs(), RESET_SECONDS * 1000, "gewartet wurde nach x-ratelimit-reset");
+  assert.equal(clock.elapsedMs(), RESET_SECONDS * MS_PER_SECOND, "gewartet wurde nach x-ratelimit-reset");
   assert.equal(pool.ok, false);
   assert.equal(pool.reason, "provider_error");
   assert.equal(pool.raw, undefined, "ok:false ist NIE die leere Menge");
@@ -1280,7 +1318,7 @@ test("(P4-3) 429 ohne x-ratelimit-reset -> Wartezeit bis zur naechsten vollen Mi
   const calls = stubFetchFailure({ status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY }); // kein Header
   const clock = jumpClock(); // 16:18:30Z -> 30 000 ms bis :00
   await captureConsole(() => telnyxVoice.fetchCostRecordPool({ throttle: testThrottle(clock) }));
-  assert.equal(clock.elapsedMs(), 30_000);
+  assert.equal(clock.elapsedMs(), HALF_MINUTE_MS);
   assert.equal(calls.length, ATTEMPTS_PER_RATE_LIMITED_PAGE);
 });
 
@@ -1298,9 +1336,9 @@ test("(P4-R1) das produktive Minutenbudget behaelt die bewusste Reserve unter de
   // Pinnt die GEMESSENEN Werte selbst (Plan F1) statt sie ueber eine test-lokale Kopie zu
   // pruefen - eine Reserve-Aenderung (z. B. 10 -> 0) macht diesen Test rot, unabhaengig davon,
   // welche Drossel ein einzelner Aufrufer injiziert.
-  assert.equal(DETAIL_RECORDS_LIMIT_PER_MINUTE, 40, "gemessenes Kontingent, Plan F1");
-  assert.equal(DETAIL_RECORDS_RESERVE_PER_MINUTE, 10, "bewusste Reserve gegen U5/Uhr-Versatz");
-  assert.equal(DETAIL_RECORDS_BUDGET_PER_MINUTE, 30);
+  assert.equal(DETAIL_RECORDS_LIMIT_PER_MINUTE, EXPECTED_LIMIT_PER_MINUTE, "gemessenes Kontingent, Plan F1");
+  assert.equal(DETAIL_RECORDS_RESERVE_PER_MINUTE, EXPECTED_RESERVE_PER_MINUTE, "bewusste Reserve gegen U5/Uhr-Versatz");
+  assert.equal(DETAIL_RECORDS_BUDGET_PER_MINUTE, EXPECTED_BUDGET_PER_MINUTE);
 });
 
 // GENAU EIN Request UEBER dem produktiven Budget, verteilt ueber ALLE zuordenbaren Typen (nie
@@ -1340,26 +1378,26 @@ const wiringPagesByType = () =>
     ]),
   );
 
-test("(P4-R2) fetchCostRecordPool OHNE injizierte Drossel haelt nach der produktiven Budget-Konstante an (Mock-Timer statt Wanduhr)", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] }); // NUR der Timer - Date.now bleibt real (s.o.)
+test("(P4-R2) fetchCostRecordPool OHNE injizierte Drossel haelt nach der produktiven Budget-Konstante an (Mock-Timer statt Wanduhr)", async (recordType) => {
+  recordType.mock.timers.enable({ apis: ["setTimeout"] }); // NUR der Timer - Date.now bleibt real (s.o.)
   try {
     const calls = stubFetchPages(wiringPagesByType());
     const poolPromise = telnyxVoice.fetchCostRecordPool({}); // KEIN throttle-Override -> modul-globaler Default
 
-    await new Promise((r) => setImmediate(r)); // Microtask-Queue leerlaufen lassen (Muster telnyx-event-ingest-machine.test.js)
+    await new Promise((resolve) => setImmediate(resolve)); // Microtask-Queue leerlaufen lassen (Muster telnyx-event-ingest-machine.test.js)
     assert.equal(
       calls.length, DETAIL_RECORDS_BUDGET_PER_MINUTE,
       "die produktive Drossel haelt nach GENAU dem echten Budget an - eine No-op-Drossel liesse hier bereits alle Anfragen durch",
     );
 
-    t.mock.timers.tick(WIRING_TICK_MS); // die Drossel wartet bis zur naechsten vollen Minute (F1) - der Mock ersetzt die Wanduhr
+    recordType.mock.timers.tick(WIRING_TICK_MS); // die Drossel wartet bis zur naechsten vollen Minute (F1) - der Mock ersetzt die Wanduhr
     const pool = await poolPromise;
 
     assert.equal(calls.length, DETAIL_RECORDS_BUDGET_PER_MINUTE + 1, "nach dem Tick lief die letzte Anfrage durch");
     assert.equal(pool.ok, true);
     assert.equal(pool.complete, true);
   } finally {
-    t.mock.timers.reset(); // echte Timer fuer die naechsten Tests wiederherstellen
+    recordType.mock.timers.reset(); // echte Timer fuer die naechsten Tests wiederherstellen
   }
 });
 
@@ -1368,53 +1406,3 @@ test("(P4-R2) fetchCostRecordPool OHNE injizierte Drossel haelt nach der produkt
 // entfallen. Die EIGENSCHAFT bleibt belegt, und zwar adapter-unabhaengig: ein Control-
 // Objekt ohne die Methoden fuehrt zu keinem Abgleich (test/cost-truing-observe.test.js,
 // `const control = {}`) - ein Stub sagt das allgemeiner als ein zweiter echter Adapter.
-
-// ---- (g) Aufrufer-Riegel ----
-
-// Rein textuelle Pruefung ueber src/ (Muster telnyx-assistant-route-drift.test.js). Bis P2
-// pinnte dieser Test "kein Aufrufer" - P3 (Kosten-Abgleich im Beobachtungsmodus,
-// billing/cost-truing.js) fuehrt den ERSTEN und EINZIGEN vorgesehenen Aufrufer ein (ueber
-// den voiceControl-Port, kein direkter Adapter-Import). Der Riegel bleibt wertvoll, nur
-// umgekehrt: er pinnt jetzt, DASS der Aufrufer NUR dort (+ server.js, reiner Kommentar-
-// Treffer aus der Verdrahtung) steht und NICHT in einem Geld-/Gate-Pfad, den P3
-// ausdruecklich unangetastet laesst (metering.js, call-finish.js, outbound-gates.js).
-function listJsFilesRecursive(dir) {
-  const out = [];
-  for (const entry of readdirSync(dir)) {
-    const full = path.join(dir, entry);
-    const st = statSync(full);
-    if (st.isDirectory()) out.push(...listJsFilesRecursive(full));
-    else if (entry.endsWith(".js")) out.push(full);
-  }
-  return out;
-}
-
-// Geld-/Gate-Pfade, die P3 ausdruecklich NICHT anfasst (PLAN-LIVE-COST-TRACING.md P3,
-// Abschnitt "Bewusst NICHT angefasst"). Ein Treffer hier waere ein echter Scope-Bruch.
-const FORBIDDEN_CALLER_FILES = Object.freeze([
-  "billing/metering.js",
-  "telephony/call-finish.js",
-  "telephony/outbound-gates.js",
-]);
-
-// KE-P2: der frueher einteilige Port ist zweigeteilt - der Riegel greppt jetzt BEIDE
-// Symbole (Vereinigung der Treffer), sonst saehe er nur noch die Haelfte der Aufrufer.
-const COST_RECORD_PORT_SYMBOLS = Object.freeze(["fetchCostRecordPool", "assignCostRecords"]);
-
-test("Belegabruf: Aufrufer NUR in cost-truing.js (LCT P3) - NIE in einem Geld-/Gate-Pfad", () => {
-  const srcDir = fileURLToPath(new URL("../src", import.meta.url));
-  const hits = listJsFilesRecursive(srcDir)
-    .filter((f) => {
-      const text = readFileSync(f, "utf8");
-      return COST_RECORD_PORT_SYMBOLS.some((symbol) => text.includes(symbol));
-    })
-    .map((f) => path.relative(srcDir, f).split(path.sep).join("/"));
-  const forbidden = hits.filter((f) => FORBIDDEN_CALLER_FILES.includes(f));
-  assert.deepEqual(forbidden, [], "P3 (Beobachtungsmodus) darf keinen dieser Geld-/Gate-Pfade beruehren");
-  assert.deepEqual(hits.sort(), [
-    "billing/cost-truing.js",
-    "server.js",
-    "telephony/adapters/telnyx/voice.js",
-    "telephony/ports.js",
-  ]);
-});

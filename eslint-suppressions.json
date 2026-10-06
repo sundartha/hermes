@@ -4008,20 +4008,6 @@
       "count": 21
     }
   },
-  "test/telnyx-cost-records.test.js": {
-    "id-length": {
-      "count": 50
-    },
-    "no-magic-numbers": {
-      "count": 60
-    },
-    "no-negated-condition": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "test/telnyx-cost-throttle.test.js": {
     "no-magic-numbers": {
       "count": 13
