@@ -40,16 +40,13 @@ import {
   CONVERSATION_DONE_WITH_DATA_COLLECTION,
   CONVERSATION_FAILED_INVALID_DESTINATION,
   CONVERSATION_IN_PROGRESS,
+  HERKUNFT,
 } from "./fixtures/elevenlabs-conversations.js";
 
 const MESSUNG_SPIKE1_URL = new URL("../tasks/spike1-messung.jsonl", import.meta.url);
 const MESSUNG_SPIKE2_URL = new URL("../tasks/spike2-messung.jsonl", import.meta.url);
-const FIXTURE_QUELLE_URL = new URL("./fixtures/elevenlabs-conversations.js", import.meta.url);
 
-// Kennzeichnung, mit der das Fixture-Modul eine NICHT gemessene Aussage ausweisen muss.
-// Beide Schreibweisen des Bestands sind zugelassen ("AUSGEDACHT" und "NICHT gemessen" /
-// "NICHT direkt gemessen") - der Test erzwingt die Kennzeichnung, nicht ihren Wortlaut.
-const AUSGEDACHT_MARKER = /AUSGEDACHT|NICHT\s+(?:direkt\s+)?gemessen/i;
+const AUSGEDACHT = "ausgedacht";
 
 function messsaetze(url) {
   return readFileSync(url, "utf8")
@@ -60,7 +57,6 @@ function messsaetze(url) {
 
 const SPIKE1 = messsaetze(MESSUNG_SPIKE1_URL);
 const SPIKE2 = messsaetze(MESSUNG_SPIKE2_URL);
-const FIXTURE_QUELLTEXT = readFileSync(FIXTURE_QUELLE_URL, "utf8");
 
 // Ueber die Sachmerkmale gesucht, NICHT ueber die Zeilennummer: eine neue Zeile in der
 // Aufzeichnung darf diesen Test nicht verschieben.
@@ -82,22 +78,6 @@ function blattPfade(wert, prefix = []) {
   if (!istObjekt) return prefix.length ? [prefix.join(".")] : [];
   return Object.entries(wert).flatMap(([schluessel, kind]) => blattPfade(kind, [...prefix, schluessel]));
 }
-
-// Der Quelltext EINES Exports plus des Kommentarblocks unmittelbar darueber. Beides aus
-// einer Funktion (G5): die Kennzeichnung "ausgedacht" steht im Bestand mal als
-// Zeilenkommentar am Feld, mal im Block ueber dem Export - geprueft werden muss beides.
-function exportQuelltext(name) {
-  const zeilen = FIXTURE_QUELLTEXT.split("\n");
-  const start = zeilen.findIndex((zeile) => zeile.startsWith(`export const ${name} =`));
-  if (start < 0) return { kommentar: "", zeilen: [] };
-  const kommentar = [];
-  for (let i = start - 1; i >= 0 && zeilen[i].startsWith("//"); i -= 1) kommentar.unshift(zeilen[i]);
-  const ende = zeilen.findIndex((zeile, index) => index > start && zeile.startsWith("});"));
-  return { kommentar: kommentar.join("\n"), zeilen: zeilen.slice(start, ende + 1) };
-}
-
-const feldZeile = (quelltext, feld) =>
-  quelltext.zeilen.find((zeile) => zeile.trim().startsWith(`${feld}:`));
 
 const CLOSE_1008_NAME = "CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES";
 
@@ -146,20 +126,15 @@ test("Fixture-Abgleich: das leere Transkript des CLOSE-1008-Fundes deckt sich mi
 });
 
 test("Fixture-Abgleich: was die Aufzeichnung NICHT hergibt, traegt im Fixture-Modul die Kennzeichnung 'ausgedacht'", () => {
-  const quelltext = exportQuelltext(CLOSE_1008_NAME);
-  assert.ok(quelltext.zeilen.length, `Export ${CLOSE_1008_NAME} im Fixture-Modul nicht gefunden`);
-
   for (const feld of OHNE_AUFZEICHNUNG) {
-    // Erst die Voraussetzung: die Kennzeichnung waere eine Luege, wenn die Aufzeichnung
-    // den Wert doch traegt (dann muesste die Fixture ihn abschreiben statt annehmen).
     assert.equal(
       TESTANRUF_1[feld],
       undefined,
       `die Aufzeichnung traegt '${feld}' inzwischen doch - dann ist die Fixture-Annahme durch den echten Wert zu ersetzen`,
     );
-    assert.match(
-      feldZeile(quelltext, feld) ?? "",
-      AUSGEDACHT_MARKER,
+    assert.equal(
+      HERKUNFT[CLOSE_1008_NAME][feld],
+      AUSGEDACHT,
       `${CLOSE_1008_NAME}.${feld} ist nicht gemessen, aber im Fixture-Modul nicht als ausgedacht gekennzeichnet`,
     );
   }
@@ -232,22 +207,18 @@ test("Fixture-Abgleich: die drei Felder des IN-PROGRESS-Fundes stehen so in task
 });
 
 test("Fixture-Abgleich: was die IN-PROGRESS-Messung nicht hergibt (analysis), ist als ausgedacht gekennzeichnet", () => {
-  const quelltext = exportQuelltext("CONVERSATION_IN_PROGRESS");
-  assert.ok(quelltext.zeilen.length, "Export CONVERSATION_IN_PROGRESS im Fixture-Modul nicht gefunden");
-  assert.match(
-    feldZeile(quelltext, "analysis") ?? "",
-    AUSGEDACHT_MARKER,
+  assert.equal(
+    HERKUNFT.CONVERSATION_IN_PROGRESS.analysis,
+    AUSGEDACHT,
     "analysis ist fuer diese Kennung nicht gemessen, aber im Fixture-Modul nicht als ausgedacht gekennzeichnet",
   );
 });
 
 test("Fixture-Abgleich: der vollstaendig erfundene data_collection-Fund ist als erfunden erkennbar", () => {
-  // Kein Gegenstueck in irgendeiner Messdatei (analysis.data_collection_results wurde nie
-  // aufgezeichnet) - dieser Fund darf deshalb nie wie eine gemessene Antwort aussehen.
-  assert.match(
-    exportQuelltext("CONVERSATION_DONE_WITH_DATA_COLLECTION").kommentar,
-    AUSGEDACHT_MARKER,
-    "die Kennzeichnung ueber dem Export ist verschwunden - der Fund saehe damit wie eine gemessene Antwort aus",
+  assert.equal(
+    HERKUNFT.CONVERSATION_DONE_WITH_DATA_COLLECTION,
+    AUSGEDACHT,
+    "die Kennzeichnung im Fixture-Modul ist verschwunden - der Fund saehe damit wie eine gemessene Antwort aus",
   );
   assert.match(
     CONVERSATION_DONE_WITH_DATA_COLLECTION.conversation_id,

@@ -506,3 +506,13 @@ export const CONVERSATION_DONE_MIT_KOSTEN = Object.freeze({
     }),
   }),
 });
+
+export const HERKUNFT = Object.freeze({
+  CONVERSATION_IN_PROGRESS: Object.freeze({ analysis: "ausgedacht" }),
+  CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES: Object.freeze({
+    status: "ausgedacht",
+    analysis: "ausgedacht",
+    transcript: "abgeleitet",
+  }),
+  CONVERSATION_DONE_WITH_DATA_COLLECTION: "ausgedacht",
+});
