@@ -26,8 +26,17 @@ const STEP_2_FIRST_ISSUE = ISSUE_OFFSET + STEP_2_FIRST_PACKAGE;
 const PHASE_PULL = 500;
 const PROOF_RUN = 600;
 const OTHER_RUN = 601;
+const OLD_PROOF_RUN = 602;
+const OTHER_BRANCH_RUN = 603;
+const FORK_RUN = 604;
+const FORK_REPOSITORY = "fremd/hermes";
+const PROOF_PULL = 700;
+const PROOF_BRANCH = "beleg/38-zehn-laeufe";
 const SHA_LENGTH = 40;
 const PROOF_SHA = "c".repeat(SHA_LENGTH);
+const OLD_PROOF_SHA = "d".repeat(SHA_LENGTH);
+const REPEATED_ATTEMPT = 2;
+const RUN_FILTERS = { head_sha: "head_sha", branch: "head_branch" };
 const PROOF_RUNS = 10;
 const ERROR_SEVERITY = 2;
 const TOO_LONG_INSTRUCTIONS = 101;
@@ -130,7 +139,12 @@ function healthyGitHub() {
       WORKFLOW_FILES.map((file) => [file, [{ conclusion: "success" }]]),
     ),
     mergedPulls: { [PHASE_PULL]: "phase/probe" },
-    proofPulls: [{ head: { sha: PROOF_SHA } }],
+    proofPulls: [{ number: PROOF_PULL, head: { sha: PROOF_SHA } }],
+    proofCommits: 1,
+    proofChangedFiles: 1,
+    hiddenRuns: 0,
+    hiddenJobs: 0,
+    proofRuns: [proofRun(PROOF_RUN, PROOF_SHA)],
     proofJobs: Array.from({ length: PROOF_RUNS }, () => "success"),
     health: HTTP_OK,
     stepIssues: [],
@@ -144,12 +158,47 @@ function onePage(list, url) {
   return list.slice((number - 1) * size, number * size);
 }
 
+function proofRun(id, sha, attempt = 1) {
+  return {
+    id,
+    name: "Beleg zehn Läufe",
+    head_sha: sha,
+    head_branch: PROOF_BRANCH,
+    head_repository: { full_name: REPOSITORY },
+    run_attempt: attempt,
+  };
+}
+
+function matchingRuns(runs, url) {
+  return runs.filter((run) =>
+    Object.entries(RUN_FILTERS).every(([parameter, field]) => {
+      const wanted = url.searchParams.get(parameter);
+      return wanted === null || run[field] === wanted;
+    }),
+  );
+}
+
+function pullDetails(state, number) {
+  if (number !== `${PROOF_PULL}`) return { head: { ref: state.mergedPulls[number] } };
+  return {
+    head: { ref: PROOF_BRANCH, sha: PROOF_SHA },
+    commits: state.proofCommits,
+    changed_files: state.proofChangedFiles,
+  };
+}
+
+function listAnswer(field, list, hidden) {
+  return { total_count: list.length + hidden, [field]: list };
+}
+
 function repoRoutes(state) {
-  const runs = [
-    { id: PROOF_RUN, name: "Beleg zehn Läufe" },
-    { id: OTHER_RUN, name: "CI" },
-  ];
-  const jobs = (id) => (id === `${PROOF_RUN}` ? state.proofJobs : ["failure"]);
+  const fork = {
+    ...proofRun(FORK_RUN, PROOF_SHA),
+    head_repository: { full_name: FORK_REPOSITORY },
+  };
+  const runs = [...state.proofRuns, { ...proofRun(OTHER_RUN, PROOF_SHA), name: "CI" }, fork];
+  const green = [`${PROOF_RUN}`, `${FORK_RUN}`];
+  const jobs = (id) => (green.includes(id) ? state.proofJobs : ["failure"]);
   return [
     [
       /^\/issues$/,
@@ -165,11 +214,19 @@ function repoRoutes(state) {
       (url, [, file]) => state.workflows[file] && { workflow_runs: state.workflows[file] },
     ],
     [/^\/pulls$/, () => state.proofPulls],
-    [/^\/pulls\/(\d+)$/, (url, [, number]) => ({ head: { ref: state.mergedPulls[number] } })],
-    [/^\/actions\/runs$/, () => ({ workflow_runs: runs })],
+    [/^\/pulls\/(\d+)$/, (url, [, number]) => pullDetails(state, number)],
+    [
+      /^\/actions\/runs$/,
+      (url) => listAnswer("workflow_runs", matchingRuns(runs, url), state.hiddenRuns),
+    ],
     [
       /^\/actions\/runs\/(\d+)\/jobs$/,
-      (url, [, id]) => ({ jobs: jobs(id).map((conclusion) => ({ conclusion })) }),
+      (url, [, id]) =>
+        listAnswer(
+          "jobs",
+          jobs(id).map((conclusion) => ({ conclusion })),
+          state.hiddenJobs,
+        ),
     ],
     [/^\/labels\/schritt$/, () => ({})],
   ];
@@ -429,6 +486,74 @@ const MISSING_END_CRITERIA = [
       },
     },
     pattern: /beleg\/38-zehn-laeufe/,
+  },
+  {
+    step: "5",
+    run: { github: { proofRuns: [proofRun(PROOF_RUN, PROOF_SHA, REPEATED_ATTEMPT)] } },
+    pattern: /Beleg-Lauf 600 .*Versuch 2\b/,
+  },
+  {
+    step: "5",
+    run: { github: { proofCommits: 2 } },
+    pattern: /beleg\/38-zehn-laeufe\b.*\b2 Commits\b/,
+  },
+  {
+    step: "5",
+    run: {
+      github: {
+        proofPulls: [
+          { number: PROOF_PULL + 1, head: { sha: PROOF_SHA } },
+          { number: PROOF_PULL, head: { sha: PROOF_SHA } },
+        ],
+      },
+    },
+    pattern: /beleg\/38-zehn-laeufe\b.*\b2 PRs\b/,
+  },
+  {
+    step: "5",
+    run: {
+      github: {
+        proofRuns: [proofRun(PROOF_RUN, PROOF_SHA), proofRun(OLD_PROOF_RUN, OLD_PROOF_SHA)],
+      },
+    },
+    pattern: /beleg\/38-zehn-laeufe\b.*\b2 Beleg-Läufe\b/,
+  },
+  {
+    step: "5",
+    run: { github: { proofRuns: [proofRun(OLD_PROOF_RUN, OLD_PROOF_SHA)] } },
+    pattern: /Beleg-Lauf 602 nicht auf dem Kopf\b/,
+  },
+  {
+    step: "5",
+    run: {
+      github: {
+        proofRuns: [
+          proofRun(PROOF_RUN, PROOF_SHA),
+          { ...proofRun(OTHER_BRANCH_RUN, PROOF_SHA), head_branch: "beleg/38-anderer-name" },
+        ],
+      },
+    },
+    pattern: /beleg\/38-zehn-laeufe\b.*\b2 Beleg-Läufe\b/,
+  },
+  {
+    step: "5",
+    run: { github: { proofRuns: [] } },
+    pattern: /beleg\/38-zehn-laeufe\b.*\b0 Beleg-Läufe aus diesem Repository\b/,
+  },
+  {
+    step: "5",
+    run: { github: { hiddenRuns: 1 } },
+    pattern: /Läufe vom Beleg-Branch beleg\/38-zehn-laeufe unvollständig\b/,
+  },
+  {
+    step: "5",
+    run: { github: { hiddenJobs: 1 } },
+    pattern: /Jobs des Beleg-Laufs 600 unvollständig .*\b11 gemeldet, 10 gelesen\b/,
+  },
+  {
+    step: "5",
+    run: { github: { proofChangedFiles: 2 } },
+    pattern: /beleg\/38-zehn-laeufe\b.*\b2 Dateien ändert\b/,
   },
 ];
 
