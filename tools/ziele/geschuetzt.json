@@ -1,0 +1,39 @@
+{
+  "gates": "tools/gate-tests.json",
+  "abrechnung": [
+    "src/billing/",
+    "src/budget-gate.js",
+    "src/llm-usage.js",
+    "src/plans.js",
+    "src/routes/api-billing.js",
+    "src/routes/stripe-webhook.js"
+  ],
+  "anmeldung": [
+    "src/elevenlabs/tenant-tool-token.js",
+    "src/mcp-no-tenant.js",
+    "src/mcp-security-schemes.js",
+    "src/middleware.js",
+    "src/onboard-guard.js",
+    "src/request-tenant.js",
+    "src/routes/_tenant.js",
+    "src/wiring/web-login.js",
+    "src/workos-management.js"
+  ],
+  "gespraech": [
+    "elevenlabs/",
+    "src/conversation/elevenlabs-agent-config.js",
+    "src/elevenlabs/call-locale.js",
+    "src/elevenlabs/convai.js",
+    "src/elevenlabs/inbound-initiation.js",
+    "src/elevenlabs/opening-line.js",
+    "src/elevenlabs/outbound.js",
+    "src/elevenlabs/time-context.js",
+    "src/i18n/inbound-opening.js",
+    "src/i18n/locales.js",
+    "src/i18n/prompts/",
+    "src/store/state-ops.js",
+    "src/telephony/adapters/telnyx/elevenlabs-voice.js"
+  ],
+  "pruefskripte": ["scripts/check-staged-suppressions.js"],
+  "erzeugt": ["design-system/_ds_bundle.js"]
+}
