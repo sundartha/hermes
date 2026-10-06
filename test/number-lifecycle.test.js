@@ -1,8 +1,3 @@
-// Onboarding-State-Machine (zahlungsfrei). Prueft die fail-closed-Invarianten:
-// eine Nummer wird NIE direkt 'active' (nur ueber requested->provisioning->active),
-// illegale Uebergaenge werfen, und die Cap-Notbremse (maxNumbers/maxNumbersPerTenant)
-// ersetzt das uebersprungene Stripe-Schloss. Rein (state-ops + defaults), offline,
-// kein pglite/Server (getrennte Dateien -> kein Test-Worker-Stall).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -31,16 +26,13 @@ import {
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const seedTenant = (s, id = "t_user1") => registerTenant(s, id);
 
-// ---- Transitions-Matrix (fail-closed) ----
 test("canTransitionNumber: legale Kette erlaubt, Spruenge verboten", () => {
   assert.equal(canTransitionNumber(NUMBER_STATUS.REQUESTED, NUMBER_STATUS.PROVISIONING), true);
   assert.equal(canTransitionNumber(NUMBER_STATUS.PROVISIONING, NUMBER_STATUS.ACTIVE), true);
   assert.equal(canTransitionNumber(NUMBER_STATUS.ACTIVE, NUMBER_STATUS.SUSPENDED), true);
-  // Spruenge + terminal:
   assert.equal(canTransitionNumber(NUMBER_STATUS.REQUESTED, NUMBER_STATUS.ACTIVE), false);
   assert.equal(canTransitionNumber(NUMBER_STATUS.RELEASED, NUMBER_STATUS.ACTIVE), false);
   assert.equal(canTransitionNumber("garbage", NUMBER_STATUS.ACTIVE), false);
-  // P6b1: capturing-Edges (additiv; provisioning->active bleibt fuer payment-off legal)
   assert.equal(canTransitionNumber(NUMBER_STATUS.PROVISIONING, NUMBER_STATUS.CAPTURING), true);
   assert.equal(canTransitionNumber(NUMBER_STATUS.CAPTURING, NUMBER_STATUS.ACTIVE), true);
   assert.equal(canTransitionNumber(NUMBER_STATUS.CAPTURING, NUMBER_STATUS.FAILED), true);
@@ -52,7 +44,6 @@ test("beginCapturing: provisioning -> capturing legal, aus requested illegal (fa
   const s = makeDefaultState();
   seedTenant(s);
   const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
-  // aus requested ist capturing kein legaler Sprung
   assert.throws(() => beginCapturing(s, number.id), /illegaler Uebergang/);
   beginProvisioning(s, number.id);
   beginCapturing(s, number.id);
@@ -71,7 +62,6 @@ test("transitionNumber: illegaler Uebergang wirft (kein active per Shortcut)", (
   );
 });
 
-// ---- registerTenant ----
 test("registerTenant: idempotent, Owner existiert immer", () => {
   const s = makeDefaultState();
   assert.equal(s.tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID).status, TENANT_STATUS.ACTIVE);
@@ -83,20 +73,15 @@ test("registerTenant: idempotent, Owner existiert immer", () => {
 
 test("registerTenant: Identitaet set-on-create (G1: firstName/lastName komponieren ownerName, leer weg, Re-Register unveraendert)", () => {
   const s = makeDefaultState();
-  // firstName + lastName -> firstName gesetzt + ownerName komponiert
   const named = registerTenant(s, "t_named", { firstName: "Maria", lastName: "Mueller" });
   assert.equal(named.firstName, "Maria");
   assert.equal(named.ownerName, "Maria Mueller");
-  // 2-arg -> kein Feld (byte-identisch zum Bestand -> Owner-Fallback)
   assert.ok(!("ownerName" in registerTenant(s, "t_plain")));
   assert.ok(!("firstName" in registerTenant(s, "t_plain")));
-  // whitespace-only -> Felder weggelassen (kein Daten-Muell)
   assert.ok(!("ownerName" in registerTenant(s, "t_ws", { firstName: "   ", lastName: "  " })));
-  // set-on-create: Re-Register mit anderem Namen aendert NICHTS (kein Upsert)
   assert.equal(registerTenant(s, "t_named", { firstName: "Bob" }).ownerName, "Maria Mueller");
 });
 
-// ---- requestNumber + Caps (Kosten-Notbremse) ----
 test("requestNumber: happy path -> status requested, KEINE e164/Kauf", () => {
   const s = makeDefaultState();
   seedTenant(s);
@@ -108,7 +93,6 @@ test("requestNumber: happy path -> status requested, KEINE e164/Kauf", () => {
 
 test("requestNumber: globaler Cap blockt (Kosten-Notbremse)", () => {
   const s = makeDefaultState();
-  // Cap 2 global, viele Tenants -> ab der 3. Nummer blockiert.
   registerTenant(s, "a");
   registerTenant(s, "b");
   registerTenant(s, "c");
@@ -137,7 +121,6 @@ test("requestNumber: unbekannter/inaktiver Tenant blockt (fail-closed)", () => {
   assert.equal(requestNumber(s, { tenantId: "susp", ...CAPS }).reason, "tenant_inactive");
 });
 
-// ---- Phase A: Cap-Zaehlung robust (Regressions-Lock, kein neues Verhalten) ----
 test("liveNumbers/requestNumber: RELEASED/FAILED belegen keine Kapazitaet - Cap greift erst bei echter Auslastung", () => {
   const s = makeDefaultState();
   registerTenant(s, "dead1");
@@ -145,16 +128,15 @@ test("liveNumbers/requestNumber: RELEASED/FAILED belegen keine Kapazitaet - Cap 
   registerTenant(s, "live1");
   const caps = { maxNumbers: 1, maxNumbersPerTenant: 1 };
   const dead1 = requestNumber(s, { tenantId: "dead1", ...caps }).number;
-  failNumber(s, dead1.id); // requested -> failed (terminal)
-  const dead2 = requestNumber(s, { tenantId: "dead2", ...caps }).number; // Slot war durch failed wieder frei
+  failNumber(s, dead1.id);
+  const dead2 = requestNumber(s, { tenantId: "dead2", ...caps }).number;
   beginProvisioning(s, dead2.id);
   activateNumber(s, dead2.id, { e164: "+4915799990002", providerNumberId: "num_dead2" });
-  releaseNumber(s, dead2.id); // terminal
+  releaseNumber(s, dead2.id);
   const live = requestNumber(s, { tenantId: "live1", ...caps });
   assert.equal(live.ok, true, "Cap greift NICHT vorzeitig durch terminale Nummern");
 });
 
-// ---- Phase A: Skip sichtbar machen (Fix B) ----
 test("requestNumber: global_cap hinterlaesst Skip-Marker am Tenant (reine Observability)", () => {
   const s = makeDefaultState();
   registerTenant(s, "a");
@@ -177,8 +159,6 @@ test("requestNumber: Skip-Marker verschwindet bei erfolgreichem Folge-Request (I
   const blocked = requestNumber(s, { tenantId: "b", ...tight });
   assert.equal(blocked.reason, GLOBAL_CAP_REASON);
   assert.equal(findTenant(s, "b").numberProvisionSkipReason, GLOBAL_CAP_REASON);
-  // Cap oeffnet sich -> erfolgreicher Folge-Request loescht den Marker wieder (kein
-  // dauerhaft haengender "blocked"-Chip nach erfolgreichem Retry).
   const loose = { maxNumbers: 5, maxNumbersPerTenant: 1 };
   const retry = requestNumber(s, { tenantId: "b", ...loose });
   assert.equal(retry.ok, true);
@@ -187,8 +167,6 @@ test("requestNumber: Skip-Marker verschwindet bei erfolgreichem Folge-Request (I
   assert.equal(tenantB.numberProvisionSkipAt, null);
 });
 
-// ---- Review-Fix (Runde 1): shouldPersistProvisionResult (G5, geteilt von POST
-// /api/onboard UND triggerTenantProvisioning, vorher woertlich dupliziert) ----
 test("shouldPersistProvisionResult: Erfolg UND global_cap persistieren, jeder andere Skip nicht", () => {
   assert.equal(shouldPersistProvisionResult({ ok: true }), true);
   assert.equal(shouldPersistProvisionResult({ ok: false, reason: GLOBAL_CAP_REASON }), true);
@@ -196,7 +174,6 @@ test("shouldPersistProvisionResult: Erfolg UND global_cap persistieren, jeder an
   assert.equal(shouldPersistProvisionResult({ ok: false, reason: "tenant_inactive" }), false);
 });
 
-// ---- Voller Lebenszyklus ----
 test("happy path: request -> provisioning -> active setzt e164 + legt assignment an", () => {
   const s = makeDefaultState();
   seedTenant(s);
@@ -222,7 +199,6 @@ test("Fehlerpfad: provisioning -> failed (kein active, keine assignment)", () =>
   assert.equal(s.numberAssignments.length, 0, "keine assignment bei Fehlschlag");
 });
 
-// ---- Inbound-Routing-Gate: NUR status=active routet (fail-closed) ----
 test("findTenantByNumber: nur active routet; requested/suspended/released -> null", () => {
   const s = makeDefaultState();
   seedTenant(s);
@@ -248,6 +224,5 @@ test("release schliesst die assignment (released_at) und gibt den Platz frei", (
     s.numberAssignments.find((a) => a.numberId === number.id).releasedAt,
     "assignment geschlossen",
   );
-  // Platz wieder frei -> neue Anfrage erlaubt (per-Tenant-Cap 1).
   assert.equal(requestNumber(s, { tenantId: "t_user1", ...CAPS }).ok, true);
 });

@@ -1,13 +1,9 @@
-// Phase 0: Nummern-Gates fuer Outbound-Calls (Denylist, Laender-Gate,
-// Pro-Stunde-Limit) + Pruefreihenfolge. Offline-Diskriminator: 500 = alle Gates
-// passiert (originateCall wirft ohne TELNYX_API_KEY, s. BASE_ENV in helpers.js),
-// 403/429/400 = ein Gate hat gesperrt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
 import { EMERGENCY_SHORT_CODES } from "../src/telephony/number-denylist.js";
 
-const ALLOWED = "+4915112345678"; // normale DE-Mobilnummer, dient als Positiv-Fall
+const ALLOWED = "+4915112345678";
 const postCall = (url, to) =>
   fetch(`${url}/api/calls`, {
     method: "POST",
@@ -15,17 +11,11 @@ const postCall = (url, to) =>
     body: JSON.stringify({ to, objective: "Test" }),
   });
 
-// ---- 0.1 Denylist (Notruf/Premium, hardcoded) ----
 test("Denylist (Notruf-/Premium-/Service-Nummern)", async (t) => {
-  // Land + Allowlist grosszuegig: NUR die Denylist kann hier greifen.
   const srv = await startServer({
     env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*" },
   });
   try {
-    // OUT-10 (P0, i18n-Testkatalog 05-auslandstelefonie.md): "911" muss unabhaengig vom
-    // Laender-Gate (hier ALLOWED_COUNTRY_CODES="*") an der Denylist scheitern, VOR jeder
-    // Format-/Land-Pruefung - genau das deckt dieser bestehende Testfall bereits ab (911
-    // ist eines der vier EMERGENCY_SHORT_CODES). Keine neue Testdatei noetig (G5).
     await t.test("Notruf-Kurzwahlen -> 403 denylist (nicht 400 Format)", async () => {
       for (const to of ["110", "112", "911", "999"]) {
         const res = await postCall(srv.localUrl, to);
@@ -53,7 +43,6 @@ test("Denylist (Notruf-/Premium-/Service-Nummern)", async (t) => {
     });
 
     await t.test("normale Mobilnummer passiert die Denylist (bis zum naechsten Gate)", async () => {
-      // +4915... ist in Allowlist + Land *: alle Gates passieren -> Twilio (offline 500), NICHT 403.
       const res = await postCall(srv.localUrl, ALLOWED);
       assert.equal(res.status, 500, "normale Nummer darf nicht von der Denylist geblockt werden");
     });
@@ -62,33 +51,28 @@ test("Denylist (Notruf-/Premium-/Service-Nummern)", async (t) => {
   }
 });
 
-// ---- 0.2 Laender-Gate ----
 test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
   await t.test("Default +49: +49 passiert, +1 -> 403 grund=land", async () => {
     const srv = await startServer({
       env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "+49" },
     });
     try {
-      const blocked = await postCall(srv.localUrl, "+12025550123"); // US
+      const blocked = await postCall(srv.localUrl, "+12025550123");
       assert.equal(blocked.status, 403);
       assert.match((await blocked.json()).error, /Country code/);
 
-      const ok = await postCall(srv.localUrl, ALLOWED); // +49 passiert das Land-Gate
+      const ok = await postCall(srv.localUrl, ALLOWED);
       assert.equal(ok.status, 500, "+49 darf das Land-Gate passieren (bis Twilio)");
     } finally {
       await srv.stop();
     }
   });
 
-  // F1 Phase 8: erweitertes Default-Gate +49,+33,+44 (DE/FR/UK). +33 und +44 passieren,
-  // ein Ziel ausserhalb der drei Vorwahlen (+1 US) bleibt fail-closed geblockt (R2:
-  // das Gate oeffnet bewusst NICHT global).
   await t.test("+49,+33,+44: FR(+33) und UK(+44) passieren, US(+1) -> 403 grund=land", async () => {
     const FR = "+33123456789",
       UK = "+447700900123",
       US = "+12025550123";
     const srv = await startServer({
-      // Allowlist grosszuegig (FR/UK/US drin), damit NUR das Land-Gate die drei trennt.
       env: {
         ALLOWED_NUMBERS: `${FR},${UK},${US}`,
         ALLOWED_COUNTRY_CODES: "+49,+33,+44",
@@ -106,7 +90,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
         "+44 darf das Land-Gate passieren (bis Twilio)",
       );
 
-      const blocked = await postCall(srv.localUrl, US); // US ausserhalb der drei Vorwahlen
+      const blocked = await postCall(srv.localUrl, US);
       assert.equal(blocked.status, 403, "+1 bleibt fail-closed geblockt");
       assert.match((await blocked.json()).error, /Country code/);
     } finally {
@@ -114,10 +98,6 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
     }
   });
 
-  // OUT-02 (P0, hochgestuft von P1 - Live-Messung 07-22, tasks/i18n-tests/13-live-env-
-  // befund.md: ALLOWED_COUNTRY_CODES steht LIVE auf "*", nicht auf den Code-Default
-  // "+49,+33,+44". Dieser bestehende Testfall prueft bereits genau den real wirksamen
-  // Zustand - kein neuer Test noetig (G5), nur die Katalog-Zuordnung dokumentiert.
   await t.test("* erlaubt alle Laender", async () => {
     const srv = await startServer({
       env: { ALLOWED_NUMBERS: "+12025550123", ALLOWED_COUNTRY_CODES: "*" },
@@ -131,10 +111,6 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
   });
 });
 
-// OUT-15: der bestehende Notruf-Test oben laeuft mit ALLOWED_COUNTRY_CODES="*" - dort ist
-// das Land-Gate ausgeschaltet und beweist die Praezedenz nur schwach. Hier ist genau EIN
-// Land explizit erlaubt (+1); die Denylist muss trotzdem VOR Format- und Land-Pruefung
-// greifen (403 denylist, nicht 400 Format).
 test("OUT-15 (Mechanismus, gruen) - die Notruf-Denylist gewinnt auch bei explizit erlaubtem Land (+1)", async () => {
   const srv = await startServer({
     env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+1" },
@@ -150,26 +126,20 @@ test("OUT-15 (Mechanismus, gruen) - die Notruf-Denylist gewinnt auch bei explizi
   }
 });
 
-// ---- GAP-18: NANP-Sub-Ranges bleiben gesperrt, auch wenn "+1" erlaubt ist ----
-// Denylist-Praezedenz (grund=denylist VOR Land-Gate) ist bereits gebaut (s. Pruefreihenfolge-
-// Test unten). Die Denylist enthaelt seit GAP-18 zwoelf "+1"-Eintraege (1-900/1-976 +
-// Karibik-Inseln, bekannt fuer Premium-Rueckruf-/One-Ring-Betrug/IRSF; seit KS-P7 stehen
-// die zehn Karibik-NPAs verhaltensgleich in der Klasse 2) - alle zwoelf
-// muessen 403 grund=denylist liefern, auch mit ALLOWED_COUNTRY_CODES="+1".
 test("NANP-Sub-Ranges (1-900/1-976 + Karibik) bleiben gesperrt, auch wenn +1 erlaubt ist (GAP-18)", async (t) => {
   const NANP_PREMIUM_TARGETS = [
-    "+19005550123", // 1-900 Pay-Per-Call
-    "+19765550123", // 1-976 Premium
-    "+18095550123", // Dominikanische Republik
-    "+18295550123", // Dominikanische Republik
-    "+18495550123", // Dominikanische Republik
-    "+18765550123", // Jamaika
-    "+12685550123", // Antigua und Barbuda
-    "+12845550123", // Britische Jungferninseln
-    "+14735550123", // Grenada
-    "+16495550123", // Turks- und Caicosinseln
-    "+16645550123", // Montserrat
-    "+17675550123", // Dominica
+    "+19005550123",
+    "+19765550123",
+    "+18095550123",
+    "+18295550123",
+    "+18495550123",
+    "+18765550123",
+    "+12685550123",
+    "+12845550123",
+    "+14735550123",
+    "+16495550123",
+    "+16645550123",
+    "+17675550123",
   ];
   const srv = await startServer({
     env: {
@@ -190,16 +160,13 @@ test("NANP-Sub-Ranges (1-900/1-976 + Karibik) bleiben gesperrt, auch wenn +1 erl
   }
 });
 
-// Pre-Mortem 1 (GAP-18): ein rein negativer Test (nur gesperrte Ziele) kann eine
-// Ueberblockierung nicht fangen - dafuer braucht es einen POSITIVEN Gegentest ueber
-// echte, gewoehnliche NANP-Nummern in verschiedenen Laendern/Regionen.
 test("gewoehnliche NANP-Nummern passieren die Denylist (GAP-18, Ueberblockierungs-Schutz)", async (t) => {
   const ORDINARY_NANP_TARGETS = [
-    "+12025550123", // Washington DC
-    "+14155550123", // San Francisco
-    "+19175550123", // New York City
-    "+16045550123", // Vancouver (CA)
-    "+18685550123", // Trinidad und Tobago (NANP, aber NICHT gesperrt)
+    "+12025550123",
+    "+14155550123",
+    "+19175550123",
+    "+16045550123",
+    "+18685550123",
   ];
   const srv = await startServer({
     env: {
@@ -219,18 +186,12 @@ test("gewoehnliche NANP-Nummern passieren die Denylist (GAP-18, Ueberblockierung
   }
 });
 
-// GAP-18: der Ablehnungsgrund allein sagt nicht, WELCHE Sub-Range gefeuert hat - genau
-// das braucht die Forensik, wenn ein ganzes Land still blockiert wird. Direkter Gate-
-// Aufruf (Muster test/outbound-gates-order.test.js): das Audit-Detail ist die EINE
-// pruefbare Quelle, ohne einen Audit-Log-Reader in test/helpers.js nachzuziehen.
 test("Denylist-Audit nennt die getroffene Sub-Range (GAP-18)", async () => {
   const { makeOutboundGates } = await import("../src/telephony/outbound-gates.js");
   const { withConfigNamespaces } = await import("./config-namespaces-helper.js");
   const to = "+19005550123";
   const { gates } = makeOutboundGates({
     store: {
-      // P15/T2: die Gate-Kette liest die Anzeigesprache der Ablehnung aus dem Store.
-      // Dieser Test prueft nur das sprachfreie Audit-Detail (grund + praefix).
       tenantLanguage: () => "de",
       countOutboundCallsSince: () => 0,
       tenantPrivateNumber: () => null,
@@ -260,13 +221,6 @@ test("Denylist-Audit nennt die getroffene Sub-Range (GAP-18)", async () => {
   assert.equal(denial.audit.detail, `to=${to} grund=denylist praefix=+1900 requestedBy=owner`);
 });
 
-// ---- OUT-25 (P0): Vollstaendiger Happy-Path fuer eine korrekt konfigurierte US-Freischaltung ----
-// Kombiniert alle Vorbedingungen eines vollstaendig freigeschalteten US-Tenants: +1 im
-// Laender-Gate, eine aktive +1-DID als Absendernummer, gueltiges KYC-Level + aktiver
-// Subscriber-Status. Der Owner-Pfad erfuellt beides byte-identisch zum Bestand (KYC via
-// seedBootstrapKyc auf id_verified beim Boot, Allowlist via tenantActiveSubscriber-Pfad 2 -
-// s. test/kyc-gate-outbound.test.js "Flag AUS: Owner-Pfad passiert via Boot-Seed
-// id_verified"), NUR mit einer +1-DID statt der Default-US-Testnummer als Absender.
 test("OUT-25: vollstaendig freigeschalteter US-Tenant passiert ALLE 17 Gates (500, kein 403/429/400)", async () => {
   const US_TARGET = "+12025550123";
   const srv = await startServer({
@@ -285,7 +239,6 @@ test("OUT-25: vollstaendig freigeschalteter US-Tenant passiert ALLE 17 Gates (50
   }
 });
 
-// ---- 0.3 Pro-Stunde-Limit ----
 test("Pro-Stunde-Limit (MAX_CALLS_PER_HOUR)", async (t) => {
   const recent = () => new Date().toISOString();
   const env = {
@@ -316,11 +269,6 @@ test("Pro-Stunde-Limit (MAX_CALLS_PER_HOUR)", async (t) => {
   await t.test("unter dem Limit passiert das Gate", async () => {
     const srv = await startServer({
       env,
-      // E3: eigenes Ziel fuer den Seed-Call, ANDERS als ALLOWED - sonst waere c1 (status
-      // "active", startedAt jetzt) ein Dedup-Treffer fuer den frischen postCall(ALLOWED)
-      // unten, und die Antwort waere 200 (dedupliziert) statt 500. Der Seed-Call zaehlt
-      // nur ins Stundenfenster (countOutboundCallsSince, richtungsoffen ueber alle
-      // Ziele) - sein "to" ist fuer DIESEN Test bedeutungslos.
       seed: seedState({ calls: [seedCall({ id: "c1", to: "+4915199999999", startedAt: recent() })] }),
     });
     try {
@@ -366,10 +314,8 @@ test("Pro-Stunde-Limit (MAX_CALLS_PER_HOUR)", async (t) => {
   });
 });
 
-// ---- 0.4 Pruefreihenfolge: Denylist > E.164 > Land > Stundenlimit > Allowlist ----
 test("Pruefreihenfolge der Nummern-Gates", async (t) => {
   await t.test("Denylist schlaegt Land + Allowlist", async () => {
-    // Premium-Prefix + falsches Land + leere Allowlist -> es muss die Denylist melden.
     const srv = await startServer({ env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+1" } });
     try {
       const res = await postCall(srv.localUrl, "+4990012345678");
@@ -391,11 +337,6 @@ test("Pruefreihenfolge der Nummern-Gates", async (t) => {
     }
   });
 
-  // Seit Phase outbound-p1 ist der Owner ein verifizierter Subscriber (Boot-Seed
-  // id_verified) und passiert die LEERE statische Allowlist ueber Pfad 2 (tenantActiveSubscriber)
-  // -> erreicht den Originate (offline 500). Der fail-closed Verifikations-Riegel fuer einen
-  // UNVERIFIZIERTEN Tenant ist jetzt das vorgelagerte KYC-Gate (siehe kyc-gate-outbound.test.js,
-  // null-kyc -> 403). Die harten Ziel-Gates (Denylist/Land) bleiben davor (s.o.).
   await t.test("verifizierter Owner/Subscriber passiert die leere Allowlist (Pfad 2 -> 500)", async () => {
     const srv = await startServer({
       env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" },
@@ -409,13 +350,8 @@ test("Pruefreihenfolge der Nummern-Gates", async (t) => {
   });
 });
 
-// ---- outbound-p1b: globale Best-effort-IRSF-Blockliste (neue Ranges) ----
-// Jeder NEU aufgenommene Premium-/Service-Range muss am DENYLIST-Gate (grund=denylist,
-// vor Format/Land) 403 + /gesperrt/ liefern; gewoehnliche internationale Nummern
-// (DE-Mobil, US, ES) duerfen die Denylist passieren. Land *, Allowlist grosszuegig;
-// ein durchgelassener Call endet offline deterministisch als 500.
 test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound-p1b)", async (t) => {
-  const PASS = ["+4915112345678", "+12025550123", "+34600000000"]; // DE-Mobil, US, ES
+  const PASS = ["+4915112345678", "+12025550123", "+34600000000"];
   const srv = await startServer({
     env: { ALLOWED_NUMBERS: PASS.join(","), ALLOWED_COUNTRY_CODES: "*" },
   });
@@ -427,25 +363,25 @@ test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound
   try {
     await t.test("UK 118/070/09/084x/087x -> 403 denylist", async () => {
       for (const to of [
-        "+4411812345678", // 118 Auskunft
-        "+447012345678", // 070 Personal/Follow-me
-        "+449123456789", // 09 Premium
+        "+4411812345678",
+        "+447012345678",
+        "+449123456789",
         "+448431234567",
         "+448441234567",
-        "+448451234567", // 084x
+        "+448451234567",
         "+448701234567",
-        "+448711234567", // 087x
+        "+448711234567",
       ])
         await blockedByDenylist(to);
     });
 
     await t.test("FR 118/089x/081x/082x -> 403 denylist", async () => {
       for (const to of [
-        "+3311812345678", // 118 Auskunft
+        "+3311812345678",
         "+338991234567",
-        "+338921234567", // 089x audiotel/SVA
+        "+338921234567",
         "+338101234567",
-        "+338201234567", // 081x/082x
+        "+338201234567",
       ])
         await blockedByDenylist(to);
     });
@@ -455,7 +391,6 @@ test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound
     });
 
     await t.test("gewoehnliche internationale Nummern passieren die Denylist (-> 500)", async () => {
-      // In Allowlist + Land *: ALLE Gates inkl. Denylist passieren -> offline 500 (kein 403).
       for (const to of PASS) {
         assert.equal(
           (await postCall(srv.localUrl, to)).status,
@@ -469,10 +404,6 @@ test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound
   }
 });
 
-// KS-P7: die neuen Hochpreis-Laendercodes muessen dieselbe Gate-Praezedenz haben wie die
-// Bestandseintraege - 403 grund=denylist, auch bei ALLOWED_COUNTRY_CODES="*" (Live-Zustand).
-// EIN Vertreter genuegt; die Vollstaendigkeit der Liste prueft das offline laufende
-// test/ks-p7-high-cost-denylist.test.js (G5: kein zweiter Spawn je Praefix).
 test("KS-P7: Hochpreis-Laendercode (+53 Kuba) -> 403 grund=denylist trotz Land-Gate '*'", async () => {
   const srv = await startServer({
     env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*" },

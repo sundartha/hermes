@@ -1,13 +1,3 @@
-// OC-P1 (PLAN-OWNER-CALL): Route-Ebene ueber POST /api/calls, Muster woertlich
-// test/diagnostic-retention-http.test.js. Blocks D (Schalter+Allowlist am Datensatz),
-// E (Nicht-Leak) und F (diagnostic bleibt bei JEDEM Schalterstand unveraendert - die
-// Zusage aus 2.2 "zwei Exporte, ein Vergleich" in Testform).
-//
-// FAKE_ORIGINATE=true legt NUR den TeXML-Zweig trocken (src/telephony/registry.js). Steht
-// in der lokalen .env ELEVENLABS_OUTBOUND_ENABLED=true, verzweigt die Route VOR dem
-// trockengelegten Zweig - dann waere das ein ECHTER Anruf mit echten Kosten (Absolute
-// Regel 1). BASE_ENV pinnt das bereits auf "false"; hier steht es trotzdem ausdruecklich,
-// weil dieser Test GENAU davon abhaengt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
@@ -16,7 +6,6 @@ import { startServer, seedState } from "./helpers.js";
 const OWN = "+491737252163";
 const FOREIGN = "+491729999001";
 const OTHER_TENANT = "t_fremd";
-// G25: kein Magic-Value - der einzige hier erwartete HTTP-Erfolgsstatus.
 const HTTP_OK = 200;
 
 const seed = seedState({
@@ -57,8 +46,6 @@ async function callAndReadFlag({ env, to }) {
   }
 }
 
-// ---- Block D: Schalter + Allowlist am Anruf-Datensatz ----
-
 test("OC-P1-60: Schalter an, Tenant gepinnt, Ziel = eigene Nummer -> calleeIsOwner true", async () => {
   const { call } = await callAndReadFlag({
     env: { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
@@ -67,11 +54,6 @@ test("OC-P1-60: Schalter an, Tenant gepinnt, Ziel = eigene Nummer -> calleeIsOwn
   assert.strictEqual(call.calleeIsOwner, true);
 });
 
-// S13-Beleg: das Praedikat MUSS auf ctx.to (normalisiert) lesen, nicht auf der rohen
-// Eingabe. "01737252163" (nationale Schreibweise) loest ueber normalize_target
-// (outbound-gates.js, Heimatland-Anker = privateNumber) auf "+491737252163" == OWN auf -
-// GEMESSEN (nicht geraten): homeCountryCode(["+491737252163"], "DE") -> "+49",
-// normalizeDialTarget("01737252163", "+49") -> "+491737252163".
 test("OC-P1-60b: nationale Schreibweise der eigenen Nummer -> calleeIsOwner true (Beleg: Praedikat liest ctx.to)", async () => {
   const { call } = await callAndReadFlag({
     env: { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
@@ -112,15 +94,6 @@ test("OC-P1-64: Schalter an, Allowlist ohne diesen Tenant, Ziel = eigene Nummer 
   assert.strictEqual(call.calleeIsOwner, false);
 });
 
-// ---- Block E: Nicht-Leak ----
-
-// Die private Nummer erscheint auf DIESEM Call legitim und schon lange VOR OC-P1 als
-// call.to (das Ziel, das der Aufrufer selbst gewaehlt hat) - das ist keine neue
-// Leckstelle, sondern der Zweck des Calls. Der Beleg dieses Tests ist deshalb NICHT
-// "die Nummer taucht nirgends auf", sondern: ausserhalb von call.to/call.from (den
-// beiden Feldern, die JEDER Call schon immer traegt) erscheint sie NIRGENDS NEU -
-// insbesondere nicht als eigenes Tenant-/Agent-Feld. Nur das neue Boolean
-// (calleeIsOwner) ist neu am Datensatz.
 test("OC-P1-65: GET /api/state traegt calleeIsOwner:true, die private Nummer NIRGENDS NEU (nur legitim als call.to)", async () => {
   const srv = await startServer({
     env: {
@@ -143,8 +116,6 @@ test("OC-P1-65: GET /api/state traegt calleeIsOwner:true, die private Nummer NIR
     assert.strictEqual(call.calleeIsOwner, true, "das Boolean erscheint - gewollt (publicCall-Denylist)");
     assert.equal(call.to, OWN, "call.to traegt die Nummer LEGITIM (das gewaehlte Ziel)");
 
-    // Denselben Datensatz OHNE die zwei legitimen Felder serialisieren - danach darf die
-    // Nummer in der GESAMTEN Antwort (alle Calls, agent, settings, ...) nicht mehr stehen.
     const sanitizedCalls = stateJson.calls.map(({ to: _to, from: _from, ...rest }) => rest);
     const sanitized = JSON.stringify({ ...stateJson, calls: sanitizedCalls });
     assert.ok(!sanitized.includes(OWN), "ausserhalb von call.to/call.from erscheint die Nummer nirgends neu");
@@ -156,8 +127,6 @@ test("OC-P1-65: GET /api/state traegt calleeIsOwner:true, die private Nummer NIR
     await srv.stop();
   }
 });
-
-// ---- Block F: diagnostic unveraendert bei JEDEM Schalterstand (2.2, zwei Exporte, ein Vergleich) ----
 
 async function diagnosticFor({ env, to }) {
   const srv = await startServer({

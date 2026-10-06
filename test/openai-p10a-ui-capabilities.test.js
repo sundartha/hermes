@@ -1,17 +1,3 @@
-// P10a (H3, P4-Abnahme): "keine capabilities in den Server-Optionen, wenn uiEnabled:false"
-// ist seit P4 von KEINEM Test mehr gedeckt gewesen. Dieser Test pinnt sie wieder, auf
-// BEIDEN Draehten (HTTP und stdio), die mcpServerOptions() (src/mcp-server-info.js)
-// aufrufen.
-//
-// Fall 3 (stdio) liest die initialize-Antwort ROH ueber die Kindprozess-Pipe, NICHT
-// ueber den typisierten SDK-Client: ServerCapabilitiesSchema (SDK types.js) ist ein
-// z.object(...) OHNE .passthrough() und wuerde einen unbekannten Top-Level-Schluessel
-// wie "extensions" beim Parsen still entfernen (UNKNOWN-2 der Spec) - ein Beleg ueber
-// den typisierten Client waere entweder faelschlich rot oder gruen aus dem falschen
-// Grund. Positivkontrolle nie weglassen (Lehre messwerkzeug-braucht-attrappe).
-//
-// Testname traegt KEIN Katalog-/ABNAHME-Praefix (package.json i18nCatalogPattern/
-// abnahmePattern), sonst landet er im falschen Lauf (Lehre catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -36,9 +22,6 @@ function initializeBody(id) {
   };
 }
 
-// Spricht das rohe stdio-JSON-RPC (newline-delimited, SDK shared/stdio.js) direkt mit
-// einem Kindprozess - kein StdioClientTransport/Client, damit KEINE SDK-Zod-Schema die
-// Server-capabilities vor der Zusicherung beschneidet.
 async function rawStdioInitialize(env) {
   const child = spawn(process.execPath, [MCP_SERVER_ENTRYPOINT], {
     cwd: ROOT,
@@ -90,7 +73,6 @@ async function rawStdioInitialize(env) {
   }
 }
 
-// ==================== Fall 1: Einheit ====================
 test("P10a (H3, Fall 1): mcpServerOptions traegt keine capabilities, wenn uiEnabled:false - unabhaengig von consultLoop", () => {
   assert.equal(
     Object.hasOwn(mcpServerOptions({ uiEnabled: false, consultLoop: false }), CAPABILITIES_KEY),
@@ -100,8 +82,6 @@ test("P10a (H3, Fall 1): mcpServerOptions traegt keine capabilities, wenn uiEnab
     Object.hasOwn(mcpServerOptions({ uiEnabled: false, consultLoop: true }), CAPABILITIES_KEY),
     false,
   );
-  // Positivkontrolle: bei uiEnabled:true IST die Extension da - sonst waere der Helfer
-  // oben unbemerkt immer gruen.
   const withUi = mcpServerOptions({ uiEnabled: true, consultLoop: false });
   assert.ok(
     withUi.capabilities?.extensions?.[UI_CAPABILITY_KEY],
@@ -109,9 +89,8 @@ test("P10a (H3, Fall 1): mcpServerOptions traegt keine capabilities, wenn uiEnab
   );
 });
 
-// ==================== Fall 2: HTTP-Draht ====================
 test("P10a (H3, Fall 2 - HTTP): /mcp initialize traegt keine io.modelcontextprotocol/ui-Extension, wenn MCP_UI_ENABLED=false", async () => {
-  const srv = await startServer({ seed: seedState({}) }); // BASE_ENV: MCP_UI_ENABLED=false
+  const srv = await startServer({ seed: seedState({}) });
   try {
     const res = await mcpPost(`${srv.localUrl}/mcp`, null, initializeBody(1));
     const result = await readToolResult(res);
@@ -139,7 +118,6 @@ test("P10a (H3, Fall 2 - HTTP, Positivkontrolle): /mcp initialize traegt die Ext
   }
 });
 
-// ==================== Fall 3: stdio-Draht ====================
 test("P10a (H3, Fall 3 - stdio): der Kindprozess (src/mcp-server.js) traegt keine io.modelcontextprotocol/ui-Extension, wenn MCP_UI_ENABLED=false", async () => {
   const { capabilities, stderrOutput } = await rawStdioInitialize({});
   assert.equal(
@@ -157,7 +135,6 @@ test("P10a (H3, Fall 3 - stdio, Positivkontrolle): der Kindprozess traegt die Ex
   );
 });
 
-// ==================== Fall 4 (optional, billig): consultLoop schaltet die Capabilities nicht ein ====================
 test("P10a (H3, Fall 4): CONSULT_ENABLED+ASSISTANT_CONTEXT_ENABLED schalten die UI-Extension NICHT ein", async () => {
   const srv = await startServer({
     seed: seedState({}),

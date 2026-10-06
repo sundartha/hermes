@@ -1,27 +1,11 @@
-// Reine Pruef-Logik des MCP-Kompatibilitaetsvertrags (docs/mcp-vertrag.json): kein Netz,
-// keine Datei, kein Server. Verbraucher: test/mcp-kompatibilitaetsvertrag.test.js, der den
-// ECHTEN tools/list-/resources/list-Output (test/mcp-draht-pfade.js) hier hineinreicht.
-// Kein Testfall hier (Datei ohne .test.js-Endung): der Runner laedt sie nur als Import.
-//
-// Was der Vertrag zusichert, sind NUR Kompatibilitaetsmerkmale: Werkzeugnamen je Pfad,
-// Eingabe-/Ausgabe-Gerippe (jedes Schema-Schluesselwort ausser reinem Text), Annotation-Hints,
-// execution, securitySchemes, Widget-URIs und Resource-URIs. Beschreibungen, Titel und
-// _meta-Texte sind KEIN Merkmal (anderweitig gepinnt, s. docs/RUNBOOK-MCP-UPDATE.md).
 import { createHash } from "node:crypto";
 
-// Gerippe eines JSON-Schemas, fail-closed: JEDER Schluessel geht ins Gerippe und wird
-// verglichen - ausser den reinen Text-Schluesseln (TEXT_SCHLUESSEL) und den eigens
-// rekursiv behandelten (REKURSIVE_SCHLUESSEL). Ein unbekanntes Schluesselwort (allOf, $ref,
-// propertyNames, ...) faellt also nie still heraus; seine Aenderung ist ein Bruch.
 const TEXT_SCHLUESSEL = ["description", "title", "$schema", "examples"];
 const REKURSIVE_SCHLUESSEL = ["properties", "items", "required"];
-// Listen von Teilschemata: werden je Eintrag auf ihr Gerippe reduziert (Text faellt heraus).
 const SCHEMA_LISTEN = ["anyOf", "allOf", "oneOf"];
 const IGNORIERT = [...TEXT_SCHLUESSEL, ...REKURSIVE_SCHLUESSEL];
 const HINT_NAMEN = ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"];
 
-// Anker der Abschnitte in docs/RUNBOOK-MCP-UPDATE.md, auf die ein Befund verweist.
-// runbookBefunde() prueft, dass jeder hier genannte Anker im Runbook existiert.
 export const RUNBOOK_ANKER = Object.freeze({
   additiv: "additive-aenderung",
   bruch: "bruch",
@@ -31,15 +15,11 @@ export const RUNBOOK_ANKER = Object.freeze({
 });
 
 export const VERTRAG_ARTEN = Object.freeze(["erstfassung", "additiv", "bruch"]);
-// Untergrenze fuer eine Begruendung: kurz genug fuer einen Satz, lang genug gegen
-// Platzhalter wie "update" oder "neu gepinnt".
 export const MIN_BEGRUENDUNG_ZEICHEN = 40;
 const ISO_DATUM = /^\d{4}-\d{2}-\d{2}$/;
 
 const VERWEIS_PRAEFIXE = ["docs/", "src/", "test/", "scripts/"];
 const INTERNE_KENNUNG = /\b(T2-\d+|T-\d+|OW-[A-Z0-9]+|H-\d+|[NOWX]-\d+)\b/g;
-
-// ---- Kanonische Form + Hash ----
 
 export function kanonisch(wert) {
   if (Array.isArray(wert)) return `[${wert.map(kanonisch).join(",")}]`;
@@ -56,10 +36,6 @@ export const standSha256 = (stand) =>
     .update(kanonisch({ profile: stand.profile, werkzeuge: stand.werkzeuge }))
     .digest("hex");
 
-// ---- Gerippe ----
-
-// Reihenfolge von type-Listen und enum-Werten traegt keine Bedeutung -> sortiert, damit
-// eine reine Umsortierung nicht als Bruch erscheint.
 const sortiertWennListe = (wert) => (Array.isArray(wert) ? [...wert].sort() : wert);
 
 const flacheSchluessel = (schema) => Object.keys(schema).filter((key) => !IGNORIERT.includes(key));
@@ -97,10 +73,7 @@ export function werkzeugMerkmale(tool) {
   };
 }
 
-// ---- Stand aus dem Draht ----
-
 const nachUri = (links, rechts) => (links.uri < rechts.uri ? -1 : Number(links.uri > rechts.uri));
-// Widget-URI, auf die ein Werkzeug am Draht verweist (undefined ohne Widget).
 export const widgetUri = (tool) => tool._meta?.ui?.resourceUri;
 
 function profilStand({ tools, resources = [] }) {
@@ -126,8 +99,6 @@ function nimmMerkmaleAuf(katalog, tool, profilId) {
   if (!bekannt) katalog.set(tool.name, { merkmale, profilId });
 }
 
-// profile: { profilId: { tools, resources } } -> { profile, werkzeuge }. Wirft bei
-// Pfad-Divergenz (dasselbe Werkzeug, verschiedene Merkmale auf zwei Pfaden).
 export function standAusDraht(profile) {
   const katalog = new Map();
   const profilStaende = {};
@@ -142,8 +113,6 @@ export function standAusDraht(profile) {
   };
 }
 
-// Ausschnitt eines Stands auf EIN Profil (dessen Werkzeuge aus dem Katalog), damit ein
-// einzelner Draht-Pfad gegen den Vertrag verglichen werden kann.
 export function teilstand(stand, profilId) {
   const profil = stand.profile[profilId];
   if (!profil) return { profile: {}, werkzeuge: {} };
@@ -154,9 +123,6 @@ export function teilstand(stand, profilId) {
   };
 }
 
-// ---- Klassifikation (fail-closed: additiv NUR fuer die ausdruecklich genannten Faelle) ----
-
-// ort: { profil?, werkzeug?, runbook? } - ohne runbook gilt der Abschnitt der Klasse.
 const befund = ({ art, merkmal, ort, detail }) => ({
   art,
   merkmal,
@@ -168,8 +134,6 @@ const pfadText = (pfad) => pfad.join(".") || "(Wurzel)";
 const nurIn = (liste, andere) => liste.filter((eintrag) => !andere.includes(eintrag));
 const aenderungsText = (alt, neu) => `${kanonisch(alt)} -> ${kanonisch(neu)}`;
 
-// Alle flachen Schluessel BEIDER Seiten: ein neu hinzugekommenes Schluesselwort ist
-// ebenso ein Bruch wie ein entferntes oder geaendertes.
 function flacheAbweichungen(alt, neu, ctx) {
   const schluessel = [...new Set([...flacheSchluessel(alt), ...flacheSchluessel(neu)])].sort();
   const geaendert = schluessel.filter((key) => kanonisch(alt[key]) !== kanonisch(neu[key]));
@@ -183,8 +147,6 @@ function flacheAbweichungen(alt, neu, ctx) {
   );
 }
 
-// Neue Eingabe-Eigenschaft (je Name): additiv, solange sie optional ist - alte Aufrufe
-// senden sie nicht.
 const neueEingabeEigenschaft = (neu, ctx) => (name) => {
   const detail = pfadText([...ctx.pfad, name]);
   if ((neu.required ?? []).includes(name)) {
@@ -193,16 +155,8 @@ const neueEingabeEigenschaft = (neu, ctx) => (name) => {
   return befund({ art: "additiv", merkmal: "eingabe: neue optionale Eigenschaft", ort: ctx.ort, detail });
 };
 
-// Ob das ALTE Objekt weitere Eigenschaften zulaesst: nur wenn additionalProperties fehlt
-// oder true ist. false - und fail-closed jeder andere Wert, etwa ein Teilschema - schliesst
-// eine unbekannte Eigenschaft aus.
 const nimmtWeitereEigenschaften = (schema) => schema.additionalProperties === undefined || schema.additionalProperties === true;
 
-// Neue Ausgabe-Eigenschaft (je Name, Pflicht oder optional): additiv NUR, wenn das alte
-// Objekt, an dem sie hinzukommt, weitere Eigenschaften zulaesst - auf jeder Objektebene,
-// denn vergleicheSchema laeuft rekursiv ueber properties und items. Sonst Bruch: ein
-// Client, der das Ergebnis gegen die gehaltene alte Definition prueft (der MCP-SDK-Client
-// tut das fuer structuredContent), lehnt die unbekannte Eigenschaft ab.
 const neueAusgabeEigenschaft = (alt, ctx) => (name) => {
   const detail = pfadText([...ctx.pfad, name]);
   if (nimmtWeitereEigenschaften(alt)) {
@@ -235,10 +189,6 @@ function eigenschaftsAbweichungen(alt, neu, ctx) {
   return befunde;
 }
 
-// Pflicht-Aenderungen an Eigenschaften, die es vorher schon gab (neue Eigenschaften
-// behandeln neueEingabeEigenschaft/neueAusgabeEigenschaft). Beide Richtungen sind Bruch: an
-// der Eingabe wird es strenger bzw. lockerer, an der Ausgabe faellt ein Versprechen weg bzw.
-// kommt ein neues hinzu.
 function pflichtAbweichungen(alt, neu, ctx) {
   const altPflicht = alt.required ?? [];
   const neuPflicht = neu.required ?? [];
@@ -269,7 +219,6 @@ function vergleicheSchema(alt, neu, ctx) {
   return befunde;
 }
 
-// Genau eine Seite hat ein Schema: neu hinzugekommen ist nur das outputSchema selbst additiv.
 function schemaDaseinsAbweichung(alt, ctx) {
   const detail = pfadText(ctx.pfad);
   if (alt !== null) return [befund({ art: "bruch", merkmal: `${ctx.richtung}: Schema entfernt`, ort: ctx.ort, detail })];
@@ -383,8 +332,6 @@ function profilAbweichungen(profil, alt, neu) {
   ];
 }
 
-// alt/neu: { profile, werkzeuge } -> Befundliste. Leer genau dann, wenn beide Staende
-// dieselben Vertragsmerkmale tragen.
 export function klassifiziere(alt, neu) {
   const profilIds = [...new Set([...Object.keys(alt.profile), ...Object.keys(neu.profile)])].sort();
   const befunde = profilIds.flatMap((id) => profilAbweichungen(id, alt.profile[id], neu.profile[id]));
@@ -395,14 +342,11 @@ export function klassifiziere(alt, neu) {
   return befunde;
 }
 
-// Menschenlesbare Zeile je Befund, mit dem zustaendigen Runbook-Abschnitt.
 export function befundZeile(eintrag) {
   const orte = [eintrag.profil && `Profil ${eintrag.profil}`, eintrag.werkzeug && `Werkzeug ${eintrag.werkzeug}`];
   const ort = orte.filter(Boolean).join(", ");
   return `${eintrag.art}: ${eintrag.merkmal} [${ort}] ${eintrag.detail} -> docs/RUNBOOK-MCP-UPDATE.md#${eintrag.runbook}`;
 }
-
-// ---- Aenderungskette ----
 
 function eintragBefunde(eintrag, index) {
   const wo = `aenderungen[${index}]`;
@@ -427,15 +371,11 @@ function katalogBefunde(vertrag) {
   ];
 }
 
-// Die Klasse, die ein Ketteneintrag nach der Klassifikation tragen muss: bruch, sobald ein
-// Befund ein Bruch ist, sonst additiv; null, wenn sich kein Vertragsmerkmal aendert.
 function sollArt(abweichungen) {
   if (abweichungen.length === 0) return null;
   return abweichungen.some((eintrag) => eintrag.art === "bruch") ? "bruch" : "additiv";
 }
 
-// Eintrag index gegen seinen Vorgaenger: art muss zur Klassifikation der beiden Staende
-// passen. Damit laesst sich ein Bruch nicht als "additiv" eintragen.
 function artBefunde(kette, index, standZu) {
   const wo = `aenderungen[${index}]`;
   const alt = standZu(kette[index - 1].stand_sha256);
@@ -451,11 +391,6 @@ function artBefunde(kette, index, standZu) {
   return [`${wo}: art "${kette[index].art}", die Klassifikation ergibt "${soll}"`, ...brueche];
 }
 
-// Nur anhaengen: eine frueher committete Kette muss ein unveraendertes Praefix der
-// aktuellen sein - jeder Eintrag kanonisch gleich, samt stand_sha256, art und
-// begruendung. Ohne diese Regel liesse sich ein Bruch in einen bestehenden Eintrag
-// hineinschreiben (z.B. den Hash der Erstfassung ueberschreiben), und die uebrigen
-// Pruefungen blieben gruen, weil Vertrag und Draht wieder uebereinstimmen.
 function praefixBefunde(kette, { quelle, aenderungen }) {
   if (aenderungen.length > kette.length) {
     return [`aenderungen: kuerzer als im committeten Stand ${quelle} - bestehende Eintraege nie entfernen`];
@@ -465,11 +400,6 @@ function praefixBefunde(kette, { quelle, aenderungen }) {
   return [`aenderungen[${index}]: weicht vom committeten Stand ${quelle} ab - bestehende Eintraege nie aendern, nur anhaengen`];
 }
 
-// vertrag: Inhalt von docs/mcp-vertrag.json. historie (Pflicht, damit keine Pruefung still
-// entfaellt; Quelle: Datei-Stand und Git-Historie, s. Vertragstest):
-//   standZu(stand_sha256) -> { profile, werkzeuge } oder undefined,
-//   fruehereKetten: [{ quelle, aenderungen }] je committetem Stand der Vertragsdatei.
-// -> Befundliste (leer = Kette in Ordnung).
 export function pruefeKette(vertrag, { standZu, fruehereKetten }) {
   const kette = vertrag.aenderungen ?? [];
   if (kette.length === 0) return ["aenderungen: leer - mindestens die Erstfassung gehoert hinein"];
@@ -488,20 +418,16 @@ export function pruefeKette(vertrag, { standZu, fruehereKetten }) {
   return befunde;
 }
 
-// ---- Veroeffentlichte Widget-URIs ----
-
 export const fehlendeVeroeffentlichteUris = (veroeffentlicht, lesbar) =>
   veroeffentlicht.filter((uri) => !lesbar.includes(uri));
 
 const WIDGET_URI = /^ui:\/\/hermes\/([a-z0-9-]+)\/v([1-9]\d*)\.html$/;
 
-// ui://hermes/<widget>/v<version>.html -> { widgetId, version } oder null.
 export function widgetUriTeile(uri) {
   const treffer = WIDGET_URI.exec(uri);
   return treffer ? { widgetId: treffer[1], version: Number(treffer[2]) } : null;
 }
 
-// Jede Widget- und Resource-URI, die irgendein Profil eines Stands nennt.
 function standUris(stand) {
   const profile = Object.values(stand.profile ?? {});
   const uris = profile.flatMap((profil) => [
@@ -511,14 +437,6 @@ function standUris(stand) {
   return [...new Set(uris)].sort();
 }
 
-// Geschuetzte Widget-URIs (veroeffentlichte_widget_uris): die "published UI resource URIs",
-// die der Server waehrend der Pruefungsluecke weiter ausliefern muss (Runbook, Abschnitt
-// Widget-URIs). Hinein gehoert deshalb NUR eine URI, die der veroeffentlichte Stand
-// (veroeffentlichung) nennt: ohne Veroeffentlichung ist die Liste leer, und rueckt die Marke
-// auf einen Stand vor, der eine URI nicht mehr nennt, ist die Luecke fuer sie vorbei und sie
-// faellt heraus. Dass eine verdraengte URI hineingehoert, erzwingt die Sperre
-// (markenBruchBefunde), dass sie lesbar bleibt, der Draht-Test.
-// umgebung: { standZu(stand_sha256) -> { profile, werkzeuge } oder undefined }.
 export function geschuetzteUriBefunde(vertrag, { standZu }) {
   const marke = vertrag.veroeffentlichung ?? null;
   const live = marke ? standZu(marke.stand_sha256) : undefined;
@@ -528,15 +446,6 @@ export function geschuetzteUriBefunde(vertrag, { standZu }) {
   );
 }
 
-// ---- Sperre nach der Veroeffentlichung ----
-
-// Waehrend der Pruefungsluecke muss die gehaltene Definition weiter funktionieren ("Keep
-// existing input schemas and each published UI resource URI working during that gap.").
-// Vertraeglich ist deshalb genau EIN Bruch: eine verdraengte Widget- bzw. Resource-URI,
-// solange die alte URI geschuetzt ist - dann verlangt der Draht-Test, dass sie lesbar bleibt.
-// Alles andere ist gesperrt, egal welcher Ketteneintrag es begleitet: auch ein entferntes
-// oder umbenanntes Werkzeug, denn sein veroeffentlichtes Eingabeschema funktionierte bis zum
-// naechsten Scan nicht mehr.
 const vertraeglicherBruch = (eintrag, geschuetzt) => eintrag.alteUri !== undefined && geschuetzt.includes(eintrag.alteUri);
 
 const kettenIndex = (vertrag, hash) => (vertrag.aenderungen ?? []).findIndex((eintrag) => eintrag.stand_sha256 === hash);
@@ -573,8 +482,6 @@ function markenBruchBefunde(vertrag, marke, standZu) {
   return gesperrt.map((eintrag) => `gesperrt nach der Veroeffentlichung (${wo}): ${befundZeile(eintrag)}`);
 }
 
-// Ein frueherer Commit ist Vorlauf des neuen veroeffentlichten Stands, wenn er genau diesen
-// Stand unter der bisherigen Marke trug und dort die Sperre bestand.
 function istVorlauf(frueher, marke, { bisher, standZu }) {
   const vertrag = frueher.vertrag;
   if (standSha256(vertrag) !== marke.stand_sha256) return false;
@@ -582,10 +489,6 @@ function istVorlauf(frueher, marke, { bisher, standZu }) {
   return markenBruchBefunde(vertrag, bisher, standZu).length === 0;
 }
 
-// Die Marke rueckt nur auf einen Stand vor, der vorher unter der bisherigen Marke committet
-// war und dort die Sperre bestanden hat. Damit legitimiert weder ein Ketteneintrag noch das
-// Versetzen der Marke einen Bruch gegen den bisher veroeffentlichten Stand. Die erste Marke
-// setzt den Ausgangsstand und braucht keinen Vorlauf.
 function vorlaufBefunde(marke, { standZu, fruehereVertraege }) {
   const bisher = fruehereVertraege.map(markeVon).find((frueher) => frueher && frueher.stand_sha256 !== marke.stand_sha256);
   if (!bisher) return [];
@@ -596,13 +499,6 @@ function vorlaufBefunde(marke, { standZu, fruehereVertraege }) {
   ];
 }
 
-// veroeffentlichung: null (nichts veroeffentlicht) oder { datum, stand_sha256 } - der Stand,
-// den OpenAI live haelt. Ab dann vergleicht diese Pruefung den AKTUELLEN Vertrag (= Draht,
-// s. Draht-Test) mit dem Stand der Marke und sperrt jeden Bruch gegen ihn - kumulativ, also
-// auch ueber mehrere Ketteneintraege hinweg. Zwischenstaende, die nie Stand der Marke waren
-// (auch einzeln von OpenAI freigegebene Werkzeuge), schuetzt sie nicht (Runbook, Sperre).
-// Die Marke wandert nur vorwaerts und nur ueber einen Vorlauf (vorlaufBefunde).
-// umgebung: { standZu, fruehereVertraege: [{ quelle, vertrag }] je committetem Stand, neuester zuerst }.
 export function veroeffentlichungsBefunde(vertrag, umgebung) {
   const marke = vertrag.veroeffentlichung ?? null;
   const befunde = markenHistorieBefunde(vertrag, marke, umgebung.fruehereVertraege);
@@ -610,9 +506,6 @@ export function veroeffentlichungsBefunde(vertrag, umgebung) {
   return befunde;
 }
 
-// ---- Runbook-Verweise ----
-
-// Interne Kennungen (Phasen-, Befund-, Owner-Nummern) gehoeren in kein Dokument unter docs/.
 export const interneKennungen = (text) => [...text.matchAll(INTERNE_KENNUNG)].map(([kennung]) => kennung);
 
 function pfadAusVerweis(verweis) {
@@ -621,7 +514,6 @@ function pfadAusVerweis(verweis) {
   return istPfad ? pfad : null;
 }
 
-// text: Runbook-Inhalt; umgebung: { exists(pfad) -> bool, skripte: [npm-Skriptnamen] }.
 export function runbookBefunde(text, { exists, skripte }) {
   const befunde = [];
   for (const [, verweis] of text.matchAll(/`([^`\s]+)`/g)) {

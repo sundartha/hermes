@@ -1,7 +1,3 @@
-// OAuth-2.1-Resource-Server-Verhalten von /mcp (MCP_AUTH=oauth) plus die
-// Well-known-Metadata. Laeuft offline: ein lokaler Mini-IdP (jose-Keypair,
-// eigener HTTP-Server) liefert openid-configuration + JWKS, Tokens werden im
-// Test signiert. Kein echter IdP, kein Netz nach aussen.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -26,12 +22,7 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: idp.issuer,
       OAUTH_AUDIENCE: AUDIENCE,
-      DASHBOARD_PASSWORD: "geheim", // Wiederauferstehungs-Detektor: der Wert wird seit AUTH-P7 von nichts mehr gelesen
-      // E4: jedes Token in diesem Block traegt den Default-sub "user-1" (idp.sign ohne
-      // explizites sub) - ohne Bindung wuerde der letzte Subtest am /mcp-Torschluss
-      // (TENANT_REJECT -> 403, VOR dem [mcp]-Diagnose-Log) scheitern, bevor er das
-      // Log-Verhalten pruefen kann. Die anderen Subtests scheitern ohnehin frueher an
-      // mcpAuth (401) und erreichen die Tenant-Aufloesung gar nicht erst.
+      DASHBOARD_PASSWORD: "geheim",
       OWNER_IDP_SUBJECT: "user-1",
     },
   });
@@ -71,11 +62,6 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
       assert.equal(res.status, HTTP_UNAUTHORIZED);
     });
 
-    // T-12: jose prueft exp nur, wenn der Claim vorhanden ist - ein signiertes
-    // Token OHNE exp muss der Resource Server trotzdem ablehnen (requiredClaims).
-    // Kein Loopback-Sonderweg im OAuth-Zweig (anders als bei isTrustedLocalCaller) -
-    // der Beleg ist damit lageunabhaengig; zusaetzlich zur Sicherheit auch ueber die
-    // externe Interface-IP geprueft, wenn eine existiert.
     await ctx.test("Token ohne exp -> 401 + WWW-Authenticate mit resource_metadata", async () => {
       const token = await idp.sign({ email: "noexp@team.test" }, { exp: null });
       const [, payloadB64] = token.split(".");
@@ -113,7 +99,6 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
       const token = await idp.sign({ email: "alice@team.test" });
       const res = await post(`${srv.localUrl}/mcp`, token);
       assert.notEqual(res.status, HTTP_UNAUTHORIZED);
-      // T-P0-7: das [mcp]-Diagnose-Log zeigt die E-Mail nur gehasht, nie im Klartext.
       await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("alice@team.test")} tenant=`));
     });
   } finally {
@@ -122,16 +107,6 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
   }
 });
 
-// E5/S2-A6: der DIVERGENTE OAUTH_AUDIENCE-Override ist kein Betriebszustand mehr,
-// sondern ein Boot-Refusal - bewusste Ruecknahme der AM6-Faehigkeit, nicht ein
-// Regressionsfang. Grund: bis hierher konnten aud-Erwartung (src/auth.js audience()) und
-// Metadaten-Verweis (PRM resource) auseinanderlaufen, ohne dass es jemand merkt; der
-// Client erfaehrt eine resource, der Server prueft eine andere aud - eine erfolgreiche
-// Autorisierung ist dann unmoeglich. T-32 verlangt EINEN angekuendigten Origin.
-// LIVE kostet das nichts: gemessen am 2026-09-18 gilt PRM.resource === publicUrl+"/mcp",
-// OAUTH_AUDIENCE ist also leer ODER exakt gleich. Was den Override-PFAD (audience() liest
-// oauthAudience, nicht den Default) weiter festhaelt, ist der Gleichheits-Pin in
-// test/s2-mcp-origin.test.js gegen die ausgelieferte PRM.
 test("MCP_AUTH=oauth: divergenter OAUTH_AUDIENCE -> Boot verweigert (exit 1)", async () => {
   const { code, output } = await startServerExpectExit({
     env: {
@@ -147,7 +122,6 @@ test("MCP_AUTH=oauth: divergenter OAUTH_AUDIENCE -> Boot verweigert (exit 1)", a
 });
 
 test("MCP_AUTH=oauth: JWKS-Discovery faellt auf oauth-authorization-server zurueck (WorkOS-Stil)", async (ctx) => {
-  // IdP liefert NUR den OAuth-2.1-Metadata-Pfad, kein openid-configuration.
   const idp = await startIdp({ metadataPath: "/.well-known/oauth-authorization-server" });
   const srv = await startServer({
     env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE },
@@ -165,9 +139,6 @@ test("MCP_AUTH=oauth: JWKS-Discovery faellt auf oauth-authorization-server zurue
 });
 
 test("MCP_AUTH=oauth ohne OAUTH_ISSUER_URL: Boot verweigert (fail-closed, OT-4)", async () => {
-  // Ein OAuth-Resource-Server ohne Issuer kann keine Tokens verifizieren -> /mcp
-  // waere kaputt/offen. assertConfig wertet das als Pflicht-Config; der Boot wird
-  // jetzt verweigert (exit 1) statt nur zu warnen und trotzdem zu starten.
   const { code, output } = await startServerExpectExit({
     env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: "" },
   });

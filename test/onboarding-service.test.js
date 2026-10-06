@@ -1,9 +1,3 @@
-// Onboarding-Orchestrierung (provisionNumber): reine State-Machine + injizierter
-// Fake-Provisioner (DIP) - kein Netz, kein Server, kein pglite (eigene Datei).
-// Prueft die Geld-Sicherheits-Invarianten: active NUR nach erfolgreichem Order
-// (Voice-Routing reist im Order-Body, kein separater configure-Schritt mehr);
-// Fehler vor dem Kauf -> failed (kein Release). Die Release-/Orphan-Abdeckung NACH
-// dem Kauf liegt im Payment-Pfad (billing-hold-capture.test.js, capture-Fehler).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { provisionNumber } from "../src/onboarding.js";
@@ -34,11 +28,8 @@ test("happy path: search -> order -> active mit e164 + providerNumberId (kein co
   assert.equal(result.e164, "+4915799990001");
   assert.equal(result.providerNumberId, "num_ext_1");
   assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
-  // AM5: kein separater configure-Aufruf mehr (Spy zaehlt 0) - das Voice-Routing reist
-  // im Order-Body (connectionId).
   assert.ok(!prov.log.some((l) => l.startsWith("configure")), "kein configure-Aufruf");
   assert.equal(prov.orderCalls.at(-1).connectionId, "conn_1");
-  // Aktivierung legt die assignment-Zeile an.
   assert.ok(s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt));
 });
 
@@ -72,7 +63,3 @@ test("order wirft -> failed, KEIN Release (Kauf nicht zustande gekommen)", async
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
   assert.ok(!prov.log.some((l) => l.startsWith("release")));
 });
-
-// Die Release-/Orphan-Abdeckung NACH dem Kauf wandert in den Payment-Pfad
-// (billing-hold-capture.test.js, capture-Fehler -> rollbackAfterOrder): es gibt
-// nach AM5 keinen separaten configure-Schritt mehr, an dem es scheitern koennte.

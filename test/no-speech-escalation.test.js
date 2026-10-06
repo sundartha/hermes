@@ -1,7 +1,3 @@
-// P3.2 (PLAN-CONVERSATION-QUALITY-V2): noSpeechEscalation ist rein (kein Store, kein I/O) -
-// diese Suite prueft die Staffel ohne Server-Spawn. Stub-Locale statt des echten i18n-
-// Bundles (P12 Independent: die Werte selbst sind hier irrelevant, nur die Zuordnung
-// Stufe->Feld zaehlt).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { noSpeechEscalation } from "../src/no-speech-escalation.js";

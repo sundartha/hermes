@@ -1,19 +1,3 @@
-// P10a (H7 + H8): haelt docs/OPENAI-TOOL-INVENTORY.md gegen den echten Draht. Die Doku
-// behauptet eine Werkzeugmenge je Konfiguration (K1-K6, Tabelle B) und je Werkzeug Titel,
-// Registrier-Bedingung und Annotationen (Tabelle A). Beide Tabellen stehen ZWEIMAL in der
-// Doku: als Prosatabelle (die der OpenAI-Pruefer liest) und als maschinenlesbarer Block.
-// Dieser Test liest BEIDE und misst sie GEGEN tools/list ueber HTTP (legacy + OAuth) und stdio.
-//
-// Nie das registerTool-Konfigobjekt pruefen: registerTool() des MCP-SDK verwirft unbekannte
-// Felder still, ein Test auf das Registrierungsobjekt beweist nichts (Lehre der Phase). Alle
-// Zusicherungen lesen deshalb den echten tools/list-Output.
-//
-// Messung EINMAL je Datei (memoisiertes Promise ueber alle sechs Konfigurationen): die
-// Bedingungsspalte laesst sich nur aus dem Vergleich MEHRERER Konfigurationen ableiten, und
-// Titel/Annotationen werden in JEDER Konfiguration geprueft, nicht nur in K1.
-//
-// Testnamen tragen KEIN Katalog-/ABNAHME-Praefix (package.json i18nCatalogPattern/
-// abnahmePattern), sonst landet dieser Test im falschen Lauf.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -33,21 +17,15 @@ const DOC_PATH = path.join(
 );
 const MCP_SERVER_ENTRYPOINT = "src/mcp-server.js";
 const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
-// T2-13 (N-10): prepare_call dazu, elf -> zwoelf.
 const EXPECTED_TABLE_A_ROWS = 12;
 const CONFIG_KEYS = ["K1", "K2", "K3", "K4", "K5", "K6"];
 const HINT_KEYS = ["readOnlyHint", "destructiveHint", "openWorldHint", "idempotentHint"];
 const TABLE_A_COLUMNS = ["name", "title", "condition", ...HINT_KEYS];
 const HINT_NOT_SET = "-";
-// Kopfzeilen-Anfaenge der beiden Prosatabellen - daran findet der Parser sie.
 const PROSE_A_HEADER = "| name | title | condition |";
 const PROSE_B_HEADER = "| K | transport |";
-// Permissives Ergebnis-Schema fuer den stdio-Fall ueber den typisierten SDK-Client: z.any()
-// reicht jedes Werkzeug unveraendert durch (title/annotations werden NICHT gestrippt).
 const RAW_TOOLS_LIST_RESULT = z.object({ tools: z.array(z.any()) });
 
-// Bedingung aus dem Draht: in welchen Konfigurationen taucht das Werkzeug auf?
-// Anwesenheits-Signatur (K1..K6 als 0/1) -> Bedingungsspalte.
 const CONDITION_BY_PRESENCE = new Map([
   ["111111", "always"],
   ["100100", "consult"],
@@ -85,8 +63,6 @@ function parseTableB(doc) {
   return rows;
 }
 
-// Markdown-Tabelle ab der Kopfzeile bis zur ersten Nicht-Tabellenzeile; Trennzeile (|---|)
-// faellt weg. Liefert je Datenzeile die getrimmten Zellen.
 function parseProseTable(doc, headerPrefix) {
   const lines = doc.split("\n");
   const start = lines.findIndex((line) => line.startsWith(headerPrefix));
@@ -109,8 +85,6 @@ function parseProseTableBCounts(doc) {
   return new Map(rows.map((cells) => [cells[0], Number(cells[cells.length - 1])]));
 }
 
-// tools/list ueber HTTP, ROH gelesen (readToolResult parst nur JSON.parse(...).result,
-// keine SDK-Zod-Schemas - annotations/Namen kommen unveraendert durch).
 async function httpToolsList(baseUrl, token) {
   const res = await mcpPost(baseUrl, token, TOOLS_LIST_BODY);
   const result = await readToolResult(res);
@@ -135,10 +109,9 @@ async function stdioToolsList(env) {
   }
 }
 
-// ==================== Konfigurationen K1-K6 ====================
 const CONSULT_ON = { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" };
-const TENANT_DEFAULT = "t_p10a_default"; // kein gespeichertes Profil -> DEFAULT_PROFILE
-const TENANT_PAID = "t_p10a_paid"; // planProfileFor("starter")
+const TENANT_DEFAULT = "t_p10a_default";
+const TENANT_PAID = "t_p10a_paid";
 const SUB_DEFAULT = "sub-p10a-default";
 const SUB_PAID = "sub-p10a-paid";
 
@@ -148,7 +121,6 @@ function seedOauthTenants() {
       { id: TENANT_DEFAULT, status: "active", idpSubject: SUB_DEFAULT },
       { id: TENANT_PAID, status: "active", idpSubject: SUB_PAID },
     ],
-    // TENANT_DEFAULT hat bewusst KEIN gespeichertes Profil
     profiles: { [TENANT_PAID]: planProfileFor("starter") },
   });
 }
@@ -177,15 +149,14 @@ async function measureOauthHttp(env, subject) {
   }
 }
 
-// Sequenziell, nicht parallel: jede Messung startet einen Kindprozess (Lastgrenze).
 async function measureAllConfigurations() {
   const wire = new Map();
-  wire.set("K1", await measureLegacyHttp(CONSULT_ON)); // Bootstrap-Owner, Consult an
-  wire.set("K2", await measureLegacyHttp({})); // BASE_ENV: CONSULT_ENABLED=false
+  wire.set("K1", await measureLegacyHttp(CONSULT_ON));
+  wire.set("K2", await measureLegacyHttp({}));
   wire.set("K3", await measureOauthHttp(CONSULT_ON, SUB_DEFAULT));
   wire.set("K4", await measureOauthHttp(CONSULT_ON, SUB_PAID));
-  wire.set("K5", await measureOauthHttp({}, SUB_PAID)); // Consult global aus
-  wire.set("K6", await stdioToolsList({})); // stdio, kein Tenant
+  wire.set("K5", await measureOauthHttp({}, SUB_PAID));
+  wire.set("K6", await stdioToolsList({}));
   return wire;
 }
 
@@ -211,8 +182,6 @@ function hintAsDocCell(value) {
   return value === undefined ? HINT_NOT_SET : String(value);
 }
 
-// Titel (Top-Level UND annotations.title) und alle vier Hints eines Draht-Werkzeugs gegen
-// EINE Tabellenzeile.
 function assertToolMatchesRow(label, tool, row) {
   const annotations = tool.annotations || {};
   assert.equal(tool.title, row.title, `${label}: title weicht ab`);
@@ -229,7 +198,6 @@ function wireCondition(name, wire) {
   return CONDITION_BY_PRESENCE.get(presence) ?? `unerwartet:${presence}`;
 }
 
-// ==================== Tabelle A: 12 Zeilen, Namensmenge == K1 ====================
 test("P10a (H7/H8): Tabelle A hat genau 12 Zeilen, ihre Namensmenge ist gleich K1", () => {
   const doc = readDoc();
   const tableA = parseTableA(doc);
@@ -237,7 +205,6 @@ test("P10a (H7/H8): Tabelle A hat genau 12 Zeilen, ihre Namensmenge ist gleich K
   assertNameSetMatches("Tabelle A vs. K1", tableA.map((row) => row.name), parseTableB(doc).get("K1").names);
 });
 
-// ==================== Prosa == Maschinenblock ====================
 test("P10a (H7/H8): Prosatabelle A stimmt Zeile fuer Zeile und Spalte fuer Spalte mit dem Maschinenblock", () => {
   const doc = readDoc();
   assert.deepEqual(parseProseTableA(doc), parseTableA(doc));
@@ -251,7 +218,6 @@ test("P10a (H7/H8): Anzahl-Spalte der Prosatabelle B stimmt mit dem Maschinenblo
   for (const k of CONFIG_KEYS) assert.equal(proseCounts.get(k), tableB.get(k).count, `${k}: Anzahl`);
 });
 
-// ==================== Draht: Anzahl + Namensmenge je Konfiguration ====================
 test("P10a (H7/H8, K1-K6 - HTTP legacy, HTTP OAuth, stdio): Anzahl (Prosa + Block) und Namensmenge stimmen je Konfiguration mit dem Draht", async () => {
   const doc = readDoc();
   const tableB = parseTableB(doc);
@@ -265,7 +231,6 @@ test("P10a (H7/H8, K1-K6 - HTTP legacy, HTTP OAuth, stdio): Anzahl (Prosa + Bloc
   }
 });
 
-// ==================== Draht: Titel + Hints in JEDER Konfiguration ====================
 test("P10a (H7/H8, K1-K6): Titel und alle vier Hints stimmen in JEDER Konfiguration mit Prosatabelle UND Maschinenblock", async () => {
   const doc = readDoc();
   const tables = { Block: parseTableA(doc), Prosa: parseProseTableA(doc) };
@@ -282,7 +247,6 @@ test("P10a (H7/H8, K1-K6): Titel und alle vier Hints stimmen in JEDER Konfigurat
   }
 });
 
-// ==================== Draht: Bedingungsspalte ====================
 test("P10a (H7/H8, K1-K6): Bedingungsspalte (Prosa + Block) stimmt mit der am Draht gemessenen Anwesenheit ueber alle Konfigurationen", async () => {
   const doc = readDoc();
   const tables = { Block: parseTableA(doc), Prosa: parseProseTableA(doc) };

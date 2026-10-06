@@ -1,10 +1,3 @@
-// F2-Newsletter-Recipients: Bestaetigung (Double-Opt-in) + Abmeldung - reine state-ops-Unit-
-// Tests (Muster newsletter-consent-store.test.js): offline/F.I.R.S.T., kein IO. Deckt
-// confirmNewsletterRecipientByToken/unsubscribeNewsletterRecipientByToken ab:
-//   - gueltiger Token -> confirmed + Token entwertet (Einmalverwendung)
-//   - abgelaufen/falsch/doppelt verwendet -> kein Treffer, kein Zustandswechsel
-//   - Scan findet den RICHTIGEN Tenant unter mehreren (kein Cross-Tenant-Leck)
-//   - Abmeldung traegt aus, idempotent, funktioniert fuer pending UND confirmed
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -20,7 +13,7 @@ import { newNewsletterTokens, hashNewsletterToken } from "../src/newsletter-reci
 const TENANT_A = "t_nl_confirm_a";
 const TENANT_B = "t_nl_confirm_b";
 const NOW_ISO = "2026-08-14T12:00:00.000Z";
-const EXPIRED_ISO = "2026-08-10T12:00:00.000Z"; // vor NOW_ISO -> bereits abgelaufen
+const EXPIRED_ISO = "2026-08-10T12:00:00.000Z";
 
 function seededState() {
   const s = makeDefaultState();
@@ -39,8 +32,6 @@ function addPending(s, tenantId, email, { expiresAt = "2099-01-01T00:00:00.000Z"
   });
   return tokens;
 }
-
-// ---- confirmNewsletterRecipientByToken -------------------------------------------------
 
 test("gueltiger Token -> confirmed + confirmedAt gesetzt, tokenHash/tokenExpiresAt geleert (Einmalverwendung)", () => {
   const s = seededState();
@@ -93,18 +84,13 @@ test("Scan findet den RICHTIGEN Tenant unter mehreren (kein Cross-Tenant-Leck)",
 });
 
 test("leerer/undefined tokenHash-Kandidat wird nie faelschlich als Treffer gewertet", () => {
-  // Ein Eintrag, dessen tokenHash bereits geleert ist (z.B. schon bestaetigt), darf mit
-  // einem LEEREN eingehenden Wert nicht matchen - sonst waere ein leerer Query-Parameter
-  // ein universeller Bypass.
   const s = seededState();
   const tokens = addPending(s, TENANT_A, "freund@example.test");
-  confirmNewsletterRecipientByToken(s, tokens.tokenHash, NOW_ISO); // -> tokenHash=null
+  confirmNewsletterRecipientByToken(s, tokens.tokenHash, NOW_ISO);
 
   const result = confirmNewsletterRecipientByToken(s, "", NOW_ISO);
   assert.equal(result, null);
 });
-
-// ---- unsubscribeNewsletterRecipientByToken ---------------------------------------------
 
 test("gueltiger Unsub-Token -> Eintrag wird vollstaendig entfernt", () => {
   const s = seededState();

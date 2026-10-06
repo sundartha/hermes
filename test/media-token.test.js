@@ -1,4 +1,3 @@
-// Phase 2.3: das stream_token (Altfeld) darf in keiner API-Antwort auftauchen.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";

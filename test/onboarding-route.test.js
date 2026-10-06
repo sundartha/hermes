@@ -1,17 +1,3 @@
-// Onboarding-Route POST /api/onboard (In-Process): registrieren -> Nummer anfragen ->
-// (optional) provisionieren. Default = Dry-Run (kein Geld).
-//
-// AUTH-P6: /api/onboard ist seither eine Betreiber-Route (webAuthMw+adminMw, nur MIT
-// operatorAuth gemountet) - ein echter Spawn-Server (json/kein SESSION_SECRET) mountet
-// sie darum gar nicht mehr. Migriert auf In-Process-Mount von makeOnboardRoutes +
-// Store-Double (load/save/withStoreLock/resolveTenant) + Provisioning-Double
-// (queueProvisioning/runProvisioningDrainExclusive). Der letzte Testfall
-// (PROVISIONING_ENABLED + echter Telnyx-Kauf-Flow) verliert damit die Ende-zu-Ende-
-// Sicht auf den echten Worker (Coverage-Delta B, s. AUTH-P6-Report) - die Kauf-Kette
-// selbst bleibt in test/provisioning-worker.test.js und test/onboarding-service.test.js
-// gedeckt. Hier wird stattdessen die Aufrufspur des Provisioning-Doubles geprueft:
-// queueProvisioning bekommt numberId+tenantId, runProvisioningDrainExclusive wird
-// angestossen (fire-and-forget).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -29,8 +15,6 @@ const postJson = (app, path, body) =>
     body: JSON.stringify(body),
   });
 
-// Owner-Tenant mit EINER aktiven Nummer (Muster ensureOwnerNumber, test/helpers.js) -
-// der globale Cap-Test braucht genau diese Vorbedingung (1 aktive Nummer vor dem Request).
 function baseState() {
   const state = makeDefaultState();
   state.numbers.push({
@@ -44,7 +28,6 @@ function baseState() {
   return state;
 }
 
-// Config-Double mit denselben Werten wie BASE_ENV (test/helpers.js), je Test ueberschreibbar.
 function onboardConfig(overrides = {}) {
   return withConfigNamespaces({
     maxNumbers: 5,
@@ -58,8 +41,6 @@ function onboardConfig(overrides = {}) {
   });
 }
 
-// Aufrufspur-Attrappe fuer die EINE P6-Provisioning-Orchestrator-Instanz. jobId ist ein
-// fester Wert (kein Zufall) - Antwort-Assertion bleibt deterministisch.
 function fakeProvisioning() {
   const calls = { queueProvisioning: [], drainRuns: 0 };
   return {
@@ -83,7 +64,7 @@ async function startOnboardApp({ state = baseState(), config = onboardConfig(), 
         load: () => state,
         save: () => {},
         withStoreLock: (fn) => Promise.resolve().then(fn),
-        resolveTenant: () => null, // kein idpSubject in diesen Tests -> nie aufgerufen
+        resolveTenant: () => null,
       },
       config,
       audit: () => {},
@@ -102,8 +83,6 @@ async function startOnboardApp({ state = baseState(), config = onboardConfig(), 
   };
 }
 
-// Wartet auf die fire-and-forget Drain-Anstoss-Zaehlung (der Handler ruft sie NACH
-// res.json() auf, ohne await - deterministisches Polling statt fixem Sleep).
 async function waitForDrainRun(app, timeoutMs = 1000) {
   const deadline = Date.now() + timeoutMs;
   while (app.provisioning.calls.drainRuns < 1) {
@@ -134,9 +113,6 @@ test("Dry-Run (Default): onboard registriert + fragt an, Nummer bleibt 'requeste
   }
 });
 
-// P7 (Cluster 3, G5): requireValidTenantId() ersetzt den vormals wortgleich verdoppelten
-// 400-Guard aus POST /api/onboard und POST /api/onboard/retry - beide Routen antworten
-// mit IDENTISCHEM Fehlertext (EINE Quelle statt zwei Kopien, die auseinanderdriften koennten).
 const TENANT_ID_REQUIRED_MESSAGE = "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)";
 
 test("Fehlende tenantId -> 400 mit dem geteilten requireValidTenantId-Text (POST /api/onboard)", async () => {
@@ -164,8 +140,6 @@ test("Fehlende tenantId -> 400 mit demselben Text wie /api/onboard (POST /api/on
 });
 
 test("Globaler Cap (Kosten-Notbremse) blockt -> 429", async () => {
-  // baseState() traegt bereits 1 aktive Nummer (Owner). maxNumbers=1 -> jede weitere
-  // Anfrage trifft den globalen Cap.
   const app = await startOnboardApp({ config: onboardConfig({ maxNumbers: 1 }) });
   try {
     const res = await postJson(app, "/api/onboard", { tenantId: "t_user1" });
@@ -185,9 +159,6 @@ test("Per-Tenant-Cap blockt die zweite Nummer desselben Tenants -> 409", async (
     await app.close();
   }
 });
-
-// ---- S1-9: fail-closed Pre-Check der privateNumber (normalizePrivateNumber, VOR dem
-// Store-Lock). Ohne den Pre-Check wirft registerTenant erst im Lock -> 503 statt 400.
 
 test("S1-9a: ungueltige privateNumber -> 400, kein persist_error-503", async () => {
   const app = await startOnboardApp();
@@ -222,7 +193,6 @@ test("PROVISIONING_ENABLED: Route antwortet SOFORT 'queued', queueProvisioning b
     const res = await postJson(app, "/api/onboard", { tenantId: "t_user1" });
     assert.equal(res.status, 200);
     const json = await res.json();
-    // Verhaltens-Aenderung (P6b2): SOFORT 'queued' (Number noch 'requested', jobId da).
     assert.equal(json.status, "requested");
     assert.equal(json.provisioning, "queued");
     assert.equal(json.jobId, "job_test1");

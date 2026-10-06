@@ -1,9 +1,3 @@
-// Unit-Test fuer src/billing/metering.js (Server-Slim P1, reine Verschiebung aus server.js).
-// Isoliert mit Fake-store (faengt recordUsageEvent/addVoiceUsageCostCents in Arrays) bzw. -
-// fuer die wiederkehrende Monatsmiete - einem zustands-gestuetzten state-ops-Store; kein
-// Server/DB/Netz (P12). Bestaetigt zugleich Spec-Risiko INV-9: das paymentEnabled-Gate
-// sitzt NICHT im Modul - die Funktionen buchen ungated, das Gating ist Sache des Aufrufers
-// (finishCall / Provisioning-Drain / Monatsmiete-Ausloeser).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeMetering } from "../src/billing/metering.js";
@@ -14,13 +8,8 @@ import { tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
 import { DOMESTIC_TEST_NUMBER } from "./helpers.js";
 
 const TENANT_A = "tenant_a";
-// Die beim Kauf gelernte Monatsmiete (P4) - seit P5 die EINZIGE Betrags-Quelle des
-// number_month-Belegs. Zwei verschiedene Werte, damit eine Verwechslung zweier Nummern
-// nicht zufaellig gruen laeuft.
 const MONTHLY_RENT_CENTS = 92;
 const MONTHLY_RENT_CENTS_B = 137;
-// KS-P5: die Achsen-Stempel, die der Fake-Bucket NACH der Buchung traegt - genau die zwei
-// Werte, die als Belastungs-Anker am Call landen muessen.
 const BUCKET_SPEND_MONTH_KEY = "2026-01";
 const BUCKET_PERIOD_KEY = "2026-01-01T00:00:00.000Z";
 
@@ -35,26 +24,16 @@ function fakeStore() {
     recordUsageEvent(ev) {
       usageEvents.push(ev);
     },
-    // KS-P5: die Fassade liefert den Usage-Bucket zurueck - die Bucket-Brigade in
-    // reconcileVoiceBudget liest daraus die Achsen-Stempel der Buchung. Ohne
-    // Rueckgabewert wuerfe der reale Aufruf (echte Interface-Erweiterung, kein Testartefakt).
     addVoiceUsageCostCents(tenantId, costCents) {
       voiceCostCents.push({ tenantId, costCents });
       return { ...emptyUsage(), spendMonthKey: BUCKET_SPEND_MONTH_KEY, budgetPeriodKey: BUCKET_PERIOD_KEY };
     },
-    // LCT P2: reconcileVoiceBudget persistiert den gebuchten Schaetzbetrag zusaetzlich
-    // am Call (store.recordCallEstimatedCostCents). Ohne diesen Stub wuerfe der reale Aufruf
-    // einen TypeError (echte Interface-Erweiterung, kein Testartefakt).
-    // KS-P5: input = { costCents, chargeAnchors }.
     recordCallEstimatedCostCents(callId, input) {
       estimatedCostCents.push({ callId, ...input });
     },
   };
 }
 
-// from = eine Inlands-DID: seit der Herkunfts-Achse (P5) haengt der Satz am LEG, und ein
-// Fixture mit US-Absender + DE-Ziel wuerde beide Seiten der Assertion auf denselben
-// Default-Satz ziehen (die Assertion waere gruen, aber inhaltsleer).
 function makeCall(overrides = {}) {
   return {
     id: "call_1",
@@ -63,7 +42,7 @@ function makeCall(overrides = {}) {
     from: DOMESTIC_TEST_NUMBER.e164,
     direction: "outbound",
     answeredAt: "2026-01-01T00:00:00.000Z",
-    endedAt: "2026-01-01T00:01:00.000Z", // 60000 ms = 1 Minute
+    endedAt: "2026-01-01T00:01:00.000Z",
     ...overrides,
   };
 }
@@ -110,12 +89,6 @@ test("recordVoiceMinuteMeter: N Minuten -> Event mit kind/quantity/costCents aus
   assert.equal(ev.costCents, 1 * tariffCentsPerMin(call.to, call.from));
 });
 
-// PAY-08 (Buchhaltung, kein eigener Test): PAY-08s Praemisse ("ein Inbound-Anruf zieht das
-// Tenant-Budget nie ab") ist mit Owner-Entscheidung 1(a)/KV-P2 ueberholt - Inbound bucht
-// seither auf dieselbe Achse; die Sperrwirkung der Decke fuer Inbound bestand schon vorher
-// (routes/voice.js), neu ist nur, dass sie gespeist wird. Die woertliche Aussage steht jetzt
-// im Test darunter. Ein zweiter Test waere ein Duplikat (G5); die Katalog-ID steht deshalb
-// hier und nicht im Testnamen - der Test bleibt damit im Regressionslauf.
 test("reconcileVoiceBudget: inbound -> addVoiceUsageCostCents mit dem Inbound-Satz", () => {
   const store = fakeStore();
   const { reconcileVoiceBudget } = makeMetering({ store });
@@ -145,10 +118,6 @@ test("reconcileVoiceBudget: outbound, N Minuten -> addVoiceUsageCostCents(tenant
     tenantId: TENANT_A,
     costCents: 1 * tariffCentsPerMin(call.to, call.from),
   });
-  // LCT P2 (E2): derselbe Betrag wird IM SELBEN Schritt am Call persistiert - nicht spaeter
-  // aus dem Tarif rekonstruiert.
-  // KS-P5: zusammen mit dem Betrag reisen die Achsen-Stempel des Buckets NACH der Buchung
-  // mit (Bucket-Brigade) - sie sind der Anker, gegen den eine spaetere Gutschrift prueft.
   assert.deepEqual(store.estimatedCostCents[0], {
     callId: call.id,
     costCents: 1 * tariffCentsPerMin(call.to, call.from),
@@ -156,8 +125,6 @@ test("reconcileVoiceBudget: outbound, N Minuten -> addVoiceUsageCostCents(tenant
   });
 });
 
-// Eine aktive Nummer, wie sie nach dem Kauf im Store steht (P4: monthlyCostCents nur bei
-// gelerntem Provider-Preis - ohne Preis bleibt das Feld ABWESEND, nicht 0).
 function makeNumber({ id = "num_1", tenantId = TENANT_A, monthlyCostCents } = {}) {
   return {
     id,
@@ -168,7 +135,6 @@ function makeNumber({ id = "num_1", tenantId = TENANT_A, monthlyCostCents } = {}
   };
 }
 
-// Drei aufeinanderfolgende UTC-Kalendermonate - die Uhr des wiederkehrenden Ausloesers.
 const MONATE = Object.freeze([
   "2026-01-15T09:00:00.000Z",
   "2026-02-15T09:00:00.000Z",
@@ -176,10 +142,6 @@ const MONATE = Object.freeze([
 ]);
 const [ERSTER_MONAT] = MONATE;
 
-// Zustands-gestuetzter Store fuer die wiederkehrende Miete: recordUsageEvent schreibt in
-// DENSELBEN State, den numbersDueForMonthMeter liest - sonst pruefte der Test einen
-// Idempotenz-Riegel gegen ein Ledger, das er nie sieht. Die Nummern kommen als Fixture
-// hinein; der Rest ist echter state-ops-Code (kein Nachbau der Buchungsregel).
 function stateWithNumbers(numbers) {
   const s = makeDefaultState();
   s.numbers = numbers;
@@ -223,10 +185,6 @@ test("recordNumberMonthMeter: ohne gelernten Preis -> kein Event (fail-closed)",
   );
 });
 
-// GAP-06 (neu gefasst, Spec-Nachtrag 2026-07-28): die DID-Monatsmiete muss WIEDERKEHREND
-// gebucht werden UND je Nummer und Kalendermonat genau einmal. Beide Haelften stehen
-// unter Test - eine allein waere eine Abschwaechung des Gates.
-
 test("GAP-06: der wiederkehrende Ausloeser bucht ueber drei Kalendermonate genau drei Belege (einen je Monat)", () => {
   const { s, store } = stateWithNumbers([makeNumber({ monthlyCostCents: MONTHLY_RENT_CENTS })]);
   const { recordDueNumberMonthMeters } = makeMetering({ store });
@@ -252,7 +210,7 @@ test("GAP-06: derselbe Ausloeser zweimal im selben Monat -> ein Beleg, nicht zwe
 
   recordDueNumberMonthMeters(s, { nowIso: ERSTER_MONAT });
   recordDueNumberMonthMeters(s, { nowIso: ERSTER_MONAT });
-  recordDueNumberMonthMeters(s, { nowIso: "2026-01-28T23:59:59.000Z" }); // andere Stunde, selber Monat
+  recordDueNumberMonthMeters(s, { nowIso: "2026-01-28T23:59:59.000Z" });
 
   assert.equal(numberMonthBelege(s).length, 1);
 });
@@ -262,18 +220,13 @@ test("GAP-06: der zweite Ausloeser bucht den vom ersten bereits gebuchten Monat 
   const { s, store } = stateWithNumbers([number]);
   const { recordNumberMonthMeter, recordDueNumberMonthMeters } = makeMetering({ store });
 
-  // Ausloeser 1: der Aktivierungs-Beleg des Provisioning-Drains.
   recordNumberMonthMeter(number, ERSTER_MONAT);
-  // Ausloeser 2: Abo-Verlaengerung / stuendlicher Sweep im selben Monat.
   const bilanz = recordDueNumberMonthMeters(s, { nowIso: ERSTER_MONAT });
 
   assert.equal(bilanz.faellig, 0, "die Nummer ist in diesem Monat nicht mehr faellig");
   assert.equal(numberMonthBelege(s).length, 1, "beide Ausloeser zusammen -> genau EIN Beleg");
 });
 
-// Das vom Review hergeleitete Doppelbuchungs-Szenario der verworfenen Tenant-Zaehlung:
-// A hat keinen gelernten Preis, B schon. Zaehlte der Riegel Belege je TENANT, absorbierte
-// A im zweiten Lauf den Zaehler und B wuerde ein zweites Mal gebucht.
 test("zwei aktive Nummern, eine ohne gelernten Preis: die andere wird NIE doppelt gebucht", () => {
   const { s, store } = stateWithNumbers([
     makeNumber({ id: "num_a" }),
@@ -325,9 +278,6 @@ test("eine freigegebene Nummer erzeugt keine Miete mehr", () => {
   assert.equal(numberMonthBelege(s).length, 0);
 });
 
-// INV-9 seit P5 strukturell: das Modul bekommt gar kein config mehr (die Miete kommt aus
-// dem Nummern-Datensatz) - es KANN nicht auf paymentEnabled gaten. Die Funktionen buchen,
-// wenn man sie ruft; gegated wird ausschliesslich beim Aufrufer.
 test("Modul bucht ungated: ohne jedes config-Gate im Modul (Gate liegt beim Aufrufer)", () => {
   const store = fakeStore();
   const { recordVoiceMinuteMeter, reconcileVoiceBudget, recordNumberMonthMeter } =

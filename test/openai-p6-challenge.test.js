@@ -1,16 +1,3 @@
-// P6 (T-13, T-5): jeder 401 von /mcp traegt eine WWW-Authenticate-Bearer-Challenge -
-// nicht nur der oauth-Zweig (Bestand), auch der token- und der Legacy-Zweig (neu).
-// Testpraefix bewusst "P6-" (NICHT MCP-/GAP-/... - Katalog-Praefixe aus package.json
-// config.i18nCatalogPattern wuerden die Datei still nach test:gates verschieben,
-// Lehre catalog-id-prefix-misroutes-tests).
-//
-// Jeder Fall prueft am ECHTEN HTTP-Response (kein fakeRes): Status 401, der Header
-// www-authenticate exakt gleich dem erwarteten String, und dass kein Tool lief (Body
-// ist das erwartete Fehlerobjekt, hat weder jsonrpc noch result). P6-T4 ist die
-// Ausnahme: die Produktions-Legacy-Verweigerung laesst sich nicht per Voll-Spawn
-// erreichen (RENDER_EXTERNAL_URL -> PRODUCTION_FOOTGUNS verweigert offline den Boot,
-// s.u.) - dort ein In-Process-Express mit echtem HTTP-Listener (Muster
-// test/auth-p5-internal-only.test.js, mountProbe).
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -18,9 +5,6 @@ import { config } from "../src/config.js";
 import { makeMcpAuth } from "../src/auth.js";
 import { startServer, startIdp, mcpPost, MCP_AUDIENCE } from "./helpers.js";
 
-// T2-07 (T-28): mcpAuth entsteht seit dieser Phase aus einer Fabrik, die den
-// Ablehnungs-Zaehler und dessen IP-Sperre injiziert bekommt. Fuer diese Datei (Challenge-Wortlaut, kein
-// Drossel-Verhalten) genuegen Attrappen, die nie drosseln.
 const ERLAUBT = () => ({ allowed: true, retryAfterS: 0 });
 const mcpAuth = makeMcpAuth({ ablehnungsDrossel: ERLAUBT, ipSperre: ERLAUBT });
 
@@ -29,14 +13,6 @@ const STATIC_CHALLENGE = 'Bearer error="invalid_token"';
 const OAUTH_CHALLENGE =
   'Bearer resource_metadata="https://agent.test/.well-known/oauth-protected-resource", scope="openid email offline_access", error="invalid_token", error_description="Kein Token"';
 
-// P6-T4 braucht die Ueberschreibung waehrend ECHTER Netzwerk-I/O (Express-Listener
-// starten, echter HTTP-Request) - das ueberschreitet mehrere Makrotask-Grenzen. Der
-// geteilte makeConfigOverrides-Helper (test/helpers.js:1092) restauriert dagegen
-// SYNCHRON direkt nach dem Aufruf von fn(), ohne dessen Promise abzuwarten - fuer rein
-// synchron (bis zum ersten await) lesende Aufrufer wie PA-17 korrekt, hier aber zu
-// frueh: die Ueberschreibung waere laengst zurueckgesetzt, bevor der echte Request
-// eintrifft (gemessen, s. Commit-Historie dieser Datei). Deshalb hier eine eigene,
-// async-sichere Variante mit try/finally um das gesamte await.
 async function withServerConfig({ mcpAuth, mcpAuthToken, isProduction }, fn) {
   const saved = {
     mcpAuth: config.auth.mcpAuth,
@@ -55,8 +31,6 @@ async function withServerConfig({ mcpAuth, mcpAuthToken, isProduction }, fn) {
   }
 }
 
-// Belegt: kein Tool lief. Ein durchgelassener Request landete in der JSON-RPC-Antwort
-// (jsonrpc/result); die 401-Ablehnung antwortet mit dem reinen Fehlerobjekt.
 function assertNoToolRan(body) {
   assert.equal(body.jsonrpc, undefined, "kein jsonrpc-Feld - kein Tool-Aufruf durchgelassen");
   assert.equal(body.result, undefined, "kein result-Feld - kein Tool-Aufruf durchgelassen");
@@ -114,12 +88,6 @@ test("P6-T3: Legacy (MCP_AUTH=\"\") mit MCP_AUTH_TOKEN gesetzt, falsches Bearer 
   }
 });
 
-// P6-T4: die Produktions-Legacy-Verweigerung (Zeile :113-116 im Ist-Zustand) laesst
-// sich nicht per Voll-Spawn erreichen - der Code erkennt Produktion an
-// RENDER_EXTERNAL_URL (src/config.js), und ein Spawn damit verweigert offline den Boot
-// (PRODUCTION_FOOTGUNS: STORE_BACKEND != pg, Muster test/boot-prod-footguns.test.js).
-// Stattdessen ein In-Process-Express mit echtem HTTP-Listener (Port 0) - echtes
-// res.set/res.status ueber echtes HTTP, der Header ist am Draht sichtbar.
 async function mountMcpAuthProbe() {
   const app = express();
   let handlerReached = false;
