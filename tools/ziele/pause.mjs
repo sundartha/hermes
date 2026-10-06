@@ -13,11 +13,11 @@ async function prNummer(github, sha) {
 }
 
 function nenntPr(text, nummer) {
-  return new RegExp(`#${nummer}(?!\\d)`).test(text ?? "");
+  return [...String(text ?? "").matchAll(/#(\d+)/g)].some((treffer) => Number(treffer[1]) === nummer);
 }
 
 function issueZu(nummer, { reparatur, masterRot }) {
-  const passend = reparatur.find((issue) => new RegExp(`nach Rücknahme von #${nummer}$`).test(issue.title));
+  const passend = reparatur.find((issue) => issue.title.endsWith(`nach Rücknahme von #${nummer}`));
   return passend ?? masterRot.find((issue) => nenntPr(issue.title, nummer) || nenntPr(issue.body, nummer));
 }
 

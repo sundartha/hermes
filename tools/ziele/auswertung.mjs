@@ -152,7 +152,7 @@ export async function zaehlen({ ordner }, root, { github = nimmGithubZugang() } 
 }
 
 function sauber(text, laenge) {
-  return ersetzeSteuerzeichen(String(text), " ").replaceAll("`", "'").slice(0, laenge);
+  return ersetzeSteuerzeichen(String(text), " ").replace(/`/g, "'").slice(0, laenge);
 }
 
 function istObjekt(wert) {

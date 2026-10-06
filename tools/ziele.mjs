@@ -4,21 +4,22 @@ import { parseArgs } from "node:util";
 const EXIT_ABBRUCH = 1;
 const EXIT_AUFRUF = 2;
 const BEFEHLE = new Map([
-  ["vorpruefen", ["./ziele/vorpruefen.mjs", "befehl"]],
-  ["waehlen", ["./ziele/waehlen.mjs", "befehl"]],
-  ["fixen", ["./ziele/fixer.mjs", "befehl"]],
-  ["agent", ["./ziele/agentenlauf.mjs", "befehl"]],
-  ["pruefen", ["./ziele/pruefen.mjs", "befehl"]],
-  ["commit", ["./ziele/pr.mjs", "committe"]],
-  ["pr", ["./ziele/pr.mjs", "oeffnePr"]],
-  ["ergebnis", ["./ziele/ergebnis.mjs", "befehl"]],
-  ["zaehlen", ["./ziele/auswertung.mjs", "zaehlen"]],
-  ["vorschlagen", ["./ziele/auswertung.mjs", "vorschlagen"]],
-  ["system-issue", ["./ziele/auswertung.mjs", "systemIssue"]],
+  ["vorpruefen", () => import("./ziele/vorpruefen.mjs").then((modul) => modul.befehl)],
+  ["waehlen", () => import("./ziele/waehlen.mjs").then((modul) => modul.befehl)],
+  ["fixen", () => import("./ziele/fixer.mjs").then((modul) => modul.befehl)],
+  ["agent", () => import("./ziele/agentenlauf.mjs").then((modul) => modul.befehl)],
+  ["pruefen", () => import("./ziele/pruefen.mjs").then((modul) => modul.befehl)],
+  ["commit", () => import("./ziele/pr.mjs").then((modul) => modul.committe)],
+  ["pr", () => import("./ziele/pr.mjs").then((modul) => modul.oeffnePr)],
+  ["ergebnis", () => import("./ziele/ergebnis.mjs").then((modul) => modul.befehl)],
+  ["zaehlen", () => import("./ziele/auswertung.mjs").then((modul) => modul.zaehlen)],
+  ["vorschlagen", () => import("./ziele/auswertung.mjs").then((modul) => modul.vorschlagen)],
+  ["system-issue", () => import("./ziele/auswertung.mjs").then((modul) => modul.systemIssue)],
 ]);
 const WORKFLOWS = new Set(["aufraeumen", "auswertung"]);
+const BEFEHLSNAMEN = [...BEFEHLE.keys()].join("|");
 const AUFRUF = [
-  `Aufruf: node tools/ziele.mjs <${[...BEFEHLE.keys()].join("|")}> --ordner <ordner>`,
+  ["Aufruf: node tools/ziele.mjs", "<" + BEFEHLSNAMEN + ">", "--ordner <ordner>"].join(" "),
   "        node tools/ziele.mjs ergebnis --ordner <ordner> --workflow <aufraeumen|auswertung>",
 ].join("\n");
 
@@ -43,9 +44,8 @@ if (gewaehlt === null) {
   process.exitCode = EXIT_AUFRUF;
 } else {
   try {
-    const [modul, funktion] = BEFEHLE.get(gewaehlt.name);
-    const geladen = await import(modul);
-    process.exitCode = await geladen[funktion](gewaehlt.optionen, cwd());
+    const befehl = await BEFEHLE.get(gewaehlt.name)();
+    process.exitCode = await befehl(gewaehlt.optionen, cwd());
   } catch (fehler) {
     console.error(`Abbruch: ${fehler.message}`);
     process.exitCode = EXIT_ABBRUCH;
