@@ -1,20 +1,3 @@
-// WW-F2 (tasks/PLAN-WERKZEUGWAHL.md, W3): das Nachfassen - eine Runde, die eine Handlung
-// nur ANKUENDIGT und kein Werkzeug aufruft, bekommt GENAU EINEN erzwungenen Nachfass-Zug.
-// Gegenstand sind die sechs bindenden Bedingungen des Auftrags:
-//   B1 kein zusaetzlicher Roundtrip, wenn nichts angekuendigt wurde (WW-F2-2/-3)
-//   B2 harte Obergrenze: hoechstens EIN Nachfassen je Zug (WW-F2-4)
-//   B3 keine Ueberkorrektur: ohne Ankuendigung kein erzwungener Werkzeugaufruf (WW-F2-2)
-//   B4 sprachunabhaengig ueber alle drei Produktsprachen (WW-F2-8/-9)
-//   B5 fail-closed: scheitert der Nachfass-Zug, endet der Zug mit dem Bestandstext (WW-F2-5)
-//   B6 end_call ist im Nachfass-Zug NIE waehlbar (WW-F2-1)
-//
-// Naht wie test/al-p4-side-effect-tool-loop.test.js: lokaler node:http-Anthropic-Mock,
-// ANTHROPIC_BASE_URL + DATA_DIR VOR dem ersten config-Import, danach dynamischer Import
-// von src/store.js / src/claude.js. Kein Server-Spawn, kein Netz (P12/R).
-//
-// Testname-Praefix "WW-F2-" trifft KEIN Katalog-Praefix aus package.json
-// config.i18nCatalogPattern - diese Tests laufen in `npm test`, wo Rot zaehlt (Lehre
-// catalog-id-prefix-misroutes-tests).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -24,11 +7,9 @@ import { LOCALES } from "../src/i18n/locales.js";
 import { announcesToolAction, followUpToolsFor } from "../src/tool-follow-up.js";
 
 const OWNER = "Jonas Beispiel";
-// Die live gemessene Ankuendigungs-Form aus dem Fuenf-Arm-Experiment (Arm A0).
 const ANNOUNCEMENT = "Ich gebe das an Jonas weiter.";
 const NO_ANNOUNCEMENT = "Donnerstag um siebzehn Uhr passt gut.";
 const HTTP_BAD_REQUEST = 400;
-// Nicht klassifiziert -> gilt als informationsliefernd, der Loop laeuft weiter (AL-P4-6).
 const UNCLASSIFIED_TOOL = "look_up_not_yet_built";
 const LANGUAGES = ["de", "en", "fr"];
 
@@ -48,11 +29,7 @@ function message(content, stopReason) {
 const textOnly = (text) => message([{ type: "text", text }], "end_turn");
 const toolOnly = (name, input = {}) =>
   message([{ type: "tool_use", id: "tu1", name, input }], "tool_use");
-// Faellt die queue leer, antwortet der Mock mit einem MARKIERTEN Text - ein ungewollter
-// Zusatz-Roundtrip faellt damit in bodies.length UND im speech auf.
 const UNWANTED_EXTRA_ROUNDTRIP_MARKER = "UNGEWOLLTER-ZUSATZ-ROUNDTRIP";
-// Sentinel der queue: diese Runde antwortet mit einem harten 4xx (kein Retry, kein
-// Breaker-Ausschlag) - so scheitert GENAU der Nachfass-Zug.
 const PROVIDER_REFUSES = Symbol("provider-refuses");
 
 let server;
@@ -113,15 +90,12 @@ test("WW-F2-1 (a) angekuendigte Handlung ohne Werkzeug -> EIN erzwungener Nachfa
     "der Seiteneffekt ist wirklich passiert - nicht nur angefordert",
   );
 
-  // Der Draht der ERSTEN Runde bleibt byte-identisch zum Bestand (B1).
   assert.equal("tool_choice" in bodies[0], false, "Runde 1 traegt kein tool_choice");
-  // Der Nachfass-Zug erzwingt eine Wahl - und end_call ist nicht darunter (B6).
   assert.deepEqual(bodies[1].tool_choice, { type: "any" });
   assert.deepEqual(
     bodies[1].tools.map((t) => t.name),
     ["take_message"],
   );
-  // Die eigene Aeusserung steht in der Kette, der Steuertext haelt sie auf einem user-Turn.
   assert.deepEqual(bodies[1].messages.at(-1), {
     role: "user",
     content: LOCALES.de.prompt.followUp.nudge,
@@ -157,8 +131,6 @@ test("WW-F2-3 Flag AUS = Bestand: dieselbe Ankuendigung loest nichts aus", async
 
 test("WW-F2-4 (c) Obergrenze B2: zweimal Nachfassen ist unmoeglich - auch wenn der Nachfass-Zug wieder nur redet", async () => {
   bodies = [];
-  // Beide Runden liefern denselben ankuendigenden Text ohne Werkzeug. Waere die Obergrenze
-  // nicht strukturell, liefe die Schleife bis MAX_TOOL_ROUNDS_PER_TURN durch.
   queue = [textOnly(ANNOUNCEMENT), textOnly(ANNOUNCEMENT)];
   const call = store.getCall("call_wwf2_4");
   const turn = await agentTurn(call, "Kann Jonas das bestaetigen?");
@@ -187,9 +159,6 @@ test("WW-F2-5 (B5) scheitert der Nachfass-Zug, endet der Zug mit dem Bestandstex
 
 test("WW-F2-6 der Nachfass-Zug loest sich NICHT selbst aus: nach ihm laeuft die Schleife regulaer weiter", async () => {
   bodies = [];
-  // Der Nachfass-Zug fordert ein INFORMATIONSLIEFERNDES (hier: unklassifiziertes) Werkzeug
-  // an - der Bestandspfad legt danach eine dritte Runde nach (AL-P4-6). Genau dort faellt
-  // ein klebriger Zwang auf: Runde 3 muss wieder der volle, freie Bestandssatz sein.
   queue = [textOnly(ANNOUNCEMENT), toolOnly(UNCLASSIFIED_TOOL), textOnly("Alles klar.")];
   const call = store.getCall("call_wwf2_6");
   const turn = await agentTurn(call, "Kann Jonas das bestaetigen?");
@@ -206,8 +175,6 @@ test("WW-F2-6 der Nachfass-Zug loest sich NICHT selbst aus: nach ihm laeuft die 
     "Runde 3 ist wieder der volle, freie Bestandssatz",
   );
 });
-
-// ---------- reine Entscheidungs-Tests (ohne Modell, ohne Netz) ----------
 
 test("WW-F2-7 followUpToolsFor: jede einzelne Bedingung ist fail-closed", () => {
   const tools = [{ name: "take_message" }];
@@ -229,7 +196,6 @@ test("WW-F2-7 followUpToolsFor: jede einzelne Bedingung ist fail-closed", () => 
 test("WW-F2-8 (B4) die Erkennung traegt in allen drei Produktsprachen - je ein Treffer und ein Nicht-Treffer", () => {
   const cases = {
     de: {
-      // Beide live gemessenen Formen, dazu die transliterierte Schreibweise.
       hits: [
         "Ich gebe das an Jonas weiter.",
         "Da müsste ich Rücksprache halten, ob Jonas das akzeptiert.",
@@ -258,8 +224,6 @@ test("WW-F2-9 Sprach-Paritaet: markers und nudge existieren in jeder Sprache, de
   const TOOL_NAMES = ["end_call", "take_message", "get_consult", "look_up"];
   for (const lang of LANGUAGES) {
     const followUp = LOCALES[lang].prompt.followUp;
-    // WW-F4: die Marker liegen nach Zielwerkzeug partitioniert vor - fuer die Form-Zusage
-    // dieses Tests zaehlt die Vereinigung, genau wie fuer announcesToolAction.
     const markers = [...followUp.consultMarkers, ...followUp.messageMarkers];
     assert.ok(markers.length > 0, `${lang}: markers`);
     for (const parts of markers)
@@ -272,8 +236,6 @@ test("WW-F2-9 Sprach-Paritaet: markers und nudge existieren in jeder Sprache, de
       followUp.nudge.startsWith("[") && followUp.nudge.endsWith("]"),
       `${lang}: kein Steuertext`,
     );
-    // Ein Steuertext, der ein Werkzeug beim Namen nennt, zeigt in dem Zug, in dem es nicht
-    // angeboten ist, ins Leere - genau die Prompt-Asymmetrie aus W2.
     for (const name of TOOL_NAMES)
       assert.equal(followUp.nudge.includes(name), false, `${lang}: nudge nennt ${name}`);
   }
