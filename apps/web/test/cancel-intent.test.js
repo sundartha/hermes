@@ -1,6 +1,3 @@
-// Kuendigungs-Auftrag der App-Shell (lib/cancel-intent.js, § 312k BGB, Owner-
-// Entscheidung 2026-10-01: gekuendigt wird NUR im Kundenbereich). Rein, ohne DOM:
-// der Speicher ist eine Map-Attrappe mit der sessionStorage-Schnittstelle.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -126,20 +123,15 @@ test("Kuendigungs-Auftrag: Fruehschleier steht vor dem ersten Bild und hebt sich
   const shell = read("src/pages/app/index.astro");
   const layout = read("src/layouts/App.astro");
   const veil = read("public/cancel-veil.js");
-  // Blockierend im <head> (nicht als Modul), sonst kommt der Schleier nach dem ersten Bild.
   assert.ok(layout.includes('<slot name="head" />'));
-  // Kein is:inline (test/sec-p5-web-haertung.test.js verbietet es): der Pfad steht als Ausdruck.
   assert.ok(shell.includes('<script slot="head" src={CANCEL_VEIL_SRC}></script>'));
   assert.ok(shell.includes('const CANCEL_VEIL_SRC = "/cancel-veil.js";'));
   assert.match(shell, /html\[data-cancel-arrival\] body\s*\{\s*visibility: hidden/);
-  // Das Skript haelt Anker und Frist der Insel; ohne Modul hebt die Frist den Schleier auf.
   assert.ok(veil.includes(`location.hash !== "${CANCEL_INTENT_HASH}"`));
   assert.match(veil, /setTimeout\([\s\S]*removeAttribute\("data-cancel-arrival"\)[\s\S]*VEIL_MAX_MS\)/);
   const veilMs = Number(veil.match(/VEIL_MAX_MS = (\d+)/)[1]);
   const islandMs = Number(island.match(/INTENT_VEIL_MS = (\d+)/)[1]);
   assert.ok(veilMs > islandMs, "die Frist des Frueh-Schleiers muss laenger sein als die der Insel");
-  // Die Insel nimmt den Schleier beim Entscheiden weg, und bei "Zurueck" vom Login
-  // (Seite aus dem Cache) wird der Auftrag verworfen statt eine leere Seite zu zeigen.
   assert.ok(island.includes('root.removeAttribute("data-cancel-arrival")'));
   assert.ok(island.includes("event.persisted && cancelIntent.pending"));
 });

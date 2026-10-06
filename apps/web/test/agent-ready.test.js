@@ -1,8 +1,3 @@
-// Plan "agent-ready" (2026-09-30): die Fassungen der Website fuer KI-Agenten.
-// /index.md, /llms.txt und /llms-full.txt entstehen beim Build aus lib/agent-docs.js,
-// der Skill und der Registry-Nachweis liegen unter public/.well-known/. Eigener
-// Test-Build im Temp-Verzeichnis, damit pages.test.js unveraendert bleibt.
-// Owner-Regel: Menschen sehen auf der Startseite nichts vom Agenten-Ausbau.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -41,10 +36,6 @@ after(() => {
   rmSync(DIST_DIR, { recursive: true, force: true });
 });
 
-// Agenten-Fassungen (Plan "agent-ready", Phase 1): /index.md, /llms.txt und
-// /llms-full.txt entstehen beim Build aus lib/agent-docs.js. Sie muessen dieselben
-// Fakten tragen wie die gebaute Startseite, sonst liest ein Agent etwas anderes als
-// der Mensch.
 test("Agenten-Fassungen: index.md, llms.txt, llms-full.txt werden gebaut", () => {
   for (const file of ["index.md", "llms.txt", "llms-full.txt"]) {
     assert.ok(existsSync(join(DIST_DIR, file)), `${file} fehlt im Build`);
@@ -122,10 +113,8 @@ test("robots.txt: Content-Signal erlaubt Suche, KI-Antworten und Training", () =
   assert.match(robots, /^Disallow: \/app$/m);
 });
 
-// Plan agent-ready, Phase 2-4: Skill auf der eigenen Domain, Registry-Nachweis,
-// Ein-Klick-Links und strukturierte Daten.
-const SKILL_DESCRIPTION_MAX = 1024; // agentskills.io/specification
-const REGISTRY_DESCRIPTION_MAX = 100; // MCP-Registry server.json
+const SKILL_DESCRIPTION_MAX = 1024;
+const REGISTRY_DESCRIPTION_MAX = 100;
 const CENTS_PER_EURO = 100;
 const PRICE_DECIMALS = 2;
 test("Agent Skill: Discovery-Index v0.2.0 passt zu SKILL.md (Name, Beschreibung, Digest)", () => {
@@ -171,8 +160,6 @@ test("MCP Registry: Domain-Nachweis und server.json fuer com.sundartha/hermes", 
   assert.ok(server.description.length <= REGISTRY_DESCRIPTION_MAX, "Registry-Beschreibung zu lang");
 });
 
-// Owner 2026-09-30: Menschen sehen vom Agenten-Ausbau nichts. Die Ein-Klick-Links und die
-// neue Client-Liste stehen nur in den Agenten-Dateien, nicht auf der Startseite.
 test("Startseite: nichts Sichtbares fuer Agenten, strukturierte Daten aus dem Katalog", () => {
   const html = readDist("index.html");
   for (const marker of ["cursor://", "vscode:mcp", "Add to Cursor", "by Sundartha for me"]) {

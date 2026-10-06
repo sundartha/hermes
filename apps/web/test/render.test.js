@@ -1,13 +1,3 @@
-// W4-Tests: die reinen Render-/Status-/Escaping-Helfer (lib/api.js) und der
-// DOM-Bau (lib/render.js). Reine Logik, kein Browser-DOM: ein winziges Fake-
-// `document` bildet exakt die im Bau genutzten DOM-Operationen nach
-// (createElement, className, textContent, append, setAttribute,
-// addEventListener). So laeuft alles mit node:test ohne Netz/DOM-Library.
-//
-// XSS-BELEG (Leitplanke): das Fake-Element wirft, sobald jemand innerHTML mit
-// einem Wert setzt -> ein Test mit einem Tenant-String, der `<`, `"` und
-// `<script>` enthaelt, belegt, dass der Wert ausschliesslich als textContent
-// landet (kein roh-injizierter Tag/Attribut-Ausbruch).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -38,12 +28,8 @@ import {
   fillCallModal,
 } from "../src/lib/render.js";
 
-// GP-P3: withLang lebt jetzt EINMAL in test/lang-helper.js (api.test.js nutzt sie ebenfalls).
 import { withLang } from "./lang-helper.js";
 
-// ---- Fake-DOM ---------------------------------------------------------------
-// Nur die Operationen, die lib/render.js wirklich nutzt. `innerHTML` ist eine
-// Falle: ein Schreibzugriff wirft -> belegt, dass der Bau ihn nie nutzt.
 class FakeElement {
   constructor(tag) {
     this.tag = tag;
@@ -59,8 +45,6 @@ class FakeElement {
   append(...nodes) {
     this.children.push(...nodes);
   }
-  // Wie der echte DOM: ersetzt alle Kinder durch die uebergebenen (leer ->
-  // Container geleert). bindList nutzt genau das.
   replaceChildren(...nodes) {
     this.children = nodes;
   }
@@ -76,19 +60,14 @@ class FakeElement {
   click() {
     for (const handler of this.listeners.click || []) handler();
   }
-  // Hilfs-Sicht fuer die Tests: der gesamte sichtbare Text dieses Teilbaums.
-  // Ausgeblendete Knoten (hidden) tragen nichts zum sichtbaren Text bei --
-  // spiegelt das echte DOM ([hidden] { display:none } in app.css).
   allText() {
     if (this.hidden) return "";
     return this.textContent + this.children.map((c) => c.allText()).join("");
   }
-  // Hilfs-Sicht: existiert irgendwo im Teilbaum die gesuchte className?
   hasClass(name) {
     if (this.className.split(" ").includes(name)) return true;
     return this.children.some((c) => c.hasClass(name));
   }
-  // Findet den ersten Nachfahren (oder sich selbst) mit der gesuchten className.
   find(name) {
     if (this.className.split(" ").includes(name)) return this;
     for (const child of this.children) {
@@ -103,8 +82,6 @@ const fakeDocument = {
   createElement: (tag) => new FakeElement(tag),
 };
 
-// Fake-Document fuer bindList: createElement + ein registriertes Element je id +
-// ein AUTH_EVENT-Listener, den der Test selbst ausloesen kann (emit).
 function makeBindDocument() {
   const elements = new Map();
   let handler = null;
@@ -126,12 +103,10 @@ function makeBindDocument() {
   };
 }
 
-// Sammelt den gesamten Text einer Knoten-Liste (z.B. einer gerenderten Liste).
 function textOf(nodes) {
   return nodes.map((n) => n.allText()).join("");
 }
 
-// ---- Listen-Extraktion (Contract-Grenze, fail-closed) -----------------------
 test("callsFrom: leere Liste bei fehlenden/null Feldern", () => {
   for (const input of [undefined, null, {}, { calls: null }, { calls: "x" }]) {
     assert.deepEqual(callsFrom(input), []);
@@ -147,7 +122,6 @@ test("isAgentLive: true nur wenn mindestens ein Call aktiv ist", () => {
   assert.equal(isAgentLive(null), false);
 });
 
-// ---- Call-Helfer ------------------------------------------------------------
 test("callCounterparty: outbound -> to, inbound -> from, fehlend -> leer", () => {
   assert.equal(
     callCounterparty({ direction: CALL_DIRECTION.OUTBOUND, to: "+491", from: "+492" }),
@@ -172,14 +146,12 @@ test("callStatusLabel/callStatusKind: bekannte Status + fail-closed auf failed",
   assert.equal(callStatusLabel({ status: "completed" }), "Completed");
   assert.equal(callStatusLabel({ status: "cancelled" }), "Cancelled");
   assert.equal(callStatusLabel({ status: "failed" }), "Failed");
-  // Unbekannter/fehlender Status -> Fehler-Beschriftung + Fehler-Klasse.
   assert.equal(callStatusLabel({ status: "weird" }), "Failed");
   assert.equal(callStatusLabel({}), "Failed");
   assert.equal(callStatusKind({ status: "active" }), "active");
   assert.equal(callStatusKind({ status: "weird" }), "failed");
 });
 
-// ---- Transkript-Helfer (W4b) -------------------------------------------------
 test("transcriptFrom: leere Liste bei fehlendem/kein Array-Transkript", () => {
   assert.deepEqual(transcriptFrom({}), []);
   assert.deepEqual(transcriptFrom(null), []);
@@ -214,7 +186,6 @@ test("callSummary: nur ein echter String zaehlt, sonst leer", () => {
   assert.equal(callSummary(null), "");
 });
 
-// ---- DOM-Bau: Empty-States --------------------------------------------------
 test("callRows: leere Daten -> genau eine Empty-Zeile", () => {
   const rows = callRows(fakeDocument, {});
   assert.equal(rows.length, 1);
@@ -222,7 +193,6 @@ test("callRows: leere Daten -> genau eine Empty-Zeile", () => {
   assert.equal(textOf(rows), "No calls yet — connect your first agent!");
 });
 
-// ---- DOM-Bau: Normalfall + Klick oeffnet das Detail-Fenster -----------------
 test("callRows rendert pro Call eine anklickbare Zeile (Richtung, Name, Meta, Status) und ruft onSelect(call, button) auf", () => {
   const data = {
     calls: [
@@ -243,16 +213,14 @@ test("callRows rendert pro Call eine anklickbare Zeile (Richtung, Name, Meta, St
   const rows = callRows(fakeDocument, data, (call, button) => selections.push({ call, button }));
   assert.equal(rows.length, 2);
   const all = textOf(rows);
-  assert.ok(all.includes("+4915112345")); // outbound -> to
-  assert.ok(all.includes("Termin")); // goal als Untertitel
-  assert.ok(all.includes("+49302")); // inbound -> from
-  assert.ok(all.includes("Inbound call")); // kein goal -> Standardtext
+  assert.ok(all.includes("+4915112345"));
+  assert.ok(all.includes("Termin"));
+  assert.ok(all.includes("+49302"));
+  assert.ok(all.includes("Inbound call"));
   assert.ok(rows[1].hasClass("status-badge--active"));
   assert.equal(rows[1].find("status-badge").textContent, "LIVE");
-  assert.equal(rows[0].find("status-badge").textContent, "ENDED"); // Spec §7-Tabelle, NICHT "Completed"
+  assert.equal(rows[0].find("status-badge").textContent, "ENDED");
 
-  // Die ganze Zeile ist ein echter <button> -- Tastatur-/Screenreader-
-  // Zugaenglichkeit ohne zusaetzliche Keydown-Verdrahtung.
   const button = rows[0].find("call-row__link");
   assert.equal(button.tag, "button");
   button.click();
@@ -261,8 +229,6 @@ test("callRows rendert pro Call eine anklickbare Zeile (Richtung, Name, Meta, St
   assert.equal(selections[0].button, button);
 });
 
-// Befund 3 (Fix-Runde): dritte Zeile der Anrufzeile zeigt die Zusammenfassung,
-// faellt ohne Summary auf den bisherigen Richtungs-Untertitel zurueck.
 test("callRows: dritte Zeile zeigt die Zusammenfassung, faellt ohne Summary auf den Richtungs-Untertitel zurueck", () => {
   const rows = callRows(fakeDocument, {
     calls: [
@@ -285,7 +251,6 @@ test("callRows: onSelect ist optional (Default no-op) -- ein Klick ohne Handler 
   assert.doesNotThrow(() => rows[0].find("call-row__link").click());
 });
 
-// ---- Zeit/Dauer-Meta (Spec §7: "Today, 09:12 · 2:40") -----------------------
 test("callTimeLabel: Today-Praefix am selben Kalendertag wie `now`, sonst Monat + Tag; ungueltig -> leer", () => {
   const now = new Date(2026, 5, 23, 12, 0, 0);
   const sameDay = new Date(2026, 5, 23, 9, 5, 0);
@@ -296,7 +261,6 @@ test("callTimeLabel: Today-Praefix am selben Kalendertag wie `now`, sonst Monat 
   const expectedOther = `May 1, ${String(otherDay.getHours()).padStart(2, "0")}:${String(otherDay.getMinutes()).padStart(2, "0")}`;
   assert.equal(callTimeLabel({ startedAt: otherDay.toISOString() }, now), expectedOther);
 
-  // answeredAt hat Vorrang vor startedAt (Anker "abgenommen" statt "geklingelt").
   assert.equal(
     callTimeLabel({ startedAt: otherDay.toISOString(), answeredAt: sameDay.toISOString() }, now),
     expectedSame,
@@ -318,7 +282,6 @@ test("callDurationLabel: m:ss von answeredAt bis endedAt bzw. bis `now` (laufend
   const now = new Date(2026, 5, 23, 9, 1, 30);
   assert.equal(callDurationLabel({ answeredAt: answeredAt.toISOString() }, now), "1:30");
 
-  // Nie abgenommen (failed/cancelled vor Abnahme) -> keine erfundene Dauer.
   assert.equal(callDurationLabel({}), "");
   assert.equal(callDurationLabel({ answeredAt: "nope" }), "");
 });
@@ -336,7 +299,6 @@ test("callMetaLabel: Zeit + Dauer getrennt durch Mittelpunkt; nur Zeit ohne Daue
   assert.equal(callMetaLabel({}, now), "");
 });
 
-// ---- Richtungs-Beschriftung des Detail-Fenster-Kopfs (Spec §8) --------------
 test("callDirectionLabel: Incoming/Outgoing, fehlende Richtung faellt auf Incoming zurueck", () => {
   assert.equal(callDirectionLabel({ direction: CALL_DIRECTION.INBOUND }), "Incoming");
   assert.equal(callDirectionLabel({ direction: CALL_DIRECTION.OUTBOUND }), "Outgoing");
@@ -344,7 +306,6 @@ test("callDirectionLabel: Incoming/Outgoing, fehlende Richtung faellt auf Incomi
   assert.equal(callDirectionLabel(null), "Incoming");
 });
 
-// ---- fillCallModal: das EINE Detail-Fenster wird je Klick neu befuellt -----
 function makeModalTargets() {
   return {
     directionEl: fakeDocument.createElement("span"),
@@ -418,16 +379,11 @@ test("fillCallModal: wiederholter Aufruf ersetzt den Inhalt (ein Modal, je Klick
   assert.equal(targets.directionEl.textContent, "Outgoing");
   assert.ok(targets.contactEl.allText().includes("+49302"));
   assert.ok(!targets.contactEl.allText().includes("+49301"));
-  assert.equal(targets.summaryEl.hidden, true); // die alte Summary ist weg
+  assert.equal(targets.summaryEl.hidden, true);
 });
 
-// ---- XSS-Beleg: Tenant-Strings landen als Text, nie als HTML -----------------
 test('Tenant-Strings mit </>/" und <script> landen ausschliesslich als textContent (Zeile)', () => {
   const attack = '<script>alert("x")</script><img src="y" onerror="z">';
-  // Der boese String in den Tenant-Quellen der Zeile: Gegenstelle (from), goal.
-  // Wuerde irgendwo innerHTML gesetzt, wirft das Fake-Element -> der Test
-  // scheitert. Hier passiert das NICHT, und der Wortlaut taucht woertlich
-  // (un-escaped, aber als Text) im Teilbaum auf.
   const rows = callRows(fakeDocument, {
     calls: [{ direction: "inbound", from: attack, goal: attack, status: "completed" }],
   });
@@ -437,8 +393,6 @@ test('Tenant-Strings mit </>/" und <script> landen ausschliesslich als textConte
 test('Tenant-Strings mit </>/" und <script> landen ausschliesslich als textContent (Detail-Fenster)', () => {
   const attack = '<script>alert("x")</script><img src="y" onerror="z">';
   const targets = makeModalTargets();
-  // Der boese String in jeder Tenant-Quelle des Modals: Gegenstelle (from),
-  // Summary, Transkript-Text.
   fillCallModal(fakeDocument, targets, {
     direction: "inbound",
     from: attack,
@@ -458,7 +412,6 @@ test("Fake-Element: jeder innerHTML-Schreibzugriff wuerde werfen (Tripwire ist s
   }, /innerHTML/);
 });
 
-// ---- bindList: Verdrahtung + Stale-Daten-Schutz -----------------------------
 test("bindList rendert im AUTHENTICATED-Zustand die Zeilen in den Container", () => {
   const doc = makeBindDocument();
   const node = doc.register("calls-list");
@@ -475,14 +428,13 @@ test("bindList leert den Container bei JEDEM Nicht-AUTHENTICATED-Zustand (Stale-
   for (const state of [AUTH_STATE.ANONYMOUS, AUTH_STATE.PENDING, AUTH_STATE.ERROR]) {
     const doc = makeBindDocument();
     const node = doc.register("calls-list");
-    node.append(new FakeElement("li")); // vorher gefuellt (simuliert alte Daten)
+    node.append(new FakeElement("li"));
     bindList(doc, "calls-list", callRows);
     doc.emit({ state, data: null });
     assert.equal(node.children.length, 0, `Container nicht geleert bei ${state}`);
   }
 });
 
-// ---- Dashboard-i18n Etappe 2: DE-Modus (Status-Pillen, Richtung, Datum) -----
 test("DE-Modus: Status-Pillen LIVE/BEENDET/ABGEBROCHEN/FEHLGESCHLAGEN statt der EN-Kurzform", () => {
   withLang("de", () => {
     const rows = callRows(fakeDocument, {
@@ -490,7 +442,7 @@ test("DE-Modus: Status-Pillen LIVE/BEENDET/ABGEBROCHEN/FEHLGESCHLAGEN statt der 
         { direction: "inbound", from: "+49301", status: "active" },
         { direction: "inbound", from: "+49302", status: "completed" },
         { direction: "inbound", from: "+49303", status: "cancelled" },
-        { direction: "inbound", from: "+49304", status: "weird" }, // faellt auf failed
+        { direction: "inbound", from: "+49304", status: "weird" },
       ],
     });
     assert.equal(rows[0].find("status-badge").textContent, "LIVE");
@@ -509,12 +461,12 @@ test("DE-Modus: Richtungs-Beschriftung Eingehend/Ausgehend (Detail-Fenster-Kopf)
 
 test("DE-Modus: callTimeLabel zeigt 'Heute' + deutsches Monatskuerzel, weiterhin ohne Intl/toLocale", () => {
   withLang("de", () => {
-    const now = new Date(2026, 5, 23, 12, 0, 0); // 23. Juni
+    const now = new Date(2026, 5, 23, 12, 0, 0);
     const sameDay = new Date(2026, 5, 23, 9, 5, 0);
     const expectedSame = `Heute, ${String(sameDay.getHours()).padStart(2, "0")}:${String(sameDay.getMinutes()).padStart(2, "0")}`;
     assert.equal(callTimeLabel({ startedAt: sameDay.toISOString() }, now), expectedSame);
 
-    const otherDay = new Date(2026, 4, 1, 9, 5, 0); // 1. Mai
+    const otherDay = new Date(2026, 4, 1, 9, 5, 0);
     const expectedOther = `Mai 1, ${String(otherDay.getHours()).padStart(2, "0")}:${String(otherDay.getMinutes()).padStart(2, "0")}`;
     assert.equal(callTimeLabel({ startedAt: otherDay.toISOString() }, now), expectedOther);
   });

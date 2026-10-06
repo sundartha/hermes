@@ -1,5 +1,3 @@
-// Handy-Startseite, Handoff "Hermes Mobile v9": Code-Feld (Farben, Tippen) und
-// die Bausteine, die der Handoff festlegt. Rein, ohne astro-Build.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

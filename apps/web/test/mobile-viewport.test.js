@@ -1,5 +1,3 @@
-// Handy-Startseite im Browserfenster: Blaettern (eine Geste = genau ein Screen)
-// und Safari-Leisten (Farbe = Bildkante). Rein, ohne astro-Build.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -20,7 +18,6 @@ import {
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const read = (path) => readFileSync(join(WEB_ROOT, path), "utf8");
 
-// Screenhoehe eines grossen iPhones in Safari (zwischen Status- und Toolbar).
 const HEIGHT = 796;
 const SCREENS = 5;
 const LAST = SCREENS - 1;

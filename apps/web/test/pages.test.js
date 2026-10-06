@@ -1,15 +1,3 @@
-// W1-Tests: der GEBAUTE Output der oeffentlichen Unterseiten. Astro pruned
-// ungenutztes CSS nicht, daher ist nur das echte Build-Ergebnis die Wahrheit
-// fuer "kein Markenrot im Output" und "alle Seiten teilen das Site-Chrome".
-//
-// Build-Operate-Check (P13): ein einmaliger astro-build in einen eigenen
-// Test-outDir (before), danach reine Asserts gegen die erzeugten HTML/CSS-
-// Dateien. Self-validating, repeatable (offline, lokale Fonts), kein DOM.
-//
-// SCOPE: geprueft werden die oeffentlichen Unterseiten — NICHT der eingeloggte
-// App-Bereich (/app), der das Markenrot bewusst weiter nutzt (W1 Out-of-Scope).
-// Daher wird das Markenrot je Seite NUR in den von DIESER Seite verlinkten CSS-
-// Bundles gesucht (nicht pauschal ueber ganz dist/).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -31,20 +19,14 @@ const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST_DIR = join(WEB_ROOT, "dist-test");
 const LEGAL_CONTENT_DIR = join(WEB_ROOT, "src/data/legal");
 
-// Markenrot darf im gerenderten Output der Unterseiten NICHT auftauchen.
 const BRAND_RED = "#e60000";
 
-// Beleg, dass eine Seite das geteilte Site-Chrome nutzt (Marke + Flügel-Logo).
-// Seit dem Hermes-Neubau traegt die Hülle (layouts/Hermes.astro) den Flügel
-// statt der Sandale — die Sandale ist mit layouts/Site.astro verwaist.
 const SITE_CHROME_MARKERS = ["by Sundartha", "hermes-wing.png"];
 
 const MARKETING_PAGES = [
   "registrieren/index.html",
   "404.html",
-  // 312k-P3: oeffentliche Kuendigungsseite, dieselbe Hermes-Huelle wie Registrieren.
   "kuendigen/index.html",
-  // Oeffentliche Support-Seite (englisch), dieselbe Hermes-Huelle.
   "support/index.html",
 ];
 const LEGAL_PAGES = [
@@ -53,9 +35,6 @@ const LEGAL_PAGES = [
   "agb/index.html",
 ];
 
-// Sprachen nach dem Neubau (Owner-Entscheidung: Deutsch ist die Standardsprache
-// der Marketing-Seiten; die beiden Rand-Seiten blieben englisch wie zuvor). Die
-// Support-Seite ist englisch (Marketing-Texte Englisch, Rechtstexte Deutsch).
 const DE_PAGES = ["kuendigen/index.html", ...LEGAL_PAGES];
 const EN_PAGES = ["registrieren/index.html", "404.html", "support/index.html"];
 
@@ -63,7 +42,6 @@ function readDist(relativePath) {
   return readFileSync(join(DIST_DIR, relativePath), "utf8");
 }
 
-// Liest alle von einer Seite verlinkten lokalen CSS-Dateien (href="/...css").
 function linkedStylesheets(html) {
   const hrefs = [...html.matchAll(/<link[^>]+href="(\/[^"]+\.css)"/g)].map(
     (match) => match[1],
@@ -73,7 +51,6 @@ function linkedStylesheets(html) {
 
 before(() => {
   rmSync(DIST_DIR, { recursive: true, force: true });
-  // Eigener outDir, damit der Test den regulaeren dist/-Output nicht beruehrt.
   execFileSync("npx", ["astro", "build", "--outDir", DIST_DIR], {
     cwd: WEB_ROOT,
     stdio: "pipe",
@@ -111,8 +88,6 @@ test("Sprachen: DE-Seiten lang=de, die EN-Seiten lang=en", () => {
   }
 });
 
-// Ganzzahl-Cents -> {major, minor} wie lib/plans.js formatPlanPrice. Der
-// Preis-Test unten leitet seine Erwartung hieraus ab, nie aus einer Zahl im Text.
 function priceParts(amountCents) {
   const CENTS_PER_MAJOR = 100;
   const MINOR_DIGITS = 2;
@@ -122,10 +97,6 @@ function priceParts(amountCents) {
   };
 }
 
-// Owner-Entscheidung 2026-09-28: die alten Unterseiten /so-funktionierts und /preise
-// fuehren auf die normale Startseite, direkt zur jeweiligen Sektion. Die Static Site
-// kann nicht serverseitig umleiten, darum eine Weiche per Meta-Refresh auf den Anker
-// (lib/home-anchors.js) - ohne eigenen Inhalt, nicht indexierbar, ohne Inline-Code.
 const HOME_REDIRECTS = [
   { page: "so-funktionierts/index.html", anchor: "so-funktionierts" },
   { page: "preise/index.html", anchor: "preise" },
@@ -160,13 +131,6 @@ test("Weichen: /so-funktionierts und /preise fuehren zur Sektion der Startseite"
 });
 
 test("Startseite: Preise in beiden Sprachen aus dem Katalog, je in der richtigen Notation", () => {
-  // Die Startseite ist seit dem Default-Wechsel englisch im Markup; Deutsch liegt
-  // als Woerterbuch in scripts/hermes-scroll.js. Beide Fassungen muessen aus
-  // DEMSELBEN Katalog stammen und die Notation ihrer Sprache tragen: englisch
-  // "€4.99" (Punkt, Symbol vorn), deutsch "4,99 €" (Komma, Symbol nachgestellt).
-  // Der Test haengt an amountCents, nicht an einer Zahl im Text.
-  // Gemessen wird der PREIS-KNOTEN, nicht die ganze Seite: "4,99 €" steht
-  // legitim auch im deutschen AGB-Text im Rechtstext-Blatt.
   const html = readDist("index.html");
   const dict = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
   for (const plan of PLAN_CATALOG) {
@@ -183,9 +147,6 @@ test("Startseite: Preise in beiden Sprachen aus dem Katalog, je in der richtigen
   }
 });
 
-// Handy-Fassung (components/MobileHome.astro, < 768 px): Preise und Minuten
-// reisen fuer das Roll-Zaehlwerk als Data-Attribute mit. Beide Notationen und
-// die Minuten muessen aus DEMSELBEN Katalog stammen wie Desktop.
 test("Handy-Startseite: Preise (EN/DE) und Minuten aus dem Katalog", () => {
   const html = readDist("index.html");
   const joined = (pick) => PLAN_CATALOG.map(pick).join("|");
@@ -197,11 +158,6 @@ test("Handy-Startseite: Preise (EN/DE) und Minuten aus dem Katalog", () => {
   assert.ok(html.includes(`data-minutes="${minutes}"`), `Handy: Inklusivminuten ${minutes} fehlen`);
 });
 
-// Handy-Markup: jede uebersetzbare Stelle traegt ihre deutsche Fassung, kein
-// style-Attribut (CSP style-src 'self'), kein Menue-Knopf mehr (Handoff), und der
-// Kuendigungs-Link (§ 312k BGB) traegt beide Fassungen aus den benannten Konstanten
-// (lib/subscribe.js) - kein Uebersetzungs-Attribut - und fuehrt direkt zur Kuendigung
-// im Kundenbereich (CANCEL_URL, Owner-Entscheidung 2026-10-01).
 test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Link je Sprache", () => {
   const html = readDist("index.html");
   const start = html.indexOf("data-mh");
@@ -218,10 +174,6 @@ test("Handy-Startseite: DE-Fassung je Knoten, kein Inline-Style, Kuendigungs-Lin
   );
 });
 
-// P14/GAP-15: der Waechter fuer die englischen Rechtsdokumente. Seit 2026-09-28 liegen
-// alle drei als informative Uebersetzung vor (Owner-Wunsch: englische Seite = englische
-// Texte); genau die gelieferten Slugs muessen gebaut sein, und die noindex-/
-// Vorrangklausel-Regel greift.
 test("EN-Rechtsseiten: gebaute Menge entspricht genau den gelieferten *.en.json", () => {
   const deliveredEnSlugs = LEGAL_SLUGS.filter((slug) =>
     existsSync(join(LEGAL_CONTENT_DIR, `${slug}.en.json`)),
@@ -257,9 +209,6 @@ test("EN-Rechtsseiten tragen noindex + Vorrangklausel, DE-Rechtsseiten kein noin
   }
 });
 
-// Cookie-Einwilligung (§ 25 TDDDG): jede oeffentliche Seite traegt den Banner,
-// den Wiederoeffnen-Link und das Handy-Viewport-Meta; ohne PUBLIC_ANALYTICS_*
-// darf KEIN Mess-Platzhalter im Output stehen (fail-closed, s. AnalyticsSlot).
 const PUBLIC_PAGES = ["index.html", ...MARKETING_PAGES, ...LEGAL_PAGES];
 
 test("Cookie-Einwilligung: Banner + Wiederoeffnen-Link + viewport-fit auf jeder oeffentlichen Seite", () => {
@@ -280,10 +229,6 @@ test("ohne PUBLIC_ANALYTICS_* steht kein Mess-Platzhalter im Output", () => {
 });
 
 test("Datenschutz nennt die lokale Speicherung (Sprachwahl, Cookie-Entscheidung)", () => {
-  // Der genannte Eintrag muss der WIRKLICH geschriebene sein: gemessen wird der
-  // Schluessel aus scripts/hermes-scroll.js, nicht ein fest getippter Name.
-  // Sonst nennt der Datenschutztext nach einer Umbenennung einen Eintrag, den
-  // es nicht mehr gibt (§ 25 TDDDG verlangt die zutreffende Angabe).
   const scroll = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
   const langKey = (scroll.match(/const LANG_KEY = "([^"]+)"/) || [])[1];
   assert.ok(langKey, "LANG_KEY in hermes-scroll.js nicht gefunden");
@@ -292,38 +237,18 @@ test("Datenschutz nennt die lokale Speicherung (Sprachwahl, Cookie-Entscheidung)
   assert.ok(html.includes("hermes.consent"), "hermes.consent fehlt im Datenschutztext");
 });
 
-// Support-Seite: die oeffentliche Support-URL fuer die OpenAI-Einreichung ("Privacy
-// policy, terms, support, and website URLs are public and match the publisher
-// identity.", developers.openai.com/plugins/deploy/submission). Geprueft wird der
-// GEBAUTE Output: indexierbar, kanonisch auf sundartha.com, Kontakt nur aus dem
-// Bestand, keine Zusage ohne Beleg, keine interne Kennung, keine fremde Quelle.
 const SUPPORT_PAGE = "support/index.html";
-// Sitemap-Schreibweise ohne Schraegstrich wie die uebrigen Eintraege; der gebaute
-// canonical-Link traegt ihn (Astro-Verzeichnis-Format), beides zeigt auf dieselbe Seite.
 const SUPPORT_CANONICAL = "https://sundartha.com/support";
 const SUPPORT_CANONICAL_LINK = /<link rel="canonical" href="https:\/\/sundartha\.com\/support\/?"/;
 const PUBLIC_CONTACT = "kontakt@sundartha.com";
 const PUBLISHER_HOST = "sundartha.com";
-// Zusagen, fuer die es keinen Beleg gibt: Frist, Rund-um-die-Uhr, Telefonnummer.
 const UNBACKED_PROMISE = /24\/7|\bSLA\b|within \d+|business days|\+\d{2}[\s\d]{6,}/i;
-// Interne Kennungen aus Plan und Befundlisten gehoeren nie auf eine oeffentliche Seite.
 const INTERNAL_ID = /\b(T2-\d+|OW-[A-Z]|O-\d+|N-\d+|H-\d+)\b/;
-// Das Wortprotokoll wird nach der Zusammenfassung geloescht (src/telephony/call-finish.js
-// purgeTranscript, Datenschutzerklaerung "Speicherdauer") - eine Transkript-Zusage fuer
-// den Kundenbereich widerspraeche dem Rechtstext.
 const TRANSCRIPT_PROMISE = /with (its|their) transcripts?|and (its|their) transcripts?/i;
-// Der Vorbehalt muss sichtbar dastehen, nicht nur die Zusage fehlen.
 const TRANSCRIPT_DELETION_NOTE = /transcript of a call is normally deleted once its summary has been created/;
-// Die Fristen gelten nur fuer unser System: der Anbieter der Gespraechs-Plattform speichert
-// das Gespraech eigenstaendig und loescht derzeit nicht automatisch (Datenschutzerklaerung
-// "Speicherdauer"). Ohne diesen Vorbehalt waere der Loesch-Hinweis eine falsche Zusage.
 const PROVIDER_RETENTION_NOTE = /voice platform provider stores conversations separately and does not currently delete them automatically/;
-// Astro entfernt einen Zeilenumbruch direkt vor einem Tag ersatzlos: ohne explizites
-// Leerzeichen klebt das Wort vor dem Link am Linktext ("email<a", "Our<a").
 const GLUED_LINK = /[A-Za-z]<a\s/;
 
-// Sichtbarer Text: Skripte/Styles raus, dann alle Tags. So pruefen die Regexe den
-// Text, den ein Mensch liest - nicht die gehashten Asset-Namen in Attributen.
 function visibleText(html) {
   return html
     .replace(/<(script|style)[\s\S]*?<\/\1>/g, " ")
@@ -340,8 +265,6 @@ function absoluteLinkHosts(html) {
   );
 }
 
-// Dieselbe Quelle wie der Build (lib/legal-content.js per import.meta.glob), hier aus
-// den Dateien gelesen - so zeigt die Erwartung automatisch auf eine kuenftige EN-Fassung.
 function englishLegalTargets() {
   const modules = Object.fromEntries(
     readdirSync(LEGAL_CONTENT_DIR)
@@ -355,7 +278,6 @@ function englishLegalTargets() {
 }
 
 test("Support-Seite: Positiv-Kontrolle - die Verbots-Regexe schlagen an", () => {
-  // Ohne diese Kontrolle saehe eine kaputte Regex aus wie eine saubere Seite.
   for (const sample of ["We answer 24/7.", "Our SLA", "within 24 hours", "3 business days", "+49 176 1234567"]) {
     assert.match(sample, UNBACKED_PROMISE, `Regex verfehlt "${sample}"`);
   }
@@ -390,8 +312,6 @@ test("Support-Seite: indexierbar, kanonisch, Kontakt aus dem Bestand, keine erfu
 });
 
 test("Support-Seite: keine Quelle oder kein Link auf einen fremden Host", () => {
-  // Erlaubt: die Publisher-Domain und der Gateway-Host des Login-Links (derselbe Wert,
-  // den der Build aus PUBLIC_GATEWAY_URL zieht, lib/routes.js).
   const allowed = new Set([PUBLISHER_HOST, new URL(LOGIN_URL).hostname]);
   for (const host of absoluteLinkHosts(readDist(SUPPORT_PAGE))) {
     assert.ok(allowed.has(host), `Support-Seite verweist auf fremden Host ${host}`);
@@ -409,10 +329,6 @@ test("Sitemap enthaelt die Support-Seite", () => {
   assert.ok(sitemap.includes(`<loc>${SUPPORT_CANONICAL}</loc>`), "sitemap.xml fehlt /support");
 });
 
-// Die Erklaer-Demo nennt nur Werkzeuge, die der Server heute anbietet, und zeigt den
-// heutigen Ablauf: die KI bereitet den Anruf vor (prepare_call), der Mensch bestaetigt
-// ihn in der Hermes-Karte. Einen Kalender hat Hermes nicht mehr, und das Wortprotokoll
-// wird nach der Zusammenfassung geloescht - die Demo verspricht kein Transkript im Dashboard.
 const RETIRED_DEMO_CLAIMS =
   /get_transcript|get_my_number|get_calendar|added it to your calendar|Termin eingetragen|Summary & transcript|Zusammenfassung & Transkript/;
 const DEMO_PAGES = ["index.html"];
@@ -424,20 +340,14 @@ test("Demo: Positiv-Kontrolle - die Verbots-Regex schlaegt an", () => {
 });
 
 test("Demo nennt nur heutige Werkzeuge, keinen Kalender und kein Dashboard-Transkript", () => {
-  // Seit 2026-09-27 zeigt die Startseite die Schritt-Kacheln (HowtoSteps) statt der
-  // Session-Demo. Wo die Demo (noch) eingebunden ist, muss sie
-  // prepare_call zeigen; KEINE Seite darf ein altes Werkzeug, den Kalender oder ein
-  // Dashboard-Transkript versprechen.
   for (const page of DEMO_PAGES) {
     const html = readDist(page);
     if (html.includes("hd-toolcall")) assert.ok(html.includes("prepare_call"), `${page}: Demo zeigt prepare_call nicht`);
     assert.doesNotMatch(html, RETIRED_DEMO_CLAIMS, `${page}: Seite nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript`);
   }
-  // Die Agenten-Anleitung (public/agents.md) muss dieselben heutigen Werkzeuge nennen.
   const agents = readFileSync(join(WEB_ROOT, "public/agents.md"), "utf8");
   assert.ok(agents.includes("prepare_call"), "agents.md: prepare_call fehlt");
   assert.doesNotMatch(agents, RETIRED_DEMO_CLAIMS, "agents.md nennt ein altes Werkzeug oder den Kalender");
-  // Das DE-Woerterbuch des Laufzeit-Umschalters traegt die Demo-Texte ein zweites Mal.
   const scroll = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
   assert.ok(scroll.includes("prepare_call"), "hermes-scroll.js: Demo zeigt prepare_call nicht");
   assert.doesNotMatch(scroll, RETIRED_DEMO_CLAIMS, "hermes-scroll.js nennt ein altes Werkzeug, den Kalender oder ein Dashboard-Transkript");

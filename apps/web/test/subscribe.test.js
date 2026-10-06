@@ -1,11 +1,3 @@
-// P2-Tests: die reinen Subscribe-Builder (lib/subscribe.js) + die Subscribe-
-// Zustandsmaschine. Reine Logik, kein Browser-DOM: ein winziges Fake-`document`
-// bildet die im Bau genutzten DOM-Operationen nach (createElement, className,
-// textContent, dataset, type, append). Die Maschine wird gegen ein gestubbtes
-// globales fetch geprueft (wie api.test.js). Laeuft mit node:test ohne Netz/DOM.
-//
-// XSS-BELEG (Leitplanke): das Fake-Element wirft bei jedem innerHTML-Schreibzugriff
-// -> belegt, dass die Kacheln ausschliesslich ueber textContent gebaut werden.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -54,8 +46,6 @@ import {
   NEWSLETTER_RECIPIENT_MESSAGES,
 } from "../src/lib/subscribe.js";
 
-// Simuliert die DE-Sprachwahl fuer getLang() (lib/i18n.js) ohne setLang() (das
-// greift auf `document` zu, s. render.test.js -- gleiches Muster hier).
 function withLang(lang, fn) {
   const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
   const original = globalThis.localStorage;
@@ -68,7 +58,6 @@ function withLang(lang, fn) {
   }
 }
 
-// ---- Fake-DOM ---------------------------------------------------------------
 class FakeElement {
   constructor(tag) {
     this.tag = tag;
@@ -91,13 +80,9 @@ class FakeElement {
     if (this.className.split(" ").includes(name)) return true;
     return this.children.some((c) => c.hasClass(name));
   }
-  // Flacher Teilbaum (inkl. self): fuer "finde den Subscribe-Button".
   flatten() {
     return [this, ...this.children.flatMap((c) => c.flatten())];
   }
-  // F2-Newsletter-Recipients: recipientRow() ruft setAttribute (aria-label) und
-  // addEventListener (Remove-Klick) -- beide bisher ungenutzt vom Fake, hier
-  // additiv nachgebildet (bricht keinen bestehenden planTiles-Test).
   setAttribute(name, value) {
     this.attrs = this.attrs || {};
     this.attrs[name] = value;
@@ -112,10 +97,6 @@ class FakeElement {
   }
 }
 
-// createElementNS additiv: das Entfernen-Kreuz ist seit dem 16.09.2026 ein
-// gezeichnetes SVG statt des Schriftzeichens "×" (s. subscribe.js removeCross).
-// Der Fake unterscheidet keine Namensraeume -- fuer die Tests zaehlt nur, dass
-// ein Knoten mit diesem Tag entsteht.
 const fakeDocument = {
   createElement: (tag) => new FakeElement(tag),
   createElementNS: (_ns, tag) => new FakeElement(tag),
@@ -125,7 +106,6 @@ function textOf(nodes) {
   return nodes.map((n) => n.allText()).join("");
 }
 
-// ---- planTiles: Kacheln aus dem Build-Spiegel -------------------------------
 test("planTiles: eine Kachel je Katalog-Plan mit Name, Preis, /month, Features, data-plan", () => {
   const tiles = planTiles(fakeDocument);
   assert.equal(tiles.length, PLAN_CATALOG.length);
@@ -134,14 +114,11 @@ test("planTiles: eine Kachel je Katalog-Plan mit Name, Preis, /month, Features, 
   const starterTile = tiles[0];
   const text = textOf([starterTile]);
   assert.ok(text.includes("Starter"));
-  // EUR-Cutover (Stripe live, 2026-07-03). Die NOTATION folgt der Sprache: ohne
-  // gespeicherte Wahl ist das Dashboard englisch -> "€4.99" (Punkt, Symbol vorn).
   assert.ok(text.includes("€4.99"));
   assert.ok(!text.includes("4,99 €"), "englische Kachel zeigt deutsche Notation");
   assert.ok(text.includes("/month"));
   for (const feature of starter.features) assert.ok(text.includes(feature), `Feature fehlt: ${feature}`);
 
-  // Subscribe-Button traegt den Slug als data-plan (delegierter Klick liest ihn).
   const buttons = starterTile.flatten().filter((n) => n.tag === "button");
   assert.equal(buttons.length, 1);
   assert.equal(buttons[0].dataset.plan, "starter");
@@ -165,11 +142,8 @@ test("planTiles: das featured-Plan traegt das Popular-Badge, das andere nicht", 
   assert.ok(!textOf([tiles[plainIndex]]).includes("Popular"));
 });
 
-// ---- planTiles: Setup-Gebuehr-Zeile (Phase A, PLAN-VOUCHER-SETUP-FEE-GAP.md) ----------
 test("planTiles: mit fee -> jede Kachel traegt die Setup-Gebuehr-Zeile", () => {
   const fee = { amountCents: 500, currency: "eur" };
-  // Der Betrag traegt dieselbe sprachabhaengige Notation wie die Preiszeile:
-  // ohne gespeicherte Wahl englisch ("€5.00"), im DE-Modus "5,00 €".
   for (const tile of planTiles(fakeDocument, fee)) {
     assert.ok(textOf([tile]).includes("€5.00"));
     assert.ok(textOf([tile]).includes("one-time number setup fee"));
@@ -186,16 +160,14 @@ test("planTiles: ohne fee (Default) -> keine Gebuehren-Zeile (Regressions-Pin)",
   for (const tile of tiles) assert.ok(!textOf([tile]).includes("setup fee"));
 });
 
-// ---- subscriptionLine / quotaLine: reine Strings -----------------------------
 test("subscriptionLine: Name + Verlaengerungsdatum (en-US), ohne Datum nur Name", () => {
-  const epoch = 1781000000; // Unix-Sekunden
+  const epoch = 1781000000;
   const expectedDate = new Date(epoch * 1000).toLocaleDateString("en-US");
   assert.equal(
     subscriptionLine({ planSlug: "starter", currentPeriodEnd: epoch }),
     `Active plan: Starter (renews ${expectedDate}).`,
   );
   assert.equal(subscriptionLine({ planSlug: "business", currentPeriodEnd: 0 }), "Active plan: Pro.");
-  // Unbekannter Slug -> kapitalisierter Fallback (nie "undefined").
   assert.equal(subscriptionLine({ planSlug: "ghost", currentPeriodEnd: 0 }), "Active plan: Ghost.");
 });
 
@@ -206,7 +178,6 @@ test("quotaLine: 'remaining of included minutes remaining' oder null", () => {
   assert.equal(quotaLine(undefined), null);
 });
 
-// ---- quotaUsedPercent: Fuellbreite des Minuten-Balkens (Dashboard-Design-Spec §10) --
 test("quotaUsedPercent: verbrauchter Anteil in Prozent, gerundet", () => {
   assert.equal(quotaUsedPercent({ remainingMinutes: 93, includedMinutes: 120 }), 23);
   assert.equal(quotaUsedPercent({ remainingMinutes: 120, includedMinutes: 120 }), 0);
@@ -224,7 +195,6 @@ test("quotaUsedPercent: geklemmt auf [0,100] gegen inkonsistente Server-Werte", 
   assert.equal(quotaUsedPercent({ remainingMinutes: -10, includedMinutes: 120 }), 100);
 });
 
-// ---- Subscribe-Zustandsmaschine ---------------------------------------------
 function stubFetch(responder) {
   const calls = [];
   const original = globalThis.fetch;
@@ -239,8 +209,6 @@ function fakeResponse({ ok, status, json }) {
   return { ok, status, json: async () => json };
 }
 
-// Fake-Container: faengt den delegierten Klick-Listener und ruft ihn mit einem
-// minimalen Event ab (target.closest -> ein Pseudo-Button mit dataset.plan).
 function fakeContainer() {
   let handler = null;
   return {
@@ -253,7 +221,6 @@ function fakeContainer() {
   };
 }
 
-// Sammelt onMessage/onSubscribed/navigate-Aufrufe fuer die Asserts.
 function spyOpts() {
   const messages = [];
   const navigated = [];
@@ -272,9 +239,6 @@ function spyOpts() {
   };
 }
 
-// Die KERN-Invariante dieses Pfades (Owner-Entscheidung 2026-09-11): ein Tarif-Klick
-// erreicht NIE POST /billing/subscribe - also nie eine stille off-session-Abbuchung der
-// Karte-on-file. Genau EIN Request, und der geht in den gehosteten Stripe-Checkout.
 test("wireSubscribe: Tarif-Klick -> setup-checkout {plan} -> navigate zur Stripe-url (KEIN /subscribe)", async () => {
   const f = stubFetch(() =>
     fakeResponse({ ok: true, status: 200, json: { url: "https://checkout.stripe.com/c/pay/cs_test" } }),
@@ -289,7 +253,6 @@ test("wireSubscribe: Tarif-Klick -> setup-checkout {plan} -> navigate zur Stripe
     assert.equal(f.calls[0].options.method, "POST");
     assert.deepEqual(JSON.parse(f.calls[0].options.body), { plan: "starter" });
     assert.deepEqual(opts.navigated, ["https://checkout.stripe.com/c/pay/cs_test"]);
-    // Keine Erfolgsmeldung im Klick-Pfad: gebucht wird erst nach der Rueckkehr von Stripe.
     assert.deepEqual(opts.messages, []);
     assert.ok(
       f.calls.every((entry) => !String(entry.path).endsWith("/billing/subscribe")),
@@ -300,9 +263,6 @@ test("wireSubscribe: Tarif-Klick -> setup-checkout {plan} -> navigate zur Stripe
   }
 });
 
-// Regression zum Ausgangsfehler: MIT hinterlegter Karte lief der Klick frueher glatt
-// durch POST /subscribe (Sofort-Abbuchung ohne Bestaetigungsseite). Der Kartenzustand
-// darf den Weg nicht mehr faerben - derselbe eine Checkout-Request wie ohne Karte.
 test("wireSubscribe: auch MIT Karte-on-file fuehrt der Klick in den Checkout, nicht in die Abbuchung", async () => {
   const f = stubFetch((path) => {
     assert.ok(!String(path).endsWith("/billing/subscribe"), "kein Sofort-Abo-Call");
@@ -314,8 +274,6 @@ test("wireSubscribe: auch MIT Karte-on-file fuehrt der Klick in den Checkout, ni
     wireSubscribe(container, opts);
     await container.click("business");
     assert.equal(f.calls.length, 1);
-    // Der Plan reist auch im Karte-vorhanden-Fall im Body mit: ohne ihn liefe die
-    // Session im setup-Mode (nur Karte erfassen) und die Rueckkehr buchte nichts.
     assert.deepEqual(JSON.parse(f.calls[0].options.body), { plan: "business" });
     assert.deepEqual(opts.navigated, ["https://checkout.stripe.com/c/pay/cs_live"]);
   } finally {
@@ -365,8 +323,6 @@ test("wireSubscribe: Klick ohne data-plan-Button macht nichts (kein Fetch)", asy
   }
 });
 
-// ApiError traegt code + next aus dem Backend-Body -> der no_card-Funnel-Zweig der
-// Maschine haengt am next. Sicherheitsnetz gegen einen stillen Verlust der Felder.
 test("ApiError traegt code + Funnel-Hinweis (next) aus dem Backend-Body", () => {
   const err = new ApiError(409, "x", { code: "no_card", next: "setup-checkout" });
   assert.equal(err.status, 409);
@@ -374,36 +330,27 @@ test("ApiError traegt code + Funnel-Hinweis (next) aus dem Backend-Body", () => 
   assert.equal(err.next, "setup-checkout");
 });
 
-// ---- Aktivierungs-Default (AM3): renderPlanChoice / dismissPlanChoice ---------
 test("renderPlanChoice: aktivierende H1 + Untertitel + 2 Kacheln + Skip sichtbar", () => {
   const els = {
     title: { textContent: "" }, subtitle: { textContent: "" },
     tiles: { _k: null, replaceChildren(...n) { this._k = n; } }, skip: { hidden: true },
-    // CL1-B4: renderPlanChoice/dismissPlanChoice schalten seither auch den Rueckweg-Knopf.
-    // Die Fixtures dieser Datei kannten ihn nicht -> die drei Faelle liefen in einen
-    // Object.assign(undefined)-TypeError (Altlast-Rot, nicht in cl1-b4-plan-choice-exit).
     restore: { hidden: false },
   };
   renderPlanChoice(fakeDocument, els);
   assert.equal(els.title.textContent, PLAN_CHOICE_COPY.title);
   assert.equal(els.subtitle.textContent, PLAN_CHOICE_COPY.subtitle);
-  assert.equal(els.tiles._k.length, 2);      // eine Kachel je Katalog-Plan
-  assert.equal(els.skip.hidden, false);      // Skip nur im Payment-Pfad sichtbar
+  assert.equal(els.tiles._k.length, 2);
+  assert.equal(els.skip.hidden, false);
 });
 
 test("renderPlanChoice: mit fee -> Kacheln tragen die Gebuehren-Zeile", () => {
   const els = {
     title: { textContent: "" }, subtitle: { textContent: "" },
     tiles: { _k: null, replaceChildren(...n) { this._k = n; } }, skip: { hidden: true },
-    // CL1-B4: renderPlanChoice/dismissPlanChoice schalten seither auch den Rueckweg-Knopf.
-    // Die Fixtures dieser Datei kannten ihn nicht -> die drei Faelle liefen in einen
-    // Object.assign(undefined)-TypeError (Altlast-Rot, nicht in cl1-b4-plan-choice-exit).
     restore: { hidden: false },
   };
   const fee = { amountCents: 999, currency: "eur" };
   renderPlanChoice(fakeDocument, els, fee);
-  // Gebuehren-Zeile nutzt dieselbe Formatierung wie die Preiszeile -> englische
-  // Notation im EN-Modus, deutsche im DE-Modus.
   assert.ok(els.tiles._k.some((t) => textOf([t]).includes("€9.99")));
   withLang("de", () => {
     renderPlanChoice(fakeDocument, els, fee);
@@ -421,7 +368,7 @@ test("dismissPlanChoice: Pending-Banner, Kacheln+Skip weg, KEIN subscribe/setSta
     };
     dismissPlanChoice(els);
     assert.equal(els.title.textContent, PLAN_CHOICE_COPY.bannerTitle);
-    assert.equal(els.tiles._k.length, 0);    // Kacheln entfernt
+    assert.equal(els.tiles._k.length, 0);
     assert.equal(els.skip.hidden, true);
     assert.equal(f.calls.length, 0, "Skip darf NICHT aktivieren (kein Backend-Call)");
   } finally {
@@ -429,21 +376,13 @@ test("dismissPlanChoice: Pending-Banner, Kacheln+Skip weg, KEIN subscribe/setSta
   }
 });
 
-// ---- 312k-P3: Kuendigungs-Weg (§ 312k BGB) -------------------------------------
-
 test("CANCEL_BUTTON_LABEL/CONFIRM_CANCEL_BUTTON_LABEL: gesetzlich vorgegebener Wortlaut", () => {
-  // § 312k BGB verlangt exakt diesen Wortlaut - Regressions-Pin gegen unbeabsichtigte
-  // Umformulierung (z.B. durch eine spaetere i18n-Aufraeumrunde).
   assert.equal(CANCEL_BUTTON_LABEL, "Verträge kündigen");
   assert.equal(CONFIRM_CANCEL_BUTTON_LABEL, "Jetzt kündigen");
 });
 
 test("cancelConfirmText (EN-Default): nennt Plan-Name + Wirkungstermin (en-US formatiert)", () => {
-  // Owner-Entscheidung 2026-08-14: der EN-Modus formatiert das Wirkungsdatum
-  // wie das uebrige englische Dashboard (renewDate, en-US) - die frueher auch
-  // im EN-Satz erzwungene TT.MM.JJJJ-Schreibweise war fuer en-US-Leser
-  // mehrdeutig (12.9. = Dec 9 oder Sep 12). DE-Modus s. eigener Test unten.
-  const epoch = 1781000000; // Unix-Sekunden
+  const epoch = 1781000000;
   const expectedDate = new Date(epoch * 1000).toLocaleDateString("en-US");
   const text = cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch });
   assert.ok(text.includes("Starter"), "Plan-Name fehlt");
@@ -464,7 +403,6 @@ test("cancelStatusLine (EN-Default): 'Cancelled — active until <en-US-Datum>.'
   assert.equal(cancelStatusLine({ currentPeriodEnd: 0 }), "Cancelled.");
 });
 
-// ---- wireCancelControls: Stufe 1/2 Sichtbarkeit (rein DOM, kein Netz) -----------
 function fakeToggle(initialHidden) {
   let handler = null;
   return {
@@ -625,8 +563,6 @@ test("CANCEL_ABORT_LABEL/RESUME_BUTTON_LABEL: nicht gesetzlich vorgegeben, Engli
   assert.equal(RESUME_BUTTON_LABEL, "Resume subscription");
 });
 
-// ---- Doppelklick-Schutz (Payment-Neugestaltung) --------------------------------
-
 test("wireSubscribe: Doppelklick waehrend ein Request laeuft macht nur EINEN Fetch (Guard)", async () => {
   let resolveFetch;
   const f = stubFetch(
@@ -641,7 +577,7 @@ test("wireSubscribe: Doppelklick waehrend ein Request laeuft macht nur EINEN Fet
     const opts = spyOpts();
     wireSubscribe(container, opts);
     const first = container.click("starter");
-    const second = container.click("starter"); // waehrend der erste Request noch offen ist
+    const second = container.click("starter");
     resolveFetch();
     await first;
     await second;
@@ -688,8 +624,6 @@ test("wireCancelControls: Doppelklick auf confirmBtn waehrend ein Request laeuft
     f.restore();
   }
 });
-
-// ---- Status-Zusammenfassung (Payment-Neugestaltung) ----------------------------
 
 test("billingStatusKind: kein Abo + keine Karte -> no_card", () => {
   assert.equal(billingStatusKind({ hasCard: false, sub: { planSlug: "" } }), BILLING_STATUS.NO_CARD);
@@ -739,8 +673,6 @@ test("billingStatusText: no_card/no_sub tragen einen statischen naechsten Schrit
   assert.notEqual(noCardText, noSubText, "no_card und no_sub muessen unterscheidbare Saetze zeigen");
 });
 
-// ---- billingStatusHeadline/-Detail: Serif-Wert + Mono-Nebenangabe (§10) -------
-
 test("billingStatusHeadline: aktiv/gekuendigt -> Plan-Name, sonst dieselbe Beschriftung wie die Status-Pille", () => {
   const activeSub = { planSlug: "starter", currentPeriodEnd: 0, cancelAtPeriodEnd: false };
   assert.equal(billingStatusHeadline(BILLING_STATUS.ACTIVE, activeSub), "Starter");
@@ -777,20 +709,16 @@ test("billingStatusDetail: no_card/no_sub -> derselbe erklaerende Satz wie billi
   assert.equal(billingStatusDetail(BILLING_STATUS.NO_SUB, sub), billingStatusText(BILLING_STATUS.NO_SUB, sub));
 });
 
-// ---- Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) ---------------------
-
 test("newsletterConsentFrom: Default nicht eingewilligt (fehlendes/kaputtes Feld -> false, NIE vorangekreuzt)", () => {
   assert.equal(newsletterConsentFrom({}), false);
   assert.equal(newsletterConsentFrom(null), false);
   assert.equal(newsletterConsentFrom(undefined), false);
   assert.equal(newsletterConsentFrom({ newsletter: {} }), false);
-  assert.equal(newsletterConsentFrom({ newsletter: { consent: "true" } }), false); // kein strikter Boolean
+  assert.equal(newsletterConsentFrom({ newsletter: { consent: "true" } }), false);
   assert.equal(newsletterConsentFrom({ newsletter: { consent: 1 } }), false);
   assert.equal(newsletterConsentFrom({ newsletter: { consent: true } }), true);
 });
 
-// F2-Mail: accountEmailFrom liest data.accountEmail (additiv, src/self-service-routes.js) -
-// reine Anzeige fuers readonly Prefill, Muster newsletterConsentFrom.
 test("accountEmailFrom: liefert die Konto-E-Mail, sonst null (fehlend/kaputt/leer -> nie erfunden)", () => {
   assert.equal(accountEmailFrom({ accountEmail: "kunde@example.test" }), "kunde@example.test");
   assert.equal(accountEmailFrom({ accountEmail: null }), null);
@@ -798,11 +726,9 @@ test("accountEmailFrom: liefert die Konto-E-Mail, sonst null (fehlend/kaputt/lee
   assert.equal(accountEmailFrom(null), null);
   assert.equal(accountEmailFrom(undefined), null);
   assert.equal(accountEmailFrom({ accountEmail: "" }), null);
-  assert.equal(accountEmailFrom({ accountEmail: 42 }), null); // kein String -> nie erfunden
+  assert.equal(accountEmailFrom({ accountEmail: 42 }), null);
 });
 
-// Fake-Checkbox: bildet nur die im Bau genutzten DOM-Operationen nach (Muster
-// fakeToggle oben), aber mit "change" statt "click" + checked/disabled-Property.
 function fakeCheckbox(initialChecked) {
   let handler = null;
   return {
@@ -812,8 +738,6 @@ function fakeCheckbox(initialChecked) {
       assert.equal(name, "change");
       handler = fn;
     },
-    // Simuliert, was der Browser vor dem "change"-Event bereits getan hat: checked
-    // ist zum Zeitpunkt des Events schon der NEUE Wert (native Checkbox-Semantik).
     change(nextChecked) {
       this.checked = nextChecked;
       return handler();
@@ -860,7 +784,7 @@ test("wireNewsletterToggle: Server-Fehler setzt das Haekchen zurueck + Fehlermel
     const toggle = fakeCheckbox(false);
     const messages = [];
     wireNewsletterToggle(toggle, { onMessage: (text, ok) => messages.push({ text, ok }) });
-    await toggle.change(true); // Nutzer versucht einzuwilligen, der Server lehnt ab
+    await toggle.change(true);
     assert.equal(toggle.checked, false, "Haekchen springt auf den vorherigen Zustand zurueck");
     assert.deepEqual(messages, [{ text: NEWSLETTER_MESSAGES.failed, ok: false }]);
     assert.equal(toggle.disabled, false, "Checkbox bleibt nach dem Fehlschlag bedienbar");
@@ -875,15 +799,13 @@ test("wireNewsletterToggle: 401 -> Session abgelaufen, Haekchen faellt zurueck",
     const toggle = fakeCheckbox(true);
     const messages = [];
     wireNewsletterToggle(toggle, { onMessage: (text, ok) => messages.push({ text, ok }) });
-    await toggle.change(false); // Nutzer versucht zu widerrufen, Session ist abgelaufen
+    await toggle.change(false);
     assert.equal(toggle.checked, true);
     assert.deepEqual(messages, [{ text: NEWSLETTER_MESSAGES.sessionExpired, ok: false }]);
   } finally {
     f.restore();
   }
 });
-
-// ---- Dashboard-i18n Etappe 2: DE-Modus ---------------------------------------
 
 test("DE-Modus: renewDate/subscriptionLine nutzen das deutsche Datumsformat (TT.MM.JJJJ), Woertlichkeit sonst deutsch", () => {
   withLang("de", () => {
@@ -909,9 +831,6 @@ test("DE-Modus: quotaLine/billingStatusBadge/billingStatusText sind deutsch", ()
 
 test("DE-Modus: SUBSCRIBE_MESSAGES/CANCEL_MESSAGES/NEWSLETTER_MESSAGES/PLAN_CHOICE_COPY laufen ueber wireSubscribe/wireCancelControls/wireNewsletterToggle deutsch", async () => {
   await withLangAsync("de", async () => {
-    // Der Erfolgsfall des Tarif-Klicks zeigt seit der Checkout-Umstellung keine Meldung
-    // mehr (er verlaesst die Seite) - die sprachbewusste Ausgabe wird deshalb am
-    // Fehlerfall geprueft: 401 -> deutscher "Sitzung abgelaufen"-Satz.
     const f = stubFetch(() => fakeResponse({ ok: false, status: 401, json: {} }));
     try {
       const container = fakeContainer();
@@ -925,9 +844,6 @@ test("DE-Modus: SUBSCRIBE_MESSAGES/CANCEL_MESSAGES/NEWSLETTER_MESSAGES/PLAN_CHOI
   });
 });
 
-// wireSubscribe/wireNewsletterToggle sind async -- withLang() (synchron) wuerde die
-// localStorage-Stub-Restauration VOR dem Abschluss des Promises zuruecknehmen. Eigene
-// async-Variante fuer diese Faelle (Muster identisch, nur await statt sofortigem finally).
 async function withLangAsync(lang, fn) {
   const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
   const original = globalThis.localStorage;
@@ -945,8 +861,6 @@ test("Kuendigungs-Weg sprachbewusst: DE-Modus woertlicher Pflichtwortlaut + deut
   const expectedGermanDate = new Date(epoch * 1000).toLocaleDateString("de-DE");
   const expectedEnDate = new Date(epoch * 1000).toLocaleDateString("en-US");
 
-  // EN-Default: englische Knopf-Beschriftung (Owner-Entscheidung 2026-08-14) --
-  // die KONSTANTEN mit dem deutschen Pflichtwortlaut bleiben davon unberuehrt.
   assert.equal(CANCEL_BUTTON_LABEL, "Verträge kündigen");
   assert.equal(cancelButtonLabel(), "Cancel contracts");
   assert.equal(confirmCancelButtonLabel(), "Cancel now");
@@ -955,7 +869,6 @@ test("Kuendigungs-Weg sprachbewusst: DE-Modus woertlicher Pflichtwortlaut + deut
   withLang("de", () => {
     assert.equal(cancelAbortLabel(), "Doch nicht");
     assert.equal(resumeButtonLabel(), "Abo fortsetzen");
-    // § 312k: im DE-Modus erscheint der gesetzlich vorgegebene Wortlaut WOERTLICH.
     assert.equal(cancelButtonLabel(), "Verträge kündigen");
     assert.equal(confirmCancelButtonLabel(), "Jetzt kündigen");
     const confirmDe = cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch });
@@ -966,13 +879,10 @@ test("Kuendigungs-Weg sprachbewusst: DE-Modus woertlicher Pflichtwortlaut + deut
     assert.equal(cancelStatusLine({ currentPeriodEnd: 0 }), "Gekündigt.");
   });
 
-  // Und weiterhin unveraendert im EN-Default danach (kein Leck aus withLang).
   assert.equal(cancelAbortLabel(), "Never mind");
   assert.equal(resumeButtonLabel(), "Resume subscription");
   assert.equal(cancelButtonLabel(), "Cancel contracts");
 });
-
-// ---- F2-Newsletter-Recipients: Zusatzempfaenger (Double-Opt-in) ---------------
 
 test("newsletterRecipientsFrom: liest data.newsletterRecipients, fail-closed leer bei fehlendem/kaputtem Feld", () => {
   const list = [{ email: "a@b.test", status: "pending", createdAt: "2026-01-01T00:00:00.000Z" }];
@@ -992,7 +902,6 @@ test("hasPendingNewsletterRecipient: true nur bei mindestens einer pending-Zeile
   assert.equal(hasPendingNewsletterRecipient({ newsletterRecipients: [] }), false);
   assert.equal(hasPendingNewsletterRecipient({}), false);
   assert.equal(hasPendingNewsletterRecipient(null), false);
-  // Kaputte Zeilen (kein Objekt/kein status) zaehlen nicht als pending.
   assert.equal(hasPendingNewsletterRecipient({ newsletterRecipients: [null, {}, "x"] }), false);
 });
 
@@ -1040,7 +949,6 @@ test("newsletterRecipientRows: Klick auf das Entfernen-Kreuz ruft onRemove(email
   assert.deepEqual(removed, ["pend@example.test"]);
 });
 
-// ---- wireNewsletterRecipientAdd: echtes <form>, Muster wireCancelControls -----
 function fakeForm() {
   let handler = null;
   return {
@@ -1196,8 +1104,6 @@ test("wireNewsletterRecipientAdd: Doppel-Submit waehrend ein Request laeuft mach
   }
 });
 
-// ---- newsletterRecipientRemove: Entfernen-Lauf (Muster runCancellationStep) --
-
 test("newsletterRecipientRemove: Erfolg -> DELETE {email}, Meldung 'removed', ruft onRemoved", async () => {
   const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { ok: true, removed: true } }));
   try {
@@ -1236,8 +1142,6 @@ test("newsletterRecipientRemove: Fehlschlag -> Meldung, KEIN onRemoved", async (
     f.restore();
   }
 });
-
-// ---- Dashboard-i18n Etappe 2: DE-Modus (Zusatzempfaenger) ---------------------
 
 test("DE-Modus: newsletterRecipientStatusLabel + newsletterRecipientRows sind deutsch", () => {
   withLang("de", () => {
