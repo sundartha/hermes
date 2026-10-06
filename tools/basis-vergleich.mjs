@@ -41,7 +41,8 @@ const COLLECTOR_PLUGIN = "basis-vergleich";
 const ROOT_FOLDER_LABEL = ".";
 const PATH_SEPARATOR = "/";
 const TEST_FILES = ["test/**"];
-const LESSONS_FILE = "tasks/lessons.md";
+const LESSONS_FILE = "docs/lessons.md";
+const FORMER_LESSONS_FILE = "tasks/lessons.md";
 const LINE_BREAK = "\n";
 const EXIT_FAILURE = 1;
 
@@ -240,17 +241,36 @@ function lineFingerprint(line) {
   return createHash("sha256").update(line).digest("hex").slice(0, FINGERPRINT_LENGTH);
 }
 
+function misplacedLessons(root) {
+  if (!existsSync(join(root, FORMER_LESSONS_FILE))) return [];
+  return [
+    {
+      key: findingKey([FORMER_LESSONS_FILE, "alter-ort"]),
+      location: `${FORMER_LESSONS_FILE} existiert; Lehren stehen nur in ${LESSONS_FILE}`,
+      always: true,
+    },
+  ];
+}
+
 function lessonsFindings(root) {
   const path = join(root, LESSONS_FILE);
-  if (!existsSync(path)) return [];
+  if (!existsSync(path)) {
+    const missing = {
+      key: findingKey([LESSONS_FILE, "fehlt"]),
+      location: `${LESSONS_FILE} fehlt`,
+      always: true,
+    };
+    return [missing, ...misplacedLessons(root)];
+  }
   const lines = readFileSync(path, "utf8").split(LINE_BREAK);
-  return lines
+  const findings = lines
     .map((line, index) => ({ text: line.trim(), number: index + 1 }))
     .filter(({ text }) => text !== "")
     .map(({ text, number }) => ({
       key: findingKey([LESSONS_FILE, lineFingerprint(text)]),
       location: `${LESSONS_FILE}:${number}`,
     }));
+  return [...findings, ...misplacedLessons(root)];
 }
 
 function keyPart(index) {
@@ -326,13 +346,24 @@ function findingKeyOf(finding) {
   return finding.key;
 }
 
+function isAlways(finding) {
+  return finding.always === true;
+}
+
+function frozenFindings(findings) {
+  return findings.filter((finding) => !isAlways(finding));
+}
+
 async function measure(context, baseline) {
   checkVersion(context, baseline);
   const findings = await context.tool.findings(context.root);
-  const currentKeys = findings.map(findingKeyOf);
+  const frozen = frozenFindings(findings);
   return {
-    added: splitByAllowance(findings, baseline.befunde, findingKeyOf).beyond,
-    known: splitByAllowance(baseline.befunde, currentKeys, identity),
+    added: [
+      ...findings.filter(isAlways),
+      ...splitByAllowance(frozen, baseline.befunde, findingKeyOf).beyond,
+    ],
+    known: splitByAllowance(baseline.befunde, frozen.map(findingKeyOf), identity),
   };
 }
 
@@ -380,7 +411,7 @@ async function create(context) {
       `${baselineFile(toolName)} existiert schon. Kürzen geht mit --${SHORTEN_OPTION}, Hinzufügen gar nicht.`,
     );
   }
-  const keys = (await tool.findings(root)).map(findingKeyOf);
+  const keys = frozenFindings(await tool.findings(root)).map(findingKeyOf);
   writeBaseline(root, toolName, { version: installedVersion(tool, root), keys });
   console.log(`${baselineFile(toolName)} mit ${keys.length} Befunden angelegt.`);
 }

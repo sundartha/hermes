@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
-import { isolatedEnvironment, probeDirectory, REPO_ROOT } from "./probe-repo.js";
+import { isolatedEnvironment, probeDirectory, REPO_ROOT, writeFiles } from "./probe-repo.js";
 
 const SCRIPT = join(REPO_ROOT, "tools/basis-vergleich.mjs");
 const EXIT_OK = 0;
@@ -176,22 +176,34 @@ test("basis-vergleich: --je-ordner lässt sich nicht mit einer anderen Betriebsa
   });
 });
 
-const LESSONS = { "tasks/lessons.md": "# Lehren\n\n- erste Lehre\n- zweite Lehre\n" };
+const LESSONS = { "docs/lessons.md": "# Lehren\n\n- erste Lehre\n- zweite Lehre\n" };
 
-test("basis-vergleich: eine neue Zeile in tasks/lessons.md ist ein Befund über der Basislinie", (context) => {
+test("basis-vergleich: eine neue Zeile in docs/lessons.md ist ein Befund über der Basislinie", (context) => {
   const probed = probe(context, LESSONS, "lessons");
-  write(probed, "tasks/lessons.md", "# Lehren\n\n- erste Lehre\n- zweite Lehre\n- dritte Lehre\n");
-  expectRun(probed, ["lessons"], { status: EXIT_FINDING, shows: "tasks/lessons.md:5" });
+  write(probed, "docs/lessons.md", "# Lehren\n\n- erste Lehre\n- zweite Lehre\n- dritte Lehre\n");
+  expectRun(probed, ["lessons"], { status: EXIT_FINDING, shows: "docs/lessons.md:5" });
 });
 
-test("basis-vergleich: eine geänderte Zeile in tasks/lessons.md ist ein Befund", (context) => {
+test("basis-vergleich: eine geänderte Zeile in docs/lessons.md ist ein Befund", (context) => {
   const probed = probe(context, LESSONS, "lessons");
-  write(probed, "tasks/lessons.md", "# Lehren\n\n- erste Lehre, ergänzt\n- zweite Lehre\n");
-  expectRun(probed, ["lessons"], { status: EXIT_FINDING, shows: "tasks/lessons.md:3" });
+  write(probed, "docs/lessons.md", "# Lehren\n\n- erste Lehre, ergänzt\n- zweite Lehre\n");
+  expectRun(probed, ["lessons"], { status: EXIT_FINDING, shows: "docs/lessons.md:3" });
 });
 
-test("basis-vergleich: eine gestrichene Zeile in tasks/lessons.md ist kein neuer Befund", (context) => {
+test("basis-vergleich: eine gestrichene Zeile in docs/lessons.md ist kein neuer Befund", (context) => {
   const probed = probe(context, LESSONS, "lessons");
-  write(probed, "tasks/lessons.md", "# Lehren\n\n- zweite Lehre\n");
+  write(probed, "docs/lessons.md", "# Lehren\n\n- zweite Lehre\n");
   expectRun(probed, ["lessons"], { status: EXIT_OK, shows: SHORTEN });
+});
+
+test("basis-vergleich: eine fehlende docs/lessons.md ist ein Befund", (context) => {
+  const probed = probe(context, LESSONS, "lessons");
+  rmSync(join(probed.directory, "docs/lessons.md"));
+  expectRun(probed, ["lessons"], { status: EXIT_FINDING, shows: "docs/lessons.md fehlt" });
+});
+
+test("basis-vergleich: eine tasks/lessons.md ist ein Befund", (context) => {
+  const probed = probe(context, LESSONS, "lessons");
+  writeFiles(probed.directory, { "tasks/lessons.md": "# Lehren\n\n- erste Lehre\n" });
+  expectRun(probed, ["lessons"], { status: EXIT_FINDING, shows: "tasks/lessons.md existiert" });
 });

@@ -13,6 +13,7 @@ const MAX_GIT_AUSGABE = 268_435_456;
 const EXIT_ABBRUCH = 2;
 const OBJEKTART_COMMIT = "commit";
 const JS_ENDUNGEN = new Set([".js", ".mjs", ".cjs"]);
+const DIFF_OHNE_UMBENENNUNG = ["diff", "--no-renames", "--no-color", "--no-ext-diff", "-U0"];
 
 export const STATUS_NEU = "A";
 export const STATUS_GELOESCHT = "D";
@@ -68,10 +69,13 @@ function hunkSeite(start, laenge) {
   return { start: Number(start), anzahl, zeilen: [] };
 }
 
-export function hunks(basis, datei, root) {
-  const args = ["diff", "--no-renames", "--no-color", "--no-ext-diff", "-U0", basis, "HEAD"];
+export function gibtEs(commit, datei, root) {
+  return git(["ls-tree", "--name-only", commit, "--", datei], root).trim() !== "";
+}
+
+function hunksAus(ausgabe) {
   const gefunden = [];
-  for (const zeile of git([...args, "--", datei], root).split(ZEILENENDE)) {
+  for (const zeile of ausgabe.split(ZEILENENDE)) {
     const kopf = HUNK_KOPF.exec(zeile);
     const aktuell = gefunden.at(-1);
     if (kopf !== null) {
@@ -85,10 +89,22 @@ export function hunks(basis, datei, root) {
   return gefunden;
 }
 
-export function hinzugefuegteZeilen(basis, datei, root) {
-  return hunks(basis, datei, root).flatMap(({ neu }) =>
+export function hunks(basis, datei, root) {
+  return hunksAus(git([...DIFF_OHNE_UMBENENNUNG, basis, "HEAD", "--", datei], root));
+}
+
+function zeilenDerHunks(gefunden) {
+  return gefunden.flatMap(({ neu }) =>
     neu.zeilen.map((text, index) => ({ zeile: neu.start + index, text })),
   );
+}
+
+export function hinzugefuegteZeilen(basis, datei, root) {
+  return zeilenDerHunks(hunks(basis, datei, root));
+}
+
+export function hinzugefuegteZeilenGegenueber(vorher, datei, root) {
+  return zeilenDerHunks(hunksAus(git([...DIFF_OHNE_UMBENENNUNG, vorher, `HEAD:${datei}`], root)));
 }
 
 export async function gelinteteJsDateien(root, dateien) {

@@ -1,5 +1,5 @@
 {
-  "titel": "Lehren nur streichen (tasks/lessons.md)",
+  "titel": "Lehren nur streichen (docs/lessons.md)",
   "pfade": [
     "tools/basis/lessons.json",
     "tools/basis-vergleich.mjs"
@@ -17,13 +17,13 @@
     ]
   },
   "ausnahmen": {
-    "bezeichnung": "Eingefrorene Zeilen von tasks/lessons.md",
+    "bezeichnung": "Eingefrorene Zeilen von docs/lessons.md",
     "datei": "tools/basis/lessons.json",
     "zaehlen": "anzahl"
   },
   "probe": {
     "mitnehmen": [
-      "tasks/lessons.md",
+      "docs/lessons.md",
       "tools/basis/lessons.json"
     ],
     "befehl": [

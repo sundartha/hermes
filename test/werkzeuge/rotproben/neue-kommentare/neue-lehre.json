@@ -1,17 +1,17 @@
 {
-  "titel": "Neue Zeile in tasks/lessons.md",
+  "titel": "Neue Zeile in docs/lessons.md",
   "vorher": {
-    "tasks/lessons.md": [
+    "docs/lessons.md": [
       "# Lehren",
       "- erste Lehre"
     ]
   },
   "dateien": {
-    "tasks/lessons.md": [
+    "docs/lessons.md": [
       "# Lehren",
       "- erste Lehre",
       "- zweite Lehre"
     ]
   },
-  "erwartet": "tasks/lessons.md:3 neue Zeile"
+  "erwartet": "docs/lessons.md:3 neue Zeile"
 }

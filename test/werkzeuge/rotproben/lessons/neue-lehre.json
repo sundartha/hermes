@@ -1,7 +1,7 @@
 {
-  "titel": "Neue Zeile in tasks/lessons.md",
+  "titel": "Neue Zeile in docs/lessons.md",
   "dateien": {
-    "tasks/lessons.md": [
+    "docs/lessons.md": [
       "# Neue Lehre",
       "- Vor jedem Commit erst den Test laufen lassen."
     ]

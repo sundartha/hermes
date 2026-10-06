@@ -64,11 +64,5 @@
     "file": "test/el-fixtures-echte-antworten.test.js",
     "test": "[abgenommen AS8] Gegenprobe an sauberen Echtfall-Fixtures (Anruf-7/8-Charakter): beide Detektoren still, Zaehlfeld 0",
     "seit": "2026-09-03"
-  },
-  {
-    "id": "AS11",
-    "file": "test/el-stimme-abnahme.test.js",
-    "test": "[abgenommen AS11] lessons.md traegt die EL-Regel mit den VIER Kernsaetzen (Signatur-Phrasen)",
-    "seit": "2026-09-04"
   }
 ]
