@@ -425,3 +425,4 @@ export function makeCallFinish({
 
   return { finishCall, releaseReserve };
 }
+export const probeBelegabruf = (deps) => deps.voiceControl?.fetchCostRecordPool?.({});
