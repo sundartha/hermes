@@ -66,12 +66,6 @@
     "seit": "2026-09-03"
   },
   {
-    "id": "AS9",
-    "file": "test/el-stimme-abnahme.test.js",
-    "test": "[abgenommen AS9] Kommentarblock an reportAudioTags nennt den Vorfall 2026-09-02 mit Doc-Verweis",
-    "seit": "2026-09-03"
-  },
-  {
     "id": "AS11",
     "file": "test/el-stimme-abnahme.test.js",
     "test": "[abgenommen AS11] lessons.md traegt die EL-Regel mit den VIER Kernsaetzen (Signatur-Phrasen)",
