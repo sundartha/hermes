@@ -1,0 +1,13 @@
+{
+  "titel": "Zeichenkette ohne Wirkung in einer neuen Funktion",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function pruefe(wert) {",
+      "  const ergebnis = wert;",
+      "  \"Absicht als Zeichenkette\";",
+      "  return ergebnis;",
+      "}"
+    ]
+  },
+  "erwartet": "no-unused-expressions"
+}

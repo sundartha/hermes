@@ -1,0 +1,11 @@
+{
+  "titel": "Kommentar in einem Workflow",
+  "dateien": {
+    ".github/workflows/rotprobe.yml": [
+      "name: Rotprobe",
+      "# Begründung im Workflow",
+      "on: push"
+    ]
+  },
+  "erwartet": "neue Befunde von kommentare-yaml-shell"
+}

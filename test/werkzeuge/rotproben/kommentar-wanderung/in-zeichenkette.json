@@ -1,0 +1,15 @@
+{
+  "titel": "Kommentarsatz wandert in eine Zeichenkette",
+  "vorher": {
+    "src/rotprobe.js": [
+      "// Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.",
+      "export const wert = true;"
+    ]
+  },
+  "dateien": {
+    "src/rotprobe.js": [
+      "export const wert = \"Der Abruf wartet zehn Sekunden auf die Antwort.\";"
+    ]
+  },
+  "erwartet": "wieder auf"
+}

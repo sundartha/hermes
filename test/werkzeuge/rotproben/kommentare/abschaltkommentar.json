@@ -1,0 +1,10 @@
+{
+  "titel": "Kommentar, der die Kommentarregel abschalten soll",
+  "dateien": {
+    "src/rotprobe.js": [
+      "// eslint-disable-next-line hermes/keine-kommentare",
+      "export const wert = true;"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/keine-kommentare\""
+}

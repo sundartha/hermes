@@ -420,3 +420,25 @@ for (const [name, changes] of [
     assert.doesNotMatch(result.stdout, /art:strenger/);
   });
 }
+
+const BASISLINIEN_PAKET_31 = [
+  "tools/basis/kommentare.json",
+  "tools/basis/quelltext-als-text.json",
+  "tools/basis/kommentare-yaml-shell.json",
+  "tools/basis/lessons.json",
+];
+
+test("(a) aus den vier Basislinien von Paket 31 nur streichen ist strenger, ein neuer Eintrag braucht eine Freigabe", async (context) => {
+  for (const basislinie of BASISLINIEN_PAKET_31) {
+    const basisFiles = { ...STRICTER_BASIS, [basislinie]: findings("a", "b") };
+    const gekuerzt = await check(context, { basisFiles, changes: { [basislinie]: ONE_FINDING } });
+    assert.equal(gekuerzt.status, EXIT_OK, `${basislinie}: ${gekuerzt.stdout}${gekuerzt.stderr}`);
+    assert.deepEqual(labelsSet(gekuerzt), ["art:strenger"], basislinie);
+    const gewachsen = await check(context, {
+      basisFiles,
+      changes: { [basislinie]: findings("a", "b", "c") },
+    });
+    assert.equal(gewachsen.status, EXIT_FAILURE, `${basislinie}: ${gewachsen.stdout}`);
+    assert.doesNotMatch(gewachsen.stdout, /art:strenger/, basislinie);
+  }
+});

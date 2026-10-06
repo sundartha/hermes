@@ -1,0 +1,11 @@
+{
+  "titel": "Neue Funktion mit einer Zahl ohne Namen",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function verdoppelt(wert) {",
+      "  return wert * 42;",
+      "}"
+    ]
+  },
+  "erwartet": "no-magic-numbers: No magic number: 42"
+}
