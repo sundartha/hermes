@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
@@ -43,6 +43,14 @@ async function until(predicate, timeoutMs = 4000) {
     await new Promise((r) => setTimeout(r, 10));
   }
 }
+
+const offeneMocks = [];
+after(async () => {
+  for (const mock of offeneMocks) {
+    mock.release();
+    await mock.close();
+  }
+});
 
 async function startHangableTelnyxMock() {
   let heldRes = null;
@@ -181,6 +189,7 @@ async function seedAndEnqueue(state, orchestrator, tenantId) {
 
 test("redrive-Erfolg: 200, reason=redrive, jobId gesetzt, danach GENAU EIN Kauf (kein Doppelkauf)", async () => {
   const telnyx = await startHangableTelnyxMock();
+  offeneMocks.push(telnyx);
   await withTelnyxMock(telnyx.url, async () => {
     const state = makeDefaultState();
     const { store, orchestrator, config: cfg } = buildOrchestrator(state);
@@ -253,6 +262,7 @@ function seedTooOldStuck() {
 
 test("needs_manual_reconcile: 409 + Runbook-Message bei zu altem stuck-Job, KEIN Kauf", async () => {
   const telnyx = await startHangableTelnyxMock();
+  offeneMocks.push(telnyx);
   await withTelnyxMock(telnyx.url, async () => {
     const state = seedTooOldStuck();
     const { store, orchestrator, config: cfg } = buildOrchestrator(state);
