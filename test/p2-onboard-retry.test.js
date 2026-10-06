@@ -1,20 +1,3 @@
-// P2 - Operator-Re-Trigger POST /api/onboard/retry: re-provisioniert eine Nummer fuer einen
-// aktiven, bezahlten Subscriber, dessen vorheriger Nummernkauf scheiterte (provisionNumber
-// faellt bei Order-Fehler auf 'failed' -> tenantHasLiveNumber wieder offen -> frische
-// 'requested'). Geld-Safety (Regel 1): NUR active + KYC>=CARD Subscriber.
-//
-// AUTH-P6: /api/onboard/retry ist seither eine Betreiber-Route (webAuthMw+adminMw, nur
-// MIT operatorAuth gemountet) - ein echter Spawn-Server (json/kein SESSION_SECRET)
-// mountet sie darum gar nicht mehr (empirisch: (a)/(b)/(c) faellen als Spawn-Tests auf
-// 404 statt 200/409/403 - DEVIATION vom Plan-Abschnitt "2 von 4": tatsaechlich brauchen
-// DREI der vier Tests die Migration, nicht zwei, weil sie alle durch die Route selbst
-// antworten muessen, nicht durch das Gate davor). (a)-(c) migriert auf In-Process-Mount
-// von makeOnboardRoutes + Provisioning-Double, das die Reason-Codes liefert (Muster
-// onboarding-route.test.js); das Reason->Status-Mapping (RETRY_REASON_STATUS) bleibt
-// wortgleich gepinnt. (d) bleibt UNVERAENDERT (echter Spawn-Server): kein SESSION_SECRET
-// im env(idp)-Fixture -> operatorAuth existiert nicht -> die Route ist gar nicht
-// gemountet (404), unabhaengig vom X-Forwarded-For-Header. Seit AUTH-P7 gibt es kein
-// Gate mehr, das stattdessen 401 antworten koennte.
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -25,16 +8,10 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeDefaultState, tenantActiveSubscriber } from "../src/store/state-ops.js";
 import { KYC_LEVEL, NUMBER_STATUS } from "../src/store/defaults.js";
 
-// active + CARD = der zahlende Subscriber (tenantActiveSubscriber true).
 function subscriberTenant(id, idpSubject) {
   return { id, status: "active", idpSubject, ownerName: `${id} Tester`, kycLevel: KYC_LEVEL.CARD };
 }
 
-// ---- (a)-(c): In-Process-Mount, Provisioning-Double liefert die Reason-Codes --------
-
-// Aufrufspur-Attrappe: wirft, wenn sie aufgerufen wird, obwohl kein Test das erwartet
-// (Muster onboarding-route.test.js) - so faellt ein Regressions-Aufruf laut auf statt
-// still durchzurutschen.
 function neverCalledProvisioning() {
   return {
     triggerTenantProvisioning: async () => {
@@ -89,7 +66,6 @@ const retryInProcess = (app, body) =>
     body: JSON.stringify(body),
   });
 
-// (a) active+CARD Subscriber ohne Nummer -> Re-Trigger fragt eine Dry-Run-Nummer an.
 test("(a) active subscriber ohne Nummer -> 200 dry_run + numberId", async () => {
   const state = { ...makeDefaultState(), tenants: [subscriberTenant("t_retry", "sub-r")] };
   const app = await startRetryApp({
@@ -107,7 +83,6 @@ test("(a) active subscriber ohne Nummer -> 200 dry_run + numberId", async () => 
   }
 });
 
-// (b) Tenant mit lebender Nummer -> 409 already_provisioned (Idempotenz, kein Doppelkauf).
 test("(b) Tenant mit lebender Nummer -> 409 already_provisioned", async () => {
   const state = {
     ...makeDefaultState(),
@@ -128,9 +103,6 @@ test("(b) Tenant mit lebender Nummer -> 409 already_provisioned", async () => {
   }
 });
 
-// (c) Geld-Safety: suspendierter ODER unbekannter Tenant -> 403 (kein Nummernkauf fuer
-// Nicht-Zahler). Beweist die active+CARD-Vorbedingung VOR jedem Provider-Pfad -
-// neverCalledProvisioning() beweist strukturell, dass der Guard vor dem Double greift.
 test("(c) suspendierter/unbekannter Tenant -> 403 (Geld-Safety, kein Kauf)", async () => {
   const state = {
     ...makeDefaultState(),
@@ -145,10 +117,6 @@ test("(c) suspendierter/unbekannter Tenant -> 403 (Geld-Safety, kein Kauf)", asy
   }
 });
 
-// ---- (d): UNVERAENDERT (echter Spawn-Server, misst das Gate) ------------------------
-
-// Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
-// TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403/429/400 = ein Gate hat gesperrt.
 const PW = "retry-secret";
 
 const env = (idp) => ({
@@ -167,11 +135,6 @@ const retry = (srv, body, headers = {}) =>
     body: JSON.stringify(body),
   });
 
-// (d) Auth fail-closed (Regel 3): kein SESSION_SECRET im Fixture -> operatorAuth
-// existiert nicht -> die Route ist gar nicht gemountet. Ein proxy-weitergereichter
-// Request (X-Forwarded-For) trifft darum auf Express' eigenen 404, unabhaengig vom
-// Header - seit AUTH-P7 gibt es kein Gate mehr, das VOR der Route-Existenz-Frage
-// antworten wuerde (s. scripts/probe-auth.sh).
 test("(d) proxied ohne Admin-Sitzung -> 404 (Route ohne operatorAuth nicht gemountet)", async () => {
   const idp = await startIdp();
   const srv = await startServer({

@@ -1,13 +1,3 @@
-// docs/OPENAI-REVIEWER-ACCESS.md geht an OpenAI. Diese Datei haelt es am Code und an der
-// Primaerquelle fest:
-// - jede datei:zeile im Fliesstext steht im Anker-Block, und dort steht der Anker-Text wirklich;
-// - keine internen Kennungen, keine echten Adressen, Nummern oder Secret-Formate (jedes Muster
-//   mit Positiv-Kontrolle, sonst saehe "nichts gefunden" aus wie "sucht nichts");
-// - jedes Zitat nennt seine developers.openai.com-URL, die Soll-Zitate stehen woertlich im EN-Teil;
-// - die Beispieldaten im Dokument sind genau REVIEWER_SEED_CALLS (EN und DE);
-// - jeder genannte Werkzeugname steht im ECHTEN tools/list ueber HTTP /mcp (nie am
-//   Registrierungsobjekt: registerTool verwirft unbekannte Felder still);
-// - EN und DE tragen dieselben Platzhalter, dieselbe Zahl Login-Schritte und jede Warnung.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -42,8 +32,6 @@ const OPENAI_URL = "https://developers.openai.com/";
 const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 const CONSULT_ON = { CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true" };
 const TOOL_NAME_IN_BACKTICKS = /`([a-z]+(?:_[a-z]+)+)`/g;
-// Bezeichner in Backticks, die KEINE Werkzeuge sind: Feldnamen der Protected Resource Metadata.
-// Jeder Eintrag muss in src/auth.js stehen (geprueft), damit die Liste nichts verschluckt.
 const NON_TOOL_IDENTIFIERS = new Set(["authorization_servers"]);
 const PLACEHOLDERS = [
   "<REVIEWER_EMAIL>",
@@ -52,7 +40,6 @@ const PLACEHOLDERS = [
   "<TEST_TARGET_NUMBER>",
 ];
 
-// Soll-Zitate der Primaerquelle, am 2026-09-27 gegen die Einzelseiten geprueft.
 const REQUIRED_QUOTES = [
   "When submitting a plugin with an authenticated MCP server, provide a login and password for a fully featured demo account that includes sample data. Plugins that require additional login steps, such as a new account sign-up or 2FA through an inaccessible account, will be rejected.",
   "For servers requiring authentication, our review team must be able to log into a demo account with no further configuration required.",
@@ -65,7 +52,6 @@ const REQUIRED_QUOTES = [
   "Reviewer-ready demo credentials when the server uses OAuth.",
 ];
 
-// Warnungen, die in BEIDEN Fassungen stehen muessen (die EN-Fassung ist nie glatter als die DE).
 const WARNINGS = {
   en: [
     "Operator commitment, not a code fact",
@@ -95,7 +81,6 @@ const WARNINGS = {
   ],
 };
 
-// Hygiene-Muster, je mit einem Beispiel, das sie treffen MUESSEN (Positiv-Kontrolle).
 const HYGIENE = [
   { name: "Phase", pattern: /\bPhase\b/, probe: "siehe Phase 3" },
   { name: "P-/E-Nummer", pattern: /\b[PE]\d+[a-z]?\b/, probe: "wie in P7b" },

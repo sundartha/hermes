@@ -1,9 +1,3 @@
-// place_call-/prepare_call-Texte: neutral (kein Markenname eines Chat-Modells, keine fremden
-// Werkzeugklassen), minimal (kein "Chat bisher", kein zweiter Sammeltrichter), mit enger
-// Zweckbindung als NUTZUNGSREGEL (nicht als Pruefung ausgegeben), ehrlichem Hinweis zu
-// on_out_of_scope und dem Satz zu sensiblen Mandaten. Gemessen NUR am echten Draht
-// (tools/list + initialize-instructions) auf sieben Pfaden, s. test/mcp-draht-pfade.js.
-// Testnamen ohne Katalog-/ABNAHME-Praefix, sonst landen sie im falschen Lauf.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MCP_WIRE_PATHS } from "./mcp-draht-pfade.js";
@@ -20,41 +14,25 @@ const FOREIGN_TOOL_CLASSES = /calendar, mail|mail, files/i;
 const CHAT_HISTORY_REQUEST = /chat so far/i;
 const SECOND_FUNNEL = /ADDITIONAL to the briefing/;
 const FORBIDDEN_TEXT_PATTERNS = [BRAND_NAMES, FOREIGN_TOOL_CLASSES, CHAT_HISTORY_REQUEST, SECOND_FUNNEL];
-// Der Zwecksatz ist eine Nutzungsregel an das Modell - der Server prueft den Zweck nicht.
-// Ein Durchsetzungs-Verb darin waere eine unwahre Behauptung gegenueber dem Pruefer.
 const ENFORCEMENT_WORDS = /\b(server|checked|rejected|blocked|enforced|refused)\b/i;
 const PURPOSE_PATTERNS = [/telemarketing/i, /political campaign/i, /advertis/i];
 const PURPOSE_POSITIVE_LIST = /booking, rescheduling, enquiring or complaining/;
 const OUT_OF_SCOPE_HONESTY = /not applied on every call path/i;
 const SENSITIVE_MANDATES = /contracts, loans, insurance, tenancy, employment or legal matters/;
 const CALL_TOOLS = ["prepare_call", "place_call"];
-// OpenAI: "Keep the most important details in the first 512 characters". Die
-// Bestaetigungs-Sequenz beginnt dort, die Zweckregel folgt ihr (nicht umgekehrt).
-// Anker ist der Satzanfang des Kern-Vorspanns (src/mcp-server-info.js CORE_SEQUENCE):
-// "before every phone call" statt "before every place_call", weil das Modell place_call
-// nie selbst aufruft - die Karte tut es.
 const INSTRUCTIONS_PRIORITY_CHARS = 512;
 const CONFIRMATION_SEQUENCE_START = "Call prepare_call before every phone call";
-// Enge Fassung (Verweigerungsrisiko): Auftrag auch fuer Angehoerige, ausgeschlossen nur die
-// Massenanwahl, und die Terminwahl bleibt bei sensiblen Mandaten erlaubt.
 const NARROW_PURPOSE = [/someone they act for/, /mass or automated dialling/];
 const APPOINTMENT_TIMES_ALLOWED = /decide_freely cover appointment times only/;
-// Ausschluesse, die in der place_call-Kurzfassung bewusst FEHLEN (Zeichen-Deckel). Genau diese
-// Luecke nennt docs/OPENAI-POLICY-ABGLEICH.md; eine neue Kategorie ohne Kurzfassung muss hier
-// und dort nachgetragen werden, sonst schlaegt der Test an.
 const EXCLUSIONS_MISSING_FROM_SHORT_RULE = ["mass or automated dialling of many numbers"];
-// Nur die Werte dieser _meta-Schluessel sind modell-lesbarer Text; die Schluessel selbst
-// heissen protokollbedingt "openai/..." und sind kein Werkzeugtext.
 const MODEL_READABLE_META_KEYS = ["openai/toolInvocation/invoking", "openai/toolInvocation/invoked"];
 
-// Jede `description` in einem JSON-Schema, rekursiv (properties, items, anyOf ...).
 function schemaDescriptions(node) {
   if (!node || typeof node !== "object") return [];
   const own = typeof node.description === "string" ? [node.description] : [];
   return own.concat(Object.values(node).flatMap(schemaDescriptions));
 }
 
-// Alle modell-lesbaren Texte eines Werkzeugs am Draht.
 function modelReadableTexts(tool) {
   const meta = tool._meta || {};
   const flat = [
@@ -67,7 +45,6 @@ function modelReadableTexts(tool) {
   return flat.concat(schemaTexts).filter((text) => typeof text === "string");
 }
 
-// Scanner: liefert je Treffer "<werkzeug>: <muster>". Leer = sauber.
 function forbiddenHits(tools, instructions) {
   const sources = tools.map((tool) => [tool.name, modelReadableTexts(tool)]);
   sources.push(["instructions", [instructions || ""]]);
@@ -98,7 +75,6 @@ function outOfScopeText(tool) {
   return mandate.properties.on_out_of_scope.description;
 }
 
-// Einmal je Pfad messen, alle Faelle lesen denselben Schnappschuss.
 const snapshots = new Map();
 async function snapshotOf(path) {
   if (!snapshots.has(path.label)) snapshots.set(path.label, await path.snapshot());
@@ -181,12 +157,6 @@ for (const path of MCP_WIRE_PATHS) {
   });
 }
 
-// Datenhinweis auf der Bestaetigungskarte: nennt JEDE besondere Kategorie (Art. 9 Abs. 1
-// DSGVO), nicht nur Gesundheitsangaben, und dieselben Zweck-Ausschluesse wie die Zweckregel -
-// als neutrale Sachaussage. Eine Einwilligungs- oder Zusicherungsformel ist Rechtstext und
-// gehoert NICHT in die Karte (Entscheidung des Owners, PLAN-SECURITY.md). Die Draht-Bruecke
-// (der echte prepare_call-_meta traegt genau einen dieser Texte, HTTP und stdio) prueft
-// test/openai-t2-14-call-widget-confirm.test.js.
 const SPECIAL_CATEGORIES_BY_LANGUAGE = {
   de: [/Gesundheitsangaben/, /ethnische Herkunft/, /politische Meinungen/, /religiöse/,
     /weltanschauliche/, /Gewerkschaftszugehörigkeit/, /genetische/, /biometrische/,
@@ -197,7 +167,6 @@ const SPECIAL_CATEGORIES_BY_LANGUAGE = {
     /philosophiques/, /appartenance syndicale/, /génétiques/, /biométriques/, /vie sexuelle/,
     /orientation sexuelle/],
 };
-// Woerter einer Einwilligungs- oder Zusicherungsformel je Sprache - keines darf vorkommen.
 const CONSENT_OR_PLEDGE_BY_LANGUAGE = {
   de: /willig|sicherst|zusicher|bestätigst, dass/i,
   en: /consent|you confirm that|assure|warrant/i,
@@ -209,8 +178,6 @@ const PURPOSE_NOTE_BY_LANGUAGE = {
   fr: [/pas destiné au télémarketing/, /non sollicités/, /publicitaires/, /commerciaux/, /campagne politique/, /de masse/],
 };
 
-// Je Ausschluss der Zweckregel (CALL_PURPOSE_EXCLUSIONS, Schluessel = voller Wortlaut) die
-// Stelle des englischen Zweckhinweises auf der Karte.
 const PURPOSE_NOTE_FOR_EXCLUSION_EN = {
   telemarketing: /not meant for telemarketing/,
   "unsolicited advertising or sales calls": /unsolicited advertising, sales/,
@@ -232,7 +199,6 @@ test("T16-f: Datenhinweis nennt je Sprache alle besonderen Kategorien und den Zw
     assert.doesNotMatch(notice, CONSENT_OR_PLEDGE_BY_LANGUAGE[language], `${language}: keine Einwilligungs-/Zusicherungsformel`);
     for (const note of PURPOSE_NOTE_BY_LANGUAGE[language]) assert.match(notice, note, `${language}: ${note}`);
   }
-  // Positiv-Kontrolle: die fruehere Fassung mit Einwilligung und Zusicherung faellt je Sprache durch.
   const formerWithPledge = {
     de: "Mit dem Bestätigen willigst du ausdrücklich ein und sicherst zu, dass dies kein Telemarketing ist.",
     en: "By confirming, you explicitly consent to this use, and you confirm that this is not telemarketing.",
@@ -240,8 +206,6 @@ test("T16-f: Datenhinweis nennt je Sprache alle besonderen Kategorien und den Zw
   };
   for (const [language, former] of Object.entries(formerWithPledge))
     assert.match(former, CONSENT_OR_PLEDGE_BY_LANGUAGE[language], `Kontrolle ${language}: alte Formel wird erkannt`);
-  // Der Zweckhinweis deckt dieselben Ausschluesse wie die Zweckregel - eine neue Zweck-Kategorie
-  // ohne Eintrag hier (und ohne Nachzug des Kartentextes) faellt auf.
   for (const { full } of CALL_PURPOSE_EXCLUSIONS) {
     const note = PURPOSE_NOTE_FOR_EXCLUSION_EN[full];
     assert.ok(note, `Zweckhinweis fuer "${full}" fehlt`);

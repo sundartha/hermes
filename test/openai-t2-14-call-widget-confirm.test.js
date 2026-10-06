@@ -1,17 +1,3 @@
-// T2-14 (N-10): Bestaetigungs-Ansicht im Call-Widget. Fake-Window nach dem Muster
-// test/mcp-ui-w1-call-widget.test.js (node:vm, parent.postMessage mitgeschnitten), Fake-
-// Document HIER erweitert um einen selbst-erzeugenden Selektor-Speicher (jeder abgefragte
-// Selektor bekommt sein eigenes Fake-Element - deckt sowohl die Bestand-Slots als auch die
-// neuen data-confirm-*/data-cf-*-Selektoren ab, ohne jeden einzeln aufzaehlen zu muessen).
-//
-// Deckt den Widget-Mechanismus (Schritt 6 (a)-(d), (f)-(l)) UEBER eine handgebaute Fixture
-// (schnell, isoliert) UND das End-to-End-Kriterium (e) am echten Draht (HTTP Legacy/OAuth,
-// stdio: echter prepare_call -> dieselbe Karte -> echtes place_call -> ui/message) sowie
-// Schritt 7 (X-2/X-6-Waechter) - T2-14-Nachbesserung (Safety-Review), zuvor fehlten (e)/X-2/
-// X-6 (Budget-Grenze des ersten Baulaufs). Die (e)-Tests nehmen den Fake-Originate-Harness
-// aus test/openai-t2-13-bestaetigung.test.js: das ECHTE prepare_call-Ergebnis wird in die
-// Karte gepusht, das von der Karte gesendete tools/call unveraendert an den echten Server
-// weitergereicht - Beleg ist der Draht, nicht eine Annahme ueber sein Format.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
@@ -28,12 +14,6 @@ import { KYC_LEVEL } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
 import { startServer, startIdp, mcpPost, toolCall, readToolResult, seedState, ROOT, BASE_ENV, externalIp } from "./helpers.js";
 
-// Lehre pgrep-blind/localhost-umgeht-das-Gate: localhost gilt serverseitig als
-// vertrauenswuerdiger lokaler Aufrufer (isTrustedLocalCaller) - ein OAuth-Draht-Test ueber
-// srv.localUrl koennte fail-closed nur WEIL localhost sowieso durchgelassen wird, ohne dass
-// der OAuth-Rundlauf selbst je gemessen wurde. (e-oauth) unten faehrt deshalb ueber die
-// Interface-IP; ohne eine solche (z.B. reines Loopback-Sandbox-Netz) wird der Fall
-// uebersprungen statt falsch gruen zu sein.
 const EXTERNAL_IP = externalIp();
 
 function makeFakeElement(initialText) {
@@ -79,16 +59,8 @@ function makeFakeElement(initialText) {
   };
 }
 
-// [data-i18n]-Elemente, die die Tests unten brauchen: Selektor -> EN-Default-Text (== der
-// Wert, den data-i18n im echten Markup traegt, s. call.html). NUR die vom I18N_SCRIPT
-// (localizeStaticLabels/querySelectorAll("[data-i18n]")) gefundenen Elemente muessen hier
-// bekannt sein - ein selbst-erzeugender Speicher wie bei den uebrigen Selektoren wuerde den
-// data-i18n-Schluessel nicht kennen.
 const I18N_LABELS = { "[data-confirm-button]": "Confirm call" };
 
-// Selbst-erzeugender Selektor-Speicher: jeder abgefragte Selektor bekommt EIN eigenes
-// Fake-Element, angelegt beim ersten querySelector-Aufruf (initiale textContent/data-i18n
-// aus I18N_LABELS, falls dort gelistet - genau wie das echte, geparste Markup).
 function makeFakeDocument() {
   const bySelector = new Map();
   function ensure(sel) {
@@ -119,8 +91,6 @@ function scriptBodyOf(script) {
   return script.match(/<script>([\s\S]*)<\/script>/)[1];
 }
 
-// Fuehrt das eigene Inline-Skript in einer frischen vm-Sandbox aus. console wird
-// mitgeschnitten (Test (f): der Code darf NIRGENDS geloggt werden).
 function runOwnScript(doc, options) {
   const sandbox = {};
   sandbox.document = doc;
@@ -164,8 +134,6 @@ function runOwnScript(doc, options) {
   sandbox.clearTimeout = (id) => timeoutFns.delete(id);
 
   if (options && options.readyBeforeScript) sandbox[UI_READY_FLAG] = true;
-  // Neulade-Tests (q)-(s): ein gemeinsamer Speicher ueber zwei Karten-Instanzen = dieselbe
-  // Karte nach einem Neuladen. Ohne Option fehlt localStorage ganz (gesperrte Sandbox).
   if (options && options.localStorage) sandbox.localStorage = options.localStorage;
 
   vm.createContext(sandbox);
@@ -183,8 +151,6 @@ function runOwnScript(doc, options) {
       for (const fn of [...timeoutFns.values()]) fn();
     },
     timeoutCount: () => timeoutFns.size,
-    // (o): beweist, dass ein nach dem Fallback-Stop neu gestartetes Poll-Intervall
-    // tatsaechlich wieder LAEUFT (nicht nur, dass kein Fehler geworfen wird).
     intervalCount: () => intervalFns.size,
     uiReady: () => signalUiReady(sandbox),
   };
@@ -193,13 +159,11 @@ function runOwnScript(doc, options) {
 const TO = "+491701234567";
 const OBJECTIVE = "I would like to book an appointment.";
 const CODE = "ABCDEF";
-// Datenhinweis (Gesundheitsangaben) im _meta von prepare_call - ohne ihn bietet die Karte
-// keinen Klick an (fail-closed). Echter Wortlaut kommt am Draht aus MCP_TEXTS.
 const NOTICE_META_KEY = "hermes/call_data_notice";
 const NOTICE = "Test notice: health details go to the agent and the providers.";
 const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
-const CONFIRMATION_WINDOW_MINUTES = 5; // deckt sich mit call-confirmation.js CONFIRMATION_WINDOW_MINUTES
+const CONFIRMATION_WINDOW_MINUTES = 5;
 const FIVE_MINUTES_MS = CONFIRMATION_WINDOW_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
 const ONE_SECOND_MS = MS_PER_SECOND;
 const EXPIRES_FUTURE = new Date(Date.now() + FIVE_MINUTES_MS).toISOString();
@@ -230,10 +194,6 @@ function uiMessages(env) {
   return env.posted.filter((msg) => msg.method === "ui/message");
 }
 
-// Objekte aus der vm-Sandbox leben in einer eigenen Realm (eigener Object.prototype) -
-// node:assert/strict vergleicht bei deepEqual den Prototyp mit und wirft sonst "gleiche
-// Struktur, nicht referenzgleich". JSON-Rundreise normalisiert auf reine Daten (Muster
-// test/mcp-ui-w1-call-widget.test.js crossRealmPlain).
 function crossRealmPlain(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -243,7 +203,7 @@ test("(a) Push ohne Klick: kein tools/call place_call, kein ui/message; Replay d
   const env = runOwnScript(doc);
   env.uiReady();
   env.emit(awaitingConfirmationPush());
-  env.emit(awaitingConfirmationPush()); // Replay desselben Pushs
+  env.emit(awaitingConfirmationPush());
   assert.equal(placeCallToolCall(env).length, 0);
   assert.equal(uiMessages(env).length, 0);
   assert.equal(doc.get("[data-confirm]").style.display, "");
@@ -275,10 +235,9 @@ test("(c) Doppelklick (synchron) und Klick nach Antwort: weiterhin genau 1 tools
   env.emit(awaitingConfirmationPush());
   const btn = doc.get("[data-confirm-button]");
   btn.click();
-  btn.click(); // synchroner zweiter Klick waehrend "submitting"
+  btn.click();
   assert.equal(placeCallToolCall(env).length, 1);
 
-  // Erfolgsantwort kommt an - Zustand "placed" - ein weiterer Klick darf nicht senden.
   const rpcId = env.posted[0].id;
   env.emit({ id: rpcId, result: { structuredContent: { call_id: CALL_ID, status: "dialing" } } });
   btn.click();
@@ -322,15 +281,12 @@ test("(d) Anzeige = Gesendetes: jeder Wert aus params.arguments steht als Text i
   }
   const shown = visibleTexts();
   assert.match(shown, /returning customer/);
-  assert.match(shown, /prefers Alex/); // Blatt-Zeichenkette aus verschachteltem context.details
+  assert.match(shown, /prefers Alex/);
   assert.match(shown, /no calls before 9am/);
   assert.match(shown, /Book a men's haircut Saturday morning/);
-  assert.match(shown, /assistant/); // mandate.role
-  assert.match(shown, /booking/); // mandate.scope
+  assert.match(shown, /assistant/);
+  assert.match(shown, /booking/);
 
-  // Positiv-Kontrolle: ein gesendetes, absichtlich NICHT geprueftes Feld wird erkannt -
-  // faellt der Werte-Vergleich weg, zeigt dieser Zusatz-Check, dass die Pruefung selbst
-  // ueberhaupt etwas aussagt (sonst waere "gefunden" wertlos).
   assert.equal(sent.constraints, "no calls before 9am");
   assert.ok(!shown.includes("ein-nicht-gesendeter-marker-xyz"), "Sanity: unbeteiligter Marker fehlt");
 });
@@ -350,7 +306,6 @@ test("(f) Code steht in GENAU EINER gesendeten Nachricht, nie in ui/message/text
   assert.equal(uiMessages(env).some((msg) => JSON.stringify(msg).includes(CODE)), false);
   assert.equal(env.consoleCalls.some((call) => JSON.stringify(call).includes(CODE)), false);
 
-  // Positiv-Kontrolle: eine Kopie MIT eingebautem Code wird von derselben Pruefung erkannt.
   const poisoned = uiMessages(env).map((msg) => ({ ...msg, params: { ...msg.params, injected: CODE } }));
   assert.ok(poisoned.every((msg) => JSON.stringify(msg).includes(CODE)));
 });
@@ -369,7 +324,6 @@ test("(g) JSON-RPC-Fehlerantwort: Zustand unklar, KEIN zweites tools/call, genau
   assert.ok(!JSON.stringify(uiMessages(env)[0]).includes(CODE));
   assert.equal(doc.get("[data-confirm-button]").disabled, true);
 
-  // Weiterer Klick sendet nichts mehr (Zustand haelt).
   doc.get("[data-confirm-button]").click();
   assert.equal(placeCallToolCall(env).length, 1);
 });
@@ -384,9 +338,6 @@ test("(h) Host antwortet nicht: nach PLACE_CALL_RESPONSE_TIMEOUT_MS derselbe unk
   env.uiReady();
   env.emit(awaitingConfirmationPush());
   doc.get("[data-confirm-button]").click();
-  // env.timeoutCount() traegt hier ZWEI Timer: den eigenen (PLACE_CALL_RESPONSE_TIMEOUT_MS)
-  // und den bestehenden 15s-Poll-Fallback (startPolling, unabhaengig von der Bestaetigung) -
-  // beide feuern harmlos zusammen (Muster env.fireTimeout()).
   assert.ok(env.timeoutCount() >= 1, "mindestens der eigene Response-Timer ist gesetzt");
   env.fireTimeout();
   assert.equal(uiMessages(env).length, 1);
@@ -406,8 +357,6 @@ test("(i) result.isError: server-seitiger Ablehnungstext sichtbar (nicht der gen
 
   assert.equal(uiMessages(env).length, 0);
   assert.equal(doc.get("[data-confirm-hint]").style.display, "");
-  // safety/wichtig (T2-14-Nachbesserung): die Karte zeigt den ECHTEN Ablehnungsgrund des
-  // Servers (z.B. ein Safety-Gate), nicht mehr nur einen generischen "neu vorbereiten".
   assert.equal(doc.get("[data-confirm-hint-text]").textContent, "code verbraucht");
   doc.get("[data-confirm-button]").click();
   assert.equal(placeCallToolCall(env).length, 1);
@@ -420,7 +369,7 @@ test("(i2) result.isError ohne verwertbaren content: Rueckfall auf den generisch
   env.emit(awaitingConfirmationPush());
   doc.get("[data-confirm-button]").click();
   const rpcId = env.posted[0].id;
-  env.emit({ id: rpcId, result: { isError: true } }); // kein content[] (unerwartete Form)
+  env.emit({ id: rpcId, result: { isError: true } });
 
   assert.equal(doc.get("[data-confirm-hint-text]").textContent, "Call was not started — ask for a new prepare_call.");
 });
@@ -454,7 +403,7 @@ test("(k) Replay nach placed: Karte bleibt Live-Karte, kein Knopf-Effekt, 0 weit
   env.emit({ id: rpcId, result: { structuredContent: { call_id: CALL_ID, status: "dialing" } } });
   assert.equal(doc.get("[data-confirm]").style.display, "none");
 
-  env.emit(awaitingConfirmationPush()); // Replay aus dem Verlauf
+  env.emit(awaitingConfirmationPush());
   assert.equal(doc.get("[data-confirm]").style.display, "none", "Bestaetigungsblock bleibt verborgen");
   doc.get("[data-confirm-button]").click();
   assert.equal(placeCallToolCall(env).length, 1, "kein weiterer Versand durch den Replay");
@@ -493,7 +442,6 @@ test("(q) Server meldet confirmation_used: Hinweis 'schon abgeschickt', Knopf au
   assert.equal(placeCallToolCall(env).length, 1);
   assert.equal(uiMessages(env).length, 0);
 
-  // Positiv-Kontrolle: ohne das Maschinenfeld bleibt es beim Ablehnungstext des Servers.
   const { doc: otherDoc, env: otherEnv } = clickedCard(undefined);
   otherEnv.emit({ id: otherEnv.posted[0].id, result: { isError: true, content: [{ type: "text", text: "server text" }] } });
   assert.equal(otherDoc.get("[data-confirm-hint-text]").textContent, "server text");
@@ -502,7 +450,7 @@ test("(q) Server meldet confirmation_used: Hinweis 'schon abgeschickt', Knopf au
 
 test("(r) Neuladen nach dem Klick (gemeinsamer Speicher): derselbe Push startet in 'schon abgeschickt', 0 place_call; anderer Code bleibt bestaetigbar (Positiv-Kontrolle); kein Klartext-Code im Speicher", () => {
   const storage = makeFakeStorage();
-  clickedCard(storage); // erste Instanz: Klick, dann "Neuladen" (Antwort egal)
+  clickedCard(storage);
 
   const doc = makeFakeDocument();
   const env = runOwnScript(doc, { withI18n: true, localStorage: storage });
@@ -512,7 +460,7 @@ test("(r) Neuladen nach dem Klick (gemeinsamer Speicher): derselbe Push startet 
   assert.equal(doc.get("[data-confirm-button]").style.display, "none");
   assert.equal(doc.get("[data-confirm-to]").textContent, TO, "Vorschau bleibt sichtbar");
   doc.get("[data-confirm-button]").click();
-  env.emit(awaitingConfirmationPush()); // erneuter Push desselben Codes
+  env.emit(awaitingConfirmationPush());
   assert.equal(placeCallToolCall(env).length, 0, "kein zweiter Anruf durch Neuladen/Replay");
   assert.ok(!storage.dump().includes(CODE), "Code nie im Klartext im Speicher");
 
@@ -570,16 +518,6 @@ test("(m) Sprachen: Knopf-/Label-Text aus WIDGET_DICT je hermes/locale (de/fr/en
   assert.equal(confirmButtonLabel("fr"), "Confirmer l'appel");
 });
 
-// safety/blocker + cleancode/blocker (T2-14-Nachbesserung): deckt zwei Befunde in EINEM
-// realistischen Ablauf ab. (1) startPolling() laeuft schon seit dem Handshake, lange bevor
-// der Nutzer die Karte gelesen und geklickt hat - der 15s-Poll-Fallback UND der
-// PLACE_CALL_RESPONSE_TIMEOUT_MS-Timer feuern deshalb typischerweise GEMEINSAM
-// (env.fireTimeout() feuert alle gesetzten Timer, wie Test (h) dokumentiert), noch bevor
-// die eigentliche place_call-Antwort eintrifft. (2) Trifft danach doch noch eine
-// Erfolgsantwort ein (wasTimedOut-Zweig in handlePlaceCallResponse), muss die Karte auf
-// "placed" umschalten, OHNE eine zweite ui/message zu senden - UND das Live-Polling muss
-// fuer DIESEN Anruf neu anlaufen (vorher blieb die Karte hier fuer immer auf ihrem ersten
-// Stand haengen, kein Terminalstatus wurde je erreicht).
 test("(o) Fallback-/Antwort-Timeout schon gefeuert, danach doch Erfolg: placed uebernommen, genau 1 ui/message, Polling laeuft weiter", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
@@ -589,18 +527,16 @@ test("(o) Fallback-/Antwort-Timeout schon gefeuert, danach doch Erfolg: placed u
   doc.get("[data-confirm-button]").click();
   const rpcId = placeCallToolCall(env)[0].id;
 
-  env.fireTimeout(); // feuert PLACE_CALL_RESPONSE_TIMEOUT_MS (-> "uncertain", 1 ui/message) UND den 15s-Poll-Fallback
+  env.fireTimeout();
   assert.equal(uiMessages(env).length, 1, "genau die unklar-Nachricht");
   assert.equal(env.intervalCount(), 0, "Poll-Intervall durch den Fallback gestoppt");
 
-  env.emit({ id: rpcId, result: { structuredContent: { call_id: CALL_ID, status: "dialing" } } }); // spaete Erfolgsantwort
+  env.emit({ id: rpcId, result: { structuredContent: { call_id: CALL_ID, status: "dialing" } } });
   assert.equal(doc.get("[data-confirm]").style.display, "none", "Bestaetigungsblock verschwindet");
   assert.equal(doc.get('[data-mcp="call_id"]').textContent, CALL_ID, "applyCallStatus hat call_id uebernommen");
   assert.equal(uiMessages(env).length, 1, "keine zweite ui/message nach der spaeten Erfolgsantwort");
   assert.equal(env.intervalCount(), 1, "Polling wurde nach dem Erfolg neu gestartet");
 
-  // Positiv-Kontrolle: das neu gestartete Intervall pollt tatsaechlich mit der bekannten
-  // call_id (nicht nur "irgendein" Intervall ohne Wirkung).
   const statusCallsBefore = env.posted.filter((msg) => msg.method === "tools/call" && msg.params.name === "get_call_status").length;
   assert.ok(statusCallsBefore >= 1, "der Sofort-Tick von startPolling() hat bereits get_call_status gesendet");
 });
@@ -609,13 +545,12 @@ test("(p) objectLines: absichtlich sehr tief verschachteltes context-Objekt bric
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
   env.uiReady();
-  const DEEP_NESTING_LEVELS = 50; // weit ueber jedem realistischen briefing/context-JSON
+  const DEEP_NESTING_LEVELS = 50;
   let deep = { leaf: "innerster-wert" };
   for (let i = 0; i < DEEP_NESTING_LEVELS; i++) deep = { nested: deep };
   assert.doesNotThrow(() => {
     env.emit(awaitingConfirmationPush({ context: deep }));
   }, "kein Stack-Overflow trotz 50 Verschachtelungsebenen");
-  // Die Karte erscheint trotzdem (Kernversprechen von N-10: kein stiller Ausfall).
   assert.equal(doc.get("[data-confirm]").style.display, "");
   assert.match(doc.get("[data-cf-context]").textContent, /…/, "ab der Deckel-Tiefe wird abgeschnitten statt weiter zu rekursieren");
 });
@@ -634,15 +569,10 @@ test("(n) ui/message-Text enthaelt nie briefing/context-Inhalte", () => {
   assert.match(msg, new RegExp(CALL_ID));
 });
 
-// ================= (e) End-to-Ende am echten Draht ==========================================
-
 const E2E_SECRET = "openai-t2-14-abnahme-test-secret-mind-32-zeichen";
 const E2E_TARGET = "+4915112340077";
 const E2E_OBJECTIVE = "Termin vereinbaren";
 const CONFIRMATION_META_KEY = "hermes/confirmation_code";
-// Kein "language": das haengt an einer Deployment-Faehigkeit (TTS-Trennung von der
-// Offenlegung), die im lokalen FAKE_ORIGINATE-Testaufbau nicht verfuegbar ist
-// (language_unavailable) - fuer den Draht-Rundlauf selbst irrelevant.
 const E2E_PREVIEW_ARGS = {
   to: E2E_TARGET,
   objective: E2E_OBJECTIVE,
@@ -650,10 +580,6 @@ const E2E_PREVIEW_ARGS = {
   max_duration_s: 300,
 };
 
-// Nimmt das ECHTE prepare_call-Ergebnis (content/structuredContent/_meta, wie es ueber den
-// Draht ankommt) und faehrt es durch DIESELBE Karte wie die Mechanismus-Tests oben: Push,
-// Klick, Abgriff des von der Karte gesendeten tools/call. Einzige Quelle fuer Anzeige UND
-// Versand ist damit - wie im Widget selbst - der echte Server-Output, nicht eine Fixture.
 function widgetPlaceCallFromRealPreview(prep) {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
@@ -662,12 +588,8 @@ function widgetPlaceCallFromRealPreview(prep) {
     method: "ui/notifications/tool-result",
     params: { structuredContent: prep.structuredContent, _meta: prep._meta },
   });
-  // Draht-Beleg Datenhinweis: der echte Server liefert ihn im _meta (fuer das Modell
-  // verborgen), NICHT im Modelltext, und die Karte zeigt ihn vor dem Klick sichtbar an.
   const notice = prep._meta?.[NOTICE_META_KEY];
   assert.ok(typeof notice === "string" && notice.length > 0, "Datenhinweis im _meta von prepare_call");
-  // Draht-Bruecke zum Inhalt: der echte Server liefert genau einen der lokalisierten Texte,
-  // deren Vollstaendigkeit (alle besonderen Kategorien, Zweckhinweis) T16-f prueft.
   assert.ok(
     Object.values(MCP_TEXTS).some((texts) => texts.callDataNotice === notice),
     "Datenhinweis am Draht ist ein vollstaendiger lokalisierter Text",
@@ -681,9 +603,6 @@ function widgetPlaceCallFromRealPreview(prep) {
   return { env, doc, call: calls[0] };
 }
 
-// Nach jeder erfolgreichen Bestaetigung: die vom Server tatsaechlich gesendeten Argumente
-// sind EXAKT die aus der echten Vorschau (kein Drift zwischen Schema-Parsing/Output-Schema/
-// Host und dem HMAC-gebundenen Tupel, Pre-Mortem (a)).
 function assertArgsMatchPreview(args, prep) {
   for (const field of ["to", "objective", "briefing", "max_duration_s"]) {
     assert.equal(args[field], prep.structuredContent[field], `${field} stimmt mit der echten Vorschau ueberein`);
@@ -748,13 +667,10 @@ test("(e-http) Draht-Rundlauf HTTP Legacy: echtes prepare_call -> dieselbe Karte
     assert.notEqual(placed.isError, true, "der von der Karte gesendete tools/call wird unveraendert angenommen");
     assert.ok(placed.structuredContent.call_id, "call_id vorhanden");
     assert.equal(srv.readStore().calls.length, before + 1, "genau EIN Anruf-Datensatz");
-    // Store-Feldname ist `goal` (routes/api-calls.js), nicht `objective` (das ist der
-    // MCP-seitige Argumentname).
     const storedCall = srv.readStore().calls[0];
     assert.equal(storedCall.goal, E2E_OBJECTIVE, "Datensatz.goal == Vorschau.objective");
     assert.equal(storedCall.to, E2E_TARGET, "Datensatz.to == Vorschau");
 
-    // Die Karte verarbeitet die ECHTE Serverantwort weiter.
     env.emit({ id: call.id, result: placed });
     const msgs = uiMessages(env);
     assert.equal(msgs.length, 1, "genau EINE ui/message");
@@ -779,7 +695,6 @@ test("(e-reload) Draht: neu geladene Karte klickt denselben, schon verbrauchten 
     assert.ok(placed.structuredContent.call_id, "Positiv-Kontrolle: der erste Klick waehlt");
     assert.equal(srv.readStore().calls.length, before + 1);
 
-    // Neuladen ohne Karten-Speicher (schlechtester Fall): dieselbe Vorschau, derselbe Code.
     const reloaded = widgetPlaceCallFromRealPreview(prep);
     const replay = await readToolResult(
       await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("place_call", reloaded.call.params.arguments)),
@@ -830,8 +745,6 @@ test("(e-oauth) Draht-Rundlauf HTTP OAuth (echtes Token): derselbe Rundlauf uebe
     const before = srv.readStore().calls.length;
     const token = await idp.sign({ sub: OAUTH_E2E_SUB });
     const args = { to: OAUTH_E2E_TARGET, objective: E2E_OBJECTIVE };
-    // externalUrl statt localUrl (s. Kommentar an EXTERNAL_IP oben): der Request kommt
-    // serverseitig NICHT von 127.0.0.1 an, isTrustedLocalCaller greift also nicht.
     const prepRes = await mcpPost(`${srv.externalUrl}/mcp`, token, toolCall("prepare_call", args));
     const prep = await readToolResult(prepRes);
     assert.notEqual(prep.isError, true, "prepare_call ueber OAuth");
@@ -855,11 +768,6 @@ test("(e-oauth) Draht-Rundlauf HTTP OAuth (echtes Token): derselbe Rundlauf uebe
   }
 });
 
-// Lokaler Mock, der JEDEN Request sofort mit 404 beantwortet - kein echtes Netz, keine
-// Wartezeit. Gepinnt auf ANTHROPIC_BASE_URL (s. FULL_FIELDS-Test unten): dieselbe
-// Rueckfall-Garantie wie test/elevenlabs-anrufstart.test.js Fall T11 ("schneller 404,
-// nicht-transient, kein Retry" -> die Eroeffnungszeilen-Erzeugung faellt deterministisch
-// auf die feste Bruecken-Zeile zurueck, bevor der EL-Anrufstart selbst beginnt).
 const HTTP_NOT_FOUND = 404;
 async function startFastFailMock() {
   const server = http.createServer((req, res) => {
@@ -873,16 +781,9 @@ async function startFastFailMock() {
   };
 }
 
-// Eigenes Ziel (nicht E2E_TARGET/OAUTH_E2E_TARGET): vermeidet jede Call-Dedup-Kollision mit
-// den Nachbar-Faellen. National-Form (fuehrende "0" statt "+49") desselben Ziels - die
-// Vorschau muss sie ueber resolveDialTarget/normalizeDialTarget (store/defaults.js) auf
-// GENAU FULL_FIELDS_TARGET normalisieren.
 const FULL_FIELDS_TARGET = "+4915112340088";
 const FULL_FIELDS_TARGET_NATIONAL = "015112340088";
 const FULL_FIELDS_OWNER_NUMBER = { e164: "+4915100000099", provider: "telnyx" };
-// Alle neun BOUND_ARG_FIELDS (src/ui/widgets/call.html) mit je einem unterscheidbaren Wert -
-// deckt den vollen Draht ab, den (e-http) bewusst ausspart (Kommentar an E2E_PREVIEW_ARGS
-// oben: "language" braucht den EL-Weg).
 const FULL_FIELDS_ARGS = {
   to: FULL_FIELDS_TARGET_NATIONAL,
   objective: E2E_OBJECTIVE,
@@ -903,9 +804,6 @@ test("(e-full-fields) Draht-Rundlauf HTTP Legacy mit allen neun gebundenen Felde
       ALLOWED_COUNTRY_CODES: "*",
       MCP_UI_ENABLED: "true",
       CALL_CONFIRMATION_SECRET: E2E_SECRET,
-      // "language" ist nur mit dem EL-Weg an bindbar (languageDenial, api-call-
-      // confirmations.js) - der Draht-Rundlauf braucht ihn deshalb wirklich an, nicht nur
-      // die Vorschau.
       ELEVENLABS_OUTBOUND_ENABLED: "true",
       ELEVENLABS_AGENT_ID: "agent_t2_14_full",
       ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_t2_14_full",
@@ -978,12 +876,6 @@ test("(e-stdio) Draht-Rundlauf stdio (echter Kindprozess): derselbe Rundlauf ueb
   }
 });
 
-// ================= X-2: ausser prepare_call kein Tool-Ergebnis mit Nutzdaten-_meta ==========
-// "Nutzdaten-_meta" = das Bestaetigungs-Geheimnis selbst (CONFIRMATION_META_KEY und sein
-// Ablauf-Gegenstueck), NICHT die Rendering-Metadaten (_meta.ui.*/hermes/locale), die JEDES
-// Widget-Werkzeug traegt (T2-01/T2-02, eigene Draht-Belege). X-2 schuetzt davor, dass der
-// Code ausserhalb von prepare_call irgendwo landet, wo ihn ein Host dem Modell zeigen
-// koennte.
 test("X-2 (Draht): ausser prepare_call traegt kein Werkzeug-Ergebnis den Bestaetigungscode in _meta", async () => {
   const srv = await startServer({
     env: { FAKE_ORIGINATE: "true", ALLOWED_COUNTRY_CODES: "*", MCP_UI_ENABLED: "true", CALL_CONFIRMATION_SECRET: E2E_SECRET },
@@ -1009,17 +901,12 @@ test("X-2 (Draht): ausser prepare_call traegt kein Werkzeug-Ergebnis den Bestaet
       const result = await resultPromise;
       assert.ok(!JSON.stringify(result._meta || {}).includes(code), `${JSON.stringify(result._meta)} darf den Code nicht enthalten`);
     }
-    // placed.result selbst darf den VERBRAUCHTEN Code auch nicht in _meta tragen.
     assert.ok(!JSON.stringify(placed._meta || {}).includes(code));
   } finally {
     await srv.stop();
   }
 });
 
-// ================= X-6: Sandbox-Scan der ausgelieferten Widget-Resource ======================
-// Keine privilegierten APIs, kein fetch/XHR/WebSocket/eval - der EINZIGE Kommunikationsweg
-// nach aussen ist parent.postMessage (Plan X-6). Gemessen am echten resources/read-Text ueber
-// die Route, nicht an der lokalen Quelldatei (die koennte anders ausgeliefert werden).
 test("X-6 (Draht): resources/read des Call-Widgets enthaelt keine privilegierten APIs (kein fetch/XHR/WebSocket/eval)", async () => {
   const srv = await startServer({ env: { MCP_UI_ENABLED: "true" } });
   try {
@@ -1034,7 +921,6 @@ test("X-6 (Draht): resources/read des Call-Widgets enthaelt keine privilegierten
     assert.doesNotMatch(html, /\beval\s*\(/, "kein eval()");
     assert.match(html, /parent\.postMessage/, "der einzige Sendeweg bleibt parent.postMessage");
 
-    // Positiv-Kontrolle: die Pruefung selbst erkennt eine eingeschleuste verbotene API.
     const poisoned = html + "\n<script>fetch('https://example.invalid');</script>";
     assert.doesNotMatch(html, /example\.invalid/, "Sanity: der echte Text enthaelt den Marker nicht");
     assert.match(poisoned, /\bfetch\s*\(/, "Sanity: die Pruefung selbst faengt eine eingebaute Verletzung");

@@ -1,7 +1,3 @@
-// P4 GAP-03/O2: das neue billing_hold-Gate in outbound-gates.js (allowlistError, direkt
-// nach dem tenantInactive-Riegel). Offline, Muster test/outbound-gates-order.test.js:
-// makeOutboundGates(deps), einzelne gate.run(ctx). Nur der "number_gate"-Eintrag ruft
-// allowlistError (letztes Glied in numberGateError).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutboundGates } from "../src/telephony/outbound-gates.js";
@@ -11,9 +7,6 @@ const VALID_TO = "+491711234567";
 
 function defaultStore(overrides = {}) {
   return {
-    // P15/T2: die Gate-Kette liest die Anzeigesprache der Ablehnung aus dem Store. Dieser
-    // Test prueft nur die sprachfreie Achse (grund/status) - die Sprache wird trotzdem
-    // explizit gesetzt, damit der Fake die reale Kontraktflaeche spiegelt.
     tenantLanguage: () => "de",
     countOutboundCallsSince: () => 0,
     tenantPrivateNumber: () => null,

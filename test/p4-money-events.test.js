@@ -1,6 +1,3 @@
-// P4 GAP-03: vier bisher wirkungslose Stripe-Geld-Ereignisse erzeugen jetzt eine
-// assertierte Wirkung (money-events.js + billing/webhook.js applyMoneyEvent). Rein,
-// offline (Muster test/p3-payment-webhook.test.js: Fake-Seams, applyStripeWebhook direkt).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -19,7 +16,6 @@ function fakeMoneyStore({ customerId = CUSTOMER, tenantId = TENANT } = {}) {
     calls,
     findTenantByCustomer: (cid) => (customerId && cid === customerId ? { id: tenantId } : null),
     findTenantBySubscription: () => null,
-    // FW1-A: Existenz-Gate der Tenant-Aufloesung - dieses Double modelliert einen existierenden Tenant.
     tenantExists: () => true,
     setTenantSubscription: (t, patch) => calls.setTenantSubscription.push([t, patch]),
     setBillingHold: (t, patch) => calls.setBillingHold.push([t, patch]),
@@ -122,7 +118,6 @@ test("ACTIVATE loescht Hold UND Revocation (Reversibilitaet)", async () => {
   const priorTenantSubscription = store.tenantSubscription;
   store.tenantSubscription = () => ({ planSlug: null });
   store.ensureTenant = async () => {};
-  // GAP-01: Perioden-Fenster des Budget-Gates (activatePaidTenant stempelt es).
   store.billingHoldActive = () => null;
   store.stampBudgetPeriod = () => false;
   const setStatusCalls = [];

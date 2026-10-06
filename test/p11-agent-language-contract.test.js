@@ -1,8 +1,3 @@
-// P11 (PLAN-I18N Umsetzung) - Vertrags-Test fuer den sprachabhaengigen Prompt-/Tool-/
-// Turn-Text: deckt den neuen i18n/prompts/*-Vertrag ab (Vollstaendigkeit, Sprach-
-// Reinheit je Sprache, Tool-Namen-Invarianz, GAP-28-Marker je Sprache, Regel-2-Struktur).
-// In-process (kein Server-Spawn, kein pglite) - Muster test/f1-i18n-locale.test.js:
-// DATA_DIR VOR dem ersten config-Import, dann dynamischer Import.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
@@ -27,7 +22,6 @@ before(async () => {
 
 const call = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, ...over });
 
-// Die fuenf deutschen Sektions-Ueberschriften des Prompt-Geruests (s. PROMPT-01).
 const GERMAN_HEADINGS = [
   "SITUATION:",
   "SO SPRICHST DU:",
@@ -36,9 +30,6 @@ const GERMAN_HEADINGS = [
   "SO KOMMST DU ZUM ERGEBNIS:",
 ];
 
-// 1. Vollstaendigkeit: jede Sprache traegt den vollen Vertrag (2.1 PLAN), jeder String
-// nicht leer, jede Funktion vom Typ "function". Faengt eine unvollstaendige vierte
-// Sprache, bevor ein Anruf sie findet.
 const STRING_FIELDS = [
   "goalLabel",
   "briefingLabel",
@@ -46,15 +37,9 @@ const STRING_FIELDS = [
   "outcomeOutbound",
   "outcomeInbound",
 ];
-// WW-P3: consultRules gehoert dazu - der Rueckfrage-Block ist Prompt-Rumpf, keine
-// Tool-Beschreibung, und eine vierte Sprache ohne ihn haette den Defekt aus Befund W2
-// sofort wieder (get_consult kommt im Prompt nicht vor).
 const FUNCTION_FIELDS = [
   "persona",
   "situationOutbound",
-  // OC-P3: die Owner-Variante von situationOutbound. Fehlt sie einer vierten Sprache,
-  // wirft outboundSituation (claude.js) fuer JEDEN Owner-Call dieser Sprache - nicht
-  // nur einen Randfall.
   "situationOutboundOwner",
   "situationInbound",
   "speechRules",
@@ -73,18 +58,12 @@ test("P11-1 jede unterstuetzte Sprache traegt den vollstaendigen Prompt-Vertrag"
     for (const f of FUNCTION_FIELDS) {
       assert.equal(typeof p[f], "function", `${lang}: prompt.${f} ist keine Funktion`);
     }
-    // WW-P3: die beiden Consult-Varianten stehen mit in der Liste - fehlt eine, faellt der
-    // Prompt einer neuen Sprache auf eine Zeile zurueck, die den Rueckfrage-Fall exklusiv
-    // auf die Nachricht schickt.
     for (const f of [
       "heading",
       "personalData",
       "bankData",
       "noCalendar",
       "noBooking",
-      // WW-F1: die Mandats-Variante der Buchungs-Zeile. Fehlt sie einer neuen Sprache,
-      // faellt deren Prompt auf die unbedingte Zeile zurueck - und die widerspricht
-      // mandate.scopeRules fuer jeden Terminwunsch innerhalb des Spielraums.
       "noBookingWithMandate",
       "noLookup",
       "noLookupWithConsult",
@@ -102,9 +81,6 @@ test("P11-1 jede unterstuetzte Sprache traegt den vollstaendigen Prompt-Vertrag"
       "outOfScopeLabel",
       "outOfScopeRules",
       "outOfScopeSentence",
-      // WW-P3: die Consult-Variante des AUSSERHALB-Ausgangs. Sie deckt bewusst NICHT alle
-      // drei Ausgaenge ab (DECLINE/ACCEPT_BEST sind Owner-Anweisungen, nicht
-      // zurueckzufragen) - geprueft wird deshalb nur die Existenz der Tabelle.
       "outOfScopeSentenceWithConsult",
     ]) {
       assert.ok(f in p.mandate, `${lang}: prompt.mandate.${f} fehlt`);
@@ -119,8 +95,6 @@ test("P11-1 jede unterstuetzte Sprache traegt den vollstaendigen Prompt-Vertrag"
     for (const f of ["heading", "summary", "relationship", "outcome", "facts", "guardrail"]) {
       assert.ok(f in p.background, `${lang}: prompt.background.${f} fehlt`);
     }
-    // AL-P12: Beziehungsgedaechtnis-Bausteine. NICHT in GERMAN_HEADINGS (fester
-    // Fuenfer-Katalog) - der Block rendert in P11-2 ohnehin nicht (kein allowCallMemory).
     for (const f of ["heading", "entryPrefix", "guardrail"]) {
       assert.ok(f in p.memory, `${lang}: prompt.memory.${f} fehlt`);
     }
@@ -140,11 +114,6 @@ test("P11-1 jede unterstuetzte Sprache traegt den vollstaendigen Prompt-Vertrag"
   }
 });
 
-// OC-P3 (D6/5.7): identityLines ist ab dieser Phase fuer JEDEN Anruf tragend
-// (claude.js identityLineFor liest sie unbedingt) - eine vierte Sprache ohne diesen
-// Baustein wuerfe nicht nur den Owner-Fall, sondern jeden Prompt. Eigener Test statt
-// eines weiteren Blocks in P11-1 (G30): jede weitere Schleife dort erhoeht dessen
-// Komplexitaet, die bereits an der Obergrenze liegt.
 test("P11-1b jede unterstuetzte Sprache traegt identityLines vollstaendig (OC-P3)", () => {
   for (const lang of SUPPORTED_LANGUAGES) {
     const localePrompt = LOCALES[lang].prompt;
@@ -158,9 +127,6 @@ test("P11-1b jede unterstuetzte Sprache traegt identityLines vollstaendig (OC-P3
   }
 });
 
-// 2. Sprach-Reinheit je Sprache: systemPrompt(en/fr) enthaelt KEINE der fuenf deutschen
-// Ueberschriften/Blattstrings; Gegenprobe, dass de sie sehr wohl enthaelt (kein
-// "alles geloescht"-Gruen).
 test("P11-2 systemPrompt(en) traegt keine deutschen Sektions-Ueberschriften (ex PROMPT-01)", () => {
   for (const direction of ["inbound", "outbound"]) {
     const prompt = systemPrompt(call({ language: "en", direction }));
@@ -184,8 +150,6 @@ test("P11-4 Gegenprobe: systemPrompt(de) traegt weiterhin alle fuenf Ueberschrif
   }
 });
 
-// 3. Tool-Namen sind sprachinvariant (D4): toolDefs(lang).map(name) ist in JEDER Sprache
-// identisch; deckt zugleich agentToolNames() ab.
 test("P11-5 toolDefs(lang)-Namen sind sprachinvariant", () => {
   const expected = ["end_call", "take_message"];
   for (const lang of SUPPORTED_LANGUAGES) {
@@ -198,8 +162,6 @@ test("P11-5 toolDefs(lang)-Namen sind sprachinvariant", () => {
   assert.deepEqual(agentToolNames(), expected);
 });
 
-// 4. GAP-28 je Sprache je Marker (die Gegenleistung fuer D2 - Uebersetzung statt
-// Neutralisierung): tabellengetrieben, Wert vorhanden/nicht leer, fuer en/fr ungleich DE.
 test("P11-6 GAP-28-Marker sind je Sprache uebersetzt (nicht leer, ungleich DE fuer en/fr)", () => {
   const deLoc = LOCALES.de.prompt.turnControl;
   const markers = [
@@ -232,10 +194,6 @@ test("P11-8 endCallWaitInstruction liefert den FR-Text fuer language=fr", () => 
   assert.equal(endCallWaitInstruction(c), LOCALES.fr.prompt.turnControl.endCallWait);
 });
 
-// 5. Absolute Regel 2, je Sprache: openingText beginnt mit disclosureSentence, und
-// LOCALES[lang].disclosure ist eine Funktion, deren Ergebnis nicht leer ist und den
-// ownerName enthaelt. Struktur-Assertion "kein Locale ohne disclosure" - ENTSCHAERFT (3)
-// als Test.
 test("P11-9 jedes Locale traegt eine funktionale, nicht-leere disclosure mit ownerName", () => {
   for (const lang of SUPPORTED_LANGUAGES) {
     assert.equal(typeof LOCALES[lang].disclosure, "function", `${lang}: disclosure fehlt`);
@@ -252,7 +210,3 @@ test("P11-10 openingText beginnt in jeder Sprache mit der Offenlegung", () => {
     assert.ok(text.startsWith(disclosure), `${lang}: openingText beginnt nicht mit der Offenlegung`);
   }
 });
-
-// 6. DE-Byte-Identitaet des Umzugs: NICHT hier erneut gepinnt (dupliziert G5) - der
-// byte-genaue DE-Pin liegt in test/personal-assistant-characterization.test.js
-// (SP1/SP2/SP3/SP6) und bleibt unveraendert gruen.

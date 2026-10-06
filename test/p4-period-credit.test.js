@@ -1,6 +1,3 @@
-// P4 GAP-03: includedMinutesFor (billing/plan-caps.js) - EINE Quelle fuer Gate
-// (outbound-gates.js planMinutesExhausted) UND Anzeige (billing/meter.js quotaView).
-// Rein, offline.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { includedMinutesFor } from "../src/billing/plan-caps.js";

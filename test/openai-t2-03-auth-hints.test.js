@@ -1,14 +1,7 @@
-// T2-03 (T-5): productionAuthHints() ist ein reiner WARN-Kanal, KEINE Sperre -
-// Autonome Entscheidung P6. Reine Unit-Tests gegen die exportierte Funktion; die
-// Boot-Verdrahtung (assertConfig -> console.error) liegt in
-// boot-prod-footguns.test.js (Kindprozess). Praefix "T2-03" (kein Katalog-ID-Muster
-// wie GAP-.. oder PROMPT-..) haelt die Tests aus dem Gates-Lauf heraus.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { productionAuthHints, productionFootguns } from "../src/config.js";
 
-// Dieselbe produktionssichere Basis wie config-prod-footguns.test.js (SAFE_PROD),
-// hier lokal dupliziert statt importiert - die Datei dort exportiert sie nicht.
 const SAFE_PROD = {
   auth: { dashboardPassword: "geheim", mcpAuth: "", oauthIssuerUrl: "", oauthAudience: "" },
   safety: { skipTwilioSignatureCheck: false },

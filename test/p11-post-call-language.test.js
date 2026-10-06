@@ -1,6 +1,3 @@
-// P11 (PLAN-I18N Umsetzung) - Post-Call-Rahmentexte (Notification/SMS, WEB-14) folgen
-// der Sprache des Calls (LOCALES[lang].postCall). Unit-Test ueber makeCallFinish
-// (Muster test/web-14-call-finish-sms-text-language.test.js), kein Server-Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
@@ -21,7 +18,6 @@ function makeHarness({ summarizeCall, planSummarySms, smsCapture, notifyCapture 
     recordUsageEvent: () => {},
     markSummarySmsSent: () => {},
     markBilled: () => {},
-    // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
     markInboxEntry: () => {},
   };
   return makeCallFinish({
@@ -90,7 +86,6 @@ for (const lang of SUPPORTED_LANGUAGES) {
   });
 }
 
-// DE-Gegenprobe byte-genau gegen die heutigen Strings (Umzug verschiebt nichts, WEB-14).
 test("P11-P3 DE-Gegenprobe byte-genau: cancelledTitle/subjectOutbound/summaryTitle", () => {
   const t = LOCALES.de.postCall;
   assert.equal(t.cancelledTitle, "Anruf abgebrochen");

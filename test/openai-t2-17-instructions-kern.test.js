@@ -1,15 +1,3 @@
-// T2-17 (T-21): der Kern-Vorspann der Server-Instructions liegt in den ersten 512
-// Zeichen - gemessen am echten Draht (initialize), nie an den Konstanten allein
-// (registerTool()/mcpServerOptions() koennten Felder still verwerfen). Pfade: die
-// sieben aus test/mcp-draht-pfade.js PLUS fuenf mit MCP_UI_ENABLED=true (die sieben
-// Basis-Pfade laufen mit MCP_UI_ENABLED=false, test/helpers.js BASE_ENV) - Instructions
-// haengen laut Code nicht von uiEnabled ab (mcpServerOptions), diese fuenf Pfade
-// belegen das am Draht statt nur am Code zu glauben (HTTP Legacy und OAuth je mit und
-// ohne Consult, dazu stdio).
-//
-// ASCII-Assertion begruendet die Zaehlweise: bei reinem ASCII sind Zeichen, UTF-8-Bytes
-// und JS-`length` (UTF-16-Einheiten) identisch, die Frage "Zeichen oder Bytes?" (die
-// OpenAI-Primaerquelle sagt es nicht) ist damit gegenstandslos.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -25,26 +13,14 @@ import { NOT_PLACED } from "../src/telephony/failure-reason.js";
 
 const INSTRUCTIONS_PRIORITY_CHARS = 512;
 const CONFIRMATION_SEQUENCE_START = "Call prepare_call before every phone call";
-// Das Schema-Feld von place_call. Es darf in den instructions NUR in einem Verbot stehen:
-// die Karte bestaetigt, das Modell kennt den Code nie, fragt nie danach und ruft
-// place_call nie selbst auf. Eine Positivform ("pass the confirmation_code ...") waere
-// eine Anleitung zur Selbstbestaetigung.
 const CONFIRMATION_FIELD = "confirmation_code";
 const CODE_PROHIBITION = `never ask the user for or invent a ${CONFIRMATION_FIELD}`;
-// Satzteile: Satzende, Gedankenstrich und Semikolon trennen je eine Anweisung.
 const CLAUSE_SEPARATOR = /\.\s+| - |; /;
 const UI_ON = Object.freeze({ MCP_UI_ENABLED: "true" });
-// Ab hier beginnt der bisherige Bestandstext (BASE_DETAILS) - der Praefix, den die
-// Positiv-Kontrolle unten abschneidet, um den Kern-Vorspann zu entfernen.
 const BASE_DETAILS_START = 'If a call reports a failure_reason starting with "';
-// Kein Regex mit Steuerzeichen-Klasse (eslint no-control-regex) - Codepoint-Vergleich
-// stattdessen. Ab Codepoint 128 ist ein Zeichen kein ASCII mehr.
 const ASCII_UPPER_BOUND = 127;
 const isAsciiOnly = (text) => [...text].every((char) => char.codePointAt(0) <= ASCII_UPPER_BOUND);
 
-// Fuenf zusaetzliche Pfade mit MCP_UI_ENABLED=true - dieselben Snapshot-Bausteine wie
-// test/mcp-draht-pfade.js (jetzt dort exportiert statt kopiert). "mit Consult" im Label
-// entscheidet unten, welche Pruefungen zusaetzlich greifen (isConsultLabel).
 const UI_ENABLED_PATHS = Object.freeze([
   { label: "HTTP Legacy, ohne Consult, UI an", snapshot: () => legacySnapshot(UI_ON) },
   {
@@ -64,14 +40,8 @@ const UI_ENABLED_PATHS = Object.freeze([
 
 const ALL_PATHS = [...MCP_WIRE_PATHS, ...UI_ENABLED_PATHS];
 
-// stdio liefert nie den Consult-Text (STDIO_CONSULT_LOOP ist hart auf false gepinnt,
-// src/mcp-server.js) - "mit Consult" im Label heisst dort nur "Consult-Env gesetzt",
-// nicht "Consult-Text ausgeliefert". Nur HTTP-Pfade mit "mit Consult" bekommen ihn.
 const isConsultLabel = (label) => label.includes("mit Consult") && !label.startsWith("stdio");
 
-// Liste fehlender Merkmale (Muster wie forbiddenHits in openai-t2-16-place-call-texte):
-// leer = jedes Merkmal gefunden. `core` sind nur VOLLSTAENDIGE Saetze bis Zeichen 512 -
-// ein Merkmal, das mitten im Wort abgeschnitten ist, gilt nicht als vorhanden.
 function coreFindings(text, { consult }) {
   const head = text.slice(0, INSTRUCTIONS_PRIORITY_CHARS);
   const core = head.slice(0, head.lastIndexOf(".") + 1);
@@ -102,8 +72,6 @@ function coreFindings(text, { consult }) {
   return checks.filter(([ok]) => !ok).map(([, label]) => label);
 }
 
-// Satzteile, die das Feld confirmation_code nennen, OHNE es zu verbieten - leer = das Feld
-// steht nur in Verboten. Prueft den GESAMTtext, nicht nur den Kern.
 function unguardedCodeMentions(text) {
   return text
     .split(CLAUSE_SEPARATOR)
@@ -148,9 +116,6 @@ for (const path of ALL_PATHS) {
   }
 }
 
-// Positiv-Kontrolle zum Verbots-Pruefer: eine Anleitung zur Selbstbestaetigung (wie in der
-// fruehen Planfassung "place_call mit dem Code aus der Nachricht des Nutzers") und eine
-// Rueckfrage nach dem Code muessen anschlagen, sonst waere "[]" oben wertlos.
 test("T2-17 Positiv-Kontrolle: der Verbots-Pruefer erkennt eine Anleitung, den Code zu benutzen oder zu erfragen", () => {
   const selfConfirm = `Then call place_call with the ${CONFIRMATION_FIELD} from the user's message.`;
   const askUser = `Ask the user for the ${CONFIRMATION_FIELD} shown in the card.`;
@@ -158,11 +123,6 @@ test("T2-17 Positiv-Kontrolle: der Verbots-Pruefer erkennt eine Anleitung, den C
   assert.deepEqual(unguardedCodeMentions(askUser), [askUser]);
 });
 
-// Positiv-Kontrolle (Pre-Mortem 2/Plan-Schritt 3): dieselbe Pruefung auf den Text OHNE
-// Kern-Vorspann muss Befunde liefern - sonst waere "coreFindings == []" oben wertlos
-// (ein Pruefer, der auf allem gruen ist, beweist nichts, Lehre "Pruefkommando ohne
-// Positiv-Kontrolle"). Der abgeschnittene Text ist wortgleich der ALTE Bestandstext vor
-// T2-17 (BASE_DETAILS begann schon immer mit BASE_DETAILS_START).
 for (const path of MCP_WIRE_PATHS) {
   const consult = isConsultLabel(path.label);
   test(`T2-17 Positiv-Kontrolle (${path.label}): ohne Kern-Vorspann liefert derselbe Pruefer Befunde`, async () => {

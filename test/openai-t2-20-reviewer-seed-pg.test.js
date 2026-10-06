@@ -1,19 +1,3 @@
-// Reviewer-Beispieldaten auf dem pg-Store (PGlite, kein Netz, kein Spawn): applyReviewerSeed
-// ueber die echte pg-Fassade, Flush, frischer Store auf DERSELBEN DB -> die Zeilen kommen ueber
-// den RLS-Pfad (app.current_tenant je Mandant) zurueck. Mandanten-Zeile, Abo und KYC bleiben
-// unveraendert, ein zweiter Lauf legt nichts an, der Betreiber-Mandant bleibt ohne Seed-Zeilen,
-// und das vordatierte endedAt (vor der Kosten-Beobachtung) ueberlebt den Flush unveraendert.
-//
-// Der Weg des Skripts unter pg (scripts/lib/pg-schema-abgleich.mjs): der Store wird OHNE
-// Migration geoeffnet, init gleicht nur das Schema ab. Belegt:
-// - Zieldatenbank mit fehlender Migration (Spalte/Tabelle fehlt) oder aus einem neueren Stand
-//   (unbekannte Spalte): Abbruch, Schema-Schnappschuss vorher/nachher gleich, keine
-//   DDL-Anweisung ueber den Runner, keine Datenzeile geaendert.
-// - Positiv-Kontrolle und Server-Boot: makePgStore OHNE Optionen migriert dieselbe
-//   Zieldatenbank weiter - Schnappschuss und Runner-Protokoll sehen die DDL.
-// - Normalfall unter einer Rolle ohne Superuser/BYPASSRLS (RLS greift wie im Betrieb): Seed
-//   ueber den RLS-Pfad geschrieben, fremde Mandanten unsichtbar, idempotent, keine DDL.
-// - Ein gescheiterter Flush endet als Fehler statt als "angelegt".
 import test from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore } from "../src/store/pg.js";
@@ -37,7 +21,6 @@ const REVIEWER_TENANT = "tenant_reviewer_pg";
 const SEED_CALL_COUNT = REVIEWER_SEED_CALLS.length;
 const SEED_ITEM_COUNT = REVIEWER_SEED_CALLS.flatMap((entry) => entry.actionItems).length;
 const SEED_SUMMARIES = new Set(REVIEWER_SEED_CALLS.map((entry) => entry.summary));
-// Herzschlag-Fenster ausgeschaltet: das Beleg-Fenster allein bestimmt den Ende-Zeitpunkt.
 const HEARTBEAT_AUS_H = 0;
 const ENDED_AT = reviewerSeedEndedAtIso({
   nowMs: Date.now(),
@@ -114,9 +97,6 @@ test("Reviewer-Seed pg: Betreiber-, unbekannter Mandant und fehlender Ende-Zeitp
   assert.equal(store.load().calls.length, callsBefore);
 });
 
-// ---- Weg des Skripts unter pg: Store ohne Migration, Schema-Abgleich statt DDL ----
-
-// Rolle ohne Superuser/BYPASSRLS: pglite laeuft sonst als Superuser, und der umgeht RLS.
 const SEED_ROLE = "seed_role";
 const DDL_ANWEISUNG = /^\s*(CREATE|ALTER|DROP|TRUNCATE|GRANT|REVOKE|COMMENT)\b/i;
 const SCHEMA_SNAPSHOT_SQL = [
@@ -136,8 +116,6 @@ const DATA_SNAPSHOT_SQL = ["tenant", "call", "action_item", "settings", "usage"]
 const snapshot = (db, statements) =>
   Promise.all(statements.map(async (sql) => (await db.query(sql)).rows));
 
-// Protokolliert jede Anweisung ueber den Runner: exec ist der Mehrfach-DDL-Kanal von
-// migrate/applySchema, query traegt die Einzelanweisungen.
 function recordingRunner(db) {
   const log = { exec: [], query: [] };
   const client = {

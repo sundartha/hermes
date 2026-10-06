@@ -1,6 +1,3 @@
-// P11 (PLAN-I18N Umsetzung, D3) - greetingForLanguage: die gespeicherte Begruessung
-// folgt der Anrufsprache, solange sie eine Katalog-Vorlage ist; Admin-Freitext bleibt
-// unangetastet. Reine Unit-Tests, kein Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

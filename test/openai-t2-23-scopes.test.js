@@ -1,13 +1,3 @@
-// OpenAI-T2-23: Scope-Angabe des Resource-Servers (T-16, Commit A, Tests A1-A5) -
-// PRM (scopes_supported), oauth-401-Challenge (scope=) und securitySchemes tragen
-// alle dieselbe BEWORBENE Menge S (= OAUTH_SCOPES); token-/Legacy-Zweig bleiben
-// byte-gleich ohne scope=. Dazu die Scope-PRUEFUNG am Token (T-12, Commit B, Tests
-// B1-B4): 403 insufficient_scope, sobald ein Element der ERZWUNGENEN Menge
-// (ENFORCED_OAUTH_SCOPES, S ohne den Grant-Scope "offline_access" - Safety-Review
-// src/auth.js:36, ein Access-Token traegt offline_access typischerweise nie) fehlt -
-// egal ob als `scope`-String oder `scp`-Array/String signiert. Jeder Beleg liest den
-// ECHTEN HTTP-Draht (kein fakeRes), s. Lehre "registerTool() verwirft unbekannte Felder
-// still" - dasselbe gilt fuer jede Auth-Behauptung.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startIdp, mcpPost as post, readToolResult, waitForLog, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
@@ -106,13 +96,8 @@ test("OpenAI-T2-23-A5: securitySchemes traegt S auf jedem Werkzeug (HTTP, echter
   }
 });
 
-// ---- Commit B (T-12): Scope-PRUEFUNG am Token ------------------------------
 const HTTP_FORBIDDEN = 403;
-// Genau die erzwungene Menge, ohne den Grant-Scope "offline_access" - MUSS reichen
-// (offline_access ist nur beworben, nicht erzwungen, s. src/auth.js GRANT_ONLY_SCOPES).
 const NUR_ERZWUNGENE_SCOPES = ENFORCED_OAUTH_SCOPES.join(" ");
-// "openid" fehlt "email" - ein Element der ERZWUNGENEN Menge fehlt (kein erfundener
-// Scope-Name, der waere ein Fehlerfall beim Auth-Server, nicht hier am RS).
 const SCOPE_OHNE_ERZWUNGENES_ELEMENT = "openid";
 
 function assertInsufficientScopeChallenge(wa) {
@@ -122,16 +107,8 @@ function assertInsufficientScopeChallenge(wa) {
   assert.match(wa, /resource_metadata="https:\/\/agent\.test\/\.well-known\/oauth-protected-resource"/);
 }
 
-// JWT-Segmente (header/payload/signature) sind base64url und in der Praxis immer
-// laenger als das - ein zufaelliger Treffer eines kuerzeren Substrings im Log waere
-// kein Leak-Beleg, sondern Rauschen.
 const MIN_LEAK_SEGMENT_LEN = 16;
 
-// Abnahmekriterium (5): in JEDEM 403-Fall darf die Audit-Ausgabe keinen Teil des
-// signierten Tokens und keine Claim-Email enthalten. Positiv-Kontrolle ZUERST (die
-// Zeile grund=insufficient_scope MUSS geloggt sein) - sonst waere eine leere/verpasste
-// Log-Pruefung kein Beleg fuer "kein Leak", sondern nur fuer "nichts geprueft" (Lehre
-// "Pruefkommando ohne Positiv-Kontrolle").
 async function assertAuditLoggedWithoutTokenLeak(srv, token, email) {
   await waitForLog(srv, /grund=insufficient_scope/);
   for (const segment of token.split(".")) {
@@ -171,11 +148,6 @@ test("OpenAI-T2-23-B2: Token mit vollstaendigem scp-Array -> 200", async () => {
   }
 });
 
-// Kernbefund des Safety-Reviews (src/auth.js:36, VOR dieser Phase): OAUTH_SCOPES war
-// gleichzeitig die beworbene UND die erzwungene Menge - der Server verlangte damit
-// "offline_access" am Access-Token, das ein spec-treuer IdP dort nie eintraegt.
-// B3 ist jetzt die POSITIV-Kontrolle fuer die Trennung: die erzwungene Menge OHNE den
-// Grant-Scope muss durchgehen.
 test("OpenAI-T2-23-B3: Token mit erzwungenen Scopes ohne offline_access -> 200 (Grant-Scope wird nicht erzwungen)", async () => {
   const idp = await startIdp();
   const srv = await startServer({

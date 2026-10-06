@@ -1,5 +1,3 @@
-// P4 GAP-04: tenantMayRequestNumber (state-ops.js) - die benannte Erlaubnis, fuer einen
-// Tenant eine Nummer anzufragen, OHNE den Lebenszyklus-Status vorwegzunehmen. Rein, offline.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {

@@ -1,18 +1,9 @@
-// outbound-p1d: per-(Tenant,Ziel)-Wiederhol-Cap. 3 Calls aufs selbe Ziel passieren das
-// Gate (enden am Offline-Originate als 500, jeder persistiert einen Outbound-Record),
-// der 4. wird VOR dem Dial mit 429 grund=ziel_limit gesperrt. Ein ANDERES Ziel ist
-// unberuehrt (ziel-isoliert). Reiner Spawn (startServer + ensureOwnerNumber-Seed), KEIN
-// pglite (Lehre p6a-Stall). Owner-Pfad (keine Identitaet, MULTI_TENANT default aus): der
-// Owner passiert KYC/Identitaet/Nummer/Budget/Allowlist (Boot-Seed id_verified, Pfad 2)
-// und erreicht den Offline-Originate -> 500 (= alle Gates passiert), wie w5-abo-allowlist-
-// gate.test.js / kyc-gate-outbound.test.js. Die per-(Tenant,Ziel)-Isolation auf ops-Ebene
-// (pg-Spiegel) deckt store-pg-tenant-budget.test.js ab; hier der HTTP-Gate-Pfad (json).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
 
-const TARGET_A = "+4915112345678"; // DE-Mobil, kein Premium-/Denylist-Prefix
-const TARGET_B = "+4915187654321"; // anderes Ziel (eigener Zaehler)
+const TARGET_A = "+4915112345678";
+const TARGET_B = "+4915187654321";
 
 const postCall = (url, to) =>
   fetch(`${url}/api/calls`, {

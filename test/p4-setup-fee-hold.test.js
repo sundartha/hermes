@@ -1,5 +1,3 @@
-// P4 GAP-05: der Setup-Hold ist das GATE, nicht die Gebuehr. Rein, offline (Muster
-// test/billing-hold-capture.test.js: provisionNumber + fakeBilling/fakeProvisioner).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { provisionNumber } from "../src/onboarding.js";
@@ -24,7 +22,7 @@ function tenantWithCard(s, id, patch = {}) {
   setTenantStripe(s, id, {
     customerId: `cus_${id}`,
     paymentMethodId: `pm_${id}`,
-    paymentMethodType: "card", // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
+    paymentMethodType: "card",
   });
   if (Object.keys(patch).length) setTenantSubscription(s, id, patch);
   return requestNumber(s, { tenantId: id, ...CAPS }).number;
@@ -66,9 +64,6 @@ test("exempt + placeHold wirft -> failNumber, KEIN orderNumber", async () => {
     () => provisionNumber(s, { provisioner: prov, billing }, { numberId: number.id, ...ARGS }),
     /stripe down/,
   );
-  // Owner-Entscheidung 2026-07-28: die read-only Preisabfrage darf vor den Hold (sie
-  // kostet nichts und kauft nichts), der KAUF nicht. Gepinnt bleibt deshalb dreifach:
-  // KEIN order-Eintrag im Provider-Log, Ausgang failNumber, KEIN cancelHold.
   assert.deepEqual(prov.log, ["search:DE"], "nur die kostenlose Preis-Suche lief");
   assert.ok(
     !prov.log.some((l) => l.startsWith("order:")),
