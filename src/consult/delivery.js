@@ -1,35 +1,12 @@
-// Consult-Zustellung, Stufe 0 (A2): kurzer, client-gezogener Long-Poll ueber die
-// bestehende /api/*-Kante. Stufe 1 (Tasks-Extension) und Stufe 2 (MRTR) ersetzen
-// SPAETER GENAU DIESE DATEI - Vertrag (ports.js), Zustand (call.consults) und
-// Aufrufer bleiben unberuehrt.
-//
-// WARUM EIN TICK-LOOP UND KEIN EVENT-BUS: der Zustand liegt am Call (A2), und er
-// wird von mehreren Pfaden geschrieben (Route, spaeter agentTurn, pg-Re-Hydrierung
-// nach Instanzwechsel). Ein Notifier waere ein ZWEITER Zustandskanal, den jeder
-// dieser Pfade mitpflegen muesste - genau die Klasse, die im Repo schon einmal
-// stille Datenverluste erzeugt hat. Der Loop liest die EINE Quelle. 250 ms Latenz
-// gegen 22 s Haltezeit sind irrelevant.
-//
-// ZAEHLUNG AM CALL/TENANT, NICHT AM SOCKET: res.on("close") schliesst in
-// routes/mcp.js Transport UND Server, waehrend ein Handler weiterlaufen kann. Die
-// Zaehler werden im finally dekrementiert, nicht auf ein Socket-Ereignis hin.
-
-export const CONSULT_POLL_HOLD_MS = 22000; // Abnahme 4 verlangt >= 20 s gemessen
+export const CONSULT_POLL_HOLD_MS = 22000;
 export const CONSULT_POLL_TICK_MS = 250;
 export const CONSULT_POLL_ABORT_MARGIN_MS = 3000;
 export const CONSULT_POLL_ABORT_MS = CONSULT_POLL_HOLD_MS + CONSULT_POLL_ABORT_MARGIN_MS;
-// Harte Obergrenzen gleichzeitig offener Polls - BENANNTE KONSTANTEN, KEIN
-// Env-Knopf. Zwei je Call decken das legitime Muster ab (ein laufender Poll + ein
-// nachrueckender waehrend des Ueberlapps), vier je Tenant decken parallele Anrufe.
 export const MAX_OPEN_POLLS_PER_CALL = 2;
 export const MAX_OPEN_POLLS_PER_TENANT = 4;
 
-// Die drei Ereignisformen des Kanals (G25: kein nacktes String-Literal an fuenf Stellen).
 export const CONSULT_EVENT = Object.freeze({ CONSULT: "consult", DONE: "done", NONE: "none" });
 
-// EL-BL4: die Absage der Slot-Vergabe. Eigenes Ergebnis-Objekt statt null/undefined,
-// damit der Aufrufer "kein Slot frei" nicht mit "Slot bekommen, Ergebnis war leer"
-// verwechseln kann - der Unterschied entscheidet ueber Ablehnung oder Antwort.
 const NO_SLOT = Object.freeze({ granted: false, value: null });
 
 const NO_EVENT = Object.freeze({ event: CONSULT_EVENT.NONE, eventId: null, questions: [] });
@@ -37,7 +14,6 @@ const DONE_EVENT = Object.freeze({ event: CONSULT_EVENT.DONE, eventId: null, que
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Zaehler-Paar-Helfer: eine Map tenantId|callId -> Anzahl offener Warter.
 function bump(counter, key, delta) {
   const next = (counter.get(key) || 0) + delta;
   if (next <= 0) counter.delete(key);
@@ -45,25 +21,15 @@ function bump(counter, key, delta) {
   return next;
 }
 
-/**
- * @param {{store: object, holdMs?: number, tickMs?: number}} deps
- *   holdMs/tickMs sind TEST-OVERRIDES nach dem Repo-Idiom von makeGracefulShutdown({exit, log});
- *   die Produktionsverdrahtung uebergibt sie nie. Ausdruecklich KEIN Env-Knopf.
- * @returns {import("./ports.js").ConsultDelivery}
- */
 export function makeConsultDelivery({
   store,
   holdMs = CONSULT_POLL_HOLD_MS,
   tickMs = CONSULT_POLL_TICK_MS,
 }) {
-  // Instanz-Zustand, KEIN Modul-Global: eine zweite Instanz haette zweite Zaehler und
-  // damit gar keine Obergrenze - deshalb wird genau EINE in server.js verdrahtet (INV-7).
   const pollsPerCall = new Map();
   const pollsPerTenant = new Map();
   let draining = false;
 
-  // Liefert false, wenn eine der beiden Obergrenzen erreicht ist (dann wird KEIN Slot
-  // belegt - der Aufrufer antwortet sofort mit "none").
   function claimSlot(callId, tenantId) {
     const callOpen = pollsPerCall.get(callId) || 0;
     const tenantOpen = pollsPerTenant.get(tenantId) || 0;
@@ -79,9 +45,6 @@ export function makeConsultDelivery({
     bump(pollsPerTenant, tenantId, -1);
   }
 
-  // Rein: liest den Store und uebersetzt ihn in ein Ereignis. Terminaler Call -> "done"
-  // (der Client hoert damit auf zu pollen und holt sich das Ergebnis), offene Rueckfrage
-  // -> "consult", sonst "none". Liefert NIE Transkript/Audio (Regel 5).
   function currentEvent(callId, afterEventId) {
     const consult = store.pendingConsult(callId, afterEventId);
     if (consult)
@@ -109,15 +72,6 @@ export function makeConsultDelivery({
     }
   }
 
-  // EL-BL4: derselbe Slot fuer einen ZWEITEN blockierenden Halter desselben Kanals - den
-  // Rueckfrage-Webhook des ElevenLabs-Laufwerks, der seinen Request bis CONSULT_OPEN_MS
-  // offen haelt. Er zaehlt auf DIESE Zaehler (kein zweiter, driftender Zaehler daneben,
-  // G5): "wie viele Verbindungen haengen gerade an diesem Anruf" ist EINE Tatsache, egal
-  // ob der Halter ein pollender Client oder ein wartendes Werkzeug ist. Der Slot wird im
-  // finally freigegeben, nicht auf ein Socket-Ereignis hin (Begruendung im Dateikopf) -
-  // deshalb kapselt die Naht das try/finally selbst, statt claim/free herauszureichen:
-  // ein vergessenes free waere eine dauerhaft verbrannte Verbindung, also schlimmer als
-  // gar keine Obergrenze.
   async function withOpenSlot(callId, tenantId, run) {
     if (!claimSlot(callId, tenantId)) return NO_SLOT;
     try {
@@ -130,16 +84,9 @@ export function makeConsultDelivery({
   return {
     waitForEvent,
     withOpenSlot,
-    // Shutdown-Drain: jeder Warter loest binnen einem Tick auf. MUSS vor
-    // httpServer.close() laufen - sonst haelt ein 22-s-Poll den Drain auf, der
-    // Watchdog kappt mit exit(0) und der finale Store-Flush faellt aus.
     releaseOpenPolls() {
       draining = true;
     },
-    // EL-BEFUND-4: dasselbe Drain-Signal, gelesen statt gesetzt. Jeder Warter, der NICHT
-    // in waitForEvent sitzt (der Rueckfrage-Webhook wartet in conversation/
-    // consult-raised.js), fragt hier nach und loest beim Drain ebenfalls auf - EIN
-    // Flag fuer alle Halter statt eines zweiten, das bootServer separat kennen muesste.
     isDraining: () => draining,
     openPollCount: (callId) => pollsPerCall.get(callId) || 0,
   };
