@@ -1,18 +1,3 @@
-// IEL-B10: die Positiv-Belege `beleg-init` (Spec E16/E21) und `stimmen-beleg` (E19). Beide sind
-// NUR LESEND gegenueber jeder Konfiguration; ihre einzigen Nicht-GET-Aufrufe sind Proben: zwei POSTs
-// an den Init-Webhook des laufenden Dienstes und je eine winzige Synthese je Stimme.
-//
-// beleg-init: ZUERST das Ziel-Urteil aus der Render-API (gepinnter Dienst). ROT -> kein Token-GET,
-// kein POST. Erst dann wird das Token frisch per Render-API gelesen (sofort in die Verbotsmenge) und
-// an die Repo-Konstante initWebhookUrl() gesendet - nie an eine Adresse aus der lokalen .env.
-// redirect:"manual": eine Umleitung wird nicht verfolgt, der Token-Header erreicht keinen anderen Host.
-// GRUEN nur bei 403 ohne Token UND 404 mit Token (Token angenommen, Bindung "{}" unbekannt).
-//
-// stimmen-beleg: das Skript kennt die Tenant-Sprache nicht (keine Prod-DB), deshalb prueft es ALLE
-// Faelle: (a) jede Profil-Stimme spricht (Probe 200); (b) Sprachen ohne Profil: TELNYX_ELEVENLABS_VOICE_ID
-// gesetzt UND Probe 200, ODER leer UND Agent-tts.voice_id == ELEVENLABS_VOICE_ID. Modell-Abweichung ist
-// nur ein Hinweis. Stimm-IDs und Modellnamen sind keine Geheimnisse. Der Fehlerkoerper der Synthese
-// (synth.detail) wird nie ausgegeben - nur der Status aus reason.
 import {
   HERMES_RENDER_SERVICE_ID,
   ZIEL_URTEIL,
@@ -34,7 +19,6 @@ const BELEG_INIT_KOERPER = "{}";
 const STIMMEN_PROBE_TEXT = "Test.";
 const PROBE_ERSTES_PAKET_MS = 5000;
 const PROBE_GESAMT_MS = 10000;
-// Kein HTTP-Status (Zeitablauf, Netzfehler, leerer Strom) - nie 200.
 const KEIN_HTTP_STATUS = 0;
 const HTTP_GRUND_MUSTER = /^http_(\d+)$/;
 const STIMMEN_SCHLUESSEL = Object.freeze([
@@ -52,9 +36,6 @@ export async function laufeStimmenBeleg({ abh }) {
   return exitVon((await stimmenBeleg(abh)).gruen);
 }
 
-// ---- beleg-init --------------------------------------------------------------------------------
-
-// Liefert {gruen} (auch von schalter --an genutzt).
 export async function belegInit(abh) {
   const { waechter } = abh;
   const urteil = zielUrteil(
@@ -88,7 +69,6 @@ export async function belegInit(abh) {
   return { gruen };
 }
 
-// Antwortkoerper wird nie gelesen. -> HTTP-Status oder KEIN_HTTP_STATUS.
 async function sendeInitProbe({ abh, token }) {
   const headers = { "content-type": "application/json", ...(token ? { [INIT_TOKEN_HEADER]: token } : {}) };
   try {
@@ -109,9 +89,6 @@ export function belegInitUrteil({ ohneToken, mitToken }) {
   return ohneToken === BELEG_INIT_ERWARTET.OHNE_TOKEN && mitToken === BELEG_INIT_ERWARTET.MIT_TOKEN;
 }
 
-// ---- stimmen-beleg -----------------------------------------------------------------------------
-
-// Liefert {gruen} (auch von schalter --an genutzt).
 export async function stimmenBeleg(abh) {
   const quellen = await leseStimmenQuellen(abh);
   if (quellen.fehler) {
@@ -130,15 +107,12 @@ export async function stimmenBeleg(abh) {
   return { gruen: urteil.gruen };
 }
 
-// Rein (E19-Tabelle). (a) jede Profil-Probe 200; (b) Telnyx-Stimme gesetzt -> ihre Probe 200,
-// sonst Agent-Stimme == Play-Stimme, beide nicht leer.
 export function stimmenUrteil({ profilProben, telnyxVoice, telnyxProbe, agentVoice, playVoice }) {
   const profilGruen = profilProben.length > 0 && profilProben.every((probe) => probe.status === HTTP.OK);
   const defaultGruen = telnyxVoice ? telnyxProbe === HTTP.OK : Boolean(agentVoice) && agentVoice === playVoice;
   return { gruen: profilGruen && defaultGruen, profilGruen, defaultGruen };
 }
 
-// {telnyxVoice, playVoice, renderModel, agentVoice, agentModel} | {fehler}
 async function leseStimmenQuellen(abh) {
   if (!(await dienstLesbar(abh))) return { fehler: "Render-Dienst nicht lesbar (Service-GET nicht 200)" };
   const render = await leseStimmenEnv(abh);
@@ -155,8 +129,6 @@ async function leseStimmenQuellen(abh) {
   };
 }
 
-// 404 = nicht gesetzt (der Service-GET davor lieferte 200); jeder andere Nicht-200-Status ist ROT.
-// Getrimmt wie in src/config.js.
 async function leseStimmenEnv(abh) {
   const werte = {};
   for (const schluessel of STIMMEN_SCHLUESSEL) {
@@ -169,7 +141,6 @@ async function leseStimmenEnv(abh) {
   return { werte };
 }
 
-// -> 200 | Status aus reason "http_<n>" | KEIN_HTTP_STATUS. result.detail wird NIE gelesen.
 async function probeSynthese({ abh, voiceId, model }) {
   const ergebnis = await synthesizeSpeechStream(STIMMEN_PROBE_TEXT, {
     fetchImpl: abh.fetchImpl,
@@ -182,7 +153,6 @@ async function probeSynthese({ abh, voiceId, model }) {
     totalTimeoutMs: PROBE_GESAMT_MS,
   });
   if (!ergebnis.ok) return statusAusGrund(ergebnis.reason);
-  // Den Rest abwarten: kein offener Strom und keine offene Frist bleiben hinter dem Lauf zurueck.
   await ergebnis.audio;
   return HTTP.OK;
 }

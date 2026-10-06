@@ -1,5 +1,3 @@
-// Kern des briefing-bench: tools/list-Schnappschuss holen (echter Draht, stdio) und die
-// Szenarien n-mal gegen ein Modell fahren. Kein Werkzeug wird ausgefuehrt.
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -10,13 +8,8 @@ import { CALL_TOOLS, evaluateReply, summarize, totals } from "./metriken.mjs";
 
 const MCP_SERVER_ENTRYPOINT = path.join("src", "mcp-server.js");
 const RAW_TOOLS_RESULT = z.object({ tools: z.array(z.any()) });
-// Der Kindprozess liest KEINE .env (NODE_ENV=test, s. src/config.js) und damit keine
-// Schluessel oder Produktionswerte; die Karten-Bestaetigung ist an wie in Produktion, damit
-// prepare_call registriert ist. Weitere Werte nur ausdruecklich ueber --env.
 const SNAPSHOT_BASE_ENV = Object.freeze({ NODE_ENV: "test", MCP_UI_ENABLED: "true" });
 
-// Holt tools/list und instructions ueber stdio aus dem Checkout unter repoDir - auch aus
-// einem alten Stand (git worktree), solange dort src/mcp-server.js existiert.
 export async function snapshotTools(repoDir, extraEnv = {}) {
   const transport = new StdioClientTransport({
     command: process.execPath,

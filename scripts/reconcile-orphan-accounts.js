@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-// CL2: raeumt account-Zeilen ab, deren WorkOS-Identitaet nicht mehr existiert, und zieht
-// tenant.idp_subject auf eine lebende Identitaet nach. Der Kern liegt in
-// src/orphan-account-reconcile.js (dort steht auch, warum das NICHT im Login-Pfad passiert);
-// dieses Skript ist nur die Verdrahtung. Muster: scripts/reconcile-stale-subscriptions.js.
-// Trockenlauf ist Default; --apply schreibt.
-// Aufruf: node scripts/reconcile-orphan-accounts.js [--apply]
 import { config } from "../src/config.js";
 import { makeAccounts } from "../src/web-auth.js";
 import { makeWorkosManagement } from "../src/workos-management.js";
@@ -13,13 +7,10 @@ import { reconcileOrphanAccounts } from "../src/orphan-account-reconcile.js";
 
 const apply = process.argv.includes("--apply");
 
-// account/tenant sind ein pg-Konzept; im json-Pfad gibt es die Tabellen nicht.
 if (config.store.storeBackend !== "pg") {
   console.log("[orphan-accounts] json-Backend: No-Op (keine account-Zeilen lokal).");
   process.exit(0);
 }
-// Ohne Management-Schluessel gibt es nichts zu fragen - lauter Abbruch statt eines Laufs, der
-// JEDE Zeile als lookup_failed meldet und wie ein Befund aussieht. Schluessel nie loggen.
 if (!config.auth.workosManagementApiKey) {
   console.error("[orphan-accounts] WORKOS_MANAGEMENT_API_KEY fehlt - ohne Abfrage kein Abgleich.");
   process.exit(1);

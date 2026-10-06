@@ -1,10 +1,3 @@
-// Beleg-Sammlung des IEL-Messwerkzeugs (scripts/iel-mess.mjs): nach dem Anruf, ohne Mensch.
-//
-// Was hier NIE in ein Ergebnis gelangt: Transkript-Volltext, volle Rufnummern, Werte von
-// dynamic variables (nur ihre NAMEN und ob die Probe-Kennung ankam), Schluessel.
-// Jede Abfrage traegt ihren HTTP-Status mit - ein falscher Filter liefert bei Telnyx
-// 200 mit 0 Treffern und sieht sonst aus wie "nichts passiert".
-
 import {
   aufnahmenAnfrage,
   callEventsAnfrage,
@@ -18,16 +11,13 @@ import {
 } from "./iel-mess-anbieter.mjs";
 
 const MS_JE_S = 1000;
-// Puffer vor dem Laufstart fuer den Gespraechsfilter (Uhrenversatz Anbieter <-> lokal).
 const EL_ZEITFENSTER_PUFFER_S = 5;
 const EL_MAX_GESPRAECHE = 5;
 const NACHRICHT_MAX_ZEICHEN = 80;
 const ABBRUCHGRUND_MAX_ZEICHEN = 160;
-// Die Aufnahme liegt erst nach dem Auflegen bereit; so lange wird hoechstens gewartet.
 const AUFNAHME_VERSUCHE = 6;
 const AUFNAHME_TAKT_MS = 5000;
 const DETAIL_RECORDS_MAX_SEITEN = 3;
-// Kuerzere Kennungen koennten zufaellig in fremden Belegen vorkommen.
 const KENNUNG_MIN_LAENGE = 8;
 const BELEG_FELDER = Object.freeze([
   "record_type", "direction", "status", "connection_id", "started_at", "start_time",
@@ -43,10 +33,6 @@ function normalisiere(text) {
   return String(text).toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-// --- ElevenLabs-Gespraeche ------------------------------------------------------------
-
-// Zuordnung von stark nach schwach. Nur "probe" und "registrierung" gelten als unser
-// Anruf; ein Treffer nur ueber das Zeitfenster kann fremder Verkehr desselben Agenten sein.
 function bestimmeZuordnung(gespraech, { probeVariable, registrierungId }) {
   if (probeVariable) return ZUORDNUNG.PROBE;
   const telefonat = gespraech.metadata?.phone_call ?? {};
@@ -59,13 +45,10 @@ function ersteAgentNachricht(transkript) {
   return eintrag ? kuerze(eintrag.message, NACHRICHT_MAX_ZEICHEN) : null;
 }
 
-// Die Probe-Kennung kann eine Endung tragen (mehrere Dials je Anruf), daher "enthaelt".
 function traegtLaufId(wert, laufId) {
   return typeof wert === "string" && wert.includes(laufId);
 }
 
-// metadata.phone_call.sip_header_dynamic_variables: Form laut OpenAPI nicht festgelegt (Liste).
-// Belegt werden nur Namen/Schluessel und ob die Probe-Kennung darin steckt, nie Werte.
 function sipHeaderBeleg(telefonat, laufId) {
   const roh = telefonat.sip_header_dynamic_variables;
   if (roh == null) return null;
@@ -74,9 +57,6 @@ function sipHeaderBeleg(telefonat, laufId) {
   return { anzahl: eintraege.length, schluessel: [...new Set(namen)], probe_enthalten: JSON.stringify(roh).includes(laufId) };
 }
 
-// Ermittelt, ob/wie das Gespraech unserem Lauf zugeordnet ist - Vorstufe fuer alle
-// abhaengigen Felder (unserAnruf schaltet sip_header_variablen/erste_agent_nachricht/
-// variablen_namen frei).
 function ermittleZuordnungskontext(gespraech, kontext) {
   const variablen = gespraech.conversation_initiation_client_data?.dynamic_variables ?? {};
   const probeVariable = Object.keys(variablen).find((name) => traegtLaufId(variablen[name], kontext.laufId)) ?? null;
@@ -106,7 +86,6 @@ function baueTelefonatFelder(telefonat, unserAnruf, laufId) {
   };
 }
 
-// Nur die Endung hinter der lauf_id (Digest-Fall: -mit/-ohne), nie der Wert selbst.
 function baueProbeFelder(probeVariable, variablen, laufId) {
   return {
     probe_variable: probeVariable,
@@ -150,8 +129,6 @@ export async function sammleElGespraeche(kontext) {
   return { liste_http: liste.status, agent_filter: Boolean(registrierung?.agentId), gespraeche };
 }
 
-// --- Telnyx call_events ------------------------------------------------------------------
-
 function zaehleNamen(namen) {
   return namen.reduce((summe, name) => ({ ...summe, [name]: (summe[name] ?? 0) + 1 }), {});
 }
@@ -161,14 +138,9 @@ export async function sammleCallEvents(kontext) {
   if (!beinId) return { status: "kein_call_control_bein" };
   const antwort = await kontext.transport.senden(callEventsAnfrage(beinId));
   const namen = (antwort.json?.data ?? []).map((ereignis) => ereignis.name ?? ereignis.type ?? "?");
-  // Positiv-Kontrolle: ein Bein, das wirklich existierte, hat mindestens ein Ereignis.
   return { http: antwort.status, positivkontrolle: namen.length > 0, namen: zaehleNamen(namen) };
 }
 
-// --- Mitschnitt des Anrufer-Beins -----------------------------------------------------
-
-// Wartet auf die Aufnahme des Anrufer-Beins und laedt sie im Format der Fall-Gruppe. Liefert
-// immer einen Status - nie eine stille Null.
 async function holeAufnahme(kontext) {
   const { transport, uhr, griffe, gruppe } = kontext;
   if (!griffe.ccSession) return { status: "kein_anrufer_bein" };
@@ -196,8 +168,6 @@ function erkenneSprache(kontext, mitschnitt) {
   return kontext.transport.senden(anfrage);
 }
 
-// Hoert "der Anrufer" Pflichtsatz und Rueckfallsatz? Beantwortet ueber je ein Kontrollwort
-// im Erkenner-Text. Der Pflichtsatz ist die Positiv-Kontrolle des Mitschnittwegs selbst.
 export async function werteMitschnittAus(kontext) {
   const mitschnitt = await holeAufnahme(kontext);
   if (mitschnitt.status !== "ausgewertet") return mitschnitt;
@@ -213,8 +183,6 @@ export async function werteMitschnittAus(kontext) {
     rueckfall_gehoert: text.includes(normalisiere(gemeinsam.kontrollwort_rueckfall)),
   };
 }
-
-// --- Telnyx detail_records (F-D) --------------------------------------------------------
 
 function fasseBelegZusammen(beleg, trefferUeber) {
   const auszug = Object.fromEntries(BELEG_FELDER.filter((feld) => beleg[feld] != null).map((feld) => [feld, beleg[feld]]));
@@ -245,12 +213,6 @@ export async function sammleDetailRecords({ transport, typen, kennungen }) {
   return ergebnis;
 }
 
-// --- IEL-B11: Nach-Deploy-Belege (N1/N2) ------------------------------------------------
-//
-// N2 kann keinen INVITE ueber ein Gespraech nachweisen (die Ablehnung erzeugt keins) - das
-// Diskriminierungs-Urteil kommt deshalb NICHT aus sip-messages, sondern aus dem Kindbein
-// der TeXML-Anrufliste (V2/V3).
-
 const SIP_OK = 200;
 const SIP_STATUS_FORM = /^[1-6]\d{2}$/;
 const SIP_ANTWORT_ZEILE = /^SIP\/2\.0 (\d{3})\b/;
@@ -262,8 +224,6 @@ function kuerzeNummer(text) {
   return maskiereNummern(text);
 }
 
-// Spec 8 R-B: der Trunk der gepinnten DID lehnt einen fremden INVITE selbst ab (J4/J6, Trunk-Wahl
-// J5) - nur eine 200-Annahme unterscheidet das Verhalten.
 export function n2Urteil({ sipStatus }) {
   return sipStatus === SIP_OK ? N2_URTEIL.ANNAHME_DISKRIMINIEREND : N2_URTEIL.NICHT_DISKRIMINIEREND;
 }
@@ -272,15 +232,11 @@ export function sipStatusAus(wert) {
   return SIP_STATUS_FORM.test(String(wert ?? "")) ? Number(wert) : null;
 }
 
-// NUR Kindbeine (parent_call_sid === hauptbein): das Elternbein wird von unserer Wegwerf-
-// Call-Control-App angenommen und traegt selbst 200 (V3, Anruf 1 vom 2026-09-14).
 export function kindbeinStatus({ calls, hauptbein }) {
   const kinder = hauptbein ? (calls ?? []).filter((anruf) => anruf.parent_call_sid === hauptbein) : [];
   return { kind_beine: kinder.length, sip_status: kinder.length === 1 ? sipStatusAus(kinder[0].sip_hangup_cause) : null };
 }
 
-// Nur die ERSTE Zeile jeder Roh-Nachricht: Kopfzeilen (Proxy-Authorization, From/To) tragen
-// womoeglich Geheimnisse oder PII und verlassen diese Funktion nie.
 export function sipNachrichtenBeleg(nachrichten) {
   let requestUri = null;
   const codes = [];

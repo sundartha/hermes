@@ -1,18 +1,3 @@
-// WEGWERF-SKRIPT (Spike 2). Richtet die SIP-Strecke Telnyx <-> ElevenLabs ein und
-// baut sie wieder ab. Gehoert NICHT zum Produktivpfad und wird nach dem Spike geloescht.
-//
-// Sicherheitsregeln, die dieses Skript einhaelt:
-//   - Kein Kauf. Keine Nummer wird bestellt oder freigegeben.
-//   - Es fasst AUSSCHLIESSLICH die in DID_SPIKE genannte Nummer an und verweigert
-//     den Dienst fuer jede andere, insbesondere fuer die live genutzte DID_LIVE.
-//   - SIP-Zugangsdaten werden im Speicher erzeugt und NIE ausgegeben oder gespeichert.
-//   - API-Schluessel erscheinen in keiner Ausgabe.
-//
-// Unterbefehle: setup | move | restore | status | teardown
-//
-// Schluessel und Basis-URLs kommen aus src/config.js (G35, Muster spike1-lab.mjs):
-// dieselben .env-Werte wie vorher, nur nicht mehr von Hand aus der Datei geparst.
-
 import { randomBytes } from "node:crypto";
 
 import { config } from "../src/config.js";
@@ -20,18 +5,15 @@ import { config } from "../src/config.js";
 const { apiKey: elevenApiKey, apiBase: elevenApiBase } = config.voice.elevenLabsOutbound;
 const { telnyxApiKey, telnyxApiBase } = config.telephony;
 
-// --- Feste Groessen des Spikes -------------------------------------------------
-const DID_SPIKE = "+15739090177"; // seit 2026-07-29 ohne Verkehr, im Repo als stillgelegt gefuehrt
+const DID_SPIKE = "+15739090177";
 const DID_SPIKE_ID = "3011078889721038032";
-const CONNECTION_HERMES = "2982643896460248193"; // TeXML-App "Hermes" = Vorher-Zustand
-const VOICE_PROFILE_MCP = "2982782444253480209"; // whitelisted_destinations enthaelt DE
+const CONNECTION_HERMES = "2982643896460248193";
+const VOICE_PROFILE_MCP = "2982782444253480209";
 const ELEVENLABS_FQDN = "sip.rtc.elevenlabs.io";
-const TELNYX_HOST = "sip.telnyx.com"; // OHNE "sip:" davor - haeufigste Fehlerquelle
+const TELNYX_HOST = "sip.telnyx.com";
 const AGENT_ID = "agent_5301kwkh9vv3ezesf100pggfj9rs";
 const VERBOTEN = ["+17067101188", "+18643028341", "+15804504874"];
 
-// Der Name ist die EINZIGE Kennung, an der move/teardown die Spike-Verbindung
-// wiederfinden - er muss in allen drei Unterbefehlen derselbe sein.
 const VERBINDUNGS_NAME = "ElevenLabs Spike2";
 
 const FQDN_VERBINDUNGEN_PFAD = "/v2/fqdn_connections";
@@ -39,13 +21,8 @@ const FQDN_PFAD = "/v2/fqdns";
 const TELNYX_NUMMERN_PFAD = "/v2/phone_numbers";
 const ELEVEN_NUMMERN_PFAD = "/v1/convai/phone-numbers";
 
-// Standard-SIP-Port; Telnyx erwartet ihn ausgeschrieben im FQDN-Eintrag.
 const SIP_PORT = 5060;
-// Auszugslaenge der Konsolen-Ausgabe: genug fuer die entscheidenden Felder einer
-// Antwort, kurz genug, dass eine Trefferliste das Terminal nicht flutet.
 const AUSGABE_MAX_ZEICHEN = 1200;
-// Laenge der im Speicher erzeugten SIP-Zugangsdaten. Der Benutzername muss nur
-// eindeutig sein, das Geheimnis traegt die Sicherheit - daher deutlich laenger.
 const BENUTZER_ZUFALL_BYTES = 4;
 const GEHEIMNIS_ZUFALL_BYTES = 18;
 
@@ -66,7 +43,7 @@ async function telnyx(methode, pfad, koerper) {
   });
   const text = await antwort.text();
   let json = null;
-  try { json = JSON.parse(text); } catch { /* Rohtext bleibt in text */ }
+  try { json = JSON.parse(text); } catch { }
   return { ok: antwort.ok, status: antwort.status, json, text };
 }
 
@@ -78,11 +55,10 @@ async function eleven(methode, pfad, koerper) {
   });
   const text = await antwort.text();
   let json = null;
-  try { json = JSON.parse(text); } catch { /* Rohtext bleibt in text */ }
+  try { json = JSON.parse(text); } catch { }
   return { ok: antwort.ok, status: antwort.status, json, text };
 }
 
-// Entfernt Zugangsdaten aus allem, was auf die Konsole geht.
 function ohneGeheimnis(wert) {
   const text = typeof wert === "string" ? wert : JSON.stringify(wert, null, 1);
   return text
@@ -103,8 +79,6 @@ function schuetzeLiveNummern() {
   }
 }
 
-// --- Unterbefehle --------------------------------------------------------------
-
 async function status() {
   zeig(`Nummer ${DID_SPIKE}`, await telnyx("GET", `${TELNYX_NUMMERN_PFAD}/${DID_SPIKE_ID}`));
   zeig("FQDN-Verbindungen", await telnyx("GET", FQDN_VERBINDUNGEN_PFAD));
@@ -114,7 +88,6 @@ async function status() {
 
 async function setup() {
   schuetzeLiveNummern();
-  // Zugangsdaten leben NUR in diesem Prozess. Beide Seiten bekommen sie im selben Lauf.
   const benutzer = `hermes${randomBytes(BENUTZER_ZUFALL_BYTES).toString("hex")}`;
   const geheim = randomBytes(GEHEIMNIS_ZUFALL_BYTES).toString("base64url");
 
@@ -160,11 +133,11 @@ async function setup() {
       media_encryption: "disabled",
     },
     outbound_trunk_config: {
-      address: TELNYX_HOST, // Hostname OHNE "sip:"
+      address: TELNYX_HOST,
       transport: "tcp",
       media_encryption: "disabled",
       credentials: { username: benutzer, password: geheim },
-      enabled_codecs: ["PCMU/8000"], // u-law, weil US-DID
+      enabled_codecs: ["PCMU/8000"],
     },
   });
   zeig("ElevenLabs-Nummer importieren", nummer);
@@ -186,8 +159,6 @@ async function move() {
   );
 }
 
-// DER RUECKWEG. Haengt die umgeleitete Nummer zurueck an die TeXML-App "Hermes";
-// alles andere darf danach fehlschlagen, ohne dass die Nummer tot bleibt.
 async function restore() {
   zeig(
     `RUECKGAENGIG: ${DID_SPIKE} -> TeXML-App Hermes`,
@@ -228,8 +199,6 @@ async function spikeVerbindungenEntfernen() {
   }
 }
 
-// Vollstaendiger Abbau in genau dieser Reihenfolge: erst die Nummer zurueckhaengen
-// (restore), dann den ElevenLabs-Import loesen, zuletzt FQDN-Eintraege und Verbindung.
 async function teardown() {
   await restore();
   await elevenLabsNummerEntfernen();

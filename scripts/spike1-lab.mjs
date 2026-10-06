@@ -1,12 +1,4 @@
 #!/usr/bin/env node
-// Mess-Werkzeug aus Spike 1. Deckt die Schritte ab, die scripts/spike1-setup.mjs
-// und scripts/spike1-ws-probe.mjs nicht koennen: Agent anlegen mit TTS-Modell
-// (die API lehnt nicht-englische Agenten ohne turbo/flash v2_5 ab), turn_timeout
-// zwischen den Runden patchen, die Felder eines LAUFENDEN Gespraechs beobachten,
-// die Objektform von language_detection klaeren, leeres overrides pruefen und am
-// Ende alles wieder loeschen. Bleibt, solange das Folgepaket sie braucht.
-//
-// Der Schluessel steht in keiner Ausgabe.
 import { config } from "../src/config.js";
 
 const { apiKey, apiBase } = config.voice.elevenLabsPlayTts;
@@ -17,21 +9,16 @@ const CONVERSATIONS_PATH = "/v1/convai/conversations";
 const ERROR_PREVIEW_CHARS = 700;
 const MS_PER_SECOND = 1000;
 
-// Vorgaben aus scripts/spike1-setup.mjs gespiegelt, damit der Agent derselbe ist.
 const AGENT_TURN_TIMEOUT_SECS = 7;
 const AGENT_SILENCE_END_CALL_DISABLED = -1;
 const AGENT_MAX_DURATION_SECONDS = 600;
 const AGENT_TEMPERATURE = 0;
 const AGENT_LLM = "gpt-4o-mini";
 const AGENT_LANGUAGE = "de";
-// Die API verlangt fuer nicht-englische Agenten turbo oder flash v2_5.
 const AGENT_TTS_MODEL = "eleven_flash_v2_5";
 
-// Wie oft und wie lange der watch-Befehl pollt, wenn die CLI nichts vorgibt.
 const DEFAULT_POLL_SECONDS = 5;
 const DEFAULT_MAX_POLLS = 60;
-// Seitengroessen der Listen-Abfragen: das laufende Gespraech steht ganz vorn,
-// die Gegenprobe soll alle uebrig gebliebenen Objekte sehen.
 const RUNNING_LOOKUP_PAGE_SIZE = 5;
 const CLEANUP_LIST_PAGE_SIZE = 30;
 
@@ -51,14 +38,9 @@ const CLIENT_EVENTS = [
   "agent_response_complete",
 ];
 
-// Die vier Formen, in denen language_detection akzeptiert werden koennte -
-// welche die API nimmt, ist genau die offene Frage dieses Werkzeugs.
 const LANGUAGE_DETECTION_VARIANTS = [
-  // Variante 1: nur type+name, wie in der Vorlage geraten.
   { tag: "ld-type-name", detection: { type: "system", name: "language_detection" } },
-  // Variante 2: leeres Objekt.
   { tag: "ld-leer", detection: {} },
-  // Variante 3: mit description + params, wie es Werkzeug-Objekte sonst tragen.
   {
     tag: "ld-mit-params",
     detection: {
@@ -68,7 +50,6 @@ const LANGUAGE_DETECTION_VARIANTS = [
       params: { system_tool_type: "language_detection" },
     },
   },
-  // Variante 4: der in der Vorlage vermutete Schalter.
   {
     tag: "ld-only-at-start",
     detection: {
@@ -138,8 +119,6 @@ async function readBack(agentId, tag) {
   return got;
 }
 
-// Alle Pfade eines Objekts, Array-Indizes zu [] normalisiert - so bleibt die
-// Ausgabe klein und nennt nur Feldnamen, nie Inhalte.
 function flatten(value, prefix, sink) {
   if (Array.isArray(value)) {
     sink.set(`${prefix}.length`, String(value.length));
@@ -175,7 +154,6 @@ function diffPaths(before, after) {
   return [...changed].sort();
 }
 
-// Sucht das juengste laufende Gespraech des Agenten; null, wenn keines auftaucht.
 async function findRunningConversation(agentId, pollPlan) {
   for (let attempt = 0; attempt < pollPlan.maxPolls; attempt += 1) {
     const list = await callApi(
@@ -191,7 +169,6 @@ async function findRunningConversation(agentId, pollPlan) {
   return null;
 }
 
-// Pollt ein bekanntes Gespraech, bis es endet, und meldet die Feld-Aenderungen.
 async function pollConversation(conversationId, pollPlan) {
   let previous = null;
   const alleGeaenderten = new Set();
@@ -275,7 +252,6 @@ async function emptyOverridesCommand(rest) {
   });
 }
 
-// Gegenprobe nach dem Loeschen: nur Namen, damit nichts Inhaltliches austritt.
 async function listLeftovers() {
   const agents = await callApi(`${AGENTS_PATH}?page_size=${CLEANUP_LIST_PAGE_SIZE}`, "GET");
   const tools = await callApi(TOOLS_PATH, "GET");

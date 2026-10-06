@@ -1,14 +1,3 @@
-// Kern-Orchestrierung der Conversation-Bench (tasks/convo-bench-spec.md §3): treibt
-// EIN (Szenario, Repeat) end-to-end. Server-Start ueber test/helpers.js (Praezedenz:
-// scripts/smoke-stripe-payment.mjs importiert dieselbe Datei) - direkter Store-Seed
-// via seedState/seedCall, NIEMALS POST /api/calls (einzige Route mit originateCall,
-// Spec §6 Sicherheitsargument). ANTHROPIC_API_KEY erreicht diese Datei nur als
-// Funktionsargument, nie geloggt.
-//
-// AL-P8: die TRANSPORTSCHICHT (wie der gespawnte Server angesprochen wird) sitzt hinter
-// dem Treiber-Port (drivers.mjs) - dieser Runner kennt nur noch turn.sayTexts/endedVia,
-// nicht mehr TeXML-Interna. Env/Seed/Persona-Schleife/Metrics/Snapshot/Checks/Judge/
-// Kosten/Report-Bau bleiben hier (S2: EIN Runner statt Duplizierung je Treiber).
 import { execSync } from "node:child_process";
 import {
   startServer,
@@ -29,35 +18,18 @@ import { parseMetricsLog } from "./metrics-parse.mjs";
 import { startExaFake } from "./exa-fake.mjs";
 import { startConsultPump } from "./consult-pump.mjs";
 
-// Vorgabewert (Spec §0: "Kein Wechsel von claude-haiku-4-5 ... im Produktions-Pfad")
-// - byte-identisch zu config.js' eigenem CLAUDE_MODEL-Default. AL-P0 (Werkzeugwahl):
-// vorher war das eine harte Konstante, die JEDEN Lauf auf Anthropic Haiku pinnte,
-// unabhaengig von Shell/.env/CLI - jede DeepSeek-Messung war strukturell eine
-// Anthropic-Messung (tasks/befund-toolwahl-5-bench.md). Jetzt nur noch der Fallback,
-// wenn --agent-model/--llm-provider nicht gesetzt sind (Bestandslaeufe bleiben
-// byte-identisch).
 export const DEFAULT_AGENT_MODEL = "claude-haiku-4-5";
 export const DEFAULT_LLM_PROVIDER_FOR_BENCH = LLM_PROVIDER.ANTHROPIC;
-// Defensive Anhebung des Bench-Budgets (Spec §3-1): der Store-Default (BASE_ENV) waere
-// zu knapp fuer mehrere Repeats/Turns in einem Lauf.
 const BENCH_MAX_BUDGET_EUR = "20";
 const BENCH_CALL_ID_PREFIX = "call_bench";
-// Dummy-Telnyx-Owner-Nummer NUR fuer die Bench (nie real gekauft/angerufen - Provider-
-// Credentials bleiben leer, kein /api/calls -> physisch kein Dial).
 const BENCH_TELNYX_OWNER = Object.freeze({ e164: "+13125557000", provider: "telnyx" });
 
 const SUMMARY_POLL_TIMEOUT_MS = 20000;
 const SUMMARY_POLL_INTERVAL_MS = 150;
 
-// Preise pro 1M Tokens in USD (Spec §8, claude-api-Referenz 2026-06-24): Haiku 4.5
-// $1/$5, Sonnet-5 Intro-Preis $2/$10 bis 2026-08-31 (danach reguraer $3/$15). Rein
-// informativer Kosten-Schaetzwert im Report, kein Budget-Gate.
 const PRICE_TABLE = Object.freeze({
   "claude-haiku-4-5": { in: 1.0, out: 5.0 },
   "claude-sonnet-5": { in: 2.0, out: 10.0 },
-  // AL-P0: Rate identisch zu src/config.js MODEL_PRICE_SCHEDULES["deepseek-v4-pro"]
-  // (in/out, ohne Cache-Raten - dieselbe bewusste Vereinfachung wie die zwei
-  // Anthropic-Zeilen oben). Rein informativer Bench-Schaetzwert, kein Budget-Gate.
   "deepseek-v4-pro": { in: 0.435, out: 0.87 },
 });
 
@@ -69,22 +41,6 @@ function gitRev() {
   }
 }
 
-// AL-D3: szenario-eigene Env als generischer Durchreicher. Bis hierher praegte NUR
-// assistantContextEnabled die Env - Faehigkeiten, die an einem Flag haengen (look_up,
-// get_consult), waren im Bench damit strukturell abwesend, unabhaengig vom Szenario.
-// REICHWEITE: dieses Objekt erreicht AUSSCHLIESSLICH den gespawnten Kindprozess. Weder
-// BASE_ENV (test/helpers.js) noch .env noch render.yaml werden angefasst - test/al-d3-*
-// pinnt das.
-// PRAEZEDENZ, bewusst: scenario.env < driverEnv (der Treiber besitzt seinen Transport) <
-// searchEnv (der Runner besitzt die Adresse des selbst gestarteten Fakes).
-//
-// AL-P0 (Werkzeugwahl): llmProvider/agentModel/deepseekApiKey sind jetzt STEUERBARE
-// Werte statt hart gepinnter Konstanten (Namen mirror die config.js-Env-Variablen
-// LLM_PROVIDER/CLAUDE_MODEL/DEEPSEEK_API_KEY) - ohne das lief JEDER Bench-Lauf
-// strukturell gegen Anthropic Haiku, egal was Shell/CLI verlangten
-// (tasks/befund-toolwahl-5-bench.md). ANTHROPIC_API_KEY bleibt UNBEDINGT gesetzt (Persona/
-// Judge/assertConfig brauchen ihn immer, auch bei llmProvider=deepseek, s. config.js
-// assertConfig-Kommentar "ANTHROPIC_API_KEY bleibt bewusst UNBEDINGT Pflicht").
 export function buildEnv({ apiKey, deepseekApiKey, llmProvider, agentModel, scenario, driverEnv, searchEnv }) {
   return {
     ANTHROPIC_API_KEY: apiKey,
@@ -100,15 +56,8 @@ export function buildEnv({ apiKey, deepseekApiKey, llmProvider, agentModel, scen
   };
 }
 
-// AL-D3: default-Treffer fuer ein Szenario mit fakeSearch:true ohne eigene
-// searchFacts-Angabe - haelt startExaFake({facts}) auch ohne Szenario-Deklaration lauffaehig.
 const DEFAULT_SEARCH_FACTS = Object.freeze([{ title: "Bench-Treffer", highlight: "Bench-Auszug" }]);
 
-// F1: Objekt statt drittem losem Argument - extra (treiber-eigene Seed-Felder) geht ans
-// Ende von seedCall durch.
-// AL-P0: tenantId kommt jetzt vom Aufrufer (Default BOOTSTRAP_TENANT_ID, s.
-// runScenarioRepeat) statt hart im Objekt zu stehen - Voraussetzung fuer
-// scenario.tenantId/scenario.profile (s. benchTenantsFor/assertProfileTenantIsSettable).
 function buildCallSeed({ scenario, provider, tenantId, extra }) {
   return seedCall({
     id: `${BENCH_CALL_ID_PREFIX}_${scenario.id}`,
@@ -119,29 +68,18 @@ function buildCallSeed({ scenario, provider, tenantId, extra }) {
     briefing: scenario.briefing,
     constraints: scenario.constraints,
     context: scenario.context,
-    mandate: scenario.mandate, // P6: undefined bei Bestands-Szenarien -> Sektion ""
+    mandate: scenario.mandate,
     language: "de",
     status: "active",
     ...extra,
   });
 }
 
-// AL-P0 (Werkzeugwahl, tasks/befund-toolwahl-2-angebot.md): ein Szenario mit eigenem
-// tenantId braucht eine minimale Tenant-Identitaet, sonst faellt disclosureSentence()
-// auf ownerName="" zurueck (tenantContext ohne Tenant-Record, P2b) - kein Absturz, aber
-// ein kaputter Offenlegungssatz. Der Owner-Tenant bleibt unberuehrt (ensureOwnerNumber
-// pflegt ihn bereits selbst, test/helpers.js) - deshalb null fuer BOOTSTRAP_TENANT_ID,
-// damit seedState() keinen tenants-Key bekommt (byte-identischer Seed zum Bestand).
 export function benchTenantsFor(tenantId) {
   if (tenantId === BOOTSTRAP_TENANT_ID) return null;
   return [{ id: tenantId, status: "active", ownerName: `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}` }];
 }
 
-// AL-P0: resolveProfileFrom pinnt BOOTSTRAP_TENANT_ID hart auf OWNER_PROFILE (R2,
-// src/store/defaults.js) und liest ein gespeichertes Profil dort NIE - ein
-// scenario.profile ohne abweichendes scenario.tenantId waere also totes Verhalten
-// (G2, stiller No-op). Failt laut und VOR dem ersten Server-Spawn statt eine
-// Rechte-Messung zu liefern, die in Wahrheit nichts gemessen hat.
 export function assertProfileTenantIsSettable(scenario, tenantId) {
   if (scenario.profile && tenantId === BOOTSTRAP_TENANT_ID) {
     throw new Error(
@@ -153,12 +91,6 @@ export function assertProfileTenantIsSettable(scenario, tenantId) {
   }
 }
 
-// AL-P12: Vor-Anrufe desselben Ziels + optionale Tenant-Settings. Ohne beides ist der
-// Seed byte-identisch zum Bestand (scenario.priorCalls/settings sind undefined).
-// AL-P0: scenario.profile seedet s.profiles[tenantId] (Tenant-Rechte wie allowLookup/
-// allowConsult, tasks/befund-toolwahl-2-angebot.md); benchTenantsFor traegt die dafuer
-// noetige Tenant-Identitaet nach. Beides bleibt weg (kein Key im seedState-Aufruf), wenn
-// tenantId der Owner ist - Bestandslaeufe bleiben byte-identisch.
 function buildSeed({ scenario, call, isInbound, tenantId }) {
   const priors = (scenario.priorCalls || []).map((prior, i) =>
     seedCall({
@@ -179,28 +111,17 @@ function buildSeed({ scenario, call, isInbound, tenantId }) {
   });
 }
 
-// P4: ein stiller Callee-Turn geht als LEERES SpeechResult raus; im Transkript steht
-// dafuer dieser Marker - Persona-Spiegelung und Judge duerfen keinen leeren Text-Block
-// sehen (die Anthropic-API lehnt ihn ab), und "der Angerufene sagt nichts" ist fuer den
-// Judge eine echte, bewertbare Information.
 const SILENT_TURN_TRANSCRIPT_TEXT = "[Schweigen - der Angerufene sagt nichts]";
 
 function calleeTranscriptText(callee) {
   return callee.silent ? SILENT_TURN_TRANSCRIPT_TEXT : callee.text;
 }
 
-// G5: das Sample-Push (agent_samples-Report-Feld) UND der Transkript-Append gehoerten
-// immer zusammen (frueher an drei Stellen dupliziert: Erst-Turn, Schleife, beide
-// Aufrufer) - EIN Aufruf traegt beides.
 function pushSample(agentSamples, transcript, turn) {
   agentSamples.push({ turn: agentSamples.length, sayTexts: turn.sayTexts });
   if (turn.sayTexts.length) transcript.push({ role: "agent", text: turn.sayTexts.join(" ") });
 }
 
-// Wartet best-effort, bis summarizeCall (async, nicht awaited im Handler) die Summary
-// persistiert hat. Timeout -> Report zeigt summary=null statt die Bench abstuerzen zu
-// lassen. Reines Store-Polling - der terminale Provider-Webhook (Settlement) gehoert
-// seit AL-P8 dem Treiber (transport.finish), nicht mehr diesem Runner.
 async function waitForSummary(srv, callId) {
   const deadline = Date.now() + SUMMARY_POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -215,7 +136,6 @@ function extractStoreSnapshot(store, tenantId, callId) {
   return {
     summary: call?.summary ?? null,
     objectiveAchieved: call?.objectiveAchieved ?? null,
-    // AL-P11: die strukturierte Ergebnis-Karte fuer den result_slots_present-Check.
     result: call?.result ?? null,
     actionItems: (store.actionItems || []).filter((a) => a.callId === callId),
     calendarNewEvents: store.calendar?.[tenantId] || [],
@@ -238,10 +158,6 @@ function usdCost(model, usage) {
 
 const round4 = (n) => Math.round(n * 1e4) / 1e4;
 
-// AL-P0: agentModel kommt vom Aufrufer (das TATSAECHLICH an CLAUDE_MODEL gesendete
-// env.CLAUDE_MODEL, s. runScenarioRepeat) statt der frueheren Konstante - sonst
-// bepreist ein DeepSeek-Lauf sich weiter mit Haiku-Raten (falsch etikettiert, genau
-// die Fehlerklasse, die diese Phase beheben soll).
 function estimateCost({ agentModel, agentUsageBucket, personaUsages, personaModel, judgeUsage, judgeModel }) {
   const agentUsd = usdCost(agentModel, {
     input_tokens: agentUsageBucket?.inputTokens || 0,
@@ -257,11 +173,6 @@ function estimateCost({ agentModel, agentUsageBucket, personaUsages, personaMode
   };
 }
 
-// Faehrt EIN (Szenario, Repeat) end-to-end und liefert den vollstaendigen Report
-// (Spec §5-iii-Schema). maxTurnsCap ist die verbindliche, globale Kosten-Bremse (CLI
-// --max-turns); scenario.maxTurns ist NUR der Check-Schwellwert (turn_count_within_
-// budget) - beide Werte sind bewusst getrennt (ein Szenario darf ueber sein eigenes
-// Budget hinauslaufen bis zum globalen Cap, der Check schlaegt dann informativ fehl).
 export async function runScenarioRepeat({
   scenario,
   repeatIndex,
@@ -272,9 +183,6 @@ export async function runScenarioRepeat({
   provider,
   driverId,
   apiKey,
-  // AL-P0: Default = Live-Default (Anthropic/Haiku, Spec §0) - ein Aufrufer, der die
-  // drei neuen Felder weglaesst (heute nur convo-bench.mjs), erhaelt den byte-
-  // identischen Bestandslauf.
   llmProvider = DEFAULT_LLM_PROVIDER_FOR_BENCH,
   agentModel = DEFAULT_AGENT_MODEL,
   deepseekApiKey,
@@ -283,16 +191,9 @@ export async function runScenarioRepeat({
   const isInbound = scenario.direction === "inbound";
   const activeOwnerNumber = provider === "telnyx" ? BENCH_TELNYX_OWNER : OWNER_TEST_NUMBER;
   const ownerNumber = provider === "telnyx" ? BENCH_TELNYX_OWNER : undefined;
-  // AL-P0: tenantId + Tenant-Rechte (allowLookup/allowConsult) sind jetzt je Szenario
-  // setzbar (tasks/befund-toolwahl-2-angebot.md) - Default bleibt der Owner-Tenant
-  // (byte-identisch zum Bestand, s. benchTenantsFor/assertProfileTenantIsSettable).
   const tenantId = scenario.tenantId ?? BOOTSTRAP_TENANT_ID;
   assertProfileTenantIsSettable(scenario, tenantId);
 
-  // Der Treiber-Transport lebt VOR startServer (ein evtl. lokaler Provider-Fake muss
-  // laufen, bevor der Server-Env darauf zeigt) und wird im aeusseren finally NACH
-  // srv.stop() geschlossen. AL-D3: derselbe Grund fuer den Such-Fake - EXA_API_BASE
-  // muss stehen, bevor der Server startet.
   const transport = await DRIVERS[driverId].create({ scenario, provider });
   const searchFake = scenario.fakeSearch
     ? await startExaFake({ facts: scenario.searchFacts ?? DEFAULT_SEARCH_FACTS }) : null;
@@ -316,9 +217,6 @@ export async function runScenarioRepeat({
     srv = await startServer({ env, seed, ownerNumber });
     const opened = await transport.open({ srv, scenario, call, activeOwnerNumber });
     callId = opened.callId;
-    // AL-D3: die Pumpe startet, sobald die callId feststeht - get_consult braucht einen
-    // FRISCHEN Client-Poll (consultClientIsPolling), bevor es ueberhaupt im Werkzeugsatz
-    // erscheint. D-4 (Poll-Frische selbst) bleibt unangefasst.
     if (scenario.pumpConsult) {
       consultPump = startConsultPump({
         baseUrl: srv.localUrl,
@@ -339,10 +237,6 @@ export async function runScenarioRepeat({
         endedVia = "turn_cap";
         break;
       }
-      // Persona-Call gegen echtes Netz (Anthropic-API) - genau wie beim Judge (weiter
-      // unten) darf ein Fehler (Auth/Rate-Limit/Netz) NICHT den ganzen Lauf crashen,
-      // sondern muss einen Report mit dem bisherigen Transkript + Befund liefern
-      // (Spec: Bench misst auch, WO ein Gespraech real scheitert).
       let callee;
       try {
         callee = await nextCalleeTurn({
@@ -371,8 +265,8 @@ export async function runScenarioRepeat({
 
     const metricsParsed = parseMetricsLog(srv.stdout);
     if (callId) {
-      await transport.finish(callId); // terminaler Provider-Webhook (Settlement)
-      await waitForSummary(srv, callId); // best-effort, Timeout -> summary=null (Bestand)
+      await transport.finish(callId);
+      await waitForSummary(srv, callId);
     }
     const store = srv.readStore();
     const storeSnapshot = extractStoreSnapshot(store, tenantId, callId);
@@ -397,11 +291,6 @@ export async function runScenarioRepeat({
       judge = { error: err.message };
     }
 
-    // AL-P0: agentModel kommt aus dem FINAL gemergten env-Objekt (env.CLAUDE_MODEL),
-    // nicht aus dem rohen Funktionsargument - so bleibt das Label auch dann korrekt,
-    // wenn ein Szenario CLAUDE_MODEL/LLM_PROVIDER selbst ueber scenario.env/driverEnv
-    // ueberschreibt (Praezedenz s. buildEnv). Das genau ist der Zweck dieser Phase:
-    // eine Zahl darf nie wieder falsch etikettiert sein.
     const cost = estimateCost({
       agentModel: env.CLAUDE_MODEL,
       agentUsageBucket,
@@ -423,9 +312,6 @@ export async function runScenarioRepeat({
         judge_model: judgeModel,
         provider,
         driver: driverId,
-        // BEW-1 (PLAN-INBOUND-PARITAET IP2): Richtung des Szenarios direkt an der
-        // Zahl, die spaeter isoliert (JSON, Zusammenfassung) gelesen wird - nie mehr
-        // stillschweigend als Aussage ueber den anderen Pfad lesbar.
         direction: scenario.direction,
         git_rev: gitRev(),
       },
@@ -444,22 +330,9 @@ export async function runScenarioRepeat({
       cost_estimate_usd: cost,
       turn_count: agentSamples.length,
       ended_via: endedVia,
-      // Nur gesetzt, wenn ended_via==="persona_error" (Netz-/Auth-Fehler auf dem
-      // Persona-Call) - err.message der Anthropic-SDK-Fehlerklassen enthaelt NIE den
-      // Key selbst (nur HTTP-Status + API-Fehlertyp/-message).
       persona_error: personaError,
     };
   } finally {
-    // AL-D3: die Pumpe steht ZUERST (ihr laufender Fetch haengt sonst an einem bereits
-    // gestoppten Server), der Such-Fake NACH srv.stop() (Muster Treiber-Transport).
-    //
-    // Review-Fix Runde 2: consultPump.stop() wirft absichtlich erneut, wenn die Pumpe
-    // im Lauf auf einen fatalError lief (z.B. der dokumentierte 401-Fall,
-    // consult-pump.mjs:74). Ohne eigenes try/catch riss das die restliche Kette ab -
-    // srv.stop()/searchFake.close()/transport.close() liefen nie, der gespawnte
-    // Server-Kindprozess und der lokale Exa-Fake blieben offen (Lehre "Verwaiste
-    // Testserver"). Der Fehler wird gesammelt und erst NACH allen Cleanups erneut
-    // geworfen.
     let consultPumpError = null;
     if (consultPump) {
       try {

@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-// B1 (tasks/b1-spec.md): Wegwerf-Messskript gegen die echte DeepSeek-API. Beantwortet
-// acht falsifizierbare Messfragen (M1-M8) darueber, was der API-Schluessel tatsaechlich
-// abgebucht bekommt - NICHT ueber die Form der Preistabelle (das war die verworfene
-// Praemisse, s. Spec Abschnitt 1).
-//
-// Kein Produktionspfad: von nichts importiert, importiert selbst nichts aus src/.
-// Nebenlaeufigkeit 1, KEIN Retry - ein Fehlversuch wird gezaehlt, nicht geheilt (Spec 6.2).
-//
-// Aufruf:
-//   node scripts/deepseek-b1-messung.mjs --selftest
-//   node scripts/deepseek-b1-messung.mjs --dry-run
-//   node scripts/deepseek-b1-messung.mjs [--blocks=A,B,C,D,E] [--max-usd=1.00]
 import assert from "node:assert/strict";
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -19,31 +7,17 @@ import dotenv from "dotenv";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..");
-// Gleicher Mechanismus wie src/config.js:15 - aber Env-Zugriff bewusst NICHT ueber
-// src/config.js (Begruendung: tasks/b1-spec.md Abschnitt 6.1, Punkte 1-3).
 dotenv.config({ path: path.join(REPO_ROOT, ".env") });
 
-// ============================================================================
-// Verifizierte API-Fakten (Momentaufnahme, abgerufen 2026-08-08). Jede Zahl hier
-// gilt NUR fuer diesen Abrufzeitpunkt - deshalb validiert das Skript die Modell-IDs
-// beim scharfen Lauf frisch gegen GET /models (fail-closed, s. validateModelsAvailable).
-// ============================================================================
-
-// Quelle: https://api-docs.deepseek.com/api/create-chat-completion (abgerufen 2026-08-08)
 const DEEPSEEK_API_BASE = "https://api.deepseek.com";
 const CHAT_COMPLETIONS_PATH = "/chat/completions";
-// Quelle: https://api-docs.deepseek.com/api/get-user-balance (abgerufen 2026-08-08)
 const USER_BALANCE_PATH = "/user/balance";
-// Quelle: https://api-docs.deepseek.com/api/list-models (abgerufen 2026-08-08)
 const MODELS_PATH = "/models";
 
-// Quelle: https://api-docs.deepseek.com/quick_start/pricing (abgerufen 2026-08-08)
 const MODEL_FLASH = "deepseek-v4-flash";
 const MODEL_PRO = "deepseek-v4-pro";
 const CONFIGURED_MODELS = Object.freeze([MODEL_FLASH, MODEL_PRO]);
 
-// Preise in USD je 1 Million Token, dieselbe Quelle wie oben, abgerufen 2026-08-08.
-// Kein Off-Peak-/Rabattfenster auf der Seite dokumentiert (-> M4 optional).
 const PRICE_SOURCE_URL = "https://api-docs.deepseek.com/quick_start/pricing";
 const PRICE_SOURCE_RETRIEVED = "2026-08-08";
 const DOC_PRICES_USD_PER_MTOK = Object.freeze({
@@ -51,10 +25,6 @@ const DOC_PRICES_USD_PER_MTOK = Object.freeze({
   [MODEL_PRO]: Object.freeze({ cacheHit: 0.003625, cacheMiss: 0.435, output: 0.87 }),
 });
 
-// usage-Objekt laut Doku (Quelle wie oben): 5 flache Felder + ein verschachteltes
-// completion_tokens_details mit reasoning_tokens (-> M8). Als PFADE gefuehrt (nicht nur
-// oberste Ebene), damit ein neues Feld auf JEDER Verschachtelungstiefe auffaellt (F10:
-// ein Geldfeld unter completion_tokens_details waere sonst unsichtbar geblieben).
 const DOCUMENTED_USAGE_KEYS = new Set([
   "prompt_tokens",
   "completion_tokens",
@@ -65,26 +35,13 @@ const DOCUMENTED_USAGE_KEYS = new Set([
   "completion_tokens_details.reasoning_tokens",
 ]);
 
-// Fehlercodes laut https://api-docs.deepseek.com/quick_start/error_codes (abgerufen 2026-08-08):
-// 400 invalid request body, 401 wrong API key, 402 Insufficient Balance,
-// 422 invalid parameters, 429 Rate Limit, 500 Server Error, 503 Server Overloaded.
-
 const TOKENS_PER_MILLION = 1_000_000;
 const REDACTED_PLACEHOLDER = "***";
 const HTTP_OK = 200;
 const HTTP_ERROR_THRESHOLD = 400;
 const HTTP_TIMEOUT_MS = 60_000;
-// Grobe Heuristik: ~4 Zeichen pro Token bei lateinischer Schrift (vorher 5x unbenannt, G25).
 const CHARS_PER_TOKEN_ESTIMATE = 4;
 
-// ============================================================================
-// Kopie der Produktions-Werkzeugdefinition (src/claude.js:465-477, take_message).
-// KEIN Import - B1 haengt an keinem Produktionsmodul (Spec M7-Messverfahren).
-// Von Hand nach DeepSeeks Chat-Completions-Werkzeugform uebersetzt:
-// { type: "function", function: { name, description, parameters } } - dieselbe
-// input_schema -> parameters-Abbildung - die neutrale toolDefs-Form (parameters) in
-// DeepSeeks verschachtelter Huelle.
-// ============================================================================
 const TAKE_MESSAGE_TOOL = Object.freeze({
   type: "function",
   function: {
@@ -102,39 +59,28 @@ const TAKE_MESSAGE_TOOL = Object.freeze({
   },
 });
 
-// ============================================================================
-// Block-Konstanten (Spec 6.2). Jede Schwelle/Groesse benannt, keine Magic Numbers.
-// ============================================================================
-
 const ALL_BLOCK_LETTERS = Object.freeze(["A", "B", "C", "D", "E", "F"]);
 const DEFAULT_BLOCKS = Object.freeze(["A", "B", "C", "D", "E"]);
-// Feste Ausfuehrungsreihenfolge, UNABHAENGIG von der Reihenfolge in --blocks: Block D
-// ("nach dem letzten Aufruf", M2-Messverfahren Punkt 3) muss nach A/B/C/E laufen, F ist
-// optional/lang und laeuft zuletzt. --blocks waehlt nur die MENGE, nicht die Reihenfolge.
 const FIXED_BLOCK_ORDER = Object.freeze(["A", "B", "C", "E", "D", "F"]);
 const COMPARABLE_BLOCKS = Object.freeze(["A", "B", "C", "E"]);
 
 const DEFAULT_MAX_USD = 1.0;
 
-// Block A - Grundlinie (M1, M6, M8)
 const BLOCK_A_CALLS_PER_MODEL = 3;
-const BLOCK_A_TARGET_CHARS = 800; // ~200 Token bei ~4 Zeichen/Token
+const BLOCK_A_TARGET_CHARS = 800;
 const BLOCK_A_MAX_TOKENS = 64;
 const BLOCK_A_SEED_SENTENCE =
   "Bitte nenne in einem Satz einen Vorteil von horizontaler Skalierung verteilter Systeme. ";
 
-// Block B - Cache (M3)
 const CACHE_PROMPT_MIN_CHARS = 12_000;
 const CACHE_REPEATS_IMMEDIATE = 10;
-const CACHE_CONTROL_AND_DELAYED_CALLS = 3; // 30-Min-Wiederholung + Kontrolle A + Kontrolle B
+const CACHE_CONTROL_AND_DELAYED_CALLS = 3;
 const BLOCK_B_CALLS_PER_MODEL = CACHE_REPEATS_IMMEDIATE + CACHE_CONTROL_AND_DELAYED_CALLS;
 const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
 const CACHE_REPEAT_DELAY_MINUTES = 30;
 const CACHE_REPEAT_DELAY_MS = CACHE_REPEAT_DELAY_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
 const CACHE_MAX_TOKENS = 16;
-// Erste/letzte Saetze der Kontroll-Varianten muessen an POSITION 0 divergieren, damit
-// sharedPrefixLength() im Selftest eine exakte, unbestreitbare Zusicherung treffen kann.
 const CACHE_PROMPT_FIRST_SENTENCE = "Alpha-Start: Dies ist ein Testprotokoll fuer Cache-Verhalten. ";
 const CACHE_PROMPT_FIRST_SENTENCE_ALT = "Zeta-Start: Dies ist ein Testprotokoll fuer Cache-Verhalten. ";
 const CACHE_PROMPT_LAST_SENTENCE = "ENDE-A bitte antworte mit einem einzigen Wort.";
@@ -145,31 +91,21 @@ const CACHE_PROMPT_BODY = CACHE_PROMPT_FILLER_SENTENCE.repeat(
   Math.ceil(CACHE_PROMPT_MIN_CHARS / CACHE_PROMPT_FILLER_SENTENCE.length),
 );
 
-// Block C - Aufloesung (M2a, M2c)
 const RESOLUTION_MAX_CALLS_PER_MODEL = 20;
-const RESOLUTION_TARGET_CHARS = 24_000; // ~6000 Token bei ~4 Zeichen/Token
+const RESOLUTION_TARGET_CHARS = 24_000;
 const RESOLUTION_MAX_TOKENS = 16;
 const RESOLUTION_SEED_SENTENCE =
   "Dieser Testtext dient ausschliesslich der Aufloesungsmessung des Guthaben-Endpunkts. ";
 
-// Block D - Nachbuchung (M2b)
 const BALANCE_POLL_COUNT = 12;
 const BALANCE_POLL_INTERVAL_SECONDS = 60;
 const BALANCE_POLL_INTERVAL_MS = BALANCE_POLL_INTERVAL_SECONDS * MS_PER_SECOND;
 
-// Block E - Stream + Werkzeug (M7). Kreuzprodukt {Stream, kein Stream} x {Werkzeug, kein
-// Werkzeug} x {include_usage, kein include_usage} = 8 Aufrufe, JE MODELL (wie A/B/C).
-// Owner-Entscheidung 2026-08-08: die Spec-Tabelle nennt bei E eine flache Zahl ohne
-// "je Modell"; das war eine Zahl im Messplan, keine technische Grenze. Nur mit beiden
-// Modellen ist die Zelle "pro x stream" belegt - und genau die ist der Live-Sprechpfad,
-// fuer den B2 die Verbrauchsfelder braucht.
 const BLOCK_E_MAX_TOKENS = 64;
 const BLOCK_E_PROMPT =
   "Ein Anrufer sagt: Bitte richten Sie aus, dass ich um 15 Uhr zurueckgerufen werden moechte. " +
   "Nutze bei Bedarf das verfuegbare Werkzeug, um eine Nachricht zu hinterlassen.";
 
-// Kreuzprodukt-Aufbau vor die Kostenschaetzung gezogen (vorher weiter unten definiert),
-// damit APPROX_INPUT_TOKENS_BLOCK_E die echte Konstante nutzt statt "* 8" zu duplizieren (G25).
 function buildBlockECombos() {
   const combos = [];
   for (const stream of [false, true]) {
@@ -181,28 +117,20 @@ function buildBlockECombos() {
 }
 const BLOCK_E_COMBOS_COUNT = buildBlockECombos().length;
 
-// Fehlerproben (M5): brauchen irgendein gueltiges Modell, gemessen wird der Fehlerweg,
-// nicht das Modell. Das guenstigste genuegt.
 const ERROR_PROBE_MODEL = MODEL_FLASH;
 
-// Block F - Off-Peak (M4, optional)
 const BLOCK_F_MODEL = MODEL_FLASH;
 const BLOCK_F_CALLS = 24;
 const HOURS_PER_BLOCK_F_STEP = 1;
 const MINUTES_PER_HOUR = 60;
 const BLOCK_F_INTERVAL_MS = HOURS_PER_BLOCK_F_STEP * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MS_PER_SECOND;
 
-// M5 - Latenz/Fehlerform. Verteilung wird JE (Modell x Betriebsart) gebildet (F9), nicht
-// gepoolt; die gepoolte Zahl steht zusaetzlich, aber benannt. Die Fehlerproben laufen einmal,
-// unabhaengig von --blocks, ueber denselben Choke-Point wie alle anderen Aufrufe.
 const SEAM_TIMEOUT_MS = 3500;
 const PERCENTILE_MEDIAN = 50;
 const PERCENTILE_P95 = 95;
-const PERCENTILE_MIN_RELIABLE_N = 20; // unter dieser Groesse ist p95 == max (Interpolationsartefakt)
-const INVALID_MAX_TOKENS = -1; // -1 ist per Ausnahme erlaubte Zahl (0/1/-1)
+const PERCENTILE_MIN_RELIABLE_N = 20;
+const INVALID_MAX_TOKENS = -1;
 
-// Grobe Dry-Run-Kostenschaetzung: konservativ auf v4-pro-Cache-Fehltreffer gerechnet
-// (Spec 6.4), Ausgabeseite als kleiner Anteil der Eingabeseite angenommen.
 const OUTPUT_TOKEN_ESTIMATE_RATIO = 0.02;
 const APPROX_INPUT_TOKENS_BLOCK_A =
   (BLOCK_A_TARGET_CHARS * BLOCK_A_CALLS_PER_MODEL * CONFIGURED_MODELS.length) / CHARS_PER_TOKEN_ESTIMATE;
@@ -216,23 +144,11 @@ const APPROX_INPUT_TOKENS_BLOCK_F = (BLOCK_A_TARGET_CHARS * BLOCK_F_CALLS) / CHA
 
 const EXIT_OK = 0;
 const EXIT_ERROR = 1;
-// S3-1: Name deckt beide Faelle ab, die diesen Exit-Code ausloesen - ein tatsaechlicher
-// Schluesselfund (status "DIRTY") UND eine Pruefung, die gar nicht stattfinden konnte
-// (status "unueberprueft", z.B. leeres Ausgabeverzeichnis). Beide sind fail-closed richtig,
-// "KEY_LEAK" nannte aber nur den ersten Fall.
 const EXIT_SECRET_CHECK_FAILED = 2;
 const EXIT_BUDGET_STOPPED = 3;
 
-// M7: Feldpfad-Konstante fuer Aufrufe, die ueberhaupt keine Auswertung zulassen (Aufruf
-// scheiterte). Eigener String statt null, damit computeM7Answer damit rechnen kann.
 const TOOL_CALL_PFAD_FAILED = "nicht ermittelbar (Aufruf gescheitert)";
 
-// ============================================================================
-// Reine Hilfsfunktionen - keine I/O, keine Zeit-/Zufallsabhaengigkeit. Das ist die
-// Menge, die --selftest ohne Netz und ohne Schluessel prueft.
-// ============================================================================
-
-// Zerlegt einen Dezimalstring in Vorzeichen/Ganzzahl-/Nachkommateil, OHNE parseFloat.
 function decimalPartsOf(str) {
   const trimmed = String(str).trim();
   const negative = trimmed.startsWith("-");
@@ -241,13 +157,6 @@ function decimalPartsOf(str) {
   return { negative, intPart: intPart || "0", fracPart };
 }
 
-// Strikte Format-Pruefung. Fuer eine tatsaechliche Geld-Differenz muss JEDES Format ausser
-// einer reinen Dezimalzahl explizit scheitern - sonst wuerden Tausendertrennzeichen
-// ("1,234.56"), ein leerer String oder "null" still als 0 durchgehen statt als "nicht
-// parsebar" aufzufallen. S2-2-Fix: dieselbe Pruefung gilt jetzt (ueber isParseableDecimalString
-// weiter unten) AUCH fuer die Aufloesungs-Zaehlung in queryBalanceLogged - decimalPartsOf
-// dient dort nur noch der Nachkommastellen-Extraktion NACH bestandener Pruefung, nie mehr
-// als alleiniger Torwaechter fuer einen Zaehlerstand.
 const DECIMAL_STRING_PATTERN = /^\d+(\.\d+)?$|^\.\d+$/;
 
 function decimalStringToMinorUnits(str, scale) {
@@ -263,21 +172,12 @@ function decimalStringToMinorUnits(str, scale) {
   return negative ? -value : value;
 }
 
-// S2-2-Fix: derselbe Formatbegriff wie decimalStringToMinorUnits (DECIMAL_STRING_PATTERN),
-// aber als eigenstaendige Pruefung OHNE Umrechnung - fuer Stellen, die nur wissen muessen
-// "ist das ueberhaupt eine reine Dezimalzahl", nicht die Ganzzahl-Differenz selbst brauchen
-// (queryBalanceLogged). decimalStringToMinorUnits (Kernrechnung) bleibt unangetastet.
 export function isParseableDecimalString(str) {
   const trimmed = String(str).trim();
   const unsigned = trimmed.startsWith("-") ? trimmed.slice(1) : trimmed;
   return DECIMAL_STRING_PATTERN.test(unsigned);
 }
 
-// Ganzzahl-Differenz zweier Guthaben-Strings in der kleinsten Einheit. NIE parseFloat/
-// Number auf Geldbetraege (Spec M2 + Pre-Mortem 3) - sonst IEEE-Rauschen statt Abbuchung.
-// F3(c): Anbieter-Strings mit Tausendertrennzeichen/leer/null wuerden BigInt() zum Werfen
-// bringen (Absturz eines bezahlten Laufs wegen einer Formatierungsfrage). Das darf nicht
-// den Prozess toeten - stattdessen ein ausdrueckliches "nicht parsebar" zurueckgeben.
 export function minorUnitsDelta(beforeStr, afterStr) {
   try {
     const scale = Math.max(decimalPartsOf(beforeStr).fracPart.length, decimalPartsOf(afterStr).fracPart.length);
@@ -303,8 +203,6 @@ export function computeDeltasByCurrency(beforeInfos, afterInfos) {
   return result;
 }
 
-// Traegt die Skala (Nachkommastellen) IMMER mit (F2): eine Ganzzahl ohne ihre Skala ist
-// keine Geldangabe - der Anbieter kann zwischen Aufrufen die Aufloesung wechseln.
 export function mapDeltasToRecords(deltas) {
   const out = {};
   for (const [currency, delta] of Object.entries(deltas)) {
@@ -313,9 +211,6 @@ export function mapDeltasToRecords(deltas) {
   return out;
 }
 
-// M1-Gleichungen. usage-Felder sind laut Doku Zahlen (nur Guthaben ist String) - normale
-// Arithmetik ist hier zulaessig, anders als bei Geldbetraegen. Beide Gleichungen behandeln
-// fehlende Felder gleich (Number(x || 0)) - vorher war nur checkPromptEquation so geschrieben.
 export function checkPromptEquation(usage) {
   const promptTokens = Number(usage.prompt_tokens || 0);
   const hit = Number(usage.prompt_cache_hit_tokens || 0);
@@ -330,14 +225,6 @@ export function checkTotalEquation(usage) {
   return total === prompt + completion;
 }
 
-// Kostenschaetzung aus einem usage-Objekt gegen die Doku-Preistabelle. Dies ist die
-// SCHAETZUNG (est_usd_from_doc_prices), nie die Ist-Quelle - die ist die Guthaben-
-// Differenz aus minorUnitsDelta.
-//
-// F6: haengt NICHT ausschliesslich an den Cache-Feldern - genau deren Existenz soll M1 ja
-// erst falsifizieren. Rueckfall-Kette: prompt_cache_miss_tokens -> (prompt_tokens - hit) ->
-// bei voelligem Fehlen beider: fail-safe TEUER aus der Prompt-Zeichenlaenge (promptChars),
-// NIE 0 (0 waere die gefaehrliche Richtung fuer eine Kostenbremse).
 export function estimateCostUsd(usage, prices, promptChars = 0) {
   const hit = Number(usage.prompt_cache_hit_tokens || 0);
   const hasMiss = usage.prompt_cache_miss_tokens != null;
@@ -360,9 +247,6 @@ export function estimateCostUsd(usage, prices, promptChars = 0) {
   return { usd, inputUnbekannt };
 }
 
-// Sammelt alle Schluessel eines Objekts als PFADE, rekursiv (F10). Ein flacher
-// Object.keys() saehe ein Feld wie completion_tokens_details.cost_usd nie - genau auf
-// dieser Verschachtelungstiefe fuehrt DeepSeek heute schon ein Feld (reasoning_tokens).
 export function collectKeyPaths(obj, prefix = "") {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) return prefix ? [prefix] : [];
   const paths = [];
@@ -377,9 +261,6 @@ export function collectKeyPaths(obj, prefix = "") {
   return paths;
 }
 
-// Redaktionsfilter (Spec 6.5): jede Datei-/Konsolenausgabe laeuft an der Schreibstelle
-// durch diese Funktion, nicht an den Aufrufstellen. Nimmt mehrere Geheimnisse
-// (echter Schluessel UND der absichtlich falsche aus M5), damit beide gefiltert werden.
 export function createRedactor(secrets) {
   const list = (secrets || []).filter(Boolean);
   if (list.length === 0) return (value) => value;
@@ -412,9 +293,6 @@ function buildFillerPrompt(seedSentence, targetChars) {
 const BLOCK_A_PROMPT = buildFillerPrompt(BLOCK_A_SEED_SENTENCE, BLOCK_A_TARGET_CHARS);
 const RESOLUTION_PROMPT = buildFillerPrompt(RESOLUTION_SEED_SENTENCE, RESOLUTION_TARGET_CHARS);
 
-// Block-B-Prompt-Varianten (Spec M3). "base" fuer die 10 Wiederholungen + die 30-Min-
-// Wiederholung; "control-a" aendert nur den letzten Satz (erwartet: Treffer auf dem
-// gemeinsamen Praefix); "control-b" aendert nur den ersten Satz (erwartet: 0 Treffer).
 export function buildCachePrompt(variant) {
   const first = variant === "control-b" ? CACHE_PROMPT_FIRST_SENTENCE_ALT : CACHE_PROMPT_FIRST_SENTENCE;
   const last = variant === "control-a" ? CACHE_PROMPT_LAST_SENTENCE_ALT : CACHE_PROMPT_LAST_SENTENCE;
@@ -427,10 +305,6 @@ export function sharedPrefixLength(a, b) {
   while (i < max && a[i] === b[i]) i += 1;
   return i;
 }
-
-// ============================================================================
-// CLI
-// ============================================================================
 
 function parseArgs(argv) {
   const has = (name) => argv.includes(name);
@@ -485,10 +359,6 @@ function printHelp() {
   console.log(HELP_TEXT);
 }
 
-// ============================================================================
-// Selftest - node:assert gegen die reinen Hilfsfunktionen, ohne Netz und ohne Schluessel.
-// ============================================================================
-
 function runChecks(assertions) {
   let checked = 0;
   let failed = 0;
@@ -507,32 +377,22 @@ function runChecks(assertions) {
 function selftestMoneyDelta() {
   return runChecks([
     () => assert.strictEqual(minorUnitsDelta("10.00", "10.05").deltaMinorUnits, 5n),
-    // ungleiche Nachkommastellen
     () => assert.strictEqual(minorUnitsDelta("10.5", "10.55").deltaMinorUnits, 5n),
-    // negatives Delta
     () => assert.strictEqual(minorUnitsDelta("10.05", "10.00").deltaMinorUnits, -5n),
-    // Delta 0
     () => assert.strictEqual(minorUnitsDelta("10.00", "10.00").deltaMinorUnits, 0n),
-    // sehr grosser Betrag, ueber Number.MAX_SAFE_INTEGER hinaus
     () =>
       assert.strictEqual(
         minorUnitsDelta("123456789012345.67", "123456789012346.67").deltaMinorUnits,
         100n,
       ),
-    // Fall, der mit parseFloat nachweislich falsch waere: 0.3 - 0.1 !== 0.2 in IEEE-754
     () => {
       assert.notStrictEqual(parseFloat("0.30") - parseFloat("0.10"), 0.2);
       assert.strictEqual(minorUnitsDelta("0.10", "0.30").deltaMinorUnits, 20n);
     },
-    // F2: die Skala wird IMMER mitgefuehrt, auch wenn beide Seiten gleich viele Stellen haben
     () => assert.strictEqual(minorUnitsDelta("10.00", "10.05").scale, 2),
-    // F2 Kernfall: Anbieter wechselt zwischen 2 und 8 Nachkommastellen - Skala folgt der
-    // laengeren Seite, das Delta bleibt in DERSELBEN kleinsten Einheit vergleichbar
     () => assert.strictEqual(minorUnitsDelta("10.00", "10.00000001").scale, 8),
-    // F3(c): Tausendertrennzeichen darf den Prozess nicht toeten (BigInt("1,23456") wirft)
     () => assert.ok(minorUnitsDelta("1,234.56", "1,234.55").parseError?.startsWith("nicht parsebar:")),
     () => assert.strictEqual(minorUnitsDelta("1,234.56", "1,234.55").deltaMinorUnits, null),
-    // leer/null duerfen ebenfalls nicht werfen
     () => assert.ok(minorUnitsDelta("", "10.00").parseError !== null),
   ]);
 }
@@ -555,17 +415,13 @@ function selftestEquations() {
 }
 
 function selftestCurrencySelection() {
-  // Pre-Mortem 3: CNY an Index 0, USD an Index 1 - ein Index-Zugriff waere falsch.
-  // computeDeltasByCurrency ist der PRODUKTIVPFAD (buildCallRecord); die vier
-  // Zusicherungen haengen hier statt an totem Code (F15: pickBalanceByCurrency entfernt,
-  // war ausschliesslich vom Selftest aufgerufen).
   const before = [
     { currency: "CNY", total_balance: "700.00" },
     { currency: "USD", total_balance: "100.00" },
   ];
   const after = [
-    { currency: "CNY", total_balance: "693.00" }, // CNY sinkt um 7.00
-    { currency: "USD", total_balance: "100.01" }, // USD steigt um 0.01
+    { currency: "CNY", total_balance: "693.00" },
+    { currency: "USD", total_balance: "100.01" },
   ];
   const deltas = computeDeltasByCurrency(before, after);
   return runChecks([
@@ -596,15 +452,12 @@ function selftestCostEstimate() {
   return runChecks([
     () => assert.strictEqual(estimateCostUsd(withCacheFields, prices).usd, prices.cacheHit + prices.output),
     () => assert.strictEqual(estimateCostUsd(withCacheFields, prices).inputUnbekannt, false),
-    // F6-Rueckfall: keine Cache-Felder, aber prompt_tokens vorhanden -> miss = prompt_tokens - hit(0)
     () =>
       assert.strictEqual(
         estimateCostUsd(withoutCacheFieldsButPromptTokens, prices).usd,
         prices.cacheMiss + prices.output,
       ),
     () => assert.strictEqual(estimateCostUsd(withoutCacheFieldsButPromptTokens, prices).inputUnbekannt, false),
-    // F6 Fail-safe: WEDER Cache-Felder NOCH prompt_tokens -> NICHT 0 (das waere die
-    // gefaehrliche Richtung fuer die Bremse), sondern teure Schaetzung aus promptChars
     () => assert.ok(estimateCostUsd(totallyUnknown, prices, 4000).usd > 0),
     () => assert.strictEqual(estimateCostUsd(totallyUnknown, prices, 4000).inputUnbekannt, true),
   ]);
@@ -623,8 +476,6 @@ function selftestPrefixControls() {
 }
 
 function selftestKeyPaths() {
-  // F10: ein Geldfeld unter completion_tokens_details.cost_usd muss auf DIESER Tiefe
-  // auftauchen, nicht nur als "completion_tokens_details" auf oberster Ebene.
   const usage = {
     prompt_tokens: 100,
     completion_tokens_details: { reasoning_tokens: 5, cost_usd: "0.000123" },
@@ -640,11 +491,8 @@ function selftestKeyPaths() {
 }
 
 function selftestOverallComparisonSign() {
-  // F11: buildOverallComparison darf das Vorzeichen NICHT mit Math.abs wegwerfen - eine
-  // Guthaben-ERHOEHUNG (Aufladung waehrend des Laufs) muss als solche erkennbar bleiben,
-  // nicht als (kleinere) Ausgabe verkleidet.
-  const increase = { USD: { deltaMinorUnits: 500n, scale: 2, parseError: null } }; // Guthaben +5.00 USD
-  const decrease = { USD: { deltaMinorUnits: -500n, scale: 2, parseError: null } }; // Guthaben -5.00 USD
+  const increase = { USD: { deltaMinorUnits: 500n, scale: 2, parseError: null } };
+  const decrease = { USD: { deltaMinorUnits: -500n, scale: 2, parseError: null } };
   const resultIncrease = buildOverallComparison(increase, 1.23);
   const resultDecrease = buildOverallComparison(decrease, 1.23);
   return runChecks([
@@ -655,10 +503,6 @@ function selftestOverallComparisonSign() {
   ]);
 }
 
-// S2-2: Aufloesungszaehlung und Geld-Differenz teilen jetzt denselben Formatbegriff
-// (DECIMAL_STRING_PATTERN) statt zweier Parser - ein unparsebarer Wert zaehlt NICHT in die
-// Aufloesung ein und wird als solcher erkennbar (parseable: false), statt eine seltsame
-// Nachkommastellen-Zahl aus einem Wert abzuleiten, den der Geldpfad verweigert.
 function selftestBalanceResolutionClassification() {
   return runChecks([
     () =>
@@ -672,7 +516,6 @@ function selftestBalanceResolutionClassification() {
         classifyBalanceEntryForResolution({ currency: "USD", total_balance: "1,234.56" }).parseable,
         false,
       ),
-    // Waehrung bleibt auch im Fehlerfall erhalten - sonst verschwindet die Zahl spurlos
     () =>
       assert.strictEqual(
         classifyBalanceEntryForResolution({ currency: "USD", total_balance: "1,234.56" }).currency,
@@ -682,9 +525,6 @@ function selftestBalanceResolutionClassification() {
   ]);
 }
 
-// S2-3: "echtes 0-Delta" (messbar, aber unbewegt) und "nicht messbar" (Parse-Fehler oder
-// fehlgeschlagene Guthaben-Abfrage) sind zwei verschiedene Kategorien - hasNonZeroDelta
-// warf beide vorher gleichermassen auf `false`.
 function selftestDeltaOutcomeClassification() {
   const bewegt = { delta_minor_units: { USD: { minor_units: "5", scale: 2 } } };
   const nullAberMessbar = { delta_minor_units: { USD: { minor_units: "0", scale: 2 } } };
@@ -695,7 +535,6 @@ function selftestDeltaOutcomeClassification() {
     () => assert.strictEqual(classifyDeltaOutcome(nullAberMessbar), "null-aber-messbar"),
     () => assert.strictEqual(classifyDeltaOutcome(nichtMessbarGanz), "nicht-messbar"),
     () => assert.strictEqual(classifyDeltaOutcome(nichtMessbarParseFehler), "nicht-messbar"),
-    // gemischt: eine Waehrung parsebar (und bewegt), eine nicht -> insgesamt "bewegt"
     () =>
       assert.strictEqual(
         classifyDeltaOutcome({
@@ -706,17 +545,12 @@ function selftestDeltaOutcomeClassification() {
   ]);
 }
 
-// M1-Kreuzabdeckung: eine leere Zelle MUSS "nicht beantwortet" ergeben und die Zelle
-// namentlich nennen. Die Sabotage, die diese Gruppe rot machen soll: `crossCoverage` nur
-// ueber die Randverteilungen rechnen lassen - dann bleibt der Fall "pro fehlt im Stream"
-// unentdeckt, obwohl beide Randsummen ungleich 0 sind.
 function selftestM1CrossCoverage() {
   const call = (model, stream) => ({ model_requested: model, stream, usage_raw: { prompt_tokens: 1 }, usage_keys: [] });
   const [flash, pro] = CONFIGURED_MODELS;
   const alleZellen = [];
   for (const m of CONFIGURED_MODELS) for (const s of [false, true]) alleZellen.push(call(m, s));
   const vollstaendig = Array.from({ length: M1_MIN_SAMPLES }, (unused, i) => alleZellen[i % alleZellen.length]);
-  // Randsummen beide ungleich 0, aber "pro x stream" leer - das faengt nur das Kreuzprodukt.
   const zelleFehlt = vollstaendig.map((c) => (c.model_requested === pro && c.stream ? call(flash, true) : c));
   return runChecks([
     () => assert.strictEqual(typeof computeM1Answer(vollstaendig), "object"),
@@ -754,11 +588,6 @@ function runSelftest() {
   return { checked, failed };
 }
 
-// ============================================================================
-// Schluessel-Vorflug (Spec 6.1): meldet ausschliesslich Vorhandensein und Laenge,
-// bricht VOR jedem Netzzugriff ab.
-// ============================================================================
-
 function preflightKeyCheck() {
   const key = process.env.DEEPSEEK_API_KEY || "";
   if (!key) {
@@ -768,10 +597,6 @@ function preflightKeyCheck() {
   console.log(`DEEPSEEK_API_KEY gefunden, Laenge ${key.length} Zeichen (Wert wird nie ausgegeben).`);
   return key;
 }
-
-// ============================================================================
-// HTTP-Schicht
-// ============================================================================
 
 function safeJsonParse(text) {
   try {
@@ -796,8 +621,6 @@ async function queryBalance(apiKey) {
 
 function buildChatRequestBody({ model, prompt, maxTokens, stream, includeUsage, withTool }) {
   const body = { model, messages: [{ role: "user", content: prompt }], max_tokens: maxTokens, stream };
-  // stream_options ist laut Doku nur fuer stream:true gedacht - fuer Nicht-Stream-Aufrufe
-  // wird das Feld gar nicht erst mitgeschickt (siehe Bericht: Block-E-Designentscheidung).
   if (stream) body.stream_options = { include_usage: includeUsage };
   if (withTool) {
     body.tools = [TAKE_MESSAGE_TOOL];
@@ -867,10 +690,6 @@ function parseSseDataLines(rawEvent) {
     .map((line) => line.slice("data:".length).trim());
 }
 
-// S2-4-Fix: gemeinsames Geruest fuer beide SSE-Konsumenten unten (vorher zweimal dasselbe
-// for-chunks -> parseSseDataLines -> [DONE] ueberspringen -> safeJsonParse). Reine
-// Iterationshilfe ohne eigenen Zustand - ruft cb(parsedEvent) fuer jedes geparste,
-// nicht-[DONE]-Ereignis auf; ungueltiges JSON wird uebersprungen, nicht an cb gereicht.
 function forEachStreamEvent(chunks, cb) {
   for (const rawEvent of chunks) {
     for (const dataLine of parseSseDataLines(rawEvent)) {
@@ -892,11 +711,6 @@ function extractStreamSummary(chunks) {
   return { usage, model };
 }
 
-// F5: Feldpfad bis zu Werkzeugname/Argumenten NAMENTLICH, fuer beide Betriebsarten.
-// Nicht-Stream: der Werkzeugaufruf steht komplett in einer message. Stream: er kommt in
-// delta-Fragmenten ueber mehrere Chunks, akkumuliert (Name meist im ersten Fragment,
-// Argumente ueber mehrere Fragmente verteilt) - fuer B1s Zweck (Feldpfad + Beobachtung
-// dokumentieren, nicht produktionsreif parsen) reicht simples Aneinanderhaengen.
 function extractToolCallInfo(message) {
   const toolCalls = message?.tool_calls;
   if (!Array.isArray(toolCalls) || toolCalls.length === 0) return null;
@@ -973,14 +787,6 @@ async function validateModelsAvailable(apiKey) {
   return json.data;
 }
 
-// ============================================================================
-// Ausgabe (Spec 6.3): JSONL-Dateien unter data/evidence/deepseek-probe/<ts>/.
-// Jede Schreibstelle laeuft durch redact() - das ist die Schutzlinie, nicht die
-// Aufrufstellen (Spec 6.5). Kein deepStringifyBigInt mehr: jede Stelle, die einen
-// BigInt erzeugt (minorUnitsDelta), wandelt ihn VOR dem Verlassen der Funktion in einen
-// String (mapDeltasToRecords) - kein rohes BigInt erreicht je appendJsonLine/writeJsonFile.
-// ============================================================================
-
 async function appendJsonLine(outputDir, filename, obj, redact) {
   const line = `${JSON.stringify(redact(obj))}\n`;
   await appendFile(path.join(outputDir, filename), line, "utf8");
@@ -997,10 +803,6 @@ async function prepareOutputDir() {
   return dir;
 }
 
-// ============================================================================
-// Lauf-Zustand + Budget-Notbremse (Spec 6.4)
-// ============================================================================
-
 class BudgetExceededError extends Error {}
 
 function createRunState({ outputDir, redact, maxUsd, apiKey, wrongApiKey }) {
@@ -1015,12 +817,12 @@ function createRunState({ outputDir, redact, maxUsd, apiKey, wrongApiKey }) {
     failedCallCount: 0,
     firstBalanceInfos: null,
     lastBalanceInfos: null,
-    balanceQueryCount: 0, // ALLE Guthaben-Abfragen (F7: getrennt von blockDPollCount)
+    balanceQueryCount: 0,
     balanceQuerySuccessCount: 0,
     blockDPollCount: 0,
-    blockDSeries: [], // M2(iii) Nachbuchungs-Zeitreihe
-    resolutionObservedByCurrency: {}, // F2/M2a: beobachtete Aufloesungen ueber ALLE Abfragen
-    resolutionUnparseableByCurrency: {}, // S2-2: Werte, die DECIMAL_STRING_PATTERN NICHT bestehen, getrennt gezaehlt statt stillschweigend zu verschwinden
+    blockDSeries: [],
+    resolutionObservedByCurrency: {},
+    resolutionUnparseableByCurrency: {},
     resolutionFindings: null,
     comparableWindow: { start_utc: null, end_utc: null },
     modelsRaw: null,
@@ -1039,11 +841,6 @@ function assertBudgetNotExceeded(state) {
   }
 }
 
-// S2-2-Fix: EIN Formatbegriff fuer die Aufloesungs-Zaehlung (DECIMAL_STRING_PATTERN ueber
-// isParseableDecimalString), statt des vorherigen nachsichtigen decimalPartsOf-Alleinganges.
-// Ein Wert, der das strenge Format nicht besteht, zaehlt NICHT in die Aufloesung ein (sonst
-// waere M2a still falsch, s. Befund S2-2) - er wird stattdessen als "nicht parsebar"
-// ausgewiesen, damit die Zahl nicht kommentarlos verschwindet.
 export function classifyBalanceEntryForResolution(entry) {
   if (!isParseableDecimalString(entry.total_balance)) {
     return { currency: entry.currency, parseable: false };
@@ -1051,10 +848,6 @@ export function classifyBalanceEntryForResolution(entry) {
   return { currency: entry.currency, parseable: true, scale: decimalPartsOf(entry.total_balance).fracPart.length };
 }
 
-// F1: haelt http_status fest (Aufrufer entscheidet, ob die Antwort verwertbar ist) und
-// setzt firstBalanceInfos/lastBalanceInfos NUR bei echtem Erfolg (Status 200 UND
-// balance_infos nicht leer) - vorher machte json?.balance_infos ?? [] jede Fehlantwort zu
-// einem stillschweigend "leeren, aber gueltigen" Ergebnis.
 async function queryBalanceLogged(state, { block, seq, purpose }) {
   const { status, json } = await queryBalance(state.apiKey);
   const balanceInfos = json?.balance_infos ?? [];
@@ -1115,8 +908,6 @@ async function writeStreamChunks(state, { block, seq, chunks }) {
   }
 }
 
-// F1: eine Guthaben-Differenz ist nur verwertbar, wenn BEIDE Seiten (vorher/nachher)
-// Status 200 mit nicht-leeren balance_infos lieferten.
 function balanceMeasurable(before, after) {
   return (
     before.http_status === HTTP_OK &&
@@ -1126,9 +917,6 @@ function balanceMeasurable(before, after) {
   );
 }
 
-// F1 + F3(c): liefert entweder die Skala-tragenden Deltas je Waehrung, oder die
-// ausdrueckliche Zeichenkette "nicht messbar" (Guthaben-Endpunkt lieferte keinen Erfolg -
-// nicht dasselbe wie ein Delta von 0, das waere die falsche Aussage "kostet nichts").
 function computeDeltaFields(before, after) {
   if (!balanceMeasurable(before, after)) return { delta_minor_units: "nicht messbar", currency: [] };
   const deltas = computeDeltasByCurrency(before.balance_infos, after.balance_infos);
@@ -1136,9 +924,6 @@ function computeDeltaFields(before, after) {
   return { delta_minor_units, currency: Object.keys(delta_minor_units) };
 }
 
-// calls.jsonl-Zeile. Deckt sowohl erfolgreiche als auch gescheiterte Aufrufe ab (F3a:
-// error != null bei Netz-/Abbruchfehlern) - EINE Funktion statt zweier fast identischer,
-// damit Feld-Set und Redaktionspfad garantiert gleich bleiben (G5).
 function buildCallRecord({
   block,
   seq,
@@ -1186,16 +971,10 @@ function buildCallRecord({
     currency,
     est_usd_from_doc_prices: costEstimate.usd,
     est_usd_input_unbekannt: costEstimate.inputUnbekannt,
-    cum_est_usd: 0, // wird direkt nach dem Aufruf in performChatMeasurement gesetzt
+    cum_est_usd: 0,
   };
 }
 
-// EINZIGER Choke-Point fuer echte Chat-Aufrufe (jetzt auch fuer die M5-Fehlerproben, s.
-// runErrorProbes - F: vorher liefen sie an Bremse und Call-Zeile vorbei): Budget-Pruefung
-// -> Guthaben vorher -> Aufruf -> Guthaben nachher -> Protokoll. Kein Retry (Spec 6.2).
-// F3(a): der Netzaufruf selbst steht in try/catch - ein Verbindungsabbruch wird als
-// Fehlversuch protokolliert und gezaehlt, der Lauf laeuft weiter (statt Exit 1 ohne jedes
-// Protokoll).
 async function performChatMeasurement(state, args) {
   assertBudgetNotExceeded(state);
   const { block, seq, model, prompt, maxTokens, stream, includeUsage, withTool, variante, apiKeyOverride } = args;
@@ -1247,13 +1026,6 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// ============================================================================
-// M5-Fehlerproben: absichtlich falscher Schluessel, absichtlich ungueltiger Parameter.
-// Laufen einmal, unabhaengig von --blocks (M5 hat keine eigene Blockbuchstabe). Laufen
-// jetzt UEBER performChatMeasurement (denselben Choke-Point wie alle anderen Aufrufe),
-// statt postChatNonStream direkt aufzurufen - Bremse und Call-Zeile gelten auch hier.
-// ============================================================================
-
 async function runErrorProbes(state) {
   const wrongKeyRecord = await performChatMeasurement(state, {
     block: "ERR",
@@ -1289,11 +1061,6 @@ async function runErrorProbes(state) {
   );
 }
 
-// ============================================================================
-// Block-Runner (Spec 6.2). Jeder Block gibt am Ende eine Zeile aus, auch bei
-// null Befunden - Stille als Erfolgssignal ist verboten (tasks/lessons.md).
-// ============================================================================
-
 async function runBlockA(state) {
   let count = 0;
   for (const model of CONFIGURED_MODELS) {
@@ -1314,12 +1081,6 @@ async function runBlockA(state) {
   console.log(`Block A: ${count} Aufrufe abgeschlossen.`);
 }
 
-// F14: variante-Feld je Block-B-Zeile (base | wiederholung | nach-30min | kontrolle-a |
-// kontrolle-b) - vorher nur ueber die Positionsordnung in calls.jsonl rekonstruierbar.
-// contentVariant steuert den PROMPT-INHALT (nur 3 Auspraegungen, s. buildCachePrompt);
-// labelVariante ist die feinere Beschriftung fuer das Protokoll.
-// S3-2-Fix: ein Objekt-Argument statt vier positioneller (contentVariant/labelVariante waren
-// zum Verwechseln aehnlich, s. Aufrufstellen in runBlockB) - Richtwert <= 3 Argumente.
 function cacheCallArgs({ model, seq, contentVariant, labelVariante }) {
   return {
     block: "B",
@@ -1338,10 +1099,6 @@ function hasCacheHit(record) {
   return Number(record.usage_raw?.prompt_cache_hit_tokens || 0) > 0;
 }
 
-// Operativ-Fix: die 30-Minuten-Pause lief vorher INNERHALB der Modellschleife (zweimal,
-// einmal je Modell = 60 min gesamt). Sie steht jetzt HINTER beiden Modellschleifen (einmal,
-// 30 min gesamt) - jedes Modell bekommt weiterhin genau 1 Wiederholung nach 30 Minuten
-// (Spec-Anforderung unveraendert), nur die Wartezeit wird nicht dupliziert.
 async function runBlockB(state) {
   let seq = 0;
   let cacheHits = 0;
@@ -1353,7 +1110,7 @@ async function runBlockB(state) {
       if (hasCacheHit(await performChatMeasurement(state, args))) cacheHits += 1;
     }
   }
-  await delay(CACHE_REPEAT_DELAY_MS); // EINE Pause fuer beide Modelle (vorher zweimal)
+  await delay(CACHE_REPEAT_DELAY_MS);
   for (const model of CONFIGURED_MODELS) {
     seq += 1;
     const nach30min = cacheCallArgs({ model, seq, contentVariant: "base", labelVariante: "nach-30min" });
@@ -1368,21 +1125,13 @@ async function runBlockB(state) {
   console.log(`Block B: ${seq} Aufrufe, ${cacheHits} mit Cache-Treffer (prompt_cache_hit_tokens > 0).`);
 }
 
-// S2-3-Fix: liefert drei Kategorien statt eines Booleans, der "echtes 0-Delta" und "gar
-// nicht messbar" (Parse-Fehler oder fehlgeschlagene Guthaben-Abfrage) beide auf `false`
-// abbildete. delta_minor_units ist entweder die Zeichenkette "nicht messbar" (komplettes
-// Paar unverwertbar, s. computeDeltaFields), oder ein Objekt je Waehrung, dessen Eintraege
-// wiederum entweder {minor_units, scale} (gemessen) oder ein "nicht parsebar"-String
-// (Parse-Fehler, s. mapDeltasToRecords) sein koennen. Die bindende Auswertungsregel aus
-// Spec M2 (ein Delta von 0 heisst "unterhalb der Aufloesung ODER noch nicht gebucht", NIE
-// "keine Kosten") bleibt unangetastet - "nicht-messbar" ist eine eigene, dritte Kategorie.
 export function classifyDeltaOutcome(record) {
   const delta = record.delta_minor_units;
   if (typeof delta !== "object" || delta === null) return "nicht-messbar";
   const measurable = Object.values(delta).filter(
     (entry) => entry && typeof entry === "object" && entry.minor_units !== undefined,
   );
-  if (measurable.length === 0) return "nicht-messbar"; // jede Waehrung hatte einen Parse-Fehler
+  if (measurable.length === 0) return "nicht-messbar";
   return measurable.some((entry) => entry.minor_units !== "0") ? "bewegt" : "null-aber-messbar";
 }
 
@@ -1423,9 +1172,6 @@ async function runBlockC(state) {
   console.log(`Block C: ${seq} Aufrufe. Guthaben-Bewegung je Modell: ${JSON.stringify(resolutionFindings)}.`);
 }
 
-// M2(iii): die Nachbuchungs-Zeitreihe (nicht nur eine Momentaufnahme) - jeder Punkt traegt
-// sein Delta zum VORHERIGEN Punkt, damit man sieht, ob/wann eine Buchung nachtraeglich
-// einschlaegt.
 async function runBlockD(state) {
   let previousInfos = null;
   for (let i = 1; i <= BALANCE_POLL_COUNT; i += 1) {
@@ -1487,8 +1233,6 @@ async function runBlockF(state) {
 
 const BLOCK_RUNNERS = Object.freeze({ A: runBlockA, B: runBlockB, C: runBlockC, D: runBlockD, E: runBlockE, F: runBlockF });
 
-// Operativ-Fix: uebersprungene Bloecke (nicht angefordert ODER nach Budget-Abbruch
-// uebersprungen) schweigen nicht mehr - je Block eine Zeile mit Grund.
 async function runRequestedBlocks(state, options) {
   const toRun = FIXED_BLOCK_ORDER.filter((b) => options.blocks.includes(b));
   const notRequested = FIXED_BLOCK_ORDER.filter((b) => !options.blocks.includes(b));
@@ -1518,11 +1262,6 @@ async function runRequestedBlocks(state, options) {
   }
 }
 
-// ============================================================================
-// Zusammenfassung (Spec 6.3, Pre-Mortem 6): je Messfrage ein answer-Feld, entweder
-// Zahl/Struktur ODER "nicht beantwortet, Grund: ...".
-// ============================================================================
-
 const M1_MIN_SAMPLES = 30;
 
 const MODE_STREAM = "stream";
@@ -1533,12 +1272,6 @@ function operatingModeLabel(call) {
   return call.stream ? MODE_STREAM : MODE_NON_STREAM;
 }
 
-// M1 prueft die von der Spec verlangte Abdeckung "verteilt ueber beide Modelle und beide
-// Betriebsarten" als VOLLES KREUZPRODUKT (Modell x Betriebsart), nicht nur je Dimension.
-// Das war frueher unerfuellbar, weil Block E nur ein Modell streamte - "pro x stream" blieb
-// per Blockdesign leer. Seit Block E beide Modelle faehrt (Owner-Entscheidung 2026-08-08),
-// ist jede der vier Zellen erreichbar, und eine leere Zelle ist wieder das, was sie sein
-// soll: ein Befund. Sie wird namentlich genannt, nicht weggemittelt.
 function crossCoverage(withUsage) {
   const zellen = {};
   for (const model of CONFIGURED_MODELS) {
@@ -1581,8 +1314,6 @@ function computeM1Answer(calls) {
   };
 }
 
-// F11: Vorzeichen bleibt erhalten (vorher Math.abs) - eine Guthaben-ERHOEHUNG waehrend des
-// Laufs (z.B. eine Aufladung) muss als solche erkennbar sein, nicht als kleinere Ausgabe.
 export function buildOverallComparison(deltas, formulaSumUsd) {
   const out = {};
   for (const [currency, delta] of Object.entries(deltas)) {
@@ -1594,13 +1325,11 @@ export function buildOverallComparison(deltas, formulaSumUsd) {
       out[currency] = "nicht vergleichbar (Waehrung ungleich USD, kein Wechselkurs im Skript - Spec Nicht-Ziele)";
       continue;
     }
-    // Naeherung NUR fuer die menschenlesbare Prozent-Gegenprobe - die exakte Ganzzahl-
-    // Differenz bleibt in delta.deltaMinorUnits (BigInt) unangetastet erhalten.
     const deltaUsdApprox = Number(delta.deltaMinorUnits) / 10 ** delta.scale;
-    const ausgabeUsd = -deltaUsdApprox; // Ausgabe positiv, wenn das Guthaben SANK
+    const ausgabeUsd = -deltaUsdApprox;
     const abweichungProzent = formulaSumUsd === 0 ? null : ((ausgabeUsd - formulaSumUsd) / formulaSumUsd) * 100;
     out[currency] = {
-      delta_usd_approx: deltaUsdApprox, // Vorzeichen erhalten: negativ = Ausgabe, positiv = Aufladung
+      delta_usd_approx: deltaUsdApprox,
       richtung:
         deltaUsdApprox > 0
           ? "guthaben_erhoeht (vermutlich Aufladung waehrend des Laufs)"
@@ -1614,9 +1343,6 @@ export function buildOverallComparison(deltas, formulaSumUsd) {
   return out;
 }
 
-// F1 + F7 + M2(iii): meldet explizit, wenn der Guthaben-Endpunkt in keiner Abfrage einen
-// verwertbaren Erfolg lieferte (statt stillschweigend mit leeren Daten weiterzurechnen);
-// zaehlt Block-D-Abfragen getrennt von der Gesamtzahl; traegt die Nachbuchungs-Zeitreihe.
 function computeM2Answer(state) {
   const balanceFailures = state.balanceQueryCount - state.balanceQuerySuccessCount;
   if (state.balanceQuerySuccessCount === 0) {
@@ -1630,17 +1356,12 @@ function computeM2Answer(state) {
   }
   const overallDeltas = computeDeltasByCurrency(state.firstBalanceInfos, state.lastBalanceInfos);
   const formulaSumUsd = state.calls.reduce((sum, c) => sum + (c.est_usd_from_doc_prices || 0), 0);
-  // F2/M2a: die BEOBACHTETE MENGE aller vorgekommenen Nachkommastellen ueber ALLE
-  // Abfragen (z.B. [2, 8]), nicht die Momentaufnahme der ersten Abfrage.
   const aufloesungJeWaehrung = {};
   for (const [currency, scales] of Object.entries(state.resolutionObservedByCurrency)) {
     aufloesungJeWaehrung[currency] = [...scales].sort((a, b) => a - b);
   }
   return {
     aufloesung_nachkommastellen_je_waehrung_beobachtet: aufloesungJeWaehrung,
-    // S2-2: nicht parsebare Guthaben-Strings fliessen NICHT in die Aufloesung ein - stattdessen
-    // hier getrennt ausgewiesen, damit die Zahl bei einem seltsamen Anbieter-Format nicht
-    // kommentarlos verschwindet.
     aufloesung_nicht_parsebar_je_waehrung: { ...state.resolutionUnparseableByCurrency },
     einzelaufruf_bewegt_bei_iteration_je_modell: state.resolutionFindings ?? "nicht beantwortet, Grund: Block C nicht gelaufen",
     block_d_abfragen: state.blockDPollCount,
@@ -1668,9 +1389,6 @@ function cachePriceDifferenceUsd(calls, model) {
   return { alles_fehltreffer_usd: allMissUsd, gemessener_split_usd: measuredUsd, differenz_usd: allMissUsd - measuredUsd };
 }
 
-// F4: "0 Treffer" ist nur dann ein gueltiges Ergebnis, wenn es ERFOLGREICHE Aufrufe mit
-// usage gab. 0 Aufrufe (z.B. Budget-Abbruch nach Modell 1) oder lauter HTTP-Fehler
-// (usage_raw fehlt ueberall) sind KEIN Befund, sondern "nicht beantwortet".
 function summarizeCacheCalls(calls, model) {
   if (calls.length === 0) {
     return "nicht beantwortet, Grund: 0 Aufrufe fuer dieses Modell (Budget-Abbruch oder Block nicht gelaufen)";
@@ -1719,9 +1437,6 @@ function computeM4Answer(state, options) {
   return { stundenwerte, groesster_unterschied_usd: Math.max(...stundenwerte) - Math.min(...stundenwerte) };
 }
 
-// F9: p95 == max fuer n < PERCENTILE_MIN_RELIABLE_N ist ein Interpolationsartefakt, kein
-// Befund - wird ab dann ausdruecklich als unzuverlaessig gekennzeichnet statt stillschweigend
-// zurueckgegeben.
 function percentile(sortedValues, p) {
   if (sortedValues.length === 0) return null;
   const index = Math.min(sortedValues.length - 1, Math.floor((p / 100) * sortedValues.length));
@@ -1744,9 +1459,6 @@ function computeDistribution(durations) {
   };
 }
 
-// F9: Verteilung JE (Modell x Betriebsart), gescheiterte Aufrufe ausgeschlossen und
-// getrennt gezaehlt. Die gepoolte Zahl bleibt zusaetzlich stehen, aber klar benannt -
-// vorher war NUR die gepoolte Zahl da, ueber Bloecke/Modelle/Erfolg/Misserfolg hinweg vermischt.
 function computeM5Answer(state) {
   const successCalls = state.calls.filter((c) => c.http_status === HTTP_OK && c.total_ms != null);
   const failedCalls = state.calls.length - successCalls.length;
@@ -1769,15 +1481,9 @@ function computeM5Answer(state) {
   };
 }
 
-// F8: nur ueber HTTP 200 vergleichen - ein 429 (Ratenbegrenzung) liefert kein model-Feld
-// und wurde vorher als "Modell-Abweichung" (requested != returned=null) gezaehlt.
-// Gescheiterte Aufrufe werden getrennt als nicht_vergleichbar ausgewiesen.
 function computeM6Answer(state) {
   if (state.calls.length === 0) return "nicht beantwortet, Grund: keine Aufrufe protokolliert";
   const comparable = state.calls.filter((c) => c.http_status === HTTP_OK);
-  // S2-1-Fix: 0 vergleichbare Aufrufe darf NICHT als "abweichungen: 0" durchgehen - das laesst
-  // sich als "die Modell-ID stimmte immer" lesen, obwohl gar keine Antwort ueberhaupt HTTP 200
-  // war (z.B. alle Aufrufe 429). Eine leere Vergleichsmenge ist unbeantwortet, kein Befund.
   if (comparable.length === 0) {
     return `nicht beantwortet, Grund: 0 von ${state.calls.length} Aufrufen mit HTTP 200`;
   }
@@ -1812,10 +1518,6 @@ function buildM7ComboRecord(call) {
   };
 }
 
-// F5: meldet nur dann "beantwortet", wenn fuer JEDE der vier Kombinationen {Stream,
-// Nicht-Stream} x {mit Werkzeug, ohne} ein Feldpfad ODER ein ausdrueckliches Fehlen
-// vorliegt - vorher zaehlten fehlende tool_calls (weil nur usage/model geparst wurden)
-// als "0 Treffer, gueltiges Ergebnis" und M7 meldete trotzdem beantwortet.
 function computeM7Answer(calls) {
   const blockE = calls.filter((c) => c.block === "E");
   if (blockE.length === 0) return "nicht beantwortet, Grund: Block E nicht gelaufen";
@@ -1849,7 +1551,6 @@ function computeM8Answer(calls) {
   const completionTokens = Number(example.usage_raw.completion_tokens);
   const promptTokens = Number(example.usage_raw.prompt_tokens);
   const totalTokens = Number(example.usage_raw.total_tokens);
-  // F11-Geschwisterfix (M8): beide Gleichungen rechnen statt nur eine zu unterstellen.
   const eqEnthalten = totalTokens === promptTokens + completionTokens;
   const eqAdditiv = totalTokens === promptTokens + completionTokens + reasoningTokens;
   let zugehoerigkeit;
@@ -1897,10 +1598,6 @@ function buildSummary(state, options) {
   };
 }
 
-// Operativ-Fix: ein Antwortobjekt ohne verwertbaren Inhalt (z.B. jedes Modell in M3 meldet
-// "nicht beantwortet") gilt als NICHT beantwortet - vorher zeigte printConsoleSummary
-// "beantwortet (siehe summary.json)", sobald der answer-Typ kein String war, unabhaengig
-// vom Inhalt.
 function isHollowAnswer(value) {
   if (typeof value === "string") return true;
   if (Array.isArray(value)) return value.length === 0 || value.every(isHollowAnswer);
@@ -1909,7 +1606,7 @@ function isHollowAnswer(value) {
     if (entries.length === 0) return true;
     return entries.every(isHollowAnswer);
   }
-  return false; // Zahlen/Booleans/null zaehlen als Inhalt (null kann ein gueltiger Befund sein)
+  return false;
 }
 
 function printConsoleSummary(summary) {
@@ -1924,16 +1621,6 @@ function printConsoleSummary(summary) {
   }
 }
 
-// ============================================================================
-// Selbstpruefung Secret-Schutz (Spec 6.5): eigene Ausgabedateien lesen, auf den
-// echten und den absichtlich falschen Schluessel pruefen.
-// ============================================================================
-
-// F12: liest das Ausgabeverzeichnis per readdir statt einer fest verdrahteten Dateiliste
-// (die nicht mitwaechst), und unterscheidet "nichts gefunden" von "nichts geprueft" -
-// 0 Dateien (leeres oder nicht existentes Verzeichnis) ist NIEMALS "clean", sondern ein
-// eigener Status mit Begruendung (tasks/lessons.md: eine Probe, die bei null Befunden
-// schweigt, ist nicht von einer kaputten zu unterscheiden).
 async function keyLeakCheck(outputDir, secrets) {
   let entries;
   try {
@@ -1970,12 +1657,7 @@ async function keyLeakCheck(outputDir, secrets) {
   return { status: "clean", dateien_geprueft: filesChecked, bytes_geprueft: bytesChecked };
 }
 
-// ============================================================================
-// Trockenlauf (Spec 6.4): plant alle Bloecke, KEIN Netzaufruf, keine Ausgabedatei.
-// ============================================================================
-
 function estimateBlockCostUsd(approxInputTokens) {
-  // Konservativ: teuerstes Modell (v4-pro), Cache-Fehltreffer-Satz (Spec 6.4).
   const prices = DOC_PRICES_USD_PER_MTOK[MODEL_PRO];
   const inputCost = (approxInputTokens / TOKENS_PER_MILLION) * prices.cacheMiss;
   const outputCost = ((approxInputTokens * OUTPUT_TOKEN_ESTIMATE_RATIO) / TOKENS_PER_MILLION) * prices.output;
@@ -2021,8 +1703,6 @@ function plannedCallsForBlock(block) {
   }
 }
 
-// Operativ-Fix: dieselbe Planausgabe laeuft jetzt auch vor dem SCHARFEN Lauf (vorher nur
-// bei --dry-run) - extrahiert, damit main() sie ohne Duplizierung wiederverwenden kann.
 function printBlockPlan(options) {
   const ordered = FIXED_BLOCK_ORDER.filter((b) => options.blocks.includes(b));
   console.log(`Geplante Bloecke (feste Ausfuehrungsreihenfolge, gefiltert auf --blocks): ${ordered.join(", ")}`);
@@ -2044,10 +1724,6 @@ function printDryRunPlan(options) {
   console.log("Trockenlauf beendet - keine Ausgabedatei wurde angelegt.");
 }
 
-// ============================================================================
-// Hauptorchestrierung
-// ============================================================================
-
 async function main(options) {
   if (options.help) {
     printHelp();
@@ -2061,8 +1737,6 @@ async function main(options) {
 
   validateOptions(options);
 
-  // Operativ-Fix: --dry-run VOR preflightKeyCheck - ein Lauf, der per Definition nicht
-  // ins Netz geht, braucht keinen Schluessel.
   if (options.dryRun) {
     printDryRunPlan(options);
     process.exit(EXIT_OK);
@@ -2079,14 +1753,10 @@ async function main(options) {
 
   const state = createRunState({ outputDir, redact, maxUsd: options.maxUsd, apiKey, wrongApiKey });
 
-  // F3(b): summary.json + keyLeakCheck laufen in einem finally - ein Absturz nach dem
-  // ersten bezahlten Aufruf (z.B. GET /models faellt aus, ein unerwarteter Fehler in
-  // einem Block) hinterlaesst trotzdem ein Protokoll und die Regel-4-Selbstpruefung,
-  // statt Exit 1 ohne jede Spur.
   let runError = null;
   let leakResult = { status: "unueberprueft", grund: "keyLeakCheck nicht erreicht", dateien_geprueft: 0, bytes_geprueft: 0 };
   try {
-    state.modelsRaw = await validateModelsAvailable(apiKey); // fail-closed bei Modell-Drift
+    state.modelsRaw = await validateModelsAvailable(apiKey);
     await runErrorProbes(state);
     await runRequestedBlocks(state, options);
   } catch (err) {

@@ -1,51 +1,15 @@
 #!/usr/bin/env node
-// E1 (PLAN-OPENAI.md Etappe 1, S5-A4 + F1-F4): Sonde fuer die Faehigkeiten des
-// Authorization Servers (WorkOS AuthKit) und drei Live-Werte unseres eigenen
-// Gateways. Reines Feststellungswerkzeug, KEIN Gate: es haengt an keinem
-// package.json-Script, keinem CI-Lauf und keinem Boot-Pfad.
-//
-// SICHERHEITSZUSAGEN: kein Token, kein Cookie, kein Secret - weder als
-// Argument, aus der Umgebung noch in der Ausgabe. Alle drei abgefragten
-// Dokumente (Protected-Resource-Metadata, AS-Metadata an zwei Well-known-
-// Pfaden) sind oeffentliche Discovery-Dokumente. Der Schritt "POST /mcp ohne
-// Token" (F3) ist ein Lesevorgang: die mcpAuth-Middleware antwortet 401 VOR
-// jedem Tool-Handler, es wird kein Koerper gesendet und der Antwortkoerper
-// wird NIE gelesen (weder .json() noch .text()) - ausgewertet werden nur
-// Statuszeile und der WWW-Authenticate-Header. Die Sonde schreibt nichts
-// (kein "node:fs"), authentifiziert sich nirgends und importiert NICHT
-// src/config.js - der Zielhost kommt ausschliesslich als Pflichtargument.
-//
-// Aufruf:  node scripts/probe-as-faehigkeiten.mjs <basis-url>
-// Exit:    0 = alle PFLICHT-Zeilen PASS
-//          1 = mindestens eine PFLICHT-Zeile nicht PASS (Discovery-404 eingeschlossen)
-//          2 = Aufruffehler - VOR der ersten Netzanfrage (kein/falsches Argument)
-//
-// Abgrenzung zu scripts/check-setup.js (Nachbesserung 18 aus S5): beide lesen
-// dieselben zwei Well-known-Pfade, aber check-setup fragt die LOKALE Config
-// und den LOKAL laufenden Gateway ab und bricht beim ersten Treffer ab; diese
-// Sonde bekommt den Host als Argument, leitet den Issuer aus der LIVE-PRM-
-// Antwort ab, liest BEIDE AS-Metadata-Pfade und bewertet acht benannte Felder.
-// Keine dritte Kopie derselben Logik entsteht dadurch, nur ein Ueberlapp bei
-// der Pfadliste (Konstante, keine Logik) - s. docs/RUNBOOK-AS-METADATA.md.
-//
-// Jeder Lauf erzeugt einen auth_failed-Audit-Eintrag am Gateway (der 401 auf
-// POST /mcp ohne Token) - das ist erwartet, keine Alarmkette haengt daran.
 import { fileURLToPath } from "node:url";
-
-// ---- Konstanten (G25/G35: alle Zahlen und Bewertungswoerter benannt) -----------
 
 const PRM_PFAD = "/.well-known/oauth-protected-resource";
 const MCP_PFAD = "/mcp";
-// Reihenfolge MUSS mit discoverJwksUri (src/auth.js) uebereinstimmen: bei
-// zwei erfolgreichen Antworten benotet die Sonde sonst ein anderes Dokument
-// als die Produktion tatsaechlich konsumiert (Befund MESSTREUE).
 const AS_PFADE = ["/.well-known/openid-configuration", "/.well-known/oauth-authorization-server"];
 const ABRUF_TIMEOUT_MS = 10000;
 const HTTP_OK_MIN = 200;
 const HTTP_OK_MAX = 299;
 const HTTP_UNAUTHORIZED = 401;
 const STATUS_LABEL_BREITE = 7;
-const ARGV_ZIEL_OFFSET = 2; // argv[0]=node, argv[1]=Skriptpfad - das Ziel steht ab Index 2
+const ARGV_ZIEL_OFFSET = 2;
 
 const EXIT_OK = 0;
 const EXIT_PFLICHT_VERLETZT = 1;
@@ -67,8 +31,6 @@ const USAGE = "Aufruf: node scripts/probe-as-faehigkeiten.mjs <basis-url>";
 const FELD_FEHLT = "(fehlt)";
 const NICHT_GEMESSEN = "nicht gemessen (AS-Metadata nicht erreichbar)";
 const PRM_FEHLT_BEFUND = "PRM fehlt -> F1/F2 nicht feststellbar, A3 NICHT deployen";
-
-// ---- reine Helfer (kein IO, offline testbar) -----------------------------------
 
 export function ohneEndSchraegstrich(wert) {
   return typeof wert === "string" ? wert.replace(/\/$/, "") : wert;
@@ -102,14 +64,10 @@ export function bewerteVorhanden(wert) {
   return typeof wert === "string" && wert.length > 0 ? PASS : FAIL;
 }
 
-// CIMD (T-10): fehlt das Feld, ist die Faehigkeit nicht beworben - das ist ein
-// FAIL (Ist-Zustand "aus"), kein UNKNOWN. Nur echtes true zaehlt.
 export function bewerteWahr(wert) {
   return wert === true ? PASS : FAIL;
 }
 
-// T-11 (RFC 9207): SHOULD-Feld laut WorkOS-Doku unbelegt. Fehlt es -> UNKNOWN
-// (kann nicht beurteilt werden), explizites false -> FAIL.
 export function bewerteWahrOderUnbekannt(wert) {
   if (wert === undefined) return UNKNOWN;
   return wert === true ? PASS : FAIL;
@@ -128,9 +86,6 @@ export function liesZiel(argumente) {
   return ohneEndSchraegstrich(kandidat);
 }
 
-// A3-Vorhersage (S5 V5/PM-2): beantwortet, ob die kanonische Audience-Falle
-// (Etappe 8, A3) greifen wuerde. Kann NICHT zwischen "OAUTH_AUDIENCE leer" und
-// "OAUTH_AUDIENCE kanonisch gesetzt" unterscheiden - beide ergeben NEIN.
 export function a3Vorhersage({ resource, publicUrl }) {
   if (!publicUrl) {
     return { status: VORHERSAGE_UNBEKANNT, aussage: "Modus nicht oauth: publicUrl nicht von aussen lesbar" };
@@ -144,8 +99,6 @@ export function a3Vorhersage({ resource, publicUrl }) {
     aussage: "Footgun feuert JA -- A3 NICHT deployen, erst Audience angleichen (PM-3)",
   };
 }
-
-// ---- Acht-Zeilen-Tabelle (deklarativ, EIN Renderpfad - G5) ---------------------
 
 const FAEHIGKEITEN = [
   {
@@ -215,8 +168,6 @@ const FAEHIGKEITEN = [
 ];
 const FAEHIGKEITEN_ANZAHL = FAEHIGKEITEN.length;
 
-// doc === null (AS-Metadata nicht erreichbar) -> alle acht Zeilen UNKNOWN mit
-// benanntem Grund; das faellt nie wie ein bestandener Lauf aus.
 export async function bewerteFaehigkeiten(doc, issuer) {
   return FAEHIGKEITEN.map((eintrag, index) => {
     const nummer = index + 1;
@@ -229,12 +180,6 @@ export async function bewerteFaehigkeiten(doc, issuer) {
   });
 }
 
-// ---- IO-Teil --------------------------------------------------------------------
-
-// Der EINE Abrufmechanismus fuer alle drei Schritte (DIP: injizierbar ueber
-// { abrufen }, damit Tests ohne Netz laufen - Muster scripts/anruf-unterbrechungen.mjs).
-// lesenAlsJson:false (Schritt 2, POST /mcp): der Antwortkoerper wird NIE
-// angefasst, weder .json() noch .text() wird aufgerufen.
 async function holeDokument(url, { methode = "GET", lesenAlsJson = true } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ABRUF_TIMEOUT_MS);
@@ -262,8 +207,6 @@ async function holeDokument(url, { methode = "GET", lesenAlsJson = true } = {}) 
   }
 }
 
-// PRM nicht erreichbar (Netzfehler oder Nicht-2xx) - dieselbe benannte
-// FAIL-Zeile wie ein leeres authorization_servers (Nachbesserung 16).
 function prmUnerreichbarZeile(antwort) {
   const statusText = antwort.status === null ? antwort.fehler : `HTTP ${antwort.status}`;
   return statusZeile({
@@ -274,8 +217,6 @@ function prmUnerreichbarZeile(antwort) {
   });
 }
 
-// PRM erreichbar (2xx) - Issuer kann trotzdem fehlen (leeres
-// authorization_servers, heute erreichbarer Zustand, s. src/auth.js).
 function prmZeileUndInfos(antwort) {
   const authorizationServers = antwort.doc?.authorization_servers ?? [];
   const issuer = authorizationServers[0] ?? null;
@@ -293,7 +234,6 @@ function prmZeileUndInfos(antwort) {
   return { zeile, issuer, resource, infos };
 }
 
-// F1/F2: GET <basis>/.well-known/oauth-protected-resource.
 export async function messePrm(basis, { abrufen }) {
   const antwort = await abrufen(`${basis}${PRM_PFAD}`, { methode: "GET" });
   if (!istErfolg(antwort.status)) {
@@ -309,10 +249,6 @@ function extrahierePublicUrl(herausforderung) {
   return rohUrl.endsWith(PRM_PFAD) ? rohUrl.slice(0, -PRM_PFAD.length) : rohUrl;
 }
 
-// F3: POST <basis>/mcp ohne Token. 401 MIT WWW-Authenticate -> Modus oauth
-// (PASS als Befund); 401 OHNE Challenge -> Modus token/legacy (kein Fehler
-// der Sonde, ein Ist-Zustand). publicUrl kommt aus resource_metadata und
-// speist die A3-Vorhersage.
 export async function messeMcpModus(basis, { abrufen }) {
   const antwort = await abrufen(`${basis}${MCP_PFAD}`, { methode: "POST", lesenAlsJson: false });
   const herausforderung = antwort.status === HTTP_UNAUTHORIZED ? antwort.header("www-authenticate") : null;
@@ -346,9 +282,6 @@ function pfadName(pfad) {
   return pfad.split("/").pop();
 }
 
-// F4: beide Well-known-Pfade am Issuer abrufen, in Produktionsreihenfolge
-// (AS_PFADE, s.o.) - der erste erfolgreiche traegt das Dokument, exakt wie
-// discoverJwksUri es in src/auth.js auswaehlt.
 export async function messeAsMetadata(issuer, { abrufen }) {
   const antworten = [];
   for (const pfad of AS_PFADE) {
@@ -379,8 +312,6 @@ export async function messeAsMetadata(issuer, { abrufen }) {
   return { zeile, faehigkeiten, infos };
 }
 
-// Kein Issuer aus der PRM ableitbar (404 oder leeres Feld) -> F4 kann gar
-// nicht erst messen; trotzdem acht UNKNOWN-Zeilen (Formatinvariante).
 async function messeAsMetadataOderLeer(prm, { abrufen }) {
   if (!prm.issuer) {
     return {
@@ -419,8 +350,6 @@ export async function sondiere(argumente, { abrufen = holeDokument } = {}) {
     exitCode: exitCodeAus(alleZeilen),
   };
 }
-
-// ---- Ausgabe ----------------------------------------------------------------
 
 function formatSpalte(text) {
   return text.padEnd(STATUS_LABEL_BREITE);
@@ -486,7 +415,6 @@ async function main() {
   process.exit(bericht.exitCode);
 }
 
-// Nur als Skript ausfuehren, NICHT beim Import (Muster scripts/anruf-unterbrechungen.mjs).
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMain) {
   main().catch((err) => {

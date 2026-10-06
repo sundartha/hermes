@@ -1,34 +1,3 @@
-// IEL-Messwerkzeug: misst die Uebergabe Telnyx -> ElevenLabs-SIP (IE1, F-A..F-F) mit
-// Maschine-zu-Maschine-Anrufen. Kein Mensch in der Leitung, kein Tunnel, keine Nummer.
-//
-// IEL-B11: zusaetzlich die Nach-Deploy-Maschinenanrufe (N1/N2, Spec E20) in einer EIGENEN
-// Zaehler-Gruppe ("nachdeploy", hoechstens 3 Anrufe) - die M1-Gruppe ("m1", 5 Anrufe) bleibt
-// unberuehrt und byte-identisch. N3 (Live-Umleitung an die gepinnte DID) wird NICHT gebaut:
-// sie braucht Prod-DB/`.env`-Ziele, die dieser Worktree nicht hat, und wuerde einen echten
-// Produktions-Inbound (Buchung, Inbox, Benachrichtigung) ausloesen. Die Live-Umleitung bleibt
-// eine Messung am ersten realen Fehlerfall (Spec 8).
-//
-// Aufruf:  node scripts/iel-mess.mjs <fall|status|setup|teardown> [--dry-run]
-//          node scripts/iel-mess.mjs setup --nachdeploy|--nur-ausgehend [--dry-run]
-// Faelle und ihre Parameter: scripts/iel-mess.cases.json (Aenderungen NUR dort).
-//
-// Sicherungen IM Skript, nicht per Konvention:
-//   - Zaehler je Fall-Gruppe (Pflichtfeld "zaehler" im Fall): "m1" -> tasks/iel-m1-zaehler.json,
-//     max 5. "nachdeploy" -> tasks/iel-nachdeploy-zaehler.json, max 3. Jede Gruppe hat eigene
-//     Sperr- und Ergebnisdatei. Gezaehlt wird VOR dem Senden. Fehlt oder zerfaellt die
-//     Zaehlerdatei einer Gruppe, wird verweigert - Loeschen setzt nichts zurueck.
-//   - Sperrdatei je Gruppe: nie zwei Mess-Anrufe derselben Gruppe gleichzeitig.
-//   - Je Anruf <= 60 s: Anbieter-Grenzen (TeXML TimeLimit + <Dial timeLimit>, Call-Control
-//     time_limit_secs) UND aktives Auflegen per API (Wachhund, Nachfassen, unabhaengiger
-//     Notaus-Timer, SIGINT/SIGTERM). Diese Stufen gelten fuer ALLE Gruppen gleich.
-//   - Nur SIP-Ziele: M1 ElevenLabs-SIP mit Spike2- oder fiktiver 555-01xx-Kennung, oder die
-//     nie antwortende TEST-NET-Adresse. Nachdeploy NUR ElevenLabs-SIP mit fiktiver 555-01xx-
-//     Kennung (kein Spike2, kein TEST-NET). Eine echte Telefonnummer waehlt dieses Werkzeug
-//     nicht: ein Fall mit dem Feld "ziel_e164" wird abgewiesen (pruefeFallDefinition).
-//   - --dry-run sendet nichts: fetch ist per Stolperdraht gesperrt und wird gezaehlt;
-//     Zaehler, Sperre und Ergebnisdatei werden nicht geschrieben.
-//   - Schluessel nur aus .env (src/config.js), nie in einer Ausgabe.
-
 import { istTrockenlauf, netzaufrufeImTrockenlauf, TROCKENLAUF_SCHALTER } from "./iel-mess-stolperdraht.mjs";
 
 import { randomBytes } from "node:crypto";
@@ -39,19 +8,15 @@ import { holeRegistrierungen, inventarSchnappschuss } from "../src/elevenlabs/nu
 import * as anbieter from "./iel-mess-anbieter.mjs";
 import { sammleCallEvents, sammleDetailRecords, sammleElGespraeche, sammleNachdeployBelege, werteMitschnittAus } from "./iel-mess-belege.mjs";
 
-// --- Owner-Grenzen -----------------------------------------------------------------------
 const MAX_ANRUFE = 5;
 const MAX_NACHDEPLOY_ANRUFE = 3;
 const HART_MAX_S = 60;
-// Auflege-Stufen relativ zum Laufstart. Jede Anfrage bricht nach 5 s ab (Transport), eine
-// Stufe kann sich also um hoechstens Abfrage + Takt verspaeten und bleibt unter 60 s.
 const WACHHUND_AUFLEGEN_S = 40;
 const NACHFASSEN_S = 48;
 const NOTAUS_S = 55;
 const STATUS_TAKT_MS = 2000;
 const ANRUFER_SUCHE_MAX_S = 12;
 const SUCHE_TAKT_MS = 1000;
-// ElevenLabs schliesst das Gespraech nach dem Auflegen erst ab; vorher fehlen Abbruchgrund und Dauer.
 const EL_NACHLAUF_MS = 20000;
 const DIAL_TIMEOUT_MIN_S = 5;
 const DIAL_TIMEOUT_MAX_S = 20;
@@ -64,12 +29,9 @@ if (!(WACHHUND_AUFLEGEN_S < NACHFASSEN_S && NACHFASSEN_S < NOTAUS_S && NOTAUS_S 
   throw new Error("Auflege-Stufen verletzen die 60-s-Grenze");
 }
 
-// --- Erlaubte Ziele ----------------------------------------------------------------------
 const EL_SIP_HOST = "sip.rtc.elevenlabs.io";
-// RFC 5737 TEST-NET-1: routet nirgendwohin, antwortet nie - die Messung "Gegenstelle stumm".
 const STUMMER_SIP_HOST = "192.0.2.1";
 const SPIKE2_KENNUNG = "+15739090177";
-// NANP-Fiktivbereich 555-0100..0199: gehoert niemandem.
 const FIKTIVE_KENNUNG = /^\+1\d{3}55501\d{2}$/;
 const E164 = /^\+\d{8,15}$/;
 const SIP_ZIEL = /^sip:([^@;?:]+)@([^:;?]+)(:\d+)?(;[a-z]+=[a-z]+)*$/;
@@ -87,15 +49,12 @@ function tasksDatei(name) {
   return Object.freeze({ url: new URL(name, TASKS), anzeige: `tasks/${name}` });
 }
 
-// Mitschnitt-Format beider Gruppen: Telnyx record_start, Download-Schluessel und STT-Dateiname.
 const MITSCHNITT_MP3 = "mp3";
 
 const EXIT = Object.freeze({ bedienfehler: 1, verweigert: 2, laufzeitfehler: 3, trockenlaufVerletzt: 4 });
 
 class Verweigerung extends Error {}
 class Bedienfehler extends Error {}
-
-// --- Dateien -----------------------------------------------------------------------------
 
 async function existiert(pfad) {
   try {
@@ -133,7 +92,6 @@ async function leseZaehler(gruppe) {
   return zaehler;
 }
 
-// Echt: schreibt Zaehler, Sperre, Ergebnis. Trocken: liest nur und zeigt, was geschaehe.
 function echteBuchhaltung(gruppe) {
   return {
     async mitSperre(handlung) {
@@ -179,9 +137,6 @@ function buchhaltungFuer(gruppe) {
   return istTrockenlauf ? trockeneBuchhaltung(gruppe) : echteBuchhaltung(gruppe);
 }
 
-// Wegwerf-Registrierung (setup/teardown): EIN gemeinsamer Zustand fuer alle Setup-Varianten
-// (M1 ohne Agent, Nachdeploy am Agenten, Nachdeploy nur-ausgehend) - es kann immer nur eine
-// geben, teardown baut sie wieder ab, bevor die naechste angelegt wird.
 function echteWegwerfAblage() {
   return {
     merke: (zustand) => schreibeAtomar(PFADE.wegwerf, zustand),
@@ -201,8 +156,6 @@ function trockeneWegwerfAblage() {
     async vergiss() {
       console.log("[TROCKEN] wuerde tasks/iel-m1-wegwerf.json loeschen");
     },
-    // Ohne Wegwerf-Datei verweigert ein echter Lauf, bevor die Zaehlerzeile erscheint (V5):
-    // der Trockenlauf zeigt trotzdem die Musterkennung, statt selbst zu verweigern.
     async idFuerFall() {
       if (await existiert(PFADE.wegwerf)) {
         const zustand = await leseJson(PFADE.wegwerf, "tasks/iel-m1-wegwerf.json unlesbar");
@@ -217,8 +170,6 @@ function trockeneWegwerfAblage() {
 function wegwerfAblageFuer() {
   return istTrockenlauf ? trockeneWegwerfAblage() : echteWegwerfAblage();
 }
-
-// --- Zaehler-Gruppen -----------------------------------------------------------------------
 
 async function keineZusatzbelege() {
   return {};
@@ -253,8 +204,6 @@ function belegArt(gruppe, endung) {
   return `${gruppe.artPraefix}-${endung}`;
 }
 
-// --- Pruefungen vor jedem Senden -------------------------------------------------------
-
 function pruefeSchluessel() {
   const vorhanden = {
     TELNYX_API_KEY: Boolean(config.telephony.telnyxApiKey),
@@ -287,8 +236,6 @@ function pruefeSipZiel(sipZiel) {
   return teile;
 }
 
-// IEL-B11 (Nachdeploy): enger als pruefeSipZiel - nur ElevenLabs-SIP mit fiktiver Kennung.
-// Weder Spike2 noch die stumme TEST-NET-Adresse sind hier erlaubte Nachdeploy-Ziele (V4).
 function pruefeFiktivesElZiel(sipZiel) {
   const teile = sipZielTeile(sipZiel);
   if (!teile) throw new Verweigerung(`sip_ziel hat keine SIP-URI-Form: ${anbieter.maskiereNummern(sipZiel)}`);
@@ -319,8 +266,6 @@ function pruefeHeaderNamen(header) {
   if (falscheHeader.length > 0) throw new Verweigerung(`Header-Namen nicht erlaubt: ${falscheHeader.join(", ")}`);
 }
 
-// Ein Fall, der eine zugewiesene Registrierung voraussetzt, braucht auch den Agenten in
-// .env - sonst waere der spaetere Vergleich blind (pruefeRegistrierungsErwartung).
 function pruefeErwartungsKonfiguration(fall) {
   if (fall.registrierung_erwartet?.agent) pruefeAgentKennung();
 }
@@ -340,8 +285,6 @@ async function loeseRegistrierungsId(kontext, id) {
   return kontext.wegwerf.idFuerFall();
 }
 
-// Die EINE Projektion einer Registrierung, die Faelle und Setup teilen (G5): erwarteter
-// Agent (Positiv-Kontrolle) und ob/wie Inbound konfiguriert ist.
 function registrierungsSicht({ id, daten, anruferKennung }) {
   return {
     id,
@@ -362,8 +305,6 @@ function pruefeRegistrierungsErwartung(sicht, erwartet) {
   }
 }
 
-// Liest die Registrierung VOR dem Anruf: erwarteter Agent (Positiv-Kontrolle fuer F-A) und
-// Abgleich, dass das SIP-Ziel wirklich diese Registrierung meint - sonst waere der Anruf blind.
 async function leseRegistrierung(kontext) {
   const id = await loeseRegistrierungsId(kontext, kontext.fall.el_registrierung_id);
   if (!id) return null;
@@ -385,8 +326,6 @@ async function pruefeRegistrierungVorAnruf(kontext) {
   Object.assign(kontext.beleg, { registrierung });
 }
 
-// IEL-B11 (N2): Trunk-Inventar VOR dem Anruf, nur lesend, ueber den B9-Helfer - laeuft damit
-// ueber denselben Transport und ist trockenlauffest. Nur fuer Faelle mit n2_protokoll.
 async function merkeInventarVorAnruf(kontext) {
   if (!kontext.fall.n2_protokoll) return;
   try {
@@ -399,8 +338,6 @@ async function merkeInventarVorAnruf(kontext) {
     throw new Verweigerung(`Trunk-Inventar vor dem Anruf nicht lesbar (HTTP ${fehler.providerStatus ?? "unbekannt"}) - kein Anruf`);
   }
 }
-
-// --- Kontext ---------------------------------------------------------------------------
 
 function mitLaufId(header, laufId) {
   return Object.fromEntries(Object.entries(header ?? {}).map(([name, wert]) => [name, String(wert).replace("{{lauf_id}}", laufId)]));
@@ -441,8 +378,6 @@ function neuerBeleg({ name, fall, laufId, header, gruppe }) {
   };
 }
 
-// Fallback-Kette fuer die Test-Kennung des Trockenlauf-Musters: SIP-Ziel > el_kennung >
-// das Setup-Feld der jeweils passenden Sektion (M1 "setup" oder "setup_nachdeploy").
 function elKennungFuer({ fall, konfiguration, setupVariante }) {
   const setupSektion = setupVariante ? konfiguration.setup_nachdeploy : konfiguration.setup;
   return sipZielTeile(fall.sip_ziel)?.kennung ?? fall.el_kennung ?? setupSektion?.el_nummer;
@@ -483,8 +418,6 @@ function baueKontext({ name, fall, konfiguration, gruppe, setupVariante }) {
   };
 }
 
-// --- Anruf-Ablauf ----------------------------------------------------------------------
-
 function merkeSchritt(kontext, schritt, antwort) {
   const fehler = antwort.json?.errors?.[0];
   kontext.beleg.schritte.push({
@@ -497,11 +430,6 @@ function merkeSchritt(kontext, schritt, antwort) {
   return antwort;
 }
 
-// Beleg Anruf 1 (2026-09-14, lauf iel-mu1c1dal-8ac9a5): active_calls der Call-Control-App
-// lieferte als erstes das TeXML-Elternbein (dessen call_control_id == TeXML-sid laut
-// TeXML-Anrufliste); answer darauf -> 422/90102, das echte eingehende Bein blieb ungeantwortet.
-// Deshalb: Kandidaten zuerst aus call.initiated (direction incoming, "to" traegt die lauf_id),
-// dann aus active_calls; jeder Kandidat wird hoechstens einmal angenommen, erstes 2xx gewinnt.
 const HTTP_UNVERARBEITBAR = 422;
 
 function kandidatenAusEreignissen(antwort, laufId) {
@@ -517,7 +445,6 @@ async function nimmErstenKandidatenAn(kontext, kandidaten, versucht) {
     versucht.add(bein.call_control_id);
     const antwort = merkeSchritt(kontext, "anrufer_annehmen", await kontext.transport.senden(anbieter.ccAktionAnfrage(bein.call_control_id, "answer", {})));
     if (antwort.ok) return bein;
-    // Ein abgelehntes Bein aus active_calls ist (Beleg oben) das TeXML-Elternbein.
     if (antwort.status === HTTP_UNVERARBEITBAR && !kontext.griffe.hauptbein) {
       Object.assign(kontext.griffe, { hauptbein: bein.call_control_id, hauptbeinQuelle: "active_calls_abgelehnt" });
     }
@@ -548,8 +475,6 @@ async function nimmAnruferAn(kontext) {
   Object.assign(kontext.griffe, { ccId: bein.call_control_id, ccLeg: bein.call_leg_id, ccSession: bein.call_session_id });
   const aktion = (name, koerper) => anbieter.ccAktionAnfrage(bein.call_control_id, name, koerper);
   if (kontext.fall.mitschnitt) {
-    // trim/play_beep bleiben AUS: ein Beep waere unser eigener Fremdton, trim verschoebe die
-    // Zeitachse, an der M-S2 gemessen wird.
     const koerper = { format: kontext.gruppe.mitschnittFormat, channels: "dual" };
     merkeSchritt(kontext, "mitschnitt_start", await kontext.transport.senden(aktion("record_start", koerper)));
   }
@@ -560,20 +485,15 @@ async function ccBeinBeendet(kontext, callControlId) {
   return antwort.status === HTTP_NICHT_GEFUNDEN || antwort.json?.data?.is_alive === false;
 }
 
-// Der TeXML-Weg: Anlegen + Annehmen des Anrufer-Beins, Endeerkennung, Auflege-Griff. Der
-// Bauer der Anlage-Anfrage kommt herein - der Weg weiss nichts ueber das gesendete Dokument.
 function texmlWeg(anfrageBauer) {
   return {
     async starte(kontext) {
       const antwort = merkeSchritt(kontext, "texml_anlegen", await kontext.transport.senden(anfrageBauer(kontext)));
-      // Anruf 1: weder data.sid noch data.call_sid gesetzt - Schluesselnamen belegen die Form.
       const daten = antwort.json?.data ?? antwort.json ?? {};
       Object.assign(kontext.beleg, { texml_antwort_schluessel: Object.keys(daten) });
       const hauptbein = daten.sid ?? daten.call_sid ?? null;
       Object.assign(kontext.griffe, { hauptbein });
       if (hauptbein) Object.assign(kontext.griffe, { hauptbeinQuelle: "texml_antwort" });
-      // Auch ohne sid in der Antwort: das Anrufer-Bein ist der zweite Griff zum Auflegen.
-      // Ohne unser answer wird nie zu ElevenLabs gebrueckt.
       if (antwort.ok) await nimmAnruferAn(kontext);
     },
     async beendet(kontext) {
@@ -599,9 +519,6 @@ const WEGE = Object.freeze({
   },
 });
 
-// nurHauptbein (F-C): nur das Elternbein per API beenden, damit sichtbar wird, ob DAS die
-// Bruecke beendet. Ohne Hauptbein-Griff faellt es auf das Anrufer-Bein zurueck, sonst
-// geschaehe gar nichts. Wachhund, Nachfassen und Notaus legen weiter BEIDE Beine auf.
 async function legeAuf(kontext, grund, { nurHauptbein = false } = {}) {
   const { griffe, transport, uhr, beleg } = kontext;
   const weg = WEGE[kontext.fall.art];
@@ -654,11 +571,6 @@ async function fuehreAnrufDurch(kontext) {
   }
 }
 
-// --- Digest-Messung (M3): Wegwerf-Zugangsdaten nur fuer die Dauer EINES Anrufs ------------
-// Ablauf: Registrierung lesen -> Zugangsdaten per PATCH setzen -> per GET belegen (sonst
-// Abbruch VOR der Zaehler-Reservierung, also kein verbrauchter Anruf) -> Anruf -> im finally
-// Zugangsdaten entfernen und den Ausgangszustand per GET belegen. Die Zugangsdaten stehen nur
-// im Speicher (kontext.geheim) und im TeXML-Koerper, nie in Ausgabe oder Ergebnisdatei.
 const DIGEST_BENUTZER_BYTES = 6;
 const DIGEST_PASSWORT_BYTES = 18;
 
@@ -701,7 +613,6 @@ async function mitDigestZugang(kontext, handlung) {
   if (!kontext.registrierung?.id) throw new Verweigerung("Digest-Fall braucht eine el_registrierung_id");
   const id = kontext.registrierung.id;
   const vorher = await leseRegistrierungRoh(kontext, id);
-  // Verweigert, wenn schon Zugangsdaten anliegen: die liessen sich nicht verlustfrei zurueckschreiben.
   const vorherInbound = alsInboundKonfiguration(vorher.inbound_trunk);
   Object.assign(kontext.beleg, { digest: { vorher: digestSicht(vorher) } });
   try {
@@ -732,7 +643,6 @@ async function sammleBelegeNachAnruf(kontext) {
 async function messeAnruf(kontext) {
   pruefeAnrufFall(kontext);
   pruefeSchluessel();
-  // Budget zuerst: ist es erschoepft, geht nicht einmal die lesende Vorab-Anfrage hinaus.
   await leseZaehler(kontext.gruppe);
   await pruefeRegistrierungVorAnruf(kontext);
   await merkeInventarVorAnruf(kontext);
@@ -748,8 +658,6 @@ async function messeAnruf(kontext) {
   Object.assign(kontext.beleg, await kontext.gruppe.sammleZusatzbelege(kontext));
   await kontext.buchhaltung.schreibe(kontext.beleg);
 }
-
-// --- Faelle ohne Anruf -----------------------------------------------------------------
 
 async function leseProtokollierteKennungen(gruppe) {
   if (!(await existiert(gruppe.ergebnis.url))) return [];
@@ -820,15 +728,11 @@ async function messeRegistrierungsVergleich(kontext) {
   });
 }
 
-// --- Wegwerf-Registrierung bei ElevenLabs (setup/teardown) -----------------------------
-
 const SETUP_VARIANTEN = Object.freeze({
   "--nachdeploy": Object.freeze({ baueKoerper: anbieter.wegwerfKoerperAmAgenten, erwartet: Object.freeze({ agent: true, inbound_trunk: true }) }),
   "--nur-ausgehend": Object.freeze({ baueKoerper: anbieter.wegwerfKoerperNurAusgehend, erwartet: Object.freeze({ agent: true, inbound_trunk: false }) }),
 });
 
-// Gemeinsame Anlage-Naht fuer M1 ("setup") und Nachdeploy ("setup --variante"): existiert-
-// Pruefung, fiktiv-Pruefung, POST, Wegwerf-Zustand merken. Liefert die phone_number_id.
 async function legeRegistrierungAn(kontext, { abschnitt, koerperFuer }) {
   if (await existiert(PFADE.wegwerf)) throw new Verweigerung("tasks/iel-m1-wegwerf.json existiert - erst 'teardown'");
   const setup = kontext.konfiguration[abschnitt];
@@ -881,8 +785,6 @@ async function raeumeWegwerfAb(kontext) {
   await kontext.wegwerf.vergiss();
 }
 
-// --- Status (offline) ------------------------------------------------------------------
-
 const STATUS_NAME_BREITE = 16;
 const STATUS_ART_BREITE = 24;
 const STATUS_ZAEHLER_BREITE = 10;
@@ -916,8 +818,6 @@ async function zeigeStatus(kontext) {
   }
 }
 
-// --- Einstieg --------------------------------------------------------------------------
-
 const UNTERBEFEHLE = Object.freeze({ status: zeigeStatus, setup: legeWegwerfAn, teardown: raeumeWegwerfAb });
 const ARTEN = Object.freeze({
   "texml-bruecke": messeAnruf,
@@ -926,13 +826,8 @@ const ARTEN = Object.freeze({
   "registrierung-vergleich": messeRegistrierungsVergleich,
 });
 
-// argv[0] = node, argv[1] = Skriptpfad - beide vor den eigentlichen Argumenten ueberspringen.
 const CLI_ARGV_OFFSET = 2;
 
-// Die drei Felder, mit denen eine blosse Aenderung an scripts/iel-mess.cases.json den Lauf
-// umlenken koennte - jedes fail-closed, keines faellt still als undefined durch.
-// "ziel_e164" (eine echte Telefonnummer statt eines SIP-Ziels) ist verboten: dieses Werkzeug
-// waehlt ausschliesslich SIP-Ziele, nie eine Telefonnummer.
 function pruefeFallDefinition(name, fall) {
   if (fall.ziel_e164 !== undefined) {
     throw new Verweigerung(`Fall ${name} traegt das Feld ziel_e164 - dieses Werkzeug waehlt ausschliesslich SIP-Ziele, nie eine Telefonnummer - verweigert`);
@@ -945,9 +840,6 @@ function pruefeFallDefinition(name, fall) {
   }
 }
 
-// Loest EINEN Aufruf-Eintrag auf: entweder "setup --variante" (Nachdeploy-Wegwerf-Anlage,
-// braucht genau eine bekannte Option) oder ein Unterbefehl/Fall ohne jede Option. Alles
-// andere (unbekannter Name, ueberzaehlige Optionen) ist kein gueltiger Eintrag.
 function loeseEinstieg(argumente, konfiguration) {
   const [name, ...optionen] = argumente;
   if (name === "setup" && optionen.length === 1 && Object.hasOwn(SETUP_VARIANTEN, optionen[0])) {

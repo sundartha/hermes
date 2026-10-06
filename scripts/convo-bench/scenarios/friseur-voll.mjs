@@ -1,10 +1,3 @@
-// Szenario "friseur-voll": outbound, Per-Call-Kontext AKTIV. Stammkunde bei "Friseur
-// Schneider" will den naechsten freien Termin bei Petra fuer einen Herrenhaarschnitt,
-// bevorzugt vormittags. Persona = Empfangsmitarbeiterin, die einen Vormittags-Slot
-// anbietet.
-// P4/P1b: Der Agent BUCHT nicht mehr (book_appointment existiert nicht mehr). Die
-// Erfolgsdefinition ist deshalb umgestellt - nicht "gebucht", sondern: den Terminwunsch
-// sauber als Nachricht fuer den Besitzer abliefern (message_taken) statt scheinzubuchen.
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
@@ -30,11 +23,8 @@ export default {
   sttNoise: false,
   maxTurns: 8,
   expectDegradation: false,
-  // AL-P8: recap_present - hat der Agent vor Abschluss zusammengefasst, was er fuer
-  // den Besitzer festhaelt? Gefaltete Wendungen (Muster mustNotPromiseSubstrings).
   recapSubstrings: ["ich notiere", "ich habe notiert", "ich gebe das weiter", "richte ich aus", "sage ich bescheid"],
   maxOpeningChars: BENCH_MAX_OPENING_CHARS,
-  // AL-P11: die Ergebnis-Karte muss Tag/Uhrzeit/Ansprechperson aus dem Gespraech tragen.
   expectedResult: [
     { slot: "day", any: ["dienstag", "donnerstag"] },
     { slot: "time", any: ["10:30", "9:00", "neun"] },

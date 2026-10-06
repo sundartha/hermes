@@ -1,8 +1,3 @@
-// AL-P8: der Bestands-Treiber der Conversation-Bench - TeXML/TwiML ueber
-// /voice/outbound|incoming|turn|status. Verhalten byte-identisch zur Fassung, die vor
-// dieser Phase in runner.mjs lebte (reine Verschiebung hinter den Treiber-Port,
-// drivers.mjs); nur der Ort und die Rueckgabeform (turn statt parsed) haben sich
-// geaendert (Muster scripts/convo-bench/drivers.mjs, Port-Vertrag im Kopfkommentar).
 import { parseVoiceBody } from "./texml.mjs";
 import { TELNYX_DUMMY_HEADERS } from "./bench-constants.mjs";
 import { BENCH_DEFAULT_CALLER } from "./bench-constants.mjs";
@@ -15,26 +10,15 @@ function extractCallIdFromUrl(url) {
   return new URL(url).searchParams.get("callId");
 }
 
-// turn.endedVia ersetzt das TeXML-spezifische hasHangup/!nextTurnUrl verhaltensgleich:
-// hasHangup -> "agent_hangup", !nextTurnUrl -> "no_gather". turn_cap bleibt Sache des
-// Runners (transportunabhaengiger globaler Kosten-Cap).
 function toTurn(parsed) {
   const endedVia = parsed.hasHangup ? "agent_hangup" : !parsed.nextTurnUrl ? "no_gather" : null;
   return { sayTexts: parsed.sayTexts, endedVia };
 }
 
-// Der Bestands-Treiber: TeXML/TwiML ueber /voice/outbound|incoming|turn|status.
-// scenario ist Teil des Treiber-Port-Vertrags (drivers.mjs); dieser Treiber braucht
-// ausser provider nichts daraus (die scenario-abhaengigen Env-Felder setzt buildEnv
-// im Runner, unabhaengig vom Treiber).
 export async function createTexmlTransport({ provider }) {
   let nextTurnUrl = null;
   let localUrl = null;
 
-  // Erster Request der Choreografie (Spec §3-2): outbound -> /voice/outbound, inbound
-  // -> /voice/incoming (To=aktive Owner-Nummer, From=Anrufer). Fuer Telnyx werden die
-  // Dummy-Signatur-Header gesetzt, damit providerFromHeaders() korrekt telnyx erkennt
-  // (SKIP_TWILIO_SIGNATURE_CHECK umgeht nur die Krypto-Pruefung selbst).
   async function open({ srv, scenario: sc, call, activeOwnerNumber }) {
     localUrl = srv.localUrl;
     const isInbound = sc.direction === "inbound";
@@ -73,9 +57,6 @@ export async function createTexmlTransport({ provider }) {
     return toTurn(parsed);
   }
 
-  // Beendet den Call ueber die echte /voice/status-Webhook-Route (reiner Status-
-  // Renderer, KEIN originateCall - Spec §6). Das Summary-Polling bleibt beim Runner
-  // (transportunabhaengig).
   async function finish(callId) {
     await fetch(`${localUrl}/voice/status?callId=${callId}`, {
       method: "POST",

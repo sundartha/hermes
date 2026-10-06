@@ -1,12 +1,3 @@
-// Szenario "hold-warteschleife" (PLAN-CONVERSATION-QUALITY-V2 P4): der Angerufene legt
-// den Hoerer beiseite ("Moment, ich schaue nach") und schweigt zwei Turns lang. Gemessen
-// wird, ob der Agent die Wartezeit aushaelt, statt vor der Klaerung aufzulegen, und ob er
-// nach der Rueckkehr an SEINE Frage anknuepft statt neu zu eroeffnen.
-// scriptedTurns[0] pinnt den Hold-Ausloeser deterministisch (Muster termin-duenn);
-// silentTurns 1+2 gehen als LEERES SpeechResult raus - genau das, was ein Gather ohne
-// Erkennung liefert. Bewusst ZWEI stille Turns: die P3.2-Staffel (no-speech-escalation)
-// legt erst beim DRITTEN leeren Gather selbst auf; drei stille Turns wuerden also den
-// deterministischen Server-Pfad messen statt die Modell-Entscheidung.
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
@@ -26,16 +17,8 @@ export default {
   silentTurns: [1, 2],
   sttNoise: false,
   maxTurns: 8,
-  // Eroeffnung(1) + Reaktion auf "Moment"(2) + zwei Reprompts(3,4) + Reaktion auf die
-  // Rueckkehr(5): frueher als beim 5. Agenten-Turn ist ein Hangup zwangslaeufig "vor
-  // der Klaerung".
   minTurnsBeforeAgentHangup: 5,
   expectDegradation: false,
-  // AL-P8: NUR TeXML. Dieses Szenario misst die serverseitige No-Speech-Staffel
-  // (src/no-speech-escalation.js) - minTurnsBeforeAgentHangup:5 ist auf ihre zwei
-  // Reprompts kalibriert. Im Assistant-Pfad gibt es sie nicht (Stille erzeugt dort
-  // gar keinen Shim-Request). Auf shim gemessen waere die Zahl eine andere Groesse
-  // unter demselben Namen. Ein shim-eigenes Hold-Szenario ist NICHT diese Phase.
   drivers: ["texml"],
   maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [

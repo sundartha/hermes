@@ -1,7 +1,3 @@
-// Szenario "inbound-nachricht" (Spec §9): inbound via /voice/incoming. Der Anrufer
-// will lediglich eine Nachricht fuer den Besitzer hinterlassen. Prueft, dass die
-// Pflicht-Offenlegung (NUR fuer Outbound vorgeschrieben) hier NICHT faelschlich
-// mitgesprochen wird, und dass das Anliegen als Action Item ankommt.
 import { MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
@@ -22,7 +18,6 @@ export default {
   sttNoise: false,
   maxTurns: 6,
   expectDegradation: false,
-  // AL-P11: die Ergebnis-Karte muss Thema + gewuenschte Aktion tragen.
   expectedResult: [
     { slot: "topic", any: ["rechnung"] },
     { slot: "action", any: ["zurueckruf", "rueckruf", "zurück"] },

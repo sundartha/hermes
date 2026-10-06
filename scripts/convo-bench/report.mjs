@@ -1,11 +1,6 @@
-// Report-Schicht (Spec §5-iii): JSON-Report pro (Szenario,Repeat) + Aggregat +
-// kompakte stdout-Tabellen (Run-Summary + A/B-Vergleich). Reines IO/Formatting, keine
-// Fachlogik (die liegt in runner.mjs/checks.mjs/judge.mjs).
 import fs from "fs";
 import path from "path";
 
-// Schreibt EINEN (Szenario,Repeat)-Report als JSON nach data/convo-bench/<run-id>/
-// (data/ ist gitignored). Dateiname wie in der Spec: <scenario>-r<n>.json.
 export function writeReport(outDir, result) {
   fs.mkdirSync(outDir, { recursive: true });
   const file = path.join(outDir, `${result.meta.scenario}-r${result.meta.repeat_index}.json`);
@@ -13,7 +8,6 @@ export function writeReport(outDir, result) {
   return file;
 }
 
-// Aggregat ueber alle (Szenario,Repeat)-Ergebnisse EINES Laufs.
 export function writeSummary(outDir, results) {
   const summary = results.map((r) => ({
     scenario: r.meta.scenario,
@@ -31,8 +25,6 @@ export function writeSummary(outDir, results) {
   return summary;
 }
 
-// IP2/BEW-1: driver+direction direkt an der Zeile mit der Bench-Zahl (checks=X/Y) -
-// die Tabelle wird oft isoliert kopiert/gelesen, ohne die Lauf-Kopfzeile daneben.
 function fmtRow(r) {
   const passed = r.checks.filter((c) => c.pass).length;
   const scenario = r.meta.scenario.padEnd(20);
@@ -47,8 +39,6 @@ export function printSummaryTable(results) {
   console.log(`  geschaetzte Gesamtkosten: $${totalUsd.toFixed(4)}`);
 }
 
-// Liest alle Report-Dateien EINES run-id-Verzeichnisses (fuer `compare`), ohne
-// summary.json (kein Report-Objekt, anderes Schema).
 export function readReportDir(dir) {
   return fs
     .readdirSync(dir)
@@ -60,8 +50,6 @@ function reportKey(r) {
   return `${r.meta.scenario}-r${r.meta.repeat_index}`;
 }
 
-// AL-P8: Check-Werte EINES Reports als id -> value-Map (nur Checks mit gesetztem
-// value-Feld, additiver Vertrag s. checks.mjs).
 function checkValues(report) {
   const values = new Map();
   for (const c of report?.checks ?? []) {
@@ -70,15 +58,11 @@ function checkValues(report) {
   return values;
 }
 
-// A/B-Diff-Tabelle (Spec §2 `compare`-Subcommand): baseline (A) im Master-Stand,
-// candidate (B) im Arbeits-Worktree, IDENTISCHE Szenarien+scriptedTurns+repeat.
 export function printCompareTable(reportsA, reportsB) {
   const a = new Map(reportsA.map((r) => [reportKey(r), r]));
   const b = new Map(reportsB.map((r) => [reportKey(r), r]));
   const keys = [...new Set([...a.keys(), ...b.keys()])].sort();
 
-  // AL-P8 (Pre-Mortem): unterschiedliche Treiber sind KEINE vergleichbare Messung -
-  // eine Messung gilt nur fuer die Konfiguration, in der sie erhoben wurde.
   const driverA = reportsA[0]?.meta.driver;
   const driverB = reportsB[0]?.meta.driver;
   if (driverA && driverB && driverA !== driverB) {

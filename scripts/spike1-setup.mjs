@@ -1,29 +1,4 @@
 #!/usr/bin/env node
-// Baut den Messaufbau fuer Spike 1 (UMSETZUNG-ElevenLabs.md, "Traegt der
-// Rueckfrage-Kanal?") im ElevenLabs-Konto auf: EIN Webhook-Werkzeug, das auf
-// den Wartezeit-Endpunkt aus scripts/spike1-consult-echo.mjs zeigt, und EINEN
-// eigenen Wegwerf-Agenten, der nur dieses Werkzeug kennt.
-//
-// VORAUSSETZUNG: der Schluessel (ELEVENLABS_API_KEY, gelesen ueber
-// src/config.js) braucht das Recht `convai_write`. Fehlt es, antworten sowohl
-// das Anlegen von Werkzeug/Agent als auch BEIDE WebSocket-Eintrittspunkte des
-// Messklienten mit HTTP 401 und `missing_permissions: convai_write`. Eine
-// Konto-Pruefung aus reinen GET-Aufrufen faellt darauf nicht herein - sie sieht
-// sauber aus, obwohl kein einziger Schreibweg offen ist.
-//
-// Aufruf:  npm run spike1:setup -- <oeffentliche-basis-url>
-// Die Basis-URL ist die von aussen erreichbare Adresse des Echo-Endpunkts
-// (z.B. ein Tunnel auf den lokalen Port von spike1-consult-echo.mjs); daran
-// haengt das Skript CONSULT_PATH. Fehlt das Argument, bricht es ab - es wird
-// KEINE Adresse geraten und KEIN Tunnel gestartet.
-//
-// Gibt Werkzeug- und Agentenkennung auf stdout aus (TOOL_ID=/AGENT_ID=) und
-// liest den Agenten danach zurueck, damit belegt ist, was wirklich an ihm
-// steht statt was gesendet wurde.
-//
-// Tut NICHT: messen (das ist scripts/spike1-ws-probe.mjs), den bestehenden
-// Agenten anfassen, eine Datei schreiben, aufraeumen. Der angelegte Agent ist
-// Wegwerf-Material und gehoert nach dem Spike von Hand geloescht.
 import { config, stripTrailingSlash } from "../src/config.js";
 
 const LOG_PREFIX = "[spike1-setup]";
@@ -35,32 +10,17 @@ const AGENT_PATH_PREFIX = "/v1/convai/agents/";
 const ERROR_BODY_PREVIEW_CHARS = 800;
 const RAW_BODY_PREVIEW_CHARS = 600;
 
-// Diese vier Schalter haengen laut Convai-Schema am WERKZEUG, nicht am Agenten
-// (im Vorbereitungslauf am Live-Schema geprueft): response_timeout_secs
-// (Bereich 5 bis 300), pre_tool_speech, interruption_mode und tool_call_sound.
-// Genau sie entscheiden, ob eine lange Rueckfrage-Wartezeit das Gespraech
-// zerfallen laesst - deshalb sitzen sie hier und nicht am Agenten.
 const TOOL_RESPONSE_TIMEOUT_SECS = 120;
 
-// turn_timeout dagegen gehoert zum AGENTEN und ist pro Gespraech NICHT
-// ueberschreibbar. Runde 2 des Spikes (anderer Wert) braucht deshalb ein PATCH
-// am Agenten zwischen den Runden, keinen Parameter am Messklienten.
 const AGENT_TURN_TIMEOUT_SECS = 7;
-// -1 schaltet das Auflegen nach Stille ab: der Messklient schweigt waehrend der
-// Werkzeug-Wartezeit absichtlich, das darf das Gespraech nicht beenden.
 const AGENT_SILENCE_END_CALL_DISABLED = -1;
 const AGENT_MAX_DURATION_SECONDS = 600;
-// Der Testagent soll nicht kreativ sein, sondern reproduzierbar dasselbe tun.
 const AGENT_TEMPERATURE = 0;
 const AGENT_LLM = "gpt-4o-mini";
 const AGENT_LANGUAGE = "de";
 
 const { apiKey, apiBase } = config.voice.elevenLabsPlayTts;
 
-// Ereignisse, die der Server dem WebSocket-Klienten melden soll.
-// agent_tool_request/agent_tool_response sind der Grund fuer den ganzen Aufbau:
-// beide Kanten eines server-seitigen Webhook-Werkzeugs kommen damit ohne
-// Telefonie am Messklienten an.
 const CLIENT_EVENTS = [
   "conversation_initiation_metadata",
   "ping",
@@ -85,9 +45,6 @@ function parseJsonOrRaw(text) {
   }
 }
 
-// Der Fehlerpfad zeigt Methode, Pfad, Status und Antwortanfang - genau daran
-// ist `missing_permissions: convai_write` erkennbar. Der Schluessel steht in
-// keiner Meldung.
 async function callApi(path, method, body) {
   const res = await fetch(`${apiBase}${path}`, {
     method,
@@ -174,7 +131,6 @@ async function createTool(consultUrl) {
   return created.id;
 }
 
-// Gegenprobe statt Vertrauen: was steht nach dem Anlegen wirklich am Agenten?
 async function logAgentReadBack(agentId) {
   const readBack = await callApi(`${AGENT_PATH_PREFIX}${agentId}`, "GET");
   const conversationConfig = readBack.conversation_config ?? {};

@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-// GP-P2-Nachtrag: traegt den fehlenden Typ der Zahlungsmethode nach (gebundene
-// stripePaymentMethodId + stripePaymentMethodType null). Ohne ihn gilt die Methode
-// fail-closed als ungeeignet und der automatische Wiederanlauf (GP-P3/GP-P4)
-// ueberspringt den zahlenden Mandanten dauerhaft und lautlos.
-// Trockenlauf ist Default; --apply schreibt. NUR pg (die realen Datensaetze leben
-// dort); json = sauberer No-Op. Muster scripts/reconcile-stale-subscriptions.js.
-// Aufruf: node scripts/reconcile-payment-method-types.js [--apply]
 import { config } from "../src/config.js";
 import * as store from "../src/store.js";
 
@@ -15,8 +8,6 @@ if (config.store.storeBackend !== "pg") {
   console.log("[pm-type] json-Backend: No-Op (keine Bestandsdaten lokal).");
   process.exit(0);
 }
-// Ohne Stripe-Secret gibt es nichts zu fragen - lauter Abbruch statt eines Laufs, der
-// jeden Mandanten als "lookup_failed" meldet und wie ein Befund aussieht. Secret nie loggen.
 if (!config.billing.stripeSecretKey) {
   console.error("[pm-type] STRIPE_SECRET_KEY fehlt - ohne Stripe-Abfrage kein Abgleich.");
   process.exit(1);
@@ -28,7 +19,7 @@ const { reconcilePaymentMethodTypes } = await import("../src/billing/payment-met
 
 const runner = await createPortalRunner();
 const report = await reconcilePaymentMethodTypes({ store, billing: stripeBilling, apply });
-if (apply) await store.save(); // PFLICHT: pg-Flush abwarten (Muster reconcile-stale-subscriptions)
+if (apply) await store.save();
 
 console.log(
   `[pm-type] mode=${apply ? "APPLY" : "DRY-RUN"} scanned=${report.scanned} ` +

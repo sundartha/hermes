@@ -1,22 +1,4 @@
 #!/usr/bin/env node
-// Setzt ELEVENLABS_API_KEY in der .env - aber NUR, wenn der Schluessel das Recht
-// convai_write nachweislich hat. Ein Schluessel mit reinem Leserecht wird abgelehnt,
-// die .env bleibt dann byte-identisch.
-//
-// Aufruf (interaktiv, Eingabe bleibt unsichtbar):
-//   node scripts/elevenlabs-key-setzen.mjs
-// Ohne TTY liest das Skript den Schluessel von der Standardeingabe (Pipe) - so laeuft
-// die Pruefung ohne Tastatur. In BEIDEN Faellen gilt: der Schluessel kommt nie als
-// Kommandozeilen-Argument herein (sonst staende er in der Shell-Historie und, waehrend
-// der Laufzeit, fuer jeden lesbar in der Prozessliste). Argumente lehnt das Skript ab.
-//
-// Der Schluessel wird NIE ausgegeben, geloggt oder in eine Fehlermeldung geschrieben -
-// auch nicht abgekuerzt. Bei Erfolg meldet das Skript genau drei Zeilen.
-//
-// Die Sicherungskopie heisst .env.bak-<Zeitstempel> und faellt damit unter das Muster
-// `.env.bak*` in der .gitignore (geprueft am 2026-08-14) - sie kann also nicht
-// versehentlich committet werden. Faellt dieses Muster je aus der .gitignore, darf hier
-// keine Sicherungskopie mehr entstehen.
 import { chmodSync, copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -35,10 +17,6 @@ const ENV_ZEILE = new RegExp(`^${ENV_SCHLUESSEL_NAME}=.*$`, "m");
 const DATEI_RECHTE_NUR_EIGENTUEMER = 0o600;
 const ARGV_NUTZLAST_START = 2;
 
-// Ein API-Schluessel besteht aus druckbaren ASCII-Zeichen ohne Leerzeichen. Alles andere
-// (Steuerzeichen, Umbrueche, Unicode aus einem Fehl-Kopieren) lehnen wir ab, BEVOR es in
-// einen HTTP-Header geht: eine Header-Bibliothek, die einen ungueltigen Wert bemaengelt,
-// koennte diesen Wert in ihre Fehlermeldung schreiben - und das waere ein Leck.
 const DRUCKBARE_ASCII = /^[!-~]+$/;
 
 const EINGABE_FRAGE = `${ENV_SCHLUESSEL_NAME} einfuegen (Eingabe bleibt unsichtbar): `;
@@ -54,13 +32,8 @@ const STATUS_ABBRUCH = "abbruch";
 
 const NICHTS_GESCHRIEBEN = "Nichts geschrieben, .env unveraendert.";
 
-// Erwarteter Abbruch mit einer Meldung, die Antonio direkt lesen kann - abgegrenzt von
-// unerwarteten Fehlern, die oben mit anderem Text herauskommen.
 class Abbruch extends Error {}
 
-// Reine Funktion: was macht dieses eine Zeichen aus dem bisher Getippten? Der Rohmodus
-// liefert Zeichen einzeln (und bei Einfuegen in Bloecken), also lebt die Entscheidung hier
-// und nicht im Stream-Handler.
 function zeichenVerarbeiten(puffer, zeichen) {
   if (zeichen === ZEICHEN_WAGENRUECKLAUF || zeichen === ZEICHEN_ZEILENVORSCHUB) {
     return { puffer, status: STATUS_FERTIG };
@@ -75,8 +48,6 @@ function zeichenVerarbeiten(puffer, zeichen) {
   return { puffer: puffer + zeichen, status: STATUS_WEITER };
 }
 
-// Im Rohmodus gibt das Terminal die Zeichen an uns weiter, statt sie selbst anzuzeigen -
-// dadurch bleibt der Schluessel unsichtbar, auch fuer den, der ueber die Schulter schaut.
 function verdeckteEingabeLesen() {
   return new Promise((erfuellen, ablehnen) => {
     const strom = process.stdin;
@@ -131,8 +102,6 @@ async function schluesselLesen() {
   return schluessel;
 }
 
-// Einziger Netzwerk-Ausgang. Liefert Status UND Rumpf, weil die Schreibrecht-Pruefung
-// beides braucht. Der Schluessel steckt nur im Header und taucht in keiner Meldung auf.
 async function anfragen(zweck, adresse, optionen) {
   try {
     const antwort = await fetch(adresse, optionen);
@@ -157,10 +126,6 @@ async function leserechtPruefen(schluessel) {
   }
 }
 
-// Schreibrecht-Pruefung ohne Nebenwirkung: der Rumpf ist ABSICHTLICH leer ({}) und
-// beschreibt damit kein Werkzeug. Der Server prueft erst die Berechtigung, dann den Rumpf -
-// fehlt das Recht, kommt 401 mit missing_permissions; ist das Recht da, kommt die
-// Rumpf-Beanstandung 422. Angelegt wird in KEINEM der beiden Faelle etwas.
 async function schreibrechtPruefen(schluessel) {
   const { status, rumpf } = await anfragen("Schreibrecht", API_BASIS + PFAD_WERKZEUGE, {
     method: "POST",
@@ -182,17 +147,12 @@ async function schreibrechtPruefen(schluessel) {
   );
 }
 
-// Ersatz ueber eine Funktion statt ueber einen Ersetzungs-String: ein $ im Schluessel
-// waere sonst ein Steuerzeichen fuer replace ($&, $1) und der geschriebene Wert waere
-// still ein anderer als der gepruefte.
 function schluesselZeileSetzen(inhalt, schluessel) {
   const zeile = `${ENV_SCHLUESSEL_NAME}=${schluessel}`;
   if (ENV_ZEILE.test(inhalt)) return inhalt.replace(ENV_ZEILE, () => zeile);
   return inhalt.endsWith("\n") ? `${inhalt}${zeile}\n` : `${inhalt}\n${zeile}\n`;
 }
 
-// Form YYYYMMDD-HHMMSS (UTC) - dieselbe Namensform wie die Sicherungskopien von
-// scripts/set-elevenlabs-key.sh, damit alle Sicherungen im Verzeichnis zusammen sortieren.
 function zeitstempel() {
   const [datum, uhrzeit] = new Date().toISOString().split("T");
   return `${datum.replaceAll("-", "")}-${uhrzeit.replace(/\..*$/, "").replaceAll(":", "")}`;
@@ -216,7 +176,6 @@ async function main() {
         `gelesen, damit er nicht in Shell-Historie und Prozessliste landet. ${NICHTS_GESCHRIEBEN}`,
     );
   }
-  // .env liegt neben dem Repo-Wurzelverzeichnis, aus dem dieses Skript geladen wurde.
   const pfad = fileURLToPath(new URL("../.env", import.meta.url));
   if (!existsSync(pfad)) throw new Abbruch(`${pfad} existiert nicht. ${NICHTS_GESCHRIEBEN}`);
 

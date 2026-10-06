@@ -1,12 +1,3 @@
-// Szenario "zweiter-anruf-gedaechtnis" (AL-P8, erweitert AL-P12): die Gegenseite bezieht
-// sich auf ein frueheres Gespraech. AL-P8 mass das "Vorher" (der Agent kennt es nicht,
-// darf nichts erfinden). AL-P12 seedet ueber priorCalls/settings echtes Gedaechtnis
-// (allowCallMemory=true, ein Vor-Anruf mit Ergebnis-Karte) und prueft zusaetzlich das
-// "Nachher": nennt der Agent einen Fakt aus dem Vor-Anruf, den er nur aus dem
-// Beziehungsgedaechtnis haben kann? Beide Messungen laufen im selben Lauf - der
-// Anti-Erfindungs-Check bleibt scharf: mit Gedaechtnis darf der Agent den Fakt nennen,
-// aber weiterhin keine Zusage erfinden. scriptedTurns[0] pinnt den Ausloeser
-// deterministisch (Muster termin-duenn).
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
@@ -17,8 +8,6 @@ export default {
   briefing: null,
   constraints: null,
   context: null,
-  // AL-P12: Gedaechtnis-Freigabe an + EIN Vor-Anruf mit Ergebnis-Karte an dieselbe
-  // Zielnummer (Default-`to` aus seedCall, s. buildSeed in runner.mjs).
   settings: { allowCallMemory: true },
   priorCalls: [
     {
@@ -57,10 +46,6 @@ export default {
     "memory_fact_recalled",
   ],
   mustNotAskSubstrings: [],
-  // Best-effort-Heuristik (kein Hard-Gate, Muster mustNotPromiseSubstrings): erfundene
-  // Erinnerung an ein Gespraech, das der Agent strukturell nicht kennen kann. Mit
-  // Gedaechtnis darf der Agent den Fakt NENNEN, aber weiterhin keine Zusage erfinden -
-  // diese Liste bleibt deshalb unveraendert.
   mustNotPromiseSubstrings: [
     "wie besprochen", "letzte woche hatten wir", "daran erinnere ich mich", "wie beim letzten mal",
   ],

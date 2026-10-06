@@ -1,40 +1,13 @@
 #!/usr/bin/env node
-// Misst, was ein Workflow-Lauf WIRKLICH gekostet hat.
-//
-// WARUM ES DIESES SKRIPT GIBT: die Kennzahl "subagent_tokens", die das Workflow-Werkzeug nach
-// jedem Lauf meldet, laesst die Cache-Reads weg. Die sind aber ~99,7 % des Verbrauchs. Gemessen
-// am 29.08.2026: das Werkzeug meldete 3,0 Mio fuer einen Lauf, der 860,7 Mio gekostet hat, und
-// eine Uebergabe schrieb "rund 15,5 Mio" fuer eine Kette, die 3.060 Mio gekostet hat - Faktor 197.
-// Weil niemand die echte Zahl las, wuchsen die Beweispflichten in den per-run-Skripten monoton
-// (6 -> 9 -> 6 -> 7 -> 10 -> 12 "woertlich"-Forderungen ueber E1..E5), ohne dass etwas dagegen
-// drueckte. Dieses Skript ist die fehlende Gegenkraft: es liest die Agenten-Transkripte, in denen
-// die Wahrheit ohnehin steht.
-//
-// KOSTENFORMEL: Verbrauch ~ Kontextgroesse x Turns. Das ist quadratisch, nicht linear - jede
-// Ausgabe, die einmal im Kontext liegt, wird bei JEDEM weiteren Turn erneut gelesen und bezahlt.
-// Zwei Stellschrauben folgen daraus: (1) nichts Grosses in den Kontext holen (keine woertlichen
-// Testlauf-Ausgaben; Exit-Code und die "# pass"/"# fail"-Zeilen genuegen als Beleg), (2) Agenten
-// kurz halten (viele kleine mit frischem Kontext statt eines langen).
-//
-// Aufruf:
-//   node scripts/workflow-kosten.mjs                 die juengsten Laeufe dieses Projekts
-//   node scripts/workflow-kosten.mjs <lauf-id>       ein Lauf, je Agent aufgeschluesselt
-//   node scripts/workflow-kosten.mjs --alle          Gesamtbilanz, teuerste zuerst
-//
-// Nur lesend. Keine Secrets, keine Gespraechsinhalte - ausschliesslich Zaehlwerte.
-
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
 
-// Ab hier gilt ein Agent als teuer: bei ~467k Kontext kostet jeder weitere Turn spuerbar.
-// Der teuerste gemessene Agent lief 955 Turns und verbrauchte 447 Mio.
 const TURNS_WARNSCHWELLE = 150;
 const MIO = 1e6;
 const TAUSEND = 1e3;
 const STANDARD_ANZAHL_LAEUFE = 12;
 
-// Spaltenbreiten der Ausgabe.
 const BREITE_ID = 17;
 const BREITE_DATUM = 18;
 const BREITE_SUMME = 9;
@@ -45,15 +18,11 @@ const BREITE_TRENNER_LAUF = 72;
 const BREITE_SUMMENLABEL = 35;
 const BEISPIELE_IM_FEHLERTEXT = 3;
 
-// "2026-08-29T18:02:11.000Z" -> "2026-08-29 18:02"
 const DATUM_LAENGE = 16;
 
 const LEER_SUMME = { cacheRead: 0, cacheWrite: 0, input: 0, output: 0, turns: 0 };
 
 function projektWurzel() {
-  // Claude Code legt Transkripte unter ~/.claude/projects/<pfad-mit-bindestrichen>/ ab: JEDES
-  // Zeichen ausserhalb [A-Za-z0-9] wird zum Bindestrich - Schraegstriche wie Leerzeichen.
-  // (Der Repo-Pfad enthaelt beides, "Mein Unternehmen".)
   const kodiert = process.cwd().replace(/[^A-Za-z0-9]/g, "-");
   return join(homedir(), ".claude", "projects", kodiert);
 }
@@ -65,7 +34,6 @@ function unterverzeichnisse(pfad) {
     .map((eintrag) => join(pfad, eintrag.name));
 }
 
-// Alle Lauf-Verzeichnisse: <projekt>/<sitzung>/subagents/workflows/<lauf>/
 function laufVerzeichnisse(wurzel) {
   const gefunden = [];
   for (const sitzung of unterverzeichnisse(wurzel)) {
@@ -74,8 +42,6 @@ function laufVerzeichnisse(wurzel) {
   return gefunden;
 }
 
-// Eine Transkript-Zeile ist JSON; traegt sie einen usage-Block, war sie ein bezahlter Turn.
-// Der Block sitzt je nach Satzart unter "message.usage" oder direkt unter "usage".
 function leseUsage(zeile) {
   if (!zeile) return null;
   let satz;
@@ -177,9 +143,6 @@ const alleLaeufe = laufVerzeichnisse(wurzel)
   .map(leseLauf)
   .filter((lauf) => lauf.agenten.length > 0);
 
-// POSITIV-KONTROLLE: "nichts gefunden" darf nicht aussehen wie "alles guenstig". Ohne diesen
-// Riegel meldet ein falscher Pfad still eine leere, beruhigende Bilanz. Beim ersten Lauf hat
-// genau das zugeschlagen (Leerzeichen im Repo-Pfad falsch kodiert).
 if (alleLaeufe.length === 0) {
   console.error(`FEHLER: unter "${wurzel}" liegt kein einziger Workflow-Lauf.`);
   console.error("Entweder ist das Arbeitsverzeichnis falsch, oder der Ablageort hat sich geaendert.");

@@ -1,42 +1,4 @@
 #!/usr/bin/env node
-// KV2-5 (tasks/kostenv2/spec-kv2-5.md, Abnahmekriterium (d)): das Messwerkzeug fuer die
-// Pflicht-Typmenge des Profils el_convai_sip. LESEND, kein Schreibzugriff. Wiederholbar
-//
-// Drei Ausgaben, EINE Ausfuehrung:
-//   Q1 (Pflicht-Typmenge): welche record_type-Werte fuehrt der EL-Weg BEWEISBAR?
-//   Q2 (Latenz-Obergrenze): ehrliche Obergrenze (jetzt - started_at des juengsten Belegs),
-//       NICHT die reale Latenz - die ist retrospektiv nicht messbar (s. Ausgabe).
-//   Q3 (inference): traegt record_type=inference auf diesem Konto ueberhaupt Betraege?
-//
-// POSITIV-KONTROLLE ist PFLICHT (Lehre pruefkommando-ohne-positiv-kontrolle): ohne den
-// Nachweis, dass der Abruf fuer eine BEKANNTE call_control_id aus dem ALTEN Telnyx-
-// Zeitraum ueberhaupt Treffer liefert, ist "0 Treffer fuer EL" kein Messergebnis, sondern
-// ein kaputtes Kommando. Scheitert sie, gilt (d) als gescheitert - unabhaengig vom
-// EL-Ergebnis.
-//
-// Eingaben (per Env, NIEMALS im Code hartkodiert - operative Daten, keine Geheimnisse,
-// aber Konto-spezifisch und nur durch eine DB-Abfrage zu beschaffen, s. Kopf-Kommentar
-// unten bei KV2_5_KNOWN_SIP_CALL_IDS):
-//   TELNYX_API_KEY                    - Pflicht, wird NIE geloggt/ausgegeben
-//   TELNYX_API_BASE                   - Default https://api.telnyx.com
-//   KV2_5_KNOWN_SIP_CALL_IDS          - kommagetrennt, die bekannten sip_call_id-Werte der
-//                                        EL-Anrufe (z.B. aus einer lesenden DB-Abfrage auf
-//                                        calls.sip_call_id WHERE cost_profile='el_convai_sip')
-//   KV2_5_KNOWN_CALL_CONTROL_ID       - EINE bekannte call_control_id aus dem ALTEN
-//                                        Telnyx-Zeitraum (Positiv-Kontrolle, Q0)
-//
-// Ausgabe: eine Textbilanz PLUS ein JSON-Block - beide PII-frei (keine Rufnummer, kein
-// API-Key, keine Rufnummer in cld/cli wird gedruckt).
-//
-// G35-Ausnahme (wie bei den uebrigen operativen scripts/*.mjs, z.B. convo-bench.mjs,
-// deepseek-b1-messung.mjs): dieses Skript laeuft AUSSERHALB des Servers und importiert
-// deshalb bewusst nicht src/config.js (kein Config-/Boot-Seiteneffekt in einem reinen
-// CLI-Werkzeug) - process.env ist hier die einzig sinnvolle Quelle.
-//
-// Die reinen Funktionen sind exportiert und main() laeuft nur, wenn das Skript direkt
-// kann ein Test die Messlogik pinnen, ohne TELNYX_API_KEY zu brauchen oder main() beim
-// Import ungewollt mit Netz-IO auszuloesen.
-
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
@@ -48,17 +10,9 @@ const FIRST_PAGE = 1;
 const SECONDS_PER_MINUTE = 60;
 const MS_PER_SECOND = 1000;
 const MS_PER_MINUTE = SECONDS_PER_MINUTE * MS_PER_SECOND;
-const USD_DECIMALS_SCALE = 1_000_000; // Rundung der USD-Summe auf 6 Nachkommastellen
+const USD_DECIMALS_SCALE = 1_000_000;
 const JSON_INDENT = 2;
 
-// Bekannte Belegtypen (ASSIGNABLE_COST_RECORD_TYPES, s. src/telephony/adapters/telnyx/voice.js) -
-// EXPLIZIT dupliziert statt importiert: dieses Skript laeuft ausserhalb des Servers und
-// darf keinen Netz-/Config-Seiteneffekt eines src/-Imports mitziehen (reines CLI-Werkzeug).
-// "inference" gehoert NICHT zu ASSIGNABLE_COST_RECORD_TYPES (kein Traeger bucht ihn heute),
-// steht aber trotzdem in der Probe-Liste - Q3 verspricht im Kopfkommentar ausdruecklich,
-// zu messen, ob der Typ auf diesem Konto ueberhaupt Betraege traegt. Ohne den Typ in dieser
-// Liste bleibt inferenceBilanz() immer auf der leeren Liste stehen (Map.get liefert
-// undefined) und Q3 wird nie gemessen, sondern nur mit "0" vorgetaeuscht.
 export const RECORD_TYPES_TO_PROBE = Object.freeze([
   "sip-trunking", "call-control", "speech-to-text", "text-to-speech", "recording", "ai-voice-assistant",
   "inference",
@@ -68,9 +22,6 @@ function parsedIds(csv) {
   return (csv || "").split(",").map((eintrag) => eintrag.trim()).filter(Boolean);
 }
 
-// EIN GET gegen /v2/detail_records. ERLAUBTE Parameter AUSSCHLIESSLICH filter[record_type],
-// page[size], page[number] - kein weiterer filter[...] (ein falscher Filtername liefert
-// HTTP 200 mit 0 Treffern, stiller Datenverlust, s. voice.js-Kopfkommentar).
 async function fetchPage(recordType, pageNumber) {
   const url = new URL(DETAIL_RECORDS_PATH, TELNYX_API_BASE);
   url.searchParams.set("filter[record_type]", recordType);
@@ -81,9 +32,6 @@ async function fetchPage(recordType, pageNumber) {
   return { ok: res.ok, status: res.status, url: url.pathname + url.search, data: body.data || [], meta: body.meta };
 }
 
-// Alle Seiten EINES Typs (Obergrenze: dieses Skript ist EINMALIG, keine Sweep-Drossel
-// noetig - anders als der Produktions-Adapter blaettert es hier ohne Zeitfenster-Bindung
-// bis zur letzten Seite oder bis zu einer kleinen Seitenobergrenze).
 const MAX_PAGES = 20;
 async function fetchAllPages(recordType) {
   const alle = [];
@@ -97,7 +45,6 @@ async function fetchAllPages(recordType) {
   return { ok: true, records: alle };
 }
 
-// Ruft ALLE Pflicht-Typen ab, oder liefert den ersten Fehlschlag (Statuscode+Endpunkt).
 async function fetchRecordsByType() {
   const recordsByType = new Map();
   for (const recordType of RECORD_TYPES_TO_PROBE) {
@@ -108,19 +55,12 @@ async function fetchRecordsByType() {
   return { ok: true, recordsByType };
 }
 
-// Q0: Positiv-Kontrolle. Ein bekannter ALTER call_control_id-Wert MUSS im call-control-Pool
-// auftauchen - sonst ist das Kommando selbst kaputt (falscher Filter, falscher Endpunkt,
-// abgelaufener Schluessel), und ein spaeteres "0 Treffer" fuer EL beweist nichts.
 function positivkontrolle(callControlRecords, knownCallControlId) {
   if (!knownCallControlId) return { status: "uebersprungen", grund: "KV2_5_KNOWN_CALL_CONTROL_ID nicht gesetzt" };
   const treffer = callControlRecords.some((eintrag) => eintrag.call_control_id === knownCallControlId);
   return { status: treffer ? "ok" : "fehlgeschlagen", callControlId: knownCallControlId };
 }
 
-// Q1: welche record_type-Werte fuehrt der EL-Weg BEWEISBAR? Ein Record gehoert zum EL-Weg,
-// wenn er (a) eine der bekannten sip_call_id traegt ODER (b) eine telnyx_session_id, die
-// AUCH auf einem der sip-trunking-Belege mit bekannter sip_call_id steht - exakt der Weg,
-// den anchoredSessionIds() im Produktions-Adapter ginge.
 function elWegTypen(recordsByType, knownSipCallIds) {
   const sipRecords = recordsByType.get("sip-trunking") || [];
   const elSessionIds = new Set(
@@ -142,8 +82,6 @@ function elWegTypen(recordsByType, knownSipCallIds) {
   return [...typen];
 }
 
-// Q2: ehrliche OBERGRENZE, nicht die reale Latenz (die ist retrospektiv nicht messbar -
-// wir wissen nicht, WANN der Beleg zuerst verfuegbar war, nur dass er JETZT da ist).
 function latenzObergrenzeMinuten(sipRecords, nowMs) {
   let juengsterMs = null;
   for (const eintrag of sipRecords) {
@@ -154,8 +92,6 @@ function latenzObergrenzeMinuten(sipRecords, nowMs) {
   return Math.round((nowMs - juengsterMs) / MS_PER_MINUTE);
 }
 
-// Q3: traegt record_type=inference ueberhaupt Betraege? Aendert am Code NICHTS - wird nur
-// beziffert (Katalogzeile #15, preisquelle).
 export function inferenceBilanz(inferenceRecords) {
   let summeUsd = 0;
   for (const eintrag of inferenceRecords) {
@@ -170,8 +106,6 @@ function meldeAbbruch(nachricht) {
   process.exitCode = 1;
 }
 
-// Baut die Endbilanz aus den drei Teilmessungen - ausgelagert (G30), damit main() nur noch
-// die Ablauf-Reihenfolge und die Abbruchpfade zeigt.
 export function baueErgebnis({ recordsByType, knownSipCallIds }) {
   const typen = knownSipCallIds.length > 0 ? elWegTypen(recordsByType, knownSipCallIds) : [];
   const latenzObergrenze = latenzObergrenzeMinuten(recordsByType.get("sip-trunking") || [], Date.now());
@@ -226,7 +160,6 @@ async function main() {
   druckeErgebnis(baueErgebnis({ recordsByType: abruf.recordsByType, knownSipCallIds }));
 }
 
-// direkter Ausfuehrung, nicht wenn ein Test die reinen Funktionen oben importiert.
 const istHauptmodul = fileURLToPath(import.meta.url) === resolve(process.argv[1] || "");
 if (istHauptmodul) {
   main().catch((fehler) => meldeAbbruch(`unerwarteter Fehler. ${fehler.message}`));

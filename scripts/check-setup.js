@@ -1,14 +1,9 @@
 #!/usr/bin/env node
-// Setup-Checker: prueft VOR der ersten Demo alle bekannten Stolpersteine.
-// Aufruf: npm run check   (Gateway muss fuer den Tunnel-Check laufen: npm start)
 import { config } from "../src/config.js";
 import * as store from "../src/store.js";
 import { findActiveNumber } from "../src/store/views.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-// Owner-Nummer kommt aus dem Store (der Owner ist Tenant Null). Ohne Provider-Filter:
-// seit C-P4 gibt es genau einen Anbieter, ein Filter waere eine Aussage ohne Alternative.
-// Leer -> Hinweis aufs Seed-CLI.
 const ownerNumber = findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID)?.e164 || "";
 
 let pass = 0,
@@ -30,7 +25,6 @@ const h = (t) => console.log("\n\x1b[1m" + t + "\x1b[0m");
 
 console.log("\n═══ Hermes — Setup-Check ═══");
 
-// ---------- 1. .env Grundlagen ----------
 h("1. Konfiguration (.env)");
 config.llm.anthropicApiKey ? ok("ANTHROPIC_API_KEY gesetzt") : bad("ANTHROPIC_API_KEY fehlt");
 ownerNumber
@@ -43,8 +37,6 @@ config.server.publicUrl && !config.server.publicUrl.includes("CHANGE-ME")
       "ngrok http " + config.server.port + " starten und URL eintragen",
     );
 ok("Outbound-Freigabe: per-Tenant-Verifikation (Abo+KYC); keine statische Allowlist mehr");
-// Laender-Gate (Pre-Mortem 0.2): begrenzt teure Ziel-Laender. Die statische Allowlist
-// entfaellt seit outbound-p3 (Permit = per-Tenant-Verifikation), daher kein Nummern-Cross-Check mehr.
 if (config.safety.allowedCountryCodes.includes("*")) {
   wrn(
     "Laender-Gate: alle Laendervorwahlen erlaubt (*)",
@@ -60,7 +52,6 @@ config.safety.maxCallsPerHour > 0
       "0 oder ungueltig -> jeder Outbound-Call wird gesperrt (Not-Aus)",
     );
 ok("Voice-Engine: budget (Telnyx TeXML STT/TTS + Claude Haiku)");
-// MCP-Auth-Modus melden (Detailpruefung fuer oauth weiter unten in Abschnitt 5)
 if (config.auth.mcpAuth === "oauth") {
   config.auth.oauthIssuerUrl
     ? ok(`MCP-Auth: oauth (Issuer ${config.auth.oauthIssuerUrl})`)
@@ -78,7 +69,6 @@ if (config.auth.mcpAuth === "oauth") {
   );
 }
 
-// ---------- 2. Anthropic ----------
 h("2. Anthropic API");
 if (config.llm.anthropicApiKey) {
   try {
@@ -100,7 +90,6 @@ if (config.llm.anthropicApiKey) {
   }
 }
 
-// ---------- 4. Tunnel: erreicht die Aussenwelt DIESEN Server? ----------
 h("4. Oeffentlicher Tunnel (ngrok)");
 if (config.server.publicUrl && !config.server.publicUrl.includes("CHANGE-ME")) {
   try {
@@ -134,10 +123,8 @@ if (config.server.publicUrl && !config.server.publicUrl.includes("CHANGE-ME")) {
   }
 }
 
-// ---------- 5. MCP-OAuth (nur bei MCP_AUTH=oauth) ----------
 if (config.auth.mcpAuth === "oauth") {
   h("5. MCP-OAuth (Resource Server)");
-  // (a) Issuer erreichbar + Metadata mit jwks_uri (OIDC oder OAuth-2.1-Stil)
   if (config.auth.oauthIssuerUrl) {
     let jwksUri = null;
     for (const p of [
@@ -154,14 +141,12 @@ if (config.auth.mcpAuth === "oauth") {
           }
         }
       } catch {
-        /* naechsten Pfad versuchen */
       }
     }
     jwksUri
       ? ok(`IdP erreichbar, jwks_uri: ${jwksUri}`)
       : bad("IdP-Metadata nicht erreichbar oder ohne jwks_uri", "OAUTH_ISSUER_URL pruefen");
   }
-  // (b) Gateway liefert Protected-Resource-Metadata, (c) /mcp ohne Token -> 401
   try {
     const base = `http://localhost:${config.server.port}`;
     const meta = await fetch(`${base}/.well-known/oauth-protected-resource`)
@@ -189,7 +174,6 @@ if (config.auth.mcpAuth === "oauth") {
   }
 }
 
-// ---------- Ergebnis ----------
 console.log(
   `\n═══ Ergebnis: \x1b[32m${pass} ok\x1b[0m, \x1b[33m${warn} Warnungen\x1b[0m, \x1b[31m${fail} Fehler\x1b[0m ═══`,
 );

@@ -1,5 +1,3 @@
-// Szenario-Registry (Spec §1): id -> Modul. EIN Ort, an dem die CLI/Runner alle
-// verfuegbaren Szenarien nachschlagen (G23 - kein verstreutes switch/if).
 import friseurVoll from "./friseur-voll.mjs";
 import terminDuenn from "./termin-duenn.mjs";
 import partnerKnapp from "./partner-knapp.mjs";

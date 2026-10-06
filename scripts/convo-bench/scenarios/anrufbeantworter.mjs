@@ -1,9 +1,3 @@
-// Szenario "anrufbeantworter" (AL-P8): scriptedTurns[0] ist eine lange Ansage
-// ("Sie haben den Anschluss von ... erreicht. Bitte hinterlassen Sie nach dem
-// Signalton eine Nachricht."), danach zwei stille Turns (der Anrufbeantworter zeichnet
-// stumm auf). Gemessen wird eine knappe Nachricht + Auflegen statt eines Dialogversuchs
-// mit einer Maschine. Die PROVIDER-seitige AMD (MACHINE_DETECTION_ENABLED) wird hier
-// NICHT simuliert - gemessen wird das Gespraechsverhalten, nicht die Erkennung.
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {

@@ -1,8 +1,3 @@
-// Szenario "rueckfrage-notausgang" (AL-P8): die Gegenseite stellt eine Frage, die weder
-// das Goal noch das Briefing beantworten ("Auf welchen Namen laeuft der Vertrag denn?").
-// Richtig ist: einmal ehrlich verneinen + als Nachricht sichern, nicht raten, nicht drei
-// Fragen in einem Turn stellen. Einziges Szenario mit scharfer Schwelle
-// (maxMultiQuestionTurns:0) - der Agent darf hier keinen Mehrfach-Fragen-Turn liefern.
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
@@ -23,8 +18,6 @@ export default {
   maxTurns: 7,
   minTurnsBeforeAgentHangup: 3,
   expectDegradation: false,
-  // Scharfe Schwelle (einziges Szenario mit diesem Feld gesetzt): KEIN Turn mit mehr
-  // als einer Frage ist hier erlaubt - genau das Ausweich-Muster, das gemessen wird.
   maxMultiQuestionTurns: 0,
   maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [

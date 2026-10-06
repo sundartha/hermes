@@ -1,14 +1,3 @@
-// RIFF/WAVE-Leser ohne Fremdbibliothek: Kopf pruefen, Format lesen, Kanaele trennen.
-//
-// EINZIGER Zweck: die Quelle des abgenommenen Begruessungslauts
-// (scripts/render-begruessungslaut.mjs, test/iep-p2-begruessungslaut.test.js).
-//
-// REIN: kein IO, kein fetch, keine Uhr, kein config - die Bytes kommen als Argument herein.
-//
-// Ein nicht unterstuetztes Format WIRFT. Ein Leser, der im Zweifel Nullen liefert, sieht aus
-// wie stilles Audio - und das waere der Befund, den man suchen wuerde.
-
-// RIFF/WAVE-Kopf: "RIFF" + Groesse + "WAVE" = 12 Bytes, danach Chunks aus 8 Byte Kopf.
 const KOPF_LAENGE = 12;
 const CHUNK_KOPF_LAENGE = 8;
 const TAG_LAENGE = 4;
@@ -20,12 +9,9 @@ const PCM16_BYTES = 2;
 const PCM16_MAX = 32768;
 const G711_BYTES = 1;
 
-// RIFF-Chunks sind auf gerade Byte-Grenzen ausgerichtet.
 const CHUNK_AUSRICHTUNG = 2;
 
 export class WavFehler extends Error {}
-
-// --- RIFF lesen ---------------------------------------------------------------------------
 
 function tag(daten, offset) {
   let text = "";
@@ -46,7 +32,6 @@ function leseFormat(sicht, ab) {
   };
 }
 
-// G.711 A-law nach linear (ITU-T-Referenzalgorithmus).
 const ALAW_MASKE = 0x55;
 const ALAW_QUANT = 0x0f;
 const ALAW_SEGMENT = 0x70;
@@ -66,7 +51,6 @@ function aLawZuFloat(byte) {
   return ((wert & ALAW_VORZEICHEN) ? stufe : -stufe) / PCM16_MAX;
 }
 
-// G.711 mu-law nach linear (ITU-T-Referenzalgorithmus).
 const MULAW_BIAS = 0x84;
 const MULAW_QUANT = 0x0f;
 const MULAW_SEGMENT = 0x70;
@@ -119,7 +103,6 @@ function sucheChunks(daten, sicht) {
   return gefunden;
 }
 
-/** Liest einen RIFF/WAVE-Mitschnitt in getrennte Kanaele. Wirft WavFehler statt zu raten. */
 export function leseWav(bytes) {
   const daten = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   if (daten.byteLength < KOPF_LAENGE || tag(daten, 0) !== "RIFF" || tag(daten, KOPF_LAENGE - TAG_LAENGE) !== "WAVE") {
@@ -129,8 +112,5 @@ export function leseWav(bytes) {
   const { format, datenTeil } = sucheChunks(daten, sicht);
   if (!format || !datenTeil) throw new WavFehler("RIFF ohne fmt- oder data-Chunk - Mitschnitt nicht auswertbar");
   if (!(format.kanaele > 0) || !(format.abtastrate > 0)) throw new WavFehler("WAV-Kopf nennt 0 Kanaele oder 0 Hz - Mitschnitt nicht auswertbar");
-  // format = { code, kanaele, abtastrate, bits } aus dem fmt-Chunk. Der Leser wandert ohnehin
-  // durch die Chunks (Polsterchunks wie afconverts FLLR verschieben die Datenposition); wer das
-  // Format pruefen will, soll dafuer keinen zweiten RIFF-Leser bauen muessen.
   return { abtastrate: format.abtastrate, format, kanaele: teileKanaele({ sicht, format, datenTeil }) };
 }

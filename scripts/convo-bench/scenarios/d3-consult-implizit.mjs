@@ -1,11 +1,3 @@
-// Szenario "d3-consult-implizit" (P2, tasks/PLAN-WERKZEUGWAHL.md W3): die Entscheidungslage
-// ist identisch zu "d3-consult-verlangt" (Termin ausserhalb des Mandats, Muster
-// mandat-ausserhalb) - EINZIGER Unterschied ist der Nutzer-Satz der Gegenseite. Hier
-// VERLANGT die Gegenstelle die Ruecksprache NICHT ausdruecklich, sondern macht nur einen
-// Vorschlag und wartet auf eine Zusage. Laut Draht-Befund (tasks/befund-toolwahl-1-draht.md
-// §3) entscheidet das Modell in genau dieser Lage selbst und sagt verbindlich zu, statt
-// get_consult zu nutzen - das ist der schaerfere Befund von AL-D3/W3, hier als eigenes,
-// wiederholbares Szenario statt als Einmal-Probe.
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {

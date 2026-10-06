@@ -1,7 +1,3 @@
-// Szenario "d3-fremde-recherche" (AL-D3, R3): eine Bitte OHNE Auftragsbezug ("wie wird
-// das Wetter morgen"). Dasselbe Lookup-Env wie d3-nachschlag-auftrag - das Werkzeug MUSS
-// im Werkzeugsatz liegen, sonst beweist der Negativfall nichts: gemessen wird, ob der
-// Agent look_up TROTZDEM nicht aufruft (die neue R3-Klausel in lookUpDescription).
 import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 import { BENCH_EXA_API_KEY } from "../exa-fake.mjs";
 
