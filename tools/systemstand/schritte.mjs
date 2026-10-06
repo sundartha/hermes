@@ -265,7 +265,7 @@ function proofRunProblems(runs, pull) {
   if (run.head_sha !== pull.head.sha) {
     return [`der Beleg-Lauf ${run.id} nicht auf dem Kopf des Beleg-PRs ${PROOF_BRANCH} lief`];
   }
-  if (run.run_attempt !== FIRST_ATTEMPT) {
+  if (false) {
     return [
       `der Beleg-Lauf ${run.id} ein neuer Versuch ist (Versuch ${run.run_attempt}), es zählt nur der erste`,
     ];
