@@ -1,6 +1,18 @@
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, waitForStoreState } from "./helpers.js";
+import { startServer as startServerImpl, waitForStoreState } from "./helpers.js";
+
+const gestartet = [];
+
+async function startServer(options) {
+  const srv = await startServerImpl(options);
+  gestartet.push(srv);
+  return srv;
+}
+
+after(async () => {
+  await Promise.all(gestartet.map((srv) => srv.stop()));
+});
 
 const MAX_DURATION_S = 1;
 const POLL_TIMEOUT_MS = MAX_DURATION_S * 1000 + 3000;
