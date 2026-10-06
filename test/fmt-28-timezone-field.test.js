@@ -1,11 +1,3 @@
-// FMT-28 (i18n-Testkatalog). Beleg: src/store/defaults.js (kein timezone-Feld),
-// src/db/schema.sql:13-135; tasks/i18n-tests/10-zeit-format-daten.md ("FMT-28");
-// PLAN-I18N-TESTS.md Abschnitt 7.6 (Owner-Entscheidung 2026-07-25).
-//
-// P8 A3-Migration: dieser Test war "SOLL (rot)". Mit P8 (DEFAULT_TIMEZONE/resolveTimezone
-// in defaults.js, timezone-Spalte in schema.sql) ist der Zielzustand erreicht - der Test
-// wandert von test:gates nach npm test. Das Anrufzeit-*Gate* bleibt ABGELEHNT (LAW-07);
-// die Zeitzonen-*ANZEIGE* ist umgesetzt (Owner-Entscheidung 7.6).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";

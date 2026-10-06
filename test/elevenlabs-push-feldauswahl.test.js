@@ -1,21 +1,3 @@
-// Die Feldauswahl des schreibenden Kommandos (scripts/push-elevenlabs.mjs) und
-// der Riegel, den die Vorlage selbst setzen kann: ein Besitz-Eintrag mit
-// "ausgenommen" (Grund + Datum).
-//
-// WARUM DIESE FAELLE: das Werkzeug ist die einzige Stelle im Repo, die den
-// Live-Agenten bei ElevenLabs veraendert. Seine Zusagen ("ohne ausdrueckliche
-// Nennung wird ein ausgenommenes Feld nie geschrieben", "ein unbekannter
-// Feldname bricht ab, bevor irgendetwas das Netz beruehrt", "der Trockenlauf
-// schreibt nie") standen bisher nur als Kommentar da. Ein Riegel, den niemand
-// misst, ist eine Behauptung - und dieser hier haelt eine
-// Eigentuemer-Entscheidung fest, die genau ein unbedachter Lauf umdrehen wuerde
-// (die Aufbewahrung steht live bewusst anders als in der Vorlage).
-//
-// KEIN NETZ, KEINE ECHTE API: der Vergleichs-Kern ist ohnehin reine Rechnung,
-// und die Faelle am ganzen Ablauf laufen gegen die gestellte fetch-Attrappe aus
-// helpers/elevenlabs-push-attrappe.mjs, die jeden Aufruf mitschreibt. "Es wurde
-// nicht geschrieben" ist damit gemessen (kein einziger PATCH in der
-// Aufrufliste) und nicht geglaubt.
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
@@ -30,10 +12,6 @@ import {
   schreibendeAufrufe,
 } from "./helpers/elevenlabs-push-attrappe.mjs";
 
-// Der Schluessel wird gesetzt, BEVOR das Kommando (und mit ihm src/config.js)
-// geladen wird - deshalb dynamischer Import: statische Importe laufen vor jeder
-// Anweisung der Datei, und ohne Schluessel bricht das Kommando fail-closed ab,
-// bevor es zur Feldauswahl kaeme.
 process.env.ELEVENLABS_API_KEY = TEST_SCHLUESSEL;
 const { runCli, teileAbweichungen } = await import("../scripts/push-elevenlabs.mjs");
 const { ladeVorlage } = await import("../scripts/lib/elevenlabs-agent-lesen.mjs");
@@ -47,8 +25,6 @@ const AUSNAHME_GUELTIG = {
   seit: "2026-08-15",
 };
 
-// Ein Verbot muss in der Erklaerung stehen (fail-closed), sonst meldet der Kern
-// einen Fehler und die Faelle hier prueften nur noch diesen Fehler.
 const REGEL = {
   regel: "nichts_heikles_je_eintrag",
   art: "verboten_je_eintrag",
@@ -64,9 +40,6 @@ const LIVE_ATTRAPPE = {
 
 const AUSGENOMMENE_VORLAGEN_FELDER = ["retention_days"];
 
-// Beide Felder weichen ab; der einzige Unterschied zwischen ihnen ist die
-// Ausnahme. Ohne diese Gleichheit koennte ein gruener Fall auch an etwas
-// anderem liegen als am Riegel.
 function baueVorlage(ausnahme) {
   const bewacht = {
     feld: FELD_BEWACHT,
@@ -218,11 +191,6 @@ describe("Push-Kommando: fail-closed vor dem Netz, Trockenlauf schreibt nie", ()
     assert.doesNotMatch(lauf.ausgabe, /Abbruch/);
   });
 
-  // Die Uebersteuerung durch Nennung gilt weiter fuer ausgenommene Felder im
-  // Allgemeinen - fuer retention_days aber NICHT MEHR (Sperrliste seit 2026-08-17;
-  // record_voice ist seit 2026-09-15 nennbar, aber nur in Richtung false). Der
-  // Fall steht hier, weil er frueher das Gegenteil behauptete; gemessen wird die
-  // Sperrliste in test/elevenlabs-push-sperrliste.test.js.
   it("ein gesperrtes Feld laesst sich auch durch Nennung nicht mehr uebersteuern", async () => {
     const lauf = await laufeMitAttrappe(["--felder=retention_days"]);
     assert.equal(lauf.code, 1);

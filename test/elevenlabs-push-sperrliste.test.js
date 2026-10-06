@@ -1,34 +1,3 @@
-// Die SPERRLISTE des schreibenden Kommandos (scripts/push-elevenlabs.mjs):
-// retention_days wird nie gepusht, in keine Richtung; record_voice seit
-// 2026-09-15 (Owner O2) nur in Richtung false.
-//
-// WARUM DIESE FAELLE: der Eigentuemer ersetzt den menschlichen Riegel (jeden
-// Push von Hand tippen) durch einen maschinellen (eine Berechtigungsregel, die
-// das Skript dauerhaft erlaubt). Damit haengt an diesem Code, was vorher an
-// einer Person hing. Aufbewahrung und Mitschnitt waren bis dahin nur durch
-// ABSICHT geschuetzt - durch die Ausnahme in der Vorlage, die sich durch
-// Nennung uebersteuern liess. Absicht ist kein Riegel: reist retention_days
-// versehentlich mit, ist das kein falscher Wert, sondern eine ungewollte
-// Aussage darueber, was mit den Gespraechen echter Menschen geschieht.
-// record_voice hat seit O2 eine ausdrueckliche Push-Absicht (false); die
-// Gegenrichtung bleibt trotzdem gesperrt, damit das Wieder-Einschalten mit
-// diesem Werkzeug unmoeglich bleibt.
-//
-// ZWEI RIEGEL, ZWEI ORTE. Der eine sieht die NENNUNG (--felder) und greift, bevor
-// irgendetwas geladen oder gerufen wurde. Der andere sieht den FERTIGEN
-// PATCH-KOERPER und ist der wichtigere: er faengt den Fall, in dem ein Feld
-// MITREIST, ohne genannt worden zu sein - unter einem groberen besessenen Pfad,
-// in einer Liste, oder weil ein kuenftiger Umbau den Koerper anders baut.
-//
-// OHNE DIE POSITIV-KONTROLLE BEWEIST KEINER DER ROTEN FAELLE ETWAS: ein
-// Riegel, der alles abweist, besteht jeden Negativ-Test. Deshalb laeuft ein
-// erlaubtes Feld hier im Trockenlauf sauber durch, und die Koerper-Pruefung
-// bekommt einen sauberen Koerper vorgelegt, an dem sie schweigen muss.
-//
-// KEIN NETZ. Alles laeuft gegen die geteilte Attrappe (helpers/
-// elevenlabs-push-attrappe.mjs), die jeden Aufruf mitschreibt. Geprueft wird
-// nicht nur der Exit-Code, sondern die Aufrufliste: ein Abbruch NACH dem Senden
-// waere wertlos und am Exit-Code nicht von einem davor zu unterscheiden.
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
@@ -42,31 +11,21 @@ import {
   schreibendeAufrufe,
 } from "./helpers/elevenlabs-push-attrappe.mjs";
 
-// Der Schluessel muss stehen, bevor das Kommando (und mit ihm src/config.js)
-// geladen wird - deshalb dynamischer Import, s. Attrappe.
 process.env.ELEVENLABS_API_KEY = TEST_SCHLUESSEL;
 const { bauePatchKoerper, koerperVerstoesse, mitSchreibwerten, runCli, teileAbweichungen } = await import(
   "../scripts/push-elevenlabs.mjs"
 );
 const { ladeVorlage } = await import("../scripts/lib/elevenlabs-agent-lesen.mjs");
 
-// Ein Befund je Riegel: die Faelle sind so gebaut, dass GENAU einer greift -
-// eine Pruefung, die aus Versehen alles meldet, faellt damit auf.
 const EIN_BEFUND = 1;
 const FELD_AUFBEWAHRUNG = "retention_days";
 const FELD_MITSCHNITT = "record_voice";
 const MARKE_RICHTUNG = /^RICHTUNG GESPERRT/;
 const PFAD_MITSCHNITT = "platform_settings.privacy.record_voice";
-// Ein besessenes Feld ohne Datenschutz-Bezug, das am gestellten Live-Agenten
-// fehlt und deshalb abweicht - der Trockenlauf baut daraus einen Koerper.
 const FELD_ERLAUBT = "prompt";
 const PFAD_ERLAUBT = "conversation_config.agent.prompt.prompt";
-// Ein zweites besessenes Feld, das der Aufrufer NICHT genannt hat.
 const FELD_UNGEFRAGT = "language";
 const PFAD_UNGEFRAGT = "conversation_config.agent.language";
-// Ein absichtlich GROBER Pfad: ein besessenes Feld, dessen Wert ein ganzes
-// Objekt ist. Genau hier koennen Datenschutz-Felder mitreisen, ohne dass sie
-// irgendwo genannt waeren.
 const FELD_GROB = "privatsphaere_block";
 const PFAD_GROB = "platform_settings.privacy";
 
@@ -131,10 +90,6 @@ describe("Sperrliste: die zwei Datenschutz-Felder sind nicht nennbar", () => {
 });
 
 describe("Sperrliste am fertigen Koerper: der blinde Passagier, der nie genannt wurde", () => {
-  // Der wichtigere der beiden Riegel. Der Koerper haelt sich hier vollstaendig
-  // an die Feldauswahl - der grobe Pfad IST gewaehlt, das Datenschutz-Feld
-  // liegt darunter und waere von der Auswahl-Pruefung gedeckt. Nur die
-  // Sperrliste sieht es.
   it("ein gesperrter Name unter einem gewaehlten Pfad ist ein Befund", () => {
     const koerper = { platform_settings: { privacy: { [FELD_AUFBEWAHRUNG]: 0 } } };
     const befunde = befundeFuer({ koerper, auswahl: [FELD_GROB] });
@@ -189,15 +144,10 @@ describe("Sperrliste am fertigen Koerper: der blinde Passagier, der nie genannt 
     assert.deepEqual(befundeFuer({ koerper: alsListe, auswahl: [FELD_GROB] }), []);
   });
 
-  // Findet den Besitz-Eintrag fuer record_voice in einer (ggf. veraenderten)
-  // Kopie der Vorlage.
   function mitschnittEintrag(vorlage) {
     return vorlage._besitz.felder.find((eintrag) => eintrag.feld === FELD_MITSCHNITT);
   }
 
-  // Baut den Koerper GENAU wie laufeAgentenPush es tut (lesen, vergleichen,
-  // Feldauswahl, Schreibwerte, Koerper, Pruefung) - ohne die Repo-Vorlage
-  // umzuschreiben, deshalb ueber die reinen Bausteine statt ueber runCli.
   function koerperAusVorlage({ vorlage, live }) {
     const auswahl = [FELD_MITSCHNITT];
     const { abweichungen } = vergleicheBesitz({ vorlage, live });

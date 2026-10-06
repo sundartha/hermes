@@ -1,19 +1,8 @@
-// G4: Der No-Speech-Reprompt im /voice/turn ist knapp (eine Rueckfrage) und ein
-// gueltiger Folge-Turn (Say + Gather, KEIN Hangup) - der Call laeuft weiter. Offline-
-// Spawn; ein Provider reicht fuer das Konzept (der Reprompt ist provider-neutral, nur
-// die Say-Huelle ist provider-spezifisch - hier Telnyx, analog zu g3-speech-timeout).
-//
-// P3-G4b/P3-G4c (PLAN-CONVERSATION-QUALITY-V2, P3.2): erweitert um die gestaffelte
-// Eskalation (drei aufeinanderfolgende leere Gathers -> drei VERSCHIEDENE Antworten,
-// die dritte beendet den Call) + die Reset-Semantik (eine verstandene Aeusserung bricht
-// die Staffel ab - "konsekutiv", nicht ueber den ganzen Call kumulativ gezaehlt).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState, seedCall } from "./helpers.js";
 
-// Tool-freie Text-Antwort (Muster claude-turn-guard.test.js textMessage) fuer P3-G4c: eine
-// verstandene Aeusserung darf den Reset ohne end_call/Hangup ausloesen.
 function textMessage(text) {
   return {
     id: "msg_g4c_text",
@@ -52,7 +41,6 @@ test("G4: leerer Gather nach bereits-gesprochenem Caller -> knappe Rueckfrage, k
           provider: "telnyx",
           status: "active",
           direction: "outbound",
-          // Caller hat schon gesprochen -> der leere Gather trifft den No-Speech-Zweig.
           transcript: [{ role: "caller", text: "..." }],
         }),
       ],
@@ -61,13 +49,13 @@ test("G4: leerer Gather nach bereits-gesprochenem Caller -> knappe Rueckfrage, k
   try {
     const res = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
       method: "POST",
-      body: new URLSearchParams({ SpeechResult: "" }), // leer -> kein heard
+      body: new URLSearchParams({ SpeechResult: "" }),
     });
     const body = await res.text();
     assert.equal(res.status, 200);
     assert.match(body, /<Say[^>]*>Können Sie das bitte wiederholen\?<\/Say>/);
-    assert.match(body, /<Gather/); // Folge-Gather -> Call laeuft weiter
-    assert.doesNotMatch(body, /<Hangup/); // KEIN Auflegen
+    assert.match(body, /<Gather/);
+    assert.doesNotMatch(body, /<Hangup/);
   } finally {
     await srv.stop();
   }
@@ -116,7 +104,6 @@ test("P3-G4b: drei aufeinanderfolgende leere Gathers -> drei verschiedene Antwor
     assert.match(turnTexts[2], /<Hangup/);
     assert.doesNotMatch(turnTexts[2], /<Gather/);
 
-    // Plan: "drei VERSCHIEDENE Antworten" - paarweise verschieden.
     assert.notEqual(turnTexts[0], turnTexts[1]);
     assert.notEqual(turnTexts[1], turnTexts[2]);
     assert.notEqual(turnTexts[0], turnTexts[2]);
@@ -143,7 +130,6 @@ test("P3-G4c: eine verstandene Aeusserung setzt die Staffel zurueck (konsekutiv,
     }),
   });
   try {
-    // Turn 1: leer -> Stufe 1.
     const t1 = await (
       await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
         method: "POST",
@@ -152,7 +138,6 @@ test("P3-G4c: eine verstandene Aeusserung setzt die Staffel zurueck (konsekutiv,
     ).text();
     assert.match(t1, /<Say[^>]*>Können Sie das bitte wiederholen\?<\/Say>/);
 
-    // Turn 2: verstandene Aeusserung -> normaler Turn, Streak-Reset, kein Hangup.
     const t2res = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "Ja bitte" }),
@@ -161,7 +146,6 @@ test("P3-G4c: eine verstandene Aeusserung setzt die Staffel zurueck (konsekutiv,
     const t2 = await t2res.text();
     assert.doesNotMatch(t2, /<Hangup/);
 
-    // Turn 3 (der Turn NACH dem Reset): wieder Stufe 1, nicht Stufe 2/3.
     const t3 = await (
       await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
         method: "POST",
@@ -171,7 +155,6 @@ test("P3-G4c: eine verstandene Aeusserung setzt die Staffel zurueck (konsekutiv,
     assert.match(t3, /<Say[^>]*>Können Sie das bitte wiederholen\?<\/Say>/);
     assert.doesNotMatch(t3, /<Hangup/);
 
-    // Turn 4 (der letzte): Stufe 2, kein Hangup.
     const t4 = await (
       await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
         method: "POST",

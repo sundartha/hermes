@@ -1,16 +1,7 @@
-// P4 / AC4: catch-all 4-arg Error-Middleware (Last-Resort-Netz fuer Routen-Fehler).
-//
-// Express 4 reicht async-Rejections NICHT automatisch an eine Error-MW weiter -> die
-// per-Route-try/catch (AC3) ist die primaere Schicht. Diese MW faengt synchron
-// geworfene/per next(err) gereichte Routen-Fehler als generische 500 ab. Sie darf
-// NIE err.message/err.stack/Env an den Client geben (Secret-/Param-Leak, Regel 4/5);
-// err.stack wird NUR server-seitig laut geloggt. Unit-Test der echten exportierten
-// Funktion (kein Replik), mit Fake err/req/res/next + abgefangenem console.error.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { errorHandler } from "../src/middleware.js";
 
-// Minimaler Express-res-Fake: erfasst Status + JSON-Body.
 function fakeRes() {
   const res = {
     statusCode: null,
@@ -28,7 +19,6 @@ function fakeRes() {
   return res;
 }
 
-// console.error fuer die Dauer des Callbacks abfangen.
 function captureConsoleError(fn) {
   const lines = [];
   const orig = console.error;
@@ -78,8 +68,6 @@ test("T-P4-AC4-03: headersSent -> an next(err) delegieren (Express-Default ueber
       delegated = e;
     }),
   );
-  // Bei bereits gesendeten Headern darf die MW nicht erneut schreiben, sondern
-  // delegiert an Express' Default-Handler (schliesst die Verbindung).
   assert.equal(delegated, err);
   assert.equal(res.statusCode, null, "kein erneuter Status-Write nach headersSent");
 });

@@ -1,11 +1,3 @@
-// F2-Mail - Self-Service GET /api/self-service/state traegt additiv accountEmail
-// (Konto-E-Mail-Prefill fuers Newsletter-Feld, s. apps/web NewsletterIsland.astro).
-// Kompositions-Integrationstest nach dem Muster f2-self-service-state-private-number.
-// test.js: reines pglite (offline, F.I.R.S.T.), KEIN Server-Spawn.
-//   - accounts injiziert + Account mit Email -> accountEmail = die echte Konto-Adresse
-//   - kein accounts-Adapter injiziert (pg-Web-Login-Block nicht gemountet) -> null,
-//     kein Throw (Muster f2-self-service-state-private-number.test.js ohne accounts)
-//   - accounts injiziert, Lookup wirft (z.B. IO-Fehler) -> null, Route bleibt 200
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -35,10 +27,6 @@ async function seedActiveTenant(store, accounts, { sub, tenantId, email }) {
 
 async function setup({ routeAccounts: routeAccountsOverride, injectAccounts = true } = {}) {
   const { store, runner } = await makePgTestStore();
-  // Session-/Seeding-Pfad braucht IMMER die echte Fassade (upsertOnFirstLogin/setStatus/
-  // resolve) - unabhaengig davon, was die Route selbst als `accounts` injiziert bekommt.
-  // Nur SO laesst sich Fall (c) bauen: der Login funktioniert normal, NUR der
-  // accountByTenant-Lookup der Route schlaegt fehl.
   const realAccounts = makeAccounts(runner);
   const routeAccounts = routeAccountsOverride ?? realAccounts;
   const sessions = makeSessions(runner);
@@ -58,8 +46,6 @@ async function setup({ routeAccounts: routeAccountsOverride, injectAccounts = tr
       audit: () => {},
       config: withConfigNamespaces({ paymentEnabled: false }),
       billing: {},
-      // Muster f2-self-service-state-private-number.test.js: accounts wird NUR injiziert,
-      // wenn injectAccounts=true - so bildet dieselbe Setup-Funktion beide Faelle ab.
       ...(injectAccounts ? { accounts: routeAccounts } : {}),
       provision: async () => {},
     }),
@@ -130,7 +116,6 @@ test("(c) accountByTenant wirft (z.B. IO-Fehler) -> accountEmail: null, Route bl
     assert.equal(res.status, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.accountEmail, null);
-    // Der Rest der Ansicht bleibt intakt (Beleg, dass der Fehler lokal gefangen wurde).
     assert.ok("settings" in body);
   } finally {
     await s.close();

@@ -1,11 +1,3 @@
-// F2 P6 - Self-Service Read der eigenen privaten Summary-Nummer (GET /api/self-service/
-// state liefert privateNumber MASKIERT). Kompositions-Integrationstest nach dem Muster
-// f2-self-service-private-number.test.js / i9-self-service.test.js: reines pglite (offline,
-// F.I.R.S.T.), KEIN Server-Spawn. Prueft die SICHERHEITS-Invarianten der Lese-Sicht:
-//   - eigene Nummer -> maskiert (+49…4567), volle E.164 NIE im Body (H4, Decision #5)
-//   - keine Nummer -> privateNumber: null
-//   - NIE eine fremde Tenant-Nummer: Schluessel ist die Web-Session (H3)
-//   - kein Cookie -> 401 (fail-closed, bestehendes webAuthMw-Verhalten)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -107,15 +99,13 @@ const getState = (s, cookie = s.cookieB) =>
 test("(a) eigene gesetzte Nummer -> maskiert (+49…4567), volle E.164 NIE im Body (H4)", async () => {
   const s = await setup();
   try {
-    s.store.setPrivateNumber(TENANT_B, "+49 (170) 123-4567"); // normalisiert -> +491701234567
+    s.store.setPrivateNumber(TENANT_B, "+49 (170) 123-4567");
     const res = await getState(s);
     assert.equal(res.status, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.privateNumber, "+49…4567", "Laendercode + letzte 4 Ziffern, Rest maskiert");
-    // PII-Dichtheit: die volle/mittlere Nummer darf NICHT durchsickern.
     assert.equal(res.body.includes("491701234567"), false, "volle E.164 NIE im Body");
     assert.equal(res.body.includes("17012"), false, "mittlere Ziffern NIE im Body");
-    // Niemals in der settings-View (die ueber /api/state + MCP komplett leakt, H4).
     assert.equal("privateNumber" in (body.settings || {}), false, "privateNumber NIE in settings");
   } finally {
     await s.close();
@@ -136,9 +126,9 @@ test("(b) keine Nummer hinterlegt -> privateNumber: null", async () => {
 test("(c) NIE eine fremde Tenant-Nummer: B sieht nur B's Nummer, nie A's (H3)", async () => {
   const s = await setup();
   try {
-    s.store.setPrivateNumber(TENANT_A, "+491999000111"); // A's Nummer
-    s.store.setPrivateNumber(TENANT_B, "+491701234567"); // B's Nummer
-    const res = await getState(s, s.cookieB); // eingeloggt als B
+    s.store.setPrivateNumber(TENANT_A, "+491999000111");
+    s.store.setPrivateNumber(TENANT_B, "+491701234567");
+    const res = await getState(s, s.cookieB);
     assert.equal(res.status, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.privateNumber, "+49…4567", "B sieht B's maskierte Nummer");

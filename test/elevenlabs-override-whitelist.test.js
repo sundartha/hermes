@@ -1,27 +1,3 @@
-// ---- Weisse Liste conversation_config_override: Rotprobe + Bestandsschutz ------------
-// Owner-Entscheidung 16.08.2026 (ersetzt den bisherigen Wortlaut "conversation_config_
-// override wird nicht benutzt"): pro Anruf duerfen am Agenten AUSSCHLIESSLICH zwei Dinge
-// gesetzt werden - die Sprache (conversation_config_override.agent.language) und die
-// Stimme (conversation_config_override.tts.voice_id). Jede andere Ueberschreibung ist
-// verboten. Die geschuetzte EIGENSCHAFT ist nicht der Pfad, sondern: niemand darf den
-// Agenten pro Anruf unbemerkt umbauen (Systemprompt, Werkzeuge, ASR-Keywords,
-// Text-only-Modus, ...).
-//
-// GEPRUEFT WIRD DIREKT AN DER STELLE, DIE "VOR DEM EINZIGEN NETZZUGRIFF DIESES WEGS"
-// SITZT: src/elevenlabs/convai.js#startOutboundCall (s. Modulkopf dort). fetchImpl bleibt
-// eine reine Attrappe (DIP, dasselbe Muster wie src/tts/synth.js) - ein echter
-// Netzzugriff ist hier unabhaengig vom Testausgang unmoeglich; die Laenge von calls[]
-// (der Aufrufzaehler DIESER Attrappe) ist der Beweis "kein Netzzugriff", nicht ein
-// beobachteter HTTP-Server.
-//
-// NUR DER WAECHTER, NICHT DIE FUNKTION: dieses Modul waehlt keine Sprache/Stimme (kein
-// Feature, ein separates Paket) - der Anrufstart schickt heute GAR KEIN Override-Objekt
-// (src/elevenlabs/outbound.js#dynamicVariables baut keins). Dieser Waechter greift
-// trotzdem VOR jedem kuenftigen Aufrufer.
-//
-// FAIL-CLOSED, NICHT FILTERND (Owner-Wortlaut): "Ein stiller Filter ist genau der
-// Fehler, der bei context.open_questions schon einmal passiert ist." Ein verbotener Pfad
-// bricht den Anrufstart deshalb GANZ ab statt ihn zu entfernen und trotzdem zu senden.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -41,9 +17,6 @@ const TO_NUMBER = "+4915000000000";
 const CONVERSATION_ID = "conv_test_1";
 const ALLOWED_VOICE_ID = "voice_test_1";
 
-// EIN fetchImpl, das jeden Aufruf mitschreibt statt je ans Netz zu gehen. Die LAENGE von
-// calls ist der Beweis "kein Netzzugriff" - stabiler als ein beobachteter HTTP-Server,
-// weil kein Zeitfenster/Race dazwischenliegen kann.
 function recordingFetch() {
   const calls = [];
   const fetchImpl = async (url, init) => {
@@ -53,7 +26,6 @@ function recordingFetch() {
   return { fetchImpl, calls };
 }
 
-// override === undefined -> das Feld fehlt ganz im Rumpf (heutiges Bestandsverhalten).
 function bodyWithOverride(override) {
   return {
     agent_id: AGENT_ID,
@@ -66,8 +38,6 @@ function bodyWithOverride(override) {
   };
 }
 
-// console.error mitschreiben, ohne test/helpers.js anzufassen (captureConsole dort
-// faengt nur log/warn ab, nicht error - die Ablehnung hier ist bewusst Fehlerebene).
 async function captureErrors(fn) {
   const zeilen = [];
   const original = console.error;
@@ -139,9 +109,6 @@ test("EL-OVERRIDE: kein Override-Objekt -> unveraendertes Bestandsverhalten (heu
 
 test("EL-OVERRIDE: ein verbotener Pfad NEBEN einem erlaubten, im selben Zweig verschachtelt, wird abgelehnt", async () => {
   const { fetchImpl, calls } = recordingFetch();
-  // agent.language ist erlaubt, agent.first_message NICHT - beide im selben Unterobjekt:
-  // ein Filter, der nur auf Ebene der TOP-LEVEL-Schluessel (agent/tts/asr/...) prueft,
-  // liesse das durch. Die Whitelist muss bis zum BLATT-Pfad hinabsehen.
   const body = bodyWithOverride({
     agent: { language: "en", first_message: "Hallo, hier spricht jemand anderes." },
   });
@@ -171,21 +138,9 @@ test("EL-OVERRIDE: ein leeres Override-Objekt setzt nichts und geht durch", asyn
   assert.equal(calls.length, 1, "ein leeres Objekt setzt keinen Pfad - nichts zu verbieten");
 });
 
-// ---- TEIL 3: die Whitelist des Codes und die Besitz-Karte der Vorlage koennen nicht -----
-// auseinanderlaufen ---------------------------------------------------------------------
-// Zwei getippte Kopien derselben zwei Pfade (der Waechter hier im Code, die EIGENE weisse
-// Liste des Anbieters in der Vorlage - elevenlabs/agent_configs/outbound-agent.template.
-// json, platform_settings.overrides.conversation_config_override, s. dort _besitz.felder
-// [feld=conversation_config_override_erlaubnisse]) sind ein zweiter, schwaecherer
-// Wahrheitsstand: dreht jemand nur die eine um, faellt es sonst niemandem auf. Dieser Test
-// haelt beide DIREKT gegeneinander - keine dritte, gepflegte Liste dazwischen.
 const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";
 const OVERRIDE_KARTE_PFAD = "platform_settings.overrides.conversation_config_override";
 
-// Alle Pfade, an denen die Besitz-Karte true traegt (= "der Anbieter darf diesen Wert per
-// Anruf annehmen"). false ist kein Blatt-Pfad in diesem Sinn - nur true zaehlt als
-// "erlaubt", exakt symmetrisch zu OVERRIDE_ALLOWED_LEAF_PATHS im Code (eine erlaubte Liste,
-// keine verbotene).
 function truePfade(wert, prefix = []) {
   if (wert === true) return [prefix.join(".")];
   if (wert === false) return [];
@@ -200,10 +155,6 @@ test("EL-OVERRIDE TEIL 3: die Code-Whitelist und die Besitz-Karte der Vorlage ne
   assert.ok(karte.gefunden, `${OVERRIDE_KARTE_PFAD} fehlt in der Vorlage - die Besitz-Karte ist nicht gebaut`);
 
   const kartePfade = truePfade(karte.wert).sort();
-  // OC-P2: die Karte des Anbieters kennt nur EINE Menge erlaubter Pfade - sie kann nicht
-  // nach Anruf unterscheiden. Der Code fuehrt seit OC-P2 ZWEI Mengen und ist damit
-  // strenger: die Owner-Menge greift nur bei call.calleeIsOwner === true. Verglichen wird
-  // deshalb gegen die VEREINIGUNG, und die Aufteilung selbst wird darunter gepinnt.
   const codePfade = [...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_FIRST_MESSAGE_LEAF_PATHS].sort();
 
   assert.deepEqual(

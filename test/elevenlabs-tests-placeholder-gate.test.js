@@ -1,15 +1,3 @@
-// Vor-dem-Hochladen-Gate fuer die ElevenLabs-Testdefinitionen
-// (scripts/check-elevenlabs-tests.js). Arbeitet ausschliesslich auf einer
-// synthetischen Attrappe in einem Temp-Verzeichnis
-// (test/helpers/elevenlabs-gate-fixture.mjs) - haengt NICHT an den echten
-// Dateien unter elevenlabs/test_configs/, damit dieser Test nicht rot wird,
-// sobald jemand die dortigen Platzhalter ausfuellt. Offline, kein Netz.
-//
-// Die Attrappe liegt am produktiven Ablageort: elevenlabs/test_configs/ plus
-// eine Zeile in der Registry elevenlabs/tests.json - denn nur was in der
-// Registry steht, wird je hochgeladen (elevenlabs/tests/README.md, Abschnitt
-// "Ablage"). Die Aussagen der drei Faelle sind davon unberuehrt; sie pruefen
-// nur nicht mehr an einem Ort, aus dem nichts mehr hochgeladen wird.
 import { strict as assert } from "node:assert";
 import { afterEach, describe, it } from "node:test";
 
@@ -64,8 +52,6 @@ describe("check-elevenlabs-tests Platzhalter-Gate", () => {
 
   it("Platzhalter unter templates/ loest keinen Fund aus (Vorlagen duerfen sie tragen)", () => {
     const root = makeRoot(TMP_PREFIX);
-    // Bewusst ohne Registry-Zeile: eine Vorlage ist keine Testdefinition, sie
-    // wird nie hochgeladen - genau deshalb darf sie Platzhalter tragen.
     writeJson(root, `${TEMPLATES_DIR_REL}/vorlage.json`, {
       criterion: "<AUSFUELLEN: Kriterium>",
     });

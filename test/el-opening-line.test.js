@@ -1,17 +1,3 @@
-// Thema A (Auftrag 2026-08-19): die Eroeffnungszeile des ElevenLabs-Wegs
-// (src/elevenlabs/opening-line.js). Rein in-process, dieselbe Naht wie
-// cq-p8-briefing.test.js: ANTHROPIC_BASE_URL + DATA_DIR VOR dem ersten
-// config-Import, dann dynamischer Import; der lokale HTTP-Mock ersetzt den
-// Anthropic-Endpunkt.
-//
-// JEDER WAECHTER MIT ROTPROBE (Auftrags-Qualitaetsregel 1): fuer jede Ablehnung
-// der Validierung gibt es den Fall, der sie auslost - zu lang, Klammern,
-// Zeilenumbruch, fehlender Satz-Schluss, Preisangabe, Offenlegungs-Wiederholung -
-// und fuer die Hash-Gegenprobe (A6) die absichtliche Mutation des gespeicherten
-// Texts. Die Anbieter-Antwortform des Mocks ist die dokumentierte
-// Anthropic-tool_use-Form (dieselbe wie in cq-p8-briefing.test.js, dort gegen die
-// echte API belegt); die ERZEUGTEN Zeileninhalte sind Testdaten, kein
-// aufgezeichnetes Anbieter-Verhalten.
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -22,36 +8,25 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 const OWNER = "Antonio Fotiadis";
 const TIMEOUT_MS = 2000;
 const HTTP_ERROR = 500;
-// Deutlich ueber OPENING_LINE_MAX_CHARS, damit auch Stufe 2 der Treppe faellt.
 const WORT_WIEDERHOLUNGEN = 40;
 const UEBERLANGE_ZEICHEN = 200;
-// Der Mock meldet 25 Output-Tokens; der Abbruch-Pfad schaetzt OPENING_MAX_TOKENS=100.
 const MOCK_OUTPUT_TOKENS = 25;
 const ABBRUCH_SCHAETZUNG_TOKENS = 100;
 
-// Gute DE-Zeile MIT Umlauten - der Kernfall von Auflage A6 (Umlaute ueberleben).
 const GENERATED_DE = "Ich rufe an, um einen Termin zur Bremsenprüfung zu vereinbaren.";
 
-// Je Sprache eine Zeile, die SELBST fragt (Eingabe fuer GQ-E1-02/07/08). Kein
-// Anbieter-Verhalten, Testdaten - aber jede muss validOpeningLine bestehen.
 const FRAGE_ZEILE = Object.freeze({
   de: "Hast du morgen um 15 Uhr Zeit?",
   fr: "As-tu le temps demain à 15 heures ?",
   en: "Do you have time tomorrow at 3 pm?",
 });
 
-// Sprachen mit grammatischer Anredeform (GQ-E1-04). Englisch ist ausgenommen: "you"/
-// "your" tragen kein Register, es gibt dort keine Du/Sie-Wahl, an der etwas brechen
-// koennte.
 const SPRACHEN_MIT_ANREDEFORM = ["de", "fr"];
-// Platzhalter-Auftrag fuer bridgePhrase: traegt selbst kein Pronomen und loest den
-// Ich-Satz-Passthrough nicht aus (er beginnt nicht mit "ich"/"je"/"I").
 const SENTINEL = "XGOALX";
 const ANREDE_MUSTER = Object.freeze({
   de: /\b(Sie|Ihnen|Ihr\w*|du|dir|dich|dein\w*)\b/,
   fr: /\b(vous|votre|vos|tu|te|toi|ton|ta|tes)\b/i,
 });
-// Die beiden Platzhalter des ANBIETERS im statischen Rahmen (providerOpeningFor).
 const OPENING_LINE_VARIABLE = "{{opening_line}}";
 const OWNER_NAME_VARIABLE = "{{owner_name}}";
 
@@ -84,9 +59,6 @@ let OPENING_LINE_MAX_CHARS, OPENING_QUESTION_MAX_CHARS;
 let providerOpeningFor;
 let openingLineHash;
 
-// Erwartung IMMER aus LOCALES gebaut, nie getippt: sonst pinnt der Test den Wortlaut
-// ein zweites Mal und die vier gestrichenen Anrede-Teile muessten hier nachgepflegt
-// werden.
 const komponiert = (reason, lang) => composedOpeningLine(reason, localeFor(lang));
 
 before(async () => {
@@ -110,7 +82,7 @@ before(async () => {
   process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${server.address().port}`;
   process.env.ANTHROPIC_API_KEY = "test-opening-key";
   process.env.PRECALL_BRIEFING_TIMEOUT_MS = String(TIMEOUT_MS);
-  process.env.LLM_BREAKER_THRESHOLD = "100"; // Reihenfolge-Unabhaengigkeit (Muster P8)
+  process.env.LLM_BREAKER_THRESHOLD = "100";
   process.env.DATA_DIR = tempDataDir(
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }] }),
   );
@@ -147,8 +119,6 @@ const args = (over = {}) => ({
   ...over,
 });
 
-// ---- Validierung: der Gut-Fall und JEDE Rotprobe ------------------------------------
-
 test("validOpeningLine: gute Zeile mit Umlauten kommt byte-identisch zurueck", () => {
   assert.equal(validOpeningLine(GENERATED_DE), GENERATED_DE);
   assert.equal(validOpeningLine("J'appelle pour réserver une table."), "J'appelle pour réserver une table.");
@@ -181,8 +151,6 @@ test("validOpeningLine: Rotprobe Offenlegungs-Wiederholung (A3), alle drei Sprac
   assert.equal(validOpeningLine("This is an AI assistant calling on behalf of Antonio about the visit."), null);
   assert.equal(validOpeningLine("Ceci est un assistant IA mandaté par Antonio pour un rendez-vous."), null);
 });
-
-// ---- Die Treppe (A3): erzeugt -> Auftrag -> feste Zeile ------------------------------
 
 test("fetchOpeningLine: erzeugte Zeile gewinnt und Umlaute ueberleben byte-genau (A6)", async () => {
   const { line, source } = await fetchOpeningLine(args());
@@ -231,8 +199,6 @@ test("fetchOpeningLine: Ich-Satz-Auftrag laeuft ohne Bruecken-Rahmen (bridgePhra
   assert.equal(line, komponiert("Ich möchte einen Herrenhaarschnitt buchen.", "de"));
 });
 
-// ---- Hash-Gegenprobe am Anrufstart (A6) ---------------------------------------------
-
 function seededCall(openingLine) {
   return store.createCall({
     direction: "outbound",
@@ -261,8 +227,6 @@ test("verifiedOpeningLine: unveraenderte Zeile wird gesprochen", () => {
 
 test("verifiedOpeningLine: ROTPROBE - mutierte Zeile wird NIE gesprochen, Rueckfall greift", () => {
   const call = seededCall(GENERATED_DE);
-  // Absichtliche Verfaelschung ZWISCHEN Annahme und Anruf - exakt der Fall aus dem
-  // Auftrag (ein Treiber transliteriert die Umlaute weg).
   call.openingLine = "Ich rufe an, um einen Termin zur Bremsenpruefung zu vereinbaren.";
   const spoken = verifiedOpeningLine({ call, locale: localeFor("de") });
   assert.notEqual(spoken, call.openingLine, "die veraenderte Zeile darf nicht gesprochen werden");
@@ -290,8 +254,6 @@ test("verifiedOpeningLine: unbrauchbares goal am Alt-Datensatz -> feste Kurzzeil
   const spoken = verifiedOpeningLine({ call, locale: localeFor("de") });
   assert.equal(spoken, komponiert(localeFor("de").openingReasonFallback, "de"));
 });
-
-// ---- Nachbesserungen aus der unabhaengigen Durchsicht (2026-08-19) -------------------
 
 test("openingReasonFallback: JEDE Sprache fuehrt eine feste Kurzzeile, die ihre eigene Pruefung besteht", () => {
   for (const lang of SUPPORTED_LANGUAGES) {
@@ -329,16 +291,7 @@ test("Kostenbuchung (R2/AL-P9): der 5xx-Abbruch bucht die pessimistische Schaetz
   assert.equal(nachher - vorher, ABBRUCH_SCHAETZUNG_TOKENS, "OPENING_MAX_TOKENS als Output-Schaetzung (estimatedAbortUsage)");
 });
 
-// ---- GQ-E1 (Thema E): die Eroeffnung ist EIN kohaerenter gesprochener Satz -----------
-// Befund call_mt0ddduxuzgl: der Auftrag duzte, die feste Frage siezte, und zwischen
-// beiden stand ein Doppelpunkt-Rahmen. Gesprochen wurde daraus ein Register-Bruch mit
-// zwei Fragen. Die Faelle unten nageln die drei Zusagen fest, aus denen der Fix besteht:
-// die Bausteine tragen keine Anrede, die Zeile darf selbst fragen, und komponiert wird
-// genau einmal - an EINER Stelle.
-
 test("GQ-E1-01: der Befundfall aus call_mt0ddduxuzgl, byte-genau", async () => {
-  // Regressionsanker: EXAKT der Auftrag, der am 19.08. den Bruch erzeugt hat. Notaus an
-  // (Muster des Notaus-Falls oben), damit die Treppe deterministisch auf Stufe 2 faellt.
   config.voice.elevenLabsOutbound.openingLineLlm = false;
   try {
     const { line } = await fetchOpeningLine(
@@ -395,8 +348,6 @@ test("GQ-E1-04: die festen Eroeffnungs-Bausteine tragen kein Anrede-Pronomen (de
 });
 
 test("GQ-E1-06: Deckel-Arithmetik der Eroeffnung", () => {
-  // Die Zusage "die Eroeffnung endet auf eine Frage" haengt seit GQ-E1 allein an diesem
-  // Wert: hinter der Variablen steht am Anbieter kein statischer Text mehr (E-P8).
   for (const lang of SUPPORTED_LANGUAGES) {
     const frage = localeFor(lang).openingQuestion;
     assert.ok(frage, `Sprache ${lang}: feste Frage fehlt`);
@@ -415,8 +366,6 @@ test("GQ-E1-06: Deckel-Arithmetik der Eroeffnung", () => {
 });
 
 test("GQ-E1-07: der GANZE gesprochene Satz, je Sprache und in beiden Faellen", () => {
-  // Der Fall, der den Befund vom 19.08. gefangen haette: Rahmen und Variable waren bis
-  // dahin nur je fuer sich geprueft, nie zusammengesetzt (E-P6).
   for (const lang of SUPPORTED_LANGUAGES) {
     const locale = localeFor(lang);
     for (const reason of [locale.openingReasonFallback, FRAGE_ZEILE[lang]]) {

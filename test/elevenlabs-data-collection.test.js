@@ -1,19 +1,3 @@
-// ABNAHME-D1 (Owner-Auftrag: eigene Felder im Ergebnisschema plus ein Prompt, der sie
-// anfordert). Deckt TEIL 2 (appointment_date/appointment_time/amount/currency) und TEIL 3
-// (die im Gespraech bestaetigte Zeitzone des Angerufenen) auf drei Ebenen ab:
-//   1) die reine Ableitung collectedFieldsOf (src/elevenlabs/outbound.js) gegen die
-//      Anbieter-Antwortform (DataCollectionResultCommonModel, ElevenLabs-OpenAPI-Schema)
-//   2) die Store-Mutatoren recordProviderCollectedFields/recordCalleeConfirmedTimezone
-//      (src/store/state-ops.js) direkt gegen eine In-Memory-State - offline, kein Server,
-//      kein Store-Backend, kein Netz (P12 F.I.R.S.T.), Muster test/elevenlabs-anker-
-//      nachziehen.test.js
-//   3) den ECHTEN Poll-Weg Ende-zu-Ende (makeElevenLabsOutbound#rearmActiveConversationPolls
-//      -> pollConversationResult -> finishFromConversation -> persistProviderResult), gegen
-//      eine Attrappen-Store + Attrappen-fetch, Muster test/el-fixtures-echte-antworten.test.js
-//
-// Testnamen tragen bewusst KEINE Katalog-ID des i18n-Launch-Testkatalogs am Namensanfang
-// ("ABNAHME-" ist keine, s. package.json config.abnahmePattern/config.i18nCatalogPattern) -
-// sonst landet die Datei im falschen Testlauf (Lehre catalog-id-prefix-misroutes-tests).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -34,8 +18,6 @@ import { makePgStore } from "../src/store/pg.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const HTTP_OK = 200;
-
-// ---- Ebene 1: collectedFieldsOf (reine Ableitung, kein Store, kein Netz) ----------------
 
 test("collectedFieldsOf: alle fuenf Angaben kommen woertlich an, amount als String (Anbieter liefert es als Zahl)", () => {
   const collected = collectedFieldsOf(CONVERSATION_DONE_WITH_DATA_COLLECTION);
@@ -76,8 +58,6 @@ test("collectedFieldsOf: FEHLT nur EINE Angabe im Gespraech (kein Preis verhande
       data_collection_results: {
         appointment_date: { data_collection_id: "appointment_date", value: "March 3", rationale: "x" },
         appointment_time: { data_collection_id: "appointment_time", value: "2:30 PM", rationale: "x" },
-        // amount/currency/confirmed_timezone fehlen komplett - kein Preis, keine Zone
-        // kam im Gespraech vor.
       },
     },
   });
@@ -102,8 +82,6 @@ test("collectedFieldsOf: eine leere Zeichenkette (Anbieter hat das Feld erwaehnt
   assert.equal(collected.amount, null);
   assert.equal(collected.currency, null);
 });
-
-// ---- Ebene 2: die Store-Mutatoren direkt gegen state-ops (Muster elevenlabs-anker-nachziehen.test.js) ----
 
 function freshCall(state) {
   return createCall(state, {
@@ -190,12 +168,6 @@ test("recordCalleeConfirmedTimezone: UEBERSCHREIBBAR (Eigentuemer-Auflage) - ein
   assert.equal(call.calleeConfirmedTimezoneAt, "2026-08-16T10:05:00.000Z");
 });
 
-// ---- Ebene 3: Ende-zu-Ende ueber den echten Poll-Weg (Muster el-fixtures-echte-antworten.test.js) ----
-
-// Faengt genau die Werte ab, die persistProviderResult an den Store weiterreicht -
-// dieselben Felder, die get_call_result/die Kostendecke bzw. (nach diesem Paket) der
-// Call-Datensatz selbst lesen. Muster makeCapturingStore (el-fixtures-echte-antworten.test.js),
-// um TEIL 2/3 zusaetzlich einzufangen.
 function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
   const call = {
     id,
@@ -226,23 +198,14 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
     recordCalleeConfirmedTimezone: (_id, confirmed) => {
       captured.confirmedTimezone = confirmed;
     },
-    // Join-Schluessel zur Telefonie-Rechnung (persistProviderResult, s.
-    // src/elevenlabs/outbound.js): hier ein No-op - der Sachverhalt dieser Datei
-    // haengt nicht an ihm, aber die Attrappe muss die Methode kennen, sonst wirft
-    // der Ergebnisweg einen TypeError.
     recordSipCallId: () => {},
-    // ST3: Zaehlfeld der Stimmen-Detektoren - dieselbe Begruendung wie recordSipCallId
-    // direkt darueber.
     recordElDetectorCounts: () => {},
-    // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber.
     recordFromRegistrationSource: () => {},
     recordActualSender: () => {},
     trueUpAnsweredAt: (_id, answeredAtIso) => {
       call._answeredAtIso = answeredAtIso;
     },
     recordAnsweredUnclearReason: () => {},
-    // OUTBOUND-E2: finishFromConversation ruft recordFailureReason UNBEDINGT - eine
-    // unvollstaendige Attrappe soll auffallen (TypeError), nicht stumm bleiben.
     recordFailureReason: () => {},
     endCallRecord: (_id, status) => {
       call.status = status;
@@ -283,8 +246,6 @@ async function pollFixtureConversation(fixture) {
 test("Ende-zu-Ende: ein abgeschlossenes Gespraech mit Data-Collection-Ergebnis liefert die vier Angaben additiv NEBEN Transkript und Zusammenfassung, unveraendert", async () => {
   const { captured } = await pollFixtureConversation(CONVERSATION_DONE_WITH_DATA_COLLECTION);
 
-  // Transkript und Zusammenfassung bleiben genau das, was der Anbieter woertlich liefert -
-  // TEIL 2/3 aendert daran nichts (Owner-Auflage: additiv, kein Ersatz).
   assert.deepEqual(captured.transcript, [
     { role: "agent", message: "So March 3rd, 2:30 PM, sixty dollars. Thank you, goodbye." },
   ]);
@@ -294,8 +255,6 @@ test("Ende-zu-Ende: ein abgeschlossenes Gespraech mit Data-Collection-Ergebnis l
     "der Freitext bleibt der unveraenderte Anbieter-Text",
   );
 
-  // Die vier Angaben kommen jetzt ZUSAETZLICH als EIGENE, exakte Werte an - keine
-  // Teilstring-Suche im Freitext noetig, um sie zu lesen.
   assert.deepEqual(captured.collectedFields, {
     appointmentDate: "March 3",
     appointmentTime: "2:30 PM",
@@ -304,7 +263,6 @@ test("Ende-zu-Ende: ein abgeschlossenes Gespraech mit Data-Collection-Ergebnis l
     confirmedTimezone: "Eastern time",
   });
 
-  // TEIL 3: die bestaetigte Zeitzone wird MIT Herkunft und Zeitstempel geschrieben.
   assert.equal(captured.confirmedTimezone.timezone, "Eastern time");
   assert.equal(captured.confirmedTimezone.origin, "elevenlabs_data_collection");
   assert.ok(captured.confirmedTimezone.confirmedAt, "ein Zeitstempel muss mitreisen");
@@ -322,7 +280,6 @@ test("Ende-zu-Ende: KEIN Feld erhoben (kein Termin, kein Preis, keine bestaetigt
     analysis: {
       call_successful: "failure",
       transcript_summary: "Reached the wrong person, no appointment or price was discussed.",
-      // data_collection_results fehlt komplett - der haeufige Normalfall.
     },
     metadata: { call_duration_secs: 12, termination_reason: "Client disconnected: 1000", error: null },
   };
@@ -343,13 +300,6 @@ test("Ende-zu-Ende: KEIN Feld erhoben (kein Termin, kein Preis, keine bestaetigt
   );
 });
 
-// ---- Ebene 4: das ECHTE pg-Backend (pglite, Postgres-in-WASM, offline) ------------------
-// Schliesst genau die Luecke, die die drei Ebenen oben NICHT decken: dass die sieben neuen
-// Spalten (src/db/schema.sql) tatsaechlich existieren, das INSERT (src/store/pg.js#
-// flushCalls) sie schreibt und rowToCall sie nach einer Re-Hydrierung unveraendert
-// zurueckliefert - "identisch zur Praezedenz answered_unclear_reason" gilt nur, wenn auch
-// diese Kante geprueft ist. Muster test/store-pg.test.js ("createCall persistiert ueber
-// Re-Hydrierung").
 async function reopen(db) {
   const runner = {
     withClient: (fn) =>

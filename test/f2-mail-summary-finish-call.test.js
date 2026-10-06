@@ -1,10 +1,3 @@
-// F2-Mail - Integration ueber makeCallFinish: Versand genau einmal (Dedup nach Erfolg),
-// ein Mailer-Fehler laesst finishCall/Billing/SMS unberuehrt (fail-soft), Skip wird
-// PII-frei auditiert (keine E-Mail-Adresse im Audit-Detail). F2-Newsletter-Recipients:
-// CONFIRMED-Zusatzempfaenger bekommen eine EIGENE Mail MIT Abmelde-Link-Footer, PENDING
-// keine, ein Teilfehler ist fail-soft (Marker trotzdem gesetzt, s. mail-summary.js/
-// call-finish.js Kommentar "bewusste Vereinfachung"). Unit-Test mit Fake-Kollaboratoren
-// (Muster test/web-14-call-finish-sms-text-language.test.js), kein Server-Spawn, kein Netz.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
@@ -28,7 +21,6 @@ function makeFakeStore({ consent = true, recipients = [] } = {}) {
     recordUsageEvent: () => {},
     markSummarySmsSent: () => calls.markSummarySmsSent.push(1),
     markBilled: () => {},
-    // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
     markInboxEntry: () => {},
     markSummaryMailSent: () => calls.markSummaryMailSent.push(1),
     tenantNewsletterConsent: () => ({ consent }),
@@ -42,11 +34,6 @@ function fakeAccountsRef(email = ACCOUNT_EMAIL) {
 
 const SUMMARY_TEXT = "Kurze Zusammenfassung.";
 
-// Fake-summarizeCall MUSS wie die echte Implementierung (claude.js) call.summary als
-// Nebeneffekt setzen, BEVOR sie zurueckkehrt - genau das liest Gate (c) in
-// planSummaryMail (mail-summary.js). Ein Fake, der nur den Rueckgabewert liefert (wie in
-// test/web-14-*.test.js, wo keine Mail-Gate den call.summary-Nebeneffekt braucht), wuerde
-// hier Gate (c) faelschlich als "keine Summary" auswerten.
 async function fakeSummarizeCall(call) {
   call.summary = SUMMARY_TEXT;
   return { summary: SUMMARY_TEXT, actionItems: [] };
@@ -92,8 +79,6 @@ test("Versand genau einmal: Erfolg -> markSummaryMailSent gesetzt, kein zweiter 
   assert.doesNotMatch(sendCalls[0].text, /Abmelden:/, "Konto-Adresse bekommt KEINEN Abmelde-Link");
   assert.equal(store.calls.markSummaryMailSent.length, 1, "Dedup-Marker gesetzt");
 
-  // Zweiter Aufruf (z.B. spaeter /voice/status-Retry): call._finished ist bereits gesetzt
-  // (In-Memory-Guard) -> finishCall selbst returnt sofort, kein zweiter Versand.
   await callFinish.finishCall(call);
   assert.equal(sendCalls.length, 1, "kein zweiter Versand nach _finished-Guard");
 });
@@ -101,8 +86,6 @@ test("Versand genau einmal: Erfolg -> markSummaryMailSent gesetzt, kein zweiter 
 test("Versand-Dedup ueber den persistierten Marker: call.summaryMailSentAt bereits gesetzt -> kein Sendeversuch", async () => {
   const sendCalls = [];
   const store = makeFakeStore({ consent: true });
-  // call._finished ist NICHT gesetzt (frischer Call-Snapshot, Muster Prozess-Restart),
-  // aber der PERSISTIERTE Marker ist schon da - planSummaryMail muss ihn sehen.
   const call = makeCompletedCall({ summaryMailSentAt: "2026-08-14T10:06:00.000Z" });
   const callFinish = makeCallFinish({
     store,
@@ -224,13 +207,10 @@ test("Default-Aufrufer ohne mailer/accountsRef (Bestandstests) bleiben gueltig -
     summarizeCall: fakeSummarizeCall,
     planSummarySms: noopSms,
     audit: () => {},
-    // mailer/accountsRef bewusst WEGGELASSEN (Default null/{current:null}).
   });
 
   await assert.doesNotReject(() => callFinish.finishCall(call));
 });
-
-// ---- F2-Newsletter-Recipients: CONFIRMED-Zusatzempfaenger ----------------------------
 
 test("CONFIRMED-Zusatzempfaenger bekommt eine EIGENE Mail MIT Abmelde-Link (Konto-Adresse bleibt ohne)", async () => {
   const sendCalls = [];
@@ -262,9 +242,6 @@ test("CONFIRMED-Zusatzempfaenger bekommt eine EIGENE Mail MIT Abmelde-Link (Kont
 });
 
 test("nur PENDING-Zusatzempfaenger (nicht bestaetigt) -> store liefert ihn nicht ueber confirmedNewsletterRecipients -> keine Mail an ihn", async () => {
-  // confirmedNewsletterRecipients ist bereits die GEFILTERTE Sicht (state-ops.js) - ein
-  // pending-Eintrag taucht dort nie auf. Dieser Test haelt die Erwartung an der Store-
-  // Fassaden-Grenze fest (Konto-Pfad bleibt der einzige Empfaenger).
   const sendCalls = [];
   const store = makeFakeStore({ consent: true, recipients: [] });
   const call = makeCompletedCall();
