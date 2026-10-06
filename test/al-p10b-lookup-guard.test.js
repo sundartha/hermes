@@ -1,10 +1,3 @@
-// AL-P10b (PLAN-ASSISTANT-LEAP, Phase 10b): die beiden REINEN Riegel des In-Call-
-// Nachschlags - was darf raus (sanitizeLookupQuery), was darf rein (lookupFactsFrom).
-// Offline, ohne Server, ohne Netz, ohne Store.
-//
-// Testnamen tragen bewusst KEINE Katalog-ID (GAP-/PROMPT-/...) am Namensanfang - sonst
-// landen sie still im Gates-Lauf (package.json config.i18nCatalogPattern), wo Rot erlaubt
-// ist (Lehre catalog-id-prefix-misroutes-tests). Praefix ist "AL-P10b-G<n>:".
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -15,12 +8,6 @@ import {
 } from "../src/research/lookup-guard.js";
 import { KEY_FACTS_LIMITS } from "../src/store/defaults.js";
 
-// Der Angerufene: Nummer + eine caller-Zeile, gegen die die Zitat-Suche laeuft.
-// KEIN callerName im Fixture: call.callerName ist in Produktion (createCall,
-// state-ops.js) seit G1 hart null - ein Fixture, das es setzt, wuerde eine Konfiguration
-// pruefen, die im Betrieb nie vorkommt (Lehre "gleiche Fixture-Werte testen nichts").
-// Der Namensbezug ist deshalb NICHT deterministisch durchgesetzt, sondern traegt die
-// Tool-Description (t.lookUpQueryParam, siehe PLAN-SECURITY.md AL-P10b Riegel 3/E8).
 const CALL = Object.freeze({
   to: "+4915112345678",
   transcript: [

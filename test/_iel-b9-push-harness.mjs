@@ -1,10 +1,3 @@
-// IEL-B9: Kindprozess fuer "das Init-Ziel haengt nicht an PUBLIC_URL". Der Test startet
-// diesen Harness mit einer eigenen Prozess-Env (PUBLIC_URL gesetzt) und einem Render-Szenario;
-// das Kommando laeuft mit dieser Env, aber ohne Netz: fetch ist ein Router aus dem Speicher.
-//
-// Szenario (JSON in IEL_B9_RENDER_SZENARIO): { publicUrlStatus, publicUrl, serviceUrl, domains,
-// settings }. Argumente fuer push-elevenlabs.mjs kommen als argv. Letzte stdout-Zeile:
-// "IEL-B9-ERGEBNIS <json {code, aufrufe}>".
 const SZENARIO_ENV = "IEL_B9_RENDER_SZENARIO";
 export const ERGEBNIS_MARKE = "IEL-B9-ERGEBNIS";
 const RENDER_BASIS = "https://api.render.com/v1/services/";

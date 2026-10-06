@@ -1,14 +1,3 @@
-// AL-P4: Seiteneffekt-Werkzeuge brechen den Tool-Loop. Gegenstand sind ZWEI Zusagen:
-//   (1) ein Roundtrip, der NUR Seiteneffekt-Werkzeuge anfordert UND Text liefert, beendet
-//       den Turn -> ein llm.complete statt zwei (die Einsparung dieser Phase);
-//   (2) die Abbruchbedingung wird nur ERWEITERT: leeres speech und der end_call-Ausstieg
-//       verhalten sich byte-identisch zum Bestand.
-// Testnamen tragen bewusst KEINE Katalog-ID (GAP-/PROMPT-/...) am Namensanfang - sonst
-// landen sie still im Gates-Lauf (package.json config.i18nCatalogPattern).
-//
-// Naht wie test/llm-message-chain-language.test.js: lokaler node:http-Anthropic-Mock,
-// ANTHROPIC_BASE_URL + DATA_DIR VOR dem ersten config-Import, danach dynamischer Import
-// von src/store.js / src/claude.js. Kein Server-Spawn, kein pglite, kein Netz (P12/R).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -16,8 +5,8 @@ import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
-const SUBSTANTIAL = "Ja, Donnerstag passt gut"; // hebt suppressEndCall auf (isSubstantialCallerText)
-const HALLUCINATED_TOOL = "look_up_not_yet_built"; // nicht klassifiziert -> Loop laeuft weiter
+const SUBSTANTIAL = "Ja, Donnerstag passt gut";
+const HALLUCINATED_TOOL = "look_up_not_yet_built";
 
 function message(content, stopReason) {
   return {
@@ -43,9 +32,6 @@ const textPlus = (text, ...names) =>
     "tool_use",
   );
 
-// Faellt die queue leer, antwortet der Mock mit einem MARKIERTEN Fallbacktext - ein
-// ungewollter Zusatz-Roundtrip faellt damit sowohl in bodies.length als auch im
-// zurueckgegebenen speech auf.
 const UNWANTED_EXTRA_ROUNDTRIP_MARKER = "UNGEWOLLTER-ZUSATZ-ROUNDTRIP";
 
 let server;
@@ -153,9 +139,6 @@ test("AL-P4-7: isSideEffectOnlyTool klassifiziert beide Bestandswerkzeuge und ni
 });
 
 test("AL-P4-8: heute ist JEDES Werkzeug aus toolDefs ein Seiteneffekt-Werkzeug", () => {
-  // Bricht bewusst, sobald look_up/get_consult dazukommen - er erzwingt die
-  // Klassifikations-Entscheidung fuer neue Tools, statt sie stillschweigend auf
-  // "informationsliefernd" fallen zu lassen (AL-P10b/AL-P14).
   assert.ok(toolDefs("de").every((t) => isSideEffectOnlyTool(t.name)));
 });
 

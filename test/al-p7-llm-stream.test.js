@@ -1,8 +1,3 @@
-// AL-P7 (Seam): llm.completeStream reicht die Text-Fragmente WAEHREND der Generierung an
-// einen Sink durch und behaelt dabei die Resilienz von complete - mit EINER neuen,
-// bindenden Regel: kein Retry mehr, sobald ein Fragment den Seam verlassen hat.
-// Reine node:test-Unit gegen einen injizierten messagesStream (DIP) - kein Netz, keine
-// echte Zeit, kein Store (P12 F.I.R.S.T.).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Anthropic from "@anthropic-ai/sdk";
@@ -28,8 +23,6 @@ function llmConfig(overrides = {}) {
 
 const noSleep = () => Promise.resolve();
 
-// Sink-Spy im Vertrag des Chunkers (pushText/toolUseStarted) - ohne dessen Satz-Logik,
-// damit dieser Test wirklich nur den Seam prueft.
 function sinkSpy() {
   const pushed = [];
   let toolUse = 0;
@@ -53,10 +46,6 @@ const jsonDelta = (partial) => ({
   delta: { type: "input_json_delta", partial_json: partial },
 });
 
-// Fake-MessageStream: AsyncIterable ueber eine feste Event-Folge + finalMessage().
-// throwAt = Index, an dem die Iteration stattdessen wirft (Abriss mitten im Strom).
-// pauseMs = echte Wartezeit VOR diesem Wurf - nur so kann eine kurz gestellte Wanduhr
-// des Seams tatsaechlich ablaufen (AL-P7-14).
 function fakeStream({ events, final, throwAt = -1, error, pauseMs = 0 }) {
   const breakOff = async () => {
     if (pauseMs) await new Promise((r) => setTimeout(r, pauseMs));
@@ -81,8 +70,6 @@ const FINAL = {
   content: [{ type: "text", text: "Guten Tag. Wie kann ich helfen?" }],
   usage: { input_tokens: 11, output_tokens: 20 },
 };
-// B3a: completeStream liefert per Vertrag ein LlmTurn (src/llm/ports.js), nicht mehr die
-// Anbieter-Endnachricht. Die Rohform steht unveraendert als opake Ruecktrage daneben.
 const FINAL_USAGE = {
   inputUncachedTokens: 11,
   inputCacheWriteTokens: 0,
@@ -92,8 +79,6 @@ const FINAL_USAGE = {
   billingModelId: MODEL,
 };
 
-// Fabrik fuer den injizierten Seam: liefert nacheinander die uebergebenen Streams und
-// protokolliert die Aufrufe (params + options).
 function streamFactory(...streams) {
   const calls = [];
   const fn = (params, options) => {
@@ -125,7 +110,6 @@ test("AL-P7-9: Text-Deltas kommen in Reihenfolge am Sink an, finalMessage wird d
   assert.deepEqual(resp.toolCalls, []);
   assert.deepEqual(resp.usage, FINAL_USAGE);
   assert.equal(resp.providerTurn, FINAL, "die Endnachricht bleibt als opake Ruecktrage erhalten");
-  // callId wird wie bei complete abgestreift, bevor params an den SDK-Seam geht.
   assert.equal(messagesStream.calls[0].params.callId, undefined);
   assert.equal(messagesStream.calls[0].params.sink, undefined);
   assert.equal(messagesStream.calls[0].params.streamBudgetMs, undefined);
@@ -204,10 +188,6 @@ test("AL-P7-13: derselbe Fehler NACH dem ersten Fragment wird NICHT wiederholt (
   assert.deepEqual(sink.pushed, ["Guten Tag."]);
 });
 
-// B3a: der Abbruch wird nicht mehr am ANBIETER-Fehlertyp erkannt, sondern daran, dass
-// UNSERE Wanduhr abgelaufen ist (llm.js: deadline.aborted) - genau die Unterscheidung,
-// die der Seam ohne Anbieter-Wissen treffen kann. Der Stream muss dafuer real ueber die
-// kurz gestellte Frist hinauslaufen; ein Wurf allein sagt nichts ueber die Uhr.
 const STREAM_BUDGET_MS = 1;
 const BREAK_OFF_AFTER_MS = 20;
 
@@ -265,10 +245,6 @@ test("AL-P7-16: offener Breaker wirft VOR dem Stream (kein openStream-Aufruf)", 
 });
 
 test("AL-P7-18: auch das Fugenzeichen sperrt den Retry (jedes Fragment zaehlt)", async () => {
-  // B3a: der Riegel haengt am Sink des Seams, nicht mehr am Ereignistyp - ein
-  // Fugen-Leerzeichen, das den Seam verlassen hat, ist genauso wenig zurueckholbar wie
-  // ein Text-Delta. Erreichbar nur, wenn ein ZWEITER Textblock beginnt, bevor je ein
-  // Delta kam.
   const sink = sinkSpy();
   const transient = new Anthropic.APIConnectionError({ message: "connection failed" });
   const messagesStream = streamFactory(

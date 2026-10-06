@@ -1,21 +1,9 @@
-// AL-D3 Review-Fix (Runde 1, G5/S2): readBody/readJsonBody wurden aus
-// scripts/convo-bench/exa-fake.mjs in
-// scripts/convo-bench/http-fake-helpers.mjs gezogen, um die Byte-fuer-Byte-Kopie
-// zwischen den beiden Fakes zu beenden. Dieser Test deckt die extrahierte Funktion
-// direkt ab (Verhalten: Body sammeln, JSON tolerant parsen) und faengt eine
-// Regression aus dem Zusammenzug (Vorlage test/al-p8-bench-shim-driver.test.js).
-//
-// Testname-Praefix "AL-D3-" trifft KEIN Katalog-Praefix aus package.json
-// config.i18nCatalogPattern - dieser Test laeuft in `npm test`, wo Rot zaehlt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { readBody, readJsonBody } from "../scripts/convo-bench/http-fake-helpers.mjs";
 import { startExaFake } from "../scripts/convo-bench/exa-fake.mjs";
 
-// Minimaler lokaler Server, der jeden eingehenden Request an die uebergebene
-// Handler-Funktion durchreicht - Vorlage fuer readBody/readJsonBody direkt gegen
-// einen echten node:http.IncomingMessage zu pruefen (kein Mock des req-Objekts).
 async function withEchoServer(handler) {
   const server = http.createServer(handler);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));

@@ -1,8 +1,3 @@
-// OUTBOUND-E5 (F3): der ElevenLabs-Anrufstart ueber die ECHTE HTTP-Route (Muster
-// test/elevenlabs-anrufstart.test.js) - Spawn-Server + lokale ElevenLabs-Attrappe, EIN
-// echter POST /api/calls je Fall. Die Attrappe ZEICHNET den Anfragekoerper auf und die
-// Tests PRUEFEN ihn (Blocker-Vermeidungsliste 3: eine Attrappe, die stur "ok" liefert,
-// beweist nichts darueber, WELCHER Wert gesendet wurde).
 import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
@@ -20,8 +15,6 @@ const START_PATH = "/v1/convai/sip-trunk/outbound-call";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 
 const AGENT_ID = "agent_el_test_1";
-// Der globale Rueckfall (ELEVENLABS_AGENT_PHONE_NUMBER_ID) - MUSS von jeder Tenant-
-// eigenen Kennung unterscheidbar sein (B2 pinnt genau das).
 const RUECKFALL_AGENT_PHONE_NUMBER_ID = "phnum_global_test";
 const API_KEY = "el-api-key-testgeheim";
 const RESULT_POLL_MS = "150";
@@ -50,9 +43,6 @@ function endJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-// Attrappe mit GENAU den zwei Endpunkten, die dieser Weg braucht (Muster
-// elevenlabs-anrufstart.test.js#startElevenLabsMock, hier schlanker: kein Abbruch-
-// Schalter, diese Datei prueft den Absender, nicht die Fehlerpfade).
 async function startElevenLabsMock() {
   const startRequests = [];
   const server = http.createServer((req, res) => {
@@ -76,9 +66,6 @@ async function startElevenLabsMock() {
   };
 }
 
-// Tenant A (mit eigener EL-Registrierung) + Tenant B (ohne). BEIDE aktiv, verifiziert,
-// mit Auftraggeber-Namen (passieren jedes Gate). Fehlende providerAgentPhoneNumberId bei
-// Tenant B ist WEGGELASSEN (nicht null) - Muster der fail-closed-Praedikate im Bestand.
 function seedZweiTenants() {
   return seedState({
     tenants: [
@@ -133,8 +120,6 @@ function placeCall(srv, identity) {
 
 const ownCall = (srv) => srv.readStore().calls.find((call) => call.goal === OBJECTIVE);
 
-// B1: Tenant MIT eigener Registrierung ruft an -> der Anrufkoerper traegt GENAU ihre
-// Kennung, byte-genau; to_number unveraendert.
 test("B1: Tenant mit eigener Registrierung -> agent_phone_number_id ist ihre Kennung, byte-genau", async () => {
   await withElevenLabs(async ({ srv, mock }) => {
     const res = await placeCall(srv, SUBJECT_A);
@@ -146,8 +131,6 @@ test("B1: Tenant mit eigener Registrierung -> agent_phone_number_id ist ihre Ken
   });
 });
 
-// B2: Tenant-Isolation UEBER DIE ROUTE - Tenant B (ohne eigene Registrierung) ruft an,
-// WAEHREND Tenant A eine hat. Die fremde Kennung von Tenant A darf NIE geliefert werden.
 test("B2: Tenant-Isolation ueber die Route - Tenant B faellt auf den Rueckfall, NIE auf Tenant As Kennung", async () => {
   await withElevenLabs(async ({ srv, mock }) => {
     const res = await placeCall(srv, SUBJECT_B);
@@ -159,8 +142,6 @@ test("B2: Tenant-Isolation ueber die Route - Tenant B faellt auf den Rueckfall, 
   });
 });
 
-// B3: der Rueckfall ist LAUT (E4-Lehre 4) - im Log benannt, Grund genannt, KEINE Rufnummer
-// im Log.
 test("B3: der Rueckfall ist LAUT im Log - benannt, mit Grund, ohne Rufnummer", async () => {
   await withElevenLabs(async ({ srv }) => {
     const res = await placeCall(srv, SUBJECT_B);
@@ -171,7 +152,6 @@ test("B3: der Rueckfall ist LAUT im Log - benannt, mit Grund, ohne Rufnummer", a
   });
 });
 
-// B4: der Rueckfall ist am Anruf-Datensatz erkennbar.
 test("B4: Rueckfall am Datensatz erkennbar - fromRegistrationSource=rueckfall_global", async () => {
   await withElevenLabs(async ({ srv }) => {
     const res = await placeCall(srv, SUBJECT_B);
@@ -181,7 +161,6 @@ test("B4: Rueckfall am Datensatz erkennbar - fromRegistrationSource=rueckfall_gl
   });
 });
 
-// B5: die eigene DID ist am Anruf-Datensatz erkennbar.
 test("B5: eigene DID am Datensatz erkennbar - fromRegistrationSource=tenant_did", async () => {
   await withElevenLabs(async ({ srv }) => {
     const res = await placeCall(srv, SUBJECT_A);
@@ -191,9 +170,6 @@ test("B5: eigene DID am Datensatz erkennbar - fromRegistrationSource=tenant_did"
   });
 });
 
-// B6: Bestandsschutz - call.from (= from_e164, die gebuchte Tenant-DID) ist in BEIDEN
-// Faellen unveraendert die jeweilige Tenant-DID; der Routing-/Geo-/Tarifpfad haengt
-// unveraendert an from_e164, nicht an der neuen Registrierungs-Herkunft.
 test("B6: Bestandsschutz - call.from bleibt in BEIDEN Faellen die gebuchte Tenant-DID", async () => {
   await withElevenLabs(async ({ srv }) => {
     const resA = await placeCall(srv, SUBJECT_A);

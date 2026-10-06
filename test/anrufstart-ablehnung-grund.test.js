@@ -1,26 +1,14 @@
-// OUTBOUND-E2 (F1): der bestehende catch im Anruf-Start-Pfad (src/routes/api-calls.js)
-// umschliesst ALLE DREI Engine-Zweige (EL/Call-Control/TeXML) - dieser Test faehrt bewusst
-// den TeXML-Telnyx-Zweig (kein ElevenLabs-Flag gesetzt), um zu belegen, dass die Luecke
-// (kein Fehlergrund bei einer Start-Ablehnung) NIE EL-spezifisch war (bindende Vorgabe 8).
-//
-// Reiner Spawn (startServer), Muster test/cq-p8-briefing-http.test.js#startVoiceMock: der
-// lokale Telnyx-TeXML-Mock antwortet HTTP 403 mit einem echten Telnyx-Fehler-Envelope
-// (adapters/telnyx/errors.js liest {errors:[{code,title}]}), statt einen echten Anruf
-// auszuloesen.
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer } from "./helpers.js";
 import { FAILURE_REASON_TEXTS } from "../src/i18n/failure-reason-texts.js";
 
-const TO = "+4915112345678"; // erlaubtes Ziel, kein Premium/Notruf
+const TO = "+4915112345678";
 const TELNYX_PROVIDER_STATUS = 403;
 const HTTP_UPSTREAM_ERROR = 502;
 const BESTANDSTEXT_MUSTER = /\(Status: failed\)$/;
 
-// Lokaler Telnyx-TeXML-Mock, der die Ablehnung vom 27.08.2026 nachstellt: HTTP 403 mit
-// einem echten Telnyx-Fehler-Envelope (Form belegt: src/telephony/adapters/telnyx/
-// errors.js#telnyxErrorEnvelope liest {errors:[{code,title,detail}]}).
 async function startFailingVoiceMock() {
   const server = http.createServer((req, res) => {
     req.on("data", () => {});
@@ -52,9 +40,6 @@ function placeCall(srv) {
   });
 }
 
-// Basis-Token "not-placed" -> Phrase der aufgeloesten Sprache des Anrufs, mit demselben
-// Rueckfall wie localeFor (unbekannte/fehlende Sprache -> en). Flach gehalten (kein
-// verketteter Zugriff ueber vier Gliedern, G36).
 function notPlacedPhraseFor(language) {
   const bundle = FAILURE_REASON_TEXTS[language] || FAILURE_REASON_TEXTS.en;
   return bundle.phrases["not-placed"];
@@ -85,12 +70,6 @@ test("Start-Ablehnung des Anbieters (403): der Anruf traegt den Grund, die Antwo
       "die Start-Ablehnung MUSS einen Grund tragen - auch auf dem TeXML-Weg",
     );
 
-    // Ergebnis-Beleg (KEIN Reihenfolge-Beweis - s. Review-Blocker Runde 4 + der
-    // ordnungssensitive Test unten): terminateAndBillCall haengt bill() fire-and-forget
-    // an (call-termination.js), darum haengt die Position dieser Assertion an der
-    // zufaelligen Ereignisschleifen-Reihenfolge des Kindprozesses, nicht an der
-    // tatsaechlichen Code-Reihenfolge im catch. Das schwaechere, aber ECHTE Ergebnis
-    // bleibt trotzdem pruefenswert: die persistierte Notification nennt den Grund.
     const stateRes = await fetch(`${srv.localUrl}/api/state`);
     const state = await stateRes.json();
     const notification = state.notifications.find((item) => item.callId === callId);
@@ -106,19 +85,3 @@ test("Start-Ablehnung des Anbieters (403): der Anruf traegt den Grund, die Antwo
     await voiceMock.close();
   }
 });
-
-// ---------------- Reihenfolge-Regressionsfang: AUSGEWANDERT (OUTBOUND-E3a) ----------------
-//
-// Der ordnungssensitive Test, der frueher hier stand, baute die Produktionsreihenfolge im
-// TEST selbst nach (recordFailureReason VOR terminateAndBillCall, von Hand getippt) - ein
-// Test, der die echte Reihenfolge im Produktionscode nicht pruefte, sondern nur seine
-// EIGENE Kopie davon. Clean-Code-Befund E2-B / Safety-Befund C1: bei vertauschter
-// Reihenfolge im echten Code (src/routes/api-calls.js) blieb dieser Test GRUEN.
-//
-// OUTBOUND-E3a macht die Reihenfolge zur STRUKTUR statt zum Kommentar: der Grund wird
-// INNERHALB des persistEnd-Thunks geschrieben (endFailedCallWithReason,
-// src/routes/api-calls.js), und persistEnd laeuft in terminateAndBillCall garantiert VOR
-// bill() (src/telephony/call-termination.js). Der Regressionsfang dafuer steht jetzt in
-// test/fehlergrund-reihenfolge-riegel.test.js - er prueft den ECHTEN Produktions-Thunk
-// (Laufzeit) UND die Verdrahtung im ausgelieferten Quelltext (Sabotage-Fang), statt eine
-// Kopie der Reihenfolge im Test zu wiederholen.

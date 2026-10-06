@@ -1,20 +1,10 @@
-// A4 (go-live-Haertung): DEFAULT_PROFILE.maxCallsPerHour = 0. Pinnt die zwei Invarianten:
-// (a) der DEFAULT-Wert ist 0 und 0 ist kein Falsy-Missverstaendnis (echte Schwelle), (b) am
-// HTTP-Gate blockt ein profil-loser Tenant hart bei 0 Calls (429 stundenlimit),
-// waehrend ein A2/A3-provisionierter Subscriber (maxCallsPerHour=null) UND der Owner
-// (OWNER_PROFILE) das Gate passieren. Phase S: das Profil keyt auf die tenantId, deshalb
-// laufen die Integration-Faelle unter MULTI_TENANT=true mit geseedeten Tenants (idpSubject,
-// kyc=card, ownerName, Profil unter tenantId) - genau der Production-Pfad. Reine Unit
-// (resolveProfileFrom) + Spawn-Integration in EINER Datei, KEIN pglite (Lehre p6a).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
 import { resolveProfileFrom, BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
 
-const TO = "+4915112345678"; // erlaubtes Ziel, kein Premium/Notruf
-// Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
-// TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403/429/400 = ein Gate hat gesperrt.
+const TO = "+4915112345678";
 const MT = { MULTI_TENANT: "true", ALLOWED_COUNTRY_CODES: "*" };
 
 const postCall = (url, to, identity) =>
@@ -45,9 +35,6 @@ const activeNumber = (id, e164, tenantId) => ({
   providerNumberId: null,
 });
 
-// (1) Reine Unit: DEFAULT_PROFILE traegt maxCallsPerHour=0 (nicht falsy-Luecke); der Owner
-// (tenantId === BOOTSTRAP) bleibt von A4 unberuehrt (OWNER_PROFILE, null = nur globaler Cap);
-// ein A2/A3-Tier-Profil (planProfileFor) ueberschreibt den DEFAULT-0-Block auf null.
 test("A4: resolveProfileFrom - DEFAULT=0 harter Block, Owner/Tier unberuehrt", () => {
   assert.equal(
     resolveProfileFrom("nobody@x", undefined).maxCallsPerHour,
@@ -66,14 +53,11 @@ test("A4: resolveProfileFrom - DEFAULT=0 harter Block, Owner/Tier unberuehrt", (
   );
 });
 
-// (2) Integration: profil-loser Tenant blockt HART bei 0 Calls (429), kein Call-Record.
-// MULTI_TENANT=true -> X-Internal-Identity loest den geseedeten Tenant auf; ohne Profil
-// greift DEFAULT_PROFILE(0) am User-Hour-Gate.
 test("A4: profil-loser Tenant -> 429 bei 0 Calls (harter Block)", async () => {
   const srv = await startServer({
     env: MT,
     seed: seedState({
-      tenants: [subscriberTenant("t_np", "sub-np")], // KEIN Profil unter t_np
+      tenants: [subscriberTenant("t_np", "sub-np")],
       numbers: [activeNumber("num_np", "+4915110000091", "t_np")],
     }),
   });
@@ -87,15 +71,13 @@ test("A4: profil-loser Tenant -> 429 bei 0 Calls (harter Block)", async () => {
   }
 });
 
-// (3) Integration: provisionierter Subscriber (A2/A3-Tier-Profil) telefoniert weiter (500);
-// der Owner ohne Header ebenfalls (OWNER_PROFILE via BOOTSTRAP), unberuehrt von A4.
 test("A4: provisioniertes Tier-Profil + Owner passieren das Gate (500)", async () => {
   const srv = await startServer({
     env: MT,
     seed: seedState({
       tenants: [subscriberTenant("t_paid", "sub-paid")],
       numbers: [activeNumber("num_paid", "+4915110000092", "t_paid")],
-      profiles: { t_paid: planProfileFor("starter") }, // Profil unter der tenantId (Phase S)
+      profiles: { t_paid: planProfileFor("starter") },
     }),
   });
   try {

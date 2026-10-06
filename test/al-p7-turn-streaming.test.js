@@ -1,20 +1,3 @@
-// AL-P7 (Turn): agentTurn streamt seine Antwort satzweise an einen Abnehmer - aber NUR,
-// wenn der Werkzeugsatz der Runde ausschliesslich aus Seiteneffekt-Werkzeugen besteht.
-// Gegenstand sind vier Zusagen:
-//   (1) Happy Path - mehrere Chunks, und der Turn-Text/das Transkript bleiben exakt das,
-//       was der Bestandspfad fuer denselben Rohtext liefert;
-//   (2) Armierung - ohne Abnehmer ODER mit einem informationsliefernden Werkzeug im Satz
-//       wird NICHT gestreamt (das ist der strukturelle Beweis fuer Abnahmekriterium 3);
-//   (3) Geld - je Modellrunde faellt GENAU EINE Buchung, auch wenn der Stream abreisst
-//       (dann pessimistisch geschaetzt, nie 0, nie zwei);
-//   (4) AL-P4 bleibt intakt - eine Seiteneffekt-Runde beendet den Turn nach EINEM Roundtrip.
-//
-// Testnamen tragen bewusst KEINE Katalog-ID am Namensanfang (package.json
-// config.i18nCatalogPattern) - Praefix ist "AL-P7-<n>:".
-//
-// Naht wie test/al-p4-side-effect-tool-loop.test.js: lokaler node:http-Anthropic-Mock,
-// hier zusaetzlich mit ECHTEM Anthropic-SSE (der SDK-Streamingpfad laeuft unveraendert).
-// Kein Server-Spawn, kein pglite, kein Netz (P12/R).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -22,14 +5,11 @@ import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
-const SUBSTANTIAL = "Ja, Donnerstag passt gut"; // hebt suppressEndCall auf
+const SUBSTANTIAL = "Ja, Donnerstag passt gut";
 const ZWEI_SAETZE = "Guten Tag, hier ist Hermes. Wie kann ich Ihnen helfen?";
-// AL-P7: Ausgabe-Deckel einer Runde (claude.js TURN_MAX_TOKENS) - der pessimistische
-// Ersatzwert eines abgerissenen Streams.
 const TURN_MAX_TOKENS = 300;
 const MOCK_USAGE = { input_tokens: 10, output_tokens: 5 };
 
-// --- Skript-Bausteine: EINE Antwort-Beschreibung, zwei Draht-Formen (JSON + SSE) ---
 const text = (value) => ({ type: "text", text: value });
 const toolUse = (name, input = {}) => ({ type: "tool_use", id: "tu1", name, input });
 const reply = (...blocks) => ({ blocks, mode: "ok" });
@@ -54,14 +34,8 @@ function sseEvent(res, type, data) {
   res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
 }
 
-// Der Abriss muss NACH dem Flush des ersten Deltas passieren - ein sofortiges destroy()
-// verwirft den noch gepufferten Body, der Client saehe dann gar kein Fragment (empirisch
-// belegt). Kurze Verzoegerung statt Schlaf im Test selbst (T9 bleibt gewahrt).
 const SOCKET_FLUSH_MS = 30;
 
-// Echtes Anthropic-SSE: message_start -> je Block content_block_start/-delta/-stop ->
-// message_delta -> message_stop. Text wird in ZWEI Deltas geschickt, damit die Delta-
-// Grenze bewusst NICHT auf einer Satzgrenze liegt.
 function writeSse(res, { blocks, mode }) {
   res.setHeader("content-type", "text/event-stream");
   sseEvent(res, "message_start", {
@@ -120,11 +94,7 @@ before(async () => {
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${server.address().port}`;
   process.env.ANTHROPIC_API_KEY = "test-alp7-key";
-  // Der usage_event-Ledger existiert nur im Metering-Pfad - ohne dieses Flag koennte
-  // "genau EIN Beleg je Runde" gar nicht gemessen werden.
   process.env.PAYMENT_ENABLED = "true";
-  // Fixture fuer die negative Armierung: get_consult ist das informationsliefernde
-  // Werkzeug, an dem der Riegel greifen MUSS.
   process.env.IN_CALL_CONSULT_ENABLED = "true";
   process.env.CONSULT_ENABLED = "true";
   process.env.ASSISTANT_CONTEXT_ENABLED = "true";
@@ -147,7 +117,6 @@ after(async () => {
   await new Promise((r) => server.close(r));
 });
 
-// Build-Operate-Check (P13): ein Turn MIT Abnehmer, die Chunks als Liste.
 async function streamedTurn(callId, callerText = SUBSTANTIAL) {
   const chunks = [];
   const turn = await claude.agentTurn(store.getCall(callId), callerText, {
@@ -156,7 +125,6 @@ async function streamedTurn(callId, callerText = SUBSTANTIAL) {
   return { turn, chunks };
 }
 
-// Live-Budget-Achse (Regel 1) + Beleg-Ledger als EIN Vorher/Nachher-Messpunkt.
 function bookingSnapshot() {
   const bucket = store.usageOf(BOOTSTRAP_TENANT_ID);
   const events = store
@@ -174,8 +142,6 @@ function bookingDelta(before) {
   };
 }
 
-// Frischer Poll + abgenommener Call -> consultAvailableFor haelt, get_consult steht im
-// Werkzeugsatz (Zustandsvorbedingung, keine Testlogik).
 function armConsult(callId) {
   const call = store.getCall(callId);
   call.consultPolledAtMs = Date.now();
@@ -193,7 +159,6 @@ test("AL-P7-18: Happy Path - mehrere Chunks, Turn-Text und Transkript identisch 
   const transcript = store.getCall("call_alp7_1").transcript;
   assert.equal(transcript[transcript.length - 1].text, turn.speech);
 
-  // Gegenprobe: derselbe Rohtext OHNE Abnehmer ergibt byte-identischen Turn-Text.
   const baseline = await claude.agentTurn(store.getCall("call_alp7_2"), SUBSTANTIAL);
   assert.equal(baseline.speech, turn.speech);
 });
@@ -206,18 +171,6 @@ test("AL-P7-19: ohne Abnehmer wird nicht gestreamt (Bestandspfad, stream nicht i
   assert.equal(turn.speech, ZWEI_SAETZE);
 });
 
-// AL-P17 (E1/E3) hat die Zusage dieses Tests umgedreht.
-//   Zusage vorher: ein INFORMATIONSLIEFERNDES Werkzeug (get_consult) im angebotenen Satz
-//     sperrt das Streamen.
-//   Zusage jetzt:  get_consult ist strom-sicher (der Fueller ersetzt seit E3 keinen
-//     bereits gesprochenen Text mehr, Owner-Entscheidung O-D1-B) und armiert. Gesperrt
-//     wird nur noch bei einem UNBEKANNTEN Werkzeug (fail-closed, G27).
-//   Warum das die Absicht ist: die Klasse "informationsliefernd sperrt" war die Ursache
-//     von Befund D-1 - sie hielt den Satz-Chunker live in JEDEM Turn still. Der
-//     fail-closed-Beweis lebt jetzt genau EINMAL, als Einheitstest mit einem erfundenen
-//     Werkzeug (AL-P17-4, test/al-p17-first-round-audible.test.js); dieser Test pinnt an
-//     seinem Ort die GEAENDERTE Ende-zu-Ende-Aussage. Abnahme 3 aus AL-P7 bleibt damit
-//     als Ganzes abgedeckt, nur auf zwei Orte verteilt.
 test("AL-P7-20: get_consult im angebotenen Satz armiert das Streamen jetzt (AL-P17 E1/E3)", async () => {
   bodies = [];
   queue = [reply(text(ZWEI_SAETZE))];
@@ -268,15 +221,8 @@ test("AL-P7-23: ein abgerissener Stream bucht GENAU EINEN pessimistischen Beleg 
   assert.equal(delta.outputTokens, TURN_MAX_TOKENS, "Output fail-closed auf den Runden-Deckel");
 });
 
-// AL-P17: nach E1 sind MEHRERE Runden eines Turns armiert (bis AL-P17 beendete eine
-// armierte Runde den Turn praktisch immer). Die Buchungsregel aus completeRound ist davon
-// unberuehrt - dieser Test macht das zur Zusage statt zur Annahme. Er liegt bewusst HIER
-// und nicht in der neuen AL-P17-Datei: bookingSnapshot/bookingDelta und PAYMENT_ENABLED
-// existieren nur in dieser Datei, eine zweite Ledger-Fixture waere Duplizierung (G5/S2).
 test("AL-P17-5: zwei gestreamte Runden buchen GENAU EINEN Beleg je Modellrunde", async () => {
   bodies = [];
-  // armConsult -> get_consult im angebotenen Satz -> nach E1 armiert. Das gefeuerte
-  // Werkzeug ist unbekannt, damit der Loop weiterlaeuft und eine ZWEITE Runde entsteht.
   armConsult("call_alp7_9");
   queue = [reply(text(ZWEI_SAETZE), toolUse("nachschlagen")), reply(text(ZWEI_SAETZE))];
   const before = bookingSnapshot();

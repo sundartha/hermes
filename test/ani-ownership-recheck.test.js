@@ -1,7 +1,3 @@
-// OUTBOUND-E4 Review-Blocker (BLOCKER 1 / G9/C2): makeAniOwnershipRecheck ist die LIVE-
-// Nachmessung, die server.js in den ANI-Riegel injiziert (s. test/ausfall-server-wiring.test.js
-// fuer den Quelltext-Wiring-Beleg). Der Gate-Vertrag selbst (fail-open, Fristen) ist in
-// test/outbound-ani-gate.test.js gepinnt - dieser Test deckt NUR die Nachmessung selbst.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeAniOwnershipRecheck } from "../src/telephony/ani-ownership-recheck.js";

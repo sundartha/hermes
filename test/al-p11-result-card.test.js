@@ -1,8 +1,3 @@
-// AL-P11 (Ergebnis-Karte statt Prosa): normalizeCallResult/evidenceRetentionEnabled/
-// stripResultEvidence (rein, offline), summarizeCall-Additivitaet + Evidence-Prompt-
-// Kopplung (gemockter Anthropic-Endpunkt, Muster c1-auftragstreue.test.js),
-// purgeExpiredResultEvidence + pruneOldData-Komposition, json/pg-Durchstich, MCP-
-// Whitelist (kein facts/evidence-Leak), SMS-Fallback. Kein Netz, kein echter Anruf.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -18,13 +13,8 @@ import {
 import { purgeExpiredResultEvidence, pruneOldData } from "../src/store/state-ops.js";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
-// AL-P11: pg-helpers.js importiert (transitiv ueber src/store/pg.js) config.js statisch -
-// das MUSS NACH dem DATA_DIR-Set im before()-Hook passieren (Repo-Regel, Lehre
-// test-base-env-drift), deshalb hier bewusst dynamisch statt am Datei-Kopf importiert.
 
 const daysAgo = (d) => new Date(Date.now() - d * 24 * 60 * 60 * 1000).toISOString();
-
-// ---- Block 1: normalizeCallResult (rein, Grenzfaelle) ----
 
 test("AL-P11-1: Modell-Antwort ohne die neuen Keys -> normalizeCallResult(...) === null (byte-identische Persistenz)", () => {
   const parsed = { summary: "Kurz.", actionItems: [], objective_achieved: true };
@@ -69,8 +59,6 @@ test("AL-P11-5: evidenceRetentionEnabled(privacy) spiegelt evidenceRetentionDays
   assert.equal(evidenceRetentionEnabled({ evidenceRetentionDays: 0 }), false);
   assert.equal(evidenceRetentionEnabled({ evidenceRetentionDays: 7 }), true);
 });
-
-// ---- Block 2: summarizeCall (gemockter Anthropic-Endpunkt, Muster c1-auftragstreue) ----
 
 const CALL_ID = "call_al_p11";
 const OWNER = "Jonas Beispiel";
@@ -124,10 +112,6 @@ before(async () => {
 
   process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${server.address().port}`;
   process.env.ANTHROPIC_API_KEY = "test-al-p11-key";
-  // AL-P11-10 (json-Durchstich) braucht einen ZWEITEN, unberuehrten Call OHNE result-Feld
-  // im selben Seed - json.js' load() cached sein state-Objekt ab dem ersten Aufruf fuer
-  // die Lebensdauer des Prozesses (Repo-Regel: EIN DATA_DIR pro Testdatei), ein zweiter
-  // DATA_DIR waere in dieser Datei nicht mehr wirksam.
   process.env.DATA_DIR = tempDataDir(
     seedState({
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }],
@@ -178,8 +162,6 @@ test("AL-P11-7: EVIDENCE_RETENTION_DAYS steuert die Zitat-Klausel im gesendeten 
   configModule.config.privacy.evidenceRetentionDays = originalDays;
 });
 
-// ---- Block 3: purgeExpiredResultEvidence + pruneOldData-Komposition (rein) ----
-
 test("AL-P11-8: purgeExpiredResultEvidence entfernt nur evidence, behaelt outcome/facts; laufender Call unberuehrt; days=0 -> alles faellt", () => {
   const s = {
     calls: [
@@ -229,10 +211,6 @@ test("AL-P11-9: pruneOldData komponiert DREI Durchgaenge (resultEvidence-Zaehler
   assert.equal(s.calls.length, 1, "der Call-Record selbst bleibt (retentionDays=0 = Retention aus)");
 });
 
-// ---- Block 4: json-Durchstich (Migration + Persistenz) ----
-// Nutzt bewusst denselben store/DATA_DIR wie Block 2 (s. before()-Kommentar oben) statt
-// eines zweiten DATA_DIR - json.js' load() cached seinen state fuer die Prozesslaufzeit.
-
 test("AL-P11-10a: Bestands-Call (aus seedCall, ohne result-Feld) migriert beim ersten load() auf result===null", () => {
   const migrated = store.getCall("call_json_migration");
   assert.equal(migrated.result, null, "Bestands-Call ohne result-Feld migriert auf null");
@@ -257,8 +235,6 @@ test("AL-P11-10b: result ueberlebt save() - auf Platte gelesen (store.json), nic
   assert.equal(onDiskCall.result.outcome, "Termin fest.", "result ist auf Platte persistiert");
 });
 
-// ---- Block 5: pg-Durchstich (pglite, i8-Lehre: ON CONFLICT DO UPDATE SET) ----
-
 test("AL-P11-11: pg-Durchstich - result ueberlebt die Re-Hydrierung UND einen zweiten Flush", async () => {
   const { makePgTestStore } = await import("./pg-helpers.js");
   const { store: pgStore, db } = await makePgTestStore();
@@ -273,8 +249,6 @@ test("AL-P11-11: pg-Durchstich - result ueberlebt die Re-Hydrierung UND einen zw
   await reopened1.init();
   assert.equal(reopened1.getCall(call.id).result.outcome, "Termin fest.", "result ueberlebt die erste Re-Hydrierung");
 
-  // Zweiter Flush OHNE result-Aenderung: die i8-Falle waere, dass result NICHT im
-  // ON CONFLICT DO UPDATE SET steht und dadurch auf NULL zurueckfaellt.
   reopened1.getCall(call.id).twilioSid = "CA-al-p11";
   await reopened1.save();
 
@@ -287,8 +261,6 @@ test("AL-P11-11: pg-Durchstich - result ueberlebt die Re-Hydrierung UND einen zw
     "result ueberlebt auch den zweiten Flush (ON CONFLICT DO UPDATE SET)",
   );
 });
-
-// ---- Block 6: MCP-Whitelist (E2, kein facts/evidence-Leak) ----
 
 test("AL-P11-12: get_call_result structuredContent traegt die fuenf Karten-Felder, NICHT facts/evidence", async () => {
   const { registerTools } = await import("../src/mcp-tools.js");
@@ -352,8 +324,6 @@ test("AL-P11-12: get_call_result structuredContent traegt die fuenf Karten-Felde
   }
 });
 
-// ---- Block 7: SMS-Fallback (call-finish.js, Muster web-14-call-finish-sms-text-language) ----
-
 function makeFakeCallFinishStore(notifyCapture) {
   return {
     withStoreLock: (fn) => fn(),
@@ -365,7 +335,6 @@ function makeFakeCallFinishStore(notifyCapture) {
     recordUsageEvent: () => {},
     markSummarySmsSent: () => {},
     markBilled: () => {},
-    // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
     markInboxEntry: () => {},
   };
 }

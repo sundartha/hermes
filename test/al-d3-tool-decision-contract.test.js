@@ -1,16 +1,3 @@
-// AL-D3 (PLAN-ASSISTANT-LEAP, tasks/al-d3-spec.md): der Tool-Entscheidungspunkt wird
-// geschaerft - vier Regeln in den Tool-Descriptions von take_message/get_consult/look_up:
-//   R1 Entscheidung des Auftraggebers verlangt -> get_consult
-//   R2 auftragsdienliches Nachschlagen -> look_up
-//   R3 auftragsfremde Recherche -> KEIN look_up
-//   R4 look_up verlangt einen fuehrenden Satz im SELBEN Zug
-// Rein, kein Spawn, kein Netz: LOCALES ist statisch (src/i18n/locales.js zieht nur
-// src/store/defaults.js, beide rein - Muster test/cq-p5-prompt-redesign.test.js).
-//
-// Testname-Praefix "AL-D3-" trifft KEIN Katalog-Praefix aus package.json
-// config.i18nCatalogPattern (DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|PROMPT|UI|VOICE|
-// WEB|WORLD gefolgt von einer Ziffer) - diese Tests laufen in `npm test`, wo Rot zaehlt
-// (Lehre catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { LOCALES } from "../src/i18n/locales.js";
@@ -20,11 +7,6 @@ import { BASE_ENV } from "./helpers.js";
 const LANGUAGES = ["de", "en", "fr"];
 const toolsOf = (lang) => LOCALES[lang].prompt.tools;
 
-// EINE Quelle fuer den Wortlaut-Vertrag: Regel -> Feld -> geforderte Substrings je
-// Sprache. Faellt eine Sprache zurueck, faellt sie hier auf - genau die Falle, die der
-// Auftrag benennt (heute pinnt KEIN Test eine reine DE-Aenderung an den Descriptions).
-// AL-D3-7(b) vergleicht die Schluesselmengen von CONTRACT.de/.en/.fr direkt - jede Regel
-// MUSS in allen drei Sprachen einen Eintrag tragen.
 const RULE_FIELD = Object.freeze({
   r1_exclusion: "takeMessageDescription",
   r1_trigger: "getConsultDescription",
@@ -43,8 +25,6 @@ const CONTRACT = Object.freeze({
     r2_lookUp: ["die Antwort deinen AUFTRAG jetzt weiterbringt"],
     r3: ["NICHT auf", "deinen Auftrag nicht", "Das ist richtig so"],
     r4: ["SELBEN Zug", "look_up", "Sage NIE, dass du nachschaust"],
-    // WW-P3: derselbe Ausstieg, aber an die TATSACHE gebunden statt an ein Gefuehl -
-    // EN und FR sagten von Anfang an "wird nicht angeboten", DE war der Ausreisser.
     b2_exit: "Wird dir das passende Werkzeug in diesem Zug nicht angeboten, bleibt die Nachricht der richtige Weg.",
   }),
   en: Object.freeze({

@@ -1,7 +1,3 @@
-// OUTBOUND-E5 (F3): das ZURUECKGEBEN einer EL-Nummernregistrierung bei der DID-Freigabe
-// (release-reconcile.js#performNumberRelease, ueber releaseTenantNumbersOnErase). Reine
-// In-Process-Unit mit Fake-Store/-Provisioner/-Audit/-Registrar (Muster
-// test/tenant-erasure-number-release.test.js) - kein Spawn, kein pglite, kein Netz.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { releaseTenantNumbersOnErase } from "../src/release-reconcile.js";
@@ -16,8 +12,6 @@ const fakeAudit = () => ({
   },
 });
 const fakeLogger = () => ({ log: () => {}, warn: () => {} });
-// Fake-Store ueber der Facade-Kontraktflaeche { load, save, withStoreLock } - EINE
-// mutable Referenz, so wirken Mutationen ueber alle load()-Aufrufe hinweg.
 const fakeStore = (state) => ({ load: () => state, save: () => {}, withStoreLock: (fn) => fn() });
 
 const seed = (over = {}) => ({
@@ -39,8 +33,6 @@ const seed = (over = {}) => ({
   ...over,
 });
 
-// F1: Freigabe einer DID mit Registrierung -> genau EIN Loeschversuch, Nummer released,
-// Feld auf der Nummer geleert.
 test("F1: Freigabe mit Registrierung -> genau EIN Loeschversuch, Nummer released, Feld geleert", async () => {
   const state = seed();
   const sipRegistrar = fakeSipRegistrar();
@@ -59,9 +51,6 @@ test("F1: Freigabe mit Registrierung -> genau EIN Loeschversuch, Nummer released
   assert.equal(state.numbers[0].providerAgentPhoneNumberId, null, "Kennung geleert - keine Zeile zeigt auf eine geloeschte Registrierung");
 });
 
-// F2: der EL-Loeschversuch schlaegt fehl -> die Freigabe laeuft TROTZDEM durch (kein
-// neuer Abbruchgrund, keine zusaetzliche Audit-Zeile - der Anbieter-DELETE ist strikt
-// fail-soft).
 test("F2: EL-Loeschversuch schlaegt fehl -> Freigabe laeuft trotzdem durch, keine zusaetzliche Audit-Zeile", async () => {
   const state = seed();
   const audit = fakeAudit();
@@ -82,8 +71,6 @@ test("F2: EL-Loeschversuch schlaegt fehl -> Freigabe laeuft trotzdem durch, kein
   assert.equal(audit.records.length, 1, "GENAU die eine Audit-Zeile der Freigabe selbst - keine zweite fuer den EL-Fehlschlag");
 });
 
-// F3: der E1-Riegel geht vor - eine plattform-gebundene Nummer wird NIE erreicht, also
-// auch KEIN EL-Loeschversuch und KEIN Telnyx-Provider-DELETE.
 test("F3: E1-Riegel (plattform-gebunden) -> HOLD, 0 EL-Loeschversuche, 0 Telnyx-Releases", async () => {
   const state = seed({
     platformNumberUse: [
@@ -117,9 +104,6 @@ test("F3: E1-Riegel (plattform-gebunden) -> HOLD, 0 EL-Loeschversuche, 0 Telnyx-
   assert.equal(state.numbers[0].status, NUMBER_STATUS.ACTIVE, "die Nummer bleibt aktiv");
 });
 
-// F4: Positiv-Kontrolle - eine ungebundene Nummer OHNE Registrierung wird wie im Bestand
-// freigegeben, 0 EL-Aufrufe (kein sipRegistrar.removeRegistration-Aufruf, weil das Feld
-// am Datensatz fehlt).
 test("F4: Positiv-Kontrolle - ungebundene Nummer ohne Registrierung -> Freigabe wie im Bestand, 0 EL-Aufrufe", async () => {
   const state = seed({
     numbers: [
@@ -130,7 +114,6 @@ test("F4: Positiv-Kontrolle - ungebundene Nummer ohne Registrierung -> Freigabe 
         provider: PROVIDER.TELNYX,
         providerNumberId: "ext_1",
         e164: "+493012345",
-        // KEIN providerAgentPhoneNumberId - Muster Bestands-DID vor dieser Etappe.
       },
     ],
   });
@@ -148,8 +131,6 @@ test("F4: Positiv-Kontrolle - ungebundene Nummer ohne Registrierung -> Freigabe 
   assert.equal(state.numbers[0].status, NUMBER_STATUS.RELEASED);
 });
 
-// Positiv-Kontrolle zu F1/F4: derselbe Ablauf OHNE injizierten sipRegistrar (Schalter aus,
-// wie in Produktion vor dem Owner-Cutover) bleibt byte-identisch zum Bestand.
 test("Positiv-Kontrolle: sipRegistrar NICHT injiziert -> Freigabe byte-identisch zum Bestand", async () => {
   const state = seed();
   const result = await releaseTenantNumbersOnErase({

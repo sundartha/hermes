@@ -1,5 +1,3 @@
-// OUTBOUND-E5 (F3): die reine Auswahl (telephony/absender-registrierung.js). Kein Netz,
-// kein Store, kein config - Eingabe/Ausgabe genuegt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -12,7 +10,6 @@ const TENANT_A_DID = "+18643028341";
 const TENANT_B_DID = "+15551234567";
 const RUECKFALL_ID = "phnum_global";
 
-// A1: Datensatz mit Registrierung, e164 == from -> die eigene Registrierung, BYTE-GENAU.
 test("A1: Datensatz mit providerAgentPhoneNumberId + e164 === from -> tenant_did, byte-genau", () => {
   const ergebnis = waehleAbsenderRegistrierung({
     numberRecord: { e164: TENANT_A_DID, providerAgentPhoneNumberId: "phnum_tenant_a" },
@@ -27,7 +24,6 @@ test("A1: Datensatz mit providerAgentPhoneNumberId + e164 === from -> tenant_did
   });
 });
 
-// A2: Positiv-Kontrolle - derselbe gesunde Fall liefert NIE die Rueckfall-Kennung.
 test("A2: Positiv-Kontrolle - der gesunde Fall liefert nie die Rueckfall-Kennung", () => {
   const ergebnis = waehleAbsenderRegistrierung({
     numberRecord: { e164: TENANT_A_DID, providerAgentPhoneNumberId: "phnum_tenant_a" },
@@ -38,7 +34,6 @@ test("A2: Positiv-Kontrolle - der gesunde Fall liefert nie die Rueckfall-Kennung
   assert.equal(ergebnis.quelle, ABSENDER_QUELLE.TENANT_DID);
 });
 
-// A3: kein Nummer-Datensatz -> Rueckfall, Grund keine_aktive_nummer.
 test("A3: numberRecord fehlt -> Rueckfall, grund=keine_aktive_nummer", () => {
   const ergebnis = waehleAbsenderRegistrierung({
     numberRecord: undefined,
@@ -53,7 +48,6 @@ test("A3: numberRecord fehlt -> Rueckfall, grund=keine_aktive_nummer", () => {
   });
 });
 
-// A4: record.e164 weicht von from ab -> Rueckfall, grund=nummer_weicht_von_from_ab.
 test("A4: numberRecord.e164 !== fromE164 -> Rueckfall, grund=nummer_weicht_von_from_ab", () => {
   const ergebnis = waehleAbsenderRegistrierung({
     numberRecord: { e164: TENANT_A_DID, providerAgentPhoneNumberId: "phnum_tenant_a" },
@@ -65,7 +59,6 @@ test("A4: numberRecord.e164 !== fromE164 -> Rueckfall, grund=nummer_weicht_von_f
   assert.equal(ergebnis.agentPhoneNumberId, RUECKFALL_ID);
 });
 
-// A5: Registrierung fehlt am Datensatz -> Rueckfall, grund=keine_eigene_registrierung.
 test("A5: numberRecord ohne providerAgentPhoneNumberId -> Rueckfall, grund=keine_eigene_registrierung", () => {
   const ergebnis = waehleAbsenderRegistrierung({
     numberRecord: { e164: TENANT_A_DID, providerAgentPhoneNumberId: null },
@@ -76,8 +69,6 @@ test("A5: numberRecord ohne providerAgentPhoneNumberId -> Rueckfall, grund=keine
   assert.equal(ergebnis.grund, RUECKFALL_GRUND.KEINE_REGISTRIERUNG);
 });
 
-// A6: Tenant-Isolation (rein) - der Datensatz gehoert zu Tenant B (andere e164), der Anruf
-// bucht die DID von Tenant A. Die fremde Kennung darf NIE geliefert werden.
 test("A6: Tenant-Isolation - fremder Datensatz (andere e164) liefert NIE seine Kennung", () => {
   const fremderDatensatzTenantB = { e164: TENANT_B_DID, providerAgentPhoneNumberId: "phnum_tenant_b" };
   const ergebnis = waehleAbsenderRegistrierung({
@@ -90,7 +81,6 @@ test("A6: Tenant-Isolation - fremder Datensatz (andere e164) liefert NIE seine K
   assert.equal(ergebnis.grund, RUECKFALL_GRUND.NUMMER_WEICHT_AB);
 });
 
-// A7: kein Netz, kein Store - die Funktion ist ohne beides aufrufbar (reiner Import genuegt).
 test("A7: rein aufrufbar ohne Store/fetch - der Import selbst beweist es bereits", () => {
   assert.equal(typeof waehleAbsenderRegistrierung, "function");
   assert.doesNotThrow(() =>

@@ -1,21 +1,9 @@
-// P3 (PLAN-PERSONAL-ASSISTANT): Persistenz-Round-Trip des Per-Call-Kontexts in BEIDEN
-// Backends. Kern-Risiko (Lehre I8): ohne JSONB-Spalte + flush UND rowToCall-Hydrierung
-// ginge context beim Restart verloren - und der naechste Flush wuerde ihn ueberschreiben.
-// PG1/PG2 ueber pglite (offline, F.I.R.S.T.), PG3 ueber den json-Store IN-PROCESS
-// (erlaubt zu mischen: KEIN Server-Spawn in dieser Datei, nur die p6a-Regel pglite+Spawn
-// gilt). Die Store-Schicht persistiert context flag-UNABHAENGIG (das Flag gatet nur den
-// Server-Producer) -> hier wird bewusst kein Flag gesetzt.
-//
-// DATA_DIR + config werden VOR allen store-Imports gebunden (json.FILE haengt an
-// config.dataDir): darum laeuft die Verdrahtung ueber dynamische Imports in before(),
-// NICHT ueber statische Imports (sonst bindet config.dataDir an das echte data/-Verzeichnis).
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Voll besetzter Kontext (alle vier Teilfelder) fuer den Round-Trip-Beweis.
 const CTX = {
   summary: "Stammkunde will Freitag vormittag",
   recipient_relationship: "Stammfriseur",
@@ -34,8 +22,6 @@ before(async () => {
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
 });
 
-// pglite-Store hinter dem Runner-Vertrag (wie pg-helpers, hier inline wegen der
-// DATA_DIR-Bindungsreihenfolge). Liefert {store, runner} fuer den Reopen.
 async function makePgTestStore() {
   const db = new PGlite();
   const runner = {
@@ -81,7 +67,6 @@ test("PG2: ohne context -> null, round-trippt als null", async () => {
 test("PG3: json-Backend persistiert context auf Platte (Roundtrip-Parity)", () => {
   const created = jsonStore.createCall(newCall({ context: CTX }));
   assert.deepEqual(jsonStore.load().calls[0].context, CTX, "json-Spiegel haelt context");
-  // createCall hat bereits gespeichert -> echter Disk-Roundtrip ueber JSON.stringify/parse.
   const onDisk = JSON.parse(fs.readFileSync(path.join(dataDir, "store.json"), "utf8"));
   const persisted = onDisk.calls.find((c) => c.id === created.id);
   assert.deepEqual(persisted.context, CTX, "context ueberlebt JSON.stringify/parse auf Platte");

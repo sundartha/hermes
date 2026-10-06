@@ -1,6 +1,3 @@
-// AL-P10 (PLAN-ASSISTANT-LEAP.md Phase 10) - allowResearch: Default-Wert +
-// Admin-Schreibpfad (updateSettings) + Self-Service-Ablehnung (Owner-Gate, Geldpfad) +
-// pg-Persistenz-Round-Trip. Muster f2-sms-opt-in-persist.test.js/self-service-patch.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgTestStore } from "./pg-helpers.js";
@@ -46,7 +43,6 @@ test("AL-P10-16 pg: allowResearch ueberlebt Flush + Hydrierung (Reopen)", async 
   assert.ok(changed.includes("allowResearch"));
   await store.save();
 
-  // Restart simulieren: neuer Store auf DERSELBEN DB -> hydrate via rowToSettings.
   const reopened = makePgStore(runner);
   await reopened.init();
   assert.equal(

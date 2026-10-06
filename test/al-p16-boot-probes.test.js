@@ -1,22 +1,10 @@
-// AL-P16: die Sonden fuer die blinden Schalter. Zwei Ebenen, bewusst:
-//   (a) capabilityProbeLines als reine Funktion - je Schalter beide Richtungen (die Spec
-//       verlangt das ausdruecklich: eine Sonde, die nur den Gutfall zeigt, meldet den
-//       Ausfall nie);
-//   (b) zwei Spawn-Tests am ECHTEN Boot-Log - sonst bliebe die Verdrahtung in
-//       logBootBanner ungetestet und ein geloeschter Aufruf faellt niemandem auf.
-//
-// MUTATIONSPROBE (Spec-Abnahme): stellt man eine Sonde auf process.env statt auf das
-// uebergebene config-Objekt um, liefert sie fuer beide Richtungen DIESELBE Zeile - jeder
-// der Tests AL-P16-1..6 wird dadurch rot, AL-P16-7 pinnt es zusaetzlich explizit.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { capabilityProbeLines } from "../src/boot.js";
 import { startServer } from "./helpers.js";
 
-// Der Sentinel-Schluessel, den keine Zeile und kein Boot-Log tragen darf (Regel 4).
 const SENTINEL_KEY = "exa-al-p16-darf-nirgends-auftauchen";
 
-// Alles aus - der ausgelieferte Default (BASE_ENV/config-Fallbacks).
 function probeConfig({ tenancy = {}, research = {}, privacy = {} } = {}) {
   return {
     tenancy: {
@@ -30,7 +18,6 @@ function probeConfig({ tenancy = {}, research = {}, privacy = {} } = {}) {
   };
 }
 
-// Genau EINE Zeile je Label - so faellt auch ein geloeschter oder doppelter Eintrag auf.
 function probe(label, config) {
   const hits = capabilityProbeLines(config).filter((l) => l.startsWith(`${label}: `));
   assert.equal(hits.length, 1, `erwartet genau eine ${label}-Zeile, bekommen: ${hits.length}`);
@@ -142,8 +129,6 @@ test("AL-P16-10: Diagnose-Transkripte tragen die Frist als Wert und verschwinden
 });
 
 test("AL-P16-7: die Sonden folgen der geparsten Konfiguration, NICHT der Rohumgebung", () => {
-  // Die Umgebung wird auf das GEGENTEIL der uebergebenen Konfiguration gestellt: eine
-  // Sonde, die process.env liest, liefert dann die falsche Zeile.
   const opposite = {
     PRECALL_BRIEFING_ENABLED: "true",
     RESEARCH_ENABLED: "true",
@@ -191,8 +176,6 @@ test("AL-P16-8: der echte Boot druckt jede der sechs Sonden genau einmal (Aus-Zu
 test("AL-P16-9: Nachschlag an -> Boot-Log meldet den Schluessel als gesetzt, nie seinen Wert", async () => {
   const srv = await startServer({ env: { LOOKUP_ENABLED: "true", EXA_API_KEY: SENTINEL_KEY } });
   try {
-    // startServer loest auf der Gateway-Zeile auf - die Sonden stehen DAHINTER im Banner.
-    // Der Roundtrip laesst den Rest des Banners eintreffen (Muster P5-B4).
     const res = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.match(

@@ -1,22 +1,9 @@
-// AL-P6, zweite Haelfte: agentTurn PRUEFT die Budget-Achsen (test/al-p6-turn-deadline-
-// budget.test.js), die REAKTION liegt beim Aufrufer - und beide Engines muessen sie haben.
-//   Teil A (Shim, Assistant-Pfad): Abschluss-Ansage + realer Call-Control-Hangup, derselbe
-//     Notaus wie das Gate VOR dem Turn (telnyx-p6, Weg iii).
-//   Teil B (Budget-Engine, /voice/turn): derselbe Locale-Satz + <Hangup> im TeXML.
-// Der ZEIT-Abbruch (deadline) fuehrt bewusst in KEINER Engine zum Auflegen - der Turn hat
-// eine gueltige Antwort. Testnamen ohne Katalog-ID (Regressionslauf).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { localeFor } from "../src/i18n/locales.js";
 import { startServer, seedState, seedCall } from "./helpers.js";
 
-// ---- Teil B: Budget-Engine (echte HTTP-Route, Spawn) --------------------------------
-
-// Haiku kostet 1,0 USD je Million Input-Token; 40 Mio. Token sind rund 3680 ct. Im
-// Spawn-Env steht DEFAULT_TENANT_BUDGET_CENTS auf 0 (Sentinel), der effektive Tenant-Cap
-// ist damit der Plattform-Cap (MAX_BUDGET_EUR=30 = 3000 ct) - EINE Runde reisst ihn, und
-// die Tenant-Achse wird zuerst gefragt, also lautet der Grund-Token budget_tenant.
 const TOKENS_OVER_TENANT_CAP = 40_000_000;
 
 function anthropicMessage(content, inputTokens) {
@@ -32,8 +19,6 @@ function anthropicMessage(content, inputTokens) {
   };
 }
 
-// Antwortet auf JEDEN Request identisch und zaehlt die Requests - so faellt eine zweite,
-// bereits gebuchte Runde als Zahl auf.
 async function startAnthropicMock(payload) {
   const requests = { count: 0 };
   const server = http.createServer((req, res) => {
@@ -52,7 +37,6 @@ async function startAnthropicMock(payload) {
   };
 }
 
-// Opening (LLM-frei) + ein Turn mit Speech gegen die echte Route (P13).
 async function runTurn(srv, id) {
   const opening = await fetch(`${srv.localUrl}/voice/outbound?callId=${id}`, {
     method: "POST",

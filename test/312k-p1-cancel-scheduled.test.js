@@ -1,12 +1,3 @@
-// 312k-P1 (Kuendigungsbutton nach Paragraph 312k BGB, Phase 1 - Zustand kennen und nicht
-// ueberschreiben): der gefaehrliche Befund aus Teil A - setzt Stripe ein Abo auf "laeuft
-// zum Periodenende aus", kommt customer.subscription.updated mit status weiterhin active
-// UND cancel_at_period_end=true. Der Bestandscode las das als ACTIVATE und haette darueber
-// clearSuspendedAt + den Billing-Hold zurueckgesetzt - der Kuendigungszustand waere im
-// selben Atemzug wieder weg. Diese Datei deckt den neuen CANCEL_SCHEDULED-Zweig
-// (webhook.js) + den Store-Setter/-Getter (state-ops.js), im selben Stil wie
-// p3-payment-webhook.test.js/stripe-webhook-race.test.js/w5-billing-revoke.test.js
-// (aufzeichnende Fake-Seams, offline, F.I.R.S.T.).
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -26,10 +17,6 @@ import { KYC_LEVEL } from "../src/store/defaults.js";
 
 const TENANT = "t_312k";
 
-// Aufzeichnende Fake-Seams, Muster p3-payment-webhook.test.js/fakeDeps. store.tenantSubscription()
-// liefert statisch {planSlug: null} (planProfile-Zweig ist hier nicht der Pruefgegenstand) -
-// die Assertions unten pruefen direkt, WAS an setTenantSubscription geschickt wird; der echte
-// Store-Roundtrip steht separat weiter unten ueber state-ops (Test 2b).
 function fakeDeps({ tenantBySub = null } = {}) {
   const calls = {
     setStatus: [],
@@ -47,7 +34,6 @@ function fakeDeps({ tenantBySub = null } = {}) {
     calls,
     store: {
       findTenantBySubscription: (subId) => (tenantBySub && subId ? { id: tenantBySub } : null),
-      // FW1-A: Existenz-Gate der Tenant-Aufloesung - dieses Double modelliert einen existierenden Tenant.
       tenantExists: () => true,
       setTenantSubscription: (tenant, patch) => calls.subscription.push([tenant, patch]),
       setKycLevel: (tenant, level) => calls.kyc.push([tenant, level]),
@@ -121,8 +107,6 @@ function deletedEvent({ id, created, subId = "sub_312k", tenant = TENANT } = {})
   };
 }
 
-// ---- interpretStripeEvent (reine Funktion, Kern der Teil-A-Aenderung) --------------
-
 test("interpretStripeEvent: cancel_at_period_end=true bei active -> CANCEL_SCHEDULED (nicht ACTIVATE)", () => {
   const out = interpretStripeEvent(cancelEvent({ id: "evt_i1", created: 1 }));
   assert.equal(out.action, WEBHOOK_ACTION.CANCEL_SCHEDULED);
@@ -143,8 +127,6 @@ test("interpretStripeEvent: Feld fehlt (Bestandsform ohne cancel_at_period_end) 
   assert.equal(out.action, WEBHOOK_ACTION.ACTIVATE);
   assert.equal("cancelAtPeriodEnd" in out, false, "kein falsches false ohne Beleg (Bestandscharakterisierung bleibt gruen)");
 });
-
-// ---- Pflichttest 1: CANCEL_SCHEDULED laesst den Tenant aktiv, KEIN clearSuspendedAt ----
 
 test("312k-P1 Test 1: updated cancel_at_period_end=true/active -> Kuendigung vermerkt, KEIN clearSuspendedAt/setStatus/KYC/provision/BillingHold-Reset", async () => {
   const deps = fakeDeps();
@@ -170,8 +152,6 @@ test("312k-P1 Test 1b: unbekannter Plan-Slug im CANCEL_SCHEDULED-Event -> fail-c
   assert.equal(deps.calls.audit[0][0], "stripe_webhook_ignored");
 });
 
-// ---- Pflichttest 2: Ruecknahme (cancel_at_period_end=false) loescht den Vermerk ----
-
 test("312k-P1 Test 2a (Webhook-Dispatch): updated cancel_at_period_end=false -> ACTIVATE-Patch traegt cancelAtPeriodEnd:false, normale Aktivierungslogik greift wieder", async () => {
   const deps = fakeDeps();
   await applyStripeWebhook(revokeEvent({ id: "evt_2a", created: 1 }), deps);
@@ -193,8 +173,6 @@ test("312k-P1 Test 2b (Store-Ebene): setTenantSubscription/tenantSubscription Ro
   assert.equal(tenantSubscription(s, "t_store_cancel").cancelAtPeriodEnd, false, "Ruecknahme: Vermerk ist weg");
 });
 
-// ---- Pflichttest 3: deleted bleibt SUSPEND, unveraendert durch die 312k-Aenderung ----
-
 test("312k-P1 Test 3: customer.subscription.deleted bleibt SUSPEND (kein gespeichertes Abo -> nichts zu entwerten, s. CL1-B2)", async () => {
   const deps = fakeDeps();
   await applyStripeWebhook(deletedEvent({ id: "evt_3", created: 1 }), deps);
@@ -204,10 +182,6 @@ test("312k-P1 Test 3: customer.subscription.deleted bleibt SUSPEND (kein gespeic
   assert.deepEqual(deps.calls.provision, [], "Suspend kauft nie");
   assert.deepEqual(deps.calls.subscription, [], "SUSPEND patcht keine Abo-Felder - unveraendert durch diese Phase");
 });
-
-// ---- Pflichttest 4: Serialisierung/Stale-Guard greifen auch fuer CANCEL_SCHEDULED ----
-// WICHTIG (wie stripe-webhook-race.test.js): webhookLock/lastAppliedByKey sind Modul-Scope -
-// jeder Testfall braucht eine in dieser Datei einmalige subscriptionId.
 
 test("312k-P1 Test 4a: Event-ID-Dedup gilt auch fuer CANCEL_SCHEDULED", async () => {
   const subId = "sub_312k_dedup";

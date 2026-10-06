@@ -1,16 +1,3 @@
-// AL-P8 ("Der Bench misst den Pfad, der live ist"): deckt die fuenf neuen
-// transportunabhaengigen Bench-Checks ab (MEASUREMENT_CHECKS + recap_present) sowie die
-// Registry-Integritaet ueber ALLE registrierten Szenarien (inkl. der drei neuen). Rein,
-// netz- und spawn-frei (Muster test/cq-p4-bench-hardening.test.js): checks.mjs zieht nur
-// src/i18n/locales.js -> src/store/defaults.js (beide rein).
-//
-// AL-D3: erweitert um die vier Werkzeug-Checks (consult_fired/no_consult_fired/
-// lookup_fired/no_lookup_fired) + lookup_turn_not_silent (AL-D3-11..13), die
-// Werkzeugnamen-Kopplung an die echten Produkt-Exporte (AL-D3-14) und die
-// Apparat-Integritaet ueber ALLE Szenarien inkl. der drei neuen (AL-D3-15). Die
-// metricsTurns-Fixture traegt seither Objekte ({roundtrips, tools}) statt nackter
-// Zahlen - EINE Form fuer alle Turn-Metrik-Tests dieser Datei (G5), keine zweite,
-// abweichende Fixture-Form.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -25,10 +12,6 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER_NAME = "Jonas Beispiel";
 
-// Vollstaendiges runResult-Geruest (Muster cq-p4-bench-hardening.test.js runResult):
-// agentSamples[0] ist immer die LLM-freie Eroeffnung, agentSays fuellt die FREI
-// GENERIERTEN Folge-Turns ab agentSamples[1]. metricsTurns: Array<{roundtrips?, tools?}>
-// (AL-D3) - EIN Eintrag je Turn-Metrikzeile.
 function runResult({
   openingText = `Ich rufe im Auftrag von ${OWNER_NAME} an. Testanliegen.`,
   agentSays = [],
@@ -88,8 +71,8 @@ test("AL-P8-2 opening_chars_before_yield failt, wenn die Eroeffnung ueber scenar
 test("AL-P8-3 handoff_rate zaehlt Weitergabe-Phrasen umlaut-gefaltet und liefert den Anteil als value", () => {
   const rr = runResult({ agentSays: ["Ich gebe das weiter.", "Das melde sich bei Ihnen.", "Alles klar, danke."] });
   const result = only("handoff_rate", rr, scenario());
-  assert.equal(result.pass, true); // reine Messung, kein Hard-Gate
-  assert.equal(result.value, Math.round((2 / 3) * 1e4) / 1e4); // auf 4 Stellen gerundet
+  assert.equal(result.pass, true);
+  assert.equal(result.value, Math.round((2 / 3) * 1e4) / 1e4);
 
   const foldedRr = runResult({ agentSays: ["Ich gebe das weiter."] });
   const folded = only("handoff_rate", foldedRr, scenario());
@@ -106,7 +89,7 @@ test("AL-P8-4 handoff_rate ist n/a bei language!==de (die Phrasenliste ist deuts
 test("AL-P8-5 recap_present trifft nur im LETZTEN frei generierten Agenten-Turn", () => {
   const rr = runResult({ agentSays: ["Dienstag 14 Uhr passt, ich notiere das.", "Danke, auf Wiederhören."] });
   const failResult = only("recap_present", rr, scenario({ recapSubstrings: ["ich notiere"] }));
-  assert.equal(failResult.pass, false, failResult.detail); // Recap steht NICHT im letzten Turn
+  assert.equal(failResult.pass, false, failResult.detail);
 
   const passResult = only(
     "recap_present",
@@ -117,9 +100,6 @@ test("AL-P8-5 recap_present trifft nur im LETZTEN frei generierten Agenten-Turn"
   assert.equal(passResult.value, true);
 });
 
-// AL-P12: memory_fact_recalled (Muster recap_present/AL-P8-5/6 - Deklaration UEBER ALLE
-// frei generierten Turns statt nur den letzten, weil ein genannter Fakt frueh im
-// Gespraech genauso zaehlt wie im Abschluss).
 test("AL-P12-B1 memory_fact_recalled ist n/a ohne scenario.expectedMemoryPhrases", () => {
   const result = only("memory_fact_recalled", runResult({ agentSays: ["Danke, tschuess."] }), scenario());
   assert.equal(result.pass, true);
@@ -160,7 +140,7 @@ test("AL-P8-7 one_question_per_turn zaehlt Turns mit mehr als einer Frage und fa
     agentSays: ["Passt Ihnen Dienstag? Oder lieber Mittwoch?", "Alles klar.", "Wann genau? Um wieviel Uhr?"],
   });
   const measurementOnly = only("one_question_per_turn", rr, scenario());
-  assert.equal(measurementOnly.pass, true); // ohne Schwelle: reine Messung
+  assert.equal(measurementOnly.pass, true);
   assert.equal(measurementOnly.value, 2);
 
   const failResult = only("one_question_per_turn", rr, scenario({ maxMultiQuestionTurns: 0 }));
@@ -237,8 +217,6 @@ test("AL-P8-12 Bestands-Checks tragen weiterhin kein value-Feld (additiver Vertr
   }
 });
 
-// ---------- AL-D3: die vier Werkzeug-Checks + der Ruhe-Check ----------
-
 test("AL-D3-11 consult_fired/no_consult_fired lesen tools aus der Turn-Metrik", () => {
   const withConsult = runResult({
     agentSays: ["Ok."],
@@ -302,9 +280,6 @@ test("AL-D3-13 lookup_turn_not_silent: gruen mit Text, rot bei leerem sayTexts, 
 
 let productGetConsultToolName, productLookUpToolName;
 before(async () => {
-  // AL-D3-14: dynamischer Import NACH gesetztem DATA_DIR (Muster al-p10b-lookup.test.js) -
-  // src/consult/in-call.js und src/research/in-call.js ziehen config.js/store.js, die
-  // eine gueltige DATA_DIR erwarten. Reiner Konstanten-Vergleich, kein Store-Zugriff.
   process.env.DATA_DIR = tempDataDir(
     seedState({ calls: [], tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
   );
