@@ -1,43 +1,6 @@
-// ---- NANP-Vorwahl -> Zone des Angerufenen: eine HYPOTHESE, kein Ergebnis --------------
-// Fuer +1 gibt es keine Land-Ableitung: countryForE164 liefert dort BEWUSST null (25
-// NANP-Laender teilen die Vorwahl, Eigentuemer-Entscheidung E2 "nie raten"), und +1 ist
-// ausgerechnet das Marktgebiet, in dem dieses Produkt telefoniert. Der einzige Anhalt ohne
-// neue Datenhaltung ist die dreistellige Vorwahl (NPA) hinter der +1.
-//
-// EIGENTUEMER-ENTSCHEIDUNG 2026-08-15, die dieses Modul umsetzt: eine Vorwahl-Tabelle
-// ALLEIN ist falsch. Was hier entsteht, ist eine HYPOTHESE - der Agent bestaetigt sie im
-// Gespraech in EINEM Satz ("I have you down as Eastern time - is that right?"), bevor er
-// eine absolute Uhrzeit nennt; der Angerufene weiss seine Zone, das ist die verlaesslichste
-// Quelle, die es gibt. Steht gar nichts fest, nennt der Agent KEINE absolute Uhrzeit. Die
-// Sprachfuehrung dazu liegt beim Aufrufer (calleeTimezoneText in outbound.js) - dieses
-// Modul liefert nur den Bezeichner.
-//
-// UNVOLLSTAENDIGKEIT IST ABSICHT, NICHT NACHLAESSIGKEIT: aufgenommen ist NUR eine Vorwahl,
-// deren Gebiet vollstaendig in EINER Zone mit EINER Sommerzeit-Regel liegt. Alles, was eine
-// Zonengrenze schneidet, fehlt bewusst - dort gilt der Fallback (keine absolute Uhrzeit).
-// "Meistens richtig" heisst bei Terminen: still falsche Uhrzeiten. Lieber eine kleine,
-// sichere Tabelle als eine grosse, die manchmal luegt. Wer eine Vorwahl ergaenzt, prueft
-// dieselbe Bedingung - im Zweifel: weglassen.
-//
-// ARIZONA ausdruecklich behandelt statt weggelassen: der Bundesstaat faehrt Mountain OHNE
-// Sommerzeit, und genau dafuer gibt es den eigenen IANA-Bezeichner America/Phoenix - eine
-// Zone ist eben keine Zeitverschiebung, deshalb traegt die Tabelle Bezeichner und keine
-// Versaetze. Aufgenommen sind nur die drei Vorwahlen des Grossraums Phoenix und die von
-// Tucson; 928 fehlt, weil es die Navajo Nation umfasst - das einzige Gebiet Arizonas, das
-// Sommerzeit faehrt, und damit ein Gebiet mit zwei Regeln in einer Vorwahl.
-//
-// BEWUSST NICHT AUFGENOMMEN, jeweils weil die Vorwahl eine Zonengrenze schneidet: 208/986
-// (Idaho), 906 (Michigan, Obere Halbinsel), 850 (Florida, Panhandle), 605 (South Dakota),
-// 701 (North Dakota), 308 (Nebraska, Panhandle), 785/620 (Kansas), 775 (Nevada), 541/458
-// (Oregon), 915 (West-Texas), 907 (Alaska), 928 (s.o.) sowie ganz Indiana, Kentucky und
-// Tennessee. NICHT aufgenommen sind ausserdem Kanada und die Karibik: sie teilen die +1,
-// gehoeren aber nicht zum Auftrag (US-Nummern) - fuer sie gilt derselbe Fallback.
 const NANP_PREFIX = "+1";
 const AREA_CODE_LENGTH = 3;
 
-// Keine Hypothese - keine +1-Nummer oder eine Vorwahl, die nicht eindeutig ist. Benannt,
-// weil der leere String hier eine Aussage ist ("wir vermuten nichts") und kein vergessener
-// Default.
 const KEINE_HYPOTHESE = "";
 
 const ZONE_EASTERN = "America/New_York";
@@ -47,9 +10,6 @@ const ZONE_ARIZONA = "America/Phoenix";
 const ZONE_PACIFIC = "America/Los_Angeles";
 const ZONE_HAWAII = "Pacific/Honolulu";
 
-// Die Tabelle ist DATEN, keine Logik. Gruppiert nach Bundesstaat, weil genau der die
-// Aufnahme-Bedingung traegt: "liegt dieser Staat (bzw. dieses Vorwahl-Gebiet) ganz in
-// dieser Zone?" laesst sich je Zeile nachpruefen, eine flache Liste aus 250 Zahlen nicht.
 const AREA_CODES_BY_ZONE = Object.freeze({
   [ZONE_EASTERN]: Object.freeze({
     NY: "212 646 332 917 718 347 929 516 631 914 845 518 315 838 607 585 716 680",
@@ -105,12 +65,6 @@ const AREA_CODES_BY_ZONE = Object.freeze({
   [ZONE_HAWAII]: Object.freeze({ HI: "808" }),
 });
 
-// Wie ein Mensch die Zone AUSSPRICHT. Ohne diese zweite Spalte muesste der
-// Bestaetigungssatz einen festen Beispielnamen tragen ("I have you down as Eastern time"),
-// und der stuende bei jedem Anruf ausserhalb des Ostens neben einer anderen Zone - der
-// Agent liesse sich dann die FALSCHE Zone bestaetigen, also genau den Fehler, den die
-// Bestaetigung verhindern soll. Arizona heisst hier ausdruecklich nicht "Mountain time":
-// der Staat faehrt keine Sommerzeit und liegt den halben Jahresverlauf neben Denver.
 const SPOKEN_ZONE_NAME = Object.freeze({
   [ZONE_EASTERN]: "Eastern time",
   [ZONE_CENTRAL]: "Central time",
@@ -122,8 +76,6 @@ const SPOKEN_ZONE_NAME = Object.freeze({
 
 const AREA_CODE_SEPARATOR = " ";
 
-// Einmal beim Laden aufgeloest: die Nachschlage-Richtung der Tabelle ist Vorwahl -> Zone,
-// gepflegt wird sie in der lesbaren Richtung Zone -> Vorwahlen.
 const ZONE_BY_AREA_CODE = new Map(
   Object.entries(AREA_CODES_BY_ZONE).flatMap(([zone, jeStaat]) =>
     Object.values(jeStaat)
@@ -132,23 +84,12 @@ const ZONE_BY_AREA_CODE = new Map(
   ),
 );
 
-/**
- * Die VERMUTETE Zone des Angerufenen aus der Vorwahl seiner +1-Nummer - oder gar nichts.
- * Erwartet eine bereits normalisierte E.164-Nummer (der Server normalisiert `to`, s.
- * routes/api-calls.js). Keine +1-Nummer, unbekannte oder nicht eindeutige Vorwahl -> leer:
- * eine falsche Zone ist schlimmer als keine.
- */
 export function timezoneHypothesisForNumber(e164) {
   if (typeof e164 !== "string" || !e164.startsWith(NANP_PREFIX)) return KEINE_HYPOTHESE;
   const vorwahl = e164.slice(NANP_PREFIX.length, NANP_PREFIX.length + AREA_CODE_LENGTH);
   return ZONE_BY_AREA_CODE.get(vorwahl) || KEINE_HYPOTHESE;
 }
 
-/**
- * Der gesprochene Name einer Zone dieser Tabelle - der Wortlaut, den der Agent im
- * Bestaetigungssatz benutzt. Eine Zone ausserhalb der Tabelle liefert den Bezeichner
- * selbst zurueck: lieber sperrig vorgelesen als die falsche Zone bestaetigt.
- */
 export function spokenTimezoneName(zone) {
   return SPOKEN_ZONE_NAME[zone] || zone;
 }
