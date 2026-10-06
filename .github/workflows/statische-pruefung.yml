@@ -60,6 +60,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node tools/basis-vergleich.mjs semgrep
 
+      - name: Kommentare in YAML und Shell
+        if: ${{ !cancelled() }}
+        run: node tools/basis-vergleich.mjs kommentare-yaml-shell
+
       - name: Bedrohungskatalog
         if: ${{ !cancelled() }}
         env:
