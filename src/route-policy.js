@@ -142,14 +142,7 @@ export const PUBLIC_ROUTES = Object.freeze([
     method: "GET",
     path: ANRUFE_LAUFEND_PATH,
     reason:
-      "HANDLER-INTERNE AUTH (Paket 15, Deploy-Weg): der Deploy-Workflow fragt vor dem " +
-      "Umschalten, ob Anrufe laufen, und hat keine Sitzung. Absicherung im Handler: " +
-      "safeEqual des ganzen Authorization-Headers gegen 'Bearer <HERMES_DEPLOY_TOKEN>'; " +
-      "leer oder kuerzer als DEPLOY_TOKEN_MIN_LENGTH -> JEDER Aufruf abgelehnt. Jede " +
-      "Ablehnung 401 mit konstantem Koerper, egal ob das Token gesetzt ist (gleiche " +
-      "Probe-Erwartung auf Staging und Produktion). Drossel ist der globale Per-IP-Limiter. " +
-      "Antwort nur {laufend: <zahl>} mit no-store - keine Nummer, keine Kennung, kein " +
-      "Inhalt. Liest nur, schreibt nichts, loest nichts aus.",
+      "HANDLER-INTERNE AUTH (Paket 15, Deploy-Weg): der Deploy-Workflow fragt vor dem Umschalten, ob Anrufe laufen, und hat keine Sitzung. Absicherung im Handler: safeEqual des ganzen Authorization-Headers gegen 'Bearer <HERMES_DEPLOY_TOKEN>'; leer oder kuerzer als DEPLOY_TOKEN_MIN_LENGTH -> JEDER Aufruf abgelehnt. Jede Ablehnung 401 mit konstantem Koerper, egal ob das Token gesetzt ist (gleiche Probe-Erwartung auf Staging und Produktion). Drossel ist der globale Per-IP-Limiter. Antwort nur {laufend: <zahl>} mit no-store - keine Nummer, keine Kennung, kein Inhalt. Liest nur, schreibt nichts, loest nichts aus.",
   },
   {
     method: "GET",
