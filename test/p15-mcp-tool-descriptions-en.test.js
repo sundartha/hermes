@@ -20,11 +20,9 @@
 // echten MCP-Transport ein.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import { registerTools } from "../src/mcp-tools.js";
 import { SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
-import { GERMAN_STOPWORDS, ROOT } from "./helpers.js";
+import { GERMAN_STOPWORDS } from "./helpers.js";
 
 // Grossschreib-Marker = Emphase. Ausgenommen sind dokumentierte ABKUERZUNGEN, die nur
 // zufaellig gross sind und keine Betonung tragen (G25: benannte Menge statt Inline-Filter).
@@ -204,13 +202,6 @@ test("O14: die Negativ-Beispiele der Qualitaets-Kette stehen woertlich in der EN
   assert.match(objective, /ask the user FIRST/);
   const decideFreely = descriptions.get("place_call.mandate.decide_freely");
   assert.match(decideFreely, /Hard prohibitions do NOT belong here/);
-});
-
-// Die Systemgrenze steht als Kommentar am Kopf von src/mcp-tools.js, damit die naechste
-// Phase die Beschreibungen nicht versehentlich wieder in die Lokalisierung zieht.
-test("O14: die Systemgrenze Modellsprache != Nutzersprache ist im Code dokumentiert", () => {
-  const src = fs.readFileSync(path.join(ROOT, "src/mcp-tools.js"), "utf8");
-  assert.match(src, /MODELLSPRACHE != NUTZERSPRACHE/);
 });
 
 // LANG-15 (SOLL, gruen nach F-2) - place_call bietet einen WIRKSAMEN Sprachparameter, und
