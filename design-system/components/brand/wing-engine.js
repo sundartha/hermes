@@ -1,30 +1,9 @@
-/*
- * Hermes wing engine — a faithful browser port of apps/hermes-animation-lab.
- * ONE feathered wing as a deformable Pixi MeshPlane (16x24), driven by a GSAP
- * motion state. No clones, mirrors, trails or second layers. Renders to a
- * transparent <canvas>; status timelines (idle / connecting / working /
- * success / error) mirror the lab's HermesStatusController.
- *
- * Globals required: PIXI (pixi.js v8 UMD) and gsap (v3 UMD). ensure() injects
- * them from a CDN on first use. Exposes window.HermesWingEngine.
- *
- * Physics overlap with wing-canvas-engine.js (same directory): the geometry/
- * gain constants, smoothstep/buildWeights/deform, restState and the preset/
- * status choreographies are intentionally duplicated there, NOT shared - that
- * file must stay a single self-contained injectable script for widget iframes
- * (no CDN, no extra file load), while this file needs Pixi/GSAP from a CDN and
- * stays the engine for design-system/mcp previews (see README.md ICONOGRAPHY
- * for the full rationale). Change the physics/choreography here -> mirror it
- * in wing-canvas-engine.js too (and vice versa); no automated sync test for
- * this subset.
- */
 (function () {
   if (window.HermesWingEngine) return;
 
   var PIXI_URL = "https://cdn.jsdelivr.net/npm/pixi.js@8.6.6/dist/pixi.min.js";
   var GSAP_URL = "https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js";
 
-  // ---- geometry / gains (from HermesWing.ts + deform.ts) -------------------
   var WING_BBOX = { minX: 97, maxX: 404, minY: 21, maxY: 455 };
   var WING_CENTER_X = (WING_BBOX.minX + WING_BBOX.maxX) / 2;
   var WING_CENTER_Y = (WING_BBOX.minY + WING_BBOX.maxY) / 2;
@@ -75,14 +54,12 @@
     }
   }
 
-  // ---- motion state --------------------------------------------------------
   function restState() {
     return { beat: 0, flap: 0, bend: 0, compression: 0, tipLag: 0, lift: 0,
              rootRotation: 0, intensity: 1, speed: 1 };
   }
   var REST_CHANNELS = { flap: 0, bend: 0, compression: 0, tipLag: 0, lift: 0 };
 
-  // ---- presets (working loops, from presets.ts) ----------------------------
   function classicCycle(state, pause) {
     return gsap.timeline({ paused: true, repeat: -1, repeatDelay: pause })
       .set(state, { beat: 0, flap: 0, bend: 0, compression: 0, tipLag: 0, lift: 0 })
@@ -106,7 +83,6 @@
       .to(state, { beat: 0, flap: 0, bend: 0, compression: 0, tipLag: 0, lift: 0, duration: 0.28, ease: "sine.inOut" });
   }
 
-  // ---- status timelines (from status.ts) -----------------------------------
   var SETTLE = 0.3;
   function buildIdle(state) {
     return gsap.timeline({ paused: true })
@@ -136,7 +112,6 @@
       .to(state, { flap: -0.16, bend: 0.12, compression: 0.08, lift: -0.18, duration: 0.25, ease: "power2.out" });
   }
 
-  // ---- script + texture loading -------------------------------------------
   function loadScript(src) {
     return new Promise(function (res, rej) {
       var existing = document.querySelector('script[src="' + src + '"]');
@@ -169,7 +144,6 @@
     return textureCache[url];
   }
 
-  // ---- one wing instance ---------------------------------------------------
   async function mount(host, opts) {
     opts = opts || {};
     var size = opts.size || 200;
@@ -232,7 +206,6 @@
       if (tl) tl.kill();
       state.beat = 0; state.rootRotation = 0;
       if (reduce) {
-        // static rest pose
         state.flap = 0; state.bend = 0; state.compression = 0; state.tipLag = 0; state.lift = 0;
         tl = null; applyState(); app.render(); return;
       }
@@ -247,9 +220,6 @@
     }
     setStatus(status);
 
-    // The ticker always runs (so the canvas always shows the current frame,
-    // even in headless/preview capture). Only the motion timeline is gated by
-    // visibility, to spare CPU when the wing is off-screen or the tab is hidden.
     var onScreen = true, pageVis = true;
     function syncPlay() {
       if (!tl) return;
