@@ -62,7 +62,7 @@ jobs:
 
       - name: Kommentare in YAML und Shell
         if: ${{ !cancelled() }}
-        run: node tools/basis-vergleich.mjs kommentare-yaml-shell
+        run: node tools/kommentare-yaml-shell.mjs
 
       - name: Lehren nur streichen
         if: ${{ !cancelled() }}

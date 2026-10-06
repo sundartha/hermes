@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { kommentareImText } from "../../tools/kommentare-yaml-shell.mjs";
-import { REPO_ROOT, commitAll, isolatedEnvironment, probeRepository, writeFiles } from "./probe-repo.js";
+import {
+  REPO_ROOT,
+  commitAll,
+  isolatedEnvironment,
+  probeDirectory,
+  probeRepository,
+  writeFiles,
+} from "./probe-repo.js";
 
-const SCRIPT = join(REPO_ROOT, "tools/basis-vergleich.mjs");
-const WERKZEUG = "kommentare-yaml-shell";
+const SCRIPT = join(REPO_ROOT, "tools/kommentare-yaml-shell.mjs");
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 
@@ -106,8 +113,8 @@ test("kommentare-yaml-shell: der Inhalt von run-Blöcken wird als Shell geprüft
   ]);
 });
 
-function vergleich(directory, args = []) {
-  const run = spawnSync(process.execPath, [SCRIPT, WERKZEUG, ...args], {
+function pruefen(directory, werkzeug = SCRIPT) {
+  const run = spawnSync(process.execPath, [werkzeug], {
     cwd: directory,
     encoding: "utf8",
     env: isolatedEnvironment(),
@@ -115,22 +122,35 @@ function vergleich(directory, args = []) {
   return { status: run.status, output: `${run.stdout}${run.stderr}` };
 }
 
-test("kommentare-yaml-shell: über basis-vergleich ist der Bestand frei und ein neuer Kommentar rot", (context) => {
+test("kommentare-yaml-shell: von der Kommandozeile ist jeder Kommentar rot und ohne Kommentar ist es grün", (context) => {
   const directory = probeRepository(context, {
-    ".github/workflows/probe.yml": "name: Probe\n# alter Kommentar\non: push\n",
-    "scripts/lauf.sh": "#!/bin/sh\n# alt\necho hallo\n",
+    ".github/workflows/probe.yml": "name: Probe\non: push\n",
+    "scripts/lauf.sh": "#!/bin/sh\necho hallo\n",
     "notizen.txt": "# kein Shell\n",
   });
-  const angelegt = vergleich(directory, ["--basis-anlegen"]);
-  assert.equal(angelegt.status, EXIT_OK, angelegt.output);
-  assert.match(angelegt.output, /mit 2 Befunden angelegt/);
-  assert.equal(vergleich(directory).status, EXIT_OK);
+  const gruen = pruefen(directory);
+  assert.equal(gruen.status, EXIT_OK, gruen.output);
+  assert.match(gruen.output, /^0 neue Befunde von kommentare-yaml-shell\.$/m);
   writeFiles(directory, {
-    ".github/workflows/probe.yml": "name: Probe\non: push # neuer Kommentar\n# alter Kommentar\n",
+    ".github/workflows/probe.yml": "name: Probe\non: push # neuer Kommentar\n",
+    "scripts/lauf.sh": "#!/bin/sh\n# Begründung\necho hallo\n",
   });
   commitAll(directory, "Kommentar");
-  const rot = vergleich(directory);
+  const rot = pruefen(directory);
   assert.equal(rot.status, EXIT_FINDING, rot.output);
-  assert.match(rot.output, /\.github\/workflows\/probe\.yml:2/);
-  assert.doesNotMatch(rot.output, /probe\.yml:3/);
+  assert.match(rot.output, /^\.github\/workflows\/probe\.yml:2$/m);
+  assert.match(rot.output, /^scripts\/lauf\.sh:2$/m);
+  assert.match(rot.output, /^2 neue Befunde von kommentare-yaml-shell\.$/m);
+  assert.doesNotMatch(rot.output, /Begründung|neuer Kommentar/);
+});
+
+test("kommentare-yaml-shell: über einen Symlink gestartet prüft das Werkzeug genauso", (context) => {
+  const directory = probeRepository(context, {
+    ".github/workflows/probe.yml": "name: Probe\n# Kommentar\non: push\n",
+  });
+  const verweis = join(probeDirectory(context, {}), "kommentare-yaml-shell.mjs");
+  symlinkSync(SCRIPT, verweis);
+  const rot = pruefen(directory, verweis);
+  assert.equal(rot.status, EXIT_FINDING, rot.output);
+  assert.match(rot.output, /^\.github\/workflows\/probe\.yml:2$/m);
 });
