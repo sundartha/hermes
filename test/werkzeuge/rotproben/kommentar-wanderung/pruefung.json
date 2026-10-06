@@ -3,7 +3,8 @@
   "pfade": [
     "tools/kommentar-wanderung.mjs",
     "tools/pr-aenderungen.mjs",
-    "tools/kommentare-yaml-shell.mjs"
+    "tools/kommentare-yaml-shell.mjs",
+    "tools/syntaxbaum.mjs"
   ],
   "probe": {
     "mitnehmen": [

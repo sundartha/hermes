@@ -3,6 +3,7 @@ import { ESLint, Linter } from "eslint";
 
 import { alleKnoten } from "./eslint-rules/knoten.js";
 import { istYamlOderShell, kommentareImText } from "./kommentare-yaml-shell.mjs";
+import { nurKommentareGeaendert } from "./syntaxbaum.mjs";
 import {
   STATUS_GELOESCHT,
   STATUS_NEU,
@@ -137,12 +138,21 @@ async function jsZiele(werkzeug, datei) {
   return textAufZeilen(await quelltext(werkzeug, datei, dateiInhalt("HEAD", datei, werkzeug.root)), zeilen);
 }
 
+async function nurKommentareWeg(werkzeug, eintrag) {
+  const vorher = inhaltOderLeer(werkzeug.basis, eintrag, werkzeug.root);
+  const nachher = inhaltOderLeer("HEAD", eintrag, werkzeug.root);
+  return nurKommentareGeaendert({ pfad: eintrag.datei, vorher, nachher }, werkzeug.eslint);
+}
+
 async function wiederaufnahmeOrte(werkzeug, dateien) {
   const ziele = new Map();
-  for (const { status, datei } of dateien) {
+  for (const eintrag of dateien) {
+    const { status, datei } = eintrag;
     if (status === STATUS_GELOESCHT) continue;
     if (datei.endsWith(MARKDOWN)) zieleEintragen(ziele, datei, hinzugefuegteZeilen(werkzeug.basis, datei, werkzeug.root));
-    if (werkzeug.js.has(datei)) zieleEintragen(ziele, datei, await jsZiele(werkzeug, datei));
+    if (werkzeug.js.has(datei) && !(await nurKommentareWeg(werkzeug, eintrag))) {
+      zieleEintragen(ziele, datei, await jsZiele(werkzeug, datei));
+    }
   }
   return ziele;
 }

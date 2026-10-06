@@ -67,6 +67,17 @@ test("kommentar-wanderung: ein nur gelöschter Kommentar ist grün", (context) =
   assert.match(lauf.output, /1 entfernte Kommentare, 0 wieder aufgetaucht/);
 });
 
+test("kommentar-wanderung: ein gelöschter Kommentar am Ende einer Zeile, deren Zeichenkette denselben Satz trägt, ist grün", (context) => {
+  const hinweis = `export const HINWEIS = ${JSON.stringify(SATZ)};`;
+  const repo = repoMitBasis(context, {
+    "eslint.config.mjs": "export default [];\n",
+    "src/hinweis.js": quelle([`${hinweis} // ${SATZ}`]),
+  });
+  const lauf = nachher(repo, { "src/hinweis.js": quelle([hinweis]) });
+  assert.equal(lauf.status, EXIT_OK, lauf.output);
+  assert.match(lauf.output, /1 entfernte Kommentare, 0 wieder aufgetaucht/);
+});
+
 test("kommentar-wanderung: fünf gleiche Wörter sind grün", (context) => {
   const lauf = nachher(basisRepo(context), {
     ...OHNE_KOMMENTAR,
