@@ -28,6 +28,7 @@ const hermesBloecke =
           plugins: { hermes: hermesRegeln },
           rules: {
             "hermes/keine-kommentare": ["error", { bestand: KOMMENTAR_BESTAND }],
+            "hermes/namen-ohne-begruendung": "warn",
           },
         },
         {

@@ -29,6 +29,9 @@
           "bestand": "tools/basis/kommentare.json"
         }
       ],
+      "hermes/namen-ohne-begruendung": [
+        1
+      ],
       "id-length": [
         2,
         {
@@ -409,6 +412,9 @@
         {
           "bestand": "tools/basis/kommentare.json"
         }
+      ],
+      "hermes/namen-ohne-begruendung": [
+        1
       ],
       "id-length": [
         2,
