@@ -1,9 +1,3 @@
-// Treibende-Wolken-Video robust abspielen (Autoplay-Policies, Tab-Wechsel,
-// Off-Screen). Portiert aus dem x-dc-componentDidMount des Quell-Designs
-// "Hermes Hero.dc.html". Bewusst als statische Datei unter /public/assets:
-// die strikte Produktions-CSP (script-src 'self', KEIN 'unsafe-inline') verbietet
-// Inline-Skripte; ein gebundeltes Astro-<script> wuerde inline landen -> blockiert.
-// Fehlt das Video, zeigt <video> still das poster-Bild.
 (function () {
   var v = document.getElementById("hermesSky");
   if (!v) return;
