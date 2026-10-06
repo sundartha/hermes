@@ -15,3 +15,4 @@ export const enumOrNull = (wert) =>
   ENUM_TOKEN.test(wert)
     ? wert
     : null;
+// const ALTE_GRENZE = MAX_ENUM_LENGTH;
