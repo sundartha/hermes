@@ -1000,3 +1000,4 @@ export function makeOutboundGates({
 
   return { gates, callQuotaDenial };
 }
+export const probeOrtszeit = (store, tenantId) => store.tenantTimezone(tenantId);
