@@ -1,20 +1,3 @@
-// 312k-Phase 5: Kuendigungsbestaetigung per E-Mail (§ 312k BGB verlangt, dass der
-// Unternehmer dem Verbraucher den Inhalt der Kuendigung UNVERZUEGLICH in Textform auf
-// einem dauerhaften Datentraeger bestaetigt). Haengt an der ERFOLGREICHEN Kuendigung
-// (self-service-routes.js cancel-Route), NICHT am Vertragsende - anders als
-// contract-end-cleanup.js (312k-Phase 4), das erst beim SUSPEND-Webhook laeuft. Der
-// Kunde soll die Bestaetigung SOFORT nach seiner Kuendigung bekommen ("unverzueglich").
-//
-// Retry-Mechanik EXAKT im Muster von contract-end-cleanup.js: ein offener Vermerk am
-// Tenant (state-ops.js setCancellationMailPending), ein periodischer Sweep
-// (runCancellationMailSweep) versucht es erneut, jeder Versuch UND jeder Ausgang landet
-// im durablen Nachweis (auditStore.record). Darf die Kuendigung NIEMALS scheitern lassen
-// (fail-soft, wirft nie) - ein nicht erreichbarer Mailserver ist kein Grund, eine
-// Kuendigung abzulehnen; ist SMTP nicht konfiguriert, wird gar nicht erst versucht,
-// sondern nur vermerkt (Muster WORKOS_MANAGEMENT_API_KEY fehlt).
-//
-// Niemals die Empfaenger-Adresse oder das SMTP-Passwort loggen/audit (Regel 4 - eine
-// Email-Adresse IST personenbezogen, genauso wie ein Secret).
 import { findPlan } from "../plans.js";
 
 const AUDIT_ACTION = Object.freeze({
@@ -33,18 +16,10 @@ const EFFECTIVE_DATE_FORMAT = new Intl.DateTimeFormat("de-DE", {
   dateStyle: "medium",
 });
 
-// Eingangszeitpunkt in der Schreibweise der Kuendigungs-Mail (deutsche Ortszeit).
 function formatReceivedAt(receivedAt) {
   return `${RECEIVED_FORMAT.format(new Date(receivedAt))} Uhr`;
 }
 
-// Der Bestaetigungstext lebt an GENAU dieser einen Stelle (kein zweites Vorkommen im
-// Code, G5) - schlichtes Deutsch, reiner Text (Textform verlangt keine Gestaltung, s.
-// Auftrag). Traegt alle sechs Pflichtangaben: Eingang (Datum+Uhrzeit), gekuendigter
-// Vertrag (Tarifname), Hinweis "ordentliche Kuendigung zum Periodenende", Wirkungsdatum,
-// Hinweis auf die unveraenderte Nutzbarkeit bis dahin, Absender-/Anbieterangabe + Verweis
-// aufs Impressum. Keine erfundenen Firmenangaben - das Impressum traegt noch Platzhalter
-// (apps/web/src/data/legal/imprint.de.json), der Text verweist deshalb NUR dorthin.
 export function buildCancellationMailText({ planSlug, currentPeriodEnd, receivedAt, publicUrl }) {
   const planName = findPlan(planSlug)?.name ?? planSlug ?? "Ihr Tarif";
   const receivedText = formatReceivedAt(receivedAt);
@@ -75,18 +50,11 @@ export function buildCancellationMailText({ planSlug, currentPeriodEnd, received
   return { subject, text };
 }
 
-// Ein Versandversuch. Liefert true = noch OFFEN (Retry noetig), false = erledigt (Mail
-// verschickt ODER nichts zu tun, weil schon bestaetigt). Jeder Versuch UND jeder Ausgang
-// landet im durablen Nachweis (auditStore.record) - console/logger sind nur die
-// operative Sicht daneben. Niemals die Empfaengeradresse in Log/Audit-Detail.
 async function attemptSend({ store, mailer, accounts, auditStore, logger, config, tenantId }) {
   const { pending, receivedAt } = store.cancellationMailPending(tenantId);
-  if (!pending) return false; // nie ausgeloest ODER bereits bestaetigt - nichts zu tun
+  if (!pending) return false;
 
   if (!mailer) {
-    // Owner-Entscheidung (Auslieferungszustand): ohne eigens gesetzte SMTP_*-Variablen
-    // wird der Versand NICHT versucht - offen vermerkt, protokolliert, der Rest der
-    // Kuendigung bleibt gueltig (Muster attemptWorkosDelete key_missing).
     logger.warn(`[cancellation-mail] SMTP nicht konfiguriert - Bestaetigung offen tenant=${tenantId}`);
     await auditStore.record({
       tenantId,
@@ -96,9 +64,6 @@ async function attemptSend({ store, mailer, accounts, auditStore, logger, config
     return true;
   }
 
-  // Empfaenger-Adresse AUSSCHLIESSLICH ueber den bestehenden Lesepfad (account.email via
-  // accounts.accountByTenant, web-auth.js) - NIE aus einem Request-Body (kein Spoofing).
-  // null = kein eindeutiger Account (0 oder mehrdeutig, fail-closed) -> kein Versand.
   const account = await accounts.accountByTenant(tenantId);
   if (!account?.email) {
     logger.warn(`[cancellation-mail] keine Empfaengeradresse hinterlegt - Bestaetigung offen tenant=${tenantId}`);
@@ -121,9 +86,6 @@ async function attemptSend({ store, mailer, accounts, auditStore, logger, config
   try {
     await mailer.sendMail({ to: account.email, subject, text });
   } catch (err) {
-    // NUR err.code/err.name loggen, NIE err.message (koennte bei einem SMTP-Auth-Fehler
-    // Nutzer-/Server-Details tragen) - striktere Vorsicht als beim WorkOS-Pendant, weil
-    // hier zusaetzlich eine Email-Adresse im Spiel ist (Regel 4).
     logger.warn(
       `[cancellation-mail] Versand fehlgeschlagen tenant=${tenantId}: ${err.code || err.name || "error"}`,
     );
@@ -140,11 +102,6 @@ async function attemptSend({ store, mailer, accounts, auditStore, logger, config
   return false;
 }
 
-// Oeffentlicher Einstieg fuer BEIDE Aufrufer (self-service-routes.js cancel-Route UND
-// runCancellationMailSweep) - EIN Codepfad (G5). Wirft NIE (Muster
-// attemptContractEndCleanup): ein aeusserer try/catch ist ein zusaetzlicher Riegel gegen
-// einen unerwarteten Store-/Config-Fehler, der die aufrufende Kuendigung sonst zu Fall
-// braechte.
 export async function attemptCancellationMailConfirm({
   store,
   mailer,
@@ -162,11 +119,6 @@ export async function attemptCancellationMailConfirm({
   }
 }
 
-// Periodischer Retry-Sweep (Muster runContractEndCleanupSweep): findet alle Tenants mit
-// noch offener Bestaetigung (Selektor tenantsPendingCancellationMail, state-ops.js) und
-// versucht jeden erneut. Idempotent: ein Tenant ohne offenen Rest verlaesst den Selektor
-// und wird nicht mehr angefasst - keine doppelte Mail nach einem bereits erfolgreichen
-// Versand.
 export async function runCancellationMailSweep({ store, mailer, accounts, config, auditStore, logger = console }) {
   const pending = store.tenantsPendingCancellationMail();
   for (const tenant of pending) {

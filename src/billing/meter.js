@@ -1,16 +1,3 @@
-// Stripe-Metering-Flush (P6b3): aggregiert den append-only usage_event-Ledger je
-// tenant+kind und meldet EIN Meter-Event pro (Tenant,kind) an den Billing-Port
-// (billing.reportMeter), dann markiert er die gemeldeten Events stripe_meter_sent.
-// Reine Fn ueber s + injiziertes deps.billing (DIP, wie provisionNumber): KEIN
-// store.save() (Aufrufer persistiert), KEIN config-Zugriff (Parameter hereingereicht),
-// KEIN Stripe-Objekt (nur kind/quantity/cost ueber den Port). Idempotent:
-// bereits gesendete Events (stripeMeterSent) werden NIE erneut gemeldet.
-//
-// KV-P0 - STICHTAG: gemeldet werden ausschliesslich Ereignisse mit occurredAt >=
-// flushEpochIso (BILLING_FLUSH_EPOCH). Die Auswahl trifft state-ops.flushableMeterEvents,
-// nicht dieses Modul; fehlt der Stichtag, ist die Auswahl LEER (fail-closed: "meldet
-// nichts", nie "meldet alles"). Der Wert kommt als Parameter herein - dieses Modul
-// bleibt config-frei (DIP, s.o.).
 import {
   flushableMeterEvents,
   METER_FLUSH_SKIP,
@@ -22,14 +9,6 @@ import { findPlan } from "../plans.js";
 import { resolvePeriodStartIso } from "./period.js";
 import { includedMinutesFor } from "./plan-caps.js";
 
-// Aggregiert eine ihr UEBERGEBENE Liste von usage_event-Zeilen je (tenantId, kind):
-// summiert quantity + costCents, sammelt die Event-ids (in stabiler Reihenfolge).
-// Liefert eine Liste [{ tenantId, kind, quantity, costCents, eventIds }]. Reine
-// Query (kein save), waehlt selbst NICHTS aus (KV-P0: die Auswahl ist
-// flushableMeterEvents; ein Aggregator, der auch auswaehlen kann, ist ein zweiter Weg
-// am Stichtag vorbei). Gruppiert ueber eine GESCHACHTELTE Map (tenantId -> kind ->
-// Aggregat): so gibt es keinen String-Delimiter und damit keine Kollision zwischen
-// beliebigen tenantId- und kind-Strings.
 export function aggregateMeterEvents(events) {
   const byTenant = new Map();
   for (const e of events) {
@@ -47,22 +26,11 @@ export function aggregateMeterEvents(events) {
   return [...byTenant.values()].flatMap((byKind) => [...byKind.values()]);
 }
 
-// Stabiler Idempotency-Key je Aggregat: meter_<tenant>_<kind>_<kleinste-eventId>.
-// Stripe-Retry meldet damit nie doppelt (analog hold_/order_ in P6b1).
 function meterIdempotencyKey({ tenantId, kind, eventIds }) {
   const minId = [...eventIds].sort()[0];
   return `meter_${tenantId}_${kind}_${minId}`;
 }
 
-// Sendet je Aggregat EIN reportMeter und markiert dessen Events sent. Idempotent:
-// stripeMeterSent verhindert die Doppel-Meldung beim zweiten Flush. billing kann
-// werfen -> dieses Aggregat bleibt UNgesendet (Events bleiben pending, naechster
-// Flush holt sie nach); andere Aggregate werden NICHT blockiert (Best-Effort je
-// Tenant/kind, Reihenfolge stabil). flushEpochIso ist der KV-P0-Stichtag (aus
-// config.billing.flushEpochIso, vom Aufrufer injiziert - dieses Modul bleibt
-// config-frei). Liefert { sent, failed, skipped, skipReason } fuers Audit (KEINE
-// Event-Inhalte, kein Secret): skipped/skipReason machen einen Riegel-Nullerfolg von
-// einem leeren Ledger unterscheidbar (kein stiller 0-Erfolg).
 export async function flushMeters(s, { billing, flushEpochIso }) {
   const { events, skipped, skipReason } = flushableMeterEvents(s, { flushEpochIso });
   if (skipReason === METER_FLUSH_SKIP.NO_EPOCH)
@@ -90,35 +58,12 @@ export async function flushMeters(s, { billing, flushEpochIso }) {
   return { sent, failed, skipped, skipReason };
 }
 
-// ---- BK4: Minuten-Kontingent-Lese-Sicht (kein Stripe, kein save, kein IO) ----------
-// Minuten-Kontingent EINES Tenants (BK4): reiner Read ueber Plan-Katalog
-// (includedMinutes) + usage_event-Ledger (Voice-Minuten im laufenden Zeitraum).
-// tenant-gefiltert (nur die eigene tenantId, kein Cross-Tenant-Leck, H3). subscription
-// = {planSlug,currentPeriodStart,currentPeriodEnd} aus store.tenantSubscription. Kein
-// aktiver/bekannter Plan -> null (UI: neutraler Leerzustand).
-//
-// B3: DERSELBE Periodenanker (resolvePeriodStartIso, Owner 5.4) UND DASSELBE
-// Erschoepfungs-Praedikat (planMinutesExceeded) wie das Outbound-Gate (server.js
-// planMinutesExhausted) -> Anzeige-Fenster == Gate-Fenster, auch fuer Tenants mit
-// persistiertem current_period_start (sonst "Rest X Min, trotzdem geblockt"). Die
-// fail-closed-Logik (kein Anker -> blocken) lebt EINMAL in der Query (G5), hier NICHT
-// erneut: exhausted == die Gate-Entscheidung. Ohne Anker (frisches Abo, Webhook
-// ausstehend) blockt das Gate -> remaining 0 (NICHT mehr fail-OPEN volles Kontingent).
-// usedMinutes bleibt der ehrlich gemessene Verbrauch (0 ohne Fenster, kein fabrizierter
-// Wert); remaining nie negativ. Reine Funktion.
-//
-// Trade-off (bewusst): bei vorhandenem Anker liest planMinutesExceeded intern
-// voiceMinutesUsedSince ein zweites Mal - zwei identische REINE Array-Filter auf einem
-// Cold-Path (Self-Service-GET), KEINE Logik-Duplizierung. Gewaehlt, weil die fail-closed-
-// Entscheidung NICHT zweitkodiert werden darf (Repo-Invariante, vgl. planMinutesExhausted).
 export function quotaView(
   s,
   { tenantId, planSlug, currentPeriodStart, currentPeriodEnd, periodCreditRevoked },
 ) {
   const plan = planSlug ? findPlan(planSlug) : null;
   if (!plan) return null;
-  // GAP-03: nach einer Rueckerstattung zeigt die Anzeige dasselbe aufgebrauchte Guthaben
-  // wie das Gate (includedMinutesFor, EINE Quelle mit outbound-gates.js).
   const includedMinutes = includedMinutesFor({ plan, subscription: { periodCreditRevoked } });
   const periodStartIso = resolvePeriodStartIso({ currentPeriodStart, currentPeriodEnd });
   const exhausted = planMinutesExceeded(s, tenantId, { includedMinutes, periodStartIso });
@@ -127,13 +72,6 @@ export function quotaView(
   return { includedMinutes, usedMinutes, remainingMinutes, exhausted };
 }
 
-// ---- KS-P8 (E4): der Nutzer sieht Prozent, nie Euro -------------------------------
-// Argument-Zusammenstellung des Minuten-Kontingents aus der Store-Fassade: EINE Stelle,
-// an der Abo-Felder + Ledger-State fuer quotaView zusammenkommen (G5) - sie speist die
-// Self-Service-Sicht UND die /api/state-Projektion. store kommt als ARGUMENT herein
-// (DIP, Muster upcomingCalendar in store/views.js), wird NICHT importiert: derselbe
-// Aufruf laeuft gegen das globale Backend und gegen einen injizierten Test-Store.
-// Reiner Read (kein save, keine Mutation).
 export function tenantQuotaView(store, tenantId) {
   const { planSlug, currentPeriodStart, currentPeriodEnd, periodCreditRevoked } =
     store.tenantSubscription(tenantId);
@@ -146,21 +84,8 @@ export function tenantQuotaView(store, tenantId) {
   });
 }
 
-// Voller Verbrauch = 100 Prozent (G25: benannt, nicht dreimal nackt im Ausdruck).
 const FULL_PERCENT = 100;
 
-// Anteil der verbrauchten Plan-Minuten in GANZEN Prozent - die EINE Groesse, die der
-// Nutzer statt eines Geldbetrags sieht (Owner-Entscheidung E4: der Kunde kauft Minuten,
-// keine Euro). Fail-closed:
-//   kein Kontingent hinterlegt (quotaView -> null) -> null, NIE 0 % (ein Prozentwert
-//     ohne Bezugsgroesse behauptet ein Kontingent, das es nicht gibt),
-//   erschoepft -> 100 %. exhausted IST das durchgesetzte Gate-Praedikat
-//     (planMinutesExceeded), inkl. fehlendem Periodenanker und widerrufenem
-//     Periodenguthaben (includedMinutes 0) - Anzeige == Gate bleibt gewahrt.
-// floor statt round: so bedeutet 100 % genau "erschoepft" und nie "fast erschoepft,
-// aber das Gate laesst noch durch". Der Divisor ist im letzten Zweig zwingend > 0
-// (exhausted=false heisst usedMinutes < includedMinutes bei endlichem includedMinutes).
-// Reine Funktion.
 export function planUsagePercent(quota) {
   if (!quota) return null;
   if (quota.exhausted) return FULL_PERCENT;

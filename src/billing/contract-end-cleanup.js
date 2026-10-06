@@ -1,18 +1,3 @@
-// 312k-Phase 4: Vertragsende-Aufraeumarbeiten - Rufnummer freigeben + WorkOS-Identitaet
-// loeschen, AUSSCHLIESSLICH wenn der Vertrag durch eine KUENDIGUNG endete. Die
-// Unterscheidung Kuendigung/Zahlungsausfall selbst lebt in billing/webhook.js (liest
-// tenantSubscription(tenant).cancelAtPeriodEnd VOR dem Suspend) - diese Datei wird nur
-// gerufen, wenn diese Bedingung bereits bejaht ist. Nummern-Freigabe nutzt den bereits
-// vorverdrahteten Seam releaseTenantNumbersOnErase (release-reconcile.js, Muster-Kommentar
-// dort: "kein Live-Aufrufer" - DIESER Aufrufer ist der erste). WorkOS-Loeschung ist neu
-// (workos-management.js). Beide Teilschritte sind UNABHAENGIG voneinander idempotent und
-// duerfen NIEMALS die Sperre (SUSPEND) blockieren - ein Fehler hier wird geloggt +
-// durabel auditiert und als offen vermerkt, nie geworfen an den Aufrufer weitergereicht.
-//
-// Retry-Mechanik folgt dem Bestands-Muster periodischer Aufraeumarbeiten (Muster
-// scheduleReleaseReconcile, wiring/web-login.js; runRetention, boot.js): EIN Selektor
-// (store.tenantsPendingContractEndCleanup) + EIN Executor (attemptContractEndCleanup),
-// Boot-Lauf + Sweep-Intervall - keine eigene Warteschlange.
 import { releaseTenantNumbersOnErase } from "../release-reconcile.js";
 
 const AUDIT_ACTION = Object.freeze({
@@ -21,15 +6,9 @@ const AUDIT_ACTION = Object.freeze({
   WORKOS_DELETE_SKIPPED: "workos_user_delete_skipped",
 });
 
-// Ein WorkOS-Loeschversuch. Liefert true = noch OFFEN (Retry noetig), false = erledigt
-// (geloescht ODER nichts zu tun). Jeder Versuch UND jeder Ausgang landet im durablen
-// Nachweis (auditStore.record) - console/logger sind nur die operative Sicht daneben.
-// Niemals subject (die WorkOS-Nutzer-Kennung) oder den API-Key loggen.
 async function attemptWorkosDelete({ store, workos, auditStore, logger, tenantId }) {
   const subject = store.tenantIdpSubject(tenantId);
   if (!subject) {
-    // Kein bekannter WorkOS-Identitaet an diesem Tenant (z.B. CLI-bootstrapped ohne
-    // Web-Login) - nichts zu loeschen, kein offener Rest.
     await auditStore.record({
       tenantId,
       action: AUDIT_ACTION.WORKOS_DELETE_SKIPPED,
@@ -38,9 +17,6 @@ async function attemptWorkosDelete({ store, workos, auditStore, logger, tenantId
     return false;
   }
   if (!workos) {
-    // Owner-Entscheidung (Auslieferungszustand): ohne eigens vergebenen
-    // WORKOS_MANAGEMENT_API_KEY wird die Loeschung NICHT versucht - offen vermerkt,
-    // protokolliert, der Rest der Vertragsende-Verarbeitung laeuft normal weiter.
     logger.warn(`[contract-end] WORKOS_MANAGEMENT_API_KEY nicht gesetzt - Loeschung offen tenant=${tenantId}`);
     await auditStore.record({
       tenantId,
@@ -64,14 +40,6 @@ async function attemptWorkosDelete({ store, workos, auditStore, logger, tenantId
   }
 }
 
-// Ein vollstaendiger Aufraeum-Versuch fuer EINEN Tenant (Nummern + WorkOS), gerufen sowohl
-// direkt am Vertragsende (billing/webhook.js SUSPEND-Zweig) als auch vom periodischen Retry-
-// Sweep (runContractEndCleanupSweep). Wirft NIE (jeder Teilschritt ist selbst schon
-// fail-soft; die aeusseren try/catch sind ein zusaetzlicher Riegel gegen einen unerwarteten
-// Store-Fehler) - der Aufrufer darf dadurch NIE blockiert werden (die Sperre ist beim
-// Webhook-Aufrufer bereits laengst vollzogen). Persistiert den Fortschritt am Ende IMMER
-// (auch bei "nichts zu tun"), damit ein Tenant ohne offenen Rest aus dem Sweep-Selektor
-// faellt (Idempotenz: ein zweiter Durchlauf nach Erfolg findet ihn nicht mehr).
 export async function attemptContractEndCleanup({
   store,
   numberProvisioner,
@@ -111,11 +79,6 @@ export async function attemptContractEndCleanup({
   return { numberReleasePending, workosDeletePending };
 }
 
-// Periodischer Retry-Sweep (Muster runReleaseReconcile): findet alle Tenants mit noch
-// offenem Teilschritt (Selektor tenantsPendingContractEndCleanup, s. state-ops.js - der
-// NIE einen bloss zahlungsausfall-suspendierten Tenant liefert, da dessen Felder nie
-// gesetzt wurden) und versucht jeden erneut. Idempotent: ein Tenant ohne offenen Rest
-// verlaesst den Selektor und wird nicht mehr angefasst.
 export async function runContractEndCleanupSweep({
   store,
   numberProvisioner,
