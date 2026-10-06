@@ -1,12 +1,3 @@
-// E5-01 (Review-Blocker Runde 3): sipRegistrar auf dem PRODUKTIONSAUFRUFER-Pfad. Bis hierher
-// injizierte KEIN Produktionsaufrufer (web-login.js, contract-end-cleanup.js) den Registrar -
-// nur test/absender-registrierung-freigabe.test.js injizierte ihn SELBST direkt in
-// releaseTenantNumbersOnErase, ein Mechanismus-Beleg fuer einen Weg, den die Produktion nicht
-// ging. Dieser Test faehrt stattdessen ueber attemptContractEndCleanup - den EINEN
-// Produktions-Einstiegspunkt, den sowohl scheduleContractEndCleanup (wireWebLogin) als auch
-// billing/webhook.js (SUSPEND-Zweig) rufen - und prueft zusaetzlich die neue gemeinsame
-// Konstruktions-Naht sipRegistrarWennAktiv (nummern-registrierung.js). Reine In-Process-Units,
-// kein Netz, kein Spawn (F.I.R.S.T.) - Muster test/312k-p4-contract-end-cleanup.test.js.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { attemptContractEndCleanup } from "../src/billing/contract-end-cleanup.js";
@@ -63,8 +54,6 @@ function fakeStore(state) {
   };
 }
 
-// ---- attemptContractEndCleanup: sipRegistrar wird durchgereicht ---------------------
-
 test("E5-01: attemptContractEndCleanup reicht sipRegistrar an die Freigabe durch - genau EIN Loeschversuch mit der richtigen Kennung", async () => {
   const state = seedState();
   const sipRegistrar = fakeSipRegistrar();
@@ -88,8 +77,6 @@ test("E5-01: attemptContractEndCleanup reicht sipRegistrar an die Freigabe durch
   );
 });
 
-// Positiv-Kontrolle: ohne injizierten sipRegistrar (Bestand vor diesem Fix, bzw. Schalter
-// aus) laeuft die Freigabe unveraendert durch, 0 EL-Aufrufe.
 test("E5-01 Positiv-Kontrolle: attemptContractEndCleanup OHNE sipRegistrar -> Freigabe byte-identisch zum Bestand, 0 EL-Aufrufe", async () => {
   const state = seedState();
 
@@ -105,8 +92,6 @@ test("E5-01 Positiv-Kontrolle: attemptContractEndCleanup OHNE sipRegistrar -> Fr
   assert.equal(result.numberReleasePending, false);
   assert.equal(state.numbers[0].status, NUMBER_STATUS.RELEASED, "Freigabe laeuft unveraendert - der EL-Schritt ist rein additiv");
 });
-
-// ---- sipRegistrarWennAktiv: die gemeinsame Konstruktions-Naht ------------------------
 
 const BASE_CONFIG = {
   provisioning: { provisioningEnabled: true },

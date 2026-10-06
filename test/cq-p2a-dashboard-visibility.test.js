@@ -1,12 +1,3 @@
-// P2a (Messbarkeit: Ergebnisse sichtbar) - GET /api/self-service/state liefert jetzt
-// den Meldungs-Feed (notifications) UND die Kartenrumpf-Datenbasis (summary/
-// objectiveAchieved) ueberlebt publicCall. Kompositions-Integrationstest nach dem
-// Muster f2-self-service-state-private-number.test.js: reines pglite (offline,
-// F.I.R.S.T.), KEIN Server-Spawn. Prueft die SICHERHEITS-Invarianten der Lese-Sicht:
-//   - eigene Notifications erscheinen (Datenkontrakt der UI)
-//   - NIE die Notification eines fremden Tenants (H3-Scope)
-//   - summary + objectiveAchieved ueberleben publicCall (streamToken bleibt draussen)
-//   - kein Cookie -> 401, kein Notification-Body im Response
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -105,11 +96,6 @@ function request(method, url, { cookie } = {}) {
 const getState = (s, cookie = s.cookieB) =>
   request("GET", `${s.base}/api/self-service/state`, { cookie });
 
-// Build-Helper (P13): legt einen beendeten Call mit Summary + Ziel-Bewertung samt
-// zugehoeriger Notification im Mirror an und liefert den Call zurueck. Direkt ueber
-// ops.createCall (wie i9-self-service.test.js) statt store.createCall - so bleibt
-// die Referenz auf dasselbe Objekt fuer die Folge-Mutationen (summary/objectiveAchieved/
-// status) erhalten, ein einziges store.save() am Ende genuegt.
 function seedFinishedCall(store, { tenantId, summary, objectiveAchieved, notificationTitle }) {
   const call = ops.createCall(store.load(), {
     direction: "outbound",
@@ -164,7 +150,7 @@ test("P2a-2: NIE die Notification eines fremden Tenants (H3-Scope)", async () =>
       objectiveAchieved: true,
       notificationTitle: "B-Meldung",
     });
-    const res = await getState(s, s.cookieB); // eingeloggt als B
+    const res = await getState(s, s.cookieB);
     assert.equal(res.status, 200);
     const body = JSON.parse(res.body);
     assert.ok(
@@ -192,7 +178,6 @@ test("P2a-3: summary + objectiveAchieved ueberleben publicCall (Datenvertrag der
     const body = JSON.parse(res.body);
     assert.equal(body.calls[0].summary, "Ruecktritt vom Vertrag angekuendigt.");
     assert.equal(body.calls[0].objectiveAchieved, true);
-    // Gegenprobe: publicCall strippt weiterhin streamToken (kein Regress durch P2a).
     assert.equal("streamToken" in body.calls[0], false);
   } finally {
     await s.close();

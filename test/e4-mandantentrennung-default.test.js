@@ -1,7 +1,3 @@
-// E4: die Mandantengrenze gilt OHNE gesetztes MULTI_TENANT. Reiner Spawn (node:test),
-// offline, KEIN pglite in dieser Datei (Lehre: nie mit Server-Spawn mischen).
-// Kein env-Override fuer MULTI_TENANT -> es gilt BASE_ENV "false" (test/helpers.js).
-// Genau das ist der Punkt: der Default, den E4 entkoppelt.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -25,14 +21,12 @@ const SUB_A = "sub-a",
   SUB_B = "sub-b",
   SUB_GHOST = "sub-ohne-tenant";
 const NUM_A = "+4915110000001",
-  NUM_B = "+4915110000002"; // aktive DIDs
+  NUM_B = "+4915110000002";
 const PRIV_A = "+491737252163",
-  PRIV_B = "+491737252164"; // hinterlegte eigene Nummern
+  PRIV_B = "+491737252164";
 const HTTP_OK = 200,
   HTTP_UNAUTHORIZED = 401,
   HTTP_NOT_FOUND = 404;
-// Positiv-Kontrolle E4-30: die vier Route-Dateien dieser Etappe (_tenant/api-read/
-// api-calls/mcp) - benannt statt einer nackten Zahl (G25).
 const MIN_ROUTE_FILE_COUNT = 4;
 
 const activeNumber = (id, e164, tenantId) => ({
@@ -44,11 +38,6 @@ const activeNumber = (id, e164, tenantId) => ({
   providerNumberId: null,
 });
 
-// Zwei telefonierfaehige Nicht-Bootstrap-Tenants (Muster test/w5-abo-allowlist-gate.js):
-// status active + idpSubject + ownerName + kycLevel card + eigene aktive Nummer +
-// eigene hinterlegte Nummer (privateNumber) + Profil mit maxCallsPerHour:null (sonst 429
-// aus DEFAULT_PROFILE vor dem zu messenden Gate). `calls` haengt zusaetzliche Calls an
-// die beiden Basis-Calls (call_a/call_b) an - fuer E4-11 den Legacy-Call ohne tenantId.
 function seedTwoTenants({ calls = [] } = {}) {
   const callA = seedCall({ id: "call_a", twilioSid: "CAa", tenantId: TENANT_A, status: "completed" });
   const callB = seedCall({ id: "call_b", twilioSid: "CAb", tenantId: TENANT_B, status: "completed" });
@@ -78,9 +67,6 @@ function seedTwoTenants({ calls = [] } = {}) {
   });
 }
 
-// GET ueber den Loopback mit X-Internal-Identity = idpSubject (exakt der Pfad, den die
-// lesenden MCP-Tools intern nutzen). Ohne Identitaet (idpSub=null) = identitaetsloser
-// Betreiber-Kanal.
 async function getAs(srv, idpSub, pfad) {
   const res = await fetch(`${srv.localUrl}${pfad}`, {
     headers: idpSub ? { "X-Internal-Identity": idpSub } : {},
@@ -89,10 +75,6 @@ async function getAs(srv, idpSub, pfad) {
   return { status: res.status, body };
 }
 const ids = (list) => list.map((item) => item.id);
-
-// ---------------------------------------------------------------------------------
-// Trennungsfaelle: GET-Lesepfade
-// ---------------------------------------------------------------------------------
 
 test("E4-10: /api/state ist tenant-gescoped, OHNE MULTI_TENANT gesetzt zu haben", async () => {
   const srv = await startServer({ seed: seedTwoTenants() });
@@ -125,11 +107,6 @@ test("E4-11: Legacy-Call ohne tenantId gehoert niemandem", async () => {
 });
 
 test("E4-12: verifizierte, aber unbekannte Identitaet -> 200 mit leeren Listen (A5, gepinnt)", async () => {
-  // /api/state ist internalOnly (kein Aussenweg ausser dem hier gemessenen Loopback-Pfad);
-  // der einzige externe Weg auf dieselbe Aufloesung ist /mcp, das seit E4 mit 403 schliesst
-  // (E4-17 unten). Eine vorhandene-aber-unbekannte Identitaet loest ueber requestTenant auf
-  // TENANT_REJECT auf - /api/state gated NICHT ueber requireTenant, sondern liefert die
-  // (leeren) Listen des Reject-Buckets zurueck. Bewusst akzeptiert, s. PLAN-SECURITY.md.
   const srv = await startServer({ seed: seedTwoTenants() });
   try {
     const { status, body } = await getAs(srv, SUB_GHOST, "/api/state");
@@ -209,15 +186,8 @@ test("E4-19: Request ohne X-Internal-Identity ueber den Loopback -> Betreiber-Ka
   }
 });
 
-// ---------------------------------------------------------------------------------
-// MCP-Torschluss
-// ---------------------------------------------------------------------------------
-
 const oauthEnv = (idp) => ({ MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer });
 
-// T2-05 (T-14) umbenannt: die Tool-Liste ist seit dieser Phase sichtbar (Pflicht fuer
-// die ChatGPT-Kontoverknuepfungs-UI), NUR der Aufruf ist gesperrt - der Stub liefert
-// einen Tool-Fehler mit Re-Auth-Challenge statt eines echten Ergebnisses.
 test("E4-17: /mcp, gueltiges Token OHNE Tenant-Zuordnung -> Tool-Liste sichtbar, Aufruf gesperrt", async () => {
   const idp = await startIdp();
   const srv = await startServer({ env: oauthEnv(idp), seed: seedTwoTenants() });
@@ -271,13 +241,6 @@ test("E4-18b: /mcp ohne Token -> 401 mit WWW-Authenticate (Torschluss sitzt HINT
   }
 });
 
-// ---------------------------------------------------------------------------------
-// Absolute Regel 2 - die beiden Fehlerrichtungen (Kern der Etappe)
-// ---------------------------------------------------------------------------------
-
-// FAKE_ORIGINATE=true legt den Originate-Zweig trocken; ELEVENLABS_OUTBOUND_ENABLED=false
-// verhindert, dass die Route VOR dem trockengelegten Zweig abbiegt. Ohne beides waere das
-// ein ECHTER Anruf mit echten Kosten (Absolute Regel 1) - Muster test/oc-p1-owner-call-http.js.
 const CALL_ENV = { FAKE_ORIGINATE: "true", ELEVENLABS_OUTBOUND_ENABLED: "false" };
 const ALLOWLIST_A = { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: TENANT_A };
 
@@ -299,9 +262,6 @@ async function placeCallAndRead({ env = {}, identity = null, to }) {
     await srv.stop();
   }
 }
-
-// Wird einer von E4-20 bis E4-24 rot, ist das kein Testproblem, sondern ein
-// Rechtsverstoss-Risiko (Art. 50 EU AI Act) - kein Merge.
 
 test("E4-20: Richtung A - Tenant A ruft die eigene hinterlegte Nummer an -> calleeIsOwner true", async () => {
   const call = await placeCallAndRead({ env: ALLOWLIST_A, identity: SUB_A, to: PRIV_A });
@@ -337,15 +297,9 @@ test("E4-24: der Bootstrap-Tenant erbt die Ausnahme NICHT (identitaetsloser Anru
   assert.strictEqual(call.calleeIsOwner, false);
 });
 
-// ---------------------------------------------------------------------------------
-// Riegel (A8): der Flag-Kurzschluss ist aus den Routen verschwunden
-// ---------------------------------------------------------------------------------
-
 const ROUTES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src", "routes");
-const FLAG_NEEDLE = "multi" + "Tenant"; // gesplittet, damit DIESE Datei den eigenen Riegel nicht triggert
+const FLAG_NEEDLE = "multi" + "Tenant";
 
-// EINE Suchfunktion fuer Riegel UND Positiv-Kontrolle (G5): waeren es zwei, wuerde die
-// Kontrolle nicht den Code pruefen, der den Riegel traegt.
 function trefferIn(inhalt) {
   return inhalt.split("\n").filter((zeile) => zeile.includes(FLAG_NEEDLE)).length;
 }
@@ -363,8 +317,6 @@ test("E4-30: keine Route liest mehr das Flag (Bestands-Gegenprobe: Dateien wurde
   assert.equal(treffer, 0, "kein Vorkommen des Flags mehr in src/routes/");
 });
 
-// Dieser Riegel ist AUSDRUECKLICH KEIN Beweis der Trennung - er ist auch ohne A1
-// erfuellbar (PM-2). Den Beweis tragen E4-10 bis E4-24.
 test("E4-31: Positiv-Kontrolle der Suchfunktion selbst (Lehre pruefkommando-ohne-positiv-kontrolle)", () => {
   const zeile = "if (!config.tenancy." + FLAG_NEEDLE + ") return x;";
   assert.equal(trefferIn(zeile), 1);

@@ -1,34 +1,3 @@
-// ---- Die AUFZEICHNUNG ist die Quelle, das Fixture-Modul nur ihre Abschrift -------------
-// Owner-Regel (17.08.2026, woertlich): "Keine erfundene Anbieter-Antwort, wo eine echte
-// aufgezeichnet ist. Gibt es keine, schreib in den Test, dass das Verhalten ausgedacht
-// ist."
-//
-// WARUM DIESE DATEI: test/fixtures/elevenlabs-conversations.js ist eine ABSCHRIFT echter
-// Messungen. Eine Abschrift kann still von ihrer Quelle abweichen - ab dann bewachen alle
-// Tests, die sie benutzen, nur noch unsere eigene Behauptung statt der Anbieter-Wahrheit.
-// Genau dieser Fehlertyp hat beim Rueckfrage-Webhook zugeschlagen: ueber zwanzig gruene
-// Tests, und in Produktion haette jeder Aufruf 404 geliefert.
-//
-// RICHTUNG DER WAHRHEIT: die Messdateien unter tasks/ werden NIE umgeschrieben. Weicht die
-// Fixture von der Messung ab, ist die FIXTURE falsch, nicht die Messung.
-//
-// REICHWEITE, ehrlich benannt: genau EIN Fund des Moduls stammt aus einer Messdatei, die
-// im Repo liegt (CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES <- tasks/spike2-messung.
-// jsonl, testanruf nr.1). Die uebrigen Funde (ERROR_ENVELOPES, FAILED, DONE) sind am
-// 15.08.2026 ECHT gemessen, ihre Rohantworten lagen aber nur im Scratchpad der
-// Mess-Sitzung und NIE im Repo (s. Modulkopf des Fixture-Moduls) - fuer sie gibt es hier
-// nichts zu vergleichen ausser der EINEN Angabe, die auch aufgezeichnet ist: die gewaehlte
-// DID. tasks/spike1b-messung.jsonl traegt ueberhaupt keine Anbieter-Antwort, die dieses
-// Modul abschreibt (sie misst Agenten-Konfiguration) - sie kommt hier deshalb nicht vor.
-//
-// ZWEITE Messdatei seit 17.08.2026 (S1-B): tasks/spike1-messung.jsonl, Satz "art":
-// "in-progress-felder". Sie belegt die drei Felder des LAUFENDEN Gespraechs
-// (CONVERSATION_IN_PROGRESS) - der einzige Fund, aus dem hervorgeht, dass eine 0 in
-// metadata.call_duration_secs waehrend des Gespraechs nichts ueber die Rufannahme sagt.
-//
-// Testnamen tragen bewusst KEINE Katalog-/Abnahme-Kennung am Namensanfang (package.json
-// config.i18nCatalogPattern / config.abnahmePattern), sonst landen sie in der falschen
-// Testbank (Lehre catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -58,21 +27,14 @@ function messsaetze(url) {
 const SPIKE1 = messsaetze(MESSUNG_SPIKE1_URL);
 const SPIKE2 = messsaetze(MESSUNG_SPIKE2_URL);
 
-// Ueber die Sachmerkmale gesucht, NICHT ueber die Zeilennummer: eine neue Zeile in der
-// Aufzeichnung darf diesen Test nicht verschieben.
 const TESTANRUF_1 = SPIKE2.find((satz) => satz.art === "testanruf" && satz.nr === 1);
 const NUMMERNWAHL = SPIKE2.find((satz) => satz.art === "nummernwahl");
 const IN_PROGRESS_MESSUNG = SPIKE1.find((satz) => satz.art === "in-progress-felder");
 
-// Punktgetrennter Lesepfad - haelt die Tabellen unten datengetrieben und die Zugriffe
-// flach (G36).
 function wertAn(objekt, pfad) {
   return pfad.split(".").reduce((knoten, schluessel) => knoten?.[schluessel], objekt);
 }
 
-// Alle BLATT-Pfade eines Fixture-Datensatzes, punktgetrennt. "Blatt" = alles, was kein
-// einfaches Objekt ist; ein Array zaehlt selbst als Blatt (transcript:[] ist EINE Aussage,
-// keine Sammlung von Aussagen).
 function blattPfade(wert, prefix = []) {
   const istObjekt = wert !== null && typeof wert === "object" && !Array.isArray(wert);
   if (!istObjekt) return prefix.length ? [prefix.join(".")] : [];
@@ -81,22 +43,14 @@ function blattPfade(wert, prefix = []) {
 
 const CLOSE_1008_NAME = "CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES";
 
-// ---- Die Aussagen des CLOSE-1008-Fundes, die AUS DER AUFZEICHNUNG stammen -------------
-// Fixture-Pfad -> wie derselbe Wert in tasks/spike2-messung.jsonl heisst.
 const AUS_DER_AUFZEICHNUNG = Object.freeze([
   Object.freeze({ fixturePfad: "conversation_id", messfeld: "conversation_id" }),
   Object.freeze({ fixturePfad: "metadata.call_duration_secs", messfeld: "gespraechsdauer_s" }),
   Object.freeze({ fixturePfad: "metadata.termination_reason", messfeld: "termination_reason" }),
 ]);
 
-// ---- Die Aussagen, fuer die die Aufzeichnung SCHWEIGT --------------------------------
-// Der volle GET-Rumpf wurde fuer diesen Anruf nie mitgeschrieben, nur die Telnyx-/
-// WebSocket-Ereignisfelder. Beide Angaben sind deshalb Annahmen und muessen als solche
-// gekennzeichnet sein.
 const OHNE_AUFZEICHNUNG = Object.freeze(["status", "analysis"]);
 
-// Das leere Transkript ist die dritte Herkunftsart: nicht woertlich abgeschrieben, aber
-// auch nicht erfunden - es folgt zwingend aus einem gemessenen Feld.
 const ABGELEITET = Object.freeze(["transcript"]);
 
 test("Fixture-Abgleich: die aufgezeichneten Felder des CLOSE-1008-Fundes stehen woertlich so in tasks/spike2-messung.jsonl", () => {
@@ -169,10 +123,6 @@ test("Fixture-Abgleich: die agent_number der beiden 15.08.-Funde ist die maskier
   }
 });
 
-// ---- Der IN-PROGRESS-Fund: drei Felder, EINE Messung (S1-B) ---------------------------
-// Der volle GET-Rumpf des laufenden Gespraechs wurde nicht mitgeschrieben, wohl aber der
-// Befund ueber genau die drei Felder, auf die es ankommt. Der Befundsatz IST hier die
-// Aufzeichnung - deshalb wird gegen ihn abgeglichen, statt die Werte nur zu behaupten.
 const IN_PROGRESS_BELEGE = Object.freeze([
   Object.freeze({ pfad: "status", wert: "in-progress", muster: /status bleibt 'in-progress'/ }),
   Object.freeze({

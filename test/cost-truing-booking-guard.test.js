@@ -1,7 +1,3 @@
-// LCT P4 (Der Flip): die zwei Boot-Riegel der Korrekturbuchung.
-//   (n) Unit: costTruingBookingFindings (src/boot-guard.js) - reine Entscheidung,
-//       Muster test/spend-cap-coherence.test.js.
-//   (n)+(p) Boot-Beweis: Spawn-Tests, Muster test/provider-rate-guard.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { costTruingBookingFindings, COST_TRUING_BOOKING_FINDING } from "../src/boot-guard.js";
@@ -11,16 +7,9 @@ import {
 } from "../src/telephony/adapters/telnyx/voice.js";
 import { startServer, startServerExpectExit, outboundCallsSeed } from "./helpers.js";
 
-// Zuordenbare und nie zuordenbare Typen kommen aus DEN Quellen, die der Boot auch verdrahtet
-// (G5) - eine im Test wiederholte Literal-Liste koennte davon abdriften.
 const ASSIGNABLE = ASSIGNABLE_COST_RECORD_TYPES;
 const UNASSIGNABLE = UNASSIGNABLE_COST_RECORD_TYPES;
-// Werte, die KEIN realer record_type sind und die eine reine Deny-Liste durchliesse: die
-// Schreibvariante eines echten Typs und der laut Telnyx-Messung nicht existierende "call"
-// (HTTP 400). Ihr Schaden ist derselbe wie beim strukturell unzuordenbaren Typ.
 const NON_ENUM_RECORD_TYPES = Object.freeze(["Inference", "call", "sip_trunking"]);
-
-// ---- Unit: costTruingBookingFindings ----
 
 test("U2: leere Pflicht-Menge (Deckung ueber der Schwelle) -> genau ein Befund, fatal:true", () => {
   const findings = costTruingBookingFindings({
@@ -68,11 +57,6 @@ test("U5: beide Befunde koennen GEMEINSAM auftreten (leere Menge UND Deckung unt
   assert.deepEqual(codes, [COST_TRUING_BOOKING_FINDING.COVERAGE_BELOW_THRESHOLD, COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_EMPTY].sort());
 });
 
-// ---- LCT-FIX-1: unerfuellbare Pflicht-Menge (nie zuordenbarer Typ) ----
-// ROT VOR DEM FIX: ohne den Riegel liefert die erste Assertion [] - die Menge sieht gesund
-// aus, waehrend jeder Call dauerhaft 'incomplete' bliebe (keine Rueckerstattung mehr, jede
-// Nachforderung gebucht).
-
 test("U6: nie zuordenbarer Pflicht-Typ -> fataler Befund, nennt den Typ", () => {
   const findings = costTruingBookingFindings({
     requiredRecordTypes: ["sip-trunking", ...UNASSIGNABLE],
@@ -86,9 +70,6 @@ test("U6: nie zuordenbarer Pflicht-Typ -> fataler Befund, nennt den Typ", () => 
   for (const t of UNASSIGNABLE) assert.match(findings[0].message, new RegExp(t));
 });
 
-// ROT VOR DEM FIX (Runde 2): der Guard prueft gegen eine Deny-Liste, also passiert JEDER
-// Wert, der kein realer record_type ist - mit exakt demselben Schaden wie der strukturell
-// unzuordenbare Typ (Pflicht-Menge dauerhaft unerfuellbar, cost-truing.js vergleicht exakt).
 test("U6b: Nicht-Enum-Pflicht-Typ (Case-Drift, Tippfehler, nicht existierender Typ) -> fataler Befund", () => {
   for (const bad of NON_ENUM_RECORD_TYPES) {
     const findings = costTruingBookingFindings({
@@ -100,8 +81,6 @@ test("U6b: Nicht-Enum-Pflicht-Typ (Case-Drift, Tippfehler, nicht existierender T
     assert.equal(findings.length, 1, `Wert ${bad}`);
     assert.equal(findings[0].fatal, true, `Wert ${bad}`);
     assert.equal(findings[0].code, COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_UNASSIGNABLE, `Wert ${bad}`);
-    // Der beanstandete Wert selbst muss die Meldung anfuehren - ein blosses Vorkommen von
-    // "call" kaeme auch ueber das mitgelistete "call-control" durch und pruefte nichts.
     assert.ok(findings[0].message.includes(`fordert ${bad} `), `Wert ${bad} fehlt in: ${findings[0].message}`);
   }
 });
@@ -116,11 +95,9 @@ test("U7: nur zuordenbare Pflicht-Typen -> kein Unzuordenbar-Befund", () => {
   assert.deepEqual(findings, []);
 });
 
-// ---- (n) Boot-Refusal: leere Pflicht-Menge (die Korrekturbuchung ist unkonditional aktiv) ----
-
 test("(n1) leere COST_TRUING_REQUIRED_RECORD_TYPES -> Boot-Refusal, nennt die Env-Var, kein Boot-Banner", async () => {
   const { code, output } = await startServerExpectExit({
-    env: { COST_TRUING_REQUIRED_RECORD_TYPES: "" }, // ueberschreibt den nicht-leeren BASE_ENV-Default
+    env: { COST_TRUING_REQUIRED_RECORD_TYPES: "" },
   });
   assert.equal(code, 1);
   assert.match(output, /COST_TRUING_REQUIRED_RECORD_TYPES/);
@@ -139,9 +116,6 @@ test("(n2) Gegenprobe: Pflicht-Menge gesetzt -> Server startet", async () => {
   }
 });
 
-// LCT-FIX-1: derselbe Riegel am echten Boot. Die Menge ist NICHT leer und saehe damit im
-// Bestands-Guard gesund aus - genau der Fall, den ein frischer Live-Beleg (er enthaelt
-// inference-Records) beim ungefilterten Uebernehmen erzeugt.
 test("(n3) nie zuordenbarer Typ in der Pflicht-Menge -> Boot-Refusal, nennt den Typ, kein Boot-Banner", async () => {
   const { code, output } = await startServerExpectExit({
     env: { COST_TRUING_REQUIRED_RECORD_TYPES: ["sip-trunking", ...UNASSIGNABLE].join(",") },
@@ -152,10 +126,6 @@ test("(n3) nie zuordenbarer Typ in der Pflicht-Menge -> Boot-Refusal, nennt den 
   assert.doesNotMatch(output, /Gateway laeuft/);
 });
 
-// KE-P6: (n3) beweist, dass der ECHTE Boot einen nicht zuordenbaren Pflicht-Typ ablehnt.
-// Dies ist die Gegenrichtung: die VOLLE Menge der zuordenbaren Typen - also genau die Menge,
-// die der Abruf holt - muss der Boot akzeptieren. Zusammen pinnen beide die Verdrahtung in
-// boot.js (assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES), nicht nur den reinen Guard.
 test("(n4) die VOLLE Menge der zuordenbaren Typen als Pflicht-Menge -> Server startet", async () => {
   const srv = await startServer({ env: { COST_TRUING_REQUIRED_RECORD_TYPES: ASSIGNABLE.join(",") } });
   try {
@@ -165,10 +135,6 @@ test("(n4) die VOLLE Menge der zuordenbaren Typen als Pflicht-Menge -> Server st
     await srv.stop();
   }
 });
-
-// ---- (p) Deckungsquote-WARN am Boot: genau eine Zeile, kein Boot-Refusal ----
-// Seed-Bauer outboundCallsSeed (G5): geteilt mit voice-tariff-full-cost-guard.test.js,
-// definiert in test/helpers.js. 5 Calls, davon `proven` bewiesen, IDs mit Praefix call_p_.
 
 test("(p1) 1 von 5 bewiesen (20% < 80%) -> genau EINE WARN-Zeile, /healthz 200, kein Boot-Refusal", async () => {
   const srv = await startServer({

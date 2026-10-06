@@ -1,14 +1,3 @@
-// OUTBOUND-E5 Review-Blocker Runde 2 (E5-01): der komplette CLI-Einstieg von
-// scripts/el-nummern-registrierung.mjs (runCli/modusAusArgv/pruefen) war UNGETESTET -
-// getestet war ausschliesslich die exportierte anlegen()-Funktion
-// (test/el-nummern-registrierung-anlegen-script.test.js). Genau die Riegel, die einen
-// kostenpflichtigen Anbieter-Schreibzugriff schuetzen, liefen ohne Regressionsfang.
-// eines LOKALEN Stub-Servers.
-//
-// (a) --anlegen ohne --ja-wirklich -> Exit 1, 0 Netzzugriffe.
-// (b) ohne ELEVENLABS_API_KEY -> Exit 1, 0 Netzzugriffe.
-// (c) --anlegen mit ELEVENLABS_NUMBER_REGISTRATION_ENABLED=false -> Exit 1, 0 Netzzugriffe.
-// (d) --pruefen gegen einen lokalen Stub -> Exit 0 mit Zaehlzeile (gesunder Fall, 0 DIDs).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -42,8 +31,6 @@ function runElNummern(args, env) {
   });
 }
 
-// Lokaler Stub NUR fuer die ElevenLabs-Basis (/v1/convai/phone-numbers). Zaehlt Treffer,
-// damit (a)/(b)/(c) belegen koennen, dass wirklich KEIN Netzzugriff stattfand.
 function startStubServer() {
   const treffer = [];
   const server = http.createServer((req, res) => {
@@ -125,12 +112,6 @@ test("el-nummern-registrierung.mjs: --anlegen mit ELEVENLABS_NUMBER_REGISTRATION
   }
 });
 
-// E5-03 (G5-Fix, Review Runde 2): --anlegen mit fehlender ELEVENLABS_AGENT_ID -> Exit 1,
-// KEIN Netzzugriff. VOR dem Fix hatte das Skript hier eine EIGENE, kuerzere Liste (nur
-// SIP-Zugang, OHNE agentId) - fehlte nur die Agent-ID, meldete runCli faelschlich "alles
-// gut" und baute die DB-Verbindung auf, statt fail-closed abzubrechen. Jetzt nutzt das
-// Skript dieselbe Quelle wie ensureRegistration (fehlendeZugangsdaten aus
-// nummern-registrierung.js).
 test("el-nummern-registrierung.mjs: --anlegen ohne ELEVENLABS_AGENT_ID -> Exit 1, KEIN Netzzugriff (E5-03)", async () => {
   const { server, treffer } = await startStubServer();
   try {
@@ -152,8 +133,6 @@ test("el-nummern-registrierung.mjs: --anlegen ohne ELEVENLABS_AGENT_ID -> Exit 1
   }
 });
 
-// Positiv-Kontrolle (Vermeidungsliste 2): der gesunde Fall - --pruefen gegen einen Stub, der
-// eine leere Nummernliste liefert, bei leerem lokalen Store (keine aktiven DIDs) -> Exit 0.
 test("el-nummern-registrierung.mjs: --pruefen gegen lokalen Stub (leerer Store) -> Exit 0, Zaehlzeile", async () => {
   const { server, treffer } = await startStubServer();
   try {

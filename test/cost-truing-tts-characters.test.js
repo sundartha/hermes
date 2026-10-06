@@ -1,7 +1,3 @@
-// KE-P6 (Aenderung 2 auf Sweep-Ebene): richtiger Tenant, kein Ueberlauf, genau einmal,
-// fail-closed. Gegen den ECHTEN Telnyx-Adapter mit gestubbtem global.fetch (Muster
-// cost-truing-pool.test.js) - nur so ist die Zuordnung (Anker + Session) die Wirklichkeit,
-// nicht ein Fake-Echo. Env VOR den dynamischen Importen (Lehre test-base-env-drift).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -24,19 +20,16 @@ const ANCHOR_B = "v3:TtsCharsTenantBAnchor0000000000000000000000000000";
 const SESSION_A = "sess-tts-tenant-a-0001";
 const SESSION_B = "sess-tts-tenant-b-0002";
 const FOREIGN_SESSION = "sess-tts-foreign-0003";
-// KOEDER (Spec A2): dieselbe fremde UUID wie in cost-truing-harness.js, an ALLEN Belegen -
-// liest der Code sie als Zuordnungsquelle, kommt kein einziger erwarteter Beleg herein.
 const BAIT_LEG_ID = "0bad0bad-0bad-11f1-0bad-0bad0bad0bad1";
-const ENDED_MINUTES_AGO = 200; // Bestandsdefault von makeDueOutboundCall
+const ENDED_MINUTES_AGO = 200;
 
-// Gemessene sip-trunking-Form (Spec A1): Anker + Session, Zeitfelder, cost als STRING.
 function sipTrunkingRecord({ callControlId, sessionId, cost, billedSec, at }) {
   const record = {
     record_type: "sip-trunking",
     cost,
     currency: "USD",
     telnyx_session_id: sessionId,
-    telnyx_leg_id: BAIT_LEG_ID, // Koeder
+    telnyx_leg_id: BAIT_LEG_ID,
     started_at: at,
     finished_at: at,
     billed_sec: billedSec,
@@ -45,33 +38,25 @@ function sipTrunkingRecord({ callControlId, sessionId, cost, billedSec, at }) {
   return record;
 }
 
-// Gemessene call-control-Form (Spec A1): NIE ein Anker, nur telnyx_leg_id + telnyx_session_id.
 function callControlRecord({ sessionId, cost, billedSec, at }) {
   return {
     record_type: "call-control",
     cost,
     currency: "USD",
     telnyx_session_id: sessionId,
-    telnyx_leg_id: BAIT_LEG_ID, // Koeder
+    telnyx_leg_id: BAIT_LEG_ID,
     started_at: at,
     billed_sec: billedSec,
   };
 }
 
-// Gemessene text-to-speech-Form (Spec A1/Plan F6): call_session_id + call_leg_id (Koeder),
-// provider + number_of_characters (KE-P6), cost als STRING. BEWUSST OHNE created_at: das
-// Zeitfeld ist zufaellig auch in RECORD_TIMESTAMP_FIELDS (Fensterfilter) enthalten, und
-// call.startedAt ist REALE Testlaufzeit (createCall stempelt sie, makeDueOutboundCall setzt
-// sie nicht um) - ein synthetischer, weit zurueckliegender Wert faellt aus dem Fenster.
-// Muster elevenLabsTtsRecord (telnyx-cost-records.test.js): dasselbe Feld bleibt dort ebenso
-// unbelegt.
 function ttsRecord({ sessionId, chars, cost, provider = "elevenlabs" }) {
   return {
     record_type: "text-to-speech",
     cost,
     currency: "USD",
     call_session_id: sessionId,
-    call_leg_id: BAIT_LEG_ID, // Koeder
+    call_leg_id: BAIT_LEG_ID,
     provider,
     number_of_characters: chars,
   };
@@ -83,26 +68,24 @@ test("(P6-5) die Zeichen landen am RICHTIGEN Tenant - kein Ueberlauf", async () 
   const callA = makeDueOutboundCall(state, { nowMs, tenantId: TENANT_A, legRef: { callControlId: ANCHOR_A } });
   const callB = makeDueOutboundCall(state, { nowMs, tenantId: TENANT_B, legRef: { callControlId: ANCHOR_B } });
   const store = makeStubStore(state);
-  // Beide Calls teilen dasselbe Fenster (gleiches nowMs, gleiches endedMinutesAgo) -> ein
-  // gemeinsamer Zeitstempel INNERHALB beider Fenster genuegt (== endedAt, Grenze inklusiv).
   const at = isoMinutesAgo(nowMs, ENDED_MINUTES_AGO);
   stubCountingFetch({
     bodyFor: (recordType) => {
       if (recordType === "sip-trunking")
         return {
           data: [
-            sipTrunkingRecord({ callControlId: null, sessionId: SESSION_A, cost: "0.0", billedSec: 0, at }), // Null-Zwilling A
-            sipTrunkingRecord({ callControlId: ANCHOR_A, sessionId: SESSION_A, cost: "0.0401", billedSec: 60, at }), // abgerechnet A
-            sipTrunkingRecord({ callControlId: null, sessionId: SESSION_B, cost: "0.0", billedSec: 0, at }), // Null-Zwilling B
-            sipTrunkingRecord({ callControlId: ANCHOR_B, sessionId: SESSION_B, cost: "0.0502", billedSec: 60, at }), // abgerechnet B
+            sipTrunkingRecord({ callControlId: null, sessionId: SESSION_A, cost: "0.0", billedSec: 0, at }),
+            sipTrunkingRecord({ callControlId: ANCHOR_A, sessionId: SESSION_A, cost: "0.0401", billedSec: 60, at }),
+            sipTrunkingRecord({ callControlId: null, sessionId: SESSION_B, cost: "0.0", billedSec: 0, at }),
+            sipTrunkingRecord({ callControlId: ANCHOR_B, sessionId: SESSION_B, cost: "0.0502", billedSec: 60, at }),
           ],
         };
       if (recordType === "call-control")
         return {
           data: [
-            callControlRecord({ sessionId: SESSION_A, cost: "0.0", billedSec: 0, at }), // Null-Zwilling A
+            callControlRecord({ sessionId: SESSION_A, cost: "0.0", billedSec: 0, at }),
             callControlRecord({ sessionId: SESSION_A, cost: "0.002", billedSec: 60, at }),
-            callControlRecord({ sessionId: SESSION_B, cost: "0.0", billedSec: 0, at }), // Null-Zwilling B
+            callControlRecord({ sessionId: SESSION_B, cost: "0.0", billedSec: 0, at }),
             callControlRecord({ sessionId: SESSION_B, cost: "0.003", billedSec: 60, at }),
           ],
         };
@@ -111,7 +94,7 @@ test("(P6-5) die Zeichen landen am RICHTIGEN Tenant - kein Ueberlauf", async () 
           data: [
             ttsRecord({ sessionId: SESSION_A, chars: 238, cost: "1.666E-4" }),
             ttsRecord({ sessionId: SESSION_B, chars: 17, cost: "1.7E-4" }),
-            ttsRecord({ sessionId: FOREIGN_SESSION, chars: 9999, cost: "1.0E-4" }), // Fehlbuchungs-Falle
+            ttsRecord({ sessionId: FOREIGN_SESSION, chars: 9999, cost: "1.0E-4" }),
           ],
         };
       return { data: [] };
@@ -125,8 +108,6 @@ test("(P6-5) die Zeichen landen am RICHTIGEN Tenant - kein Ueberlauf", async () 
 
   assert.equal(usageFor(state, TENANT_A).ttsCharacters, 238);
   assert.equal(usageFor(state, TENANT_B).ttsCharacters, 17);
-  // Die Kostensumme MUSS die Null-Zwillinge enthalten - "erster Treffer je Typ gewinnt"
-  // verliert 0,0401 USD und erstattet real ausgegebenes Geld zurueck.
   assert.equal(callA.actualCostMicroCents, 4_226_660, "0 + 4010000 + 0 + 200000 + 16660");
   assert.equal(callB.actualCostMicroCents, 5_337_000, "0 + 5020000 + 0 + 300000 + 17000");
 });
@@ -183,11 +164,6 @@ test("(P6-7) unvollstaendiger Pool -> keine Zeichen (dieselbe fail-closed-Asymme
   assert.equal(usageFor(state, TENANT_A).ttsCharacters, 0);
 });
 
-// ---- KV-P7 (Massnahme 3, Sweep-Ebene): Relay-Verbrauch im Kontingent-Zaehler ------------
-// Der Sweep bucht ueber store.recordRelayTtsCharacters (cost-truing.js, bookTtsCharactersFor)
-// - dieselbe Zuordnung wie oben (P6-5/P6-6), zusaetzlich am PLATTFORM-Zyklus-Zaehler
-// geprueft statt nur am Tenant-Bucket.
-
 test("KV-P7-12: Relay-Verbrauch landet NACH dem Sweep im Kontingent-Zaehler; zweiter Sweep aendert nichts (costTruedAt)", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
@@ -223,7 +199,6 @@ test("KV-P7-13: Warnschwelle laeuft ueber den bestehenden Befundkanal (WARN + Au
   const nowMs = Date.now();
   const state = makeDefaultState();
   makeDueOutboundCall(state, { nowMs, tenantId: TENANT_A, legRef: { callControlId: ANCHOR_A } });
-  // Kontingent klein: 238 Zeichen ueberschreiten 50% von 300 (=150) sofort.
   const config = fakeConfig({ ttsCharacterQuota: 300, ttsCharacterQuotaWarnPercent: 50 });
   const store = makeStubStore(state, { billing: config.billing });
   const at = isoMinutesAgo(nowMs, ENDED_MINUTES_AGO);

@@ -1,17 +1,3 @@
-// Review-Blocker Runde 1 (G26/P16 + G5) fuer scripts/el-nummern-registrierung.mjs#anlegen:
-//
-// G26/P16: saveState() wurde bisher NICHT awaited. Auf STORE_BACKEND=pg (die dokumentierte
-// Betriebsvoraussetzung dieses Skripts, s. Modul-Kopf) ist save() asynchron (flushChain) -
-// der anlegen-Loop lief damit vor jedem DB-Write weiter, und runCli(...) ging direkt in
-// process.exit(), bevor der Flush fertig war. Der Test pinnt eine Fake-saveState, deren
-// Promise ERST im naechsten Tick aufloest (Muster stt-model-seam.test.js) - loest anlegen()
-// NICHT auf sie, laeuft die Zusicherung "Feld ist VOR dem naechsten Kandidaten persistiert"
-// nicht durch.
-//
-// G5: providerAgentPhoneNumberId wird ueber attachNumberRegistration (state-ops.js)
-// geschrieben statt per Direktzuweisung - derselbe set-once-Riegel wie im Produktionspfad
-// (onboarding.js#registriereNummerFailSoft). Ein zweiter Anlauf auf eine Nummer, die
-// zwischenzeitlich (Race) bereits eine Kennung bekam, ueberschreibt sie NICHT.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { anlegen } from "../scripts/el-nummern-registrierung.mjs";
@@ -24,9 +10,6 @@ const SIP_USER = "sip_user_test";
 const SIP_PASSWORT = "GEHEIMES_PASSWORT_XYZ";
 const ARGS = { countryCode: "DE", connectionId: "conn_1" };
 
-// Muster absender-registrierung-anlegen.test.js#seedRequested: requested -> active ueber
-// den echten provisionNumber-Pfad (fakeProvisioner, KEIN sipRegistrar hier - die
-// Registrierung ist genau das, was anlegen() im Test danach nachholt).
 async function seedActiveTelnyxNummer(tenantId) {
   const state = makeDefaultState();
   registerTenant(state, tenantId);
@@ -47,8 +30,6 @@ function fetchAttrappe() {
   return { fetchImpl, calls };
 }
 
-// G26: saveState wird AWAITED, bevor anlegen() zur naechsten Zeile geht - eine
-// erst-im-naechsten-Tick aufloesende Attrappe muss VOR dem Log-Ausgang durchgelaufen sein.
 test("G26: saveState wird awaited - der spaete Flush ist abgeschlossen, bevor anlegen() zurueckkehrt", async () => {
   const { state, numberId } = await seedActiveTelnyxNummer("t_g26");
   const { fetchImpl } = fetchAttrappe();
@@ -66,8 +47,6 @@ test("G26: saveState wird awaited - der spaete Flush ist abgeschlossen, bevor an
   assert.equal(findNumber(state, numberId).providerAgentPhoneNumberId, "phnum_neu");
 });
 
-// Positiv-Kontrolle (Vermeidungsliste 2): eine synchron aufloesende saveState-Attrappe
-// bleibt unveraendert gruen.
 test("G26 (Positiv-Kontrolle): synchrone saveState-Attrappe bleibt unveraendert gruen", async () => {
   const { state, numberId } = await seedActiveTelnyxNummer("t_g26b");
   const { fetchImpl } = fetchAttrappe();
@@ -81,11 +60,6 @@ test("G26 (Positiv-Kontrolle): synchrone saveState-Attrappe bleibt unveraendert 
   assert.equal(findNumber(state, numberId).providerAgentPhoneNumberId, "phnum_neu");
 });
 
-// G5: attachNumberRegistration ist set-once - eine Nummer, die WAEHREND des laufenden
-// Anbieter-POSTs (Race, z.B. der Produktionspfad lief parallel durch) bereits eine Kennung
-// bekam, wird von anlegen() beim Zurueckschreiben NICHT ueberschrieben. Die Race-Injektion
-// sitzt bewusst IN der fetchImpl-Attrappe (zwischen POST-Antwort und dem Zurueckschreiben in
-// anlegen()) - eine Injektion in saveState waere zu spaet, das Feld stuende dann schon.
 test("G5: set-once ueber attachNumberRegistration - eine waehrend des Anbieter-Aufrufs gesetzte Kennung bleibt unangetastet", async () => {
   const { state, numberId } = await seedActiveTelnyxNummer("t_g5");
   const calls = [];

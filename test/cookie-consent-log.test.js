@@ -1,6 +1,3 @@
-// Cookie-Einwilligungs-Protokoll (Nachweis Art. 7 Abs. 1 DSGVO): Eingabepruefung,
-// Schreib-/Loeschpfad gegen das echte Schema (pglite) und die HTTP-Kante.
-// Offline, kein Spawn, kein Netz ausser dem lokalen Loopback-Server.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -26,8 +23,6 @@ const HTTP_NO_CONTENT = 204;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_PAYLOAD_TOO_LARGE = 413;
 const HTTP_SERVER_ERROR = 500;
-
-// ---- Eingabepruefung --------------------------------------------------------------
 
 test("parseConsentRecord: gueltiger Datensatz als Objekt UND als Beacon-Text", () => {
   const expected = { consentId: CONSENT_ID, version: 1, statistics: true, marketing: false };
@@ -60,8 +55,6 @@ test("siteFromOrigin: nur der Host eines http(s)-Origins, sonst null", () => {
   assert.equal(siteFromOrigin(""), null);
   assert.equal(siteFromOrigin(undefined), null);
 });
-
-// ---- Schreib-/Loeschpfad gegen das echte Schema ------------------------------------
 
 async function freshLog() {
   const db = new PGlite();
@@ -117,8 +110,6 @@ test("pruneOlderThanDays loescht nur Zeilen jenseits der Frist", async () => {
   const { rows } = await db.query(`SELECT count(*)::int AS remaining FROM cookie_consent_log`);
   assert.equal(rows[0].remaining, 1);
 });
-
-// ---- HTTP-Kante --------------------------------------------------------------------
 
 async function withServer(consentLog, fn) {
   const app = express();

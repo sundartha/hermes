@@ -1,12 +1,3 @@
-// P2b (PLAN-CONVERSATION-QUALITY-V2): Diagnose-Retention + das geschlossene
-// `allowSummaries`-Leck. Vier Bloecke:
-//   A - diagnosticRetentionGranted (Scope-Pruefung, offline/rein)
-//   B - finishCall ueber makeCallFinish (der wichtigste Test: P2b-10 MUSS vor dem
-//       Fix in call-finish.js rot sein - der Purge lief vorher NACH dem Frueh-Return)
-//   C - purgeExpiredDiagnosticTranscripts (reiner Sweep-Durchgang)
-//   D - pruneOldData-Komposition + json-Persistenz-Durchstich
-// Kein Netz, kein Spawn (D-32 nutzt tempDataDir + einen In-Process-Import wie
-// retention.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
@@ -26,15 +17,6 @@ const OWN = "+491737252163";
 const FOREIGN = "+491729999001";
 const daysAgo = (d) => new Date(Date.now() - d * 24 * 60 * 60 * 1000).toISOString();
 const AT = "2026-01-01T00:00:00Z";
-
-// LAW-15 (i18n-Launch-Testkatalog, Buchhaltung - kein eigener Test, G5): die Haelfte
-// "fail-closed bei 0" ist hier bereits gepinnt (P2b-05: kein Flag wird gewaehrt;
-// P2b-12: der Purge laeuft trotzdem; P2b-24: jedes beendete Diagnose-Transkript faellt;
-// P2b-31: retentionDays=0 schaltet die Diagnose-Frist nicht mit ab) plus
-// test/retention.test.js "RETENTION_DAYS=0 schaltet die Retention ab". Die andere
-// Haelfte (Defaults 30/7 gegen .env.example) traegt
-// test/env-docs-spend-cap-coherence.test.js.
-// ---- Block A: diagnosticRetentionGranted (Scope-Pruefung, offline) ----
 
 test("P2b-01: eigenes Ziel + Frist scharf + requested=true -> gewaehrt", () => {
   assert.equal(
@@ -107,9 +89,6 @@ test("P2b-06: requested=undefined -> gewaehrt (GQ-P11: kein Modell-Opt-in mehr n
     true,
   );
 });
-
-// GQ-P11: die Umkehrung. Opt-in wurde Opt-out - der Server gewaehrt von sich aus, ein
-// ausdruecklicher Widerspruch (false/"false") verweigert.
 
 test("GQ-P11-1: das Feld fehlt ganz im Objekt -> gewaehrt (der Kern der Phase)", () => {
   assert.equal(
@@ -191,10 +170,6 @@ test("GQ-P11-7: ownNumber='' (leer) -> verweigert (Boolean-Guard, kein '' === ''
   );
 });
 
-// ---- Block B: finishCall (makeCallFinish) - der wichtigste Test ----
-
-// Minimale Stubs: nur was call-finish.js tatsaechlich aufruft. purged[] zeichnet jeden
-// purgeTranscript-Aufruf auf (Muster Plan §3.1 Block B).
 function makeFakeStore(call) {
   const purged = [];
   return {
@@ -210,7 +185,6 @@ function makeFakeStore(call) {
     markBilled: () => {
       call.billedAt = new Date().toISOString();
     },
-    // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
     markInboxEntry: () => {},
   };
 }
@@ -288,8 +262,6 @@ test("P2b-14 (Bestandspin): summarizeCall wirft -> Purge unterbleibt (Exception-
   assert.deepEqual(store.purged, []);
 });
 
-// ---- Block C: purgeExpiredDiagnosticTranscripts (reiner Sweep-Durchgang) ----
-
 test("P2b-20: alter beendeter Diagnose-Call -> Transkript geleert, Record bleibt", () => {
   const s = seedState({
     calls: [
@@ -366,9 +338,6 @@ test("P2b-24: days=0 -> jedes beendete Diagnose-Transkript faellt (dokumentierte
         id: "call_diag_just_ended",
         status: "completed",
         diagnostic: true,
-        // Knapp in der Vergangenheit (nicht new Date() im selben Tick wie der cutoff
-        // unten) - sonst waere endedAt>=cutoff eine Zeit-Ties-Falle statt eines
-        // echten Vergleichs (F.I.R.S.T./R).
         endedAt: daysAgo(0.001),
         transcript: [{ role: "caller", text: "Geheim", at: AT }],
       }),
@@ -378,8 +347,6 @@ test("P2b-24: days=0 -> jedes beendete Diagnose-Transkript faellt (dokumentierte
   assert.equal(purged, 1);
   assert.deepEqual(s.calls[0].transcript, []);
 });
-
-// ---- Block D: Komposition + Persistenz ----
 
 test("P2b-30: pruneOldData komponiert beide Durchgaenge (diagnosticTranscripts=1, Record bleibt)", () => {
   const s = seedState({
@@ -393,7 +360,6 @@ test("P2b-30: pruneOldData komponiert beide Durchgaenge (diagnosticTranscripts=1
       }),
     ],
   });
-  // AL-P11: evidenceRetentionDays explizit (kein Default in state-ops.pruneOldData).
   const removed = pruneOldData(s, { retentionDays: 30, diagnosticRetentionDays: 7, evidenceRetentionDays: 0 });
   assert.equal(removed.diagnosticTranscripts, 1);
   assert.ok(s.calls.some((c) => c.id === "call_diag_old"), "Call-Record bleibt (nur die lange Frist entfernt ihn)");
@@ -411,7 +377,6 @@ test("P2b-31: retentionDays=0 schaltet die Diagnose-Frist NICHT mit ab", () => {
       }),
     ],
   });
-  // AL-P11: evidenceRetentionDays explizit (kein Default in state-ops.pruneOldData).
   const removed = pruneOldData(s, { retentionDays: 0, diagnosticRetentionDays: 7, evidenceRetentionDays: 0 });
   assert.equal(removed.diagnosticTranscripts, 1);
 });

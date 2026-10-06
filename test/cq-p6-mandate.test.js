@@ -1,7 +1,3 @@
-// P6 (PLAN-CONVERSATION-QUALITY-V2, Anhang C): MANDAT statt Rueckfrage - die
-// Prompt-Sektion (claude.js mandateSection). Rein in-process (kein Server-Spawn, kein
-// pglite) - dieselbe Naht wie assistant-context-render/cq-p5-prompt-redesign: DATA_DIR
-// vor dem ersten config-Import, dann dynamischer Import der reinen Funktionen.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -13,8 +9,6 @@ import { TRANSLITERATION_STEMS } from "./umlaut-stems-helper.js";
 const OWNER = "Jonas Beispiel";
 const REAL_UMLAUT = /[äöüÄÖÜ]/u;
 
-// Voller Mandats-Wortlaut (aus dem TATSAECHLICHEN Output eingefroren, nicht erraten -
-// siehe Plan-Protokoll: Literal leer lassen, Test laufen, Ist-Ausgabe uebernehmen).
 const EXPECTED_MANDATE_SECTION_NO_CONSTRAINTS = `DEIN SPIELRAUM: Termin an einem Werktag zwischen 9 und 12 Uhr, bis 60 Euro
 Das darfst du im Gespräch ohne Rückfrage verbindlich zusagen. Innerhalb dieses Rahmens entscheidest du selbst, fragst NICHT nach und gibst es NICHT als Nachricht weiter. Eintragen oder buchen kannst du weiterhin nichts - du sagst nur verbindlich zu, was in diesem Rahmen liegt.
 
@@ -30,7 +24,6 @@ const FULL_MANDATE = {
   on_out_of_scope: "take_message",
 };
 
-// Einzige volatile Stelle (claude.js base: `Heute ist ${now}.`) einfrieren.
 const NOW_TOKEN = "<NOW>";
 const freezeNow = (prompt) => prompt.replace(/Heute ist [^\n]+\./, `Heute ist ${NOW_TOKEN}.`);
 
@@ -116,7 +109,6 @@ test("M6 alle drei Enum-Werte rendern ihren eigenen Satz; unbekannter Wert faell
   assert.match(promptFor("decline"), /lehne höflich ab, ohne ein Gegenangebot zu machen/);
   assert.match(promptFor("accept_best"), /Nimm die beste angebotene Möglichkeit an/);
 
-  // D5: unbekannter/korrupter Wert wirft NICHT, sondern faellt auf den Default (take_message).
   assert.doesNotThrow(() => promptFor("irgendwas_unbekanntes"));
   assert.match(promptFor("irgendwas_unbekanntes"), /Halte das Angebot mit allen Details fest/);
 });
@@ -137,9 +129,6 @@ test("M7 Vorrangsatz nur mit gesetzten constraints", () => {
   assert.ok(!withoutConstraints.includes("Die EINSCHRÄNKUNGEN gehen deinem Spielraum immer vor."));
 });
 
-// E1-Invariante (hart, Owner-Entscheidung): auch mit vollem Mandat bleibt jeder
-// Kalender-/Buchungspfad draussen; die beiden unbedingten Grenzen-Zeilen (P1b) stehen
-// weiter. Muster p1b-no-booking.test.js.
 const REMOVED_PROMPT_MARKERS = [
   "book_appointment",
   "get_calendar",
@@ -188,10 +177,6 @@ test("M10 Anti-Spoofing: disclosureSentence + openingText byte-identisch mit/ohn
   );
 });
 
-// PROMPT-22 (tasks/i18n-tests/02-llm-prompts.md), NACH P11 umformuliert wie PROMPT-08:
-// die Mandats-Texte kommen aus loc.prompt.mandate (19-w2-baseline.md 3.3). Geprueft wird
-// Sprachreinheit statt "bleibt deutsch": EN-Call -> englische Mandats-Labels, keine
-// deutschen. Der DE-Wortlaut bleibt woertlich von M3 gepinnt (kein Duplikat, G5).
 test("PROMPT-22 (Sprachreinheit, gruen) - Mandats-Sektion eines EN-Calls ist englisch", () => {
   const prompt = systemPrompt(call({ direction: "outbound", language: "en", mandate: FULL_MANDATE }));
   assert.ok(prompt.includes("YOUR LEEWAY:"));

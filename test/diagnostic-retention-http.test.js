@@ -1,7 +1,3 @@
-// P2b (PLAN-CONVERSATION-QUALITY-V2): der Scope-Beweis MUSS serverseitig liegen (der
-// Wunsch des Aufrufers ist keine Wahrheit). Muster wie dial-target-normalization.test.js
-// Sektion 2: ein Owner-Tenant mit gesetzter privateNumber (OWN), FAKE_ORIGINATE=true fuer
-// einen synthetischen 200-Erfolg ohne echten Provider-Call.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";

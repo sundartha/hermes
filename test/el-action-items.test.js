@@ -1,26 +1,3 @@
-// Der naechste Schritt eines ElevenLabs-Gespraechs wird ein Action Item - und
-// list_action_items liefert ihn.
-//
-// LAGE VOR DIESEM PAKET: die Feld-Kennung "next_steps" ist am Agenten deklariert
-// (elevenlabs/agent_configs/outbound-agent.template.json, platform_settings.
-// data_collection) und wurde vom Anbieter bei jedem Gespraech mitgeliefert - aber von
-// keinem Leser abgeholt. Auf dem ElevenLabs-Weg rief deshalb NICHTS store.addActionItem
-// (der Bestandsweg tut es in claude.js), und list_action_items (src/mcp-tools.js) blieb
-// dauerhaft leer. In src/telephony/call-finish.js stand im selben Zweig ein hart
-// gesetztes actionItems: [], sodass auch die Zusammenfassungs-SMS nichts nannte.
-//
-// GEPRUEFT WIRD auf zwei Ebenen, jeweils gegen den ECHTEN Weg:
-//   1) Poll-Weg Ende-zu-Ende (makeElevenLabsOutbound#rearmActiveConversationPolls ->
-//      pollConversationResult -> finishFromConversation -> persistProviderResult) gegen
-//      einen Store aus den ECHTEN state-ops (kein Attrappen-Store, damit addActionItem/
-//      callActionItems wirklich laufen), Attrappen-fetch, kein Netz, kein Backend.
-//   2) die Ausgabe des echten MCP-Werkzeugs list_action_items ueber ein Gateway-Mock,
-//      das genau den so entstandenen Store-Zustand als /api/state ausliefert. Muster
-//      test/mcp-tools.test.js.
-//
-// Testnamen tragen bewusst KEINE Katalog-Kennung am Namensanfang (kein "ABNAHME-",
-// "GAP-", "PROMPT-") - sonst landet die Datei im falschen Testlauf (Lehre
-// catalog-id-prefix-misroutes-tests).
 import assert from "node:assert/strict";
 import http from "node:http";
 import { test } from "node:test";
@@ -39,10 +16,6 @@ const HTTP_OK = 200;
 const NEXT_STEP_TEXT = "Bring the vehicle registration to the appointment on March 3.";
 const NEXT_STEP_WITHOUT_APPOINTMENT = "Send over the damage photos by email this week.";
 
-// ---- Fixtures: Anbieter-Antworten in der Form, die collectedValue liest ----------------
-// Form je Eintrag = DataCollectionResultCommonModel (data_collection_id/value), dieselbe
-// wie in test/fixtures/elevenlabs-conversations.js. Hier bewusst LOKAL statt die dortige
-// gemeinsame Fixture zu erweitern: an ihr haengen deepEqual-Erwartungen anderer Tests.
 function collected(entries) {
   return Object.fromEntries(
     Object.entries(entries).map(([id, value]) => [id, { data_collection_id: id, value }]),
@@ -82,9 +55,6 @@ const CONVERSATION_OHNE_NAECHSTEN_SCHRITT = conversationWith(
   "conv_ohne_next_steps",
 );
 
-// ---- Ein Store aus den ECHTEN state-ops --------------------------------------------------
-// Nur die Mutatoren, die dieser Weg anfasst - aber jeder davon der echte, damit
-// addActionItem wirklich entdoppelt und callActionItems wirklich liest.
 function makeStateStore() {
   const state = ops.makeDefaultState();
   const call = ops.createCall(state, {
@@ -96,12 +66,9 @@ function makeStateStore() {
   call.status = "active";
   call.answeredAt = new Date().toISOString();
   call.elevenlabsConversationId = null;
-  // E2-S2-2 (Review-Blocker Runde 2): storeOpsFacade (test/helpers.js) statt einer
-  // handkopierten Attrappe - dieselben echten state-ops-Mutatoren, EINE Quelle.
   return { state, call, store: storeOpsFacade(state) };
 }
 
-// Faehrt den ECHTEN Poll-Weg gegen eine Anbieter-Antwort und liefert den Store-Zustand.
 async function pollConversation(conversation) {
   const { state, call, store } = makeStateStore();
   call.elevenlabsConversationId = conversation.conversation_id;
@@ -127,8 +94,6 @@ async function pollConversation(conversation) {
   );
   return { state, call, store };
 }
-
-// ---- Ebene 1: der Poll-Weg schreibt das Action Item -------------------------------------
 
 test("EL-Ergebnisabruf: der vereinbarte naechste Schritt landet als Action Item am Store", async () => {
   const { state, call } = await pollConversation(CONVERSATION_MIT_TERMIN);
@@ -159,18 +124,10 @@ test("EL-Ergebnisabruf: nennt das Gespraech keinen naechsten Schritt, entsteht K
 
 test("EL-Ergebnisabruf: ein zweiter Durchlauf derselben Antwort legt KEIN zweites Item an (Entdopplung des Bestands-Mutators)", async () => {
   const { state, call, store } = await pollConversation(CONVERSATION_MIT_TERMIN);
-  // Denselben Wortlaut noch einmal einspeisen - genau das tut ein Beende-Versuch, der das
-  // Ergebnis nach einem bereits gelaufenen Poll ein zweites Mal holt (endActiveCall).
   store.addActionItem(call.id, NEXT_STEP_TEXT, "appointment");
   assert.equal(state.actionItems.length, 1);
 });
 
-// ---- Ebene 2: das echte MCP-Werkzeug liest ihn ------------------------------------------
-
-// Faengt die registrierten Handler ein. Beide Registrier-Formen der MCP-Bibliothek
-// (tool(name, desc, schema, handler) und registerTool(name, config, handler)) tragen den
-// Namen ZUERST und den Handler ZULETZT - deshalb genuegt EIN Sammler ueber Restargumente,
-// statt zwei Signaturen nachzubauen.
 function captureTools() {
   const handlers = new Map();
   const remember = (...args) => handlers.set(args[0], args.at(-1));
@@ -181,7 +138,6 @@ function captureTools() {
   return handlers;
 }
 
-// Liefert den echten Store-Zustand als /api/state aus und ruft list_action_items.
 async function listActionItemsFor(state) {
   const server = http.createServer((_req, res) => {
     res.writeHead(HTTP_OK, { "content-type": "application/json" });

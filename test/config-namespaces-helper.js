@@ -1,23 +1,3 @@
-// Test-Fixture-Helfer (PA-13): haengt die 13 Config-Namespaces als GETTER an einen flachen
-// Test-Mock, EXAKT wie config.js es am globalen rawConfig tut (nicht-enumerable Gruppen,
-// Blaetter delegieren auf denselben flachen Slot). So liest migrierter Code config.<ns>.<key>
-// aus einem Hand-Mock, und ein Spread-Override eines flachen Schluessels schlaegt 1:1 auf den
-// Namespace durch (kein PM-1-Stale). Verhaltensneutral fuer Pfade ohne Namespace-Zugriff.
-// WICHTIG: NACH allen Spreads/Overrides anwenden (Namespaces sind nicht-enumerable -> ein
-// spaeterer { ...mock } verliert sie); bei geteiltem Modul-CONFIG eine Spread-Kopie wrappen.
-//
-// EIGENE Datei statt in helpers.js (Pflicht, kein Stil-Entscheid): helpers.js importiert
-// praktisch jedes Testfile ALS ALLERERSTES, VOR dessen eigenem process.env-Setup. Etliche
-// Dateien nutzen bewusst das Muster "process.env setzen, DANACH config.js dynamisch
-// importieren" (z.B. telnyx-call-control.test.js, claude-identity.test.js), um genau zu
-// verhindern, dass config.js seinen env-Snapshot vor dem testeigenen Setup zieht (Lehre
-// test-base-env-drift). Ein statischer config.js-Import in helpers.js wuerde config.js
-// schon beim Import von helpers.js auswerten (ESM: Abhaengigkeiten werten vor dem
-// importierenden Modul aus) - VOR dem env-Setup jeder aufrufenden Datei - und damit fuer
-// die GESAMTE Suite denselben fail-open-Stale-Bug herbeifuehren, den das Muster verhindern
-// soll (empirisch bestaetigt: 110 Suite-Faelle bei Erstversuch ueber helpers.js). Nur
-// Dateien, die withConfigNamespaces tatsaechlich brauchen, importieren diese Datei -
-// keine der PA-13-Zieldateien nutzt das env-vor-config-Muster (siehe PA-13-Report).
 import { attachNamespaces, CONFIG_NAMESPACES } from "../src/config.js";
 
 export function withConfigNamespaces(flatConfig) {
@@ -25,40 +5,17 @@ export function withConfigNamespaces(flatConfig) {
   return flatConfig;
 }
 
-// Fake-Config fuer den Telnyx Brain-Shim (makeTelnyxLlmShim): EINE Quelle (G5/S2) statt
-// der frueher in telnyx-llm-shim.test.js + telnyx-shim-endcall.test.js byte-identisch
-// kopierten Definition. telnyxShimMaxTurnsPerMin=100 bewusst grosszuegig (!= config.js-
-// Default 30): einzelne Turn-Tests sollen vom per-callId-Rate-Limiter unberuehrt bleiben,
-// der einen eigenen Testfall mit engerem Limit bekommt.
-// PA-18: lebt HIER statt in helpers.js (das praktisch jedes Testfile ALS ALLERERSTES
-// importiert, VOR dessen eigenem env-Setup - ein config.js-Import dort wuerde den
-// test-base-env-drift-Bug reproduzieren, s. Modul-Kommentar oben). withConfigNamespaces
-// haengt die Namespace-Getter an (dual-read: der migrierte Shim liest config.telnyx.
-// telnyxAssistant.X, Bestandsassertions auf den flachen Keys bleiben unveraendert gueltig).
 export function fakeTelnyxShimConfig({
   enabled = true,
   claudeModel = "claude-haiku-4-5",
   telnyxShimMaxTurnsPerMin = 100,
   telnyxShimSharedSecret = "shim-secret",
   telnyxShimDebugShape = false,
-  // AL-P7: Default AUS = Bestandspfad (EIN content-Chunk am Ende) - alle Bestands-Shim-
-  // Tests bleiben damit unveraendert gueltig; nur die AL-P7-Tests flippen ihn.
   telnyxShimTokenStreaming = false,
-  // GQ-P1: spiegelt den Prod-Default (true). Bestandstests bleiben gruen - sie erzeugen
-  // nie zwei ueberlappende Turns, der Riegel findet nie einen laufenden Vorgaenger.
   telnyxShimSupersedeExtendedTurn = true,
-  // GQ-P5: spiegelt den Prod-Default (true). Bestandstests bleiben gruen - ihr
-  // messages-Array endet auf einer user-Rolle oder fehlt ganz ("missing"), der Riegel
-  // greift dort nie. Ausnahme ist P5-4 (telnyx-llm-shim.test.js), das den Nudge-Payload
-  // als Praemisse hat und den Schalter deshalb ausdruecklich umlegt.
   telnyxShimIgnoreProviderNudge = true,
-  // GQ-P4: spiegelt die Prod-Defaults. Bestandstests bleiben gruen - keiner erzeugt drei
-  // gescheiterte Turns in Folge; die A2-Tests setzen den Wert explizit herunter.
   telnyxMaxConsecutiveFailedTurns = 3,
   telnyxFailedTurnFarewellText = "",
-  // GQ-P17: Default 0 = Frist AUS, bewusst NICHT der Prod-Default (3000). Eine gesetzte
-  // Frist liesse jeden Bestands-Shim-Test warten, ohne sein Verhalten zu pruefen; die
-  // GQ-P17-Tests setzen den Wert explizit und fahren ihn ueber injizierte Timer.
   telnyxShimExtendHoldMs = 0,
 } = {}) {
   return withConfigNamespaces({

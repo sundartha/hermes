@@ -1,9 +1,3 @@
-// Owner-Auftrag 15.08.2026 (Aufgabe 2): scheduleResultPoll (elevenlabs/outbound.js) ist ein
-// reiner In-Prozess-setTimeout - sein EINZIGER Ausloeser ist originateCall. Ohne Boot-Re-Arm
-// nimmt ein Neustart/Deploy die Poll-Schleife mit: ein aktiver EL-Call (elevenlabsConversationId
-// gesetzt) bleibt fuer immer "active", Transkript/Zusammenfassung fallen aus. Belegt echt als
-// Kindprozess (Muster telnyx-p6-boot-rearm.test.js): der Call wird DIREKT als aktiv geseedet
-// (simulierter Neustart mit bereits laufendem Anruf), nicht ueber place_call erzeugt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -18,22 +12,9 @@ const CONVERSATION_PATH = "/v1/convai/conversations/";
 const HTTP_OK = 200;
 const CALL_ID = "call_boot_rearm";
 
-// Die Attrappe antwortet mit einer ECHTEN, gegen api.elevenlabs.io gemessenen Antwort
-// (15.08.2026, s. test/fixtures/elevenlabs-conversations.js) statt mit lokal erfundenen
-// Werten - Owner-Regel: keine erfundene Anbieter-Antwort, wo eine echte aufgezeichnet ist.
-// Kennung und Zusammenfassung stammen aus DEMSELBEN Fund, damit die Attrappe genau das
-// antwortet, wonach der Poll fragt.
 const CONV_ID = CONVERSATION_DONE_WITH_ANALYSIS.conversation_id;
 const PROVIDER_SUMMARY = CONVERSATION_DONE_WITH_ANALYSIS.analysis.transcript_summary;
 
-// Die Ergebnis-Attrappe des Anbieters: EIN Endpunkt (GET) - der Anrufstart selbst wird hier
-// nie durchlaufen (der Call ist bereits als aktiv geseedet), also braucht die Attrappe
-// keinen POST-Zweig. Der Fehlbedien-Zweig antwortet mit dem GEMESSENEN 404-Umschlag des
-// Anbieters. EHRLICHKEIT: gemessen ist dieser Umschlag fuer eine unbekannte
-// Gespraechs-Kennung, NICHT fuer einen unbekannten Pfad - dafuer existiert keine
-// Aufzeichnung. Er steht hier trotzdem, weil unser Code den Fehler-Rumpf nie liest
-// (src/elevenlabs/convai.js: nur der Status zaehlt) und die echte Umschlag-Form allemal
-// naeher an der Anbieter-Wahrheit liegt als ein erfundener deutscher Satz.
 async function startResultMock() {
   const requests = [];
   const server = http.createServer((req, res) => {
@@ -53,11 +34,6 @@ async function startResultMock() {
   };
 }
 
-// answeredAt vor wenigen Sekunden, maxDurationS grosszuegig: WEDER diese Klassifikation
-// (ELEVENLABS_PROVIDER_MAX_DURATION_S, pollConversationResult) NOCH der unabhaengige
-// Platform-Max-Dauer-Cap (rearmActiveCallTimers, call-lifecycle.js - laeuft unveraendert
-// fuer JEDEN aktiven Call mit) duerfen den Call waehrend der kurzen Testlaufzeit von sich
-// aus terminalisieren - GENAU der Poll-Re-Arm soll den Ausschlag geben, kein Nachbar-Timer.
 const ANSWERED_SECONDS_AGO = 5;
 const ANSWERED_AT = new Date(Date.now() - ANSWERED_SECONDS_AGO * MS_PER_SECOND).toISOString();
 
@@ -66,7 +42,7 @@ function activeElCallSeed() {
     calls: [
       seedCall({
         id: CALL_ID,
-        provider: "telnyx", // der Provider des Anrufs bleibt telnyx (s. outbound.js Modul-Kopf)
+        provider: "telnyx",
         status: "active",
         answeredAt: ANSWERED_AT,
         startedAt: ANSWERED_AT,

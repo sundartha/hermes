@@ -1,7 +1,3 @@
-// KE-P6 (Aenderung 3): das Sweep-Log ist die Datenquelle des Bruchpunkt-Waechters (KE-P8)
-// und liefert B = pool/kandidaten aus der Wirklichkeit (U9). Deshalb gegen den ECHTEN
-// Adapter, mit gestubbtem global.fetch: nur so zaehlt `anfragen` echte HTTP-Anfragen.
-// Env VOR den dynamischen Importen (Lehre test-base-env-drift), Muster cost-truing-pool.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -20,14 +16,6 @@ const {
 
 const sweepLineOf = (lines) => lines.filter((l) => l.startsWith("[cost-truing] sweep "));
 
-// ---- (P6-8) das Format selbst: die vier neuen Felder HINTER den Bestandsfeldern ----
-//
-// Zwei Kandidaten mit demselben Anker (bewusst - dieser Test pinnt NUR das Log-FORMAT, die
-// Zuordnungs-Korrektheit selbst ist test/cost-truing-pool.test.js/telnyx-cost-records.test.js
-// vorbehalten): so liefert EIN einziger Roh-Beleg (pool=1) fuer BEIDE Kandidaten einen
-// nicht-leeren Treffer (unvollstaendig=2, unbestimmt=0) - ohne die Kernzusage D1 (EIN
-// Pool-Abruf je Sweep) zu verlassen. costTruingRequiredRecordTypes bleibt beim
-// fakeConfig-Default [] -> classifyRecords liefert nie 'complete' (gemessen=0 bleibt exakt).
 test("(P6-8) Sweep-Log traegt anfragen/seiten/pool/vollstaendig HINTER den Bestandsfeldern", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
@@ -52,20 +40,7 @@ test("(P6-8) Sweep-Log traegt anfragen/seiten/pool/vollstaendig HINTER den Besta
     "[cost-truing] sweep trigger=manual kandidaten=2 gemessen=0 unvollstaendig=2 " +
       "ohne_schaetzung=0 unbestimmt=0 uebersprungen=0 " +
       `anfragen=${ASSIGNABLE_COST_RECORD_TYPES.length} seiten=${ASSIGNABLE_COST_RECORD_TYPES.length} ` +
-      // KV2-1 (Kriterium (d)): kanaele= HINTER den Bestandsfeldern - kein Ziel gesetzt
-      // (BASE_ENV/fakeConfig-Default) -> kanaele=keine.
-      // KV2-6: buch=/herzschlag= HINTER kanaele=. Beide Kandidaten enden 200 min her
-      // (makeDueOutboundCall-Default) - das liegt INNERHALB der Karenz dieser Config
-      // (costTruingDelayMinutes=180min + costTruingSweepIntervalMs=1h = 4h), also
-      // ausserhalb JEDES Fensters: buch=keine herzschlag=keine.
-      // KV2-7: erschoepft=/abschluesse= HINTER profillos=. Beide Kandidaten sind
-      // messbar (0 Versuche), erschoepft=0. Beide Fixturen tragen KEIN costProfile
-      // (makeDueOutboundCall setzt es nicht) -> Endzustand profil_fehlt, sobald der
-      // Sweep-Traeger (telnyx_call_records) fertig ist (measured!==null, auch bei
-      // unvollstaendiger Pflicht-Menge) -> abschluesse=profil_fehlt(2).
       "pool=1 vollstaendig=true kanaele=keine buch=keine herzschlag=keine nie_beendet=0 " +
-      // KV2-9: el_reifung=/el_abweichung=/el_uebrig= HINTER abschluesse= - kein
-      // elKostenRead injiziert (Bestandstest ohne EL-Anrufe) -> vollstaendiges No-op.
       "profillos=0 erschoepft=0 abschluesse=profil_fehlt(2) el_reifung=keine el_abweichung=0 el_uebrig=0",
   );
   assert.equal(
@@ -73,8 +48,6 @@ test("(P6-8) Sweep-Log traegt anfragen/seiten/pool/vollstaendig HINTER den Besta
     "anfragen zaehlt ECHTE HTTP-Anfragen, nicht eine zweite Buchhaltung",
   );
 });
-
-// ---- (P6-9) 0 Kandidaten -> 0 Anfragen, die Zeile erscheint trotzdem (KE-P5-Nachweis) ----
 
 test("(P6-9) 0 Kandidaten -> 0 Anfragen, aber die Zeile erscheint (KE-P5-Nachweis, jetzt ablesbar)", async () => {
   const nowMs = Date.now();
@@ -90,8 +63,6 @@ test("(P6-9) 0 Kandidaten -> 0 Anfragen, aber die Zeile erscheint (KE-P5-Nachwei
   assert.match(line, /kandidaten=0 .* anfragen=0 seiten=0 pool=0 vollstaendig=true/);
   assert.equal(fetchCalls.length, 0, "ohne Kandidaten darf der Sweep keine einzige Anfrage stellen");
 });
-
-// ---- (P6-10) unvollstaendiger Pool: vollstaendig=false, die Anfragen stehen trotzdem da ----
 
 test("(P6-10) unvollstaendiger Pool -> vollstaendig=false, die Anfragen stehen trotzdem da", async () => {
   const nowMs = Date.now();
@@ -115,11 +86,6 @@ test("(P6-10) unvollstaendiger Pool -> vollstaendig=false, die Anfragen stehen t
     "genau im Stoerfall darf der Waechter nicht blind sein",
   );
 });
-
-// ---- (P6-11) 429 mit Wiederholung: anfragen > seiten (der verbrannte Versuch ist sichtbar) ----
-//
-// Muster (P4-R2, telnyx-cost-records.test.js): Mock-Timer statt Wanduhr - die produktive
-// Drossel (kein throttle-Override im Sweep-Pfad) haengt an setTimeout, Date.now bleibt real.
 
 test("(P6-11) 429 mit Wiederholung: anfragen > seiten (der verbrannte Versuch ist sichtbar)", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
@@ -150,7 +116,7 @@ test("(P6-11) 429 mit Wiederholung: anfragen > seiten (der verbrannte Versuch is
 
     const sweepPromise = captureConsole(() => runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL }));
     await new Promise((r) => setImmediate(r));
-    t.mock.timers.tick(2000); // ueber die 1 s Wartezeit aus x-ratelimit-reset hinaus
+    t.mock.timers.tick(2000);
     const lines = await sweepPromise;
 
     const [line] = sweepLineOf(lines);

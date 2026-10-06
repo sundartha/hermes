@@ -1,18 +1,8 @@
-// P3.1 (PLAN-CONVERSATION-QUALITY-V2): Abschied VOR dem harten Max-Dauer-Cap. Beweist per
-// echtem /voice/turn-HTTP-Aufruf, dass eine knapp bemessene maxDurationS (< CAP_FAREWELL_
-// LEAD_MS) sofort einen deterministischen Abschluss-Satz + Hangup rendert statt eines
-// Folge-Gathers, den der wortlose Timer-Backstop (terminateCappedCall) Sekunden spaeter
-// ohnehin abgeschnitten haette. P3-C2 ist die Gegenprobe (grosszuegige Restzeit -> normaler
-// Turn). P3-C3 (Backstop unveraendert) ist bewusst KEIN neuer Test hier - siehe Kommentar
-// unten, Abnahmekriterium 2 wird von der unveraenderten Bestandssuite bewiesen.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState, seedCall } from "./helpers.js";
 
-// Tool-freie Text-Antwort (Muster claude-turn-guard.test.js textMessage): der Tool-Loop
-// bricht nach einem Roundtrip ab, KEIN end_call - der Cap-Vorlauf muss ALLEIN ueber die
-// Restzeit ausloesen, nicht ueber ein vom Modell gewuenschtes end_call.
 function textMessage(text) {
   return {
     id: "msg_p3c_text",
@@ -53,7 +43,7 @@ test("P3-C1: Restzeit unter CAP_FAREWELL_LEAD_MS -> Abschluss-Satz + Hangup stat
           provider: "telnyx",
           status: "active",
           direction: "outbound",
-          maxDurationS: 20, // < CAP_FAREWELL_LEAD_MS=20000ms -> remaining ist ab Call-Start < Vorlauf
+          maxDurationS: 20,
           transcript: [{ role: "caller", text: "Ja gerne" }],
         }),
       ],
@@ -90,7 +80,7 @@ test("P3-C2 (Gegenprobe): grosszuegige Restzeit -> normaler Turn, kein Cap-Absch
           provider: "telnyx",
           status: "active",
           direction: "outbound",
-          maxDurationS: 180, // >> CAP_FAREWELL_LEAD_MS=20000ms -> remaining bleibt weit darueber
+          maxDurationS: 180,
           transcript: [{ role: "caller", text: "Ja gerne" }],
         }),
       ],
@@ -116,18 +106,6 @@ test("P3-C2 (Gegenprobe): grosszuegige Restzeit -> normaler Turn, kein Cap-Absch
   }
 });
 
-// P3-C3 (Backstop unveraendert, Abnahmekriterium 2): KEIN neuer Test hier - der Beweis ist
-// die unveraendert gruene Bestandssuite test/max-duration-live-cap.test.js +
-// test/max-duration-rearm.test.js (siehe Report). Diese Dateien pruefen terminateCappedCall/
-// armMaxDurationTimer und sind von P3.1 nicht angefasst worden.
-
-// P3-COV1 (Review-Blocker Runde 1): die KOMBINATION aus leerem Gather UND knapper Restzeit
-// war bisher ungetestet - P3-C1/P3-C2 decken den Cap-Vorlauf nur im agentTurn-Zweig ab,
-// P3-G4b/c die Staffel nur ohne knappe Restzeit. voice.js verzweigt bei "kein Speech gehoert
-// UND Caller hat schon gesprochen" auf capFarewellOutcome(call) ?? noSpeechOutcome(call) -
-// der Cap-Vorlauf MUSS auch hier vor der Staffel gewinnen, sonst wuerde Stufe 1 der Staffel
-// gerendert und der Timer-Backstop den Call Sekunden spaeter wortlos abschneiden (P3.1s
-// eigentlicher Zweck). Kein LLM-Mock noetig: dieser Zweig kehrt VOR agentTurn zurueck.
 test("P3-COV1: leerer Gather UND Restzeit unter CAP_FAREWELL_LEAD_MS -> Abschluss-Satz statt Staffel-Stufe-1", async () => {
   const id = "call_p3cov1";
   const srv = await startServer({
@@ -139,8 +117,8 @@ test("P3-COV1: leerer Gather UND Restzeit unter CAP_FAREWELL_LEAD_MS -> Abschlus
           provider: "telnyx",
           status: "active",
           direction: "outbound",
-          maxDurationS: 20, // < CAP_FAREWELL_LEAD_MS=20000ms -> remaining ist ab Call-Start < Vorlauf
-          transcript: [{ role: "caller", text: "..." }], // callerHasSpoken=true -> No-Speech-Zweig
+          maxDurationS: 20,
+          transcript: [{ role: "caller", text: "..." }],
         }),
       ],
     }),
@@ -148,7 +126,7 @@ test("P3-COV1: leerer Gather UND Restzeit unter CAP_FAREWELL_LEAD_MS -> Abschlus
   try {
     const res = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
       method: "POST",
-      body: new URLSearchParams({ SpeechResult: "" }), // leer -> kein heard, No-Speech-Zweig
+      body: new URLSearchParams({ SpeechResult: "" }),
     });
     const body = await res.text();
     assert.equal(res.status, 200);

@@ -1,39 +1,21 @@
-// P2 (W2): Fristnachweis des gestaffelten Halts. Gemessen wird an HERUNTERGESETZTEN
-// Fristen (stages ist Test-Override, Repo-Idiom von makeConsultDelivery/holdMs) - eine
-// Messung gegen die Produktionszahlen dauerte 30 s je Fall und belegte dasselbe.
-// Store-DOUBLE statt echtem Store: gemessen wird der WARTELAUF, nicht die Persistenz;
-// die haengt an state-ops und hat dort ihre eigenen Faelle (P2-10/P2-11 unten).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeConsultRaised, CONSULT_RESULT } from "../src/conversation/consult-raised.js";
 import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON, CONSULT_ANSWER } from "../src/store/defaults.js";
 import * as ops from "../src/store/state-ops.js";
 
-// S1-Fix (Review Runde 2): Fristen weiter heruntergezogen (200/400/900 -> 60/120/240).
-// Grund: node:test faehrt Testdateien parallel: die echten Timer dieser Datei (bis zu
-// 900ms) drueckten unter Last woanders in ein knappes 50ms-Zeitbudget hinein
-// (PRECALL_BRIEFING_TIMEOUT_MS in al-p10-precall-research.test.js) und liessen dessen
-// Retry dort in "retries-exhausted" laufen. Der Fristnachweis selbst (Reihenfolge/
-// Grenzen der Stufen) bleibt bei jeder Groessenordnung gueltig - nur die absolute
-// Wanduhr-Last dieser Datei sinkt.
 const STAGES = Object.freeze({ deliveryDeadlineMs: 60, ackDeadlineMs: 120, answerDeadlineMs: 240 });
 const TICK_MS = 10;
-const TOLERANZ_MS = 150; // ein Tick + Scheduler-Rauschen, grosszuegig gegen Last
+const TOLERANZ_MS = 150;
 
-// Marker-Zeitpunkte fuer die Store-Double-Faelle unten - proportional zu den STAGES oben
-// heruntergezogen (vorher 50/300/600 gegen 200/400/900), G25: benannte Konstanten statt
-// wiederholter Magic Numbers.
-const FRUEH_MARKIERT_MS = 20; // deutlich vor der jeweils naechsten Stufe (Zustellung/Quittung)
-const ANTWORT_VOR_QUITTUNGSFRIST_MS = 90; // P2-5: Antwort ohne Quittung, noch vor ackDeadlineMs
-const ANTWORT_NACH_QUITTUNGSFRIST_MS = 170; // P2-4: Antwort zwischen ackDeadlineMs und answerDeadlineMs
+const FRUEH_MARKIERT_MS = 20;
+const ANTWORT_VOR_QUITTUNGSFRIST_MS = 90;
+const ANTWORT_NACH_QUITTUNGSFRIST_MS = 170;
 
 const CALL_ID = "call_staffelung";
-const CONSULT_ID = "c0"; // erste Rueckfrage der Kette (state-ops.consultIdOf)
+const CONSULT_ID = "c0";
 const QUESTION = "Darf ich den Termin bestaetigen?";
 
-// answeredAt VOR jeder Rueckfrage: isInCallConsult (state-ops) erkennt eine Rueckfrage nur
-// als IN-CALL, wenn sie nach dem Abnehmen entstand - genau der Fall, den diese Datei
-// misst (die EL-Rueckfrage entsteht immer waehrend eines bereits laufenden Gespraechs).
 function seedActiveCall(state) {
   state.calls.push({
     id: CALL_ID,
@@ -44,13 +26,6 @@ function seedActiveCall(state) {
   });
 }
 
-// Der Store-Double: reine In-Memory-Operationen ueber state-ops, mit den Schreibaufrufen
-// von timeOutStagedConsult mitgeschrieben (aufrufe), damit P2-7 sie ohne einen zweiten
-// Lesepfad pruefen kann. zustellenNachMs setzt NUR askDeliveredAt (Stufe 0);
-// quittierenNachMs setzt askDeliveredAt UND ackedAt (eine Quittung setzt voraus, dass die
-// Frage angekommen ist - realistischer Client, kein zweiter Fall fuer "quittiert, nie
-// zugestellt"); antwortNachMs speist eine echte Antwort ueber ops.answerConsult ein (E-3:
-// eine Antwort ist implizit auch eine Quittung, unabhaengig von den beiden anderen Markern).
 function storeDouble({ zustellenNachMs = null, quittierenNachMs = null, antwortNachMs = null } = {}) {
   const state = { calls: [] };
   seedActiveCall(state);
@@ -210,10 +185,6 @@ test("P2-9: Drain loest sofort auf, unabhaengig von der Stufe", async () => {
   assert.ok(ms < STAGES.deliveryDeadlineMs, `Dauer ${ms}ms - der Drain haette sofort ausloesen muessen`);
 });
 
-// ---- P2-10/P2-11: reine Zustands-Faelle gegen state-ops (echter In-Memory-State) -------
-// Der Ort des neuen Verhaltens ist state-ops, nicht der Wartelauf - ein Store-Double
-// pruefte hier nur seine eigene Nachbildung, keine echte Logik.
-
 test("P2-10: ackConsult quittiert nur eine OFFENE Rueckfrage", () => {
   const state = { calls: [] };
   seedActiveCall(state);
@@ -263,38 +234,19 @@ test("P2-11: markConsultAskDelivered haelt den ERSTEN Zeitpunkt", () => {
   assert.equal(zweit.changed, false, "der zweite Aufruf aendert askDeliveredAt nicht");
   assert.equal(consult.askDeliveredAt, ersterZeitpunkt);
 
-  // B-1 (Regressionsschutz gegen die Namenskollision): deliveredAt ist seit GQ-P7 vergeben
-  // und bedeutet das GEGENTEIL - markConsultAskDelivered darf es NIE beruehren.
   assert.equal(consult.deliveredAt, undefined);
 });
 
-// P2-12/P2-13 (S1-1-Fix): benannte Alter statt Magic Numbers (G25). Die Zustellfrist ist
-// dieselbe wie STAGES.deliveryDeadlineMs oben (200ms) - EINE Quelle statt einer zweiten,
-// zufaellig gleichen Zahl. ALIVE liegt darunter (fuer SICH selbst noch nicht abgelaufen),
-// EXPIRED darueber.
 const P2_STAGE_MS = STAGES.deliveryDeadlineMs;
 const ALT_ALIVE_AGE_MS = 150;
 const JUNG_ALIVE_AGE_MS = 50;
 const EXPIRED_AGE_MS = 250;
 
-// P2-12 (S1-1-Fix, Review Runde 1): ZWEI GLEICHZEITIG OFFENE In-Call-Consults
-// (MAX_OPEN_POLLS_PER_CALL=2, consult/delivery.js) mit je EIGENER, unabhaengiger Stufe.
-// Vorher waehlte timeOutStagedConsult den zu schliessenden Datensatz ueber
-// advanceInCallConsult, das den ERSTEN offenen Consult in ARRAY-REIHENFOLGE nimmt - nicht
-// ueber die uebergebene consultId. Bei zwei offenen Consults traf das nicht zuverlaessig
-// den Consult, dessen EIGENE Stufe gerade abgelaufen ist: der aeltere, noch lebendige
-// Consult (c0) wurde angefasst (held:true), waehrend der juengere Ziel-Consult (c1),
-// dessen Zustellfrist tatsaechlich gerissen ist, unveraendert OPEN blieb, OHNE
-// timeoutReason - waehrend awaitAnswer dem Anbieter trotzdem bedingungslos "timed out"
-// zurueckgab (Phantom-Datensatz, E-2, s. state-ops.js:timeOutStagedConsult).
 test("P2-12: bei zwei offenen In-Call-Consults schliesst timeOutStagedConsult GENAU den per consultId benannten, nicht den ersten im Array", () => {
   const state = { calls: [] };
   seedActiveCall(state);
   const call = ops.getCall(state, CALL_ID);
   const now = Date.now();
-  // c0 (aelter): 150ms alt - unter der Zustellfrist (200ms) von c1, also fuer SICH selbst
-  // noch nicht abgelaufen. Reihenfolge im Array bewusst zuerst (der bisherige Bug waehlte
-  // genau dieses Element).
   call.consults.push({
     id: "c0",
     seq: 0,
@@ -304,8 +256,6 @@ test("P2-12: bei zwei offenen In-Call-Consults schliesst timeOutStagedConsult GE
     answeredAt: null,
     answeredFacts: 0,
   });
-  // c1 (juenger, das eigentliche Ziel dieses Aufrufs): ueber der Zustellfrist alt, also
-  // fuer sich selbst abgelaufen.
   call.consults.push({
     id: "c1",
     seq: 1,
@@ -333,18 +283,11 @@ test("P2-12: bei zwei offenen In-Call-Consults schliesst timeOutStagedConsult GE
   assert.equal(c0.held, undefined, "c0 bleibt UNVERAENDERT - kein Seiteneffekt auf dem falschen Datensatz");
 });
 
-// Gegenprobe: derselbe Aufbau, aber consultId zeigt auf den AELTEREN (c0) - der jetzt
-// selbst seine eigene (kuerzere) Frist gerissen hat, waehrend der juengere (c1) noch
-// lebt. Ohne den Fix waere das Ergebnis in beide Richtungen falsch moeglich, je nach
-// Array-Position - dieser Fall deckt die andere Reihenfolge ab.
 test("P2-13: dieselbe Lage umgekehrt im Array - der juengere steht an Array-Position 0, das Ziel (aelterer) trotzdem korrekt getroffen", () => {
   const state = { calls: [] };
   seedActiveCall(state);
   const call = ops.getCall(state, CALL_ID);
   const now = Date.now();
-  // Array-Position 0: der JUENGERE (50ms, fuer sich selbst noch nicht abgelaufen) -
-  // genau die Position, die der bisherige Bug (Array-Reihenfolge statt consultId)
-  // gegriffen haette.
   call.consults.push({
     id: "c1",
     seq: 1,
@@ -354,7 +297,6 @@ test("P2-13: dieselbe Lage umgekehrt im Array - der juengere steht an Array-Posi
     answeredAt: null,
     answeredFacts: 0,
   });
-  // Array-Position 1: der AELTERE (ueber der Zustellfrist) - das eigentliche Ziel.
   call.consults.push({
     id: "c0",
     seq: 0,

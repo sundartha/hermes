@@ -1,17 +1,9 @@
-// P6 (PLAN-CONVERSATION-QUALITY-V2): HTTP-Wiring + json-Persist von mandate ueber POST
-// /api/calls. Reiner Spawn (startServer + Owner-Pfad), KEIN pglite in derselben Datei
-// (Lehre p6a-Stall: NIE mischen). Beweist: (1) gueltiges Mandat erreicht den Originate
-// und wird normalisiert persistiert; (2) ein ungueltiger on_out_of_scope-Wert -> 400 VOR
-// der Telefonie, kein Call; (3) uebergrosse Teilfelder -> 400; (4) mandate als Nicht-
-// Objekt -> 400; (5) unbekannte Sub-Keys fallen weg (Storage-Deckel). Kein Flag: mandate
-// ist selbst-gatend (fehlt es, bleibt ctx.mandate null). Muster assistant-context-http.test.js.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
 
-const TO = "+4915112345678"; // erlaubtes Ziel, kein Premium/Notruf
+const TO = "+4915112345678";
 
-// Volles, gueltiges Mandat (alle drei Teilfelder unter den Caps).
 const MANDATE = {
   decide_freely: "Termin an einem Werktag zwischen 9 und 12 Uhr, bis 60 Euro",
   fallback_order: "zuerst Donnerstag, sonst Freitag",
