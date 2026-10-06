@@ -278,7 +278,7 @@ const ACTION_ITEM_TYPE = Object.freeze({ TODO: "todo", APPOINTMENT: "appointment
 // eine Bestaetigung ueber SMS) denselben Wert mit ANDERER Herkunft schreiben koennte -
 // "ueberschreibbar" (Eigentuemer-Auflage) ist nur nachvollziehbar, wenn die Herkunft
 // mitreist statt zu raten, WELCHER Weg zuletzt geschrieben hat.
-export const CALLEE_TIMEZONE_ORIGIN_ELEVENLABS = "elevenlabs_data_collection";
+const CALLEE_TIMEZONE_ORIGIN_ELEVENLABS = "elevenlabs_data_collection";
 
 // Liest EINEN Data-Collection-Wert aus der Anbieter-Antwort (ABNAHME-D1). FEHLT die
 // Angabe (kein Termin/Betrag im Gespraech verhandelt, der Normalfall - s. der
