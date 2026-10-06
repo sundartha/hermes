@@ -1,17 +1,4 @@
-/* =============================================================================
- * hermes-demo.js — Steuerung der Erklär-Animation
- *
- * Die Animation selbst läuft vollständig über CSS-Keyframes (hermes-demo.css).
- * Dieses Modul macht nur drei Dinge:
- *   1. Pause-Taste  → data-paused umschalten (CSS pausiert alles).
- *   2. Scrub-Leiste → an eine Stelle der 76s-Schleife springen.
- *   3. Kopier-Knöpfe für MCP-Adresse und Terminal-Befehl.
- *
- * Alles per CSSOM (setProperty / setAttribute) — Style-ATTRIBUTE im
- * HTML-Quelltext wären unter der Produktions-CSP blockiert, CSSOM ist es nicht.
- * ========================================================================== */
-
-const LOOP = 76; // Sekunden — muss zur animation-duration in hermes-demo.css passen
+const LOOP = 76;
 
 function initStage(stage) {
   const track = stage.querySelector("[data-hd-track]");
@@ -28,9 +15,6 @@ function initStage(stage) {
     }
   };
 
-  /* Absolut springen statt nur den Verzug zu verschieben: sobald die Schleife
-   * läuft, wäre ein geänderter animation-delay bloß relativ. Über die
-   * Animationsobjekte ist die Stelle exakt. */
   const seek = (ratio) => {
     at = Math.max(0, Math.min(0.9999, ratio));
     stage.style.setProperty("--hd-t", "0s");
@@ -42,8 +26,6 @@ function initStage(stage) {
         try {
           anim.currentTime = ms;
         } catch {
-          /* Manche Animationen sind noch nicht bereit — die zieht der nächste
-             Frame ohnehin nach. */
         }
       }
     }
@@ -68,7 +50,6 @@ function initStage(stage) {
       try {
         track.setPointerCapture(event.pointerId);
       } catch {
-        /* Ohne Pointer-Capture funktioniert das Ziehen im Rahmen trotzdem. */
       }
       const move = (ev) => seek(ratioFrom(ev));
       const up = () => {
@@ -82,8 +63,6 @@ function initStage(stage) {
       track.addEventListener("pointercancel", up);
     });
 
-    // Mit der Tastatur in 5%-Schritten, damit die Leiste nicht nur mit der
-    // Maus bedienbar ist.
     track.addEventListener("keydown", (event) => {
       const step =
         event.key === "ArrowRight" ? 0.05 : event.key === "ArrowLeft" ? -0.05 : 0;
@@ -94,14 +73,10 @@ function initStage(stage) {
     });
   }
 
-  // Die Marken der Aktwechsel: ihre Position steht im Markup, gesetzt wird sie
-  // hier (ein style-Attribut im HTML wäre CSP-blockiert).
   for (const tick of stage.querySelectorAll("[data-hd-tick]")) {
     tick.style.left = tick.dataset.hdTick;
   }
 
-  /* Die Bühne kennt die Höhe ihrer Fussleiste nicht — die Akte brauchen sie
-   * aber, um darüber zu enden statt darunter zu verschwinden. */
   const foot = stage.querySelector(".hd-foot");
   const measure = () => {
     if (foot) stage.style.setProperty("--hd-foot", Math.round(foot.offsetHeight) + "px");
@@ -115,8 +90,6 @@ function initStage(stage) {
     window.addEventListener("resize", measure);
   }
 
-  // Läuft die Bühne unsichtbar (mobiles Blatt geschlossen), kostet sie nur
-  // Rechenzeit. Sichtbarkeit steuert darum, ob die Schleife arbeitet.
   if (window.IntersectionObserver) {
     const io = new IntersectionObserver(
       (entries) => {
@@ -138,7 +111,6 @@ function initCopy(root) {
       try {
         await navigator.clipboard.writeText(btn.dataset.hdCopy);
       } catch {
-        /* Ohne Zwischenablage-Recht bleibt der Text trotzdem lesbar. */
       }
       btn.textContent = btn.dataset.hdCopied || "✓";
       setTimeout(() => {

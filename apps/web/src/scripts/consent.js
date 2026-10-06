@@ -1,35 +1,3 @@
-/* =============================================================================
- * consent.js — Einwilligung fuer Cookies & lokale Speicherung (§ 25 TDDDG,
- * Art. 6 Abs. 1 lit. a DSGVO).
- *
- * Grundsatz: Notwendiges (Sprachwahl "hermes.lang.v2", diese Entscheidung selbst,
- * Login-Sitzung im Kundenbereich) braucht keine Einwilligung (§ 25 Abs. 2 Nr. 2
- * TDDDG). Alles andere — Statistik, Marketing — laeuft erst NACH Zustimmung.
- *
- * Wie ein spaeterer Dienst angebunden wird (CSP-konform, same-origin):
- *   <script type="text/plain" data-consent="statistics" data-src="/scripts/stats.js"></script>
- * consent.js aktiviert solche Platzhalter genau einmal, sobald die Kategorie
- * freigegeben ist. Inline-Code geht NICHT (CSP script-src 'self') — nur data-src.
- *
- * Zusaetzlich: document-Event "hermes:consent" mit dem Stand als detail, und
- * window.hermesConsent = { get(), open() } fuer Fusszeilen-Links.
- *
- * Nachweis (Art. 7 Abs. 1 DSGVO): jede Entscheidung geht zusaetzlich als Beacon an
- * das Einwilligungs-Protokoll des Gateways (data-consent-log an der Karte, gesetzt aus
- * lib/routes.js). Uebertragen werden nur Zufalls-ID, Banner-Version und die zwei
- * Kategorien - s. src/cookie-consent-log.js im Wurzelprojekt.
- *
- * Widerruf: ein bereits geladenes Skript laesst sich nicht entladen. Wird eine
- * Kategorie widerrufen, deren Skript auf der Seite schon laeuft, laedt die Seite neu.
- *
- * Der Banner erscheint ungefragt, solange keine Entscheidung gespeichert ist (erster
- * Besuch, Owner-Entscheidung 2026-09-27); danach jederzeit ueber
- * "Cookie-Einstellungen".
- *
- * Astro buendelt diese Datei als externes, same-origin Modul (assetsInlineLimit
- * 0) — damit CSP-konform ohne script-src 'unsafe-inline'.
- * ========================================================================== */
-
 import {
   CONSENT_CATEGORIES,
   CONSENT_VERSION,
@@ -61,14 +29,10 @@ function writeConsent(choice, previous) {
   try {
     localStorage.setItem(KEY, JSON.stringify(consent));
   } catch {
-    /* Privater Modus / Speicher voll: die Wahl gilt dann nur fuer diese Sitzung. */
   }
   return consent;
 }
 
-/* Aktiviert gesperrte Platzhalter-Skripte der freigegebenen Kategorien.
- * Alle uebrigen Attribute des Platzhalters wandern mit (data-domain bei
- * Plausible, data-website-id bei Umami, defer, crossorigin ...). */
 const CONTROL_ATTRS = new Set(["type", "data-consent", "data-src", "data-consent-done"]);
 
 function activateScripts(consent) {
@@ -94,9 +58,6 @@ function activatedCategories() {
   return running;
 }
 
-/* Nachweis an das Protokoll. Fire-and-forget: sendBeacon ueberlebt auch das
- * Neuladen nach einem Widerruf. text/plain ist ein CORS-"einfacher" Typ (kein
- * Preflight). Scheitert der Versand, bleibt die Entscheidung trotzdem gueltig. */
 function logDecision(consent) {
   const url = root ? root.dataset.consentLog : "";
   if (!url || typeof navigator.sendBeacon !== "function") return;
@@ -106,7 +67,6 @@ function logDecision(consent) {
       new Blob([JSON.stringify(logPayload(consent))], { type: BEACON_TYPE }),
     );
   } catch {
-    /* Beacon abgelehnt (z. B. Blocker): kein Beleg, aber die Wahl gilt. */
   }
 }
 
@@ -114,8 +74,6 @@ function announce(consent) {
   activateScripts(consent);
   document.dispatchEvent(new CustomEvent("hermes:consent", { detail: consent }));
 }
-
-/* ------------------------------------------------------------------- UI */
 
 const root = document.querySelector("[data-consent-root]");
 const prefs = root ? root.querySelector("[data-consent-prefs]") : null;
@@ -146,9 +104,6 @@ function open(withPrefs) {
   syncToggles(readConsent());
   showPrefs(Boolean(withPrefs));
   root.hidden = false;
-  // Fokus auf den Dialog selbst (tabindex -1): Screenreader lesen Titel und
-  // Text vor, Tab fuehrt zur ersten Handlung — ohne sichtbaren Fokusring auf
-  // "Alle akzeptieren" beim Oeffnen (das saehe nach Vorauswahl aus).
   const card = root.querySelector(".consent__card");
   if (card) card.focus({ preventScroll: true });
 }
@@ -200,8 +155,6 @@ function wire() {
     }
   });
 
-  // Esc schliesst nur, wenn schon eine Entscheidung vorliegt (sonst bliebe
-  // die Frage unbeantwortet, und "Schliessen" darf keine Zustimmung sein).
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && isOpen() && readConsent()) close();
   });

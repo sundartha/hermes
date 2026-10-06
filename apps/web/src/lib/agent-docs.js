@@ -1,56 +1,27 @@
-// Fassungen der Website fuer KI-Agenten (Plan "agent-ready", Phase 1, 2026-09-30).
-//
-// Ein Agent, der die Startseite als HTML liest, sieht jeden Text mehrfach
-// (Desktop-Buehne, Handy-Screens, Querformat-Blaetter) und die Preis-Rolle als
-// Einzelziffern. Darum gibt es dieselben Inhalte als schlichtes Markdown:
-//   /index.md       die Startseite (englisch, wie die indexierte Fassung)
-//   /llms.txt       Kurzueberblick mit Fakten und Links (llmstxt.org)
-//   /llms-full.txt  Startseite + Agenten-Anleitung (public/agents.md) in einer Datei
-//
-// Preise, Minuten und Tarifnamen kommen aus dem Tarif-Katalog (lib/plans.js), die
-// Leistungen aus lib/plan-benefits.js - dieselben Quellen wie die Startseite.
-// Reine Funktionen ohne import.meta.env: aus dem Node-Test UND dem Astro-Build
-// aufrufbar. Die Login-URL reicht der Aufrufer herein (lib/routes.js braucht das
-// Build-Env). test/agent-ready.test.js haelt MCP-URL, Befehl und Prompt gleich mit
-// der gebauten Startseite.
 import { PLAN_CATALOG, formatPlanPrice } from "./plans.js";
 import { planBenefitsText } from "./plan-benefits.js";
 
 export const SITE_URL = "https://sundartha.com";
 export const MCP_URL = "https://app.sundartha.com/mcp";
-// Name des Servers in den KI-Clients (claude mcp add ... hermes, Cursor, VS Code, Codex).
 export const SERVER_NAME = "hermes";
 export const MCP_CMD = `claude mcp add --transport http ${SERVER_NAME} ${MCP_URL}`;
 export const CODEX_CMD = `codex mcp add ${SERVER_NAME} --url ${MCP_URL}`;
 export const CODEX_LOGIN_CMD = `codex mcp login ${SERVER_NAME}`;
-// Anzeige ohne Schema (Startseite), Link mit Schema.
 export const AGENT_GUIDE = "sundartha.com/agents.md";
 export const AGENT_GUIDE_URL = `https://${AGENT_GUIDE}`;
-// Der Satz, den man in die eigene KI kopiert. "by Sundartha", weil "Hermes Agent"
-// ein eigenes, bekanntes Agent-Framework ist (Plan agent-ready, Phase 3).
 export const AGENT_LINE = {
   en: "Set up Hermes by Sundartha for me:",
   de: "Richte Hermes by Sundartha für mich ein:",
 };
 export const AGENT_PROMPT = `${AGENT_LINE.en} ${AGENT_GUIDE_URL}`;
-// Die Website zeigt Menschen nichts vom Agenten-Ausbau (Owner 2026-09-30: "der User
-// soll das nicht sehen, nur der Agent"). Der sichtbare Kopier-Satz behaelt darum seinen
-// bisherigen Wortlaut; nur die Dateien fuer Agenten nutzen AGENT_PROMPT.
 export const SITE_AGENT_LINE = { en: "Set up Hermes for me:", de: "Richte Hermes für mich ein:" };
 export const SITE_AGENT_PROMPT = `${SITE_AGENT_LINE.en} ${AGENT_GUIDE_URL}`;
 export const CONTACT_EMAIL = "kontakt@sundartha.com";
 export const DASHBOARD_URL = "https://app.sundartha.com";
 
-// Agent Skill auf der eigenen Domain (kein oeffentliches Repo, Owner 2026-09-30):
-// public/.well-known/agent-skills/index.json (Discovery v0.2.0) + SKILL.md.
 export const SKILL_NAME = "hermes-by-sundartha";
 export const SKILL_CMD = `npx skills add ${SITE_URL}`;
 
-// Ein-Klick-Installation. Cursor: Server-Konfiguration als Base64-JSON
-// (cursor.com/docs/context/mcp/install-links). VS Code: URL-kodiertes JSON mit
-// name/type/url (code.visualstudio.com/api/extension-guides/ai/mcp). Die Objekte stehen
-// ausserhalb der Template-Strings: Semgrep (missing-template-string-indicator) haelt
-// "{ ... }" in einem Template sonst fuer ein vergessenes "$".
 const CURSOR_CONFIG = { url: MCP_URL };
 const VSCODE_CONFIG = { name: SERVER_NAME, type: "http", url: MCP_URL };
 export const CURSOR_INSTALL_URL = `cursor://anysphere.cursor-deeplink/mcp/install?name=${SERVER_NAME}&config=${btoa(JSON.stringify(CURSOR_CONFIG))}`;
@@ -92,7 +63,6 @@ function linkList(links) {
   return links.map(([label, path]) => `- [${label}](${SITE_URL}${path})`).join("\n");
 }
 
-// Weitere Clients und der Skill: fuer /index.md und /llms.txt gleich.
 function installSection() {
   return `More clients:
 
@@ -102,7 +72,6 @@ function installSection() {
 - Agent Skill (Claude Code, Codex, Cursor, OpenClaw and other agents): \`${SKILL_CMD}\` installs the skill \`${SKILL_NAME}\`.`;
 }
 
-// Die Startseite als Markdown. loginUrl = LOGIN_URL aus lib/routes.js.
 export function buildHomeMarkdown({ loginUrl }) {
   return `# Hermes by Sundartha: give your AI a phone number
 
@@ -153,7 +122,6 @@ ${linkList(LEGAL_LINKS)}
 `;
 }
 
-// llms.txt nach llmstxt.org: H1, Zusammenfassung als Zitat, Fakten, Link-Abschnitte.
 export function buildLlmsTxt() {
   const plans = planFacts()
     .map(
@@ -198,7 +166,6 @@ ${linkList(LEGAL_LINKS)}
 `;
 }
 
-// llms-full.txt: Startseite + Agenten-Anleitung, getrennt durch eine Linie.
 export function buildLlmsFull({ loginUrl, agentGuide }) {
   const home = buildHomeMarkdown({ loginUrl });
   return `${home}\n---\n\n${agentGuide.trim()}\n`;

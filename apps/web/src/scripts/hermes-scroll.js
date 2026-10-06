@@ -1,20 +1,3 @@
-/* =============================================================================
- * hermes-scroll.js — Verhalten der Startseite
- *
- * Herkunft: die Logik-Klasse aus "Hermes Scroll.dc.html". Dort lief sie als
- * React-Komponente; hier als reines DOM-Modul, weil die Live-Seite statisch
- * ausgeliefert wird. Astro buendelt diese Datei zu einem externen, same-origin
- * Modul (astro.config: assetsInlineLimit 0) — damit CSP-konform, ohne
- * script-src 'unsafe-inline'.
- *
- * Vier Aufgaben:
- *   1. Scroll-Choreografie der vier Ebenen (Hero, So funktioniert's, Preise,
- *      Fuer Entwickler) plus aufsteigendes Fussband.
- *   2. Tastatur-Navigation, die auf die Ruhepunkte der Sektionen springt.
- *   3. Vollbild-Blaetter am Handy (Menue, Sektionen, Rechtstexte).
- *   4. Sprachumschalter EN/DE (Default EN).
- * ========================================================================== */
-
 import { anchorFromHash } from "../lib/home-anchors.js";
 
 const QUADRATIC_EXPONENT = 2;
@@ -78,12 +61,6 @@ const SWIPE_MIN_DISTANCE_PX = 44;
 const SWIPE_HORIZONTAL_DOMINANCE_FACTOR = 1.4;
 const COPIED_LABEL_DURATION_MS = 1800;
 
-/* ------------------------------------------------------------------ Sprache */
-
-/* Englisch steht IM HTML (das ist seit dem Default-Wechsel 2026-09-10 die
- * indexierte Fassung). Hier liegt nur die deutsche Gegenfassung; beim ersten
- * Umschalten wird der englische Stand je Element eingefroren, damit das
- * Zurueckschalten verlustfrei ist. */
 const DE = {
   howItWorks: "So funktioniert's",
   pricing: "Preise",
@@ -100,11 +77,6 @@ const DE = {
   starterLabel: "Starter",
   businessLabel: "Pro",
   popular: "Beliebt",
-  /* Preisnotation folgt der Sprache: englisch "€4.99" (Punkt, Symbol vorn),
-   * deutsch "4,99 €" (Komma, Symbol nachgestellt). Dieselbe Regel wie
-   * lib/plans.js formatPlanPrice -- die Betraege selbst stehen im
-   * Tarif-Katalog (lib/plans.js), der Gleichlauf ist test-gepinnt
-   * (apps/web/test/pages.test.js). */
   starterPrice: "4,99 €",
   businessPrice: "9,99 €",
   perMonth: "/ Monat",
@@ -147,7 +119,6 @@ const DE = {
   contact: "Kontakt",
   footerCopy: "© Sundartha — Hermes, dein Telefonassistent",
   copyLabel: "Kopieren",
-  /* Einwilligungs-Karte (components/site/CookieConsent.astro, scripts/consent.js). */
   cookieSettings: "Cookie-Einstellungen",
   ckTitle: "Cookies &amp; Datenschutz",
   ckText: "Wir speichern nur, was die Seite braucht: deine Sprache und diese Wahl. Statistik oder Marketing laufen erst, wenn du zustimmst. <a href=\"/datenschutz\">Datenschutz</a>",
@@ -161,11 +132,6 @@ const DE = {
   ckNecessaryOnly: "Nur notwendige",
   ckSave: "Auswahl speichern",
   ckSettings: "Einstellungen",
-  /* HermesDemo (Session-Stream, components/HermesDemo.astro): die DE-Fassung
-   * aller uebersetzbaren Demo-Texte. Sprachneutrale Werte (Rufnummer,
-   * Werkzeugliste, "Live", Sprecher "Hermes") tragen im Markup bewusst
-   * keinen data-i18n-Key. hdToolcall traegt Inline-HTML (innerHTML-Swap,
-   * Muster heroTitle). */
   hdWinTitle: "deine-ki — Hermes-Session",
   hdScene1: "01 · Verbinden & beauftragen",
   hdScene2: "02 · Hermes telefoniert",
@@ -197,9 +163,6 @@ const DE = {
   imprint: "Impressum",
   terms: "AGB",
   copiedLabel: "Kopiert",
-  /* How-it-works-Kacheln (components/HowtoSteps.astro). Titel/Texte nutzen die
-   * Keys step1Title ... step3Desc oben. Der kopierte Agenten-Satz selbst bleibt
-   * Englisch - er ist fuer das Modell. */
   hgStep: "Schritt",
   hgB11: "Eine echte Rufnummer",
   hgB12: "In zwei Minuten aktiv",
@@ -216,12 +179,6 @@ const DE = {
   agentTryLabel: "Mit deiner KI ausprobieren",
 };
 
-/* Der Schluessel traegt seit dem Default-Wechsel eine Version. Grund: unter dem
- * alten Schluessel "hermes.lang" liegen Wahlen aus der Zeit, als Deutsch der
- * Default war - die wuerden Englisch fuer jeden Rueckkehrer aushebeln. Ab v2
- * zaehlt nur, was jemand NACH dem Wechsel bewusst gewaehlt hat; der alte
- * Eintrag wird beim ersten Besuch entfernt (s. init), damit nichts
- * Verwaistes zurueckbleibt, das der Datenschutztext nicht mehr beschreibt. */
 const LANG_KEY = "hermes.lang.v2";
 const LEGACY_LANG_KEY = "hermes.lang";
 const en = new Map();
@@ -246,21 +203,11 @@ function applyLang(next) {
   try {
     localStorage.setItem(LANG_KEY, lang);
   } catch {
-    /* Privater Modus: die Wahl gilt dann nur fuer diese Sitzung. */
   }
 }
 
-/* --------------------------------------------------------------- Blaetter */
-
-/* Dieselbe Abfrage wie im CSS — so koennen Aussehen und Verhalten nicht
- * auseinanderlaufen. Reagiert live auf Drehen und Fenstergroesse. */
 const mq = window.matchMedia("(max-width:700px), (pointer:coarse) and (max-width:1024px)");
 const isMobile = () => mq.matches;
-/* Owner-Entscheidung 2026-09-26: das Handy scrollt wie der Desktop durch die
- * Ebenen (revidiert den Ein-Screen-Hero vom 2026-08-20). Nur das Handy im
- * QUERFORMAT (<= 500px hoch) bleibt beim Ein-Screen-Hero mit Vollbild-
- * Blaettern - dort passt keine Ebene in die Hoehe. Dieselbe Abfrage steht in
- * hermes-mobile-scroll.css. */
 const mqSheets = window.matchMedia("(pointer:coarse) and (max-width:1024px) and (max-height:500px)");
 const usesSheets = () => mqSheets.matches;
 
@@ -275,7 +222,6 @@ function setSheet(which, cameFromMenu) {
   for (const sheet of document.querySelectorAll(".sheet")) {
     sheet.setAttribute("data-open", sheet.dataset.sheet === which ? "1" : "0");
   }
-  // Die Mockup-Animationen im Entwickler-Blatt starten bei jedem Oeffnen neu.
   const devSheet = sheetEl("dev");
   if (devSheet) {
     devSheet.classList.remove("play");
@@ -295,8 +241,6 @@ function closeSheet() {
   setSheet(null, false);
 }
 
-/* ------------------------------------------------------- Scroll-Choreografie */
-
 const page = document.querySelector(".page");
 const copy = document.querySelector(".hero-copy");
 const hint = document.querySelector(".scroll-hint");
@@ -315,12 +259,6 @@ const devHead = devLayer ? devLayer.querySelectorAll(".layer-eyebrow, .layer-tit
 
 const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/* Handy (Owner-Entwurf v3, 2026-09-26): "So funktioniert's" zeigt die drei
- * Schritt-Karten NACHEINANDER, je eine pro Scroll-Halt. Dafuer wird an der
- * Stelle, an der die Ebene voll steht (HOWTO_REST), zusaetzlicher Scrollweg
- * eingeschoben (STEP_RUN je Wechsel); alles danach verschiebt sich um genau
- * diesen Weg. Der Desktop zeigt die drei Kacheln nebeneinander - dort ist der
- * Einschub 0. Die Laenge der Buehne steht in hermes-mobile-scroll.css. */
 const HOWTO_REST = 1.55;
 const STEP_RUN = 0.9;
 const stepTiles = howtoLayer ? [...howtoLayer.querySelectorAll(".hg-tile")] : [];
@@ -331,9 +269,6 @@ let restGap = null;
 let devPlayed = false;
 let glideRaf = null;
 
-/* Wie weit der Hero-Text nach oben darf: hoechstens bis kurz unter die
- * Nav-Kante. Die Leiste bleibt transparent, darum darf die Schrift sie gar
- * nicht erreichen — auf niedrigen Fenstern ist der Weg entsprechend kurz. */
 function travel() {
   const nav = navEl();
   if (!copy || !nav) return 0;
@@ -372,9 +307,6 @@ function layerHandover(vh, position, startVh) {
 function apply() {
   if (!page) return;
 
-  // Bewegung reduzieren: die Ebenen werden trotzdem gezeigt (vorher blieben sie
-  // am Desktop dauerhaft unsichtbar - Preise/Entwickler waren nicht erreichbar).
-  // Die Uebergaenge haengen allein am Scrollen, laufen also nicht von selbst.
   if (usesSheets()) {
     applySheetMode();
     return;
@@ -407,8 +339,6 @@ function applySheetMode() {
 function measureStage() {
   const vh = Math.max(1, page.clientHeight);
   const raw = page.scrollTop;
-  // Handy: waehrend des eingeschobenen Wegs steht die Zeitachse still und nur
-  // die Schritt-Karten wechseln; danach laeuft sie um den Einschub versetzt weiter.
   const rest = vh * HOWTO_REST;
   const extra = stepExtra(vh);
   const position = raw <= rest ? raw : raw <= rest + extra ? rest : raw - extra;
@@ -416,9 +346,7 @@ function measureStage() {
     vh,
     position,
     stepProgress: extra > 0 ? clamp01((raw - rest) / extra) : null,
-    // Ebene 2 erscheint auf demselben Bild, sobald der Hero-Text weg ist.
     howtoToPrice: layerHandover(vh, position, HOWTO_TO_PRICE_START_VH),
-    // Ebene 4 (Entwickler), dieselbe Choreografie wie 2 -> 3.
     priceToDev: layerHandover(vh, position, PRICE_TO_DEV_START_VH),
   };
 }
@@ -427,7 +355,6 @@ function applyHero(stage) {
   const progress = clamp01(stage.position / (stage.vh * HERO_FADE_DISTANCE_VH));
   const eased = easeOut(progress);
   if (copy) {
-    // "important" am Element: das Handy-CSS pinnt den Hero-Text sonst fest.
     copy.style.setProperty("transform", "translateY(" + -travel() * eased + "px)", "important");
     copy.style.setProperty(
       "opacity",
@@ -446,14 +373,11 @@ function applyHowto(stage) {
   const risen = easeOut(rise);
   const howtoOpacity = risen * Math.max(0, 1 - exit * LAYER_FADE_OUT_FACTOR);
   howtoLayer.style.opacity = String(howtoOpacity);
-  // Die Kachel-Animationen (HowtoSteps.astro) laufen nur, solange die Ebene
-  // sichtbar ist - spart Rechenzeit/Akku, und man sieht sie beim Ankommen.
   howtoLayer.classList.toggle("is-visible", howtoOpacity > HOWTO_VISIBLE_MIN_OPACITY);
   howtoLayer.style.transform =
     "translateY(" + (LAYER_RISE_OFFSET_PX * (1 - risen) - travel() * easeOut(exit)) + "px)";
   howtoLayer.style.pointerEvents =
     rise > HOWTO_INTERACTIVE_MIN_RISE && exit < LAYER_INTERACTIVE_MAX_EXIT ? "auto" : "none";
-  // Der Hintergrund wechselt mit der zweiten Ebene auf das Wolkenmeer.
   if (howtoBg) howtoBg.style.opacity = String(risen);
 }
 
@@ -478,8 +402,6 @@ function applyDev(stage) {
   devLayer.style.pointerEvents = rise > LAYER_INTERACTIVE_MIN_RISE ? "auto" : "none";
   replayDevAnimation(risen);
 
-  // Die beiden Karten steigen versetzt nach, damit der Blick von links nach
-  // rechts gefuehrt wird statt beide Bloecke gleichzeitig zu zeigen.
   if (devCardA) {
     const shown = staggeredRise(rise, DEV_CARD_A_DELAY_RISE);
     devCardA.style.opacity = String(shown);
@@ -506,20 +428,14 @@ function replayDevAnimation(risen) {
 }
 
 function applyFooter(stage) {
-  // Fussband: steigt ganz am Ende von der Unterkante herein, ueber der letzten
-  // Ebene — wie ein Footer, nicht wie eine eigene Sektion.
   if (!footer) return;
   const { vh, position } = stage;
-  // Am Handy setzt das Band erst NACH dem Entwickler-Halt ein - sonst stuende
-  // dort schon ein Hauch Fussband unter der Karte.
   const startVh = stepMode() ? FOOTER_START_STEP_MODE_VH : FOOTER_START_VH;
   const rise = clamp01((position - vh * startVh) / (vh * FOOTER_RISE_DISTANCE_VH));
   const risen = easeOut(rise);
   footer.style.opacity = String(risen);
   footer.style.transform = "translateY(" + FOOTER_HIDDEN_OFFSET_PERCENT * (1 - risen) + "%)";
   footer.style.pointerEvents = rise > FOOTER_INTERACTIVE_MIN_RISE ? "auto" : "none";
-  // Die letzte Ebene weicht dem Band aus, statt sich davon ueberdecken zu
-  // lassen: das Band ist hoeher als der Bodenabstand der Ebene.
   if (devLayer) liftDevLayer(vh, risen);
 }
 
@@ -532,23 +448,16 @@ function liftDevLayer(vh, footerRisen) {
   const base = devBottomPaddingPx(vh);
   const lift = Math.max(0, footer.offsetHeight - base) * footerRisen;
   devLayer.style.paddingBottom = base + lift + "px";
-  // Handy: die Ebene steht oben buendig (nicht mittig), der Bodenabstand
-  // allein hebt sie nicht an. Reicht die Karte ins Band, rueckt die ganze
-  // Ebene um genau die Ueberdeckung nach oben.
   let headOpacity = "";
   if (stepMode() && devList && footerRisen > 0) {
     const bottom = devList.offsetTop + devList.offsetHeight;
     const overlap = Math.max(0, bottom - (vh - footer.offsetHeight)) * footerRisen;
     devLayer.style.transform = "translateY(" + -overlap + "px)";
-    // Rueckt die Ebene dabei unter die Kopfleiste, weicht ihr Kopf aus.
     if (overlap > 0) headOpacity = String(Math.max(0, 1 - overlap / DEV_HEAD_FADE_DISTANCE_PX));
   }
   for (const head of devHead) head.style.opacity = headOpacity;
 }
 
-/* Schritt-Karten am Handy: s = 0 (Schritt 1) ... 1 (letzter Schritt). Jede
- * Karte steht eine Weile ganz, dazwischen blendet sie weich ueber und gleitet
- * dabei ein Stueck zur Seite. null = Desktop: alle Karten normal. */
 function applySteps(progress) {
   if (!stepTiles.length) return;
   if (progress == null) {
@@ -568,8 +477,6 @@ function applySteps(progress) {
       1 - (Math.abs(offset) - STEP_FULL_OPACITY_RADIUS_STEPS) / STEP_CROSSFADE_STEPS,
     );
     tile.style.opacity = String(opacity);
-    // Seitlich wie eine Galerie: die naechste Karte kommt von rechts, die
-    // vorige geht nach links - passt zum Wischen.
     tile.style.transform = "translateX(" + -Math.max(-1, Math.min(1, offset)) * STEP_SLIDE_PX + "px)";
     tile.style.visibility = opacity > STEP_VISIBLE_MIN_OPACITY ? "visible" : "hidden";
     tile.classList.toggle("is-active", i === current);
@@ -577,10 +484,6 @@ function applySteps(progress) {
   stepBars.forEach((bar, i) => bar.classList.toggle("is-on", i <= current));
 }
 
-/* Ruhepunkte: dort ist die jeweilige Ebene voll aufgestiegen und wird noch
- * nicht wieder nach oben weggezogen. Letzter Halt: Fussband ganz oben. Am
- * Handy liegen hinter "So funktioniert's" die Halte der Schritte 2 und 3;
- * withSteps=false liefert nur die Sektionen (Index = data-goto). */
 function sectionStops(withSteps = true) {
   if (!page) return [0];
   const vh = page.clientHeight;
@@ -601,8 +504,6 @@ function sectionStops(withSteps = true) {
   ].map((stop) => Math.min(stop, max));
 }
 
-/* Eigene Scroll-Animation mit gleicher GESCHWINDIGKEIT statt gleicher Dauer:
- * sonst fuehlt sich der weiteste Sprung anders an als die kurzen. */
 function glideTo(top) {
   if (!page) return;
   const max = Math.max(0, page.scrollHeight - page.clientHeight);
@@ -615,8 +516,6 @@ function glideTo(top) {
     return;
   }
   const vh = Math.max(1, page.clientHeight);
-  // Der Sprung aus dem Hero heraus laeuft etwas straffer: dort blendet
-  // zusaetzlich der Hero-Text aus, was die Bewegung laenger wirken laesst.
   const speed = from < vh * GLIDE_HERO_ZONE_VH ? GLIDE_FROM_HERO_MS_PER_VH : GLIDE_MS_PER_VH;
   const dur = Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MIN_MS, (Math.abs(dist) / vh) * speed));
   const t0 = performance.now();
@@ -633,12 +532,6 @@ function goToSection(index) {
   glideTo(stops[Math.min(index, stops.length - 1)]);
 }
 
-/* ------------------------------------------------------------------ Verdrahtung */
-
-/* Am Handy tritt an die Stelle des Scrollens jeweils ein Vollbild-Blatt
- * (Owner-Entscheidung 2026-08-20: nur die Startseite ist sichtbar, alles
- * andere oeffnet sich als eigene Seite); auf dem Desktop scrollt derselbe
- * Knopf zur Sektion. */
 function wireSectionTriggers() {
   for (const el of document.querySelectorAll("[data-goto]")) {
     const [sheet, index] = el.dataset.goto.split(":");
@@ -646,7 +539,6 @@ function wireSectionTriggers() {
     el.addEventListener("click", (event) => {
       event.preventDefault();
       if (!usesSheets()) {
-        // Aus dem Handy-Menue heraus: erst das Menue schliessen, dann gleiten.
         if (fromMenu) setSheet(null, false);
         goToSection(Number(index));
         return;
@@ -674,9 +566,6 @@ function wireSectionTriggers() {
   }
 }
 
-/* Rechtstexte im Blatt: die Pillen tauschen das sichtbare Dokument. Die
- * Dokumente stehen vollstaendig im HTML (aus src/data/legal/*.json gebaut) —
- * dieselben Texte, die auch unter /datenschutz & Co. ausgeliefert werden. */
 function wireLegal() {
   const pills = document.querySelectorAll("[data-legal-pill]");
   const docs = document.querySelectorAll("[data-legal-doc]");
@@ -702,24 +591,16 @@ function wireLegal() {
     trigger.addEventListener("click", (event) => {
       event.preventDefault();
       show(trigger.dataset.legalOpen);
-      // Verweis INNERHALB des Blatts (Support -> Kuendigen, -> Datenschutz): nur den
-      // Reiter wechseln und zum Anfang, der Rueckweg ins Menue bleibt, wie er war.
       if (legalSheet && legalSheet.contains(trigger)) {
         legalSheet.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
         return;
       }
-      // "Zurueck ins Menue" nur, wenn der Ausloeser wirklich im Menue-Blatt
-      // sitzt — vom .stack-foot oder Desktop-Fussband aus schliesst das
-      // Rechts-Blatt einfach (kein erfundener Menue-Rueckweg).
       setSheet("legal", Boolean(trigger.closest('.sheet[data-sheet="menu"]')));
     });
   }
   show("privacy");
 }
 
-/* Handy: die Schritt-Karten lassen sich auch seitlich wischen. Ein Wisch
- * gleitet zum Halt des naechsten/vorigen Schritts - dieselbe Stelle, an die
- * auch das Scrollen fuehrt, darum passen Karte und Fortschritt immer. */
 function wireStepSwipe() {
   const zone = howtoLayer && howtoLayer.querySelector(".hg--layer");
   if (!zone || !page) return;
@@ -768,7 +649,6 @@ function wireCopy() {
       try {
         await navigator.clipboard.writeText(btn.dataset.copy);
       } catch {
-        /* Ohne Zwischenablage-Recht bleibt die Adresse trotzdem lesbar. */
       }
       btn.textContent = lang === "de" ? DE.copiedLabel : "Copied";
       setTimeout(() => {
@@ -784,12 +664,8 @@ function wireKeyboard() {
 
 function onKeyDown(event) {
   if (isModifiedKeyEvent(event)) return;
-  // Bei offenem Blatt gehoert die Tastatur dem Blatt: sonst springt die Seite
-  // dahinter und der lange Rechtstext liesse sich nicht scrollen.
   if (keyHandledByOpenSheet(event)) return;
   if (isTypingTarget(event.target)) return;
-  // Handy-Fassung (hermes-mobile.js): dort ist die Buehne ausgeblendet und
-  // die Tastatur gehoert den Screens.
   if (!page || !page.clientHeight || usesSheets()) return;
   navigateByKey(event);
 }
@@ -848,8 +724,6 @@ function navigateByKey(event) {
   if (!direction) return;
   event.preventDefault();
 
-  // Tasten springen auf die Ruhepunkte, nicht um eine Bildschirmhoehe —
-  // dazwischen liegen die Uebergaenge, in denen nur der Hintergrund zu sehen waere.
   const scrollTop = page.scrollTop;
   const tolerance = page.clientHeight * KEY_STOP_TOLERANCE_VH;
   const index =
@@ -859,11 +733,6 @@ function navigateByKey(event) {
   glideTo(stops[index]);
 }
 
-/* Unterseiten verlinken "So funktioniert's" und "Preise" als Anker der Startseite
- * (lib/home-anchors.js): beim Laden steht die Buehne gleich auf der Ebene, im
- * Handy-Querformat oeffnet sich das passende Blatt. Die Handy-Fassung
- * (hermes-mobile.js) liest denselben Anker selbst - dort ist die Buehne
- * ausgeblendet (clientHeight 0), darum greift hier nichts. */
 function openAnchor() {
   const target = anchorFromHash(window.location.hash);
   if (!target) return;
@@ -874,8 +743,6 @@ function openAnchor() {
   if (!page || !page.clientHeight) return;
   page.scrollTop = sectionStops(false)[target.index];
 }
-
-/* ------------------------------------------------------------------- Start */
 
 function init() {
   wireSectionTriggers();
@@ -889,15 +756,12 @@ function init() {
     const saved = localStorage.getItem(LANG_KEY);
     if (saved === "de") applyLang("de");
   } catch {
-    /* Kein Speicher, keine Vorauswahl — Englisch bleibt. */
   }
 
   if (!page) return;
 
   page.addEventListener("scroll", apply, { passive: true });
   window.addEventListener("resize", () => {
-    // Nach Groessenaenderung den Ruheabstand neu messen: dazu kurz zurueck auf
-    // den Ruhezustand, sonst wird mitten in der Bewegung gemessen.
     if (copy) copy.style.transform = "translateY(0px)";
     restGap = null;
     apply();
@@ -911,8 +775,6 @@ function init() {
     else query.addListener(onView);
   }
 
-  // Beim Sichtbarwerden einmal nachziehen: im Hintergrund pausiert der Browser
-  // die Frame-Schleife, der Scrollstand kann sich zwischenzeitlich geaendert haben.
   document.addEventListener("visibilitychange", apply);
 
   openAnchor();

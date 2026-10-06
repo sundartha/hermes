@@ -1,24 +1,3 @@
-/* =============================================================================
- * hermes-mobile.js - Verhalten der Handy-Startseite (< 768 px)
- *
- * Gegenstueck zu components/MobileHome.astro und styles/hermes-mobile*.css;
- * Umsetzung von design/handoff-mobile ("Hermes Mobile v9", Design-Schema.md,
- * Abschnitt 8). Das Modul setzt nur Zustaende - als Data-Attribute und als
- * Variable --p -, das Aussehen und die Bewegung rechnet das CSS. Ausnahmen:
- * Tippen und Zaehler schreiben Text (textContent), die Breite des rollenden
- * Tarifnamens wird gemessen. Kein Inline-Style im Markup, CSP-konform.
- *
- * Zustaende (README des Handoffs):
- *   active  0-4   aktueller Screen aus p = scrollTop / clientHeight
- *   Blaettern     eine Geste = genau ein Screen, immer buendig (lib/mobile-pager.js)
- *   step    0-2   Autoplay (6.5 s) nur auf Screen 2, Tippen oder Wischen
- *   plan    0/1   Starter / Pro, Start auf dem hervorgehobenen Tarif
- *   way     0-2   Connector / Terminal / Your AI, der Code tippt sich
- *   copied        faellt nach 1.6 s zurueck
- *   lang    en/de folgt <html lang> (der Umschalter laeuft ueber hermes-scroll.js)
- * prefers-reduced-motion: kein Autoplay, kein Tippen, der Ring steht fertig da.
- * ========================================================================== */
-
 import {
   WHEEL_QUIET_MS,
   WHEEL_STEP_PX,
@@ -30,37 +9,23 @@ import {
 import { anchorFromHash } from "../lib/home-anchors.js";
 import { typeableLength, typedSplit } from "../lib/mobile-code.js";
 
-/* Dieselbe Abfrage wie in hermes-mobile.css. */
 const MOBILE_QUERY = "(max-width: 767.98px) and (not ((pointer: coarse) and (max-height: 500px)))";
 const SCREEN_HOW = 1;
 const SCREEN_PRICE = 2;
 const SCREEN_DEV = 3;
 const AUTOPLAY_MS = 6500;
 const COPIED_MS = 1600;
-/* Beim Ankommen auf den Preisen starten Leiste, Zaehler und Leistungen nach
- * 520 ms - gilt fuer alles, was in den ersten 300 ms nach dem Ankommen passiert. */
 const ARRIVE_WINDOW_MS = 300;
 const ARRIVE_DELAY_MS = 520;
 const COUNT_BASE_MS = 450;
 const COUNT_PER_SEGMENT_MS = 150;
 const SWIPE_MIN_PX = 40;
-/* Blaettern: ab dieser Strecke (px) steht fest, ob die Geste senkrecht
- * (blaettern) oder waagerecht (Schritte auf Screen 2) gemeint ist; das Tempo
- * am Ende misst sich ueber die letzten VELOCITY_WINDOW_MS; nach SETTLE_MS Ruhe
- * wird eine fremd verursachte Zwischenposition (Fokus, Vorlesen) buendig
- * gestellt. */
 const AXIS_LOCK_PX = 8;
 const VELOCITY_WINDOW_MS = 100;
 const MIN_SAMPLES = 2;
 const SETTLE_MS = 140;
 const PROGRESS_DIGITS = 4;
 const EASE_POWER = 3;
-/* Der Ring auf Screen 2 (Design-Schema 6.2): Phasen je Schritt in ms ab
- * Schrittstart, in welcher Phase der Schritt fertig ist (Bogen gruen) und ab
- * welcher Phase die Ergebniszeile getippt wird (Tempo je Zeichen).
- *   Nummer:    Bogen leer 380, fuellt sich 420, Haken + Tippen 1860, Live 2810
- *   Verbinden: rastet ein + Tippen 1700, Connected 2560
- *   Abnehmen:  Welle faellt zusammen, Haken, Summary 3200 */
 const NUMBER_EMPTY_MS = 380;
 const NUMBER_FILL_MS = 420;
 const NUMBER_TYPE_MS = 1860;
@@ -80,14 +45,10 @@ const RING = Object.freeze([
   Object.freeze({ phases: [MCP_LOCK_MS, MCP_DONE_MS], doneAt: 1, typeAt: 1, charMs: MCP_CHAR_MS }),
   Object.freeze({ phases: [WAVE_DONE_MS], doneAt: 1, typeAt: 0, charMs: 0 }),
 ]);
-/* Code-Feld (Design-Schema 6.4): Tippen beim Ankommen nach 560 ms, bei jedem
- * Wegwechsel nach 140 ms, 12 ms je Zeichen, abgefragt alle 24 ms. */
 const CODE_ARRIVE_MS = 560;
 const CODE_SWITCH_MS = 140;
 const CODE_CHAR_MS = 12;
 const CODE_TICK_MS = 24;
-/* Zwei gleichwertige Keyframe-Namen im CSS: der Wechsel startet Fuellung und
- * Aufleuchten neu. */
 const RUN_VARIANTS = 2;
 
 const mobile = window.matchMedia(MOBILE_QUERY);
@@ -134,8 +95,6 @@ const setRel = (nodes, current) =>
 const autoplay = () => mobile.matches && !reduced.matches;
 const langAttr = (base) => `${base}-${state.lang === "de" ? "de" : "en"}`;
 
-/* ------------------------------------------------------------ Scrollen */
-
 function onScroll() {
   if (!scrollFrame) scrollFrame = requestAnimationFrame(update);
   clearTimeout(pager.settleTimer);
@@ -156,17 +115,8 @@ function jump(index) {
   glideTo(clamp(index, 0, el.screens.length - 1));
 }
 
-/* ----------------------------------------------------------- Blaettern */
-
-/* Eine Geste bewegt genau einen Screen, und jede Fahrt endet buendig auf einem
- * ganzen Screen - egal wie hart gewischt wurde. Der Finger zieht den Screen mit
- * (hoechstens bis zum Nachbarn), beim Loslassen entscheidet lib/mobile-pager.js
- * ueber weiter / zurueck; die Fahrt dorthin laeuft hier per requestAnimationFrame
- * ueber scrollTop, damit --p, Kamerafahrt und Ankommen wie beim Scrollen folgen. */
-
 const pageHeight = () => el.scroller.clientHeight;
 
-/* Worauf die Seite gerade steht oder zufaehrt. */
 function pageIndex() {
   if (pager.frame) return pager.target;
   const height = pageHeight();
@@ -198,9 +148,6 @@ function glideTo(index) {
   pager.frame = requestAnimationFrame(tick);
 }
 
-/* Steht die Seite zwischen zwei Screens (der Browser rollt einen fokussierten
- * Knopf ins Bild, Vorlesefunktion), faehrt sie buendig - auf den Screen mit dem
- * Fokus, wenn er einer der beiden angeschnittenen ist, sonst auf den naechsten. */
 function settle() {
   const height = pageHeight();
   if (pager.frame || pager.drag || !height || !mobile.matches) return;
@@ -215,7 +162,6 @@ function settle() {
 function onPointerDown(event) {
   if (!mobile.matches || event.pointerType === "mouse") return;
   if (!event.isPrimary) {
-    // Zweiter Finger (Zoomen): Geste abbrechen, buendig stellen.
     pager.drag = null;
     glideTo(pageIndex());
     return;
@@ -254,7 +200,6 @@ function onPointerMove(event) {
   }
 }
 
-/* Fingertempo am Ende in px/ms, positiv = Richtung naechster Screen. */
 function releaseVelocity(samples) {
   const first = samples[0];
   const last = samples[samples.length - 1];
@@ -267,7 +212,6 @@ function onPointerUp(event) {
   if (!drag || event.pointerId !== drag.id) return;
   pager.drag = null;
   if (drag.axis !== "y") {
-    // Antippen oder waagerechte Geste: die Seite bleibt, steht aber immer buendig.
     glideTo(drag.base);
     return;
   }
@@ -286,7 +230,6 @@ function onPointerCancel(event) {
   glideTo(pageIndex());
 }
 
-/* Mausrad und Trackpad: eine Geste = ein Screen; ihr Nachlauf zaehlt nicht. */
 function onWheel(event) {
   if (!mobile.matches || event.ctrlKey) return;
   event.preventDefault();
@@ -312,9 +255,6 @@ function wirePager() {
   scroller.addEventListener("wheel", onWheel, { passive: false });
 }
 
-/* Screen wird aktiv: gestaffeltes Einblenden per CSS, Schritt 1 von vorn,
- * "Copied" zurueck, die Preise laufen ihre Ankunft durch, der Code tippt sich.
- * data-screen am Wurzelelement pausiert die ziehenden Wolken auf Screen 2-4. */
 function setActive(index) {
   state.active = index;
   state.arrivedAt = performance.now();
@@ -328,8 +268,6 @@ function setActive(index) {
   if (index === SCREEN_DEV) startTyping(CODE_ARRIVE_MS);
   else stopTyping();
 }
-
-/* ------------------------------------------- Screen 2: Schritte und Ring */
 
 function setStep(index) {
   state.step = index;
@@ -360,7 +298,6 @@ function scheduleAutoplay() {
 }
 
 function clearViz() {
-  // clearTimeout raeumt nach HTML-Spec auch Intervalle ab (gemeinsame Liste).
   for (const id of vizTimers) clearTimeout(id);
   vizTimers.clear();
 }
@@ -373,10 +310,6 @@ function later(ms, run) {
   vizTimers.add(id);
 }
 
-/* Ein Ring, der stehen bleibt: bei jedem Schrittwechsel laufen nur seine
- * Phasen von vorn, der Uebergang zwischen den Schritten bleibt sichtbar. Beim
- * Ankommen startet er ohne Uebergaenge (data-reset), damit nichts zurueckspult.
- * Bei reduzierter Bewegung steht jeder Schritt sofort fertig da. */
 function mountRing(arriving) {
   clearViz();
   const { viz, typed } = el;
@@ -430,14 +363,11 @@ function wireSwipe() {
     const dx = event.clientX - start.left;
     const dy = event.clientY - start.top;
     start = null;
-    // Nur eine ueberwiegend waagerechte Geste wechselt den Schritt; senkrecht blaettert.
     if (Math.abs(dx) <= SWIPE_MIN_PX || Math.abs(dx) <= Math.abs(dy)) return;
     const next = state.step + (dx < 0 ? 1 : -1);
     if (next >= 0 && next < el.steps.length) setStep(next);
   });
 }
-
-/* ---------------------------------------------------- Screen 3: Preise */
 
 function setPlan(index) {
   if (index === state.plan) return;
@@ -464,7 +394,6 @@ function renderPlan() {
   el.benefitRows.forEach((row) => setRel([...row.children], state.plan));
   setRel(el.ctaNames, state.plan);
   sizeCta();
-  // Die Verzoegerung beim Ankommen rechnet das CSS ueber data-arrive.
   clearTimeout(arriveTimer);
   price.toggleAttribute("data-arrive", delay > 0);
   if (delay > 0)
@@ -474,14 +403,11 @@ function renderPlan() {
   if (el.priceFallback) el.priceNum.replaceChildren(el.priceFallback[state.plan] || "");
 }
 
-/* Ein Segment steht fuer ein Viertel der groessten Minutenzahl (30 von 120). */
 function litSegments(plan) {
   const most = Math.max(1, ...el.minutes);
   return Math.round(el.minutes[plan] / (most / el.segments.length));
 }
 
-/* Zaehler laeuft synchron zur Leiste (Tabellenziffern im CSS). Beim Ankommen
- * zaehlt er von 0; ausserhalb der Preise steht die Zahl still. */
 function renderCount(on, lit, delay) {
   cancelAnimationFrame(countFrame);
   const target = el.minutes[state.plan];
@@ -513,8 +439,6 @@ function countTo(target, duration, delay) {
   countFrame = requestAnimationFrame(tick);
 }
 
-/* Preis in Schaechte zerlegen: nur Zeichen, die sich zwischen den Tarifen
- * unterscheiden, rollen. Gleiche Zerlegung wie im Astro-Markup. */
 function priceSlots(list) {
   if (!list.every((price) => price.length === list[0].length)) return null;
   return Array.from(list[0], (_ch, pos) => list.map((price) => price[pos]));
@@ -543,7 +467,6 @@ function buildPrice() {
   el.priceNum.replaceChildren(...(slots ? slots.map(slotNode) : []));
 }
 
-/* "Choose {}" bzw. "{} wählen": nur der Tarifname rollt, der Rest steht. */
 function buildCta() {
   const template = el.cta.getAttribute(langAttr("data-cta")) || "{}";
   const [pre, suf] = template.split("{}");
@@ -552,15 +475,12 @@ function buildCta() {
   sizeCta();
 }
 
-/* Die Breite des Namens gleitet mit (CSS-Uebergang auf width). */
 function sizeCta() {
   const name = el.ctaNames[state.plan];
   if (!name) return;
   const width = Math.ceil(name.getBoundingClientRect().width);
   if (width > 0) el.ctaRoll.style.width = `${width + 1}px`;
 }
-
-/* ------------------------------------------------ Screen 4: Entwickler */
 
 function setWay(index) {
   state.way = index;
@@ -573,7 +493,6 @@ function setWay(index) {
   startTyping(CODE_SWITCH_MS);
 }
 
-/* Teilstuecke eines Wegs, die getippt werden (der Prompt "$ " steht immer). */
 const typeTokens = (way) => [...way.querySelectorAll(".mh-tk:not(.mh-tk--p)")];
 const tokenText = (token) => token.getAttribute(langAttr("data-t")) || "";
 
@@ -584,8 +503,6 @@ function spanOf(className, text) {
   return node;
 }
 
-/* Zeigt count getippte Zeichen: der Rest steht schon da, aber transparent,
- * davor sitzt der Block-Cursor. Infinity = alles steht, ohne Cursor. */
 function renderCode(way, count) {
   const tokens = typeTokens(way);
   const texts = tokens.map(tokenText);
@@ -642,8 +559,6 @@ function setCopied(on) {
   if (on) copiedTimer = setTimeout(() => setCopied(false), COPIED_MS);
 }
 
-/* Kopiert wird immer der vollstaendige Text (beim Terminal der ganze Befehl).
- * "Copied" erscheint nur, wenn es wirklich geklappt hat. */
 async function copyActive() {
   const text = el.ways[state.way].getAttribute(langAttr("data-copy"));
   if (await writeClipboard(text)) setCopied(true);
@@ -675,10 +590,6 @@ function legacyCopy(text) {
   return done;
 }
 
-/* ------------------------------------------------------------- Sprache */
-
-/* Englisch steht im Markup; beim ersten Wechsel wird es je Knoten eingefroren,
- * die deutsche Fassung reist als data-mh-de mit (eigenes, statisches Markup). */
 function applyLang(next) {
   const lang = next === "de" ? "de" : "en";
   if (lang === state.lang) return;
@@ -701,8 +612,6 @@ function applyLang(next) {
   setCopied(false);
 }
 
-/* ------------------------------------------------------------ Tastatur */
-
 const KEY_STEPS = Object.freeze({ ArrowDown: 1, PageDown: 1, ArrowUp: -1, PageUp: -1 });
 
 function keyTarget(event) {
@@ -717,8 +626,6 @@ function keyTarget(event) {
   return null;
 }
 
-/* Die Tastatur gehoert dem Handy-Screen nur, wenn kein Blatt offen ist und
- * nicht gerade in ein Feld getippt wird. */
 function keyIgnored(event) {
   if (!mobile.matches || event.defaultPrevented) return true;
   if (event.metaKey || event.ctrlKey || event.altKey) return true;
@@ -737,8 +644,6 @@ function onKey(event) {
   jump(next);
 }
 
-/* --------------------------------------------------------------- Start */
-
 function stopAll() {
   stopGlide();
   pager.drag = null;
@@ -748,8 +653,6 @@ function stopAll() {
   stopTyping();
 }
 
-/* Groesse geaendert (Drehen, Fensterbreite): den aktiven Screen wieder
- * buendig stellen, der Zustand bleibt. */
 function realign() {
   if (!mobile.matches || state.active < 0) return;
   const index = pager.frame ? pager.target : state.active;
@@ -758,15 +661,11 @@ function realign() {
   update();
 }
 
-/* Unterseiten verlinken "So funktioniert's" und "Preise" als Anker der Startseite
- * (lib/home-anchors.js): die Handy-Fassung steht dann gleich auf dem passenden
- * Screen, ohne Fahrt vom Start dorthin. */
 function openAnchor() {
   const anchor = anchorFromHash(window.location.hash);
   if (anchor && mobile.matches) el.scroller.scrollTop = anchor.index * el.scroller.clientHeight;
 }
 
-/* Handy-Abfrage oder Bewegungs-Wunsch geaendert: alles neu ableiten. */
 function refresh() {
   if (!mobile.matches) {
     stopAll();
@@ -845,8 +744,6 @@ function wire(root) {
   );
 }
 
-/* Das Einrollen des Starts beim Laden laeuft als CSS-Animation ab dem ersten
- * Bild (hermes-mobile-motion.css); der Start bleibt dafuer aktiv. */
 function init() {
   const root = document.querySelector("[data-mh]");
   if (!root) return;

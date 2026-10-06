@@ -1,5 +1,3 @@
-// /index.md: die Startseite als Markdown fuer KI-Agenten (lib/agent-docs.js).
-// Render liefert .md als text/markdown aus (wie /agents.md).
 import { buildHomeMarkdown } from "../lib/agent-docs.js";
 import { LOGIN_URL } from "../lib/routes.js";
 
