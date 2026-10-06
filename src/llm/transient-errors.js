@@ -12,6 +12,8 @@
 // 408 Timeout, 409 Conflict, 429 RateLimit, >=500 Server. NICHT 400/401/403/404/422.
 const RETRYABLE_STATUS = new Set([408, 409, 429]);
 const SERVER_ERROR_MIN = 500;
+// eslint-disable-next-line hermes/keine-kommentare
+// Hinweis, der durch die Abschaltung frei sein soll
 // Rohe Transport-Fehlercodes (Verbindungsklasse, gefahrlos wiederholbar).
 // UND_ERR_SOCKET = undici "other side closed": Unter dem Anthropic-SDK 0.105 (native
 // fetch) erscheint der Premature close als APIConnectionError (ueber das Anbieter-
