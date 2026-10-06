@@ -1,8 +1,3 @@
-// Pay1: Stripe-Adapter createCustomer/createSetupCheckoutSession/getCheckoutSessionResult
-// gegen ein gemocktes global fetch (kein echter Netz-Call, F.I.R.S.T.). Prueft URL,
-// Methode, Bearer-Auth, form-urlencoded-Body + Response-Parsing. Fehlendes payment_method
-// -> wirft (Karte nicht gespeichert). Leak-Guard: Fehler-Message nennt HTTP-Status, NIE
-// den Secret-Key (Regel 4). config/fetch werden pro Test gespeichert/wiederhergestellt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -12,16 +7,10 @@ import { makeStripeStub } from "./helpers.js";
 
 const SECRET = "sk_test_geheim_leak_probe";
 
-// Stub: jeder Response traegt ok/status + ein .json() (der Adapter parst json()).
-// pa20-fix1: geteilte Implementierung (G5) statt lokaler Kopie - makeStripeStub buendelt
-// fetch-Stub + stripeSecretKey/stripeApiBase-Override (Muster wie makeConfigOverrides).
 const withStripeStub = makeStripeStub(config, SECRET);
 
 const okJson = (body) => ({ ok: true, status: 200, json: async () => body });
 
-// Self-Heal (Fix B): der Adapter muss den ROHEN Fehlerbody-Text lesen koennen
-// (assertOkWithDetail), um code/param zu klassifizieren - die bestehenden Fehler-
-// Stubs oben haben KEIN .text() und bleiben deshalb unveraendert im generischen Pfad.
 const errJson = (status, body) => ({
   ok: false,
   status,
@@ -68,7 +57,6 @@ test("createSetupCheckoutSession: POST /v1/checkout/sessions, mode=setup + custo
   assert.equal(captured.opts.body.get("success_url"), "https://agent.test/ok");
   assert.equal(captured.opts.body.get("cancel_url"), "https://agent.test/no");
   assert.equal(captured.opts.body.get("metadata[tenant_ref]"), "tenant_a");
-  // Stripe verlangt im setup-Mode ein currency (sonst HTTP 400) - aus config.billing.paymentCurrency.
   assert.equal(captured.opts.body.get("currency"), config.billing.paymentCurrency);
   assert.deepEqual(result, { url: "https://stripe.test/c/cs_1", sessionId: "cs_1" });
 });
@@ -86,7 +74,6 @@ test("getCheckoutSessionResult: GET /v1/checkout/sessions/<id>?expand[]=setup_in
   assert.ok(captured.url.includes("expand[]=setup_intent"), "setup_intent wird expandiert");
   assert.equal(captured.opts.method, "GET");
   assert.equal(captured.opts.headers.Authorization, `Bearer ${SECRET}`);
-  // GP-P2: unexpandierte Fixtur (payment_method als String) -> Typ unbekannt, KEIN Wurf.
   assert.deepEqual(result, {
     customerId: "cus_new1",
     paymentMethodId: "pm_1",
@@ -142,8 +129,6 @@ test("createSubscription: liest current_period_end aus items.data[0] (aktuelle S
   assert.ok(captured.url.endsWith("/v1/subscriptions"), "URL endet auf /v1/subscriptions");
   assert.equal(captured.opts.method, "POST");
   assert.equal(captured.opts.body.get("items[0][price]"), "price_starter");
-  // default_payment_method MUSS mit: ohne das wirft Stripe HTTP 400 (off_session-Abbuchung
-  // der ersten Rechnung scheitert). Regressionsschutz fuer den Abo-"passiert-nichts"-Bug.
   assert.equal(captured.opts.body.get("default_payment_method"), "pm_1");
   assert.equal(captured.opts.body.get("off_session"), "true");
   assert.equal(captured.opts.headers["Idempotency-Key"], "sub_tenant_a_starter");
@@ -194,8 +179,6 @@ test("createSubscriptionCheckoutSession: mode=subscription + line_items + allow_
   assert.equal(captured.opts.method, "POST");
   assert.equal(captured.opts.headers.Authorization, `Bearer ${SECRET}`);
   assert.equal(captured.opts.headers["Content-Type"], "application/x-www-form-urlencoded");
-  // Regression (Review-Blocker S1): OHNE Idempotency-Key liefert ein Doppelklick/zwei Tabs
-  // ZWEI echte Stripe-Checkout-Sessions -> zwei echte, real abgerechnete Abos (Kostenleck).
   assert.equal(captured.opts.headers["Idempotency-Key"], "subcs_tenant_a_starter_price_starter");
   assert.equal(captured.opts.body.get("mode"), "subscription");
   assert.equal(captured.opts.body.get("customer"), "cus_new1");
@@ -253,8 +236,6 @@ test("createSubscriptionCheckoutSession: Nicht-2xx -> wirft HTTP-Status, OHNE Se
       ),
   );
 });
-
-// ---- Self-Heal (Fix B): CustomerMissingError-Klassifikation (resource_missing/customer) ----
 
 test("createSubscriptionCheckoutSession: Stripe resource_missing/customer -> CustomerMissingError, Message wie generisch, kein Secret-Leak", async () => {
   await withStripeStub(
@@ -353,7 +334,7 @@ test("getSubscriptionCheckoutResult: GET /v1/checkout/sessions/<id>?expand[]=sub
   assert.deepEqual(result, {
     customerId: "cus_new1",
     paymentMethodId: "pm_b",
-    paymentMethodType: null, // GP-P2: Fixtur-Objekt ohne type -> unbekannt
+    paymentMethodType: null,
     subscriptionId: "sub_new",
     currentPeriodStart: 1890864000,
     currentPeriodEnd: 1893456000,
@@ -405,7 +386,7 @@ test("getSubscriptionCheckoutResult: unexpandiertes pm-String + top-level-Period
   assert.deepEqual(result, {
     customerId: "cus_new1",
     paymentMethodId: "pm_string",
-    paymentMethodType: null, // GP-P2: unexpandierter String traegt keinen Typ
+    paymentMethodType: null,
     subscriptionId: "sub_new",
     currentPeriodStart: 1600000000,
     currentPeriodEnd: 1602592000,
@@ -430,8 +411,6 @@ test("retrieveSubscription: GET /v1/subscriptions/<id>?expand[]=latest_invoice, 
   assert.ok(captured.url.includes("expand[]=latest_invoice"), "latest_invoice wird expandiert");
   assert.equal(captured.opts.method, "GET");
   assert.equal(captured.opts.headers.Authorization, `Bearer ${SECRET}`);
-  // status: additiv fuer den Stripe-Abgleich-Sweep (stripe-reconcile.js) - opaker
-  // Stripe-Wert, durchgereicht wie geliefert.
   assert.deepEqual(result, { planSlug: "starter", numberSetupFeeExempt: true, status: "active" });
 });
 
@@ -441,7 +420,6 @@ test("retrieveSubscription: latest_invoice.total>0 -> numberSetupFeeExempt:false
       okJson({ metadata: { plan_slug: "business" }, latest_invoice: { total: 2900 } }),
     () => stripeBilling.retrieveSubscription("sub_2"),
   );
-  // status fehlt im Stub -> null (nie raten, G26; der Sweep heilt bei null NICHT).
   assert.deepEqual(result, { planSlug: "business", numberSetupFeeExempt: false, status: null });
 });
 
@@ -481,7 +459,7 @@ test("placeHold: POST /v1/payment_intents mit customer + payment_method + off_se
   assert.ok(captured.url.endsWith("/v1/payment_intents"), "URL endet auf /v1/payment_intents");
   assert.equal(captured.opts.method, "POST");
   assert.equal(captured.opts.headers["Idempotency-Key"], "hold_num_1");
-  assert.equal(captured.opts.body.get("amount"), "500"); // GANZZAHL Cents
+  assert.equal(captured.opts.body.get("amount"), "500");
   assert.equal(captured.opts.body.get("currency"), "eur");
   assert.equal(captured.opts.body.get("capture_method"), "manual");
   assert.equal(captured.opts.body.get("confirm"), "true");

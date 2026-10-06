@@ -1,10 +1,3 @@
-// SEC-P1: Persistenz-Round-Trip der Ereignis-Anker (webhookAnchors) in BEIDEN Backends.
-// Kern-Risiko (Lehre I8): ohne Spalte + flush-ON-CONFLICT-DO-UPDATE-SET UND
-// rowToCall-Hydrierung ginge der Anker beim Restart verloren - und der naechste Flush
-// wuerde ihn ueberschreiben. Genau dann loeste eine Wiederholung nach einem Deploy
-// wieder eine zweite Modellrunde aus (REPLAY-02).
-// Muster test/al-p1-store-fields.test.js (pglite + json in-process, dynamische Imports
-// NACH DATA_DIR-Bindung).
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -35,7 +28,6 @@ async function makePgTestStore() {
   return { store, runner };
 }
 
-// So viele Anker mehr, als der Ringpuffer haelt - der Deckel muss sie herauswerfen.
 const UEBERLAUF = 2;
 
 const newCall = (over = {}) => ({

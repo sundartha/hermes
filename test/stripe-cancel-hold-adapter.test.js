@@ -1,8 +1,3 @@
-// S1-8: stripeBilling.cancelHold gegen ein gemocktes global fetch (kein echter Netz-
-// Call, F.I.R.S.T.). Prueft Pfad/Methode/Header/Body (KEIN Body bei cancel) + Fehlerpfad
-// + Key-Freiheit der Fehlermeldung (Secret im Text -> rot). Datei-lokaler Stub (repo-
-// Konvention "lokale Single-Consumer-Test-Doubles", Muster stripe-setup-checkout.test.js) -
-// config/fetch werden pro Test gespeichert/wiederhergestellt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -11,9 +6,6 @@ import { makeStripeStub } from "./helpers.js";
 
 const SECRET = "sk_test_cancel_leak_probe";
 
-// Stub: jeder Response traegt ok/status (der Adapter parst hier kein json() bei cancelHold).
-// pa20-fix1: geteilte Implementierung (G5) statt lokaler Kopie - makeStripeStub buendelt
-// fetch-Stub + stripeSecretKey/stripeApiBase-Override (Muster wie makeConfigOverrides).
 const withStripeStub = makeStripeStub(config, SECRET);
 
 test("cancelHold: POST /v1/payment_intents/<id>/cancel, Bearer + form-urlencoded, KEIN Body", async () => {

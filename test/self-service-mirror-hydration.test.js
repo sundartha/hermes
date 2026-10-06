@@ -1,16 +1,3 @@
-// Regressionstest fuer den Live-Bug "setTenantStripe: Tenant t_<sub> nicht gefunden":
-// ein per OIDC-Web-Login frisch registrierter Tenant landet in der DB (accounts.
-// upsertOnFirstLogin -> tenant-Zeile 'suspended'), aber NICHT im Boot-hydrierten Store-
-// Spiegel -> jede WRITE-Store-Op auf dem Subscribe-Pfad warf fail-closed -> 502.
-//
-// Modell wie bk5-smoke-e2e (pglite + app.listen(0) + node:http, KEIN Server-Spawn), aber
-// DELIBERATELY OHNE den ops.registerTenant-Vorseed (genau die Zeile, die den Bug in bk5
-// maskiert). Der Tenant entsteht ausschliesslich ueber den ECHTEN Signup-Pfad /auth/dev-
-// login -> mintSession -> upsertOnFirstLogin + ensureTenant (KEIN registerTenant).
-//
-// F.I.R.S.T.: offline (pglite, kein Netz, keine echten Secrets), repeatable (fixe Werte,
-// kein Date.now/Zufall), self-validating (boolesche Asserts), independent (jeder Fall
-// eigenes setup() + finally close()).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -29,20 +16,19 @@ import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.js"
 import { NUMBER_STATUS, TENANT_STATUS, tenantIdForSubject } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
-// ---- Benannte Konstanten (G25, kein Magic-Value) ---------------------------------
-const SECRET = "mirror-hydration-secret-0123456789"; // Session-Cookie-HMAC
-const SUB = "sub-mirror"; // OIDC-Subject
+const SECRET = "mirror-hydration-secret-0123456789";
+const SUB = "sub-mirror";
 const EMAIL = "mirror@kunde.test";
-const TENANT = tenantIdForSubject(SUB); // = t_sub-mirror (EINE Quelle, kein Literal)
+const TENANT = tenantIdForSubject(SUB);
 const CUSTOMER = "cus_mirror";
 const PAYMENT_METHOD = "pm_mirror";
-const SESSION = "cs_mirror"; // Stripe-Checkout-Session-Id
-const PERIOD_END = 1893456000; // Unix-Sek (fix, kein Date.now) = 2030-01-01Z
-const PERIOD_START = 1890864000; // Unix-Sek, Periodenanker der Fake-Session (fix)
+const SESSION = "cs_mirror";
+const PERIOD_END = 1893456000;
+const PERIOD_START = 1890864000;
 const PLAN = "starter";
-const HIGH_CAP = 100; // Caps weit offen: kein Cap-Block im Happy-Funnel
+const HIGH_CAP = 100;
 const SESSION_TTL_S = 3600;
-const RETURN_SUB_OK = "/app?sub=ok"; // Rueckkehr-Ziel bei gebuchtem Abo
+const RETURN_SUB_OK = "/app?sub=ok";
 
 const CONFIG = Object.freeze({
   paymentEnabled: true,
@@ -51,8 +37,6 @@ const CONFIG = Object.freeze({
   stripeBusinessPriceId: "price_business",
 });
 
-// Fake-BillingPort (in-process, KEIN Netz, kein echtes Stripe), Modell wie bk5: liefert
-// IMMER den Customer + ein paymentMethod, sodass die Karte im Rueckkehr-Flow bindet.
 function fakeBilling() {
   return {
     createCustomer: async () => ({ customerId: CUSTOMER }),
@@ -80,14 +64,6 @@ function fakeBilling() {
   };
 }
 
-// Produktions-Provision-Seam 1:1 nachgebaut (server.js triggerTenantProvisioning):
-// ZUERST ensureTenant (zieht den nach upsertOnFirstLogin in der DB aktivierten status in
-// den Spiegel - sonst liest requestNumber noch 'suspended' -> tenant_inactive -> kein
-// Kauf), dann der echte Decision-Core auf demselben Store. Dry-Run: kein queue/drain ->
-// die Nummer bleibt 'requested'. save() persistiert die Mutation.
-// GAP-04: activatePaidTenant wertet die Rueckgabe jetzt aus (provisionCleared) - der
-// Nachbau reicht das Ergebnis von requestNumberForPaidTenant durch (dieselbe Form, die
-// der echte Orchestrator letztlich liefert: {ok:true, ...} bei frischer Anfrage).
 const provisionSeam = (store) => async (tenantId) => {
   await store.ensureTenant(tenantId);
   const r = requestNumberForPaidTenant(store.load(), {
@@ -100,9 +76,6 @@ const provisionSeam = (store) => async (tenantId) => {
   return r.ok ? { ok: true, reason: "queued" } : r;
 };
 
-// Harness: EIN pglite-Store + Identitaets-Schicht + Web-Login-Routen (mit ensureTenant
-// verdrahtet, dev-login an) + Self-Service-Routen auf einer Wegwerf-App. KEIN
-// registerTenant-Vorseed -> der Tenant entsteht erst ueber den echten dev-login-Pfad.
 async function setup() {
   const { store, db, runner } = await makePgTestStore();
   const accounts = makeAccounts(runner);
@@ -120,7 +93,6 @@ async function setup() {
       sessions,
       audit: { record: async () => {} },
       devLoginEnabled: true,
-      // genau die Produktions-Verdrahtung (server.js): store.ensureTenant
       ensureTenant: (tid) => store.ensureTenant(tid),
     }),
   );
@@ -148,7 +120,6 @@ async function setup() {
   };
 }
 
-// node:http-Request, faengt status + body + Location + set-cookie (Modell bk5).
 function request(method, url, { cookie, body } = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -180,8 +151,6 @@ function request(method, url, { cookie, body } = {}) {
   });
 }
 
-// Extrahiert den Sitzungs-Cookie aus dem Set-Cookie der dev-login-Antwort (der Wert ist
-// bereits URL-encoded, wird so unveraendert als Cookie-Header zurueckgereicht).
 function sessionCookieFrom(setCookie) {
   for (const c of setCookie || []) {
     if (c.startsWith(`${SESSION_COOKIE_NAME}=`)) return c.split(";")[0];
@@ -189,9 +158,6 @@ function sessionCookieFrom(setCookie) {
   return null;
 }
 
-// Echter Signup ueber den dev-login-Shim: mintet die Session ueber DIESELBE Quelle wie der
-// WorkOS-Callback (upsertOnFirstLogin + ensureTenant), OHNE registerTenant. Liefert das
-// Session-Cookie.
 async function devLogin(s) {
   const res = await request("POST", `${s.base}/auth/dev-login`, { body: { sub: SUB, email: EMAIL } });
   const cookie = sessionCookieFrom(res.cookies);
@@ -209,14 +175,10 @@ const requestedNumbersFor = (store, tenantId) =>
     .load()
     .numbers.filter((n) => n.tenantId === tenantId && n.status === NUMBER_STATUS.REQUESTED);
 
-// (1) CORE REGRESSION: der frische Signup (kein registerTenant) erreicht setup-checkout
-// mit 200 statt 502; der Spiegel traegt jetzt den Tenant mit dem REALEN suspended-Status.
 test("(1) frischer Signup: setup-checkout -> 200 (kein 502), Spiegel-Tenant ist suspended", async () => {
   const s = await setup();
   try {
     const cookie = await devLogin(s);
-    // Vor-Fix: ensureCustomer -> setTenantStripe wirft (Tenant nicht im Spiegel) ->
-    // asyncBilling -> 502 billing_unavailable.
     const res = await setupCheckout(s.base, cookie, PLAN);
     assert.equal(res.status, 200, "setup-checkout darf nicht mehr 502en (Spiegel hydratisiert)");
     const tenant = mirrorTenant(s.store);
@@ -231,14 +193,10 @@ test("(1) frischer Signup: setup-checkout -> 200 (kein 502), Spiegel-Tenant ist 
   }
 });
 
-// (2) GANZE KETTE: Rueckkehr von Stripe bucht + aktiviert + provisioniert auf dem realen
-// Signup-State (Abo/Plan/KYC am Spiegel, accounts active, GENAU eine Dry-Run-Nummer ->
-// beweist, dass das Provisioning den Mirror-Status-Sync ueberlebt).
 test("(2) ganze Kette: Rueckkehr bucht+aktiviert+provisioniert auf dem realen Signup-State", async () => {
   const s = await setup();
   try {
     const cookie = await devLogin(s);
-    // Karte/Customer ueber den echten setup-checkout-Pfad binden (setzt customerId=CUSTOMER).
     const chk = await setupCheckout(s.base, cookie, PLAN);
     assert.equal(chk.status, 200);
 
@@ -262,14 +220,12 @@ test("(2) ganze Kette: Rueckkehr bucht+aktiviert+provisioniert auf dem realen Si
   }
 });
 
-// (3) IDEMPOTENZ / KEINE FABRIKATION: ein zweiter Login dupliziert den Spiegel-Eintrag
-// nicht; ensureTenant fuer eine unbekannte Id liefert false und fuegt nichts hinzu.
 test("(3) zweiter Login dedupt; ensureTenant(unbekannt) -> false, fabriziert nichts", async () => {
   const s = await setup();
   try {
     await devLogin(s);
     const afterFirst = s.store.load().tenants.length;
-    await devLogin(s); // zweiter Login desselben sub
+    await devLogin(s);
     assert.equal(s.store.load().tenants.length, afterFirst, "kein doppelter Spiegel-Eintrag");
 
     const before = s.store.load().tenants.length;

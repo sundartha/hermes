@@ -1,24 +1,3 @@
-// SEC-P6 (GATE-02) - der Fehlerpfad der Outbound-Gate-Kette.
-//
-// Gemessener Ausgang: 17 von 17 sterbenden Gate-Datenquellen fuehrten zu NULL
-// Wahlversuchen (das Sicherheitsversprechen hielt), aber 14 davon zu GAR KEINER Antwort -
-// Express 4 faengt Promise-Rejections aus async-Handlern nicht, der Request hing bis zum
-// Client-Timeout. Diese Datei pinnt BEIDE Haelften: es wird geantwortet UND es wird nicht
-// gewaehlt.
-//
-// Naht: die ECHTE Gate-Kette (makeOutboundGates) auf der ECHTEN Route (makeCallRoutes),
-// montiert auf eine nackte Express-App - Muster test/el-beende-versuch.test.js#postCancel.
-// Offline, kein Spawn, keine DB, kein Netz nach draussen (P12 F.I.R.S.T.).
-//
-// Env VOR dem ersten config-Import, danach dynamische Importe (Muster
-// test/al-p10b-lookup.test.js): die Route beruehrt ueber consult/gate.js und
-// precall-briefing.js den GLOBALEN config-Snapshot. Ohne dieses Setup entschiede eine
-// lokale .env, ob der Briefing-Zweig ein LLM anspricht (Lehre test-base-env-drift).
-//
-// Testnamen tragen bewusst KEINE Katalog-ID (GAP-/PROMPT-/ABNAHME-) am Namensanfang -
-// sonst landen sie still im Gates- statt im Regressionslauf (package.json
-// config.i18nCatalogPattern, Lehre catalog-id-prefix-misroutes-tests). Praefix ist
-// "SEC-P6-<n>:"; ein Waechter, der nicht im Regressionslauf faehrt, friert nichts ein.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -32,8 +11,6 @@ const HTTP_OK = 200;
 const HTTP_CLIENT_ERROR = 400;
 const HTTP_SERVICE_UNAVAILABLE = 503;
 const HTTP_FORBIDDEN = 403;
-// Marker im geworfenen Fehler. Er darf im Antwort-Body NIRGENDS auftauchen (Regel 4:
-// kein Innenleben an den Client).
 const WURF_MARKER = "interner-datenquellen-defekt";
 
 let makeCallRoutes;
@@ -42,8 +19,6 @@ let GATE_ERROR_GRUND;
 let GATE_ERROR_MESSAGE;
 
 before(async () => {
-  // Die drei Schalter, die den globalen config-Snapshot dieser Route beruehren: das
-  // Pre-Call-Briefing (LLM-Aufruf), der Consult-Kanal und die Metrik-Senke.
   process.env.PRECALL_BRIEFING_ENABLED = "false";
   process.env.ASSISTANT_CONTEXT_ENABLED = "false";
   process.env.IN_CALL_CONSULT_ENABLED = "false";
@@ -56,17 +31,6 @@ before(async () => {
   ));
 });
 
-// ---- Attrappen ------------------------------------------------------------------------
-
-// Attrappe der Ketten-Datenquellen: JEDE Methode, die die Gate-Kette am Store aufruft
-// (grep "store\." in telephony/outbound-gates.js), plus die Nachketten-Methoden, ohne die
-// die Route nach der Kette nicht bis zum Waehlen kaeme.
-//
-// BEWUSST LOKAL statt geteilt: dieselbe Idee steht als defaultStore() bereits in
-// test/outbound-gates-order.test.js und test/p15-gate-denial-language.test.js. Eine
-// gemeinsame Fixtur waere die richtige Aufloesung (G5), schriebe aber zwei Bestandstests
-// der Gate-Kette in einer Sicherheitsphase um - das ist ein eigener Refactor, kein
-// Nebeneffekt dieses Commits.
 function kettenStore(overrides = {}) {
   return {
     tenantLanguage: () => "de",
@@ -97,16 +61,7 @@ function kettenStore(overrides = {}) {
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 350, remainingCents: 650 }),
     reserveExceedsBudget: () => true,
     claimPlatformSpendWarning: () => null,
-    // Nachketten-Methoden der Route (RESTRISIKO A, s. PLAN-SECURITY.md): sie sind KEINE
-    // Gate-Datenquellen und stehen deshalb in keiner Erwartungstabelle unten - ohne sie
-    // erreichte der Gutfall aber nie den Wahlversuch, und die Positiv-Kontrolle waere
-    // wertlos.
     resolveCallLanguage: () => "de",
-    // E3: die Dedup-Entscheidung (activeCallsFor) und ihr Fehlerpfad
-    // (releaseOutboundReserveCents) laufen NACH der vollstaendigen Gate-Kette - wie
-    // createCall selbst sind sie KEINE Gate-Datenquelle (s. NICHT_KETTEN_QUELLEN). Ein Wurf
-    // in diesem Fenster ist Gegenstand von test/openai-s3-place-call-idempotenz.test.js,
-    // nicht dieser Datei.
     activeCallsFor: () => [],
     releaseOutboundReserveCents: () => true,
     createCall: (felder) => ({ id: "call_secp6", ...felder }),
@@ -116,9 +71,6 @@ function kettenStore(overrides = {}) {
   };
 }
 
-// Zaehlt JEDEN Zugriff und laesst GENAU EINE Quelle sterben. Der Zaehler ist die
-// Voraussetzung der Aussage "diese Quelle wurde ueberhaupt gefragt" - ohne ihn saehe
-// "nie gefragt" wie "sauber abgelehnt" aus (Lehre pruefkommando-ohne-positiv-kontrolle).
 function zaehlenderStore(basis, werfendeQuelle = null) {
   const aufrufe = new Map();
   const store = {};
@@ -154,19 +106,12 @@ function testConfig(overrides = {}) {
   });
 }
 
-// Baut Kette + Route ueber DEMSELBEN Store und schickt einen echten HTTP-POST. Liefert
-// Status, Body, die Zahl der Wahlversuche (drei Spione, Summe) und die Aufruf-Zaehler.
 async function postCall({ store, aufrufe, config, audit = () => {} }) {
   let wahlversuche = 0;
   const zaehleWahl = () => {
     wahlversuche += 1;
     return { sid: "sid_secp6" };
   };
-  // T2-08 (T-27): callQuotaDenial kommt aus DERSELBEN makeOutboundGates()-Instanz wie
-  // outboundGates (EINE Quelle, kein zweiter Zaehler) - der Claim-Lock prueft ihn jetzt
-  // zusaetzlich. kettenStore().countOutboundCallsSince liefert 0, testConfig() setzt
-  // grosszuegige Limits - die reale Pruefung lehnt hier nie ab, byte-identisch zum
-  // Bestandsverhalten dieser Datei.
   const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
     store,
     config,
@@ -217,20 +162,10 @@ async function postCall({ store, aufrufe, config, audit = () => {} }) {
   }
 }
 
-// ---- Die drei Konfigurations-Varianten -------------------------------------------------
-//
-// Drei Quellen werden im Gutfall NIE gefragt (die Kette liest sie erst, wenn ein
-// bestimmter Zweig laeuft). Sie brauchen deshalb eine eigene Variante - bewusst
-// hartkodiert und NICHT "automatisch uebersprungen": eine still uebersprungene Quelle
-// waere genau die Luecke, gegen die dieser Test gebaut ist.
 const VARIANTE = Object.freeze({
-  // Alle Gates passieren, es wird gewaehlt.
   STANDARD: "standard",
-  // Kein Admin-Override -> die Abo-Kopplung im allowlistError-Zweig wird gelesen.
   EINGESCHRAENKT: "eingeschraenkt",
-  // Zahlungspflicht an -> das Minuten-Kontingent-Gate ist kein No-op mehr.
   BEZAHLPFLICHTIG: "bezahlpflichtig",
-  // Reserve schlaegt fehl -> Achsen-Klassifizierung + Ablehnungstext werden gelesen.
   RESERVE_SCHEITERT: "reserve_scheitert",
 });
 
@@ -256,8 +191,6 @@ const VARIANTEN = Object.freeze({
   },
 });
 
-// Jede Gate-Datenquelle mit der Variante, in der sie tatsaechlich gelesen wird (am Code
-// gemessen, im Test unten per aufrufe-Zaehler nachgewiesen).
 const KETTEN_QUELLEN = Object.freeze({
   tenantPrivateNumber: VARIANTE.STANDARD,
   load: VARIANTE.STANDARD,
@@ -279,14 +212,9 @@ const KETTEN_QUELLEN = Object.freeze({
   tenantLanguage: VARIANTE.RESERVE_SCHEITERT,
 });
 
-// Die Nachketten-Methoden der Route (RESTRISIKO A) und die Fruehwarnung, die per
-// Owner-Invariante NIE ablehnen darf (eigener Fall unten). Zusammen mit KETTEN_QUELLEN
-// decken sie den Store vollstaendig ab - der Vollstaendigkeits-Test unten haelt das fest.
 const NICHT_KETTEN_QUELLEN = Object.freeze([
   "claimPlatformSpendWarning",
   "resolveCallLanguage",
-  // E3: Dedup-Praedikat + sein Fehler-Freigabeweg - beide NACH der Gate-Kette (s. Kommentar
-  // an kettenStore()).
   "activeCallsFor",
   "releaseOutboundReserveCents",
   "createCall",
@@ -300,8 +228,6 @@ async function postMitWerfenderQuelle(quelle, variante) {
   return postCall({ store, aufrufe, config: testConfig(configOverrides) });
 }
 
-// ---- SEC-P6-1: Positiv-Kontrolle -------------------------------------------------------
-
 test("SEC-P6-1: Kontrolle - saubere Kette waehlt GENAU EINMAL und antwortet 200", async () => {
   const { store, aufrufe } = zaehlenderStore(kettenStore());
   const ergebnis = await postCall({ store, aufrufe, config: testConfig() });
@@ -313,8 +239,6 @@ test("SEC-P6-1: Kontrolle - saubere Kette waehlt GENAU EINMAL und antwortet 200"
     "ohne diese Kontrolle waere 'Spion bleibt bei 0' unten wertlos",
   );
 });
-
-// ---- SEC-P6-2: der Waechter ------------------------------------------------------------
 
 test("SEC-P6-2: JEDE werfende Datenquelle der Kette -> Status >= 400 UND null Wahlversuche", async () => {
   for (const [quelle, variante] of Object.entries(KETTEN_QUELLEN)) {
@@ -343,12 +267,7 @@ test("SEC-P6-2b: die Erwartungstabelle deckt den Store vollstaendig ab", () => {
   );
 });
 
-// ---- SEC-P6-3: der Abbruch-Riegel ------------------------------------------------------
-
 test("SEC-P6-3: ein geworfenes Gate BRICHT AB - spaetere Gates laufen nicht", async () => {
-  // kycReached stirbt im Gate 'kyc' - lange vor 'reserve_budget'. Wuerde der Fehlerpfad
-  // die Kette weiterlaufen lassen (continue statt return), wuerde Geld reserviert und
-  // am Ende gewaehlt: aus "Gate kaputt" wuerde "es wird gewaehlt" (Absolute Regel 1).
   const { aufrufe, wahlversuche, status } = await postMitWerfenderQuelle(
     "kycReached",
     VARIANTE.STANDARD,
@@ -358,12 +277,7 @@ test("SEC-P6-3: ein geworfenes Gate BRICHT AB - spaetere Gates laufen nicht", as
   assert.equal(wahlversuche, 0);
 });
 
-// ---- SEC-P6-4/5: die Zustellung der Ablehnung ------------------------------------------
-
 test("SEC-P6-4: stirbt die Metrik-Dimension (tenantGeo) mit, wird trotzdem geantwortet", async () => {
-  // Zweiter Fehlermodus, eigener Fall: tenantGeo ist Gate-Datenquelle UND Quelle der
-  // PII-freien Metrik-Dimension. Ohne die fail-safe Beobachtung wirft sie in der
-  // Ablehnungs-Senke ein zweites Mal - AUSSERHALB jedes Gates, also wieder ohne Antwort.
   const { status, body, wahlversuche } = await postMitWerfenderQuelle(
     "tenantGeo",
     VARIANTE.STANDARD,
@@ -388,8 +302,6 @@ test("SEC-P6-5: wirft audit() selbst, wird die Ablehnung trotzdem zugestellt", a
   assert.equal(wahlversuche, 0);
 });
 
-// ---- SEC-P6-6: Auditierbarkeit ohne Innenleben -----------------------------------------
-
 test("SEC-P6-6: der Fehlerpfad ist als gate_error auditiert und nennt kein Innenleben", async () => {
   const zeilen = [];
   const { store, aufrufe } = zaehlenderStore(kettenStore(), "budgetExceeded");
@@ -408,13 +320,7 @@ test("SEC-P6-6: der Fehlerpfad ist als gate_error auditiert und nennt kein Innen
   assert.ok(!antwort.includes("budgetExceeded"), "die Antwort traegt einen internen Namen");
 });
 
-// ---- Die Owner-Invariante der Fruehwarnung ---------------------------------------------
-
 test("SEC-P6-6b: eine sterbende Fruehwarnung lehnt NICHT ab (eigener try/catch bleibt)", async () => {
-  // claimPlatformSpendWarning haengt in einem EIGENEN try/catch (SAFETY-KERN,
-  // telephony/outbound-gates.js): der Call ist an dieser Stelle bereits reserviert, ein
-  // Throw duerfte daraus keine Ablehnung machen. Der neue generische Fang darf diese
-  // Invariante nicht kassieren.
   const { status, wahlversuche } = await postMitWerfenderQuelle(
     "claimPlatformSpendWarning",
     VARIANTE.STANDARD,

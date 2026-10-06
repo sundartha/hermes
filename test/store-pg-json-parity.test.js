@@ -1,17 +1,3 @@
-// P2 (C2, S1-3): pg/json-Paritaet fuer objectiveAchieved (Boolean-Serialisierungs-Drift).
-// src/store/pg.js serialisiert objectiveAchieved (Boolean|String|null) beim Flush als
-// TEXT (serializeObjective), las aber bis zu diesem Fix OHNE Rueck-Coercion
-// (rowToCall) - ein Boolean wurde nach jedem pg-Neustart zur STRING. json speichert
-// nativ (kein Drift) -> der Bug war im lokalen json-Dev strukturell unsichtbar. Dieser
-// table-driven Rundlauf laeuft gegen BEIDE Backends, damit ein kuenftiger Typ-Drift
-// laut wird statt still zu bleiben (Meta-Lehre, PLAN-FRAGILITY-REMEDIATION.md #2).
-//
-// Erweitern bei jeder neuen pg-Spalte mit nicht-trivialer Typabbildung (analog
-// config-money-manifest.test.js): OBJECTIVE_ACHIEVED_CASES um einen Eintrag ergaenzen.
-//
-// DATA_DIR + config werden VOR allen store-Imports gebunden (json.FILE haengt an
-// config.dataDir): darum laeuft die Verdrahtung ueber dynamische Imports in before()
-// (Muster: test/assistant-context-persist-pg.test.js).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -30,8 +16,6 @@ before(async () => {
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
 });
 
-// pglite-Store hinter dem Runner-Vertrag (wie pg-helpers.js, hier inline wegen der
-// DATA_DIR-Bindungsreihenfolge). Liefert {store, runner} fuer den Reopen.
 async function makePgTestStore() {
   const db = new PGlite();
   const runner = {
@@ -50,9 +34,6 @@ const newCall = (over = {}) => ({
   ...over,
 });
 
-// Ein voller pg-Rundlauf fuer EINEN objectiveAchieved-Wert: create -> mutate-then-save
-// -> echter Reopen (frischer makePgStore auf derselben pglite-Instanz) -> Rueckgabe des
-// hydrierten Werts. EINE Stelle fuer den Rundlauf (G5), von zwei Tests genutzt.
 async function pgObjectiveRoundtrip(value) {
   const { store, runner } = await makePgTestStore();
   const created = store.createCall(newCall());
@@ -63,10 +44,6 @@ async function pgObjectiveRoundtrip(value) {
   return reopened.getCall(created.id).objectiveAchieved;
 }
 
-// Ein voller json-Rundlauf fuer EINEN objectiveAchieved-Wert: create -> mutate-then-save
-// -> echter Disk-Read (JSON.parse(fs.readFileSync)). EINE Stelle (G5), von zwei Tests
-// genutzt. json ist ein Modul-Singleton (state lebt ueber die ganze Testdatei) - jeder
-// Aufruf erzeugt einen frischen Call (eigene id), keine Kollision zwischen Tests.
 function jsonObjectiveRoundtrip(value) {
   const created = jsonStore.createCall(newCall());
   jsonStore.getCall(created.id).objectiveAchieved = value;
@@ -75,11 +52,6 @@ function jsonObjectiveRoundtrip(value) {
   return onDisk.calls.find((c) => c.id === created.id).objectiveAchieved;
 }
 
-// objectiveAchieved-Werte, die claude.js fachlich setzt (Boolean true/false, der String
-// "unclear" bei Mehrdeutigkeit, null wenn noch offen). Der Literal-String "true"/"false"
-// ist NIE ein Fachwert (nur eine Serialisierungsform) - siehe deserializeObjective-Kommentar
-// in pg.js. typeof null === "object": assert.equal(got, value) mit value=null ist fuer den
-// null-Fall trivial wahr; die typeof-Assertion ist dort redundant, aber harmlos.
 const OBJECTIVE_ACHIEVED_CASES = [
   ["true", true],
   ["false", false],
@@ -101,22 +73,12 @@ for (const [label, value] of OBJECTIVE_ACHIEVED_CASES) {
   });
 
   test(`objectiveAchieved=${label}: pg-Ergebnis == json-Ergebnis (Paritaet)`, async () => {
-    // Waere vor dem S1-3-Fix im pg-Zweig rot gewesen: pg lieferte "true"/"false"-Strings,
-    // json lieferte Booleans -> deepStrictEqual haette den Typ-Drift aufgedeckt.
     const pgResult = await pgObjectiveRoundtrip(value);
     const jsonResult = jsonObjectiveRoundtrip(value);
     assert.deepStrictEqual(pgResult, jsonResult);
   });
 }
 
-// ---- Thema A+B (2026-08-19): die drei neuen Call-Spalten ueberleben BEIDE Backends ----
-// Review-Befund R3: jedes bisherige additiv-nullable Call-Feld hat einen Persistenz-
-// Test; opening_line/opening_line_sha256/lookup_log bekamen keinen. Der Rundlauf hier
-// prueft je Backend: create (openingLine via createCall, Hash im Store berechnet) ->
-// lookupLog via recordCallLookup/finishCallLookup -> echter Reopen bzw. Disk-Read ->
-// Werte identisch. Ohne die pg-Zeilen (Spalte/INSERT/UPDATE-SET/rowToCall) spraeche der
-// Boot-Re-Arm eines aktiven EL-Calls den Rueckfall statt der festgelegten Zeile, und
-// der Recherche-Deckel zaehlte nach jedem Restart von vorn.
 const SHA256_HEX_LAENGE = 64;
 const FIXTURE_FAKTEN = 2;
 const OPENING_LINE_FIXTURE = "Ich rufe an, um einen Termin zur Bremsenprüfung zu vereinbaren.";
@@ -166,7 +128,6 @@ test("openingLine/Hash/lookupLog: pg-Roundtrip erhaelt alle drei (inkl. Umlaute)
 test("openingLine/Hash/lookupLog: pg-Ergebnis == json-Ergebnis (Paritaet)", async () => {
   const pgResult = await pgOpeningLookupRoundtrip();
   const jsonResult = jsonOpeningLookupRoundtrip();
-  // askedAt entsteht je Lauf neu - fuer die Paritaet zaehlt die FORM, nicht die Uhrzeit.
   for (const seite of [pgResult, jsonResult]) {
     assert.ok(typeof seite.lookupLog[0].askedAt === "string" && seite.lookupLog[0].askedAt);
     delete seite.lookupLog[0].askedAt;
@@ -174,11 +135,6 @@ test("openingLine/Hash/lookupLog: pg-Ergebnis == json-Ergebnis (Paritaet)", asyn
   assert.deepStrictEqual(pgResult, jsonResult);
 });
 
-// ---- KV2-2: cost_profile (das an der Engine-Weiche gesetzte Kostenprofil) -------------
-// Neuer Spaltentyp (additiv nullable, Muster sipCallId): create -> recordCostProfile ->
-// save -> echter Reopen/Disk-Read -> Wert unveraendert. Eine Altzeile ohne das Feld
-// hydriert auf null, nie auf undefined (4.6: das ist das Legacy-Signal fuer "vor der
-// Kette entstanden").
 const COST_PROFILE_FIXTURE = "el_convai_sip";
 
 async function pgCostProfileRoundtrip() {
@@ -215,9 +171,6 @@ test("costProfile: eine Altzeile ohne das Feld hydriert auf null (BEIDE Backends
   assert.equal(jsonStore.getCall(jsonCreated.id).costProfile, null, "json: nie gesetzt -> null");
 });
 
-// ---- KV2-3: call_cost_evidence (das Kosten-Buch) --------------------------------------
-// Voller Rundlauf ueber ALLE Felder inkl. detail und einem Nicht-Default-versuche-Wert -
-// create -> recordCallCostEvidence -> save -> echter Reopen/Disk-Read -> callCostEvidence.
 const EVIDENCE_FIXTURE = Object.freeze({
   traeger: "ai_token",
   reife: "vorlaeufig",
@@ -229,8 +182,6 @@ const EVIDENCE_FIXTURE = Object.freeze({
   gemessenAt: "2026-08-31T10:00:00.000Z",
   abstandZumGespraechsendeS: 4,
   detail: { llm_price: 0.05, tier: "starter" },
-  // KV2-4: das Nicht-Default-Feld mitfuehren - ein Roundtrip, der nur den Default TRUE
-  // prueft, wuerde eine fehlende Spalte im Flush nicht bemerken.
   nachreifbar: false,
 });
 
@@ -250,8 +201,6 @@ function jsonCostEvidenceRoundtrip() {
   return jsonStore.callCostEvidence(created.id);
 }
 
-// Entfernt die lauf-eigene id (Muster askedAt oben), damit der Shape-Vergleich nicht an
-// zwei unterschiedlich generierten IDs scheitert.
 function ohneId(zeilen) {
   return zeilen.map(({ id: _id, ...rest }) => rest);
 }
@@ -283,9 +232,6 @@ test("callCostEvidence: json-Roundtrip erhaelt die Zeile (Disk)", () => {
 test("callCostEvidence: pg-Ergebnis == json-Ergebnis (Shape-Paritaet)", async () => {
   const pgResult = ohneId(await pgCostEvidenceRoundtrip());
   const jsonResult = ohneId(jsonCostEvidenceRoundtrip());
-  // tenantId/callId unterscheiden sich (unabhaengige createCall-Aufrufe je Backend) -
-  // aus dem Vergleich genommen, der Rest (Typabbildung BIGINT/INT/JSONB/NULL) muss
-  // identisch sein.
   for (const seite of [pgResult, jsonResult]) {
     delete seite[0].tenantId;
     delete seite[0].callId;

@@ -1,8 +1,3 @@
-// P3b: pg-Store-Backend gegen pglite (Postgres-in-WASM, offline). Prueft die
-// 24 Store-Funktionen auf Shape-/Verhaltens-Parity zum json-Backend UND den
-// mutate-then-save()-Vertrag (getCall-Referenz mutieren + save -> persistiert),
-// jeweils per Re-Hydrierung aus derselben DB (zweiter makePgStore-Aufbau auf
-// derselben pglite-Instanz). pglite = kein Netz, keine externe DB (F.I.R.S.T.).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -29,8 +24,6 @@ import {
 import { makePgTestStore } from "./pg-helpers.js";
 import { PRICES, tokensOf } from "./_prices.js";
 
-// Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (re-hydriert
-// den Spiegel aus der DB) - so wird Persistenz statt nur In-Memory geprueft.
 async function reopen(db) {
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
@@ -43,28 +36,24 @@ async function reopen(db) {
 test("frischer pg-Zustand == frischer json-Zustand (Defaults)", async () => {
   const { store } = await makePgTestStore();
   const s = store.load();
-  // settings/calendar sind seit I2 Maps tenantId -> Bucket; der frische Zustand
-  // traegt den Owner-Bucket (byte-identisch zur gemeinsamen Quelle defaults.js).
   assert.deepEqual(s.settings[BOOTSTRAP_TENANT_ID], defaultSettings());
   assert.equal(s.calls.length, 0);
   assert.equal(s.actionItems.length, 0);
   assert.equal(s.notifications.length, 0);
   assert.deepEqual(s.profiles, {});
-  // usage ist seit P4 eine Map tenantId -> Bucket; der frische Zustand traegt den Owner-Bucket.
   assert.deepEqual(s.usage[BOOTSTRAP_TENANT_ID], {
     inputTokens: 0,
     outputTokens: 0,
     costCents: 0,
     costMicroCentsRem: 0,
-    costCorrectionMicroCentsRem: 0, // LCT P4: neues emptyUsage()-Feld
-    ttsCharacters: 0, // KE-P6: neues emptyUsage()-Feld
+    costCorrectionMicroCentsRem: 0,
+    ttsCharacters: 0,
     calls: 0,
     spendMonthKey: null,
     spendMonthCostCents: 0,
-    budgetPeriodKey: null, // GAP-01: neues emptyUsage()-Feld
-    budgetPeriodBaselineCents: 0, // GAP-01: neues emptyUsage()-Feld
+    budgetPeriodKey: null,
+    budgetPeriodBaselineCents: 0,
   });
-  // Demo-Kalender identisch zur gemeinsamen Quelle (defaults.js).
   assert.deepEqual(store.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());
 });
 
@@ -162,11 +151,11 @@ test("markAnswered + endCallRecord: Statusuebergaenge + Idempotenz", async () =>
   const call = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   assert.equal(store.markAnswered(call.id).answeredAt !== null, true);
   const firstAnswered = store.getCall(call.id).answeredAt;
-  store.markAnswered(call.id); // zweiter Aufruf aendert answeredAt nicht
+  store.markAnswered(call.id);
   assert.equal(store.getCall(call.id).answeredAt, firstAnswered);
   store.endCallRecord(call.id, "completed");
   assert.equal(store.getCall(call.id).status, "completed");
-  store.endCallRecord(call.id, "failed"); // nur aus active -> kein Wechsel mehr
+  store.endCallRecord(call.id, "failed");
   assert.equal(store.getCall(call.id).status, "completed");
   await store.save();
   const reopened = await reopen(db);
@@ -194,7 +183,7 @@ test("trackUsage Kostenformel + budgetExceeded-Schwelle", async () => {
   assert.equal(usage.costCents, 558);
   assert.equal(usage.costMicroCentsRem, 0);
   assert.equal(store.budgetExceeded(BOOTSTRAP_TENANT_ID, PRICES), false);
-  store.trackUsage(BOOTSTRAP_TENANT_ID, tokensOf(0, 2_000_000), PRICES); // schiebt ueber 8 EUR
+  store.trackUsage(BOOTSTRAP_TENANT_ID, tokensOf(0, 2_000_000), PRICES);
   assert.equal(store.budgetExceeded(BOOTSTRAP_TENANT_ID, PRICES), true);
   await store.save();
   const reopened = await reopen(db);
@@ -219,8 +208,6 @@ test("getCalendar sortiert + addCalendarEvent + findConflict (tenantId-Signatur,
     null,
   );
   await store.save();
-  // Round-Trip durch flush/hydrate: belegt, dass ops.calendarFor ueber den pg-Pfad
-  // erreichbar ist (kein undefined-Drift, R6-pg) - der Owner-Bucket-Termin ueberlebt.
   const reopened = await reopen(db);
   assert.ok(
     reopened.findConflict(BOOTSTRAP_TENANT_ID, "2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"),
@@ -247,13 +234,10 @@ test("updateSettings Whitelist (unbekannte Keys/Typen ignoriert) + persistiert (
     allowCalendar: "kein-bool",
   });
   assert.deepEqual(changed.sort(), ["agentName", "allowBooking"]);
-  // settings ist seit I2 eine Map tenantId -> Bucket; Laufzeit liest den Owner-Bucket.
   assert.equal(store.load().settings[BOOTSTRAP_TENANT_ID].agentName, "Neu");
   assert.equal(store.load().settings[BOOTSTRAP_TENANT_ID].allowBooking, false);
   assert.equal("fremd" in store.load().settings[BOOTSTRAP_TENANT_ID], false);
   await store.save();
-  // Round-Trip durch flush/hydrate: belegt, dass ops.settingsFor ueber den pg-Pfad
-  // erreichbar ist (kein undefined-Drift, R6-pg) - der Owner-Bucket ueberlebt.
   const reopened = await reopen(db);
   assert.equal(reopened.load().settings[BOOTSTRAP_TENANT_ID].agentName, "Neu");
   assert.equal(reopened.load().settings[BOOTSTRAP_TENANT_ID].allowBooking, false);
@@ -261,7 +245,6 @@ test("updateSettings Whitelist (unbekannte Keys/Typen ignoriert) + persistiert (
 
 test("Profile: resolveProfile Owner/Default + setProfile/deleteProfile/listProfiles", async () => {
   const { store, db } = await makePgTestStore();
-  // Phase S: BOOTSTRAP -> Owner (permissiv), unbekannte tenantId -> Default (restriktiv)
   assert.equal(store.resolveProfile(BOOTSTRAP_TENANT_ID).allowCalendar, true);
   assert.equal(store.resolveProfile("unbekannt@x").allowCalendar, false);
   store.setProfile("a@x", { unrestricted: true, maxCallsPerHour: 6, fremd: 1 });
@@ -284,7 +267,6 @@ test("pruneOldData: Keep-Praedikate (aktiv/offen bleiben, alt+beendet weg)", asy
   const active = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   const doneOld = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   store.endCallRecord(doneOld.id, "completed");
-  // Alters-Stempel direkt im Spiegel setzen (wie der Retention-Test alte Daten seedet)
   store.getCall(doneOld.id).endedAt = old;
   const { item: openItem } = store.addActionItem(doneOld.id, "offen");
   const { item: doneItem } = store.addActionItem(doneOld.id, "erledigt");
@@ -315,9 +297,6 @@ test("pruneOldData: Keep-Praedikate (aktiv/offen bleiben, alt+beendet weg)", asy
 });
 
 test("pruneOldData() ohne Argument nutzt config.privacy.retentionDays (Produktions-Caller server.js:583)", async () => {
-  // server.js:583 ruft store.pruneOldData() OHNE Argument. Der Default (=
-  // config.privacy.retentionDays) MUSS auch unter pg greifen, sonst ist die DSGVO-
-  // Retention still abgeschaltet. Default hier deterministisch auf 30 Tage.
   const { store } = await makePgTestStore();
   config.privacy.retentionDays = 30;
   const old = new Date(Date.now() - 40 * 24 * 3600 * 1000).toISOString();
@@ -328,7 +307,7 @@ test("pruneOldData() ohne Argument nutzt config.privacy.retentionDays (Produktio
   store.endCallRecord(freshDone.id, "completed");
   await store.save();
 
-  const removed = store.pruneOldData(); // KEIN Argument = Produktionspfad
+  const removed = store.pruneOldData();
   assert.equal(removed.calls, 1, "alter beendeter Call wird ueber den Default-Pfad geprunt");
   const ids = store.load().calls.map((c) => c.id);
   assert.ok(!ids.includes(doneOld.id), "alter beendeter Call weg");
@@ -339,13 +318,10 @@ test("mutate-then-save()-Vertrag: getCall-Referenz mutieren + save persistiert",
   const { store, db } = await makePgTestStore();
   const call = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   await store.save();
-  // Genau die Bestands-Muster: server.js setzt twilioSid, claude.js summary/objectiveAchieved
   const ref = store.getCall(call.id);
   ref.twilioSid = "CA-test-sid";
   ref.summary = "Gespraech zusammengefasst";
   ref.objectiveAchieved = true;
-  // CDF1 (Spec d/pglite): Fehlergrund am Spiegel setzen -> belegt Flush-Spalte (INSERT +
-  // ON CONFLICT DO UPDATE SET) + rowToCall-Hydrierung der neuen Spalte nach reopen.
   ref.failureReason = "no-answer";
   store.save();
   await store.save();
@@ -355,7 +331,6 @@ test("mutate-then-save()-Vertrag: getCall-Referenz mutieren + save persistiert",
   assert.equal(got.summary, "Gespraech zusammengefasst");
   assert.equal(got.objectiveAchieved, true);
   assert.equal(got.failureReason, "no-answer");
-  // getCall findet auch per twilioSid (wie json)
   assert.equal(reopened.getCall("CA-test-sid").id, call.id);
 });
 
@@ -367,9 +342,6 @@ test("Re-init ist idempotent: keine Default-Duplikate (Kalender bleibt 3)", asyn
 });
 
 test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null", async () => {
-  // number direkt in die DB seeden (deterministisch, ohne Config-Kopplung fuer die
-  // Owner-Nummer: der Contract-Test bekommt config nicht ueber BASE_ENV), dann
-  // reopen -> Hydrierung+Lookup wie im Inbound-Pfad.
   const { db } = await makePgTestStore();
   const seededE164 = "+15005550006";
   await db.query(
@@ -386,13 +358,9 @@ test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null"
 });
 
 test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-Hydrierung; nur active routet", async () => {
-  // Kein config-Auto-Seed mehr (Owner-Nummer kommt ueber seedBootstrapNumber): der
-  // frische pg-Store traegt nur die hier selbst gesetzten Nummern.
   {
     const { store, db } = await makePgTestStore();
     const s = store.load();
-    // requested (e164=null, kein Kauf) + active (mit providerNumberId + paymentIntentId,
-    // Payment-Pfad P6b1) in den Spiegel.
     s.numbers.push({
       id: "num_req",
       e164: null,
@@ -424,7 +392,6 @@ test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-
     assert.equal(act.paymentIntentId, "pi_test_1", "payment_intent_id ueberlebt Flush+Hydrate");
     assert.equal(r1.findTenantByNumber("+4915700000001"), BOOTSTRAP_TENANT_ID, "active routet");
 
-    // Suspend -> Flush schreibt status -> Re-Hydrierung -> NICHT mehr routbar (Gate).
     transitionNumber(r1.load(), "num_act", NUMBER_STATUS.SUSPENDED);
     await r1.save();
     const r2 = await reopen(db);
@@ -449,7 +416,6 @@ test("numberProvisionSkipReason/-At ueberleben store.save() + Re-Hydrierung (Fix
   assert.equal(r.reason, GLOBAL_CAP_REASON);
   await store.save();
 
-  // Frischer Store auf DERSELBEN DB -> hydriert aus der DB (kein Spiegel-Reuse).
   const store2 = makePgStore(runner);
   await store2.init();
   const tenant = store2.load().tenants.find((t) => t.id === "t_cap_skip");
@@ -464,8 +430,6 @@ test("numberProvisionSkipReason/-At ueberleben store.save() + Re-Hydrierung (Fix
 test("provisioning_job ueberlebt Flush+Re-Hydrierung; markProvisioningJob -> done persistiert (P6b2)", async () => {
   const { store, db } = await makePgTestStore();
   const s = store.load();
-  // FK-Voraussetzung: number_id verweist auf number(id) -> erst die Number in den
-  // Spiegel (Owner-Scope), dann den Job. status='requested' (kein Kauf), e164=null.
   s.numbers.push({
     id: "num_job1",
     e164: null,
@@ -491,7 +455,6 @@ test("provisioning_job ueberlebt Flush+Re-Hydrierung; markProvisioningJob -> don
   assert.equal(persisted.attempts, 0);
   assert.equal(persisted.lastError, null, "ohne Fehler -> null (kein undefined-Drift)");
 
-  // Worker-Endzustand: done + attempts hochgezaehlt -> Flush -> Re-Hydrierung.
   markProvisioningJob(r1.load(), job.id, PROVISIONING_JOB_STATUS.DONE);
   await r1.save();
   const r2 = await reopen(db);
@@ -507,17 +470,14 @@ test("purgeTranscript loescht NUR die Segmente des Ziel-Calls; Summary + anderer
   store.addTranscript(c1.id, "agent", "Hallo");
   store.addTranscript(c1.id, "caller", "Geheim");
   store.addTranscript(c2.id, "caller", "Bleibt");
-  // Summary wie der Produktionspfad (claude.js) setzt + persistiert.
   store.getCall(c1.id).summary = "Zusammenfassung 1";
   store.getCall(c1.id).objectiveAchieved = true;
   await store.save();
 
-  // Beide Calls haben vor dem Purge persistierte Segmente.
   const r1 = await reopen(db);
   assert.equal(r1.getCall(c1.id).transcript.length, 2);
   assert.equal(r1.getCall(c2.id).transcript.length, 1);
 
-  // Purge auf c1 -> Reconcile-on-empty loescht NUR c1-Segmente beim naechsten Flush.
   r1.purgeTranscript(c1.id);
   await r1.save();
   const r2 = await reopen(db);
@@ -556,7 +516,6 @@ test("tenant_budget ueberlebt Flush+Re-Hydrierung (Money als Ganzzahl Cents, P6b
   assert.equal(budget.budgetCents, 400);
   assert.equal(budget.hardCapCents, 500);
   assert.equal(Number.isInteger(budget.hardCapCents), true, "Cents Ganzzahl at rest");
-  // Upsert: zweiter setTenantBudget aktualisiert dieselbe Zeile.
   r1.setTenantBudget(BOOTSTRAP_TENANT_ID, { budgetCents: 700, hardCapCents: 900 });
   await r1.save();
   const r2 = await reopen(db);
@@ -570,8 +529,6 @@ test("usage_event ueberlebt Flush+Re-Hydrierung; stripe_meter_sent-Flip persisti
   const ev = store.recordUsageEvent({
     tenantId: BOOTSTRAP_TENANT_ID,
     callId: null,
-    // P5/GAP-06: der number_month-Beleg traegt die Nummer - der Idempotenz-Anker der
-    // Monatsmiete muss den Flush ueberleben, sonst bucht der naechste Sweep neu.
     numberId: "num_pg",
     kind: USAGE_EVENT_KIND.NUMBER_MONTH,
     quantity: 1,
@@ -601,7 +558,6 @@ test("usage_event ueberlebt Flush+Re-Hydrierung; stripe_meter_sent-Flip persisti
     "Event ohne Nummer -> null (kein undefined-Drift)",
   );
 
-  // Flush-Flip: markMeterEventsSent + save -> Re-Hydrierung sieht stripe_meter_sent=true.
   const n = r1.markMeterEventsSent([ev.id, voiceEv.id]);
   assert.equal(n, 2, "beide Events geflippt");
   await r1.save();
@@ -616,7 +572,7 @@ test("usage_event ueberlebt Flush+Re-Hydrierung; stripe_meter_sent-Flip persisti
 
 test("KV-P6-5 (pg): cost_micro_cents ueberlebt Flush+Re-Hydrierung; NULL bei fehlendem Wert; BIGINT traegt einen Betrag jenseits des INT4-Bereichs", async () => {
   const { store, db } = await makePgTestStore();
-  const GROSS_BETRAG = 3_000_000_000; // > 2^31 (INT4-Grenze ~2,147 Mrd.) - der Grund fuer BIGINT
+  const GROSS_BETRAG = 3_000_000_000;
   const mitMicro = store.recordUsageEvent({
     tenantId: BOOTSTRAP_TENANT_ID,
     kind: USAGE_EVENT_KIND.AI_TOKEN,
@@ -629,7 +585,6 @@ test("KV-P6-5 (pg): cost_micro_cents ueberlebt Flush+Re-Hydrierung; NULL bei feh
     kind: USAGE_EVENT_KIND.VOICE_MINUTE,
     quantity: 1,
     costCents: 10,
-    // costMicroCents bewusst weggelassen
   });
   await store.save();
 
@@ -640,15 +595,8 @@ test("KV-P6-5 (pg): cost_micro_cents ueberlebt Flush+Re-Hydrierung; NULL bei feh
   assert.equal(persistedOhne.costMicroCents, null, "fehlender Wert bleibt NULL, nie 0 (additiv-nullable)");
 });
 
-// ---- ensureTenant: Signup-Spiegel-Nachzug (Nach-Boot, idempotent, fail-safe) ----
-// Der OIDC-Web-Login legt die tenant-Zeile NACH dem Boot in der DB an; der Spiegel wird
-// sonst nur bei init() hydriert. ensureTenant zieht GENAU diesen Tenant nach - mit dem
-// REALEN DB-status (Regel 1: nie ein hartcodiertes active).
-
 test("ensureTenant: abwesender DB-Tenant wird mit REALEM (suspended) Status nachgezogen", async () => {
   const { store, db } = await makePgTestStore();
-  // Web-Login-Pfad simuliert: die tenant-Zeile existiert in der DB (suspended), aber NICHT
-  // im Boot-hydrierten Spiegel (kein registerTenant). Direktes INSERT (tenant hat keine RLS).
   await db.query(`INSERT INTO tenant (id, status, idp_subject) VALUES ($1, 'suspended', $2)`, [
     "t_signup",
     "sub-signup",
@@ -673,13 +621,12 @@ test("ensureTenant: abwesender DB-Tenant wird mit REALEM (suspended) Status nach
 test("ensureTenant: vorhandener Spiegel-Tenant -> NUR status-Refresh (suspended -> active), Felder bleiben", async () => {
   const { store, db } = await makePgTestStore();
   await db.query(`INSERT INTO tenant (id, status) VALUES ($1, 'suspended')`, ["t_refresh"]);
-  await store.ensureTenant("t_refresh"); // in den Spiegel (suspended)
-  store.setTenantStripe("t_refresh", { customerId: "cus_keep" }); // Spiegel-eigenes Feld
+  await store.ensureTenant("t_refresh");
+  store.setTenantStripe("t_refresh", { customerId: "cus_keep" });
   assert.equal(
     store.load().tenants.find((t) => t.id === "t_refresh").status,
     TENANT_STATUS.SUSPENDED,
   );
-  // DB-Status wird aktiv (wie accounts.setStatus es taete); ensureTenant zieht NUR ihn nach.
   await db.query(`UPDATE tenant SET status = 'active' WHERE id = $1`, ["t_refresh"]);
   const ok = await store.ensureTenant("t_refresh");
   assert.equal(ok, true);
@@ -700,21 +647,14 @@ test("ensureTenant: unbekannte Id -> false, fabriziert keinen Tenant", async () 
   assert.equal(store.load().tenants.length, before, "kein Tenant aus dem Nichts");
 });
 
-// S1-12: calendar_event.id ist GLOBALER PK mit festen Demo-IDs. Ein zweiter Tenant sieht unter
-// seiner RLS-GUC die Owner-Zeilen NICHT (tenant_isolation) -> sein SELECT-Existenz-Guard greift
-// nicht, die Demo-Schleife laeuft und insert-t DIESELBEN globalen IDs. Ohne ON CONFLICT (id)
-// DO NOTHING wirft der Insert eine PK-Kollision (verifiziert). Deterministische Single-Connection-
-// Reproduktion der "zwei parallel bootenden Prozesse"-Race.
 test("S1-12: zweiter Tenant-Seed kollidiert nicht am globalen calendar_event-PK (ON CONFLICT DO NOTHING)", async () => {
-  const { db } = await makePgTestStore(); // init(): GUC=BOOTSTRAP, 3 Demo-Events (ev1/ev2/ev3)
+  const { db } = await makePgTestStore();
   const TENANT_B = "t_seed_collision";
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [TENANT_B]);
   await assert.doesNotReject(
     seedDefaults(db, TENANT_B),
     "zweiter Tenant-Seed darf am globalen calendar_event-PK NICHT kollidieren",
   );
-  // Idempotenz-Gegentest: nochmal (TENANT_B hat weiterhin 0 eigene calendar_event-Zeilen, alle
-  // kollidierten -> Loop laeuft erneut, ON CONFLICT no-op-t erneut).
   await assert.doesNotReject(seedDefaults(db, TENANT_B), "wiederholter Seed bleibt kollisionsfrei");
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
   const { rows } = await db.query(`SELECT count(*)::int AS n FROM calendar_event`);

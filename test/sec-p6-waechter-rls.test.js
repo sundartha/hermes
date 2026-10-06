@@ -1,25 +1,8 @@
-// SEC-P6, Waechter 1: das RLS-Inventar.
-//
-// Zusage: JEDE Tabelle mit Spalte tenant_id traegt Row-Level-Security als FORCE plus
-// mindestens eine Policy - ODER sie steht mit Begruendung in der hartkodierten
-// Ausnahmeliste unten. Der Waechter friert den heute erreichten Stand ein: eine neue
-// Tabelle mit tenant_id, die niemand mit einer Policy versieht, macht rot, statt still
-// jedem Tenant die Zeilen aller anderen zu zeigen.
-//
-// Naht wie test/rls-with-check.test.js: frische pglite-Instanz, Schema als Superuser
-// angewendet, danach reine Katalog-Abfragen (pg_class/pg_policies). Offline, kein Spawn,
-// kein Netz.
-//
-// Testnamen tragen bewusst KEINE Katalog-ID am Namensanfang (Lehre
-// catalog-id-prefix-misroutes-tests) - ein Waechter, der nicht im Regressionslauf faehrt,
-// friert nichts ein.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { applySchema } from "../src/db/migrate.js";
 
-// Die drei Tabellen, die tenant_id tragen und trotzdem KEINE Policy haben duerfen. Jede
-// mit ihrem Grund - eine Liste ohne Begruendung waere eine Blankovollmacht.
 const RLS_AUSNAHMEN = Object.freeze({
   account: "identity(sub)->tenant-Resolver, laeuft VOR app.current_tenant (schema.sql)",
   session: "Sitzungs-Aufloesung, laeuft VOR app.current_tenant",
@@ -28,8 +11,6 @@ const RLS_AUSNAHMEN = Object.freeze({
     "portalStore/Kunden-Reads exponiert",
 });
 
-// Jede public-Tabelle mit Spalte tenant_id samt ihrem RLS-Zustand. EINE Abfrage, EINE
-// Quelle - beide Waechter-Tests und die Positiv-Kontrolle lesen dasselbe Inventar.
 async function rlsInventar(db) {
   const { rows } = await db.query(`
     SELECT c.relname AS tabelle,
@@ -56,9 +37,6 @@ async function rlsInventar(db) {
 
 const abgeschirmt = (eintrag) => eintrag.enabled && eintrag.forced && eintrag.policies > 0;
 
-// Frische, rein im Hauptspeicher lebende Instanz je Aufruf. Sie wird nie geteilt: es gibt
-// strukturell nichts aufzuraeumen, auch nicht wenn ein Test scheitert (besser als ein
-// try/finally, das man vergessen kann).
 async function schemaInventar() {
   const db = new PGlite();
   await applySchema({ query: (text, parameter) => db.query(text, parameter), exec: (sql) => db.exec(sql) });

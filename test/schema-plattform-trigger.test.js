@@ -1,6 +1,3 @@
-// OUTBOUND-E1, Ebene C: reine Text-Assertion gegen schema.sql - laeuft OHNE DB (kein
-// pglite, kein Spawn). Belegt Form + WHEN-Klausel + globale Policy + Abwesenheit eines
-// werfenden DELETE-Zweigs, unabhaengig davon, ob eine DB verfuegbar ist.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";

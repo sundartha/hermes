@@ -1,12 +1,3 @@
-// P4: Budget/Usage tenant-scoped (Daten-Schicht pro-Tenant). Prueft die GENUINE
-// pro-Tenant-Datenschicht auf STATE-OPS-Ebene (ops.usageFor/trackUsage/
-// budgetExceeded/countOutboundCallsSince) mit zwei
-// synthetischen Tenants - nicht die owner-scoped pg-Hydrierung (die bleibt ein
-// Key, P4-Scope-Grenze). Der Spiegel wird per ops direkt manipuliert (wie der
-// pruneOldData-Test alte Daten direkt im Spiegel seedet). Test 5 belegt die
-// zweite Verteidigungslinie (RLS) auch fuer die usage-Tabelle, Test 6/7 (P6b3)
-// fuer die neuen tenant_budget/usage_event-Tabellen. pglite = kein Netz, keine
-// externe DB (F.I.R.S.T.).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -17,10 +8,9 @@ import { PRICES, tokensOf } from "./_prices.js";
 
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
-const APP_ROLE = "app_user"; // liest Owner-Daten, ohne Superuser/BYPASSRLS
+const APP_ROLE = "app_user";
 
-// Token-Menge, die unter PRICES (Input 1 USD/MTok, * 0.93) den 8-EUR-Cap reisst.
-const TOKENS_OVER_CAP = 10_000_000; // 10 USD * 0.93 = 9.3 EUR > 8
+const TOKENS_OVER_CAP = 10_000_000;
 
 test("P4 Test 1: Pro-Tenant-Budget-Isolation (A ueber Cap, B unberuehrt)", async () => {
   const { store } = await makePgTestStore();
@@ -41,20 +31,19 @@ test("P4 Test 2: trackUsage(A) beeinflusst B nicht (frischer Null-Bucket)", asyn
     outputTokens: 0,
     costCents: 0,
     costMicroCentsRem: 0,
-    costCorrectionMicroCentsRem: 0, // LCT P4: neues emptyUsage()-Feld
-    ttsCharacters: 0, // KE-P6: neues emptyUsage()-Feld
+    costCorrectionMicroCentsRem: 0,
+    ttsCharacters: 0,
     calls: 0,
     spendMonthKey: null,
     spendMonthCostCents: 0,
-    budgetPeriodKey: null, // GAP-01: neues emptyUsage()-Feld
-    budgetPeriodBaselineCents: 0, // GAP-01: neues emptyUsage()-Feld
+    budgetPeriodKey: null,
+    budgetPeriodBaselineCents: 0,
   });
 });
 
 test("P4 Test 3 (KS-P9): beide Tenants bleiben frei, obwohl die Plattform-Summe die Zahl reisst", async () => {
   const { store } = await makePgTestStore();
   const s = store.load();
-  // Je 6 USD * 0.93 = 5.58 EUR pro Tenant -> unter 8, Summe 11.16 EUR -> ueber 8.
   ops.trackUsage(s, TENANT_A, tokensOf(6_000_000, 0), PRICES);
   ops.trackUsage(s, TENANT_B, tokensOf(6_000_000, 0), PRICES);
   assert.equal(ops.budgetExceeded(s, TENANT_A, PRICES), false, "A einzeln unter Cap");
@@ -99,7 +88,6 @@ test("P4 Test 4: countOutboundCallsSince pro-Tenant + pro-Nutzer + global", asyn
     2,
     "Nutzer x@a ueber Tenants",
   );
-  // Kombiniert (UND): nur x@a-Outbound im Tenant A.
   assert.equal(
     ops.countOutboundCallsSince(s, since, { tenantId: TENANT_A, requestedBy: "x@a" }),
     1,
@@ -158,16 +146,13 @@ test("outbound-p1d: countOutboundCallsSince mit to-Filter -> per-(Tenant,Ziel) i
   );
 });
 
-// Baut den Owner-Store (migriert Schema, seedet Owner-usage), seedet zwei fremde
-// Tenants mit eigenen usage-Zeilen und legt die unprivilegierte Rolle an. Analog
-// store-pg-rls.test.js, hier auf die usage-Tabelle fokussiert.
 async function setupUsageRls() {
   const db = new PGlite();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };
   const store = makePgStore(runner);
-  await store.init(); // migriert + seedet Owner (inkl. Owner-usage-Zeile)
+  await store.init();
 
   for (const tenantId of [TENANT_A, TENANT_B]) {
     await db.query(`INSERT INTO tenant (id) VALUES ($1) ON CONFLICT DO NOTHING`, [tenantId]);
@@ -202,10 +187,6 @@ test("P4 Test 5: usage-Tabelle ist tenant-isoliert (Cross-Tenant-Read = leer, RL
   }
 });
 
-// P6b3: seedet Owner + zwei fremde Tenants mit eigenen tenant_budget- und
-// usage_event-Zeilen unter der jeweiligen RLS-GUC (FORCE-RLS blockt sonst den
-// Insert), legt die unprivilegierte Rolle an. Analog setupUsageRls, hier auf die
-// zwei neuen P6b3-Tabellen.
 async function setupMeterRls() {
   const db = new PGlite();
   const runner = {
@@ -269,17 +250,13 @@ test("P6b3 Test 7: usage_event ist tenant-isoliert (Cross-Tenant-Read = leer, RL
   }
 });
 
-// outbound-p1c (Spec-Test 6, "beide Backends"): die neue Vorab-Reservierung + der
-// Budget-Reconcile + der registerTenant-Default-Seed muessen auch ueber die pg-Fassade
-// + Persistenz funktionieren. pglite = kein Netz, keine externe DB (F.I.R.S.T.).
 test("outbound-p1c Test 8 (pg): reserveExceedsBudget + addVoiceUsageCostCents ueber den Wrapper", async () => {
   const { store } = await makePgTestStore();
   const s = store.load();
-  ops.setTenantBudget(s, TENANT_A, { budgetCents: 150, hardCapCents: 150 }); // 1.50 EUR Cap
+  ops.setTenantBudget(s, TENANT_A, { budgetCents: 150, hardCapCents: 150 });
   assert.equal(store.reserveExceedsBudget(TENANT_A, 1500, PRICES), true, "15 EUR Reserve > 1.50 EUR Cap");
   assert.equal(store.reserveExceedsBudget(TENANT_A, 60, PRICES), false, "0.60 EUR Reserve < 1.50 EUR Cap");
-  // Reconcile bucht die Ist-Minuten in den Spiegel-Bucket -> hebt budgetExceeded an.
-  store.addVoiceUsageCostCents(TENANT_A, 200); // 2 EUR Ist > 1.50 EUR Cap
+  store.addVoiceUsageCostCents(TENANT_A, 200);
   assert.equal(store.budgetExceeded(TENANT_A, PRICES), true, "Ist-Minuten reissen den Cap");
 });
 
@@ -287,10 +264,9 @@ test("outbound-p1c Test 9 (pg): tenant_budget-Seed + costCents-Reconcile ueberle
   const { store, runner } = await makePgTestStore();
   const s = store.load();
   ops.registerTenant(s, "user_x", { firstName: "Max", defaultBudgetCents: 1000 });
-  ops.addVoiceUsageCostCents(s, "user_x", 250); // 2.50 EUR Carrier-Minuten
+  ops.addVoiceUsageCostCents(s, "user_x", 250);
   await store.save();
 
-  // Frischer Store auf DERSELBEN DB -> hydriert aus der DB (kein Spiegel-Reuse).
   const store2 = makePgStore(runner);
   await store2.init();
   const s2 = store2.load();

@@ -1,13 +1,3 @@
-// P7 (Cluster 2, G5): migrateFlatToMap() in src/store/json.js ersetzt die vormals
-// getrennten migrateUsageToMap/migrateSettingsToMap-Implementierungen durch EINEN
-// generischen Alt-Shape->owner-keyed-Map-Migrator. Dieser Test deckt gezielt den
-// kollabierten "kein Objekt"-Sonderfall (null/non-object -> NUR der Owner-Default-
-// Bucket) fuer BEIDE Felder (usage/settings) ab, plus die bereits bestehenden Faelle
-// (flach/Map-mit-mehreren-Tenants) als Regressionsnetz gegen die alte, getrennte
-// Implementierung (emptyUsageMap/defaultSettingsMap). Muster wie
-// tenant-settings-calendar-map.test.js (temp-DATA_DIR, dynamischer json.js-Import).
-// usage-Faelle erwarten das cc-p1-Geldformat (Integer costCents statt Float costEur,
-// G26 "Geld nie als Float") - migrateFlatToMap's mapBucket fuer usage ist bucketToCents.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
@@ -26,8 +16,6 @@ async function loadStore(raw) {
   const mod = await import(`../src/store/json.js?migrate-shapes=${migrateSeq++}`);
   return mod.load();
 }
-
-// ---- usage: kollabierter "kein Objekt"-Fall (byte-identisch zu emptyUsageMap()) ----
 
 test("Migration usage: fehlendes Feld (undefined) -> nur der Owner-Default-Bucket", async () => {
   const state = await loadStore({});
@@ -62,8 +50,6 @@ test("Migration usage: bereits eine Map mit >=2 Tenants -> jeder Bucket costCent
     [BOOTSTRAP_TENANT_ID]: emptyUsage(),
   });
 });
-
-// ---- settings: derselbe kollabierte "kein Objekt"-Fall (byte-identisch zu defaultSettingsMap()) ----
 
 test("Migration settings: fehlendes Feld (undefined) -> nur der Owner-Default-Bucket", async () => {
   const state = await loadStore({});

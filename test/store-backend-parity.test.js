@@ -1,12 +1,3 @@
-// CC-6: strukturelle Methodenmengen-Gleichheit json.js (Modul-Exports) vs.
-// makePgStore(runner) (Objekt-Keys). Faengt die historische Drift-Klasse (eine neue
-// json-Store-Methode ohne pg-Wrapper vergessen, "objectiveAchieved"-Bugklasse) ohne
-// echte DB - reiner Struktur-Vergleich, kein Verhalten.
-//
-// DATA_DIR + config werden VOR allen store-Imports gebunden (json.FILE haengt an
-// config.dataDir): darum laufen die Imports dynamisch in before() (Muster
-// store-pg-json-parity.test.js). Der Stub-Runner wird bei der Konstruktion NICHT
-// getouched (makePgStore ruft ihn erst bei init()/den einzelnen Methoden auf).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -23,9 +14,6 @@ before(async () => {
   ({ makePgStore } = await import("../src/store/pg.js"));
 });
 
-// pg-only Methoden, die strukturell KEIN json-Pendant haben (begruendete Ausnahme,
-// kein Drift): init() ist die async Schema-/Hydrierungs-Migration des pg-Backends -
-// json braucht keine, es liest die Datei synchron beim ersten load().
 const PG_ONLY_ALLOWLIST = new Set(["init"]);
 
 const stubRunner = {

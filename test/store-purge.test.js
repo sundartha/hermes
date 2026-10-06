@@ -1,8 +1,3 @@
-// P8: Roh-Transkript-Purge nach Summary (#7, DSGVO-Datenminimierung). Prueft die
-// Fachlogik purgeTranscript am state-ops-Seam (reine Mutation, kein DATA_DIR/
-// Modul-Singleton -> jeder Test baut seinen eigenen frischen Plain-State via
-// seedState() -> hart Independent, F.I.R.S.T.) PLUS einen json.js-Persistenz-
-// Durchstich (save -> reload -> Transkript leer, Summary erhalten).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
@@ -10,8 +5,6 @@ import { purgeTranscript } from "../src/store/state-ops.js";
 
 const AT = "2026-01-01T00:00:00Z";
 
-// Frischer Plain-State pro Aufruf (kein geteilter Modul-Zustand) mit zwei
-// abgeschlossenen Calls (beide mit Transkript + Summary) und einem Action Item.
 function freshState() {
   return seedState({
     calls: [
@@ -61,7 +54,6 @@ test("purgeTranscript laesst Summary + objectiveAchieved + Action Items unangeta
 test("purgeTranscript auf unbekannte callId -> false (kein Effekt)", () => {
   const s = freshState();
   assert.equal(purgeTranscript(s, "call_missing"), false);
-  // Bestehende Calls unveraendert (kein Save-Effekt im Backend, da changed=false)
   assert.equal(getCall(s, "call1").transcript.length, 1);
 });
 
@@ -71,7 +63,6 @@ test("purgeTranscript auf bereits leeres Transkript -> false (idempotent, Grenzf
   assert.equal(purgeTranscript(s, "call1"), false, "zweiter Aufruf meldet keine Aenderung");
 });
 
-// ---- json.js-Persistenz-Durchstich (Lesepfad nach Purge: leer + Summary) ----
 let store;
 before(async () => {
   const dataDir = tempDataDir(freshState());
@@ -84,6 +75,5 @@ test("json-Persistenz: getCall nach Purge liefert leeres transcript + erhaltene 
   const got = store.getCall("call1");
   assert.deepEqual(got.transcript, [], "Lesepfad (API/MCP) liefert leeres Transkript");
   assert.equal(got.summary, "Zusammenfassung 1", "Summary ueberlebt at rest");
-  // Re-Load aus dem Spiegel: andere Calls unberuehrt persistiert
   assert.equal(store.getCall("call2").transcript.length, 1);
 });

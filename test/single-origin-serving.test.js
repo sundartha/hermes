@@ -1,13 +1,3 @@
-// P1 — Single-Origin-Serving: WEB_DIST_DIR liefert den apps/web-Build statisch,
-// oeffentlich (ohne Sitzung). Spawn-Tests (startServer) gegen ein winziges
-// Fixture-dist. Beweist:
-//  (1) Marketing-Pfad ist OHNE Auth erreichbar, eine echte API-Route (/api/state)
-//      bleibt hinter internalOnly (403 - kein Freilegen).
-//  (2) /tenant.html -> 302 /app (Altpfad des mit P14 geloeschten Dashboards). Der
-//      Redirect bleibt NICHT nur wegen Bookmarks: eine Stripe-Checkout-Session, die VOR
-//      dem Deploy geoeffnet wurde, traegt die alte Rueckkehr-Adresse IN der Stripe-
-//      Session - ohne ihn landet genau der Kunde, der gerade bezahlt hat, auf einem 404.
-// KEIN pglite hier (nur Server-Spawn, Lehre P6a). node:http-GET ohne Redirect-Follow.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -18,9 +8,6 @@ import { startServer, externalIp, ROOT } from "./helpers.js";
 
 const EXTERNAL_IP = externalIp();
 
-// Winziges Fixture-dist (= apps/web/dist im Echtbetrieb): Marketing-index.html +
-// app/index.html (App-Shell). Einmal angelegt, am Dateiende geloescht. WEB_DIST_DIR
-// zeigt darauf -> der Boot-Guard (config.js) findet index.html und bootet.
 const WEB_DIST = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-webdist-"));
 fs.writeFileSync(
   path.join(WEB_DIST, "index.html"),
@@ -33,9 +20,6 @@ fs.writeFileSync(
 );
 after(() => fs.rmSync(WEB_DIST, { recursive: true, force: true }));
 
-// Roher GET ohne Redirect-Follow (node:http folgt 3xx nicht) -> {status, location}.
-// path traegt pathname + search, damit der Query-erhaltende /tenant.html-Redirect
-// (P2/D2) pruefbar ist.
 function rawGet(url) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -55,17 +39,13 @@ test(
   "WEB_DIST_DIR: Marketing OHNE Auth erreichbar, /api/state bleibt 403 (internalOnly)",
   { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
   async () => {
-    // DASHBOARD_PASSWORD gesetzt (Wiederauferstehungs-Detektor); extern (keine
-    // localhost-Ausnahme) - internalOnly ist die einzige Sicherung auf /api/state.
     const srv = await startServer({
       env: { WEB_DIST_DIR: WEB_DIST, DASHBOARD_PASSWORD: "test-geheim" },
     });
     try {
-      // Marketing-Landing same-origin OHNE Credentials -> 200 (static ist oeffentlich).
       const marketing = await fetch(`${srv.externalUrl}/`);
       assert.equal(marketing.status, 200, "Marketing-Landing ohne Auth erreichbar");
       assert.match(await marketing.text(), /Marketing-Fixture/);
-      // Negativ: eine echte API-Route bleibt HINTER internalOnly (kein Freilegen).
       const api = await fetch(`${srv.externalUrl}/api/state`);
       assert.equal(api.status, 403, "API-Route weiter hinter internalOnly");
     } finally {
@@ -74,9 +54,6 @@ test(
   },
 );
 
-// WEB-03 (Buchhaltung) - die Redirect-/Query-/SPA-Haelfte der ID ist bereits in den drei
-// folgenden Tests gepinnt (302, Query-Erhalt, SPA-Fallback). Kein Duplikat (G5); die
-// App-Shell-Haelfte (englische Sprache) steht am Dateiende.
 test("WEB_DIST_DIR: /tenant.html -> 302 /app (Altpfad-Redirect, Bookmarks)", async () => {
   const srv = await startServer({ env: { WEB_DIST_DIR: WEB_DIST } });
   try {
@@ -88,9 +65,6 @@ test("WEB_DIST_DIR: /tenant.html -> 302 /app (Altpfad-Redirect, Bookmarks)", asy
   }
 });
 
-// P2/D2: der Query-String muss den Redirect ueberleben, sonst geht die Post-Checkout-
-// Rueckkehr (?sub=ok / ?card=ok) auf dem Weg /tenant.html -> /app verloren und die
-// BillingIsland zeigt die Rueckmeldung nie an.
 test("WEB_DIST_DIR: /tenant.html?sub=ok -> 302 /app?sub=ok (Query erhalten)", async () => {
   const srv = await startServer({ env: { WEB_DIST_DIR: WEB_DIST } });
   try {
@@ -104,20 +78,15 @@ test("WEB_DIST_DIR: /tenant.html?sub=ok -> 302 /app?sub=ok (Query erhalten)", as
   }
 });
 
-// Kernziel Single-Origin: Post-Login-Ziel /app + clientseitiges Routing. fetch folgt
-// dem serve-static-301 (/app -> /app/) automatisch -> wir pruefen das End-Ergebnis.
 test("WEB_DIST_DIR: /app + Deep-Links liefern die App-Shell (SPA-Fallback)", async () => {
   const srv = await startServer({ env: { WEB_DIST_DIR: WEB_DIST } });
   try {
-    // /app -> express.static-Index (serve-static 301 -> /app/ -> app/index.html).
     const app = await fetch(`${srv.localUrl}/app`);
     assert.equal(app.status, 200, "App-Shell unter /app erreichbar");
     assert.match(await app.text(), /App-Fixture/);
-    // Deep-Link: kein Datei-Treffer -> SPA-Fallback app.get("/app/*") liefert die Shell.
     const deep = await fetch(`${srv.localUrl}/app/dashboard`);
     assert.equal(deep.status, 200, "Deep-Link liefert App-Shell (Client-Routing)");
     assert.match(await deep.text(), /App-Fixture/);
-    // Negativ: ein /app-Unterpfad serviert NIE die Marketing-index (kein Shadowing).
     const foo = await fetch(`${srv.localUrl}/app/foo`);
     assert.equal(foo.status, 200);
     const fooBody = await foo.text();
@@ -128,10 +97,6 @@ test("WEB_DIST_DIR: /app + Deep-Links liefern die App-Shell (SPA-Fallback)", asy
   }
 });
 
-// AM3: der bestehende /app/foo-Test nutzt ein ABSOLUTES Fixture und maskiert den
-// Live-Bug. Hier RELATIV (live "apps/web/dist") -> ohne config.path.resolve-Fix wirft
-// res.sendFile "path must be absolute" -> 500. Mit Fix: 200 (App-Shell). Der Child
-// laeuft mit cwd=ROOT (helpers), daher den relativen Pfad gegen ROOT bilden.
 test("WEB_DIST_DIR relativ: /app-Deep-Link liefert die App-Shell (sendFile absolut)", async () => {
   const relDist = path.relative(ROOT, WEB_DIST);
   const srv = await startServer({ env: { WEB_DIST_DIR: relDist } });
@@ -144,9 +109,6 @@ test("WEB_DIST_DIR relativ: /app-Deep-Link liefert die App-Shell (sendFile absol
   }
 });
 
-// WEB-03 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md). Reiner
-// Quelltext-Read (kein Build noetig, apps/web/dist ist gitignored) - die App-Shell
-// hinter dem /tenant.html-Redirect ist die englische Astro-Layout-Datei.
 test("WEB-03 (Mechanismus, gruen) - die App-Shell hinter dem /tenant.html-Redirect ist englisch", () => {
   const layout = fs.readFileSync(path.join(ROOT, "apps/web/src/layouts/App.astro"), "utf8");
   assert.match(layout, /<html lang="en">/, "App-Shell muss lang=en tragen");
