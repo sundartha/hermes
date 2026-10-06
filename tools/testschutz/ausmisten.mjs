@@ -32,6 +32,9 @@ const ABGESCHLOSSEN = "completed";
 const STANDARD_SERVER = "https://github.com";
 const LAUF_NUMMER = /^(\d+)(?:\/attempts\/\d+)?$/;
 const ELTERN_EINES_MERGES = 3;
+const OHNE_RECHT = /HTTP 403/;
+const RECHTE_HINWEIS =
+  "Dem Token fehlen Leserechte; der Job Testschutz braucht actions: read und statuses: read.";
 
 function verlange(bedingung, grund) {
   if (!bedingung) throw new Error(grund);
@@ -160,7 +163,8 @@ export async function ausmistenFrei({ basis, pullRequest, stellen }) {
     );
     return true;
   } catch (fehler) {
-    console.error(`Testschutz: die Ausnahme „${KONTEXT}“ gilt nicht: ${fehler.message}.`);
+    const hinweis = OHNE_RECHT.test(fehler.message) ? ` ${RECHTE_HINWEIS}` : "";
+    console.error(`Testschutz: die Ausnahme „${KONTEXT}“ gilt nicht: ${fehler.message}.${hinweis}`);
     return false;
   }
 }

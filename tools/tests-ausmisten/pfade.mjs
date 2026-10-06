@@ -7,10 +7,12 @@ export const BRANCH_PRAEFIX = "ausmisten/";
 export const BEREICHE_DATEI = "tools/bereiche.json";
 export const GATE_DATEI = "tools/gate-tests.json";
 export const TESTORDNER = "test/";
-export const NUR_KUERZEN = [
+const ZAEHLER_BESTAND = "tools/basis/zeitglieder-bestand.json";
+const NUR_KUERZEN = [
   "tools/basis/test-importe.json",
   "tools/basis/selbstpruefung.json",
   "tools/basis/fester-importpfad.json",
+  ZAEHLER_BESTAND,
 ];
 const GESPERRTE_TESTPFADE = [
   "test/werkzeuge/",
@@ -116,17 +118,27 @@ function alsJson(text) {
   }
 }
 
-export function nurGekuerzt(altText, neuText) {
+function zaehlerGekuerzt(alt, neu) {
+  if (!istObjekt(alt) || !istObjekt(neu) || Array.isArray(alt) || Array.isArray(neu)) return false;
+  return Object.entries(neu).every(
+    ([name, anzahl]) =>
+      Object.hasOwn(alt, name) && Number.isInteger(anzahl) && anzahl > 0 && anzahl <= alt[name],
+  );
+}
+
+function nurGekuerzt(altText, neuText, pfad) {
   const [alt, neu] = [alsJson(altText), alsJson(neuText)];
-  if (alt === undefined || neu === undefined) return false;
-  return !isDeepStrictEqual(alt.wert, neu.wert) && gekuerzt(alt.wert, neu.wert);
+  if (alt === undefined || neu === undefined || isDeepStrictEqual(alt.wert, neu.wert)) return false;
+  return pfad === ZAEHLER_BESTAND
+    ? zaehlerGekuerzt(alt.wert, neu.wert)
+    : gekuerzt(alt.wert, neu.wert);
 }
 
 function bestandsVerstoss({ status, pfad }, { von, bis, verzeichnis }) {
   if (status !== "M")
     return `${pfad}: Bestandsdateien dürfen weder neu entstehen noch verschwinden.`;
   const text = (commit) => git(["show", `${commit}:${pfad}`], verzeichnis);
-  if (nurGekuerzt(text(von), text(bis))) return undefined;
+  if (nurGekuerzt(text(von), text(bis), pfad)) return undefined;
   return `${pfad}: die Bestandsdatei darf nur Einträge verlieren.`;
 }
 

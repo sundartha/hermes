@@ -13,10 +13,11 @@ import {
   RECHNEN_TEST,
   REPOSITORY,
   UHR_QUELLE,
+  VERBOTEN,
   ausmistenRepo,
+  scheinApi,
   starte,
 } from "./ausmisten/hilfen.mjs";
-import { scheinGithub } from "./pruefer/hilfen.mjs";
 
 const WERKZEUG = "tools/tests-nur-ergaenzt.mjs";
 const SERVER = "https://github.com";
@@ -33,6 +34,7 @@ const GELOESCHT = "test/post/doppelt.test.js: die ganze Testdatei ist gelöscht"
 const ANDERE_SHA = "0123456789abcdef0123456789abcdef01234567";
 const BESTAND = "tools/basis/selbstpruefung.json";
 const KURZE_SHA = 7;
+const ZEITGLIEDER = "tools/basis/zeitglieder-bestand.json";
 const MERGE_EINSTELLUNGEN = [
   "-c",
   "user.name=Probe",
@@ -105,14 +107,14 @@ async function pruefe(context, fall = {}) {
   const routen = new Map([
     [`GET /repos/${REPOSITORY}/pulls/${PR_NUMMER}`, pr],
     [`GET /repos/${REPOSITORY}/commits/${pr.head.sha}/status`, status],
-    [`GET /repos/${REPOSITORY}/actions/runs/${LAUF_ID}`, lauf],
+    [`GET /repos/${REPOSITORY}/actions/runs/${LAUF_ID}`, fall.laufAntwort ?? lauf],
     [
       `GET /repos/${REPOSITORY}/actions/workflows/tests-ausmisten.yml`,
       fall.workflow ?? { id: WORKFLOW_ID },
     ],
     ["POST /graphql", { data: { repository: { issue: null } } }],
   ]);
-  const github = await scheinGithub(context, routen);
+  const github = await scheinApi(context, routen);
   const umgebung = {
     GITHUB_TOKEN: "probe-token",
     GITHUB_REPOSITORY: REPOSITORY,
@@ -377,11 +379,12 @@ test("ausmisten-testschutz: ein PR, der die Testbank-Skripte ändert, gibt nicht
   );
 });
 
-test("ausmisten-testschutz: keine der drei Bestandsdateien darf neu entstehen", async (context) => {
+test("ausmisten-testschutz: keine der vier Bestandsdateien darf neu entstehen", async (context) => {
   const bestaende = [
     "tools/basis/test-importe.json",
     BESTAND,
     "tools/basis/fester-importpfad.json",
+    ZEITGLIEDER,
   ];
   const neu = Object.fromEntries(bestaende.map((pfad) => [pfad, '{ "befunde": [] }\n']));
   const ergebnis = await pruefe(context, { branch: { weg: [DOPPELT], neu } });
@@ -484,4 +487,38 @@ test("ausmisten-testschutz: ein Warteschlangen-Commit mit zusätzlicher Änderun
     await pruefe(context, { warteschlange: { zusatz } }),
     "der PR-Kopf ist nicht der geprüfte Stand",
   );
+});
+
+test("ausmisten-testschutz: ein gekürzter Zeitglieder-Bestand bleibt frei", async (context) => {
+  const dateien = { [ZEITGLIEDER]: '{ "test/a.test.js": 2, "test/b.test.js": 1 }\n' };
+  const branch = { weg: [DOPPELT], neu: { [ZEITGLIEDER]: '{ "test/a.test.js": 1 }\n' } };
+  const ergebnis = await pruefe(context, { dateien, branch });
+  assert.equal(ergebnis.status, EXIT_FREI, ergebnis.ausgabe);
+});
+
+test("ausmisten-testschutz: ein verlängerter Zeitglieder-Bestand gibt nichts frei", async (context) => {
+  const dateien = { [ZEITGLIEDER]: '{ "test/a.test.js": 1 }\n' };
+  const branch = { weg: [DOPPELT], neu: { [ZEITGLIEDER]: '{ "test/a.test.js": 2 }\n' } };
+  const ergebnis = await pruefe(context, { dateien, branch });
+  erwarteGesperrt(ergebnis, `${ZEITGLIEDER}: die Bestandsdatei darf nur Einträge verlieren`);
+});
+
+test("ausmisten-testschutz: ein Zeitglieder-Bestand mit neuer Datei gibt nichts frei", async (context) => {
+  const dateien = { [ZEITGLIEDER]: '{ "test/a.test.js": 1 }\n' };
+  const branch = { weg: [DOPPELT], neu: { [ZEITGLIEDER]: '{ "test/b.test.js": 1 }\n' } };
+  const ergebnis = await pruefe(context, { dateien, branch });
+  erwarteGesperrt(ergebnis, `${ZEITGLIEDER}: die Bestandsdatei darf nur Einträge verlieren`);
+});
+
+test("ausmisten-testschutz: fehlende Leserechte auf den Status geben nichts frei und sagen warum", async (context) => {
+  const ergebnis = await pruefe(context, { status: VERBOTEN });
+  erwarteGesperrt(
+    ergebnis,
+    "Dem Token fehlen Leserechte; der Job Testschutz braucht actions: read und statuses: read.",
+  );
+  assert.ok(ergebnis.ausgabe.includes(GELOESCHT), ergebnis.ausgabe);
+});
+
+test("ausmisten-testschutz: fehlende Leserechte auf den Lauf geben nichts frei", async (context) => {
+  erwarteGesperrt(await pruefe(context, { laufAntwort: VERBOTEN }), "HTTP 403");
 });

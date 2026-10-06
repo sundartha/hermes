@@ -27,6 +27,7 @@ export const REPO_ID = 4242;
 const EINRUECKUNG = 2;
 const HTTP_OK = 200;
 const HTTP_NICHT_GEFUNDEN = 404;
+const HTTP_VERBOTEN = 403;
 const ERSTE_ARTEFAKT_ID = 7001;
 export const EINGANG_ID = 31;
 
@@ -109,7 +110,13 @@ export function eingangsLauf(kopf, felder = {}) {
   };
 }
 
+export const VERBOTEN = Symbol("verboten");
+
 function beantworte(ausgang, antwort) {
+  if (antwort === VERBOTEN) {
+    ausgang.writeHead(HTTP_VERBOTEN).end("{}");
+    return;
+  }
   if (antwort === undefined) {
     ausgang.writeHead(HTTP_NICHT_GEFUNDEN).end("{}");
     return;
