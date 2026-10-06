@@ -20,7 +20,7 @@ const DEFAULT_HUNK_LENGTH = 1;
 const NAME_STATUS_FIELDS = 2;
 const MAX_GIT_OUTPUT_BYTES = 67_108_864;
 
-function git(args) {
+export function git(args) {
   const result = spawnSync("git", ["-c", "core.quotePath=false", ...args], {
     encoding: "utf8",
     maxBuffer: MAX_GIT_OUTPUT_BYTES,
@@ -93,7 +93,7 @@ function isTestCall({ callee, arguments: args }) {
   return isSubtest && FUNCTION_NODE_TYPES.has(args.at(-1).type);
 }
 
-function staticTestName(argument) {
+export function staticTestName(argument) {
   if (argument?.type === "Literal" && typeof argument.value === "string") return argument.value;
   if (argument?.type === "TemplateLiteral" && argument.expressions.length === 0) {
     const [quasi] = argument.quasis;
@@ -102,14 +102,26 @@ function staticTestName(argument) {
   return undefined;
 }
 
-function testCases(file, source) {
-  const sourceType = extname(file) === COMMONJS_EXTENSION ? "commonjs" : "module";
+export function sourceTypeOf(file) {
+  return extname(file) === COMMONJS_EXTENSION ? "commonjs" : "module";
+}
+
+export function isJavaScript(file) {
+  return JAVASCRIPT_EXTENSIONS.has(extname(file));
+}
+
+export function testSource(file, source) {
   const linter = new Linter();
   const messages = linter.verify(source, {
-    languageOptions: { ecmaVersion: "latest", sourceType },
+    languageOptions: { ecmaVersion: "latest", sourceType: sourceTypeOf(file) },
   });
-  if (messages.some(({ fatal }) => fatal)) return [];
-  const cases = callExpressions(linter.getSourceCode()).filter(isTestCall);
+  if (messages.some(({ fatal }) => fatal)) return undefined;
+  const sourceCode = linter.getSourceCode();
+  return { sourceCode, calls: callExpressions(sourceCode).filter(isTestCall) };
+}
+
+function testCases(file, source) {
+  const cases = testSource(file, source)?.calls ?? [];
   const named = cases.map((node) => ({ name: staticTestName(node.arguments[0]), loc: node.loc }));
   return named.filter(({ name }) => name !== undefined);
 }
@@ -130,8 +142,8 @@ function groupLines(file, lines, nameOfLine) {
   return [...units.values()];
 }
 
-export function changedUnits(basis, { status, file }) {
-  if (status === STATUS_DELETED) return [{ file, deleted: true, lines: [] }];
+export function changedUnits(basis, { status, file, details = [] }) {
+  if (status === STATUS_DELETED) return [{ file, deleted: true, lines: [], details }];
   const { lines, binary } = removedLines(basis, file);
   if (binary) return [{ file, name: undefined, lines: [] }];
   if (!JAVASCRIPT_EXTENSIONS.has(extname(file))) return groupLines(file, lines, () => undefined);
@@ -139,11 +151,15 @@ export function changedUnits(basis, { status, file }) {
   return groupLines(file, lines, (line) => innermostTestName(cases, line));
 }
 
-export function gatesByTestFile() {
-  const gates = JSON.parse(readFileSync(GATE_TESTS_FILE, "utf8"));
+export function gatesByTestFile(text = readFileSync(GATE_TESTS_FILE, "utf8")) {
+  const gates = JSON.parse(text);
   const byFile = new Map();
   for (const [gate, { tests }] of Object.entries(gates)) {
     for (const file of tests) byFile.set(file, [...(byFile.get(file) ?? []), gate]);
   }
   return byFile;
+}
+
+export function gatesAt(basis) {
+  return gatesByTestFile(git(["show", `${basis}:${GATE_TESTS_FILE}`]));
 }

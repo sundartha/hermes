@@ -1,0 +1,24 @@
+{
+  "titel": "Zeichenkette geändert, die wie ein Kommentar aussieht",
+  "vorher": {
+    "test/beispiel.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"kennt das Kommentarzeichen\", () => {",
+      "  assert.equal(\"// a\".startsWith(\"//\"), true);",
+      "});"
+    ]
+  },
+  "dateien": {
+    "test/beispiel.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"kennt das Kommentarzeichen\", () => {",
+      "  assert.equal(\"// b\".startsWith(\"//\"), true);",
+      "});"
+    ]
+  },
+  "erwartet": "ohne Freigabe"
+}
