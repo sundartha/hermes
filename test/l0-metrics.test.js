@@ -1,21 +1,12 @@
-// L0-Mess-Instrumentierung (src/metrics.js): reine Unit gegen injizierte Fakes -
-// kein Server-Spawn, kein pglite, store-agnostisch (F.I.R.S.T.: schnell, offline,
-// deterministisch). Prueft das NEUE Verhalten (PII-Whitelist, Master-Schalter,
-// STT-Gap-Ableitung, beschraenkte Map). Die Verdrahtung in claude.js/server.js ist
-// byte-identisch-wenn-aus (BASE_ENV pinnt METRICS_ENABLED=false) und wird ueber das
-// Gruen-Bleiben der Bestandssuite abgedeckt.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createMetrics } from "../src/metrics.js";
 
-// Build-Helper (P13): Sammler liefert die (kind, payload)-Paare jedes log-Aufrufs.
 function collector() {
   const entries = [];
   return { log: (kind, payload) => entries.push({ kind, payload }), entries };
 }
 
-// Build-Helper: now-Stub liefert die vorgegebenen Werte der Reihe nach (deterministische
-// Zeit statt Date.now im Hot-Path-Test, F.I.R.S.T. R).
 function fakeNow(values) {
   let i = 0;
   return () => values[i++];
@@ -50,7 +41,7 @@ test("T-L0-1b (I13): llmCall traegt callId + Cache-Zaehler additiv, NUR wenn mit
     callId: "c1",
     cache_creation_input_tokens: 20,
     cache_read_input_tokens: 100,
-    secret: "leak", // Whitelist-Gegenprobe: unbekanntes Feld darf NIE durch
+    secret: "leak",
   });
 
   assert.equal(entries.length, 1);
@@ -178,14 +169,13 @@ test("T-L0-3: logTurn ist PII-frei (Tool-NAMEN, kein Transkript)", () => {
 
 test("T-L0-4: STT-Gap = JETZT - voriger Render; Erst-Turn ohne Vorgaenger loggt nicht", () => {
   const { log, entries } = collector();
-  // record@1000, gap-Aufruf@1700 -> gapMs 700.
   const m = createMetrics({ enabled: true, log, now: fakeNow([1000, 1700]) });
 
-  m.logTurnGap("c1"); // kein Vorgaenger -> kein Log
+  m.logTurnGap("c1");
   assert.equal(entries.length, 0);
 
-  m.recordTurnRendered("c1"); // now()=1000
-  m.logTurnGap("c1"); // now()=1700
+  m.recordTurnRendered("c1");
+  m.logTurnGap("c1");
 
   assert.equal(entries.length, 1);
   assert.equal(entries[0].kind, "stt_gap");
@@ -248,7 +238,6 @@ test("T-L0-8b (E5-02): logSenderFallback schweigt bei enabled=false (Master-Scha
 
 test("T-L0-5: beschraenkte Map verdraengt den aeltesten Eintrag (Leak-Schutz)", () => {
   const { log, entries } = collector();
-  // maxTrackedCalls=2: nach A,B,C ist A verdraengt; now liefert record-Zeiten + Gap-Zeit.
   const m = createMetrics({
     enabled: true,
     log,
@@ -256,14 +245,14 @@ test("T-L0-5: beschraenkte Map verdraengt den aeltesten Eintrag (Leak-Schutz)", 
     maxTrackedCalls: 2,
   });
 
-  m.recordTurnRendered("A"); // now()=10
-  m.recordTurnRendered("B"); // now()=20
-  m.recordTurnRendered("C"); // now()=30 -> A faellt raus
+  m.recordTurnRendered("A");
+  m.recordTurnRendered("B");
+  m.recordTurnRendered("C");
 
-  m.logTurnGap("A"); // A verdraengt -> kein Log
+  m.logTurnGap("A");
   assert.equal(entries.length, 0);
 
-  m.logTurnGap("C"); // now()=40 -> 40-30
+  m.logTurnGap("C");
   assert.equal(entries.length, 1);
   assert.equal(entries[0].kind, "stt_gap");
   assert.deepEqual(entries[0].payload, { callId: "C", gapMs: 10 });

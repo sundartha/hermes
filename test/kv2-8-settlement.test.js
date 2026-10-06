@@ -1,10 +1,3 @@
-// KV2-8 (tasks/kostenv2/spec-kv2-8.md): das Settlement - der Geld-Umschalter. Gebucht
-// wird ab dieser Phase aus der BELEGSUMME des Kosten-Buchs (alle Traeger) statt aus EINER
-// Telnyx-Messung. In-process, netzfrei (Muster test/kv2-7-schliessregel.test.js: ECHTER
-// state-ops-Shape ueber test/cost-truing-harness.js).
-//
-// Testnamen tragen bewusst KEINE Katalog-/Abnahme-Kennung am Namensanfang (Lehre
-// catalog-id-prefix-misroutes-tests) - diese Tests gehoeren in den Regressionslauf.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -25,22 +18,14 @@ import { BOOTSTRAP_TENANT_ID, COST_TRUING_SOURCE, REIFE, emptyUsage, istBeweisen
 import { makeStubStore, fakeConfig, fakeVoiceControl, isoMinutesAgo } from "./cost-truing-harness.js";
 import { captureConsole } from "./helpers.js";
 
-// ---- Konstanten (G25) -------------------------------------------------------------------
-
 const MINUTEN_JE_STUNDE = 60;
 const DEADLINE_H = 48;
 const UEBER_DEADLINE_MARGE_MIN = 10;
-// Faellig fuer den Sweep (> COST_TRUING_DELAY_MINUTES), aber INNERHALB der Frist.
 const IN_FRIST_MINUTEN_HER = 200;
-// Deutlich hinter der Faelligkeitsfrist.
 const NACH_FRIST_MINUTEN_HER = DEADLINE_H * MINUTEN_JE_STUNDE + UEBER_DEADLINE_MARGE_MIN;
-// Im HERZSCHLAG-Fenster des Kosten-Buchs: [now - kostenHeartbeatFensterH, now - karenz],
-// karenz = costTruingDelayMinutes + costTruingSweepIntervalMs (kosten-deckung.js). Mit den
-// Prod-Fallbacks der Harness sind das 6 h bzw. 4 h - 5 h liegt sicher dazwischen.
 const HERZSCHLAG_TREFFER_STUNDEN = 5;
 const IM_HERZSCHLAG_FENSTER_MINUTEN_HER = HERZSCHLAG_TREFFER_STUNDEN * MINUTEN_JE_STUNDE;
 
-// Neutrale Rate: 1.000.000 Mikro-Cent = 1 Bucket-Cent (CORRECTION_DIVISOR = 1e12).
 const NEUTRALE_RATE_MICRO = 1_000_000;
 const MIKRO_JE_CENT = 1_000_000;
 const SCHAETZUNG_CENTS = 30;
@@ -54,13 +39,7 @@ const VORHER_COST_CENTS = 100;
 const PFLICHT_RECORD_TYPES = ["sip-trunking", "call-control"];
 const BILLED_SEC = 60;
 const KEINE_SEKUNDEN = 0;
-// Matrix 4.6, "Profil unbekannt (Anruf NACH der Kette entstanden)": ein GESETZTER, aber
-// nicht registrierter Wert - z.B. ein spaeter entferntes/umbenanntes Profil. KEINE
-// Altzeile (die hat gar kein costProfile, s. Zeile 6/7) und deshalb NICHT ueber die
-// Legacy-Zuordnung aufloesbar (kostenprofilFuerAnruf, KV2-8-Verschaerfung).
 const UNBEKANNTES_PROFIL = "kv2_profil_entfernt_oder_zukuenftig";
-
-// ---- Fixture-Bausteine -------------------------------------------------------------------
 
 function testConfig(overrides = {}) {
   return fakeConfig({
@@ -75,8 +54,6 @@ function seedUsageCents(state, costCents) {
   Object.assign(state.usage, { [BOOTSTRAP_TENANT_ID]: { ...emptyUsage(), costCents } });
 }
 
-// Ein beendeter, fuer den Sweep faelliger Anruf. costProfile bleibt UNGESETZT, wenn kein
-// Profil mitgegeben wird - genau die Altzeilen-Lage der Matrixzeilen 6/7/8.
 function beendeterCall(state, { nowMs, profil = null, endedMinutenHer = IN_FRIST_MINUTEN_HER, legRef = {}, direction = "outbound", schaetzung = SCHAETZUNG_CENTS }) {
   const call = createCall(state, { direction, from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx" });
   call.status = "completed";
@@ -89,7 +66,6 @@ function beendeterCall(state, { nowMs, profil = null, endedMinutenHer = IN_FRIST
   return call;
 }
 
-// Eine Belegzeile ueber den ECHTEN Store-Schreibweg (kein vereinfachtes Mock).
 function seedBeleg(state, { callId, traeger, reife, mikroCents, nachreifbar }) {
   return recordCallCostEvidence(state, {
     callId,
@@ -102,7 +78,6 @@ function seedBeleg(state, { callId, traeger, reife, mikroCents, nachreifbar }) {
   }).evidence;
 }
 
-// Belegabruf-Attrappe: ein vollstaendiger Pool, der genau diese Records zuordnet.
 function poolMit(records) {
   return {
     async fetchCostRecordPool() {
@@ -114,7 +89,6 @@ function poolMit(records) {
   };
 }
 
-// Belegabruf-Attrappe, die NICHTS liefert (Provider nicht abrufbar).
 const POOL_AUS = {
   async fetchCostRecordPool() {
     return { ok: false };
@@ -124,8 +98,6 @@ const POOL_AUS = {
   },
 };
 
-// Records eines vollstaendigen Telnyx-Pools: der Betrag haengt am ERSTEN Typ, der zweite
-// traegt 0 (er muss nur ANWESEND sein, damit die Pflicht-Typmenge erfuellt ist).
 function vollerPool({ mikroCents, billedSec = BILLED_SEC }) {
   return PFLICHT_RECORD_TYPES.map((recordType, index) => ({
     recordType,
@@ -136,9 +108,6 @@ function vollerPool({ mikroCents, billedSec = BILLED_SEC }) {
   }));
 }
 
-// EIN Sweep mit Spion auf der Geld-Kante. Der Spion delegiert an die ECHTE
-// state-ops-Funktion (kein zweites Buchungsverhalten) und zaehlt die Aufrufe -
-// "ungerufen" ist in mehreren Abnahmen die eigentliche Zusage.
 async function sweepMitSpion({ state, nowMs, control, config }) {
   const store = makeStubStore(state, { nowMs });
   const echteKorrektur = store.applyCostCorrectionCents.bind(store);
@@ -154,21 +123,8 @@ async function sweepMitSpion({ state, nowMs, control, config }) {
   return { store, korrekturAufrufe, logs: ergebnis };
 }
 
-// ---- (a) Die Matrix aus Plan 4.6: zehn Lagen, je zwei Richtungen -------------------------
-
-// Plan 4.6, alle zehn Lagen. Wer eine Matrixzeile ergaenzt, zieht diese Zahl mit -
-// dieselbe Regel und derselbe Grund wie die Katalog-Zeilenmenge in KV2-2(d). Die zehnte
-// Zeile (Altzeile mit GESETZTEM sipCallId) ist der Riegel gegen die ungewollte Erstattung
-// an den 12 EL-Altanrufen; ein Test, der auf 9 stehen bleibt, laesst genau sie ungeprueft.
 const MATRIX_ZEILEN_ERWARTET = 10;
 
-// Jede Zeile: aufbau() legt Anruf UND (falls noetig) Vorbelege an und liefert den Anruf +
-// die Belegabruf-Attrappe; hoch/niedrig nennen das ERWARTETE Ergebnis je Richtung.
-//   gebucht          - lief applyCostCorrectionCents und hat es gebucht?
-//   deltaCents       - der erwartete Delta (null = Kante gar nicht gerufen)
-//   costCentsNachher - die Gate-Achse NACH dem Sweep
-//   herkunft         - der persistierte costTruedSource (null = unveraendert)
-//   endzustand       - der gemeldete Endzustand (null = nicht geschlossen)
 const MATRIX = [
   {
     nr: 1,
@@ -178,7 +134,6 @@ const MATRIX = [
       control: poolMit(vollerPool({ mikroCents })),
     }),
     hoch: { gebucht: true, deltaCents: ERWARTETES_DELTA_HOCH, costCentsNachher: VORHER_COST_CENTS + ERWARTETES_DELTA_HOCH, herkunft: COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG, endzustand: ENDZUSTAND.VOLLSTAENDIG },
-    // DIE Erstattung: vollstaendiges Buch -> dataComplete -> der negative Delta wird gebucht.
     niedrig: { gebucht: true, deltaCents: ERWARTETES_DELTA_NIEDRIG, costCentsNachher: VORHER_COST_CENTS + ERWARTETES_DELTA_NIEDRIG, herkunft: COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG, endzustand: ENDZUSTAND.VOLLSTAENDIG },
   },
   {
@@ -188,23 +143,18 @@ const MATRIX = [
       call: beendeterCall(state, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, legRef: { callControlId: "cc_1" } }),
       control: POOL_AUS,
     }),
-    // Kein Beleg, keine Frist -> der Anruf bleibt offen und bewegt keinen Cent.
     hoch: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.UNAVAILABLE, endzustand: null },
     niedrig: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.UNAVAILABLE, endzustand: null },
   },
   {
     nr: 3,
     name: "ein Traeger nur vorlaeufig, Frist abgelaufen, in diesem Lauf NICHT messbar",
-    // Ohne Leg-Referenz ist der Anruf nicht abrufbar - er laeuft ueber den
-    // Faelligkeitslauf (schliesseFaelligeOffene), nicht ueber die Messung.
     aufbau: ({ state, nowMs, mikroCents }) => {
       const call = beendeterCall(state, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, endedMinutenHer: NACH_FRIST_MINUTEN_HER });
       seedBeleg(state, { callId: call.id, traeger: KOSTENART.TELNYX_CALL_RECORDS, reife: REIFE.VORLAEUFIG, mikroCents });
       return { call, control: POOL_AUS };
     },
     hoch: { gebucht: true, deltaCents: ERWARTETES_DELTA_HOCH, costCentsNachher: VORHER_COST_CENTS + ERWARTETES_DELTA_HOCH, herkunft: COST_TRUING_SOURCE.KOSTENBUCH_TEILBELEG, endzustand: ENDZUSTAND.UNVOLLSTAENDIG_FINAL },
-    // Teilbeleg ist systematisch ZU NIEDRIG -> kein dataComplete -> die Erstattung wird
-    // VOR jeder Mutation verworfen.
     niedrig: { gebucht: false, deltaCents: ERWARTETES_DELTA_NIEDRIG, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.KOSTENBUCH_TEILBELEG, endzustand: ENDZUSTAND.UNVOLLSTAENDIG_FINAL },
   },
   {
@@ -214,8 +164,6 @@ const MATRIX = [
       call: beendeterCall(state, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, legRef: { callControlId: "cc_1" } }),
       control: poolMit(vollerPool({ mikroCents, billedSec: KEINE_SEKUNDEN })),
     }),
-    // Der Sweep-Traeger ist fertig -> der Anruf schliesst ueber die Belegsammlung, die
-    // Zeile bleibt aber vorlaeufig (billed_sec 0 beweist nichts) -> kein dataComplete.
     hoch: { gebucht: true, deltaCents: ERWARTETES_DELTA_HOCH, costCentsNachher: VORHER_COST_CENTS + ERWARTETES_DELTA_HOCH, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: ENDZUSTAND.UNVOLLSTAENDIG_FINAL },
     niedrig: { gebucht: false, deltaCents: ERWARTETES_DELTA_NIEDRIG, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: ENDZUSTAND.UNVOLLSTAENDIG_FINAL },
   },
@@ -225,7 +173,6 @@ const MATRIX = [
     aufbau: ({ state, nowMs, mikroCents }) => {
       const call = beendeterCall(state, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, endedMinutenHer: NACH_FRIST_MINUTEN_HER });
       seedBeleg(state, { callId: call.id, traeger: KOSTENART.TELNYX_CALL_RECORDS, reife: REIFE.STRUKTURELL_UNBESCHAFFBAR, mikroCents: 0, nachreifbar: false });
-      // "nachbuchen mit dem, was da ist": ein NICHT-pflichtiger Traeger traegt den Betrag.
       seedBeleg(state, { callId: call.id, traeger: KOSTENART.AI_TOKEN, reife: REIFE.VORLAEUFIG, mikroCents });
       return { call, control: POOL_AUS };
     },
@@ -239,9 +186,6 @@ const MATRIX = [
       call: beendeterCall(state, { nowMs, legRef: { callControlId: "cc_1" } }),
       control: poolMit(vollerPool({ mikroCents })),
     }),
-    // Wie heute: die Legacy-Zuordnung liefert telnyx_budget, das Buch ist vollstaendig -
-    // die Erstattung ist eingeschlossen. Der Endzustand meldet trotzdem das fehlende
-    // Profil (KV2-7-Regel: "kein costProfile" ist NIE Vollstaendigkeit).
     hoch: { gebucht: true, deltaCents: ERWARTETES_DELTA_HOCH, costCentsNachher: VORHER_COST_CENTS + ERWARTETES_DELTA_HOCH, herkunft: COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG, endzustand: ENDZUSTAND.PROFIL_FEHLT },
     niedrig: { gebucht: true, deltaCents: ERWARTETES_DELTA_NIEDRIG, costCentsNachher: VORHER_COST_CENTS + ERWARTETES_DELTA_NIEDRIG, herkunft: COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG, endzustand: ENDZUSTAND.PROFIL_FEHLT },
   },
@@ -252,10 +196,6 @@ const MATRIX = [
       call: beendeterCall(state, { nowMs, legRef: { sipCallId: "otb_4101m190brwyf4mb9cwvhts7rymk" } }),
       control: poolMit([{ recordType: "sip-trunking", costMicroCents: mikroCents, currency: "USD", billedSec: BILLED_SEC, legId: "otb_4101m190brwyf4mb9cwvhts7rymk" }]),
     }),
-    // Kein Settlement: der Anruf schliesst NICHT (die elevenlabs_convai-Zeile fehlt, die
-    // Frist laeuft noch) - das Settlement haengt am Abschluss (KV2-8), nicht an der
-    // Messung. Die Herkunft bleibt 'incomplete' und NIEMALS 'telnyx_detail_records': der
-    // Telnyx-Pool ist zwar vollstaendig, der ANRUF aber nicht.
     hoch: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: null },
     niedrig: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: null },
   },
@@ -266,11 +206,6 @@ const MATRIX = [
       call: beendeterCall(state, { nowMs, profil: UNBEKANNTES_PROFIL, legRef: { callControlId: "cc_1" } }),
       control: poolMit(vollerPool({ mikroCents })),
     }),
-    // Kein Riegel wie bei sipCallId GESETZT (Zeile 7) - hier gibt es keine Legacy-
-    // Zuordnung, die greifen koennte: die Pflichtmenge ist strukturell leer
-    // (pflichtTraegerFuerProfil eines unbekannten Profils), sweepTraegerFuerProfil
-    // liefert null, also schreibt der Sweep gar keine Belegzeile - "gar nichts" in
-    // BEIDE Richtungen (4.6), trotz eines vollstaendigen Telnyx-Pools.
     hoch: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: ENDZUSTAND.PROFIL_FEHLT },
     niedrig: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: ENDZUSTAND.PROFIL_FEHLT },
   },
@@ -281,8 +216,6 @@ const MATRIX = [
       call: beendeterCall(state, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, legRef: { callControlId: "cc_1" } }),
       control: poolMit(vollerPool({ mikroCents: 0 })),
     }),
-    // Matrix 4.6: eine 0 bei abgerechneten Sekunden waere eine erfundene Messung -> KEINE
-    // Belegzeile -> Summe null -> die Geld-Kante bleibt UNGERUFEN, in BEIDE Richtungen.
     hoch: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: ENDZUSTAND.UNVOLLSTAENDIG_FINAL },
     niedrig: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: ENDZUSTAND.UNVOLLSTAENDIG_FINAL },
   },
@@ -293,8 +226,6 @@ const MATRIX = [
       call: beendeterCall(state, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, legRef: { callControlId: "cc_1" } }),
       control: poolMit(vollerPool({ mikroCents: 0, billedSec: KEINE_SEKUNDEN })),
     }),
-    // Gueltige 0-Zeile -> Summe 0 (NICHT null) -> die Kante LAEUFT, der Delta ist die
-    // volle Schaetzung ins Minus und wird mangels dataComplete verworfen.
     hoch: { gebucht: false, deltaCents: -SCHAETZUNG_CENTS, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: ENDZUSTAND.UNVOLLSTAENDIG_FINAL },
     niedrig: { gebucht: false, deltaCents: -SCHAETZUNG_CENTS, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: ENDZUSTAND.UNVOLLSTAENDIG_FINAL },
   },
@@ -342,16 +273,9 @@ for (const zeile of MATRIX) {
   }
 }
 
-// ---- (b) Vakuositaet: die LEERE Pflichtmenge ist NIEMALS Vollstaendigkeit ----------------
-
 test("(b) istVollBelegt ist ueber der leeren Pflichtmenge FALSCH - in beiden Auspraegungen", () => {
-  // Unbekanntes Profil: keine Pflichtmenge, kein Freispruch.
   assert.equal(istVollBelegt({ profil: "gibt_es_nicht", pflichtTraeger: [], fehlend: [] }), false);
-  // Bekanntes Profil, aber (hypothetisch) leere Pflichtmenge: der Allquantor waere WAHR -
-  // genau das darf ein Praedikat, das ueber Geldrueckgabe entscheidet, nie werden.
   assert.equal(istVollBelegt({ profil: KOSTENPROFIL.TELNYX_BUDGET, pflichtTraeger: [], fehlend: [] }), false);
-  // Positiv-Kontrolle: mit nicht-leerer Pflichtmenge und ohne Fehlstelle ist es WAHR -
-  // sonst pruefte der Test eine Funktion, die immer false liefert.
   assert.equal(
     istVollBelegt({ profil: KOSTENPROFIL.TELNYX_BUDGET, pflichtTraeger: [KOSTENART.TELNYX_CALL_RECORDS], fehlend: [] }),
     true,
@@ -362,7 +286,6 @@ test("(b) profilloser Anruf ohne jeden Beleg: kein Cent bewegt sich, und das Buc
   const nowMs = Date.now();
   const state = makeDefaultState();
   seedUsageCents(state, VORHER_COST_CENTS);
-  // Kein Profil, keine Leg-Referenz, kein Beleg - und trotzdem im Herzschlag-Fenster.
   const call = beendeterCall(state, { nowMs, endedMinutenHer: IM_HERZSCHLAG_FENSTER_MINUTEN_HER });
   const { korrekturAufrufe, logs } = await sweepMitSpion({ state, nowMs, control: POOL_AUS, config: testConfig() });
 
@@ -374,8 +297,6 @@ test("(b) profilloser Anruf ohne jeden Beleg: kein Cent bewegt sich, und das Buc
     `das Kosten-Buch muss profil-fehlt melden: ${logs.join("\n")}`,
   );
 });
-
-// ---- (c) Ein Anruf wird genau EINMAL gesettelt -------------------------------------------
 
 test("(c) zwei Sweeps hintereinander: das Settlement laeuft genau einmal", async () => {
   const nowMs = Date.now();
@@ -407,14 +328,12 @@ test("(c) zwei Sweeps hintereinander: das Settlement laeuft genau einmal", async
   assert.equal(call.costTruedAt, truedAtNachErstem, "costTruedAt ist set-once");
 });
 
-// ---- (d) Rundung: der Sub-Cent-Rest wandert mit, gerechnet statt abgeschrieben -----------
-
 test("(d) nicht-neutrale Rate: der Rest-Uebertrag entspricht exakt der Umrechnung", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
   seedUsageCents(state, VORHER_COST_CENTS);
-  const RATE_MICRO = 920_000; // 0,92 EUR je USD - eine neutrale Rate verdeckte den Rest
-  const IST_MIT_REST_MIKRO = 4_010_000; // gemessener SIP-Satz, erzeugt einen echten Rest
+  const RATE_MICRO = 920_000;
+  const IST_MIT_REST_MIKRO = 4_010_000;
   beendeterCall(state, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, legRef: { callControlId: "cc_1" } });
   const config = testConfig({ providerToBucketRateMicro: RATE_MICRO });
   await sweepMitSpion({ state, nowMs, control: poolMit(vollerPool({ mikroCents: IST_MIT_REST_MIKRO })), config });
@@ -433,8 +352,6 @@ test("(d) nicht-neutrale Rate: der Rest-Uebertrag entspricht exakt der Umrechnun
   );
 });
 
-// ---- (e) Kein Herkunftswert faellt unentschieden durch ------------------------------------
-
 const HERKUNFT_BEWEISEND = Object.freeze({
   [COST_TRUING_SOURCE.DETAIL_RECORDS]: true,
   [COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG]: true,
@@ -450,7 +367,6 @@ test("(e) jeder Enum-Wert ist ausdruecklich als beweisend oder nicht-beweisend e
   for (const wert of werte) {
     assert.equal(istBeweisendeHerkunft(wert), HERKUNFT_BEWEISEND[wert], `Herkunft ${wert}`);
   }
-  // Ein unbekannter Wert (Altzeile, Datenfehler) ist NIE beweisend - fail-closed.
   assert.equal(istBeweisendeHerkunft(null), false);
   assert.equal(istBeweisendeHerkunft("erfundener_wert"), false);
 });
@@ -475,8 +391,6 @@ test("(e) ein el_convai_sip-Settlement schreibt NIE 'telnyx_detail_records'", as
   const nowMs = Date.now();
   const state = makeDefaultState();
   seedUsageCents(state, VORHER_COST_CENTS);
-  // Ohne Leg-Referenz laeuft der Anruf ueber den Faelligkeitslauf - dort entsteht die
-  // Herkunft aus dem BUCH (herkunftOhneMessung), nicht aus einer Messung.
   const call = beendeterCall(state, {
     nowMs, profil: KOSTENPROFIL.EL_CONVAI_SIP, endedMinutenHer: NACH_FRIST_MINUTEN_HER,
   });
@@ -485,23 +399,16 @@ test("(e) ein el_convai_sip-Settlement schreibt NIE 'telnyx_detail_records'", as
 
   assert.notEqual(call.costTruedSource, COST_TRUING_SOURCE.DETAIL_RECORDS);
   assert.equal(call.costTruedSource, COST_TRUING_SOURCE.KOSTENBUCH_TEILBELEG);
-  // KV2-11 (OR-1): Ist > Schaetzung -> bedingungslos nachbuchen, auch ohne beweisende
-  // Herkunft. Die Erstattungs-Richtung bleibt am dataComplete-Riegel: die EL-Zeile ist
-  // nur vorlaeufig, das telnyx_sip-SOLL fehlt ganz -> keine Rueckerstattung.
   assert.equal(korrekturAufrufe.length, 1, "nach Fristablauf settelt die EL-Route (OR-1)");
   assert.equal(korrekturAufrufe[0].dataComplete, false, "das Buch ist unvollstaendig");
   assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, VORHER_COST_CENTS + ERWARTETES_DELTA_HOCH);
 });
-
-// ---- (g) Vorzeichen und Typ: was die Geld-Kante zu sehen bekommt --------------------------
 
 test("(g) Belegsumme ausserhalb des sicheren Ganzzahlbereichs: die Geld-Kante bleibt ungerufen", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
   seedUsageCents(state, VORHER_COST_CENTS);
   const call = beendeterCall(state, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, endedMinutenHer: NACH_FRIST_MINUTEN_HER });
-  // Zwei Zeilen, deren SUMME den sicheren Ganzzahlbereich verlaesst - jede einzelne ist
-  // fuer sich ein gueltiger Anbieter-Mikro-Cent-Betrag.
   const HAELFTE = 2;
   const HALB_MAX = Math.floor(Number.MAX_SAFE_INTEGER / HAELFTE) + 1;
   seedBeleg(state, { callId: call.id, traeger: KOSTENART.TELNYX_CALL_RECORDS, reife: REIFE.VORLAEUFIG, mikroCents: HALB_MAX });
@@ -518,7 +425,6 @@ test("(g) kein summierbarer Beleg: Summe ist null (nicht 0) und die Geld-Kante b
   const state = makeDefaultState();
   seedUsageCents(state, VORHER_COST_CENTS);
   const call = beendeterCall(state, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, endedMinutenHer: NACH_FRIST_MINUTEN_HER });
-  // 'erwartet' traegt per Regel keinen Betrag und ist nicht summierbar.
   seedBeleg(state, { callId: call.id, traeger: KOSTENART.TELNYX_CALL_RECORDS, reife: REIFE.ERWARTET });
   assert.equal(settlementProjektion({ call, belege: state.callCostEvidence }).summeMikroCents, null);
 
@@ -542,19 +448,14 @@ test("(g) Gegenprobe: gueltige Summe -> genau EIN Aufruf mit einem Betrag >= 0",
   assert.equal(korrekturAufrufe[0].dataComplete, true);
 });
 
-// ---- (i) Erstattungs-Regression: der Bestandsweg und der neue Weg buchen dasselbe --------
-
 test("(i) vergleichend: neuer Sweep und nachgebauter Bestandspfad buchen bit-gleich", async () => {
   const nowMs = Date.now();
   const IST_MIKRO = 4_010_000;
-  // Arm A: der neue Sweep.
   const stateA = makeDefaultState();
   seedUsageCents(stateA, VORHER_COST_CENTS);
   beendeterCall(stateA, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, legRef: { callControlId: "cc_1" } });
   await sweepMitSpion({ state: stateA, nowMs, control: poolMit(vollerPool({ mikroCents: IST_MIKRO })), config: testConfig() });
 
-  // Arm B: der HEUTIGE Pfad, aus den echten Bausteinen nachgebaut - belegVollstaendig
-  // (source vollstaendig UND billedSec > 0) als dataComplete, die Telnyx-Messung als Betrag.
   const stateB = makeDefaultState();
   seedUsageCents(stateB, VORHER_COST_CENTS);
   const callB = beendeterCall(stateB, { nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, legRef: { callControlId: "cc_1" } });
@@ -620,18 +521,6 @@ test("(i) Gegenprobe 3: kein buchbarer Schaetzbetrag -> null Cent und Herkunft n
   assert.equal(call.costTruedSource, COST_TRUING_SOURCE.NO_ESTIMATE);
 });
 
-// ---------------------------------------------------------------------------------
-// KV2-8B: die Luecke, durch die Regression B1 gerutscht ist.
-//
-// Abnahme (e) verlangt woertlich, JEDEN Wert von COST_TRUING_SOURCE einmal durch die
-// Herkunftsregel zu schicken. Geprueft wurde bisher nur istBeweisendeHerkunft ueber den
-// Enum plus zwei Einzelfaelle - die Regel SELBST lief nie ueber ihren Eingaberaum. Genau
-// deshalb blieb unbemerkt, dass der Riegel im no-estimate-Zweig fehlte.
-//
-// Zwei Tests, weil es zwei Aussagen sind: der Riegel als Funktion (Tabelle ueber den
-// vollen Enum) und seine Verdrahtung im Sweep (der konkrete Regressionspfad).
-// ---------------------------------------------------------------------------------
-
 test("(e) ohneBeweiskraft: JEDER Enum-Wert - beweisende Herkunft wird zu incomplete, jede andere bleibt", () => {
   const werte = Object.values(COST_TRUING_SOURCE);
   assert.ok(werte.length > 0, "Enum ist nicht leer (sonst waere die Tabelle vakuos wahr)");
@@ -650,8 +539,6 @@ test("(e) ohneBeweiskraft: JEDER Enum-Wert - beweisende Herkunft wird zu incompl
       assert.equal(ergebnis, source, `'${source}' ist nicht beweisend und muss unveraendert bleiben`);
     }
   }
-  // Positiv-Kontrolle: haette der Enum keinen einzigen beweisenden Wert, waere die
-  // Schleife oben allquantifiziert wahr, ohne je den Riegel auszuloesen.
   assert.ok(beweisendeGesehen > 0, "mindestens eine beweisende Herkunft muss im Enum stehen");
 });
 
@@ -659,9 +546,6 @@ test("(e) B1-Regression: kein Schaetzbetrag UND unvollstaendiges Buch ergibt NIE
   const nowMs = Date.now();
   const state = makeDefaultState();
   seedUsageCents(state, VORHER_COST_CENTS);
-  // Vollstaendiger Telnyx-Pool (measured.source waere 'telnyx_detail_records'), aber
-  // billedSec 0 haelt die Belegzeile vorlaeufig -> das Kosten-Buch ist NICHT vollbelegt.
-  // Dazu kein Schaetzbetrag: exakt die Kombination, die vor dem Fix am Riegel vorbeilief.
   const call = beendeterCall(state, {
     nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, legRef: { callControlId: "cc_1" }, schaetzung: null,
   });

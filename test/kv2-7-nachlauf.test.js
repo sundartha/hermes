@@ -1,7 +1,3 @@
-// KV2-7 (tasks/kostenv2/spec-kv2-7.md, Abnahme (g)): der Phasenschnitt-Nachlauf. In-
-// process, netzfrei (Muster test/kv2-4-el-kosten-beleg.test.js Ebene 1). Testname traegt
-// bewusst KEINE Katalog-/Abnahme-Kennung am Namensanfang (Lehre
-// catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -21,8 +17,6 @@ import {
 import { BOOTSTRAP_TENANT_ID, REIFE } from "../src/store/defaults.js";
 import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
 
-// Store-Naht (Muster test/kv2-4-el-kosten-beleg.test.js#seedCall): nur die Methoden, die
-// der Nachlauf tatsaechlich braucht.
 function makeStore(state) {
   return {
     load: () => state,
@@ -38,7 +32,6 @@ function seedCall(state, { costProfile, costTruedAtIso }) {
   call.status = "completed";
   call.endedAt = new Date().toISOString();
   if (costProfile !== undefined) call.costProfile = costProfile;
-  // KV2-8: Optionsobjekt statt drittem Positionsargument (Signaturwechsel, F1).
   if (costTruedAtIso !== undefined) schliesseKostenAbgleich(state, call.id, { closedAt: costTruedAtIso });
   return call;
 }
@@ -50,9 +43,7 @@ function seedSipBeleg(state, callId) {
 }
 
 const JETZT_ISO = () => new Date().toISOString();
-const ZWEI_TREFFER = 2; // G25: benannt statt nackter Zahl im assert
-
-// ---- (g) Treffer: gelatchte Altzeile wird wieder geoeffnet -----------------------------
+const ZWEI_TREFFER = 2;
 
 test("(g) Treffer: el_convai_sip, costTruedAt gesetzt, telnyx_sip-Beleg, KEINE elevenlabs_convai-Zeile -> wird wieder geoeffnet", () => {
   const state = makeDefaultState();
@@ -91,8 +82,6 @@ test("(g) zweiter Lauf auf demselben Datensatz ist ein No-Op (bereits null)", ()
   );
 });
 
-// ---- Gegenprobe: Altzeile OHNE jede Belegzeile bleibt unveraendert ---------------------
-
 test("Gegenprobe: el_convai_sip mit costTruedAt, aber OHNE jede call_cost_evidence-Zeile, bleibt unveraendert", () => {
   const state = makeDefaultState();
   const call = seedCall(state, { costProfile: KOSTENPROFIL.EL_CONVAI_SIP, costTruedAtIso: JETZT_ISO() });
@@ -108,8 +97,6 @@ test("Gegenprobe: el_convai_sip mit costTruedAt, aber OHNE jede call_cost_eviden
   assert.equal(call.costTruedAt, gesetztCostTruedAt, "unveraendert");
 });
 
-// ---- Gegenprobe: Dry-Run mutiert nichts ------------------------------------------------
-
 test("Gegenprobe: Dry-Run (apply=false) mutiert keinen Datensatz, auch bei mehreren Treffern", () => {
   const state = makeDefaultState();
   const callA = seedCall(state, { costProfile: KOSTENPROFIL.EL_CONVAI_SIP, costTruedAtIso: JETZT_ISO() });
@@ -123,8 +110,6 @@ test("Gegenprobe: Dry-Run (apply=false) mutiert keinen Datensatz, auch bei mehre
   assert.notEqual(callA.costTruedAt, null);
   assert.notEqual(callB.costTruedAt, null);
 });
-
-// ---- Gegenprobe: eine vorhandene elevenlabs_convai-Zeile (vorlaeufig|belegt) verhindert den Treffer ----
 
 test("Gegenprobe: eine vorhandene elevenlabs_convai-Zeile (vorlaeufig) verhindert den Treffer", () => {
   const state = makeDefaultState();
@@ -144,8 +129,6 @@ test("Gegenprobe: eine vorhandene elevenlabs_convai-Zeile (vorlaeufig) verhinder
   assert.equal(report.treffer.length, 0);
   assert.notEqual(call.costTruedAt, null, "bleibt geschlossen");
 });
-
-// ---- Weitere Skip-Gruende (rein) --------------------------------------------------------
 
 test("rein: kein el_convai_sip-Profil -> KEIN_EL_PROFIL", () => {
   const state = makeDefaultState();

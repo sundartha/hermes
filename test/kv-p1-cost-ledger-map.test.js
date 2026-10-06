@@ -1,38 +1,3 @@
-// KV-P1 (PLAN-KOSTEN-VOLLSTAENDIGKEIT.md): faehrt die Kosten-Landkarte
-// (src/billing/cost-ledger-map.js) gegen die REALITAET, nicht gegen eine zweite Konstante.
-// Fuer JEDE Zeile wird der echte Produktions-Buchungspfad ausgeloest (recordVoiceMinuteMeter/
-// reconcileVoiceBudget, bookTokenUsage, bookResearchSearchFee/bookLookupSearchFee,
-// finishCall (SMS), recordNumberMonthMeter, recordTenantTtsCharacters) und danach werden
-// BEIDE Buecher gelesen: Buch A = der Verbrauchs-Ledger (usage_event), Buch B = die
-// Gate-Achse (usage.costCents/costMicroCentsRem). Kein Server-Spawn, kein Netz (P12).
-//
-// ZWEI Testnaehte in dieser Datei, bewusst getrennt:
-//   (1) direkter state-ops-Zugriff (Muster test/metering-unit.test.js): makeMetering/
-//       makeCallFinish/recordTenantTtsCharacters gegen einen selbst gebauten `s =
-//       makeDefaultState()`, ueber einen duennen Adapter, der echte state-ops-Funktionen
-//       aufruft. Kein config.js/store.js-Singleton involviert.
-//   (2) dynamischer Import NACH Env (Muster test/al-p10-precall-research.test.js) fuer
-//       ai_token/research_fee: bookTokenUsage/bookResearchSearchFee/bookLookupSearchFee in
-//       src/llm-usage.js sprechen mit dem ECHTEN src/store.js-Singleton, der wiederum
-//       src/config.js singleton-artig laedt. Deshalb duerfen metering.js/outbound-gates.js
-//       (transitiv config.js) in DIESER Datei NICHT statisch importiert werden - ein
-//       frueher Import wuerde config.js VOR unserem before()-Env-Setup fixieren und
-//       DATA_DIR/PAYMENT_ENABLED aus (2) wirkungslos machen. makeMetering/tariffCentsPerMin
-//       werden deshalb ebenfalls dynamisch importiert (in DEMSELBEN before()), obwohl Naht
-//       (1) sie selbst nicht braucht - Sicherheitsabstand statt Beweislast.
-//
-// MUTATIONSPROBEN (manuell waehrend der Abnahme, NICHT Teil dieses Testcodes):
-//   (a) EINE Zeile luegen lassen (z.B. sms.gate testweise auf true) -> der zugehoerige
-//       Verhaltenstest unten muss ROT werden (er liest weiterhin usageOf(...).costCents
-//       unveraendert). Bleibt er gruen, ist der Test eine Tautologie.
-//   (b) einen Wert in USAGE_EVENT_KIND ergaenzen ohne Tabellenzeile -> KV-P1-8 rot.
-//   (c) eine Tabellenzeile entfernen, deren Kosten-Art es weiterhin gibt -> KV-P1-9 rot
-//       (verwaiste ledger:true-Zeile) bzw. KV-P1-8 rot (Enum-Wert ohne Zeile).
-//   (d) einen zweiten Aufruf von store.addVoiceUsageCostCents( anlegen -> KV-P1-10 rot,
-//       UNABHAENGIG davon, ob dieser zweite Aufruf in src/billing/metering.js selbst
-//       steht (zweiter Aufruf in DERSELBEN Datei) oder in einer anderen src-Datei -
-//       der Riegel zaehlt Vorkommen ueber alle src-Dateien hinweg, nicht Dateinamen.
-// Jede Mutation danach zuruecknehmen, npm test wieder gruen.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -52,26 +17,16 @@ import {
 import { makeCallFinish } from "../src/telephony/call-finish.js";
 import { COST_LEDGER_MAP } from "../src/billing/cost-ledger-map.js";
 
-// ---- Fixtures (benannt statt Magic Numbers, G25) --------------------------------------
 const ANSWERED_AT = "2026-01-01T00:00:00.000Z";
 const ENDED_AT_PLUS_ONE_MINUTE = "2026-01-01T00:01:00.000Z";
-const VOICE_CALL_TO = "+491701234567"; // DE, wie DOMESTIC_TEST_NUMBER.from -> Inlandstarif
-const MONTHLY_RENT_CENTS = 92; // beliebiger, von 0 verschiedener Fixture-Wert (Muster metering-unit.test.js)
-const SMS_COST_CENTS_FIXTURE = 7; // bewusst NICHT 0 - eine 0 waere eine leere 0===0-Assertion
+const VOICE_CALL_TO = "+491701234567";
+const MONTHLY_RENT_CENTS = 92;
+const SMS_COST_CENTS_FIXTURE = 7;
 const RESEARCH_FEE_CENTS_FIXTURE = 3;
 const LOOKUP_FEE_CENTS_FIXTURE = 4;
-// KV-P2: bewusst von 0 verschieden (Muster SMS_COST_CENTS_FIXTURE) - eine 0 waere am
-// Gate eine leere 0===0-Assertion und liesse einen Rueckfall auf den Richtungsfilter
-// unsichtbar.
 const INBOUND_TARIFF_CENTS_FIXTURE = 9;
 const TTS_CHARACTERS_FIXTURE = 42;
-// Ein 5/5-Token-Turn rundet mit den heutigen Modellpreisen (claude-haiku-4-5: 1,0/5,0 USD
-// je Mio. Token, usdToEur 0,92) auf 0 EUR-Cent - das demonstriert die ai_token-Zeile. Die
-// Fixture-Behauptung wird unten GEGEN DIE ECHTE FORMEL (aiCostCents) geprueft, nicht
-// hart erwartet - aendern sich die Preise, faellt genau diese Assertion zuerst auf.
 const AI_TOKEN_MODEL = "claude-haiku-4-5";
-// B3a: die neutrale Verbrauchsform (src/llm/ports.js LlmTokenUsage) - dieselben Zahlen
-// wie zuvor, nur nach Preisklasse benannt; die Modell-ID reist darin mit.
 const AI_TOKEN_TURN = Object.freeze({
   inputUncachedTokens: 5,
   inputCacheWriteTokens: 0,
@@ -80,7 +35,7 @@ const AI_TOKEN_TURN = Object.freeze({
   estimated: false,
   billingModelId: AI_TOKEN_MODEL,
 });
-const AI_TOKEN_TURNS_COUNT = 3; // mind. 2 (Plan-Vorgabe): die Divergenz ist ein Verlauf, kein Einzelwert
+const AI_TOKEN_TURNS_COUNT = 3;
 
 const TENANT_VOICE_OUT = "kvp1_voice_out";
 const TENANT_VOICE_IN = "kvp1_voice_in";
@@ -89,15 +44,12 @@ const TENANT_TTS = "kvp1_tts";
 const TENANT_AI = "kvp1_ai_token";
 const TENANT_RESEARCH = "kvp1_research_fee";
 
-// ---- Naht (2): dynamischer Import NACH Env (Muster al-p10-precall-research.test.js) ----
 let config, store, makeMetering, tariffCentsPerMin, bookTokenUsage, bookResearchSearchFee, bookLookupSearchFee;
 
 before(async () => {
-  process.env.PAYMENT_ENABLED = "true"; // ai_token-Zeile: meterAiTokens gated auf PAYMENT_ENABLED
+  process.env.PAYMENT_ENABLED = "true";
   process.env.RESEARCH_SEARCH_FEE_CENTS = String(RESEARCH_FEE_CENTS_FIXTURE);
   process.env.LOOKUP_SEARCH_FEE_CENTS = String(LOOKUP_FEE_CENTS_FIXTURE);
-  // KV-P2: explizit setzen, sonst entscheidet eine lokale .env ueber den Inbound-Satz
-  // (Lehre test-base-env-drift, Muster RESEARCH_SEARCH_FEE_CENTS oben).
   process.env.VOICE_TARIFF_INBOUND_CENTS = String(INBOUND_TARIFF_CENTS_FIXTURE);
   process.env.DATA_DIR = tempDataDir(
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
@@ -109,14 +61,6 @@ before(async () => {
   ({ bookTokenUsage, bookResearchSearchFee, bookLookupSearchFee } = await import("../src/llm-usage.js"));
 });
 
-// Kreuzprobe GEGEN DIE TABELLE (nicht nur gegen eine hart erwartete Zahl): jede Zeile
-// unten berechnet aus dem beobachteten Verhalten zwei Booleans (ledgerWrote/gateWrote)
-// und diese Funktion vergleicht sie mit COST_LEDGER_MAP[rowName].ledger/.gate. Eine
-// geluegene Tabellenzeile (z.B. sms.gate testweise auf true) aendert damit die
-// ERWARTUNG, nicht die Beobachtung - assert.equal schlaegt dann fehl, weil der
-// tatsaechliche Code sich nicht mitgeaendert hat. Ohne diese Kreuzprobe wuerden die
-// Tests unten nur gegen eine hart einprogrammierte Erwartung pruefen und liefen bei
-// einer geluegenen Zeile weiterhin gruen durch - genau die Tautologie-Falle des Plans.
 function assertRowMatchesObservation(rowName, { ledgerWrote, gateWrote }) {
   const row = COST_LEDGER_MAP[rowName];
   assert.equal(
@@ -131,8 +75,6 @@ function assertRowMatchesObservation(rowName, { ledgerWrote, gateWrote }) {
   );
 }
 
-// ---- Naht (1): duenner Adapter, der echte state-ops-Funktionen gegen ein `s` aufruft ----
-// (Muster test/metering-unit.test.js: fakeStore faengt NICHTS - er REICHT DURCH.)
 function realMeteringStore(s) {
   return {
     recordUsageEvent: (ev) => recordUsageEvent(s, ev),
@@ -204,10 +146,6 @@ test("KV-P1-2 voice_minute_inbound: Ledger UND Gate tragen den kalibrierten Inbo
 });
 
 test("KV-P1-3 ai_token: jede Buchung landet 0-gerundet im Ledger, das Gate akkumuliert den Mikro-Cent-Rest weiter", () => {
-  // aiCostCents erwartet die BEREITS KONVERTIERTE Form (billedTokens in llm-usage.js):
-  // seit B4a die VIER Token-Sorten + die Modell-ID, nicht die Verbrauchsform des Ports
-  // (die zusaetzlich estimated/billingModelId traegt) - dieselbe Umrechnung, die
-  // bookTokenUsage intern vornimmt.
   const billedForm = {
     inputUncachedTokens: AI_TOKEN_TURN.inputUncachedTokens,
     inputCacheWriteTokens: AI_TOKEN_TURN.inputCacheWriteTokens,
@@ -231,11 +169,6 @@ test("KV-P1-3 ai_token: jede Buchung landet 0-gerundet im Ledger, das Gate akkum
     .load()
     .usageEvents.filter((e) => e.kind === USAGE_EVENT_KIND.AI_TOKEN && e.tenantId === TENANT_AI);
 
-  // Gate-Signal DIESER Zeile ist bewusst der Mikro-Cent-Rest, nicht die Ganzzahl-Projektion
-  // usageOf(...).costCents: die Fixture ist ABSICHTLICH so klein gewaehlt, dass costCents
-  // ueber alle AI_TOKEN_TURNS_COUNT Turns hinweg 0 bleibt (der volle Cent-Uebertrag
-  // braucht weit mehr Turns) - genau costMicroCentsRem ist die Groesse, die die Zeile
-  // behauptet ("verliert den Rest NIE").
   assertRowMatchesObservation("ai_token", {
     ledgerWrote: ledgerEvents.length > 0,
     gateWrote: microRestVerlauf[microRestVerlauf.length - 1] > 0,
@@ -300,12 +233,9 @@ test("KV-P1-5 sms: die Summary-SMS bucht den Ledger, das Gate bleibt unberuehrt"
       recordUsageEvent: (ev) => recordUsageEvent(s, ev),
       markSummarySmsSent: () => {},
       markBilled: () => {},
-      // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
       markInboxEntry: () => {},
     },
     config: callFinishConfig,
-    // Metering isoliert ausgeschaltet (Muster test/web-14-call-finish-sms-text-language.test.js):
-    // diese Zeile prueft NUR den SMS-Pfad, nicht die Voice-Metering-Zeilen aus KV-P1-1/2.
     metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
     messaging: () => ({ sendSms: async () => {} }),
     summarizeCall: async () => ({ summary: "Testzusammenfassung", actionItems: [] }),
@@ -367,8 +297,6 @@ test("KV-P1-7 play_tts_characters: zaehlt Zeichen, beruehrt weder Ledger noch Ga
   assert.equal(usage.ttsCharacters, TTS_CHARACTERS_FIXTURE, "einziger Effekt ist das Zeichen-Feld");
 });
 
-// ---- Vollstaendigkeits-Riegel (Teil 3 des Plans) --------------------------------------
-
 test("KV-P1-8: jeder USAGE_EVENT_KIND-Wert hat mindestens eine Tabellenzeile", () => {
   const gedeckt = new Set(
     Object.values(COST_LEDGER_MAP)
@@ -389,10 +317,6 @@ test("KV-P1-9: jede ledger:true-Zeile referenziert einen echten USAGE_EVENT_KIND
   }
 });
 
-// ---- Ein-Aufrufer-Riegel (Teil 4 des Plans, TOD 2) -------------------------------------
-
-// Rekursiver .js-Scan unter <repo-root>/<relDir>. Kein bestehender Helfer in helpers.js
-// (geprueft) - privat hier, weil nur dieser eine Test ihn braucht (G5).
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXCLUDED_DIR_NAMES = new Set(["node_modules", ".git"]);
 
@@ -416,13 +340,6 @@ test("KV-P1-10: addVoiceUsageCostCents hat genau EIN Vorkommen von store.addVoic
   const EXPECTED_CALL_SITE = "src/billing/metering.js";
   const ERWARTETE_VORKOMMEN = 1;
 
-  // matchAll zaehlt ALLE Treffer je Datei (nicht nur, OB die Datei ueberhaupt trifft) -
-  // genau das deckt einen zweiten Aufruf INNERHALB derselben Datei auf, den ein reiner
-  // Dateiname-Vergleich uebersehen wuerde (der urspruengliche Fehler dieses Riegels).
-  // matchAll verlangt den /g-Flag und klont den Regex intern: der hier wiederverwendete
-  // CALL_SITE_PATTERN behaelt ueber alle Dateien hinweg lastIndex=0 (empirisch geprueft) -
-  // der klassische /g-Fallstrick (zustandsbehaftetes lastIndex bei exec()/test()-Wiederverwendung)
-  // greift bei matchAll nicht.
   const vorkommenJeDatei = alleSrcDateien("src")
     .map((datei) => ({
       datei: path.relative(REPO_ROOT, datei),

@@ -1,8 +1,3 @@
-// KV2-7 (tasks/kostenv2/spec-kv2-7.md): Schliessregel, Faelligkeit, Verfall,
-// Endzustaende. In-process, netzfrei (Muster test/kv2-6-deckung-herzschlag.test.js).
-//
-// Testnamen tragen bewusst KEINE Katalog-/Abnahme-Kennung am Namensanfang (Lehre
-// catalog-id-prefix-misroutes-tests) - diese Tests gehoeren in den Regressionslauf.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -35,10 +30,8 @@ const HOUR_MS = MINUTEN_JE_STUNDE * MINUTE_MS;
 const ZWEI_STUNDEN_MS = ZWEI_STUNDEN * HOUR_MS;
 const SIEBEN_TAGE_MS = SIEBEN_TAGE * STUNDEN_JE_TAG * HOUR_MS;
 const DEADLINE_H = 48;
-const NACH_FRIST_MS = DEADLINE_H * HOUR_MS + MINUTE_MS; // 48h + 1min drueber
-const VOR_FRIST_MS = HOUR_MS; // deutlich unter 48h
-// Minuten seit Ende bei bereits abgelaufener Frist, deutlich ueber der Deadline (10 min
-// Marge) - EINE Quelle statt in jedem (e)/(h)-Fixture wiederholter Arithmetik (G5/G25).
+const NACH_FRIST_MS = DEADLINE_H * HOUR_MS + MINUTE_MS;
+const VOR_FRIST_MS = HOUR_MS;
 const UEBER_DEADLINE_MARGE_MIN = 10;
 const ABGELAUFEN_MINUTEN_HER = DEADLINE_H * MINUTEN_JE_STUNDE + UEBER_DEADLINE_MARGE_MIN;
 const MAX_ATTEMPTS = 5;
@@ -49,8 +42,6 @@ function testConfig(overrides = {}) {
   return fakeConfig({ costSettleDeadlineHours: DEADLINE_H, costTruingMaxAttempts: 5, ...overrides });
 }
 
-// Ein bereits beendeter Anruf mit gesetztem Profil, IN-MEMORY (Muster kv2-6-Test
-// beendeterAnruf), aber ohne Abgleich-Ergebnis - der Sweep soll ihn erst behandeln.
 function beendeterCall(state, { nowMs, profil, endedMinutenHer, tenantId = BOOTSTRAP_TENANT_ID, legRef = {} }) {
   const call = createCall(state, { direction: "outbound", from: "+49", to: "+49", tenantId, provider: "telnyx" });
   call.status = "completed";
@@ -74,8 +65,6 @@ function seedBeleg(state, { callId, traeger, reife, nachreifbar }) {
     nachreifbar,
   }).evidence;
 }
-
-// ---- (a) Regressionsschutz: telnyx_budget verhaelt sich byte-identisch zum Bestand ----
 
 test("(a) telnyx_budget, vollstaendiger Pool: ein Sweep schliesst, ein zweiter sieht 0 Kandidaten", async () => {
   const nowMs = Date.now();
@@ -103,14 +92,11 @@ test("(a) telnyx_budget, vollstaendiger Pool: ein Sweep schliesst, ein zweiter s
   assert.equal(result.candidates, 1);
   assert.equal(call.costTruingAttempts, 1, "genau EIN Versuch");
   assert.equal(call.costTruedAt, new Date(nowMs).toISOString());
-  // KV2-8: neu gesettelte Anrufe tragen "kostenbuch_vollbeleg".
   assert.equal(call.costTruedSource, "kostenbuch_vollbeleg");
 
   const result2 = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
   assert.equal(result2.candidates, 0, "geschlossener Anruf ist kein Kandidat mehr");
 });
-
-// ---- (b) el_convai_sip, Telnyx-SIP-Beleg zuerst: bleibt Kandidat ----
 
 test("(b) el_convai_sip mit Telnyx-SIP-Beleg zuerst bleibt Kandidat, wird nicht geschlossen", async () => {
   const nowMs = Date.now();
@@ -146,8 +132,6 @@ test("(b) el_convai_sip mit Telnyx-SIP-Beleg zuerst bleibt Kandidat, wird nicht 
   return call;
 });
 
-// ---- (c) nach Fristablauf: geschlossen, unvollstaendig_final, fehlend benannt ----
-
 test("(c) nach Ablauf der Frist: geschlossen, unvollstaendig_final, fehlend=elevenlabs_convai, danach kein Kandidat mehr", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
@@ -182,8 +166,6 @@ test("(c) nach Ablauf der Frist: geschlossen, unvollstaendig_final, fehlend=elev
   const result2 = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
   assert.equal(result2.candidates, 0, "kein Kandidat mehr - er bleibt nicht ewig offen");
 });
-
-// ---- (d) Versuche je Traeger: ein erschoepfter Telnyx-Zaehler beendet nicht die EL-Nachreifung ----
 
 test("(d) Versuche je Traeger: nach 5 erfolglosen Telnyx-Versuchen NICHT geschlossen; Versuch 6 ruft den Adapter nicht mehr; EL-Zeile unangetastet", async () => {
   const nowMs = Date.now();
@@ -226,8 +208,6 @@ test("(d) Versuche je Traeger: nach 5 erfolglosen Telnyx-Versuchen NICHT geschlo
   assert.equal(elZeile.reife, REIFE.VORLAEUFIG);
 });
 
-// ---- (e) Abbruchweg: beleg_strukturell_unbeschaffbar, kein Deckungs-Alarm ----
-
 test("(e) Abbruchweg (nachreifbar=false) nach Fristablauf: beleg_strukturell_unbeschaffbar, kein Deckungs-Alarm", () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
@@ -237,8 +217,6 @@ test("(e) Abbruchweg (nachreifbar=false) nach Fristablauf: beleg_strukturell_unb
   call.elevenlabsConversationId = "conv_e";
   seedBeleg(state, { callId: call.id, traeger: "telnyx_sip", reife: REIFE.BELEGT });
   seedBeleg(state, { callId: call.id, traeger: "elevenlabs_convai", reife: REIFE.VORLAEUFIG });
-  // Abbruchweg: zweite Fortschreibung derselben Reife setzt nachreifbar=false (Muster
-  // KV2-4 "nachreifbar ist eine Einbahnstrasse").
   recordCallCostEvidence(state, {
     callId: call.id, traeger: "elevenlabs_convai", reife: REIFE.VORLAEUFIG, nachreifbar: false,
   });
@@ -261,12 +239,9 @@ test("(e) Abbruchweg (nachreifbar=false) nach Fristablauf: beleg_strukturell_unb
   );
 });
 
-// lokale Config-Bruecke fuer die reinen (nicht-Sweep-)Tests dieser Datei.
 function config_() {
   return testConfig().billing;
 }
-
-// ---- (f) usage.costCents unveraendert, keine Doppelbuchung ----
 
 test("(f) usage.costCents bleibt unveraendert; bei drei Sweeps eines offenen el_convai_sip-Anrufs hoechstens EIN Buchungsaufruf", async () => {
   const nowMs = Date.now();
@@ -302,13 +277,9 @@ test("(f) usage.costCents bleibt unveraendert; bei drei Sweeps eines offenen el_
   }
 
   assert.deepStrictEqual(state.usage, usageVorher, "usage.costCents unveraendert");
-  // KV2-11: der Wert 0 traegt nicht mehr der EL-Riegel, sondern der Abschluss - der
-  // zweite Pflicht-Traeger fehlt, die Frist laeuft, ohne Schluss kein Settlement.
   assert.equal(bookings, 0, "kein Buchungsaufruf: der Anruf schliesst nicht (zweiter Pflicht-Traeger fehlt), das Settlement haengt am Abschluss");
   assert.equal(call.costTruedAt, null, "der Anruf bleibt offen (kein zweiter Traeger belegt)");
 });
-
-// ---- (h) 6.10-Fall: beleg_strukturell_unbeschaffbar am Anruf, Gegenproben ----
 
 test("(h) alle fuenf Bedingungen + abgelaufene Frist -> beleg_strukturell_unbeschaffbar, kein Deckungs-Alarm, nicht im Herzschlag", () => {
   const nowMs = Date.now();
@@ -331,31 +302,23 @@ test("(h) alle fuenf Bedingungen + abgelaufene Frist -> beleg_strukturell_unbesc
   const herzschlagEintrag = buch.herzschlag.find((zeile) => zeile.traeger === "elevenlabs_convai");
   assert.equal(herzschlagEintrag, undefined, "der 6.10-Fall haelt sich aus dem Herzschlag heraus");
 
-  // (i) Gegenprobe: ein nie angenommener Anruf hat NIE ein ElevenLabs-Gespraech
-  // begonnen (elevenlabsConversationId bleibt null) - Bedingung 3 schlaegt fehl, das
-  // Praedikat greift nicht. Er ist kein unbeschaffbarer Beleg, sondern ein Anruf ohne
-  // Kosten (Matrix 4.6: gueltiger 0-Beleg).
   const nieAngenommen = beendeterCall(state, { nowMs, profil: KOSTENPROFIL.EL_CONVAI_SIP, endedMinutenHer: ABGELAUFEN_MINUTEN_HER });
   nieAngenommen.estimatedCostCents = null;
   nieAngenommen.answeredAt = null;
   assert.equal(belegUnbeschaffbarAmAnruf({ call: nieAngenommen, belege: [] }), false);
 
-  // (ii) Gegenprobe: derselbe Fixture MIT gesetztem sipCallId bleibt regulaerer Kandidat.
   const mitSipCallId = beendeterCall(state, {
     nowMs, profil: KOSTENPROFIL.EL_CONVAI_SIP, endedMinutenHer: ABGELAUFEN_MINUTEN_HER, legRef: { sipCallId: "otb_h_ii" },
   });
   mitSipCallId.elevenlabsConversationId = "conv_h_ii";
   assert.equal(belegUnbeschaffbarAmAnruf({ call: mitSipCallId, belege: [] }), false);
 
-  // (iii) Gegenprobe: waehrend laufender Frist greift die Regel nicht (frist=false).
   const nochOffen = beendeterCall(state, { nowMs, profil: KOSTENPROFIL.EL_CONVAI_SIP, endedMinutenHer: 10 });
   nochOffen.elevenlabsConversationId = "conv_h_iii";
   nochOffen.sipCallId = null;
   const abschlussOffen = abschlussFuerAnruf({ call: nochOffen, belege: [], nowMs, deadlineMs, sweepTraegerErledigt: false });
   assert.equal(abschlussOffen.geschlossen, false, "waehrend laufender Frist bleibt der Anruf offen");
 });
-
-// ---- rein: abschlussFuerAnruf/belegUnbeschaffbarAmAnruf/offeneTraeger ueber alle Profile ----
 
 test("rein: offeneTraeger liefert je Profil genau die noch nicht belegten Pflicht-Traeger", () => {
   const state = makeDefaultState();

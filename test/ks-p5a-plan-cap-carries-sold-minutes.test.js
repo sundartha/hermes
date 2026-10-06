@@ -1,15 +1,3 @@
-// KS-P5a/E5a: die Plan-Kostendecke und der Buchungssatz sind DERSELBE Satz. Diese Datei
-// pinnt die fachliche Invariante dahinter: eine Plan-Decke muss die VERKAUFTEN Minuten
-// tragen, und zwar inklusive der Worst-Case-Reserve des LETZTEN Anrufs - sonst haengt der
-// Kunde vor seiner letzten verkauften Minute im Reserve-Gate (402).
-//
-// Reine Rechnung + state-ops-Ebene: KEIN Server-Spawn, KEIN pglite, KEINE process.env-
-// Manipulation. Der Satz wird als cfg hereingereicht (planCapCents(slug, cfg) /
-// deriveTenantBudgetFromPlan(s, id, cfg)) - dadurch ist die Datei immun gegen eine lokale
-// .env und gegen jede kuenftige BASE_ENV-Drift.
-//
-// Die Testnamen tragen BEWUSST keinen i18n-Katalog-Praefix: dies ist Regressionsschutz und
-// gehoert in `npm test`, wo Rot etwas heisst - nicht in `test:gates`, wo Rot erlaubt ist.
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -27,18 +15,12 @@ import {
   tenantBudgetSnapshot,
 } from "../src/store/state-ops.js";
 
-// Zwei um Faktor 10 auseinanderliegende Buchungssaetze: der seit KS-P6 ausgelieferte
-// (30, E1) und der Stand davor (300). Die Invariante ist satzunabhaengig und muss an
-// beiden halten - eine Decke, die nur bei einem Satz aufgeht, ist keine.
 const BOOKING_RATES_CENTS_PER_MIN = Object.freeze([300, 30]);
 const STARTER_CAP_AT_LIVE_RATE_CENTS = 1500;
 const BUSINESS_CAP_AT_LIVE_RATE_CENTS = 4500;
 const LIVE_BOOKING_RATE_CENTS_PER_MIN = 30;
 const STARTER_SOLD_MINUTES = 30;
 
-// Die drei Sentinel-Felder liest ausschliesslich die Cap-Aufloesung (effectiveCapCents /
-// gateUsageCents): 0/false stellt sicher, dass KEIN Fallback die abgeleitete Zeile
-// ueberdeckt und der Verbrauch auf der Lebenszeit-Achse gemessen wird.
 function cfgAtRate(rateCentsPerMin) {
   return Object.freeze({
     voiceTariffDefaultCents: rateCentsPerMin,
@@ -98,7 +80,6 @@ test("KS-P5a: Starter telefoniert die verkauften Minuten leer - der letzte Anruf
     "Vorbedingung: die abgeleitete Decke folgt dem Buchungssatz",
   );
 
-  // Alles bis auf den letzten (Worst-Case langen) Anruf ist bereits telefoniert und gebucht.
   const reserveCents = outboundReserveCents(LIVE_BOOKING_RATE_CENTS_PER_MIN);
   const minutesBeforeLastCall = STARTER_SOLD_MINUTES - reserveCents / LIVE_BOOKING_RATE_CENTS_PER_MIN;
   addVoiceUsageCostCents(s, tenantId, minutesBeforeLastCall * LIVE_BOOKING_RATE_CENTS_PER_MIN);

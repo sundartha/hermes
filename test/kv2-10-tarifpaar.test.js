@@ -1,15 +1,3 @@
-// KV2-10 (tasks/PLAN-KOSTEN-V2.md Abschnitt KV2-10): der Tarifpaar-Waechter je Route.
-// Rein/offline gegen src/billing/cost-calibration.js (Muster test/cost-calibration.test.js),
-// der Sweep-Kanal-Test gegen makeCostTruing (Muster test/kv2-1-kosten-alarm-naht.test.js),
-// der Boot-Waechter als Spawn (Muster test/voice-tariff-full-cost-guard.test.js).
-// Testnamen tragen KEIN Katalog-Praefix - sie laufen im Regressionslauf `npm test`.
-//
-// ABWEICHUNG VOM PLAN, dokumentiert: der Plan-Klammerkommentar zur Fixture nennt fuer den
-// 76-s-Festnetz-Anruf "2 x 0,0401" USD - seine eigene Quelle (befund-telnyx.md O2) misst
-// die Festnetzrate mit 0,0231 USD/min (billed_sec=120, cost=0,0462 USD). Die Fixture folgt
-// der MESSUNG; daraus aendert sich der gepinnte Vorschlag von (23,18) auf (20,18) und die
-// Gegenprobe ohne Eigen-Cent von (20,15) auf (17,15) - alle Eigenschaften, die der Plan
-// verlangt (deckt alle 8 am p95, strikt niedriger ohne Eigen-Achsen), bleiben erhalten.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -32,27 +20,20 @@ import { makeStubStore, fakeConfig, fakeSpies } from "./cost-truing-harness.js";
 import { startServer, seedState, BASE_ENV } from "./helpers.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const KURS_MICRO = 920_000; // 0,92 EUR je USD - der Live-Kurs (config.js-Fallback)
+const KURS_MICRO = 920_000;
 const ROUTE_EL = "el_convai_sip";
 
-// Die Herleitungswerte aus der Fixture (Kurs 0,92, aufgerundet je Beleg) - als Konstanten,
-// damit die Gegenprobe R9-2 lesbar gegen sie rechnet statt nackte Cent-Literale zu tragen.
 const STICHPROBEN_GROESSE = EL_STICHPROBE.length;
 const VORSCHLAG_GRUNDBETRAG_CENTS = 20;
 const VORSCHLAG_MINUTENSATZ_CENTS = 18;
-// Dieselbe Fixture OHNE Eigen-Cent: nachweislich NIEDRIGER (R9-2).
 const GEGENPROBE_GRUNDBETRAG_CENTS = 17;
 const GEGENPROBE_MINUTENSATZ_CENTS = 15;
-// Der heute live gesetzte Inlands-Minutensatz (gedeckter Fall) und ein unterschaetzender.
 const LIVE_MINUTENSATZ_CENTS = 20;
 const ZU_NIEDRIGER_MINUTENSATZ_CENTS = 10;
 const INBOUND_MINUTENSATZ_CENTS = 6;
-// Geteilt mit dem Praefix-Waechter (costCalibrationMinSamples): dessen dokumentierter
-// Prod-Default, hier als Pruefgroesse fuer "keine Paar-Aussage unter der Mindestprobe".
 const DEFAULT_MINDESTPROBEN = 20;
 const HTTP_OK = 200;
 
-// Die Billing-Fixture des Rein-Tests: NUR die fuenf Felder, die tarifpaarReport liest.
 function fixtureBilling({ minSamples = STICHPROBEN_GROESSE, domesticCents = LIVE_MINUTENSATZ_CENTS, grundbetragJeRoute = {} } = {}) {
   return {
     providerToBucketRateMicro: KURS_MICRO,
@@ -63,22 +44,18 @@ function fixtureBilling({ minSamples = STICHPROBEN_GROESSE, domesticCents = LIVE
   };
 }
 
-// ---- (a) Herleitung: Vorschlag aus den 8 gemessenen EL-Anrufen -------------------------
-
 test("KV2-10 (a1): Fixture mit Eigen-Cent -> vorschlag 20ct + 18ct/min, Gegenprobe deckt unabhaengig", () => {
   const state = elVollkostenState();
   const eigen = eigenCentQuelleJeAnruf();
   const el = tarifpaarReport({ state, eigenCentJeAnruf: eigen, billing: fixtureBilling() }).find((eintrag) => eintrag.route === ROUTE_EL);
   assert.equal(el.proben, STICHPROBEN_GROESSE, "alle 8 Anrufe sind Stichproben");
   assert.deepEqual(el.vorschlag, { grundbetragCents: VORSCHLAG_GRUNDBETRAG_CENTS, minutensatzCents: VORSCHLAG_MINUTENSATZ_CENTS });
-  // KEINE Tautologie: das Paar prueft die UNABHAENIGE Deckungsfunktion gegen dieselben Stichproben.
   const { jeRoute } = vollkostenStichprobenJeRoute({ state, eigenCentJeAnruf: eigen, rateMicro: KURS_MICRO });
   const stichproben = jeRoute.get(ROUTE_EL);
   assert.equal(
     tarifpaarDecktStichproben({ grundbetragCents: VORSCHLAG_GRUNDBETRAG_CENTS, minutensatzCents: VORSCHLAG_MINUTENSATZ_CENTS }, stichproben),
     true,
   );
-  // Der Grundbetrag ALLEIN (Minutensatz 0) deckt die p95 der Je-Anruf-Kosten bereits.
   assert.equal(tarifpaarDecktStichproben({ grundbetragCents: VORSCHLAG_GRUNDBETRAG_CENTS, minutensatzCents: 0 }, stichproben), true);
 });
 
@@ -116,10 +93,6 @@ test("KV2-10 (a4): konfiguriertes Paar (0,20) -> im_band; (0,10) -> tarifpaar_un
   assert.equal(alertbareTarifpaarBefunde(zuNiedrig).length, 1);
 });
 
-// ---- (b) Ausschluss-Gruende: je eine Gegenprobe ----------------------------------------
-
-// Der Ausschluss-Zaehler fuer EINE Abwandlung des Fixture-States (Build -> Operate -> Check,
-// P13): genau EIN Anruf wird verbogen, erwartet wird genau EIN Zaehlerstand.
 function fehlgrundZaehler(verbiege, grund) {
   const state = elVollkostenState();
   verbiege(state);
@@ -167,8 +140,6 @@ test("KV2-10 (b5): Default-Mindeststichprobe 20 -> tarifpaar_zu_wenig_proben mit
   assert.match(tarifpaarZeile(el), /proben=8 fehlgrund=keine befund=tarifpaar_zu_wenig_proben/);
 });
 
-// ---- PII-Riegel ------------------------------------------------------------------------
-
 test("KV2-10 (pii): der Report traegt keine Rufnummer, nur Routen-/Profilnamen und Cent-Betraege", () => {
   const report = tarifpaarReport({ state: elVollkostenState(), eigenCentJeAnruf: eigenCentQuelleJeAnruf(), billing: fixtureBilling() });
   const json = JSON.stringify(report) + report.map(tarifpaarZeile).join(" | ");
@@ -176,10 +147,6 @@ test("KV2-10 (pii): der Report traegt keine Rufnummer, nur Routen-/Profilnamen u
   assert.ok(!json.includes("call_mt"), "keine Call-ID");
 });
 
-// ---- (d) Sweep-Kanal: GENAU EIN Befund, Mail+SMS nur bei Unterschaetzung --------------
-
-// Der gebundene Alarm-Absender (Muster test/kv2-1-kosten-alarm-naht.test.js) - ohne ihn
-// sendet der Kanal nur Mail.
 function boundAlertSender() {
   return [{
     id: "pnu_kv2_10", e164: "+15005550006", purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER, provider: "telnyx",
@@ -200,14 +167,6 @@ function kanalConfig(domesticCents) {
   });
 }
 
-// KV2-10 / SEC-P0: `now` ist der FIXTURE-ANKER, nicht die Wanduhr. Begruendung (Messung
-// 2026-09-08): der Sweep bewertet jeden Anruf gegen PROVIDER_COST_RECORD_WINDOW_DAYS=7.
-// Mit Date.now() fielen die 8 Stichproben ab dem 06.09.2026 aus dem Belegfenster, die
-// Deckung sank auf 0 % und der Sweep meldete ZUSAETZLICH coverage_below_threshold - ein
-// ZWEITER, eigener Sachverhalt mit eigenem Alarm. Die Faelle unten zaehlen die Meldungen
-// des Kanals; sie muessen deshalb den Zustand festlegen, ueber den der Kanal urteilt.
-// Nicht geaendert hat sich, was sie zusichern: genau EINE Meldung bei Unterschaetzung,
-// KEINE bei gedecktem Tarif.
 async function sweepMitTarifpaar(domesticCents) {
   const nowMs = STICHPROBEN_ENDE_MS;
   const state = elVollkostenState();
@@ -241,8 +200,6 @@ test("KV2-10 (d1): Unterschaetzung (Minutensatz 10) -> GENAU EINE Mail und EINE 
   assert.equal(mailCalls.length, 1, "genau eine Mail");
   assert.equal(smsCalls.length, 1, "genau eine SMS");
   assert.match(JSON.stringify(mailCalls[0]) + JSON.stringify(smsCalls[0]), /vorschlag=20ct\+18ct\/min/);
-  // Die EINE Meldung ist die des Tarifpaars - eine Zahl allein liesse sich auch von einem
-  // fremden Befund erfuellen (SEC-P0: genau so war der Fall rot geworden).
   assert.match(JSON.stringify(mailCalls[0]), /grund=tarifpaar_unterschaetzt/);
   assert.ok(
     auditCalls.some((entry) => entry.detail.includes("grund=tarifpaar_unterschaetzt")),
@@ -259,8 +216,6 @@ test("KV2-10 (d2): gedeckter Tarif (Minutensatz 20) -> KEINE Mail, KEINE SMS, nu
   assert.match(tarifpaarLog, /route=el_convai_sip proben=8 .* befund=im_band/);
 });
 
-// ---- (e) Boot-Waechter feuert beim Start -----------------------------------------------
-
 test("KV2-10 (e): der Boot meldet das Tarifpaar - [boot] Tarifpaar: im Spawn-stdout, /healthz 200", async () => {
   const srv = await startServer({ seed: seedState({ calls: [] }) });
   try {
@@ -273,8 +228,6 @@ test("KV2-10 (e): der Boot meldet das Tarifpaar - [boot] Tarifpaar: im Spawn-std
   }
 });
 
-// ---- Konfigurations-Pins (Muster P5-13 in test/cost-calibration.test.js) ----------------
-
 test("KV2-10 (cfg1): VOICE_TARIFF_GRUNDBETRAG_CENTS in .env.example + render.yaml vorhanden (leer), config-Fallback {}", () => {
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
   const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
@@ -283,7 +236,7 @@ test("KV2-10 (cfg1): VOICE_TARIFF_GRUNDBETRAG_CENTS in .env.example + render.yam
 });
 
 test("KV2-10 (cfg2): VOICE_TARIFF_FULL_COST_FLOOR_CENTS-Fallback = 15 in config.js, .env.example und render.yaml", async () => {
-  const BODEN_FALLBACK_CENTS = "15"; // Neuherleitung KV2-10: 0,1576 USD x 0,92 -> 14,5 -> 15
+  const BODEN_FALLBACK_CENTS = "15";
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
   const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
 
@@ -322,11 +275,6 @@ test("KV2-10 (cfg3): unbekanntes Profil oder Muell-Cent in der Env-Karte reisst 
   }
 });
 
-// KV2-10 Review (Randbedingung 3 der Spec): die neue Env-Variable muss wie jede
-// Schwester-Variable in BASE_ENV gepinnt sein. Ohne die Klemme fuellt dotenv die
-// UNgesetzte Variable aus einer lokalen .env - steht dort Muell (z.B.
-// "el_convai_sip:kein_zahl"), reisst routeCentsEnv den Config-Build
-// (fatalConfigErrors -> Boot-Refusal) in JEDEM Spawn-Test der Suite.
 test("KV2-10 (cfg4): BASE_ENV pinnt VOICE_TARIFF_GRUNDBETRAG_CENTS neutral leer (kein dotenv-Leak aus lokaler .env)", () => {
   assert.ok(
     "VOICE_TARIFF_GRUNDBETRAG_CENTS" in BASE_ENV,

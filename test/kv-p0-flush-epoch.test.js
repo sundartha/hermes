@@ -1,13 +1,3 @@
-// KV-P0 (PLAN-KOSTEN-VOLLSTAENDIGKEIT.md): Flush-Stichtag verriegelt POST
-// /api/billing/flush-meters gegen die Ein-Klick-Nachmeldung des Vorbetrieb-Ledgers.
-// Prueft state-ops.flushableMeterEvents + billing/meter.flushMeters + config.js
-// isoInstantEnv/BILLING_FLUSH_EPOCH direkt (kein Netz, kein Server, KEIN echter
-// Stripe-Aufruf - fakeBilling wie test/usage-event-meter.test.js). KV-P0-8 ist der
-// einzige Test hier, der pglite braucht (Zwei-Backend-Beleg).
-//
-// IDs beginnen mit "KV-P0-" - kein i18n-Katalog-Praefix (DID|E2E|FMT|GAP|LANG|LAW|
-// MCP|ORIG|OUT|PAY|PROMPT|UI|VOICE|WEB|WORLD gefolgt von einer Ziffer), landet also im
-// npm-test-Regressionslauf, nicht im test:gates-Katalog.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -29,16 +19,12 @@ import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "./pg-helpers.js";
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
 
-// Fixe Fixture-Zeitpunkte (benannte Konstanten, unterschiedliche Werte je Rolle - gleiche
-// Werte wuerden nichts testen).
 const EPOCH = "2026-08-04T00:00:00.000Z";
-const VOR_EPOCH = "2026-07-10T09:00:00.000Z"; // Altzeile (Muster der 138 in Prod)
-const AUF_EPOCH = "2026-08-04T00:00:00.000Z"; // exakt auf dem Stichtag (== EPOCH)
+const VOR_EPOCH = "2026-07-10T09:00:00.000Z";
+const AUF_EPOCH = "2026-08-04T00:00:00.000Z";
 const NACH_EPOCH = "2026-08-05T12:34:56.789Z";
 const EINE_MS_VOR_EPOCH = "2026-08-03T23:59:59.999Z";
 
-// Ledger fuer KV-P0-1/-2: zwei Zeilen VOR dem Stichtag (Tenant A und B), eine NACH
-// (Tenant A). Eigene Funktion statt Kopie (G5) - beide Tests teilen sich die Fixture.
 function seedVorUndNachEpoch(s) {
   recordUsageEvent(s, {
     tenantId: TENANT_A,
@@ -93,7 +79,7 @@ test("KV-P0-2: ohne gesetzten Flush-Stichtag geht KEIN Ereignis raus (fail-close
   seedVorUndNachEpoch(s);
   const billing = fakeBilling();
 
-  const result = await flushMeters(s, { billing }); // flushEpochIso fehlt
+  const result = await flushMeters(s, { billing });
   assert.equal(result.sent, 0);
   assert.equal(result.failed, 0);
   assert.equal(result.skipped, 3, "alle drei Zeilen zurueckgehalten");
@@ -119,7 +105,6 @@ test("KV-P0-3: Grenzfall - ein Ereignis GENAU auf dem Stichtag wird gemeldet (>=
   assert.equal(result.skipped, 0);
   assert.equal(billing.log.length, 1);
 
-  // Gegenprobe auf FRISCHEM Zustand: dieselbe Zeile, eine Millisekunde FRUEHER.
   const s2 = makeDefaultState();
   recordUsageEvent(s2, {
     tenantId: TENANT_A,
@@ -155,9 +140,6 @@ test("KV-P0-4: nicht-kanonischer aber gueltiger Stichtag wird VOR dem Vergleich 
     occurredAt: VOR_EPOCH,
   });
   const billing = fakeBilling();
-  // "2026-08-04T02:00:00+02:00" == "2026-08-04T00:00:00.000Z" (EPOCH) - derselbe
-  // Zeitpunkt, andere Schreibweise. Beweist, dass verglichen wird NACHDEM kanonisiert
-  // wurde, nicht auf der Rohform (ein String-Vergleich der Rohform waere falsch).
   const result = await flushMeters(s, { billing, flushEpochIso: "2026-08-04T02:00:00+02:00" });
   assert.equal(result.sent, 1);
   assert.equal(result.skipped, 1, "die VOR_EPOCH-Zeile (Tenant B) bleibt zurueck");
@@ -168,14 +150,6 @@ test("KV-P0-4: nicht-kanonischer aber gueltiger Stichtag wird VOR dem Vergleich 
 });
 
 test("KV-P0-5: Muell-Stichtag meldet NICHTS (nicht 'alles')", async () => {
-  // "0" ist bewusst NICHT in dieser Tabelle: new Date("0") liefert (dokumentierte
-  // JS-Altlast, s. config.js isoInstantEnv-Kommentar) ein GUELTIGES Datum
-  // (01.01.2000 lokal), keine NaN - das bare new Date() in state-ops (zeit-/config-
-  // frei, kein Pattern-Check) faengt das darum HIER nicht ab. Der Fall ist trotzdem
-  // fail-closed abgedeckt: config.js.isoInstantEnv prueft die STRENGE ISO-8601-Form
-  // (ISO_INSTANT_PATTERN) VOR jeder Date-Konstruktion und verweigert "0" bereits am
-  // Boot (KV-P0-9c). "kein-datum" ersetzt "0" hier als garantiert unparsebarer Wert
-  // (dieselbe Fixture wie test/usage-event-meter.test.js numbersDueForMonthMeter).
   const MUELL_WERTE = ["morgen", "1999-hello", "", "kein-datum"];
   for (const wert of MUELL_WERTE) {
     const s = makeDefaultState();
@@ -232,10 +206,6 @@ test("KV-P0-7: nicht-String-Stichtag ist fail-closed (new Date(null) ist gueltig
     occurredAt: NACH_EPOCH,
   });
 
-  // new Date(null) === new Date(0) === 1970-01-01 (GUELTIG!) - ohne den typeof-Waechter
-  // in flushableMeterEvents wuerde ausgerechnet der "nicht gesetzt"-Wert (null) zum
-  // aeltesten moeglichen Stichtag und liesse ALLES durch. 0/true/ein Date-Objekt sind
-  // derselbe Fallstrick in anderer Form.
   for (const wert of [null, undefined, 0, true, new Date(0)]) {
     const { events, skipped, skipReason } = flushableMeterEvents(s, { flushEpochIso: wert });
     assert.equal(events.length, 0, `Wert ${String(wert)} darf nichts durchlassen`);
@@ -247,10 +217,6 @@ test("KV-P0-7: nicht-String-Stichtag ist fail-closed (new Date(null) ist gueltig
 test("KV-P0-8: pg-Backend filtert nach Re-Hydrierung identisch (Zwei-Backend-Beleg)", async () => {
   const { store, runner } = await makePgTestStore();
   const s = store.load();
-  // BOOTSTRAP_TENANT_ID (bereits im frischen Store vorhanden) statt eines neuen Tenants -
-  // usage_event.tenant_id traegt eine FK auf tenant(id) (schema.sql), ein unregistrierter
-  // Tenant wuerde beim Flush scheitern. Dieser Test prueft den Stichtag-Filter, nicht die
-  // Tenant-Registrierung (die hat T-PA6-4 in store-pg-multitenant.test.js).
   recordUsageEvent(s, {
     tenantId: BOOTSTRAP_TENANT_ID,
     callId: "c1",
@@ -269,9 +235,6 @@ test("KV-P0-8: pg-Backend filtert nach Re-Hydrierung identisch (Zwei-Backend-Bel
   });
   await store.save();
 
-  // Re-Hydrierung: FRISCHE Store-Instanz auf DERSELBEN pglite-Verbindung (Muster
-  // test/al-p1-store-fields.test.js) - beweist, dass occurred_at als TEXT/String
-  // zurueckkommt und der Filter denselben String-Vergleich trifft wie im json-Backend.
   const reopened = makePgStore(runner);
   await reopened.init();
   const rs = reopened.load();
@@ -286,8 +249,6 @@ test("KV-P0-8: pg-Backend filtert nach Re-Hydrierung identisch (Zwei-Backend-Bel
   assert.equal(result.sent, 1, "nur die NACH_EPOCH-Zeile wird gemeldet");
   assert.equal(result.skipped, 1, "die VOR_EPOCH-Zeile bleibt zurueck");
 
-  // Gegenprobe auf DEMSELBEN re-hydrierten Zustand ohne Stichtag: die verbleibende
-  // (noch nicht gesendete) VOR_EPOCH-Zeile wird weiterhin zurueckgehalten.
   const billing2 = fakeBilling();
   const result2 = await flushMeters(rs, { billing: billing2 });
   assert.equal(result2.sent, 0);
@@ -298,7 +259,6 @@ test("KV-P0-8: pg-Backend filtert nach Re-Hydrierung identisch (Zwei-Backend-Bel
 test("KV-P0-9: config.js kanonisiert einen gueltigen Stichtag und verweigert einen ungueltigen fail-closed", async () => {
   const saved = process.env.BILLING_FLUSH_EPOCH;
   try {
-    // (a) leer -> null, KEIN neuer Fatal-Befund (dokumentierter Ruhezustand).
     delete process.env.BILLING_FLUSH_EPOCH;
     const leer = await import("../src/config.js?kv-p0-9a");
     assert.equal(leer.config.billing.flushEpochIso, null);
@@ -307,18 +267,16 @@ test("KV-P0-9: config.js kanonisiert einen gueltigen Stichtag und verweigert ein
       "leer ist der ausgelieferte Ruhezustand, kein Fatal",
     );
 
-    // (b) gueltiger Zeitpunkt MIT Offset statt Z -> kanonisiertes UTC-ISO.
     process.env.BILLING_FLUSH_EPOCH = "2026-08-04T02:00:00+02:00";
     const offset = await import("../src/config.js?kv-p0-9b");
     assert.equal(offset.config.billing.flushEpochIso, "2026-08-04T00:00:00.000Z");
 
-    // (c) Muell -> null UND ein Fatal-Befund (Boot-Refusal statt stillem Riegel-Aus).
     process.env.BILLING_FLUSH_EPOCH = "0";
     const nullJahr = await import("../src/config.js?kv-p0-9c1");
     assert.equal(nullJahr.config.billing.flushEpochIso, null);
     assert.ok(nullJahr.configFatalErrors().some((e) => e.includes("BILLING_FLUSH_EPOCH")));
 
-    process.env.BILLING_FLUSH_EPOCH = "2026-08-04T00:00:00"; // gueltiges ISO, aber OHNE Zone
+    process.env.BILLING_FLUSH_EPOCH = "2026-08-04T00:00:00";
     const ohneZone = await import("../src/config.js?kv-p0-9c2");
     assert.equal(ohneZone.config.billing.flushEpochIso, null);
     assert.ok(ohneZone.configFatalErrors().some((e) => e.includes("BILLING_FLUSH_EPOCH")));

@@ -1,7 +1,3 @@
-// KV2-9 (tasks/PLAN-KOSTEN-V2.md, Phase KV2-9): der Reifungs-Zweig. In-process, netzfrei
-// (Muster test/kv2-8-settlement.test.js: ECHTER state-ops-Shape ueber
-// test/cost-truing-harness.js). Testnamen tragen bewusst KEINE Katalog-/Abnahme-Kennung
-// am Namensanfang (Lehre catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -22,20 +18,16 @@ import { makeStubStore, fakeConfig, fakeVoiceControl, isoMinutesAgo } from "./co
 import { captureConsole } from "./helpers.js";
 import { MS_PER_MINUTE } from "../src/utils/timer.js";
 
-// ---- Konstanten (G25) -------------------------------------------------------------------
-
-const MIN_AGE_MINUTES = 15; // = Code-Default EL_EVIDENCE_MIN_AGE_MINUTES
-const MAX_ATTEMPTS = 5; // = Code-Default COST_TRUING_MAX_ATTEMPTS
+const MIN_AGE_MINUTES = 15;
+const MAX_ATTEMPTS = 5;
 const BILLING = { elEvidenceMinAgeMinutes: MIN_AGE_MINUTES, costTruingMaxAttempts: MAX_ATTEMPTS };
-const STANDARD_ENDED_MINUTES_AGO = 200; // reichlich ueber MIN_AGE_MINUTES und costTruingDelayMinutes
-const ALT_MIKRO_CENTS = 10_000_000; // $0.10
-const HOEHER_MIKRO_CENTS = 12_000_000; // $0.12
-const NIEDRIGER_MIKRO_CENTS = 5_000_000; // $0.05
-// Die drei cost_fiat-Werte, deren Mikro-Cent-Gegenstuecke oben benannt sind.
+const STANDARD_ENDED_MINUTES_AGO = 200;
+const ALT_MIKRO_CENTS = 10_000_000;
+const HOEHER_MIKRO_CENTS = 12_000_000;
+const NIEDRIGER_MIKRO_CENTS = 5_000_000;
 const ALT_COST_FIAT = 0.1;
 const HOEHER_COST_FIAT = 0.12;
 const NIEDRIGER_COST_FIAT = 0.05;
-// Wohlgeformte, aber neutrale Anbieter-Kennung (isBelegRef-Muster) - kein echter Anruf.
 const CONV_ID = "conv_kv2_9_test0000000000000001";
 const DROSSEL_ANZAHL = 30;
 const CONV_ID_PAD_WIDTH = 2;
@@ -43,19 +35,11 @@ const Z2_SCHAETZUNG_CENTS = 30;
 const Z2_SIP_BELEG_MIKRO_CENTS = 40_100;
 const Z2_SIP_BELEG_BILLED_SEC = 60;
 
-// ---- Fixture-Bausteine -------------------------------------------------------------------
-
-// Die Wertfelder einer frischen elevenlabs_convai-Zeile - reife=erwartet darf laut
-// cost-evidence.js#pruefeGeld KEINEN Betrag tragen, jede andere Reife braucht einen mit
-// Waehrung. EINE Stelle fuer diese Fallunterscheidung, statt sie in seedElCall zu
-// verzweigen (haelt dessen Komplexitaet unterhalb der Obergrenze).
 function elZeilenWerte({ reife, betragMikroCents }) {
   if (reife === REIFE.ERWARTET) return { betragMikroCents: undefined, waehrung: undefined };
   return { betragMikroCents, waehrung: "USD" };
 }
 
-// Default-Werte als Objekt statt als Destrukturierungs-Defaults (G30/Komplexitaets-
-// Obergrenze: jeder Default-Wert in einem Destrukturierungsmuster zaehlt als eigener Pfad).
 const SEED_EL_CALL_DEFAULTS = Object.freeze({
   endedMinutesAgo: STANDARD_ENDED_MINUTES_AGO,
   elevenlabsConversationId: CONV_ID,
@@ -67,8 +51,6 @@ const SEED_EL_CALL_DEFAULTS = Object.freeze({
   profil: KOSTENPROFIL.EL_CONVAI_SIP,
 });
 
-// Ein beendeter el_convai_sip-Anruf mit einer elevenlabs_convai-Belegzeile. withElZeile:
-// false laesst die Zeile ganz weg (Test KEINE_EL_ZEILE).
 function seedElCall(state, overrides = {}) {
   const {
     nowMs, endedMinutesAgo, elevenlabsConversationId, versuche,
@@ -94,8 +76,6 @@ function seedElCall(state, overrides = {}) {
   return call;
 }
 
-// Zaehlender Lese-Port. handler(conversationId) liefert entweder eine Anbieter-Antwort
-// ODER wirft (Muster convai.js#fetchConversation: err.providerStatus).
 function makePortStub(handler) {
   const aufrufe = [];
   return {
@@ -121,8 +101,6 @@ function wirftNetzfehler() {
   throw new Error("fetch failed");
 }
 
-// ---- Reine Funktionen: reifeErgebnis (Test 15) -------------------------------------------
-
 test("reifeErgebnis: gleicher Wert -> bestaetigt, kein Wechsel", () => {
   const ergebnis = reifeErgebnis({ altMikroCents: ALT_MIKRO_CENTS, neuMikroCents: ALT_MIKRO_CENTS });
   assert.deepEqual(ergebnis, { mikroCents: ALT_MIKRO_CENTS, ergebnis: EL_REIFUNG_ERGEBNIS.BESTAETIGT });
@@ -137,8 +115,6 @@ test("reifeErgebnis: niedrigerer Wert -> niedriger, der ALTE (hoehere) bleibt", 
   const ergebnis = reifeErgebnis({ altMikroCents: ALT_MIKRO_CENTS, neuMikroCents: NIEDRIGER_MIKRO_CENTS });
   assert.deepEqual(ergebnis, { mikroCents: ALT_MIKRO_CENTS, ergebnis: EL_REIFUNG_ERGEBNIS.NIEDRIGER });
 });
-
-// ---- Reine Funktion: reifungsKandidat (Skip-Gruende) -------------------------------------
 
 test("reifungsKandidat: fremdes Profil -> KEIN_EL_PROFIL", () => {
   const state = makeDefaultState();
@@ -222,8 +198,6 @@ test("reifungsKandidat: Versuche erschoepft -> VERSUCHE_ERSCHOEPFT (Traeger-eige
   assert.deepEqual(ergebnis, { kandidat: false, grund: EL_REIFUNG_SKIP.VERSUCHE_ERSCHOEPFT });
 });
 
-// ---- reifeElBelege: die Orchestrierung ---------------------------------------------------
-
 function makeStore(state, nowMs) {
   return makeStubStore(state, { nowMs });
 }
@@ -233,7 +207,7 @@ test("(a) bestaetigt: gleicher cost_fiat -> Zeile belegt, Betrag unveraendert, e
   const nowMs = Date.now();
   const call = seedElCall(state, { nowMs });
   const store = makeStore(state, nowMs);
-  const port = makePortStub(() => antwortMit(ALT_COST_FIAT)); // -> 10_000_000 Mikro-Cent
+  const port = makePortStub(() => antwortMit(ALT_COST_FIAT));
 
   const bericht = await reifeElBelege({ candidates: [call], store, elKostenRead: port, billing: BILLING, nowMs });
 
@@ -254,7 +228,7 @@ test("(b) hoeher: der ANBIETER-Wert ist hoeher -> belegt mit dem hoeheren, el_ab
   const nowMs = Date.now();
   const call = seedElCall(state, { nowMs });
   const store = makeStore(state, nowMs);
-  const port = makePortStub(() => antwortMit(HOEHER_COST_FIAT)); // -> 12_000_000 Mikro-Cent
+  const port = makePortStub(() => antwortMit(HOEHER_COST_FIAT));
 
   const bericht = await reifeElBelege({ candidates: [call], store, elKostenRead: port, billing: BILLING, nowMs });
 
@@ -270,7 +244,7 @@ test("(c) niedriger: der ANBIETER-Wert ist niedriger -> belegt, der ALTE (hoeher
   const nowMs = Date.now();
   const call = seedElCall(state, { nowMs });
   const store = makeStore(state, nowMs);
-  const port = makePortStub(() => antwortMit(NIEDRIGER_COST_FIAT)); // -> 5_000_000 Mikro-Cent
+  const port = makePortStub(() => antwortMit(NIEDRIGER_COST_FIAT));
 
   const bericht = await reifeElBelege({ candidates: [call], store, elKostenRead: port, billing: BILLING, nowMs });
 
@@ -320,8 +294,6 @@ test("(e) Drossel: bei 30 faelligen Anrufen werden GENAU 25 abgerufen - die AELT
   const state = makeDefaultState();
   const nowMs = Date.now();
   const calls = [];
-  // Aeltester zuerst erzeugt (groesster endedMinutesAgo zuerst) - dieselbe Reihenfolge wie
-  // state.calls, die der Aufrufer (cost-truing.js) unveraendert an reifeElBelege reicht.
   for (let i = 0; i < DROSSEL_ANZAHL; i++) {
     calls.push(seedElCall(state, {
       nowMs, endedMinutesAgo: STANDARD_ENDED_MINUTES_AGO + DROSSEL_ANZAHL - i,
@@ -420,8 +392,6 @@ test("fail-soft: wirft der Store beim Schreiben, laeuft der Reifungs-Zweig trotz
   );
 });
 
-// ---- (f) Sweep-Zeile: el_reifung=/el_abweichung=/el_uebrig= HINTER abschluesse= ----------
-
 test("(f) die vollstaendige Sweep-Zeile traegt el_reifung=/el_abweichung=/el_uebrig= am Ende, Bestandsfelder unveraendert", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
@@ -450,26 +420,16 @@ test("elKostenRead nicht injiziert -> el_reifung=keine in der Sweep-Zeile (Besta
   assert.match(line, /el_reifung=keine el_abweichung=0 el_uebrig=0$/);
 });
 
-// ---- Zusatzauftrag 2: die gemessene Pflicht-Typmenge ------------------------------------
-
 test("Z1: pflichttypenFuerProfil(EL_CONVAI_SIP) liefert ['sip-trunking'], eingefroren, identisch mit dem Sweep-Belegtyp", () => {
   const menge = pflichttypenFuerProfil(KOSTENPROFIL.EL_CONVAI_SIP, []);
   assert.deepEqual(menge, ["sip-trunking"]);
   assert.ok(Object.isFrozen(menge));
-  assert.notEqual(menge, []); // keine zufaellige Referenzgleichheit mit dem Env-Leerwert
-  // Gegen-Pin: derselbe Belegtyp wie sweep-kostenbeleg.js#SIP_TRUNKING_RECORD_TYPE -
-  // keine zweite, hier getippte Wahrheit.
+  assert.notEqual(menge, []);
   assert.equal(menge[0], SIP_TRUNKING_RECORD_TYPE);
 });
 
 test("Z2: die gesetzte Pflicht-Typmenge ist auf dem Geldweg heute VERHALTENSNEUTRAL - " +
   "ein el_convai_sip-Anruf bleibt 'incomplete', mit UND ohne sip-trunking-Beleg im Pool", async () => {
-  // Der einzige Leser der Pflicht-Typmenge ist classifyRecords (cost-truing.js); sein
-  // Ergebnis wird fuer el_convai_sip durch ohneBeweiskraft() (KV2-8B) gewaschen, solange
-  // das GESAMTE Kosten-Buch nicht vollstaendig ist (die elevenlabs_convai-Zeile fehlt in
-  // diesem Aufbau) - die Auftragspraemisse "leere Menge = jeder Pool vollstaendig" trifft
-  // auf classifyRecords nicht zu (requiredRecordTypes.length > 0, Befund B-B): schon VOR
-  // KV2-9 lieferte die leere Menge 'incomplete', nicht 'complete'.
   const nowMs = Date.now();
   const state = makeDefaultState();
   const call = seedElCall(state, { nowMs, withElZeile: false });

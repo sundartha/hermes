@@ -1,7 +1,3 @@
-// P14 (GAP-15-Mechanik) - Regressionsschutz fuer die Rechtsdokument-Logik
-// (apps/web/src/lib/legal.js). Laeuft als reiner node-Test ueber Fixture-
-// Objektmaps - kein Astro-Build noetig, weil indexLegalContent eine reine
-// Funktion ueber der Modulmap ist (Muster: test/plans-catalog.test.js).
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";

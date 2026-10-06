@@ -1,9 +1,3 @@
-// KV2-1: die Alarm-Naht des Kostenpfads scharf gemacht. Gemessener Befund (AUFTRAG B3):
-// 11 Tage 0 % Deckung, emitFinding feuerte korrekt, audit_log blieb LEER (util.js#audit
-// ist ausschliesslich ein console.log). Diese Datei belegt die Naht selbst - nicht den
-// Meldeweg (test/ausfall-meldeweg.test.js) und nicht den Drift-Waechter
-// Umzugs). Testnamen tragen KEIN Katalog-Praefix (Lehre catalog-id-prefix-misroutes-tests)
-// und landen damit im Regressionslauf `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -27,9 +21,6 @@ function boundAlertSender() {
   }];
 }
 
-// Ein beendeter, BELEGBARER (isBookableCents) aber NIE bewiesener Call - deckungspflichtig
-// (eligible), 0% Deckung. Bereits abgeschlossen (costTruedAt gesetzt) -> KEIN Kandidat
-// mehr, isoliert den Deckungs-Befund vom Sweep-Verarbeitungspfad (Muster (j1)).
 function makeUnprovenCoverageCall(state, nowMs) {
   const call = makeDueOutboundCall(state, { nowMs, estimatedCostCents: 20 });
   call.costTruedSource = COST_TRUING_SOURCE.UNAVAILABLE;
@@ -44,8 +35,6 @@ function collectWarns() {
   return { warns, restore: () => { console.warn = original; } };
 }
 
-// ---- (a) makeDurableAudit: Naht selbst, fail-soft, PII-frei ----------------------------
-
 test("KV2-1 (a1): durableAudit ruft die Konsolen-Audit-Funktion UND den durablen Sink", async () => {
   const auditCalls = [];
   const recordCalls = [];
@@ -57,9 +46,7 @@ test("KV2-1 (a1): durableAudit ruft die Konsolen-Audit-Funktion UND den durablen
 
   durableAudit("x", null, "y");
   assert.deepEqual(auditCalls, [{ action: "x", req: null, detail: "y" }]);
-  await Promise.resolve().then(() => {}); // dem .then()/.catch() der Sink-Promise Zeit geben
-  // P3: der Eintrag traegt seither das tenant_id-Feld. Der PLATTFORM-Auditor bindet keinen
-  // Mandanten und schreibt hier weiterhin null - genau das pinnt diese Zeile jetzt mit.
+  await Promise.resolve().then(() => {});
   assert.deepEqual(recordCalls, [{ action: "x", tenantId: null, detail: "y" }]);
 });
 
@@ -70,20 +57,17 @@ test("KV2-1 (a2): fail-soft - null-Sink, synchroner Wurf, rejectete Promise brec
   const originalError = console.error;
   console.error = (...args) => errors.push(args.map(String).join(" "));
   try {
-    // Sink null (STORE_BACKEND=json oder pg-gated Block nie durchgelaufen).
     const auditStoreRef1 = { current: null };
     assert.doesNotThrow(() => makeDurableAudit({ audit, auditStoreRef: auditStoreRef1 })("a", null, "1"));
 
-    // Sink wirft SYNCHRON.
     const auditStoreRef2 = { current: { record: () => { throw new Error("sync-boom"); } } };
     assert.doesNotThrow(() => makeDurableAudit({ audit, auditStoreRef: auditStoreRef2 })("b", null, "2"));
 
-    // Sink liefert eine REJECTETE Promise.
     const auditStoreRef3 = { current: { record: () => Promise.reject(new Error("async-boom")) } };
     assert.doesNotThrow(() => makeDurableAudit({ audit, auditStoreRef: auditStoreRef3 })("c", null, "3"));
-    await Promise.resolve().then(() => {}).then(() => {}); // dem .catch() Zeit geben
+    await Promise.resolve().then(() => {}).then(() => {});
 
-    const WERFENDE_SINKS = 2; // auditStoreRef2 (sync) + auditStoreRef3 (async) - nicht auditStoreRef1 (null)
+    const WERFENDE_SINKS = 2;
     assert.deepEqual(auditCalls.map((entry) => entry.action), ["a", "b", "c"], "audit lief in JEDEM Fall");
     assert.equal(errors.filter((zeile) => zeile.includes("durabler Eintrag fehlgeschlagen")).length, WERFENDE_SINKS,
       "genau die zwei werfenden Sinks hinterlassen eine Fehlerzeile - der null-Sink keine");
@@ -116,7 +100,7 @@ test("KV2-1 (a3): ein voller Sweep schreibt GENAU EINEN durablen Eintrag - und K
 
 test("KV2-1 (a3-negativ): Deckung ueber der Schwelle -> der durable Sink bleibt LEER", async () => {
   const nowMs = Date.now();
-  const state = makeDefaultState(); // keine Calls -> Nenner 0, aber Schwelle 0 -> gesund
+  const state = makeDefaultState();
   const store = makeStubStore(state);
   const recordCalls = [];
   const sink = { record: (row) => { recordCalls.push(row); return Promise.resolve(); } };
@@ -130,8 +114,6 @@ test("KV2-1 (a3-negativ): Deckung ueber der Schwelle -> der durable Sink bleibt 
   await Promise.resolve().then(() => {});
   assert.equal(recordCalls.length, 0, "keine Meldung -> kein Sink-Eintrag");
 });
-
-// ---- (b) VOLL-Stufe sendet wirklich Mail+SMS, entprellt am durablen Marker -------------
 
 test("KV2-1 (b1): beide Kanaele gesetzt -> erster Sweep sendet GENAU EINE Mail und EINE SMS", async () => {
   const nowMs = Date.now();
@@ -173,11 +155,9 @@ test("KV2-1 (b2): zweiter Sweep INNERHALB des Entprellfensters -> keine zweite M
 
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
   const markerBucket = "kosten:coverage_below_threshold";
-  // String-KOPIEN, nicht die live-mutierte Objektreferenz - openOutageAlert liefert
-  // dieselbe Objektinstanz zurueck, die claimOutageAlert im naechsten Sweep weiter mutiert.
   const { firstSeenAt, lastSeenAt: lastSeenAtNachSweep1 } = openOutageAlert(state, markerBucket);
 
-  const INNERHALB_DEBOUNCE_MS = 1000; // weit innerhalb outageAlertDebounceMs (21600000)
+  const INNERHALB_DEBOUNCE_MS = 1000;
   clock += INNERHALB_DEBOUNCE_MS;
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
 
@@ -190,8 +170,6 @@ test("KV2-1 (b2): zweiter Sweep INNERHALB des Entprellfensters -> keine zweite M
   assert.ok(Date.parse(nachSweep2.lastSeenAt) > Date.parse(lastSeenAtNachSweep1), "lastSeenAt fortgeschrieben");
 });
 
-// ---- (c) der Marker ueberlebt einen simulierten Prozess-Neustart -----------------------
-
 test("KV2-1 (c): neue Store-Instanz UND neue makeCostTruing-Instanz ueber DENSELBEN Zustand -> firstSeenAt bleibt, coverage_stalled kommt erst nach der Zeitschwelle", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
@@ -202,7 +180,6 @@ test("KV2-1 (c): neue Store-Instanz UND neue makeCostTruing-Instanz ueber DENSEL
     costTruingMinCoveragePercent: 80, costTruingCoverageStallSweeps: STALL_SWEEPS, costTruingSweepIntervalMs: SWEEP_INTERVAL_MS,
   });
 
-  // "Prozess" A.
   const storeA = makeStubStore(state);
   const auditA = [];
   const { runCostTruingSweep: sweepA } = makeCostTruing({
@@ -214,8 +191,6 @@ test("KV2-1 (c): neue Store-Instanz UND neue makeCostTruing-Instanz ueber DENSEL
   assert.ok(markerNachA, "Marker existiert nach Sweep A");
   assert.equal(auditA.some((entry) => entry.detail.includes("coverage_stalled")), false, "noch nicht stalled (Sweep A)");
 
-  // Simulierter Neustart: NEUE Store-Instanz, NEUE makeCostTruing-Fabrik, DERSELBE state
-  // (== "neue Prozess-Instanz, gleiche Datenbank"). Uhr auf firstSeenAt + Stall-Schwelle.
   const storeB = makeStubStore(state);
   const auditB = [];
   const restartClock = Date.parse(markerNachA.firstSeenAt) + STALL_SWEEPS * SWEEP_INTERVAL_MS;
@@ -230,8 +205,6 @@ test("KV2-1 (c): neue Store-Instanz UND neue makeCostTruing-Instanz ueber DENSEL
   assert.equal(auditB.some((entry) => entry.detail.includes("coverage_stalled")), true,
     "die NEUE Instanz erkennt den Stillstand SOFORT beim ersten Lauf - ein prozesslokaler Zaehler haette das nie gekonnt (AUFTRAG B3)");
 });
-
-// ---- (d) kostenAlarmFindings + Sweep-Zeile: reine Kanal-Diagnose -----------------------
 
 test("KV2-1 (d1): kostenAlarmFindings - beide Ziele leer meldet, ein vollstaendiger Kanal nicht", () => {
   const leer = kostenAlarmFindings({ billing: { platformAlertSmsTo: "" }, mail: { platformAlertMailTo: "" } });
@@ -248,7 +221,7 @@ test("KV2-1 (d1): kostenAlarmFindings - beide Ziele leer meldet, ein vollstaendi
   assert.equal(
     kostenAlarmFindings({
       billing: { platformAlertSmsTo: "" },
-      mail: { platformAlertMailTo: "ops@example.test" }, // OHNE brevoApiKey/smtpHost
+      mail: { platformAlertMailTo: "ops@example.test" },
     }).length,
     1,
     "eine Mail-Adresse OHNE konstruierbaren Mailer zaehlt NICHT als Kanal (G26)",
@@ -276,7 +249,6 @@ test("KV2-1 (d2): die Sweep-Zeile traegt kanaele= - NUR Kanal-Arten, NIE die Zie
   }));
   assert.equal(zeileMitBeiden, "mail,sms");
 
-  // Gegenprobe auf dem ECHTEN Sweep-Log (kein Ziel -> kanaele=keine, nie die Adresse/Nummer).
   const state = makeDefaultState();
   const store = makeStubStore(state);
   const config = fakeConfig();
@@ -294,14 +266,9 @@ test("KV2-1 (d2): die Sweep-Zeile traegt kanaele= - NUR Kanal-Arten, NIE die Zie
     logs.restore();
   }
   const sweepLine = lines.find((line) => line.startsWith("[cost-truing] sweep "));
-  // KV2-6: buch=/herzschlag=/nie_beendet=/profillos= wachsen HINTER kanaele= (dieselbe
-  // Bewegung wie kanaele= selbst hinter den P6-8-Feldern) - "kanaele=keine" steht deshalb
-  // nicht mehr am Zeilenende, sondern unmittelbar VOR dem naechsten Feld.
   assert.match(sweepLine, /kanaele=keine buch=/, "kanaele=keine steht unmittelbar vor dem Kosten-Buch");
   assert.doesNotMatch(sweepLine, /ops@|\+\d{6,}/, "kein Ziel in der Sweep-Zeile");
 });
-
-// ---- (e) Quelltext-Verdrahtungs-Guard (Muster test/ausfall-server-wiring.test.js) ------
 
 test("KV2-1 (e): server.js/app.js/wiring/web-login.js verdrahten die durable Audit-Zelle korrekt", () => {
   const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
@@ -328,8 +295,6 @@ test("KV2-1 (e): server.js/app.js/wiring/web-login.js verdrahten die durable Aud
   assert.match(depsBlock, /\bdurableAudit,/, "durableAudit fehlt im deps-Buendel");
 
   assert.match(appSrc, /auditStoreRef,/, "app.js muss auditStoreRef an wireWebLogin durchreichen");
-  // Object.assign statt direkter Property-Zuweisung (G25/Clean-Code-Ratsche dieser Datei) -
-  // dieselbe Wirkung, ohne den bestehenden no-param-reassign-Fund zu vermehren.
   assert.match(webLoginSrc, /Object\.assign\(auditStoreRef, \{ current: auditStore \}\)/,
     "wireWebLogin muss auditStoreRef.current befuellen");
 });

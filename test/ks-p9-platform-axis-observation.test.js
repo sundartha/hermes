@@ -1,11 +1,3 @@
-// KS-P9/E10: die Plattform-Geldachse verliert die SPERRWIRKUNG und behaelt nur noch
-// Messung + Warnschwelle. Diese Datei ist das Regressionsschloss dafuer, auf zwei Ebenen:
-//   - Ops-Ebene (state-ops): zwei Tenants unter ihren eigenen Decken duerfen telefonieren,
-//     auch wenn ihre SUMME die Plattform-Zahl weit reisst - und die Beobachtung sieht
-//     dieselbe Summe trotzdem.
-//   - Gate-Ebene (outbound-gates): die Kette kommt OHNE eine globalBudgetExceeded-Methode
-//     am Store aus (keine Kontraktflaeche mehr), waehrend die Tenant-Achse scharf bleibt.
-// Reine Unit-Ebene, offline, kein Spawn, kein Store-Singleton (F.I.R.S.T.).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -24,9 +16,6 @@ import {
 import { makeOutboundGates } from "../src/telephony/outbound-gates.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
-// Die Store-Fassade wird DYNAMISCH geladen, nachdem DATA_DIR auf ein Temp-Verzeichnis
-// zeigt (Muster test/store-backend-parity.test.js): sonst haengt json.FILE an der echten
-// data/store.json. Nur Struktur wird gelesen, kein Zustand.
 let storeFacade;
 
 before(async () => {
@@ -37,9 +26,6 @@ before(async () => {
 
 const TENANT_A = "ks_p9_tenant_a";
 const TENANT_B = "ks_p9_tenant_b";
-// Jeder Tenant hat 1000 ct eigene Decke; die Plattform-"Zahl" liegt bei 1200 ct. Zwei
-// Tenants mit je 900 ct Verbrauch reissen die Summe (1800 > 1200), bleiben aber JEDER
-// unter seiner eigenen Decke.
 const TENANT_CAP_CENTS = 1000;
 const PLATFORM_CENTS = 1200;
 const SPENT_PER_TENANT_CENTS = 900;
@@ -48,13 +34,11 @@ const JULY_ISO = "2026-07-15T10:00:00.000Z";
 
 const CFG = {
   platformSpendCapCents: PLATFORM_CENTS,
-  defaultTenantBudgetCents: 0, // Sentinel: die gesetzten Zeilen unten sind die Decke
+  defaultTenantBudgetCents: 0,
   budgetMonthEnabled: false,
   platformSpendWarnPercent: 80,
 };
 
-// Build (P13): zwei Tenants mit eigener Decke, jeder unter seiner Decke, Summe weit
-// ueber der Plattform-Zahl, KEINE Reserve gebucht.
 function stateWithTwoTenantsOverPlatformSum() {
   const s = makeDefaultState();
   for (const tenantId of [TENANT_A, TENANT_B]) {
@@ -63,8 +47,6 @@ function stateWithTwoTenantsOverPlatformSum() {
   }
   return s;
 }
-
-// ---- (1) Mutationsprobe: die Plattform-Summe sperrt nicht mehr ---------------------
 
 test("KS-P9 (1): Summe weit ueber der Plattform-Zahl - beide Tenants bleiben frei und duerfen reservieren", () => {
   const s = stateWithTwoTenantsOverPlatformSum();
@@ -85,14 +67,12 @@ test("KS-P9 (1): Summe weit ueber der Plattform-Zahl - beide Tenants bleiben fre
 
 test("KS-P9 (1b): die EIGENE Tenant-Decke sperrt unveraendert (Gegenprobe zur Mutationsprobe)", () => {
   const s = stateWithTwoTenantsOverPlatformSum();
-  addVoiceUsageCostCents(s, TENANT_A, TENANT_CAP_CENTS - SPENT_PER_TENANT_CENTS); // A exakt auf seiner Decke
+  addVoiceUsageCostCents(s, TENANT_A, TENANT_CAP_CENTS - SPENT_PER_TENANT_CENTS);
   assert.equal(budgetExceeded(s, TENANT_A, CFG, JULY_ISO), true, "eigene Decke erreicht -> gesperrt");
   assert.equal(tryReserveOutboundBudget(s, TENANT_A, RESERVE_CENTS, CFG, JULY_ISO), false);
   assert.equal(reservationFor(s, TENANT_A), 0, "abgelehnte Reserve hinterlaesst keinen Schreibeffekt");
   assert.equal(budgetExceeded(s, TENANT_B, CFG, JULY_ISO), false, "B ist von A's Sperre unberuehrt");
 });
-
-// ---- (2) Die Beobachtung lebt weiter ----------------------------------------------
 
 test("KS-P9 (2): die Plattform-Warnung sieht dieselbe Summe inkl. In-Flight-Reserve, genau einmal je Spend-Monat", () => {
   const s = stateWithTwoTenantsOverPlatformSum();
@@ -106,22 +86,15 @@ test("KS-P9 (2): die Plattform-Warnung sieht dieselbe Summe inkl. In-Flight-Rese
   assert.equal(claimPlatformSpendWarning(s, CFG, JULY_ISO), null, "zweiter Aufruf im selben Spend-Monat: stumm");
 });
 
-// ---- (3) Strukturelles Regressionsschloss (Modul-Exporte, kein Text-Scan) ----------
-
 test("KS-P9 (3): die Sperrpraedikate der Plattform-Achse sind aus state-ops und der Store-Fassade verschwunden", () => {
   const opsExports = Object.keys(stateOps);
   for (const name of ["globalBudgetExceeded", "globalReserveExceedsBudget"]) {
     assert.equal(opsExports.includes(name), false, `state-ops exportiert ${name} nicht mehr`);
     assert.equal(name in storeFacade, false, `die Store-Fassade traegt ${name} nicht mehr`);
   }
-  // Gegenprobe: die BEOBACHTUNG haengt weiter an der Fassade (sonst waere zu viel entfallen).
   assert.equal(typeof storeFacade.claimPlatformSpendWarning, "function");
 });
 
-// ---- (4)/(5) Gate-Kette: keine Plattform-Kontraktflaeche mehr, Tenant-Achse scharf --
-
-// Vollstaendig durchgesteuerter Fake OHNE globalBudgetExceeded-Methode (Muster
-// test/deny-diagnosability.test.js): ein Rest-Aufruf wuerde hier als TypeError auffallen.
 function gatesWithStore(storeOverrides = {}) {
   return makeOutboundGates({
     store: {

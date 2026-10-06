@@ -1,7 +1,3 @@
-// KV2-9 (tasks/PLAN-KOSTEN-V2.md, Phase KV2-9, Abnahme (g)): der zweite einmalige
-// Nachlauf. In-process, netzfrei (Muster test/kv2-7-nachlauf.test.js). Testnamen tragen
-// bewusst KEINE Katalog-/Abnahme-Kennung am Namensanfang (Lehre
-// catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -25,26 +21,20 @@ import { KOSTENART, KOSTENPROFIL } from "../src/billing/kostenarten.js";
 import { fakeConfig, fakeVoiceControl, isoMinutesAgo, makeStubStore } from "./cost-truing-harness.js";
 import { captureConsole } from "./helpers.js";
 
-// ---- Konstanten (G25) --------------------------------------------------------------------
-
 const DEADLINE_H = 48;
 const MINUTEN_JE_STUNDE = 60;
 const NACH_FRIST_MARGE_MIN = 10;
 const NACH_FRIST_MINUTEN_HER = DEADLINE_H * MINUTEN_JE_STUNDE + NACH_FRIST_MARGE_MIN;
 const SCHAETZUNG_CENTS = 30;
-// providerToBucketRateMicro=1_000_000 (fakeConfig-Default, neutrale Rate) macht
-// bucketCents = floor(actualCostMicroCents / 1_000_000) - direkt lesbare Cent-Fixturen.
-const UNTER_SCHAETZUNG_MIKRO = 5_000_000; // -> 5 Bucket-Cent, < 30
-const UEBER_SCHAETZUNG_MIKRO = 40_000_000; // -> 40 Bucket-Cent, > 30
-const GLEICH_SCHAETZUNG_MIKRO = 30_000_000; // -> 30 Bucket-Cent, == 30 (Grenzfall)
+const UNTER_SCHAETZUNG_MIKRO = 5_000_000;
+const UEBER_SCHAETZUNG_MIKRO = 40_000_000;
+const GLEICH_SCHAETZUNG_MIKRO = 30_000_000;
 
 function testConfig() {
   return fakeConfig({ costSettleDeadlineHours: DEADLINE_H, providerToBucketRateMicro: 1_000_000 });
 }
 
 const DEADLINE_MS = () => faelligkeitsfensterMs(testConfig().billing);
-
-// ---- Fixture-Bausteine --------------------------------------------------------------------
 
 function makeStore(state) {
   return {
@@ -54,8 +44,6 @@ function makeStore(state) {
   };
 }
 
-// Ein bereits zwangs-gesettelter el_convai_sip-Anruf: costTruedAt gesetzt, Endzustand
-// unvollstaendig_final (Frist abgelaufen, EL-Zeile fehlt/vorlaeufig).
 function seedZwangsGesettelt(state, { nowMs, elBetragMikroCents, elReife = REIFE.VORLAEUFIG, schaetzung = SCHAETZUNG_CENTS }) {
   const call = createCall(state, {
     direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx",
@@ -75,7 +63,6 @@ function seedZwangsGesettelt(state, { nowMs, elBetragMikroCents, elReife = REIFE
       quelle: "el_kosten_beleg",
     });
   }
-  // KV2-8: Optionsobjekt statt drittem Positionsargument (Signaturwechsel, F1).
   schliesseKostenAbgleich(state, call.id, {
     closedAt: isoMinutesAgo(nowMs, 0),
     source: "kostenbuch_teilbeleg",
@@ -83,8 +70,6 @@ function seedZwangsGesettelt(state, { nowMs, elBetragMikroCents, elReife = REIFE
   });
   return call;
 }
-
-// ---- (g) Treffer + Idempotenz -------------------------------------------------------------
 
 test("(g) Treffer: el_convai_sip, zwangs-gesettelt, EINE vorlaeufige EL-Zeile, Belegsumme < Schaetzung -> wird wieder geoeffnet", () => {
   const state = makeDefaultState();
@@ -142,8 +127,6 @@ test("(g) nach dem Oeffnen ist der Anruf im naechsten Sweep wieder Kandidat", as
   assert.match(line, /kandidaten=1\b/, `der wieder geoeffnete Anruf muss Kandidat sein: ${line}`);
 });
 
-// ---- Gegenproben: die vier Bedingungen, die NICHT treffen duerfen -------------------------
-
 test("(g) Gegenprobe 1: Endzustand beleg_strukturell_unbeschaffbar (nachreifbar:false) -> NICHT angefasst", () => {
   const state = makeDefaultState();
   const nowMs = Date.now();
@@ -157,9 +140,6 @@ test("(g) Gegenprobe 1: Endzustand beleg_strukturell_unbeschaffbar (nachreifbar:
     callId: call.id, traeger: KOSTENART.ELEVENLABS_CONVAI, reife: REIFE.VORLAEUFIG,
     betragMikroCents: UNTER_SCHAETZUNG_MIKRO, waehrung: "USD", quelle: "el_kosten_beleg", nachreifbar: false,
   });
-  // Der TELNYX_SIP-Traeger muss BELEGT sein, sonst ist er selbst ein "fehlender, nicht
-  // nachreifbarer"-Kandidat mit undefined-Zeile (nichtNachreifbar(undefined)===false) -
-  // und der Anruf faellt auf unvollstaendig_final statt auf den Abbruchweg.
   recordCallCostEvidence(state, {
     callId: call.id, traeger: KOSTENART.TELNYX_SIP, reife: REIFE.BELEGT,
     betragMikroCents: 40_100, waehrung: "USD", quelle: "sweep_kostenbeleg",
@@ -239,8 +219,6 @@ test("Grenzfall: Belegsumme EXAKT gleich der Schaetzung (Delta 0) -> NICHT angef
   assert.equal(grund, NACHLAUF_KV2_9_SKIP.BELEGSUMME_NICHT_UNTER_SCHAETZUNG);
 });
 
-// ---- Weitere Skip-Gruende (rein) -----------------------------------------------------------
-
 test("rein: kein el_convai_sip-Profil -> KEIN_EL_PROFIL", () => {
   const state = makeDefaultState();
   const nowMs = Date.now();
@@ -264,7 +242,3 @@ test("rein: costTruedAt noch null (nie geschlossen) -> NICHT_GESCHLOSSEN", () =>
   assert.equal(treffer, false);
   assert.equal(grund, NACHLAUF_KV2_9_SKIP.NICHT_GESCHLOSSEN);
 });
-
-// Der eigentliche Refactor-Beweis (die Schleifen-Extraktion laufUeberAnrufe ist ein
-// reiner Refactor) ist test/kv2-7-nachlauf.test.js selbst: es bleibt UNVERAENDERT und muss
-// weiterhin gruen sein (npm test faehrt beide Dateien im selben Lauf).

@@ -1,7 +1,3 @@
-// P6b4: KYC-Level + Gate-Praedikat (state-ops-Unit). Prueft die INVARIANTEN rein
-// ueber ops.setKycLevel/kycReached (kein Netz, kein Server, kein pglite; Lehre P6a:
-// state-ops-Unit NICHT mit Spawn/pglite mischen). Das HTTP-Gate (numberGateError-
-// Sequenz) deckt kyc-gate-outbound.test.js ab.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -67,8 +63,6 @@ test("setKycLevel ist idempotent-set (eine kycLevel-Eigenschaft, kein Duplikat)"
   assert.equal(s.tenants.find((t) => t.id === A).kycLevel, KYC_LEVEL.CARD);
 });
 
-// ---- seedBootstrapKyc (Phase outbound-p1): Owner-Heal, set-if-absent ----
-
 test("seedBootstrapKyc: frischer Owner -> id_verified, zweiter Lauf No-Op (idempotent)", () => {
   const s = makeDefaultState();
   assert.equal(seedBootstrapKyc(s, BOOTSTRAP_TENANT_ID), true, "erste Heilung mutiert");
@@ -94,7 +88,6 @@ test("seedBootstrapKyc: heilt BEIDE Praedikate (kycReached + tenantActiveSubscri
   assert.equal(kycReached(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN), false, "vorher: fail-closed");
   assert.equal(tenantActiveSubscriber(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN), false, "vorher kein Sub");
   seedBootstrapKyc(s, BOOTSTRAP_TENANT_ID);
-  // Bewusste Doppelwirkung (PLAN-SECURITY outbound-p1): id_verified erfuellt BEIDE Gates.
   assert.equal(kycReached(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN), true, "nachher: passiert KYC-Gate");
   assert.equal(
     tenantActiveSubscriber(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN),

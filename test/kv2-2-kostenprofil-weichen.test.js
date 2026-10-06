@@ -1,5 +1,3 @@
-// KV2-2: das Kostenprofil an der Engine-Weiche. Abnahmekriterien (b), (c), (e) aus
-// tasks/kostenv2/spec-kv2-2.md.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -23,16 +21,12 @@ const EL_BOOT_ENV = Object.freeze({
   ELEVENLABS_API_KEY: "key_x",
 });
 
-// Zwei kleine Finder statt verketteter Zugriffe (harness.store.load().calls.find(...)
-// bzw. srv.readStore().calls.find(...) waeren eine zu tiefe Aufrufkette, G36).
 function callWithId(calls, id) {
   return calls.find((call) => call.id === id);
 }
 function callWithTwilioSid(calls, twilioSid) {
   return calls.find((call) => call.twilioSid === twilioSid);
 }
-
-// ---- Kriterium (c): Inventar-Test ueber die FUENF Weichen-Zweige ----------------------
 
 test("KV2-2-c1: EL-Zweig (api-calls.js) setzt costProfile=el_convai_sip", async () => {
   const srv = await startServer({ env: { ...EL_BOOT_ENV }, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
@@ -43,16 +37,11 @@ test("KV2-2-c1: EL-Zweig (api-calls.js) setzt costProfile=el_convai_sip", async 
     const calls = srv.readStore().calls;
     const call = callWithId(calls, callId);
     assert.equal(call.costProfile, KOSTENPROFIL.EL_CONVAI_SIP);
-    // Gegenprobe: der Zweig lief wirklich (fake_el_-Kennung, s. elevenlabs-anrufstart.test.js).
     assert.match(call.elevenlabsConversationId, /^fake_el_/);
   } finally {
     await srv.stop();
   }
 });
-
-// KV2-2-c2 ist mit IE6-S1 als IE6-S1-2 umgezogen (test/ie6-s1-assistant-entfernt.test.js):
-// der Telnyx-Assistant-Zweig ist entfernt, dieselbe Weiche faellt jetzt auf den TeXML-
-// Zweig zurueck - jetzt mit Rueckfall-Erwartung statt costProfile=telnyx_assistant.
 
 test("KV2-2-c3: TeXML-Zweig (beide Flags aus) setzt costProfile=telnyx_budget", async () => {
   const srv = await startServer({
@@ -66,14 +55,12 @@ test("KV2-2-c3: TeXML-Zweig (beide Flags aus) setzt costProfile=telnyx_budget", 
     const calls = srv.readStore().calls;
     const call = callWithId(calls, callId);
     assert.equal(call.costProfile, KOSTENPROFIL.TELNYX_BUDGET);
-    // Gegenprobe: TeXML-Fake-Praefix (kein _cc_) - der Zweig lief wirklich.
     assert.match(call.twilioSid, /^fake_(?!cc_)/);
   } finally {
     await srv.stop();
   }
 });
 
-// Inbound-Seed (Muster geoSeed aus inbound-routing.test.js): eine aktive Owner-Nummer.
 function inboundSeed() {
   return ownerNumberSeed(TELNYX_TEST_OWNER_NUMBER);
 }
@@ -131,8 +118,6 @@ test("KV2-2-c7: alle drei Weichen-Zweige liefern ein Profil aus der Registry", a
   }
 });
 
-// ---- Kriterium (b): unbekannt wirft, fehlend wirft NICHT ------------------------------
-
 function seedCallState() {
   const state = ops.makeDefaultState();
   const call = ops.createCall(state, {
@@ -183,12 +168,7 @@ test("KV2-2-b4 (set-once): zweimal setzen - der erste Wert bleibt, changed=false
   assert.equal(second.call.costProfile, KOSTENPROFIL.TELNYX_BUDGET, "der erste Wert bleibt");
 });
 
-// ---- Kriterium (e): usage.costCents und usage_event byte-identisch --------------------
-
 test("KV2-2-e1: costProfile-Weiche bewegt weder usage.costCents noch usageEvents", async () => {
-  // NUR costCents + usageEvents sind das Abnahmekriterium (e) - "calls" (der Zaehler
-  // platzierter Anrufe) veraendert sich durch das PLATZIEREN selbst, unabhaengig vom
-  // Kostenprofil, und ist deshalb kein Teil dieses Vergleichs.
   const srv = await startServer({ env: { FAKE_ORIGINATE: "true" }, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
   try {
     const ownerUsage = () => srv.readStore().usage.owner;
