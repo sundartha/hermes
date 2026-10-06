@@ -28,6 +28,11 @@ export function committeAlsBot(root, nachricht) {
   gitAusgabe(["-c", `user.name=${BOT}`, "-c", `user.email=${BOT_EMAIL}`, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-F", "-"], root, { eingabe: nachricht });
 }
 
+function restText(rest, sorte) {
+  const texte = rest.map((eintrag) => eintrag.text).join("; ");
+  return ["Noch", rest.length, "Befunde von", sorte + ":", texte].join(" ");
+}
+
 function auszug(text) {
   const zeilen = text.split("\n").filter((zeile) => zeile.trim() !== "");
   return zeilen.slice(0, MAX_AUSZUG).join("\n");
@@ -81,7 +86,7 @@ const CODE_PRUEFUNGEN = [
   },
   (root, ziel) => {
     const rest = befundeDer(ziel.sorte, root).get(ziel.datei) ?? [];
-    return rest.length === 0 ? null : befund(IDS.offen, ziel.datei, `Noch ${rest.length} Befunde von ${ziel.sorte}: ${rest.map(({ text }) => text).join("; ")}`);
+    return rest.length === 0 ? null : befund(IDS.offen, ziel.datei, restText(rest, ziel.sorte));
   },
   (root, ziel) => {
     if (!Array.isArray(ziel.tests) || ziel.tests.length === 0) return befund(IDS.testsRot, ziel.datei, "Kein Test erreicht die Zieldatei.");
