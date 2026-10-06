@@ -48,7 +48,10 @@ test("testordnung: test/openai-t9-99-probe.test.js direkt unter test/ ist rot un
     /^test\/openai-t9-99-probe\.test\.js: neue Testdateien liegen unter test\/<bereich>\/ \(Bereiche: anrufe, gemeinsam\) und heißen nach Verhalten, z\. B\. test\/anrufe\/anruf-starten\.test\.js\./m,
   );
   assert.match(ergebnis.stderr, /Ticket-Nummern gehören in Commit-Text und Testtitel\./);
-  assert.match(ergebnis.stderr, /Ausnahme des Musters in tools\/abhaengigkeiten\/testordnung\.mjs/);
+  assert.match(
+    ergebnis.stderr,
+    /braucht eine Freigabe von Antonio oder Jonas; im Zweifel den Namen nach Verhalten wählen\./,
+  );
 });
 
 test("testordnung: test/anrufe/anruf-starten.test.js ist grün", (context) => {
