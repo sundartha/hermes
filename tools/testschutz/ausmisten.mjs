@@ -8,7 +8,7 @@ import {
   laufTitel,
   pfadUndEreignis,
 } from "../tests-ausmisten/herkunft.mjs";
-import { graphImStand, messmenge } from "../tests-ausmisten/messmenge.mjs";
+import { graphImStand, mengenVerstoesse, messmenge } from "../tests-ausmisten/messmenge.mjs";
 import {
   BRANCH_PRAEFIX,
   bereichAusBranch,
@@ -135,6 +135,8 @@ async function pruefeMessgrundlage(basis, { bereich, gemessen }) {
   const alt = { rev: basis, graph };
   const geaendert = testaenderungen(basis, "HEAD");
   const menge = messmenge({ bereich, bereiche: leseBereiche(), geaendert, alt });
+  const unmessbar = mengenVerstoesse({ geaendert, alt, menge });
+  verlange(unmessbar.length === 0, unmessbar.join(" "));
   const beobachtet = [...MESSGRUNDLAGE, ...menge.dateien, ...menge.beobachtet];
   const seither = git([
     "diff",
@@ -150,11 +152,11 @@ async function pruefeMessgrundlage(basis, { bereich, gemessen }) {
 }
 
 export async function ausmistenFrei({ basis, pullRequest, stellen }) {
-  const { full } = repositoryName();
-  const pr = await getJson(`/repos/${full}/pulls/${pullRequest}`);
-  const branch = String(pr.head?.ref ?? "").toLowerCase();
-  if (!branch.startsWith(BRANCH_PRAEFIX)) return false;
   try {
+    const { full } = repositoryName();
+    const pr = await getJson(`/repos/${full}/pulls/${pullRequest}`);
+    const branch = String(pr.head?.ref ?? "").toLowerCase();
+    if (!branch.startsWith(BRANCH_PRAEFIX)) return false;
     const angaben = prAngaben(pr, basis);
     const lauf = await gueltigerLauf(full, angaben);
     await pruefeMessgrundlage(basis, { ...angaben, ...lauf });

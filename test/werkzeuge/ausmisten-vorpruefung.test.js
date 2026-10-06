@@ -25,7 +25,7 @@ function testMit(...zeilen) {
 }
 
 async function miss(context, fall) {
-  const repo = ausmistenRepo(context);
+  const repo = ausmistenRepo(context, fall.dateien);
   const kopf = fall.leer ? repo.master : repo.committe(fall.neu ?? {}, fall.weg ?? [DOPPELT]);
   repo.git(["checkout", "-q", repo.master]);
   if (fall.master !== undefined) repo.committe(fall.master);
@@ -204,4 +204,28 @@ test("ausmisten-vorpruefung: die Umgebung über ein Programm zu lesen stoppt die
 test("ausmisten-vorpruefung: der Branch-Job ohne gültigen Plan legt nichts über master", async (context) => {
   const ergebnis = await erwarteRot(context, { befehl: "branch" }, "Plan unbrauchbar");
   assert.equal(ergebnis.repo.git(["status", "--porcelain"]).stdout, "");
+});
+
+test("ausmisten-vorpruefung: ein gelöschter Test, der nur tools/ prüft, ist nicht messbar und stoppt die Planung", async (context) => {
+  const nurWerkzeug = "test/post/werkzeug.test.js";
+  const dateien = {
+    "tools/pruefen.mjs": "export const ok = true;\n",
+    [nurWerkzeug]: 'import "../../tools/pruefen.mjs";\n',
+  };
+  const ergebnis = await erwarteRot(context, { dateien, weg: [nurWerkzeug] }, "Nicht messbar:");
+  assert.match(
+    ergebnis.ausgabe,
+    /test\/post\/werkzeug\.test\.js: erreicht keine src-Datei der Messmenge/,
+  );
+});
+
+test("ausmisten-vorpruefung: eine geänderte Datendatei ohne Nutzer ist nicht messbar und stoppt die Planung", async (context) => {
+  const daten = "test/daten/frei.json";
+  const dateien = { [daten]: '{ "a": 1 }\n' };
+  const neu = { [daten]: '{ "a": 2 }\n' };
+  await erwarteRot(
+    context,
+    { dateien, neu },
+    `${daten}: keine Testdatei lädt oder nennt diese Datei`,
+  );
 });

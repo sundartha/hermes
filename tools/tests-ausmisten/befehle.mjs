@@ -108,6 +108,8 @@ async function mengen({ lauf, bereiche, werkzeug }) {
   const geaendert = testaenderungen(lauf.master, lauf.kopf);
   const alt = { rev: lauf.master, graph };
   const menge = werkzeug.messmenge({ bereich: lauf.bereich, bereiche, geaendert, alt });
+  const unmessbar = werkzeug.mengenVerstoesse({ geaendert, alt, menge });
+  if (unmessbar.length > 0) throw new Error(`Nicht messbar:\n${unmessbar.join("\n")}`);
   const neu = werkzeug.geaenderteTestdateien(geaendert, {
     rev: lauf.kopf,
     graph: branchSicht.graph,

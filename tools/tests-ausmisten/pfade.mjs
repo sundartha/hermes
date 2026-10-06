@@ -16,6 +16,7 @@ const NUR_KUERZEN = [
 ];
 const GESPERRTE_TESTPFADE = [
   "test/werkzeuge/",
+  "test/sicherheit/",
   "test/testbaenke-run.mjs",
   "test/i18n-catalog-run.mjs",
 ];
@@ -150,7 +151,7 @@ function aenderungsVerstoss(aenderung, stand) {
   }
   if (NUR_KUERZEN.includes(pfad)) return bestandsVerstoss(aenderung, stand);
   if (!testpfadFrei(pfad)) {
-    return `${pfad}: beim Ausmisten sind nur Dateien unter test/ erlaubt, nicht unter test/werkzeuge/ und nicht die Testbank-Skripte.`;
+    return `${pfad}: beim Ausmisten sind nur Dateien unter test/ erlaubt, nicht unter test/werkzeuge/ oder test/sicherheit/ und nicht die Testbank-Skripte.`;
   }
   if (status === STATUS_GELOESCHT && stand.gates.has(pfad)) {
     return `${pfad}: Safety-Gate-Tests aus ${GATE_DATEI} dürfen weder gelöscht noch verschoben werden.`;
