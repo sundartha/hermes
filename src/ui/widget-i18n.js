@@ -1,42 +1,7 @@
-// Gemeinsame Lokalisierung fuer ALLE Hermes-Widgets. Der MCP ist international -
-// das Widget zeigt seine Oberflaeche in der Sprache des Agenten, NICHT hart deutsch.
-//
-// T2-02/T-34 (cache-feste, sprachunabhaengige Resource-URIs): die ui://-Resource
-// selbst ist jetzt EINE einzige, sprachneutrale Fassung (widget-catalog.js) - die
-// Sprache reist NICHT MEHR im Katalog-Cache-Schluessel, sondern als Ergebnis-`_meta`
-// der Widget-Werkzeuge (mcp-tools.js, WIDGET_LOCALE_META_KEY) und wird ERST IM
-// IFRAME umgeschaltet. Grund: ChatGPT darf Resource-Inhalte bis zu 1 h cachen
-// (developers.openai.com/plugins/deploy/app-review) - eine URI pro Sprache wuerde
-// das Cache-Fenster mit einer haerteren Anforderung (Origin-Stabilitaet) in Konflikt
-// bringen. Start-Locale ist deshalb IMMER "en" (sichtbar bis zum ersten Tool-
-// Ergebnis, bewusste Folge s. T2-02-Pre-Mortem), das I18N-Script schaltet danach auf
-// die servergerenderte Sprache um.
-//
-// Mechanik (Muster widget-bind.js): dieselben Funktionen laufen in Node-Tests
-// UND - via Function.prototype.toString projiziert - als self-contained
-// Iframe-Script (I18N_SCRIPT, injiziert von widget-catalog.js in den <head> jedes
-// Widgets, VOR den Inline-Skripten -> window.HermesI18n ist dort synchron
-// verfuegbar). Das Script registriert ALS ERSTES einen eigenen message-Listener
-// (vor widget-bind.js' Listener, der spaeter vor </body> injiziert wird) - die
-// Sprache steht damit fest, BEVOR dieselbe Host-Nachricht das structuredContent
-// bindet.
-//
-// Uebersetzungs-Modell: die Keys SIND die englischen Anzeigetexte. Englisch ist
-// damit der eingebaute Fallback (kein eigenes en-Dict, kein Key-Drift zwischen
-// Markup und Woerterbuch): unbekannter Key oder unbekannte Sprache -> der Key
-// selbst wird angezeigt. Die statischen Markup-Texte stehen ebenfalls auf
-// Englisch und tragen data-i18n="<derselbe Text>"; faellt das Script aus,
-// bleibt die Karte vollstaendig englisch statt kaputt (fail-safe).
-// UI-Strings duerfen echte Umlaute/Akzente tragen (UTF-8, meta charset) -
-// die ASCII-Disziplin gilt nur fuer Code-Kommentare.
 import { METHOD_TOOL_RESULT } from "./widget-bind.js";
 
 export const DEFAULT_LOCALE = "en";
 
-// Unterstuetzte Nicht-EN-Sprachen = die Produktsprachen der Voice-Seite
-// (F1: DE+FR+EN). Neue Sprache = ein neuer Eintrag hier, sonst nichts (OCP);
-// der Paritaets-Test (test/mcp-ui-widget-i18n.test.js) erzwingt identische
-// Key-Saetze ueber alle Eintraege.
 export const WIDGET_DICT = {
   de: {
     "Hermes · Call": "Hermes · Anruf",
@@ -74,7 +39,6 @@ export const WIDGET_DICT = {
     "Yes": "Ja",
     "No": "Nein",
     "Unclear": "Unklar",
-    // T2-14 (N-10): Bestaetigungs-Ansicht im Call-Widget.
     "To": "Ziel",
     "Request": "Anliegen",
     "Briefing": "Briefing",
@@ -136,7 +100,6 @@ export const WIDGET_DICT = {
     "Yes": "Oui",
     "No": "Non",
     "Unclear": "Incertain",
-    // T2-14 (N-10): Bestaetigungs-Ansicht im Call-Widget.
     "To": "Destinataire",
     "Request": "Demande",
     "Briefing": "Briefing",
@@ -164,21 +127,12 @@ export const WIDGET_DICT = {
   },
 };
 
-// Sprachfeld-Schluessel am Ergebnis-`_meta` der Widget-Werkzeuge (mcp-tools.js
-// withWidgetLocale). NICHT in structuredContent (pinnte outputSchema/T-33-Snapshot,
-// s. T2-02-Spec Kernentscheidung 4) und NICHT ueber die globale OpenAI-Bruecke
-// gelesen (UI-03 verbietet ihre Nutzung im ausgelieferten HTML) - NUR ueber die
-// MCP-Apps-Bruecke (ui/notifications/tool-result, params._meta).
 export const WIDGET_LOCALE_META_KEY = "hermes/locale";
 
-// "de-DE"/"fr_CH" -> "de"/"fr". Nur der primaere Subtag entscheidet - die
-// Widgets haben keine regionalen Varianten.
 export function primaryLanguage(tag) {
   return String(tag || "").toLowerCase().split(/[-_]/)[0];
 }
 
-// Erster Kandidat, dessen Sprache unterstuetzt wird; nichts passt -> DEFAULT_LOCALE
-// (fail-safe englisch).
 export function resolveLocale(candidates, dict) {
   for (const candidate of candidates) {
     const lang = primaryLanguage(candidate);
@@ -188,8 +142,6 @@ export function resolveLocale(candidates, dict) {
   return DEFAULT_LOCALE;
 }
 
-// Key = englischer Text (siehe Kopfkommentar): en -> Key selbst, sonst Eintrag
-// aus der Sprachtabelle, fehlender Eintrag -> Key (englischer Fallback).
 export function translate(dict, locale, key) {
   if (locale === DEFAULT_LOCALE) return key;
   const table = dict[locale];
@@ -197,34 +149,16 @@ export function translate(dict, locale, key) {
   return key;
 }
 
-// Ersetzt die statischen Markup-Texte: jedes [data-i18n]-Element bekommt die
-// Uebersetzung seines Keys als textContent (XSS-Disziplin wie widget-bind.js:
-// NIE innerHTML).
 export function localizeStaticLabels(doc, t) {
   const nodes = doc.querySelectorAll("[data-i18n]");
   for (const el of nodes) el.textContent = t(el.getAttribute("data-i18n"));
 }
 
-// Loest einen eingehenden Sprachkandidaten auf - nur bei einem GUELTIGEN
-// String-Kandidaten (jeder andere Wert, inkl. Objekte/undefined, liefert null:
-// die aktuelle Locale bleibt unangetastet, kein Wurf). `resolveLocale`
-// entscheidet ueber gueltig/unterstuetzt (unbekannt -> en, dieselbe Regel wie
-// ueberall sonst - kein zweiter Fallback). Reine Funktion (keine Parameter-
-// Mutation, hoechstens 3 Argumente, F1) - das Anwenden (Dokument/Labels/
-// HermesI18n) macht der Aufrufer.
 export function incomingLocale(candidate, dict) {
   if (typeof candidate !== "string") return null;
   return resolveLocale([candidate], dict);
 }
 
-// Projiziert dieselben Funktionen als Iframe-Script-Text (eine Quelle, G5/S2 -
-// exakt das buildBindScript-Muster). EIN Script fuer ALLE Sprachen (kein
-// Locale-Parameter mehr, T2-02/S2): Start "en", danach Umschalten per
-// ui/notifications/tool-result mit `params._meta[WIDGET_LOCALE_META_KEY]`.
-// Registriert seinen Listener beim Modul-Lauf im <head> - also BEVOR
-// widget-bind.js' Listener (vor </body> injiziert) registriert wird; die
-// Listener-Reihenfolge ist die Registrierungsreihenfolge, die Sprache steht
-// damit fest, bevor dieselbe Nachricht structuredContent bindet.
 function buildI18nScript() {
   const body = [
     '"use strict";',
@@ -246,9 +180,6 @@ function buildI18nScript() {
     "window.HermesI18n = { locale: locale, t: t };",
     'if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", localizeDocument);',
     "else localizeDocument();",
-    // Eigener Listener, unabhaengig von widget-bind.js (das die Nachricht ebenfalls
-    // liest, um structuredContent zu binden) - dieselbe Host-Nachricht darf mehrere
-    // Listener haben (Standard-DOM-Semantik), Reihenfolge = Registrierreihenfolge.
     "window.addEventListener(\"message\", function (event) {",
     "  var message = event && event.data;",
     "  if (!message || typeof message !== \"object\") return;",
@@ -267,6 +198,4 @@ function buildI18nScript() {
   return `<script>\n(function () {\n${body}\n})();\n</script>`;
 }
 
-// EIN fertiges Script, EINMAL beim Modul-Load gebaut (kein Lazy-Init, P15) -
-// sprachunabhaengig, s. Kopfkommentar.
 export const I18N_SCRIPT = buildI18nScript();

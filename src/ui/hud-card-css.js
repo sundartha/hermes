@@ -1,26 +1,3 @@
-// Gemeinsamer Olympus-HUD-Kartenrahmen fuer die 3 Read-only-Widgets (H4:
-// agent-status/my-number/calls; calendar entfallen seit T2-12) - dieselbe
-// visuelle Sprache wie call.html (H3, MUSTER), aber NICHT aus call.html
-// importiert: call.html bleibt in dieser Kette unangetastet (ABS_RULES der
-// H4-Phase), behaelt daher seine eigene, werte-identische Token-Deklaration.
-// Die Read-only-Widgets teilen dieses Fragment wortgleich - EINE Quelle statt
-// mehrfacher Kopien derselben ~35 CSS-Zeilen (G5/S2). widget-catalog.js
-// injiziert es per Platzhalter-Replace
-// (withHudCardCss), dasselbe Muster wie WING_CSS/WING_MARKUP (wing-markup.js)
-// und WING_ENGINE (wing-canvas-engine.js).
-//
-// Bewusst NICHT geteilt (bleibt lokal in den einzelnen Widget-Dateien):
-// - .rows/.row-k/.row-v (Schluessel/Wert-Zeilen) - nur agent-status.html
-//   braucht sie, kein zweiter Konsument. Kollidiert NICHT mit .list .row
-//   unten (dort per .list-Scope auf die Listen-Widgets begrenzt, agent-
-//   status.html hat keinen .list-Container).
-// - .cell[data-field=...] (feldspezifische Farben/Formatierung) -
-//   calls.html hat eigene Felder/Farben, keine wortgleiche Kopie mit anderen
-//   Listen-Widgets. Die Basis-Regeln .list .row/.list .cell SIND dagegen
-//   wortgleich und leben deshalb hier (analog .list, s.u.).
-// Werte (Farben/Radien/Ease) sind ABSICHTLICH identisch zu call.html gewaehlt
-// (Produkt-weite Konsistenz), die Wing-Groesse (86px) ist H4-spezifisch
-// (call.html bleibt bei 112px).
 export const HUD_CARD_CSS = `
   :root {
     --color-navy-800:#0f2d52; --color-navy-900:#0a2245; --color-navy-card:#13335c;
