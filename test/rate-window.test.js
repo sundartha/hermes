@@ -1,8 +1,3 @@
-// Unit-Test fuer den extrahierten Fixed-Window-Zaehler (PLAN-TELNYX-AI-ASSISTANT.md, P5,
-// G5-Extraktion aus middleware.js createRateLimiter). Pinnt den Kern isoliert (kein Express/
-// HTTP): Limit-Grenze (N erlaubt, N+1 abgelehnt), Window-Reset nach Ablauf, Schluessel-
-// Isolation (zwei Keys teilen sich das Fenster NICHT). F.I.R.S.T.: keine echte Uhr/Zeitgeber
-// im Test - windowMs klein genug, dass ein kurzer setTimeout genuegt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeFixedWindowCounter } from "../src/middleware.js";
@@ -31,8 +26,6 @@ test("Window-Reset: nach Ablauf des Fensters startet der Zaehler neu", async () 
   assert.equal(hit("k").allowed, true, "nach Fenster-Ablauf wieder erlaubt");
 });
 
-// T2-07-Nachbesserung: peek liest den Stand, ohne zu zaehlen - Grundlage der IP-Sperre vor
-// dem statischen Token-Vergleich (src/mcp-rate-limit.js ipSperre).
 test("peek zaehlt nicht mit und sperrt erst, wenn das Fenster ausgeschoepft ist", () => {
   const hit = makeFixedWindowCounter({ windowMs: 60_000, limit: 2, sweepMs: 300_000 });
   assert.equal(hit.peek("k").allowed, true, "unbekannter Schluessel frei");

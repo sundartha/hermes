@@ -1,7 +1,3 @@
-// PROV-01 (F4): createdAt am Provisioning-Job. Unit (state-ops, IO-frei) + ein
-// pglite-Roundtrip (Flush -> Re-Hydrierung, TIMESTAMPTZ -> ISO). pglite und
-// Server-Spawn NIE in derselben Testdatei mischen - diese Datei hat nur pglite +
-// reine Unit (offline, F.I.R.S.T.).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
@@ -9,7 +5,6 @@ import { recordProvisioningJob } from "../src/store/state-ops.js";
 import { PROVIDER } from "../src/store/defaults.js";
 import { makePgTestStore } from "./pg-helpers.js";
 
-// Zweiter Store auf derselben pglite-Instanz -> prueft Persistenz statt In-Memory.
 async function reopen(db) {
   const store = makePgStore({
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),

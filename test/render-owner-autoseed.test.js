@@ -1,6 +1,3 @@
-// Render-Deploy-Fix: config-derive Owner-Nummer-Seed (state-ops, pure Unit, kein IO).
-// Ohne diesen Seed braeche der Boot-Guard auf Render (fluechtiges FS, leerer Store)
-// fail-closed mit exit 1 ab -> alle Deploys update_failed.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDefaultState, seedBootstrapNumberFromConfig } from "../src/store/state-ops.js";

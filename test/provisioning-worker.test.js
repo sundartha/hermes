@@ -1,8 +1,3 @@
-// Provisioning-Worker (handleProvisionJob) + In-Memory-Queue-Adapter (P6b2): reine
-// State-Machine + injizierte Fakes (DIP) - kein Netz, kein Server, kein pglite
-// (eigene Datei gegen Worker-Stall, Lehre P6a). Prueft die Spec-Invarianten des
-// async Pfads: enqueue+drain -> active; Worker nur fuer 'requested'; Idempotenz
-// (kein Doppelkauf); Fehler -> Rollback im Worker; payment-off byte-identisch.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeMemoryQueue } from "../src/queue/adapters/memory/queue.js";
@@ -26,23 +21,18 @@ const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "DE", connectionId: "conn_1" };
 const PAY_ARGS = { ...ARGS, holdAmountCents: 500, currency: "eur" };
 
-// seedet einen Tenant MIT hinterlegter Karte (Pay2: der billing-Pfad ist ohne Karte
-// fail-closed). Im payment-off-Pfad (kein billing) ist die Karte irrelevant.
 function seedRequested() {
   const s = makeDefaultState();
   registerTenant(s, "t_user1");
   setTenantStripe(s, "t_user1", {
     customerId: "cus_1",
     paymentMethodId: "pm_1",
-    paymentMethodType: "card", // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
+    paymentMethodType: "card",
   });
   const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
   return { s, numberId: number.id };
 }
 
-// Reicht die enqueued Jobs an handleProvisionJob durch + markiert die persistente
-// Job-Spur (wie runProvisioningDrain in server.js, ohne store.save). drain wirft
-// NICHT (Adapter faengt handler-Fehler) -> der Test prueft den Fachzustand.
 function drainWith(queue, s, deps, opts) {
   return queue.drain(async (queuedJob) => {
     const record = s.provisioningJobs.find((j) => j.idempotencyKey === queuedJob.idempotencyKey);
@@ -94,9 +84,8 @@ test("enqueue -> drain -> active: Number aktiv, e164 gesetzt, assignment + Job '
 test("Worker nur fuer 'requested': andere Zustaende -> skipped, KEIN Provider-Call", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner();
-  // Number ist bereits active (nicht mehr 'requested') -> Worker darf NICHT kaufen.
-  await handleProvisionJob(s, { payload: { numberId } }, { provisioner: prov }, ARGS); // erster Lauf -> active
-  prov.log.length = 0; // Log fuer den zweiten Lauf leeren
+  await handleProvisionJob(s, { payload: { numberId } }, { provisioner: prov }, ARGS);
+  prov.log.length = 0;
 
   const result = await handleProvisionJob(
     s,
@@ -119,8 +108,8 @@ test("Idempotenz: doppeltes enqueue = ein Job; zweiter drain ist No-op (kein Dop
   assert.equal(id1, id2, "gleicher idempotencyKey -> derselbe Job (kein Duplikat)");
   recordProvisioningJob(s, { numberId, tenantId: "t_user1", idempotencyKey });
 
-  await drainWith(queue, s, { provisioner: prov }, ARGS); // kauft (requested -> active)
-  const processedAgain = await drainWith(queue, s, { provisioner: prov }, ARGS); // re-drain
+  await drainWith(queue, s, { provisioner: prov }, ARGS);
+  const processedAgain = await drainWith(queue, s, { provisioner: prov }, ARGS);
 
   assert.equal(processedAgain, 0, "Job ist 'done' -> drain verarbeitet ihn nicht erneut");
   assert.equal(prov.log.filter((l) => l.startsWith("order")).length, 1, "order GENAU einmal");
@@ -131,7 +120,6 @@ test("Fehler -> Rollback im Worker: captureHold wirft -> released, cancelHold, J
   const { s, numberId } = seedRequested();
   const queue = makeMemoryQueue();
   const prov = fakeProvisioner();
-  // AM5: kein configure-Schritt mehr; der Post-Order-Fehlerpfad wird vom Capture ausgeloest.
   const billing = fakeBilling({
     async captureHold() {
       throw new Error("HTTP 500");
@@ -141,7 +129,6 @@ test("Fehler -> Rollback im Worker: captureHold wirft -> released, cancelHold, J
 
   await drainWith(queue, s, { provisioner: prov, billing }, PAY_ARGS);
 
-  // Hold-vor-Order + Rollback gelten jetzt im Worker (provisionNumber unveraendert).
   assert.equal(
     findNumber(s, numberId).status,
     NUMBER_STATUS.RELEASED,
@@ -164,7 +151,7 @@ test("payment-off byte-identisch: ohne billing -> active, kein Hold/Capture", as
   const prov = fakeProvisioner();
   enqueueProvision(queue, s, "t_user1", numberId);
 
-  await drainWith(queue, s, { provisioner: prov }, ARGS); // deps ohne billing
+  await drainWith(queue, s, { provisioner: prov }, ARGS);
 
   const num = findNumber(s, numberId);
   assert.equal(num.status, NUMBER_STATUS.ACTIVE);

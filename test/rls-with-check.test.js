@@ -1,21 +1,13 @@
-// F4: Explizites WITH CHECK auf allen tenant_isolation-Policies. Beweist, dass die
-// DB schreibende Zugriffe mit fremder/fehlender tenant_id-GUC ablehnt (zweite
-// Verteidigungslinie gegen einen vergessenen tenant_id-Filter in kuenftigen
-// Schreibpfaden). Muster wie store-pg-rls.test.js: pglite als Superuser, Schema als
-// Superuser angewendet, DML als unprivilegierte Rolle (NOBYPASSRLS) mit GUC.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { applySchema } from "../src/db/migrate.js";
 
-const APP_ROLE = "app_user"; // schreibt unter RLS, ohne Superuser/BYPASSRLS
+const APP_ROLE = "app_user";
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
 const RLS_ERROR = /row-level security|policy/i;
 
-// Frische pglite-Instanz, Schema angewendet (Superuser), beide Tenants angelegt und
-// die unprivilegierte Rolle mit DML-Rechten erzeugt. Schreibt KEINE call-Zeilen -
-// das machen die einzelnen Tests, damit jeder Test seinen Ausgangszustand kontrolliert.
 async function setup() {
   const db = new PGlite();
   const conn = { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) };
@@ -34,8 +26,6 @@ async function setup() {
   return { db, conn };
 }
 
-// Fuehrt fn als unprivilegierte Rolle aus; setzt die GUC nur, wenn ein Tenant
-// uebergeben wird (tenantId=null -> leerer Kontext, fail-closed-Pruefung).
 async function asAppRole(db, tenantId, fn) {
   await db.query(`SET ROLE ${APP_ROLE}`);
   if (tenantId !== null) {
@@ -56,17 +46,8 @@ function insertCall(db, id, tenantId) {
   );
 }
 
-// Anzahl Tabellen mit tenant_isolation-Policy (schema.sql). AC1 verlangt fuer JEDE
-// dieser Policies ein EXPLIZITES WITH CHECK - belegbar ueber pg_policies.with_check.
-// 13 = die urspruenglichen 10 + die 3 P6-Tabellen (provisioning_job, tenant_budget,
-// usage_event) MINUS profile: profile ist seit Owner-Removal P5 global (eigene Policy
-// profile_global, nicht mehr tenant_isolation) + call_cost_evidence, KV2-3.
 const TENANT_ISOLATION_POLICY_COUNT = 13;
 
-// T0 (AC1): Jede tenant_isolation-Policy hat ein explizites WITH CHECK im Katalog.
-// Ohne explizite Klausel ist pg_policies.with_check NULL (FOR ALL wendet USING nur
-// IMPLIZIT an) - genau die stille Konvention, die F4 sichtbar macht. Dieser Test ist
-// vor dem Fix ROT (with_check IS NULL) und gruen, sobald die Klausel explizit ist.
 test("AC1: alle tenant_isolation-Policies tragen ein explizites WITH CHECK", async () => {
   const { db } = await setup();
   const rows = (
@@ -79,7 +60,6 @@ test("AC1: alle tenant_isolation-Policies tragen ein explizites WITH CHECK", asy
   assert.deepEqual(missing, [], `Policies ohne explizites WITH CHECK: ${missing.join(", ")}`);
 });
 
-// T1 (AC5): INSERT mit korrekter tenant_id passiert die WITH-CHECK.
 test("WITH CHECK: INSERT mit korrekter tenant_id passiert RLS", async () => {
   const { db } = await setup();
   await asAppRole(db, TENANT_A, () => insertCall(db, "c_ok", TENANT_A));
@@ -87,7 +67,6 @@ test("WITH CHECK: INSERT mit korrekter tenant_id passiert RLS", async () => {
   assert.equal(count, 1, "legitime Zeile wurde geschrieben");
 });
 
-// T2 (AC3): INSERT mit fremder tenant_id wird von der WITH-CHECK abgelehnt.
 test("WITH CHECK: INSERT mit fremder tenant_id wird von RLS blockiert", async () => {
   const { db } = await setup();
   await assert.rejects(
@@ -96,7 +75,6 @@ test("WITH CHECK: INSERT mit fremder tenant_id wird von RLS blockiert", async ()
   );
 });
 
-// T3: INSERT ohne gesetzte GUC (leerer Kontext) wird abgelehnt (fail-closed).
 test("WITH CHECK: INSERT ohne GUC wird von RLS blockiert (fail-closed)", async () => {
   const { db } = await setup();
   await assert.rejects(
@@ -105,12 +83,9 @@ test("WITH CHECK: INSERT ohne GUC wird von RLS blockiert (fail-closed)", async (
   );
 });
 
-// T4 (AC4): UPDATE, das tenant_id auf einen fremden Tenant setzt, wird abgelehnt.
-// Der eigentliche Sicherheitsnachweis fuer explizites WITH CHECK (geht ohne es verloren,
-// sobald eine Policy in FOR SELECT + FOR INSERT/UPDATE aufgespalten wird).
 test("WITH CHECK: UPDATE das tenant_id auf fremden Tenant setzt, wird blockiert", async () => {
   const { db } = await setup();
-  await insertCall(db, "c_update", TENANT_A); // als Superuser anlegen
+  await insertCall(db, "c_update", TENANT_A);
   await assert.rejects(
     () =>
       asAppRole(db, TENANT_A, () =>
@@ -120,10 +95,9 @@ test("WITH CHECK: UPDATE das tenant_id auf fremden Tenant setzt, wird blockiert"
   );
 });
 
-// T5: UPDATE der eigenen Zeile ohne tenant_id-Aenderung bleibt erlaubt (Gegenprobe).
 test("WITH CHECK: UPDATE eigener Zeile ohne tenant_id-Aenderung passiert RLS", async () => {
   const { db } = await setup();
-  await insertCall(db, "c_update2", TENANT_A); // als Superuser anlegen
+  await insertCall(db, "c_update2", TENANT_A);
   await asAppRole(db, TENANT_A, () =>
     db.query(`UPDATE call SET status = 'completed' WHERE id = 'c_update2'`),
   );
@@ -131,7 +105,6 @@ test("WITH CHECK: UPDATE eigener Zeile ohne tenant_id-Aenderung passiert RLS", a
   assert.equal(status, "completed", "legitimes Update wurde uebernommen");
 });
 
-// T6 (AC2): Schema bleibt idempotent - applySchema zweimal wirft keinen Fehler.
 test("Schema-Idempotenz: applySchema zweimal aufrufen wirft keinen Fehler", async () => {
   const db = new PGlite();
   const conn = { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) };

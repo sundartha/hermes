@@ -1,6 +1,3 @@
-// Phase 3.2: Transkript-Retention - store.pruneOldData() loescht beendete
-// Calls/Notifications/erledigte Action Items aelter als RETENTION_DAYS;
-// aktive Calls und offene Action Items bleiben immer erhalten.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
@@ -54,7 +51,6 @@ before(async () => {
       ],
     }),
   );
-  // DATA_DIR muss vor dem Import gesetzt sein (config.js liest Env beim Laden)
   process.env.DATA_DIR = dataDir;
   store = await import("../src/store.js");
 });

@@ -1,24 +1,10 @@
-// PROMPT-03 + PROMPT-14 (tasks/i18n-tests/02-llm-prompts.md).
-//
-// Echter Server-Spawn (Muster helpers.js/g4-no-speech-reprompt.test.js): ein Tenant mit
-// settings.language="en" durchlaeuft /voice/incoming (Greeting, PROMPT-03) UND /voice/turn
-// (echter LLM-Roundtrip ueber einen lokalen Anthropic-Mock, der system/tools des
-// TATSAECHLICHEN Request-Bodys aufzeichnet - KEIN Mock von systemPrompt()/toolDefs()
-// selbst). PROMPT-14 zaehlt die deutschen Leck-Kanaele, die DIESER Block traegt
-// (Greeting/Prompt-Geruest/toolDefs). Der SMS-/Notification-Kanal (PROMPT-12/PROMPT-13,
-// src/telephony/call-finish.js) gehoert zu einem anderen Testkatalog-Block und fliesst
-// hier NICHT in die Zaehlung ein (Scope-Begrenzung, siehe Phasenbericht).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
 
-// EN-Greeting-Praefix (locale.greetingDefault, src/i18n/locales.js:249-250) - der
-// SOLLZUSTAND, den settings.language="en" heute NICHT erreicht (Bug: settings.greeting
-// bleibt der deutsche DEFAULT_GREETING, s. src/routes/voice.js:265).
 const EN_GREETING_MARKER = /Hi, this is the AI assistant of/;
 
-// Die fuenf deutschen Sektions-Ueberschriften des Prompt-Geruests (s. PROMPT-01).
 const GERMAN_HEADINGS = [
   "SITUATION:",
   "SO SPRICHST DU:",
@@ -40,8 +26,6 @@ function textMessage(text) {
   };
 }
 
-// Fake-Anthropic-Server: zeichnet JEDEN Request-Body auf (system/tools-Assertion) und
-// antwortet immer mit einer knappen Text-Antwort (kein Tool-Aufruf -> ein Roundtrip reicht).
 async function startCapturingMock() {
   const bodies = [];
   const server = http.createServer((req, res) => {
@@ -115,9 +99,9 @@ test("EN-Call ist frei von hartcodiertem Deutsch: Greeting + Prompt-Geruest + to
     const toolDescriptions = reqBody.tools.map((t) => t.description).join(" ");
 
     let germanLeakCount = 0;
-    if (!EN_GREETING_MARKER.test(greeting)) germanLeakCount += 1; // Greeting-Kanal
-    if (GERMAN_HEADINGS.some((h) => promptText.includes(h))) germanLeakCount += 1; // Prompt-Geruest-Kanal
-    if (/Beendet das Telefonat|Nimmt eine Nachricht/.test(toolDescriptions)) germanLeakCount += 1; // toolDefs-Kanal
+    if (!EN_GREETING_MARKER.test(greeting)) germanLeakCount += 1;
+    if (GERMAN_HEADINGS.some((h) => promptText.includes(h))) germanLeakCount += 1;
+    if (/Beendet das Telefonat|Nimmt eine Nachricht/.test(toolDescriptions)) germanLeakCount += 1;
 
     assert.equal(
       germanLeakCount,

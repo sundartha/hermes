@@ -1,11 +1,3 @@
-// PROV-01 (F5): Boot-Sweep-Reconciler reconcileOrphanedProvisioning. Ein Prozess-Crash
-// zwischen Enqueue und Drain laesst eine Nummer 'requested' + Job 'queued' haengen; beim
-// naechsten Boot klassifiziert der fire-and-forget Sweep und fuehrt NUR den geld-sicheren
-// redrive-Korb ueber den single-flight-Drain nach. Money-Safety (Regel 1): trotz einer
-// bereits existierenden Provider-Order (Vor-Order) wird KEINE zweite Order gekauft
-// (Idempotency-Key) und der Hold GENAU EINMAL captured. Observe-Only (maxAge=0),
-// createdAt-alt und Dry-Run kaufen NICHTS. Server-Spawn (PAYMENT_ENABLED=true) + HTTP-Mocks
-// fuer Telnyx (Order-Idempotenz) und Stripe (Hold/Capture) - EIGENE Datei, KEIN pglite.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -22,25 +14,21 @@ import {
 } from "../src/store/defaults.js";
 
 const NUMBER_ID = "num_x";
-const ORDER_KEY = `order_${NUMBER_ID}`; // Idempotency-Key aus onboarding.js (order_${numberId})
-const PROVISION_KEY = `provision_${NUMBER_ID}`; // Job-Idempotenz aus queueProvisioning
+const ORDER_KEY = `order_${NUMBER_ID}`;
+const PROVISION_KEY = `provision_${NUMBER_ID}`;
 const ORDERED_E164 = "+4915799990001";
 const PROVIDER_NUMBER_ID = "num_ext_1";
 const ONE_HOUR_MS = 3600000;
 
-// Idempotenz-bewusster Telnyx-Provisioning-Mock: dedupliziert POST /v2/number_orders nach
-// Idempotency-Key (Map key -> Order). seedPreOrder modelliert den Kauf des abgestuerzten
-// Prozesses: ein Re-Order mit demselben Key erzeugt KEINE zweite effektive Order.
-// orderCreations[key] = Anzahl NEU erzeugter Orders (>1 oder ein zweiter Key = Doppelkauf).
 async function startTelnyxOrderIdempotentMock({ seedPreOrder = false } = {}) {
-  const orders = new Map(); // idempotencyKey -> { id, phone_number }
-  const orderCreations = {}; // idempotencyKey -> Anzahl NEU erzeugter Orders
-  const orderPosts = []; // jeder empfangene POST-Key (Aufrufzaehler, unabhaengig vom Dedup)
+  const orders = new Map();
+  const orderCreations = {};
+  const orderPosts = [];
   const create = (key) => {
     orders.set(key, { id: "ord_sub_1", phone_number: ORDERED_E164 });
     orderCreations[key] = (orderCreations[key] || 0) + 1;
   };
-  if (seedPreOrder) create(ORDER_KEY); // geseedete Vor-Order
+  if (seedPreOrder) create(ORDER_KEY);
 
   const server = http.createServer((req, res) => {
     let body = "";
@@ -52,7 +40,7 @@ async function startTelnyxOrderIdempotentMock({ seedPreOrder = false } = {}) {
       if (req.url === "/v2/number_orders" && req.method === "POST") {
         const key = req.headers["idempotency-key"];
         orderPosts.push(key);
-        if (!orders.has(key)) create(key); // Dedup: existierender Key -> keine neue Order
+        if (!orders.has(key)) create(key);
         const order = orders.get(key);
         return res.end(
           JSON.stringify({ data: { phone_numbers: [{ id: order.id, phone_number: order.phone_number }] } }),
@@ -60,7 +48,7 @@ async function startTelnyxOrderIdempotentMock({ seedPreOrder = false } = {}) {
       }
       if (req.url.startsWith("/v2/phone_numbers?"))
         return res.end(JSON.stringify({ data: [{ id: PROVIDER_NUMBER_ID, phone_number: ORDERED_E164 }] }));
-      res.end(JSON.stringify({ data: {} })); // release u.a.
+      res.end(JSON.stringify({ data: {} }));
     });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -72,12 +60,9 @@ async function startTelnyxOrderIdempotentMock({ seedPreOrder = false } = {}) {
   };
 }
 
-// Stripe-Mock (PAYMENT_ENABLED): placeHold (POST /v1/payment_intents, idempotent nach
-// Idempotency-Key) + captureHold (POST .../{id}/capture). captured = Set der captured PIs
-// (>1 = Doppel-Capture). Nicht getroffene Pfade -> 200 {} (kein 500 durch Stray-Call).
 async function startStripeHoldCaptureMock() {
-  const intents = new Map(); // idempotencyKey -> pi-id
-  const captured = new Set(); // captured PI-ids
+  const intents = new Map();
+  const captured = new Set();
   let seq = 0;
   const server = http.createServer((req, res) => {
     let body = "";
@@ -107,9 +92,6 @@ async function startStripeHoldCaptureMock() {
   };
 }
 
-// Geseedeter Store: aktiver KYC-Subscriber t_user1 mit hinterlegter Karte, eine 'requested'
-// Telnyx-DE-Nummer num_x + ein 'queued'-Job (Crash-Spur). jobOverrides justiert createdAt.
-// startServer.ensureOwnerNumber ergaenzt die aktive Owner-Nummer (Boot-Guard) + Owner-Identitaet.
 function seedStuck(jobOverrides = {}) {
   const s = makeDefaultState();
   s.tenants = [
@@ -121,7 +103,7 @@ function seedStuck(jobOverrides = {}) {
       ownerName: "Uwe Test",
       stripeCustomerId: "cus_1",
       stripePaymentMethodId: "pm_1",
-      stripePaymentMethodType: PAYMENT_METHOD_TYPE_CARD, // GP-P2: Eignungs-Gate braucht den Typ, nicht nur die ID
+      stripePaymentMethodType: PAYMENT_METHOD_TYPE_CARD,
     },
   ];
   s.numbers = [
@@ -162,7 +144,6 @@ const PAY_ENV = {
   TELNYX_API_KEY: "KEYtest",
   TELNYX_CONNECTION_ID: "conn_1",
   MAX_NUMBERS: "10",
-  // GP-P6: Price-Id je Katalog-Slug ist bei PAYMENT_ENABLED=true Boot-Pflicht (assertPricedPlans).
   ...PLAN_PRICE_BOOT_ENV,
 };
 
@@ -186,7 +167,7 @@ async function pollJobStatus(srv, id, status, timeoutMs = 4000) {
   }
 }
 
-const settle = () => new Promise((r) => setTimeout(r, 400)); // fire-and-forget Sweep abwarten
+const settle = () => new Promise((r) => setTimeout(r, 400));
 
 test("scharf (maxAge=1h, PAYMENT): junger stuck-requested -> active, GENAU EINE effektive Order + EIN captured PI trotz Vor-Order", async () => {
   const telnyx = await startTelnyxOrderIdempotentMock({ seedPreOrder: true });
@@ -205,7 +186,6 @@ test("scharf (maxAge=1h, PAYMENT): junger stuck-requested -> active, GENAU EINE 
     assert.equal(num.status, "active");
     assert.equal(num.e164, ORDERED_E164);
     assert.equal(num.providerNumberId, PROVIDER_NUMBER_ID);
-    // Money-Safety: die Vor-Order wurde WIEDERVERWENDET, nicht dupliziert.
     assert.equal(telnyx.orderCreations[ORDER_KEY], 1, "genau EINE effektive Order fuer den Key");
     assert.equal(Object.keys(telnyx.orderCreations).length, 1, "keine zweite (neue-numberId-)Order");
     assert.equal(telnyx.orderPosts.length, 1, "single-flight: genau EIN Order-POST");
@@ -272,8 +252,8 @@ test("close-Korb: Nummer bereits 'active' -> Job wird 'done', KEIN Provider-Call
   const telnyx = await startTelnyxOrderIdempotentMock();
   const stripe = await startStripeHoldCaptureMock();
   const seed = seedStuck();
-  seed.numbers[0].status = NUMBER_STATUS.ACTIVE; // gegenstandslos: Nummer laengst durch
-  seed.numbers[0].e164 = ORDERED_E164; // (z.B. manuelle Owner-Recovery vor dem Boot-Sweep)
+  seed.numbers[0].status = NUMBER_STATUS.ACTIVE;
+  seed.numbers[0].e164 = ORDERED_E164;
   const srv = await startServer({
     seed,
     env: {

@@ -1,21 +1,7 @@
-// LCT P2 (Kurs-Guard): providerRateOutOfBand (src/boot-guard.js) prueft den Umrechnungskurs
-// Provider-Waehrung -> Ziel-Bucket gegen ein Toleranzband. Reiner Unit-Teil (f1, Muster
-// test/spend-cap-coherence.test.js: kein pglite, kein Netz - F.I.R.S.T.) + Boot-Beweis via
-// startServer (f2, Muster test/boot-failclosed.test.js). Datei-Disziplin (p6a): Spawn hier,
-// KEIN pglite (das lebt in test/call-actual-cost-roundtrip.test.js).
-//
-// PAY-20 (Buchhaltung, kein eigener Test): die Katalog-Praemisse "providerToBucketRateMicro
-// ist eine reine Konstante OHNE automatisierten Drift-Alarm" ist WIDERLEGT (Re-Baseline
-// tasks/i18n-tests/19-w2-baseline.md §3.7). Der Alarm existiert zweistufig: das
-// Toleranzband-Gate providerRateOutOfBand am Boot (diese Datei) und der laufende
-// p95-Abgleich in src/billing/cost-calibration.js gegen warnPercent/minSamples
-// (test/cost-calibration.test.js). Ein SOLL-Test waere damit gegenstandslos.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { providerRateOutOfBand, PROVIDER_RATE_FINDING } from "../src/boot-guard.js";
 import { startServer, startServerExpectExit } from "./helpers.js";
-
-// ---- (f1) Unit ----
 
 test("F1-01: 920 (Zehnerpotenz-Vertipper) -> genau ein Befund, code+fatal", () => {
   const findings = providerRateOutOfBand(920);
@@ -37,8 +23,6 @@ test("F1-04: Bandraender - 459999 und 1840001 -> je ein Befund (ausserhalb)", ()
   assert.equal(providerRateOutOfBand(459999).length, 1);
   assert.equal(providerRateOutOfBand(1840001).length, 1);
 });
-
-// ---- (f2) Boot-Beweis, ohne jedes Flag-Setup ----
 
 test("F2-01: PROVIDER_TO_BUCKET_RATE_MICRO=920 -> Boot-Refusal (LCT P4: der Kurs bewegt jetzt Geld)", async () => {
   const { code, output } = await startServerExpectExit({ env: { PROVIDER_TO_BUCKET_RATE_MICRO: "920" } });

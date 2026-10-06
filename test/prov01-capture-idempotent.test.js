@@ -1,14 +1,3 @@
-// PROV-01 (F6): captureHold in src/billing/stripe.js ist idempotenz-sicher. Ein zweiter
-// Capture desselben PaymentIntent (z.B. Boot-Sweep-Re-Drive nach einem Crash zwischen
-// erfolgreichem Capture und store.save()) lehnt Stripe mit payment_intent_unexpected_state
-// + PI-Status 'succeeded' ab. Ohne Sonderbehandlung wirft captureHold -> provisionNumber
-// rollt zurueck (rollbackAfterOrder) und gibt eine BEREITS BEZAHLTE Nummer frei. Mit F6
-// gilt "already captured" als Erfolg -> die Nummer bleibt active. Praezise Diskriminierung:
-// JEDER andere Stripe-Fehler (anderer code, anderer PI-Status) wirft weiter.
-//
-// Kein Server-Spawn, kein pglite: die reale stripeBilling-Logik wird gegen einen in-process
-// HTTP-Mock getrieben (config.billing.stripeApiBase-Override; config ist nicht eingefroren -> Base-URL
-// und Secret werden pro Test gesetzt und in finally wiederhergestellt).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -29,8 +18,6 @@ const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "DE", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
 const CAPTURE_PATH = /^\/v1\/payment_intents\/([^/]+)\/capture$/;
 
-// Dokumentierter Stripe-Fehlerkoerper "PaymentIntent bereits captured" (HTTP 400): code +
-// PI-Status 'succeeded'. Genau diese Kombination behandelt F6 als Erfolg.
 const ALREADY_CAPTURED_BODY = {
   error: {
     code: "payment_intent_unexpected_state",
@@ -38,7 +25,6 @@ const ALREADY_CAPTURED_BODY = {
   },
 };
 
-// Setzt Base-URL + Secret auf den Mock, ruft fn, stellt danach wieder her (Independent/R).
 async function withStripeMock(url, fn) {
   const savedBase = config.billing.stripeApiBase;
   const savedKey = config.billing.stripeSecretKey;
@@ -52,8 +38,6 @@ async function withStripeMock(url, fn) {
   }
 }
 
-// Mock, der JEDE Anfrage mit festem Status + JSON beantwortet (Diskriminierungs-Tests:
-// der eine erwartete captureHold-POST bekommt genau diese Antwort).
 async function startFixedServer(statusCode, json) {
   const server = http.createServer((req, res) => {
     res.statusCode = statusCode;
@@ -67,11 +51,8 @@ async function startFixedServer(statusCode, json) {
   };
 }
 
-// Stateful Stripe-Mock: placeHold idempotent (Idempotency-Key -> pi-id); captureHold beim
-// ERSTEN Capture eines PI -> 200 succeeded, bei jedem WEITEREN -> already-captured (400).
-// captured = Menge der eingezogenen PIs (Groesse = effektive Captures).
 async function startIdempotentStripeMock() {
-  const intents = new Map(); // idempotencyKey -> pi-id
+  const intents = new Map();
   const captured = new Set();
   let seq = 0;
   const server = http.createServer((req, res) => {
@@ -103,7 +84,7 @@ async function startIdempotentStripeMock() {
         if (key) intents.set(key, id);
         return res.end(JSON.stringify({ id }));
       }
-      res.end(JSON.stringify({ data: {} })); // cancel u.a.
+      res.end(JSON.stringify({ data: {} }));
     });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -120,7 +101,7 @@ function seedRequested() {
   setTenantStripe(s, "t_user1", {
     customerId: "cus_1",
     paymentMethodId: "pm_1",
-    paymentMethodType: "card", // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
+    paymentMethodType: "card",
   });
   const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
   return { s, numberId: number.id };
@@ -176,7 +157,6 @@ test("F6 end-to-end: provisionNumber zweimal auf derselben numberId -> zweiter L
   const { s, numberId } = seedRequested();
   try {
     await withStripeMock(mock.url, async () => {
-      // Lauf 1: voller Erfolg -> Nummer active, PI beim Stripe-Mock captured.
       const first = await provisionNumber(
         s,
         { provisioner: prov, billing: stripeBilling },
@@ -184,12 +164,8 @@ test("F6 end-to-end: provisionNumber zweimal auf derselben numberId -> zweiter L
       );
       assert.equal(first.status, NUMBER_STATUS.ACTIVE);
 
-      // Crash-Simulation: die Aktivierung wurde NICHT persistiert -> der Boot-Sweep-Re-Drive
-      // findet die Nummer wieder als 'requested' (der PI ist bei Stripe bereits captured).
       findNumber(s, numberId).status = NUMBER_STATUS.REQUESTED;
 
-      // Lauf 2 (Re-Drive): placeHold idempotent -> gleicher PI; captureHold -> already-captured.
-      // Mit F6 ist das ein Erfolg -> Nummer bleibt active, KEIN Release einer bezahlten Nummer.
       const second = await provisionNumber(
         s,
         { provisioner: prov, billing: stripeBilling },
