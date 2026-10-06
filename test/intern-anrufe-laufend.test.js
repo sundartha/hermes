@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { config } from "../src/config.js";
 import {
   ANRUFE_LAUFEND_PATH,
   DEPLOY_TOKEN_MIN_LENGTH,
@@ -222,4 +223,29 @@ test("Paket 15: ein leeres oder fehlendes Deploy-Token wird zur leeren Zeichenke
   assert.equal(await deployTokenDerKonfiguration(""), "");
   assert.equal(await deployTokenDerKonfiguration("  \n"), "");
   assert.equal(await deployTokenDerKonfiguration(undefined), "");
+});
+
+const SCHLUESSEL_DER_ANMELDE_KONFIGURATION = Object.freeze([
+  "mcpAuthToken",
+  "mcpAuth",
+  "oauthIssuerUrl",
+  "oauthAudience",
+  "sessionSecret",
+  "oidcClientId",
+  "oidcClientSecret",
+  "workosApiBase",
+  "workosManagementApiKey",
+  "adminEmails",
+  "loginRateLimitPerMin",
+  "sessionTtlSeconds",
+  "loginCookieTtlSeconds",
+  "dashboardPassword",
+  "ownerIdpSubject",
+  "devLoginEnabled",
+  "callConfirmationSecret",
+  "deployToken",
+]);
+
+test("Paket 15: die Anmelde-Konfiguration bietet genau diese Schlüssel an, darunter deployToken", () => {
+  assert.deepEqual(Object.keys(config.auth), SCHLUESSEL_DER_ANMELDE_KONFIGURATION);
 });
