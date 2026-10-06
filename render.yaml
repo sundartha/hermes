@@ -132,6 +132,8 @@ services:
         value: "false"
       - key: ELEVENLABS_RESULT_POLL_MS
         value: "5000"
+      - key: ELEVENLABS_ENVIRONMENT
+        value: "production"
       # ---- ElevenLabs-Inbound (K1, IE3/IE5) ----
       # Default AUS. Erst scharfstellen, wenn IE5 live und der Testanruf gruen ist
       # (Owner-Entscheidung O10, Kosten pro Inbound-Minute). Achtung: die Live-Services
