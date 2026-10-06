@@ -1,15 +1,3 @@
-// Der Zeitkontext des ElevenLabs-Anrufstarts (src/elevenlabs/time-context.js) - die eine
-// Stelle, an der die Zone des ANGERUFENEN entsteht. In-process und ohne Server: es sind
-// reine Funktionen ueber Store-Werten.
-//
-// WARUM DIESE DATEI NEBEN T7 (test/elevenlabs-anrufstart.test.js): T7 misst den ganzen Weg
-// bis zum Anbieter, aber an EINEM Ziel, dessen Land ableitbar ist (+33). Der Fall, um den
-// es hier geht, ist der andere: +1. countryForE164 liefert dort BEWUSST null (25
-// NANP-Laender teilen die Vorwahl, Eigentuemer-Entscheidung E2 "nie raten"), und die
-// Anzeige-Kette timezoneForCountry faellt auf DEFAULT_TIMEZONE zurueck. Wer die Ableitung
-// blind ueber sie baut, liefert fuer JEDEN US-Anruf lautlos die Berliner Zone als die des
-// Angerufenen - im Marktgebiet, in dem dieses Produkt telefoniert, und ohne dass irgendein
-// anderer Test davon rot wuerde. Genau diese Rueckfall-Falle nagelt die Datei fest.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -17,9 +5,7 @@ import { timezoneForCountry } from "../src/geo/resolve.js";
 import { calleeTimezone, callTimeContext, todayIn } from "../src/elevenlabs/time-context.js";
 import { DEFAULT_TIMEZONE } from "../src/store/defaults.js";
 
-// Eine +1-Nummer (US-Vorwahl 512, Austin) - das Land ist NICHT ableitbar.
 const NANP_NUMBER = "+15125550143";
-// Eine franzoesische Mobilnummer - +33 ist eindeutig FR.
 const FR_NUMBER = "+33612345678";
 const FR_TIMEZONE = "Europe/Paris";
 const OWNER_TZ = "Asia/Tokyo";
@@ -30,8 +16,6 @@ test("Zone des Angerufenen: ableitbares Land -> seine Zone", () => {
 });
 
 test("Zone des Angerufenen: +1 liefert KEINEN Wert - nie geraten, nie DEFAULT_TIMEZONE (E2)", () => {
-  // Die Positiv-Kontrolle des Falls: die Anzeige-Kette, gegen die hier abgegrenzt wird,
-  // liefert fuer dieselbe Nummer sehr wohl einen Wert - und zwar den falschen.
   assert.equal(
     timezoneForCountry(null),
     DEFAULT_TIMEZONE,
@@ -66,8 +50,6 @@ test("Zeitkontext: Auftraggeber-Zone fail-safe, Angerufenen-Zone ohne Rueckfall"
   assert.equal(kontext.calleeZone, FR_TIMEZONE);
   assert.equal(kontext.today, todayIn(OWNER_TZ));
 
-  // Muell am Tenant darf nicht werfen (Intl wuerde es) - hier gilt der Default, weil ein
-  // Wurf den Anruf toetete. Fuer die Gegenstelle gilt weiter: kein Wert statt falschem.
   const ohne = callTimeContext({ tenantTimezone: "Nicht/EineZone", callee: NANP_NUMBER });
   assert.equal(ohne.ownerZone, DEFAULT_TIMEZONE);
   assert.equal(ohne.calleeZone, KEINE_ZONE);

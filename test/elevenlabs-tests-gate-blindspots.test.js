@@ -1,32 +1,3 @@
-// Blinde Flecken des Vor-dem-Hochladen-Gates (scripts/check-elevenlabs-tests.js).
-// Ergaenzt test/elevenlabs-tests-placeholder-gate.test.js um die zwei Stellen, an
-// denen das Gate NICHT gemessen hat, was es zu messen vorgab. Beide Faelle sind
-// beobachtet, nicht vermutet - die hier gepinnten SOLL-Aussagen halten fest,
-// dass die Luecken geschlossen bleiben:
-//
-// D-A (Deckung pro Datei): checkVariableVocabulary verschmolz alle
-// Testdefinitionen zu EINER Vereinigungsmenge und fragte nur, ob IRGENDEINE
-// Datei eine Variable kennt. Beim Testlauf rendert ElevenLabs den Prompt aber
-// mit den dynamic_variables genau EINER Testdefinition
-// (elevenlabs/tests/README.md, Feldtabelle: "dynamic_variables | Map string->any,
-// alle drei Typen"). Fehlt die Variable dort, faehrt dieser Lauf mit leerem Wert -
-// und das Gate schwieg, solange irgendeine Nachbardatei sie setzte. Zusaetzlich
-// zaehlte eine blosse {{name}}-Erwaehnung im Erwartungstext testseitig als
-// "kennt die Variable"; erwaehnen befuellt aber nichts.
-//
-// D-B (Doku-Schluessel): walkForPlaceholders stieg in Schluessel mit
-// Unterstrich-Praefix ab, walkForVariables uebersprang sie (DOC_KEY_PREFIX).
-// Der Prosa-Satz "Alle <AUSFUELLEN: ...>-Werte vor dem Push ersetzen" in einem
-// _hinweis-Feld wurde dadurch als echter Platzhalter-Fund gemeldet - das Gate
-// konnte also auch dann nicht gruen werden, wenn jeder echte Platzhalter
-// ausgefuellt ist. Ein Gate, das nie gruen werden kann, misst nichts.
-//
-// Arbeitet wie der Bestandstest ausschliesslich auf einer synthetischen
-// Attrappe in einem Temp-Verzeichnis (test/helpers/elevenlabs-gate-fixture.mjs),
-// nicht an den echten Dateien unter elevenlabs/. Die Attrappe liegt am
-// produktiven Ablageort (test_configs/ + Registry-Zeile in tests.json); die
-// Aussagen der Faelle sind davon unberuehrt. Offline, kein Netz, keine neue
-// Abhaengigkeit.
 import { strict as assert } from "node:assert";
 import { afterEach, describe, it } from "node:test";
 
@@ -41,8 +12,6 @@ import {
 } from "./helpers/elevenlabs-gate-fixture.mjs";
 
 const TMP_PREFIX = "elevenlabs-gate-blindspots-";
-// Woertlich der Satz, der in den Testdefinitionen unter _hinweis steht: reine
-// Entwickler-Doku ueber die Konvention, kein auszufuellendes Feld.
 const DOC_PROSE_WITH_MARKER =
   "Alle <AUSFUELLEN: ...>-Werte vor dem Push ersetzen.";
 
@@ -181,10 +150,6 @@ describe("check-elevenlabs-tests Platzhalter-Gate: Doku-Schluessel gegen Schema-
 });
 
 describe("check-elevenlabs-tests Positiv-Kontrolle", () => {
-  // Ohne diesen Fall weiss niemand, ob das Gate ueberhaupt gruen werden kann -
-  // ein Gate, das alles ablehnt, besteht jeden Negativ-Test. ok === true ist
-  // genau der Zustand, den runCli auf Exit-Code 0 abbildet
-  // (scripts/check-elevenlabs-tests.js, runCli).
   it("deckungsgleiche, platzhalterfreie Attrappe: jede Testdefinition setzt jede Variable -> null Funde", () => {
     const root = makeRoot(TMP_PREFIX);
     writeAgentConfig(root, ["owner_name", "callee"]);

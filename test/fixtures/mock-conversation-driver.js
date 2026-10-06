@@ -1,19 +1,5 @@
-// Attrappe fuer den Gespraechsfuehrungs-Vertrag (ConversationControl/ConversationCallbacks,
-// src/conversation/conversation-ports.js). Kein echter Anbieter, kein Netz, keine
-// Zugangsdaten - reine Fake-Infrastruktur fuer den lokalen Testlauf. Gegen diese Datei
-// laeuft dieselbe Vertragspruefung (test/conversation-driver-contract.js), die spaeter der
-// echte Adapter (GENAU EIN Adapter, s. conversation-ports.js) bestehen muss.
-//
-// Szenario-Steuerung ausschliesslich ueber StartConversationParams.objective
-// (MOCK_OBJECTIVE, Testkonvention wie Stripe-Testkartennummern - importiert aus der
-// Vertragspruefung, damit die Werte an genau einer Stelle stehen). Kein Zufall, keine
-// Uhr als verstecktes Verhalten: gleiche Eingabe liefert immer dasselbe Ergebnis.
-
 import { MOCK_OBJECTIVE } from "../conversation-driver-contract.js";
 
-// Verzoegerung, mit der die Attrappe eingehende Laufwerk-Meldungen nachstellt (simuliert
-// Asynchronitaet statt synchron innerhalb von startConversation zu feuern) - in
-// Millisekunden steuerbar ueber den optionalen Parameter callbackDelayMs.
 const DEFAULT_CALLBACK_DELAY_MS = 1;
 
 const REJECT_REASON = "mock_abgelehnt";
@@ -23,32 +9,20 @@ const CONSULT_QUESTION_SECOND = "Attrappe-Rueckfrage: reicht auch 15 statt 30 Mi
 const CONSULT_ANSWERED_PREFIX = "Antwort erhalten: ";
 const CONSULT_UNANSWERED_PREFIX = "Keine Antwort erhalten: ";
 const ENDED_MID_CONSULT_PREFIX = "Vom Auftraggeber beendet, bevor eine Antwort eintraf: ";
-// Deterministisch EIN Wert aus dem Bestandsvokabular (telephony/failure-reason.js) - die
-// Attrappe simuliert kein echtes Klingeln, sie pinnt nur, dass das Feld befuellt und aus
-// dieser Menge ist.
 const NEVER_CONNECTED_REASON = "no-answer";
 const NEVER_CONNECTED_SUMMARY = "Niemand hat abgenommen (Attrappe-Laufwerk).";
 
 let requestSequence = 0;
 
-// Kennung EINER konkreten Rueckfrage (Befund 1) - fortlaufend statt zufaellig, damit die
-// Attrappe deterministisch bleibt.
 function nextRequestId(callId) {
   requestSequence += 1;
   return `${callId}-req-${requestSequence}`;
 }
 
-// Befund 4: der bisherige Gespraechsverlauf, den JEDE Rueckfrage-Anfrage mitliefern muss.
-// Die Attrappe nutzt den tatsaechlich uebergebenen Offenlegungssatz als ersten Eintrag -
-// naeher an einem echten Transkript als ein rein erfundener Platzhalter. NIE leer (V5): der
-// Offenlegungssatz ist immer schon gesprochen, bevor ueberhaupt eine Rueckfrage entstehen kann.
 function buildTranscriptSoFar(params) {
   return [params.disclosureSentence, "Ja, ich hoere."];
 }
 
-// Baut EINE Rueckfrage-Anfrage mit frischer requestId (Befund 1). Eigene Funktion statt
-// Inline-Objekt, weil sowohl die sequenzielle als auch die gleichzeitige Rueckfrage-Szenario-
-// Funktion sie brauchen.
 function buildConsultRequest(callId, params, question) {
   return {
     callId,
@@ -58,9 +32,6 @@ function buildConsultRequest(callId, params, question) {
   };
 }
 
-// Baut aus einer beantworteten, abgelehnten oder verstrichenen Rueckfrage das
-// ConversationOutcome, das die Attrappe fuer MOCK_OBJECTIVE.CONSULT anschliessend meldet.
-// Zeitablauf/Ablehnung sind ein gueltiges Ergebnis (achieved:null), niemals achieved:false.
 function outcomeFromConsultAnswer(callId, answer) {
   if (answer.kind === "answered") {
     return {
@@ -73,17 +44,10 @@ function outcomeFromConsultAnswer(callId, answer) {
   return { callId, connected: true, achieved: null, summary: CONSULT_UNANSWERED_PREFIX + answer.reason };
 }
 
-// Befund 3: wird endConversation aufgerufen, waehrend eine Rueckfrage noch offen haengt,
-// darf die Attrappe NICHT laenger auf die (dann nie mehr relevante) Antwort warten - sie
-// schliesst stattdessen sofort mit einem Ergebnis ab, dessen summary den Abbruchgrund
-// erkennbar traegt.
 function outcomeFromEndedConsult(callId, endReason) {
   return { callId, connected: true, achieved: null, summary: ENDED_MID_CONSULT_PREFIX + endReason };
 }
 
-// Pro Unterhaltung EIN geplanter Callback-Aufruf (Timer-Handle). endConversation storniert
-// ihn, statt ihn nach dem Ende noch zuzustellen. Eigene Registry statt Inline-Map, damit
-// makeMockConversationDriver selbst kurz bleibt (G30/max-lines-per-function).
 function createTimerRegistry() {
   const timers = new Map();
   return {
@@ -104,9 +68,6 @@ function createTimerRegistry() {
   };
 }
 
-// Pro Unterhaltung mit einer OFFENEN Rueckfrage EIN Abbruch-Signal (Befund 3):
-// endConversation loest es aus, damit eine wartende Rueckfrage nicht auf eine Antwort
-// haengen bleibt, die nach dem Ende noch eintreffen koennte.
 function createEndSignalRegistry() {
   const signals = new Map();
   return {
@@ -133,20 +94,10 @@ function createEndSignalRegistry() {
   };
 }
 
-/**
- * Baut eine Attrappe von ConversationControl. callbacks ist die (hier vom Aufrufer
- * gestellte) ConversationCallbacks-Implementierung, die die Attrappe bei Bedarf ansteuert.
- * @param {{ callbacks: import("../../src/conversation/conversation-ports.js").ConversationCallbacks,
- *           callbackDelayMs?: number }} deps
- * @returns {import("../../src/conversation/conversation-ports.js").ConversationControl}
- */
 export function makeMockConversationDriver({ callbacks, callbackDelayMs = DEFAULT_CALLBACK_DELAY_MS }) {
   const timers = createTimerRegistry();
   const endSignals = createEndSignalRegistry();
 
-  // Stellt EINE Rueckfrage und liefert entweder die Antwort ODER, falls waehrenddessen
-  // endConversation eintrifft, das Abbruch-Signal - je nachdem, was zuerst eintrifft. So
-  // wartet die Attrappe NIE laenger auf eine Antwort, als das Gespraech tatsaechlich lebt.
   function raiseConsult(callId, params, question) {
     const request = buildConsultRequest(callId, params, question);
     const { promise: ended } = endSignals.signalFor(callId);
@@ -192,11 +143,6 @@ export function makeMockConversationDriver({ callbacks, callbackDelayMs = DEFAUL
     });
   }
 
-  // Befund 1 (Nachfassrunde): zwei Rueckfragen GLEICHZEITIG offen - beide Aufrufe starten,
-  // OHNE dass der erste auf seine Antwort wartet. Die Zuordnung der eintreffenden Antworten
-  // laeuft ueber eine mit requestId indizierte Map, NICHT ueber die Reihenfolge, in der die
-  // Antworten eintreffen (die kann von der Stellreihenfolge abweichen - genau das prueft der
-  // zugehoerige Vertragsfall aktiv, mit vertauschter Ankunftsreihenfolge).
   async function runConsultConcurrent(callId, params) {
     const requestA = buildConsultRequest(callId, params, CONSULT_QUESTION);
     const requestB = buildConsultRequest(callId, params, CONSULT_QUESTION_SECOND);
@@ -226,15 +172,13 @@ export function makeMockConversationDriver({ callbacks, callbackDelayMs = DEFAUL
     });
   }
 
-  // Waehlt die Szenario-Funktion je exaktem objective-Wert - reine Zuordnung, kein
-  // Verhalten (haelt startConversation selbst kurz, G30).
   function runnerFor(objective) {
     if (objective === MOCK_OBJECTIVE.OUTCOME) return runOutcome;
     if (objective === MOCK_OBJECTIVE.CONSULT) return runConsult;
     if (objective === MOCK_OBJECTIVE.CONSULT_TWICE) return runConsultTwice;
     if (objective === MOCK_OBJECTIVE.CONSULT_CONCURRENT) return runConsultConcurrent;
     if (objective === MOCK_OBJECTIVE.NEVER_CONNECTED) return runNeverConnected;
-    return null; // MOCK_OBJECTIVE.SILENT und jedes unbekannte objective: bewusst kein Callback
+    return null;
   }
 
   async function startConversation(params) {

@@ -1,31 +1,8 @@
-// G3/G26-Fix (Runde 2, Review zu phase/stab-p7-fix-g326-r1): Beweist per ECHTEM
-// /voice/turn-HTTP-Aufruf (nicht nur agentTurn direkt wie claude-turn-guard.test.js - genau
-// diese Luecke stellte der Review-Blocker fest), dass server.js's No-Speech-Kurzschluss
-// ("kein Speech gehoert -> nur ein statischer Reprompt, agentTurn wird uebersprungen") NICHT
-// mehr dauerhaft vor agentTurn steht, sobald outbound nur eine nicht-substanzielle Rausch-
-// Zeile aufgezeichnet wurde.
-//
-// Sequenz: /voice/outbound (Opening, LLM-frei) -> /voice/turn mit Rausch-SpeechResult "."
-// (R2: end_call bleibt unterdrueckt, KEIN Hangup) -> /voice/turn mit WIRKLICH leerem
-// SpeechResult (kein STT-Ergebnis) -> muss trotzdem agentTurn aufrufen (nicht den
-// statischen Reprompt) und nach Erreichen von maxEmptyTurns per end_call auflegen (R4).
-//
-// VOR diesem Fix haette server.js's Kurzschluss (call.transcript.some(role==="caller"),
-// OHNE Substanz-Filter) nach dem Rausch-Turn JEDEN weiteren stillen Turn kurzgeschlossen
-// und agentTurn nie wieder aufgerufen - der R4-Empty-Turn-Zaehler (unansweredAgentTurns,
-// nur bei echtem agentTurn-Aufruf neu ausgewertet) waere eingefroren, der Call haette bis
-// der Max-Dauer-Frist re-promptet statt nach maxEmptyTurns geordnet aufzulegen.
-//
-// MAX_EMPTY_TURNS="2" (kuerzeste testbare Schwelle, F.I.R.S.T.); CALLER_SUBSTANCE_MIN_LEN
-// bleibt der BASE_ENV-Prod-Default (2). Spawn-Test (echte HTTP-Route, kein In-Process-Import
-// von agentTurn) - eigene Datei, ueberschneidet keine parallele Phase.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState, seedCall } from "./helpers.js";
 
-// Antwortet JEDEN Turn mit end_call + Sprechtext - ob der Wunsch durchgereicht wird,
-// entscheidet allein suppressEndCall (claude.js); der Mock selbst verhaelt sich konstant.
 function endCallMessage(speech) {
   return {
     id: "msg_g326_endcall",
@@ -67,15 +44,12 @@ test("G3/G26 Runde 2: Rausch-Turn dann echte Dauerstille - der R4-Deadlock-Schut
     }),
   });
   try {
-    // Opening (LLM-frei, schreibt die erste agent-Zeile synchron - wie im echten Call).
     const openRes = await fetch(`${srv.localUrl}/voice/outbound?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ CallSid: "CAtest" }),
     });
     assert.equal(openRes.status, 200);
 
-    // Turn 1: Rausch-Fragment (nicht-substanziell, kuerzer als CALLER_SUBSTANCE_MIN_LEN=2).
-    // heard ist truthy -> laeuft durch agentTurn, der Fruehauflege-Schutz bleibt aktiv (R2).
     const noiseRes = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "." }),
@@ -88,10 +62,6 @@ test("G3/G26 Runde 2: Rausch-Turn dann echte Dauerstille - der R4-Deadlock-Schut
       `Rausch darf end_call nicht freigeben (R2): ${noiseBody}`,
     );
 
-    // Turn 2: WIRKLICH leeres SpeechResult (kein STT-Ergebnis, nicht nur Rauschen). Vor
-    // diesem Fix haette server.js's Kurzschluss (jede caller-Zeile zaehlt als "gesprochen")
-    // agentTurn hier uebersprungen und nur einen statischen Reprompt gerendert - der
-    // R4-Zaehler waere nie befragt worden.
     const silentRes = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "" }),
@@ -103,8 +73,6 @@ test("G3/G26 Runde 2: Rausch-Turn dann echte Dauerstille - der R4-Deadlock-Schut
       `nach maxEmptyTurns muss der Guard trotz Rausch-Historie auflegen: ${silentBody}`,
     );
 
-    // Vollstaendiges Transkript bleibt erhalten (G3): die Rausch-Zeile "." steht im Call,
-    // obwohl sie den Empty-Turn-Zaehler nicht zuruecksetzt hat.
     const stored = srv.readStore();
     const call = stored.calls.find((c) => c.id === id);
     const callerLines = call.transcript.filter((t) => t.role === "caller");

@@ -1,39 +1,4 @@
-// ---- ECHTE Anbieter-Antworten als Fixtures ---------------------------------------------
-// Phase 2, Owner-Auftrag 15.08.2026, woertlich: "Die Aufzeichnungen werden Fixtures.
-// Attrappen antworten ab jetzt mit aufgezeichneten echten Antworten statt mit lokalen
-// Konstanten." Jeder Wert unten ist eine TATSAECHLICH beim Anbieter (api.elevenlabs.io)
-// GEMESSENE Antwort vom 15.08.2026 - keine lokale Erfindung, AUSSER wo ausdruecklich mit
-// "AUSGEDACHT"/"NICHT gemessen" markiert (dann nach der sichereren Seite behandelt statt
-// erfunden, s. je Fundstelle unten).
-//
-// MASKIERT (Absolute Regel 4/5, DSGVO): jede echte Rufnummer lief VOR dem Einchecken durch
-// maskNumber (src/util.js) - die Klartext-Nummern existierten nur ausserhalb des Repos, in
-// der Mess-Sitzung. Personenbezogene Inhalte in Transkript/Zusammenfassung sind ersetzt:
-// der reale Name des Auftraggebers wurde durch den ohnehin in der ganzen Suite genutzten
-// Test-Platzhalternamen "Jonas Beispiel" (test/helpers.js OWNER_TEST_FIRST_NAME/
-// -LAST_NAME) ausgetauscht - sonst ist am behaltenen Wortlaut kein Zeichen veraendert.
-//
-// TRIMMED UND ABSICHTLICH SO: jeder Konversations-Datensatz traegt nur die Felder, die
-// src/elevenlabs/{convai,outbound}.js tatsaechlich lesen (status, transcript[].role/
-// message, analysis?.call_successful, analysis?.transcript_summary,
-// metadata?.call_duration_secs) plus ein paar Felder zur Wiedererkennung/Realismus
-// (conversation_id, metadata.phone_call, metadata.error, metadata.termination_reason). Die
-// vollen Rohantworten (u.a. Kostenaufschluesselung, evaluation_criteria_results,
-// conversation_turn_metrics, die zweite, redundante Transkript-Kopie in
-// conversation_initiation_client_data.dynamic_variables.system__conversation_history)
-// liegen NICHT im Repo - kein Code hier liest sie, sie waeren nur PII-/Groessen-Ballast.
-
-// ---- Teil 1: Fehlerantworten des Ergebnisabrufs (GET /v1/convai/conversations/{id}) ----
-// Rein LESEND gegen api.elevenlabs.io gemessen (15.08.2026, s. .fortschritt.md "PHASE 2
-// vorgearbeitet: die ECHTEN Fehlerantworten des Ergebnisabrufs"). Form durchgaengig
-// {"detail":{type,code,message,status,request_id}}. request_id ist je Anfrage einzigartig
-// und wurde nicht dauerhaft mitgeschrieben - hier bewusst WEGGELASSEN statt erfunden
-// (unser Code liest den Fehler-Rumpf ohnehin nie, s. convai.js#assertConvaiOk).
 export const ERROR_ENVELOPES = Object.freeze({
-  // 404: unbekannte/nicht mehr vorhandene Konversations-Kennung - GEMESSEN. Auch eine
-  // syntaktisch unsinnige Kennung liefert 404, NICHT 422 (ein 422 auf diesem Pfad ist
-  // NICHT belegt). "message" ist NICHT im Fund enthalten (nur type/code/status wurden
-  // protokolliert) - hier bewusst weggelassen statt erfunden.
   notFound: Object.freeze({
     httpStatus: 404,
     body: Object.freeze({
@@ -44,7 +9,6 @@ export const ERROR_ENVELOPES = Object.freeze({
       }),
     }),
   }),
-  // 401: unser Schluessel ist gesetzt, aber falsch - GEMESSEN, woertlich.
   unauthorizedBadKey: Object.freeze({
     httpStatus: 401,
     body: Object.freeze({
@@ -56,7 +20,6 @@ export const ERROR_ENVELOPES = Object.freeze({
       }),
     }),
   }),
-  // 401: gar kein Schluessel mitgeschickt - GEMESSEN, woertlich.
   unauthorizedNoKey: Object.freeze({
     httpStatus: 401,
     body: Object.freeze({
@@ -70,16 +33,6 @@ export const ERROR_ENVELOPES = Object.freeze({
   }),
 });
 
-// ---- Teil 2: vollstaendige Gespraechs-Datensaetze (GET .../conversations/{id}) --------
-// Abgerufen am 15.08.2026 gegen den Live-Agenten (agent_5301kwkh9vv3ezesf100pggfj9rs,
-// "Hermes"). Die vollen Rohantworten lagen kurzzeitig im Scratchpad der Mess-Sitzung
-// (conv_8501m02dx3t7ed7vbbfevrdd39qj.json, conv_0001m02e503qetv8mm6jy5redk1b.json) - NIE
-// im Repo, s. Modulkopf oben.
-
-// FAILED: SIP 404 "Invalid destination number" - ein UNGUELTIGES ZIEL, NICHT "niemand hat
-// abgenommen" (dieser Fall ist NICHT belegt, s. test/el-fixtures-echte-antworten.test.js).
-// analysis ist woertlich `null` (nicht bloss ein leeres Objekt) - GEMESSEN, s.
-// .fortschritt.md "KORREKTUR und Vertiefung: was der 'failed'-Datensatz WIRKLICH ist".
 export const CONVERSATION_FAILED_INVALID_DESTINATION = Object.freeze({
   conversation_id: "conv_8501m02dx3t7ed7vbbfevrdd39qj",
   status: "failed",
@@ -94,29 +47,13 @@ export const CONVERSATION_FAILED_INVALID_DESTINATION = Object.freeze({
     }),
     phone_call: Object.freeze({
       direction: "outbound",
-      agent_number: "***0177#1ca0c7", // maskNumber() der gewaehlten DID, s. Modulkopf
-      external_number: "***0000#8aacb9", // maskNumber() des gewaehlten Ziels (ElevenLabs-Testbereich +1555...)
+      agent_number: "***0177#1ca0c7",
+      external_number: "***0000#8aacb9",
       call_id: "otb_7701m02dx3t8emg9w4wg6h4vnrek",
     }),
   }),
 });
 
-// FAILED: SIP 403 "Unverified origination number D51" - der Anbieter/Carrier hat den INVITE
-// abgelehnt, WEIL UNSERE Absendernummer dem Telnyx-Konto nicht mehr gehoerte. Das ist der
-// Totalausfall vom 27.08.2026 (vier Anrufe, woertlich derselbe Fehler), Beleg
-// tasks/befund-outbound-ausfall-2026-08-27.md Abschnitt 2.
-//
-// GEMESSEN, woertlich: metadata.error (code, reason, error_type).
-// ABGELEITET aus dem gemessenen DB-Datensatz desselben Anrufs (status=failed,
-//   answered_unclear_reason=call_duration_secs_zero_not_answered): status "failed" und
-//   call_duration_secs 0 - beide sind die EINZIGEN Werte, die zu diesem gespeicherten
-//   Ergebnis fuehren koennen (s. answeredAnchorOutcome/endStatusOf).
-// NICHT GEMESSEN und deshalb bewusst weggelassen: metadata.phone_call (unser Code liest es
-//   fail-soft, s. recordSipCallId). transcript/analysis stehen wie beim 404-Fund (leer bzw.
-//   null) - dort GEMESSEN, hier nach demselben Muster gesetzt und AUSDRUECKLICH als
-//   uebertragen markiert.
-// conversation_id ist KONSTRUIERT (die EL-Kennungen der vier Anrufe wurden nicht
-//   protokolliert) - erkennbar als Testwert.
 export const CONVERSATION_FAILED_UNVERIFIED_ORIGINATION = Object.freeze({
   conversation_id: "conv_konstruiert_403_unverified_origination",
   status: "failed",
@@ -133,13 +70,6 @@ export const CONVERSATION_FAILED_UNVERIFIED_ORIGINATION = Object.freeze({
   }),
 });
 
-// DONE: ein vollstaendiges, TECHNISCH erfolgreiches Gespraech (149 s). call_successful ist
-// woertlich "failure" (GEMESSEN) - der Anbieter bewertet das AUFTRAGSZIEL des Anrufs, nicht
-// ob das Telefonat zustande kam (es kam zustande: 149 s, volles Transkript).
-// transcript_summary steht bis auf den maskierten Namen UNVERAENDERT (echte Anbieter-
-// Antwort, kein Test-Text). transcript ist eine gekuerzte Teilmenge des echten Verlaufs
-// (urspruenglich 7 Zeilen, hier 2) - Wortlaut der behaltenen Zeilen unveraendert bis auf
-// denselben maskierten Namen.
 export const CONVERSATION_DONE_WITH_ANALYSIS = Object.freeze({
   conversation_id: "conv_0001m02e503qetv8mm6jy5redk1b",
   status: "done",
@@ -163,53 +93,22 @@ export const CONVERSATION_DONE_WITH_ANALYSIS = Object.freeze({
     phone_call: Object.freeze({
       direction: "outbound",
       agent_number: "***0177#1ca0c7",
-      external_number: "***2163#1e3c18", // maskNumber() des echten Ziels
+      external_number: "***2163#1e3c18",
       call_id: "otb_4601m02e503rek1b0vxwjvtxtgfw",
     }),
   }),
 });
 
-// IN-PROGRESS: der Stand, den GET waehrend eines LAUFENDEN Gespraechs liefert. Die drei
-// Felder, auf die es hier ankommt, sind GEMESSEN (tasks/spike1-messung.jsonl, Zeile "art":
-// "in-progress-felder", conv_8801kzzs612ffneskmr32gmsb33t: 60 Abfragen im 5-Sekunden-Takt
-// ueber 5 Minuten, 59 Vergleiche, NULL Pfad-Aenderungen): status bleibt "in-progress",
-// metadata.call_duration_secs bleibt 0, transcript bleibt leer. Der Befund dort woertlich:
-// "Die REST-Sicht ist waehrend des Gespraechs tot"; erst beim Uebergang auf "processing"
-// erscheinen 59 Pfade auf einen Schlag.
-//
-// AUSGEDACHT ist alles UEBRIGE an dieser Fixture: der volle GET-Rumpf dieses Gespraechs wurde
-// nicht aufgezeichnet, nur die Pfad-Vergleichsliste. `analysis: null` folgt der Form der
-// beiden echten Funde oben (ohne Abschluss keine Analyse) und ist fuer DIESE Kennung nicht
-// direkt gemessen; die Kennung selbst stammt aus der Messung. Kein Feld hier behauptet mehr,
-// als der Fund hergibt - gebraucht wird die Fixture fuer genau eine Frage: eine 0 unter
-// status "in-progress" heisst "noch nicht bekannt", nicht "niemand hat abgenommen"
-// (s. elevenlabs/outbound.js#answeredAnchorOutcome).
 export const CONVERSATION_IN_PROGRESS = Object.freeze({
   conversation_id: "conv_8801kzzs612ffneskmr32gmsb33t",
-  status: "in-progress", // gemessen, woertlich
-  transcript: Object.freeze([]), // gemessen: bleibt leer, solange das Gespraech laeuft
-  analysis: null, // AUSGEDACHT, s. Kommentar oben
+  status: "in-progress",
+  transcript: Object.freeze([]),
+  analysis: null,
   metadata: Object.freeze({
-    call_duration_secs: 0, // gemessen: bleibt 0 ueber die gesamte Laufzeit
+    call_duration_secs: 0,
   }),
 });
 
-// AUSGEDACHT (ABNAHME-D1, TEIL 2/3): KEIN gemessener Fund - analysis.data_collection_results
-// wurde bislang NIRGENDS aufgezeichnet (Modul-Kopf oben: "kein Code hier liest sie" galt VOR
-// diesem Paket). Diese Fixture bildet die FORM nach, die das ElevenLabs-OpenAPI-Schema dafuer
-// belegt (DataCollectionResultCommonModel: data_collection_id/value/json_schema/rationale,
-// components.schemas im lokal liegenden Schema-Snapshot), mit genau den fuenf Feld-
-// Kennungen, die die Vorlage deklariert (elevenlabs/agent_configs/outbound-agent.template.json,
-// platform_settings.data_collection: appointment_date/appointment_time/amount/currency/
-// confirmed_timezone). transcript/analysis.call_successful/metadata sind selbst erfunden
-// (keine echte Aufzeichnung mit befuellten data_collection_results existiert), aber in der
-// FORM identisch zu CONVERSATION_DONE_WITH_ANALYSIS oben (derselbe echte Fund). WAS HIER
-// NICHT BEHAUPTET WIRD: ob der Anbieter bei einer NICHT im Gespraech vorgekommenen Angabe
-// den Schluessel weglaesst, "value":"" liefert oder "value":null - das ist NICHT gemessen.
-// Diese Fixture deckt deshalb nur den VOLLSTAENDIG befuellten Fall ab; den fehlenden
-// Schluessel (der laut Owner-Auflage der NORMALFALL ist) deckt test/elevenlabs-data-
-// collection.test.js separat und ausdruecklich ab (ein Objekt ganz ohne den jeweiligen
-// Schluessel), ohne dafuer eine zweite, ebenso ungemessene Fixture-Form zu erfinden.
 export const CONVERSATION_DONE_WITH_DATA_COLLECTION = Object.freeze({
   conversation_id: "conv_ausgedacht_data_collection",
   status: "done",
@@ -235,9 +134,6 @@ export const CONVERSATION_DONE_WITH_DATA_COLLECTION = Object.freeze({
         json_schema: null,
         rationale: "AUSGEDACHT - die Gegenstelle nannte die Uhrzeit im Gespraech.",
       }),
-      // amount ist am Agenten als type:"number" deklariert (Vorlage) - der Wert kommt hier
-      // deshalb bewusst als JS-Zahl, nicht als String, s. collectedValue (elevenlabs/
-      // outbound.js), das ihn auf einen String abbildet.
       amount: Object.freeze({
         data_collection_id: "amount",
         value: 60,
@@ -271,48 +167,17 @@ export const CONVERSATION_DONE_WITH_DATA_COLLECTION = Object.freeze({
   }),
 });
 
-// CLOSE-1008: der Anbieter beendet das WebSocket sofort nach Rufannahme, weil eine
-// Pflicht-dynamische-Variable fehlt (hier: owner_name) - tasks/spike2-messung.jsonl,
-// testanruf nr.1, conv_5701m00ppcvjeewbat7w0nxxsxrj. call_duration_secs und
-// termination_reason sind WOERTLICH GEMESSENE Felder aus dieser Aufzeichnung
-// (dortige Felder gespraechsdauer_s bzw. termination_reason).
-//
-// status IST NICHT GEMESSEN fuer diese Kennung - der volle GET-Rumpf wurde fuer diesen
-// Anruf nicht aufgezeichnet, nur die Telnyx-/WebSocket-Ereignisfelder. "done" ist eine
-// ANNAHME (Telnyx meldet hangup_cause=NORMAL_CLEARING/telnyx_error_code=D00, also eine
-// geordnete Beendigung, kein Anbieter-Fehlschlag auf Telefonie-Ebene) - AUSGEDACHT, kein
-// Fund. analysis:null ist ebenfalls NICHT direkt gemessen, aber plausibel (agent_redet:
-// false, gemessen - ohne gesprochenen Inhalt kann keine Analyse gelaufen sein), dieselbe
-// Form wie der FAILED-Fund oben.
 export const CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES = Object.freeze({
   conversation_id: "conv_5701m00ppcvjeewbat7w0nxxsxrj",
-  status: "done", // AUSGEDACHT, s. Kommentar oben - fuer DIESE Kennung nicht gemessen
-  transcript: Object.freeze([]), // agent_redet:false (gemessen) - der Agent kam nie zu Wort
-  analysis: null, // plausibel abgeleitet, NICHT direkt gemessen (s. Kommentar oben)
+  status: "done",
+  transcript: Object.freeze([]),
+  analysis: null,
   metadata: Object.freeze({
-    call_duration_secs: 1, // gemessen: gespraechsdauer_s
-    termination_reason: "Missing required dynamic variables in first message: {'owner_name'}", // gemessen, woertlich
+    call_duration_secs: 1,
+    termination_reason: "Missing required dynamic variables in first message: {'owner_name'}",
   }),
 });
 
-// ---- Teil 3: die Namensfalle des Join-Schluessels ---------------------------------------
-// ANRUF 2 vom 17.08.2026 (17:45:41Z bis 17:46:09Z, unsere Kennung call_msxiyh84dwc6,
-// Anbieter conv_7201m08d8gnbe7mtygb7vxbphc7y) - GEMESSEN, s. .fortschritt.md "BEFUND 4".
-// KEIN Gespraechs-Datensatz, sondern die vier Werte, an denen der Defekt sichtbar wurde:
-// ZWEI FELDER HEISSEN AN BEIDEN ENDEN sip_call_id UND TRAGEN VERSCHIEDENE WERTE.
-//
-// Nur der "otb_"-Wert findet den Telefonie-Beleg. Der "SCL_"-Wert ist ElevenLabs' call_sid -
-// derselbe Anruf fuehrt ihn im Gespraechs-Datensatz woertlich unter metadata.phone_call.
-// call_sid, und die Antwort des Anrufstarts gibt AUSGERECHNET IHN unter dem Namen
-// sip_call_id heraus. In Anruf 1 fiel das nicht auf, weil call_sid dort leer war ("").
-//
-// HERKUNFT JE WERT (kein Wert ist erfunden):
-//   startAntwort.sip_call_id  - nicht als Rumpf mitgeschrieben, aber am ERGEBNIS belegt:
-//                               genau dieser Wert stand nach dem Anruf in unserem
-//                               sipCallId-Feld, und der Anrufstart war sein einziger
-//                               Schreiber (set-once, er lief zuerst).
-//   phoneCall.*               - ElevenLabs-Gespraechs-Datensatz, woertlich abgelesen.
-//   telnyxDetailRecord.*      - Telnyx GET /v2/detail_records, record_type sip-trunking.
 export const JOIN_SCHLUESSEL_ANRUF_2 = Object.freeze({
   startAntwort: Object.freeze({ sip_call_id: "SCL_Qu4voPd3TXvD" }),
   phoneCall: Object.freeze({
@@ -322,20 +187,6 @@ export const JOIN_SCHLUESSEL_ANRUF_2 = Object.freeze({
   telnyxDetailRecord: Object.freeze({ sip_call_id: "otb_4801m08d8gnce3xs4xpka1h3773a" }),
 });
 
-// ANRUF 6 vom 18.08.2026 (unsere Kennung call_msyy57p7i7r7, Anbieter
-// conv_6901m0az888dek8t3x1wpzj4mh3z) - GEMESSEN, die Agenten-Zeilen sind WOERTLICH aus dem
-// Gespraechs-Datensatz des Anbieters abgeschrieben, samt der Klammer-Marken, die der Agent
-// wirklich gesprochen hat. Das ist Befund 3 dieses Anrufs: tts.suggested_audio_tags schlug
-// dem Modell zehn solcher Marken vor, waehrend der Prompt sie verbot - und die Marken
-// gewannen.
-//
-// WOFUER: der Riegel gegen Klammer-Marken (src/elevenlabs/outbound.js#reportAudioTags)
-// wird an DIESEM Datensatz gemessen, nicht an einem ausgedachten. Vier Marken in vier
-// Agenten-Zeilen: [warmly], [patient], [Curious], [confident].
-//
-// GEKUERZT, nicht veraendert: nur die vier Agenten-Zeilen mit Marken plus die
-// Offenlegung; die uebrigen Zeilen des Anrufs (Werkzeug-Ereignisse, Anrufer-Zeilen) tragen
-// zu dieser Frage nichts bei. Kein Wort der uebernommenen Zeilen ist umgeschrieben.
 export const CONVERSATION_MIT_KLAMMER_MARKEN = Object.freeze({
   conversation_id: "conv_6901m0az888dek8t3x1wpzj4mh3z",
   status: "done",
@@ -386,25 +237,6 @@ export const CONVERSATION_MIT_KLAMMER_MARKEN = Object.freeze({
   }),
 });
 
-// VORFALL 2026-09-02 (ST0-Mitschnitt-Testanruf, tasks/PLAN-AGENTEN-STIMME.md ST3/O3):
-// Quelle ist der Gespraechs-Datensatz conv_0501m1hddb92f5d8hktsr4cb813m (unser Call
-// call_mtka4kunn0qy, 02.09.2026 17:57 MESZ), kurzzeitig in der ST0-Mitschnitt-Sitzung
-// als /tmp/st0_conv_vorfall.json abgelegt - NIE im Repo. Der Agent sprach hier BEIDE
-// Defekte derselben Aeusserung: "[fröhlich]" als Audio-Marke (B2) UND die doppelte
-// Ankuendigung des Gedichts ("Gut, dann erzähle ich dir ein kurzes Gedicht." direkt
-// gefolgt von "[fröhlich] Klar, hier ein kurzes Gedicht:", B1) - deshalb ist diese
-// Fixture die Datenbasis beider Detektoren (AS7).
-//
-// ANONYMISIERT nach Modulkopf-Pflicht: Rufnummern als maskNumber-Token (berechnet gegen
-// src/util.js: ***1188#c02909 = maskNumber("+17067101188"), ***2163#1e3c18 =
-// maskNumber("+491737252163"), dasselbe Token wie die Anruf-6-Fixture - dieselbe Owner-
-// Nummer), Eigennamen durch den Platzhalternamen "Jonas" (Modulkopf).
-//
-// GEKUERZT, nicht veraendert: die zwei Agent-Zeilen ohne message (Werkzeug-Ereignisse)
-// bewusst weggelassen (TRIMMED-Prinzip des Modulkopfs), analysis.evaluation_criteria_
-// results und sentiment_analysis bewusst weggelassen (ungelesen, und sie enthielten den
-// Eigennamen). Der Wortlaut der Sprechzeilen ist unveraendert bis auf den Namensersatz -
-// die Marke [fröhlich] und das B1-Paar sind byte-erhalten (das ist der Pruefgegenstand).
 export const CONVERSATION_VORFALL_2026_09_02 = Object.freeze({
   conversation_id: "conv_0501m1hddb92f5d8hktsr4cb813m",
   status: "done",
@@ -436,26 +268,13 @@ export const CONVERSATION_VORFALL_2026_09_02 = Object.freeze({
     error: null,
     phone_call: Object.freeze({
       direction: "outbound",
-      agent_number: "***1188#c02909", // maskNumber("+17067101188"), berechnet
-      external_number: "***2163#1e3c18", // maskNumber("+491737252163") == Token der Anruf-6-Fixture (dieselbe Owner-Nummer)
+      agent_number: "***1188#c02909",
+      external_number: "***2163#1e3c18",
       call_id: "otb_9501m1hddb93e8et4m1nx0jwy42h",
     }),
   }),
 });
 
-// KV2-3 (f): der VOLLSTAENDIGE Rumpf-Aufbau aus befund-elevenlabs.md Abschnitt 1 -
-// gemessen 2026-08-30 gegen conv_6301m0dha17kes9ax95jzx19cvt4 (19.08., 53s, der erste der
-// 8 B2-Anrufe). Zahlenwerte (cost/cost_fiat/charging.*) sind der dort dokumentierte
-// GEMESSENE Fund, wortgleich uebernommen. Rufnummer maskiert (Modulkopf-Pflicht), der
-// Transkript-Wortlaut ist ein generischer Platzhaltersatz (kein echter Gespraechsinhalt
-// wurde fuer dieses Feld aufgezeichnet) - die Kosten-/Struktur-Felder sind der eigentliche
-// Pruefgegenstand dieser Fixture, nicht der Gespraechsinhalt.
-//
-// ZWECK: Kriterium (f) faehrt den VOLLEN Rumpf gegen belegDetailAusRohdaten und prueft,
-// dass NUR die Allowlist-Pfade durchkommen - transcript[].message, metadata.phone_call.
-// external_number und analysis.transcript_summary muessen alle drei herausfallen,
-// charging.llm_usage.<modell>.input.price (ein gleichnamiger 'price'-Leaf unter einem
-// ANDEREN Elternsegment als 'analysis') ebenfalls (Gegenprobe zu analysis.price).
 export const CONVERSATION_DONE_MIT_KOSTEN = Object.freeze({
   conversation_id: "conv_6301m0dha17kes9ax95jzx19cvt4",
   status: "done",
@@ -480,7 +299,7 @@ export const CONVERSATION_DONE_MIT_KOSTEN = Object.freeze({
     phone_call: Object.freeze({
       direction: "outbound",
       agent_number: "***0177#1ca0c7",
-      external_number: "***2163#1e3c18", // maskNumber() des echten Ziels
+      external_number: "***2163#1e3c18",
       call_id: "otb_6301m0dha17kes9ax95jzx19cvt4",
     }),
     charging: Object.freeze({

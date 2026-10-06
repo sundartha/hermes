@@ -1,8 +1,3 @@
-// LAW-14 (i18n-Launch-Testkatalog, tasks/i18n-tests/09-recht-und-compliance.md):
-// fail-closed CLI-Gate der DSGVO-Loeschung. Das Skript ist BEWUSST kein Netz-Endpunkt
-// (kleinste Angriffsflaeche) und damit von npm test bisher ungedeckt - kein Importeur
-// zieht es (Muster check-setup-script.test.js: eigener Kindprozess-Lauf).
-// Netzfrei/deterministisch: DATA_DIR auf ein Temp-Verzeichnis, json-Backend.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -12,13 +7,12 @@ import { ROOT, BASE_ENV, tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const SCRIPT = "scripts/erase-tenant.js";
-const SPAWN_TIMEOUT_MS = 8000; // G25, Muster check-setup-script.test.js
-const EXIT_REFUSED = 1; // fail-closed: nichts geloescht
+const SPAWN_TIMEOUT_MS = 8000;
+const EXIT_REFUSED = 1;
 const EXIT_OK = 0;
-// Bewusst PII-artig: darf nach --confirm NIRGENDS im stdout auftauchen (Log bleibt zaehlerbasiert).
 const TRANSCRIPT_SECRET_TEXT = "Mein Geheimnis lautet 12345";
 const PRIVATE_NUMBER_SEED = "+4915100000999";
-const REFUSED_INVOCATIONS = [[], [BOOTSTRAP_TENANT_ID]]; // ohne tenantId / ohne --confirm
+const REFUSED_INVOCATIONS = [[], [BOOTSTRAP_TENANT_ID]];
 
 function seededDataDir() {
   return tempDataDir(

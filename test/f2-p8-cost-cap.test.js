@@ -1,10 +1,3 @@
-// F2 P8 - Kosten-Schutz fuer die Summary-SMS (Toll-Fraud H1): pro Send ein
-// USAGE_EVENT_KIND.SMS-Beleg + Tages-Cap pro Tenant. Drei Ebenen, alle offline
-// (kein Netz, kein Server-Boot; pglite = Postgres-in-WASM, F.I.R.S.T.):
-//   1. state-ops dailySmsCount: zaehlt NUR SMS-Events DES Tenants IM 24h-Fenster.
-//   2. planSummarySms: Cap erreicht -> send=false, reason="daily_cap" (still, kein Fehler).
-//   3. pglite-Round-Trip: ein SMS-Beleg ueberlebt die Re-Hydrierung -> der Cap-Zaehler
-//      bleibt nach einem Prozess-Restart korrekt (das Fenster ist persistenz-getragen).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -24,8 +17,6 @@ const A = "tenant_a";
 const B = "tenant_b";
 const FAR_PAST = "2000-01-01T00:00:00.000Z";
 const FAR_FUTURE = "2999-01-01T00:00:00.000Z";
-
-// ---- 1. dailySmsCount (state-ops, reine Query) ----
 
 test("dailySmsCount zaehlt NUR SMS-Events DES Tenants (nicht voice_minute, nicht fremder Tenant)", () => {
   const s = makeDefaultState();
@@ -47,7 +38,6 @@ test("dailySmsCount zaehlt NUR SMS-Events DES Tenants (nicht voice_minute, nicht
 test("dailySmsCount: Events vor sinceIso zaehlen nicht (rollierendes Fenster)", () => {
   const s = makeDefaultState();
   registerTenant(s, A);
-  // Ein alter Beleg (ausserhalb des Fensters) + ein frischer (recordUsageEvent stempelt now).
   s.usageEvents.push({
     id: "ue_old",
     tenantId: A,
@@ -68,8 +58,6 @@ test("dailySmsCount: Tenant ohne SMS -> 0 (Grenzfall, nie undefined)", () => {
   registerTenant(s, A);
   assert.equal(dailySmsCount(s, A, FAR_PAST), 0);
 });
-
-// ---- 2. planSummarySms: Cap-Entscheidung ----
 
 function planStore({
   smsCount = 0,
@@ -114,11 +102,6 @@ test("planSummarySms: dailySmsCap=0 (Not-Aus) -> jede SMS gesperrt", () => {
   assert.equal(plan.reason, "daily_cap");
 });
 
-// PA-10: die Toll-Fraud-Tageskappe ist fail-closed. planSummarySms verlaesst sich NICHT
-// mehr auf einen stillen Fallback (frueher "config.dailySmsCap ?? 20") - ein config OHNE
-// dailySmsCap darf die Kappe nicht still umgehen (die alte Luecke: "count >= undefined"
-// ist immer false -> jede SMS durchgelassen). Statt fail-open scheitert die Funktion jetzt
-// LAUT, bevor eine Sende-Entscheidung ohne gueltige Kappe faellt.
 test("planSummarySms: config ohne dailySmsCap -> wirft laut (fail-closed statt fail-open)", () => {
   assert.throws(
     () => planSummarySms(planStore({ smsCount: 19 }), withConfigNamespaces({ sendSmsSummary: true }), call),
@@ -127,19 +110,12 @@ test("planSummarySms: config ohne dailySmsCap -> wirft laut (fail-closed statt f
 });
 
 test("planSummarySms: smsCount=25 + config ohne Cap -> Guard schliesst die alte fail-open-Luecke", () => {
-  // Ohne Guard/Fallback waere "25 >= undefined" false -> send=true trotz 25 gesendeter SMS
-  // (Toll-Fraud). Der Guard verhindert genau diesen stillen Send, indem er laut scheitert.
   assert.throws(
     () => planSummarySms(planStore({ smsCount: 25 }), withConfigNamespaces({ sendSmsSummary: true }), call),
     /dailySmsCap/,
   );
 });
 
-// Review-Blocker Runde 1 (G26/G3): typeof config.dailySmsCap !== "number" laesst NaN UND
-// Infinity durch (typeof NaN === "number", typeof Infinity === "number"). Ohne
-// Number.isFinite waere "count >= NaN" bzw. "count >= Infinity" immer false -> die
-// Tageskappe faellt still auf send=true zurueck, exakt dieselbe Fail-open-Luecke wie beim
-// fehlenden Key. Beide Werte muessen den Guard genauso auslaesen wie ein fehlender Key.
 test("planSummarySms: config.dailySmsCap=NaN -> wirft laut (Number.isFinite faengt NaN, nicht nur typeof)", () => {
   assert.throws(
     () => planSummarySms(planStore({ smsCount: 25 }), cfg(NaN), call),
@@ -148,14 +124,11 @@ test("planSummarySms: config.dailySmsCap=NaN -> wirft laut (Number.isFinite faen
 });
 
 test("planSummarySms: config.dailySmsCap=Infinity -> wirft laut (Number.isFinite faengt Infinity)", () => {
-  // Ohne Guard-Fix waere "25 >= Infinity" false -> send=true trotz 25 gesendeter SMS.
   assert.throws(
     () => planSummarySms(planStore({ smsCount: 25 }), cfg(Infinity), call),
     /dailySmsCap/,
   );
 });
-
-// ---- 3. pglite-Round-Trip: SMS-Beleg + Cap-Zaehler ueberleben den Restart ----
 
 async function reopen(db) {
   const runner = {

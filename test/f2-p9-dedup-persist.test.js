@@ -1,17 +1,3 @@
-// F2 P9 (M2) - persistierter Summary-SMS-Dedup-Marker (summarySmsSentAt). Nagelt die
-// Restart-Idempotenz fest: nach erfolgreichem Send markiert finishCall den Call mit
-// summarySmsSentAt (ISO); der Marker ueberlebt - anders als das In-Memory-Flag
-// call._finished - einen Prozess-Restart. Ein zweiter /voice/status-Callback (mit
-// Restart dazwischen) findet den Marker und sendet KEINE zweite SMS (genau eine pro Call).
-//
-// Vier Achsen, alle offline (pglite = Postgres-in-WASM, kein Netz; sonst reine
-// Funktionen) -> F.I.R.S.T.:
-//   A) Persistenz: Marker round-trippt durch flush/hydrate des pg-Backends (AK1, AK3).
-//   B) Guard: planSummarySms sieht den persistierten Marker -> send=false (AK2, AK3).
-//   C) View: publicCall strippt den internen Marker (kein API-Leak, AK4).
-//   D) Idempotenz: markSummarySmsSent gewinnt einmal, der gesetzte Marker bleibt stabil.
-//
-// ISOLATION: pglite NIE mit einem Server-Spawn in einer Datei (P3/P6a-Lehre) - hier nur pglite.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -24,8 +10,6 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const PROV = PROVIDER.TELNYX;
 
-// Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (re-hydriert den
-// Spiegel aus der DB) -> simuliert den Prozess-Restart zwischen zwei Callbacks.
 async function reopen(db) {
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
@@ -35,8 +19,6 @@ async function reopen(db) {
   return store;
 }
 
-// A) Persistenz (AK1, AK3): der Marker lebt am Store-Call-Record, nicht nur in der
-// Laufzeit-Variable. Setzen -> flush -> NEUER Store aus derselben DB -> Marker da.
 test("Marker round-trippt durch flush/hydrate (pg): summarySmsSentAt ueberlebt den Restart", async () => {
   const db = new PGlite();
   const store = await reopen(db);
@@ -59,12 +41,7 @@ test("Marker round-trippt durch flush/hydrate (pg): summarySmsSentAt ueberlebt d
   );
 });
 
-// B) Guard (AK2, AK3): planSummarySms prueft den persistierten Marker VOR allen anderen
-// Send-Bedingungen. Identischer Store, der ohne Marker sendet -> mit Marker send=false.
-// Das ist die persistierte Haelfte des Doppel-Guards; call._finished deckt die
-// In-Memory-Haelfte im selben Prozess ab (server.js finishCall).
 test("Guard: persistierter Marker unterdrueckt die zweite SMS (send=false, kein reason)", () => {
-  // Fake-Store, der genau die vier planSummarySms-Reads abbildet und sonst SENDEN wuerde.
   const store = {
     tenantPrivateNumber: () => "+491701234567",
     load: () => ({
@@ -75,14 +52,11 @@ test("Guard: persistierter Marker unterdrueckt die zweite SMS (send=false, kein 
     tenantContext: () => ({ settings: { smsSummaryOptIn: true } }),
     dailySmsCount: () => 0,
   };
-  // PA-10: dailySmsCap numerisch (fail-closed-Guard); 20 = Prod-Default, dailySmsCount 0
-  // -> der Kontroll-Pfad (before) sendet unveraendert.
   const cfg = withConfigNamespaces({ sendSmsSummary: true, dailySmsCap: 20 });
 
   const before = planSummarySms(store, cfg, { id: "call_A", tenantId: "A", provider: PROV });
   assert.equal(before.send, true, "ohne Marker wuerde gesendet (Kontroll-Pfad)");
 
-  // Zweiter Callback nach Restart: derselbe Call, jetzt mit persistiertem Marker.
   const after = planSummarySms(store, cfg, {
     id: "call_A",
     tenantId: "A",
@@ -97,8 +71,6 @@ test("Guard: persistierter Marker unterdrueckt die zweite SMS (send=false, kein 
   );
 });
 
-// C) View (AK4): der interne Marker darf den Server nie verlassen - publicCall strippt
-// ihn (wie streamToken/_finished). Sonst leakte ein internes Timing-Detail in die API.
 test("publicCall strippt summarySmsSentAt (kein API-Leak)", () => {
   const out = publicCall({
     id: "call_A",
@@ -113,8 +85,6 @@ test("publicCall strippt summarySmsSentAt (kein API-Leak)", () => {
   assert.equal(out.summary, "ok", "Nutzdaten bleiben erhalten");
 });
 
-// D) Idempotenz: der erste Aufruf setzt den Marker (changed=true), jeder weitere ist ein
-// No-op (changed=false) -> der zuerst gesetzte Zeitstempel gewinnt und bleibt stabil.
 test("markSummarySmsSent ist idempotent: gesetzter Marker gewinnt, kein zweites Schreiben", () => {
   const s = makeDefaultState();
   const c = createCall(s, {
@@ -134,8 +104,6 @@ test("markSummarySmsSent ist idempotent: gesetzter Marker gewinnt, kein zweites 
   assert.equal(second.call.summarySmsSentAt, stamp, "Zeitstempel unveraendert (gesetzter gewinnt)");
 });
 
-// Fehlender Call -> kein Throw, changed=false (Muster markAnswered): ein /voice/status fuer
-// einen unbekannten Call darf den Marker-Setter nicht crashen.
 test("markSummarySmsSent fuer unbekannten Call: changed=false, kein Throw", () => {
   const s = makeDefaultState();
   const res = markSummarySmsSent(s, "call_does_not_exist");

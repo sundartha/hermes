@@ -1,22 +1,3 @@
-// ---- DE1: der Anrufbeantworter-Text spricht die Sprache des Anrufs -------------------
-// Vorfall 2026-09-04 (call_mtmpqje4clmh / conv_4501m1nsr1hhe2aa07pt5t38r0zy): ein
-// deutscher Anruf hinterliess eine ENGLISCHE Nachricht auf dem Anrufbeantworter, weil das
-// Feld voicemail_message am Agenten statischen englischen Text trug und weder je Sprache
-// (language_presets) noch je Anruf (conversation_config_override) uebersteuerbar ist
-// (Anbieter-Schema, 2026-09-04 gemessen - beide Pfade fuehren kein built_in_tools). Der
-// tragfaehige Weg ist die dynamische Variable {{voicemail_line}}, komponiert in
-// src/elevenlabs/call-locale.js#providerVoicemailMessage aus LOCALES.<sprache>.disclosure
-// + LOCALES.<sprache>.voicemailBody.
-//
-// Faehrt den ECHTEN Anrufstart gegen die Bestands-Attrappe (PIN_STATE traegt
-// defaultLanguage "de", pinCall().to loest ueber die Ziel-Rufnummer ebenfalls auf "de"
-// auf - kein neuer Fixture-Zustand noetig, s. test/el-vorlage-variablen-abgleich.test.js
-// fuer dieselbe Attrappe).
-//
-// Testnamen tragen bewusst KEINE Katalog-/Abnahme-Kennung am Namensanfang (package.json
-// config.i18nCatalogPattern / config.abnahmePattern), sonst landen sie in der falschen
-// Bank (Lehre catalog-id-prefix-misroutes-tests). Das Verhalten muss ab sofort dauerhaft
-// gelten, gehoert also in den Regressionslauf.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -29,9 +10,6 @@ import { sendeAnrufstart } from "./helpers/elevenlabs-anrufstart-attrappe.mjs";
 
 const OWNER_NAME = "Pin Testowner";
 
-// Nur ANFAENGE als Baustein - genug, um festzustellen, dass der englische Text NICHT
-// eingeflossen ist, ohne von einer zufaelligen Teilstring-Ueberschneidung mit den
-// anderen Sprachen abhaengig zu sein.
 const BAUSTEIN_LAENGE = 20;
 
 function englishBausteine() {

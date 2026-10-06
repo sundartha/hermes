@@ -1,13 +1,3 @@
-// F2 P5 - Self-Service Write der privaten Summary-Nummer (POST /api/self-service/
-// private-number). Kompositions-Integrationstest nach dem Muster i9-self-service.test.js:
-// reines pglite (offline, F.I.R.S.T.), KEIN Server-Spawn. Prueft die SICHERHEITS-
-// Invarianten der dedizierten Schreibtuer:
-//   - gueltig -> normalisierte E.164 am Tenant-RECORD (NICHT in settings, H4)
-//   - ungueltig / gesperrtes Land -> 400, alter Wert bleibt (fail-closed, H2)
-//   - leer/"" -> Feld geloescht (impliziter Opt-Out)
-//   - Trennzeichen-Eingabe -> normalisiert gespeichert (M3)
-//   - kein Cookie -> 401, suspendiert -> 403 (kein Write)
-//   - Audit + Response tragen NIE die Nummer (nur Outcome-Key, H4)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -26,8 +16,6 @@ const TENANT_SUSPENDED = "t_sub-susp";
 
 const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
-// Sammelt die Audit-Aufrufe (action, details), damit der Test beweisen kann, dass die
-// Nummer NIE ins Audit gehoben wird (H4) - nur der Outcome-Key.
 function makeAuditSpy() {
   const calls = [];
   const fn = (action, _req, details = "") => calls.push({ action, details });
@@ -135,7 +123,6 @@ test("(a) gueltige Nummer -> 200, normalisierte E.164 am Record, NICHT in settin
       "+491701234567",
       "normalisiert am Record (M3)",
     );
-    // PII darf NICHT in settings landen (settings leakt ueber /api/state + MCP).
     const settings = s.store.load().settings[TENANT_B] || {};
     assert.equal("privateNumber" in settings, false, "privateNumber NIE in settings");
   } finally {
@@ -146,7 +133,7 @@ test("(a) gueltige Nummer -> 200, normalisierte E.164 am Record, NICHT in settin
 test("(b) ungueltiges Format -> 400, alter Wert bleibt (fail-closed, H2)", async () => {
   const s = await setup();
   try {
-    await setNumber(s, { privateNumber: "+491701234567" }); // erst gueltig setzen
+    await setNumber(s, { privateNumber: "+491701234567" });
     const res = await setNumber(s, { privateNumber: "abc" });
     assert.equal(res.status, 400);
     assert.equal(s.recordOf(TENANT_B).privateNumber, "+491701234567", "alter Wert unveraendert");

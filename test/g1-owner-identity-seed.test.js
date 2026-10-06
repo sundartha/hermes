@@ -1,5 +1,3 @@
-// G1: applyOwnerIdentity (Komposition) + setTenantIdentityIfAbsent (Web-Login/Boot).
-// Reine state-ops-Units (kein IO, kein config/DATA_DIR) - statisch importierbar.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -28,11 +26,9 @@ test("tenantContext leitet firstName aus dem geseedeten ownerName ab (eine Quell
   assert.equal(ctx.firstName, "Max");
 });
 
-// ---- P2b: setTenantIdentityIfAbsent (gemeinsame set-if-absent-Quelle, Web-Login + Boot) ----
-
 test("T-P2b-G-01: setTenantIdentityIfAbsent setzt ownerName auf einem existierenden, namlosen Tenant -> true", () => {
   const s = makeDefaultState();
-  registerTenant(s, "t_web", {}); // active, OHNE ownerName (Web-Login-Form)
+  registerTenant(s, "t_web", {});
   const changed = setTenantIdentityIfAbsent(s, "t_web", { firstName: "Web", lastName: "User" });
   assert.equal(changed, true, "echte Mutation -> true (Wrapper flusht)");
   assert.equal(s.tenants.find((t) => t.id === "t_web").ownerName, "Web User");
@@ -61,12 +57,8 @@ test("T-P2b-G-04: leere Namen -> No-Op -> false (Dev-Login-/namloses-Profil-Aequ
   assert.equal("ownerName" in s.tenants.find((t) => t.id === "t_web"), false);
 });
 
-// FMT-23 (tasks/i18n-tests/10-zeit-format-daten.md): firstNameOf ist modul-privat und
-// wird ueber seinen einzigen Aufrufer tenantContext gemessen. Ein CJK-Name ohne
-// Leerzeichen darf nicht "zerschnitten" werden - split(/\s+/)[0] liefert den ganzen
-// String. Die Luecke war die ABWESENHEIT der Absicherung, kein bekannter Bug.
-const CJK_FULL_NAME = "田中太郎"; // kein Whitespace -> nichts zu splitten
-const CJK_SPACED_NAME = "田中 太郎"; // Gegenprobe: mit Trenner greift die Regel normal
+const CJK_FULL_NAME = "田中太郎";
+const CJK_SPACED_NAME = "田中 太郎";
 test("FMT-23 (Mechanismus, gruen) - tenantContext leitet aus einem CJK-Namen ohne Leerzeichen den vollen String ab", () => {
   const s = makeDefaultState();
   s.tenants = [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: CJK_FULL_NAME }];

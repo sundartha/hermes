@@ -1,13 +1,3 @@
-// F1 Geo-Location (Phase 2) - Sprach-Resolver + LLM-Schicht sprachabhaengig.
-// Zwei Achsen:
-//   (A) Resolver localeFor() + Bundle-Vertrag (Fallback de, BCP-47-Locales, Voice-Profil)
-//       - rein gegen src/i18n/locales.js (config-frei, statisch importierbar).
-//   (B) claude.js konsumiert call.language: DE bleibt BYTE-IDENTISCH zum Bestand, FR ist
-//       die kuratierte, fest verdrahtete Variante (R8); kein FR-Pfad faerbt DE ab.
-//
-// DATA_DIR im before VOR dem ersten config-/claude-Import (Repo-Regel, wie
-// claude-identity/disclosure-regression). Der Resolver-Block braucht das nicht, laeuft
-// aber gegen denselben statischen Import (kein Spawn, kein Netz - F.I.R.S.T.).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
@@ -18,20 +8,12 @@ import {
 } from "../src/store/defaults.js";
 import { localeFor, LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 
-// Heutiges DE-Verhalten, woertlich gepinnt. OWNER_NAME ist ein lokales Literal, das
-// direkt in die reinen Locale-Funktionen geht (kein Store/Config noetig) - der Test ist
-// damit env-unabhaengig deterministisch. Diese DE-Strings duerfen sich NIE aendern
-// (byte-identisch); ein Refactor, der sie verschiebt, faellt hier auf.
 const OWNER_NAME = "Jonas Beispiel";
 const DE_DISCLOSURE =
   "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.";
-const DE_SPEECH_CLAUSE = "Nur natürlich gesprochenes Deutsch."; // P5: Umlaut (D3)
-// I11 (call-quality Impl-1): Klausel "nenne konkrete Ergebnisse ..." ergaenzt (S2 aus
-// tasks/call-quality-findings.md: Summary war zu allgemein).
+const DE_SPEECH_CLAUSE = "Nur natürlich gesprochenes Deutsch.";
 const DE_SUMMARY =
   'Du fasst ein Telefonat des KI-Assistenten von Jonas Beispiel zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 Satz", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. Nenne in der summary konkrete Ergebnisse (vereinbartes Datum/Uhrzeit, Preis, Name der Kontaktperson), sofern im Transkript vorhanden, statt allgemeiner Umschreibungen. objective_achieved bewertet AUSSCHLIESSLICH den unter "Auftrag" genannten urspruenglichen Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Vom Assistenten oder Angerufenen selbst eroeffnete Nebenthemen (z.B. ein angebotener oder abgebrochener Termin-Folgeschritt) sind fuer diese Bewertung IRRELEVANT. true = der Auftrag wurde genug beantwortet, auch wenn der Anruf mitten in einem Folgeschritt endete; false = der Auftrag wurde klar nicht erreicht; "unclear" = aus dem Auftrag heraus echt nicht beurteilbar. Action Items nur, wenn Jonas Beispiel wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item. Ergebnis-Karte: outcome ist EIN Satz mit dem konkreten Ergebnis (vereinbartes Datum/Uhrzeit, Preis, Name) oder - wenn nichts erreicht wurde - woran es lag. commitments sind Zusagen, die der Assistent im Namen von Jonas Beispiel gemacht hat; counterparty_commitments sind Zusagen der Gegenstelle. open_points sind Fragen, die offen blieben. next_step ist der EINE naechste Schritt fuer Jonas Beispiel, sonst null. facts sind dauerhaft nuetzliche Angaben ueber die Gegenstelle (Oeffnungszeiten, Ansprechpartner, Preise). Jede Liste hoechstens 3 Eintraege, jeder Eintrag hoechstens 200 Zeichen. Erfinde nichts: fehlt eine Angabe im Transkript, bleibt die Liste leer bzw. das Feld null.';
-
-// ---- (A) Resolver + Bundle-Vertrag ----
 
 test("localeFor: bekannte Sprache liefert das passende Locale (de/fr/en)", () => {
   assert.equal(localeFor("de").language, "de");
@@ -39,9 +21,6 @@ test("localeFor: bekannte Sprache liefert das passende Locale (de/fr/en)", () =>
   assert.equal(localeFor("en").language, "en");
 });
 
-// Charakterisierung (i18n-Testkatalog, Regel 5): der Fail-Safe-MECHANISMUS (R3 der
-// kanonischen Liste, tasks/i18n-tests/00-kanonische-liste.md) bleibt Regressionsschutz,
-// unabhaengig vom konkreten Wert von DEFAULT_LANGUAGE.
 test("Charakterisierung: localeFor faellt fail-safe auf DEFAULT_LANGUAGE zurueck (R7)", () => {
   assert.equal(localeFor("xx").language, DEFAULT_LANGUAGE);
   assert.equal(localeFor(undefined).language, DEFAULT_LANGUAGE);
@@ -49,16 +28,6 @@ test("Charakterisierung: localeFor faellt fail-safe auf DEFAULT_LANGUAGE zurueck
   assert.equal(localeFor("").language, DEFAULT_LANGUAGE);
 });
 
-// A3-Migration (P10): DEFAULT_LANGUAGE ist geflippt, der Test ist Regressionsschutz.
-// Beleg: tasks/i18n-tests/00-kanonische-liste.md Abschnitt 4 (Nachtrag 7.12);
-// PLAN-I18N-TESTS.md Abschnitt 7.12.
-//
-// LANG-21 (i18n-Launch-Testkatalog, tasks/i18n-tests/01-sprachaufloesung.md). Der
-// Katalogfall ist durch DIESEN Test und den Charakterisierungs-Test darueber bereits
-// vollstaendig abgedeckt: alle vier Eingaben der Spezifikation ("xx", "", null, undefined)
-// sind hier gepinnt. tasks/i18n-tests/00-kanonische-liste.md (Nachtrag zu D4) weist
-// ausdruecklich darauf hin, dass LANG-21 und WORLD-3 sonst kollidieren. Deshalb hier nur
-// die Katalog-Referenz statt einer dritten Kopie (G5) - kein neuer Test.
 test("localeFor(null|undefined|'xx') liefert das EN-Locale (Weltdefault) (ex WORLD-03)", () => {
   assert.equal(localeFor("xx").language, "en");
   assert.equal(localeFor(undefined).language, "en");
@@ -74,23 +43,12 @@ test("Bundle-Vertrag: STT-Locale ist volles BCP-47 + Voice-Profil je Sprache ges
   assert.equal(LOCALES.de.dateLocale, "de-DE");
   assert.equal(LOCALES.fr.dateLocale, "fr-FR");
   assert.equal(LOCALES.en.dateLocale, "en-GB");
-  // Voice-Profil (Phase-3-Konsument) als nicht-leerer logischer Name vorhanden.
   for (const lang of SUPPORTED_LANGUAGES) {
     assert.equal(typeof LOCALES[lang].voiceProfile, "string");
     assert.ok(LOCALES[lang].voiceProfile.length > 0, `voiceProfile fehlt fuer ${lang}`);
   }
 });
 
-// VOICE-01 (i18n-Testkatalog). Beleg: src/i18n/locales.js:219-220;
-// tasks/i18n-tests/03-telefonie-render.md ("VOICE-01"). Mechanismus-Test (gruen,
-// Regressionsschutz): dieser Pin gilt AUSDRUECKLICH nur fuer den Sprachcode "en" - NICHT
-// fuer "Englisch generell". Owner-Entscheidung 7.5 (PLAN-I18N-TESTS.md Abschnitt 7.5)
-// macht ein kuenftiges "en-US"-Bundle zu einem EIGENEN, separaten Bundle-Eintrag; welche
-// Variante (en/en-GB vs. en-US) der WELTDEFAULT fuer Laender ohne eigenes Bundle waehlt,
-// ist ausdruecklich noch offen (00-kanonische-liste.md, D16/VOICE-01: "entblockt", aber
-// nur die Bundle-Frage, nicht die Weltdefault-Variante). Ein Test auf "irgendein
-// EN-Bundle" wuerde den spaeteren Bundle-Schnitt fuer en-US blockieren - deshalb hier
-// bewusst gegen den KONKRETEN Schluessel LOCALES.en, nicht gegen SUPPORTED_LANGUAGES.
 test("VOICE-01 (Mechanismus, gruen) - Bundle fuer Sprachcode 'en' bleibt auf en-GB gepinnt (sttLocale+dateLocale)", () => {
   assert.equal(LOCALES.en.sttLocale, "en-GB");
   assert.equal(LOCALES.en.dateLocale, "en-GB");
@@ -100,9 +58,6 @@ test("Bundle: DE-Summary-Prompt ist byte-identisch zum Bestand; FR ist franzoesi
   assert.equal(LOCALES.de.summarySystem(OWNER_NAME), DE_SUMMARY);
   const fr = LOCALES.fr.summarySystem(OWNER_NAME);
   assert.ok(fr.includes("2-3 phrases en français"), `FR-Summary muss franzoesisch sein: ${fr}`);
-  // JSON-Keys bleiben sprachunabhaengig (werden geparst) - in BEIDEN Sprachen identisch.
-  // AL-P11: die sechs neuen Ergebnis-Karten-Keys gehoeren dazu (evidence NICHT - das
-  // Feld existiert nur in der Prompt-KLAUSEL, nicht im Basis-JSON-Literal).
   for (const key of [
     '"summary"',
     '"actionItems"',
@@ -119,21 +74,12 @@ test("Bundle: DE-Summary-Prompt ist byte-identisch zum Bestand; FR ist franzoesi
   }
 });
 
-// ---- (A2) EN-Bundle (F1 P4): kuratierte Offenlegung + statische Texte ----
-
-// OUT-24 (i18n-Testkatalog). Beleg: src/i18n/locales.js:236-238;
-// tasks/i18n-tests/05-auslandstelefonie.md ("OUT-24"). Mechanismus-Test (gruen):
-// byte-exakter EN-Offenlegungssatz, UND der Nachweis, dass kein Call-Parameter (analog
-// zum FR-Pin weiter unten) ihn veraendern/abschalten kann - nur ownerName ist gebunden.
 test("OUT-24 (Mechanismus, gruen) - EN-Offenlegungssatz ist byte-stabil und nicht abschaltbar", () => {
   const a = LOCALES.en.disclosure(OWNER_NAME);
   assert.equal(
     a,
     "Hello, this is an AI assistant calling on behalf of Jonas Beispiel. This conversation will be summarised for the person I represent.",
   );
-  // Kein zusaetzliches Argument/Call-Parameter kann den Wortlaut veraendern - die
-  // Funktion nimmt einzig ownerName entgegen (Signatur-Beweis: erneuter Aufruf mit
-  // demselben Namen liefert byte-identisch dasselbe Ergebnis).
   const b = LOCALES.en.disclosure(OWNER_NAME);
   assert.equal(a, b, "EN-Offenlegung muss byte-stabil/deterministisch sein");
 });
@@ -198,7 +144,6 @@ test("Statische Texte: DE-Wortlaut gepinnt (Umlaute seit P1, kein Drift durch da
     "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es später erneut.",
   );
   assert.equal(LOCALES.de.noSpeechReprompt, "Können Sie das bitte wiederholen?");
-  // P3.2: die zwei weiteren Eskalations-Stufen der No-Speech-Staffel.
   assert.equal(
     LOCALES.de.noSpeechRepromptAgain,
     "Ich höre Sie leider immer noch nicht. Sind Sie noch in der Leitung?",
@@ -207,7 +152,6 @@ test("Statische Texte: DE-Wortlaut gepinnt (Umlaute seit P1, kein Drift durch da
     LOCALES.de.noSpeechFarewell,
     "Ich kann Sie leider nicht hören. Ich versuche es später noch einmal. Auf Wiederhören.",
   );
-  // P3.1: deterministischer Abschluss-Satz kurz vor dem harten Max-Dauer-Cap.
   assert.equal(
     LOCALES.de.capFarewellSpeech,
     "Ich muss das Gespräch jetzt leider beenden. Vielen Dank für Ihre Zeit. Auf Wiederhören.",
@@ -218,25 +162,14 @@ test("Statische Texte: DE-Wortlaut gepinnt (Umlaute seit P1, kein Drift durch da
   );
 });
 
-// ---- (B) claude.js konsumiert call.language ----
-
 let systemPrompt, disclosureSentence, openingText;
 before(async () => {
-  // Owner-Tenant mit explizitem ownerName seeden -> tenantContext liefert OWNER_NAME
-  // deterministisch (kein Config/Env-Coupling, Muster wie claude-identity Tenant B).
   const seed = seedState({
     calls: [],
     tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER_NAME }],
   });
   process.env.DATA_DIR = tempDataDir(seed);
   await import("../src/config.js");
-  // P10-Blocker-Folgefix: der config.js-Import druesst DEFAULT_LANGUAGE via
-  // setWorldDefaultLanguageEnabled() auf den fail-closed Boot-Default ("de", Env-Schalter
-  // WORLD_DEFAULT_LANGUAGE_ENABLED steht bis P13 auf AUS). Dieses EINE root-before() laeuft
-  // vor JEDEM Test der Datei (auch den oben deklarierten WORLD-03-/Bundle-Tests, node:test
-  // fuehrt alle before()-Hooks vor allen Tests der Suite aus) - deshalb hier den
-  // Weltdefault-MECHANISMUS explizit scharf stellen (analog e2e-05, "Flip unter eigenem
-  // Override"), statt die Tests unbemerkt vom Boot-Default abhaengen zu lassen.
   setWorldDefaultLanguageEnabled(true);
   ({ systemPrompt, disclosureSentence, openingText } = await import("../src/claude.js"));
 });
@@ -245,15 +178,6 @@ const deCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language
 const frCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "fr", ...over });
 const enCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "en", ...over });
 
-// LANG-07 (i18n-Testkatalog). Beleg: src/claude.js:254-259,264-278;
-// tasks/i18n-tests/01-sprachaufloesung.md ("LANG-07"). Der Katalog-Sachverhalt
-// (Offenlegungssatz bleibt Deutsch fuer strukturell falsch aufgeloeste US-Tenants,
-// call.language="de") ist mechanisch bereits durch DIESEN Test abgedeckt: die Funktion
-// prueft nicht, WARUM ein Call call.language="de" traegt (LANG-02/LANG-04-Kette:
-// web-onboardeter US-Tenant ohne gesetztes number.language/tenant.defaultLanguage), sie
-// bekommt einzig den Wert. Ein zweiter Test mit identischem Aufruf
-// disclosureSentence(deCall()) === DE_DISCLOSURE haette keinen eigenen Pruefwert (G5) -
-// deshalb hier nur die Katalog-Referenz angehaengt statt einer Kopie.
 test("DE-Wortlaut: disclosureSentence(de) == gepinnter Offenlegungssatz", () => {
   assert.equal(disclosureSentence(deCall()), DE_DISCLOSURE);
 });
@@ -263,7 +187,6 @@ test("DE byte-identisch: systemPrompt(de) traegt die deutsche Output-Sprach-Rege
   assert.ok(prompt.includes(DE_SPEECH_CLAUSE), `DE-Sprach-Regel fehlt: ${prompt}`);
 });
 
-// Pin bewusst justiert (Runde 2, S-B): natuerlichere Bruecke statt Amtsdeutsch.
 test("DE: openingText(de) == Offenlegung + 'Es geht um Folgendes: <goal>.'", () => {
   const text = openingText(deCall({ direction: "outbound", goal: "Testziel" }));
   assert.equal(text, `${DE_DISCLOSURE} Es geht um Folgendes: Testziel.`);
@@ -278,8 +201,6 @@ test("FR: disclosureSentence(fr) liefert die kuratierte FR-Variante (mit ownerNa
 });
 
 test("FR-Offenlegung ist fest verdrahtet (R8): nicht per Call-Parameter waehlbar/abschaltbar", () => {
-  // Unrelated Call-Parameter (callerName, goal, direction) duerfen den FR-Wortlaut NICHT
-  // veraendern - er haengt allein an Sprache + gebundener Identitaet (byte-stabil).
   const a = disclosureSentence(frCall({ callerName: "Klaus", direction: "inbound" }));
   const b = disclosureSentence(frCall({ goal: "etwas ganz anderes", direction: "outbound" }));
   assert.equal(a, b, "FR-Offenlegung muss byte-stabil sein (kein Call-Parameter faerbt sie)");
@@ -306,10 +227,6 @@ test("Gegenprobe: ein FR-Call faerbt einen parallelen DE-Call nicht ab (Resolver
   assert.notEqual(frText, deText);
 });
 
-// PROMPT-18 (tasks/i18n-tests/02-llm-prompts.md): die EN-Achse desselben Beweises wie der
-// FR/DE-Test darueber - promptInputs loest loc = localeFor(call.language) PRO AUFRUF auf,
-// es gibt keinen modulweiten Sprach-State in claude.js. Promise.all statt sequenziell:
-// nur so beruehrt der Test die Nebenlaeufigkeits-Aussage des Katalogs ueberhaupt.
 test("PROMPT-18 (Mechanismus, gruen) - paralleler EN- und DE-Call faerben sich nicht gegenseitig ab", async () => {
   const [de, en] = await Promise.all([
     Promise.resolve(systemPrompt(deCall())),
@@ -321,12 +238,6 @@ test("PROMPT-18 (Mechanismus, gruen) - paralleler EN- und DE-Call faerben sich n
   assert.ok(!en.includes(DE_SPEECH_CLAUSE));
 });
 
-// ---- LAW-02 (i18n-Testkatalog): EN end-to-end ueber disclosureSentence/openingText ----
-// Beleg: src/i18n/locales.js:237-239 (EN-Disclosure-Funktion); src/claude.js:250-258;
-// tasks/i18n-tests/09-recht-und-compliance.md ("LAW-02"). Bundle-Ebene ist bereits ueber
-// LOCALES.en/OUT-24 getestet - hier fehlte bislang das DE/FR-aequivalente End-to-End (via
-// disclosureSentence/openingText mit einem echten call.language="en"). Mechanismus-Test
-// (gruen): das Bundle ist korrekt verdrahtet, es war nur der Test-Lueckenschluss noetig.
 test("LAW-02 (Mechanismus, gruen) - EN: disclosureSentence(en) liefert die kuratierte EN-Offenlegung end-to-end", () => {
   const en = disclosureSentence(enCall());
   assert.equal(en, LOCALES.en.disclosure(OWNER_NAME), "EN-Offenlegung muss aus dem Bundle kommen");

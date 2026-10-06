@@ -1,13 +1,3 @@
-// FMT-11 (i18n-Testkatalog, tasks/i18n-tests/10-zeit-format-daten.md:284) - Private
-// Summary-Nummer: ein US-Land-Tenant bekommt beim Onboarding trotzdem nur das +49-Gate.
-//
-// P8 A3-Migration: dieser Test war "SOLL (rot)". Mit P8 (allowedPrivateNumberCodes leitet
-// das erlaubte Praefix aus country her; api-onboard.js reicht country jetzt an
-// normalizePrivateNumber durch) ist der Zielzustand erreicht.
-//
-// AUTH-P6: /api/onboard ist seither eine Betreiber-Route (webAuthMw+adminMw, nur MIT
-// operatorAuth gemountet) - migriert auf In-Process-Mount von makeOnboardRoutes (Muster
-// onboarding-route.test.js/f1-geo-onboard.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";

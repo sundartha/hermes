@@ -1,5 +1,3 @@
-// FW2 (tasks/fw2-spec.md): der LLM-Guthaben-Latch mit Ausweich-Anbieter. Unit-Tests gegen
-// den config-Singleton (Muster test/b5-llm-registry.test.js) - kein Server-Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -15,12 +13,8 @@ import { readFileSync } from "node:fs";
 const { withConfigOverrides } = makeConfigOverrides(config);
 
 const TEST_DEEPSEEK_KEY = "sk-fw2-latch-dummy";
-// G25/G35: no-magic-numbers erlaubt Zahlen als Objekt-Property-Wert (detectObjects:false),
-// nicht aber in Arithmetik - deshalb hier eine benannte Konstante fuer den EINEN
-// Rechenausdruck (FW2-R4: ein Zeitpunkt knapp NACH Ablauf des Cooldowns).
 const LATCH_COOLDOWN_MS = 60000;
 
-// Minimal-gueltige Anthropic-Antwort (Muster test/llm.test.js).
 function anthropicOk() {
   return Promise.resolve({
     content: [{ type: "text", text: "ok" }],
@@ -37,7 +31,6 @@ function deepseekOk() {
   });
 }
 
-// Entsperrt den Vermerk sofort (kein reset-Export, s. billing-latch.js Kommentar).
 function expireLatch(provider) {
   markBillingBlocked({ provider, nowMs: Date.now(), cooldownMs: 0 });
 }
@@ -125,7 +118,6 @@ test("FW2-R4: Latch abgelaufen (Cooldown ueberschritten) - das Routing faellt au
     { llmProviderFallback: "deepseek", deepseekApiKey: TEST_DEEPSEEK_KEY },
     async () => {
       const nowMs = Date.now();
-      // Backdatiert: der Vermerk ist zum Zeitpunkt des Aufrufs bereits abgelaufen.
       markBillingBlocked({
         provider: "anthropic",
         nowMs: nowMs - LATCH_COOLDOWN_MS - 1,
@@ -182,10 +174,6 @@ test("FW2-R7: llmFallbackFindings - leer bei ungesetzt/verschieden, genau EIN ni
 });
 
 test("FW2-R8: render.yaml dokumentiert LLM_PROVIDER_FALLBACK und LLM_BILLING_LATCH_COOLDOWN_MS", () => {
-  // .env.example ist in dieser Umsetzungs-Session ueber die Werkzeuge nicht erreichbar
-  // (harness-seitiger Secret-Pfad-Schutz auf jede .env*-Datei, auch Templates ohne echte
-  // Secrets) - deshalb prueft dieser Test NUR render.yaml. Nachtrag in .env.example bleibt
-  // offen, s. tasks/lessons.md.
   const renderYaml = readFileSync(new URL("../render.yaml", import.meta.url), "utf8");
   assert.match(renderYaml, /key: LLM_PROVIDER_FALLBACK/);
   assert.match(renderYaml, /key: LLM_BILLING_LATCH_COOLDOWN_MS\s*\n\s*value: "900000"/);

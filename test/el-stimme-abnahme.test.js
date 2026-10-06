@@ -1,42 +1,3 @@
-// Abnahmekriterien AS1-AS4 der Stimme-Kette (ST1 aus tasks/PLAN-AGENTEN-STIMME.md, O1).
-// ST2-ST4 erweitern dieselbe Datei um AS5-AS10 - die kommen MIT Abnahme-Kennung und
-// Grund-Zeile in die ABNAHME-Bahn (npm run test:abnahme).
-// ST2-Anteil (2026-09-03): AS5 pinnt die Vorlagen-Besitzerweiterung (Owner-Entscheidungen
-// 4 + 9), ist GRUEN abgeliefert und direkt mitgewandert (ST1-Prezedenz); AS6 war
-// Doc-Kriterium (bewusst ROT bis zum Push) und ist nach dem dokumentierten Push
-// (Befund-Doc '## ST2 Push-Protokoll', 2026-09-03) ebenfalls gewandert.
-//
-// ST3-Anteil (2026-09-03): AS9 (Kommentarblock am reportAudioTags nennt den Vorfall
-// 2026-09-02) ist GRUEN abgeliefert und direkt gewandert. AS7/AS8 (Detektoren am
-// Vorfalls-Datensatz + Gegenprobe) leben in test/el-fixtures-echte-antworten.test.js -
-// dort steht der Poll-Treiber (pollFixtureConversation), Verlagerung statt Duplikation.
-//
-// MIGRATIONSSTAND: AS1-AS9 und AS11 sind abgenommen (2026-09-03/04) und in den
-// Regressionslauf gewandert - Kennung abgelegt, Siegel "[abgenommen <ID>]" getragen,
-// Eintrag in
-// test/abnahme-ausgewandert.json (AS7/AS8 unter ihrer eigenen Datei). Ab da haelt
-// "npm test" sie fest (R2-Ratsche im Selbsttest der Abnahme-Bahn,
-// test/abnahme-bahn-selbsttest.test.js). Die Grund-Zeile
-// "| ROT WEIL: ... | FIX: ..." ist mit der Kennung weggefallen: R3 verlangt sie nur an
-// Namen MIT Abnahme-Kennung, und ihr Inhalt dokumentierte den Zustand VOR ST1 - der ist
-// jetzt eingepinnt, nicht mehr offen.
-//
-// WAHRHEITS-KETTE (O1, Wartungsregel): kanonisch fuer den Regel-Inhalt B1+B2 ist die
-// EL-VORLAGE (elevenlabs/agent_configs/outbound-agent.template.json - Master-Prompt EN
-// und soft_timeout-Override EN). Die speechRules-Zeilen in src/i18n/prompts/de.js, en.js
-// und fr.js sind bewusste Uebersetzungen, keine zweite Wahrheit. Inhaltliche
-// B1/B2-Aenderungen gehen im SELBEN Commit an allen FUENF Stellen und ihren Pins
-// (AS2/AS3-Assertions) - wer nur eine Stelle aendert, macht AS2 oder AS3 rot.
-//
-// Testnamen tragen bewusst KEINE Katalog-ID des i18n-Launch-Testkatalogs am Namensanfang
-// (package.json config.i18nCatalogPattern) und keine Abnahme-Kennung mehr, sondern das
-// Abnahme-Siegel - sonst landet die Datei im falschen Testlauf (Lehre
-// catalog-id-prefix-misroutes-tests).
-//
-// Kein Netz, kein Konto, kein DATA_DIR: geprueft werden die Vorlage im Repo, die
-// LOCALES-Bausteine (config-frei, Bestandsmuster f1-i18n-locale / call-locale) und das
-// Befund-Doc. Ob Vorlage und Live-Agent uebereinstimmen, ist Sache von
-// npm run elevenlabs:drift (ST2).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -45,12 +6,8 @@ import { providerOpeningFor, providerVoicemailMessage } from "../src/elevenlabs/
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 const BEFUNDE_REL = "tasks/EL-STIMME-BEFUNDE.md";
-// EINE Aufzaehlung der Sprachmenge, aus LOCALES abgeleitet (keine zweite Liste, die
-// driften kann) - auch die Preset-Schleife unten iteriert LANGS, nicht LOCALES selbst.
 const LANGS = Object.keys(LOCALES);
 
-// Kanon-Texte der Vorlage (Abschnitt 0 des ST1-Plans; Typografie im Bestandsstil der
-// Vorlage: " - " statt Gedankenstrich, "Do not" statt "Do NOT").
 const B1_RULE =
   "Deliver content exactly once. When you start an answer, a story or a result, " +
   "the very next sentence is that answer, story or result - never a second introduction " +
@@ -64,8 +21,6 @@ const OVERRIDE_NEU =
   "immediately after. Never write anything in square brackets: every character you " +
   "produce is spoken out loud exactly as it stands.";
 
-// Uebersetzungen derselben Regel fuer die Budget-/Realtime-Prompts - je die GANZE neue
-// Zeile ohne Bullet-Praefix, wie sie im gerenderten speechRules-Block steht.
 const SPEECH_B1 = Object.freeze({
   de: "Kündige Inhalt genau einmal an und liefere ihn dann: Der Satz nach einer Ankündigung IST der Inhalt, keine zweite Ankündigung. Eine Handlung kündigst du nur an, solange wirklich gewartet wird oder ein Werkzeug läuft.",
   en: "Announce content exactly once, then deliver it: the sentence after an announcement IS the content, never a second announcement. You announce an action only while genuinely waiting or while a tool is running.",
@@ -77,32 +32,21 @@ const SPEECH_B2 = Object.freeze({
   fr: "Aucun crochet ni indication d'humeur ou de mise en scène dans le texte parlé : tout ce que tu écris est prononcé exactement tel quel. L'humeur passe uniquement par le choix des mots.",
 });
 
-// DE1: das Blatt am Agenten traegt NUR noch die dynamische Variable. Der frueher hier
-// stehende englische Byte-Pin schrieb den Defekt als SOLL fest: er war genau dann
-// gruen, wenn ein deutscher Anrufbeantworter den englischen Text hoert - dieselbe
-// falsche Haelfte, die 2026-08-17 schon beim Preset-Anwesenheitsverbot geschuetzt war.
 const VOICEMAIL_PLATZHALTER = "{{voicemail_line}}";
 const VOICEMAIL_OWNER = "Pin Testowner";
 const VOICEMAIL_GRUNDZEILE = "Ich rufe wegen einer Terminfrage an.";
 
-// Basis-Sprache des Agenten der Vorlage: ihr Satz steht in first_message, ein Preset fuer
-// sie waere eine zweite Kopie desselben Wortlauts (Bestandsmuster EL-START T5 e).
 const BASE_LANGUAGE = "en";
 
-// Pin-Marker des Aenderungswegs an den ST2-Besitz-Eintraegen: der Satz ist bewusst
-// identisch in beiden Eintraegen - er ist der R9-Riegel gegen Dashboard-Aenderungen am
-// gepinnten SOLL (siehe _besitz.felder, Eintraege soft_timeout_llm_filler/_filler_limit).
 const AENDERUNGSWEG_MARKER = "SOLL aendern NUR in dieser Vorlage";
 
 const template = () =>
   JSON.parse(readFileSync(new URL(`../${TEMPLATE_REL}`, import.meta.url), "utf8"));
 
-// In Stufen gelesen statt in einer Kette (G36/Demeter, Bestandsmuster el-prompt-kuerze).
 const masterPromptOf = (vorlage) => {
   const agentSection = vorlage.agent?.conversation_config?.agent ?? {};
   return agentSection.prompt?.prompt ?? "";
 };
-// In Stufen gelesen statt in einer Kette (G36/Demeter, im Lint dieses Repos ein Fehler).
 const softTimeoutConfig = (vorlage) => {
   const turn = vorlage.agent?.conversation_config?.turn ?? {};
   return turn.soft_timeout_config ?? {};
@@ -114,12 +58,9 @@ const besitzEintrag = (vorlage, feld) =>
 const overrideKarte = (vorlage) =>
   vorlage.platform_settings?.overrides?.conversation_config_override ?? {};
 
-// Neutraler Render der speechRules: settings ohne agentStyle -> styleClause faellt auf
-// die Neutral-Klausel, byte-stabil und ohne Store/Konfiguration.
 const speechRulesOf = (lang) =>
   LOCALES[lang].prompt.speechRules({ loc: LOCALES[lang], settings: {} });
 
-// In Stufen gelesen statt in einer Kette (G36/Demeter, im Lint dieses Repos ein Fehler).
 const presetFirstMessageOf = (preset) => {
   const override = preset?.overrides?.agent ?? {};
   return override.first_message ?? null;
@@ -131,10 +72,6 @@ const voicemailMessageOf = (agentSection) => {
   return params.voicemail_message ?? null;
 };
 
-// UNBERUEHRTHEIT der Art.-50-Felder (Pre-Mortem R1): eine Regel-Aenderung darf NIEMALS
-// an ihnen mitschleifen. Dieselbe Kette wie EL-START T5 (c)/(e): first_message und die
-// Presets sind die aus LOCALES zusammengesetzte Eroeffnung, der Schalter laesst den
-// Satz zu Ende sprechen, der Anrufbeantworter-Text ist der gepinnte Ist-Stand.
 const assertArt50FelderUnberuehrt = (vorlage) => {
   const conversationConfig = vorlage.agent.conversation_config;
   const agentSection = conversationConfig.agent;
@@ -158,8 +95,6 @@ const assertArt50FelderUnberuehrt = (vorlage) => {
     "voicemail_message darf am Agenten KEINEN gesprochenen Text mehr tragen - alles, was hier " +
       "statisch steht, kommt bei jedem nicht-englischen Anruf englisch heraus",
   );
-  // JE SPRACHE, wie first_message darueber: der komponierte Text beginnt byte-identisch
-  // mit LOCALES.<sprache>.disclosure (Artikel 50 EU AI Act, nicht uebersetzt, nicht gekuerzt).
   for (const sprache of LANGS) {
     const text = providerVoicemailMessage({
       locale: LOCALES[sprache],
@@ -187,10 +122,6 @@ const allNewRuleTexts = () => [
   ...LANGS.flatMap((lang) => [SPEECH_B1[lang], SPEECH_B2[lang]]),
 ];
 
-// EIN art-wert-Pin am soft_timeout_config (ST2, Owner-Entscheidung 4): Feldname, beide
-// Pfade exakt, keine Ausnahme (eine Ausnahme wuerde die Bewachung stumm schalten) und der
-// Aenderungsweg im Hinweis. Gemeinsamer Helfer fuer beide Eintraege - dieselbe Pruefung
-// doppelt zu schreiben hiesse, sie getrennt pflegen zu koennen (G5).
 const assertBesitzWertPin = (vorlage, feld, blatt) => {
   const eintrag = besitzEintrag(vorlage, feld);
   assert.ok(eintrag, `der Besitz-Eintrag "${feld}" fehlt in _besitz.felder`);
@@ -219,22 +150,16 @@ const assertBesitzWertPin = (vorlage, feld, blatt) => {
 test("[abgenommen AS1] ST0-Forensik im Befund-Doc - Drift-Exit-Code, Abweichungsfelder und [el-tags]-Trefferzahl stehen als Zahlen", () => {
   const befunde = readFileSync(new URL(`../${BEFUNDE_REL}`, import.meta.url), "utf8");
 
-  // Der gemessene Drift-Exit-Code steht als Zahl im Doc - nicht als "irgendwie rot".
   assert.match(
     befunde,
     /Exit-Code 1/,
     "der ST0-Driftlauf muss sein Ergebnis (Exit-Code 1) dokumentiert haben",
   );
 
-  // Die Felder, die der Driftlauf als Abweichung meldet, stehen namentlich im Doc -
-  // sonst ist die Zahl nicht zuordenbar.
   for (const feld of ["retention_days", "record_voice", "conversation_config_override"]) {
     assert.ok(befunde.includes(feld), `das Abweichungsfeld "${feld}" muss im Befund-Doc stehen`);
   }
 
-  // Positivkontrolle gegen ein entleertes Messwerkzeug: die Trefferzahl steht als
-  // geparste ZAHL da und ist >= 1 - ein leerer Rueckblick saehe hier wie "0 Treffer"
-  // aus, wenn das Doc nur Behauptungen ohne Zahl enthielte.
   const treffer = befunde.match(/Trefferzahl[^\n]*?:\s*(\d+)/);
   assert.ok(
     treffer,
@@ -249,8 +174,6 @@ test("[abgenommen AS1] ST0-Forensik im Befund-Doc - Drift-Exit-Code, Abweichungs
 test("[abgenommen AS2] Vorlage traegt B1-Regel, B2-Ergaenzung und neuen soft_timeout-Override - und die Art-50-Felder bleiben unberuehrt", () => {
   const vorlage = template();
 
-  // (a)+(b) die Regeln stehen im Master-Prompt (Substring, nicht Ganz-Feld: der Prompt
-  // traegt mehr als die Regeln).
   assert.ok(
     masterPromptOf(vorlage).includes(B1_RULE),
     "der Master-Prompt der Vorlage traegt die B1-Regel (Deliver content exactly once ...)",
@@ -260,14 +183,12 @@ test("[abgenommen AS2] Vorlage traegt B1-Regel, B2-Ergaenzung und neuen soft_tim
     "der Master-Prompt der Vorlage traegt die B2-Ergaenzung (Convey mood through word choice ...)",
   );
 
-  // (c) das Override-Feld ist GANZ ersetzt - exakte Gleichheit ist der staerkere Pin.
   assert.equal(
     softTimeoutOverrideOf(vorlage),
     OVERRIDE_NEU,
     "llm_generated_message_prompt_override muss exakt den neuen Wortlaut tragen (kein Ankündigen, kein Floskel-Verbot mehr)",
   );
 
-  // (d) Unberuehrtheit der Art.-50-Felder - eigene Helfer-Funktion direkt darueber.
   assertArt50FelderUnberuehrt(vorlage);
 });
 
@@ -286,12 +207,8 @@ test("[abgenommen AS3] alle drei i18n-speechRules (de/en/fr) tragen die B1-Zeile
 });
 
 test("[abgenommen AS4] keiner der neuen Regeltexte enthaelt ein eckiges Klammer-Zeichen", () => {
-  // Lehre 18.08.: ein Prompt-Verbot mit Klammer-BEISPIEL verlor gegen das Beispiel -
-  // deshalb darf KEIN neuer Regeltext auch nur ein "[" oder "]" enthalten.
   const texte = allNewRuleTexts();
 
-  // Positivkontrolle gegen ein entleertes Messwerkzeug: alle Kanon-Texte sind besetzt,
-  // sonst prueft bracketFree eine leere Menge und ist immer gruen.
   for (const text of texte) {
     assert.ok(
       text.length > 0,
@@ -303,8 +220,6 @@ test("[abgenommen AS4] keiner der neuen Regeltexte enthaelt ein eckiges Klammer-
     "mindestens ein Kanon-Text (Vorlage oder speechRules) enthaelt ein eckiges Klammer-Zeichen",
   );
 
-  // Zusaetzlich die GERENDERTEN Bloecke (Lehre: Beispiel schlaegt Regel - gezaehlt wird,
-  // was tatsaechlich im Prompt steht, nicht die Absicht) und der Override.
   for (const lang of LANGS) {
     assert.ok(
       bracketFree(speechRulesOf(lang)),
@@ -320,14 +235,9 @@ test("[abgenommen AS4] keiner der neuen Regeltexte enthaelt ein eckiges Klammer-
 test("[abgenommen AS5] Vorlage pinnt die zwei Filler-Stellschrauben als Besitz (Feldname, beide Pfade, SOLL-Wert, Aenderungsweg) und fuehrt die zwei LIVE-only Erlaubnis-Schluessel mit false", () => {
   const vorlage = template();
 
-  // (a) beide Stellschrauben sind als Besitz gepinnt: Feldname, art, beide Pfade exakt,
-  // keine Ausnahme, Aenderungsweg im Hinweis (der Pin-Marker fuer dieses Kriterium).
   assertBesitzWertPin(vorlage, "soft_timeout_llm_filler", "use_llm_generated_message");
   assertBesitzWertPin(vorlage, "soft_timeout_filler_limit", "max_soft_timeouts_per_generation");
 
-  // (b) die SOLL-Werte sind der am Live-Agenten gemessene Stand (Bewachung, nicht
-  // Korrektur) - SOLL == LIVE heisst: keine Schreib-Kandidaten, der spaetere ST2-Push
-  // schreibt nur die ST1-Regelfelder.
   assert.equal(
     softTimeoutConfig(vorlage).use_llm_generated_message,
     true,
@@ -339,9 +249,6 @@ test("[abgenommen AS5] Vorlage pinnt die zwei Filler-Stellschrauben als Besitz (
     "max_soft_timeouts_per_generation muss SOLL 1 tragen (LIVE-Messwert ST2)",
   );
 
-  // (c) Entscheidung 9: die zwei LIVE-only Schluessel stehen mit false in der Karte -
-  // Wert false heisst "nicht erlaubt", keine Erlaubnis wird erweitert (und die Karte
-  // ist damit kein Push-Kandidat mehr, SOLL == LIVE).
   assert.equal(
     overrideKarte(vorlage).tts.supported_voices,
     false,
@@ -357,8 +264,6 @@ test("[abgenommen AS5] Vorlage pinnt die zwei Filler-Stellschrauben als Besitz (
 test("[abgenommen AS6] Drift-Lauf Exit-Code 0 nach dem Push als 'ST2 Push-Protokoll' im Befund-Doc dokumentiert", () => {
   const befunde = readFileSync(new URL(`../${BEFUNDE_REL}`, import.meta.url), "utf8");
 
-  // Der Abschnitt entsteht erst mit dem echten Push - die Marker-Literale sind die
-  // Vorgabe an den, der den Push protokolliert (Bestandsmuster AS1: String-Checks).
   assert.match(
     befunde,
     /## ST2 Push-Protokoll/,
@@ -374,11 +279,6 @@ test("[abgenommen AS6] Drift-Lauf Exit-Code 0 nach dem Push als 'ST2 Push-Protok
   );
 });
 
-// ST4/ST5-Anteil (2026-09-04): AS10 ist Doc-Kriterium des Verifikationsanrufs und
-// bleibt BEWUSST ROT in der Abnahme-Bahn - der Anruf wurde per Owner-Entscheidung
-// 2026-09-04 nicht durchgefuehrt ("kein Testanruf"), die Kette sollte trotzdem
-// abgeschlossen werden; das Kriterium ist damit offen und nachholbar. AS11 (lessons)
-// ist gruen abgeliefert und direkt gewandert (ST1/ST2/ST3-Prezedenz).
 test("ABNAHME-AS10: Verifikationsanruf im Befund-Doc belegt - Marken 0, B1 ungemeldet, Hoer-Urteil | ROT WEIL: der Verifikationsanruf wurde nicht durchgefuehrt - Owner-Entscheidung 2026-09-04: kein Testanruf, Kette trotzdem abschliessen | FIX: Testanruf gemaess Protokoll (tasks/EL-STIMME-BEFUNDE.md ST0-3, place_call auf die eigene Nummer) nachholen und Abschnitt '## ST4 Verifikationsanruf' mit call-/conv-ID, 'Klammer-Marken in Agent-Zeilen: 0', 'B1: ungemeldet', 'Hoer-Urteil' und anonymisierter Fixture dokumentieren", () => {
   const befunde = readFileSync(new URL(`../${BEFUNDE_REL}`, import.meta.url), "utf8");
 
@@ -401,9 +301,6 @@ test("ABNAHME-AS10: Verifikationsanruf im Befund-Doc belegt - Marken 0, B1 ungem
   );
 });
 
-// ST5: die vier Kernsaetze der EL-Regel in tasks/lessons.md - deterministischer
-// Grep auf die Signatur-Phrasen (Aufgabenstellung AS11). Wer eine Phrase abschwächt,
-// macht diesen Test rot, bevor die Lehre unbemerkt verwaessert.
 test("[abgenommen AS11] lessons.md traegt die EL-Regel mit den VIER Kernsaetzen (Signatur-Phrasen)", () => {
   const lessons = readFileSync(new URL("../tasks/lessons.md", import.meta.url), "utf8");
   const signaturPhrasen = [

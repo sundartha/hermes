@@ -1,15 +1,3 @@
-// F2-Mail - planSummaryMail: reine Ziel-/Sende-Entscheidung fuer die Call-Summary-Mail
-// nach einem beendeten Anruf (Newsletter-Einwilligung + F2-Newsletter-Recipients Double-
-// Opt-in-Zusatzempfaenger). Offline-Unit-Test mit Fake-Store/Fake-Mailer/Fake-Accounts
-// (kein DB, kein Netz, F.I.R.S.T. - Muster f2-sms-summary-plan.test.js). Deckt ab:
-//   (a) Dedup-Marker gesetzt -> skip, KEIN reason
-//   (b) kein Mailer -> skip, reason=no_mailer
-//   (c) keine Summary -> skip, KEIN reason
-//   (d) keine Newsletter-Einwilligung UND keine Zusatzempfaenger -> skip, KEIN reason
-//   (e) Einwilligung, aber keine Konto-E-Mail UND keine Zusatzempfaenger -> reason=no_account_email
-//   Positivfall Konto: alles vorhanden -> send=true, EIN Ziel = Konto-E-Mail, unsubToken=null
-//   F2-Newsletter-Recipients: CONFIRMED-Zusatzempfaenger sind ORTHOGONAL zum Boolean-Consent
-//   (Consent=false + bestaetigte Zusatzempfaenger -> trotzdem send=true, NUR die Zusatzziele)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { planSummaryMail } from "../src/mail-summary.js";

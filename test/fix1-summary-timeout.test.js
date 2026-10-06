@@ -1,12 +1,3 @@
-// FIX-1 Teil 1: die Gespraechs-Zusammenfassung fuehrt ihren EIGENEN Per-Request-Timeout
-// mit (config.llm.summaryTimeoutMs), nicht den Sprechpfad-Timeout (llmRequestTimeoutMs).
-// Gemessen wird am echten Pfad: ein lokaler HTTP-Mock verzoegert die Antwort so, dass sie
-// unter dem Sprechpfad-Timeout SICHER stirbt und unter dem Zusammenfassungs-Timeout SICHER
-// durchkommt. Rotprobe (Spec): summaryLlm zurueck auf llmRequestTimeoutMs biegen -> FIX1-1 rot.
-//
-// Rein in-process (kein Server-Spawn, kein pglite) - dieselbe Naht wie
-// test/c1-auftragstreue.test.js: ANTHROPIC_BASE_URL + DATA_DIR vor dem ersten
-// config-Import setzen, dann dynamischer Import der reinen Funktionen.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -22,10 +13,10 @@ const TRANSCRIPT = [
   { role: "caller", text: "Ja, gerne morgen Vormittag." },
 ];
 
-const SPEECH_PATH_TIMEOUT_MS = 50; // absichtlich winzig: nur so ist der Beweis scharf
+const SPEECH_PATH_TIMEOUT_MS = 50;
 const SUMMARY_TIMEOUT_MS = 1200;
-const MOCK_FAST_DELAY_MS = 400; // > 50 (Sprechpfad tot), << 1200 (Zusammenfassung lebt)
-const MOCK_SLOW_DELAY_MS = 3000; // > 1200 -> auch die eigene Frist greift wirklich
+const MOCK_FAST_DELAY_MS = 400;
+const MOCK_SLOW_DELAY_MS = 3000;
 
 const MOCK_DECISION = { summary: "Rueckruf vereinbart.", actionItems: [], objective_achieved: true };
 
@@ -42,7 +33,7 @@ function anthropicMessage() {
   };
 }
 
-let mode = "fast"; // "fast" | "slow"
+let mode = "fast";
 let server;
 const pending = new Set();
 let summarizeCall, store, LlmUnavailableError;
@@ -52,11 +43,10 @@ before(async () => {
     let body = "";
     req.on("data", (d) => (body += d));
     req.on("end", () => {
-      body; // Body wird nicht gebraucht (Prompt-Grounding ist nicht Gegenstand dieses Tests)
+      body;
       const delay = mode === "slow" ? MOCK_SLOW_DELAY_MS : MOCK_FAST_DELAY_MS;
       const timer = setTimeout(() => {
         pending.delete(timer);
-        // Nach einem SDK-Abort darf nicht auf einen toten Socket geschrieben werden.
         if (res.writableEnded || res.destroyed) return;
         res.setHeader("content-type", "application/json");
         res.end(JSON.stringify(anthropicMessage()));
@@ -66,9 +56,6 @@ before(async () => {
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
 
-  // Env VOR dem ersten config-Import: Sprechpfad-Timeout winzig, Zusammenfassungs-Timeout
-  // im mittleren Fenster, kein Backoff-Wartezeit, Breaker praktisch nie offen (Test-
-  // Reihenfolge-Unabhaengigkeit, Muster cq-p8).
   process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${server.address().port}`;
   process.env.ANTHROPIC_API_KEY = "test-fix1-key";
   process.env.LLM_REQUEST_TIMEOUT_MS = String(SPEECH_PATH_TIMEOUT_MS);

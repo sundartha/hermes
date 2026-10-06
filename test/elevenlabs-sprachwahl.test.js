@@ -1,42 +1,3 @@
-// Sprach-, Stimm- und Offenlegungswahl pro Nutzer - Bestand pinnen, SOLL festnageln.
-//
-// EIGENTUEMER-VORGABE (bindend): nicht jeder Nutzer bekommt eine amerikanische Stimme.
-// Deutscher Nutzer -> deutsches Modell und deutsche Stimme. Franzoesisch analog. Sonst
-// Englisch. Diese Logik EXISTIERT BEREITS und laeuft live auf dem Telnyx-Pfad; sie ist
-// Bestand, kein Wunsch - und genau die Sorte Regel, die beim Abriss lautlos verschwindet,
-// weil sie im neuen Pfad kein Kriterium hat. Diese Datei gibt ihr eines, BEVOR am alten
-// Pfad etwas abgerissen wird.
-//
-// ZWEI BAENKE, zwei Aussagen:
-//
-// Bestandspfad (Regressionsschutz, "npm test", GRUEN): die Aufloesungskette des heutigen
-//   Pfades ist gepinnt - resolveCallLanguage (src/store/state-ops.js, Praezedenz
-//   Spracheinstellung > Nummern-Geo > Tenant-Default aus der Herkunft > Weltdefault),
-//   daraus das Stimmprofil (LOCALES.<sprache>.voiceProfile), daraus die ElevenLabs-Stimme
-//   (elevenLabsVoiceIdFor) und der Offenlegungssatz (LOCALES.<sprache>.disclosure). Wer
-//   diese Kette im Zuge des Umbaus entfernt, macht diesen Test rot - das ist der Zweck.
-//   Kein Abnahmekriterium: der Zustand gilt heute schon, sein Wegfall waere eine
-//   Regression.
-//
-// [abgenommen G2] (frueher ABNAHME-G2, gruen seit 2026-08-17, s.
-//   test/abnahme-ausgewandert.json): derselbe Nutzer, ueber den ElevenLabs-Anrufstart
-//   gefuehrt, bekommt dasselbe. Die Naht dafuer ist src/elevenlabs/call-locale.js - sie
-//   loest die Sprache mit derselben resolveCallLanguage auf wie der Bestandspfad und
-//   liefert daraus Sprache, ElevenLabs-Stimme und Offenlegungssatz des Anrufstarts.
-//   VORHER war der Weg fest englisch: agent.language stand als Fixwert "en" am Agenten,
-//   die Stimme kam ungefragt aus dem Dashboard, und src/elevenlabs/outbound.js verdrahtete
-//   den englischen Offenlegungs-Ausdruck fest (DISCLOSURE_OWNER_FALLBACK_EN). Der
-//   Weltdefault Englisch war damit nicht umgesetzt, sondern ueberdehnt: er galt fuer jeden,
-//   statt nur fuer den, der keine Sprache gesetzt hat. Ab jetzt haelt "npm test" diesen
-//   Zustand fest.
-//
-// KONFIGURATIONSTEST, KEIN ANRUF: kein Netz, kein Konto, keine Attrappe, kein Server.
-// Geprueft wird ausschliesslich, was der Anrufstart aus dem gespeicherten Zustand eines
-// Tenants ABLEITET - genau die Ebene, auf der die Regel beim Umbau verloren geht.
-//
-// Testnamen: beide Faelle tragen die Abnahme-Kennung NICHT (der ausgewanderte traegt
-// stattdessen sein Siegel) - so laeuft jeder im Regressionslauf und keiner doppelt (Lehre
-// catalog-id-prefix-misroutes-tests).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -47,26 +8,12 @@ import { elevenLabsVoiceIdFor } from "../src/telephony/adapters/telnyx/elevenlab
 
 const OWNER_NAME = "Owen Barrett";
 
-// Die global konfigurierte Plattform-Stimme (TELNYX_ELEVENLABS_VOICE_ID) als Testwert.
-// SEIT 2026-08-18 hat Deutsch eine EIGENE kuratierte Stimme (s.u.), dieser Wert ist damit
-// der Rueckfall fuer ein Profil OHNE eigenen Eintrag. Er bleibt bewusst frei gewaehlt und
-// von allen drei Stimm-IDs verschieden: taucht er in einem der drei Faelle auf, ist eine
-// kuratierte Stimme verlorengegangen - genau der Defekt, den Anruf 7 hoerbar machte
-// (deutsches Gespraech in einer amerikanischen Stimme, weil DE keinen Eintrag hatte).
 const PLATFORM_VOICE_ID = "plattform-stimme-test";
 
 const TENANT_DE = "tenant-herkunft-de";
 const TENANT_FR = "tenant-einstellung-fr";
 const TENANT_OHNE_SPRACHE = "tenant-ohne-sprache";
 
-// Stimmprofile und ElevenLabs-Stimm-Kennungen stehen hier als LITERALE, nicht als Import
-// aus LOCALES/ELEVENLABS_VOICE_ID_BY_PROFILE. Beide Seiten aus derselben Quelle zu ziehen
-// koennte ein Auseinanderlaufen nicht sehen (dieselbe Begruendung wie beim Werkzeugnamen
-// in test/elevenlabs-agent-werkzeuge.test.js). Die IDs sind bindende Eigentuemer-Daten
-// (Owner-Entscheidung 2026-08-18, vom Eigentuemer selbst angehoert), kein
-// Konfigurationswert. ALLE DREI Sprachen tragen jetzt eine eigene Stimme - Deutsch fiel
-// bis dahin auf die Plattform-Stimme zurueck und damit, wenn die nicht gesetzt war, auf
-// die Dashboard-Stimme des Agenten.
 const VOICE_PROFILE_DE = "de-female-neural";
 const VOICE_PROFILE_FR = "fr-female-neural";
 const VOICE_PROFILE_EN = "en-female-neural";
@@ -74,18 +21,8 @@ const VOICE_ID_DE = "cqPdIo76zSHFDcSZpFov";
 const VOICE_ID_FR = "WeAAwKYcS06VmXw086yZ";
 const VOICE_ID_EN = "ZSNL4hPqCnqoMPaI4jGX";
 
-// Die drei Faelle der Eigentuemer-Vorgabe. Jeder greift eine ANDERE Stufe der
-// Praezedenzkette an - drei Faelle, die alle ueber dieselbe Stufe liefen, wuerden die
-// Kette nicht vermessen.
-//
-// Der Zustand kommt je Fall FRISCH aus einer Fabrik: settingsFor(s, tenantId) legt den
-// Settings-Bucket lazy an (Bestandsverhalten), ein geteiltes Objekt truege also nach dem
-// ersten Fall fremde Spuren.
 const CASES = Object.freeze([
   {
-    // Stufe "Tenant-Default aus der Herkunft": der Tenant traegt, was der Eintrittspfad
-    // aus seinem Land geschrieben hat (tenantGeoForCountry, src/geo/resolve.js). Keine
-    // eigene Spracheinstellung, keine Nummer - allein die Herkunft entscheidet.
     name: "Herkunft Deutschland, keine eigene Spracheinstellung",
     tenantId: TENANT_DE,
     stateOf: () => ({
@@ -98,9 +35,6 @@ const CASES = Object.freeze([
     disclosureStart: "Guten Tag,",
   },
   {
-    // Stufe "Spracheinstellung": sie steht VOR der Herkunft. Deshalb ist die Herkunft hier
-    // bewusst US - der Fall belegt, dass die gesetzte Sprache das Land ueberstimmt, statt
-    // nur ein zweites Mal dieselbe Stufe zu messen wie oben.
     name: "Spracheinstellung Franzoesisch schlaegt die Herkunft",
     tenantId: TENANT_FR,
     stateOf: () => ({
@@ -113,8 +47,6 @@ const CASES = Object.freeze([
     disclosureStart: "Bonjour,",
   },
   {
-    // Stufe "Weltdefault": nichts gesetzt - keine Spracheinstellung, keine Nummer, kein
-    // Tenant-Default. GENAU dieser Fall ist der Geltungsbereich der Englisch-Regel.
     name: "keine Sprache gesetzt",
     tenantId: TENANT_OHNE_SPRACHE,
     stateOf: () => ({ tenants: [{ id: TENANT_OHNE_SPRACHE }], settings: {} }),
@@ -125,9 +57,6 @@ const CASES = Object.freeze([
   },
 ]);
 
-// Die Sprache, die der BESTANDSPFAD fuer diesen Fall aufloest - die eine Quelle, gegen die
-// beide Baenke messen. numberRecord bleibt weg: keiner der drei Faelle haengt an der
-// Nummern-Geo-Stufe.
 const bestandsSpracheFor = (kase) =>
   resolveCallLanguage(kase.stateOf(), { tenantId: kase.tenantId, numberRecord: null });
 
@@ -140,9 +69,6 @@ function alleZweierPaare(liste) {
   return paare;
 }
 
-// Die drei Merkmale muessen sich PAARWEISE unterscheiden, sonst ist jede Pruefung darunter
-// wertlos: waere die deutsche Stimme dieselbe wie die englische, bestuende ein Pfad, der
-// stur englisch spricht, den Test (Lehre pruefkommando-ohne-positiv-kontrolle).
 function assertUnterscheidbar(werteJeFall, merkmal) {
   for (const [links, rechts] of alleZweierPaare(werteJeFall))
     assert.notEqual(
@@ -180,7 +106,6 @@ test("Bestandspfad Sprachwahl: Herkunft und Spracheinstellung des Nutzers bestim
     );
   }
 
-  // Positiv-Kontrolle: die drei Faelle sind in allen drei Merkmalen unterscheidbar.
   assertUnterscheidbar(merkmalJeFall(bestandsSpracheFor), "die Sprache");
   assertUnterscheidbar(
     merkmalJeFall((kase) => elevenLabsVoiceIdFor(PLATFORM_VOICE_ID, kase.voiceProfile)),
@@ -192,18 +117,6 @@ test("Bestandspfad Sprachwahl: Herkunft und Spracheinstellung des Nutzers bestim
   );
 });
 
-// Die NAHT, die G2 verlangt - hier VOR dem Bau gepinnt, wie R16 die Naht
-// outboundAgentConfigFor gepinnt hat (test/elevenlabs-agent-werkzeuge.test.js).
-//   ORT: src/elevenlabs/ - dort liegt der Anrufstart, der die Werte braucht
-//     (outbound.js). Eine zweite Aufloesung in src/telephony/ waere eine zweite Wahrheit.
-//   EINGABE: der Store-Zustand und der Tenant, NICHT eine fertige Sprache - sonst haette
-//     der neue Pfad eine eigene Praezedenzkette neben resolveCallLanguage, und genau die
-//     Doppelung ist der Weg, auf dem die Regel still auseinanderlaeuft. defaultVoiceId
-//     kommt herein statt aus config gelesen zu werden (DIP, wie bei elevenLabsVoiceIdFor):
-//     Deutsch hat keine eigene ElevenLabs-Kennung, seine Stimme IST die Plattform-Stimme.
-//   RUECKGABE: { language, voiceId, firstMessage }. firstMessage heisst wie das Feld des
-//     Anbieters, an dem die Offenlegung haengt. Weitere Felder darf die Naht liefern,
-//     dieser Test liest nur diese drei.
 const SEAM = Object.freeze({
   module: "../src/elevenlabs/call-locale.js",
   export: "callLocaleFor",
@@ -230,9 +143,6 @@ async function callLocaleSeam() {
 }
 
 test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers - Deutsch mit deutscher Stimme und deutschem Offenlegungssatz fuer einen deutschen Nutzer, Franzoesisch analog, Englisch fuer jeden ohne gesetzte Sprache", async () => {
-  // 1. Positiv-Kontrolle: der Bestandspfad misst in alle drei Richtungen und ist in allen
-  //    drei Merkmalen unterscheidbar. Ohne sie waere ein stur englischer Pfad von einem
-  //    richtig aufloesenden nicht zu unterscheiden.
   for (const kase of CASES)
     assert.equal(bestandsSpracheFor(kase), kase.language, `Bestands-Aufloesung "${kase.name}"`);
   assertUnterscheidbar(
@@ -244,7 +154,6 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
     "der Offenlegungssatz",
   );
 
-  // 2. Die eigentliche Pruefung, alle drei Faelle ueber dieselbe Naht.
   const resolveLocale = await callLocaleSeam();
   for (const kase of CASES) {
     const gewaehlt = resolveLocale(kase.stateOf(), {
@@ -266,11 +175,6 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
         "Bestandspfad, elevenLabsVoiceIdFor) - sonst spricht der Agent Deutsch mit " +
         "amerikanischer Stimme.",
     );
-    // Seit 18.08.2026 traegt firstMessage die GANZE Eroeffnung (Offenlegung + Grund-Zeile
-    // (die Frage reist seit GQ-E1 im Wert), s. call-locale.js providerOpening). Was
-    // DIESER Fall misst, ist unveraendert:
-    // dass der Offenlegungssatz der SPRACHWAHL folgt - deshalb der Anfang, byte-genau.
-    // Dass die Eroeffnung als Ganzes zum Code passt, misst T5 (c)/(e) gegen die Vorlage.
     assert.ok(
       gewaehlt?.firstMessage?.startsWith(disclosureFor(kase.language)),
       `Fall "${kase.name}": der Offenlegungssatz kommt WOERTLICH aus ` +
@@ -280,40 +184,11 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
   }
 });
 
-// ---- Vorrang des ANGERUFENEN (17.08.2026) --------------------------------------------
-// Die Faelle oben messen alle dieselbe Frage: welche Sprache spricht der AUFTRAGGEBER.
-// Fertig-Punkt 10 stellt eine andere: in welcher Sprache muss die Offenlegung ANKOMMEN.
-// Beide fallen nur zusammen, solange jemand im eigenen Land anruft.
-//
-// WARUM DIESER FALL EXISTIERT, gemessen und nicht ausgedacht: der lokale Stand traegt
-// tenant.defaultLanguage "fr" (Herkunft FR) und eine US-Nummer ohne eigenen Sprachanker.
-// Ein Anruf an eine deutsche Mobilnummer haette danach auf FRANZOESISCH begonnen - nach
-// der alten Regel voellig richtig aufgeloest und trotzdem der falsche erste Satz.
-//
-// DREI RICHTUNGEN, weil "gewinnt immer" genauso falsch waere wie "gewinnt nie":
-//   (1) belegbares Land des Angerufenen -> es gewinnt, auch gegen eine gesetzte
-//       Spracheinstellung des Auftraggebers;
-//   (2) NICHT belegbares Land (+1 teilen 25 NANP-Laender) -> die Auftraggeber-Kette gilt
-//       unveraendert weiter.
-//
-// EIN DRITTER FALL WIRD HIER NICHT GEMESSEN, und das ist eine Messung, keine Luecke:
-// "Land belegbar, aber ohne Sprachzuordnung" ist heute NICHT ERREICHBAR. Die Vorwahl-
-// Tabelle (CALLING_CODE_FOR_COUNTRY, src/store/defaults.js) und die Sprachkarte
-// (LANGUAGE_FOR_COUNTRY, src/i18n/locales.js) fuehren exakt dieselben sechs Laender - am
-// 2026-08-17 durchprobiert: +49/+33/+44/+41/+43/+353 loesen auf, +39/+34/+31/+48/+46
-// liefern schon kein Land. Ein Testfall dafuer waere blind gruen: er kann nicht
-// unterscheiden, ob der Rueckfall richtig gebaut ist. Der Guard in call-locale.js liest
-// die Sprachkarte trotzdem direkt statt ueber languageForCountry - er ist fuer den Tag
-// gebaut, an dem die Tabellen auseinandergehen (ein neues Land in der Vorwahl-Tabelle
-// ohne Sprachzuordnung), und genau dann wird der Fall messbar.
 const ZIEL_DE = "+491737252163";
 const ZIEL_NANP = "+18643028341";
 
 test("Sprachwahl EL: die Sprache des ANGERUFENEN gewinnt, wenn seine Nummer sie belegt - sonst gilt die Auftraggeber-Kette unveraendert", async () => {
   const resolveLocale = await callLocaleSeam();
-  // Der Auftraggeber-Fall, gegen den gemessen wird: Spracheinstellung Franzoesisch. Er
-  // ist die staerkste Stufe der alten Kette - wer den Vorrang gegen die SCHWAECHSTE
-  // Stufe zeigt, hat nichts gezeigt.
   const kase = CASES.find((fall) => fall.language === "fr");
   const locale = (to) =>
     resolveLocale(kase.stateOf(), {
@@ -324,18 +199,12 @@ test("Sprachwahl EL: die Sprache des ANGERUFENEN gewinnt, wenn seine Nummer sie 
       to,
     });
 
-  // P4a (F-2 Punkt 2): die GESPRAECHSSPRACHE folgt seit dieser Phase dem Sprachwunsch des
-  // Auftraggebers (hier: keiner gesetzt -> Auftraggeber-Kette), NICHT mehr dem Land des
-  // Angerufenen - genau die Umkehrung, die F-2 verlangt (ein portugiesischer Auftrag an
-  // eine deutsche Nummer soll das Gespraech auf Portugiesisch fuehren koennen).
   assert.equal(
     locale(ZIEL_DE).language,
     kase.language,
     "die GESPRAECHSSPRACHE folgt seit F-2 dem Auftraggeber, nicht mehr dem Land des " +
       "Angerufenen - das ist die von F-2 Punkt 2 verlangte Umkehrung",
   );
-  // Die OFFENLEGUNGSSPRACHE bleibt UNVERAENDERT die Sprache des Angerufenen (E-2) - diese
-  // Zusicherung ist der Beleg, dass P4a die Offenlegung in KEINEM Fall lockert.
   assert.equal(
     locale(ZIEL_DE).disclosureLanguage,
     "de",

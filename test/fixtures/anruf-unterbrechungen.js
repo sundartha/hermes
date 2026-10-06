@@ -1,28 +1,3 @@
-// ---- ECHTE Anbieter-Antworten als Fixtures: Unterbrechungs-Messung (P6) ----------------
-// Aufgezeichnet am 06.09.2026 rein LESEND gegen api.elevenlabs.io
-// (GET /v1/convai/conversations/{id}) fuer die drei in PLAN-ANRUFDEFEKTE.md (W6, P6)
-// belegten Anrufe. Kein Wert ist erfunden.
-//
-// ALLOWLIST STATT DENYLIST (fail-closed, Absolute Regel 4/5): uebernommen sind AUSSCHLIESSLICH
-// conversation_id, metadata.call_duration_secs und je Turn role / time_in_call_secs /
-// interrupted / message / original_message. Alles andere der Rohantwort - Analyse,
-// dynamische Variablen (Auftrag, Briefing), Werkzeug-Aufrufe und -Ergebnisse (Fragetext!),
-// metadata.phone_call (Rufnummern) - ist NICHT uebernommen.
-//
-// TEXT IST ERSETZT, LAENGE IST ECHT: jeder Sprechtext steht als laengengleiche
-// Platzhalterkette ("x".repeat(n)). Die Kennzahl dieser Phase haengt ausschliesslich an den
-// LAENGEN (len(message)/len(original_message)) und an interrupted - beides ist unveraendert
-// echt. Gespraechsinhalt gehoert nicht ins Repo.
-//
-// Diese Datei ist die POSITIV-KONTROLLE des Messwerkzeugs: sie darf nicht an das Werkzeug
-// angepasst werden. Weicht eine Zahl ab, ist das Werkzeug falsch (Lehre
-// pruefkommando-ohne-positiv-kontrolle).
-//
-// Erwartete Kennzahlen, unabhaengig aus der Rohantwort nachgerechnet (Lead, 06.09.2026):
-//   laut_12_44      7 Agenten-Turns, 6 unterbrochen, Anteile 56,7 / 65,7 / 86,3 / 35,5 / 21,4 / 85,4 %
-//   kontrolle_10_26 6 Agenten-Turns, 1 unterbrochen, Anteil 98,7 % (607/615); 4 davon mit Text
-//   referenz_03_09  7 Agenten-Turns, 2 unterbrochen, Anteile 52,5 % (63/120) und 96,7 %
-
 export const UNTERBRECHUNGS_FIXTURES = {
   "laut_12_44": {
     "conversation_id": "conv_0501m1vbz70bfpctff3th2h2htrc",

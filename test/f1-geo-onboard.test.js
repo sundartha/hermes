@@ -1,21 +1,3 @@
-// F1 Geo-Location (Phase 6) - Onboard-Wiring: Land/Sprache bei der Registrierung
-// landen auf tenant (country/defaultLanguage) UND number-Request (country/language).
-// Die pg-Persistenz DERSELBEN Felder ist in f1-geo-store.test.js (pglite-Roundtrip)
-// abgedeckt (R12: beide Backends ueber die Suite).
-//
-// Der IP-Geo-VORSCHLAG laeuft im Default (GEO_ENABLED aus) ueber den Null-Adapter und
-// der maxmind-Adapter ist heute fail-safe null (Dep-Regel) - der IP->Land-Pfad ist
-// daher per Stub UNIT-getestet (resolveOnboardCountry/makeStubGeoLookup in
-// f1-geo-port.test.js). Hier wird der AUTORITATIVE User-Override (body.country) end-to-
-// end persistiert und der Fallback-Pfad (kein body.country -> DE/de byte-identisch).
-//
-// AUTH-P6: /api/onboard ist seither eine Betreiber-Route (webAuthMw+adminMw, nur MIT
-// operatorAuth gemountet) - ein echter Spawn-Server (json/kein SESSION_SECRET) mountet
-// sie darum gar nicht mehr. Migriert auf In-Process-Mount von makeOnboardRoutes (Muster
-// onboarding-route.test.js). Die vormaligen Env-Schalter (GEO_ENABLED,
-// PROVISIONING_COUNTRY, FORCE_NUMBER_COUNTRY) werden zu Feldern des Config-Doubles.
-// Router pro Test frisch gebaut (nicht pro Datei) - geoLookupAdapter() wird bei der
-// Router-Konstruktion in makeOnboardRoutes gebaut.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -25,13 +7,6 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import { DEFAULT_COUNTRY, setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
 
-// BASE_ENV pinnte WORLD_DEFAULT_LANGUAGE_ENABLED=true (Spawn-Server, s. Bestand). Ohne
-// Spawn liest config.js beim Import den PROZESS-ECHTEN Env-Wert (hier unbekannt/unset)
-// und drueckt ihn beim Laden EINMAL in defaults.js (setWorldDefaultLanguageEnabled,
-// Wiring-Kommentar dort) - der Code-Default "en" wuerde dadurch sonst still auf "de"
-// zurueckfallen. Direkt gesetzt (dieselbe Funktion, die config.js beim Boot ruft):
-// keine Env-Var-vor-Import-Choreografie noetig (Muster
-// test/p10-world-default-language-switch.test.js, Achse A).
 setWorldDefaultLanguageEnabled(true);
 
 function onboardConfig(overrides = {}) {
@@ -84,7 +59,6 @@ const postJson = (app, body) =>
     body: JSON.stringify(body),
   });
 
-// User-Wahl (body.country=FR) ist autoritativ (R4): FR/fr landen auf Tenant + Number.
 test("Onboard mit body.country=FR -> tenant.country/defaultLanguage UND number.country/language = FR/fr", async () => {
   const app = await startOnboardApp();
   try {
@@ -105,7 +79,6 @@ test("Onboard mit body.country=FR -> tenant.country/defaultLanguage UND number.c
   }
 });
 
-// GB -> en (zweite Sprache, beweist die generische Tabelle ueber DE/FR hinaus).
 test("Onboard mit body.country=GB -> en (country->language-Tabelle generisch)", async () => {
   const app = await startOnboardApp();
   try {
@@ -120,11 +93,6 @@ test("Onboard mit body.country=GB -> en (country->language-Tabelle generisch)", 
   }
 });
 
-// LANG-23 (tasks/i18n-tests/01-sprachaufloesung.md, Nebenlaeufigkeit): zwei gleichzeitige
-// Onboardings duerfen sich nicht vermischen. registerTenant -> setTenantGeo ->
-// requestNumber -> save laufen in EINEM withStoreLock-Abschnitt ohne fremdes await
-// dazwischen (src/store.js, src/routes/api-onboard.js). Promise.all statt sequenziell -
-// sequenziell wuerde die Invariante gar nicht beruehren.
 test("LANG-23 (Mechanismus, gruen) - parallele Onboards bleiben isoliert (kein Geo-/Sprach-Mix)", async () => {
   const app = await startOnboardApp();
   try {
@@ -151,12 +119,6 @@ test("LANG-23 (Mechanismus, gruen) - parallele Onboards bleiben isoliert (kein G
   }
 });
 
-// LAW-22 (tasks/i18n-tests/09-recht-und-compliance.md, Nebenlaeufigkeit): zwei
-// gleichzeitige US-Onboards. Abgrenzung zu LANG-23 daneben (kein Duplikat, G5): dort
-// verschiedene Laender - der Sprach-Mix ist die Sonde. Bei IDENTISCHEM Land waere ein
-// Cross-Talk in der Sprache gar nicht sichtbar; die pruefbare Isolation ist hier die
-// RECORD-Identitaet (zwei Tenants, zwei verschiedene Nummern, kein Ueberschreiben).
-// R-G: die Katalog-Erwartung "je isoliert DE-Sprache" ist seit P10 falsch - US -> "en".
 test("LAW-22 (Mechanismus, gruen) - zwei parallele US-Onboards bleiben isoliert (je US/en, eigene Nummer)", async () => {
   const app = await startOnboardApp();
   try {
@@ -183,7 +145,6 @@ test("LAW-22 (Mechanismus, gruen) - zwei parallele US-Onboards bleiben isoliert 
   }
 });
 
-// Geo aus (Default) + kein body.country -> Fallback DE/de (byte-identisch zum Bestand).
 test("Onboard ohne country (Geo aus) -> Fallback DE/de (byte-identisch)", async () => {
   const app = await startOnboardApp();
   try {
@@ -200,8 +161,6 @@ test("Onboard ohne country (Geo aus) -> Fallback DE/de (byte-identisch)", async 
   }
 });
 
-// Ungueltiges/gespooftes country-Feld -> ignoriert, fail-safe Fallback DE (kein Muell
-// im Store, keine Allowlist-Lockerung). Beweist: nichts Autoritatives durch Eingabe-Muell.
 test("Onboard mit ungueltigem country -> ignoriert, Fallback DE/de (fail-safe)", async () => {
   const app = await startOnboardApp();
   try {
@@ -215,8 +174,6 @@ test("Onboard mit ungueltigem country -> ignoriert, Fallback DE/de (fail-safe)",
   }
 });
 
-// PROVISIONING_COUNTRY als Fallback (ohne body.country, Geo aus): Onboard erbt das
-// konfigurierte Land statt hart DE. Beweist die Praezedenz-Stufe config-Fallback.
 test("Onboard ohne country erbt PROVISIONING_COUNTRY (Fallback-Stufe) -> FR/fr", async () => {
   const app = await startOnboardApp({ config: onboardConfig({ provisioningCountry: "FR" }) });
   try {
@@ -229,10 +186,6 @@ test("Onboard ohne country erbt PROVISIONING_COUNTRY (Fallback-Stufe) -> FR/fr",
   }
 });
 
-// Beleg: src/routes/api-onboard.js:141-152,168,172-173; src/i18n/locales.js:268-280;
-// tasks/i18n-tests/06-nummern-provisioning.md ("DID-02"). A3-Migration (P10): US ist
-// nicht eigens in LANGUAGE_FOR_COUNTRY eingetragen (bewusst) - der Weltdefault traegt
-// US mit (languageForCountry("US") -> "en").
 test("Onboard mit body.country=US -> tenant/number.language = 'en' (ueber den Weltdefault) (ex DID-02)", async () => {
   const app = await startOnboardApp();
   try {
@@ -253,16 +206,6 @@ test("Onboard mit body.country=US -> tenant/number.language = 'en' (ueber den We
   }
 });
 
-// FORCE_NUMBER_COUNTRY=US: das KAUF-Land ist entkoppelt vom Herkunftsland. Ein DE-User
-// bekommt eine US-Nummer (number.country=US), aber die Sprache bleibt am Herkunftsland
-// (de): number.language=de, tenant.country/defaultLanguage=DE/de (Quelle fuer Sprache/
-// Analytics). Beweist: Geo-/Sprach-Erkennung bleibt aktiv, nur die Kauf-Land-Wahl wird
-// neutralisiert. Laufzeit-Sprache liest number.language (resolveCallLanguage) -> de.
-//
-// Traegt zugleich LANG-06 des i18n-Launch-Testkatalogs (Welle W1, Mechanismus/gruen,
-// Spezifikation in tasks/i18n-tests/01-sprachaufloesung.md): US-DID plus de-Sprache bleibt
-// gepinnt, damit die bewusste Entkopplung von Kauf-Land und Sprache nicht lautlos kippt.
-// Deshalb EINMAL hier (G5) statt als zweite Fassung in einer eigenen Datei.
 test("FORCE_NUMBER_COUNTRY=US: number.country US, Sprache + tenant am Herkunftsland (DE)", async () => {
   const app = await startOnboardApp({ config: onboardConfig({ forceNumberCountry: "US" }) });
   try {

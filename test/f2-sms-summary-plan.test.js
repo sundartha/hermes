@@ -1,10 +1,3 @@
-// F2 P7 - planSummarySms: reine Ziel-/Sende-Entscheidung fuer die Summary-SMS nach
-// einem Inbound-Call. Offline-Unit-Test mit Fake-Store (kein DB, kein Netz, F.I.R.S.T.).
-// Deckt die Sicherheits-Invarianten ab:
-//   - alles vorhanden -> send, Ziel = private Nummer des Call-Tenants
-//   - H3: Ziel IMMER ueber call.tenantId, nie eine fremde Nummer
-//   - kein Ziel -> skip + reason=no_private_number (M4: kein Crash, PII-frei auditierbar)
-//   - Opt-Out (smsSummaryOptIn=false) / Feature-Schalter aus / kein Absender -> skip, KEIN reason
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { planSummarySms } from "../src/sms-summary.js";
@@ -13,8 +6,6 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const PROV = PROVIDER.TELNYX;
 
-// Fake-Store: pro Tenant privateNumber (Ziel), sender (aktive Absender-Nummer) und optIn.
-// Bildet exakt die drei Reads ab, die planSummarySms macht (Vertrag dokumentiert).
 function makeStore(tenants) {
   const numbers = [];
   for (const [tenantId, t] of Object.entries(tenants))
@@ -24,13 +15,10 @@ function makeStore(tenants) {
     tenantPrivateNumber: (id) => tenants[id]?.privateNumber ?? null,
     load: () => ({ numbers }),
     tenantContext: (id) => ({ settings: { smsSummaryOptIn: tenants[id]?.optIn ?? true } }),
-    // F2 P8: Tages-Cap-Zaehler (default 0 = Cap nicht erreicht -> send-Pfad unveraendert).
     dailySmsCount: (id) => tenants[id]?.smsCount ?? 0,
   };
 }
 const call = (tenantId) => ({ id: `call_${tenantId}`, tenantId, provider: PROV });
-// PA-10: dailySmsCap muss numerisch sein (fail-closed-Guard); 20 = Prod-Default, der
-// Fake-Store liefert dailySmsCount 0 -> der Send-Pfad bleibt unveraendert.
 const cfg = (sendSmsSummary = true) => withConfigNamespaces({ sendSmsSummary, dailySmsCap: 20 });
 
 test("alles vorhanden -> send=true, Ziel = private Nummer des Call-Tenants", () => {

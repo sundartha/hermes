@@ -1,15 +1,3 @@
-// F2 P10 - DSGVO Export/Erase fuer die private Summary-Nummer (privateNumber). Die
-// Nummer ist ein personenbezogenes Kontaktdatum und muss daher (a) in der Auskunft
-// (Art. 15/20, exportTenantData) erscheinen und (b) bei der Loeschung (Art. 17,
-// eraseTenantData) MIT entfernt werden - spiegelbildlich, kein Export/Erase-Drift.
-//
-// Achsen, alle offline (reine state-ops-Funktionen + pglite, kein Netz) -> F.I.R.S.T.:
-//   A) Export enthaelt die Nummer; nach Erase ist sie weg (Set -> Export -> Erase -> Export).
-//   B) Audit/Zaehler ist PII-frei: removed.privateNumber ist 0/1, NIE der Nummern-Wert.
-//   C) Persistenz (pglite): die Loeschung ueberlebt den Restart - AUCH fuer einen Tenant
-//      GANZ OHNE Calls (der frueher den save()-Gate verfehlt haette -> Regressions-Anker).
-//
-// ISOLATION: pglite NIE mit einem Server-Spawn in einer Datei (P3/P6a-Lehre) - hier nur pglite.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -34,7 +22,6 @@ async function reopen(db) {
   return store;
 }
 
-// A) Set -> Export enthaelt die Nummer -> Erase -> Export hat sie nicht mehr; tenant-Record ohne Feld.
 test("Export enthaelt privateNumber; Erase entfernt sie (state-ops, Art. 15 <-> Art. 17)", () => {
   const s = makeDefaultState();
   setPrivateNumber(s, BOOTSTRAP_TENANT_ID, NUM);
@@ -60,7 +47,6 @@ test("Export enthaelt privateNumber; Erase entfernt sie (state-ops, Art. 15 <-> 
   );
 });
 
-// Kein gesetzter Wert -> Export null, Erase ist ein No-op fuer das Feld (Zaehler 0).
 test("ohne gesetzte privateNumber: Export null, Erase-Zaehler 0 (kein Phantom-Loeschen)", () => {
   const s = makeDefaultState();
   assert.equal(
@@ -75,7 +61,6 @@ test("ohne gesetzte privateNumber: Export null, Erase-Zaehler 0 (kein Phantom-Lo
   );
 });
 
-// B) AK4: der Audit-/Loesch-Zaehler traegt NIE den PII-Wert, nur die Anzahl (0/1).
 test("AK4: Loesch-Zaehler ist PII-frei (Zahl, nicht der Nummern-Wert)", () => {
   const s = makeDefaultState();
   setPrivateNumber(s, BOOTSTRAP_TENANT_ID, NUM);
@@ -89,16 +74,12 @@ test("AK4: Loesch-Zaehler ist PII-frei (Zahl, nicht der Nummern-Wert)", () => {
   );
 });
 
-// C) Persistenz-Regressions-Anker (pglite): Tenant GANZ OHNE Calls. Die Erase muss trotzdem
-// persistieren (save-Gate beruecksichtigt removed.privateNumber) - sonst kaeme die Nummer
-// nach dem Restart zurueck. Owner hat hier keine Calls -> removed.calls===0.
 test("Erase persistiert ueber Restart, auch ohne Calls (pglite, save-Gate)", async () => {
   const db = new PGlite();
   const store = await reopen(db);
   store.setPrivateNumber(BOOTSTRAP_TENANT_ID, NUM);
   await store.save();
 
-  // Re-Hydrierung belegt: die Nummer ist real persistiert (nicht nur in-memory).
   assert.equal(
     (await reopen(db)).tenantPrivateNumber(BOOTSTRAP_TENANT_ID),
     NUM,
@@ -123,7 +104,6 @@ test("Erase persistiert ueber Restart, auch ohne Calls (pglite, save-Gate)", asy
   );
 });
 
-// Cross-Tenant-Dichtheit: Erase(owner) laesst die privateNumber eines FREMDEN Tenants intakt.
 test("Erase ist tenant-scoped: fremde privateNumber bleibt unberuehrt", () => {
   const s = makeDefaultState();
   s.tenants.push({ id: "other", status: "active" });
