@@ -1,22 +1,3 @@
-// WW-F4 (Fortsetzung von WW-F2; Befund tasks/werkzeugwahl-fix2-messung.md 3.4 und 3.6):
-//   (1) ZIELGERICHTETER Zwang - kuendigt eine Runde eine RUECKSPRACHE an und liegt
-//       get_consult in diesem Zug, erzwingt der Nachfass-Zug es BENANNT. Der Sammel-Zwang
-//       (required ueber einen Satz, der take_message mitfuehrt) liess das Modell die
-//       Absicht der Vorrunde ERBEN - live gemessen: take_message statt get_consult.
-//   (2) die MARKER-LUECKE aus Lauf #4 ("Ich gebe Jonas aber gerne Bescheid: ...") -
-//       dieselbe Weitergabe wie "weitergeben", nur ohne das Wort "weiter".
-//
-// BEIDE Richtungen sind Gegenstand: eine angekuendigte NACHRICHT darf NICHT in eine
-// Rueckfrage umgebogen werden (das waere die Ueberkorrektur), und ohne angebotenes
-// get_consult bleibt alles wie im Bestand.
-//
-// Naht wie test/ww-f2-tool-follow-up.test.js + test/al-p14-in-call-consult.test.js:
-// lokaler node:http-Anthropic-Mock, Env VOR dem ersten config-Import, danach dynamischer
-// Import von src/store.js / src/claude.js. Kein Server-Spawn, kein Netz (P12/R).
-//
-// Testname-Praefix "WW-F4-" trifft KEIN Katalog-Praefix aus package.json
-// config.i18nCatalogPattern - diese Tests laufen in `npm test`, wo Rot zaehlt (Lehre
-// catalog-id-prefix-misroutes-tests).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -34,14 +15,9 @@ const CONSULT = "get_consult";
 const TAKE_MESSAGE = "take_message";
 const END_CALL = "end_call";
 const LANGUAGES = ["de", "en", "fr"];
-// Hebt suppressEndCall auf (isSubstantialCallerText) - sonst haengt der Zug an einer
-// anderen Weiche als der hier gemessenen.
 const CALLER = "Donnerstag um siebzehn Uhr, der Grosscheck kostet fuenfundneunzig Euro";
-// Die Lage aus der Messung: eine ENTSCHEIDUNG des Auftraggebers steht an.
 const CONSULT_ANNOUNCEMENT = "Da müsste ich noch Rücksprache mit Jonas halten.";
-// Die Gegenrichtung: eine reine Weitergabe, live gemessen (Lauf #1).
 const MESSAGE_ANNOUNCEMENT = "Ich gebe Jonas die Option aber gern weiter.";
-// Die Erkennungsluecke aus Lauf #4, woertlich bis zum Doppelpunkt.
 const BESCHEID_ANNOUNCEMENT = "Ich gebe Jonas aber gerne Bescheid: Donnerstag ginge auch.";
 const QUESTION = "Darf der Termin auf einen anderen Wochentag rutschen?";
 
@@ -61,8 +37,6 @@ function message(content, stopReason) {
 const textOnly = (text) => message([{ type: "text", text }], "end_turn");
 const toolOnly = (name, input = {}) =>
   message([{ type: "tool_use", id: "tu1", name, input }], "tool_use");
-// Faellt die queue leer, antwortet der Mock mit einem MARKIERTEN Text - ein ungewollter
-// Zusatz-Roundtrip faellt damit in bodies.length UND im speech auf.
 const UNWANTED_EXTRA_ROUNDTRIP_MARKER = "UNGEWOLLTER-ZUSATZ-ROUNDTRIP";
 
 let server;
@@ -70,9 +44,6 @@ let queue = [];
 let bodies = [];
 let store, agentTurn;
 
-// Ein Call, der ALLE Registrierungs-Bedingungen von get_consult erfuellt: Outbound, aktiv,
-// abgenommen (der Uhr-Anker liegt damit am Anfang der laufenden Abrechnungsminute) und mit
-// frischem Client-Poll. Zustandsvorbedingungen, keine Testlogik (Muster al-p14).
 function armCall(id) {
   const call = store.getCall(id);
   call.answeredAt = new Date().toISOString();
@@ -126,7 +97,6 @@ test("WW-F4-1 angekuendigte Ruecksprache + get_consult im Zug -> der Nachfass-Zu
 
   assert.equal(bodies.length, 2, "genau ein zusaetzlicher Roundtrip");
   assert.equal("tool_choice" in bodies[0], false, "Runde 1 traegt kein tool_choice");
-  // Der Kern dieser Phase: BENANNT, nicht der Sammel-Zwang, der take_message mitfuehrt.
   assert.deepEqual(bodies[1].tool_choice, { type: "tool", name: CONSULT });
   assert.ok(toolNamesOf(bodies[1]).includes(CONSULT), "das benannte Werkzeug liegt im Satz");
   assert.equal(toolNamesOf(bodies[1]).includes(END_CALL), false, "B6 haelt: kein end_call");
@@ -144,7 +114,6 @@ test("WW-F4-2 angekuendigte NACHRICHT -> KEIN benannter Zwang auf get_consult, o
   const turn = await agentTurn(call, CALLER);
 
   assert.equal(bodies.length, 2);
-  // Sammel-Zwang wie im Bestand - eine legitime Nachricht wird NICHT umgebogen.
   assert.deepEqual(bodies[1].tool_choice, { type: "any" });
   assert.ok(
     toolNamesOf(bodies[1]).includes(CONSULT),
@@ -171,8 +140,6 @@ test("WW-F4-3 ohne get_consult im Zug (Inbound) bleibt der Nachfass-Zug beim Bes
 
 test("WW-F4-4 die Obergrenze aus F2 haelt auch im benannten Zwang: hoechstens EIN Nachfassen je Zug", async () => {
   bodies = [];
-  // Beide Runden kuendigen dieselbe Ruecksprache an, ohne ein Werkzeug zu rufen. Waere die
-  // Obergrenze nicht strukturell, liefe die Schleife bis MAX_TOOL_ROUNDS_PER_TURN durch.
   queue = [textOnly(CONSULT_ANNOUNCEMENT), textOnly(CONSULT_ANNOUNCEMENT)];
   const call = armCall("call_wwf4_3");
   const turn = await agentTurn(call, CALLER);
@@ -204,8 +171,6 @@ test("WW-F4-5 die neu erkannte Bescheid-Form loest ein Nachfassen aus - als NACH
   assert.deepEqual(turn.toolNames, [TAKE_MESSAGE]);
 });
 
-// ---------- reine Entscheidungs-Tests (ohne Modell, ohne Netz) ----------
-
 test("WW-F4-6 followUpToolChoiceFor: benannt NUR bei Ruecksprache UND angebotenem Werkzeug", () => {
   const withConsult = [{ name: TAKE_MESSAGE }, { name: CONSULT }];
   const withoutConsult = [{ name: TAKE_MESSAGE }];
@@ -232,7 +197,6 @@ test("WW-F4-6 followUpToolChoiceFor: benannt NUR bei Ruecksprache UND angebotene
     LLM_TOOL_CHOICE.REQUIRED,
     "ohne angebotenes get_consult bleibt es beim Sammel-Zwang",
   );
-  // Ein gemischter Text: die offene Frage ist der Teil, der ohne Werkzeug verloren geht.
   assert.deepEqual(
     choiceFor("Ich frage bei Jonas nach und gebe Ihnen dann Bescheid.", withConsult),
     forcedTool(CONSULT),
@@ -243,11 +207,7 @@ test("WW-F4-6 followUpToolChoiceFor: benannt NUR bei Ruecksprache UND angebotene
 test("WW-F4-7 die neuen Marker tragen in allen drei Sprachen - und ein harmloser Satz loest NICHTS aus", () => {
   const cases = {
     de: {
-      // Woertlich aus Lauf #4, dazu die zwei uebrigen Oberflaechenformen derselben
-      // Redewendung.
       hits: [BESCHEID_ANNOUNCEMENT, "Ich sage Jonas Bescheid.", "Ich werde Jonas Bescheid geben."],
-      // Die an die GEGENSTELLE gerichtete Bitte und das blosse Wissen kuendigen keine
-      // eigene Handlung an - genau der Fall, den der Erste-Person-Anker ausschliesst.
       misses: [
         "Sagen Sie mir gerne Bescheid, wenn sich etwas ändert.",
         "Da weiß ich Bescheid, das passt.",

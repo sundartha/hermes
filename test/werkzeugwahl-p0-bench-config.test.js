@@ -1,12 +1,3 @@
-// Phase P0 (tasks/PLAN-WERKZEUGWAHL.md): die Bench-Messkette muss die Live-Konfiguration
-// (LLM_PROVIDER/CLAUDE_MODEL/DEEPSEEK_API_KEY) UND Tenant-Profilrechte (allowLookup/
-// allowConsult) je Szenario erreichen koennen - vorher pinnte buildEnv jeden Lauf hart
-// auf Anthropic Haiku (tasks/befund-toolwahl-5-bench.md, empirisch belegt: ein Lauf mit
-// LLM_PROVIDER=deepseek in der Shell lief real gegen Anthropic).
-//
-// Netz- und spawn-frei: buildEnv/benchTenantsFor/assertProfileTenantIsSettable sind reine
-// Funktionen (kein startServer-Aufruf, kein echter Anthropic-/DeepSeek-Call) - Muster
-// test/cq-p4-bench-hardening.test.js (dort fuer checks.mjs/persona.mjs).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -50,8 +41,6 @@ test("T-P0-2 buildEnv reicht --llm-provider deepseek + --agent-model + DEEPSEEK_
   assert.equal(env.LLM_PROVIDER, "deepseek");
   assert.equal(env.CLAUDE_MODEL, "deepseek-v4-pro");
   assert.equal(env.DEEPSEEK_API_KEY, "ds-key");
-  // Regressionsfang: die fruehere Implementierung setzte CLAUDE_MODEL auf die
-  // Konstante PRODUCTION_CLAUDE_MODEL ("claude-haiku-4-5"), UNABHAENGIG vom Aufrufer.
   assert.notEqual(env.CLAUDE_MODEL, "claude-haiku-4-5");
 });
 
