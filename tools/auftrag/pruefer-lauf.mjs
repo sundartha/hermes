@@ -129,7 +129,7 @@ export async function starteMitFrist(befehl, { cwd, umgebung, eingabe = "", zeit
   return { zeilen, exitCode, zeitAbgelaufen: uhr.abgelaufen };
 }
 
-function alsObjekt(zeile) {
+export function alsObjekt(zeile) {
   try {
     const wert = JSON.parse(zeile);
     return wert !== null && typeof wert === "object" ? wert : null;
@@ -182,7 +182,7 @@ function laufFehler({ ergebnis }) {
   return `Fehler im Lauf (${art})`;
 }
 
-const REGELN = [
+export const REGELN = [
   ({ zeitAbgelaufen }) => (zeitAbgelaufen ? "Zeitablauf" : null),
   (lage) => (limitErreicht(lage) ? LIMIT_GRUND : null),
   (lage) => (anmeldungGescheitert(lage) ? ANMELDUNG_GRUND : null),
@@ -193,7 +193,7 @@ const REGELN = [
     token && JSON.stringify(befunde).includes(token) ? "Antwort enthielt das Token" : null,
 ];
 
-function verbrauch(ergebnis) {
+export function verbrauch(ergebnis) {
   const nutzung = ergebnis?.usage ?? {};
   return TOKEN_FELDER.reduce((summe, feld) => summe + (Number(nutzung[feld]) || 0), 0);
 }
