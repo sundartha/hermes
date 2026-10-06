@@ -28,8 +28,8 @@ Produktion unter `/intern/anrufe-laufend` fragt, ob gerade ein Anruf laeuft.
 Es hat mindestens 32 Zeichen, ohne Leerzeichen und ohne Zeilenumbruch, und
 steht mit demselben Wert an zwei Stellen: als Secret im GitHub-Environment
 `produktion` und als Umgebungsvariable beim Render-Dienst `vodafone-agent`.
-Ist es auf dem Server leer oder kuerzer als 32 Zeichen, lehnt die Produktion
-jede Anfrage ab, und `live` deployt nicht.
+Fehlt es auf dem Server oder hat es dort weniger als 32 Zeichen, lehnt die
+Produktion jede Anfrage ab, und `live` deployt nicht.
 
 Der Gateway baut und serviert das Website-Build mit (`app.sundartha.com`).
 Eine Aenderung unter `apps/web/` geht deshalb auch mit dem naechsten
