@@ -1,9 +1,15 @@
-import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { parseArgs } from "node:util";
 import { ESLint, Linter } from "eslint";
 
 import { GEBUNDENE_KNOTEN, gebundeneNamen } from "./eslint-rules/namen-ohne-begruendung.js";
+import {
+  STATUS_NEU,
+  ausfuehren,
+  basisAusAufruf,
+  dateiInhalt,
+  geaenderteDateien,
+  hunks,
+} from "./pr-aenderungen.mjs";
 
 const JS_DATEIEN = ["*.js", "*.mjs", "*.cjs"];
 const FUNKTIONEN = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
@@ -17,76 +23,13 @@ const BESTANDS_REGELN = [
   { regel: "hermes/kein-quelltext-als-text", files: ["test/**"] },
 ];
 const OHNE_BESTAND = {};
-const HUNK_KOPF = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const LEERRAUM = /\s+/g;
 const NICHT_ZEILENENDE = /[^\n]/g;
 const ZEILENENDE = "\n";
-const FELDER_JE_DATEI = 2;
-const STANDARD_HUNK_LAENGE = 1;
 const LANGER_NAME = 40;
-const STATUS_NEU = "A";
-const MAX_GIT_AUSGABE = 268_435_456;
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
-const EXIT_ABBRUCH = 2;
 const AUFRUF = "Aufruf: node tools/lint-neue-funktionen.mjs --basis <commit>";
-
-class Abbruch extends Error {}
-
-function git(args, root) {
-  const lauf = spawnSync("git", ["-c", "core.quotePath=false", ...args], {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: MAX_GIT_AUSGABE,
-  });
-  if (lauf.status !== 0) throw new Abbruch(`git ${args.join(" ")}: ${lauf.stderr.trim()}`);
-  return lauf.stdout;
-}
-
-export function basisPruefen(basis, root) {
-  if (basis === undefined || basis.trim() === "") {
-    throw new Abbruch(`--basis fehlt oder ist leer. ${AUFRUF}`);
-  }
-  try {
-    git(["rev-parse", "--verify", "--quiet", `${basis}^{commit}`], root);
-  } catch {
-    throw new Abbruch(`Die Basis ${basis} ist kein Commit in diesem Checkout. ${AUFRUF}`);
-  }
-  return basis;
-}
-
-export function geaenderteDateien(basis, root, muster) {
-  const felder = git(
-    ["diff", "--name-status", "-z", "--no-renames", "--diff-filter=AM", basis, "HEAD", "--", ...muster],
-    root,
-  ).split("\0");
-  const dateien = [];
-  for (let index = 0; index + 1 < felder.length; index += FELDER_JE_DATEI) {
-    dateien.push({ status: felder[index], datei: felder[index + 1] });
-  }
-  return dateien;
-}
-
-export function dateiInhalt(commit, datei, root) {
-  return git(["show", `${commit}:${datei}`], root);
-}
-
-function hunkZeilen(start, laenge) {
-  const anzahl = laenge === undefined ? STANDARD_HUNK_LAENGE : Number(laenge);
-  return { start: Number(start), anzahl };
-}
-
-export function hunks(basis, datei, root) {
-  const diff = git(["diff", "--no-renames", "--no-color", "--no-ext-diff", "-U0", basis, "HEAD", "--", datei], root);
-  const gefunden = [];
-  for (const zeile of diff.split(ZEILENENDE)) {
-    const kopf = HUNK_KOPF.exec(zeile);
-    if (kopf !== null) {
-      gefunden.push({ alt: hunkZeilen(kopf[1], kopf[2]), neu: hunkZeilen(kopf[3], kopf[4]) });
-    }
-  }
-  return gefunden;
-}
 
 function zeilenOhneKommentare(text, kommentare) {
   let ohne = text;
@@ -251,7 +194,7 @@ export async function eslintOhneBestand(root, dateien) {
 
 async function gelinteteDateien(root, basis) {
   const pruefer = new ESLint({ cwd: root });
-  const alle = geaenderteDateien(basis, root, JS_DATEIEN);
+  const alle = geaenderteDateien(basis, root, { filter: "AM", muster: JS_DATEIEN });
   const gelintet = [];
   for (const eintrag of alle) {
     if (!(await pruefer.isPathIgnored(join(root, eintrag.datei)))) gelintet.push(eintrag);
@@ -289,16 +232,4 @@ async function pruefen(root, basis) {
   return berichten(ergebnisse);
 }
 
-async function main() {
-  const { values } = parseArgs({ options: { basis: { type: "string" } } });
-  const root = process.cwd();
-  return pruefen(root, basisPruefen(values.basis, root));
-}
-
-try {
-  process.exitCode = await main();
-} catch (error) {
-  console.error(`Abbruch: ${error.message}`);
-  if (!(error instanceof Abbruch)) console.error(error.stack);
-  process.exitCode = EXIT_ABBRUCH;
-}
+await ausfuehren(async (root) => pruefen(root, basisAusAufruf(AUFRUF, root)));
