@@ -1,11 +1,3 @@
-// Hermes Studio — lokaler Bridge-Server.
-// Die einzige Stelle, die mit deinem Higgsfield-Account spricht. Der Browser
-// kennt KEINEN Key — er ruft nur diesen lokalen Server, der die Higgsfield-CLI
-// (dein Login) ausfuehrt und die fertige Clip-URL zurueckgibt.
-//
-// Start:  node server.mjs   (oder `npm run bridge` / `npm start`)
-// Login:  higgsfield auth login   (einmalig, oeffnet den Browser)
-
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
@@ -17,7 +9,6 @@ const PORT = 5181;
 const HF = "higgsfield";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, "out");
-// Lokaler Remotion-Aufruf: bewusst die installierte Binary, kein npx-Rateraten.
 const REMOTION_BIN = path.join(__dirname, "node_modules", ".bin", "remotion");
 
 function run(args, timeoutMs = 15 * 60 * 1000) {
@@ -28,7 +19,6 @@ function run(args, timeoutMs = 15 * 60 * 1000) {
   });
 }
 
-/** Generischer Kommando-Runner (fuer den Remotion-Render). */
 function runCmd(cmd, args, timeoutMs = 20 * 60 * 1000) {
   return new Promise((resolve) => {
     execFile(cmd, args, { cwd: __dirname, timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
@@ -37,7 +27,6 @@ function runCmd(cmd, args, timeoutMs = 20 * 60 * 1000) {
   });
 }
 
-/** Sucht rekursiv das erste plausible Ergebnis-URL-Feld im CLI-JSON. */
 function findResultUrl(node) {
   if (!node || typeof node !== "object") return null;
   for (const key of ["result_url", "resultUrl", "url", "video_url", "output_url"]) {
@@ -74,8 +63,6 @@ function send(res, code, obj) {
 const server = createServer(async (req, res) => {
   if (req.method === "OPTIONS") return send(res, 204, {});
 
-  // Account/Login-Status: Auth wird gegen `auth token` geprueft (verlaesslich),
-  // Workspace separat gegen `account status`.
   if (req.method === "GET" && req.url === "/api/status") {
     const auth = await run(["auth", "token"], 20000);
     const authed = !/Not authenticated/i.test(auth.stderr + auth.stdout);
@@ -87,7 +74,6 @@ const server = createServer(async (req, res) => {
     return send(res, 200, { authed, needsWorkspace });
   }
 
-  // Echte Generierung
   if (req.method === "POST" && req.url === "/api/generate") {
     const job = await readBody(req);
     const args = [
@@ -105,7 +91,7 @@ const server = createServer(async (req, res) => {
       return send(res, 502, { error: "cli_failed", detail: (r.stderr || String(r.err)).slice(0, 1200) });
     }
     let parsed = null;
-    try { parsed = JSON.parse(r.stdout); } catch { /* CLI lieferte kein JSON */ }
+    try { parsed = JSON.parse(r.stdout); } catch { }
     const clipUrl = parsed ? findResultUrl(parsed) : null;
     if (!clipUrl) {
       return send(res, 502, { error: "no_url", detail: (r.stdout || r.stderr).slice(0, 1200) });
@@ -113,9 +99,6 @@ const server = createServer(async (req, res) => {
     return send(res, 200, { clipUrl });
   }
 
-  // Phase 3 — finaler Schnitt: Render-Plan rein, fertiges MP4 raus.
-  // Nimmt das JSON aus dem Studio, schreibt es als Datei, ruft Remotion und
-  // liefert die URL zum fertigen Reel (das dieser Server unter /out ausliefert).
   if (req.method === "POST" && req.url === "/api/render") {
     const plan = await readBody(req);
     if (!plan || !plan.clipUrl) {
@@ -138,7 +121,6 @@ const server = createServer(async (req, res) => {
     return send(res, 200, { mp4Url: `/out/reel-${id}.mp4`, file: outFile });
   }
 
-  // Fertige MP4s ausliefern (mit einfacher Range-Unterstuetzung fuers Abspielen).
   if (req.method === "GET" && req.url.startsWith("/out/")) {
     const name = path.basename(decodeURIComponent(req.url.split("?")[0].slice(5)));
     const filePath = path.join(OUT_DIR, name);
