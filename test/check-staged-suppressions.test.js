@@ -835,6 +835,19 @@ describe("findChangedFindings (Attrappe)", () => {
     assert.equal(offenders.length, KANDIDATEN.length);
   });
 
+  it("laesst durch, wenn ein Befund ohne Regelnamen wegfaellt", async () => {
+    const OHNE_REGELNAMEN = meldung(null, "Unused eslint-disable directive.", ZEILE_VORHER);
+    const offenders = await abgelehnt([KURZER_NAME, OHNE_REGELNAMEN], [KURZER_NAME]);
+    assert.deepEqual(offenders, []);
+  });
+
+  it("lehnt weiter ab, wenn ein Befund mit Regelnamen wegfaellt, auch neben einem ohne", async () => {
+    const OHNE_REGELNAMEN = meldung(null, "Unused eslint-disable directive.", ZEILE_VORHER);
+    const offenders = await abgelehnt([KURZER_NAME, MAGISCHE_ZAHL, OHNE_REGELNAMEN], [KURZER_NAME]);
+    assert.equal(offenders.length, KANDIDATEN.length);
+    assert.match(begruendung(offenders), /No magic number: 7\./);
+  });
+
   it("lehnt fail-closed ab, wenn die Befunde nicht lesbar sind", async () => {
     const offenders = await findChangedFindings({
       candidates: KANDIDATEN,
