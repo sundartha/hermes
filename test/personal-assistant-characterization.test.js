@@ -1,32 +1,14 @@
-// P0 (PLAN-PERSONAL-ASSISTANT.md): Charakterisierungs-Harness. Pinnt den HEUTIGEN
-// systemPrompt/disclosureSentence/openingText fuer repraesentative Outbound-/Inbound-
-// Calls Wort fuer Wort, damit alle Folgephasen (P1-P4) "Flag aus / null = byte-
-// identisch" deterministisch beweisen koennen und versehentliche DE-String-Drift
-// (Pre-Mortem 5) auffliegt. KEIN Produktivcode. Rein in-process (kein Server-Spawn,
-// kein pglite) - dieselbe Naht wie disclosure-regression/claude-identity: DATA_DIR vor
-// dem ersten config-Import, dann dynamischer Import der reinen Funktionen.
-//
-// Die EXPECTED_SP_*-Literale sind bewusst VOLLSTAENDIG und standalone (kein
-// extrahierter Gemein-Prefix): ein Golden-Master-Pin ist nur dann eine echte
-// Sicherung, wenn die erwartete Ausgabe byte-fuer-byte im Diff lesbar ist (Vorrang
-// Lesbarkeit). Sie sind aus dem TATSAECHLICHEN Output eingefroren, nicht erraten.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-// Zwei Settings-Konfigurationen ueber zwei Tenants (gleicher ownerName -> Prompts
-// unterscheiden sich NUR in den allow*-Zeilen). BOOTSTRAP traegt die Default-Settings
-// (= heutiger Bestand). Ein dritter Tenant (T_RESTRICTED, allowCalendar/Booking=false)
-// entfiel mit P1b - siehe Kommentar an der geloeschten SP7 unten.
 const OWNER = "Jonas Beispiel";
 const T_PERMISSIVE = "permissive";
 
-// Einzige volatile Stelle (claude.js base: `Heute ist ${now}.`, haengt an Uhr+TZ).
 const NOW_TOKEN = "<NOW>";
 const freezeNow = (prompt) => prompt.replace(/Heute ist [^\n]+\./, `Heute ist ${NOW_TOKEN}.`);
 
-// Build-Helper (P13): repraesentativer Call ueber den Bestands-seedCall.
 const call = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, ...over });
 
 let systemPrompt, disclosureSentence, openingText, store;
@@ -43,21 +25,9 @@ before(async () => {
   await import("../src/config.js");
   store = await import("../src/store.js");
   ({ systemPrompt, disclosureSentence, openingText } = await import("../src/claude.js"));
-  // allow*-Matrix ueber den ECHTEN Setter (Produktionspfad, keine Map-Umgehung).
   store.updateSettings(T_PERMISSIVE, { allowPersonalData: true, allowBankData: true });
 });
 
-// ---------- systemPrompt (frozen now) ----------
-// EXPECTED_* sind aus dem TATSAECHLICHEN heutigen Output eingefroren, NICHT erraten.
-// Reihenfolge der Faelle = Branch-Abdeckung.
-
-// SP1: outbound, default, ohne briefing/constraints. P5 (PLAN-CONVERSATION-QUALITY-V2,
-// Anhang A): kompletter Prompt-Umbau - Situation vor Regeln (vorher: 17 Regelzeilen vor
-// dem Zweck des Anrufs), sechs beschriftete Bloecke (SITUATION/SO SPRICHST DU/WENN ETWAS
-// UNKLAR IST/DEINE GRENZEN/SO KOMMST DU ZUM ERGEBNIS), korrekte Umlaute+ss/sz im
-// Prompt-Text (D3, Priming-These - der Text wird nie gesprochen). Die vormals zwei
-// Leerzeilen der briefing/constraints-Ternaries sind weg (D8, Array-Filter statt
-// Leerstring-Ternaries). Die beiden Kalender-/Buchungs-Zeilen (P1b) bleiben unbedingt.
 const EXPECTED_SP_DE_DEFAULT_OUT = `Du bist "Hermes", der persönliche KI-Telefonassistent von Jonas.
 Du telefonierst gerade LIVE. Heute ist ${NOW_TOKEN}.
 
@@ -97,8 +67,6 @@ Bekommst du mehrere Optionen angeboten, nenne zuerst deine Wahl, zum Beispiel "D
 Ist der Auftrag erledigt, darfst du einen hilfreichen Folgeschritt anbieten. Fehlt dir dafür eine Information oder macht dein Gegenüber nicht weiter mit, schließe höflich ab. Lass den Anruf nie an einem Nebenthema hängen, das du selbst eröffnet hast.
 Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`;
 
-// SP2: outbound, default, mit briefing+constraints (BRIEFING/EINSCHRAENKUNGEN rendern,
-// keine Leerzeile mehr davor/danach, D8).
 const EXPECTED_SP_DE_DEFAULT_OUT_FULL = `Du bist "Hermes", der persönliche KI-Telefonassistent von Jonas.
 Du telefonierst gerade LIVE. Heute ist ${NOW_TOKEN}.
 
@@ -140,10 +108,6 @@ Bekommst du mehrere Optionen angeboten, nenne zuerst deine Wahl, zum Beispiel "D
 Ist der Auftrag erledigt, darfst du einen hilfreichen Folgeschritt anbieten. Fehlt dir dafür eine Information oder macht dein Gegenüber nicht weiter mit, schließe höflich ab. Lass den Anruf nie an einem Nebenthema hängen, das du selbst eröffnet hast.
 Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`;
 
-// SP3: inbound, default. P5-O5: KEIN DEIN-AUFTRAG-Block (Anhang A, D7 Identitaets-
-// Wortlaut "fuer wen du sprichst" statt "fuer wen du anrufst"). P1b (Owner-Entscheidung
-// E1): Kalender-/Buchungs-Bullets, die Kalender-Sektion (vormals I6) und der Inbound-
-// Terminwunsch-Satz entfallen weiterhin - der Agent hat kein Kalender-/Buchungs-Tool.
 const EXPECTED_SP_DE_INBOUND = `Du bist "Hermes", der persönliche KI-Telefonassistent von Jonas.
 Du telefonierst gerade LIVE. Heute ist ${NOW_TOKEN}.
 
@@ -181,15 +145,6 @@ SO KOMMST DU ZUM ERGEBNIS:
 Kläre das Anliegen, löse es wenn möglich direkt, sonst nimm eine Nachricht auf.
 Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`;
 
-// SP4/SP5 (outbound fr/en byte-Pin) GELOESCHT (P11): sie pinnten den frueheren Bestand
-// "Geruest bleibt deutsch, nur speechClause + Datums-Locale wechseln" byte-genau - genau
-// die Praemisse, die P11 aufhebt (das Geruest ist jetzt je Sprache uebersetzt). Waeren sie
-// stehen geblieben, waere P11 unmoeglich gewesen. Ersatz: test/p11-agent-language-contract.test.js
-// (Sprach-Reinheit je Sprache) - der Regressionsschutz wechselt von "deutsch gepinnt" auf
-// "sprachrein gepinnt", geht nicht verloren.
-
-// SP6: outbound, allowPersonalData+BankData true (die beiden Verbots-Zeilen fehlen,
-// keine Leerzeile mehr an der Stelle, D8).
 const EXPECTED_SP_DE_PERMISSIVE = `Du bist "Hermes", der persönliche KI-Telefonassistent von Jonas.
 Du telefonierst gerade LIVE. Heute ist ${NOW_TOKEN}.
 
@@ -272,7 +227,6 @@ test("SP6 systemPrompt outbound de permissive (allow personal+bank) byte-identis
     EXPECTED_SP_DE_PERMISSIVE,
   );
 });
-// ---------- disclosureSentence (keine Uhr, voll deterministisch) ----------
 const DISCLOSURE_DE = `Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`;
 const DISCLOSURE_FR = `Bonjour, ceci est un assistant IA mandaté par Jonas Beispiel. Cette conversation sera résumée pour mon mandant.`;
 const DISCLOSURE_EN = `Hello, this is an AI assistant calling on behalf of Jonas Beispiel. This conversation will be summarised for the person I represent.`;
@@ -287,9 +241,6 @@ test("D3 disclosureSentence en fester Wortlaut", () => {
   assert.equal(disclosureSentence(call({ language: "en" })), DISCLOSURE_EN);
 });
 
-// ---------- openingText (keine Uhr) ----------
-// Bruecken-Pins bewusst justiert (Runde 2, S-B): natuerlicherer Wortlaut; die
-// Struktur (Offenlegung zuerst, genau ein Punkt, LLM-frei) bleibt gepinnt.
 test("O1 openingText de (goal vorhanden) = Offenlegung + Bruecke", () => {
   assert.equal(
     openingText(call({ language: "de", goal: "Testziel" })),
@@ -311,9 +262,6 @@ test("O4 openingText en (goal vorhanden) = Offenlegung + Bruecke", () => {
     `${DISCLOSURE_EN} Here's what I'm calling about: Testziel.`,
   );
 });
-// O6-O8: Ich-Satz-Passthrough (Runde 2, S-B). Ein bereits sprechbarer Ich-Satz
-// (neue place_call-objective-Description) wird OHNE Bruecke woertlich gesprochen;
-// trimGoalForSpeech normalisiert das Satz-Endzeichen auf genau einen Punkt.
 test("O6 openingText de: Ich-Satz-goal wird ohne Bruecke gesprochen", () => {
   assert.equal(
     openingText(call({ language: "de", goal: "Ich moechte den naechsten freien Termin erfragen." })),
@@ -332,8 +280,6 @@ test("O8 openingText en: I-goal wird ohne Bruecke gesprochen", () => {
     `${DISCLOSURE_EN} I'd like to book an appointment.`,
   );
 });
-// O9: Woerter, die nur mit "Ich"/"I" BEGINNEN (z.B. "Informiere"), sind KEIN
-// Ich-Satz -> Bruecke bleibt (Wortgrenzen-Regex, kein Praefix-Match).
 test("O9 openingText de: 'Informiere...'-Imperativ bekommt weiter die Bruecke", () => {
   assert.equal(
     openingText(call({ language: "de", goal: "Informiere ueber die Oeffnungszeiten" })),
@@ -341,15 +287,6 @@ test("O9 openingText de: 'Informiere...'-Imperativ bekommt weiter die Bruecke", 
   );
 });
 
-// O5: goal > OPENING_GOAL_MAX_CHARS (75) -> trimGoalForSpeech kappt an der Wortgrenze und
-// strippt das Satz-Endzeichen (der gekappte Rest endet auf "...vereinbaren und", die
-// Bruecke haengt genau einen Punkt an). Pinnt die Grenzfall-Glaettung (T5).
-// NEU EINGEFROREN in AL-P5 (PLAN-ASSISTANT-LEAP.md, Phase 5): die Kappe ist von 160 auf 70
-// gesunken; der Charakterisierungs-Wert aendert sich deshalb ABSICHTLICH. Grund und Phase
-// stehen hier, damit die Aenderung nicht als stille Reparatur eines Pins durchgeht.
-// AL-P5-REVIEW-RUNDE 1 hat die Kappe von 70 auf 75 nachgehoben, weil bei 70 reale
-// Auftraege ihr zweck-tragendes Verb verloren (s. OPENING_GOAL_MAX_CHARS-Kommentar in
-// claude.js, test/al-p5-opening.test.js AL-P5-1) - der Wert hier folgt, kein neuer Pin.
 const O5_LONG_GOAL =
   "einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und dabei moeglichst einen Vormittagstermin in der naechsten Woche bekommen falls das ueberhaupt geht.";
 const EXPECTED_O5 = `${DISCLOSURE_DE} Es geht um Folgendes: einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und.`;
@@ -358,13 +295,10 @@ test("O5 openingText de (goal > 75 Zeichen) = Offenlegung + an Wortgrenze gekapp
   assert.equal(openingText(call({ language: "de", goal: O5_LONG_GOAL })), EXPECTED_O5);
 });
 
-// C2: objective-neutrale Bruecke. openingText bleibt LLM-frei (rein synchron, kein
-// Anthropic-Pfad) und grammatisch sauber fuer einen Imperativ-Auftrag - die fruehere
-// "weil ${goal}"-Subjunktor-Konstruktion ist beseitigt.
 test("C2 openingText: Imperativ-Auftrag LLM-frei + grammatisch sauber (kein 'weil'-Subjunktor)", () => {
   const imperativeGoal = "Vereinbare einen Friseurtermin fuer Samstag vormittag";
   const text = openingText(call({ language: "de", goal: imperativeGoal }));
-  assert.equal(typeof text, "string"); // synchron -> LLM-frei (kein await/Promise)
+  assert.equal(typeof text, "string");
   assert.ok(text.startsWith(DISCLOSURE_DE), `Offenlegung zuerst: ${text}`);
   assert.ok(text.endsWith(`${imperativeGoal}.`), `Auftrag am Ende, genau ein Punkt: ${text}`);
   assert.ok(!/\bweil\b/.test(text), `Subjunktor 'weil' muss weg sein: ${text}`);

@@ -1,7 +1,3 @@
-// Pay4: Offline-Guard fuer scripts/smoke-stripe-payment.mjs. Verifiziert, dass der
-// Smoke NUR Stripe-Test-Keys akzeptiert (fail-closed gegen versehentliche Live-Charges).
-// Importiert NUR die reine Guard-Funktion -> kein Netz, kein Secret, kein process.exit
-// (der isMain-Guard im Skript verhindert main() beim Import).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isTestKey } from "../scripts/smoke-stripe-payment.mjs";

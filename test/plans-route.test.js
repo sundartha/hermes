@@ -1,11 +1,3 @@
-// BK0 — GET /api/plans: oeffentlicher, read-only Plan-Katalog. Beweist (1) der
-// Endpoint liefert den Spec-Katalog und (2) er ist - wie /healthz - ohne Login
-// erreichbar, waehrend eine normale API-Route (GET /api/state) extern weiter
-// abgewiesen wird (403, internalOnly - seit AUTH-P7 kein Gate mehr davor). Der
-// Auth-Exemption-Teil laeuft ueber die externe Interface-IP (srv.externalUrl);
-// ueber localhost greift der isLocalSocket-Bypass und der Kontrast waere nicht
-// aussagekraeftig (P12: dokumentierte Limitation, sonst nicht repeatable -> per
-// skip ausgenommen).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, externalIp } from "./helpers.js";
@@ -28,7 +20,6 @@ test("GET /api/plans liefert den Spec-Katalog (oeffentlich, ohne Login)", async 
       plans.map((p) => p.amountCents),
       [499, 999],
     );
-    // EUR-Cutover (Stripe live, 2026-07-03)
     for (const plan of plans) assert.equal(plan.currency, "eur");
   } finally {
     await srv.stop();

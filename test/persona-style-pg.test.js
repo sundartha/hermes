@@ -1,6 +1,3 @@
-// P2 - agentStyle: Persistenz-Round-Trip (pg). Kern-Risiko (wie smsSummaryOptIn/M1):
-// settings ist im pg-Backend SPALTEN-basiert (kein JSON) -> ohne agent_style-Spalte +
-// flush/hydrate ginge der Stil beim Restart still verloren. pglite (offline, F.I.R.S.T.).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgTestStore } from "./pg-helpers.js";

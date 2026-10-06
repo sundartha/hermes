@@ -1,9 +1,3 @@
-// A3 - Backfill gegen das ECHTE pg-Schema (pglite, offline, F.I.R.S.T.). Faengt SQL-/
-// Persistenz-Fehler, die der state-ops-Kern-Test (profile-a3-backfill.test.js) nicht sieht:
-// EINE pglite-Instanz traegt den Store-Spiegel (makePgStore) UND die Accounts (makeAccounts)
-// -> der Subscriber wird real angelegt; backfillPlanProfiles laeuft end-to-end ueber
-// setProfile + Flush/Hydrate. Phase S: das Profil keyt auf die tenantId (vormals email).
-// Rein pglite, NIE mit Server-Spawn gemischt (P6a-Stall-Lehre).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -12,23 +6,18 @@ import { makeAccounts } from "../src/web-auth.js";
 import { backfillPlanProfiles, BACKFILL_SKIP } from "../src/billing/backfill-profiles.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
 
-// Query-Runner-Adapter ueber EINER pglite-Instanz - das Schnittstellen-Objekt, das
-// makePgStore und makeAccounts erwarten (withClient -> { query, exec }).
 function makeRunner(db) {
   return {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };
 }
 
-// Oeffnet einen pg-Store auf dem Runner; store.init() migriert das volle Schema
-// (inkl. account/session) und hydriert den Bootstrap-Owner.
 async function openStore(runner) {
   const store = makePgStore(runner);
   await store.init();
   return store;
 }
 
-// Baut einen Store + Accounts auf EINER pglite-Instanz (geteilte DB ueber denselben Runner).
 async function makeStoreAndAccounts() {
   const db = new PGlite();
   const runner = makeRunner(db);
@@ -36,15 +25,10 @@ async function makeStoreAndAccounts() {
   return { db, store, accounts: makeAccounts(runner) };
 }
 
-// Frischer Store auf EINER bestehenden pglite-Instanz (re-hydriert aus der DB) - so wird
-// Persistenz statt nur In-Memory geprueft (Muster owner-p5-profiles-global reopen).
 async function reopen(db) {
   return openStore(makeRunner(db));
 }
 
-// Legt einen aktiven, CARD-verifizierten Subscriber an (Account + Tenant + KYC + Abo) und
-// zieht ihn in den Store-Spiegel (ensureTenant). Spiegelt den Pre-A2-Bestand: aktiviert,
-// aber (noch) ohne Rechteprofil. Liefert die tenantId (= Profil-Schluessel ab Phase S).
 async function seedActiveSubscriber(store, accounts, { sub, email, planSlug, subscriptionId }) {
   const { tenantId } = await accounts.upsertOnFirstLogin({ sub, email });
   await accounts.setStatus(tenantId, "active");
@@ -60,7 +44,7 @@ test("Dry-Run listet den Bestands-Subscriber, schreibt aber kein Profil", async 
   const tenantId = await seedActiveSubscriber(store, accounts, { sub: "u1", email: "u1@x", planSlug: "starter", subscriptionId: "sub_1" });
   const r = await backfillPlanProfiles({ store, apply: false });
   assert.deepEqual(r.changes, [{ id: tenantId, hadExisting: false }]);
-  assert.equal(Object.keys(store.load().profiles).length, 0); // Dry-Run mutiert NICHT
+  assert.equal(Object.keys(store.load().profiles).length, 0);
 });
 
 test("Apply provisioniert + persistiert das Tier-Profil (hydrate->flush->hydrate)", async () => {
@@ -68,15 +52,13 @@ test("Apply provisioniert + persistiert das Tier-Profil (hydrate->flush->hydrate
   const tenantId = await seedActiveSubscriber(store, accounts, { sub: "u1", email: "u1@x", planSlug: "starter", subscriptionId: "sub_1" });
 
   const r = await backfillPlanProfiles({ store, apply: true });
-  await store.save(); // pg-Flush abwarten (Muster CLI)
+  await store.save();
   assert.equal(r.changes.length, 1);
   assert.equal(store.resolveProfile(tenantId).maxCallsPerHour, null);
 
-  // Persistenz-Beleg: frischer Store re-hydriert den tenantId-Key aus der DB.
   const reopened = await reopen(db);
   assert.equal(reopened.resolveProfile(tenantId).unrestricted, false, "Profil round-trippt persistent");
 
-  // Idempotenz ueber die DB-Form: 2. Apply auf dem re-hydrierten Store = 0 changes.
   const r2 = await backfillPlanProfiles({ store: reopened, apply: true });
   assert.equal(r2.changes.length, 0);
   assert.equal(r2.unchanged.length, 1);

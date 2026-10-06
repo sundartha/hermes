@@ -1,13 +1,3 @@
-// P2/OT-4 AC5 (erweitert): Die Originate-Fehler-Response (POST /api/calls) darf
-// KEINE rohe Provider-Fehlermeldung / kein Secret an den Client geben (Regel 4/5).
-// NEU: Bei einer Provider-HTTP-Ablehnung antwortet der Handler kategorisiert mit
-// 502 (Upstream) + sichtbarer STATUSKLASSE (kein Secret) statt nacktem 500, und der
-// frueher hartkodierte Twilio-Trial-Hint ist mit dem Adapter entfallen (C-P4); der Test
-// pinnt, dass KEIN hint-Feld mehr kommt. Offline + deterministisch: ein lokaler Telnyx-
-// Mock antwortet mit Fehler-Status -> der Telnyx-Adapter wirft -> Handler-catch.
-// Geprueft wird der HTTP-Body, nicht das Netz. Provider=telnyx, sobald TELNYX_NUMBER
-// gesetzt ist (wie onboarding-outbound). ALLOWED_NUMBERS=TARGET, damit der Call die
-// Gates passiert und den Originate ueberhaupt erreicht.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -16,10 +6,6 @@ import { startServer } from "./helpers.js";
 const TELNYX_NR = "+13125550100";
 const TARGET = "+4917312345678";
 
-// Mock der Telnyx-TeXML-API, der mit Fehlerstatus + einem geheimnis-aehnlichen Body
-// antwortet (errors[].detail, KEIN code/title) - der Adapter reicht detail/Token
-// NICHT durch (Allowlist code/title), und der Handler gibt nur die Statusklasse an
-// den Client. Weder der Provider-Name "Telnyx" noch der Token duerfen lecken.
 async function startTelnyxErrorMock() {
   const server = http.createServer((req, res) => {
     res.statusCode = 503;
@@ -44,9 +30,6 @@ const TELNYX_ENV = (mockUrl) => ({
 
 test("T-P2-11: Originate-Fehler -> kategorisierte 502 (Statusklasse sichtbar), kein Secret/Provider-Name/Twilio-Hint bei Telnyx", async () => {
   const mock = await startTelnyxErrorMock();
-  // Provider kommt aus der aktiven Owner-Nummer (nicht mehr aus TELNYX_NUMBER-Env):
-  // explizit eine Telnyx-Nummer seeden, sonst liefe der Default (DEFAULT_PROVIDER) und der
-  // Telnyx-Mock/-Pfad wuerde gar nicht getroffen.
   const srv = await startServer({
     env: TELNYX_ENV(mock.url),
     ownerNumber: { e164: TELNYX_NR, provider: "telnyx" },
@@ -57,9 +40,6 @@ test("T-P2-11: Originate-Fehler -> kategorisierte 502 (Statusklasse sichtbar), k
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ to: TARGET, objective: "Testziel" }),
     });
-    // Provider-HTTP-Ablehnung -> 502 Upstream (nicht 500), kategorisierte Meldung mit
-    // Statusklasse. Die Statusklasse (HTTP 503) ist KEIN Secret und bewusst sichtbar
-    // (Diagnose); Provider-NAME, Roh-Body und Token duerfen NIE leaken.
     assert.equal(res.status, 502);
     const body = await res.json();
     assert.match(body.error, /HTTP 503/, "Statusklasse sichtbar fuer Diagnose");

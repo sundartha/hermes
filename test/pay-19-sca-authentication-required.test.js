@@ -1,25 +1,3 @@
-// PAY-19 (Katalog: tasks/i18n-tests/07-geld-und-waehrung.md, Abschnitt "PAY-19";
-// Schwere-Einordnung: PLAN-SECURITY.md Rubrik "SCA-DEADEND").
-//
-// SOLL-Gate der SCA-Achse. Verlangt die Bank eines Kunden bei einer off-session-Belastung
-// eine Authentifizierung (3-D Secure), muss der Aufrufer das ERKENNEN koennen - sonst
-// kann er den Kunden weder benachrichtigen noch ihm eine Bestaetigung anbieten, und der
-// Vorgang endet als stiller Fehlschlag.
-//
-// FORMULIERT AM BEOBACHTBAREN ERGEBNIS, nicht an einer Signatur (R1/R2 der kanonischen
-// Liste): der Fix darf einen eigenen Fehlertyp einfuehren (Praezedenz im Bestand:
-// CustomerMissingError, src/billing/stripe.js:126), ein Feld am Fehler setzen oder ein
-// typisiertes Ergebnis zurueckgeben. Der Test schreibt den WEG nicht vor, nur dass die
-// beiden Faelle am Ergebnis auseinanderzuhalten sind.
-//
-// WARUM NICHT UEBER DIE MELDUNG: beide Faelle sind HTTP 402. assertOk (:92-94) baut daraus
-// denselben Text; assertOkWithDetail (:114-128) haengt den Roh-Body an, sodass sich die
-// Texte zwar unterscheiden - aber nur als unstrukturierter Freitext. Ein Aufrufer muesste
-// darin nach Teilzeichenketten suchen. Deshalb prueft dieser Test auf ein MASCHINEN-
-// LESBARES Unterscheidungsmerkmal (Fehlertyp oder eigene Eigenschaft), nicht auf .message.
-//
-// Rein und offline: global.fetch wird ueber makeStripeStub ersetzt (Muster
-// test/gap-05-number-hold.test.js), kein Netz, kein Stripe-Konto.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -28,13 +6,8 @@ import { makeStripeStub } from "./helpers.js";
 
 const withStripeStub = makeStripeStub(config, "sk_test_pay19");
 
-// Stripe antwortet auf BEIDE Faelle mit 402 - das ist der Kern des Problems.
 const DECLINED_HTTP_STATUS = 402;
 
-// Echter Antwortkoerper, am 2026-07-27 gegen Stripe TEST gemessen (Test-Token
-// pm_card_authenticationRequired): die Bank verlangt eine Authentifizierung. Bemerkenswert
-// und im Feld next_action festgehalten - Stripe liefert KEINES, es gibt also nichts, wohin
-// man umleiten koennte; die Erholung muss eine neue on-session-Bestaetigung sein.
 const SCA_ERROR_BODY = {
   error: {
     type: "card_error",
@@ -45,8 +18,6 @@ const SCA_ERROR_BODY = {
   },
 };
 
-// Gewoehnliche Ablehnung ohne Authentifizierungs-Wunsch - der Fall, von dem sich der obere
-// unterscheiden MUSS. Hier ist der Kunde wirklich am Ende; oben nicht.
 const GENERIC_DECLINE_BODY = {
   error: {
     type: "card_error",
@@ -65,8 +36,6 @@ function declineResponse(body) {
   });
 }
 
-// Das maschinenlesbare Profil eines Fehlers: Typname plus alle EIGENEN Eigenschaften.
-// .message bleibt bewusst draussen (s. Datei-Kopf) - ein Freitext ist kein Vertrag.
 function machineReadableShape(err) {
   return JSON.stringify({
     type: err?.constructor?.name ?? typeof err,
@@ -74,9 +43,6 @@ function machineReadableShape(err) {
   });
 }
 
-// Faengt den Fehler eines Geld-Aufrufs ein. Bleibt der Aufruf erfolgreich, ist das selbst
-// ein Befund (eine abgelehnte Karte darf nie als Erfolg durchgehen) - dann traegt der
-// Rueckgabewert die Aussage.
 async function shapeOfFailure(body, callBilling) {
   return withStripeStub(declineResponse(body), async () => {
     try {

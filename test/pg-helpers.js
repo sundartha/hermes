@@ -1,7 +1,3 @@
-// Test-Helfer fuer das pg-Backend: pglite (Postgres-in-WASM, KEIN Netz, keine
-// externe DB -> F.I.R.S.T. erfuellt) hinter dem Runner-Vertrag, den store/pg.js
-// erwartet. pglite ist ein-verbindig: withClient reicht die pglite-Instanz als
-// Client (query + exec) durch.
 import fs from "node:fs";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { applySchema } from "../src/db/migrate.js";
