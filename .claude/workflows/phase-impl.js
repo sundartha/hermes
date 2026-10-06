@@ -1,15 +1,3 @@
-// Wiederverwendbarer Phasen-Workflow: Plan -> Implementieren (isolierter Worktree) -> dualer
-// Review (Safety/Verhalten + dedizierter Clean-Code-Auditor gegen .claude/refs/clean-code.md).
-// Clean-Code S1/S2 = hartes Gate (Blocker).
-//
-// Aufruf (Workflow-Tool) - args ENTWEDER Objekt ODER String:
-//   args = { phaseId:"P1", phaseTitle:"...", branch:"phase/p1-...", baseBranch:"master",
-//            planDoc:"PLAN-X.md", extraNotes:"..." }   // volle Kontrolle
-//   args = "Implementiere ... (freies Mandat)"          // String -> wird zu extraNotes,
-//                                                        // generischer Branch, kein planDoc
-// Fehlt args komplett -> der Lauf bricht LAUT ab (kein stiller Default-Task; das war der Bug,
-// der eine fremde Phase still ausfuehrte).
-
 export const meta = {
   name: "phase-impl",
   description:
@@ -21,16 +9,12 @@ export const meta = {
   ],
 };
 
-// Portabel (kein maschinen-spezifischer Hardcode mehr - das war der antonio-Pfad-Bug):
-// OCLAW_REPO falls gesetzt, sonst "." (Spawn-cwd ist der Repo-/Worktree-Root, relative Pfade greifen).
 const REPO =
   typeof process !== "undefined" && process.env && process.env.OCLAW_REPO
     ? process.env.OCLAW_REPO
     : ".";
 const NODE_MODULES = `${REPO}/node_modules`;
 
-// args normalisieren: Objekt (volle Kontrolle) ODER nicht-leerer String (freies Mandat) ODER
-// LAUTER Abbruch. KEIN stiller Default-Task mehr.
 const A =
   args && typeof args === "object"
     ? args
@@ -54,7 +38,7 @@ const PHASE_TITLE = A.phaseTitle || "";
 const BRANCH = A.branch || `phase/${String(PHASE).toLowerCase()}-impl`;
 const BASE = A.baseBranch || "master";
 const EXTRA = A.extraNotes ? `\nAUFTRAG / ZUSATZ-HINWEISE DES AUFTRAGGEBERS:\n${A.extraNotes}\n` : "";
-const PLAN_DOC = A.planDoc || ""; // leer = kein Plan-Doc; der Auftrag steht dann in EXTRA
+const PLAN_DOC = A.planDoc || "";
 
 const CLEAN_CODE_REQ = `CLEAN-CODE (PFLICHT, kein Optional): Lies "${REPO}/.claude/refs/clean-code.md" - der verbindliche Prueftkatalog dieses Repos - und befolge ihn bei JEDER Entscheidung. Keine Duplizierung (G5/S2) - gemeinsame Logik extrahieren. Keine Magic Numbers ausser 0/1/-1 (G25); Konfigurierbares in config.js (G35). Kein toter/auskommentierter Code (C5/G9), keine ungenutzten Imports/Variablen (G12). Intentions-ausdrueckende Namen (N-Serie), Nebeneffekte im Namen sichtbar (N7). Eine Aufgabe/Abstraktionsebene pro Funktion (G30/G34), <=3 Argumente (F1). Kein brittle Datei:Zeile-Verweis in Kommentaren (C2). Bestands-Konventionen (G24/G11): ESM, kein Build-Step, kein TypeScript, Kommentare deutsch OHNE Umlaute (ue/oe/ae). Neues Verhalten braucht automatisierten Test (P11/T-Serie); reiner Refactor -> Bestandssuite OHNE Test-Aenderung gruen.`;
 
@@ -69,7 +53,6 @@ const PLAN_DOC_STEP = PLAN_DOC
   ? `1. Lies "${REPO}/${PLAN_DOC}" und finde den Abschnitt "**${PHASE} — ...**" (Ziel, betroffene Dateien, deterministisch pruefbares Ergebnis, Risiko). Das ist der Auftrag dieser Phase.`
   : `1. Es gibt KEIN Plan-Doc - der Auftrag steht vollstaendig in den ZUSATZ-HINWEISEN unten. Lies sie als verbindliche Spec.`;
 
-// ---------- Phase 1: Plan ----------
 phase("Plan");
 const plan = await agent(
   `Du erstellst den DETAILLIERTEN, code-gegroundeten und CLEAN-CODE-KONFORMEN Umsetzungsplan fuer Phase ${PHASE} ${PHASE_TITLE} im Repo "${REPO}". NUR PLANEN, NICHTS aendern.
@@ -85,7 +68,6 @@ LIEFERE: (1) exakte Liste neuer Dateien inkl. Funktionssignaturen + Inhalts-Skiz
   { label: `${PHASE}-plan`, phase: "Plan" },
 );
 
-// ---------- Phase 2: Implementieren + Verifizieren (Worktree) ----------
 phase("Implementieren");
 const IMPL_SCHEMA = {
   type: "object",
@@ -134,7 +116,6 @@ Fuelle das Ergebnis EHRLICH. Tests nicht gruen oder blockiert -> testsPass=false
   { label: `${PHASE}-implement`, phase: "Implementieren", schema: IMPL_SCHEMA, isolation: "worktree" },
 );
 
-// ---------- Phase 3: Dualer Review (parallel) ----------
 phase("Review");
 const SAFETY_SCHEMA = {
   type: "object",

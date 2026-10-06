@@ -1,22 +1,3 @@
-// SCHLANKES, SELBST-FIXENDES Phasen-Workflow (Lead bleibt duenn).
-// Unterschiede zum kanonischen phase-impl.js:
-//  1) ARGS-DRIVEN + FAIL-CLOSED: die Phase kommt ueber args (phaseId/specFile), NICHT
-//     ueber einen hartkodierten A-Fallback. Fehlt args.phaseId -> sofortiger Abbruch
-//     (KEIN Default-Phase-Bau -> kein "baut versehentlich eine gemergte Phase"-Unfall,
-//     siehe Memory [[phase-impl-workflow-args]]).
-//  2) SELF-FIX-LOOP: ist der Gate BLOCKED (Safety nicht approved ODER Clean-Code S1/S2),
-//     fixt ein Fix-Agent die Blocker im Worktree und der Review laeuft erneut - bis PASS
-//     oder MAX_FIX_ROUNDS erschoepft. So muss der Lead NIE einen Diff lesen/fixen.
-//  3) POSTAGE-STAMP-RETURN: der Workflow gibt nur eine kleine Zusammenfassung zurueck
-//     (gate/finalBranch/testPassCount/blocker-Kurztitel) - NICHT plan/diff/volle Reviews.
-//     Die Details schreibt ein Report-Agent in tasks/<phase>-report.md (Lead liest sie NICHT).
-//
-// AUFRUF (Lead): Workflow({ scriptPath: ".../phase-impl-lean.js", args: {
-//   phaseId:"P6b2", phaseTitle:"...", branch:"phase/p6b2-async-worker", baseBranch:"master",
-//   planDoc:"PLAN-MULTI-TENANT-TELNYX.md", specFile:"tasks/p6-rest-chain.md", maxFixRounds:2 } })
-// KEIN resume. Der Lead merged danach den ZURUECKGEGEBENEN finalBranch (kann BRANCH oder
-// BRANCH-fixN sein), NICHT blind BRANCH.
-
 export const meta = {
   name: "phase-impl-lean",
   description:
@@ -37,8 +18,6 @@ export const meta = {
   ],
 };
 
-// Spawn-fest: im ACP-/Spawn-Kontext gibt es kein process-Global. Dann faellt REPO
-// auf '.' zurueck (Spawn-cwd ist der Worktree-Root, relative Pfade greifen korrekt).
 const REPO =
   typeof process !== "undefined" && process.env && process.env.OCLAW_REPO
     ? process.env.OCLAW_REPO
@@ -47,7 +26,6 @@ const REPO =
       : ".";
 const NODE_MODULES = `${REPO}/node_modules`;
 
-// Spawn-fest: der Spawn-Harness liefert args als JSON-String -> tolerant parsen.
 const _argsObj =
   typeof args === "string"
     ? (() => {
@@ -58,7 +36,6 @@ const _argsObj =
         }
       })()
     : args;
-// FAIL-CLOSED: keine Phase ohne explizite args.phaseId. Verhindert den I2-Unfall.
 const A = typeof _argsObj === "object" && _argsObj && _argsObj.phaseId ? _argsObj : null;
 if (!A) {
   throw new Error(
@@ -75,19 +52,9 @@ const SPEC_FILE = A.specFile || "";
 const MAX_FIX_ROUNDS = Number.isInteger(A.maxFixRounds) ? A.maxFixRounds : 2;
 const REPORT_PATH = `tasks/${String(PHASE).toLowerCase()}-report.md`;
 
-// MODELL-POLITIK: jeder agent() wird explizit gepinnt. Ohne Pin erbt der Subagent das
-// Session-Modell - bei einer Fable-Session ein Vielfaches der noetigen Kosten (Memory
-// [[workflow-model-policy]]). Zuordnung: Plan + Safety-Review = opus (dort entstehen bzw.
-// sterben Fehler), Impl/Clean-Code/Fix = sonnet (Ausfuehrung gegen fertige Spec bzw.
-// Regelanwendung gegen einen geschriebenen Katalog), Report = sonnet/low (reines
-// Zusammenschreiben).
 const MODEL_OPUS = "opus";
 const MODEL_SONNET = "sonnet";
 
-// HOCHRISIKO-PHASEN: hier ist ein Impl-Fehler kein haesslicher Code, sondern eine falsche
-// Geldrechnung (Tarif-Signatur), ein blindes Safety-Gate (Budget/Stundenlimit) oder ein
-// Live-Dienst, der nicht mehr startet (fatal:true beim Boot). Dort laeuft die Umsetzung
-// ebenfalls auf opus und der Safety-Review eine Stufe schaerfer.
 const HIGH_STAKES_PHASES = ["P5", "P6", "P7"];
 const HIGH_STAKES =
   typeof A.highStakes === "boolean" ? A.highStakes : HIGH_STAKES_PHASES.includes(PHASE);
@@ -114,7 +81,6 @@ const specInstruction = SPEC_FILE
   ? `Lies "${REPO}/${SPEC_FILE}" und finde den Abschnitt fuer ${PHASE} - das ist die AUTORITATIVE Scope-/Design-/Invarianten-/Abgrenzungs-Definition dieser Phase (verbindlich vor dem Plan-Doc).`
   : `(Keine specFile uebergeben - nutze ausschliesslich ${PLAN_DOC}.)`;
 
-// ---------- Phase 1: Plan ----------
 phase("Plan");
 const plan = await agent(
   `Du erstellst den DETAILLIERTEN, code-gegroundeten, CLEAN-CODE-KONFORMEN Umsetzungsplan fuer Phase ${PHASE} ${PHASE_TITLE} im Repo "${REPO}". NUR PLANEN, NICHTS aendern.
@@ -127,7 +93,6 @@ LIEFERE: (1) neue Dateien inkl. Funktionssignaturen + Inhalts-Skizze; (2) pro be
   { label: `${PHASE}-plan`, phase: "Plan", ...PLAN_AGENT },
 );
 
-// ---------- Phase 2: Implementieren (Worktree) ----------
 phase("Implementieren");
 const IMPL_SCHEMA = {
   type: "object",
@@ -182,7 +147,6 @@ EHRLICH fuellen. Tests nicht gruen / blockiert -> testsPass=false + deviations, 
   },
 );
 
-// ---------- Phase 3: Dualer Review (parallel, wiederholbar) ----------
 const SAFETY_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -278,7 +242,6 @@ phase("Review");
 let reviewTarget = BRANCH;
 let [safety, cc] = await runReview(reviewTarget, "");
 
-// ---------- Phase 4: Self-Fix-Loop ----------
 const FIX_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -322,13 +285,6 @@ EHRLICH: was du NICHT loesen konntest, in summary nennen.`,
   fixSummaries.push(
     `r${round}: ${fix && fix.summary ? fix.summary.slice(0, 300) : "(kein Ergebnis)"}`,
   );
-  // Ein Fix-Agent kann sterben (API-Fehler, Abbruch) und liefert dann null - der Branch
-  // ${fixBranch} existiert in dem Fall NICHT. Frueher wurde reviewTarget trotzdem
-  // weitergesetzt: die Folgerunde reviewte einen Phantom-Branch, meldete "Branch existiert
-  // nicht" als Blocker und verbrannte die letzte Fix-Runde an einem Nicht-Befund
-  // (beobachtet 2026-07-25 in P5, ausgeloest durch ein API-529 in Runde 1). Ohne
-  // belegten Commit wird die Schleife deshalb abgebrochen; das Gate bleibt BLOCKED mit
-  // den ECHTEN Blockern der letzten belastbaren Review-Runde.
   if (!fix || !fix.committed || !fix.headCommit) {
     fixSummaries.push(
       `r${round}: ABBRUCH - kein Commit vom Fix-Agenten (Branch ${fixBranch} existiert nicht). Self-Fix-Schleife beendet, Blocker der Runde ${round - 1 || "Erstreview"} bleiben stehen.`,
@@ -341,7 +297,6 @@ EHRLICH: was du NICHT loesen konntest, in summary nennen.`,
 
 const approved = gateOk(safety, cc);
 
-// ---------- Phase 5: Report-Datei (Lead liest sie NICHT) ----------
 phase("Report");
 let reportPath = "";
 try {
@@ -366,7 +321,6 @@ Antworte NUR mit dem geschriebenen Dateipfad.`,
   reportPath = "(Report fehlgeschlagen)";
 }
 
-// ---------- POSTAGE-STAMP-RETURN (klein, damit der Lead duenn bleibt) ----------
 return {
   phaseId: PHASE,
   finalBranch: reviewTarget,
