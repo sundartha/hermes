@@ -1,7 +1,19 @@
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { costConfigBannerLines, UNSET_LABEL } from "../src/boot.js";
-import { startServer, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
+import { startServer as startServerImpl, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
+
+const offeneServer = new Set();
+
+async function startServer(...args) {
+  const server = await startServerImpl(...args);
+  offeneServer.add(server);
+  return server;
+}
+
+after(async () => {
+  for (const server of offeneServer) await server.stop();
+});
 
 function bannerConfig({ billing = {}, llm = {}, voice = {} } = {}) {
   return {
