@@ -1,10 +1,3 @@
-// B3a: der Anthropic-Adapter als Einheit - die EINE Uebersetzungsstelle zwischen
-// Anbieter-Vokabular und der neutralen Form aus src/llm/ports.js. Reine node:test-Unit
-// gegen injizierte messagesCreate/messagesStream (DIP): kein Netz, kein Store, keine
-// echte Zeit (P12 F.I.R.S.T.).
-//
-// Testnamen tragen bewusst KEINE Katalog-ID am Namensanfang (package.json
-// config.i18nCatalogPattern) - Praefix ist "B3A-<n>:".
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { anthropicErrors, createAnthropicProvider } from "../src/llm/adapters/anthropic.js";
@@ -12,14 +5,11 @@ import { providerTurnMessage, toolResultsMessage } from "../src/llm/messages.js"
 import { LLM_TOOL_CHOICE } from "../src/llm/tool-choice.js";
 
 const MODEL = "claude-haiku-4-5";
-// Anthropic antwortet mit der aufgeloesten, DATIERTEN Snapshot-ID - genau der Wert, der
-// in keiner Preistabelle steht und deshalb NICHT gebucht werden darf.
 const SNAPSHOT_MODEL = "claude-haiku-4-5-20260101";
 
 const text = (value) => ({ type: "text", text: value });
 const toolUse = (id, name, input) => ({ type: "tool_use", id, name, ...(input ? { input } : {}) });
 
-// Provider mit festem Antwort-Objekt; merkt sich, was messagesCreate bekommen hat.
 function providerReturning(resp) {
   const seen = [];
   const provider = createAnthropicProvider({

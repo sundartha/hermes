@@ -1,12 +1,3 @@
-// Pay1: Routen /api/billing/setup-checkout (POST) + /api/billing/checkout-return (GET).
-// Spawn (node:test), offline gegen eine Mini-Fake-Stripe (STRIPE_API_BASE zeigt darauf
-// -> KEIN echter Netz-Call, kein api.stripe.com). KEIN pglite in derselben Datei (Lehre
-// P6a: nie mit Server-Spawn mischen). Prueft das PAYMENT_ENABLED-404-Gate (Flag aus =
-// byte-identisch), den Happy-Path (Customer anlegen -> Karte speichern), die fail-closed
-// Customer-Match-Invariante (cross-tenant session_id -> 403) und das TENANT_REJECT-403.
-//
-// Identitaets-Threading wie read-scope-tenant.test.js: localhost-Request mit
-// X-Internal-Identity = idpSubject -> exakt der requestTenant-REST-Pfad.
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -18,9 +9,6 @@ const CUST = "cus_test1",
   PM = "pm_test1",
   SESSION = "cs_1";
 
-// Mini-Fake-Stripe (Vorlage startTelnyxProvisioningMock): die drei Pay1-Endpunkte.
-// getCheckoutSessionResult liefert per default cus_test1; ein Sonderpfad
-// (cs_other) liefert einen FREMDEN Customer fuer den Mismatch-Test.
 async function startFakeStripe() {
   const server = http.createServer((req, res) => {
     let body = "";
@@ -48,15 +36,9 @@ async function startFakeStripe() {
   };
 }
 
-// Ein aktiver Tenant A mit idpSubject (Karten-Erfassung laeuft tenant-scoped).
 const seedTenantA = () =>
   seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", idpSubject: SUB_A }] });
 
-// Env mit PAYMENT_ENABLED an: NUMBER_SETUP_FEE_CENTS>0 ist assertConfig-Pflicht,
-// STRIPE_API_BASE muss auf die Fake-Stripe zeigen (sonst Live-Default api.stripe.com).
-// STRIPE_WEBHOOK_SECRET ist seit W4 Boot-Pflicht bei PAYMENT_ENABLED (Webhook sonst
-// fail-closed unverifizierbar) - ohne diese Zeile verweigert assertConfig den Boot und
-// der Spawn haengt; der Wert ist hier neutral (dieser Test nutzt den Webhook nicht).
 const PAY_ENV = (stripeUrl) => ({
   MULTI_TENANT: "true",
   PAYMENT_ENABLED: "true",
@@ -64,7 +46,6 @@ const PAY_ENV = (stripeUrl) => ({
   STRIPE_WEBHOOK_SECRET: "whsec_test_x",
   STRIPE_API_BASE: stripeUrl,
   NUMBER_SETUP_FEE_CENTS: "500",
-  // GP-P6: Price-Id je Katalog-Slug ist bei PAYMENT_ENABLED=true Boot-Pflicht (assertPricedPlans).
   ...PLAN_PRICE_BOOT_ENV,
 });
 
@@ -126,7 +107,6 @@ test("Customer-Mismatch (fremde session_id -> fremder Customer) -> 403, KEIN pay
   const stripe = await startFakeStripe();
   const srv = await startServer({ env: PAY_ENV(stripe.url), seed: seedTenantA() });
   try {
-    // Erst Customer cus_test1 anlegen (setup-checkout), dann return mit cs_other (cus_other).
     await postAs(srv, SUB_A, "/api/billing/setup-checkout");
     const ret = await getAs(srv, SUB_A, "/api/billing/checkout-return?session_id=cs_other");
     assert.equal(ret.status, 403, "Customer-Mismatch -> 403");

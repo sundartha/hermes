@@ -1,6 +1,3 @@
-// OUTBOUND-E3b (PM-16): "nicht konfiguriert" darf nie wie "alles gruen" aussehen. Die
-// alertChannelFindings-Erweiterung um BOTH_UNSET_WITH_OUTBOUND + platformAlertSenderFindings
-// (PM-17). Reine Units gegen boot-guard.js, kein Boot, kein Netz.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -55,10 +52,6 @@ test("Mail-Adresse gesetzt UND Mailer konstruierbar -> die neue FATALE Pruefung 
   assert.equal(findings[0].fatal, false);
 });
 
-// G26/G2-Fix (Review-Blocker Runde 4): Mail-Adresse gesetzt, aber KEIN Mailer
-// konstruierbar (weder BREVO_API_KEY noch SMTP_HOST) - genau der Zustand, der am
-// laufenden Code "[outage] Kanal mail fehlgeschlagen: Cannot read properties of null"
-// erzeugte, waehrend der Boot gruen durchlief. Muss jetzt FATAL sein.
 test("Mail-Adresse gesetzt, aber KEIN Mailer konstruierbar -> weiterhin fatal (PM-16, kein stilles Gruen)", () => {
   const findings = alertChannelFindings({
     platformAlertSmsTo: "",
@@ -103,8 +96,6 @@ test("beide leer, aber OUTAGE_ALERT_WINDOW_MS=0 -> WARN, nicht fatal", () => {
 });
 
 test("die zwei Bestandsbefunde bleiben BYTE-IDENTISCH (Zeichenkettenvergleich)", () => {
-  // Bestandsverhalten (LCT P5/GAP-07), unveraendert durch die neuen Parameter: alle drei
-  // neuen Parameter fehlen hier komplett (Bestandsaufrufer wie warnAlertChannelUnset).
   const unsetOnly = alertChannelFindings({ platformAlertSmsTo: "", paymentEnabled: false, platformSpendWarnPercent: WARN_PERCENT_AUS });
   assert.equal(unsetOnly.length, 1);
   assert.equal(unsetOnly[0].code, ALERT_CHANNEL_FINDING.UNSET);
@@ -140,8 +131,6 @@ test("gesetzte SMS-Nummer -> [] wie bisher, unabhaengig von den neuen Parametern
   assert.deepEqual(findings, []);
 });
 
-// ---- PM-17: platformAlertSenderFindings ----
-
 test("PM-17: keine offene alert_sms_sender-Bindung -> WARN, nicht fatal", () => {
   const findings = platformAlertSenderFindings({ openBindings: [] });
   assert.equal(findings.length, 1);
@@ -170,10 +159,6 @@ test("PM-17: openBindings undefined -> WARN (Default leer), kein Wurf", () => {
   assert.equal(findings.length, 1);
 });
 
-// G5-Fix (Review-Blocker Runde 2): alertChannelInputs war byte-identisch in boot.js und
-// config.js dupliziert (die Zusammenfuehrung der drei Namespaces zu EINEM
-// alertChannelFindings-Eingabeobjekt) - jetzt EINE exportierte Quelle, beide Aufrufer
-// reichen nur noch ihre Namespaces durch.
 test("G5: alertChannelInputs fuehrt billing/mail/voice zu EINEM Eingabeobjekt zusammen (inkl. mailerVorhanden, G26-Fix)", () => {
   const merged = alertChannelInputs({
     billing: { platformAlertSmsTo: "+12025550143", paymentEnabled: true },
@@ -198,8 +183,6 @@ test("G5: alertChannelInputs-Ergebnis ist direkt an alertChannelFindings ueberge
   assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND);
 });
 
-// G26-Fix: Mail-Adresse gesetzt, aber WEDER BREVO_API_KEY NOCH SMTP_HOST -> mailerVorhanden
-// ist false und der BOTH_UNSET_WITH_OUTBOUND-Riegel greift trotz gesetzter Adresse.
 test("G5/G26: alertChannelInputs liest mailerVorhanden aus mail.brevoApiKey/mail.smtpHost - Adresse ALLEIN reicht nicht", () => {
   const merged = alertChannelInputs({
     billing: { platformAlertSmsTo: "" },
@@ -211,9 +194,6 @@ test("G5/G26: alertChannelInputs liest mailerVorhanden aus mail.brevoApiKey/mail
   assert.equal(findings.length, 1);
   assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND);
 });
-
-// ---- G26/G2-Fix (Review-Blocker Runde 4): mailerKonstruierbar - EINE Quelle, gemeinsam
-// gelesen von selectMailer (wiring/web-login.js) und alertChannelFindings hier. ----
 
 test("mailerKonstruierbar: weder Brevo-Schluessel noch SMTP-Host -> false", () => {
   assert.equal(mailerKonstruierbar({ brevoApiKey: "", smtpHost: "" }), false);

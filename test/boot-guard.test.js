@@ -1,8 +1,3 @@
-// P0/AC5: Boot-Entkopplung. Ein Fehler im Web-Login/Portal-Block darf den Boot
-// (und damit die Telefonie) NICHT killen. Bewiesen ueber den realen Seam:
-// guardedBoot faengt den ECHTEN createPortalRunner-Fault (Superuser -> [F5]) ab.
-// Reachable-pg-over-socket ist offline n.v. (pglite ist in-process), darum Fault-
-// Injection in das echte createPortalRunner via DI-Pool (User-Entscheidung 2026-06-16).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -17,8 +12,6 @@ import {
 } from "../src/boot-guard.js";
 import { createPortalRunner } from "../src/portal-pool.js";
 
-// Erreichbarer Fake-Pool, dessen Rolle Superuser ist -> assertNoBypassRls wirft den
-// realen [F5]-Fehler (die reale Boot-Fault einer Superuser-DATABASE_URL).
 const superuserPool = () => ({
   connect: async () => ({
     query: async () => ({ rows: [{ is_su: "on", rolbypassrls: false }] }),
@@ -39,7 +32,6 @@ async function captureErrAsync(fn) {
   return logs.join("\n");
 }
 
-// T-P0-05a: guardedBoot schluckt den Fault, loggt laut, wirft nicht, returnt false.
 test("T-P0-05a: guardedBoot faengt Portal-Fault, loggt [boot] deaktiviert, returnt false", async () => {
   let result;
   const out = await captureErrAsync(async () => {
@@ -51,7 +43,6 @@ test("T-P0-05a: guardedBoot faengt Portal-Fault, loggt [boot] deaktiviert, retur
   assert.match(out, /\[boot\] Web-Login\/Portal deaktiviert/);
 });
 
-// T-P0-05b: erfolgreicher Block -> returnt true, kein [boot]-deaktiviert-Log.
 test("T-P0-05b: guardedBoot returnt true wenn der Block durchlaeuft", async () => {
   let logged = "";
   const orig = console.error;
@@ -61,7 +52,6 @@ test("T-P0-05b: guardedBoot returnt true wenn der Block durchlaeuft", async () =
   let result;
   try {
     result = await guardedBoot("Web-Login/Portal", async () => {
-      /* ok */
     });
   } finally {
     console.error = orig;
@@ -70,15 +60,13 @@ test("T-P0-05b: guardedBoot returnt true wenn der Block durchlaeuft", async () =
   assert.ok(!/deaktiviert/.test(logged));
 });
 
-// T-P0-05 (Kern, HTTP-Level): Portal-Fault VOR dem Route-Mount -> /auth/login wird
-// nie registriert (404), aber /healthz bleibt 200 und der Server lebt weiter.
 test("T-P0-05: Portal-Fault -> /healthz 200, /auth/login 404, Server lebt", async () => {
   const app = express();
   app.get("/healthz", (_q, res) => res.json({ ok: true }));
 
   const mounted = await guardedBoot("Web-Login/Portal", async () => {
-    await createPortalRunner({ pool: superuserPool() }); // wirft [F5] VOR dem Mount
-    app.get("/auth/login", (_q, res) => res.send("login")); // nie erreicht
+    await createPortalRunner({ pool: superuserPool() });
+    app.get("/auth/login", (_q, res) => res.send("login"));
   });
   assert.equal(mounted, false);
 
@@ -96,7 +84,6 @@ test("T-P0-05: Portal-Fault -> /healthz 200, /auth/login 404, Server lebt", asyn
   }
 });
 
-// OUT-05 (F2): reine Wahrheitstabelle des Boot-Refusal-Praedikats (kein Spawn noetig).
 test("OUT-05 F2: fakeOriginateBootBlocked-Wahrheitstabelle", () => {
   assert.equal(fakeOriginateBootBlocked({ fakeOriginate: true, skipTwilioSignatureCheck: false }), true);
   assert.equal(fakeOriginateBootBlocked({ fakeOriginate: true, skipTwilioSignatureCheck: true }), false);
@@ -104,8 +91,6 @@ test("OUT-05 F2: fakeOriginateBootBlocked-Wahrheitstabelle", () => {
   assert.equal(fakeOriginateBootBlocked({ fakeOriginate: false, skipTwilioSignatureCheck: true }), false);
 });
 
-// S1-7: meterMappingGaps meldet jede usage_event-Sorte OHNE Stripe-Meter-Abbildung
-// (kein Spawn noetig, reine Entscheidung).
 test("S1-7: meterMappingGaps meldet fehlende Meter-Abbildungen (Boot-Assertion)", () => {
   const kinds = ["voice_minute", "ai_token", "sms", "number_month"];
   assert.deepEqual(
@@ -120,10 +105,6 @@ test("S1-7: meterMappingGaps meldet fehlende Meter-Abbildungen (Boot-Assertion)"
   );
 });
 
-// LCT P5 (Drift-Waechter): alertChannelFindings ist die reine Wahrheitstabelle des
-// Alarmkanal-Guards (kein Spawn noetig, Muster meterMappingGaps). Seit GAP-07 (P6) nimmt
-// sie das ganze config.billing-Objekt statt nur der Nummer - die Assertions der beiden
-// Bestandsfaelle bleiben unveraendert, nur die Signatur zieht nach.
 test("P5-B1: alertChannelFindings('') -> genau ein Befund, UNSET, nicht fatal", () => {
   const findings = alertChannelFindings({ platformAlertSmsTo: "" });
   assert.equal(findings.length, 1);
@@ -135,8 +116,6 @@ test("P5-B2: alertChannelFindings(nummer) -> [] (Kanal besetzt, kein Befund)", (
   assert.deepEqual(alertChannelFindings({ platformAlertSmsTo: "+491234567890" }), []);
 });
 
-// GAP-07 (P6): die scharfe Konjunktion ist FATAL, jede Abschwaechung faellt auf die WARN
-// zurueck. Hoechstens EIN Befund je Zustand.
 test("Alarmkanal-Wahrheitstabelle (GAP-07): leerer Kanal + Buchung + Warnschwelle>0 -> genau ein FATALER Befund", () => {
   const findings = alertChannelFindings({
     platformAlertSmsTo: "",
@@ -177,10 +156,6 @@ test("Alarmkanal-Wahrheitstabelle (GAP-07): besetzter Kanal liefert auch bei sch
   );
 });
 
-// GAP-38 (Boot-Heilung eines leeren Stores): reine Wahrheitstabelle der Entscheidung, ohne
-// Spawn (Muster fakeOriginateBootBlocked). Die Reihenfolge der Klauseln IST die Spezifikation
-// - deshalb je Ausgang mindestens ein Fall, inkl. der beiden Riegel gegen einen stillen
-// Fehl-Seed (Muell-E.164, Provider-Tippfehler).
 const FRESH_STORE = Object.freeze({
   activeNumberPresent: false,
   numberCount: 0,

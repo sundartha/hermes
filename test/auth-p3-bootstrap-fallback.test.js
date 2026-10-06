@@ -1,20 +1,3 @@
-// AUTH-P3: Bootstrap-Fallback fail-closed. Bis hierher galt "keine Identitaet =
-// Bootstrap-/Owner-Tenant" unkonditional - das war nur wahr, solange das Basic-Auth-Gate
-// jeden anonymen Request abfing (PLAN-AUTH-GATE Abschnitt 1). Diese Phase engt genau EINEN
-// Fallback ein: operatorChannelTenant liefert den Bootstrap-Tenant NUR noch fuer den genuin
-// lokalen In-Process-Aufrufer (isTrustedLocalCaller - echtes Loopback, kein
-// X-Forwarded-For), jeder andere identitaetslose Request -> TENANT_REJECT.
-//
-// Testpraefix bewusst "AUTH-P3-N" (NICHT DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|
-// PROMPT|UI|VOICE|WEB|WORLD-<Ziffer>): sonst landet die Datei still im test:gates-Lauf,
-// wo Rot erlaubt ist und nichts meldet (Lehre catalog-id-prefix-misroutes-tests).
-//
-// Seit AUTH-P7 existiert kein Basic-Auth-Gate mehr im Code (BASE_ENV.DASHBOARD_PASSWORD
-// = "" in test/helpers.js ist reine Env-Neutralisierung gegen ein lokal gesetztes .env).
-// Jeder 403-Test hier prueft zusaetzlich res.status !== 401 und www-authenticate === null:
-// sollte je ein Gate wiederauferstehen, meldet der Test es, statt still eine falsche
-// Sicherung zu messen. Rate-Limit ist kein Stoerfaktor (RATE_LIMIT_PER_MIN="1000" in
-// BASE_ENV).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
@@ -32,9 +15,6 @@ import {
   readToolResult,
   assertGateAbsent,
 } from "./helpers.js";
-
-// --- Unit-Test-Helfer (Muster request-tenant-unit.test.js, EINE Datei = eigene Kopie,
-// Repo-Konvention - siehe reqWith/fakeRes in u.a. error-handler.test.js) ---
 
 function makeStore(map = {}) {
   const calls = [];
@@ -72,8 +52,6 @@ function fakeRes() {
 const LOCAL_ADDRS = ["127.0.0.1", "::1", "::ffff:127.0.0.1"];
 const EXTERNAL_ADDR = "203.0.113.7";
 
-// === operatorChannelTenant ======================================================
-
 test("AUTH-P3-1: operatorChannelTenant, Loopback ohne XFF -> BOOTSTRAP_TENANT_ID", () => {
   for (const addr of LOCAL_ADDRS) {
     assert.equal(
@@ -103,11 +81,7 @@ test("AUTH-P3-3: operatorChannelTenant, externer Socket -> TENANT_REJECT (mit un
   );
 });
 
-// === requestTenant / requireTenant ==============================================
-
 test("AUTH-P3-4: requestTenant, keinerlei Identitaet, externer Socket -> TENANT_REJECT, kein Lookup", () => {
-  // E4: vormals zwei Faelle (Flag AUS / Flag AN) - der Flag-Kurzschluss ist entfernt,
-  // beide fielen auf denselben Pfad (operatorChannelTenant) und sind damit EIN Fall.
   const store = makeStore();
   const { requestTenant } = makeRequestTenant(store);
   assert.equal(requestTenant(reqWith({ remoteAddress: EXTERNAL_ADDR })), TENANT_REJECT);
@@ -115,7 +89,6 @@ test("AUTH-P3-4: requestTenant, keinerlei Identitaet, externer Socket -> TENANT_
 });
 
 test("AUTH-P3-5: requestTenant, keinerlei Identitaet, Loopback ohne XFF (stdio/MCP) -> BOOTSTRAP_TENANT_ID, kein Lookup", () => {
-  // E4: vormals zwei Faelle (Flag AUS / Flag AN) - siehe AUTH-P3-4.
   const store = makeStore();
   const { requestTenant } = makeRequestTenant(store);
   assert.equal(
@@ -134,8 +107,6 @@ test("AUTH-P3-8: requireTenant, externer Aufrufer -> 403, null", () => {
   assert.equal(res.statusCode, 403);
   assert.ok(res.body && typeof res.body.error === "string", "403-Body traegt eine Fehlermeldung");
 });
-
-// === Invariante: BOOTSTRAP nur im EINEN von vier Faellen ========================
 
 test("AUTH-P3-9: operatorChannelTenant liefert BOOTSTRAP_TENANT_ID NUR bei Loopback ohne XFF", () => {
   const cases = [
@@ -159,14 +130,6 @@ test("AUTH-P3-9: operatorChannelTenant liefert BOOTSTRAP_TENANT_ID NUR bei Loopb
     assert.equal(out, expectBootstrap ? BOOTSTRAP_TENANT_ID : TENANT_REJECT, label);
   }
 });
-
-// === Spawn-Tests: Gate beweisbar abwesend (DASHBOARD_PASSWORD="" in BASE_ENV) ====
-// assertGateAbsent lebt in test/helpers.js (geteilt mit auth-p5-internal-only.test.js, S2).
-//
-// AUTH-P5-Hinweis (AUTH-P3-10/-11/-12/-13): der 403, der hier gemessen wird, kommt seit
-// AUTH-P5 zuerst von internalOnly (vor dem jeweiligen Handler) statt vom Tenant-Reject
-// im Handler-Rumpf. Assertions bleiben unveraendert wahr (Status + Store-Nebenwirkung);
-// die eigentliche operatorChannelTenant-Zusage tragen weiterhin die neun Unit-Tests oben.
 
 test("AUTH-P3-10: GET /api/tenant-data/export, MULTI_TENANT=true, externer Aufrufer (XFF) -> 403", async () => {
   const srv = await startServer({
@@ -206,14 +169,6 @@ test("AUTH-P3-11: GET /api/tenant-data/export, MULTI_TENANT=false, externer Aufr
   }
 });
 
-// AUTH-P4: der urspruengliche Traeger (POST /api/settings) ist geloescht. Umgestellt
-// auf POST /api/calls/:id/consult/answer - eine weiterhin lebende, schreibende Route,
-// deren Handler requireTenant(req, res) ALS ERSTES aufruft (Reihenfolge bindend, s.
-// Modulkommentar in api-calls.js): bei TENANT_REJECT schreibt requireTenant selbst die
-// 403-Antwort, VOR jedem Call-Lookup - anders als POST /api/calls/:id/cancel (das bei
-// fehlender Sichtbarkeit bewusst 404 statt 403 liefert, kein Existenz-Leck). ID und
-// Testname bleiben AUTH-P3-12 (sonst rottet die Zuordnung in PLAN-SECURITY.md); die
-// Zusage ist unveraendert "externer Aufrufer ohne Identitaet -> 403, kein Schreibzugriff".
 test("AUTH-P3-12: POST /api/calls/:id/consult/answer, MULTI_TENANT=true, externer Aufrufer (XFF) -> 403, kein Schreibzugriff", async () => {
   const srv = await startServer({
     env: { MULTI_TENANT: "true" },
@@ -236,8 +191,6 @@ test("AUTH-P3-13: POST /api/calls, MULTI_TENANT=false, externer Aufrufer (XFF) -
   const srv = await startServer({
     env: {
       MULTI_TENANT: "false",
-      // Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
-      // TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403 = ein Gate hat gesperrt.
       ALLOWED_COUNTRY_CODES: "+49",
     },
     seed: seedState({}),

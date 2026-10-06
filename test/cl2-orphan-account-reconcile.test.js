@@ -1,15 +1,7 @@
-// CL2 - Abgleich verwaister account-Zeilen gegen WorkOS.
-// Gepinnt werden hier vor allem die GRENZEN des Laufs, denn jede davon war im Entwurf eine
-// echte Fehlentscheidung: nie die letzte Zeile entfernen (sonst ist der Tenant per Email
-// unauffindbar und der Rueckkehrer bekommt einen leeren Account), bei einem Abfragefehler gar
-// nichts anfassen, lebende Identitaeten niemals abraeumen - auch nicht, wenn zwei davon
-// dieselbe Adresse tragen (test/tenant-prolif-b.test.js verlangt genau das) - und den
-// Trockenlauf wirklich trocken lassen.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { reconcileOrphanAccounts } from "../src/orphan-account-reconcile.js";
 
-// Test-Doubles statt DB: der Kern ist reine Entscheidungslogik ueber injizierten Naehten.
 function fakeAccounts(rows) {
   const calls = { dropped: [], anchors: [] };
   return {
@@ -26,7 +18,6 @@ function fakeAccounts(rows) {
   };
 }
 
-// livingSubs = die Identitaeten, die WorkOS noch kennt. failFor wirft fuer einen sub.
 function fakeWorkos(livingSubs, failFor = null) {
   return {
     userExists: async (sub) => {
@@ -38,15 +29,10 @@ function fakeWorkos(livingSubs, failFor = null) {
 
 const quiet = { warn: () => {}, log: () => {} };
 
-// Eine Zeile so, wie accountsForOrphanReconcile sie liefert. Die Adresse ist ueberall
-// dieselbe: der Lauf entscheidet nie nach Adresse, sondern nur nach der Antwort des
-// Identitaetsanbieters - genau das ist der Unterschied zum verworfenen Login-Abraeumen.
 const EMAIL = "kunde@x";
 const row = (tenantId, idpSubject, sub) => ({ tenantId, idpSubject, sub, email: EMAIL });
 
 test("CL2: tote Zeile wird entfernt und der Anker auf die lebende Identitaet gezogen", async () => {
-  // Der gemessene Produktionsfall: zwei Rueckkehr-Logins nach dem Vertragsende, der Anker
-  // zeigt noch auf die aelteste, laengst geloeschte Identitaet.
   const accounts = fakeAccounts([
     row("t_1", "alt", "alt"),
     row("t_1", "alt", "mittel"),
@@ -66,9 +52,6 @@ test("CL2: tote Zeile wird entfernt und der Anker auf die lebende Identitaet gez
 });
 
 test("CL2: zwei LEBENDE Identitaeten derselben Adresse bleiben beide stehen", async () => {
-  // Der Fall, an dem ein Abraeumen im Login-Pfad gescheitert waere: das System laesst
-  // mehrere lebende subs derselben Adresse auf einem Tenant ausdruecklich zu
-  // (test/tenant-prolif-b.test.js). Nur die Rueckfrage beim Anbieter unterscheidet sie.
   const accounts = fakeAccounts([row("t_1", "u1", "u1"), row("t_1", "u1", "u2")]);
   const report = await reconcileOrphanAccounts({
     accounts,
@@ -87,9 +70,6 @@ test("CL2: zwei LEBENDE Identitaeten derselben Adresse bleiben beide stehen", as
 });
 
 test("CL2: sind ALLE Identitaeten tot, bleibt die aelteste Zeile stehen (Tenant bleibt auffindbar)", async () => {
-  // Ohne diese Grenze faende der naechste Login den Tenant per Email nicht mehr und legte
-  // einen leeren neuen an - ohne Historie, ohne stripe_customer_id, waehrend Stripe den
-  // alten Kunden weiterfuehrt.
   const accounts = fakeAccounts([row("t_1", "alt", "alt"), row("t_1", "alt", "neu")]);
   const report = await reconcileOrphanAccounts({
     accounts,
@@ -104,9 +84,6 @@ test("CL2: sind ALLE Identitaeten tot, bleibt die aelteste Zeile stehen (Tenant 
 });
 
 test("CL2: eine fehlgeschlagene Abfrage laesst den GANZEN Tenant unveraendert", async () => {
-  // Fail-closed: faellt eine einzige Abfrage aus, ist unbekannt, wie viele lebende Zeilen der
-  // Tenant hat - und genau davon haengt ab, ob eine Loeschung die letzte Zeile traefe. Ein
-  // kurzer WorkOS-Ausfall darf niemals lebende Identitaeten abraeumen.
   const accounts = fakeAccounts([row("t_1", "alt", "alt"), row("t_1", "alt", "neu")]);
   const report = await reconcileOrphanAccounts({
     accounts,

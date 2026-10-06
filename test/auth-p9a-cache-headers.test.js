@@ -1,13 +1,3 @@
-// AUTH-P9A — Cache-Header fuer die statische Auslieferung. Spawn-Test gegen ein
-// Temp-WEB_DIST_DIR (Muster test/single-origin-serving.test.js). EIN Server fuer die
-// ganze Datei (before/after): alle fuenf Tests sind reine, seiteneffektfreie GETs -
-// keine gemeinsame veraenderliche Zustandsflaeche, Reihenfolge egal (F.I.R.S.T.
-// "Independent"), und wir sparen vier Server-Spawns Laufzeit (T9).
-//
-// Fixture bildet den realen Astro-Build nach: fingerprintete Chunks unter /_astro/,
-// eine Falle (/_astrophysik/ - enthaelt "_astro", ist aber ein anderes Verzeichnis)
-// und eine Gegenprobe (/assets/hero.js - liegt daneben, aus apps/web/public/,
-// NICHT fingerprintet).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -29,10 +19,8 @@ fs.writeFileSync(
 );
 fs.mkdirSync(path.join(WEB_DIST, "_astro"));
 fs.writeFileSync(path.join(WEB_DIST, "_astro", "chunk.AbC12345.js"), "console.log('chunk');");
-// FALLE: enthaelt "_astro" als Teilstring, ist aber ein anderes Verzeichnis.
 fs.mkdirSync(path.join(WEB_DIST, "_astrophysik"));
 fs.writeFileSync(path.join(WEB_DIST, "_astrophysik", "hinweis.js"), "console.log('kein chunk');");
-// GEGENPROBE: liegt daneben (wie apps/web/public/*), NICHT fingerprintet.
 fs.mkdirSync(path.join(WEB_DIST, "assets"));
 fs.writeFileSync(path.join(WEB_DIST, "assets", "hero.js"), "console.log('hero');");
 
@@ -40,12 +28,6 @@ let srv;
 before(async () => {
   srv = await startServer({ env: { WEB_DIST_DIR: WEB_DIST } });
 });
-// Fail-safe wie in test/al-p10b-lookup.test.js (Lehre catalog-id-prefix-misroutes-tests):
-// laeuft die Datei unter einem --test-name-pattern, das KEINEN ihrer Testnamen trifft
-// (Gates- und Abnahme-Lauf, s. test/testbaenke-run.mjs), bleibt der Root-before() aus -
-// srv ist dann undefined. Ohne das Fragezeichen dereferenziert dieser Hook undefined und
-// der Kindprozess haengt unbegrenzt, statt sauber durchzulaufen (gemessen 2026-08-13:
-// beide Name-Pattern-Baenke blieben genau hier stehen).
 after(async () => {
   await srv?.stop();
   fs.rmSync(WEB_DIST, { recursive: true, force: true });

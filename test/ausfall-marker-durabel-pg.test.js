@@ -1,8 +1,3 @@
-// OUTBOUND-E3b (PM-23): der Entprell-/Zustandsmarker des Ausfall-Melders MUSS einen
-// Prozess-Neustart ueberleben - auf plan:free ist JEDES Aufwachen ein Prozessstart, ein
-// Marker im Speicher hiesse Alarm bei jedem Aufwachen. PGlite (Postgres-in-WASM, KEIN
-// Netz, keine externe DB -> F.I.R.S.T. erfuellt), Muster
-// test/plattform-nummer-bindung-pg.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore } from "../src/store/pg.js";
@@ -22,7 +17,7 @@ const SCHWELLEN = Object.freeze({
 const T0_ISO = "2026-08-27T16:45:00Z";
 const T0_MS = Date.parse(T0_ISO);
 const EINE_MINUTE_SPAETER_MS = Date.parse("2026-08-27T16:46:00Z");
-const NACH_DEBOUNCE_MS = Date.parse("2026-08-27T22:45:01Z"); // T0 + 6h + 1s
+const NACH_DEBOUNCE_MS = Date.parse("2026-08-27T22:45:01Z");
 
 async function reopen(db) {
   const runner = {

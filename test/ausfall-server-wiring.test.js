@@ -1,14 +1,3 @@
-// OUTBOUND-E3b Review-Blocker (E3B-01): der zweite Verdrahtungspunkt des Melders -
-// server.js baut makeOutageWatch EINMAL beim Boot (Muster costTruing/costCrossCheck,
-// INV-7) und reicht das Ergebnis als "outageWatch" ins deps-Buendel durch, das
-// runSweepTick (boot.js) am Stunden-Takt aufruft. Ein echter Boot-Test waere hier
-// unverhaeltnismaessig (server.js startet beim Import den ganzen Prozess) - der
-// Laufzeit-Beleg fuer runSweepTick selbst steht bereits in KV-M4-8
-// (test/kv-m4-monthly-cross-check.test.js, injizierte Attrappe). Dieser Test schliesst
-// die verbleibende Luecke: dass server.js outageWatch UEBERHAUPT baut und WEITERREICHT -
-// faellt eine der beiden Zeilen weg, wirft runSweepTick beim naechsten Boot auf
-// undefined, ohne dass ein einziger bestehender Test es merkt (Quelltext-Wiring-Guard,
-// Muster test/call-termination-order.test.js "C5").
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -24,8 +13,6 @@ test("E3B-01: server.js baut makeOutageWatch und reicht outageWatch ins deps-Bue
     "makeOutageWatch muss importiert sein");
   assert.match(serverSrc, /const outageWatch = makeOutageWatch\(/,
     "outageWatch muss EINMAL beim Boot konstruiert werden (Muster costTruing/costCrossCheck)");
-  // Das deps-Buendel (const deps = {...}) muss den Schluessel "outageWatch," tragen -
-  // sonst bekommt runSweepTick (boot.js) nie eine echte Instanz, sondern undefined.
   const depsStart = serverSrc.indexOf("const deps = {");
   assert.notEqual(depsStart, -1, "deps-Buendel nicht gefunden");
   const depsEnd = serverSrc.indexOf("};", depsStart);
@@ -38,26 +25,16 @@ test("E3B-01: boot.js reicht outageWatch aus dem deps-Buendel an runSweepTick we
     "runSweepTick muss outageWatch destrukturieren");
   assert.match(bootSrc, /outageWatch\s*\n\s*\.runRecoverySweep\(\)/,
     "runSweepTick muss outageWatch.runRecoverySweep() tatsaechlich aufrufen");
-  // Der Aufrufer von runSweepTick (der Stunden-Timer) muss outageWatch aus SEINEM
-  // eigenen deps-Buendel weiterreichen, nicht selbst neu bauen (EINE Instanz, INV-7).
   assert.match(bootSrc, /runSweepTick\({\s*costTruing,\s*provisioning,\s*costCrossCheck,\s*outageWatch,\s*paidWithoutNumberWatch,\s*provisionRetryWatch,\s*priceDriftWatch\s*}\)/,
     "der Sweep-Timer muss outageWatch, paidWithoutNumberWatch, provisionRetryWatch UND priceDriftWatch an runSweepTick durchreichen");
 });
 
-// Review-Blocker (BLOCKER 1 / G9/C2): der ANI-Riegel (outbound-gates.js#ani_ownership)
-// kann OHNE diese Verdrahtung NIE ablehnen - makeOutboundGates() faellt sonst auf ihren
-// Default-No-op (`async () => null`) zurueck, egal wie scharf OUTBOUND_ANI_GATE_ENABLED
-// steht. test/outbound-ani-gate.test.js deckt NUR die Gate-Logik selbst (injizierte
-// Attrappe) - dieser Test schliesst die Luecke, dass server.js den ECHTEN Recheck
-// UEBERHAUPT baut und an makeOutboundGates uebergibt.
 test("OUTBOUND-E4: server.js baut den echten aniOwnershipRecheck ueber providerConfigRead() und uebergibt ihn an makeOutboundGates", () => {
   assert.match(
     serverSrc,
     /import\s*{\s*makeAniOwnershipRecheck\s*}\s*from\s*"\.\/telephony\/ani-ownership-recheck\.js"/,
     "makeAniOwnershipRecheck muss importiert sein",
   );
-  // T2-08 (T-27): der Destrukturier-Ausdruck traegt seit dieser Etappe zusaetzlich
-  // callQuotaDenial (Quoten-Pruefung im Claim-Lock, EINE Instanz mit outboundGates).
   const gatesStart = serverSrc.indexOf(
     "const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({",
   );
@@ -69,8 +46,6 @@ test("OUTBOUND-E4: server.js baut den echten aniOwnershipRecheck ueber providerC
     /aniOwnershipRecheck:\s*makeAniOwnershipRecheck\(\s*{\s*telnyxRead\s*}\s*\)/,
     "aniOwnershipRecheck muss ueber makeAniOwnershipRecheck({ telnyxRead }) an makeOutboundGates uebergeben werden",
   );
-  // telnyxRead muss VOR diesem Aufruf existieren, sonst wirft server.js beim Boot auf
-  // ein undefiniertes Symbol (TDZ) statt den Recheck zu bauen.
   const telnyxReadDefIndex = serverSrc.indexOf("const telnyxRead = providerConfigRead();");
   assert.notEqual(telnyxReadDefIndex, -1, "telnyxRead muss ueber providerConfigRead() gebaut werden");
   assert.ok(telnyxReadDefIndex < gatesStart, "telnyxRead muss VOR makeOutboundGates(...) definiert sein");
@@ -100,10 +75,6 @@ test("GP-P0: boot.js destrukturiert paidWithoutNumberWatch und ruft runPaidWitho
     "bootServer muss paidWithoutNumberWatch aus dem deps-Buendel destrukturieren");
 });
 
-// GP-P4: dritter Verdrahtungspunkt, identisches Muster (GP-P0 oben) - der zeitgesteuerte
-// Wiederanlauf ist der NEUNTE Sweep-Zweig. Er wird NACH dem Provisioning-Orchestrator
-// konstruiert (er braucht triggerTenantProvisioning); faellt eine der Zeilen weg, wirft
-// runSweepTick beim naechsten Boot synchron auf undefined.
 test("GP-P4: server.js baut makeProvisionRetryWatch und reicht provisionRetryWatch ins deps-Buendel durch", () => {
   assert.match(
     serverSrc,
@@ -128,10 +99,6 @@ test("GP-P4: boot.js destrukturiert provisionRetryWatch und ruft runProvisionRet
     "bootServer muss provisionRetryWatch aus dem deps-Buendel destrukturieren");
 });
 
-// GP-P6: vierter Verdrahtungspunkt, identisches Muster (GP-P0/GP-P4 oben) - der
-// Preis-Waechter ist der ZEHNTE Sweep-Zweig UND ein eigener Boot-Lauf. Faellt eine der
-// Zeilen weg, wirft runSweepTick beim naechsten Boot synchron auf undefined bzw. der
-// Boot-Lauf entfaellt lautlos, ohne dass ein Bestandstest es merkt.
 test("GP-P6: server.js baut makePriceDriftWatch und reicht priceDriftWatch ins deps-Buendel durch", () => {
   assert.match(
     serverSrc,

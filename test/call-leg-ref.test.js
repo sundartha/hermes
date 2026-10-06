@@ -1,8 +1,3 @@
-// KV2-5 Review-Blocker (Runde 1, S2): legRefOfCall stand wortgleich in
-// sweep-kostenbeleg.js UND cost-truing.js (dieselbe dreiwertige ODER-Kette). Ausgelagert
-// nach call-leg-ref.js als EINE Quelle fuer beide - dieser Test pinnt die Prioritaet
-// (twilioSid > callControlId > sipCallId > null), damit ein kuenftiger Edit an einer der
-// beiden Verbraucherstellen nicht wieder in eine zweite, abweichende Fassung driftet.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { legRefOfCall } from "../src/billing/call-leg-ref.js";

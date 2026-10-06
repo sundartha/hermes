@@ -1,14 +1,3 @@
-// CL1 (B1+B2) — Kuendigung darf keinen ausweglosen Zustand hinterlassen. Nach
-// customer.subscription.deleted blieb die gespeicherte sub_-Referenz stehen: der
-// Tenant kam weder ins Dashboard (status=suspended -> 403) noch zu einem neuen Abo
-// (hasActiveSubscription -> 409 already_subscribed). Diese Datei deckt die
-// Interpretation (SUSPEND_REASON), die neue Schreibkante (clearSubscriptionReference)
-// UND den fachlichen Beweis auf Routen-Ebene (kein Ausweg mehr).
-//
-// Zwei Ebenen (Muster 312k-p1-cancel-scheduled.test.js + bk2-checkout-return-plan.test.js):
-// (1) reine Units mit aufzeichnenden Fake-Seams, offline, F.I.R.S.T.
-// (2) Routen-Test mit echtem pglite-Store + echten Self-Service-Routen (der eigentliche
-//     Beweis: setup-checkout antwortet nach deleted NICHT mehr mit 409).
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -31,7 +20,6 @@ const TENANT = "t_cl1";
 const HTTP_OK = 200;
 const HTTP_CONFLICT = 409;
 
-// ---- Aufzeichnende Fake-Seams (Muster 312k-p1-cancel-scheduled.test.js) ------------------
 function fakeDeps({ storedSubscriptionId = null } = {}) {
   const calls = {
     setStatus: [],
@@ -44,7 +32,6 @@ function fakeDeps({ storedSubscriptionId = null } = {}) {
     calls,
     store: {
       findTenantBySubscription: () => null,
-      // FW1-A: Existenz-Gate der Tenant-Aufloesung - dieses Double modelliert einen existierenden Tenant.
       tenantExists: () => true,
       setTenantSubscription: (tenant, patch) => calls.subscription.push([tenant, patch]),
       tenantSubscription: () => ({ planSlug: null, subscriptionId: storedSubscriptionId }),
@@ -76,8 +63,6 @@ function paymentFailedEvent({ id, created, subId = "sub_cl1", tenant = TENANT } 
   };
 }
 
-// ---- interpretStripeEvent: SUSPEND_REASON pro Ereignis -----------------------------------
-
 test("interpretStripeEvent: customer.subscription.deleted -> suspendReason=SUBSCRIPTION_DELETED", () => {
   const out = interpretStripeEvent(deletedEvent({ id: "evt_i1", created: 1 }));
   assert.equal(out.action, WEBHOOK_ACTION.SUSPEND);
@@ -90,8 +75,6 @@ test("interpretStripeEvent: invoice.payment_failed -> suspendReason=PAYMENT_FAIL
   assert.equal(out.suspendReason, SUSPEND_REASON.PAYMENT_FAILED);
 });
 
-// ---- Spec-Test 1: deleted entwertet die gespeicherte Abo-Referenz ------------------------
-
 test("Spec-Test 1: applyStripeWebhook(deleted) mit gespeichertem Abo -> setStatus(suspended) UND genau ein setTenantSubscription({subscriptionId:null})", async () => {
   const deps = fakeDeps({ storedSubscriptionId: "sub_old" });
   await applyStripeWebhook(deletedEvent({ id: "evt_1", created: 1 }), deps);
@@ -99,16 +82,12 @@ test("Spec-Test 1: applyStripeWebhook(deleted) mit gespeichertem Abo -> setStatu
   assert.deepEqual(deps.calls.subscription, [[TENANT, { subscriptionId: null }]], "NUR die Referenz entwertet - kein planSlug/cancelAtPeriodEnd im Patch");
 });
 
-// ---- Spec-Test 2: payment_failed laesst die Referenz stehen (Doppelabbuchungs-Schutz) ----
-
 test("Spec-Test 2: applyStripeWebhook(payment_failed) mit gespeichertem Abo -> setStatus(suspended), KEINE Abo-Schreibung", async () => {
   const deps = fakeDeps({ storedSubscriptionId: "sub_old" });
   await applyStripeWebhook(paymentFailedEvent({ id: "evt_2", created: 1 }), deps);
   assert.deepEqual(deps.calls.setStatus, [[TENANT, "suspended"]]);
   assert.deepEqual(deps.calls.subscription, [], "Abo lebt im Dunning weiter - Referenz bleibt (Doppelabbuchungs-Schutz)");
 });
-
-// ---- Store-Roundtrip: der Setter traegt null (Vorentscheidung Plan §0) -------------------
 
 test("Store-Roundtrip: setTenantSubscription(state, tenantId, {subscriptionId:null}) -> tenantSubscription liefert null, planSlug bleibt", () => {
   const state = makeDefaultState();
@@ -120,18 +99,13 @@ test("Store-Roundtrip: setTenantSubscription(state, tenantId, {subscriptionId:nu
   assert.equal(tenantSubscription(state, "t_cl1_store").planSlug, "starter", "planSlug bleibt stehen (Owner-Entscheidung geparkt)");
 });
 
-// ---- Idempotenz: ein zweites deleted ist ein No-Op fuer die Abo-Referenz -----------------
-
 test("Idempotenz: zweites deleted (andere event.id) nach bereits geleerter Referenz -> kein zweiter Patch", async () => {
   const subId = "sub_cl1_idem";
-  const deps = fakeDeps({ storedSubscriptionId: null }); // Referenz bereits leer (erstes deleted lief schon)
+  const deps = fakeDeps({ storedSubscriptionId: null });
   await applyStripeWebhookSerialized(deletedEvent({ id: "evt_idem_1", created: 1_800_000_000, subId }), deps);
   await applyStripeWebhookSerialized(deletedEvent({ id: "evt_idem_2", created: 1_800_000_001, subId }), deps);
   assert.deepEqual(deps.calls.subscription, [], "clearSubscriptionReference ist bei bereits leerer Referenz ein No-Op");
 });
-
-// ---- Spec-Tests 3+4 (Routen-Ebene): der eigentliche Beweis -------------------------------
-// Echter pglite-Store + echte Self-Service-Routen (Muster bk2-checkout-return-plan.test.js).
 
 const SECRET = "cl1-cancel-lockout-secret-0123456789";
 const CUSTOMER = "cus_cl1";
@@ -150,9 +124,6 @@ async function setupRoute({ tenantId, priorSubscriptionId = "sub_prior" }) {
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
 
-  // tenantIdForSubject(sub) = "t_"+sub (EINE Quelle, s. store/defaults.js) - der sub muss so
-  // gewaehlt sein, dass upsertOnFirstLogin GENAU tenantId anlegt (sonst FK-Mismatch zwischen
-  // dem hier direkt gesetzten Store-Mirror und der von upsertOnFirstLogin geschriebenen Zeile).
   const sub = tenantId.replace(/^t_/, "");
   const state = store.load();
   const { registerTenant: reg, setTenantStripe, setTenantSubscription: setSub } = await import("../src/store/state-ops.js");
@@ -185,10 +156,6 @@ async function setupRoute({ tenantId, priorSubscriptionId = "sub_prior" }) {
   const server = await new Promise((resolve) => {
     const sv = app.listen(0, "127.0.0.1", () => resolve(sv));
   });
-  // Session ERST NACH dem Webhook-Aufruf anlegen (der Test simuliert einen Kunden, der sich
-  // nach der Kuendigung/dem Zahlungsausfall NEU einloggt) - applyStripeWebhook invalidiert im
-  // SUSPEND-Zweig alle Bestandssessions des Tenants; eine vorher erzeugte Session waere im
-  // Moment des Requests bereits geloescht (401 statt der eigentlich gepruefte 200/409).
   async function loginAs() {
     const { id: sessionId } = await sessions.create({ sub, tenantId, ttlSeconds: 3600 });
     return `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(sessionId, SECRET))}`;

@@ -1,11 +1,3 @@
-// LCT P2 (Ist-Kosten am Call persistieren, additiv/inert): Rundlauf-Beweis ueber BEIDE
-// Backends fuer die fuenf Kosten-Felder (estimatedCostCents, actualCostMicroCents,
-// costTruedAt, costTruedSource, costTruingAttempts). pglite + json IN-PROCESS, KEIN
-// Server-Spawn (p6a-Regel; Muster test/assistant-context-persist-pg.test.js).
-//
-// DATA_DIR + config werden VOR allen store-Imports gebunden (json.FILE haengt an
-// config.dataDir): darum laeuft die Verdrahtung ueber dynamische Imports in before(),
-// NICHT ueber statische Imports (sonst bindet config.dataDir an das echte data/-Verzeichnis).
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -32,8 +24,6 @@ before(async () => {
   ({ makeConfigOverrides } = await import("./helpers.js"));
 });
 
-// pglite-Store hinter dem Runner-Vertrag (Muster assistant-context-persist-pg.test.js).
-// Liefert {store, runner} fuer den Reopen.
 async function makePgTestStore() {
   const db = new PGlite();
   const runner = {
@@ -51,8 +41,6 @@ const newCall = (over = {}) => ({
   tenantId: BOOTSTRAP,
   ...over,
 });
-
-// ---- (a) Rundlauf 51300 ueber BEIDE Backends ----
 
 test("A1 (pg): actualCostMicroCents=51300 ueberlebt Flush+Reopen als NUMBER (kein BIGINT-String)", async () => {
   const { store, runner } = await makePgTestStore();
@@ -75,8 +63,6 @@ test("A2 (json): actualCostMicroCents=51300 ueberlebt load() auf frischem Modulz
   assert.equal(persisted.actualCostMicroCents, 51300);
 });
 
-// ---- (b) Fehlende Felder -> null bzw. 0, kein NaN ----
-
 test("B1 (pg): Call ohne Kosten-Felder -> null/0 nach Flush+Reopen, kein NaN", async () => {
   const { store, runner } = await makePgTestStore();
   const created = store.createCall(newCall());
@@ -89,8 +75,6 @@ test("B1 (pg): Call ohne Kosten-Felder -> null/0 nach Flush+Reopen, kein NaN", a
   assert.equal(hydrated.costTruedAt, null);
   assert.equal(hydrated.costTruedSource, null);
   assert.equal(hydrated.costTruingAttempts, 0);
-  // KS-P5: die zwei Belastungs-Anker hydrieren wie estimatedCostCents zu null - eine
-  // Bestandszeile ohne Anker laesst die Gutschrift fail-closed auf der Lebenszeit-Achse.
   assert.equal(hydrated.estimatedCostSpendMonthKey, null);
   assert.equal(hydrated.estimatedCostPeriodKey, null);
   assert.ok(!Number.isNaN(hydrated.estimatedCostCents));
@@ -111,13 +95,8 @@ test("B2 (json Alt-Shape): ein von Hand ohne die fuenf Felder geschriebener Call
     startedAt: new Date().toISOString(),
     transcript: [],
     actionItemIds: [],
-    // BEWUSST: keine estimatedCostCents/actualCostMicroCents/costTruedAt/
-    // costTruedSource/costTruingAttempts-Felder (Alt-Bestand vor P2).
   });
   fs.writeFileSync(rawPath, JSON.stringify(raw, null, 2));
-  // Modul-Cache-Reset: jsonStore.load() haelt den Zustand modul-lokal im Speicher
-  // (state-Singleton) - ein frischer dynamischer Import mit Query-String zwingt einen
-  // echten Re-Read von der Platte.
   const freshJsonStore = await import(`../src/store/json.js?altshape-${Date.now()}`);
   const hydrated = freshJsonStore.load().calls.find((c) => c.id === legacyId);
   assert.ok(hydrated, "Alt-Call muss geladen werden");
@@ -126,14 +105,10 @@ test("B2 (json Alt-Shape): ein von Hand ohne die fuenf Felder geschriebener Call
   assert.equal(hydrated.costTruedAt, null);
   assert.equal(hydrated.costTruedSource, null);
   assert.equal(hydrated.costTruingAttempts, 0);
-  // KS-P5: json<->pg-Paritaet der zwei Belastungs-Anker (CALL_FIELD_DEFAULTS) - strukturell
-  // null, nie undefined.
   assert.equal(hydrated.estimatedCostSpendMonthKey, null);
   assert.equal(hydrated.estimatedCostPeriodKey, null);
   assert.ok(!Number.isNaN(hydrated.costTruingAttempts + 1), "P3 rechnet +1 - darf nie NaN werden");
 });
-
-// ---- (c) Mutation nach Create ueberlebt den zweiten Flush (ON CONFLICT DO UPDATE SET) ----
 
 test("C1 (pg): costTruedSource + costTruingAttempts gesetzt NACH Create ueberleben einen zweiten Flush", async () => {
   const { store, runner } = await makePgTestStore();
@@ -143,8 +118,6 @@ test("C1 (pg): costTruedSource + costTruingAttempts gesetzt NACH Create ueberleb
   const mirrored = store.getCall(created.id);
   mirrored.costTruedSource = "incomplete";
   mirrored.costTruingAttempts = 3;
-  // Zwischenbeleg: die Mutation steht VOR Flush 2 bereits im Spiegel (sonst testet
-  // dieser Fall nur die Spalten-Existenz, nicht den UPDATE-SET-Drift).
   assert.equal(store.getCall(created.id).costTruedSource, "incomplete", "Zwischenbeleg vor Flush 2");
   assert.equal(store.getCall(created.id).costTruingAttempts, 3, "Zwischenbeleg vor Flush 2");
 
@@ -156,16 +129,12 @@ test("C1 (pg): costTruedSource + costTruingAttempts gesetzt NACH Create ueberleb
   assert.equal(hydrated.costTruingAttempts, 3, "Mutation nach Create muss den 2. Flush ueberleben");
 });
 
-// ---- (d) migrate() zweimal auf derselben pglite-DB (Idempotenz) ----
-
 test("D1 (pg): migrate() zweimal auf derselben DB -> kein Throw, geschriebene Zeile bleibt unveraendert", async () => {
   const { store, runner } = await makePgTestStore();
   const created = store.createCall(newCall());
   created.actualCostMicroCents = 777;
   await store.save();
 
-  // Zweiter init() auf demselben Runner faehrt migrate() (ALTER TABLE ADD COLUMN IF NOT
-  // EXISTS) ein zweites Mal auf derselben DB.
   await assert.doesNotReject(async () => {
     const second = makePgStore(runner);
     await second.init();
@@ -176,8 +145,6 @@ test("D1 (pg): migrate() zweimal auf derselben DB -> kein Throw, geschriebene Ze
   assert.equal(reopened.getCall(created.id).actualCostMicroCents, 777, "Zeile bleibt nach doppeltem migrate() unveraendert");
 });
 
-// ---- (e) Estimate == gebuchter Betrag, stabil gegen Tarifwechsel (E2/E3/E4) ----
-
 test("E1: reconcileVoiceBudget bucht + persistiert denselben Estimate-Wert, stabil gegen spaeteren Tarifwechsel", async () => {
   const { withConfig } = makeConfigOverrides(config);
   const tenantId = BOOTSTRAP;
@@ -186,7 +153,7 @@ test("E1: reconcileVoiceBudget bucht + persistiert denselben Estimate-Wert, stab
   );
   const mirrored = jsonStore.load().calls.find((c) => c.id === created.id);
   mirrored.answeredAt = "2026-07-20T10:00:00.000Z";
-  mirrored.endedAt = "2026-07-20T10:03:00.000Z"; // 3 Minuten
+  mirrored.endedAt = "2026-07-20T10:03:00.000Z";
 
   await withConfig("voiceTariffDomesticCents", 6, async () => {
     const metering = makeMetering({ store: jsonStore, config });
@@ -196,15 +163,10 @@ test("E1: reconcileVoiceBudget bucht + persistiert denselben Estimate-Wert, stab
     assert.equal(costCentsAfterFirst - costCentsBeforeFirst, 18, "3 Minuten * 6 Cent/min = 18 Cent gebucht");
     const persisted = jsonStore.getCall(created.id);
     assert.equal(persisted.estimatedCostCents, 18, "derselbe Betrag wird am Call persistiert");
-    // KS-P5: mit dem Betrag reisen die zwei Achsen-Stempel der Buchung mit (Bucket-Brigade).
-    // Verglichen wird gegen den Bucket SELBST - eine fest verdrahtete Erwartung waere eine
-    // zweite, unabhaengig gepflegte Monats-/Perioden-Regel.
     const bucket = jsonStore.usageOf(tenantId);
     assert.equal(persisted.estimatedCostSpendMonthKey, bucket.spendMonthKey, "Anker = Monatsstempel NACH der Buchung");
     assert.equal(persisted.estimatedCostPeriodKey, bucket.budgetPeriodKey, "Anker = Perioden-Stempel NACH der Buchung");
 
-    // Set-once (E3): ein zweiter Aufruf auf demselben Call darf den Estimate NICHT
-    // erneut buchen/ueberschreiben.
     const costCentsBeforeSecond = jsonStore.usageOf(tenantId).costCents;
     metering.reconcileVoiceBudget(mirrored);
     assert.equal(jsonStore.getCall(created.id).estimatedCostCents, 18, "set-once: Estimate bleibt 18");
@@ -215,8 +177,6 @@ test("E1: reconcileVoiceBudget bucht + persistiert denselben Estimate-Wert, stab
     );
   });
 
-  // Tarifwechsel NACH der Buchung: der persistierte Estimate darf sich NICHT aendern
-  // (Kapitel 4 des Plans - sonst rekonstruiert P4 gegen den falschen Tarif).
   await withConfig("voiceTariffDomesticCents", 25, async () => {
     const stillPersisted = jsonStore.getCall(created.id);
     assert.equal(stillPersisted.estimatedCostCents, 18, "Estimate bleibt stabil gegen spaeteren Tarifwechsel");

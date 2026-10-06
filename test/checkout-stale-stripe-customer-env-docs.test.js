@@ -1,8 +1,3 @@
-// Review-Fix (Fix B, Runde 1): STRIPE_CUSTOMER_RETRY_DELAY_MS ist in src/config.js
-// zentralisiert (siehe src/config.js) - Repo-Konvention verlangt zusaetzlich
-// Dokumentation in .env.example UND einen Eintrag in render.yaml. Reiner
-// Datei-Read, keine Server-/Config-Imports (verhindert stille Rueckkehr der
-// Luecke, ohne die Datei-Formate nachzubauen).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";

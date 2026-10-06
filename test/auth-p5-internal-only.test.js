@@ -1,25 +1,3 @@
-// AUTH-P5: internalOnly vor den sieben MCP-Routen + Audit-Ersatz an vier Stellen.
-// Bis dahin war der Schutz dieser sieben Routen NUR ein Nebeneffekt des Basic-Auth-
-// Gates (das mit AUTH-P7 gefallen ist). internalOnly macht die eigentliche
-// Vertrauensgrenze explizit: genuin lokaler In-Process-Aufrufer (isTrustedLocalCaller,
-// echter Loopback-Socket OHNE X-Forwarded-For) - dieselbe Grenze wie AUTH-P3, keine
-// neue Trust-Idee.
-//
-// Testpraefix bewusst "AUTH-P5-N" (NICHT DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|
-// PROMPT|UI|VOICE|WEB|WORLD-<Ziffer>): sonst landet die Datei still im test:gates-Lauf,
-// wo Rot erlaubt ist und nichts meldet (Lehre catalog-id-prefix-misroutes-tests).
-//
-// AUTH-P5-1/-2/-3 messen internalOnly ueber echte Spawn-Server (Muster AUTH-P3): seit
-// AUTH-P7 existiert kein Basic-Auth-Gate mehr im Code (BASE_ENV.DASHBOARD_PASSWORD=""
-// ist reine Env-Neutralisierung) - jeder 403-Fall prueft zusaetzlich assertGateAbsent
-// (kein 401, kein www-authenticate), der Wiederauferstehungs-Detektor.
-//
-// AUTH-P5-4/-5/-6 messen die drei Ablehnungszweige in web-auth.js direkt: eine winzige
-// lokale Express-App (Muster mountAdmin in test/web-auth.test.js) statt eines vollen
-// Server-Spawns, weil der Web-Login-Block bei STORE_BACKEND=json (Spawn-Default) gar
-// nicht gemountet ist (src/app.js: sessionSecret && storeBackend === "pg"). req.path/
-// req.originalUrl sind dabei ECHT (echter Express-Request) - der W9-Test misst die
-// reale Semantik, kein handgebautes req-Objekt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -47,14 +25,10 @@ function countMatches(text, re) {
   return (text.match(new RegExp(re, "g")) || []).length;
 }
 
-// Regex-Sonderzeichen im Pfad neutralisieren (keiner der sieben Pfade traegt welche,
-// aber die Funktion bleibt korrekt statt zufaellig richtig).
 function escapeForRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// EINE lokale Express-App mit einer Handler-Kette auf GET /api/probe (Muster
-// mountAdmin, test/web-auth.test.js) - fuer AUTH-P5-4/-5/-6.
 async function mountProbe(middlewares, requestFelder = {}) {
   const app = express();
   Object.assign(app.request, requestFelder);
@@ -67,8 +41,6 @@ async function mountProbe(middlewares, requestFelder = {}) {
     close: () => new Promise((resolve) => server.close(resolve)),
   };
 }
-
-// === AUTH-P5-1: die sieben Routen weisen den externen Aufrufer ab =================
 
 const ROUTEN = [
   { methode: "POST", pfad: "/api/calls", body: { to: "+4915112345678", objective: "Test" } },
@@ -97,20 +69,15 @@ test("AUTH-P5-1: die sieben internalOnly-Routen weisen den externen Aufrufer ab 
           ...(body ? { body: JSON.stringify(body) } : {}),
         });
 
-        // a) Status + Gate-Abwesenheit + Fehlerkoerper
         assert.equal(res.status, HTTP_FORBIDDEN);
         assertGateAbsent(res);
         const json = await res.json();
         assert.ok(json.error, "403-Body traegt eine Fehlermeldung");
 
-        // b) genau EINE Audit-Zeile. Das grund=not_local-Suffix ist load-bearing: ohne
-        // es waere path=/api/calls ein Praefix von path=/api/calls/call_p5/... und der
-        // Zaehler faelschlich hoch.
         const auditRegex = `\\[audit\\] auth_failed ip=\\S+ path=${escapeForRegex(pfad)} grund=not_local`;
         await waitForLog(srv, new RegExp(auditRegex));
         assert.equal(countMatches(srv.stdout, auditRegex), 1, `Audit-Zeile fuer ${pfad} fehlt oder kommt mehrfach vor`);
 
-        // c) kein Seiteneffekt: kein neuer Call, kein Statuswechsel des geseedeten Calls
         const store = srv.readStore();
         assert.equal(store.calls.length, 1, "kein neuer Call entstand");
         assert.equal(store.calls[0].status, "active", "der geseedete Call wurde nicht abgebrochen");
@@ -120,8 +87,6 @@ test("AUTH-P5-1: die sieben internalOnly-Routen weisen den externen Aufrufer ab 
     await srv.stop();
   }
 });
-
-// === AUTH-P5-2: der In-Process-Pfad lebt (Pre-Mortem-Gegenprobe) ==================
 
 test("AUTH-P5-2: der In-Process-MCP-Pfad ueber Loopback (ohne XFF) bleibt unveraendert offen", async () => {
   const srv = await startServer({
@@ -143,20 +108,15 @@ test("AUTH-P5-2: der In-Process-MCP-Pfad ueber Loopback (ohne XFF) bleibt unvera
     const exported = await exportRes.json();
     assert.equal(exported.tenantId, BOOTSTRAP_TENANT_ID);
 
-    // direkter Beweis, dass internalOnly die MCP-Werkzeuge nicht toetet: list_calls
-    // laeuft intern ueber GET /api/state.
     const mcpRes = await mcpPost(`${srv.localUrl}/mcp`, null, toolCall("list_calls"));
     const result = await readToolResult(mcpRes);
     assert.notEqual(result?.isError, true, `MCP-Tool lieferte einen Fehler: ${JSON.stringify(result)}`);
 
-    // Gegenprobe: kein einziger not_local-Eintrag fuer diesen genuin lokalen Verkehr.
     assert.ok(!srv.stdout.includes("grund=not_local"), "Loopback ohne XFF darf internalOnly nie ausloesen");
   } finally {
     await srv.stop();
   }
 });
-
-// === AUTH-P5-3: W9 (PFLICHTTEST) - kein Query im Audit, echte Express-Semantik ====
 
 test("AUTH-P5-3 (W9): der Audit-Eintrag von internalOnly traegt NIE den Query-String", async () => {
   const srv = await startServer({
@@ -177,12 +137,7 @@ test("AUTH-P5-3 (W9): der Audit-Eintrag von internalOnly traegt NIE den Query-St
   }
 });
 
-// === AUTH-P5-4/-5/-6: die drei Web-Auth-Ablehnungen (echter Express-Request) ======
-
 test("AUTH-P5-4 (W9): webAuth ohne Sitzungs-Cookie -> 401 grund=no_session, kein Query im Log", async () => {
-  // resolveWebSession bricht VOR jedem sessions/accounts-Zugriff ab (kein Cookie ->
-  // sofort null) - werfende Attrappen pinnen diese Kurzschluss-Reihenfolge zusaetzlich:
-  // wuerden sie aufgerufen, wuerfe der Test statt still falsch zu messen.
   const throwing = () => {
     throw new Error("darf bei fehlendem Cookie nie aufgerufen werden");
   };

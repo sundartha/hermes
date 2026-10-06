@@ -1,7 +1,3 @@
-// W4 — createTenantSubscription/priceIdForPlan: reine Orchestrierung ueber Fake-Store +
-// Fake-Billing (kein IO, kein Netz, F.I.R.S.T.). Deckt die fail-closed-Gates
-// (unknown_plan/plan_unconfigured/already_subscribed/no_card) + den Happy-Pfad
-// (persistiert die Abo-Felder, KEIN Status-Flip hier) ab.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -21,8 +17,6 @@ const CONFIG = withConfigNamespaces({
   stripeBusinessPriceId: "price_business",
 });
 
-// Fake-Store: haelt EINEN Tenant-Bucket mit stripe-Karte + Abo-Referenzen, exakt die
-// Felder, die subscribe.js liest/schreibt (Fassaden-Form).
 function fakeStore({ card = true, sub = null, pm = "pm_x" } = {}) {
   const state = {
     stripe: card
@@ -44,14 +38,10 @@ function fakeStore({ card = true, sub = null, pm = "pm_x" } = {}) {
       state.kycLevel = level;
     },
     setProfile: () => ({ changed: ["maxNumbers"] }),
-    // tenant-prolif-c: activatePaidTenant loescht den Grace-Anker bei Reaktivierung.
     clearSuspendedAt: () => {},
-    // GAP-01: Perioden-Fenster des Budget-Gates (activatePaidTenant stempelt es).
     billingHoldActive: () => null,
     stampBudgetPeriod: () => false,
-    // GAP-04: ensureTenant (Spiegel-Nachzug NACH erfolgreicher Aktivierung).
     ensureTenant: async () => {},
-    // FW1-B: clearBillingHold laeuft jetzt in activatePaidTenant - also auch auf diesem Rueckkehrpfad.
     clearBillingHold: () => {},
   };
 }
@@ -72,11 +62,6 @@ test("priceIdForPlan: bekannte Slugs -> Price, unbekannt/unkonfiguriert -> null"
   assert.equal(priceIdForPlan("starter", withConfigNamespaces({})), null, "fehlende Price-Id -> null");
 });
 
-// PA-20 (Flip, PM-5-Verifikation): priceIdForPlan liest config.billing[key] - der
-// Namespace-Bracket-Zugriff (Plan-slug -> Stripe-Price) muss auf dem ECHTEN config-
-// Singleton (nicht nur einem Hand-Mock) eine echte Price-Id liefern, kein undefined/
-// TypeError. makeConfigOverrides routet den flachen Override-Key ueber sein Namespace-
-// Blatt (billing), Restore per finally.
 test("priceIdForPlan: liest config.billing[key] vom ECHTEN config-Singleton (kein Bracket-Blindflug)", () => {
   const { withConfigOverrides } = makeConfigOverrides(realConfig);
   withConfigOverrides(
@@ -132,17 +117,13 @@ test("createTenantSubscription: Happy-Pfad persistiert Abo-Felder + reicht Idemp
   assert.equal(r.planSlug, "business");
   assert.equal(r.subscriptionId, "sub_new");
   assert.equal(r.currentPeriodEnd, 1893456000);
-  // Stripe-Call mit dem richtigen Price + Idempotency-Key (tenant+plan+Karten-Suffix).
   assert.equal(spy.params.priceId, "price_business");
   assert.equal(spy.params.customerId, "cus_x");
-  // Die on-file-Karte wird als default_payment_method durchgereicht (sonst Stripe-400).
   assert.equal(spy.params.paymentMethodId, "pm_x");
   assert.equal(spy.params.idempotencyKey, "sub_t_x_business_pm_x");
-  // persistiert am Tenant (KEIN Status-Flip - der liegt im Route-Layer).
   assert.equal(store.state.subscription.subscriptionId, "sub_new");
   assert.equal(store.state.subscription.planSlug, "business");
   assert.equal(store.state.subscription.currentPeriodEnd, 1893456000);
-  // B1a: der Periodenanker (currentPeriodStart) wird mit in den Store gefaedelt.
   assert.equal(store.state.subscription.currentPeriodStart, 1890864000);
 });
 
@@ -161,10 +142,6 @@ test("createTenantSubscription: andere Karte -> anderer Idempotenz-Key (kein Par
   assert.ok(a.params.idempotencyKey.endsWith("pm_first"), "nur das PM-Suffix, nie ein anderer Wert");
 });
 
-// ---- Review-Blocker Runde 1: checkoutSessionIdempotencyKey + hasActiveSubscription --
-
-// Objekt-Signatur (Self-Heal, Fix B): customerId ist Teil des Keys, damit der Heal-
-// Retry (anderer customer-Param) nie unter dem Key des vorherigen Versuchs kollidiert.
 const idemKey = (tenant, planSlug, priceId, customerId = "cus_a") =>
   checkoutSessionIdempotencyKey({ tenant, planSlug, priceId, customerId });
 
@@ -189,8 +166,6 @@ test("checkoutSessionIdempotencyKey: deterministisch aus Tenant+Plan+Price+Custo
     idemKey("t_y", "starter", "price_a"),
     "anderer Tenant -> anderer Key",
   );
-  // Self-Heal (Fix B): der Heal-Retry wiederholt denselben Tenant+Plan+Price mit einem
-  // FRISCHEN customer-Param - das darf NIE mit dem Key des Alt-Versuchs kollidieren.
   assert.notEqual(
     idemKey("t_x", "starter", "price_a", "cus_stale"),
     idemKey("t_x", "starter", "price_a", "cus_fresh"),
@@ -202,8 +177,6 @@ test("hasActiveSubscription: gemeinsames Praedikat spiegelt store.tenantSubscrip
   assert.equal(hasActiveSubscription(fakeStore(), TENANT), false, "kein Abo -> false");
   assert.equal(hasActiveSubscription(fakeStore({ sub: "sub_old" }), TENANT), true, "Abo vorhanden -> true");
 });
-
-// ---- BK-Discount: activateSubscriptionFromCheckoutSession (Sicherheits-Gates) -------
 
 const CHECKOUT_OUTCOME = Object.freeze({
   customerId: "cus_x",
@@ -220,14 +193,11 @@ function fakeCheckoutBilling(outcomeOverrides = {}) {
   };
 }
 
-// accounts/provision-Fakes: zeichnen nur auf, WAS activatePaidTenant aufruft (setStatus +
-// provision), kein echtes IO (F.I.R.S.T.).
 function activationSpies() {
   const calls = { status: [], provisioned: [] };
   return {
     calls,
     accounts: { setStatus: async (tenant, status) => calls.status.push({ tenant, status }) },
-    // GAP-04: activatePaidTenant aktiviert nur bei GEKLAERTEM Ergebnis (provisionCleared).
     provision: async (tenant) => {
       calls.provisioned.push(tenant);
       return { ok: true, reason: "queued" };
@@ -250,7 +220,7 @@ function runActivate({ store, billing, expectedPlanSlug = "starter" }) {
 
 test("activateSubscriptionFromCheckoutSession: fremder Customer -> customer_mismatch, nichts persistiert", async () => {
   const store = fakeStore({ card: true });
-  store.state.stripe.customerId = "cus_owner"; // gespeichert != Session-Customer
+  store.state.stripe.customerId = "cus_owner";
   const { result, calls } = await runActivate({
     store,
     billing: fakeCheckoutBilling({ customerId: "cus_fremd" }),
@@ -301,7 +271,7 @@ test("activateSubscriptionFromCheckoutSession: fehlender plan_slug -> plan_misma
 });
 
 test("activateSubscriptionFromCheckoutSession: bereits abonniert, IDENTISCHE subscriptionId (Doppel-Redirect derselben Session) -> already_subscribed, nichts ueberschrieben", async () => {
-  const store = fakeStore({ card: true, sub: "sub_checkout" }); // == CHECKOUT_OUTCOME.subscriptionId
+  const store = fakeStore({ card: true, sub: "sub_checkout" });
   store.state.subscription.planSlug = "starter";
   store.state.subscription.currentPeriodEnd = 1700000000;
   const { result } = await runActivate({ store, billing: fakeCheckoutBilling() });
@@ -310,14 +280,8 @@ test("activateSubscriptionFromCheckoutSession: bereits abonniert, IDENTISCHE sub
   assert.equal(store.state.subscription.currentPeriodEnd, 1700000000);
 });
 
-// Review-Blocker Runde 2 (P16/G3, Cross-Plan-Race): zwei nahezu gleichzeitige
-// setup-checkout-Aufrufe fuer VERSCHIEDENE Plaene erzeugen zwei ECHTE, real
-// abgerechnete Stripe-Subscriptions (verschiedene Idempotency-Keys). Die zweite
-// Rueckkehr traegt eine ANDERE outcome.subscriptionId als die bereits gespeicherte -
-// das ist KEIN harmloser Doppel-Redirect, sondern eine verwaiste Zweit-Subscription.
-// Muss NIE als already_subscribed/Erfolg gewertet werden.
 test("activateSubscriptionFromCheckoutSession: bereits abonniert, ABWEICHENDE subscriptionId (Cross-Plan-Race) -> subscription_conflict, nichts ueberschrieben", async () => {
-  const store = fakeStore({ card: true, sub: "sub_old" }); // != CHECKOUT_OUTCOME.subscriptionId ("sub_checkout")
+  const store = fakeStore({ card: true, sub: "sub_old" });
   store.state.subscription.planSlug = "starter";
   store.state.subscription.currentPeriodEnd = 1700000000;
   const { result, calls } = await runActivate({ store, billing: fakeCheckoutBilling() });
@@ -339,22 +303,15 @@ test("activateSubscriptionFromCheckoutSession: Happy-Pfad persistiert Karte+Abo 
   assert.equal(result.subscriptionId, "sub_checkout");
   assert.equal(result.planSlug, "starter");
   assert.equal(result.currentPeriodEnd, 1893456000);
-  // Karte + Abo aus der Session persistiert (kein zweiter Geld-Call).
   assert.equal(store.state.stripe.paymentMethodId, "pm_checkout");
   assert.equal(store.state.subscription.subscriptionId, "sub_checkout");
   assert.equal(store.state.subscription.currentPeriodStart, 1890864000);
-  // activatePaidTenant-Kette lief vollstaendig: KYC->Status->Provisioning->Profil.
   assert.equal(store.state.kycLevel, "card");
   assert.deepEqual(calls.status, [{ tenant: TENANT, status: "active" }]);
   assert.deepEqual(calls.provisioned, [TENANT]);
   assert.equal(result.profile.provisioned, true);
 });
 
-// Fix B (Plumbing-Regressionsnetz): activateSubscriptionFromCheckoutSession reicht sein
-// eigenes billing tatsaechlich an activatePaidTenant durch (statt es zu vergessen/ein
-// anderes zu bauen). Beweis indirekt ueber die Wirkung: NUR wenn dasselbe billing-Objekt
-// ankommt, kann syncNumberSetupFeeExemption ueberhaupt retrieveSubscription aufrufen und
-// das Flag am Store setzen.
 test("activateSubscriptionFromCheckoutSession reicht sein billing tatsaechlich an activatePaidTenant durch", async () => {
   const store = fakeStore({ card: true });
   const billing = {

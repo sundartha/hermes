@@ -1,8 +1,3 @@
-// BK3 - Auto-Provisioning nach bestaetigter Abo-Aktivierung (Dry-Run, offline).
-// Beweist den vom Spec geforderten Dreiklang gegen die ECHTE Decision-Logik
-// (requestNumberForPaidTenant), plus einen signierten End-to-End-Pfad ueber
-// verifyStripeSignature + applyStripeWebhook mit Store-Double (kein Server-Spawn,
-// Repo-Konvention). Kein Cap-Umgehen wie im P3-Test: der Limit-Fall wird HIER geprueft.
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -15,7 +10,6 @@ const HIGH = 100;
 const SECRET = "whsec_bk3_test";
 const NOW = 1_700_000_000;
 
-// T1: bestaetigte Aktivierung (Dry-Run) -> genau EINE 'requested'-Nummer.
 test("BK3-T1 Aktivierung fragt genau eine Dry-Run-Nummer an", () => {
   const s = makeDefaultState();
   registerTenant(s, "t1", {});
@@ -25,7 +19,6 @@ test("BK3-T1 Aktivierung fragt genau eine Dry-Run-Nummer an", () => {
   assert.equal(s.numbers.filter((n) => n.tenantId === "t1").length, 1);
 });
 
-// AM5: ohne Tenant-Geo greift fallbackCountry als Land der Nummer (US fuer Tests).
 test("BK3 fallbackCountry US (keine Tenant-Geo) -> Nummer mit country US", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_us", {});
@@ -34,14 +27,6 @@ test("BK3 fallbackCountry US (keine Tenant-Geo) -> Nummer mit country US", () =>
   assert.equal(r.number.country, "US");
 });
 
-// Beleg: src/billing/provision-trigger.js; tasks/i18n-tests/06-nummern-provisioning.md
-// ("DID-03"). Eigener Test statt Erweiterung des Bestandstests oben (Zeile 29-35): der
-// Bestand bleibt gruen und byte-identisch (Regel 3), das ist zugleich der Beleg fuer
-// DID-15 (die bestehende Assertion dort deckt r.number.language BEWUSST NICHT ab).
-// A3-Migration (P10): t_us_lang hat KEINE eigene Geo -> die Sprache kommt seit Schritt 1
-// NICHT mehr von fallbackCountry, sondern vom Weltdefault (beide liefern hier zufaellig
-// denselben Wert "en" - der Test bleibt trotzdem als Regressionsschutz auf der neuen
-// Achse stehen, s. requestNumberForPaidTenant Achsentrennung).
 test("BK3 fallbackCountry US (Webhook-/Aktivierungspfad) liefert number.language='en' ueber den Weltdefault (ex DID-03)", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_us_lang", {});
@@ -55,9 +40,6 @@ test("BK3 fallbackCountry US (Webhook-/Aktivierungspfad) liefert number.language
   assert.equal(r.number.language, "en");
 });
 
-// forceNumberCountry entkoppelt das KAUF-Land vom Herkunftsland: Tenant-Geo DE, aber
-// erzwungenes US -> number.country=US, number.language bleibt am Herkunftsland (de).
-// Beweist die Provision-Pfad-Haelfte des Kauf-Land-Overrides (Onboard-Haelfte: f1-geo-onboard).
 test("BK3 forceNumberCountry US ueberschreibt Kauf-Land, Sprache bleibt am Herkunftsland (DE)", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_force", {});
@@ -74,10 +56,6 @@ test("BK3 forceNumberCountry US ueberschreibt Kauf-Land, Sprache bleibt am Herku
   assert.equal(r.number.language, "de", "Sprache am Herkunftsland DE");
 });
 
-// A1 (PLAN-I18N-FIX, P10): der Wurzelfix von E2E-04 Teil 1 - fallbackCountry faerbt NUR
-// das Kauf-Land, NIEMALS die Sprache eines Tenants ohne eigene Geo. Flip-stabil (gilt vor
-// UND nach dem DEFAULT_LANGUAGE-Flip): der Tenant ohne Geo bekommt IMMER den Weltdefault,
-// nie die Sprache des Landes, in dem die Plattform zufaellig fuer ihn einkauft.
 test("requestNumberForPaidTenant: Tenant OHNE Geo erbt die Sprache NICHT vom Plattform-Fallback-Land", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_no_geo", {});
@@ -92,7 +70,6 @@ test("requestNumberForPaidTenant: Tenant OHNE Geo erbt die Sprache NICHT vom Pla
   assert.notEqual(r.number.language, "fr", "Sprache folgt dem Fallback-Land NICHT");
 });
 
-// Schwester-Pin: MIT eigener Tenant-Geo gewinnt die Tenant-Sprache ueber fallbackCountry.
 test("requestNumberForPaidTenant: Tenant MIT Geo DE schlaegt fallbackCountry FR -> 'de'", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_geo_de", {});
@@ -107,7 +84,6 @@ test("requestNumberForPaidTenant: Tenant MIT Geo DE schlaegt fallbackCountry FR 
   assert.equal(r.number.language, "de", "Tenant-Geo gewinnt ueber den Plattform-Fallback");
 });
 
-// T2: Idempotenz - zweite Aktivierung kauft nicht doppelt.
 test("BK3-T2 zweiter Trigger -> already_provisioned, weiterhin eine Nummer", () => {
   const s = makeDefaultState();
   registerTenant(s, "t2", {});
@@ -119,9 +95,6 @@ test("BK3-T2 zweiter Trigger -> already_provisioned, weiterhin eine Nummer", () 
   assert.equal(s.numbers.filter((n) => n.tenantId === "t2").length, 1);
 });
 
-// T3: Limit -> kein Kauf (tenant_cap UND global_cap). Grund ist der testbare Vertrag,
-// auf den server.js den Audit-Eintrag abbildet (audit() = console-IO, per T-Serie
-// nicht im Unit-Test asserted - Smoke/BK5 deckt die Emission).
 test("BK3-T3 Cap blockt: keine Nummer, Grund tenant_cap", () => {
   const s = makeDefaultState();
   registerTenant(s, "t3", {});
@@ -137,13 +110,9 @@ test("BK3-T3b global cap -> global_cap, keine Nummer", () => {
   const r = requestNumberForPaidTenant(s, { tenantId: "t3b", fallbackCountry: "DE", maxNumbers: 0, maxNumbersPerTenant: HIGH });
   assert.equal(r.reason, "global_cap");
   assert.equal(s.numbers.length, 0);
-  // Fix B (Webhook-Pfad): der Skip ist auch ueber requestNumberForPaidTenant sichtbar,
-  // da beide Aufrufer denselben requestNumber teilen (G5).
   assert.equal(findTenant(s, "t3b").numberProvisionSkipReason, GLOBAL_CAP_REASON);
 });
 
-// T4: signierter End-to-End-Webhook -> Nummer im Store, idempotent. provision-Seam
-// wendet den ECHTEN Core auf ein gemeinsames s an (Dry-Run: kein queue/drain).
 test("BK3-T4 signierter active-Webhook -> eine Dry-Run-Nummer, Retry idempotent", async () => {
   const s = makeDefaultState();
   registerTenant(s, "t4", {});
@@ -159,17 +128,11 @@ test("BK3-T4 signierter active-Webhook -> eine Dry-Run-Nummer, Retry idempotent"
   const deps = {
     store: {
       findTenantBySubscription: () => null, setTenantSubscription: () => {}, setKycLevel: () => {},
-      // FW1-A: Existenz-Gate der Tenant-Aufloesung - ueber den echten State geprueft.
       tenantExists: (tenantId) => Boolean(findTenant(s, tenantId)),
       tenantSubscription: () => ({ planSlug: null }), setProfile: () => ({ changed: [] }),
-      // tenant-prolif-c: activatePaidTenant loescht den Grace-Anker bei Reaktivierung.
       clearSuspendedAt: () => {},
-      // GAP-01: Perioden-Fenster des Budget-Gates (activatePaidTenant stempelt es).
       billingHoldActive: () => null,
       stampBudgetPeriod: () => false,
-      // GAP-04/GAP-03: ensureTenant (Spiegel-Nachzug) + clearBillingHold (Reversibilitaet)
-      // laufen NUR bei geklaertem provision-Ergebnis (der idempotente Retry liefert
-      // reason=already_provisioned, s. requestNumberForPaidTenant) - beide No-op-Fakes.
       ensureTenant: async () => {},
       clearBillingHold: () => {},
     },
@@ -181,7 +144,7 @@ test("BK3-T4 signierter active-Webhook -> eine Dry-Run-Nummer, Retry idempotent"
   };
   const event = JSON.parse(body);
   await applyStripeWebhook(event, deps);
-  await applyStripeWebhook(event, deps); // identischer Retry
+  await applyStripeWebhook(event, deps);
   assert.equal(s.numbers.filter((n) => n.tenantId === "t4").length, 1, "Retry kauft nicht doppelt");
   assert.equal(s.numbers[0].status, NUMBER_STATUS.REQUESTED);
 });

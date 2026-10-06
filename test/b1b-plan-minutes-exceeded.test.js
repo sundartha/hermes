@@ -1,8 +1,3 @@
-// B1b - Minuten-Kontingent-Gate-Praedikat planMinutesExceeded (reiner Unit-Test,
-// Geschwister-Muster zu bk4-quota-view.test.js: makeDefaultState, fixes Fenster,
-// deterministisches occurredAt, kein Date.now). Plus EIN pglite-Fassaden-Durchreich-
-// Test (Muster store-pg-tenant-budget.test.js) - der pg-Wrapper hydriert ueber
-// requireState(). F.I.R.S.T.: kein Netz, keine externe DB.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDefaultState, recordUsageEvent, planMinutesExceeded } from "../src/store/state-ops.js";
@@ -16,15 +11,12 @@ const OUT_OF_WINDOW = "2026-05-01T10:00:00.000Z";
 const TENANT_A = "t_a";
 const TENANT_B = "t_b";
 
-// Seedet EIN Voice-Event mit deterministischem occurredAt (ueberschreibt den Recorder-
-// Zeitstempel). Liefert das Event.
 function seedVoice(s, { tenantId = TENANT_A, quantity, occurredAt = IN_WINDOW }) {
   const e = recordUsageEvent(s, { tenantId, kind: USAGE_EVENT_KIND.VOICE_MINUTE, quantity, costCents: 0 });
   e.occurredAt = occurredAt;
   return e;
 }
 
-// Seedet ein Event eines beliebigen kind (fuer die Achsen-Isolation).
 function seedKind(s, { tenantId = TENANT_A, kind, quantity, occurredAt = IN_WINDOW }) {
   const e = recordUsageEvent(s, { tenantId, kind, quantity, costCents: 0 });
   e.occurredAt = occurredAt;
@@ -64,8 +56,6 @@ test("(5) Tenant-Isolation: fremder Verbrauch laesst A unberuehrt", () => {
 
 test("(6) fail-closed: fehlender Anker -> true, auch bei leerem Ledger", () => {
   const s = makeDefaultState();
-  // Explizite Objekte (NICHT der opt-Helper): dessen Default periodStartIso=PERIOD_START
-  // greift bei undefined und wuerde die "kein Anker"-Variante verfaelschen.
   assert.equal(planMinutesExceeded(s, TENANT_A, { includedMinutes: 30, periodStartIso: "" }), true);
   assert.equal(planMinutesExceeded(s, TENANT_A, { includedMinutes: 30, periodStartIso: null }), true);
   assert.equal(planMinutesExceeded(s, TENANT_A, { includedMinutes: 30 }), true);

@@ -1,15 +1,3 @@
-// AUTH-P6-5/-6: die sechs Betreiber-Routen sind ohne die Admin-Sitzungs-Infrastruktur
-// (webAuthMw+adminMw, s. src/wiring/operator-routes.js) gar nicht gemountet (404) -
-// niemals ungeschuetzt. AUTH-P6-6 pinnt zusaetzlich, dass ein anonymer externer
-// Aufrufer seit AUTH-P7 KEINE Basic-Challenge mehr sieht (das Gate ist gefallen) -
-// die W6-Negativkontrolle, die scripts/probe-auth.sh live nachvollzieht.
-//
-// Testpraefix bewusst "AUTH-P6-N" (NICHT DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|
-// PROMPT|UI|VOICE|WEB|WORLD-<Ziffer>): sonst landet die Datei still im test:gates-Lauf,
-// wo Rot erlaubt ist und nichts meldet (Lehre catalog-id-prefix-misroutes-tests).
-//
-// Spawn (node:test), KEIN pglite in dieser Datei (Lehre: pglite nie mit Kindprozess
-// mischen - s. test/auth-p6-operator-routes.test.js fuer den pglite-Teil).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, externalIp, assertGateAbsent } from "./helpers.js";
@@ -34,8 +22,6 @@ async function fetchRoute(baseUrl, route, extraHeaders = {}) {
 }
 
 test("AUTH-P6-5: ohne Admin-Sitzungs-Infra (json/kein SESSION_SECRET) sind die sechs Betreiber-Routen NICHT gemountet (404, kein Gate)", async () => {
-  // (a) BASE_ENV: STORE_BACKEND=json, kein SESSION_SECRET, DASHBOARD_PASSWORD="" (Gate
-  // abwesend, s. assertGateAbsent) - der Zustand JEDES Spawn-Tests in dieser Suite.
   const srv = await startServer();
   try {
     for (const route of OPERATOR_ROUTES) {
@@ -43,8 +29,6 @@ test("AUTH-P6-5: ohne Admin-Sitzungs-Infra (json/kein SESSION_SECRET) sind die s
       assert.equal(res.status, 404, `${route.method} ${route.path}: Route existiert nicht (W6)`);
       assertGateAbsent(res);
     }
-    // Gegenprobe (W6): der Rest des Dienstes lebt - der fail-open-Zustand ist NICHT
-    // "der Server ist kaputt", sondern "diese sechs Routen existieren nicht".
     const health = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(health.status, 200);
   } finally {

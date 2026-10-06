@@ -1,10 +1,3 @@
-// Payment-Pfad (P6b1): provisionNumber mit injiziertem Fake-Provisioner UND
-// Fake-Billing (DIP) - kein Netz, kein Server, kein pglite (eigene Datei gegen
-// Worker-Stall, Lehre P6a). Prueft die Geld-Sicherheits-Invarianten der
-// Hold/Capture-Mechanik: Hold VOR Order; Capture NACH Order, VOR active;
-// kein active ohne Capture; Rollback (releaseNumber + cancelHold) in allen
-// Fehlerkanten inkl. Orphan-Log bei fehlgeschlagenem Release (AM5/GAP-2);
-// payment-off (kein billing) byte-identisch ohne capturing.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { provisionNumber } from "../src/onboarding.js";
@@ -21,13 +14,10 @@ import { NUMBER_STATUS } from "../src/store/defaults.js";
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "DE", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
 
-// seedet einen aktiven Tenant MIT hinterlegter Karte (Pay2: ohne Karte ist der
-// billing-Pfad fail-closed). cardless=true laesst die Karte bewusst weg (Fail-closed-Test).
 function seedRequested({ cardless = false } = {}) {
   const s = makeDefaultState();
   registerTenant(s, "t_user1");
   if (!cardless)
-    // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
     setTenantStripe(s, "t_user1", {
       customerId: "cus_1",
       paymentMethodId: "pm_1",
@@ -37,7 +27,6 @@ function seedRequested({ cardless = false } = {}) {
   return { s, numberId: number.id };
 }
 
-// Hilfsnamen fuer die billing.log-Eintraege (kein Magic-String verstreut).
 const methodsOf = (billing) => billing.log.map((entry) => entry[0]);
 
 test("happy path: Hold vor Order, Capture nach Configure, active mit paymentIntentId", async () => {
@@ -50,15 +39,12 @@ test("happy path: Hold vor Order, Capture nach Configure, active mit paymentInte
   assert.equal(result.e164, "+4915799990001");
   assert.equal(result.providerNumberId, "num_ext_1");
   assert.equal(result.paymentIntentId, "pi_fake_1", "PI auf der Nummer hinterlegt");
-  // Hold zuerst, dann der Provider-Kauf, dann Capture (Reihenfolge ueber beide Logs).
   assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
   assert.deepEqual(methodsOf(billing), ["placeHold", "captureHold"]);
-  // placeHold-Args: idempotencyKey number-id-basiert + Betrag/Currency.
   const [, holdArgs] = billing.log[0];
   assert.equal(holdArgs.idempotencyKey, `hold_${numberId}`);
   assert.equal(holdArgs.amountCents, 500);
   assert.equal(holdArgs.currency, "eur");
-  // captureHold-Args: PI + Betrag.
   assert.deepEqual(billing.log[1], ["captureHold", "pi_fake_1", 500]);
 });
 
@@ -75,9 +61,6 @@ test("Hold vor Order: placeHold wirft -> failed, KEIN Kauf, KEIN cancelHold", as
     /HTTP 402/,
   );
 
-  // Owner-Entscheidung 2026-07-28: die read-only Preisabfrage darf vor den Hold (sie
-  // kostet nichts und kauft nichts), der KAUF nicht. Gepinnt bleibt deshalb dreifach:
-  // Ausgang failed, KEIN order-Eintrag im Provider-Log, KEIN cancelHold.
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
   assert.deepEqual(prov.log, ["search:DE"], "nur die kostenlose Preis-Suche lief");
   assert.ok(
@@ -100,7 +83,6 @@ test("kein active ohne Capture: captureHold wirft -> failed/released, releaseNum
     /HTTP 500/,
   );
 
-  // Provider-Release sauber -> terminal released, NIE active.
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.RELEASED);
   assert.ok(prov.log.includes("release:num_ext_1"), "gekaufte Nummer wird freigegeben");
   assert.ok(methodsOf(billing).includes("cancelHold"), "Hold wird freigegeben");
@@ -147,14 +129,11 @@ test("AM5/GAP-2 Orphan-Log: captureHold + releaseNumber werfen -> failed, logger
     /Stripe captureHold/,
   );
 
-  // Provider-Release fehlgeschlagen -> bezahlter Orphan -> Zustand bleibt failed (NICHT released).
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
-  // GAP-2: der Orphan wird geloggt (sichtbar fuers Reconcile-Runbook), nicht still geschluckt.
   assert.ok(
     logs.some((m) => m.includes("Orphan")),
     "Orphan-Warnung geloggt",
   );
-  // Regel 4: die Meldung traegt NIE Stripe-Ids oder einen API-Key.
   const joined = logs.join(" ");
   assert.ok(!joined.includes("cus_") && !joined.includes("pm_"), "kein Stripe-Id-Leak");
 });
@@ -162,8 +141,6 @@ test("AM5/GAP-2 Orphan-Log: captureHold + releaseNumber werfen -> failed, logger
 test("Rollback verschluckt cancelHold-Fehler: Aufrufer-Fehler bleibt, Zustand released", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner();
-  // captureHold wirft (Geld-Einzug scheitert) UND cancelHold wirft -> der cancelHold-Fehler
-  // darf den captureHold-Fehler NICHT maskieren (Best-Effort-Rollback). Provider-Release ok.
   const billing = fakeBilling({
     async captureHold() {
       throw new Error("capture kaputt");
@@ -182,7 +159,6 @@ test("Rollback verschluckt cancelHold-Fehler: Aufrufer-Fehler bleibt, Zustand re
 test("payment-off-Parity: ohne billing -> kein Hold/Capture, requested->provisioning->active", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner();
-  // deps ohne billing: byte-identisch zum Bestand (kein capturing, kein PI).
   const result = await provisionNumber(s, { provisioner: prov }, { numberId, ...ARGS });
 
   assert.equal(result.status, NUMBER_STATUS.ACTIVE);
@@ -209,14 +185,7 @@ test("Pay2 durchreichen: billing + Tenant MIT Karte -> placeHold bekommt custome
   const billing = fakeBilling();
   const result = await provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS });
   assert.equal(result.status, NUMBER_STATUS.ACTIVE);
-  const [, holdArgs] = billing.log[0]; // ["placeHold", args]
+  const [, holdArgs] = billing.log[0];
   assert.equal(holdArgs.customerId, "cus_1");
   assert.equal(holdArgs.paymentMethodId, "pm_1");
 });
-
-// Fix B ("numberSetupFeeExempt=true -> KEIN placeHold/captureHold" + "... + KEIN
-// Zahlungsmittel -> trotzdem ACTIVE") ist mit P4/GAP-05 GELOESCHT (R1/R5, nicht
-// umgeschrieben): beide Tests pinnten genau den Polaritaets-Konflikt, den GAP-05 behebt
-// (Gutschein-Missbrauch - ein befreiter Tenant bekam eine Nummer OHNE jeden Hold/Karten-
-// Riegel). Das NEUE Verhalten (Hold IMMER, Storno statt Einzug bei Befreiung) ist gepinnt
-// in test/p4-setup-fee-hold.test.js + test/gap-05-number-hold.test.js.
