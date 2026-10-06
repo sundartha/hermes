@@ -1,97 +1,35 @@
-// Reine, IO-freie Code-Defaults und Profil-Sanitisierung. Von BEIDEN Backends
-// (json.js + pg.js) genutzt, damit "frischer pg-Zustand == frischer json-Zustand"
-// strukturell garantiert ist (eine Quelle statt zwei). Kein DB-/Datei-Zugriff hier.
-
-// GAP-14/O7: der Inbound-Pflichtsatz (Blatt-Modul, importiert selbst nichts - kein
-// Zyklus moeglich). Der geseedete DEFAULT_GREETING traegt ihn AT REST (s.u.).
 import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
 
-// Bootstrap-Tenant: in der Single-Tenant-Phase laeuft alles unter genau einem Tenant
-// (der "erste" Tenant, kein hartcodierter Owner-Sonderfall mehr - Owner-Removal P2a).
-// Benannte Konstante statt verstreutem Magic-String (von json/pg/state-ops/server
-// gemeinsam genutzt). pg.js re-exportiert sie, damit RLS-GUC + Seeding davon haengen.
-// Wert bleibt vorerst "owner" (Symbol neutralisiert; ein Wert-Wechsel waere eine
-// Store-Migration und gehoert nach P2b/P5).
 export const BOOTSTRAP_TENANT_ID = "owner";
 
-// Demo-Termine relativ zum Startzeitpunkt (Tage voraus / Uhrzeit). Werte als
-// benannte Eintraege statt nackter Zahlen mitten im Code.
 const DEMO_EVENTS = [
   { id: "ev1", title: "Team-Meeting", daysAhead: 1, startHour: 10, endHour: 11 },
   { id: "ev2", title: "Mittagessen mit Alex", daysAhead: 2, startHour: 12, endHour: 13 },
   { id: "ev3", title: "Projekt-Review", daysAhead: 3, startHour: 15, endHour: 16.5 },
 ];
 
-// Hoechstens so viele Notifications behalten (Ring-Puffer, neueste zuerst).
 export const MAX_NOTIFICATIONS = 50;
 
-// SEC-P1: Hoechstens so viele Ereignis-Anker je Anruf behalten (Ring-Puffer der bereits
-// verarbeiteten /voice/turn-Webhooks, neueste zuletzt). Zwei Anker je Runde plus Reserve -
-// ein Anbieter-Retry trifft immer die juengste Runde, aeltere braucht niemand mehr. Hier
-// statt in telephony/webhook-idempotenz.js, weil state-ops den Deckel anwendet und ein
-// Store-Modul keine Telefonie-Kette (und ueber sie config) importieren soll - Muster
-// MAX_NOTIFICATIONS darueber.
 export const WEBHOOK_ANCHOR_HISTORY = 6;
 
-// Telefonie-Provider fuer den config-derived Nummern-Seed (number-Tabelle). Benannte
-// Konstante (G25), eine Quelle (G5/G13) fuer state-ops.seedBootstrapNumber,
-// pg.flushNumbers, migrate.seedDefaults; die telephony-registry importiert dieselben
-// Werte als Schluessel ihrer ADAPTERS-Tabelle.
-//
-// C-P4 (Track C, Schritt 5): TWILIO ist RAUS - gemeinsam mit den Adapter-Eintraegen,
-// nicht davor und nicht danach. Ein Enum-Wert ohne Adapter haette die
-// Vollstaendigkeits-Invariante (test/telephony-registry.test.js) zu Recht rot gemacht;
-// ein Adapter ohne Enum-Wert waere unerreichbarer Code gewesen. Die Enum-FORM bleibt
-// bei einem Wert bestehen: sie ist die Stelle, an der ein zweiter Carrier eintraegt,
-// und `Object.values(PROVIDER)` ist die Validierungsquelle von resolveSeedProvider.
-// Datenseitig unbedenklich: `provider TEXT` in schema.sql traegt KEINEN CHECK, ein
-// gespeichertes 'twilio' bricht nichts; resolveSeedProvider("twilio") liefert danach
-// null - fail-closed und fachlich korrekt, denn Twilio ist kein Anbieter mehr.
 export const PROVIDER = Object.freeze({ TELNYX: "telnyx" });
-// C-P1 (Track C, Schritt 2): der Rueckfall ist TELNYX, nicht mehr Twilio. Belegt am
-// 2026-08-07 gegen die Produktions-DB (RLS je Tenant gesetzt): 3 Nummern, 67 Anrufe,
-// keine einzige Zeile auf Twilio - der Flip leitet keinen echten Verkehr um. Diese eine
-// Zeile bewegt ZEHN Leser auf einmal (resolveSeedProvider, Inbound-Header-Rueckfall,
-// /voice/status, Media-Pfad, createCall, drei Seed-/Kauf-Default-Argumente, zwei
-// pg-Flush-Rueckfaelle) - deshalb haengen an ihr eigene Tests
-// (test/provider-threading.test.js: "C-P1 A"/"C-P1 B").
 export const DEFAULT_PROVIDER = PROVIDER.TELNYX;
 
-// Provider fuer den Owner-Number-Autoseed aufloesen (render-owner-autoseed, AC4 /
-// Pre-Mortem R1 - stiller Falsch-Carrier). PURE Entscheidung (providerRaw als Arg,
-// lowercase erwartet wie config.provisioning.ownerNumberProvider), bewusst getrennt vom IO-Wrapper
-// in json.js und so direkt unit-testbar: ungesetzt/leer -> DEFAULT_PROVIDER (Telnyx, der
-// einzige live betriebene Carrier, Zero-Config); gesetzt + gueltig (telnyx) -> dieser
-// Provider; gesetzt + ungueltig (z.B. Tippfehler "telnix") -> null (fail-closed -> der
-// Aufrufer seedet NICHT, der Boot-Guard greift, statt still den falschen Carrier zu
-// schreiben). Die Trennung leer<->Muell ist gewollt: nur Muell ist ein Refusal-Grund.
-// Validierungs-Quelle ist dasselbe Object.values(PROVIDER) wie in seedBootstrapNumberFromConfig (G5).
 export function resolveSeedProvider(providerRaw) {
   if (!providerRaw) return DEFAULT_PROVIDER;
   return Object.values(PROVIDER).includes(providerRaw) ? providerRaw : null;
 }
 
-// ---- Number-Lifecycle (Onboarding ohne Payment) ----
-// Zustaende einer provisionierten Nummer. Eine Nummer wird NIE direkt "active"
-// gebaut - sie durchlaeuft requested -> provisioning -> active. Der reale
-// Provider-Kauf haengt strukturell an provisioning (kein Kauf ohne diesen
-// Zustand); die Cap-Pruefung (config.provisioning.maxNumbers) ersetzt das frueher geplante
-// Stripe-Schloss (Payment uebersprungen, Kosten-Notbremse bleibt).
 export const NUMBER_STATUS = Object.freeze({
-  REQUESTED: "requested", // angefragt, noch KEINE e164, KEIN Provider-Kauf
-  PROVISIONING: "provisioning", // Kauf/Konfiguration beim Provider laeuft
-  // Geld wird eingezogen (Stripe capture), bevor die Nummer aktiv routet. NUR im
-  // Payment-Pfad erreicht (PAYMENT_ENABLED); payment-off ueberspringt diesen Zustand
-  // (provisioning -> active bleibt legal) -> byte-identisch zum Bestand.
+  REQUESTED: "requested",
+  PROVISIONING: "provisioning",
   CAPTURING: "capturing",
-  ACTIVE: "active", // gekauft + konfiguriert + dem Tenant zugewiesen, routet
-  FAILED: "failed", // Kauf/Konfig fehlgeschlagen -> Rollback/Release
-  SUSPENDED: "suspended", // Abuse/Budget/manuell stillgelegt (routet nicht)
-  RELEASED: "released", // freigegeben (terminal)
+  ACTIVE: "active",
+  FAILED: "failed",
+  SUSPENDED: "suspended",
+  RELEASED: "released",
 });
 
-// Erlaubte Transitionen (fail-closed: alles nicht hier Gelistete ist verboten).
-// from -> Set der zulaessigen Folge-Zustaende. RELEASED ist terminal (leer).
 export const NUMBER_TRANSITIONS = Object.freeze({
   [NUMBER_STATUS.REQUESTED]: [NUMBER_STATUS.PROVISIONING, NUMBER_STATUS.FAILED],
   [NUMBER_STATUS.PROVISIONING]: [
@@ -106,67 +44,31 @@ export const NUMBER_TRANSITIONS = Object.freeze({
   [NUMBER_STATUS.RELEASED]: [],
 });
 
-// ---- OUTBOUND-E1: Plattform-Rollen einer Rufnummer ----
-// Die Wurzel des Ausfalls vom 24.08.2026: EINE Nummer trug zwei Rollen (Tenant-DID UND
-// Plattform-Absender), und nur die erste war im Datenmodell darstellbar. Der Loeschweg
-// eines Wegwerf-Kontos gab damit den Absender des gesamten Produkt-Outbounds frei.
-// Die Rolle ist deshalb ein eigener, deklarierter Datensatz (platform_number_use),
-// KEINE Spalte an number: number ist unter FORCE RLS tenant-isoliert (schema.sql:882),
-// eine plattformweite Frage waere dort nur unter dem GUC des zufaellig richtigen Tenants
-// beantwortbar - ein Riegel, der die Antwort nicht sehen kann, ist keiner.
-// Genau ZWEI Rollen, weil genau zwei Nummern-Abhaengigkeiten existieren, die still
-// sterben koennen: der Outbound-Absender und der Alarm-Absender (alert-sms.js:36).
 export const PLATFORM_NUMBER_PURPOSE = Object.freeze({
   OUTBOUND_ANI: "outbound_ani",
   ALERT_SMS_SENDER: "alert_sms_sender",
 });
 
-// HOLD-Gruende des Freigabe-Verdikts (G25: Enum statt verstreuter String-Literale).
-// Werte sind maschinenlesbare Tokens fuer Audit-Zeilen - PII-frei, nie eine Rufnummer.
 export const NUMBER_HOLD_REASON = Object.freeze({
   PLATFORM_IN_USE: "platform_number_in_use",
   ACTIVE_CALL: "active_call_on_number",
-  NON_TELNYX: "non_telnyx_manual", // Bestandswert, unveraendert (release-reconcile-Kompat)
+  NON_TELNYX: "non_telnyx_manual",
 });
 
-// Skip-Grund, den requestNumber sichtbar am Tenant hinterlaesst (Fix B, PLAN-
-// PROVISIONING-CAP.md Phase A). Bewusst NUR dieser eine Grund: tenant_cap/tenant_inactive
-// sind fachlich andere Faelle (Tenant hat schon eine Nummer bzw. ist nicht aktiv) und
-// nicht Teil dieser Phase.
 export const GLOBAL_CAP_REASON = "global_cap";
 
-// GP-P3: terminaler Skip-Grund am Tenant - der automatische Wiederanlauf hat seinen
-// Versuchsdeckel (PROVISIONING_RETRY_MAX_ATTEMPTS) erschoepft und uebergibt an den
-// Handbetrieb (POST /api/onboard/retry, admin-only). Wert identisch zum bereits
-// bestehenden Rueckgabegrund von resolveProvisionRetry - EINE Quelle statt dreier
-// getippter Literale (G25/G5).
 export const NEEDS_MANUAL_RECONCILE_REASON = "needs_manual_reconcile";
 
-// Skip-Gruende von requestNumber() als Enum (G25/G11): EINE Quelle statt verstreuter
-// String-Literale in state-ops.js. GLOBAL_CAP bleibt der bestehende GLOBAL_CAP_REASON-
-// Export (kein Duplikat, Wert identisch).
 export const REQUEST_NUMBER_REASON = Object.freeze({
   TENANT_INACTIVE: "tenant_inactive",
   TENANT_CAP: "tenant_cap",
   GLOBAL_CAP: GLOBAL_CAP_REASON,
 });
 
-// Persistenz-Entscheidung fuer ein requestNumber()-Ergebnis (Fix B, PLAN-PROVISIONING-
-// CAP.md Phase A). Erfolg wird IMMER persistiert ('requested' auch im Dry-Run); der
-// global_cap-Skip wird IMMER persistiert (reine Observability, kein Trigger); jeder
-// andere Skip-Grund (tenant_cap/tenant_inactive) bleibt ungespeichert (ausserhalb des
-// Scopes dieser Phase). EINE Quelle fuer BEIDE Call-Sites (POST /api/onboard UND
-// triggerTenantProvisioning, G5/S2 - vorher woertlich dupliziert).
 export function shouldPersistProvisionResult(r) {
   return r.ok || r.reason === GLOBAL_CAP_REASON;
 }
 
-// ---- Provisioning-Jobs (async Worker, P6b2) ----
-// Status eines enqueued Jobs. EINE Quelle (G5/G13): der In-Memory-Queue-Adapter
-// (queue/adapters/memory) UND die persistente Job-Spur im Store-Spiegel (state-ops
-// recordProvisioningJob) importieren dieselben Werte - sonst driften zwei Listen
-// von "queued"/"done"/"failed"-Strings auseinander. PROVISION_NUMBER_JOB ist der
-// einzige Job-Typ in P6b2 (Nummer kaufen + konfigurieren).
 export const PROVISIONING_JOB_STATUS = Object.freeze({
   QUEUED: "queued",
   DONE: "done",
@@ -174,13 +76,6 @@ export const PROVISIONING_JOB_STATUS = Object.freeze({
 });
 export const PROVISION_NUMBER_JOB = "provision_number";
 
-// ---- Metering / Budget (P6b3) ----
-// usage_event.kind: die Stripe-Meter (Plan-Datenmodell). EINE Quelle (G5/G13): der
-// Recorder (state-ops recordUsageEvent), der Flush (billing/meter.js) UND die
-// pg-Hydrierung/Flush importieren dieselben Werte - sonst driften kind-Strings.
-// P6b3 verdrahtet die DREI im Scope (voice_minute, ai_token, number_month); SMS
-// bleibt als zukunftssicherer kind-Wert im Enum (Datenmodell-Treue, OHNE Producer
-// in dieser Phase - reine Datenkonstante, kein Code-Branch).
 export const USAGE_EVENT_KIND = Object.freeze({
   VOICE_MINUTE: "voice_minute",
   AI_TOKEN: "ai_token",
@@ -188,22 +83,6 @@ export const USAGE_EVENT_KIND = Object.freeze({
   NUMBER_MONTH: "number_month",
 });
 
-// LCT P3: Herkunft des Ist-Werts am Call (costTruedSource). KEINE dritte Kosten-Achse -
-// eine Herkunftsangabe. 'incomplete' = Records da, Pflicht-Menge nicht vollstaendig
-// (auch bei LEERER Pflicht-Menge: die beweist nichts) - ein DATENPROBLEM (Messung
-// lueckenhaft). 'no_estimate' (LCT P4) = Records VOLLSTAENDIG bewiesen, aber KEIN
-// persistierter Schaetzbetrag (Bestandszeile von vor P2) - strukturell nicht korrigierbar,
-// kein Messproblem; wie 'incomplete' nicht erstattbar und nicht 'telnyx_detail_records',
-// aber ein anderer Sachverhalt und deshalb ein eigener Zustand (zwei Ursachen teilen sich
-// NICHT ein Label). 'unavailable' = nicht gemessen (ok:false, leere Antwort, unparsbare
-// Summe) und NIEMALS "Kosten = 0".
-// KV2-8 (Plan 4.8): zwei neue Werte. 'telnyx_detail_records' bleibt - er steht an
-// Bestandszeilen von VOR dieser Phase und behauptet dort weiterhin die Wahrheit; neu
-// geschrieben wird er nur noch im Rueckfall (unvollstaendiges Buch ohne abgelaufene
-// Frist). Die Regel dieser Enum ("zwei Ursachen teilen sich NICHT ein Label") ist der
-// Grund fuer ZWEI Werte statt eines: "alle Pflicht-Traeger belegt" und "Frist abgelaufen,
-// Teilbeleg" sind verschiedene Sachverhalte, und ein Settlement aus dem Kosten-Buch darf
-// nicht 'telnyx_detail_records' behaupten (Abnahme (e)).
 export const COST_TRUING_SOURCE = Object.freeze({
   DETAIL_RECORDS: "telnyx_detail_records",
   KOSTENBUCH_VOLLBELEG: "kostenbuch_vollbeleg",
@@ -213,12 +92,6 @@ export const COST_TRUING_SOURCE = Object.freeze({
   UNAVAILABLE: "unavailable",
 });
 
-// KV2-8: WELCHE Herkunft "vollstaendig bewiesen" bedeutet - EINE Quelle fuer die drei
-// Leser (coverageBreakdown und countOutcome in cost-truing.js, isDriftSample in
-// cost-calibration.js). Vor dieser Phase stand der Vergleich `=== DETAIL_RECORDS`
-// dreimal getrennt da; mit einem ZWEITEN beweisenden Wert waeren daraus drei einzeln
-// nachzuziehende Stellen geworden (G5) - genau der Fehlertyp, an dem die Deckungsquote
-// still auf 0 % gefallen waere.
 const BEWEISENDE_HERKUNFT = Object.freeze([
   COST_TRUING_SOURCE.DETAIL_RECORDS,
   COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG,
@@ -228,11 +101,6 @@ export function istBeweisendeHerkunft(source) {
   return BEWEISENDE_HERKUNFT.includes(source);
 }
 
-// KV2-3: Reife einer Belegzeile im Kosten-Buch (call_cost_evidence.reife). VIER
-// Auspraegungen. Der frueher hier vorgesehene fuenfte Wert 'beleg_ausgeblieben' ENTFAELLT
-// (Owner-Entscheidung 16, DEFAULT uebernommen am 2026-08-30, nicht ausdruecklich
-// entschieden): kein Schreiber, keine Zeile der Matrix 4.6, kein Endzustand aus KV2-7 -
-// ein Enum-Wert ohne Schreiber ist toter Code im Schema.
 export const REIFE = Object.freeze({
   ERWARTET: "erwartet",
   VORLAEUFIG: "vorlaeufig",
@@ -240,125 +108,48 @@ export const REIFE = Object.freeze({
   STRUKTURELL_UNBESCHAFFBAR: "beleg_strukturell_unbeschaffbar",
 });
 
-// Die FORTSCHRITTS-Ordnung: Position = Rang. Ein Uebergang ist erlaubt, wenn der Rang
-// nicht SINKT (Ueberspringen von 'vorlaeufig' eingeschlossen, Gleichstand erlaubt ->
-// Idempotenz). Ein Rueckschritt wirft (Mutator in state-ops.js).
 export const REIFE_FORTSCHRITT = Object.freeze([REIFE.ERWARTET, REIFE.VORLAEUFIG, REIFE.BELEGT]);
 
-// TERMINALE Zustaende - sie stehen NEBEN der Ordnung, nicht darin: aus jedem
-// Fortschritts-Zustand erreichbar (kein Rueckschritt, wirft nicht), aus ihnen fuehrt
-// KEIN Uebergang mehr heraus (auch nicht nach 'belegt').
 export const REIFE_TERMINAL = Object.freeze([REIFE.STRUKTURELL_UNBESCHAFFBAR]);
 
-// Welche Reifegrade in die Belegsumme zaehlen (4.5). 'erwartet' traegt NICHTS bei - es hat
-// keinen Betrag, nicht den Betrag 0. EINE Quelle, damit KV2-8 die Regel nicht neu erfindet.
 export const REIFE_SUMMIERBAR = Object.freeze([REIFE.VORLAEUFIG, REIFE.BELEGT]);
 
-// Cent<->EUR-Bruecke (G25): EUR-Ableitung an Anzeige-/Persistenz-Kanten (z.B.
-// api-read.js usageView, pg.js flushUsage). Das Budget-Gate selbst vergleicht rein
-// Integer costCents (P1) - keine Division im Gate-Pfad.
 export const CENTS_PER_EUR = 100;
 
-// Nachkommastellen der EUR-Anzeige in Ablehnungstexten (P5a). Benannte Konstante statt
-// nackter "2" in toFixed().
 export const EUR_DECIMALS = 2;
 
-// EINE Geld-nach-Text-Kante (G5/G25): Ablehnungstexte (outbound-gates.js) formatieren
-// Cents NUR hier zu einem EUR-String. api-read.js bleibt numerisch (JSON-Zahl, kein
-// String) - kein Duplikat derselben Formatierung.
 export function eurText(cents) {
   return (cents / CENTS_PER_EUR).toFixed(EUR_DECIMALS);
 }
 
-// 'YYYY-MM-DD' - Laenge des ISO-Datumspraefix (G25, keine nackte 10 in slice()).
 const ISO_DATE_LENGTH = 10;
 
-// Letzter Tag des laufenden UTC-Kalendermonats (Spend-Monat-Achse, s. state-ops.js
-// spendMonthKeyOf/emptyUsage - dieselbe Achse, hier nur als Anzeige-Datum statt als
-// Vergleichsschluessel). Tag 0 des Folgemonats = letzter Tag des laufenden Monats;
-// Date.UTC normalisiert den Dezember-Ueberlauf selbst (Monat 12 -> Jahr+1, Monat 0).
-// nowMs kommt vom Aufrufer (Date.now()), damit dieses Modul zeit-frei bleibt (Muster
-// voiceMinutesUsedSince/setSuspendedAtIfAbsent) und der Wert nie unlesbar sein kann.
-// Reine Funktion.
 export function spendMonthEndDate(nowMs) {
   const at = new Date(nowMs);
   const lastDayOfMonth = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 0));
   return lastDayOfMonth.toISOString().slice(0, ISO_DATE_LENGTH);
 }
 
-// Sub-Cent-Aufloesung fuer die KI-Kosten-Akkumulation (Safety-BLOCKER P1): der
-// Sub-Cent-Anteil eines Turns (Haiku << 0,5 Cent) darf NICHT pro Inkrement auf 0
-// gerundet werden. trackUsage akkumuliert exakt in Mikro-Cents (1 Cent = 1e6) und
-// bucht nur den vollen Cent-Uebertrag in costCents (G26: Money at rest = Ganzzahl).
 export const MICRO_CENTS_PER_CENT = 1_000_000;
 
-// Audit-/Log-Grund fuer einen unbuchbaren Geldwert (D7). EINE Quelle (G5/G25): Schreib-,
-// Lese- und Hydrierungskante nennen denselben String, damit der Operator "Bucket vergiftet"
-// NIE mit "Budget wirklich erschoepft" verwechselt - genau diese Fehldiagnose hat den
-// Vorfall verlaengert. Deutsch, wie die uebrigen Gate-Gruende (denylist/land/reserve).
 export const USAGE_CORRUPT_REASON = "usage_korrupt";
 
-// Ist x ein BUCHBARER Geldbetrag (GANZZAHL-Cents-Konvention, G26)? EINZIGE
-// Gueltigkeitsquelle aller Geld-Kanten (D7, G5): Schreibkante (trackUsage,
-// addVoiceUsageCostCents), Lesekante (budgetExceeded und die reserve-bewusste
-// Schwester reserveExceedsBudget), Reserve-Riegel (tryReserveOutboundBudget) und die
-// pg-Hydrierung (rowToUsage) fragen NUR hier. Vorher stand eine negierte Vorzeichenpruefung
-// ad hoc genau einmal (in tryReserveOutboundBudget); fuenf weitere Inline-Kopien waeren
-// exakt die Invarianten-per-Konvention-Klasse, an der die naechste vergessene
-// Schreibstelle fail-open geht.
-//
-// Prueft auf Endlichkeit, Ganzzahligkeit und Nicht-Negativitaet, NIE auf Kleinheit
-// (P1-Safety-BLOCKER): ein Sub-Cent-Turn (Haiku << 0,5 Cent, faehrt in
-// costMicroCentsRem) und ein legitimer 0-Betrag bleiben buchbar - die Kleinheits-Ausnahme
-// gilt fuer die MICRO-Cent-Einheit, nicht fuer die (groebere) Cents-Achse selbst.
-// Number.isFinite faengt NaN UND +/-Infinity (ein positiver Unendlich-Wert waere bei
-// einer reinen >=0-Pruefung durchgerutscht - genau die Luecke, die die alte Pruefung
-// offen liess) und faengt zugleich Nicht-Zahlen ("5" ist nicht buchbar).
-// Number.isInteger (Review-Fix Runde 1, G26): diese Funktion ist die EINZIGE
-// Gueltigkeitsquelle der Ganzzahl-Cents-Konvention (G26, Money at rest) - ohne
-// Ganzzahl-Pruefung waere ein fraktionaler Wert (z.B. 0.5) klaglos in den
-// Ganzzahl-Akkumulator costCents geschrieben worden. turnIncrementsBookable bleibt
-// kompatibel: Token-Zaehler und microInc sind produktionsseitig immer Ganzzahlen.
-// Reine Funktion.
 export function isBookableCents(x) {
   return Number.isFinite(x) && Number.isInteger(x) && x >= 0;
 }
 
-// Skala, in der providerToBucketRateMicro gefuehrt wird (config.js). Benannt, damit
-// weder die Korrektur-Formel (state-ops.CORRECTION_DIVISOR) noch der Drift-Waechter
-// (cost-calibration.providerMicroCentsToBucketCents) eine nackte 1_000_000 im Rumpf
-// traegt (G25) und nicht mit dem gleich aussehenden MICRO_CENTS_PER_CENT verwechselt
-// wird - die beiden haben NICHTS miteinander zu tun (Kurs-Skala vs. Geld-Aufloesung).
-// EINE Quelle fuer beide Umrechner (G5): dieselbe Kurs-Skala wird nie zweimal gepflegt.
 export const PROVIDER_RATE_SCALE = 1_000_000;
 
-// Ist x ein buchbarer KORREKTUR-Betrag (LCT P4)? Schwester von isBookableCents, mit
-// EINEM Unterschied: BELIEBIGES VORZEICHEN. isBookableCents (x >= 0) bleibt
-// UNVERAENDERT - es ist der fail-closed-Riegel gegen korrupte Werte auf dem
-// Bestandspfad (D12) und wird NICHT aufgeweicht, sondern bekommt einen Nachbarn.
 export function isCorrectionCents(x) {
   return Number.isFinite(x) && Number.isInteger(x);
 }
 
-// Ist x ein gueltiger ANBIETER-Betrag in Mikro-Cent? Schwester von isBookableCents auf der
-// feineren Achse: isSafeInteger statt isFinite+isInteger, weil Mikro-Cent-Summen gross
-// werden. Bisher stand genau dieser Ausdruck inline in recordCallCostTruingResult; das
-// Kosten-Buch (KV2-3) waere die zweite Kopie gewesen (G5).
 export function isProviderMicroCents(wert) {
   return Number.isSafeInteger(wert) && wert >= 0;
 }
 
-// Preis-Bezugsgroesse der Anthropic-Preisstaffel (USD pro 1 Mio. Tokens). Benannt
-// (G25), weil tokenCostUsd sonst zwei nackte 1e6 traegt, die NICHTS mit dem
-// gleich aussehenden MICRO_CENTS_PER_CENT zu tun haben.
 export const TOKENS_PER_M_TOK = 1_000_000;
 
-// B4a: die vier Raten EINER Preisstaffel (USD je 1 Mio. Token), je Token-Sorte aus
-// llm/ports.js LlmTokenUsage. EINE Liste (G5) fuer die zwei Stellen, die ueber ALLE
-// Raten laufen: die Boot-Validierung (resolveModelPrices, config.js) und die
-// Fail-closed-Obergrenze (worstCasePrice, state-ops.js). Die Preisformel selbst
-// (tokenCostUsd) nennt die Felder bewusst EINZELN - sie PAART jede Rate mit ihrer
-// Token-Sorte; das sind vier Summanden, keine Liste.
 export const MODEL_PRICE_RATE_FIELDS = Object.freeze([
   "inPerMTok",
   "cacheWritePerMTok",
@@ -366,51 +157,18 @@ export const MODEL_PRICE_RATE_FIELDS = Object.freeze([
   "outPerMTok",
 ]);
 
-// Plattform-Bezugsgroesse in GANZZAHL Cents (G5: eine Quelle fuer das Rechnen in Cents).
-// cfg.platformSpendCapCents ist bereits Cents -> reiner benannter Seam, kein Einheiten-Mix.
-// ZWEI Verwendungen seit KS-P9/E10: die Warnschwelle der Plattform-Beobachtung
-// (claimPlatformSpendWarning) und - als PRO-TENANT-Fallback - Stufe (3) von
-// effectiveCapCents. Eine SPERRE der Plattform-Achse gibt es nicht mehr. Die
-// EUR-Anzeige-Schwester (frueher globalCapEur) ist mit P5a entfallen: die Plattform-Achse
-// gibt NIE eine Zahl an einen Tenant heraus (Cross-Tenant-Leck-Riegel) - eine
-// EUR-Ableitung dieses Caps hatte ab da keinen Aufrufer mehr (F4, tote Funktion).
 export function globalCapCents(cfg) {
   return cfg.platformSpendCapCents;
 }
 
-// ABSOLUTE Obergrenze der guthaben-abgeleiteten Notbremse (KS-P3 (b), E2/E3): die
-// laengste Frist, nach der ein Leg OHNE weitere Turns hart beendet wird. KEIN
-// Kosten-Deckel (das ist seit KS-P2 der Live-Zaehler), sondern die maximale LEBENSDAUER
-// einer technisch toten Verbindung. Deckelt weiterhin AUCH den Body-Override
-// (place_call max_duration_s). Hartkodiert und KEIN Operator-Knopf (G35 n.z.) - eine
-// Notbremse gehoert nicht an einen Knopf; die frueher hier stehende Env MAX_CALL_DURATION_S
-// ist mit E2/E3 ersatzlos entfallen (sie WAR die willkuerliche Produktgrenze).
-// 1800 s = 30 min liegt ueber jedem realistischen Terminanruf inkl. Warteschleife und in
-// der Groessenordnung des groessten verkauften Kontingents (Business, 120 min/Monat).
 export const MAX_CALL_DURATION_CAP_S = 1800;
 
-// KS-P3 (a): die Vorab-Reserve deckt seit dieser Phase nur noch das VORLAUFFENSTER, bis
-// der Live-Zaehler (KS-P2, blockingBudgetAxis) zum ersten Mal greift - nicht mehr das
-// ganze Gespraech. Ihr verbleibender Zweck ist der Schutz gegen GLEICHZEITIGKEIT
-// (mehrere Legs desselben Tenants), nicht die Deckung der Gespraechsdauer. Deshalb
-// haengt sie nicht mehr an der Maximaldauer: die waechst mit dem Guthaben, die Reserve
-// nicht. KEIN Operator-Knopf (Muster MAX_CALL_DURATION_CAP_S, G35 n.z.).
 export const RESERVE_LEAD_MINUTES = 2;
 
-// EINE Quelle (G5) der Reserve-Formel fuer die DREI Stellen, die sie brauchen: das
-// compute_reserve-Gate (die echte Buchung) und die zwei Boot-Guards, die eine Decke
-// dagegen halten (spendCapCoherence Klausel B, planCapReserveFindings). Vorher stand
-// dieselbe Rechnung zweimal - und beide Kopien trugen die Maximaldauer, die hier
-// bewusst nicht mehr vorkommt.
 export function outboundReserveCents(tariffCentsPerMin) {
   return tariffCentsPerMin * RESERVE_LEAD_MINUTES;
 }
 
-// P6 (PLAN-CONVERSATION-QUALITY-V2, Anhang C): Verhalten des Agenten, wenn ein Angebot
-// AUSSERHALB des vorab erteilten Mandats liegt. EINE Quelle (G25/G5) fuer das
-// place_call-Schema (zod-Enum), die /api/calls-Validierung und den Prompt-Renderer.
-// Das Mandat erlaubt NUR muendliche Zusagen im vom Owner gesetzten Rahmen - es oeffnet
-// keinen Kalender- oder Buchungspfad (Owner-Entscheidung E1).
 export const MANDATE_OUT_OF_SCOPE = Object.freeze({
   TAKE_MESSAGE: "take_message",
   DECLINE: "decline",
@@ -418,94 +176,50 @@ export const MANDATE_OUT_OF_SCOPE = Object.freeze({
 });
 export const MANDATE_OUT_OF_SCOPE_VALUES = Object.freeze(Object.values(MANDATE_OUT_OF_SCOPE));
 
-// P3/AL-P13: Deckel des key_facts-Arrays. EINE Quelle (G5) fuer die HTTP-Kante
-// (routes/_validation.js re-exportiert, Muster E164) UND den Consult-Merge
-// (state-ops.mergeConsultFacts) - sonst driften zwei Deckel auf demselben Feld.
 export const KEY_FACTS_LIMITS = Object.freeze({ maxItems: 10, maxLen: 200 });
 
-// AL-P13: Lebenszyklus eines Consults am Call.
 export const CONSULT_STATUS = Object.freeze({
   OPEN: "open",
   ANSWERED: "answered",
   EXPIRED: "expired",
-  // AL-P14: die Wartezeit EINES In-Call-Consults ist abgelaufen. Bewusst NICHT
-  // "expired" (das heisst "der Call ist terminal"): nur so bleibt im Export und im
-  // Log unterscheidbar, ob niemand geantwortet hat oder der Anruf endete.
   TIMED_OUT: "timed_out",
 });
 
-// AL-P14: Ergebnis EINES Zustandsschritts der Consult-Wartezeit - maschinenlesbar,
-// damit agentTurn nicht auf Statuszeichenketten vergleicht (Muster CONSULT_ANSWER).
 export const CONSULT_WAIT = Object.freeze({
   NONE: "none",
   HOLD: "hold",
-  // GQ-P2: die Rueckfrage LEBT, die Antwort steht nur noch aus. Der Turn laeuft normal
-  // (Modellrunde, kein Halte-Satz) und traegt genau EINMAL den ehrlichen Hinweis.
-  // Bewusst NICHT "hold": hold ueberspringt die Modellrunde, pending nicht.
   PENDING: "pending",
   TIMED_OUT: "timed_out",
-  // GQ-P8: die Antwort ist EINGETROFFEN und hat noch keinen Turn gesehen. Der bisher
-  // fehlende dritte Zustand - und die Wurzel des Live-Befunds vom 2026-08-05: nach dem
-  // Eintreffen steht der Consult auf "answered", die Suche nach OFFENEN Rueckfragen findet
-  // nichts, der Turn bekommt GAR KEINEN Steuertext. Das Modell sah nur dieselbe
-  // HINTERGRUND-Liste wie vorher und sagte "ich frage mal und rufe spaeter an" - waehrend
-  // die Auskunft seit Sekunden in genau dieser Liste stand.
   ANSWERED: "answered",
 });
 
-// AL-P13: Ergebnis von answerConsult - maschinenlesbar, damit die Route den HTTP-Status
-// ableitet, ohne Zeichenketten zu vergleichen (Bestandsmuster GLOBAL_CAP_REASON).
 export const CONSULT_ANSWER = Object.freeze({
   ACCEPTED: "accepted",
   UNKNOWN_EVENT: "unknown_event",
   ALREADY_ANSWERED: "already_answered",
   CALL_ENDED: "call_ended",
-  // GQ-P2: die Offen-Frist des In-Call-Consults ist abgelaufen. Bewusst eigener Wert
-  // neben ALREADY_ANSWERED: im Audit-Log muss "zu spaet" von "schon beantwortet"
-  // unterscheidbar bleiben - genau daran haengt die Diagnose des Rueckkanals.
   DEADLINE_PASSED: "deadline_passed",
 });
 
-// P2 (W2): warum der gestaffelte Halt endete. Maschinenlesbar - er steht am Datensatz
-// (P3 auditiert ihn dort ohne Rateschritt) und in der HTTP-Antwort an den Anbieter, NIE
-// im Gespraech: alle drei sprechen den bestehenden Timeout-Text (E-4).
 export const CONSULT_TIMEOUT_REASON = Object.freeze({
-  NOT_DELIVERED: "not_delivered", // Stufe 0: kein pollender Client hat die Frage bekommen
-  NOT_ACKED: "not_acked", // Stufe 1: zugestellt, aber niemand quittiert -> nicht bedienbar
-  TIMEOUT: "timeout", // Stufe 2: quittiert, aber keine Antwort in der Gesamtfrist
+  NOT_DELIVERED: "not_delivered",
+  NOT_ACKED: "not_acked",
+  TIMEOUT: "timeout",
 });
 
-// P2: die zwei Modi von answer_consult. KEIN neues Werkzeug (SCOPE 2): ein eigenes
-// ack_consult haette eine eigene Connector-Berechtigung, die per Default wieder auf
-// "nachfragen" stuende - die Falle waere identisch nachgebaut. Fehlender Modus = FINAL,
-// damit jeder Bestands-Aufrufer byte-identisch bleibt.
 export const CONSULT_ANSWER_MODE = Object.freeze({ WORKING: "working", FINAL: "final" });
 
-// Konservativster der drei Wege: ohne ausdrueckliche Angabe gibt der Agent ein Angebot
-// ausserhalb seines Spielraums als Nachricht weiter, statt ab- oder zuzusagen.
 export const MANDATE_OUT_OF_SCOPE_DEFAULT = MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE;
 
-// Tenant-Lebenszyklus (Onboarding). status steuert, ob ein Tenant ueberhaupt
-// Nummern/Calls bekommen darf (suspended/closed = gesperrt, fail-closed).
 export const TENANT_STATUS = Object.freeze({
   ACTIVE: "active",
   SUSPENDED: "suspended",
   CLOSED: "closed",
 });
 
-// Kanonische Tenant-ID aus einer IdP-Identitaet (WorkOS access_token sub). EINE Quelle
-// (G5) fuer Web-Login (upsertOnFirstLogin) UND den idp-gebundenen Onboard-Pfad: derselbe
-// sub MUSS denselben Tenant-Record adressieren, sonst entstehen zwei Records pro Person.
-// Praefix als benannte Konstante (G25), nicht als verstreuter Magic-String.
 const TENANT_ID_PREFIX = "t_";
 export const tenantIdForSubject = (sub) => `${TENANT_ID_PREFIX}${sub}`;
 
-// KYC-Reifegrad eines Tenants (P6b4). Geordnete Stufen: jede hoehere schliesst
-// die niedrigeren ein. EINE Quelle (G5/G25): der Gate-Vergleich (state-ops
-// kycReached) UND der Setter (setKycLevel) UND die pg-Hydrierung/Flush
-// importieren dieselben Werte - sonst driften die level-Strings.
-// none < otp < card < id_verified. KYC_ORDER bildet die Vergleichbarkeit ab
-// (Index = Rang), damit ">= card" ohne magische Zahlen ausdrueckbar ist.
 export const KYC_LEVEL = Object.freeze({
   NONE: "none",
   OTP: "otp",
@@ -519,8 +233,6 @@ export const KYC_ORDER = Object.freeze([
   KYC_LEVEL.ID_VERIFIED,
 ]);
 
-// Schwelle fuer Outbound (Gate). >= card. Benannte Konstante (G25), eine Quelle
-// fuer Gate + Tests.
 export const KYC_OUTBOUND_MIN = KYC_LEVEL.CARD;
 
 function nextWeekday(daysAhead, hour) {
@@ -532,59 +244,20 @@ function nextWeekday(daysAhead, hour) {
   return d.toISOString();
 }
 
-// Default-Begruessung (erster Inbound-Satz). EINE Quelle (G5): defaultSettings()
-// UND der Greeting-Katalog (i18n/greeting-catalog.js greetingTemplatesFor) referenzieren
-// sie, damit der geseedete Default IMMER eine waehlbare Vorlage bleibt (kein Drift).
-//
-// GAP-14: der geseedete Default traegt den Pflichtsatz bereits AT REST. Sonst waere der
-// Default der einzige Wert, den updateSettings nach dem Guard (state-ops) nicht mehr
-// zurueckschreiben koennte. Zusammensetzung statt zweiter Literal-Kopie des Satzes (G5).
 export const DEFAULT_GREETING = withInboundNotice(
   "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht für {owner} aufnehmen. Wie kann ich helfen?",
   INBOUND_NOTICES.de,
 );
 
-// ---- Geo-Location (F1): Default-Land + -Sprache ----
-// EINE Quelle (G5/G25) fuer die Geo-Defaults: defaultSettings().language, der
-// config-derived Number-Seed (seedBootstrapNumber), der Nummern-Request (requestNumber)
-// UND der Code-Fallback der spaeteren Sprach-/Routing-Konsumenten leiten DE/de
-// hieraus ab. Die Geo-Felder auf Number-/Tenant-Record sind additiv NULLABLE
-// (Bestand ohne Wert -> Code-Fallback hier, nie hart angenommen, R7). country =
-// ISO-3166-1-alpha-2, language = BCP-47-kurz.
 export const DEFAULT_COUNTRY = "DE";
-// Weltdefault (Owner-Entscheidung 7.12, PLAN-I18N-FIX P10): "en", NICHT mehr "de".
-// LANGUAGE_FOR_COUNTRY (i18n/locales.js) bleibt unveraendert - DE/AT/CH/FR/GB/IE loesen
-// weiterhin auf ihre eigene Sprache auf, dieser Flip aendert nur den Fallback fuer JEDES
-// andere/unbekannte Land.
-//
-// Review-Fix (Runde 1, P10-Blocker "ENTSCHAERFT (1)"): der Flip haengt zusaetzlich an
-// einem Env-Schalter (WORLD_DEFAULT_LANGUAGE_ENABLED, s. config.js) - Rueckflip ohne
-// Deploy in Minuten (Render-Dashboard-Env-Aenderung statt Commit-Revert). Diese Datei
-// bleibt IO-/config-frei (s. Datei-Kopf, "reine Code-Defaults", von beiden Backends UND
-// von reinen Unit-Tests config-frei importierbar): config.js liest den Schalter EINMAL
-// beim Boot und drueckt das Ergebnis ueber setWorldDefaultLanguageEnabled() hier rein
-// (Wiring im Kompositions-Root, P15) - kein Rueck-Import defaults.js->config.js noetig.
-// Reine Unit-Tests, die config.js nie laden, sehen weiterhin den unveraenderten
-// Default "en" (byte-identisch zum Bestand vor diesem Fix).
 export let DEFAULT_LANGUAGE = "en";
 
-// NUR von config.js aufgerufen (s.o.), sonst bleibt der Code-Default "en" stehen.
-// enabled=false -> Rueckfall auf "de" (Vor-Flip-Verhalten, Aktivierungsfenster-Default
-// laut PLAN-I18N-FIX.md P10 bis zur Abnahme von P13); enabled=true -> "en" (Weltdefault).
 export function setWorldDefaultLanguageEnabled(enabled) {
   DEFAULT_LANGUAGE = enabled ? "en" : "de";
 }
 
-// P8/FMT-28 (Owner-Entscheidung 7.6): IANA-Zeitzone des Default-Landes. Reine ANZEIGE -
-// sie faerbt nur die Uhrzeit im Systemprompt (claude.js). Ein Anrufzeit-Gate ist
-// ausdruecklich ABGELEHNT (LAW-07); dass KEIN Gate-Modul dieses Feld liest, pinnt
-// test/p8-timezone-no-gate.test.js strukturell.
 export const DEFAULT_TIMEZONE = "Europe/Berlin";
 
-// Fail-safe Aufloesung einer gespeicherten Zeitzone (R7-Muster wie localeFor): fehlend,
-// leer oder kein gueltiger IANA-Bezeichner -> DEFAULT_TIMEZONE. PFLICHT, weil
-// Date#toLocaleString mit einer unbekannten timeZone einen RangeError WIRFT - ein
-// Muellwert an dieser Stelle wuerde sonst jeden Prompt-Bau und damit jeden Anruf toeten.
 export function resolveTimezone(timezone) {
   if (typeof timezone !== "string" || !timezone.trim()) return DEFAULT_TIMEZONE;
   try {
@@ -599,62 +272,19 @@ export function defaultSettings() {
   return {
     agentName: "Hermes",
     greeting: DEFAULT_GREETING,
-    // Seit P1b (Owner-Entscheidung E1) OHNE lesenden Konsumenten: der Telefon-Agent
-    // hat kein Kalender-/Buchungs-Tool mehr, und Self-Service kann die Felder nicht
-    // mehr setzen. Bewusst NICHT entfernt - ein Spalten-Drop waere eine Migration mit
-    // Rollback-Risiko ohne funktionalen Gewinn. Die GLEICHNAMIGEN Felder auf der
-    // Profil-Achse (PROFILE_FIELDS weiter unten) leben unabhaengig weiter und gaten
-    // weiterhin das MCP-Tool - nicht verwechseln.
     allowCalendar: true,
     allowBooking: true,
     allowSummaries: true,
-    // F2 P7: Opt-Out fuer die Summary-SMS an die private Nummer (Decision #2, Muster
-    // allowSummaries). Default true = Bestandsverhalten (wer eine private Nummer hinterlegt,
-    // bekommt die SMS). false = Summary ja, aber KEINE SMS - ohne die Nummer (Login-/
-    // Kontaktkanal) loeschen zu muessen. Kein PII (Boolean) -> ueber /api/state + MCP
-    // sichtbar unkritisch; schreibbar ueber die updateSettings-Whitelist; seit AUTH-P4
-    // ohne HTTP-Schreibflaeche (nur direkter DB-Eingriff).
     smsSummaryOptIn: true,
     allowPersonalData: false,
     allowBankData: false,
-    // AL-P10: Per-Tenant-Freigabe der Vorab-Web-Recherche. DEFAULT AUS (fail-closed):
-    // mit dem Auftragsmaterial wandert Inhalt an einen Suchindex - das ist eine
-    // Entscheidung, die dem Tenant gehoert, nicht dem globalen Schalter allein. Der
-    // Adapter liest die SCHNITTMENGE aus config.research.researchEnabled und diesem
-    // Feld (src/research/registry.js). Kein PII (Boolean) -> ueber /api/state
-    // unkritisch; schreibbar ueber die updateSettings-Whitelist; seit AUTH-P4 ohne
-    // HTTP-Schreibflaeche (nur direkter DB-Eingriff), NICHT ueber Self-Service
-    // (Geldpfad, Owner-Gate O3).
     allowResearch: false,
-    // AL-P12: Beziehungsgedaechtnis - darf der Agent beim naechsten Anruf an dieselbe
-    // Nummer die Ergebnisse/Fakten seiner frueheren Anrufe dorthin im Prompt sehen?
-    // DEFAULT AUS - und das ist eine bewusste Umkehr des urspruenglichen Plans: das
-    // Argument "es sind die eigenen Daten des Tenants" traegt fuer den Tenant, NICHT fuer
-    // die Gegenstelle. Getragen werden Fakten ueber den Angerufenen, ueber Anrufe hinweg,
-    // in kuenftige Prompts injiziert - ein neuer Verarbeitungszweck ueber Drittdaten, der
-    // fuer Bestands-Tenants nicht still scharf geschaltet wird (Muster allowResearch /
-    // PRECALL_BRIEFING_ENABLED: Faehigkeit vorhanden, Schalter aus). Kein PII (Boolean);
-    // schreibbar ueber die updateSettings-Whitelist; seit AUTH-P4 ohne HTTP-
-    // Schreibflaeche (nur direkter DB-Eingriff), NICHT ueber Self-Service.
     allowCallMemory: false,
-    // Gespraechssprache pro Tenant als OPTIONALES Override (F1 Phase 4, Entscheidung #8):
-    // null = "nicht gesetzt" -> die Aufloesungs-Praezedenz (resolveCallLanguage) faellt
-    // auf number.language -> tenant.defaultLanguage -> DEFAULT_LANGUAGE (Weltdefault, P10)
-    // durch. Ein harter Default wuerde number.language IMMER ueberstimmen (Praezedenz-Bug)
-    // -> deshalb null statt eines festen Sprachcodes.
-    // Im Dashboard umstellbar (updateSettings hat eine eigene language-Validierung gegen
-    // SUPPORTED_LANGUAGES, da typeof null === "object" den generischen Typ-Check umgeht).
     language: null,
-    // Stehender Tenant-Stil (P2, Owner-Entscheidung 6.1): kuratierte NON-PII-Enum-ID
-    // (PERSONA_STYLE_IDS, src/i18n/locales.js) ODER null. null = Bestand (neutral, Siezen)
-    // -> agentStyle=null byte-identisch zum heutigen systemPrompt (P0-Pins). Faerbt NUR
-    // Ton + Anrede EINER System-Prompt-Zeile (claude.js styleClause), NIE Offenlegung/
-    // Persona/Telefon-Regeln. Validiert fail-closed in updateSettings (kein Freitext).
     agentStyle: null,
   };
 }
 
-// Demo-Termine, damit der Agent echte Verfuegbarkeiten hat.
 export function demoCalendar() {
   return DEMO_EVENTS.map((e) => ({
     id: e.id,
@@ -664,219 +294,88 @@ export function demoCalendar() {
   }));
 }
 
-// Settings-Map mit dem Owner-Bucket vorbelegt (Identitaets-Schicht pro-Tenant, I2;
-// analog emptyUsageMap). s.settings ist eine Map tenantId -> Settings. Der
-// Owner-Bucket existiert von Anfang an (die Lesepfade /api/state und Self-Service
-// lesen ihn).
 export function defaultSettingsMap() {
   return { [BOOTSTRAP_TENANT_ID]: defaultSettings() };
 }
 
-// Kalender-Map mit dem Owner-Demo-Kalender vorbelegt (I2; analog emptyUsageMap).
-// s.calendar ist eine Map tenantId -> [events]. Nur der Owner ist vorbelegt; ein
-// neuer Tenant bekommt ueber calendarFor eine leere Liste.
 export function calendarMap() {
   return { [BOOTSTRAP_TENANT_ID]: demoCalendar() };
 }
 
-// Leerer Usage-Bucket. Money at rest = GANZZAHL Cents (costCents, G26). costMicroCentsRem
-// = ephemerer Sub-Cent-Rest der KI-Akkumulation (nie auf Platte, Reset 0 bei Boot).
-// spendMonthKey/spendMonthCostCents (P4): zweite, PERIODISCHE Achse (UTC-Kalendermonat)
-// NEBEN dem unveraenderten Lebenszeit-Zaehler costCents. null = noch nie gestempelt ->
-// die Leseprojektion spendMonthUsageCents liefert 0. Sie ist die Gate-Quelle NUR bei
-// BUDGET_MONTH_ENABLED=true (P7). NICHT die Stripe-Abrechnungsperiode
-// (src/billing/period.js) - die traegt seit GAP-01 die dritte Achse weiter unten.
 export function emptyUsage() {
   return {
     inputTokens: 0,
     outputTokens: 0,
     costCents: 0,
     costMicroCentsRem: 0,
-    // LCT P4: Sub-Cent-Rest der KORREKTURBUCHUNGEN. PERSISTIERT - und das ist der
-    // Unterschied zum Nachbarn costMicroCentsRem eine Zeile darueber, der ausdruecklich
-    // ephemer ist. Zwei gleich benannte Rest-Felder mit verschiedener Lebensdauer sind
-    // eine Falle fuer den naechsten Leser, deshalb hier hart begruendet: der
-    // Korrektur-Rest sammelt sich ueber TAGE (ein Abgleichlauf alle 6 h, verzoegert um
-    // 180 min), der trackUsage-Rest entsteht und verbraucht sich innerhalb EINES
-    // Gespraechs. Ein Restart wirft beim Korrektur-Rest also echtes Geld weg.
     costCorrectionMicroCentsRem: 0,
-    // KE-P6: ElevenLabs-Zeichen dieses Tenants, LEBENSZEIT-Summe wie calls. Quelle ist
-    // AUSSCHLIESSLICH der zugeordnete Telnyx-Beleg (number_of_characters am
-    // text-to-speech-Beleg mit provider elevenlabs) - der globale platformTtsUsage-Zaehler
-    // daneben misst den anderen Pfad (Play-TTS) und bleibt unveraendert. REINE SICHTBARKEIT:
-    // kein Gate, kein Meter, keine Projektion liest diese Zahl (die /api/state-Usage-
-    // Projektion ist eine Whitelist, s. test/api-state-usage-axis.test.js).
     ttsCharacters: 0,
     calls: 0,
     spendMonthKey: null,
     spendMonthCostCents: 0,
-    // GAP-01 (P6): DRITTE Achse - das Budget-Gate misst den Verbrauch der laufenden
-    // STRIPE-Abrechnungsperiode statt der Lebenszeit. budgetPeriodKey = ISO-Periodenstart
-    // (resolvePeriodStartIso, billing/period.js); null = nie gestempelt -> das Gate faellt
-    // auf costCents (Lebenszeit, strengste Achse) zurueck. budgetPeriodBaselineCents ist
-    // der Lebenszeit-Stand BEI Periodenbeginn - der Reset ist eine Subtraktion, kein
-    // Nullen: costCents bleibt monoton (Forensik + D7-Gegenprobe).
-    // NICHT der UTC-Kalendermonat (spendMonthKey daneben) und NICHT die Plattform-Achse.
     budgetPeriodKey: null,
     budgetPeriodBaselineCents: 0,
   };
 }
 
-// Usage-Map mit dem Owner-Bucket vorbelegt. Daten-Schicht pro-Tenant (P4):
-// s.usage ist eine Map tenantId -> Bucket. Laufzeit bleibt owner-only, der
-// Owner-Bucket existiert von Anfang an (Dashboard/get_agent_status lesen ihn).
 export function emptyUsageMap() {
   return { [BOOTSTRAP_TENANT_ID]: emptyUsage() };
 }
 
-// LCT P7: globaler ElevenLabs-Zeichenzaehler (nicht tenant-scoped, Muster profile - EIN
-// Konto, keine Tenant-Dimension). PERSISTIERT (ueberlebt einen Restart - ein Free-Tier-
-// Dyno startet haeufig neu, ein rein prozess-lokaler Zaehler erreichte die Kontingent-
-// Wand nie; dieselbe Begruendung wie costTruingAttempts). cycleKey/warnedCycle sind
-// 'YYYY-MM'-Zyklusschluessel (Anker = TTS_QUOTA_CYCLE_ANCHOR_DAY, NICHT der Kalendermonat -
-// der ElevenLabs-Zyklus faellt auf einen Tag mitten im Monat). REINE SICHTBARKEIT: kein
-// Gate liest die Zahl.
 export function emptyPlatformTtsUsage() {
   return { cycleKey: null, characters: 0, warnedCycle: null };
 }
 
-// KV-M4: globaler Riegel der monatlichen Gegenprobe (nicht tenant-scoped, Muster
-// platformTtsUsage - EIN Konto, keine Tenant-Dimension, kein Ledger-Beleg). PERSISTIERT
-// (ueberlebt einen Restart - dieselbe Begruendung wie platformTtsUsage/costTruingAttempts:
-// ein rein prozess-lokaler Riegel wuerde bei jedem Free-Tier-Restart auf null fallen und
-// den Provider-Aufruf erneut ausloesen). lastCheckedMonthKey ist 'YYYY-MM' (Muster
-// platformTtsUsage.cycleKey) - der zuletzt GEPRUEFTE (nicht: erfolgreich abgeglichene)
-// Kalendermonat. REINE BEOBACHTUNG: kein Gate, kein Meter, keine Buchung liest dieses Feld.
 export function emptyCostCrossCheck() {
   return { lastCheckedMonthKey: null };
 }
 
-// ---- Rechteprofile pro Nutzer (Phase 2) ----
-// Profil-Felder mit erwartetem Typ (Whitelist gegen sanitizeProfile, analog
-// updateSettings). "string[]" = Array aus Strings.
 export const PROFILE_FIELDS = {
-  allowedNumbers: "string[]", // eigene Ziel-Freigabe (Pfad 1: gezielte Nummern ohne Abo/Verifikation)
-  allowedCountryCodes: "string[]", // engt das globale Land-Gate weiter ein (nie auf)
-  unrestricted: "boolean", // erfuellt das Verifikations-Gate (Pfad 1; nur dieses Gate, kein hartes Gate)
-  allowCalendar: "boolean", // ohne Konsumenten, das MCP-Kalender-Werkzeug ist entfallen (T2-12)
-  allowConsult: "boolean", // AL-P13: await_call_event/answer_consult + Consult-Routen
-  allowLookup: "boolean", // AL-P10b: look_up im Gespraech (zweiter Auftragsverarbeiter)
-  allowBooking: "boolean", // seit AUTH-P4 ohne Konsumenten (die einzige gegatete Aktion war POST /api/calendar)
-  // number ODER null: null = keine Profil-Senkung (effektiv der Pro-Tenant-Default
-  // config.safety.maxCallsPerHour, telephony/outbound-gates tenantHourReached). Muss als
-  // null erhalten bleiben (PLAN_PROFILE/OWNER_PROFILE) - sonst faellt das Profil ueber
-  // resolveProfileFrom still auf DEFAULT_PROFILE.maxCallsPerHour (A11).
-  maxCallsPerHour: "number?", // pro-Tenant-Stundenlimit (effektiv min(config, profil))
+  allowedNumbers: "string[]",
+  allowedCountryCodes: "string[]",
+  unrestricted: "boolean",
+  allowCalendar: "boolean",
+  allowConsult: "boolean",
+  allowLookup: "boolean",
+  allowBooking: "boolean",
+  maxCallsPerHour: "number?",
 };
 
-// E.164-Normalisierung: entfernt Whitespace/Bindestriche/Klammern aus einer
-// Telefonnummer ("+49 151-(0)123" -> "+491510123"). EINE Quelle (G5/DRY) fuer die
-// Inbound-To-Pruefung (server.js), den config-derived Nummern-Seed
-// (state-ops.seedBootstrapNumber, migrate.seedNumber) UND die Profil-Allowlist
-// (sanitizeProfile) - sonst driften drei Kopien desselben Regex. Nicht-String ->
-// "" (env-gating/Guard beim Aufrufer). Seed + Lookup teilen dieselbe Form, damit
-// eine gesetzte Owner-Nummer mit Trennzeichen trotzdem routbar bleibt (TD-2).
 export function normNum(n) {
   return typeof n === "string" ? n.replace(/[\s\-()]/g, "") : "";
 }
 
-// E.164-Format: '+' gefolgt von 7-15 Ziffern, erste Ziffer != 0. EINE Quelle (G5):
-// kanonisch hier neben normNum (dem Praezedenzort fuer geteilte Telefon-Helfer),
-// damit der private-number-Setter in state-ops normalisiert UND validiert, ohne den
-// Regex zu kopieren. routes/_validation.js re-exportiert diese Konstante (statt eine
-// zweite Definition zu pflegen) - normale Schicht-Richtung (routes -> store), kein
-// Zyklus (defaults.js importiert nichts). Wert byte-identisch zur frueheren Definition.
 export const E164 = /^\+[1-9]\d{6,14}$/;
 
-// Laendervorwahlen, bei denen eine '0' UNMITTELBAR nach der Vorwahl ein nationaler
-// Trunk-Praefix (Verkehrsausscheidungsziffer) ist, der in E.164 NICHT vorkommen darf
-// (DE/FR/UK lassen die fuehrende 0 im internationalen Format weg). BEWUSST eine eigene,
-// enge Liste - NICHT an config.safety.allowedCountryCodes gekoppelt (G13): Italien (+39) z.B.
-// BEHAELT die fuehrende 0 im NSN; eine an die Anruf-Allowlist gebundene Regel wuerde dort
-// gueltige Nummern faelschlich ablehnen (Pre-Mortem). Telefonie-Tatsache, kein Policy-Gate
-// -> bewusst kein Env-Knopf (fail-safe gegen Fehlkonfiguration).
 const TRUNK_ZERO_COUNTRY_CODES = ["+49", "+33", "+44"];
 const NATIONAL_TRUNK_PREFIX = "0";
 
-// NANP (+1, Nordamerika + karibische Mitglieder): EIGENE Wahl-Konvention. Der nationale
-// Praefix ist "1" (nicht "0"), der internationale "011" (nicht "00"). Deshalb eine eigene
-// Liste NEBEN TRUNK_ZERO_COUNTRY_CODES statt eines Eintrags darin: dort gilt die
-// "fuehrende 0"-Regel, hier gilt sie NIE (hasTrunkZeroAfterCountryCode bleibt unberuehrt).
 const NANP_COUNTRY_CODE = "+1";
 const NANP_INTERNATIONAL_PREFIX = "011";
 const NANP_TRUNK_PREFIX = "1";
-const NANP_NSN_DIGITS = 10; // Teilnehmernummer ohne Laender-/Trunk-Praefix
+const NANP_NSN_DIGITS = 10;
 const NANP_NATIONAL_DIGITS = NANP_NSN_DIGITS + NANP_TRUNK_PREFIX.length;
 
-// NANP-Plausibilitaet (Review-Fix Runde 1, GAP-25): NPA (Ortsvorwahl) und NXX
-// (Nebenstellen-Praefix) beginnen laut NANP-Nummerierungsplan NIE mit 0 oder 1 - nur
-// 2-9 sind gueltige erste Ziffern. Ohne diese Pruefung wuerde JEDE 10-stellige Eingabe
-// (z.B. eine deutsche Ortsnetznummer ohne fuehrende 0) klaglos zu einer formal
-// gueltigen E.164-Nummer materialisiert ("ablehnen statt raten" wird sonst verletzt -
-// s. Kommentar an normalizeNanpTarget/normalizeDialTarget).
 const NANP_NSN_PATTERN = /^[2-9]\d{2}[2-9]\d{6}$/;
 
-// Heimatlaender, fuer die eine nationale Wahl-Konvention BEKANNT ist. Nur fuer sie darf
-// aus einer nationalen Schreibweise eine E.164-Nummer materialisiert werden.
 const DIALING_HOME_COUNTRY_CODES = [...TRUNK_ZERO_COUNTRY_CODES, NANP_COUNTRY_CODE];
 
-// ISO-3166-1-alpha-2-Mitgliedslaender des NANP (Nordamerika + karibische Mitglieder).
-// Fixe Telefonie-Tatsache (Nummerierungsplan-Mitgliedschaft), NICHT konfigurierbar
-// (G35 n.z., wie TRUNK_ZERO_COUNTRY_CODES/NO_NATIONAL_ELEVEN_RANGE_COUNTRIES) und
-// NICHT an config.safety.allowedCountryCodes gekoppelt (G13, gleiche Begruendung wie
-// bei TRUNK_ZERO_COUNTRY_CODES: eine Policy-Liste ist kein Telefonie-Fakt).
 const NANP_ISO_COUNTRIES = Object.freeze([
   "US", "CA", "AG", "AI", "AS", "BB", "BM", "BS", "DM", "DO", "GD", "GU", "JM", "KN",
   "KY", "LC", "MP", "MS", "PR", "SX", "TC", "TT", "VC", "VG", "VI",
 ]);
 
-// Ist countryIso (ISO-3166-1-alpha-2, aus tenantGeo) ein NANP-Mitgliedsland? Reines
-// Praedikat, Nicht-String/unbekannt -> false (fail-closed). EINE Quelle (G5) fuer den
-// homeCountryCode-Guard unten.
 export function isNanpCountry(countryIso) {
   return typeof countryIso === "string" && NANP_ISO_COUNTRIES.includes(countryIso.toUpperCase());
 }
 
-// Heimatlaender, in denen eine nationale Rufnummer NIE mit "11" beginnt: die 11x-Gasse ist
-// dort reine Kurzwahl/Dienste (DE 110/112/115/116xxx/118xx, FR 112/115/118xxx). Eine
-// Eingabe "011..." kann dort also keine nationale Nummer sein - normalisiert man sie
-// trotzdem ueber die Trunk-0-Regel, materialisiert man aus einer NANP-Auslandswahl
-// ("011" + 44...) eine falsche INLANDS-Nummer und ruft einen Dritten an (GAP-25).
-// "+44" ist BEWUSST NICHT dabei: 0113/0114/0115/0116/0117/0118 sind echte britische
-// Ortsnetze - dort bleibt der Wahlpfad byte-identisch zum Bestand.
 const NO_NATIONAL_ELEVEN_RANGE_COUNTRIES = ["+49", "+33"];
 
-// true, wenn die (bereits normNum-normalisierte) Nummer eine Trunk-0 direkt nach einer
-// dieser Laendervorwahlen traegt (z.B. +4901737... statt +491737...). Reines Praedikat
-// (kein Kanonisieren - Owner-Entscheidung #4: REJECT). Nicht-String/leer -> false
-// (fail-closed beim Aufrufer; das allgemeine E.164-Format prueft weiter die E164-Regex
-// bzw. numberGateError). Vertrag bewusst getrennt von normNum (nur kosmetisch) und E164.
 export function hasTrunkZeroAfterCountryCode(e164) {
   if (typeof e164 !== "string" || !e164) return false;
   return TRUNK_ZERO_COUNTRY_CODES.some((code) => e164.startsWith(code + NATIONAL_TRUNK_PREFIX));
 }
 
-// Heimat-Laendervorwahl eines Tenants fuer die Interpretation nationaler Rufnummern: die
-// erste Kandidaten-Nummer (bereits E.164 im Store), deren Vorwahl eine BEKANNTE Wahl-
-// Konvention hat (DIALING_HOME_COUNTRY_CODES = Trunk-0-Laender + NANP, s.o.) - NUR dort
-// laesst sich eine nationale Schreibweise ueberhaupt korrekt aufloesen (Gegenbeispiel +39
-// IT, s.o.). Kandidaten in Praezedenz beim Aufrufer (private Mobilnummer = die "SIM" des
-// Nutzers vor eigener DID - die DID kann in einem anderen Land liegen als der Nutzer,
-// z.B. US-DID eines DE-Tenants). Kein Treffer/leer -> null (Aufrufer normalisiert dann
-// NICHT, das E164-Gate lehnt ab - ablehnen statt raten).
-//
-// tenantCountryIso (ISO-3166-1-alpha-2, aus store.tenantGeo) ist der GUARD fuer den
-// NANP-Zweig (Review-Fix Runde 2, GAP-25): eine Kandidatennummer, die zufaellig NANP-
-// foermig ist (haeufigster Fall - eine DID OHNE eigene privateNumber; DIDs sind heute per
-// FORCE_NUMBER_COUNTRY default US), darf NUR dann als Heimatland gelten, wenn das
-// TENANT-Herkunftsland selbst NANP ist. Sonst wuerde JEDER europaeische Tenant ohne
-// privateNumber ueber seine US-DID zum NANP-Heimatland (der Fund aus Runde 1: eine
-// deutsche Ortsnetznummer ohne fuehrende 0 waere dann als formal gueltige +1-Nummer
-// materialisiert worden - genau der neue Fremdanruf-Pfad, den diese Funktion verhindern
-// soll). Trunk-0-Laender (+49/+33/+44) bleiben UNGUARDED: ihre Kandidaten-Herkunft war
-// nie das Sicherheitsproblem (nur der NANP-Zweig oeffnete den neuen Pfad). Ein nicht
-// bestaetigter NANP-Kandidat wird uebersprungen (naechster Kandidat gewinnt), nicht die
-// ganze Suche abgebrochen.
 export function homeCountryCode(candidateNumbers, tenantCountryIso = null) {
   for (const num of candidateNumbers) {
     if (typeof num !== "string") continue;
@@ -888,22 +387,8 @@ export function homeCountryCode(candidateNumbers, tenantCountryIso = null) {
   return null;
 }
 
-// Internationale Verkehrsausscheidungsziffern "00" (ITU-Standard in allen
-// TRUNK_ZERO_COUNTRY_CODES-Laendern): "0049..." ist die Wahl-Schreibweise von "+49...".
 const INTERNATIONAL_CALL_PREFIX = "00";
 
-// NANP-Zweig: "00..." ist die ITU-Auslandsvorwahl (unzweideutig - "00" ist in KEINER
-// NANP-Schreibweise ein gueltiges Praefix, NPA/NXX beginnen nie mit 0, s.
-// NANP_NSN_PATTERN), "011..." die NANP-EIGENE Auslandsvorwahl, "1"+10 Ziffern die
-// nationale Schreibweise, 10 blanke Ziffern die Teilnehmernummer. "00" wird VOR "011"
-// geprueft (dieselbe Reihenfolge wie im Trunk-0-Zweig) - Review-Fix Runde 1 (GAP-25):
-// ein NANP-Heimatland (z.B. eine europaeische Tenant-DID ohne privateNumber, die zufaellig
-// eine US-Nummer ist) darf eine ITU-Wahl ("0049...") nicht mehr ablehnen, nur weil die
-// DID zufaellig NANP ist - das war vor diesem Fix eine Regression gegen den Trunk-0-Pfad.
-// normNum vorweg, weil die NANP-Schreibweise ueblicherweise Trennzeichen traegt
-// ("1-415-555-0123"); normNum ist idempotent - der Produktionspfad
-// (routes/api-calls.js normNum(b.to)) aendert sich dadurch nicht (G5: dieselbe eine
-// Quelle, kein zweites Regex).
 function normalizeNanpTarget(raw) {
   const num = normNum(raw);
   if (num.startsWith("+")) return num;
@@ -912,19 +397,14 @@ function normalizeNanpTarget(raw) {
   if (num.startsWith(NANP_INTERNATIONAL_PREFIX))
     return "+" + num.slice(NANP_INTERNATIONAL_PREFIX.length);
   if (!/^\d+$/.test(num)) return num;
-  // Review-Fix Runde 1 (GAP-25): NPA/NXX-Plausibilitaet PRUEFEN statt raten - eine
-  // 10-stellige Eingabe, die keine gueltige NANP-Teilnehmernummer sein kann (z.B. eine
-  // deutsche Ortsnetznummer ohne fuehrende 0), bleibt unveraendert -> das E164-Gate
-  // lehnt ab (400), statt eine formal gueltige, aber falsche +1-Nummer zu erfinden.
   if (num.length === NANP_NATIONAL_DIGITS && num.startsWith(NANP_TRUNK_PREFIX)) {
     const nsn = num.slice(NANP_TRUNK_PREFIX.length);
     return NANP_NSN_PATTERN.test(nsn) ? "+" + num : num;
   }
   if (num.length === NANP_NSN_DIGITS) return NANP_NSN_PATTERN.test(num) ? NANP_COUNTRY_CODE + num : num;
-  return num; // unbekannte Form -> unveraendert, das E164-Gate lehnt ab (ablehnen statt raten)
+  return num;
 }
 
-// Trunk-0-Zweig (Bestandsverhalten, byte-identisch bis auf die "011"-Ausnahme).
 function normalizeTrunkZeroTarget(num, homeCountry) {
   if (num.startsWith(INTERNATIONAL_CALL_PREFIX))
     return "+" + num.slice(INTERNATIONAL_CALL_PREFIX.length);
@@ -932,43 +412,24 @@ function normalizeTrunkZeroTarget(num, homeCountry) {
     num.startsWith(NANP_INTERNATIONAL_PREFIX) &&
     NO_NATIONAL_ELEVEN_RANGE_COUNTRIES.includes(homeCountry)
   )
-    return num; // GAP-25: keine Inlandsnummer aus einer NANP-Auslandswahl erfinden
+    return num;
   if (num.startsWith(NATIONAL_TRUNK_PREFIX) && homeCountry)
     return homeCountry + num.slice(NATIONAL_TRUNK_PREFIX.length);
   return num;
 }
 
-// Deterministische Normalisierung eines Wahl-Ziels nach Telefon-Konvention (Wurzelfix
-// LLM-Ziffern-Regeneration: der MCP-Client reicht die Nutzer-Eingabe zeichengenau durch,
-// JEDE Umformung passiert hier in Code statt im Modell). Erwartet normNum-Form (Ausnahme:
-// der NANP-Zweig normalisiert selbst, s.o.). KEINE Validierung hier: das nachgelagerte
-// E164-/Trunk-0-Gate lehnt ab (fail-closed). Reihenfolge im Trunk-0-Zweig ist die
-// Spezifikation: "00" (ITU) gewinnt vor der "011"-Ausnahme, sonst wuerde "0011..." falsch
-// klassifiziert.
 export function normalizeDialTarget(num, homeCountry) {
   if (typeof num !== "string") return "";
   if (homeCountry === NANP_COUNTRY_CODE) return normalizeNanpTarget(num);
   return normalizeTrunkZeroTarget(num, homeCountry);
 }
 
-// P8/FMT-11: der strenge Bestands-Default des Summary-SMS-Gates. Als benannte Konstante
-// (G25) statt zweier Literal-Kopien - countryAllowed UND die Land-Herleitung unten
-// teilen ihn.
 const DEFAULT_PRIVATE_NUMBER_CODES = Object.freeze(["+49"]);
 
-// ISO-3166-1-alpha-2 -> E.164-Laendervorwahl fuer die Laender, in denen Hermes heute
-// Kunden hat (identische Menge wie LANGUAGE_FOR_COUNTRY in i18n/locales.js; NANP laeuft
-// ueber isNanpCountry, s.u.). BEWUSST keine Weltliste: ein unbekanntes Land faellt auf
-// den strengen Bestands-Default zurueck, statt das Gate still zu oeffnen.
 const CALLING_CODE_FOR_COUNTRY = Object.freeze({
   DE: "+49", AT: "+43", CH: "+41", FR: "+33", GB: "+44", IE: "+353",
 });
 
-// Erlaubte E.164-Praefixe der privaten Summary-Nummer EINES Tenants (Toll-Fraud-Gate H1).
-// Das Gate BLEIBT eine Allowlist - landabhaengig ist ausschliesslich die HERLEITUNG des
-// erlaubten Praefixes aus dem Tenant-Land, nie die Existenz des Gates (P8-Gegenmassnahme 2).
-// Unbekanntes/fehlendes Land -> DEFAULT_PRIVATE_NUMBER_CODES (fail-closed, byte-identisch
-// zum Bestand). isNanpCountry ist die EINE Quelle fuer die 25 NANP-Mitgliedslaender (G5).
 export function allowedPrivateNumberCodes(countryIso) {
   const cc = String(countryIso || "").toUpperCase();
   if (isNanpCountry(cc)) return [NANP_COUNTRY_CODE];
@@ -976,11 +437,6 @@ export function allowedPrivateNumberCodes(countryIso) {
   return code ? [code] : DEFAULT_PRIVATE_NUMBER_CODES;
 }
 
-// Vorwahl -> Land: die UMKEHRUNG von CALLING_CODE_FOR_COUNTRY. Bewusst aus derselben
-// Tabelle abgeleitet und nicht zweitgepflegt (G5) - ein Land dazu heisst weiterhin EIN
-// Eintrag. Laengste Vorwahl zuerst, damit eine geschachtelte Vorwahl nie von einer
-// kuerzeren geschlagen wird (heute keine im Bestand, aber die Reihenfolge darf nicht von
-// der Schluessel-Reihenfolge eines Objekts abhaengen).
 const CALLING_CODES_LONGEST_FIRST = Object.freeze(
   Object.values(CALLING_CODE_FOR_COUNTRY).sort((a, b) => b.length - a.length),
 );
@@ -988,33 +444,17 @@ const COUNTRY_FOR_CALLING_CODE = Object.freeze(
   Object.fromEntries(Object.entries(CALLING_CODE_FOR_COUNTRY).map(([iso, code]) => [code, iso])),
 );
 
-// Land einer DID aus ihrer E.164-Vorwahl ABLEITEN - nie raten (Owner-Entscheidung E2).
-// Eindeutig ist die Zuordnung nur fuer die Vorwahlen aus CALLING_CODE_FOR_COUNTRY; NANP
-// (+1) steht dort bewusst NICHT (25 Mitgliedslaender teilen die Vorwahl, s.
-// NANP_ISO_COUNTRIES / isNanpCountry) und bleibt damit unableitbar. Fehlende, formal
-// ungueltige oder unbekannte Nummer -> null; der Aufrufer laesst das Feld dann leer.
 export function countryForE164(e164) {
   if (typeof e164 !== "string" || !E164.test(e164)) return null;
   const code = CALLING_CODES_LONGEST_FIRST.find((c) => e164.startsWith(c));
   return code ? COUNTRY_FOR_CALLING_CODE[code] : null;
 }
 
-// Laendercode-Gate fuer die private Summary-Nummer (F2, Toll-Fraud-Schutz H1). Reines
-// Praefix-Praedikat: erlaubt nur Nummern, deren E.164-Praefix in allowedCodes liegt.
-// Default DEFAULT_PRIVATE_NUMBER_CODES - BEWUSST strenger als das globale Call-Gate
-// (+49,+33,+44): die Summary-SMS soll eng sein (jede gesendete SMS kostet uns). "*" hebt
-// das Gate auf. Erwartet eine bereits normalisierte (normNum) E.164-Nummer; Nicht-String/
-// leer -> false (fail-closed). Spiegelt die Praefix-Logik von server.js matchesPrefix
-// bewusst, bleibt hier aber unabhaengig (eigener, strengerer Default; kein Import aus dem
-// Route-Layer).
 export function countryAllowed(e164, allowedCodes = DEFAULT_PRIVATE_NUMBER_CODES) {
   if (typeof e164 !== "string" || !e164) return false;
   return allowedCodes.includes("*") || allowedCodes.some((c) => e164.startsWith(c));
 }
 
-// Whitelist gegen PROFILE_FIELDS (Key + Typ). Unbekannte Keys / falsche Typen
-// werden verworfen. allowedNumbers wird wie eine Nummern-Liste normalisiert (normNum-Schema),
-// damit der Gate-Vergleich gegen E.164 trifft; Laendercodes nur getrimmt.
 export function sanitizeProfile(patch) {
   const clean = {};
   for (const [key, value] of Object.entries(patch || {})) {
@@ -1028,9 +468,6 @@ export function sanitizeProfile(patch) {
             : value.map((c) => c.trim()).filter(Boolean);
       }
     } else if (type === "number?") {
-      // Nullable Zahl: null ist eine VALIDE Belegung (kein pro-Nutzer-Limit -> globaler
-      // Cap), NICHT verwerfen (sonst A11, s. PROFILE_FIELDS). Nicht-Zahl/Nicht-null faellt
-      // wie bisher raus (profiles.test.js "viele" -> verworfen bleibt gruen).
       if (value === null || typeof value === "number") clean[key] = value;
     } else if (typeof value === type) {
       clean[key] = value;
@@ -1039,51 +476,31 @@ export function sanitizeProfile(patch) {
   return clean;
 }
 
-// Default-Profil: KEIN Outbound (0 = harter Block, fail-closed fuer profillose Nutzer).
-// 0 ist eine echte Schwelle, kein Falsy-"kein Limit": tenantHourReached rechnet
-// limit=min(config,0)=0, count>=0 ist immer wahr (telephony/outbound-gates). Nur ein Plan-Profil
-// (A2/A3, maxCallsPerHour=null) ODER der Owner (OWNER_PROFILE) schaltet Outbound frei.
 const DEFAULT_PROFILE_MAX_CALLS_PER_HOUR = 0;
 
-// Owner-Profil: gilt fuer den Bootstrap-Tenant (resolveProfileFrom matcht tenantId ===
-// BOOTSTRAP_TENANT_ID). Das Profil lockert nichts (unrestricted=false, leere Profil-
-// Allowlist) - der Owner passiert das Verifikations-Gate ueber Pfad 2 (aktiver Subscriber
-// via Boot-Seed, outbound-p1/p3), keine Profil-Senkung des Stundenlimits
-// (maxCallsPerHour=null -> effektiv der Pro-Tenant-Default), Kalender/Booking erlaubt.
-// So wird der Owner NIE per Stundenlimit
-// gesperrt (R2) - hart auf OWNER_PROFILE gepinnt; ein etwaiges s.profiles[BOOTSTRAP] wird
-// bewusst ignoriert.
 const OWNER_PROFILE = {
   allowedNumbers: [],
   allowedCountryCodes: [],
   unrestricted: false,
   allowCalendar: true,
-  allowConsult: true, // AL-P13: Consult-Kanal ist zunaechst eine Owner-Faehigkeit
-  allowLookup: true, // AL-P10b: der In-Call-Nachschlag ist zunaechst eine Owner-Faehigkeit
+  allowConsult: true,
+  allowLookup: true,
   allowBooking: true,
   maxCallsPerHour: null,
 };
 
-// Default = authentifiziert, aber (noch) ohne Profil: fail-closed/restriktiv.
-// Keine Allowlist-Lockerung, KEIN Outbound (maxCallsPerHour=0), kein Kalender/Booking.
 const DEFAULT_PROFILE = {
   allowedNumbers: [],
   allowedCountryCodes: [],
   unrestricted: false,
   allowCalendar: false,
-  allowConsult: false, // AL-P13: fail-closed wie allowCalendar/allowBooking
-  allowLookup: false, // AL-P10b: fail-closed wie allowConsult
+  allowConsult: false,
+  allowLookup: false,
   allowBooking: false,
   maxCallsPerHour: DEFAULT_PROFILE_MAX_CALLS_PER_HOUR,
 };
 
-// Effektives Profil aus einer tenantId + dem gespeicherten Profil (oder undefined).
-// tenantId === BOOTSTRAP_TENANT_ID -> Owner (hart auf OWNER_PROFILE gepinnt, nie gesperrt,
-// R2). Andere tenantId mit gespeichertem Profil -> ueber DEFAULT gemerged (fehlende Felder
-// fallen restriktiv zurueck). tenantId ohne Profil ODER leer/null/"reject" -> DEFAULT (kein
-// Falsy-Kollaps auf Owner mehr - exakte BOOTSTRAP-Gleichheit statt !tenantId, Sec1). Reine
-// Merge-Logik, vom Storage entkoppelt: der Aufrufer reicht den gespeicherten Datensatz herein.
 export function resolveProfileFrom(tenantId, storedProfile) {
-  if (tenantId === BOOTSTRAP_TENANT_ID) return { ...OWNER_PROFILE }; // R2: Owner nie gesperrt
+  if (tenantId === BOOTSTRAP_TENANT_ID) return { ...OWNER_PROFILE };
   return storedProfile ? { ...DEFAULT_PROFILE, ...storedProfile } : { ...DEFAULT_PROFILE };
 }
