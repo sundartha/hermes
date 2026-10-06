@@ -133,3 +133,30 @@ test("basis-vergleich: eine andere Semgrep-Version als die der Basislinie ist ro
     shows: OTHER_VERSION,
   });
 });
+
+test("basis-vergleich: --je-ordner zählt die Einträge einer Basislinie je oberstem Ordner", (context) => {
+  const befunde = ["src/a.js|1", "src/b/c.js|2", "test/d.test.js|3", "eslint.config.js|4"];
+  const directory = probeDirectory(context, {
+    "tools/basis/kommentare.json": JSON.stringify({ befunde }),
+  });
+  const run = spawnSync(process.execPath, [SCRIPT, "kommentare", "--je-ordner"], {
+    cwd: directory,
+    encoding: "utf8",
+    env: isolatedEnvironment(),
+  });
+  assert.equal(run.status, EXIT_OK, run.stderr);
+  assert.deepEqual(run.stdout.trim().split("\n"), [
+    ".: 1",
+    "src: 2",
+    "test: 1",
+    "tools/basis/kommentare.json: 4 Einträge",
+  ]);
+});
+
+test("basis-vergleich: --je-ordner lässt sich nicht mit einer anderen Betriebsart verbinden", (context) => {
+  const directory = probeDirectory(context, {});
+  expectRun({ directory }, ["kommentare", "--je-ordner", CREATE], {
+    status: EXIT_FINDING,
+    shows: "Aufruf:",
+  });
+});

@@ -13,6 +13,23 @@ const ZEITGLIEDER_BESTAND_DATEI = new URL(
 const zeitgliederBestand = existsSync(ZEITGLIEDER_BESTAND_DATEI)
   ? JSON.parse(readFileSync(ZEITGLIEDER_BESTAND_DATEI, "utf8"))
   : {};
+const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
+const KOMMENTAR_BESTAND = "tools/basis/kommentare.json";
+const hermesRegeln = existsSync(HERMES_REGELN_DATEI)
+  ? (await import(HERMES_REGELN_DATEI.href)).default
+  : undefined;
+const hermesBloecke =
+  hermesRegeln === undefined
+    ? []
+    : [
+        {
+          name: "hermes",
+          plugins: { hermes: hermesRegeln },
+          rules: {
+            "hermes/keine-kommentare": ["error", { bestand: KOMMENTAR_BESTAND }],
+          },
+        },
+      ];
 
 // Gesetz von Demeter (G36): ab dem 5. verketteten Punktzugriff in Folge
 // (a.b.c.d.e) gilt eine Aufrufkette als Kopplungsrisiko - bis a.b.c.d bleibt
@@ -271,4 +288,5 @@ export default [
       ],
     },
   },
+  ...hermesBloecke,
 ];

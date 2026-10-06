@@ -23,6 +23,12 @@
           "allowImplicit": false
         }
       ],
+      "hermes/keine-kommentare": [
+        2,
+        {
+          "bestand": "tools/basis/kommentare.json"
+        }
+      ],
       "id-length": [
         2,
         {
@@ -390,6 +396,12 @@
         2,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes/keine-kommentare": [
+        2,
+        {
+          "bestand": "tools/basis/kommentare.json"
         }
       ],
       "id-length": [
