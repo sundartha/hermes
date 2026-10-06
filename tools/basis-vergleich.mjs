@@ -43,6 +43,8 @@ const COLLECTOR_PLUGIN = "basis-vergleich";
 const ROOT_FOLDER_LABEL = ".";
 const PATH_SEPARATOR = "/";
 const TEST_FILES = ["test/**"];
+const LESSONS_FILE = "tasks/lessons.md";
+const LINE_BREAK = "\n";
 const EXIT_FAILURE = 1;
 
 function runTool(command, args, root) {
@@ -247,6 +249,23 @@ function textReadingFindings(root) {
   });
 }
 
+function lineFingerprint(line) {
+  return createHash("sha256").update(line).digest("hex").slice(0, FINGERPRINT_LENGTH);
+}
+
+function lessonsFindings(root) {
+  const path = join(root, LESSONS_FILE);
+  if (!existsSync(path)) return [];
+  const lines = readFileSync(path, "utf8").split(LINE_BREAK);
+  return lines
+    .map((line, index) => ({ text: line.trim(), number: index + 1 }))
+    .filter(({ text }) => text !== "")
+    .map(({ text, number }) => ({
+      key: findingKey([LESSONS_FILE, lineFingerprint(text)]),
+      location: `${LESSONS_FILE}:${number}`,
+    }));
+}
+
 function keyPart(index) {
   return (key) => key.split(KEY_SEPARATOR)[index];
 }
@@ -258,6 +277,7 @@ const TOOLS = {
   kommentare: { findings: commentFindings, path: pfadAusSchluessel },
   "quelltext-als-text": { findings: textReadingFindings, path: pfadAusSchluessel },
   "kommentare-yaml-shell": { findings: yamlShellFindings, path: pfadAusSchluessel },
+  lessons: { findings: lessonsFindings, path: pfadAusSchluessel },
 };
 
 function baselineFile(toolName) {
