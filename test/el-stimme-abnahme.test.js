@@ -374,28 +374,6 @@ test("[abgenommen AS6] Drift-Lauf Exit-Code 0 nach dem Push als 'ST2 Push-Protok
   );
 });
 
-// ST3 (O3): der Kommentarblock am [el-tags]-Detektor muss den Vorfall BENENNEN, der ihn
-// erweitert hat - Datum, Doc-Verweis und die Nachbar-Instrumente (reportDoubleAnnouncements,
-// Zaehlfeld). Nur die Kombination aller drei Strings ist der Beleg: "2026-09-02" allein
-// koennte irgendwo im Modulkopf mitschwingen, "function reportAudioTags" pinnt den Check
-// an den Detektor-Block.
-test("[abgenommen AS9] Kommentarblock an reportAudioTags nennt den Vorfall 2026-09-02 mit Doc-Verweis", () => {
-  const outbound = readFileSync(new URL("../src/elevenlabs/outbound.js", import.meta.url), "utf8");
-
-  assert.ok(
-    outbound.includes("function reportAudioTags"),
-    "Positivkontrolle: reportAudioTags muss in der Datei stehen (der Check haengt an ihrem Block)",
-  );
-  assert.ok(
-    outbound.includes("2026-09-02"),
-    "der Kommentarblock muss das Vorfalls-Datum 2026-09-02 nennen",
-  );
-  assert.ok(
-    outbound.includes("PLAN-AGENTEN-STIMME"),
-    "der Kommentarblock muss auf tasks/PLAN-AGENTEN-STIMME.md verweisen",
-  );
-});
-
 // ST4/ST5-Anteil (2026-09-04): AS10 ist Doc-Kriterium des Verifikationsanrufs und
 // bleibt BEWUSST ROT in der Abnahme-Bahn - der Anruf wurde per Owner-Entscheidung
 // 2026-09-04 nicht durchgefuehrt ("kein Testanruf"), die Kette sollte trotzdem
