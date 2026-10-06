@@ -92,6 +92,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Lint neuer Funktionen
+        if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: node tools/lint-neue-funktionen.mjs --basis "$PR_BASE_SHA"
+
       - name: Syntax
         run: |
           find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
