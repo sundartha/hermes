@@ -1,39 +1,3 @@
-// Kosten-Abgleich (LCT P3, seit LCT P4 buchend): misst die Ist-Kosten JEDES beendeten
-// Calls gegen den Provider - seit KV-P3 in BEIDEN Richtungen. Der Richtungsfilter fiel,
-// weil ein Inbound-Call seit KV-P2 eine Schaetzung auf der Gate-Achse traegt (6 EUR-Cent
-// je angefangener Minute) und ohne Abgleich dauerhaft rund 3,5x ueber dem an KV-M1
-// gemessenen Ist (1,87 US-Cent/min) stehen bliebe. Schreibt weiterhin AUSSCHLIESSLICH die
-// vier P2-Felder, die publicCall (src/store/views.js) bereits strippt und die kein Gate,
-// kein Meter und keine Projektion liest. Muster makeMetering (store+config im Closure,
-// keine Telefonie-Logik im Server, kein Netz-IO im Store).
-//
-// Warum NICHT in finishCall: die CDR-Latenz ist UNBELEGT (PLAN-LIVE-COST-TRACING.md
-// Kap. 2.6) - ein synchroner Abruf blockierte den Teardown oder lieferte verlaesslich null.
-//
-// Warum KEIN eigenes SQL: unter FORCE ROW LEVEL SECURITY liefert eine naive, direkt
-// abgesetzte Anfrage 0 Zeilen bzw., bei klebender GUC auf einer geteilten DB-Connection,
-// die Zeilen des FALSCHEN Tenants. Der Job arbeitet ausschliesslich auf dem In-Memory-
-// Spiegel, den hydrate() in src/store/pg.js ohnehin PRO TENANT vollstaendig laedt
-// (state.calls ist flach ueber alle Tenants) - daher laeuft er tenant-uebergreifend,
-// ohne je einen Tenant-Filter zu formulieren oder eine eigene Datenbank-Verbindung zu
-// beruehren.
-//
-// Warum der Laufriegel PROZESS-LOKAL ist: Render laeuft mit EINER Instanz; ein DB-Lock
-// waere eigene Infrastruktur fuer ein Problem, das diese Topologie nicht hat. DIESE
-// VORAUSSETZUNG FAELLT BEIM ERSTEN SKALIERUNGSSCHRITT (2. Instanz) - dann ist der Riegel
-// wirkungslos und muss ersetzt werden.
-//
-// Waehrungs-Regel (D5): actualCostMicroCents bleibt am Call USD-Mikro-Cent,
-// UNVERAENDERT. Die Umrechnung USD -> EUR-Bucket lebt an GENAU EINER Stelle:
-// convertProviderMicroToBucketCents (state-ops.js), aufgerufen ausschliesslich aus
-// applyCostCorrectionCents. In diesem Modul wird NIE umgerechnet.
-//
-// Deckungsquote (KV-M3): costTruingCoveragePercent zaehlt seit dieser Phase im Nenner
-// NUR noch belegbare Calls (beantwortet, mit buchbarer Schaetzung, innerhalb des
-// Provider-Belegfensters) statt JEDEM beendeten Call - der Nenner enthielt vorher Calls,
-// die strukturell nie einen Beleg bekommen koennen (Plan-Befund N4). Die drei
-// ausgeschlossenen Gruppen bekommen eigene, IMMER sichtbare Zaehler in der Sweep-Zeile
-// und im Rueckgabewert (coverageBucketOf/coverageBreakdown).
 import {
   COST_TRUING_SOURCE,
   MAX_CALL_DURATION_CAP_S,
@@ -58,116 +22,47 @@ import {
 import { istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
 import { schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.js";
 import { legRefOfCall } from "./call-leg-ref.js";
-// KV2-6: die Deckung JE TRAEGER und der faelligkeits-unabhaengige Herzschlag. Das
-// Regelwerk liegt bewusst in einem eigenen Modul und NICHT hier: diese Datei traegt ein
-// gepinntes Lint-Budget (eslint-suppressions.json, makeCostTruing 292 Zeilen), und der
-// Kostenpfad soll seine Kennzahl nicht ein zweites Mal formulieren. Import-Richtung ist
-// strikt einseitig - kosten-deckung.js kennt cost-truing.js nicht (kein Zyklus).
 import { kostenBuchBericht, istBuchBefundCode } from "./kosten-deckung.js";
-// KV2-7: die Schliessregel und die Endzustaende liegen als REINES Regelwerk daneben -
-// dieselbe Begruendung wie bei kosten-deckung.js (Lint-Budget dieser Datei, EINE
-// Formulierung je Frage). Import-Richtung strikt einseitig.
 import { ABSCHLUSS_GRUND, abschlussFuerAnruf, faelligkeitsfensterMs, LEERE_LISTE, zaehlListe } from "./kosten-abschluss.js";
-// KV2-8: die Projektion des Kosten-Buchs auf das Settlement. Eigenes Modul, dieselbe
-// Begruendung wie bei kosten-deckung.js/kosten-abschluss.js (Lint-Budget dieser Datei,
-// EINE Formulierung je Frage). Import-Richtung strikt einseitig.
 import { settlementProjektion } from "./kosten-projektion.js";
-// KV2-9: der Reifungs-Zweig liegt als eigenes Modul daneben - dieselbe Begruendung wie bei
-// kosten-deckung.js/kosten-abschluss.js/kosten-projektion.js (Lint-Budget dieser Datei,
-// EINE Formulierung je Frage). Import-Richtung strikt einseitig.
 import { reifeElBelege } from "./el-reifung.js";
 
-// Zwei Ausloeser (Intervall + manueller Endpunkt), EIN benannter Grund je. Exportiert:
-// boot.js und api-billing.js teilen sich diese eine Quelle statt zweier Magic-Strings.
 export const SWEEP_TRIGGER = Object.freeze({ INTERVAL: "interval", MANUAL: "manual" });
 
 const PERCENT_BASE = 100;
 const MS_PER_MINUTE = 60 * 1000;
 const SWEEP_RUNNING_REASON = "sweep_running";
-// Grund fuer einen Pool, der zwar geantwortet hat, dessen Menge aber nachweislich
-// unvollstaendig ist (pool.complete === false, ab KE-P3 erreichbar).
 const POOL_INCOMPLETE_REASON = "pool_incomplete";
 const COST_TRUING_FINDING = Object.freeze({
   COVERAGE_BELOW_THRESHOLD: "coverage_below_threshold",
   COVERAGE_STALLED: "coverage_stalled",
-  // KE-P8: dritter Code auf DEMSELBEN Kanal - kein eigener Alarmweg, keine SMS-Klasse (PM-7).
   REQUESTS_ABOVE_THRESHOLD: "requests_above_threshold",
-  // KV-P7: vierter/fuenfter Code auf DEMSELBEN Kanal (kein eigener Alarmweg, keine
-  // SMS-Klasse - dieselbe Praezedenz wie REQUESTS_ABOVE_THRESHOLD). Meldet die
-  // ElevenLabs-Kontingent-Warnschwelle/-Erschoepfung, wenn sie ueber den Telnyx-Relay-
-  // Verbrauch (recordRelayTtsCharacters) erreicht wird - der Play-TTS-Pfad alarmiert
-  // dieselbe Schwelle stattdessen per SMS (server.js), NICHT hierueber.
   TTS_QUOTA_WARN_THRESHOLD: "tts_quota_warn_threshold",
   TTS_QUOTA_EXHAUSTED: "tts_quota_exhausted",
-  // KV2-10: sechster Code auf DEMSELBEN Kanal - dieselbe Kanal-Praezedenz wie
-  // REQUESTS_ABOVE_THRESHOLD: der Tarifpaar-Waechter (cost-calibration.js) meldet die
-  // Unterschaetzung des konfigurierten Paars, und der laufende Alarm gehoert an den
-  // Sweep (der Boot loggt nur, s. boot.js#warnTarifpaar).
   TARIFPAAR_UNTERSCHAETZT: "tarifpaar_unterschaetzt",
 });
 const COST_TRUING_AUDIT_EVENT = "cost_truing_befund";
 
-// KV2-1: der Marker-Namensraum des Kostenpfads in state.outageAlerts. Kollidiert mit
-// keinem Bestands-Eimer (Fehlergrund "not-placed*", "drift:", "hold:", "self-test:") -
-// wichtig, weil runOutageRecoverySweep NUR Fehlergrund-Eimer schliesst (istFehlergrundEimer)
-// und schliesseVerschwundeneBefunde nur "drift:"-Marker: ein kosten:-Marker wird also von
-// keinem fremden Sweep angefasst. Jeder Befund-Code bekommt seinen EIGENEN Eimer und damit
-// seine EIGENE Entprellung (Plan 4.9).
 const KOSTEN_BUCKET_PREFIX = "kosten:";
 const kostenBucket = (code) => `${KOSTEN_BUCKET_PREFIX}${code}`;
 
-// Die Deckungs-Achse - EINE Liste fuer drei Leser: die Meldestufe (VOLL), das Schliessen
-// bei Erholung und der Stillstands-Bezug. Drei getrennte Aufzaehlungen liefen beim ersten
-// Nachziehen auseinander (G5).
 const COVERAGE_FINDING_CODES = Object.freeze([
   COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD,
   COST_TRUING_FINDING.COVERAGE_STALLED,
 ]);
 
-// die Deckungs-Achse meldet VOLL (WARN -> Audit -> Mail -> SMS), Volumen und
-// TTS-Kontingent bleiben auf der kostenlosen Notiz-Stufe. Das ist keine neue Entscheidung,
-// sondern die bestehende: KE-P8/PM-7 ("kein eigener Alarmweg, keine SMS-Klasse") und
-// KV-P7 (der Play-TTS-Pfad alarmiert dieselbe Schwelle bereits per SMS aus server.js -
-// eine zweite SMS waere Kanal-Verdopplung auf demselben Konto).
-// KV2-10 (d): TARIFPAAR_UNTERSCHAETZT meldet VOLL wie die Deckungs-Klassen (Plan 4.9) -
-// die Unterschaetzung ist die geldrelevante Richtung (der Tarif deckt die gemessenen
-// Vollkosten nicht), tarifpaar_zu_wenig_proben bleibt dagegen reine Log-Zeile.
 const VOLL_BEFUND_CODES = new Set([...COVERAGE_FINDING_CODES, COST_TRUING_FINDING.TARIFPAAR_UNTERSCHAETZT]);
 
-// Ein eigenes Ereignis fuer den Uebergang zurueck ueber die Schwelle (Muster
-// drift_recovered). Nie zwei Sachverhalte auf einem Label: "Befund" und "Befund weg" sind
-// zwei Aussagen.
 const COST_TRUING_RECOVERED_EVENT = "cost_truing_erholt";
 
-// Modul-Ebene statt im makeCostTruing-Closure (G30/G34: eine Aufgabe, eine
-// Abstraktionsebene je Funktion) - beide sind rein und brauchen nur die zwei
-// Zahlen, keinen Zugriff auf store/audit/messaging.
-//
-// Die Zahlen der Deckungs-Achse. Das Feld sweeps= (prozesslokaler Zaehler) ist seit
-// KV2-1 durch seit= ersetzt - dieselbe Frage ("seit wann durchgehend unter der
-// Schwelle"), aber am DURABLEN Marker beantwortet (firstSeenAt) statt in einer
-// Prozesserinnerung. Der alte Zaehler wurde von JEDEM Deploy genullt und erreichte die
-// Eskalationsstufe nie (AUFTRAG B3, im Live-Log gemessen: nach dem Deploy wieder
-// sweeps=1). Der Name wechselt mit dem Sachverhalt (G11: nie zwei Bedeutungen auf einem
-// Label).
 function coverageDetail(coveragePercent, minCoveragePercent, seitIso) {
   return `deckung=${coveragePercent}% schwelle=${minCoveragePercent}% seit=${seitIso}`;
 }
 
-// Die Terminierungsregel in ZEIT statt in Sweeps. Die SCHWELLE bleibt
-// COST_TRUING_COVERAGE_STALL_SWEEPS und wird ueber die EINE Kadenz-Quelle
-// COST_TRUING_SWEEP_INTERVAL_MS umgerechnet (min 1 Minute, also nie 0) - kein neuer
-// Env-Wert, keine zweite Zeit-Groesse. Die Schwelle wird NIE gesenkt, um die
-// Vorbedingung zu erfuellen.
 function coverageStallMs(stallSweeps, sweepIntervalMs) {
   return stallSweeps * sweepIntervalMs;
 }
 
-// Zurueck ueber der Schwelle: die offenen Deckungs-Marker schliessen, damit firstSeenAt
-// beim naechsten Einbruch neu beginnt (das durable Gegenstueck zu sweepsBelowThreshold=0).
-// EINE Audit-Zeile je Uebergang, und NUR wenn wirklich etwas geschlossen wurde - sonst
-// schriebe jeder gesunde Sweep eine Zeile (Muster drift_recovered). store/audit als
-// Parameter statt Closure (F1: 3 Argumente) - dieselbe Instanz, die der Aufrufer haelt.
 async function closeCoverageBefunde(store, audit, nowMs) {
   const geschlossen = await store.withStoreLock(() => {
     const state = store.load();
@@ -182,10 +77,6 @@ async function closeCoverageBefunde(store, audit, nowMs) {
   audit(COST_TRUING_RECOVERED_EVENT, null, zeile);
 }
 
-// KV2-7: schreibt den Beleg (falls gemessen) und wertet die Schliessregel aus - AUSGELAGERT
-// aus trueOneCall (Lint-Budget dieser Datei, eslint-suppressions.json). Modul-Ebene,
-// store/config als Parameter (Muster closeCoverageBefunde oben). sweepTraegerErledigt
-// bleibt Sache des Aufrufers (dort lesbarer im Kontext von attempt/measured).
 function abschlussNachMessung({ call, measured, records, sweepTraegerErledigt, sammler, store, config }) {
   if (measured) schreibeSweepKostenbeleg({ store, call, measured, records });
   return abschlussFuerAnruf({
@@ -194,30 +85,14 @@ function abschlussNachMessung({ call, measured, records, sweepTraegerErledigt, s
   });
 }
 
-// KV2-7: EINE Stelle, an der ein Abschluss sichtbar wird: die namentliche Traegerliste
-// (Abnahme (c)) im Log, die Zaehlzeile ((e)/(h)) in der Sweep-Bilanz. PII-frei: Call-ID
-// und Traegernamen, dieselbe Klasse wie die bestehende korrektur-Zeile. Modul-Ebene statt
-// im makeCostTruing-Closure (Lint-Budget dieser Datei) - reiner console.log/Push, kein
-// store/config-Zugriff noetig (Muster closeCoverageBefunde oben). Aufrufer entscheidet,
-// OB geschlossen wurde (s. trueOneCall/schliesseFaelligeOffene) - diese Funktion nimmt es
-// als gegeben.
 function meldeAbschluss(call, abschluss, sammler) {
   console.log(
     `[cost-truing] abschluss call=${call.id} zustand=${abschluss.endzustand} ` +
       `grund=${abschluss.grund} fehlend=${abschluss.fehlend.join(",") || LEERE_LISTE}`,
   );
-  sammler.abschluesse.push(abschluss.endzustand); // push, keine Parameter-Zuweisung (Lint-Pin)
+  sammler.abschluesse.push(abschluss.endzustand);
 }
 
-// KV2-7: Kandidaten, die in DIESEM Lauf gar nicht gemessen wurden (nicht abrufbar oder
-// Versuche erschoepft) UND die noch offen sind: nach Fristablauf schliessen. Ohne diesen
-// Lauf bliebe genau diese Menge fuer immer offen (Abnahme (c): "er bleibt nicht ewig
-// offen"). Rein synchron - die PM-5-Zusage bleibt unberuehrt. Modul-Ebene, store/config
-// als Parameter (Muster closeCoverageBefunde).
-// KV2-8: dieser Lauf schliesst nicht mehr nur, er SETTELT. Bis KV2-7 bewegte er bewusst
-// keinen Cent - die Matrix 4.6 verlangt aber genau hier "Frist abgelaufen, Ist >
-// Schaetzung -> nachbuchen" und "Traeger nur vorlaeufig -> nachbuchen". Er misst
-// weiterhin NICHT, verbraucht KEINEN Versuch und ruft KEINEN Adapter.
 function schliesseFaelligeOffene(candidates, sammler, { store, config }) {
   for (const call of candidates) {
     if (call.costTruedAt !== null) continue;
@@ -232,8 +107,6 @@ function schliesseFaelligeOffene(candidates, sammler, { store, config }) {
     if (!abschluss.geschlossen) continue;
     const projektion = settlementProjektion({ call, belege });
     setteleAnruf({ call, projektion, store, config });
-    // KV2-8: Herkunft UND Betrag am selben set-once-Schritt - beides Aussagen ueber das
-    // BUCH, keine ueber eine Messung. Ohne summierbare Zeile bleibt beides unberuehrt.
     store.schliesseKostenAbgleich(call.id, {
       closedAt: new Date(sammler.nowMs).toISOString(),
       source: herkunftOhneMessung(projektion),
@@ -243,30 +116,11 @@ function schliesseFaelligeOffene(candidates, sammler, { store, config }) {
   }
 }
 
-// LCT P5 (Drift-Waechter): eigenes Audit-Ereignis + eigener SMS-Praefix, getrennt von
-// COST_TRUING_AUDIT_EVENT (verschiedene Aussage: Deckungsquote vs. Tarif-Abweichung).
 const TARIFF_DRIFT_AUDIT_EVENT = "tarif_drift_befund";
 const DRIFT_ALERT_SMS_PREFIX = "[hermes] Tarif-Drift: ";
 
-// KE-P8 (Bruchpunkt-Waechter): Betriebsschwelle EINES Sweeps, in HTTP-Anfragen.
-// Herleitung (Plan Kap. 3): /v2/detail_records erlaubt gemessene 40 Anfragen je FIXEM
-// UTC-Minutenfenster (Plan F1, Messung 2026-07-21). 1440 Anfragen sind damit 36 Minuten
-// reiner Abrufzeit - 10 % des 6-h-Intervalls, aus dem die Schwelle stammt. Seit KE-P6B
-// laeuft der Sweep stuendlich; dieselben 1440 Anfragen sind dort rund 48 Minuten (unser
-// Drossel-Budget ist 30/min, nicht 40) und fuellen damit fast das ganze Intervall: die
-// Schwelle meldet weiterhin VOR dem Punkt, an dem zwei Sweeps ineinander laufen, nur knapper.
-// Die gemessenen 40 werden BEWUSST NICHT aus dem Telnyx-Adapter importiert - der
-// Billing-Pfad kennt keinen Provider (DIP), und die Schwelle ist eine Betriebsgroesse,
-// keine Provider-Eigenschaft. Aendert der Provider sein Kontingent, ist sie neu
-// herzuleiten; sichtbar wird das an anfragen= in der Sweep-Zeile (PM-6).
-// BEWUSST keine Env-Variable: eine Warnschwelle, die sich hochdrehen laesst, ist die
-// Sicherung, die an ihre eigene Verletzung angepasst wird.
 const SWEEP_REQUESTS_WARN_THRESHOLD = 1440;
 
-// Die vier sich gegenseitig ausschliessenden Ausgaenge des Praedikats "belegbar"
-// (KV-M3, N4-Behebung). EIN Ausdruck mit vier benannten Buckets statt eines Booleans -
-// jede ausgeschlossene Gruppe bekommt einen eigenen, sichtbaren Zaehler (s.
-// coverageBreakdown), statt still im Nenner zu verschwinden.
 const COVERAGE_BUCKET = Object.freeze({
   ELIGIBLE: "eligible",
   NEVER_ANSWERED: "nie_beantwortet",
@@ -274,124 +128,30 @@ const COVERAGE_BUCKET = Object.freeze({
   OUTSIDE_WINDOW: "ausserhalb_fenster",
 });
 
-// Providerseitiges Belegfenster (KV-M3, N4-Behebung Teil 1): /v2/detail_records deckt
-// GEMESSEN nur die letzten PROVIDER_COST_RECORD_WINDOW_DAYS Tage ab (Kosten-Inventar
-// 2026-07-31, tasks/kosten-inventar.md:546: "last_7_days"). Diese Zahl existierte vor
-// KV-M3 an KEINER Stelle im Code (grep auf "last_7_days"/"7 Tage" in src/: 0 Treffer) -
-// das war der Befund selbst, keine Kopie eines vorhandenen Werts.
-// Ein beendeter Call AELTER als dieses Fenster kann strukturell nie mehr belegt werden,
-// unabhaengig davon, ob je ein Sweep ihn versucht hat.
-// BEWUSST KEINE Env-Variable, aus DEMSELBEN Grund wie SWEEP_REQUESTS_WARN_THRESHOLD
-// (oben in dieser Datei): ein Wert, den ein Operator herunterdrehen kann, um Calls
-// vorzeitig aus dem Nenner zu nehmen, ist die Sicherung, die an ihre eigene Verletzung
-// angepasst wird - ein zu KLEIN gesetztes Fenster schliesst noch belegbare Calls aus
-// dem Nenner aus und TREIBT die Quote kuenstlich nach oben, still den WARN aushebelnd.
-// Ein zu GROSSES Fenster ist dagegen harmlos (es drueckt die Quote hoechstens, nie
-// faelschlich hoch) - die Richtung mit Schadenspotenzial ist die eine, die eine
-// Env-Variable eroeffnen wuerde. Exportiert, damit Tests exakt gegen sie koppeln
-// (kein zweites "7" in den Tests, G5/G25).
 export const PROVIDER_COST_RECORD_WINDOW_DAYS = 7;
 const HOURS_PER_DAY = 24;
 const MINUTES_PER_HOUR = 60;
 const SECONDS_PER_MINUTE = 60;
-// KV2-6: exportiert, weil die Deckung je Traeger GENAU dieses Fenster misst - ein Anruf
-// ausserhalb kann strukturell keinen Beleg mehr bekommen. Die Zahl wandert NICHT in das
-// neue Modul (das erzeugte einen Import-Zyklus); sie wird von dort als Parameter
-// entgegengenommen. EINE Quelle bleibt diese Zeile.
 export const PROVIDER_COST_RECORD_WINDOW_MS =
   PROVIDER_COST_RECORD_WINDOW_DAYS * HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MS_PER_SECOND;
 
-// DAS Praedikat "beendeter Call" - RICHTUNGSOFFEN seit KV-P3. Bis dahin stand hier
-// zusaetzlich direction === "outbound"; der Filter war die zweite Haelfte der
-// Inbound-Luecke (L1): KV-P2 bucht die Schaetzung, ohne diesen Abgleich bliebe sie
-// fuer immer stehen. Der Name traegt die Richtung deshalb nicht mehr mit (N2) - ein
-// Name, der "Outbound" behauptet, waehrend die Funktion beide Richtungen bedient,
-// ist die Sorte Luege, an der die naechste Phase falsch abbiegt.
-// EINE Quelle fuer BEIDE Verbraucher (G5): den Kandidaten-Riegel (isTruingCandidate)
-// und die VORFILTERUNG des Deckungsquote-Nenners (coverageBreakdown) - zwei getrennte
-// Fassungen liefen beim ersten Nachziehen auseinander. Seit KV-M3 ist isEndedCall nicht
-// mehr der Nenner selbst (s. coverageBucketOf): ein beendeter Call zaehlt nur dann, wenn
-// er zusaetzlich belegbar ist.
 const isEndedCall = (call) => !!call.endedAt;
-// KV2-5: dritte Alternative sipCallId. Ein EL-Anruf traegt weder twilioSid noch
-// callControlId (12/12 gemessen, befund-telnyx.md O1) - providerLegIdOf lieferte fuer ihn
-// null, isRetrievable war falsch, und er wurde vom Sweep uebersprungen.
-// FOLGE, benannt: ab diesem Deploy sind die 12 EL-Altanrufe erstmals Kandidaten. Ihre
-// Erstattung haengt seit KV2-11 nicht mehr an einer Profilsperre, sondern am
-// vollstaendigen Kosten-Buch (istVollBelegt): fehlt die EL-Zeile, gibt es dataComplete
-// falsch und damit keine Rueckerstattung.
-// Ableitung liegt in call-leg-ref.js (EINE Quelle mit sweep-kostenbeleg.js#legRefOfCall).
 const providerLegIdOf = legRefOfCall;
 
-// Die Pflicht-Typmenge DIESES Anrufs (KV2-5(f)) - Profil-Aufloesung und Env-Wert an EINER
-// Stelle zusammengefuehrt, damit die Aufrufzeile in trueOneCall lesbar bleibt.
 const pflichttypenVon = (call, billing) =>
   pflichttypenFuerProfil(kostenprofilFuerAnruf(call), billing.costTruingRequiredRecordTypes);
 
-// KV2-7: darf der Sweep fuer diesen Anruf in DIESEM Lauf noch messen? Bis KV2-7 war das
-// derselbe Vergleich wie in isTruingCandidate (Kandidaten-Riegel) - er wandert hierher, an
-// die Stelle, an die er gehoert: an den ABRUF, nicht an die Offenheit des Anrufs (ein
-// Anruf mit erschoepftem Zaehler bleibt Kandidat, s. isTruingCandidate). Modul-Ebene statt
-// im makeCostTruing-Closure (Lint-Budget dieser Datei, eslint-suppressions.json) - reine
-// Funktion, billing kommt vom Aufrufer statt aus dem Closure.
 const versucheUebrig = (call, billing) => nextCostTruingAttempt(call) <= billing.costTruingMaxAttempts;
 
-// KV2-9: Modul-Ebene statt im makeCostTruing-Closure (Lint-Budget dieser Datei,
-// eslint-suppressions.json) - reine Funktion, GEGENBUCHUNG zu den zwei neuen gezaehlten
-// Zeilen des Reifungs-Zweigs (Zeilen-Neutralitaet, s. Kopfkommentar B-C).
-//
-// DIE Bedingung "abrufbar" (KE-P9), an GENAU EINER Stelle formuliert: ohne belegfaehigen
-// Adapter oder ohne aufloesbare Leg-Referenz ist ein Call strukturell nie abgleichbar. Er
-// darf deshalb weder den UMFANG des Belegabrufs (welche Provider) noch dessen ZEITSCHRANKE
-// bestimmen - ein einziger solcher Call fror `since` sonst dauerhaft ein, und der Pool
-// wuchs mit dem gesamten Kontoverkehr, bis die Seitenobergrenze reisst und ALLE Kandidaten
-// unavailable werden (keine Rueckerstattung mehr, fuer niemanden).
-// Fehlende Faehigkeit bleibt der konservative Fall: der Call bleibt im NENNER der
-// Deckungsquote und drueckt sie, statt sie zu beschoenigen.
 const isRetrievable = (call, control) => control !== null && providerLegIdOf(call) !== null;
 
-// KV2-9: Modul-Ebene, zweite Gegenbuchung (s.o.). Abruf-Kennzahlen EINER Provider-Antwort:
-// `incomplete` heisst "dieser Abruf hat KEIN vollstaendiges Bild geliefert" - ok:false und
-// complete:false sind darin dasselbe.
 const nonNegativeCount = (n) => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
 
-// Darf der Sweep fuer diesen Anruf eine Korrektur BUCHEN? Drei Ausschlussgruende, eine
-// Frage:
-//   1. Kein buchbarer Schaetzbetrag -> strukturell nicht korrigierbar (Bestandsregel).
-//   2. Keine brauchbare Belegsumme -> es gibt nichts zu buchen. Der Riegel ERFUELLT die
-//      Bestandszusage von applyCostCorrectionCents ("der Aufrufer garantiert
-//      actualCostMicroCents >= 0"): die Summe ist entweder ein gueltiger
-//      Anbieter-Mikro-Cent-Betrag oder null - nie negativ, nie NaN, nie ein String.
-//   3. Profil unbekannt (Matrix 4.6, "Anruf NACH der Kette entstanden") -> STRUKTURELL
-//      kein Sweep-Traeger (sweepTraegerFuerProfil liefert null, schreibeSweepKostenbeleg
-//      schreibt deshalb nie eine Zeile fuer diesen Anruf) und damit heute bereits ueber
-//      Grund 2 abgedeckt - der Riegel steht trotzdem EXPLIZIT hier, weil "gar nichts,
-//      in BEIDE Richtungen" (4.6) eine Aussage ueber das PROFIL ist, nicht nur ueber die
-//      zufaellig leere Belegsumme: ein kuenftiger Einsammler, der unabhaengig vom Profil
-//      schreibt, darf diese Zeile nie buchbar machen.
-//
-// KV2-11 (Owner-Entscheidung OR-1, 2026-09-02): der bisherige vierte Grund - die EL-Route
-// pauschal gesperrt - ist ENTFALLEN. Der B6-Schutz (der Telnyx-Pool traegt NUR den
-// SIP-Anteil, NIE die ElevenLabs-Kosten; eine Erstattung gegen die 30-ct-Schaetzung
-// loeschte rund 90 % der echten Kosten von der Gate-Achse) lebt seit KV2-8 STRUKTURELL,
-// nicht als Profilsperre: istVollBelegt (kosten-projektion.js) vergleicht Beleg-IST gegen
-// PROFIL-SOLL, und applyCostCorrectionCents (state-ops.js) verwirft jeden NEGATIVEN Delta
-// ohne vollstaendiges Buch VOR jeder Mutation. Nachbuchen (Ist > Schaetzung) bleibt
-// bedingungslos. Beide EL-Pflicht-Traeger sind USD - der EINE Kurs passt.
 const sweepDarfKorrigieren = (call, projektion) =>
   isBookableCents(call.estimatedCostCents) &&
   isProviderMicroCents(projektion.summeMikroCents) &&
   istBekanntesKostenprofil(kostenprofilFuerAnruf(call));
 
-// KV2-8, DIE Geld-Kante dieser Phase: genau EIN Settlement je Anruf, gespeist aus der
-// Belegsumme des Kosten-Buchs statt aus EINER Telnyx-Messung. Zwei Aufrufer, ein Rumpf
-// (G5): der schliessende Mess-Lauf (trueOneCall) und der Faelligkeitslauf
-// (schliesseFaelligeOffene). Der Riegel gegen ein ZWEITES Settlement ist unveraendert
-// costTruedAt (set-once, state-ops.js) - ein geschlossener Anruf ist nie wieder Kandidat.
-// Die Asymmetrie wird NICHT hier gebaut: applyCostCorrectionCents verwirft einen
-// negativen Delta ohne dataComplete VOR jeder Mutation. Was diese Funktion liefert, ist
-// ausschliesslich, WORAUS dataComplete entsteht. Modul-Ebene, store/config als Parameter
-// (Muster closeCoverageBefunde). Nebeneffekt im Namen (N7).
 function setteleAnruf({ call, projektion, store, config }) {
   if (!sweepDarfKorrigieren(call, projektion)) return;
   const { booked, deltaCents } = store.applyCostCorrectionCents(call.tenantId, {
@@ -399,16 +159,11 @@ function setteleAnruf({ call, projektion, store, config }) {
     estimatedCostCents: call.estimatedCostCents,
     providerToBucketRateMicro: config.billing.providerToBucketRateMicro,
     dataComplete: projektion.vollBelegt,
-    // KS-P5: die Anker der Belastung reisen mit. Ohne sie faellt die Gutschrift auf
-    // NO_CHARGE_ANCHORS zurueck und wirkt nur auf der Lebenszeit-Achse.
     chargeAnchors: chargeAnchorsOfCall(call),
   });
   console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${deltaCents} gebucht=${booked}`);
 }
 
-// KV2-8: Herkunft eines Abschlusses OHNE Messung in diesem Lauf. Ohne summierbare
-// Belegzeile gibt es nichts zu behaupten -> null, das Feld bleibt stehen (bei einem nie
-// gemessenen Anruf also null, wie im Bestand).
 function herkunftOhneMessung(projektion) {
   if (projektion.summeMikroCents === null) return null;
   return projektion.vollBelegt
@@ -416,14 +171,6 @@ function herkunftOhneMessung(projektion) {
     : COST_TRUING_SOURCE.KOSTENBUCH_TEILBELEG;
 }
 
-// KV2-10 (d): GENAU EIN Befund fuer ALLE unterschaetzten Routen (Muster warnTariffDrift im
-// Boot: eine Zeile, keine je Route - WARN-Muedigkeit). Das Detail nennt das konkrete Paar
-// (Vorschlag gegen konfiguriert), PII-frei per tarifpaarZeile. Die Log-Zeile steht in
-// JEDEM Sweep (sichtbar-wartend), der Kanal nur bei Unterschaetzung.
-// Modul-Ebene statt im makeCostTruing-Closure (Lint-Budget dieser Datei,
-// eslint-suppressions.json - Muster closeCoverageBefunde/abschlussNachMessung oben):
-// emitFinding kommt als Parameter herein (P4), eigenCentJeAnruf ebenfalls - die Quelle ist
-// eine Fabrik-Argument, kein Zustand des Closure.
 async function meldeTarifpaar({ state, eigenCentJeAnruf, billing, emitFinding, nowMs }) {
   const report = tarifpaarReport({ state, eigenCentJeAnruf, billing });
   console.log(`[cost-truing] tarifpaar ${report.map(tarifpaarZeile).join(" | ")}`);
@@ -436,29 +183,11 @@ async function meldeTarifpaar({ state, eigenCentJeAnruf, billing, emitFinding, n
   );
 }
 
-// Beendet-Zeitstempel EINES Calls in Millisekunden, oder null (fehlend/unbrauchbar).
-// EINE Parse-Stelle fuer die zwei Verbraucher - die Faelligkeit eines Kandidaten und die
-// Zeitschranke des Belegabrufs (G5). Zwei eigene Date.parse-Ausdruecke liefen beim ersten
-// Nachziehen auseinander, und ein NaN, das bis in new Date(...).toISOString() durchschluege,
-// wuerfe - der Sweep braeche mitten in der Kandidatenliste ab.
 const endedAtMs = (call) => {
   const ms = Date.parse(call.endedAt);
   return Number.isFinite(ms) ? ms : null;
 };
 
-// DAS Praedikat "belegbar" (KV-M3, N4). Ein beendeter Call kann NUR dann je einen
-// Provider-Beleg bekommen, wenn (1) er ueberhaupt beantwortet wurde - ein nie
-// angenommenes Leg hat nichts zu belegen -, (2) eine buchbare Schaetzung persistiert
-// ist - ohne sie klassifiziert truedSourceOf() ihn ohnehin fuer immer als NO_ESTIMATE,
-// s. dort -, und (3) sein Ende innerhalb des Provider-Belegfensters liegt.
-// Reihenfolge ist eine Aussage: "nie beantwortet" geht vor "ohne Schaetzung", weil ein
-// nie beantworteter Call strukturell auch nie eine Schaetzung bekommt
-// (reconcileVoiceBudget bucht nur auf tatsaechlich verbrauchte Minuten) - die
-// aussagekraeftigere Kategorie darf nicht hinter der schwaecheren verschwinden.
-// EINE Quelle (G5): sowohl der Nenner der Deckungsquote als auch die drei
-// Nebenzaehler (coverageBreakdown) lesen AUSSCHLIESSLICH diese Funktion - eine zweite,
-// getrennt gepflegte Fassung liefe beim naechsten Nachziehen auseinander, exakt wie
-// isEndedCall es vor KV-P3 tat.
 function coverageBucketOf(call, nowMs) {
   if (!call.answeredAt) return COVERAGE_BUCKET.NEVER_ANSWERED;
   if (!isBookableCents(call.estimatedCostCents)) return COVERAGE_BUCKET.NO_ESTIMATE;
@@ -468,16 +197,6 @@ function coverageBucketOf(call, nowMs) {
   return COVERAGE_BUCKET.ELIGIBLE;
 }
 
-// EIN Durchlauf ueber alle beendeten Calls (KV-M3, G5/G30): bildet Nenner, Zaehler UND
-// die drei Nebenzaehler in einem Pass - keine zweite Iteration, kein zweiter
-// Formel-Ausdruck. costTruingCoveragePercent und die Sweep-Log-Zeile leiten sich BEIDE
-// aus GENAU diesem Objekt ab (percentFromBreakdown), damit sie nie auseinanderlaufen
-// koennen.
-// KV2-8: Zaehler (proven) ist die BEWEISENDE Herkunft (istBeweisendeHerkunft,
-// defaults.js) - seit dieser Phase zwei Werte statt eines. Das ist der VIERTE Leser des
-// alten Direktvergleichs, den Plan 4.8 nicht nennt: ohne diesen Mitzug faellt die Quote
-// nach dem Deploy dauerhaft auf 0 %, coverage_below_threshold waere ein Dauer-Alarm und
-// coverage_stalled eskalierte - genau der "Alarm, der immer an ist" (4.4).
 function coverageBreakdown(state, nowMs) {
   const ended = Array.isArray(state?.calls) ? state.calls.filter(isEndedCall) : [];
   const breakdown = { eligible: 0, proven: 0, noEstimate: 0, neverAnswered: 0, outsideWindow: 0 };
@@ -501,38 +220,13 @@ function coverageBreakdown(state, nowMs) {
   return breakdown;
 }
 
-// Die Quote aus einem bereits gebildeten Breakdown (KV-M3): NENNER 0 -> 0, kein
-// Freispruch - dieselbe Konvention wie vor dieser Phase, jetzt bezogen auf den engeren
-// (nur belegbare Calls zaehlenden) Nenner. Abgerundet (floor) - die Abweichung geht
-// Richtung "zu wenig Deckung", nie Richtung vorgetaeuschter Reife.
 function percentFromBreakdown({ eligible, proven }) {
   return eligible === 0 ? 0 : Math.floor((proven * PERCENT_BASE) / eligible);
 }
 
-// Marge, um die die Zeitschranke des Belegabrufs VOR dem aeltesten Kandidaten liegt (KE-P5).
-// GELD-Sicherung, kein Sparknopf - die Richtungen sind nicht symmetrisch:
-//   zu grosszuegig -> ein paar Anfragen mehr, kein Beleg geht verloren;
-//   zu knapp       -> die Seitenschleife des Adapters endet, BEVOR der Beleg gefunden ist,
-//                     und der Pool gilt trotzdem als vollstaendig (complete:true) - eine
-//                     Rueckerstattung auf einer bewiesenen Untermenge.
-// Herleitung: die Belege tragen Zeitfelder vom GESPRAECHSBEGINN, nicht vom Ende - der
-// Pflicht-Typ call-control fuehrt ausschliesslich started_at (Messung 2026-07-21). Der
-// groesste Abstand zum endedAt eines Kandidaten ist damit die Gespraechsdauer, und die
-// deckelt MAX_CALL_DURATION_CAP_S (die absolute Obergrenze der Notbremse, KS-P3). Die
-// Marge ist deshalb ABGELEITET und nicht als Zahl gepflegt: sie war schon einmal eine
-// Zahl, die an einem Cap hing, der sich geaendert hat (TOD 12). Das Zwoelffache traegt
-// zusaetzlich den Versatz zwischen unserer Uhr (endedAt) und der Provider-Uhr
-// (Belegzeitstempel); zwoelffach, weil die Richtungen nicht symmetrisch sind (s.o.).
 const POOL_SINCE_MARGIN_FACTOR = 12;
 const POOL_SINCE_MARGIN_MS = POOL_SINCE_MARGIN_FACTOR * MAX_CALL_DURATION_CAP_S * MS_PER_SECOND;
 
-// Zeitschranke des Belegabrufs, abgeleitet aus dem AELTESTEN Kandidaten (KE-P5): ohne sie
-// zog ein Sweep mit einem 3 h alten Call denselben Umfang wie einer mit 200 Kandidaten -
-// der Adapter blaettert je Typ bis zur letzten Seite bzw. bis zur Seitenobergrenze.
-// Kein Kandidat mit brauchbarem Zeitstempel -> KEINE Schranke (undefined): das kostet
-// Anfragen, kann aber keinen Beleg verlieren. Ein unbrauchbarer endedAt faellt heraus,
-// statt die Schranke als NaN ins Bodenlose zu ziehen (solche Calls sind ohnehin keine
-// Kandidaten, s. isTruingCandidate).
 function poolSinceFor(candidates) {
   let oldestMs = null;
   for (const call of candidates) {
@@ -542,85 +236,29 @@ function poolSinceFor(candidates) {
   return oldestMs === null ? undefined : new Date(oldestMs - POOL_SINCE_MARGIN_MS).toISOString();
 }
 
-// Anteil der beendeten Calls mit beweisbar vollstaendiger Datenlage - seit KV-M3 NUR
-// noch unter den BELEGBAREN (coverageBucketOf: beantwortet, mit buchbarer Schaetzung,
-// innerhalb des Provider-Belegfensters). Vor KV-M3 zaehlte der Nenner JEDEN beendeten
-// Call, egal ob er strukturell je einen Beleg bekommen konnte (Plan-Befund N4) - eine
-// Warnung, die nie gruen werden kann, ist keine Warnung mehr, sondern Tapete. Die drei
-// ausgeschlossenen Gruppen verschwinden NICHT, sie bekommen eigene, IMMER sichtbare
-// Zaehler (s. reportCoverage/sweepAllCandidates), damit eine Quote von z.B. 100% nie
-// verschleiert, wie viele Calls ohne Schaetzung oder ausserhalb des Belegfensters lagen.
-// Abgerundet (floor) - die Abweichung geht Richtung "zu wenig Deckung", nie Richtung
-// vorgetaeuschter Reife. NENNER 0 -> 0, kein Freispruch (percentFromBreakdown). Nicht
-// persistiert: live aus dem geladenen Spiegel gerechnet. Aufrufer reichen store.load()
-// herein (P4- und P4b-Boot-Guard rufen DIESE Funktion, statt die Rechnung ein zweites
-// Mal zu erfinden). nowMs mit Default (Date.now()), damit alle Bestandsaufrufer mit
-// einem Argument unveraendert weiterlaufen.
 export function costTruingCoveragePercent(state, nowMs = Date.now()) {
   return percentFromBreakdown(coverageBreakdown(state, nowMs));
 }
 
-// messaging/mailer sind der Betreiber-Alarmkanal (Plan 4.9), kein Abgleich-Pfad - der
-// Provider-Kosten-Abgleich selbst laeuft ausschliesslich ueber voiceControl. audit ist
-// seit KV2-1 die DURABLE Variante (server.js#durableAudit); ein Test kann jede Funktion
-// mit der util.js#audit-Signatur injizieren.
-// KV2-8B: der Riegel aus Abnahme (e) an EINER Stelle. Ohne vollstaendiges Kosten-Buch darf
-// NIE eine BEWEISENDE Herkunft entstehen: measured.source misst nur den Telnyx-Pool gegen
-// die Pflicht-TYPMENGE des Profils, nicht die Pflicht-TRAEGER - ein el_convai_sip-Anruf hat
-// seinen sip-trunking-Pool vollstaendig, seine elevenlabs_convai-Zeile aber noch gar nicht.
-// Liegt bewusst auf Modul-Ebene statt im Closure: so bleibt das gepinnte Zeilenbudget von
-// makeCostTruing (292) unberuehrt und der Riegel ist trotzdem nur einmal geschrieben.
 export function ohneBeweiskraft(source) {
   return istBeweisendeHerkunft(source) ? COST_TRUING_SOURCE.INCOMPLETE : source;
 }
 
-// KV2-10: eigenCentJeAnruf = die Eigen-Cent je Anruf (ai_token + research_fee) als
-// INJIZIERTE Quelle - im Bestand existiert keine (Briefing/Eroeffnungssatz buchen
-// callId:null, research_fee schreibt kein usage_event). Injektion statt Lazy-Init (P15);
-// die Produktion (server.js) uebergibt nichts -> null -> jede Stichprobe wird benannt als
-// eigen_achsen verweigert. Die Signatur bleibt einzeilig: makeCostTruing traegt eine
-// gepinnte max-lines-Befundmenge (eslint-suppressions.json), Zeilen verschieben sie.
 export function makeCostTruing({ store, config, voiceControl, audit, messaging, mailer, elKostenRead = null, eigenCentJeAnruf = null, now = Date.now }) {
-  // Modul-lokaler Laufriegel. BEIDE Ausloeser (Intervall + manueller Endpunkt) teilen
-  // sich diesen einen Boolean. GESETZT VOR DEM ERSTEN await, freigegeben im finally:
-  // Node ist single-threaded, aber der Sweep awaitet den Pool-Abruf je Provider (KE-P2,
-  // vor der Buchungsschleife). Feuert das Intervall, waehrend der manuelle Lauf noch auf
-  // eine Antwort wartet, saehen sonst BEIDE Laeufe costTruedAt === null fuer denselben Call und
-  // verarbeiteten ihn doppelt (ab P4: doppelte Korrekturbuchung). Ein nach dem await
-  // gesetzter Riegel schuetzt genau hier NICHT. Ein zweiter Aufruf ist ein
-  // protokolliertes No-op, KEIN Fehler. (costTruedAt selbst riegelt nur SEQUENZIELLE
-  // Wiederholung, nicht Verschraenkung - deshalb beide Riegel, nicht einer.)
   let sweepRunning = false;
 
-  // Entprellfenster der NOTIZ-Stufe (COST_ALERT_DEBOUNCE_MS, Default 24 h) und der
-  // Tarif-Drift-SMS (P5 keyt zusaetzlich auf den Praefix, "<praefix> <code>"). BEWUSST
-  // DIESELBE Map und DIESELBE Regel fuer beide.
-  // KV2-1: die VOLL-Stufe entprellt NICHT mehr hier, sondern am DURABLEN Marker
-  // (outage-report.js#meldeVollBefund, OUTAGE_ALERT_DEBOUNCE_MS/-RETRY_MS). Warum die
-  // Notiz-Stufe trotzdem diese Map braucht: sie setzt nie sent:true, also bleiben
-  // lastAttemptAt/reportedAt null und meldeErlaubt liefert immer true - der Marker KANN
-  // eine nie sendende Stufe nicht entprellen.
   const lastFindingMs = new Map();
 
-  // Kandidaten-Praedikat (persistierter Versuchszaehler, kein In-Memory). COST_TRUING_
-  // MAX_ATTEMPTS gegen den PERSISTIERTEN Zaehler (P2): ein prozess-lokaler Zaehler wird
-  // auf dem Render-Free-Tier bei jedem Restart genullt, erreicht die Obergrenze nie und
-  // liesse den Job unbegrenzt gegen tote Calls laufen.
-  // KV2-7: der Versuchszaehler ist KEIN Kandidaten-Riegel mehr, sondern ein MESS-Riegel
-  // (Modul-Ebene versucheUebrig). Ein Anruf mit erschoepftem Zaehler bleibt offen, bis
-  // seine Pflichtmenge steht oder die Frist ablaeuft (Abnahme (d)).
   function isTruingCandidate(call, nowMs) {
     if (!isEndedCall(call) || call.costTruedAt !== null) return false;
     const endedMs = endedAtMs(call);
-    if (endedMs === null) return false; // unbrauchbarer Zeitstempel != "faellig"
+    if (endedMs === null) return false;
     return nowMs - endedMs >= config.billing.costTruingDelayMinutes * MS_PER_MINUTE;
   }
 
   function sumRecordMicroCents(records) {
     let total = 0;
     for (const r of records) {
-      // P1 liefert Ganzzahl-Mikro-Cents. Zweite Linie: alles andere ist ein Datenfehler
-      // und wird zu "nicht gemessen" (null), NIE stillschweigend zu 0 addiert.
       if (!Number.isSafeInteger(r?.costMicroCents) || r.costMicroCents < 0) return null;
       total += r.costMicroCents;
       if (!Number.isSafeInteger(total)) return null;
@@ -628,23 +266,13 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return total;
   }
 
-  // Summe eines GANZZAHL-Mengenfelds ueber alle Records. Nicht-ganzzahlig, fehlend oder
-  // negativ zaehlt als 0 (fail-closed). EINE Regel fuer BEIDE Mengen (G5): billedSec (Beweis
-  // der Abrechnung) und ttsCharacters (ElevenLabs-Menge) - zwei nebeneinander gepflegte
-  // reduce-Ausdruecke liefen beim ersten Nachziehen auseinander.
   function sumIntegerField(records, field) {
     return records.reduce(
       (sum, r) => sum + (Number.isSafeInteger(r?.[field]) && r[field] > 0 ? r[field] : 0), 0);
   }
 
-  // Die leere Pflicht-Menge (Punkt 5 des Auftrags) - EIN Ausdruck, testgepinnt:
-  // requiredRecordTypes.length > 0 ist DER Riegel: ueber der LEEREN Menge ist
-  // "jeder Typ ist vertreten" allquantifiziert wahr und damit fuer JEDEN Call erfuellt -
-  // der Vollstaendigkeits- faellt still auf den Anwesenheitsbeweis zurueck. Leer heisst
-  // deshalb 'incomplete' ("nichts bewiesen"), nie 'telnyx_detail_records'. Kein geratener
-  // Nicht-leer-Default (der saehe nach Vollstaendigkeit aus).
   function classifyRecords(records, requiredRecordTypes) {
-    if (!Array.isArray(records) || records.length === 0) return null; // leere Antwort = keine Messung
+    if (!Array.isArray(records) || records.length === 0) return null;
     const total = sumRecordMicroCents(records);
     if (total === null) return null;
     const found = new Set(records.map((r) => r.recordType));
@@ -652,26 +280,13 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return {
       actualCostMicroCents: total,
       source: complete ? COST_TRUING_SOURCE.DETAIL_RECORDS : COST_TRUING_SOURCE.INCOMPLETE,
-      // LCT P4: zweiter Beleg des Vollstaendigkeits-Praedikats.
       billedSecTotal: sumIntegerField(records, "billedSec"),
-      // KE-P6: ElevenLabs-Zeichen der ZUGEORDNETEN text-to-speech-Belege dieses Calls.
-      // 0 heisst "kein zugeordneter ElevenLabs-Beleg" und fuehrt zu KEINEM Schreibzugriff.
       ttsCharacters: sumIntegerField(records, "ttsCharacters"),
     };
   }
 
-  // Kontrolle, deren Fehlen D2 ausmacht: der konfigurierte Tarif wird ab hier DAUERHAFT
-  // gegen die Wirklichkeit gehalten. Bezugsgroesse ist AUSSCHLIESSLICH der persistierte
-  // estimatedCostCents (P2) - nie ein aus tariffCentsPerMin rekonstruierter Wert.
-  //
-  // BEWUSSTE, BEGRENZTE ABWEICHUNG: die linke Seite ist USD-Mikro-Cent, die rechte
-  // EUR-Cent. In P3 wird NICHT umgerechnet (der Umrechnungskurs Provider->Bucket bekommt
-  // seinen Verbraucher erst in P4). Zulaessig, weil diese Zeile eine LOG-Ausgabe ist: sie
-  // bewegt kein Geld, speist kein Gate und wird nirgends persistiert. P4 ersetzt den
-  // Vergleich durch den umgerechneten.
   function warnOnCostDrift(call, actualMicroCents) {
     const estimateCents = call.estimatedCostCents;
-    // Fehlender/0-Schaetzbetrag: KEINE Drift-Aussage (und erst recht kein "keine Drift").
     if (!Number.isSafeInteger(estimateCents) || estimateCents <= 0) return;
     const estimateMicroCents = estimateCents * MICRO_CENTS_PER_CENT;
     const deviationPercent = Math.floor(
@@ -691,35 +306,16 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return true;
   }
 
-  // DER Befundkanal, seit KV2-1 auf dem BESTEHENDEN Betreiber-Meldeweg (Plan 4.9): WARN ->
-  // Audit (durabel) -> je nach Stufe Mail+SMS. Er wird hier NICHT neu gebaut - alarmErlaubt/
-  // meldeVollBefund/meldeBetreiberNotiz sind dieselben Bausteine wie beim Drift-Waechter
-  // (EIN Meldeweg, G5). WAS gemeldet wird, formuliert weiterhin der Aufrufer im detail;
-  // der Kanal kennt weder Deckungsquote noch Anfragezahl.
-  // Die Inhalts-WARN bleibt die BESTEHENDE Zeile ("[cost-truing] Befund grund=..."): der
-  // Meldeweg loggt nur aktion+klasse, das Detail stuende sonst in keiner Log-Zeile mehr.
-  // zeile ist zugleich Audit-Detail UND Mail-Body und bleibt deshalb byte-identisch zum
-  // Bestandsformat (Log-/Test-Konsumenten) - PII-frei per Vertrag der Aufrufer.
   async function emitFinding(code, detail, nowMs) {
-    // Die Bestandscodes sind feste Strings, verglichen ueber die Menge; die drei
-    // KV2-6-Klassen tragen den Traeger hinter einem ':' und werden deshalb ueber ihre
-    // KLASSE erkannt (istBuchBefundCode). Alle drei melden VOLL (Mail+SMS) - 4.9 fuehrt
-    // sie unter demselben Meldeweg, und die Entprellung bleibt der durable Marker je
-    // Eimer (meldeVollBefund), inklusive Rueckfall auf die Notiz-Stufe im Entprellfenster.
     const voll = VOLL_BEFUND_CODES.has(code) || istBuchBefundCode(code);
     if (!voll && !shouldEmitFinding(code, nowMs)) return;
     const zeile = `grund=${code} ${detail}`;
     console.warn(`[cost-truing] Befund ${zeile}`);
-    // meldung einzeilig (KV2-10): die Zeilenzahl dieses Closures ist gepinnt
-    // (eslint-suppressions.json, max-lines-per-function) - reines Formatting.
     const meldung = { store, config, audit, messaging, mailer, bucket: kostenBucket(code), aktion: COST_TRUING_AUDIT_EVENT, zeile, nowMs };
     if (voll) await meldeVollBefund(meldung);
     else await meldeBetreiberNotiz(meldung);
   }
 
-  // coverageDetail/coverageStallMs/closeCoverageBefunde sind Modul-Ebene (oben, vor
-  // makeCostTruing) - reine Funktionen bzw. store/audit als explizite Parameter statt
-  // Closure (G30/G34, F1).
   async function reportCoverage(coveragePercent, coverage, nowMs) {
     const min = config.billing.costTruingMinCoveragePercent;
     console.log(
@@ -731,8 +327,6 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       await closeCoverageBefunde(store, audit, nowMs);
       return;
     }
-    // Marker VOR dem Melden lesen: emitFinding legt ihn sonst gerade erst an, und seit=
-    // stuende im ersten Sweep eines Einbruchs auf einem anderen Wert als in den folgenden.
     const marker = openOutageAlert(store.load(), kostenBucket(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD));
     const seitIso = marker ? marker.firstSeenAt : new Date(nowMs).toISOString();
     const detail = coverageDetail(coveragePercent, min, seitIso);
@@ -742,13 +336,6 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     await emitFinding(COST_TRUING_FINDING.COVERAGE_STALLED, detail, nowMs);
   }
 
-  // Zaehlt das Ergebnis EINES abgeglichenen Calls in die Sweep-Bilanz ein. Bezugsgroesse
-  // ist der PERSISTIERTE truedSource (nicht der rohe measured.source) - die Bilanz zaehlt
-  // damit GENAU den Sachverhalt, der am Call landet, und kann ihm nie widersprechen.
-  // 'unavailable' (== measured war null: ok:false/leere Antwort/unparsbare Summe): closed
-  // -> Versuche erschoepft, dauerhaft 'failed'; offen -> ein spaeterer Lauf bekommt eine
-  // neue Chance (unavailable). Sonst nach Herkunft: 'telnyx_detail_records' -> gemessen,
-  // 'no_estimate' -> ohne Schaetzbetrag (NIE gemessen), Rest ('incomplete') -> unvollstaendig.
   function countOutcome(tally, truedSource, closed) {
     if (truedSource === COST_TRUING_SOURCE.UNAVAILABLE) {
       if (closed) tally.failed++;
@@ -760,68 +347,20 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     else tally.incomplete++;
   }
 
-  // KV2-8: das VOLLSTAENDIGKEITS-Praedikat lebt seit dieser Phase im Kosten-Buch
-  // (kosten-projektion.js#istVollBelegt: Beleg-IST gegen PROFIL-SOLL), nicht mehr in
-  // EINER Telnyx-Messung. Die Herkunft folgt derselben Quelle:
-  //   - Buch vollstaendig + Schaetzbetrag -> 'kostenbuch_vollbeleg' (beweisend)
-  //   - Buch vollstaendig, kein Schaetzbetrag -> 'no_estimate' (die Belege sind gut, es
-  //     fehlt nur der Betrag, gegen den gerechnet wuerde)
-  //   - Buch unvollstaendig, Frist abgelaufen -> 'kostenbuch_teilbeleg' (final, aber
-  //     NICHT beweisend: systematisch zu niedrig)
-  //   - sonst -> die Messaussage dieses Laufs (measured.source, i.d.R. 'incomplete')
-  // Ohne Schaetzbetrag gibt es keinen Teilbeleg-Fall: es faellt nichts zu buchen an, und
-  // 'no_estimate'/'incomplete' bleiben die zwei Sachverhalte des Bestands.
   function truedSourceOf({ call, measured, projektion, abschluss }) {
     if (!isBookableCents(call.estimatedCostCents)) return projektion.vollBelegt ? COST_TRUING_SOURCE.NO_ESTIMATE : ohneBeweiskraft(measured.source);
     if (projektion.vollBelegt) return COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG;
     if (abschluss.grund === ABSCHLUSS_GRUND.FRIST) return COST_TRUING_SOURCE.KOSTENBUCH_TEILBELEG;
-    // KV2-8B: der Riegel aus Abnahme (e) steht als ohneBeweiskraft() auf Modul-Ebene und
-    // gilt in BEIDEN Rueckgabewegen ohne vollstaendiges Buch - auch im no-estimate-Zweig
-    // oben. Stand er nur hier, fiel 'telnyx_detail_records' bei fehlendem Schaetzbetrag
-    // durch: die Deckungsquote zaehlte den Anruf als bewiesen und der Drift-Waechter nahm
-    // ihn als Stichprobe, mit einem Betrag, der nur einen Teil des Anrufs traegt. Auf
-    // master war das unmoeglich, es kam erst mit KV2-8 herein (Regression B1).
     return ohneBeweiskraft(measured.source);
   }
 
-  // KV2-8: die Belegzeilen kommen aus dem Store, die Regel aus kosten-projektion.js.
-  // Diese Funktion ist die EINZIGE Store-Beruehrung des Settlements im Closure; das
-  // Settlement selbst liegt auf Modul-Ebene (setteleAnruf), weil der Faelligkeitslauf
-  // denselben Rumpf braucht (G5).
   function projektionVon(call) {
     return settlementProjektion({ call, belege: store.callCostEvidence(call.id) });
   }
 
-  // ElevenLabs-Zeichen des Calls, PRO TENANT (KE-P6, Plan F6) UND auf dem globalen
-  // Plattform-Kontingent-Zaehler (KV-P7, C2: dieser Kommentar behauptete vor KV-P7, der
-  // globale Zaehler bliebe unveraendert und stuende auf dem Assistant-Pfad "dauerhaft bei
-  // 0" - das stimmte, BEVOR store.recordRelayTtsCharacters existierte, und ist jetzt
-  // falsch). Auf dem Assistant-Pfad synthetisiert Telnyx die Stimme serverseitig; genau
-  // diesen Verbrauch sah der Kontingent-Zaehler bisher strukturell nie, unabhaengig davon
-  // ob Play-TTS an oder aus ist (Klaerung Teil (c), tasks/kv-p7-tts-klaerung.md). Die
-  // Warnschwelle/Erschoepfung laeuft ab jetzt ueber DENSELBEN Befundkanal wie die uebrigen
-  // Sweep-Befunde (emitFinding: entprellen -> WARN -> Audit) - KEINE SMS: der Play-TTS-Pfad
-  // alarmiert dieselbe Schwelle bereits per SMS (server.js), eine zweite Alarmklasse fuer
-  // dasselbe Konto waere Kanal-Verdopplung.
-  // RIEGEL GEGEN DOPPELZAEHLUNG ist costTruedAt und sonst nichts: eine Messung
-  // (measured !== null) setzt closed und damit costTruedAt, der Call ist danach nie wieder
-  // Kandidat (isTruingCandidate). Kein zweiter Riegel noetig - ein zweiter waere eine zweite
-  // Wahrheit. Gegen VERSCHRAENKUNG zweier Sweeps traegt der Laufriegel sweepRunning.
-  // 0 Zeichen -> gar kein Schreibzugriff (ein Anruf ohne zugeordneten ElevenLabs-Beleg darf
-  // keine Tenant-Zeile anfassen).
-  // KV2-1: sammelt statt sofort zu melden - gemeldet wird NACH der Buchungsschleife (der
-  // Meldeweg ist seit dieser Phase asynchron: Marker-Lock, Versand), und ein await IN der
-  // Schleife braeche die Zusage "zwischen Pool-Abruf und Bilanz kommt kein await mehr"
-  // (D1/PM-5), an der der Schutz gegen verschraenkte Sweeps haengt.
-  // sammler HIER statt eines Rueckgabewerts an trueOneCall (G34/C2): trueOneCall traegt
-  // bereits die Komplexitaets-Obergrenze dieser Datei (eslint-suppressions.json) - eine
-  // weitere Verzweigung dort haette sie ERHOEHT. Die Entscheidung "melden oder nicht"
-  // gehoert ohnehin zu DIESER Funktion (sie kennt measured.ttsCharacters/warnung), nicht
-  // zur Aufrufer-Schleife.
-  // 0 Zeichen -> gar kein Schreibzugriff und kein Befund.
   function bookTtsCharactersFor(call, measured, sammler) {
     if (measured.ttsCharacters <= 0) return;
-    const nowMs = now(); // EIN Zeitpunkt, zwei Projektionen (Muster closedAt in trueOneCall)
+    const nowMs = now();
     const warnung = store.recordRelayTtsCharacters(call.tenantId, measured.ttsCharacters, new Date(nowMs).toISOString());
     if (warnung) sammler.ttsWarnungen.push(warnung);
   }
@@ -833,13 +372,6 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     await emitFinding(code, `zeichen=${warning.characters}/${warning.quota} zyklus=${warning.cycleKey}`, nowMs);
   }
 
-  // Abruf-Kennzahlen EINER Provider-Antwort, gelesen VOR der Buchbarkeits-Uebersetzung
-  // (bookablePool weiter unten): sie beschreiben den ABRUF, nicht die Buchbarkeit. Getrennt
-  // gehalten, weil bookablePool eine complete:false-Antwort bewusst zu ok:false verdichtet -
-  // die Anfragen waren trotzdem da und muessen im Log erscheinen (sonst waere der
-  // Bruchpunkt-Waechter ausgerechnet im Stoerfall blind).
-  // `incomplete` heisst "dieser Abruf hat KEIN vollstaendiges Bild geliefert" - ok:false und
-  // complete:false sind darin dasselbe.
   function poolFetchStats(pool) {
     return {
       requests: nonNegativeCount(pool?.requests), pages: nonNegativeCount(pool?.pages),
@@ -859,12 +391,6 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     if (stats.incomplete) fetchTally.incompletePools++;
   }
 
-  // "Kein Abgleich moeglich": unbekannter Provider (die Registry wirft fail-closed) oder ein
-  // Adapter ohne die beiden Beleg-Methoden - sie sind OPTIONAL am Port, nicht jeder Carrier
-  // liefert Einzelbelege (bis C-P4 war Twilio genau dieser Fall). EINE
-  // Entscheidung an EINER Stelle (G5). SYNCHRON und ohne Netz - genau deshalb steht die
-  // Aufloesung ab KE-P9 VOR dem Abruf zur Verfuegung, statt als dessen Nebenprodukt zu
-  // entstehen; ein zweiter Netz-Zugriff kommt dadurch NICHT hinzu (PM-5).
   function costRecordControlFor(provider) {
     let control;
     try {
@@ -877,12 +403,6 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return hasCostRecordMethods ? control : null;
   }
 
-  // isRetrievable liegt seit KV2-9 auf Modul-Ebene (oben, neben versucheUebrig) -
-  // Lint-Budget-Gegenbuchung fuer den Reifungs-Zweig, s. Kopfkommentar der Datei.
-
-  // Jeder in diesem Sweep vorkommende Provider genau EINMAL aufgeloest. Rein synchron; die
-  // Map ist die EINE Wahrheit, aus der sowohl der Abruf-Filter als auch der Abruf selbst
-  // liest (kein zweites voiceControl-Ergebnis, das abweichen koennte).
   function costRecordControlsFor(candidates) {
     const controls = new Map();
     for (const call of candidates)
@@ -890,42 +410,20 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return controls;
   }
 
-  // Nur ein VOLLSTAENDIGER Pool darf Geld bewegen: gegen eine bewiesene Untermenge erstattet
-  // die Korrektur real ausgegebenes Geld zurueck - die fail-OPEN-Richtung im Geldpfad.
-  // complete:false ist deshalb dasselbe wie ok:false, uebersetzt an genau EINER Stelle.
   function bookablePool(pool) {
     if (!pool?.ok) return pool ?? { ok: false };
     return pool.complete === false ? { ok: false, reason: POOL_INCOMPLETE_REASON } : pool;
   }
 
-  // Der Belegabruf EINES Providers - genau EINMAL je Sweep (D1: der Abruf ist
-  // schleifeninvariant, die Query kennt weder legId noch Zeitfenster). `since` bindet
-  // ausschliesslich die Seitenschleife des Adapters und geht NIE als Query-Parameter
-  // hinaus - ein geratener Zeitfilter liefert HTTP 200 mit 0 Treffern (Messung, s. ports.js).
-  // Bekommt die BEREITS aufgeloeste Belegsteuerung herein (KE-P9): dass dieser Adapter
-  // belegfaehig ist, wurde beim Auswaehlen der abrufbaren Kandidaten entschieden und wird
-  // hier nicht ein zweites Mal beurteilt.
   async function fetchCostRecordPoolFor(control, since) {
     try {
       const answer = await control.fetchCostRecordPool({ since });
       return { control, pool: bookablePool(answer), stats: poolFetchStats(answer) };
     } catch {
-      // der Port WIRFT NIE - zweite Linie. Kein zaehlbarer Abruf, aber auch kein
-      // vollstaendiges Bild (poolFetchStats(null) -> incomplete:true).
       return { control, pool: { ok: false }, stats: poolFetchStats(null) };
     }
   }
 
-  // Ein Pool je vorkommendem Provider der ABRUFBAREN Kandidaten, jeder Provider genau einmal.
-  // Die Kandidatenliste bestimmt die Menge - kein Providername im Billing-Pfad (DIP). Kein
-  // abrufbarer Kandidat -> kein Abruf: die Schleife laeuft nicht, 0 Anfragen (KE-P9; genau
-  // derselbe Ausgang wie "gar keine Kandidaten").
-  // EINE Zeitschranke je Sweep, VOR der Schleife bestimmt: sie haengt an der Kandidatenmenge,
-  // nicht am Provider - je Provider neu zu rechnen waere dieselbe Zahl zweimal (G5). Gebildet
-  // ueber ALLE abrufbaren Kandidaten, nie ueber eine Teilmenge davon: eine zu weit nach vorn
-  // gerutschte Schranke verloere Belege und meldete den Pool trotzdem als vollstaendig - die
-  // fail-OPEN-Richtung im Geldpfad (s. POOL_SINCE_MARGIN_MS).
-  // Rein synchron ausserhalb des Abrufs, also kein zusaetzliches Netz-await (PM-5).
   async function fetchCostRecordPools(retrievable, controls) {
     const since = poolSinceFor(retrievable);
     const pools = new Map();
@@ -939,36 +437,21 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return { pools, fetchTally };
   }
 
-  // SYNCHRON (KE-P2/PM-5): zwischen Pool-Abruf und Buchungsschleife liegt strukturell kein
-  // Netz-await mehr. Provideraufloesung und Faehigkeitspruefung sind in costRecordControlFor
-  // gewandert (EINE Entscheidung, EINE Stelle). Ab KE-P9 laeuft die Schleife ausschliesslich
-  // ueber ABRUFBARE, seit KV2-7 zusaetzlich noch MESSBARE Kandidaten (isRetrievable +
-  // versucheUebrig) - control und legId sind hier deshalb strukturell vorhanden, ein
-  // Ueberspring-Zweig waere toter Code. Wer nicht abrufbar oder erschoepft ist, erreicht
-  // diese Funktion nie und bleibt ein vollstaendiges No-op (kein Wurf, KEIN Feld-
-  // Schreiben, KEIN verbrauchter Versuch).
   function trueOneCall(call, { control, pool }, sammler) {
     const legId = providerLegIdOf(call);
     let result;
     try {
-      // Ein nicht nutzbarer Pool laesst ALLE Kandidaten 'unavailable' - kein Teilerfolg, keine
-      // Herkunft 'telnyx_detail_records', keine Rueckerstattung. Der Versuchszaehler steigt
-      // je Kandidat genau einmal, exakt wie bei einem ok:false-Abruf im Bestand.
       result = pool.ok
         ? control.assignCostRecords(pool, { legId, startedAt: call.startedAt, endedAt: call.endedAt })
         : pool;
     } catch {
-      result = { ok: false }; // der Port WIRFT NIE - zweite Linie, nie ein Sweep-Abbruch
+      result = { ok: false };
     }
 
-    // ok:false, leere Antwort und unparsbare Summe sind IM TYP von einer gemessenen Null
-    // unterscheidbar (P1) und heissen NIEMALS "keine Kosten" (PM-4).
     const measured = result?.ok
       ? classifyRecords(result.records, pflichttypenVon(call, config.billing))
       : null;
     const attempt = nextCostTruingAttempt(call);
-    // KV2-7: der Sweep-Traeger ist fertig (GENAU der Bestandsausdruck) - ob das den
-    // ANRUF schliesst, entscheidet die Pflichtmenge des Profils (kosten-abschluss.js).
     const sweepTraegerErledigt = measured !== null || attempt >= config.billing.costTruingMaxAttempts;
     const abschluss = abschlussNachMessung({
       call,
@@ -980,71 +463,34 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       config,
     });
     const closed = abschluss.geschlossen;
-    // KV2-8: NACH abschlussNachMessung - dort ist die Belegzeile dieses Laufs bereits
-    // geschrieben; eine Projektion davor saehe das Buch von gestern.
     const projektion = projektionVon(call);
-    // EINE Herkunfts-Bestimmung fuer Persistenz UND Bilanz (G5): countOutcome zaehlt exakt
-    // den Wert, der am Call landet - kein zweites, aus measured.source neu abgeleitetes Urteil.
     const truedSource = measured
       ? truedSourceOf({ call, measured, projektion, abschluss })
       : COST_TRUING_SOURCE.UNAVAILABLE;
 
-    // KV2-8: der persistierte Ist-Betrag ist die BELEGSUMME des Kosten-Buchs (alle
-    // Traeger), nicht mehr die eine Telnyx-Messung. recordCallCostTruingResult uebernimmt
-    // ihn nur bei isProviderMicroCents; null laesst das Feld unveraendert - "nicht
-    // gemessen" bleibt von "0" unterscheidbar.
     store.recordCallCostTruingResult(call.id, {
       source: truedSource,
       actualCostMicroCents: projektion.summeMikroCents,
       closedAt: closed ? new Date(now()).toISOString() : null,
     });
 
-    // LCT P4: der Flip. Idempotenz traegt costTruedAt (oben gesetzt) - ein zweiter Lauf
-    // sieht den Call nicht mehr als Kandidaten; gegen VERSCHRAENKUNG traegt der
-    // Laufriegel aus P3. KV2-7: nur im SCHLIESSENDEN Lauf (s. setteleAnruf) - sonst
-    // Doppelbuchung bei einem ueber mehrere Sweeps offenen Anruf (el_convai_sip).
-    // Drift-Warnung und TTS-Zeichen brauchen die MESSUNG dieses Laufs.
     if (measured && closed) {
       warnOnCostDrift(call, measured.actualCostMicroCents);
       bookTtsCharactersFor(call, measured, sammler);
     }
-    // KV2-8: das Settlement haengt am ABSCHLUSS, nicht an der Messung dieses Laufs - es
-    // speist sich aus dem Kosten-Buch. Ein hier per FRIST geschlossener Anruf ohne
-    // Messung (Pool nicht abrufbar) wuerde sonst NIE settlen: schliesseFaelligeOffene
-    // ueberspringt ihn, weil costTruedAt schon steht. Ohne Belegsumme bewegt sich
-    // trotzdem kein Cent (sweepDarfKorrigieren).
     if (closed) setteleAnruf({ call, projektion, store, config });
     countOutcome(sammler.tally, truedSource, closed);
     if (closed) meldeAbschluss(call, abschluss, sammler);
   }
 
-  // Der SMS-Versand ist ECHT und KOSTENPFLICHTIG. Die Kostenklemme ist die Entprellung:
-  // hoechstens EINE Meldung je Praefix und Befund-Code je COST_ALERT_DEBOUNCE_MS (24 h) ->
-  // bei 3 Praefixen x 3 alarmierenden Codes (ALERTABLE_DRIFT_CODES) maximal 9 SMS am Tag,
-  // statt einer Meldung je Befund und Sweep. Der Schluessel traegt den Code,
-  // conversion_error entprellt also getrennt von under-/overestimate.
-  //
-  // Versand ueber den geteilten Bootstrap-Alarm-Baustein (G5, EINE Quelle mit der
-  // ElevenLabs-Kontingent-Warnung LCT P7): Empfaenger-Riegel, Bootstrap-Absender (die
-  // eigene Betreiber-Nummer, NIE die DID eines Kunden), try/catch und fire-and-forget
-  // liegen alle dort. Ein Alarm darf einen Sweep nie abbrechen. Das Ziel
-  // (platformAlertSmsTo) wird NIE geloggt.
   function alertDrift(entry, nowMs) {
     if (!shouldEmitFinding(`${entry.prefix} ${entry.code}`, nowMs)) return;
     const detail = driftLine(entry);
     console.warn(`[cost-truing] Tarif-Drift ${detail}`);
-    audit(TARIFF_DRIFT_AUDIT_EVENT, null, detail); // req=null -> ip=system
+    audit(TARIFF_DRIFT_AUDIT_EVENT, null, detail);
     sendBootstrapAlertSms({ messaging, config, store, prefix: DRIFT_ALERT_SMS_PREFIX, detail, logTag: "cost-truing" });
   }
 
-  // Ausloeser 2 von 2 (Laufzeit). Der Boot-Guard allein genuegt NICHT: er feuert einmal je
-  // Prozessstart, und ein Dienst, der nach dem Deploy wochenlang ohne Restart laeuft,
-  // wertet genau in dem Zeitraum nicht aus, in dem sich P4 auf P5 als Gegenmassnahme
-  // stuetzt. insufficient_samples wird GELOGGT, aber NIE alarmiert (alertableDriftFindings).
-  // LCT P5 + KV2-10: die ZWEI Tarif-Waechter des Sweeps an EINER Aufrufstelle - der
-  // Praefix-Drift (P5, eigener SMS-Versand) und das Tarifpaar (KV2-10, Modul-Ebene
-  // meldeTarifpaar unten, emitFinding als Parameter). Zwei getrennte Aufrufzeilen wuerden
-  // die gepinnte max-lines-Befundmenge dieses Closures verschieben.
   async function reportTariffDrift(state, nowMs) {
     const report = tariffDriftReportFromConfig(state.calls, config.billing);
     console.log(`[cost-truing] tarif-drift ${report.map(driftLine).join(" | ")}`);
@@ -1052,21 +498,6 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     await meldeTarifpaar({ state, eigenCentJeAnruf, billing: config.billing, emitFinding, nowMs });
   }
 
-  // Die Sweep-Bilanz als EINE Zeile. Das Format ist TESTGEPINNT: es ist die Datenquelle des
-  // Bruchpunkt-Waechters (KE-P8) und liefert B = pool/kandidaten aus der Wirklichkeit (U9).
-  // Die Bestandsfelder und ihre Reihenfolge bleiben unveraendert (Log-Konsumenten), die vier
-  // Abruf-Felder kommen HINTEN dazu.
-  // vollstaendig=true heisst "kein unvollstaendiger Abruf in diesem Sweep" - bei 0 Kandidaten
-  // (0 Abrufe) also ebenfalls true; die daneben stehenden anfragen=0 pool=0 machen den Fall
-  // eindeutig. Bewusst als Zaehler formuliert und nicht als Allquantor ueber der leeren Menge:
-  // "nichts Unvollstaendiges beobachtet" ist eine Beobachtung, "alles vollstaendig" waere eine
-  // Behauptung (dieselbe Falle wie die leere Pflicht-Menge in classifyRecords).
-  // KV2-1 (Kriterium (d)): kanaele= nennt, ueber welche Betreiber-Kanaele die Befunde
-  // dieses Sweeps ueberhaupt hinauskaemen. Es ist die Gegenprobe zu der bewusst
-  // beibehaltenen Meldeweg-Semantik "kein Mail-Ziel gilt als zugestellt"
-  // (outage-report.js#sendeUeberBeideKanaele, Plan 4.9): kanaele=keine heisst, dass jede
-  // Meldung dieses Sweeps ausschliesslich im Log und in audit_log steht. Nur Kanal-ARTEN,
-  // nie die Ziele.
   function logSweepLine({ trigger, candidateCount, tally, fetchTally, kanaele, buch, erschoepft, abschluesse, elReifung }) {
     console.log(
       `[cost-truing] sweep trigger=${trigger} kandidaten=${candidateCount} ` +
@@ -1080,12 +511,6 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     );
   }
 
-  // KE-P8, der Bruchpunkt-Waechter: meldet, wenn EIN Sweep mehr Anfragen zieht als die
-  // Betriebsschwelle erlaubt. Die Zahl selbst steht schon in der Sweep-Zeile (anfragen=) -
-  // hier kommt KEINE zweite Log-Zeile dazu, nur der entprellte Befund. Gemeldet wird ein
-  // VOLUMEN, kein Fehler: der Sweep bleibt korrekt, er waechst nur aus seinem Intervall
-  // heraus (Gegenmassnahme: Plan Kap. 3, Stufe 1 - Fenster verschmaelern).
-  // Dieselbe Quelle wie das Log (fetchTally), damit Befund und Zeile nie auseinanderlaufen.
   async function reportFetchVolume(fetchTally, nowMs) {
     if (fetchTally.requests <= SWEEP_REQUESTS_WARN_THRESHOLD) return;
     await emitFinding(
@@ -1097,64 +522,31 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
 
   async function sweepAllCandidates(trigger) {
     const nowMs = now();
-    // Kandidaten-Schnappschuss VOR den awaits: ein Call, der waehrend des Sweeps endet,
-    // ist ohnehin erst nach COST_TRUING_DELAY_MINUTES faellig und kommt im naechsten Lauf.
     const candidates = store.load().calls.filter((c) => isTruingCandidate(c, nowMs));
-    // KE-P9: ab hier arbeitet der Sweep auf den ABRUFBAREN Kandidaten. Sie allein bestimmen
-    // Umfang und Zeitschranke des Belegabrufs UND durchlaufen die Buchungsschleife - beide
-    // Seiten lesen dieselbe Bedingung (isRetrievable) und dieselben controls, sie koennen
-    // nicht auseinanderlaufen. Rein synchron, noch vor jedem await.
     const controls = costRecordControlsFor(candidates);
     const retrievable = candidates.filter((c) => isRetrievable(c, controls.get(c.provider)));
-    // Strukturell nie abgleichbar (keine Leg-Referenz / kein belegfaehiger Adapter): kein
-    // Abruf, kein Schreibzugriff, kein verbrauchter Versuch. Sie bleiben Kandidaten und
-    // erscheinen unveraendert als uebersprungen= (Owner-Entscheidung: nur Abruf-Filter).
     const skippedCalls = candidates.length - retrievable.length;
-    // KV2-7: gemessen wird nur, wer noch Versuche hat - ein erschoepfter Anruf bleibt
-    // offen (s. isTruingCandidate), zieht aber KEINE Anfrage mehr.
     const messbar = retrievable.filter((call) => versucheUebrig(call, config.billing));
-    // KV2-9: der Reifungs-Zweig laeuft ueber DIESELBE Kandidatenmenge (Abnahme (e)) und
-    // VOR dem Pool-Abruf - so bleibt die PM-5-Zusage woertlich erhalten ("ab dem
-    // Pool-Abruf kommt kein await mehr"). Die frisch gereifte Belegzeile steht damit im
-    // Buch, BEVOR trueOneCall/schliesseFaelligeOffene sie projizieren.
     const elReifung = await reifeElBelege({ candidates, store, elKostenRead, billing: config.billing, nowMs });
-    // D1: der Abruf ist schleifeninvariant und laeuft EINMAL je Provider - VOR der Schleife.
-    // Ab hier bis zur Bilanz kommt kein Netz-await mehr (PM-5): zwei verschraenkte Sweeps
-    // koennen sich hier nicht mehr dazwischenschieben.
-    // pools ist aus GENAU DIESER messbar-Liste gebaut, ueber die die Schleife laeuft -
-    // deshalb liefert pools.get() hier nie undefined.
     const { pools, fetchTally } = await fetchCostRecordPools(messbar, controls);
     const tally = { measured: 0, incomplete: 0, noEstimate: 0, unavailable: 0, skippedCalls, failed: 0 };
     const sammler = { tally, ttsWarnungen: [], abschluesse: [], nowMs };
     for (const call of messbar) trueOneCall(call, pools.get(call.provider), sammler);
-    // KV2-7: der Faelligkeitslauf ueber ALLE Kandidaten - schliesst auch einen nie
-    // gemessenen Anruf (Abnahme (c): "er bleibt nicht ewig offen").
     schliesseFaelligeOffene(candidates, sammler, { store, config });
-    // EIN Breakdown (coverageBreakdown), aus dem SOWOHL die Quote ALS AUCH die drei
-    // Nebenzaehler abgeleitet werden (KV-M3, G5) - keine zweite Iteration ueber
-    // state.calls, kein zweiter Formel-Ausdruck.
     const coverage = coverageBreakdown(store.load(), nowMs);
     const coveragePercent = percentFromBreakdown(coverage);
-    // KV2-6: die zweite, unabhaengige Kennzahl - Deckung JE TRAEGER aus dem Kosten-Buch
-    // plus der faelligkeits-unabhaengige Herzschlag. Rein synchron, ohne Netz: sie liest
-    // denselben In-Memory-Spiegel und faellt damit nicht unter die PM-5-Zusage.
     const buch = kostenBuchBericht({ state: store.load(), billing: config.billing, nowMs, deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS });
     const kanaele = alarmKanalZeile(betreiberAlarmKanaele({ billing: config.billing, mail: config.mail }));
     logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally, kanaele, buch, erschoepft: retrievable.length - messbar.length, abschluesse: sammler.abschluesse, elReifung });
-    // Ab hier meldet der Sweep - NACH der Bilanz, also ausserhalb der PM-5-Zusage.
     await reportFetchVolume(fetchTally, nowMs);
     for (const warnung of sammler.ttsWarnungen) await reportTtsQuotaFinding(warnung, nowMs);
     await reportCoverage(coveragePercent, coverage, nowMs);
     for (const befund of buch.befunde) await emitFinding(befund.code, befund.detail, nowMs);
-    await reportTariffDrift(store.load(), nowMs); // KV2-10: async, meldet danach das Tarifpaar
+    await reportTariffDrift(store.load(), nowMs);
     return {
       skipped: false,
       candidates: candidates.length,
       coveragePercent,
-      // KV-M3: eigene, coverage-praefigierte Felder - NICHT noEstimate pur, das existiert
-      // bereits in tally (Ergebnis-Bilanz DIESES Sweeps, COST_TRUING_SOURCE.NO_ESTIMATE-
-      // Ausgang) und misst etwas anderes als dieser, ueber ALLE beendeten Calls gebildete
-      // Denominator-Ausschluss (G11: keine Namenskollision mit zwei Bedeutungen).
       coverageNoEstimate: coverage.noEstimate,
       coverageNeverAnswered: coverage.neverAnswered,
       coverageOutsideWindow: coverage.outsideWindow,
