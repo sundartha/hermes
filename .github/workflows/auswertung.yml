@@ -1,0 +1,176 @@
+name: Auswertung
+
+on:
+  schedule:
+    - cron: "13 4 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/auswertung.yml
+      - tools/ziele.mjs
+      - tools/ziele/**
+
+permissions: {}
+
+concurrency:
+  group: auswertung
+  cancel-in-progress: false
+
+jobs:
+  zaehlen:
+    name: Befunde zählen
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+    outputs:
+      ausgang: ${{ steps.zaehlung.outputs.ausgang }}
+      agent: ${{ steps.zaehlung.outputs.agent }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Zählen
+        id: zaehlung
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/ziele.mjs zaehlen --ordner /tmp/ziele
+
+      - name: Zählung hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: zaehlung
+          path: /tmp/ziele/zaehlung
+          retention-days: 90
+          if-no-files-found: ignore
+
+  vorschlagen:
+    name: Mechanismus vorschlagen
+    needs: zaehlen
+    if: needs.zaehlen.outputs.agent == 'ja'
+    runs-on: ubuntu-latest
+    environment: wartung
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Zählung laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: zaehlung
+          path: /tmp/ziele/zaehlung
+
+      - name: Agenten-Programm installieren
+        run: npm ci --ignore-scripts --prefix tools/pruefer
+
+      - name: Vorschlagen lassen
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: node tools/ziele.mjs vorschlagen --ordner /tmp/ziele
+
+      - name: Vorschlag hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vorschlag
+          path: /tmp/ziele/vorschlag
+          retention-days: 90
+          if-no-files-found: ignore
+
+  issue:
+    name: System-Issue schreiben
+    needs: [zaehlen, vorschlagen]
+    if: always() && needs.zaehlen.outputs.ausgang == 'weiter' && needs.vorschlagen.result != 'failure' && needs.vorschlagen.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Teilergebnisse laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          path: /tmp/ziele
+
+      - name: System-Issue schreiben
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/ziele.mjs system-issue --ordner /tmp/ziele
+
+      - name: Issue hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: issue
+          path: /tmp/ziele/issue
+          retention-days: 90
+          if-no-files-found: ignore
+
+  ergebnis:
+    name: Ergebnis
+    needs: [zaehlen, vorschlagen, issue]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Teilergebnisse laden
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          path: /tmp/ziele
+
+      - name: Ergebnis
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_ERGEBNISSE: ${{ toJSON(needs) }}
+        run: node tools/ziele.mjs ergebnis --ordner /tmp/ziele --workflow auswertung
+
+      - name: Ergebnis hochladen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ergebnis
+          path: /tmp/ziele/ergebnis
+          retention-days: 90
