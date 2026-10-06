@@ -12,6 +12,9 @@ const BEFEHLE = new Map([
   ["commit", ["./ziele/pr.mjs", "committe"]],
   ["pr", ["./ziele/pr.mjs", "oeffnePr"]],
   ["ergebnis", ["./ziele/ergebnis.mjs", "befehl"]],
+  ["zaehlen", ["./ziele/auswertung.mjs", "zaehlen"]],
+  ["vorschlagen", ["./ziele/auswertung.mjs", "vorschlagen"]],
+  ["system-issue", ["./ziele/auswertung.mjs", "systemIssue"]],
 ]);
 const WORKFLOWS = new Set(["aufraeumen", "auswertung"]);
 const AUFRUF = [
