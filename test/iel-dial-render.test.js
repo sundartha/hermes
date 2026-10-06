@@ -1,6 +1,3 @@
-// IEL-B7: Dial-Direktive (directives.js), TeXML-Renderer (<Dial><Sip>) und Umleitungs-Port
-// (redirectCall). Rein offline: global.fetch wird gestubbt (Muster test/telnyx-voice.test.js).
-// Die Telnyx-Config wird VOR dem Import gesetzt (dotenv ueberschreibt gesetzte Vars NICHT).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeConfigOverrides } from "./helpers.js";
@@ -13,28 +10,21 @@ const DID = "+4930123456789";
 const TOKEN = "0123456789abcdef0123456789abcdef";
 const STUB_DEFAULT_STATUS = 200;
 const HTTP_UNPROCESSABLE = 422;
-// Dieselben Grenzwerte wie DIAL_TIME_LIMIT_MIN_S/_MAX_S im Renderer (render.js) - hier
-// als Testkonstanten benannt, damit keine nackte Zahl im Testkoerper steht (G25).
 const DIAL_TIME_LIMIT_MIN_S = 60;
 const DIAL_TIME_LIMIT_MAX_S = 14400;
 const FAR_ABOVE_DIAL_TIME_LIMIT_MAX_S = 86400;
-const DEFAULT_TIME_LIMIT_S = 1800; // liegt innerhalb der Grenzen, aendert sich also nicht
-// IEL-B7-S1a-Nachtrag: dieselben Grenzwerte wie DIAL_TIMEOUT_MIN_S/_MAX_S im Renderer
-// (render.js), hier als Testkonstanten benannt (G25).
+const DEFAULT_TIME_LIMIT_S = 1800;
 const DIAL_TIMEOUT_MIN_S = 5;
 const DIAL_TIMEOUT_MAX_S = 600;
 const FAR_ABOVE_DIAL_TIMEOUT_MAX_S = 3600;
-// IEP-P2: eine beispielhafte Ringback-URL (Literal, nicht aus der Konstante abgeleitet).
 const BEGRUESSUNGSLAUT_URL = "https://agent.test/brand/hermes-begruessungslaut.wav";
 const EINMAL = 1;
-// Ein Wert, der kein String ist - die Fail-Richtung des Renderers muss ihn ignorieren.
 const KEIN_STRING_ZAHL = 123;
 
 process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
 process.env.TELNYX_ACCOUNT_SID = ACCOUNT_SID;
 
-// Dynamischer Import NACH dem Env-Setzen (config liest process.env beim Eval).
 const { telnyxVoice } = await import("../src/telephony/adapters/telnyx/voice.js");
 const { renderDirectives } = await import("../src/telephony/adapters/telnyx/render.js");
 const { say, redirect, dialSip } = await import("../src/telephony/directives.js");
@@ -71,7 +61,6 @@ function baueDialSip(overrides = {}) {
   });
 }
 
-// Rendert eine Direktivenliste ohne den XML+<Response>-Rahmen (Vergleichshilfe).
 function renderEinzeln(directives) {
   return renderDirectives(directives).slice((XML + "<Response>").length, -"</Response>".length);
 }
@@ -137,9 +126,6 @@ test("IEL-B7-4: timeLimit keine Zahl -> wirft ohne Wert", () => {
   }
 });
 
-// IEL-B7-S1a-Nachtrag (Review-Blocker Runde 2): timeoutS lief bislang OHNE die Pruef-/
-// Klemm-Funktion durch attrString und erzeugte bei fehlendem Wert woertlich
-// timeout="undefined" im TeXML. Diese beiden Tests decken das ab (Muster IEL-B7-3/-4).
 test("IEL-B7-14: timeout-Grenzen, tabellengetrieben", () => {
   const min = DIAL_TIMEOUT_MIN_S;
   const max = DIAL_TIMEOUT_MAX_S;
@@ -173,7 +159,6 @@ test("IEL-B7-15: fehlendes/kaputtes timeoutS -> wirft statt timeout=\"undefined\
   }
 });
 
-// IEX-A4: answerOnBridge als erstes Dial-Attribut, nur bei ausdruecklichem true.
 test("IEX-A4-3: answerOnBridge true -> erstes Attribut am Dial, Sip unveraendert", () => {
   const inner = renderEinzeln([baueDialSip({ answerOnBridge: true })]);
   assert.equal(
@@ -186,7 +171,7 @@ test("IEX-A4-3: answerOnBridge true -> erstes Attribut am Dial, Sip unveraendert
 });
 
 test("IEX-A4-4: answerOnBridge fehlend, false oder kein Boolean -> byte-gleich zur Bestandsform", () => {
-  const bestand = renderEinzeln([baueDialSip()]); // Literal gepinnt in IEL-B7-1
+  const bestand = renderEinzeln([baueDialSip()]);
   for (const wert of [undefined, false, "true", 1, null]) {
     const inner = renderEinzeln([baueDialSip({ answerOnBridge: wert })]);
     assert.equal(inner, bestand, `answerOnBridge=${JSON.stringify(wert)}`);
@@ -194,7 +179,6 @@ test("IEX-A4-4: answerOnBridge fehlend, false oder kein Boolean -> byte-gleich z
   }
 });
 
-// IEP-P2: ringbackAudioUrl -> Telnyx-Attribut audioUrl, direkt hinter answerOnBridge.
 test("IEP-P2-6: ringbackAudioUrl gesetzt -> audioUrl am Dial, Sip unveraendert", () => {
   const inner = renderEinzeln([baueDialSip({ ringbackAudioUrl: BEGRUESSUNGSLAUT_URL })]);
   assert.equal(
@@ -207,7 +191,7 @@ test("IEP-P2-6: ringbackAudioUrl gesetzt -> audioUrl am Dial, Sip unveraendert",
 });
 
 test("IEP-P2-7: ringbackAudioUrl fehlend, leer oder kein String -> byte-gleich zur Bestandsform", () => {
-  const bestand = renderEinzeln([baueDialSip()]); // Literal gepinnt in IEL-B7-1
+  const bestand = renderEinzeln([baueDialSip()]);
   for (const wert of [undefined, "", false, KEIN_STRING_ZAHL, null]) {
     const inner = renderEinzeln([baueDialSip({ ringbackAudioUrl: wert })]);
     assert.equal(inner, bestand, `ringbackAudioUrl=${JSON.stringify(wert)}`);
@@ -227,7 +211,6 @@ test("IEP-P2-9: ringTone kommt im gerenderten Dial nie vor", () => {
   for (const wert of [undefined, BEGRUESSUNGSLAUT_URL]) {
     assert.ok(!RINGTONE.test(renderEinzeln([baueDialSip({ ringbackAudioUrl: wert })])), String(wert));
   }
-  // Positiv-Kontrolle: sonst waere "kein Treffer" nicht von "sucht nichts" zu unterscheiden.
   assert.ok(RINGTONE.test('<Dial ringTone="us">'));
 });
 

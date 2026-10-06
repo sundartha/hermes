@@ -1,28 +1,3 @@
-// GQ-P13 (Gespraechsqualitaet): keine "Antwort ist DA"-Anweisung ohne Antwort.
-//
-// Befund F2 der Fragilitaets-Analyse: answerConsult (claude.js) setzt consult.status
-// UNBEDINGT auf "answered" - auch dann, wenn mergeContextFacts am geteilten Deckel
-// KEY_FACTS_LIMITS null Fakten aus der Antwort in call.context.key_facts uebernommen hat
-// (z.B. weil der Deckel schon voll war, AL-P13-10). Vorher genuegte allein der Status
-// "answered" ohne deliveredAt, damit consultAnswerAwaitingDelivery true meldete und
-// advanceInCallConsult den Steuertext CONSULT_WAIT.ANSWERED auslieferte - eine Anweisung
-// an das Modell, JETZT eine Auskunft zu nennen, die nirgends im Prompt steht, waehrend
-// derselbe Steuertext jeden ehrlichen Ausweg verbietet (nicht nachfragen, kein Rueckruf,
-// keine Nachricht).
-//
-// Beleg-Kette: mergeContextFacts -> answerConsult (beide claude.js, bewusst UNVERAENDERT -
-// die Spec grenzt sie aus) -> answerAwaitsDelivery (state-ops.js, NEU, GQ-P13) ->
-// consultAnswerAwaitingDelivery + markConsultAnswerDelivered (state-ops.js, beide lesen
-// jetzt DIESELBE Bedingung statt zweier auseinanderlaufender Kopien, G5).
-//
-// Testnamen tragen bewusst KEINE Katalog-ID (GAP-/PROMPT-/...) am Namensanfang - sonst
-// landen sie still im Gates-Lauf, wo Rot erlaubt ist (Lehre
-// catalog-id-prefix-misroutes-tests). Praefix ist "GQ-P13-<n>:".
-//
-// Reine state-ops-Ops auf einem In-Memory-Objekt (kein Store-Wrapper noetig) - Muster
-// al-p12-call-memory.test.js: state-ops.js zieht kein config.js, nur defaults.js/
-// locales.js/crypto, statischer Import ist unproblematisch. Offline, kein Netz, kein
-// Spawn, kein Sleep.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ops from "../src/store/state-ops.js";
@@ -33,9 +8,6 @@ const CALL_ID = "call_gqp13";
 const WAIT_MS = 1_000;
 const OPEN_MS = 300_000;
 
-// Ein Call mit EINGETROFFENER, noch nicht ausgelieferter Rueckfrage-Antwort. askedAt liegt
-// nach call.answeredAt - nur dann zaehlt der Consult als In-Call-Consult
-// (isInCallConsult), und nur In-Call-Consults erreichen das Praedikat.
 function stateWithAnsweredConsult({ answeredFacts = 1, ...consultOverrides } = {}) {
   const call = seedCall({
     id: CALL_ID,

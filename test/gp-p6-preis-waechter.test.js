@@ -1,15 +1,3 @@
-// GP-P6 (PLAN-GELDPFAD.md, "Preis-Waechter Katalog gegen Stripe"): zwei Sicherungen mit
-// getrennter Schwere - (a) ein Katalog-Slug OHNE Stripe-Price-Id bricht bei aktivem
-// Geldpfad den Boot ab (netzfrei, Config gegen Config), (b) ein Katalog-Betrag, der nicht
-// zum Stripe-Price passt, erzeugt einen entprellten Betreiber-Befund.
-//
-// Rein und offline: Fake-Store, injiziertes lesePreis, makeStripeStub fuer die
-// Adapter-Fixtur. Kein Netz, kein Anbieter-Call; nur die beiden Boot-Faelle spawnen den
-// Server (und der spricht dabei ebenfalls mit niemandem).
-//
-// Testnamen tragen bewusst KEINEN Katalog-Praefix (i18nCatalogPattern kennt GAP, nicht GP;
-// abnahmePattern verlangt ABNAHME-) - alle Faelle bleiben im Regressionslauf (Lehre
-// catalog-id-prefix-misroutes-tests).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -29,12 +17,9 @@ const ALERT_MAIL_TO = "ops@example.invalid";
 const MINDESTFRIST_MS = 86_400_000;
 const ENTPRELLUNG_MS = 21_600_000;
 const STUNDE_MS = 3_600_000;
-// Fester Startzeitpunkt statt Date.now(): zwei Laeufe im selben Millisekunden-Tick sind
-// von einem echten zweiten Lauf nicht unterscheidbar (der Marker traegt dieselbe Zeit).
 const T0 = Date.parse("2026-09-11T00:00:00.000Z");
 const HTTP_OK = 200;
 
-// Die gesunden Anbieter-Antworten: exakt das, was der Katalog anzeigt.
 const GESUNDE_PREISE = Object.freeze({
   [STARTER_PRICE]: { unitAmountCents: 499, currency: "eur" },
   [BUSINESS_PRICE]: { unitAmountCents: 999, currency: "eur" },
@@ -49,8 +34,6 @@ function fakeConfig(overrides = {}) {
     stripeBusinessPriceId: BUSINESS_PRICE,
     platformAlertMailTo: ALERT_MAIL_TO,
     platformAlertSmsTo: ALERT_SMS_TO,
-    // Produktions-Defaults der geteilten Entprellung (6 h / 15 min) - damit "zweiter Lauf
-    // knapp nach der Mindestfrist" deterministisch entprellt wird (Muster W-6).
     outageAlertDebounceMs: ENTPRELLUNG_MS,
     outageAlertRetryMs: 900_000,
     ...overrides,
@@ -72,8 +55,6 @@ function fakeStore(alerts = []) {
   };
 }
 
-// Baut Waechter + Protokoll in EINEM Schritt (G5: sonst stuende dieses Buendel in jedem
-// Fall erneut). preise: priceId -> Messung; alternativ eine Funktion fuer Fehlerfaelle.
 function baueWaechter({ preise = GESUNDE_PREISE, config: cfg = fakeConfig(), store = fakeStore() } = {}) {
   const protokoll = { audit: [], mails: 0, sms: 0, abrufe: [] };
   const lesePreis = async (priceId) => {
@@ -97,8 +78,6 @@ function baueWaechter({ preise = GESUNDE_PREISE, config: cfg = fakeConfig(), sto
     },
     lesePreis,
   };
-  // watch: der Weg, den boot.js geht (Fabrik, eigene Uhr). lauf(nowMs): derselbe Kern mit
-  // gestellter Uhr - fuer jeden Fall, der ZWEI Laeufe zu verschiedenen Zeiten braucht.
   return {
     watch: makePriceDriftWatch(deps),
     lauf: (nowMs) => runPriceDriftSweep({ ...deps, anlass: "test", nowMs }),
@@ -108,7 +87,6 @@ function baueWaechter({ preise = GESUNDE_PREISE, config: cfg = fakeConfig(), sto
   };
 }
 
-// Lese-Helfer (G36): kein vierfach verkettetes store.load().outageAlerts.find(...).
 function offeneMarker(store) {
   const alerts = store.load().outageAlerts;
   return alerts.filter((alert) => alert.closedAt === null).map((alert) => alert.code);
@@ -116,9 +94,6 @@ function offeneMarker(store) {
 
 const preisAudit = (protokoll) => protokoll.audit.filter((aktion) => aktion.startsWith("price_drift"));
 
-// ---------------------------------------------------------------------------------------
-// P6-0: Positiv-Kontrolle - ein Waechter, der alles meldet, besteht jeden Negativ-Test
-// ---------------------------------------------------------------------------------------
 test("GP-P6: P6-0 gesunde Preise -> KEIN Befund, KEIN Marker, aber die Umfangszeile existiert", async () => {
   const zeilen = [];
   const originalLog = console.log;
@@ -139,9 +114,6 @@ test("GP-P6: P6-0 gesunde Preise -> KEIN Befund, KEIN Marker, aber die Umfangsze
   );
 });
 
-// ---------------------------------------------------------------------------------------
-// Abnahme 1: eine echte Abweichung wird gemeldet
-// ---------------------------------------------------------------------------------------
 test("GP-P6: P6-1 Stripe bucht 599 statt der angezeigten 499 -> genau EIN Marker, EINE Audit-Zeile, EINE Mail, EINE SMS", async () => {
   const { watch, protokoll, store } = baueWaechter({
     preise: { ...GESUNDE_PREISE, [STARTER_PRICE]: { unitAmountCents: 599, currency: "eur" } },
@@ -153,15 +125,8 @@ test("GP-P6: P6-1 Stripe bucht 599 statt der angezeigten 499 -> genau EIN Marker
   assert.equal(protokoll.sms, 1);
 });
 
-// ---------------------------------------------------------------------------------------
-// Abnahme 2: Entprellung und Single-Flight
-// ---------------------------------------------------------------------------------------
 test("GP-P6: P6-2 unveraenderte Abweichung im naechsten Lauf INNERHALB der Entprellung -> KEIN zweiter Versand, Marker bleibt frisch", async () => {
   const { lauf, protokoll, store } = baueWaechter({
-    // Mindestfrist bewusst KUERZER als die Entprellung (Muster W-6): nur so misst dieser
-    // Fall den Lauf INNERHALB des Entprell-Fensters. Der Produktions-Takt ist laenger als
-    // die Entprellung - ein UNGELOESTER Drift meldet sich dort taeglich erneut, und das
-    // ist gewollt (Pre-Mortem 2).
     config: fakeConfig({ priceDriftMinIntervalMs: STUNDE_MS }),
     preise: { ...GESUNDE_PREISE, [STARTER_PRICE]: { unitAmountCents: 599, currency: "eur" } },
   });
@@ -182,9 +147,6 @@ test("GP-P6: P6-2b zweiter Lauf INNERHALB der Mindestfrist -> lesePreis wird gar
   assert.equal(protokoll.abrufe.length, nachErstemLauf, "der zweite Lauf darf den Anbieter nicht erneut befragen");
 });
 
-// ---------------------------------------------------------------------------------------
-// Abnahme 3: Unwissenheit wird gezaehlt, GENAU EINMAL eskaliert und wieder zurueckgesetzt
-// ---------------------------------------------------------------------------------------
 const werfendesLesen = () => {
   throw new Error("Stripe retrievePriceAmount fehlgeschlagen (HTTP 401)");
 };
@@ -247,9 +209,6 @@ test("GP-P6: P6-3c ein unbekannter Lauf schliesst einen offenen Preis-Befund NIC
   );
 });
 
-// ---------------------------------------------------------------------------------------
-// Abnahme 4/5: der Boot-Guard (a)
-// ---------------------------------------------------------------------------------------
 const PAY_BOOT_ENV = Object.freeze({
   PAYMENT_ENABLED: "true",
   STRIPE_SECRET_KEY: "sk_test_x",
@@ -281,9 +240,6 @@ test("GP-P6: P6-5 ohne aktiven Geldpfad sind leere Price-Ids folgenlos - der Die
   }
 });
 
-// ---------------------------------------------------------------------------------------
-// P6-6: Rollback-Hebel und Trennung der Marker-Raeume
-// ---------------------------------------------------------------------------------------
 test("GP-P6: P6-6 Mindestfrist 0 bzw. Payment aus -> lesePreis wird NIE gerufen (Rollback-Hebel)", async () => {
   const aus = baueWaechter({ config: fakeConfig({ priceDriftMinIntervalMs: 0 }) });
   await aus.watch.runPriceDriftSweep();
@@ -302,9 +258,6 @@ test("GP-P6: P6-6 die Marker des Preis-Waechters liegen in einem eigenen Raum (w
   }
 });
 
-// ---------------------------------------------------------------------------------------
-// P6-7: der rein lesende Adapter
-// ---------------------------------------------------------------------------------------
 const SECRET = "sk_test_gpp6";
 const withStripeStub = makeStripeStub(config, SECRET);
 const okJson = (body) => ({ ok: true, status: 200, json: async () => body });
@@ -348,9 +301,6 @@ test("GP-P6: P6-7 Nicht-2xx -> wirft mit Status, OHNE Schluessel in der Meldung"
   );
 });
 
-// ---------------------------------------------------------------------------------------
-// P6-8: das reine Praedikat des Boot-Guards
-// ---------------------------------------------------------------------------------------
 test("GP-P6: P6-8 unpricedPlanSlugs nennt genau die Slugs ohne Price-Id", () => {
   const alle = { starter: STARTER_PRICE, business: BUSINESS_PRICE };
   assert.deepEqual(unpricedPlanSlugs(CATALOG_SLUGS, (slug) => alle[slug]), []);

@@ -1,13 +1,6 @@
-// GQ-P4: Teil B (state-ops.js addActionItem + claude.js execTool take_message) - keine
-// inhaltsgleiche Nachricht desselben Calls zweimal anlegen (Befund B-6: acht identische
-// take_message-Aufrufe am Beleg-Anruf call_msczdf1aadbw). Zwei Ebenen: (a) reine
-// Store-Ebene gegen einen Handzustand, (b) Werkzeug-Ebene ueber execTool (Muster
-// test/bridge-openai-event.test.js: env setzen, DANN dynamisch importieren).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ops from "../src/store/state-ops.js";
-
-// ---- (a) reine Store-Ebene ----
 
 function handState() {
   return { calls: [{ id: "c1", actionItemIds: [] }, { id: "c2", actionItemIds: [] }], actionItems: [] };
@@ -68,8 +61,6 @@ test("GQ-P4/B1 Grenzfaelle", () => {
   assert.equal(s.actionItems.length, 1, "null/undefined/'' normalisieren auf dieselbe leere Nachricht");
   assert.equal(r.duplicate, true);
 });
-
-// ---- (b) Werkzeug-Ebene (execTool) ----
 
 const { BASE_ENV, tempDataDir, seedState, seedCall } = await import("./helpers.js");
 

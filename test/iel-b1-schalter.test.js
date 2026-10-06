@@ -1,8 +1,3 @@
-// IEL-B1: Schalter, Tenant-Allowlist, Zugangs-Env fuer den ElevenLabs-Inbound-Weg. Deckt
-// das Praedikat (inboundElPathFor/inboundElAccessDefects), den neuen Boot-Riegel
-// (elInboundAccessFindings), das Config-Parsing, die Env-Kohaerenz (config.js/.env.example/
-// render.yaml/BASE_ENV), die Sondenzeile und die Banner-Zeile. Kein Testname traegt eine
-// Katalog-ID am Namensanfang - alle landen in npm test (Regressionsschutz).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -35,7 +30,6 @@ import {
 const GEPINNT = "tenant_iel_gepinnt";
 const FREMD = "tenant_iel_fremd";
 const SPEC_MINDESTLAENGE = 32;
-// 31 Zeichen (Mindestlaenge - 1) - der Grenzfall, der als NICHT gueltig gilt.
 const SENTINEL_PASSWORT = "ielb1-geheim-pw-".padEnd(SIP_PASSWORD_MIN_LENGTH - 1, "z");
 const SENTINEL_TOKEN = "ielb1-geheim-tk-".padEnd(INIT_WEBHOOK_TOKEN_MIN_LENGTH - 1, "z");
 const DID = "+493000001188";
@@ -56,7 +50,6 @@ function inboundConfig(overrides = {}) {
   };
 }
 
-// ---- Praedikat (tabellengetrieben) ------------------------------------------------
 const PRAEDIKAT_FAELLE = [
   { name: "aus", overrides: { enabled: false }, tenantId: GEPINNT, erwartet: false },
   { name: "enabled als String", overrides: { enabled: "true" }, tenantId: GEPINNT, erwartet: false },
@@ -92,7 +85,6 @@ test("IEL-B1-2: die Mindestlaengen sind exakt die Spec-Vorgabe (32)", () => {
   assert.equal(INIT_WEBHOOK_TOKEN_MIN_LENGTH, SPEC_MINDESTLAENGE);
 });
 
-// ---- elInboundAccessDefects (rein) -------------------------------------------------
 test("IEL-B1-3a: Schalter aus liefert keine Maengel", () => {
   assert.deepEqual(inboundElAccessDefects(inboundConfig({ enabled: false }).voice.elevenLabsInbound), []);
 });
@@ -122,7 +114,6 @@ test("IEL-B1-3c: Benutzer leer + Passwort/Token zu kurz - genau ein Sentinel-Bef
   assert.equal(defekte[2].mangel, ZUGANG_MANGEL.ZU_KURZ);
 });
 
-// ---- Boot-Riegel (Spawn) -----------------------------------------------------------
 test("IEL-B1-4: Schalter an, Token fehlt - Boot-Refusal nennt genau diesen Schluessel", async () => {
   const { code, output } = await startServerExpectExit({
     env: {
@@ -169,7 +160,6 @@ test("IEL-B1-3c/EL_INBOUND_ACCESS_FINDING: der Befund-Code ist der erwartete Kon
   assert.equal(EL_INBOUND_ACCESS_FINDING.INCOMPLETE, "el_inbound_access_incomplete");
 });
 
-// ---- Konfig-Parsing (Kindprozess, Muster fx-single-source-fallback-wiring) ---------
 function readBuiltInboundConfig(overrides = {}) {
   const env = { PATH: process.env.PATH, ...BASE_ENV, ...overrides, NODE_ENV: "test" };
   const script =
@@ -214,7 +204,6 @@ test("IEX-A9-8: Scope-Parsing - Default allowlist, getrimmt, unbekannter Wert bl
   assert.equal(readBuiltInboundConfig({ ELEVENLABS_INBOUND_SCOPE: "alle" }).scope, "alle");
 });
 
-// ---- Env-Kohaerenz (Dateilesen, kein Konfig-Import) --------------------------------
 const ENV_KOHAERENZ_SCHLUESSEL = [
   "ELEVENLABS_INBOUND_TENANT_IDS",
   "ELEVENLABS_INBOUND_SIP_USER",
@@ -231,9 +220,6 @@ test("IEL-B1-8: alle vier Schluessel stehen kohaerent in config.js, .env.example
   const envExample = readRepoFile(".env.example");
   const renderYaml = readRepoFile("render.yaml");
 
-  // Positiv-Kontrolle: die Regeln finden bei einem BEKANNT vorhandenen Schluessel etwas -
-  // sonst waere "kein Treffer" nicht von "sucht gar nicht" zu unterscheiden (Lehre
-  // pruefkommando-ohne-positiv-kontrolle).
   assert.ok(configJs.includes("process.env.OWNER_SELF_CALL_TENANT_IDS"));
   assert.match(envExample, /^OWNER_SELF_CALL_TENANT_IDS=\s*(#.*)?$/m);
   assert.match(renderYaml, /key:\s*OWNER_SELF_CALL_TENANT_IDS\s*\n\s*sync:\s*false/);
@@ -255,7 +241,6 @@ test("IEX-A9-9: ELEVENLABS_INBOUND_SCOPE steht kohaerent in config.js, .env.exam
   const envExample = readRepoFile(".env.example");
   const renderYaml = readRepoFile("render.yaml");
 
-  // Positiv-Kontrolle (Muster IEL-B1-8): ein bekannt vorhandener Schluessel mit Enum-Default.
   assert.ok(configJs.includes("process.env.STT_PROFILE"));
 
   assert.ok(configJs.includes("process.env.ELEVENLABS_INBOUND_SCOPE"));
@@ -264,7 +249,6 @@ test("IEX-A9-9: ELEVENLABS_INBOUND_SCOPE steht kohaerent in config.js, .env.exam
   assert.equal(BASE_ENV.ELEVENLABS_INBOUND_SCOPE, "");
 });
 
-// ---- Sondenzeile (rein) -------------------------------------------------------------
 test("IEL-B1-9: leere Allowlist, keine Nummern - keine aktive DID", () => {
   const zeile = inboundElAllowlistProbeLine({ state: { numbers: [] }, tenantIds: [] });
   assert.equal(zeile, "Inbound-EL-Allowlist: 0 Tenants, keine aktive DID");
@@ -313,7 +297,6 @@ test("IEL-B1-13: doppelter Allowlist-Eintrag zaehlt einmal", () => {
   assert.ok(zeile.startsWith("Inbound-EL-Allowlist: 1 Tenants, "));
 });
 
-// ---- Banner (rein) -------------------------------------------------------------------
 test("IEL-B1-14: Banner-Zeile - aus/an, Anzahl, Scope (IEX-A9), nie eine Tenant-ID", () => {
   assert.equal(
     inboundElBannerLine({ enabled: false, tenantIds: [], scope: INBOUND_EL_SCOPE.ALLOWLIST }),
@@ -328,7 +311,6 @@ test("IEL-B1-14: Banner-Zeile - aus/an, Anzahl, Scope (IEX-A9), nie eine Tenant-
   assert.ok(!zeileAn.includes(GEPINNT));
 });
 
-// ---- Spawn-Verdrahtung (zwei echte Server) --------------------------------------------
 test("IEL-B1-15: die Allowlist-Sondenzeile ist unabhaengig vom Schalter byte-gleich, Banner unterscheidet sich", async () => {
   const seed = seedWithTelnyxNumber();
   const srvAus = await startServer({

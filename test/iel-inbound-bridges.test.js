@@ -1,9 +1,3 @@
-// ---- IEL-B6: Fristen der wartenden Inbound-EL-Bruecken (inbound-bridges.js) ---------------
-// Im Prozess (20-27): Fake-Timer als Warteschlange, feste Uhr, Store ueber die echten
-// state-ops-Mutatoren (storeOpsFacade). Kindprozess (28): der Boot re-armiert die aeussere
-// Frist und die Wirkung laeuft ueber die echte Verdrahtung in server.js.
-//
-// Namen beginnen mit "IEL-B6-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -30,16 +24,12 @@ import {
 } from "./helpers.js";
 import { CONV_ID, INBOUND_FROM, INBOUND_TO, TRAEGER_SID, seedWartenderElCall } from "./_iel-inbound-harness.js";
 
-// Die Uhr steht OFFSET_MS nach dem Abheben - die Restfrist ist damit exakt vorhersagbar.
 const OFFSET_MS = 5000;
 const FRISCH_BEANTWORTET_S = 1;
 const LANGE_HER_S = 3600;
 const UNLESBAR = "kein-zeitpunkt";
 const BEIDE_FRISTEN = 2;
 
-// ---- Build ------------------------------------------------------------------------------------
-
-// Fake-Timer: jeder setTimer-Aufruf wird ein Auftrag; geloeschte Auftraege feuern nie.
 function fakeTimer() {
   const auftraege = [];
   const geloescht = new Set();
@@ -84,8 +74,6 @@ function wartenderZustand({ answeredVorS = FRISCH_BEANTWORTET_S } = {}) {
 }
 
 const rueckfallUrlFuer = (callId) => `/voice/el-rueckfall?callId=${callId}&quelle=frist`;
-
-// ---- Armieren und Ablauf ----------------------------------------------------------------------
 
 test("IEL-B6-20: armDeadlines armiert die Restfrist ab answeredAt; Ablauf leitet genau einmal mit quelle=frist um", () => {
   const { state, call, nowMs } = wartenderZustand();
@@ -152,8 +140,6 @@ function budgetCall(state) {
   });
 }
 
-// ---- Neustart ---------------------------------------------------------------------------------
-
 function neustartZustand() {
   const { state, call, nowMs } = wartenderZustand();
   const gebunden = seedWartenderElCall(state, { answeredVorS: FRISCH_BEANTWORTET_S });
@@ -202,8 +188,6 @@ test("IEL-B6-26: EL_RUECKFALL_QUELLE und elRueckfallUrl sind gepinnt (einzige Qu
   );
 });
 
-// ---- Wirkung: umleiten oder auflegen ----------------------------------------------------------
-
 const WIRKUNG_URL = "https://agent.test/voice/el-rueckfall?callId=call_w&quelle=frist";
 const WIRKUNG_CALL = Object.freeze({ id: "call_w", provider: "telnyx", twilioSid: TRAEGER_SID });
 
@@ -245,8 +229,6 @@ test("IEL-B6-27c: auch ein werfendes Auflegen laesst die Wirkung erfuellen und w
   });
   assert.ok(zeilen.some((zeile) => zeile.startsWith(`[el-inbound] auflegen_fehlgeschlagen call=${WIRKUNG_CALL.id}`)));
 });
-
-// ---- Verdrahtung am echten Server -------------------------------------------------------------
 
 const SPAWN_CALL_ID = "call_iel_b6_frist";
 const PUFFER_MS = 5000;

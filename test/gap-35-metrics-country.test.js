@@ -1,8 +1,3 @@
-// GAP-35 (Katalog: tasks/i18n-tests/11-luecken-und-e2e.md, Abschnitt "GAP-35").
-// Telemetrie muss Land und Sprache tragen, sobald mehr als ein Land im Gate steht -
-// sonst gibt es keine Log-Zeile, die einen laenderspezifischen Totalausfall sichtbar
-// macht. Gefixt in P1: src/metrics.js (logCallDenied), src/telephony/outbound-gates.js
-// (denialAudit traegt grund als eigenes Feld), src/routes/api-calls.js (Denial-Senke).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
@@ -67,13 +62,8 @@ test("das Ablehnungs-Ereignis schweigt bei METRICS_ENABLED=false (GAP-35)", () =
   assert.equal(logged.length, 0);
 });
 
-// === Gate-Ebene: jeder auditierte Deny traegt grund als eigenes Feld =================
-
 function defaultStore() {
   return {
-    // P15/T2: die Gate-Kette liest die Anzeigesprache der Ablehnung aus dem Store. Dieser
-    // Test prueft ausschliesslich die sprachfreie Audit-Achse (grund) - die Sprache wird
-    // trotzdem explizit gesetzt, damit der Fake die reale Kontraktflaeche spiegelt.
     tenantLanguage: () => "de",
     countOutboundCallsSince: () => 0,
     tenantPrivateNumber: () => null,
@@ -89,7 +79,6 @@ function defaultStore() {
       allowedNumbers: [],
     }),
     tenantInactive: () => false,
-    // GAP-03: kein Zahlungsbeanstandungs-Hold (vollstaendig durchsteuerbarer Default-Store).
     billingHoldActive: () => null,
     tenantActiveSubscriber: () => true,
     tenantSubscription: () => ({}),
@@ -149,7 +138,6 @@ function baseCtx(overrides = {}) {
 }
 
 test("jeder auditierte Deny traegt den Grund als eigenes Feld (GAP-35)", async () => {
-  // outbound_frozen
   {
     const deps = makeDeps({ config: { outboundFrozen: true } });
     const { gates } = makeOutboundGates(deps);
@@ -157,7 +145,6 @@ test("jeder auditierte Deny traegt den Grund als eigenes Feld (GAP-35)", async (
     assert.equal(denial.audit.grund, "frozen");
     assert.ok(denial.audit.detail.includes("grund=frozen"));
   }
-  // number_gate (Land)
   {
     const deps = makeDeps({ config: { allowedCountryCodes: ["+33"] } });
     const { gates } = makeOutboundGates(deps);
@@ -165,7 +152,6 @@ test("jeder auditierte Deny traegt den Grund als eigenes Feld (GAP-35)", async (
     assert.equal(denial.audit.grund, "land");
     assert.ok(denial.audit.detail.includes("grund=land"));
   }
-  // budget (Tenant-Achse)
   {
     const deps = makeDeps({ store: { budgetExceeded: () => true } });
     const { gates } = makeOutboundGates(deps);
@@ -174,8 +160,6 @@ test("jeder auditierte Deny traegt den Grund als eigenes Feld (GAP-35)", async (
     assert.ok(denial.audit.detail.includes("grund=budget_tenant"));
   }
 });
-
-// === End-to-End: Spawn-Server, echte Land-Ablehnung ==================================
 
 test("eine Land-Ablehnung erzeugt eine call_denied-Zeile mit Land und Sprache (GAP-35)", async () => {
   const seed = seedState({
@@ -204,8 +188,6 @@ test("eine Land-Ablehnung erzeugt eine call_denied-Zeile mit Land und Sprache (G
     assert.equal(payload.grund, "land");
     assert.equal(payload.country, "DE");
     assert.equal(payload.language, "de");
-    // Nur das call_denied-Ereignis muss PII-frei sein - der bestehende audit()-Log traegt
-    // to= bewusst (Forensik, unveraendert von dieser Phase).
     assert.ok(!match[1].includes("+12025550143"), "Zielnummer darf nicht in der call_denied-Zeile stehen");
   } finally {
     await srv.stop();

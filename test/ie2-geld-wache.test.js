@@ -1,22 +1,3 @@
-// IE2 (PLAN-INBOUND-PARITAET.md, "Die Geld-Achse bekommt einen Herzschlag"): der
-// wiederkehrende Geld-Waechter. B8 war der Befund: blockingBudgetAxis wird nur aus vier
-// EREIGNISGEBUNDENEN Stellen gefragt (Turn-Runde, Shim-Turn, EL-Werkzeug-Webhook,
-// /voice/*-Re-Attach) - ein Anruf ohne Turn und ohne Werkzeugaufruf erreicht die
-// pro-Tenant-Decke NIE. Genau diesen Fall gab es bisher als Test nicht.
-//
-// Gefahren wird gegen die ECHTE Verdrahtung (Muster und Begruendung: test/budget-failure-
-// reason.test.js): makeCallLifecycle() + der echte reattachActiveCallCore + die echte
-// blockingBudgetAxis + die echte terminateAndBillCall/hangUpAction/billThunk. Gefaelscht
-// sind nur die beiden Geld-Achse-Primitiven des Stores (activeCallsFor/liveBudgetExceeded) -
-// nicht die Entscheidung selbst.
-//
-// Zwei Uhren, zwei Listen, keine Wanduhr (P12 Repeatable, T9 Fast):
-//   budgetTimers - der TAKT der Geld-Wache, ueber den DI-Parameter setBudgetWatchTimer.
-//   capTimers    - der Max-Dauer-Cap, der bewusst NICHT injizierbar ist (Begruendung an
-//                  der Signatur in call-lifecycle.js). Er wird fuer die Dauer EINES Tests
-//                  ueber die globale Uhr eingefangen und in finally zurueckgegeben. Ohne
-//                  das haengt die Datei an einem echten 180-s-setTimeout, den kein Test
-//                  mehr abraeumen kann (gemessen: node --test wartet die volle Frist ab).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -29,16 +10,12 @@ import { blockingBudgetAxis, BUDGET_AXIS } from "../src/budget-gate.js";
 import { cappedEndedAtMs, classifyCallTime } from "../src/store/state-ops.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
-const TAKT_MS = 15000; // derselbe Wert, den config.js ausliefert
-const TAKT_AUS = 0; // dokumentierter Rueckfall-Hebel
+const TAKT_MS = 15000;
+const TAKT_AUS = 0;
 const MAX_DURATION_S = 180;
-const RECENTLY_STARTED_MS = 30000; // 30 s, deutlich unter MAX_DURATION_S -> NICHT expired
+const RECENTLY_STARTED_MS = 30000;
 const TERMINATION_ORDER = ["recordFailureReason", "setCallEndedAt", "endCall", "bill"];
 
-// Der Anruf-Datensatz UND sein Spy-Store entstehen gemeinsam in makeHarness: der Store
-// schreibt beim Terminalisieren an den Datensatz (setCallEndedAt/recordFailureReason), und
-// genau dieser Datensatz ist danach der Pruefgegenstand. Gefaelscht sind nur die beiden
-// Geld-Achse-Primitiven (activeCallsFor/liveBudgetExceeded) - nicht die Entscheidung.
 function makeHarness({
   callId = "call_ie2",
   intervalMs = TAKT_MS,
@@ -51,8 +28,6 @@ function makeHarness({
     status: "active",
     provider: "telnyx",
     twilioSid: "CA_ie2",
-    // Inbound: die Richtung, die B8 ueberhaupt erst zum Befund gemacht hat (ein Anrufer,
-    // der nur eine Nachricht hinterlaesst, erzeugt weder Turn noch Werkzeugaufruf).
     direction: "inbound",
     startedAt: new Date(Date.now() - RECENTLY_STARTED_MS).toISOString(),
     maxDurationS: MAX_DURATION_S,
@@ -89,17 +64,17 @@ function makeHarness({
     finishCall: () => {
       order.push("bill");
       settleBill();
-    }, // Settlement-Latch statt Timer-Warten
+    },
     releaseReserve: () => {},
     voiceControl: () => ({
       async endCall() {
         order.push("endCall");
       },
     }),
-    terminateAndBillCall, // echte Orchestrierung (Reihenfolge ist Pruefgegenstand)
+    terminateAndBillCall,
     hangUpAction,
     billThunk,
-    reattachActiveCallCore, // echter Kern (reattach.js), kein Spy
+    reattachActiveCallCore,
     cappedEndedAtMs,
     classifyCallTime,
     blockingBudgetAxis: budgetAxis,
@@ -111,9 +86,6 @@ function makeHarness({
   return { lifecycle, call, order, budgetTimers, capTimers, billed };
 }
 
-// Faengt die NICHT injizierbaren Cap-Timer fuer die Dauer des Testkoerpers ein (s.
-// Dateikopf). Wiederherstellung in finally - die Tests einer Datei laufen bei node:test
-// sequenziell, die Ersetzung reicht also nie in einen anderen Test hinein.
 async function withCapturedCapTimers(harness, body) {
   const realSetTimeout = globalThis.setTimeout;
   globalThis.setTimeout = (fn, ms) => {
@@ -127,9 +99,6 @@ async function withCapturedCapTimers(harness, body) {
   }
 }
 
-// Eine Takt-Runde: den zuletzt gestellten Timer feuern und die Microtasks der
-// (asynchronen) Runde ausspielen. setImmediate statt setTimeout - es ueberlebt die
-// eingefangene globale Uhr.
 async function fireLatest(timers) {
   const timer = timers.pop();
   assert.ok(timer, "es muss ein Timer gestellt sein, um ihn feuern zu koennen");
@@ -177,7 +146,6 @@ test("IE2-3: Geld-Wache und Max-Dauer-Cap ergeben GENAU EINE Terminalisierung", 
     harness.lifecycle.armMaxDurationTimer(call, call.twilioSid);
     await fireLatest(harness.budgetTimers);
     await harness.billed;
-    // Jetzt der ZEIT-Pfad auf denselben, inzwischen beendeten Anruf.
     await fireLatest(harness.capTimers);
   });
   assert.deepEqual(harness.order, TERMINATION_ORDER, "der Cap fuegt keine zweite Runde hinzu");
@@ -243,7 +211,6 @@ test("IE2-7: wirft die Achse, stirbt die Wache nicht - die Runde wird neu gestel
       assert.equal(call.status, "active", "eine gescheiterte Runde terminalisiert nichts");
       assert.equal(errorLines.length, 1, "genau EINE Fehlerzeile");
       assert.equal(harness.budgetTimers.length, 1, "die Wache stellt sich neu");
-      // Runde 2: die Achse antwortet wieder - und sperrt.
       await fireLatest(harness.budgetTimers);
       await harness.billed;
     });

@@ -1,12 +1,3 @@
-// GAP-07 (Katalog: tasks/i18n-tests/11-luecken-und-e2e.md, Abschnitt "GAP-07").
-// Eine Fruehwarnung ohne Empfaenger ist keine Sicherung: bei PAYMENT_ENABLED=true UND
-// PLATFORM_SPEND_WARN_PERCENT>0 UND leerem PLATFORM_ALERT_SMS_TO darf der Boot NICHT
-// durchlaufen. Umgesetzt in P6: alertChannelFindings liefert fuer genau diese Konjunktion
-// einen fatal:true-Befund, den assertConfig() in seine Fatal-Menge faltet. Rein, offline
-// (Muster test/config-payment-guard.test.js: assertConfig() direkt am config-Singleton).
-//
-// A3: die Testnamen tragen KEINE Katalog-ID mehr - die Faelle sind seit P6 gruener
-// Regressionsschutz und gehoeren damit in `npm test`, nicht in `test:gates`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config, assertConfig } from "../src/config.js";
@@ -22,8 +13,6 @@ const REQUIRED_OK = {
   numberSetupFeeCents: 100,
 };
 
-// Faengt console.error waehrend fn ab (Muster test/boot-guard.test.js captureErrAsync):
-// restauriert IMMER, auch bei Wurf.
 function captureErr(fn) {
   const logs = [];
   const orig = console.error;

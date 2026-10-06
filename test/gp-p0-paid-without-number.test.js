@@ -1,8 +1,3 @@
-// GP-P0 (PLAN-GELDPFAD.md 2, "Sichtbarkeit: zahlender Mandant ohne Nummer"): deckt den
-// reinen Selektor (paidWithoutNumberCandidates, state-ops.js) UND den Sweep-Zweig
-// (runPaidWithoutNumberSweep, billing/paid-without-number-watch.js) - Muster
-// prov01-classify.test.js (Selektor) + platform-number-hold-eskalation.test.js (Sweep
-// mit In-Process-Attrappen). Kein Spawn, kein Netz, kein Anbieter.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { paidWithoutNumberCandidates } from "../src/store/state-ops.js";
@@ -15,10 +10,10 @@ import { TENANT_STATUS, KYC_LEVEL, NUMBER_STATUS, PROVIDER } from "../src/store/
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const NOW_MS = Date.parse("2026-09-11T12:00:00.000Z");
-const GRACE_MS = 3600000; // 1 h, = Default
-const SEC = 1000; // Sekunden<->Millis, benannt (G25)
-const ZWEI_FRISTEN = 2; // deutlich aelter als die Frist (G25: benannt statt nackter 2)
-const HALBE_FRIST_TEILER = 2; // Frist/2 = juenger als die Frist (G25: benannt statt nackter 2)
+const GRACE_MS = 3600000;
+const SEC = 1000;
+const ZWEI_FRISTEN = 2;
+const HALBE_FRIST_TEILER = 2;
 const periodStartSec = (msVorJetzt) => Math.floor((NOW_MS - msVorJetzt) / SEC);
 
 const tenant = (overrides = {}) => ({
@@ -47,8 +42,6 @@ const state = ({ tenants = [tenant()], numbers = [nummer()], outageAlerts = [] }
 
 const selectCandidates = (testState, graceMs = GRACE_MS) =>
   paidWithoutNumberCandidates(testState, { nowMs: NOW_MS, graceMs, kycMinLevel: KYC_LEVEL.CARD });
-
-// ---- Selektor -------------------------------------------------------------------------
 
 test("GP-P0 Selektor: aktiver Subscriber + Nummer failed + aelter als Frist -> GENAU EIN Kandidat", () => {
   const kandidaten = selectCandidates(state());
@@ -84,16 +77,12 @@ test("GP-P0 Selektor: kein Stripe-Anker (Owner/Bootstrap) -> fail-closed NULL Ka
 });
 
 test("GP-P0 Selektor: nur currentPeriodEnd vorhanden -> Anker wird abgeleitet, EIN Kandidat", () => {
-  // Ende liegt (relativ zu jetzt) in der Zukunft, der abgeleitete Start damit rund
-  // einen Monat davor - deutlich aelter als GRACE_MS.
   const periodEndSec = periodStartSec(-ZWEI_FRISTEN * GRACE_MS);
   const kandidaten = selectCandidates(
     state({ tenants: [tenant({ stripeCurrentPeriodStart: null, stripeCurrentPeriodEnd: periodEndSec })] }),
   );
   assert.equal(kandidaten.length, 1);
 });
-
-// ---- Sweep ------------------------------------------------------------------------------
 
 function makeStore(initialState) {
   let currentState = initialState;

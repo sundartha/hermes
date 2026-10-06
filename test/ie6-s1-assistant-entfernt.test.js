@@ -1,8 +1,3 @@
-// IE6-S1: Testpflicht "neu" - nicht nur abgeschaltet, sondern NICHT ERREICHBAR. Alte
-// Assistant-Schalter werden ausdruecklich AN gesetzt; der Boot muss trotzdem sauber
-// durchlaufen (kein Pflichtbefund mehr) und die entfernten Routen/Zweige duerfen keine
-// Spur hinterlassen. Server-Start nur ueber test/helpers.js#startServer (Lehre
-// test-base-env-drift).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -18,9 +13,6 @@ import {
 const HTTP_NOT_FOUND = 404;
 const HTTP_OK = 200;
 
-// Alte Assistant-Schalter, ausdruecklich AN - der Boot muss trotzdem durchlaufen (kein
-// Pflichtbefund mehr, keine Route mehr) und /v1/chat/completions bleibt unauffindbar,
-// unabhaengig vom Env-Wert.
 const ALTE_ASSISTANT_SCHALTER_AN = Object.freeze({
   TELNYX_AI_ASSISTANT_ENABLED: "true",
   TELNYX_INBOUND_HANDOFF_ENABLED: "true",
@@ -81,8 +73,6 @@ test("IE6-S1-3: Inbound bei gesetzten Alt-Schaltern bleibt byte-identisch zu ein
     assert.equal(contentType.split(";")[0], "text/xml");
     const xmlAlt = await resAlt.text();
     const xmlClean = await resClean.text();
-    // Normalisierung: callId=call_... und turnToken=... unterscheiden sich zwischen
-    // den zwei Servern (server-generiert, zufaellig).
     assert.equal(
       normalizeIncomingTexml(xmlAlt),
       normalizeIncomingTexml(xmlClean),
@@ -135,8 +125,6 @@ test("IE6-S1-6: logInboundPath schreibt genau eine byte-gleiche Zeile; INBOUND_P
     console.log = original;
   }
   assert.deepEqual(lines, ['[inbound-path] inbound_path {"callId":"call_a","path":"budget"}']);
-  // IEL-B8 ergaenzt den Uebergabe-Pfad, IEX-A9 die Abweisung, wie inbound-path.js es vorsieht; der geloeschte
-  // Assistant-Token bleibt weg.
   assert.deepEqual(Object.keys(INBOUND_PATH), ["BUDGET", "ELEVENLABS", "ABGEWIESEN"]);
 });
 

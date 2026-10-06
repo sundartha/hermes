@@ -1,9 +1,3 @@
-// GQ-P14 (Befund N-2, Messung M-6): die ZUSAMMENFASSUNG erfaehrt, was im Anruf schon
-// notiert wurde. GQ-P10 gab dem Gespraech diese Information, aber die zwei
-// ueberzaehligen Eintraege aus call_msg0swwfhe5e entstehen in summarizeCall - also am
-// anderen Pfad. Diese Tests halten beide Pfade auseinander.
-//
-// Testnamen tragen KEINE Katalog-ID des i18n-Laufs am Namensanfang.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -19,8 +13,6 @@ const TRANSCRIPT = [
 const FIRST = "Fahrzeugmodell an die Werkstatt mitteilen.";
 const REPHRASED = "Werkstatt erneut kontaktieren, um den Inspektionstermin zu vereinbaren.";
 
-// Das Modell liefert KEINE actionItems zurueck - sonst legte summarizeCall im Nachgang
-// Items an und faerbte die Folge-Tests ein (P12 Independent).
 const MOCK = { summary: "Zusammenfassung.", actionItems: [], objective_achieved: "unclear" };
 
 function anthropicMessage() {

@@ -1,10 +1,3 @@
-// GQ-P1 (Befund B-1): agentTurn-Kontrakt des kooperativen Abbruchs. Der Riegel selbst
-// (Registry + Shim-Verdraengung) steht in test/gq-p1-turn-supersede.test.js; hier geht es
-// NUR um agentTurn: liest es abortSignal an der Schleifengrenze, bucht es die laufende
-// Runde trotzdem GENAU EINMAL (Regel 1), schreibt es keine Phantom-agent-Zeile.
-//
-// Naht wie test/al-p7-turn-streaming.test.js: lokaler node:http-Anthropic-Mock, echter
-// Store ueber tempDataDir/seedState/seedCall, kein Spawn, kein Netz nach aussen (P12).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -12,16 +5,11 @@ import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
-const SUBSTANTIAL = "Ja, Donnerstag passt gut"; // hebt suppressEndCall auf
+const SUBSTANTIAL = "Ja, Donnerstag passt gut";
 const MOCK_USAGE = { input_tokens: 10, output_tokens: 5 };
 
 const text = (value) => ({ type: "text", text: value });
 const toolUse = (name, input = {}) => ({ type: "tool_use", id: "tu1", name, input });
-// EIN Konstruktionspunkt (G5) fuer beide Formen: eine gewoehnliche Antwort, ODER eine, die
-// den Mock beim Empfang der Anfrage synchron einen Abbruch ausloesen laesst - BEVOR der
-// Mock antwortet. Da Node den Handler synchron bis zu diesem Aufruf abarbeitet, ist der
-// Abbruch garantiert VOR der Aufloesung des Client-Fetch-Promise gesetzt (happens-before) -
-// unabhaengig davon, wie schnell das lokale Netz die Antwort liefert.
 function reply(...blocks) {
   return { blocks };
 }
@@ -63,8 +51,6 @@ before(async () => {
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${server.address().port}`;
   process.env.ANTHROPIC_API_KEY = "test-gqp1-key";
-  // Der usage_event-Ledger existiert nur im Metering-Pfad - ohne dieses Flag koennte
-  // "genau EIN Beleg je Runde" gar nicht gemessen werden.
   process.env.PAYMENT_ENABLED = "true";
   const answeredAt = new Date().toISOString();
   const calls = [];
@@ -118,7 +104,6 @@ test("GQ-P1-16: vorab abgebrochenes Signal -> keine Modellrunde, superseded, kei
   );
   assert.equal(lastTranscriptRole("call_gqp1_1"), "caller", "keine agent-Zeile geschrieben");
 
-  // Gegenbeispiel: derselbe Aufruf OHNE Signal schreibt sehr wohl eine agent-Zeile.
   bodies = [];
   queue = [reply(text("Normale Antwort"))];
   const baseline = await claude.agentTurn(store.getCall("call_gqp1_2"), SUBSTANTIAL);
@@ -155,7 +140,6 @@ test("GQ-P1-18: end_call-Runde liefert nach Verdraengung endCall:false", async (
   assert.equal(turnAborted.superseded, true);
   assert.equal(turnAborted.endCall, false);
 
-  // Gegenbeispiel: derselbe Turn OHNE Signal liefert endCall:true.
   bodies = [];
   queue = [reply(text("Auf Wiederhoeren"), toolUse("end_call"))];
   const baseline = await claude.agentTurn(store.getCall("call_gqp1_5"), SUBSTANTIAL);
@@ -165,9 +149,6 @@ test("GQ-P1-18: end_call-Runde liefert nach Verdraengung endCall:false", async (
 test("GQ-P1-19: mehrrundiger Turn - Abbruch nach Runde 1 verhindert Runde 2, stopReason=superseded, keine Geld-Achse", async () => {
   bodies = [];
   const controller = new AbortController();
-  // Runde 1: Text + ein unbekanntes Werkzeug (informationsliefernd -> loopContinues waere
-  // true, der Turn wuerde ohne den Riegel eine zweite Runde fahren). Der Mock bricht ab,
-  // SOBALD Runde 1 eingegangen ist - noch bevor sie beantwortet ist.
   queue = [replyThenAbort(controller, text("Ich schaue nach."), toolUse("erfundenes_werkzeug"))];
   const turn = await claude.agentTurn(store.getCall("call_gqp1_6"), SUBSTANTIAL, {
     abortSignal: controller.signal,

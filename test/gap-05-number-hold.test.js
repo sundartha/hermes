@@ -1,9 +1,3 @@
-// GAP-05 (Katalog: tasks/i18n-tests/11-luecken-und-e2e.md, Abschnitt "GAP-05").
-// Kein Nummernkauf ohne Hold (Gutschein-Missbrauch): der Setup-Hold wird seit P4 IMMER
-// gestellt, auch fuer einen per numberSetupFeeExempt befreiten Tenant - die Befreiung
-// wirkt nur noch auf die PREIS-Achse (Storno statt Einzug am Ende, settleSetupFeeHold in
-// src/onboarding.js). Rein, offline (Muster test/billing-hold-capture.test.js:
-// provisionNumber + fakeBilling/fakeProvisioner).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { provisionNumber } from "../src/onboarding.js";
@@ -27,11 +21,10 @@ test("Ein 100-%-Gutschein-Tenant bekommt die Nummer nur mit gestelltem Setup-Hol
   const s = makeDefaultState();
   registerTenant(s, "t_gap05");
   setTenantSubscription(s, "t_gap05", { numberSetupFeeExempt: true });
-  // Karte hinterlegt: der Hold-Riegel gilt jetzt UNABHAENGIG von der Befreiung.
   setTenantStripe(s, "t_gap05", {
     customerId: "cus_gap05",
     paymentMethodId: "pm_gap05",
-    paymentMethodType: "card", // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
+    paymentMethodType: "card",
   });
   const { number } = requestNumber(s, { tenantId: "t_gap05", ...CAPS });
 

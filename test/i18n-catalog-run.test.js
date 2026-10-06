@@ -1,8 +1,3 @@
-// Deckt die Parsing-/Zaehl-Logik von test/i18n-catalog-run.mjs ab (Regressions- und
-// Launch-Gate-Lauf-Trennung, s. Kommentar dort). Ohne diesen Test war die Logik nur durch
-// echte, teure node --test-Volllaeufe verifiziert - eine kuenftige Aenderung an node:test's
-// TAP-Format oder an diesem Skript selbst haette hier lautlos brechen koennen (Befund S1
-// aus der Review von phase/i18n-lauf-trennung).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -12,14 +7,6 @@ import {
   patternFlagFor,
 } from "./i18n-catalog-run.mjs";
 
-// Synthetische TAP-Fragmente, empirisch gegen echte node --test --test-reporter=tap-Laeufe
-// abgeglichen (node 22/24, 2026-07): node meldet einen Datei-Wrapper ("# Subtest:
-// test/<datei>.test.js" + "ok N - test/<datei>.test.js") NUR, wenn nach Anwendung des
-// Musters KEIN echter Subtest mehr in der Datei uebrig bleibt. Bleibt mindestens ein Test
-// uebrig, erscheinen dessen "# Subtest: <testname>"-Zeilen OHNE Datei-Pfad-Praefix direkt
-// auf oberster Ebene - kein Wrapper. Eine "1..0"-Zeile UNMITTELBAR vor dem Wrapper stammt
-// vom internen Plan des Kindprozesses fuer genau diese Datei und bedeutet: alle Tests
-// darin wurden vom Muster herausgefiltert (nicht: die Datei war schon immer leer).
 const FILE_WITH_REMAINING_TEST = [
   "# Subtest: normal test",
   "ok 1 - normal test",
@@ -67,7 +54,7 @@ test("parseNodeSummary: liest tests/pass/fail aus den TAP-Summenzeilen", () => {
 });
 
 test("parseNodeSummary: liefert null bei abgebrochenem Lauf ohne vollstaendige Summe", () => {
-  const tap = ["# tests 42", "# pass 40"].join("\n"); // fail-Zeile fehlt (Ladefehler o.ae.)
+  const tap = ["# tests 42", "# pass 40"].join("\n");
   assert.equal(parseNodeSummary(tap), null);
 });
 
@@ -101,9 +88,6 @@ test("extraArgsFrom: alles nach '--' geht unveraendert durch (CI-Coverage-Gate-A
   ]);
 });
 
-// Deckt zugleich den vom Impl-Agenten selbst genannten offenen Punkt ab: package.json
-// config.i18nCatalogPattern (die EINE Quelle fuer Wrapper + ci.yml) bleibt ein gueltiger,
-// nicht-leerer Regex-String.
 test("package.json config.i18nCatalogPattern ist ein gueltiger, nicht-leerer Regex-String", async () => {
   const { default: pkg } = await import("../package.json", { with: { type: "json" } });
   const pattern = pkg.config?.i18nCatalogPattern;

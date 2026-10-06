@@ -1,10 +1,3 @@
-// P1: setRole (account-Mutator) + adminOnly-Gate. pglite, kein echtes pg, kein
-// CLI-Spawn. Beweist: setRole idempotent (zweimal = ein Effekt); nicht-existente
-// E-Mail -> false (kein silent-noop); adminOnly laesst role==='admin' durch und
-// weist member + fehlende Identitaet ab (Phasen-Invariante: rein additiv,
-// Nicht-Admin-Verhalten unveraendert). Das grant-admin-Script selbst (arg-Parsing/
-// process.exit/Pool) ist duenner Glue um createPortalRunner (echtes pg) + setRole;
-// ein CLI-Spawn mit echter DB waere ein langsamer Integrationstest ohne Mehrwert (T9).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -22,7 +15,7 @@ async function setup() {
 
 test("setRole befoerdert per E-Mail zu admin", async () => {
   const { accounts } = await setup();
-  await accounts.upsertOnFirstLogin({ sub: "u1", email: "boss@x" }); // role=member
+  await accounts.upsertOnFirstLogin({ sub: "u1", email: "boss@x" });
   assert.equal(await accounts.setRole("boss@x", "admin"), true);
   assert.equal((await accounts.resolve("u1")).role, "admin");
 });
@@ -40,7 +33,6 @@ test("setRole auf nicht-existente E-Mail -> false (kein silent-noop)", async () 
   assert.equal(await accounts.setRole("ghost@x", "admin"), false);
 });
 
-// adminOnly-Gate: role==='admin' durch, member/keine Identitaet ab (Invariante).
 async function probe(tenant) {
   const app = express();
   app.get(

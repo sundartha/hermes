@@ -1,12 +1,3 @@
-// GP-P5, Teil 3: GET /api/self-service/state nennt den GRUND eines gescheiterten
-// Nummern-Setups (agent.numberStatusReason). Vorher zeigte das Dashboard nur
-// "Einrichtung der Nummer fehlgeschlagen" - der Server kannte die Lage seit GP-P2/P3,
-// sagte sie aber niemandem. Fuer den Vorfall vom 11.09.2026 war genau das entscheidend:
-// die Zahlungsmethode (Typ 'link') kann strukturell keinen Hold tragen, es half also
-// weder Warten noch erneutes Klicken, sondern ausschliesslich eine Karte.
-//
-// Kompositions-Integrationstest nach dem Muster f2-self-service-state-private-number.js:
-// reines pglite (offline, F.I.R.S.T.), KEIN Server-Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -118,8 +109,6 @@ function leseState(ctx) {
   });
 }
 
-// Der Fall aus dem Vorfall: Wallet-Typ, der keinen Hold traegt. Nur hier darf das
-// Dashboard dem Kunden eine Handlung anbieten - sie ist die einzige, die wirkt.
 test("Wallet-Zahlungsmethode -> payment_method_unsuitable", async () => {
   const ctx = await setup({ paymentMethodType: WALLET_TYPE, anzahlFailed: 1 });
   try {
@@ -132,8 +121,6 @@ test("Wallet-Zahlungsmethode -> payment_method_unsuitable", async () => {
   }
 });
 
-// Bestands-Mandant vor GP-P2: Typ null. Er ist aus demselben Grund ausgeschlossen -
-// das Dashboard muss ihm dieselbe Handlung anbieten, sonst bleibt er ohne Ausweg.
 test("fehlender Typ (Bestand vor GP-P2) -> ebenfalls payment_method_unsuitable", async () => {
   const ctx = await setup({ paymentMethodType: null, anzahlFailed: 1 });
   try {
@@ -144,8 +131,6 @@ test("fehlender Typ (Bestand vor GP-P2) -> ebenfalls payment_method_unsuitable",
   }
 });
 
-// Hold-faehige Karte, Versuche frei: der Wiederanlauf greift von selbst - hier waere
-// ein Handlungsaufruf ein Fehlalarm.
 test("hold-faehige Karte mit freien Versuchen -> retry_pending", async () => {
   const ctx = await setup({ paymentMethodType: PAYMENT_METHOD_TYPE_CARD, anzahlFailed: 1 });
   try {
@@ -156,8 +141,6 @@ test("hold-faehige Karte mit freien Versuchen -> retry_pending", async () => {
   }
 });
 
-// Deckel erreicht: ein Kartenwechsel stoesst nichts mehr an (resolveAutoProvisionRetry
-// prueft den Deckel NACH der Eignung). Ein Handlungsaufruf waere hier eine leere Zusage.
 test("erschoepfte Versuche -> manual_review", async () => {
   const ctx = await setup({
     paymentMethodType: PAYMENT_METHOD_TYPE_CARD,
@@ -171,9 +154,6 @@ test("erschoepfte Versuche -> manual_review", async () => {
   }
 });
 
-// Der Not-Aus (maxAttempts=0) wird im Kern VOR dem Zustands-Gate beantwortet. Ohne die
-// eigene 'failed'-Vorpruefung in numberSetupReason truege JEDER Mandant einen Grund -
-// auch der mit laufender Nummer.
 test("ohne gescheiterte Nummer bleibt der Grund leer - auch bei abgeschaltetem Wiederanlauf", async () => {
   for (const maxAttempts of [DEFAULT_MAX_ATTEMPTS, 0]) {
     const ctx = await setup({ paymentMethodType: PAYMENT_METHOD_TYPE_CARD, maxAttempts });

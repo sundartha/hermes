@@ -1,7 +1,3 @@
-// IEL-B7a (E19): prueft, dass eine gesetzte voiceId an say/gather die Stimme der
-// Play-TTS-Vorabsynthese bestimmt (EL-Inbound: Fehlersatz in der Stimme des Agenten, IEX-A3).
-// Rein offline, globales fetch ueber die geteilte Attrappe (recordingStreamFetch via
-// runPlayTtsProbe), kein Server und keine DB (P12).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
@@ -15,7 +11,7 @@ const AGENT_STIMME = "v_agent";
 const AGENT_STIMME_B = "v_agent_b";
 const AGENT_SATZ = "Pflichtsatz-Testtext";
 const TURN_ACTION = "https://agent.test/voice/turn?callId=c1";
-const TTS_TOKEN_TTL_MS = 60000; // nur fuer den echten ttsStore im Cache-Fall; Timer ist unref()
+const TTS_TOKEN_TTL_MS = 60000;
 const QUOTA = 10;
 const CYCLE_KEY = "2026-09";
 const DREI_VERSCHIEDENE_STIMMEN = 3;
@@ -56,7 +52,6 @@ test("IEL-B7a-3: ohne Feld -> heutige Aufloesung (Profil-Stimme)", async () => {
 });
 
 test("IEL-B7a-4: ohne Feld und ohne Profil-Stimme -> cfg.voiceId", async () => {
-  // Randfall T5: Literal ohne Profil, wie in test/directive-synth.test.js.
   const { voiceIds } = await runPlayTtsProbe([{ kind: DIRECTIVE.SAY, text: AGENT_SATZ }]);
   assert.deepEqual(voiceIds, [PROBE_PLATTFORM_STIMME]);
 });
@@ -72,7 +67,6 @@ test('IEL-B7a-5: voiceId "" am Builder -> kein Feld, Direktive formgleich zum Be
 });
 
 test('IEL-B7a-6: voiceId "" an der Direktive -> heutige Aufloesung in der Synthese', async () => {
-  // Per Spread gebaut, also am Builder vorbei - voiceIdField greift nur im Builder.
   const directive = { ...say(AGENT_SATZ, VOICE_PROFILE.DE_FEMALE_NEURAL), voiceId: "" };
   const { voiceIds } = await runPlayTtsProbe([directive]);
   assert.deepEqual(voiceIds, [elevenLabsVoiceIdFor(PROBE_PLATTFORM_STIMME, VOICE_PROFILE.DE_FEMALE_NEURAL)]);

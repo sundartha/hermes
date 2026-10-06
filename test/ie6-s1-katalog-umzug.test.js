@@ -1,6 +1,3 @@
-// IE6-S1: Umzug zweier Katalog-Tests, deren gemessener Pfad mit dem Assistant-Pfad
-// entfernt wurde. Beide IDs stehen am Namensanfang und landen damit automatisch in
-// npm run test:gates (package.json config.i18nCatalogPattern).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -8,9 +5,6 @@ import { startInboundHarness } from "./helpers/inbound-router-harness.js";
 import { localeFor } from "../src/i18n/locales.js";
 import { voiceAttrs } from "../src/telephony/adapters/telnyx/render.js";
 
-// GAP-24: der Inbound-Gather traegt den STT-Sprach-Hint des Calls - abgeleitet aus der
-// Locale-Quelle (G5), kein Literal. Vorher gegen den Assistant-Speak-Node gemessen; seit
-// IE6-S1 gibt es nur noch den TeXML-Gather-Pfad.
 test("GAP-24 (Mechanismus, gruen) - der Inbound-Gather traegt den Sprach-Hint des Calls", async () => {
   for (const lang of ["fr", "en"]) {
     const { url, stop } = await startInboundHarness({
@@ -42,14 +36,7 @@ test("GAP-24 (Mechanismus, gruen) - der Inbound-Gather traegt den Sprach-Hint de
   }
 });
 
-// OUT-27: der TeXML-Originationspfad reicht das gegatete 'to' unveraendert durch - alles
-// Landbezogene (Normalisierung, Denylist, Land-Gate) ist in der Gate-Kette davor
-// abgeschlossen ("geprueft == gewaehlt"). Gemessen am VERHALTEN (Spy sieht exakt das
-// gegatete to), nicht per grep auf Symbolnamen.
 test("OUT-27 (Mechanismus, gruen) - der TeXML-Originationspfad reicht das gegatete 'to' unveraendert durch", async () => {
-  // Env VOR dem dynamischen Import (Muster test/sec-p6-gate-fehlerpfad.test.js): die
-  // Route beruehrt ueber consult/gate.js und precall-briefing.js den globalen config-
-  // Snapshot - ohne dieses Setup entschiede eine lokale .env, ob ein LLM angesprochen wird.
   process.env.PRECALL_BRIEFING_ENABLED = "false";
   process.env.ASSISTANT_CONTEXT_ENABLED = "false";
   process.env.IN_CALL_CONSULT_ENABLED = "false";
@@ -65,7 +52,6 @@ test("OUT-27 (Mechanismus, gruen) - der TeXML-Originationspfad reicht das gegate
         return { sid: "sid_out27" };
       },
     });
-    // EIN Stub-Gate, das ctx VOLLSTAENDIG befuellt (Muster test/sec-p6-gate-fehlerpfad.test.js).
     const outboundGates = [
       {
         name: "stub-fill-ctx",
@@ -95,8 +81,6 @@ test("OUT-27 (Mechanismus, gruen) - der TeXML-Originationspfad reicht das gegate
       tenantPrivateNumber: () => null,
       resolveProfile: () => ({ allowConsult: false }),
       resolveCallLanguage: () => "de",
-      // E3: Dedup-Claim-Abschnitt + sein Fehler-Freigabeweg - beide NACH der
-      // Gate-Kette (Muster test/sec-p6-gate-fehlerpfad.test.js#kettenStore).
       withStoreLock: (fn) => fn(),
       activeCallsFor: () => [],
       releaseOutboundReserveCents: () => true,
@@ -112,9 +96,6 @@ test("OUT-27 (Mechanismus, gruen) - der TeXML-Originationspfad reicht das gegate
         config,
         audit: () => {},
         outboundGates,
-        // T2-08 (T-27): der Claim-Lock prueft jetzt zusaetzlich callQuotaDenial(ctx) - ohne
-        // Verdrahtung wirft der fail-closed Default (503). Dieser Test will die Kette hinter
-        // dem Stub-Gate passieren lassen, also nie ablehnen (Muster outboundGates: []).
         callQuotaDenial: () => null,
         voiceControl,
         terminateAndBillCall: async () => {},
