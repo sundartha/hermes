@@ -66,6 +66,7 @@ const MAX_REPORTED_DIFFERENCES = 3;
 export function findingTally(messages) {
   const tally = new Map();
   for (const message of messages) {
+    if (message.ruleId === null) continue;
     const key = `${message.ruleId}${FINDING_KEY_SEPARATOR}${message.message}`;
     tally.set(key, (tally.get(key) ?? 0) + 1);
   }
