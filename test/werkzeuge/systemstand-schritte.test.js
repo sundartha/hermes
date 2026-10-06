@@ -43,6 +43,7 @@ const OVERDUE_DAYS = 11;
 const IN_TIME_DAYS = 9;
 const RECORDED_OVERDUE_DAYS = 15;
 const JSON_INDENT = 2;
+const FINGERPRINT_LENGTH = 16;
 const SINCE = "2026-10-01";
 const TIME_LIMIT = "Zeitgrenze überschritten, Entscheidung durch Antonio oder Jonas";
 const PACKAGE_STEP_IDS = ["1b", "2", "3", "4", "5"];
@@ -304,6 +305,11 @@ function suppressed(rule, counts) {
   );
 }
 
+function frozenBaseline(files) {
+  const keys = files.map((file, index) => `${file}|${String(index).padStart(FINGERPRINT_LENGTH, "0")}`);
+  return json({ befunde: keys });
+}
+
 const MISSING_END_CRITERIA = [
   { step: "1b", run: { github: { health: HTTP_UNAVAILABLE } }, pattern: /\/healthz\b.*\b503\b/ },
   { step: "1b", run: { github: { health: HTTP_FOUND } }, pattern: /\/healthz\b.*\b302\b/ },
@@ -356,6 +362,38 @@ const MISSING_END_CRITERIA = [
       files: { "eslint-suppressions.json": suppressed("hermes/kein-quelltext-als-text", [1, 1]) },
     },
     pattern: /\b2\b.*als Text/,
+  },
+  {
+    step: "3",
+    run: {
+      files: {
+        "tools/basis/kommentare.json": frozenBaseline(["src/a.js", "src/a.js", "test/b.test.js"]),
+      },
+    },
+    pattern: /Kommentarregel noch 3 eingefrorene Treffer in 2 Dateien/,
+  },
+  {
+    step: "3",
+    run: {
+      files: {
+        "tools/basis/kommentare.json": frozenBaseline(["src/a.js"]),
+        "eslint-suppressions.json": suppressed("hermes/keine-kommentare", [1, 1]),
+      },
+    },
+    pattern: /Kommentarregel noch 3 eingefrorene Treffer in 3 Dateien/,
+  },
+  {
+    step: "3",
+    run: {
+      files: {
+        "tools/basis/quelltext-als-text.json": frozenBaseline([
+          "test/a.test.js",
+          "test/a.test.js",
+          "test/b.test.js",
+        ]),
+      },
+    },
+    pattern: /noch 2 Testdateien .*als Text/,
   },
   {
     step: "3",
