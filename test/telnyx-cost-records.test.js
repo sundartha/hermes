@@ -258,10 +258,6 @@ function realRecord(recordType, { cost, billedSec, currency = "USD", ids = OWN_I
     currency,
     ...ID_FIELDS_BY_RECORD_TYPE[recordType](ids),
     ...(billedSec === undefined ? {} : { billed_sec: billedSec }),
-    // Zusatzfelder je Testfall. GEMESSEN sind started_at (nur sip-trunking) und
-    // rate_measured_in; die Zeitstempel-Kandidaten des Fensterfilters (recorded_at/
-    // created_at) sind GERATENE Feldnamen und werden nur dort injiziert, wo der Test
-    // genau diesen Codepfad meint.
     ...extraFields,
   };
 }
@@ -302,7 +298,7 @@ const PARSER_INVALID_CASES = [
   "",
   null,
   undefined,
-  NUMBER_TYPED_PRICE, // Number statt String - G26: kein Number auf Geldstrings, auch nicht implizit
+  NUMBER_TYPED_PRICE,
   "-0.01",
   "1.0E+400",
   "1e",
@@ -319,12 +315,6 @@ for (const input of PARSER_INVALID_CASES) {
 }
 
 test("parseDecimalToMicroCents: Ganzzahl-Summe ohne Float-Fehler (0.07+0.01 === 8000000 exakt)", () => {
-  // Abweichung von der Plan-Formulierung: der Plan behauptet "0.07 + 0.01 === 0.08 ist in
-  // JS falsch" - das ist fuer GENAU dieses Zahlenpaar empirisch nicht der Fall (IEEE754
-  // rundet hier zufaellig exakt, node -e "0.07+0.01===0.08" -> true). Die eigentliche
-  // Zusicherung (Ganzzahl-Summe exakt, kein Float-Zwischenschritt) bleibt unveraendert;
-  // die Kontrollannahme demonstriert die Float-Fehlerklasse stattdessen am klassischen,
-  // tatsaechlich falschen Beispiel 0.1+0.2 (s. naechster Test).
   const sum = parseDecimalToMicroCents("0.07") + parseDecimalToMicroCents("0.01");
   assert.equal(sum, SUMMED_MICRO_CENTS_FIRST);
 });
@@ -410,15 +400,13 @@ test("Belegabruf: reale Belegformen - der Anker spannt die Session auf, die Bele
   stubRealRecords();
   const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, true);
-  // ROT VOR DEM FIX: die alte leg_id/call_leg_id-Zuordnung findet in diesen realen Formen
-  // KEINEN einzigen Beleg -> records.length === 0.
   assert.equal(
     res.records.length,
     ASSIGNABLE_RECORD_COUNT,
     "alle Typen ausser den unzuordenbaren kommen mit (inference traegt keine Session)",
   );
   const sum = res.records.reduce((acc, record) => acc + record.costMicroCents, 0);
-  assert.equal(sum, REAL_RECORDS_SUM_MICRO_CENTS); // 4010000 + 100000 + 0 + 16870 + 200000 + 5000000
+  assert.equal(sum, REAL_RECORDS_SUM_MICRO_CENTS);
   const found = new Set(res.records.map((record) => record.recordType));
   for (const sessionOnly of SESSION_ONLY_RECORD_TYPES)
     assert.ok(found.has(sessionOnly), `${sessionOnly} traegt keinen Anker und muss ueber die Session kommen`);
@@ -495,7 +483,6 @@ test("assignCostRecords: geteilter Pool - zwei Anker, kein Anker-Beleg gleicht d
   assert.ok(!resultB.records.some((record) => record.costMicroCents === FOREIGN_RECORD_MICRO_CENTS), "fremde Session kommt bei B nicht mit");
   assert.ok(!resultA.records.some((record) => record.costMicroCents === SECOND_CALL_SIP_TRUNKING_MICRO_CENTS), "keine Quervermischung: B-Beleg landet nicht bei A");
 
-  // Zuordnung ist REIN: derselbe Pool, dieselbe Antwort - unabhaengig von der Reihenfolge.
   assert.deepEqual(
     telnyxVoice.assignCostRecords(pool, { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT }),
     resultA,
@@ -703,7 +690,7 @@ test("Belegabruf: Belege einer FREMDEN Session kommen NIE mit (Tenant-Trennung)"
   assert.equal(res.ok, true);
   assert.equal(res.records.length, OWN_RECORD_COUNT, "nur die zwei eigenen Belege");
   const sum = res.records.reduce((acc, record) => acc + record.costMicroCents, 0);
-  assert.equal(sum, OWN_RECORDS_SUM_MICRO_CENTS); // 4010000 + 100000, der fremde Beleg (999000000) fehlt
+  assert.equal(sum, OWN_RECORDS_SUM_MICRO_CENTS);
   assert.ok(
     !res.records.some((record) => record.costMicroCents === FOREIGN_RECORD_MICRO_CENTS),
     "ein fremder Beleg waere eine Fehlbuchung auf einen fremden Tenant",
@@ -718,7 +705,7 @@ test("Belegabruf: Belege einer FREMDEN Session kommen NIE mit (Tenant-Trennung)"
 // der call_session_id-Zweig einseitig gepinnt (nur der Treffer-, nie der Ablehnungsfall).
 test("Belegabruf: fremde `call_session_id` kommt NIE mit (Zuordnung bleibt fail-closed)", async () => {
   stubFetchByRecordType({
-    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401" })], // Anker + eigene Session
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401" })],
     "speech-to-text": [
       realRecord("speech-to-text", { cost: "0.0000" }),
       realRecord("speech-to-text", { cost: "9.99", ids: FOREIGN_IDS }),
@@ -912,7 +899,7 @@ test("Belegabruf: volle Seite mit meta.total_pages=1 bleibt vollstaendig", async
 test("(P3-2c) volle Seite OHNE meta wird nachgeblaettert; erst die kurze Folgeseite beweist das Ende", async () => {
   const calls = stubFetchPages({
     "sip-trunking": [anchorPage()],
-    "call-control": [fullCallControlPage(), []], // Seite 2 ist LEER - die kurze Folgeseite
+    "call-control": [fullCallControlPage(), []],
   });
   const res = await fetchAndAssign(WINDOW);
   assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, SECOND_PAGE]);
@@ -1109,7 +1096,7 @@ test("(P3-8) 'start_time' vor 'since' beendet die speech-to-text-Schleife (das g
 });
 
 test("(P3-9) abgerufene Typenmenge ist GENAU ASSIGNABLE_COST_RECORD_TYPES - inference wird nie angefragt", async () => {
-  const calls = stubRealRecords(); // bietet inference weiterhin an (Koeder auf Fixture-Ebene)
+  const calls = stubRealRecords();
   await fetchAndAssign(WINDOW);
   const requestedTypes = calls.map((call) => new URL(call.url).searchParams.get("filter[record_type]"));
   assert.deepEqual(new Set(requestedTypes), new Set(ASSIGNABLE_COST_RECORD_TYPES));
@@ -1147,7 +1134,7 @@ test("(P3-11) die Zeitfeld-Tabelle deckt GENAU die abgerufenen Typen ab (keine z
 // dass dieselbe Konstante zweimal importiert wurde - sie koennte eine von Hand gepflegte
 // Abruf-Liste (Entkopplung) nicht falsifizieren. Dieser Test kann es.
 test("(P6-1) Abruf-Typenmenge und Boot-Guard-Allowlist stammen aus DERSELBEN Quelle", async () => {
-  const calls = stubRealRecords(); // bietet ALLE 7 Typen an, auch inference
+  const calls = stubRealRecords();
   await fetchPool();
   const fetched = [...new Set(calls.map((call) => new URL(call.url).searchParams.get("filter[record_type]")))];
   assert.ok(fetched.length > 0, "ohne abgerufene Typen pruefte der Test nichts");
@@ -1174,7 +1161,7 @@ const elevenLabsTtsRecord = ({ chars, ids = OWN_IDS, provider = "elevenlabs", co
 
 test("(P6-2) ElevenLabs-Zeichen reisen am zugeordneten text-to-speech-Beleg mit", async () => {
   stubFetchByRecordType({
-    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })], // Anker
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })],
     "text-to-speech": [elevenLabsTtsRecord({ chars: 238 })],
   });
   const res = await fetchAndAssign(WINDOW);
@@ -1223,7 +1210,7 @@ test("(P6-3c) ein Nicht-TTS-Beleg zaehlt NICHT - auch mit elevenlabs-Provider un
 test("(P6-4) ein NICHT zugeordneter ElevenLabs-Beleg liefert keine Zeichen (fail-closed)", async () => {
   stubFetchByRecordType({
     "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })],
-    "text-to-speech": [elevenLabsTtsRecord({ chars: 999, ids: FOREIGN_POOL_IDS })], // fremde Session
+    "text-to-speech": [elevenLabsTtsRecord({ chars: 999, ids: FOREIGN_POOL_IDS })],
   });
   const res = await fetchAndAssign(WINDOW);
   assert.ok(!res.records.some((record) => record.recordType === "text-to-speech"),
@@ -1286,7 +1273,6 @@ test("(P4-1) hoechstens 30 Anfragen je fixem UTC-Minutenfenster - und kein Beleg
     assert.ok(count <= BUDGET_PER_MINUTE, `kein Fenster ueber dem Budget (gesehen: ${count})`);
   assert.deepEqual(perMinute, [BUDGET_PER_MINUTE, THROTTLE_REQUEST_COUNT - BUDGET_PER_MINUTE]);
   assert.equal(clock.now() % MS_PER_MINUTE, 0, "die Pause endet exakt auf :00 - das Fenster ist fix, nicht gleitend");
-  // Die Drossel darf nur bremsen, nie filtern.
   assert.equal(pool.ok, true);
   assert.equal(pool.complete, true);
   assert.equal(pool.raw.length, THROTTLE_REQUEST_COUNT * MEASURED_PAGE_SIZE);
@@ -1295,7 +1281,7 @@ test("(P4-1) hoechstens 30 Anfragen je fixem UTC-Minutenfenster - und kein Beleg
 });
 
 test("(P4-2) 429 -> GENAU ein Wiederholungsversuch mit dem Wartehinweis des Providers, danach ok:false", async () => {
-  const RESET_SECONDS = 17; // gemessen unmittelbar nach dem 429 (Plan F1)
+  const RESET_SECONDS = 17;
   const calls = stubFetchFailure({
     status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY,
     headers: { "x-ratelimit-reset": String(RESET_SECONDS) },
@@ -1315,8 +1301,8 @@ test("(P4-2) 429 -> GENAU ein Wiederholungsversuch mit dem Wartehinweis des Prov
 });
 
 test("(P4-3) 429 ohne x-ratelimit-reset -> Wartezeit bis zur naechsten vollen Minute aus der eigenen Uhr", async () => {
-  const calls = stubFetchFailure({ status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY }); // kein Header
-  const clock = jumpClock(); // 16:18:30Z -> 30 000 ms bis :00
+  const calls = stubFetchFailure({ status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY });
+  const clock = jumpClock();
   await captureConsole(() => telnyxVoice.fetchCostRecordPool({ throttle: testThrottle(clock) }));
   assert.equal(clock.elapsedMs(), HALF_MINUTE_MS);
   assert.equal(calls.length, ATTEMPTS_PER_RATE_LIMITED_PAGE);
@@ -1333,9 +1319,6 @@ test("(P4-3) 429 ohne x-ratelimit-reset -> Wartezeit bis zur naechsten vollen Mi
 // trotzdem in Millisekunden statt einer echten Minute laeuft (F.I.R.S.T.).
 
 test("(P4-R1) das produktive Minutenbudget behaelt die bewusste Reserve unter dem gemessenen Limit", () => {
-  // Pinnt die GEMESSENEN Werte selbst (Plan F1) statt sie ueber eine test-lokale Kopie zu
-  // pruefen - eine Reserve-Aenderung (z. B. 10 -> 0) macht diesen Test rot, unabhaengig davon,
-  // welche Drossel ein einzelner Aufrufer injiziert.
   assert.equal(DETAIL_RECORDS_LIMIT_PER_MINUTE, EXPECTED_LIMIT_PER_MINUTE, "gemessenes Kontingent, Plan F1");
   assert.equal(DETAIL_RECORDS_RESERVE_PER_MINUTE, EXPECTED_RESERVE_PER_MINUTE, "bewusste Reserve gegen U5/Uhr-Versatz");
   assert.equal(DETAIL_RECORDS_BUDGET_PER_MINUTE, EXPECTED_BUDGET_PER_MINUTE);
@@ -1379,25 +1362,25 @@ const wiringPagesByType = () =>
   );
 
 test("(P4-R2) fetchCostRecordPool OHNE injizierte Drossel haelt nach der produktiven Budget-Konstante an (Mock-Timer statt Wanduhr)", async (recordType) => {
-  recordType.mock.timers.enable({ apis: ["setTimeout"] }); // NUR der Timer - Date.now bleibt real (s.o.)
+  recordType.mock.timers.enable({ apis: ["setTimeout"] });
   try {
     const calls = stubFetchPages(wiringPagesByType());
-    const poolPromise = telnyxVoice.fetchCostRecordPool({}); // KEIN throttle-Override -> modul-globaler Default
+    const poolPromise = telnyxVoice.fetchCostRecordPool({});
 
-    await new Promise((resolve) => setImmediate(resolve)); // Microtask-Queue leerlaufen lassen (Muster telnyx-event-ingest-machine.test.js)
+    await new Promise((resolve) => setImmediate(resolve));
     assert.equal(
       calls.length, DETAIL_RECORDS_BUDGET_PER_MINUTE,
       "die produktive Drossel haelt nach GENAU dem echten Budget an - eine No-op-Drossel liesse hier bereits alle Anfragen durch",
     );
 
-    recordType.mock.timers.tick(WIRING_TICK_MS); // die Drossel wartet bis zur naechsten vollen Minute (F1) - der Mock ersetzt die Wanduhr
+    recordType.mock.timers.tick(WIRING_TICK_MS);
     const pool = await poolPromise;
 
     assert.equal(calls.length, DETAIL_RECORDS_BUDGET_PER_MINUTE + 1, "nach dem Tick lief die letzte Anfrage durch");
     assert.equal(pool.ok, true);
     assert.equal(pool.complete, true);
   } finally {
-    recordType.mock.timers.reset(); // echte Timer fuer die naechsten Tests wiederherstellen
+    recordType.mock.timers.reset();
   }
 });
 
