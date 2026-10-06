@@ -11,6 +11,7 @@ import {
   mitarbeiterVergleich,
   repoVergleich,
   rulesetVergleich,
+  weitereRulesetsVergleich,
 } from "./soll-vergleich/vergleich.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -22,6 +23,7 @@ const PFLICHTFELDER = [
   "mitarbeiter",
   "codeowners",
   "environments",
+  "weitere_rulesets",
 ];
 const EXIT_GLEICH = 0;
 const EXIT_ABWEICHUNG = 1;
@@ -55,15 +57,17 @@ function sollLesen(datei) {
 
 function vergleiche(soll, ist) {
   const ruleset = rulesetVergleich(soll.ruleset, ist.ruleset);
+  const weitere = weitereRulesetsVergleich(soll.ruleset.id, soll.weitere_rulesets, ist.rulesets);
   return {
     abweichungen: [
       ...ruleset.abweichungen,
+      ...weitere.abweichungen,
       ...repoVergleich(soll.repo_einstellungen, ist.repo),
       ...mitarbeiterVergleich(soll.mitarbeiter, ist.mitarbeiter),
       ...codeownersVergleich(soll.codeowners, ist.codeowners),
       ...environmentsVergleich(soll.environments, ist.environments),
     ],
-    nichtPruefbar: ruleset.nichtPruefbar,
+    nichtPruefbar: [...ruleset.nichtPruefbar, ...weitere.nichtPruefbar],
   };
 }
 

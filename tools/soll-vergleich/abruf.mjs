@@ -51,20 +51,32 @@ async function environment(basis, name) {
   };
 }
 
+function weitereRulesets(basis, soll) {
+  return Promise.all(
+    soll.weitere_rulesets.map(({ id }) =>
+      api(`${basis}/rulesets/${id}`, { accepted: [HTTP_NOT_FOUND] }),
+    ),
+  );
+}
+
 export async function istStand(soll) {
   const basis = `/repos/${soll.repo}`;
   const namen = Object.keys(soll.environments);
-  const [ruleset, repo, mitarbeiter, fehler, vorhanden, ...umgebungen] = await Promise.all([
-    api(`${basis}/rulesets/${soll.ruleset.id}`),
-    api(basis),
-    alleSeiten(`${basis}/collaborators?affiliation=all`, (seite) => seite),
-    codeownersFehler(basis),
-    alleSeiten(`${basis}/environments`, (seite) => seite?.environments),
-    ...namen.map((name) => environment(basis, name)),
-  ]);
+  const [ruleset, rulesets, weitere, repo, mitarbeiter, fehler, vorhanden, ...umgebungen] =
+    await Promise.all([
+      api(`${basis}/rulesets/${soll.ruleset.id}`),
+      alleSeiten(`${basis}/rulesets`, (seite) => seite),
+      weitereRulesets(basis, soll),
+      api(basis),
+      alleSeiten(`${basis}/collaborators?affiliation=all`, (seite) => seite),
+      codeownersFehler(basis),
+      alleSeiten(`${basis}/environments`, (seite) => seite?.environments),
+      ...namen.map((name) => environment(basis, name)),
+    ]);
   const zweig = repo.default_branch ?? soll.repo_einstellungen.default_branch;
   return {
     ruleset,
+    rulesets: { vorhanden: rulesets.map(({ id, name }) => ({ id, name })), einzeln: weitere },
     repo,
     mitarbeiter,
     codeowners: { inhalt: await codeownersInhalt(basis, zweig), fehler },

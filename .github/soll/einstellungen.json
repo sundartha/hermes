@@ -95,6 +95,35 @@
       }
     ]
   },
+  "weitere_rulesets": [
+    {
+      "id": 24519520,
+      "name": "phase-schutz",
+      "target": "branch",
+      "enforcement": "active",
+      "conditions": {
+        "ref_name": {
+          "exclude": [],
+          "include": ["refs/heads/phase/*"]
+        }
+      },
+      "bypass_actors": [
+        {
+          "actor_id": 335012687,
+          "actor_type": "User",
+          "bypass_mode": "always"
+        }
+      ],
+      "rules": [
+        {
+          "type": "creation"
+        },
+        {
+          "type": "update"
+        }
+      ]
+    }
+  ],
   "repo_einstellungen": {
     "default_branch": "master",
     "visibility": "public",

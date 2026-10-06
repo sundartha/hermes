@@ -10,7 +10,7 @@ const MITARBEITER = "Mitarbeiter";
 const CODEOWNERS = "CODEOWNERS";
 const ENVIRONMENT = "Environment";
 const NICHT_PRUEFBAR_BYPASS =
-  "Ruleset bypass_actors: nicht prüfbar mit den Rechten dieses Tokens (GitHub liefert das Feld nur an Konten mit Admin-Recht am Ruleset).";
+  "bypass_actors: nicht prüfbar mit den Rechten dieses Tokens (GitHub liefert das Feld nur an Konten mit Admin-Recht am Ruleset).";
 
 function istObjekt(wert) {
   return typeof wert === "object" && wert !== null && !Array.isArray(wert);
@@ -86,14 +86,45 @@ function felderVergleich(bereich, soll, ist) {
     .map((eintrag) => zeile(bereich, eintrag));
 }
 
-export function rulesetVergleich(soll, ist) {
+export function rulesetVergleich(soll, ist, bereich = RULESET) {
   const ohneBypass = Object.hasOwn(soll, BYPASS) && !Object.hasOwn(ist, BYPASS);
   const geprueft = Object.keys(soll).filter((name) => name !== "id");
   const felder = geprueft.filter((name) => !(ohneBypass && name === BYPASS));
   const sollFelder = Object.fromEntries(felder.map((name) => [name, soll[name]]));
   return {
-    abweichungen: felderVergleich(RULESET, sollFelder, ist),
-    nichtPruefbar: ohneBypass ? [NICHT_PRUEFBAR_BYPASS] : [],
+    abweichungen: felderVergleich(bereich, sollFelder, ist),
+    nichtPruefbar: ohneBypass ? [`${bereich} ${NICHT_PRUEFBAR_BYPASS}`] : [],
+  };
+}
+
+function weitererVergleich(soll, ist, vorhandeneIds) {
+  const bereich = `${RULESET} ${soll.name}`;
+  if (ist === null || !vorhandeneIds.has(soll.id)) {
+    return {
+      abweichungen: [{ bereich, feld: RULESET, soll: VORHANDEN, ist: FEHLT }],
+      nichtPruefbar: [],
+    };
+  }
+  return rulesetVergleich(soll, ist, bereich);
+}
+
+export function weitereRulesetsVergleich(hauptId, soll, { vorhanden, einzeln }) {
+  const vorhandeneIds = new Set(vorhanden.map(({ id }) => id));
+  const bekannt = new Set([hauptId, ...soll.map(({ id }) => id)]);
+  const ergebnisse = soll.map((eintrag, index) =>
+    weitererVergleich(eintrag, einzeln[index], vorhandeneIds),
+  );
+  const fremde = vorhanden
+    .filter(({ id }) => !bekannt.has(id))
+    .map(({ name }) => ({
+      bereich: `${RULESET} ${name}`,
+      feld: RULESET,
+      soll: NICHT_IM_SOLL,
+      ist: VORHANDEN,
+    }));
+  return {
+    abweichungen: [...ergebnisse.flatMap(({ abweichungen }) => abweichungen), ...fremde],
+    nichtPruefbar: ergebnisse.flatMap(({ nichtPruefbar }) => nichtPruefbar),
   };
 }
 
