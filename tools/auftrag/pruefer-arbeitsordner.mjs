@@ -10,7 +10,6 @@ export const WERKZEUG_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 export const KEIN_AUFTRAGSZETTEL = "kein Auftragszettel gefunden";
 const REFERENZEN = new Map([
   ["clean-code.md", ".claude/refs/clean-code.md"],
-  ["clean-code-pruefer.md", ".claude/refs/clean-code-pruefer.md"],
   ["sicherheitsgrenzen.md", "docs/sicherheitsgrenzen.md"],
 ]);
 const HEIKLER_NAME = /^(?:\.|claude|agents\.md$)/i;

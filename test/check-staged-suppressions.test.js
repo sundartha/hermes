@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -209,7 +209,10 @@ function firstGatedFile() {
   const suppressions = JSON.parse(readRepoFile(SUPPRESSIONS_REL));
   const legacyExceptions = JSON.parse(readRepoFile(LEGACY_EXCEPTIONS_REL));
   return Object.keys(suppressions).find(
-    (file) => !legacyExceptions[file] && Object.keys(suppressions[file]).length > 0,
+    (file) =>
+      !legacyExceptions[file] &&
+      Object.keys(suppressions[file]).length > 0 &&
+      existsSync(resolve(REPO_ROOT, file)),
   );
 }
 
