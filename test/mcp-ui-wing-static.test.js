@@ -1,9 +1,3 @@
-// T2 (tasks/mcp-widget-branding-chain.md): statische idle-Wing-Marke in den 4
-// Read-only-Widgets (kein Anruf-Lebenszyklus, deshalb kein Skript-Diff dort - nur
-// Markup + der idle-Keyframe-Block). Byte-Identitaet zur Quelle (wing-image.js)
-// verhindert stillen Drift zwischen den 5 self-contained Kopien. H4: die 4
-// Read-only-Widgets sind jetzt Olympus-HUD-Karten (volldunkel) - die Wing-Marke
-// traegt seitdem die dunkle Auspraegung (wing--dark, navy Rundmarke neutralisiert).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

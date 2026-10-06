@@ -1,8 +1,3 @@
-// OUTBOUND-E3a (F2a): der MCP-Rueckweg (await_call_event/get_call_result) bekommt Ausgang
-// UND Grund - der Weg, in den die Server-Instruktionen das Modell tatsaechlich schicken.
-// Offline, kein echter Anruf: ein lokaler HTTP-Mock spielt das Gateway (GATEWAY_URL),
-// Muster test/mcp-tools-language.test.js#withGateway. Testnamen ohne Katalog-Praefix
-// (Lehre catalog-id-prefix-misroutes-tests).
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -20,8 +15,6 @@ const HTTP_OK = 200;
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
-    // Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
-    // server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern.
     registerTool(name, _config, handler) {
       handlers.set(name, handler);
     },
@@ -31,8 +24,6 @@ function captureTools(ctx) {
   return handlers;
 }
 
-// Lokaler Gateway-Mock: /consult liefert das Consult-Event, jeder andere Pfad den
-// (finished) Call-Record. Beide Antworten pro Test frei waehlbar.
 async function startGatewayMock({ consultBody, callBody }) {
   const server = http.createServer((req, res) => {
     const body = req.url.includes("/consult") ? consultBody : callBody;
@@ -89,7 +80,6 @@ test("1: terminaler Anruf MIT Grund - status+failure_reason befuellt, result_sum
   });
 
   assert.equal(data.status, "failed");
-  // P5b (O-13 Teil 2): an der MCP-Kante nur noch das Basis-Token, nicht das volle Detail.
   assert.equal(data.failure_reason, NOT_PLACED);
   assert.ok(data.result_summary.includes(FAILURE_REASON_TEXTS.de.phrases["not-placed"]));
   assert.ok(!data.result_summary.includes("5 Sekunden"));
@@ -121,9 +111,6 @@ test("4: D-5 unbekanntes Token - der Sammel-Satz erscheint, das Roh-Token NICHT 
   assert.equal(data.result_summary, MCP_TEXTS.de.callFailedSummary(RAW_TOKEN));
   assert.ok(!data.result_summary.includes("brandneu-nie-gesehen"));
   assert.ok(!data.result_summary.includes("42"));
-  // P5b (O-13 Teil 2): das Maschinenfeld traegt seit dieser Phase nur noch das
-  // Basis-Token (Datenminimierung) - das Detail bleibt am Datensatz/Log/Ausfallbericht,
-  // nicht mehr im MCP-Feld.
   assert.equal(data.failure_reason, failureReasonBase(RAW_TOKEN));
   assert.ok(!data.failure_reason.includes("42"));
 });
@@ -176,17 +163,10 @@ test("6b: AWAIT_EVENT_OUTPUT-Kontrakt bleibt additiv - alle Bestandsfelder sind 
   ]) {
     assert.ok(Object.hasOwn(data, field), `Bestandsfeld ${field} fehlt`);
   }
-  // Additiv (NEU seit E3a), kein Feld entfaellt:
   assert.ok(Object.hasOwn(data, "status"));
   assert.ok(Object.hasOwn(data, "failure_reason"));
 });
 
-// P11/T1 (Review-Blocker Runde 2): MCP_CONSULT_INSTRUCTIONS trug bisher NULL
-// Testabdeckung fuer den Wiederhol-Riegel - ein stiller Verlust dieses Satzes liesse
-// das Modell einen not-placed-Anruf wiederholen, jedes Mal mit echten Anbieterkosten.
-// Positiv-Kontrolle (Lehre pruefkommando-ohne-positiv-kontrolle): ein bekannter
-// Bestandssatz muss ebenfalls gefunden werden, sonst zeigt "nichts gefunden" nur einen
-// leeren String.
 test("7: MCP_CONSULT_INSTRUCTIONS traegt den not-placed-Wiederhol-Riegel (mit Positiv-Kontrolle)", () => {
   assert.ok(
     MCP_CONSULT_INSTRUCTIONS.includes("await_call_event"),

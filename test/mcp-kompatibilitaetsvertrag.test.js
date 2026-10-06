@@ -1,19 +1,3 @@
-// Kompatibilitaetsvertrag des MCP-Servers (docs/mcp-vertrag.json, Vorgang in
-// docs/RUNBOOK-MCP-UPDATE.md). Der Vertrag friert den Stand NICHT ein: jede Aenderung ist
-// erlaubt, braucht aber einen Eintrag in der Aenderungskette. Wird ein Draht-Test rot,
-// nennt die Meldung jede Abweichung mit Klasse (bruch/additiv) und Runbook-Abschnitt und
-// schreibt den gemessenen Ist-Stand samt Hash in eine Datei unter os.tmpdir().
-// Nach der Veroeffentlichung greifen zwei Regeln technisch statt nur per Runbook: der Test
-// sperrt jeden Bruch gegen den veroeffentlichten Stand, den eine gehaltene Definition nicht
-// vertraegt (eine verdraengte Widget-URI nur, wenn sie geschuetzt ist), und jede geschuetzte
-// URI muss am Draht mit ihren gepinnten Bytes lesbar sein. Geschuetzt sind nur URIs des
-// veroeffentlichten Stands, solange die Pruefungsluecke dauert - vor der Veroeffentlichung
-// ist die Liste leer.
-//
-// Gemessen wird NUR am echten Draht (tools/list, resources/list, resources/read ueber
-// HTTP /mcp und stdio, test/mcp-draht-pfade.js) - registerTool() verwirft unbekannte Felder
-// still, ein Test am Registrierungsobjekt bewiese nichts. Es wird kein Werkzeug aufgerufen.
-// Testnamen ohne Katalog-Praefix: dieser Test gehoert in `npm test`, nicht in test:gates.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -58,16 +42,10 @@ const HTTP_FORBIDDEN = 403;
 const UI_ON = Object.freeze({ MCP_UI_ENABLED: "true" });
 const JSON_EINRUECKUNG = 2;
 
-// Fehlt die Datei, gilt ein leerer Vertrag: jeder Draht-Test wird rot und schreibt den
-// Ist-Stand - so entsteht die Erstfassung aus dem Draht, nie von Hand.
 const LEERER_VERTRAG = { profile: {}, werkzeuge: {}, veroeffentlichte_widget_uris: [], aenderungen: [] };
 const VERTRAG = fs.existsSync(VERTRAG_PFAD) ? JSON.parse(fs.readFileSync(VERTRAG_PFAD, "utf8")) : LEERER_VERTRAG;
-// Jede Messung liest die geschuetzten Widget-URIs zusaetzlich direkt per resources/read -
-// auch die, die resources/list nicht mehr nennt (verdraengte, aber noch veroeffentlichte
-// Fassungen).
 const MIT_RESSOURCEN = Object.freeze({ ressourcen: true, zusatzUris: VERTRAG.veroeffentlichte_widget_uris });
 
-// Profil-Ids stehen gleichlautend im Vertrag. ui: das Profil registriert Widgets.
 const PROFILE = Object.freeze([
   { id: "http-legacy", messen: () => legacySnapshot({}, MIT_RESSOURCEN) },
   { id: "http-legacy-consult", messen: () => legacySnapshot(CONSULT_ON, MIT_RESSOURCEN) },
@@ -83,7 +61,6 @@ const PROFILE = Object.freeze([
     ui: true,
     messen: () => oauthSnapshot({ subject: OAUTH_SUBJECT, env: { ...CONSULT_ON, ...UI_ON }, ...MIT_RESSOURCEN }),
   },
-  // OAuth mit UI ohne Consult: die Kombination der Code-Defaults beider Schalter.
   { id: "http-oauth-ui", ui: true, messen: () => oauthSnapshot({ subject: OAUTH_SUBJECT, env: UI_ON, ...MIT_RESSOURCEN }) },
   { id: "http-oauth-ohne-mandant", messen: () => oauthSnapshot({ subject: NO_TENANT_SUBJECT, ...MIT_RESSOURCEN }) },
   {
@@ -96,10 +73,8 @@ const PROFILE = Object.freeze([
   { id: "stdio-ui", ui: true, messen: () => stdioSnapshot(UI_ON, MIT_RESSOURCEN) },
 ]);
 
-// Draht-Messungen der D1-Faelle, von D1-Gesamtstand und D2 wiederverwendet (ein Start je Profil).
 const gemessen = {};
 
-// Schreibt NUR Schemata, Namen und URIs (keine Daten, keine Secrets) nach os.tmpdir().
 function schreibeIstStand(name, stand) {
   const datei = path.join(os.tmpdir(), `mcp-vertrag-ist-${name}.json`);
   const inhalt = { profile: stand.profile, werkzeuge: stand.werkzeuge, stand_sha256: standSha256(stand) };
@@ -116,9 +91,6 @@ function vertragsMeldung(befunde, datei) {
   ].join("\n");
 }
 
-// Token-Modus: gemessen ueber localhost MIT Token (nur dort gibt es eine Werkzeugliste,
-// s. tokenSnapshot). Beleg, dass der Auth-Pfad greift: ohne Token 401 - lokal UND ueber die
-// Interface-IP; mit Token ueber die Interface-IP 403 (kein Mandant, fail-closed).
 function pruefeTokenPfad(kontext, draht) {
   assert.equal(draht.ohneTokenStatus, HTTP_UNAUTHORIZED, "localhost ohne Token muss 401 liefern");
   if (!draht.interfaceIp) {
@@ -128,8 +100,6 @@ function pruefeTokenPfad(kontext, draht) {
   assert.equal(draht.interfaceIp.ohneToken, HTTP_UNAUTHORIZED, "Interface-IP ohne Token muss 401 liefern");
   assert.equal(draht.interfaceIp.mitToken, HTTP_FORBIDDEN, "Interface-IP mit Token: kein Mandant, 403");
 }
-
-// ---- D1: je Profil der echte Draht gegen den Vertrag ----
 
 for (const profil of PROFILE) {
   test(`Kompatibilitaetsvertrag D1: Draht-Profil ${profil.id} entspricht dem Vertrag`, async (kontext) => {
@@ -155,22 +125,14 @@ test("Kompatibilitaetsvertrag D1: Gesamtstand aller Profile ist pfad-konsistent 
   assert.fail(vertragsMeldung(klassifiziere(VERTRAG, ist), schreibeIstStand("gesamt", ist)));
 });
 
-// ---- D2: veroeffentlichte und referenzierte Widget-URIs sind lesbar ----
-
-// Die Pin-Datei direkt gelesen (wie test/openai-t2-02-widget-uris.test.js): Version ->
-// SHA-256 des ausgelieferten HTML je Widget.
 const WIDGET_PINS = JSON.parse(fs.readFileSync(path.join(ROOT, "src/ui/widget-versions.json"), "utf8"));
 const sha256Hex = (text) => createHash("sha256").update(text, "utf8").digest("hex");
 
-// Pin einer versionierten Widget-URI (undefined ohne Pin).
 function pinFuerUri(uri) {
   const teile = widgetUriTeile(uri);
   return teile ? WIDGET_PINS[teile.widgetId]?.[String(teile.version)] : undefined;
 }
 
-// Eine gelesene geschuetzte URI liefert am Draht genau die gepinnten Bytes ihrer Version -
-// die alte Fassung, nicht die aktuelle unter altem Namen; ohne Pin ist jede Fassung fremd.
-// draht: { inhalte: uri -> text }, geschuetzt: veroeffentlichte_widget_uris.
 function fremdeBytes(profilId, draht, geschuetzt) {
   const gelesen = geschuetzt.filter((uri) => draht.inhalte[uri] !== undefined);
   const abweichend = gelesen.filter((uri) => sha256Hex(draht.inhalte[uri]) !== pinFuerUri(uri));
@@ -195,10 +157,6 @@ test("Kompatibilitaetsvertrag D2: veroeffentlichte und referenzierte Widget-URIs
   assert.deepEqual(befunde, [], `Abschnitt "Widget-URIs nach der Veroeffentlichung": ${RUNBOOK_DATEI}#${RUNBOOK_ANKER.widget}`);
 });
 
-// ---- U1: Klassifikation an einem synthetischen Stand (Positiv-Kontrollen je Klasse) ----
-
-// Kopie von basis mit den Operationen { pfad, wert } (setzen) bzw. { pfad, entfernen: true }.
-// Die Kontrollen beschreiben so nur, WAS sich aendert; basis selbst bleibt unberuehrt.
 function abgeleitet(basis, operationen) {
   const kopie = structuredClone(basis);
   for (const { pfad, wert, entfernen } of operationen) {
@@ -366,10 +324,6 @@ for (const [name, operationen, erwartet] of KLASSIFIKATION) {
   });
 }
 
-// Neue Ausgabe-Eigenschaft: ob sie additiv ist, entscheidet das ALTE Objekt, an dem sie
-// hinzukommt - auf jeder Ebene, ob Pflicht oder optional. BASIS traegt oben
-// additionalProperties:false wie alle Werkzeuge mit outputSchema im Vertrag; ZEILEN_OBJEKT
-// macht aus den items von zeilen ein Objekt (wie calls in list_calls).
 const ZEILEN_ITEMS = [...A_AUS, "properties", "zeilen", "items"];
 const zeilenObjekt = (additionalProperties) =>
   abgeleitet(BASIS, [setze(ZEILEN_ITEMS, { type: "object", properties: { text: { type: "string" } }, additionalProperties })]);
@@ -397,7 +351,6 @@ for (const [name, alt, operationen, erwartung] of AUSGABE_ERWEITERT) {
   });
 }
 
-// Jeder Objekt-Knoten eines Gerippes (ueber properties und items) mit seinem Pfad.
 function objektKnoten(gerippe, pfad) {
   if (!gerippe || typeof gerippe !== "object") return [];
   const eigener = gerippe.properties ? [{ pfad, knoten: gerippe }] : [];
@@ -405,8 +358,6 @@ function objektKnoten(gerippe, pfad) {
   return [...eigener, ...kinder, ...objektKnoten(gerippe.items, [...pfad, "items"])];
 }
 
-// Am echten Vertrag: an JEDEM Objekt-Knoten jedes outputSchema eine neue optionale
-// Eigenschaft - Bruch genau dort, wo das Objekt keine weiteren Eigenschaften zulaesst.
 test("Kompatibilitaetsvertrag U1: neue optionale Ausgabe-Eigenschaft auf jeder Objektebene des Vertrags richtig eingestuft", () => {
   const abweichend = [];
   let verschachteltGeschlossen = 0;
@@ -435,9 +386,6 @@ test("Kompatibilitaetsvertrag U1: Beschreibungen und Titel sind kein Vertragsmer
   assert.equal(standSha256(standAusDraht(umformuliert)), standSha256(BASIS));
 });
 
-// Fail-closed am Gerippe: ein Schluesselwort ausserhalb der eigens behandelten faellt
-// nicht still heraus, sondern ist ein Bruch - gemessen ueber standAusDraht, also am
-// Draht-Format (Pfade relativ zu werkzeug_a im Fixture).
 const ALL_OF_ZIEL = ["inputSchema", "properties", "ziel", "allOf"];
 const UNBEKANNTE_SCHLUESSEL = [
   ["allOf an einer Eingabe-Eigenschaft", ALL_OF_ZIEL, [{ minLength: 1 }], "eingabe: allOf geaendert"],
@@ -474,20 +422,12 @@ test("Kompatibilitaetsvertrag U1: kanonische Form ist unabhaengig von der Schlue
   assert.equal(kanonisch(vorwaerts), kanonisch(rueckwaerts));
 });
 
-// ---- U2: Aenderungskette ----
-
-// Jeder committete Stand der Vertragsdatei aus der Git-Historie (fehlt Git, wirft der
-// Aufruf: fail-closed).
 function committeteVertraege() {
   const git = (argumente) => execFileSync("git", argumente, { cwd: ROOT, encoding: "utf8" });
   const commits = git(["log", "--format=%H", "--diff-filter=AM", "--", VERTRAG_RELATIV]).split("\n").filter(Boolean);
   return commits.map((commit) => ({ commit, vertrag: JSON.parse(git(["show", `${commit}:${VERTRAG_RELATIV}`])) }));
 }
 
-// Historie fuer pruefeKette: standZu schlaegt Staende nach stand_sha256 nach (Datei-Stand
-// plus jeder committete Stand; damit prueft pruefeKette die art jedes Eintrags gegen die
-// Klassifikation seines Vorgaengers), fruehereKetten traegt die Kette jedes committeten
-// Stands (Nur-anhaengen-Pruefung).
 function echteHistorie() {
   const committet = committeteVertraege();
   const staende = new Map([[standSha256(VERTRAG), VERTRAG]]);
@@ -500,7 +440,6 @@ function echteHistorie() {
     fruehereKetten: committet.map(({ commit, vertrag }) => ({ quelle: commit, aenderungen: vertrag.aenderungen ?? [] })),
   };
 }
-// Nachschlagen in einer festen Liste synthetischer Staende (Positiv-Kontrollen).
 const standAus =
   (...staende) =>
   (hash) =>
@@ -543,9 +482,6 @@ for (const [name, operationen, muster] of KETTEN_KONTROLLEN) {
   });
 }
 
-// art gegen die Klassifikation: ein zweiter Eintrag nach der Erstfassung, dessen Stand
-// sich wie angegeben aendert (Bruch = optionale Eingabe entfernt, additiv = neue optionale
-// Eingabe).
 const STAND_BRUCH = abgeleitet(BASIS, [entferne([...A_EIN, "properties", "notiz"])]);
 const STAND_ADDITIV = abgeleitet(BASIS, [setze([...A_EIN, "properties", "extra"], { type: "string" })]);
 function vertragMitZweitemEintrag(stand, art) {
@@ -575,10 +511,6 @@ test("Kompatibilitaetsvertrag U2: Kontrolle Vorgaengerstand nicht auffindbar lie
   assert.ok(befunde.some((zeile) => /nicht auffindbar/.test(zeile)), JSON.stringify(befunde));
 });
 
-// Nur anhaengen: der committete Stand traegt die synthetische Erstfassung; der aktuelle
-// Stand bricht (optionale Eingabe entfernt) und bringt den Bruch ohne neuen Eintrag unter.
-// Ohne fruehereKetten liefert pruefeKette fuer genau diese Faelle keinen Befund - das
-// belegt, dass die Nur-anhaengen-Regel sie faengt und nichts sonst.
 const COMMITTETE_ERSTFASSUNG = Object.freeze([{ quelle: "synthetischer-commit", aenderungen: [ERSTFASSUNG] }]);
 const alsVertrag = (stand, aenderungen) => ({ ...stand, veroeffentlichte_widget_uris: [], aenderungen });
 const NEUE_ERSTFASSUNG = {
@@ -612,17 +544,12 @@ test("Kompatibilitaetsvertrag U2: angehaengter Eintrag nach committeter Erstfass
   assert.deepEqual(pruefeKette(vertrag, synthetisch([BASIS, STAND_BRUCH], COMMITTETE_ERSTFASSUNG)), []);
 });
 
-// ---- U3: veroeffentlichte URIs ----
-
 test("Kompatibilitaetsvertrag U3: eine veroeffentlichte, nicht lesbare URI ist ein Befund", () => {
   const alt = "ui://probe/alt/v1.html";
   assert.deepEqual(fehlendeVeroeffentlichteUris([WIDGET_A, alt], [WIDGET_A]), [alt]);
   assert.deepEqual(fehlendeVeroeffentlichteUris([WIDGET_A], [WIDGET_A]), []);
 });
 
-// Positiv-Kontrolle der Byte-Pruefung aus D2 (dort heute ohne geschuetzte URI): fremde
-// Bytes unter einer gepinnten URI und eine URI ohne Pin sind je ein Befund; die aktuelle
-// Fassung unter ihrer eigenen URI ist keiner.
 test("Kompatibilitaetsvertrag U3: fremde Bytes unter einer geschuetzten URI oder eine URI ohne Pin sind ein Befund", () => {
   const version = widgetVersion(WIDGET_CALL);
   const aktuell = `ui://hermes/${WIDGET_CALL}/v${version}.html`;
@@ -633,9 +560,6 @@ test("Kompatibilitaetsvertrag U3: fremde Bytes unter einer geschuetzten URI oder
   assert.deepEqual(fremdeBytes("probe", { inhalte: { [aktuell]: widgetHtml(WIDGET_CALL) } }, [aktuell]), []);
 });
 
-// ---- Veroeffentlichte Staende (Fixtures fuer U4 und U5) ----
-
-// Ein wohlgeformter Hash, der zu keinem Stand gehoert.
 const FREMDER_HASH = sha256Hex("kein Stand der Kette");
 const MARKE_BASIS = Object.freeze({ datum: "2026-01-02", stand_sha256: standSha256(BASIS) });
 const WIDGET_A2 = "ui://probe/a/v2.html";
@@ -644,7 +568,6 @@ const STAND_WIDGET_NEU = abgeleitet(BASIS, [
   setze([...PROFIL_P, "widgets", "werkzeug_a"], WIDGET_A2),
   setze([...PROFIL_P, "ressourcen"], [{ uri: WIDGET_A2, mimeType: WIDGET_MIME }]),
 ]);
-// werkzeug_a heisst jetzt werkzeug_c, ohne das Pflichtfeld ziel und mit neuer Widget-URI.
 const WERKZEUG_C = abgeleitet(BASIS.werkzeuge.werkzeug_a, [entferne(["eingabe", "properties", "ziel"]), setze(["eingabe", "required"], [])]);
 const STAND_UMBENANNT = abgeleitet(BASIS, [
   setze([...PROFIL_P, "werkzeuge"], ["werkzeug_b", "werkzeug_c"]),
@@ -655,13 +578,10 @@ const STAND_UMBENANNT = abgeleitet(BASIS, [
   setze([...PROFIL_P, "ressourcen"], [{ uri: WIDGET_A2, mimeType: WIDGET_MIME }]),
 ]);
 
-// Vertrag mit Erstfassung (BASIS, veroeffentlicht) und einem zweiten Eintrag fuer stand.
 function nachVeroeffentlichung(stand, geschuetzt = [], marke = MARKE_BASIS) {
   const art = klassifiziere(BASIS, stand).some((eintrag) => eintrag.art === "bruch") ? "bruch" : "additiv";
   return { ...vertragMitZweitemEintrag(stand, art), veroeffentlichte_widget_uris: geschuetzt, veroeffentlichung: marke };
 }
-
-// ---- U4: geschuetzte Widget-URIs (nur URIs des veroeffentlichten Stands) ----
 
 test("Kompatibilitaetsvertrag U4: die committete Vertragsdatei schuetzt nur URIs des veroeffentlichten Stands", () => {
   const befunde = geschuetzteUriBefunde(VERTRAG, { standZu: echteHistorie().standZu });
@@ -689,8 +609,6 @@ test("Kompatibilitaetsvertrag U4: verdraengte URI des veroeffentlichten Stands i
   assert.deepEqual(geschuetztUnter(nachVeroeffentlichung(STAND_WIDGET_NEU, [], MARKE_WIDGET_NEU), STAND_WIDGET_NEU), []);
 });
 
-// ---- U5: Sperre nach der Veroeffentlichung ----
-
 test("Kompatibilitaetsvertrag U5: die committete Vertragsdatei verletzt die Veroeffentlichungs-Sperre nicht", () => {
   const fruehereVertraege = committeteVertraege().map(({ commit, vertrag }) => ({ quelle: commit, vertrag }));
   const befunde = veroeffentlichungsBefunde(VERTRAG, { standZu: echteHistorie().standZu, fruehereVertraege });
@@ -701,9 +619,6 @@ const sperre = (vertrag, stand, fruehereVertraege = []) =>
   veroeffentlichungsBefunde(vertrag, { standZu: standAus(BASIS, stand), fruehereVertraege });
 const GESPERRT_WERKZEUG = /gesperrt nach der Veroeffentlichung.*Werkzeug entfernt oder umbenannt/;
 
-// Jeder Bruch gegen den veroeffentlichten Stand ist gesperrt, auch mit passendem
-// Ketteneintrag (nachVeroeffentlichung traegt ihn) - einzige Ausnahme ist die geschuetzte,
-// am Draht lesbare alte URI.
 const SPERR_KONTROLLEN = [
   ["entfernte Eingabe-Eigenschaft", nachVeroeffentlichung(STAND_BRUCH), STAND_BRUCH, /gesperrt nach der Veroeffentlichung/],
   ["entferntes Werkzeug", nachVeroeffentlichung(STAND_OHNE_B), STAND_OHNE_B, GESPERRT_WERKZEUG],
@@ -748,8 +663,6 @@ test("Kompatibilitaetsvertrag U5: Kontrolle Marke zurueckgesetzt oder entfernt l
   assert.ok(entfernt.some((zeile) => zeile.includes("entfernt")), entfernt.join("\n"));
 });
 
-// Vorlauf: die Marke rueckt nur auf einen Stand vor, der vorher unter der alten Marke
-// committet war und dort sperrfrei ist. Historie neuester Commit zuerst.
 const markeAuf = (stand) => ({ datum: "2026-01-03", stand_sha256: standSha256(stand) });
 const commitUnterBasis = (stand, geschuetzt = []) => ({ quelle: "vorlauf-commit", vertrag: nachVeroeffentlichung(stand, geschuetzt) });
 const BASIS_VEROEFFENTLICHT = Object.freeze({ quelle: "basis-commit", vertrag: { ...SYNTHETISCHER_VERTRAG, veroeffentlichung: MARKE_BASIS } });
@@ -775,8 +688,6 @@ test("Kompatibilitaetsvertrag U5: Marke nach sperrfreiem Vorlauf vorgerueckt ist
   const widget = [commitUnterBasis(STAND_WIDGET_NEU, [WIDGET_A]), BASIS_VEROEFFENTLICHT];
   assert.deepEqual(sperre(vorgerueckt(STAND_WIDGET_NEU), STAND_WIDGET_NEU, widget), []);
 });
-
-// ---- R1: Runbook ----
 
 const PAKET = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
 const UMGEBUNG = {

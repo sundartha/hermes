@@ -1,7 +1,3 @@
-// Token-Pull-Disziplin. Prueft das Drift-Gate
-// (scripts/check-token-sync.js) gegen den echten Repo-Zustand (read-only) UND
-// gegen synthetische Temp-Fixtures (mkdtemp-Muster) fuer die Fehlerfaelle --
-// die echten Repo-Dateien werden nie zerstoerend angefasst. Offline, kein Netz.
 import { strict as assert } from "node:assert";
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,16 +25,12 @@ function writeFile(root, rel, content) {
   writeFileSync(abs, content);
 }
 
-// Legt die minimale synchrone Struktur an und friert sie via writeTokenLock
-// als konsistenten Soll-Stand ein. Liefert das Wurzelverzeichnis zurueck.
 function makeSyncedFixture() {
   const root = mkdtempSync(join(tmpdir(), "token-sync-"));
   tmpDirs.push(root);
-  // Quelle (apps/web): roh -> semantisch -> hero.
   writeFile(root, PRIMITIVES_REL, ":root{--c:#fff;}\n");
   writeFile(root, `${TOKEN_DIR_REL}/semantic.css`, ":root{--a:var(--c);}\n");
   writeFile(root, `${TOKEN_DIR_REL}/hero.css`, ":root{--h:#000;}\n");
-  // Gespiegelte Katalog-Kopie (inlined, .on-dark-Scope): eigene Hashes.
   writeFile(root, COPY_PRIMITIVES_REL, ":root{--c:#fff;}\n");
   writeFile(root, `${COPY_DIR_REL}/semantic.css`, ":root{--a:#fff;}\n");
   writeFile(root, `${COPY_DIR_REL}/dark.css`, ".on-dark{--h:#000;}\n");
@@ -109,9 +101,6 @@ describe("check-token-sync gate", () => {
     assert.equal(checkTokens({ rootDir: root }).ok, false);
   });
 
-  // Regression: eine fehlende gepinnte Kopie-Datei muss ueber den Hash-Pfad
-  // (checkHashDrift -> fileMissingProblem) die einheitliche "Datei fehlt"-
-  // Meldung erzeugen, nicht still durchrutschen.
   it("(d') fehlende Kopie -> einheitliche fail-closed-Meldung", () => {
     const root = makeSyncedFixture();
     rmSync(join(root, COPY_PRIMITIVES_REL));

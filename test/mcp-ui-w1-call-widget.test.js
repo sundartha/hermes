@@ -1,9 +1,3 @@
-// W1: das vereinte Call-Widget (src/ui/widgets/call.html). Prueft die statische
-// Slot-/String-Form ueber widgetHtml() UND das eigene Inline-Skript dynamisch ueber
-// eine Fake-DOM/Fake-Window-Ausfuehrung mit node:vm (Node-Bordmittel, kein neuer
-// Dependency) - analog dem Fake-DOM-Muster aus mcp-ui-w1-bind.test.js, diesmal auf
-// den tatsaechlich ausgelieferten Skript-Text angewendet statt auf importierte
-// ESM-Funktionen (call.html hat keinen Import, self-contained Iframe).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
@@ -12,17 +6,11 @@ import { BIND_SCRIPT, signalUiReady, UI_READY_FLAG, UI_READY_EVENT } from "../sr
 import { I18N_SCRIPT, WIDGET_LOCALE_META_KEY } from "../src/ui/widget-i18n.js";
 import { WING_PNG } from "../design-system/components/brand/wing-image.js";
 
-// data-mcp-Slots nach dem Design-Cleanup 2026-07-02: duration_s/failure_reason/
-// objective_achieved sind KEINE Slots mehr, sondern Anzeige-Elemente ohne
-// data-mcp ([data-duration-display] usw.) - das geteilte BIND_SCRIPT laeuft
-// nach dem Inline-Skript und wuerde formatierte Werte sonst mit Rohwerten
-// ueberschreiben. bridge_format/last_update (Diagnose-Zeile) sind ersatzlos raus.
 const SLOT_NAMES = [
   "status",
   "last_transcript_lines",
   "call_id",
   "result_summary",
-  // AL-P11: die beiden skalaren Ergebnis-Karten-Felder (outcome/next_step).
   "outcome",
   "next_step",
 ];
@@ -34,9 +22,6 @@ const DISPLAY_SELECTORS = [
 const REMOVED_SLOT_NAMES = ["duration_s", "failure_reason", "objective_achieved", "bridge_format", "last_update"];
 const ROW_NAMES = ["lines", "failure", "summary", "objective", "outcome", "next_step"];
 
-// Minimal-Fake eines DOM-Elements: textContent (Setter leert Kinder wie echtes DOM),
-// style.display, disabled, Kind-Verwaltung, addEventListener/click - genau die
-// Oberflaeche, die call.html anfasst.
 function makeFakeElement() {
   const listeners = {};
   return {
@@ -73,10 +58,6 @@ function makeFakeElement() {
   };
 }
 
-// Fake-Document: kennt genau die Selektoren, die call.html abfragt
-// ([data-mcp="..."], [data-row="..."], [data-cancel]). Jeder Selektor bekommt ein
-// EIGENES Fake-Element (kein geteiltes DOM-Knoten-Modell noetig - das Skript liest/
-// schreibt jeden Slot ausschliesslich ueber seinen eigenen Selektor).
 function makeFakeDocument() {
   const bySelector = new Map();
   for (const name of SLOT_NAMES) bySelector.set(`[data-mcp="${name}"]`, makeFakeElement());
@@ -84,23 +65,12 @@ function makeFakeDocument() {
   for (const name of ROW_NAMES) bySelector.set(`[data-row="${name}"]`, makeFakeElement());
   bySelector.set("[data-cancel]", makeFakeElement());
   const wingEl = makeFakeElement();
-  // Reales Markup (wingSpan(), src/ui/wing-markup.js) startet dunkel+idle -
-  // updateWingForStatus haengt nur noch den Status-Modifier-Token um statt die
-  // komplette Klasse zu ueberschreiben (H3-Fix), die Fake muss deshalb densel-
-  // ben Startzustand wie das echte DOM abbilden (s. T-W1-call-AC-wing-static).
   wingEl.className = "wing wing--dark wing--idle";
   bySelector.set("[data-wing]", wingEl);
-  // H3 (Olympus-HUD): Wing-Canvas-Mount-Container + das <img> innerhalb der
-  // CSS-WingMark (mountWingEngine liest dessen .src als Engine-Bildquelle).
-  // Wirkungslos fuer alle Bestandstests, da diese nie window.HermesWingCanvas
-  // setzen -> mountWingEngine() kehrt fruehzeitig zurueck, ohne diese
-  // Selektoren je abzufragen.
   bySelector.set("[data-wing-canvas]", makeFakeElement());
   const wingImg = makeFakeElement();
   wingImg.src = "data:image/png;base64,FAKE";
   bySelector.set("[data-wing] img", wingImg);
-  // H3: rein dekorative HUD-Hooks (Status-Pill/Phase/Ring) - kein data-mcp-Slot,
-  // aber von updateStatusPill/updateHudPhase/updateRingForStatus abgefragt.
   bySelector.set("[data-status-pill]", makeFakeElement());
   bySelector.set("[data-status-dot]", makeFakeElement());
   bySelector.set("[data-status-label]", makeFakeElement());
@@ -113,10 +83,6 @@ function makeFakeDocument() {
   bySelector.set("[data-ring-arc]", ringArc);
   return {
     querySelector: (sel) => bySelector.get(sel) || null,
-    // T2-02/S5: leer, weil call.html keine [data-i18n]-Elemente traegt (die
-    // Status-Pill/HUD-Phase werden dynamisch uebersetzt, s. updateStatusPill/
-    // updateHudPhase) - noetig, damit das I18N_SCRIPT (widget-i18n.js) in
-    // derselben Fake-Sandbox laufen kann (T-W1-call-AC-status-pill-locale).
     querySelectorAll: () => [],
     documentElement: { lang: "" },
     createElement: () => makeFakeElement(),
@@ -130,31 +96,16 @@ function makeFakeDocument() {
   };
 }
 
-// Ueberschreibt querySelector eines Fake-Dokuments so, dass GENAU ein Selektor
-// null liefert (fehlendes DOM-Element) - alle anderen Selektoren bleiben wie
-// gewohnt bedient. Fuer die mountWingEngine-Fail-Safe-Tests (H3-S1-1): host-
-// oder wingImg-Selektor fehlt, der Rest des Fake-DOM bleibt unveraendert.
 function withMissingSelector(doc, missingSelector) {
   const original = doc.querySelector;
   doc.querySelector = (sel) => (sel === missingSelector ? null : original(sel));
   return doc;
 }
 
-// Objekte, die IM vm-Sandbox-Skript entstehen (z.B. die geposteten JSON-RPC-params),
-// leben in einer eigenen Realm mit eigenem Object.prototype. node:assert/strict
-// vergleicht bei deepEqual zusaetzlich den Prototyp und wirft sonst "same structure
-// but not reference-equal", obwohl die Daten identisch sind. JSON-Rundreise
-// normalisiert auf reine Daten (hier immer einfache {call_id} Objekte, kein Verlust).
 function crossRealmPlain(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-// Extrahiert NUR das eigene Inline-Skript von call.html (ohne das angehaengte
-// BIND_SCRIPT, das die Katalog-Ladefunktion injiziert - widget-catalog.js:withBindScript).
-// H3: die Wing-Canvas-Engine wird per <!--__WING_ENGINE__--> in <head> injiziert,
-// also VOR diesem Skript - der erste <script>-Block ist deshalb nicht mehr
-// automatisch das eigene Skript. Nach Autorenregel (siehe call.html-Kopfkommentar)
-// bleibt das eigene Skript IMMER das LETZTE <script>-Element im Dokument.
 function ownScriptSource() {
   const html = widgetHtml(WIDGET_CALL).replace(BIND_SCRIPT, "");
   const matches = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
@@ -162,23 +113,15 @@ function ownScriptSource() {
   return matches[matches.length - 1][1];
 }
 
-// Schneidet den Inhalt eines einzelnen <script>-Fragments heraus (Muster
-// mcp-ui-widget-i18n.test.js scriptBodyOf) - fuer T2-02/S5: das I18N_SCRIPT laeuft
-// in <head>, also VOR dem eigenen Inline-Skript, und braucht deshalb dieselbe
-// Extraktion wie ownScriptSource oben, nur fuer ein fertiges Fragment statt fuer
-// die ganze widgetHtml()-Ausgabe.
 function scriptBodyOf(script) {
   return script.match(/<script>([\s\S]*)<\/script>/)[1];
 }
 
-// Fuehrt das eigene Inline-Skript in einer frischen vm-Sandbox aus (window === die
-// Sandbox selbst, wie im echten Iframe window === globalThis). Timer sind synchron
-// erfassbare Fakes (F.I.R.S.T. - Fast, kein echtes Warten im Test).
 function runOwnScript(doc, options) {
   const sandbox = {};
   sandbox.document = doc;
   sandbox.window = sandbox;
-  sandbox.HermesWingCanvas = options && options.hermesWingCanvas; // H3: optionaler Engine-Fake
+  sandbox.HermesWingCanvas = options && options.hermesWingCanvas;
   sandbox._posted = [];
   sandbox.parent = { postMessage: (msg) => sandbox._posted.push(msg) };
   const listeners = {};
@@ -186,8 +129,6 @@ function runOwnScript(doc, options) {
     listeners[type] = listeners[type] || [];
     listeners[type].push(handler);
   };
-  // CustomEvent/dispatchEvent-Oberflaeche, damit der ECHTE signalUiReady (widget-bind.js)
-  // in dieser Sandbox dispatchen kann - kein Test-Attrappen-Signalpfad (s. env.uiReady).
   sandbox.CustomEvent = function CustomEvent(type) { this.type = type; };
   sandbox.dispatchEvent = (event) => {
     for (const h of listeners[event.type] || []) h(event);
@@ -211,14 +152,9 @@ function runOwnScript(doc, options) {
   };
   sandbox.clearTimeout = (id) => timeoutFns.delete(id);
 
-  // Late-safe-Pfad (F2): Flag schon gesetzt, BEVOR das Inline-Skript ueberhaupt laeuft.
   if (options && options.readyBeforeScript) sandbox[UI_READY_FLAG] = true;
 
   vm.createContext(sandbox);
-  // T2-02/S5: optional das I18N_SCRIPT VOR dem eigenen Inline-Skript laufen lassen -
-  // exakt die reale Reihenfolge (widget-catalog.js injiziert es in <head>, das eigene
-  // Skript steht im <body>). Der I18N-message-Listener landet dadurch VOR dem eigenen
-  // in sandbox.addEventListener("message", ...) - env.emit() unten ruft beide aus.
   if (options && options.withI18n) vm.runInContext(scriptBodyOf(I18N_SCRIPT), sandbox);
   vm.runInContext(ownScriptSource(), sandbox);
 
@@ -235,8 +171,6 @@ function runOwnScript(doc, options) {
     fireTimeout: () => {
       for (const fn of timeoutFns.values()) fn();
     },
-    // Faehrt den ECHTEN Handshake-Signalpfad aus widget-bind.js (Flag setzen + Event
-    // dispatchen), nicht eine Test-Attrappe - beweist die Verdrahtung, nicht nur die Form.
     uiReady: () => signalUiReady(sandbox),
   };
 }
@@ -265,8 +199,6 @@ test("T-W1-call-AC3: data-mcp-Slots + Anzeige-Elemente vorhanden, Debug-Slots re
   for (const name of REMOVED_SLOT_NAMES) {
     assert.ok(!html.includes(`data-mcp="${name}"`), `kein data-mcp-Slot mehr fuer ${name}`);
   }
-  // Owner-Entscheidung 2026-07-02: keine sichtbare Debug-/ID-Zeile mehr; der
-  // Fuss ist eine Inschrift (Wortmarke + Maeander-Fries).
   assert.ok(!html.includes("id-block"), "ID-Block (call_id/Status roh) entfernt");
   assert.ok(!html.includes('class="diag"'), "Diagnose-Zeile entfernt");
   assert.ok(html.includes('class="foot-mark"'), "Fuss-Wortmarke vorhanden");
@@ -294,16 +226,12 @@ test("T-W1-call-AC6: kein innerHTML/@import/<link/href= im Widget", () => {
 test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deaktiviert Cancel, erreicht clearInterval, holt get_call_result GENAU EINMAL", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
-  env.uiReady(); // Handshake beantwortet - Polling/Sendeweg ist ab hier offen (F2)
+  env.uiReady();
 
-  // Simuliert den bereits bewiesenen Empfangspfad (widget-bind.js bindet call_id aus
-  // dem initialen place_call-Push, BEVOR unser eigenes Skript pollt).
   doc.slot("call_id").textContent = "call_1";
 
-  // Vor dem ersten Poll-Response darf get_call_result NICHT versucht worden sein.
   assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_call_result").length, 0);
 
-  // Zwischenschritt: in_progress darf get_call_result weiterhin NICHT ausloesen.
   env.emit({
     jsonrpc: "2.0",
     method: "ui/notifications/tool-result",
@@ -322,7 +250,6 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   assert.equal(doc.cancelButton().disabled, false, "Cancel bleibt aktiv, nicht terminal");
   assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_call_result").length, 0);
 
-  // Terminal-Notification: completed.
   env.emit({
     jsonrpc: "2.0",
     method: "ui/notifications/tool-result",
@@ -354,7 +281,6 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
     "get_call_result NUR im Terminal-Zweig (completed) versucht - genau EIN Versuch (tools/call)",
   );
 
-  // Get-transcript-Antwort einspielen -> result_summary/objective_achieved gefuellt.
   const transcriptReq = env.posted.find((m) => m.params && m.params.name === "get_call_result");
   env.emit({
     jsonrpc: "2.0",
@@ -362,13 +288,9 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
     result: { structuredContent: { call_id: "call_1", result_summary: "Termin gebucht.", objective_achieved: true } },
   });
   assert.equal(doc.slot("result_summary").textContent, "Termin gebucht.");
-  // objective_achieved=true -> lokalisiertes Label; in der vm-Sandbox gibt es
-  // kein injiziertes I18N_SCRIPT -> t() degradiert auf die Keys = englische
-  // Texte (genau der dokumentierte Fail-Safe-Pfad von call.html).
   assert.equal(doc.querySelector("[data-objective-display]").textContent, "Yes");
   assert.equal(doc.row("summary").style.display, "", "Ergebnis-Zeile sichtbar nach completed");
 
-  // Erneutes Terminal-Signal darf get_call_result NICHT erneut ausloesen (Guard).
   env.emit({
     jsonrpc: "2.0",
     method: "ui/notifications/tool-result",
@@ -381,9 +303,6 @@ test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
 
-  // Kanal A (Host-Push) ist NICHT ready-gegated, nur der ausgehende sendToolCall() ist es
-  // (s. Datei-Kommentar bei METHOD_TOOL_RESULT) - die Notification trifft hier VOR dem
-  // Handshake ein, call_id UND status=completed werden trotzdem sofort gebunden.
   env.emit({
     jsonrpc: "2.0",
     method: "ui/notifications/tool-result",
@@ -393,13 +312,11 @@ test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert
   });
   assert.equal(env.posted.length, 0, "get_call_result-Versuch scheitert am ready-Gate - noch kein Versand");
 
-  env.uiReady(); // Handshake beantwortet - init() startet ueber whenUiReady(startPolling) sofort einen Poll-Tick
+  env.uiReady();
 
   assert.equal(env.posted.length, 1, "erster Versand nach dem Handshake ist der Poll-Tick, nicht der nachgeholte Transcript-Fetch");
   assert.equal(env.posted[0].params.name, "get_call_status");
 
-  // Antwort auf den Poll-Tick: Call ist weiterhin completed -> fetchCallResultOnce()
-  // laeuft ein zweites Mal, diesmal mit ready=true - der Fetch ist NICHT verloren.
   env.emit({
     jsonrpc: "2.0",
     id: env.posted[0].id,
@@ -426,7 +343,7 @@ test("T-W1-call-F1-tick: ein Poll-Tick postet GENAU EINE Nachricht, Methode tool
   doc.slot("call_id").textContent = "call_1";
 
   env.posted.length = 0;
-  env.fireInterval(); // simuliert den naechsten 8s-Tick
+  env.fireInterval();
 
   assert.equal(env.posted.length, 1, "genau ein Versuch pro Tick");
   assert.equal(env.posted[0].method, "tools/call");
@@ -436,13 +353,13 @@ test("T-W1-call-F1-tick: ein Poll-Tick postet GENAU EINE Nachricht, Methode tool
 
 test("T-W1-call-F2: kein tools/call vor dem Handshake - erst das ready-Signal startet das Polling", () => {
   const doc = makeFakeDocument();
-  doc.slot("call_id").textContent = "call_1"; // call_id VOR runOwnScript gebunden
+  doc.slot("call_id").textContent = "call_1";
   const env = runOwnScript(doc);
 
   assert.equal(env.posted.length, 0, "kein tools/call vor dem Handshake");
   assert.equal(env.intervalFns.size, 0, "kein Polling-Timer vor dem Handshake");
 
-  env.uiReady(); // echtes signalUiReady aus widget-bind.js
+  env.uiReady();
 
   assert.equal(env.posted.length, 1, "sofort ein tools/call nach dem Handshake");
   assert.equal(env.posted[0].method, "tools/call");
@@ -494,7 +411,7 @@ test("T-W1-call-F3: 3 aufeinanderfolgende JSON-RPC-Fehler stoppen das Polling; e
   assert.equal(env.intervalFns.size, 1, "2 Fehler in Folge - Polling laeuft weiter");
 
   env.fireInterval();
-  respondWithSuccess(); // Erfolg setzt den Fehlerzaehler zurueck
+  respondWithSuccess();
 
   env.fireInterval();
   respondWithError();
@@ -503,7 +420,7 @@ test("T-W1-call-F3: 3 aufeinanderfolgende JSON-RPC-Fehler stoppen das Polling; e
   assert.equal(env.intervalFns.size, 1, "nach dem Erfolg wieder bei 2 Fehlern - Polling laeuft noch");
 
   env.fireInterval();
-  respondWithError(); // 3. Fehler in Folge seit dem letzten Erfolg
+  respondWithError();
   assert.equal(env.intervalFns.size, 0, "3 aufeinanderfolgende Fehler - Polling gestoppt");
   assert.equal(doc.slot("status").textContent, "in_progress", "kein Blanking, letzter Stand bleibt sichtbar");
 });
@@ -515,7 +432,7 @@ test("T-W1-call-AC7d: Fallback nach 15s ohne jede Antwort - clearInterval, initi
   env.uiReady();
   doc.slot("call_id").textContent = "call_1";
 
-  env.fireTimeout(); // simuliert Ablauf von FALLBACK_TIMEOUT_MS ohne jede Host-Antwort
+  env.fireTimeout();
 
   assert.equal(env.intervalFns.size, 0, "Polling gestoppt");
   assert.equal(doc.slot("status").textContent, "dialing", "initialer Status bleibt sichtbar (nie leer)");
@@ -540,17 +457,12 @@ test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEI
     },
   });
 
-  // Bekannter Reason-Token -> Anzeige-Label (EN-Fail-Safe der Sandbox, s.o.).
   assert.equal(doc.querySelector("[data-failure-display]").textContent, "No answer");
   assert.equal(doc.row("failure").style.display, "", "Grund-Zeile sichtbar bei failed");
   assert.equal(doc.row("summary").style.display, "none", "Ergebnis-Zeile bleibt versteckt bei failed");
   assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_call_result").length, 0);
   assert.equal(doc.cancelButton().disabled, true);
 
-  // OUTBOUND-E3a (Befund D-5): ein unbekanntes/neues Token faellt auf das Sammel-Label
-  // "Failed" zurueck statt roh sichtbar zu bleiben - "failed:<sipcause>" tat das schon
-  // vorher, ein voellig fremder Token ("sonderfall-token") jetzt ebenso. Der rohe Token
-  // bleibt der Diagnose vorbehalten (Store/Log/get_call_status), nicht der Nutzeranzeige.
   const doc2 = makeFakeDocument();
   const env2 = runOwnScript(doc2);
   doc2.slot("call_id").textContent = "call_2";
@@ -562,10 +474,6 @@ test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEI
   assert.equal(doc2.querySelector("[data-failure-display]").textContent, "Failed");
 });
 
-// OUTBOUND-E2 (Review-Blocker Runde 4): die drei neuen Schuld-Basis-Token aus
-// FAILURE_REASON_BASE_TOKENS (telephony/failure-reason.js) MUESSEN im Widget ein Label
-// bekommen, sonst zeigt failureReasonLabel() den rohen internen Token (Befund: ein per
-// place_call abgelehnter Anruf zeigte z.B. "not-placed:start-403" statt eines Labels).
 test("T-W1-call-AC7f: die drei OUTBOUND-E2-Basis-Token (not-placed/unreachable/result-unknown) zeigen ein Label, keinen rohen Token", () => {
   const cases = [
     { failure_reason: "not-placed:start-403", expected: "Not placed" },
@@ -624,14 +532,14 @@ test("T-W1-call-G2: Cancel-Klick vor dem Handshake deaktiviert den Button NICHT 
   const env = runOwnScript(doc);
   doc.slot("call_id").textContent = "call_1";
 
-  doc.cancelButton().click(); // Klick VOR dem Handshake (call_id kann frueher gebunden sein als Ready, s. T-W1-call-F5-transcript-race)
+  doc.cancelButton().click();
 
   assert.equal(env.posted.length, 0, "kein cancel_call vor dem Handshake");
   assert.equal(doc.cancelButton().disabled, false, "Button bleibt aktiv - sendToolCall() lief ins Leere, keine optische Luege ueber einen nie gesendeten Abbruch");
   assert.notEqual(doc.cancelButton().style.display, "none", "Button bleibt sichtbar");
 
   env.uiReady();
-  doc.cancelButton().click(); // erneuter Klick NACH dem Handshake - jetzt gelingt der Versand
+  doc.cancelButton().click();
 
   assert.equal(doc.cancelButton().disabled, true, "Button deaktiviert sich erst nach bestaetigtem Versand");
   const cancelReqs = env.posted.filter((m) => m.params && m.params.name === "cancel_call");
@@ -663,7 +571,6 @@ test("T-W1-call-AC-wing: Statuswechsel spiegelt sich als CSS-Klassenwechsel (Fal
     ["cancelled", "wing wing--dark wing--error"],
   ];
 
-  // Pfad A: keine Engine injiziert - reiner CSS-Fallback, kein Crash.
   const docA = makeFakeDocument();
   const envA = runOwnScript(docA);
   docA.slot("call_id").textContent = "call_1";
@@ -674,7 +581,6 @@ test("T-W1-call-AC-wing: Statuswechsel spiegelt sich als CSS-Klassenwechsel (Fal
   }
   assert.notEqual(docA.wing().style.display, "none", "ohne Engine bleibt die CSS-WingMark sichtbar");
 
-  // Pfad B: Engine erfolgreich injiziert.
   const docB = makeFakeDocument();
   const setStatusCalls = [];
   const fakeHandle = { setStatus: (s) => setStatusCalls.push(s) };
@@ -714,9 +620,6 @@ test("T-W1-call-AC-wing-mount-throws: HermesWingCanvas.mount() wirft -> engineHa
   assert.notEqual(doc.wing().style.display, "none",
     "CSS-WingMark bleibt sichtbar nach fehlgeschlagenem Mount - kein leeres Loch statt Marke");
 
-  // Beweis, dass engineHandle null blieb (catch-Zweig): ein Statuswechsel darf
-  // NICHT auf einen toten Engine-Handle zugreifen (engineHandle.setStatus wuerde
-  // sonst crashen) - der Fallback-Klassenwechsel bleibt der einzige Effekt.
   assert.doesNotThrow(() => {
     env.emit({ jsonrpc: "2.0", method: "ui/notifications/tool-result",
       params: { structuredContent: { call_id: "call_1", status: "in_progress", duration_s: 1, last_transcript_lines: [], failure_reason: null } } });
@@ -776,14 +679,6 @@ test("T-W1-call-AC-status-pill: Status-Pill-Labels ueber alle 5 Status (EN-Keys;
   }
 });
 
-// T2-02/S5: Status-Pill/HUD-Phase muessen NACH einem Sprachwechsel in der neuen
-// Sprache erscheinen - vorher rechnete call.html t() beim Laden (S5-Spec-Beweis).
-// Faehrt das ECHTE I18N_SCRIPT (widget-i18n.js) UND das eigene Inline-Skript in
-// derselben Sandbox (runOwnScript({ withI18n: true })), sendet EINE Host-Nachricht
-// mit BEIDEM: _meta["hermes/locale"]="de" (I18N-Listener schaltet um) UND
-// structuredContent.status="in_progress" (eigener Listener bindet/rendert) - exakt
-// wie am echten Draht (mcp-tools.js withWidgetLocale setzt beide Felder am selben
-// CallToolResult).
 test("T-W1-call-AC-status-pill-locale: tool-result mit hermes/locale=de uebersetzt Status-Pill + HUD-Phase live (T2-02/S5)", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc, { withI18n: true });
@@ -801,7 +696,6 @@ test("T-W1-call-AC-status-pill-locale: tool-result mit hermes/locale=de ueberset
   assert.equal(doc.querySelector("[data-status-label]").textContent, "Live", "DE: Live (im Woerterbuch identisch zu EN)");
   assert.equal(doc.querySelector("[data-hud-phase]").textContent, "Im Gespräch", "DE: HUD-Phase uebersetzt");
 
-  // Gegenprobe: ohne _meta bleibt die Karte englisch (fail-safe Start-Locale).
   const docEn = makeFakeDocument();
   const envEn = runOwnScript(docEn, { withI18n: true });
   docEn.slot("call_id").textContent = "call_1";
@@ -818,9 +712,6 @@ test("T-W1-call-AC-hud-ring: Status -> HUD-Phasentext (STATUS_VIEW.hudPhase) + S
   const env = runOwnScript(doc);
   doc.slot("call_id").textContent = "call_1";
 
-  // Spiegelbild der Konstanten aus call.html (RING_RADIUS_PX/RING_ARC_*_PX) -
-  // Kreuzpruefung von RING_RADIUS_PX gegen das ausgelieferte SVG-Markup siehe
-  // T-W1-call-AC-hud-ring-sync (kein stiller Drift zwischen JS und SVG).
   const RING_RADIUS_PX = 74;
   const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS_PX;
   const RING_ARC_DIALING_PX = 110;

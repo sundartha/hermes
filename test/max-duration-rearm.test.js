@@ -1,21 +1,3 @@
-// F10 (A6, T4) - Boot-Re-Arm der Max-Dauer-Timer (rearmActiveCallTimers).
-//
-// Ein Deploy/Restart toetet den In-Prozess-setTimeout jedes laufenden Calls. Ohne Re-Arm
-// waere der harte Max-Dauer-Cap (Absolute Regel 1) nach jedem Boot weg und eine beim Boot
-// bereits ueber die Max-Dauer gelaufene aktive Zeile bliebe fuer immer "active" (Phantom).
-// Dieser Test faehrt den Kindprozess mit geseedeten aktiven Calls hoch (echter Boot) und
-// prueft die zwei Wege:
-//   (1) Zombie (Anker weit in der Vergangenheit, Restzeit<=0) -> beim Boot terminalisiert:
-//       status "failed", endedAt = gekappter Anker (answeredAt + Max-Dauer, NIE Boot-Zeit),
-//       Voice-Minuten GEBUCHT (usageFor). Beweist K2 (kein Boot-Zeit-Anker) + genau-einmal.
-//   (2) Aktiver Call mit Restzeit (Anker vor 10s, max 180) -> bleibt "active"; das Boot-Log
-//       [rearm] weist 1 re-armed / 0 terminalisiert aus (Timer neu armiert, nicht beendet).
-//
-// Rot-vor-Fix: ohne rearmActiveCallTimers bleibt der Zombie "active" (kein [rearm]-Log,
-// keine Buchung) -> beide Assertions von Fall (1) und der waitForLog von Fall (2) fehlen.
-//
-// Netzfrei/deterministisch: leeres Transkript -> finishCall returnt VOR jedem LLM-Call
-// (kein Anthropic-Mock). twilioSid=null (seedCall-Default) -> kein Provider-endCall.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -28,23 +10,19 @@ import {
 } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-// Tarif so, dass die gebuchte Zombie-Minute eine sichtbare Summe ergibt (G25, Muster
-// finishcall-billing-once.test.js - kein nacktes Cent-Literal).
 const DOMESTIC_TARIFF_CENTS = 20;
-const DOMESTIC_TO = "+4915112345678"; // DE -> Inlandstarif
+const DOMESTIC_TO = "+4915112345678";
 const TARIFF_ENV = {
   VOICE_TARIFF_DOMESTIC_CENTS: String(DOMESTIC_TARIFF_CENTS),
   VOICE_TARIFF_DEFAULT_CENTS: "300",
 };
 
-// Zombie-Anker: fixer, weit zurueckliegender answeredAt -> Restzeit garantiert <=0. Der
-// gekappte End-Anker ist deterministisch answeredAt + ZOMBIE_MAX_S (NIE Boot-Zeit/2026).
 const ZOMBIE_MAX_S = 60;
 const ZOMBIE_ANSWERED_AT = "2020-01-01T00:00:00.000Z";
 const ZOMBIE_ENDED_AT = new Date(
   Date.parse(ZOMBIE_ANSWERED_AT) + ZOMBIE_MAX_S * 1000,
 ).toISOString();
-const ZOMBIE_MINUTES = 1; // ceil(60s / 60s)
+const ZOMBIE_MINUTES = 1;
 
 test("Boot-Re-Arm terminalisiert einen Zombie gekappt + gebucht (nie Boot-Zeit)", async () => {
   const srv = await startServer({
@@ -55,8 +33,6 @@ test("Boot-Re-Arm terminalisiert einen Zombie gekappt + gebucht (nie Boot-Zeit)"
           id: "zombie",
           direction: "outbound",
           to: DOMESTIC_TO,
-          // Absender mit +49: der Inlandssatz greift seit P5 nur bei gleicher Vorwahl an
-          // BEIDEN Enden (seedCall-Default ist die US-DID = Auslands-Leg).
           from: DOMESTIC_TEST_NUMBER.e164,
           status: "active",
           answeredAt: ZOMBIE_ANSWERED_AT,
@@ -90,7 +66,7 @@ test("Boot-Re-Arm terminalisiert einen Zombie gekappt + gebucht (nie Boot-Zeit)"
 });
 
 test("Boot-Re-Arm laesst einen aktiven Call mit Restzeit active (Timer neu armiert)", async () => {
-  const answeredAt = new Date(Date.now() - 10_000).toISOString(); // vor 10s, max 180 -> ~170s Rest
+  const answeredAt = new Date(Date.now() - 10_000).toISOString();
   const srv = await startServer({
     env: TARIFF_ENV,
     seed: seedState({

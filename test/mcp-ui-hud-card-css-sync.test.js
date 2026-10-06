@@ -1,15 +1,3 @@
-// H4 Review-Fix (S2-1): Drift-Guard fuer den gemeinsamen Olympus-HUD-
-// Kartenrahmen zwischen call.html (H3, bleibt in dieser Kette unangetastet,
-// ABS_RULES) und hud-card-css.js (H4, injiziert in die 4 Read-only-Widgets).
-// hud-card-css.js ist NICHT aus call.html importiert (siehe dortiger Kopf-
-// kommentar "Werte sind ABSICHTLICH identisch zu call.html gewaehlt"), daher
-// gibt es KEINEN automatischen Sync-Mechanismus zwischen beiden Dateien -
-// dieser Test ist das Drift-Gate (Muster wie mcp-ui-wing-canvas-sync.test.js
-// T-wing-canvas-sync fuer die Engine-Doppelkopie design-system/src-ui).
-// Ohne diesen Test faellt eine kuenftige Aenderung an genau EINEM der beiden
-// Orte nie auf - die Karten liefen still visuell auseinander (PLAN
-// tasks/widget-hermes-redesign-chain.md H4-AC3: "die 5 Widgets teilen
-// Tokens/Basis-CSS wortgleich").
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -21,11 +9,6 @@ const CALL_HTML = readFileSync(
   "utf8",
 );
 
-// Custom Properties, die laut hud-card-css.js Kopfkommentar ABSICHTLICH
-// wortgleich zu call.html sind (Produkt-weite Konsistenz fuer Farben/Radien/
-// Ease). --wing-size und --wing-glow-filter sind bewusst NICHT gelistet: sie
-// weichen bewusst ab (86px read-only vs. 112px live-Karte, kleinerer Glow-
-// Radius fuer die kleinere Karte).
 const SHARED_CUSTOM_PROPERTIES = [
   "color-navy-800", "color-navy-900", "color-navy-card", "color-white",
   "radius-card", "radius-pill", "font-sans", "ease",
@@ -33,8 +16,6 @@ const SHARED_CUSTOM_PROPERTIES = [
   "color-accent-light-rgb", "color-accent-light-glow",
 ];
 
-// Basisregeln, die laut hud-card-css.js-Kopfkommentar wortgleich aus call.html
-// uebernommen sind (body-Reset + Wing-Canvas-Mount-Rahmen).
 const SHARED_RULE_SELECTORS = ["body", "\\.wing-canvas-mount", "\\.wing-canvas-mount canvas"];
 
 function customPropertyValue(css, name, source) {

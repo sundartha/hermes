@@ -1,35 +1,18 @@
-// Seam-Unit-Tests fuer src/llm.js (P3b-R Schicht 2). Reine node:test-Unit gegen
-// Fakes (DIP) - KEIN Server-Spawn, KEIN pglite: schnell, offline, deterministisch
-// (P12 F.I.R.S.T.; injizierte sleep/random/now/messagesCreate statt echter Zeit/Netz).
-//
-// Scope-Abgrenzung (bewusst): Der echte HTTP-Premature-close-Mock (chunked ohne
-// Content-Length + res.socket.destroy()) gehoert zu CP4 (Server-Spawn, end-to-end
-// Pfad). Hier wuerde er keinen Konsumenten haben (tote Test-Infra, G12). isTransient
-// wird stattdessen gegen die reine, VERIFIZIERTE Fehler-Form geprueft (FetchError-Shape
-// direkt konstruiert) - schneller und stabiler als ein echter HTTP-Round-Trip.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Anthropic from "@anthropic-ai/sdk";
 import { isTransient, withRetry, createLlmClient, LlmUnavailableError } from "../src/llm.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
-// --- Test-Doubles (lokal, Single-Consumer-Konvention) ---
-
-// Rohe node-fetch-FetchError-Form: message "Premature close" + ERR_STREAM_PREMATURE_CLOSE,
-// KEIN status, KEIN APIError (die verifizierte Shape aus dem Parse-Pfad des SDK 0.39).
 function prematureClose() {
   return { message: "Premature close", code: "ERR_STREAM_PREMATURE_CLOSE" };
 }
-// SDK-APIError-Subklassen tragen .status (HTTP-Status); hier minimal nachgebildet.
 function apiError(status) {
   return { status, message: `HTTP ${status}` };
 }
-// Echte APIConnectionError-Instanz (status undefined) - prueft gegen die reale Klasse.
 function connError() {
   return new Anthropic.APIConnectionError({ message: "connection failed" });
 }
-// Minimale Anbieter-Antwort. Seit B3a liefert complete() ein LlmTurn (llm/ports.js), also
-// wird auf turn.text geprueft statt auf ein durchgereichtes Rohfeld.
 function okResponse() {
   return {
     content: [{ type: "text", text: "ok" }],
@@ -37,7 +20,6 @@ function okResponse() {
   };
 }
 
-// sleep-Fake: zaehlt Aufrufe + Delays, schlaeft NICHT real (synchron resolved).
 function fakeSleep() {
   const calls = [];
   const fn = (ms) => {
@@ -48,7 +30,6 @@ function fakeSleep() {
   return fn;
 }
 
-// Minimal-Config mit den sechs LLM-Feldern (deterministisch, kein echter Backoff).
 function llmConfig(overrides = {}) {
   return withConfigNamespaces({
     llmRequestTimeoutMs: 3500,
@@ -61,12 +42,9 @@ function llmConfig(overrides = {}) {
   });
 }
 
-// Standard-withRetry-Optionen mit injizierten Fakes; max/baseMs ueberschreibbar.
 function retryOpts({ sleep, max = 2, baseMs = 1, jitter = false, random = () => 0 } = {}) {
   return { max, baseMs, jitter, retryable: isTransient, sleep: sleep || fakeSleep(), random };
 }
-
-// --- T-CP2-1..4: isTransient-Klassifikation ---
 
 test("T-CP2-1: isTransient klassifiziert Premature-close-FetchError als transient", () => {
   assert.equal(isTransient(prematureClose()), true);
@@ -87,8 +65,6 @@ test("T-CP2-4: isTransient folgt verschachtelter cause (ECONNRESET) als transien
   assert.equal(isTransient({ message: "wrapped", cause: { code: "ECONNRESET" } }), true);
   assert.equal(isTransient(null), false);
 });
-
-// --- T-CP2-5..8: withRetry ---
 
 test("T-CP2-5: withRetry retriet bei transient und gibt nach Erfolg zurueck", async () => {
   const sleep = fakeSleep();
@@ -130,7 +106,7 @@ test("T-CP2-7: withRetry haelt die Obergrenze ein (1 + max Versuche)", async () 
     () => withRetry(fn, retryOpts({ sleep, max: 2 }), null),
     (e) => e.message === "Premature close",
   );
-  assert.equal(calls, 3); // 1 + max
+  assert.equal(calls, 3);
   assert.equal(sleep.calls.length, 2);
 });
 
@@ -141,16 +117,12 @@ test("T-CP2-8: withRetry-Jitter-Backoff ist via injiziertem random deterministis
     calls += 1;
     throw prematureClose();
   };
-  // random=0.5, baseMs=100, jitter=true: delay = floor(0.5 * 100*2^attempt) = 50, 100.
   await assert.rejects(() =>
     withRetry(fn, retryOpts({ sleep, max: 2, baseMs: 100, jitter: true, random: () => 0.5 }), null),
   );
   assert.deepEqual(sleep.calls, [50, 100]);
 });
 
-// --- T-CP2-9..13: complete / Breaker / Metrik (ueber injiziertes messagesCreate) ---
-
-// Baut einen Client mit Fake-SDK-Aufruf + injizierter sleep, sammelt Metrik-Calls.
 function clientWith({ create, config = llmConfig() } = {}) {
   const metricCalls = [];
   const client = createLlmClient({
@@ -172,11 +144,9 @@ test("T-CP2-9: Breaker oeffnet nach threshold transienten Fehlern -> Folge-Call 
       return Promise.reject(prematureClose());
     },
   });
-  // Zwei fehlschlagende complete()-Calls saettigen den Breaker (threshold=2, je 1 SDK-Call).
   await assert.rejects(() => client.complete({}), LlmUnavailableError);
   await assert.rejects(() => client.complete({}), LlmUnavailableError);
   const callsAfterSaturation = sdkCalls;
-  // Folge-Call: Breaker open -> sofortiger circuit-open-Throw, KEIN weiterer SDK-Call.
   await assert.rejects(
     () => client.complete({}),
     (e) => e instanceof LlmUnavailableError && e.reason === "circuit-open",
@@ -185,9 +155,6 @@ test("T-CP2-9: Breaker oeffnet nach threshold transienten Fehlern -> Folge-Call 
 });
 
 test("T-CP2-10: Breaker open -> nach Cooldown half-open eine Probe -> Erfolg schliesst ihn", async () => {
-  // Echter Cooldown waere 30 s; hier kurz halten und Date.now ueber das Fenster bewegen
-  // ist nicht injizierbar (Breaker nutzt Date.now). Stattdessen Cooldown=0 -> isOpen()
-  // laesst SOFORT die half-open-Probe zu; Erfolg der Probe schliesst den Breaker wieder.
   let attempt = 0;
   const config = llmConfig({ llmBreakerThreshold: 1, llmMaxRetries: 0, llmBreakerCooldownMs: 0 });
   const { client } = clientWith({
@@ -198,10 +165,10 @@ test("T-CP2-10: Breaker open -> nach Cooldown half-open eine Probe -> Erfolg sch
       return Promise.resolve(okResponse());
     },
   });
-  await assert.rejects(() => client.complete({}), LlmUnavailableError); // oeffnet (threshold=1)
-  const probe = await client.complete({}); // half-open-Probe geht durch -> closed
+  await assert.rejects(() => client.complete({}), LlmUnavailableError);
+  const probe = await client.complete({});
   assert.equal(probe.text, "ok");
-  const again = await client.complete({}); // wieder normal verfuegbar
+  const again = await client.complete({});
   assert.equal(again.text, "ok");
 });
 
@@ -301,7 +268,6 @@ test("FIX1-6: die Metrik traegt alle vier Token-Sorten aus resp.usage - >0-Regel
   assert.equal(m.cache_creation_input_tokens, 20);
   assert.equal(m.cache_read_input_tokens, 100);
 
-  // Gegenprobe der >0-Regel: 0-Werte werden NICHT gemeldet (Bestandsregel unveraendert).
   const zero = clientWith({
     create: () =>
       Promise.resolve({ id: "y", usage: { input_tokens: 0, output_tokens: 0 } }),
@@ -311,17 +277,13 @@ test("FIX1-6: die Metrik traegt alle vier Token-Sorten aus resp.usage - >0-Regel
   assert.ok(!("output_tokens" in zero.metricCalls[0]));
 });
 
-// S1-10: Der Breaker-open-Zweig in complete() emittiert eine STRUKTURELL abweichende
-// Metrik-Payload (outcome/attempts/breakerState, OHNE latencyMs) - anders als success/
-// non-transient (die immer latencyMs tragen, da eine echte Messung stattfand). Diese
-// Form ist bisher nirgends festgenagelt.
 test("S1-10: Breaker-open-Metrik traegt outcome/attempts/breakerState, KEIN latencyMs", async () => {
   const config = llmConfig({ llmBreakerThreshold: 1, llmMaxRetries: 0 });
   const { client, metricCalls } = clientWith({
     config,
     create: () => Promise.reject(prematureClose()),
   });
-  await assert.rejects(() => client.complete({}), LlmUnavailableError); // saettigt + oeffnet den Breaker
+  await assert.rejects(() => client.complete({}), LlmUnavailableError);
   const before = metricCalls.length;
   await assert.rejects(
     () => client.complete({}),
@@ -336,7 +298,6 @@ test("S1-10: Breaker-open-Metrik traegt outcome/attempts/breakerState, KEIN late
 });
 
 test("T-CP2-13: Metrik-Stub wird je Outcome einmal mit der fixierten Form gerufen (kein PII)", async () => {
-  // Erfolg
   const ok = clientWith({ create: () => Promise.resolve({ id: "x" }) });
   await ok.client.complete({ secret: "do-not-leak" });
   assert.equal(ok.metricCalls.length, 1);
@@ -345,10 +306,8 @@ test("T-CP2-13: Metrik-Stub wird je Outcome einmal mit der fixierten Form gerufe
   assert.equal(typeof m.attempts, "number");
   assert.equal(typeof m.latencyMs, "number");
   assert.equal(typeof m.breakerState, "string");
-  // Form-Fixierung: keine rohen params/keine Secrets in der Metrik.
   assert.deepEqual(Object.keys(m).sort(), ["attempts", "breakerState", "latencyMs", "outcome"]);
 
-  // Nicht-transient
   const bad = clientWith({ create: () => Promise.reject(apiError(401)) });
   await assert.rejects(() => bad.client.complete({}));
   assert.equal(bad.metricCalls.length, 1);

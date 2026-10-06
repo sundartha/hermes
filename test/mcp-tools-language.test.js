@@ -1,16 +1,3 @@
-// P12 (MCP-Textkanal): Regressionssuite fuer die Sprachverzweigung der MCP-Tool-Schicht.
-// Uebernimmt fuenf der sechs SOLL-Tests aus test/mcp-tools-i18n.test.js NACH deren
-// gruenem Gate-Lauf (A3-Umzug, s. PLAN-I18N-FIX P12 Abschnitt 5.3) - Namenskonvention
-// "beschreibender Name + (ex <ID>)" (Praezedenz: f1-geo-port.test.js, fmt-28-timezone-
-// field.test.js). T7-T10 sind additiv (Regressionsschutz gegen P12 Pre-Mortem 1/2/3).
-//
-// ZWINGEND eine eigene Datei: MCP-12 (P13) zaehlt EN-Sprachfaelle NUR in genau
-// test/mcp-tools.test.js, test/mcp-ui.test.js, test/mcp-ui-widget-i18n.test.js - neue
-// EN-Faelle dort wuerden MCP-12 vorzeitig gruen faerben und P13 seinen Kanarienvogel
-// stehlen.
-//
-// Harness-Muster (kopiert/angepasst aus test/mcp-tools-i18n.test.js; Dedup dort bereits
-// begruendet, s. Kommentar in mcp-ui-i18n-divergence.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -27,10 +14,6 @@ import { makeConfigOverrides, startServer, seedState, seedCall, mcpPost, toolCal
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const { withConfig } = makeConfigOverrides(config);
 
-// ---- geteilter Mini-Harness (Muster test/mcp-tools-i18n.test.js) ----
-
-// Nur registerTool/registerResource: der Legacy-Weg tool() hat seit OpenAI-P2 keinen
-// Aufrufer mehr in src/.
 function captureTools(ctx) {
   const handlers = new Map();
   const fakeServer = {
@@ -97,7 +80,6 @@ const AGENT_STATE_FIXTURE = {
   settings: { allowSummaries: true, allowPersonalData: false, allowBankData: false },
 };
 
-// ==================== T1 (ex MCP-04) ====================
 test("requireFields-Fehler folgt der Tenant-Sprache; DE ist byte-identisch zum Bestand (ex MCP-04)", async () => {
   await withGateway({}, async () => {
     const handlersEn = captureTools({ identity: null, scopedTenant: "tenant-en-us", language: "en" });
@@ -115,7 +97,6 @@ test("requireFields-Fehler folgt der Tenant-Sprache; DE ist byte-identisch zum B
   });
 });
 
-// ==================== T2 (ex MCP-06) ====================
 test("Transkript-Rollen-Praefix folgt der Tenant-Sprache (ex MCP-06)", async () => {
   const cases = [
     ["en", "Other party:"],
@@ -140,7 +121,6 @@ function firstCallStartedAt(result) {
   return calls[0].startedAt;
 }
 
-// ==================== T3 (ex FMT-03) ====================
 test("list_calls formatiert startedAt nach dateLocale der Tenant-Sprache (ex FMT-03)", async () => {
   const calls = [{ id: "c1", direction: "outbound", to: "+491511234", status: "completed", startedAt: "2026-06-26T09:59:50.000Z" }];
   await withGateway({ calls }, async () => {
@@ -152,15 +132,12 @@ test("list_calls formatiert startedAt nach dateLocale der Tenant-Sprache (ex FMT
     const resultEn = await handlersEn.get("list_calls")();
     const startedAtEn = firstCallStartedAt(resultEn);
 
-    // Zeitzonen-unabhaengige Formprobe (kein Uhrzeit-Pin): de-DE nutzt Punkt-Trenner,
-    // en-GB Schraegstrich - der Unterschied belegt, dass dateLocale konsumiert wird.
     assert.match(startedAtDe, /\d{2}\.\d{2}\./, "de-DE-Format nutzt Punkt-Trenner");
     assert.match(startedAtEn, /\d{2}\/\d{2}/, "en-GB-Format nutzt Schraegstrich-Trenner");
     assert.notEqual(startedAtDe, startedAtEn, "unterschiedliche Sprachen formatieren unterschiedlich");
   });
 });
 
-// ==================== T5 (ex PROMPT-09) ====================
 test("mcp-tools.js traegt kein hartes de-DE-Literal mehr (ex PROMPT-09)", async () => {
   assert.doesNotMatch(MCP_TOOLS_SRC, /toLocaleString\("de-DE"/);
   await withGateway({}, async () => {
@@ -172,13 +149,6 @@ test("mcp-tools.js traegt kein hartes de-DE-Literal mehr (ex PROMPT-09)", async 
   });
 });
 
-// ==================== T6 (ex MCP-08, KS-P8 umgebaut) ====================
-// Die Praemisse von T6 (Belastungswaehrung im Textblock) entfaellt mit KS-P8/E4 - der
-// Textblock nennt ueberhaupt keinen Kostenbetrag mehr. Statt geloescht wird der Test zum
-// Waechter der neuen Zusage: schlaegt kuenftig rot, sobald irgendein Betrag/Waehrungslabel
-// in genau diese Nutzer-Flaeche zurueckkehrt (Pre-Mortem 3 aus dem KS-P8-Plan). Kein
-// Katalog-ID-Praefix am Namensanfang -> bleibt im npm test-Regressionslauf (Lehre
-// catalog-id-prefix-misroutes-tests).
 test("get_agent_status-Textblock nennt ueberhaupt keine Waehrung mehr (ex MCP-08, KS-P8/E4)", async () => {
   await withConfig("paymentCurrency", "usd", async () => {
     await withGateway(AGENT_STATE_FIXTURE, async () => {
@@ -196,10 +166,6 @@ test("get_agent_status-Textblock nennt ueberhaupt keine Waehrung mehr (ex MCP-08
   });
 });
 
-// ==================== T7 ====================
-// Regressionsschutz gegen Pre-Mortem (1): der MCP-Textkanal darf NICHT ueber den
-// Weltdefault aufgeloest werden - ein DE-Tenant bleibt deutsch, SELBST wenn der
-// Weltdefault scharf auf "en" steht.
 test("Tenant mit language=de bleibt im MCP-Kanal deutsch, auch bei scharfem Weltdefault", async () => {
   setWorldDefaultLanguageEnabled(true);
   try {
@@ -221,7 +187,6 @@ test("Tenant mit language=de bleibt im MCP-Kanal deutsch, auch bei scharfem Welt
   }
 });
 
-// ==================== T8 ====================
 test("unbekannte/leere Sprache faellt auf den EINEN Fallback (localeFor), nicht auf einen zweiten", async () => {
   const expected = localeFor(null).mcp.errors[MCP_ERROR_CODE.UPSTREAM_INCOMPLETE];
   for (const language of ["xx", "", null]) {
@@ -233,12 +198,6 @@ test("unbekannte/leere Sprache faellt auf den EINEN Fallback (localeFor), nicht 
   }
 });
 
-// ==================== T9 ====================
-// Die Pruefbloecke je Textgruppe als eigene Funktionen (Komplexitaet je Funktion klein);
-// der Test ruft sie fuer jede Sprache in derselben Reihenfolge wie zuvor auf.
-// T2-15 (O-14): ein Eintrag kann statt eines festen Strings eine Funktion (field) =>
-// string sein (Muster agentStatus.planUsage unten, die RESTRICTED_*-Kennungen) - dann
-// muss der AUFGERUFENE Text nicht-leer sein, nicht die Funktion selbst.
 function assertErrorTextsComplete(texts, language) {
   for (const code of Object.values(MCP_ERROR_CODE)) {
     const entry = texts.errors[code];
@@ -255,18 +214,12 @@ function assertPermissionLabelsComplete(texts, language) {
     assert.ok(texts.permissionLabels?.[key], `permissionLabels.${key} fehlt fuer ${language}`);
 }
 
-// P15/T3a: Leertexte + Feldnamen des get_agent_status-Blocks. Eine Luecke wuerde
-// "undefined" in einen tenant-sichtbaren Text rendern (G27: Struktur statt Disziplin).
-// INBOX-P3: emptyInbox/inboxSummaryUnavailable ergaenzt - ein fehlender Schluessel
-// schriebe "undefined" in genau die Antwort, die "kurz und eindeutig leer" sein soll.
 function assertPlainTextsComplete(texts, language) {
   for (const key of [
     "emptyCalls",
     "callStillRunning",
     "emptyInbox",
     "inboxSummaryUnavailable",
-    // E3 (N-11): Dedup-Hinweis - eine Luecke schriebe "undefined" in den Textblock der
-    // Antwort auf einen deduplizierten place_call.
     "callAlreadyRunningHint",
   ])
     assert.ok(
@@ -296,8 +249,6 @@ test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
     assertPermissionLabelsComplete(texts, language);
     assertPlainTextsComplete(texts, language);
     assertAgentStatusTextsComplete(texts, language);
-    // OUTBOUND-E3a: ein fehlender callFailedSummary schriebe "undefined" in genau den
-    // Text, der dem Nutzer erklaeren soll, warum sein Anruf nicht zustande kam.
     assert.equal(
       typeof texts.callFailedSummary,
       "function",
@@ -306,7 +257,6 @@ test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
   }
 });
 
-// ==================== T10 (Verdrahtung, Spawn) ====================
 test("/mcp loest die Sprache aus dem Tenant-Feld auf (Wiring, Spawn)", async () => {
   const seed = seedState({
     settings: { language: "en" },
@@ -325,9 +275,6 @@ test("/mcp loest die Sprache aus dem Tenant-Feld auf (Wiring, Spawn)", async () 
   }
 });
 
-// ==================== T11 (ex MCP-09) ====================
-// Die Feldnamen der Berechtigungs-Zusammenfassung folgen der Tenant-Sprache. DE bleibt
-// byte-identisch (derselbe String, den test/mcp-ui.test.js als Widget-Wert pinnt).
 test("permissionsSummary-Feldnamen folgen der Tenant-Sprache; DE byte-identisch (ex MCP-09)", async () => {
   await withGateway(AGENT_STATE_FIXTURE, async () => {
     const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
@@ -349,9 +296,6 @@ test("permissionsSummary-Feldnamen folgen der Tenant-Sprache; DE byte-identisch 
   });
 });
 
-// ==================== T13 (P15/T3a) ====================
-// Die Leer-/Zwischenzustaende der Tool-Antworten sind tenant-sichtbarer Text und folgen
-// derselben Sprache wie Rollen-Praefix und Fehlertexte (loc.mcp) - kein zweiter Katalog.
 test("list_calls: Leertext folgt der Tenant-Sprache; DE byte-identisch (P15/T3a)", async () => {
   await withGateway({ calls: [] }, async () => {
     const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
@@ -365,14 +309,11 @@ test("list_calls: Leertext folgt der Tenant-Sprache; DE byte-identisch (P15/T3a)
   });
 });
 
-// ==================== T15 (P15/T3a) ====================
 test("get_call_result bei laufendem Anruf: Hinweistext folgt der Tenant-Sprache (P15/T3a)", async () => {
   await withGateway({ status: "active" }, async () => {
     for (const language of SUPPORTED_LANGUAGES) {
       const result = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
         .get("get_call_result")({ call_id: "call_1" });
-      // T-19: der Satz bleibt byte-identisch, die JSON-Huelle faellt weg - errText()
-      // setzt isError statt eines {"error": ...}-Textblocks (siehe src/mcp-tools.js).
       assert.equal(result.isError, true, `isError fuer Sprache ${language}`);
       assert.equal(toolText(result), MCP_TEXTS[language].callStillRunning);
     }
@@ -387,12 +328,6 @@ test("get_call_result bei laufendem Anruf: Hinweistext folgt der Tenant-Sprache 
   });
 });
 
-// ==================== T16 (P15/T3a) ====================
-// Der get_agent_status-Textblock traegt die Feldnamen der Tenant-Sprache. Der DE-Block ist
-// VOLLSTAENDIG byte-identisch zum Bestand (voller String-Vergleich, nicht nur Stichprobe).
-// P5a/O-13 Teil 1: Voice-Engine/Modell sind seit diesem Commit ABSICHTLICH nicht mehr Teil
-// des Blocks (interne Konfigurationswerte, keine Session-Selbstauskunft) - der Pin ist hier
-// bewusst nachgezogen, kein Testabbau.
 const AGENT_STATUS_TEXT_DE =
   "Agent-Nummer: +18643028341\n" +
   "Besitzer: Antonio\n" +
@@ -424,9 +359,6 @@ test("get_agent_status-Textblock: Feldnamen folgen der Sprache; DE byte-identisc
   });
 });
 
-// ==================== T17 (P15/T3a) ====================
-// registerTools OHNE language-Argument (stdio-Transport, der keinen Store hat) faellt auf
-// den EINEN Fallback localeFor(null) = Weltdefault - nicht auf ein hartes "de".
 test("registerTools ohne language-Argument nutzt den Weltdefault (P15/T3a)", async () => {
   setWorldDefaultLanguageEnabled(true);
   try {
@@ -439,10 +371,6 @@ test("registerTools ohne language-Argument nutzt den Weltdefault (P15/T3a)", asy
   }
 });
 
-// ==================== T12 (ex MCP-12) ====================
-// Kanarienvogel: die drei Bestands-Testdateien der MCP-Schicht decken mindestens ein
-// EN-Sprachszenario ab. Bleibt als DAUERHAFTER Waechter stehen (nicht abgesenkt, nicht
-// geloescht): faellt die EN-Abdeckung dort je wieder heraus, schlaegt er rot.
 test("Bestandstests der MCP-Schicht decken ein EN-Sprachszenario ab (ex MCP-12)", () => {
   const files = ["mcp-tools.test.js", "mcp-ui.test.js", "mcp-ui-widget-i18n.test.js"];
   let hits = 0;
@@ -456,11 +384,6 @@ test("Bestandstests der MCP-Schicht decken ein EN-Sprachszenario ab (ex MCP-12)"
   );
 });
 
-// ==================== T16 (P10/MCP-14) ====================
-// Leertext UND Termin-Praefix von list_action_items folgen der Tenant-Sprache; DE bleibt
-// byte-identisch zum frueheren Inline-String. Die Schleife ueber SUPPORTED_LANGUAGES ist
-// zugleich die Vollstaendigkeitsprobe: ein fehlender Buendel-Schluessel wuerde
-// "undefined" in tenant-sichtbaren Text rendern und hier scheitern.
 test("list_action_items: Leertext + Termin-Praefix folgen der Tenant-Sprache; DE byte-identisch", async () => {
   await withGateway({ actionItems: [] }, async () => {
     for (const language of SUPPORTED_LANGUAGES) {
@@ -478,7 +401,6 @@ test("list_action_items: Leertext + Termin-Praefix folgen der Tenant-Sprache; DE
       for (const language of SUPPORTED_LANGUAGES) {
         const result = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
           .get("list_action_items")();
-        // T2-09 (O-13): keine interne Item-ID mehr in der Zeile.
         assert.equal(toolText(result), `${MCP_TEXTS[language].appointmentPrefix}Zahnarzt`);
       }
       const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })

@@ -1,15 +1,3 @@
-// H2-S1 (Review-Blocker Runde 1): Verhaltenstests fuer die reine, DOM-unabhaengige
-// Kernlogik der Wing-Canvas-Engine (Timeline-Runtime, Easings, Deform-Mathematik,
-// Helper). Die Engine ist eine self-contained IIFE, deren einziger produktiver Export
-// mount() ist - keine der pruefbaren Funktionen (Timeline, deform, parseEase, ...) ist
-// von aussen erreichbar. Statt die Engine-Datei selbst um einen Test-Hook zu erweitern
-// (haette die 25KB-Budget-Grenze gerissen, siehe T-wing-canvas-size), patcht dieser
-// Test NUR seine eigene In-Memory-Kopie des Quelltexts: die letzte Zeile
-// (`window.HermesWingCanvas = { mount: mount };`) wird durch eine Variante ersetzt,
-// die zusaetzlich __internal exponiert. Die produktiv ausgelieferte Datei bleibt dabei
-// unveraendert (kein Edit, kein Byte-Diff) - das ist dieselbe vm-Sandbox-Technik wie in
-// test/mcp-ui-w1-call-widget.test.js (dort fuer ein <script>-Fragment, hier fuer die
-// ganze Datei).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
@@ -33,10 +21,6 @@ const EXPORT_LINE_WITH_INTERNAL =
   INTERNAL_NAMES.map((n) => `${n}: ${n}`).join(", ") +
   " } };";
 
-// Baut die gepatchte Quelle einmal und fuehrt sie in einer frischen vm-Sandbox aus
-// (window === globalThis der Sandbox, wie im echten Iframe). Wirft, falls die
-// Ersetzung ins Leere lief (Datei hat sich strukturell geaendert) - lieber laut
-// scheitern als still nichts zu testen.
 function loadInternal() {
   const source = readFileSync(enginePath, "utf8");
   assert.ok(source.includes(EXPORT_LINE), "Export-Zeile nicht gefunden - Datei umstrukturiert?");
@@ -59,7 +43,6 @@ test("T-wing-physics-smoothstep: klemmt an den Raendern, Mittelpunkt=0.5 (G3 Gre
 });
 
 test("T-wing-physics-buildWeights: Wurzel-Punkt Gewicht 0, entferntester Punkt Gewicht 1", () => {
-  // Vier Punkte um die Wurzel (0,0): die Wurzel selbst + drei mit wachsendem Abstand.
   const original = new Float32Array([0, 0, 10, 0, 20, 0, 30, 0]);
   const { weights, weightsTip } = I.buildWeights(original, 0, 0);
   assert.equal(weights[0], 0, "Punkt AUF der Wurzel -> Gewicht 0 (unabhaengig vom Exponenten)");
@@ -83,7 +66,7 @@ test("T-wing-physics-deform: restState() ist eine Identitaets-Transformation", (
 });
 
 test("T-wing-physics-deform: hoeheres Gewicht -> staerkere Auslenkung bei gleichem flap-Kanal", () => {
-  const original = new Float32Array([0, 0, 0, 100]); // Punkt A auf der Wurzel, Punkt B 100px entfernt
+  const original = new Float32Array([0, 0, 0, 100]);
   const ctx = {
     original, rootX: 0, rootY: 0,
     weights: new Float32Array([0, 1]), weightsTip: new Float32Array([0, 1]),
@@ -156,7 +139,7 @@ test("T-wing-physics-timeline-set: duration=0 wendet Endwerte sofort an (0-Werte
 test("T-wing-physics-timeline-step: linearer .to() interpoliert ueber duration (identitaets-ease)", () => {
   const target = { x: 0 };
   const tl = new I.Timeline();
-  tl.to(target, { x: 10, duration: 2 }); // keine ease-Angabe -> Identitaet (linear)
+  tl.to(target, { x: 10, duration: 2 });
   tl.play(0);
   tl.step(1);
   assert.equal(target.x, 5, "nach der Haelfte der duration -> Haelfte des Wegs");
@@ -208,10 +191,6 @@ test("T-wing-physics-hexToRgb: #e6be5c (HERMES_GOLD) -> 230,190,92", () => {
   assert.equal(I.hexToRgb("#000000"), "0,0,0");
 });
 
-// deepEqual auf dem RUECKGABE-Objekt wuerde scheitern: das Objekt entsteht IN der
-// vm-Sandbox und traegt deren Object.prototype (andere Realm) - node:assert/strict
-// vergleicht bei deepEqual auch den Prototyp (siehe crossRealmPlain-Kommentar in
-// test/mcp-ui-w1-call-widget.test.js). Feldweise pruefen umgeht das sauber.
 test("T-wing-physics-defaultGrid: Groessen-Schwelle exakt bei COARSE_MAX_SIZE_PX=96 (G3)", () => {
   const coarse = I.defaultGrid(96);
   assert.equal(coarse.x, 8, "96 -> genau an der Schwelle -> coarse.x");

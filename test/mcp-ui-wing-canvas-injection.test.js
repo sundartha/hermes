@@ -1,8 +1,3 @@
-// H2: Testet die Wing-Canvas-Engine-Injektion isoliert ueber ein
-// synthetisches Fixture-HTML (die 5 echten Widgets tragen den Platzhalter in
-// H2 noch NICHT - das kommt erst in H3/H4, WIDGET_DEFS bleibt hier
-// unveraendert). Build-Operate-Check (P13) statt Reimplementierung der
-// Replace-Logik im Test.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { withWingEngine } from "../src/ui/widget-catalog.js";
@@ -28,11 +23,6 @@ test("T-wing-canvas-inject-no-network: injizierter Block ist self-contained", ()
   assert.doesNotMatch(out, /@import/, "kein @import");
 });
 
-// H6-QA-Regression: der Platzhalter-Name darf im SERVIERTEN Widget nirgends
-// mehr auftauchen - weder als unersetzter Platzhalter (replace trifft nur das
-// ERSTE Vorkommen) noch woertlich in einem HTML-Kommentar (Kommentare nesten
-// nicht; das Platzhalter-Ende wuerde den Kommentar schliessen und den Rest als
-// sichtbaren Text leaken - genau so in call.html gefunden).
 test("T-wing-canvas-inject-no-leak: kein __WING_ENGINE__-Rest im Serve-Output aller Widgets", async () => {
   const { widgetHtml } = await import("../src/ui/widget-catalog.js");
   for (const id of ["call", "agent-status", "my-number", "calls"]) {

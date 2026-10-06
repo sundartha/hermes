@@ -1,7 +1,3 @@
-// W1: gemeinsames Client-Daten-Binding fuer alle Widgets. Prueft die pure Binding-
-// Logik (widget-bind.js) ohne echtes DOM/Browser ueber ein lokales Fake-DOM, plus die
-// strukturelle Invariante, dass ALLE Widget-HTML genau EINE Quelle des Binding-Scripts
-// tragen (G5/S2). Kein Netz, kein Spawn, kein neuer Dependency.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -29,10 +25,6 @@ const WIDGET_IDS = [
   WIDGET_CALL,
 ];
 
-// Minimal-Fake der DOM-Oberflaeche, die widget-bind.js nutzt: querySelectorAll,
-// createElement, textContent (Setter leert Kinder wie echtes DOM), firstChild,
-// appendChild/removeChild, get/setAttribute (fuer data-mcp-row + data-field der
-// Objekt-Listen). Slots werden ueber data-mcp registriert.
 function makeEl() {
   const el = {
     className: "",
@@ -67,14 +59,12 @@ function makeEl() {
   return el;
 }
 
-// doc mit fest registrierten Slots: key -> Liste von Elementen (data-mcp="key").
 function makeDoc(slotKeys) {
   const slots = new Map();
   for (const key of slotKeys) slots.set(key, [makeEl()]);
   return {
     slots,
     querySelectorAll(selector) {
-      // Selektor-Form: [data-mcp="<key>"]
       const m = selector.match(/^\[data-mcp="(.+)"\]$/);
       const key = m ? m[1] : null;
       return slots.has(key) ? slots.get(key) : [];
@@ -87,9 +77,6 @@ function makeDoc(slotKeys) {
 
 const slot = (doc, key) => doc.slots.get(key)[0];
 
-// Fake-Host: faengt die ans window.parent geposteten JSON-RPC-Nachrichten ab und
-// erlaubt, Host-Nachrichten ueber den message-Listener einzuspielen (emit). Spiegelt
-// die MCP-Apps-UI-Bridge, ohne echtes Browser/postMessage.
 function makeRoot(doc) {
   let messageHandler = null;
   const root = {
@@ -156,32 +143,24 @@ test("T-W1-AC6: MCP-Apps-Handshake - ui/initialize beim Laden, tool-result binde
   const root = makeRoot(doc);
   run(root);
 
-  // (1) Beim Laden postet das Widget ui/initialize an den Host (sonst rendert er nicht).
   assert.equal(root.posted[0].method, "ui/initialize", "erste Nachricht = ui/initialize");
   assert.equal(root.posted[0].id, 1);
   assert.equal(root.posted[0].params.protocolVersion, "2026-01-26");
-  // SEP-1865: appInfo ist PFLICHT (McpUiInitializeRequestSchema, non-optional). Der Host
-  // weist eine ui/initialize OHNE appInfo per JSON-RPC-error ab -> kein Render. Frueher
-  // sendete das Widget faelschlich clientInfo -> Handshake scheiterte. Regression-Pin.
   assert.ok(
     root.posted[0].params.appInfo && typeof root.posted[0].params.appInfo.name === "string",
     "ui/initialize traegt appInfo {name,version} (Spec-Pflicht)",
   );
   assert.ok(!("clientInfo" in root.posted[0].params), "kein clientInfo (vom Host abgelehnt)");
 
-  // (1b) PROAKTIV: Hoehe wird sofort gemeldet, OHNE auf eine Host-Antwort zu warten
-  // (sonst bliebe das Iframe 0/leer, wenn der Host nicht exakt wie erwartet antwortet).
   assert.ok(
     root.posted.some((m) => m.method === "ui/notifications/size-changed"),
     "Hoehe proaktiv gemeldet (vor jeder Host-Antwort)",
   );
 
-  // (2) Host antwortet auf initialize -> Widget bestaetigt initialized + meldet Hoehe.
   root.emit({ jsonrpc: "2.0", id: 1, result: { hostContext: {} } });
   assert.ok(root.posted.some((m) => m.method === "ui/notifications/initialized"), "initialized bestaetigt");
   assert.ok(root.posted.some((m) => m.method === "ui/notifications/size-changed"), "Hoehe gemeldet");
 
-  // (3) Host pusht das Tool-Ergebnis -> structuredContent landet in den Slots.
   root.emit({
     jsonrpc: "2.0",
     method: "ui/notifications/tool-result",
@@ -201,7 +180,6 @@ test("T-W1-AC7: run ist fail-safe ohne DOM/Host und ignoriert unbekannte Nachric
   const doc = makeDoc(["status"]);
   const root = makeRoot(doc);
   run(root);
-  // Unbekannte Host-Nachricht aendert keinen Slot (kein Crash, kein Binding).
   root.emit({ jsonrpc: "2.0", method: "ui/notifications/irgendwas", params: {} });
   assert.equal(slot(doc, "status").textContent, "", "unbekannte Methode -> Slot unberuehrt");
 });
@@ -231,7 +209,6 @@ test("T-W1-AC8: ein Binding deckt alle Slot-Namen beider Whitelists ab (Kontrakt
 });
 
 test("T-W1-AC9: applyField/renderLines direkt - mehrere Slots gleichen Schluessels", () => {
-  // Zwei Slots desselben Schluessels (kommt im DOM vor) -> beide gefuellt.
   const doc = makeDoc([]);
   doc.slots.set("status", [makeEl(), makeEl()]);
   applyField(doc, "status", "done");
@@ -241,10 +218,6 @@ test("T-W1-AC9: applyField/renderLines direkt - mehrere Slots gleichen Schluesse
   renderLines(doc, container, ["a", "b", "c"]);
   assert.deepEqual(container.children.map((c) => c.textContent), ["a", "b", "c"]);
 });
-
-// ===== W-batch: generische Objekt-Listen-Bindung (list_calls) =====
-// Ein data-mcp-Slot rendert eine Liste von Objekten als wiederholte Rows. Pure Logik,
-// ohne DOM/Browser (Fake-DOM oben). XSS-Disziplin: nur textContent, nie innerHTML.
 
 test("T-Wb-BIND1: rowFields parst data-mcp-row; fehlend/leer -> []", () => {
   const el = makeEl();
@@ -265,7 +238,7 @@ test("T-Wb-BIND2: renderRows - je Objekt eine Row mit Zellen je Feld; fehlend ->
   container.setAttribute("data-mcp-row", fields.join(","));
   renderRows(doc, container, [
     { counterparty: "+49170", status: "completed", summary: "Termin" },
-    { counterparty: "+49160", status: "dialing" }, // summary fehlt
+    { counterparty: "+49160", status: "dialing" },
   ]);
 
   assert.equal(container.children.length, 2, "zwei Rows");
@@ -276,7 +249,6 @@ test("T-Wb-BIND2: renderRows - je Objekt eine Row mit Zellen je Feld; fehlend ->
   assert.deepEqual(row0.children.map((c) => c.textContent), ["+49170", "completed", "Termin"]);
   assert.equal(container.children[1].children[2].textContent, "", "fehlendes Feld -> leere Zelle");
 
-  // Erneutes Rendern leert vorher (kein Doppeln) - selbe Disziplin wie renderLines.
   renderRows(doc, container, [{ counterparty: "+49150", status: "failed" }]);
   assert.equal(container.children.length, 1, "vorher geleert");
   assert.deepEqual(container.children[0].children.map((c) => c.getAttribute("data-field")), fields, "Felder weiter aus data-mcp-row");
@@ -294,7 +266,6 @@ test("T-Wb-BIND3: renderRows XSS - Feldwert landet als textContent, nie als Mark
 });
 
 test("T-Wb-BIND4: applyField-Dispatch - Objekt-Liste (data-mcp-row) -> Rows; Skalar-Array -> turns", () => {
-  // Slot MIT data-mcp-row -> Objekt-Rows.
   const rowDoc = makeDoc(["calls"]);
   slot(rowDoc, "calls").setAttribute("data-mcp-row", "counterparty,status");
   applyField(rowDoc, "calls", [{ counterparty: "+49170", status: "completed" }]);
@@ -303,7 +274,6 @@ test("T-Wb-BIND4: applyField-Dispatch - Objekt-Liste (data-mcp-row) -> Rows; Ska
   assert.equal(container.children[0].className, "row");
   assert.deepEqual(container.children[0].children.map((c) => c.textContent), ["+49170", "completed"]);
 
-  // Slot OHNE data-mcp-row -> Bestand unveraendert: skalare Zeilen als .turn.
   const lineDoc = makeDoc(["last_transcript_lines"]);
   applyField(lineDoc, "last_transcript_lines", ["Agent: hi", "Gegenseite: yo"]);
   const lines = slot(lineDoc, "last_transcript_lines");
@@ -321,7 +291,6 @@ test("T-Wb-BIND5: bind end-to-end - { calls: [...] } in den data-mcp=calls-Slot"
   });
   const container = slot(doc, "calls");
   assert.equal(container.children.length, 2, "zwei Call-Rows");
-  // id ist NICHT als Spalte deklariert -> taucht nicht im DOM auf (View waehlt Felder).
   assert.deepEqual(container.children[0].children.map((c) => c.getAttribute("data-field")),
     ["direction", "counterparty", "status", "startedAt", "summary"]);
   assert.equal(container.children[1].children[4].textContent, "", "c2 ohne summary -> leere Zelle");
@@ -330,7 +299,6 @@ test("T-Wb-BIND5: bind end-to-end - { calls: [...] } in den data-mcp=calls-Slot"
 test("T-Wb-BIND6: BIND_SCRIPT projiziert Binding + Handshake (eine Quelle, kein innerHTML)", () => {
   assert.ok(BIND_SCRIPT.includes("function rowFields"), "rowFields projiziert");
   assert.ok(BIND_SCRIPT.includes("function renderRows"), "renderRows projiziert");
-  // Der Host-Handshake MUSS im Iframe-Script landen, sonst rendert der Host nichts.
   assert.ok(BIND_SCRIPT.includes("ui/initialize"), "ui/initialize-Handshake projiziert");
   assert.ok(BIND_SCRIPT.includes("ui/notifications/size-changed"), "Hoehen-Reporting projiziert");
   assert.ok(BIND_SCRIPT.includes("run(window);"), "run(window) am Ende");
