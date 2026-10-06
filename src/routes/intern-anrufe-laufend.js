@@ -12,7 +12,7 @@ const ABGELEHNT = Object.freeze({ error: "unauthorized" });
 function deployTokenGueltig(config, authorization) {
   const erwartet = config.auth.deployToken;
   if (typeof erwartet !== "string" || erwartet.length < DEPLOY_TOKEN_MIN_LENGTH) return false;
-  return safeEqual(authorization || "", `${BEARER_PRAEFIX}${erwartet}`);
+  return safeEqual(authorization, `${BEARER_PRAEFIX}${erwartet}`);
 }
 
 function laeuft(call, nowMs, store) {
