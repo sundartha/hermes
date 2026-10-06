@@ -17,6 +17,7 @@
     ".githooks/pre-commit|f3f1ac11afd8d2b3",
     ".githooks/pre-commit|fa57e88f9bb8fb9d",
     ".githooks/pre-commit|fd77ca7ff7420238",
+    ".github/workflows/ci.yml|2e2011d96a411698",
     "CLEANUP-NGROK.command|4da27b6437ba6325",
     "CLEANUP-NGROK.command|cf384d02fb0b06d7",
     "DEPLOY.command|0b1fd8ee285a227b",
