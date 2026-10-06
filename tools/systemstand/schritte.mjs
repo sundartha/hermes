@@ -21,7 +21,6 @@ const ERROR_SEVERITY = 2;
 const COMMENT_RULE = {
   paket: 31,
   name: "hermes/keine-kommentare",
-  bestand: "tools/basis/kommentare.json",
 };
 const TEXT_READING_RULE = {
   paket: 31,

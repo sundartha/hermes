@@ -424,20 +424,11 @@ const MISSING_END_CRITERIA = [
     step: "3",
     run: {
       files: {
-        "tools/basis/kommentare.json": frozenBaseline(["src/a.js", "src/a.js", "test/b.test.js"]),
-      },
-    },
-    pattern: /Kommentarregel noch 3 eingefrorene Treffer in 2 Dateien/,
-  },
-  {
-    step: "3",
-    run: {
-      files: {
         "tools/basis/kommentare.json": frozenBaseline(["src/a.js"]),
         "eslint-suppressions.json": suppressed("hermes/keine-kommentare", [1, 1]),
       },
     },
-    pattern: /Kommentarregel noch 3 eingefrorene Treffer in 3 Dateien/,
+    pattern: /Kommentarregel noch 2 eingefrorene Treffer in 2 Dateien/,
   },
   {
     step: "3",

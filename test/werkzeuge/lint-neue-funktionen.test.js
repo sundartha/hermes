@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
-import { befundSchluessel } from "../../tools/eslint-rules/bestand.js";
-import { bestandsDatei, eslintKonfiguration } from "./hermes-regeln-probe.js";
+import { eslintKonfiguration } from "./hermes-regeln-probe.js";
 import { REPO_ROOT } from "./probe-repo.js";
 import { brichtOhneBasisAb, nachCommitPruefen, repoMitBasis } from "./pr-probe.js";
 
@@ -13,7 +12,7 @@ const EXIT_FINDING = 1;
 const JSON_INDENT = 2;
 const REGELN = {
   "no-magic-numbers": ["error", { ignore: [0, 1, -1] }],
-  "hermes/keine-kommentare": ["error", { bestand: "tools/basis/kommentare.json" }],
+  "hermes/keine-kommentare": "error",
   "hermes/namen-ohne-begruendung": "warn",
 };
 const ALTER_KOMMENTAR = "  // die Antwort";
@@ -40,8 +39,9 @@ const ALT = [
 function basisRepo(context, zeilen = ALT) {
   return repoMitBasis(context, {
     "eslint.config.mjs": eslintKonfiguration({ linterOptions: { noInlineConfig: true }, rules: REGELN }),
-    "eslint-suppressions.json": json({ [DATEI]: { "no-magic-numbers": { count: 1 } } }),
-    "tools/basis/kommentare.json": bestandsDatei([befundSchluessel(DATEI, " die Antwort")]),
+    "eslint-suppressions.json": json({
+      [DATEI]: { "no-magic-numbers": { count: 1 }, "hermes/keine-kommentare": { count: 1 } },
+    }),
     [DATEI]: quelle(zeilen),
   });
 }

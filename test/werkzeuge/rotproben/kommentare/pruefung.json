@@ -2,25 +2,19 @@
   "titel": "Kommentare im Code (hermes/keine-kommentare)",
   "pfade": [
     "eslint.config.*",
-    "tools/eslint-rules/",
-    "tools/basis/kommentare.json",
-    "tools/basis-vergleich.mjs"
+    "tools/eslint-rules/"
   ],
   "treffer": {
     "befehl": [
       "node",
-      "{wurzel}/tools/basis-vergleich.mjs",
-      "kommentare"
+      "{wurzel}/node_modules/eslint/bin/eslint.js",
+      ".",
+      "--suppressions-location",
+      "eslint-suppressions.empty.json",
+      "--format",
+      "json"
     ],
-    "zaehlen": "zahlen",
-    "vor": [
-      " neue Befunde"
-    ]
-  },
-  "ausnahmen": {
-    "bezeichnung": "Eingefrorene Kommentare in der Basislinie",
-    "datei": "tools/basis/kommentare.json",
-    "zaehlen": "anzahl"
+    "zaehlen": "eslint-json"
   },
   "probe": {
     "mitnehmen": [
