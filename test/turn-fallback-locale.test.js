@@ -1,17 +1,3 @@
-// I2 (call-quality Impl-1): der Turn-Fallback-Satz (claude.js agentTurn, falls das
-// Modell in allen 4 Tool-Loop-Runden KEINEN Text liefert) ist jetzt richtungsabhaengig
-// UND sprachabhaengig (locales.js turnFallbackSpeech{inbound,outbound}) statt hart
-// deutsch + inbound-only (S1: eine Outbound-Absage klang vorher wie eine Inbound-
-// Verabschiedung - "vielen Dank fuer Ihren Anruf" bei einem Call, den WIR gestartet
-// haben). Erzwingt den Fallback-Pfad deterministisch: der Anthropic-Mock liefert NUR
-// tool_use (nie Text) -> der Tool-Loop laeuft alle 4 Runden durch, speech bleibt "" ->
-// agentTurn muss den lokalisierten, richtungsabhaengigen Fallback einsetzen. DE-inbound
-// bleibt BYTE-IDENTISCH zum Vorgaenger-String (Regressionsschutz, siehe auch
-// personal-assistant-characterization.test.js).
-//
-// Rein in-process (kein Server-Spawn, kein pglite) - dieselbe Naht wie l3-prompt-caching/
-// c1-auftragstreue: ANTHROPIC_BASE_URL + DATA_DIR vor dem ersten config-Import, dann
-// dynamischer Import. Der lokale HTTP-Mock ersetzt den Anthropic-Endpunkt.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -20,8 +6,6 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
 
-// Antwortet IMMER nur mit tool_use (take_message), NIE mit Text -> speech bleibt ""
-// nach dem 4-Runden-Tool-Loop -> erzwingt den Fallback-Pfad deterministisch.
 function toolOnlyMessage() {
   return {
     id: "msg_fallback_mock",

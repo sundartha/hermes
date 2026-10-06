@@ -1,16 +1,7 @@
-// LCT P4b (Vollkosten-Boot-Guard): sichert die spaetere Owner-Tarifsenkung ab. Muster
-// test/cost-truing-booking-guard.test.js.
-//   (Wahrheitstabelle) Unit: voiceTariffFloorFindings (src/boot-guard.js) - reine
-//       Entscheidung. Seit KV2-10 feuert sie auf belowFloor ALLEIN (deckungs-
-//       unabhaengig, Kriterium (c)); bis KV2-9 war es die Konjunktion aus zwei Schwellen.
-//   (p)/(q)/(r) Boot-Beweis: Spawn-Tests, Seed-Bauer outboundCallsSeed (G5: geteilt mit
-//       cost-truing-booking-guard.test.js, definiert in test/helpers.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { voiceTariffFloorFindings, VOICE_TARIFF_FLOOR_FINDING } from "../src/boot-guard.js";
 import { startServer, seedState, outboundCallsSeed } from "./helpers.js";
-
-// ---- Unit: voiceTariffFloorFindings (Konjunktions-Wahrheitstabelle) ----
 
 test("U1: belowFloor && thinCoverage (6<10, 20<80) -> genau ein Befund, fatal:false, BELOW_FULL_COST", () => {
   const findings = voiceTariffFloorFindings({
@@ -79,10 +70,6 @@ test("U6 (KV2-10): Gleichstand Coverage==Schwelle bei belowFloor (6<10, 80==80) 
   assert.equal(findings.length, 1);
   assert.equal(findings[0].code, VOICE_TARIFF_FLOOR_FINDING.BELOW_FULL_COST);
 });
-
-// ---- Boot-Beweis ----
-// Seed-Bauer outboundCallsSeed (G5): geteilt mit cost-truing-booking-guard.test.js, in
-// test/helpers.js. 10 Calls, davon `proven` bewiesen, IDs mit Praefix call_q_.
 
 test("(p) Tarif 6 < Schwelle 10, Deckung 20% < 80% -> genau EINE WARN-Zeile mit beiden Zahlen, /healthz 200, kein exit", async () => {
   const srv = await startServer({

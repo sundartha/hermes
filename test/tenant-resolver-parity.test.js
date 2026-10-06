@@ -1,27 +1,9 @@
-// Paritaets-Test fuer die T4-Phase-1-Konsolidierung des Tenant-/Identitaets-Resolvers.
-//
-// Der Resolver wurde von src/request-tenant.js (A4) nach src/routes/_tenant.js
-// umgezogen; src/request-tenant.js ist jetzt ein reiner Re-Export. Dieser Test
-// sichert die KONSOLIDIERUNG ab, getrennt in zwei Beweise:
-//
-//  (A) Eine Quelle: jeder Export ueber die Re-Export-Naht (request-tenant.js) ist
-//      REFERENZ-identisch zum kanonischen Modul (routes/_tenant.js). Damit kann es
-//      keinen zweiten, divergierenden Resolver geben (T4 R1.1 "niemals zwei Resolver").
-//  (B) Verhaltens-Paritaet: requestTenant deckt alle drei sicherheits-relevanten Pfade
-//      ab (fehlend->Owner, unbekannt->Reject, bekannt->tenantId) plus Flag-aus und den
-//      Web-Session-Zweig - ueber BEIDE Import-Wege identisch (T4 R1.2: ein subtiler
-//      Verschiebe-Fehler im fail-closed-Pfad oeffnet ein Tenant-Leck).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import * as viaReexport from "../src/request-tenant.js";
 import * as canonical from "../src/routes/_tenant.js";
 
-// --- Test-Helfer ---------------------------------------------------------------
-
-// Mock-store: nur resolveTenant (per Factory injiziert). `map` bildet Identitaet ->
-// tenantId ab; unbekannt -> null (Reject-Pfad). `calls` protokolliert jede Aufloesung,
-// damit der Web-Session-Pfad als lookup-frei (R7) bewiesen werden kann.
 function makeStore(map = {}) {
   const calls = [];
   return {
@@ -33,7 +15,6 @@ function makeStore(map = {}) {
   };
 }
 
-// Minimal-Request: localhost-Socket ohne Auth/Tenant (= fehlende Identitaet -> Owner).
 function makeReq(overrides = {}) {
   return {
     auth: null,
@@ -44,13 +25,10 @@ function makeReq(overrides = {}) {
   };
 }
 
-// === (A) Eine Quelle: Referenz-Identitaet beider Import-Wege ====================
-
 test("Re-Export exportiert exakt dieselben Symbole wie das kanonische Modul", () => {
   const reKeys = Object.keys(viaReexport).sort();
   const canonKeys = Object.keys(canonical).sort();
   assert.deepEqual(reKeys, canonKeys, "Export-Schluessel muessen identisch sein");
-  // Die erwarteten Symbole sind tatsaechlich vorhanden (kein leerer Schnitt).
   for (const expected of [
     "isLocalSocket",
     "internalIdentity",
@@ -86,12 +64,6 @@ test("Konstanten tragen ihre Bestands-Werte", () => {
   assert.equal(canonical.TENANT_REJECT, "reject");
 });
 
-// === (B) Verhaltens-Paritaet ueber beide Import-Wege ============================
-
-// Beide Factory-Einstiege liefern denselben Resolver-Vertrag; der Parameter-Lauf
-// deckt alle Pfade ab. makeRequestTenant (A4-Kompat) liefert nur {requestTenant,
-// requireTenant}, makeTenantResolver (T4) das volle Objekt - beide muessen identisch
-// aufloesen.
 const RESOLVER_FACTORIES = [
   ["routes/_tenant.js::makeTenantResolver", (store) => canonical.makeTenantResolver({ store })],
   ["routes/_tenant.js::createTenantResolver", (store) => canonical.createTenantResolver({ store })],
@@ -141,7 +113,6 @@ for (const [label, build] of RESOLVER_FACTORIES) {
   test(`[${label}] requireTenant: REJECT -> 403 + null, gueltig -> tenant`, () => {
     const store = makeStore({ "user-1": "tenant-a" });
     const { requireTenant } = build(store);
-    // REJECT-Pfad: 403 gesendet, Rueckgabe null.
     let status;
     let body;
     const res = {
@@ -159,13 +130,11 @@ for (const [label, build] of RESOLVER_FACTORIES) {
     assert.equal(status, 403);
     assert.ok(body && typeof body.error === "string", "403 traegt eine error-Nachricht");
 
-    // Gueltiger Pfad: tenant zurueck, kein res-Zugriff.
     const ok = requireTenant(makeReq({ auth: { sub: "user-1" } }), null);
     assert.equal(ok, "tenant-a");
   });
 }
 
-// tenantOwnsCall ist eine reine Ownership-Regel und ueber beide Wege identisch.
 test("tenantOwnsCall vergleicht call.tenantId mit dem Request-Tenant", () => {
   assert.equal(canonical.tenantOwnsCall({ tenantId: "t1" }, "t1"), true);
   assert.equal(canonical.tenantOwnsCall({ tenantId: "t1" }, "t2"), false);

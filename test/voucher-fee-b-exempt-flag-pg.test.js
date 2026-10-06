@@ -1,7 +1,3 @@
-// Fix B (pg): numberSetupFeeExempt-Flag durch alle pg-Schichten. Round-Trip
-// hydrate->flush->hydrate: ein gesetztes Flag ueberlebt save()->reload (deckt
-// Schema+TENANT_COLUMNS+rowToTenant+flushTenants). pglite = kein Netz, keine
-// externe DB (F.I.R.S.T.). Muster b1a-period-anchor-pg.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore } from "../src/store/pg.js";
@@ -22,7 +18,6 @@ test("Fix B pg: numberSetupFeeExempt ueberlebt hydrate->flush->hydrate (Round-Tr
   });
   await store.save();
 
-  // Frischer Store auf DERSELBEN DB -> hydriert aus der DB (kein Spiegel-Reuse).
   const store2 = makePgStore(runner);
   await store2.init();
   assert.equal(

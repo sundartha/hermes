@@ -1,8 +1,3 @@
-// P5: Telnyx-TeXML-Renderer byte-exakt (Snapshot, analog directive-render.test.js).
-// Nagelt Voice-Bezeichner (Azure.de-DE-KatjaNeural), STT-Engine (Deepgram Nova-3),
-// Attribut-Reihenfolge und das XML-Escaping fest. Grenzfaelle: Gather mit/ohne Prompt,
-// bare Hangup, unbekanntes voiceProfile -> wirft. STREAM-Rendering (ab P7) in
-// telnyx-stream-render.test.js. Offline.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderDirectives } from "../src/telephony/adapters/telnyx/render.js";
@@ -41,12 +36,6 @@ test("Gather ohne Prompt -> self-closing Gather + Redirect", () => {
   );
 });
 
-// Regression (Inbound-Audio-Bug 2026-06-15): Ohne transcriptionEngine transkribiert
-// Telnyx `<Gather input="speech">` NICHT -> kein SpeechResult -> Agent hoert den
-// Angerufenen nie. Diese Invariante schuetzt vor erneutem stillem Weglassen. Seit
-// 2026-06-16 ist die Engine "Deepgram" (Nova-3); language MUSS das volle Locale "de-DE"
-// sein - "de" allein faellt Telnyx-seitig auf Englisch zurueck -> leeres Transcript
-// (echte STT-Records, 2026-06-20). Diese Invariante schuetzt vor Rueckfall auf "de".
 test("Telnyx-Gather aktiviert STT (transcriptionEngine gesetzt, sonst kein SpeechResult)", () => {
   const out = renderDirectives([gather({ promptText: "Hallo?", action: "/voice/turn?callId=c1" })]);
   assert.match(out, /<Gather\b[^>]*\binput="speech"/, "Sprach-Eingabe aktiv");
@@ -90,30 +79,20 @@ test("Unbekanntes voiceProfile -> wirft (fail-closed, kein stiller Default-Voice
   assert.throws(() => renderDirectives([say("x", "kein-profil")]), /unbekanntes voiceProfile/);
 });
 
-// G3: gesetztes speechTimeoutSec ersetzt "auto" an derselben Attribut-Position
-// (Reihenfolge vertraglich). Folge-Gather im /voice/turn.
 test('G3: Folge-Gather mit speechTimeoutSec -> speechTimeout="2" (positiver Integer, nicht auto)', () => {
   const out = renderDirectives([
     gather({ promptText: "Hallo?", action: "/voice/turn?callId=c1", speechTimeoutSec: 2 }),
   ]);
   assert.match(out, /<Gather\b[^>]*\bspeechTimeout="2"/, "festes Endpointing 2s");
   assert.doesNotMatch(out, /speechTimeout="auto"/, "kein auto mehr im Folge-Gather");
-  // Reihenfolge unveraendert: model direkt vor speechTimeout (Snapshot-Invariante).
   assert.match(out, /model="deepgram\/nova-3" speechTimeout="2"/, "Attribut-Reihenfolge stabil");
 });
 
-// G3-Drift (Pre-Mortem a): OHNE speechTimeoutSec bleibt der Gather byte-identisch
-// auf "auto" - schuetzt das Outbound-Erst-Gather + Inbound-Greeting vor dem
-// G2-Deadlock-Regress.
 test('G3-Drift: Gather ohne speechTimeoutSec bleibt auf speechTimeout="auto"', () => {
   const out = renderDirectives([gather({ promptText: "Hallo?", action: "/voice/turn?callId=c1" })]);
   assert.match(out, /<Gather\b[^>]*\bspeechTimeout="auto"/, "Default bleibt auto (Erst-Gather)");
 });
 
-// --- F1 Phase 3: FR-Sprachpfad. STT-Locale UND TTS-Voice kommen aus dem voiceProfile
-// des Aufrufers (eine Quelle: TELNYX_VOICE). DE-Snapshots oben bleiben byte-identisch
-// (Default-Profil), die FR-Snapshots sind neu. Akzente sind keine XML-Sonderzeichen und
-// passieren escapeXml unveraendert; der ASCII-' wird wie im Bestand zu &apos; escaped.
 const FR = VOICE_PROFILE.FR_FEMALE_NEURAL;
 
 test("FR: Gather + Say + Redirect -> TeXML mit fr-FR-STT + Azure.fr-FR-DeniseNeural (Akzente erhalten, ' escaped)", () => {
@@ -134,8 +113,6 @@ test("FR: Gather + Say + Redirect -> TeXML mit fr-FR-STT + Azure.fr-FR-DeniseNeu
   );
 });
 
-// R9-Falle fuer FR: die STT-Locale haengt am Profil, NICHT am inneren Say. Ein leeres
-// FR-Gather muss trotzdem fr-FR transkribieren - sonst faellt Telnyx still auf Englisch.
 test("FR: Gather ohne Prompt -> self-closing Gather mit fr-FR-STT (kein stilles de-DE)", () => {
   const action = "/voice/turn?callId=call_fr";
   const out = renderDirectives([
@@ -152,8 +129,6 @@ test("FR: Gather ohne Prompt -> self-closing Gather mit fr-FR-STT (kein stilles 
   );
 });
 
-// R9 explizit: FR-STT-Locale MUSS das volle BCP-47 "fr-FR" sein (nicht das blosse "fr",
-// das Telnyx wie bei "de" auf Englisch zuruckfallen liesse). Nova-3 deckt FR mit ab.
 test("FR/R9: Gather-STT-Locale ist fr-FR (volles BCP-47, nicht 'fr'); Nova-3 mehrsprachig", () => {
   const out = renderDirectives([
     gather({ promptText: "Oui?", action: "/voice/turn?callId=c1", voiceProfile: FR }),
@@ -178,8 +153,6 @@ test("FR: Say + Hangup -> TeXML mit Azure.fr-FR-DeniseNeural + fr-FR (Akzent erh
   );
 });
 
-// G3 komponiert mit FR: gesetztes speechTimeoutSec ersetzt "auto" an derselben Position,
-// die FR-Locale bleibt davon unberuehrt (Attribut-Reihenfolge stabil).
 test('FR/G3: Folge-Gather mit speechTimeoutSec -> fr-FR + speechTimeout="2" (Reihenfolge stabil)', () => {
   const out = renderDirectives([
     gather({
@@ -197,8 +170,6 @@ test('FR/G3: Folge-Gather mit speechTimeoutSec -> fr-FR + speechTimeout="2" (Rei
   assert.doesNotMatch(out, /speechTimeout="auto"/, "kein auto mehr im Folge-Gather");
 });
 
-// Fail-closed gilt jetzt AUCH fuer das leere Gather: die STT-Locale kommt aus dem Profil,
-// ein unbekanntes Profil wirft (vorher rendete ein promptloses Gather still durch).
 test("FR/Fail-closed: leeres Gather mit unbekanntem Profil wirft (STT-Locale aus Profil)", () => {
   assert.throws(
     () => renderDirectives([gather({ promptText: "", action: "/x", voiceProfile: "kein-profil" })]),
@@ -206,12 +177,6 @@ test("FR/Fail-closed: leeres Gather mit unbekanntem Profil wirft (STT-Locale aus
   );
 });
 
-// --- F1 Phase 4: EN-Sprachpfad. Azure.en-GB-SoniaNeural + en-GB-STT; Nova-3 deckt EN ab.
-//
-// Traegt zugleich VOICE-03 des i18n-Launch-Testkatalogs (Welle W1, Mechanismus/gruen,
-// Spezifikation in tasks/i18n-tests/03-telefonie-render.md). Der Katalogfall verlangt exakt
-// diese Assertion - deshalb steht sie hier EINMAL (G5) statt als zweite Fassung in einer
-// eigenen Datei. Der Pin gilt fuer den Sprachcode "en" (s. VOICE-02 in directive-render).
 const EN = VOICE_PROFILE.EN_FEMALE_NEURAL;
 
 test("EN: Gather + Say + Redirect -> TeXML mit en-GB-STT + Azure.en-GB-SoniaNeural", () => {
@@ -256,10 +221,6 @@ test("EN/R9: Gather-STT-Locale ist en-GB (volles BCP-47, nicht 'en'); Nova-3 meh
   );
 });
 
-// FMT-24 (tasks/i18n-tests/10-zeit-format-daten.md): escapeXml ersetzt ausschliesslich
-// & < > " ' - CJK-Zeichen sind keine XML-Sonderzeichen und muessen unveraendert durch
-// den TeXML-Renderpfad laufen. Der Fehlermodus waere unsichtbar (Mojibake/abgeschnitten),
-// deshalb zusaetzlich die Bytezahl-Invariante wie in de-umlaut-orthography P1-U4.
 const CJK_SPEECH = "田中様、お電話ありがとうございます";
 test("FMT-24 (Mechanismus, gruen) - CJK-Text passiert escapeXml und den Say-Renderpfad unveraendert", () => {
   const out = renderDirectives([say(CJK_SPEECH, VOICE_PROFILE.DE_FEMALE_NEURAL), hangup()]);

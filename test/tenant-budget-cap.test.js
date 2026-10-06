@@ -1,10 +1,3 @@
-// P6b3: per-Tenant-Kostendecke (tenant_budget) + budgetExceeded. Prueft die
-// INVARIANTEN (1) pro-Tenant-Cap, (2) Unabhaengigkeit von der Plattform-Summe (KS-P9), (3)
-// Owner ohne tenant_budget-Zeile byte-identisch zum Bestand - rein ueber state-ops
-// (kein Netz, kein Server, kein pglite; Lehre P6a: state-ops-Unit NICHT mit
-// Spawn/pglite mischen). Verbrauchsquelle bleibt die usage-Map (trackUsage); neu
-// ist nur der effektive Cap. usage_event wird hier NICHT angefasst (getrennte
-// Quelle, kein Doppelzaehlen).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -22,19 +15,14 @@ import { PRICES, TEST_MODEL_CHEAP, tokensOf } from "./_prices.js";
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
 
-// Token-Mengen unter PRICES (Input 1 USD/MTok * 0.93 = 0.93 EUR/MTok).
-const TOKENS_PER_EUR = 1_000_000 / 0.93; // ~1.075M Input-Tokens = 1 EUR
+const TOKENS_PER_EUR = 1_000_000 / 0.93;
 
-// Preis-Rate des in dieser Datei genutzten Test-Modells (G5: eine Ableitungsstelle
-// statt mehrfach verstreuter direkter Preis-Feld-Zugriffe auf PRICES, P7a).
 const RATE = PRICES.modelPricesUsd[TEST_MODEL_CHEAP];
 
 test("INV(3): Owner ohne tenant_budget-Zeile = exakt cfg.platformSpendCapCents (byte-identisch)", () => {
   const s = makeDefaultState();
-  // knapp unter dem Cap -> frei
   trackUsage(s, TENANT_A, tokensOf(Math.floor(TOKENS_PER_EUR * 7.9), 0), PRICES);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "unter 8 EUR -> frei");
-  // genau auf/ueber dem Cap (>=) -> exceeded, wie der Bestand (costCents >= platformSpendCapCents)
   trackUsage(s, TENANT_A, tokensOf(Math.ceil(TOKENS_PER_EUR * 0.2), 0), PRICES);
   assert.equal(
     budgetExceeded(s, TENANT_A, PRICES),
@@ -45,18 +33,15 @@ test("INV(3): Owner ohne tenant_budget-Zeile = exakt cfg.platformSpendCapCents (
 
 test("INV(1): pro-Tenant-Cap blockt A, B ohne Zeile telefoniert weiter", () => {
   const s = makeDefaultState();
-  setTenantBudget(s, TENANT_A, { budgetCents: 400, hardCapCents: 500 }); // 5 EUR harte Sperre
-  // A: 6 EUR Verbrauch -> ueber seinen 5-EUR-Cap (waere unter dem globalen 8-EUR-Cap)
+  setTenantBudget(s, TENANT_A, { budgetCents: 400, hardCapCents: 500 });
   trackUsage(s, TENANT_A, tokensOf(Math.ceil(TOKENS_PER_EUR * 6), 0), PRICES);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "A ueber seinem pro-Tenant-Cap");
-  // B: 4 EUR, keine eigene Zeile -> faellt auf den globalen 8-EUR-Cap -> frei
   trackUsage(s, TENANT_B, tokensOf(Math.floor(TOKENS_PER_EUR * 4), 0), PRICES);
   assert.equal(budgetExceeded(s, TENANT_B, PRICES), false, "B faellt auf platformSpendCapCents, frei");
 });
 
 test("INV(2) KS-P9: die Plattform-Summe sperrt nicht mehr, solange jeder unter SEINEM Cap bleibt", () => {
   const s = makeDefaultState();
-  // Je 5 EUR (unter dem 8-EUR-Fallback-Cap), Summe 10 EUR - bis KS-P9 der Plattform-Notaus.
   trackUsage(s, TENANT_A, tokensOf(Math.floor(TOKENS_PER_EUR * 5), 0), PRICES);
   trackUsage(s, TENANT_B, tokensOf(Math.floor(TOKENS_PER_EUR * 5), 0), PRICES);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "A einzeln unter Cap");
@@ -70,18 +55,16 @@ test("INV(2) KS-P9: die Plattform-Summe sperrt nicht mehr, solange jeder unter S
 
 test("INV(2b): der pro-Tenant-Cap greift fuer sich allein (A blockt, B unberuehrt)", () => {
   const s = makeDefaultState();
-  setTenantBudget(s, TENANT_A, { budgetCents: 100, hardCapCents: 200 }); // 2 EUR
-  trackUsage(s, TENANT_A, tokensOf(Math.ceil(TOKENS_PER_EUR * 3), 0), PRICES); // 3 EUR > 2-EUR-Cap
+  setTenantBudget(s, TENANT_A, { budgetCents: 100, hardCapCents: 200 });
+  trackUsage(s, TENANT_A, tokensOf(Math.ceil(TOKENS_PER_EUR * 3), 0), PRICES);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "A ueber pro-Tenant-Cap");
   assert.equal(budgetExceeded(s, TENANT_B, PRICES), false, "B ohne Zeile bleibt frei");
 });
 
 test("Grenzfall (T5/G3): hardCapCents exakt = Verbrauch -> exceeded (>= wie Bestand)", () => {
   const s = makeDefaultState();
-  setTenantBudget(s, TENANT_A, { budgetCents: 400, hardCapCents: 500 }); // 5 EUR
-  trackUsage(s, TENANT_A, tokensOf(Math.round(TOKENS_PER_EUR * 5), 0), PRICES); // genau ~5 EUR
-  // costCents ist eine Ganzzahl; >= 5 EUR muss exceeden. Wir runden minimal drueber, um
-  // den Inklusiv-Vergleich deterministisch zu treffen.
+  setTenantBudget(s, TENANT_A, { budgetCents: 400, hardCapCents: 500 });
+  trackUsage(s, TENANT_A, tokensOf(Math.round(TOKENS_PER_EUR * 5), 0), PRICES);
   trackUsage(s, TENANT_A, tokensOf(1, 0), PRICES);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "Verbrauch >= Cap -> exceeded");
 });
@@ -99,9 +82,6 @@ test("setTenantBudget ist Upsert (eine Zeile pro Tenant, zweiter Aufruf aktualis
   assert.equal(s.tenantBudgets.length, 1, "kein Duplikat");
   assert.deepEqual(s.tenantBudgets[0], { tenantId: TENANT_A, budgetCents: 300, hardCapCents: 900 });
 });
-
-// ---- S1-1 (P1 Integer-Cents-Kern): addVoiceUsageCostCents/globalUsageTotals + der
-// Safety-BLOCKER (Sub-Cent-Turns duerfen nie pro Inkrement auf 0 gerundet werden) ----
 
 test("S1-1: addVoiceUsageCostCents bucht ganze Cents exakt (kein Float-Drift)", () => {
   const s = makeDefaultState();
@@ -123,20 +103,16 @@ test("Grenzfall (T5): cap-1/cap/cap+1 mit ganzen Cents (addVoiceUsageCostCents) 
   setTenantBudget(s, TENANT_A, { budgetCents: 500, hardCapCents: 500 });
   addVoiceUsageCostCents(s, TENANT_A, 499);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "499 < 500 -> frei");
-  addVoiceUsageCostCents(s, TENANT_A, 1); // -> 500
+  addVoiceUsageCostCents(s, TENANT_A, 1);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "500 >= 500 -> exceeded");
-  addVoiceUsageCostCents(s, TENANT_A, 1); // -> 501
+  addVoiceUsageCostCents(s, TENANT_A, 1);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "501 > 500 -> exceeded");
 });
 
-// P1-SAFETY-BLOCKER: der KI-Kosten-Live-Gate-Akkumulator (trackUsage) darf einen
-// Sub-Cent-Turn NICHT pro Inkrement auf 0 runden - sonst wird die KI-Kosten-Achse des
-// Budget-Gates blind (stille Aufweichung von Absolute Regel 1). Ground-Truth ist die
-// PRAEZISE (nicht per-Schritt gerundete) Summe ueber alle Turns.
 test("S1-1 BLOCKER: viele Sub-Cent-Turns summieren ueber den Cap -> Gate greift", () => {
   const s = makeDefaultState();
   setTenantBudget(s, TENANT_A, { budgetCents: 500, hardCapCents: 500 });
-  const SUBCENT_TOKENS = 1000; // 0.00093 EUR = 0.093 Cent/Turn (<< 0,5 Cent)
+  const SUBCENT_TOKENS = 1000;
   const TURNS = 6000;
   for (let i = 0; i < TURNS; i++) trackUsage(s, TENANT_A, tokensOf(SUBCENT_TOKENS, 0), PRICES);
   const preciseCents = TURNS * (SUBCENT_TOKENS / 1e6) * RATE.inPerMTok * PRICES.usdToEur * 100;
@@ -171,10 +147,6 @@ test("S1-1: praezise Rekonstruktion aus costCents+costMicroCentsRem (kein per-Sc
   );
 });
 
-// P1-Safety-BLOCKER in der GEGENRICHTUNG: der D7-Riegel darf Sub-Cent-Turns NICHT
-// verwerfen. 200 Turns a 54 Input-Token = je 5022 Mikro-Cent (0,005 Cent, weit unter
-// jeder Rundungsschwelle) muessen exakt 1 Cent + 4400 Mikro-Cent-Rest ergeben.
-// Ein Guard, der auf Kleinheit statt auf Endlichkeit pruefte, liefert hier 0.
 test("P1-BLOCKER: 200 Sub-Cent-Turns ergeben exakt 1 Cent (D7-Riegel verwirft sie nicht)", () => {
   const s = makeDefaultState();
   const SUBCENT_TOKENS = 54;

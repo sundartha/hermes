@@ -1,18 +1,10 @@
-// Play-TTS end-to-end (Server-Spawn, json-Store, Telnyx-Outbound-Pfad): mit
-// ELEVENLABS_PLAY_TTS_ENABLED=true + einem lokalen Fake-ElevenLabs-Origin rendert
-// /voice/outbound ein <Play> statt <Say> und die Serve-URL liefert die Bytes GENAU
-// EINMAL (danach 404). Flag AUS bleibt byte-identisch auf dem Azure-<Say>-Bestand
-// (kein <Play>). Offline/deterministisch: der Fake-Origin laeuft auf Loopback, kein
-// echter ElevenLabs-Key noetig (Muster telnyx-elevenlabs-inbound.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { runOutbound, runOutboundKeepOpen } from "./_outbound-harness.js";
 
-const FAKE_MP3_BYTES = Buffer.from([0x49, 0x44, 0x33, 0x01, 0x02, 0x03]); // Fake-"ID3"-Praefix
+const FAKE_MP3_BYTES = Buffer.from([0x49, 0x44, 0x33, 0x01, 0x02, 0x03]);
 
-// Fake-ElevenLabs-Origin: antwortet auf JEDEN POST mit festen mp3-Bytes (kein echtes
-// Netz, kein echter Key). requests[] zeichnet Pfad+Query fuer optionale Assertions auf.
 async function startFakeElevenLabsOrigin() {
   const requests = [];
   const server = http.createServer((req, res) => {
@@ -75,11 +67,3 @@ test("Flag AUS: /voice/outbound (Telnyx) bleibt byte-identisch auf dem Azure-<Sa
   assert.match(body, /<Say voice="Azure\.de-DE-KatjaNeural"/, "Azure-Bestand unveraendert");
   assert.doesNotMatch(body, /<Play>/, "Gate aus -> kein Play-Zweig");
 });
-// C-P4: hier stand "Flag AN + provider=twilio -> Renderer-Bestand unveraendert, KEIN
-// Request an ElevenLabs (Twilio-Gate)". Das Gate ist providerSupports(PLAY_AUDIO_TTS);
-// seine Aussage war "ein Anbieter OHNE diese Faehigkeit loest keine Synthese aus".
-// Twilio war der einzige solche Anbieter - mit seinem Ausbau hat der Test keinen
-// Gegenpol mehr und ist entfallen, nicht gruen gemacht. Die Kosten-Seite des Gates
-// bleibt gedeckt: der Flag-AUS-Test daneben belegt, dass ohne Flag KEINE Synthese
-// laeuft, und test/provider-capabilities.test.js pinnt fail-closed=false fuer jeden
-// unbekannten Anbieter (inkl. der Altzeile 'twilio').

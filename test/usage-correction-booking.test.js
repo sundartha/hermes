@@ -1,8 +1,3 @@
-// LCT P4 (Der Flip): Unit-Tests der Korrektur-ARITHMETIK auf state-ops.js/defaults.js.
-// Muster test/usage-spend-month-axis.test.js: reiner makeDefaultState()-Spiegel, kein
-// Spawn, keine DB (F.I.R.S.T.). Die Sweep-Ebene (Vollstaendigkeits-Praedikat,
-// Asymmetrie-Verdrahtung) lebt in test/cost-truing-booking.test.js; hier NUR die
-// Ganzzahl-Formel + die Cent-Schreibkante.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -15,10 +10,8 @@ import {
 import { emptyUsage, isBookableCents, isCorrectionCents, USAGE_CORRUPT_REASON } from "../src/store/defaults.js";
 
 const TENANT_A = "tenant_a";
-const JULY_ISO = "2026-07-19T10:00:00.000Z"; // Schluessel '2026-07'
+const JULY_ISO = "2026-07-19T10:00:00.000Z";
 
-// Leitet console.error waehrend fn um (Muster test/budget-nan-fail-closed.test.js) und
-// restauriert IMMER, auch bei Wurf. Die Discard-Kante loggt ueber discardCorruptWrite.
 function captureErr(fn) {
   const logs = [];
   const orig = console.error;
@@ -31,18 +24,12 @@ function captureErr(fn) {
   return logs.join("\n");
 }
 
-// Neutraler Kurs (Faktor 1,0): actualCostMicroCents in Mikro-Cent bildet 1:1 auf
-// Ziel-Bucket-Cent ab (X * 1_000_000 Mikro-Cent -> X Cent, ohne Rundungsrest), s.
-// cost-truing-observe.test.js fakeConfig. Werkzeug fuer die Faelle, die NUR die
-// Asymmetrie/den 0-Boden pruefen, nicht den Kurs selbst (der ist Fall f/j).
 const NEUTRAL_RATE = 1_000_000;
 
 function seedUsage(s, tenantId, overrides = {}) {
   s.usage[tenantId] = { ...emptyUsage(), ...overrides };
   return usageFor(s, tenantId);
 }
-
-// ---- (d) 0-BODEN: eine grosse negative Korrektur klemmt costCents auf 0, nie negativ ----
 
 test("(d) 0-BODEN: costCents faellt NIE unter 0 (Ist 0, Schaetzung 15, vorhandene 3 Cent)", () => {
   const s = makeDefaultState();
@@ -57,9 +44,6 @@ test("(d) 0-BODEN: costCents faellt NIE unter 0 (Ist 0, Schaetzung 15, vorhanden
   assert.equal(deltaCents, -15);
   assert.equal(usage.costCents, 0, "0-Boden: NIE negativ, obwohl 3 - 15 = -12");
 });
-
-// ---- (e) ACHSEN-ASYMMETRIE: seit KS-P5 entscheidet der BELASTUNGS-ANKER, nicht mehr
-// pauschal das Vorzeichen. Zwei getrennte Faelle, ein Konzept je Test (P14). ----
 
 test("(e1) FREMDER Anker (Vormonat): negative Korrektur senkt NUR costCents, spendMonthCostCents/-Key bleiben bit-identisch", () => {
   const s = makeDefaultState();
@@ -103,8 +87,6 @@ test("(e2) KS-P5, Anker = laufender Monat: die Gutschrift senkt die Monats-Achse
   assert.equal(usage.spendMonthKey, "2026-07");
 });
 
-// ---- (f) KURS + REST-UEBERTRAG in EINEM Fall (Kapitel 5 des Plans, von Hand durchgerechnet) ----
-
 test("(f) 200 Korrekturen a 400.000 Mikro-Cent bei Kurs 920000 -> costCents=73, Rest=600000000000", () => {
   const s = makeDefaultState();
   const RUNS = 200;
@@ -121,8 +103,6 @@ test("(f) 200 Korrekturen a 400.000 Mikro-Cent bei Kurs 920000 -> costCents=73, 
   assert.equal(usage.costCorrectionMicroCentsRem, 600_000_000_000, "Rest 0,6 Cent - OHNE Uebertrag verschwaenden systematisch 73 Cent");
 });
 
-// ---- (j) KURS-Gegenrechnung: die Umrechnung ist im Ergebnis nachweisbar ----
-
 test("(j) 50.000.000 Mikro-Cent bei Kurs 920000, Schaetzung 20 -> delta=+26 (NICHT +30 ohne Umrechnung)", () => {
   const s = makeDefaultState();
   const { usage, deltaCents } = applyCostCorrectionCents(
@@ -135,19 +115,15 @@ test("(j) 50.000.000 Mikro-Cent bei Kurs 920000, Schaetzung 20 -> delta=+26 (NIC
   assert.equal(usage.costCents, 26);
 });
 
-// ---- Rest bit-gleich: ein verworfener Lauf laesst den Rest UNVERAENDERT ----
-
 test("Rest bit-gleich: ein verworfener Lauf (delta<0, dataComplete:false) aendert weder costCents noch den Rest; Endwert == Kontrolllauf ohne den verworfenen Lauf", () => {
   const RUN = { actualCostMicroCents: 400_000, estimatedCostCents: 0, providerToBucketRateMicro: 920_000, dataComplete: true };
 
-  // 3 gebuchte Laeufe (Kapitel-5-Tabelle: Lauf 1/2 -> 0 Cent, Lauf 3 -> +1 Cent).
   const s = makeDefaultState();
   for (let i = 0; i < 3; i++) applyCostCorrectionCents(s, TENANT_A, RUN, JULY_ISO);
   const after3 = usageFor(s, TENANT_A);
   assert.equal(after3.costCents, 1);
   assert.equal(after3.costCorrectionMicroCentsRem, 104_000_000_000);
 
-  // Verworfener Lauf: Ist 0, Schaetzung 100 -> delta=-100, dataComplete:false -> discarded.
   const discarded = applyCostCorrectionCents(
     s,
     TENANT_A,
@@ -159,11 +135,9 @@ test("Rest bit-gleich: ein verworfener Lauf (delta<0, dataComplete:false) aender
   assert.equal(afterDiscard.costCents, 1, "verworfener Lauf: costCents bit-identisch");
   assert.equal(afterDiscard.costCorrectionMicroCentsRem, 104_000_000_000, "verworfener Lauf: Rest bit-identisch");
 
-  // Ein 4. gebuchter Lauf NACH dem verworfenen.
   applyCostCorrectionCents(s, TENANT_A, RUN, JULY_ISO);
   const finalState = usageFor(s, TENANT_A);
 
-  // Kontrolllauf: dieselben 3+1 Laeufe, aber OHNE den verworfenen Lauf dazwischen.
   const control = makeDefaultState();
   for (let i = 0; i < 4; i++) applyCostCorrectionCents(control, TENANT_A, RUN, JULY_ISO);
   const controlUsage = usageFor(control, TENANT_A);
@@ -176,8 +150,6 @@ test("Rest bit-gleich: ein verworfener Lauf (delta<0, dataComplete:false) aender
   );
 });
 
-// ---- Praedikate: isBookableCents bleibt UNVERAENDERT, isCorrectionCents ist der NEUE, eigene Riegel ----
-
 test("Praedikate: isBookableCents(-1)===false bleibt unveraendert; isCorrectionCents traegt beliebiges Vorzeichen, aber nur Ganzzahl+endlich", () => {
   assert.equal(isBookableCents(-1), false, "isBookableCents wird NICHT aufgeweicht");
   assert.equal(isCorrectionCents(-1), true, "Korrektur darf negativ sein");
@@ -188,13 +160,6 @@ test("Praedikate: isBookableCents(-1)===false bleibt unveraendert; isCorrectionC
   assert.equal(isCorrectionCents(Infinity), false);
   assert.equal(isCorrectionCents(-Infinity), false);
 });
-
-// ---- D7-Riegel END-TO-END: ein korrupter deltaCents wird verworfen (booked=false),
-// der usage-Bucket bleibt BIT-IDENTISCH und die Verwerfung wird geloggt. Analog zu
-// trackUsage(NaN)/addVoiceUsageCostCents(NaN) in test/budget-nan-fail-closed.test.js -
-// die Praedikat-Tests oben pruefen nur isCorrectionCents(x) direkt, NICHT die
-// Schreibkante. Die einzige oeffentliche Fassade store.applyCostCorrectionCents ist
-// direkt aufrufbar, der Pfad also erreichbar. ----
 
 test("D7 end-to-end: bookCostCorrectionCents(NaN/1.5) verwirft, Bucket bit-identisch, geloggt", () => {
   for (const bad of [NaN, 1.5, Infinity, -Infinity]) {
@@ -218,7 +183,6 @@ test("D7 end-to-end: bookCostCorrectionCents(NaN/1.5) verwirft, Bucket bit-ident
 
 test("D7 end-to-end: applyCostCorrectionCents mit NaN-estimatedCostCents verwirft alles-oder-nichts", () => {
   const s = makeDefaultState();
-  // Vorbelegter Bucket inkl. Korrektur-Rest: er MUSS bit-gleich bleiben (alles-oder-nichts).
   seedUsage(s, TENANT_A, {
     costCents: 42,
     spendMonthKey: "2026-07",
@@ -228,7 +192,6 @@ test("D7 end-to-end: applyCostCorrectionCents mit NaN-estimatedCostCents verwirf
   const before = { ...usageFor(s, TENANT_A) };
   let result;
   const out = captureErr(() => {
-    // estimatedCostCents=NaN -> deltaCents = bucketCents - NaN = NaN -> isCorrectionCents(NaN)=false.
     result = applyCostCorrectionCents(
       s,
       TENANT_A,

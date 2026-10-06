@@ -1,14 +1,6 @@
-// Unit-Tests fuer src/tts/store.js (PII-Audio-Serve-Seam, In-Memory-Port). Pinnt:
-// put->takeOnce liefert exakt die Bytes+ContentType; zweiter takeOnce -> null (EINMALIG);
-// nach TTL -> null (kein Nichtabruf-Leck); zwei put -> verschiedene, URL-sichere Tokens.
-// IE7: die Ablage haelt ein VERSPRECHEN auf die Bytes - ein noch laufendes wird beim
-// Abruf abgewartet, und takeOnce loescht VOR dem Warten (ein paralleler zweiter Abruf
-// bekommt 404, statt auf dieselben Bytes zu warten).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createTtsStore } from "../src/tts/store.js";
-// Die Bytewerte sind ohne Bedeutung - geliehen aus dem geteilten Strom-Harnisch, damit
-// hier keine nackten Zahlen stehen (G25).
 import { FAKE_FIRST_CHUNK, FAKE_REST_CHUNK } from "./helpers/fake-tts-stream.mjs";
 
 const TTL_MS = 60000;
@@ -17,8 +9,6 @@ const TTL_WAIT_MS = 30;
 const BYTES_A = Buffer.from(FAKE_FIRST_CHUNK);
 const BYTES_B = Buffer.from(FAKE_REST_CHUNK);
 
-// Der schon fertige Sonderfall der EINEN Ablageform (IE7): Bytes als aufgeloestes
-// Versprechen.
 function fertigesAudio(bytes, contentType = "audio/mpeg") {
   return { bytes: Promise.resolve(bytes), contentType };
 }
@@ -84,7 +74,7 @@ test("IE7: takeOnce loescht VOR dem Warten -> paralleler zweiter Abruf bekommt n
     }),
   });
   const ersterAbruf = store.takeOnce(token);
-  const zweiterAbruf = store.takeOnce(token); // startet WAEHREND der erste noch wartet
+  const zweiterAbruf = store.takeOnce(token);
   assert.equal(await zweiterAbruf, null, "kein zweiter Konsument derselben Ausgabe");
   liefern(BYTES_A);
   assert.notEqual(await ersterAbruf, null);

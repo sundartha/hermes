@@ -49,7 +49,6 @@ function get(url, cookie) {
   });
 }
 const sessionCookie = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
-// SEC-P5: benannter Antwortcode fuer den neuen Fall - der nackte Wert waere ein Magic Number.
 const UNAUTHORIZED = 401;
 
 test("kein Cookie -> 401", async () => {
@@ -60,8 +59,6 @@ test("kein Cookie -> 401", async () => {
     await s.close();
   }
 });
-// SEC-P5: der ALTE Name traegt keine Sitzung mehr. Ohne diesen Fall bewiese die Suite
-// nur, dass der neue Name funktioniert - nicht, dass nicht beide akzeptiert werden.
 test("altes Cookie 'session=' -> 401 (kein Doppel-Lesen)", async () => {
   const server = await mount(fakeDeps());
   try {
@@ -130,11 +127,6 @@ test("unbekannte Session -> 401", async () => {
   }
 });
 
-// ---- PA-9: Status-Gate-Matrix (4 Status x 2 Middlewares) --------------
-// Sperrt die GEWOLLTE Divergenz mechanisch fest: die zwei Middlewares unterscheiden sich
-// AUSSCHLIESSLICH im Status-Praedikat (active-only vs. active|suspended). Alle 8 Zellen als
-// Golden-Truth-Table mit {statusCode, req.tenant} - vor und nach der Higher-Order-Dedup
-// identisch. Der Pass-Fall (200) prueft den VOLLEN req.tenant-Inhalt, nicht nur den Code.
 const accountFor = (status) => ({ tenantId: "t_u1", role: "member", status, email: "u1@x" });
 
 const expectedTenant = (status) => ({
@@ -145,10 +137,9 @@ const expectedTenant = (status) => ({
   status,
 });
 
-// 4. Status "unexpected" = ausserhalb des TENANT_STATUS-Enums -> beweist Default-Deny.
 const STATUS_MATRIX = [
   { status: "active", webAuth: 200, pending: 200 },
-  { status: "suspended", webAuth: 403, pending: 200 }, // einzige Zelle, in der die zwei divergieren
+  { status: "suspended", webAuth: 403, pending: 200 },
   { status: "closed", webAuth: 403, pending: 403 },
   { status: "unexpected", webAuth: 403, pending: 403 },
 ];

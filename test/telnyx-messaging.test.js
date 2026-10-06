@@ -1,7 +1,3 @@
-// P5: Telnyx-sendSms gegen ein gemocktes global fetch (kein echter Netz-Call,
-// F.I.R.S.T.). Prueft URL (.../v2/messages), POST, Bearer-Auth, JSON-Content-Type
-// und das body->text-Mapping. Nicht-2xx -> wirft mit HTTP-Status, OHNE API-Key in
-// der Meldung (Regel 4). fetch wird pro Test gespeichert/wiederhergestellt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";

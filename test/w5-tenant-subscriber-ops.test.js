@@ -1,7 +1,3 @@
-// W5: state-ops-Unit fuer das abo-gekoppelte Outbound-Gate. Prueft die INVARIANTEN von
-// tenantActiveSubscriber (Lockerungssignal) + tenantInactive (Defense-in-depth) rein ueber
-// ops (kein Netz, kein Server, kein pglite; Lehre P6a: state-ops-Unit NICHT mit Spawn
-// mischen). Das HTTP-Gate (allowlistError-Sequenz) deckt w5-abo-allowlist-gate.test.js ab.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -17,15 +13,13 @@ const A = "tenant_a";
 
 test("tenantActiveSubscriber: Owner/Bestand ohne kyc_level -> false (byte-identisch, strenger als kycReached)", () => {
   const s = makeDefaultState();
-  // Der Owner-Tenant ist active, traegt aber KEIN kycLevel -> KEIN Abo-Subscriber: das Gate
-  // faellt fuer ihn auf die statische ALLOWED_NUMBERS zurueck (kein Regress).
   assert.equal("kycLevel" in s.tenants[0], false, "Owner traegt kein kycLevel");
   assert.equal(tenantActiveSubscriber(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN), false);
 });
 
 test("tenantActiveSubscriber: aktiv + explizit >= card -> true (Lockerung greift)", () => {
   const s = makeDefaultState();
-  registerTenant(s, A); // status active
+  registerTenant(s, A);
   setKycLevel(s, A, KYC_LEVEL.CARD);
   assert.equal(tenantActiveSubscriber(s, A, KYC_OUTBOUND_MIN), true, "card == Schwelle -> Subscriber");
   setKycLevel(s, A, KYC_LEVEL.ID_VERIFIED);
@@ -65,7 +59,7 @@ test("tenantInactive: suspended UND closed -> true (Defense-in-depth-Hard-Block)
 
 test("tenantInactive: aktiver Tenant -> false", () => {
   const s = makeDefaultState();
-  registerTenant(s, A); // status active
+  registerTenant(s, A);
   assert.equal(tenantInactive(s, A), false);
   assert.equal(tenantInactive(s, BOOTSTRAP_TENANT_ID), false, "Owner active -> kein Block");
 });

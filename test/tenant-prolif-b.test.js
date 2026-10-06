@@ -1,9 +1,3 @@
-// tenant-prolif-b: sub->Tenant ueber account (synchroner Spiegel-Index). Beweist den
-// Merge-Fall aus Phase tenant-prolif-a (Email-Dedup): ein per Email gemergter Zweit-sub
-// (account(sub2)->t_sub1, aber KEIN tenant.idpSubject===sub2) loest ueber den subIndex
-// auf den KANONISCHEN Tenant auf - sowohl nach frischem Boot (hydrateSubIndex aus
-// account) als auch OHNE Neustart (mintSession-Nach-Boot-Bind). Rein pglite, NIE mit
-// Server-Spawn in derselben Datei (P6a-Stall-Lehre, Muster store-pg-idp-seed.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -12,8 +6,6 @@ import { makeAccounts } from "../src/web-auth.js";
 import { tenantIdForSubject } from "../src/store/defaults.js";
 import { checkSubAlreadyMerged, SUB_ALREADY_MERGED_ERROR } from "../src/onboard-guard.js";
 
-// pglite ist ein-verbindig: withClient reicht die Instanz als Client durch (Muster
-// store-pg-idp-seed.test.js).
 const runnerFor = (db) => ({
   withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
 });
@@ -26,12 +18,12 @@ const TENANT_1 = tenantIdForSubject(SUB_1);
 test("tenant-prolif-b: init() hydriert subIndex aus account -> gemergter sub2 loest kanonisch auf", async () => {
   const db = new PGlite();
   const boot = makePgStore(runnerFor(db));
-  await boot.init(); // Schema anlegen
+  await boot.init();
   const accounts = makeAccounts(runnerFor(db));
-  await accounts.upsertOnFirstLogin({ sub: SUB_1, email: SHARED_EMAIL }); // t_u1 + account(u1)
-  await accounts.upsertOnFirstLogin({ sub: SUB_2, email: SHARED_EMAIL }); // Phase-A-Merge: account(u2)->t_u1
+  await accounts.upsertOnFirstLogin({ sub: SUB_1, email: SHARED_EMAIL });
+  await accounts.upsertOnFirstLogin({ sub: SUB_2, email: SHARED_EMAIL });
   const reborn = makePgStore(runnerFor(db));
-  await reborn.init(); // frischer Boot -> hydrateSubIndex
+  await reborn.init();
   assert.equal(reborn.resolveTenant(SUB_1), TENANT_1);
   assert.equal(reborn.resolveTenant(SUB_2), TENANT_1, "gemergter Zweit-sub loest auf den kanonischen Tenant");
   assert.equal(
@@ -46,11 +38,11 @@ test("tenant-prolif-b: Nach-Boot-Login bindet gemergten sub ohne Neustart (kein 
   const store = makePgStore(runnerFor(db));
   await store.init();
   const accounts = makeAccounts(runnerFor(db));
-  await accounts.upsertOnFirstLogin({ sub: SUB_1, email: SHARED_EMAIL }); // NACH init(): DB hat t_u1
-  await accounts.upsertOnFirstLogin({ sub: SUB_2, email: SHARED_EMAIL }); // NACH init(): account(u2)->t_u1
+  await accounts.upsertOnFirstLogin({ sub: SUB_1, email: SHARED_EMAIL });
+  await accounts.upsertOnFirstLogin({ sub: SUB_2, email: SHARED_EMAIL });
   assert.equal(store.resolveTenant(SUB_2), null, "vor dem Bind kennt der Spiegel u2 nicht");
-  await store.ensureTenant(TENANT_1); // mintSession-Schritt 1: Tenant in den Spiegel
-  store.bindSubToTenant(SUB_2, TENANT_1); // mintSession-Schritt 2: sub in den Index
+  await store.ensureTenant(TENANT_1);
+  store.bindSubToTenant(SUB_2, TENANT_1);
   assert.equal(store.resolveTenant(SUB_2), TENANT_1, "gemergter sub sofort aufloesbar (ohne reinit)");
   assert.equal(
     store.resolveTenant(SUB_1),
@@ -77,21 +69,15 @@ test("tenant-prolif-b: Onboard-Guard-Bedingung - resolveTenant(gemergt) != tenan
   );
 });
 
-// ---- checkSubAlreadyMerged (der eigentliche Onboard-Guard aus server.js, extrahiert
-// nach src/onboard-guard.js) - direkt gegen den echten pglite-hydrierten resolveTenant
-// getrieben, statt nur die Vorbedingung zu pruefen. Beweist Bedingung UND Status/Error-
-// Shape der 409-Antwort in einem Rutsch.
 test("checkSubAlreadyMerged: gemergter Zweit-sub -> 409 + Fehlertext (blockt den Zweit-Tenant-Kauf)", async () => {
   const db = new PGlite();
   const boot = makePgStore(runnerFor(db));
   await boot.init();
   const accounts = makeAccounts(runnerFor(db));
   await accounts.upsertOnFirstLogin({ sub: SUB_1, email: SHARED_EMAIL });
-  await accounts.upsertOnFirstLogin({ sub: SUB_2, email: SHARED_EMAIL }); // Phase-A-Merge
+  await accounts.upsertOnFirstLogin({ sub: SUB_2, email: SHARED_EMAIL });
   const reborn = makePgStore(runnerFor(db));
   await reborn.init();
-  // server.js berechnet tenantId = tenantIdForSubject(sub) VOR dem Guard-Aufruf (t_u2) -
-  // exakt die Eingabe, die ein onboard-Request mit idpSubject=u2 erzeugen wuerde.
   const result = checkSubAlreadyMerged({
     sub: SUB_2,
     tenantId: tenantIdForSubject(SUB_2),
@@ -108,8 +94,6 @@ test("checkSubAlreadyMerged: Primaer-sub (canonical === tenantId) -> null (kein 
   await accounts.upsertOnFirstLogin({ sub: SUB_1, email: SHARED_EMAIL });
   const reborn = makePgStore(runnerFor(db));
   await reborn.init();
-  // sub1 loest auf seinen EIGENEN Tenant auf (canonical === tenantId) -> kein Merge-Fall,
-  // der Guard darf einen regulaeren Erst-/Wieder-Login nicht blocken.
   const result = checkSubAlreadyMerged({
     sub: SUB_1,
     tenantId: tenantIdForSubject(SUB_1),
@@ -119,7 +103,6 @@ test("checkSubAlreadyMerged: Primaer-sub (canonical === tenantId) -> null (kein 
 });
 
 test("checkSubAlreadyMerged: isoliert ohne Store - unbekannter sub -> null, sub-los (Operator-Pfad) -> null", () => {
-  // Rein, kein pglite/Store noetig: resolveTenant als simpler Fake.
   const noMatch = checkSubAlreadyMerged({
     sub: "unbekannt",
     tenantId: "t_unbekannt",

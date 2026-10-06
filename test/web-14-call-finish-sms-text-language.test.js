@@ -1,14 +1,3 @@
-// WEB-14 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:344, kanonisch
-// D12 Leit-Test) - Post-Call-SMS-Rahmentext ist sprachunabhaengig deutsch.
-//
-// SOLL (rot): fuer einen Call mit language="en" darf der erzeugte SMS-Text (und die
-// Notification) KEIN "Anruf..." enthalten. Heute sind die Rahmentexte in
-// src/telephony/call-finish.js:57 ("Anruf abgebrochen"/"Anruf nicht zustande gekommen")
-// und :80 (`who = "Anruf bei "/"Anruf von "`) sprachunabhaengige Literale - call.language
-// wird an keiner der beiden Stellen gelesen.
-//
-// Unit-Test ueber makeCallFinish (Muster test/diagnostic-retention.test.js Block B): reine
-// Fake-Kollaboratoren, kein Server-Spawn, kein Netz.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
@@ -27,7 +16,6 @@ function makeFakeStore(notifyCapture) {
     recordUsageEvent: () => {},
     markSummarySmsSent: () => {},
     markBilled: () => {},
-    // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
     markInboxEntry: () => {},
   };
 }

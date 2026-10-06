@@ -1,8 +1,3 @@
-// W4 — Abo-Buchung ueber den Self-Service-Pfad (web-session-only). Kompositions-
-// Integrationstest nach Muster i9-self-service.test.js: reines pglite (offline,
-// F.I.R.S.T.), KEIN Server-Spawn (Lehre p6a-Stall). Prueft: eingeloggt+Karte ->
-// subscribe -> Abo-Felder persistiert + accounts.setStatus(active) -> webAuthMw laesst
-// danach durch; ohne Karte -> 409; bereits abonniert -> 409; PAYMENT_ENABLED aus -> 404.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -42,7 +37,6 @@ async function setup({ card = true, paymentEnabled = true, billing } = {}) {
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
 
-  // Tenant B im Mirror + DB anlegen, vorerst suspended (Subscribe soll aktivieren).
   const s = store.load();
   ops.registerTenant(s, TENANT_B, { firstName: "Kunde", lastName: "B" });
   const t = s.tenants.find((x) => x.id === TENANT_B);
@@ -51,8 +45,7 @@ async function setup({ card = true, paymentEnabled = true, billing } = {}) {
     ops.setTenantStripe(s, TENANT_B, { customerId: "cus_b", paymentMethodId: "pm_b" });
   }
   await accounts.upsertOnFirstLogin({ sub: SUB_B, email: "b@kunde.de" });
-  await accounts.setStatus(TENANT_B, "active"); // Session-Auth braucht active fuer den Durchlass
-  // (Hinweis: webAuthMw prueft DB-status; wir testen den Abo-Effekt auf den Mirror + DB-Setter.)
+  await accounts.setStatus(TENANT_B, "active");
   const { id: sessionId } = await sessions.create({ sub: SUB_B, tenantId: TENANT_B, ttlSeconds: 3600 });
 
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
@@ -124,17 +117,12 @@ test("(a) Happy: subscribe mit Karte -> Abo persistiert + Tenant aktiv (accounts
     const body = JSON.parse(res.body);
     assert.equal(body.plan, "starter");
     assert.equal(body.currentPeriodEnd, 1893456000);
-    // Abo-Felder im Mirror.
     const t = s.store.load().tenants.find((x) => x.id === TENANT_B);
     assert.equal(t.stripeSubscriptionId, "sub_new");
     assert.equal(t.stripePlanSlug, "starter");
-    // Status-Flip ueber den pg-Status-Seam (webAuthMw-Quelle).
     const acct = await s.accounts.resolve(SUB_B);
     assert.equal(acct.status, "active", "Tenant ueber accounts.setStatus aktiviert");
-    // Stripe-Call mit dem richtigen Price.
     assert.equal(s.billingSpy.params.priceId, "price_starter");
-    // P5: volle 3-Effekt-Aktivierung - KYC auf CARD gehoben (Outbound-Gate offen) +
-    // Provisioning genau 1x mit dem EIGENEN Tenant (idempotent ueber den geteilten Trigger).
     assert.equal(t.kycLevel, "card", "KYC auf CARD gehoben");
     assert.deepEqual(s.provisionSpy, [TENANT_B], "Provisioning genau 1x mit dem eigenen Tenant");
   } finally {
@@ -162,7 +150,6 @@ test("(c) ohne Karte -> 409 no_card + Funnel-Hinweis (next/plan), kein Abo, kein
     assert.equal(res.status, 409);
     const body = JSON.parse(res.body);
     assert.equal(body.error, "no_card");
-    // AM4: maschinenlesbarer Funnel statt Sackgasse -> Client springt in setup-checkout.
     assert.equal(body.next, "setup-checkout");
     assert.equal(body.plan, "starter");
     const t = s.store.load().tenants.find((x) => x.id === TENANT_B);
@@ -219,9 +206,6 @@ test("(g) ohne Session-Cookie -> 401, kein Abo", async () => {
   }
 });
 
-// asyncBilling-Catch: ein UNERWARTETER Wurf aus dem BillingPort (Stripe/Netz) wird zu
-// sauberem 502/Redirect statt Express-4-Hang; fachliche Ablehnungen (no_card etc.) laufen
-// weiter ueber result.ok (Tests c/d/e). Alle Methoden werfen wie assertOk (kein Secret).
 function throwingBilling() {
   const boom = (op) => async () => {
     throw new Error(`Stripe ${op} fehlgeschlagen: HTTP 500`);

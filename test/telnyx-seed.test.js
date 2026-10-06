@@ -1,8 +1,3 @@
-// Owner-Bestandsnummer-Seed in BEIDEN Backends. Seit "Owner = Tenant Null" kommt die
-// Owner-Nummer NICHT mehr aus der config/migrate, sondern ueber seedBootstrapNumber (CLI-
-// Pfad, state-ops + Fassade). Verhindert "Nummer gesetzt, routet aber nicht": die
-// Telnyx-Owner-Nummer landet idempotent + normalisiert in der number-Tabelle
-// (provider=telnyx), routbar via findTenantByNumber. Offline (state-ops + pglite).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDefaultState, seedBootstrapNumber, findTenantByNumber } from "../src/store/state-ops.js";
@@ -14,7 +9,6 @@ import { PGlite } from "@electric-sql/pglite";
 
 const TELNYX_NR = "+13125550100";
 
-// ---- json-Pfad (state-ops, der json-load() identisch nutzt) ----
 test("json: gesetzte Telnyx-Nummer -> routbar, provider=telnyx", () => {
   const s = makeDefaultState();
   seedBootstrapNumber(s, TELNYX_NR, BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
@@ -35,9 +29,6 @@ test("json: bestehende e164 gewinnt (idempotent, kein Duplikat)", () => {
   assert.equal(s.numbers.filter((n) => n.e164 === TELNYX_NR).length, 1);
 });
 
-// TD-2: config-Nummer mit Trennzeichen (Whitespace/Bindestrich) wird normalisiert
-// gespeichert, damit der normalisierte Inbound-To-Lookup (findTenantByNumber) sie
-// trifft - sonst routet sie nicht (defense-in-depth, fail-closed).
 test("json: Nummer mit Trennzeichen wird normalisiert -> routbar (TD-2)", () => {
   const s = makeDefaultState();
   seedBootstrapNumber(s, "+49 151-1234 567", BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
@@ -52,9 +43,6 @@ test("json: Trennzeichen- und Klar-Form derselben Nummer -> 1 Zeile (Idempotenz,
   assert.equal(s.numbers.length, 1, "Idempotenz-Check laeuft gegen die normalisierte Form");
 });
 
-// ---- pg-Pfad: Owner-Nummer ueber die Fassade -> persistiert + re-hydrierbar ----
-// Eine frische Store-Instanz auf DERSELBEN DB beweist, dass save()->flushNumbers die
-// Nummer durablt und die Re-Hydrierung sie mit provider=telnyx zurueckliefert.
 function pgStoreOn(db) {
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
@@ -68,7 +56,6 @@ test("pg: ueber die Fassade geseedete Telnyx-Nummer ueberlebt Re-Hydrierung, pro
   await store1.init();
   store1.seedBootstrapNumber(TELNYX_NR, BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
   await store1.save();
-  // Frische Instanz auf derselben DB -> hydriert aus der number-Tabelle.
   const store2 = pgStoreOn(db);
   await store2.init();
   const num = findActiveNumber(store2.load(), BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
@@ -84,8 +71,6 @@ test("pg: frischer Store ohne Seed -> keine Telnyx-Nummer (fail-closed)", async 
   assert.equal(rows.length, 0, "ohne Seed kein Telnyx-Eintrag");
 });
 
-// TD-2 (pg-Seite): identisch zur json-Seite - eine Nummer mit Trennzeichen landet
-// normalisiert in der number-Tabelle (eine Norm-Quelle, beide Backends).
 test("pg: Nummer mit Trennzeichen wird normalisiert geseedet (TD-2)", async () => {
   const db = new PGlite();
   const store = pgStoreOn(db);

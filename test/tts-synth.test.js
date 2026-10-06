@@ -1,10 +1,3 @@
-// Unit-Tests fuer src/tts/synth.js (Play-TTS, reine IO-injizierte Funktion, DIP wie
-// src/llm.js). Fake-fetchImpl statt echtem Netz (P12 F.I.R.S.T.) - offline, deterministisch.
-// IE7: die Funktion streamt und kehrt beim ERSTEN Audio-Paket zurueck. Gepinnt:
-// URL traegt /stream + output_format, Body traegt model_id; HTTP-Fehler ->
-// {ok:false, reason:"http_<code>"}; Abbruch am ersten Paket -> "timeout"; kein erstes
-// Paket -> "empty_stream" (das Gate gegen ein leeres <Play>); das audio-Versprechen lehnt
-// NIE ab; der API-Key taucht NIE in der Rueckgabe auf (Regel 4/Secrets).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { synthesizeSpeechStream } from "../src/tts/synth.js";

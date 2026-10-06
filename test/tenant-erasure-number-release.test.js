@@ -1,7 +1,3 @@
-// tenant-prolif-e: Art.-17-Erase gibt Nummern frei. Reiner Selektor (tenantNumbersForErase)
-// + Orchestrator (releaseTenantNumbersOnErase) mit Fake-Store + Fake-Provisioner - reine
-// In-Process-Unit, kein Spawn, kein pglite, kein Netz (F.I.R.S.T.). Deckt: Selektor-Filter,
-// Happy-Path, non-telnyx-safe, Idempotenz, 404-Konvergenz, harter Provider-Fehler, cross-tenant.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { releaseTenantNumbersOnErase } from "../src/release-reconcile.js";
@@ -9,10 +5,6 @@ import { tenantNumbersForErase } from "../src/store/state-ops.js";
 import { NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { fakeProvisioner } from "./helpers.js";
 
-// Ein Provider-Wert, den die Registry NICHT kennt. Bewusst 'twilio' statt eines
-// Phantasienamens: genau dieser String kann als ALTZEILE in einer Bestands-DB stehen
-// (`provider TEXT` ohne CHECK-Constraint) - und eine Altzeile darf der Release-Pfad
-// NICHT anfassen (kein Provider, bei dem man sie freigeben koennte).
 const NON_TELNYX_PROVIDER = "twilio";
 
 const fakeAudit = () => ({
@@ -23,8 +15,6 @@ const fakeAudit = () => ({
   },
 });
 const fakeLogger = () => ({ log: () => {}, warn: () => {} });
-// Fake-Store ueber der facade-Kontraktflaeche { load, save, withStoreLock } - EINE
-// mutable Referenz, so wirken Mutationen ueber alle load()-Aufrufe hinweg.
 const fakeStore = (s) => ({ load: () => s, save: () => {}, withStoreLock: (fn) => fn() });
 const http = (status) => Object.assign(new Error(`HTTP ${status}`), { providerStatus: status });
 
@@ -41,8 +31,6 @@ const seed = (over = {}) => ({
     },
   ],
   numberAssignments: [{ id: "a1", numberId: "n1", tenantId: "t1", assignedAt: "x", releasedAt: null }],
-  // OUTBOUND-E1: tenantNumbersForErase ruft jetzt numberBusyReason (Anruf-Check +
-  // Plattform-Bindung) - ohne diese beiden Felder wuerfe der Zugriff bei gesetzter e164.
   calls: [],
   platformNumberUse: [],
   ...over,
@@ -59,8 +47,6 @@ test("(1) Selektor: active+telnyx des Tenants ja, alles andere nein", () => {
     ],
   });
   const result = tenantNumbersForErase(s, "t1");
-  // OUTBOUND-E1: liefert Koerbe {release, hold} statt eines flachen Arrays (§4.4 des Plans -
-  // Filter waere ein stiller Rueckschritt, s. state-ops.js).
   assert.deepEqual(
     result.release.map((n) => n.id),
     ["n1"],
@@ -125,7 +111,7 @@ test("(4) doppelter Erase idempotent: 2. Lauf findet keine Kandidaten mehr", asy
     tenantId: "t1",
   });
   assert.deepEqual(second, { released: 0, aborted: 0 });
-  assert.deepEqual(prov.log, ["release:ext_1"]); // kein zweiter Provider-Call im 2. Lauf
+  assert.deepEqual(prov.log, ["release:ext_1"]);
 });
 
 test("(5) 404 = Konvergenz: bereits bei Telnyx geloescht zaehlt als Erfolg", async () => {
