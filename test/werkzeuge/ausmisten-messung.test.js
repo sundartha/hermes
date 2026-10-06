@@ -30,6 +30,15 @@ const GROSSE_QUELLEN_FUER_ZWEI_PAKETE = 2;
 const ZU_VIELE_GROSSE_QUELLEN = 21;
 const MAX_MUTANTEN_JE_PAKET = 3000;
 const SHA256_ZEICHEN = 64;
+const ISSUE_IM_TEST = 42;
+const AUTOR = [
+  "-c",
+  "user.name=Probe",
+  "-c",
+  "user.email=probe@example.invalid",
+  "-c",
+  "commit.gpgsign=false",
+];
 const BERECHNET_TEST = "test/post/berechnet.test.js";
 
 function testDatei(importPfad, name, pruefung) {
@@ -94,7 +103,9 @@ async function laufe(werkzeug, { repo, umgebung }) {
 
 async function plane(context, branch, dateien = {}) {
   const repo = ausmistenRepo(context, { ...WIRKSAME_TESTS, ...dateien });
-  const kopf = repo.committe(branch.neu ?? {}, branch.weg);
+  repo.committe(branch.neu ?? {}, branch.weg);
+  if (branch.nachricht) repo.git([...AUTOR, "commit", "-q", "--amend", "-m", branch.nachricht]);
+  const kopf = repo.git(["rev-parse", "HEAD"]).stdout.trim();
   repo.git(["checkout", "-q", repo.master]);
   const artefakte = probeDirectory(context, { "planen.txt": "", "sammeln.txt": "" });
   const routen = new Map([
@@ -352,4 +363,22 @@ test("ausmisten-messung: eine geänderte Testdatei ohne Regressionstest bricht d
   assert.equal(ergebnis.zweig.status, EXIT_GRUEN, ergebnis.zweig.ausgabe);
   assert.equal(ergebnis.melden.status, EXIT_GRUEN, ergebnis.melden.ausgabe);
   assert.deepEqual(ergebnis.gelesen.tests.alt, [katalog]);
+});
+
+function geplant(stand) {
+  return JSON.parse(readFileSync(join(stand.artefakte, "plan", "plan.json"), "utf8"));
+}
+
+test("ausmisten-messung: eine Zeile Issue: #<Nummer> im Kopf-Commit landet im Plan", async (context) => {
+  const nachricht = "Miste doppelte Tests aus\n\nWarum: doppelt.\n\nIssue: #42\nPaket: 37";
+  const stand = await plane(context, { weg: [DOPPELT], nachricht });
+  assert.equal(stand.planen.status, EXIT_GRUEN, stand.planen.ausgabe);
+  assert.equal(geplant(stand).issue, ISSUE_IM_TEST);
+});
+
+test("ausmisten-messung: ohne genaue Issue-Zeile bleibt der Plan ohne Issue", async (context) => {
+  const nachricht = "Miste aus\n\nIssue: #42; echo x\nSiehe Issue: #43";
+  const stand = await plane(context, { weg: [DOPPELT], nachricht });
+  assert.equal(stand.planen.status, EXIT_GRUEN, stand.planen.ausgabe);
+  assert.equal(geplant(stand).issue, null);
 });

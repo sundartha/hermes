@@ -25,6 +25,7 @@ const ZEILENZAHL = /:(\d+)$/;
 const ZAHLENSPALTE = /^(\d+)\t(\d+)\t/;
 const EINRUECKUNG = 2;
 const MS_JE_SEKUNDE = 1000;
+const ISSUE_ZEILE = /^Issue: #(\d{1,9})$/m;
 
 function geprueft(herkunft) {
   const master = git(["rev-parse", "HEAD"]).trim();
@@ -117,6 +118,12 @@ async function mengen({ lauf, bereiche, werkzeug }) {
   return { graph, branchSicht, menge, neu };
 }
 
+function issueDes(kopf) {
+  const nachricht = git(["log", "-1", "--format=%B", kopf]);
+  const treffer = ISSUE_ZEILE.exec(nachricht);
+  return treffer === null ? null : Number(treffer[1]);
+}
+
 export async function planen({ aus }) {
   const vorbereitung = await vorbereitet();
   const { lauf } = vorbereitung;
@@ -131,6 +138,7 @@ export async function planen({ aus }) {
     ...kopfdaten(vorbereitung, menge.dateien),
     art: PLAN_ART,
     tests: { alt: menge.alt, neu },
+    issue: issueDes(lauf.kopf),
     pakete,
     geschaetzt: zahlen,
   });

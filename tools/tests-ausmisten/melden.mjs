@@ -16,6 +16,7 @@ import {
 import {
   oeffneOderNeustarten,
   prTitel,
+  schalteAutoMergeAus,
   schalteAutoMergeEin,
   setzeStatus,
   testschutzNeuStarten,
@@ -109,7 +110,12 @@ async function artefakte(github, { jobs, erwartet }) {
     erwartet,
   });
   if (fehler.length > 0) return { fehler };
-  return { basis: vereinige(teile[BASIS]), branch: vereinige(teile[BRANCH]), fehler: [] };
+  return {
+    basis: vereinige(teile[BASIS]),
+    branch: vereinige(teile[BRANCH]),
+    issue: plan.daten.issue,
+    fehler: [],
+  };
 }
 
 function urteilFuer({ basis, branch, fehler }) {
@@ -118,7 +124,16 @@ function urteilFuer({ basis, branch, fehler }) {
   return { gruen: false, verstoesse: fehler, kurz };
 }
 
-export function prText({ bereich, basis, branch, urteil, adresse }) {
+function issueZeilen(issue) {
+  if (issue === null) {
+    return [
+      "Die letzte Commit-Nachricht nennt keine Zeile „Issue: #<Nummer>“; dieser PR schließt kein Issue.",
+    ];
+  }
+  return [`Closes #${issue}`];
+}
+
+export function prText({ bereich, basis, branch, urteil, adresse, issue }) {
   const dateien = basis.dateien.map((datei) => `\`${datei}\``);
   const { alt, neu } = basis.tests;
   return [
@@ -133,6 +148,8 @@ export function prText({ bereich, basis, branch, urteil, adresse }) {
     "",
     "Jeder Mutant, den die alten Fassungen der geänderten Tests getötet haben, ist auch mit den Tests dieses Branches getötet, im Gate-Lauf ebenso.",
     "",
+    ...issueZeilen(issue),
+    "",
   ].join("\n");
 }
 
@@ -140,7 +157,11 @@ function standardAbhaengigkeiten() {
   return {
     github: githubZugang({ token: env.GITHUB_TOKEN ?? "" }),
     bot: () => githubZugang({ token: env.GH_TOKEN ?? "" }),
-    aktionen: { autoMerge: schalteAutoMergeEin, neustart: testschutzNeuStarten },
+    aktionen: {
+      autoMerge: schalteAutoMergeEin,
+      autoMergeAus: schalteAutoMergeAus,
+      neustart: testschutzNeuStarten,
+    },
     jobs: jobErgebnisse(),
     master: git(["rev-parse", "HEAD"]).trim(),
   };

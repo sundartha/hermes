@@ -20,6 +20,7 @@ const WERKZEUG = "tools/tests-ausmisten.mjs";
 const KOPF = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
 const ANDERE_SHA = "0123456789abcdef0123456789abcdef01234567";
 const SHA256_ZEICHEN = 64;
+const ISSUE_NUMMER = 4711;
 const ANDERE_SUMME = "f".repeat(SHA256_ZEICHEN);
 const ZWEITE_DATEI = "src/post/zweite.js";
 const ZWEITER_MUTANT = `${ZWEITE_DATEI}:2:10-2:11 BooleanLiteral → false`;
@@ -79,6 +80,7 @@ function planDaten(master, felder = {}) {
     bereich: "posteingang",
     dateien: [DATEI],
     tests: { alt: [ALTER_TEST], neu: [] },
+    issue: null,
     pakete: [{ mutanten: 2, dateien: [DATEI] }],
     ...felder,
   };
@@ -153,14 +155,17 @@ async function melde(context, angabe = {}) {
   return { ...ergebnis, gesetzt: status?.rumpf, anfragen: github.anfragen, gh };
 }
 
-function erwarteNurNeustart(ergebnis) {
+function erwarteNeustartMit(ergebnis, schalter) {
   const pfade = ergebnis.anfragen.map(({ methode, pfad }) => `${methode} ${pfad}`);
   assert.ok(
     pfade.includes(`POST /repos/${REPOSITORY}/actions/runs/${TESTSCHUTZ_LAUF}/rerun`),
     pfade.join("\n"),
   );
   assert.ok(!pfade.includes(`POST /repos/${REPOSITORY}/pulls`));
-  assert.deepEqual(ergebnis.gh.aufrufe(), []);
+  const aufrufe = ergebnis.gh.aufrufe().map(({ argumente }) => argumente);
+  assert.deepEqual(aufrufe, [
+    ["pr", "merge", String(PR_NUMMER), "--repo", REPOSITORY, ...schalter],
+  ]);
 }
 
 function erwarteRot(ergebnis, grund) {
@@ -298,11 +303,11 @@ test("ausmisten-melden: grün öffnet mit dem Bot-Token den PR und schaltet Auto
   assert.equal(aufruf.token, "bot-token");
 });
 
-test("ausmisten-melden: ein offener PR auf demselben Kopf bekommt einen neuen Testschutz-Lauf", async (context) => {
+test("ausmisten-melden: grün mit offenem PR schaltet Auto-Merge ein und startet den Testschutz neu", async (context) => {
   const offenePrs = [{ number: PR_NUMMER, head: { ref: BRANCH, sha: KOPF } }];
   const ergebnis = await melde(context, { pr: true, offenePrs });
   assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
-  erwarteNurNeustart(ergebnis);
+  erwarteNeustartMit(ergebnis, ["--auto", "--rebase"]);
 });
 
 test("ausmisten-melden: rot öffnet keinen PR", async (context) => {
@@ -414,10 +419,9 @@ test("ausmisten-melden: zwei grüne Pakete ergeben zusammen grün", async (conte
 });
 
 test("ausmisten-melden: ein rotes Paket macht die Vereinigung rot", async (context) => {
-  const repo = ausmistenRepo(context);
-  const fall = zweitesPaket(repo.master, { [ZWEITER_MUTANT]: "Survived" });
+  const zusatz = (master) => zweitesPaket(master, { [ZWEITER_MUTANT]: "Survived" });
   erwarteRot(
-    await melde(context, fall),
+    await melde(context, { zusatz }),
     `Mutant auf dem Branch nicht mehr getötet: ${ZWEITER_MUTANT}`,
   );
 });
@@ -470,12 +474,12 @@ test("ausmisten-melden: eine Basis mit ungültiger Liste geänderter Tests setzt
   erwarteRot(await melde(context, { basis }), "Liste der geänderten Testdateien ist ungültig");
 });
 
-test("ausmisten-melden: rot startet den Testschutz eines offenen PRs neu, öffnet aber nichts", async (context) => {
+test("ausmisten-melden: rot mit offenem PR schaltet Auto-Merge ab und startet den Testschutz neu", async (context) => {
   const branch = { mutanten: { [MUTANT]: "Survived", [BLOCK]: "Killed" } };
   const offenePrs = [{ number: PR_NUMMER, head: { ref: BRANCH, sha: KOPF } }];
   const ergebnis = await melde(context, { pr: true, branch, offenePrs });
   assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
-  erwarteNurNeustart(ergebnis);
+  erwarteNeustartMit(ergebnis, ["--disable-auto"]);
 });
 
 test("ausmisten-melden: ein Plan für einen anderen Kopf setzt failure", async (context) => {
@@ -493,4 +497,29 @@ test("ausmisten-melden: ein Plan mit einer Datei in zwei Paketen setzt failure",
     },
   });
   erwarteRot(await melde(context, { zusatz }), "Plan: eine Datei steht in mehreren Paketen");
+});
+
+test("ausmisten-melden: ein Plan mit Issue-Nummer schreibt Closes in den PR", async (context) => {
+  const ergebnis = await melde(context, { pr: true, plan: { issue: ISSUE_NUMMER } });
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
+  const pr = ergebnis.anfragen.find(
+    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/pulls"),
+  );
+  assert.match(pr.rumpf.body, new RegExp(`^Closes #${ISSUE_NUMMER}$`, "m"));
+});
+
+test("ausmisten-melden: ohne Issue-Nummer schreibt der PR kein Closes, aber einen Hinweis", async (context) => {
+  const ergebnis = await melde(context, { pr: true });
+  const pr = ergebnis.anfragen.find(
+    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/pulls"),
+  );
+  assert.doesNotMatch(pr.rumpf.body, /Closes/);
+  assert.match(pr.rumpf.body, /dieser PR schließt kein Issue/);
+});
+
+test("ausmisten-melden: ein Plan mit ungültiger Issue-Nummer setzt failure", async (context) => {
+  erwarteRot(
+    await melde(context, { plan: { issue: "12; rm" } }),
+    "Plan: Issue-Nummer ist ungültig",
+  );
 });
