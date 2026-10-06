@@ -11,7 +11,7 @@ test("S3: findPlan(bekannt) -> Katalog-Objekt", () => {
 });
 
 test("S3: findPlan(unbekannt/leer/undefined) -> null (Null-Zweig)", () => {
-  assert.equal(findPlan("nope"), null);
+  assert.equal(findPlan("gibt-es-nicht"), null);
   assert.equal(findPlan(""), null);
   assert.equal(findPlan(undefined), null);
 });
