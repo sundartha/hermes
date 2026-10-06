@@ -1,27 +1,27 @@
 {
-  "titel": "ESLint-Regeln",
+  "titel": "Kommentare im Code (hermes/keine-kommentare)",
   "pfade": [
     "eslint.config.*",
-    "eslint-suppressions.json",
-    "eslint-suppressions.empty.json",
-    "eslint-legacy-exceptions.json"
+    "tools/eslint-rules/",
+    "tools/basis/kommentare.json",
+    "tools/basis-vergleich.mjs"
   ],
   "treffer": {
     "befehl": [
       "node",
-      "{wurzel}/node_modules/eslint/bin/eslint.js",
-      ".",
-      "--suppressions-location",
-      "eslint-suppressions.empty.json",
-      "--format",
-      "json"
+      "{wurzel}/tools/basis-vergleich.mjs",
+      "kommentare"
     ],
-    "zaehlen": "eslint-json"
+    "zaehlen": "zahlen",
+    "vor": [
+      " neue Befunde",
+      " bekannte"
+    ]
   },
   "ausnahmen": {
-    "bezeichnung": "Unterdrückte Verstöße in eslint-suppressions.json",
-    "datei": "eslint-suppressions.json",
-    "zaehlen": "summe"
+    "bezeichnung": "Eingefrorene Kommentare in der Basislinie",
+    "datei": "tools/basis/kommentare.json",
+    "zaehlen": "anzahl"
   },
   "probe": {
     "mitnehmen": [

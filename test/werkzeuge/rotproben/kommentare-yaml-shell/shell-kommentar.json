@@ -1,0 +1,10 @@
+{
+  "titel": "Kommentar in einem Shell-Skript",
+  "dateien": {
+    "scripts/rotprobe.sh": [
+      "#!/bin/sh",
+      "echo hallo # Begründung am Zeilenende"
+    ]
+  },
+  "erwartet": "neue Befunde von kommentare-yaml-shell"
+}

@@ -1,0 +1,10 @@
+{
+  "titel": "Test liest Quelltext als Text",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "import { readFileSync } from \"node:fs\";",
+      "export const quelltext = readFileSync(new URL(\"../src/server.js\", import.meta.url), \"utf8\");"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/kein-quelltext-als-text\""
+}

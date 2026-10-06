@@ -1,0 +1,18 @@
+{
+  "titel": "Kommentarsatz wandert nach Markdown",
+  "vorher": {
+    "src/rotprobe.js": [
+      "// Der Abruf wartet zehn Sekunden auf die Antwort des Anbieters.",
+      "export const wert = true;"
+    ]
+  },
+  "dateien": {
+    "src/rotprobe.js": [
+      "export const wert = true;"
+    ],
+    "docs/rotprobe.md": [
+      "Der Abruf wartet zehn Sekunden auf die Antwort."
+    ]
+  },
+  "erwartet": "wieder auf"
+}

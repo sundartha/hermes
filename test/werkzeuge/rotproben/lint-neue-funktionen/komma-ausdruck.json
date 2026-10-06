@@ -1,0 +1,12 @@
+{
+  "titel": "Komma-Ausdruck ohne Wirkung in einer neuen Funktion",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function zaehlt(protokoll, zahl) {",
+      "  const laenge = protokoll.push(zahl);",
+      "  return (laenge, \"positiv\");",
+      "}"
+    ]
+  },
+  "erwartet": "src/rotprobe.js:3 no-sequences"
+}

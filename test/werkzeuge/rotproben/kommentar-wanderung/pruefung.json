@@ -1,0 +1,19 @@
+{
+  "titel": "Kommentar-Wanderung",
+  "pfade": [
+    "tools/kommentar-wanderung.mjs",
+    "tools/pr-aenderungen.mjs",
+    "tools/kommentare-yaml-shell.mjs"
+  ],
+  "probe": {
+    "mitnehmen": [
+      "eslint.config.js"
+    ],
+    "befehl": [
+      "node",
+      "{wurzel}/tools/kommentar-wanderung.mjs",
+      "--basis",
+      "HEAD~1"
+    ]
+  }
+}

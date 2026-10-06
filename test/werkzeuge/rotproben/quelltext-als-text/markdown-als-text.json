@@ -1,0 +1,11 @@
+{
+  "titel": "Test liest eine Markdown-Datei als Text",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "import { readFileSync } from \"node:fs\";",
+      "import { join } from \"node:path\";",
+      "export const lehren = readFileSync(join(process.cwd(), \"tasks\", \"lessons.md\"), \"utf8\");"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/kein-quelltext-als-text\""
+}

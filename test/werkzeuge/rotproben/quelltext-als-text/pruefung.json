@@ -1,27 +1,27 @@
 {
-  "titel": "ESLint-Regeln",
+  "titel": "Tests lesen keinen Quelltext als Text (hermes/kein-quelltext-als-text)",
   "pfade": [
     "eslint.config.*",
-    "eslint-suppressions.json",
-    "eslint-suppressions.empty.json",
-    "eslint-legacy-exceptions.json"
+    "tools/eslint-rules/",
+    "tools/basis/quelltext-als-text.json",
+    "tools/basis-vergleich.mjs"
   ],
   "treffer": {
     "befehl": [
       "node",
-      "{wurzel}/node_modules/eslint/bin/eslint.js",
-      ".",
-      "--suppressions-location",
-      "eslint-suppressions.empty.json",
-      "--format",
-      "json"
+      "{wurzel}/tools/basis-vergleich.mjs",
+      "quelltext-als-text"
     ],
-    "zaehlen": "eslint-json"
+    "zaehlen": "zahlen",
+    "vor": [
+      " neue Befunde",
+      " bekannte"
+    ]
   },
   "ausnahmen": {
-    "bezeichnung": "Unterdrückte Verstöße in eslint-suppressions.json",
-    "datei": "eslint-suppressions.json",
-    "zaehlen": "summe"
+    "bezeichnung": "Eingefrorene Lesestellen in der Basislinie",
+    "datei": "tools/basis/quelltext-als-text.json",
+    "zaehlen": "anzahl"
   },
   "probe": {
     "mitnehmen": [

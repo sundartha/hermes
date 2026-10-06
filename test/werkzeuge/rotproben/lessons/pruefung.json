@@ -1,0 +1,35 @@
+{
+  "titel": "Lehren nur streichen (tasks/lessons.md)",
+  "pfade": [
+    "tools/basis/lessons.json",
+    "tools/basis-vergleich.mjs"
+  ],
+  "treffer": {
+    "befehl": [
+      "node",
+      "{wurzel}/tools/basis-vergleich.mjs",
+      "lessons"
+    ],
+    "zaehlen": "zahlen",
+    "vor": [
+      " neue Befunde",
+      " bekannte"
+    ]
+  },
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene Zeilen von tasks/lessons.md",
+    "datei": "tools/basis/lessons.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "mitnehmen": [
+      "tasks/lessons.md",
+      "tools/basis/lessons.json"
+    ],
+    "befehl": [
+      "node",
+      "{wurzel}/tools/basis-vergleich.mjs",
+      "lessons"
+    ]
+  }
+}

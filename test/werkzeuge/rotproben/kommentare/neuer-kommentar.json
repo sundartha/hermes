@@ -1,0 +1,10 @@
+{
+  "titel": "Neuer Kommentar in src/",
+  "dateien": {
+    "src/rotprobe.js": [
+      "// Hier steht eine Begründung.",
+      "export const wert = true;"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/keine-kommentare\""
+}

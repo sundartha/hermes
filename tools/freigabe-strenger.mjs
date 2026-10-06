@@ -17,6 +17,10 @@ const OLD_FINDING_LISTS = new Map([
   ["tools/basis/jscpd.json", "befunde"],
   ["tools/basis/knip.json", "befunde"],
   ["tools/basis/semgrep.json", "befunde"],
+  ["tools/basis/kommentare.json", "befunde"],
+  ["tools/basis/quelltext-als-text.json", "befunde"],
+  ["tools/basis/kommentare-yaml-shell.json", "befunde"],
+  ["tools/basis/lessons.json", "befunde"],
   ["tools/basis/lieferkette-ausnahmen.json", WHOLE_FILE],
   ["tools/basis/katalog-ohne-test.txt", WHOLE_FILE],
 ]);

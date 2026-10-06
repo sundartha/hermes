@@ -1,0 +1,19 @@
+{
+  "titel": "Alter Treffer in einer geänderten Funktion",
+  "vorher": {
+    "src/rotprobe.js": [
+      "export function verdoppelt(wert) {",
+      "  return wert * 42;",
+      "}"
+    ]
+  },
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function verdoppelt(wert) {",
+      "  const eingabe = wert;",
+      "  return eingabe * 42;",
+      "}"
+    ]
+  },
+  "erwartet": "no-magic-numbers: No magic number: 42"
+}

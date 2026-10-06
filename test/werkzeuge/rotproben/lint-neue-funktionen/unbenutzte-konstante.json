@@ -1,0 +1,12 @@
+{
+  "titel": "Unbenutzte _-Konstante in einer neuen Funktion",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function pruefe(wert) {",
+      "  const _grund = \"früher war es kaputt\";",
+      "  return wert;",
+      "}"
+    ]
+  },
+  "erwartet": "no-unused-vars: '_grund'"
+}

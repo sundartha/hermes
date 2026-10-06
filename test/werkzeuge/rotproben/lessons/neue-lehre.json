@@ -1,0 +1,10 @@
+{
+  "titel": "Neue Zeile in tasks/lessons.md",
+  "dateien": {
+    "tasks/lessons.md": [
+      "# Neue Lehre",
+      "- Vor jedem Commit erst den Test laufen lassen."
+    ]
+  },
+  "erwartet": "neue Befunde von lessons"
+}

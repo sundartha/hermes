@@ -1,0 +1,20 @@
+{
+  "titel": "Alter Kommentar in einer geänderten Funktion",
+  "vorher": {
+    "src/rotprobe.js": [
+      "export function zaehlt(wert) {",
+      "  // alter Kommentar",
+      "  return wert;",
+      "}"
+    ]
+  },
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function zaehlt(wert) {",
+      "  // alter Kommentar",
+      "  return wert + 1;",
+      "}"
+    ]
+  },
+  "erwartet": "hermes/keine-kommentare"
+}

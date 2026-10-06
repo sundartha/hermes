@@ -1,0 +1,12 @@
+{
+  "titel": "Begründung als Direktive",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export function pruefe(wert) {",
+      "  \"weil das früher kaputt war\";",
+      "  return wert;",
+      "}"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/keine-kommentare\""
+}
