@@ -37,8 +37,6 @@ const SECTIONS = {
   de: { begin: "## Deutsch", end: "## Anker" },
 };
 const LOGIN_SECTION = { en: "### 3. Login path", de: "### 3. Login-Pfad" };
-const CODE_REF = /\b((?:src|scripts)\/[\w./-]+\.(?:js|mjs|sql|json)):(\d+(?:-\d+)?)/g;
-const BLOCK_SEPARATOR = " | ";
 const QUOTE_START = '> "';
 const OPENAI_URL = "https://developers.openai.com/";
 const TOOLS_LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
@@ -128,22 +126,11 @@ function between(doc, { begin, end }) {
 
 const nonEmptyLines = (text) => text.split("\n").filter((line) => line.trim().length > 0);
 
-function anchorPairs(doc) {
-  const lines = nonEmptyLines(between(doc, ANCHOR_BLOCK).body).map((raw) => raw.trim());
-  return lines.map((line) => {
-    const cut = line.indexOf(BLOCK_SEPARATOR);
-    assert.ok(cut > 0, `Ankerzeile ohne Trenner: ${line}`);
-    return { key: line.slice(0, cut).trim(), anchor: line.slice(cut + BLOCK_SEPARATOR.length) };
-  });
-}
-
 function proseOf(doc) {
   const { start, stop } = between(doc, ANCHOR_BLOCK);
   return doc.slice(0, start) + doc.slice(stop);
 }
 
-const codeRefsIn = (text) =>
-  new Set([...text.matchAll(CODE_REF)].map(([, file, lines]) => `${file}:${lines}`));
 const section = (doc, lang) => between(doc, SECTIONS[lang]).body;
 
 function loginSteps(doc, lang) {
@@ -171,40 +158,6 @@ async function httpToolNames() {
     await srv.stop();
   }
 }
-
-test("Reviewer-Doku: an jeder genannten Code-Stelle steht der Anker-Text", () => {
-  const anchors = anchorPairs(readDoc());
-  assert.ok(anchors.length > 0, "Anker-Block ist leer");
-  for (const { key, anchor } of anchors) {
-    const cut = key.lastIndexOf(":");
-    const filePath = path.join(ROOT, key.slice(0, cut));
-    const [from, to = from] = key
-      .slice(cut + 1)
-      .split("-")
-      .map(Number);
-    assert.ok(fs.existsSync(filePath), `${key}: Datei fehlt`);
-    const fileLines = fs.readFileSync(filePath, "utf8").split("\n");
-    const window = fileLines.slice(from - 1, to).join("\n");
-    assert.ok(window.includes(anchor), `${key}: Anker "${anchor}" steht nicht dort`);
-  }
-});
-
-test("Reviewer-Doku: jede datei:zeile im Fliesstext steht im Anker-Block und umgekehrt", () => {
-  const doc = readDoc();
-  const prose = codeRefsIn(proseOf(doc));
-  const block = new Set(anchorPairs(doc).map((pair) => pair.key));
-  assert.ok(prose.size > 0, "Fliesstext nennt keine Code-Stelle - der Extraktor greift nicht");
-  assert.deepEqual(
-    [...prose].filter((ref) => !block.has(ref)),
-    [],
-    "Fliesstext-Stelle ohne Anker",
-  );
-  assert.deepEqual(
-    [...block].filter((ref) => !prose.has(ref)),
-    [],
-    "Anker ohne Fliesstext-Stelle",
-  );
-});
 
 test("Reviewer-Doku: keine internen Kennungen, Adressen, fremden Nummern oder Secret-Formate", () => {
   const doc = readDoc();

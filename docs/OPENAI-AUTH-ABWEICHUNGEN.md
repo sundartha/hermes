@@ -24,7 +24,7 @@ Token lokal: Signatur, Issuer, Audience, **`exp` ist Pflicht** (`requiredClaims`
 `nbf` weiterhin **nur, wenn der Claim im Token vorhanden ist** (Details T-12).
 
 Die Token-Pruefung sitzt **einmal pro HTTP-Request** in der Middleware `mcpAuth`
-(`src/routes/mcp.js:126`), **vor** jedem MCP-Tool-Aufruf; waehrend eines Tool-Aufrufs wird das
+(`src/routes/mcp.js#router.post("/mcp")`), **vor** jedem MCP-Tool-Aufruf; waehrend eines Tool-Aufrufs wird das
 Token nicht erneut geprueft. Es gibt aber **zwei weitere Stellen**, an denen ein bereits
 authentifizierter Request abgelehnt wird:
 
@@ -36,10 +36,10 @@ authentifizierter Request abgelehnt wird:
   (`registerNoTenantStubs`, `src/mcp-no-tenant.js`), deren `tools/call`-Ergebnis eine
   Re-Auth-Challenge in `_meta["mcp/www_authenticate"]` traegt. Beide Faelle auditieren
   `auth_failed` (Befund B-1, Abschnitt 7).
-- **Der interne REST-Hop der Tools** (`api()`, `src/mcp-tools.js:61-82`): liefert der Gateway
-  dort 403 (z. B. `internalOnly`, `src/wiring/internal-only.js:24-28`, ebenfalls auditiert als
+- **Der interne REST-Hop der Tools** (`src/mcp-tools.js#api`): liefert der Gateway
+  dort 403 (z. B. `src/wiring/internal-only.js#internalOnly`, ebenfalls auditiert als
   `auth_failed`), kommt das beim Client als Tool-Ergebnis mit `isError: true` an
-  (`wrapHandler`, `src/mcp-tools.js:886-903`). Aufzaehlung der Faelle unter T-14.
+  (`src/mcp-tools.js#wrapHandler`). Aufzaehlung der Faelle unter T-14.
 
 ## 2. Status je ID
 
@@ -65,7 +65,7 @@ Verknuepfungs-UI zeigt, ist weiterhin **UNKNOWN** (Owner-Probe O-6 unten).
 **Ist-Zustand seit 2026-09-23.** Die erste Haelfte war schon vorhanden fuer den Modus, in dem
 ChatGPT den Server ueberhaupt erreicht (`MCP_AUTH=oauth` — nur dort spricht ChatGPT den
 Connector, s. Abschnitt T-16 unten): `securitySchemes` traegt dort an jedem Tool die volle
-beworbene Scope-Menge (P3, `src/mcp-security-schemes.js:59-61`, angewandt in
+beworbene Scope-Menge (P3, `src/mcp-security-schemes.js#TOOL_SECURITY_SCHEMES`, angewandt in
 `src/routes/mcp.js`). **Nachtrag 2026-09-22:** im Token-/Legacy-Modus (statischer Bearer-Token
 bzw. lokaler Dev-Bypass, kein OAuth-Flow) traegt `tools/list` seither GAR KEIN
 `securitySchemes`-Feld mehr — vorher wurde faelschlich derselbe oauth2-Wert gemeldet,
@@ -136,7 +136,7 @@ gelingen) — deshalb ebenfalls bewusst nicht gebaut.
 **Bedingung (woertlich, Pflicht-Wiederholung vor jeder Einreichung):** der Transport-401 traegt
 `resource_metadata` NUR, solange Produktion `MCP_AUTH=oauth` faehrt. Im token-/Legacy-Zweig
 traegt der 401 seit P6 zwar ebenfalls eine Challenge, aber **ohne** `resource_metadata`
-(`STATIC_BEARER_CHALLENGE`, `src/auth.js:89`) — dann findet ChatGPT keinen OAuth-Einstieg ueber
+(`src/auth.js#STATIC_BEARER_CHALLENGE`) — dann findet ChatGPT keinen OAuth-Einstieg ueber
 den Header. Pruefkommando:
 
 ```
@@ -158,21 +158,20 @@ tokens that have expired or have not yet become valid (`exp`/`nbf`)." — "Confi
 minted for your server (`aud` or the `resource` claim) and contains the scopes you marked as
 required."
 
-Geprueft wird in `verifyOauth()` (`src/auth.js:91-113`) in einem einzigen `jwtVerify`-Aufruf
-(`:98-102`): Signatur gegen den per JWKS-Discovery gefundenen Schluessel, `issuer` gegen
+Geprueft wird in `verifyOauth()` (`src/auth.js#verifyOauth`) in einem einzigen `jwtVerify`-Aufruf
+(`#verifyOauth`): Signatur gegen den per JWKS-Discovery gefundenen Schluessel, `issuer` gegen
 `config.auth.oauthIssuerUrl`, `audience` gegen die kanonische Resource, `clockTolerance: 30`
 Sekunden.
 
 **Einschraenkung `nbf`, `exp` jetzt Pflicht (T2-03):** `jose` (6.2.3) prueft `nbf` und `exp`
-frueher **nur, wenn der Claim vorhanden war** (`node_modules/jose/dist/webapi/lib/jwt_claims_set.js:142`
-und `:150`, `if (payload.exp !== undefined)`). Seit T2-03 setzt `src/auth.js:98-106`
+frueher **nur, wenn der Claim vorhanden war** (`node_modules/jose/dist/webapi/lib/jwt_claims_set.js#validateClaimsSet`, `if (payload.exp !== undefined)`). Seit T2-03 setzt `src/auth.js#verifyOauth`
 `requiredClaims: ['exp']`: ein vom Anbieter signiertes Token **ohne `exp`** wird jetzt
 abgelehnt (401 + oauth-Challenge, `test/oauth.test.js`, Subtest "Token ohne exp"), nicht mehr
 unbefristet angenommen. `nbf` bleibt weiterhin **nur** geprueft, wenn der Claim vorhanden ist
 (nicht Teil dieser Anforderung, s. T2-03-Spec "Nicht bauen"). Ob echte WorkOS-Access-Tokens
 `exp` tragen, ist am echten Token weiterhin nicht gemessen (Abschnitt 5, O-3) - das ist die
 Deploy-Vorbedingung OW-B fuer T2-03, nicht Teil des Codes. Belegt ist: ein Token **mit**
-abgelaufenem `exp` -> 401 (`test/oauth.test.js:66-70`, prueft den Status) UND ein Token **ohne**
+abgelaufenem `exp` -> 401 (`test/oauth.test.js#"abgelaufenes Token -> 401"`, prueft den Status) UND ein Token **ohne**
 `exp` -> 401 (Rot-vor-Gruen-Nachweis im T2-03-Bericht).
 
 Am echten `tools/list`-Response belegt (`test/openai-p7-token-pruefachsen.test.js`, Faelle
@@ -237,13 +236,12 @@ nur eben nicht mehr durch einen Scope ausgeloest, den kein Access-Token je traeg
 "Configure your authorization server to copy that value into the access token (commonly the
 `aud` claim)."
 
-Wir verlangen `aud` == kanonische Resource. Die erwartete Audience (`audience()`,
-`src/auth.js:23`) und die in der Protected-Resource-Metadata angekuendigte `resource`
-(`src/auth.js:144`) kommen aus **derselben Funktion**; die Pruefung nutzt sie in `:100`. Live
+Wir verlangen `aud` == kanonische Resource. Die erwartete Audience (`src/auth.js#audience`) und die in der Protected-Resource-Metadata angekuendigte `resource`
+(`src/auth.js#doc.resource`) kommen aus **derselben Funktion**; die Pruefung nutzt sie in `#verifyOauth`. Live
 gemessen: `"resource":"https://app.sundartha.com/mcp"` (Abschnitt 3). Boot-fatal ist genau ein
-Fall: `OAUTH_AUDIENCE` gesetzt und ungleich `publicUrl + /mcp` (`src/boot-guard.js:910-923`,
-belegt in `test/oauth.test.js:107-119`). Falsches `aud` im Token -> 401
-(`test/oauth.test.js:72-76`).
+Fall: `OAUTH_AUDIENCE` gesetzt und ungleich `publicUrl + /mcp` (`src/boot-guard.js#audienceFindings`,
+belegt in `test/oauth.test.js#"MCP_AUTH=oauth: divergenter OAUTH_AUDIENCE -> Boot verweigert (exit 1)"`). Falsches `aud` im Token -> 401
+(`test/oauth.test.js#"falsche Audience -> 401"`).
 
 **Nebenbefund:** WorkOS bewirbt **kein** `resource_indicators_supported` (fehlt in beiden
 Dokumenten, Abschnitt 3). Die OpenAI-Primaerquelle nennt dieses Feld nicht (gelesen
@@ -313,14 +311,14 @@ This section, together with Section 2c below, is complete on its own: it carries
 limitation and every UNKNOWN from Section 2 and is not more optimistic than the German text.
 Requirement quotes are verbatim from the OpenAI primary sources, read on 2026-09-21:
 https://developers.openai.com/plugins/build/auth and
-https://developers.openai.com/plugins/reference. File:line references point into this
+https://developers.openai.com/plugins/reference. File#name references point into this
 repository. "Section 3" is the raw measurement log below (verbatim, not duplicated in
 English; it contains some German literal output, translated in 2c.1). Section 4 (our open questions to WorkOS) and Section 5 (measurements that need a
 real, completed login) are German-only; their English equivalents are 2c.2 and 2c.3 below.
 
 **Architecture.** Hermes is an OAuth 2.1 resource server for `/mcp` only; WorkOS AuthKit
 (`https://fearless-network-26.authkit.app`) is the authorization server. Every bearer token is
-verified locally once per HTTP request in the `mcpAuth` middleware (`src/routes/mcp.js:126`),
+verified locally once per HTTP request in the `mcpAuth` middleware (`src/routes/mcp.js#router.post("/mcp")`),
 before any MCP tool runs: signature (JWKS), issuer, audience, **`exp` is now required**
 (`requiredClaims`, since T2-03); `nbf` still **only if the claim is present** (see T-12). The
 token is not re-checked during a tool call. Two further places can
@@ -331,8 +329,8 @@ valid token that maps to no tenant. In token/legacy/off mode (no `req.auth`) thi
 `/mcp` handler in the same file then registers stub tools (`registerNoTenantStubs`,
 `src/mcp-no-tenant.js`) instead of the real tools (`registerTools`); their `tools/call` result
 carries a re-auth challenge in `_meta["mcp/www_authenticate"]`. Both cases are audited as `auth_failed` (finding B-1, Section
-7). And the tools' internal REST hop (`api()`, `src/mcp-tools.js:61-82`) can receive a 403,
-which reaches the client as a tool result with `isError: true` (`src/mcp-tools.js:886-903`).
+7). And the tools' internal REST hop (`src/mcp-tools.js#api`) can receive a 403,
+which reaches the client as a tool result with `isError: true` (`src/mcp-tools.js#wrapHandler`).
 
 ### T-14 — in-conversation auth UI only via an error result carrying `_meta["mcp/www_authenticate"]`
 
@@ -406,7 +404,7 @@ would have to succeed without a valid token) — so that too remains deliberatel
 
 Condition: the transport 401 carries `resource_metadata` only while production runs
 `MCP_AUTH=oauth`; in the static-token/legacy mode the 401 carries `Bearer error="invalid_token"`
-without `resource_metadata` (`src/auth.js:89`). Verify before every submission:
+without `resource_metadata` (`src/auth.js#STATIC_BEARER_CHALLENGE`). Verify before every submission:
 `curl -sS -D - -o /dev/null -X POST https://app.sundartha.com/mcp` must contain a
 `www-authenticate: Bearer resource_metadata="https://app.sundartha.com/...` line. Measured live
 2026-09-21T10:06:03Z: it does (Section 3).
@@ -421,17 +419,17 @@ Requirement: "verify the token's signature and `iss`." — "Deny tokens that hav
 not yet become valid (`exp`/`nbf`)." — "Confirm the token was minted for your server (`aud` or
 the `resource` claim) and contains the scopes you marked as required."
 
-`verifyOauth()` (`src/auth.js:91-113`) checks, in one `jwtVerify` call (`:98-102`), signature
+`verifyOauth()` (`src/auth.js#verifyOauth`) checks, in one `jwtVerify` call (`#verifyOauth`), signature
 against the JWKS-discovered key, issuer and audience, with a 30-second clock tolerance.
 
 **Limitation on `nbf`, `exp` now required (T2-03):** the `jose` library (6.2.3) used to check
-`nbf` and `exp` **only when the claim was present** (`jwt_claims_set.js:142` and `:150`). Since
-T2-03, `src/auth.js:98-106` sets `requiredClaims: ['exp']`: a token signed by the provider
+`nbf` and `exp` **only when the claim was present** (`jwt_claims_set.js#validateClaimsSet`). Since
+T2-03, `src/auth.js#verifyOauth` sets `requiredClaims: ['exp']`: a token signed by the provider
 **without `exp` is now rejected** (401 + oauth challenge, `test/oauth.test.js`, subtest "Token
 ohne exp"), no longer accepted without time limit. `nbf` still has no start of validity if
 absent (not part of this requirement). Whether real WorkOS access tokens carry `exp` is still
 not measured on a real token (2c.3, O-3) - that is deploy precondition OW-B for T2-03, not part
-of the code. What is proven: a token **with** an expired `exp` -> 401 (`test/oauth.test.js:66-70`)
+of the code. What is proven: a token **with** an expired `exp` -> 401 (`test/oauth.test.js#"abgelaufenes Token -> 401"`)
 AND a token **without** `exp` -> 401 (red-then-green proof in the T2-03 report).
 
 Proven end-to-end against the real `tools/list` HTTP response
@@ -486,11 +484,10 @@ requests." — "Configure your authorization server to copy that value into the 
 (commonly the `aud` claim)."
 
 We require `aud == https://app.sundartha.com/mcp`. The expected audience and the `resource`
-announced in the protected-resource metadata come from the **same function** (`audience()`,
-`src/auth.js:23`, used for the check at `:100` and for the metadata at `:144`), so they cannot
+announced in the protected-resource metadata come from the **same function** (`src/auth.js#audience`, used for the check at `#verifyOauth` and for the metadata at `#doc.resource`), so they cannot
 diverge at runtime. Boot is refused in exactly one case: `OAUTH_AUDIENCE` is set and differs from
-`publicUrl + /mcp` (`src/boot-guard.js:910-923`, `test/oauth.test.js:107-119`). A wrong `aud` in
-the token -> 401 (`test/oauth.test.js:72-76`).
+`publicUrl + /mcp` (`src/boot-guard.js#audienceFindings`, `test/oauth.test.js#"MCP_AUTH=oauth: divergenter OAUTH_AUDIENCE -> Boot verweigert (exit 1)"`). A wrong `aud` in
+the token -> 401 (`test/oauth.test.js#"falsche Audience -> 401"`).
 
 Side finding: WorkOS does **not** advertise `resource_indicators_supported` (absent from both
 discovery documents, Section 3). The OpenAI primary source does not name that field, so it is not
@@ -579,7 +576,7 @@ noted here only).
   token)". Likewise `--- POST /mcp ohne Token (Live-Gateway) ---`: "POST /mcp without a token
   (live gateway)".
 - `error_description="Kein Token"` and `{"error":"Kein Token"}` — the Hermes gateway's own error
-  text, sent verbatim by `src/auth.js:95`: "No token".
+  text, sent verbatim by `src/auth.js#verifyOauth`: "No token".
 - `=== Sonde AS-Faehigkeiten (scripts/probe-as-faehigkeiten.mjs) ===` — header of the probe
   script: "Probe: authorization-server capabilities". `Ziel:` = "target".
 - `WWW-Authenticate vorhanden -> Modus oauth` — "WWW-Authenticate present -> mode oauth".
@@ -638,7 +635,7 @@ require a completed login (owner-only).
   there). Whether ChatGPT actually offers the account-linking UI on this tool error is
   UNKNOWN (open owner probe with a real ChatGPT connector).
 - **`exp` required since T2-03, scope check since T2-23 Commit B (T-12 fully met in code):**
-  `jwtVerify` in `src/auth.js:98-106` sets `requiredClaims: ['exp']`; a signed token without
+  `jwtVerify` in `src/auth.js#verifyOauth` sets `requiredClaims: ['exp']`; a signed token without
   `exp` has been rejected since (401), no longer accepted without time limit (`PLAN-SECURITY.md`
   updated accordingly). Since T2-23 Commit B, `verifyOauth` also checks `scope`/`scp` against
   `ENFORCED_OAUTH_SCOPES` (`openid`, `email` — **not** the full advertised `OAUTH_SCOPES`, which
@@ -649,19 +646,19 @@ require a completed login (owner-only).
   longer part of that confirmation: it was never expected to be enforceable, and now isn't.
 - **T-8 (side finding, outside the requirements covered by this document):** `code_challenge_methods_supported` is missing from
   `openid-configuration`, present in `oauth-authorization-server` (Section 3). Our
-  `discoverJwksUri()` tries `openid-configuration` first (`src/auth.js:31`) - inconsequential for
+  `discoverJwksUri()` tries `openid-configuration` first (`src/auth.js#discoverJwksUri`) - inconsequential for
   us (we only read `jwks_uri` there), but UNKNOWN for ChatGPT's own discovery order (question d,
   2c.2). Owner item, not built.
 
 ### 2c.5 Duplicate paths (completeness check; German original: Section 8)
 
 - **HTTP `/mcp` vs. stdio:** `mcpAuth` is the **only** token-check path - it exists only on the
-  HTTP route (`src/routes/mcp.js:126`). stdio (`src/mcp-server.js:35-46`) registers tools without
+  HTTP route (`src/routes/mcp.js#router.post("/mcp")`). stdio (`src/mcp-server.js`) registers tools without
   the auth middleware and deliberately never calls `applyToolSecuritySchemes`;
   T-9/T-11/T-12/T-14/T-16 are **not applicable** to stdio (no token, no OpenAI connector path
   there) - this is a limitation of scope, not a claim that stdio meets them.
 - **mcp-native adapter (since T2-01 the only one, ChatGPT-/Skybridge adapter removed):**
-  `mcpAuth` runs **before** renderer selection (`src/routes/mcp.js:126` vs. `:169`) - only one
+  `mcpAuth` runs **before** renderer selection (`src/routes/mcp.js#router.post("/mcp")`) - only one
   renderer exists for every host now, a second auth test per adapter has become moot (it was not
   needed before either, since both adapters shared the same auth code path).
 
@@ -690,7 +687,7 @@ require a completed login (owner-only).
   would have to succeed without a valid token) and stays an explicit owner decision, not a
   default.
 - **... production no longer runs `MCP_AUTH=oauth`:** the transport 401 no longer points at the
-  protected-resource metadata (`STATIC_BEARER_CHALLENGE`, `src/auth.js:89`); ChatGPT finds no
+  protected-resource metadata (`src/auth.js#STATIC_BEARER_CHALLENGE`); ChatGPT finds no
   OAuth entry point via the header. Whether the transport path even covers T-14 is UNKNOWN
   regardless (O-6).
 
@@ -807,7 +804,7 @@ sie verlangen einen abgeschlossenen Login (Owner-Only).
   Authentisierung auf (`initialize` duerfte dann ohne gueltiges Token gelingen) und bleibt eine
   ausdrueckliche Owner-Entscheidung, kein Default.
 - **… Produktion nicht mehr `MCP_AUTH=oauth` faehrt:** der Transport-401 verweist nicht mehr auf
-  die Protected-Resource-Metadata (`STATIC_BEARER_CHALLENGE`, `src/auth.js:89`); ChatGPT findet
+  die Protected-Resource-Metadata (`src/auth.js#STATIC_BEARER_CHALLENGE`); ChatGPT findet
   ueber den Header keinen OAuth-Einstieg. Ob der Transport-Pfad T-14 ueberhaupt abdeckt, ist
   unabhaengig davon UNKNOWN (O-6).
 
@@ -823,7 +820,7 @@ sie verlangen einen abgeschlossenen Login (Owner-Only).
   OAuth-Flow). Ob ChatGPT bei diesem Tool-Fehler tatsaechlich die Konto-Verknuepfungs-UI zeigt,
   ist UNKNOWN (offene Owner-Probe mit einem echten ChatGPT-Connector).
 - **`exp` verlangt seit T2-03, Scope-Pruefung seit T2-23 Commit B (T-12 damit code-seitig
-  vollstaendig):** `jwtVerify` in `src/auth.js:98-106` setzt `requiredClaims: ['exp']`; ein
+  vollstaendig):** `jwtVerify` in `src/auth.js#verifyOauth` setzt `requiredClaims: ['exp']`; ein
   signiertes Token ohne `exp` wird seither abgelehnt (401), nicht mehr unbefristet angenommen
   (`PLAN-SECURITY.md` entsprechend nachgezogen). Seit T2-23 Commit B prueft `verifyOauth`
   zusaetzlich `scope`/`scp` gegen `OAUTH_SCOPES`; fehlt ein Element, folgt 403
@@ -831,19 +828,19 @@ sie verlangen einen abgeschlossenen Login (Owner-Only).
   alle drei Scopes) VOR dem Deploy — ohne sie wird Commit B laut Plan zurueckgenommen.
 - **T-8 (Nebenbefund, ausserhalb der in diesem Dokument behandelten Anforderungen):** `code_challenge_methods_supported` fehlt in
   `openid-configuration`, steht in `oauth-authorization-server` (Abschnitt 3). Unser
-  `discoverJwksUri()` probiert `openid-configuration` zuerst (`src/auth.js:31`) — fuer uns
+  `discoverJwksUri()` probiert `openid-configuration` zuerst (`src/auth.js#discoverJwksUri`) — fuer uns
   folgenlos (wir lesen dort nur `jwks_uri`), fuer ChatGPTs eigene Discovery-Reihenfolge UNKNOWN
   (Frage d, Abschnitt 4). Owner-Punkt, nicht gebaut.
 
 ## 8. Doppelte Pfade (Vollstaendigkeits-Check)
 
 - **HTTP `/mcp` vs. stdio:** `mcpAuth` ist der **einzige** Token-Pruefpfad — er existiert nur fuer
-  die HTTP-Route (`src/routes/mcp.js:126`). stdio (`src/mcp-server.js:35-46`) registriert Tools
+  die HTTP-Route (`src/routes/mcp.js#router.post("/mcp")`). stdio (`src/mcp-server.js`) registriert Tools
   ohne Auth-Middleware und ruft bewusst kein `applyToolSecuritySchemes` auf;
   T-9/T-11/T-12/T-14/T-16 sind fuer stdio **nicht anwendbar** (kein Token, kein
   OpenAI-Connector-Pfad dort).
 - **mcp-nativer Adapter (seit T2-01 der einzige, ChatGPT-/Skybridge-Adapter entfernt):**
-  `mcpAuth` laeuft **vor** der Renderer-Wahl (`src/routes/mcp.js:126` vs. `:169`) — es gibt
+  `mcpAuth` laeuft **vor** der Renderer-Wahl (`src/routes/mcp.js#router.post("/mcp")`) — es gibt
   seit T2-01 nur noch einen Renderer fuer JEDEN Host, ein zweiter Auth-Test pro Adapter
   ist damit gegenstandslos geworden (er war schon vorher nicht noetig, da beide Adapter
   denselben Auth-Codepfad teilten).

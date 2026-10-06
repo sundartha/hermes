@@ -35,10 +35,11 @@ NICHT Teil des Vertrags (bewusst, weil sie kein Kompatibilitaetsmerkmal sind):
 Beschreibungen, Titel, server-instructions, `_meta`-Texte (z.B. die
 Aufruf-Statuszeilen), CSP und `ui.domain` der Widgets, der Inhalt von
 Werkzeug-Ergebnissen. Was davon anderswo gepinnt ist: die Annotations
-(`test/mcp-tool-annotations.test.js`), Titel, Annotationen und Werkzeugmengen gegen die
-Inventar-Doku (`test/openai-p10a-tool-inventar.test.js`), die Texte von `place_call`
+(`test/mcp-tool-annotations.test.js`), die Texte von `place_call`
 (`test/openai-t2-16-place-call-texte.test.js`) und der Kern der server-instructions
-(`test/openai-t2-17-instructions-kern.test.js`). Die Beschreibungen von
+(`test/openai-t2-17-instructions-kern.test.js`). Die Code-Verweise der Inventar-Doku
+(`docs/OPENAI-TOOL-INVENTORY.md`) zeigen auf Namen (`datei#name`), nicht auf Zeilen; Titel,
+Annotationen und Werkzeugmengen dort prueft kein Test mehr gegen den Draht. Die Beschreibungen von
 `get_call_status` und `list_action_items` pinnt der Byte-Snapshot des vollen Drahts
 (`tools/list`, `resources/list`, jedes `resources/read`, mit `MCP_UI_ENABLED`) in
 `test/openai-p8-widget-ui.test.js`, je ein Fall fuer HTTP und stdio. Den Text von
