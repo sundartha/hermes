@@ -1,5 +1,3 @@
-// KV2-2: der Kostenarten-Katalog (src/billing/kostenarten.js). Abnahmekriterien (a), (d),
-// (g), (i) aus tasks/kostenv2/spec-kv2-2.md.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -12,8 +10,6 @@ import {
   pruefeProfil,
 } from "../src/billing/kostenarten.js";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "../src/telephony/adapters/telnyx/voice.js";
-
-// ---- Kriterium (a): die vier Pflichtfelder ohne Default, plus Formregeln --------------
 
 const VOLLSTAENDIGE_ZEILE = { quelle: "x", waehrung: "USD", pflicht: true, preisquelle: "y" };
 
@@ -44,7 +40,6 @@ test("KV2-2-a5: pflicht:true mit weicher Waehrung wirft (harte Waehrung noetig)"
   );
 });
 
-// Positivkontrolle (sonst gruen ohne Aussage): eine vollstaendige Zeile wirft NICHT.
 test("KV2-2-a6 (Positivkontrolle): vollstaendige Zeile besteht pruefeKostenart", () => {
   assert.doesNotThrow(() => pruefeKostenart("x", VOLLSTAENDIGE_ZEILE));
 });
@@ -56,10 +51,6 @@ test("KV2-2-a7: die Validierung lief zur BAUZEIT - der Import selbst ist der Bew
   }
 });
 
-// ---- Kriterium (d): 17 Zeilen, Loeschschutz -------------------------------------------
-
-// Kriterium (d): "16" ist der gepinnte Loeschschutz selbst - eine benannte Konstante,
-// keine Willkuer-Zahl (G25).
 const ERWARTETE_ANZAHL_KOSTENARTEN = 16;
 
 test("KV2-2-d1: der Katalog hat GENAU 16 Zeilen (Loeschschutz, kein Vollstaendigkeitsbeweis)", () => {
@@ -71,8 +62,6 @@ test("KV2-2-d2: die drei zuletzt ergaenzten Zeilen sind da", () => {
   assert.ok(Object.hasOwn(KOSTENARTEN, KOSTENART.MAIL_ZUSAMMENFASSUNG));
   assert.ok(Object.hasOwn(KOSTENARTEN, KOSTENART.WORKOS_AUTH));
 });
-
-// ---- Kriterium (g): record_type-Menge PINNEN, nicht abschreiben -----------------------
 
 const telnyxCallRecordsZeile = KOSTENARTEN[KOSTENART.TELNYX_CALL_RECORDS];
 
@@ -87,8 +76,6 @@ test("KV2-2-g2 (Gegenprobe): die Menge ist nicht leer und enthaelt 'inference' N
   assert.ok(menge.length > 0);
   assert.ok(!menge.includes("inference"), "inference gehoert zu Katalogzeile #15, nicht #3");
 });
-
-// ---- Kriterium (i): jeder Pflicht-Traeger jedes Profils hat einen benannten Einsammler -
 
 test("KV2-2-i1: ueber ALLE Profile/Traeger - einsammler ist Phasenkennung ODER nicht_belegpflichtig", () => {
   const erlaubt = new Set(Object.values(EINSAMMLER));
@@ -106,7 +93,6 @@ test("KV2-2-i2 (Gegenprobe auf einer KOPIE): ein dritter, freier Wert faellt dur
   const kopie = structuredClone(KOSTENPROFILE);
   kopie.kunstprofil = { traeger: { [KOSTENART.TELNYX_SIP]: { einsammler: "irgendwas" } } };
   assert.throws(() => pruefeProfil("kunstprofil", kopie.kunstprofil), /einsammler/);
-  // Die echte Registry ist unberuehrt - dieselbe Zeile wie vor der Mutation der Kopie.
   const telnyxBudgetTraeger = KOSTENPROFILE[KOSTENPROFIL.TELNYX_BUDGET].traeger;
   assert.equal(telnyxBudgetTraeger[KOSTENART.TELNYX_CALL_RECORDS].einsammler, EINSAMMLER.KV2_5G);
 });

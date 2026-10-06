@@ -1,8 +1,3 @@
-// KV-P6 (json-Durchstich): cost_micro_cents ist additiv im json-Backend - src/store/json.js
-// selbst braucht KEINEN Code-Edit (recordUsageEvent(input) reicht das komplette
-// ops.recordUsageEvent(...)-Ergebnisobjekt unveraendert an save() durch), aber diese Datei
-// beweist es empirisch: der Wert muss tatsaechlich auf der Platte landen (data/store.json-
-// Aequivalent im Test-DATA_DIR), nicht nur im In-Memory-Zustand ueberleben.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";

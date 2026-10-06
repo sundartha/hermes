@@ -1,7 +1,3 @@
-// KV2-3 (tasks/kostenv2/spec-kv2-3.md): das Kosten-Buch (call_cost_evidence). In-Memory
-// ueber state-ops + cost-evidence, kein Server-Spawn, kein Netz (F.I.R.S.T.). Diese Phase
-// baut NUR die Tabelle, das Regelwerk und die zwei Store-Operationen - kein Schreiber
-// ausserhalb dieses Tests, keine Route, kein Gate.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -18,13 +14,11 @@ import { CONVERSATION_DONE_MIT_KOSTEN } from "./fixtures/elevenlabs-conversation
 const TENANT_ID = "t_kv23";
 const TRAEGER_AI_TOKEN = "ai_token";
 const TRAEGER_TELNYX_SIP = "telnyx_sip";
-// G25: benannte Testbetraege statt nackter Zahlen in den assert-Aufrufen unten.
 const VORLAEUFIG_BETRAG_MIKRO_CENTS = 5000;
 const BELEGT_BETRAG_MIKRO_CENTS = 120;
 const ZWEI_ZEILEN = 2;
 const SUMME_VORLAEUFIG_PLUS_BELEGT_MIKRO_CENTS = 3_500;
 
-// Build: EIN Tenant + EIN Call, geteilt von jedem Test unten (P13: Build/Operate/Check).
 function seedCall() {
   const state = makeDefaultState();
   registerTenant(state, TENANT_ID);
@@ -36,8 +30,6 @@ function seedCall() {
   });
   return { state, callId: call.id };
 }
-
-// ---- Kriterium (a): Idempotenz je (callId, traeger) -------------------------------------
 
 test("KV2-3 (a): zweiter Aufruf mit derselben (callId, traeger) legt keine zweite Zeile an", () => {
   const { state, callId } = seedCall();
@@ -64,8 +56,6 @@ test("KV2-3 (a): dieselbe callId mit ANDEREM traeger legt eine zweite Zeile an",
   recordCallCostEvidence(state, { callId, traeger: TRAEGER_TELNYX_SIP, reife: REIFE.ERWARTET });
   assert.equal(callCostEvidence(state, callId).length, ZWEI_ZEILEN, "zwei Traeger = zwei Zeilen");
 });
-
-// ---- Kriterium (b): Reife-Uebergaenge --------------------------------------------------
 
 test("KV2-3 (b): erwartet -> vorlaeufig -> belegt schreibt, jeder Schritt erlaubt", () => {
   const { state, callId } = seedCall();
@@ -172,8 +162,6 @@ test("KV2-3 (b)(iv): belegt->vorlaeufig, belegt->erwartet, vorlaeufig->erwartet 
   }
 });
 
-// ---- Kriterium (e): Summenregel --------------------------------------------------------
-
 test("KV2-3 (e): die Summe zaehlt nur vorlaeufig und belegt", () => {
   const { state, callId } = seedCall();
   recordCallCostEvidence(state, { callId, traeger: "research_fee", reife: REIFE.ERWARTET });
@@ -222,8 +210,6 @@ test("KV2-3 (e): eine terminale Zeile mit Betrag traegt nicht bei", () => {
   assert.equal(costEvidenceSumMicroCents(callCostEvidence(state, callId)), 0);
 });
 
-// ---- Kriterium (f): detail-Allowlist ---------------------------------------------------
-
 test("KV2-3 (f): das VOLLSTAENDIGE EL-Antwortobjekt erzeugt nur Allowlist-Schluessel", () => {
   const detail = belegDetailAusRohdaten(CONVERSATION_DONE_MIT_KOSTEN);
   assert.ok(detail, "die Fixture traegt Allowlist-Treffer");
@@ -258,7 +244,6 @@ test("KV2-3 (f): kein Transkript-, Rufnummern- oder Analysetext-Feld rutscht dur
 test("KV2-3 (f): ein gleichnamiger price-Leaf unter fremdem Elternsegment faellt raus", () => {
   const detail = belegDetailAusRohdaten(CONVERSATION_DONE_MIT_KOSTEN);
   const serialisiert = JSON.stringify(detail);
-  // charging.llm_usage.<modell>.input.price - Elternsegment ist 'input', nicht 'analysis'.
   assert.equal(detail.input_price, undefined);
   assert.ok(!serialisiert.includes("0.0036"), "der llm_usage-Preis ist nicht durchgerutscht");
 });
@@ -289,8 +274,6 @@ test("KV2-3 (f): der Schreibweg selbst filtert - ein roher Anbieter-Body als det
   assert.ok(!serialisiert.includes("+4915799990001"), "keine Rufnummer im gespeicherten detail");
   assert.ok(!serialisiert.includes("sk-live-abc"), "kein Secret im gespeicherten detail");
 });
-
-// ---- Abhaengigkeit KV2-2, Waechter -------------------------------------------------------
 
 test("KV2-3: unbekannter traeger / unbekannte reife werfen", () => {
   const { state, callId } = seedCall();

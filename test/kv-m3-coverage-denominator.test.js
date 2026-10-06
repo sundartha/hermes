@@ -1,11 +1,3 @@
-// KV-M3 (tasks/PLAN-KOSTEN-VOLLSTAENDIGKEIT.md): die Deckungsquote zaehlt im Nenner nur
-// noch BELEGBARE Calls (beantwortet, mit buchbarer Schaetzung, innerhalb des
-// Provider-Belegfensters), statt JEDEM beendeten Call (Plan-Befund N4). Diese Datei
-// rechnet ausschliesslich gegen ihre EIGENE Fixture - keine Behauptung ueber den
-// heutigen Prod-Bestand (die 8/31 aus dem Plan sind historischer Kontext, kein
-// aktueller Messwert).
-//
-// Muster test/cost-truing-observe.test.js: in-process, netzfrei, kein Server-Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -29,7 +21,6 @@ test("KV-M3-1 gemischte Fixture: alte Formel (alle beendeten Calls) vs. neue For
   const nowMs = Date.now();
   const state = makeDefaultState();
 
-  // Belegbar + bewiesen: 1 Outbound, 1 Inbound (KV-P3-Wechselwirkung).
   const provenOutbound = makeDueOutboundCall(state, {
     nowMs, estimatedCostCents: 20, legRef: { callControlId: "cc_m3_out_p" },
   });
@@ -41,22 +32,17 @@ test("KV-M3-1 gemischte Fixture: alte Formel (alle beendeten Calls) vs. neue For
   provenInbound.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
   provenInbound.costTruedAt = new Date(nowMs).toISOString();
 
-  // Belegbar, aber NICHT bewiesen.
   const unprovenOutbound = makeDueOutboundCall(state, {
     nowMs, estimatedCostCents: 15, legRef: { callControlId: "cc_m3_out_u" },
   });
   unprovenOutbound.costTruedSource = COST_TRUING_SOURCE.UNAVAILABLE;
   unprovenOutbound.costTruedAt = new Date(nowMs).toISOString();
 
-  // Nie beantwortet: nichts zu beweisen.
   const neverAnswered = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_m3_never" } });
   neverAnswered.answeredAt = null;
 
-  // Ohne Schaetzung: historische Altzeile (vor KV-P2/LCT-P2). estimatedCostCents bleibt
-  // beim Default der Fabrik (null).
   makeDueInboundCall(state, { nowMs, legRef: { callControlId: "cc_m3_noest" } });
 
-  // Ausserhalb des Provider-Belegfensters: beantwortet, mit Schaetzung, aber laengst zu alt.
   const outsideWindowMinutesAgo = (PROVIDER_COST_RECORD_WINDOW_DAYS + 1) * MINUTES_PER_DAY;
   const outsideWindow = makeDueOutboundCall(state, {
     nowMs, estimatedCostCents: 10, legRef: { callControlId: "cc_m3_old" },
@@ -65,11 +51,9 @@ test("KV-M3-1 gemischte Fixture: alte Formel (alle beendeten Calls) vs. neue For
   outsideWindow.costTruedSource = COST_TRUING_SOURCE.UNAVAILABLE;
   outsideWindow.costTruedAt = isoMinutesAgo(nowMs, outsideWindowMinutesAgo);
 
-  // ALTE Formel (zum Vergleich, nicht Produktionscode): alle 6 beendeten Calls, 2 bewiesen.
-  const altValue = Math.floor((2 * 100) / 6); // 33
+  const altValue = Math.floor((2 * 100) / 6);
   assert.equal(altValue, 33, "Kontrollrechnung der alten Formel, damit der Unterschied im Diff sichtbar bleibt");
 
-  // NEUE Formel: nur 3 belegbare Calls (provenOutbound, provenInbound, unprovenOutbound), 2 bewiesen.
   assert.equal(costTruingCoveragePercent(state, nowMs), 66, "floor(2/3*100) - Inbound zaehlt mit (KV-P3-Wechselwirkung)");
   assert.notEqual(costTruingCoveragePercent(state, nowMs), altValue, "die neue Formel weicht bewusst von der alten ab");
 });
@@ -79,7 +63,6 @@ test("KV-M3-2 leerer Nenner: kein einziger belegbarer Call -> 0%, nicht NaN, nic
   const state = makeDefaultState();
   const never = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_m3_empty_never" } });
   never.answeredAt = null;
-  // estimatedCostCents bleibt beim Default der Fabrik (null).
   makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_m3_empty_noest" } });
 
   const percent = costTruingCoveragePercent(state, nowMs);
@@ -121,7 +104,6 @@ test("KV-M3-4 Sweep: die drei Nebenzaehler stehen IMMER in der Log-Zeile und im 
   const neverAnswered = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_m3s_never" } });
   neverAnswered.answeredAt = null;
 
-  // Ohne Schaetzung: estimatedCostCents bleibt beim Default der Fabrik (null).
   makeDueInboundCall(state, { nowMs, legRef: { callControlId: "cc_m3s_noest" } });
 
   const outsideWindowMinutesAgo = (PROVIDER_COST_RECORD_WINDOW_DAYS + 1) * MINUTES_PER_DAY;
@@ -143,7 +125,6 @@ test("KV-M3-4 Sweep: die drei Nebenzaehler stehen IMMER in der Log-Zeile und im 
     result = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
   });
 
-  // 1 belegbarer Call (provenOutbound), davon 1 bewiesen -> 100%.
   const coverageLine = logs.find((line) => line.startsWith("[cost-truing] deckung="));
   assert.ok(coverageLine, "die Deckungszeile steht im Log");
   assert.match(

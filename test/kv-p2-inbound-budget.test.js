@@ -1,16 +1,3 @@
-// KV-P2 (tasks/PLAN-KOSTEN-VOLLSTAENDIGKEIT.md): die vier Pflicht-Abnahmen der Phase - ein
-// beendeter Inbound-Call erreicht die Gate-Achse mit dem kalibrierten Inbound-Satz, beide
-// Achsen-Anker landen an der Call-Zeile, ein nie beantworteter Call bucht nichts, und die
-// Buchung ist ueber einen Prozess-Neustart hinweg genau-einmal.
-//
-// Seam wie test/ks-p2-live-carrier-spend.test.js: die Tarif-Env wird VOR dem ersten
-// config.js-Import gesetzt (metering.js importiert config.js statisch), danach werden die
-// config-lesenden Module dynamisch importiert. state-ops.js importiert config.js NICHT und
-// bleibt oben statisch importiert.
-//
-// INBOUND_CENTS bewusst != DOMESTIC_CENTS (20) und != DEFAULT_CENTS (30, hier ungenutzt,
-// aber als Kontrast benannt): ein Rueckfall auf einen der beiden Outbound-Saetze waere an
-// der ZAHL sichtbar, nicht nur am Vorzeichen.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -40,7 +27,6 @@ const DOMESTIC_CENTS = 20;
 const DEFAULT_CENTS = 30;
 const SHORT_CALL_MINUTES = 2;
 const HTTP_OK = 200;
-// Uhr der Spend-Monat-Achse (Bucket-Brigade-Fallstrick, s.u.) - PFLICHT, nicht kosmetisch.
 const NOW_ISO = "2026-07-30T12:00:00.000Z";
 const NOW_SPEND_MONTH_KEY = "2026-07";
 const PERIOD_START_ISO = "2026-07-01T00:00:00.000Z";
@@ -58,14 +44,6 @@ before(async () => {
   ({ makeMetering } = await import("../src/billing/metering.js"));
 });
 
-// Fassaden-Fake ueber einen ECHTEN state-ops-State (Muster test/kv-p1-cost-ledger-map.test.js
-// realMeteringStore): reicht durch, faengt nichts. addVoiceUsageCostCents bekommt NOW_ISO
-// durchgereicht - GENAU wie json.js/pg.js es in Produktion mit new Date().toISOString() tun.
-//
-// FALLSTRICK (gehoert hierher, nicht als Fussnote): addVoiceUsageCostCents(s, tenantId, cents)
-// OHNE nowIso laesst bookCents nach usage.costCents schreiben, aber spendMonthCostCents
-// UNBERUEHRT (authoritativeSpendMonthKey(null, null) === null -> early return). Ohne NOW_ISO
-// waere Abnahme (1) unten eine leere 0 === 0-Behauptung.
 function realMeteringStore(state) {
   return {
     addVoiceUsageCostCents: (tenantId, costCents) =>
@@ -87,19 +65,11 @@ function makeInboundCall(state, { tenantId = TENANT, answeredAt, endedAt } = {})
   return call;
 }
 
-// ---- KV-P2-1: 2 Minuten Inbound -> spendMonthCostCents + costCents um 2 x Inbound-Satz ----
-//
-// MUTATIONSPROBEN (manuell waehrend der Abnahme, NICHT Teil dieses Testcodes):
-//   (a) `if (call.direction !== "outbound") return;` in reconcileVoiceBudget wieder
-//       einsetzen -> dieser Test wird ROT (0 statt 14).
-//   (b) den Inbound-Zweig in callTariffCentsPerMin auf
-//       tariffCentsPerMin(call.to, call.to) zuruecksetzen -> ROT (60 statt 14, OWN_DID ist
-//       eine US-DID ohne Inlandssatz -> DEFAULT_CENTS).
 test("KV-P2-1: ein beendeter Inbound-Call mit 2 Minuten erhoeht spendMonthCostCents und costCents um 2 x Inbound-Satz", () => {
   const state = makeDefaultState();
   const call = makeInboundCall(state, {
     answeredAt: "2026-07-30T11:58:00.000Z",
-    endedAt: "2026-07-30T12:00:00.000Z", // 2 Minuten
+    endedAt: "2026-07-30T12:00:00.000Z",
   });
   const { reconcileVoiceBudget } = makeMetering({ store: realMeteringStore(state) });
 
@@ -115,16 +85,11 @@ test("KV-P2-1: ein beendeter Inbound-Call mit 2 Minuten erhoeht spendMonthCostCe
   );
 });
 
-// ---- KV-P2-2: estimated_cost_cents + BEIDE Achsen-Anker stehen an der Inbound-Zeile ----
-//
-// MUTATIONSPROBE: die Bucket-Brigade umdrehen (Anker VOR store.addVoiceUsageCostCents lesen)
-// -> spendMonthKey ist null statt "2026-07". Ohne diese drei Felder kann KV-P3 spaeter nicht
-// korrigieren.
 test("KV-P2-2: estimated_cost_cents und beide Achsen-Anker sind an der Inbound-call-Zeile gesetzt", () => {
   const state = makeDefaultState();
   const call = makeInboundCall(state, {
     answeredAt: "2026-07-30T11:59:00.000Z",
-    endedAt: "2026-07-30T12:00:00.000Z", // 1 Minute
+    endedAt: "2026-07-30T12:00:00.000Z",
   });
   stampBudgetPeriod(state, TENANT, PERIOD_START_ISO);
   const { reconcileVoiceBudget } = makeMetering({ store: realMeteringStore(state) });
@@ -137,7 +102,6 @@ test("KV-P2-2: estimated_cost_cents und beide Achsen-Anker sind an der Inbound-c
   assert.equal(row.estimatedCostPeriodKey, PERIOD_START_ISO);
 });
 
-// ---- KV-P2-3: nie beantwortet -> 0, PLUS der Grenzfall (unbrauchbares answeredAt) ----
 test("KV-P2-3: ein nie beantworteter Inbound-Call bucht nichts", () => {
   const state = makeDefaultState();
   const call = makeInboundCall(state, { answeredAt: null, endedAt: "2026-07-30T12:00:00.000Z" });
@@ -153,9 +117,6 @@ test("KV-P2-3: ein nie beantworteter Inbound-Call bucht nichts", () => {
   );
 });
 
-// T5-Grenzfall (Teil desselben Konzepts: "bucht nichts", nicht ein zweites): ein
-// UNBRAUCHBARES answeredAt normalisiert ueber voiceMinutesOf auf 0 Minuten - kein NaN im
-// Bucket, keine Buchung.
 test("KV-P2-3 (T5-Grenzfall): unbrauchbares answeredAt normalisiert auf 0 Minuten, keine Buchung, kein NaN", () => {
   const state = makeDefaultState();
   const call = makeInboundCall(state, {
@@ -170,14 +131,6 @@ test("KV-P2-3 (T5-Grenzfall): unbrauchbares answeredAt normalisiert auf 0 Minute
   assert.notEqual(usageOf(state, TENANT).costCents, NaN);
 });
 
-// ---- KV-P2-5: Ein-Quellen-Riegel (strukturell, Muster KV-P1-10) --------------------------
-//
-// Fangt eine dritte Inbound-Tarif-Quelle ab, bevor sie entsteht (G5/G27): die Landkarte
-// deklariert EINE Preisquelle je Kosten-Art. Seit KV2-10 gibt es ZWEI legitimierte
-// LESESTELLEN mit verschiedenen Rollen: metering.js BUCHT den Satz (unveraendert),
-// cost-calibration.js vergleicht ihn im Tarifpaar-Waechter gegen die gemessenen Vollkosten
-// (misst - justiert/bucht NICHTS, Plan KV2-10 3.1b). Jede weitere Stelle bliebe ein
-// G5-Bruch.
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXCLUDED_DIR_NAMES = new Set(["node_modules", ".git"]);
 
@@ -197,13 +150,6 @@ test("KV-P2-5: billing.voiceTariffInboundCents wird an genau ZWEI Stellen gelese
     return treffer;
   }
 
-  // Matcht JEDE Lesestelle "<irgendein Bezeichner>.billing.voiceTariffInboundCents"
-  // (config/defaultConfig/cfg/...) - nicht nur den literalen Bezeichner "config", der in
-  // metering.js bewusst als "defaultConfig" importiert ist (Idiom aus outbound-gates.js,
-  // s. dortiges tariffCentsPerMin). Die Deklarationszeile in config.js ("voiceTariffInbound
-  // Cents: numEnv(...)" bzw. der Namensraum-String in CONFIG_NAMESPACES.billing) traegt
-  // kein ".billing." davor und faellt damit NICHT unter dieses Muster - nur eine weitere
-  // LESESTELLE waere ein Treffer.
   const CALL_SITE_PATTERN = /\bbilling\.voiceTariffInboundCents\b/g;
   const EXPECTED_CALL_SITES = ["src/billing/cost-calibration.js", "src/billing/metering.js"];
 
@@ -232,13 +178,6 @@ test("KV-P2-5: billing.voiceTariffInboundCents wird an genau ZWEI Stellen gelese
   );
 });
 
-// ---- KV-P2-4: GENAU EINE Buchung je Call, auch ueber einen Neustart hinweg ---------------
-// Spawn-Test im Muster test/finishcall-billing-once.test.js, mit INBOUND-Seed. Der
-// persistierte billedAt-Marker (state-ops.markBilled, call-finish.js) deckt Inbound
-// IDENTISCH ab - keine Zeile Aenderung dort war noetig (Pre-Mortem TOD 2).
-//
-// MUTATIONSPROBE: `if (!call.billedAt)` in finishCall entfernen -> Schritt 3 (nach dem
-// Neustart) liefert 2x statt x -> ROT.
 const CALL_ID = "kv_p2_bill_once";
 const BILLED_MINUTES = 5;
 const ANSWERED_AT = "2026-01-01T00:00:00.000Z";
@@ -294,11 +233,9 @@ test("KV-P2-4: genau EINE Buchung je Inbound-Call, auch ueber einen Prozess-Neus
   const expectedCostCents = BILLED_MINUTES * INBOUND_CENTS;
   let dataDir;
   try {
-    // 1) erster Callback -> genau eine Buchung.
     await completeCall(srv1, CALL_ID);
     assert.equal(ownerCostCents(srv1), expectedCostCents, "erste Buchung: Minuten x Inbound-Satz");
 
-    // 2) zweiter Callback IM SELBEN Prozess -> unveraendert (In-Memory _finished).
     await repeatCompletedInSameProcess(srv1, CALL_ID);
     assert.equal(ownerCostCents(srv1), expectedCostCents, "zweiter Callback im selben Prozess bucht nicht erneut");
 
@@ -309,8 +246,6 @@ test("KV-P2-4: genau EINE Buchung je Inbound-Call, auch ueber einen Prozess-Neus
     await srv1.stop();
   }
 
-  // 3) Prozess-NEUSTART auf DERSELBEN Platte: frisches call._finished (Boot-Default), aber
-  // der persistierte billedAt-Marker vom ersten Prozess bleibt bestehen.
   const srv2 = await startServer({ env: SPAWN_TARIFF_ENV, dataDir });
   try {
     await completeCall(srv2, CALL_ID);
@@ -326,19 +261,7 @@ test("KV-P2-4: genau EINE Buchung je Inbound-Call, auch ueber einen Prozess-Neus
   }
 });
 
-// ---- FAIL-RICHTUNG: unset/leer -> Code-Fallback 6, NIE 0 --------------------------------
-// Kein Test oben pinnt den NACKTEN Code-Fallback - jeder setzt VOICE_TARIFF_INBOUND_CENTS
-// explizit, um von einer lokalen .env unabhaengig zu sein (Lehre test-base-env-drift). Ohne
-// diesen Test waere eine Regression, die den Fallback in src/config.js stillschweigend von
-// 6 auf 0 aendert, durch KEINEN Test dieser Datei gefangen - "unset -> 6" waere Dokumentation,
-// nicht Code-Garantie. numEnv() behandelt einen LEEREN String identisch zu "nicht gesetzt"
-// (raw === "" -> fallback), deshalb ueberschreibt env:{VOICE_TARIFF_INBOUND_CENTS:""}
-// deterministisch die BASE_ENV-Neutralisierung ("0") des Spawn-Helpers, ohne von der
-// Shell-Umgebung des Testlaufs abzuhaengen.
-//
-// MUTATIONSPROBE: fallback in src/config.js (voiceTariffInboundCents) von 6 auf 0 aendern
-// -> dieser Test wird ROT (0 statt 30).
-const CODE_FALLBACK_INBOUND_CENTS = 6; // gehalten gegen src/config.js voiceTariffInboundCents.fallback
+const CODE_FALLBACK_INBOUND_CENTS = 6;
 test("FAIL-RICHTUNG: VOICE_TARIFF_INBOUND_CENTS unset/leer bucht mit dem Code-Fallback 6, nie 0", async () => {
   const seed = seedState({
     calls: [

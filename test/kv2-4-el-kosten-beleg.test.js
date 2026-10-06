@@ -1,12 +1,3 @@
-// KV2-4 (tasks/kostenv2/spec-kv2-4.md): der ElevenLabs-Beleg, synchron und vorlaeufig.
-// Zwei Ebenen: Ebene 1 in-memory ueber state-ops (Muster test/kv2-3-kosten-buch.test.js),
-// kein Netz, kein Spawn; Ebene 2 durch die echte Fabrik (Muster
-// test/el-sip-call-id-join.test.js), echter json-Store auf Temp-DATA_DIR,
-// globalThis.fetch-Attrappe.
-//
-// Testnamen tragen bewusst KEINE Katalog-/Abnahme-Kennung am Namensanfang (Lehre
-// catalog-id-prefix-misroutes-tests) - "KV2-4 (...)" trifft weder
-// package.json config.i18nCatalogPattern noch config.abnahmePattern.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -33,16 +24,11 @@ import {
   CONVERSATION_FAILED_INVALID_DESTINATION,
 } from "./fixtures/elevenlabs-conversations.js";
 
-// G25: benannte Testbetraege statt nackter Zahlen in den assert-Aufrufen unten.
-// Gemessen, node -e mit dem echten Parser: parseDecimalToMicroCents("0.10420301650668388").
 const B2_ANRUF_1_MIKRO_CENTS = 10_420_301;
 const ZWEI_ZEILEN = 2;
-// G25: benannte Testwerte fuer die (b)-Faelle statt nackter Zahlen in den Metadaten.
 const DAUER_SEKUNDEN_BELIEBIG = 10;
 const DAUER_SEKUNDEN_KURZ = 5;
 const NEGATIVER_TESTBETRAG_USD = -0.5;
-
-// ---- Ebene 1: in-memory ueber state-ops, kein Netz, kein Spawn -------------------------
 
 function seedCall() {
   const state = makeDefaultState();
@@ -54,7 +40,6 @@ function seedCall() {
     to: "+49456",
     tenantId,
   });
-  // Store-Naht (Plan Abschnitt 3.1): nur die eine Methode, die kosten-beleg.js braucht.
   const store = { recordCallCostEvidence: (eingabe) => recordCallCostEvidence(state, eingabe) };
   return { state, store, callId: call.id };
 }
@@ -78,8 +63,6 @@ function sipZeile(state, callId) {
   return callCostEvidence(state, callId).find((zeile) => zeile.traeger === KOSTENART.TELNYX_SIP);
 }
 
-// Baut eine metadata-Attrappe mit genau den zwei Feldern, die elBelegBetrag liest -
-// die uebrigen Fixture-Details sind fuer die (b)-Faelle irrelevant.
 const metadata = (costFiat, durationSecs) => ({ cost_fiat: costFiat, call_duration_secs: durationSecs });
 
 test("KV2-4 (a): genau eine vorlaeufig-Zeile mit exaktem Mikro-Cent-Integer", () => {
@@ -298,8 +281,6 @@ test("KV2-4: elBelegBetrag ist rein - kein Wurf bei einer leeren/fehlenden metad
   assert.deepStrictEqual(elBelegBetrag(undefined), { ablehnung: EL_BELEG_ABLEHNUNG.FEHLT });
   assert.deepStrictEqual(elBelegBetrag({}), { ablehnung: EL_BELEG_ABLEHNUNG.FEHLT });
 });
-
-// ---- Ebene 2: durch die echte Fabrik, echter json-Store, fetch-Attrappe ---------------
 
 let jsonStore, BOOTSTRAP;
 

@@ -1,11 +1,3 @@
-// KV-P7: latente Kosten-Pfade verriegeln. Boot-Guard (Play-TTS ohne gedeckte Kosten)
-// + Massnahme 3 (Telnyx-Relay-Verbrauch im ElevenLabs-Kontingent-Zaehler sichtbar
-// machen, statt eines neuen Preis-Parameters - Begruendung: tasks/kv-p7-tts-klaerung.md,
-// TEIL 1 der Phase).
-//
-// IDs beginnen mit "KV-P7-" - kein i18n-Katalog-Praefix (DID|E2E|FMT|GAP|LANG|LAW|MCP|
-// ORIG|OUT|PAY|PROMPT|UI|VOICE|WEB|WORLD gefolgt von einer Ziffer), landet also im
-// npm-test-Regressionslauf, nicht im test:gates-Katalog.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -22,13 +14,8 @@ import {
 } from "../src/store/state-ops.js";
 import { startServer, ROOT } from "./helpers.js";
 
-// Konfig-Fixture des ElevenLabs-Kontingents (Muster tts-quota-counter.test.js): flach, weil
-// bumpPlatformTtsQuota/recordRelayTtsCharacters cfg.ttsCharacterQuota direkt lesen (der
-// Aufrufer reicht bereits config.billing herein, nicht die gesamte Config).
 const CFG = { ttsCharacterQuota: 1000, ttsCharacterQuotaWarnPercent: 75, ttsQuotaCycleAnchorDay: 3 };
 const NOW_ISO = "2026-08-15T10:00:00.000Z";
-
-// ---- Guard 1: Play-TTS ohne gedeckte Kosten (PLAY_TTS_UNPRICED) -------------------------
 
 test("KV-P7-1: ELEVENLABS_PLAY_TTS_ENABLED=true -> genau ein Befund PLAY_TTS_UNPRICED mit Handlung", () => {
   const findings = latentCostPathFindings({
@@ -58,8 +45,6 @@ test("KV-P7-7 (Gegenbeleg Budget-Engine): src/claude.js prueft blockingBudgetAxi
   const fnBody = claudeSource.slice(fnStart, fnStart + 400);
   assert.match(fnBody, /blockingBudgetAxis\(/);
 });
-
-// ---- Massnahme 3 (Abnahme 2, Ops-Ebene): Relay-Zeichen im Kontingent-Zaehler -------------
 
 test("KV-P7-8: Relay-Zeichen kommen im Kontingent-Zaehler an (Massnahme 3)", () => {
   const state = makeDefaultState();
@@ -93,23 +78,17 @@ test("KV-P7-11 (fail-closed): ungueltige Zeichenzahl bewegt keinen Zaehler", () 
   }
 });
 
-// ---- Banner ------------------------------------------------------------------------------
-
 test("KV-P7-14: ttsQuotaCoverageBannerLine nennt die Quote und den UNTERGRENZE-Vorbehalt", () => {
   const line = ttsQuotaCoverageBannerLine({ ttsCharacterQuota: 39981 });
   assert.match(line, /39981/);
   assert.match(line, /UNTERGRENZE/);
 });
 
-// ---- Abnahme 4 (Spawn): Standardkonfiguration bleibt still -------------------------------
-
 test("KV-P7-15: Standardkonfiguration (alle Flags aus) -> kein neuer Befund, /healthz 200, Kontingent-Zeile im Banner", async () => {
   const srv = await startServer();
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
-    // Kein neuer Befund: die eindeutige Formulierung der Guard-Meldung fehlt komplett
-    // (BASE_ENV pinnt ELEVENLABS_PLAY_TTS_ENABLED=false).
     assert.doesNotMatch(srv.stdout, /die von diesem Pfad selbst synthetisierten Zeichen/);
     assert.match(
       srv.stdout,

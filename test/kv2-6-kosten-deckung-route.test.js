@@ -1,10 +1,3 @@
-// KV2-6: HTTP-Test fuer GET /api/billing/kosten-deckung (Deckung je Traeger + der
-// faelligkeits-unabhaengige Herzschlag). pglite (kein Spawn, kein echtes Netz) - Muster
-// test/auth-p6-operator-routes.test.js (echte webAuthMw+adminMw-Kette ueber
-// makePgTestStore); der Store-/Billing-Kollaborator selbst bleibt ein Double (Subjekt
-// dieser Datei ist die Sicherung UND die Response-Form, nicht die Fachlogik - die
-// rechnet test/kv2-6-deckung-herzschlag.test.js nach). Testname ohne Katalog-Praefix
-// (Lehre catalog-id-prefix-misroutes-tests) - landet im Regressionslauf.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -30,16 +23,12 @@ const ROUTE_CONFIG = withConfigNamespaces({
   costTruingSweepIntervalMs: SWEEP_INTERVAL_MS,
 });
 
-// PII-Fixturen: markant, damit ein Leak in der Antwort nicht in generischen Zahlen
-// untergeht.
 const PII_TENANT_ID = "t_kv2_6_route_pii";
 const PII_PHONE = "+4915155512399";
 const TWO_HOURS_MS = 7_200_000;
 const ONE_HOUR_MS = 3_600_000;
 const STANDARD_ESTIMATE_CENTS = 30;
 
-// EIN beendeter Anruf mit PII-tragenden Feldern - genug, um die Antwort inhaltlich zu
-// fuellen (deckung/herzschlag nicht leer) und den PII-Scan aussagekraeftig zu machen.
 function seedPiiCall(state) {
   const call = createCall(state, {
     direction: "outbound", from: PII_PHONE, to: PII_PHONE, tenantId: PII_TENANT_ID, provider: PROVIDER.TELNYX,
