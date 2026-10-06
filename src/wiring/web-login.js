@@ -1,22 +1,3 @@
-// ---- wireWebLogin (Server-Slim P13) ---------------------------------------------
-// Kompositions-Glue fuer den gesamten OIDC-/Portal-/Accounts-/Sessions-/AuditStore-
-// Block inkl. /auth, /api/portal/state, Admin-/Self-Service-Mounts, Stripe-Webhook-
-// Mount und Release-Reconcile-Scheduler. REINE Verschiebung aus server.js (byte-
-// identische Mount-Reihenfolge, gleiche Semantik). Laeuft in der Wurzel unter
-// guardedBoot (fail-OPEN) - ein Portal-pg-Fehler toetet die Telefonie nicht
-// (boot-decoupling.test.js). Konstruktion (hier) getrennt von der Anwendung (Wurzel).
-//
-// createPortalRunner ist injiziert (DIP-Seam wie boot-guard.test.js): der einzige
-// infrastruktur-beruehrende Kollaborator (pg-Pool) - so ist der Q1-Happy-Path-Marker
-// offline fakebar, ohne erreichbare DB und ohne Kindprozess+pglite. provision ist
-// provisioning.triggerTenantProvisioning - eine Methode der EINEN P6-Provisioning-
-// Orchestrator-Instanz, die in server.js VOR diesem Block konstruiert wird (TDZ-
-// Vermeidung, siehe Kommentar dort) und dort weitere server.js-lokale Kollaboratoren
-// (Queue/Metering) schliesst - injiziert, nicht importiert. Alle uebrigen
-// Kollaboratoren sind reine Factories/Helfer/Konstanten ohne eigenen Laufzeit-State
-// und werden direkt importiert (gleiche Konvention wie in server.js selbst); nur
-// Laufzeit-Instanzen (app/store/audit) + die geteilten Pfad-Konstanten
-// (STRIPE_WEBHOOK_PATH bleibt EINE Quelle) werden injiziert.
 import {
   makeWebAuthRoutes,
   makeAdminRoutes,
@@ -37,9 +18,6 @@ import { setTenantIdentityIfAbsent } from "../store/state-ops.js";
 import { runReleaseReconcile } from "../release-reconcile.js";
 import { numberProvisioning } from "../telephony/registry.js";
 import { PROVIDER } from "../store/defaults.js";
-// E5-01 (Review-Blocker Runde 3): dieselbe Konstruktions-Naht wie der Provisioning-
-// Orchestrator - vorher injizierte dieser Aufrufer NIE einen sipRegistrar, jede Freigabe
-// hinterliess live eine EL-Waise (s. sipRegistrarWennAktiv, nummern-registrierung.js).
 import { sipRegistrarWennAktiv } from "../elevenlabs/nummern-registrierung.js";
 import { stripeBilling } from "../billing/stripe.js";
 import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";
@@ -52,21 +30,10 @@ import { makeBrevoMailer } from "../brevo-mail.js";
 import { mailerKonstruierbar } from "../boot-guard.js";
 import { runCancellationMailSweep } from "../billing/cancellation-mail.js";
 
-// tenant-prolif-d: Sweep-Kadenz des DID-Release-Reconcilers (interne Kadenz, kein
-// Operator-Knopf -> Modul-Konstante; der Sicherheits-Knopf ist RELEASE_GRACE_DAYS/config).
 const RELEASE_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-// 312k-Phase 4: Sweep-Kadenz des Vertragsende-Aufraeumens (Rufnummer freigeben + WorkOS-
-// Identitaet loeschen) - EIGENSTAENDIG von RELEASE_RECONCILE_INTERVAL_MS (kein geteilter
-// Timer: ein haengender Provider-Call in dem einen Sweep darf den anderen nie verzoegern).
-// Selbe Grosse wie der DID-Release-Reconciler (Muster), kein Operator-Knopf noetig - anders
-// als RELEASE_GRACE_DAYS ist hier kein Beobachtungsmodus vorgesehen: die Owner-Entscheidung
-// (nur bei KUENDIGUNG) ist bereits die Sicherung, kein weiterer Schalter noetig.
 const CONTRACT_END_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-// Boot-Lauf + periodischer Sweep des DID-Release-Reconcilers. fire-and-forget; nowMs
-// pro Lauf injiziert -> reiner Klassifizierer/Executor bleibt Date.now-frei. (byte-
-// identisch aus server.js verschoben.)
 function scheduleReleaseReconcile(deps) {
   const run = () =>
     void runReleaseReconcile({ ...deps, nowMs: Date.now() }).catch((e) =>
@@ -76,9 +43,6 @@ function scheduleReleaseReconcile(deps) {
   setInterval(run, RELEASE_RECONCILE_INTERVAL_MS).unref();
 }
 
-// Boot-Lauf + periodischer Sweep des Vertragsende-Aufraeumens (312k-Phase 4). Muster
-// scheduleReleaseReconcile: fire-and-forget, eigener catch-Riegel (ein Fehler hier darf den
-// Boot nie stoppen), unref() (der Timer haelt den Prozess/Test-Runner nicht am Beenden).
 function scheduleContractEndCleanup(deps) {
   const run = () =>
     void runContractEndCleanupSweep(deps).catch((e) => console.error("[contract-end]", e.message));
@@ -86,14 +50,8 @@ function scheduleContractEndCleanup(deps) {
   setInterval(run, CONTRACT_END_CLEANUP_INTERVAL_MS).unref();
 }
 
-// 312k-Phase 5: Sweep-Kadenz der Kuendigungsbestaetigung per E-Mail - EIGENSTAENDIG von
-// den anderen beiden Sweeps (kein geteilter Timer). Gleiche Groesse (Muster), kein
-// Operator-Knopf noetig (dieselbe Owner-Entscheidung wie bei der Kuendigung selbst).
 const CANCELLATION_MAIL_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-// Boot-Lauf + periodischer Sweep der Kuendigungsbestaetigung (312k-Phase 5). Muster
-// scheduleContractEndCleanup: fire-and-forget, eigener catch-Riegel, unref() (der Timer
-// haelt den Prozess/Test-Runner nicht am Beenden).
 function scheduleCancellationMailSweep(deps) {
   const run = () =>
     void runCancellationMailSweep(deps).catch((e) => console.error("[cancellation-mail]", e.message));
@@ -101,17 +59,8 @@ function scheduleCancellationMailSweep(deps) {
   setInterval(run, CANCELLATION_MAIL_SWEEP_INTERVAL_MS).unref();
 }
 
-// Stripe-Abgleich-Sweep: Kadenz des Webhook-Verlust-Heilers (stripe-reconcile.js) -
-// EIGENSTAENDIG von den anderen Sweeps (kein geteilter Timer, Muster CONTRACT_END_
-// CLEANUP_INTERVAL_MS). Auf dem kostenlosen Render-Plan ist der Boot-Lauf der eigentliche
-// Traeger: der Dienst schlaeft ohne Traffic ohnehin, und JEDES Aufwachen ist ein
-// Prozess-Start -> Boot-Lauf -> Abgleich. Das Intervall greift nur in Wachphasen.
 const STRIPE_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-// Boot-Lauf + periodischer Sweep des Stripe-Abgleichs. Muster scheduleReleaseReconcile:
-// fire-and-forget, eigener catch-Riegel (ein Fehler hier darf den Boot nie stoppen),
-// unref() (der Timer haelt den Prozess/Test-Runner nicht am Beenden); nowMs pro Lauf
-// injiziert -> der Executor bleibt Date.now-frei.
 function scheduleStripeReconcile(deps) {
   const run = () =>
     void runStripeSubscriptionReconcile({ ...deps, nowMs: Date.now() }).catch((e) =>
@@ -121,22 +70,6 @@ function scheduleStripeReconcile(deps) {
   setInterval(run, STRIPE_RECONCILE_INTERVAL_MS).unref();
 }
 
-// Mail-Adapter-Auswahl (312k-Phase 5, HTTP-Fortsetzung): EINE Stelle, EINE Rangfolge (G5) -
-// kein zweiter Auswahl-Codepfad irgendwo sonst (die Boot-Sonde, mail-boot-probe.js,
-// bildet dieselbe Rangfolge NUR fuer die Diagnose nach, konstruiert aber keinen Mailer).
-// Brevo (HTTP ueber Port 443, den Render auf kostenlosen Web-Diensten NICHT sperrt) hat
-// Vorrang vor SMTP (Render sperrt SMTP 25/465/587 dort, ETIMEDOUT in Produktion). SMTP
-// bleibt als Fallback bestehen - sobald der Dienst auf einen bezahlten Plan wechselt,
-// reicht das Setzen von SMTP_* ohne BREVO_API_KEY. Kein Schluessel gesetzt -> kein Mailer
-// (Muster workosManagementApiKey): die Kuendigungsbestaetigung bleibt offen vermerkt.
-// Konstruktoren injizierbar (DIP-Seam) fuer den isolierten Auswahl-Test ohne echtes
-// nodemailer/fetch.
-//
-// G26-Fix (Review-Blocker Runde 4): OB ueberhaupt ein Mailer konstruierbar ist ("Brevo-
-// Schluessel ODER SMTP-Host gesetzt"), liest der Boot-Guard (alertChannelFindings) fuer
-// den BOTH_UNSET_WITH_OUTBOUND-Riegel - dieselbe Frage darf nicht zweimal formuliert
-// werden (G5). mailerKonstruierbar() aus boot-guard.js ist die EINE Quelle, hier nur
-// gelesen statt erneut geschrieben.
 export function selectMailer(
   config,
   { _makeBrevoMailer = makeBrevoMailer, _makeSmtpMailer = makeSmtpMailer } = {},
@@ -156,95 +89,39 @@ export async function wireWebLogin({
   stripeWebhookPath,
   appPath,
   messaging,
-  // F2-Mail: spaet gebundene Accounts-Zelle (server.js, Muster operatorAuth in app.js).
-  // Optional (Default undefined) - der Routen-Inventar-Test (route-auth-inventory.test.js)
-  // baut den Graph ohne sie; der Guard unten macht das No-op statt eines TypeErrors.
-  // KV2-1: auditStoreRef ist dieselbe Art spaet gebundener Zelle wie accountsRef -
-  // optional, der Routen-Inventar-Test baut den Graph ohne sie; der Guard unten macht
-  // das No-op statt eines TypeErrors.
   accountsRef, auditStoreRef,
 }) {
   const portalRunner = await createPortalRunner();
   const oidc = makeOidc(config);
-  // P8/LANG-02: der Login-Pfad legt den Tenant mit Land/Sprache/Zeitzone an (Plattform-
-  // Default, kein IP-Geo - s. makeAccounts). Ohne das bekaeme jeder Web-Login-Kunde nach
-  // dem Weltdefault-Flip (P10) die falsche Sprache, weil sein Tenant kein Land traegt.
   const accounts = makeAccounts(portalRunner, {
     defaultCountry: config.provisioning.provisioningCountry,
   });
-  // F2-Mail: die Zelle NACH dem Bau von accounts befuellen - callFinish (server.js,
-  // synchron VOR diesem asynchronen Block konstruiert) liest accountsRef.current bei
-  // jedem Call-Ende frisch und findet ab hier die echte accounts-Instanz.
   if (accountsRef) accountsRef.current = accounts;
   const sessions = makeSessions(portalRunner);
-  // KV2-1: dieselbe EINE Instanz (G5/DIP) bekommt der Kostenpfad ueber die spaet gebundene
-  // Zelle - kein zweiter Runner, kein zweiter Pool, kein zweiter audit_log-Schreibweg.
-  // Object.assign statt direkter Property-Zuweisung (G25/Clean-Code-Ratsche dieser Datei,
-  // eslint-suppressions.json no-param-reassign): dieselbe Wirkung, ohne den bestehenden
-  // Fund um einen zweiten zu vermehren.
   const auditStore = makeAuditStore(portalRunner); if (auditStoreRef) Object.assign(auditStoreRef, { current: auditStore });
-  // EINE Instanz (G5), geteilt vom DID-Release-Reconciler UND dem 312k-Phase-4-
-  // Vertragsende-Aufraeumen - beide releasen ausschliesslich Telnyx-DIDs ueber denselben Port.
   const telnyxProvisioner = numberProvisioning(PROVIDER.TELNYX);
-  // tenant-prolif-d: DID-Release-Reconcile scharfschalten (Boot-Lauf + Sweep). Der
-  // Provider laeuft ueber den bestehenden NumberProvisioning-Port (nur Telnyx). graceMs=0
-  // (Default) = Observe-Only -> loggt nur Kandidaten, gibt nichts frei. E5-01: sipRegistrar
-  // ueber sipRegistrarWennAktiv(config) - dasselbe Dreifach-Gate wie der Provisioning-
-  // Orchestrator; die Fabrik ist zustandslos, ein erneuter Aufruf je Sweep aendert am
-  // Ergebnis nichts (undefined bei Schalter aus/Default -> performNumberRelease
-  // ueberspringt den EL-Schritt unveraendert, byte-identisch zum Bestand).
   scheduleReleaseReconcile({
     store,
     provisioner: telnyxProvisioner,
     audit: auditStore,
     graceMs: config.provisioning.releaseGraceMs, sipRegistrar: sipRegistrarWennAktiv(config),
   });
-  // 312k-Phase 4: WorkOS-Management-Adapter NUR konstruieren, wenn ein eigens dafuer
-  // vergebener Schluessel gesetzt ist (config.auth.workosManagementApiKey) - NICHT
-  // oidcClientSecret (der Anmeldeschluessel gehoert nicht auf einen Loeschpfad, s.
-  // workos-management.js). Ungesetzt (Auslieferungszustand) -> null: die Loeschung wird
-  // gar nicht erst versucht, attemptContractEndCleanup vermerkt sie offen + protokolliert.
   const workosManagement = config.auth.workosManagementApiKey
     ? makeWorkosManagement(config)
     : null;
-  // 312k-Phase 5 (HTTP-Fortsetzung): Mailer ueber die EINE Rangfolge oben auswaehlen
-  // (selectMailer) - Brevo/HTTP vor SMTP, keiner gesetzt -> null (Muster workosManagement).
-  // Ungesetzt (Auslieferungszustand) -> null: die Kuendigungsbestaetigung wird gar nicht
-  // erst versucht, attemptCancellationMailConfirm vermerkt sie offen + protokolliert.
   const mailer = selectMailer(config);
-  // mail-boot-probe: die Boot-Sonde selbst haengt NICHT an diesem pg-gated Block (der bei
-  // STORE_BACKEND=json gar nicht laeuft, s. app.js) - sie sitzt unconditional in boot.js
-  // (bootServer), Muster PROV-01 (reconcileOrphanedProvisioning), damit der Betreiber den
-  // Mail-Zustand (Brevo/HTTP oder SMTP) auch ohne laufendes Portal/pg-Backend sieht.
-  // Boot-Lauf + Sweep des Vertragsende-Aufraeumens (Rufnummer freigeben + WorkOS-Identitaet
-  // loeschen, NUR fuer Tenants mit noch offenem Teilschritt - s. tenantsPendingContractEnd-
-  // Cleanup, state-ops.js). Der direkte Aufruf sitzt in billing/webhook.js (SUSPEND-Zweig);
-  // dieser Sweep ist NUR der Retry-Pfad fuer einen zuvor fehlgeschlagenen Versuch.
   scheduleContractEndCleanup({
     store,
     numberProvisioner: telnyxProvisioner,
     workos: workosManagement,
     auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
   });
-  // Boot-Lauf + Sweep der Kuendigungsbestaetigung per E-Mail (312k-Phase 5, NUR fuer
-  // Tenants mit noch offenem Vermerk - s. tenantsPendingCancellationMail, state-ops.js).
-  // Der direkte Ausloeser sitzt in self-service-routes.js (cancel-Route); dieser Sweep
-  // ist NUR der Retry-Pfad fuer einen zuvor fehlgeschlagenen/uebersprungenen Versuch.
   scheduleCancellationMailSweep({ store, mailer, accounts, config, auditStore });
   const portalStore = makePortalStore(portalRunner);
   const webAuthMw = webAuth({ secret: config.auth.sessionSecret, sessions, accounts });
-  // P5: pending-Variante fuer die Self-Aktivierungs-Routen (suspended erreichbar, sonst
-  // 403-Deadlock). Gleiche Session-Mechanik, nur das Status-Gate ist gelockert (web-auth.js).
   const webAuthPendingMw = webAuthAllowPending({ secret: config.auth.sessionSecret, sessions, accounts });
   const adminMw = adminOnly({ adminEmails: config.auth.adminEmails });
 
-  // P2b: Vor-/Nachname aus dem verifizierten IdP-Profil set-if-absent in den Gate-Store
-  // schreiben (gleiche Kompositions-Quelle wie /api/onboard: applyOwnerIdentity ueber
-  // setTenantIdentityIfAbsent + Store-Lock, G5). FAIL-OPEN wie ensureTenant: ein Store-
-  // Schluckauf darf den Login NICHT blocken -> Folge ist ein eingeloggter Tenant ohne
-  // ownerName, den das Outbound-Identitaets-Gate fail-CLOSED sperrt (kein Leak). save() NUR
-  // bei echter Mutation (set-if-absent: Folge-Logins = No-Op). Kein Secret im Log. (byte-
-  // identisch aus server.js verschoben.)
   const applyTenantIdentity = async (tenantId, identity) => {
     try {
       await store.withStoreLock(() => {
@@ -262,41 +139,20 @@ export async function wireWebLogin({
       secret: config.auth.sessionSecret,
       redirectUri: config.server.publicUrl + "/auth/callback",
       ttlSeconds: config.auth.sessionTtlSeconds,
-      // Login-Flow-Cookie-TTL (state/pkce/nonce), separat von der Session-TTL: grosszuegig
-      // genug fuer den Mail-Verify-Round-Trip; Ablauf faengt die Callback-Recovery benign ab.
       loginCookieTtlSeconds: config.auth.loginCookieTtlSeconds,
       oidc,
       accounts,
       sessions,
       audit: auditStore,
-      // Post-Login auf die App-Shell (/app) im unified Build. P14: der frueher zweite
-      // Zweig (altes Kunden-Portal public/tenant.html, flag-gegatet) ist entfallen - die
-      // Datei existiert nicht mehr, ein Redirect dorthin waere ein 404 direkt nach dem
-      // Login. Ohne WEB_DIST_DIR bleibt der Default "/" (byte-identisch zum Bestand).
       postLoginPath: config.server.webDistDir ? appPath : undefined,
-      // WorkOS-Sign-out-Rueckkehr-URL (return_to), symmetrisch zu redirectUri oben. Muss im
-      // WorkOS-Dashboard als Sign-out-Redirect-URL registriert sein.
       postLogoutUrl: config.server.publicUrl + LOGIN_ROUTE,
-      // Lokaler Dev-Login-Shim (NUR mit config.auth.devLoginEnabled, fail-closed): mintet dieselbe
-      // Session wie der echte Callback fuer den Chrome-e2e-Loop ohne WorkOS.
       devLoginEnabled: config.auth.devLoginEnabled,
-      // Signup-Spiegel-Nachzug: zieht den per accounts.upsertOnFirstLogin (mintSession) frisch
-      // angelegten Tenant in den pg-Store-Spiegel, BEVOR der Self-Service-Subscribe-Pfad eine
-      // WRITE-Store-Op (setTenantStripe etc.) ausloest, die ihn sonst nicht faende.
       ensureTenant: (tid) => store.ensureTenant(tid),
-      // tenant-prolif-b: nach dem Login den (evtl. gemergten) sub in den Resolver-Index
-      // spiegeln (mintSession), damit der MCP/REST-Kanal den kanonischen Tenant ohne Neustart
-      // aufloest. Fassade store.bindSubToTenant (beide Backends).
       bindSub: (sub, tid) => store.bindSubToTenant(sub, tid),
-      // P2b: Identitaets-Write (Vor-/Nachname aus dem verifizierten IdP-Profil) ueber die
-      // Fassade in den Gate-Store - sonst sperrt das Outbound-Identitaets-Gate den Web-Tenant.
       applyTenantIdentity,
     }),
   );
 
-  // Kunden-Portal (READ-only, tenant-scoped ueber portalStore). webAuthMw setzt req.tenant
-  // (fail-closed); portalStore.withTenant erzwingt RLS. KEINE Owner-Daten. Ausschliesslich
-  // ueber webAuth (Kunden-Session) gesichert - seit AUTH-P7 die einzige Schicht davor.
   app.get("/api/portal/state", webAuthMw, async (req, res) => {
     try {
       const calls = await portalStore.listCalls(req.tenant.tenantId);
@@ -307,27 +163,10 @@ export async function wireWebLogin({
     }
   });
 
-  // ---- Admin: Tenant freigeben / suspendieren (admin-allowlist, fail-closed) ----
-  // Routen-Handler in makeAdminRoutes (web-auth.js), damit der Test exakt denselben Handler
-  // prueft statt einer Replik (G5). suspend invalidiert sofort alle Sessions des Tenants;
-  // jede Aktion auditiert; nicht-existenter Tenant -> 404. store: approve loescht den
-  // suspended_at-Grace-Anker (tenant-prolif-c Invariante 2, G3-Fix).
   app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw, store }));
 
-  // ---- Cookie-Einwilligungs-Protokoll (Nachweis Art. 7 Abs. 1 DSGVO) ----------------
-  // AUTH-AUSNAHME (Regel 3, begruendet in src/route-policy.js und src/cookie-consent-log.js):
-  // Besucher der Marketing-Seite haben keine Sitzung; die Route schreibt nur eine anonyme
-  // Belegzeile. Hier im pg-Block, weil die Tabelle am portalRunner haengt (derselbe Runner,
-  // kein zweiter Pool) - ohne pg gibt es keinen Beleg-Speicher, die Route antwortet 404.
   mountCookieConsentLog({ app, runner: portalRunner });
 
-  // ---- Self-Service (I9 + #3): web-session-only, hinter webAuthMw ----------------
-  // Konvergenz #3: Self-Service haengt jetzt am echten OIDC-Browser-Login statt am
-  // X-Internal-Identity-Pfad. NUR hier (im Web-Login-Block: sessionSecret + pg) registriert
-  // -> ohne Web-Login-Infra existieren die Routen nicht (404). Zusaetzlich an
-  // SELF_SERVICE_ENABLED + MULTI_TENANT gegated (eigenes Reife-Flag; ohne MULTI_TENANT keyt
-  // der Mirror nur den Owner-Bucket). Ausschliesslich ueber webAuthMw (Kunden-Session)
-  // gesichert, keine Admin-Sitzung. audit = util.audit (nur Keys, keine Werte/PII).
   if (isSelfServiceLive(config)) {
     app.use(
       mountSelfServiceRoutes({
@@ -339,46 +178,22 @@ export async function wireWebLogin({
         billing: stripeBilling,
         accounts,
         provision,
-        // 312k-P3: Nachweis auf dauerhaftem Datentraeger (§ 312k BGB) fuer die
-        // Kuendigung/Ruecknahme - derselbe auditStore, den makeAdminRoutes oben schon
-        // fuer tenant_approve/tenant_suspend nutzt (EINE Postgres-audit_log-Quelle,
-        // KEIN zweiter Schreibpfad). util.audit (Parameter audit oben) bleibt reiner
-        // console.log und ist fuer den gesetzlich verlangten Nachweis untauglich.
         auditStore,
-        // 312k-Phase 5: derselbe SMTP-Mailer wie der periodische Sweep oben
-        // (scheduleCancellationMailSweep) - EINE Quelle, kein Drift.
         mailer,
       }),
     );
   }
 
-  // ---- Stripe-Webhook (W4): Abo-Lifecycle nachziehen ------------------------------
-  // KEINE Sitzungspflicht (Stripe kann keine Credentials senden) - die Sicherung ist die
-  // HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET (fail-closed, eigener Begruendungs-
-  // Kommentar wie /voice). Ohne PAYMENT_ENABLED -> 404 (byte-identisch). Liegt im
-  // guardedBoot-Block, weil applyStripeWebhookSerialized accounts.setStatus +
-  // sessions.invalidateByTenant braucht (nur hier konstruiert). Serialisiert pro Stripe-
-  // Korrelationsschluessel (subscriptionId, Fallback tenantRef) + verwirft veraltete/doppelte
-  // Events (Ordnungswache) - Details in billing/webhook.js. Idempotent: jeder Event wirkt nur
-  // als Vorwaerts-Zustand.
   app.post(
     stripeWebhookPath,
     makeStripeWebhookRoute({
       config, store, audit, accounts, sessions, billing: stripeBilling, provision, messaging,
-      // 312k-Phase 4: derselbe Telnyx-Port/WorkOS-Adapter/durable Nachweis wie der
-      // periodische Sweep oben (scheduleContractEndCleanup) - EINE Quelle, kein Drift.
       numberProvisioner: telnyxProvisioner,
       workos: workosManagement,
       auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
     }),
   );
 
-  // Stripe-Abgleich-Sweep (verlorene Webhooks selbstheilen, s. billing/stripe-reconcile.js):
-  // Boot-Lauf + Sweep. NUR bei aktiver Zahlungsabwicklung (ohne PAYMENT_ENABLED gibt es
-  // keine Stripe-Abos abzugleichen, und stripeBilling wuerde ohne Key werfen - dieselbe
-  // Bedingung, unter der die Webhook-Route oben ueberhaupt Events annimmt). webhookDeps =
-  // EXAKT die Deps der Webhook-Route (EINE Quelle, kein Drift); req=null -> audit()
-  // loggt ip=system (Muster TTS_QUOTA_WARN_EVENT, server.js).
   if (config.billing.paymentEnabled) {
     scheduleStripeReconcile({
       store,
@@ -392,15 +207,7 @@ export async function wireWebLogin({
     });
   }
 
-  // Q1: positiver Boot-Marker im Erfolgsfall - eigene Zeile. Erreicht NUR wenn alle Mounts
-  // durchliefen; wirft ein Schritt vorher, faengt guardedBoot es als "deaktiviert" (fail-open)
-  // ab und diese Zeile bleibt aus. Macht den fail-open-Zustand dauerhaft sichtbar (Render-Log)
-  // statt lautlos 404.
   console.log("[boot] Web-Login aktiv");
 
-  // AUTH-P6: die Betreiber-Sicherung nach oben reichen. webAuthMw/adminMw entstehen fuer
-  // die Admin-Routen ohnehin HIER - ein zweiter Bau waere eine zweite Wahrheit darueber,
-  // wer Admin ist (G5). Rueckgabe erst NACH allen Mounts: wirft ein Schritt vorher, faengt
-  // guardedBoot es ab, der Aufrufer bekommt nichts und mountet die Betreiber-Routen nicht.
   return { webAuthMw, adminMw };
 }
