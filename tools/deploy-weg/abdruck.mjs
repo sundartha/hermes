@@ -65,9 +65,11 @@ async function git(repoDir, argumente, { ausgabe } = {}) {
   return lauf.text.trim();
 }
 
+const COMMIT_ZIEL = "^{commit}";
+
 async function commitVon(repoDir, commit) {
   if (typeof commit !== "string" || commit === "") throw new TypeError("Commit fehlt");
-  const sha = await git(repoDir, ["rev-parse", "--verify", "--quiet", "--end-of-options", `${commit}^{commit}`], {
+  const sha = await git(repoDir, ["rev-parse", "--verify", "--quiet", "--end-of-options", commit + COMMIT_ZIEL], {
     ausgabe: "pipe",
   });
   if (!COMMIT_MUSTER.test(sha)) throw new Error("Commit nicht eindeutig");

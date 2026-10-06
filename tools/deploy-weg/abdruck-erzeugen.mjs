@@ -234,7 +234,7 @@ function wertAnPfad(wurzel, pfad) {
   let aktuell = wurzel;
   for (const segment of String(pfad).split(".")) {
     if (aktuell === null || typeof aktuell !== "object" || !(segment in aktuell)) return { art: "fehlt" };
-    aktuell = aktuell[segment];
+    aktuell = Reflect.get(aktuell, segment);
   }
   return aktuell;
 }

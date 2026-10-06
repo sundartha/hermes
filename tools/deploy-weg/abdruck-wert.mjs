@@ -95,20 +95,20 @@ function objektAbbild(wert, unterwegs) {
   }
 }
 
-const WERT_ABBILDER = Object.freeze({
-  string: (wert) => wert,
-  boolean: (wert) => wert,
-  number: zahlAbbild,
-  bigint: (wert) => ({ art: "bigint", text: String(wert) }),
-  undefined: () => ({ art: "undefined" }),
-  symbol: (wert) => ({ art: "symbol", text: String(wert.description) }),
-  function: (wert) => funktionAbbild(wert),
-});
+const WERT_ABBILDER = new Map([
+  ["string", (wert) => wert],
+  ["boolean", (wert) => wert],
+  ["number", zahlAbbild],
+  ["bigint", (wert) => ({ art: "bigint", text: String(wert) })],
+  ["undefined", () => ({ art: "undefined" })],
+  ["symbol", (wert) => ({ art: "symbol", text: String(wert.description) })],
+  ["function", (wert) => funktionAbbild(wert)],
+]);
 
 export function abbild(wert, unterwegs = new Set()) {
   if (probeMarken.has(wert)) return { art: "probe", pfad: probeMarken.get(wert) };
   if (wert === null) return null;
-  const abbilder = WERT_ABBILDER[typeof wert];
+  const abbilder = WERT_ABBILDER.get(typeof wert);
   return abbilder ? abbilder(wert) : objektAbbild(wert, unterwegs);
 }
 
