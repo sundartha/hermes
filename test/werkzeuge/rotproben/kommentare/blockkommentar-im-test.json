@@ -1,0 +1,12 @@
+{
+  "titel": "Blockkommentar in einer Testdatei",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "/**",
+      " * Begründung",
+      " */",
+      "export const wert = true;"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/keine-kommentare\""
+}
