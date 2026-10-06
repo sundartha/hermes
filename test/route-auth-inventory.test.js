@@ -1,5 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -11,6 +12,11 @@ import {
   classifyRoute,
   routeKey,
 } from "../src/route-policy.js";
+import { ANRUFE_LAUFEND_PATH, DEPLOY_TOKEN_MIN_LENGTH } from "../src/routes/intern-anrufe-laufend.js";
+
+const HTTP_OK = 200;
+const HTTP_UNAUTHORIZED = 401;
+const DEPLOY_TOKEN = "d".repeat(DEPLOY_TOKEN_MIN_LENGTH);
 
 const TEMP_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "route-auth-inventory-"));
 
@@ -224,6 +230,35 @@ test("Routen-Inventar: keine verwaisten Eintraege in Oeffentlich-Liste und Gate-
       "Eine verwaiste Ausnahme ist eine Ausnahme, die beim naechsten gleichnamigen " +
       "Endpunkt still wieder greift - loeschen.",
   );
+});
+
+test("Routen-Inventar: jede Ausnahme in der Oeffentlich-Liste traegt eine Begruendung", () => {
+  const ohneBegruendung = PUBLIC_ROUTES.filter(
+    ({ reason }) => typeof reason !== "string" || reason.trim() === "",
+  ).map((entry) => routeKey(entry.method, entry.path));
+  assert.deepEqual(ohneBegruendung, []);
+});
+
+test("Routen-Inventar: die echte App gibt /intern/anrufe-laufend Konfiguration und Speicher mit", async (kontext) => {
+  const vorher = config.auth.deployToken;
+  config.auth.deployToken = DEPLOY_TOKEN;
+  kontext.after(() => {
+    config.auth.deployToken = vorher;
+  });
+  const { app } = await withSilencedConsole(() => buildApp(inventoryDeps()));
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  kontext.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const adresse = `http://127.0.0.1:${server.address().port}${ANRUFE_LAUFEND_PATH}`;
+  const ohneToken = await withSilencedConsole(() => fetch(adresse));
+  assert.equal(ohneToken.status, HTTP_UNAUTHORIZED);
+  assert.deepEqual(await ohneToken.json(), { error: "unauthorized" });
+  const mitToken = await fetch(adresse, { headers: { authorization: `Bearer ${DEPLOY_TOKEN}` } });
+  assert.equal(mitToken.status, HTTP_OK);
+  assert.deepEqual(await mitToken.json(), { laufend: 0 });
 });
 
 test("Routen-Inventar: der Routen-Fingerprint ist unveraendert", () => {
