@@ -5,6 +5,7 @@ import { basename, join } from "node:path";
 import { chdir, cwd } from "node:process";
 
 import { cruise } from "dependency-cruiser";
+import { Linter } from "eslint";
 
 import { git, gitGelingt, quellenDesBereichs, testpfadFrei } from "./pfade.mjs";
 
@@ -16,7 +17,9 @@ const OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6",
 const KEIN_TREFFER = 1;
 const QUELLE_IN_TEXT = /["'`][^"'`\n]*?\bsrc\/([\w./-]+\.[cm]?js)(?=["'`?#])/g;
 const WERKZEUGPFAD = /^(?:tools|scripts)\//;
-const WERKZEUG_IN_TEXT = /["'`][^"'`\n]*?\b(?:tools|scripts)\/[^"'`\n]*["'`]/;
+const WERKZEUG_DATEI_IN_TEXT = /(?:^|[^\w-])(?:tools|scripts)\/[\w./-]*\.(?:mjs|cjs|js|sh|json)\b/;
+const SKRIPT = /\.[cm]?js$/;
+const COMMONJS = /\.cjs$/;
 const MAX_GIT_AUSGABE = 268_435_456;
 
 export async function importgraph() {
@@ -153,6 +156,35 @@ function kette(test, graph) {
   return { besucht: [...besucht], ziele: [...ziele] };
 }
 
+function textwert(knoten) {
+  if (knoten.type === "Literal" && typeof knoten.value === "string") return [knoten.value];
+  if (knoten.type === "TemplateElement") return [knoten.value.cooked ?? knoten.value.raw];
+  return [];
+}
+
+function literale(datei, text) {
+  const linter = new Linter();
+  const sourceType = COMMONJS.test(datei) ? "commonjs" : "module";
+  const meldungen = linter.verify(text, { languageOptions: { ecmaVersion: "latest", sourceType } });
+  if (meldungen.some(({ fatal }) => fatal)) return [text];
+  const { ast, visitorKeys } = linter.getSourceCode();
+  const werte = [];
+  const offen = [ast];
+  while (offen.length > 0) {
+    const knoten = offen.pop();
+    werte.push(...textwert(knoten));
+    for (const schluessel of visitorKeys[knoten.type] ?? []) {
+      offen.push(...[knoten[schluessel]].flat().filter(Boolean));
+    }
+  }
+  return werte;
+}
+
+function nenntWerkzeugdatei(datei, text) {
+  const teile = SKRIPT.test(datei) ? literale(datei, text) : [text];
+  return teile.some((teil) => WERKZEUG_DATEI_IN_TEXT.test(teil));
+}
+
 function testVerstoesse(test, { alt, dateien }) {
   const { besucht, ziele } = kette(test, alt.graph);
   const vorhanden = new Set(quelldateien(alt.graph));
@@ -167,7 +199,7 @@ function testVerstoesse(test, { alt, dateien }) {
     );
   }
   const werkzeug = ziele.filter((ziel) => WERKZEUGPFAD.test(ziel));
-  const genannt = besucht.filter((datei) => WERKZEUG_IN_TEXT.test(inhaltIm(alt.rev, datei)));
+  const genannt = besucht.filter((datei) => nenntWerkzeugdatei(datei, inhaltIm(alt.rev, datei)));
   if (werkzeug.length > 0 || genannt.length > 0) {
     befunde.push(
       `${test}: prüft tools/ oder scripts/ (${[...werkzeug, ...genannt].join(", ")}); solche Tests mistet die Ausnahme nicht aus`,
