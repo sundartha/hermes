@@ -1,22 +1,3 @@
-// ---- makeBillingRoutes (Server-Slim P7, AUTH-P6) --------------------------------
-// Extrahierte /api/billing/*-Route-Gruppe (flush-meters, setup-checkout,
-// checkout-return, cost-truing/sweep, cost-drift, platform-costs) als Factory mit
-// Dependency-Injection - gleiches Muster wie makeReadRoutes/makeCallRoutes.
-//
-// AUTH-P6: vier dieser Routen (flush-meters, cost-truing/sweep, cost-drift,
-// platform-costs) sind Betreiber-Routen und haengen hinter einer echten Admin-Sitzung
-// (webAuthMw+adminMw, operatorRoutes/operatorAuth) - und NUR DANN gemountet, wenn
-// diese Sicherung existiert (fail-closed, s. wiring/operator-routes.js). Das
-// Legacy-Checkout-Paar (setup-checkout, checkout-return) traegt seit AUTH-P7
-// `internalOnly` (dieselbe Middleware wie die sieben P5-Routen, KEIN neuer
-// Mechanismus) - geloescht wird es weiterhin erst in P9 (Karenzfrist).
-//
-// BEWUSST KEIN MCP-Tool (kein offener ungegateter Geld-Endpunkt, R4). Ohne
-// PAYMENT_ENABLED -> 404 (fail-closed, byte-identisch zum Bestand). billing = die
-// EINE stripeBilling-Instanz (INV-7), requireTenant = die EINE Wurzel-Instanz (403 bei
-// TENANT_REJECT). Die pure Helfer (flushMeters/bindCardFromSession/
-// startCheckoutWithStaleCustomerHeal) kommen direkt aus billing/* (eine Quelle, G5 -
-// wie publicCall in makeReadRoutes).
 import { Router } from "express";
 import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.js";
@@ -25,31 +6,15 @@ import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-t
 import { kostenBuchBericht } from "../billing/kosten-deckung.js";
 import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
 import { countActiveNumbers } from "../store/views.js";
-// KV2-10: die einzige Stelle, die US-Cent (Listenpreis) ueber DEN EINEN Kurs nach EUR-Cent
-// hebt - MICRO_CENTS_PER_CENT ist die Skala der geteilten Umrechnungsfunktion (G5: EINE
-// Quelle je Idiom, kein hier getippter zweiter 1e6-Faktor).
 import { MICRO_CENTS_PER_CENT } from "../store/defaults.js";
-// P14: dieselbe EINE Quelle der Stripe-Rueckkehr-Ziele wie self-service-routes.js
-// (frueher stand die cancelUrl hier als zweites Inline-Literal, driftfaehig, G5).
 import { CHECKOUT_RETURN } from "../portal-paths.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
 import { internalOnly } from "../wiring/internal-only.js";
 
-// Status-Marker der gebundenen Karte (kein Magic-String, G25). Nur checkout-return.
 const CARD_ON_FILE_STATUS = "card_on_file";
 
-// HTTP-Status der Nicht-berechenbar-Antwort von platform-costs (G25, Naming wie
-// src/app.js/webhooks-elevenlabs.js).
 const HTTP_SERVER_ERROR = 500;
 
-// deps: { config, store, audit, billing, tenant, costTruing, operatorAuth }. config ist
-// das globale Config-Objekt (paymentEnabled/publicUrl/stripeCustomerRetryDelayMs).
-// store traegt load/save. audit ist util.audit (loggt nur Keys, keine Werte/Secrets).
-// billing ist die EINE stripeBilling-Instanz (Stripe-Port). tenant buendelt die
-// request-tenant-Resolver: requireTenant (tenant-gescopt; REJECT -> 403). costTruing
-// ist die EINE LCT-P3-Instanz (INV-7, in server.js konstruiert). operatorAuth traegt
-// { webAuthMw, adminMw } fuer die vier Betreiber-Routen (AUTH-P6) - null, wenn die
-// Admin-Sitzungs-Infra nicht verfuegbar ist (dann werden diese vier NICHT gemountet).
 export function makeBillingRoutes({
   config,
   store,
@@ -62,17 +27,6 @@ export function makeBillingRoutes({
   const router = Router();
   const operator = operatorRoutes({ router, operatorAuth });
 
-  // ---- Stripe-Metering-Flush (P6b3): aggregiert den usage_event-Ledger je tenant+kind
-  // und meldet je Aggregat EIN reportMeter (idempotent ueber stripe_meter_sent). Hinter
-  // einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese Sicherung
-  // gar nicht gemountet. KEIN MCP-Tool. NUR im Metering-Pfad erreichbar: ohne
-  // PAYMENT_ENABLED -> 404 (fail-closed, byte-identisch zum Bestand). "Periodisch" =
-  // extern cron-baar (echter Scheduler = P8); KEIN neuer Scheduler-Dep.
-  // KV-P0: zusaetzlich verriegelt durch config.billing.flushEpochIso - gemeldet wird
-  // NUR occurredAt >= diesem Stichtag; fehlt er, meldet flushMeters NICHTS (fail-closed,
-  // "meldet nichts", nie "meldet alles"). Antwort = NUR Zaehler + ein Grund-Code
-  // {sent, failed, skipped, skipReason} (KEINE Event-Inhalte, keine Tenant-Kennung, kein
-  // Betrag, kein Secret).
   operator.post("/api/billing/flush-meters", async (req, res) => {
     if (!requirePaymentEnabled(res, config, "metering disabled (PAYMENT_ENABLED)")) return;
     const result = await flushMeters(store.load(), {
@@ -88,23 +42,14 @@ export function makeBillingRoutes({
     res.json(result);
   });
 
-  // ---- Karten-Erfassung via Stripe Checkout (setup-Mode), Pay1 ----
-  // Hinter `internalOnly` (AUTH-P7, s. Kopfkommentar; localhost = Owner). KEIN
-  // MCP-Tool (kein offener ungegateter Geld-Endpunkt, R4). tenant-scoped
-  // (requireTenant -> fail-closed 403 bei TENANT_REJECT). Ohne PAYMENT_ENABLED -> 404
-  // (byte-identisch zum Bestand, Muster flush-meters). Die Karte wird OHNE Abbuchung
-  // am Customer gespeichert; der spaetere Hold/Capture (Pay2) nutzt
-  // customer+payment_method.
   router.post("/api/billing/setup-checkout", internalOnly, async (req, res) => {
     if (!requirePaymentEnabled(res, config)) return;
-    // WEB-10: stabiler, sprachneutraler Code statt deutschem Klartext mit Env-Namen.
     if (!requirePublicUrl(res, config)) return;
-    const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
+    const tenant = requireTenant(req, res);
     if (!tenant) return;
 
     const successUrl = `${config.server.publicUrl}/api/billing/checkout-return?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${config.server.publicUrl}${CHECKOUT_RETURN.CARD_CANCELED}`;
-    // Fix B: derselbe Self-Heal wie der Pay3-Pfad (geteilte Logik, G5 - s. card-setup.js).
     const { session, healed } = await startCheckoutWithStaleCustomerHeal(
       { store, billing, tenant, retryDelayMs: config.billing.stripeCustomerRetryDelayMs },
       (customerId) =>
@@ -115,62 +60,22 @@ export function makeBillingRoutes({
     res.json({ url: session.url });
   });
 
-  // ---- Kosten-Abgleich manuell anstossen (LCT P3) ----
-  // Hinter einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
-  // Sicherung gar nicht gemountet. KEIN MCP-Tool (Muster flush-meters, R4: kein offener
-  // ungegateter Geld-naher Endpunkt). BEWUSST OHNE PAYMENT_ENABLED-Gate: der Abgleich
-  // ist Beobachtung der Kosten-Achse, die - wie reconcileVoiceBudget - auch ohne
-  // Zahlungspfad laeuft; ein 404 hier machte den Job im heutigen Live-Betrieb
-  // unausloesbar. NICHT tenant-gescopt: ein Plattform-Job ueber alle Tenants (Muster
-  // flush-meters). Antwort = NUR Zaehler + Quote, keine Call-IDs, keine Rufnummern,
-  // keine Tenant-Kennungen. Ausloeser Nummer zwei neben dem Intervall - der Laufriegel
-  // im Modul faengt die Ueberlappung.
   operator.post("/api/billing/cost-truing/sweep", async (req, res) => {
     const result = await costTruing.runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
     audit("cost_truing_sweep", req, `skipped=${result.skipped} deckung=${result.coveragePercent ?? "-"}%`);
     res.json(result);
   });
 
-  // ---- Drift-Waechter: gemessener Minutensatz je Praefix (LCT P5) ----
-  // Hinter einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
-  // Sicherung gar nicht gemountet. NICHT tenant-gescopt - dieselbe Naht und dieselbe
-  // Begruendung wie der Sweep-Endpunkt daneben (Plattform-Groesse ueber alle Tenants).
-  // BEWUSST NICHT in /api/state: dort gilt der Cross-Tenant-Leck-Riegel (api-read.js,
-  // usageView) - ein praefix-weites p95 ueber alle Tenants ist genau die Plattform-
-  // Aggregation, die diese Projektion nicht verlassen darf. Antwort ist PII-frei:
-  // Praefix ("+49" ist keine Rufnummer), Befund-Code, Stichprobenzahl, zwei
-  // Cent-Betraege. Kein Alarm-Empfaenger, keine Call-ID, keine Tenant-Kennung.
   operator.get("/api/billing/cost-drift", (req, res) => {
     res.json({ prefixes: tariffDriftReportFromConfig(store.load().calls, config.billing) });
   });
 
-  // ---- Fixkosten sichtbar machen (LCT P7): ElevenLabs-Wand + DID-Miete ----
-  // Hinter einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
-  // Sicherung gar nicht gemountet. NICHT tenant-gescopt - dieselbe Naht und Begruendung
-  // wie cost-drift daneben (Plattform-Aggregat, kein Tenant-Filter existiert).
-  // public/index.html gibt es nicht mehr (Owner-Removal P5) - dieser Reader ist der
-  // Anzeige-Pfad. REINE ANZEIGE: kein Gate/keine Reserve/keine Buchung liest diese Route.
-  // Antwort ist PII-frei: nur Cent-Betraege, ein Nummern-ZAEHLER (keine E.164), die
-  // Zeichenzahl des TTS-Kontingents und der Zyklus-Schluessel. "Listenpreis, nicht
-  // Rechnungsposten" (Entscheidung 6) - listPriceNotBilled markiert das explizit in der
-  // Antwort, damit kein Konsument die Zahl faelschlich als Ist-Kosten liest.
   operator.get("/api/billing/platform-costs", (req, res) => {
     const nowIso = new Date().toISOString();
     const activeNumbers = countActiveNumbers(store.load());
-    // KV2-10: der ElevenLabs-Wert ist ein USD-LISTENPREIS (600 US-ct = 6,00 USD) und wird
-    // hier ueber DEN EINEN Kurs in EUR-Cent umgerechnet (600 x 0,92 = 552, aufgerundet in
-    // der geteilten Funktion) - vorher wurde er unumgerechnet als "EUR-Cent" ausgegeben.
-    // elevenLabsUsdCents reist separat mit, damit kein Konsument die Waehrungen verwechselt.
     const elevenLabsUsdCents = config.billing.platformFixedCostUsdCentsPerMonth;
     const elevenLabsCents =
       providerMicroCentsToBucketCents(elevenLabsUsdCents * MICRO_CENTS_PER_CENT, config.billing.providerToBucketRateMicro);
-    // KV2-10 Review (G26/PM-4): die geteilte Umrechnung liefert dokumentiert null, sobald
-    // das Produkt den sicheren Ganzzahlbereich verlaesst (US-Listenpreis ab rund 98 USD
-    // je Monat bei Kurs 0,92 - realistisch, die Env hat kein max). null + didRentCents
-    // koerzierte null zuvor still zu 0 und liess den ElevenLabs-Anteil aus der Summe
-    // verschwinden. "Nicht berechenbar ist nicht kostet nichts": der Anzeige-Endpunkt
-    // lehnt mit diagnosefaehiger Meldung ab, statt eine zu niedrige Betreiber-Zahl
-    // still auszugeben. Reine Anzeige - kein Gate liest diese Route.
     if (elevenLabsCents === null) {
       return res.status(HTTP_SERVER_ERROR).json({
         error:
@@ -191,15 +96,6 @@ export function makeBillingRoutes({
     });
   });
 
-  // ---- Deckung je Traeger + Herzschlag (KV2-6) ----
-  // Hinter einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese Sicherung gar
-  // nicht gemountet. NICHT tenant-gescopt - dieselbe Naht und Begruendung wie cost-drift
-  // und platform-costs daneben (Plattform-Aggregat ueber alle Tenants). REINE ANZEIGE:
-  // kein Gate, keine Reserve, keine Buchung liest diese Route; sie rechnet dieselbe
-  // Kennzahl wie der Sweep aus DERSELBEN Funktion (G5), nicht aus einer zweiten Formel.
-  // Antwort ist PII- und secret-frei: Traegernamen (Katalog-IDs), Zaehler, Prozente, die
-  // gerenderte Zeile und die Befund-Codes. Keine Call-ID, keine Tenant-Kennung, keine
-  // Rufnummer, kein Alarm-Empfaenger.
   operator.get("/api/billing/kosten-deckung", (req, res) => {
     res.json(kostenBuchBericht({
       state: store.load(), billing: config.billing, nowMs: Date.now(),
@@ -207,20 +103,14 @@ export function makeBillingRoutes({
     }));
   });
 
-  // ---- Stripe-Rueckkehr nach der Karten-Erfassung, Gegenstueck zu setup-checkout ----
-  // Hinter `internalOnly` (AUTH-P7, s. Kopfkommentar). tenant-scoped (requireTenant ->
-  // fail-closed 403 bei TENANT_REJECT). Audit-Zeilen tragen NUR tenant, NIE session_id
-  // (Regel 4/W9) - unveraendert seit AUTH-P5.
   router.get("/api/billing/checkout-return", internalOnly, async (req, res) => {
     if (!requirePaymentEnabled(res, config)) return;
-    const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
+    const tenant = requireTenant(req, res);
     if (!tenant) return;
     const sessionId = req.query.session_id;
     if (!sessionId || typeof sessionId !== "string")
       return res.status(400).json({ error: "session_id ist Pflicht" });
 
-    // Karte fail-closed an den eigenen Customer binden (geteilte Customer-Match-
-    // Invariante, G5: identisch zum Self-Service-Pfad). Mismatch -> 403, kein Store.
     const { ok } = await bindCardFromSession({ store, billing, tenant, sessionId });
     if (!ok) {
       audit("billing_card_mismatch", req, `tenant=${tenant}`);
