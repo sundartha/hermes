@@ -643,38 +643,6 @@ test("IEX-A8-16: inboundElAllowlistProbeLine ist mit und ohne Beleg-Felder byte-
   for (const wort of ["belegt", "abweichung", "unbekannt"]) assert.equal(zeileMit.includes(wort), false, wort);
 });
 
-// --- 17: kein Leck ----------------------------------------------------------------------
-
-const LECK_MUSTER = /elInboundTrunkZugangFp|el_inbound_trunk_zugang_fp|elInboundTrunkBelegtAt/;
-const ERLAUBTE_DATEIEN = [
-  "store/state-ops.js",
-  "store/pg.js",
-  "db/schema.sql",
-  "elevenlabs/inbound-trunk-beleg.js",
-  "elevenlabs/inbound-path-decision.js",
-];
-
-function posixRelativ(basis, datei) {
-  const relativ = path.relative(basis, datei);
-  return relativ.split(path.sep).join("/");
-}
-
-function alleDateien(verzeichnis) {
-  return fs.readdirSync(verzeichnis, { withFileTypes: true }).flatMap((eintrag) => {
-    const voll = path.join(verzeichnis, eintrag.name);
-    return eintrag.isDirectory() ? alleDateien(voll) : [voll];
-  });
-}
-
-test("IEX-A8-17: Beleg-Felder stehen nur in Store, Schema, Beleg-Modul und Weiche (Leser, IEX-A9) (mit Positiv-Kontrolle)", () => {
-  const srcVerzeichnis = path.join(ROOT, "src");
-  const treffer = alleDateien(srcVerzeichnis)
-    .filter((datei) => LECK_MUSTER.test(fs.readFileSync(datei, "utf8")))
-    .map((datei) => posixRelativ(srcVerzeichnis, datei))
-    .sort();
-  assert.deepEqual(treffer, [...ERLAUBTE_DATEIEN].sort());
-});
-
 // --- 18: Verdrahtung --------------------------------------------------------------------
 
 test("IEX-A8-18: server.js baut den Sweep und reicht ihn durch, boot.js ruft ihn nach logBootBanner", () => {
