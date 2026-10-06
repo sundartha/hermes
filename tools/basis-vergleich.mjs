@@ -12,6 +12,7 @@ import {
   lesestellenSchluessel,
   quelltextLesestellen,
 } from "./eslint-rules/kein-quelltext-als-text.js";
+import { instructionFindings, rootFindings } from "./anweisungen-befunde.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const NODE_BIN_DIR = join(REPO_ROOT, "node_modules/.bin");
@@ -283,6 +284,8 @@ const TOOLS = {
   semgrep: { findings: semgrepFindings, version: semgrepVersion, path: keyPart(1) },
   "quelltext-als-text": { findings: textReadingFindings, path: pfadAusSchluessel },
   lessons: { findings: lessonsFindings, path: pfadAusSchluessel },
+  anweisungen: { findings: instructionFindings, path: pfadAusSchluessel },
+  wurzel: { findings: rootFindings, path: pfadAusSchluessel },
 };
 
 function baselineFile(toolName) {

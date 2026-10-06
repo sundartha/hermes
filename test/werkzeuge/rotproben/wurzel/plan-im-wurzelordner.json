@@ -1,0 +1,10 @@
+{
+  "titel": "Neuer Plan im Wurzelordner",
+  "dateien": {
+    "PLAN-NEU.md": [
+      "# Plan",
+      "- Schritt eins"
+    ]
+  },
+  "erwartet": "neue Befunde von wurzel"
+}

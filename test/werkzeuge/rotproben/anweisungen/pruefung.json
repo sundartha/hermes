@@ -1,0 +1,36 @@
+{
+  "titel": "Anweisungen nur streichen (CLAUDE.md, AGENTS.md, .claude/rules/)",
+  "pfade": [
+    "tools/basis/anweisungen.json",
+    "tools/basis-vergleich.mjs",
+    "tools/anweisungen-befunde.mjs"
+  ],
+  "treffer": {
+    "befehl": [
+      "node",
+      "{wurzel}/tools/basis-vergleich.mjs",
+      "anweisungen"
+    ],
+    "zaehlen": "zahlen",
+    "vor": [
+      " neue Befunde",
+      " bekannte"
+    ]
+  },
+  "ausnahmen": {
+    "bezeichnung": "Eingefrorene Zeilen der Anweisungsdateien und Fachordner ohne eigene Regeln",
+    "datei": "tools/basis/anweisungen.json",
+    "zaehlen": "anzahl"
+  },
+  "probe": {
+    "mitnehmen": [
+      "CLAUDE.md",
+      "tools/basis/anweisungen.json"
+    ],
+    "befehl": [
+      "node",
+      "{wurzel}/tools/basis-vergleich.mjs",
+      "anweisungen"
+    ]
+  }
+}

@@ -19,6 +19,8 @@ const OLD_FINDING_LISTS = new Map([
   ["tools/basis/semgrep.json", "befunde"],
   ["tools/basis/quelltext-als-text.json", "befunde"],
   ["tools/basis/lessons.json", "befunde"],
+  ["tools/basis/anweisungen.json", "befunde"],
+  ["tools/basis/wurzel.json", "befunde"],
   ["tools/basis/lieferkette-ausnahmen.json", WHOLE_FILE],
   ["tools/basis/katalog-ohne-test.txt", WHOLE_FILE],
 ]);

@@ -50,7 +50,7 @@ const WORKFLOWS = {
   redProbes: { paket: 20, datei: "rotproben.yml" },
   cleanup: { paket: 30, datei: "aufraeumen.yml" },
   evaluation: { paket: 30, datei: "auswertung.yml" },
-  instructions: { paket: 35, datei: "anweisungstexte.yml" },
+  instructions: { paket: 35, datei: "statische-pruefung.yml" },
 };
 
 function readJson(path) {
