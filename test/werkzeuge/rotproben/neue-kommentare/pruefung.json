@@ -1,0 +1,20 @@
+{
+  "titel": "Keine neuen Kommentare",
+  "pfade": [
+    "tools/neue-kommentare.mjs",
+    "tools/pr-aenderungen.mjs",
+    "tools/kommentare-yaml-shell.mjs",
+    "tools/eslint-rules/"
+  ],
+  "probe": {
+    "mitnehmen": [
+      "eslint.config.js"
+    ],
+    "befehl": [
+      "node",
+      "{wurzel}/tools/neue-kommentare.mjs",
+      "--basis",
+      "HEAD~1"
+    ]
+  }
+}

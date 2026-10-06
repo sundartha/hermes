@@ -1,0 +1,21 @@
+{
+  "titel": "Neuer Kommentar, dessen Schlüssel im selben PR eingefroren wird",
+  "vorher": {
+    "tools/basis/kommentare.json": [
+      "{ \"befunde\": [] }"
+    ],
+    "src/rotprobe.js": [
+      "export const wert = true;"
+    ]
+  },
+  "dateien": {
+    "tools/basis/kommentare.json": [
+      "{ \"befunde\": [\"src/rotprobe.js|b7da2fc50942e8e5\"] }"
+    ],
+    "src/rotprobe.js": [
+      "// Begründung, die eingefroren werden soll",
+      "export const wert = true;"
+    ]
+  },
+  "erwartet": "src/rotprobe.js:1 neuer Kommentar"
+}
