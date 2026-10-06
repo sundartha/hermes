@@ -1,0 +1,9 @@
+{
+  "titel": "Kommentar am Ende einer Codezeile",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export const wert = true; // Begründung"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/keine-kommentare\""
+}
