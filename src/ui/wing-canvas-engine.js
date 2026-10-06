@@ -1,26 +1,7 @@
-// Diese Datei existiert zweimal byte-identisch: design-system/components/brand/
-// als Authoring-Quelle und src/ui/ als Laufzeit-Kopie (src/ importiert NICHT aus
-// design-system/, siehe wing-image-data.js). Ein Sync-Test
-// (test/mcp-ui-wing-canvas-sync.test.js) erzwingt die Gleichheit - bei einer
-// Aenderung IMMER beide Orte pflegen.
-//
-// Hermes-Fluegel als deformierbares Canvas2D-Dreiecksnetz (Portierung aus einem
-// Prototyp, Mathe 1:1 aus apps/hermes-animation-lab/src/wing/{HermesWing.ts,
-// deform.ts,motionState.ts,presets.ts}). Kein Pixi/GSAP/CDN, self-contained IIFE,
-// globaler Einstieg window.HermesWingCanvas.mount(host, opts). Status-Timelines
-// (idle/connecting/working/success/error) + Mini-Timeline-Runtime (GSAP-Ersatz)
-// wie im Spike; zusaetzlich Frame-Cap, Visibility-Gating, Terminal-Stop,
-// reduced-motion-Fallback und ein optionaler Gold-Post-Tint (Default aus, siehe
-// GOLD_ENABLED).
-//
-// Physik (Konstanten, smoothstep/buildWeights/deform, restState, classicCycle/
-// olympianCycle, Status-Timelines) dupliziert aus wing-engine.js (bewusst,
-// self-contained-Zwang) - Begruendung/Sync-Pflicht: README.md ICONOGRAPHY.
 (function () {
   "use strict";
-  if (window.HermesWingCanvas) return; // Idempotenz falls das Skript zweimal injiziert wird (Muster wing-engine.js)
+  if (window.HermesWingCanvas) return;
 
-  // ---- Geometrie / Gains (aus HermesWing.ts + deform.ts) ----
   var WING_BBOX = { minX: 97, maxX: 404, minY: 21, maxY: 455 };
   var WING_CENTER_X = (WING_BBOX.minX + WING_BBOX.maxX) / 2;
   var WING_CENTER_Y = (WING_BBOX.minY + WING_BBOX.maxY) / 2;
@@ -33,27 +14,24 @@
       ROOT_ROT_GAIN = 0.22, COMPRESS_GAIN = 0.28, MIN_COMPRESS_FACTOR = 0.55,
       NORMALIZE_HEADROOM = 0.85, WEIGHT_EXPONENT = 1.7, TIP_BAND_START = 0.45;
 
-  // 1px-Overlap-Ausdehnung pro Dreieck gegen sichtbare Naht-Kanten (Seams).
   var SEAM_PAD = 0.75;
-  // Einschwingzeit der idle-Timeline (aus dem Ruhezustand in den Drift).
   var SETTLE = 0.3;
 
-  // ---- Produktionskonstanten (gemessene Werte) ----
   var HERMES_GOLD = "#e6be5c";
-  var GOLD_ENABLED = false; // bewusst deaktiviert auf Quell-Ebene
+  var GOLD_ENABLED = false;
   var GOLD_STRENGTH = 0.35;
   var GOLD_PULSE_GAIN = 0.25;
-  var FPS_CAP_DEFAULT = 30; // Cap 30 traegt bequem
-  var GRID_FINE = { x: 16, y: 24 }; // 112px median 0.40ms
-  var GRID_COARSE = { x: 8, y: 12 }; // 86px median 0.10ms
-  var COARSE_MAX_SIZE_PX = 96; // Schwelle (86<=96 -> coarse, 112>96 -> fine)
+  var FPS_CAP_DEFAULT = 30;
+  var GRID_FINE = { x: 16, y: 24 };
+  var GRID_COARSE = { x: 8, y: 12 };
+  var COARSE_MAX_SIZE_PX = 96;
   var DPR_CAP = 2;
   var DEFAULT_SIZE_PX = 112;
   var DEFAULT_STATUS = "idle";
   var DEFAULT_PRESET = "classic";
-  var WORKING_LOOP_PAUSE_SEC = 0.12; // benannt statt Magic Number im Spike
-  var TAB_SWITCH_DT_CAP_SEC = 0.1; // benannt statt Magic Number im Spike
-  var INTERSECTION_THRESHOLD = 0.02; // ported aus wing-engine.js
+  var WORKING_LOOP_PAUSE_SEC = 0.12;
+  var TAB_SWITCH_DT_CAP_SEC = 0.1;
+  var INTERSECTION_THRESHOLD = 0.02;
   var TERMINAL_WING_STATUSES = { success: true, error: true };
 
   function smoothstep(e0, e1, x) {
@@ -93,26 +71,24 @@
     }
   }
 
-  // ---- Motion-State (aus motionState.ts) ----
   function restState() {
     return { beat: 0, flap: 0, bend: 0, compression: 0, tipLag: 0, lift: 0,
              rootRotation: 0, intensity: 1, speed: 1 };
   }
   var REST_CHANNELS = { flap: 0, bend: 0, compression: 0, tipLag: 0, lift: 0 };
 
-  // ---- Easings (GSAP-Ersatz, nur was gebraucht wird) ----
   var POWER_EXP = { power1: 2, power2: 3, power3: 4, power4: 5 };
   function powerEase(exp, mode) {
     if (mode === "in") return function (p) { return Math.pow(p, exp); };
     if (mode === "inOut") return function (p) {
       return p < 0.5 ? Math.pow(2 * p, exp) / 2 : 1 - Math.pow(2 * (1 - p), exp) / 2;
     };
-    return function (p) { return 1 - Math.pow(1 - p, exp); }; // out (default)
+    return function (p) { return 1 - Math.pow(1 - p, exp); };
   }
   function sineEase(mode) {
     if (mode === "in") return function (p) { return 1 - Math.cos((p * Math.PI) / 2); };
     if (mode === "inOut") return function (p) { return -(Math.cos(Math.PI * p) - 1) / 2; };
-    return function (p) { return Math.sin((p * Math.PI) / 2); }; // out
+    return function (p) { return Math.sin((p * Math.PI) / 2); };
   }
   function elasticOut(amplitude, period) {
     var p1 = amplitude >= 1 ? amplitude : 1;
@@ -136,13 +112,8 @@
     return function (p) { return p; };
   }
 
-  // ---- Mini-Timeline-Runtime (GSAP-Ersatz) ----
-  // Sequenzielle .to()/.set()-Steps mit duration/ease/repeat/yoyo/repeatDelay,
-  // Position-Offsets ("<", "-=x", "+=x", absolut) und timeScale. Werte werden
-  // pro Tween LAZY beim ersten Aktivwerden gecaptured (wie GSAP) -> weiche
-  // Uebergaenge aus der jeweils vorigen Pose.
   var CONTROL_KEYS = { duration: 1, ease: 1, repeat: 1, yoyo: 1, repeatDelay: 1 };
-  var DEFAULT_DURATION = 0.5; // GSAP-Default fuer .to ohne duration
+  var DEFAULT_DURATION = 0.5;
   function extractProps(vars) {
     var props = [];
     for (var k in vars) if (!CONTROL_KEYS[k]) props.push({ name: k, end: vars[k] });
@@ -151,8 +122,8 @@
   function Timeline(opts) {
     opts = opts || {};
     this.tweens = [];
-    this.cursor = 0;      // Ende der Sequenz (Default-Anhaengepunkt)
-    this.prevStart = 0;   // Startzeit des zuletzt hinzugefuegten Tweens ("<")
+    this.cursor = 0;
+    this.prevStart = 0;
     this.time = 0;
     this.ts = 1;
     this.paused = true;
@@ -195,7 +166,7 @@
     var d = 0;
     for (var i = 0; i < this.tweens.length; i++) {
       var t = this.tweens[i];
-      if (t.repeat === 0) d = Math.max(d, t.start + t.duration); // endliche Tweens
+      if (t.repeat === 0) d = Math.max(d, t.start + t.duration);
     }
     this.tweens.sort(function (a, b) { return a.start - b.start; });
     this._iterDur = d;
@@ -219,7 +190,7 @@
     var iter = Math.floor(local / period);
     if (t.repeat > 0 && iter > t.repeat) iter = t.repeat;
     var tin = local - iter * period;
-    if (tin > t.duration) tin = t.duration; // in repeatDelay: Endpose halten
+    if (tin > t.duration) tin = t.duration;
     var p = Math.min(1, Math.max(0, tin / t.duration));
     if (t.yoyo && iter % 2 === 1) p = 1 - p;
     return p;
@@ -234,7 +205,7 @@
       var iter = Math.floor(this.time / period);
       if (iter !== this._curIter) { this._curIter = iter; this._resetCaptures(); }
       lt = this.time - iter * period;
-      if (lt > dur) lt = dur; // in repeatDelay: Endpose halten
+      if (lt > dur) lt = dur;
     }
     this._apply(lt);
   };
@@ -242,7 +213,7 @@
     for (var i = 0; i < this.tweens.length; i++) {
       var t = this.tweens[i], local = lt - t.start;
       if (local < 0) continue;
-      if (t.duration === 0) { // .set: sofort Endwerte
+      if (t.duration === 0) {
         for (var j = 0; j < t.props.length; j++) t.target[t.props[j].name] = t.props[j].end;
         continue;
       }
@@ -260,7 +231,6 @@
   };
   function timeline(opts) { return new Timeline(opts); }
 
-  // ---- Presets (working-Loops, aus presets.ts) ----
   function classicCycle(state, pause) {
     return timeline({ repeat: -1, repeatDelay: pause })
       .set(state, { beat: 0, flap: 0, bend: 0, compression: 0, tipLag: 0, lift: 0 })
@@ -284,7 +254,6 @@
       .to(state, { beat: 0, flap: 0, bend: 0, compression: 0, tipLag: 0, lift: 0, duration: 0.28, ease: "sine.inOut" });
   }
 
-  // ---- Status-Timelines (aus status.ts) ----
   function buildIdle(state) {
     return timeline()
       .to(state, { flap: 0, bend: 0, compression: 0, tipLag: 0, lift: 0, duration: SETTLE, ease: "power2.out" })
@@ -313,15 +282,10 @@
       .to(state, { flap: -0.16, bend: 0.12, compression: 0.08, lift: -0.18, duration: 0.25, ease: "power2.out" });
   }
 
-  // ---- Canvas2D-Triangle-Texture-Mapping ----
-  // Affines Mapping Quell-Dreieck (Textur-Pixel) -> Ziel-Dreieck (Screen) via
-  // clip()+setTransform()+drawImage(). Clip-Region wird leicht nach aussen
-  // gedehnt (SEAM_PAD), damit Nachbar-Texel die Naht ueberdecken.
   function pushOut(x, y, cx, cy) {
     var dx = x - cx, dy = y - cy, len = Math.hypot(dx, dy) || 1;
     return [x + (dx / len) * SEAM_PAD, y + (dy / len) * SEAM_PAD];
   }
-  // blit={ctx,img,dpr} (invariant je Frame); dst/src=[x0,y0,x1,y1,x2,y2] (F1).
   function drawTriangle(blit, dst, src) {
     var ctx = blit.ctx, img = blit.img, dpr = blit.dpr;
     var [dx0, dy0, dx1, dy1, dx2, dy2] = dst;
@@ -339,7 +303,7 @@
     var p0 = pushOut(dx0, dy0, cx, cy), p1 = pushOut(dx1, dy1, cx, cy), p2 = pushOut(dx2, dy2, cx, cy);
 
     ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // Clip in logischen Koordinaten
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.beginPath();
     ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.closePath();
     ctx.clip();
@@ -348,7 +312,6 @@
     ctx.restore();
   }
 
-  // ---- Produktionshelfer ----
   function hexToRgb(hex) {
     var bigint = parseInt(hex.replace("#", ""), 16);
     var r = (bigint >> 16) & 0xff;
@@ -356,14 +319,12 @@
     var b = bigint & 0xff;
     return r + "," + g + "," + b;
   }
-  var GOLD_RGB = hexToRgb(HERMES_GOLD); // vermeidet "230,190,92" als Magic Numbers
+  var GOLD_RGB = hexToRgb(HERMES_GOLD);
 
   function defaultGrid(size) {
     return size <= COARSE_MAX_SIZE_PX ? GRID_COARSE : GRID_FINE;
   }
 
-  // Baut Gitter/Gewichte NACH Bild-Load - ausgelagert, damit mount() nur
-  // Verdrahtung ist (G30/G34).
   function buildDeformContext(img, grid) {
     var imgW = img.naturalWidth, imgH = img.naturalHeight;
     var cols = grid.x + 1, rows = grid.y + 1, vcount = cols * rows;
@@ -389,7 +350,6 @@
     return Math.min(1, Math.max(0, GOLD_STRENGTH + GOLD_PULSE_GAIN * pulse));
   }
 
-  // ---- eine Wing-Instanz ----
   function mount(host, opts) {
     opts = opts || {};
     var size = opts.size || DEFAULT_SIZE_PX;
@@ -401,7 +361,6 @@
     var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     var ambient = !reduce;
 
-    // Canvas SOFORT dimensionieren (kein reportSize-Jank), unabhaengig vom Bild-Load.
     var dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP);
     var canvas = document.createElement("canvas");
     canvas.width = Math.round(size * dpr);
@@ -477,12 +436,12 @@
       var dt = (now - last) / 1000; last = now;
       if (dt > TAB_SWITCH_DT_CAP_SEC) dt = TAB_SWITCH_DT_CAP_SEC;
       acc += dt;
-      if (acc < frameBudgetSec) { raf = requestAnimationFrame(frame); return; } // Frame-Cap: uebersprungen
+      if (acc < frameBudgetSec) { raf = requestAnimationFrame(frame); return; }
       if (tl) tl.step(acc);
       acc = 0;
       computeScreen();
       render();
-      if (isTerminalDone()) { running = false; raf = 0; stopped = true; return; } // Terminal-Stop: Standbild
+      if (isTerminalDone()) { running = false; raf = 0; stopped = true; return; }
       raf = requestAnimationFrame(frame);
     }
     function startLoop() {
@@ -517,12 +476,12 @@
       else tl = buildIdle(state);
       tl.timeScale(state.speed);
       tl.play(0);
-      stopped = false; // erneutes setStatus startet die Schleife wieder (Spec-Pflicht)
+      stopped = false;
       if (reduce) { applyReducedPose(); return; }
       syncRun();
     }
     function requestStatus(next) {
-      status = next; // damit img.onload den aktuellen Status sieht, falls Bild noch laedt
+      status = next;
       if (dctx) applyStatus(next);
     }
 
