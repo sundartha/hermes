@@ -601,3 +601,30 @@ test("ausmisten-testschutz: ein Fehler beim Abruf des PRs ergibt „gilt nicht�
   assert.equal(ergebnis.status, EXIT_GESPERRT, ergebnis.ausgabe);
   assert.match(ergebnis.ausgabe, /die Ausnahme „Tests ausmisten“ gilt nicht: .*HTTP 403/);
 });
+
+test("ausmisten-testschutz: ein MCP-Methodenname wie tools/call in einer Hilfe sperrt nichts", async (context) => {
+  const hilfe = "test/hilfe/mcp.js";
+  const nutzer = "test/post/mcp.test.js";
+  const dateien = {
+    [hilfe]: 'export const methode = "tools/call";\n',
+    [nutzer]: `${MIT_QUELLE}import { methode } from "../hilfe/mcp.js";\nvoid methode;\n`,
+  };
+  const ergebnis = await pruefe(context, { dateien, branch: { weg: [nutzer] } });
+  assert.equal(ergebnis.status, EXIT_FREI, ergebnis.ausgabe);
+});
+
+test("ausmisten-testschutz: ein Werkzeugpfad mit Endung als Literal sperrt", async (context) => {
+  const nennt = "test/post/auftrag.test.js";
+  const dateien = { [nennt]: `${MIT_QUELLE}const ziel = "../tools/auftrag.mjs";\nvoid ziel;\n` };
+  const ergebnis = await pruefe(context, { dateien, branch: { weg: [nennt] } });
+  erwarteGesperrt(ergebnis, `${nennt}: prüft tools/ oder scripts/ (${nennt})`);
+});
+
+test("ausmisten-testschutz: ein Werkzeugpfad nur im Kommentar sperrt nichts", async (context) => {
+  const kommentiert = "test/post/kommentiert.test.js";
+  const dateien = {
+    [kommentiert]: `${MIT_QUELLE}// vergleichbar mit 'tools/auftrag.mjs'\nvoid 0;\n`,
+  };
+  const ergebnis = await pruefe(context, { dateien, branch: { weg: [kommentiert] } });
+  assert.equal(ergebnis.status, EXIT_FREI, ergebnis.ausgabe);
+});
