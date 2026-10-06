@@ -6,6 +6,7 @@ import { lauf } from "./auftrag/lauf.mjs";
 import { aufraeumen, phase } from "./auftrag/phase.mjs";
 import { PRUEFER_OPTIONEN, pruefer } from "./auftrag/pruefer-befehle.mjs";
 import { reparatur } from "./auftrag/reparatur.mjs";
+import { system } from "./auftrag/system.mjs";
 
 const EXIT_ABBRUCH = 1;
 const EXIT_AUFRUF = 2;
@@ -21,6 +22,7 @@ const AUFRUF = [
   "        node tools/auftrag.mjs pruefer nachstellen --ergebnis <ordner> --pr <ordner> --basis <ordner> --aus <ordner>",
   "        node tools/auftrag.mjs pruefer entscheiden --ergebnis <ordner> [--nachstellung <ordner>] [--head <sha>]",
   "        node tools/auftrag.mjs reparatur --ergebnis <ordner> --nachstellung <ordner>",
+  "        node tools/auftrag.mjs system",
 ].join("\n");
 const OPTIONEN = [
   "rolle",
@@ -56,6 +58,7 @@ const BEFEHLE = {
     optionen: ["ergebnis", "nachstellung"],
     fuehreAus: (keine, root, optionen) => reparatur(optionen, root),
   },
+  system: { argumente: 0, fuehreAus: () => system() },
 };
 
 function gelesen() {
