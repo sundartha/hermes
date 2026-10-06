@@ -1,13 +1,3 @@
-// Stripe-Abgleich-Sweep (billing/stripe-reconcile.js): heilt verlorene Stripe-Webhooks
-// (Render-Free-Plan-Befund 2026-08-13: Events nach Ablauf aller Stripe-Retries endgueltig
-// verloren). Reine In-Process-Units mit aufzeichnenden Fake-Seams, kein Netz, kein Spawn
-// (F.I.R.S.T.) - Muster 312k-p4-contract-end-cleanup.test.js (fakeStore/fakeProvisioner/
-// fakeAudit) + p3-payment-webhook.test.js (applyStripeWebhook-fakeDeps).
-//
-// WICHTIG (Ordnungswache): applyStripeWebhookSerialized haelt lastAppliedByKey ueber die
-// gesamte Prozesslaufzeit (bewusst NIE geloescht, s. webhook.js). Jeder Test nutzt deshalb
-// eine EIGENE subscriptionId (+ eigenen Tenant), damit kein Test den Anker eines anderen
-// erbt - dieselbe Isolation, die stripe-webhook-race.test.js pro Fall verwendet.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -20,8 +10,6 @@ import { NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { fakeProvisioner } from "./helpers.js";
 
 const NOW_MS = 1765000000000;
-
-// ---- geteilte Fakes (Muster 312k-p4-contract-end-cleanup.test.js) --------------------
 
 const fakeAudit = () => ({
   records: [],
@@ -36,9 +24,6 @@ function fakeLogger() {
   return { lines, log: (m) => lines.push(String(m)), warn: (m) => lines.push(String(m)) };
 }
 
-// EINE mutable state-Referenz: ein Tenant mit gespeichertem Abo + aktiver Telnyx-Nummer.
-// cancelAtPeriodEnd=true als Default (der Kuendigungsfall ist der Anlass des Sweeps);
-// der Zahlungsausfall-Fall setzt es explizit auf false.
 function seedState({ tenantId, subscriptionId, cancelAtPeriodEnd = true, suspendedAt = null }) {
   return {
     tenants: [
@@ -47,7 +32,7 @@ function seedState({ tenantId, subscriptionId, cancelAtPeriodEnd = true, suspend
         stripeSubscriptionId: subscriptionId,
         stripeCancelAtPeriodEnd: cancelAtPeriodEnd,
         suspendedAt,
-        idpSubject: null, // kein WorkOS-Fall in diesen Tests (deckt 312k-p4 ab)
+        idpSubject: null,
       },
     ],
     numbers: [
@@ -65,9 +50,6 @@ function seedState({ tenantId, subscriptionId, cancelAtPeriodEnd = true, suspend
   };
 }
 
-// Store-Fassade ueber der Kontraktflaeche, die der Sweep (load) + der DELETED-Zweig von
-// applyStripeWebhook (tenantSubscription/setSuspendedAtIfAbsent) + attemptContractEnd-
-// Cleanup (withStoreLock/save/tenantIdpSubject/setContractEndCleanupPending) brauchen.
 function fakeStore(s) {
   const findTenant = (tenantId) => s.tenants.find((t) => t.id === tenantId);
   return {
@@ -78,9 +60,6 @@ function fakeStore(s) {
       subscriptionId: findTenant(tenantId)?.stripeSubscriptionId ?? null,
       cancelAtPeriodEnd: findTenant(tenantId)?.stripeCancelAtPeriodEnd ?? false,
     }),
-    // CL1-B2: der DELETED-Zweig entwertet die gespeicherte Abo-Referenz - dieser Sweep
-    // treibt genau diesen Zweig ueber den echten Webhook-Pfad, die Schreibkante muss
-    // hier also existieren (sonst TypeError statt No-Op).
     setTenantSubscription: (tenantId, patch) => {
       const tenant = findTenant(tenantId);
       if (tenant && patch.subscriptionId !== undefined) tenant.stripeSubscriptionId = patch.subscriptionId;
@@ -98,13 +77,10 @@ function fakeStore(s) {
     },
     findTenantBySubscription: (subId) =>
       s.tenants.find((t) => t.stripeSubscriptionId === subId) ?? null,
-    // FW1-A: Existenz-Gate der Tenant-Aufloesung - ueber den echten State geprueft.
     tenantExists: (tenantId) => Boolean(findTenant(tenantId)),
   };
 }
 
-// Aufzeichnende Webhook-Deps um den fakeStore herum - dieselbe Kontraktflaeche, die
-// wireWebLogin an den Sweep reicht (webhookDeps).
 function makeDeps(s, { billingStatus, retrieveError } = {}) {
   const store = fakeStore(s);
   const calls = { setStatus: [], invalidate: [], retrieve: [] };
@@ -142,8 +118,6 @@ function makeDeps(s, { billingStatus, retrieveError } = {}) {
   };
 }
 
-// ---- Selektor (reiner Kern) ----------------------------------------------------------
-
 test("tenantsForStripeReconcile: nur Tenants mit Abo und ohne suspendedAt", () => {
   const s = {
     tenants: [
@@ -160,8 +134,6 @@ test("tenantsForStripeReconcile: nur Tenants mit Abo und ohne suspendedAt", () =
   );
 });
 
-// ---- Synthetisches Event (Vertrag mit webhook.js) ------------------------------------
-
 test("syntheticSubscriptionDeletedEvent: DELETED-Typ, Sekunden-created, doppelter Anker (sub-id + tenant_ref)", () => {
   const event = syntheticSubscriptionDeletedEvent({
     tenantId: "t_x",
@@ -174,8 +146,6 @@ test("syntheticSubscriptionDeletedEvent: DELETED-Typ, Sekunden-created, doppelte
   assert.equal(event.data.object.metadata.tenant_ref, "t_x");
   assert.ok(event.id.length > 0, "eindeutige Event-id (Dedup pro Lauf)");
 });
-
-// ---- Heilung: verlorenes DELETED nach Kuendigung -------------------------------------
 
 test("Heilung Kuendigungsfall: Stripe=canceled + cancelAtPeriodEnd -> Suspend + Session-Kill + Telnyx-Release ueber den ECHTEN Webhook-Pfad", async () => {
   const s = seedState({ tenantId: "t_heal", subscriptionId: "sub_heal", cancelAtPeriodEnd: true });
@@ -203,8 +173,6 @@ test("Idempotenz: der geheilte Tenant faellt aus dem Selektor - zweiter Lauf ist
   assert.deepEqual(deps.prov.log, ["release:ext_t_idem"], "kein zweiter Provider-DELETE");
 });
 
-// ---- Heilung: verlorenes DELETED nach Zahlungsausfall (byte-identische Webhook-Regel) --
-
 test("Zahlungsausfall-Fall: Stripe=canceled OHNE cancelAtPeriodEnd -> Suspend, aber KEIN Release/Aufraeumen (dieselbe Regel wie der Webhook)", async () => {
   const s = seedState({ tenantId: "t_fail", subscriptionId: "sub_fail", cancelAtPeriodEnd: false });
   const deps = makeDeps(s, { billingStatus: "canceled" });
@@ -216,8 +184,6 @@ test("Zahlungsausfall-Fall: Stripe=canceled OHNE cancelAtPeriodEnd -> Suspend, a
   assert.equal(s.numbers[0].status, NUMBER_STATUS.ACTIVE, "Nummer bleibt (kein Kuendigungs-Aufraeumen)");
   assert.deepEqual(deps.prov.log, [], "kein Provider-DELETE");
 });
-
-// ---- Fail-closed: nichts heilen, was Stripe nicht eindeutig beendet meldet -----------
 
 test("Fail-closed: status=active -> keine Mutation", async () => {
   const s = seedState({ tenantId: "t_act", subscriptionId: "sub_act" });

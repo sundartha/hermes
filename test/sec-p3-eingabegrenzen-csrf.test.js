@@ -1,13 +1,3 @@
-// SEC-P3 - Eingabegrenzen (agentName) + Herkunftspruefung (CSRF) auf den
-// zustandsaendernden Self-Service-Routen. Zwei Ebenen in EINER Datei, weil beide
-// Sicherungen denselben Schreibweg schuetzen:
-//   * reine Einheits-Faelle fuer die beiden Praedikate (crossOriginRequest,
-//     promptLineRejection) - Grenze und Grenze+1, Gross-/Kleinschreibung, Nicht-Strings;
-//   * Kompositions-Integrationsfaelle nach dem Muster f2-self-service-private-number /
-//     312k-p3-self-service-cancel: reines pglite (offline, F.I.R.S.T.), KEIN
-//     Server-Spawn, echte HTTP-Route, echter Host-Header, echter Store-Zustand.
-// Die Abnahme verlangt bei jeder Ablehnung BEIDES: den Status UND den unveraenderten
-// Store - ein 400/403, hinter dem trotzdem geschrieben wurde, waere kein Schutz.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -37,8 +27,6 @@ const NON_STRING_AGENT_NAME = 123;
 
 const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
-// Spion ueber BEIDE Geld-Wege, die unter dem Praefix liegen: ein fremder Origin darf
-// weder eine Kuendigung vormerken noch ein Abo anlegen (Nachweis "kein Zustandswechsel").
 function makeBillingSpy() {
   const calls = [];
   return {
@@ -60,8 +48,6 @@ function makeBillingSpy() {
   };
 }
 
-// Der Tenant-Datensatz, direkt am rohen Store-Zustand aktiviert (registerTenant legt ihn
-// nur an, aktiv wird er erst hier) - eigene Funktion statt Demeter-Kette im Aufrufer (G36).
 function activateTenant(store) {
   const rawState = store.load();
   ops.registerTenant(rawState, TENANT, { firstName: "Kunde", lastName: "P3" });
@@ -160,9 +146,6 @@ function request(method, url, { cookie, body, origin } = {}) {
 const postSettings = (ctx, body, opts = {}) =>
   request("POST", `${ctx.base}/api/self-service/settings`, { cookie: ctx.cookie, body, ...opts });
 
-// Die vier zustandsaendernden Routen unter dem geschuetzten Praefix - EINE Quelle fuer
-// den Sperr- und den Durchlass-Fall (G5), damit keine Route in nur einem der beiden
-// Faelle geprueft wird.
 const SCHREIBROUTEN = [
   { path: "/api/self-service/settings", body: { agentName: "Neu" } },
   { path: "/api/self-service/private-number", body: { privateNumber: GUELTIGE_NUMMER } },
@@ -172,8 +155,6 @@ const SCHREIBROUTEN = [
 
 const postRoute = (ctx, route, opts) =>
   request("POST", `${ctx.base}${route.path}`, { cookie: ctx.cookie, body: route.body, ...opts });
-
-// ---- Einheits-Faelle: das Herkunfts-Praedikat -------------------------------------
 
 test("(u1) crossOriginRequest: fehlender/leerer Origin ist KEIN fremder Ursprung", () => {
   assert.equal(crossOriginRequest(undefined, "app.test"), false);
@@ -207,8 +188,6 @@ test("(u7) crossOriginRequest: kein Vergleichsanker (Host fehlt) -> true", () =>
   assert.equal(crossOriginRequest("https://app.test", ""), true);
 });
 
-// ---- Einheits-Faelle: der Deckel fuer prompt-gebundenen Freitext -------------------
-
 test("(u8) promptLineRejection: exakt die Grenze ist erlaubt", () => {
   assert.equal(promptLineRejection("agentName", "x".repeat(TEXT_LIMITS.agentName)), null);
 });
@@ -228,13 +207,9 @@ test("(u11) promptLineRejection: Nicht-Strings bleiben unveraendert erlaubt (Bes
 });
 
 test("(u12) promptLineRejection zaehlt CODEPOINTS, nicht UTF-16-Einheiten", () => {
-  // Emoji sind je 2 UTF-16-Einheiten: eine Code-Unit-Zaehlung wuerde hier faelschlich
-  // ablehnen und damit nicht-lateinische Schrift systematisch benachteiligen.
   const emoji = "\u{1F600}".repeat(TEXT_LIMITS.agentName);
   assert.equal(promptLineRejection("agentName", emoji), null);
 });
-
-// ---- Integration: die Laengengrenze am echten Schreibweg ---------------------------
 
 test("(a1) 20.000 Zeichen agentName -> 400 too_long, Store UNVERAENDERT", async () => {
   const ctx = await setup();
@@ -285,8 +260,6 @@ test("(a4) die 400-Antwort echot den abgelehnten Wert NICHT zurueck", async () =
     await ctx.close();
   }
 });
-
-// ---- Integration: die Herkunftspruefung -------------------------------------------
 
 test("(b1) fremder Origin -> 403 auf ALLEN vier Schreibrouten, kein Zustandswechsel", async () => {
   const ctx = await setup();

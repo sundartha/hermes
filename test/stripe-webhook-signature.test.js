@@ -1,7 +1,3 @@
-// W4 — verifyStripeSignature/interpretStripeEvent: reine Krypto + Event-Interpretation
-// (node:crypto, kein IO/Netz, F.I.R.S.T.). Deckt gueltige Signatur, falscher HMAC,
-// fehlender Header, abgelaufenes Toleranzfenster (>300s) -> fail-closed; das
-// Event-Mapping (activate/suspend/ignore) + die Tenant-Aufloesung ueber metadata.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -16,7 +12,6 @@ const SECRET = "whsec_test_0123456789";
 const NOW = 1_700_000_000;
 const BODY = '{"id":"evt_1","type":"customer.subscription.updated"}';
 
-// Baut einen gueltigen Stripe-Signature-Header fuer (timestamp, body).
 function signHeader(body, secret, ts) {
   const mac = crypto.createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex");
   return `t=${ts},v1=${mac}`;
@@ -50,7 +45,7 @@ test("verifyStripeSignature: fehlender/leerer Header -> false", () => {
 
 test("verifyStripeSignature: abgelaufener Timestamp (>300s) -> false (Replay-Schutz)", () => {
   const oldTs = NOW - 301;
-  const header = signHeader(BODY, SECRET, oldTs); // HMAC korrekt, aber zu alt
+  const header = signHeader(BODY, SECRET, oldTs);
   assert.equal(
     verifyStripeSignature({ rawBody: BODY, signatureHeader: header, secret: SECRET, nowS: NOW }),
     false,

@@ -1,10 +1,3 @@
-// P1 — Single-Origin-Boot-Guard: assertConfig() verweigert den Boot, wenn WEB_DIST_DIR
-// gesetzt ist, der Build (<dir>/index.html) aber fehlt - fail-closed (sichtbarer Boot-
-// Fehler statt stiller 404: ohne index.html faende express.static nichts, jeder
-// Marketing-Request fiele auf 404 durch). Rein-Unit gegen die config-Funktion
-// (kein Server-Spawn, kein pglite). Eigene Testdatei mit SAUBEREM Modul-Scope: config.js
-// haelt fatalConfigErrors modulweit; ein numEnv-polluter (config-failclosed.test.js)
-// wuerde die Gegenprobe (assertConfig() === true) verfaelschen - hier akkumuliert nichts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -15,7 +8,6 @@ import { makeConfigOverrides } from "./helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
 
-// console.error abfangen (Diagnose-Zeilen pruefen), ohne den Testlauf zuzumuellen.
 function captureConsoleError(fn) {
   const lines = [];
   const orig = console.error;
@@ -28,8 +20,6 @@ function captureConsoleError(fn) {
   return lines;
 }
 
-// Pflichtfelder erfuellen (sonst faellt assertConfig aus anderen Gruenden), NUR webDistDir
-// variieren. Restore am Ende.
 const REQUIRED_OK = {
   anthropicApiKey: "x",
   publicUrl: "https://example.test",

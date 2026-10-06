@@ -1,43 +1,3 @@
-// SEC-P4: die Mandanten-Dimension des ElevenLabs-Werkzeug-Tokens, gemessen ueber die
-// ECHTEN HTTP-Routen beider Werkzeug-Webhooks.
-//
-// DER GEMESSENE DEFEKT, zwei Haelften:
-//   (a) Der Ablehnungsgrund verriet die Bindung. Eine ERFUNDENE Gespraechskennung
-//       antwortete "kein_laufender_anruf", die Kennung des Anrufs eines FREMDEN Mandanten
-//       "kanal_nicht_freigegeben" - der Unterschied sagte dem Angreifer, dass sein
-//       Ratetreffer sitzt und der fremde Anruf existiert.
-//   (b) Wichtiger: das Geheimnis im Header ist EIN Wert fuer ALLE Mandanten. Wer ihn hat,
-//       erreicht mit der Kennung eines fremden Anrufs auch dessen Wirkung.
-// (a) allein waere Kosmetik - deshalb misst diese Datei beide Haelften, und die
-// entscheidenden Faelle laufen gegen einen fremden Mandanten, der SELBST faehig ist
-// (eigenes Profil mit allowLookup/allowConsult). Ohne das faehige Opfer misst der Test
-// nur dessen Faehigkeits-Ablehnung und nie die Bindung.
-//
-//   P4-1  Schalter AUS: eine erfundene Kennung und die Kennung eines GEBUNDENEN, aber
-//         nicht faehigen fremden Anrufs sind in Status UND Rumpf ununterscheidbar (die
-//         beiden Antworten gegeneinander verglichen, nicht gegen ein Literal - gemessen
-//         wird die Ununterscheidbarkeit selbst). Genau hier lag der Grund-Defekt: der
-//         abweichende Grund verriet, dass die Bindung gelungen war.
-//   P4-2  Schalter AUS, HEUTIGE Anbieter-Form ({conversation_id, query}, kein
-//         tenant_token) am berechtigten Anruf -> 200. Ohne diesen Fall misst P4-1 eine
-//         tote Route.
-//   P4-3  Schalter AN: Token von Mandant A gegen den Anruf des faehigen Mandanten B ->
-//         404 uniform, Suchdienst 0x, im Log grund=mandant_fremd (nicht
-//         kanal_nicht_freigegeben: der Aufruf scheitert an der BINDUNG, nicht an der
-//         Konfiguration des Opfers)
-//   P4-3b ROTPROBE zu P4-3: der HEUTIGE Zustand (Schalter AUS, gar kein tenant_token -
-//         genau das, was der Anbieter heute schickt) am Anruf desselben faehigen fremden
-//         Mandanten -> 200 + Suchdienst 1x. Das IST die Quer-Mandanten-Reichweite, die
-//         P4-3 schliesst; ohne diese Gegenprobe belegt P4-3 nichts (Lehre
-//         bench-must-reproduce-defect).
-//   P4-4  Positiv-Kontrolle scharf: Token von A gegen A's EIGENEN Anruf -> 200
-//   P4-5  fail-closed scharf: gar kein tenant_token -> 404 uniform
-//   P4-6  Schalter AUS, aber ein VORGELEGTER falscher Wert -> 404 uniform (die additive
-//         Haelfte wirkt sofort, ohne jede Anbieter-Aenderung)
-//   P4-7  dieselben Faelle gegen /webhooks/elevenlabs/consult - beide Webhooks binden
-//         ueber dieselbe eine Funktion
-//   P4-8  die Ableitung selbst (Einheit, ohne Spawn): Algorithmus-Pin, Mandanten-Trennung,
-//         Leerformen, fail-closed-Urteil
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -61,10 +21,6 @@ const TOOL_TOKEN = "sec-p4-plattform-geheim";
 
 const OWN_CALL_ID = "call_p4_eigen";
 const OWN_CONVERSATION_ID = "conv_p4_eigen";
-// Zwei fremde Mandanten, weil die beiden Haelften der Phase VERSCHIEDENE Opfer brauchen:
-// der GESPERRTE misst den vereinheitlichten Ablehnungsgrund (seine Ablehnung kommt aus
-// der Faehigkeit, nicht aus der Bindung), der FAEHIGE die Reichweite selbst (er waere
-// ohne den Riegel wirklich ansprechbar).
 const FOREIGN_TENANT_ID = "tenant_p4_fremd";
 const FOREIGN_CALL_ID = "call_p4_fremd";
 const FOREIGN_CONVERSATION_ID = "conv_p4_fremd";
@@ -77,26 +33,16 @@ const QUERY = "opening hours of the town hall in Bremen";
 const QUESTION = "Darf ich den Termin am Donnerstag zusagen?";
 const FACT_TEXT = "Open Monday to Friday, 8am to 6pm";
 
-// Der Wert, den der Anrufstart dem Agenten des BOOTSTRAP-Tenants mitgibt - hier aus
-// derselben einen Ableitung gerechnet, gegen die der Server prueft. Ein zweiter Nachbau
-// hier wuerde die Ableitung gegen sich selbst testen statt gegen den Server; ihren
-// Algorithmus pinnt P4-8 unabhaengig davon an einem Literal.
 const OWN_TENANT_TOKEN = tenantToolToken({
   secret: TOOL_TOKEN,
   tenantId: BOOTSTRAP_TENANT_ID,
 });
 
-// Der Kanal ist in ALLEN Faellen an - ein Gate, das nur misst, solange die Faehigkeit
-// ohnehin aus ist, misst nichts. Die kurzen Consult-Fristen halten die Faelle, die eine
-// ANGENOMMENE Rueckfrage messen, unter zwei Sekunden (Muster
-// elevenlabs-consult-webhook-guards.test.js).
 const P4_ENV = Object.freeze({
   LOOKUP_ENABLED: "true",
   EXA_API_KEY: "exa-test-key",
   ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN,
   MULTI_TENANT: "true",
-  // Die Log-Schranke unten braucht die greifende Signaturpruefung - mit dem Bypass
-  // antwortet /voice/status 200 und die Schranke misst nichts.
   SKIP_TWILIO_SIGNATURE_CHECK: "false",
   CONSULT_ENABLED: "true",
   ASSISTANT_CONTEXT_ENABLED: "true",
@@ -112,9 +58,6 @@ const SCHARF = Object.freeze({ ELEVENLABS_TENANT_TOKEN_REQUIRED: "true" });
 
 const activeCall = (overrides) => seedCall({ status: "active", maxDurationS: 300, ...overrides });
 
-// Der FAEHIGE fremde Mandant traegt ein eigenes Profil - sonst messen die Bindungs-Faelle
-// nur seine Faehigkeits-Ablehnung und nie die Bindung (das ist der Kern dieser Datei).
-// Der GESPERRTE bekommt bewusst keines und faellt damit auf das fail-closed Default-Profil.
 function p4Seed() {
   return seedState({
     calls: [
@@ -136,8 +79,6 @@ function p4Seed() {
   });
 }
 
-// Attrappe des Suchdienstes: sie ZAEHLT die Aufrufe - nur so laesst sich "der Suchdienst
-// wurde NICHT gerufen" ueberhaupt messen (Lehre b1-messwerkzeug-attrappe).
 async function startExaFake() {
   const requests = [];
   const server = http.createServer((req, res) => {
@@ -182,9 +123,6 @@ const werkzeugAufruf = (srv, pfad, body) =>
     body: JSON.stringify(body),
   });
 
-// Nutzlast in der HEUTIGEN Anbieter-Form je Werkzeug; tenant_token kommt nur dazu, wo ein
-// Fall ihn ausdruecklich vorlegt (undefined faellt bei JSON.stringify heraus, also genau
-// die Form, die der Anbieter heute schickt).
 const lookupBody = (conversationId, tenantToken) => ({
   conversation_id: conversationId,
   query: QUERY,
@@ -199,8 +137,6 @@ const consultBody = (conversationId, tenantToken) => ({
 
 const antwortVon = async (res) => ({ status: res.status, body: await res.json() });
 
-// Log-Schranke (Bestandsmuster): stdout ist eine geordnete Pipe - ist die 403-Zeile der
-// Signatur-Middleware da, ist alles davor auch da.
 async function logSchranke(srv) {
   const res = await fetch(`${srv.localUrl}/voice/status`, { method: "POST" });
   assert.equal(res.status, HTTP_FORBIDDEN, "Log-Schranke: /voice/status ohne Signatur = 403");
@@ -212,16 +148,10 @@ test("SEC-P4-1: erfundene Kennung und GEBUNDENER fremder Anruf sind in Status UN
     const erfunden = await antwortVon(
       await werkzeugAufruf(srv, LOOKUP_PATH, lookupBody(INVENTED_CONVERSATION_ID)),
     );
-    // Dieser Anruf EXISTIERT und die Bindung an ihn gelingt - abgelehnt wird er erst eine
-    // Stufe spaeter (sein Mandant ist nicht freigeschaltet). Vor SEC-P4 sagte genau das
-    // der Ablehnungsgrund.
     const gebunden = await antwortVon(
       await werkzeugAufruf(srv, LOOKUP_PATH, lookupBody(LOCKED_CONVERSATION_ID)),
     );
 
-    // Verglichen werden die ZWEI ANTWORTEN gegeneinander: gemessen ist damit die
-    // Ununterscheidbarkeit selbst, nicht ein Wortlaut, den ein kuenftiger Umbau mit
-    // beiden Faellen gemeinsam verschieben koennte.
     assert.deepEqual(gebunden, erfunden);
     assert.equal(erfunden.status, HTTP_NOT_FOUND);
     assert.equal(exa.requests.length, 0, "keiner der beiden Aufrufe erreicht den Suchdienst");
@@ -250,8 +180,6 @@ test("SEC-P4-3: mit Riegel scheitert der Aufruf fuer Mandant A am Anruf des FAEH
     assert.deepEqual(await res.json(), { error: "kein_laufender_anruf" });
     assert.equal(exa.requests.length, 0, "die Query hat den Server NIE verlassen");
 
-    // Das LOG unterscheidet weiter - ohne diese Diagnose waere der naechste echte
-    // Vorfall nicht mehr aufklaerbar.
     await waitForLog(srv, /\[el-lookup\] abgelehnt grund=mandant_fremd/);
     assert.ok(
       !srv.stdout.includes("grund=kanal_nicht_freigegeben"),
@@ -262,9 +190,6 @@ test("SEC-P4-3: mit Riegel scheitert der Aufruf fuer Mandant A am Anruf des FAEH
 
 test("SEC-P4-3b (ROTPROBE): im HEUTIGEN Zustand ist derselbe fremde Anruf ansprechbar", async () => {
   await withP4Server({}, async ({ srv, exa }) => {
-    // Schalter AUS und gar kein tenant_token - exakt die Nutzlast, die der Anbieter heute
-    // schickt. Der Aufruf traegt nur das eine geteilte Plattform-Geheimnis und die
-    // Kennung eines fremden Anrufs.
     const res = await werkzeugAufruf(srv, LOOKUP_PATH, lookupBody(FOREIGN_CONVERSATION_ID));
     assert.equal(res.status, HTTP_OK, "ohne den Riegel ist der fremde Anruf ansprechbar");
     assert.equal(exa.requests.length, 1, "und der Suchdienst laeuft auf fremde Rechnung");
@@ -336,9 +261,6 @@ test("SEC-P4-7: der Rueckfrage-Webhook bindet ueber dieselbe Funktion - gleiche 
         CONSULT_PATH,
         consultBody(OWN_CONVERSATION_ID, OWN_TENANT_TOKEN),
       );
-      // Die Rueckfrage wird ANGENOMMEN (kein Halter beantwortet sie im Test, sie laeuft
-      // in den gestaffelten Abbruch) - gemessen ist die Bindung, nicht der Ausgang: sie
-      // ist nicht mehr 404, und das Ergebnis-Log nennt den gebundenen Anruf.
       assert.notEqual(res.status, HTTP_NOT_FOUND);
       await waitForLog(srv, new RegExp(`\\[el-consult\\] call=${OWN_CALL_ID} ergebnis=`));
     });
@@ -351,9 +273,6 @@ test("SEC-P4-7: der Rueckfrage-Webhook bindet ueber dieselbe Funktion - gleiche 
   });
 });
 
-// ---- P4-8: die Ableitung selbst, ohne Spawn ------------------------------------------
-// Das Literal pinnt den ALGORITHMUS (HMAC-SHA256 ueber "v1:<tenantId>", hex). Ein Test,
-// der den Sollwert selbst nachrechnete, waere gegen eine geaenderte Ableitung blind.
 const PIN_SECRET = "s";
 const PIN_TENANT = "t";
 const PIN_ANDERER_TENANT = "t2";

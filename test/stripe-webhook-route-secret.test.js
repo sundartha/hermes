@@ -1,11 +1,3 @@
-// PA-15 (PM-10-Guard): beweist, dass die Route (src/routes/stripe-webhook.js) das Stripe-
-// HMAC-Secret aus config.billing.stripeWebhookSecret liest (nicht mehr aus dem Flach-Key).
-// Hermetisch, OHNE applyStripeWebhookSerialized (nutzt den JSON.parse-Zweig als
-// Diskriminator): ein "not-json"-Body signiert mit dem KORREKTEN Blattwert besteht die
-// Signaturpruefung und faellt danach am Parse (400 "bad payload"); signiert mit einem
-// FALSCHEN Secret schlaegt schon die Signaturpruefung fehl (400 "invalid signature" +
-// Audit-Reject, fail-closed). Waere das gelesene Blatt undefined/falsch, wuerde auch der
-// Positiv-Fall wie der Negativ-Fall enden - genau den Unterschied beweist dieser Test.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -16,8 +8,6 @@ const SECRET = "whsec_route_secret_test_0123456789";
 const WRONG_SECRET = "whsec_wrong_0123456789";
 const RAW_BODY = Buffer.from("not-json");
 
-// Baut einen gueltigen Stripe-Signature-Header fuer (body, secret, ts) - identisch zum
-// Muster in stripe-webhook-signature.test.js.
 function signHeader(body, secret, ts) {
   const mac = crypto.createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex");
   return `t=${ts},v1=${mac}`;

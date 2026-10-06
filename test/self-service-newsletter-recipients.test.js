@@ -1,16 +1,3 @@
-// F2-Newsletter-Recipients: HTTP-Integrationstest fuer die authentifizierten Self-Service-
-// Routen (POST/DELETE /api/self-service/newsletter-recipients) UND die beiden oeffentlichen
-// Token-Routen (GET /newsletter/confirm, /newsletter/unsubscribe). Kompositionstest nach dem
-// Muster self-service-newsletter-consent.test.js: reines pglite (offline, F.I.R.S.T.), KEIN
-// Server-Spawn. Deckt ab:
-//   - Add -> 200, pending im Store + in GET /state (ohne Token), Bestaetigungs-Mail ausgeloest
-//   - Cap (5) / Format / Duplikat (auch gegen die Konto-Adresse) -> 400, kein Write
-//   - Remove -> 200, idempotent
-//   - Confirm mit gueltigem Token -> confirmed, Summary-Mail-Pfad sieht ihn danach
-//   - Confirm mit falschem/fehlendem Token -> 400, neutrale Seite, kein Zustandswechsel
-//   - Unsubscribe -> entfernt den Eintrag, idempotent
-//   - kein Session-Cookie -> 401, kein Write
-//   - Audit: durabler Nachweis PII-frei (kein Klartext der Adresse im Detail)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -152,7 +139,6 @@ test("(a) Add -> 200, pending im Store + in GET /state, Bestaetigungs-Mail ausge
     assert.deepEqual(stateBody.newsletterRecipients, [
       { email: "freund@example.test", status: "pending", createdAt: record.newsletterRecipients[0].createdAt },
     ]);
-    // KEINE Tokens/Hashes in der Antwort (Owner-Auftrag).
     assert.equal("tokenHash" in stateBody.newsletterRecipients[0], false);
 
     assert.equal(s.mailer.sent.length, 1, "Bestaetigungs-Mail ausgeloest");
@@ -179,7 +165,7 @@ test("(b) ungueltiges Format -> 400 error=invalid_format, kein Write, kein Mail-
 test("(c) Duplikat gegen die Konto-Adresse -> 400 error=duplicate", async () => {
   const s = await setup();
   try {
-    const res = await addRecipient(s, "kunde@example.test"); // == Konto-Adresse (seedActiveTenant)
+    const res = await addRecipient(s, "kunde@example.test");
     assert.equal(res.status, 400);
     assert.deepEqual(JSON.parse(res.body), { error: "duplicate" });
   } finally {
@@ -191,7 +177,7 @@ test("(d) Duplikat gegen bestehenden Eintrag -> 400 error=duplicate", async () =
   const s = await setup();
   try {
     await addRecipient(s, "freund@example.test");
-    const res = await addRecipient(s, "Freund@Example.Test"); // normalisiert identisch
+    const res = await addRecipient(s, "Freund@Example.Test");
     assert.equal(res.status, 400);
     assert.deepEqual(JSON.parse(res.body), { error: "duplicate" });
   } finally {
@@ -297,8 +283,6 @@ test("(k) Unsubscribe entfernt den Eintrag (auch bereits bestaetigt), idempotent
     const confirmLink = confirmUrlFromMail(s.mailer.sent[0]);
     await confirmToken(s, confirmLink);
 
-    // unsubToken ist NICHT in der Mail (nur der Confirm-Link) - direkt aus dem Store lesen,
-    // wie es die echte Summary-Mail spaeter tut (call-finish.js).
     const unsubToken = s.recordOf().newsletterRecipients[0].unsubToken;
     const res = await unsubscribeToken(s, unsubToken);
     assert.equal(res.status, 200);

@@ -1,17 +1,3 @@
-// Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) - Self-Service-Schreib-/Lese-Weg
-// (POST /api/self-service/newsletter-consent, GET /api/self-service/state). Kompositions-
-// Integrationstest nach dem Muster f2-self-service-private-number.test.js +
-// 312k-p3-self-service-cancel.test.js (auditStore-Nachweis): reines pglite (offline,
-// F.I.R.S.T.), KEIN Server-Spawn. Deckt ab:
-//   - Default eines frischen Tenants: GET /state liefert { consent: false, consentAt: null }
-//   - Einwilligen (true) -> 200, Store-Record gesetzt, GET /state spiegelt es, DURABLER
-//     Nachweis in audit_log (312k-P3-Muster)
-//   - Widerruf (false) NACH Einwilligung -> 200, Store-Record aktualisiert, eigener
-//     durabler Nachweis (zweiter Audit-Eintrag, andere action)
-//   - ungueltiger Wert -> 400, alter Wert bleibt (fail-closed, H2), KEIN Audit-Eintrag
-//   - kein Session-Cookie -> 401, kein Write
-//   - suspendierter Tenant -> 403, kein Write
-//   - NIE in settings (H4, Muster private-number)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -191,7 +177,7 @@ test("(c) Widerruf (false) NACH Einwilligung -> 200, Store aktualisiert, eigener
 test("(d) ungueltiger Wert (String statt boolean) -> 400, alter Wert bleibt, kein Audit-Eintrag", async () => {
   const s = await setup();
   try {
-    await setConsent(s, { consent: true }); // erst gueltig setzen
+    await setConsent(s, { consent: true });
     const res = await setConsent(s, { consent: "yes" });
     assert.equal(res.status, 400);
     assert.deepEqual(JSON.parse(res.body), { error: "invalid_newsletter_consent" });

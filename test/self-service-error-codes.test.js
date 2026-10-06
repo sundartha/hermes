@@ -1,12 +1,3 @@
-// ex WEB-09, umbenannt in P9 (A3) - i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:261.
-//
-// POST /api/self-service/private-number liefert bei ungueltigem Wert einen stabilen,
-// sprachneutralen Code im `error`-Feld ("invalid_private_number"), keinen deutschen
-// Klartext.
-//
-// Eigene Datei (Vorgabe): betrifft src/self-service-routes.js, NICHT den Auth-Pfad
-// (test/web-auth.test.js deckt die dortigen Codes ab). In-process pglite (Muster
-// test/i9-self-service.test.js): kein Server-Spawn, kein Netz.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -18,7 +9,7 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const SECRET = "web-09-web-secret-0123456789";
 const SUB = "sub-web09";
-const TENANT_ID = "t_sub-web09"; // upsertOnFirstLogin: tenantId = `t_${sub}`
+const TENANT_ID = "t_sub-web09";
 
 async function setup({ paymentEnabled = false, publicUrl = "https://agent.test" } = {}) {
   const { store, runner } = await makePgTestStore();
@@ -75,9 +66,6 @@ test("private-number: ungueltiger Wert liefert 400 + stabilen Code invalid_priva
   }
 });
 
-// WEB-10 (R-G): Katalogtitel nennt api-onboard.js, dort gibt es keinen PUBLIC_URL-Treffer.
-// Gemessene Belegstelle ist der Checkout-Handler in self-service-routes.js - dieselbe
-// Funktion, die zwei Zeilen weiter plan_unconfigured/already_subscribed als Codes liefert.
 test("WEB-10 (SOLL, rot) - fehlende PUBLIC_URL liefert einen sprachneutralen Code, keinen deutschen Klartext", async () => {
   const srv = await setup({ paymentEnabled: true, publicUrl: "" });
   try {

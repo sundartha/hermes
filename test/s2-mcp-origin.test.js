@@ -1,14 +1,3 @@
-// E5/S2-A1..A8: die Herkunftswache auf /mcp (MCP-Spec T-06) - Einheits-Faelle des
-// Praedikats, HTTP-Faelle am Spawn-Server, Boot-Faelle des angekuendigten Origins.
-//
-// DIESE DATEI IST DER EINZIGE REGRESSIONSANKER DER WACHE. collectRoutes in
-// test/route-auth-inventory.test.js sammelt ausschliesslich layer.route-Schichten; die
-// Wache ist eine router.use-Schicht und erscheint in KEINEM handlerNames und in KEINEM
-// ROUTE_FINGERPRINT. Faellt der Mount weg, bleibt das Inventar-Gate gruen. Deshalb:
-// nicht loeschen, nicht skippen (T4/G4), und KEINE Katalog-ID am Namensanfang - ein
-// Praefix aus package.json config.i18nCatalogPattern (DID|E2E|FMT|GAP|LANG|LAW|MCP|
-// ORIG|OUT|PAY|PROMPT|UI|VOICE|WEB|WORLD)-<Ziffer> wuerde die Faelle in test:gates
-// verschieben, wo npm test sie nicht mehr festhaelt. Praefix hier: "E5-".
 import test from "node:test";
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -35,9 +24,6 @@ const HTTP_FORBIDDEN = 403;
 const HTTP_METHOD_NOT_ALLOWED = 405;
 const HTTP_NO_CONTENT = 204;
 
-// mcpPost (helpers.js) kann keinen Origin setzen - bewusst nicht erweitert: 47
-// Testdateien haengen an seiner heutigen Header-Menge, und "kein Origin" ist die
-// Baseline, die byte-identisch bleiben MUSS. Hier steht der eine Sender MIT Origin.
 function mcpPostMitOrigin(url, { origin, token, body } = {}) {
   const originHeader = origin === undefined ? {} : { Origin: origin };
   return fetch(url, {
@@ -51,10 +37,6 @@ function mcpPostMitOrigin(url, { origin, token, body } = {}) {
     body: JSON.stringify(body || { jsonrpc: "2.0", id: 1, method: "initialize" }),
   });
 }
-
-// ==================================================================================
-// Einheits-Faelle (kein Server)
-// ==================================================================================
 
 test("E5-U01: normalisierterOrigin normalisiert Schema-Case, Trailing-Slash", () => {
   assert.equal(normalisierterOrigin("https://agent.test"), "https://agent.test");
@@ -136,10 +118,6 @@ test("E5-U12: angekuendigterOriginFindings toleriert Schraegstrich-Differenz (PM
   );
 });
 
-// E8: der GESETZTE, exakt kanonische Wert ist der zweite erlaubte Betriebszustand neben
-// "leer" (E5-U10) - live nicht unterscheidbar (RUNBOOK-LIVE-WERTE, F-b), deshalb darf
-// KEINER der beiden einen Befund ergeben. Ohne diese Zeile haengt die Zusage nur am
-// Spawn-Fall in test/oauth.test.js, der sie als Nebenwirkung mitbelegt statt sie zu pruefen.
 test("E8-U01: gesetzte, exakt kanonische OAUTH_AUDIENCE -> kein Befund", () => {
   assert.deepEqual(
     angekuendigterOriginFindings({
@@ -179,10 +157,6 @@ test("E5-U16: angekuendigterOriginFindings mit Muell in allowedOrigins -> fatal,
   assert.doesNotMatch(findings[0].message, /agent-ohne-schema\.test/);
 });
 
-// ==================================================================================
-// HTTP-Faelle (Spawn-Server, MCP_AUTH=oauth + lokaler IdP)
-// ==================================================================================
-
 describe("E5-H: Herkunftswache am laufenden Server", () => {
   let idp;
   let srv;
@@ -195,11 +169,6 @@ describe("E5-H: Herkunftswache am laufenden Server", () => {
         MCP_AUTH: "oauth",
         OAUTH_ISSUER_URL: idp.issuer,
         OAUTH_AUDIENCE: MCP_AUDIENCE,
-        // E4: gueltigesToken traegt den Default-sub "user-1" (idp.sign ohne explizites
-        // sub) - ohne Bindung wuerde jeder Origin-/Auth-positive Fall am /mcp-Torschluss
-        // (TENANT_REJECT -> 403) scheitern, bevor er die Herkunftswache selbst pruefen
-        // kann. Die Negativ-Faelle (fremder Origin) bleiben unberuehrt: die Herkunftswache
-        // sitzt VOR mcpAuth und dem Torschluss und blockt dort bereits.
         OWNER_IDP_SUBJECT: "user-1",
       },
     });
@@ -293,9 +262,6 @@ describe("E5-H: Herkunftswache am laufenden Server", () => {
   });
 });
 
-// Zweiter describe-Block (G30/max-lines-per-function): dieselbe Wache, derselbe Server-
-// Aufbau wie oben - nur in ein eigenes before/after gespiegelt, damit keine einzelne
-// Funktion die Laenge aller H-Faelle traegt. Kein fachlicher Unterschied zu "E5-H" oben.
 describe("E5-H (Methoden, Pfad, Forensik, Formel-Pin)", () => {
   let idp;
   let srv;
@@ -368,14 +334,6 @@ describe("E5-H (Methoden, Pfad, Forensik, Formel-Pin)", () => {
     await waitForLog(srv, /grund=mcp_cross_origin origin=unlesbar/);
   });
 
-  // H12 (PM-7, Positiv-Kontrolle): die Wache ist an "/mcp" GEMOUNTET, nicht global.
-  // /api/self-service/* ist im Default-Testumfeld ungemountet (SELF_SERVICE_ENABLED +
-  // MULTI_TENANT + STORE_BACKEND=pg noetig, s. test/self-service-flag-gate.test.js) -
-  // die dortige Herkunftspruefung (createSameOriginGuard) ist bereits eigenstaendig in
-  // test/sec-p3-eingabegrenzen-csrf.test.js belegt (G5: keine zweite pg-Kompositions-
-  // Umgebung nur fuer diese eine Zeile). Positiv-Kontrolle hier: /healthz (immer gemountet,
-  // ausserhalb "/mcp") UND /api/plans (oeffentliche Route, ausserhalb "/mcp") bleiben mit
-  // fremdem Origin unberuehrt - der Mount deckt GENAU "/mcp", nicht das Gateway.
   it("H12: Pfadbindung - Routen ausserhalb /mcp bleiben mit fremdem Origin unberuehrt", async () => {
     const health = await fetch(`${srv.localUrl}/healthz`, { headers: { Origin: "https://evil.example" } });
     assert.equal(health.status, HTTP_OK);
@@ -405,8 +363,6 @@ describe("E5-H14: MCP_ALLOWED_ORIGINS ist additiv, nicht ersetzend", () => {
         OAUTH_ISSUER_URL: idp.issuer,
         OAUTH_AUDIENCE: MCP_AUDIENCE,
         MCP_ALLOWED_ORIGINS: "https://chatgpt.com",
-        // E4: s. Kommentar im "E5-H"-Block oben - der Default-sub "user-1" braucht eine
-        // Tenant-Bindung, sonst greift der /mcp-Torschluss VOR der Herkunftswaage-Aussage.
         OWNER_IDP_SUBJECT: "user-1",
       },
     });
@@ -435,8 +391,6 @@ describe("E5-H14: MCP_ALLOWED_ORIGINS ist additiv, nicht ersetzend", () => {
 });
 
 test("E5-H15: Notventil MCP_ORIGIN_ENFORCE=false loest die Wache, schreibt keine Zeile", async () => {
-  // MCP_AUTH=token OHNE Token erzwingt 401 unabhaengig vom Legacy-Localhost-Bypass
-  // (der Default-Modus wuerde hier lokal 200 liefern und den Beweis verdecken).
   const srv = await startServer({ env: { MCP_ORIGIN_ENFORCE: "false", MCP_AUTH: "token" } });
   try {
     const vorher = srv.stdout.length;
@@ -447,10 +401,6 @@ test("E5-H15: Notventil MCP_ORIGIN_ENFORCE=false loest die Wache, schreibt keine
     await srv.stop();
   }
 });
-
-// ==================================================================================
-// Boot-Faelle (startServerExpectExit)
-// ==================================================================================
 
 test("E5-B01: divergente OAUTH_AUDIENCE -> Boot-Refusal, nennt OAUTH_AUDIENCE", async () => {
   const { code, output } = await startServerExpectExit({
@@ -502,23 +452,10 @@ test("E5-B05: Happy-Path-Schraegstrich - PUBLIC_URL/OAUTH_AUDIENCE mit/ohne Slas
   }
 });
 
-// ==================================================================================
-// T2-06 (T-29): CORS auf /mcp - nur byte-genau gelistete Origins duerfen die Antwort
-// im Browser lesen. Praefix "T2-06-" (NICHT DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|
-// PROMPT|UI|VOICE|WEB|WORLD-<Ziffer>) - sonst landen die Faelle im test:gates-Lauf
-// (Lehre catalog-id-prefix-misroutes-tests).
-// ==================================================================================
-
-// Nur die access-control-*-Header einer Antwort, sortiert-frei als Menge lesbar.
 function acHeaders(res) {
   return [...res.headers.keys()].filter((k) => k.startsWith("access-control-"));
 }
 
-// Auto-OPTIONS-Baseline OHNE T2-06 (vor dem Bau am laufenden Server gemessen, s.
-// T2-06-Spec Schritt 4/H02): Express haengt bei fehlendem Origin und leerer CORS-Liste
-// den "Allow"-Header unveraendert an - "POST,GET,HEAD,DELETE" (Reihenfolge der
-// router.METHOD-Aufrufe in routes/mcp.js: post, get, delete, plus das implizite HEAD
-// zu GET). Als Konstante gepinnt, damit ein Drift sofort auffaellt.
 const AUTO_OPTIONS_ALLOW_BASELINE = "POST,GET,HEAD,DELETE";
 
 describe("T2-06-A: leere Liste (BASE_ENV) - byte-identisch zu vor T2-06", () => {
@@ -589,9 +526,6 @@ describe("T2-06-A: leere Liste (BASE_ENV) - byte-identisch zu vor T2-06", () => 
   });
 });
 
-// Zweigeteilt wie "E5-H"/"E5-H (Methoden, Pfad, ...)" oben (G30/max-lines-per-function):
-// derselbe Server-Aufbau, nur in zwei before/after gespiegelt, damit keine einzelne
-// Arrow-Function alle H04..H11-Faelle traegt.
 describe("T2-06-B1: MCP_ALLOWED_ORIGINS=https://chatgpt.com - Preflight, 401, 200", () => {
   let idp;
   let srv;
@@ -820,10 +754,6 @@ describe("T2-06-C: Auth-Modi und Notventil", () => {
     }
   });
 });
-
-// ==================================================================================
-// Unit-Faelle des Praedikats (kein Server) - T2-06-U01..U05
-// ==================================================================================
 
 test("T2-06-U01: mcpCorsOrigin - Treffer liefert das Listen-Element", () => {
   assert.equal(mcpCorsOrigin("https://chatgpt.com", ["https://chatgpt.com"]), "https://chatgpt.com");

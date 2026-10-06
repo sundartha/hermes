@@ -1,5 +1,3 @@
-// OUTBOUND-E3b: openOutageAlert/claimOutageAlert/closeOutageAlert - backend-frei (Muster
-// test/plattform-nummer-bindung.test.js), reine In-Process-Units, kein Netz, kein pglite.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDefaultState, openOutageAlert, claimOutageAlert, closeOutageAlert } from "../src/store/state-ops.js";
@@ -78,7 +76,7 @@ test("claimOutageAlert NACH einem closeOutageAlert legt eine NEUE offene Zeile a
   closeOutageAlert(state, { code: BUCKET, nowMs: EINE_MINUTE_MS });
   const neuerVorfall = claimOutageAlert(state, { code: BUCKET, nowMs: EINE_MINUTE_MS });
   assert.equal(neuerVorfall.closedAt, null);
-  const ERWARTETE_ZEILEN = 2; // geschlossene Historie + neue offene Zeile
+  const ERWARTETE_ZEILEN = 2;
   assert.equal(state.outageAlerts.length, ERWARTETE_ZEILEN, "zwei Zeilen: die geschlossene Historie + die neue offene");
 });
 

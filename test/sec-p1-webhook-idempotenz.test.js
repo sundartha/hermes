@@ -1,10 +1,3 @@
-// SEC-P1 (REPLAY-01/02): Wiederholungs-Riegel der zwei ungeschuetzten Voice-Webhooks.
-// Der Aufbau spiegelt den Messaufbau des Befunds exakt: EIN Body-String, EIN Zeitstempel,
-// EINE echte Ed25519-Signatur, zweimal zugestellt (Muster test/security.test.js). Der
-// Signatur-Check laeuft SCHARF (SKIP_TWILIO_SIGNATURE_CHECK=false) - der Riegel sitzt
-// strukturell dahinter und darf nur signierte Ereignisse sehen.
-// Das Modell haengt an einem lokalen Mock, der seine Aufrufe ZAEHLT: "keine zweite
-// Modellrunde" ist damit gemessen, nicht behauptet.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -18,21 +11,15 @@ import {
 import { startCountingAnthropicMock } from "./_outbound-harness.js";
 import { incomingAnchors, turnAnchors, newTurnToken } from "../src/telephony/webhook-idempotenz.js";
 
-// Der Mock antwortet ab dem ersten Request valide (nichts soll scheitern) und zaehlt nur.
 const NIE_SCHEITERN = 0;
-// Benannte Erwartungswerte statt nackter Zahlen (G25).
 const HTTP_OK = 200;
 const ZWEI_ANRUFE = 2;
 const ANKER_PAAR = 2;
 
-// Die Turn-Marke aus einer gerenderten Antwort ziehen (Gather-action bzw. Redirect).
-// Genau so verhaelt sich der Anbieter: er reicht die URL zurueck, die WIR gerendert haben.
 function turnTokenOf(xml) {
   return xml.match(/turnToken=([0-9a-f]{16})/)?.[1];
 }
 
-// EIN signierter Umschlag: derselbe Body-String, derselbe Zeitstempel, dieselbe Signatur -
-// beliebig oft zustellbar. Genau das tut ein Anbieter-Retry.
 function sealedEnvelope(signer, fields) {
   const body = new URLSearchParams(fields).toString();
   const ts = String(nowSeconds());
@@ -54,7 +41,6 @@ function deliver(srv, url, envelope) {
   });
 }
 
-// Spawn-Env eines Turn-Servers: scharfer Signatur-Check + Modell auf den zaehlenden Mock.
 const turnEnv = (llmBaseUrl, publicKey) => ({
   SKIP_TWILIO_SIGNATURE_CHECK: "false",
   TELNYX_PUBLIC_KEY: publicKey,
@@ -147,9 +133,6 @@ test("SEC-P1-2/3/4/5: /voice/turn - Wiederholung kostet nichts, echte Runden lau
         const gewachsen = transcriptOf("call_runden");
         assert.ok(gewachsen > zeilen, `"${gesagt}" steht im Transkript`);
         zeilen = gewachsen;
-        // Die naechste Runde traegt die Marke, die DIESE Antwort gerendert hat - genau
-        // das tut der Anbieter. Sie ist frisch, also faengt sie die Runde nicht als
-        // Duplikat (der Riegel beansprucht beim Eintreffen, nicht beim Rendern).
         token = turnTokenOf(xml) ?? newTurnToken();
       }
     });
@@ -191,8 +174,6 @@ test("SEC-P1-6: zwei verschiedene Anrufe im selben Moment - keiner schliesst den
   });
   try {
     const vorher = llm.count();
-    // Der Anbieter schickt je Leg seine eigene CallSid mit - zwei gleichzeitige Anrufe
-    // tragen deshalb verschiedene Umschlaege, auch wenn beide Anrufer dasselbe sagen.
     const resA = await deliver(
       srv,
       `/voice/turn?callId=call_a&turnToken=${newTurnToken()}`,
@@ -220,8 +201,6 @@ test("SEC-P1-6: zwei verschiedene Anrufe im selben Moment - keiner schliesst den
 test("SEC-P1-7: Neustart-Fall - persistierter Anker antwortet mit offenem Mikrofon", async () => {
   const signer = makeTelnyxSigner();
   const llm = await startCountingAnthropicMock({ failFirst: NIE_SCHEITERN });
-  // Der Prozess kennt den Wortlaut nicht mehr (frischer Server), der Anker liegt aber am
-  // Anruf-Datensatz - genau der Zustand nach einem Deploy mitten im Gespraech.
   const token = newTurnToken();
   const srv = await startServer({
     env: turnEnv(llm.url, signer.publicKeyBase64),
@@ -256,11 +235,6 @@ test("SEC-P1-7: Neustart-Fall - persistierter Anker antwortet mit offenem Mikrof
 
 test("SEC-P1-9: /voice/incoming nach Neustart - der Anruf-Datensatz IST der Anker", async () => {
   const signer = makeTelnyxSigner();
-  // Der Prozess-Cache ist leer (frischer Server), der Anruf-Datensatz aber schon da -
-  // genau der Zustand nach einem Deploy zwischen Provider-Retry und Erst-Zustellung.
-  // Anders als SEC-P1-1 (zweimal DEMSELBEN Prozess zugestellt, der Prozess-Cache faengt
-  // dort VOR seenBefore) muss dieser Test den store-basierten Fallback-Zweig selbst
-  // erreichen: der Call existiert bereits BEVOR der Request eintrifft.
   const srv = await startServer({
     env: { SKIP_TWILIO_SIGNATURE_CHECK: "false", TELNYX_PUBLIC_KEY: signer.publicKeyBase64 },
     seed: seedState({
@@ -290,8 +264,6 @@ test("SEC-P1-9: /voice/incoming nach Neustart - der Anruf-Datensatz IST der Anke
   }
 });
 
-// Reine Anker-Ableitung, ohne Server: die Grenzfaelle sind fail-open dokumentiert
-// (kein Anker -> Bestandsverhalten) und duerfen NIE werfen.
 test("SEC-P1-8: Anker-Ableitung an den Raendern - leere Liste statt Throw", () => {
   assert.deepEqual(incomingAnchors({ body: { CallSid: "CAx" } }), ["in:CAx"]);
   assert.deepEqual(incomingAnchors({ body: {} }), [], "fehlende CallSid -> kein Anker");

@@ -1,7 +1,3 @@
-// F8 (A6/DEPLOY-04): der Reconcile-Flush (pg.js flushCalls) darf eine FREMDE aktive
-// Call-Zeile NIE loeschen, wenn der flushende Prozess sie nicht im Spiegel hat.
-// Zwei Stores auf EINER pglite-DB = zwei Prozesse mit divergentem In-Memory-Spiegel.
-// Pglite (offline, F.I.R.S.T.); KEIN Server-Spawn in dieser Datei (p6a-Regel).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -23,13 +19,11 @@ const outboundCall = () => ({
 });
 
 async function withTenantContext(db, tenantId, fn) {
-  // Kapselt set_config('app.current_tenant', ...) fuer RLS-pflichtige Test-Queries.
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
   return fn();
 }
 
 async function seedForeignActiveCall(runner, { withTranscript = false } = {}) {
-  // store1 legt auf DERSELBEN DB einen aktiven Call an, den store2 nie im Spiegel sah.
   const store1 = makePgStore(runner);
   await store1.init();
   const foreign = store1.createCall(outboundCall());
@@ -37,7 +31,7 @@ async function seedForeignActiveCall(runner, { withTranscript = false } = {}) {
   if (withTranscript) {
     store1.addTranscript(foreign.id, "caller", "Hallo");
   }
-  await store1.save(); // aktive Zeile (+ ggf. Transkript-Segment) jetzt in der DB
+  await store1.save();
   return foreign;
 }
 
@@ -56,10 +50,9 @@ async function transcriptSegmentsInDb(db, callId) {
 test("F8: fremde aktive Zeile ueberlebt Flush mit nicht-leerem Call-Spiegel", async () => {
   const { db, runner } = await sharedDb();
   const store2 = makePgStore(runner);
-  await store2.init(); // leerer Spiegel (kennt den Fremd-Call nicht)
+  await store2.init();
   const foreign = await seedForeignActiveCall(runner);
 
-  // store2 flusht seinen eigenen Call -> deleteMissingCallsKeepActive, keepIds=[eigener]
   store2.createCall(outboundCall());
   await store2.save();
 
@@ -71,30 +64,24 @@ test("F8: fremde aktive Zeile ueberlebt Flush mit nicht-leerem Call-Spiegel", as
 test("F8: fremde aktive Zeile ueberlebt Flush mit leerem Call-Spiegel", async () => {
   const { db, runner } = await sharedDb();
   const store2 = makePgStore(runner);
-  await store2.init(); // leerer Spiegel, bleibt call-leer
+  await store2.init();
   const foreign = await seedForeignActiveCall(runner);
 
-  await store2.save(); // flushCalls(BOOTSTRAP, []) -> leerer keepIds-Zweig
+  await store2.save();
 
   const rows = await statusInDb(db, foreign.id);
   assert.equal(rows.length, 1, "leerer Spiegel loescht die aktive Zeile nicht");
   assert.equal(rows[0].status, "active");
 });
 
-// stab-p10 (I8-CASCADE-Schutz): der F8-Test oben beweist nur "Call-Row ueberlebt". Diese
-// Ergaenzung nagelt die von der Spec explizit verlangte CASCADE-Kernaussage fest:
-// transcript_segment (FK ON DELETE CASCADE auf call) darf beim divergenten Flush NICHT
-// mitgeloescht werden, UND ein spaeteres attachActiveCall (Rehydrate, F12/A6) muss die
-// tenantId korrekt hydrieren (I8) - sonst faende der Owner-Filter nach dem Flush keinen
-// Call mehr und loeschte beim naechsten Zyklus faelschlich alles.
 test("stab-p10 (I8-CASCADE-Schutz): aktiver Call + transcript_segment ueberleben divergenten Flush; Rehydrat traegt tenantId", async () => {
   const { db, runner } = await sharedDb();
   const foreign = await seedForeignActiveCall(runner, { withTranscript: true });
 
   const store2 = makePgStore(runner);
-  await store2.init(); // leerer Spiegel (kennt den Fremd-Call nicht)
+  await store2.init();
   store2.createCall(outboundCall());
-  await store2.save(); // divergenter Flush -> deleteMissingCallsKeepActive
+  await store2.save();
 
   const rows = await statusInDb(db, foreign.id);
   assert.equal(rows.length, 1, "fremde aktive Zeile ueberlebt den divergenten Flush");
