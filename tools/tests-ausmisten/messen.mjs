@@ -13,9 +13,12 @@ import { rang } from "./entscheiden.mjs";
 import { TESTDATEI, erreichendeTests } from "./messmenge.mjs";
 import { GATE_DATEI, gateDateien } from "./pfade.mjs";
 
+const SCHEMA_SCHLUESSEL = "$schema";
 const KONFIGURATIONSDATEI = fileURLToPath(new URL("../../stryker.config.json", import.meta.url));
-const { $schema: _schema, ...KONFIGURATION } = JSON.parse(
-  readFileSync(KONFIGURATIONSDATEI, "utf8"),
+const KONFIGURATION = Object.fromEntries(
+  Object.entries(JSON.parse(readFileSync(KONFIGURATIONSDATEI, "utf8"))).filter(
+    ([schluessel]) => schluessel !== SCHEMA_SCHLUESSEL,
+  ),
 );
 const BANK = "regression";
 const ARBEITSORDNER = join("node_modules", ".cache", "tests-ausmisten");
