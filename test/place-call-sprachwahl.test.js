@@ -1,12 +1,3 @@
-// ---- P4a: Sprachparameter an place_call --------------------------------------------
-// Drei Baenke (tasks/p4a-spec.md, PLAN-ANRUFDEFEKTE.md Abschnitt 4/6):
-//   A. Route (Spawn-Server + EL-Attrappe): der Sprachwunsch ueber die echte HTTP-Route,
-//      Katalog-Ablehnung, Byte-Identitaet ohne Wunsch.
-//   B. Naht (rein, kein Netz): callLocaleFor trennt Gespraechs- und Offenlegungssprache.
-//   C. Waechter (Rotprobe gegen startOutboundCall): agent.first_message ist nur bei
-//      nachgewiesener Sprachabweichung erlaubt UND muss den Pflichtsatz tragen.
-//
-// KEIN KATALOG-ID-PRAEFIX am Dateinamen/Testnamen -> Regressionsbank (npm test).
 import assert from "node:assert/strict";
 import http from "node:http";
 import { describe, it } from "node:test";
@@ -22,8 +13,6 @@ const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_NOT_FOUND = 404;
 
-// ---- A. Route --------------------------------------------------------------------
-
 const START_PATH = "/v1/convai/sip-trunk/outbound-call";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 const AGENT_ID = "agent_p4a_test_1";
@@ -31,11 +20,8 @@ const AGENT_PHONE_NUMBER_ID = "phnum_p4a_test_1";
 const API_KEY = "el-p4a-test-geheim";
 const OBJECTIVE = "Termin vereinbaren (P4a)";
 const CONVERSATION_ID = "conv_p4a_test_1";
-const FR_TARGET = "+33612345678"; // +33 - Fremd-Ziel, +49 steht in TELNYX_TEST_PEER_NUMBER
+const FR_TARGET = "+33612345678";
 
-// Attrappe des Anbieters: nur die zwei Endpunkte, die der Anrufstart braucht (Muster
-// test/elevenlabs-anrufstart.test.js#startElevenLabsMock, hier ohne Ausfall-Zweige - die
-// misst diese Datei nicht).
 async function startElevenLabsMock() {
   const startRequests = [];
   const server = http.createServer((req, res) => {
@@ -72,9 +58,6 @@ const EL_ENV = Object.freeze({
   ELEVENLABS_RESULT_POLL_MS: "150",
 });
 
-// Owner-Tenant (BOOTSTRAP_TENANT_ID) mit GESETZTER Auftraggeber-Sprache "de" - der feste
-// Bezugspunkt aller A-Faelle: der Sprachwunsch bzw. sein Fehlen ist der EINZIGE Unterschied
-// zwischen den Faellen, nicht ein driftender Tenant-Default.
 function seedOwnerDe() {
   return seedState({
     settings: { language: "de" },
@@ -106,8 +89,6 @@ function placeCall(srv, { to = TELNYX_TEST_PEER_NUMBER, language } = {}) {
 }
 
 const outboundCall = (srv) => srv.readStore().calls.find((call) => call.direction === "outbound");
-// Zwei flache Schritte statt einer tiefen Kette (G36/Gesetz von Demeter): erst der erste
-// Anfragekoerper der Attrappe, dann darin gesucht.
 const firstBody = (mock) => mock.startRequests[0]?.body;
 const overrideOf = (mock) =>
   firstBody(mock)?.conversation_initiation_client_data?.conversation_config_override;
@@ -194,8 +175,6 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
   });
 });
 
-// ---- B. Naht: callLocaleFor trennt Gespraechs- und Offenlegungssprache ----------------
-
 const OWNER_NAME = "Pin B-Testowner";
 const PLATFORM_VOICE_ID = "plattform-stimme-p4a";
 const DE_NUMMER = TELNYX_TEST_PEER_NUMBER;
@@ -237,9 +216,9 @@ describe("P4a-B: callLocaleFor trennt Gespraechs- und Offenlegungssprache rein",
   it("P4a-B3: Positiv-Kontrolle - die drei Faelle sind in language UND disclosureLanguage paarweise unterscheidbar", () => {
     const state = { tenants: [{ id: "t3", defaultLanguage: "en" }], settings: {} };
     const basis = { tenantId: "t3", numberRecord: null, ownerName: OWNER_NAME, defaultVoiceId: PLATFORM_VOICE_ID };
-    const fall1 = callLocaleFor(state, { ...basis, to: DE_NUMMER, callLanguage: "fr" }); // fr/de
-    const fall2 = callLocaleFor(state, { ...basis, to: DE_NUMMER }); // en/de
-    const fall3 = callLocaleFor(state, { ...basis, to: undefined }); // en/en
+    const fall1 = callLocaleFor(state, { ...basis, to: DE_NUMMER, callLanguage: "fr" });
+    const fall2 = callLocaleFor(state, { ...basis, to: DE_NUMMER });
+    const fall3 = callLocaleFor(state, { ...basis, to: undefined });
 
     assert.notEqual(fall1.language, fall2.language);
     assert.equal(fall2.language, fall3.language, "Voraussetzung: fall2/fall3 unterscheiden sich nur in disclosureLanguage");
@@ -247,8 +226,6 @@ describe("P4a-B: callLocaleFor trennt Gespraechs- und Offenlegungssprache rein",
     assert.notEqual(fall1.disclosureLanguage, fall1.language, "fall1 ist der Abweichungsfall selbst");
   });
 });
-
-// ---- C. Waechter: startOutboundCall gegen ein zaehlendes fetchImpl -------------------
 
 const WAECHTER_ACCOUNT = Object.freeze({ apiKey: "waechter-key", apiBase: "http://127.0.0.1:1" });
 const WAECHTER_CALL_ID = "call_p4a_waechter";

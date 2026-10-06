@@ -1,6 +1,3 @@
-// portalStore: per-Request tenant-isolierte Reads. pglite laeuft als Superuser
-// (umgeht RLS) -> wie store-pg-rls.test.js per SET ROLE auf eine unprivilegierte
-// Rolle wechseln, damit die Policy wie im Betrieb greift.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -17,7 +14,6 @@ async function setup() {
   const exec = (sql) => db.exec(sql);
   const query = (t, p) => db.query(t, p);
   await applySchema({ query, exec });
-  // GUC vor Seed (FORCE-RLS WITH-CHECK), wie init() es macht.
   await query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
   await seedDefaults({ query, exec }, BOOTSTRAP_TENANT_ID);
   for (const t of [TENANT_A, TENANT_B]) {
@@ -37,10 +33,6 @@ async function setup() {
   return db;
 }
 
-// runner, der pro withTenant SET ROLE setzt (simuliert die unprivilegierte
-// Produktionsrolle auf der einen pglite-Verbindung). BEWUSST nur SET ROLE/RESET
-// ROLE hier: BEGIN/COMMIT kommen aus portal.js (withTenant), NICHT aus dem
-// roleRunner -> kein BEGIN hier einbauen, das wuerde ein nested-BEGIN erzeugen.
 function roleRunner(db) {
   return {
     withClient: async (fn) => {
@@ -92,7 +84,6 @@ test("portalStore: frischer Tenant ist leer (kein Owner-Leak)", async () => {
 
 test("portalStore: Transkript-Read ist tenant-isoliert (Leak-Schutz)", async () => {
   const db = await setup();
-  // Geheim-Transkript fuer Tenant A, als Superuser eingefuegt (Setup laeuft als Superuser).
   await db.query(
     `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at)
      VALUES ('call_tenant_a', $1, 'caller', 'GEHEIM_A', now()::text)`,
@@ -108,16 +99,14 @@ test("portalStore: Transkript-Read ist tenant-isoliert (Leak-Schutz)", async () 
 test("portalStore: Query-Fehler in withTenant -> ROLLBACK, naechster Request sauber isoliert", async () => {
   const db = await setup();
   const portal = makePortalStore(roleRunner(db));
-  // Request 1 (Tenant A) wirft mitten in der Txn -> ROLLBACK.
   await assert.rejects(
     () =>
       portal.withTenant(TENANT_A, async (c) => {
         await c.query(`SELECT 1`);
-        await c.query(`SELECT * FROM does_not_exist`); // Fehler -> ROLLBACK
+        await c.query(`SELECT * FROM does_not_exist`);
       }),
     /does_not_exist|relation/i,
   );
-  // Request 2 (Tenant B) auf derselben Verbindung darf NUR B sehen.
   const rows = await portal.listCalls(TENANT_B);
   assert.deepEqual(
     rows.map((r) => r.id),

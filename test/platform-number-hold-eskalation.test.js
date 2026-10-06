@@ -1,35 +1,19 @@
-// OUTBOUND-E3b (C8, F-8, PLAN-OUTBOUND-RESILIENZ.md Abschnitt 9): Owner-Frage "Darf eine
-// Kuendigung wegen einer Plattform-Bindung haengen bleiben?" - "Ja, mit HOLD + Audit +
-// 24-h-Eskalation. Artikel 17 ist unabhaengig davon erfuellt." Dieser Test deckt die
-// Eskalation: ein HOLD platform_number_in_use, der laenger als die Schwelle besteht,
-// erzeugt GENAU EINEN Betreiber-Befund ueber DENSELBEN Meldeweg wie der Ausfall-Alarm
-// (WARN -> Audit -> Mail -> SMS), dauerhaft entprellt (kein zweiter Sweep, kein Neustart
-// bringt einen zweiten Befund). Reine In-Process-Attrappen (KEINE echten Anrufe/SMS/Mails/
-// Provider-Schreibzugriffe), Zielnummern nur aus reservierten Testbereichen.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { platformHoldEscalationCandidates } from "../src/store/state-ops.js";
 import { runPlatformHoldEscalationSweep, runOutageRecoverySweep } from "../src/telephony/outage-report.js";
 import { NUMBER_STATUS, PROVIDER, PLATFORM_NUMBER_PURPOSE, NUMBER_HOLD_REASON } from "../src/store/defaults.js";
 
-const SCHWELLE_MS = 86400000; // 24h - identisch zum Default PLATFORM_HOLD_ESCALATION_MAX_AGE_MS
-// ZUSATZAUFTRAG B: zwei gehaltene Nummern -> zwei Meldungen (je Nummer eine, s. holdZeile).
+const SCHWELLE_MS = 86400000;
 const ZWEI_MELDUNGEN = 2;
-// Fenster/Tick-Abstand fuer den C8-Regressionstest unten (Ausfall-Erkennungsfenster UND
-// Abstand zwischen den zwei simulierten Sweep-Ticks) - eine benannte Stunde statt einer
-// nackten Zahlenkette (G25).
 const EINE_STUNDE_MS = 3600000;
-// Vielfaches der Schwelle fuer den "viel spaeter"-Sweep (G25: benannte Konstante statt
-// Zahlenkette) - beliebig, solange deutlich ueber jeder denkbaren Zeit-basierten Frist.
 const WEIT_UEBER_JEDE_FRIST_VIELFACHES = 30;
 const NOW_ISO = "2026-08-27T16:45:00Z";
 const NOW_MS = Date.parse(NOW_ISO);
-// 25h vor NOW - AELTER als die 24h-Schwelle.
 const ALT_SUSPENDED_AT = "2026-08-26T15:45:00Z";
-// 1h vor NOW - JUENGER als die Schwelle.
 const JUNG_SUSPENDED_AT = "2026-08-27T15:45:00Z";
-const NUMMER_E164 = "+493012345000"; // erkennbar fiktiv, kein reales Format-Reservat noetig (interne DID)
-const SENDER_E164 = "+15005550006"; // reserviert (Twilio-Magic-Number-Muster, Bestandskonvention)
+const NUMMER_E164 = "+493012345000";
+const SENDER_E164 = "+15005550006";
 
 const CONFIG = Object.freeze({
   billing: {
@@ -47,16 +31,12 @@ function seed({ suspendedAt, holdReason = NUMBER_HOLD_REASON.PLATFORM_IN_USE, nu
     numbers: [
       {
         id: "n1", tenantId: "t1", status: NUMBER_STATUS.ACTIVE,
-        // NON_TELNYX-Gegenprobe: ein fremder Provider haelt unabhaengig von jeder
-        // Plattform-Bindung - platformNumberUse bleibt in diesem Fall leer.
         provider: holdReason === NUMBER_HOLD_REASON.NON_TELNYX ? "twilio" : PROVIDER.TELNYX,
         providerNumberId: "ext_1", e164: NUMMER_E164,
       },
     ],
     calls: [],
     platformNumberUse: [
-      // Absender-Bindung fuer den Alarm-SMS-Kanal (PM-17) - unabhaengige e164, beeinflusst
-      // numberBusyReason(n1) nicht.
       {
         id: "pnu_sender", e164: SENDER_E164, purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER,
         provider: "telnyx", tenantId: null, providerNumberId: null,
@@ -76,9 +56,6 @@ function seed({ suspendedAt, holdReason = NUMBER_HOLD_REASON.PLATFORM_IN_USE, nu
   };
 }
 
-// ZUSATZAUFTRAG B: mehrere gleichzeitig alte HOLDs (verschiedene Tenants/Nummern) - fuer
-// die PII-freien Anzahlen kuendigungen/nummern in der Alarm-Zeile (holdZeile,
-// outage-report.js). nummern: [{id, tenantId, e164}], alle ALT_SUSPENDED_AT (alt genug).
 function seedMehrere(nummern) {
   const tenantIds = [...new Set(nummern.map((nummer) => nummer.tenantId))];
   return {
@@ -122,8 +99,6 @@ function makeSpies() {
   return { auditCalls, mailCalls, smsCalls, audit, mailer, messaging };
 }
 
-// ---- Pure Selector (platformHoldEscalationCandidates) ------------------------------------
-
 test("Selektor: HOLD juenger als die Schwelle -> KEIN Kandidat (Positiv-Kontrolle der Gegenrichtung)", () => {
   const state = seed({ suspendedAt: JUNG_SUSPENDED_AT });
   const candidates = platformHoldEscalationCandidates(state, { nowMs: NOW_MS, maxAgeMs: SCHWELLE_MS });
@@ -154,8 +129,6 @@ test("Selektor: kein Zeitanker (suspendedAt fehlt) -> fail-closed KEIN Kandidat"
   const candidates = platformHoldEscalationCandidates(state, { nowMs: NOW_MS, maxAgeMs: SCHWELLE_MS });
   assert.deepEqual(candidates, []);
 });
-
-// ---- PFLICHT-TESTS (a)-(d): der volle Sweep + Meldeweg ------------------------------------
 
 test("C8 (a) HOLD juenger als die Schwelle -> KEIN Befund", async () => {
   const state = seed({ suspendedAt: JUNG_SUSPENDED_AT });
@@ -189,9 +162,6 @@ test("C8 (c) zweiter Sweep unmittelbar danach -> KEIN weiterer Befund (permanent
   const spies = makeSpies();
   await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
   assert.equal(spies.auditCalls.length, 1, "erster Sweep meldet");
-  // Zweiter Sweep, spaeter (auch weit ueber jede denkbare Zeit-basierte Entprellfrist
-  // hinaus) - die Entprellung ist PERMANENT (Existenz des Markers), keine Frist, die
-  // irgendwann ablaeuft.
   const vielSpaeter = NOW_MS + WEIT_UEBER_JEDE_FRIST_VIELFACHES * SCHWELLE_MS;
   await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: vielSpaeter });
   assert.equal(spies.auditCalls.length, 1, "kein zweiter Befund im selben Prozess");
@@ -210,9 +180,6 @@ test("C8 (d) Neustart zwischen den Sweeps -> immer noch KEIN zweiter Befund (Mar
   });
   assert.equal(spiesVorNeustart.auditCalls.length, 1);
 
-  // NEUSTART: der State wird ueber JSON serialisiert/deserialisiert (Muster
-  // ausfall-marker-durabel-pg.test.js "Spiegel verwerfen, hydrieren") - eine neue
-  // Store-Instanz, kein geteiltes Objekt mit dem Lauf davor.
   const stateNachNeustart = JSON.parse(JSON.stringify(stateVorNeustart));
   const storeNachNeustart = makeStore(stateNachNeustart);
   const spiesNachNeustart = makeSpies();
@@ -248,24 +215,8 @@ test("C8-Aus: platformHoldEscalationMaxAgeMs=0 haelt die Eskalation komplett aus
   assert.equal(state.outageAlerts.length, 0);
 });
 
-// ---- Review-Blocker Runde 2 (neu, selbst gemessener Defekt): der HOLD-Marker faellt in
-// den Erholungs-Sweep und wird dort geschlossen -------------------------------------------
-// Reproduziert exakt die vom Reviewer gemessene Verdrahtung: ein alter HOLD eskaliert
-// (C8), UND im selben Zeitfenster liegt ein beantworteter Outbound-Anruf (irgendeiner -
-// erfolge im Fenster ist NICHT bucket-spezifisch, s. outage-detection.js#outageWindow).
-// Die urspruengliche Fassung von istFehlergrundEimer() (Ausschlussliste: "code !==
-// SELF_TEST_BUCKET") liess den HOLD-Code "hold:platform_number_in_use:<id>" ungehindert in
-// runOutageRecoverySweep - dort liefert outageWindow() fuer diesen Code konstruktionsbedingt
-// IMMER fehler=0 (kein echter call.failureReason bildet je auf ihn ab), und mit dem
-// Blocker-1-Fix ("RECOVERED nur bei erfolge>0") urteilte der Sweep faelschlich "erholt" und
-// schloss den Marker - die Eskalation feuerte danach beim naechsten Tick erneut, weil kein
-// offener Marker mehr gefunden wurde (die vom Reviewer gemessene Wiederholung stuendlich).
-// Der Fix (istFehlergrundEimer als Whitelist auf NOT_PLACED-Praefix) haelt DIESEN Test gruen.
 test("C8-Regression (Review Runde 2): alter HOLD + erfolgreicher Anruf im Fenster -> ueber zwei Sweep-Ticks GENAU EIN Befund, KEINE outage_recovered-Zeile auf dem HOLD-Code", async () => {
   const state = seed({ suspendedAt: ALT_SUSPENDED_AT });
-  // Ein beantworteter Outbound-Anruf, deutlich vom HOLD-Vorgang getrennt (anderer Tenant,
-  // kein Bezug zur gehaltenen Nummer) - genau das Szenario "irgendein Anruf im Fenster
-  // gelingt", das der Reviewer gemessen hat.
   state.calls = [
     {
       id: "call_ok", tenantId: "t_andere", direction: "outbound",
@@ -288,15 +239,11 @@ test("C8-Regression (Review Runde 2): alter HOLD + erfolgreicher Anruf im Fenste
     },
   };
 
-  // Tick 1 (Muster boot.js#runSweepTick: beide Zweige laufen im selben Stunden-Sweep):
-  // die HOLD-Eskalation legt den Marker an, DANACH prueft der Erholungs-Sweep denselben
-  // Sweep-Durchlauf - der erfolgreiche Anruf liegt im Fenster.
   await runPlatformHoldEscalationSweep({ store, config: configVoll, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
   await runOutageRecoverySweep({ store, config: configVoll, audit: spies.audit, nowMs: NOW_MS });
   assert.equal(spies.auditCalls.length, 1, "genau ein Befund nach Tick 1 (Regression: der Erholungs-Sweep schloss den HOLD-Marker im selben Tick faelschlich)");
   assert.equal(spies.auditCalls[0].action, "platform_hold_escalation");
 
-  // Tick 2, eine Stunde spaeter: kein zweiter Befund, egal in welcher Reihenfolge.
   const tick2 = NOW_MS + EINE_STUNDE_MS;
   await runOutageRecoverySweep({ store, config: configVoll, audit: spies.audit, nowMs: tick2 });
   await runPlatformHoldEscalationSweep({ store, config: configVoll, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: tick2 });
@@ -306,11 +253,6 @@ test("C8-Regression (Review Runde 2): alter HOLD + erfolgreicher Anruf im Fenste
   assert.equal(marker.code, `hold:${NUMBER_HOLD_REASON.PLATFORM_IN_USE}:n1`);
   assert.equal(marker.closedAt, null, "der HOLD-Marker bleibt dauerhaft offen - kein Erholungs-Uebergang fuer HOLD-Codes");
 });
-
-// ---- ZUSATZAUFTRAG B (E3b-Nachbesserung): PII-freie Anzahlen in der Alarm-Zeile ---------
-// Vorher: "eine Kuendigung wartet..." - der Empfaenger wusste nicht, ob EINE oder FUENF
-// Kuendigungen haengen. Jetzt: kuendigungen=<distinkte Tenants> nummern=<Zeilen>, PII-frei
-// (keine Rufnummer/Tenant-ID/Nummern-ID im Body - C8-PII gilt unveraendert weiter).
 
 test("B-1: zwei Tenants mit je einem alten HOLD -> Mail-Body enthaelt kuendigungen=2 nummern=2", async () => {
   const state = seedMehrere([

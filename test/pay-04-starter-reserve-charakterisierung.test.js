@@ -1,23 +1,3 @@
-// PAY-04 (Katalog: tasks/i18n-tests/07-geld-und-waehrung.md, Abschnitt "PAY-04") +
-// GAP-32-Nachbarschaft. Reserve-Rechnung fuer einen Starter-Tenant, der ein Nicht-
-// Inlandsziel anruft: reserveExceedsBudget() gegen die Starter-Plan-Decke.
-//
-// SOLLZUSTAND seit KS-P5a/E5a (vorher: Charakterisierung eines Defekts). Die Decke und die
-// Reserve leiten sich seither aus DEMSELBEN Satz ab (voiceTariffDefaultCents) - es gibt
-// keinen zweiten Deckel-Basissatz mehr, der davon abweichen koennte. Damit gilt fuer JEDEN
-// Satz T: 0 Ist-Verbrauch + 0 In-Flight-Reserve + 5*T <= 50*T (Starter-Decke), ein
-// Starter-Abonnent kommt also zu einem Nicht-Inlandsziel durch.
-//
-// Der gepruefte MECHANISMUS bleibt derselbe (R3 der kanonischen Liste,
-// 00-kanonische-liste.md): Reserve = tariffCentsPerMin * RESERVE_LEAD_MINUTES (seit
-// KS-P3 (a) ein festes Vorlauffenster, nicht mehr die angefangenen Minuten der
-// Maximaldauer), gegen die abgeleitete Plan-Decke. Die Nachbarn bleiben
-// unberuehrt: GAP-32 (test/gap-32-worst-case-fatal.test.js, Boot-Guard-Schaerfe) und
-// GAP-33 (test/prod-config-smoke.test.js, Auslandsziel kommt bis zum Provider durch).
-//
-// Bewusst OHNE hartkodierte Zahlen: derselbe config.billing speist Decke UND Reserve, die
-// Aussage ist damit satz-unabhaengig. Bei abgeschalteter Kosten-Achse (Satz 0) ist der Fall
-// vakuum-gruen - und das ist korrekt, dann reserviert niemand etwas.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -27,8 +7,8 @@ import { tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
 import { outboundReserveCents } from "../src/store/defaults.js";
 
 const TENANT_A = "t_pay04_starter";
-const NON_DOMESTIC_TARGET = "+15551234567"; // kein +49/+33/+44-Praefix
-const US_OWN_DID = "+15005550006"; // ausgelieferte Default-DID (ebenfalls ohne Inlands-Vorwahl)
+const NON_DOMESTIC_TARGET = "+15551234567";
+const US_OWN_DID = "+15005550006";
 
 test("PAY-04: Starter-Decke traegt die Worst-Case-Reserve eines Nicht-Inlandsanrufs bei 0 Ist-Verbrauch", () => {
   const capCents = planCapCents("starter", config.billing);

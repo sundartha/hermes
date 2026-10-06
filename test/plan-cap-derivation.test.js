@@ -1,21 +1,3 @@
-// LCT P6: Tenant-Decken aus dem Abo ableiten (billing/plan-caps.js + state-ops
-// deriveTenantBudgetFromPlan, an der Schreibkante store.setTenantSubscription gehaengt).
-// pglite (kein Netz, kein echter Server-Spawn, F.I.R.S.T.).
-//
-// MECHANIK GEGEN DIE MODUL-CONFIG-FALLE: config.js liest process.env EINMALIG beim
-// Modul-Import (Modul-Singleton). Damit die Ableitung 900 (Business) UNCLAMPED sieht,
-// braucht der Prozess platformSpendCapCents > 900 - deshalb MUESSEN MAX_BUDGET_EUR/
-// VOICE_TARIFF_DEFAULT_CENTS VOR jedem Import (auch transitiv ueber store/pg.js,
-// billing/*.js) gesetzt sein. Ein statischer Import wuerde per ESM-Hoisting VOR diesem
-// Zeilenblock laufen - deshalb AUSSCHLIESSLICH dynamische Imports in before() (Muster
-// assistant-context-persist-pg.test.js). `node --test` isoliert jede Datei in einem
-// eigenen Prozess -> keine Cross-File-Leckage dieser process.env-Werte.
-//
-// KS-P5a: die Decke folgt seit E5a dem BUCHUNGSSATZ (voiceTariffDefaultCents), es gibt
-// keinen zweiten Deckel-Basissatz mehr. Der Fixtur-Wert 6 bleibt bewusst stehen: diese
-// Datei prueft das VERDRAHTEN der sechs Aufrufer, nicht den Tarifwert - so bleiben alle
-// gepinnten Decken (300/900) und Verbrauchszahlen unveraendert. Den Tarifwert selbst pinnt
-// test/ks-p5a-plan-cap-carries-sold-minutes.test.js.
 process.env.MAX_BUDGET_EUR = "30";
 process.env.VOICE_TARIFF_DEFAULT_CENTS = "6";
 
@@ -40,12 +22,8 @@ before(async () => {
   activationMod = await import("../src/billing/activation.js");
   backfillMod = await import("../src/billing/backfill-profiles.js");
   planCapsMod = await import("../src/billing/plan-caps.js");
-  ({ CATALOG_SLUGS } = await import("../src/plans.js")); // PAY-16: die Katalog-Slug-Quelle
+  ({ CATALOG_SLUGS } = await import("../src/plans.js"));
   ({ USAGE_EVENT_KIND, KYC_LEVEL } = await import("../src/store/defaults.js"));
-  // createTenantSubscription/priceIdForPlan brauchen konfigurierte Price-Ids (sonst
-  // plan_unconfigured). Direkte Namespace-Zuweisung (Getter+Setter auf denselben
-  // rawConfig-Slot, s. config.js) statt Env - diese Datei besitzt bereits die
-  // Punkt-0-Env-Zeilen oben, ein drittes process.env-Paar waere Rauschen.
   config.billing.stripeStarterPriceId = "price_starter_test";
   config.billing.stripeBusinessPriceId = "price_business_test";
 });
@@ -80,14 +58,9 @@ function fakeSubscribeBilling(overrides = {}) {
 function noopAccounts() {
   return { setStatus: async () => {} };
 }
-// GAP-04: activatePaidTenant aktiviert nur bei GEKLAERTEM Provisioning-Ergebnis
-// (provisionCleared) - der Noop muss also einen freigebenden Grund liefern, sonst
-// bliebe jeder Aufrufer hier faelschlich im GAP-04-Wartezustand haengen.
 function noopProvision() {
   return async () => ({ ok: true, reason: "queued" });
 }
-
-// ---- (a) Happy-Pfad + Formel direkt gepinnt --------------------------------------
 
 test("(a) planCapCents direkt: starter=300, business=900 (Bruch, keine Rundung)", () => {
   assert.equal(planCapsMod.planCapCents("starter", { voiceTariffDefaultCents: 6 }), 300);
@@ -116,18 +89,8 @@ test("(a) createTenantSubscription(starter) -> abgeleitete Decke 300 ct", async 
   assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 300);
 });
 
-// ---- PAY-15/16: fail-closed bei fehlender Kopffreiheit ---------------------------
-// (a) oben pinnt die WERTE der zwei heutigen Slugs. Hier steht die andere Haelfte: was
-// passiert mit einem Slug, den die Kopffreiheit-Tabelle nicht kennt. Beide Faelle teilen
-// sich EINEN Wurf (`!plan || !headroom`) und sind trotzdem zwei Tests (ein Konzept je
-// Test, P14): PAY-15 ist der unbekannte Slug (keine Katalog-Zeile), PAY-16 die
-// OCP-Frage - ein KUENFTIGER Katalog-Slug ohne Kopffreiheit-Eintrag.
-//
-// Die Basissatz-Fixtur spiegelt die VOICE_TARIFF_DEFAULT_CENTS-Zeile am Dateikopf
-// (Punkt 0): dieselbe Zahl, damit die abgeleiteten Decken hier und in der Ableitung
-// darunter dieselben sind.
 const PLAN_CAP_CFG = Object.freeze({ voiceTariffDefaultCents: 6 });
-const UNKNOWN_PLAN_SLUG = "enterprise_us"; // weder im Katalog noch in der Kopffreiheit-Tabelle
+const UNKNOWN_PLAN_SLUG = "enterprise_us";
 
 test("PAY-15: planCapCents wirft fail-closed bei unbekanntem Plan-Slug (kein stiller Default)", () => {
   assert.throws(
@@ -142,18 +105,12 @@ test("PAY-16: JEDER Katalog-Slug hat eine Kopffreiheit (ein neuer Plan ohne Eint
     const cap = planCapsMod.planCapCents(slug, PLAN_CAP_CFG);
     assert.ok(Number.isInteger(cap) && cap > 0, `${slug}: keine ganzzahlige, positive Decke`);
   }
-  // Der Waechter-Anteil: dieselbe Klausel greift fuer einen Slug OHNE Eintrag. Waere sie
-  // fail-open, kaeme hier eine Zahl statt eines Wurfs - und ein neu eingefuehrter Plan
-  // bekaeme lautlos eine falsche Decke statt eines lauten Boot-Abbruchs (erste Linie:
-  // planCapInertFindings, gepinnt in test/env-docs-spend-cap-coherence.test.js).
   assert.throws(
     () => planCapsMod.planCapCents("starter_us", PLAN_CAP_CFG),
     /kein Katalog-\/Kopffreiheit-Eintrag/,
     "ein kuenftiger Katalog-Slug ohne Kopffreiheit-Eintrag muss werfen, nie rechnen",
   );
 });
-
-// ---- (b) Downgrade senkt die Decke, auch bei bereits hoeherem Verbrauch ----------
 
 test("(b) Downgrade business(900)->starter(300): Verbrauch 400 wird erst NACH dem Downgrade exceeded", async () => {
   const { store } = await makeTestStore();
@@ -164,7 +121,6 @@ test("(b) Downgrade business(900)->starter(300): Verbrauch 400 wird erst NACH de
   });
   store.addVoiceUsageCostCents(tenantId, 400);
   assert.equal(store.budgetExceeded(tenantId, config.billing), false, "400 < 900 (business) -> frei");
-  // Downgrade (Muster Webhook-Patch: nur planSlug).
   store.setTenantSubscription(tenantId, { planSlug: "starter" });
   assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 300, "Decke gesunken");
   assert.equal(
@@ -174,13 +130,6 @@ test("(b) Downgrade business(900)->starter(300): Verbrauch 400 wird erst NACH de
   );
 });
 
-// ---- PAY-24: Downgrade waehrend einer OFFENEN In-Flight-Reserve ------------------
-// (b) oben prueft den Downgrade gegen SETTLED Verbrauch. Der gefaehrlichere Fall ist die
-// noch nicht abgerechnete Reserve eines LAUFENDEN Calls: sie sitzt im ephemeren
-// Reserve-Ledger (s.reservations), nicht im usage-Bucket. Der Test beweist, dass
-// effectiveCapCents bei JEDER Pruefung frisch gelesen wird (kein zwischengespeicherter
-// Cap, der die alte Business-Decke ueberleben liesse). Reine state-ops-Ebene, kein
-// pglite noetig.
 const BUSINESS_CAP_CENTS = 900;
 const STARTER_CAP_CENTS = 300;
 
@@ -216,14 +165,11 @@ test("PAY-24: Downgrade business->starter wirkt sofort auf eine bereits offene N
   );
 });
 
-// ---- (c) Tenant ohne Abo: keine Ableitung, Bestandsverhalten unveraendert --------
-
 test("(c) Tenant ohne stripePlanSlug: keine tenant_budget-Zeile, Cap = Registrierungs-Default", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_c";
   const s = store.load();
   ops.registerTenant(s, tenantId, { firstName: "Ohne Abo" });
-  // Patch OHNE Slug (Muster activation.js syncNumberSetupFeeExemption) - No-op.
   store.setTenantSubscription(tenantId, { numberSetupFeeExempt: false });
   assert.equal(
     s.tenantBudgets.find((b) => b.tenantId === tenantId),
@@ -237,8 +183,6 @@ test("(c) Tenant ohne stripePlanSlug: keine tenant_budget-Zeile, Cap = Registrie
   );
 });
 
-// ---- (d) EUR-Gate vs. Minuten-Gate: D8 ist behoben (heute umgekehrt) ------------
-
 test("(d) Business-Tenant telefoniert 120 Min: EUR-Gate frei (900 > 648), Minuten-Gate exceeded (120>=120)", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_d";
@@ -246,7 +190,6 @@ test("(d) Business-Tenant telefoniert 120 Min: EUR-Gate frei (900 > 648), Minute
   await subscribeMod.createTenantSubscription({
     store, billing: fakeSubscribeBilling(), config, tenant: tenantId, planSlug: "business",
   });
-  // 120 Minuten zu 5.4 ct = 648 ct Ist-Verbrauch (Kontrollrechnung, NICHT die Formel-Eingabe).
   store.addVoiceUsageCostCents(tenantId, 648);
   assert.equal(store.budgetExceeded(tenantId, config.billing), false, "648 < 900 -> EUR-Gate frei");
   const s = store.load();
@@ -258,8 +201,6 @@ test("(d) Business-Tenant telefoniert 120 Min: EUR-Gate frei (900 > 648), Minute
     "120 >= 120 Minuten -> Plan-Minuten-Gate exceeded",
   );
 });
-
-// ---- (e) ALLE SECHS setTenantSubscription-Aufrufer treiben die Ableitung --------
 
 test("(e1) createTenantSubscription -> Ableitung laeuft (bereits durch (a) bewiesen, hier nur benannt)", async () => {
   const { store } = await makeTestStore();
@@ -276,7 +217,7 @@ test("(e2) activateSubscriptionFromCheckoutSession ok-Pfad (kein Abo bisher) -> 
   const tenantId = "t_e2";
   const s = store.load();
   ops.registerTenant(s, tenantId, { firstName: "E2" });
-  store.setTenantStripe(tenantId, { customerId: "cus_e2" }); // Customer-Match, kein Abo -> unterer Zweig
+  store.setTenantStripe(tenantId, { customerId: "cus_e2" });
   const outcome = {
     customerId: "cus_e2",
     paymentMethodId: "pm_e2",
@@ -303,10 +244,7 @@ test("(e3) activateSubscriptionFromCheckoutSession Heilungs-Pfad (Karte fehlt, A
   const tenantId = "t_e3";
   const s = store.load();
   ops.registerTenant(s, tenantId, { firstName: "E3" });
-  store.setTenantStripe(tenantId, { customerId: "cus_e3" }); // KEIN paymentMethodId -> hasCardOnFile=false
-  // Simuliert "der Webhook hat das Rennen gewonnen": Abo roh gesetzt, OHNE die Schreibkante
-  // zu durchlaufen (RAW ops-Aufruf, keine Ableitung) - der Test isoliert damit, dass
-  // GENAU der Heilungs-Pfad (nicht ein vorheriger Aufrufer) die Ableitung ausloest.
+  store.setTenantStripe(tenantId, { customerId: "cus_e3" });
   ops.setTenantSubscription(s, tenantId, { subscriptionId: "sub_e3", planSlug: "business" });
   assert.equal(
     s.tenantBudgets.find((b) => b.tenantId === tenantId),
@@ -316,7 +254,7 @@ test("(e3) activateSubscriptionFromCheckoutSession Heilungs-Pfad (Karte fehlt, A
   const outcome = {
     customerId: "cus_e3",
     paymentMethodId: "pm_e3",
-    subscriptionId: "sub_e3", // IDENTISCH -> Heilungs-Pfad, kein subscription_conflict
+    subscriptionId: "sub_e3",
     currentPeriodStart: 1890864000,
     currentPeriodEnd: 1893456000,
     planSlug: "business",
@@ -373,7 +311,7 @@ test("(e5) activation.js syncNumberSetupFeeExemption -> {numberSetupFeeExempt} A
   const tenantId = "t_e5";
   const s = store.load();
   ops.registerTenant(s, tenantId, { firstName: "E5" });
-  store.setTenantSubscription(tenantId, { subscriptionId: "sub_e5" }); // kein planSlug
+  store.setTenantSubscription(tenantId, { subscriptionId: "sub_e5" });
   await activationMod.activatePaidTenant({
     store,
     accounts: noopAccounts(),
@@ -395,7 +333,7 @@ test("(e6) backfillPlanProfiles apply+resolvePlanSlug -> {planSlug} ALLEIN -> Ab
   const s = store.load();
   ops.registerTenant(s, tenantId, { firstName: "E6" });
   store.setKycLevel(tenantId, KYC_LEVEL.CARD);
-  store.setTenantSubscription(tenantId, { subscriptionId: "sub_e6" }); // slug-los (Bestands-Abo)
+  store.setTenantSubscription(tenantId, { subscriptionId: "sub_e6" });
   assert.equal(store.tenantActiveSubscriber(tenantId, KYC_LEVEL.CARD), true, "Vorbedingung: aktiver Subscriber");
   const report = await backfillMod.backfillPlanProfiles({
     store,
@@ -409,8 +347,6 @@ test("(e6) backfillPlanProfiles apply+resolvePlanSlug -> {planSlug} ALLEIN -> Ab
   assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 900);
 });
 
-// ---- (f) Bestands-Guard: der Spiegel apps/web/src/lib/plans.js bleibt unberuehrt ----
-
 test("(f) plan-caps.js importiert NICHTS aus apps/web (der Spiegel bleibt unberuehrt)", () => {
   const src = fs.readFileSync(path.join(REPO_ROOT, "src", "billing", "plan-caps.js"), "utf8");
   const importLines = src.split("\n").filter((l) => /^\s*import\b/.test(l));
@@ -420,8 +356,6 @@ test("(f) plan-caps.js importiert NICHTS aus apps/web (der Spiegel bleibt unberu
     `kein Import-Statement darf apps/web referenzieren: ${JSON.stringify(importLines)}`,
   );
 });
-
-// ---- (g) Patch ohne Slug wirft nicht; Webhook-Perioden-Verlaengerung laeuft durch ---
 
 test("(g) Patch ohne Slug wirft NICHT, Decke unveraendert", async () => {
   const { store } = await makeTestStore();
@@ -437,7 +371,6 @@ test("(g) applyStripeWebhook ACTIVATE OHNE plan_slug (Perioden-Verlaengerung) la
   const tenantId = "t_g2";
   const s = store.load();
   ops.registerTenant(s, tenantId, { firstName: "G2" });
-  // Erst-Abo mit Slug (Ableitung laeuft einmal, pinnt die Decke auf 300).
   store.setTenantSubscription(tenantId, {
     subscriptionId: "sub_g2",
     planSlug: "starter",
@@ -445,7 +378,6 @@ test("(g) applyStripeWebhook ACTIVATE OHNE plan_slug (Perioden-Verlaengerung) la
     currentPeriodStart: 1890864000,
   });
   assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 300);
-  // Perioden-Verlaengerung: Event OHNE plan_slug in der Metadata.
   const event = {
     type: webhookMod.SUBSCRIPTION_EVENT.UPDATED,
     data: {
@@ -481,8 +413,6 @@ test("(g) applyStripeWebhook ACTIVATE OHNE plan_slug (Perioden-Verlaengerung) la
   );
 });
 
-// ---- (h) Slug gesetzt, aber UNBEKANNT -> wirft (der einzige Wurf dieser Phase) -----
-
 test("(h) unbekannter Plan-Slug -> setTenantSubscription wirft (fail-closed)", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_h";
@@ -494,11 +424,6 @@ test("(h) unbekannter Plan-Slug -> setTenantSubscription wirft (fail-closed)", a
   );
 });
 
-// ---- (h2) S1-1 TORN WRITE: der Wurf hinterlaesst KEINE Mutation im Singleton, auch nicht
-// nach einem spaeteren, unabhaengigen save() ------------------------------------------------
-// Repro des Blockers: vor dem Fix mutierte ops.setTenantSubscription stripePlanSlug BEVOR
-// deriveTenantBudgetFromPlan warf; die Mutation ueberlebte im Singleton und ein spaeterer,
-// unabhaengiger save() (anderer Tenant) flushte den ungueltigen Slug still auf die DB.
 test("(h2) unbekannter Slug wirft ATOMAR: Tenant-Record unveraendert, kein Flush durch spaeteren save()", async () => {
   const { store, runner } = await makeTestStore();
   const tenantId = "t_h2";
@@ -508,12 +433,9 @@ test("(h2) unbekannter Slug wirft ATOMAR: Tenant-Record unveraendert, kein Flush
     () => store.setTenantSubscription(tenantId, { planSlug: "enterprise", subscriptionId: "sub_h2" }),
     /unbekannter Plan-Slug 'enterprise'/,
   );
-  // In-Memory sofort nach dem Wurf: NICHTS mutiert (kein Slug, keine subscriptionId, keine Zeile).
   assert.equal(store.tenantSubscription(tenantId).planSlug, null, "stripePlanSlug NICHT mutiert");
   assert.equal(store.tenantSubscription(tenantId).subscriptionId, null, "subscriptionId NICHT mutiert");
   assert.equal(s.tenantBudgets.find((b) => b.tenantId === tenantId), undefined, "keine Budget-Zeile");
-  // Ein spaeterer, voellig unabhaengiger save() (zweiter Tenant) darf den ungueltigen Slug
-  // NICHT nachtraeglich flushen. Frischer Store auf DERSELBEN pglite-DB -> hydriert aus der DB.
   ops.registerTenant(store.load(), "t_h2_other", { firstName: "Other" });
   await store.save();
   const store2 = makePgStore(runner);
@@ -525,8 +447,6 @@ test("(h2) unbekannter Slug wirft ATOMAR: Tenant-Record unveraendert, kein Flush
   );
 });
 
-// ---- (h3) S1-1 Webhook-Gate: ACTIVATE mit unbekanntem plan_slug wirft NICHT (kein unhandled
-// rejection durch die Route), aktiviert NICHT und schreibt keine Budget-Zeile -----------------
 test("(h3) applyStripeWebhook ACTIVATE mit unbekanntem plan_slug -> ignoriert fail-closed (kein Wurf, keine Aktivierung)", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_h3";
@@ -567,8 +487,6 @@ test("(h3) applyStripeWebhook ACTIVATE mit unbekanntem plan_slug -> ignoriert fa
   );
 });
 
-// ---- (i) pg-Rundlauf: BEIDE Pflichtfelder ueberleben save()->reload, kein Mit-Verlust ---
-
 test("(i) pg-Rundlauf: budgetCents+hardCapCents beide 900 nach reload; ein im selben Flush geschriebener Call bleibt erhalten", async () => {
   const { store, runner } = await makeTestStore();
   const tenantId = "t_i";
@@ -580,7 +498,6 @@ test("(i) pg-Rundlauf: budgetCents+hardCapCents beide 900 nach reload; ein im se
   ops.createCall(s, { direction: "outbound", from: "+49", to: "+49", tenantId });
   await store.save();
 
-  // Frischer Store auf DERSELBEN pglite-DB -> hydriert aus der DB (kein Spiegel-Reuse).
   const store2 = makePgStore(runner);
   await store2.init();
   const s2 = store2.load();
@@ -596,7 +513,6 @@ test("(i) pg-Rundlauf: budgetCents+hardCapCents beide 900 nach reload; ein im se
     "der im selben Flush geschriebene Call ist ebenfalls da (Mit-Verlust-Beweis)",
   );
 
-  // Patch ohne Slug, erneut save() -> weiterhin beide Felder 900.
   store2.setTenantSubscription(tenantId, { numberSetupFeeExempt: true });
   await store2.save();
   const store3 = makePgStore(runner);
@@ -608,26 +524,13 @@ test("(i) pg-Rundlauf: budgetCents+hardCapCents beide 900 nach reload; ein im se
   );
 });
 
-// ---- (j) S1-1 Runde 3: ein FRUEHER gueltiger, jetzt aus dem Katalog entfernter/umbenannter
-// (Alt-/Test-) Slug erreicht die Ableitung ueber einen SLUG-LOSEN Folge-Patch. Die
-// Schreibkanten-Validierung (setTenantSubscription) prueft NUR patch.planSlug - der alte,
-// bereits persistierte Slug wird NIE erneut geprueft. Vor dem Fix warf planCapCents darauf
-// uncaught und riss den nicht gefangenen Stripe-Webhook ab (haengende Antwort). Erwartung:
-// No-op + WARN, KEIN Wurf; bestehende Decke bleibt (fail-closed). ---------------------------
-
 test("(j) persistierter, nicht mehr im Katalog gefuehrter Slug + slug-loser Patch wirft NICHT (No-op, Decke bleibt)", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_j";
   const s = store.load();
   ops.registerTenant(s, tenantId, { firstName: "J" });
-  // Bestehende Decke aus einer frueheren, damals gueltigen Ableitung.
   ops.setTenantBudget(s, tenantId, { budgetCents: 300, hardCapCents: 300 });
-  // Simuliert Katalog-Umbenennung/-Entfernung ODER Alt-/Testdaten: ein Slug, der bei
-  // Persistenz gueltig war, den isKnownPlanSlug jetzt aber ablehnt. Direkt am Record geplant -
-  // die Schreibkante wuerde ihn heute abweisen, genau darum geht es (er sitzt bereits at rest).
   s.tenants.find((t) => t.id === tenantId).stripePlanSlug = "legacy-discontinued-plan";
-  // Slug-loser Folge-Patch (Perioden-Verlaengerung): triggert die Ableitung auf dem
-  // PERSISTIERTEN Alt-Slug.
   assert.doesNotThrow(
     () => store.setTenantSubscription(tenantId, { currentPeriodEnd: 1896134400 }),
     "persistierter Alt-Slug darf die Ableitung NICHT werfen lassen",
@@ -646,8 +549,7 @@ test("(j2) applyStripeWebhook ACTIVATE ohne plan_slug bei persistiertem Alt-Slug
   ops.registerTenant(s, tenantId, { firstName: "J2" });
   const tenant = s.tenants.find((t) => t.id === tenantId);
   tenant.stripeSubscriptionId = "sub_j2";
-  tenant.stripePlanSlug = "legacy-discontinued-plan"; // Alt-Slug at rest, Katalog kennt ihn nicht mehr
-  // Perioden-Verlaengerung: Event OHNE plan_slug in der Metadata (der gespeicherte Slug bleibt).
+  tenant.stripePlanSlug = "legacy-discontinued-plan";
   const event = {
     type: webhookMod.SUBSCRIPTION_EVENT.UPDATED,
     data: {

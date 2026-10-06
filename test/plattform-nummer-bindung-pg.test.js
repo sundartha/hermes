@@ -1,10 +1,3 @@
-// OUTBOUND-E1: Plattform-Nummern-Bindung gegen das pg-Backend (pglite, Postgres-in-WASM -
-// KEIN Netz, keine externe DB -> F.I.R.S.T. erfuellt, Muster test/store-pg-multitenant.test.js).
-// Deckt Ebene C (DB-Trigger) + die zwei Blocker der Pruefung (Flush-/Prune-Regression, PM-11/
-// PM-12) + den Neustart-Round-Trip (Lehre pg-store-holds-state-in-memory) + den Teilindex +
-// die Flush-Reihenfolge (platform_number_use VOR der Tenant-Schleife).
-//
-// PII (Regel 9): NUR erkennbar fiktive Nummern aus dem Bestandsstil.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -102,16 +95,12 @@ test("P4 (Flush-Regression, PM-11): gebundene, BEREITS released-e Zeile zweimal 
     tenantId: "t1",
     e164: CUSTOMER_DID,
     provider: PROVIDER.TELNYX,
-    status: NUMBER_STATUS.RELEASED, // der heutige Live-Zustand: schon released, TROTZDEM gebunden
+    status: NUMBER_STATUS.RELEASED,
     providerNumberId: "ext_n3",
   });
   ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
   await store.save();
-  await store.save(); // zweiter Flush - ohne WHEN-Klausel wuerfe der Trigger hier
-  // store.save() schluckt einen Flush-Fehler bewusst (lastFlushError, S1-2) - die Kette
-  // bleibt resolved, damit createCall/gracefulShutdown unveraendert bleiben. Nur
-  // drainFlushes() wirft ihn wieder hoch - das ist der einzig verlaessliche Nachweis,
-  // dass der zweite Flush WIRKLICH durchgelaufen ist (assert.ok(true) waere blind dafuer).
+  await store.save();
   await store.drainFlushes();
 });
 
@@ -130,9 +119,6 @@ test("P5 (Prune-Regression, PM-12): Flush mit leerem Nummern-Slice des gebundene
   ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
   await store.save();
 
-  // Spiegel-Divergenz simulieren: die Nummer verschwindet aus dem In-Memory-Slice des
-  // Tenants (Teil-Hydrierung/Overlap), OHNE ueber releaseNumber/unbindPlatformNumber
-  // gegangen zu sein - flushOwnScoped prunt sie beim naechsten save() per DELETE.
   state.numbers = state.numbers.filter((number) => number.id !== "n4");
   await store.save();
 
@@ -158,11 +144,10 @@ test("P6 (Flush-Reihenfolge): Unbind + releaseNumber in EINEM save() - die legit
     e164: CUSTOMER_DID,
     purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
     provider: PROVIDER.TELNYX,
-    tenantId: "t1", // eigene Bindung des freigebenden Tenants - darf mit
+    tenantId: "t1",
   });
   await store.save();
 
-  // Geordnete Kette: unbind VOR releaseNumber, IM SELBEN save() (Muster performNumberRelease).
   const fresh = store.load();
   const number = ops.findNumber(fresh, "n5");
   ops.unbindPlatformNumber(fresh, { e164: number.e164, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI });

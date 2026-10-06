@@ -1,6 +1,3 @@
-// S3 (P8-Testluecke): findPlan() - bisher nur indirekt ueber bekannte Slugs genutzt
-// (b2-quota-gate.test.js, telnyx-p5-gate-proof.test.js). Deckt hier zusaetzlich den
-// bisher ungetesteten Null-Zweig (?? null bei unbekanntem/leerem/undefined Slug, G3/T5).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { findPlan } from "../src/plans.js";

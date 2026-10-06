@@ -1,7 +1,3 @@
-// A2 - Aktivierung provisioniert das plan-basierte Rechteprofil (GAP A). Phase S: das Profil
-// keyt auf die tenantId (vormals account.email). Backend-agnostisch ueber die geteilte
-// state-ops-Schicht (deckt json + pglite-Logik). Muster wie p3-payment-webhook.test.js:
-// Fake-Seams, offline, F.I.R.S.T.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../src/billing/webhook.js";
@@ -22,35 +18,22 @@ import {
 import { sanitizeProfile, KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
 
-// Duenner Store-Seam auf einem ECHTEN state-Objekt -> s.profiles ist assertbar (ein
-// Fake-Recorder haette keine .profiles-Map). Genau die von activatePaidTenant + dem
-// Webhook-Pfad genutzten Methoden, jede gegen die echte state-ops-Mutation. setProfile
-// keyt key-agnostisch (Phase S: der Aufrufer reicht die tenantId).
 function storeOn(s) {
   return {
     setKycLevel: (t, l) => setKycLevel(s, t, l),
     tenantSubscription: (t) => tenantSubscription(s, t),
     setProfile: (key, patch) => setProfile(s, key, patch),
     findTenantBySubscription: () => null,
-    // FW1-A: Existenz-Gate der Tenant-Aufloesung - ueber den echten State geprueft.
     tenantExists: (tenant) => tenantExists(s, tenant),
     setTenantSubscription: (t, p) => setTenantSubscription(s, t, p),
-    // tenant-prolif-c: activatePaidTenant loescht den Grace-Anker bei Reaktivierung.
     clearSuspendedAt: (t) => clearSuspendedAt(s, t),
-    // GAP-01: Perioden-Fenster des Budget-Gates. Wrapper-Parity zur Fassade
-    // (json/pg): Uhr an der IO-Grenze, {changed} -> Boolean.
     billingHoldActive: (t) => billingHoldActive(s, t, new Date().toISOString()),
     stampBudgetPeriod: (t, iso) => stampBudgetPeriod(s, t, iso).changed,
-    // GAP-04: Spiegel-Nachzug NACH erfolgreicher Aktivierung - json-Backend-Muster (No-op,
-    // nur pg braucht den echten DB-Roundtrip).
     ensureTenant: async () => {},
-    // GAP-03: Reversibilitaet bei ACTIVATE-Erfolg - hier nicht relevant (kein Hold gesetzt).
     clearBillingHold: () => {},
   };
 }
 
-// Zeichnet setStatus auf (wie die Webhook-Fakes). accountByTenant wird seit Phase S NICHT
-// mehr gebraucht (Profil keyt auf die tenantId), nur noch setStatus.
 function fakeAccounts() {
   const calls = { setStatus: [] };
   return {
@@ -59,21 +42,18 @@ function fakeAccounts() {
   };
 }
 
-// --- sanitizeProfile-Null-Toleranz (Regressions-Guard fuer A11/A4) ---
 test("sanitizeProfile haelt maxCallsPerHour=null, droppt Nicht-Zahl", () => {
   assert.deepEqual(sanitizeProfile({ maxCallsPerHour: null }), { maxCallsPerHour: null });
   assert.deepEqual(sanitizeProfile({ maxCallsPerHour: 5 }), { maxCallsPerHour: 5 });
-  assert.deepEqual(sanitizeProfile({ maxCallsPerHour: "viele" }), {}); // Bestand bleibt
+  assert.deepEqual(sanitizeProfile({ maxCallsPerHour: "viele" }), {});
 });
 
-// --- Audit-Detail-Mapper: alle drei Ausgabe-Zweige (Objekt -> String) ---
 test("profileAuditDetail mappt ok/skip/none auf das Audit-Fragment", () => {
   assert.equal(profileAuditDetail({ provisioned: true, keys: 6 }), "profile=ok:6");
   assert.equal(profileAuditDetail({ provisioned: false, reason: "no_plan" }), "profile=skip:no_plan");
   assert.equal(profileAuditDetail(undefined), "profile=none");
 });
 
-// --- Direkter Pfad: voller Tier-Snapshot inkl. null, auf die tenantId ---
 test("activatePaidTenant provisioniert das Tier-Profil auf die tenantId (alle 8 Felder)", async () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {});
@@ -86,16 +66,13 @@ test("activatePaidTenant provisioniert das Tier-Profil auf die tenantId (alle 8 
     tenant: "t_a",
   });
 
-  assert.deepEqual(s.profiles["t_a"], planProfileFor("starter")); // inkl. maxCallsPerHour:null
+  assert.deepEqual(s.profiles["t_a"], planProfileFor("starter"));
   assert.equal(s.profiles["t_a"].maxCallsPerHour, null);
-  // AL-P13: PROFILE_FIELDS traegt seit dem Consult-Kanal 7 Felder (allowConsult).
-  // AL-P10b: allowLookup ergaenzt (In-Call-Nachschlag) -> 8.
   assert.deepEqual(r.profile, { provisioned: true, reason: null, keys: 8 });
   assert.deepEqual(acc.calls.setStatus, [["t_a", "active"]]);
   assert.equal(kycReached(s, "t_a", KYC_OUTBOUND_MIN), true);
 });
 
-// --- Toll-Fraud-Downgrade: Merge==Replace (voller 8-Felder-Snapshot ueberschreibt) ---
 test("vorbestehendes unrestricted=true + allowedNumbers -> nach Aktivierung false/[]", async () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {});
@@ -112,10 +89,9 @@ test("vorbestehendes unrestricted=true + allowedNumbers -> nach Aktivierung fals
   assert.equal(s.profiles["t_a"].maxCallsPerHour, null);
 });
 
-// --- SKIP no_plan: KYC/Status bleiben, kein Wurf, kein Profil-Eintrag ---
 test("kein/unbekannter planSlug -> SKIP no_plan, kein undefined-Profil", async () => {
   const s = makeDefaultState();
-  registerTenant(s, "t_a", {}); // keine setTenantSubscription -> planSlug null
+  registerTenant(s, "t_a", {});
   const r = await activatePaidTenant({
     store: storeOn(s),
     accounts: fakeAccounts(),
@@ -126,7 +102,6 @@ test("kein/unbekannter planSlug -> SKIP no_plan, kein undefined-Profil", async (
   assert.equal(Object.keys(s.profiles).length, 0);
 });
 
-// --- Webhook-Pfad == direkter Pfad ---
 test("Webhook-ACTIVATE mit plan_slug provisioniert identisch (auf die tenantId)", async () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {});
@@ -156,7 +131,7 @@ test("Webhook-ACTIVATE mit plan_slug provisioniert identisch (auf die tenantId)"
 
 test("planSlug-loser Webhook (frischer Tenant) -> SKIP, kein Profil, KYC/Status gesetzt", async () => {
   const s = makeDefaultState();
-  registerTenant(s, "t_a", {}); // kein gespeicherter Slug, metadata ohne plan_slug
+  registerTenant(s, "t_a", {});
   const acc = fakeAccounts();
   await applyStripeWebhook(
     {
@@ -179,12 +154,6 @@ test("planSlug-loser Webhook (frischer Tenant) -> SKIP, kein Profil, KYC/Status 
   assert.equal(kycReached(s, "t_a", KYC_OUTBOUND_MIN), true);
 });
 
-// --- Fix B (0-EUR-Checkout generisch): syncNumberSetupFeeExemption in activatePaidTenant.
-// Kernbeweis der Race-Fix-Korrektheit (s. PLAN-VOUCHER-SETUP-FEE-GAP.md Fix B): die
-// Pruefung "ist diese Subscription 0 EUR" lebt EINMAL in activation.js, damit BEIDE
-// Race-Teilnehmer (Checkout-Return UND Webhook, die beide activatePaidTenant rufen)
-// garantiert denselben Code treffen - unabhaengig davon, wer das Aktivierungs-Rennen
-// gewinnt (webhook.js: der Webhook gewinnt es REGELMAESSIG). ---
 function fakeExemptBilling({ exempt = true, throwErr = null } = {}) {
   const log = [];
   return {
@@ -207,9 +176,6 @@ test("activatePaidTenant: billing.retrieveSubscription liefert exempt:true -> VO
     accounts: fakeAccounts(),
     billing,
     provision: async () => {
-      // Zum Zeitpunkt von provision() MUSS das Flag bereits gesetzt sein: das
-      // ausgeloeste, idempotente Nummern-Provisioning kann sehr schnell in den
-      // echten placeHold laufen (Provisioning-Drain, single-flight).
       assert.equal(
         tenantSubscription(s, "t_a").numberSetupFeeExempt,
         true,

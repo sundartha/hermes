@@ -1,9 +1,3 @@
-// OUTBOUND-E1: Plattform-Nummern-Bindung (platform_number_use) + dreifacher
-// Freigabe-Riegel, Ebene A (transitionNumber/releaseNumber) + Ebene B (Verdikt/Koerbe) +
-// Boot-Ableitung + Boot-Guard-Befund. Reine In-Process-Units (state-ops/release-reconcile/
-// boot/boot-guard), kein Spawn, kein pglite, kein Netz (F.I.R.S.T.).
-//
-// PII (Regel 9): NUR erkennbar fiktive Nummern aus dem Bestandsstil.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -36,19 +30,14 @@ import { platformAniFindings } from "../src/boot-guard.js";
 import { derivePlatformNumberBindings } from "../src/boot.js";
 import { fakeProvisioner } from "./helpers.js";
 
-// Erkennbar fiktive Nummern (Regel 9). ANI/Alarm-Absender/Kunden-DID sind bewusst
-// UNTERSCHIEDLICH, damit ein Test nie zwei Rollen ueber dieselbe Zeichenkette verwechselt.
 const ANI = "+15005550006";
 const ALERT_SENDER = "+15005550007";
 const CUSTOMER_DID = "+4915112345678";
 
-// Bare-Literal-Konstanten (no-magic-numbers/enforceConst: NUR ein einzelner Literal direkt
-// an einem const ist ausgenommen - ein Ausdruck wie "24 * 60 * 60 * 1000" zaehlt trotz
-// const-Deklaration als Magic Number, weil jeder Operand ein eigener Literal-Knoten ist).
-const THIRTY_DAYS_MS = 2592000000; // Alter des simulierten Suspends (> Grace)
-const FOURTEEN_DAYS_MS = 1209600000; // Grace-Frist des Verdikts
-const TWO_DERIVED_BINDINGS = 2; // Boot leitet outbound_ani + alert_sms_sender ab
-const TWO_OPEN_BINDINGS_ON_ONE_NUMBER = 2; // E1-01: eigene + geteilte Bindung auf DERSELBEN e164
+const THIRTY_DAYS_MS = 2592000000;
+const FOURTEEN_DAYS_MS = 1209600000;
+const TWO_DERIVED_BINDINGS = 2;
+const TWO_OPEN_BINDINGS_ON_ONE_NUMBER = 2;
 
 const fakeAudit = () => ({
   records: [],
@@ -60,7 +49,6 @@ const fakeAudit = () => ({
 const fakeLogger = () => ({ log: () => {}, warn: () => {} });
 const fakeStore = (state) => ({ load: () => state, save: () => {}, withStoreLock: (fn) => fn() });
 
-// Ein Tenant mit einer aktiven Telnyx-DID, optional plattform-gebunden.
 function seedTenantWithNumber({
   tenantId = "t1",
   e164 = CUSTOMER_DID,
@@ -242,15 +230,12 @@ test("T9 (DSGVO): Loeschung entfernt ALLE personenbezogenen Daten, die Nummer wi
   assert.equal(state.actionItems.filter((item) => item.tenantId === "t1").length, 0);
   assert.equal(state.notifications.filter((notif) => notif.tenantId === "t1").length, 0);
   assert.ok(!state.tenants.find((tenant) => tenant.id === "t1")?.privateNumber, "privateNumber ist weg");
-  // die Nummer selbst bleibt gehalten - eraseTenantData fasst state.numbers nicht an,
-  // und die Bindung bleibt offen (Art. 17 ist erfuellt, die DID-Miete nicht Teil davon).
   assert.equal(findNumber(state, "n1").status, NUMBER_STATUS.ACTIVE);
-  assert.equal(platformNumberBindings(state, ANI).length, 0); // Sanity: falsche Nummer, kein Treffer
+  assert.equal(platformNumberBindings(state, ANI).length, 0);
   assert.equal(platformNumberBindings(state, findNumber(state, "n1").e164).length, 1, "Bindung bleibt offen");
 });
 
 test("T10: Unbind - eine Bindung, die dem freigebenden Tenant selbst gehoert, darf mit ihm gehen; die geteilte Plattform-ANI nicht", async () => {
-  // Bindung gehoert GENAU dem freigebenden Tenant -> darf mit.
   const own = seedTenantWithNumber({ bound: true, bindingTenantId: "t1" });
   assert.equal(numberBusyReason(own, findNumber(own, "n1"), { forTenantId: "t1" }), null);
   const provisioner = fakeProvisioner();
@@ -264,7 +249,6 @@ test("T10: Unbind - eine Bindung, die dem freigebenden Tenant selbst gehoert, da
   assert.deepEqual(result, { released: 1, aborted: 0 });
   assert.deepEqual(provisioner.log, ["release:ext_n1"]);
 
-  // Gegenprobe: geteilte Plattform-ANI (tenantId=null) -> HOLD.
   const shared = seedTenantWithNumber({ bound: true, bindingTenantId: null });
   const sharedResult = await releaseTenantNumbersOnErase({
     store: fakeStore(shared),
@@ -362,8 +346,6 @@ test("T14: Freigabe setzt e164=NULL - dieselbe Nummer ist danach erneut beschaff
   const state = seedTenantWithNumber({ bound: false });
   releaseNumber(state, "n1");
   assert.equal(findNumber(state, "n1").e164, null);
-  // "Wiederkauf": eine neue Zeile mit DERSELBEN e164 darf ohne Kollision entstehen, weil
-  // die alte Zeile die e164 nicht mehr traegt (number.e164 ist global UNIQUE, schema.sql).
   state.numbers.push({
     id: "n1_rebuy",
     tenantId: "t1",
@@ -389,12 +371,7 @@ test("T15: leeres PLATFORM_ANI_E164 meldet sich; gesetzter Wert bleibt still; Te
   assert.deepEqual(set, []);
 });
 
-// ---- Review-Blocker Runde 1 (E1-01/E1-02/E1-03) ----
-
 test("T16 (E1-01, Regression): eine Nummer mit ZWEI gleichzeitig offenen Bindungen (eigene + geteilte Plattform-ANI) haelt - die eigene reicht NICHT, um die geteilte zu entschaerfen", () => {
-  // Zwei offene Bindungen auf DERSELBEN e164: die eigene Kunden-Bindung (tenantId=t1) UND
-  // zusaetzlich die geteilte Plattform-ANI (tenantId=null) - genau der Zwei-Rollen-Fall, den
-  // das Datenmodell (Teilindex auf (e164,purpose), kein (e164)-Unique) ausdruecklich vorsieht.
   const state = seedTenantWithNumber({ bound: true, bindingTenantId: "t1" });
   const e164 = findNumber(state, "n1").e164;
   bindPlatformNumber(state, {
@@ -404,9 +381,6 @@ test("T16 (E1-01, Regression): eine Nummer mit ZWEI gleichzeitig offenen Bindung
     tenantId: null,
   });
   assert.equal(platformNumberBindings(state, e164).length, TWO_OPEN_BINDINGS_ON_ONE_NUMBER, "beide Bindungen sind offen");
-  // Vor E1-01 lieferte platformNumberBinding() nur die ERSTE Bindung (die eigene) -> die
-  // geteilte Plattform-Bindung blieb fuer numberBusyReason unsichtbar und liess den
-  // irreversiblen Provider-DELETE durchlaufen, obwohl die Plattform-ANI noch offen war.
   assert.equal(
     numberBusyReason(state, findNumber(state, "n1"), { forTenantId: "t1" }),
     NUMBER_HOLD_REASON.PLATFORM_IN_USE,
@@ -415,10 +389,6 @@ test("T16 (E1-01, Regression): eine Nummer mit ZWEI gleichzeitig offenen Bindung
 });
 
 test("T17 (E1-02/E1-03, Regression): schlaegt die Store-Mutation NACH dem Provider-DELETE fehl (neuer Anruf waehrend des Netz-Aufrufs), bricht performNumberRelease sauber ab - der bereits geschlossene eigene Unbind wird zurueckgerollt, GENAU EINE ABORTED-Audit-Zeile, kein unhandled throw", async () => {
-  // Bindung gehoert dem freigebenden Tenant selbst (own) - unbindOwnPlatformBindings schliesst
-  // sie, BEVOR releaseNumber laeuft. Der Provisioner simuliert einen waehrend seines
-  // Netz-Aufrufs neu eingehenden Anruf auf der Nummer - exakt das Fenster, das E1-02 als
-  // ungefangenen Wurf belegt hat.
   const state = seedTenantWithNumber({ bound: true, bindingTenantId: "t1" });
   const e164 = findNumber(state, "n1").e164;
   const provisioner = fakeProvisioner({
@@ -436,12 +406,7 @@ test("T17 (E1-02/E1-03, Regression): schlaegt die Store-Mutation NACH dem Provid
     tenantId: "t1",
   });
   assert.deepEqual(result, { released: 0, aborted: 1 }, "kein unhandled throw beendet den Lauf");
-  // Store bleibt active (kein Orphan, retrybar - der naechste Lauf konvergiert ueber den
-  // 404-Pfad, weil der Provider die Nummer bereits geloescht hat).
   assert.equal(findNumber(state, "n1").status, NUMBER_STATUS.ACTIVE);
-  // Rollback (E1-03): der bereits geschlossene eigene Unbind ist zurueckgerollt, sonst
-  // persistierte ein spaeteres fremdes save() eine geschlossene Bindung, ohne dass die
-  // Nummer je freigegeben wurde.
   assert.equal(platformNumberBindings(state, e164).length, 1, "die eigene Bindung ist wieder offen");
   const abortedRecords = audit.records.filter((record) => record.action === "did_release_aborted");
   assert.equal(abortedRecords.length, 1, "GENAU EINE Audit-Zeile, keine Doppelbuchung");
@@ -452,11 +417,6 @@ test("T17 (E1-02/E1-03, Regression): schlaegt die Store-Mutation NACH dem Provid
 test("T18 (E1-02, Regression): der Recheck IM Lock unmittelbar VOR dem Provider-DELETE greift - ein Anruf, der GENAU IN DEM Fenster zwischen dem aeusseren (unlocked) Verdikt und dem ersten Lock-Erwerb beginnt, verhindert den Provider-DELETE komplett", async () => {
   const state = seedTenantWithNumber({ bound: false });
   const e164 = findNumber(state, "n1").e164;
-  // raceStore simuliert das TOCTOU-Fenster exakt: tenantNumbersForErase() liest den State
-  // UNGELOCKT und sieht die Nummer frei (release-Bucket). Der ALLERERSTE withStoreLock-Aufruf
-  // danach ist performNumberRelease's eigener Recheck - genau in diesem Moment (nicht davor,
-  // sonst wuerde bereits der aeussere Selektor die Nummer in den hold-Korb legen) trifft ein
-  // neuer Anruf ein.
   let lockCalls = 0;
   const raceStore = {
     load: () => state,
@@ -485,8 +445,6 @@ test("T18 (E1-02, Regression): der Recheck IM Lock unmittelbar VOR dem Provider-
   assert.match(abortedRecords[0].detail, /grund=recheck_vor_delete/);
 });
 
-// ---- Review-Blocker Runde 2 (E1-S1-1/E1-S2-3) ----
-
 test("T19 (E1-S1-1, Regression neben T15): ein gueltiges PLATFORM_ANI_E164 bleibt still, ein formal ungueltiges meldet platform_ani_malformed - der Text traegt keine Nummer", () => {
   const valid = platformAniFindings({ platformAniE164: ANI, elevenLabsOutboundEnabled: true });
   assert.deepEqual(valid, [], "gueltige e164 -> kein Befund (T15 unveraendert)");
@@ -513,23 +471,12 @@ test("T20 (E1-S1-1, Regression): derivePlatformNumberBindings leitet aus einem f
 });
 
 test("T21 (E1-S2-3, Regression): das Eigentums-Praedikat kommt fuer numberBusyReason UND unbindOwnPlatformBindings aus DERSELBEN Quelle - fuer eine echte tenantId stimmen beide ueberein, statt kopiert auseinanderzulaufen", () => {
-  // Fall 1 (Bestandsverhalten, seedTenantWithNumber): eine Bindung, die dem freigebenden
-  // Tenant selbst gehoert (tenantId=t1), blockiert numberBusyReason NICHT und wird von
-  // unbindOwnPlatformBindings als eigene geschlossen - beide Antworten stammen jetzt aus
-  // bindingBelongsTo(binding, tenantId).
   const own = seedTenantWithNumber({ bound: true, bindingTenantId: "t1" });
   const ownNumber = findNumber(own, "n1");
   assert.equal(numberBusyReason(own, ownNumber, { forTenantId: "t1" }), null, "eigene Bindung blockiert nicht");
   const closedOwn = unbindOwnPlatformBindings(own, ownNumber);
   assert.equal(closedOwn.length, 1, "unbindOwnPlatformBindings schliesst dieselbe Bindung als eigene");
 
-  // Fall 2 (E1-S2-3, der gemeldete Widerspruch): eine geteilte Bindung (tenantId=null) auf
-  // einer NUMMER mit tenantId=null - "heute nicht ausloesbar" (number.tenantId ist NOT NULL),
-  // aber genau der Fall, an dem die zwei fruehen Kopien der Eigentumsfrage nicht komplementaer
-  // waren. bindingBelongsTo(binding, null) mit binding.tenantId=null ist wahr - EIN und
-  // derselbe Wert fuer beide Aufrufer, die Sonderrolle von forTenantId=null bei
-  // numberBusyReason bleibt ein EXPLIZITER, dokumentierter Zusatz am Aufrufer, kein zweites,
-  // abweichendes Praedikat.
   const state = makeDefaultState();
   bindPlatformNumber(state, { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
   const hypotheticalNumber = { e164: ANI, tenantId: null };

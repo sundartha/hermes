@@ -1,8 +1,3 @@
-// A3 - Backfill plan-basierter Rechteprofile fuer Bestands-Subscriber (GAP A). Phase S: das
-// Profil keyt auf die tenantId (vormals account.email) - kein Account-Lookup mehr. Backend-
-// agnostischer Kern ueber die geteilte state-ops-Schicht (deckt json + pglite-Logik; die
-// pg-Persistenz liegt separat in profile-a3-backfill-pg.test.js). ECHTER state + duenner
-// storeOn(s)-Seam, offline, F.I.R.S.T. Plus ein CLI-No-Op-Smoke (json-Backend, §5.7).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
@@ -27,9 +22,6 @@ import { backfillPlanProfiles, BACKFILL_SKIP } from "../src/billing/backfill-pro
 const execFileAsync = promisify(execFile);
 const CLI = fileURLToPath(new URL("../scripts/backfill-plan-profiles.js", import.meta.url));
 
-// Duenner Store-Seam auf einem ECHTEN state-Objekt -> s.profiles ist assertbar. Genau die
-// von backfillPlanProfiles genutzten Methoden, jede gegen die echte state-ops-Mutation.
-// setProfile keyt key-agnostisch (Phase S: backfill reicht die tenantId).
 function storeOn(s) {
   return {
     load: () => s,
@@ -40,23 +32,20 @@ function storeOn(s) {
   };
 }
 
-// Baut einen aktiven, CARD-verifizierten Subscriber mit (optional) Plan-Slug.
 function seedSubscriber(s, id, { planSlug, subscriptionId } = {}) {
   registerTenant(s, id, {});
   setKycLevel(s, id, KYC_LEVEL.CARD);
   if (planSlug || subscriptionId) setTenantSubscription(s, id, { planSlug, subscriptionId });
 }
 
-// --- Dry-Run: Diff korrekt, KEINE Mutation ---
 test("Dry-Run listet die Aenderung, schreibt aber kein Profil", async () => {
   const s = makeDefaultState();
   seedSubscriber(s, "t_a", { planSlug: "starter" });
   const r = await backfillPlanProfiles({ store: storeOn(s), apply: false });
   assert.deepEqual(r.changes, [{ id: "t_a", hadExisting: false }]);
-  assert.equal(Object.keys(s.profiles).length, 0); // Dry-Run mutiert NICHT
+  assert.equal(Object.keys(s.profiles).length, 0);
 });
 
-// --- Apply schreibt den vollen Tier-Snapshot (inkl. maxCallsPerHour=null) auf die tenantId ---
 test("Apply provisioniert das Tier-Profil auf die tenantId (alle 7 Felder)", async () => {
   const s = makeDefaultState();
   seedSubscriber(s, "t_a", { planSlug: "starter" });
@@ -66,7 +55,6 @@ test("Apply provisioniert das Tier-Profil auf die tenantId (alle 7 Felder)", asy
   assert.equal(r.changes.length, 1);
 });
 
-// --- Idempotenz: 2. Apply-Lauf = 0 changes ---
 test("zweiter Apply-Lauf ist idempotent (0 changes, in unchanged)", async () => {
   const s = makeDefaultState();
   seedSubscriber(s, "t_a", { planSlug: "business" });
@@ -76,10 +64,8 @@ test("zweiter Apply-Lauf ist idempotent (0 changes, in unchanged)", async () => 
   assert.deepEqual(r2.unchanged, [{ id: "t_a" }]);
 });
 
-// --- Owner/Bootstrap hart ausgenommen (auch wenn er ALLES erfuellt) ---
 test("Bootstrap-Tenant wird per ID ausgenommen (skip bootstrap, kein Profil)", async () => {
   const s = makeDefaultState();
-  // Bootstrap kuenstlich zum perfekten Subscriber machen -> beweist die Ausnahme ist per ID.
   setKycLevel(s, BOOTSTRAP_TENANT_ID, KYC_LEVEL.ID_VERIFIED);
   setTenantSubscription(s, BOOTSTRAP_TENANT_ID, { planSlug: "business" });
   const r = await backfillPlanProfiles({ store: storeOn(s), apply: true });
@@ -87,16 +73,14 @@ test("Bootstrap-Tenant wird per ID ausgenommen (skip bootstrap, kein Profil)", a
   assert.equal(Object.keys(s.profiles).length, 0);
 });
 
-// --- Aktiver Subscriber ohne planSlug -> no_plan, kein planProfileFor(undefined) ---
 test("aktiver Subscriber ohne planSlug -> skip no_plan, kein Profil", async () => {
   const s = makeDefaultState();
-  seedSubscriber(s, "t_a"); // CARD, aber keine Subscription -> planSlug null
+  seedSubscriber(s, "t_a");
   const r = await backfillPlanProfiles({ store: storeOn(s), apply: true });
   assert.ok(r.skipped.some((x) => x.id === "t_a" && x.reason === BACKFILL_SKIP.NO_PLAN));
   assert.equal(Object.keys(s.profiles).length, 0);
 });
 
-// --- Toll-Fraud-Downgrade: Merge==Replace raeumt Alt-unrestricted=true ab ---
 test("vorbestehendes unrestricted=true + allowedNumbers -> nach Apply false/[]", async () => {
   const s = makeDefaultState();
   seedSubscriber(s, "t_a", { planSlug: "business" });
@@ -107,31 +91,28 @@ test("vorbestehendes unrestricted=true + allowedNumbers -> nach Apply false/[]",
   assert.equal(s.profiles["t_a"].maxCallsPerHour, null);
 });
 
-// --- Nicht-Subscriber (kein KYC) -> not_subscriber, kein Profil ---
 test("aktiver Tenant ohne KYC -> skip not_subscriber, kein Profil", async () => {
   const s = makeDefaultState();
-  registerTenant(s, "t_a", {}); // active, aber kein kycLevel -> kein Subscriber
+  registerTenant(s, "t_a", {});
   setTenantSubscription(s, "t_a", { planSlug: "starter" });
   const r = await backfillPlanProfiles({ store: storeOn(s), apply: true });
   assert.ok(r.skipped.some((x) => x.id === "t_a" && x.reason === BACKFILL_SKIP.NOT_SUBSCRIBER));
   assert.equal(Object.keys(s.profiles).length, 0);
 });
 
-// --- Reconcile-Seam (Fake): heilt slug-loses Abo, setzt Slug + Profil ---
 test("Reconcile-Resolver heilt slug-loses Abo (setzt Slug, schreibt Profil)", async () => {
   const s = makeDefaultState();
-  seedSubscriber(s, "t_a", { subscriptionId: "sub_x" }); // CARD + Abo, aber KEIN planSlug
+  seedSubscriber(s, "t_a", { subscriptionId: "sub_x" });
   const r = await backfillPlanProfiles({
     store: storeOn(s),
     apply: true,
     resolvePlanSlug: async () => "business",
   });
   assert.deepEqual(r.reconciled, [{ id: "t_a" }]);
-  assert.equal(tenantSubscription(s, "t_a").planSlug, "business"); // Slug persistiert im Spiegel
+  assert.equal(tenantSubscription(s, "t_a").planSlug, "business");
   assert.deepEqual(s.profiles["t_a"], sanitizeProfile(planProfileFor("business")));
 });
 
-// --- Ohne Reconcile-Resolver bleibt das slug-lose Abo no_plan-Skip ---
 test("slug-loses Abo ohne Reconcile -> skip no_plan", async () => {
   const s = makeDefaultState();
   seedSubscriber(s, "t_a", { subscriptionId: "sub_x" });
@@ -140,7 +121,6 @@ test("slug-loses Abo ohne Reconcile -> skip no_plan", async () => {
   assert.equal(Object.keys(s.profiles).length, 0);
 });
 
-// --- §5.7: json-Backend = sauberer No-Op (kein Wurf, store.json unberuehrt) ---
 test("CLI ist im json-Backend ein No-Op (exit 0, store.json nicht erzeugt)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "a3-backfill-"));
   try {
@@ -148,7 +128,7 @@ test("CLI ist im json-Backend ein No-Op (exit 0, store.json nicht erzeugt)", asy
       env: { ...process.env, STORE_BACKEND: "json", DATA_DIR: dir },
     });
     assert.match(stdout, /json-Backend: No-Op/);
-    assert.equal(existsSync(join(dir, "store.json")), false); // No-Op schreibt nie
+    assert.equal(existsSync(join(dir, "store.json")), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -1,16 +1,3 @@
-// KS-P9/E10: die Plan-Cap-Ableitung klemmt NICHT mehr auf die Plattform-Zahl. Diese Datei
-// pinnt genau das - die verkaufte Business-Decke (900 ct) bleibt stehen, auch wenn
-// MAX_BUDGET_EUR (jetzt nur noch Warnschwelle) darunter liegt. pglite (F.I.R.S.T.).
-//
-// process.env.MAX_BUDGET_EUR="5" (500 ct) < abgeleitete Business-Decke (900 ct) - GENAU der
-// Fall, den der Clamp frueher auffing und der seit KS-P9 folgenlos ist (sonst kuerzte eine
-// niedrig gesetzte Warnschwelle still verkaufte Leistung).
-// KEIN Server-Boot in dieser Datei - nur die Schreibkante (store.setTenantSubscription)
-// wird direkt gerufen. Mechanik gegen die Modul-Config-Falle: process.env VOR jedem Import,
-// ausschliesslich dynamische Imports in before() (Muster plan-cap-derivation.test.js).
-// KS-P5a: die Decke folgt seit E5a dem BUCHUNGSSATZ (voiceTariffDefaultCents). Der
-// Fixtur-Wert 6 bleibt bewusst stehen - der gepruefte Vektor ist MAX_BUDGET_EUR=5 (500 ct)
-// UNTER der Business-Decke (900 ct), nicht der Tarifwert.
 process.env.MAX_BUDGET_EUR = "5";
 process.env.VOICE_TARIFF_DEFAULT_CENTS = "6";
 
@@ -41,10 +28,6 @@ async function makeTestStore() {
   return { store, runner };
 }
 
-// Faengt console.warn waehrend fn() ab (kein Log-Lesen, P12/S). Eigene, minimale Kopie
-// statt test/helpers.js-Import: diese Datei bleibt bewusst bei ausschliesslich
-// dynamischen Imports (s. Datei-Kommentar oben), ein statischer Helper-Import waere die
-// einzige Ausnahme davon.
 async function captureWarn(fn) {
   const lines = [];
   const orig = console.warn;
@@ -62,9 +45,6 @@ test("(j2a) KS-P9: applyStripeWebhook ACTIVATE (business) laeuft durch, Decke bl
   const tenantId = "t_j2a";
   const s = store.load();
   ops.registerTenant(s, tenantId, { firstName: "J2A" });
-  // Realistischer Vorzustand des Race-Fix (webhook.js): customerId bereits bekannt
-  // (Checkout-Session-Anlage), paymentMethodId noch nicht - NUR dann fuellt der
-  // Webhook die Luecke (customerMatches braucht einen VORHANDENEN Treffer).
   store.setTenantStripe(tenantId, { customerId: "cus_j2a" });
   const event = {
     type: webhookMod.SUBSCRIPTION_EVENT.CREATED,
@@ -93,8 +73,6 @@ test("(j2a) KS-P9: applyStripeWebhook ACTIVATE (business) laeuft durch, Decke bl
       billing: undefined,
     }),
   );
-  // Voller Durchlauf trotz Clamp (Zahlungspfad NICHT unterbrochen): Perioden-Anker,
-  // Karte gebunden, Aktivierung + Provisioning ausgeloest.
   assert.equal(store.tenantSubscription(tenantId).subscriptionId, "sub_j2a");
   assert.equal(store.tenantSubscription(tenantId).currentPeriodEnd, 1893456000);
   assert.equal(store.tenantStripe(tenantId).customerId, "cus_j2a", "Karte via Fake gebunden");
@@ -114,7 +92,7 @@ test("(j2b) KS-P9: Checkout-Return-Pfad (business) laeuft durch, Decke bleibt 90
   const tenantId = "t_j2b";
   const s = store.load();
   ops.registerTenant(s, tenantId, { firstName: "J2B" });
-  store.setTenantStripe(tenantId, { customerId: "cus_j2b" }); // Customer-Match
+  store.setTenantStripe(tenantId, { customerId: "cus_j2b" });
   const outcome = {
     customerId: "cus_j2b",
     paymentMethodId: "pm_j2b",
@@ -144,15 +122,11 @@ test("(j2b) KS-P9: Checkout-Return-Pfad (business) laeuft durch, Decke bleibt 90
   assert.deepEqual(clampLines, [], `keine Klemm-WARN mehr erwartet, war:\n${warnLines.join("\n")}`);
 });
 
-// ---- (j4) S1-2: planCapUnderivableFindings faengt einen werfenden capForSlug (Katalog-Slug
-// ohne Kopffreiheit-Eintrag) und liefert ein fatal:true-Finding, statt selbst zu werfen ------
-// Vor dem Fix waere der Wurf uncaught durch assertBootGates gelaufen und der Prozess LAUTLOS
-// mit exit(0) geendet (globales uncaughtException-Netz) - der fatale Guard versagte still.
 test("(j4) planCapUnderivableFindings: werfender capForSlug -> fatal:true PLAN_CAP_UNDERIVABLE (kein Wurf)", () => {
   let findings;
   assert.doesNotThrow(() => {
     findings = bootGuardMod.planCapUnderivableFindings({
-      slugs: ["starter", "enterprise"], // 'enterprise' hat keinen Kopffreiheit-Eintrag -> planCapCents wirft
+      slugs: ["starter", "enterprise"],
       capForSlug: (slug) => planCapThatThrows(slug),
     });
   });
@@ -162,9 +136,6 @@ test("(j4) planCapUnderivableFindings: werfender capForSlug -> fatal:true PLAN_C
   assert.match(findings[0].message, /enterprise/);
 });
 
-// Kleiner Stub, der planCapCents' Wurf-Verhalten nachbildet (wirft bei 'enterprise'), ohne
-// die echte config/plan-caps zu koppeln - der Guard soll JEDEN Wurf des injizierten
-// capForSlug fangen, unabhaengig von der Ursache.
 function planCapThatThrows(slug) {
   if (slug === "starter") return 300;
   throw new Error(`planCapCents: unbekannter Plan-Slug '${slug}'`);

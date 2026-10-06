@@ -1,10 +1,3 @@
-// Kompositions-Integrationstest fuer den Kunden-Portal-Datenpfad:
-// webAuth (Session->req.tenant) -> portalStore.listCalls(tenant-scoped). Baut die
-// gleiche Route wie server.js auf einer Wegwerf-App nach (ein echter child-process
-// + Postgres ist im Test-Env nicht verfuegbar; pglite ist in-process). Beweist:
-// (1) ohne Session -> 401 (fail-closed), (2) aktive Kunden-Session sieht NUR die
-// eigenen (leeren) Calls, nie die des Owners. account/session/tenant sind nicht
-// unter RLS -> ein Runner reicht; die RLS-Tiefe deckt portal-rls-killer.test.js ab.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -23,7 +16,6 @@ async function setup() {
   await applySchema({ query: q, exec: (s) => db.exec(s) });
   await q(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
   await seedDefaults({ query: q, exec: (s) => db.exec(s) }, BOOTSTRAP_TENANT_ID);
-  // Owner-Call (darf NIE im Kunden-Portal auftauchen)
   await q(
     `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at)
      VALUES ('call_owner', $1, 'tok', 'inbound', 'active', now()::text)`,
@@ -34,7 +26,6 @@ async function setup() {
   const sessions = makeSessions(runner);
   const portalStore = makePortalStore(runner);
 
-  // Kunde anlegen, aktivieren, Session erzeugen (echte Factories).
   await accounts.upsertOnFirstLogin({ sub: "cust1", email: "c@x" });
   await accounts.setStatus("t_cust1", "active");
   const { id: sessionId } = await sessions.create({
@@ -43,7 +34,6 @@ async function setup() {
     ttlSeconds: 3600,
   });
 
-  // Route wie in server.js.
   const app = express();
   app.get(
     "/api/portal/state",

@@ -1,31 +1,3 @@
-// PLAN-PERSONAL-ASSISTANT P1 (Kontext-Bruecke): die geschaerften place_call-
-// Feldbeschreibungen sind reine MCP-Client-Metadaten (advisory, runtime-folgenlos).
-// Dieser Test nagelt zwei Dinge fest: (1) die briefing-Beschreibung weist das
-// aufrufende Chat-LLM aktiv an, den Chat-Kontext ZUSAMMENGEFASST, ohne Secrets und
-// in der Assistenten-Rolle weiterzureichen; (2) das Schema deckt die erwartete Feld-
-// Menge + Optionalitaet ab. P3 ergaenzt das OPTIONALE advisory-Feld context (Server
-// bleibt autoritativ, Wirkung nur bei ASSISTANT_CONTEXT_ENABLED); die Required-Menge
-// bleibt unveraendert -> /api/calls bei Flag aus byte-identisch (die P0-Pins in
-// personal-assistant-characterization.test.js decken das Laufzeitverhalten ab). P2b
-// ergaenzt zusaetzlich das OPTIONALE Diagnose-Retention-Flag diagnostic (Server bleibt
-// autoritativ, siehe src/diagnostic-retention.js); auch das aendert die Required-Menge nicht.
-//
-// P15/O14: die Beschreibungen sind seit dem Sprachreinheits-Rest EINSPRACHIG ENGLISCH
-// (Modellsprache != Nutzersprache, s. Kopf von src/mcp-tools.js). Die AUSSAGE dieser Tests
-// ist unveraendert - nur die Regex-Anker greifen jetzt den englischen Wortlaut. Die
-// Vollstaendigkeit der Emphase-Marker haelt zusaetzlich
-// test/p15-mcp-tool-descriptions-en.test.js.
-//
-// Seam wie mcp-tools.test.js / mcp-ui.test.js: ein fakeServer faengt die per
-// server.registerTool registrierten Schemas ein, ohne echten MCP-Transport.
-// Einziger Registrierweg ist registerTool (src/mcp-tools.js uiTool); ein
-// server.tool()-Aufruf wuerde hier absichtlich mit TypeError scheitern
-// (schema = die reine Zod-Feldmenge, aus config.inputSchema). registerResource
-// ist ein No-Op (die UI-Tools brauchen wir hier nicht).
-// AL-P9 (unten): zwei Faelle brauchen mehr als die Schema-Form - z, um die Feldmenge so
-// zu parsen, wie das MCP-SDK sie parst (z.object(shape), strip-Modus), und den
-// Spawn-Server, um denselben Aufruf ueber die ECHTE /mcp-Route bis in den Store zu
-// verfolgen. Kein echter Anruf: FAKE_ORIGINATE haelt den Anrufstart netzfrei.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
@@ -44,13 +16,6 @@ function captureSchemas() {
   return schemas;
 }
 
-// Soll-Form von place_call NACH P4a (= P1 + das optionale advisory-Feld context + das
-// optionale Diagnose-Retention-Flag diagnostic PLUS das seit F-2 wirksame language-Feld
-// (LANG-15 aufgehoben, PLAN-ANRUFDEFEKTE.md Abschnitt 6, tasks/p4a-spec.md): ohne Angabe
-// loest der Server die Sprache weiterhin ausschliesslich ueber store.resolveCallLanguage
-// auf, mit Angabe gewinnt der Sprachwunsch die GESPRAECHSSPRACHE (nie die Offenlegung).
-// Aus diesen Eintraegen leiten sich Feldanzahl + Optionalitaet ab - kein nacktes
-// Zahl-Literal (G25).
 const PLACE_CALL_SHAPE = {
   to: { optional: false },
   objective: { optional: false },
@@ -61,7 +26,6 @@ const PLACE_CALL_SHAPE = {
   language: { optional: true },
   max_duration_s: { optional: true },
   diagnostic: { optional: true },
-  // T2-13 (N-10): optional im Schema (SDK-Grund, s. mcp-tools.js), Pflicht erst im Handler.
   confirmation_code: { optional: true },
 };
 
@@ -73,17 +37,8 @@ test("P1-01: place_call-briefing-Beschreibung verlangt zusammengefassten Kontext
   assert.match(briefing, /summari/i, "verlangt Zusammenfassen statt Roh-Dump");
   assert.match(briefing, /secret/i, "untersagt Secrets");
   assert.match(briefing, /assistant/i, "haelt die Assistenten-Rolle (kein Claude/Gemini)");
-  // GQ-B2 (Owner-Revision der GQ-B1-Pauschale): der Owner ist waehrend des Anrufs
-  // abwesend. Die ehrliche Prozess-Auskunft fuer Nur-Owner-Wissen ist deshalb erlaubt -
-  // untersagt bleibt die ERFUNDENE Antwort. Die volle Drei-Klassen-Inventur pinnt
-  // test/gq-b1-briefing-openness.test.js (GQ-B2-01/02).
   assert.match(briefing, /never script an answer/i, "untersagt die erfundene Antwort");
   assert.match(briefing, /Leave the gap open/i, "verlangt die offene Luecke");
-  // GQ-B1 Review-Blocker (Runde 1): das Verbot betrifft nur das VORWEGSCHREIBEN hier -
-  // es behauptet nicht, der Agent duerfe eine Rueckmeldung generell nicht zusagen.
-  // mandate.on_out_of_scope weist den Default take_message ausdruecklich an, genau das
-  // zuzusagen ("promise that the user will get back") - eine gegenteilige Behauptung in
-  // derselben Tool-Beschreibung waere ein sachlicher Widerspruch im selben Schema.
   assert.doesNotMatch(
     briefing,
     /agent is not allowed to say that/i,
@@ -105,12 +60,6 @@ test("P1-02 (nach P10/LANG-15): place_call-Schema bleibt strukturell unveraender
   }
 });
 
-// I9 (call-quality Impl-1) + Runde 2 (S-B): die objective-Beschreibung macht dem
-// aufrufenden Chat-LLM vier Dinge klar - (1) der Satz wird nach der Offenlegung
-// WOERTLICH vorgesprochen, bevor der Angerufene antwortet; (2) er ist ein sprechbarer
-// Ich-Satz, KEIN Infinitiv-Stummel; (3) IMMER konkretes Thema/Anlass nennen, wenn
-// bekannt; (4) bei unbekanntem Thema erst kurz beim Nutzer nachfragen statt vage
-// anzurufen. Regex-Pins statt Woertlich-Pin (wie P1-01: advisory-Metadaten).
 test("I9-01: place_call-objective-Beschreibung verlangt Ich-Satz + konkretes Thema + warnt vor woertlichem Vorsprechen", () => {
   const schema = captureSchemas().get("place_call");
   const objective = schema.objective.description || "";
@@ -120,14 +69,9 @@ test("I9-01: place_call-objective-Beschreibung verlangt Ich-Satz + konkretes The
   assert.match(objective, /disclosure/i, "verortet es nach der Offenlegung");
   assert.match(objective, /concrete topic/i, "verlangt konkretes Thema/Anlass");
   assert.match(objective, /ask the user FIRST/i, "verlangt Rueckfrage statt vagem Auftrag");
-  // GQ-B1: die Vorab-Rueckfrage ist auf das THEMA eingeengt - ein einzelnes fehlendes
-  // Detail traegt das Briefing oder die Live-Rueckfrage, keine Chat-Runde.
   assert.match(objective, /topic itself/i, "die Vorab-Rueckfrage gilt nur noch dem Thema selbst");
 });
 
-// P3 (PLAN-PERSONAL-ASSISTANT): das context-Feld ist OPTIONAL (advisory) und seine
-// Beschreibung haelt den Anti-Spoofing-/Secret-Vertrag - genau wie briefing in P1-01.
-// Das Schema wird immer annonciert; der Server (Flag) entscheidet ueber die Wirkung.
 test("P3-01: place_call-context ist optional + Beschreibung haelt Hintergrund-/Secret-/Assistenten-Vertrag", () => {
   const schema = captureSchemas().get("place_call");
   assert.ok(schema.context, "context ist registriert");
@@ -138,11 +82,6 @@ test("P3-01: place_call-context ist optional + Beschreibung haelt Hintergrund-/S
   assert.match(desc, /assistant/i, "haelt die Assistenten-Rolle (kein Claude/Gemini)");
 });
 
-// P6 (PLAN-CONVERSATION-QUALITY-V2): das mandate-Feld ist OPTIONAL (advisory Schema, der
-// Server validiert/normalisiert autoritativ). Die Beschreibungen SIND das Feature: sie
-// zwingen das aufrufende Chat-Modell, den Owner nach dem Rahmen zu fragen, statt einen zu
-// erfinden, und stellen den E1-Vertrag (kein Buchen/Kalender) sowie den
-// constraints-Vorrang klar.
 test("P6-01: place_call-mandate ist optional + Beschreibungen halten E1-/Vorrang-/Enum-Vertrag", () => {
   const schema = captureSchemas().get("place_call");
   assert.ok(schema.mandate, "mandate ist registriert");
@@ -165,39 +104,11 @@ test("P6-01: place_call-mandate ist optional + Beschreibungen halten E1-/Vorrang
   assert.match(onOutOfScope, /accept_best/, "on_out_of_scope dokumentiert accept_best");
 });
 
-// ---- AL-P9 (offene Fragen): das Feld, das place_call still verwirft -------------------
-// ABSICHTLICH ROT. context.open_questions ist die Eingabe des Eroeffnungs-Consults
-// (AL-P13, "Consult #0"): die Fragen, die der Auftrag offen laesst, werden beantwortet,
-// WAEHREND das Telefon klingelt - 0 ms Gespraechslatenz. Der Server ist dafuer
-// vollstaendig gebaut: _validation.js fuehrt open_questions unter CONTEXT_FIELDS und
-// validiert es (max. 10 Eintraege a 300 Zeichen), routes/api-calls.js liest es in
-// emitOpeningConsult und emittiert daraus den Consult.
-//
-// Ueber place_call kann dieser Weg trotzdem NIE feuern: das zod-Objekt des context-Feldes
-// (src/mcp-tools.js) deklariert vier Teilfelder - summary, key_facts,
-// recipient_relationship, desired_outcome - und open_questions ist keins davon. zod
-// strippt unbekannte Keys still (dieselbe Falle, die die Kommentare an mandate und
-// diagnostic bereits benennen: "Ohne Eintrag im zod-Schema erreichte das Feld /api/calls
-// nie"). Es gibt keinen Fehler, keine Warnung und keinen Log-Eintrag - der Anruf laeuft,
-// nur ohne die Antworten, die ihn haetten tragen sollen.
-//
-// GEPINNT wird der SOLL-Zustand (die Fragen kommen an), nicht das heutige Strippen: ein
-// Test, der das Verschwinden festschreibt, macht den Defekt zur Zusage. Zwei Ebenen, weil
-// nur beide zusammen den Weg belegen - die Schema-Pruefung ist der Ort des Verlusts, der
-// Call-Datensatz der Ort, an dem der Wert gebraucht wird.
-//
-// Die Schema-Pruefung wird hier so gefahren, wie das MCP-SDK sie fahrt: die registrierte
-// Feldmenge ist eine rohe zod-Shape, das SDK macht daraus z.object(shape) und uebergibt
-// dem Handler das ERGEBNIS dieses Parse. z.object(...) ohne .passthrough() ist im
-// strip-Modus - genau das ist der Verlust.
 const PLACE_CALL_INPUT = Object.freeze({
   to: "+4915112345678",
   objective: "I would like to book a men's haircut for Max on Saturday morning.",
 });
 const OFFENE_FRAGEN = Object.freeze(["Welche Uhrzeit passt genau?", "Darf es auch Freitag sein?"]);
-// Ein Geschwisterfeld, das heute nachweislich durchkommt: ohne diese Positiv-Kontrolle
-// saehe "open_questions fehlt" genauso aus wie "das ganze context-Objekt faellt weg"
-// (Lehre pruefkommando-ohne-positiv-kontrolle).
 const KEY_FACTS = Object.freeze(["Stammkunde seit drei Jahren"]);
 const CONTEXT_MIT_FRAGEN = Object.freeze({ key_facts: KEY_FACTS, open_questions: OFFENE_FRAGEN });
 
@@ -217,19 +128,8 @@ test("AL-P9-10: ueber das place_call-Schema uebergebene open_questions ueberlebe
   );
 });
 
-// Die zweite Ebene: derselbe Aufruf ueber die ECHTE MCP-Route bis in den Store. Ein
-// Schema-Fall allein bewiese nur, dass zod das Feld durchlaesst - nicht, dass es dort
-// ankommt, wo emitOpeningConsult es liest. Spawn-Muster wie test/assistant-context-http.js
-// (Owner-Pfad, ASSISTANT_CONTEXT_ENABLED an - ohne das Kanal-Gate setzt der
-// assistant_context-Gate ctx.context auf null und der Fall maesse eine Luecke, die er
-// selbst erzeugt hat). FAKE_ORIGINATE haelt den Anrufstart netzfrei: kein echter Anruf,
-// keine Anbieter-API.
 const CALL_ZIEL = "+4915112345678";
-// Benannt statt nackt (Repo-Regel: keine Magic Numbers) - die eine Achse, an der dieser
-// Fall scheitern koennte, ohne den Kontext-Weg ueberhaupt erreicht zu haben.
 const HTTP_UNAUTHORIZED = 401;
-// T2-13 (N-10): CALL_CONFIRMATION_SECRET testweise gesetzt (>= 32 Zeichen) - ohne
-// bestaetigten confirmation_code wuerde place_call gar nicht mehr bis /api/calls kommen.
 const TEST_CONFIRMATION_SECRET = "al-p9-11-test-secret-mindestens-32-zeichen";
 const E2E_ENV = Object.freeze({
   ASSISTANT_CONTEXT_ENABLED: "true",
@@ -238,11 +138,6 @@ const E2E_ENV = Object.freeze({
   CALL_CONFIRMATION_SECRET: TEST_CONFIRMATION_SECRET,
 });
 
-// T2-13 (N-10): dieser Host deklariert keine Kartenfaehigkeit (kein MCP_UI_ENABLED), der
-// Code aus prepare_call bliebe also unsichtbar. Fuer diesen Test - der die
-// open_questions-Bruecke misst, nicht den Bestaetigungs-Weg - wird der Code deshalb direkt
-// an der Route geholt (derselbe Loopback-Aufrufer wie der MCP-Handler selbst, s.
-// src/routes/api-call-confirmations.js) statt ueber prepare_call/_meta.
 async function confirmationCodeFor(localUrl, body) {
   const res = await fetch(`${localUrl}/api/call-confirmations`, {
     method: "POST",
@@ -265,9 +160,6 @@ test("AL-P9-11: ueber die MCP-Route uebergebene open_questions stehen am Call-Da
       toolCall("place_call", { ...placeCallArgs, confirmation_code }),
     );
     assert.notEqual(res.status, HTTP_UNAUTHORIZED, "Vorbedingung: die MCP-Route nimmt den Aufruf an");
-    // Der Rumpf MUSS vor dem Store-Lesen abgeholt werden: der Streamable-HTTP-Transport
-    // antwortet als SSE, fetch loest schon mit den Kopfzeilen auf - der Handler laeuft zu
-    // diesem Zeitpunkt noch. Ohne diese Zeile liest der Store einen Stand VOR dem Anruf.
     const antwort = await res.text();
 
     const call = srv.readStore().calls.find((eintrag) => eintrag.to === CALL_ZIEL);

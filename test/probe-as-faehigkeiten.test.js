@@ -1,22 +1,3 @@
-// E1 (PLAN-OPENAI.md Etappe 1, S5-A4 + F1-F4): Test des read-only
-// Messwerkzeugs scripts/probe-as-faehigkeiten.mjs. Reine Funktionen laufen
-// offline gegen eine Attrappe (Lehre "Messwerkzeug braucht Attrappe" -
-// alle Blocker lagen im Fehlerfall); der IO-Teil per Kindprozess-Spawn
-// (Muster test/anruf-unterbrechungen-script.test.js) und - fuer die
-// Ende-zu-Ende-Faelle - gegen den echten Gateway (Muster test/oauth.test.js).
-//
-// Neues Verhalten braucht einen Test (P11): vor dieser Datei gibt es keine
-// Zeile Code fuer diese Sonde.
-//
-// Fixture "vollstaendiges AuthKit-Dokument": die Feldliste stammt woertlich
-// aus tasks/openai-fix/S5-authorization-server.md, Abschnitt "Kann der AS
-// das?" (authorization_endpoint/token_endpoint/introspection_endpoint/
-// registration_endpoint/issuer/code_challenge_methods_supported/
-// grant_types_supported/scopes_supported/response_types_supported/
-// response_modes_supported/token_endpoint_auth_methods_supported), ergaenzt
-// um jwks_uri/userinfo_endpoint/client_id_metadata_document_supported/
-// authorization_response_iss_parameter_supported (im selben Dokument als
-// AS-Faehigkeiten diskutiert, nicht im Kurzbeispiel enthalten).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -67,8 +48,6 @@ function vollstaendigesAsDokument(overrides = {}) {
   };
 }
 
-// Konstanter Abruf-Spion: zaehlt Aufrufe, antwortet nach einer festen
-// Tabelle {url -> {status, doc}}. Netzfrei, deterministisch.
 function machAbrufAttrappe(tabelle) {
   const aufrufe = [];
   const abrufen = async (url) => {
@@ -250,11 +229,6 @@ test("E1-12b messePrm/messeMcpModus/messeAsMetadata direkt gegen die Attrappe", 
   assert.equal(asMeta.faehigkeiten.length, FAEHIGKEITEN_ANZAHL);
 });
 
-// MESSTREUE (Review-Befund): beide Well-known-Pfade antworten 200, aber mit
-// unterschiedlichen Dokumenten - die Sonde MUSS dasselbe Dokument benoten,
-// das discoverJwksUri (src/auth.js) tatsaechlich konsumiert (zuerst
-// openid-configuration). Reproduziert exakt den Live-Fund: das zweite
-// Dokument bewirbt S256, das erste nicht - Quelle bleibt trotzdem das erste.
 test("E1-12c AS-Metadata auf beiden Pfaden 200 mit divergenten Dokumenten: Produktionsreihenfolge gewinnt", async () => {
   const jwksVonOpenidConfig = `${ISSUER}/openid/jwks`;
   const jwksVonAuthServer = `${ISSUER}/as/jwks`;
@@ -318,7 +292,6 @@ test("E1-13 gegen den echten Gateway: F1/F2/F3 und publicUrl stimmen", async () 
     assert.equal(bericht.mcpModus.modus, "oauth");
     assert.equal(bericht.mcpModus.publicUrl, "https://agent.test");
     assert.equal(bericht.vorhersage.status, "NEIN");
-    // Der lokale Mini-IdP bewirbt kein S256 -> PFLICHT-FAIL schlaegt auf den Exit durch.
     assert.equal(bericht.exitCode, EXIT_PFLICHT_VERLETZT);
   } finally {
     await srv.stop();
@@ -342,11 +315,6 @@ test("E1-15 Quelltext-Gate: kein process.env, kein Authorization/Cookie, kein Sc
   const quelltext = await fs.readFile(`${ROOT}/scripts/probe-as-faehigkeiten.mjs`, "utf8");
   const kommentarfrei = quelltext.replace(/\/\/.*$/gm, "");
 
-  // "authorization" als Wortstueck ist im Quelltext ERWARTET (well-known-Pfade
-  // wie oauth-authorization-server, Feldnamen wie authorization_servers/
-  // authorization_endpoint/authorization_response_iss_parameter_supported) -
-  // das Gate prueft deshalb gezielt das GESETZTE Header-Paar "Authorization:",
-  // nicht das Wortstueck.
   assert.doesNotMatch(kommentarfrei, /process\.env/);
   assert.doesNotMatch(kommentarfrei, /["']?Authorization["']?\s*:/);
   assert.doesNotMatch(kommentarfrei, /cookie/i);
@@ -354,8 +322,6 @@ test("E1-15 Quelltext-Gate: kein process.env, kein Authorization/Cookie, kein Sc
   assert.doesNotMatch(kommentarfrei, /writeFile|appendFile|createWriteStream/);
   assert.doesNotMatch(kommentarfrei, /method:\s*"(PUT|PATCH|DELETE)"/);
 
-  // Positiv-Kontrolle (Lehre pruefkommando-ohne-positiv-kontrolle): dieselben
-  // Regexe MUESSEN auf einen synthetischen Schnipsel treffen.
   const verdaechtigerSchnipsel =
     'const t = process.env.TOKEN;\nfetch(url, { headers: { Authorization: t, cookie: "x" }, method: "DELETE" });\nimport { writeFile } from "node:fs";\n';
   assert.match(verdaechtigerSchnipsel, /process\.env/);

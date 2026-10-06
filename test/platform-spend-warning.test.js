@@ -1,17 +1,3 @@
-// P6 (PLAN-BUDGET-AXES): Fruehwarnung der Plattform-Achse. Nach einer ERFOLGREICHEN
-// Reservierung im letzten Gate (reserve_budget) feuert - GENAU EINMAL pro Spend-Monat -
-// ein Audit-Ereignis (+ optional eine SMS). KEIN Praedikat, KEIN Gate, KEINE
-// Ablehnungsentscheidung aendert sich. Seit KS-P9/E10 ist diese Warnung die EINZIGE
-// Wirkung der Plattform-Achse - einen Plattform-Notaus, vor dem sie warnen koennte, gibt
-// es nicht mehr; das Regressionsschloss dafuer steht in
-// test/ks-p9-platform-axis-observation.test.js.
-//
-// Zwei Ebenen in einer Datei (Muster test/usage-spend-month-axis.test.js): Ops-Ebene
-// (claimPlatformSpendWarning direkt auf makeDefaultState()) + Gate-Ebene (makeOutboundGates
-// mit Fake-Store/Fake-audit/Fake-messaging, Muster test/outbound-gates-order.test.js). Alle
-// Faelle sind VOR der Implementierung rot: der Import von claimPlatformSpendWarning aus
-// state-ops.js wirft (Funktion existiert noch nicht). Offline, kein Netz, kein Server-Spawn
-// (F.I.R.S.T.).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -26,11 +12,9 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { tempDataDir } from "./helpers.js";
 
 const TENANT_A = "tenant_a";
-// cap=1000, percent=80 -> Schwelle = 800 Cent (80% von 1000). Grenzwert-Testwerte 799/800
-// aus dem Plan uebernommen (G3).
 const CFG = { platformSpendCapCents: 1000, platformSpendWarnPercent: 80 };
-const JULY_ISO = "2026-07-15T10:00:00.000Z"; // Schluessel '2026-07'
-const AUGUST_ISO = "2026-08-01T00:00:00.000Z"; // Schluessel '2026-08'
+const JULY_ISO = "2026-07-15T10:00:00.000Z";
+const AUGUST_ISO = "2026-08-01T00:00:00.000Z";
 
 function buildState(costCents) {
   const s = makeDefaultState();
@@ -38,10 +22,8 @@ function buildState(costCents) {
   return s;
 }
 
-// ==== Ops-Ebene: claimPlatformSpendWarning ========================================
-
 test("T1 rot-vor-Fix (a): zwei aufeinanderfolgende Ueberschreitungen im selben Monat -> genau EIN Ereignis", () => {
-  const s = buildState(900); // 900 >= Schwelle 800
+  const s = buildState(900);
   const first = claimPlatformSpendWarning(s, CFG, JULY_ISO);
   assert.deepEqual(first, { totalCents: 900, monthKey: "2026-07" });
   const second = claimPlatformSpendWarning(s, CFG, JULY_ISO);
@@ -49,7 +31,7 @@ test("T1 rot-vor-Fix (a): zwei aufeinanderfolgende Ueberschreitungen im selben M
 });
 
 test("T2 rot-vor-Fix (b): Verbrauch knapp UNTER der Schwelle -> keine Meldung", () => {
-  const s = buildState(799); // 799 < Schwelle 800
+  const s = buildState(799);
   assert.equal(claimPlatformSpendWarning(s, CFG, JULY_ISO), null);
 });
 
@@ -69,18 +51,18 @@ test("T3 rot-vor-Fix (c): Monatswechsel -> genau EIN weiteres Ereignis mit neuem
 });
 
 test("T4 rot-vor-Fix (e): PLATFORM_SPEND_WARN_PERCENT=0 -> Warnung AUS, byte-identisch zum Bestand", () => {
-  const s = buildState(999_999); // weit ueber jedem realistischen Cap
+  const s = buildState(999_999);
   const cfgOff = { platformSpendCapCents: 1000, platformSpendWarnPercent: 0 };
   assert.equal(claimPlatformSpendWarning(s, cfgOff, JULY_ISO), null);
   assert.equal(s.platformSpendWarnedMonth, null, "Marker bleibt unangetastet");
 });
 
 test("T5 In-Flight-Reserven zaehlen mit (die Warnung sieht denselben Ist-Stand wie das Reserve-Gate)", () => {
-  const settledOnly = buildState(700); // 700 < Schwelle 800 (settled allein)
+  const settledOnly = buildState(700);
   assert.equal(claimPlatformSpendWarning(settledOnly, CFG, JULY_ISO), null);
 
   const withReserve = buildState(700);
-  withReserve.reservations[TENANT_A] = 200; // settled 700 + Reserve 200 = 900 >= 800
+  withReserve.reservations[TENANT_A] = 200;
   assert.deepEqual(claimPlatformSpendWarning(withReserve, CFG, JULY_ISO), {
     totalCents: 900,
     monthKey: "2026-07",
@@ -96,21 +78,11 @@ test("T6 unlesbares nowIso zweimal -> ZWEI Ereignisse, Marker bleibt unangetaste
   assert.equal(s.platformSpendWarnedMonth, null);
 });
 
-// ==== T7: Ephemeralitaet (json-Backend) ============================================
-
 test("T7 Ephemeralitaet (json): platformSpendWarnedMonth erscheint NIE in data/store.json", async () => {
   const dataDir = tempDataDir();
   const file = path.join(dataDir, "store.json");
-  // config.server.dataDir direkt mutieren (Muster test/usage-spend-month-axis.test.js
-  // freshJsonStore): dieselbe Testdatei importiert bereits config.js-abhaengige Module
-  // (outbound-gates.js) statisch - process.env.DATA_DIR waere zu diesem Zeitpunkt zu
-  // spaet (config.js hat dataDir schon eingefroren). Der Namespace-Setter (config.js
-  // makeNamespaceGroup) erlaubt die direkte Live-Mutation, die json.js beim naechsten
-  // (fresh query-stringed) Import liest.
   const { config } = await import("../src/config.js");
   config.server.dataDir = dataDir;
-  // Direkter json.js-Import (NICHT ueber die store.js-Fassade) mit Query-Suffix -> eigenes
-  // Modul-Singleton (state/FILE), teilt sich NICHT mit anderen Tests dieser Datei.
   const jsonStore = await import(`../src/store/json.js?platform-warn=${Date.now()}`);
 
   const s = jsonStore.load();
@@ -127,11 +99,8 @@ test("T7 Ephemeralitaet (json): platformSpendWarnedMonth erscheint NIE in data/s
     "platformSpendWarnedMonth ist strukturell von der Platte ausgeschlossen",
   );
 
-  // In-Prozess-Marker bleibt trotz save() korrekt: derselbe Monat meldet nicht erneut.
   assert.equal(jsonStore.claimPlatformSpendWarning(CFG, JULY_ISO), null);
 });
-
-// ==== Gate-Ebene: makeOutboundGates (reserve_budget-Gate) ==========================
 
 const VALID_TO = "+491711234567";
 const TENANT = "T";
@@ -208,8 +177,6 @@ test("T10: fehlschlagende SMS (asynchroner reject) beeintraechtigt den Anruf NIC
     const { gates } = makeOutboundGates(deps);
     const result = await gateBy(gates, "reserve_budget").run(baseCtx());
     assert.equal(result, null, "der Anruf laeuft normal weiter");
-    // Microtask-Flush: der Reject wird NICHT awaitet, muss aber trotzdem sicher gefangen
-    // werden (kein unhandled rejection).
     await new Promise((resolve) => setImmediate(resolve));
     assert.ok(logs.some((l) => l.includes("boom-async")), "der SMS-Fehler wurde geloggt");
   } finally {

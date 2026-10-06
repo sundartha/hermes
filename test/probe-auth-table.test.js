@@ -1,14 +1,3 @@
-// ---- Erwartungstabelle der Live-Probe gegen die Routen-Politik (PLAN-AUTH-GATE P2) --
-// scripts/probe-auth.sh misst den deployten Zustand, src/route-policy.js beschreibt den
-// Quellstand. Beide reden ueber dieselben Routen - also darf es nur EINE Wahrheit geben.
-// Ohne diesen Test koennte eine Route in der Politik "haengt am Gate" heissen und in der
-// Probe "ist oeffentlich, 200 ist in Ordnung"; die Probe liefe gruen ueber genau die
-// offene Tuer, die sie finden soll. Der Test kennt keine Statuscodes des Produkts - er
-// prueft die Zuordnung, nicht das Verhalten.
-//
-// Die Probe ist ein Shell-Skript ohne Laufzeit-Kopplung an src/ (sie muss gegen einen
-// FREMDEN Deploy laufen, dessen Code hier gar nicht liegt). Die Tabelle wird deshalb aus
-// dem Skript gelesen, nicht importiert.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
@@ -22,28 +11,21 @@ const PROBE_SKRIPT = path.join(
   "scripts",
   "probe-auth.sh",
 );
-// Der Tabellenblock im Skript (Here-Doc). Beide Marken stehen dort jeweils allein.
 const TABELLE_START = "<<'TABELLE'";
 const TABELLE_ENDE = "TABELLE";
 const SPALTEN = 6;
-// Arten aus dem Skript-Kopf. "sitzung" = darf ohne Sitzung nicht bedienbar sein.
 const ART = Object.freeze({
   SITZUNG: "sitzung",
   OEFFENTLICH: "oeffentlich",
   STATISCH: "statisch",
   FEHLT: "fehlt",
 });
-// Antwortende Schicht. "gate" (die Sammelsicherung, die dieser Plan aufloest) ist seit
-// AUTH-P7 aufgeloest und aus der Tabelle verschwunden - Ersatz ist "internal"
-// (internalOnly).
 const ANTWORTET = Object.freeze({
   INTERNAL: "internal",
   WEBAUTH: "webauth",
   MCPAUTH: "mcpauth",
   KEINE: "keine",
 });
-// Fuer sitzungspflichtige Routen ist NUR das ein bestandener Zustand (W6): 404 waere
-// eine nicht gemountete Route, 2xx eine offene Tuer.
 const SCHUTZ_STATUS = Object.freeze(["401", "403"]);
 
 function leseTabelle() {
@@ -130,16 +112,12 @@ test("Probe-Tabelle: die Einordnung stimmt mit src/route-policy.js ueberein", ()
       widerspruch.push(`${zeile.schluessel}: PUBLIC_ROUTES, aber ART='${zeile.art}'`);
     if (inGateOnly && zeile.art !== ART.SITZUNG)
       widerspruch.push(`${zeile.schluessel}: GATE_ONLY_ROUTES, aber ART='${zeile.art}'`);
-    // Der gefaehrliche Fall: eine Zeile erklaert etwas fuer oeffentlich, das in der
-    // Politik nirgends als oeffentlich begruendet ist.
     if (!inPublic && zeile.art === ART.OEFFENTLICH)
       widerspruch.push(
         `${zeile.schluessel}: ART='oeffentlich', steht aber nicht in PUBLIC_ROUTES`,
       );
     if ((inPublic || inGateOnly) && zeile.art === ART.STATISCH)
       widerspruch.push(`${zeile.schluessel}: ART='statisch', ist aber eine Express-Route`);
-    // Eine als oeffentlich begruendete Route antwortet SELBST. Antwortet dort
-    // stattdessen eine Auth-Schicht, ist die Begruendung in PUBLIC_ROUTES falsch.
     if (inPublic && zeile.antwortet !== ANTWORTET.KEINE)
       widerspruch.push(`${zeile.schluessel}: PUBLIC_ROUTES, aber ANTWORTET='${zeile.antwortet}'`);
     if (zeile.antwortet === ANTWORTET.INTERNAL && zeile.art !== ART.SITZUNG)
@@ -148,8 +126,6 @@ test("Probe-Tabelle: die Einordnung stimmt mit src/route-policy.js ueberein", ()
       widerspruch.push(
         `${zeile.schluessel}: sitzungspflichtig, aber ANTWORTET='keine' - dann sichert nichts`,
       );
-    // AUTH-P7: nichts maskiert einen fehlenden Pfad mehr - ein 'fehlt' MUSS mit 404
-    // und ohne antwortende Schicht auftreten, sonst haengt dort noch eine Sammelsicherung.
     if (zeile.art === ART.FEHLT && (zeile.antwortet !== ANTWORTET.KEINE || zeile.status !== "404"))
       widerspruch.push(
         `${zeile.schluessel}: ART='fehlt', aber ANTWORTET='${zeile.antwortet}'/STATUS='${zeile.status}' (erwartet KEINE/404)`,
@@ -189,8 +165,6 @@ test("Probe-Tabelle: jede Zeile traegt eine Begruendung", () => {
   );
 });
 
-// Die sechs in AUTH-P4 geloeschten Routen als EINE benannte Konstante (keine dritte
-// Wahrheit - die Behauptung "diese sechs sind weg" gibt es sonst nirgends).
 const IN_P4_GELOESCHT = [
   { method: "POST", path: "/api/settings" },
   { method: "POST", path: "/api/action-items/:id/toggle" },
@@ -200,13 +174,6 @@ const IN_P4_GELOESCHT = [
   { method: "DELETE", path: "/api/profiles/:tenantId" },
 ];
 
-// AUTH-P4-8 (Befund B3 aus dem Umsetzungsplan, seit AUTH-P7 eingeloest): die
-// Bestandsregeln oben halten (1) route-policy.js und (3) probe-auth.sh zusammen -
-// vergisst eine Aenderung GATE_ONLY_ROUTES oder die Probe-Tabelle, feuert eine der
-// Widerspruchsregeln. Dieser Test schliesst die urspruengliche Luecke weiterhin: er
-// verlangt explizit, dass die sechs geloeschten Routen NICHT mehr in der Politik
-// stehen UND als Negativkontrolle (art=fehlt, status=404, antwortet=keine) in der
-// Probe-Tabelle auftauchen - seit AUTH-P7 maskiert kein Gate diesen 404 mehr.
 test("AUTH-P4-8: die sechs in P4 geloeschten Routen stehen nicht mehr in der Politik und sind Negativkontrolle der Probe", () => {
   for (const { method, path } of IN_P4_GELOESCHT) {
     const schluessel = routeKey(method, path);
@@ -223,9 +190,6 @@ test("AUTH-P4-8: die sechs in P4 geloeschten Routen stehen nicht mehr in der Pol
   }
 });
 
-// Die sieben in AUTH-P5 mit internalOnly abgesicherten Routen als EINE benannte
-// Konstante (keine dritte Wahrheit - die Behauptung "diese sieben sind jetzt AUTH"
-// gibt es sonst nirgends).
 const IN_P5_ABGESICHERT = [
   { method: "POST", path: "/api/calls" },
   { method: "POST", path: "/api/calls/:id/cancel" },
@@ -236,12 +200,6 @@ const IN_P5_ABGESICHERT = [
   { method: "GET", path: "/api/tenant-data/export" },
 ];
 
-// AUTH-P5-7: ohne diesen Test ist das Entfernen aus GATE_ONLY_ROUTES NICHT maschinell
-// erzwungen - ein vergessener Restposten bliebe gruen, und P7s harte Vorbedingung
-// ("die Liste muss leer sein") waere eine Behauptung statt einer Messung. Seit AUTH-P7
-// (Gate-Wegfall) ist internalOnly die alleinige Sicherung dieser sieben Routen: die
-// Probe-Zeile wechselt auf STATUS 403, ANTWORTET internal - der H10-Zwischenstand
-// ("das Gate antwortet VOR internalOnly, 403 erst ab P7 sichtbar") ist eingeloest.
 test("AUTH-P5-7: die sieben in P5 abgesicherten Routen stehen nicht mehr in der Politik, die Probe-Zeile zeigt internalOnly", () => {
   for (const { method, path } of IN_P5_ABGESICHERT) {
     const schluessel = routeKey(method, path);
@@ -262,9 +220,6 @@ test("AUTH-P5-7: die sieben in P5 abgesicherten Routen stehen nicht mehr in der 
   }
 });
 
-// Die sechs in AUTH-P6 mit webAuthMw+adminMw abgesicherten Betreiber-Routen als EINE
-// benannte Konstante (keine dritte Wahrheit - die Behauptung "diese sechs sind jetzt
-// AUTH" gibt es sonst nirgends).
 const IN_P6_ABGESICHERT = [
   { method: "POST", path: "/api/billing/flush-meters" },
   { method: "POST", path: "/api/billing/cost-truing/sweep" },
@@ -274,10 +229,6 @@ const IN_P6_ABGESICHERT = [
   { method: "POST", path: "/api/onboard/retry" },
 ];
 
-// AUTH-P6-9: ohne diesen Test ist das Entfernen aus GATE_ONLY_ROUTES NICHT maschinell
-// erzwungen (Muster AUTH-P5-7). Der STATUS bleibt 401 (webAuthMw antwortet einer
-// Anfrage ohne Sitzung genauso wie das frueher gefallene Gate) - das P7-Delta ist der
-// Schichtwechsel (ANTWORTET gate -> webauth), NICHT der Status.
 test("AUTH-P6-9: die sechs in P6 abgesicherten Betreiber-Routen stehen nicht mehr in der Politik, die Probe-Zeile zeigt webAuthMw", () => {
   for (const { method, path } of IN_P6_ABGESICHERT) {
     const schluessel = routeKey(method, path);
@@ -298,10 +249,6 @@ test("AUTH-P6-9: die sechs in P6 abgesicherten Betreiber-Routen stehen nicht meh
   }
 });
 
-// AUTH-P7-6: die harte Vorbedingung von P7 ("GATE_ONLY_ROUTES muss leer sein, bevor das
-// Gate faellt") ist jetzt eine Zusage fuer die Zeit NACH dem Gate-Wegfall - die Liste
-// bleibt als MECHANISMUS stehen (src/route-policy.js), jeder neue Eintrag heisst, dass
-// eine Route wieder allein an einer Sammelsicherung haengt, die es nicht mehr gibt.
 test("AUTH-P7-6: GATE_ONLY_ROUTES ist leer - keine Route haengt mehr allein an einer Sammelsicherung", () => {
   assert.deepEqual(
     GATE_ONLY_ROUTES,
@@ -311,7 +258,6 @@ test("AUTH-P7-6: GATE_ONLY_ROUTES ist leer - keine Route haengt mehr allein an e
   );
 });
 
-// IE6-S1: der Telnyx-Assistant-Shim ist geloescht. Negativkontrolle wie AUTH-P4-8.
 const IN_IE6_S1_GELOESCHT = [{ method: "POST", path: "/v1/chat/completions" }];
 
 test("IE6-S1-10: der in IE6-S1 geloeschte Shim-Endpunkt steht nicht mehr in der Politik und ist Negativkontrolle der Probe", () => {

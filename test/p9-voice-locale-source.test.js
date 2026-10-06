@@ -1,16 +1,3 @@
-// P9 - Regressionsschutz fuer die EINE Locale-Quelle und die sprach-aufgeloeste
-// ElevenLabs-Stimme. Zwei Verhaltensaenderungen werden hier gepinnt:
-// (1) der Renderer holt das `language`-Attribut aus dem Locale-Buendel
-//     (src/i18n/locales.js) statt aus einer eigenen Voice-Tabelle - gemessen gegen den
-//     BUENDELWERT, nicht gegen ein Literal: aendert jemand LOCALES.fr.sttLocale, folgt
-//     der Renderer oder dieser Test ist rot (das ist der Drift-Faenger);
-// (2) die ElevenLabs-Voice-ID folgt der Sprache (Owner-Entscheidung 2026-08-18) - seit
-//     diesem Tag fuer ALLE DREI Sprachen, auch fuer DE. Vorher fiel Deutsch auf die global
-//     konfigurierte Plattform-Stimme zurueck; war die nicht gesetzt, sprach ein deutsches
-//     Gespraech in der Dashboard-Stimme des Agenten (an Anruf 7 gemessen: en/american).
-//     Messpunkt seit IP3 ist die Play-TTS-Vorabsynthese (test/directive-synth.test.js);
-//     hier wird nur noch gepinnt, dass opts.elevenLabs den Renderer nicht mehr erreicht.
-// Pur, offline, kein Env, kein Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderDirectives as renderTelnyx } from "../src/telephony/adapters/telnyx/render.js";

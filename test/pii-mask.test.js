@@ -1,7 +1,3 @@
-// T-P0-7: PII-Hygiene fuer Logs - maskNumber/hashEmail de-identifizieren
-// Telefonnummern/E-Mails, bevor sie in Diagnose-/Banner-Logs (Render-stdout)
-// landen. Geprueft: stabil (korrelierbar), nicht umkehrbar (kein Klartext), und
-// Grenzfaelle (leer/null).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { maskNumber, hashEmail } from "../src/util.js";
@@ -17,7 +13,6 @@ test("maskNumber: deterministisch (gleiche Nummer -> gleiches Token)", () => {
 });
 
 test("maskNumber: verschiedene Nummern -> verschiedene Tokens", () => {
-  // Gleiche letzte 4 Ziffern, aber unterschiedlicher Praefix -> Hash unterscheidet.
   assert.notEqual(maskNumber("+491701234567"), maskNumber("+499991234567"));
 });
 
