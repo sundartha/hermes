@@ -1307,3 +1307,27 @@ test("Login-Fehlerpfad: exchange wirft -> 401 + sprachneutraler Code (ex WEB-12b
     await srv.close();
   }
 });
+
+test("Login-Fehlerpfad: authorizeUrl wirft -> 500 und login_failed innerhalb der Frist, Login-Cookies geloescht", async () => {
+  const FRIST_MS = 4000;
+  const ERWARTETER_STATUS = 500;
+  const { deps } = fakeDeps({
+    oidc: { authorizeUrl: () => Promise.reject(new Error("IdP nicht erreichbar")) },
+  });
+  const srv = await mountRouter(deps);
+  try {
+    const antwort = await fetch(`${srv.base}/auth/login`, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(FRIST_MS),
+    }).catch((fehler) => assert.fail(`keine Antwort innerhalb von ${FRIST_MS} ms: ${fehler.name}`));
+    const gesetzteCookies = antwort.headers.getSetCookie();
+    const geloeschteCookies = gesetzteCookies
+      .filter((eintrag) => eintrag.split("; ").includes("Max-Age=0"))
+      .map((eintrag) => eintrag.split("=")[0]);
+    assert.equal(antwort.status, ERWARTETER_STATUS);
+    assert.equal(await antwort.text(), "login_failed");
+    assert.deepEqual(geloeschteCookies.toSorted(), ["oauth_state", "oidc_nonce", "pkce_verifier"]);
+  } finally {
+    await srv.close();
+  }
+});
