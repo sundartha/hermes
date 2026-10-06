@@ -1,66 +1,21 @@
-// ---- Routen-Auth-Politik (PLAN-AUTH-GATE P1) -------------------------------------
-// Die maschinenlesbare Fassung von Absoluter Regel 3 (AUTH FAIL-CLOSED). Bis AUTH-P7
-// trug ein einziges Basic-Auth-Gate als Sammelsicherung alles, was nicht ausdruecklich
-// ausgenommen war. Diese Sammelsicherung ist gefallen (Owner-Entscheidung,
-// PLAN-AUTH-GATE.md). Ihr Ersatz ist kein zweites Gate, sondern eine
-// Vollstaendigkeitspruefung: test/route-auth-inventory.test.js laeuft ueber den
-// PRODUKTIONS-Routengraph und verlangt fuer JEDE Route eine bewusste Einordnung.
-// Eine neue Route ohne Auth-Middleware und ohne Eintrag hier macht `npm test` rot.
-//
-// KEIN Laufzeit-Konsument, und das ist Absicht: eine zur Laufzeit ausgewertete
-// Allowlist waere ein zweites Gate mit eigenem Umgehungsrisiko. Die Liste wirkt
-// stattdessen zur Testzeit. Sie liegt trotzdem in src/ (nicht in test/), weil sie
-// Teil des Produkt-Vertrags ist: wer eine Route hinzufuegt, muss sie HIER begruenden,
-// nicht in einer Testdatei.
-//
-// GRENZE (bewusst offengelegt, PLAN-AUTH-GATE Abschnitt 5/W8): sichtbar ist nur
-// route-level Middleware. NICHT sichtbar sind
-//   (a) Auth im Handler-Rumpf (drei Faelle, unten namentlich mit Begruendung),
-//   (b) Praefix-Middleware eines Routers (die /voice-Signaturpruefung),
-//   (c) Routen, die nur hinter einem Flag registriert werden (POST /auth/dev-login
-//       existiert nur bei DEV_LOGIN_ENABLED und taucht im geprueften Graph nicht auf).
-// Fuer diese drei Klassen traegt der quartalsweise Pruefpunkt in
-// docs/RUNBOOK-AUTH-REVIEW.md die Last - ein Mensch, kein Mechanismus.
-//
-// Pfade, fuer die es bereits eine benannte Konstante gibt, werden importiert statt
-// als Literal wiederholt (G5/G25) - test/p14-checkout-return-app-shell.test.js pinnt
-// das fuer den Altpfad ausdruecklich.
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 import { ELEVENLABS_INIT_PATH } from "./routes/webhooks-elevenlabs-init.js";
 import { COOKIE_CONSENT_PATH } from "./cookie-consent-log.js";
 
-// Benannte Auth-Middlewares. Der Inventar-Test erkennt sie an handler.name in der
-// Route-Handler-Kette. INVARIANTE: diese Middlewares MUESSEN benannte Funktionen
-// bleiben - eine anonyme Arrow waere im Express-Stack "<anonymous>" und damit fuer
-// den Test unsichtbar (die Route saehe ungeschuetzt aus und der Test schluege an;
-// umgekehrt duerfte niemand eine Route durch Umbenennen still "schuetzen").
 export const AUTH_MIDDLEWARE_NAMES = Object.freeze([
-  // src/web-auth.js - Browser-Session (signiertes Cookie + DB-Session + aktiver Account)
   "webAuthGateMiddleware",
-  // src/web-auth.js - zusaetzliche Admin-Stufe (role==='admin' ODER ADMIN_EMAILS)
   "adminOnlyMiddleware",
-  // src/auth.js - MCP-Bearer/OIDC, fail-closed
   "mcpAuth",
-  // src/wiring/internal-only.js - genuin lokaler In-Process-Aufrufer
-  // (echter Loopback-Socket OHNE X-Forwarded-For), AUTH-P5
   "internalOnly",
 ]);
 
-// Einordnung einer Route durch den Inventar-Test.
 export const ROUTE_CLASS = Object.freeze({
-  AUTH: "auth", // traegt eine benannte Auth-Middleware
-  PUBLIC: "public", // bewusst oeffentlich bzw. handler-intern abgesichert
-  GATE_ONLY: "gate_only", // haengt allein an einer Sammelsicherung (seit AUTH-P7 leer, bleibt als Mechanismus)
-  UNPROTECTED: "unprotected", // nirgends eingeordnet -> Testfehler
+  AUTH: "auth",
+  PUBLIC: "public",
+  GATE_ONLY: "gate_only",
+  UNPROTECTED: "unprotected",
 });
 
-// ---- Bewusst oeffentlich bzw. handler-intern abgesichert --------------------------
-// Jeder Eintrag nennt seine Sicherung. "oeffentlich" heisst hier: es gibt nichts zu
-// schuetzen (statisches Asset, oeffentlicher Katalog) ODER die Sicherung sitzt im
-// Handler und ist darum von aussen nicht als Middleware sichtbar.
-
-// Begruendungen, die sich mehrere Routen teilen - EINE Quelle (G5), damit eine
-// Praezisierung nicht an fuenf Stellen nachgezogen werden muss.
 const VOICE_SIGNATURE_REASON =
   "PRAEFIX-MIDDLEWARE (Runbook-Fall 3): Provider-Signaturpruefung (Telnyx Ed25519, " +
   "fail-closed) sitzt vor allen /voice-Handlern, nicht an der einzelnen Route.";
@@ -275,40 +230,17 @@ export const PUBLIC_ROUTES = Object.freeze([
     path: "/mcp",
     reason: MCP_METHOD_NOT_ALLOWED_REASON,
   },
-  // AUTH-P7: die sieben Umleitungen. Abgeleitet aus derselben Quelle, aus der src/app.js
-  // sie mountet (G5) - eine achte Wiederholung der Pfade waere genau die Duplizierung,
-  // die src/portal-paths.js verhindern soll. Zwei Zwangspunkte bleiben trotzdem: der
-  // ROUTE_FINGERPRINT und die Abdeckungsregel von test/probe-auth-table.test.js werden
-  // rot, wenn jemand hier einen Pfad ergaenzt, ohne ihn ueberall nachzuziehen.
   ...LOGIN_ALIAS_PATHS.map((path) => ({ method: "GET", path, reason: ALIAS_REASON })),
   ...APP_ALIAS_PATHS.map((path) => ({ method: "GET", path, reason: ALIAS_REASON })),
 ]);
 
-// ---- Restarbeit: haengt allein an einer Sammelsicherung ---------------------------
-// Diese Routen sind NICHT oeffentlich. Bis AUTH-P7 haengten sie ausschliesslich an der
-// Basic-Auth-Sammelsicherung; die Liste bleibt als MECHANISMUS stehen, damit eine
-// kuenftige Route nicht wieder still allein an einer Sammelsicherung haengt, die es
-// heute nicht mehr gibt. Der Inventar-Test laesst die hier gelisteten Routen durch und
-// haelt sie zugleich sichtbar: die Liste IST die Arbeitsliste.
-//
-// HARTE VORBEDINGUNG FUER P7 WAR: das Gate durfte erst fallen, wenn diese Liste LEER
-// ist. Das Legacy-Checkout-Paar traegt seit AUTH-P7 `internalOnly` (dieselbe
-// Middleware wie die sieben P5-Routen) und ist damit in die Klasse AUTH gewandert -
-// die Liste ist jetzt leer. Geloescht wird das Paar erst in P9 (Karenzfrist).
 export const GATE_ONLY_ROUTES = Object.freeze([]);
 
-// Schluessel einer Route. EINE Quelle fuer beide Listen und den Test (G5).
 export const routeKey = (method, path) => `${String(method).toUpperCase()} ${path}`;
 
 const PUBLIC_KEYS = new Set(PUBLIC_ROUTES.map((route) => routeKey(route.method, route.path)));
 const GATE_ONLY_KEYS = new Set(GATE_ONLY_ROUTES.map((route) => routeKey(route.method, route.path)));
 
-// Einordnung einer einzelnen Route. Reine Funktion (kein Express, kein Zustand) -
-// damit sie mit synthetischen Eingaben pruefbar ist, ohne die App zu bauen.
-// handlerNames = die Namen der Route-Handler-Kette in Mount-Reihenfolge.
-// Reihenfolge der Pruefung ist load-bearing: eine Route mit echter Auth-Middleware
-// gilt als geschuetzt, auch wenn sie (noch) in einer der Listen steht - sonst
-// meldete der Test nach P5/P6 einen Fehler fuer Routen, die gerade abgesichert wurden.
 export function classifyRoute({ method, path, handlerNames = [] }) {
   if (handlerNames.some((name) => AUTH_MIDDLEWARE_NAMES.includes(name))) return ROUTE_CLASS.AUTH;
   const key = routeKey(method, path);
