@@ -1,15 +1,4 @@
 #!/bin/sh
-# Pre-Commit-Hook: erzwingt den Linter vor jedem Commit.
-# Aktivierung ueber "git config core.hooksPath .githooks" (siehe package.json prepare-Skript).
-# Volle Variante (npm run lint), keine Beschraenkung auf vorgemerkte Dateien:
-# gemessene Laufzeit liegt bei ca. 4-5 Sekunden, weit unter der 30-Sekunden-Schwelle.
-#
-# Vorab-Pruefung: npm run lint lintet den ARBEITSBAUM, nicht den Index. Hat
-# eine vorgemerkte .js/.mjs-Datei zusaetzlich unvorgemerkte Aenderungen im
-# Arbeitsbaum, sagt der Lint-Lauf ueber den vorgemerkten Inhalt nichts aus -
-# der Commit koennte kaputten Code vorgemerkt haben, waehrend der Arbeitsbaum
-# zufaellig sauber ist. Bewusst KEIN "git stash" (refs/stash ist zwischen
-# Arbeitsbaeumen geteilt, s. CLAUDE.md/MEMORY): stattdessen Verweigerung.
 staged_js=$(git diff --cached --name-only --diff-filter=ACM -- '*.js' '*.mjs')
 if [ -n "$staged_js" ]; then
   dirty_staged=$(printf '%s\n' "$staged_js" | while IFS= read -r f; do
@@ -29,12 +18,6 @@ if [ -n "$staged_js" ]; then
   fi
 fi
 
-# Aufraeum-Gate: eine vorgemerkte Bestandsdatei mit noch offenen Eintraegen in
-# eslint-suppressions.json (Datei+Regel -> Anzahl, keine Einzel-Fundstellen)
-# wird abgelehnt. Sonst kann derselbe Regelverstoss an anderer Stelle der
-# Datei neu entstehen, waehrend die eingefrorene Zahl unveraendert bleibt und
-# der neue Verstoss still durchrutscht (siehe CLAUDE.md). IFS wird auf
-# Newline verengt, damit Dateinamen mit Leerzeichen nicht auseinanderfallen.
 if [ -n "$staged_js" ]; then
   old_ifs=$IFS
   IFS='
