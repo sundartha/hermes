@@ -22,8 +22,8 @@ const FRAME_BUDGET_MS = 1000 / FPS_CAP_DEFAULT; // ~33.3ms, wie im Engine-Defaul
 // Dieselbe Patch-Technik wie mcp-ui-wing-canvas-physics.test.js (EXPORT_LINE) - hier
 // wird NUR die eigene In-Memory-Kopie der Quelle fuer diesen einen Test umgeschaltet,
 // die produktiv ausgelieferte Datei bleibt unveraendert.
-const GOLD_ENABLED_LINE = "  var GOLD_ENABLED = false; // bewusst deaktiviert auf Quell-Ebene";
-const GOLD_ENABLED_LINE_PATCHED = "  var GOLD_ENABLED = true; // bewusst deaktiviert auf Quell-Ebene (Test-Patch)";
+const GOLD_ENABLED_LINE = "  var GOLD_ENABLED = false;";
+const GOLD_ENABLED_LINE_PATCHED = "  var GOLD_ENABLED = true;";
 assert.ok(ENGINE_SOURCE.includes(GOLD_ENABLED_LINE), "GOLD_ENABLED-Zeile nicht gefunden - Datei umstrukturiert?");
 const ENGINE_SOURCE_GOLD_ENABLED = ENGINE_SOURCE.replace(GOLD_ENABLED_LINE, GOLD_ENABLED_LINE_PATCHED);
 
