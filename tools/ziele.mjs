@@ -6,6 +6,11 @@ const EXIT_AUFRUF = 2;
 const BEFEHLE = new Map([
   ["vorpruefen", ["./ziele/vorpruefen.mjs", "befehl"]],
   ["waehlen", ["./ziele/waehlen.mjs", "befehl"]],
+  ["fixen", ["./ziele/fixer.mjs", "befehl"]],
+  ["agent", ["./ziele/agentenlauf.mjs", "befehl"]],
+  ["pruefen", ["./ziele/pruefen.mjs", "befehl"]],
+  ["commit", ["./ziele/pr.mjs", "committe"]],
+  ["pr", ["./ziele/pr.mjs", "oeffnePr"]],
   ["ergebnis", ["./ziele/ergebnis.mjs", "befehl"]],
 ]);
 const WORKFLOWS = new Set(["aufraeumen", "auswertung"]);
