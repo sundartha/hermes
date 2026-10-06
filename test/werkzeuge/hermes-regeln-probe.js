@@ -19,7 +19,8 @@ export function bestandsDatei(befunde) {
 
 export function gemeldeteZeilen({ directory, datei, regel, bestand, linterOptions = {} }, zeilen) {
   const linter = new Linter({ cwd: directory });
-  const config = { plugins: { hermes }, linterOptions, rules: { [regel]: ["error", { bestand }] } };
+  const einstellung = bestand === undefined ? "error" : ["error", { bestand }];
+  const config = { plugins: { hermes }, linterOptions, rules: { [regel]: einstellung } };
   const messages = linter.verify(zeilen.join("\n"), config, { filename: join(directory, datei) });
   return messages.filter(({ ruleId }) => ruleId === regel).map(({ line }) => zeilen[line - 1].trim());
 }

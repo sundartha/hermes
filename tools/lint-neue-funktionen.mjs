@@ -19,10 +19,7 @@ const STRENGE_NEBENREGELN = {
   "no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
   "no-sequences": ["error", { allowInParentheses: false }],
 };
-const BESTANDS_REGELN = [
-  { regel: "hermes/keine-kommentare" },
-  { regel: "hermes/kein-quelltext-als-text", files: ["test/**"] },
-];
+const BESTANDS_REGELN = [{ regel: "hermes/kein-quelltext-als-text", files: ["test/**"] }];
 const OHNE_BESTAND = {};
 const LEERRAUM = /\s+/g;
 const NICHT_ZEILENENDE = /[^\n]/g;

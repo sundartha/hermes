@@ -12,7 +12,6 @@ import {
   lesestellenSchluessel,
   quelltextLesestellen,
 } from "./eslint-rules/kein-quelltext-als-text.js";
-import { kommentarSchluessel, pruefbareKommentare } from "./eslint-rules/keine-kommentare.js";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const NODE_BIN_DIR = join(REPO_ROOT, "node_modules/.bin");
@@ -222,17 +221,6 @@ export async function eslintCollectorFindings(root, ruleName, collector) {
   return results.flatMap((result) => lintResultFindings(root, ruleId, result));
 }
 
-function commentKeys(context, file) {
-  return pruefbareKommentare(context.sourceCode).map((comment) => ({
-    key: kommentarSchluessel(file, comment),
-    loc: comment.loc,
-  }));
-}
-
-function commentFindings(root) {
-  return eslintCollectorFindings(root, "kommentare", { keysOf: commentKeys });
-}
-
 function textReadingKeys(context, file) {
   const { sourceCode } = context;
   return quelltextLesestellen(sourceCode, file).map((call) => ({
@@ -273,7 +261,6 @@ const TOOLS = {
   jscpd: { findings: jscpdFindings, path: keyPart(0) },
   knip: { findings: knipFindings, path: keyPart(1) },
   semgrep: { findings: semgrepFindings, version: semgrepVersion, path: keyPart(1) },
-  kommentare: { findings: commentFindings, path: pfadAusSchluessel },
   "quelltext-als-text": { findings: textReadingFindings, path: pfadAusSchluessel },
   lessons: { findings: lessonsFindings, path: pfadAusSchluessel },
 };

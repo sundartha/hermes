@@ -14,7 +14,6 @@ const zeitgliederBestand = existsSync(ZEITGLIEDER_BESTAND_DATEI)
   ? JSON.parse(readFileSync(ZEITGLIEDER_BESTAND_DATEI, "utf8"))
   : {};
 const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
-const KOMMENTAR_BESTAND = "tools/basis/kommentare.json";
 const QUELLTEXT_BESTAND = "tools/basis/quelltext-als-text.json";
 const WORT_NUR_IN = [
   {
@@ -61,7 +60,7 @@ const hermesBloecke =
           name: "hermes",
           plugins: { hermes: hermesRegeln },
           rules: {
-            "hermes/keine-kommentare": ["error", { bestand: KOMMENTAR_BESTAND }],
+            "hermes/keine-kommentare": "error",
             "hermes/namen-ohne-begruendung": "warn",
           },
         },
