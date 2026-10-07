@@ -1,0 +1,20 @@
+name: Status-Fälscher
+
+on:
+  push:
+    branches: [rotprobe/36-status-faelscher]
+
+permissions: {}
+
+jobs:
+  faelschen:
+    name: Status fälschen
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+    steps:
+      - name: Status setzen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIEL: e9d1d888459eb5afce9eb9af24cc720396221fa9
+        run: gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$ZIEL" -f state=success -f context="Tests ausmisten" -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
