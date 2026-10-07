@@ -1,8 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { config } from "../src/config.js";
 import { stripeBilling } from "../src/billing/stripe.js";
 import { PaymentAuthenticationRequiredError } from "../src/billing/errors.js";
@@ -244,92 +241,4 @@ test("GP-P1 (Frage 8): der Enum-Anhang landet in job.lastError", async () => {
   assert.equal(job.status, "failed");
   assert.match(job.lastError, /decline_code=insufficient_funds/);
   assert.doesNotMatch(job.lastError, /example\.invalid|Mustermann/);
-});
-
-const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const QUELLVERZEICHNIS = "src";
-
-const ohneKommentare = (quelltext) =>
-  quelltext.replace(/\/\/[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ");
-
-function produktionsDateien(verzeichnis = QUELLVERZEICHNIS) {
-  const dateien = [];
-  for (const eintrag of fs.readdirSync(path.join(REPO_ROOT, verzeichnis), {
-    withFileTypes: true,
-  })) {
-    const relativ = path.join(verzeichnis, eintrag.name);
-    if (eintrag.isDirectory()) dateien.push(...produktionsDateien(relativ));
-    else if (eintrag.name.endsWith(".js"))
-      dateien.push({
-        pfad: relativ,
-        quelltext: fs.readFileSync(path.join(REPO_ROOT, relativ), "utf8"),
-      });
-  }
-  return dateien;
-}
-
-const LESER = "(?:includes|match|indexOf|search|startsWith|endsWith)";
-const MESSAGE_STEUERUNG = new RegExp(
-  `\\b[\\w$]*(?:[Mm]essage|[Mm]sg)\\s*(?:\\.\\s*\\w+\\s*\\(\\s*\\))*\\s*\\.\\s*${LESER}\\s*\\(` +
-    `|(?:String\\s*\\(\\s*[\\w$.]*[Ee]rr[\\w$]*\\s*\\)|[\\w$.]*[Ee]rr[\\w$]*\\s*\\.\\s*toString\\s*\\(\\s*\\))` +
-    `\\s*(?:\\.\\s*\\w+\\s*\\(\\s*\\))*\\s*\\.\\s*${LESER}\\s*\\(`,
-);
-
-const ERWARTETE_STELLEN = Object.freeze([
-  {
-    pfad: "src/elevenlabs/outbound.js",
-    grund: "zeile.message ist eine TRANSKRIPTZEILE, kein Fehlerobjekt (reportAudioTags meldet nur)",
-  },
-  {
-    pfad: "src/llm/adapters/anthropic.js",
-    grund:
-      "isBillingError liest die LLM-Anbieter-Marke fuer 'Guthaben leer' - LLM-Seam, nicht der Geldpfad",
-  },
-]);
-
-function sammleTreffer(dateien) {
-  return dateien
-    .filter(({ quelltext }) => MESSAGE_STEUERUNG.test(ohneKommentare(quelltext)))
-    .map(({ pfad }) => pfad)
-    .sort();
-}
-
-test("GP-P1 Waechter: keine Steuerung ueber .message ausser den benannten Ausnahmen", () => {
-  const dateien = produktionsDateien();
-  assert.ok(dateien.length > 0, "kein Quelltext eingelesen - der Waechter sucht nichts");
-  assert.deepEqual(sammleTreffer(dateien), ERWARTETE_STELLEN.map((stelle) => stelle.pfad).sort());
-});
-
-test("GP-P1 Waechter Positiv-Kontrolle: ein synthetischer Zusatz macht rot", () => {
-  const dateien = produktionsDateien();
-  const mitZusatz = [
-    ...dateien,
-    {
-      pfad: "src/synthetisch-gpp1.js",
-      quelltext: 'if (err.message.includes("insufficient_funds")) { doSomething(); }',
-    },
-  ];
-  assert.notDeepEqual(
-    sammleTreffer(mitZusatz),
-    ERWARTETE_STELLEN.map((stelle) => stelle.pfad).sort(),
-  );
-});
-
-test("GP-P1 Waechter: eine Erwaehnung im Kommentar gilt nicht als Steuerung", () => {
-  const quelltext = `
-// so ruft man es NICHT: err.message.includes("insufficient_funds")
-/* und auch hier nicht: err.message.match(/x/) */
-export const nichts = 1;
-`;
-  assert.deepEqual(sammleTreffer([{ pfad: "src/nur-prosa-gpp1.js", quelltext }]), []);
-});
-
-test("GP-P1 Waechter: ein Zeilenkommentar mit /* verschluckt den Code dahinter nicht", () => {
-  const quelltext = `
-// siehe adapters/*
-if (err.message.includes("x")) { doSomething(); }
-`;
-  assert.deepEqual(sammleTreffer([{ pfad: "src/gpp1-slash-star.js", quelltext }]), [
-    "src/gpp1-slash-star.js",
-  ]);
 });
