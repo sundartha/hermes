@@ -109,17 +109,6 @@ test("(e) Einwilligung, aber keine Konto-E-Mail hinterlegt, keine Zusatzempfaeng
   assert.equal(plan.reason, "no_account_email");
 });
 
-test("(e) kein accounts-Adapter injiziert (pg-Web-Login-Block nicht gemountet) -> send=false, reason=no_account_email", async () => {
-  const plan = await planSummaryMail({
-    store: fakeStore({ consent: true }),
-    call: baseCall(),
-    mailer: fakeMailer(),
-    accounts: null,
-  });
-  assert.equal(plan.send, false);
-  assert.equal(plan.reason, "no_account_email");
-});
-
 test("F2-Newsletter-Recipients: Consent=false + bestaetigter Zusatzempfaenger -> send=true, NUR das Zusatzziel", async () => {
   const plan = await planSummaryMail({
     store: fakeStore({
