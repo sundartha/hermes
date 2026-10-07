@@ -1,15 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findeB1Treffer } from "../src/elevenlabs/b1-doppelankaendigung.js";
+import { findeB1Treffer } from "../../src/elevenlabs/b1-doppelankaendigung.js";
 
 const agentZeile = (message) => ({ role: "agent", message });
 
-const VORFALL_PAAR = "Gut, dann erzähle ich dir ein kurzes Gedicht. Klar, hier ein kurzes Gedicht:\n\nZeile";
+const VORFALL_PAAR =
+  "Gut, dann erzähle ich dir ein kurzes Gedicht. Klar, hier ein kurzes Gedicht:\n\nZeile";
 const VORFALL_PAAR_MIT_MARKE =
   "Gut, dann erzähle ich dir ein kurzes Gedicht. [fröhlich] Klar, hier ein kurzes Gedicht:\n\nZeile";
 
 test("el-b1: Vorfall-Paar feuert exakt 1x - mit UND ohne Audio-Marke vor dem zweiten Satz", () => {
-  assert.deepEqual(findeB1Treffer([agentZeile(VORFALL_PAAR)]), [{ zeile: 0, cues: ["gut", "klar"] }]);
+  assert.deepEqual(findeB1Treffer([agentZeile(VORFALL_PAAR)]), [
+    { zeile: 0, cues: ["gut", "klar"] },
+  ]);
 
   assert.deepEqual(findeB1Treffer([agentZeile(VORFALL_PAAR_MIT_MARKE)]), [
     { zeile: 0, cues: ["gut", "klar"] },
