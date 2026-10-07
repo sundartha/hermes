@@ -1,0 +1,9 @@
+{
+  "titel": "Sonde schickt Anmeldedaten",
+  "dateien": {
+    "scripts/probe-as-faehigkeiten.mjs": [
+      "export const kopf = { Authorization: \"Bearer x\" };"
+    ]
+  },
+  "erwartet": "Die Sonde schickt keine Anmeldedaten"
+}

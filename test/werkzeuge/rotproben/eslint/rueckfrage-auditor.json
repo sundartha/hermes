@@ -1,0 +1,10 @@
+{
+  "titel": "Rückfrage-Auditor ohne Mandant",
+  "dateien": {
+    "src/server.js": [
+      "const audit = () => {};",
+      "export const durableAuditFor = () => audit;"
+    ]
+  },
+  "erwartet": "durableAuditFor wird über makeDurableAudit"
+}
