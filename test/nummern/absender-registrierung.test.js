@@ -4,7 +4,7 @@ import {
   waehleAbsenderRegistrierung,
   ABSENDER_QUELLE,
   RUECKFALL_GRUND,
-} from "../src/telephony/absender-registrierung.js";
+} from "../../src/telephony/absender-registrierung.js";
 
 const TENANT_A_DID = "+18643028341";
 const TENANT_B_DID = "+15551234567";
@@ -22,16 +22,6 @@ test("A1: Datensatz mit providerAgentPhoneNumberId + e164 === from -> tenant_did
     quelle: ABSENDER_QUELLE.TENANT_DID,
     grund: null,
   });
-});
-
-test("A2: Positiv-Kontrolle - der gesunde Fall liefert nie die Rueckfall-Kennung", () => {
-  const ergebnis = waehleAbsenderRegistrierung({
-    numberRecord: { e164: TENANT_A_DID, providerAgentPhoneNumberId: "phnum_tenant_a" },
-    fromE164: TENANT_A_DID,
-    rueckfallId: RUECKFALL_ID,
-  });
-  assert.notEqual(ergebnis.agentPhoneNumberId, RUECKFALL_ID);
-  assert.equal(ergebnis.quelle, ABSENDER_QUELLE.TENANT_DID);
 });
 
 test("A3: numberRecord fehlt -> Rueckfall, grund=keine_aktive_nummer", () => {
