@@ -119,6 +119,10 @@ jobs:
         if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
         run: node tools/openai-doku-pruefen.mjs
 
+      - name: Anbieter im Datenschutz
+        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
+        run: node tools/anbieter-datenschutz-pruefen.mjs
+
       - name: Audit
         env:
           EVENT_NAME: ${{ github.event_name }}
