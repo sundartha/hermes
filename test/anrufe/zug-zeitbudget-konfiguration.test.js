@@ -1,14 +1,16 @@
-import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { tempDataDir, seedState } from "./helpers.js";
-import { PROVIDER_WEBHOOK_HARDCUT_MS, turnBudgetMs } from "../src/turn-budget.js";
+import { test, before } from "node:test";
+import { tempDataDir, seedState } from "../helpers.js";
+import { PROVIDER_WEBHOOK_HARDCUT_MS, turnBudgetMs } from "../../src/turn-budget.js";
 
 let config;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(seedState({}));
-  for (const k of ["LLM_REQUEST_TIMEOUT_MS", "LLM_MAX_RETRIES", "LLM_BACKOFF_MS", "ELEVENLABS_SYNTH_TIMEOUT_MS"])
-    process.env[k] = "";
-  ({ config } = await import("../src/config.js"));
+  process.env.LLM_REQUEST_TIMEOUT_MS = "";
+  process.env.LLM_MAX_RETRIES = "";
+  process.env.LLM_BACKOFF_MS = "";
+  process.env.ELEVENLABS_SYNTH_TIMEOUT_MS = "";
+  ({ config } = await import("../../src/config.js"));
 });
 
 test("Turn-Budget plus Play-TTS-Synthese bleibt unter dem 15-s-Provider-Hardcut (GAP-22)", () => {
