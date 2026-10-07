@@ -9,6 +9,8 @@ const TOKEN_TRENNER = /[-_.]/;
 const TOKEN_VERBINDER = "-";
 const BEREICH_UND_DATEI = 2;
 const MAX_GIT_AUSGABE = 268_435_456;
+const ZUSAMMENFASSUNG =
+  "neue Dateien unter test/ seit der Basis, alle unter test/<bereich>/ und ohne Ticket-Namen";
 
 const TICKET_TOKEN =
   /^(?!(?:v\d+|p(?:50|75|90|95|99)|mp[34]|md5|pg\d+|([a-z])2\1)$)(?:[a-z]{1,2}\d{1,2}[ab]?|0\d|al|ks|gq|gp|cq|iel|iex|iep|oc|ww|afix|prolif|kostenv\d+)$/;
@@ -59,6 +61,6 @@ export function testordnung(basis) {
   const befunde = neu
     .filter((pfad) => !liegtGeordnet(pfad, erlaubt))
     .map((pfad) => meldung(pfad, erlaubt));
-  const zusammenfassung = `${neu.length} neue Dateien unter test/ seit der Basis, alle unter test/<bereich>/ und ohne Ticket-Namen`;
+  const zusammenfassung = `${neu.length} ${ZUSAMMENFASSUNG}`;
   return { befunde, zusammenfassung };
 }

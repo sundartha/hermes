@@ -32,6 +32,8 @@ const ABGESCHLOSSEN = "completed";
 const STANDARD_SERVER = "https://github.com";
 const LAUF_NUMMER = /^(\d+)(?:\/attempts\/\d+)?$/;
 const ELTERN_EINES_MERGES = 3;
+const OBJEKTART_COMMIT = "commit";
+const BRANCH_FORM = "ausmisten/<Bereich mit Quellen>";
 const OHNE_RECHT = /HTTP 403/;
 const RECHTE_HINWEIS =
   "Dem Token fehlen Leserechte; der Job Testschutz braucht actions: read und statuses: read.";
@@ -46,8 +48,16 @@ function patchKennung(von, bis) {
   return git(["patch-id", "--stable"], undefined, diff).split(" ")[0];
 }
 
+function istCommit(objekt) {
+  try {
+    return git(["cat-file", "-t", objekt]).trim() === OBJEKTART_COMMIT;
+  } catch {
+    return false;
+  }
+}
+
 function inhaltGleich(kopf, basis) {
-  if (!gitGelingt(["cat-file", "-e", `${kopf}^{commit}`])) return false;
+  if (!istCommit(kopf)) return false;
   const gemeinsam = git(["merge-base", kopf, basis]).trim();
   const kennung = patchKennung(gemeinsam, kopf);
   return kennung !== "" && kennung === patchKennung(basis, "HEAD");
@@ -63,10 +73,7 @@ function istGepruefterStand(kopf, basis) {
 function prAngaben(pr, basis) {
   const { head = {}, base = {} } = pr;
   const eintrag = bereichAusBranch(head.ref, leseBereiche());
-  verlange(
-    eintrag !== undefined,
-    `der Branch ${head.ref} heißt nicht genau ausmisten/<Bereich mit Quellen>`,
-  );
+  verlange(eintrag !== undefined, `der Branch ${head.ref} heißt nicht genau ${BRANCH_FORM}`);
   const basisRepo = base.repo?.id;
   verlange(
     Number.isInteger(basisRepo) && head.repo?.id === basisRepo,
