@@ -26,6 +26,7 @@ import {
   waitForLog,
   TELNYX_TEST_TENANT_NUMBER,
 } from "./helpers.js";
+import { gebauteKonfiguration } from "./gemeinsam/gebaute-konfiguration.js";
 
 const GEPINNT = "tenant_iel_gepinnt";
 const FREMD = "tenant_iel_fremd";
@@ -211,21 +212,41 @@ const ENV_KOHAERENZ_SCHLUESSEL = [
   "ELEVENLABS_INIT_WEBHOOK_TOKEN",
 ];
 
+const GEBAUTE_LAENGE_BENUTZER = 3;
+const GEBAUTE_LAENGE_PASSWORT = 5;
+const GEBAUTE_LAENGE_TOKEN = 7;
+
 function readRepoFile(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), "utf8");
 }
 
 test("IEL-B1-8: alle vier Schluessel stehen kohaerent in config.js, .env.example, render.yaml, BASE_ENV", () => {
-  const configJs = readRepoFile("src/config.js");
   const envExample = readRepoFile(".env.example");
   const renderYaml = readRepoFile("render.yaml");
 
-  assert.ok(configJs.includes("process.env.OWNER_SELF_CALL_TENANT_IDS"));
+  assert.deepEqual(
+    gebauteKonfiguration({ OWNER_SELF_CALL_TENANT_IDS: "t_eigen" }, ["voice.ownerSelfCallTenantIds"]),
+    { "voice.ownerSelfCallTenantIds": ["t_eigen"] },
+  );
   assert.match(envExample, /^OWNER_SELF_CALL_TENANT_IDS=\s*(#.*)?$/m);
   assert.match(renderYaml, /key:\s*OWNER_SELF_CALL_TENANT_IDS\s*\n\s*sync:\s*false/);
 
+  assert.deepEqual(
+    readBuiltInboundConfig({
+      ELEVENLABS_INBOUND_TENANT_IDS: "t_kohaerent",
+      ELEVENLABS_INBOUND_SIP_USER: "u".repeat(GEBAUTE_LAENGE_BENUTZER),
+      ELEVENLABS_INBOUND_SIP_PASSWORD: "p".repeat(GEBAUTE_LAENGE_PASSWORT),
+      ELEVENLABS_INIT_WEBHOOK_TOKEN: "t".repeat(GEBAUTE_LAENGE_TOKEN),
+    }),
+    {
+      tenantIds: ["t_kohaerent"],
+      scope: INBOUND_EL_SCOPE.ALLOWLIST,
+      sipUserLength: GEBAUTE_LAENGE_BENUTZER,
+      sipPasswordLength: GEBAUTE_LAENGE_PASSWORT,
+      initWebhookTokenLength: GEBAUTE_LAENGE_TOKEN,
+    },
+  );
   for (const key of ENV_KOHAERENZ_SCHLUESSEL) {
-    assert.ok(configJs.includes(`process.env.${key}`), `${key} fehlt in src/config.js`);
     assert.match(envExample, new RegExp(`^${key}=\\s*(#.*)?$`, "m"), `${key} fehlt in .env.example`);
     assert.match(
       renderYaml,
@@ -237,13 +258,17 @@ test("IEL-B1-8: alle vier Schluessel stehen kohaerent in config.js, .env.example
 });
 
 test("IEX-A9-9: ELEVENLABS_INBOUND_SCOPE steht kohaerent in config.js, .env.example, render.yaml, BASE_ENV", () => {
-  const configJs = readRepoFile("src/config.js");
   const envExample = readRepoFile(".env.example");
   const renderYaml = readRepoFile("render.yaml");
 
-  assert.ok(configJs.includes("process.env.STT_PROFILE"));
+  assert.deepEqual(gebauteKonfiguration({ STT_PROFILE: "profil-probe" }, ["voice.sttProfile"]), {
+    "voice.sttProfile": "profil-probe",
+  });
 
-  assert.ok(configJs.includes("process.env.ELEVENLABS_INBOUND_SCOPE"));
+  assert.equal(
+    readBuiltInboundConfig({ ELEVENLABS_INBOUND_SCOPE: INBOUND_EL_SCOPE.REGISTRIERTE_DIDS }).scope,
+    INBOUND_EL_SCOPE.REGISTRIERTE_DIDS,
+  );
   assert.match(envExample, /^ELEVENLABS_INBOUND_SCOPE=allowlist\s*$/m);
   assert.match(renderYaml, /key:\s*ELEVENLABS_INBOUND_SCOPE\s*\n\s*value:\s*"allowlist"/);
   assert.equal(BASE_ENV.ELEVENLABS_INBOUND_SCOPE, "");
