@@ -1,0 +1,11 @@
+{
+  "titel": "Prozess-Wächter nicht zuerst geladen",
+  "dateien": {
+    "src/server.js": [
+      "import { config } from \"./config.js\";",
+      "import \"./process-guards.js\";",
+      "export { config };"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/erster-import\""
+}

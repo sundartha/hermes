@@ -132,6 +132,30 @@ const GEHEIMNIS_SKRIPT_WORT_NUR_IN = [
     meldung: "Die Geheimnis-Skripte laden den Speicher nie (IEL-B10-14 und -15).",
   },
 ];
+const STEUERUNG_AUSNAHMEN = [
+  {
+    datei: "src/elevenlabs/outbound.js",
+    grund: "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur).",
+  },
+  {
+    datei: "src/llm/adapters/anthropic.js",
+    grund:
+      "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad.",
+  },
+];
+const PROZESS_WAECHTER = "./process-guards.js";
+const KONFIG_GRUPPEN = ["telnyxElevenLabs", "elevenLabsPlayTts"];
+const KONFIG_SKRIPTE_MIT_BLATT = [
+  "scripts/telnyx-call-latency.mjs",
+  "scripts/smoke-stripe-payment.mjs",
+  "scripts/el-nummern-registrierung.mjs",
+];
+const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
+const ABLEHNUNGS_TABELLE = {
+  datei: "src/i18n/mcp-denial-texts.js",
+  tabelle: "MCP_DENIAL_TEXTS",
+  sprache: "en",
+};
 const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.meta.url);
 const SELBSTPRUEFUNG_BESTAND = "tools/basis/selbstpruefung.json";
 const FESTER_IMPORTPFAD_BESTAND = "tools/basis/fester-importpfad.json";
@@ -176,6 +200,37 @@ const hermesBloecke =
           name: "hermes-wort-nur-in-geheimnis-skripte",
           files: ["scripts/iel-geheimnisse*.mjs"],
           rules: { "hermes/wort-nur-in": ["error", ...GEHEIMNIS_SKRIPT_WORT_NUR_IN] },
+        },
+        {
+          name: "hermes-steuerung-ueber-meldung",
+          files: ["src/**/*.js"],
+          rules: { "hermes/keine-steuerung-ueber-meldung": ["error", ...STEUERUNG_AUSNAHMEN] },
+        },
+        {
+          name: "hermes-erster-import",
+          files: ["src/server.js", "src/mcp-server.js"],
+          rules: { "hermes/erster-import": ["error", { quelle: PROZESS_WAECHTER }] },
+        },
+        {
+          name: "hermes-ablehnungsgruende",
+          files: ["src/telephony/outbound-gates.js"],
+          rules: { "hermes/ablehnungsgruende": ["error", ABLEHNUNGS_TABELLE] },
+        },
+        {
+          name: "hermes-config-pfade",
+          files: ["scripts/**/*.{js,mjs}"],
+          ignores: KONFIG_SKRIPTE_MIT_BLATT,
+          rules: {
+            "hermes/config-pfade": [
+              "error",
+              { ...KONFIG_TABELLE, gruppen: KONFIG_GRUPPEN, blattPflicht: false },
+            ],
+          },
+        },
+        {
+          name: "hermes-config-pfade-mit-blatt",
+          files: KONFIG_SKRIPTE_MIT_BLATT,
+          rules: { "hermes/config-pfade": ["error", { ...KONFIG_TABELLE, gruppen: KONFIG_GRUPPEN }] },
         },
       ];
 const testRegeln = existsSync(TESTREGELN_DATEI)

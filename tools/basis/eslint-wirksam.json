@@ -26,6 +26,17 @@
       "hermes/keine-kommentare": [
         2
       ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
       "hermes/namen-ohne-begruendung": [
         1
       ],
@@ -500,6 +511,17 @@
       "hermes/keine-kommentare": [
         2
       ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
       "hermes/namen-ohne-begruendung": [
         1
       ],
@@ -965,6 +987,17 @@
       ],
       "hermes/keine-kommentare": [
         2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
       ],
       "hermes/namen-ohne-begruendung": [
         1
@@ -1432,6 +1465,17 @@
       "hermes/keine-kommentare": [
         2
       ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
       "hermes/namen-ohne-begruendung": [
         1
       ],
@@ -1897,6 +1941,17 @@
       ],
       "hermes/keine-kommentare": [
         2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
       ],
       "hermes/namen-ohne-begruendung": [
         1
@@ -2364,6 +2419,17 @@
       "hermes/keine-kommentare": [
         2
       ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
       "hermes/namen-ohne-begruendung": [
         1
       ],
@@ -2829,6 +2895,17 @@
       ],
       "hermes/keine-kommentare": [
         2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
       ],
       "hermes/namen-ohne-begruendung": [
         1
@@ -3296,6 +3373,17 @@
       "hermes/keine-kommentare": [
         2
       ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
       "hermes/namen-ohne-begruendung": [
         1
       ],
@@ -3761,6 +3849,17 @@
       ],
       "hermes/keine-kommentare": [
         2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
       ],
       "hermes/namen-ohne-begruendung": [
         1
@@ -4228,6 +4327,17 @@
       "hermes/keine-kommentare": [
         2
       ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
       "hermes/namen-ohne-begruendung": [
         1
       ],
@@ -4693,6 +4803,17 @@
       ],
       "hermes/keine-kommentare": [
         2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
       ],
       "hermes/namen-ohne-begruendung": [
         1
@@ -5160,6 +5281,17 @@
       "hermes/keine-kommentare": [
         2
       ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
       "hermes/namen-ohne-begruendung": [
         1
       ],
@@ -5625,6 +5757,17 @@
       ],
       "hermes/keine-kommentare": [
         2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
       ],
       "hermes/namen-ohne-begruendung": [
         1
@@ -6092,6 +6235,17 @@
       "hermes/keine-kommentare": [
         2
       ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
       "hermes/namen-ohne-begruendung": [
         1
       ],
@@ -6557,6 +6711,17 @@
       ],
       "hermes/keine-kommentare": [
         2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
       ],
       "hermes/namen-ohne-begruendung": [
         1
@@ -7024,6 +7189,17 @@
       "hermes/keine-kommentare": [
         2
       ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
       "hermes/namen-ohne-begruendung": [
         1
       ],
@@ -7489,6 +7665,17 @@
       ],
       "hermes/keine-kommentare": [
         2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
       ],
       "hermes/namen-ohne-begruendung": [
         1
@@ -7956,6 +8143,17 @@
       "hermes/keine-kommentare": [
         2
       ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
       "hermes/namen-ohne-begruendung": [
         1
       ],
@@ -8422,6 +8620,17 @@
       "hermes/keine-kommentare": [
         2
       ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
+      ],
       "hermes/namen-ohne-begruendung": [
         1
       ],
@@ -8887,6 +9096,17 @@
       ],
       "hermes/keine-kommentare": [
         2
+      ],
+      "hermes/keine-steuerung-ueber-meldung": [
+        2,
+        {
+          "datei": "src/elevenlabs/outbound.js",
+          "grund": "zeile.message ist eine Transkriptzeile, kein Fehlerobjekt (reportAudioTags meldet nur)."
+        },
+        {
+          "datei": "src/llm/adapters/anthropic.js",
+          "grund": "isBillingError liest die Marke des LLM-Anbieters für ‚Guthaben leer‘; das ist die LLM-Naht, nicht der Geldpfad."
+        }
       ],
       "hermes/namen-ohne-begruendung": [
         1
@@ -9796,6 +10016,18 @@
           "allowImplicit": false
         }
       ],
+      "hermes/config-pfade": [
+        2,
+        {
+          "blattPflicht": false,
+          "datei": "src/config.js",
+          "gruppen": [
+            "telnyxElevenLabs",
+            "elevenLabsPlayTts"
+          ],
+          "tabelle": "CONFIG_NAMESPACES"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -10206,6 +10438,18 @@
           "allowImplicit": false
         }
       ],
+      "hermes/config-pfade": [
+        2,
+        {
+          "blattPflicht": false,
+          "datei": "src/config.js",
+          "gruppen": [
+            "telnyxElevenLabs",
+            "elevenLabsPlayTts"
+          ],
+          "tabelle": "CONFIG_NAMESPACES"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -10581,6 +10825,18 @@
           "allowImplicit": false
         }
       ],
+      "hermes/config-pfade": [
+        2,
+        {
+          "blattPflicht": false,
+          "datei": "src/config.js",
+          "gruppen": [
+            "telnyxElevenLabs",
+            "elevenLabsPlayTts"
+          ],
+          "tabelle": "CONFIG_NAMESPACES"
+        }
+      ],
       "hermes/keine-kommentare": [
         2
       ],
@@ -10954,6 +11210,18 @@
         2,
         {
           "allowImplicit": false
+        }
+      ],
+      "hermes/config-pfade": [
+        2,
+        {
+          "blattPflicht": false,
+          "datei": "src/config.js",
+          "gruppen": [
+            "telnyxElevenLabs",
+            "elevenLabsPlayTts"
+          ],
+          "tabelle": "CONFIG_NAMESPACES"
         }
       ],
       "hermes/keine-kommentare": [
