@@ -127,6 +127,10 @@ jobs:
         if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
         run: node tools/log-geheimnisse-pruefen.mjs
 
+      - name: Rückkehr-Parameter
+        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
+        run: node tools/rueckkehr-parameter-pruefen.mjs
+
       - name: Audit
         env:
           EVENT_NAME: ${{ github.event_name }}
