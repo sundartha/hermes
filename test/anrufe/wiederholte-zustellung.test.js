@@ -1,41 +1,39 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, makeTelnyxSigner, nowSeconds, BASE_ENV } from "./helpers.js";
-import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
-import { TURN_LOOP_BY_COST_PROFILE, legRunsOurTurnLoop } from "../src/telephony/leg-turn-loop.js";
+import { test } from "node:test";
+import {
+  startServer,
+  seedState,
+  seedCall,
+  makeTelnyxSigner,
+  nowSeconds,
+  BASE_ENV,
+} from "../helpers.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import {
+  TURN_LOOP_BY_COST_PROFILE,
+  legRunsOurTurnLoop,
+} from "../../src/telephony/leg-turn-loop.js";
 
 const HTTP_OK = 200;
 const GATHER_UND_REDIRECT_VORKOMMEN = 2;
 const ANRUF_DATENSAETZE_ERWARTET = 1;
 
-function sealedEnvelope(signer, fields) {
-  const body = new URLSearchParams(fields).toString();
-  const ts = String(nowSeconds());
-  return {
-    body,
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "telnyx-signature-ed25519": signer.sign(ts, body),
-      "telnyx-timestamp": ts,
-    },
-  };
-}
-
-function deliver(srv, url, envelope) {
-  return fetch(`${srv.localUrl}${url}`, {
-    method: "POST",
-    headers: envelope.headers,
-    body: envelope.body,
-  });
-}
-
 function deliverIncoming(srv, signer, callSid) {
-  const envelope = sealedEnvelope(signer, {
+  const zeitstempel = String(nowSeconds());
+  const rumpf = new URLSearchParams({
     CallSid: callSid,
     From: "+4915112345678",
     To: "+15005550006",
+  }).toString();
+  return fetch(`${srv.localUrl}/voice/incoming`, {
+    method: "POST",
+    body: rumpf,
+    headers: {
+      "telnyx-timestamp": zeitstempel,
+      "telnyx-signature-ed25519": signer.sign(zeitstempel, rumpf),
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
   });
-  return deliver(srv, "/voice/incoming", envelope);
 }
 
 async function pruefeBudgetBein(srv, signer) {
@@ -150,11 +148,13 @@ test("IE4-3/4/5: Wiederholungs-Antwort auf /voice/incoming - pfadgerecht je Kost
     }),
   });
   try {
-    await ctx.test("IE4-3: Budget-Bein - byte-identischer Folge-Gather, Attribut fuer Attribut", () =>
-      pruefeBudgetBein(srv, signer),
+    await ctx.test(
+      "IE4-3: Budget-Bein - byte-identischer Folge-Gather, Attribut fuer Attribut",
+      () => pruefeBudgetBein(srv, signer),
     );
-    await ctx.test("IE4-4: uebergebenes Bein - leeres, aber gueltiges Dokument, kein Fehlerstatus", () =>
-      pruefeUebergebenesBein(srv, signer),
+    await ctx.test(
+      "IE4-4: uebergebenes Bein - leeres, aber gueltiges Dokument, kein Fehlerstatus",
+      () => pruefeUebergebenesBein(srv, signer),
     );
     await ctx.test("IE4-5: unbelegtes Kostenprofil - fail-safe bleibt die Bestandsantwort", () =>
       pruefeUnbelegtesProfil(srv, signer),
