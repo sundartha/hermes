@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../src/config.js";
-import { createQueue } from "../src/queue/registry.js";
+import { config } from "../../src/config.js";
+import { createQueue } from "../../src/queue/registry.js";
 
 function withQueueBackend(value, fn) {
   const original = config.store.queueBackend;
