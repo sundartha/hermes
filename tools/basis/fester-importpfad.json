@@ -3,6 +3,7 @@
     "test/abnahme-bahn-selbsttest.test.js|5cc87864b98ca348",
     "test/al-p1-store-fields.test.js|fc2c21b57588c938",
     "test/call-actual-cost-roundtrip.test.js|19f57e9b6cb3aa68",
+    "test/config-auth.test.js|e01fca17f596de32",
     "test/config-failclosed.test.js|41aa8a3e573747fe",
     "test/config-shape.test.js|431d98ea66acfb56",
     "test/elevenlabs-agent-werkzeuge.test.js|823a83db15fae497",

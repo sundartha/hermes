@@ -8438,6 +8438,28 @@
   },
   {
     "type": "dependency",
+    "from": "test/intern-anrufe-laufend.test.js",
+    "to": "src/store/defaults.js",
+    "unresolvedTo": "../src/store/defaults.js",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "tests-nur-ueber-eingaenge"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "test/intern-anrufe-laufend.test.js",
+    "to": "src/store/state-ops.js",
+    "unresolvedTo": "../src/store/state-ops.js",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "tests-nur-ueber-eingaenge"
+    }
+  },
+  {
+    "type": "dependency",
     "from": "test/ip1-greeting-orthography.test.js",
     "to": "src/i18n/greeting-catalog.js",
     "unresolvedTo": "../src/i18n/greeting-catalog.js",
@@ -10058,6 +10080,17 @@
     "from": "test/mcp-tools-language.test.js",
     "to": "src/store/defaults.js",
     "unresolvedTo": "../src/store/defaults.js",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "tests-nur-ueber-eingaenge"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "test/mcp-tools-modellsprache.test.js",
+    "to": "src/i18n/locales.js",
+    "unresolvedTo": "../src/i18n/locales.js",
     "dependencyTypes": ["local", "import"],
     "rule": {
       "severity": "error",
