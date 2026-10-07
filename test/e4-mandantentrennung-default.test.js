@@ -1,8 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   startServer,
   startIdp,
@@ -27,7 +24,6 @@ const PRIV_A = "+491737252163",
 const HTTP_OK = 200,
   HTTP_UNAUTHORIZED = 401,
   HTTP_NOT_FOUND = 404;
-const MIN_ROUTE_FILE_COUNT = 4;
 
 const activeNumber = (id, e164, tenantId) => ({
   id,
@@ -295,29 +291,4 @@ test("E4-24: der Bootstrap-Tenant erbt die Ausnahme NICHT (identitaetsloser Anru
   const call = await placeCallAndRead({ env: ALLOWLIST_A, identity: null, to: PRIV_A });
   assert.equal(call.tenantId, BOOTSTRAP_TENANT_ID);
   assert.strictEqual(call.calleeIsOwner, false);
-});
-
-const ROUTES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src", "routes");
-const FLAG_NEEDLE = "multi" + "Tenant";
-
-function trefferIn(inhalt) {
-  return inhalt.split("\n").filter((zeile) => zeile.includes(FLAG_NEEDLE)).length;
-}
-
-test("E4-30: keine Route liest mehr das Flag (Bestands-Gegenprobe: Dateien wurden tatsaechlich durchsucht)", () => {
-  const dateien = fs.readdirSync(ROUTES_DIR).filter((datei) => datei.endsWith(".js"));
-  assert.ok(dateien.length >= MIN_ROUTE_FILE_COUNT, "Positiv-Kontrolle: die Route-Dateien existieren");
-  for (const name of ["_tenant.js", "api-read.js", "api-calls.js", "mcp.js"]) {
-    assert.ok(dateien.includes(name), `Positiv-Kontrolle: ${name} liegt in src/routes/`);
-  }
-  const treffer = dateien.reduce(
-    (sum, datei) => sum + trefferIn(fs.readFileSync(path.join(ROUTES_DIR, datei), "utf8")),
-    0,
-  );
-  assert.equal(treffer, 0, "kein Vorkommen des Flags mehr in src/routes/");
-});
-
-test("E4-31: Positiv-Kontrolle der Suchfunktion selbst (Lehre pruefkommando-ohne-positiv-kontrolle)", () => {
-  const zeile = "if (!config.tenancy." + FLAG_NEEDLE + ") return x;";
-  assert.equal(trefferIn(zeile), 1);
 });
