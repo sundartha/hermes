@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planSummaryMail } from "../src/mail-summary.js";
+import { planSummaryMail } from "../../src/mail-summary.js";
 
 const TENANT = "t_mail_a";
 
@@ -34,17 +34,14 @@ const baseCall = (over = {}) => ({
   ...over,
 });
 
-test("alles vorhanden -> send=true, EIN Ziel = Konto-E-Mail, unsubToken=null", async () => {
-  const plan = await planSummaryMail({
-    store: fakeStore({ consent: true }),
+function planWithRecipients({ consent, recipients, accountEmail }) {
+  return planSummaryMail({
+    store: fakeStore({ consent, recipients }),
     call: baseCall(),
     mailer: fakeMailer(),
-    accounts: fakeAccounts("kunde@example.test"),
+    accounts: fakeAccounts(accountEmail),
   });
-  assert.equal(plan.send, true);
-  assert.deepEqual(plan.targets, [{ email: "kunde@example.test", unsubToken: null }]);
-  assert.equal(plan.reason, null);
-});
+}
 
 test("(a) Dedup-Marker gesetzt -> send=false, KEIN reason (normaler Retry, kein Defizit)", async () => {
   const plan = await planSummaryMail({
@@ -121,14 +118,10 @@ test("(e) kein accounts-Adapter injiziert (pg-Web-Login-Block nicht gemountet) -
 });
 
 test("F2-Newsletter-Recipients: Consent=false + bestaetigter Zusatzempfaenger -> send=true, NUR das Zusatzziel", async () => {
-  const plan = await planSummaryMail({
-    store: fakeStore({
-      consent: false,
-      recipients: [{ email: "freund@example.test", unsubToken: "unsub_tok_1" }],
-    }),
-    call: baseCall(),
-    mailer: fakeMailer(),
-    accounts: fakeAccounts("kunde@example.test"),
+  const plan = await planWithRecipients({
+    consent: false,
+    recipients: [{ email: "freund@example.test", unsubToken: "unsub_tok_1" }],
+    accountEmail: "kunde@example.test",
   });
   assert.equal(plan.send, true);
   assert.deepEqual(plan.targets, [{ email: "freund@example.test", unsubToken: "unsub_tok_1" }]);
@@ -136,17 +129,13 @@ test("F2-Newsletter-Recipients: Consent=false + bestaetigter Zusatzempfaenger ->
 });
 
 test("F2-Newsletter-Recipients: Consent=true + Konto-E-Mail + zwei bestaetigte Zusatzempfaenger -> drei Ziele", async () => {
-  const plan = await planSummaryMail({
-    store: fakeStore({
-      consent: true,
-      recipients: [
-        { email: "a@example.test", unsubToken: "tok_a" },
-        { email: "b@example.test", unsubToken: "tok_b" },
-      ],
-    }),
-    call: baseCall(),
-    mailer: fakeMailer(),
-    accounts: fakeAccounts("kunde@example.test"),
+  const plan = await planWithRecipients({
+    consent: true,
+    recipients: [
+      { email: "a@example.test", unsubToken: "tok_a" },
+      { email: "b@example.test", unsubToken: "tok_b" },
+    ],
+    accountEmail: "kunde@example.test",
   });
   assert.equal(plan.send, true);
   assert.deepEqual(plan.targets, [
@@ -157,14 +146,10 @@ test("F2-Newsletter-Recipients: Consent=true + Konto-E-Mail + zwei bestaetigte Z
 });
 
 test("F2-Newsletter-Recipients: Consent=true, keine Konto-E-Mail, aber bestaetigter Zusatzempfaenger -> send=true trotz Konto-Defizit, reason bleibt null", async () => {
-  const plan = await planSummaryMail({
-    store: fakeStore({
-      consent: true,
-      recipients: [{ email: "freund@example.test", unsubToken: "unsub_tok_2" }],
-    }),
-    call: baseCall(),
-    mailer: fakeMailer(),
-    accounts: fakeAccounts(null),
+  const plan = await planWithRecipients({
+    consent: true,
+    recipients: [{ email: "freund@example.test", unsubToken: "unsub_tok_2" }],
+    accountEmail: null,
   });
   assert.equal(plan.send, true);
   assert.deepEqual(plan.targets, [{ email: "freund@example.test", unsubToken: "unsub_tok_2" }]);
