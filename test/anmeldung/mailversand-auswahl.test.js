@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { selectMailer } from "../src/wiring/web-login.js";
-import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { selectMailer } from "../../src/wiring/web-login.js";
+import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 function mailConfig(over = {}) {
   return withConfigNamespaces({ brevoApiKey: "", smtpHost: "", ...over });
