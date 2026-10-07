@@ -115,6 +115,10 @@ jobs:
           find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
             | xargs -0 -n1 node --check
 
+      - name: OpenAI-Doku
+        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
+        run: node tools/openai-doku-pruefen.mjs
+
       - name: Audit
         env:
           EVENT_NAME: ${{ github.event_name }}
