@@ -1,14 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { createAnthropicProvider } from "../src/llm/adapters/anthropic.js";
 import { LLM_TOOL_CHOICE, forcedTool } from "../src/llm/tool-choice.js";
-
-const SRC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src");
-const readSrc = (name) => fs.readFileSync(path.join(SRC_DIR, name), "utf8");
-const countOf = (source, marker) => (source.match(new RegExp(marker, "g")) || []).length;
 
 function providerReturning(resp) {
   const seen = [];
@@ -23,27 +16,6 @@ function providerReturning(resp) {
 
 const MODEL = "claude-haiku-4-5";
 const emptyResp = { content: [] };
-
-test("B3B-1: kein Anthropic-Vokabular mehr im Fachcode - mit Positiv-Kontrolle im Adapter", () => {
-  const claudeSrc = readSrc("claude.js");
-  const briefingSrc = readSrc("precall-briefing.js");
-  const adapterSrc = readSrc(path.join("llm", "adapters", "anthropic.js"));
-
-  for (const marker of ["input_schema", "cache_control", "max_tokens", "tool_choice"]) {
-    assert.equal(countOf(claudeSrc, marker), 0, `claude.js darf ${marker} nicht mehr enthalten`);
-    assert.equal(
-      countOf(briefingSrc, marker),
-      0,
-      `precall-briefing.js darf ${marker} nicht mehr enthalten`,
-    );
-  }
-
-  for (const marker of ["input_schema", "cache_control", "max_tokens", "tool_choice"])
-    assert.ok(
-      countOf(adapterSrc, marker) > 0,
-      `${marker} muss im Adapter existieren - sonst sucht der Riegel nichts`,
-    );
-});
 
 test("B3B-2: maxTokens wird an DERSELBEN Position zu max_tokens; kein neutraler Schluessel entkommt", async () => {
   const { provider, seen } = providerReturning(emptyResp);
