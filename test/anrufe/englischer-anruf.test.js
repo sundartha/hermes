@@ -1,7 +1,9 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
+import { test } from "node:test";
+import { startServer, seedState, OWNER_TEST_NUMBER } from "../helpers.js";
+
+const HTTP_OK = 200;
 
 const EN_GREETING_MARKER = /Hi, this is the AI assistant of/;
 
@@ -30,18 +32,18 @@ async function startCapturingMock() {
   const bodies = [];
   const server = http.createServer((req, res) => {
     let raw = "";
-    req.on("data", (d) => (raw += d));
+    req.on("data", (teil) => (raw += teil));
     req.on("end", () => {
       bodies.push(JSON.parse(raw));
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify(textMessage("Alright, thank you for calling. Goodbye!")));
     });
   });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     bodies,
     url: `http://127.0.0.1:${server.address().port}`,
-    close: () => new Promise((r) => server.close(r)),
+    close: () => new Promise((resolve) => server.close(resolve)),
   };
 }
 
@@ -85,22 +87,22 @@ test("EN-Call ist frei von hartcodiertem Deutsch: Greeting + Prompt-Geruest + to
     const greeting = await incomingRes.text();
 
     const stored = srv.readStore();
-    const call = stored.calls.find((c) => c.status === "active" && c.direction === "inbound");
+    const call = stored.calls.find((anruf) => anruf.status === "active" && anruf.direction === "inbound");
     assert.ok(call, "Inbound-Call wurde nicht angelegt");
 
     const turnRes = await fetch(`${srv.localUrl}/voice/turn?callId=${call.id}`, {
       method: "POST",
       body: new URLSearchParams({ SpeechResult: "Hello, who is this?" }),
     });
-    assert.equal(turnRes.status, 200);
+    assert.equal(turnRes.status, HTTP_OK);
     assert.equal(mock.bodies.length, 1, "genau ein LLM-Roundtrip erwartet (keine Tool-Nutzung)");
     const [reqBody] = mock.bodies;
-    const promptText = reqBody.system.map((b) => b.text).join(" ");
-    const toolDescriptions = reqBody.tools.map((t) => t.description).join(" ");
+    const promptText = reqBody.system.map((block) => block.text).join(" ");
+    const toolDescriptions = reqBody.tools.map((werkzeug) => werkzeug.description).join(" ");
 
     let germanLeakCount = 0;
     if (!EN_GREETING_MARKER.test(greeting)) germanLeakCount += 1;
-    if (GERMAN_HEADINGS.some((h) => promptText.includes(h))) germanLeakCount += 1;
+    if (GERMAN_HEADINGS.some((ueberschrift) => promptText.includes(ueberschrift))) germanLeakCount += 1;
     if (/Beendet das Telefonat|Nimmt eine Nachricht/.test(toolDescriptions)) germanLeakCount += 1;
 
     assert.equal(
