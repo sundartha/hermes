@@ -21,15 +21,6 @@ const PERIOD_START_S = 1_890_864_000;
 const MS_PER_SECOND = 1000;
 const HTTP_BAD_REQUEST = 400;
 
-const ROUTE_SECRET = "whsec_bbbbbbbbbbbb";
-const WRONG_SECRET = "whsec_cccccccccccc";
-const RAW_BODY = Buffer.from("not-json");
-
-const ALARM_SECRET = "whsec_dddddddddddd";
-const ALARM_CUSTOMER = "cus_alarm1";
-const ALARM_TENANT = "t_alarm1";
-const ALARM_SMS_TO = "+491711234567";
-
 function signHeader(body, secret, ts) {
   const mac = crypto.createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex");
   return `t=${ts},v1=${mac}`;
@@ -294,31 +285,33 @@ function makeAuditSpy() {
   return { audit, calls };
 }
 
-function routeWithSecret(audit) {
+function webhookRoute({ secret, audit = () => {}, store = {}, platformAlertSmsTo, messaging }) {
   return makeStripeWebhookRoute({
-    config: withConfigNamespaces({ paymentEnabled: true, stripeWebhookSecret: ROUTE_SECRET }),
-    store: {},
+    config: withConfigNamespaces({ paymentEnabled: true, stripeWebhookSecret: secret, platformAlertSmsTo }),
+    store,
     audit,
     accounts: {},
     sessions: {},
     billing: {},
     provision: async () => {},
+    messaging,
   });
 }
 
-async function postRawBody(handler, signingSecret) {
-  const req = {
-    rawBody: RAW_BODY,
-    headers: { "stripe-signature": signHeader(RAW_BODY, signingSecret, nowSeconds()) },
-  };
+async function postSignedBody(handler, body, signingSecret) {
+  const req = { rawBody: Buffer.from(body), headers: { "stripe-signature": signHeader(body, signingSecret, nowSeconds()) } };
   const res = fakeRes();
   await handler(req, res);
   return res;
 }
 
+const ROUTE_SECRET = "whsec_bbbbbbbbbbbb";
+const WRONG_SECRET = "whsec_cccccccccccc";
+const RAW_BODY = "not-json";
+
 test("stripe-webhook-Route: korrektes config.billing.stripeWebhookSecret -> Signatur besteht, faellt am JSON.parse (400 bad payload, kein Audit-Reject)", async () => {
   const { audit, calls } = makeAuditSpy();
-  const res = await postRawBody(routeWithSecret(audit), ROUTE_SECRET);
+  const res = await postSignedBody(webhookRoute({ secret: ROUTE_SECRET, audit }), RAW_BODY, ROUTE_SECRET);
   assert.equal(res.statusCode, HTTP_BAD_REQUEST);
   assert.deepEqual(res.body, { error: "bad payload" });
   assert.equal(
@@ -330,7 +323,7 @@ test("stripe-webhook-Route: korrektes config.billing.stripeWebhookSecret -> Sign
 
 test("stripe-webhook-Route: falsches Secret -> Signaturpruefung schlaegt fehl (400 invalid signature, Audit-Reject, fail-closed)", async () => {
   const { audit, calls } = makeAuditSpy();
-  const res = await postRawBody(routeWithSecret(audit), WRONG_SECRET);
+  const res = await postSignedBody(webhookRoute({ secret: ROUTE_SECRET, audit }), RAW_BODY, WRONG_SECRET);
   assert.equal(res.statusCode, HTTP_BAD_REQUEST);
   assert.deepEqual(res.body, { error: "invalid signature" });
   assert.equal(
@@ -339,6 +332,11 @@ test("stripe-webhook-Route: falsches Secret -> Signaturpruefung schlaegt fehl (4
     "falsches Secret -> Signatur faellt durch -> Audit-Reject (fail-closed)",
   );
 });
+
+const ALARM_SECRET = "whsec_dddddddddddd";
+const ALARM_CUSTOMER = "cus_alarm1";
+const ALARM_TENANT = "t_alarm1";
+const ALARM_SMS_TO = "+491711234567";
 
 const BOOTSTRAP_SENDER = {
   tenantId: "owner",
@@ -369,29 +367,13 @@ function fakeMessaging() {
 }
 
 function alarmRoute({ platformAlertSmsTo, sender, messaging }) {
-  return makeStripeWebhookRoute({
-    config: withConfigNamespaces({ paymentEnabled: true, stripeWebhookSecret: ALARM_SECRET, platformAlertSmsTo }),
-    store: alarmStore(sender),
-    audit: () => {},
-    accounts: {},
-    sessions: {},
-    billing: {},
-    provision: async () => {},
-    messaging,
-  });
-}
-
-async function postSigned(handler, body) {
-  const req = { rawBody: Buffer.from(body), headers: { "stripe-signature": signHeader(body, ALARM_SECRET, nowSeconds()) } };
-  const res = fakeRes();
-  await handler(req, res);
-  return res;
+  return webhookRoute({ secret: ALARM_SECRET, store: alarmStore(sender), platformAlertSmsTo, messaging });
 }
 
 test("outcome.alarm -> Route sendet die SMS ueber messaging()", async () => {
   const { calls, messaging } = fakeMessaging();
   const handler = alarmRoute({ platformAlertSmsTo: ALARM_SMS_TO, sender: BOOTSTRAP_SENDER, messaging });
-  const res = await postSigned(handler, disputeBody());
+  const res = await postSignedBody(handler, disputeBody(), ALARM_SECRET);
   assert.deepEqual(res.body, { received: true }, "Antwort bleibt received:true");
   assert.equal(calls.length, 1, "genau eine SMS gesendet");
   assert.match(calls[0].body, /type=charge\.dispute\.created/);
@@ -401,7 +383,7 @@ test("outcome.alarm -> Route sendet die SMS ueber messaging()", async () => {
 test("ohne PLATFORM_ALERT_SMS_TO: kein Versand, kein Wurf, Antwort bleibt received:true", async () => {
   const { calls, messaging } = fakeMessaging();
   const handler = alarmRoute({ platformAlertSmsTo: "", sender: BOOTSTRAP_SENDER, messaging });
-  const res = await postSigned(handler, disputeBody());
+  const res = await postSignedBody(handler, disputeBody(), ALARM_SECRET);
   assert.deepEqual(res.body, { received: true });
   assert.equal(calls.length, 0, "kein Versand ohne Empfaenger");
 });
@@ -409,7 +391,7 @@ test("ohne PLATFORM_ALERT_SMS_TO: kein Versand, kein Wurf, Antwort bleibt receiv
 test("werfendes messaging() (fehlender Bootstrap-Absender) beeintraechtigt die Antwort NICHT (fail-soft)", async () => {
   const { calls, messaging } = fakeMessaging();
   const handler = alarmRoute({ platformAlertSmsTo: ALARM_SMS_TO, sender: null, messaging });
-  const res = await postSigned(handler, disputeBody());
+  const res = await postSignedBody(handler, disputeBody(), ALARM_SECRET);
   assert.deepEqual(res.body, { received: true }, "Antwort bleibt received:true trotz fehlendem Absender");
   assert.equal(calls.length, 0, "kein Absender -> kein Versand");
 });
