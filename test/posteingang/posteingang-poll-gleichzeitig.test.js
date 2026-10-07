@@ -1,14 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall } from "./helpers.js";
-import * as ops from "../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { startServer, seedState, seedCall } from "../helpers.js";
 
 const HTTP_OK = 200;
 const NOW = "2026-08-21T10:00:00.000Z";
 const QUALIFIED_CALL_COUNT = 3;
 const PARALLEL_POLL_COUNT = 6;
 const NO_LIMIT_CAP = 20;
+const OWNER_TENANT = "owner";
 
 function seedThreeQualifiedCalls(prefix) {
   const calls = Array.from({ length: QUALIFIED_CALL_COUNT }, (_unused, index) =>
@@ -63,23 +65,35 @@ test("INBOX-P2 C2: sechs parallele Polls liefern jede call_id genau einmal", asy
   }
 });
 
-test("INBOX-P2 C3: Struktur-Beleg - takeInboxEntries ist kein Thenable und markiert im selben synchronen Durchlauf", () => {
-  const state = seedThreeQualifiedCalls("call_sync_");
-  const result = ops.takeInboxEntries(state, BOOTSTRAP_TENANT_ID, {
-    limit: NO_LIMIT_CAP,
-    includeSeen: false,
-  });
-
-  assert.equal(
-    typeof result.then,
-    "undefined",
-    "die Rueckgabe darf kein Thenable sein (kein await dazwischen)",
+test("INBOX-P2 C3: Struktur-Beleg - takeInboxEntries ist kein Thenable und markiert im selben synchronen Durchlauf", async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-inbox-sync-"));
+  fs.writeFileSync(
+    path.join(dataDir, "store.json"),
+    JSON.stringify(seedThreeQualifiedCalls("call_sync_")),
   );
-  assert.equal(result.entries.length, QUALIFIED_CALL_COUNT);
-  assert.equal(result.marked, QUALIFIED_CALL_COUNT);
+  process.env.DATA_DIR = dataDir;
+  try {
+    const store = await import("../../src/store.js");
+    const result = store.takeInboxEntries(OWNER_TENANT, {
+      limit: NO_LIMIT_CAP,
+      includeSeen: false,
+    });
 
-  for (const entry of result.entries) {
-    const matchingCall = state.calls.find((call) => call.id === entry.call_id);
-    assert.notEqual(matchingCall.inboxSeenAt, null);
+    assert.equal(
+      typeof result.then,
+      "undefined",
+      "die Rueckgabe darf kein Thenable sein (kein await dazwischen)",
+    );
+    assert.equal(result.entries.length, QUALIFIED_CALL_COUNT);
+    assert.equal(result.marked, QUALIFIED_CALL_COUNT);
+
+    const { calls } = store.load();
+    for (const entry of result.entries) {
+      const matchingCall = calls.find((call) => call.id === entry.call_id);
+      assert.notEqual(matchingCall.inboxSeenAt, null);
+    }
+  } finally {
+    delete process.env.DATA_DIR;
+    fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
