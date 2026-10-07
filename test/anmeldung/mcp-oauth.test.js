@@ -8,11 +8,12 @@ import {
   mcpPost as post,
   MCP_AUDIENCE as AUDIENCE,
   externalIp,
-} from "./helpers.js";
-import { hashEmail } from "../src/util.js";
+} from "../helpers.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
+const ALICE_EMAIL_HASH = "37774a9c";
+const RESOURCE_METADATA_HINWEIS = /resource_metadata="https:\/\/agent\.test\/\.well-known\/oauth-protected-resource"/;
 const EXTERNAL_IP = externalIp();
 
 test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
@@ -44,11 +45,7 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
     await ctx.test("ohne Token -> 401 + WWW-Authenticate mit resource_metadata", async () => {
       const res = await post(`${srv.localUrl}/mcp`, null);
       assert.equal(res.status, HTTP_UNAUTHORIZED);
-      const wa = res.headers.get("www-authenticate") || "";
-      assert.match(
-        wa,
-        /resource_metadata="https:\/\/agent\.test\/\.well-known\/oauth-protected-resource"/,
-      );
+      assert.match(res.headers.get("www-authenticate") || "", RESOURCE_METADATA_HINWEIS);
     });
 
     await ctx.test("Muell-Token -> 401", async () => {
@@ -99,7 +96,7 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (ctx) => {
       const token = await idp.sign({ email: "alice@team.test" });
       const res = await post(`${srv.localUrl}/mcp`, token);
       assert.notEqual(res.status, HTTP_UNAUTHORIZED);
-      await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("alice@team.test")} tenant=`));
+      await waitForLog(srv, new RegExp(`\\[mcp\\] ${ALICE_EMAIL_HASH} tenant=`));
     });
   } finally {
     await srv.stop();
