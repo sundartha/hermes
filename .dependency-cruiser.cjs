@@ -3,6 +3,13 @@ const path = require("node:path");
 
 const BEREICHE_DATEI = path.join(__dirname, "tools/bereiche.json");
 const BEREICHE = fs.existsSync(BEREICHE_DATEI) ? require(BEREICHE_DATEI) : [];
+const SERVER_PFLICHT_MODULE = [
+  ["ausfall-meldung", "src/telephony/outage-report.js"],
+  ["bezahlt-ohne-nummer", "src/billing/paid-without-number-watch.js"],
+  ["preisdrift", "src/billing/price-drift-watch.js"],
+  ["bereitstellung-wiederholen", "src/billing/provision-retry-sweep.js"],
+  ["absender-besitz", "src/telephony/ani-ownership-recheck.js"],
+];
 const TEST_ZIELE_ERLAUBT = BEREICHE.flatMap(({ eingaenge, fachlogik }) => [
   ...eingaenge,
   ...fachlogik,
@@ -44,6 +51,14 @@ module.exports = {
       to: { path: "^src/", pathNot: TEST_ZIELE_ERLAUBT },
     },
     {
+      name: "src-nicht-nach-apps-web",
+      severity: "error",
+      comment:
+        "Der Dienst unter src/ importiert nichts aus der Website apps/web/; geteilte Werte liegen unter src/ und die Website liest sie von dort.",
+      from: { path: "^src/" },
+      to: { path: "^apps/web/" },
+    },
+    {
       name: "werkzeug-tests-ohne-src",
       severity: "error",
       comment:
@@ -52,6 +67,13 @@ module.exports = {
       to: { path: "^src/" },
     },
   ],
+  required: SERVER_PFLICHT_MODULE.map(([name, modul]) => ({
+    name: `server-baut-${name}`,
+    severity: "error",
+    comment: `src/server.js baut beim Start ${modul} und reicht es in die Abläufe weiter; ohne diesen Import fehlt der Wächter im laufenden Dienst.`,
+    module: { path: "^src/server\\.js$" },
+    to: { path: `^${modul.replace(/\./g, "\\.")}$` },
+  })),
   options: {
     doNotFollow: { path: "node_modules" },
     exclude: { path: "^src/.*\\.test\\.js$" },
