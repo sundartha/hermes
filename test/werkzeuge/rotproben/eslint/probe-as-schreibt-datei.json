@@ -1,0 +1,10 @@
+{
+  "titel": "Sonde schreibt eine Datei",
+  "dateien": {
+    "scripts/probe-as-faehigkeiten.mjs": [
+      "import { writeFile } from \"node:fs\";",
+      "export const ablegen = (pfad) => writeFile(pfad, \"x\", () => {});"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-restricted-imports\""
+}

@@ -1,0 +1,9 @@
+{
+  "titel": "Lese-Skript mit schreibender HTTP-Methode",
+  "dateien": {
+    "scripts/anruf-unterbrechungen.mjs": [
+      "export const senden = (url) => fetch(url, { method: \"POST\" });"
+    ]
+  },
+  "erwartet": "Dieses Skript liest nur"
+}

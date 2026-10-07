@@ -1,0 +1,10 @@
+{
+  "titel": "Kalibrierung rechnet mit dem Gate-Tarif",
+  "dateien": {
+    "src/billing/cost-calibration.js": [
+      "import { tariffCentsPerMin } from \"../telephony/outbound-gates.js\";",
+      "export const tarif = tariffCentsPerMin;"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-restricted-imports\""
+}

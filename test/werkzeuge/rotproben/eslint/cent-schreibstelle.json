@@ -1,0 +1,11 @@
+{
+  "titel": "Dritte Cent-Schreibstelle im Speicher",
+  "dateien": {
+    "src/store/state-ops.js": [
+      "export function heimlicherDritter(bucket) {",
+      "  bucket.costCents = 0;",
+      "}"
+    ]
+  },
+  "erwartet": "Cent-Stände schreiben nur bookCents"
+}

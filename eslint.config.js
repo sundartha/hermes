@@ -203,6 +203,144 @@ const ZEITGLIEDER_MELDUNG =
 const ZEITGLIEDER_MODULE = ["node:timers", "timers", "node:timers/promises", "timers/promises"];
 const demeterChainMessage =
   "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)";
+const demeterRegel = { selector: demeterChainSelector, message: demeterChainMessage };
+const NUR_LESEN_MELDUNG =
+  "Dieses Skript liest nur: kein Dateisystem-Schreiben und keine schreibende HTTP-Methode.";
+const DATEISYSTEM_MODULE = ["fs", "node:fs", "fs/promises", "node:fs/promises"];
+const nurLesenImporte = [
+  "error",
+  { paths: DATEISYSTEM_MODULE.map((name) => ({ name, message: NUR_LESEN_MELDUNG })) },
+];
+const schreibFunktion = {
+  selector: "Identifier[name=/^(writeFile|appendFile|createWriteStream)(Sync)?$/]",
+  message: NUR_LESEN_MELDUNG,
+};
+const dateiBloecke = [
+  {
+    name: "rueckfrage-auditor",
+    files: ["src/server.js", "src/app.js"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        demeterRegel,
+        {
+          selector:
+            'VariableDeclarator[id.name="durableAuditFor"]:not(:has(CallExpression[callee.name="makeDurableAudit"] Property[key.name="tenantId"]))',
+          message:
+            "durableAuditFor wird über makeDurableAudit mit tenantId gebaut, damit die Rückfrage-Spur dauerhaft und je Mandant geschrieben wird (P3-7).",
+        },
+        {
+          selector:
+            'CallExpression[callee.name="makeElevenLabsWebhookRoutes"]:not(:has(Property[key.name="auditFor"][value.name="durableAuditFor"]))',
+          message: "Die Rückfrage-Route bekommt durableAuditFor als auditFor (P3-7).",
+        },
+      ],
+    },
+  },
+  {
+    name: "cent-schreibstellen",
+    files: ["src/store/state-ops.js"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        demeterRegel,
+        {
+          selector:
+            'AssignmentExpression[left.property.name="costCents"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] AssignmentExpression)',
+          message:
+            "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
+        },
+        {
+          selector:
+            'UpdateExpression[argument.property.name="costCents"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] UpdateExpression)',
+          message:
+            "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
+        },
+      ],
+    },
+  },
+  {
+    name: "kalibrierung-ohne-gate-tarif",
+    files: ["src/billing/cost-calibration.js"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "../telephony/outbound-gates.js",
+              importNames: ["tariffCentsPerMin"],
+              message:
+                "Die Kosten-Kalibrierung rechnet mit dem Tarif aus der Konfiguration, nicht mit tariffCentsPerMin der Gates (P5-12).",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: "anruf-unterbrechungen-nur-lesen",
+    files: ["scripts/anruf-unterbrechungen.mjs"],
+    rules: {
+      "no-restricted-imports": nurLesenImporte,
+      "no-restricted-syntax": [
+        "error",
+        demeterRegel,
+        schreibFunktion,
+        { selector: 'Property[key.name="method"]', message: NUR_LESEN_MELDUNG },
+        { selector: 'Property[key.value="method"]', message: NUR_LESEN_MELDUNG },
+      ],
+    },
+  },
+  {
+    name: "probe-as-nur-lesen",
+    files: ["scripts/probe-as-faehigkeiten.mjs"],
+    rules: {
+      "no-restricted-imports": nurLesenImporte,
+      "no-restricted-syntax": [
+        "error",
+        demeterRegel,
+        schreibFunktion,
+        { selector: "ImportExpression", message: "Die Sonde lädt keine Module nach (E1-15)." },
+        {
+          selector: "Property[key.name=/^authorization$/i]",
+          message: "Die Sonde schickt keine Anmeldedaten (E1-15).",
+        },
+        {
+          selector: "Property[key.value=/^authorization$/i]",
+          message: "Die Sonde schickt keine Anmeldedaten (E1-15).",
+        },
+        { selector: "Identifier[name=/cookie/i]", message: "Die Sonde schickt keine Cookies (E1-15)." },
+        { selector: "Literal[value=/cookie/i]", message: "Die Sonde schickt keine Cookies (E1-15)." },
+        {
+          selector: "TemplateElement[value.raw=/cookie/i]",
+          message: "Die Sonde schickt keine Cookies (E1-15).",
+        },
+        {
+          selector: "Property[key.name=/^methode?$/][value.value=/^(PUT|PATCH|DELETE)$/]",
+          message: "Die Sonde fragt nur lesend ab (E1-15).",
+        },
+      ],
+    },
+  },
+  {
+    name: "iel-mess-auflegestufen",
+    files: ["scripts/iel-mess*.mjs"],
+    ignores: ["scripts/iel-mess.mjs"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        demeterRegel,
+        {
+          selector: "VariableDeclarator[id.name=/^(HART_MAX_S|WACHHUND_AUFLEGEN_S|NACHFASSEN_S|NOTAUS_S)$/]",
+          message:
+            "Die Auflege-Stufen stehen genau einmal in scripts/iel-mess.mjs (Test 9a); die Hilfsmodule bekommen sie von dort.",
+        },
+      ],
+    },
+  },
+];
+
 export default [
   {
     ignores: [
@@ -378,6 +516,7 @@ export default [
       ],
     },
   },
+  ...dateiBloecke,
   ...hermesBloecke,
   ...testRegelBloecke,
 ];

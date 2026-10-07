@@ -1,0 +1,9 @@
+{
+  "titel": "Auflege-Stufe doppelt definiert",
+  "dateien": {
+    "scripts/iel-mess-audio.mjs": [
+      "export const NOTAUS_S = 55;"
+    ]
+  },
+  "erwartet": "Die Auflege-Stufen stehen genau einmal"
+}
