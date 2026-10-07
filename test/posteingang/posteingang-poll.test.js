@@ -1,14 +1,55 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import express from "express";
+import { makeInboxRoutes, INBOX_MAX_ENTRIES } from "../../src/routes/api-inbox.js";
+import { startServer, seedState, seedCall } from "../helpers.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
-
+const OWNER_TENANT = "owner";
+const A5_POLL_COUNT = 3;
 const CALLER = "+4915112345678";
 const NOW = "2026-08-21T10:00:00.000Z";
 const STARTED = "2026-08-21T09:00:00.000Z";
+
+function makeMockStore(result) {
+  const saves = [];
+  const pollCalls = [];
+  return {
+    saves,
+    pollCalls,
+    save: () => saves.push(1),
+    takeInboxEntries: (tenantId, options) => {
+      pollCalls.push({ tenantId, options });
+      return result;
+    },
+  };
+}
+
+function makeAllowTenant() {
+  return { requireTenant: () => OWNER_TENANT };
+}
+
+function makeRejectTenant() {
+  return {
+    requireTenant: (req, res) => {
+      res.status(HTTP_FORBIDDEN).json({ error: "tenant" });
+      return null;
+    },
+  };
+}
+
+async function mount(store, tenant) {
+  const audits = [];
+  const app = express();
+  app.use(express.json());
+  app.use(makeInboxRoutes({ store, audit: (...args) => audits.push(args), tenant }));
+  const server = await new Promise((resolve) => {
+    const listener = app.listen(0, () => resolve(listener));
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  return { base, audits, stop: () => new Promise((resolve) => server.close(resolve)) };
+}
 
 function seedThreeCalls() {
   const inboundQualified = seedCall({
@@ -56,6 +97,129 @@ function poll(srv, { headers = {}, body } = {}) {
   });
 }
 
+const SUB_OWNER = "sub-owner";
+const SUB_B = "sub-b";
+const TENANT_B = "tenant_b_inbox";
+const OWNER_NUM = "+4915200000001";
+const B_NUM = "+4915200000002";
+
+function seedTwoTenantsQualified() {
+  const ownerCall = seedCall({
+    id: "call_owner_inbox",
+    tenantId: OWNER_TENANT,
+    direction: "inbound",
+    from: CALLER,
+    status: "completed",
+    startedAt: STARTED,
+    summary: "Owner-Anliegen",
+    inboxEntryAt: NOW,
+    inboxSeenAt: null,
+  });
+  const bCall = seedCall({
+    id: "call_b",
+    tenantId: TENANT_B,
+    direction: "inbound",
+    from: CALLER,
+    status: "completed",
+    startedAt: STARTED,
+    summary: "B-Anliegen",
+    inboxEntryAt: NOW,
+    inboxSeenAt: null,
+  });
+  return seedState({
+    calls: [ownerCall, bCall],
+    tenants: [
+      { id: OWNER_TENANT, status: "active", idpSubject: SUB_OWNER },
+      { id: TENANT_B, status: "active", idpSubject: SUB_B, ownerName: "Maria" },
+    ],
+    numbers: [
+      {
+        id: "num_owner",
+        e164: OWNER_NUM,
+        tenantId: OWNER_TENANT,
+        provider: "telnyx",
+        status: "active",
+        providerNumberId: null,
+      },
+      {
+        id: "num_b",
+        e164: B_NUM,
+        tenantId: TENANT_B,
+        provider: "telnyx",
+        status: "active",
+        providerNumberId: null,
+      },
+    ],
+  });
+}
+
+test("INBOX-P2 A2: Poll mit Eintrag (marked:1) ruft store.save() TROTZDEM nicht auf (kein Doppel-Flush)", async () => {
+  const store = makeMockStore({
+    entries: [{ call_id: "call_x" }],
+    remaining: 0,
+    marked: 1,
+  });
+  const srv = await mount(store, makeAllowTenant());
+  try {
+    const res = await fetch(`${srv.base}/api/inbox/poll`, { method: "POST" });
+    assert.equal(res.status, HTTP_OK);
+    assert.equal(store.saves.length, 0);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("INBOX-P2 A3: Audit-Form ist ausschliesslich Zaehler", async () => {
+  const store = makeMockStore({ entries: [{ call_id: "call_x" }], remaining: 2, marked: 1 });
+  const srv = await mount(store, makeAllowTenant());
+  try {
+    await fetch(`${srv.base}/api/inbox/poll`, { method: "POST" });
+    assert.equal(srv.audits.length, 1);
+    const [action, , detail] = srv.audits[0];
+    assert.equal(action, "inbox_poll");
+    assert.match(detail, /^neu=\d+ rest=\d+$/);
+    assert.ok(!/\d{6,}/.test(detail), "Audit-Detail darf keine E.164-artige Ziffernfolge tragen");
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("INBOX-P2 A4: requireTenant-Ablehnung -> 403, takeInboxEntries wird NIE gerufen", async () => {
+  const store = makeMockStore({ entries: [], remaining: 0, marked: 0 });
+  const srv = await mount(store, makeRejectTenant());
+  try {
+    const res = await fetch(`${srv.base}/api/inbox/poll`, { method: "POST" });
+    assert.equal(res.status, HTTP_FORBIDDEN);
+    assert.equal(store.pollCalls.length, 0);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("INBOX-P2 A5: include_seen wird fail-closed durchgereicht", async () => {
+  const store = makeMockStore({ entries: [], remaining: 0, marked: 0 });
+  const srv = await mount(store, makeAllowTenant());
+  try {
+    await fetch(`${srv.base}/api/inbox/poll`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ include_seen: true }),
+    });
+    await fetch(`${srv.base}/api/inbox/poll`, { method: "POST" });
+    await fetch(`${srv.base}/api/inbox/poll`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ include_seen: "true" }),
+    });
+    assert.equal(store.pollCalls.length, A5_POLL_COUNT);
+    assert.deepEqual(store.pollCalls[0].options, { limit: INBOX_MAX_ENTRIES, includeSeen: true });
+    assert.deepEqual(store.pollCalls[1].options, { limit: INBOX_MAX_ENTRIES, includeSeen: false });
+    assert.deepEqual(store.pollCalls[2].options, { limit: INBOX_MAX_ENTRIES, includeSeen: false });
+  } finally {
+    await srv.stop();
+  }
+});
+
 test("INBOX-P2 R1: erster Poll liefert den qualifizierten Eintrag, zweiter Poll ist leer", async () => {
   const srv = await startServer({ seed: seedThreeCalls() });
   try {
@@ -99,62 +263,6 @@ test("INBOX-P2 R3: X-Forwarded-For wird als externer Aufrufer abgelehnt (403), k
     await srv.stop();
   }
 });
-
-const SUB_OWNER = "sub-owner";
-const SUB_B = "sub-b";
-const TENANT_B = "tenant_b_inbox";
-const OWNER_NUM = "+4915200000001";
-const B_NUM = "+4915200000002";
-
-function seedTwoTenantsQualified() {
-  const ownerCall = seedCall({
-    id: "call_owner_inbox",
-    tenantId: BOOTSTRAP_TENANT_ID,
-    direction: "inbound",
-    from: CALLER,
-    status: "completed",
-    startedAt: STARTED,
-    summary: "Owner-Anliegen",
-    inboxEntryAt: NOW,
-    inboxSeenAt: null,
-  });
-  const bCall = seedCall({
-    id: "call_b",
-    tenantId: TENANT_B,
-    direction: "inbound",
-    from: CALLER,
-    status: "completed",
-    startedAt: STARTED,
-    summary: "B-Anliegen",
-    inboxEntryAt: NOW,
-    inboxSeenAt: null,
-  });
-  return seedState({
-    calls: [ownerCall, bCall],
-    tenants: [
-      { id: BOOTSTRAP_TENANT_ID, status: "active", idpSubject: SUB_OWNER },
-      { id: TENANT_B, status: "active", idpSubject: SUB_B, ownerName: "Maria" },
-    ],
-    numbers: [
-      {
-        id: "num_owner",
-        e164: OWNER_NUM,
-        tenantId: BOOTSTRAP_TENANT_ID,
-        provider: "telnyx",
-        status: "active",
-        providerNumberId: null,
-      },
-      {
-        id: "num_b",
-        e164: B_NUM,
-        tenantId: TENANT_B,
-        provider: "telnyx",
-        status: "active",
-        providerNumberId: null,
-      },
-    ],
-  });
-}
 
 test("INBOX-P2 R4: Cross-Tenant - jede Identitaet bekommt und markiert NUR ihre eigene Inbox", async () => {
   const srv = await startServer({ env: { MULTI_TENANT: "true" }, seed: seedTwoTenantsQualified() });
