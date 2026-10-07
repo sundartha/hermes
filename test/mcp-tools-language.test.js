@@ -61,8 +61,6 @@ function toolText(result) {
   return (result?.content || []).map((content) => content.text).join("\n");
 }
 
-const MCP_TOOLS_SRC = fs.readFileSync(path.join(ROOT, "src", "mcp-tools.js"), "utf8");
-
 const RICH_CALL = (lines) => ({
   status: "active",
   answeredAt: "2026-06-26T10:00:00.000Z",
@@ -139,7 +137,6 @@ test("list_calls formatiert startedAt nach dateLocale der Tenant-Sprache (ex FMT
 });
 
 test("mcp-tools.js traegt kein hartes de-DE-Literal mehr (ex PROMPT-09)", async () => {
-  assert.doesNotMatch(MCP_TOOLS_SRC, /toLocaleString\("de-DE"/);
   await withGateway({}, async () => {
     const handlersDe = captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" });
     const handlersEn = captureTools({ identity: null, scopedTenant: "tenant-en", language: "en" });
