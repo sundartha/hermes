@@ -340,3 +340,5 @@ src/telephony/call-finish.js#finishCall | store.markInboxEntry(call.id, inboxWor
 src/store/state-ops.js#takeInboxEntries | .filter((call) => Boolean(call.inboxEntryAt) && (includeSeen || !call.inboxSeenAt))
 src/store/state-ops.js#keepCall | const keepCall = (c) => c.status === "active" || !c.endedAt || c.endedAt >= cutoff;
 ANKER-END -->
+
+Interne Kennung zur Probe: T2-99
