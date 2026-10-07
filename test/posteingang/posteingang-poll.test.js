@@ -153,12 +153,8 @@ function seedTwoTenantsQualified() {
   });
 }
 
-test("INBOX-P2 A2: Poll mit Eintrag (marked:1) ruft store.save() TROTZDEM nicht auf (kein Doppel-Flush)", async () => {
-  const store = makeMockStore({
-    entries: [{ call_id: "call_x" }],
-    remaining: 0,
-    marked: 1,
-  });
+async function assertPollDoesNotSave(pollResult) {
+  const store = makeMockStore(pollResult);
   const srv = await mount(store, makeAllowTenant());
   try {
     const res = await fetch(`${srv.base}/api/inbox/poll`, { method: "POST" });
@@ -167,6 +163,18 @@ test("INBOX-P2 A2: Poll mit Eintrag (marked:1) ruft store.save() TROTZDEM nicht 
   } finally {
     await srv.stop();
   }
+}
+
+test("INBOX-P2 A1: Leer-Poll ruft store.save() nicht auf", async () => {
+  await assertPollDoesNotSave({ entries: [], remaining: 0, marked: 0 });
+});
+
+test("INBOX-P2 A2: Poll mit Eintrag (marked:1) ruft store.save() TROTZDEM nicht auf (kein Doppel-Flush)", async () => {
+  await assertPollDoesNotSave({
+    entries: [{ call_id: "call_x" }],
+    remaining: 0,
+    marked: 1,
+  });
 });
 
 test("INBOX-P2 A3: Audit-Form ist ausschliesslich Zaehler", async () => {
