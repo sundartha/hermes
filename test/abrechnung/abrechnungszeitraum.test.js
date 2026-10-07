@@ -1,17 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MS_PER_SECOND, periodStartFromEnd } from "../src/billing/period.js";
+import { MS_PER_SECOND, periodStartFromEnd } from "../../src/billing/period.js";
 
-const END_SEC = Date.UTC(2026, 6, 15) / 1000;
-const EXPECTED_START_SEC = Date.UTC(2026, 5, 15) / 1000;
-
-test("periodStartFromEnd: Ende minus ein Monat im UTC-Kalender (Mitte-Monat)", () => {
-  const start = periodStartFromEnd(END_SEC);
-  assert.equal(start.toISOString(), "2026-06-15T00:00:00.000Z");
-});
+const MS_PER_SECOND_EXPECTED = 1000;
+const END_SEC = Date.parse("2026-07-15T00:00:00.000Z") / MS_PER_SECOND_EXPECTED;
+const EXPECTED_START_SEC = Date.parse("2026-06-15T00:00:00.000Z") / MS_PER_SECOND_EXPECTED;
+const END_MAR_31_SEC = Date.parse("2026-03-31T00:00:00.000Z") / MS_PER_SECOND_EXPECTED;
 
 test("MS_PER_SECOND ist die kanonische s<->ms-Bruecke", () => {
-  assert.equal(MS_PER_SECOND, 1000);
+  assert.equal(MS_PER_SECOND, MS_PER_SECOND_EXPECTED);
 });
 
 test("beide Wrapper-Formate meinen denselben Zeitpunkt (ISO == Sekunden)", () => {
@@ -23,6 +20,5 @@ test("beide Wrapper-Formate meinen denselben Zeitpunkt (ISO == Sekunden)", () =>
 });
 
 test("Monatsletzten-Ueberlauf: dokumentiertes Roll-over (akzeptiert, kein Gate)", () => {
-  const endMar31 = Date.UTC(2026, 2, 31) / 1000;
-  assert.equal(periodStartFromEnd(endMar31).toISOString(), "2026-03-03T00:00:00.000Z");
+  assert.equal(periodStartFromEnd(END_MAR_31_SEC).toISOString(), "2026-03-03T00:00:00.000Z");
 });
