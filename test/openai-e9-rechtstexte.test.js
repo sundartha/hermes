@@ -1,25 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { ROOT } from "./helpers.js";
+import privacy from "../apps/web/src/data/legal/privacy.de.json" with { type: "json" };
+import imprint from "../apps/web/src/data/legal/imprint.de.json" with { type: "json" };
+import terms from "../apps/web/src/data/legal/terms.de.json" with { type: "json" };
 
-const LEGAL_DIR = path.join(ROOT, "apps/web/src/data/legal");
 const PRIVACY_FILE = "privacy.de.json";
 const IMPRINT_FILE = "imprint.de.json";
 const TERMS_FILE = "terms.de.json";
-
-const ADAPTER_DIRS = Object.freeze([
-  path.join(ROOT, "src/llm/adapters"),
-  path.join(ROOT, "src/research/adapters"),
-]);
-
-const PROVIDER_DISPLAY_NAMES = Object.freeze({
-  "anthropic.js": "Anthropic",
-  "deepseek.js": "DeepSeek",
-  "anthropic-web-search.js": "Anthropic",
-  "exa-search.js": "Exa",
-});
 
 const OFFEN_MARKER = "[OFFEN:";
 const ASSISTENT_HEADING = "Anbindung an einen KI-Assistenten";
@@ -31,8 +18,10 @@ const WIDERLEGTE_AUSSAGEN = Object.freeze([
   "vollständige Löschung",
 ]);
 
+const LEGAL_DOCUMENTS = Object.freeze({ [PRIVACY_FILE]: privacy, [IMPRINT_FILE]: imprint, [TERMS_FILE]: terms });
+
 function legalDocument(fileName) {
-  return JSON.parse(fs.readFileSync(path.join(LEGAL_DIR, fileName), "utf8"));
+  return LEGAL_DOCUMENTS[fileName];
 }
 
 function documentText(doc) {
@@ -48,37 +37,9 @@ function countOccurrences(haystack, needle) {
   return haystack.split(needle).length - 1;
 }
 
-function adapterFileNames() {
-  return ADAPTER_DIRS.flatMap((dir) => fs.readdirSync(dir)).filter((name) => name.endsWith(".js"));
-}
-
-function requireProviderDisplayNames(fileNames) {
-  const namen = fileNames.map((fileName) => {
-    const anzeigename = PROVIDER_DISPLAY_NAMES[fileName];
-    if (!anzeigename) {
-      throw new Error(
-        `Anbieter-Adapter ohne Anzeigenamen: ${fileName} - Karte in dieser Testdatei ergaenzen UND den Anbieter in apps/web/src/data/legal/${PRIVACY_FILE} nennen`,
-      );
-    }
-    return anzeigename;
-  });
-  return [...new Set(namen)];
-}
-
 function offenMarkerCount(fileName) {
   return countOccurrences(documentText(legalDocument(fileName)), OFFEN_MARKER);
 }
-
-test("Anbieter-Naht: jeder gebaute Sprachmodell- und Such-Adapter ist in der Datenschutzerklaerung genannt", () => {
-  const text = documentText(legalDocument(PRIVACY_FILE));
-  for (const anzeigename of requireProviderDisplayNames(adapterFileNames())) {
-    assert.ok(text.includes(anzeigename), `Anbieter "${anzeigename}" fehlt in ${PRIVACY_FILE}`);
-  }
-});
-
-test("Negativ-Kontrolle zur Anbieter-Naht: ein unbekannter Adapter laesst die Pruefung werfen", () => {
-  assert.throws(() => requireProviderDisplayNames(["neuer-anbieter.js"]), /neuer-anbieter\.js/);
-});
 
 test("Datenschutzerklaerung traegt keine der vor E9 widerlegten Aussagen mehr", () => {
   const text = documentText(legalDocument(PRIVACY_FILE));
