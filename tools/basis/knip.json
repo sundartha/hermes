@@ -72,8 +72,6 @@
     "exports|src/call-memory.js|MEMORY_MAX_ENTRY_CHARS",
     "exports|src/conversation/consult-raised.js|EL_CONSULT_STAGES",
     "exports|src/cookie-consent-log.js|scheduleCookieConsentRetention",
-    "exports|src/db/migrate.js|backfillNumberGeo",
-    "exports|src/db/migrate.js|backfillPeriodStart",
     "exports|src/elevenlabs/inbound-rueckfall.js|EL_DIAL_ANSWER_ON_BRIDGE",
     "exports|src/elevenlabs/inbound-rueckfall.js|elBeinUrl",
     "exports|src/i18n/failure-reason-texts.js|makeFailureSentence",
@@ -86,8 +84,6 @@
     "exports|src/routes/_call-request.js|LANGUAGE_UNAVAILABLE",
     "exports|src/routes/_call-request.js|UNSUPPORTED_LANGUAGE",
     "exports|src/routes/webhooks-elevenlabs-init.js|INIT_GRUND",
-    "exports|src/routes/webhooks-elevenlabs.js|ELEVENLABS_CONSULT_PATH",
-    "exports|src/routes/webhooks-elevenlabs.js|ELEVENLABS_LOOKUP_PATH",
     "exports|src/self-service.js|SELF_SERVICE_LOCKED_FIELDS",
     "exports|src/store/cost-evidence.js|BELEG_DETAIL_PFADE",
     "exports|src/store/cost-evidence.js|costEvidenceValuePatch",
@@ -136,7 +132,6 @@
     "files|scripts/workflow-kosten.mjs|scripts/workflow-kosten.mjs",
     "files|src/conversation/elevenlabs-agent-config.js|src/conversation/elevenlabs-agent-config.js",
     "files|src/mail/ports.js|src/mail/ports.js",
-    "files|src/queue/ports.js|src/queue/ports.js",
-    "unlisted|eslint.config.js|espree"
+    "files|src/queue/ports.js|src/queue/ports.js"
   ]
 }
