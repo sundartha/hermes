@@ -1,15 +1,26 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-
-import { ELEVENLABS_CONSULT_PATH, ELEVENLABS_LOOKUP_PATH } from "../src/routes/webhooks-elevenlabs.js";
+import { readFileSync } from "node:fs";
+import {
+  ELEVENLABS_CONSULT_PATH,
+  ELEVENLABS_LOOKUP_PATH,
+} from "../../src/routes/webhooks-elevenlabs.js";
 
 const VORLAGE = JSON.parse(
-  readFileSync(new URL("../elevenlabs/agent_configs/outbound-agent.template.json", import.meta.url), "utf8"),
+  readFileSync(
+    new URL("../../elevenlabs/agent_configs/outbound-agent.template.json", import.meta.url),
+    "utf8",
+  ),
 );
 const HOST_VARIABLE = "{{system__env_hermes_host}}";
-const UMGEBUNGEN = Object.freeze({ production: "app.sundartha.com", staging: "hermes-staging.example" });
-const BEDIENTE_PFADE = Object.freeze({ get_consult: ELEVENLABS_CONSULT_PATH, look_up: ELEVENLABS_LOOKUP_PATH });
+const UMGEBUNGEN = Object.freeze({
+  production: "app.sundartha.com",
+  staging: "hermes-staging.example",
+});
+const BEDIENTE_PFADE = Object.freeze({
+  get_consult: ELEVENLABS_CONSULT_PATH,
+  look_up: ELEVENLABS_LOOKUP_PATH,
+});
 const TOKEN_HEADER = "x-hermes-tool-token";
 
 function apiSchemas() {
@@ -37,6 +48,10 @@ test("EL-WERKZEUG-ADRESSEN b: der Token-Header jedes Werkzeugs kommt aus der Umg
   assert.ok(schemas.length > 0, "keine Webhook-Werkzeuge in der Vorlage");
 
   for (const [name, schema] of schemas) {
-    assert.deepEqual(schema.request_headers[TOKEN_HEADER], { env_var_label: "hermes_tool_token" }, name);
+    assert.deepEqual(
+      schema.request_headers[TOKEN_HEADER],
+      { env_var_label: "hermes_tool_token" },
+      name,
+    );
   }
 });
