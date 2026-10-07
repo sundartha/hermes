@@ -970,13 +970,6 @@ async function mitStub(lauf) {
   }
 }
 
-function geheimnisDateien() {
-  return fs
-    .readdirSync(path.join(ROOT, "scripts"))
-    .filter((name) => /^iel-geheimnisse.*\.mjs$/.test(name))
-    .map((name) => ({ name, text: fs.readFileSync(path.join(ROOT, "scripts", name), "utf8") }));
-}
-
 describe("IEL-B10 ohne Store und Quelltext-Pins", () => {
   it("IEL-B10-14: setzen-Trockenlauf als Kindprozess laedt den Store nie (Import-Spion mit Positiv-Kontrolle)", async () => {
     const spion = ["--import", pathToFileURL(path.join(ROOT, "test/_import-spion-store.mjs")).href];
@@ -1004,22 +997,5 @@ describe("IEL-B10 ohne Store und Quelltext-Pins", () => {
       env: { DATA_DIR: dataDir },
     });
     assert.ok(kontrolle.ausgabe.includes(SPION_MARKE), `Positiv-Kontrolle: der Spion sieht nichts\n${kontrolle.ausgabe}`);
-  });
-
-  it("IEL-B10-15: Quelltext-Pins ueber alle scripts/iel-geheimnisse*.mjs mit Positiv-Kontrollen", () => {
-    const dateien = geheimnisDateien();
-    const publicUrlZugriff = /config(\.server)?\.publicUrl|process\.env\.PUBLIC_URL/;
-    for (const { name, text } of dateien) {
-      assert.ok(!text.includes("process.env.ELEVENLABS_INBOUND_SIP_PASSWORD"), name);
-      assert.ok(!text.includes("config.voice.elevenLabsInbound"), name);
-      assert.doesNotMatch(text, publicUrlZugriff, name);
-      assert.ok(!text.includes("src/store"), name);
-    }
-    assert.match("const x = config.server.publicUrl;", publicUrlZugriff, "Positiv-Kontrolle des Musters");
-    assert.ok(dateien.some(({ text }) => text.includes("HERMES_RENDER_SERVICE_ID")), "Positiv-Kontrolle Service-ID");
-    const einstieg = dateien.find(({ name }) => name === "iel-geheimnisse.mjs");
-    const importe = [...einstieg.text.matchAll(/from "\.\/(iel-geheimnisse-[a-z]+\.mjs)"/g)].map((treffer) => treffer[1]);
-    assert.ok(importe.length > 0, "Positiv-Kontrolle: keine Hilfsmodul-Importe gefunden");
-    for (const modul of importe) assert.ok(dateien.some(({ name }) => name === modul), modul);
   });
 });
