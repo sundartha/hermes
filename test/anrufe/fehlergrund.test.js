@@ -98,7 +98,9 @@ const EINGEBETTETE_TESTNUMMER = "+12025550143";
 test("REGRESSIONSFANG 27.08.2026: die gemessene 403-Antwort ergibt not-placed:invite-403-D51", () => {
   const { error } = CONVERSATION_FAILED_UNVERIFIED_ORIGINATION.metadata;
   assert.equal(providerErrorReason(error), "not-placed:invite-403-D51");
-  const { error_type: _ignoriert, ...ohneErrorType } = error;
+  const ohneErrorType = Object.fromEntries(
+    Object.entries(error).filter(([schluessel]) => schluessel !== "error_type"),
+  );
   assert.equal(providerErrorReason(ohneErrorType), "not-placed:invite-403-D51");
 });
 
