@@ -1,0 +1,14 @@
+{
+  "titel": "Ablehnungsgrund ohne Tabelleneintrag",
+  "vorher": {
+    "src/i18n/mcp-denial-texts.js": [
+      "export const MCP_DENIAL_TEXTS = { en: { erfunden_nicht: \"No.\" } };"
+    ]
+  },
+  "dateien": {
+    "src/telephony/outbound-gates.js": [
+      "export const ablehnen = () => ({ status: 403, grund: \"erfunden\" });"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/ablehnungsgruende\""
+}

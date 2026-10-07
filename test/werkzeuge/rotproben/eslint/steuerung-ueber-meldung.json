@@ -1,0 +1,9 @@
+{
+  "titel": "Entscheidung über den Text einer Fehlermeldung",
+  "dateien": {
+    "src/rotprobe.js": [
+      "export const abgelehnt = (err) => err.message.includes(\"x\");"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"hermes/keine-steuerung-ueber-meldung\""
+}
