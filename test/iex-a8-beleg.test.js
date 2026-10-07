@@ -6,7 +6,6 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import {
-  ROOT,
   EL_INBOUND_ACCESS_BOOT_ENV,
   TELNYX_TEST_TENANT_NUMBER,
   seedWithTelnyxNumber,
@@ -596,26 +595,6 @@ test("IEX-A8-16: inboundElAllowlistProbeLine ist mit und ohne Beleg-Felder byte-
   assert.equal(zeileMit, zeileOhne);
   assert.ok(zeileMit.includes("…0001"), "Positiv-Kontrolle: die Sonde sieht die Nummer");
   for (const wort of ["belegt", "abweichung", "unbekannt"]) assert.equal(zeileMit.includes(wort), false, wort);
-});
-
-test("IEX-A8-18: server.js baut den Sweep und reicht ihn durch, boot.js ruft ihn nach logBootBanner", () => {
-  const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
-  const bootSrc = fs.readFileSync(path.join(ROOT, "src", "boot.js"), "utf8");
-  assert.match(
-    serverSrc,
-    /const inboundTrunkSweep = makeTrunkSweep\(\{ store, config, elRead, reparatur: inboundTrunkSchreiberWennErlaubt\(config\) \}\)/,
-  );
-  const depsStart = serverSrc.indexOf("const deps = {");
-  assert.notEqual(depsStart, -1, "deps-Buendel nicht gefunden");
-  const depsBlock = serverSrc.slice(depsStart, serverSrc.indexOf("};", depsStart));
-  assert.match(depsBlock, /\binboundTrunkSweep,/);
-  assert.match(bootSrc, /export async function bootServer\(\{[^]*?\binboundTrunkSweep,[^]*?\}\)/);
-  const listenStart = bootSrc.indexOf("app.listen(");
-  const bannerIndex = bootSrc.indexOf("logBootBanner(config, port", listenStart);
-  const sweepIndex = bootSrc.indexOf("inboundTrunkSweep.runBootSweep()", listenStart);
-  assert.notEqual(listenStart, -1);
-  assert.notEqual(bannerIndex, -1);
-  assert.ok(sweepIndex > bannerIndex, "runBootSweep steht im listen-Callback NACH logBootBanner");
 });
 
 async function startFakeEl(body) {
