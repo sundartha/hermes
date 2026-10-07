@@ -7,6 +7,7 @@ import { leseWav } from "../scripts/iel-mess-audio.mjs";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "../src/elevenlabs/inbound-rueckfall.js";
 import { config } from "../src/config.js";
 import { BASE_ENV, ROOT, startServer } from "./helpers.js";
+import { gebauteKonfiguration } from "./gemeinsam/gebaute-konfiguration.js";
 
 const HTTP_OK = 200;
 
@@ -171,14 +172,18 @@ test("IEP-P2c-A7: der bestehende public-Mount liefert das Asset ohne jede Auth a
 
 test("IEP-P2c-A8: ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED steht kohaerent in config.js, .env.example, render.yaml, BASE_ENV", () => {
   const lies = (datei) => fs.readFileSync(path.join(ROOT, datei), "utf8");
-  const configJs = lies("src/config.js");
   const envExample = lies(".env.example");
   const renderYaml = lies("render.yaml");
   const SCHLUESSEL = "ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED";
 
-  assert.ok(configJs.includes("process.env.ELEVENLABS_INBOUND_SCOPE"));
+  const LAUT_FELD = "voice.elevenLabsInbound.begruessungslautEnabled";
+  assert.deepEqual(
+    gebauteKonfiguration({ ELEVENLABS_INBOUND_SCOPE: "registrierte_dids" }, ["voice.elevenLabsInbound.scope"]),
+    { "voice.elevenLabsInbound.scope": "registrierte_dids" },
+  );
 
-  assert.ok(configJs.includes(`process.env.${SCHLUESSEL}`));
+  assert.deepEqual(gebauteKonfiguration({ [SCHLUESSEL]: undefined }, [LAUT_FELD]), { [LAUT_FELD]: true });
+  assert.deepEqual(gebauteKonfiguration({ [SCHLUESSEL]: "false" }, [LAUT_FELD]), { [LAUT_FELD]: false });
   assert.match(envExample, new RegExp(`^${SCHLUESSEL}=true\\s*$`, "m"));
   assert.match(renderYaml, new RegExp(`key:\\s*${SCHLUESSEL}\\s*\\n\\s*value:\\s*"true"`));
   assert.equal(BASE_ENV[SCHLUESSEL], "");
