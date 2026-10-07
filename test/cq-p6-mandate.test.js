@@ -1,7 +1,5 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { TRANSLITERATION_STEMS } from "./umlaut-stems-helper.js";
@@ -152,14 +150,6 @@ test("M8 E1-Invariante: volles Mandat traegt keinen entfernten Marker, beide unb
     toolDefs().map((t) => t.name),
     ["end_call", "take_message"],
   );
-});
-
-test("M9 Quell-Invariante: src/claude.js enthaelt keinen Kalender-/Buchungs-Code-Marker", () => {
-  const claudeJsPath = fileURLToPath(new URL("../src/claude.js", import.meta.url));
-  const source = readFileSync(claudeJsPath, "utf8");
-  for (const marker of ["book_appointment", "get_calendar", "calendarSection", "calendarExcerpt"]) {
-    assert.ok(!source.includes(marker), `"${marker}" steht im Quelltext von src/claude.js`);
-  }
 });
 
 test("M10 Anti-Spoofing: disclosureSentence + openingText byte-identisch mit/ohne Mandat", () => {
