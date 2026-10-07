@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { readFileSync } from "node:fs";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
+import { gebauteKonfiguration } from "./gemeinsam/gebaute-konfiguration.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
@@ -94,10 +95,17 @@ test("FIX1-2: der eigene Timeout ist ARMIERT - jenseits von summaryTimeoutMs bri
   );
 });
 
+const SPRECHPFAD_TIMEOUT_MS = 3500;
+const ZUSAMMENFASSUNG_TIMEOUT_MS = 20000;
+
 test("FIX1-3: der Sprechpfad-Timeout bleibt unveraendert 3500 ms (Code-Fallback + Doku-Parity)", () => {
-  const configSrc = readFileSync(new URL("../src/config.js", import.meta.url), "utf8");
-  assert.match(configSrc, /LLM_REQUEST_TIMEOUT_MS[\s\S]{0,200}fallback:\s*3500/);
-  assert.match(configSrc, /CALL_SUMMARY_TIMEOUT_MS[\s\S]{0,400}fallback:\s*20000/);
+  assert.deepEqual(
+    gebauteKonfiguration(
+      { LLM_REQUEST_TIMEOUT_MS: undefined, CALL_SUMMARY_TIMEOUT_MS: undefined },
+      ["llm.llmRequestTimeoutMs", "llm.summaryTimeoutMs"],
+    ),
+    { "llm.llmRequestTimeoutMs": SPRECHPFAD_TIMEOUT_MS, "llm.summaryTimeoutMs": ZUSAMMENFASSUNG_TIMEOUT_MS },
+  );
 
   const envExample = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
   assert.match(envExample, /^CALL_SUMMARY_TIMEOUT_MS=20000$/m);
