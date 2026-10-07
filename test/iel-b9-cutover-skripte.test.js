@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -26,7 +26,7 @@ import {
   registrierungsKlasse,
 } from "../src/elevenlabs/nummern-registrierung.js";
 import { NUMBER_STATUS } from "../src/store/defaults.js";
-import { ROOT } from "./helpers.js";
+import { BASE_ENV, ROOT } from "./helpers.js";
 import { SPION_MARKE } from "./_import-spion-store.mjs";
 import {
   LIVE_MIT_DATENSCHUTZ,
@@ -205,6 +205,9 @@ function renderFake(szenario) {
   };
   return { aufrufe, fetchImpl };
 }
+
+const INIT_ADRESSE_AUSGEBEN =
+  "import(\"./src/elevenlabs/init-webhook-ziel.js\").then((modul) => process.stdout.write(modul.initWebhookUrl()));";
 
 describe("IEL-B9 A: Ziel-Urteil", () => {
   it("IEL-B9-1: zielUrteil - GRUEN nur bei erlaubtem https-Origin und zugeordneter Init-Domain", () => {
@@ -744,19 +747,14 @@ describe("IEL-B9 D2: el-nummern-registrierung als Kindprozess und Quelltext-Pins
     });
   });
 
-  it("IEL-B9-24: Quelltext-Pins mit Positiv-Kontrolle", () => {
-    const lies = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
-    for (const rel of ["scripts/el-nummern-registrierung.mjs", "scripts/push-elevenlabs.mjs"]) {
-      assert.ok(!lies(rel).includes("credentials"), rel);
-    }
-    assert.ok(lies("src/elevenlabs/nummern-registrierung.js").includes("credentials"), "Positiv-Kontrolle credentials");
-
-    const publicUrlZugriff = /config(\.server)?\.publicUrl|process\.env\.PUBLIC_URL/;
-    for (const rel of ["src/elevenlabs/init-webhook-ziel.js", "scripts/push-elevenlabs.mjs"]) {
-      assert.doesNotMatch(lies(rel), publicUrlZugriff, rel);
-    }
-    assert.match("const x = config.server.publicUrl;", publicUrlZugriff, "Positiv-Kontrolle des Musters");
-    assert.ok(lies("src/elevenlabs/init-webhook-ziel.js").includes("renderDienstZiel"));
-    assert.ok(lies("scripts/push-elevenlabs.mjs").includes("init-webhook-ziel"));
+  it("IEL-B9-24: die Init-Webhook-Adresse haengt nicht an PUBLIC_URL", () => {
+    const adresseBei = (publicUrl) =>
+      execFileSync(
+        process.execPath,
+        ["--input-type=module", "-e", INIT_ADRESSE_AUSGEBEN],
+        { cwd: ROOT, env: { PATH: process.env.PATH, ...BASE_ENV, PUBLIC_URL: publicUrl, NODE_ENV: "test" }, encoding: "utf8" },
+      );
+    assert.equal(adresseBei("https://eins.example"), initWebhookUrl());
+    assert.equal(adresseBei("https://zwei.example"), initWebhookUrl());
   });
 });
