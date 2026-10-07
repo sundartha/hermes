@@ -12,6 +12,7 @@ import {
   turnLoopDeadlineMs,
 } from "../src/turn-budget.js";
 import { startServer } from "./helpers.js";
+import { gebauteKonfiguration } from "./gemeinsam/gebaute-konfiguration.js";
 
 test("llmTurnBudgetMs: Backoff-Summe ist base*(2^r-1), NICHT 2*base", () => {
   assert.equal(llmTurnBudgetMs({ requestTimeoutMs: 1000, maxRetries: 1, backoffMs: 100 }), 2100);
@@ -62,14 +63,18 @@ test("die ausgelieferten Defaults halten das Turn-Budget", () => {
   assert.ok(budgetMs <= PROVIDER_WEBHOOK_HARDCUT_MS);
 });
 
+const SYNTHESE_FELD = "voice.elevenLabsPlayTts.synthTimeoutMs";
+const DOKUMENTIERTE_SYNTHESE_MS = 2000;
+
 test("Doku-Parity: .env.example, render.yaml und config-Fallback nennen dieselben 2000 ms", () => {
   const envExample = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
   const renderYaml = readFileSync(new URL("../render.yaml", import.meta.url), "utf8");
-  const configSrc = readFileSync(new URL("../src/config.js", import.meta.url), "utf8");
 
   assert.match(envExample, /ELEVENLABS_SYNTH_TIMEOUT_MS=2000\b/);
   assert.match(renderYaml, /key: ELEVENLABS_SYNTH_TIMEOUT_MS\s*\n\s*value: "2000"/);
-  assert.match(configSrc, /ELEVENLABS_SYNTH_TIMEOUT_MS[\s\S]{0,120}fallback:\s*2000/);
+  assert.deepEqual(gebauteKonfiguration({ ELEVENLABS_SYNTH_TIMEOUT_MS: undefined }, [SYNTHESE_FELD]), {
+    [SYNTHESE_FELD]: DOKUMENTIERTE_SYNTHESE_MS,
+  });
 });
 
 test("MAX_TOOL_ROUNDS_PER_TURN pinnt die Rundenzahl, die claude.js UND der Boot-Waechter teilen", () => {
