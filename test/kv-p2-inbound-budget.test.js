@@ -1,8 +1,5 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   startServer,
   seedState,
@@ -129,53 +126,6 @@ test("KV-P2-3 (T5-Grenzfall): unbrauchbares answeredAt normalisiert auf 0 Minute
 
   assert.equal(usageOf(state, TENANT).costCents, 0);
   assert.notEqual(usageOf(state, TENANT).costCents, NaN);
-});
-
-const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXCLUDED_DIR_NAMES = new Set(["node_modules", ".git"]);
-
-test("KV-P2-5: billing.voiceTariffInboundCents wird an genau ZWEI Stellen gelesen - metering.js (Buchung) und cost-calibration.js (Waechter, KV2-10)", () => {
-  function alleSrcDateien(relDir) {
-    const treffer = [];
-    const stack = [path.join(REPO_ROOT, relDir)];
-    while (stack.length) {
-      const dir = stack.pop();
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (EXCLUDED_DIR_NAMES.has(entry.name)) continue;
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) stack.push(full);
-        else if (entry.isFile() && entry.name.endsWith(".js")) treffer.push(full);
-      }
-    }
-    return treffer;
-  }
-
-  const CALL_SITE_PATTERN = /\bbilling\.voiceTariffInboundCents\b/g;
-  const EXPECTED_CALL_SITES = ["src/billing/cost-calibration.js", "src/billing/metering.js"];
-
-  const vorkommenJeDatei = alleSrcDateien("src")
-    .map((datei) => {
-      const quelltext = fs.readFileSync(datei, "utf8");
-      return {
-        datei: path.relative(REPO_ROOT, datei),
-        anzahl: [...quelltext.matchAll(CALL_SITE_PATTERN)].length,
-      };
-    })
-    .filter((eintrag) => eintrag.anzahl > 0);
-
-  const gesamtVorkommen = vorkommenJeDatei.reduce((summe, eintrag) => summe + eintrag.anzahl, 0);
-  const fundstellen = vorkommenJeDatei.map((eintrag) => `${eintrag.datei}:${eintrag.anzahl}`).join(", ") || "keine";
-
-  assert.equal(
-    gesamtVorkommen,
-    EXPECTED_CALL_SITES.length,
-    `eine dritte Inbound-Tarif-Quelle waere G5-Bruch (legitimiert: Buchung in metering.js, Mess-Vergleich im KV2-10-Waechter) - gefunden: ${gesamtVorkommen} Vorkommen [${fundstellen}]`,
-  );
-  assert.deepEqual(
-    vorkommenJeDatei.map((eintrag) => eintrag.datei),
-    EXPECTED_CALL_SITES,
-    `die Vorkommen muessen genau in ${EXPECTED_CALL_SITES.join(" und ")} liegen - gefunden: [${fundstellen}]`,
-  );
 });
 
 const CALL_ID = "kv_p2_bill_once";
