@@ -89,11 +89,10 @@ export async function starte(werkzeug, { args, cwd, umgebung }) {
     cwd,
     env: { ...isolatedEnvironment(), ...umgebung },
   });
-  let ausgabe = "";
-  kind.stdout.on("data", (teil) => (ausgabe += teil));
-  kind.stderr.on("data", (teil) => (ausgabe += teil));
+  const teile = [];
+  for (const strom of [kind.stdout, kind.stderr]) strom.on("data", (teil) => teile.push(teil));
   const [status] = await once(kind, "close");
-  return { status, ausgabe };
+  return { status, ausgabe: Buffer.concat(teile).toString() };
 }
 
 export function eingangsLauf(kopf, felder = {}) {
