@@ -16,6 +16,7 @@ import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
 import { INBOUND_EL_GRUND } from "../src/elevenlabs/inbound-uebergabe-gescheitert.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
 import { BASE_ENV, seedCall } from "./helpers.js";
+import { gebauteKonfiguration } from "./gemeinsam/gebaute-konfiguration.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const NOW_ISO = "2026-09-17T12:00:00Z";
@@ -496,6 +497,8 @@ test("IEX-B1-9 (I1): der Bestandspfad sieht die neue Klasse nicht - der Default 
   assert.equal(AUSFALL_KLASSE.OUTBOUND.zaehlweise, ZAEHLWEISE_OUTBOUND);
 });
 
+const GEBAUTER_GRUNDWERT = 31;
+
 test("IEX-B1-10: die vier Schwellen stehen in config.js, .env.example, render.yaml und BASE_ENV kohaerent", () => {
   const envNamen = [
     "INBOUND_OUTAGE_ALERT_WINDOW_MS",
@@ -509,15 +512,17 @@ test("IEX-B1-10: die vier Schwellen stehen in config.js, .env.example, render.ya
     "inboundOutageAlertMinAttempts",
     "inboundOutageAlertFailSharePercent",
   ];
-  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
   const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
   for (const name of envNamen) {
-    assert.ok(configSrc.includes(`"${name}"`), `${name} fehlt in src/config.js`);
     assert.ok(new RegExp(`^${name}=`, "m").test(envExample), `${name} fehlt in .env.example`);
     assert.ok(new RegExp(`key:\\s*${name}`).test(renderYaml), `${name} fehlt in render.yaml`);
   }
-  for (const blatt of blattNamen) assert.ok(configSrc.includes(`"${blatt}"`), `${blatt} fehlt im billing-Namespace`);
+  const gesetzt = Object.fromEntries(envNamen.map((name, stelle) => [name, String(GEBAUTER_GRUNDWERT + stelle)]));
+  assert.deepEqual(
+    gebauteKonfiguration(gesetzt, blattNamen.map((blatt) => `billing.${blatt}`)),
+    Object.fromEntries(blattNamen.map((blatt, stelle) => [`billing.${blatt}`, GEBAUTER_GRUNDWERT + stelle])),
+  );
   assert.equal(BASE_ENV.INBOUND_OUTAGE_ALERT_WINDOW_MS, "0");
   assert.equal(BASE_ENV.INBOUND_OUTAGE_ALERT_MIN_FAILURES, "2");
   assert.equal(BASE_ENV.INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS, "20");
