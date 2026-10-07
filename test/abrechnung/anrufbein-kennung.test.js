@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { legRefOfCall } from "../src/billing/call-leg-ref.js";
+import { legRefOfCall } from "../../src/billing/call-leg-ref.js";
 
 test("legRefOfCall: twilioSid hat Vorrang vor callControlId und sipCallId", () => {
   assert.equal(legRefOfCall({ twilioSid: "CA1", callControlId: "v3:1", sipCallId: "otb_1" }), "CA1");
