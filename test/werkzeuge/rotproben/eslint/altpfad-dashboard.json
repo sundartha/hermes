@@ -1,0 +1,9 @@
+{
+  "titel": "Ziel auf das gelöschte Dashboard",
+  "dateien": {
+    "src/routes/self-service.js": [
+      "export const ziel = \"/tenant.html?checkout=ok\";"
+    ]
+  },
+  "erwartet": "altpfad-dashboard:"
+}

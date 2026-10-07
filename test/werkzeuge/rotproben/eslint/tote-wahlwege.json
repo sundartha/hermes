@@ -1,0 +1,9 @@
+{
+  "titel": "Stillgelegter Wahlweg wieder aufgerufen",
+  "dateien": {
+    "src/telephony/call-finish.js": [
+      "export const wahl = (control) => control.originateViaCallControl({});"
+    ]
+  },
+  "erwartet": "tote-wahlwege:"
+}

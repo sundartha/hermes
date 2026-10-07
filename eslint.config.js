@@ -48,6 +48,89 @@ const WORT_NUR_IN = [
     meldung:
       "Die Beleg-Felder des Inbound-Trunks stehen nur im Store und in der Weiche (IEX-A8). Andere Module lesen und schreiben sie über die Store-Operationen (markNumberElInboundTrunkBelegt, clearNumberElInboundTrunkBeleg).",
   },
+  {
+    name: "anthropic-vokabular",
+    nurIn: ["src/llm/adapters/anthropic.js", "src/llm/adapters/deepseek.js"],
+    meldung:
+      "Anbieter-Vokabular der LLM-Schnittstelle (input_schema, cache_control, max_tokens, tool_choice) steht nur in den LLM-Adaptern (B3B-1); der übrige Code bleibt anbieterneutral.",
+  },
+  {
+    name: "keine-aufnahme",
+    nurIn: [],
+    meldung:
+      "Hermes nimmt keine Gespräche auf, und Audio läuft nie durch MCP (CLAUDE.md, Regel AUDIO); recordingUrl und startRecording gibt es im Code nicht.",
+  },
+  {
+    name: "tote-wahlwege",
+    nurIn: [],
+    meldung:
+      "originateViaCallControl und originateAiAssistantCall sind stillgelegte Wahlwege ohne Gates (SEC-P6); Anrufe starten nur über originateCall und originateElevenLabsCall in src/routes/api-calls.js.",
+  },
+  {
+    name: "sprachkosten-buchen",
+    art: "aufruf",
+    nurIn: ["src/billing/metering.js", "src/store/json.js", "src/store/pg.js"],
+    meldung:
+      "Sprachkosten bucht nur src/billing/metering.js über store.addVoiceUsageCostCents (KV-P1-10); ein zweiter Aufrufer wäre eine mögliche Doppelbelastung.",
+  },
+  {
+    name: "anruf-starten",
+    art: "aufruf",
+    nurIn: ["src/routes/api-calls.js"],
+    meldung:
+      "originateCall und originateElevenLabsCall ruft nur src/routes/api-calls.js auf, hinter allen Outbound-Gates (SEC-P6); ein neuer Wahlweg braucht dieselben Gates und eine Freigabe der Owner.",
+  },
+  {
+    name: "inbound-tarif",
+    nurIn: ["src/billing/cost-calibration.js", "src/billing/metering.js", "src/config.js"],
+    meldung:
+      "Der Inbound-Tarif wird nur in src/billing/metering.js (Buchung) und src/billing/cost-calibration.js (Wächter) gelesen und nur in src/config.js gesetzt (KV-P2-5).",
+  },
+  {
+    name: "altpfad-dashboard",
+    nurIn: ["src/portal-paths.js"],
+    meldung:
+      "Das alte Dashboard /tenant.html gibt es nicht mehr (P14); Ziele zeigen auf die App-Shell, den Altpfad kennt nur src/portal-paths.js.",
+  },
+];
+const WEB_WORT_NUR_IN = [
+  {
+    name: "sprachkennung",
+    nurIn: ["apps/web/src/lib/subscribe.js"],
+    meldung:
+      "Sprach-Kennungen für die Datumsformatierung stehen in apps/web nur in src/lib/subscribe.js (WEB-18); andere Module formatieren über dessen Funktionen.",
+  },
+  {
+    name: "datumsformat",
+    nurIn: ["apps/web/src/lib/subscribe.js"],
+    meldung:
+      "Datum und Zahlen formatiert apps/web nur in src/lib/subscribe.js (WEB-18); andere Module rufen dessen Funktionen auf, statt toLocale…, toString oder Intl zu benutzen.",
+  },
+];
+const SKRIPT_MELDUNG_ADRESSE =
+  "Die öffentliche Adresse des Dienstes liest dieses Skript nicht selbst (IEL-B9-24, IEL-B10-15); das Webhook-Ziel kommt aus src/elevenlabs/init-webhook-ziel.js.";
+const WAHLSKRIPT_WORT_NUR_IN = [
+  {
+    name: "zugangsdaten",
+    nurIn: [],
+    meldung:
+      "Dieses Skript setzt keine SIP-Zugangsdaten (IEL-B9-24); die Zugangsdaten verwaltet nur src/elevenlabs/nummern-registrierung.js.",
+  },
+  { name: "oeffentliche-adresse", nurIn: [], meldung: SKRIPT_MELDUNG_ADRESSE },
+];
+const GEHEIMNIS_SKRIPT_WORT_NUR_IN = [
+  {
+    name: "inbound-geheimnis",
+    nurIn: [],
+    meldung:
+      "Die Geheimnis-Skripte lesen den Inbound-Zugang nicht aus der Konfiguration des Dienstes (IEL-B10-15); sie arbeiten nur mit den Render-Umgebungsvariablen.",
+  },
+  { name: "oeffentliche-adresse", nurIn: [], meldung: SKRIPT_MELDUNG_ADRESSE },
+  {
+    name: "speicher-import",
+    nurIn: [],
+    meldung: "Die Geheimnis-Skripte laden den Speicher nie (IEL-B10-14 und -15).",
+  },
 ];
 const TESTREGELN_DATEI = new URL("./tools/eslint-rules/tests.js", import.meta.url);
 const SELBSTPRUEFUNG_BESTAND = "tools/basis/selbstpruefung.json";
@@ -79,6 +162,21 @@ const hermesBloecke =
           files: ["src/**/*.js"],
           rules: { "hermes/wort-nur-in": ["error", ...WORT_NUR_IN] },
         },
+        {
+          name: "hermes-wort-nur-in-web",
+          files: ["apps/web/src/**/*.js"],
+          rules: { "hermes/wort-nur-in": ["error", ...WEB_WORT_NUR_IN] },
+        },
+        {
+          name: "hermes-wort-nur-in-wahlskripte",
+          files: ["scripts/el-nummern-registrierung.mjs", "scripts/push-elevenlabs.mjs"],
+          rules: { "hermes/wort-nur-in": ["error", ...WAHLSKRIPT_WORT_NUR_IN] },
+        },
+        {
+          name: "hermes-wort-nur-in-geheimnis-skripte",
+          files: ["scripts/iel-geheimnisse*.mjs"],
+          rules: { "hermes/wort-nur-in": ["error", ...GEHEIMNIS_SKRIPT_WORT_NUR_IN] },
+        },
       ];
 const testRegeln = existsSync(TESTREGELN_DATEI)
   ? (await import(TESTREGELN_DATEI.href)).default
@@ -105,7 +203,6 @@ const ZEITGLIEDER_MELDUNG =
 const ZEITGLIEDER_MODULE = ["node:timers", "timers", "node:timers/promises", "timers/promises"];
 const demeterChainMessage =
   "Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)";
-
 export default [
   {
     ignores: [

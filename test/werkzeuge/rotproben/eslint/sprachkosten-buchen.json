@@ -1,0 +1,9 @@
+{
+  "titel": "Zweiter Aufrufer der Sprachkosten-Buchung",
+  "dateien": {
+    "src/billing/cost-truing.js": [
+      "export const buchen = (store) => store.addVoiceUsageCostCents(\"t\", 1);"
+    ]
+  },
+  "erwartet": "sprachkosten-buchen:"
+}

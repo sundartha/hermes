@@ -1,0 +1,9 @@
+{
+  "titel": "Inbound-Tarif außerhalb von Buchung und Wächter gelesen",
+  "dateien": {
+    "src/telephony/outbound-gates.js": [
+      "export const tarif = (config) => config.billing.voiceTariffInboundCents;"
+    ]
+  },
+  "erwartet": "inbound-tarif:"
+}
