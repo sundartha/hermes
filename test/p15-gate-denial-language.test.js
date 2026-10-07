@@ -1,9 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import { makeOutboundGates, E164_FORMAT_ERROR } from "../src/telephony/outbound-gates.js";
-import { ROOT } from "./helpers.js";
+import { mitRoutenServer, postJson } from "./anrufe/routen-server.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 import { spendMonthEndDate } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -11,6 +9,7 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 const VALID_TO = "+491711234567";
 const DENIED_TO = "+870123456789";
 const FOREIGN_TO = "+15551234567";
+const HTTP_BAD_REQUEST = 400;
 
 function defaultStore(language, overrides = {}) {
   return {
@@ -263,11 +262,20 @@ test("P15b/C1: der E.164-Formattext ist englisch und liegt in KEINEM Locale-Buen
   }
 });
 
-test("P15b/C1: der Pre-Gate-400 liefert dieselbe Konstante, kein eigenes Literal", () => {
-  const src = fs.readFileSync(path.join(ROOT, "src/routes/api-calls.js"), "utf8");
-  assert.match(src, /error:\s*E164_FORMAT_ERROR/);
-  const codeMentions = src
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("//") && /E\.164/.test(line));
-  assert.deepEqual(codeMentions, [], "kein zweitgefasster Formatfehler-Text in der Route");
+test("P15b/C1: die Anruf-Route lehnt eine Nummer mit Fernvorwahl-Null vor allen Gates mit dem E.164-Formattext ab", async () => {
+  const { makeCallRoutes } = await import("../src/routes/api-calls.js");
+  const router = makeCallRoutes({
+    store: {},
+    config: { voice: { elevenLabsOutbound: { enabled: false } } },
+    audit: () => {},
+    outboundGates: [],
+    tenant: { requestTenant: () => null, requireTenant: () => null, tenantOwnsCall: () => false },
+    arm: {},
+  });
+  const antwort = await mitRoutenServer(router, async (basis) => {
+    const gesendet = await postJson(`${basis}/api/calls`, { to: "+4901737123456", objective: "Termin vereinbaren" });
+    return { status: gesendet.status, inhalt: await gesendet.json() };
+  });
+  assert.equal(antwort.status, HTTP_BAD_REQUEST);
+  assert.deepEqual(antwort.inhalt, { error: E164_FORMAT_ERROR });
 });
