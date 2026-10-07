@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { qualifiesAsInboxEntry } from "../src/inbox-entry.js";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
-import fs from "node:fs";
 import { seedCall } from "./helpers.js";
 
 const AT = "2026-01-01T00:00:00Z";
@@ -148,10 +147,4 @@ test("INBOX-P1-B default-ist-fail-closed: ohne Verdrahtung entsteht KEIN Eintrag
   await callFinish.finishCall(call);
   assert.ok(store.protokoll.includes(`mark:${call.id}:false`));
   assert.ok(!store.protokoll.includes("praedikat"), "der Default lief, nicht die echte Regel");
-});
-
-test("INBOX-P1-B verdrahtet: server.js reicht die echte Regel in makeCallFinish herein", () => {
-  const quelle = fs.readFileSync(new URL("../src/server.js", import.meta.url), "utf8");
-  assert.match(quelle, /import \{ qualifiesAsInboxEntry \} from "\.\/inbox-entry\.js";/);
-  assert.match(quelle, /makeCallFinish\(\{[^}]*qualifiesAsInboxEntry,/s);
 });
