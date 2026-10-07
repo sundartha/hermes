@@ -47,7 +47,7 @@ function aufzeichnend(fabrikErgebnis, watchName, gerufen) {
     get(ziel, methode) {
       if (typeof ziel[methode] !== "function") return undefined;
       return async () => {
-        gerufen.add(watchName);
+        gerufen.add(`${watchName}.${String(methode)}`);
       };
     },
   });
@@ -86,8 +86,12 @@ test("Z-A8: runSweepTick laeuft mit den echten Rueckgaben aller vier Wachen-Fabr
       priceDriftWatch: aufzeichnend(priceDriftWatch, "priceDriftWatch", gerufen),
     }),
   );
-  assert.deepEqual(
-    [...gerufen].sort(),
-    ["outageWatch", "paidWithoutNumberWatch", "priceDriftWatch", "provisionRetryWatch"],
-  );
+  assert.deepEqual([...gerufen].sort(), [
+    "outageWatch.runAlertChannelSelfTest",
+    "outageWatch.runHoldEscalationSweep",
+    "outageWatch.runRecoverySweep",
+    "paidWithoutNumberWatch.runPaidWithoutNumberSweep",
+    "priceDriftWatch.runPriceDriftSweep",
+    "provisionRetryWatch.runProvisionRetrySweep",
+  ]);
 });
