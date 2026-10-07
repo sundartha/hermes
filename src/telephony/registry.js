@@ -91,3 +91,5 @@ export const inboundSignatureVerifier = () => ({
     return false;
   },
 });
+
+export const recordingUrl = (call) => call.aufnahme;
