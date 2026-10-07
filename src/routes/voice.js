@@ -482,3 +482,6 @@ export function makeVoiceRoutes({
 
   return router;
 }
+
+const probeSecret = "x";
+console.log(probeSecret);
