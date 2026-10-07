@@ -123,6 +123,10 @@ jobs:
         if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
         run: node tools/anbieter-datenschutz-pruefen.mjs
 
+      - name: Geheimnisse in Logs
+        if: ${{ !cancelled() && steps.installation.outcome == 'success' }}
+        run: node tools/log-geheimnisse-pruefen.mjs
+
       - name: Audit
         env:
           EVENT_NAME: ${{ github.event_name }}
