@@ -1,8 +1,8 @@
-const { existsSync } = require("node:fs");
-const { join } = require("node:path");
+const fs = require("node:fs");
+const path = require("node:path");
 
-const BEREICHE_DATEI = join(__dirname, "tools/bereiche.json");
-const BEREICHE = existsSync(BEREICHE_DATEI) ? require(BEREICHE_DATEI) : [];
+const BEREICHE_DATEI = path.join(__dirname, "tools/bereiche.json");
+const BEREICHE = fs.existsSync(BEREICHE_DATEI) ? require(BEREICHE_DATEI) : [];
 const TEST_ZIELE_ERLAUBT = BEREICHE.flatMap(({ eingaenge, fachlogik }) => [
   ...eingaenge,
   ...fachlogik,

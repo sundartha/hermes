@@ -22,20 +22,26 @@ async function befehle() {
   return import("./tests-ausmisten/befehle.mjs");
 }
 
-const BEFEHLE = {
-  planen: async (werte) => (await befehle()).planen({ aus: werte.aus }),
-  basis: async (werte) =>
-    (await befehle()).basis({ aus: werte.aus, planDaten: werte["plan-daten"], paket: werte.paket }),
-  sammeln: async () => (await befehle()).sammeln(),
-  branch: async (werte) =>
-    (await befehle()).branch({
-      aus: werte.aus,
-      planDaten: werte["plan-daten"],
-      basisDaten: werte["basis-daten"],
-      paket: werte.paket,
-    }),
-  melden: async ({ pr }) => (await import("./tests-ausmisten/melden.mjs")).melden({ pr }),
-};
+const BEFEHLE = new Map(
+  Object.entries({
+    planen: async (werte) => (await befehle()).planen({ aus: werte.aus }),
+    basis: async (werte) =>
+      (await befehle()).basis({
+        aus: werte.aus,
+        planDaten: werte["plan-daten"],
+        paket: werte.paket,
+      }),
+    sammeln: async () => (await befehle()).sammeln(),
+    branch: async (werte) =>
+      (await befehle()).branch({
+        aus: werte.aus,
+        planDaten: werte["plan-daten"],
+        basisDaten: werte["basis-daten"],
+        paket: werte.paket,
+      }),
+    melden: async ({ pr }) => (await import("./tests-ausmisten/melden.mjs")).melden({ pr }),
+  }),
+);
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -49,12 +55,12 @@ async function main() {
     },
   });
   const [name] = positionals;
-  const bekannt = Object.hasOwn(BEFEHLE, name ?? "") && positionals.length === 1;
+  const bekannt = BEFEHLE.has(name) && positionals.length === 1;
   if (!bekannt || PFLICHT[name].some((option) => values[option] === undefined)) {
     console.error(AUFRUF);
     return EXIT_ROT;
   }
-  const ausgang = await BEFEHLE[name](values);
+  const ausgang = await BEFEHLE.get(name)(values);
   return typeof ausgang === "number" ? ausgang : EXIT_GRUEN;
 }
 

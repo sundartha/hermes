@@ -133,9 +133,8 @@ export async function planen({ aus }) {
   const { zaehle, packe } = await import("./planen.mjs");
   const zahlen = await zaehle(menge.dateien);
   const pakete = packe(zahlen);
-  console.log(
-    `${zahlen.reduce((summe, { mutanten }) => summe + mutanten, 0)} Mutanten geschätzt, ${pakete.length} Pakete.`,
-  );
+  const geschaetzt = zahlen.reduce((summe, { mutanten }) => summe + mutanten, 0);
+  console.log(`${geschaetzt} Mutanten geschätzt, ${pakete.length} Pakete.`);
   schreibeErgebnis(aus, PLAN_ART, {
     ...kopfdaten(vorbereitung, menge.dateien),
     art: PLAN_ART,

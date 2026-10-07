@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 export const BRANCH_PRAEFIX = "ausmisten/";
@@ -42,8 +41,14 @@ export function gitGelingt(args, verzeichnis) {
   return spawnSync("git", args, { cwd: verzeichnis, stdio: "ignore" }).status === 0;
 }
 
-export function leseBereiche(wurzel = ".") {
-  return JSON.parse(readFileSync(join(wurzel, BEREICHE_DATEI), "utf8"));
+const QUELLMUSTER = new Map();
+
+export function leseBereiche() {
+  const bereiche = JSON.parse(readFileSync(BEREICHE_DATEI, "utf8"));
+  for (const { quellen } of bereiche) {
+    for (const muster of quellen) QUELLMUSTER.set(muster, new RegExp(muster));
+  }
+  return bereiche;
 }
 
 export function bereichAusBranch(branch, bereiche) {
@@ -54,8 +59,9 @@ export function bereichAusBranch(branch, bereiche) {
 }
 
 export function bereichDerDatei(datei, bereiche) {
-  return bereiche.find(({ quellen }) => quellen.some((muster) => new RegExp(muster).test(datei)))
-    ?.bereich;
+  return bereiche.find(({ quellen }) =>
+    quellen.some((muster) => QUELLMUSTER.get(muster)?.test(datei) === true),
+  )?.bereich;
 }
 
 export function quellenDesBereichs(bereich, bereiche, dateien) {

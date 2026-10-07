@@ -87,21 +87,24 @@ function beideSeiten(lauf, node) {
   return konstant(lauf, node.left, false) && konstant(lauf, node.right, false);
 }
 
-const KONSTANTE_KNOTEN = {
-  Literal: (lauf, node, imAufruf) => imAufruf || node.regex === undefined,
-  TemplateLiteral: (lauf, node) => node.expressions.every((teil) => konstant(lauf, teil, false)),
-  UnaryExpression: (lauf, node) => konstant(lauf, node.argument, false),
-  BinaryExpression: beideSeiten,
-  LogicalExpression: beideSeiten,
-  Identifier: (lauf, node) => konstanteVariable(lauf, aufgeloest(lauf.sourceCode, node)),
-  ArrayExpression: (lauf, node, imAufruf) =>
-    imAufruf && node.elements.every((element) => element === null || konstant(lauf, element, true)),
-  ObjectExpression: (lauf, node, imAufruf) =>
-    imAufruf && node.properties.every((eigenschaft) => konstanteEigenschaft(lauf, eigenschaft)),
-};
+const KONSTANTE_KNOTEN = new Map(
+  Object.entries({
+    Literal: (lauf, node, imAufruf) => imAufruf || node.regex === undefined,
+    TemplateLiteral: (lauf, node) => node.expressions.every((teil) => konstant(lauf, teil, false)),
+    UnaryExpression: (lauf, node) => konstant(lauf, node.argument, false),
+    BinaryExpression: beideSeiten,
+    LogicalExpression: beideSeiten,
+    Identifier: (lauf, node) => konstanteVariable(lauf, aufgeloest(lauf.sourceCode, node)),
+    ArrayExpression: (lauf, node, imAufruf) =>
+      imAufruf &&
+      node.elements.every((element) => element === null || konstant(lauf, element, true)),
+    ObjectExpression: (lauf, node, imAufruf) =>
+      imAufruf && node.properties.every((eigenschaft) => konstanteEigenschaft(lauf, eigenschaft)),
+  }),
+);
 
 function konstant(lauf, node, imAufruf) {
-  const pruefer = KONSTANTE_KNOTEN[node.type];
+  const pruefer = KONSTANTE_KNOTEN.get(node.type);
   return pruefer !== undefined && pruefer(lauf, node, imAufruf);
 }
 
