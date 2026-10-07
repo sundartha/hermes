@@ -1,34 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { makeOutageWatch } from "../src/telephony/outage-report.js";
 import { makePaidWithoutNumberWatch } from "../src/billing/paid-without-number-watch.js";
 import { makeProvisionRetryWatch } from "../src/billing/provision-retry-sweep.js";
 import { makePriceDriftWatch } from "../src/billing/price-drift-watch.js";
 import { runSweepTick } from "../src/boot.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
-
-const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const BOOT_SRC = fs.readFileSync(path.join(REPO_ROOT, "src", "boot.js"), "utf8");
-
-function gerufeneMethoden(objektName) {
-  const re = new RegExp(`${objektName}\\s*\\.(\\w+)\\(`, "g");
-  const namen = [...BOOT_SRC.matchAll(re)].map((treffer) => treffer[1]);
-  assert.ok(namen.length > 0, `keine Methodenaufrufe fuer ${objektName} in boot.js gefunden - Regex oder Datei veraltet?`);
-  return [...new Set(namen)];
-}
-
-function pruefeVertrag(objekt, erwarteteMethoden, objektName) {
-  for (const name of erwarteteMethoden) {
-    assert.equal(
-      typeof objekt[name],
-      "function",
-      `${objektName}.${name} fehlt oder ist keine Funktion - runSweepTick ruft sie aber auf`,
-    );
-  }
-}
 
 function fakeDeps() {
   return {
@@ -48,19 +25,6 @@ function fakeDeps() {
   };
 }
 
-test("Z-A1: jede von runSweepTick auf outageWatch gerufene Methode existiert auf makeOutageWatch(...) und ist eine Funktion", () => {
-  const methoden = gerufeneMethoden("outageWatch");
-  const outageWatch = makeOutageWatch(fakeDeps());
-  pruefeVertrag(outageWatch, methoden, "outageWatch");
-});
-
-test("Z-A3: Gegenprobe - ein Objekt, dem eine Methode fehlt, laesst pruefeVertrag scheitern (belegt, dass die Pruefung wirklich etwas prueft)", () => {
-  const methoden = gerufeneMethoden("outageWatch");
-  const unvollstaendig = { ...makeOutageWatch(fakeDeps()) };
-  delete unvollstaendig[methoden[0]];
-  assert.throws(() => pruefeVertrag(unvollstaendig, methoden, "outageWatch"));
-});
-
 test("Z-A4: runSweepTick mit einer Fabrik-Rueckgabe, der eine Methode fehlt, WIRFT SYNCHRON (der Produktionsschaden, ausgefuehrt statt behauptet)", () => {
   const vollstaendigesOutageWatch = makeOutageWatch(fakeDeps());
   const unvollstaendigesOutageWatch = { ...vollstaendigesOutageWatch };
@@ -78,33 +42,52 @@ test("Z-A4: runSweepTick mit einer Fabrik-Rueckgabe, der eine Methode fehlt, WIR
   );
 });
 
-test("Z-A5: jede von runSweepTick auf paidWithoutNumberWatch gerufene Methode existiert auf makePaidWithoutNumberWatch(...) und ist eine Funktion", () => {
-  const methoden = gerufeneMethoden("paidWithoutNumberWatch");
-  const watch = makePaidWithoutNumberWatch({
+function aufzeichnend(fabrikErgebnis, watchName, gerufen) {
+  return new Proxy(fabrikErgebnis, {
+    get(ziel, methode) {
+      if (typeof ziel[methode] !== "function") return undefined;
+      return async () => {
+        gerufen.add(watchName);
+      };
+    },
+  });
+}
+
+test("Z-A8: runSweepTick laeuft mit den echten Rueckgaben aller vier Wachen-Fabriken durch und ruft jede Wache", () => {
+  const gerufen = new Set();
+  const outageWatch = makeOutageWatch(fakeDeps());
+  const paidWithoutNumberWatch = makePaidWithoutNumberWatch({
     store: fakeDeps().store,
     config: withConfigNamespaces({ paidWithoutNumberGraceMs: 0 }),
     audit: () => {},
   });
-  pruefeVertrag(watch, methoden, "paidWithoutNumberWatch");
-});
-
-test("Z-A6: jede von runSweepTick auf provisionRetryWatch gerufene Methode existiert auf makeProvisionRetryWatch(...) und ist eine Funktion", () => {
-  const methoden = gerufeneMethoden("provisionRetryWatch");
-  const watch = makeProvisionRetryWatch({
+  const provisionRetryWatch = makeProvisionRetryWatch({
     store: fakeDeps().store,
     config: withConfigNamespaces({ provisioningRetryMinIntervalMs: 0, provisioningRetryMaxAttempts: 0 }),
     provision: async () => {},
     audit: () => {},
   });
-  pruefeVertrag(watch, methoden, "provisionRetryWatch");
-});
-
-test("Z-A7: jede von runSweepTick auf priceDriftWatch gerufene Methode existiert auf makePriceDriftWatch(...) und ist eine Funktion", () => {
-  const methoden = gerufeneMethoden("priceDriftWatch");
-  const watch = makePriceDriftWatch({
+  const priceDriftWatch = makePriceDriftWatch({
     ...fakeDeps(),
     config: withConfigNamespaces({ paymentEnabled: false, priceDriftMinIntervalMs: 0 }),
     lesePreis: async () => ({}),
   });
-  pruefeVertrag(watch, methoden, "priceDriftWatch");
+  const uebrigeLaeufe = {
+    costCrossCheck: { runMonthlyCrossCheck: async () => ({}) },
+    provisioning: { settleDueNumberMonthMeters: async () => ({}) },
+    costTruing: { runCostTruingSweep: async () => ({}) },
+  };
+  assert.doesNotThrow(() =>
+    runSweepTick({
+      ...uebrigeLaeufe,
+      outageWatch: aufzeichnend(outageWatch, "outageWatch", gerufen),
+      paidWithoutNumberWatch: aufzeichnend(paidWithoutNumberWatch, "paidWithoutNumberWatch", gerufen),
+      provisionRetryWatch: aufzeichnend(provisionRetryWatch, "provisionRetryWatch", gerufen),
+      priceDriftWatch: aufzeichnend(priceDriftWatch, "priceDriftWatch", gerufen),
+    }),
+  );
+  assert.deepEqual(
+    [...gerufen].sort(),
+    ["outageWatch", "paidWithoutNumberWatch", "priceDriftWatch", "provisionRetryWatch"],
+  );
 });
