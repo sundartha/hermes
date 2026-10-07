@@ -1,0 +1,10 @@
+{
+  "titel": "Geheimnis-Skript lädt den Speicher",
+  "dateien": {
+    "scripts/iel-geheimnisse-setzen.mjs": [
+      "import * as store from \"../src/store.js\";",
+      "export const speicher = store;"
+    ]
+  },
+  "erwartet": "speicher-import:"
+}

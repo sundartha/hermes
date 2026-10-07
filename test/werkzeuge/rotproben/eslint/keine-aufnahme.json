@@ -1,0 +1,9 @@
+{
+  "titel": "Gesprächsaufnahme im Telefonie-Port",
+  "dateien": {
+    "src/telephony/ports.js": [
+      "export const recordingUrl = (call) => call.aufnahme;"
+    ]
+  },
+  "erwartet": "keine-aufnahme:"
+}

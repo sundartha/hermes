@@ -1,0 +1,9 @@
+{
+  "titel": "Anruf außerhalb der Anruf-Route gestartet",
+  "dateien": {
+    "src/consult/delivery.js": [
+      "export const anrufen = (voice) => voice.originateCall({ to: \"+491\" });"
+    ]
+  },
+  "erwartet": "anruf-starten:"
+}

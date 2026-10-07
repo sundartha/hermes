@@ -1,0 +1,9 @@
+{
+  "titel": "Datumsformatierung außerhalb von subscribe.js",
+  "dateien": {
+    "apps/web/src/lib/settings.js": [
+      "export const datum = (wert) => new Date(wert).toLocaleDateString();"
+    ]
+  },
+  "erwartet": "datumsformat:"
+}

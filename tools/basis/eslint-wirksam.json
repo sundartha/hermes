@@ -66,6 +66,58 @@
             "src/store/pg.js",
             "src/elevenlabs/inbound-path-decision.js"
           ]
+        },
+        {
+          "meldung": "Anbieter-Vokabular der LLM-Schnittstelle (input_schema, cache_control, max_tokens, tool_choice) steht nur in den LLM-Adaptern (B3B-1); der übrige Code bleibt anbieterneutral.",
+          "name": "anthropic-vokabular",
+          "nurIn": [
+            "src/llm/adapters/anthropic.js",
+            "src/llm/adapters/deepseek.js"
+          ]
+        },
+        {
+          "meldung": "Hermes nimmt keine Gespräche auf, und Audio läuft nie durch MCP (CLAUDE.md, Regel AUDIO); recordingUrl und startRecording gibt es im Code nicht.",
+          "name": "keine-aufnahme",
+          "nurIn": []
+        },
+        {
+          "meldung": "originateViaCallControl und originateAiAssistantCall sind stillgelegte Wahlwege ohne Gates (SEC-P6); Anrufe starten nur über originateCall und originateElevenLabsCall in src/routes/api-calls.js.",
+          "name": "tote-wahlwege",
+          "nurIn": []
+        },
+        {
+          "art": "aufruf",
+          "meldung": "Sprachkosten bucht nur src/billing/metering.js über store.addVoiceUsageCostCents (KV-P1-10); ein zweiter Aufrufer wäre eine mögliche Doppelbelastung.",
+          "name": "sprachkosten-buchen",
+          "nurIn": [
+            "src/billing/metering.js",
+            "src/store/json.js",
+            "src/store/pg.js"
+          ]
+        },
+        {
+          "art": "aufruf",
+          "meldung": "originateCall und originateElevenLabsCall ruft nur src/routes/api-calls.js auf, hinter allen Outbound-Gates (SEC-P6); ein neuer Wahlweg braucht dieselben Gates und eine Freigabe der Owner.",
+          "name": "anruf-starten",
+          "nurIn": [
+            "src/routes/api-calls.js"
+          ]
+        },
+        {
+          "meldung": "Der Inbound-Tarif wird nur in src/billing/metering.js (Buchung) und src/billing/cost-calibration.js (Wächter) gelesen und nur in src/config.js gesetzt (KV-P2-5).",
+          "name": "inbound-tarif",
+          "nurIn": [
+            "src/billing/cost-calibration.js",
+            "src/billing/metering.js",
+            "src/config.js"
+          ]
+        },
+        {
+          "meldung": "Das alte Dashboard /tenant.html gibt es nicht mehr (P14); Ziele zeigen auf die App-Shell, den Altpfad kennt nur src/portal-paths.js.",
+          "name": "altpfad-dashboard",
+          "nurIn": [
+            "src/portal-paths.js"
+          ]
         }
       ],
       "id-length": [
@@ -1638,6 +1690,23 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/wort-nur-in": [
+        2,
+        {
+          "meldung": "Sprach-Kennungen für die Datumsformatierung stehen in apps/web nur in src/lib/subscribe.js (WEB-18); andere Module formatieren über dessen Funktionen.",
+          "name": "sprachkennung",
+          "nurIn": [
+            "apps/web/src/lib/subscribe.js"
+          ]
+        },
+        {
+          "meldung": "Datum und Zahlen formatiert apps/web nur in src/lib/subscribe.js (WEB-18); andere Module rufen dessen Funktionen auf, statt toLocale…, toString oder Intl zu benutzen.",
+          "name": "datumsformat",
+          "nurIn": [
+            "apps/web/src/lib/subscribe.js"
+          ]
+        }
+      ],
       "id-length": [
         2,
         {
@@ -2013,6 +2082,23 @@
       "hermes/namen-ohne-begruendung": [
         1
       ],
+      "hermes/wort-nur-in": [
+        2,
+        {
+          "meldung": "Sprach-Kennungen für die Datumsformatierung stehen in apps/web nur in src/lib/subscribe.js (WEB-18); andere Module formatieren über dessen Funktionen.",
+          "name": "sprachkennung",
+          "nurIn": [
+            "apps/web/src/lib/subscribe.js"
+          ]
+        },
+        {
+          "meldung": "Datum und Zahlen formatiert apps/web nur in src/lib/subscribe.js (WEB-18); andere Module rufen dessen Funktionen auf, statt toLocale…, toString oder Intl zu benutzen.",
+          "name": "datumsformat",
+          "nurIn": [
+            "apps/web/src/lib/subscribe.js"
+          ]
+        }
+      ],
       "id-length": [
         2,
         {
@@ -2387,6 +2473,23 @@
       ],
       "hermes/namen-ohne-begruendung": [
         1
+      ],
+      "hermes/wort-nur-in": [
+        2,
+        {
+          "meldung": "Sprach-Kennungen für die Datumsformatierung stehen in apps/web nur in src/lib/subscribe.js (WEB-18); andere Module formatieren über dessen Funktionen.",
+          "name": "sprachkennung",
+          "nurIn": [
+            "apps/web/src/lib/subscribe.js"
+          ]
+        },
+        {
+          "meldung": "Datum und Zahlen formatiert apps/web nur in src/lib/subscribe.js (WEB-18); andere Module rufen dessen Funktionen auf, statt toLocale…, toString oder Intl zu benutzen.",
+          "name": "datumsformat",
+          "nurIn": [
+            "apps/web/src/lib/subscribe.js"
+          ]
+        }
       ],
       "id-length": [
         2,

@@ -1,0 +1,9 @@
+{
+  "titel": "SIP-Zugangsdaten im Wahlskript",
+  "dateien": {
+    "scripts/push-elevenlabs.mjs": [
+      "export const nummer = { credentials: { user: \"x\" } };"
+    ]
+  },
+  "erwartet": "zugangsdaten:"
+}
