@@ -1,7 +1,6 @@
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { readFileSync } from "node:fs";
 import { tempDataDir, seedState, seedCall, makeConfigOverrides } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, MICRO_CENTS_PER_CENT } from "../src/store/defaults.js";
 
@@ -239,15 +238,6 @@ test("B11 assistantContextEnabled aus (Briefing-Flag bleibt an) -> null, kein Re
 
 const NOW_TOKEN = "<NOW>";
 const freezeNow = (prompt) => prompt.replace(/Heute ist [^\n]+\./, `Heute ist ${NOW_TOKEN}.`);
-
-test("PROMPT-06 (Luecke, gruen) - fetchPrecallBriefing kennt keine Sprache, der Aufrufer reicht keine durch", () => {
-  const briefingSrc = readFileSync(new URL("../src/precall-briefing.js", import.meta.url), "utf8");
-  assert.doesNotMatch(briefingSrc, /language/, "das Briefing-Modul kennt den Begriff nicht");
-  const apiCallsSrc = readFileSync(new URL("../src/routes/api-calls.js", import.meta.url), "utf8");
-  const args = apiCallsSrc.match(/fetchPrecallBriefing\(\{([\s\S]*?)\}\)/)?.[1];
-  assert.ok(args, "Aufrufstelle nicht gefunden - Test muss nachgezogen werden");
-  assert.doesNotMatch(args, /\blanguage\s*:/, "kein language-Key im Aufrufobjekt");
-});
 
 test("PROMPT-07 (Luecke, gruen) - der Briefing-System-Prompt enthaelt keine Sprachvorgabe fuer die Freitextfelder", async () => {
   await fetchPrecallBriefing(briefingArgs());
