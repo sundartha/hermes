@@ -6,10 +6,10 @@ const AUFRUF = [
   "Aufruf: node tools/tests-ausmisten.mjs",
   "planen --aus <ordner> [--speicher <ordner>]",
   "| basis --plan-daten <ordner> --paket <nr> --aus <ordner>",
-  "| branch --plan-daten <ordner> --basis-daten <ordner> --paket <nr> --aus <ordner>",
+  "| branch --plan-daten <ordner> --basis-daten <ordner> --paket <nr> --aus <ordner> [--alle]",
   "| vorpruefen --kopf <rev> --gitleaks <pfad> --aus <ordner>",
   "| melden [--pr]",
-  "| lokal --bereich <name> --master <rev> --gitleaks <pfad> [--kopf <rev>] [--speicher <ordner>] [--aus <ordner>]",
+  "| lokal --bereich <name> --master <rev> --gitleaks <pfad> [--kopf <rev>] [--speicher <ordner>] [--aus <ordner>] [--alle]",
 ].join(" ");
 const PFLICHT = {
   planen: ["aus"],
@@ -39,6 +39,7 @@ const BEFEHLE = new Map(
         planDaten: werte["plan-daten"],
         basisDaten: werte["basis-daten"],
         paket: werte.paket,
+        alle: werte.alle,
       }),
     vorpruefen: async (werte) =>
       (await import("./tests-ausmisten/vorpruefen.mjs")).vorpruefenBefehl(werte),
@@ -61,6 +62,7 @@ async function main() {
       kopf: { type: "string" },
       gitleaks: { type: "string" },
       pr: { type: "boolean", default: false },
+      alle: { type: "boolean", default: false },
     },
   });
   const [name] = positionals;
