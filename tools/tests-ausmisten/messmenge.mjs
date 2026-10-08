@@ -5,8 +5,8 @@ import { basename, join } from "node:path";
 import { chdir, cwd } from "node:process";
 
 import { cruise } from "dependency-cruiser";
-import { Linter } from "eslint";
 
+import { dynamischeZiele, syntaxknoten } from "./importe.mjs";
 import { git, gitGelingt, quellenDesBereichs, testpfadFrei } from "./pfade.mjs";
 
 export const TESTDATEI = /^test\/.+\.test\.[cm]?js$/;
@@ -21,7 +21,7 @@ const WERKZEUGPFAD = /^(?:tools|scripts)\//;
 const WERKZEUG_DATEI_IN_TEXT =
   /(?:^|[^\w-])((?:tools|scripts)\/[\w./-]*\.(?:mjs|cjs|js|sh|json))\b/g;
 const SKRIPT = /\.[cm]?js$/;
-const COMMONJS = /\.cjs$/;
+const EIGENES_MODUL = /^(?:src|test)\/.+\.[cm]?js$/;
 const MAX_GIT_AUSGABE = 268_435_456;
 
 export async function importgraph() {
@@ -29,7 +29,9 @@ export async function importgraph() {
   const importe = new Map();
   const importierer = new Map();
   for (const { source, dependencies } of output.modules) {
-    const ziele = dependencies.map(({ resolved }) => resolved);
+    const statisch = dependencies.map(({ resolved }) => resolved);
+    const dynamisch = EIGENES_MODUL.test(source) ? dynamischeZiele(source) : [];
+    const ziele = [...new Set([...statisch, ...dynamisch])];
     importe.set(source, ziele);
     for (const ziel of ziele) importierer.set(ziel, [...(importierer.get(ziel) ?? []), source]);
   }
@@ -165,21 +167,8 @@ function textwert(knoten) {
 }
 
 function literale(datei, text) {
-  const linter = new Linter();
-  const sourceType = COMMONJS.test(datei) ? "commonjs" : "module";
-  const meldungen = linter.verify(text, { languageOptions: { ecmaVersion: "latest", sourceType } });
-  if (meldungen.some(({ fatal }) => fatal)) return [text];
-  const { ast, visitorKeys } = linter.getSourceCode();
-  const werte = [];
-  const offen = [ast];
-  while (offen.length > 0) {
-    const knoten = offen.pop();
-    werte.push(...textwert(knoten));
-    for (const schluessel of visitorKeys[knoten.type] ?? []) {
-      offen.push(...[knoten[schluessel]].flat().filter(Boolean));
-    }
-  }
-  return werte;
+  const knoten = syntaxknoten(datei, text);
+  return knoten === undefined ? [text] : knoten.flatMap(textwert);
 }
 
 function werkzeugeInText(datei, text) {
