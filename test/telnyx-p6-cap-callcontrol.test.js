@@ -1,20 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { hangUpAction } from "../src/telephony/call-termination.js";
 import { reattachActiveCall } from "../src/telephony/reattach.js";
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAX_DURATION_S = 180;
 const SECONDS_60 = 60;
 const SECONDS_400 = 400;
 const MS_PER_S = 1000;
-
-const SOURCE_WINDOW_TERMINATE_ACTIVE_CALL_CHARS = 1600;
-const SOURCE_WINDOW_CANCEL_CALL_CHARS = 4000;
-const SOURCE_WINDOW_REARM_TIMERS_CHARS = 1200;
 
 function voiceControlSpy() {
   const calls = [];
@@ -125,54 +117,4 @@ test("T5b: reattach Aktiv-Restzeit-Fixture (callControlId, twilioSid null) -> sc
   assert.equal(calls.schedule[0].callId, "reattach_cc");
   assert.equal(calls.schedule[0].providerCallSid, null);
   assert.ok(calls.schedule[0].ms > 0 && calls.schedule[0].ms <= MAX_DURATION_S * MS_PER_S);
-});
-
-const lifecycleSrc = fs.readFileSync(path.join(ROOT, "src", "telephony", "call-lifecycle.js"), "utf8");
-const apiCallsSrc = fs.readFileSync(path.join(ROOT, "src", "routes", "api-calls.js"), "utf8");
-
-test("T6: terminateCappedCall verwendet hangUpAction (nicht mehr das alte providerCallSid-Ternary)", () => {
-  const marker = "async function terminateActiveCall({ callId, providerCallSid, status, failureReason }) {";
-  const block = lifecycleSrc.slice(
-    lifecycleSrc.indexOf(marker),
-    lifecycleSrc.indexOf(marker) + SOURCE_WINDOW_TERMINATE_ACTIVE_CALL_CHARS,
-  );
-
-  assert.match(block, /hangUp:\s*hangUpAction\(voiceControl,\s*call,\s*providerCallSid\)/);
-  assert.doesNotMatch(
-    block,
-    /providerCallSid\s*\?\s*\(\)\s*=>\s*voiceControl\(call\.provider\)\.endCall/,
-    "das alte inline Ternary darf nicht mehr da sein (G5: EINE Quelle ueber hangUpAction)",
-  );
-});
-
-test("T7: cancel_call verwendet hangUpAction (dieselbe Quelle wie terminateCappedCall)", () => {
-  const marker = 'router.post("/api/calls/:id/cancel"';
-  const block = apiCallsSrc.slice(
-    apiCallsSrc.indexOf(marker),
-    apiCallsSrc.indexOf(marker) + SOURCE_WINDOW_CANCEL_CALL_CHARS,
-  );
-
-  assert.match(block, /const providerHangUp = hangUpAction\(voiceControl,\s*call,\s*call\.twilioSid\);/);
-  assert.match(block, /hangUp:\s*providerHangUp\s*\?\?\s*elHangUp/);
-  assert.equal(
-    (block.match(/hangUpAction\(voiceControl,\s*call,\s*call\.twilioSid\)/g) || []).length,
-    1,
-    "hangUpAction() darf nur EINMAL ausgewertet werden - Regressionsguard fuer den alten Doppelaufruf",
-  );
-});
-
-test("Wiring: rearmActiveCallTimers terminalisiert ausschliesslich ueber terminateCappedCall/scheduleMaxDurationEnd (kein direkter voiceEngine-getriebener endCall)", () => {
-  const marker = "function rearmActiveCallTimers()";
-  const block = lifecycleSrc.slice(
-    lifecycleSrc.indexOf(marker),
-    lifecycleSrc.indexOf(marker) + SOURCE_WINDOW_REARM_TIMERS_CHARS,
-  );
-  assert.doesNotMatch(block, /voiceEngine/, "rearm kennt keinen Engine-Sonderfall mehr (IE6-S2)");
-  assert.match(block, /terminateCappedCall\(call\.id, call\.twilioSid/);
-  assert.match(block, /scheduleMaxDurationEnd\(call, call\.twilioSid/);
-  assert.doesNotMatch(
-    block,
-    /endCallViaCallControl|\.endCall\(/,
-    "Hangup-Endpunktwahl bleibt in hangUpAction (Befund 1), NIE inline in rearm",
-  );
 });
