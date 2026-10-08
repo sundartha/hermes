@@ -31,7 +31,14 @@ const RANG = new Map([
   [TIMEOUT, RANG_ZEITUEBERSCHREITUNG],
 ]);
 const MAX_BESCHREIBUNG = 140;
-const STAND_IM_BRANCH = new Set(["unverändert", "geändert", "gelöscht", "nicht zuzuordnen"]);
+const STAND_IM_BRANCH = new Set([
+  "unverändert",
+  "geändert",
+  "gelöscht",
+  "nicht zuzuordnen",
+  "Datei geändert",
+]);
+const HILFSDATEI_IM_BRANCH = /^Hilfsdatei geändert: test\/\S+$/;
 const AUSLASSUNG = "…";
 
 export function rang(status) {
@@ -94,6 +101,10 @@ function istOrt(ort) {
   );
 }
 
+function istStand(stand) {
+  return STAND_IM_BRANCH.has(stand) || HILFSDATEI_IM_BRANCH.test(stand ?? "");
+}
+
 function istFall(fall, dateien) {
   return (
     istObjekt(fall) &&
@@ -106,9 +117,7 @@ function istFall(fall, dateien) {
 
 export function istFallListe(wert, dateien, { mitStand = false } = {}) {
   if (!Array.isArray(wert) || !Array.isArray(dateien)) return false;
-  return wert.every(
-    (fall) => istFall(fall, dateien) && (!mitStand || STAND_IM_BRANCH.has(fall.imBranch)),
-  );
+  return wert.every((fall) => istFall(fall, dateien) && (!mitStand || istStand(fall.imBranch)));
 }
 
 function istSenkung(eintrag) {

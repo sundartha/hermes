@@ -111,17 +111,49 @@ export function testfaelleImText(datei, text) {
   return faelle;
 }
 
-function fassung(rev, test) {
-  if (!gitGelingt(["cat-file", "-e", `${rev}:${test}`])) return undefined;
-  return git(["show", `${rev}:${test}`]);
+export const DATEI_GEAENDERT = "Datei geändert";
+export const HILFSDATEI_GEAENDERT = "Hilfsdatei geändert: ";
+const TESTHILFE = /^test\//;
+
+function fassung(rev, test, verzeichnis) {
+  if (!gitGelingt(["cat-file", "-e", `${rev}:${test}`], verzeichnis)) return undefined;
+  return git(["show", `${rev}:${test}`], verzeichnis);
 }
 
-export function imBranch({ test, name }, { master, kopf }) {
-  const alt = testfaelleImText(test, fassung(master, test) ?? "")?.get(name);
+function blob(rev, pfad, verzeichnis) {
+  if (!gitGelingt(["cat-file", "-e", `${rev}:${pfad}`], verzeichnis)) return undefined;
+  return git(["rev-parse", `${rev}:${pfad}`], verzeichnis).trim();
+}
+
+function gleich(pfad, { master, kopf, verzeichnis }) {
+  return blob(master, pfad, verzeichnis) === blob(kopf, pfad, verzeichnis);
+}
+
+export function hilfsdateien(test, graphen) {
+  const erreicht = new Set([test]);
+  for (const datei of erreicht) {
+    for (const { importe } of graphen) {
+      for (const ziel of importe.get(datei) ?? []) if (TESTHILFE.test(ziel)) erreicht.add(ziel);
+    }
+  }
+  erreicht.delete(test);
+  return [...erreicht].sort();
+}
+
+function fallImBranch({ test, name }, { master, kopf, verzeichnis }) {
+  const alt = testfaelleImText(test, fassung(master, test, verzeichnis) ?? "")?.get(name);
   if (alt === undefined || alt === null) return "nicht zuzuordnen";
-  const neuText = fassung(kopf, test);
+  const neuText = fassung(kopf, test, verzeichnis);
   if (neuText === undefined) return "gelöscht";
   const neu = testfaelleImText(test, neuText)?.get(name);
   if (neu === undefined) return "gelöscht";
   return neu === alt ? UNVERAENDERT : "geändert";
+}
+
+export function imBranch(fall, lauf, graphen = []) {
+  const stand = fallImBranch(fall, lauf);
+  if (stand !== UNVERAENDERT) return stand;
+  if (!gleich(fall.test, lauf)) return DATEI_GEAENDERT;
+  const hilfe = hilfsdateien(fall.test, graphen).find((pfad) => !gleich(pfad, lauf));
+  return hilfe === undefined ? UNVERAENDERT : `${HILFSDATEI_GEAENDERT}${hilfe}`;
 }
