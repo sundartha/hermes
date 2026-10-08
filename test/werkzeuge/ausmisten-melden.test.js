@@ -121,6 +121,7 @@ function jobs({ pakete, pruefsumme }, ergebnisse = {}) {
   const ergebnis = (name) => ergebnisse[name] ?? "success";
   return JSON.stringify({
     planen: { result: ergebnis("planen"), outputs: { pakete, pruefsumme } },
+    vorpruefen: { result: ergebnis("vorpruefen"), outputs: {} },
     kette: { result: ergebnis("kette"), outputs: {} },
   });
 }
@@ -241,6 +242,16 @@ test("ausmisten-melden: ein nicht erfolgreicher Mess-Job setzt failure", async (
   });
   erwarteRot(ergebnis, "Job „Paket 0 / Basis messen“ endete mit cancelled");
   assert.match(ergebnis.ausgabe, /Job kette endete mit cancelled/);
+});
+
+test("ausmisten-melden: rote Prüfungen vor der Messung setzen failure, auch ohne Mess-Artefakte", async (context) => {
+  const liste = (eintraege) => eintraege.filter(({ name }) => name === "plan");
+  const ergebnis = await melde(context, {
+    liste,
+    ergebnisse: { vorpruefen: "failure", kette: "skipped" },
+  });
+  erwarteRot(ergebnis, "Job vorpruefen endete mit failure");
+  assert.match(ergebnis.ausgabe, /Job kette endete mit skipped/);
 });
 
 test("ausmisten-melden: ein Artefakt, das nicht zur Prüfsumme des Jobs passt, setzt failure", async (context) => {

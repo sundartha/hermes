@@ -7,13 +7,15 @@ const AUFRUF = [
   "planen --aus <ordner> [--speicher <ordner>]",
   "| basis --plan-daten <ordner> --paket <nr> --aus <ordner>",
   "| branch --plan-daten <ordner> --basis-daten <ordner> --paket <nr> --aus <ordner>",
+  "| vorpruefen --kopf <rev> --gitleaks <pfad> --aus <ordner>",
   "| melden [--pr]",
-  "| lokal --bereich <name> --master <rev> [--kopf <rev>] [--speicher <ordner>] [--aus <ordner>]",
+  "| lokal --bereich <name> --master <rev> --gitleaks <pfad> [--kopf <rev>] [--speicher <ordner>] [--aus <ordner>]",
 ].join(" ");
 const PFLICHT = {
   planen: ["aus"],
   basis: ["plan-daten", "paket", "aus"],
   branch: ["plan-daten", "basis-daten", "paket", "aus"],
+  vorpruefen: ["kopf", "aus"],
   melden: [],
   lokal: ["bereich", "master"],
 };
@@ -38,6 +40,8 @@ const BEFEHLE = new Map(
         basisDaten: werte["basis-daten"],
         paket: werte.paket,
       }),
+    vorpruefen: async (werte) =>
+      (await import("./tests-ausmisten/vorpruefen.mjs")).vorpruefenBefehl(werte),
     melden: async ({ pr }) => (await import("./tests-ausmisten/melden.mjs")).melden({ pr }),
     lokal: async (werte) => (await import("./tests-ausmisten/lokal.mjs")).lokal(werte),
   }),
@@ -55,6 +59,7 @@ async function main() {
       bereich: { type: "string" },
       master: { type: "string" },
       kopf: { type: "string" },
+      gitleaks: { type: "string" },
       pr: { type: "boolean", default: false },
     },
   });

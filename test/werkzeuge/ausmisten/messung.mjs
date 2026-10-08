@@ -220,6 +220,7 @@ export async function messeUndMelde(context, branch, { dateien = {}, vorBranch, 
     ketten.length === pakete.length && ketten.every(({ zweig }) => zweig?.status === EXIT_GRUEN);
   const jobs = {
     planen: { result: ergebnisVon(stand.planen), outputs: plan },
+    vorpruefen: { result: "success", outputs: {} },
     kette: { result: gruen ? "success" : "failure", outputs: {} },
   };
   const melden = await laufe(
