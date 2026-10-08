@@ -1,13 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { HUD_CARD_CSS } from "../src/ui/hud-card-css.js";
+import { ausgelieferteWidgets } from "./gemeinsam/ausgelieferte-widgets.js";
 
-const CALL_HTML = readFileSync(
-  fileURLToPath(new URL("../src/ui/widgets/call.html", import.meta.url)),
-  "utf8",
-);
+const CALL_HTML = (await ausgelieferteWidgets()).call;
 
 const SHARED_CUSTOM_PROPERTIES = [
   "color-navy-800", "color-navy-900", "color-navy-card", "color-white",
