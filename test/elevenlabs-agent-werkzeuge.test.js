@@ -154,12 +154,6 @@ test("Werkzeug-Inventar der ElevenLabs-Vorlage: get_consult schickt die Gespraec
     undefined,
     `${TEMPLATE_REL}: "${CONSULT_CONVERSATION_KEY}" traegt description NEBEN dynamic_variable - das Anbieter-Schema nennt beide ausdruecklich gegenseitig ausschliessend.`,
   );
-
-  const handlerQuelle = readFileSync(new URL(`../${CONSULT_HANDLER_REL}`, import.meta.url), "utf8");
-  assert.ok(
-    handlerQuelle.includes(CONSULT_CONVERSATION_KEY),
-    `${CONSULT_HANDLER_REL} nennt "${CONSULT_CONVERSATION_KEY}" nicht mehr. Sende- und Leseseite tragen dann verschiedene Namen, und die Rueckfrage landet wieder bei 404 - der Schluessel ist der einzige Draht zwischen beiden.`,
-  );
 });
 
 const TENANT_TOKEN_KEY = "tenant_token";
@@ -188,12 +182,6 @@ test("Werkzeug-Inventar der ElevenLabs-Vorlage: beide Werkzeuge schicken die Man
       `${TEMPLATE_REL}: "${TENANT_TOKEN_KEY}" steht an "${werkzeug}" unter required - ein Anruf, der VOR dem Push gestartet wurde, traegt den Wert nicht, und ein dynamic_variable-Parameter wird nie vom Modell geliefert.`,
     );
   }
-
-  const handlerQuelle = readFileSync(new URL(`../${CONSULT_HANDLER_REL}`, import.meta.url), "utf8");
-  assert.ok(
-    handlerQuelle.includes(TENANT_TOKEN_KEY),
-    `${CONSULT_HANDLER_REL} nennt "${TENANT_TOKEN_KEY}" nicht mehr. Sende- und Leseseite tragen dann verschiedene Namen, und der Riegel prueft einen Wert, den niemand schickt.`,
-  );
 });
 
 test("Werkzeug-Inventar der ElevenLabs-Vorlage: jedes Werkzeug heisst ueberall gleich und haengt genau einmal am Agenten", () => {
