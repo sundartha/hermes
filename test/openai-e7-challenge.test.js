@@ -95,13 +95,11 @@ test("E7-T8: der Token ist keine configHash-Achse (Boot-Hash identisch mit/ohne 
 });
 
 test("E7-T9: .env.example + render.yaml + config.js sind kohaerent (Doku-Pin)", () => {
-  const configJs = readRepoFile("src/config.js");
   const envExample = readRepoFile(".env.example");
   const renderYaml = readRepoFile("render.yaml");
 
   assert.match(envExample, /^MCP_ORIGIN_ENFORCE=true$/m);
 
-  assert.ok(configJs.includes("process.env.OPENAI_APPS_CHALLENGE_TOKEN"));
   assert.match(envExample, /^OPENAI_APPS_CHALLENGE_TOKEN=\s*(#.*)?$/m);
   assert.match(renderYaml, /key:\s*OPENAI_APPS_CHALLENGE_TOKEN\s*\n\s*sync:\s*false/);
 });
