@@ -1,4 +1,4 @@
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { relative } from "node:path";
 
 import { syntaxbaum } from "./importe.mjs";
@@ -56,6 +56,8 @@ function fallFehler(fall, ohne) {
   const treffer = ohne.filter(({ name, eigen }) => name === fall.name || eigen === fall.name);
   if (treffer.length !== 1)
     return `${fall.test}: der Name „${fall.name}“ ist nicht eindeutig (${treffer.length} Testfälle)`;
+  if (!imTextEindeutig(fall, vorher.datei))
+    return `${fall.test}: „${fall.name}“ lässt sich im Text der Testdatei nicht eindeutig finden`;
   return undefined;
 }
 
@@ -108,6 +110,10 @@ export function testfaelleImText(datei, text) {
     }
   }
   return faelle;
+}
+
+function imTextEindeutig({ test, name }, datei) {
+  return typeof testfaelleImText(test, readFileSync(datei, "utf8"))?.get(name) === "string";
 }
 
 export const DATEI_GEAENDERT = "Datei geändert";

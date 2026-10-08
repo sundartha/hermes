@@ -827,9 +827,11 @@ test("ausmisten-melden: ein geänderter ausgenommener Fall braucht ebenfalls die
   erwarteFreigabeNoetig(await melde(context, mitAusnahme("geändert")), ausnahmePunkt("geändert"));
 });
 
-test("ausmisten-melden: ein ausgenommener Fall, den die Messung nicht zuordnen kann, braucht die Freigabe", async (context) => {
-  const stand = "nicht zuzuordnen";
-  erwarteFreigabeNoetig(await melde(context, mitAusnahme(stand)), ausnahmePunkt(stand));
+test("ausmisten-melden: ein ausgenommener Fall, den die Messung nicht zuordnen kann, macht das Artefakt ungültig", async (context) => {
+  erwarteRot(
+    await melde(context, mitAusnahme("nicht zuzuordnen")),
+    "Liste der ausgenommenen Testfälle ist ungültig",
+  );
 });
 
 test("ausmisten-melden: Antonios Zustimmung gibt einen gelöschten ausgenommenen Fall frei", async (context) => {
