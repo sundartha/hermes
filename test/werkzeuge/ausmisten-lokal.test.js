@@ -6,19 +6,20 @@ import { test } from "node:test";
 import { probeDirectory } from "./probe-repo.js";
 import { DOPPELT, RECHNEN_TEST, ausmistenRepo, starte } from "./ausmisten/hilfen.mjs";
 import { EXIT_GRUEN, EXIT_ROT, WIRKSAME_TESTS, messeUndMelde } from "./ausmisten/messung.mjs";
-import {
-  scheinGitleaks,
-  verlinkeLintWerkzeuge,
-  vorpruefDateien,
-} from "./ausmisten/vorpruefen.mjs";
+import { KUERZEN, MIT_TEXT, TEXTTEST, VERHALTEN, fall, texttest } from "./ausmisten/texttest.mjs";
+import { scheinGitleaks, verlinkeLintWerkzeuge, vorpruefDateien } from "./ausmisten/vorpruefen.mjs";
 
 const WERKZEUG = "tools/tests-ausmisten.mjs";
 
-function lokalesRepo(context, weg) {
+function lokalesRepo(context, weg, { dateien = {}, neu = {} } = {}) {
   const protokoll = join(probeDirectory(context, {}), "aufrufe.txt");
-  const repo = ausmistenRepo(context, { ...WIRKSAME_TESTS, ...vorpruefDateien(protokoll) });
+  const repo = ausmistenRepo(context, {
+    ...WIRKSAME_TESTS,
+    ...vorpruefDateien(protokoll),
+    ...dateien,
+  });
   verlinkeLintWerkzeuge(repo.ordner);
-  const kopf = repo.committe({}, weg);
+  const kopf = repo.committe(neu, weg);
   repo.git(["checkout", "-q", repo.master]);
   return { ...repo, kopf, gitleaks: scheinGitleaks(context, { protokoll }) };
 }
@@ -110,4 +111,24 @@ test("ausmisten-lokal: ohne --master bricht der Befehl mit der Aufrufhilfe ab", 
   });
   assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
   assert.match(ergebnis.ausgabe, /lokal --bereich <name> --master <rev>/);
+});
+
+const EXIT_FREIGABE = 3;
+
+test("ausmisten-lokal: ein gelöschter ausgenommener Texttest endet mit Exit 3 und nennt Fall und Freigabe", async (context) => {
+  const repo = lokalesRepo(context, [], {
+    dateien: { [TEXTTEST]: MIT_TEXT },
+    neu: { [TEXTTEST]: texttest(fall(VERHALTEN, KUERZEN)) },
+  });
+  const ergebnis = await lokal(context, repo);
+  assert.equal(ergebnis.status, EXIT_FREIGABE, ergebnis.ausgabe);
+  assert.match(
+    ergebnis.ausgabe,
+    /Ausgenommen: test\/post\/text\.test\.js: liest den Quelltext \(umgebaute Datei src\/post\/eingang\.js, im Branch gelöscht\)/,
+  );
+  assert.match(
+    ergebnis.ausgabe,
+    /Freigabe nötig: Ausgenommener Testfall im Branch gelöscht: test\/post\/text\.test\.js: liest den Quelltext/,
+  );
+  assert.doesNotMatch(ergebnis.ausgabe, /Lokal: grün\n/);
 });

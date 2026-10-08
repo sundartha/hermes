@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { entferneArbeitsordner, legeArbeitsordnerAn } from "./arbeitsordner.mjs";
 import { paketName } from "./artefakte.mjs";
 import { BASIS, BRANCH, leseArtefakt, lesePlan } from "./entscheiden.mjs";
-import { urteilAusTeilen } from "./melden.mjs";
+import { ausgenommeneFaelle, urteilAusTeilen } from "./melden.mjs";
 import { git } from "./pfade.mjs";
 import { meldeVorpruefung, vorpruefen } from "./vorpruefen.mjs";
 import { inSpeicher } from "./zwischenspeicher.mjs";
@@ -112,6 +112,8 @@ function urteil(stand, { pruefsumme, erwartet, summen }) {
       else teile[art].push({ ...gelesen.daten, nummer });
     }
   });
+  for (const { datei, test, name, imBranch } of ausgenommeneFaelle(teile[BASIS]))
+    console.log(`Ausgenommen: ${test}: ${name} (umgebaute Datei ${datei}, im Branch ${imBranch})`);
   return urteilAusTeilen(teile, { fehler, plan: plan.daten });
 }
 

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,12 @@ import { fileURLToPath } from "node:url";
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 import { gruppen } from "../mutationspruefung/gruppen.mjs";
 import { katalogtests } from "../testwirkung/katalog.mjs";
+import {
+  TROCKENLAUF_GESCHEITERT,
+  auslassungen,
+  auswerten,
+  faelleAusBericht,
+} from "./ausnehmen.mjs";
 import { rang } from "./entscheiden.mjs";
 import { TESTDATEI, erreichendeTests } from "./messmenge.mjs";
 import { GATE_DATEI, gateDateien } from "./pfade.mjs";
@@ -23,6 +29,10 @@ const BANK = "regression";
 const ARBEITSORDNER = join("node_modules", ".cache", "tests-ausmisten");
 const LEERRAUM = /\s+/g;
 const STRYKER_LAUF = fileURLToPath(new URL("stryker-lauf.mjs", import.meta.url));
+const FAELLE_BERICHT = fileURLToPath(new URL("faelle-bericht.mjs", import.meta.url));
+const BERICHT_OPTION = /^--test-reporter/;
+const SANDBOX = /^sandbox-/;
+const AKTIVER_MUTANT = "__STRYKER_ACTIVE_MUTANT__";
 const KEIN_PROZESS = "ESRCH";
 const MS_JE_SEKUNDE = 1000;
 const NACHKOMMA = 10;
@@ -81,25 +91,107 @@ async function strykerImEigenenProzess(optionen) {
   }
 }
 
-async function strykerLauf({ mutate, tests }) {
+function strykerOptionen({ mutate, tests, ausnahmen = [], tempDirName }) {
+  return {
+    ...KONFIGURATION,
+    mutate,
+    tap: {
+      ...KONFIGURATION.tap,
+      testFiles: tests,
+      nodeArgs: [
+        ...KONFIGURATION.tap.nodeArgs,
+        ...patternFlagsFor(BANK),
+        ...auslassungen(ausnahmen),
+      ],
+    },
+    configFile: KONFIGURATIONSDATEI,
+    tempDirName,
+  };
+}
+
+function neuerArbeitsordner(art) {
   mkdirSync(ARBEITSORDNER, { recursive: true });
-  const tempDirName = mkdtempSync(join(ARBEITSORDNER, "lauf-"));
+  return mkdtempSync(join(ARBEITSORDNER, `${art}-`));
+}
+
+async function strykerLauf(lauf) {
+  const tempDirName = neuerArbeitsordner("lauf");
   try {
-    const optionen = {
-      ...KONFIGURATION,
-      mutate,
-      tap: {
-        ...KONFIGURATION.tap,
-        testFiles: tests,
-        nodeArgs: [...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK)],
-      },
-      configFile: KONFIGURATIONSDATEI,
-      tempDirName,
-    };
-    return (await strykerImEigenenProzess(optionen)).map(eintrag);
+    return (await strykerImEigenenProzess(strykerOptionen({ ...lauf, tempDirName }))).map(eintrag);
   } finally {
     rmSync(tempDirName, { recursive: true, force: true });
   }
+}
+
+function testumgebung() {
+  const umgebung = { ...env, NODE_ENV: "test" };
+  delete umgebung[AKTIVER_MUTANT];
+  return umgebung;
+}
+
+async function testfaelle(tests, verzeichnis) {
+  const ordner = neuerArbeitsordner("faelle");
+  const ziel = join(cwd(), ordner, "faelle.jsonl");
+  try {
+    await inEigenerGruppe(
+      [
+        "--test",
+        ...KONFIGURATION.tap.nodeArgs.filter((option) => !BERICHT_OPTION.test(option)),
+        ...patternFlagsFor(BANK),
+        `--test-reporter=${FAELLE_BERICHT}`,
+        `--test-reporter-destination=${ziel}`,
+        ...tests,
+      ],
+      { cwd: verzeichnis, stdio: "ignore", env: testumgebung() },
+    );
+    return faelleAusBericht(readFileSync(ziel, "utf8"), verzeichnis);
+  } finally {
+    rmSync(ordner, { recursive: true, force: true });
+  }
+}
+
+async function ermittleAusnahmen({ mutate, tests }) {
+  const tempDirName = neuerArbeitsordner("umbau");
+  try {
+    const optionen = strykerOptionen({ mutate, tests, tempDirName });
+    try {
+      await strykerImEigenenProzess({ ...optionen, dryRunOnly: true, cleanTempDir: false });
+    } catch (fehler) {
+      if (!TROCKENLAUF_GESCHEITERT.test(fehler.message)) throw fehler;
+    }
+    const sandbox = readdirSync(tempDirName).find((name) => SANDBOX.test(name));
+    if (sandbox === undefined) throw new Error("Der umgebaute Stand für die Fallsuche fehlt.");
+    const ohne = await testfaelle(tests, cwd());
+    const mit = await testfaelle(tests, join(cwd(), tempDirName, sandbox));
+    return auswerten({ ohne, mit });
+  } finally {
+    rmSync(tempDirName, { recursive: true, force: true });
+  }
+}
+
+function fallListe(faelle) {
+  return faelle.map(({ test, name }) => `${test}: ${name}`).join("\n");
+}
+
+async function messeGruppe({ datei, mutate, gruppe, erlaubt }) {
+  try {
+    return { ergebnisse: await strykerLauf({ mutate, tests: gruppe }), ausgenommen: [] };
+  } catch (fehler) {
+    if (!TROCKENLAUF_GESCHEITERT.test(fehler.message)) throw fehler;
+  }
+  const { faelle, fehler } = await ermittleAusnahmen({ mutate, tests: gruppe });
+  if (fehler)
+    throw new Error(`Trockenlauf mit umgebauter ${datei} gescheitert:\n${fehler.join("\n")}`);
+  const verboten = faelle.filter((fall) => !erlaubt(fall));
+  if (verboten.length > 0)
+    throw new Error(
+      `Diese Testfälle scheitern an der umgebauten ${datei} und dürfen hier nicht ausgenommen werden:\n${fallListe(verboten)}`,
+    );
+  console.log(
+    `Ausgenommen, weil sie nur an der umgebauten ${datei} scheitern:\n${fallListe(faelle)}`,
+  );
+  const ergebnisse = await strykerLauf({ mutate, tests: gruppe, ausnahmen: faelle });
+  return { ergebnisse, ausgenommen: faelle.map((fall) => ({ datei, ...fall })) };
 }
 
 function offeneBereiche(datei, stati) {
@@ -120,12 +212,15 @@ function offen(datei, { stati, ziele }) {
   return [...new Set(uebrig.map(([, [von, bis]]) => `${datei}:${von}-${bis}`))];
 }
 
-async function messe({ datei, testgruppen, ziele }) {
+async function messe({ datei, testgruppen, ziele, erlaubt = () => true }) {
   const stati = new Map();
+  const ausgenommen = [];
   for (const gruppe of testgruppen) {
     const mutate = offen(datei, { stati, ziele });
     if (mutate.length === 0) break;
-    for (const ergebnis of await strykerLauf({ mutate, tests: gruppe })) {
+    const lauf = await messeGruppe({ datei, mutate, gruppe, erlaubt });
+    ausgenommen.push(...lauf.ausgenommen);
+    for (const ergebnis of lauf.ergebnisse) {
       const bisher = stati.get(ergebnis.schluessel);
       const gesucht = ziele === undefined || ziele.has(ergebnis.schluessel);
       if (gesucht && (bisher === undefined || rang(ergebnis.status) > rang(bisher.status))) {
@@ -133,7 +228,7 @@ async function messe({ datei, testgruppen, ziele }) {
       }
     }
   }
-  return stati;
+  return { stati, ausgenommen };
 }
 
 export function gateMenge() {
@@ -171,7 +266,7 @@ function uebernimm(ziel, stati) {
 }
 
 export async function messeGegenAlte({ dateien, alt, gateAlt }) {
-  const ergebnis = { mutanten: new Map(), gate: new Map(), jeDatei: [] };
+  const ergebnis = { mutanten: new Map(), gate: new Map(), jeDatei: [], ausgenommen: [] };
   for (const datei of dateien) {
     for (const [art, tests] of [
       ["mutanten", alt],
@@ -179,8 +274,9 @@ export async function messeGegenAlte({ dateien, alt, gateAlt }) {
     ]) {
       if (tests.length === 0) continue;
       const beginn = Date.now();
-      const stati = await messe({ datei, testgruppen: gruppen(tests) });
+      const { stati, ausgenommen } = await messe({ datei, testgruppen: gruppen(tests) });
       uebernimm(ergebnis[art], stati);
+      ergebnis.ausgenommen.push(...ausgenommen);
       protokolliere(ergebnis, { datei, art, stati, tests, beginn });
     }
   }
@@ -193,7 +289,7 @@ function getoeteteIn(datei, liste) {
   );
 }
 
-async function messeDateiGegenNeue(ergebnis, { datei, basis, neu, graph, gates }) {
+async function messeDateiGegenNeue(ergebnis, { datei, basis, neu, graph, gates, erlaubt }) {
   const uebrige = erreichendeTests(datei, graph).filter((test) => !neu.includes(test));
   const plaene = [
     ["mutanten", neu, uebrige],
@@ -205,16 +301,31 @@ async function messeDateiGegenNeue(ergebnis, { datei, basis, neu, graph, gates }
     const beginn = Date.now();
     const testgruppen = [...gruppen(zuerst), ...nachTests(datei, danach, graph)];
     const ziele = new Map(getoetet.map(([schluessel, { zeilen }]) => [schluessel, zeilen]));
-    const stati = await messe({ datei, testgruppen, ziele });
+    const gemessen = await messe({ datei, testgruppen, ziele, erlaubt: erlaubt(datei) });
+    const { stati } = gemessen;
     uebernimm(ergebnis[art], stati);
+    ergebnis.ausgenommen.push(...gemessen.ausgenommen);
     protokolliere(ergebnis, { datei, art, stati, tests: [...zuerst, ...danach], beginn });
   }
 }
 
-export async function messeGegenNeue({ dateien, nachDatei = () => false, ...messung }) {
-  const ergebnis = { mutanten: new Map(), gate: new Map(), jeDatei: [], gemessen: [] };
+const NICHTS_AUSNEHMEN = () => () => false;
+
+export async function messeGegenNeue({
+  dateien,
+  nachDatei = () => false,
+  erlaubt = NICHTS_AUSNEHMEN,
+  ...messung
+}) {
+  const ergebnis = {
+    mutanten: new Map(),
+    gate: new Map(),
+    jeDatei: [],
+    gemessen: [],
+    ausgenommen: [],
+  };
   for (const datei of dateien) {
-    await messeDateiGegenNeue(ergebnis, { datei, ...messung });
+    await messeDateiGegenNeue(ergebnis, { datei, erlaubt, ...messung });
     ergebnis.gemessen.push(datei);
     if (nachDatei(datei, ergebnis)) break;
   }

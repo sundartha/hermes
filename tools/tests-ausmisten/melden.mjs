@@ -14,6 +14,7 @@ import {
   pruefePlan,
   vereinige,
 } from "./entscheiden.mjs";
+import { UNVERAENDERT } from "./ausnehmen.mjs";
 import {
   FREIGEBER,
   freigegeben,
@@ -139,13 +140,30 @@ async function artefakte(github, { jobs, erwartet }) {
   return {
     ...gemessenesErgebnis(teile),
     issue: plan.daten.issue,
-    punkte: freigabePunkte(plan.daten),
+    punkte: freigabePunkte(plan.daten, teile[BASIS]),
     fehler: [...bisher, ...fehler],
   };
 }
 
-export function freigabePunkte(plan) {
+function eindeutig(liste) {
+  return [...new Map(liste.map((eintrag) => [JSON.stringify(eintrag), eintrag])).values()];
+}
+
+export function ausgenommeneFaelle(basisTeile) {
+  return eindeutig(basisTeile.flatMap(({ ausgenommen = [] }) => ausgenommen));
+}
+
+export function freigabePunkte(plan, basisTeile) {
+  const faelle = eindeutig(
+    ausgenommeneFaelle(basisTeile)
+      .filter(({ imBranch }) => imBranch !== UNVERAENDERT)
+      .map(({ test, name, imBranch }) => ({ test, name, imBranch })),
+  );
   return [
+    ...faelle.map(
+      ({ test, name, imBranch }) =>
+        `Ausgenommener Testfall im Branch ${imBranch}: ${test}: ${name}`,
+    ),
     ...(plan.unterdrueckungen ?? []).map(
       ({ datei, regel, vorher, nachher }) =>
         `Unterdrückung in eslint-suppressions.json gesenkt: ${datei} ${regel} ${vorher} → ${nachher}`,
@@ -160,6 +178,7 @@ function gemessenesErgebnis(teile) {
     basis: vereinige(teile[BASIS].map((teil) => beschraenke(teil, gemessen))),
     branch: vereinige(teile[BRANCH].map((teil) => beschraenke(teil, gemessen))),
     abgebrochen: teile[BRANCH].filter((teil) => teil.gemessen.length < teil.dateien.length),
+    ausgenommen: ausgenommeneFaelle(teile[BASIS]),
     wiederverwendet: teile[BASIS].filter((teil) => teil.wiederverwendet !== null).map(
       ({ nummer, wiederverwendet }) => ({ nummer, ...wiederverwendet }),
     ),
@@ -174,7 +193,7 @@ function abbruchVerstoesse(abgebrochen) {
 }
 
 export function urteilAusTeilen(teile, { fehler, plan }) {
-  const punkte = freigabePunkte(plan);
+  const punkte = freigabePunkte(plan, teile[BASIS]);
   return urteilFuer({ ...gemessenesErgebnis(teile), punkte, fehler });
 }
 
@@ -212,6 +231,21 @@ function wiederverwendungZeile(wiederverwendet) {
   return `- Basis wiederverwendet (gleiche Eingaben, Prüfsumme aus dem Protokoll jenes Laufs): ${teile.join(", ")}`;
 }
 
+function ausnahmenZeilen(ausgenommen) {
+  if (ausgenommen.length === 0) return [];
+  return [
+    "## Ausgenommene Testfälle",
+    "",
+    "Diese Testfälle bestehen ohne Umbau der Quelldateien und scheitern nur an der für die Messung umgebauten Datei; sie zählen für keinen Mutanten als tötend:",
+    "",
+    ...ausgenommen.map(
+      ({ datei, test, name, imBranch }) =>
+        `- \`${test}\`: ${name} (umgebaute Datei \`${datei}\`, im Branch ${imBranch})`,
+    ),
+    "",
+  ];
+}
+
 function freigabeZeilen({ punkte = [], freigabe }, kopf) {
   if (punkte.length === 0) return [];
   const stand = freigabe
@@ -236,6 +270,7 @@ export function prText({
   issue,
   kopf,
   wiederverwendet = [],
+  ausgenommen = [],
 }) {
   const dateien = basis.dateien.map((datei) => `\`${datei}\``);
   const { alt, neu } = basis.tests;
@@ -253,6 +288,7 @@ export function prText({
     "Jeder Mutant, den die alten Fassungen der geänderten Tests getötet haben, ist auch mit den Tests dieses Branches getötet, im Gate-Lauf ebenso.",
     "",
     ...freigabeZeilen(urteil, kopf),
+    ...ausnahmenZeilen(ausgenommen),
     ...issueZeilen(issue),
     "",
   ].join("\n");

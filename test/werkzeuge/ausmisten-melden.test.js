@@ -810,3 +810,57 @@ test("ausmisten-melden: eine ungültige Liste gesenkter Unterdrückungen setzt f
     "Liste der gesenkten Unterdrückungen ist ungültig",
   );
 });
+
+const AUSGENOMMEN = "liest den Quelltext";
+
+function mitAusnahme(imBranch, weiteres = {}) {
+  const fall = { datei: DATEI, test: ALTER_TEST, name: AUSGENOMMEN, imBranch };
+  return freigabeFall({
+    plan: { unterdrueckungen: [] },
+    basis: { ausgenommen: [fall] },
+    ...weiteres,
+  });
+}
+
+function ausnahmePunkt(stand) {
+  return `Ausgenommener Testfall im Branch ${stand}: ${ALTER_TEST}: ${AUSGENOMMEN}`;
+}
+
+test("ausmisten-melden: ein gelöschter ausgenommener Fall ohne Freigabe setzt failure", async (context) => {
+  erwarteFreigabeNoetig(await melde(context, mitAusnahme("gelöscht")), ausnahmePunkt("gelöscht"));
+});
+
+test("ausmisten-melden: ein geänderter ausgenommener Fall braucht ebenfalls die Freigabe", async (context) => {
+  erwarteFreigabeNoetig(await melde(context, mitAusnahme("geändert")), ausnahmePunkt("geändert"));
+});
+
+test("ausmisten-melden: ein ausgenommener Fall, den die Messung nicht zuordnen kann, braucht die Freigabe", async (context) => {
+  const stand = "nicht zuzuordnen";
+  erwarteFreigabeNoetig(await melde(context, mitAusnahme(stand)), ausnahmePunkt(stand));
+});
+
+test("ausmisten-melden: Antonios Zustimmung gibt einen gelöschten ausgenommenen Fall frei", async (context) => {
+  const reviews = [review(ANTONIO, "APPROVED")];
+  const ergebnis = await melde(context, mitAusnahme("gelöscht", { reviews }));
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
+  assert.equal(ergebnis.gesetzt.state, "success");
+});
+
+test("ausmisten-melden: ein unveränderter ausgenommener Fall braucht keine Freigabe und steht im PR-Text", async (context) => {
+  const ergebnis = await melde(context, mitAusnahme("unverändert", { pr: true, offen: false }));
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
+  const text = geoeffneterPrText(ergebnis);
+  assert.ok(
+    text.includes(
+      "- `test/post/doppelt.test.js`: liest den Quelltext (umgebaute Datei `src/post/eingang.js`, im Branch unverändert)",
+    ),
+    text,
+  );
+  assert.match(text, /## Ausgenommene Testfälle/);
+  assert.doesNotMatch(text, /Freigabe durch/);
+});
+
+test("ausmisten-melden: ein ausgenommener Fall ohne Angabe zum Branch macht das Artefakt ungültig", async (context) => {
+  const basis = { ausgenommen: [{ datei: DATEI, test: ALTER_TEST, name: AUSGENOMMEN }] };
+  erwarteRot(await melde(context, { basis }), "Liste der ausgenommenen Testfälle ist ungültig");
+});
