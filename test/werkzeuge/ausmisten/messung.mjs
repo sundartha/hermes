@@ -179,5 +179,5 @@ export async function messeUndMelde(context, branch, { dateien = {}, vorBranch }
   const gelesen = JSON.parse(readFileSync(join(artefakte, "basis-0", "basis-0.json"), "utf8"));
   const { anfragen } = stand.github;
   const status = anfragen.find(({ methode }) => methode === "POST")?.rumpf;
-  return { basis: basisLaeufe[0], zweig: zweige[0], melden, gelesen, status, sammeln };
+  return { basis: basisLaeufe[0], zweig: zweige[0], melden, gelesen, status, sammeln, artefakte };
 }

@@ -15,6 +15,7 @@ import {
   pruefePlan,
   pruefsumme,
   rang,
+  verstoesseIn,
 } from "./entscheiden.mjs";
 import { ausloeser } from "./herkunft.mjs";
 import { git, gitGelingt, leseBereiche, pfadVerstoesse, testaenderungen } from "./pfade.mjs";
@@ -26,6 +27,8 @@ const ZAHLENSPALTE = /^(\d+)\t(\d+)\t/;
 const EINRUECKUNG = 2;
 const MS_JE_SEKUNDE = 1000;
 const ISSUE_ZEILE = /^Issue: #(\d{1,9})$/m;
+const EXIT_GRUEN = 0;
+const EXIT_ROT = 1;
 
 function geprueft(herkunft) {
   const master = git(["rev-parse", "HEAD"]).trim();
@@ -250,6 +253,24 @@ function legeBranchDarueber({ master, kopf }) {
   if (diff !== "") git(["apply", "--index", "--whitespace=nowarn", "-"], cwd(), diff);
 }
 
+function abbruchBeiVerstoss(daten, verstoesse) {
+  return (datei, ergebnis) => {
+    const branch = { mutanten: statusListe(ergebnis.mutanten), gate: statusListe(ergebnis.gate) };
+    verstoesse.push(...verstoesseIn([datei], daten, branch));
+    return verstoesse.length > 0;
+  };
+}
+
+function meldeAbbruch(nummer, { dateien, gemessen, verstoesse }) {
+  if (verstoesse.length === 0) return EXIT_GRUEN;
+  for (const verstoss of verstoesse) console.log(`Verstoß: ${verstoss}`);
+  const offen = dateien.length - gemessen.length;
+  console.log(
+    `Paket ${nummer}: rot nach ${gemessen.at(-1)}; ${offen} weitere Dateien nicht mehr gemessen.`,
+  );
+  return EXIT_ROT;
+}
+
 export async function branch({ aus, planDaten, basisDaten, paket }) {
   const vorbereitung = await vorbereitet();
   const { lauf, werkzeug } = vorbereitung;
@@ -260,20 +281,24 @@ export async function branch({ aus, planDaten, basisDaten, paket }) {
   legeBranchDarueber(lauf);
   const graph = await werkzeug.importgraph();
   const vorlauf = await werkzeug.trockenlauf(daten.tests.neu);
+  const verstoesse = [];
   const gemessen = await werkzeug.messeGegenNeue({
     dateien,
     basis: getoetet,
     neu: daten.tests.neu,
     graph,
     gates: werkzeug.gateMenge(),
+    nachDatei: abbruchBeiVerstoss(daten, verstoesse),
   });
   schreibeErgebnis(aus, paketName(BRANCH, nummer), {
     ...kopfdaten(vorbereitung, dateien),
     art: BRANCH,
     paket: nummer,
+    gemessen: gemessen.gemessen,
     mutanten: statusListe(gemessen.mutanten),
     gate: statusListe(gemessen.gate),
     trockenlauf: vorlauf,
     jeDatei: gemessen.jeDatei,
   });
+  return meldeAbbruch(nummer, { dateien, gemessen: gemessen.gemessen, verstoesse });
 }
