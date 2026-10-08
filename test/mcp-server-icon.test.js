@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { startServer, mcpPost, readToolResult, externalIp, BASE_ENV } from "./helpers.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -26,10 +28,36 @@ test("T-T3-AC1: public/brand/hermes-icon.png existiert und ist ein valides PNG",
   assert.ok(bytes.subarray(0, 8).equals(PNG_SIGNATURE), "PNG-Signatur-Bytes fehlen/falsch");
 });
 
-test("T-T3-AC2: src/mcp-server.js (stdio/Claude-Desktop) verdrahtet HERMES_SERVER_INFO, kein eigenes Literal mehr", () => {
-  const src = fs.readFileSync(path.join(ROOT, "src", "mcp-server.js"), "utf8");
-  assert.match(src, /new McpServer\(HERMES_SERVER_INFO, serverOptions\)/, "nutzt die geteilte Konstante");
-  assert.doesNotMatch(src, /name:\s*"hermes"/, "kein dupliziertes {name,version}-Literal mehr (G5/S2)");
+const STDIO_EINSTIEG = "src/mcp-server.js";
+const HTTP_OK = 200;
+
+async function stdioServerInfo() {
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [STDIO_EINSTIEG],
+    cwd: ROOT,
+    env: { ...BASE_ENV },
+    stderr: "pipe",
+  });
+  const client = new Client({ name: "mcp-server-icon", version: "0.0.1" });
+  try {
+    await client.connect(transport);
+    return client.getServerVersion();
+  } finally {
+    await client.close();
+  }
+}
+
+test("T-T3-AC2: der stdio-Server (Claude Desktop) meldet dieselbe serverInfo samt Icons wie POST /mcp", async () => {
+  const srv = await startServer();
+  try {
+    const res = await mcpPost(`${srv.localUrl}/mcp`, null, INITIALIZE_BODY);
+    assert.equal(res.status, HTTP_OK);
+    const { serverInfo } = await readToolResult(res);
+    assert.deepEqual(await stdioServerInfo(), serverInfo);
+  } finally {
+    await srv.stop();
+  }
 });
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
