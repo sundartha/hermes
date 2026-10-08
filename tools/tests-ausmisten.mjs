@@ -8,12 +8,14 @@ const AUFRUF = [
   "| basis --plan-daten <ordner> --paket <nr> --aus <ordner>",
   "| branch --plan-daten <ordner> --basis-daten <ordner> --paket <nr> --aus <ordner>",
   "| melden [--pr]",
+  "| lokal --bereich <name> --master <rev> [--kopf <rev>] [--speicher <ordner>] [--aus <ordner>]",
 ].join(" ");
 const PFLICHT = {
   planen: ["aus"],
   basis: ["plan-daten", "paket", "aus"],
   branch: ["plan-daten", "basis-daten", "paket", "aus"],
   melden: [],
+  lokal: ["bereich", "master"],
 };
 
 async function befehle() {
@@ -37,6 +39,7 @@ const BEFEHLE = new Map(
         paket: werte.paket,
       }),
     melden: async ({ pr }) => (await import("./tests-ausmisten/melden.mjs")).melden({ pr }),
+    lokal: async (werte) => (await import("./tests-ausmisten/lokal.mjs")).lokal(werte),
   }),
 );
 
@@ -49,6 +52,9 @@ async function main() {
       "basis-daten": { type: "string" },
       paket: { type: "string" },
       speicher: { type: "string" },
+      bereich: { type: "string" },
+      master: { type: "string" },
+      kopf: { type: "string" },
       pr: { type: "boolean", default: false },
     },
   });
