@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 import {
   SECRETS_PATTERN,
@@ -15,6 +15,7 @@ const NON_BLOCKING_PATTERNS = [/continue-on-error/, /\|\|\s*true/];
 const PULL_REQUEST_TARGET_PATTERN = /\bpull_request_target\b/;
 const USES_REFERENCE_PATTERN = /\buses:\s*["']?([^\s"'#]+)/;
 const COMMIT_SHA_REFERENCE_PATTERN = /@[0-9a-f]{40}$/;
+const LOCAL_WORKFLOW_PATTERN = /^\.\/\.github\/workflows\/([\w.-]+\.ya?ml)$/;
 const NPM_CI_PATTERN = /\bnpm\s+ci\b/;
 const STEP_NAME_PATTERN = /^\s*(?:-\s+)?name\s*:/;
 const IGNORE_SCRIPTS_PATTERN = /--ignore-scripts(?:=true)?(?=\s|$)/;
@@ -39,10 +40,14 @@ function pullRequestTarget(line) {
   return "pull_request_target ist als Auslöser verboten";
 }
 
-function actionWithoutCommitSha(line) {
-  const reference = USES_REFERENCE_PATTERN.exec(line)?.[1];
-  if (reference === undefined || COMMIT_SHA_REFERENCE_PATTERN.test(reference)) return undefined;
-  return `${reference} ist nicht per 40-stelliger Commit-SHA eingebunden`;
+function actionWithoutCommitSha(workflowDir) {
+  return (line) => {
+    const reference = USES_REFERENCE_PATTERN.exec(line)?.[1];
+    if (reference === undefined || COMMIT_SHA_REFERENCE_PATTERN.test(reference)) return undefined;
+    const local = LOCAL_WORKFLOW_PATTERN.exec(reference)?.[1];
+    if (local !== undefined && existsSync(join(workflowDir, local))) return undefined;
+    return `${reference} ist nicht per 40-stelliger Commit-SHA eingebunden`;
+  };
 }
 
 function npmCiWithInstallScripts(line) {
@@ -85,7 +90,6 @@ function environmentOutsideList(line) {
 const LINE_RULES = [
   ...NON_BLOCKING_PATTERNS.map(nonBlockingStepRule),
   pullRequestTarget,
-  actionWithoutCommitSha,
   npmCiWithInstallScripts,
 ];
 
@@ -97,7 +101,12 @@ function runsForPullRequests(lines) {
 function lineRulesFor(filePath, lines) {
   const listed = SECRET_WORKFLOWS.includes(basename(filePath));
   const pullRequestRules = runsForPullRequests(lines) ? [secretsInPullRequestWorkflow] : [];
-  const rules = [...LINE_RULES, ...pullRequestRules, ...structureRules(lines, { listed })];
+  const rules = [
+    ...LINE_RULES,
+    actionWithoutCommitSha(dirname(filePath)),
+    ...pullRequestRules,
+    ...structureRules(lines, { listed }),
+  ];
   if (listed) return rules;
   return [...rules, secretsOutsideList, productionEnvironmentOutsideList, environmentOutsideList];
 }
