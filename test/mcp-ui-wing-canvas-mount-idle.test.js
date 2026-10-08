@@ -1,12 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { HUD_CARD_CSS } from "../src/ui/hud-card-css.js";
+import { ausgelieferteWidgets, skriptbloecke } from "./gemeinsam/ausgelieferte-widgets.js";
 
-const scriptPath = fileURLToPath(new URL("../src/ui/wing-canvas-mount-idle.js", import.meta.url));
-const SCRIPT_SOURCE = readFileSync(scriptPath, "utf8");
+const MOUNT_HOST = "[data-wing-canvas]";
+const ANZEIGE_WIDGET = "agent-status";
+const [SCRIPT_SOURCE] = skriptbloecke((await ausgelieferteWidgets())[ANZEIGE_WIDGET]).filter((block) =>
+  block.includes(MOUNT_HOST),
+);
 
 function makeFakeElement({ src } = {}) {
   return { style: {}, src };
@@ -89,10 +91,13 @@ test("T-wing-mount-idle-success: mount() gelingt -> exakte Optionen, .wing wird 
 });
 
 test("T-wing-mount-idle-drift-guard: WING_CANVAS_SIZE_PX deckt sich mit --wing-size in HUD_CARD_CSS (86)", () => {
-  assert.match(SCRIPT_SOURCE, /var WING_CANVAS_SIZE_PX = 86;/, "benannte Konstante WING_CANVAS_SIZE_PX=86 im Quelltext");
-  assert.match(HUD_CARD_CSS, /--wing-size:86px/, "hud-card-css.js traegt denselben Wert");
-});
-
-test("T-wing-mount-idle-fps-cap-constant: WING_CANVAS_FPS_CAP=24 als benannte Konstante (H0-Entscheidungsregel)", () => {
-  assert.match(SCRIPT_SOURCE, /var WING_CANVAS_FPS_CAP = 24;/, "benannte Konstante WING_CANVAS_FPS_CAP=24 im Quelltext");
+  const { mountCalls } = runInSandbox({
+    querySelectorAnswers: {
+      [MOUNT_HOST]: {},
+      ".wing img": makeFakeElement({ src: "data:image/png;base64,x" }),
+      ".wing": makeFakeElement(),
+    },
+  });
+  const groesse = mountCalls[0].opts.size;
+  assert.ok(HUD_CARD_CSS.includes(`--wing-size:${groesse}px`), "hud-card-css.js traegt denselben Wert");
 });
