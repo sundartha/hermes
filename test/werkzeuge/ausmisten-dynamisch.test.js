@@ -4,7 +4,12 @@ import { test } from "node:test";
 
 import { erreichendeTests, importgraph } from "../../tools/tests-ausmisten/messmenge.mjs";
 import { FREMDE_QUELLE, GRUNDDATEIEN, RECHNEN_TEST } from "./ausmisten/hilfen.mjs";
-import { EXIT_GRUEN, EXIT_ROT, erwarteBranchUndMeldenGruen, messeUndMelde } from "./ausmisten/messung.mjs";
+import {
+  EXIT_GRUEN,
+  EXIT_ROT,
+  erwarteBranchUndMeldenGruen,
+  messeUndMelde,
+} from "./ausmisten/messung.mjs";
 import { probeDirectory } from "./probe-repo.js";
 
 const ZIEL = "src/rechnen.js";
@@ -45,57 +50,80 @@ async function erreicht(context, zeilen) {
   }
 }
 
-const FORMEN = {
-  "ein Literal mit Anhang": ['await import("../src/rechnen.js?stand=1");'],
-  "eine Vorlage mit berechnetem Anhang": [
-    "const stand = Date.now();",
-    "await import(`../src/rechnen.js?stand=${stand}`);",
-  ],
-  "eine Konstante": ['const PFAD = "../src/rechnen.js";', "await import(PFAD);"],
-  "eine Eigenschaft eines eingefrorenen Objekts": [
-    'const SEAM = Object.freeze({ module: "../src/rechnen.js" });',
-    "await import(SEAM.module);",
-  ],
-  "eine Eigenschaft eines Objekts in eckigen Klammern": [
-    'const SEAM = { "modul": "../src/rechnen.js" };',
-    'await import(SEAM["modul"]);',
-  ],
-  "eine URL neben import.meta.url": [
-    'await import(new URL("../src/rechnen.js", import.meta.url).href);',
-  ],
-  "eine URL als Konstante": [
-    'const ORT = new URL("../src/rechnen.js", import.meta.url);',
-    "await import(ORT.href);",
-  ],
-};
-
-for (const [form, zeilen] of Object.entries(FORMEN)) {
-  test(`ausmisten-dynamisch: ein dynamischer Import über ${form} erreicht die Datei`, async (context) => {
-    assert.deepEqual(await erreicht(context, zeilen), ["test/a.test.js"]);
-  });
+async function erwarteErreicht(context, zeilen) {
+  assert.deepEqual(await erreicht(context, zeilen), ["test/a.test.js"]);
 }
 
-const KEINE_IMPORTE = {
-  "der Pfad nur als Text": ['const PFAD = "../src/rechnen.js";', "void PFAD;"],
-  "eine veränderliche Variable": ['let pfad = "../src/rechnen.js";', "await import(pfad);"],
-  "eine Vorlage, die vor dem Anhang rechnet": [
+async function erwarteUnerreicht(context, zeilen) {
+  assert.deepEqual(await erreicht(context, zeilen), []);
+}
+
+test("ausmisten-dynamisch: ein dynamischer Import über ein Literal mit Anhang erreicht die Datei", async (context) => {
+  await erwarteErreicht(context, ['await import("../src/rechnen.js?stand=1");']);
+});
+
+test("ausmisten-dynamisch: ein dynamischer Import über eine Vorlage mit berechnetem Anhang erreicht die Datei", async (context) => {
+  await erwarteErreicht(context, [
+    "const stand = Date.now();",
+    "await import(`../src/rechnen.js?stand=${stand}`);",
+  ]);
+});
+
+test("ausmisten-dynamisch: ein dynamischer Import über eine Konstante erreicht die Datei", async (context) => {
+  await erwarteErreicht(context, ['const PFAD = "../src/rechnen.js";', "await import(PFAD);"]);
+});
+
+test("ausmisten-dynamisch: ein dynamischer Import über eine Eigenschaft eines eingefrorenen Objekts erreicht die Datei", async (context) => {
+  await erwarteErreicht(context, [
+    'const SEAM = Object.freeze({ module: "../src/rechnen.js" });',
+    "await import(SEAM.module);",
+  ]);
+});
+
+test("ausmisten-dynamisch: ein dynamischer Import über eine Eigenschaft eines Objekts in eckigen Klammern erreicht die Datei", async (context) => {
+  await erwarteErreicht(context, [
+    'const SEAM = { "modul": "../src/rechnen.js" };',
+    'await import(SEAM["modul"]);',
+  ]);
+});
+
+test("ausmisten-dynamisch: ein dynamischer Import über eine URL neben import.meta.url erreicht die Datei", async (context) => {
+  await erwarteErreicht(context, [
+    'await import(new URL("../src/rechnen.js", import.meta.url).href);',
+  ]);
+});
+
+test("ausmisten-dynamisch: ein dynamischer Import über eine URL als Konstante erreicht die Datei", async (context) => {
+  await erwarteErreicht(context, [
+    'const ORT = new URL("../src/rechnen.js", import.meta.url);',
+    "await import(ORT.href);",
+  ]);
+});
+
+test("ausmisten-dynamisch: der Pfad nur als Text erreicht die Datei nicht", async (context) => {
+  await erwarteUnerreicht(context, ['const PFAD = "../src/rechnen.js";', "void PFAD;"]);
+});
+
+test("ausmisten-dynamisch: eine veränderliche Variable erreicht die Datei nicht", async (context) => {
+  await erwarteUnerreicht(context, ['let pfad = "../src/rechnen.js";', "await import(pfad);"]);
+});
+
+test("ausmisten-dynamisch: eine Vorlage, die vor dem Anhang rechnet erreicht die Datei nicht", async (context) => {
+  await erwarteUnerreicht(context, [
     'const ordner = "src";',
     "await import(`../${ordner}/rechnen.js`);",
-  ],
-  "eine doppelt vergebene Konstante": [
+  ]);
+});
+
+test("ausmisten-dynamisch: eine doppelt vergebene Konstante erreicht die Datei nicht", async (context) => {
+  await erwarteUnerreicht(context, [
     'const PFAD = "../src/rechnen.js";',
     "{",
     '  const PFAD = "../src/anders.js";',
     "  await import(PFAD);",
     "}",
-  ],
-};
-
-for (const [form, zeilen] of Object.entries(KEINE_IMPORTE)) {
-  test(`ausmisten-dynamisch: ${form} erreicht die Datei nicht`, async (context) => {
-    assert.deepEqual(await erreicht(context, zeilen), []);
-  });
-}
+  ]);
+});
 
 test("ausmisten-dynamisch: ein umbenannter Test, der seine Datei über eine Naht lädt, bleibt grün", async (context) => {
   const neu = { [NAHT_TEST]: nahtTest("verdoppelt über die Naht, umbenannt") };
