@@ -108,7 +108,7 @@ export async function plane(context, branch, dateien = {}) {
     GITHUB_TOKEN: "actions-token",
     GITHUB_RUN_ID: LAUF_ID,
   };
-  const stand = { repo, umgebung, artefakte, routen, github };
+  const stand = { repo, umgebung, artefakte, routen, github, kopf };
   const planen = await laufe(
     {
       args: ["planen", "--aus", join(artefakte, "plan")],
@@ -230,5 +230,14 @@ export async function messeUndMelde(context, branch, { dateien = {}, vorBranch, 
   const { anfragen } = stand.github;
   const status = anfragen.find(({ methode }) => methode === "POST")?.rumpf;
   const [erste] = ketten;
-  return { basis: erste.basis, zweig: erste.zweig, melden, gelesen, status, artefakte, ketten };
+  return {
+    basis: erste.basis,
+    zweig: erste.zweig,
+    melden,
+    gelesen,
+    status,
+    artefakte,
+    ketten,
+    stand,
+  };
 }

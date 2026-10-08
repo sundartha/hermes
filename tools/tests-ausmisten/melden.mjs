@@ -101,7 +101,7 @@ function paketTeile(texte, { plan, summen, erwartet }) {
     );
     for (const { fehler: grund = [] } of gelesen) fehler.push(...grund);
     if (gelesen.every(({ daten }) => daten !== undefined)) {
-      teile[BASIS].push(gelesen[0].daten);
+      teile[BASIS].push({ ...gelesen[0].daten, nummer });
       teile[BRANCH].push({ ...gelesen[1].daten, nummer });
     }
   });
@@ -144,6 +144,9 @@ function gemessenesErgebnis(teile) {
     basis: vereinige(teile[BASIS].map((teil) => beschraenke(teil, gemessen))),
     branch: vereinige(teile[BRANCH].map((teil) => beschraenke(teil, gemessen))),
     abgebrochen: teile[BRANCH].filter((teil) => teil.gemessen.length < teil.dateien.length),
+    wiederverwendet: teile[BASIS].filter((teil) => teil.wiederverwendet !== null).map(
+      ({ nummer, wiederverwendet }) => ({ nummer, ...wiederverwendet }),
+    ),
   };
 }
 
@@ -173,7 +176,15 @@ function issueZeilen(issue) {
   return [`Closes #${issue}`];
 }
 
-export function prText({ bereich, basis, branch, urteil, adresse, issue }) {
+function wiederverwendungZeile(wiederverwendet) {
+  if (wiederverwendet.length === 0) return "- Basis: in diesem Lauf vollständig gemessen";
+  const teile = wiederverwendet.map(
+    ({ nummer, lauf, artefakt }) => `Paket ${nummer} aus Lauf ${lauf} (${artefakt})`,
+  );
+  return `- Basis wiederverwendet (gleiche Eingaben, Prüfsumme aus dem Protokoll jenes Laufs): ${teile.join(", ")}`;
+}
+
+export function prText({ bereich, basis, branch, urteil, adresse, issue, wiederverwendet = [] }) {
   const dateien = basis.dateien.map((datei) => `\`${datei}\``);
   const { alt, neu } = basis.tests;
   return [
@@ -185,6 +196,7 @@ export function prText({ bereich, basis, branch, urteil, adresse, issue }) {
     `- Gate-Lauf (nur Gate- und SG-Tests): ${urteil.gate.basis}, davon auf dem Branch getötet: ${urteil.gate.branch}`,
     `- Testzeilen: vorher ${basis.testzeilen.vorher}, nachher ${basis.testzeilen.nachher}`,
     `- Trockenlauf: vorher ${basis.trockenlauf.sekunden} s, nachher ${branch.trockenlauf.sekunden} s`,
+    wiederverwendungZeile(wiederverwendet),
     "",
     "Jeder Mutant, den die alten Fassungen der geänderten Tests getötet haben, ist auch mit den Tests dieses Branches getötet, im Gate-Lauf ebenso.",
     "",
