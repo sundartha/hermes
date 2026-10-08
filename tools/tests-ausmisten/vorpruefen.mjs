@@ -10,6 +10,8 @@ const GITLEAKS_VERSION = "8.30.1";
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const VERSION_VORSILBE = /^v/;
+const NUR_COMMIT = "^{commit}";
+const GITLEAKS_OPTION = "--gitleaks <pfad>";
 
 function pruefungen({ master, kopf, gitleaks }) {
   const basis = ["--basis", master];
@@ -56,7 +58,7 @@ function pruefungen({ master, kopf, gitleaks }) {
 
 function gitleaksFehler(gitleaks) {
   if (gitleaks === undefined) {
-    return `Die Option --gitleaks <pfad> fehlt; ohne Secret-Scan (gitleaks ${GITLEAKS_VERSION}) misst lokal nicht.`;
+    return `Die Option ${GITLEAKS_OPTION} fehlt; ohne Secret-Scan (gitleaks ${GITLEAKS_VERSION}) misst lokal nicht.`;
   }
   const lauf = spawnSync(gitleaks, ["version"], { encoding: "utf8" });
   const version = (lauf.stdout ?? "").trim().replace(VERSION_VORSILBE, "");
@@ -98,6 +100,6 @@ export function meldeVorpruefung(verstoesse) {
 
 export function vorpruefenBefehl({ kopf, gitleaks, aus }) {
   const master = git(["rev-parse", "HEAD"]).trim();
-  const ziel = git(["rev-parse", "--verify", `${kopf}^{commit}`]).trim();
+  const ziel = git(["rev-parse", "--verify", `${kopf}${NUR_COMMIT}`]).trim();
   return meldeVorpruefung(vorpruefen({ master, kopf: ziel, ordner: aus, gitleaks }));
 }

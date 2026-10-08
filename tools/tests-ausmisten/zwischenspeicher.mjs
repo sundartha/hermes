@@ -21,6 +21,7 @@ const WERKZEUG_PFADE = [
 const MAX_FRUEHERE_LAEUFE = 10;
 const GELESENE_LAEUFE = 30;
 const BASIS_NAME = /^basis-(\d+)$/;
+const VOLLE_SHA = "[0-9a-f]{40}";
 const UEBERNOMMEN = ["mutanten", "gate", "orte", "trockenlauf", "jeDatei", "ausgenommen"];
 
 function inhalte(master, { pfade, verzeichnis }) {
@@ -78,7 +79,7 @@ async function fruehereLaeufe(github, { branch, laufId }) {
   const { workflow_runs: laeufe = [] } = await github.hole(
     `/actions/workflows/${MESSUNG.datei}/runs?per_page=${GELESENE_LAEUFE}`,
   );
-  const titel = new RegExp(`^${KONTEXT} [0-9a-f]{40} `);
+  const titel = new RegExp(`^${KONTEXT} ${VOLLE_SHA} `);
   return laeufe
     .filter(
       ({ id, display_title: anzeige = "" }) =>
