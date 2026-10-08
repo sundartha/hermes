@@ -14,35 +14,31 @@ const DATEI = "src/beispiel.js";
 const ALTER_KOMMENTAR = "// alter Kommentar";
 const CODE = "export const wert = true;";
 
-function verzeichnisMitBestand(context, schluessel) {
-  return probeDirectory(context, { [BESTAND]: bestandsDatei(schluessel) });
-}
-
 function gemeldeteZeilen(directory, zeilen) {
   const regel = { directory, datei: DATEI, regel: RULE };
   return gemeldet({ ...regel, linterOptions: { noInlineConfig: true } }, zeilen);
 }
 
 test("keine-kommentare: ein Kommentar in einer neuen Datei wird gemeldet", (context) => {
-  const directory = verzeichnisMitBestand(context, []);
+  const directory = probeDirectory(context, {});
   const kommentare = ["// neu", "/* auch neu */", "/** JSDoc */"];
   assert.deepEqual(gemeldeteZeilen(directory, [CODE, ...kommentare]), kommentare);
 });
 
 test("keine-kommentare: jede andere Startzeile als #!/usr/bin/env node wird gemeldet", (context) => {
-  const directory = verzeichnisMitBestand(context, []);
+  const directory = probeDirectory(context, {});
   for (const startzeile of ["#!/usr/bin/node", "#!/usr/bin/env node --weil-es-schneller-ist", "#!/usr/bin/env  node"]) {
     assert.deepEqual(gemeldeteZeilen(directory, [startzeile, CODE]), [startzeile]);
   }
 });
 
 test("keine-kommentare: die Startzeile #!/usr/bin/env node ist kein Kommentar", (context) => {
-  const directory = verzeichnisMitBestand(context, []);
+  const directory = probeDirectory(context, {});
   assert.deepEqual(gemeldeteZeilen(directory, ["#!/usr/bin/env node", CODE]), []);
 });
 
 test("keine-kommentare: ein Abschaltkommentar für die Regel wird selbst gemeldet", (context) => {
-  const directory = verzeichnisMitBestand(context, []);
+  const directory = probeDirectory(context, {});
   const abschaltung = `// eslint-disable-next-line ${RULE}`;
   const dahinter = "// dahinter";
   assert.deepEqual(gemeldeteZeilen(directory, [abschaltung, dahinter, CODE]), [
@@ -56,7 +52,7 @@ test("keine-kommentare: ein Abschaltkommentar für die Regel wird selbst gemelde
 const DIREKTIVE_OBEN = '"weil es so sein muss";';
 
 test("keine-kommentare: eine Direktive mit Text wird gemeldet, \"use strict\" nicht", (context) => {
-  const directory = verzeichnisMitBestand(context, []);
+  const directory = probeDirectory(context, {});
   const innen = '"auch hier eine Begründung";';
   const zeilen = ['"use strict";', DIREKTIVE_OBEN, "export function f() {", "'use strict';", innen, "return 1;", "}"];
   assert.deepEqual(gemeldeteZeilen(directory, zeilen), [DIREKTIVE_OBEN, innen]);
