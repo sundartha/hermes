@@ -28,11 +28,10 @@ const KONFIGURATION = Object.fromEntries(
 const BANK = "regression";
 const ARBEITSORDNER = join("node_modules", ".cache", "tests-ausmisten");
 const LEERRAUM = /\s+/g;
-const STRYKER_LAUF = fileURLToPath(new URL("stryker-lauf.mjs", import.meta.url));
+const LAUF_SKRIPT = fileURLToPath(new URL("stryker-lauf.mjs", import.meta.url));
 const FAELLE_BERICHT = fileURLToPath(new URL("faelle-bericht.mjs", import.meta.url));
 const BERICHT_OPTION = /^--test-reporter/;
 const SANDBOX = /^sandbox-/;
-const AKTIVER_MUTANT = "__STRYKER_ACTIVE_MUTANT__";
 const KEIN_PROZESS = "ESRCH";
 const MS_JE_SEKUNDE = 1000;
 const NACHKOMMA = 10;
@@ -79,7 +78,7 @@ async function strykerImEigenenProzess(optionen) {
   try {
     const [auftrag, antwort] = [join(ordner, "optionen.json"), join(ordner, "ergebnis.json")];
     writeFileSync(auftrag, JSON.stringify(optionen));
-    const exit = await inEigenerGruppe([STRYKER_LAUF, auftrag, antwort], {
+    const exit = await inEigenerGruppe([LAUF_SKRIPT, auftrag, antwort], {
       stdio: ["ignore", "inherit", "inherit"],
     });
     if (exit !== 0) throw new Error(`Der Stryker-Lauf endete mit Exit ${exit}.`);
@@ -123,12 +122,6 @@ async function strykerLauf(lauf) {
   }
 }
 
-function testumgebung() {
-  const umgebung = { ...env, NODE_ENV: "test" };
-  delete umgebung[AKTIVER_MUTANT];
-  return umgebung;
-}
-
 async function testfaelle(tests, verzeichnis) {
   const ordner = neuerArbeitsordner("faelle");
   const ziel = join(cwd(), ordner, "faelle.jsonl");
@@ -142,7 +135,7 @@ async function testfaelle(tests, verzeichnis) {
         `--test-reporter-destination=${ziel}`,
         ...tests,
       ],
-      { cwd: verzeichnis, stdio: "ignore", env: testumgebung() },
+      { cwd: verzeichnis, stdio: "ignore", env: { ...env, NODE_ENV: "test" } },
     );
     return faelleAusBericht(readFileSync(ziel, "utf8"), verzeichnis);
   } finally {
