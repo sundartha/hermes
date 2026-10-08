@@ -43,7 +43,7 @@ const LAUF_ADRESSE = `https://github.com/${REPOSITORY}/actions/runs/${LAUF_ID}`;
 
 function artefaktDaten(name, master, felder = {}) {
   const gemeinsam = {
-    format: 1,
+    format: 2,
     art: name,
     kopf: KOPF,
     master,
@@ -60,7 +60,9 @@ function artefaktDaten(name, master, felder = {}) {
     tests: { alt: [ALTER_TEST], neu: [] },
     orte: { [MUTANT]: ZEILEN_MUTANT, [BLOCK]: ZEILEN_BLOCK },
   };
-  return { ...gemeinsam, ...(name === "basis" ? basis : {}), ...felder };
+  const daten = { ...gemeinsam, ...(name === "basis" ? basis : {}), ...felder };
+  if (name === "branch" && !Object.hasOwn(felder, "gemessen")) daten.gemessen = daten.dateien;
+  return daten;
 }
 
 function alsText(daten) {
@@ -73,7 +75,7 @@ function summe(text) {
 
 function planDaten(master, felder = {}) {
   return {
-    format: 1,
+    format: 2,
     art: "plan",
     kopf: KOPF,
     master,
@@ -522,4 +524,41 @@ test("ausmisten-melden: ein Plan mit ungültiger Issue-Nummer setzt failure", as
     await melde(context, { plan: { issue: "12; rm" } }),
     "Plan: Issue-Nummer ist ungültig",
   );
+});
+
+test("ausmisten-melden: ein abgebrochenes Branch-Paket nennt den verlorenen Mutanten und die nicht gemessene Datei", async (context) => {
+  const dateien = [DATEI, ZWEITE_DATEI];
+  const zusatz = () => ({
+    plan: { pakete: [{ mutanten: 3, dateien }] },
+    basis: {
+      dateien,
+      mutanten: { [MUTANT]: "Killed", [ZWEITER_MUTANT]: "Killed" },
+      gate: {},
+      erreicht: dateien,
+      erreichtGate: [],
+      orte: { [MUTANT]: ZEILEN_MUTANT, [ZWEITER_MUTANT]: ZEILEN_MUTANT },
+    },
+    branch: { dateien, gemessen: [DATEI], mutanten: { [MUTANT]: "Survived" }, gate: {} },
+  });
+  const ergebnis = await melde(context, { zusatz, ergebnisse: { branch: "failure" } });
+  erwarteRot(ergebnis, `Mutant auf dem Branch nicht mehr getötet: ${MUTANT}`);
+  assert.match(ergebnis.ausgabe, /Job branch endete mit failure/);
+  assert.match(
+    ergebnis.ausgabe,
+    /Paket 0 nach dem ersten Verstoß abgebrochen, nicht gemessen: src\/post\/zweite\.js/,
+  );
+  assert.doesNotMatch(ergebnis.ausgabe, new RegExp(`nicht mehr getötet: ${ZWEITE_DATEI}`));
+});
+
+test("ausmisten-melden: ein Branch-Artefakt, das nicht alle Dateien gemessen hat, ist auch bei grünen Jobs rot", async (context) => {
+  const ergebnis = await melde(context, { branch: { gemessen: [] } });
+  erwarteRot(
+    ergebnis,
+    "Paket 0 nach dem ersten Verstoß abgebrochen, nicht gemessen: src/post/eingang.js",
+  );
+});
+
+test("ausmisten-melden: ein Branch-Artefakt mit gemessenen Dateien außerhalb des Pakets setzt failure", async (context) => {
+  const ergebnis = await melde(context, { branch: { gemessen: [ZWEITE_DATEI] } });
+  erwarteRot(ergebnis, "Liste der gemessenen Dateien ist ungültig");
 });

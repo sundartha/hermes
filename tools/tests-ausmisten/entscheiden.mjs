@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const FORMAT = 1;
+export const FORMAT = 2;
 export const BASIS = "basis";
 export const BRANCH = "branch";
 export const PLAN_ART = "plan";
@@ -121,6 +121,14 @@ function basisFehler(daten) {
   return pruefungen.filter(([gilt]) => !gilt).map(([, grund]) => grund);
 }
 
+function branchFehler(daten) {
+  const dateien = Array.isArray(daten.dateien) ? daten.dateien : [];
+  const gemessen = Array.isArray(daten.gemessen) ? daten.gemessen : [];
+  const anfang = gemessen.every((datei, index) => datei === dateien[index]);
+  if (istSortierteListe(daten.gemessen, QUELLDATEI) && anfang) return [];
+  return ["Liste der gemessenen Dateien ist ungültig"];
+}
+
 function leseDatei(ordner, name) {
   let eintraege;
   try {
@@ -154,7 +162,7 @@ export function pruefeArtefakt({ name, art, text, summe, erwartet }) {
   if (daten === undefined) return { fehler: [`Artefakt ${name} ist kein JSON-Objekt`] };
   const schema = [
     ...gemeinsameFehler(daten, art, erwartet),
-    ...(art === BASIS ? basisFehler(daten) : []),
+    ...(art === BASIS ? basisFehler(daten) : branchFehler(daten)),
   ];
   if (schema.length > 0) return { fehler: schema.map((grund) => `Artefakt ${name}: ${grund}`) };
   return { daten };
@@ -281,6 +289,27 @@ export function entscheide(basis, branch) {
     ),
   ];
   return { gruen: verstoesse.length === 0, verstoesse, mutanten, gate };
+}
+
+function nurIn(dateien, liste) {
+  return Object.fromEntries(
+    Object.entries(liste).filter(([schluessel]) => datei(schluessel, dateien) !== undefined),
+  );
+}
+
+export function beschraenke(basis, dateien) {
+  return {
+    ...basis,
+    dateien: basis.dateien.filter((eintrag) => dateien.includes(eintrag)),
+    mutanten: nurIn(dateien, basis.mutanten),
+    gate: nurIn(dateien, basis.gate),
+  };
+}
+
+export function verstoesseIn(dateien, basis, branch) {
+  const teil = beschraenke(basis, dateien);
+  const gemessen = { mutanten: nurIn(dateien, branch.mutanten), gate: nurIn(dateien, branch.gate) };
+  return entscheide(teil, gemessen).verstoesse;
 }
 
 export function beschreibung({ gruen, mutanten, gate }) {

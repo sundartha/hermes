@@ -3,10 +3,11 @@ import { isDeepStrictEqual } from "node:util";
 
 import { githubZugang } from "../auftrag/pruefer-github.mjs";
 import { laufAdresse } from "../ziele/ausgabe.mjs";
-import { PLAN, ladeArtefakte, paketName } from "./artefakte.mjs";
+import { PLAN, ladeVorhandene, paketName } from "./artefakte.mjs";
 import {
   BASIS,
   BRANCH,
+  beschraenke,
   beschreibung,
   entscheide,
   pruefeArtefakt,
@@ -66,20 +67,34 @@ function jobDaten(jobs) {
   if (!summenGueltig) {
     fehler.push("Die Prüfsummen der Basis-Pakete fehlen oder passen nicht zur Paketliste");
   }
-  return { fehler, pakete, summen };
+  return { fehler, pakete, summen, lesbar: paketeGueltig && summenGueltig };
+}
+
+function paketArtefakt(texte, { name, art, summe, erwartet, dateien }) {
+  if (!texte.has(name)) return { fehler: [] };
+  const ergebnis = pruefeArtefakt({ name, art, text: texte.get(name), summe, erwartet });
+  if (ergebnis.fehler) return ergebnis;
+  if (isDeepStrictEqual(ergebnis.daten.dateien, dateien)) return ergebnis;
+  return { fehler: [`Artefakt ${name} hat andere Dateien gemessen als geplant`] };
 }
 
 function paketTeile(texte, { plan, summen, erwartet }) {
   const fehler = [];
   const teile = { [BASIS]: [], [BRANCH]: [] };
   plan.pakete.forEach(({ dateien }, nummer) => {
-    for (const art of [BASIS, BRANCH]) {
-      const name = paketName(art, nummer);
-      const summe = art === BASIS ? summen[nummer] : undefined;
-      const ergebnis = pruefeArtefakt({ name, art, text: texte.get(name), summe, erwartet });
-      if (ergebnis.fehler) fehler.push(...ergebnis.fehler);
-      else if (isDeepStrictEqual(ergebnis.daten.dateien, dateien)) teile[art].push(ergebnis.daten);
-      else fehler.push(`Artefakt ${name} hat andere Dateien gemessen als geplant`);
+    const gelesen = [BASIS, BRANCH].map((art) =>
+      paketArtefakt(texte, {
+        name: paketName(art, nummer),
+        art,
+        summe: art === BASIS ? summen[nummer] : undefined,
+        erwartet,
+        dateien,
+      }),
+    );
+    for (const { fehler: grund = [] } of gelesen) fehler.push(...grund);
+    if (gelesen.every(({ daten }) => daten !== undefined)) {
+      teile[BASIS].push(gelesen[0].daten);
+      teile[BRANCH].push({ ...gelesen[1].daten, nummer });
     }
   });
   return { fehler, teile };
@@ -87,41 +102,57 @@ function paketTeile(texte, { plan, summen, erwartet }) {
 
 async function artefakte(github, { jobs, erwartet }) {
   const geplant = jobDaten(jobs);
-  if (geplant.fehler.length > 0) return { fehler: geplant.fehler };
+  if (!geplant.lesbar) return { fehler: geplant.fehler };
   const nummern = geplant.pakete;
   const namen = [
     PLAN,
     ...nummern.map((nummer) => paketName(BASIS, nummer)),
     ...nummern.map((nummer) => paketName(BRANCH, nummer)),
   ];
-  const geladen = await ladeArtefakte(github, { laufId: env.GITHUB_RUN_ID, erwartet: namen });
-  if (geladen.fehler.length > 0) return { fehler: geladen.fehler };
+  const geladen = await ladeVorhandene(github, { laufId: env.GITHUB_RUN_ID, erwartet: namen });
+  const bisher = [...geplant.fehler, ...geladen.fehler];
+  if (!geladen.texte.has(PLAN)) return { fehler: bisher };
   const plan = pruefePlan({
     text: geladen.texte.get(PLAN),
     summe: jobs.planen.outputs.pruefsumme,
     erwartet,
   });
-  if (plan.fehler) return { fehler: plan.fehler };
+  if (plan.fehler) return { fehler: [...bisher, ...plan.fehler] };
   if (plan.daten.pakete.length !== nummern.length)
-    return { fehler: ["Plan und Paketliste passen nicht zusammen"] };
+    return { fehler: [...bisher, "Plan und Paketliste passen nicht zusammen"] };
   const { fehler, teile } = paketTeile(geladen.texte, {
     plan: plan.daten,
     summen: geplant.summen,
     erwartet,
   });
-  if (fehler.length > 0) return { fehler };
+  return { ...gemessenesErgebnis(teile), issue: plan.daten.issue, fehler: [...bisher, ...fehler] };
+}
+
+function gemessenesErgebnis(teile) {
+  if (teile[BRANCH].length === 0) return {};
+  const gemessen = teile[BRANCH].flatMap((teil) => teil.gemessen);
   return {
-    basis: vereinige(teile[BASIS]),
-    branch: vereinige(teile[BRANCH]),
-    issue: plan.daten.issue,
-    fehler: [],
+    basis: vereinige(teile[BASIS].map((teil) => beschraenke(teil, gemessen))),
+    branch: vereinige(teile[BRANCH].map((teil) => beschraenke(teil, gemessen))),
+    abgebrochen: teile[BRANCH].filter((teil) => teil.gemessen.length < teil.dateien.length),
   };
 }
 
-function urteilFuer({ basis, branch, fehler }) {
-  if (fehler.length === 0) return entscheide(basis, branch);
-  const kurz = `rot: ${fehler.join("; ")}`.slice(0, MAX_ROTE_BESCHREIBUNG);
-  return { gruen: false, verstoesse: fehler, kurz };
+function abbruchVerstoesse(abgebrochen) {
+  return abgebrochen.map(
+    ({ nummer, dateien, gemessen }) =>
+      `Paket ${nummer} nach dem ersten Verstoß abgebrochen, nicht gemessen: ${dateien.filter((datei) => !gemessen.includes(datei)).join(", ")}`,
+  );
+}
+
+function urteilFuer({ basis, branch, abgebrochen = [], fehler }) {
+  const urteil = basis === undefined ? undefined : entscheide(basis, branch);
+  const gemessen = [...(urteil?.verstoesse ?? []), ...abbruchVerstoesse(abgebrochen)];
+  const verstoesse = [...fehler, ...gemessen];
+  if (fehler.length === 0 && urteil !== undefined)
+    return { ...urteil, gruen: verstoesse.length === 0, verstoesse };
+  const kurz = `rot: ${verstoesse.join("; ")}`.slice(0, MAX_ROTE_BESCHREIBUNG);
+  return { gruen: false, verstoesse, kurz };
 }
 
 function issueZeilen(issue) {

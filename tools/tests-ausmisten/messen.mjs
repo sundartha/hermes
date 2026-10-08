@@ -193,25 +193,30 @@ function getoeteteIn(datei, liste) {
   );
 }
 
-export async function messeGegenNeue({ dateien, basis, neu, graph, gates }) {
-  const ergebnis = { mutanten: new Map(), gate: new Map(), jeDatei: [] };
-  const neuGate = neu.filter((test) => gates.has(test));
+async function messeDateiGegenNeue(ergebnis, { datei, basis, neu, graph, gates }) {
+  const uebrige = erreichendeTests(datei, graph).filter((test) => !neu.includes(test));
+  const plaene = [
+    ["mutanten", neu, uebrige],
+    ["gate", neu.filter((test) => gates.has(test)), uebrige.filter((test) => gates.has(test))],
+  ];
+  for (const [art, zuerst, danach] of plaene) {
+    const getoetet = getoeteteIn(datei, basis[art]);
+    if (getoetet.length === 0) continue;
+    const beginn = Date.now();
+    const testgruppen = [...gruppen(zuerst), ...nachTests(datei, danach, graph)];
+    const ziele = new Map(getoetet.map(([schluessel, { zeilen }]) => [schluessel, zeilen]));
+    const stati = await messe({ datei, testgruppen, ziele });
+    uebernimm(ergebnis[art], stati);
+    protokolliere(ergebnis, { datei, art, stati, tests: [...zuerst, ...danach], beginn });
+  }
+}
+
+export async function messeGegenNeue({ dateien, nachDatei = () => false, ...messung }) {
+  const ergebnis = { mutanten: new Map(), gate: new Map(), jeDatei: [], gemessen: [] };
   for (const datei of dateien) {
-    const uebrige = erreichendeTests(datei, graph).filter((test) => !neu.includes(test));
-    const plaene = [
-      ["mutanten", neu, uebrige],
-      ["gate", neuGate, uebrige.filter((test) => gates.has(test))],
-    ];
-    for (const [art, zuerst, danach] of plaene) {
-      const getoetet = getoeteteIn(datei, basis[art]);
-      if (getoetet.length === 0) continue;
-      const beginn = Date.now();
-      const testgruppen = [...gruppen(zuerst), ...nachTests(datei, danach, graph)];
-      const ziele = new Map(getoetet.map(([schluessel, { zeilen }]) => [schluessel, zeilen]));
-      const stati = await messe({ datei, testgruppen, ziele });
-      uebernimm(ergebnis[art], stati);
-      protokolliere(ergebnis, { datei, art, stati, tests: [...zuerst, ...danach], beginn });
-    }
+    await messeDateiGegenNeue(ergebnis, { datei, ...messung });
+    ergebnis.gemessen.push(datei);
+    if (nachDatei(datei, ergebnis)) break;
   }
   return ergebnis;
 }
