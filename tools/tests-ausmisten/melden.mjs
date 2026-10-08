@@ -139,7 +139,7 @@ export function prText({ bereich, basis, branch, urteil, adresse, issue }) {
   return [
     `Ausmisten im Bereich ${bereich}, gemessen im Lauf ${adresse}.`,
     "",
-    `- Gemessene src-Dateien: ${dateien.length} (${dateien.join(", ")})`,
+    `- Gemessene Dateien: ${dateien.length} (${dateien.join(", ")})`,
     `- Geänderte Testdateien: ${alt.length} auf master, ${neu.length} im Branch`,
     `- Von den alten Fassungen getötete Mutanten: ${urteil.mutanten.basis}, davon auf dem Branch getötet: ${urteil.mutanten.branch}`,
     `- Gate-Lauf (nur Gate- und SG-Tests): ${urteil.gate.basis}, davon auf dem Branch getötet: ${urteil.gate.branch}`,

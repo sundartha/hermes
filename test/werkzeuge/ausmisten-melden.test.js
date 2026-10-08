@@ -330,7 +330,7 @@ test("ausmisten-melden: ein Artefakt für einen anderen Bereich setzt failure", 
 
 test("ausmisten-melden: eine ungültige Dateiliste setzt failure", async (context) => {
   erwarteRot(
-    await melde(context, { branch: { dateien: ["tools/x.mjs"] } }),
+    await melde(context, { branch: { dateien: ["docs/x.mjs"] } }),
     "Dateiliste ist ungültig",
   );
 });

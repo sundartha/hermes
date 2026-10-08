@@ -115,7 +115,7 @@ async function mengen({ lauf, bereiche, werkzeug }) {
     graph: branchSicht.graph,
   });
   console.log(
-    `Bereich ${lauf.bereich}: ${menge.dateien.length} src-Dateien, ${menge.alt.length} geänderte Testdateien auf master, ${neu.length} im Branch.`,
+    `Bereich ${lauf.bereich}: ${menge.dateien.length} Dateien zum Mutieren, ${menge.alt.length} geänderte Testdateien auf master, ${neu.length} im Branch.`,
   );
   return { graph, branchSicht, menge, neu };
 }

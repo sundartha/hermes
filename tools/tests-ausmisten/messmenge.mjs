@@ -11,13 +11,15 @@ import { git, gitGelingt, quellenDesBereichs, testpfadFrei } from "./pfade.mjs";
 
 export const TESTDATEI = /^test\/.+\.test\.[cm]?js$/;
 const QUELLDATEI = /^src\/.+\.[cm]?js$/;
+const MESSBAR = /^(?:src|scripts|tools)\/.+\.[cm]?js$/;
 const TESTHILFE = /^test\//;
 const WURZELN = ["src", "test"];
 const OPTIONEN = { doNotFollow: { path: "node_modules" }, moduleSystems: ["es6", "cjs"] };
 const KEIN_TREFFER = 1;
 const QUELLE_IN_TEXT = /["'`][^"'`\n]*?\bsrc\/([\w./-]+\.[cm]?js)(?=["'`?#])/g;
 const WERKZEUGPFAD = /^(?:tools|scripts)\//;
-const WERKZEUG_DATEI_IN_TEXT = /(?:^|[^\w-])(?:tools|scripts)\/[\w./-]*\.(?:mjs|cjs|js|sh|json)\b/;
+const WERKZEUG_DATEI_IN_TEXT =
+  /(?:^|[^\w-])((?:tools|scripts)\/[\w./-]*\.(?:mjs|cjs|js|sh|json))\b/g;
 const SKRIPT = /\.[cm]?js$/;
 const COMMONJS = /\.cjs$/;
 const MAX_GIT_AUSGABE = 268_435_456;
@@ -111,7 +113,7 @@ function direkteQuellen(startpfade, graph) {
   const quellen = new Set();
   for (const datei of besucht) {
     for (const ziel of graph.importe.get(datei) ?? []) {
-      if (QUELLDATEI.test(ziel)) quellen.add(ziel);
+      if (MESSBAR.test(ziel)) quellen.add(ziel);
       else if (TESTHILFE.test(ziel)) besucht.add(ziel);
     }
   }
@@ -180,29 +182,34 @@ function literale(datei, text) {
   return werte;
 }
 
-function nenntWerkzeugdatei(datei, text) {
+function werkzeugeInText(datei, text) {
   const teile = SKRIPT.test(datei) ? literale(datei, text) : [text];
-  return teile.some((teil) => WERKZEUG_DATEI_IN_TEXT.test(teil));
+  return teile.flatMap((teil) =>
+    [...teil.matchAll(WERKZEUG_DATEI_IN_TEXT)].map(([, pfad]) => pfad),
+  );
 }
 
 function testVerstoesse(test, { alt, dateien }) {
   const { besucht, ziele } = kette(test, alt.graph);
   const vorhanden = new Set(quelldateien(alt.graph));
   const quellen = [
-    ...ziele.filter((ziel) => QUELLDATEI.test(ziel)),
+    ...ziele.filter((ziel) => MESSBAR.test(ziel)),
     ...genannteQuellen(besucht, { rev: alt.rev, vorhanden }),
   ];
   const befunde = [];
   if (!quellen.some((quelle) => dateien.has(quelle))) {
     befunde.push(
-      `${test}: erreicht keine src-Datei der Messmenge; seine Wirkung lässt sich so nicht messen`,
+      `${test}: erreicht keine Datei der Messmenge unter src/, scripts/ oder tools/; seine Wirkung lässt sich so nicht messen`,
     );
   }
-  const werkzeug = ziele.filter((ziel) => WERKZEUGPFAD.test(ziel));
-  const genannt = besucht.filter((datei) => nenntWerkzeugdatei(datei, inhaltIm(alt.rev, datei)));
+  const importiert = new Set(ziele.filter((ziel) => dateien.has(ziel)));
+  const werkzeug = ziele.filter((ziel) => WERKZEUGPFAD.test(ziel) && !importiert.has(ziel));
+  const genannt = besucht.filter((datei) =>
+    werkzeugeInText(datei, inhaltIm(alt.rev, datei)).some((pfad) => !importiert.has(pfad)),
+  );
   if (werkzeug.length > 0 || genannt.length > 0) {
     befunde.push(
-      `${test}: prüft tools/ oder scripts/ (${[...werkzeug, ...genannt].join(", ")}); solche Tests mistet die Ausnahme nicht aus`,
+      `${test}: prüft tools/ oder scripts/ (${[...werkzeug, ...genannt].join(", ")}) über Dateien, die er nicht importiert, oder über Programme, die er startet; deren Mutanten misst Stryker nicht, solche Tests mistet die Ausnahme nicht aus`,
     );
   }
   return befunde;
