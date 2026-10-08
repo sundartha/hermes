@@ -282,11 +282,11 @@ function legeBranchDarueber({ master, kopf }) {
   if (diff !== "") git(["apply", "--index", "--whitespace=nowarn", "-"], cwd(), diff);
 }
 
-function abbruchBeiVerstoss(daten, verstoesse) {
+function abbruchBeiVerstoss(daten, verstoesse, alle) {
   return (datei, ergebnis) => {
     const branch = { mutanten: statusListe(ergebnis.mutanten), gate: statusListe(ergebnis.gate) };
     verstoesse.push(...verstoesseIn([datei], daten, branch));
-    return verstoesse.length > 0;
+    return !alle && verstoesse.length > 0;
   };
 }
 
@@ -294,13 +294,12 @@ function meldeAbbruch(nummer, { dateien, gemessen, verstoesse }) {
   if (verstoesse.length === 0) return EXIT_GRUEN;
   for (const verstoss of verstoesse) console.log(`Verstoß: ${verstoss}`);
   const offen = dateien.length - gemessen.length;
-  console.log(
-    `Paket ${nummer}: rot nach ${gemessen.at(-1)}; ${offen} weitere Dateien nicht mehr gemessen.`,
-  );
+  const rest = offen === 0 ? "alle Dateien gemessen" : `${offen} weitere Dateien nicht mehr gemessen`;
+  console.log(`Paket ${nummer}: rot nach ${gemessen.at(-1)}; ${rest}.`);
   return EXIT_ROT;
 }
 
-export async function branch({ aus, planDaten, basisDaten, paket }) {
+export async function branch({ aus, planDaten, basisDaten, paket, alle = false }) {
   const vorbereitung = await vorbereitet();
   const { lauf, werkzeug } = vorbereitung;
   const { nummer, dateien } = paketDes(geplant(planDaten, lauf), paket);
@@ -317,7 +316,7 @@ export async function branch({ aus, planDaten, basisDaten, paket }) {
     neu: daten.tests.neu,
     graph,
     gates: werkzeug.gateMenge(),
-    nachDatei: abbruchBeiVerstoss(daten, verstoesse),
+    nachDatei: abbruchBeiVerstoss(daten, verstoesse, alle),
   });
   schreibeErgebnis(aus, paketName(BRANCH, nummer), {
     ...kopfdaten(vorbereitung, dateien),

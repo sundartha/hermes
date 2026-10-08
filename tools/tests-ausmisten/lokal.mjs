@@ -84,6 +84,7 @@ function messeKette(stand, { nummer, pruefsumme }) {
       stand.ordner,
       "--aus",
       join(stand.ordner, paketName(BRANCH, nummer)),
+      ...(stand.alle ? ["--alle"] : []),
     ],
     umgebung: { PLAN_PRUEFSUMME: pruefsumme, BASIS_PRUEFSUMME: basis.werte.pruefsumme ?? "" },
   });
@@ -119,7 +120,8 @@ function messePakete(stand, { pakete, pruefsumme }) {
     const gruen = messeKette(stand, { nummer, pruefsumme });
     const basis = ausgabenAus(join(stand.ordner, `${paketName(BASIS, nummer)}.txt`));
     summen.push(basis.pruefsumme ?? "");
-    if (!gruen) {
+    if (!gruen && stand.alle) console.log(`Lokal: rot in Paket ${nummer}; weiter wegen --alle.`);
+    if (!gruen && !stand.alle) {
       console.log(`Lokal: rot in Paket ${nummer}; die übrigen Pakete werden nicht gemessen.`);
       return undefined;
     }
@@ -148,7 +150,7 @@ async function messe(stand, { master, kopf, bereich }) {
 }
 
 export async function lokal(optionen) {
-  const { bereich, kopf: kopfRev = "HEAD", speicher, aus, gitleaks } = optionen;
+  const { bereich, kopf: kopfRev = "HEAD", speicher, aus, gitleaks, alle = false } = optionen;
   const [master, kopf] = [sha(optionen.master), sha(kopfRev)];
   const ordner = aus ?? mkdtempSync(join(tmpdir(), "ausmisten-lokal-"));
   mkdirSync(ordner, { recursive: true });
@@ -167,7 +169,7 @@ export async function lokal(optionen) {
   };
   try {
     return await messe(
-      { ordner, arbeitsordner: arbeit, umgebung, speicher },
+      { ordner, arbeitsordner: arbeit, umgebung, speicher, alle },
       { master, kopf, bereich },
     );
   } finally {
