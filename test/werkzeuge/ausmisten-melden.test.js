@@ -46,7 +46,7 @@ const LAUF_ADRESSE = `https://github.com/${REPOSITORY}/actions/runs/${LAUF_ID}`;
 
 function artefaktDaten(name, master, felder = {}) {
   const gemeinsam = {
-    format: 2,
+    format: 3,
     art: name,
     kopf: KOPF,
     master,
@@ -55,6 +55,7 @@ function artefaktDaten(name, master, felder = {}) {
     mutanten: { [MUTANT]: "Killed", [BLOCK]: "Killed" },
     gate: { [MUTANT]: "Killed" },
     trockenlauf: { sekunden: 2, exit: 0 },
+    ausgenommen: [],
   };
   const basis = {
     erreicht: [DATEI],
@@ -80,7 +81,7 @@ function summe(text) {
 
 function planDaten(master, felder = {}) {
   const daten = {
-    format: 2,
+    format: 3,
     art: "plan",
     kopf: KOPF,
     master,
@@ -89,6 +90,7 @@ function planDaten(master, felder = {}) {
     tests: { alt: [ALTER_TEST], neu: [] },
     issue: null,
     pakete: [{ mutanten: 2, dateien: [DATEI] }],
+    unterdrueckungen: [],
     ...felder,
   };
   if (!Object.hasOwn(felder, "frueher")) daten.frueher = daten.pakete.map(() => null);
@@ -173,6 +175,8 @@ async function melde(context, angabe = {}) {
     [`POST /repos/${REPOSITORY}/statuses/${KOPF}`, {}],
     [`GET /repos/${REPOSITORY}/pulls`, fall.offenePrs ?? []],
     [`POST /repos/${REPOSITORY}/pulls`, { number: PR_NUMMER }],
+    [`PATCH /repos/${REPOSITORY}/pulls/${PR_NUMMER}`, { number: PR_NUMMER }],
+    ...(fall.routen ?? []),
     [
       `GET /repos/${REPOSITORY}/actions/workflows/testschutz.yml/runs`,
       { workflow_runs: [{ id: TESTSCHUTZ_LAUF, status: "completed" }] },
@@ -696,5 +700,113 @@ test("ausmisten-melden: eine Basis ohne Schlüssel des Zwischenspeichers setzt f
   erwarteRot(
     await melde(context, { basis: { schluessel: undefined } }),
     "Schlüssel des Zwischenspeichers fehlt",
+  );
+});
+
+const ANTONIO = "Antonio20045";
+const SENKUNG = { datei: ALTER_TEST, regel: "id-length", vorher: 40, nachher: 38 };
+const SENKUNG_PUNKT = `Unterdrückung in eslint-suppressions.json gesenkt: ${ALTER_TEST} id-length 40 → 38`;
+
+function freigabeFall({ reviews, offen = true, ...weiteres } = {}) {
+  const offenePrs = offen ? [{ number: PR_NUMMER, head: { ref: BRANCH, sha: KOPF } }] : [];
+  return {
+    plan: { unterdrueckungen: [SENKUNG] },
+    offenePrs,
+    routen: [[`GET /repos/${REPOSITORY}/pulls/${PR_NUMMER}/reviews`, reviews ?? []]],
+    ...weiteres,
+  };
+}
+
+function neuerPrText({ anfragen }) {
+  const { rumpf } = anfragen.find(({ methode }) => methode === "PATCH");
+  return rumpf.body;
+}
+
+function geoeffneterPrText({ anfragen }) {
+  const { rumpf } = anfragen.find(
+    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/pulls"),
+  );
+  return rumpf.body;
+}
+
+function review(login, state, commitId = KOPF) {
+  return { user: { login }, state, commit_id: commitId };
+}
+
+function erwarteFreigabeNoetig(ergebnis, punkt = SENKUNG_PUNKT) {
+  erwarteRot(ergebnis, `Freigabe nötig: ${punkt}`);
+  assert.match(ergebnis.gesetzt.description, /Freigabe von Antonio20045 nötig: 1 Punkte/);
+}
+
+test("ausmisten-melden: eine gesenkte Unterdrückung ohne Freigabe setzt failure", async (context) => {
+  erwarteFreigabeNoetig(await melde(context, freigabeFall()));
+});
+
+test("ausmisten-melden: ein Freigabepunkt öffnet den PR ohne Auto-Merge und nennt ihn unter eigener Überschrift", async (context) => {
+  const ergebnis = await melde(context, freigabeFall({ pr: true, offen: false }));
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
+  assert.ok(
+    geoeffneterPrText(ergebnis).includes(
+      `## Freigabe durch Antonio20045 nötig\n\n- ${SENKUNG_PUNKT}`,
+    ),
+  );
+  assert.deepEqual(ergebnis.gh.aufrufe(), []);
+  assert.match(ergebnis.ausgabe, /ohne Auto-Merge: Freigabe von Antonio20045 nötig/);
+});
+
+test("ausmisten-melden: ein offener PR mit Freigabepunkt verliert Auto-Merge und bekommt den neuen Text", async (context) => {
+  const ergebnis = await melde(context, freigabeFall({ pr: true }));
+  assert.equal(ergebnis.status, EXIT_ROT, ergebnis.ausgabe);
+  erwarteNeustartMit(ergebnis, ["--disable-auto"]);
+  assert.match(
+    neuerPrText(ergebnis),
+    /Auto-Merge bleibt aus, bis Antonio20045 diesen PR auf dem Stand/,
+  );
+});
+
+test("ausmisten-melden: die Zustimmung eines anderen Kontos gibt nichts frei", async (context) => {
+  for (const login of ["jonas986", "sundartha-bot"])
+    erwarteFreigabeNoetig(
+      await melde(context, freigabeFall({ reviews: [review(login, "APPROVED")] })),
+    );
+});
+
+test("ausmisten-melden: Antonios Zustimmung auf einem alten Stand gibt nichts frei", async (context) => {
+  const reviews = [review(ANTONIO, "APPROVED", ANDERE_SHA)];
+  erwarteFreigabeNoetig(await melde(context, freigabeFall({ reviews })));
+});
+
+test("ausmisten-melden: eine spätere Bitte um Änderungen hebt Antonios Zustimmung auf", async (context) => {
+  const reviews = [review(ANTONIO, "APPROVED"), review(ANTONIO, "CHANGES_REQUESTED")];
+  erwarteFreigabeNoetig(await melde(context, freigabeFall({ reviews })));
+});
+
+test("ausmisten-melden: Antonios Zustimmung auf dem gemessenen Stand gibt frei und schaltet Auto-Merge ein", async (context) => {
+  const reviews = [review(ANTONIO, "APPROVED"), review(ANTONIO, "COMMENTED")];
+  const status = await melde(context, freigabeFall({ reviews }));
+  assert.equal(status.status, EXIT_GRUEN, status.ausgabe);
+  assert.equal(status.gesetzt.state, "success");
+  const ergebnis = await melde(context, freigabeFall({ reviews, pr: true }));
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
+  erwarteNeustartMit(ergebnis, ["--auto", "--rebase"]);
+  assert.match(
+    neuerPrText(ergebnis),
+    new RegExp(`Freigegeben von Antonio20045 auf dem Stand ${KOPF}`),
+  );
+});
+
+test("ausmisten-melden: ein verlorener Mutant bleibt neben einem Freigabepunkt rot, auch mit Freigabe", async (context) => {
+  const reviews = [review(ANTONIO, "APPROVED")];
+  const branch = { mutanten: { [MUTANT]: "Survived", [BLOCK]: "Killed" } };
+  const ergebnis = await melde(context, freigabeFall({ reviews, branch }));
+  erwarteRot(ergebnis, `Mutant auf dem Branch nicht mehr getötet: ${MUTANT}`);
+  assert.doesNotMatch(ergebnis.ausgabe, /Freigegeben von/);
+});
+
+test("ausmisten-melden: eine ungültige Liste gesenkter Unterdrückungen setzt failure", async (context) => {
+  const unterdrueckungen = [{ ...SENKUNG, nachher: 41 }];
+  erwarteRot(
+    await melde(context, { plan: { unterdrueckungen } }),
+    "Liste der gesenkten Unterdrückungen ist ungültig",
   );
 });

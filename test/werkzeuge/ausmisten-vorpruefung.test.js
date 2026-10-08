@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import {
@@ -47,7 +49,7 @@ async function miss(context, fall) {
     cwd: repo.ordner,
     umgebung,
   });
-  return { ...ergebnis, repo };
+  return { ...ergebnis, repo, aus };
 }
 
 async function erwarteRot(context, fall, grund) {
@@ -227,5 +229,106 @@ test("ausmisten-vorpruefung: eine geänderte Datendatei ohne Nutzer ist nicht me
     context,
     { dateien, neu },
     `${daten}: keine Testdatei lädt oder nennt diese Datei`,
+  );
+});
+
+const UNTERDRUECKUNGEN = "eslint-suppressions.json";
+const EIGENER_TEST = DOPPELT;
+const FREMDER_TEST = "test/post/eingang.test.js";
+const ZAEHLER_VORHER = 3;
+const ZAEHLER_NACHHER = 1;
+
+const EINRUECKUNG = 2;
+const MAGISCHE_ZAHLEN = 2;
+const FREMDER_EINTRAG = { "id-length": { count: 1 } };
+
+function alsJson(daten) {
+  return `${JSON.stringify(daten, null, EINRUECKUNG)}\n`;
+}
+
+function unterdrueckungen(eigene) {
+  if (eigene === undefined) return alsJson({ [FREMDER_TEST]: FREMDER_EINTRAG });
+  return alsJson({ [EIGENER_TEST]: eigene, [FREMDER_TEST]: FREMDER_EINTRAG });
+}
+
+function planVon({ aus }) {
+  return JSON.parse(readFileSync(join(aus, "plan.json"), "utf8"));
+}
+
+const MASTER_UNTERDRUECKUNGEN = unterdrueckungen({
+  "id-length": { count: ZAEHLER_VORHER },
+  "no-magic-numbers": { count: MAGISCHE_ZAHLEN },
+});
+
+function mitUnterdrueckungen(neu) {
+  return {
+    dateien: { [UNTERDRUECKUNGEN]: MASTER_UNTERDRUECKUNGEN },
+    neu: { [UNTERDRUECKUNGEN]: neu },
+  };
+}
+
+test("ausmisten-vorpruefung: eine gesenkte Unterdrückung des eigenen Tests geht in den Plan", async (context) => {
+  const fall = mitUnterdrueckungen(unterdrueckungen({ "id-length": { count: ZAEHLER_NACHHER } }));
+  const ergebnis = await miss(context, fall);
+  assert.equal(ergebnis.status, 0, ergebnis.ausgabe);
+  const plan = planVon(ergebnis);
+  assert.deepEqual(plan.unterdrueckungen, [
+    { datei: EIGENER_TEST, regel: "id-length", vorher: ZAEHLER_VORHER, nachher: ZAEHLER_NACHHER },
+    { datei: EIGENER_TEST, regel: "no-magic-numbers", vorher: MAGISCHE_ZAHLEN, nachher: 0 },
+  ]);
+});
+
+test("ausmisten-vorpruefung: ein ganz entfernter Eintrag des eigenen Tests gilt als Senkung auf null", async (context) => {
+  const ergebnis = await miss(context, mitUnterdrueckungen(unterdrueckungen(undefined)));
+  assert.equal(ergebnis.status, 0, ergebnis.ausgabe);
+  const plan = planVon(ergebnis);
+  assert.deepEqual(
+    plan.unterdrueckungen.map(({ regel, nachher }) => [regel, nachher]),
+    [
+      ["id-length", 0],
+      ["no-magic-numbers", 0],
+    ],
+  );
+});
+
+test("ausmisten-vorpruefung: eine erhöhte Unterdrückung stoppt die Planung, auch neben einer Senkung", async (context) => {
+  const neu = unterdrueckungen({ "id-length": { count: 4 }, "no-magic-numbers": { count: 1 } });
+  await erwarteRot(
+    context,
+    mitUnterdrueckungen(neu),
+    `${UNTERDRUECKUNGEN}: ${EIGENER_TEST} id-length darf nur sinken.`,
+  );
+});
+
+test("ausmisten-vorpruefung: eine gesenkte Unterdrückung eines fremden Tests stoppt die Planung", async (context) => {
+  const daten = JSON.parse(MASTER_UNTERDRUECKUNGEN);
+  delete daten[FREMDER_TEST];
+  await erwarteRot(
+    context,
+    mitUnterdrueckungen(alsJson(daten)),
+    `${UNTERDRUECKUNGEN}: ${FREMDER_TEST} ändert der Branch nicht; ihr Eintrag muss bleiben.`,
+  );
+});
+
+test("ausmisten-vorpruefung: eine neue Regel in den Unterdrückungen stoppt die Planung", async (context) => {
+  const neu = unterdrueckungen({
+    "id-length": { count: ZAEHLER_VORHER },
+    "no-magic-numbers": { count: MAGISCHE_ZAHLEN },
+    complexity: { count: 1 },
+  });
+  await erwarteRot(
+    context,
+    mitUnterdrueckungen(neu),
+    `${UNTERDRUECKUNGEN}: neue Regel complexity für ${EIGENER_TEST}.`,
+  );
+});
+
+test("ausmisten-vorpruefung: ein neuer Eintrag in den Unterdrückungen stoppt die Planung", async (context) => {
+  const daten = JSON.parse(MASTER_UNTERDRUECKUNGEN);
+  daten[NEUER_TEST] = { "id-length": { count: 1 } };
+  await erwarteRot(
+    context,
+    mitUnterdrueckungen(alsJson(daten)),
+    `${UNTERDRUECKUNGEN}: neuer Eintrag für ${NEUER_TEST}.`,
   );
 });

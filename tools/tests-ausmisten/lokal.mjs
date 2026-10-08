@@ -16,6 +16,7 @@ import { inSpeicher } from "./zwischenspeicher.mjs";
 const EINSTIEG = fileURLToPath(new URL("../tests-ausmisten.mjs", import.meta.url));
 const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
+const EXIT_FREIGABE = 3;
 const REPOSITORY = "lokal/hermes";
 const REPO_ID = 1;
 const EINGANG = ".github/workflows/ausmisten-eingang.yml";
@@ -111,7 +112,7 @@ function urteil(stand, { pruefsumme, erwartet, summen }) {
       else teile[art].push({ ...gelesen.daten, nummer });
     }
   });
-  return urteilAusTeilen(teile, fehler);
+  return urteilAusTeilen(teile, { fehler, plan: plan.daten });
 }
 
 function messePakete(stand, { pakete, pruefsumme }) {
@@ -144,6 +145,11 @@ async function messe(stand, { master, kopf, bereich }) {
   const summen = messePakete(stand, { pakete: JSON.parse(planen.werte.pakete), pruefsumme });
   if (summen === undefined) return EXIT_ROT;
   const ergebnis = urteil(stand, { pruefsumme, erwartet: { kopf, master, bereich }, summen });
+  if (ergebnis.freigabe) {
+    for (const punkt of ergebnis.punkte) console.log(`Freigabe nötig: ${punkt}`);
+    console.log("Lokal: grün bis auf die Freigabe durch Antonio im PR (Exit 3)");
+    return EXIT_FREIGABE;
+  }
   for (const verstoss of ergebnis.verstoesse) console.log(`Verstoß: ${verstoss}`);
   console.log(`Lokal: ${ergebnis.gruen ? "grün" : "rot"}`);
   return ergebnis.gruen ? EXIT_GRUEN : EXIT_ROT;

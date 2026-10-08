@@ -15,6 +15,8 @@ import {
   vereinige,
 } from "./entscheiden.mjs";
 import {
+  FREIGEBER,
+  freigegeben,
   oeffneOderNeustarten,
   prTitel,
   schalteAutoMergeAus,
@@ -134,7 +136,21 @@ async function artefakte(github, { jobs, erwartet }) {
     summen: festgehalten.summen,
     erwartet,
   });
-  return { ...gemessenesErgebnis(teile), issue: plan.daten.issue, fehler: [...bisher, ...fehler] };
+  return {
+    ...gemessenesErgebnis(teile),
+    issue: plan.daten.issue,
+    punkte: freigabePunkte(plan.daten),
+    fehler: [...bisher, ...fehler],
+  };
+}
+
+export function freigabePunkte(plan) {
+  return [
+    ...(plan.unterdrueckungen ?? []).map(
+      ({ datei, regel, vorher, nachher }) =>
+        `Unterdrückung in eslint-suppressions.json gesenkt: ${datei} ${regel} ${vorher} → ${nachher}`,
+    ),
+  ];
 }
 
 function gemessenesErgebnis(teile) {
@@ -157,16 +173,24 @@ function abbruchVerstoesse(abgebrochen) {
   );
 }
 
-export function urteilAusTeilen(teile, fehler) {
-  return urteilFuer({ ...gemessenesErgebnis(teile), fehler });
+export function urteilAusTeilen(teile, { fehler, plan }) {
+  const punkte = freigabePunkte(plan);
+  return urteilFuer({ ...gemessenesErgebnis(teile), punkte, fehler });
 }
 
-function urteilFuer({ basis, branch, abgebrochen = [], fehler }) {
+function freigabeNoetig(urteil, punkte) {
+  if (!urteil.gruen || punkte.length === 0) return { ...urteil, punkte };
+  const kurz = `Freigabe von ${FREIGEBER} nötig: ${punkte.length} Punkte, siehe PR`;
+  const verstoesse = punkte.map((punkt) => `Freigabe nötig: ${punkt}`);
+  return { ...urteil, gruen: false, freigabe: true, punkte, verstoesse, kurz };
+}
+
+function urteilFuer({ basis, branch, abgebrochen = [], punkte = [], fehler }) {
   const urteil = basis === undefined ? undefined : entscheide(basis, branch);
   const gemessen = [...(urteil?.verstoesse ?? []), ...abbruchVerstoesse(abgebrochen)];
   const verstoesse = [...fehler, ...gemessen];
   if (fehler.length === 0 && urteil !== undefined)
-    return { ...urteil, gruen: verstoesse.length === 0, verstoesse };
+    return freigabeNoetig({ ...urteil, gruen: verstoesse.length === 0, verstoesse }, punkte);
   const kurz = `rot: ${verstoesse.join("; ")}`.slice(0, MAX_ROTE_BESCHREIBUNG);
   return { gruen: false, verstoesse, kurz };
 }
@@ -188,7 +212,31 @@ function wiederverwendungZeile(wiederverwendet) {
   return `- Basis wiederverwendet (gleiche Eingaben, Prüfsumme aus dem Protokoll jenes Laufs): ${teile.join(", ")}`;
 }
 
-export function prText({ bereich, basis, branch, urteil, adresse, issue, wiederverwendet = [] }) {
+function freigabeZeilen({ punkte = [], freigabe }, kopf) {
+  if (punkte.length === 0) return [];
+  const stand = freigabe
+    ? `Auto-Merge bleibt aus, bis ${FREIGEBER} diesen PR auf dem Stand ${kopf} freigibt (Approve) und den Job „Ergebnis melden“ dieses Laufs neu startet.`
+    : `Freigegeben von ${FREIGEBER} auf dem Stand ${kopf}.`;
+  return [
+    `## Freigabe durch ${FREIGEBER} nötig`,
+    "",
+    ...punkte.map((punkt) => `- ${punkt}`),
+    "",
+    stand,
+    "",
+  ];
+}
+
+export function prText({
+  bereich,
+  basis,
+  branch,
+  urteil,
+  adresse,
+  issue,
+  kopf,
+  wiederverwendet = [],
+}) {
   const dateien = basis.dateien.map((datei) => `\`${datei}\``);
   const { alt, neu } = basis.tests;
   return [
@@ -204,6 +252,7 @@ export function prText({ bereich, basis, branch, urteil, adresse, issue, wiederv
     "",
     "Jeder Mutant, den die alten Fassungen der geänderten Tests getötet haben, ist auch mit den Tests dieses Branches getötet, im Gate-Lauf ebenso.",
     "",
+    ...freigabeZeilen(urteil, kopf),
     ...issueZeilen(issue),
     "",
   ].join("\n");
@@ -223,12 +272,25 @@ function standardAbhaengigkeiten() {
   };
 }
 
+async function mitFreigabe(github, urteil, { branch, kopf }) {
+  if (!urteil.freigabe) return urteil;
+  let zugestimmt = false;
+  try {
+    zugestimmt = await freigegeben(github, { branch, kopf });
+  } catch (grund) {
+    console.log(`Freigabe nicht lesbar (${grund.message}); sie gilt als nicht erteilt.`);
+  }
+  if (!zugestimmt) return urteil;
+  console.log(`Freigegeben von ${FREIGEBER} auf dem Stand ${kopf}.`);
+  return { ...urteil, kurz: undefined, gruen: true, freigabe: false, verstoesse: [] };
+}
+
 export async function melden({ pr }, abhaengigkeiten = standardAbhaengigkeiten()) {
   const { github, jobs, master } = abhaengigkeiten;
   const herkunft = await ausloeser({ bereiche: leseBereiche(), github });
   const erwartet = { kopf: herkunft.kopf, master, bereich: herkunft.bereich };
   const gelesen = await artefakte(github, { jobs, erwartet });
-  const urteil = urteilFuer(gelesen);
+  const urteil = await mitFreigabe(github, urteilFuer(gelesen), herkunft);
   const adresse = laufAdresse();
   for (const verstoss of urteil.verstoesse) console.log(`Verstoß: ${verstoss}`);
   const text = urteil.kurz ?? beschreibung(urteil);
@@ -242,11 +304,11 @@ export async function melden({ pr }, abhaengigkeiten = standardAbhaengigkeiten()
     });
   const ausgang = urteil.gruen ? EXIT_GRUEN : EXIT_ROT;
   if (!pr) return ausgang;
-  const inhalt = { ...gelesen, bereich: herkunft.bereich, urteil, adresse };
+  const inhalt = { ...gelesen, bereich: herkunft.bereich, urteil, adresse, kopf: herkunft.kopf };
   const ziel = { bot: abhaengigkeiten.bot(), branch: herkunft.branch, kopf: herkunft.kopf };
   const neuerPr = () => ({ title: prTitel(herkunft.bereich), body: prText(inhalt) });
   const meldung = await oeffneOderNeustarten(
-    { ...ziel, gruen: urteil.gruen, pr: neuerPr },
+    { ...ziel, gruen: urteil.gruen, freigabe: urteil.freigabe === true, pr: neuerPr },
     abhaengigkeiten.aktionen,
   );
   console.log(meldung);
