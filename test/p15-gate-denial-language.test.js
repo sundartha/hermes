@@ -264,11 +264,20 @@ test("P15b/C1: der E.164-Formattext ist englisch und liegt in KEINEM Locale-Buen
 
 test("P15b/C1: die Anruf-Route lehnt eine Nummer mit Fernvorwahl-Null vor allen Gates mit dem E.164-Formattext ab", async () => {
   const { makeCallRoutes } = await import("../src/routes/api-calls.js");
+  const gelaufeneGates = [];
   const router = makeCallRoutes({
     store: {},
     config: { voice: { elevenLabsOutbound: { enabled: false } } },
     audit: () => {},
-    outboundGates: [],
+    outboundGates: [
+      {
+        name: "mitschreibendes-gate",
+        run: () => {
+          gelaufeneGates.push("mitschreibendes-gate");
+          return null;
+        },
+      },
+    ],
     tenant: { requestTenant: () => null, requireTenant: () => null, tenantOwnsCall: () => false },
     arm: {},
   });
@@ -278,4 +287,5 @@ test("P15b/C1: die Anruf-Route lehnt eine Nummer mit Fernvorwahl-Null vor allen 
   });
   assert.equal(antwort.status, HTTP_BAD_REQUEST);
   assert.deepEqual(antwort.inhalt, { error: E164_FORMAT_ERROR });
+  assert.deepEqual(gelaufeneGates, []);
 });
