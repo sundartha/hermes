@@ -20,9 +20,10 @@ const EXIT_FREIGABE = 3;
 const REPOSITORY = "lokal/hermes";
 const REPO_ID = 1;
 const EINGANG = ".github/workflows/ausmisten-eingang.yml";
+const NUR_COMMIT = "^{commit}";
 
 function sha(rev) {
-  return git(["rev-parse", "--verify", `${rev}^{commit}`]).trim();
+  return git(["rev-parse", "--verify", `${rev}${NUR_COMMIT}`]).trim();
 }
 
 function ereignis(ordner, { kopf, bereich }) {

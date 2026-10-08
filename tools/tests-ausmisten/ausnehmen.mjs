@@ -53,8 +53,7 @@ function fallFehler(fall, ohne) {
   const vorher = ohne.find(({ test, name }) => test === fall.test && name === fall.name);
   if (vorher?.ok !== true)
     return `${fall.test}: „${fall.name}“ besteht auch ohne Umbau der Quelldateien nicht`;
-  const ausdruck = new RegExp(muster(fall.name));
-  const treffer = ohne.filter(({ name, eigen }) => ausdruck.test(name) || ausdruck.test(eigen));
+  const treffer = ohne.filter(({ name, eigen }) => name === fall.name || eigen === fall.name);
   if (treffer.length !== 1)
     return `${fall.test}: der Name „${fall.name}“ ist nicht eindeutig (${treffer.length} Testfälle)`;
   return undefined;

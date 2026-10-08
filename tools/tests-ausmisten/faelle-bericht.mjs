@@ -4,6 +4,7 @@ export default async function* faelleBericht(quelle) {
   for await (const { type, data } of quelle) {
     if (!ARTEN.has(type)) continue;
     const { name, nesting, file } = data;
-    yield `${JSON.stringify({ art: type, name, tiefe: nesting, datei: file })}\n`;
+    const fall = { art: type, name, tiefe: nesting, datei: file };
+    yield `${JSON.stringify(fall)}\n`;
   }
 }
