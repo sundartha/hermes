@@ -157,6 +157,10 @@ function abbruchVerstoesse(abgebrochen) {
   );
 }
 
+export function urteilAusTeilen(teile, fehler) {
+  return urteilFuer({ ...gemessenesErgebnis(teile), fehler });
+}
+
 function urteilFuer({ basis, branch, abgebrochen = [], fehler }) {
   const urteil = basis === undefined ? undefined : entscheide(basis, branch);
   const gemessen = [...(urteil?.verstoesse ?? []), ...abbruchVerstoesse(abgebrochen)];
