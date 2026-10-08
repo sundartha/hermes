@@ -16,6 +16,7 @@ export const LESEN = [
   'const quelle = readFileSync(new URL("../../src/post/eingang.js", import.meta.url), "utf8");',
   'assert.ok(quelle.includes("return text.trim();"));',
 ];
+export const MIT_MUSTER = [LESEN[0], "assert.ok(quelle.includes(MUSTER));"];
 export const KUERZEN = ['assert.equal(eingang(" a "), "a");'];
 export const TABULATOR = ['assert.equal(eingang("\\tb\\t"), "b");'];
 

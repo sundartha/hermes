@@ -6,7 +6,16 @@ import { test } from "node:test";
 import { probeDirectory } from "./probe-repo.js";
 import { DOPPELT, RECHNEN_TEST, ausmistenRepo, starte } from "./ausmisten/hilfen.mjs";
 import { EXIT_GRUEN, EXIT_ROT, WIRKSAME_TESTS, messeUndMelde } from "./ausmisten/messung.mjs";
-import { KUERZEN, MIT_TEXT, TEXTTEST, VERHALTEN, fall, texttest } from "./ausmisten/texttest.mjs";
+import {
+  KUERZEN,
+  MIT_MUSTER,
+  MIT_TEXT,
+  TEXTFALL,
+  TEXTTEST,
+  VERHALTEN,
+  fall,
+  texttest,
+} from "./ausmisten/texttest.mjs";
 import { scheinGitleaks, verlinkeLintWerkzeuge, vorpruefDateien } from "./ausmisten/vorpruefen.mjs";
 
 const WERKZEUG = "tools/tests-ausmisten.mjs";
@@ -131,4 +140,23 @@ test("ausmisten-lokal: ein gelöschter ausgenommener Texttest endet mit Exit 3 u
     /Freigabe nötig: Ausgenommener Testfall im Branch gelöscht: test\/post\/text\.test\.js: liest den Quelltext/,
   );
   assert.doesNotMatch(ergebnis.ausgabe, /Lokal: grün\n/);
+});
+
+test("ausmisten-lokal: eine geänderte Konstante außerhalb eines ausgenommenen Falls endet mit Exit 3", async (context) => {
+  const mitMuster = (muster) =>
+    texttest(
+      [`const MUSTER = ${JSON.stringify(muster)};`, ""],
+      fall(TEXTFALL, MIT_MUSTER),
+      fall(VERHALTEN, KUERZEN),
+    );
+  const repo = lokalesRepo(context, [], {
+    dateien: { [TEXTTEST]: mitMuster("return text.trim();") },
+    neu: { [TEXTTEST]: mitMuster("") },
+  });
+  const ergebnis = await lokal(context, repo);
+  assert.equal(ergebnis.status, EXIT_FREIGABE, ergebnis.ausgabe);
+  assert.match(
+    ergebnis.ausgabe,
+    /Freigabe nötig: Ausgenommener Testfall im Branch Datei geändert: test\/post\/text\.test\.js: liest den Quelltext/,
+  );
 });

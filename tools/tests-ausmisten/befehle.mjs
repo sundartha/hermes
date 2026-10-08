@@ -274,9 +274,11 @@ export async function basis({ aus, planDaten, paket }) {
   const schluessel = basisSchluessel({ master: lauf.master, dateien, alt });
   const werte =
     wiederverwendbar(plan, { nummer, schluessel }) ?? (await messwerte(werkzeug, { dateien, alt }));
+  const graphen =
+    werte.ausgenommen.length > 0 ? [await werkzeug.importgraph(), branchSicht.graph] : [];
   werte.ausgenommen = werte.ausgenommen.map((fall) => ({
     ...fall,
-    imBranch: imBranch(fall, lauf),
+    imBranch: imBranch(fall, lauf, graphen),
   }));
   const summe = schreibeErgebnis(aus, paketName(BASIS, nummer), {
     ...kopfdaten(vorbereitung, dateien),
