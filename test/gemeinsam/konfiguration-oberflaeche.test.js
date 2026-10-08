@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config, CONFIG_NAMESPACES } from "../src/config.js";
-import { makeConfigOverrides } from "./helpers.js";
+import {
+  CONFIG_NAMESPACES,
+  config,
+  gatewayUrlForPort,
+  isSelfServiceLive,
+  resolveGatewayUrl,
+} from "../../src/config.js";
+import { makeConfigOverrides } from "../helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
 
@@ -92,7 +98,7 @@ test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN F
   const saved = process.env.MAX_CALLS_PER_HOUR;
   process.env.MAX_CALLS_PER_HOUR = "120abc";
   try {
-    const fresh = await import("../src/config.js?pa12-nodbl");
+    const fresh = await import("../../src/config.js?pa12-nodbl");
     const before = fresh.configFatalErrors().length;
     for (const [namespace, keys] of Object.entries(fresh.CONFIG_NAMESPACES)) {
       for (const key of keys) void fresh.config[namespace][key];
@@ -144,4 +150,98 @@ test("Flip-Regression: entfernte flache Keys werfen TypeError bei Read UND Write
       `config.${key} = ... (Write) sollte nicht mehr moeglich sein`,
     );
   }
+});
+
+const MONEY_CONFIG_KEYS = Object.freeze([
+  "platformSpendCapCents",
+  "numberSetupFeeCents",
+  "voiceTariffDomesticCents",
+  "voiceTariffDefaultCents",
+  "voiceTariffInboundCents",
+  "voiceTariffFullCostFloorCents",
+  "defaultTenantBudgetCents",
+  "smsCostCents",
+  "usdToEur",
+  "modelPricesUsd",
+  "numberMonthlyCostCents",
+  "platformFixedCostUsdCentsPerMonth",
+  "voiceTariffGrundbetragCentsJeRoute",
+  "researchSearchFeeCents",
+  "lookupSearchFeeCents",
+]);
+
+const MONEY_NAME_PATTERN = /(Cents|Eur|Usd)$/;
+
+test("Geld-Manifest: jedes Cents-/Eur-/Usd-Feld in config.js ist im Manifest erfasst", () => {
+  const allNamespacedKeys = Object.values(CONFIG_NAMESPACES).flat();
+  const moneyShapedKeys = allNamespacedKeys.filter((k) => MONEY_NAME_PATTERN.test(k));
+  const unregistered = moneyShapedKeys.filter((k) => !MONEY_CONFIG_KEYS.includes(k));
+  assert.deepEqual(
+    unregistered,
+    [],
+    `Neues Geld-Feld in config.js nicht im Manifest eingetragen: ${unregistered.join(", ")}. ` +
+      `Bewusst in MONEY_CONFIG_KEYS (test/gemeinsam/konfiguration-oberflaeche.test.js) aufnehmen.`,
+  );
+});
+
+test("Geld-Manifest: kein gelistetes Feld wurde stillschweigend aus config.js entfernt", () => {
+  const allNamespacedKeys = Object.values(CONFIG_NAMESPACES).flat();
+  const missing = MONEY_CONFIG_KEYS.filter((k) => !allNamespacedKeys.includes(k));
+  assert.deepEqual(
+    missing,
+    [],
+    `Manifest-Feld existiert nicht mehr in config.js: ${missing.join(", ")}. Manifest nachziehen.`,
+  );
+});
+
+const BEISPIEL_PORT = 3000;
+
+test("gatewayUrlForPort baut die localhost-Fallback-URL", () => {
+  assert.equal(gatewayUrlForPort(BEISPIEL_PORT), "http://localhost:3000");
+  assert.equal(gatewayUrlForPort(0), "http://localhost:0");
+});
+
+test("resolveGatewayUrl: ohne GATEWAY_URL -> Fallback auf den config-Port", () => {
+  const prev = process.env.GATEWAY_URL;
+  try {
+    delete process.env.GATEWAY_URL;
+    assert.equal(resolveGatewayUrl(), gatewayUrlForPort(config.server.port));
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+  }
+});
+
+test("resolveGatewayUrl: mit GATEWAY_URL -> genau dieser Wert, Trailing-Slash gestrippt", () => {
+  const prev = process.env.GATEWAY_URL;
+  try {
+    process.env.GATEWAY_URL = "https://hermes.example.test/";
+    assert.equal(resolveGatewayUrl(), "https://hermes.example.test");
+    process.env.GATEWAY_URL = "https://hermes.example.test";
+    assert.equal(resolveGatewayUrl(), "https://hermes.example.test");
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+  }
+});
+
+test("isSelfServiceLive: beide Flags an -> true", () => {
+  assert.equal(isSelfServiceLive({ tenancy: { selfServiceEnabled: true, multiTenant: true } }), true);
+});
+
+test("isSelfServiceLive: nur selfServiceEnabled an -> false", () => {
+  assert.equal(isSelfServiceLive({ tenancy: { selfServiceEnabled: true, multiTenant: false } }), false);
+});
+
+test("isSelfServiceLive: nur multiTenant an -> false", () => {
+  assert.equal(isSelfServiceLive({ tenancy: { selfServiceEnabled: false, multiTenant: true } }), false);
+});
+
+test("isSelfServiceLive: beide Flags aus -> false", () => {
+  assert.equal(isSelfServiceLive({ tenancy: { selfServiceEnabled: false, multiTenant: false } }), false);
+});
+
+test("isSelfServiceLive: liefert immer einen echten Boolean (kein truthy-Objekt-Leak)", () => {
+  assert.strictEqual(isSelfServiceLive({ tenancy: { selfServiceEnabled: true, multiTenant: true } }), true);
+  assert.strictEqual(isSelfServiceLive({ tenancy: { selfServiceEnabled: false, multiTenant: false } }), false);
 });
