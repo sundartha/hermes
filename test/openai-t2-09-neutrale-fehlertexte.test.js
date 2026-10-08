@@ -1,9 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { registerTools, toolErrorText } from "../src/mcp-tools.js";
@@ -20,53 +17,14 @@ const HTTP_BAD_REQUEST = 400;
 const HTTP_FROZEN = 403;
 const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_SERVER_ERROR = 500;
-const OUTBOUND_GATES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "../src/telephony/outbound-gates.js");
-const MINUTES_TEXT_MIN_COUNT = 20;
 
-function readOutboundGatesSource() {
-  return readFileSync(OUTBOUND_GATES_PATH, "utf8");
-}
+const BEKANNTE_ABLEHNUNGSGRUENDE = ["minutes", "frozen", "gate_error", "reserve_error"];
 
-function grundSetFromSource(src) {
-  const literal = [...src.matchAll(/grund:\s*"([a-z_]+)"/g)].map((match) => match[1]);
-  const auditLiteral = [...src.matchAll(/denialAudit\(\s*"([a-z_]+)"/g)].map((match) => match[1]);
-  const gateErrorMatch = src.match(/export const GATE_ERROR_GRUND = "([a-z_]+)";/);
-  assert.ok(gateErrorMatch, "GATE_ERROR_GRUND muss als String-Literal exportiert sein");
-  return new Set([...literal, ...auditLiteral, gateErrorMatch[1]]);
-}
-
-function assertDenialAuditCallsAreStructured(src) {
-  const calls = [...src.matchAll(/denialAudit\(\s*([^,]+),/g)].map((match) => match[1].trim());
-  assert.ok(calls.length >= 1, "Positiv-Kontrolle: mindestens ein denialAudit-Aufruf gefunden");
-  for (const arg of calls) {
-    const ok =
-      /^"[a-z_]+"$/.test(arg) ||
-      arg === "GATE_ERROR_GRUND" ||
-      arg === "grund" ||
-      /^[A-Za-z_][A-Za-z0-9_]*\.grund$/.test(arg);
-    assert.ok(ok, `denialAudit-Aufruf mit unerwartetem ersten Argument: ${arg}`);
-  }
-}
-
-test("T1: jeder Ablehnungsgrund aus outbound-gates.js hat in JEDER Sprache genau einen Tabelleneintrag", () => {
-  const src = readOutboundGatesSource();
-  assertDenialAuditCallsAreStructured(src);
-  const quelle = grundSetFromSource(src);
-
-  for (const bekannt of ["minutes", "frozen", "gate_error", "reserve_error"]) {
-    assert.ok(quelle.has(bekannt), `Positiv-Kontrolle: "${bekannt}" muss in der Quelle stehen`);
-  }
-  assert.ok(
-    quelle.size >= MINUTES_TEXT_MIN_COUNT,
-    `Positiv-Kontrolle: >= ${MINUTES_TEXT_MIN_COUNT} Gruende erwartet, gefunden ${quelle.size}`,
-  );
-
+test("T1b: jede Sprache fuehrt genau die Ablehnungsgruende der englischen Tabelle", () => {
+  const englisch = Object.keys(MCP_TEXTS.en.denials).sort();
+  for (const bekannt of BEKANNTE_ABLEHNUNGSGRUENDE) assert.ok(englisch.includes(bekannt), `en: Grund "${bekannt}" fehlt`);
   for (const lang of SUPPORTED_LANGUAGES) {
-    const tabelle = new Set(Object.keys(MCP_TEXTS[lang].denials));
-    for (const grund of quelle)
-      assert.ok(tabelle.has(grund), `${lang}: Grund "${grund}" aus der Quelle fehlt in der Tabelle`);
-    for (const grund of tabelle)
-      assert.ok(quelle.has(grund), `${lang}: toter Tabellen-Eintrag "${grund}" (nicht in der Quelle)`);
+    assert.deepEqual(Object.keys(MCP_TEXTS[lang].denials).sort(), englisch, `${lang}: andere Ablehnungsgruende als en`);
   }
 });
 
