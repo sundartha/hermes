@@ -36,7 +36,7 @@ function einzigeDatei(puffer, name) {
   return dateien.get(erwartet).toString("utf8");
 }
 
-export async function artefaktListe(github, laufId) {
+async function artefaktListe(github, laufId) {
   return github.alle(`/actions/runs/${laufId}/artifacts`, (antwort) => antwort.artifacts);
 }
 
@@ -45,22 +45,6 @@ export async function ladeVorhandene(github, { laufId, erwartet }) {
   const fehler = namensFehler(nachName, erwartet);
   const texte = new Map();
   for (const name of erwartet.filter((kandidat) => nachName.get(kandidat)?.length === 1)) {
-    const [{ id }] = nachName.get(name);
-    try {
-      texte.set(name, einzigeDatei(await github.roh(`/actions/artifacts/${id}/zip`), name));
-    } catch (grund) {
-      fehler.push(grund.message);
-    }
-  }
-  return { fehler, texte };
-}
-
-export async function ladeArtefakte(github, { laufId, erwartet }) {
-  const nachName = gefundeneArtefakte(await artefaktListe(github, laufId));
-  const fehler = namensFehler(nachName, erwartet);
-  if (fehler.length > 0) return { fehler, texte: new Map() };
-  const texte = new Map();
-  for (const name of erwartet) {
     const [{ id }] = nachName.get(name);
     try {
       texte.set(name, einzigeDatei(await github.roh(`/actions/artifacts/${id}/zip`), name));

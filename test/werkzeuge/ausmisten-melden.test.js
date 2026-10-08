@@ -39,6 +39,9 @@ const ZEILEN_MUTANT = [ZEILE_DES_MUTANTEN, ZEILE_DES_MUTANTEN];
 const ZEILEN_BLOCK = [1, LETZTE_ZEILE_DES_BLOCKS];
 const MUTANT = `${DATEI}:2:10-2:21 MethodExpression → text`;
 const BLOCK = `${DATEI}:1:30-3:2 BlockStatement → {}`;
+const ZEITSTEMPEL = "2026-10-08T10:00:00.0000000Z";
+const ERSTE_JOB_ID = 800;
+const JOBS_JE_PAKET = 2;
 const LAUF_ADRESSE = `https://github.com/${REPOSITORY}/actions/runs/${LAUF_ID}`;
 
 function artefaktDaten(name, master, felder = {}) {
@@ -110,14 +113,48 @@ function artefaktListe(master, fall) {
   return { eintraege: fall.liste?.(eintraege) ?? eintraege, ausgaben };
 }
 
-function jobs({ pakete, pruefsumme, summen }, ergebnisse = {}) {
+function jobs({ pakete, pruefsumme }, ergebnisse = {}) {
   const ergebnis = (name) => ergebnisse[name] ?? "success";
   return JSON.stringify({
     planen: { result: ergebnis("planen"), outputs: { pakete, pruefsumme } },
-    basis: { result: ergebnis("basis"), outputs: {} },
-    sammeln: { result: ergebnis("sammeln"), outputs: { summen } },
-    branch: { result: ergebnis("branch"), outputs: {} },
+    kette: { result: ergebnis("kette"), outputs: {} },
   });
+}
+
+function protokoll(zeilen) {
+  return Buffer.from(zeilen.map((zeile) => `${ZEITSTEMPEL} ${zeile}\n`).join(""));
+}
+
+function jobRouten({ pakete, summen }, fall) {
+  const nummern = JSON.parse(pakete);
+  const festgehalten = JSON.parse(summen ?? "[]");
+  const routen = new Map();
+  const liste = nummern.flatMap((nummer) =>
+    ["Basis messen", "Branch messen"].map((teil, index) => ({
+      id: ERSTE_JOB_ID + JOBS_JE_PAKET * nummer + index,
+      name: `Paket ${nummer} / ${teil}`,
+      status: "completed",
+      conclusion: fall.jobErgebnisse?.[`Paket ${nummer} / ${teil}`] ?? "success",
+    })),
+  );
+  routen.set(`GET /repos/${REPOSITORY}/actions/runs/${LAUF_ID}/jobs`, {
+    total_count: liste.length,
+    jobs: fall.jobListe?.(liste) ?? liste,
+  });
+  for (const { id, name } of liste) {
+    const nummer = Number(name.split(" ")[1]);
+    const basis = name.endsWith("Basis messen");
+    const zeilen =
+      basis && festgehalten[nummer] !== undefined
+        ? [`Basis-Prüfsumme basis-${nummer}: ${festgehalten[nummer]}`]
+        : [];
+    const ersatz = fall.protokolle?.[name];
+    routen.set(
+      `GET /repos/${REPOSITORY}/actions/jobs/${id}/logs`,
+      protokoll(ersatz ?? ["Start", ...zeilen, "Ende"]),
+    );
+  }
+  return routen;
 }
 
 async function melde(context, angabe = {}) {
@@ -126,6 +163,7 @@ async function melde(context, angabe = {}) {
   const { eintraege, ausgaben } = artefaktListe(repo.master, fall);
   const routen = new Map([
     ...artefaktRouten(LAUF_ID, eintraege),
+    ...jobRouten(ausgaben, fall),
     [`GET /repos/${REPOSITORY}/actions/workflows/ausmisten-eingang.yml`, { id: EINGANG_ID }],
     [`POST /repos/${REPOSITORY}/statuses/${KOPF}`, {}],
     [`GET /repos/${REPOSITORY}/pulls`, fall.offenePrs ?? []],
@@ -193,8 +231,12 @@ test("ausmisten-melden: ein fehlendes Artefakt setzt failure", async (context) =
 });
 
 test("ausmisten-melden: ein nicht erfolgreicher Mess-Job setzt failure", async (context) => {
-  const ergebnis = await melde(context, { ergebnisse: { basis: "cancelled" } });
-  erwarteRot(ergebnis, "Job basis endete mit cancelled");
+  const ergebnis = await melde(context, {
+    ergebnisse: { kette: "cancelled" },
+    jobErgebnisse: { "Paket 0 / Basis messen": "cancelled" },
+  });
+  erwarteRot(ergebnis, "Job „Paket 0 / Basis messen“ endete mit cancelled");
+  assert.match(ergebnis.ausgabe, /Job kette endete mit cancelled/);
 });
 
 test("ausmisten-melden: ein Artefakt, das nicht zur Prüfsumme des Jobs passt, setzt failure", async (context) => {
@@ -352,7 +394,11 @@ test("ausmisten-melden: eine Basis ohne Testzeilen setzt failure", async (contex
 
 test("ausmisten-melden: ohne festgehaltene Basis-Prüfsummen setzt melden failure", async (context) => {
   const ergebnis = await melde(context, { ausgaben: { summen: undefined } });
-  erwarteRot(ergebnis, "Die Prüfsummen der Basis-Pakete fehlen");
+  erwarteRot(
+    ergebnis,
+    "Das Protokoll von „Paket 0 / Basis messen“ nennt die Prüfsumme nicht genau einmal",
+  );
+  assert.match(ergebnis.ausgabe, /Für basis-0 fehlt die Prüfsumme/);
 });
 
 test("ausmisten-melden: ein Plan ohne Prüfsumme setzt failure", async (context) => {
@@ -446,8 +492,11 @@ test("ausmisten-melden: ein doppelt hochgeladenes Artefakt setzt failure", async
 
 test("ausmisten-melden: ein nicht erfolgreiches Branch-Paket setzt failure", async (context) => {
   erwarteRot(
-    await melde(context, { ergebnisse: { branch: "failure" } }),
-    "Job branch endete mit failure",
+    await melde(context, {
+      ergebnisse: { kette: "failure" },
+      jobErgebnisse: { "Paket 0 / Branch messen": "failure" },
+    }),
+    "Job „Paket 0 / Branch messen“ endete mit failure",
   );
 });
 
@@ -540,9 +589,13 @@ test("ausmisten-melden: ein abgebrochenes Branch-Paket nennt den verlorenen Muta
     },
     branch: { dateien, gemessen: [DATEI], mutanten: { [MUTANT]: "Survived" }, gate: {} },
   });
-  const ergebnis = await melde(context, { zusatz, ergebnisse: { branch: "failure" } });
+  const ergebnis = await melde(context, {
+    zusatz,
+    ergebnisse: { kette: "failure" },
+    jobErgebnisse: { "Paket 0 / Branch messen": "failure" },
+  });
   erwarteRot(ergebnis, `Mutant auf dem Branch nicht mehr getötet: ${MUTANT}`);
-  assert.match(ergebnis.ausgabe, /Job branch endete mit failure/);
+  assert.match(ergebnis.ausgabe, /Job „Paket 0 \/ Branch messen“ endete mit failure/);
   assert.match(
     ergebnis.ausgabe,
     /Paket 0 nach dem ersten Verstoß abgebrochen, nicht gemessen: src\/post\/zweite\.js/,
@@ -561,4 +614,47 @@ test("ausmisten-melden: ein Branch-Artefakt, das nicht alle Dateien gemessen hat
 test("ausmisten-melden: ein Branch-Artefakt mit gemessenen Dateien außerhalb des Pakets setzt failure", async (context) => {
   const ergebnis = await melde(context, { branch: { gemessen: [ZWEITE_DATEI] } });
   erwarteRot(ergebnis, "Liste der gemessenen Dateien ist ungültig");
+});
+
+test("ausmisten-melden: ein Basis-Artefakt eines fehlgeschlagenen Basis-Jobs wird nicht geglaubt", async (context) => {
+  const ergebnis = await melde(context, {
+    jobErgebnisse: { "Paket 0 / Basis messen": "failure" },
+  });
+  erwarteRot(ergebnis, "Job „Paket 0 / Basis messen“ endete mit failure");
+  assert.match(ergebnis.ausgabe, /Für basis-0 fehlt die Prüfsumme/);
+});
+
+test("ausmisten-melden: zwei Prüfsummen-Zeilen im Protokoll der Basis machen sie unglaubwürdig", async (context) => {
+  const ergebnis = await melde(context, {
+    zusatz: () => ({
+      protokolle: {
+        "Paket 0 / Basis messen": [
+          `Basis-Prüfsumme basis-0: ${ANDERE_SUMME}`,
+          `Basis-Prüfsumme basis-0: ${ANDERE_SUMME}`,
+        ],
+      },
+    }),
+  });
+  erwarteRot(ergebnis, "nennt die Prüfsumme nicht genau einmal");
+});
+
+test("ausmisten-melden: eine Prüfsummen-Zeile im Protokoll des Branch-Jobs zählt nicht", async (context) => {
+  const ergebnis = await melde(context, {
+    ausgaben: { summen: undefined },
+    zusatz: (master) => {
+      const text = alsText(artefaktDaten("basis", master));
+      return {
+        protokolle: { "Paket 0 / Branch messen": [`Basis-Prüfsumme basis-0: ${summe(text)}`] },
+      };
+    },
+  });
+  erwarteRot(
+    ergebnis,
+    "Das Protokoll von „Paket 0 / Basis messen“ nennt die Prüfsumme nicht genau einmal",
+  );
+});
+
+test("ausmisten-melden: ein fehlender Basis-Job setzt failure", async (context) => {
+  const jobListe = (liste) => liste.filter(({ name }) => name !== "Paket 0 / Basis messen");
+  erwarteRot(await melde(context, { jobListe }), "Job „Paket 0 / Basis messen“ gibt es 0-mal");
 });

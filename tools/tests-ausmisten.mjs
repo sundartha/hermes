@@ -6,14 +6,12 @@ const AUFRUF = [
   "Aufruf: node tools/tests-ausmisten.mjs",
   "planen --aus <ordner>",
   "| basis --plan-daten <ordner> --paket <nr> --aus <ordner>",
-  "| sammeln",
   "| branch --plan-daten <ordner> --basis-daten <ordner> --paket <nr> --aus <ordner>",
   "| melden [--pr]",
 ].join(" ");
 const PFLICHT = {
   planen: ["aus"],
   basis: ["plan-daten", "paket", "aus"],
-  sammeln: [],
   branch: ["plan-daten", "basis-daten", "paket", "aus"],
   melden: [],
 };
@@ -31,7 +29,6 @@ const BEFEHLE = new Map(
         planDaten: werte["plan-daten"],
         paket: werte.paket,
       }),
-    sammeln: async () => (await befehle()).sammeln(),
     branch: async (werte) =>
       (await befehle()).branch({
         aus: werte.aus,

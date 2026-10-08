@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -14,8 +14,6 @@ import {
 import {
   EXIT_GRUEN,
   EXIT_ROT,
-  bieteAn,
-  laufe,
   messePaket,
   messeUndMelde,
   plane,
@@ -159,19 +157,17 @@ test("ausmisten-messung: ein nach dem Festhalten verändertes Basis-Paket stoppt
   assert.equal(ergebnis.melden.status, EXIT_ROT, ergebnis.melden.ausgabe);
 });
 
-test("ausmisten-messung: ein Plan, der nicht zur Prüfsumme passt, stoppt das Festhalten der Basis", async (context) => {
-  const stand = await plane(context, { weg: [DOPPELT] });
-  const basis = await messePaket(stand, { art: "basis", paket: 0 });
-  assert.equal(basis.status, EXIT_GRUEN, basis.ausgabe);
-  bieteAn(stand.routen, stand.artefakte, ["plan", "basis-0"]);
-  const umgebung = {
-    PAKETE: stand.plan.pakete,
-    PLAN_PRUEFSUMME: "0".repeat(SHA256_ZEICHEN),
-    GITHUB_OUTPUT: join(stand.artefakte, "sammeln.txt"),
+test("ausmisten-messung: ein nach der Basis-Messung ausgetauschtes Basis-Artefakt glaubt melden nicht", async (context) => {
+  const vorMelden = (artefakte) => {
+    const datei = join(artefakte, "basis-0", "basis-0.json");
+    const daten = JSON.parse(readFileSync(datei, "utf8"));
+    writeFileSync(datei, `${JSON.stringify({ ...daten, mutanten: {}, gate: {} })}\n`);
   };
-  const sammeln = await laufe({ args: ["sammeln"], umgebung }, stand);
-  assert.equal(sammeln.status, EXIT_ROT, sammeln.ausgabe);
-  assert.match(sammeln.ausgabe, /Der Plan passt nicht zur Prüfsumme/);
+  const ergebnis = await messeUndMelde(context, { weg: [DOPPELT] }, { vorMelden });
+  assert.equal(ergebnis.zweig.status, EXIT_GRUEN, ergebnis.zweig.ausgabe);
+  assert.equal(ergebnis.melden.status, EXIT_ROT, ergebnis.melden.ausgabe);
+  assert.match(ergebnis.melden.ausgabe, /Artefakt basis-0 passt nicht zur Prüfsumme/);
+  assert.equal(ergebnis.status.state, "failure");
 });
 
 test("ausmisten-messung: ein Plan, der nicht zur Prüfsumme passt, stoppt die Basis-Messung", async (context) => {

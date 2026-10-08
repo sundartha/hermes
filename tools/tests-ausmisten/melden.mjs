@@ -22,6 +22,7 @@ import {
   setzeStatus,
   testschutzNeuStarten,
 } from "./github.mjs";
+import { branchJobName, festgehalteneSumme, jobFehler, jobsDesLaufs } from "./festgehalten.mjs";
 import { ausloeser } from "./herkunft.mjs";
 import { git, leseBereiche } from "./pfade.mjs";
 
@@ -37,9 +38,8 @@ function jobErgebnisse() {
   }
 }
 
-const JOBS = ["planen", "basis", "sammeln", "branch"];
+const JOBS = ["planen", "kette"];
 const ERFOLG = "success";
-const PRUEFSUMME = /^[0-9a-f]{64}$/;
 
 function alsListe(text) {
   try {
@@ -59,15 +59,23 @@ function jobDaten(jobs) {
     (name) => `Job ${name} endete mit ${jobs[name]?.result ?? "nichts"}`,
   );
   const pakete = alsListe(ausgabe(jobs, "planen", "pakete")) ?? [];
-  const summen = alsListe(ausgabe(jobs, "sammeln", "summen")) ?? [];
-  const paketeGueltig = pakete.length > 0 && pakete.every((paket, index) => paket === index);
-  const summenGueltig =
-    summen.length === pakete.length && summen.every((summe) => PRUEFSUMME.test(summe));
-  if (!paketeGueltig) fehler.push("Die Paketliste des Plans fehlt oder ist ungültig");
-  if (!summenGueltig) {
-    fehler.push("Die Prüfsummen der Basis-Pakete fehlen oder passen nicht zur Paketliste");
+  const lesbar = pakete.length > 0 && pakete.every((paket, index) => paket === index);
+  if (!lesbar) fehler.push("Die Paketliste des Plans fehlt oder ist ungültig");
+  return { fehler, pakete, lesbar };
+}
+
+async function festgehalteneSummen(github, nummern) {
+  const jobs = await jobsDesLaufs(github, env.GITHUB_RUN_ID);
+  const fehler = [];
+  const summen = [];
+  for (const nummer of nummern) {
+    const { summe, fehler: grund } = await festgehalteneSumme(github, { jobs, nummer });
+    summen.push(summe ?? "");
+    if (grund) fehler.push(grund);
+    const branch = jobFehler(jobs, branchJobName(nummer));
+    if (branch && !grund) fehler.push(branch);
   }
-  return { fehler, pakete, summen, lesbar: paketeGueltig && summenGueltig };
+  return { fehler, summen };
 }
 
 function paketArtefakt(texte, { name, art, summe, erwartet, dateien }) {
@@ -110,7 +118,8 @@ async function artefakte(github, { jobs, erwartet }) {
     ...nummern.map((nummer) => paketName(BRANCH, nummer)),
   ];
   const geladen = await ladeVorhandene(github, { laufId: env.GITHUB_RUN_ID, erwartet: namen });
-  const bisher = [...geplant.fehler, ...geladen.fehler];
+  const festgehalten = await festgehalteneSummen(github, nummern);
+  const bisher = [...geplant.fehler, ...festgehalten.fehler, ...geladen.fehler];
   if (!geladen.texte.has(PLAN)) return { fehler: bisher };
   const plan = pruefePlan({
     text: geladen.texte.get(PLAN),
@@ -122,7 +131,7 @@ async function artefakte(github, { jobs, erwartet }) {
     return { fehler: [...bisher, "Plan und Paketliste passen nicht zusammen"] };
   const { fehler, teile } = paketTeile(geladen.texte, {
     plan: plan.daten,
-    summen: geplant.summen,
+    summen: festgehalten.summen,
     erwartet,
   });
   return { ...gemessenesErgebnis(teile), issue: plan.daten.issue, fehler: [...bisher, ...fehler] };
