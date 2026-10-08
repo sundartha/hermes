@@ -58,9 +58,59 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+  vorpruefen:
+    name: Prüfungen vor der Messung
+    needs: planen
+    if: (github.event.workflow_run.path == '.github/workflows/ausmisten-eingang.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ausmisten-eingang.yml@')) && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, 'ausmisten/') && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Install-Skripte
+        run: |
+          set -euo pipefail
+          jq -r '.[]' tools/basis/install-skripte.json | xargs -r npm rebuild
+
+      - name: Branch als Daten holen
+        env:
+          KOPF: ${{ github.event.workflow_run.head_sha }}
+        run: git fetch --no-tags origin "$KOPF"
+
+      - name: gitleaks laden
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archive"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" gitleaks
+
+      - name: Prüfungen vor der Messung
+        env:
+          KOPF: ${{ github.event.workflow_run.head_sha }}
+        run: node tools/tests-ausmisten.mjs vorpruefen --kopf "$KOPF" --gitleaks "$RUNNER_TEMP/gitleaks" --aus "$RUNNER_TEMP/vorpruefen"
+
   kette:
     name: Paket ${{ matrix.paket }}
-    needs: planen
+    needs: [planen, vorpruefen]
     if: (github.event.workflow_run.path == '.github/workflows/ausmisten-eingang.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ausmisten-eingang.yml@')) && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, 'ausmisten/') && github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
@@ -75,7 +125,7 @@ jobs:
 
   melden:
     name: Ergebnis melden
-    needs: [planen, kette]
+    needs: [planen, vorpruefen, kette]
     if: always() && (github.event.workflow_run.path == '.github/workflows/ausmisten-eingang.yml' || startsWith(github.event.workflow_run.path, '.github/workflows/ausmisten-eingang.yml@')) && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && startsWith(github.event.workflow_run.head_branch, 'ausmisten/') && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: wartung

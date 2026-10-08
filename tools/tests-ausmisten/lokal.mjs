@@ -1,23 +1,16 @@
 import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { entferneArbeitsordner, legeArbeitsordnerAn } from "./arbeitsordner.mjs";
 import { paketName } from "./artefakte.mjs";
 import { BASIS, BRANCH, leseArtefakt, lesePlan } from "./entscheiden.mjs";
 import { urteilAusTeilen } from "./melden.mjs";
 import { git } from "./pfade.mjs";
+import { meldeVorpruefung, vorpruefen } from "./vorpruefen.mjs";
 import { inSpeicher } from "./zwischenspeicher.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../tests-ausmisten.mjs", import.meta.url));
@@ -26,8 +19,6 @@ const EXIT_ROT = 1;
 const REPOSITORY = "lokal/hermes";
 const REPO_ID = 1;
 const EINGANG = ".github/workflows/ausmisten-eingang.yml";
-const VORPRUEFUNGEN = [];
-const EIGENER_CACHE = ".cache";
 
 function sha(rev) {
   return git(["rev-parse", "--verify", `${rev}^{commit}`]).trim();
@@ -71,21 +62,6 @@ function schritt(stand, { name, args, umgebung = {} }) {
   });
   git(["reset", "-q", "--hard"], stand.arbeitsordner);
   return { exit: lauf.status, werte: ausgabenAus(ausgabe) };
-}
-
-function verlinkeModule(quelle, ziel) {
-  mkdirSync(ziel);
-  for (const eintrag of readdirSync(quelle)) {
-    if (eintrag !== EIGENER_CACHE) symlinkSync(join(quelle, eintrag), join(ziel, eintrag));
-  }
-}
-
-function arbeitsordner(ordner, master) {
-  const ziel = join(ordner, "master");
-  git(["worktree", "add", "--detach", "-q", ziel, master]);
-  const module = join(git(["rev-parse", "--show-toplevel"]).trim(), "node_modules");
-  if (existsSync(module)) verlinkeModule(module, join(ziel, "node_modules"));
-  return ziel;
 }
 
 function messeKette(stand, { nummer, pruefsumme }) {
@@ -137,6 +113,20 @@ function urteil(stand, { pruefsumme, erwartet, summen }) {
   return urteilAusTeilen(teile, fehler);
 }
 
+function messePakete(stand, { pakete, pruefsumme }) {
+  const summen = [];
+  for (const nummer of pakete) {
+    const gruen = messeKette(stand, { nummer, pruefsumme });
+    const basis = ausgabenAus(join(stand.ordner, `${paketName(BASIS, nummer)}.txt`));
+    summen.push(basis.pruefsumme ?? "");
+    if (!gruen) {
+      console.log(`Lokal: rot in Paket ${nummer}; die übrigen Pakete werden nicht gemessen.`);
+      return undefined;
+    }
+  }
+  return summen;
+}
+
 async function messe(stand, { master, kopf, bereich }) {
   const planen = schritt(stand, {
     name: "planen",
@@ -149,33 +139,25 @@ async function messe(stand, { master, kopf, bereich }) {
   });
   if (planen.exit !== EXIT_GRUEN) return EXIT_ROT;
   const { pruefsumme } = planen.werte;
-  const pakete = JSON.parse(planen.werte.pakete);
-  const summen = [];
-  for (const nummer of pakete) {
-    const gruen = messeKette(stand, { nummer, pruefsumme });
-    const basis = ausgabenAus(join(stand.ordner, `${paketName(BASIS, nummer)}.txt`));
-    summen.push(basis.pruefsumme ?? "");
-    if (!gruen) {
-      console.log(`Lokal: rot in Paket ${nummer}; die übrigen Pakete werden nicht gemessen.`);
-      return EXIT_ROT;
-    }
-  }
+  const summen = messePakete(stand, { pakete: JSON.parse(planen.werte.pakete), pruefsumme });
+  if (summen === undefined) return EXIT_ROT;
   const ergebnis = urteil(stand, { pruefsumme, erwartet: { kopf, master, bereich }, summen });
   for (const verstoss of ergebnis.verstoesse) console.log(`Verstoß: ${verstoss}`);
   console.log(`Lokal: ${ergebnis.gruen ? "grün" : "rot"}`);
   return ergebnis.gruen ? EXIT_GRUEN : EXIT_ROT;
 }
 
-export async function lokal({ bereich, master: masterRev, kopf: kopfRev = "HEAD", speicher, aus }) {
-  const [master, kopf] = [sha(masterRev), sha(kopfRev)];
+export async function lokal(optionen) {
+  const { bereich, kopf: kopfRev = "HEAD", speicher, aus, gitleaks } = optionen;
+  const [master, kopf] = [sha(optionen.master), sha(kopfRev)];
   const ordner = aus ?? mkdtempSync(join(tmpdir(), "ausmisten-lokal-"));
   mkdirSync(ordner, { recursive: true });
-  for (const pruefung of VORPRUEFUNGEN) {
-    const verstoesse = await pruefung({ master, kopf, ordner });
-    for (const verstoss of verstoesse) console.log(`Vorprüfung: ${verstoss}`);
-    if (verstoesse.length > 0) return EXIT_ROT;
+  const vorpruefung = vorpruefen({ master, kopf, ordner, gitleaks });
+  if (meldeVorpruefung(vorpruefung) !== EXIT_GRUEN) {
+    console.log("Lokal: rot vor der Messung; es wurde nichts gemessen.");
+    return EXIT_ROT;
   }
-  const arbeit = arbeitsordner(ordner, master);
+  const arbeit = legeArbeitsordnerAn(join(ordner, "master"), master);
   const umgebung = {
     GITHUB_EVENT_PATH: ereignis(ordner, { kopf, bereich }),
     GITHUB_REPOSITORY: REPOSITORY,
@@ -189,6 +171,6 @@ export async function lokal({ bereich, master: masterRev, kopf: kopfRev = "HEAD"
       { master, kopf, bereich },
     );
   } finally {
-    git(["worktree", "remove", "--force", arbeit]);
+    entferneArbeitsordner(arbeit);
   }
 }

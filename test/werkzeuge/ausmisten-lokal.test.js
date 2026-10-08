@@ -6,14 +6,21 @@ import { test } from "node:test";
 import { probeDirectory } from "./probe-repo.js";
 import { DOPPELT, RECHNEN_TEST, ausmistenRepo, starte } from "./ausmisten/hilfen.mjs";
 import { EXIT_GRUEN, EXIT_ROT, WIRKSAME_TESTS, messeUndMelde } from "./ausmisten/messung.mjs";
+import {
+  scheinGitleaks,
+  verlinkeLintWerkzeuge,
+  vorpruefDateien,
+} from "./ausmisten/vorpruefen.mjs";
 
 const WERKZEUG = "tools/tests-ausmisten.mjs";
 
 function lokalesRepo(context, weg) {
-  const repo = ausmistenRepo(context, WIRKSAME_TESTS);
+  const protokoll = join(probeDirectory(context, {}), "aufrufe.txt");
+  const repo = ausmistenRepo(context, { ...WIRKSAME_TESTS, ...vorpruefDateien(protokoll) });
+  verlinkeLintWerkzeuge(repo.ordner);
   const kopf = repo.committe({}, weg);
   repo.git(["checkout", "-q", repo.master]);
-  return { ...repo, kopf };
+  return { ...repo, kopf, gitleaks: scheinGitleaks(context, { protokoll }) };
 }
 
 async function lokal(context, repo, zusatz = []) {
@@ -28,6 +35,8 @@ async function lokal(context, repo, zusatz = []) {
     repo.kopf,
     "--aus",
     aus,
+    "--gitleaks",
+    repo.gitleaks,
     ...zusatz,
   ];
   const ergebnis = await starte(WERKZEUG, { args, cwd: repo.ordner, umgebung: {} });

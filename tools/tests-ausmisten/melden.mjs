@@ -38,7 +38,7 @@ function jobErgebnisse() {
   }
 }
 
-const JOBS = ["planen", "kette"];
+const JOBS = ["planen", "vorpruefen", "kette"];
 const ERFOLG = "success";
 
 function alsListe(text) {
