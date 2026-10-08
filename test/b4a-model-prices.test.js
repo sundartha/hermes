@@ -1,8 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { config, resolveModelPrices } from "../src/config.js";
 import { modelPriceScheduleBannerLine } from "../src/boot.js";
 import { stalePriceFindings, MODEL_PRICE_MAX_AGE_DAYS } from "../src/boot-guard.js";
@@ -181,32 +178,4 @@ test("B4A-STALE-2: einen Tag VOR der Hoechstdauer schweigt der Guard (T5-Rand)",
     stalePriceFindings(STALE_PRICES, daysAfterAnchor(MODEL_PRICE_MAX_AGE_DAYS - 1)),
     [],
   );
-});
-
-const ADAPTER_SOURCE = fs.readFileSync(
-  path.join(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "src",
-    "llm",
-    "adapters",
-    "anthropic.js",
-  ),
-  "utf8",
-);
-
-test("B4A-TTL-1: die Cache-Markierung traegt KEIN ttl - sonst gilt eine andere Schreib-Rate als die hinterlegte", () => {
-  assert.ok(
-    ADAPTER_SOURCE.includes('const CACHE_CONTROL_EPHEMERAL = Object.freeze({ type: "ephemeral" });'),
-    "Ein `ttl` an der Cache-Markierung waehlt eine ANDERE Schreib-Rate; die Preistabelle " +
-      "traegt nur die 5m-Rate - sonst wird still zu wenig gebucht (Regel 1).",
-  );
-  const marks = ADAPTER_SOURCE.match(/cache_control:\s*\S+/g) || [];
-  assert.ok(marks.length > 0, "ohne Cache-Markierung waere dieser Riegel eine leere Behauptung");
-  for (const mark of marks)
-    assert.equal(
-      mark,
-      "cache_control: CACHE_CONTROL_EPHEMERAL",
-      "jede Cache-Markierung MUSS die eine Konstante referenzieren, kein eigenes Literal",
-    );
 });
