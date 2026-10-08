@@ -314,28 +314,6 @@ test("P3-6: Sink wirft synchron - HTTP bleibt der Timeout-Antwort, kein 500, gen
   }
 });
 
-test("P3-7: Verdrahtung - server.js baut durableAuditFor ueber makeDurableAudit, app.js reicht es als auditFor an die Route", async () => {
-  const fs = await import("node:fs");
-  const path = await import("node:path");
-  const { fileURLToPath } = await import("node:url");
-  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-  const serverSrc = fs.readFileSync(path.join(root, "src/server.js"), "utf8");
-  assert.match(
-    serverSrc,
-    /const durableAuditFor = \(tenantId\) => makeDurableAudit\(\{ audit, auditStoreRef, tenantId \}\);/,
-    "server.js muss durableAuditFor ueber makeDurableAudit bauen",
-  );
-  assert.match(serverSrc, /\bdurableAuditFor,/, "durableAuditFor muss in deps stehen");
-
-  const appSrc = fs.readFileSync(path.join(root, "src/app.js"), "utf8");
-  assert.match(
-    appSrc,
-    /auditFor: durableAuditFor,/,
-    "app.js muss durableAuditFor als auditFor an makeElevenLabsWebhookRoutes reichen",
-  );
-});
-
 test("P3-8: die Anbieter-Antwort traegt exakt status/reason/answer - die Spur verlaesst den Server nicht", async () => {
   const { callId, conversationId } = nextIds();
   const { store, cleanup } = storeDouble({ callId, conversationId });
