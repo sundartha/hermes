@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { erreichendeTests, importgraph } from "../../tools/tests-ausmisten/messmenge.mjs";
 import { FREMDE_QUELLE, GRUNDDATEIEN, RECHNEN_TEST } from "./ausmisten/hilfen.mjs";
-import { EXIT_GRUEN, EXIT_ROT, messeUndMelde } from "./ausmisten/messung.mjs";
+import { EXIT_GRUEN, EXIT_ROT, erwarteBranchUndMeldenGruen, messeUndMelde } from "./ausmisten/messung.mjs";
 import { probeDirectory } from "./probe-repo.js";
 
 const ZIEL = "src/rechnen.js";
@@ -102,8 +102,7 @@ test("ausmisten-dynamisch: ein umbenannter Test, der seine Datei über eine Naht
   const ergebnis = await messeUndMelde(context, { weg: [], neu }, { dateien: NAHT_DATEIEN });
   assert.equal(ergebnis.basis.status, EXIT_GRUEN, ergebnis.basis.ausgabe);
   assert.ok(ergebnis.gelesen.erreicht.includes(FREMDE_QUELLE), ergebnis.basis.ausgabe);
-  assert.equal(ergebnis.zweig.status, EXIT_GRUEN, ergebnis.zweig.ausgabe);
-  assert.equal(ergebnis.melden.status, EXIT_GRUEN, ergebnis.melden.ausgabe);
+  erwarteBranchUndMeldenGruen(ergebnis);
 });
 
 test("ausmisten-dynamisch: ein gelöschter Test, der seine Datei über eine Naht lädt, wird rot", async (context) => {

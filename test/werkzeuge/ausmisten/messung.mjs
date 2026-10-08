@@ -1,6 +1,8 @@
+import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { ausgabenAus as ausgaben } from "../../../tools/tests-ausmisten/lokal.mjs";
 import { ereignisDatei } from "../pruefer/hilfen.mjs";
 import { probeDirectory } from "../probe-repo.js";
 import {
@@ -18,6 +20,20 @@ import {
 const WERKZEUG = "tools/tests-ausmisten.mjs";
 export const EXIT_GRUEN = 0;
 export const EXIT_ROT = 1;
+
+export function erwarteBranchUndMeldenGruen(ergebnis) {
+  assert.equal(ergebnis.zweig.status, EXIT_GRUEN, ergebnis.zweig.ausgabe);
+  assert.equal(ergebnis.melden.status, EXIT_GRUEN, ergebnis.melden.ausgabe);
+}
+
+export function erwarteGemeldetenVerlust(ergebnis, quelle) {
+  assert.equal(ergebnis.melden.status, EXIT_ROT, ergebnis.melden.ausgabe);
+  assert.ok(
+    ergebnis.melden.ausgabe.includes(`Mutant auf dem Branch nicht mehr getötet: ${quelle}:`),
+    ergebnis.melden.ausgabe,
+  );
+  assert.equal(ergebnis.status.state, "failure");
+}
 const LAUF_ID = "4711";
 const AUTOR = [
   "-c",
@@ -58,16 +74,6 @@ export const WIRKSAME_TESTS = {
     "assert.equal(modul.doppelt(3), 6);",
   ),
 };
-
-export function ausgaben(datei) {
-  const zeilen = readFileSync(datei, "utf8").split("\n").filter(Boolean);
-  return Object.fromEntries(
-    zeilen.map((zeile) => [
-      zeile.slice(0, zeile.indexOf("=")),
-      zeile.slice(zeile.indexOf("=") + 1),
-    ]),
-  );
-}
 
 export function bieteAn(routen, artefakte, alleNamen) {
   const namen = alleNamen.filter((name) => existsSync(join(artefakte, name, `${name}.json`)));

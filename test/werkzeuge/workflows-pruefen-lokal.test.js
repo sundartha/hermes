@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const SCRIPT_PATH = resolve(REPO_ROOT, "tools/workflows-pruefen.mjs");
+const SCRIPT_PATH = fileURLToPath(new URL("../../tools/workflows-pruefen.mjs", import.meta.url));
 const EXIT_OK = 0;
 const EXIT_FINDING = 1;
 const AUFRUFER = "aufrufer.yml";

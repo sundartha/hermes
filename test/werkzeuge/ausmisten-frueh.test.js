@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { DOPPELT, EINGANG_QUELLE, FREMDE_QUELLE, RECHNEN_TEST } from "./ausmisten/hilfen.mjs";
-import { EXIT_GRUEN, EXIT_ROT, messeUndMelde } from "./ausmisten/messung.mjs";
+import { EXIT_GRUEN, EXIT_ROT, erwarteGemeldetenVerlust, messeUndMelde } from "./ausmisten/messung.mjs";
 
 function branchArtefakt(artefakte) {
   return JSON.parse(readFileSync(join(artefakte, "branch-0", "branch-0.json"), "utf8"));
@@ -22,12 +22,7 @@ test("ausmisten-frueh: ein verlorener Mutant macht schon die Branch-Messung rot 
     ergebnis.zweig.ausgabe,
     /Paket 0: rot nach src\/fremd\/rechnen\.js; 1 weitere Dateien nicht mehr gemessen\./,
   );
-  assert.equal(ergebnis.melden.status, EXIT_ROT, ergebnis.melden.ausgabe);
-  assert.match(
-    ergebnis.melden.ausgabe,
-    /Mutant auf dem Branch nicht mehr getötet: src\/fremd\/rechnen\.js:/,
-  );
-  assert.equal(ergebnis.status.state, "failure");
+  erwarteGemeldetenVerlust(ergebnis, FREMDE_QUELLE);
 });
 
 test("ausmisten-frueh: nach dem ersten Verstoß misst der Branch keine weitere Datei und legt sein Ergebnis trotzdem ab", async (context) => {
