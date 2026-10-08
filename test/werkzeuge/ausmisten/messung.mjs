@@ -94,7 +94,7 @@ export async function plane(context, branch, dateien = {}) {
   if (branch.nachricht) repo.git([...AUTOR, "commit", "-q", "--amend", "-m", branch.nachricht]);
   const kopf = repo.git(["rev-parse", "HEAD"]).stdout.trim();
   repo.git(["checkout", "-q", repo.master]);
-  const artefakte = probeDirectory(context, { "planen.txt": "", "sammeln.txt": "" });
+  const artefakte = probeDirectory(context, { "planen.txt": "" });
   const routen = new Map([
     [`GET /repos/${REPOSITORY}/actions/workflows/ausmisten-eingang.yml`, { id: EINGANG_ID }],
     [`POST /repos/${REPOSITORY}/statuses/${kopf}`, {}],
@@ -142,35 +142,85 @@ export async function messePaket(stand, { art, paket, zusatz }) {
   );
 }
 
-export async function messeUndMelde(context, branch, { dateien = {}, vorBranch } = {}) {
+const ERSTE_JOB_ID = 700;
+const JOBS_JE_PAKET = 2;
+const ZEITSTEMPEL = "2026-10-08T10:00:00.0000000Z";
+
+function alsProtokoll(ausgabe) {
+  return Buffer.from(
+    ausgabe
+      .split("\n")
+      .map((zeile) => `${ZEITSTEMPEL} ${zeile}`)
+      .join("\n"),
+  );
+}
+
+function ergebnisVon(lauf) {
+  if (lauf === undefined) return "cancelled";
+  return lauf.status === EXIT_GRUEN ? "success" : "failure";
+}
+
+export function bieteJobsAn(routen, ketten) {
+  const jobs = ketten.flatMap(({ basis, zweig }, paket) => [
+    {
+      id: ERSTE_JOB_ID + JOBS_JE_PAKET * paket,
+      name: `Paket ${paket} / Basis messen`,
+      lauf: basis,
+    },
+    {
+      id: ERSTE_JOB_ID + JOBS_JE_PAKET * paket + 1,
+      name: `Paket ${paket} / Branch messen`,
+      lauf: zweig,
+    },
+  ]);
+  routen.set(`GET /repos/${REPOSITORY}/actions/runs/${LAUF_ID}/jobs`, {
+    total_count: jobs.length,
+    jobs: jobs.map(({ id, name, lauf }) => ({
+      id,
+      name,
+      status: "completed",
+      conclusion: ergebnisVon(lauf),
+    })),
+  });
+  for (const { id, lauf } of jobs)
+    routen.set(
+      `GET /repos/${REPOSITORY}/actions/jobs/${id}/logs`,
+      alsProtokoll(lauf?.ausgabe ?? ""),
+    );
+}
+
+function pruefsummeDer(artefakte, name) {
+  const datei = join(artefakte, `${name}.txt`);
+  return existsSync(datei) ? (ausgaben(datei).pruefsumme ?? "") : "";
+}
+
+async function messeKette(stand, paket) {
+  const basis = await messePaket(stand, { art: "basis", paket });
+  if (basis.status !== EXIT_GRUEN) return { basis };
+  stand.vorBranch?.(stand.artefakte);
+  const zusatz = { BASIS_PRUEFSUMME: pruefsummeDer(stand.artefakte, `basis-${paket}`) };
+  return { basis, zweig: await messePaket(stand, { art: "branch", paket, zusatz }) };
+}
+
+export async function messeUndMelde(context, branch, { dateien = {}, vorBranch, vorMelden } = {}) {
   const stand = { ...(await plane(context, branch, dateien)), vorBranch };
   const { artefakte, plan, routen } = stand;
   const pakete = JSON.parse(plan.pakete);
-  const basisLaeufe = [];
-  for (const paket of pakete) basisLaeufe.push(await messePaket(stand, { art: "basis", paket }));
-  const basisNamen = pakete.map((paket) => `basis-${paket}`);
-  bieteAn(routen, artefakte, ["plan", ...basisNamen]);
-  const sammelUmgebung = {
-    PAKETE: plan.pakete,
-    PLAN_PRUEFSUMME: plan.pruefsumme,
-    GITHUB_OUTPUT: join(artefakte, "sammeln.txt"),
-  };
-  const sammeln = await laufe({ args: ["sammeln"], umgebung: sammelUmgebung }, stand);
-  const { summen } = ausgaben(join(artefakte, "sammeln.txt"));
-  stand.vorBranch?.(artefakte);
-  const zweige = [];
-  for (const paket of pakete)
-    zweige.push(
-      await messePaket(stand, { art: "branch", paket, zusatz: { BASIS_SUMMEN: summen } }),
-    );
-  bieteAn(routen, artefakte, ["plan", ...basisNamen, ...pakete.map((paket) => `branch-${paket}`)]);
-  const ergebnis = (liste) =>
-    liste.every(({ status }) => status === EXIT_GRUEN) ? "success" : "failure";
+  const ketten = [];
+  for (const paket of pakete) {
+    const kette = await messeKette(stand, paket);
+    ketten.push(kette);
+    if (kette.zweig?.status !== EXIT_GRUEN) break;
+  }
+  const namen = pakete.flatMap((paket) => [`basis-${paket}`, `branch-${paket}`]);
+  vorMelden?.(artefakte);
+  bieteAn(routen, artefakte, ["plan", ...namen]);
+  bieteJobsAn(routen, ketten);
+  const gruen =
+    ketten.length === pakete.length && ketten.every(({ zweig }) => zweig?.status === EXIT_GRUEN);
   const jobs = {
-    planen: { result: ergebnis([stand.planen]), outputs: plan },
-    basis: { result: ergebnis(basisLaeufe), outputs: {} },
-    sammeln: { result: ergebnis([sammeln]), outputs: { summen } },
-    branch: { result: ergebnis(zweige), outputs: {} },
+    planen: { result: ergebnisVon(stand.planen), outputs: plan },
+    kette: { result: gruen ? "success" : "failure", outputs: {} },
   };
   const melden = await laufe(
     { args: ["melden"], umgebung: { JOB_ERGEBNISSE: JSON.stringify(jobs) } },
@@ -179,5 +229,6 @@ export async function messeUndMelde(context, branch, { dateien = {}, vorBranch }
   const gelesen = JSON.parse(readFileSync(join(artefakte, "basis-0", "basis-0.json"), "utf8"));
   const { anfragen } = stand.github;
   const status = anfragen.find(({ methode }) => methode === "POST")?.rumpf;
-  return { basis: basisLaeufe[0], zweig: zweige[0], melden, gelesen, status, sammeln, artefakte };
+  const [erste] = ketten;
+  return { basis: erste.basis, zweig: erste.zweig, melden, gelesen, status, artefakte, ketten };
 }

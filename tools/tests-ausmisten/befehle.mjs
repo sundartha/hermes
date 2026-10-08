@@ -3,8 +3,7 @@ import { join } from "node:path";
 import { cwd, env } from "node:process";
 
 import { setzeAusgaben } from "../ziele/ausgabe.mjs";
-import { githubZugang } from "../auftrag/pruefer-github.mjs";
-import { PLAN, ladeArtefakte, paketName } from "./artefakte.mjs";
+import { paketName } from "./artefakte.mjs";
 import {
   BASIS,
   BRANCH,
@@ -12,11 +11,11 @@ import {
   PLAN_ART,
   leseArtefakt,
   lesePlan,
-  pruefePlan,
   pruefsumme,
   rang,
   verstoesseIn,
 } from "./entscheiden.mjs";
+import { pruefsummenZeile } from "./festgehalten.mjs";
 import { ausloeser } from "./herkunft.mjs";
 import { git, gitGelingt, leseBereiche, pfadVerstoesse, testaenderungen } from "./pfade.mjs";
 import { vorpruefung } from "./vorpruefung.mjs";
@@ -88,7 +87,9 @@ function schreibeErgebnis(aus, name, daten) {
   mkdirSync(aus, { recursive: true });
   const text = `${JSON.stringify(daten, null, EINRUECKUNG)}\n`;
   writeFileSync(join(aus, `${name}.json`), text);
-  setzeAusgaben({ pruefsumme: pruefsumme(text) });
+  const summe = pruefsumme(text);
+  setzeAusgaben({ pruefsumme: summe });
+  return summe;
 }
 
 function kopfdaten({ lauf, beginn }, dateien) {
@@ -179,7 +180,7 @@ export async function basis({ aus, planDaten, paket }) {
   const vorlauf = await werkzeug.trockenlauf(alt);
   const gateAlt = alt.filter((test) => gates.has(test));
   const gemessen = await werkzeug.messeGegenAlte({ dateien, alt, gateAlt });
-  schreibeErgebnis(aus, paketName(BASIS, nummer), {
+  const summe = schreibeErgebnis(aus, paketName(BASIS, nummer), {
     ...kopfdaten(vorbereitung, dateien),
     art: BASIS,
     paket: nummer,
@@ -192,49 +193,17 @@ export async function basis({ aus, planDaten, paket }) {
     trockenlauf: vorlauf,
     jeDatei: gemessen.jeDatei,
   });
-}
-
-function geplantePakete(paketeText) {
-  const pakete = JSON.parse(paketeText ?? "null");
-  if (
-    !Array.isArray(pakete) ||
-    !pakete.every((paket, index) => paket === index) ||
-    pakete.length === 0
-  ) {
-    throw new Error("Die Paketliste des Plans fehlt oder ist ungültig.");
-  }
-  return pakete;
-}
-
-export async function sammeln({ github = githubZugang({ token: env.GITHUB_TOKEN ?? "" }) } = {}) {
-  const herkunft = await ausloeser({ bereiche: leseBereiche() });
-  const master = git(["rev-parse", "HEAD"]).trim();
-  const erwartet = { kopf: herkunft.kopf, master, bereich: herkunft.bereich };
-  const pakete = geplantePakete(env.PAKETE);
-  const namen = [PLAN, ...pakete.map((paket) => paketName(BASIS, paket))];
-  const { fehler, texte } = await ladeArtefakte(github, {
-    laufId: env.GITHUB_RUN_ID,
-    erwartet: namen,
-  });
-  if (fehler.length > 0) throw new Error(fehler.join("; "));
-  const plan = pruefePlan({ text: texte.get(PLAN), summe: env.PLAN_PRUEFSUMME, erwartet });
-  if (plan.fehler) throw new Error(plan.fehler.join("; "));
-  if (plan.daten.pakete.length !== pakete.length)
-    throw new Error("Plan und Paketliste passen nicht zusammen.");
-  const summen = pakete.map((paket) => pruefsumme(texte.get(paketName(BASIS, paket))));
-  setzeAusgaben({ summen: JSON.stringify(summen) });
-  console.log(`${summen.length} Basis-Artefakte festgehalten.`);
+  console.log(pruefsummenZeile(nummer, summe));
 }
 
 function basisArtefakt(ordner, { lauf, nummer }) {
-  const summen = JSON.parse(env.BASIS_SUMMEN ?? "[]");
   const erwartet = { kopf: lauf.kopf, master: lauf.master, bereich: lauf.bereich };
   const name = paketName(BASIS, nummer);
   const { daten, fehler } = leseArtefakt({
     ordner,
     name,
     art: BASIS,
-    summe: summen[nummer] ?? "",
+    summe: env.BASIS_PRUEFSUMME ?? "",
     erwartet,
   });
   if (fehler) throw new Error(`Basis-Artefakt unbrauchbar: ${fehler.join("; ")}`);
