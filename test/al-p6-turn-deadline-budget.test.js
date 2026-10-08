@@ -1,4 +1,4 @@
-import { test, before, after } from "node:test";
+import { test, before, after, mock } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
@@ -60,18 +60,23 @@ function capWithHeadroom(headroomCents) {
   return capCents;
 }
 
+before(() => {
+  mock.timers.enable({ apis: ["Date"], now: Date.now() });
+});
+
+after(() => {
+  mock.timers.reset();
+});
+
 before(async () => {
   server = http.createServer((req, res) => {
     req.on("data", () => {});
     req.on("end", () => {
       bodies.push(true);
       const payload = JSON.stringify(queue.shift() || toolRound());
-      const respond = () => {
-        res.setHeader("content-type", "application/json");
-        res.end(payload);
-      };
-      if (delayMs) setTimeout(respond, delayMs);
-      else respond();
+      mock.timers.tick(delayMs);
+      res.setHeader("content-type", "application/json");
+      res.end(payload);
     });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
