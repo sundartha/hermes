@@ -123,6 +123,41 @@ test("ausmisten-lokal: ohne --master bricht der Befehl mit der Aufrufhilfe ab", 
 });
 
 const EXIT_FREIGABE = 3;
+const UNTERDRUECKUNGEN = "eslint-suppressions.json";
+const UNGENUTZT_AUF_MASTER = 2;
+const UNGENUTZT_IM_BRANCH = 1;
+const EINRUECKUNG = 2;
+
+function mitUngenutzten(anzahl) {
+  const nummern = [...Array(anzahl).keys()];
+  const konstanten = nummern.map((nummer) => `const UNGENUTZT_${nummer} = ${nummer};\n`);
+  return `${WIRKSAME_TESTS[DOPPELT]}${konstanten.join("")}`;
+}
+
+function unterdrueckteUngenutzte(anzahl) {
+  const eintraege = { [DOPPELT]: { "no-unused-vars": { count: anzahl } } };
+  return `${JSON.stringify(eintraege, null, EINRUECKUNG)}\n`;
+}
+
+function mitUnterdrueckten(anzahl) {
+  return { [DOPPELT]: mitUngenutzten(anzahl), [UNTERDRUECKUNGEN]: unterdrueckteUngenutzte(anzahl) };
+}
+
+test("ausmisten-lokal: eine gesenkte Unterdrückung des eigenen Tests endet weiter mit Exit 3 und nennt die Freigabe", async (context) => {
+  const repo = lokalesRepo(context, [], {
+    dateien: mitUnterdrueckten(UNGENUTZT_AUF_MASTER),
+    neu: mitUnterdrueckten(UNGENUTZT_IM_BRANCH),
+  });
+  const ergebnis = await lokal(context, repo);
+  assert.equal(ergebnis.status, EXIT_FREIGABE, ergebnis.ausgabe);
+  assert.ok(
+    ergebnis.ausgabe.includes(
+      `Freigabe nötig: Unterdrückung in eslint-suppressions.json gesenkt: ${DOPPELT} no-unused-vars ${UNGENUTZT_AUF_MASTER} → ${UNGENUTZT_IM_BRANCH}`,
+    ),
+    ergebnis.ausgabe,
+  );
+  assert.match(ergebnis.ausgabe, /Lokal: grün bis auf die Freigabe durch Antonio im PR \(Exit 3\)/);
+});
 
 test("ausmisten-lokal: ein gelöschter ausgenommener Texttest endet mit Exit 3 und nennt Fall und Freigabe", async (context) => {
   const repo = lokalesRepo(context, [], {
