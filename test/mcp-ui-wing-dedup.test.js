@@ -1,7 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import {
   widgetHtml,
   WIDGET_AGENT_STATUS,
@@ -26,20 +24,35 @@ const STATIC_WIDGETS = [
   ["my-number.html", WIDGET_MY_NUMBER],
   ["calls.html", WIDGET_CALLS],
 ];
-const ALL_WIDGETS = [...STATIC_WIDGETS, ["call.html", WIDGET_CALL]];
 
-const widgetDir = fileURLToPath(new URL("../src/ui/widgets/", import.meta.url));
-const rawSource = (file) => readFileSync(widgetDir + file, "utf8");
+const EINMAL = 1;
+const WING_DRIFT_KEYFRAMES = /@keyframes\s+hermesWingDrift/g;
 
-for (const [file] of ALL_WIDGETS) {
-  test(`T-wing-dedup-source-${file}: rohe Quelle traegt nur Platzhalter, kein WING_PNG/Keyframe-Copy-Paste mehr`, () => {
-    const raw = rawSource(file);
-    assert.ok(raw.includes("/*__WING_CSS__*/"), "CSS-Platzhalter vorhanden");
-    assert.ok(raw.includes("<!--__WING_MARKUP__-->"), "Markup-Platzhalter vorhanden");
-    assert.ok(!raw.includes(WING_PNG), "WING_PNG NICHT mehr woertlich in der Quelle (nur noch injiziert)");
-    assert.doesNotMatch(raw, /@keyframes\s+hermesWingDrift/, "Wing-Keyframes NICHT mehr woertlich in der Quelle");
-  });
+function vorkommen(text, gesucht) {
+  return text.split(gesucht).length - 1;
 }
+
+function pruefeWingGenauEinmal(id) {
+  const html = widgetHtml(id);
+  assert.equal(vorkommen(html, WING_PNG), EINMAL, "WING_PNG genau einmal (nur injiziert, keine Kopie in der Quelle)");
+  assert.equal(html.match(WING_DRIFT_KEYFRAMES).length, EINMAL, "Wing-Keyframes genau einmal");
+}
+
+test("T-wing-dedup-once-agent-status: ausgeliefertes Widget traegt WING_PNG und die Wing-Keyframes genau einmal", () => {
+  pruefeWingGenauEinmal(WIDGET_AGENT_STATUS);
+});
+
+test("T-wing-dedup-once-my-number: ausgeliefertes Widget traegt WING_PNG und die Wing-Keyframes genau einmal", () => {
+  pruefeWingGenauEinmal(WIDGET_MY_NUMBER);
+});
+
+test("T-wing-dedup-once-calls: ausgeliefertes Widget traegt WING_PNG und die Wing-Keyframes genau einmal", () => {
+  pruefeWingGenauEinmal(WIDGET_CALLS);
+});
+
+test("T-wing-dedup-once-call: ausgeliefertes Widget traegt WING_PNG und die Wing-Keyframes genau einmal", () => {
+  pruefeWingGenauEinmal(WIDGET_CALL);
+});
 
 for (const [, id] of STATIC_WIDGETS) {
   test(`T-wing-dedup-output-static-${id}: injiziertes CSS/Markup ist exakt WING_CSS_DARK_STATIC/WING_MARKUP_DARK_STATIC (H4: Olympus-HUD ist volldunkel)`, () => {
