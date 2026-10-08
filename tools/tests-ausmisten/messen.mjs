@@ -1,10 +1,9 @@
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { cwd, env } from "node:process";
 import { fileURLToPath } from "node:url";
-
-import { Stryker } from "@stryker-mutator/core";
 
 import { patternFlagsFor } from "../../test/testbaenke-run.mjs";
 import { gruppen } from "../mutationspruefung/gruppen.mjs";
@@ -23,7 +22,8 @@ const KONFIGURATION = Object.fromEntries(
 const BANK = "regression";
 const ARBEITSORDNER = join("node_modules", ".cache", "tests-ausmisten");
 const LEERRAUM = /\s+/g;
-const OHNE_TESTS = /No tests were executed/;
+const STRYKER_LAUF = fileURLToPath(new URL("stryker-lauf.mjs", import.meta.url));
+const KEIN_PROZESS = "ESRCH";
 const MS_JE_SEKUNDE = 1000;
 const NACHKOMMA = 10;
 
@@ -43,6 +43,44 @@ function eintrag({ fileName, location, mutatorName, replacement, status }) {
   };
 }
 
+function beendeGruppe(pid) {
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch (fehler) {
+    if (fehler.code !== KEIN_PROZESS) throw fehler;
+  }
+}
+
+async function inEigenerGruppe(args, optionen) {
+  const kind = spawn(process.execPath, args, { ...optionen, detached: true });
+  const aufraeumen = () => beendeGruppe(kind.pid);
+  process.once("exit", aufraeumen);
+  try {
+    const [exit] = await once(kind, "exit");
+    return exit;
+  } finally {
+    process.removeListener("exit", aufraeumen);
+    aufraeumen();
+  }
+}
+
+async function strykerImEigenenProzess(optionen) {
+  const ordner = mkdtempSync(join(ARBEITSORDNER, "auftrag-"));
+  try {
+    const [auftrag, antwort] = [join(ordner, "optionen.json"), join(ordner, "ergebnis.json")];
+    writeFileSync(auftrag, JSON.stringify(optionen));
+    const exit = await inEigenerGruppe([STRYKER_LAUF, auftrag, antwort], {
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+    if (exit !== 0) throw new Error(`Der Stryker-Lauf endete mit Exit ${exit}.`);
+    const { ergebnisse, fehler } = JSON.parse(readFileSync(antwort, "utf8"));
+    if (fehler !== undefined) throw new Error(fehler);
+    return ergebnisse;
+  } finally {
+    rmSync(ordner, { recursive: true, force: true });
+  }
+}
+
 async function strykerLauf({ mutate, tests }) {
   mkdirSync(ARBEITSORDNER, { recursive: true });
   const tempDirName = mkdtempSync(join(ARBEITSORDNER, "lauf-"));
@@ -58,10 +96,7 @@ async function strykerLauf({ mutate, tests }) {
       configFile: KONFIGURATIONSDATEI,
       tempDirName,
     };
-    return (await new Stryker(optionen).runMutationTest()).map(eintrag);
-  } catch (fehler) {
-    if (OHNE_TESTS.test(fehler.message)) return [];
-    throw fehler;
+    return (await strykerImEigenenProzess(optionen)).map(eintrag);
   } finally {
     rmSync(tempDirName, { recursive: true, force: true });
   }
@@ -107,15 +142,14 @@ export function gateMenge() {
   return new Set([...gates, ...katalog]);
 }
 
-export function trockenlauf(tests) {
+export async function trockenlauf(tests) {
   if (tests.length === 0) return { sekunden: 0, exit: 0 };
   const beginn = Date.now();
-  const lauf = spawnSync(
-    process.execPath,
+  const exit = await inEigenerGruppe(
     ["--test", ...KONFIGURATION.tap.nodeArgs, ...patternFlagsFor(BANK), ...tests],
     { stdio: "ignore", env: { ...env, NODE_ENV: "test" } },
   );
-  return { sekunden: sekundenSeit(beginn), exit: lauf.status };
+  return { sekunden: sekundenSeit(beginn), exit };
 }
 
 function protokolliere(ergebnis, { datei, art, stati, tests, beginn }) {

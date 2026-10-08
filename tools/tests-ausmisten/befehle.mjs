@@ -173,7 +173,7 @@ export async function basis({ aus, planDaten, paket }) {
   }));
   const gates = werkzeug.gateMenge();
   const { alt, neu } = plan.tests;
-  const vorlauf = werkzeug.trockenlauf(alt);
+  const vorlauf = await werkzeug.trockenlauf(alt);
   const gateAlt = alt.filter((test) => gates.has(test));
   const gemessen = await werkzeug.messeGegenAlte({ dateien, alt, gateAlt });
   schreibeErgebnis(aus, paketName(BASIS, nummer), {
@@ -259,7 +259,7 @@ export async function branch({ aus, planDaten, basisDaten, paket }) {
     throw new Error("Basis-Artefakt passt nicht zum Paket.");
   legeBranchDarueber(lauf);
   const graph = await werkzeug.importgraph();
-  const vorlauf = werkzeug.trockenlauf(daten.tests.neu);
+  const vorlauf = await werkzeug.trockenlauf(daten.tests.neu);
   const gemessen = await werkzeug.messeGegenNeue({
     dateien,
     basis: getoetet,
