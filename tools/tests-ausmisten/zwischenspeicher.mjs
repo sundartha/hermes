@@ -21,7 +21,7 @@ const WERKZEUG_PFADE = [
 const MAX_FRUEHERE_LAEUFE = 10;
 const GELESENE_LAEUFE = 30;
 const BASIS_NAME = /^basis-(\d+)$/;
-const UEBERNOMMEN = ["mutanten", "gate", "orte", "trockenlauf", "jeDatei"];
+const UEBERNOMMEN = ["mutanten", "gate", "orte", "trockenlauf", "jeDatei", "ausgenommen"];
 
 function inhalte(master, { pfade, verzeichnis }) {
   return pfade.map((pfad) => [pfad, git(["rev-parse", `${master}:${pfad}`], verzeichnis).trim()]);

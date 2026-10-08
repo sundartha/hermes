@@ -10,12 +10,19 @@ const NACH_OBEN = /^\.\.(?:\/|$)/;
 const MAX_TIEFE = 8;
 const DYNAMISCHER_IMPORT = "import(";
 
-export function syntaxknoten(datei, text) {
+export function syntaxbaum(datei, text) {
   const linter = new Linter();
   const sourceType = COMMONJS.test(datei) ? "commonjs" : "module";
   const meldungen = linter.verify(text, { languageOptions: { ecmaVersion: "latest", sourceType } });
   if (meldungen.some(({ fatal }) => fatal)) return undefined;
   const { ast, visitorKeys } = linter.getSourceCode();
+  return { ast, visitorKeys };
+}
+
+export function syntaxknoten(datei, text) {
+  const baum = syntaxbaum(datei, text);
+  if (baum === undefined) return undefined;
+  const { ast, visitorKeys } = baum;
   const gefunden = [];
   const offen = [ast];
   while (offen.length > 0) {

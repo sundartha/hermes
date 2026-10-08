@@ -31,6 +31,7 @@ const RANG = new Map([
   [TIMEOUT, RANG_ZEITUEBERSCHREITUNG],
 ]);
 const MAX_BESCHREIBUNG = 140;
+const STAND_IM_BRANCH = new Set(["unverändert", "geändert", "gelöscht", "nicht zuzuordnen"]);
 const AUSLASSUNG = "…";
 
 export function rang(status) {
@@ -93,6 +94,23 @@ function istOrt(ort) {
   );
 }
 
+function istFall(fall, dateien) {
+  return (
+    istObjekt(fall) &&
+    dateien.includes(fall.datei) &&
+    TESTPFAD.test(fall.test ?? "") &&
+    typeof fall.name === "string" &&
+    fall.name.length > 0
+  );
+}
+
+export function istFallListe(wert, dateien, { mitStand = false } = {}) {
+  if (!Array.isArray(wert) || !Array.isArray(dateien)) return false;
+  return wert.every(
+    (fall) => istFall(fall, dateien) && (!mitStand || STAND_IM_BRANCH.has(fall.imBranch)),
+  );
+}
+
 function istSenkung(eintrag) {
   return (
     istObjekt(eintrag) &&
@@ -131,6 +149,10 @@ function basisFehler(daten) {
     [orteGueltig(daten), "Orte der getöteten Mutanten fehlen"],
     [PRUEFSUMME.test(daten.schluessel ?? ""), "Schlüssel des Zwischenspeichers fehlt"],
     [herkunftGueltig(daten.wiederverwendet), "Angabe zur Wiederverwendung ist ungültig"],
+    [
+      istFallListe(daten.ausgenommen, daten.dateien, { mitStand: true }),
+      "Liste der ausgenommenen Testfälle ist ungültig",
+    ],
   ];
   return pruefungen.filter(([gilt]) => !gilt).map(([, grund]) => grund);
 }
@@ -140,16 +162,23 @@ function herkunftGueltig(wert) {
   return istObjekt(wert) && typeof wert.lauf === "string" && typeof wert.artefakt === "string";
 }
 
+function messwerteGueltig(eintrag, dateien) {
+  return (
+    istMutantenListe(eintrag.mutanten, dateien) &&
+    istMutantenListe(eintrag.gate, dateien) &&
+    orteGueltig(eintrag) &&
+    istZahl(eintrag.trockenlauf?.sekunden) &&
+    Array.isArray(eintrag.jeDatei) &&
+    istFallListe(eintrag.ausgenommen, dateien)
+  );
+}
+
 function fruehereGueltig(eintrag, dateien) {
   return (
     istObjekt(eintrag) &&
     PRUEFSUMME.test(eintrag.schluessel ?? "") &&
     herkunftGueltig({ lauf: eintrag.lauf, artefakt: eintrag.artefakt }) &&
-    istMutantenListe(eintrag.mutanten, dateien) &&
-    istMutantenListe(eintrag.gate, dateien) &&
-    orteGueltig(eintrag) &&
-    istZahl(eintrag.trockenlauf?.sekunden) &&
-    Array.isArray(eintrag.jeDatei)
+    messwerteGueltig(eintrag, dateien)
   );
 }
 
@@ -170,8 +199,12 @@ function branchFehler(daten) {
   const dateien = Array.isArray(daten.dateien) ? daten.dateien : [];
   const gemessen = Array.isArray(daten.gemessen) ? daten.gemessen : [];
   const anfang = gemessen.every((datei, index) => datei === dateien[index]);
-  if (istSortierteListe(daten.gemessen, QUELLDATEI) && anfang) return [];
-  return ["Liste der gemessenen Dateien ist ungültig"];
+  const fehler = [];
+  if (!istSortierteListe(daten.gemessen, QUELLDATEI) || !anfang)
+    fehler.push("Liste der gemessenen Dateien ist ungültig");
+  if (!istFallListe(daten.ausgenommen, dateien))
+    fehler.push("Liste der ausgenommenen Testfälle ist ungültig");
+  return fehler;
 }
 
 function leseDatei(ordner, name) {

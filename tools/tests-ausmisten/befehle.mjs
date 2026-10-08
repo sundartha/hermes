@@ -5,6 +5,7 @@ import { cwd, env } from "node:process";
 import { githubZugang } from "../auftrag/pruefer-github.mjs";
 import { setzeAusgaben } from "../ziele/ausgabe.mjs";
 import { paketName } from "./artefakte.mjs";
+import { imBranch } from "./ausnehmen.mjs";
 import {
   BASIS,
   BRANCH,
@@ -83,6 +84,18 @@ function erreichteDateien(dateien, { graph, gates }, werkzeug) {
 
 function statusListe(stati) {
   return Object.fromEntries([...stati].map(([schluessel, { status }]) => [schluessel, status]));
+}
+
+function faelleOhneDoppelte(faelle) {
+  const eindeutig = new Map(
+    faelle.map(({ datei, test, name }) => [
+      JSON.stringify([datei, test, name]),
+      { datei, test, name },
+    ]),
+  );
+  return [...eindeutig]
+    .sort(([links], [rechts]) => links.localeCompare(rechts))
+    .map(([, fall]) => fall);
 }
 
 function orteDerGetoeteten({ mutanten, gate }) {
@@ -223,6 +236,7 @@ async function messwerte(werkzeug, { dateien, alt }) {
     orte: orteDerGetoeteten(gemessen),
     trockenlauf: vorlauf,
     jeDatei: gemessen.jeDatei,
+    ausgenommen: faelleOhneDoppelte(gemessen.ausgenommen),
     wiederverwendet: null,
   };
 }
@@ -234,7 +248,16 @@ function wiederverwendbar(plan, { nummer, schluessel }) {
     `Basis für Paket ${nummer} wiederverwendet: ${eintrag.artefakt} aus Lauf ${eintrag.lauf}.`,
   );
   const { lauf, artefakt, mutanten, gate, orte, trockenlauf, jeDatei } = eintrag;
-  return { mutanten, gate, orte, trockenlauf, jeDatei, wiederverwendet: { lauf, artefakt } };
+  const ausgenommen = faelleOhneDoppelte(eintrag.ausgenommen);
+  return {
+    mutanten,
+    gate,
+    orte,
+    trockenlauf,
+    jeDatei,
+    ausgenommen,
+    wiederverwendet: { lauf, artefakt },
+  };
 }
 
 export async function basis({ aus, planDaten, paket }) {
@@ -251,6 +274,10 @@ export async function basis({ aus, planDaten, paket }) {
   const schluessel = basisSchluessel({ master: lauf.master, dateien, alt });
   const werte =
     wiederverwendbar(plan, { nummer, schluessel }) ?? (await messwerte(werkzeug, { dateien, alt }));
+  werte.ausgenommen = werte.ausgenommen.map((fall) => ({
+    ...fall,
+    imBranch: imBranch(fall, lauf),
+  }));
   const summe = schreibeErgebnis(aus, paketName(BASIS, nummer), {
     ...kopfdaten(vorbereitung, dateien),
     art: BASIS,
@@ -283,6 +310,15 @@ function basisArtefakt(ordner, { lauf, nummer }) {
       ]),
     );
   return { daten, getoetet: { mutanten: karte(daten.mutanten), gate: karte(daten.gate) } };
+}
+
+function ausnahmenDerBasis({ ausgenommen }, neu) {
+  return (datei) => (fall) =>
+    !neu.includes(fall.test) ||
+    ausgenommen.some(
+      (basisFall) =>
+        basisFall.datei === datei && basisFall.test === fall.test && basisFall.name === fall.name,
+    );
 }
 
 function legeBranchDarueber({ master, kopf }) {
@@ -325,6 +361,7 @@ export async function branch({ aus, planDaten, basisDaten, paket, alle = false }
     neu: daten.tests.neu,
     graph,
     gates: werkzeug.gateMenge(),
+    erlaubt: ausnahmenDerBasis(daten, daten.tests.neu),
     nachDatei: abbruchBeiVerstoss(daten, verstoesse, alle),
   });
   schreibeErgebnis(aus, paketName(BRANCH, nummer), {
@@ -336,6 +373,7 @@ export async function branch({ aus, planDaten, basisDaten, paket, alle = false }
     gate: statusListe(gemessen.gate),
     trockenlauf: vorlauf,
     jeDatei: gemessen.jeDatei,
+    ausgenommen: faelleOhneDoppelte(gemessen.ausgenommen),
   });
   return meldeAbbruch(nummer, { dateien, gemessen: gemessen.gemessen, verstoesse });
 }
