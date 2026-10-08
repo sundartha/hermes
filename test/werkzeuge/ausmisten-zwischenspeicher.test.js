@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { ausgabenAus as ausgaben } from "../../tools/tests-ausmisten/lokal.mjs";
 import { basisSchluessel } from "../../tools/tests-ausmisten/zwischenspeicher.mjs";
 import { commitAll, probeRepository, runIn, writeFiles } from "./probe-repo.js";
 import { BRANCH, DOPPELT, REPOSITORY, artefaktRouten } from "./ausmisten/hilfen.mjs";
-import { EXIT_GRUEN, ausgaben, laufe, messePaket, messeUndMelde } from "./ausmisten/messung.mjs";
+import { EXIT_GRUEN, laufe, messePaket, messeUndMelde } from "./ausmisten/messung.mjs";
 
 const FRUEHERER_LAUF = 4700;
 const FRUEHERER_JOB = 900;

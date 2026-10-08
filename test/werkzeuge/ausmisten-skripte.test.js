@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { EXIT_GRUEN, EXIT_ROT, messeUndMelde, plane, testDatei } from "./ausmisten/messung.mjs";
+import {
+  EXIT_GRUEN,
+  EXIT_ROT,
+  erwarteBranchUndMeldenGruen,
+  messeUndMelde, plane, testDatei } from "./ausmisten/messung.mjs";
 
 const SKRIPT = "scripts/zaehlen.mjs";
 const WERKZEUG = "tools/zaehlen/summe.mjs";
@@ -64,8 +68,7 @@ test("ausmisten-skripte: ein doppelter Test eines Werkzeugs unter tools/ lässt 
   assert.equal(ergebnis.basis.status, EXIT_GRUEN, ergebnis.basis.ausgabe);
   assert.ok(ergebnis.gelesen.dateien.includes(WERKZEUG), ergebnis.basis.ausgabe);
   assert.ok(Object.values(ergebnis.gelesen.mutanten).includes("Killed"), ergebnis.basis.ausgabe);
-  assert.equal(ergebnis.zweig.status, EXIT_GRUEN, ergebnis.zweig.ausgabe);
-  assert.equal(ergebnis.melden.status, EXIT_GRUEN, ergebnis.melden.ausgabe);
+  erwarteBranchUndMeldenGruen(ergebnis);
 });
 
 test("ausmisten-skripte: ein Skript, das ein gelöschter Test nur als Programm startet, bleibt nicht messbar", async (context) => {

@@ -41,7 +41,7 @@ function ereignis(ordner, { kopf, bereich }) {
   return datei;
 }
 
-function ausgabenAus(datei) {
+export function ausgabenAus(datei) {
   if (!existsSync(datei)) return {};
   const zeilen = readFileSync(datei, "utf8").split("\n").filter(Boolean);
   return Object.fromEntries(

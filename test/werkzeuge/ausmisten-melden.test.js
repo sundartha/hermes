@@ -347,9 +347,7 @@ test("ausmisten-melden: grün öffnet mit dem Bot-Token den PR und schaltet Auto
   const ergebnis = await melde(context, { pr: true });
   assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
   assert.equal(ergebnis.gesetzt, undefined);
-  const pr = ergebnis.anfragen.find(
-    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/pulls"),
-  );
+  const pr = geoeffneterPr(ergebnis);
   assert.equal(pr.rumpf.title, "Paket 37: Tests ausmisten posteingang");
   assert.equal(pr.rumpf.head, BRANCH);
   assert.match(pr.rumpf.body, /Testzeilen: vorher 40, nachher 32/);
@@ -572,17 +570,13 @@ test("ausmisten-melden: ein Plan mit einer Datei in zwei Paketen setzt failure",
 test("ausmisten-melden: ein Plan mit Issue-Nummer schreibt Closes in den PR", async (context) => {
   const ergebnis = await melde(context, { pr: true, plan: { issue: ISSUE_NUMMER } });
   assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
-  const pr = ergebnis.anfragen.find(
-    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/pulls"),
-  );
+  const pr = geoeffneterPr(ergebnis);
   assert.match(pr.rumpf.body, new RegExp(`^Closes #${ISSUE_NUMMER}$`, "m"));
 });
 
 test("ausmisten-melden: ohne Issue-Nummer schreibt der PR kein Closes, aber einen Hinweis", async (context) => {
   const ergebnis = await melde(context, { pr: true });
-  const pr = ergebnis.anfragen.find(
-    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/pulls"),
-  );
+  const pr = geoeffneterPr(ergebnis);
   assert.doesNotMatch(pr.rumpf.body, /Closes/);
   assert.match(pr.rumpf.body, /dieser PR schließt kein Issue/);
 });
@@ -682,9 +676,7 @@ test("ausmisten-melden: eine wiederverwendete Basis steht mit Lauf und Artefakt 
   const basis = { wiederverwendet: { lauf: "4700", artefakt: "basis-0" } };
   const ergebnis = await melde(context, { pr: true, basis });
   assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
-  const pr = ergebnis.anfragen.find(
-    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/pulls"),
-  );
+  const pr = geoeffneterPr(ergebnis);
   assert.match(pr.rumpf.body, /Basis wiederverwendet .*: Paket 0 aus Lauf 4700 \(basis-0\)/);
 });
 
@@ -722,11 +714,12 @@ function neuerPrText({ anfragen }) {
   return rumpf.body;
 }
 
-function geoeffneterPrText({ anfragen }) {
-  const { rumpf } = anfragen.find(
-    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/pulls"),
-  );
-  return rumpf.body;
+function geoeffneterPr({ anfragen }) {
+  return anfragen.find(({ methode, pfad }) => methode === "POST" && pfad.endsWith("/pulls"));
+}
+
+function geoeffneterPrText(ergebnis) {
+  return geoeffneterPr(ergebnis).rumpf.body;
 }
 
 function review(login, state, commitId = KOPF) {
