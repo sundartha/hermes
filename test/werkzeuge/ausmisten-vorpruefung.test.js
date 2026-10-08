@@ -210,12 +210,12 @@ test("ausmisten-vorpruefung: ein gelöschter Test, der nur tools/ prüft, ist ni
   const nurWerkzeug = "test/post/werkzeug.test.js";
   const dateien = {
     "tools/pruefen.mjs": "export const ok = true;\n",
-    [nurWerkzeug]: 'import "../../tools/pruefen.mjs";\n',
+    [nurWerkzeug]: 'const programm = "tools/pruefen.mjs";\nvoid programm;\n',
   };
   const ergebnis = await erwarteRot(context, { dateien, weg: [nurWerkzeug] }, "Nicht messbar:");
   assert.match(
     ergebnis.ausgabe,
-    /test\/post\/werkzeug\.test\.js: erreicht keine src-Datei der Messmenge/,
+    /test\/post\/werkzeug\.test\.js: erreicht keine Datei der Messmenge/,
   );
 });
 

@@ -535,24 +535,35 @@ test("ausmisten-testschutz: ein gelöschter Test, der nur tools/ prüft, gibt ni
   const nurWerkzeug = "test/post/werkzeug.test.js";
   const dateien = {
     [WERKZEUG_DATEI]: "export const ok = true;\n",
-    [nurWerkzeug]: 'import "../../tools/pruefen.mjs";\n',
+    [nurWerkzeug]: 'const programm = "tools/pruefen.mjs";\nvoid programm;\n',
   };
   const ergebnis = await pruefe(context, { dateien, branch: { weg: [nurWerkzeug] } });
-  erwarteGesperrt(ergebnis, `${nurWerkzeug}: erreicht keine src-Datei der Messmenge`);
+  erwarteGesperrt(ergebnis, `${nurWerkzeug}: erreicht keine Datei der Messmenge`);
   assert.ok(
     ergebnis.ausgabe.includes(`${nurWerkzeug}: prüft tools/ oder scripts/`),
     ergebnis.ausgabe,
   );
 });
 
-test("ausmisten-testschutz: ein gelöschter Test, der neben src auch tools/ importiert, gibt nichts frei", async (context) => {
+test("ausmisten-testschutz: ein gelöschter Test, der neben src auch tools/ importiert, ist messbar und gibt frei", async (context) => {
   const gemischt = "test/post/gemischt.test.js";
   const dateien = {
     [WERKZEUG_DATEI]: "export const ok = true;\n",
     [gemischt]: `${MIT_QUELLE}import "../../tools/pruefen.mjs";\n`,
   };
   const ergebnis = await pruefe(context, { dateien, branch: { weg: [gemischt] } });
-  erwarteGesperrt(ergebnis, `${gemischt}: prüft tools/ oder scripts/ (${WERKZEUG_DATEI}`);
+  assert.equal(ergebnis.status, EXIT_FREI, ergebnis.ausgabe);
+});
+
+test("ausmisten-testschutz: ein gelöschter Test, der neben src auch eine Datendatei unter tools/ importiert, gibt nichts frei", async (context) => {
+  const gemischt = "test/post/gemischt.test.cjs";
+  const daten = "tools/pruefen-daten.json";
+  const dateien = {
+    [daten]: '{ "ok": true }\n',
+    [gemischt]: `${MIT_QUELLE_CJS}require("../../tools/pruefen-daten.json");\n`,
+  };
+  const ergebnis = await pruefe(context, { dateien, branch: { weg: [gemischt] } });
+  erwarteGesperrt(ergebnis, `${gemischt}: prüft tools/ oder scripts/ (${daten}`);
 });
 
 test("ausmisten-testschutz: ein gelöschter Test, der scripts/ nur als Text nennt, gibt nichts frei", async (context) => {
