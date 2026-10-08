@@ -35,7 +35,6 @@ const STAND_IM_BRANCH = new Set([
   "unverändert",
   "geändert",
   "gelöscht",
-  "nicht zuzuordnen",
   "Datei geändert",
 ]);
 const HILFSDATEI_IM_BRANCH = /^Hilfsdatei geändert: test\/\S+$/;

@@ -185,6 +185,24 @@ test("ausmisten-texttests: ein Fall, der auch ohne Umbau scheitert, wird nicht a
   assert.match(basis.ausgabe, /„scheitert immer“ besteht auch ohne Umbau der Quelldateien nicht/);
 });
 
+test("ausmisten-texttests: ein Texttest, dessen Name sich im Text nicht finden lässt, wird nicht ausgenommen", async (context) => {
+  const dynamisch = [
+    "test(`liest ${\"den\"} Quelltext`, () => {",
+    ...LESEN.map((zeile) => `  ${zeile}`),
+    "});",
+    "",
+  ];
+  const { basis } = await basisMit(context, {
+    master: texttest(dynamisch, fall(VERHALTEN, KUERZEN)),
+    branch: texttest(fall(VERHALTEN, KUERZEN)),
+  });
+  assert.equal(basis.status, EXIT_ROT, basis.ausgabe);
+  assert.match(
+    basis.ausgabe,
+    /„liest den Quelltext“ lässt sich im Text der Testdatei nicht eindeutig finden/,
+  );
+});
+
 test("ausmisten-texttests: ein Texttest mit doppeltem Namen wird nicht ausgenommen", async (context) => {
   const { basis } = await basisMit(context, {
     master: texttest(fall(TEXTFALL, LESEN), fall(TEXTFALL, KUERZEN)),
