@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cwd, env } from "node:process";
 
+import { githubZugang } from "../auftrag/pruefer-github.mjs";
 import { setzeAusgaben } from "../ziele/ausgabe.mjs";
 import { paketName } from "./artefakte.mjs";
 import {
@@ -130,7 +131,41 @@ function issueDes(kopf) {
   return treffer === null ? null : Number(treffer[1]);
 }
 
-export async function planen({ aus }) {
+async function suche(quelle, { lauf, schluessel }) {
+  const speicher = await import("./zwischenspeicher.mjs");
+  if (quelle.speicher !== undefined)
+    return schluessel.map(
+      (wert) => speicher.ausSpeicher(quelle.speicher, { schluessel: wert, lauf }) ?? null,
+    );
+  if (!quelle.token) return schluessel.map(() => null);
+  const github = githubZugang({ token: quelle.token });
+  return speicher.ausFrueherenLaeufen(github, { lauf, laufId: env.GITHUB_RUN_ID, schluessel });
+}
+
+async function fruehereBasis(quelle, { lauf, pakete, alt }) {
+  const { basisSchluessel } = await import("./zwischenspeicher.mjs");
+  const schluessel = pakete.map(({ dateien }) =>
+    basisSchluessel({ master: lauf.master, dateien, alt }),
+  );
+  let frueher;
+  try {
+    frueher = await suche(quelle, { lauf, schluessel });
+  } catch (grund) {
+    console.log(
+      `Frühere Basis: Suche nicht möglich (${grund.message}); alle Pakete werden gemessen.`,
+    );
+    return pakete.map(() => null);
+  }
+  frueher.forEach((eintrag, nummer) => {
+    if (eintrag !== null)
+      console.log(
+        `Frühere Basis für Paket ${nummer}: ${eintrag.artefakt} aus Lauf ${eintrag.lauf}.`,
+      );
+  });
+  return frueher;
+}
+
+export async function planen({ aus, speicher }) {
   const vorbereitung = await vorbereitet();
   const { lauf } = vorbereitung;
   const { menge, neu } = await mengen(vorbereitung);
@@ -139,12 +174,15 @@ export async function planen({ aus }) {
   const pakete = packe(zahlen);
   const geschaetzt = zahlen.reduce((summe, { mutanten }) => summe + mutanten, 0);
   console.log(`${geschaetzt} Mutanten geschätzt, ${pakete.length} Pakete.`);
+  const quelle = { speicher, token: env.GITHUB_TOKEN };
+  const frueher = await fruehereBasis(quelle, { lauf, pakete, alt: menge.alt });
   schreibeErgebnis(aus, PLAN_ART, {
     ...kopfdaten(vorbereitung, menge.dateien),
     art: PLAN_ART,
     tests: { alt: menge.alt, neu },
     issue: issueDes(lauf.kopf),
     pakete,
+    frueher,
     geschaetzt: zahlen,
   });
   setzeAusgaben({ pakete: JSON.stringify(pakete.map((_paket, index) => index)) });
@@ -166,6 +204,31 @@ function paketDes(plan, paket) {
   return { nummer, dateien: plan.pakete[nummer].dateien };
 }
 
+async function messwerte(werkzeug, { dateien, alt }) {
+  const gates = werkzeug.gateMenge();
+  const vorlauf = await werkzeug.trockenlauf(alt);
+  const gateAlt = alt.filter((test) => gates.has(test));
+  const gemessen = await werkzeug.messeGegenAlte({ dateien, alt, gateAlt });
+  return {
+    mutanten: statusListe(gemessen.mutanten),
+    gate: statusListe(gemessen.gate),
+    orte: orteDerGetoeteten(gemessen),
+    trockenlauf: vorlauf,
+    jeDatei: gemessen.jeDatei,
+    wiederverwendet: null,
+  };
+}
+
+function wiederverwendbar(plan, { nummer, schluessel }) {
+  const eintrag = plan.frueher[nummer];
+  if (eintrag === null || eintrag.schluessel !== schluessel) return undefined;
+  console.log(
+    `Basis für Paket ${nummer} wiederverwendet: ${eintrag.artefakt} aus Lauf ${eintrag.lauf}.`,
+  );
+  const { lauf, artefakt, mutanten, gate, orte, trockenlauf, jeDatei } = eintrag;
+  return { mutanten, gate, orte, trockenlauf, jeDatei, wiederverwendet: { lauf, artefakt } };
+}
+
 export async function basis({ aus, planDaten, paket }) {
   const vorbereitung = await vorbereitet();
   const { lauf, werkzeug } = vorbereitung;
@@ -175,23 +238,20 @@ export async function basis({ aus, planDaten, paket }) {
     graph: await werkzeug.importgraph(),
     gates: werkzeug.gateMenge(),
   }));
-  const gates = werkzeug.gateMenge();
   const { alt, neu } = plan.tests;
-  const vorlauf = await werkzeug.trockenlauf(alt);
-  const gateAlt = alt.filter((test) => gates.has(test));
-  const gemessen = await werkzeug.messeGegenAlte({ dateien, alt, gateAlt });
+  const { basisSchluessel } = await import("./zwischenspeicher.mjs");
+  const schluessel = basisSchluessel({ master: lauf.master, dateien, alt });
+  const werte =
+    wiederverwendbar(plan, { nummer, schluessel }) ?? (await messwerte(werkzeug, { dateien, alt }));
   const summe = schreibeErgebnis(aus, paketName(BASIS, nummer), {
     ...kopfdaten(vorbereitung, dateien),
     art: BASIS,
     paket: nummer,
     tests: { alt, neu },
-    mutanten: statusListe(gemessen.mutanten),
-    gate: statusListe(gemessen.gate),
-    orte: orteDerGetoeteten(gemessen),
+    ...werte,
     ...erreichteDateien(dateien, branchSicht, werkzeug),
     testzeilen: testzeilen(lauf.master, lauf.kopf),
-    trockenlauf: vorlauf,
-    jeDatei: gemessen.jeDatei,
+    schluessel,
   });
   console.log(pruefsummenZeile(nummer, summe));
 }

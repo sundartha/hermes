@@ -117,8 +117,41 @@ function basisFehler(daten) {
       "Liste der geänderten Testdateien ist ungültig",
     ],
     [orteGueltig(daten), "Orte der getöteten Mutanten fehlen"],
+    [PRUEFSUMME.test(daten.schluessel ?? ""), "Schlüssel des Zwischenspeichers fehlt"],
+    [herkunftGueltig(daten.wiederverwendet), "Angabe zur Wiederverwendung ist ungültig"],
   ];
   return pruefungen.filter(([gilt]) => !gilt).map(([, grund]) => grund);
+}
+
+function herkunftGueltig(wert) {
+  if (wert === null) return true;
+  return istObjekt(wert) && typeof wert.lauf === "string" && typeof wert.artefakt === "string";
+}
+
+function fruehereGueltig(eintrag, dateien) {
+  return (
+    istObjekt(eintrag) &&
+    PRUEFSUMME.test(eintrag.schluessel ?? "") &&
+    herkunftGueltig({ lauf: eintrag.lauf, artefakt: eintrag.artefakt }) &&
+    istMutantenListe(eintrag.mutanten, dateien) &&
+    istMutantenListe(eintrag.gate, dateien) &&
+    orteGueltig(eintrag) &&
+    istZahl(eintrag.trockenlauf?.sekunden) &&
+    Array.isArray(eintrag.jeDatei)
+  );
+}
+
+function testlistenGueltig(daten) {
+  return (
+    istSortierteListe(daten.tests?.alt, TESTPFAD) && istSortierteListe(daten.tests?.neu, TESTPFAD)
+  );
+}
+
+function fruehereImPlan({ frueher, pakete }) {
+  if (!Array.isArray(frueher) || frueher.length !== pakete.length) return false;
+  return frueher.every(
+    (eintrag, nummer) => eintrag === null || fruehereGueltig(eintrag, pakete[nummer].dateien),
+  );
 }
 
 function branchFehler(daten) {
@@ -200,10 +233,10 @@ function planFehler(daten, erwartet) {
       daten.issue === null || (Number.isSafeInteger(daten.issue) && daten.issue > 0),
       "Issue-Nummer ist ungültig",
     ],
+    [testlistenGueltig(daten), "Liste der geänderten Testdateien ist ungültig"],
     [
-      istSortierteListe(daten.tests?.alt, TESTPFAD) &&
-        istSortierteListe(daten.tests?.neu, TESTPFAD),
-      "Liste der geänderten Testdateien ist ungültig",
+      pakete.every(paketGueltig) && fruehereImPlan({ frueher: daten.frueher, pakete }),
+      "Angaben zu früheren Basis-Ergebnissen sind ungültig",
     ],
   ];
   return pruefungen.filter(([gilt]) => !gilt).map(([, grund]) => `Plan: ${grund}`);

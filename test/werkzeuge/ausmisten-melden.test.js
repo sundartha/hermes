@@ -62,6 +62,8 @@ function artefaktDaten(name, master, felder = {}) {
     testzeilen: { vorher: 40, nachher: 32 },
     tests: { alt: [ALTER_TEST], neu: [] },
     orte: { [MUTANT]: ZEILEN_MUTANT, [BLOCK]: ZEILEN_BLOCK },
+    schluessel: "a".repeat(SHA256_ZEICHEN),
+    wiederverwendet: null,
   };
   const daten = { ...gemeinsam, ...(name === "basis" ? basis : {}), ...felder };
   if (name === "branch" && !Object.hasOwn(felder, "gemessen")) daten.gemessen = daten.dateien;
@@ -77,7 +79,7 @@ function summe(text) {
 }
 
 function planDaten(master, felder = {}) {
-  return {
+  const daten = {
     format: 2,
     art: "plan",
     kopf: KOPF,
@@ -89,6 +91,8 @@ function planDaten(master, felder = {}) {
     pakete: [{ mutanten: 2, dateien: [DATEI] }],
     ...felder,
   };
+  if (!Object.hasOwn(felder, "frueher")) daten.frueher = daten.pakete.map(() => null);
+  return daten;
 }
 
 function artefaktListe(master, fall) {
@@ -657,4 +661,29 @@ test("ausmisten-melden: eine Prüfsummen-Zeile im Protokoll des Branch-Jobs zäh
 test("ausmisten-melden: ein fehlender Basis-Job setzt failure", async (context) => {
   const jobListe = (liste) => liste.filter(({ name }) => name !== "Paket 0 / Basis messen");
   erwarteRot(await melde(context, { jobListe }), "Job „Paket 0 / Basis messen“ gibt es 0-mal");
+});
+
+test("ausmisten-melden: eine wiederverwendete Basis steht mit Lauf und Artefakt im PR-Text", async (context) => {
+  const basis = { wiederverwendet: { lauf: "4700", artefakt: "basis-0" } };
+  const ergebnis = await melde(context, { pr: true, basis });
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
+  const pr = ergebnis.anfragen.find(
+    ({ methode, pfad }) => methode === "POST" && pfad.endsWith("/pulls"),
+  );
+  assert.match(pr.rumpf.body, /Basis wiederverwendet .*: Paket 0 aus Lauf 4700 \(basis-0\)/);
+});
+
+test("ausmisten-melden: ein Plan mit ungültigen Angaben zu früheren Basis-Ergebnissen setzt failure", async (context) => {
+  const plan = { frueher: [{ schluessel: "kurz", lauf: "1", artefakt: "basis-0" }] };
+  erwarteRot(
+    await melde(context, { plan }),
+    "Plan: Angaben zu früheren Basis-Ergebnissen sind ungültig",
+  );
+});
+
+test("ausmisten-melden: eine Basis ohne Schlüssel des Zwischenspeichers setzt failure", async (context) => {
+  erwarteRot(
+    await melde(context, { basis: { schluessel: undefined } }),
+    "Schlüssel des Zwischenspeichers fehlt",
+  );
 });

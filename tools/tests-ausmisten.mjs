@@ -4,7 +4,7 @@ const EXIT_GRUEN = 0;
 const EXIT_ROT = 1;
 const AUFRUF = [
   "Aufruf: node tools/tests-ausmisten.mjs",
-  "planen --aus <ordner>",
+  "planen --aus <ordner> [--speicher <ordner>]",
   "| basis --plan-daten <ordner> --paket <nr> --aus <ordner>",
   "| branch --plan-daten <ordner> --basis-daten <ordner> --paket <nr> --aus <ordner>",
   "| melden [--pr]",
@@ -22,7 +22,7 @@ async function befehle() {
 
 const BEFEHLE = new Map(
   Object.entries({
-    planen: async (werte) => (await befehle()).planen({ aus: werte.aus }),
+    planen: async (werte) => (await befehle()).planen({ aus: werte.aus, speicher: werte.speicher }),
     basis: async (werte) =>
       (await befehle()).basis({
         aus: werte.aus,
@@ -48,6 +48,7 @@ async function main() {
       "plan-daten": { type: "string" },
       "basis-daten": { type: "string" },
       paket: { type: "string" },
+      speicher: { type: "string" },
       pr: { type: "boolean", default: false },
     },
   });
