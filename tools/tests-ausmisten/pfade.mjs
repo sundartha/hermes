@@ -7,6 +7,7 @@ export const BEREICHE_DATEI = "tools/bereiche.json";
 export const GATE_DATEI = "tools/gate-tests.json";
 export const TESTORDNER = "test/";
 const ZAEHLER_BESTAND = "tools/basis/zeitglieder-bestand.json";
+export const UNTERDRUECKUNGEN = "eslint-suppressions.json";
 const NUR_KUERZEN = [
   "tools/basis/test-importe.json",
   "tools/basis/selbstpruefung.json",
@@ -149,6 +150,60 @@ function bestandsVerstoss({ status, pfad }, { von, bis, verzeichnis }) {
   return `${pfad}: die Bestandsdatei darf nur Einträge verlieren.`;
 }
 
+function ohneZahl(eintrag) {
+  return { ...eintrag, count: 0 };
+}
+
+function regelVergleich({ datei, regel, vorher, nachher }) {
+  if (!Object.hasOwn(nachher, regel)) {
+    return { senkung: { datei, regel, vorher: vorher[regel]?.count, nachher: 0 } };
+  }
+  const [alt, neu] = [vorher[regel]?.count, nachher[regel]?.count];
+  const restGleich = isDeepStrictEqual(ohneZahl(vorher[regel]), ohneZahl(nachher[regel]));
+  if (!restGleich || !Number.isInteger(neu) || neu <= 0 || neu > alt) {
+    return { verstoss: `${UNTERDRUECKUNGEN}: ${datei} ${regel} darf nur sinken.` };
+  }
+  return neu < alt ? { senkung: { datei, regel, vorher: alt, nachher: neu } } : {};
+}
+
+function dateiVergleich(datei, { alt, neu, eigene }) {
+  if (isDeepStrictEqual(alt[datei], neu[datei])) return [];
+  if (!Object.hasOwn(alt, datei))
+    return [{ verstoss: `${UNTERDRUECKUNGEN}: neuer Eintrag für ${datei}.` }];
+  if (!eigene.has(datei))
+    return [
+      {
+        verstoss: `${UNTERDRUECKUNGEN}: ${datei} ändert der Branch nicht; ihr Eintrag muss bleiben.`,
+      },
+    ];
+  const [vorher, nachher] = [alt[datei], neu[datei] ?? {}];
+  const neueRegeln = Object.keys(nachher).filter((regel) => !Object.hasOwn(vorher, regel));
+  return [
+    ...neueRegeln.map((regel) => ({
+      verstoss: `${UNTERDRUECKUNGEN}: neue Regel ${regel} für ${datei}.`,
+    })),
+    ...Object.keys(vorher).map((regel) => regelVergleich({ datei, regel, vorher, nachher })),
+  ];
+}
+
+function unterdrueckungsVergleich({ von, bis, verzeichnis, eigene }) {
+  const text = (commit) => git(["show", `${commit}:${UNTERDRUECKUNGEN}`], verzeichnis);
+  const [alt, neu] = [alsJson(text(von))?.wert, alsJson(text(bis))?.wert];
+  if (!istObjekt(alt) || !istObjekt(neu) || Array.isArray(alt) || Array.isArray(neu)) {
+    return { verstoesse: [`${UNTERDRUECKUNGEN}: die Datei ist kein JSON-Objekt.`], senkungen: [] };
+  }
+  const dateien = [...new Set([...Object.keys(alt), ...Object.keys(neu)])].sort();
+  const teile = dateien.flatMap((datei) => dateiVergleich(datei, { alt, neu, eigene }));
+  return {
+    verstoesse: teile.map(({ verstoss }) => verstoss).filter(Boolean),
+    senkungen: teile.map(({ senkung }) => senkung).filter(Boolean),
+  };
+}
+
+function eigeneTestdateien(liste) {
+  return new Set(liste.filter(({ pfad }) => testpfadFrei(pfad)).map(({ pfad }) => pfad));
+}
+
 function aenderungsVerstoss(aenderung, stand) {
   const { status, pfad, modi } = aenderung;
   if (status === undefined) return `${pfad}: die Änderung ist nicht lesbar.`;
@@ -156,6 +211,11 @@ function aenderungsVerstoss(aenderung, stand) {
     return `${pfad}: Symlinks und Submodule sind beim Ausmisten gesperrt.`;
   }
   if (NUR_KUERZEN.includes(pfad)) return bestandsVerstoss(aenderung, stand);
+  if (pfad === UNTERDRUECKUNGEN) {
+    if (status !== "M") return `${pfad}: die Datei darf weder neu entstehen noch verschwinden.`;
+    const { verstoesse } = unterdrueckungsVergleich(stand);
+    return verstoesse.length > 0 ? verstoesse.join("\n") : undefined;
+  }
   if (!testpfadFrei(pfad)) {
     return `${pfad}: beim Ausmisten sind nur Dateien unter test/ erlaubt, nicht unter test/werkzeuge/ oder test/sicherheit/ und nicht die Testbank-Skripte.`;
   }
@@ -169,8 +229,15 @@ export function pfadVerstoesse({ von, bis, verzeichnis }) {
   const gates = gateDateien(git(["show", `${von}:${GATE_DATEI}`], verzeichnis));
   const liste = aenderungen(von, bis, verzeichnis);
   if (liste.length === 0) return ["Der Branch ändert nichts gegenüber master."];
-  const stand = { von, bis, verzeichnis, gates };
+  const stand = { von, bis, verzeichnis, gates, eigene: eigeneTestdateien(liste) };
   return liste.map((aenderung) => aenderungsVerstoss(aenderung, stand)).filter(Boolean);
+}
+
+export function gesenkteUnterdrueckungen({ von, bis, verzeichnis }) {
+  const liste = aenderungen(von, bis, verzeichnis);
+  if (!liste.some(({ pfad, status }) => pfad === UNTERDRUECKUNGEN && status === "M")) return [];
+  const eigene = eigeneTestdateien(liste);
+  return unterdrueckungsVergleich({ von, bis, verzeichnis, eigene }).senkungen;
 }
 
 export function testaenderungen(von, bis, verzeichnis) {

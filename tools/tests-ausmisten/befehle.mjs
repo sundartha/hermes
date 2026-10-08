@@ -18,7 +18,14 @@ import {
 } from "./entscheiden.mjs";
 import { pruefsummenZeile } from "./festgehalten.mjs";
 import { ausloeser } from "./herkunft.mjs";
-import { git, gitGelingt, leseBereiche, pfadVerstoesse, testaenderungen } from "./pfade.mjs";
+import {
+  gesenkteUnterdrueckungen,
+  git,
+  gitGelingt,
+  leseBereiche,
+  pfadVerstoesse,
+  testaenderungen,
+} from "./pfade.mjs";
 import { vorpruefung } from "./vorpruefung.mjs";
 
 const TESTBESTAND = ["--", "test/", ":(exclude)test/werkzeuge/"];
@@ -184,6 +191,7 @@ export async function planen({ aus, speicher }) {
     pakete,
     frueher,
     geschaetzt: zahlen,
+    unterdrueckungen: gesenkteUnterdrueckungen({ von: lauf.master, bis: lauf.kopf }),
   });
   setzeAusgaben({ pakete: JSON.stringify(pakete.map((_paket, index) => index)) });
   return lauf;
@@ -294,7 +302,8 @@ function meldeAbbruch(nummer, { dateien, gemessen, verstoesse }) {
   if (verstoesse.length === 0) return EXIT_GRUEN;
   for (const verstoss of verstoesse) console.log(`Verstoß: ${verstoss}`);
   const offen = dateien.length - gemessen.length;
-  const rest = offen === 0 ? "alle Dateien gemessen" : `${offen} weitere Dateien nicht mehr gemessen`;
+  const rest =
+    offen === 0 ? "alle Dateien gemessen" : `${offen} weitere Dateien nicht mehr gemessen`;
   console.log(`Paket ${nummer}: rot nach ${gemessen.at(-1)}; ${rest}.`);
   return EXIT_ROT;
 }

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const FORMAT = 2;
+export const FORMAT = 3;
 export const BASIS = "basis";
 export const BRANCH = "branch";
 export const PLAN_ART = "plan";
@@ -90,6 +90,18 @@ function istOrt(ort) {
     ort.every(Number.isInteger) &&
     ort[0] >= 1 &&
     ort[1] >= ort[0]
+  );
+}
+
+function istSenkung(eintrag) {
+  return (
+    istObjekt(eintrag) &&
+    TESTPFAD.test(eintrag.datei ?? "") &&
+    typeof eintrag.regel === "string" &&
+    Number.isInteger(eintrag.vorher) &&
+    Number.isInteger(eintrag.nachher) &&
+    eintrag.nachher >= 0 &&
+    eintrag.nachher < eintrag.vorher
   );
 }
 
@@ -237,6 +249,10 @@ function planFehler(daten, erwartet) {
     [
       pakete.every(paketGueltig) && fruehereImPlan({ frueher: daten.frueher, pakete }),
       "Angaben zu früheren Basis-Ergebnissen sind ungültig",
+    ],
+    [
+      Array.isArray(daten.unterdrueckungen) && daten.unterdrueckungen.every(istSenkung),
+      "Liste der gesenkten Unterdrückungen ist ungültig",
     ],
   ];
   return pruefungen.filter(([gilt]) => !gilt).map(([, grund]) => `Plan: ${grund}`);
