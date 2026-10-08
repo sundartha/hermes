@@ -9,7 +9,6 @@ const SUPPRESSIONS_REL = "eslint-suppressions.json";
 const LEGACY_EXCEPTIONS_REL = "eslint-legacy-exceptions.json";
 const EMPTY_SUPPRESSIONS_REL = "eslint-suppressions.empty.json";
 const CALENDAR_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const PRUNE_COMMAND = "npx eslint --prune-suppressions";
 const NO_VERIFY_COMMAND = "git commit --no-verify";
 const LOG_PREFIX = "[check-staged-suppressions]";
 const CLI_ARGS_OFFSET = 2;
@@ -85,6 +84,12 @@ export function tallyDifferences(before, after) {
   return differences;
 }
 
+function tallyIncreases(before, after) {
+  return tallyDifferences(before, after).filter(
+    ({ countBefore, countAfter }) => countAfter > countBefore,
+  );
+}
+
 function describeDifference({ key, countBefore, countAfter }) {
   const separatorIndex = key.indexOf(FINDING_KEY_SEPARATOR);
   const rule = key.slice(0, separatorIndex);
@@ -104,7 +109,7 @@ async function reasonsToReject(file, readFindings) {
   let differences;
   try {
     const { before, after } = await readFindings(file);
-    differences = tallyDifferences(findingTally(before), findingTally(after));
+    differences = tallyIncreases(findingTally(before), findingTally(after));
   } catch (err) {
     return [`nicht pruefbar (fail-closed): ${err.message}`];
   }
@@ -163,9 +168,10 @@ function formatOffender({ file, ruleCounts, reasons = [] }) {
 }
 
 const WAY_OUT_LINES = [
-  "Eine Aenderung, die die Befundmenge NICHT bewegt, geht ohne Aufraeumen durch -",
-  "hier ist sie bewegt (Zeilen oben).",
-  `Aufraeumen (Normalfall): Verstoesse beheben, danach: ${PRUNE_COMMAND}`,
+  "Eine Aenderung, die keinen Befund hinzufuegt, geht durch; weniger Befunde sind",
+  "erlaubt - hier sind Befunde dazugekommen (Zeilen oben).",
+  "Normalfall: die neuen Verstoesse beheben. Fallen dabei Befunde weg, die Zahl",
+  `dieser Datei in ${SUPPRESSIONS_REL} von Hand senken; npm run lint prueft, dass sie genau stimmt.`,
   `Waere das Aufraeumen ein eigener Umbau: die Datei in ${LEGACY_EXCEPTIONS_REL}`,
   "eintragen, mit reason (warum sie liegen bleibt) und date (YYYY-MM-DD).",
   "Dieser Eintrag braucht die Freigabe des Eigentuemers - kein Bau-Agent setzt",
@@ -182,7 +188,7 @@ function printReport(offenders) {
   console.error("");
   logLine("Commit abgebrochen: folgende vorgemerkte Dateien tragen");
   logLine(`noch Eintraege in ${SUPPRESSIONS_REL} UND ihre Lint-Befunde`);
-  logLine("haben sich durch die Aenderung bewegt:");
+  logLine("durch die Aenderung neue Befunde bekommen:");
   for (const offender of offenders) console.error(formatOffender(offender));
   console.error("");
   for (const line of WAY_OUT_LINES) logLine(line);

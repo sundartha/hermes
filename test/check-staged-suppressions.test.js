@@ -217,7 +217,7 @@ function firstGatedFile() {
 }
 
 const GIT_BLOB_MODE = "100644";
-const CLEAN_BLOB_SOURCE = "scripts/check-staged-suppressions.js";
+const ZUSAETZLICHER_VERSTOSS = "\n;[1].map((q) => q);\n";
 
 function git(args, env = process.env) {
   return execFileSync("git", args, {
@@ -234,11 +234,23 @@ function tempIndexEnv() {
   return env;
 }
 
-function stageForeignContent(file) {
+function stageContent(file, content) {
   const env = tempIndexEnv();
-  const blob = git(["rev-parse", `HEAD:${CLEAN_BLOB_SOURCE}`]);
+  const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    input: content,
+  }).trim();
   git(["update-index", "--add", "--cacheinfo", `${GIT_BLOB_MODE},${blob},${file}`], env);
   return env;
+}
+
+function stageAddedFinding(file) {
+  return stageContent(file, `${git(["show", `HEAD:${file}`])}${ZUSAETZLICHER_VERSTOSS}`);
+}
+
+function stageEmptyContent(file) {
+  return stageContent(file, "");
 }
 
 function runGate(file, env) {
@@ -260,8 +272,9 @@ function gatedFile() {
 
 function rejectionReport() {
   const rejectedFile = gatedFile();
-  const { status, report } = runGate(rejectedFile, stageForeignContent(rejectedFile));
+  const { status, report } = runGate(rejectedFile, stageAddedFinding(rejectedFile));
   assert.equal(status, 1, `Gate hat nicht abgelehnt: ${report}`);
+  assert.match(report, /Befunde bewegt: \d+ -> \d+ {2}id-length: Identifier name 'q'/);
   return { rejectedFile, report };
 }
 
@@ -822,9 +835,28 @@ describe("findChangedFindings (Attrappe)", () => {
     assert.match(begruendung(offenders), /No magic number: 7\./);
   });
 
-  it("lehnt ab, wenn ein Befund wegfaellt", async () => {
+  it("laesst eine reine Verringerung der Befunde durch", async () => {
     const offenders = await abgelehnt([KURZER_NAME, MAGISCHE_ZAHL], [KURZER_NAME]);
+    assert.deepEqual(offenders, []);
+  });
+
+  it("lehnt ab, wenn ein Befund steigt und ein anderer zugleich sinkt", async () => {
+    const offenders = await abgelehnt(
+      [KURZER_NAME, MAGISCHE_ZAHL, MAGISCHE_ZAHL],
+      [KURZER_NAME, KURZER_NAME_VERSCHOBEN, MAGISCHE_ZAHL],
+    );
     assert.equal(offenders.length, KANDIDATEN.length);
+    assert.match(begruendung(offenders), /1 -> 2 {2}id-length: Identifier name 'q'/);
+    assert.doesNotMatch(begruendung(offenders), /No magic number/);
+  });
+
+  it("lehnt einen neuen Schluessel ab, auch wenn alle anderen sinken", async () => {
+    const offenders = await abgelehnt(
+      [KURZER_NAME, KURZER_NAME_VERSCHOBEN, MAGISCHE_ZAHL],
+      [ANDERER_KURZER_NAME],
+    );
+    assert.equal(offenders.length, KANDIDATEN.length);
+    assert.match(begruendung(offenders), /0 -> 1 {2}id-length: Identifier name 'x'/);
   });
 
   it("lehnt ab, wenn ein Befund gegen einen anderen getauscht wird", async () => {
@@ -834,7 +866,7 @@ describe("findChangedFindings (Attrappe)", () => {
   });
 
   it("vergleicht als Multimenge, nicht als Menge", async () => {
-    const offenders = await abgelehnt([KURZER_NAME, KURZER_NAME_VERSCHOBEN], [KURZER_NAME]);
+    const offenders = await abgelehnt([KURZER_NAME], [KURZER_NAME, KURZER_NAME_VERSCHOBEN]);
     assert.equal(offenders.length, KANDIDATEN.length);
   });
 
@@ -844,9 +876,9 @@ describe("findChangedFindings (Attrappe)", () => {
     assert.deepEqual(offenders, []);
   });
 
-  it("lehnt weiter ab, wenn ein Befund mit Regelnamen wegfaellt, auch neben einem ohne", async () => {
+  it("lehnt weiter ab, wenn ein Befund mit Regelnamen dazukommt, auch neben einem ohne", async () => {
     const OHNE_REGELNAMEN = meldung(null, "Unused eslint-disable directive.", ZEILE_VORHER);
-    const offenders = await abgelehnt([KURZER_NAME, MAGISCHE_ZAHL, OHNE_REGELNAMEN], [KURZER_NAME]);
+    const offenders = await abgelehnt([KURZER_NAME, OHNE_REGELNAMEN], [KURZER_NAME, MAGISCHE_ZAHL]);
     assert.equal(offenders.length, KANDIDATEN.length);
     assert.match(begruendung(offenders), /No magic number: 7\./);
   });
@@ -971,5 +1003,11 @@ describe("Aufraeum-Gate am echten CLI", () => {
     const file = gatedFile();
     const { status, report } = runGate(file, tempIndexEnv());
     assert.equal(status, 0, `Gate hat eine unveraenderte Datei abgelehnt: ${report}`);
+  });
+
+  it("laesst eine vorgemerkte Fassung ohne Befunde durch, weil sie nur Befunde verliert", () => {
+    const file = gatedFile();
+    const { status, report } = runGate(file, stageEmptyContent(file));
+    assert.equal(status, 0, `Gate hat eine reine Verringerung abgelehnt: ${report}`);
   });
 });
