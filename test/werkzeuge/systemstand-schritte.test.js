@@ -450,11 +450,6 @@ const MISSING_END_CRITERIA = [
   },
   {
     step: "4",
-    run: { files: { "CLAUDE.md": "Zeile\n".repeat(TOO_LONG_INSTRUCTIONS) } },
-    pattern: /CLAUDE\.md.*\b101\b/,
-  },
-  {
-    step: "4",
     run: { files: { ".claude/workflows/a.js": "1;\n", ".claude/workflows/b.js": "2;\n" } },
     pattern: /\.claude\/workflows\/.*\b2\b/,
   },
@@ -623,11 +618,11 @@ test("--pruefen kennt die neuen Kriterien und sperrt einen Rückfall; ein Stagin
   const recorded = everyCriterionSince();
   const steady = await systemstand(context, { recorded, args: ["--pruefen"] });
   assert.equal(steady.status, EXIT_OK, steady.stderr);
-  const longInstructions = { "CLAUDE.md": "Zeile\n".repeat(TOO_LONG_INSTRUCTIONS) };
+  const retiredWorkflow = { ".claude/workflows/a.js": "1;\n" };
   const inPullRequest = ["--pruefen", "--pr-basis", "HEAD"];
   const regression = await systemstand(context, {
     recorded,
-    files: longInstructions,
+    files: retiredWorkflow,
     args: inPullRequest,
   });
   assert.equal(regression.status, EXIT_FAILURE);
@@ -636,4 +631,9 @@ test("--pruefen kennt die neuen Kriterien und sperrt einen Rückfall; ein Stagin
   assert.equal(pullRequest.status, EXIT_OK, pullRequest.stderr);
   const master = await systemstand(context, { ...stagingDown, args: ["--pruefen"] });
   assert.equal(master.status, EXIT_FAILURE);
+});
+
+test("eine CLAUDE.md über 100 Zeilen hält Schritt 4 nicht offen und steht als Bericht in seiner Zeile", async (context) => {
+  const { lines } = await systemstand(context, { files: { "CLAUDE.md": "Zeile\n".repeat(TOO_LONG_INSTRUCTIONS) } });
+  assert.equal(lines["4"], "Schritt 4: erfüllt. Bericht: CLAUDE.md hat 101 Zeilen, mehr als 100");
 });

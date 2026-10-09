@@ -245,10 +245,15 @@ function overdue({ start, schaetzungTage }) {
   return Date.now() - Date.parse(start) > TIME_LIMIT_FACTOR * schaetzungTage * DAY_MS;
 }
 
+function reportNote(step) {
+  const notes = step.kriterien.flatMap(({ bericht }) => bericht ?? []);
+  return notes.length === 0 ? "" : `. Bericht: ${notes.join("; ")}`;
+}
+
 function stepLine(step) {
   const reasons = stepReasons(step);
   const note = reasons.length > 0 && overdue(step) ? `. ${TIME_LIMIT_NOTE}` : "";
-  return `Schritt ${step.id}: ${state(reasons)}${note}`;
+  return `Schritt ${step.id}: ${state(reasons)}${note}${reportNote(step)}`;
 }
 
 function estimate(days) {
