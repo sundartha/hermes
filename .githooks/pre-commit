@@ -24,11 +24,11 @@ if [ -n "$staged_js" ]; then
 '
   set -- $staged_js
   IFS=$old_ifs
-  node scripts/check-staged-suppressions.js "$@"
-  status=$?
-  if [ "$status" -ne 0 ]; then
-    exit 1
-  fi
+fi
+node scripts/check-staged-suppressions.js "$@"
+status=$?
+if [ "$status" -ne 0 ]; then
+  exit 1
 fi
 
 npm run lint

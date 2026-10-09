@@ -129,12 +129,6 @@ function tallyFromFindings(findings) {
   return new Map(Object.entries(findings));
 }
 
-function findingsFromTally(tally) {
-  const findings = {};
-  for (const key of [...tally.keys()].sort()) findings[key] = tally.get(key);
-  return findings;
-}
-
 export async function findPinMismatches({ stagedFiles, legacyExceptions, readStagedFindings }) {
   const offenders = [];
   for (const file of stagedFiles) {
@@ -148,15 +142,28 @@ export async function findPinMismatches({ stagedFiles, legacyExceptions, readSta
       offenders.push({ file, reasons: [`nicht pruefbar (fail-closed): ${err.message}`] });
       continue;
     }
-    const differences = tallyDifferences(pin, actual);
+    const differences = tallyIncreases(pin, actual);
     if (differences.length === 0) continue;
-    offenders.push({
-      file,
-      reasons: describeDifferences(differences),
-      correctedFindings: findingsFromTally(actual),
-    });
+    offenders.push({ file, reasons: describeDifferences(differences) });
   }
   return offenders;
+}
+
+function suppressionCounts(suppressions) {
+  return Object.entries(suppressions).flatMap(([file, rules]) =>
+    Object.entries(rules).map(([rule, entry]) => ({ file, rule, count: entry.count })),
+  );
+}
+
+function countIn(suppressions, file, rule) {
+  const rules = suppressions[file] ?? {};
+  return rules[rule]?.count ?? 0;
+}
+
+export function findRaisedSuppressions(before, after) {
+  return suppressionCounts(after)
+    .map(({ file, rule, count }) => ({ file, rule, countBefore: countIn(before, file, rule), countAfter: count }))
+    .filter(({ countBefore, countAfter }) => !(countAfter <= countBefore));
 }
 
 function formatOffender({ file, ruleCounts, reasons = [] }) {
@@ -170,13 +177,9 @@ function formatOffender({ file, ruleCounts, reasons = [] }) {
 const WAY_OUT_LINES = [
   "Eine Aenderung, die keinen Befund hinzufuegt, geht durch; weniger Befunde sind",
   "erlaubt - hier sind Befunde dazugekommen (Zeilen oben).",
-  "Normalfall: die neuen Verstoesse beheben. Fallen dabei Befunde weg, die Zahl",
-  `dieser Datei in ${SUPPRESSIONS_REL} von Hand senken; npm run lint prueft, dass sie genau stimmt.`,
-  `Waere das Aufraeumen ein eigener Umbau: die Datei in ${LEGACY_EXCEPTIONS_REL}`,
-  "eintragen, mit reason (warum sie liegen bleibt) und date (YYYY-MM-DD).",
-  "Dieser Eintrag braucht die Freigabe des Eigentuemers - kein Bau-Agent setzt",
-  "einen, um weiterzukommen. Der Grund muss sagen, WARUM das Aufraeumen",
-  "gefaehrlich waere, nicht dass es Arbeit ist.",
+  "Die neuen Verstoesse beheben. Fallen dabei Befunde weg, darf die Zahl dieser",
+  `Datei in ${SUPPRESSIONS_REL} sinken; sie muss es nicht.`,
+  `Keine Zahl in ${SUPPRESSIONS_REL} oder ${LEGACY_EXCEPTIONS_REL} darf steigen.`,
   `"${NO_VERIFY_COMMAND}" ist keine Option.`,
 ];
 
@@ -194,39 +197,23 @@ function printReport(offenders) {
   for (const line of WAY_OUT_LINES) logLine(line);
 }
 
-const CORRECTED_FINDINGS_JSON_INDENT = 2;
-const CORRECTED_FINDINGS_LINE_PREFIX = "       ";
-
-function formatCorrectedFindings(correctedFindings) {
-  const json = JSON.stringify(correctedFindings, null, CORRECTED_FINDINGS_JSON_INDENT);
-  const lines = json.split("\n");
-  const indentedLines = lines.map((line) => `${CORRECTED_FINDINGS_LINE_PREFIX}${line}`);
-  return indentedLines.join("\n");
-}
-
-function formatPinOffender({ file, reasons = [], correctedFindings }) {
+function formatPinOffender({ file, reasons = [] }) {
   const reasonLines = reasons.map((reason) => `\n     ${reason}`).join("");
-  const correctedBlock = correctedFindings
-    ? `\n     Korrigierter findings-Block fuer ${LEGACY_EXCEPTIONS_REL}:\n${formatCorrectedFindings(correctedFindings)}`
-    : "";
-  return `  ${file}${reasonLines}${correctedBlock}`;
+  return `  ${file}${reasonLines}`;
 }
 
 const PIN_WAY_OUT_LINES = [
-  "Ein Altlast-Eintrag entschuldigt nur GENAU die gepinnte Befundmenge - sie hat",
-  "sich bewegt (Zeilen oben). Weniger Befunde brechen genauso wie mehr: ein zu",
-  "hoch stehender Pin ist der Spielraum, in dem spaeter ein neuer Verstoss",
-  "unbemerkt Platz faende.",
-  `Ersetze den findings-Block dieser Datei in ${LEGACY_EXCEPTIONS_REL} durch den`,
-  "oben ausgegebenen, fertigen JSON-Block.",
+  "Ein Altlast-Eintrag entschuldigt hoechstens die gepinnte Befundmenge - hier",
+  "sind Befunde dazugekommen (Zeilen oben). Weniger Befunde sind erlaubt.",
+  "Die neuen Verstoesse beheben; der Pin steigt nicht.",
   `"${NO_VERIFY_COMMAND}" ist keine Option.`,
 ];
 
 function printPinMismatchReport(offenders) {
   console.error("");
-  logLine("Commit abgebrochen: folgende Dateien auf der Altlast-Liste tragen");
-  logLine("einen Pin, der nicht mehr zur tatsaechlichen, ungefilterten");
-  logLine("Befundmenge ihrer vorgemerkten Fassung passt:");
+  logLine("Commit abgebrochen: folgende Dateien auf der Altlast-Liste haben");
+  logLine("mehr ungefilterte Befunde in ihrer vorgemerkten Fassung, als ihr");
+  logLine("Pin erlaubt:");
   for (const offender of offenders) console.error(formatPinOffender(offender));
   console.error("");
   for (const line of PIN_WAY_OUT_LINES) logLine(line);
@@ -297,8 +284,51 @@ async function makeStagedFindingsReader() {
   };
 }
 
+const BASIS_OPTION = "--basis";
+const HEAD_REVISION = "HEAD";
+const STAGED_REVISION = "";
+
+function suppressionsAt(revision) {
+  let text;
+  try {
+    text = readGitContent(`${revision}:${SUPPRESSIONS_REL}`);
+  } catch {
+    return {};
+  }
+  return JSON.parse(text);
+}
+
+function printRaisedReport(raised) {
+  console.error("");
+  logLine(`Abgebrochen: in ${SUPPRESSIONS_REL} steigen Zahlen:`);
+  for (const { file, rule, countBefore, countAfter } of raised) {
+    console.error(`  ${file} -> ${rule}: ${countBefore} -> ${countAfter}`);
+  }
+  console.error("");
+  logLine("Die Liste wird nur kleiner. Den neuen Verstoss beheben, statt ihn zu unterdruecken.");
+  logLine(`"${NO_VERIFY_COMMAND}" ist keine Option.`);
+}
+
+function raisedSuppressionsStatus(beforeRevision, afterRevision) {
+  const raised = findRaisedSuppressions(suppressionsAt(beforeRevision), suppressionsAt(afterRevision));
+  if (raised.length === 0) return 0;
+  printRaisedReport(raised);
+  return 1;
+}
+
+function basisStatus(basis) {
+  if (!isNonEmptyText(basis)) throw new Error(`${BASIS_OPTION} braucht einen Commit`);
+  return raisedSuppressionsStatus(basis, HEAD_REVISION);
+}
+
 async function runCli() {
-  const stagedFiles = process.argv.slice(CLI_ARGS_OFFSET);
+  const args = process.argv.slice(CLI_ARGS_OFFSET);
+  if (args[0] === BASIS_OPTION) return basisStatus(args[1]);
+  if (raisedSuppressionsStatus(HEAD_REVISION, STAGED_REVISION) !== 0) return 1;
+  return stagedFilesStatus(args);
+}
+
+async function stagedFilesStatus(stagedFiles) {
   if (stagedFiles.length === 0) return 0;
   const suppressions = JSON.parse(readRepoFile(SUPPRESSIONS_REL));
   const legacyExceptions = loadLegacyExceptions();

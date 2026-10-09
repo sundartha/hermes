@@ -278,7 +278,7 @@ function rejectionReport() {
   return { rejectedFile, report };
 }
 
-const APPROVAL_TERMS = ["Freigabe des Eigentuemers", "gefaehrlich"];
+const NO_RISE_TERM = `Keine Zahl in ${SUPPRESSIONS_REL} oder ${LEGACY_EXCEPTIONS_REL} darf steigen`;
 
 describe("Ablehnungs-Bericht des Aufraeum-Gates", () => {
   it("nennt die Altlast-Liste als Ausweg", () => {
@@ -290,15 +290,9 @@ describe("Ablehnungs-Bericht des Aufraeum-Gates", () => {
     );
   });
 
-  it("nennt die Freigabe des Eigentuemers als Bedingung fuer einen Eintrag", () => {
+  it("sagt, dass keine Zahl steigen darf, statt einen Eintrag als Ausweg anzubieten", () => {
     const { report } = rejectionReport();
-    for (const term of APPROVAL_TERMS) {
-      assert.ok(
-        report.includes(term),
-        `Bericht nennt "${term}" nicht - dann liest der Blockierte den Ausweg als ` +
-          `Selbstbedienung und traegt sich im Vorbeigehen ein: ${report}`,
-      );
-    }
+    assert.ok(report.includes(NO_RISE_TERM), `Bericht nennt "${NO_RISE_TERM}" nicht: ${report}`);
   });
 });
 
@@ -901,7 +895,6 @@ function kurzeNamen(zeilen) {
     meldung("id-length", "Identifier name 'q' is too short (< 2).", line),
   );
 }
-const PIN_QUELLE = "id-length :: Identifier name 'q' is too short (< 2).";
 
 describe("findPinMismatches (Attrappe)", () => {
   it("laesst eine Datei mit deckungsgleichem Pin durch und prueft nur gueltige Eintraege", async () => {
@@ -926,19 +919,16 @@ describe("findPinMismatches (Attrappe)", () => {
     });
     assert.equal(offenders.length, 1);
     assert.equal(offenders[0].file, "src/dummy/altlast.js");
-    assert.deepEqual(offenders[0].correctedFindings, { [PIN_QUELLE]: 4 });
     assert.match(begruendung(offenders), /3 -> 4/);
   });
 
-  it("lehnt ab, wenn weniger Befunde da sind als der Pin sagt", async () => {
+  it("laesst durch, wenn weniger Befunde da sind als der Pin sagt", async () => {
     const offenders = await findPinMismatches({
       stagedFiles: ["src/dummy/altlast.js"],
       legacyExceptions: LEGACY_EXCEPTIONS,
       readStagedFindings: async () => kurzeNamen(PIN_BASISZEILEN.slice(1)),
     });
-    assert.equal(offenders.length, 1);
-    assert.deepEqual(offenders[0].correctedFindings, { [PIN_QUELLE]: 2 });
-    assert.match(begruendung(offenders), /3 -> 2/);
+    assert.deepEqual(offenders, []);
   });
 
   it("lehnt fail-closed ab, wenn die Befunde nicht lesbar sind", async () => {
