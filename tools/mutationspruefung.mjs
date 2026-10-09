@@ -46,10 +46,9 @@ const GLEICHZEITIG = KONFIGURATION.concurrency;
 const ABGELEHNT = "rejected";
 const LEERRAUM = /\s+/g;
 const UMBAU_ZEILE = "^Art: umbau$";
-const GLEICHWERTIG = /^Gleichwertig: (.+)$/gm;
-const GLEICHWERTIG_WIRKUNGSLOS =
-  "Hinweis: als gleichwertig gemeldet, wirkungslos, Mutant bleibt Verstoß; Code vereinfachen oder Test schreiben, sonst Paket anhalten und Betreuung fragen";
-const KEINE_FREIGABEN = new Set();
+const GLEICHWERTIG = /^Gleichwertig: (.+?), weil \S.*$/gm;
+const AUFTRAGSWEG = /^Auftrag: [^\s/]+\/\S+$/m;
+const GLEICHWERTIG_ANGENOMMEN = "Hinweis: als gleichwertig angenommen";
 const KURZ = 7;
 const MS_JE_SEKUNDE = 1000;
 const MAX_GIT_AUSGABE = 268_435_456;
@@ -332,12 +331,17 @@ function gesamturteil(pruefung, { ergebnisse, ueberlebende, zugriffe }) {
   return `rot: ${zugriffe.length} neue Zeilen fragen Strykers Zustand ab; ${mutanten.slice(mutanten.indexOf(" ") + 1)}`;
 }
 
-async function pruefe(pruefung, { gemeldete, freigegebene }) {
+function angenommen({ schluessel, status }, gleichwertige) {
+  return gleichwertige.has(schluessel) && !ABGESCHALTET.has(status);
+}
+
+async function pruefe(pruefung, gleichwertige) {
   const zugriffe = zustandszugriffe(pruefung);
   const ergebnisse = await mutiere(pruefung);
-  const ueberlebende = ergebnisse.filter(ueberlebt).filter(({ schluessel }) => !freigegebene.has(schluessel));
-  for (const { schluessel } of ueberlebende.filter((eintrag) => gemeldete.has(eintrag.schluessel))) {
-    console.log(`${GLEICHWERTIG_WIRKUNGSLOS}: ${schluessel}`);
+  const ueberlebend = ergebnisse.filter(ueberlebt);
+  const ueberlebende = ueberlebend.filter((eintrag) => !angenommen(eintrag, gleichwertige));
+  for (const { schluessel } of ueberlebend.filter((eintrag) => angenommen(eintrag, gleichwertige))) {
+    console.log(`${GLEICHWERTIG_ANGENOMMEN}: ${schluessel}`);
   }
   for (const { schluessel } of ueberlebende.filter(({ status }) => ABGESCHALTET.has(status))) {
     console.log(`${ABSCHALTUNG_VERSTOSS}: ${schluessel}`);
@@ -356,7 +360,10 @@ function umbauCommits(basis) {
 }
 
 function gemeldet(basis) {
-  return [...git(["log", "--format=%B", `${basis}..HEAD`]).matchAll(GLEICHWERTIG)].map(([, schluessel]) => schluessel.trim());
+  const nachrichten = git(["log", "-z", "--format=%B", `${basis}..HEAD`]).split("\0");
+  return nachrichten
+    .filter((nachricht) => AUFTRAGSWEG.test(nachricht))
+    .flatMap((nachricht) => [...nachricht.matchAll(GLEICHWERTIG)].map(([, schluessel]) => schluessel.trim()));
 }
 
 async function main() {
@@ -371,15 +378,12 @@ async function main() {
     console.error(AUFRUF);
     return EXIT_ABBRUCH;
   }
-  const meldungen = {
-    gemeldete: new Set([...values.gleichwertig, ...gemeldet(values.basis)]),
-    freigegebene: KEINE_FREIGABEN,
-  };
+  const gleichwertige = new Set([...values.gleichwertig, ...gemeldet(values.basis)]);
   const pruefungen = values["alter-stand"]
     ? [{ von: values.basis, seite: "alt" }]
     : [{ von: values.basis, seite: "neu" }, ...umbauCommits(values.basis).map((commit) => ({ von: `${commit}^`, bis: commit, seite: "alt" }))];
   let ueberlebende = 0;
-  for (const pruefung of pruefungen) ueberlebende += await pruefe(pruefung, meldungen);
+  for (const pruefung of pruefungen) ueberlebende += await pruefe(pruefung, gleichwertige);
   return ueberlebende === 0 ? EXIT_GRUEN : EXIT_ROT;
 }
 

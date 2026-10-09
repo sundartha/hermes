@@ -9,7 +9,9 @@ import { REPO_ROOT, commitAll, probeDirectory, probeRepository, runIn, writeFile
 const WERKZEUG = join(REPO_ROOT, "tools/mutationspruefung.mjs");
 const EXIT_ROT = 1;
 const UEBERLEBT = /^Verstoß: Mutant überlebt: (.+)$/gm;
-const WIRKUNGSLOS = /^Hinweis: als gleichwertig gemeldet, wirkungslos, .+: (.+)$/gm;
+const ANGENOMMEN = /^Hinweis: als gleichwertig angenommen: (.+)$/gm;
+const GRUND = ", weil die Null wie eine positive Zahl gelten darf";
+const AUFTRAGSWEG = "Auftrag: probe/a1";
 
 function schluessel(ausgabe, muster) {
   return [...ausgabe.matchAll(muster)].map(([, gefunden]) => gefunden).sort();
@@ -48,23 +50,27 @@ function pruefe(repo, ...argumente) {
   return runIn(repo, process.execPath, [WERKZEUG, ...argumente]);
 }
 
-test("eine neue Zeile ohne Test bleibt rot, auch wenn die Commit-Nachricht den Mutanten gleichwertig meldet, bis ein Test sie verlangt", (context) => {
+test("eine neue Zeile ohne Test ist grün, wenn ein Commit des Auftragswegs ihre Mutanten mit Grund gleichwertig meldet; ohne Grund oder ohne Auftragsweg bleibt sie rot", (context) => {
   const repo = probeRepository(context, BASIS);
   writeFiles(repo, { "src/zahl.js": quelle(NEGATIV, NULL) });
   const rot = pruefe(repo, "--basis", "HEAD");
   assert.equal(rot.status, EXIT_ROT, rot.stdout + rot.stderr);
   const ueberlebende = schluessel(rot.stdout, UEBERLEBT);
   assert.ok(ueberlebende.length > 0 && ueberlebende.every((mutant) => mutant.startsWith("src/zahl.js:3:")));
-  const meldungen = ueberlebende.map((mutant) => `Gleichwertig: ${mutant}`).join("\n");
-  commitAll(repo, `Ordne die Null ein\n\nWarum: Probe.\n\n${meldungen}\nPaket: VS`);
+  const meldungen = (grund) => ueberlebende.map((mutant) => `Gleichwertig: ${mutant}${grund}`).join("\n");
+  commitAll(repo, `Ordne die Null ein\n\nWarum: Probe.\n\n${meldungen(GRUND)}\nPaket: AN1`);
+  writeFiles(repo, { "notiz.txt": "zweiter Commit\n" });
+  commitAll(repo, `Notiere die Null\n\nWarum: Probe.\n\n${meldungen("")}\n${AUFTRAGSWEG}`);
+  const abgelehnt = pruefe(repo, "--basis", "HEAD~2");
+  assert.equal(abgelehnt.status, EXIT_ROT, abgelehnt.stdout + abgelehnt.stderr);
+  assert.deepEqual(schluessel(abgelehnt.stdout, UEBERLEBT), ueberlebende);
+  assert.deepEqual(schluessel(abgelehnt.stdout, ANGENOMMEN), []);
+  runIn(repo, "git", ["reset", "-q", "--soft", "HEAD~2"]);
+  commitAll(repo, `Ordne die Null ein\n\nWarum: Probe.\n\n${meldungen(GRUND)}\n${AUFTRAGSWEG}`);
   const gemeldet = pruefe(repo, "--basis", "HEAD~1");
-  assert.equal(gemeldet.status, EXIT_ROT, gemeldet.stdout + gemeldet.stderr);
-  assert.deepEqual(schluessel(gemeldet.stdout, UEBERLEBT), ueberlebende);
-  assert.deepEqual(schluessel(gemeldet.stdout, WIRKUNGSLOS), ueberlebende);
-  writeFiles(repo, { "test/zahl.test.js": testdatei([-1, "negativ"], [0, "null"], [1, "positiv"]) });
-  const gruen = pruefe(repo, "--basis", "HEAD~1");
-  assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
-  assert.match(gruen.stdout, /^grün: \d+ Mutanten in den neuen Zeilen/m);
+  assert.equal(gemeldet.status, 0, gemeldet.stdout + gemeldet.stderr);
+  assert.deepEqual(schluessel(gemeldet.stdout, ANGENOMMEN), ueberlebende);
+  assert.deepEqual(schluessel(gemeldet.stdout, UEBERLEBT), []);
 });
 
 test("eine Zeile, aus der nur ein Kommentar verschwindet, braucht keinen Test; eine Code-Änderung dort bleibt rot", (context) => {
@@ -125,12 +131,12 @@ function aufrufzeileRot(context, weitere = {}) {
   return repo;
 }
 
-test("eine neue Aufrufzeile ohne eigenen Mutanten wird gelöscht und bleibt rot, auch gleichwertig gemeldet, bis ein Test sie verlangt", (context) => {
+test("eine neue Aufrufzeile ohne eigenen Mutanten wird gelöscht und bleibt rot, bis sie gleichwertig gemeldet ist oder ein Test sie verlangt", (context) => {
   const repo = aufrufzeileRot(context);
   const gemeldet = pruefe(repo, "--basis", "HEAD", "--gleichwertig", "src/zahl.js:3 Zeile gelöscht");
-  assert.equal(gemeldet.status, EXIT_ROT, gemeldet.stdout + gemeldet.stderr);
-  assert.deepEqual(schluessel(gemeldet.stdout, UEBERLEBT), ["src/zahl.js:3 Zeile gelöscht"]);
-  assert.deepEqual(schluessel(gemeldet.stdout, WIRKUNGSLOS), ["src/zahl.js:3 Zeile gelöscht"]);
+  assert.equal(gemeldet.status, 0, gemeldet.stdout + gemeldet.stderr);
+  assert.deepEqual(schluessel(gemeldet.stdout, UEBERLEBT), []);
+  assert.deepEqual(schluessel(gemeldet.stdout, ANGENOMMEN), ["src/zahl.js:3 Zeile gelöscht"]);
   writeFiles(repo, { "test/zahl.test.js": protokolltest('assert.equal(zahl.einordnen(-1), "negativ");', "assert.deepEqual(zahl.protokoll, [-1]);") });
   const gruen = pruefe(repo, "--basis", "HEAD");
   assert.equal(gruen.status, 0, gruen.stdout + gruen.stderr);
