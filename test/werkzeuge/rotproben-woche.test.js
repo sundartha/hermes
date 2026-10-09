@@ -54,7 +54,7 @@ const REGEL_HAKEN = haken(
   "exit 1",
 );
 const RECHTE_HAKEN = haken(
-  'echo "Permission to sundartha/hermes.git denied to sundartha-bot." >&2',
+  'echo "Permission to sundartha/hermes.git denied to sundartha-agent[bot]." >&2',
   "exit 1",
 );
 const NUR_MASTER_HAKEN = haken(

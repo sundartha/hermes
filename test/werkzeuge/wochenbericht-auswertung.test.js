@@ -71,7 +71,7 @@ test("Wochenbericht: eine 2 vom Bot zählt nicht, es gilt die Vorgabe", async (c
   const writes = await evaluate(context, [
     NOTE,
     presented(PRESENTED_LONG_AGO),
-    comment("sundartha-bot", "2"),
+    comment("sundartha-agent[bot]", "2"),
   ]);
   assert.match(decision(writes), /Entschieden: Option 1\n/);
   assert.match(decision(writes), /es gilt die Vorgabe/);

@@ -21,7 +21,7 @@ import {
 const ZURUECKGENOMMEN = 41;
 const REPARATUR = 80;
 const MASTER_ROT = 81;
-const AUTOR = ["-c", "user.name=sundartha-bot", "-c", "user.email=bot@example.invalid"];
+const AUTOR = ["-c", "user.name=sundartha-agent[bot]", "-c", "user.email=bot@example.invalid"];
 
 function nachricht(betreff, sorte = "knip", auftrag = "aufraeumen/2026-10-01-knip") {
   return [betreff, "", "Warum: knip meldet toten Code.", "", `Auftrag: ${auftrag}`, "Art: aufraeumen", `Sorte: ${sorte}`].join("\n");

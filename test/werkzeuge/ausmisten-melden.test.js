@@ -771,7 +771,7 @@ test("ausmisten-melden: ein offener PR mit Freigabepunkt verliert Auto-Merge und
 });
 
 test("ausmisten-melden: die Zustimmung eines anderen Kontos gibt nichts frei", async (context) => {
-  for (const login of ["jonas986", "sundartha-bot"])
+  for (const login of ["jonas986", "sundartha-agent[bot]"])
     erwarteFreigabeNoetig(
       await melde(context, freigabeFall({ reviews: [review(login, "APPROVED")] })),
     );

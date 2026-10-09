@@ -13,7 +13,7 @@ const PULL_REQUEST = "7";
 const ISSUE = 12;
 const LABEL = "verhalten-geaendert";
 const ANTONIO = "Antonio20045";
-const BOT = "sundartha-bot";
+const BOT = "sundartha-agent";
 const LABEL_TIME = "2026-09-30T10:00:00Z";
 const LATER = "2026-09-30T11:00:00Z";
 const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -200,7 +200,7 @@ test("tests-nur-ergaenzt: ein Label vom Bot stoppt", async (context) => {
   changeSumExpectation(repo.directory);
   const result = await check(repo, linkedIssue({ names: [SUM_TEST], events: [labeled(BOT)] }));
   assert.equal(result.status, EXIT_FINDING, result.output);
-  assert.match(result.output, /das Label verhalten-geaendert hat sundartha-bot gesetzt/);
+  assert.match(result.output, /das Label verhalten-geaendert hat sundartha-agent gesetzt/);
 });
 
 test("tests-nur-ergaenzt: ein Label von Antonio mit genanntem Test geht durch", async (context) => {
