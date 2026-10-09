@@ -806,25 +806,106 @@ test("ausmisten-melden: eine ungültige Liste gesenkter Unterdrückungen setzt f
 
 const AUSGENOMMEN = "liest den Quelltext";
 
-function mitAusnahme(imBranch, weiteres = {}) {
-  const fall = { datei: DATEI, test: ALTER_TEST, name: AUSGENOMMEN, imBranch };
+const UNVERAENDERT_AUSGENOMMEN = "liest den Quelltext noch einmal";
+const VERAENDERTE_AUSNAHMEN = "## Ausgenommene Testfälle, im Branch gelöscht oder geändert";
+
+function ausgenommenerFall(imBranch, { name = AUSGENOMMEN, datei = DATEI } = {}) {
+  return { datei, test: ALTER_TEST, name, imBranch };
+}
+
+function mitAusnahmen(ausgenommen, weiteres = {}) {
   return freigabeFall({
     plan: { unterdrueckungen: [] },
-    basis: { ausgenommen: [fall] },
+    basis: { ausgenommen },
     ...weiteres,
   });
 }
 
-function ausnahmePunkt(stand) {
-  return `Ausgenommener Testfall im Branch ${stand}: ${ALTER_TEST}: ${AUSGENOMMEN}`;
+function mitAusnahme(imBranch, weiteres = {}) {
+  return mitAusnahmen([ausgenommenerFall(imBranch)], weiteres);
 }
 
-test("ausmisten-melden: ein gelöschter ausgenommener Fall ohne Freigabe setzt failure", async (context) => {
-  erwarteFreigabeNoetig(await melde(context, mitAusnahme("gelöscht")), ausnahmePunkt("gelöscht"));
+function ausnahmeZeile(stand) {
+  return `- Ausgenommener Testfall im Branch ${stand}: ${ALTER_TEST}: ${AUSGENOMMEN}`;
+}
+
+function ausnahmeImLog(stand) {
+  return `Ausgenommen: ${ALTER_TEST}: ${AUSGENOMMEN} (umgebaute Datei ${DATEI}, im Branch ${stand})`;
+}
+
+function veraenderteAusnahmen(text) {
+  const anfang = text.indexOf(VERAENDERTE_AUSNAHMEN);
+  assert.notEqual(anfang, -1, text);
+  const ende = text.indexOf("\n## ", anfang + VERAENDERTE_AUSNAHMEN.length);
+  return text.slice(anfang, ende === -1 ? undefined : ende + 1);
+}
+
+test("ausmisten-melden: ein gelöschter ausgenommener Fall öffnet den PR mit Auto-Merge und steht unter eigener Überschrift", async (context) => {
+  const ausgenommen = [
+    ausgenommenerFall("gelöscht"),
+    ausgenommenerFall("unverändert", { name: UNVERAENDERT_AUSGENOMMEN }),
+  ];
+  const ergebnis = await melde(context, mitAusnahmen(ausgenommen, { pr: true, offen: false }));
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
+  const [aufruf] = ergebnis.gh.aufrufe();
+  assert.deepEqual(aufruf.argumente, [
+    "pr",
+    "merge",
+    String(PR_NUMMER),
+    "--repo",
+    REPOSITORY,
+    "--auto",
+    "--rebase",
+  ]);
+  assert.ok(ergebnis.ausgabe.includes(ausnahmeImLog("gelöscht")), ergebnis.ausgabe);
+  const text = geoeffneterPrText(ergebnis);
+  assert.equal(
+    veraenderteAusnahmen(text),
+    `${VERAENDERTE_AUSNAHMEN}\n\n${ausnahmeZeile("gelöscht")}\n\n`,
+  );
+  assert.ok(text.includes(`${ausnahmeZeile("gelöscht")}\n\n## Ausgenommene Testfälle\n`), text);
+  assert.doesNotMatch(text, /Freigabe/);
+  assert.doesNotMatch(ergebnis.ausgabe, /Freigabe/);
 });
 
-test("ausmisten-melden: ein geänderter ausgenommener Fall braucht ebenfalls die Freigabe", async (context) => {
-  erwarteFreigabeNoetig(await melde(context, mitAusnahme("geändert")), ausnahmePunkt("geändert"));
+test("ausmisten-melden: ein geänderter ausgenommener Fall setzt success ohne Freigabe", async (context) => {
+  const ergebnis = await melde(context, mitAusnahme("geändert"));
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
+  assert.equal(ergebnis.gesetzt.state, "success");
+  assert.ok(ergebnis.ausgabe.includes(ausnahmeImLog("geändert")), ergebnis.ausgabe);
+  assert.doesNotMatch(ergebnis.ausgabe, /Freigabe/);
+});
+
+test("ausmisten-melden: eine gesenkte Unterdrückung braucht neben einem gelöschten ausgenommenen Fall weiter die Freigabe", async (context) => {
+  const ergebnis = await melde(
+    context,
+    mitAusnahme("gelöscht", { plan: { unterdrueckungen: [SENKUNG] } }),
+  );
+  erwarteFreigabeNoetig(ergebnis);
+  assert.doesNotMatch(ergebnis.ausgabe, /Freigabe nötig: Ausgenommener Testfall/);
+});
+
+test("ausmisten-melden: ein für zwei umgebaute Dateien ausgenommener gelöschter Fall steht nur einmal unter der eigenen Überschrift", async (context) => {
+  const dateien = [DATEI, ZWEITE_DATEI];
+  const ausgenommen = [
+    ausgenommenerFall("gelöscht"),
+    ausgenommenerFall("gelöscht", { datei: ZWEITE_DATEI }),
+  ];
+  const ergebnis = await melde(
+    context,
+    mitAusnahmen(ausgenommen, {
+      pr: true,
+      offen: false,
+      plan: { unterdrueckungen: [], dateien, pakete: [{ mutanten: 2, dateien }] },
+      basis: { ausgenommen, dateien },
+      branch: { dateien },
+    }),
+  );
+  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
+  assert.equal(
+    veraenderteAusnahmen(geoeffneterPrText(ergebnis)),
+    `${VERAENDERTE_AUSNAHMEN}\n\n${ausnahmeZeile("gelöscht")}\n\n`,
+  );
 });
 
 test("ausmisten-melden: ein ausgenommener Fall, den die Messung nicht zuordnen kann, macht das Artefakt ungültig", async (context) => {
@@ -832,13 +913,6 @@ test("ausmisten-melden: ein ausgenommener Fall, den die Messung nicht zuordnen k
     await melde(context, mitAusnahme("nicht zuzuordnen")),
     "Liste der ausgenommenen Testfälle ist ungültig",
   );
-});
-
-test("ausmisten-melden: Antonios Zustimmung gibt einen gelöschten ausgenommenen Fall frei", async (context) => {
-  const reviews = [review(ANTONIO, "APPROVED")];
-  const ergebnis = await melde(context, mitAusnahme("gelöscht", { reviews }));
-  assert.equal(ergebnis.status, EXIT_GRUEN, ergebnis.ausgabe);
-  assert.equal(ergebnis.gesetzt.state, "success");
 });
 
 test("ausmisten-melden: ein unveränderter ausgenommener Fall braucht keine Freigabe und steht im PR-Text", async (context) => {
@@ -852,6 +926,7 @@ test("ausmisten-melden: ein unveränderter ausgenommener Fall braucht keine Frei
     text,
   );
   assert.match(text, /## Ausgenommene Testfälle/);
+  assert.doesNotMatch(text, /im Branch gelöscht oder geändert/);
   assert.doesNotMatch(text, /Freigabe durch/);
 });
 
