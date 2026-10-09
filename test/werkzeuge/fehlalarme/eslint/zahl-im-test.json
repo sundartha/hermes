@@ -1,0 +1,15 @@
+{
+  "titel": "Zahl im Test, die der Testname erklärt",
+  "dateien": {
+    "test/rotprobe.test.js": [
+      "import assert from \"node:assert/strict\";",
+      "import { test } from \"node:test\";",
+      "",
+      "test(\"sperrt nach 3 Fehlversuchen\", () => {",
+      "  const versuche = [false, false, false];",
+      "  assert.equal(versuche.length, 3);",
+      "});"
+    ]
+  },
+  "erwartet": "\"ruleId\":\"no-magic-numbers\""
+}
