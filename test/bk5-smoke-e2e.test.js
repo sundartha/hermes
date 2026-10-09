@@ -4,6 +4,7 @@ import http from "node:http";
 import crypto from "node:crypto";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
+import { SMOKE_SITZUNGS_GEHEIMNIS, SMOKE_WEBHOOK_GEHEIMNIS } from "./gemeinsam/erfundene-geheimnisse.js";
 import {
   webAuth,
   webAuthAllowPending,
@@ -24,9 +25,8 @@ import { PLAN_CATALOG } from "../src/plans.js";
 import { NUMBER_STATUS, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
-const SECRET_BYTES = 16;
-const SECRET = crypto.randomBytes(SECRET_BYTES).toString("hex");
-const WEBHOOK_SECRET = `whsec_${crypto.randomBytes(SECRET_BYTES).toString("hex")}`;
+const SECRET = SMOKE_SITZUNGS_GEHEIMNIS;
+const WEBHOOK_SECRET = SMOKE_WEBHOOK_GEHEIMNIS;
 const SUB = "sub-bk5";
 const TENANT = "t_sub-bk5";
 const CUSTOMER = "cus_bk5";
