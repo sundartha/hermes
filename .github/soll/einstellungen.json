@@ -109,8 +109,8 @@
       },
       "bypass_actors": [
         {
-          "actor_id": 335012687,
-          "actor_type": "User",
+          "actor_id": 5250443,
+          "actor_type": "Integration",
           "bypass_mode": "always"
         }
       ],
@@ -136,8 +136,7 @@
   },
   "mitarbeiter": {
     "Antonio20045": "admin",
-    "jonas986": "admin",
-    "sundartha-bot": "write"
+    "jonas986": "admin"
   },
   "codeowners": [
     "eslint.config.* @Antonio20045 @jonas986",

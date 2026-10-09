@@ -24,8 +24,8 @@
   "updated_at": "2026-10-05T19:47:24.670+02:00",
   "bypass_actors": [
     {
-      "actor_id": 335012687,
-      "actor_type": "User",
+      "actor_id": 5250443,
+      "actor_type": "Integration",
       "bypass_mode": "always"
     }
   ],
