@@ -6,7 +6,7 @@ import { MIN_AGENT_SEKUNDEN, budgetFehlt, budgetMinuten, restSekunden } from "./
 import { BLOCKIERT, SAUBER, WEITER, leseJson, schreibeJson, setzeAusgaben } from "./ausgabe.mjs";
 import { IDS, befund } from "./befunde.mjs";
 import { arbeitsbaumAenderungen, patchPruefsumme, schreibePatch } from "./patch.mjs";
-import { BASIS, KNIP, basisVergleich, befundeDer } from "./sorten.mjs";
+import { ALTFUNKTION, BASIS, KNIP, basisVergleich, restBefunde } from "./sorten.mjs";
 import { DATEI as VORPRUEFUNG, ORDNER } from "./vorpruefen.mjs";
 import { DATEI } from "./waehlen.mjs";
 import { eslintBefehl, fuehreAus, paketBefehl } from "./werkzeuge.mjs";
@@ -56,8 +56,8 @@ export function fixe(root, ziel) {
   }
   const vorher = unbenutzte(root, ziel.datei);
   const zurueckgesetzt = ziel.sorte === KNIP ? knipFix(root, ziel.datei) : [];
-  eslintFix(root, ziel.datei);
-  const rest = (befundeDer(ziel.sorte, root).get(ziel.datei) ?? []).length;
+  if (ziel.sorte !== ALTFUNKTION) eslintFix(root, ziel.datei);
+  const rest = restBefunde(ziel, root).length;
   const nachher = unbenutzte(root, ziel.datei);
   return { agent: rest > 0 || nachher > vorher, rest, zurueckgesetzt, unbenutzt: { vorher, nachher } };
 }

@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { gitAusgabe } from "../auftrag/pruefer-auswahl.mjs";
-import { stricterCases } from "../freigabe-strenger.mjs";
+import { onlyLowersCounts, stricterCases } from "../freigabe-strenger.mjs";
 import { AGENT_DATEI, AGENT_ORDNER, AGENT_PATCH } from "./agentenlauf.mjs";
 import { BLOCKIERT, WEITER, ergebnisVon, leseJson, schreibeJson, setzeAusgaben } from "./ausgabe.mjs";
 import { IDS, ROTE_IDS, befund } from "./befunde.mjs";
@@ -11,7 +11,7 @@ import { commitNachricht } from "./nachricht.mjs";
 import { geaenderteGegen, wendeAn } from "./patch.mjs";
 import { BOT, BOT_EMAIL } from "./prs.mjs";
 import { SCHUTZ, istTestPfad, schutzGrund, schutzLage } from "./schutz.mjs";
-import { BASIS, BASIS_WERKZEUGE, basisVergleich, befundeDer } from "./sorten.mjs";
+import { ALTFUNKTION, BASIS, BASIS_WERKZEUGE, UNTERDRUECKUNGEN, basisVergleich, restBefunde } from "./sorten.mjs";
 import { ORDNER } from "./vorpruefen.mjs";
 import { DATEI as ZIEL } from "./waehlen.mjs";
 import { eslintBefehl, fuehreAus } from "./werkzeuge.mjs";
@@ -69,6 +69,14 @@ function basisVerstoss(root, ziel, aenderungen) {
   return offen ? befund(IDS.offen, ziel.datei, `${offen.behoben.length} behobene Einträge stehen noch in ${ziel.datei}.`) : null;
 }
 
+function unterdrueckungenSinken(root, ziel) {
+  const vorher = JSON.parse(gitAusgabe(["show", `${ziel.master}:${UNTERDRUECKUNGEN}`], root));
+  fuehreAus(eslintBefehl(["--prune-suppressions", ziel.datei]), root);
+  const nachher = JSON.parse(readFileSync(join(root, UNTERDRUECKUNGEN), "utf8"));
+  gitAusgabe(["checkout", "--", UNTERDRUECKUNGEN], root);
+  return onlyLowersCounts(vorher, nachher);
+}
+
 function npmPruefung(root, { ziel, id }, argumente) {
   const lauf = fuehreAus(["npm", "run", "--silent", ...argumente], root);
   return lauf.status === EXIT_GRUEN ? null : befund(id, ziel.datei, auszug(`${argumente[0]}: ${lauf.stdout}${lauf.stderr}`));
@@ -85,8 +93,12 @@ const CODE_PRUEFUNGEN = [
     return rot ? befund(IDS.neu, ziel.datei, auszug(rot.ausgabe)) : null;
   },
   (root, ziel) => {
-    const rest = befundeDer(ziel.sorte, root).get(ziel.datei) ?? [];
+    const rest = restBefunde(ziel, root);
     return rest.length === 0 ? null : befund(IDS.offen, ziel.datei, restText(rest, ziel.sorte));
+  },
+  (root, ziel) => {
+    if (ziel.sorte !== ALTFUNKTION || unterdrueckungenSinken(root, ziel)) return null;
+    return befund(IDS.offen, ziel.datei, `Keine Zahl der Datei in ${UNTERDRUECKUNGEN} würde sinken.`);
   },
   (root, ziel) => {
     if (!Array.isArray(ziel.tests) || ziel.tests.length === 0) return befund(IDS.testsRot, ziel.datei, "Kein Test erreicht die Zieldatei.");

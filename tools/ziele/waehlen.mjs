@@ -17,6 +17,7 @@ import { pausierteSorten } from "./pause.mjs";
 import { eigenePrs } from "./prs.mjs";
 import { istUnterdrueckt, kandidatenGrund, schutzLage, testsFuer } from "./schutz.mjs";
 import {
+  ALTFUNKTION,
   BASIS,
   BASIS_WERKZEUGE,
   JSCPD,
@@ -60,6 +61,7 @@ function istKandidat(sorte, [datei, liste], kontext) {
   const { root, schutz } = kontext;
   const frei = existsSync(join(root, datei)) && kandidatenGrund(datei, schutz) === null;
   if (!frei || gesperrt(sorte, datei, kontext)) return false;
+  if (sorte === ALTFUNKTION) return true;
   const agentErlaubt = !istUnterdrueckt(datei, schutz);
   if (sorte === JSCPD) return agentErlaubt;
   const duplikateErlaubt = agentErlaubt || !liste.some(istDuplikat);
@@ -69,6 +71,15 @@ function istKandidat(sorte, [datei, liste], kontext) {
 function zielText(root, datei, eintrag) {
   if (!istDuplikat(eintrag)) return eintrag.text;
   return `${eintrag.text} (entfernbar: ${entfernbareNamen(root, datei, eintrag).join(", ")})`;
+}
+
+function brennpunkt(root, datei) {
+  return Number(gitAusgabe(["rev-list", "--count", "HEAD", "--", datei], root).trim());
+}
+
+function altfunktionKandidat([datei, [ziel]], { root, schutz }) {
+  const zielbefunde = [ziel.text];
+  return { datei, zielbefunde, arten: [ziel.art], agentErlaubt: true, tests: testsFuer(datei, schutz), funktion: ziel.funktion, aenderungen: brennpunkt(root, datei) };
 }
 
 function kandidat([datei, liste], { root, schutz }) {
@@ -82,13 +93,16 @@ function kandidat([datei, liste], { root, schutz }) {
 }
 
 function vorrang(links, rechts) {
+  const haeufiger = (rechts.aenderungen ?? 0) - (links.aenderungen ?? 0);
+  if (haeufiger !== 0) return haeufiger;
   const mehr = rechts.zielbefunde.length - links.zielbefunde.length;
   return mehr === 0 ? links.datei.localeCompare(rechts.datei) : mehr;
 }
 
 export function kandidatenDer(sorte, kontext) {
   const befunde = [...befundeDer(sorte, kontext.root)].filter((eintrag) => istKandidat(sorte, eintrag, kontext));
-  return befunde.map((eintrag) => kandidat(eintrag, kontext)).sort(vorrang);
+  const bauen = sorte === ALTFUNKTION ? altfunktionKandidat : kandidat;
+  return befunde.map((eintrag) => bauen(eintrag, kontext)).sort(vorrang);
 }
 
 function basisZiel(root, sperren) {
