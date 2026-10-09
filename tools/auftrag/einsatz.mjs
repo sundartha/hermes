@@ -9,7 +9,9 @@ import { UEBERGABE } from "./verlauf.mjs";
 const MS_JE_MINUTE = 60_000;
 const WARTEZEIT_OHNE_ANGABE_MINUTEN = 30;
 const VORAUSSETZUNG = /^Voraussetzung fehlt:\s*(\S.*)$/m;
+const AUSSTIEG = /^Auftrag passt nicht:\s*(\S.*)$/m;
 const BAU = "bau";
+const MIT_AUSSTIEG = new Set([BAU, "test"]);
 const LESE_WERKZEUGE = ["Read", "Grep", "Glob"];
 const LESE_MODELL = "opus";
 const OHNE_HOOKS = JSON.stringify({ disableAllHooks: true });
@@ -78,6 +80,10 @@ function voraussetzung({ rolle, antwort = "" }) {
   return rolle === BAU ? (VORAUSSETZUNG.exec(antwort)?.[1] ?? null) : null;
 }
 
+function ausstieg({ rolle, antwort = "" }) {
+  return MIT_AUSSTIEG.has(rolle) ? (AUSSTIEG.exec(antwort)?.[1] ?? null) : null;
+}
+
 export function setzeEin(kontext, prompt, start) {
   const auftragsPrompt = kontext.rolle === BAU ? `${prompt}${ERGEBNIS_DES_BAUS}` : prompt;
   const sperre = limitSperre(kontext);
@@ -91,7 +97,7 @@ export function setzeEin(kontext, prompt, start) {
     const grund = grundDerSitzung(sitzung, { auftrag: kontext.auftrag, sperre });
     sitzungen.push(grund ? { ...sitzung, grund } : sitzung);
     if (!sitzung.limit && sitzung.aktion?.art !== UEBERGABE) {
-      return { ...sitzung, grund, sitzungen, voraussetzung: voraussetzung(sitzung) };
+      return { ...sitzung, grund, sitzungen, voraussetzung: voraussetzung(sitzung), ausstieg: ausstieg(sitzung) };
     }
     vorgaenger = { grund, antwort: sitzung.antwort };
     pruefleiter = sitzung.pruefleiter;

@@ -111,6 +111,19 @@ test("dreimal dieselbe Prüfleiter-Meldung aus dem Auftrag trotz Änderung stopp
   assert.deepEqual(agenten[0].fremdeBefunde, [fremd]);
 });
 
+test("„Auftrag passt nicht“ zählt nicht als rote Runde und führt mit dem Grund wörtlich zur Entscheidungsnotiz", (context) => {
+  const grund = "Der Abnahmetest verlangt ein Verhalten, das der Entwurf ausschließt.";
+  const bau = [{ dateien: { "src/zahl.js": "kaputt\n" }, antwort: `Ich höre auf.\nAuftrag passt nicht: ${grund}` }];
+  const { repo, ergebnis, beleg, datei } = lauf(context, { bau, notiz: [{ antwort: "1. Test ändern" }] });
+  assert.equal(ergebnis.status, EXIT_ROT);
+  const { runde, runden, ausstieg, entscheidung } = beleg("A1");
+  assert.deepEqual([runde, runden, ausstieg], [1, [], grund]);
+  assert.ok(entscheidung.text.includes(`\nAuftrag passt nicht: ${grund}\n`), entscheidung.text);
+  assert.ok(datei("gh.log").includes(`Auftrag passt nicht: ${grund}`));
+  assert.equal(datei("anzahl-bau"), "1");
+  assert.equal(runIn(repo, "git", ["status", "--porcelain"]).stdout, "");
+});
+
 test("„Voraussetzung fehlt“ verwirft die Arbeit, baut erst einen Umbau-Auftrag und geht beim zweiten Mal zurück in die Entwurfsprüfung", (context) => {
   const umbau = { ziel: "Lege text an", bereich: "src/text.js", erwarteteDateien: ["src/text.js"], vorbild: "src/zahl.js" };
   const plan = [{ antwort: JSON.stringify({ ...umbau, abnahme: "test/zahl.test.js", entwurf: "Text anlegen." }) }];

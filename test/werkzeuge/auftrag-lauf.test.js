@@ -185,6 +185,16 @@ test("der Test-Agent darf nur den Abnahmetest und erwartete Testdateien ändern"
   assert.equal(existsSync(join(werkzeug, "prompt-bau.txt")), false);
 });
 
+test("steigt der Test-Agent mit „Auftrag passt nicht“ aus, startet kein Bau-Agent und die Notiz nennt den Grund", (context) => {
+  const grund = "Ziel und erwarteter Fehler widersprechen sich.";
+  const drehbuch = { "test-antwort": `Auftrag passt nicht: ${grund}`, "notiz-antwort": "1. Ziel klären" };
+  const { werkzeug, lauf, beleg } = starte(context, { auftrag: funktion("2 !== 4"), drehbuch });
+  assert.equal(lauf.status, EXIT_ROT);
+  assert.deepEqual([beleg.ausstieg, beleg.runden], [grund, []]);
+  assert.ok(beleg.entscheidung.text.includes(`Auftrag passt nicht: ${grund}`));
+  assert.equal(existsSync(join(werkzeug, "prompt-bau.txt")), false);
+});
+
 test("lauf mit unvollständiger Phase startet keinen Agenten", (context) => {
   const ohneNie = { ...funktion("2 !== 4"), wasDarfNiePassieren: undefined };
   const { werkzeug, lauf } = starte(context, { auftrag: ohneNie, drehbuch: {} });

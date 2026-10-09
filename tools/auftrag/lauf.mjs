@@ -23,6 +23,7 @@ class AuftragsLauf {
     this.runde = runde;
     this.vorgeschichte = vorgeschichte;
     this.voraussetzung = null;
+    this.ausstieg = null;
     this.basis = kopf(root);
     this.basisBau = this.basis;
     this.testausgabe = "";
@@ -64,6 +65,8 @@ class AuftragsLauf {
     }
     this.voraussetzung = ergebnis.voraussetzung;
     if (this.voraussetzung) return this.scheitert(`Voraussetzung fehlt: ${this.voraussetzung}`);
+    this.ausstieg = ergebnis.ausstieg;
+    if (this.ausstieg) return this.scheitert(`Auftrag passt nicht: ${this.ausstieg}`);
     if (ergebnis.grund) return this.scheitert(ergebnis.grund);
     return ergebnis.exitCode === 0 || this.scheitert(`Der Agent ${ergebnis.agent} endete mit Exit ${ergebnis.exitCode}.`);
   }
@@ -167,6 +170,7 @@ class AuftragsLauf {
       ergebnis: gruen ? GRUEN : ROT,
       grund: this.grund,
       voraussetzung: this.voraussetzung,
+      ausstieg: this.ausstieg,
       commit: this.commit,
       agenten: this.agenten,
       pruefungen: this.pruefungen,
