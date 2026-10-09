@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -78,4 +78,28 @@ test("Unterdrückungen: mit --basis ist ein Branch rot, der eine Zahl erhöht, u
   const laeufe = [tor(erhoeht, ["--basis", "HEAD~1"]), tor(gesenkt, ["--basis", "HEAD~1"])];
   assert.deepEqual(laeufe.map(({ status }) => status), [EXIT_ROT, EXIT_GRUEN], laeufe.map(({ ausgabe }) => ausgabe).join("\n"));
   assert.match(laeufe[0].ausgabe, /src\/b\.js -> complexity: 2 -> 3/);
+});
+
+const VERSTOESSE_IN_ALT = 2;
+
+function lintRepo(context, gezaehlt) {
+  const { scripts } = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8"));
+  const repo = probeRepository(context, {
+    "package.json": `${JSON.stringify({ type: "module", scripts: { lint: scripts.lint } })}\n`,
+    "eslint.config.js": 'export default [{ rules: { "no-var": "error" } }];\n',
+    "src/alt.js": "var erster = 1;\nvar zweiter = 2;\nexport { erster, zweiter };\n",
+    [UNTERDRUECKUNGEN]: `${JSON.stringify({ "src/alt.js": { "no-var": { count: gezaehlt } } })}\n`,
+  });
+  symlinkSync(join(REPO_ROOT, "node_modules"), join(repo, "node_modules"));
+  return runIn(repo, "npm", ["run", "--silent", "lint"]);
+}
+
+test("npm run lint bleibt grün, wenn eslint-suppressions.json mehr unterdrückt, als es Verstöße gibt", (context) => {
+  const lauf = lintRepo(context, VERSTOESSE_IN_ALT + 1);
+  assert.equal(lauf.status, EXIT_GRUEN, `${lauf.stdout}${lauf.stderr}`);
+});
+
+test("npm run lint ist rot, wenn eslint-suppressions.json weniger unterdrückt, als es Verstöße gibt", (context) => {
+  const lauf = lintRepo(context, VERSTOESSE_IN_ALT - 1);
+  assert.equal(lauf.status, EXIT_ROT, `${lauf.stdout}${lauf.stderr}`);
 });
