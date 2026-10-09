@@ -100,6 +100,33 @@ function jscpdFinding(root, { firstFile, secondFile, tokens }) {
   };
 }
 
+const JSCPD_PAIR_PARTS = 2;
+
+function jscpdPair(key) {
+  return key.split(KEY_SEPARATOR).slice(0, JSCPD_PAIR_PARTS).join(KEY_SEPARATOR);
+}
+
+function jscpdTokens(key) {
+  return Number(key.split(KEY_SEPARATOR)[JSCPD_PAIR_PARTS]);
+}
+
+function byTokens(left, right) {
+  return jscpdTokens(left) - jscpdTokens(right);
+}
+
+function jscpdShrunk(findings, freeKeys) {
+  const free = freeKeys.toSorted(byTokens);
+  const shrunk = { covered: [], keys: [] };
+  for (const finding of findings.toSorted((left, right) => byTokens(right.key, left.key))) {
+    const fits = (key) => jscpdPair(key) === jscpdPair(finding.key) && jscpdTokens(finding.key) <= jscpdTokens(key);
+    const index = free.findIndex(fits);
+    if (index === -1) continue;
+    shrunk.covered.push(finding);
+    shrunk.keys.push(...free.splice(index, 1));
+  }
+  return shrunk;
+}
+
 function jscpdFindings(root) {
   const outputDir = mkdtempSync(join(tmpdir(), "basis-vergleich-jscpd-"));
   try {
@@ -314,7 +341,7 @@ function keyPart(index) {
 }
 
 const TOOLS = {
-  jscpd: { findings: jscpdFindings, path: keyPart(0) },
+  jscpd: { findings: jscpdFindings, path: keyPart(0), shrunk: jscpdShrunk },
   knip: { findings: knipFindings, path: keyPart(1) },
   semgrep: { findings: semgrepFindings, version: semgrepVersion, path: keyPart(1) },
   "quelltext-als-text": { findings: textReadingFindings, path: pfadAusSchluessel },
@@ -394,16 +421,19 @@ function frozenFindings(findings) {
   return findings.filter((finding) => !isAlways(finding));
 }
 
+const NOTHING_SHRUNK = { covered: [], keys: [] };
+
 async function measure(context, baseline) {
   checkVersion(context, baseline);
-  const findings = await context.tool.findings(context.root);
-  const frozen = frozenFindings(findings);
+  const { tool, root } = context;
+  const findings = await tool.findings(root);
+  const { within, beyond } = splitByAllowance(frozenFindings(findings), baseline.befunde, findingKeyOf);
+  const exact = within.map(findingKeyOf);
+  const unmatched = splitByAllowance(baseline.befunde, exact, identity).beyond;
+  const shrunk = tool.shrunk?.(beyond, unmatched) ?? NOTHING_SHRUNK;
   return {
-    added: [
-      ...findings.filter(isAlways),
-      ...splitByAllowance(frozen, baseline.befunde, findingKeyOf).beyond,
-    ],
-    known: splitByAllowance(baseline.befunde, frozen.map(findingKeyOf), identity),
+    added: [...findings.filter(isAlways), ...beyond.filter((finding) => !shrunk.covered.includes(finding))],
+    known: splitByAllowance(baseline.befunde, [...exact, ...shrunk.keys], identity),
   };
 }
 
