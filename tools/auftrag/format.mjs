@@ -6,7 +6,6 @@ import { matches } from "../pruefungen-messen.mjs";
 export const ARTEN = ["funktion", "fehlerbehebung", "umbau"];
 export const FUNKTIONSKARTE = "FUNKTIONSKARTE.md";
 const ARTEN_MIT_ROTEM_TEST = new Set(["funktion", "fehlerbehebung"]);
-const NIE_SCHLUESSEL = ["wiederholung", "gleichzeitig", "zeitueberschreitung", "abbruch"];
 const KENNUNG = /^[a-z0-9][a-z0-9-]*$/i;
 const ABNAHMETEST = /^test\/.+\.test\.[cm]?js$/;
 const TESTDATEI = /(^|\/)test\/|\.test\.[cm]?js$/;
@@ -135,9 +134,8 @@ function nieBefunde(auftrag) {
   if (nie === null || typeof nie !== "object") {
     return ["wasDarfNiePassieren fehlt; Pflicht für Funktion und Fehlerbehebung"];
   }
-  return NIE_SCHLUESSEL.filter((schluessel) => textFehlt(nie[schluessel])).map(
-    (schluessel) => `wasDarfNiePassieren.${schluessel} fehlt`,
-  );
+  const saetze = Array.isArray(nie) ? nie : Object.values(nie);
+  return saetze.some(textFehlt) ? ["wasDarfNiePassieren muss eine Liste von Sätzen sein"] : [];
 }
 
 function abhaengigkeitBefunde(auftrag, kontext) {
