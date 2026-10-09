@@ -8,6 +8,14 @@ export const ROT = "rot";
 const JSON_EINRUECKUNG = 2;
 const MIO = 1_000_000;
 const NACHKOMMA = 1;
+const HINWEISE_DES_BAUS = "Hinweise des Bau-Agenten:";
+const ZITAT = "> ";
+
+export function hinweiseDesBaus(agenten = []) {
+  const antwort = (agenten.findLast(({ rolle }) => rolle === "bau")?.antwort ?? "").trim();
+  if (antwort === "") return [];
+  return [HINWEISE_DES_BAUS, ...antwort.split("\n").map((zeile) => `${ZITAT}${zeile}`)];
+}
 
 export function belegVerzeichnis(root, phase) {
   return join(root, BELEGE, phase);

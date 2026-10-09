@@ -124,6 +124,19 @@ test("„Auftrag passt nicht“ zählt nicht als rote Runde und führt mit dem G
   assert.equal(runIn(repo, "git", ["status", "--porcelain"]).stdout, "");
 });
 
+test("die letzte Antwort des Bau-Agenten steht als Hinweis in der Fehlerausgabe der zweiten Runde und in der Notiz", (context) => {
+  const fremd = { "fremd.js": "x\n" };
+  const bau = [
+    { dateien: fremd, antwort: "Ich brauche fremd.js." },
+    { dateien: fremd, antwort: "Ohne fremd.js geht es nicht.\nPaket: 99" },
+  ];
+  const { beleg, datei } = lauf(context, { bau, notiz: [{ antwort: "1. Bereich erweitern" }] });
+  assert.match(datei("prompt-bau.txt"), /Fehlerausgabe der vorigen Runde[\s\S]*Hinweise des Bau-Agenten:\n> Ich brauche fremd\.js\./);
+  const { runden, entscheidung } = beleg("A1");
+  assert.equal(runden.length, ZWEITE_RUNDE);
+  assert.ok(entscheidung.text.includes("Hinweise des Bau-Agenten:\n> Ohne fremd.js geht es nicht.\n> Paket: 99\n"), entscheidung.text);
+});
+
 test("„Voraussetzung fehlt“ verwirft die Arbeit, baut erst einen Umbau-Auftrag und geht beim zweiten Mal zurück in die Entwurfsprüfung", (context) => {
   const umbau = { ziel: "Lege text an", bereich: "src/text.js", erwarteteDateien: ["src/text.js"], vorbild: "src/zahl.js" };
   const plan = [{ antwort: JSON.stringify({ ...umbau, abnahme: "test/zahl.test.js", entwurf: "Text anlegen." }) }];

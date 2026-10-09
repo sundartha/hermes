@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { bauPrompt, testPrompt } from "./agenten.mjs";
 import { EXIT_GRUEN, EXIT_ROT, abnahmeBefehl, gueltigePhase, hatSkript } from "./befehle.mjs";
-import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, schreibeBeleg } from "./bericht.mjs";
+import { BELEGE, GRUEN, ROT, druckeBeleg, fingerabdruck, hinweiseDesBaus, schreibeBeleg } from "./bericht.mjs";
 import { bisektion } from "./bisektion.mjs";
 import { brauchtRotenTest, reihenfolge } from "./format.mjs";
 import { aenderungenSeit, festhalten, istSauber, kopf, vormerken, weichZuruecksetzen } from "./git.mjs";
@@ -120,7 +120,9 @@ class AuftragsLauf {
     const warum = `${absatz}: Auftrag ${auftrag.id} der Phase ${phase.phase}; tools/auftrag.mjs hat ihn gebaut und geprüft.`;
     const herkunft = [`Auftrag: ${phase.phase}/${auftrag.id}`, `Art: ${auftrag.art}`];
     const paket = phase.paket ? [`Paket: ${phase.paket}`] : [];
-    return [auftrag.ziel, "", warum, ...this.berichtszeilen, ...belege, "", ...herkunft, ...paket, ""].join("\n");
+    const hinweise = hinweiseDesBaus(this.agenten);
+    const abschnitt = hinweise.length > 0 ? [...hinweise, ""] : [];
+    return [auftrag.ziel, "", warum, ...this.berichtszeilen, ...belege, "", ...abschnitt, ...herkunft, ...paket, ""].join("\n");
   }
 
   abschliessen() {
