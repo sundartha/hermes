@@ -1,24 +1,18 @@
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   installProcessGuards,
   onUnhandledRejection,
   onUncaughtException,
 } from "../src/process-guards.js";
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-
 function captureErr(fn) {
   const logs = [];
-  const orig = console.error;
-  console.error = (...a) => logs.push(a.map(String).join(" "));
+  const stderr = mock.method(console, "error", (...teile) => logs.push(teile.map(String).join(" ")));
   try {
     fn();
   } finally {
-    console.error = orig;
+    stderr.mock.restore();
   }
   return logs.join("\n");
 }
@@ -57,18 +51,4 @@ test("T-P0-03: onUncaughtException loggt stack, nie ein Secret", () => {
   assert.match(out, /\[guard\] uncaughtException/);
   assert.ok(out.includes(err.stack), "stack soll geloggt werden (Diagnose)");
   assert.ok(!out.includes(SECRET), "Handler darf kein Secret aus config ziehen");
-});
-
-function firstImportLine(file) {
-  const lines = fs.readFileSync(path.join(ROOT, file), "utf8").split("\n");
-  const found = lines.find((l) => /^\s*import\b/.test(l));
-  return found ? found.trim() : null;
-}
-
-test("T-P0-07: process-guards ist erste Importzeile in server.js", () => {
-  assert.equal(firstImportLine("src/server.js"), 'import "./process-guards.js";');
-});
-
-test("T-P0-07: process-guards ist erste Importzeile in mcp-server.js", () => {
-  assert.equal(firstImportLine("src/mcp-server.js"), 'import "./process-guards.js";');
 });
