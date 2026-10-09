@@ -467,7 +467,7 @@ export default [
 
       "no-param-reassign": ["error", { props: true }],
 
-      "no-useless-constructor": "error",
+      "no-useless-constructor": "off",
 
       "id-length": ["error", { min: 2, exceptions: ["i", "j", "k"] }],
 
