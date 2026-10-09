@@ -243,3 +243,56 @@ test("pruefen schreibt nur Zählwerte ins Log, und das Token erreicht nur den Pr
   assert.ok(gitUmgebungen.includes("GH_TOKEN=gh-schein"));
   assert.equal(gitUmgebungen.includes(SCHEIN_TOKEN), false);
 });
+
+async function pruefenMitAblage(context, ablageIn) {
+  const { repo, basis, commit } = einCommit(context);
+  const ersatz = ersatzPruefer(context, { aufnahme: aufzeichnung("sicherheitshinweis") });
+  const pr = { number: PR_NUMMER, state: "open", head: { sha: commit.sha }, base: { sha: basis, ref: "master" }, body: "" };
+  const github = await scheinGithub(
+    context,
+    new Map([
+      [`GET /repos/sundartha/hermes/commits/${commit.sha}/pulls`, [pr]],
+      ["GET /repos/sundartha/hermes/actions/artifacts", { artifacts: [] }],
+      ["GET /repos/sundartha/hermes/actions/workflows/ci.yml", { id: WORKFLOW_NUMMERN.get("ci.yml") }],
+    ]),
+  );
+  const werkzeug = probeDirectory(context, { "ausgabe.txt": "" });
+  const aus = join(werkzeug, "ergebnis");
+  const umgebung = {
+    ...isolatedEnvironment(),
+    HERMES_CLAUDE: ersatz.programm,
+    CLAUDE_CODE_OAUTH_TOKEN: SCHEIN_TOKEN,
+    GH_TOKEN: "gh-schein",
+    GITHUB_API_URL: github.url,
+    GITHUB_REPOSITORY: "sundartha/hermes",
+    GITHUB_EVENT_PATH: ereignisDatei(context, ciLauf()),
+    GITHUB_OUTPUT: join(werkzeug, "ausgabe.txt"),
+  };
+  const ablage = join(ablageIn ? aus : werkzeug, "ablage");
+  const args = ["pruefer", "pruefen", "--head", commit.sha, "--pr-branch", "fix/zahl", "--aus", aus, "--ablage", ablage];
+  const lauf = await starteEinstieg(args, { cwd: repo.ordner, umgebung });
+  return { lauf, commit, aus, ablage, ausgabe: join(werkzeug, "ausgabe.txt") };
+}
+
+test("pruefen legt Sicherheitshinweise mit Details nur in die Ablage, das Artefakt bekommt Schwere und Merker", async (context) => {
+  const { lauf, commit, aus, ablage, ausgabe } = await pruefenMitAblage(context, false);
+  assert.equal(lauf.status, 0, lauf.stderr);
+  const artefakt = readFileSync(join(aus, "ergebnis.json"), "utf8");
+  assert.equal(artefakt.includes("GEHEIM"), false);
+  const [{ befunde }] = JSON.parse(artefakt).commits;
+  assert.deepEqual(befunde[0], { sicherheit: true, schwere: "SOLLTE" });
+  assert.equal(befunde[1].id, "N7");
+  const { hinweise } = JSON.parse(readFileSync(join(ablage, "sicherheitshinweise.json"), "utf8"));
+  assert.deepEqual(
+    hinweise.map(({ sha, befund }) => [sha, befund.schwere, befund.beleg]),
+    [[commit.sha, "SOLLTE", "GEHEIMER-BELEG-91c2"]],
+  );
+  assert.equal(readFileSync(ausgabe, "utf8"), "hinweise=1\n");
+});
+
+test("pruefen bricht ab, wenn die Ablage im hochgeladenen Ordner --aus liegen soll", async (context) => {
+  const { lauf, aus } = await pruefenMitAblage(context, true);
+  assert.notEqual(lauf.status, 0);
+  assert.match(lauf.stderr, /Ablage darf nicht im Ordner --aus liegen/);
+  assert.equal(existsSync(join(aus, "ergebnis.json")), false);
+});

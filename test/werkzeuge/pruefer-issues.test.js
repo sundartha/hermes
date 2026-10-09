@@ -5,18 +5,22 @@ import { test } from "node:test";
 import { entscheiden } from "../../tools/auftrag/pruefer-befehle.mjs";
 import { issueText, legeIssuesAn } from "../../tools/auftrag/pruefer-issues.mjs";
 import { urteile } from "../../tools/auftrag/pruefer-urteil.mjs";
-import { probeDirectory } from "./probe-repo.js";
+import { isolatedEnvironment, probeDirectory } from "./probe-repo.js";
 import {
   ciLauf,
   ereignisDatei,
   prueferLauf,
+  scheinGithub as scheinServer,
   scheinSha,
   setzeAusloeser,
+  starteEinstieg,
   workflowAbfrage,
 } from "./pruefer/hilfen.mjs";
 
 const HEAD = scheinSha("d");
 const TITEL = "Prüfer: N7 in src/zahl.js";
+const PRIVAT = "sundartha/hermes-sicherheit";
+const ABLAGE_TITEL = "Sicherheit: Prüfer: SG-12 in `src/zahl.js`";
 
 function scheinGithub(offen = []) {
   const gesendet = [];
@@ -153,4 +157,52 @@ test("eine Katalog-ID nach Muster und die Datei als Code-Span stehen in Titel un
   const { titel, text } = einzigesIssue(hinweis({ id: "SG-07", datei: "src/zahl.js" }));
   assert.equal(titel, "Prüfer: SG-07 in `src/zahl.js`");
   assert.ok(text.includes("- Katalog-ID: SG-07\n- Stelle: `src/zahl.js`, Zeile 1"), text);
+});
+
+async function ablegenGegen(context, ablage, offen) {
+  const server = await scheinServer(
+    context,
+    new Map([
+      [`GET /repos/${PRIVAT}/issues`, offen.map((title) => ({ title }))],
+      [`POST /repos/${PRIVAT}/issues`, {}],
+    ]),
+  );
+  const umgebung = { ...isolatedEnvironment(), GH_TOKEN: "gh-schein", GITHUB_API_URL: server.url };
+  const lauf = await starteEinstieg(["pruefer", "ablegen", "--ablage", ablage, "--repo", PRIVAT], { cwd: ablage, umgebung });
+  const neu = server.anfragen.filter(({ methode }) => methode === "POST");
+  return { lauf, neu, pfade: server.anfragen.map(({ pfad }) => pfad) };
+}
+
+test("ablegen legt Sicherheitshinweise nur im privaten Repo als Issue an, jeden Titel nur einmal", async (context) => {
+  const befund = hinweis({ id: "SG-12", beleg: "GEHEIMER-BELEG", sicherheit: true });
+  const ablage = probeDirectory(context, {
+    "sicherheitshinweise.json": JSON.stringify({ format: 1, hinweise: [{ sha: HEAD, befund }] }),
+  });
+  const erster = await ablegenGegen(context, ablage, []);
+  assert.equal(erster.lauf.status, 0, erster.lauf.stderr);
+  assert.deepEqual(
+    erster.neu.map(({ pfad, rumpf }) => [pfad, rumpf.title, rumpf.labels]),
+    [[`/repos/${PRIVAT}/issues`, ABLAGE_TITEL, ["pruefer"]]],
+  );
+  const [{ rumpf }] = erster.neu;
+  assert.match(rumpf.body, /GEHEIMER-BELEG/);
+  assert.match(rumpf.body, /Schwere: SOLLTE \(Sicherheitsbezug, nicht öffentlich\)/);
+  assert.ok(erster.pfade.every((pfad) => pfad.startsWith(`/repos/${PRIVAT}/`)));
+  const zweiter = await ablegenGegen(context, ablage, [ABLAGE_TITEL]);
+  assert.equal(zweiter.lauf.status, 0, zweiter.lauf.stderr);
+  assert.deepEqual(zweiter.neu, []);
+});
+
+test("ablegen ohne gültige Ablage-Datei scheitert und legt nichts an", async (context) => {
+  const leer = probeDirectory(context, {});
+  const ohneDatei = await ablegenGegen(context, leer, []);
+  assert.notEqual(ohneDatei.lauf.status, 0);
+  assert.deepEqual(ohneDatei.neu, []);
+  const blocker = hinweis({ schwere: "BLOCKER", sicherheit: true });
+  const falsch = probeDirectory(context, {
+    "sicherheitshinweise.json": JSON.stringify({ format: 1, hinweise: [{ sha: HEAD, befund: blocker }] }),
+  });
+  const mitBlocker = await ablegenGegen(context, falsch, []);
+  assert.notEqual(mitBlocker.lauf.status, 0);
+  assert.deepEqual(mitBlocker.neu, []);
 });

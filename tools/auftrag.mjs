@@ -18,9 +18,10 @@ const AUFRUF = [
   "        node tools/auftrag.mjs phase <phasendatei>",
   "        node tools/auftrag.mjs aufraeumen",
   "        node tools/auftrag.mjs pruefer artefakt --head <sha>",
-  "        node tools/auftrag.mjs pruefer pruefen --head <sha> --pr-branch <branch> [--pr-repo <owner/name>] --aus <ordner>",
+  "        node tools/auftrag.mjs pruefer pruefen --head <sha> --pr-branch <branch> [--pr-repo <owner/name>] --aus <ordner> [--ablage <ordner>]",
   "        node tools/auftrag.mjs pruefer nachstellen --ergebnis <ordner> --pr <ordner> --basis <ordner> --aus <ordner>",
   "        node tools/auftrag.mjs pruefer entscheiden --ergebnis <ordner> [--nachstellung <ordner>] [--head <sha>]",
+  "        node tools/auftrag.mjs pruefer ablegen --ablage <ordner> --repo <owner/name>",
   "        node tools/auftrag.mjs reparatur --ergebnis <ordner> --nachstellung <ordner>",
   "        node tools/auftrag.mjs system",
 ].join("\n");
@@ -34,6 +35,8 @@ const OPTIONEN = [
   "ergebnis",
   "pr",
   "nachstellung",
+  "ablage",
+  "repo",
 ];
 
 const BEFEHLE = {

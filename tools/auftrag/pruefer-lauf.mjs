@@ -17,6 +17,7 @@ import {
   SCHWEREN,
   UNVOLLSTAENDIG,
   befundeDerAntwort,
+  gehoertInAblage,
   gekuerzt,
 } from "./pruefer-schema.mjs";
 
@@ -228,7 +229,13 @@ export function werteAus(lauf, { ordner, patches, token }) {
       befunde: [],
       zaehler,
     };
-  return { zustand: GEPRUEFT, grund: "", befunde: befunde.map(gekuerzt), zaehler };
+  return {
+    zustand: GEPRUEFT,
+    grund: "",
+    befunde: befunde.map(gekuerzt),
+    ablage: befunde.filter(gehoertInAblage),
+    zaehler,
+  };
 }
 
 function eintrag(commit, auswertung) {
