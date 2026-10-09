@@ -44,12 +44,12 @@ function planPrompt(phase, auftrag, satz) {
   ].join("\n");
 }
 
-function notizPrompt(phase, auftrag, fehler) {
+function notizPrompt(phase, auftrag, { anlass, verlauf }) {
   return [
     testPrompt(phase, auftrag),
-    abschnitt("Fehlerausgabe beider Runden", [CODEBLOCK, ...fehler, CODEBLOCK]),
+    abschnitt("Verlauf", [CODEBLOCK, ...verlauf, CODEBLOCK]),
     abschnitt("Deine Aufgabe", [
-      `Der Auftrag ist nach ${MAX_RUNDEN} roten Runden gestoppt. Schreib eine Entscheidungsnotiz für Menschen, die keinen Code lesen.`,
+      `${anlass} Schreib eine Entscheidungsnotiz für Menschen, die keinen Code lesen.`,
       "Sie hat drei Teile in Klartext ohne Code: was versucht wurde, was beobachtet wurde, und zwei bis drei nummerierte Optionen mit deiner Empfehlung.",
       "Antworte nur mit der Notiz.",
     ]),
@@ -112,6 +112,7 @@ class Runden {
       const runde = this.fehler.length + 1;
       const ergebnis = this.starteRunde({ ...this.kontext, runde, vorgeschichte: this.vorgeschichte() });
       if (ergebnis.ergebnis === GRUEN) return GRUEN;
+      if (ergebnis.ausstieg) return this.ausgestiegen(ergebnis);
       if (ergebnis.voraussetzung) {
         const vorlauf = this.voraussetzungFehlt(ergebnis);
         if (vorlauf !== GRUEN) return vorlauf;
@@ -160,6 +161,12 @@ class Runden {
     return { befunde, kontext: { phase: neu, auftrag: umbau, phasendatei } };
   }
 
+  gestoppt() {
+    const { phase, auftrag } = this.kontext;
+    const kopf = `Auftrag ${auftrag.id} der Phase ${phase.phase} ist nach ${MAX_RUNDEN} roten Runden gestoppt.`;
+    return { kopf, anlass: `Der Auftrag ist nach ${MAX_RUNDEN} roten Runden gestoppt.`, verlauf: this.fehler };
+  }
+
   zurueckInDenEntwurf(ergebnis, grund) {
     const text = `Zurück in die Entwurfsprüfung: ${grund}`;
     schreibeBeleg(this.kontext.root, { ...ergebnis, ergebnis: ENTWURFSPRUEFUNG, grund: text });
@@ -167,11 +174,18 @@ class Runden {
     return ENTWURFSPRUEFUNG;
   }
 
-  entscheidung(ergebnis) {
+  ausgestiegen(ergebnis) {
+    verwerfe(ergebnis.basis, this.kontext.root);
+    const { phase, auftrag } = this.kontext;
+    const zeile = `Auftrag passt nicht: ${ergebnis.ausstieg}`;
+    const kopf = `Der Agent ist aus dem Auftrag ${auftrag.id} der Phase ${phase.phase} ausgestiegen.\n\n${zeile}`;
+    return this.entscheidung(ergebnis, { kopf, anlass: `Der Agent ist ausgestiegen: ${zeile}`, verlauf: [zeile] });
+  }
+
+  entscheidung(ergebnis, gestoppt = this.gestoppt()) {
     const { phase, auftrag, root } = this.kontext;
-    const notiz = frage({ rolle: "notiz", phase, auftrag, root }, notizPrompt(phase, auftrag, this.fehler));
-    const kopf = `Auftrag ${auftrag.id} der Phase ${phase.phase} ist nach ${MAX_RUNDEN} roten Runden gestoppt.`;
-    const text = ["## Entscheidung nötig", "", kopf, "", notiz.antwort.trim() || this.fehler.join("\n\n"), ""].join("\n");
+    const notiz = frage({ rolle: "notiz", phase, auftrag, root }, notizPrompt(phase, auftrag, gestoppt));
+    const text = ["## Entscheidung nötig", "", gestoppt.kopf, "", notiz.antwort.trim() || gestoppt.verlauf.join("\n\n"), ""].join("\n");
     const veroeffentlicht = veroeffentliche(phase.issue, text, root);
     schreibeBeleg(root, { ...ergebnis, runden: this.fehler, entscheidung: { text, agenten: notiz.sitzungen, ...veroeffentlicht } });
     console.log(`Auftrag ${auftrag.id}: Entscheidung nötig. ${veroeffentlicht.hinweis}`);
