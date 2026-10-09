@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { expectClean, expectFinding, runCheck } from "./workflows-probe.mjs";
 
 const QUEUE_TRIGGER = ["  merge_group:", "    types: [checks_requested]"];
-const SECRET = "          GH_TOKEN: ${{ secrets.BOT_TOKEN }}";
+const SECRET = "          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}";
 const PULL_REQUEST_SECRETS = "secrets in einem Workflow, der für Pull Requests läuft";
 const OUTSIDE_LIST = "secrets nur in Workflows aus tools/basis/geheimnis-workflows.json";
 const JOB_CONDITION =
@@ -26,9 +26,14 @@ function secretWorkflow(triggers) {
     "    runs-on: ubuntu-latest",
     "    environment: rotproben",
     "    steps:",
+    "      - name: App-Token",
+    "        id: app-token",
+    "        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1",
+    "        with:",
+    SECRET,
     "      - name: Rot-Proben",
     "        env:",
-    SECRET,
+    "          GH_TOKEN: ${{ steps.app-token.outputs.token }}",
     "        run: node tools/rotproben-woche.mjs",
     "",
   ];
