@@ -99,6 +99,13 @@ test("ein kaputter Merge wird als Rücknahme-PR mit zwei Standard-Reverts angele
   assert.equal(lauf.stand.repo.imOrigin(["show", "revert/7:src/zahl.js"]), "export const ZAHL = 2;");
 });
 
+test("die Revert-Commits tragen Name und Adresse von sundartha-agent[bot]", async (context) => {
+  const { status, stderr, stand } = await nimmZurueck(context);
+  assert.equal(status, EXIT_OK, stderr);
+  const autoren = stand.repo.imOrigin(["log", "--format=%an <%ae>", "-2", "revert/7"]);
+  assert.deepEqual(autoren.split("\n"), Array(stand.pull.commits).fill("sundartha-agent[bot] <340129717+sundartha-agent[bot]@users.noreply.github.com>"));
+});
+
 test("die Rücknahme pusht nie auf master und reiht nur mit --auto ein", async (context) => {
   const lauf = await nimmZurueck(context);
   assert.equal(lauf.masterImOrigin, lauf.stand.zweiter);

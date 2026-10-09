@@ -5,8 +5,8 @@ import { githubZugang } from "../auftrag/pruefer-github.mjs";
 import { ciLauf, git, schreibeAusgabe } from "./gleicher-stand.mjs";
 import { eintraegeAus, leseBelege } from "./wackelig-issues.mjs";
 
-const BOT = "sundartha-bot";
-const BOT_ADRESSE = "335012687+sundartha-bot@users.noreply.github.com";
+const BOT = "sundartha-agent[bot]";
+const BOT_ADRESSE = "340129717+sundartha-agent[bot]@users.noreply.github.com";
 const MASTER = "master";
 const RUECKNAHME_PRAEFIX = "revert/";
 const WORKFLOW_ORDNER = ".github/workflows/";
