@@ -22,6 +22,7 @@ import {
   scheduledRedStreaks,
   systemstandLines,
 } from "./wochenbericht/stand.mjs";
+import { raiseEmptyLists, transitionLists, transitionSection } from "./wochenbericht/uebergang.mjs";
 import { germanDate, isoWeek } from "./wochenbericht/zeit.mjs";
 
 const REPORT_PREFIX = "Wochenbericht KW";
@@ -115,6 +116,7 @@ async function buildReport({ now, decisions, streaks, workflows, openIssues }) {
     ...section("Rote Läufe", redSection({ runs, streaks, now })),
     ...section("Merges ohne Menschen", merges),
     ...section("Rücknahmen", reverts),
+    ...section("Übergangslisten", transitionSection(transitionLists())),
     ...section("Kosten", costSection(runs, readBudget(), now)),
     ...section("Issues automatischer Läufe", [
       `${openIssues.length} offen, Obergrenze ${OPEN_ISSUE_LIMIT}.`,
@@ -150,7 +152,10 @@ async function main() {
   const workflows = await workflowList();
   const streaks = await scheduledRedStreaks(workflows);
   const openIssues = await openAutomationIssues();
-  if (options.alarme) await raiseAlarms(streaks, openIssues);
+  if (options.alarme) {
+    await raiseAlarms(streaks, openIssues);
+    await raiseEmptyLists(transitionLists(), openIssues, { limit: OPEN_ISSUE_LIMIT });
+  }
   if (!options.probe && !options.bericht) return;
   const report = await buildReport({ now, decisions, streaks, workflows, openIssues });
   if (options.probe) {

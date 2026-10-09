@@ -14,7 +14,7 @@ const LINE_BREAK = "\n";
 const WHOLE_FILE = "";
 const SUPPRESSION_COUNTS = "count";
 
-const OLD_FINDING_LISTS = new Map([
+export const OLD_FINDING_LISTS = new Map([
   ["tools/basis/jscpd.json", "befunde"],
   ["tools/basis/knip.json", "befunde"],
   ["tools/basis/semgrep.json", "befunde"],
