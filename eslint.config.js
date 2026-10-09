@@ -526,6 +526,8 @@ export default [
     files: ["test/**"],
     rules: {
       "no-restricted-properties": "off",
+      "no-magic-numbers": "off",
+      "id-length": "off",
     },
   },
   {

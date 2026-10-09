@@ -9596,7 +9596,7 @@
         1
       ],
       "id-length": [
-        2,
+        0,
         {
           "exceptionPatterns": [],
           "exceptions": [
@@ -9746,7 +9746,7 @@
         2
       ],
       "no-magic-numbers": [
-        2,
+        0,
         {
           "detectObjects": false,
           "enforceConst": true,

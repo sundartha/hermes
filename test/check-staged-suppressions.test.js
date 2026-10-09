@@ -942,7 +942,7 @@ describe("findPinMismatches (Attrappe)", () => {
   });
 });
 
-const PROBE_PFAD = "test/dummy-probe.test.js";
+const PROBE_PFAD = "src/dummy-probe.js";
 const PROBE_CODE = "export function probe(q) {\n  return q;\n}\n";
 const PROBE_CODE_VERSCHOBEN = `\n${PROBE_CODE}`;
 const PROBE_CODE_SCHLECHTER = `${PROBE_CODE}export function zweite(x) {\n  return x;\n}\n`;
