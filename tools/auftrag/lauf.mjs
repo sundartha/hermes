@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { env, execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -15,6 +17,7 @@ import { fuehreRundenAus } from "./runden.mjs";
 
 const EINSTIEG = fileURLToPath(new URL("../auftrag.mjs", import.meta.url));
 const TYPPRUEFUNG = "typecheck";
+const UNTERDRUECKUNGEN = "eslint-suppressions.json";
 
 class AuftragsLauf {
   constructor({ phase, auftrag, root, phasendatei, runde, vorgeschichte }) {
@@ -113,6 +116,14 @@ class AuftragsLauf {
     return true;
   }
 
+  unterdrueckungenKuerzen() {
+    const { auftrag, root } = this.kontext;
+    if (auftrag.art !== "umbau" || !existsSync(join(root, UNTERDRUECKUNGEN))) return true;
+    if (!this.gruen("unterdrückungen kürzen", ["npm", "--silent", "run", "lint", "--", "--prune-suppressions"])) return false;
+    vormerken([UNTERDRUECKUNGEN], root);
+    return true;
+  }
+
   commitNachricht() {
     const { phase, auftrag } = this.kontext;
     const belege = this.pruefungen.map(({ name, exitCode }) => `${name}: Exit ${exitCode}`);
@@ -143,7 +154,7 @@ class AuftragsLauf {
           () => bisektion(this),
         ]
       : [() => this.vorherGruen()];
-    return [...vorBau, ...this.bauSchritte(), ...mutationsSchritte(this), () => this.abschliessen()];
+    return [...vorBau, ...this.bauSchritte(), ...mutationsSchritte(this), () => this.unterdrueckungenKuerzen(), () => this.abschliessen()];
   }
 
   bauSchritte() {

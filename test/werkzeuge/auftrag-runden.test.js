@@ -52,6 +52,16 @@ const REPO = {
 };
 
 const ZAHL = "src/zahl.js";
+const ESLINT = join(REPO_ROOT, "node_modules/eslint/bin/eslint.js");
+const MIT_ALTFUNKTION = {
+  "eslint.config.js": 'export default [{ files: ["**/*.js"], rules: { "no-unused-vars": "error" } }];\n',
+  "eslint-suppressions.json": JSON.stringify({ [ZAHL]: { "no-unused-vars": { count: 1 } } }),
+  [ZAHL]: "const alt = 1;\nexport const ZAHL = 1;\n",
+  "package.json": JSON.stringify({
+    type: "module",
+    scripts: { lint: `node ${JSON.stringify(ESLINT)} . --pass-on-unpruned-suppressions`, "test:betroffen": "node -e 0 --", test: "node --test" },
+  }),
+};
 const AUFTRAG = { id: "A1", art: "umbau", ziel: "Räume zahl auf", bereich: ZAHL, erwarteteDateien: [ZAHL], vorbild: ZAHL, abnahme: "test/zahl.test.js" };
 
 const aufruf = (name, input) => ({ type: "assistant", message: { content: [{ type: "tool_use", id: name, name, input }] } });
@@ -61,8 +71,8 @@ const pruefleiter = (zeilen) => [
   { type: "system", subtype: "hook_response", hook_event: "Stop", stderr: zeilen.join("\n") },
 ];
 
-function lauf(context, drehbuch) {
-  const repo = probeRepository(context, REPO);
+function lauf(context, drehbuch, dateien = {}) {
+  const repo = probeRepository(context, { ...REPO, ...dateien });
   const phase = { phase: "probe", issue: ISSUE, entwurf: { [AUFTRAG.bereich]: "Entwurf." }, auftraege: [AUFTRAG] };
   const werkzeug = probeDirectory(context, {
     "claude.mjs": CLAUDE,
@@ -154,6 +164,26 @@ test("„Voraussetzung fehlt“ verwirft die Arbeit, baut erst einen Umbau-Auftr
   assert.match(grund, /^Zurück in die Entwurfsprüfung: Voraussetzung fehlt zum zweiten Mal: Es fehlt noch mehr\.$/);
   assert.equal(runIn(repo, "git", ["log", "-1", "--format=%s"]).stdout.trim(), "Lege text an");
   assert.equal(runIn(repo, "git", ["status", "--porcelain"]).stdout, "");
+});
+
+test("„Altfunktionen aufräumen“ baut erst einen Umbau, der eslint-suppressions.json kürzt, und startet dann den Auftrag neu", (context) => {
+  const umbau = { ziel: "Räume die Altfunktion alt auf", bereich: ZAHL, erwarteteDateien: [ZAHL], vorbild: ZAHL, abnahme: "test/zahl.test.js" };
+  const plan = [{ antwort: JSON.stringify({ ...umbau, entwurf: "Die ungenutzte Variable alt fällt weg." }) }];
+  const bau = [
+    { antwort: `Voraussetzung fehlt: Altfunktionen aufräumen: ${ZAHL}:alt` },
+    { dateien: { [ZAHL]: "export const ZAHL = 1;\n" } },
+    { dateien: { [ZAHL]: "export const ZAHL = 2;\n" } },
+  ];
+  const { repo, ergebnis, beleg, datei } = lauf(context, { bau, plan }, MIT_ALTFUNKTION);
+  assert.equal(ergebnis.status, 0, ergebnis.stdout + ergebnis.stderr);
+  const git = (...args) => runIn(repo, "git", args).stdout.trim();
+  assert.deepEqual(git("log", "--format=%s").split("\n"), [AUFTRAG.ziel, umbau.ziel, "Basis"]);
+  assert.match(beleg("A1-plan").grund, /^Voraussetzung fehlt: Altfunktionen aufräumen: src\/zahl\.js:alt$/);
+  assert.deepEqual(git("show", "--name-only", "--format=", "HEAD~1").split("\n").sort(), ["eslint-suppressions.json", ZAHL]);
+  const vorher = JSON.parse(git("show", "HEAD~2:eslint-suppressions.json"));
+  const nachher = JSON.parse(git("show", "HEAD~1:eslint-suppressions.json"));
+  assert.deepEqual([Object.keys(vorher), Object.keys(nachher)], [[ZAHL], []]);
+  assert.equal(datei("anzahl-bau"), String(bau.length));
 });
 
 test("ein voller Kontext geht an einen frischen Agenten; nach der Limit-Meldung startet der nächste erst nach dem Zurücksetzen", (context) => {
